@@ -3,7 +3,6 @@ package query
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 
 	querydto "narratives/internal/application/query/console/dto"
@@ -23,23 +22,37 @@ func (s *MintRequestQueryService) ListTokenBlueprintsForMint(
 		return nil, errors.New("brandID is empty")
 	}
 
-	result, err := tbdom.ListByBrandID(ctx, s.tbRepo, brandID, pageFromMintInput(input))
+	result, err := tbdom.ListByBrandID(
+		ctx,
+		s.tbRepo,
+		brandID,
+		pageFromMintInput(input),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	out := make([]querydto.TokenBlueprintForMintDTO, 0, len(result.Items))
-	if len(result.Items) == 0 {
-		return out, nil
-	}
+	out := make(
+		[]querydto.TokenBlueprintForMintDTO,
+		0,
+		len(result.Items),
+	)
 
-	b, err := json.Marshal(result.Items)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal(b, &out); err != nil {
-		return nil, err
+	for _, tokenBlueprint := range result.Items {
+		out = append(
+			out,
+			querydto.TokenBlueprintForMintDTO{
+				ID:          tokenBlueprint.ID,
+				TokenName:   tokenBlueprint.Name,
+				Symbol:      tokenBlueprint.Symbol,
+				BrandID:     tokenBlueprint.BrandID,
+				CompanyID:   tokenBlueprint.CompanyID,
+				Description: tokenBlueprint.Description,
+				Minted:      tokenBlueprint.Minted,
+				MetadataURI: tokenBlueprint.MetadataURI,
+				IconURL:     tokenBlueprint.IconURL,
+			},
+		)
 	}
 
 	return out, nil

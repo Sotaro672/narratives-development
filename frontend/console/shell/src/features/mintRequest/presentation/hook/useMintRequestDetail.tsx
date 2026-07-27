@@ -3,7 +3,10 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import type { MintTaskProgress } from "../../application/port/MintRequestRepository";
+import type {
+  BrandSummary,
+  TokenBlueprintSummary,
+} from "../../application/port/MintRequestRepository";
 import { asNonEmptyString } from "../../application/util/primitive";
 
 import { getMintRequestDetail } from "../../application/usecase/getMintRequestDetail";
@@ -23,11 +26,9 @@ import {
 import { HttpMintRequestRepository } from "../../infrastructure/repository/HttpMintRequestRepository";
 
 import type {
-  BrandOptionVM as BrandOption,
   ProductBlueprintCardVM as ProductBlueprintCardViewModel,
   TokenBlueprintCardHandlersVM as TokenBlueprintCardHandlers,
   TokenBlueprintCardVM as TokenBlueprintCardViewModel,
-  TokenBlueprintOptionVM as TokenBlueprintOption,
 } from "../viewModel/mintRequestDetail.vm";
 
 import { useInspectionResultCard } from "./useInspectionResultCard";
@@ -40,101 +41,6 @@ import {
   buildTokenBlueprintCardHandlers,
   buildTokenBlueprintCardVm,
 } from "./useMintRequestDetail.viewModels";
-
-function normalizeProgressNumber(
-  value: unknown,
-): number {
-  const numberValue = Number(value);
-
-  if (!Number.isFinite(numberValue)) {
-    return 0;
-  }
-
-  if (numberValue <= 0) {
-    return 0;
-  }
-
-  return Math.trunc(numberValue);
-}
-
-function clampProgressPercentage(
-  value: unknown,
-): number {
-  const numberValue = Number(value);
-
-  if (!Number.isFinite(numberValue)) {
-    return 0;
-  }
-
-  if (numberValue <= 0) {
-    return 0;
-  }
-
-  if (numberValue >= 100) {
-    return 100;
-  }
-
-  return Math.trunc(numberValue);
-}
-
-function normalizeMintTaskProgress(
-  raw: unknown,
-): MintTaskProgress | null {
-  if (
-    !raw ||
-    typeof raw !== "object" ||
-    Array.isArray(raw)
-  ) {
-    return null;
-  }
-
-  const progress =
-    raw as Record<string, unknown>;
-
-  const total = normalizeProgressNumber(
-    progress.total,
-  );
-
-  const minted = normalizeProgressNumber(
-    progress.minted,
-  );
-
-  const calculatedPercentage =
-    total > 0
-      ? Math.trunc(
-          (
-            Math.min(minted, total) /
-            total
-          ) * 100,
-        )
-      : 0;
-
-  return {
-    total,
-    pending: normalizeProgressNumber(
-      progress.pending,
-    ),
-    minting: normalizeProgressNumber(
-      progress.minting,
-    ),
-    minted,
-    failedRetryable:
-      normalizeProgressNumber(
-        progress.failedRetryable,
-      ),
-    failedFatal: normalizeProgressNumber(
-      progress.failedFatal,
-    ),
-    percentage:
-      progress.percentage === undefined
-        ? clampProgressPercentage(
-            calculatedPercentage,
-          )
-        : clampProgressPercentage(
-            progress.percentage,
-          ),
-  };
-}
 
 function getErrorMessage(
   error: unknown,
@@ -214,7 +120,7 @@ export function useMintRequestDetail() {
   const [
     brandOptions,
     setBrandOptions,
-  ] = React.useState<BrandOption[]>([]);
+  ] = React.useState<BrandSummary[]>([]);
 
   const [
     selectedBrandId,
@@ -224,7 +130,7 @@ export function useMintRequestDetail() {
   const [
     tokenBlueprintOptions,
     setTokenBlueprintOptions,
-  ] = React.useState<TokenBlueprintOption[]>(
+  ] = React.useState<TokenBlueprintSummary[]>(
     [],
   );
 
@@ -238,8 +144,10 @@ export function useMintRequestDetail() {
     setScheduledBurnDate,
   ] = React.useState("");
 
-  const [isMinting, setIsMinting] =
-    React.useState(false);
+  const [
+    isSubmittingMintRequest,
+    setIsSubmittingMintRequest,
+  ] = React.useState(false);
 
   const [
     isCompletingInspection,
@@ -497,7 +405,8 @@ export function useMintRequestDetail() {
   const {
     mint,
     hasMint,
-    isMintRequested,
+    isMinting: isMintProcessing,
+    isMintCompleted,
     requestedByName,
     mintRequestedTokenBlueprintId,
     mintRequestedBrandId,
@@ -508,41 +417,25 @@ export function useMintRequestDetail() {
   });
 
   /**
-   * MintDTOの正規型には現時点で
-   * mintProgressが含まれていないため、
-   * APIレスポンス上の追加フィールドとして読み取る。
+   * ミント申請の送信中、またはBackend上で
+   * MintがMINTEDになる前の状態を「ミント中」として扱う。
    */
+  const isMinting =
+    isSubmittingMintRequest ||
+    isMintProcessing;
+
   const mintProgress =
-    React.useMemo(() => {
-      const mintResponse =
-        mintDTO as
-          | (MintDTO & {
-              mintProgress?: unknown;
-            })
-          | null;
-
-      return normalizeMintTaskProgress(
-        mintResponse?.mintProgress,
-      );
-    }, [mintDTO]);
-
-  const isMintCompleted =
-    React.useMemo(
-      () => mint?.minted === true,
-      [mint],
-    );
+    mintDTO?.mintProgress ?? null;
 
   const showMintProgress =
     React.useMemo(() => {
       return Boolean(
-        isMintRequested &&
-          !isMintCompleted &&
+        isMintProcessing &&
           mintProgress &&
           mintProgress.total > 0,
       );
     }, [
-      isMintRequested,
-      isMintCompleted,
+      isMintProcessing,
       mintProgress,
     ]);
 
@@ -551,11 +444,7 @@ export function useMintRequestDetail() {
       return;
     }
 
-    if (!isMintRequested) {
-      return;
-    }
-
-    if (isMintCompleted) {
+    if (!isMintProcessing) {
       return;
     }
 
@@ -582,8 +471,7 @@ export function useMintRequestDetail() {
     };
   }, [
     productionId,
-    isMintRequested,
-    isMintCompleted,
+    isMintProcessing,
     reloadDetail,
   ]);
 
@@ -599,25 +487,30 @@ export function useMintRequestDetail() {
         inspectionBatch &&
           !loading &&
           !error &&
-          !isMintRequested &&
+          !isMinting &&
+          !isMintCompleted &&
           !isInspectionCompleted,
       );
     }, [
       inspectionBatch,
       loading,
       error,
-      isMintRequested,
+      isMinting,
+      isMintCompleted,
       isInspectionCompleted,
     ]);
 
   const showMintButton =
-    !isMintRequested;
+    !isMinting &&
+    !isMintCompleted;
 
   const showBrandSelectorCard =
-    !isMintRequested;
+    !isMinting &&
+    !isMintCompleted;
 
   const showTokenSelectorCard =
-    !isMintRequested;
+    !isMinting &&
+    !isMintCompleted;
 
   useMintAutoSelection({
     hasMint,
@@ -655,7 +548,8 @@ export function useMintRequestDetail() {
     React.useCallback(async () => {
       if (
         isCompletingInspection ||
-        isMinting
+        isMinting ||
+        isMintCompleted
       ) {
         return;
       }
@@ -713,13 +607,17 @@ export function useMintRequestDetail() {
       inspectionBatch,
       isCompletingInspection,
       isMinting,
+      isMintCompleted,
       productionId,
       reloadDetail,
     ]);
 
   const handleMint =
     React.useCallback(async () => {
-      if (isMinting) {
+      if (
+        isMinting ||
+        isMintCompleted
+      ) {
         return;
       }
 
@@ -736,7 +634,7 @@ export function useMintRequestDetail() {
         return;
       }
 
-      setIsMinting(true);
+      setIsSubmittingMintRequest(true);
       setError(null);
 
       try {
@@ -790,12 +688,13 @@ export function useMintRequestDetail() {
           // エラー表示を優先するため、再取得失敗は握りつぶす。
         }
       } finally {
-        setIsMinting(false);
+        setIsSubmittingMintRequest(false);
       }
     }, [
       inspectionBatch,
       isInspectionCompleted,
       isMinting,
+      isMintCompleted,
       productionId,
       reloadDetail,
       scheduledBurnDate,
@@ -893,7 +792,6 @@ export function useMintRequestDetail() {
 
     hasMint,
 
-    isMintRequested,
     isMintCompleted,
     isInspectionCompleted,
     showMintButton,

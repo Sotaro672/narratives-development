@@ -1,26 +1,19 @@
-// frontend/console/mintRequest/src/presentation/viewModel/mintRequestDetail.vm.ts
+// frontend/console/shell/src/features/mintRequest/presentation/viewModel/mintRequestDetail.vm.ts
 
 // ============================================================
-// ViewModel Types for MintRequestDetail (Detail Screen)
+// ViewModel Types for MintRequestDetail
 // ============================================================
+
+import type {
+  BrandSummary,
+  TokenBlueprintSummary,
+} from "../../application/port/MintRequestRepository";
 
 import type {
   CategoryFieldValues,
   ProductBlueprintCategoryKind,
   ProductBlueprintCategorySnapshot,
 } from "../../../productBlueprint/domain/productBlueprintCategory";
-
-export type BrandOptionVM = {
-  id: string;
-  name: string;
-};
-
-export type TokenBlueprintOptionVM = {
-  id: string;
-  name: string;
-  symbol: string;
-  iconUrl?: string;
-};
 
 export type ProductBlueprintCategoryFieldRowVM = {
   label: string;
@@ -29,57 +22,87 @@ export type ProductBlueprintCategoryFieldRowVM = {
 
 export type ProductBlueprintCardVM = {
   productName?: string;
-  brand?: string; // 表示用（brandName のみ）
 
   /**
-   * 商品カテゴリ snapshot。
+   * ブランドの表示名。
    *
-   * ProductBlueprintCard は categoryName ではなく
-   * productBlueprintCategory / productBlueprintPatch.productBlueprintCategory を参照して
-   * 商品カテゴリを表示するため、ここで保持して page 側から渡す。
+   * IDや別名は保持せず、
+   * UI表示ではbrandNameのみを使用する。
    */
-  productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+  brandName?: string;
 
   /**
-   * 旧 itemType は廃止。
-   * 表示本体は productBlueprintCategory を正とする。
+   * 商品カテゴリsnapshot。
    *
-   * categoryName / categoryCode / categoryKind は、
-   * mintRequest 側で補助表示・条件分岐が必要な場合の派生値。
+   * ProductBlueprintCardはcategoryNameではなく、
+   * productBlueprintCategoryまたは
+   * productBlueprintPatch.productBlueprintCategoryを参照して
+   * 商品カテゴリを表示する。
+   */
+  productBlueprintCategory?:
+    | ProductBlueprintCategorySnapshot
+    | null;
+
+  /**
+   * 旧itemTypeは廃止。
+   *
+   * 表示本体はproductBlueprintCategoryを正とする。
+   *
+   * categoryName、categoryCode、categoryKindは、
+   * MintRequest側で補助表示や条件分岐が必要な場合の派生値。
    */
   categoryName?: string;
   categoryCode?: string;
-  categoryKind?: ProductBlueprintCategoryKind | string;
+  categoryKind?:
+    | ProductBlueprintCategoryKind
+    | string;
 
   /**
-   * categoryFields の raw 値。
-   * 表示用には categoryFieldRows を優先する。
-   */
-  categoryFields?: CategoryFieldValues | null;
-
-  /**
-   * categoryFields を UI 表示しやすい label/value に変換したもの。
+   * categoryFieldsのraw値。
    *
-   * alcohol の例:
+   * 表示用にはcategoryFieldRowsを優先する。
+   */
+  categoryFields?:
+    | CategoryFieldValues
+    | null;
+
+  /**
+   * categoryFieldsをUI表示用の
+   * label/valueへ変換した値。
+   *
+   * alcoholの例:
    * - ヴィンテージ: 2020
    * - 地域: 福島
    * - 原材料: 山田錦
    * - アルコール度数: 78%
    */
-  categoryFieldRows?: ProductBlueprintCategoryFieldRowVM[];
+  categoryFieldRows?:
+    ProductBlueprintCategoryFieldRowVM[];
 
   productIdTag?: string;
 };
 
 export type TokenBlueprintCardVM = {
   id: string;
-  name: string;
+
+  /**
+   * トークン名。
+   *
+   * MintRequest内ではtokenNameを正とし、
+   * nameは使用しない。
+   */
+  tokenName: string;
+
   symbol: string;
 
-  // brandId は UI 表示に使わせない（揺れ防止）
+  /**
+   * brandIdはUI表示には使用しない。
+   */
   brandId: string;
 
-  // UI 表示は brandName のみに統一
+  /**
+   * UI表示ではbrandNameのみを使用する。
+   */
   brandName: string;
 
   description: string;
@@ -87,7 +110,10 @@ export type TokenBlueprintCardVM = {
 
   isEditMode: boolean;
 
-  brandOptions: BrandOptionVM[];
+  /**
+   * ブランド候補はBrandSummaryへ統一する。
+   */
+  brandOptions: BrandSummary[];
 };
 
 export type TokenBlueprintCardHandlersVM = {
@@ -104,6 +130,7 @@ export type MintInfoVM = {
   createdByName?: string | null;
   createdAt: string | null;
   requestedByName?: string | null;
+
   minted: boolean;
   mintedAt?: string | null;
   onChainTxSignature?: string | null;
@@ -117,8 +144,9 @@ export type MintModelMetaEntryVM = {
   rgb?: number | null;
 
   /**
-   * alcohol 対応:
-   * model variation 側で容量も扱う。
+   * alcohol対応。
+   *
+   * model variation側で容量も扱う。
    */
   volume?: string | number | null;
 };
@@ -132,8 +160,9 @@ export type ModelInspectionRowVM = {
   rgb: number | null;
 
   /**
-   * alcohol 対応:
-   * model variation 側で容量も扱う。
+   * alcohol対応。
+   *
+   * model variation側で容量も扱う。
    */
   volume?: string | number | null;
 
@@ -142,31 +171,52 @@ export type ModelInspectionRowVM = {
 };
 
 /**
- * 詳細画面 ViewModel
- * - batch / mint は “raw DTO” を UI に晒さず、必要な情報を VM として束ねる
- * - 必要なら batchRaw / mintRaw を optional で保持してもよいが、まずは最小限
+ * 詳細画面ViewModel。
+ *
+ * batchとmintのraw DTOをUIへ直接公開せず、
+ * 画面に必要な情報をViewModelとして束ねる。
  */
 export type MintRequestDetailVM = {
   requestId: string;
 
-  // key refs（画面内の data fetch / submit 用）
+  /**
+   * 画面内のデータ取得と送信用ID。
+   */
   productionId: string;
   productBlueprintId: string | null;
 
-  // cards
-  productBlueprintCard: ProductBlueprintCardVM | null;
-  tokenBlueprintCard: TokenBlueprintCardVM | null;
+  /**
+   * カード表示用ViewModel。
+   */
+  productBlueprintCard:
+    | ProductBlueprintCardVM
+    | null;
 
-  // mint
+  tokenBlueprintCard:
+    | TokenBlueprintCardVM
+    | null;
+
+  /**
+   * Mint情報。
+   */
   mintInfo: MintInfoVM | null;
 
-  // options
-  brandOptions: BrandOptionVM[];
-  tokenBlueprintOptions: TokenBlueprintOptionVM[];
+  /**
+   * 選択候補。
+   */
+  brandOptions: BrandSummary[];
 
-  // inspections (model aggregate)
+  tokenBlueprintOptions:
+    TokenBlueprintSummary[];
+
+  /**
+   * モデル単位の検品集計。
+   */
   modelRows: ModelInspectionRowVM[];
 
-  // token blueprint patch（inventory 側などからの追加表示用）
+  /**
+   * inventory側などから取得する
+   * TokenBlueprint追加表示情報。
+   */
   tokenBlueprintPatchRaw?: any | null;
 };

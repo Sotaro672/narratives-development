@@ -1,25 +1,26 @@
-// frontend\console\shell\src\pages\mintRequestDetail.tsx
+// frontend/console/shell/src/pages/mintRequestDetail.tsx
 
-import PageStyle from "../layout/PageStyle/PageStyle";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "../shared/ui/card";
-import { Button } from "../shared/ui/button";
 import { CheckCircle2, Coins } from "lucide-react";
 
+import PageStyle from "../layout/PageStyle/PageStyle";
+
+import { Button } from "../shared/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../shared/ui/card";
 import {
   Popover,
-  PopoverTrigger,
   PopoverContent,
+  PopoverTrigger,
 } from "../shared/ui/popover";
 
 import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
 import InspectionResultCard from "../features/mintRequest/presentation/components/inspectionResultCard";
-import TokenBlueprintCard from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 import { useMintRequestDetail } from "../features/mintRequest/presentation/hook/useMintRequestDetail";
+import TokenBlueprintCard from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 
 import "../styles/mintRequest.css";
 
@@ -37,41 +38,30 @@ function MintingEffectOverlay() {
             className="minting-overlay__coin minting-overlay__coin--left"
             size={28}
           />
+
           <Coins
             className="minting-overlay__coin minting-overlay__coin--center"
             size={40}
           />
+
           <Coins
             className="minting-overlay__coin minting-overlay__coin--right"
             size={28}
           />
         </div>
+
         <div className="minting-overlay__spinner" />
-        <div className="minting-overlay__title">ミント中...</div>
+
+        <div className="minting-overlay__title">
+          ミント中...
+        </div>
+
         <div className="minting-overlay__description">
-          ブロックチェーンへミント申請を送信しています。
+          ブロックチェーン上でミント処理を実行しています。
         </div>
       </div>
     </div>
   );
-}
-
-function clampProgressPercentage(value: unknown): number {
-  const n = Number(value);
-
-  if (!Number.isFinite(n)) {
-    return 0;
-  }
-
-  if (n <= 0) {
-    return 0;
-  }
-
-  if (n >= 100) {
-    return 100;
-  }
-
-  return Math.trunc(n);
 }
 
 export default function MintRequestDetail() {
@@ -85,6 +75,10 @@ export default function MintRequestDetail() {
     onBack,
     handleMint,
     isMinting,
+
+    hasMint,
+    isMintCompleted,
+
     productBlueprintCardView,
     pbPatchLoading,
     pbPatchError,
@@ -98,7 +92,6 @@ export default function MintRequestDetail() {
     selectedTokenBlueprintId,
     handleSelectTokenBlueprint,
 
-    isMintRequested,
     showMintButton,
     showBrandSelectorCard,
     showTokenSelectorCard,
@@ -115,6 +108,7 @@ export default function MintRequestDetail() {
 
     tokenBlueprintCardVm,
     tokenBlueprintCardHandlers,
+
     mintCreatedAtLabel,
     mintCreatedByLabel,
     mintScheduledBurnDateLabel,
@@ -124,22 +118,28 @@ export default function MintRequestDetail() {
     requestedByName,
   } = useMintRequestDetail();
 
-  const handleSave = () => {};
+  const progressPercentage =
+    mintProgress?.percentage ?? 0;
 
-  const progressPercentage = clampProgressPercentage(mintProgress?.percentage);
   const failedMintCount =
-    Number(mintProgress?.failedRetryable ?? 0) +
-    Number(mintProgress?.failedFatal ?? 0);
+    (mintProgress?.failedRetryable ?? 0) +
+    (mintProgress?.failedFatal ?? 0);
+
+  const mintStatusLabel =
+    isMintCompleted
+      ? "ミント完了"
+      : "ミント中";
 
   return (
     <>
-      {isMinting && <MintingEffectOverlay />}
+      {isMinting && (
+        <MintingEffectOverlay />
+      )}
 
       <PageStyle
         layout="grid-2"
         title={title}
         onBack={onBack}
-        onSave={isMintRequested ? undefined : handleSave}
       >
         {/* 左カラム */}
         <div className="space-y-4 mt-4">
@@ -158,10 +158,16 @@ export default function MintRequestDetail() {
           ) : productBlueprintCardView ? (
             <ProductBlueprintCard
               mode="view"
-              productName={productBlueprintCardView.productName}
-              brandName={productBlueprintCardView.brand}
+              productName={
+                productBlueprintCardView.productName
+              }
+              brandName={
+                productBlueprintCardView.brandName
+              }
               productBlueprintCategory={
-                productBlueprintCardView.productBlueprintCategory ?? null
+                productBlueprintCardView
+                  .productBlueprintCategory ??
+                null
               }
             />
           ) : (
@@ -186,7 +192,9 @@ export default function MintRequestDetail() {
             </Card>
           ) : (
             <>
-              <InspectionResultCard data={inspectionCardData} />
+              <InspectionResultCard
+                data={inspectionCardData}
+              />
 
               {showCompleteInspectionButton && (
                 <Card className="mint-request-card">
@@ -196,6 +204,7 @@ export default function MintRequestDetail() {
                         <div className="text-sm font-medium text-gray-900">
                           検品完了
                         </div>
+
                         <p className="text-xs text-gray-500 mt-1">
                           除外対象がない場合でも、ここで検品完了を確定できます。
                           完了後、未入力の検品結果は合格として扱われます。
@@ -204,11 +213,17 @@ export default function MintRequestDetail() {
 
                       <Button
                         type="button"
-                        onClick={handleCompleteInspection}
-                        disabled={isCompletingInspection || isMinting}
+                        onClick={
+                          handleCompleteInspection
+                        }
+                        disabled={
+                          isCompletingInspection ||
+                          isMinting
+                        }
                         className="mint-request-card__button flex items-center gap-2"
                       >
                         <CheckCircle2 size={16} />
+
                         {isCompletingInspection
                           ? "検品完了中..."
                           : "検品を完了する"}
@@ -223,7 +238,9 @@ export default function MintRequestDetail() {
           {tokenBlueprintCardVm && (
             <TokenBlueprintCard
               vm={tokenBlueprintCardVm as any}
-              handlers={tokenBlueprintCardHandlers as any}
+              handlers={
+                tokenBlueprintCardHandlers as any
+              }
             />
           )}
 
@@ -233,31 +250,44 @@ export default function MintRequestDetail() {
                 <div className="space-y-3">
                   <div className="mint-request-card__burn-date space-y-1">
                     <label className="block text-sm font-medium text-gray-700">
-                      焼却予定日（Scheduled Burn Date）
+                      焼却予定日（Scheduled Burn
+                      Date）
                     </label>
+
                     <input
                       type="date"
                       className="mint-request-card__burn-date-input"
                       value={scheduledBurnDate}
-                      onChange={(e) => setScheduledBurnDate(e.target.value)}
+                      onChange={(event) =>
+                        setScheduledBurnDate(
+                          event.target.value,
+                        )
+                      }
                       disabled={isMinting}
                     />
+
                     <p className="text-xs text-gray-500">
-                      ※ 任意。未入力の場合は焼却予定日なしでミント申請します。
+                      ※
+                      任意。未入力の場合は焼却予定日なしでミント申請します。
                     </p>
                   </div>
 
                   <div className="mint-request-card__actions">
                     <Button
+                      type="button"
                       onClick={handleMint}
                       disabled={isMinting}
                       className="mint-request-card__button flex items-center gap-2"
                     >
                       <Coins size={16} />
-                      {isMinting ? "ミント中..." : "ミント申請を実行"}
+                      ミント申請を実行
                     </Button>
+
                     <span className="mint-request-card__total">
-                      ミント数: <strong>{totalMintQuantity}</strong>
+                      ミント数:{" "}
+                      <strong>
+                        {totalMintQuantity}
+                      </strong>
                     </span>
                   </div>
                 </div>
@@ -268,67 +298,131 @@ export default function MintRequestDetail() {
 
         {/* 右カラム */}
         <div className="space-y-4 mt-4">
-          {isMintRequested && (
+          {hasMint && (
             <Card className="pb-select">
               <CardHeader>
-                <CardTitle>ミント情報</CardTitle>
+                <CardTitle>
+                  ミント情報
+                </CardTitle>
               </CardHeader>
+
               <CardContent>
                 <div className="space-y-2 text-sm">
                   <div>
-                    ミント数: <strong>{totalMintQuantity}</strong>
+                    状態:{" "}
+                    <strong>
+                      {mintStatusLabel}
+                    </strong>
                   </div>
 
-                  {showMintProgress && mintProgress && (
-                    <div className="mint-request-progress">
-                      <div className="mint-request-progress__head">
-                        <span>ミント進捗</span>
-                        <strong>
-                          {mintProgress.minted} / {mintProgress.total}
-                        </strong>
-                      </div>
+                  <div>
+                    ミント数:{" "}
+                    <strong>
+                      {totalMintQuantity}
+                    </strong>
+                  </div>
 
-                      <div
-                        className="mint-request-progress__bar"
-                        role="progressbar"
-                        aria-label="ミント進捗"
-                        aria-valuemin={0}
-                        aria-valuemax={mintProgress.total}
-                        aria-valuenow={mintProgress.minted}
-                      >
-                        <div
-                          className="mint-request-progress__fill"
-                          style={{ width: `${progressPercentage}%` }}
-                        />
-                      </div>
+                  {showMintProgress &&
+                    mintProgress && (
+                      <div className="mint-request-progress">
+                        <div className="mint-request-progress__head">
+                          <span>
+                            ミント進捗
+                          </span>
 
-                      <div className="mint-request-progress__meta">
-                        <span>{progressPercentage}%</span>
-                        <span>
-                          処理中: {mintProgress.minting} / 待機中:{" "}
-                          {mintProgress.pending}
-                        </span>
-                      </div>
-
-                      {failedMintCount > 0 && (
-                        <div className="mint-request-progress__error">
-                          失敗: {failedMintCount}
+                          <strong>
+                            {
+                              mintProgress.minted
+                            }{" "}
+                            /{" "}
+                            {
+                              mintProgress.total
+                            }
+                          </strong>
                         </div>
-                      )}
-                    </div>
-                  )}
 
-                  <div>作成者: {mintCreatedByLabel}</div>
-                  <div>作成日時: {mintCreatedAtLabel}</div>
-                  <div>焼却予定日: {mintScheduledBurnDateLabel}</div>
-                  <div>リクエスト者: {requestedByName || "（不明）"}</div>
-                  <div>ミント日時: {mintMintedAtLabel}</div>
+                        <div
+                          className="mint-request-progress__bar"
+                          role="progressbar"
+                          aria-label="ミント進捗"
+                          aria-valuemin={0}
+                          aria-valuemax={
+                            mintProgress.total
+                          }
+                          aria-valuenow={
+                            mintProgress.minted
+                          }
+                        >
+                          <div
+                            className="mint-request-progress__fill"
+                            style={{
+                              width: `${progressPercentage}%`,
+                            }}
+                          />
+                        </div>
+
+                        <div className="mint-request-progress__meta">
+                          <span>
+                            {progressPercentage}%
+                          </span>
+
+                          <span>
+                            処理中:{" "}
+                            {
+                              mintProgress.minting
+                            }{" "}
+                            / 待機中:{" "}
+                            {
+                              mintProgress.pending
+                            }
+                          </span>
+                        </div>
+
+                        {failedMintCount >
+                          0 && (
+                          <div className="mint-request-progress__error">
+                            失敗:{" "}
+                            {failedMintCount}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                  <div>
+                    作成者:{" "}
+                    {mintCreatedByLabel}
+                  </div>
+
+                  <div>
+                    作成日時:{" "}
+                    {mintCreatedAtLabel}
+                  </div>
+
+                  <div>
+                    焼却予定日:{" "}
+                    {
+                      mintScheduledBurnDateLabel
+                    }
+                  </div>
+
+                  <div>
+                    リクエスト者:{" "}
+                    {requestedByName ||
+                      "（不明）"}
+                  </div>
+
+                  <div>
+                    ミント日時:{" "}
+                    {mintMintedAtLabel}
+                  </div>
 
                   {onChainTxSignature && (
                     <div className="break-all">
                       txSignature:{" "}
                       <span className="font-mono text-xs">
-                        {onChainTxSignature}
+                        {
+                          onChainTxSignature
+                        }
                       </span>
                     </div>
                   )}
@@ -340,34 +434,52 @@ export default function MintRequestDetail() {
           {showBrandSelectorCard && (
             <Card className="pb-select">
               <CardHeader>
-                <CardTitle>ブランド選択</CardTitle>
+                <CardTitle>
+                  ブランド選択
+                </CardTitle>
               </CardHeader>
+
               <CardContent>
                 <Popover>
                   <PopoverTrigger>
                     <div className="pb-select__trigger">
-                      {selectedBrandName || "ブランドを選択"}
+                      {selectedBrandName ||
+                        "ブランドを選択"}
                     </div>
                   </PopoverTrigger>
 
                   <PopoverContent>
                     <div className="pb-select__list">
-                      {brandOptions.map((b) => (
-                        <button
-                          key={b.id}
-                          type="button"
-                          className={
-                            "pb-select__row" +
-                            (selectedBrandId === b.id ? " is-active" : "")
-                          }
-                          onClick={() => handleSelectBrand(b.id)}
-                          disabled={isMinting}
-                        >
-                          {b.name}
-                        </button>
-                      ))}
+                      {brandOptions.map(
+                        (brand) => (
+                          <button
+                            key={brand.id}
+                            type="button"
+                            className={
+                              "pb-select__row" +
+                              (
+                                selectedBrandId ===
+                                brand.id
+                                  ? " is-active"
+                                  : ""
+                              )
+                            }
+                            onClick={() =>
+                              handleSelectBrand(
+                                brand.id,
+                              )
+                            }
+                            disabled={
+                              isMinting
+                            }
+                          >
+                            {brand.name}
+                          </button>
+                        ),
+                      )}
 
-                      {brandOptions.length === 0 && (
+                      {brandOptions.length ===
+                        0 && (
                         <div className="pb-select__empty">
                           ブランド候補が未設定です
                         </div>
@@ -382,8 +494,11 @@ export default function MintRequestDetail() {
           {showTokenSelectorCard && (
             <Card className="pb-select">
               <CardHeader>
-                <CardTitle>トークン設計一覧</CardTitle>
+                <CardTitle>
+                  トークン設計一覧
+                </CardTitle>
               </CardHeader>
+
               <CardContent>
                 {!selectedBrandId && (
                   <div className="pb-select__empty">
@@ -391,32 +506,53 @@ export default function MintRequestDetail() {
                   </div>
                 )}
 
-                {selectedBrandId && tokenBlueprintOptions.length > 0 && (
-                  <div className="pb-select__list">
-                    {tokenBlueprintOptions.map((tb) => (
-                      <button
-                        key={tb.id}
-                        type="button"
-                        className={
-                          "pb-select__row" +
-                          (selectedTokenBlueprintId === tb.id
-                            ? " is-active"
-                            : "")
-                        }
-                        onClick={() => handleSelectTokenBlueprint(tb.id)}
-                        disabled={isMinting}
-                      >
-                        {tb.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {selectedBrandId &&
+                  tokenBlueprintOptions.length >
+                    0 && (
+                    <div className="pb-select__list">
+                      {tokenBlueprintOptions.map(
+                        (
+                          tokenBlueprint,
+                        ) => (
+                          <button
+                            key={
+                              tokenBlueprint.id
+                            }
+                            type="button"
+                            className={
+                              "pb-select__row" +
+                              (
+                                selectedTokenBlueprintId ===
+                                tokenBlueprint.id
+                                  ? " is-active"
+                                  : ""
+                              )
+                            }
+                            onClick={() =>
+                              handleSelectTokenBlueprint(
+                                tokenBlueprint.id,
+                              )
+                            }
+                            disabled={
+                              isMinting
+                            }
+                          >
+                            {
+                              tokenBlueprint.tokenName
+                            }
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  )}
 
-                {selectedBrandId && tokenBlueprintOptions.length === 0 && (
-                  <div className="pb-select__empty">
-                    選択中のブランドに紐づくトークン設計がありません。
-                  </div>
-                )}
+                {selectedBrandId &&
+                  tokenBlueprintOptions.length ===
+                    0 && (
+                    <div className="pb-select__empty">
+                      選択中のブランドに紐づくトークン設計がありません。
+                    </div>
+                  )}
               </CardContent>
             </Card>
           )}

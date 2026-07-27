@@ -5,6 +5,7 @@ import { getAuthJsonHeadersOrThrow } from "../../../../../shared/http/authHeader
 
 import type { MintDTO } from "../../dto/mint.dto";
 
+import type { MintTaskProgress } from "../../../application/port/MintRequestRepository";
 import type { MintRequestManagementRowDTO } from "../../../application/dto/mintRequestManagementRow";
 import type { MintStatus } from "../../../domain/mints";
 
@@ -15,16 +16,6 @@ import type { MintStatus } from "../../../domain/mints";
 export type MintRequestsView =
   | "management"
   | "list";
-
-export type MintTaskProgressDTO = {
-  total: number;
-  pending: number;
-  minting: number;
-  minted: number;
-  failedRetryable: number;
-  failedFatal: number;
-  percentage: number;
-};
 
 export type MintQueuedResponse = {
   mintRequestId: string;
@@ -172,7 +163,7 @@ function normalizeMintStatus(
 
 function normalizeMintProgress(
   raw: unknown,
-): MintTaskProgressDTO | null {
+): MintTaskProgress | null {
   if (
     !raw ||
     typeof raw !== "object" ||

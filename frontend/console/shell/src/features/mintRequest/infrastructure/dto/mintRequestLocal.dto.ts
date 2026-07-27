@@ -1,4 +1,4 @@
-// frontend/console/mintRequest/src/infrastructure/dto/mintRequestLocal.dto.ts
+// frontend/console/shell/src/features/mintRequest/infrastructure/dto/mintRequestLocal.dto.ts
 
 import type { InspectionBatchDTO } from "../../domain/inspections";
 import type { MintDTO } from "./mint.dto";
@@ -9,8 +9,10 @@ import type {
 } from "../../../productBlueprint/domain/productBlueprintCategory";
 
 /**
- * ProductBlueprint.modelRefs 取得用 DTO
- * displayOrder は ProductBlueprint 側にのみ存在する前提のため、UI はこれを正として扱う。
+ * ProductBlueprint.modelRefs 取得用DTO。
+ *
+ * displayOrderはProductBlueprint側にのみ存在する前提のため、
+ * UIはこの値を正として扱う。
  */
 export type ProductBlueprintModelRefDTO = {
   modelId: string;
@@ -28,15 +30,20 @@ export type ProductBlueprintPatchDTO = {
   /**
    * 商品カテゴリ。
    *
-   * ProductBlueprint 側に denormalize 保存されるカテゴリ snapshot を正とする。
-   * itemType は廃止し、カテゴリ判定はこの productBlueprintCategory を使う。
+   * ProductBlueprint側にdenormalize保存される
+   * カテゴリsnapshotを正とする。
+   *
+   * itemTypeは廃止し、カテゴリ判定には
+   * productBlueprintCategoryを使用する。
    */
-  productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+  productBlueprintCategory?:
+    | ProductBlueprintCategorySnapshot
+    | null;
 
   /**
    * カテゴリ別入力値。
    *
-   * alcohol の例:
+   * alcoholの例:
    * {
    *   vintage,
    *   region,
@@ -44,36 +51,40 @@ export type ProductBlueprintPatchDTO = {
    *   alcoholContent
    * }
    */
-  categoryFields?: CategoryFieldValues | null;
+  categoryFields?:
+    | CategoryFieldValues
+    | null;
 
-  productIdTag?: { type?: string | null; Type?: string | null } | null;
+  productIdTag?: {
+    type?: string | null;
+    Type?: string | null;
+  } | null;
 
   assigneeId?: string | null;
 
   /**
-   * displayOrder の唯一のソース（ProductBlueprint.modelRefs）
+   * displayOrderの唯一のソース。
+   *
+   * ProductBlueprint.modelRefsを正とする。
    */
-  modelRefs?: ProductBlueprintModelRefDTO[] | null;
-};
-
-export type BrandForMintDTO = {
-  id: string;
-  name: string;
+  modelRefs?:
+    | ProductBlueprintModelRefDTO[]
+    | null;
 };
 
 export type TokenBlueprintForMintDTO = {
   id: string;
 
   /**
-   * selector 表示用。
+   * selector表示用。
    *
-   * backend response の正は tokenName だが、
-   * 既存 UI は name を表示用 field として使う。
+   * Backend responseの正はtokenNameだが、
+   * 既存UIはnameを表示用fieldとして使用する。
    */
   name: string;
 
   /**
-   * TokenBlueprintCard 表示用。
+   * TokenBlueprintCard表示用。
    */
   tokenName?: string;
 
@@ -97,8 +108,9 @@ export type MintModelMetaEntryDTO = {
   rgb?: number | null;
 
   /**
-   * alcohol 対応:
-   * model variation 側で容量と単位を扱う。
+   * alcohol対応。
+   *
+   * model variation側で容量と単位を扱う。
    *
    * 表示例:
    * - volume: 720
@@ -109,9 +121,10 @@ export type MintModelMetaEntryDTO = {
 };
 
 /**
- * MintRequest detail DTO
- * ✅ productionId を正とする。
- * ✅ inspectionId fallback は扱わない。
+ * MintRequest detail DTO。
+ *
+ * productionIdを正とする。
+ * inspectionId fallbackは扱わない。
  */
 export type MintRequestDetailDTO = {
   productionId?: string | null;
@@ -120,9 +133,16 @@ export type MintRequestDetailDTO = {
 
   mint?: MintDTO | null;
 
-  productBlueprintPatch?: ProductBlueprintPatchDTO | null;
+  productBlueprintPatch?:
+    | ProductBlueprintPatchDTO
+    | null;
 
-  modelMeta?: Record<string, MintModelMetaEntryDTO> | null;
+  modelMeta?:
+    | Record<
+        string,
+        MintModelMetaEntryDTO
+      >
+    | null;
 
   tokenBlueprintId?: string | null;
   productName?: string | null;
@@ -130,7 +150,7 @@ export type MintRequestDetailDTO = {
 
   productBlueprintId?: string | null;
 
-  [k: string]: any;
+  [key: string]: any;
 };
 
 export type ModelVariationForMintDTO = {
@@ -141,10 +161,11 @@ export type ModelVariationForMintDTO = {
   rgb: number | null;
 
   /**
-   * alcohol 対応:
-   * model variation 側で容量と単位を扱う。
+   * alcohol対応。
    *
-   * backend / mapper 側では volumeUnit に正規化する。
+   * model variation側で容量と単位を扱う。
+   *
+   * Backend・mapper側ではvolumeUnitへ正規化する。
    * 例: "ml", "L"
    */
   volume?: string | number | null;

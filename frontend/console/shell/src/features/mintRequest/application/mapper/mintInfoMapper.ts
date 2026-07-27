@@ -1,10 +1,12 @@
-// frontend/console/mintRequest/src/application/mapper/mintInfoMapper.ts
+// frontend/console/shell/src/features/mintRequest/application/mapper/mintInfoMapper.ts
 
+import type { MintStatus } from "../../domain/mints";
 import type { InspectionBatchDTO } from "../../domain/inspections";
 import type { MintDTO } from "../../infrastructure/dto/mint.dto";
+
 import {
-  asNonEmptyString,
   asMaybeISO,
+  asNonEmptyString,
 } from "../util/primitive";
 
 // ============================================================
@@ -16,78 +18,141 @@ export type MintInfo = {
 
   brandId: string;
   tokenBlueprintId: string;
+
+  status: MintStatus;
+
   requestedByName?: string | null;
+
   createdBy: string;
   createdByName?: string | null;
   createdAt: string | null;
 
-  minted: boolean;
   mintedAt?: string | null;
   onChainTxSignature?: string | null;
   scheduledBurnDate?: string | null;
 };
+
+/**
+ * 詳細APIのinspection内にMint情報が含まれる場合の型。
+ *
+ * InspectionBatchDTO本体にはMint情報を持たせず、
+ * APIレスポンス上の追加情報として扱う。
+ */
+type InspectionBatchWithMintDTO =
+  InspectionBatchDTO & {
+    mint?: MintDTO | null;
+  };
 
 // ============================================================
 // mapper
 // ============================================================
 
 /**
- * MintDTO（優先）から MintInfo を抽出。
+ * MintDTOから画面表示用のMintInfoを生成する。
+ *
+ * ミント状態はmintedフラグを再生成せず、
+ * Backendと共通のstatusを正とする。
+ *
+ * - status !== "MINTED": ミント中
+ * - status === "MINTED": ミント完了
  */
-export function extractMintInfoFromMintDTO(m: MintDTO | any): MintInfo | null {
-  if (!m) return null;
+export function extractMintInfoFromMintDTO(
+  mintDTO: MintDTO | null | undefined,
+): MintInfo | null {
+  if (!mintDTO) {
+    return null;
+  }
 
-  const id = asNonEmptyString((m as any).id);
-  if (!id) return null;
-
-  const tokenBlueprintId = asNonEmptyString((m as any).tokenBlueprintId);
-  const brandId = asNonEmptyString((m as any).brandId);
-
-  const requestedByName = asNonEmptyString((m as any).requestedByName);
-
-  const createdBy = asNonEmptyString((m as any).createdBy);
-  const createdByName = asNonEmptyString((m as any).createdByName);
-
-  const createdAtStr = asNonEmptyString(asMaybeISO((m as any).createdAt));
-  const createdAt = createdAtStr ? createdAtStr : null;
-
-  const mintedAtStr = asNonEmptyString(asMaybeISO((m as any).mintedAt));
-
-  const minted =
-    typeof (m as any).minted === "boolean"
-      ? (m as any).minted
-      : Boolean(mintedAtStr);
-
-  const onChainTxSignature = asNonEmptyString((m as any).onChainTxSignature);
-  const scheduledBurnDate = asNonEmptyString(
-    asMaybeISO((m as any).scheduledBurnDate),
+  const id = asNonEmptyString(
+    mintDTO.id,
   );
+
+  if (!id) {
+    return null;
+  }
+
+  const brandId = asNonEmptyString(
+    mintDTO.brandId,
+  );
+
+  const tokenBlueprintId =
+    asNonEmptyString(
+      mintDTO.tokenBlueprintId,
+    );
+
+  const requestedByName =
+    asNonEmptyString(
+      mintDTO.requestedByName,
+    );
+
+  const createdBy = asNonEmptyString(
+    mintDTO.createdBy,
+  );
+
+  const createdByName =
+    asNonEmptyString(
+      mintDTO.createdByName,
+    );
+
+  const createdAt =
+    asNonEmptyString(
+      asMaybeISO(mintDTO.createdAt),
+    ) || null;
+
+  const mintedAt =
+    asNonEmptyString(
+      asMaybeISO(mintDTO.mintedAt),
+    ) || null;
+
+  const onChainTxSignature =
+    asNonEmptyString(
+      mintDTO.onChainTxSignature,
+    ) || null;
+
+  const scheduledBurnDate =
+    asNonEmptyString(
+      asMaybeISO(
+        mintDTO.scheduledBurnDate,
+      ),
+    ) || null;
 
   return {
     id,
+
     brandId,
     tokenBlueprintId,
-    requestedByName: requestedByName ? requestedByName : null,
+
+    status: mintDTO.status,
+
+    requestedByName:
+      requestedByName || null,
+
     createdBy,
-    createdByName: createdByName ? createdByName : null,
+    createdByName:
+      createdByName || null,
     createdAt,
-    minted,
-    mintedAt: mintedAtStr ? mintedAtStr : null,
-    onChainTxSignature: onChainTxSignature ? onChainTxSignature : null,
-    scheduledBurnDate: scheduledBurnDate ? scheduledBurnDate : null,
+
+    mintedAt,
+    onChainTxSignature,
+    scheduledBurnDate,
   };
 }
 
 /**
- * InspectionBatchDTO 内に埋め込まれている mint から MintInfo を抽出。
+ * InspectionBatchDTO内に埋め込まれているMint情報から
+ * 画面表示用のMintInfoを生成する。
  */
 export function extractMintInfoFromBatch(
-  batch: InspectionBatchDTO | any,
+  batch:
+    | InspectionBatchWithMintDTO
+    | null
+    | undefined,
 ): MintInfo | null {
-  if (!batch) return null;
+  if (!batch?.mint) {
+    return null;
+  }
 
-  const mintObj = (batch as any).mint ?? null;
-  if (!mintObj) return null;
-
-  return extractMintInfoFromMintDTO(mintObj as any);
+  return extractMintInfoFromMintDTO(
+    batch.mint,
+  );
 }

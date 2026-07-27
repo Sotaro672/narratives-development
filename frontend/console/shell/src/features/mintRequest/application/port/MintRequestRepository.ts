@@ -13,17 +13,12 @@ export type TokenBlueprintSummary = {
   id: string;
 
   /**
-   * 右側の「トークン設計一覧」表示用。
+   * トークン名。
    *
-   * Backend responseではtokenNameを正とするが、
-   * 既存UIではnameを表示用フィールドとして使用する。
+   * MintRequestではtokenNameを正規フィールドとし、
+   * nameは使用しない。
    */
-  name: string;
-
-  /**
-   * TokenBlueprintCard表示用。
-   */
-  tokenName?: string;
+  tokenName: string;
 
   symbol: string;
 

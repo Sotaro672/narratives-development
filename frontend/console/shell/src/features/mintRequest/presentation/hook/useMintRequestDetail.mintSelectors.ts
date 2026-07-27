@@ -1,9 +1,7 @@
-// frontend/console/mintRequest/src/presentation/hook/useMintRequestDetail.mintSelectors.ts
+// frontend/console/shell/src/features/mintRequest/presentation/hook/useMintRequestDetail.mintSelectors.ts
 
 import * as React from "react";
 
-import type { InspectionBatchDTO } from "../../domain/inspections";
-import type { MintDTO } from "../../infrastructure/dto/mint.dto";
 import { asNonEmptyString } from "../../application/util/primitive";
 
 import {
@@ -12,63 +10,126 @@ import {
   type MintInfo,
 } from "../../application/mapper/mintInfoMapper";
 
+import type { InspectionBatchDTO } from "../../domain/inspections";
+import type { MintDTO } from "../../infrastructure/dto/mint.dto";
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
-export function useMintInfo(params: {
+type UseMintInfoParams = {
   mintDTO: MintDTO | null;
   inspectionBatch: InspectionBatchDTO | null;
   pbPatch: ProductBlueprintPatchDTO | null;
-}) {
-  const { mintDTO, inspectionBatch, pbPatch } = params;
+};
 
-  const mint: MintInfo | null = React.useMemo(() => {
-    const fromDTO = extractMintInfoFromMintDTO(mintDTO as any);
-    if (fromDTO) return fromDTO;
+export function useMintInfo({
+  mintDTO,
+  inspectionBatch,
+  pbPatch,
+}: UseMintInfoParams) {
+  const mint: MintInfo | null =
+    React.useMemo(() => {
+      const mintInfoFromDTO =
+        extractMintInfoFromMintDTO(
+          mintDTO,
+        );
 
-    const fromBatch = extractMintInfoFromBatch(inspectionBatch as any);
-    return fromBatch;
-  }, [mintDTO, inspectionBatch]);
+      if (mintInfoFromDTO) {
+        return mintInfoFromDTO;
+      }
 
-  const hasMint = React.useMemo(() => !!mint, [mint]);
+      return extractMintInfoFromBatch(
+        inspectionBatch,
+      );
+    }, [
+      mintDTO,
+      inspectionBatch,
+    ]);
 
-  // minted=true のときのみ非表示判定（= mint 完了扱い）
-  const isMintRequested = React.useMemo(() => {
-    return Boolean(mint?.minted === true);
+  const hasMint = mint !== null;
+
+  /**
+   * Mintが存在し、まだMINTEDではない場合は
+   * 画面上「ミント中」として扱う。
+   */
+  const isMinting =
+    hasMint &&
+    mint.status !== "MINTED";
+
+  /**
+   * Backendの正規状態に合わせ、
+   * status === "MINTED"のみを
+   * 画面上「ミント完了」として扱う。
+   */
+  const isMintCompleted =
+    mint?.status === "MINTED";
+
+  /**
+   * ミント実行者の表示名。
+   *
+   * 優先順位:
+   * 1. requestedByName
+   * 2. createdByName
+   * 3. createdBy
+   */
+  const requestedByName:
+    | string
+    | null = React.useMemo(() => {
+    const requestedName =
+      asNonEmptyString(
+        mint?.requestedByName,
+      );
+
+    if (requestedName) {
+      return requestedName;
+    }
+
+    const creatorName =
+      asNonEmptyString(
+        mint?.createdByName,
+      );
+
+    if (creatorName) {
+      return creatorName;
+    }
+
+    const creatorId =
+      asNonEmptyString(
+        mint?.createdBy,
+      );
+
+    return creatorId || null;
   }, [mint]);
 
-  // ✅ requestedByName（表示名）
-  // - mintInfo が requestedByName を持つ場合はそれを最優先
-  // - 次に createdByName
-  // - 最後に createdBy（id）
-  const requestedByName: string | null = React.useMemo(() => {
-    const a = asNonEmptyString((mint as any)?.requestedByName);
-    if (a) return a;
+  const mintRequestedTokenBlueprintId =
+    React.useMemo(() => {
+      return asNonEmptyString(
+        mint?.tokenBlueprintId,
+      );
+    }, [mint]);
 
-    const b = asNonEmptyString((mint as any)?.createdByName);
-    if (b) return b;
+  const mintRequestedBrandId =
+    React.useMemo(() => {
+      const brandIdFromMint =
+        asNonEmptyString(
+          mint?.brandId,
+        );
 
-    const c = asNonEmptyString((mint as any)?.createdBy);
-    return c ? c : null;
-  }, [mint]);
+      if (brandIdFromMint) {
+        return brandIdFromMint;
+      }
 
-  const mintRequestedTokenBlueprintId = React.useMemo(() => {
-    const v = asNonEmptyString(mint?.tokenBlueprintId);
-    return v ? v : "";
-  }, [mint]);
-
-  const mintRequestedBrandId = React.useMemo(() => {
-    // mint.brandId を最優先。無ければ pbPatch.brandId を fallback
-    const fromMint = asNonEmptyString(mint?.brandId);
-    if (fromMint) return fromMint;
-
-    const fromPatch = asNonEmptyString((pbPatch as any)?.brandId);
-    return fromPatch ? fromPatch : "";
-  }, [mint, pbPatch]);
+      return asNonEmptyString(
+        pbPatch?.brandId,
+      );
+    }, [
+      mint,
+      pbPatch,
+    ]);
 
   return {
     mint,
     hasMint,
-    isMintRequested,
+    isMinting,
+    isMintCompleted,
     requestedByName,
     mintRequestedTokenBlueprintId,
     mintRequestedBrandId,

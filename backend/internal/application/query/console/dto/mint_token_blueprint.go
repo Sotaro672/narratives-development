@@ -1,3 +1,4 @@
+// backend/internal/application/query/console/dto/mint_token_blueprint.go
 package dto
 
 type ListTokenBlueprintsForMintInput struct {
@@ -7,15 +8,9 @@ type ListTokenBlueprintsForMintInput struct {
 }
 
 type TokenBlueprintForMintDTO struct {
-	ID string `json:"id"`
-
-	// 既存 UI 互換: selector 表示用
-	Name string `json:"name"`
-
-	// TokenBlueprintCard 表示用: backend の正フィールド
-	TokenName string `json:"tokenName,omitempty"`
-
-	Symbol string `json:"symbol"`
+	ID        string `json:"id"`
+	TokenName string `json:"tokenName"`
+	Symbol    string `json:"symbol"`
 
 	BrandID   string `json:"brandId,omitempty"`
 	BrandName string `json:"brandName,omitempty"`

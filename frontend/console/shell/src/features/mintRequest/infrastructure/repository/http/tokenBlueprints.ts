@@ -1,13 +1,12 @@
-// frontend/console/mintRequest/src/infrastructure/repository/http/tokenBlueprints.ts
+// frontend/console/shell/src/features/mintRequest/infrastructure/repository/http/tokenBlueprints.ts
 
 import { API_BASE } from "../../../../../shared/http/apiBase";
 import { getAuthHeadersOrThrow } from "../../../../../shared/http/authHeaders";
 
-import type { TokenBlueprintForMintDTO } from "../../dto/mintRequestLocal.dto";
+import type { TokenBlueprintSummary } from "../../../application/port/MintRequestRepository";
 
 type TokenBlueprintRaw = {
   id?: unknown;
-  name?: unknown;
   tokenName?: unknown;
   symbol?: unknown;
   brandId?: unknown;
@@ -19,88 +18,140 @@ type TokenBlueprintRaw = {
   iconUrl?: unknown;
 };
 
-const toText = (value: unknown): string => {
-  return typeof value === "string" ? value.trim() : "";
+const toText = (
+  value: unknown,
+): string => {
+  return typeof value === "string"
+    ? value.trim()
+    : "";
 };
 
-const toOptionalText = (value: unknown): string | undefined => {
+const toOptionalText = (
+  value: unknown,
+): string | undefined => {
   const text = toText(value);
+
   return text || undefined;
 };
 
-const toBool = (value: unknown): boolean => {
-  if (typeof value === "boolean") return value;
+const toBool = (
+  value: unknown,
+): boolean => {
+  if (typeof value === "boolean") {
+    return value;
+  }
 
   if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    return normalized === "true";
+    return (
+      value.trim().toLowerCase() ===
+      "true"
+    );
   }
 
   return false;
 };
 
 const mapTokenBlueprintRaw = (
-  tb: TokenBlueprintRaw,
-): TokenBlueprintForMintDTO => {
-  const tokenName = toText(tb.tokenName) || toText(tb.name);
-
+  tokenBlueprint: TokenBlueprintRaw,
+): TokenBlueprintSummary => {
   return {
-    id: toText(tb.id),
+    id: toText(tokenBlueprint.id),
+    tokenName: toText(
+      tokenBlueprint.tokenName,
+    ),
+    symbol: toText(
+      tokenBlueprint.symbol,
+    ),
 
-    // selector 表示用
-    name: tokenName,
+    brandId: toOptionalText(
+      tokenBlueprint.brandId,
+    ),
+    brandName: toOptionalText(
+      tokenBlueprint.brandName,
+    ),
+    companyId: toOptionalText(
+      tokenBlueprint.companyId,
+    ),
 
-    // TokenBlueprintCard 表示用
-    tokenName,
+    description: toOptionalText(
+      tokenBlueprint.description,
+    ),
+    minted: toBool(
+      tokenBlueprint.minted,
+    ),
+    metadataUri: toOptionalText(
+      tokenBlueprint.metadataUri,
+    ),
 
-    symbol: toText(tb.symbol),
-
-    brandId: toOptionalText(tb.brandId),
-    brandName: toOptionalText(tb.brandName),
-    companyId: toOptionalText(tb.companyId),
-
-    description: toOptionalText(tb.description),
-    minted: toBool(tb.minted),
-    metadataUri: toOptionalText(tb.metadataUri),
-
-    iconUrl: toOptionalText(tb.iconUrl),
+    iconUrl: toOptionalText(
+      tokenBlueprint.iconUrl,
+    ),
   };
 };
 
 export async function fetchTokenBlueprintsByBrandHTTP(
   brandId: string,
-): Promise<TokenBlueprintForMintDTO[]> {
-  const trimmed = String(brandId ?? "").trim();
-  if (!trimmed) return [];
+): Promise<TokenBlueprintSummary[]> {
+  const normalizedBrandId =
+    String(brandId ?? "").trim();
 
-  const authHeaders = await getAuthHeadersOrThrow();
+  if (!normalizedBrandId) {
+    return [];
+  }
 
-  const url = `${API_BASE}/mint/token_blueprints?brandId=${encodeURIComponent(
-    trimmed,
-  )}`;
+  const authHeaders =
+    await getAuthHeadersOrThrow();
 
-  const res = await fetch(url, { method: "GET", headers: authHeaders });
+  const url =
+    `${API_BASE}/mint/token_blueprints` +
+    `?brandId=${encodeURIComponent(
+      normalizedBrandId,
+    )}`;
 
-  if (res.status === 404) return [];
+  const response = await fetch(
+    url,
+    {
+      method: "GET",
+      headers: authHeaders,
+    },
+  );
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
+  if (response.status === 404) {
+    return [];
+  }
+
+  if (!response.ok) {
+    const body = await response
+      .text()
+      .catch(() => "");
+
     throw new Error(
-      `Failed to fetch tokenBlueprints (mint): ${res.status} ${res.statusText}${
-        body ? ` body=${body.slice(0, 400)}` : ""
-      }`,
+      `Failed to fetch tokenBlueprints (mint): ` +
+        `${response.status} ${response.statusText}` +
+        (
+          body
+            ? ` body=${body.slice(0, 400)}`
+            : ""
+        ),
     );
   }
 
-  const json = (await res.json()) as unknown;
+  const responsePayload =
+    await response.json() as unknown;
 
-  const rawItems: TokenBlueprintRaw[] = Array.isArray(json)
-    ? (json as TokenBlueprintRaw[])
-    : [];
+  const rawItems: TokenBlueprintRaw[] =
+    Array.isArray(responsePayload)
+      ? responsePayload as TokenBlueprintRaw[]
+      : [];
 
   return rawItems
     .map(mapTokenBlueprintRaw)
-    .filter((tb: TokenBlueprintForMintDTO) => {
-      return Boolean(tb.id && tb.name && tb.symbol);
-    });
+    .filter(
+      (tokenBlueprint) =>
+        Boolean(
+          tokenBlueprint.id &&
+            tokenBlueprint.tokenName &&
+            tokenBlueprint.symbol,
+        ),
+    );
 }
