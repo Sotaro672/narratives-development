@@ -4,208 +4,122 @@ import {
   safeDateLabelJa,
   safeDateTimeLabelJa,
 } from "../../../../shared/util/dateJa";
+
+import type {
+  BrandSummary,
+  TokenBlueprintSummary,
+} from "../../application/port/MintRequestRepository";
+import type { MintInfo } from "../../application/mapper/mintInfoMapper";
 import { asNonEmptyString } from "../../application/util/primitive";
 
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
-import type { MintInfo } from "../../application/mapper/mintInfoMapper";
 
 import type {
   ProductBlueprintCardVM as ProductBlueprintCardViewModel,
-  TokenBlueprintCardVM as TokenBlueprintCardViewModel,
   TokenBlueprintCardHandlersVM as TokenBlueprintCardHandlers,
-  BrandOptionVM as BrandOption,
-  TokenBlueprintOptionVM as TokenBlueprintOption,
+  TokenBlueprintCardVM as TokenBlueprintCardViewModel,
 } from "../viewModel/mintRequestDetail.vm";
-
-type TokenBlueprintPatchDTO = {
-  id?: string | null;
-  tokenName?: string | null;
-  symbol?: string | null;
-  brandId?: string | null;
-  brandName?: string | null;
-  companyId?: string | null;
-  description?: string | null;
-  minted?: boolean | null;
-  metadataUri?: string | null;
-  iconUrl?: string | null;
-};
-
-const toDisplayText = (value: unknown): string => {
-  if (value === null || value === undefined) return "";
-
-  if (typeof value === "string") {
-    return value.trim();
-  }
-
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-
-  return "";
-};
-
-const toProductIdTagLabel = (
-  productIdTag: ProductBlueprintPatchDTO["productIdTag"],
-): string | undefined => {
-  if (!productIdTag) return undefined;
-
-  const value =
-    asNonEmptyString(productIdTag.type) ||
-    asNonEmptyString(productIdTag.Type);
-
-  return value || undefined;
-};
-
-const buildCategoryFieldRows = (
-  pbPatch: ProductBlueprintPatchDTO,
-): { label: string; value: string }[] => {
-  const fields = pbPatch.categoryFields;
-  if (!fields) return [];
-
-  const rows: { label: string; value: string }[] = [];
-
-  const addRow = (key: string, label: string, suffix = "") => {
-    const value = toDisplayText(fields[key]);
-    if (!value) return;
-
-    rows.push({
-      label,
-      value: suffix ? `${value}${suffix}` : value,
-    });
-  };
-
-  /**
-   * alcohol category fields
-   */
-  addRow("vintage", "ヴィンテージ");
-  addRow("region", "地域");
-  addRow("material", "原材料");
-  addRow("alcoholContent", "アルコール度数", "%");
-
-  /**
-   * 未定義カテゴリや今後追加される categoryFields 用。
-   * 既知 key は上で表示済みなので除外する。
-   */
-  const knownKeys = new Set([
-    "vintage",
-    "region",
-    "material",
-    "alcoholContent",
-  ]);
-
-  Object.entries(fields).forEach(([key, value]) => {
-    if (knownKeys.has(key)) return;
-
-    const displayValue = toDisplayText(value);
-    if (!displayValue) return;
-
-    rows.push({
-      label: key,
-      value: displayValue,
-    });
-  });
-
-  return rows;
-};
 
 export function buildProductBlueprintCardView(
   pbPatch: ProductBlueprintPatchDTO | null,
 ): ProductBlueprintCardViewModel | null {
-  if (!pbPatch) return null;
-
-  const category = pbPatch.productBlueprintCategory ?? null;
-
-  const productName = asNonEmptyString(pbPatch.productName) || "";
-  const brand = asNonEmptyString(pbPatch.brandName) || "";
-
-  const categoryName =
-    asNonEmptyString(category?.nameJa) ||
-    asNonEmptyString(category?.nameEn) ||
-    asNonEmptyString(category?.code) ||
-    "";
-
-  const categoryCode = asNonEmptyString(category?.code) || "";
-  const categoryKind = asNonEmptyString(category?.kind) || "";
+  if (!pbPatch) {
+    return null;
+  }
 
   return {
-    productName,
-    brand,
+    productName:
+      asNonEmptyString(
+        pbPatch.productName,
+      ) || undefined,
 
-    /**
-     * ProductBlueprintCard は categoryName ではなく
-     * productBlueprintCategory / productBlueprintPatch.productBlueprintCategory を見て
-     * 商品カテゴリを表示する。
-     */
-    productBlueprintCategory: category,
+    brandName:
+      asNonEmptyString(
+        pbPatch.brandName,
+      ) || undefined,
 
-    /**
-     * mintRequest 側で補助表示・条件分岐に使う派生値。
-     */
-    categoryName,
-    categoryCode,
-    categoryKind,
-
-    categoryFields: pbPatch.categoryFields ?? null,
-    categoryFieldRows: buildCategoryFieldRows(pbPatch),
-
-    productIdTag: toProductIdTagLabel(pbPatch.productIdTag),
+    productBlueprintCategory:
+      pbPatch.productBlueprintCategory ??
+      null,
   };
 }
 
 export function buildTokenBlueprintCardVm(params: {
-  selectedTokenBlueprint: TokenBlueprintOption | null;
+  selectedTokenBlueprint:
+    | TokenBlueprintSummary
+    | null;
   tokenBlueprintIdForPatch: string;
   selectedBrandName: string;
-  tokenBlueprintPatch: TokenBlueprintPatchDTO | null;
   pbPatch: ProductBlueprintPatchDTO | null;
-  brandOptions: BrandOption[];
+  brandOptions: BrandSummary[];
 }): TokenBlueprintCardViewModel | null {
   const {
     selectedTokenBlueprint,
     tokenBlueprintIdForPatch,
     selectedBrandName,
-    tokenBlueprintPatch,
     pbPatch,
     brandOptions,
   } = params;
 
-  const tbId =
-    asNonEmptyString(selectedTokenBlueprint?.id) ||
-    asNonEmptyString(tokenBlueprintIdForPatch);
+  const tokenBlueprintId =
+    asNonEmptyString(
+      selectedTokenBlueprint?.id,
+    ) ||
+    asNonEmptyString(
+      tokenBlueprintIdForPatch,
+    );
 
-  if (!tbId) return null;
+  if (!tokenBlueprintId) {
+    return null;
+  }
 
-  const brandName =
-    selectedBrandName ||
-    asNonEmptyString(tokenBlueprintPatch?.brandName) ||
-    asNonEmptyString(pbPatch?.brandName) ||
-    "";
-
-  const name =
-    asNonEmptyString(tokenBlueprintPatch?.tokenName) ||
-    asNonEmptyString(selectedTokenBlueprint?.name);
+  const tokenName =
+    asNonEmptyString(
+      selectedTokenBlueprint?.tokenName,
+    ) ||
+    tokenBlueprintId;
 
   const symbol =
-    asNonEmptyString(tokenBlueprintPatch?.symbol) ||
-    asNonEmptyString(selectedTokenBlueprint?.symbol);
+    asNonEmptyString(
+      selectedTokenBlueprint?.symbol,
+    );
 
-  const description = asNonEmptyString(tokenBlueprintPatch?.description);
+  const brandId =
+    asNonEmptyString(
+      selectedTokenBlueprint?.brandId,
+    );
+
+  const brandName =
+    asNonEmptyString(
+      selectedBrandName,
+    ) ||
+    asNonEmptyString(
+      selectedTokenBlueprint?.brandName,
+    ) ||
+    asNonEmptyString(
+      pbPatch?.brandName,
+    );
+
+  const description =
+    asNonEmptyString(
+      selectedTokenBlueprint?.description,
+    );
 
   const iconUrl =
-    asNonEmptyString(tokenBlueprintPatch?.iconUrl) ||
-    asNonEmptyString(selectedTokenBlueprint?.iconUrl) ||
-    undefined;
+    asNonEmptyString(
+      selectedTokenBlueprint?.iconUrl,
+    ) || undefined;
 
   return {
-    id: tbId,
-    name: name || tbId,
-    symbol: symbol || "",
-    brandId: "",
+    id: tokenBlueprintId,
+    tokenName,
+    symbol,
+    brandId,
     brandName,
-    description: description || "",
+    description,
     iconUrl,
     isEditMode: false,
-    brandOptions: brandOptions.map((b) => ({ id: b.id, name: b.name })),
+    brandOptions,
   };
 }
 
@@ -214,8 +128,15 @@ export function buildTokenBlueprintCardHandlers(
 ): TokenBlueprintCardHandlers {
   return {
     onPreview: () => {
-      const url = iconUrl;
-      if (url) window.open(url, "_blank", "noopener,noreferrer");
+      if (!iconUrl) {
+        return;
+      }
+
+      window.open(
+        iconUrl,
+        "_blank",
+        "noopener,noreferrer",
+      );
     },
   };
 }
@@ -224,32 +145,51 @@ export function buildMintLabels(params: {
   mint: MintInfo | null;
   requestedByName: string | null;
 }) {
-  const { mint, requestedByName } = params;
+  const {
+    mint,
+    requestedByName,
+  } = params;
 
-  const mintCreatedAtLabel = safeDateTimeLabelJa(
-    mint?.createdAt ?? null,
-    "（未登録）",
-  );
+  const mintCreatedAtLabel =
+    safeDateTimeLabelJa(
+      mint?.createdAt ?? null,
+      "（未登録）",
+    );
 
   const mintCreatedByLabel = (() => {
-    const name = asNonEmptyString(requestedByName);
-    if (name) return name;
+    const requestedBy =
+      asNonEmptyString(
+        requestedByName,
+      );
 
-    const fallback = asNonEmptyString(mint?.createdBy);
-    return fallback ? fallback : "（不明）";
+    if (requestedBy) {
+      return requestedBy;
+    }
+
+    const createdBy =
+      asNonEmptyString(
+        mint?.createdBy,
+      );
+
+    return createdBy || "（不明）";
   })();
 
-  const mintScheduledBurnDateLabel = safeDateLabelJa(
-    mint?.scheduledBurnDate ?? null,
-    "（未設定）",
-  );
+  const mintScheduledBurnDateLabel =
+    safeDateLabelJa(
+      mint?.scheduledBurnDate ?? null,
+      "（未設定）",
+    );
 
-  const mintMintedAtLabel = safeDateTimeLabelJa(
-    mint?.mintedAt ?? null,
-    "（未完了）",
-  );
+  const mintMintedAtLabel =
+    safeDateTimeLabelJa(
+      mint?.mintedAt ?? null,
+      "（未完了）",
+    );
 
-  const onChainTxSignature = asNonEmptyString(mint?.onChainTxSignature);
+  const onChainTxSignature =
+    asNonEmptyString(
+      mint?.onChainTxSignature,
+    );
 
   return {
     mintCreatedAtLabel,

@@ -500,15 +500,7 @@ export function useMintRequestDetail() {
       isInspectionCompleted,
     ]);
 
-  const showMintButton =
-    !isMinting &&
-    !isMintCompleted;
-
-  const showBrandSelectorCard =
-    !isMinting &&
-    !isMintCompleted;
-
-  const showTokenSelectorCard =
+  const showMintControls =
     !isMinting &&
     !isMintCompleted;
 
@@ -736,7 +728,6 @@ export function useMintRequestDetail() {
         selectedTokenBlueprint,
         tokenBlueprintIdForPatch,
         selectedBrandName,
-        tokenBlueprintPatch: null,
         pbPatch,
         brandOptions,
       }),
@@ -794,9 +785,15 @@ export function useMintRequestDetail() {
 
     isMintCompleted,
     isInspectionCompleted,
-    showMintButton,
-    showBrandSelectorCard,
-    showTokenSelectorCard,
+
+    showMintButton:
+      showMintControls,
+
+    showBrandSelectorCard:
+      showMintControls,
+
+    showTokenSelectorCard:
+      showMintControls,
 
     mintProgress,
     showMintProgress,
