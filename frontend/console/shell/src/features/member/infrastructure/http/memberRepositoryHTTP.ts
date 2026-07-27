@@ -1,22 +1,15 @@
-// frontend\console\shell\src\features\member\infrastructure\http\memberRepositoryHTTP.ts
+// frontend/console/shell/src/features/member/infrastructure/http/memberRepositoryHTTP.ts
 /// <reference types="vite/client" />
 
 import type {
   MemberRepository,
   MemberFilter,
-  MemberSort,
 } from "../../domain/repository/memberRepository";
 import type {
   Page,
   PageResult,
-  CursorPage,
-  CursorPageResult,
-  SaveOptions,
 } from "../../../../shared/types/common/common";
-import type {
-  Member,
-  MemberPatch,
-} from "../../../../shared/types/member";
+import type { Member } from "../../../../shared/types/member";
 
 import { buildConsoleUrl } from "../../../../shared/http/apiBase";
 import {
@@ -28,7 +21,9 @@ import { withQuery } from "../../../../shared/http/queryString";
 
 type UnknownRecord = Record<string, unknown>;
 
-function isRecord(value: unknown): value is UnknownRecord {
+function isRecord(
+  value: unknown,
+): value is UnknownRecord {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -44,15 +39,22 @@ function normalizeAssignedBrands(
   }
 
   const assignedBrandIds = value
-    .map((brandId) => String(brandId ?? "").trim())
-    .filter((brandId) => brandId.length > 0);
+    .map((brandId) =>
+      String(brandId ?? "").trim(),
+    )
+    .filter(
+      (brandId) =>
+        brandId.length > 0,
+    );
 
   return assignedBrandIds.length > 0
     ? assignedBrandIds
     : null;
 }
 
-function normalizeMemberWire(value: unknown): Member {
+function normalizeMemberWire(
+  value: unknown,
+): Member {
   if (!isRecord(value)) {
     throw new Error(
       "メンバーレスポンスの形式が不正です。",
@@ -61,9 +63,10 @@ function normalizeMemberWire(value: unknown): Member {
 
   return {
     ...value,
-    assignedBrands: normalizeAssignedBrands(
-      value.assignedBrands,
-    ),
+    assignedBrands:
+      normalizeAssignedBrands(
+        value.assignedBrands,
+      ),
   } as unknown as Member;
 }
 
@@ -119,23 +122,28 @@ function normalizeMemberPageResult(
   }
 
   return {
-    items: value.items.map(normalizeMemberWire),
-    totalCount: requireNonNegativeInteger(
-      value.totalCount,
-      "totalCount",
+    items: value.items.map(
+      normalizeMemberWire,
     ),
-    totalPages: requirePositiveInteger(
-      value.totalPages,
-      "totalPages",
-    ),
+    totalCount:
+      requireNonNegativeInteger(
+        value.totalCount,
+        "totalCount",
+      ),
+    totalPages:
+      requirePositiveInteger(
+        value.totalPages,
+        "totalPages",
+      ),
     page: requirePositiveInteger(
       value.page,
       "page",
     ),
-    perPage: requirePositiveInteger(
-      value.perPage,
-      "perPage",
-    ),
+    perPage:
+      requirePositiveInteger(
+        value.perPage,
+        "perPage",
+      ),
   };
 }
 
@@ -143,66 +151,101 @@ export class MemberRepositoryHTTP
   implements MemberRepository
 {
   /**
-   * Firebase UID で member を取得する。
+   * Firebase UIDでMemberを取得する。
    *
-   * backend:
+   * Backend:
    * GET /members/{uid}
    */
-  async getByUid(uid: string): Promise<Member | null> {
+  async getByUid(
+    uid: string,
+  ): Promise<Member | null> {
     const trimmed = uid.trim();
 
     if (!trimmed) {
       return null;
     }
 
-    const headers = await getAuthHeaders();
+    const headers =
+      await getAuthHeaders();
+
     const url = buildConsoleUrl(
-      `/members/${encodeURIComponent(trimmed)}`,
+      `/members/${encodeURIComponent(
+        trimmed,
+      )}`,
     );
 
-    const res = await fetch(url, { headers });
+    const response = await fetch(
+      url,
+      {
+        headers,
+      },
+    );
 
-    if (res.status === 404) {
+    if (response.status === 404) {
       return null;
     }
 
     const contentType =
-      res.headers.get("content-type") ?? "";
+      response.headers.get(
+        "content-type",
+      ) ?? "";
 
-    if (!contentType.includes("application/json")) {
-      const text = await res.text().catch(() => "");
+    if (
+      !contentType.includes(
+        "application/json",
+      )
+    ) {
+      const text = await response
+        .text()
+        .catch(() => "");
 
       throw new Error(
-        `Unexpected content-type: ${contentType}\n${text.slice(0, 200)}`,
+        `Unexpected content-type: ${contentType}\n${text.slice(
+          0,
+          200,
+        )}`,
       );
     }
 
-    if (!res.ok) {
-      const message = await res
+    if (!response.ok) {
+      const message = await response
         .text()
-        .catch(() => `HTTP ${res.status}`);
+        .catch(
+          () =>
+            `HTTP ${response.status}`,
+        );
 
       throw new Error(message);
     }
 
-    const data: unknown = await res.json();
+    const data: unknown =
+      await response.json();
 
     return normalizeMemberWire(data);
   }
 
+  /**
+   * Member一覧を取得する。
+   *
+   * Backend:
+   * GET /members
+   */
   async list(
     page: Page,
     filter?: MemberFilter,
   ): Promise<PageResult<Member>> {
-    const headers = await getAuthHeaders();
+    const headers =
+      await getAuthHeaders();
 
     const pageNumber =
-      page.number && page.number > 0
+      page.number &&
+      page.number > 0
         ? page.number
         : 1;
 
     const perPage =
-      page.perPage && page.perPage > 0
+      page.perPage &&
+      page.perPage > 0
         ? page.perPage
         : 50;
 
@@ -220,152 +263,64 @@ export class MemberRepositoryHTTP
       },
     );
 
-    const data = await fetchJSON<unknown>(url, {
-      headers,
-    });
-
-    return normalizeMemberPageResult(data);
-  }
-
-  async create(member: Member): Promise<Member> {
-    const headers = await getAuthJsonHeaders();
-    const url = buildConsoleUrl("/members");
-
-    const data = await fetchJSON<unknown>(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        firstName: member.firstName ?? "",
-        lastName: member.lastName ?? "",
-        firstNameKana:
-          member.firstNameKana ?? "",
-        lastNameKana:
-          member.lastNameKana ?? "",
-        email: member.email ?? "",
-        permissions:
-          member.permissions ?? [],
-        assignedBrands:
-          member.assignedBrands ?? [],
-        status: member.status ?? "",
-      }),
-    });
-
-    return normalizeMemberWire(data);
-  }
-
-  async update(
-    docId: string,
-    _patch: MemberPatch,
-    _opts?: SaveOptions,
-  ): Promise<Member> {
-    void docId;
-
-    throw new Error(
-      "MemberRepositoryHTTP.update: not supported by current backend API",
-    );
-  }
-
-  async delete(docId: string): Promise<void> {
-    void docId;
-
-    throw new Error(
-      "MemberRepositoryHTTP.delete: not supported by current backend API",
-    );
-  }
-
-  async listByCursor(
-    filter: MemberFilter,
-    _sort: MemberSort,
-    cursorPage: CursorPage,
-  ): Promise<CursorPageResult<Member>> {
-    const limit =
-      cursorPage.limit && cursorPage.limit > 0
-        ? cursorPage.limit
-        : 50;
-
-    const page: Page = {
-      number: 1,
-      perPage: limit,
-      totalPages: 1,
-    };
-
-    const res = await this.list(page, filter);
-
-    return {
-      items: res.items,
-      nextCursor: null,
-      prevCursor: undefined,
-      hasNext: false,
-      hasPrev: false,
-    };
-  }
-
-  async getByEmail(
-    email: string,
-  ): Promise<Member | null> {
-    const trimmed = email.trim().toLowerCase();
-
-    if (!trimmed) {
-      return null;
-    }
-
-    const res = await this.list(
-      {
-        number: 1,
-        perPage: 50,
-        totalPages: 1,
-      },
-      {
-        searchQuery: trimmed,
-      },
-    );
-
-    const hit = res.items.find(
-      (member) =>
-        (member.email ?? "")
-          .trim()
-          .toLowerCase() === trimmed,
-    );
-
-    return hit ?? null;
-  }
-
-  async existsByUid(uid: string): Promise<boolean> {
-    return (await this.getByUid(uid)) !== null;
-  }
-
-  async count(filter: MemberFilter): Promise<number> {
-    const res = await this.list(
-      {
-        number: 1,
-        perPage: 100,
-        totalPages: 1,
-      },
-      filter,
-    );
-
-    return res.totalCount;
-  }
-
-  async save(
-    member: Member,
-    opts?: SaveOptions,
-  ): Promise<Member> {
-    if (
-      opts?.mode === "update" ||
-      opts?.ifExists
-    ) {
-      throw new Error(
-        "MemberRepositoryHTTP.save(update): not supported by current backend API",
+    const data =
+      await fetchJSON<unknown>(
+        url,
+        {
+          headers,
+        },
       );
-    }
 
-    return this.create(member);
+    return normalizeMemberPageResult(
+      data,
+    );
   }
 
-  async reset(): Promise<void> {
-    throw new Error(
-      "MemberRepositoryHTTP.reset: not supported by current backend API",
+  /**
+   * Memberを作成する。
+   *
+   * Backend:
+   * POST /members
+   */
+  async create(
+    member: Member,
+  ): Promise<Member> {
+    const headers =
+      await getAuthJsonHeaders();
+
+    const url =
+      buildConsoleUrl("/members");
+
+    const data =
+      await fetchJSON<unknown>(
+        url,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            firstName:
+              member.firstName,
+            lastName:
+              member.lastName,
+            firstNameKana:
+              member.firstNameKana,
+            lastNameKana:
+              member.lastNameKana,
+            email:
+              member.email,
+            permissions:
+              member.permissions,
+            assignedBrands:
+              member.assignedBrands ??
+              [],
+            status:
+              member.status,
+          }),
+        },
+      );
+
+    return normalizeMemberWire(
+      data,
     );
   }
 }
