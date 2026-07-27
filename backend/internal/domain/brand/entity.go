@@ -16,7 +16,7 @@ type Brand struct {
 	BrandIcon            string     `json:"brandIcon,omitempty"`
 	BrandBackgroundImage string     `json:"brandBackgroundImage,omitempty"`
 	IsActive             bool       `json:"isActive"`
-	ManagerID            *string    `json:"manager,omitempty"`
+	ManagerID            *string    `json:"managerId,omitempty"`
 	WalletAddress        string     `json:"walletAddress"`
 	CreatedAt            time.Time  `json:"createdAt"`
 	CreatedBy            *string    `json:"createdBy,omitempty"`
@@ -43,6 +43,7 @@ func New(
 	createdAt time.Time,
 ) (Brand, error) {
 	createdAt = createdAt.UTC()
+
 	b := Brand{
 		ID:                   id,
 		CompanyID:            companyID,
@@ -63,6 +64,7 @@ func New(
 	if err := b.validate(); err != nil {
 		return Brand{}, err
 	}
+
 	return b, nil
 }
 
@@ -71,17 +73,30 @@ func NewMinimal(
 	id, companyID, name, description, walletAddress string,
 	createdAt time.Time,
 ) (Brand, error) {
-	return New(id, companyID, name, description, walletAddress, "", "", "", true, nil, nil, createdAt)
+	return New(
+		id,
+		companyID,
+		name,
+		description,
+		walletAddress,
+		"",
+		"",
+		"",
+		true,
+		nil,
+		nil,
+		createdAt,
+	)
 }
 
 func (b Brand) validate() error {
-
 	// ★ 新規作成時は ID="" を許容する
 	// if b.ID == "" { return ErrInvalidID }
 
 	if b.CompanyID == "" {
 		return ErrInvalidCompanyID
 	}
+
 	if b.Name == "" {
 		return ErrInvalidName
 	}
@@ -102,9 +117,11 @@ func (b Brand) validate() error {
 	if b.ManagerID != nil && *b.ManagerID == "" {
 		return ErrInvalidID
 	}
+
 	if b.CreatedBy != nil && *b.CreatedBy == "" {
 		return ErrInvalidID
 	}
+
 	if b.UpdatedBy != nil && *b.UpdatedBy == "" {
 		return ErrInvalidID
 	}
@@ -112,9 +129,11 @@ func (b Brand) validate() error {
 	if b.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
+
 	if b.UpdatedAt != nil && b.UpdatedAt.Before(b.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
+
 	return nil
 }
 
@@ -142,4 +161,15 @@ type BrandPatch struct {
 	UpdatedAt            *time.Time
 	UpdatedBy            *string
 	CreatedBy            *string
+}
+
+// Validate validates values included in a partial Brand update.
+func (p BrandPatch) Validate() error {
+	if p.URL != nil &&
+		*p.URL != "" &&
+		!isValidURL(*p.URL) {
+		return ErrInvalidURL
+	}
+
+	return nil
 }

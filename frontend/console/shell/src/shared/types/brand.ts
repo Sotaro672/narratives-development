@@ -71,50 +71,6 @@ export interface BrandPatch {
   managerId?: string | null;
 }
 
-/** URL形式かどうかを簡易確認する。空値は未設定として許可する。 */
-export function isValidUrl(value?: string | null): boolean {
-  if (value === undefined || value === null || value === "") {
-    return true;
-  }
-
-  try {
-    const url = new URL(value);
-    return Boolean(url.protocol && url.host);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Brandのフロントエンド側簡易バリデーション。
- * trimによる補正は行わず、入力値をそのまま判定する。
- */
-export function validateBrand(brand: Brand): string[] {
-  const errors: string[] = [];
-
-  if (!brand.id) {
-    errors.push("id is required");
-  }
-
-  if (!brand.companyId) {
-    errors.push("companyId is required");
-  }
-
-  if (!brand.name) {
-    errors.push("name is required");
-  }
-
-  if (!brand.walletAddress) {
-    errors.push("walletAddress is required");
-  }
-
-  if (!isValidUrl(brand.websiteUrl)) {
-    errors.push("websiteUrl must be a valid URL");
-  }
-
-  return errors;
-}
-
 /** Brandを有効化した新しいオブジェクトを返す。 */
 export function activateBrand(
   brand: Brand,

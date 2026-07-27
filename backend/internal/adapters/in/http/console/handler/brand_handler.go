@@ -30,7 +30,10 @@ func NewBrandHandler(
 	}
 }
 
-func (h *BrandHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *BrandHandler) ServeHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if shared.RedirectTrailingSlash(w, r) {
@@ -40,10 +43,12 @@ func (h *BrandHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
 	switch {
-	case r.Method == http.MethodGet && path == "/brands":
+	case r.Method == http.MethodGet &&
+		path == "/brands":
 		h.list(w, r)
 
-	case r.Method == http.MethodPost && path == "/brands":
+	case r.Method == http.MethodPost &&
+		path == "/brands":
 		h.create(w, r)
 
 	case r.Method == http.MethodGet &&
@@ -69,9 +74,12 @@ func (h *BrandHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	default:
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "not_found",
-		})
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "not_found",
+			},
+		)
 	}
 }
 
@@ -95,7 +103,10 @@ type brandDTO struct {
 	DeletedBy            *string    `json:"deletedBy,omitempty"`
 }
 
-func toBrandDTO(b branddom.Brand, memberName string) brandDTO {
+func toBrandDTO(
+	b branddom.Brand,
+	memberName string,
+) brandDTO {
 	return brandDTO{
 		ID:                   b.ID,
 		CompanyID:            b.CompanyID,
@@ -125,20 +136,30 @@ func (h *BrandHandler) get(
 	vid, err := shared.StrictID(id, "id")
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "invalid id",
-		})
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "invalid id",
+			},
+		)
+
 		return
 	}
 
-	result, err := h.detailQuery.GetByID(ctx, vid)
+	result, err := h.detailQuery.GetByID(
+		ctx,
+		vid,
+	)
 	if err != nil {
 		writeBrandErr(w, err)
 		return
 	}
 
 	_ = json.NewEncoder(w).Encode(
-		toBrandDTO(result.Brand, result.MemberName),
+		toBrandDTO(
+			result.Brand,
+			result.MemberName,
+		),
 	)
 }
 
@@ -155,121 +176,179 @@ func (h *BrandHandler) create(
 		WebsiteURL           string  `json:"websiteUrl"`
 		BrandIcon            string  `json:"brandIcon"`
 		BrandBackgroundImage string  `json:"brandBackgroundImage"`
-		IsActive             *bool   `json:"isActive"`
 		ManagerID            *string `json:"managerId"`
 		CreatedBy            *string `json:"createdBy"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "invalid json",
-		})
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "invalid json",
+			},
+		)
+
 		return
 	}
 
 	companyID := in.CompanyID
+
 	if companyID != "" {
-		value, err := shared.StrictRequired(companyID, "companyId")
+		value, err := shared.StrictRequired(
+			companyID,
+			"companyId",
+		)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "invalid companyId",
-			})
+
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "invalid companyId",
+				},
+			)
+
 			return
 		}
+
 		companyID = value
 	}
 
-	name, err := shared.StrictRequired(in.Name, "name")
+	name, err := shared.StrictRequired(
+		in.Name,
+		"name",
+	)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "name is required",
-		})
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "name is required",
+			},
+		)
+
 		return
 	}
 
 	description := in.Description
+
 	if description != "" {
 		if shared.HasOuterWhitespace(description) ||
 			shared.HasControlWhitespace(description) {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "description must not have leading/trailing whitespace or tab/newline",
-			})
+
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "description must not have leading/trailing whitespace or tab/newline",
+				},
+			)
+
 			return
 		}
 	}
 
 	websiteURL := in.WebsiteURL
+
 	if websiteURL != "" {
 		if shared.HasOuterWhitespace(websiteURL) ||
 			shared.HasControlWhitespace(websiteURL) {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "websiteUrl must not have leading/trailing whitespace or tab/newline",
-			})
+
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "websiteUrl must not have leading/trailing whitespace or tab/newline",
+				},
+			)
+
 			return
 		}
 	}
 
 	brandIcon := in.BrandIcon
+
 	if brandIcon != "" {
 		if shared.HasOuterWhitespace(brandIcon) ||
 			shared.HasControlWhitespace(brandIcon) {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "brandIcon must not have leading/trailing whitespace or tab/newline",
-			})
+
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "brandIcon must not have leading/trailing whitespace or tab/newline",
+				},
+			)
+
 			return
 		}
 	}
 
-	brandBackgroundImage := in.BrandBackgroundImage
+	brandBackgroundImage :=
+		in.BrandBackgroundImage
+
 	if brandBackgroundImage != "" {
-		if shared.HasOuterWhitespace(brandBackgroundImage) ||
-			shared.HasControlWhitespace(brandBackgroundImage) {
+		if shared.HasOuterWhitespace(
+			brandBackgroundImage,
+		) ||
+			shared.HasControlWhitespace(
+				brandBackgroundImage,
+			) {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "brandBackgroundImage must not have leading/trailing whitespace or tab/newline",
-			})
+
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "brandBackgroundImage must not have leading/trailing whitespace or tab/newline",
+				},
+			)
+
 			return
 		}
 	}
 
 	var managerID *string
+
 	if in.ManagerID != nil {
-		value, err := shared.StrictRequired(*in.ManagerID, "managerId")
+		value, err := shared.StrictRequired(
+			*in.ManagerID,
+			"managerId",
+		)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "invalid managerId",
-			})
+
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "invalid managerId",
+				},
+			)
+
 			return
 		}
+
 		managerID = &value
 	}
 
 	var createdBy *string
+
 	if in.CreatedBy != nil {
-		value, err := shared.StrictRequired(*in.CreatedBy, "createdBy")
+		value, err := shared.StrictRequired(
+			*in.CreatedBy,
+			"createdBy",
+		)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "invalid createdBy",
-			})
+
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "invalid createdBy",
+				},
+			)
+
 			return
 		}
+
 		createdBy = &value
 	}
 
-	isActive := true
-	if in.IsActive != nil {
-		isActive = *in.IsActive
-	}
-
 	now := time.Now().UTC()
+
 	b, err := branddom.New(
 		"",
 		companyID,
@@ -279,7 +358,7 @@ func (h *BrandHandler) create(
 		websiteURL,
 		brandIcon,
 		brandBackgroundImage,
-		isActive,
+		true,
 		managerID,
 		createdBy,
 		now,
@@ -297,15 +376,24 @@ func (h *BrandHandler) create(
 
 	w.WriteHeader(http.StatusCreated)
 
-	result, err := h.detailQuery.GetByID(ctx, created.ID)
+	result, err := h.detailQuery.GetByID(
+		ctx,
+		created.ID,
+	)
 	if err == nil {
 		_ = json.NewEncoder(w).Encode(
-			toBrandDTO(result.Brand, result.MemberName),
+			toBrandDTO(
+				result.Brand,
+				result.MemberName,
+			),
 		)
+
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(toBrandDTO(created, ""))
+	_ = json.NewEncoder(w).Encode(
+		toBrandDTO(created, ""),
+	)
 }
 
 func (h *BrandHandler) update(
@@ -318,9 +406,13 @@ func (h *BrandHandler) update(
 	vid, err := shared.StrictID(id, "id")
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "invalid id",
-		})
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "invalid id",
+			},
+		)
+
 		return
 	}
 
@@ -336,85 +428,143 @@ func (h *BrandHandler) update(
 
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "invalid json",
-		})
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "invalid json",
+			},
+		)
+
 		return
 	}
 
 	if in.Name != nil {
-		if _, err := shared.StrictRequired(*in.Name, "name"); err != nil {
+		if _, err := shared.StrictRequired(
+			*in.Name,
+			"name",
+		); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "name is required",
-			})
+
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "name is required",
+				},
+			)
+
 			return
 		}
 
 		if shared.HasOuterWhitespace(*in.Name) ||
 			shared.HasControlWhitespace(*in.Name) {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "name must not have leading/trailing whitespace or tab/newline",
-			})
+
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "name must not have leading/trailing whitespace or tab/newline",
+				},
+			)
+
 			return
 		}
 	}
 
-	if in.Description != nil && *in.Description != "" {
-		if shared.HasOuterWhitespace(*in.Description) ||
-			shared.HasControlWhitespace(*in.Description) {
+	if in.Description != nil &&
+		*in.Description != "" {
+		if shared.HasOuterWhitespace(
+			*in.Description,
+		) ||
+			shared.HasControlWhitespace(
+				*in.Description,
+			) {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "description must not have leading/trailing whitespace or tab/newline",
-			})
+
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "description must not have leading/trailing whitespace or tab/newline",
+				},
+			)
+
 			return
 		}
 	}
 
-	if in.WebsiteURL != nil && *in.WebsiteURL != "" {
-		if shared.HasOuterWhitespace(*in.WebsiteURL) ||
-			shared.HasControlWhitespace(*in.WebsiteURL) {
+	if in.WebsiteURL != nil &&
+		*in.WebsiteURL != "" {
+		if shared.HasOuterWhitespace(
+			*in.WebsiteURL,
+		) ||
+			shared.HasControlWhitespace(
+				*in.WebsiteURL,
+			) {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "websiteUrl must not have leading/trailing whitespace or tab/newline",
-			})
+
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "websiteUrl must not have leading/trailing whitespace or tab/newline",
+				},
+			)
+
 			return
 		}
 	}
 
-	if in.BrandIcon != nil && *in.BrandIcon != "" {
-		if shared.HasOuterWhitespace(*in.BrandIcon) ||
-			shared.HasControlWhitespace(*in.BrandIcon) {
+	if in.BrandIcon != nil &&
+		*in.BrandIcon != "" {
+		if shared.HasOuterWhitespace(
+			*in.BrandIcon,
+		) ||
+			shared.HasControlWhitespace(
+				*in.BrandIcon,
+			) {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "brandIcon must not have leading/trailing whitespace or tab/newline",
-			})
+
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "brandIcon must not have leading/trailing whitespace or tab/newline",
+				},
+			)
+
 			return
 		}
 	}
 
 	if in.BrandBackgroundImage != nil &&
 		*in.BrandBackgroundImage != "" {
-		if shared.HasOuterWhitespace(*in.BrandBackgroundImage) ||
-			shared.HasControlWhitespace(*in.BrandBackgroundImage) {
+		if shared.HasOuterWhitespace(
+			*in.BrandBackgroundImage,
+		) ||
+			shared.HasControlWhitespace(
+				*in.BrandBackgroundImage,
+			) {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "brandBackgroundImage must not have leading/trailing whitespace or tab/newline",
-			})
+
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "brandBackgroundImage must not have leading/trailing whitespace or tab/newline",
+				},
+			)
+
 			return
 		}
 	}
 
 	if in.ManagerID != nil {
-		value, err := shared.StrictRequired(*in.ManagerID, "managerId")
+		value, err := shared.StrictRequired(
+			*in.ManagerID,
+			"managerId",
+		)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "invalid managerId",
-			})
+
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "invalid managerId",
+				},
+			)
+
 			return
 		}
+
 		in.ManagerID = &value
 	}
 
@@ -428,21 +578,34 @@ func (h *BrandHandler) update(
 		IsActive:             in.IsActive,
 	}
 
-	updated, err := h.uc.Update(ctx, vid, patch)
+	updated, err := h.uc.Update(
+		ctx,
+		vid,
+		patch,
+	)
 	if err != nil {
 		writeBrandErr(w, err)
 		return
 	}
 
-	result, err := h.detailQuery.GetByID(ctx, updated.ID)
+	result, err := h.detailQuery.GetByID(
+		ctx,
+		updated.ID,
+	)
 	if err == nil {
 		_ = json.NewEncoder(w).Encode(
-			toBrandDTO(result.Brand, result.MemberName),
+			toBrandDTO(
+				result.Brand,
+				result.MemberName,
+			),
 		)
+
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(toBrandDTO(updated, ""))
+	_ = json.NewEncoder(w).Encode(
+		toBrandDTO(updated, ""),
+	)
 }
 
 func (h *BrandHandler) delete(
@@ -453,13 +616,20 @@ func (h *BrandHandler) delete(
 	vid, err := shared.StrictID(id, "id")
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "invalid id",
-		})
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "invalid id",
+			},
+		)
+
 		return
 	}
 
-	if err := h.uc.Delete(r.Context(), vid); err != nil {
+	if err := h.uc.Delete(
+		r.Context(),
+		vid,
+	); err != nil {
 		writeBrandErr(w, err)
 		return
 	}
@@ -474,29 +644,39 @@ func (h *BrandHandler) list(
 	ctx := r.Context()
 	q := r.URL.Query()
 
-	pageNum, err := shared.StrictPositiveIntParam(
-		q.Get("page"),
-		"page",
-		1,
-	)
+	pageNum, err :=
+		shared.StrictPositiveIntParam(
+			q.Get("page"),
+			"page",
+			1,
+		)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "invalid page",
-		})
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "invalid page",
+			},
+		)
+
 		return
 	}
 
-	perPage, err := shared.StrictPositiveIntParam(
-		q.Get("perPage"),
-		"perPage",
-		50,
-	)
+	perPage, err :=
+		shared.StrictPositiveIntParam(
+			q.Get("perPage"),
+			"perPage",
+			50,
+		)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "invalid perPage",
-		})
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "invalid perPage",
+			},
+		)
+
 		return
 	}
 
@@ -505,23 +685,33 @@ func (h *BrandHandler) list(
 		PerPage: perPage,
 	}
 
-	companyID := usecase.CompanyIDFromContext(ctx)
+	companyID :=
+		usecase.CompanyIDFromContext(ctx)
 
-	result, err := h.managementQuery.ListByCompanyID(
-		ctx,
-		companyID,
-		page,
-	)
+	result, err :=
+		h.managementQuery.ListByCompanyID(
+			ctx,
+			companyID,
+			page,
+		)
 	if err != nil {
 		writeBrandErr(w, err)
 		return
 	}
 
-	dtoItems := make([]brandDTO, 0, len(result.Items))
+	dtoItems := make(
+		[]brandDTO,
+		0,
+		len(result.Items),
+	)
+
 	for _, item := range result.Items {
 		dtoItems = append(
 			dtoItems,
-			toBrandDTO(item.Brand, item.MemberName),
+			toBrandDTO(
+				item.Brand,
+				item.MemberName,
+			),
 		)
 	}
 
@@ -542,20 +732,29 @@ func (h *BrandHandler) list(
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-func writeBrandErr(w http.ResponseWriter, err error) {
+func writeBrandErr(
+	w http.ResponseWriter,
+	err error,
+) {
 	code := http.StatusInternalServerError
 
 	switch err {
-	case branddom.ErrInvalidID:
+	case branddom.ErrInvalidID,
+		branddom.ErrInvalidURL:
 		code = http.StatusBadRequest
+
 	case branddom.ErrNotFound:
 		code = http.StatusNotFound
+
 	case branddom.ErrConflict:
 		code = http.StatusConflict
 	}
 
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error": err.Error(),
-	})
+
+	_ = json.NewEncoder(w).Encode(
+		map[string]string{
+			"error": err.Error(),
+		},
+	)
 }

@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "generate:brand-image-policy": "node ../scripts/generate-brand-image-policy.mjs",
+    "check:brand-image-policy": "npm run generate:brand-image-policy && git diff --exit-code -- ../storage.rules src/features/brand/config/brandImagePolicy.generated.ts",
+    "prebuild": "npm run generate:brand-image-policy",
     "build": "vite build",
     "preview": "vite preview"
   },

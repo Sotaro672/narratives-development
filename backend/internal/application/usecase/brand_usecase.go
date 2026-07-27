@@ -63,9 +63,7 @@ func (u *BrandUsecase) Create(
 		b.CompanyID = cid
 	}
 
-	if !b.IsActive {
-		b.IsActive = true
-	}
+	b.IsActive = true
 
 	if b.CreatedAt.IsZero() {
 		b.CreatedAt = u.now().UTC()
@@ -119,6 +117,7 @@ func (u *BrandUsecase) Create(
 				[]string(nil),
 				managerRecord.Member.AssignedBrands...,
 			)
+
 			assignedBrands = append(
 				assignedBrands,
 				brandID,
@@ -184,6 +183,10 @@ func (u *BrandUsecase) Update(
 	if id == "" {
 		return branddom.Brand{},
 			branddom.ErrInvalidID
+	}
+
+	if err := patch.Validate(); err != nil {
+		return branddom.Brand{}, err
 	}
 
 	if cid := CompanyIDFromContext(ctx); cid != "" {

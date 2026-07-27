@@ -16,13 +16,15 @@ import type { Member } from "../../../member/domain/entity/member";
 import type { MemberFilter } from "../../../member/domain/repository/memberRepository";
 import { MemberRepositoryHTTP } from "../../../member/infrastructure/http/memberRepositoryHTTP";
 
-import type { Brand } from "../../../../shared/types/brand";
 import { validateBrandImage } from "../../application/brandImageValidation";
 import {
   BRAND_IMAGE_ALLOWED_MIME_TYPES,
   type BrandImageTarget,
 } from "../../config/brandImagePolicy.generated";
-import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHTTP";
+import {
+  brandRepositoryHTTP,
+  type CreateBrandInput,
+} from "../../infrastructure/http/brandRepositoryHTTP";
 import { uploadBrandAssetToFirebaseStorage } from "../../infrastructure/storage/brandAssetStorage";
 
 const memberRepo = new MemberRepositoryHTTP();
@@ -534,26 +536,16 @@ export function useBrandCreate() {
     try {
       setSaving(true);
 
-      const createPayload: Omit<
-        Brand,
-        "createdAt" | "updatedAt"
-      > = {
-        id: "",
+      const createPayload: CreateBrandInput = {
         companyId,
         name: normalizedName,
         description,
         websiteUrl,
         brandIcon: "",
         brandBackgroundImage: "",
-        isActive: true,
         managerId: normalizedManagerId,
-        walletAddress: "pending",
-        createdBy:
-          (currentMember?.id ?? null) as any,
-        updatedBy: null as any,
-        deletedAt: null as any,
-        deletedBy: null as any,
-      } as any;
+        createdBy: currentMember?.id ?? null,
+      };
 
       const created =
         await brandRepositoryHTTP.create(

@@ -1,6 +1,6 @@
-// frontend/console/production/src/presentation/create/mappers.ts
+// frontend/console/shell/src/features/production/presentation/create/mappers.ts
 
-import type { Brand } from "../../../brand/src/domain/entity/brand";
+import type { Brand } from "../../../../shared/types/brand";
 import type { Member } from "../../../member/domain/entity/member";
 import { getMemberFullName } from "../../../member/domain/entity/member";
 
@@ -8,7 +8,10 @@ import type { ProductBlueprintManagementRow } from "../../../productBlueprint/in
 import type { ModelVariationResponse } from "../../../productBlueprint/application/productBlueprintDetailService";
 import type { ProductBlueprintCategorySnapshot } from "../../../productBlueprint/domain/productBlueprintCategory";
 
-import type { ProductBlueprintForCard, ProductionQuantityRow } from "./types";
+import type {
+  ProductBlueprintForCard,
+  ProductionQuantityRow,
+} from "./types";
 
 function normalizeProductBlueprintCategorySnapshot(
   value: unknown,
@@ -22,13 +25,19 @@ function normalizeProductBlueprintCategorySnapshot(
 
 function isApparelModelVariation(
   mv: ModelVariationResponse,
-): mv is Extract<ModelVariationResponse, { kind: "apparel" }> {
+): mv is Extract<
+  ModelVariationResponse,
+  { kind: "apparel" }
+> {
   return (mv as any)?.kind === "apparel";
 }
 
 function isAlcoholModelVariation(
   mv: ModelVariationResponse,
-): mv is Extract<ModelVariationResponse, { kind: "alcohol" }> {
+): mv is Extract<
+  ModelVariationResponse,
+  { kind: "alcohol" }
+> {
   return (mv as any)?.kind === "alcohol";
 }
 
@@ -47,11 +56,14 @@ function buildAlcoholVariationLabel(args: {
   volumeUnit?: unknown;
 }): string {
   const value =
-    typeof args.volumeValue === "number" && Number.isFinite(args.volumeValue)
+    typeof args.volumeValue === "number" &&
+    Number.isFinite(args.volumeValue)
       ? args.volumeValue
       : undefined;
 
-  const unit = String(args.volumeUnit ?? "").trim();
+  const unit = String(
+    args.volumeUnit ?? "",
+  ).trim();
 
   if (value === undefined || !unit) {
     return "";
@@ -63,8 +75,12 @@ function buildAlcoholVariationLabel(args: {
 // ======================================================================
 // ブランド（変換）
 // ======================================================================
-export function buildBrandOptions(brands: Brand[]): string[] {
-  return brands.map((b) => b.name).filter(Boolean);
+export function buildBrandOptions(
+  brands: Brand[],
+): string[] {
+  return brands
+    .map((brand) => brand.name)
+    .filter(Boolean);
 }
 
 // ======================================================================
@@ -74,17 +90,22 @@ export function filterProductBlueprintsByBrand(
   rows: ProductBlueprintManagementRow[],
   brandName: string | null,
 ): ProductBlueprintManagementRow[] {
-  if (!brandName) return [];
+  if (!brandName) {
+    return [];
+  }
 
-  return rows.filter((pb) => pb.brandName === brandName);
+  return rows.filter(
+    (productBlueprint) =>
+      productBlueprint.brandName === brandName,
+  );
 }
 
 export function buildProductRows(
   filtered: ProductBlueprintManagementRow[],
 ): Array<{ id: string; name: string }> {
-  return filtered.map((pb) => ({
-    id: pb.id,
-    name: pb.productName,
+  return filtered.map((productBlueprint) => ({
+    id: productBlueprint.id,
+    name: productBlueprint.productName,
   }));
 }
 
@@ -104,41 +125,64 @@ export function buildSelectedForCard(
   row: ProductBlueprintManagementRow | null,
 ): ProductBlueprintForCard {
   if (detail) {
-    const productBlueprintCategory = normalizeProductBlueprintCategorySnapshot(
-      detail.productBlueprintCategory,
-    );
+    const productBlueprintCategory =
+      normalizeProductBlueprintCategorySnapshot(
+        detail.productBlueprintCategory,
+      );
 
     return {
       id: String(detail.id ?? "").trim(),
-      productName: String(detail.productName ?? "").trim(),
-      brandName: String(detail.brandName ?? "").trim(),
+      productName: String(
+        detail.productName ?? "",
+      ).trim(),
+      brandName: String(
+        detail.brandName ?? "",
+      ).trim(),
       productBlueprintCategory,
 
-      fit: detail.fit ? String(detail.fit).trim() : undefined,
-      materials: detail.material ? String(detail.material).trim() : undefined,
+      fit: detail.fit
+        ? String(detail.fit).trim()
+        : undefined,
+      materials: detail.material
+        ? String(detail.material).trim()
+        : undefined,
       weight:
-        typeof detail.weight === "number" && Number.isFinite(detail.weight)
+        typeof detail.weight === "number" &&
+        Number.isFinite(detail.weight)
           ? detail.weight
           : undefined,
-      washTags: Array.isArray(detail.qualityAssurance)
+      washTags: Array.isArray(
+        detail.qualityAssurance,
+      )
         ? detail.qualityAssurance.filter(
-            (tag: unknown): tag is string =>
-              typeof tag === "string" && tag.trim() !== "",
+            (
+              tag: unknown,
+            ): tag is string =>
+              typeof tag === "string" &&
+              tag.trim() !== "",
           )
         : undefined,
-      productIdTag: String(detail.productIdTag?.type ?? "").trim() || undefined,
+      productIdTag:
+        String(
+          detail.productIdTag?.type ?? "",
+        ).trim() || undefined,
     };
   }
 
   if (row) {
-    const productBlueprintCategory = normalizeProductBlueprintCategorySnapshot(
-      (row as any).productBlueprintCategory,
-    );
+    const productBlueprintCategory =
+      normalizeProductBlueprintCategorySnapshot(
+        (row as any).productBlueprintCategory,
+      );
 
     return {
       id: String(row.id ?? "").trim(),
-      productName: String(row.productName ?? "").trim(),
-      brandName: String(row.brandName ?? "").trim(),
+      productName: String(
+        row.productName ?? "",
+      ).trim(),
+      brandName: String(
+        row.brandName ?? "",
+      ).trim(),
       productBlueprintCategory,
     };
   }
@@ -162,12 +206,18 @@ export function buildAssigneeOptions(
   members: Member[],
 ): Array<{ id: string; name: string }> {
   return members
-    .map((m) => {
-      const uid = String((m as any).uid ?? "").trim();
+    .map((member) => {
+      const uid = String(
+        (member as any).uid ?? "",
+      ).trim();
 
       return {
         id: uid,
-        name: getMemberFullName(m) || m.email || uid || m.id,
+        name:
+          getMemberFullName(member) ||
+          member.email ||
+          uid ||
+          member.id,
       };
     })
     .filter((option) => option.id);
@@ -182,17 +232,41 @@ export function buildAssigneeOptions(
 export function mapModelVariationsToRows(
   list: ModelVariationResponse[],
 ): ProductionQuantityRow[] {
-  const safe = Array.isArray(list) ? list : [];
+  const safe = Array.isArray(list)
+    ? list
+    : [];
 
-  return safe.map((mv, index) => {
-    const modelId = String((mv as any)?.id ?? "").trim() || String(index);
-    const modelNumber = String((mv as any)?.modelNumber ?? "").trim();
+  return safe.map((modelVariation, index) => {
+    const modelId =
+      String(
+        (modelVariation as any)?.id ?? "",
+      ).trim() || String(index);
 
-    if (isApparelModelVariation(mv)) {
-      const size = String(mv.size ?? "").trim();
-      const color = String(mv.color?.name ?? "").trim();
-      const rgb = (mv.color?.rgb ?? null) as number | string | null;
-      const variationLabel = buildApparelVariationLabel({ size, color });
+    const modelNumber = String(
+      (modelVariation as any)?.modelNumber ??
+        "",
+    ).trim();
+
+    if (
+      isApparelModelVariation(modelVariation)
+    ) {
+      const size = String(
+        modelVariation.size ?? "",
+      ).trim();
+
+      const color = String(
+        modelVariation.color?.name ?? "",
+      ).trim();
+
+      const rgb = (
+        modelVariation.color?.rgb ?? null
+      ) as number | string | null;
+
+      const variationLabel =
+        buildApparelVariationLabel({
+          size,
+          color,
+        });
 
       return {
         modelId,
@@ -207,19 +281,29 @@ export function mapModelVariationsToRows(
       };
     }
 
-    if (isAlcoholModelVariation(mv)) {
-      const volumeValueRaw = (mv as any).volume?.value;
-      const volumeUnit = String((mv as any).volume?.unit ?? "").trim();
+    if (
+      isAlcoholModelVariation(modelVariation)
+    ) {
+      const volumeValueRaw = (
+        modelVariation as any
+      ).volume?.value;
+
+      const volumeUnit = String(
+        (modelVariation as any).volume?.unit ??
+          "",
+      ).trim();
 
       const volumeValue =
-        typeof volumeValueRaw === "number" && Number.isFinite(volumeValueRaw)
+        typeof volumeValueRaw === "number" &&
+        Number.isFinite(volumeValueRaw)
           ? volumeValueRaw
           : undefined;
 
-      const variationLabel = buildAlcoholVariationLabel({
-        volumeValue,
-        volumeUnit,
-      });
+      const variationLabel =
+        buildAlcoholVariationLabel({
+          volumeValue,
+          volumeUnit,
+        });
 
       return {
         modelId,
@@ -238,7 +322,11 @@ export function mapModelVariationsToRows(
 
     return {
       modelId,
-      kind: String((mv as any)?.kind ?? "").trim() || undefined,
+      kind:
+        String(
+          (modelVariation as any)?.kind ??
+            "",
+        ).trim() || undefined,
       modelNumber,
       variationLabel: "",
       size: undefined,

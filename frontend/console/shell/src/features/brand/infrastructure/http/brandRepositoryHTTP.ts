@@ -10,6 +10,33 @@ import {
   getAuthJsonHeadersOrThrow,
 } from "../../../../shared/http/authHeaders";
 
+/**
+ * POST /brands のリクエストボディ。
+ *
+ * 新規BrandはBackend側で必ず isActive=true として作成するため、
+ * isActiveは作成リクエストへ含めない。
+ *
+ * 次の項目もBackend側で生成または後から設定されるため含めない。
+ * - id
+ * - memberName
+ * - walletAddress
+ * - createdAt
+ * - updatedAt
+ * - updatedBy
+ * - deletedAt
+ * - deletedBy
+ */
+export interface CreateBrandInput {
+  companyId: string;
+  name: string;
+  description: string;
+  websiteUrl?: string;
+  brandIcon?: string;
+  brandBackgroundImage?: string;
+  managerId?: string | null;
+  createdBy?: string | null;
+}
+
 export interface PageParams {
   page?: number;
   perPage?: number;
@@ -99,7 +126,7 @@ export class BrandRepositoryHTTP {
   }
 
   async create(
-    input: Omit<Brand, "createdAt" | "updatedAt">,
+    input: CreateBrandInput,
   ): Promise<Brand> {
     return authed<Brand>(
       this.baseUrl,
@@ -158,6 +185,7 @@ export class BrandRepositoryHTTP {
     }
 
     const query = params.toString();
+
     const url = query
       ? `${this.baseUrl}?${query}`
       : this.baseUrl;
@@ -179,10 +207,13 @@ export class BrandRepositoryHTTP {
         brandIcon: brand.brandIcon ?? "",
         brandBackgroundImage:
           brand.brandBackgroundImage ?? "",
-        isActive: Boolean(brand.isActive ?? false),
+        isActive: Boolean(
+          brand.isActive ?? false,
+        ),
         managerId: brand.managerId ?? null,
         memberName: brand.memberName ?? null,
-        walletAddress: brand.walletAddress ?? "",
+        walletAddress:
+          brand.walletAddress ?? "",
         createdAt: brand.createdAt ?? "",
         createdBy: brand.createdBy ?? null,
         updatedAt: brand.updatedAt ?? null,
@@ -194,9 +225,15 @@ export class BrandRepositoryHTTP {
 
     return {
       items: normalizedItems,
-      totalCount: Number(raw.totalCount ?? 0),
-      totalPages: Number(raw.totalPages ?? 1),
-      page: Number(raw.page ?? page ?? 1),
+      totalCount: Number(
+        raw.totalCount ?? 0,
+      ),
+      totalPages: Number(
+        raw.totalPages ?? 1,
+      ),
+      page: Number(
+        raw.page ?? page ?? 1,
+      ),
       perPage: Number(
         raw.perPage ??
           perPage ??
