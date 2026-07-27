@@ -3,18 +3,10 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import type { MintTaskProgress } from "../../application/port/MintRequestRepository";
 import { asNonEmptyString } from "../../application/util/primitive";
 
-import {
-  toBrandOptionVMs,
-  toTokenBlueprintOptionVMs,
-} from "../../application/mapper/mintRequestOptionsMapper";
-
 import { getMintRequestDetail } from "../../application/usecase/getMintRequestDetail";
-import { getProductBlueprintPatch } from "../../application/usecase/getProductBlueprintPatch";
-import { listBrandsForMint } from "../../application/usecase/listBrandsForMint";
-import { listTokenBlueprintsByBrand } from "../../application/usecase/listTokenBlueprintsByBrand";
-import { submitMintRequestAndRefresh } from "../../application/usecase/submitMintRequestAndRefresh";
 
 import { validateCompleteInspection } from "../../application/validator/validateCompleteInspection";
 import { validateMintRequestSubmit } from "../../application/validator/validateMintRequestSubmit";
@@ -24,7 +16,10 @@ import type { InspectionBatchDTO } from "../../domain/inspections";
 import type { MintDTO } from "../../infrastructure/dto/mint.dto";
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
-import { completeInspectionHTTP } from "../../infrastructure/repository";
+import {
+  completeInspectionHTTP,
+  postMintRequestHTTP,
+} from "../../infrastructure/repository";
 import { HttpMintRequestRepository } from "../../infrastructure/repository/HttpMintRequestRepository";
 
 import type {
@@ -45,16 +40,6 @@ import {
   buildTokenBlueprintCardHandlers,
   buildTokenBlueprintCardVm,
 } from "./useMintRequestDetail.viewModels";
-
-type MintTaskProgressVM = {
-  total: number;
-  pending: number;
-  minting: number;
-  minted: number;
-  failedRetryable: number;
-  failedFatal: number;
-  percentage: number;
-};
 
 function normalizeProgressNumber(
   value: unknown,
@@ -94,7 +79,7 @@ function clampProgressPercentage(
 
 function normalizeMintTaskProgress(
   raw: unknown,
-): MintTaskProgressVM | null {
+): MintTaskProgress | null {
   if (
     !raw ||
     typeof raw !== "object" ||
@@ -103,7 +88,8 @@ function normalizeMintTaskProgress(
     return null;
   }
 
-  const progress = raw as Record<string, unknown>;
+  const progress =
+    raw as Record<string, unknown>;
 
   const total = normalizeProgressNumber(
     progress.total,
@@ -116,7 +102,10 @@ function normalizeMintTaskProgress(
   const calculatedPercentage =
     total > 0
       ? Math.trunc(
-          (Math.min(minted, total) / total) * 100,
+          (
+            Math.min(minted, total) /
+            total
+          ) * 100,
         )
       : 0;
 
@@ -129,9 +118,10 @@ function normalizeMintTaskProgress(
       progress.minting,
     ),
     minted,
-    failedRetryable: normalizeProgressNumber(
-      progress.failedRetryable,
-    ),
+    failedRetryable:
+      normalizeProgressNumber(
+        progress.failedRetryable,
+      ),
     failedFatal: normalizeProgressNumber(
       progress.failedFatal,
     ),
@@ -150,7 +140,10 @@ function getErrorMessage(
   error: unknown,
   fallback: string,
 ): string {
-  if (error instanceof Error && error.message) {
+  if (
+    error instanceof Error &&
+    error.message
+  ) {
     return error.message;
   }
 
@@ -181,7 +174,10 @@ export function useMintRequestDetail() {
     [],
   );
 
-  const [inspectionBatch, setInspectionBatch] =
+  const [
+    inspectionBatch,
+    setInspectionBatch,
+  ] =
     React.useState<InspectionBatchDTO | null>(
       null,
     );
@@ -215,8 +211,10 @@ export function useMintRequestDetail() {
     setPbPatchError,
   ] = React.useState<string | null>(null);
 
-  const [brandOptions, setBrandOptions] =
-    React.useState<BrandOption[]>([]);
+  const [
+    brandOptions,
+    setBrandOptions,
+  ] = React.useState<BrandOption[]>([]);
 
   const [
     selectedBrandId,
@@ -364,8 +362,7 @@ export function useMintRequestDetail() {
 
       try {
         const patch =
-          await getProductBlueprintPatch(
-            mintRequestRepo,
+          await mintRequestRepo.fetchProductBlueprintPatch(
             productBlueprintId,
           );
 
@@ -444,17 +441,13 @@ export function useMintRequestDetail() {
     const run = async () => {
       try {
         const brands =
-          await listBrandsForMint(
-            mintRequestRepo,
-          );
+          await mintRequestRepo.fetchBrandsForMint();
 
         if (cancelled) {
           return;
         }
 
-        setBrandOptions(
-          toBrandOptionVMs(brands),
-        );
+        setBrandOptions(brands);
       } catch {
         if (!cancelled) {
           setBrandOptions([]);
@@ -482,15 +475,12 @@ export function useMintRequestDetail() {
 
         try {
           const options =
-            await listTokenBlueprintsByBrand(
-              mintRequestRepo,
+            await mintRequestRepo.fetchTokenBlueprintsByBrand(
               brandId,
             );
 
           setTokenBlueprintOptions(
-            toTokenBlueprintOptionVMs(
-              options,
-            ),
+            options,
           );
 
           setSelectedTokenBlueprintId(
@@ -751,7 +741,7 @@ export function useMintRequestDetail() {
 
       try {
         const queuedResponse =
-          await submitMintRequestAndRefresh(
+          await postMintRequestHTTP(
             validation.productionId,
             validation.tokenBlueprintId,
             scheduledBurnDate ||
@@ -783,11 +773,10 @@ export function useMintRequestDetail() {
           `ミント申請を受け付けました（生産ID: ${queuedResponse.productionId} / ミント数: ${totalMintQuantity}）。順次ミント処理を実行します。`,
         );
       } catch (error: unknown) {
-        const message =
-          getErrorMessage(
-            error,
-            "不明なエラーが発生しました",
-          );
+        const message = getErrorMessage(
+          error,
+          "不明なエラーが発生しました",
+        );
 
         setError(message);
 
@@ -868,7 +857,9 @@ export function useMintRequestDetail() {
           buildTokenBlueprintCardHandlers(
             tokenBlueprintCardVm?.iconUrl,
           ),
-        [tokenBlueprintCardVm?.iconUrl],
+        [
+          tokenBlueprintCardVm?.iconUrl,
+        ],
       );
 
   const {

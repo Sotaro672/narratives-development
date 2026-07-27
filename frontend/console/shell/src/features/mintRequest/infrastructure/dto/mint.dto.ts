@@ -7,14 +7,3 @@ export type MintDTO = Mint & {
   requestedByName?: string | null;
   onChainTxSignature?: string | null;
 };
-
-export type MintListRowDTO = {
-  productionId?: string | null;
-  mintId?: string | null;
-  tokenBlueprintId?: string | null;
-  tokenName: string;
-  status?: Mint["status"] | null;
-  createdByName?: string | null;
-  requestedByName?: string | null;
-  mintedAt?: string | null;
-};
