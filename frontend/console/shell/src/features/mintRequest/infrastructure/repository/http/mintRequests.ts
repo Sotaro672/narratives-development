@@ -1,4 +1,4 @@
-// frontend/console/mintRequest/src/infrastructure/repository/http/mintRequests.ts
+// frontend/console/shell/src/features/mintRequest/infrastructure/repository/http/mintRequests.ts
 
 import { API_BASE } from "../../../../../shared/http/apiBase";
 import { getAuthJsonHeadersOrThrow } from "../../../../../shared/http/authHeaders";
@@ -12,13 +12,7 @@ import type { MintStatus } from "../../../domain/mints";
 // types
 // ===============================
 
-type MintRequestsView = "management" | "list";
-
-type FetchMintRequestsResult = {
-  rows: MintRequestManagementRowDTO[];
-  usedView: MintRequestsView;
-  usedUrl: string;
-};
+export type MintRequestsView = "management" | "list";
 
 export type MintTaskProgressDTO = {
   total: number;
@@ -41,63 +35,87 @@ export type MintQueuedResponse = {
 // helpers
 // ===============================
 
-function uniqStrings(xs: string[]): string[] {
+function uniqStrings(values: string[]): string[] {
   const seen = new Set<string>();
-  const out: string[] = [];
+  const result: string[] = [];
 
-  for (const x of xs ?? []) {
-    const s = String(x ?? "");
-    if (!s) continue;
-    if (seen.has(s)) continue;
+  for (const value of values ?? []) {
+    const normalized = String(value ?? "").trim();
 
-    seen.add(s);
-    out.push(s);
+    if (!normalized) continue;
+    if (seen.has(normalized)) continue;
+
+    seen.add(normalized);
+    result.push(normalized);
   }
 
-  return out;
+  return result;
 }
 
 function buildMintRequestsUrl(
   productionIds: string[],
   view: MintRequestsView,
 ): string {
-  const base = `${API_BASE}/mint/requests?productionIds=${encodeURIComponent(
-    productionIds.join(","),
-  )}`;
+  const query = new URLSearchParams({
+    productionIds: productionIds.join(","),
+    view,
+  });
 
-  return `${base}&view=${encodeURIComponent(view)}`;
+  return `${API_BASE}/mint/requests?${query.toString()}`;
 }
 
 function isServiceUnavailableStatus(status: number): boolean {
   return status === 502 || status === 503 || status === 504;
 }
 
-async function readTextSafe(res: Response): Promise<string> {
+async function readTextSafe(response: Response): Promise<string> {
   try {
-    return await res.text();
+    return await response.text();
   } catch {
     return "";
   }
 }
 
-function getProductionId(row: any): string | null {
-  const productionId = String(row?.productionId ?? "");
+function getProductionId(
+  row: MintRequestManagementRowDTO,
+): string | null {
+  const productionId = String(
+    (row as Record<string, unknown>)?.productionId ?? "",
+  ).trim();
+
   return productionId || null;
 }
 
-function toFiniteNumber(value: unknown, fallback = 0): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
+function toFiniteNumber(
+  value: unknown,
+  fallback = 0,
+): number {
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue)
+    ? numberValue
+    : fallback;
+}
+
+function toNonNegativeInteger(value: unknown): number {
+  return Math.max(
+    0,
+    Math.trunc(toFiniteNumber(value, 0)),
+  );
 }
 
 function clampPercentage(value: unknown): number {
-  const n = toFiniteNumber(value, 0);
-  if (n <= 0) return 0;
-  if (n >= 100) return 100;
-  return Math.trunc(n);
+  const percentage = toFiniteNumber(value, 0);
+
+  if (percentage <= 0) return 0;
+  if (percentage >= 100) return 100;
+
+  return Math.trunc(percentage);
 }
 
-function normalizeMintStatus(value: unknown): MintStatus | null {
+function normalizeMintStatus(
+  value: unknown,
+): MintStatus | null {
   const status = String(value ?? "").toUpperCase();
 
   switch (status) {
@@ -109,31 +127,38 @@ function normalizeMintStatus(value: unknown): MintStatus | null {
     case "FAILED_RETRYABLE":
     case "FAILED_FATAL":
       return status;
+
     default:
       return null;
   }
 }
 
-function normalizeMintProgress(raw: unknown): MintTaskProgressDTO | null {
-  if (!raw || typeof raw !== "object") return null;
+function normalizeMintProgress(
+  raw: unknown,
+): MintTaskProgressDTO | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
 
-  const obj = raw as Record<string, unknown>;
+  const value = raw as Record<string, unknown>;
 
-  const total = Math.max(0, Math.trunc(toFiniteNumber(obj.total, 0)));
-  const pending = Math.max(0, Math.trunc(toFiniteNumber(obj.pending, 0)));
-  const minting = Math.max(0, Math.trunc(toFiniteNumber(obj.minting, 0)));
-  const minted = Math.max(0, Math.trunc(toFiniteNumber(obj.minted, 0)));
-  const failedRetryable = Math.max(
-    0,
-    Math.trunc(toFiniteNumber(obj.failedRetryable, 0)),
+  const total = toNonNegativeInteger(value.total);
+  const pending = toNonNegativeInteger(value.pending);
+  const minting = toNonNegativeInteger(value.minting);
+  const minted = toNonNegativeInteger(value.minted);
+  const failedRetryable = toNonNegativeInteger(
+    value.failedRetryable,
   );
-  const failedFatal = Math.max(
-    0,
-    Math.trunc(toFiniteNumber(obj.failedFatal, 0)),
+  const failedFatal = toNonNegativeInteger(
+    value.failedFatal,
   );
 
   const calculatedPercentage =
-    total > 0 ? Math.trunc((Math.min(minted, total) / total) * 100) : 0;
+    total > 0
+      ? Math.trunc(
+          (Math.min(minted, total) / total) * 100,
+        )
+      : 0;
 
   return {
     total,
@@ -143,9 +168,9 @@ function normalizeMintProgress(raw: unknown): MintTaskProgressDTO | null {
     failedRetryable,
     failedFatal,
     percentage:
-      obj.percentage === undefined
+      value.percentage === undefined
         ? clampPercentage(calculatedPercentage)
-        : clampPercentage(obj.percentage),
+        : clampPercentage(value.percentage),
   };
 }
 
@@ -153,16 +178,28 @@ function normalizeMintQueuedResponse(
   raw: unknown,
   fallbackProductionId: string,
 ): MintQueuedResponse | null {
-  if (!raw || typeof raw !== "object") return null;
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
 
-  const obj = raw as Record<string, unknown>;
+  const value = raw as Record<string, unknown>;
 
-  const mintRequestId = String(obj.mintRequestId ?? "");
-  const productionId = String(obj.productionId ?? fallbackProductionId);
-  const status = normalizeMintStatus(obj.status);
-  const message = String(obj.message ?? "");
+  const mintRequestId = String(
+    value.mintRequestId ?? "",
+  ).trim();
 
-  if (!mintRequestId || !productionId || status !== "QUEUED") {
+  const productionId = String(
+    value.productionId ?? fallbackProductionId,
+  ).trim();
+
+  const status = normalizeMintStatus(value.status);
+  const message = String(value.message ?? "");
+
+  if (
+    !mintRequestId ||
+    !productionId ||
+    status !== "QUEUED"
+  ) {
     return null;
   }
 
@@ -177,34 +214,47 @@ function normalizeMintQueuedResponse(
 function mergeMintDTOFromRow(
   row: MintRequestManagementRowDTO,
 ): MintDTO | null {
-  const anyRow = row as any;
-  const mintRaw = anyRow?.mint ?? null;
+  const rawRow = row as Record<string, any>;
 
-  const status = normalizeMintStatus(mintRaw?.status ?? anyRow?.status);
-  if (!status) return null;
+  const mintRaw =
+    rawRow.mint &&
+    typeof rawRow.mint === "object"
+      ? rawRow.mint
+      : null;
+
+  const status = normalizeMintStatus(
+    mintRaw?.status ?? rawRow.status,
+  );
+
+  if (!status) {
+    return null;
+  }
 
   const mintProgress =
-    normalizeMintProgress(anyRow?.mintProgress) ??
+    normalizeMintProgress(rawRow.mintProgress) ??
     normalizeMintProgress(mintRaw?.mintProgress);
 
   const merged = {
-    ...(mintRaw ?? anyRow ?? {}),
+    ...(mintRaw ?? rawRow),
 
     status,
 
     createdByName:
-      anyRow?.requestedByName ??
-      anyRow?.createdByName ??
+      rawRow.requestedByName ??
+      rawRow.createdByName ??
       mintRaw?.createdByName ??
       null,
 
-    requestedByName: anyRow?.requestedByName ?? null,
+    requestedByName:
+      rawRow.requestedByName ??
+      mintRaw?.requestedByName ??
+      null,
 
     onChainTxSignature:
       mintRaw?.onChainTxSignature ??
-      anyRow?.onChainTxSignature ??
+      rawRow.onChainTxSignature ??
       mintRaw?.txSignature ??
-      anyRow?.txSignature ??
+      rawRow.txSignature ??
       null,
 
     mintProgress,
@@ -213,149 +263,213 @@ function mergeMintDTOFromRow(
   return merged as MintDTO;
 }
 
-/**
- * Raw fetch for a single view.
- * - fallback は行わない
- * - 404/405 もそのままエラーにする
- * - Backend response は配列を正とする
- */
-async function fetchMintRequestsRowsRawOnce(
-  productionIds: string[],
-  view: MintRequestsView,
-): Promise<FetchMintRequestsResult> {
-  const safeProductionIds = uniqStrings(productionIds ?? []);
+// ===============================
+// GET: /mint/requests
+// ===============================
 
-  if (safeProductionIds.length === 0) {
-    return { rows: [], usedView: view, usedUrl: "" };
+/**
+ * GET /mint/requests の唯一の取得処理。
+ *
+ * - productionIds は空文字と重複を除去する
+ * - Backend response は配列を正とする
+ * - items / rows / data などの旧レスポンス形状は吸収しない
+ * - HTTPエラー、空レスポンス、不正JSON、不正なレスポンス型を区別する
+ */
+export async function fetchMintRequestRowsHTTP(
+  productionIds: string[],
+  view: MintRequestsView = "management",
+): Promise<MintRequestManagementRowDTO[]> {
+  const ids = uniqStrings(productionIds);
+
+  if (ids.length === 0) {
+    return [];
   }
 
-  const authHeaders = await getAuthJsonHeadersOrThrow();
+  const authHeaders =
+    await getAuthJsonHeadersOrThrow();
 
-  const url = buildMintRequestsUrl(safeProductionIds, view);
+  const url = buildMintRequestsUrl(ids, view);
 
-  let res: Response;
+  let response: Response;
 
   try {
-    res = await fetch(url, { method: "GET", headers: authHeaders });
-  } catch (e: any) {
+    response = await fetch(url, {
+      method: "GET",
+      headers: authHeaders,
+    });
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
     throw new Error(
-      `Failed to fetch mint requests (network): ${String(e?.message ?? e)}`,
+      `Failed to fetch mint requests (network): ${message}`,
     );
   }
 
-  if (res.ok) {
-    const json =
-      (await res.json()) as MintRequestManagementRowDTO[] | null | undefined;
+  const text = await readTextSafe(response);
 
-    return {
-      rows: Array.isArray(json) ? json : [],
-      usedView: view,
-      usedUrl: url,
-    };
+  if (!response.ok) {
+    const hint = isServiceUnavailableStatus(
+      response.status,
+    )
+      ? " (service unavailable)"
+      : "";
+
+    throw new Error(
+      `Failed to fetch mint requests${hint}: ` +
+        `${response.status} ${response.statusText}` +
+        (text
+          ? ` body=${text.slice(0, 400)}`
+          : ""),
+    );
   }
 
-  const body = await readTextSafe(res);
+  if (!text.trim()) {
+    throw new Error(
+      "Failed to fetch mint requests: response is empty",
+    );
+  }
 
-  const hint = isServiceUnavailableStatus(res.status)
-    ? " (service unavailable)"
-    : "";
+  let payload: unknown;
 
-  throw new Error(
-    `Failed to fetch mint requests${hint}: ${res.status} ${res.statusText}${
-      body ? ` body=${body.slice(0, 400)}` : ""
-    }`,
-  );
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    throw new Error(
+      "Failed to fetch mint requests: response is not valid JSON",
+    );
+  }
+
+  if (!Array.isArray(payload)) {
+    throw new Error(
+      "Failed to fetch mint requests: response must be an array",
+    );
+  }
+
+  return payload as MintRequestManagementRowDTO[];
 }
 
 // ===============================
-// Public exports
+// GET: MintDTO
 // ===============================
 
 /**
- * productionId で 1 件の MintDTO を取得。
- * ✅ productionId を正とし、id / inspectionId fallback は使わない。
+ * productionId で1件のMintDTOを取得する。
+ *
+ * productionIdを正とし、
+ * id / inspectionId fallbackは使用しない。
  */
 export async function fetchMintByProductionIdHTTP(
   productionId: string,
 ): Promise<MintDTO | null> {
-  const pid = String(productionId ?? "");
+  const normalizedProductionId = String(
+    productionId ?? "",
+  ).trim();
 
-  if (!pid) {
+  if (!normalizedProductionId) {
     throw new Error("productionId が空です");
   }
 
-  const { rows } = await fetchMintRequestsRowsRawOnce([pid], "management");
+  const rows = await fetchMintRequestRowsHTTP(
+    [normalizedProductionId],
+    "management",
+  );
 
   const row =
-    (rows ?? []).find((r) => getProductionId(r) === pid) ??
-    rows?.[0] ??
+    rows.find(
+      (item) =>
+        getProductionId(item) ===
+        normalizedProductionId,
+    ) ??
+    rows[0] ??
     null;
 
-  if (!row) return null;
+  if (!row) {
+    return null;
+  }
 
   return mergeMintDTOFromRow(row);
 }
 
 /**
- * productionIds で MintDTO を map 取得。
- * ✅ key は productionId のみ。
+ * productionIdsでMintDTOをまとめて取得する。
+ *
+ * 戻り値のkeyはproductionIdのみとする。
  */
 export async function fetchMintsByProductionIdsHTTP(
   productionIds: string[],
 ): Promise<Record<string, MintDTO>> {
-  const ids = uniqStrings(productionIds ?? []);
+  const ids = uniqStrings(productionIds);
 
-  if (ids.length === 0) return {};
-
-  const { rows } = await fetchMintRequestsRowsRawOnce(ids, "management");
-
-  const out: Record<string, MintDTO> = {};
-
-  for (const row of rows ?? []) {
-    const key = getProductionId(row);
-    if (!key) continue;
-
-    const mint = mergeMintDTOFromRow(row);
-    if (!mint) continue;
-
-    out[key] = mint;
+  if (ids.length === 0) {
+    return {};
   }
 
-  return out;
+  const rows = await fetchMintRequestRowsHTTP(
+    ids,
+    "management",
+  );
+
+  const result: Record<string, MintDTO> = {};
+
+  for (const row of rows) {
+    const productionId = getProductionId(row);
+
+    if (!productionId) continue;
+
+    const mint = mergeMintDTOFromRow(row);
+
+    if (!mint) continue;
+
+    result[productionId] = mint;
+  }
+
+  return result;
 }
 
 /**
- * productionIds で “一覧用” MintListRowDTO を map 取得。
- * ✅ key は productionId のみ。
+ * productionIdsで一覧表示用MintListRowDTOを
+ * まとめて取得する。
+ *
+ * 戻り値のkeyはproductionIdのみとする。
  */
 export async function fetchMintListRowsByProductionIdsHTTP(
   productionIds: string[],
 ): Promise<Record<string, MintListRowDTO>> {
-  const ids = uniqStrings(productionIds ?? []);
+  const ids = uniqStrings(productionIds);
 
-  if (ids.length === 0) return {};
+  if (ids.length === 0) {
+    return {};
+  }
 
-  const { rows } = await fetchMintRequestsRowsRawOnce(ids, "list");
+  const rows = await fetchMintRequestRowsHTTP(
+    ids,
+    "list",
+  );
 
-  const out: Record<string, MintListRowDTO> = {};
+  const result: Record<string, MintListRowDTO> = {};
 
-  for (const row of rows ?? []) {
-    const key = getProductionId(row);
-    if (!key) continue;
+  for (const row of rows) {
+    const productionId = getProductionId(row);
 
-    const anyRow = row as any;
+    if (!productionId) continue;
+
+    const rawRow = row as Record<string, any>;
+
     const status = normalizeMintStatus(
-      anyRow?.status ?? anyRow?.mint?.status,
+      rawRow.status ?? rawRow.mint?.status,
     );
 
-    out[key] = {
-      ...anyRow,
-      productionId: key,
+    result[productionId] = {
+      ...rawRow,
+      productionId,
       status,
     } as MintListRowDTO;
   }
 
-  return out;
+  return result;
 }
 
 // ===============================
@@ -367,53 +481,98 @@ export async function postMintRequestHTTP(
   tokenBlueprintId: string,
   scheduledBurnDate?: string,
 ): Promise<MintQueuedResponse | null> {
-  const pid = String(productionId ?? "");
+  const normalizedProductionId = String(
+    productionId ?? "",
+  ).trim();
 
-  if (!pid) {
+  if (!normalizedProductionId) {
     throw new Error("productionId が空です");
   }
 
-  const tbID = String(tokenBlueprintId ?? "");
-  if (!tbID) {
+  const normalizedTokenBlueprintId = String(
+    tokenBlueprintId ?? "",
+  ).trim();
+
+  if (!normalizedTokenBlueprintId) {
     throw new Error("tokenBlueprintId が空です");
   }
 
-  const authHeaders = await getAuthJsonHeadersOrThrow();
+  const authHeaders =
+    await getAuthJsonHeadersOrThrow();
 
-  const url = `${API_BASE}/mint/inspections/${encodeURIComponent(pid)}/request`;
+  const url =
+    `${API_BASE}/mint/inspections/` +
+    `${encodeURIComponent(normalizedProductionId)}` +
+    "/request";
 
-  const payload: { tokenBlueprintId: string; scheduledBurnDate?: string } = {
-    tokenBlueprintId: tbID,
+  const payload: {
+    tokenBlueprintId: string;
+    scheduledBurnDate?: string;
+  } = {
+    tokenBlueprintId:
+      normalizedTokenBlueprintId,
   };
 
-  if (scheduledBurnDate) {
-    payload.scheduledBurnDate = String(scheduledBurnDate);
+  const normalizedScheduledBurnDate = String(
+    scheduledBurnDate ?? "",
+  ).trim();
+
+  if (normalizedScheduledBurnDate) {
+    payload.scheduledBurnDate =
+      normalizedScheduledBurnDate;
   }
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: authHeaders,
-    body: JSON.stringify(payload),
-  });
+  let response: Response;
 
-  if (res.status === 404) return null;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify(payload),
+    });
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
 
-  const text = await readTextSafe(res);
-
-  if (!res.ok) {
     throw new Error(
-      `Failed to post mint request: ${res.status} ${res.statusText}${
-        text ? ` body=${text.slice(0, 400)}` : ""
-      }`,
+      `Failed to post mint request (network): ${message}`,
     );
   }
 
-  if (!text) return null;
-
-  try {
-    const json = JSON.parse(text) as unknown;
-    return normalizeMintQueuedResponse(json, pid);
-  } catch {
+  if (response.status === 404) {
     return null;
   }
+
+  const text = await readTextSafe(response);
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to post mint request: ` +
+        `${response.status} ${response.statusText}` +
+        (text
+          ? ` body=${text.slice(0, 400)}`
+          : ""),
+    );
+  }
+
+  if (!text.trim()) {
+    return null;
+  }
+
+  let payloadResponse: unknown;
+
+  try {
+    payloadResponse = JSON.parse(text);
+  } catch {
+    throw new Error(
+      "Failed to post mint request: response is not valid JSON",
+    );
+  }
+
+  return normalizeMintQueuedResponse(
+    payloadResponse,
+    normalizedProductionId,
+  );
 }
