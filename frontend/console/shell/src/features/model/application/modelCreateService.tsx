@@ -2,7 +2,10 @@
 
 import type * as React from "react";
 
-import type { MeasurementOption } from "../domain/entity/catalog";
+import type {
+  ApparelSizeInput,
+  MeasurementOption,
+} from "../../../shared/types/apparel";
 
 /**
  * Model variation作成画面で使用する型定義と
@@ -16,34 +19,33 @@ import type { MeasurementOption } from "../domain/entity/catalog";
  * Common
  * =======================================================*/
 
-export type ModelVariationKind = "apparel" | "alcohol";
+export type ModelVariationKind =
+  | "apparel"
+  | "alcohol";
 
 export type Volume = {
   value: number;
   unit: string;
 };
 
-export type ModelVariationMode = "edit" | "view";
+export type ModelVariationMode =
+  | "edit"
+  | "view";
 
 /* =========================================================
  * SizeVariationCard / apparel variation
  * =======================================================*/
 
-export type SizeRow = {
-  id: string;
-  sizeLabel: string;
-  length?: number;
-  width?: number;
-  chest?: number;
-  shoulder?: number;
-  sleeveLength?: number;
-  waist?: number;
-  hip?: number;
-  rise?: number;
-  inseam?: number;
-  thigh?: number;
-  hemWidth?: number;
-};
+/**
+ * Model variation画面で使用するサイズ・採寸入力行。
+ *
+ * 共通の入力項目はApparelSizeInputを使用し、
+ * UI上の行識別に必要なidだけを追加する。
+ */
+export type SizeRow =
+  ApparelSizeInput & {
+    id: string;
+  };
 
 /* =========================================================
  * VolumeVariationCard / alcohol variation
@@ -104,7 +106,8 @@ export type AlcoholModelNumber = {
 /**
  * 既存のApparel向け利用箇所で使用する型。
  */
-export type ModelNumber = ApparelModelNumber;
+export type ModelNumber =
+  ApparelModelNumber;
 
 export type AnyModelNumber =
   | ApparelModelNumber
@@ -125,6 +128,7 @@ export type UseModelCardParams = {
   colors: string[];
   modelNumbers: ApparelModelNumber[];
   colorRgbMap?: Record<string, string>;
+
   onChangeModelNumber?: (
     sizeLabel: string,
     color: string,
@@ -137,12 +141,15 @@ export type UseModelCardResult = {
     sizeLabel: string,
     color: string,
   ) => string;
+
   onChangeModelNumber: (
     sizeLabel: string,
     color: string,
     nextCode: string,
   ) => void;
-  flatModelNumbers: ApparelModelNumber[];
+
+  flatModelNumbers:
+    ApparelModelNumber[];
 };
 
 /* =========================================================
@@ -153,6 +160,7 @@ export type UseAlcoholModelCardParams = {
   kind: "alcohol";
   volumes: VolumeLike[];
   modelNumbers: AlcoholModelNumber[];
+
   onChangeModelNumber?: (
     volume: Volume,
     nextCode: string,
@@ -160,12 +168,17 @@ export type UseAlcoholModelCardParams = {
 };
 
 export type UseAlcoholModelCardResult = {
-  getCode: (volume: Volume) => string;
+  getCode: (
+    volume: Volume,
+  ) => string;
+
   onChangeModelNumber: (
     volume: Volume,
     nextCode: string,
   ) => void;
-  flatModelNumbers: AlcoholModelNumber[];
+
+  flatModelNumbers:
+    AlcoholModelNumber[];
 };
 
 /* =========================================================
@@ -180,6 +193,7 @@ export type UseSizeVariationCardParams = {
   sizes: SizeRow[];
   mode?: ModelVariationMode;
   measurementOptions?: MeasurementOption[];
+
   onChangeSize?: (
     id: string,
     patch: SizePatch,
@@ -188,16 +202,20 @@ export type UseSizeVariationCardParams = {
 
 export type UseSizeVariationCardResult = {
   isEdit: boolean;
+
   readonlyInputProps: {
     variant?: "readonly";
     readOnly?: boolean;
   };
+
   measurementHeaders: string[];
+
   handleChange: (
     id: string,
     key: keyof Omit<SizeRow, "id">,
   ) => (
-    event: React.ChangeEvent<HTMLInputElement>,
+    event:
+      React.ChangeEvent<HTMLInputElement>,
   ) => void;
 };
 
@@ -212,6 +230,7 @@ export type VolumePatch = Partial<
 export type UseVolumeVariationCardParams = {
   volumes: VolumeRow[];
   mode?: ModelVariationMode;
+
   onChangeVolume?: (
     id: string,
     patch: VolumePatch,
@@ -220,15 +239,18 @@ export type UseVolumeVariationCardParams = {
 
 export type UseVolumeVariationCardResult = {
   isEdit: boolean;
+
   readonlyInputProps: {
     variant?: "readonly";
     readOnly?: boolean;
   };
+
   handleChange: (
     id: string,
     key: keyof Omit<VolumeRow, "id">,
   ) => (
-    event: React.ChangeEvent<HTMLInputElement>,
+    event:
+      React.ChangeEvent<HTMLInputElement>,
   ) => void;
 };
 
@@ -244,11 +266,13 @@ export type UseVolumeVariationCardResult = {
 export function toVolumeLabel(
   volume: Volume,
 ): string {
-  const value = Number.isFinite(volume.value)
-    ? volume.value
-    : 0;
+  const value =
+    Number.isFinite(volume.value)
+      ? volume.value
+      : 0;
 
-  const unit = volume.unit || "ml";
+  const unit =
+    volume.unit || "ml";
 
   return `${value}${unit}`;
 }
@@ -261,6 +285,7 @@ export function volumeRowToVolume(
 ): Volume {
   return {
     value: row.volumeValue,
-    unit: row.volumeUnit || "ml",
+    unit:
+      row.volumeUnit || "ml",
   };
 }
