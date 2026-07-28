@@ -1,10 +1,9 @@
-// frontend/console/productBlueprint/src/domain/entity/apparel.ts
+// frontend/console/shell/src/features/productBlueprint/domain/apparel.ts
 
 // ============================
 // Apparel category codes
 // ============================
 //
-// itemType は廃止。
 // 旧 tops / bottoms は productBlueprintCategory.code の
 // apparel.tops / apparel.bottoms として扱う。
 
@@ -59,20 +58,38 @@ export function isApparelCategoryCode(
 // 上記は categoryFields には入れない。
 // 以下は productBlueprint.categoryFields に入る apparel 専用 field。
 
-export type ApparelCategoryFieldKey = "weight" | "fit" | "material";
+export type ApparelCategoryFieldKey =
+  | "weight"
+  | "fit"
+  | "material";
 
 export type ApparelCategoryFields = Partial<
-  Record<ApparelCategoryFieldKey, string | number | null>
+  Record<
+    ApparelCategoryFieldKey,
+    string | number | null
+  >
 >;
 
 export const APPAREL_CATEGORY_FIELD_KEYS: Record<
   ApparelCategoryCode,
   ApparelCategoryFieldKey[]
 > = {
-  "apparel.tops": ["weight", "fit", "material"],
-  "apparel.bottoms": ["weight", "fit", "material"],
+  "apparel.tops": [
+    "weight",
+    "fit",
+    "material",
+  ],
+  "apparel.bottoms": [
+    "weight",
+    "fit",
+    "material",
+  ],
   "apparel.outerwear": ["material"],
-  "apparel.dress": ["weight", "fit", "material"],
+  "apparel.dress": [
+    "weight",
+    "fit",
+    "material",
+  ],
   "apparel.shoes": ["material"],
   "apparel.bag": ["material"],
   "apparel.accessory": ["material"],
@@ -85,47 +102,11 @@ export function getApparelCategoryFieldKeys(
     return [];
   }
 
-  return APPAREL_CATEGORY_FIELD_KEYS[categoryCode] ?? [];
-}
-
-// ============================
-// Apparel model fields
-// ============================
-//
-// color / size / measurements は ProductBlueprint.categoryFields ではなく、
-// model variation 側に保存する。
-
-export type ApparelModelFieldKey = "color" | "size" | "measurements";
-
-export const APPAREL_MODEL_FIELD_KEYS: Record<
-  ApparelCategoryCode,
-  ApparelModelFieldKey[]
-> = {
-  "apparel.tops": ["color", "size", "measurements"],
-  "apparel.bottoms": ["color", "size", "measurements"],
-  "apparel.outerwear": ["color", "size"],
-  "apparel.dress": ["color", "size", "measurements"],
-  "apparel.shoes": ["color", "size"],
-  "apparel.bag": [],
-  "apparel.accessory": [],
-};
-
-export function getApparelModelFieldKeys(
-  categoryCode: string,
-): ApparelModelFieldKey[] {
-  if (!isApparelCategoryCode(categoryCode)) {
-    return [];
-  }
-
-  return APPAREL_MODEL_FIELD_KEYS[categoryCode] ?? [];
-}
-
-export function hasApparelModelFields(categoryCode: string): boolean {
-  return getApparelModelFieldKeys(categoryCode).length > 0;
-}
-
-export function hasApparelMeasurements(categoryCode: string): boolean {
-  return getApparelModelFieldKeys(categoryCode).includes("measurements");
+  return (
+    APPAREL_CATEGORY_FIELD_KEYS[
+      categoryCode
+    ] ?? []
+  );
 }
 
 // ============================
@@ -164,28 +145,68 @@ export type MeasurementOption = {
   label: string;
 };
 
-export const APPAREL_MEASUREMENT_OPTIONS: MeasurementOption[] = [
-  // トップス
-  { value: "着丈", label: "着丈" },
-  { value: "身幅", label: "身幅" },
-  { value: "胸囲", label: "胸囲" },
-  { value: "肩幅", label: "肩幅" },
-  { value: "袖丈", label: "袖丈" },
+export const APPAREL_MEASUREMENT_OPTIONS: MeasurementOption[] =
+  [
+    // トップス
+    {
+      value: "着丈",
+      label: "着丈",
+    },
+    {
+      value: "身幅",
+      label: "身幅",
+    },
+    {
+      value: "胸囲",
+      label: "胸囲",
+    },
+    {
+      value: "肩幅",
+      label: "肩幅",
+    },
+    {
+      value: "袖丈",
+      label: "袖丈",
+    },
 
-  // ボトムス
-  { value: "ウエスト", label: "ウエスト" },
-  { value: "ヒップ", label: "ヒップ" },
-  { value: "股上", label: "股上" },
-  { value: "股下", label: "股下" },
-  { value: "わたり幅", label: "わたり幅" },
-  { value: "裾幅", label: "裾幅" },
-];
+    // ボトムス
+    {
+      value: "ウエスト",
+      label: "ウエスト",
+    },
+    {
+      value: "ヒップ",
+      label: "ヒップ",
+    },
+    {
+      value: "股上",
+      label: "股上",
+    },
+    {
+      value: "股下",
+      label: "股下",
+    },
+    {
+      value: "わたり幅",
+      label: "わたり幅",
+    },
+    {
+      value: "裾幅",
+      label: "裾幅",
+    },
+  ];
 
 export const APPAREL_CATEGORY_MEASUREMENT_KEYS: Record<
   ApparelCategoryCode,
   ApparelMeasurementKey[]
 > = {
-  "apparel.tops": ["着丈", "身幅", "胸囲", "肩幅", "袖丈"],
+  "apparel.tops": [
+    "着丈",
+    "身幅",
+    "胸囲",
+    "肩幅",
+    "袖丈",
+  ],
   "apparel.bottoms": [
     "ウエスト",
     "ヒップ",
@@ -213,18 +234,25 @@ export const APPAREL_CATEGORY_MEASUREMENT_OPTIONS: Record<
   ApparelCategoryCode,
   MeasurementOption[]
 > = Object.fromEntries(
-  Object.entries(APPAREL_CATEGORY_MEASUREMENT_KEYS).map(
-    ([categoryCode, values]) => [
-      categoryCode,
-      APPAREL_MEASUREMENT_OPTIONS.filter((option) =>
+  Object.entries(
+    APPAREL_CATEGORY_MEASUREMENT_KEYS,
+  ).map(([categoryCode, values]) => [
+    categoryCode,
+    APPAREL_MEASUREMENT_OPTIONS.filter(
+      (option) =>
         values.includes(option.value),
-      ),
-    ],
-  ),
-) as Record<ApparelCategoryCode, MeasurementOption[]>;
+    ),
+  ]),
+) as Record<
+  ApparelCategoryCode,
+  MeasurementOption[]
+>;
 
 export type ApparelMeasurements = Partial<
-  Record<ApparelMeasurementKey, number | null>
+  Record<
+    ApparelMeasurementKey,
+    number | null
+  >
 >;
 
 // ============================
@@ -275,9 +303,10 @@ export type ApparelSizeInput = {
  * UI 行用。
  * 画面 state やリスト描画では id を使えるようにする。
  */
-export type ApparelSizeRow = ApparelSizeInput & {
-  id: string;
-};
+export type ApparelSizeRow =
+  ApparelSizeInput & {
+    id: string;
+  };
 
 // ============================
 // フィット種別
@@ -289,11 +318,26 @@ export type Fit =
   | "リラックスフィット"
   | "オーバーサイズ";
 
-export const FIT_OPTIONS: { value: Fit; label: string }[] = [
-  { value: "レギュラーフィット", label: "レギュラーフィット" },
-  { value: "スリムフィット", label: "スリムフィット" },
-  { value: "リラックスフィット", label: "リラックスフィット" },
-  { value: "オーバーサイズ", label: "オーバーサイズ" },
+export const FIT_OPTIONS: {
+  value: Fit;
+  label: string;
+}[] = [
+  {
+    value: "レギュラーフィット",
+    label: "レギュラーフィット",
+  },
+  {
+    value: "スリムフィット",
+    label: "スリムフィット",
+  },
+  {
+    value: "リラックスフィット",
+    label: "リラックスフィット",
+  },
+  {
+    value: "オーバーサイズ",
+    label: "オーバーサイズ",
+  },
 ];
 
 // ============================
@@ -305,9 +349,18 @@ export const FIT_OPTIONS: { value: Fit; label: string }[] = [
 // 現時点では既存 import 影響を抑えるためここに残す。
 // 後続で common/productIdTag.ts のような共通ファイルへ移動するのが望ましい。
 
-export const PRODUCT_ID_TAG_OPTIONS: { value: string; label: string }[] = [
-  { value: "QRコード", label: "QRコード" },
-  { value: "NFC", label: "NFC" },
+export const PRODUCT_ID_TAG_OPTIONS: {
+  value: string;
+  label: string;
+}[] = [
+  {
+    value: "QRコード",
+    label: "QRコード",
+  },
+  {
+    value: "NFC",
+    label: "NFC",
+  },
 ];
 
 // ============================
@@ -329,128 +382,247 @@ export type WashTagOption = {
   category: WashTagCategory;
 };
 
-export const WASH_TAG_OPTIONS: WashTagOption[] = [
-  { category: "洗濯", value: "手洗い", label: "手洗い" },
-  { category: "洗濯", value: "洗濯機可", label: "洗濯機可" },
-  { category: "洗濯", value: "弱い洗濯", label: "弱い洗濯" },
-  { category: "洗濯", value: "液温30℃限度", label: "液温30℃限度" },
-  { category: "洗濯", value: "液温40℃限度", label: "液温40℃限度" },
-  { category: "洗濯", value: "水洗い不可", label: "水洗い不可" },
+export const WASH_TAG_OPTIONS: WashTagOption[] =
+  [
+    {
+      category: "洗濯",
+      value: "手洗い",
+      label: "手洗い",
+    },
+    {
+      category: "洗濯",
+      value: "洗濯機可",
+      label: "洗濯機可",
+    },
+    {
+      category: "洗濯",
+      value: "弱い洗濯",
+      label: "弱い洗濯",
+    },
+    {
+      category: "洗濯",
+      value: "液温30℃限度",
+      label: "液温30℃限度",
+    },
+    {
+      category: "洗濯",
+      value: "液温40℃限度",
+      label: "液温40℃限度",
+    },
+    {
+      category: "洗濯",
+      value: "水洗い不可",
+      label: "水洗い不可",
+    },
 
-  { category: "漂白", value: "酸素系漂白可", label: "酸素系漂白可" },
-  { category: "漂白", value: "塩素系漂白可", label: "塩素系漂白可" },
-  { category: "漂白", value: "漂白不可", label: "漂白不可" },
+    {
+      category: "漂白",
+      value: "酸素系漂白可",
+      label: "酸素系漂白可",
+    },
+    {
+      category: "漂白",
+      value: "塩素系漂白可",
+      label: "塩素系漂白可",
+    },
+    {
+      category: "漂白",
+      value: "漂白不可",
+      label: "漂白不可",
+    },
 
-  { category: "乾燥", value: "タンブル乾燥可 低温", label: "タンブル乾燥可（低温）" },
-  { category: "乾燥", value: "タンブル乾燥可 中温", label: "タンブル乾燥可（中温）" },
-  { category: "乾燥", value: "タンブル乾燥不可", label: "タンブル乾燥不可" },
-  { category: "乾燥", value: "つり干し", label: "つり干し" },
-  { category: "乾燥", value: "日陰つり干し", label: "日陰つり干し" },
-  { category: "乾燥", value: "平干し", label: "平干し" },
-  { category: "乾燥", value: "日陰平干し", label: "日陰平干し" },
+    {
+      category: "乾燥",
+      value: "タンブル乾燥可 低温",
+      label:
+        "タンブル乾燥可（低温）",
+    },
+    {
+      category: "乾燥",
+      value: "タンブル乾燥可 中温",
+      label:
+        "タンブル乾燥可（中温）",
+    },
+    {
+      category: "乾燥",
+      value: "タンブル乾燥不可",
+      label: "タンブル乾燥不可",
+    },
+    {
+      category: "乾燥",
+      value: "つり干し",
+      label: "つり干し",
+    },
+    {
+      category: "乾燥",
+      value: "日陰つり干し",
+      label: "日陰つり干し",
+    },
+    {
+      category: "乾燥",
+      value: "平干し",
+      label: "平干し",
+    },
+    {
+      category: "乾燥",
+      value: "日陰平干し",
+      label: "日陰平干し",
+    },
 
-  { category: "アイロン", value: "アイロン低温", label: "アイロン低温（110℃まで）" },
-  { category: "アイロン", value: "アイロン中温", label: "アイロン中温（150℃まで）" },
-  { category: "アイロン", value: "アイロン高温", label: "アイロン高温（200℃まで）" },
-  { category: "アイロン", value: "アイロン不可", label: "アイロン不可" },
+    {
+      category: "アイロン",
+      value: "アイロン低温",
+      label:
+        "アイロン低温（110℃まで）",
+    },
+    {
+      category: "アイロン",
+      value: "アイロン中温",
+      label:
+        "アイロン中温（150℃まで）",
+    },
+    {
+      category: "アイロン",
+      value: "アイロン高温",
+      label:
+        "アイロン高温（200℃まで）",
+    },
+    {
+      category: "アイロン",
+      value: "アイロン不可",
+      label: "アイロン不可",
+    },
 
-  {
-    category: "ドライクリーニング",
-    value: "ドライクリーニング可",
-    label: "ドライクリーニング可",
-  },
-  {
-    category: "ドライクリーニング",
-    value: "石油系ドライ可",
-    label: "石油系ドライクリーニング可",
-  },
-  {
-    category: "ドライクリーニング",
-    value: "ドライクリーニング不可",
-    label: "ドライクリーニング不可",
-  },
+    {
+      category:
+        "ドライクリーニング",
+      value:
+        "ドライクリーニング可",
+      label:
+        "ドライクリーニング可",
+    },
+    {
+      category:
+        "ドライクリーニング",
+      value: "石油系ドライ可",
+      label:
+        "石油系ドライクリーニング可",
+    },
+    {
+      category:
+        "ドライクリーニング",
+      value:
+        "ドライクリーニング不可",
+      label:
+        "ドライクリーニング不可",
+    },
 
-  {
-    category: "ウェットクリーニング",
-    value: "ウェットクリーニング可",
-    label: "ウェットクリーニング可",
-  },
-  {
-    category: "ウェットクリーニング",
-    value: "ウェットクリーニング弱",
-    label: "ウェットクリーニング（弱）",
-  },
-  {
-    category: "ウェットクリーニング",
-    value: "ウェットクリーニング非常に弱",
-    label: "ウェットクリーニング（非常に弱）",
-  },
-  {
-    category: "ウェットクリーニング",
-    value: "ウェットクリーニング不可",
-    label: "ウェットクリーニング不可",
-  },
-];
+    {
+      category:
+        "ウェットクリーニング",
+      value:
+        "ウェットクリーニング可",
+      label:
+        "ウェットクリーニング可",
+    },
+    {
+      category:
+        "ウェットクリーニング",
+      value:
+        "ウェットクリーニング弱",
+      label:
+        "ウェットクリーニング（弱）",
+    },
+    {
+      category:
+        "ウェットクリーニング",
+      value:
+        "ウェットクリーニング非常に弱",
+      label:
+        "ウェットクリーニング（非常に弱）",
+    },
+    {
+      category:
+        "ウェットクリーニング",
+      value:
+        "ウェットクリーニング不可",
+      label:
+        "ウェットクリーニング不可",
+    },
+  ];
 
 // ============================
 // helpers
 // ============================
 
-export function getApparelMeasurementOptions(
-  categoryCode: string,
-): MeasurementOption[] {
-  if (!isApparelCategoryCode(categoryCode)) {
-    return [];
-  }
-
-  return APPAREL_CATEGORY_MEASUREMENT_OPTIONS[categoryCode] ?? [];
-}
-
-export function isApparelMeasurementRequiredCategory(
-  categoryCode: string,
-): boolean {
-  return hasApparelMeasurements(categoryCode);
-}
-
-function toMeasurementKeyFromSizeField(key: string): ApparelMeasurementKey | null {
+function toMeasurementKeyFromSizeField(
+  key: string,
+): ApparelMeasurementKey | null {
   switch (key) {
     case "length":
       return "着丈";
+
     case "width":
       return "身幅";
+
     case "chest":
       return "胸囲";
+
     case "shoulder":
       return "肩幅";
+
     case "sleeveLength":
       return "袖丈";
+
     case "waist":
       return "ウエスト";
+
     case "hip":
       return "ヒップ";
+
     case "rise":
       return "股上";
+
     case "inseam":
       return "股下";
+
     case "thigh":
       return "わたり幅";
+
     case "hemWidth":
       return "裾幅";
+
     default:
       return null;
   }
 }
 
 export function normalizeApparelMeasurements(
-  measurements: Record<string, number | null | undefined> | undefined | null,
+  measurements:
+    | Record<
+        string,
+        number | null | undefined
+      >
+    | undefined
+    | null,
 ): Record<string, number> {
   const out: Record<string, number> = {};
 
-  for (const [key, value] of Object.entries(measurements ?? {})) {
-    if (value == null) continue;
-    if (Number.isNaN(value)) continue;
+  for (const [key, value] of Object.entries(
+    measurements ?? {},
+  )) {
+    if (value == null) {
+      continue;
+    }
 
-    const measurementKey = toMeasurementKeyFromSizeField(key) ?? key;
+    if (Number.isNaN(value)) {
+      continue;
+    }
+
+    const measurementKey =
+      toMeasurementKeyFromSizeField(key) ??
+      key;
+
     out[measurementKey] = value;
   }
 

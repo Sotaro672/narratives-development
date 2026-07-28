@@ -61,7 +61,9 @@ export interface ProductBlueprintCategorySnapshot {
 /**
  * backend/internal/domain/productBlueprintCategory.InputFieldScope に対応。
  */
-export type CategoryInputFieldScope = "productBlueprint" | "model";
+export type CategoryInputFieldScope =
+  | "productBlueprint"
+  | "model";
 
 /**
  * backend/internal/domain/productBlueprintCategory.InputFieldType に対応。
@@ -183,52 +185,8 @@ export function isValidWashTags(
 }
 
 /**
- * washTags を保存用に正規化する。
- *
- * - 文字列以外を除外
- * - 空文字を除外
- * - 前後の空白を除去
- * - 重複を除外
+ * ProductBlueprintCategoryKindとして有効な値か判定する。
  */
-export function normalizeWashTags(
-  value: unknown,
-): WashTags {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const normalized = value
-    .filter(
-      (item): item is string =>
-        typeof item === "string",
-    )
-    .map((item) => item.trim())
-    .filter((item) => item !== "");
-
-  return [...new Set(normalized)];
-}
-
-/**
- * apparel の必須 categoryFields を検証する。
- */
-export function validateApparelCategoryFields(
-  fields: CategoryFieldValues | null | undefined,
-): string[] {
-  const errors: string[] = [];
-
-  if (!fields) {
-    return ["categoryFields is required for apparel"];
-  }
-
-  if (!isValidWashTags(fields.washTags)) {
-    errors.push(
-      "categoryFields.washTags must contain at least one value",
-    );
-  }
-
-  return errors;
-}
-
 export function isValidProductBlueprintCategoryKind(
   value: string | null | undefined,
 ): value is ProductBlueprintCategoryKind {
@@ -241,49 +199,9 @@ export function isValidProductBlueprintCategoryKind(
   );
 }
 
-export function validateProductBlueprintCategorySnapshot(
-  category:
-    | ProductBlueprintCategorySnapshot
-    | null
-    | undefined,
-): string[] {
-  const errors: string[] = [];
-
-  if (!category) {
-    return ["productBlueprintCategory is required"];
-  }
-
-  if (!category.id?.trim()) {
-    errors.push(
-      "productBlueprintCategory.id is required",
-    );
-  }
-
-  if (!category.code?.trim()) {
-    errors.push(
-      "productBlueprintCategory.code is required",
-    );
-  }
-
-  if (!category.nameJa?.trim()) {
-    errors.push(
-      "productBlueprintCategory.nameJa is required",
-    );
-  }
-
-  if (
-    !isValidProductBlueprintCategoryKind(
-      category.kind,
-    )
-  ) {
-    errors.push(
-      "productBlueprintCategory.kind is invalid",
-    );
-  }
-
-  return errors;
-}
-
+/**
+ * カテゴリマスタをProductBlueprintへ保存するsnapshotへ変換する。
+ */
 export function toProductBlueprintCategorySnapshot(
   category: ProductBlueprintCategory,
 ): ProductBlueprintCategorySnapshot {
@@ -297,66 +215,4 @@ export function toProductBlueprintCategorySnapshot(
     path: [...category.path],
     displayOrder: category.displayOrder,
   };
-}
-
-export function getProductBlueprintCategoryDisplayName(
-  category:
-    | ProductBlueprintCategory
-    | ProductBlueprintCategorySnapshot,
-): string {
-  return (
-    category.nameJa ||
-    category.nameEn ||
-    category.code
-  );
-}
-
-export function isApparelProductBlueprintCategory(
-  category:
-    | ProductBlueprintCategory
-    | ProductBlueprintCategorySnapshot
-    | null
-    | undefined,
-): boolean {
-  return category?.kind === "apparel";
-}
-
-export function isAlcoholProductBlueprintCategory(
-  category:
-    | ProductBlueprintCategory
-    | ProductBlueprintCategorySnapshot
-    | null
-    | undefined,
-): boolean {
-  return category?.kind === "alcohol";
-}
-
-export function isCosmeticsProductBlueprintCategory(
-  category:
-    | ProductBlueprintCategory
-    | ProductBlueprintCategorySnapshot
-    | null
-    | undefined,
-): boolean {
-  return category?.kind === "cosmetics";
-}
-
-export function isHealthcareProductBlueprintCategory(
-  category:
-    | ProductBlueprintCategory
-    | ProductBlueprintCategorySnapshot
-    | null
-    | undefined,
-): boolean {
-  return category?.kind === "healthcare";
-}
-
-export function isOtherProductBlueprintCategory(
-  category:
-    | ProductBlueprintCategory
-    | ProductBlueprintCategorySnapshot
-    | null
-    | undefined,
-): boolean {
-  return category?.kind === "other";
 }

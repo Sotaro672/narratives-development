@@ -1,28 +1,13 @@
-// frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintCreateCategory.ts
+// frontend/console/shell/src/features/productBlueprint/presentation/hooks/create/useProductBlueprintCreateCategory.ts
 
 import * as React from "react";
 
+import { listProductBlueprintCategoriesApi } from "../../../infrastructure/api/productBlueprintApi";
+
 import {
-  listProductBlueprintCategoriesApi,
-} from "../../../infrastructure/api/productBlueprintApi";
-
-import type {
-  ProductBlueprintCategory,
-  ProductBlueprintCategorySnapshot,
+  toProductBlueprintCategorySnapshot,
+  type ProductBlueprintCategorySnapshot,
 } from "../../../domain/productBlueprintCategory";
-
-function toProductBlueprintCategorySnapshot(
-  category: ProductBlueprintCategory,
-): ProductBlueprintCategorySnapshot {
-  return {
-    id: category.id,
-    code: category.code,
-    nameJa: category.nameJa,
-    nameEn: category.nameEn,
-    kind: category.kind,
-    path: [...category.path],
-  };
-}
 
 function getCategoryLabel(
   category: ProductBlueprintCategorySnapshot | null,
@@ -53,17 +38,30 @@ export type UseProductBlueprintCreateCategoryResult = {
 };
 
 export function useProductBlueprintCreateCategory(): UseProductBlueprintCreateCategoryResult {
-  const [productBlueprintCategory, setProductBlueprintCategory] =
-    React.useState<ProductBlueprintCategorySnapshot | null>(null);
+  const [
+    productBlueprintCategory,
+    setProductBlueprintCategory,
+  ] =
+    React.useState<ProductBlueprintCategorySnapshot | null>(
+      null,
+    );
 
-  const [productBlueprintCategoryOptions, setProductBlueprintCategoryOptions] =
-    React.useState<ProductBlueprintCategorySnapshot[]>([]);
+  const [
+    productBlueprintCategoryOptions,
+    setProductBlueprintCategoryOptions,
+  ] = React.useState<
+    ProductBlueprintCategorySnapshot[]
+  >([]);
 
-  const [productBlueprintCategoryLoading, setProductBlueprintCategoryLoading] =
-    React.useState(false);
+  const [
+    productBlueprintCategoryLoading,
+    setProductBlueprintCategoryLoading,
+  ] = React.useState(false);
 
-  const [productBlueprintCategoryError, setProductBlueprintCategoryError] =
-    React.useState<Error | null>(null);
+  const [
+    productBlueprintCategoryError,
+    setProductBlueprintCategoryError,
+  ] = React.useState<Error | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -73,21 +71,32 @@ export function useProductBlueprintCreateCategory(): UseProductBlueprintCreateCa
       setProductBlueprintCategoryError(null);
 
       try {
-        const categories = await listProductBlueprintCategoriesApi();
-        const snapshots = categories.map(toProductBlueprintCategorySnapshot);
+        const categories =
+          await listProductBlueprintCategoriesApi();
+
+        const snapshots = categories.map(
+          toProductBlueprintCategorySnapshot,
+        );
 
         if (!cancelled) {
-          setProductBlueprintCategoryOptions(snapshots);
+          setProductBlueprintCategoryOptions(
+            snapshots,
+          );
         }
       } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
+        const err =
+          error instanceof Error
+            ? error
+            : new Error(String(error));
 
         if (!cancelled) {
           setProductBlueprintCategoryError(err);
         }
       } finally {
         if (!cancelled) {
-          setProductBlueprintCategoryLoading(false);
+          setProductBlueprintCategoryLoading(
+            false,
+          );
         }
       }
     }
@@ -99,15 +108,21 @@ export function useProductBlueprintCreateCategory(): UseProductBlueprintCreateCa
     };
   }, []);
 
-  const productBlueprintCategoryId = React.useMemo(
-    () => productBlueprintCategory?.id ?? "",
-    [productBlueprintCategory],
-  );
+  const productBlueprintCategoryId =
+    React.useMemo(
+      () =>
+        productBlueprintCategory?.id ?? "",
+      [productBlueprintCategory],
+    );
 
-  const productBlueprintCategoryLabel = React.useMemo(
-    () => getCategoryLabel(productBlueprintCategory),
-    [productBlueprintCategory],
-  );
+  const productBlueprintCategoryLabel =
+    React.useMemo(
+      () =>
+        getCategoryLabel(
+          productBlueprintCategory,
+        ),
+      [productBlueprintCategory],
+    );
 
   return {
     productBlueprintCategoryId,
@@ -116,6 +131,7 @@ export function useProductBlueprintCreateCategory(): UseProductBlueprintCreateCa
     productBlueprintCategoryOptions,
     productBlueprintCategoryLoading,
     productBlueprintCategoryError,
-    onChangeProductBlueprintCategory: setProductBlueprintCategory,
+    onChangeProductBlueprintCategory:
+      setProductBlueprintCategory,
   };
 }
