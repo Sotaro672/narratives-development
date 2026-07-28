@@ -42,7 +42,6 @@ type CategoryFieldsCardProps = {
   categoryCode: string;
   categoryFields?: CategoryFieldValues | null;
   mode?: "edit" | "view";
-
   onChangeCategoryField?: (
     key: string,
     value: CategoryFieldValue,
@@ -52,18 +51,14 @@ type CategoryFieldsCardProps = {
 function normalizeCategoryCode(
   categoryCode: string,
 ): string {
-  return String(
-    categoryCode ?? "",
-  ).trim();
+  return String(categoryCode ?? "").trim();
 }
 
 function isChildCategoryCode(
   categoryCode: string,
 ): boolean {
   const code =
-    normalizeCategoryCode(
-      categoryCode,
-    );
+    normalizeCategoryCode(categoryCode);
 
   if (!code) {
     return false;
@@ -84,47 +79,25 @@ function resolveCategoryFieldsCardTitle(
   categoryCode: string,
 ): string {
   const code =
-    normalizeCategoryCode(
-      categoryCode,
-    );
+    normalizeCategoryCode(categoryCode);
 
-  if (
-    code.startsWith(
-      "apparel.",
-    )
-  ) {
+  if (code.startsWith("apparel.")) {
     return "衣類情報";
   }
 
-  if (
-    code.startsWith(
-      "alcohol.",
-    )
-  ) {
+  if (code.startsWith("alcohol.")) {
     return "酒類情報";
   }
 
-  if (
-    code.startsWith(
-      "cosmetics.",
-    )
-  ) {
+  if (code.startsWith("cosmetics.")) {
     return "化粧品情報";
   }
 
-  if (
-    code.startsWith(
-      "healthcare.",
-    )
-  ) {
+  if (code.startsWith("healthcare.")) {
     return "ヘルスケア情報";
   }
 
-  if (
-    code.startsWith(
-      "other.",
-    )
-  ) {
+  if (code.startsWith("other.")) {
     return "その他情報";
   }
 
@@ -138,8 +111,7 @@ function getCategoryFieldValue(
     | undefined,
   key: string,
 ): CategoryFieldValue {
-  const value =
-    categoryFields?.[key];
+  const value = categoryFields?.[key];
 
   if (
     typeof value === "string" ||
@@ -160,8 +132,7 @@ function getStringFieldValue(
     | undefined,
   key: string,
 ): string {
-  const value =
-    categoryFields?.[key];
+  const value = categoryFields?.[key];
 
   return typeof value === "string"
     ? value
@@ -174,16 +145,15 @@ function getNumberFieldValue(
     | null
     | undefined,
   key: string,
-): number {
-  const value =
-    categoryFields?.[key];
+): number | "" {
+  const value = categoryFields?.[key];
 
   return (
     typeof value === "number" &&
-    !Number.isNaN(value)
+    Number.isFinite(value)
   )
     ? value
-    : 0;
+    : "";
 }
 
 function getWashTagsValue(
@@ -197,9 +167,7 @@ function getWashTagsValue(
     categoryFields?.qualityAssurance ??
     [];
 
-  if (
-    !Array.isArray(rawValue)
-  ) {
+  if (!Array.isArray(rawValue)) {
     return [];
   }
 
@@ -210,33 +178,26 @@ function getWashTagsValue(
   );
 }
 
-const CategoryFieldsCard:
-  React.FC<
-    CategoryFieldsCardProps
-  > = ({
+const CategoryFieldsCard: React.FC<
+  CategoryFieldsCardProps
+> = ({
   categoryCode,
   categoryFields,
   mode = "edit",
   onChangeCategoryField,
 }) => {
   const normalizedCategoryCode =
-    normalizeCategoryCode(
-      categoryCode,
-    );
+    normalizeCategoryCode(categoryCode);
 
-  const isEdit =
-    mode === "edit";
+  const isEdit = mode === "edit";
 
-  const visibility =
-    React.useMemo(
-      () =>
-        getCategoryCardVisibility(
-          normalizedCategoryCode,
-        ),
-      [
+  const visibility = React.useMemo(
+    () =>
+      getCategoryCardVisibility(
         normalizedCategoryCode,
-      ],
-    );
+      ),
+    [normalizedCategoryCode],
+  );
 
   /**
    * alcoholのvolumeはmodel variation側で扱う。
@@ -254,16 +215,12 @@ const CategoryFieldsCard:
         key: string,
         rawValue: string,
       ) => {
-        if (
-          !onChangeCategoryField
-        ) {
+        if (!onChangeCategoryField) {
           return;
         }
 
         if (
-          isNumberCategoryField(
-            key,
-          )
+          isNumberCategoryField(key)
         ) {
           onChangeCategoryField(
             key,
@@ -282,24 +239,18 @@ const CategoryFieldsCard:
             : rawValue,
         );
       },
-      [
-        onChangeCategoryField,
-      ],
+      [onChangeCategoryField],
     );
 
   const handleChangeWashTags =
     React.useCallback(
-      (
-        nextTags: string[],
-      ) => {
+      (nextTags: string[]) => {
         onChangeCategoryField?.(
           "washTags",
           nextTags as CategoryFieldValue,
         );
       },
-      [
-        onChangeCategoryField,
-      ],
+      [onChangeCategoryField],
     );
 
   const fitValue =
@@ -321,9 +272,7 @@ const CategoryFieldsCard:
     );
 
   const washTagsValue =
-    getWashTagsValue(
-      categoryFields,
-    );
+    getWashTagsValue(categoryFields);
 
   const cardTitle =
     resolveCategoryFieldsCardTitle(
@@ -355,24 +304,18 @@ const CategoryFieldsCard:
   /**
    * 子カテゴリでも表示対象fieldがない場合は非表示。
    */
-  if (
-    !hasVisibleFields
-  ) {
+  if (!hasVisibleFields) {
     return null;
   }
 
   return (
     <Card
       className={`pbc ${
-        !isEdit
-          ? "view-mode"
-          : ""
+        !isEdit ? "view-mode" : ""
       }`}
     >
       <CardHeader className="box__header">
-        <SlidersHorizontal
-          size={16}
-        />
+        <SlidersHorizontal size={16} />
 
         <CardTitle className="box__title">
           {cardTitle}
@@ -396,9 +339,7 @@ const CategoryFieldsCard:
                       "vintage",
                     ),
                   )}
-                  onChange={(
-                    event,
-                  ) =>
+                  onChange={(event) =>
                     handleChangeCategoryField(
                       "vintage",
                       event.target.value,
@@ -437,9 +378,7 @@ const CategoryFieldsCard:
                     "region",
                   ),
                 )}
-                onChange={(
-                  event,
-                ) =>
+                onChange={(event) =>
                   handleChangeCategoryField(
                     "region",
                     event.target.value,
@@ -474,12 +413,9 @@ const CategoryFieldsCard:
                 <>
                   <Input
                     type="number"
-                    value={
-                      weightValue
-                    }
-                    onChange={(
-                      event,
-                    ) =>
+                    value={weightValue}
+                    placeholder="0"
+                    onChange={(event) =>
                       handleChangeCategoryField(
                         "weight",
                         event.target.value,
@@ -496,9 +432,9 @@ const CategoryFieldsCard:
                 <>
                   <Input
                     value={
-                      weightValue
-                        ? `${weightValue}`
-                        : ""
+                      weightValue === ""
+                        ? ""
+                        : String(weightValue)
                     }
                     variant="readonly"
                     readOnly
@@ -545,9 +481,7 @@ const CategoryFieldsCard:
                       },
                     ) => (
                       <div
-                        key={
-                          option.value
-                        }
+                        key={option.value}
                         className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
                           fitValue ===
                           option.value
@@ -561,9 +495,7 @@ const CategoryFieldsCard:
                           )
                         }
                       >
-                        {
-                          option.label
-                        }
+                        {option.label}
                       </div>
                     ),
                   )}
@@ -571,9 +503,7 @@ const CategoryFieldsCard:
               </Popover>
             ) : (
               <Input
-                value={
-                  fitValue
-                }
+                value={fitValue}
                 variant="readonly"
                 readOnly
                 aria-label="フィット"
@@ -590,12 +520,8 @@ const CategoryFieldsCard:
 
             {isEdit ? (
               <Input
-                value={
-                  materialValue
-                }
-                onChange={(
-                  event,
-                ) =>
+                value={materialValue}
+                onChange={(event) =>
                   handleChangeCategoryField(
                     "material",
                     event.target.value,
@@ -605,9 +531,7 @@ const CategoryFieldsCard:
               />
             ) : (
               <Input
-                value={
-                  materialValue
-                }
+                value={materialValue}
                 variant="readonly"
                 readOnly
                 aria-label="素材"
@@ -633,9 +557,7 @@ const CategoryFieldsCard:
                         "alcoholContent",
                       ),
                     )}
-                    onChange={(
-                      event,
-                    ) =>
+                    onChange={(event) =>
                       handleChangeCategoryField(
                         "alcoholContent",
                         event.target.value,
@@ -688,9 +610,7 @@ const CategoryFieldsCard:
                         "volume",
                       ),
                     )}
-                    onChange={(
-                      event,
-                    ) =>
+                    onChange={(event) =>
                       handleChangeCategoryField(
                         "volume",
                         event.target.value,
@@ -728,9 +648,7 @@ const CategoryFieldsCard:
 
         {visibility.showWashTags && (
           <WashTagField
-            value={
-              washTagsValue
-            }
+            value={washTagsValue}
             mode={mode}
             onChange={
               handleChangeWashTags
