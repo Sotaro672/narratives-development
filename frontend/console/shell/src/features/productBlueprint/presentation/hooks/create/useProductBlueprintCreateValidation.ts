@@ -7,12 +7,20 @@ import type {
   ModelNumber,
   VolumeRow,
 } from "../../../../model/application/modelCreateService";
-import type { ApparelSizeRow } from "../../../domain/apparel";
+
+import type {
+  ApparelSizeInput,
+} from "../../../../../shared/types/apparel";
+
 import {
   isValidWashTags,
   type CategoryFieldValues,
   type ProductBlueprintCategorySnapshot,
 } from "../../../domain/productBlueprintCategory";
+
+type ApparelSizeRow = ApparelSizeInput & {
+  id: string;
+};
 
 export type UseProductBlueprintCreateValidationParams = {
   companyId: string;
@@ -40,13 +48,16 @@ export type UseProductBlueprintCreateValidationParams = {
 
   /**
    * alcohol model variation 用。
-   * volume は productBlueprint.categoryFields ではなく model domain 側で扱う。
+   * volume は ProductBlueprint.categoryFields ではなく
+   * model domain 側で扱う。
    */
   volumes: VolumeRow[];
   alcoholModelNumbers: AlcoholModelNumber[];
 };
 
-function normalizeString(value: unknown): string {
+function normalizeString(
+  value: unknown,
+): string {
   return typeof value === "string"
     ? value.trim()
     : String(value ?? "").trim();
@@ -65,7 +76,9 @@ function toVolumeLabel(
       : 0;
 
   const unit =
-    normalizeString(volume.volumeUnit) || "ml";
+    normalizeString(
+      volume.volumeUnit,
+    ) || "ml";
 
   if (value <= 0) {
     return "";
@@ -78,30 +91,33 @@ function toAlcoholModelNumberVolumeLabel(
   modelNumber: AlcoholModelNumber,
 ): string {
   return toVolumeLabel({
-    volumeValue: modelNumber.volume.value,
-    volumeUnit: modelNumber.volume.unit,
+    volumeValue:
+      modelNumber.volume.value,
+
+    volumeUnit:
+      modelNumber.volume.unit,
   });
 }
 
 function hasEmptyModelNumberValue(
   modelNumber: ModelNumber,
 ): boolean {
-  return Object.values(modelNumber).some(
-    (value) => {
-      if (value == null) {
-        return true;
-      }
+  return Object.values(
+    modelNumber,
+  ).some((value) => {
+    if (value == null) {
+      return true;
+    }
 
-      if (
-        typeof value === "string" &&
-        value.trim() === ""
-      ) {
-        return true;
-      }
+    if (
+      typeof value === "string" &&
+      value.trim() === ""
+    ) {
+      return true;
+    }
 
-      return false;
-    },
-  );
+    return false;
+  });
 }
 
 function hasEmptyAlcoholModelNumberValue(
@@ -135,7 +151,9 @@ export function useProductBlueprintCreateValidation(
     }
 
     if (!params.productName.trim()) {
-      errors.push("商品名は必須です。");
+      errors.push(
+        "商品名は必須です。",
+      );
     }
 
     if (!params.brandId) {
@@ -218,9 +236,13 @@ export function useProductBlueprintCreateValidation(
             }
 
             if (seenCodes.has(code)) {
-              duplicateCodes.add(code);
+              duplicateCodes.add(
+                code,
+              );
             } else {
-              seenCodes.add(code);
+              seenCodes.add(
+                code,
+              );
             }
           },
         );
@@ -243,21 +265,30 @@ export function useProductBlueprintCreateValidation(
         const duplicateSizes =
           new Set<string>();
 
-        params.sizes.forEach((size) => {
-          const label = normalizeString(
-            size.sizeLabel,
-          );
+        params.sizes.forEach(
+          (size) => {
+            const label =
+              normalizeString(
+                size.sizeLabel,
+              );
 
-          if (!label) {
-            return;
-          }
+            if (!label) {
+              return;
+            }
 
-          if (seenSizes.has(label)) {
-            duplicateSizes.add(label);
-          } else {
-            seenSizes.add(label);
-          }
-        });
+            if (
+              seenSizes.has(label)
+            ) {
+              duplicateSizes.add(
+                label,
+              );
+            } else {
+              seenSizes.add(
+                label,
+              );
+            }
+          },
+        );
 
         if (
           duplicateSizes.size > 0
@@ -272,7 +303,9 @@ export function useProductBlueprintCreateValidation(
     }
 
     if (params.isAlcoholCategory) {
-      if (params.volumes.length === 0) {
+      if (
+        params.volumes.length === 0
+      ) {
         errors.push(
           "容量バリエーションを1つ以上登録してください。",
         );
@@ -298,7 +331,9 @@ export function useProductBlueprintCreateValidation(
         }
       }
 
-      if (params.volumes.length > 0) {
+      if (
+        params.volumes.length > 0
+      ) {
         const seenVolumes =
           new Set<string>();
 
@@ -308,7 +343,9 @@ export function useProductBlueprintCreateValidation(
         params.volumes.forEach(
           (volume) => {
             const label =
-              toVolumeLabel(volume);
+              toVolumeLabel(
+                volume,
+              );
 
             if (!label) {
               errors.push(
@@ -325,7 +362,9 @@ export function useProductBlueprintCreateValidation(
                 label,
               );
             } else {
-              seenVolumes.add(label);
+              seenVolumes.add(
+                label,
+              );
             }
           },
         );
@@ -360,10 +399,16 @@ export function useProductBlueprintCreateValidation(
               return;
             }
 
-            if (seenCodes.has(code)) {
-              duplicateCodes.add(code);
+            if (
+              seenCodes.has(code)
+            ) {
+              duplicateCodes.add(
+                code,
+              );
             } else {
-              seenCodes.add(code);
+              seenCodes.add(
+                code,
+              );
             }
           },
         );
@@ -387,22 +432,28 @@ export function useProductBlueprintCreateValidation(
         const validVolumeLabels =
           new Set(
             params.volumes
-              .map(toVolumeLabel)
+              .map(
+                toVolumeLabel,
+              )
               .filter(Boolean),
           );
 
         const missingModelNumberVolumes =
           params.volumes
-            .map(toVolumeLabel)
+            .map(
+              toVolumeLabel,
+            )
             .filter(Boolean)
             .filter(
               (label) =>
-                !params.alcoholModelNumbers.some(
-                  (modelNumber) =>
-                    toAlcoholModelNumberVolumeLabel(
-                      modelNumber,
-                    ) === label,
-                ),
+                !params
+                  .alcoholModelNumbers
+                  .some(
+                    (modelNumber) =>
+                      toAlcoholModelNumberVolumeLabel(
+                        modelNumber,
+                      ) === label,
+                  ),
             );
 
         if (

@@ -6,7 +6,7 @@ import {
   type ApparelCategoryCode,
   type ApparelMeasurements,
   type ApparelSizeInput,
-} from "../domain/apparel";
+} from "../../../shared/types/apparel";
 
 import {
   isAlcoholCategoryCode,

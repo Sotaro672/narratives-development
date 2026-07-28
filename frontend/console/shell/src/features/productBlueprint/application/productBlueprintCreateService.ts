@@ -5,9 +5,8 @@ import {
   normalizeApparelMeasurementsForRequest,
   type ApparelCategoryCode,
   type ApparelMeasurements,
-  type ApparelModelVariationPayload,
-  type ApparelSizeRow,
-} from "../domain/apparel";
+  type ApparelSizeInput,
+} from "../../../shared/types/apparel";
 
 import {
   isAlcoholCategoryCode,
@@ -57,6 +56,11 @@ export type ProductIDTag = {
 // 作成用型
 // ------------------------------------------------------
 
+export type ApparelSizeRow =
+  ApparelSizeInput & {
+    id: string;
+  };
+
 export type CreateProductBlueprintModelNumber = {
   size: string;
   color: string;
@@ -68,6 +72,7 @@ export type CreateProductBlueprintParams = {
   brandId: string;
 
   productBlueprintCategoryId: string;
+
   productBlueprintCategory:
     ProductBlueprintCategorySnapshot;
 
@@ -84,8 +89,10 @@ export type CreateProductBlueprintParams = {
 
   colors?: string[];
   sizes?: ApparelSizeRow[];
+
   modelNumbers?:
     CreateProductBlueprintModelNumber[];
+
   colorRgbMap?: Record<string, string>;
 
   /**
@@ -94,16 +101,25 @@ export type CreateProductBlueprintParams = {
    * model domain側で扱う。
    */
   volumes?: VolumeRow[];
-  alcoholModelNumbers?: AlcoholModelNumber[];
 
-  categoryFields?: CategoryFieldValues | null;
+  alcoholModelNumbers?:
+    AlcoholModelNumber[];
+
+  categoryFields?:
+    CategoryFieldValues | null;
 };
 
 export type ProductBlueprintResponse =
   ProductBlueprintDetailResponse;
 
-export type NewModelVariationPayload =
-  ApparelModelVariationPayload;
+export type NewModelVariationPayload = {
+  sizeLabel: string;
+  color: string;
+  modelNumber: string;
+  createdBy?: string;
+  rgb?: number;
+  measurements: ApparelMeasurements;
+};
 
 // ------------------------------
 // validation helpers
@@ -180,7 +196,8 @@ function toCreateApparelModelVariationRequests(args: {
         ),
 
       rgb:
-        typeof variation.rgb === "number"
+        typeof variation.rgb === "number" &&
+        Number.isFinite(variation.rgb)
           ? variation.rgb
           : 0,
 
@@ -191,6 +208,10 @@ function toCreateApparelModelVariationRequests(args: {
     }),
   );
 }
+
+// ------------------------------
+// Alcohol helpers
+// ------------------------------
 
 function makeVolumeKey(
   volume: Volume,
@@ -233,7 +254,10 @@ function buildAlcoholModelNumberMap(
     | undefined,
 ): Map<string, AlcoholModelNumber> {
   const map =
-    new Map<string, AlcoholModelNumber>();
+    new Map<
+      string,
+      AlcoholModelNumber
+    >();
 
   if (
     !modelNumbers ||
@@ -335,7 +359,7 @@ function toCreateAlcoholModelVariationRequests(args: {
 }
 
 // ------------------------------
-// apparel measurements builder
+// Apparel helpers
 // ------------------------------
 
 function resolveApparelCategoryCode(
@@ -395,7 +419,8 @@ function buildApparelMeasurements(
   categoryCode: ApparelCategoryCode,
   size: ApparelSizeRow,
 ): ApparelMeasurements {
-  const result: ApparelMeasurements = {};
+  const result:
+    ApparelMeasurements = {};
 
   switch (categoryCode) {
     case "apparel.bottoms": {
@@ -476,7 +501,7 @@ function buildApparelMeasurements(
 
 /**
  * ProductBlueprintCategory / SizeRow / 各種コードから
- * apparel ModelVariation payloadを組み立てる共通ヘルパー。
+ * apparel ModelVariation payloadを組み立てる。
  */
 function toApparelModelVariationPayload(
   categoryCode: ApparelCategoryCode,
@@ -488,7 +513,7 @@ function toApparelModelVariationPayload(
     createdBy: string;
     rgb?: number;
   },
-): ApparelModelVariationPayload {
+): NewModelVariationPayload {
   const measurements =
     buildApparelMeasurements(
       categoryCode,
@@ -516,7 +541,8 @@ function toApparelModelVariationPayload(
 }
 
 /**
- * modelNumbers配列を(size,color) -> codeのMapに変換する。
+ * modelNumbers配列を
+ * (size, color) -> codeのMapに変換する。
  *
  * - trim
  * - 空は除外
@@ -582,6 +608,10 @@ function shouldCreateApparelModelVariations(
   );
 }
 
+// ------------------------------
+// ProductBlueprint creation
+// ------------------------------
+
 async function createProductBlueprintWithModelRequests(
   params: CreateProductBlueprintParams,
   requests: CreateModelVariationRequest[],
@@ -619,7 +649,7 @@ async function createProductBlueprintWithModelRequests(
 }
 
 // ------------------------------
-// Service本体（アプリケーション層）
+// Service本体
 // ------------------------------
 
 export async function createProductBlueprint(
@@ -637,9 +667,10 @@ export async function createProductBlueprint(
     )
   ) {
     const variations:
-      ApparelModelVariationPayload[] = [];
+      NewModelVariationPayload[] = [];
 
-    // displayOrderの採番元を「色登録順 → サイズ登録順」に固定
+    // displayOrderの採番元を
+    // 「色登録順 → サイズ登録順」に固定
     const colors: string[] =
       (params.colors ?? [])
         .map(
@@ -651,7 +682,8 @@ export async function createProductBlueprint(
             color.length > 0,
         );
 
-    const sizes: ApparelSizeRow[] =
+    const sizes:
+      ApparelSizeRow[] =
       (params.sizes ?? []).filter(
         (size: ApparelSizeRow) =>
           String(
@@ -704,6 +736,7 @@ export async function createProductBlueprint(
             {
               sizeLabel,
               color,
+
               modelNumber:
                 code,
 

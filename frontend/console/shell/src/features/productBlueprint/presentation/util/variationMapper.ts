@@ -1,9 +1,9 @@
-// frontend/console/productBlueprint/presentation/util/variationMapper.ts
+// frontend/console/shell/src/features/productBlueprint/presentation/util/variationMapper.ts
 
 import type {
   ApparelModelNumberRow as ModelNumberRow,
-  ApparelSizeRow as SizeRow,
-} from "../../domain/apparel";
+  ApparelSizeInput,
+} from "../../../../shared/types/apparel";
 
 import type {
   AlcoholModelNumber,
@@ -15,6 +15,10 @@ import {
   rgbIntToHex,
   coerceRgbInt,
 } from "../../../../shared/util/color";
+
+type SizeRow = ApparelSizeInput & {
+  id: string;
+};
 
 type AnyVar = any;
 
@@ -32,65 +36,130 @@ export type VariationsUiState = {
   alcoholModelNumbers: AlcoholModelNumber[];
 };
 
-function s(value: unknown): string {
-  return String(value ?? "").trim();
+function s(
+  value: unknown,
+): string {
+  return String(
+    value ?? "",
+  ).trim();
 }
 
-function pickId(value: AnyVar): string {
-  return s(typeof value?.id === "string" ? value.id : "");
+function pickId(
+  value: AnyVar,
+): string {
+  return s(
+    typeof value?.id === "string"
+      ? value.id
+      : "",
+  );
 }
 
-function pickKind(value: AnyVar): string {
-  return s(typeof value?.kind === "string" ? value.kind : "apparel");
+function pickKind(
+  value: AnyVar,
+): string {
+  return s(
+    typeof value?.kind === "string"
+      ? value.kind
+      : "apparel",
+  );
 }
 
-function pickSizeLabel(value: AnyVar): string {
-  return s(typeof value?.size === "string" ? value.size : "");
+function pickSizeLabel(
+  value: AnyVar,
+): string {
+  return s(
+    typeof value?.size === "string"
+      ? value.size
+      : "",
+  );
 }
 
-function pickColorName(value: AnyVar): string {
-  if (typeof value?.color?.name === "string") {
-    return s(value.color.name);
+function pickColorName(
+  value: AnyVar,
+): string {
+  if (
+    typeof value?.color?.name ===
+    "string"
+  ) {
+    return s(
+      value.color.name,
+    );
   }
 
   return "";
 }
 
-function pickModelNumber(value: AnyVar): string {
-  return s(typeof value?.modelNumber === "string" ? value.modelNumber : "");
+function pickModelNumber(
+  value: AnyVar,
+): string {
+  return s(
+    typeof value?.modelNumber ===
+      "string"
+      ? value.modelNumber
+      : "",
+  );
 }
 
 function pickMeasurements(
   value: AnyVar,
-): Record<string, number | null> | undefined {
-  const measurements = value?.measurements;
+): Record<
+  string,
+  number | null
+> | undefined {
+  const measurements =
+    value?.measurements;
 
-  if (!measurements || typeof measurements !== "object") {
+  if (
+    !measurements ||
+    typeof measurements !==
+      "object"
+  ) {
     return undefined;
   }
 
-  return measurements as Record<string, number | null>;
+  return measurements as Record<
+    string,
+    number | null
+  >;
 }
 
-function pickRgbInt(value: AnyVar): number | undefined {
-  return coerceRgbInt(value?.color?.rgb);
+function pickRgbInt(
+  value: AnyVar,
+): number | undefined {
+  return coerceRgbInt(
+    value?.color?.rgb,
+  );
 }
 
-function pickVolume(value: AnyVar): Volume | null {
-  const rawVolume = value?.volume;
+function pickVolume(
+  value: AnyVar,
+): Volume | null {
+  const rawVolume =
+    value?.volume;
 
-  if (!rawVolume || typeof rawVolume !== "object") {
+  if (
+    !rawVolume ||
+    typeof rawVolume !==
+      "object"
+  ) {
     return null;
   }
 
-  const rawValue = rawVolume.value;
-  const rawUnit = rawVolume.unit;
+  const rawValue =
+    rawVolume.value;
 
-  if (typeof rawValue !== "number" || !Number.isFinite(rawValue)) {
+  const rawUnit =
+    rawVolume.unit;
+
+  if (
+    typeof rawValue !== "number" ||
+    !Number.isFinite(rawValue)
+  ) {
     return null;
   }
 
-  const unit = s(rawUnit) || "ml";
+  const unit =
+    s(rawUnit) || "ml";
 
   if (rawValue <= 0) {
     return null;
@@ -102,13 +171,20 @@ function pickVolume(value: AnyVar): Volume | null {
   };
 }
 
-function toVolumeLabel(volume: Volume): string {
+function toVolumeLabel(
+  volume: Volume,
+): string {
   const value =
-    typeof volume.value === "number" && Number.isFinite(volume.value)
+    typeof volume.value ===
+      "number" &&
+    Number.isFinite(
+      volume.value,
+    )
       ? volume.value
       : 0;
 
-  const unit = s(volume.unit) || "ml";
+  const unit =
+    s(volume.unit) || "ml";
 
   if (value <= 0) {
     return "";
@@ -117,39 +193,80 @@ function toVolumeLabel(volume: Volume): string {
   return `${value}${unit}`;
 }
 
-function isApparelVariation(value: AnyVar): boolean {
-  return pickKind(value) === "apparel";
+function isApparelVariation(
+  value: AnyVar,
+): boolean {
+  return (
+    pickKind(value) ===
+    "apparel"
+  );
 }
 
-function isAlcoholVariation(value: AnyVar): boolean {
-  return pickKind(value) === "alcohol";
+function isAlcoholVariation(
+  value: AnyVar,
+): boolean {
+  return (
+    pickKind(value) ===
+    "alcohol"
+  );
 }
 
-function isBottomsLikeCategory(categoryCode: string): boolean {
-  const normalized = s(categoryCode).toLowerCase();
+function isBottomsLikeCategory(
+  categoryCode: string,
+): boolean {
+  const normalized =
+    s(categoryCode)
+      .toLowerCase();
 
-  return normalized === "apparel.bottoms";
+  return (
+    normalized ===
+    "apparel.bottoms"
+  );
 }
 
-function isDressLikeCategory(categoryCode: string): boolean {
-  const normalized = s(categoryCode).toLowerCase();
+function isDressLikeCategory(
+  categoryCode: string,
+): boolean {
+  const normalized =
+    s(categoryCode)
+      .toLowerCase();
 
-  return normalized === "apparel.dress";
+  return (
+    normalized ===
+    "apparel.dress"
+  );
 }
 
 /**
  * variations から color 名のユニーク配列を抽出
  */
-export function extractColors(varsAny: unknown[]): string[] {
-  const list = Array.isArray(varsAny) ? (varsAny as AnyVar[]) : [];
-  const set = new Set<string>();
+export function extractColors(
+  varsAny: unknown[],
+): string[] {
+  const list =
+    Array.isArray(varsAny)
+      ? varsAny as AnyVar[]
+      : [];
 
-  for (const variation of list) {
-    if (!isApparelVariation(variation)) {
+  const set =
+    new Set<string>();
+
+  for (
+    const variation
+    of list
+  ) {
+    if (
+      !isApparelVariation(
+        variation,
+      )
+    ) {
       continue;
     }
 
-    const name = pickColorName(variation);
+    const name =
+      pickColorName(
+        variation,
+      );
 
     if (name) {
       set.add(name);
@@ -162,16 +279,33 @@ export function extractColors(varsAny: unknown[]): string[] {
 /**
  * variations から sizeLabel のユニーク配列を抽出
  */
-export function extractSizes(varsAny: unknown[]): string[] {
-  const list = Array.isArray(varsAny) ? (varsAny as AnyVar[]) : [];
-  const set = new Set<string>();
+export function extractSizes(
+  varsAny: unknown[],
+): string[] {
+  const list =
+    Array.isArray(varsAny)
+      ? varsAny as AnyVar[]
+      : [];
 
-  for (const variation of list) {
-    if (!isApparelVariation(variation)) {
+  const set =
+    new Set<string>();
+
+  for (
+    const variation
+    of list
+  ) {
+    if (
+      !isApparelVariation(
+        variation,
+      )
+    ) {
       continue;
     }
 
-    const size = pickSizeLabel(variation);
+    const size =
+      pickSizeLabel(
+        variation,
+      );
 
     if (size) {
       set.add(size);
@@ -184,22 +318,42 @@ export function extractSizes(varsAny: unknown[]): string[] {
 /**
  * variations から volume label のユニーク配列を抽出
  */
-export function extractVolumeLabels(varsAny: unknown[]): string[] {
-  const list = Array.isArray(varsAny) ? (varsAny as AnyVar[]) : [];
-  const set = new Set<string>();
+export function extractVolumeLabels(
+  varsAny: unknown[],
+): string[] {
+  const list =
+    Array.isArray(varsAny)
+      ? varsAny as AnyVar[]
+      : [];
 
-  for (const variation of list) {
-    if (!isAlcoholVariation(variation)) {
+  const set =
+    new Set<string>();
+
+  for (
+    const variation
+    of list
+  ) {
+    if (
+      !isAlcoholVariation(
+        variation,
+      )
+    ) {
       continue;
     }
 
-    const volume = pickVolume(variation);
+    const volume =
+      pickVolume(
+        variation,
+      );
 
     if (!volume) {
       continue;
     }
 
-    const label = toVolumeLabel(volume);
+    const label =
+      toVolumeLabel(
+        volume,
+      );
 
     if (label) {
       set.add(label);
@@ -210,32 +364,58 @@ export function extractVolumeLabels(varsAny: unknown[]): string[] {
 }
 
 /**
- * 同一サイズの variations 群から measurements をマージする
+ * 同一サイズの variations 群から measurements をマージする。
+ *
  * - 先に入っている値を優先
  * - 未設定項目だけ後続 variation から補完
  */
 function mergeMeasurementsBySize(
   variations: AnyVar[],
-): Record<string, number | undefined> {
-  const merged: Record<string, number | undefined> = {};
+): Record<
+  string,
+  number | undefined
+> {
+  const merged:
+    Record<
+      string,
+      number | undefined
+    > = {};
 
-  for (const variation of variations) {
-    const measurements = pickMeasurements(variation);
+  for (
+    const variation
+    of variations
+  ) {
+    const measurements =
+      pickMeasurements(
+        variation,
+      );
 
     if (!measurements) {
       continue;
     }
 
-    for (const [key, value] of Object.entries(measurements)) {
-      if (typeof value !== "number" || Number.isNaN(value)) {
+    for (
+      const [key, value]
+      of Object.entries(
+        measurements,
+      )
+    ) {
+      if (
+        typeof value !== "number" ||
+        Number.isNaN(value)
+      ) {
         continue;
       }
 
-      if (merged[key] !== undefined) {
+      if (
+        merged[key] !==
+        undefined
+      ) {
         continue;
       }
 
-      merged[key] = value;
+      merged[key] =
+        value;
     }
   }
 
@@ -243,7 +423,8 @@ function mergeMeasurementsBySize(
 }
 
 /**
- * variations から SizeRow[] を構築
+ * variations から SizeRow[] を構築する。
+ *
  * - backend の id を代表 variation から使う
  * - 同じサイズの複数色 variation から measurements をマージする
  */
@@ -251,72 +432,154 @@ export function buildSizeRows(
   varsAny: unknown[],
   categoryCode: string,
 ): SizeRow[] {
-  const list = Array.isArray(varsAny)
-    ? (varsAny as AnyVar[]).filter(isApparelVariation)
-    : [];
+  const list =
+    Array.isArray(varsAny)
+      ? (
+          varsAny as AnyVar[]
+        ).filter(
+          isApparelVariation,
+        )
+      : [];
 
-  const sizeLabels = extractSizes(list);
+  const sizeLabels =
+    extractSizes(list);
 
-  return sizeLabels.map((label) => {
-    const sameSizeVars = list.filter(
-      (variation) => pickSizeLabel(variation) === label,
-    );
+  return sizeLabels.map(
+    (label) => {
+      const sameSizeVars =
+        list.filter(
+          (variation) =>
+            pickSizeLabel(
+              variation,
+            ) === label,
+        );
 
-    const representative = sameSizeVars[0];
-    const merged = mergeMeasurementsBySize(sameSizeVars);
+      const representative =
+        sameSizeVars[0];
 
-    const base: SizeRow = {
-      id: pickId(representative) || `size-${label}`,
-      sizeLabel: label,
-    };
+      const merged =
+        mergeMeasurementsBySize(
+          sameSizeVars,
+        );
 
-    if (isBottomsLikeCategory(categoryCode)) {
-      base.waist = merged["ウエスト"];
-      base.hip = merged["ヒップ"];
-      base.rise = merged["股上"];
-      base.inseam = merged["股下"];
-      base.thigh = merged["わたり幅"];
-      base.hemWidth = merged["裾幅"];
+      const base:
+        SizeRow = {
+        id:
+          pickId(
+            representative,
+          ) ||
+          `size-${label}`,
+
+        sizeLabel:
+          label,
+      };
+
+      if (
+        isBottomsLikeCategory(
+          categoryCode,
+        )
+      ) {
+        base.waist =
+          merged["ウエスト"];
+
+        base.hip =
+          merged["ヒップ"];
+
+        base.rise =
+          merged["股上"];
+
+        base.inseam =
+          merged["股下"];
+
+        base.thigh =
+          merged["わたり幅"];
+
+        base.hemWidth =
+          merged["裾幅"];
+
+        return base;
+      }
+
+      if (
+        isDressLikeCategory(
+          categoryCode,
+        )
+      ) {
+        base.length =
+          merged["着丈"];
+
+        base.width =
+          merged["身幅"];
+
+        base.chest =
+          merged["胸囲"];
+
+        base.shoulder =
+          merged["肩幅"];
+
+        base.sleeveLength =
+          merged["袖丈"];
+
+        base.waist =
+          merged["ウエスト"];
+
+        base.hip =
+          merged["ヒップ"];
+
+        return base;
+      }
+
+      base.length =
+        merged["着丈"];
+
+      base.width =
+        merged["身幅"];
+
+      base.chest =
+        merged["胸囲"];
+
+      base.shoulder =
+        merged["肩幅"];
+
+      base.sleeveLength =
+        merged["袖丈"];
 
       return base;
-    }
-
-    if (isDressLikeCategory(categoryCode)) {
-      base.length = merged["着丈"];
-      base.width = merged["身幅"];
-      base.chest = merged["胸囲"];
-      base.shoulder = merged["肩幅"];
-      base.sleeveLength = merged["袖丈"];
-      base.waist = merged["ウエスト"];
-      base.hip = merged["ヒップ"];
-
-      return base;
-    }
-
-    base.length = merged["着丈"];
-    base.width = merged["身幅"];
-    base.chest = merged["胸囲"];
-    base.shoulder = merged["肩幅"];
-    base.sleeveLength = merged["袖丈"];
-
-    return base;
-  });
+    },
+  );
 }
 
 /**
- * apparel variations から ModelNumberRow[]（size/color/code）を構築
+ * apparel variations から
+ * ModelNumberRow[]（size / color / code）を構築する。
  */
 export function buildModelNumberRows(
   varsAny: unknown[],
 ): ModelNumberRow[] {
-  const list = Array.isArray(varsAny) ? (varsAny as AnyVar[]) : [];
+  const list =
+    Array.isArray(varsAny)
+      ? varsAny as AnyVar[]
+      : [];
 
   return list
-    .filter(isApparelVariation)
+    .filter(
+      isApparelVariation,
+    )
     .map((variation) => {
-      const size = pickSizeLabel(variation);
-      const color = pickColorName(variation);
-      const code = pickModelNumber(variation);
+      const size =
+        pickSizeLabel(
+          variation,
+        );
+
+      const color =
+        pickColorName(
+          variation,
+        );
+
+      const code =
+        pickModelNumber(
+          variation,
+        );
 
       return {
         size,
@@ -324,42 +587,78 @@ export function buildModelNumberRows(
         code,
       };
     })
-    .filter((row) => row.size || row.color || row.code);
+    .filter(
+      (row) =>
+        row.size ||
+        row.color ||
+        row.code,
+    );
 }
 
 /**
- * alcohol variations から VolumeRow[] を構築
+ * alcohol variations から VolumeRow[] を構築する。
  */
 export function buildVolumeRows(
   varsAny: unknown[],
 ): VolumeRow[] {
-  const list = Array.isArray(varsAny) ? (varsAny as AnyVar[]) : [];
-  const seen = new Set<string>();
-  const rows: VolumeRow[] = [];
+  const list =
+    Array.isArray(varsAny)
+      ? varsAny as AnyVar[]
+      : [];
 
-  for (const variation of list) {
-    if (!isAlcoholVariation(variation)) {
+  const seen =
+    new Set<string>();
+
+  const rows:
+    VolumeRow[] = [];
+
+  for (
+    const variation
+    of list
+  ) {
+    if (
+      !isAlcoholVariation(
+        variation,
+      )
+    ) {
       continue;
     }
 
-    const volume = pickVolume(variation);
+    const volume =
+      pickVolume(
+        variation,
+      );
 
     if (!volume) {
       continue;
     }
 
-    const label = toVolumeLabel(volume);
+    const label =
+      toVolumeLabel(
+        volume,
+      );
 
-    if (!label || seen.has(label)) {
+    if (
+      !label ||
+      seen.has(label)
+    ) {
       continue;
     }
 
     seen.add(label);
 
     rows.push({
-      id: pickId(variation) || `volume-${label}`,
-      volumeValue: volume.value,
-      volumeUnit: volume.unit,
+      id:
+        pickId(
+          variation,
+        ) ||
+        `volume-${label}`,
+
+      volumeValue:
+        volume.value,
+
+      volumeUnit:
+        volume.unit,
     });
   }
 
@@ -367,26 +666,44 @@ export function buildVolumeRows(
 }
 
 /**
- * alcohol variations から AlcoholModelNumber[] を構築
+ * alcohol variations から AlcoholModelNumber[] を構築する。
  */
 export function buildAlcoholModelNumberRows(
   varsAny: unknown[],
 ): AlcoholModelNumber[] {
-  const list = Array.isArray(varsAny) ? (varsAny as AnyVar[]) : [];
-  const rows: AlcoholModelNumber[] = [];
+  const list =
+    Array.isArray(varsAny)
+      ? varsAny as AnyVar[]
+      : [];
 
-  for (const variation of list) {
-    if (!isAlcoholVariation(variation)) {
+  const rows:
+    AlcoholModelNumber[] = [];
+
+  for (
+    const variation
+    of list
+  ) {
+    if (
+      !isAlcoholVariation(
+        variation,
+      )
+    ) {
       continue;
     }
 
-    const volume = pickVolume(variation);
+    const volume =
+      pickVolume(
+        variation,
+      );
 
     if (!volume) {
       continue;
     }
 
-    const code = pickModelNumber(variation);
+    const code =
+      pickModelNumber(
+        variation,
+      );
 
     rows.push({
       kind: "alcohol",
@@ -399,54 +716,105 @@ export function buildAlcoholModelNumberRows(
 }
 
 /**
- * apparel variations から colorRgbMap を構築
+ * apparel variations から colorRgbMap を構築する。
  */
 export function buildColorRgbMap(
   varsAny: unknown[],
 ): Record<string, string> {
-  const list = Array.isArray(varsAny) ? (varsAny as AnyVar[]) : [];
-  const rgbMap: Record<string, string> = {};
+  const list =
+    Array.isArray(varsAny)
+      ? varsAny as AnyVar[]
+      : [];
 
-  for (const variation of list) {
-    if (!isApparelVariation(variation)) {
+  const rgbMap:
+    Record<string, string> = {};
+
+  for (
+    const variation
+    of list
+  ) {
+    if (
+      !isApparelVariation(
+        variation,
+      )
+    ) {
       continue;
     }
 
-    const name = pickColorName(variation);
+    const name =
+      pickColorName(
+        variation,
+      );
 
     if (!name) {
       continue;
     }
 
-    const rgbInt = pickRgbInt(variation);
-    const hex = rgbIntToHex(rgbInt);
+    const rgbInt =
+      pickRgbInt(
+        variation,
+      );
+
+    const hex =
+      rgbIntToHex(
+        rgbInt,
+      );
 
     if (!hex) {
       continue;
     }
 
-    rgbMap[name] = hex.toLowerCase();
+    rgbMap[name] =
+      hex.toLowerCase();
   }
 
   return rgbMap;
 }
 
 /**
- * variations をまとめて UI state に使える形へ変換
+ * variations をまとめて UI state に使える形へ変換する。
  */
-export function mapVariationsToUiState(args: {
-  varsAny: unknown[];
-  categoryCode: string;
-}): VariationsUiState {
-  const { varsAny, categoryCode } = args;
+export function mapVariationsToUiState(
+  args: {
+    varsAny: unknown[];
+    categoryCode: string;
+  },
+): VariationsUiState {
+  const {
+    varsAny,
+    categoryCode,
+  } = args;
 
-  const colors = extractColors(varsAny);
-  const sizes = buildSizeRows(varsAny, categoryCode);
-  const modelNumbers = buildModelNumberRows(varsAny);
-  const colorRgbMap = buildColorRgbMap(varsAny);
+  const colors =
+    extractColors(
+      varsAny,
+    );
 
-  const volumes = buildVolumeRows(varsAny);
-  const alcoholModelNumbers = buildAlcoholModelNumberRows(varsAny);
+  const sizes =
+    buildSizeRows(
+      varsAny,
+      categoryCode,
+    );
+
+  const modelNumbers =
+    buildModelNumberRows(
+      varsAny,
+    );
+
+  const colorRgbMap =
+    buildColorRgbMap(
+      varsAny,
+    );
+
+  const volumes =
+    buildVolumeRows(
+      varsAny,
+    );
+
+  const alcoholModelNumbers =
+    buildAlcoholModelNumberRows(
+      varsAny,
+    );
 
   return {
     colors,

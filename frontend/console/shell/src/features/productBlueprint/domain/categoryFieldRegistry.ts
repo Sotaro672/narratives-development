@@ -10,7 +10,7 @@ import {
   getApparelCategoryFieldKeys,
   isApparelCategoryCode,
   type ApparelCategoryFieldKey,
-} from "./apparel";
+} from "../../../shared/types/apparel";
 
 import {
   getCosmeticsCategoryFieldKeys,
@@ -31,11 +31,11 @@ import {
 } from "./other";
 
 /**
- * productBlueprint.CategoryFields に保存するカテゴリ別入力値。
+ * ProductBlueprint.categoryFieldsに保存するカテゴリ別入力値。
  *
  * 注意:
- * - brandId / productName / productIdTagType / description は共通field。
- * - color / size / measurements はmodel variation側。
+ * - brandId / productName / productIdTagType / descriptionは共通field。
+ * - color / size / measurementsはmodel variation側。
  * - 上記はcategoryFieldsには含めない。
  */
 export type CategoryFieldPrimitiveValue =
@@ -71,33 +71,51 @@ export type ProductBlueprintCategoryFieldKey =
 export function getProductBlueprintCategoryFieldKeys(
   categoryCode: string,
 ): ProductBlueprintCategoryFieldKey[] {
-  if (isAlcoholCategoryCode(categoryCode)) {
+  if (
+    isAlcoholCategoryCode(
+      categoryCode,
+    )
+  ) {
     return getAlcoholCategoryFieldKeys(
       categoryCode,
     );
   }
 
-  if (isApparelCategoryCode(categoryCode)) {
+  if (
+    isApparelCategoryCode(
+      categoryCode,
+    )
+  ) {
     return getApparelCategoryFieldKeys(
       categoryCode,
     );
   }
 
-  if (isCosmeticsCategoryCode(categoryCode)) {
+  if (
+    isCosmeticsCategoryCode(
+      categoryCode,
+    )
+  ) {
     return getCosmeticsCategoryFieldKeys(
       categoryCode,
     );
   }
 
   if (
-    isHealthcareCategoryCode(categoryCode)
+    isHealthcareCategoryCode(
+      categoryCode,
+    )
   ) {
     return getHealthcareCategoryFieldKeys(
       categoryCode,
     );
   }
 
-  if (isOtherCategoryCode(categoryCode)) {
+  if (
+    isOtherCategoryCode(
+      categoryCode,
+    )
+  ) {
     return getOtherCategoryFieldKeys(
       categoryCode,
     );

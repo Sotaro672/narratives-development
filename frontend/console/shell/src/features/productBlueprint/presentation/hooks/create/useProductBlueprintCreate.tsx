@@ -11,11 +11,11 @@ import type {
 
 import { useAuth } from "../../../../../auth/presentation/hook/useCurrentMember";
 
-import {
-  type MeasurementOption,
-  type ApparelSizeRow as SizeRow,
-  type Fit,
-} from "../../../domain/apparel";
+import type {
+  ApparelSizeInput,
+  Fit,
+  MeasurementOption,
+} from "../../../../../shared/types/apparel";
 
 import type {
   CategoryFieldValue,
@@ -40,11 +40,14 @@ import {
 import { useProductBlueprintCreateVariations } from "./useProductBlueprintCreateVariations";
 import { useProductBlueprintCreateValidation } from "./useProductBlueprintCreateValidation";
 
+type SizeRow = ApparelSizeInput & {
+  id: string;
+};
+
 export {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
   FIT_OPTIONS,
-  WASH_TAG_OPTIONS,
-} from "../../../domain/apparel";
+} from "../../../../../shared/types/apparel";
 
 export interface UseProductBlueprintCreateResult {
   title: string;

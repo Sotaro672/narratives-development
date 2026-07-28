@@ -8,12 +8,14 @@ import type {
   ProductBlueprintCategorySnapshot,
 } from "../../../domain/productBlueprintCategory";
 
-import { getProductBlueprintCategoryFieldKeys } from "../../../domain/categoryFieldRegistry";
+import {
+  getProductBlueprintCategoryFieldKeys,
+} from "../../../domain/categoryFieldRegistry";
 
 import {
   FIT_OPTIONS,
   type Fit,
-} from "../../../domain/apparel";
+} from "../../../../../shared/types/apparel";
 
 export type FitInputValue = Fit | "";
 
@@ -23,30 +25,44 @@ export type UseProductBlueprintCreateCategoryFieldsResult = {
   weight: number;
   qualityAssurance: string[];
   categoryFields: CategoryFieldValues;
-  onChangeFit: (value: Fit) => void;
-  onChangeMaterial: (value: string) => void;
-  onChangeWeight: (value: number) => void;
+
+  onChangeFit: (
+    value: Fit,
+  ) => void;
+
+  onChangeMaterial: (
+    value: string,
+  ) => void;
+
+  onChangeWeight: (
+    value: number,
+  ) => void;
+
   onChangeQualityAssurance: (
     value: string[],
   ) => void;
+
   onChangeCategoryField: (
     key: string,
     value: CategoryFieldValue,
   ) => void;
+
   resetCategoryFields: () => void;
 };
 
-const FIT_VALUE_SET: ReadonlySet<string> =
-  new Set(
-    FIT_OPTIONS.map(
-      (option) => option.value,
-    ),
-  );
+const FIT_VALUE_SET:
+  ReadonlySet<string> = new Set(
+  FIT_OPTIONS.map(
+    (option) => option.value,
+  ),
+);
 
 /**
  * Fitとして有効な値か判定する。
  */
-function isFit(value: unknown): value is Fit {
+function isFit(
+  value: unknown,
+): value is Fit {
   return (
     typeof value === "string" &&
     FIT_VALUE_SET.has(value)
@@ -64,7 +80,9 @@ function isModelOwnedCategoryFieldKey(
   key: string,
 ): boolean {
   return (
-    categoryCode.startsWith("alcohol.") &&
+    categoryCode.startsWith(
+      "alcohol.",
+    ) &&
     key === "volume"
   );
 }
@@ -76,7 +94,9 @@ function normalizeNumberValue(
     return 0;
   }
 
-  return value < 0 ? 0 : value;
+  return value < 0
+    ? 0
+    : value;
 }
 
 function normalizeStringArrayValue(
@@ -107,17 +127,20 @@ function normalizeCategoryFieldsForCategory(
     return {};
   }
 
-  const allowedKeys = new Set<string>(
-    getProductBlueprintCategoryFieldKeys(
-      categoryCode,
-    ),
-  );
+  const allowedKeys =
+    new Set<string>(
+      getProductBlueprintCategoryFieldKeys(
+        categoryCode,
+      ),
+    );
 
-  const next: CategoryFieldValues = {};
+  const next:
+    CategoryFieldValues = {};
 
-  for (const [key, value] of Object.entries(
-    fields,
-  )) {
+  for (
+    const [key, value]
+    of Object.entries(fields)
+  ) {
     if (
       isModelOwnedCategoryFieldKey(
         categoryCode,
@@ -142,85 +165,129 @@ export function useProductBlueprintCreateCategoryFields(
     | ProductBlueprintCategorySnapshot
     | null,
 ): UseProductBlueprintCreateCategoryFieldsResult {
-  const categoryCode = React.useMemo(
-    () =>
-      String(
-        productBlueprintCategory?.code ?? "",
-      ).trim(),
-    [productBlueprintCategory?.code],
-  );
+  const categoryCode =
+    React.useMemo(
+      () =>
+        String(
+          productBlueprintCategory?.code ??
+            "",
+        ).trim(),
+      [
+        productBlueprintCategory?.code,
+      ],
+    );
 
-  const [fit, setFit] =
-    React.useState<FitInputValue>("");
+  const [
+    fit,
+    setFit,
+  ] =
+    React.useState<FitInputValue>(
+      "",
+    );
 
-  const [material, setMaterial] =
+  const [
+    material,
+    setMaterial,
+  ] =
     React.useState("");
 
-  const [weight, setWeight] =
+  const [
+    weight,
+    setWeight,
+  ] =
     React.useState<number>(0);
 
   const [
     qualityAssurance,
     setQualityAssurance,
-  ] = React.useState<string[]>([]);
+  ] =
+    React.useState<string[]>([]);
 
   const [
     categoryFields,
     setCategoryFields,
-  ] = React.useState<CategoryFieldValues>(
-    {},
-  );
+  ] =
+    React.useState<CategoryFieldValues>(
+      {},
+    );
 
   React.useEffect(() => {
-    setCategoryFields((previous) =>
-      normalizeCategoryFieldsForCategory(
-        productBlueprintCategory,
-        previous,
-      ),
+    setCategoryFields(
+      (previous) =>
+        normalizeCategoryFieldsForCategory(
+          productBlueprintCategory,
+          previous,
+        ),
     );
-  }, [productBlueprintCategory]);
+  }, [
+    productBlueprintCategory,
+  ]);
 
-  const onChangeFit = React.useCallback(
-    (value: Fit) => {
-      setFit(value);
+  const onChangeFit =
+    React.useCallback(
+      (
+        value: Fit,
+      ) => {
+        setFit(value);
 
-      setCategoryFields((previous) => ({
-        ...previous,
-        fit: value,
-      }));
-    },
-    [],
-  );
+        setCategoryFields(
+          (previous) => ({
+            ...previous,
+            fit: value,
+          }),
+        );
+      },
+      [],
+    );
 
   const onChangeMaterial =
-    React.useCallback((value: string) => {
-      setMaterial(value);
+    React.useCallback(
+      (
+        value: string,
+      ) => {
+        setMaterial(value);
 
-      setCategoryFields((previous) => ({
-        ...previous,
-        material:
-          value.trim() === ""
-            ? null
-            : value,
-      }));
-    }, []);
+        setCategoryFields(
+          (previous) => ({
+            ...previous,
+
+            material:
+              value.trim() === ""
+                ? null
+                : value,
+          }),
+        );
+      },
+      [],
+    );
 
   const onChangeWeight =
-    React.useCallback((value: number) => {
-      const next =
-        normalizeNumberValue(value);
+    React.useCallback(
+      (
+        value: number,
+      ) => {
+        const next =
+          normalizeNumberValue(
+            value,
+          );
 
-      setWeight(next);
+        setWeight(next);
 
-      setCategoryFields((previous) => ({
-        ...previous,
-        weight: next,
-      }));
-    }, []);
+        setCategoryFields(
+          (previous) => ({
+            ...previous,
+            weight: next,
+          }),
+        );
+      },
+      [],
+    );
 
   const onChangeQualityAssurance =
     React.useCallback(
-      (value: string[]) => {
+      (
+        value: string[],
+      ) => {
         const next =
           normalizeStringArrayValue(
             value,
@@ -266,9 +333,10 @@ export function useProductBlueprintCreateCategoryFields(
         }
 
         if (key === "fit") {
-          const nextFit = isFit(value)
-            ? value
-            : "";
+          const nextFit =
+            isFit(value)
+              ? value
+              : "";
 
           setFit(nextFit);
 
@@ -279,7 +347,8 @@ export function useProductBlueprintCreateCategoryFields(
               };
 
               if (nextFit) {
-                next.fit = nextFit;
+                next.fit =
+                  nextFit;
               } else {
                 delete next.fit;
               }
@@ -297,13 +366,17 @@ export function useProductBlueprintCreateCategoryFields(
               ? value
               : "";
 
-          setMaterial(nextMaterial);
+          setMaterial(
+            nextMaterial,
+          );
 
           setCategoryFields(
             (previous) => ({
               ...previous,
+
               material:
-                nextMaterial.trim() === ""
+                nextMaterial.trim() ===
+                ""
                   ? null
                   : nextMaterial,
             }),
@@ -320,7 +393,9 @@ export function useProductBlueprintCreateCategoryFields(
                 )
               : 0;
 
-          setWeight(nextWeight);
+          setWeight(
+            nextWeight,
+          );
 
           setCategoryFields(
             (previous) => ({
@@ -348,7 +423,8 @@ export function useProductBlueprintCreateCategoryFields(
           setCategoryFields(
             (previous) => ({
               ...previous,
-              washTags: nextWashTags,
+              washTags:
+                nextWashTags,
             }),
           );
 
@@ -362,17 +438,22 @@ export function useProductBlueprintCreateCategoryFields(
           }),
         );
       },
-      [categoryCode],
+      [
+        categoryCode,
+      ],
     );
 
   const resetCategoryFields =
-    React.useCallback(() => {
-      setFit("");
-      setMaterial("");
-      setWeight(0);
-      setQualityAssurance([]);
-      setCategoryFields({});
-    }, []);
+    React.useCallback(
+      () => {
+        setFit("");
+        setMaterial("");
+        setWeight(0);
+        setQualityAssurance([]);
+        setCategoryFields({});
+      },
+      [],
+    );
 
   return {
     fit,
