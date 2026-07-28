@@ -6,10 +6,10 @@ import {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../layout/List/List";
+import type { ListStatus } from "../../../shared/types/list";
 import { safeDateTimeLabelJa } from "../../../shared/util/dateJa";
 
-import type { ListStatus } from "../domain/list";
-import type { ListDTO } from "../infrastructure/dto/listDto";
+import type { ListManagementRowDTO } from "../infrastructure/repository";
 import { fetchListsHTTP } from "../infrastructure/repository";
 
 export type SortKey = "id" | "createdAt" | null;
@@ -70,7 +70,7 @@ const LIST_STATUS_PRESENTATION: Record<
 };
 
 function mapListDTOToVMRow(
-  dto: ListDTO,
+  dto: ListManagementRowDTO,
 ): ListManagementRowVM {
   const status = dto.status ?? "suspended";
   const statusPresentation =

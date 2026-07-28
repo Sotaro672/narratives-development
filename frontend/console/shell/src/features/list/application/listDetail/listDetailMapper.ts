@@ -1,220 +1,273 @@
-// frontend/console/list/src/application/listDetail/listDetailMapper.ts
+// frontend/console/shell/src/features/list/application/listDetail/listDetailMapper.ts
 
+import {
+  isValidListStatus,
+  type ListStatus,
+} from "../../../../shared/types/list";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
-import type { ListStatus } from "../../domain/list";
+import type { ListDetailDTO } from "../../infrastructure/dto/listDetailDto";
 
-// ---------------------------------------------------------
-// Shared helpers
-// ---------------------------------------------------------
+type ListDetailPriceRowSource = {
+  modelId?: unknown;
 
-function dedupeUrlsKeepOrder(urls: string[]): string[] {
+  kind?: unknown;
+  modelNumber?: unknown;
+
+  displayOrder?: unknown;
+  stock?: unknown;
+  price?: unknown;
+
+  size?: unknown;
+  color?: unknown;
+  rgb?: unknown;
+
+  volumeValue?: unknown;
+  volumeUnit?: unknown;
+};
+
+type ListDetailSource = Omit<
+  Partial<ListDetailDTO>,
+  "imageUrls" | "priceRows"
+> & {
+  imageUrls?: readonly unknown[] | null;
+  priceRows?: readonly ListDetailPriceRowSource[] | null;
+};
+
+export type NormalizedListDetailPriceRow = {
+  id: string;
+  modelId: string;
+
+  kind: string | null;
+  modelNumber: string | null;
+
+  displayOrder: number | null;
+  stock: number;
+  price: number | null;
+
+  size: string | null;
+  color: string | null;
+  rgb: number | null;
+
+  volumeValue: number | null;
+  volumeUnit: string | null;
+};
+
+function dedupeUrlsKeepOrder(
+  urls: readonly unknown[],
+): string[] {
   const seen = new Set<string>();
-  const out: string[] = [];
+  const result: string[] = [];
 
-  for (const url of urls) {
-    const normalizedUrl = String(url ?? "");
-    if (!normalizedUrl) continue;
-    if (seen.has(normalizedUrl)) continue;
+  for (const value of urls) {
+    const url =
+      typeof value === "string"
+        ? value
+        : "";
 
-    seen.add(normalizedUrl);
-    out.push(normalizedUrl);
+    if (!url || seen.has(url)) {
+      continue;
+    }
+
+    seen.add(url);
+    result.push(url);
   }
 
-  return out;
+  return result;
 }
 
-function toInt(v: unknown): number {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return 0;
-  return Math.trunc(n);
+function toInt(value: unknown): number {
+  const numberValue = Number(value);
+
+  if (!Number.isFinite(numberValue)) {
+    return 0;
+  }
+
+  return Math.trunc(numberValue);
 }
 
-function toNumberOrNull(v: unknown): number | null {
-  if (v === null || v === undefined) return null;
+function toNumberOrNull(
+  value: unknown,
+): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
 
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
+  const numberValue = Number(value);
 
-  return n;
+  if (!Number.isFinite(numberValue)) {
+    return null;
+  }
+
+  return numberValue;
 }
 
-function toDisplayOrderOrNull(v: unknown): number | null {
-  if (v === null || v === undefined) return null;
+function toDisplayOrderOrNull(
+  value: unknown,
+): number | null {
+  const numberValue = toNumberOrNull(value);
 
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
+  if (numberValue === null) {
+    return null;
+  }
 
-  return Math.trunc(n);
+  return Math.trunc(numberValue);
 }
 
-function toStringOrNull(v: unknown): string | null {
-  if (v === null || v === undefined) return null;
+function toStringOrNull(
+  value: unknown,
+): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
 
-  const s = String(v);
-  return s || null;
+  if (typeof value === "string") {
+    return value || null;
+  }
+
+  return String(value) || null;
 }
 
-// ---------------------------------------------------------
-// Status helpers
-// ---------------------------------------------------------
-
-export function normalizeStatus(v: unknown): ListStatus | "" {
-  const status = String(v ?? "").toLowerCase();
-
-  if (status === "listing") return "listing";
-  if (status === "suspended") return "suspended";
-
-  return "";
+export function normalizeStatus(
+  value: unknown,
+): ListStatus | "" {
+  return isValidListStatus(value) ? value : "";
 }
 
-// ---------------------------------------------------------
-// Datetime format helper
-// ---------------------------------------------------------
+export function formatYMDHM(
+  value: unknown,
+): string {
+  if (typeof value !== "string") {
+    return "";
+  }
 
-/**
- * yyyy/mm/dd hh:mm:ss 形式
- * - shell の safeDateTimeLabelJa を共通利用
- * - 空/不正な値でも落ちず、fallback は空文字
- */
-export function formatYMDHM(v: unknown): string {
-  return safeDateTimeLabelJa(String(v ?? ""), "");
+  return safeDateTimeLabelJa(value, "");
 }
 
-// ---------------------------------------------------------
-// imageUrls helpers
-// ---------------------------------------------------------
-
-/**
- * UI 用の imageUrls を生成
- *
- * 正:
- * - GET /lists/{id} response の imageUrls: string[] を採用
- * - listImages / listImage / objectPath 互換は扱わない
- */
-export function normalizeImageUrls(dto: any): string[] {
-  const imageUrls = Array.isArray(dto?.imageUrls) ? dto.imageUrls : [];
-
+export function normalizeImageUrls(
+  dto:
+    | {
+        imageUrls?: readonly unknown[] | null;
+      }
+    | null
+    | undefined,
+): string[] {
   return dedupeUrlsKeepOrder(
-    imageUrls.map((url: any) => String(url ?? "")).filter(Boolean),
+    dto?.imageUrls ?? [],
   );
 }
 
-// ---------------------------------------------------------
-// priceRows helpers
-// ---------------------------------------------------------
-
-/**
- * priceRows は dto.priceRows のみ採用する。
- *
- * 正:
- * - GET /lists/{listId} response の priceRows をそのまま画面用に正規化する
- * - model resolver 済みの model 情報を落とさない
- *
- * apparel:
- * - kind
- * - modelNumber
- * - size
- * - color
- * - rgb
- *
- * alcohol:
- * - kind
- * - modelNumber
- * - volumeValue
- * - volumeUnit
- */
 export function normalizePriceRows<
-  TRow extends Record<string, any> = any,
->(dto: any): TRow[] {
-  const rowsRaw = Array.isArray(dto?.priceRows) ? dto.priceRows : [];
+  TRow extends object = NormalizedListDetailPriceRow,
+>(
+  dto:
+    | {
+        priceRows?:
+          | readonly ListDetailPriceRowSource[]
+          | null;
+      }
+    | null
+    | undefined,
+): TRow[] {
+  const rows = dto?.priceRows ?? [];
 
-  return rowsRaw.map((r: any, idx: number) => {
-    const modelId = String(r?.modelId ?? "");
-    const displayOrder = toDisplayOrderOrNull(r?.displayOrder);
+  return rows.map((row, index) => {
+    const modelId =
+      typeof row.modelId === "string"
+        ? row.modelId
+        : "";
 
-    const stock = toInt(r?.stock);
-    const price = toNumberOrNull(r?.price);
-
-    const rowAny = {
-      id: modelId || String(idx),
+    const normalizedRow: NormalizedListDetailPriceRow = {
+      id: modelId || String(index),
       modelId,
 
-      kind: toStringOrNull(r?.kind),
-      modelNumber: toStringOrNull(r?.modelNumber),
+      kind: toStringOrNull(row.kind),
+      modelNumber: toStringOrNull(
+        row.modelNumber,
+      ),
 
-      displayOrder,
-      stock,
-      price,
+      displayOrder: toDisplayOrderOrNull(
+        row.displayOrder,
+      ),
+      stock: toInt(row.stock),
+      price: toNumberOrNull(row.price),
 
-      // apparel
-      size: toStringOrNull(r?.size),
-      color: toStringOrNull(r?.color),
-      rgb: toNumberOrNull(r?.rgb),
+      size: toStringOrNull(row.size),
+      color: toStringOrNull(row.color),
+      rgb: toNumberOrNull(row.rgb),
 
-      // alcohol
-      volumeValue: toNumberOrNull(r?.volumeValue),
-      volumeUnit: toStringOrNull(r?.volumeUnit),
+      volumeValue: toNumberOrNull(
+        row.volumeValue,
+      ),
+      volumeUnit: toStringOrNull(
+        row.volumeUnit,
+      ),
     };
 
-    return rowAny as unknown as TRow;
+    return normalizedRow as unknown as TRow;
   });
 }
 
-/**
- * PriceCard 編集時、price だけ更新する。
- * kind / modelNumber / size / color / rgb / volumeValue / volumeUnit / stock は row spread で保持する。
- */
 export function updatePriceRowPrice<
-  TRow extends Record<string, any>,
+  TRow extends object,
 >(
-  rows: TRow[] | null | undefined,
+  rows: readonly TRow[] | null | undefined,
   index: number,
   price: number | null,
 ): TRow[] {
-  const src = Array.isArray(rows) ? rows : [];
+  const source = rows ?? [];
 
-  return src.map((row, i) => {
-    if (i !== index) return row;
-    return { ...row, price };
+  return source.map((row, rowIndex) => {
+    if (rowIndex !== index) {
+      return row;
+    }
+
+    return {
+      ...row,
+      price,
+    };
   });
 }
 
-// ---------------------------------------------------------
-// detail mapper
-// ---------------------------------------------------------
-
 export function deriveListDetail<
-  TRow extends Record<string, any> = any,
->(dto: any) {
-  const listingTitle = String(dto?.title ?? "");
-  const description = String(dto?.description ?? "");
+  TRow extends object = NormalizedListDetailPriceRow,
+>(
+  dto: ListDetailSource | null | undefined,
+) {
+  const listingTitle = dto?.title ?? "";
+  const description = dto?.description ?? "";
   const status = normalizeStatus(dto?.status);
 
-  const productBrandId = String(dto?.productBrandId ?? "");
-  const productBrandName = String(dto?.productBrandName ?? "");
-  const productName = String(dto?.productName ?? "");
+  const productBrandId =
+    dto?.productBrandId ?? "";
+  const productBrandName =
+    dto?.productBrandName ?? "";
+  const productName = dto?.productName ?? "";
 
-  const tokenBrandId = String(dto?.tokenBrandId ?? "");
-  const tokenBrandName = String(dto?.tokenBrandName ?? "");
-  const tokenName = String(dto?.tokenName ?? "");
+  const tokenBrandId =
+    dto?.tokenBrandId ?? "";
+  const tokenBrandName =
+    dto?.tokenBrandName ?? "";
+  const tokenName = dto?.tokenName ?? "";
 
-  const assigneeId = String(dto?.assigneeId ?? "");
-  const assigneeName = String(dto?.assigneeName ?? "") || "未設定";
+  const assigneeId = dto?.assigneeId ?? "";
+  const assigneeName =
+    dto?.assigneeName || "未設定";
 
-  const createdByName = String(dto?.createdByName ?? "");
-  const createdAt = safeDateTimeLabelJa(
-    String(dto?.createdAt ?? ""),
-    "",
+  const createdByName =
+    dto?.createdByName ?? "";
+  const createdAt = formatYMDHM(
+    dto?.createdAt,
   );
 
-  const updatedByName = String(dto?.updatedByName ?? "");
-  const updatedAt = safeDateTimeLabelJa(
-    String(dto?.updatedAt ?? ""),
-    "",
+  const updatedByName =
+    dto?.updatedByName ?? "";
+  const updatedAt = formatYMDHM(
+    dto?.updatedAt,
   );
 
   const imageUrls = normalizeImageUrls(dto);
-  const priceRows = normalizePriceRows<TRow>(dto);
+  const priceRows =
+    normalizePriceRows<TRow>(dto);
 
   return {
     listingTitle,
@@ -243,12 +296,17 @@ export function deriveListDetail<
   };
 }
 
-export function computeListDetailPageTitle(args: {
-  listId?: string;
-  listingTitle?: string;
-}) {
-  const id = String(args.listId ?? "");
-  const title = String(args.listingTitle ?? "") || "出品詳細";
+export function computeListDetailPageTitle(
+  args: {
+    listId?: string;
+    listingTitle?: string;
+  },
+): string {
+  const id = args.listId ?? "";
+  const title =
+    args.listingTitle || "出品詳細";
 
-  return id ? `${title}（listId: ${id}）` : title;
+  return id
+    ? `${title}（listId: ${id}）`
+    : title;
 }
