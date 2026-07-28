@@ -2,7 +2,7 @@
 
 import {
   isApparelCategoryCode,
-  normalizeApparelMeasurements,
+  normalizeApparelMeasurementsForRequest,
   type ApparelCategoryCode,
   type ApparelMeasurements,
   type ApparelSizeInput,
@@ -193,17 +193,12 @@ function buildMeasurementsFromSizeRow(
   categoryCode: ApparelCategoryCode,
   size: ApparelSizeInput,
 ): Record<string, number> | undefined {
-  const measurements =
-    normalizeApparelMeasurements(
-      buildApparelMeasurements(
-        categoryCode,
-        size,
-      ),
-    );
-
-  return Object.keys(measurements).length > 0
-    ? measurements
-    : undefined;
+  return normalizeApparelMeasurementsForRequest(
+    buildApparelMeasurements(
+      categoryCode,
+      size,
+    ),
+  );
 }
 
 function resolveRgbInt(args: {

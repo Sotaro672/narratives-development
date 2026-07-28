@@ -635,11 +635,10 @@ export function normalizeApparelMeasurements(
   for (const [key, value] of Object.entries(
     measurements ?? {},
   )) {
-    if (value == null) {
-      continue;
-    }
-
-    if (Number.isNaN(value)) {
+    if (
+      typeof value !== "number" ||
+      !Number.isFinite(value)
+    ) {
       continue;
     }
 
@@ -651,4 +650,23 @@ export function normalizeApparelMeasurements(
   }
 
   return out;
+}
+
+export function normalizeApparelMeasurementsForRequest(
+  measurements:
+    | Record<
+        string,
+        number | null | undefined
+      >
+    | undefined
+    | null,
+): Record<string, number> | undefined {
+  const normalized =
+    normalizeApparelMeasurements(
+      measurements,
+    );
+
+  return Object.keys(normalized).length > 0
+    ? normalized
+    : undefined;
 }
