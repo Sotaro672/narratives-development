@@ -1,4 +1,4 @@
-// frontend/console/model/src/application/modelCreateService.tsx
+// frontend/console/shell/src/features/model/application/modelCreateService.tsx
 
 import type * as React from "react";
 
@@ -237,23 +237,6 @@ export type UseVolumeVariationCardResult = {
  * =======================================================*/
 
 /**
- * Volumeを比較やMapのkeyに使用できる文字列へ変換する。
- *
- * この値は保存用データではなく、画面内での照合にだけ使用する。
- */
-export function toVolumeKey(
-  volume: Volume,
-): string {
-  const value = Number.isFinite(volume.value)
-    ? volume.value
-    : 0;
-
-  const unit = volume.unit || "ml";
-
-  return `${value}:${unit}`;
-}
-
-/**
  * Model variationのVolumeから表示文字列を生成する。
  *
  * 表示文字列は派生値であり、保存対象にはしない。
@@ -280,25 +263,4 @@ export function volumeRowToVolume(
     value: row.volumeValue,
     unit: row.volumeUnit || "ml",
   };
-}
-
-/**
- * 入力行をAlcohol variationの画面表示用データへ変換する。
- */
-export function volumeRowToVolumeLike(
-  row: VolumeRow,
-): VolumeLike {
-  return {
-    id: row.id,
-    volume: volumeRowToVolume(row),
-  };
-}
-
-/**
- * 複数の容量入力行を画面表示用データへ変換する。
- */
-export function volumeRowsToVolumeLikes(
-  rows: VolumeRow[],
-): VolumeLike[] {
-  return rows.map(volumeRowToVolumeLike);
 }

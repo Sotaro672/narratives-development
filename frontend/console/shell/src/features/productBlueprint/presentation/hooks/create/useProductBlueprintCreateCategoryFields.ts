@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/presentation/hooks/create/useProductBlueprintCreateCategoryFields.ts
+// frontend/console/shell/src/features/productBlueprint/presentation/hooks/create/useProductBlueprintCreateCategoryFields.ts
 
 import * as React from "react";
 
@@ -10,10 +10,15 @@ import type {
 
 import { getProductBlueprintCategoryFieldKeys } from "../../../domain/categoryFieldRegistry";
 
-import type { Fit } from "../../../domain/apparel";
+import {
+  FIT_OPTIONS,
+  type Fit,
+} from "../../../domain/apparel";
+
+export type FitInputValue = Fit | "";
 
 export type UseProductBlueprintCreateCategoryFieldsResult = {
-  fit: Fit;
+  fit: FitInputValue;
   material: string;
   weight: number;
   qualityAssurance: string[];
@@ -21,22 +26,52 @@ export type UseProductBlueprintCreateCategoryFieldsResult = {
   onChangeFit: (value: Fit) => void;
   onChangeMaterial: (value: string) => void;
   onChangeWeight: (value: number) => void;
-  onChangeQualityAssurance: (value: string[]) => void;
-  onChangeCategoryField: (key: string, value: CategoryFieldValue) => void;
+  onChangeQualityAssurance: (
+    value: string[],
+  ) => void;
+  onChangeCategoryField: (
+    key: string,
+    value: CategoryFieldValue,
+  ) => void;
   resetCategoryFields: () => void;
 };
 
-/**
- * model domain 管轄の field。
- * ProductBlueprint.categoryFields には保存しない。
- */
-const MODEL_OWNED_CATEGORY_FIELD_KEYS = new Set<string>(["volume"]);
+const FIT_VALUE_SET: ReadonlySet<string> =
+  new Set(
+    FIT_OPTIONS.map(
+      (option) => option.value,
+    ),
+  );
 
-function isModelOwnedCategoryFieldKey(key: string): boolean {
-  return MODEL_OWNED_CATEGORY_FIELD_KEYS.has(key);
+/**
+ * Fitとして有効な値か判定する。
+ */
+function isFit(value: unknown): value is Fit {
+  return (
+    typeof value === "string" &&
+    FIT_VALUE_SET.has(value)
+  );
 }
 
-function normalizeNumberValue(value: number): number {
+/**
+ * model domain管轄のfieldか判定する。
+ *
+ * alcoholのvolumeはmodel variation側へ保存する。
+ * cosmeticsのvolumeはProductBlueprint.categoryFieldsへ保存する。
+ */
+function isModelOwnedCategoryFieldKey(
+  categoryCode: string,
+  key: string,
+): boolean {
+  return (
+    categoryCode.startsWith("alcohol.") &&
+    key === "volume"
+  );
+}
+
+function normalizeNumberValue(
+  value: number,
+): number {
   if (Number.isNaN(value)) {
     return 0;
   }
@@ -44,34 +79,51 @@ function normalizeNumberValue(value: number): number {
   return value < 0 ? 0 : value;
 }
 
-function normalizeStringArrayValue(value: unknown): string[] {
+function normalizeStringArrayValue(
+  value: unknown,
+): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
   return value.filter(
-    (item): item is string => typeof item === "string" && item.trim() !== "",
+    (item): item is string =>
+      typeof item === "string" &&
+      item.trim() !== "",
   );
 }
 
 function normalizeCategoryFieldsForCategory(
-  category: ProductBlueprintCategorySnapshot | null,
+  category:
+    | ProductBlueprintCategorySnapshot
+    | null,
   fields: CategoryFieldValues,
 ): CategoryFieldValues {
-  const categoryCode = String(category?.code ?? "").trim();
+  const categoryCode = String(
+    category?.code ?? "",
+  ).trim();
 
   if (!categoryCode) {
     return {};
   }
 
   const allowedKeys = new Set<string>(
-    getProductBlueprintCategoryFieldKeys(categoryCode),
+    getProductBlueprintCategoryFieldKeys(
+      categoryCode,
+    ),
   );
 
   const next: CategoryFieldValues = {};
 
-  for (const [key, value] of Object.entries(fields)) {
-    if (isModelOwnedCategoryFieldKey(key)) {
+  for (const [key, value] of Object.entries(
+    fields,
+  )) {
+    if (
+      isModelOwnedCategoryFieldKey(
+        categoryCode,
+        key,
+      )
+    ) {
       continue;
     }
 
@@ -86,106 +138,241 @@ function normalizeCategoryFieldsForCategory(
 }
 
 export function useProductBlueprintCreateCategoryFields(
-  productBlueprintCategory: ProductBlueprintCategorySnapshot | null,
+  productBlueprintCategory:
+    | ProductBlueprintCategorySnapshot
+    | null,
 ): UseProductBlueprintCreateCategoryFieldsResult {
-  const [fit, setFit] = React.useState<Fit>("" as Fit);
-  const [material, setMaterial] = React.useState("");
-  const [weight, setWeight] = React.useState<number>(0);
-  const [qualityAssurance, setQualityAssurance] = React.useState<string[]>([]);
-  const [categoryFields, setCategoryFields] =
-    React.useState<CategoryFieldValues>({});
+  const categoryCode = React.useMemo(
+    () =>
+      String(
+        productBlueprintCategory?.code ?? "",
+      ).trim(),
+    [productBlueprintCategory?.code],
+  );
+
+  const [fit, setFit] =
+    React.useState<FitInputValue>("");
+
+  const [material, setMaterial] =
+    React.useState("");
+
+  const [weight, setWeight] =
+    React.useState<number>(0);
+
+  const [
+    qualityAssurance,
+    setQualityAssurance,
+  ] = React.useState<string[]>([]);
+
+  const [
+    categoryFields,
+    setCategoryFields,
+  ] = React.useState<CategoryFieldValues>(
+    {},
+  );
 
   React.useEffect(() => {
-    setCategoryFields((prev) =>
-      normalizeCategoryFieldsForCategory(productBlueprintCategory, prev),
+    setCategoryFields((previous) =>
+      normalizeCategoryFieldsForCategory(
+        productBlueprintCategory,
+        previous,
+      ),
     );
   }, [productBlueprintCategory]);
 
-  const onChangeFit = React.useCallback((value: Fit) => {
-    setFit(value);
+  const onChangeFit = React.useCallback(
+    (value: Fit) => {
+      setFit(value);
 
-    setCategoryFields((prev) => ({
-      ...prev,
-      fit: value,
-    }));
-  }, []);
-
-  const onChangeMaterial = React.useCallback((value: string) => {
-    setMaterial(value);
-
-    setCategoryFields((prev) => ({
-      ...prev,
-      material: value.trim() === "" ? null : value,
-    }));
-  }, []);
-
-  const onChangeWeight = React.useCallback((value: number) => {
-    const next = normalizeNumberValue(value);
-
-    setWeight(next);
-
-    setCategoryFields((prev) => ({
-      ...prev,
-      weight: next,
-    }));
-  }, []);
-
-  const onChangeQualityAssurance = React.useCallback((value: string[]) => {
-    const next = normalizeStringArrayValue(value);
-
-    setQualityAssurance(next);
-
-    setCategoryFields((prev) => ({
-      ...prev,
-      washTags: next,
-    }));
-  }, []);
-
-  const onChangeCategoryField = React.useCallback(
-    (key: string, value: CategoryFieldValue) => {
-      if (isModelOwnedCategoryFieldKey(key)) {
-        setCategoryFields((prev) => {
-          const next = { ...prev };
-          delete next[key];
-          return next;
-        });
-        return;
-      }
-
-      setCategoryFields((prev) => ({
-        ...prev,
-        [key]: value,
+      setCategoryFields((previous) => ({
+        ...previous,
+        fit: value,
       }));
-
-      if (key === "fit" && typeof value === "string") {
-        setFit(value as Fit);
-        return;
-      }
-
-      if (key === "material") {
-        setMaterial(typeof value === "string" ? value : "");
-        return;
-      }
-
-      if (key === "weight") {
-        setWeight(typeof value === "number" ? normalizeNumberValue(value) : 0);
-        return;
-      }
-
-      if (key === "washTags" || key === "qualityAssurance") {
-        setQualityAssurance(normalizeStringArrayValue(value));
-      }
     },
     [],
   );
 
-  const resetCategoryFields = React.useCallback(() => {
-    setFit("" as Fit);
-    setMaterial("");
-    setWeight(0);
-    setQualityAssurance([]);
-    setCategoryFields({});
-  }, []);
+  const onChangeMaterial =
+    React.useCallback((value: string) => {
+      setMaterial(value);
+
+      setCategoryFields((previous) => ({
+        ...previous,
+        material:
+          value.trim() === ""
+            ? null
+            : value,
+      }));
+    }, []);
+
+  const onChangeWeight =
+    React.useCallback((value: number) => {
+      const next =
+        normalizeNumberValue(value);
+
+      setWeight(next);
+
+      setCategoryFields((previous) => ({
+        ...previous,
+        weight: next,
+      }));
+    }, []);
+
+  const onChangeQualityAssurance =
+    React.useCallback(
+      (value: string[]) => {
+        const next =
+          normalizeStringArrayValue(
+            value,
+          );
+
+        setQualityAssurance(next);
+
+        setCategoryFields(
+          (previous) => ({
+            ...previous,
+            washTags: next,
+          }),
+        );
+      },
+      [],
+    );
+
+  const onChangeCategoryField =
+    React.useCallback(
+      (
+        key: string,
+        value: CategoryFieldValue,
+      ) => {
+        if (
+          isModelOwnedCategoryFieldKey(
+            categoryCode,
+            key,
+          )
+        ) {
+          setCategoryFields(
+            (previous) => {
+              const next = {
+                ...previous,
+              };
+
+              delete next[key];
+
+              return next;
+            },
+          );
+
+          return;
+        }
+
+        if (key === "fit") {
+          const nextFit = isFit(value)
+            ? value
+            : "";
+
+          setFit(nextFit);
+
+          setCategoryFields(
+            (previous) => {
+              const next = {
+                ...previous,
+              };
+
+              if (nextFit) {
+                next.fit = nextFit;
+              } else {
+                delete next.fit;
+              }
+
+              return next;
+            },
+          );
+
+          return;
+        }
+
+        if (key === "material") {
+          const nextMaterial =
+            typeof value === "string"
+              ? value
+              : "";
+
+          setMaterial(nextMaterial);
+
+          setCategoryFields(
+            (previous) => ({
+              ...previous,
+              material:
+                nextMaterial.trim() === ""
+                  ? null
+                  : nextMaterial,
+            }),
+          );
+
+          return;
+        }
+
+        if (key === "weight") {
+          const nextWeight =
+            typeof value === "number"
+              ? normalizeNumberValue(
+                  value,
+                )
+              : 0;
+
+          setWeight(nextWeight);
+
+          setCategoryFields(
+            (previous) => ({
+              ...previous,
+              weight: nextWeight,
+            }),
+          );
+
+          return;
+        }
+
+        if (
+          key === "washTags" ||
+          key === "qualityAssurance"
+        ) {
+          const nextWashTags =
+            normalizeStringArrayValue(
+              value,
+            );
+
+          setQualityAssurance(
+            nextWashTags,
+          );
+
+          setCategoryFields(
+            (previous) => ({
+              ...previous,
+              washTags: nextWashTags,
+            }),
+          );
+
+          return;
+        }
+
+        setCategoryFields(
+          (previous) => ({
+            ...previous,
+            [key]: value,
+          }),
+        );
+      },
+      [categoryCode],
+    );
+
+  const resetCategoryFields =
+    React.useCallback(() => {
+      setFit("");
+      setMaterial("");
+      setWeight(0);
+      setQualityAssurance([]);
+      setCategoryFields({});
+    }, []);
 
   return {
     fit,

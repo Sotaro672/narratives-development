@@ -1,29 +1,34 @@
-// frontend\console\shell\src\pages\productBlueprintCreate.tsx
+// frontend/console/shell/src/pages/productBlueprintCreate.tsx
 
 import * as React from "react";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
+
 import { AdminCard } from "../features/admin/presentation/components/AdminCard";
+
 import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
+
 import {
   ProductBlueprintBrandCard,
   ProductBlueprintCategoryCard,
 } from "../features/productBlueprint/presentation/cards/classification";
+
 import CategoryFieldsCard from "../features/productBlueprint/presentation/cards/categoryFields";
+
 import ColorVariationCard from "../features/model/presentation/components/ColorVariationCard";
 import SizeVariationCard from "../features/model/presentation/components/SizeVariationCard";
 import ModelNumberCard from "../features/model/presentation/components/ModelNumberCard";
 import VolumeCard from "../features/model/presentation/components/VolumeCard";
 import AlcoholModelNumberCard from "../features/model/presentation/components/AlcoholModelNumberCard";
 
-// モデルナンバー用のロジックは model 側の hook を利用
+// モデルナンバー用のロジックはmodel側のhookを利用
 import { useModelCard } from "../features/model/presentation/hook/useModelCard";
 
 import { useProductBlueprintCreate } from "../features/productBlueprint/presentation/hooks/create/useProductBlueprintCreate";
 
-import type { CategoryFieldValues } from "../features/productBlueprint/domain/productBlueprintCategory";
-
-function shouldShowApparelVariationCards(categoryCode: string): boolean {
+function shouldShowApparelVariationCards(
+  categoryCode: string,
+): boolean {
   return (
     categoryCode === "apparel.tops" ||
     categoryCode === "apparel.bottoms" ||
@@ -33,7 +38,9 @@ function shouldShowApparelVariationCards(categoryCode: string): boolean {
   );
 }
 
-function shouldShowAlcoholVariationCards(categoryCode: string): boolean {
+function shouldShowAlcoholVariationCards(
+  categoryCode: string,
+): boolean {
   return (
     categoryCode === "alcohol.beer" ||
     categoryCode === "alcohol.sake" ||
@@ -42,29 +49,6 @@ function shouldShowAlcoholVariationCards(categoryCode: string): boolean {
     categoryCode === "alcohol.whisky" ||
     categoryCode === "alcohol.wine"
   );
-}
-
-function toSafeNumber(value: unknown, fallback = 0): number {
-  return typeof value === "number" && !Number.isNaN(value) ? value : fallback;
-}
-
-function toSafeStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-
-  return value.filter(
-    (item): item is string => typeof item === "string" && item.trim() !== "",
-  );
-}
-
-function removeModelOwnedCategoryFields(
-  fields: CategoryFieldValues,
-): CategoryFieldValues {
-  const next: CategoryFieldValues = { ...fields };
-
-  // alcohol volume は model domain 管轄。
-  delete next.volume;
-
-  return next;
 }
 
 export default function ProductBlueprintCreate() {
@@ -87,23 +71,19 @@ export default function ProductBlueprintCreate() {
     productBlueprintCategoryError,
     isApparelCategory,
     isAlcoholCategory,
-    fit,
-    material,
-    weight,
-    qualityAssurance,
     categoryFields,
 
     // 商品カテゴリから導出された採寸項目
     measurementOptions,
 
-    // apparel バリエーション
+    // apparelバリエーション
     colorInput,
     colors,
     colorRgbMap,
     sizes,
     modelNumbers,
 
-    // alcohol バリエーション
+    // alcoholバリエーション
     volumes,
     alcoholModelNumbers,
 
@@ -121,15 +101,15 @@ export default function ProductBlueprintCreate() {
     onRemoveSize,
     onChangeSize,
 
-    // apparel モデルナンバー操作
+    // apparelモデルナンバー操作
     onChangeModelNumber,
 
-    // alcohol 容量操作
+    // alcohol容量操作
     onAddVolume,
     onRemoveVolume,
     onChangeVolume,
 
-    // alcohol モデルナンバー操作
+    // alcoholモデルナンバー操作
     onChangeAlcoholModelNumber,
 
     // 管理情報
@@ -144,52 +124,81 @@ export default function ProductBlueprintCreate() {
     onBack,
   } = useProductBlueprintCreate();
 
-  const categoryCode = String(productBlueprintCategory?.code ?? "").trim();
+  const categoryCode = String(
+    productBlueprintCategory?.code ?? "",
+  ).trim();
 
-  const mergedCategoryFields = React.useMemo<CategoryFieldValues>(() => {
-    return removeModelOwnedCategoryFields({
-      ...(categoryFields ?? {}),
-      fit,
-      material: String(material ?? ""),
-      weight: toSafeNumber(weight, 0),
-      washTags: toSafeStringArray(qualityAssurance),
-    });
-  }, [categoryFields, fit, material, weight, qualityAssurance]);
+  const showApparelVariationCards =
+    React.useMemo(
+      () =>
+        isApparelCategory &&
+        shouldShowApparelVariationCards(
+          categoryCode,
+        ),
+      [
+        isApparelCategory,
+        categoryCode,
+      ],
+    );
 
-  const showApparelVariationCards = React.useMemo(
-    () => isApparelCategory && shouldShowApparelVariationCards(categoryCode),
-    [isApparelCategory, categoryCode],
-  );
-
-  const showAlcoholVariationCards = React.useMemo(
-    () => isAlcoholCategory && shouldShowAlcoholVariationCards(categoryCode),
-    [isAlcoholCategory, categoryCode],
-  );
+  const showAlcoholVariationCards =
+    React.useMemo(
+      () =>
+        isAlcoholCategory &&
+        shouldShowAlcoholVariationCards(
+          categoryCode,
+        ),
+      [
+        isAlcoholCategory,
+        categoryCode,
+      ],
+    );
 
   const showCategoryOnlyMessage =
-    !!productBlueprintCategory &&
+    Boolean(productBlueprintCategory) &&
     !showApparelVariationCards &&
     !showAlcoholVariationCards;
 
   // -----------------------------
-  // apparel モデルナンバー表示用の hook（model 側）
-  // rgb を hook 経由で渡すため colorRgbMap も渡す
+  // apparelモデルナンバー表示用のhook（model側）
+  // rgbをhook経由で渡すためcolorRgbMapも渡す
   // -----------------------------
-  const { getCode, onChangeModelNumber: uiOnChangeModelNumber } = useModelCard({
+  const {
+    getCode,
+    onChangeModelNumber:
+      uiOnChangeModelNumber,
+  } = useModelCard({
     sizes,
     colors,
     modelNumbers,
     colorRgbMap,
   });
 
-  // UI 変更時に「model 側の内部状態」と「productBlueprintCreate の状態」の両方を更新
-  const handleChangeModelNumber = React.useCallback(
-    (sizeLabel: string, color: string, nextCode: string) => {
-      uiOnChangeModelNumber(sizeLabel, color, nextCode);
-      onChangeModelNumber(sizeLabel, color, nextCode);
-    },
-    [uiOnChangeModelNumber, onChangeModelNumber],
-  );
+  // UI変更時にmodel側とproductBlueprint側の両方を更新する
+  const handleChangeModelNumber =
+    React.useCallback(
+      (
+        sizeLabel: string,
+        color: string,
+        nextCode: string,
+      ) => {
+        uiOnChangeModelNumber(
+          sizeLabel,
+          color,
+          nextCode,
+        );
+
+        onChangeModelNumber(
+          sizeLabel,
+          color,
+          nextCode,
+        );
+      },
+      [
+        uiOnChangeModelNumber,
+        onChangeModelNumber,
+      ],
+    );
 
   return (
     <PageStyle
@@ -201,19 +210,35 @@ export default function ProductBlueprintCreate() {
       <div className="space-y-4">
         <ProductBlueprintCategoryCard
           mode="edit"
-          productBlueprintCategoryId={productBlueprintCategoryId}
-          productBlueprintCategory={productBlueprintCategory}
-          productBlueprintCategoryOptions={productBlueprintCategoryOptions}
-          productBlueprintCategoryLoading={productBlueprintCategoryLoading}
-          productBlueprintCategoryError={productBlueprintCategoryError}
-          onChangeProductBlueprintCategory={onChangeProductBlueprintCategory}
+          productBlueprintCategoryId={
+            productBlueprintCategoryId
+          }
+          productBlueprintCategory={
+            productBlueprintCategory
+          }
+          productBlueprintCategoryOptions={
+            productBlueprintCategoryOptions
+          }
+          productBlueprintCategoryLoading={
+            productBlueprintCategoryLoading
+          }
+          productBlueprintCategoryError={
+            productBlueprintCategoryError
+          }
+          onChangeProductBlueprintCategory={
+            onChangeProductBlueprintCategory
+          }
         />
 
         <ProductBlueprintCard
           mode="edit"
           productName={productName}
-          productBlueprintCategory={productBlueprintCategory}
-          onChangeProductName={onChangeProductName}
+          productBlueprintCategory={
+            productBlueprintCategory
+          }
+          onChangeProductName={
+            onChangeProductName
+          }
         />
 
         {!productBlueprintCategory && (
@@ -225,15 +250,20 @@ export default function ProductBlueprintCreate() {
         {productBlueprintCategory && (
           <CategoryFieldsCard
             categoryCode={categoryCode}
-            categoryFields={mergedCategoryFields}
+            categoryFields={
+              categoryFields
+            }
             mode="edit"
-            onChangeCategoryField={onChangeCategoryField}
+            onChangeCategoryField={
+              onChangeCategoryField
+            }
           />
         )}
 
         {showCategoryOnlyMessage && (
           <p className="mt-2 text-xs text-slate-500">
-            選択中の商品カテゴリ: {productBlueprintCategoryLabel}
+            選択中の商品カテゴリ:{" "}
+            {productBlueprintCategoryLabel}
           </p>
         )}
 
@@ -242,18 +272,28 @@ export default function ProductBlueprintCreate() {
             <ColorVariationCard
               colors={colors}
               colorInput={colorInput}
-              onChangeColorInput={onChangeColorInput}
+              onChangeColorInput={
+                onChangeColorInput
+              }
               onAddColor={onAddColor}
-              onRemoveColor={onRemoveColor}
+              onRemoveColor={
+                onRemoveColor
+              }
               colorRgbMap={colorRgbMap}
-              onChangeColorRgb={onChangeColorRgb}
+              onChangeColorRgb={
+                onChangeColorRgb
+              }
             />
 
             <SizeVariationCard
               sizes={sizes}
               onRemove={onRemoveSize}
-              onChangeSize={onChangeSize}
-              measurementOptions={measurementOptions}
+              onChangeSize={
+                onChangeSize
+              }
+              measurementOptions={
+                measurementOptions
+              }
               mode="edit"
               onAddSize={onAddSize}
             />
@@ -262,7 +302,9 @@ export default function ProductBlueprintCreate() {
               sizes={sizes}
               colors={colors}
               getCode={getCode}
-              onChangeModelNumber={handleChangeModelNumber}
+              onChangeModelNumber={
+                handleChangeModelNumber
+              }
             />
           </>
         )}
@@ -272,16 +314,26 @@ export default function ProductBlueprintCreate() {
             <VolumeCard
               volumes={volumes}
               mode="edit"
-              onAddVolume={onAddVolume}
-              onRemoveVolume={onRemoveVolume}
-              onChangeVolume={onChangeVolume}
+              onAddVolume={
+                onAddVolume
+              }
+              onRemoveVolume={
+                onRemoveVolume
+              }
+              onChangeVolume={
+                onChangeVolume
+              }
             />
 
             <AlcoholModelNumberCard
               volumes={volumes}
-              modelNumbers={alcoholModelNumbers}
+              modelNumbers={
+                alcoholModelNumbers
+              }
               mode="edit"
-              onChangeModelNumber={onChangeAlcoholModelNumber}
+              onChangeModelNumber={
+                onChangeAlcoholModelNumber
+              }
             />
           </>
         )}
@@ -291,10 +343,18 @@ export default function ProductBlueprintCreate() {
         <AdminCard
           mode="edit"
           assigneeId={assigneeId}
-          assigneeName={assigneeName || "未設定"}
-          onSelectAssignee={onSelectAssignee}
-          onEditAssignee={onEditAssignee}
-          onClickAssignee={onClickAssignee}
+          assigneeName={
+            assigneeName || "未設定"
+          }
+          onSelectAssignee={
+            onSelectAssignee
+          }
+          onEditAssignee={
+            onEditAssignee
+          }
+          onClickAssignee={
+            onClickAssignee
+          }
         />
 
         <ProductBlueprintBrandCard
@@ -304,7 +364,9 @@ export default function ProductBlueprintCreate() {
           brandOptions={brandOptions}
           brandLoading={brandLoading}
           brandError={brandError}
-          onChangeBrandId={onChangeBrandId}
+          onChangeBrandId={
+            onChangeBrandId
+          }
         />
       </div>
     </PageStyle>

@@ -7,43 +7,83 @@
 // 旧 tops / bottoms は productBlueprintCategory.code の
 // apparel.tops / apparel.bottoms として扱う。
 
+export const APPAREL_CATEGORY_OPTIONS = [
+  {
+    value: "apparel.tops",
+    label: "トップス",
+  },
+  {
+    value: "apparel.bottoms",
+    label: "ボトムス",
+  },
+  {
+    value: "apparel.outerwear",
+    label: "アウター",
+  },
+  {
+    value: "apparel.dress",
+    label: "ワンピース",
+  },
+  {
+    value: "apparel.shoes",
+    label: "靴",
+  },
+  {
+    value: "apparel.bag",
+    label: "バッグ",
+  },
+  {
+    value: "apparel.accessory",
+    label: "アクセサリー",
+  },
+] as const;
+
 export type ApparelCategoryCode =
-  | "apparel.tops"
-  | "apparel.bottoms"
-  | "apparel.outerwear"
-  | "apparel.dress"
-  | "apparel.shoes"
-  | "apparel.bag"
-  | "apparel.accessory";
+  (typeof APPAREL_CATEGORY_OPTIONS)[number]["value"];
 
 export type ApparelCategoryOption = {
   value: ApparelCategoryCode;
   label: string;
 };
 
-export const APPAREL_CATEGORY_OPTIONS: ApparelCategoryOption[] = [
-  { value: "apparel.tops", label: "トップス" },
-  { value: "apparel.bottoms", label: "ボトムス" },
-  { value: "apparel.outerwear", label: "アウター" },
-  { value: "apparel.dress", label: "ワンピース" },
-  { value: "apparel.shoes", label: "靴" },
-  { value: "apparel.bag", label: "バッグ" },
-  { value: "apparel.accessory", label: "アクセサリー" },
-];
+const APPAREL_CATEGORY_CODE_SET: ReadonlySet<string> =
+  new Set(
+    APPAREL_CATEGORY_OPTIONS.map(
+      (option) => option.value,
+    ),
+  );
 
 export function isApparelCategoryCode(
   value: string,
 ): value is ApparelCategoryCode {
-  return (
-    value === "apparel.tops" ||
-    value === "apparel.bottoms" ||
-    value === "apparel.outerwear" ||
-    value === "apparel.dress" ||
-    value === "apparel.shoes" ||
-    value === "apparel.bag" ||
-    value === "apparel.accessory"
-  );
+  return APPAREL_CATEGORY_CODE_SET.has(value);
 }
+
+// ============================
+// フィット種別
+// ============================
+
+export const FIT_OPTIONS = [
+  {
+    value: "レギュラーフィット",
+    label: "レギュラーフィット",
+  },
+  {
+    value: "スリムフィット",
+    label: "スリムフィット",
+  },
+  {
+    value: "リラックスフィット",
+    label: "リラックスフィット",
+  },
+  {
+    value: "オーバーサイズ",
+    label: "オーバーサイズ",
+  },
+] as const;
+
+export type Fit =
+  (typeof FIT_OPTIONS)[number]["value"];
 
 // ============================
 // Apparel productBlueprint category fields
@@ -61,14 +101,15 @@ export function isApparelCategoryCode(
 export type ApparelCategoryFieldKey =
   | "weight"
   | "fit"
-  | "material";
+  | "material"
+  | "washTags";
 
-export type ApparelCategoryFields = Partial<
-  Record<
-    ApparelCategoryFieldKey,
-    string | number | null
-  >
->;
+export type ApparelCategoryFields = {
+  weight?: number | null;
+  fit?: Fit | null;
+  material?: string | null;
+  washTags?: string[];
+};
 
 export const APPAREL_CATEGORY_FIELD_KEYS: Record<
   ApparelCategoryCode,
@@ -78,21 +119,36 @@ export const APPAREL_CATEGORY_FIELD_KEYS: Record<
     "weight",
     "fit",
     "material",
+    "washTags",
   ],
   "apparel.bottoms": [
     "weight",
     "fit",
     "material",
+    "washTags",
   ],
-  "apparel.outerwear": ["material"],
+  "apparel.outerwear": [
+    "material",
+    "washTags",
+  ],
   "apparel.dress": [
     "weight",
     "fit",
     "material",
+    "washTags",
   ],
-  "apparel.shoes": ["material"],
-  "apparel.bag": ["material"],
-  "apparel.accessory": ["material"],
+  "apparel.shoes": [
+    "material",
+    "washTags",
+  ],
+  "apparel.bag": [
+    "material",
+    "washTags",
+  ],
+  "apparel.accessory": [
+    "material",
+    "washTags",
+  ],
 };
 
 export function getApparelCategoryFieldKeys(
@@ -307,38 +363,6 @@ export type ApparelSizeRow =
   ApparelSizeInput & {
     id: string;
   };
-
-// ============================
-// フィット種別
-// ============================
-
-export type Fit =
-  | "レギュラーフィット"
-  | "スリムフィット"
-  | "リラックスフィット"
-  | "オーバーサイズ";
-
-export const FIT_OPTIONS: {
-  value: Fit;
-  label: string;
-}[] = [
-  {
-    value: "レギュラーフィット",
-    label: "レギュラーフィット",
-  },
-  {
-    value: "スリムフィット",
-    label: "スリムフィット",
-  },
-  {
-    value: "リラックスフィット",
-    label: "リラックスフィット",
-  },
-  {
-    value: "オーバーサイズ",
-    label: "オーバーサイズ",
-  },
-];
 
 // ============================
 // 商品IDタグ選択肢

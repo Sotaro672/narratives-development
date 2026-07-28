@@ -1,4 +1,4 @@
-// frontend/console/model/src/infrastructure/repository/http/modelRepositoryHTTP.ts
+// frontend/console/shell/src/features/model/infrastructure/repository/modelRepositoryHTTP.ts
 
 import { API_BASE } from "../../../../shared/http/apiBase";
 import {
@@ -100,7 +100,9 @@ type ReplaceModelVariationsBody = {
  * Generic helpers
  * =======================================================*/
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(
+  value: unknown,
+): value is Record<string, unknown> {
   return (
     value !== null &&
     typeof value === "object" &&
@@ -117,7 +119,8 @@ function isAlcoholCreatePayload(
 function requireProductBlueprintId(
   productBlueprintId: string,
 ): string {
-  const normalizedProductBlueprintId = productBlueprintId.trim();
+  const normalizedProductBlueprintId =
+    productBlueprintId.trim();
 
   if (!normalizedProductBlueprintId) {
     throw new Error(
@@ -128,23 +131,14 @@ function requireProductBlueprintId(
   return normalizedProductBlueprintId;
 }
 
-function requireModelId(modelId: string): string {
-  const normalizedModelId = modelId.trim();
-
-  if (!normalizedModelId) {
-    throw new Error(
-      "modelRepositoryHTTP: modelIdが空です",
-    );
-  }
-
-  return normalizedModelId;
-}
-
 function requireNonEmptyString(
   value: string,
   fieldName: string,
 ): string {
-  if (typeof value !== "string" || value.length === 0) {
+  if (
+    typeof value !== "string" ||
+    value.length === 0
+  ) {
     throw new Error(
       `modelRepositoryHTTP: ${fieldName}が空です`,
     );
@@ -170,10 +164,18 @@ function requireInteger(
   return value;
 }
 
-function normalizeRGB(value: number): number {
-  const rgb = requireInteger(value, "rgb");
+function normalizeRGB(
+  value: number,
+): number {
+  const rgb = requireInteger(
+    value,
+    "rgb",
+  );
 
-  if (rgb < 0 || rgb > 0xffffff) {
+  if (
+    rgb < 0 ||
+    rgb > 0xffffff
+  ) {
     throw new Error(
       "modelRepositoryHTTP: rgbは0から16777215の範囲である必要があります",
     );
@@ -182,7 +184,9 @@ function normalizeRGB(value: number): number {
   return rgb;
 }
 
-function normalizeVolume(volume: Volume): Volume {
+function normalizeVolume(
+  volume: Volume,
+): Volume {
   const value = requireInteger(
     volume.value,
     "volume.value",
@@ -199,7 +203,10 @@ function normalizeVolume(volume: Volume): Volume {
     "volume.unit",
   );
 
-  if (unit !== "ml" && unit !== "L") {
+  if (
+    unit !== "ml" &&
+    unit !== "L"
+  ) {
     throw new Error(
       `modelRepositoryHTTP: 未対応のvolume.unitです: ${unit}`,
     );
@@ -212,7 +219,10 @@ function normalizeVolume(volume: Volume): Volume {
 }
 
 function normalizeMeasurements(
-  value?: Record<string, number | null | undefined>,
+  value?: Record<
+    string,
+    number | null | undefined
+  >,
 ): Record<string, number> | undefined {
   if (value === undefined) {
     return undefined;
@@ -220,21 +230,28 @@ function normalizeMeasurements(
 
   const measurements: Record<string, number> = {};
 
-  for (const [key, rawValue] of Object.entries(value)) {
+  for (
+    const [key, rawValue]
+    of Object.entries(value)
+  ) {
     if (!key) {
       throw new Error(
         "modelRepositoryHTTP: measurementsの項目名が空です",
       );
     }
 
-    if (rawValue === null || rawValue === undefined) {
+    if (
+      rawValue === null ||
+      rawValue === undefined
+    ) {
       continue;
     }
 
-    const measurementValue = requireInteger(
-      rawValue,
-      `measurements.${key}`,
-    );
+    const measurementValue =
+      requireInteger(
+        rawValue,
+        `measurements.${key}`,
+      );
 
     if (measurementValue < 0) {
       throw new Error(
@@ -242,10 +259,13 @@ function normalizeMeasurements(
       );
     }
 
-    measurements[key] = measurementValue;
+    measurements[key] =
+      measurementValue;
   }
 
-  if (Object.keys(measurements).length === 0) {
+  if (
+    Object.keys(measurements).length === 0
+  ) {
     return undefined;
   }
 
@@ -255,16 +275,19 @@ function normalizeMeasurements(
 function toCreateRequestBody(
   payload: CreateModelVariationRequest,
 ): CreateModelVariationBody {
-  const modelNumber = requireNonEmptyString(
-    payload.modelNumber,
-    "modelNumber",
-  );
+  const modelNumber =
+    requireNonEmptyString(
+      payload.modelNumber,
+      "modelNumber",
+    );
 
   if (isAlcoholCreatePayload(payload)) {
     return {
       kind: "alcohol",
       modelNumber,
-      volume: normalizeVolume(payload.volume),
+      volume: normalizeVolume(
+        payload.volume,
+      ),
     };
   }
 
@@ -279,10 +302,13 @@ function toCreateRequestBody(
       payload.color,
       "color",
     ),
-    rgb: normalizeRGB(payload.rgb),
-    measurements: normalizeMeasurements(
-      payload.measurements,
+    rgb: normalizeRGB(
+      payload.rgb,
     ),
+    measurements:
+      normalizeMeasurements(
+        payload.measurements,
+      ),
   };
 }
 
@@ -290,23 +316,33 @@ function toCreateRequestBody(
  * Response envelope helpers
  * =======================================================*/
 
-function unwrapSingleResponse(value: unknown): unknown {
+function unwrapSingleResponse(
+  value: unknown,
+): unknown {
   if (!isRecord(value)) {
     return value;
   }
 
-  if (isRecord(value.modelVariation)) {
+  if (
+    isRecord(value.modelVariation)
+  ) {
     return value.modelVariation;
   }
 
   if (isRecord(value.data)) {
-    if (isRecord(value.data.modelVariation)) {
+    if (
+      isRecord(
+        value.data.modelVariation,
+      )
+    ) {
       return value.data.modelVariation;
     }
 
     if (
-      typeof value.data.id === "string" ||
-      typeof value.data.kind === "string"
+      typeof value.data.id ===
+        "string" ||
+      typeof value.data.kind ===
+        "string"
     ) {
       return value.data;
     }
@@ -315,7 +351,9 @@ function unwrapSingleResponse(value: unknown): unknown {
   return value;
 }
 
-function unwrapListResponse(value: unknown): unknown[] {
+function unwrapListResponse(
+  value: unknown,
+): unknown[] {
   if (Array.isArray(value)) {
     return value;
   }
@@ -332,7 +370,10 @@ function unwrapListResponse(value: unknown): unknown[] {
     value.items,
   ];
 
-  for (const candidate of directCandidates) {
+  for (
+    const candidate
+    of directCandidates
+  ) {
     if (Array.isArray(candidate)) {
       return candidate;
     }
@@ -349,7 +390,10 @@ function unwrapListResponse(value: unknown): unknown[] {
       value.data.items,
     ];
 
-    for (const candidate of dataCandidates) {
+    for (
+      const candidate
+      of dataCandidates
+    ) {
       if (Array.isArray(candidate)) {
         return candidate;
       }
@@ -372,7 +416,10 @@ function optionalResponseString(
 function parseResponseMeasurements(
   value: unknown,
 ): Record<string, number> | undefined {
-  if (value === undefined || value === null) {
+  if (
+    value === undefined ||
+    value === null
+  ) {
     return undefined;
   }
 
@@ -384,7 +431,10 @@ function parseResponseMeasurements(
 
   const measurements: Record<string, number> = {};
 
-  for (const [key, rawValue] of Object.entries(value)) {
+  for (
+    const [key, rawValue]
+    of Object.entries(value)
+  ) {
     if (!key) {
       throw new Error(
         "modelRepositoryHTTP: measurements responseの項目名が空です",
@@ -402,10 +452,13 @@ function parseResponseMeasurements(
       );
     }
 
-    measurements[key] = rawValue;
+    measurements[key] =
+      rawValue;
   }
 
-  if (Object.keys(measurements).length === 0) {
+  if (
+    Object.keys(measurements).length === 0
+  ) {
     return undefined;
   }
 
@@ -419,8 +472,11 @@ function parseResponseColor(
   rgb: number;
 } {
   if (isRecord(json.color)) {
-    const name = json.color.name;
-    const rgb = json.color.rgb;
+    const name =
+      json.color.name;
+
+    const rgb =
+      json.color.rgb;
 
     if (
       typeof name !== "string" ||
@@ -484,7 +540,10 @@ function parseResponseVolume(
 
   if (
     typeof value.unit !== "string" ||
-    (value.unit !== "ml" && value.unit !== "L")
+    (
+      value.unit !== "ml" &&
+      value.unit !== "L"
+    )
   ) {
     throw new Error(
       "modelRepositoryHTTP: alcohol volume.unit responseが不正です",
@@ -501,7 +560,8 @@ function parseModelVariationResponse(
   value: unknown,
   fallbackProductBlueprintId?: string,
 ): ModelVariationResponse {
-  const unwrapped = unwrapSingleResponse(value);
+  const unwrapped =
+    unwrapSingleResponse(value);
 
   if (!isRecord(unwrapped)) {
     throw new Error(
@@ -509,19 +569,26 @@ function parseModelVariationResponse(
     );
   }
 
-  const id = unwrapped.id;
-  const kind = unwrapped.kind;
-  const modelNumber = unwrapped.modelNumber;
+  const id =
+    unwrapped.id;
+
+  const kind =
+    unwrapped.kind;
+
+  const modelNumber =
+    unwrapped.modelNumber;
 
   const productBlueprintId =
-    typeof unwrapped.productBlueprintId === "string"
+    typeof unwrapped.productBlueprintId ===
+      "string"
       ? unwrapped.productBlueprintId
       : fallbackProductBlueprintId;
 
   if (
     typeof id !== "string" ||
     !id ||
-    typeof productBlueprintId !== "string" ||
+    typeof productBlueprintId !==
+      "string" ||
     !productBlueprintId ||
     typeof kind !== "string" ||
     typeof modelNumber !== "string" ||
@@ -536,27 +603,31 @@ function parseModelVariationResponse(
     id,
     productBlueprintId,
     modelNumber,
-    createdAt: optionalResponseString(
-      unwrapped.createdAt,
-    ),
-    updatedAt: optionalResponseString(
-      unwrapped.updatedAt,
-    ),
+    createdAt:
+      optionalResponseString(
+        unwrapped.createdAt,
+      ),
+    updatedAt:
+      optionalResponseString(
+        unwrapped.updatedAt,
+      ),
   };
 
   if (kind === "alcohol") {
     return {
       ...base,
       kind: "alcohol",
-      volume: parseResponseVolume(
-        unwrapped.volume,
-      ),
+      volume:
+        parseResponseVolume(
+          unwrapped.volume,
+        ),
     };
   }
 
   if (kind === "apparel") {
     if (
-      typeof unwrapped.size !== "string" ||
+      typeof unwrapped.size !==
+        "string" ||
       !unwrapped.size
     ) {
       throw new Error(
@@ -568,10 +639,14 @@ function parseModelVariationResponse(
       ...base,
       kind: "apparel",
       size: unwrapped.size,
-      color: parseResponseColor(unwrapped),
-      measurements: parseResponseMeasurements(
-        unwrapped.measurements,
-      ),
+      color:
+        parseResponseColor(
+          unwrapped,
+        ),
+      measurements:
+        parseResponseMeasurements(
+          unwrapped.measurements,
+        ),
     };
   }
 
@@ -584,68 +659,15 @@ function parseModelVariationListResponse(
   value: unknown,
   fallbackProductBlueprintId?: string,
 ): ModelVariationResponse[] {
-  return unwrapListResponse(value).map(
+  return unwrapListResponse(
+    value,
+  ).map(
     (variation) =>
       parseModelVariationResponse(
         variation,
         fallbackProductBlueprintId,
       ),
   );
-}
-
-/* =========================================================
- * Response ID helpers
- * =======================================================*/
-
-function responseIdCandidate(
-  value: unknown,
-): string {
-  if (!isRecord(value)) {
-    return "";
-  }
-
-  if (typeof value.id === "string" && value.id.trim()) {
-    return value.id.trim();
-  }
-
-  if (isRecord(value.modelVariation)) {
-    const modelVariationId =
-      responseIdCandidate(value.modelVariation);
-
-    if (modelVariationId) {
-      return modelVariationId;
-    }
-  }
-
-  if (isRecord(value.data)) {
-    const dataId = responseIdCandidate(value.data);
-
-    if (dataId) {
-      return dataId;
-    }
-  }
-
-  return "";
-}
-
-function responseLocationId(
-  locationHeader: string | null,
-): string {
-  const location = String(locationHeader ?? "").trim();
-
-  if (!location) {
-    return "";
-  }
-
-  const match = location.match(
-    /\/models\/([^/?#]+)(?:[/?#]|$)/,
-  );
-
-  if (!match?.[1]) {
-    return "";
-  }
-
-  return decodeURIComponent(match[1]).trim();
 }
 
 function parseResponseIds(
@@ -684,7 +706,9 @@ function parseResponseIds(
   }
 
   if (isRecord(value.data)) {
-    return parseResponseIds(value.data);
+    return parseResponseIds(
+      value.data,
+    );
   }
 
   return undefined;
@@ -694,29 +718,42 @@ function parseResponseIds(
  * HTTP response helpers
  * =======================================================*/
 
-function parseErrorDetail(text: string): string {
+function parseErrorDetail(
+  text: string,
+): string {
   if (!text) {
     return "";
   }
 
   try {
-    const detail: unknown = JSON.parse(text);
+    const detail: unknown =
+      JSON.parse(text);
 
-    if (typeof detail === "string") {
+    if (
+      typeof detail === "string"
+    ) {
       return detail;
     }
 
     if (isRecord(detail)) {
-      if (typeof detail.error === "string") {
+      if (
+        typeof detail.error ===
+          "string"
+      ) {
         return detail.error;
       }
 
-      if (typeof detail.message === "string") {
+      if (
+        typeof detail.message ===
+          "string"
+      ) {
         return detail.message;
       }
     }
 
-    return JSON.stringify(detail);
+    return JSON.stringify(
+      detail,
+    );
   } catch {
     return text;
   }
@@ -739,87 +776,14 @@ function createHTTPError(
   response: Response,
   text: string,
 ): Error {
-  const detail = parseErrorDetail(text);
+  const detail =
+    parseErrorDetail(text);
 
   return new Error(
     `${operation} (${response.status}) ${
       response.statusText ?? ""
     } ${detail}`,
   );
-}
-
-/* =========================================================
- * POST /models/{productBlueprintId}/variations
- * =======================================================*/
-
-export async function createModelVariation(
-  productBlueprintId: string,
-  payload: CreateModelVariationRequest,
-): Promise<ModelVariationResponse> {
-  const normalizedProductBlueprintId =
-    requireProductBlueprintId(productBlueprintId);
-
-  const url = `${API_BASE}/models/${encodeURIComponent(
-    normalizedProductBlueprintId,
-  )}/variations`;
-
-  const body = toCreateRequestBody(payload);
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      ...(await getAuthJsonHeadersOrThrow()),
-      Accept: "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  const text = await response.text().catch(() => "");
-
-  if (!response.ok) {
-    throw createHTTPError(
-      "モデルバリエーションの作成に失敗しました",
-      response,
-      text,
-    );
-  }
-
-  const json: unknown = text
-    ? parseJSONResponseText(text)
-    : undefined;
-
-  if (json !== undefined) {
-    try {
-      return parseModelVariationResponse(
-        json,
-        normalizedProductBlueprintId,
-      );
-    } catch (parseError) {
-      const responseId =
-        responseIdCandidate(json) ||
-        responseLocationId(
-          response.headers.get("Location"),
-        );
-
-      if (responseId) {
-        return getModelVariationById(responseId);
-      }
-
-      throw parseError;
-    }
-  }
-
-  const responseId = responseLocationId(
-    response.headers.get("Location"),
-  );
-
-  if (!responseId) {
-    throw new Error(
-      "modelRepositoryHTTP: 作成後のmodel variation IDを取得できませんでした",
-    );
-  }
-
-  return getModelVariationById(responseId);
 }
 
 /* =========================================================
@@ -834,29 +798,43 @@ export async function createModelVariations(
   variations: CreateModelVariationRequest[],
 ): Promise<string[]> {
   const normalizedProductBlueprintId =
-    requireProductBlueprintId(productBlueprintId);
+    requireProductBlueprintId(
+      productBlueprintId,
+    );
 
-  const url = `${API_BASE}/models/${encodeURIComponent(
-    normalizedProductBlueprintId,
-  )}/variations`;
+  const url =
+    `${API_BASE}/models/${encodeURIComponent(
+      normalizedProductBlueprintId,
+    )}/variations`;
 
   const body: ReplaceModelVariationsBody = {
-    variations: variations.map(
-      (variation) =>
-        toCreateRequestBody(variation),
-    ),
+    variations:
+      variations.map(
+        (variation) =>
+          toCreateRequestBody(
+            variation,
+          ),
+      ),
   };
 
-  const response = await fetch(url, {
-    method: "PUT",
-    headers: {
-      ...(await getAuthJsonHeadersOrThrow()),
-      Accept: "application/json",
+  const response = await fetch(
+    url,
+    {
+      method: "PUT",
+      headers: {
+        ...(
+          await getAuthJsonHeadersOrThrow()
+        ),
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  });
+  );
 
-  const text = await response.text().catch(() => "");
+  const text =
+    await response
+      .text()
+      .catch(() => "");
 
   if (!response.ok) {
     throw createHTTPError(
@@ -872,21 +850,32 @@ export async function createModelVariations(
         normalizedProductBlueprintId,
       );
 
-    if (replaced.length !== variations.length) {
+    if (
+      replaced.length !==
+      variations.length
+    ) {
       throw new Error(
         "modelRepositoryHTTP: 一括置換後の件数がrequest件数と一致しません",
       );
     }
 
-    return replaced.map((variation) => variation.id);
+    return replaced.map(
+      (variation) =>
+        variation.id,
+    );
   }
 
-  const json = parseJSONResponseText(text);
+  const json =
+    parseJSONResponseText(text);
 
-  const responseIds = parseResponseIds(json);
+  const responseIds =
+    parseResponseIds(json);
 
   if (responseIds) {
-    if (responseIds.length !== variations.length) {
+    if (
+      responseIds.length !==
+      variations.length
+    ) {
       throw new Error(
         "modelRepositoryHTTP: 一括置換responseのID件数がrequest件数と一致しません",
       );
@@ -901,65 +890,32 @@ export async function createModelVariations(
       normalizedProductBlueprintId,
     );
 
-  if (replaced.length !== variations.length) {
+  if (
+    replaced.length !==
+    variations.length
+  ) {
     throw new Error(
       "modelRepositoryHTTP: 一括置換responseの件数がrequest件数と一致しません",
     );
   }
 
-  const ids = replaced.map(
-    (variation) => variation.id,
-  );
+  const ids =
+    replaced.map(
+      (variation) =>
+        variation.id,
+    );
 
-  if (ids.some((id) => !id)) {
+  if (
+    ids.some(
+      (id) => !id,
+    )
+  ) {
     throw new Error(
       "modelRepositoryHTTP: 一括置換responseに空のmodel variation IDがあります",
     );
   }
 
   return ids;
-}
-
-/* =========================================================
- * GET /models/{id}
- * =======================================================*/
-
-export async function getModelVariationById(
-  modelId: string,
-): Promise<ModelVariationResponse> {
-  const normalizedModelId = requireModelId(modelId);
-
-  const url = `${API_BASE}/models/${encodeURIComponent(
-    normalizedModelId,
-  )}`;
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      ...(await getAuthHeadersOrThrow()),
-      Accept: "application/json",
-    },
-  });
-
-  const text = await response.text().catch(() => "");
-
-  if (!response.ok) {
-    throw createHTTPError(
-      "モデルバリエーション取得失敗",
-      response,
-      text,
-    );
-  }
-
-  if (!text) {
-    throw new Error(
-      "modelRepositoryHTTP: model variation取得responseが空です",
-    );
-  }
-
-  return parseModelVariationResponse(
-    parseJSONResponseText(text),
-  );
 }
 
 /* =========================================================
@@ -970,21 +926,32 @@ export async function listModelVariationsByProductBlueprintId(
   productBlueprintId: string,
 ): Promise<ModelVariationResponse[]> {
   const normalizedProductBlueprintId =
-    requireProductBlueprintId(productBlueprintId);
+    requireProductBlueprintId(
+      productBlueprintId,
+    );
 
-  const url = `${API_BASE}/models/by-blueprint/${encodeURIComponent(
-    normalizedProductBlueprintId,
-  )}/variations`;
+  const url =
+    `${API_BASE}/models/by-blueprint/${encodeURIComponent(
+      normalizedProductBlueprintId,
+    )}/variations`;
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      ...(await getAuthHeadersOrThrow()),
-      Accept: "application/json",
+  const response = await fetch(
+    url,
+    {
+      method: "GET",
+      headers: {
+        ...(
+          await getAuthHeadersOrThrow()
+        ),
+        Accept: "application/json",
+      },
     },
-  });
+  );
 
-  const text = await response.text().catch(() => "");
+  const text =
+    await response
+      .text()
+      .catch(() => "");
 
   if (!response.ok) {
     throw createHTTPError(
@@ -999,7 +966,9 @@ export async function listModelVariationsByProductBlueprintId(
   }
 
   return parseModelVariationListResponse(
-    parseJSONResponseText(text),
+    parseJSONResponseText(
+      text,
+    ),
     normalizedProductBlueprintId,
   );
 }

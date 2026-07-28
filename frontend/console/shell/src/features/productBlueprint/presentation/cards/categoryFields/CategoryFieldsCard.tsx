@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/presentation/cards/categoryFields/CategoryFieldsCard.tsx
+// frontend/console/shell/src/features/productBlueprint/presentation/cards/categoryFields/CategoryFieldsCard.tsx
 
 import * as React from "react";
 import { SlidersHorizontal } from "lucide-react";
@@ -9,15 +9,20 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../../shared/ui";
+
 import { Button } from "../../../../../shared/ui/button";
 import { Input } from "../../../../../shared/ui/input";
+
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "../../../../../shared/ui/popover";
 
-import { FIT_OPTIONS, type Fit } from "../../../domain/apparel";
+import {
+  FIT_OPTIONS,
+  type Fit,
+} from "../../../domain/apparel";
 
 import type {
   CategoryFieldValue,
@@ -37,15 +42,23 @@ type CategoryFieldsCardProps = {
   categoryCode: string;
   categoryFields?: CategoryFieldValues | null;
   mode?: "edit" | "view";
-  onChangeCategoryField?: (key: string, value: CategoryFieldValue) => void;
+  onChangeCategoryField?: (
+    key: string,
+    value: CategoryFieldValue,
+  ) => void;
 };
 
-function normalizeCategoryCode(categoryCode: string): string {
+function normalizeCategoryCode(
+  categoryCode: string,
+): string {
   return String(categoryCode ?? "").trim();
 }
 
-function isChildCategoryCode(categoryCode: string): boolean {
-  const code = normalizeCategoryCode(categoryCode);
+function isChildCategoryCode(
+  categoryCode: string,
+): boolean {
+  const code =
+    normalizeCategoryCode(categoryCode);
 
   if (!code) {
     return false;
@@ -54,8 +67,19 @@ function isChildCategoryCode(categoryCode: string): boolean {
   return code.includes(".");
 }
 
-function resolveCategoryFieldsCardTitle(categoryCode: string): string {
-  const code = normalizeCategoryCode(categoryCode);
+function isCosmeticsCategoryCode(
+  categoryCode: string,
+): boolean {
+  return categoryCode.startsWith(
+    "cosmetics.",
+  );
+}
+
+function resolveCategoryFieldsCardTitle(
+  categoryCode: string,
+): string {
+  const code =
+    normalizeCategoryCode(categoryCode);
 
   if (code.startsWith("apparel.")) {
     return "衣類情報";
@@ -81,7 +105,10 @@ function resolveCategoryFieldsCardTitle(categoryCode: string): string {
 }
 
 function getCategoryFieldValue(
-  categoryFields: CategoryFieldValues | null | undefined,
+  categoryFields:
+    | CategoryFieldValues
+    | null
+    | undefined,
   key: string,
 ): CategoryFieldValue {
   const value = categoryFields?.[key];
@@ -99,79 +126,158 @@ function getCategoryFieldValue(
 }
 
 function getStringFieldValue(
-  categoryFields: CategoryFieldValues | null | undefined,
+  categoryFields:
+    | CategoryFieldValues
+    | null
+    | undefined,
   key: string,
 ): string {
   const value = categoryFields?.[key];
-  return typeof value === "string" ? value : "";
+
+  return typeof value === "string"
+    ? value
+    : "";
 }
 
 function getNumberFieldValue(
-  categoryFields: CategoryFieldValues | null | undefined,
+  categoryFields:
+    | CategoryFieldValues
+    | null
+    | undefined,
   key: string,
 ): number {
   const value = categoryFields?.[key];
-  return typeof value === "number" && !Number.isNaN(value) ? value : 0;
+
+  return (
+    typeof value === "number" &&
+    !Number.isNaN(value)
+  )
+    ? value
+    : 0;
 }
 
 function getWashTagsValue(
-  categoryFields: CategoryFieldValues | null | undefined,
+  categoryFields:
+    | CategoryFieldValues
+    | null
+    | undefined,
 ): string[] {
   const rawValue =
-    categoryFields?.washTags ?? categoryFields?.qualityAssurance ?? [];
+    categoryFields?.washTags ??
+    categoryFields?.qualityAssurance ??
+    [];
 
   if (!Array.isArray(rawValue)) {
     return [];
   }
 
   return rawValue.filter(
-    (item): item is string => typeof item === "string" && item.trim() !== "",
+    (item): item is string =>
+      typeof item === "string" &&
+      item.trim() !== "",
   );
 }
 
-const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
+const CategoryFieldsCard: React.FC<
+  CategoryFieldsCardProps
+> = ({
   categoryCode,
   categoryFields,
   mode = "edit",
   onChangeCategoryField,
 }) => {
-  const normalizedCategoryCode = normalizeCategoryCode(categoryCode);
+  const normalizedCategoryCode =
+    normalizeCategoryCode(categoryCode);
+
   const isEdit = mode === "edit";
 
   const visibility = React.useMemo(
-    () => getCategoryCardVisibility(normalizedCategoryCode),
+    () =>
+      getCategoryCardVisibility(
+        normalizedCategoryCode,
+      ),
     [normalizedCategoryCode],
   );
 
-  const handleChangeCategoryField = React.useCallback(
-    (key: string, rawValue: string) => {
-      if (!onChangeCategoryField) {
-        return;
-      }
+  /**
+   * alcoholのvolumeはmodel variation側で扱う。
+   * CategoryFieldsCardでは化粧品のvolumeだけを表示する。
+   */
+  const showCosmeticsVolume =
+    visibility.showVolume &&
+    isCosmeticsCategoryCode(
+      normalizedCategoryCode,
+    );
 
-      if (isNumberCategoryField(key)) {
-        onChangeCategoryField(key, toCategoryNumberOrNull(rawValue));
-        return;
-      }
+  const handleChangeCategoryField =
+    React.useCallback(
+      (
+        key: string,
+        rawValue: string,
+      ) => {
+        if (!onChangeCategoryField) {
+          return;
+        }
 
-      onChangeCategoryField(key, rawValue.trim() === "" ? null : rawValue);
-    },
-    [onChangeCategoryField],
-  );
+        if (
+          isNumberCategoryField(key)
+        ) {
+          onChangeCategoryField(
+            key,
+            toCategoryNumberOrNull(
+              rawValue,
+            ),
+          );
 
-  const handleChangeWashTags = React.useCallback(
-    (nextTags: string[]) => {
-      onChangeCategoryField?.("washTags", nextTags as CategoryFieldValue);
-    },
-    [onChangeCategoryField],
-  );
+          return;
+        }
 
-  const fitValue = getStringFieldValue(categoryFields, "fit") as Fit;
-  const materialValue = getStringFieldValue(categoryFields, "material");
-  const weightValue = getNumberFieldValue(categoryFields, "weight");
-  const washTagsValue = getWashTagsValue(categoryFields);
+        onChangeCategoryField(
+          key,
+          rawValue.trim() === ""
+            ? null
+            : rawValue,
+        );
+      },
+      [onChangeCategoryField],
+    );
 
-  const cardTitle = resolveCategoryFieldsCardTitle(normalizedCategoryCode);
+  const handleChangeWashTags =
+    React.useCallback(
+      (nextTags: string[]) => {
+        onChangeCategoryField?.(
+          "washTags",
+          nextTags as CategoryFieldValue,
+        );
+      },
+      [onChangeCategoryField],
+    );
+
+  const fitValue =
+    getStringFieldValue(
+      categoryFields,
+      "fit",
+    ) as Fit;
+
+  const materialValue =
+    getStringFieldValue(
+      categoryFields,
+      "material",
+    );
+
+  const weightValue =
+    getNumberFieldValue(
+      categoryFields,
+      "weight",
+    );
+
+  const washTagsValue =
+    getWashTagsValue(categoryFields);
+
+  const cardTitle =
+    resolveCategoryFieldsCardTitle(
+      normalizedCategoryCode,
+    );
 
   const hasVisibleFields =
     visibility.showVintage ||
@@ -180,50 +286,74 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
     visibility.showFit ||
     visibility.showMaterial ||
     visibility.showAlcoholContent ||
+    showCosmeticsVolume ||
     visibility.showWashTags;
 
   /**
-   * hooks をすべて呼び出した後で return する。
+   * hooksをすべて呼び出した後でreturnする。
    * 親カテゴリだけ選択されている状態では非表示。
    */
-  if (!isChildCategoryCode(normalizedCategoryCode)) {
+  if (
+    !isChildCategoryCode(
+      normalizedCategoryCode,
+    )
+  ) {
     return null;
   }
 
   /**
-   * 子カテゴリでも表示対象 field がない場合は非表示。
+   * 子カテゴリでも表示対象fieldがない場合は非表示。
    */
   if (!hasVisibleFields) {
     return null;
   }
 
   return (
-    <Card className={`pbc ${!isEdit ? "view-mode" : ""}`}>
+    <Card
+      className={`pbc ${
+        !isEdit ? "view-mode" : ""
+      }`}
+    >
       <CardHeader className="box__header">
         <SlidersHorizontal size={16} />
-        <CardTitle className="box__title">{cardTitle}</CardTitle>
+
+        <CardTitle className="box__title">
+          {cardTitle}
+        </CardTitle>
       </CardHeader>
 
       <CardContent className="box__body">
         {visibility.showVintage && (
           <>
-            <div className="label">ヴィンテージ</div>
+            <div className="label">
+              ヴィンテージ
+            </div>
+
             <div className="flex gap-8 items-center">
               {isEdit ? (
                 <Input
                   type="number"
                   value={toCategoryInputValue(
-                    getCategoryFieldValue(categoryFields, "vintage"),
+                    getCategoryFieldValue(
+                      categoryFields,
+                      "vintage",
+                    ),
                   )}
-                  onChange={(e) =>
-                    handleChangeCategoryField("vintage", e.target.value)
+                  onChange={(event) =>
+                    handleChangeCategoryField(
+                      "vintage",
+                      event.target.value,
+                    )
                   }
                   aria-label="ヴィンテージ"
                 />
               ) : (
                 <Input
                   value={toCategoryInputValue(
-                    getCategoryFieldValue(categoryFields, "vintage"),
+                    getCategoryFieldValue(
+                      categoryFields,
+                      "vintage",
+                    ),
                   )}
                   variant="readonly"
                   readOnly
@@ -236,21 +366,33 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
 
         {visibility.showRegion && (
           <>
-            <div className="label">地域・産地</div>
+            <div className="label">
+              地域・産地
+            </div>
+
             {isEdit ? (
               <Input
                 value={toCategoryInputValue(
-                  getCategoryFieldValue(categoryFields, "region"),
+                  getCategoryFieldValue(
+                    categoryFields,
+                    "region",
+                  ),
                 )}
-                onChange={(e) =>
-                  handleChangeCategoryField("region", e.target.value)
+                onChange={(event) =>
+                  handleChangeCategoryField(
+                    "region",
+                    event.target.value,
+                  )
                 }
                 aria-label="地域・産地"
               />
             ) : (
               <Input
                 value={toCategoryInputValue(
-                  getCategoryFieldValue(categoryFields, "region"),
+                  getCategoryFieldValue(
+                    categoryFields,
+                    "region",
+                  ),
                 )}
                 variant="readonly"
                 readOnly
@@ -262,29 +404,45 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
 
         {visibility.showWeight && (
           <>
-            <div className="label">重さ</div>
+            <div className="label">
+              重さ
+            </div>
+
             <div className="flex gap-8 items-center">
               {isEdit ? (
                 <>
                   <Input
                     type="number"
                     value={weightValue}
-                    onChange={(e) =>
-                      handleChangeCategoryField("weight", e.target.value)
+                    onChange={(event) =>
+                      handleChangeCategoryField(
+                        "weight",
+                        event.target.value,
+                      )
                     }
                     aria-label="重さ"
                   />
-                  <span className="suffix">g</span>
+
+                  <span className="suffix">
+                    g
+                  </span>
                 </>
               ) : (
                 <>
                   <Input
-                    value={weightValue ? `${weightValue}` : ""}
+                    value={
+                      weightValue
+                        ? `${weightValue}`
+                        : ""
+                    }
                     variant="readonly"
                     readOnly
                     aria-label="重さ"
                   />
-                  <span className="suffix">g</span>
+
+                  <span className="suffix">
+                    g
+                  </span>
                 </>
               )}
             </div>
@@ -293,7 +451,10 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
 
         {visibility.showFit && (
           <>
-            <div className="label">フィット</div>
+            <div className="label">
+              フィット
+            </div>
+
             {isEdit ? (
               <Popover>
                 <PopoverTrigger>
@@ -302,25 +463,43 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                     className="w-full justify-between pbc-select-trigger"
                     aria-label="フィットを選択"
                   >
-                    {fitValue || "フィットを選択してください。"}
+                    {fitValue ||
+                      "フィットを選択してください。"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="start" className="p-1">
-                  {FIT_OPTIONS.map((option: { value: Fit; label: string }) => (
-                    <div
-                      key={option.value}
-                      className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
-                        fitValue === option.value
-                          ? "bg-blue-100 text-blue-700 font-medium"
-                          : ""
-                      }`}
-                      onClick={() =>
-                        onChangeCategoryField?.("fit", option.value)
-                      }
-                    >
-                      {option.label}
-                    </div>
-                  ))}
+
+                <PopoverContent
+                  align="start"
+                  className="p-1"
+                >
+                  {FIT_OPTIONS.map(
+                    (
+                      option: {
+                        value: Fit;
+                        label: string;
+                      },
+                    ) => (
+                      <div
+                        key={
+                          option.value
+                        }
+                        className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
+                          fitValue ===
+                          option.value
+                            ? "bg-blue-100 text-blue-700 font-medium"
+                            : ""
+                        }`}
+                        onClick={() =>
+                          onChangeCategoryField?.(
+                            "fit",
+                            option.value,
+                          )
+                        }
+                      >
+                        {option.label}
+                      </div>
+                    ),
+                  )}
                 </PopoverContent>
               </Popover>
             ) : (
@@ -336,12 +515,18 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
 
         {visibility.showMaterial && (
           <>
-            <div className="label">素材</div>
+            <div className="label">
+              素材
+            </div>
+
             {isEdit ? (
               <Input
                 value={materialValue}
-                onChange={(e) =>
-                  handleChangeCategoryField("material", e.target.value)
+                onChange={(event) =>
+                  handleChangeCategoryField(
+                    "material",
+                    event.target.value,
+                  )
                 }
                 aria-label="素材"
               />
@@ -358,36 +543,104 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
 
         {visibility.showAlcoholContent && (
           <>
-            <div className="label">アルコール度数</div>
+            <div className="label">
+              アルコール度数
+            </div>
+
             <div className="flex gap-8 items-center">
               {isEdit ? (
                 <>
                   <Input
                     type="number"
                     value={toCategoryInputValue(
-                      getCategoryFieldValue(categoryFields, "alcoholContent"),
+                      getCategoryFieldValue(
+                        categoryFields,
+                        "alcoholContent",
+                      ),
                     )}
-                    onChange={(e) =>
+                    onChange={(event) =>
                       handleChangeCategoryField(
                         "alcoholContent",
-                        e.target.value,
+                        event.target.value,
                       )
                     }
                     aria-label="アルコール度数"
                   />
-                  <span className="suffix">%</span>
+
+                  <span className="suffix">
+                    %
+                  </span>
                 </>
               ) : (
                 <>
                   <Input
                     value={toCategoryInputValue(
-                      getCategoryFieldValue(categoryFields, "alcoholContent"),
+                      getCategoryFieldValue(
+                        categoryFields,
+                        "alcoholContent",
+                      ),
                     )}
                     variant="readonly"
                     readOnly
                     aria-label="アルコール度数"
                   />
-                  <span className="suffix">%</span>
+
+                  <span className="suffix">
+                    %
+                  </span>
+                </>
+              )}
+            </div>
+          </>
+        )}
+
+        {showCosmeticsVolume && (
+          <>
+            <div className="label">
+              容量
+            </div>
+
+            <div className="flex gap-8 items-center">
+              {isEdit ? (
+                <>
+                  <Input
+                    type="number"
+                    value={toCategoryInputValue(
+                      getCategoryFieldValue(
+                        categoryFields,
+                        "volume",
+                      ),
+                    )}
+                    onChange={(event) =>
+                      handleChangeCategoryField(
+                        "volume",
+                        event.target.value,
+                      )
+                    }
+                    aria-label="容量"
+                  />
+
+                  <span className="suffix">
+                    ml
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Input
+                    value={toCategoryInputValue(
+                      getCategoryFieldValue(
+                        categoryFields,
+                        "volume",
+                      ),
+                    )}
+                    variant="readonly"
+                    readOnly
+                    aria-label="容量"
+                  />
+
+                  <span className="suffix">
+                    ml
+                  </span>
                 </>
               )}
             </div>
@@ -398,7 +651,9 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
           <WashTagField
             value={washTagsValue}
             mode={mode}
-            onChange={handleChangeWashTags}
+            onChange={
+              handleChangeWashTags
+            }
           />
         )}
       </CardContent>

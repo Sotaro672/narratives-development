@@ -29,8 +29,14 @@ import {
   useProductBlueprintCreateBrand,
   type BrandOption,
 } from "./useProductBlueprintCreateBrand";
+
 import { useProductBlueprintCreateCategory } from "./useProductBlueprintCreateCategory";
-import { useProductBlueprintCreateCategoryFields } from "./useProductBlueprintCreateCategoryFields";
+
+import {
+  useProductBlueprintCreateCategoryFields,
+  type FitInputValue,
+} from "./useProductBlueprintCreateCategoryFields";
+
 import { useProductBlueprintCreateVariations } from "./useProductBlueprintCreateVariations";
 import { useProductBlueprintCreateValidation } from "./useProductBlueprintCreateValidation";
 
@@ -61,7 +67,7 @@ export interface UseProductBlueprintCreateResult {
   isApparelCategory: boolean;
   isAlcoholCategory: boolean;
 
-  fit: Fit;
+  fit: FitInputValue;
   material: string;
   weight: number;
   qualityAssurance: string[];
@@ -76,8 +82,8 @@ export interface UseProductBlueprintCreateResult {
   modelNumbers: ModelNumber[];
 
   /**
-   * alcohol model variation 用。
-   * volume は productBlueprint.categoryFields ではなく model domain 側で扱う。
+   * alcohol model variation用。
+   * volumeはProductBlueprint.categoryFieldsではなくmodel domain側で扱う。
    */
   volumes: VolumeRow[];
   alcoholModelNumbers: AlcoholModelNumber[];
@@ -90,30 +96,56 @@ export interface UseProductBlueprintCreateResult {
   onCreate: () => Promise<void>;
   onBack: () => void;
 
-  onChangeProductName: (value: string) => void;
+  onChangeProductName: (
+    value: string,
+  ) => void;
+
   onChangeProductBlueprintCategory: (
     category: ProductBlueprintCategorySnapshot | null,
   ) => void;
 
-  onChangeFit: (value: Fit) => void;
-  onChangeMaterial: (value: string) => void;
-  onChangeWeight: (value: number) => void;
-  onChangeQualityAssurance: (value: string[]) => void;
+  onChangeFit: (
+    value: Fit,
+  ) => void;
+
+  onChangeMaterial: (
+    value: string,
+  ) => void;
+
+  onChangeWeight: (
+    value: number,
+  ) => void;
+
+  onChangeQualityAssurance: (
+    value: string[],
+  ) => void;
+
   onChangeCategoryField: (
     key: string,
     value: CategoryFieldValue,
   ) => void;
 
-  onChangeColorInput: (value: string) => void;
+  onChangeColorInput: (
+    value: string,
+  ) => void;
+
   onAddColor: () => void;
-  onRemoveColor: (name: string) => void;
+
+  onRemoveColor: (
+    name: string,
+  ) => void;
+
   onChangeColorRgb: (
     name: string,
     rgbHex: string,
   ) => void;
 
   onAddSize: () => void;
-  onRemoveSize: (id: string) => void;
+
+  onRemoveSize: (
+    id: string,
+  ) => void;
+
   onChangeSize: (
     id: string,
     patch: Partial<Omit<SizeRow, "id">>,
@@ -126,43 +158,62 @@ export interface UseProductBlueprintCreateResult {
   ) => void;
 
   /**
-   * alcohol volume variation 操作用。
+   * alcohol volume variation操作用。
    */
   onAddVolume: () => void;
-  onRemoveVolume: (id: string) => void;
+
+  onRemoveVolume: (
+    id: string,
+  ) => void;
+
   onChangeVolume: (
     id: string,
     patch: Partial<Omit<VolumeRow, "id">>,
   ) => void;
+
   onChangeAlcoholModelNumber: (
     volumeLabel: string,
     nextCode: string,
   ) => void;
 
-  onSelectAssignee: (id: string) => void;
+  onSelectAssignee: (
+    id: string,
+  ) => void;
+
   onEditAssignee: () => void;
   onClickAssignee: () => void;
 }
 
+/**
+ * model domain管轄のカテゴリフィールドを除外する。
+ *
+ * - alcoholのvolumeはmodel variationへ保存する。
+ * - cosmeticsのvolumeはProductBlueprint.categoryFieldsへ保存する。
+ */
 function removeModelOwnedCategoryFields(
+  category:
+    | ProductBlueprintCategorySnapshot
+    | null,
   fields: CategoryFieldValues,
 ): CategoryFieldValues {
-  const next: CategoryFieldValues = { ...fields };
+  const next: CategoryFieldValues = {
+    ...fields,
+  };
 
-  /**
-   * alcohol volume は model domain 管轄。
-   * ProductBlueprint.categoryFields へ保存しない。
-   */
-  delete next.volume;
+  if (category?.kind === "alcohol") {
+    delete next.volume;
+  }
 
   return next;
 }
 
-function getMemberDisplayLabel(member: {
-  id: string;
-  email?: string | null;
-  displayName?: string | null;
-}): string {
+function getMemberDisplayLabel(
+  member: {
+    id: string;
+    email?: string | null;
+    displayName?: string | null;
+  },
+): string {
   const displayName = String(
     member.displayName ?? "",
   ).trim();
@@ -171,7 +222,9 @@ function getMemberDisplayLabel(member: {
     return displayName;
   }
 
-  const email = String(member.email ?? "").trim();
+  const email = String(
+    member.email ?? "",
+  ).trim();
 
   if (email) {
     return email;
@@ -182,23 +235,35 @@ function getMemberDisplayLabel(member: {
 
 export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const navigate = useNavigate();
-  const { currentMember, user } = useAuth();
 
-  const effectiveCompanyId = React.useMemo(
-    () =>
-      (
-        currentMember?.companyId ??
-        user?.companyId ??
-        ""
-      ).trim(),
-    [currentMember?.companyId, user?.companyId],
-  );
+  const {
+    currentMember,
+    user,
+  } = useAuth();
 
-  const [productName, setProductName] =
-    React.useState("");
+  const effectiveCompanyId =
+    React.useMemo(
+      () =>
+        (
+          currentMember?.companyId ??
+          user?.companyId ??
+          ""
+        ).trim(),
+      [
+        currentMember?.companyId,
+        user?.companyId,
+      ],
+    );
+
+  const [
+    productName,
+    setProductName,
+  ] = React.useState("");
 
   const brand =
-    useProductBlueprintCreateBrand(effectiveCompanyId);
+    useProductBlueprintCreateBrand(
+      effectiveCompanyId,
+    );
 
   const category =
     useProductBlueprintCreateCategory();
@@ -213,14 +278,21 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       category.productBlueprintCategory,
     );
 
-  const [assigneeId, setAssigneeId] =
+  const [
+    assigneeId,
+    setAssigneeId,
+  ] = React.useState("");
+
+  const [
+    assigneeName,
+    setAssigneeName,
+  ] = React.useState("");
+
+  const [createdBy] =
     React.useState("");
 
-  const [assigneeName, setAssigneeName] =
+  const [createdAt] =
     React.useState("");
-
-  const [createdBy] = React.useState("");
-  const [createdAt] = React.useState("");
 
   React.useEffect(() => {
     if (!currentMember) {
@@ -231,42 +303,74 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       return;
     }
 
-    const memberId = currentMember.id;
+    const memberId =
+      currentMember.id;
 
     const label =
-      getMemberDisplayLabel(currentMember);
+      getMemberDisplayLabel(
+        currentMember,
+      );
 
     setAssigneeId(memberId);
     setAssigneeName(label);
-  }, [currentMember, assigneeId]);
+  }, [
+    currentMember,
+    assigneeId,
+  ]);
 
-  const sanitizedCategoryFields = React.useMemo(
-    () =>
-      removeModelOwnedCategoryFields(
+  const sanitizedCategoryFields =
+    React.useMemo(
+      () =>
+        removeModelOwnedCategoryFields(
+          category.productBlueprintCategory,
+          categoryFields.categoryFields,
+        ),
+      [
+        category.productBlueprintCategory,
         categoryFields.categoryFields,
-      ),
-    [categoryFields.categoryFields],
-  );
+      ],
+    );
 
   const validate =
     useProductBlueprintCreateValidation({
-      companyId: effectiveCompanyId,
+      companyId:
+        effectiveCompanyId,
+
       productName,
-      brandId: brand.brandId,
+
+      brandId:
+        brand.brandId,
+
       productBlueprintCategoryId:
         category.productBlueprintCategoryId,
+
       productBlueprintCategory:
         category.productBlueprintCategory,
-      categoryFields: sanitizedCategoryFields,
-      weight: categoryFields.weight,
+
+      categoryFields:
+        sanitizedCategoryFields,
+
+      weight:
+        categoryFields.weight,
+
       isApparelCategory:
         variations.isApparelCategory,
+
       isAlcoholCategory:
         variations.isAlcoholCategory,
-      colors: variations.colors,
-      sizes: variations.sizes,
-      modelNumbers: variations.modelNumbers,
-      volumes: variations.volumes,
+
+      colors:
+        variations.colors,
+
+      sizes:
+        variations.sizes,
+
+      modelNumbers:
+        variations.modelNumbers,
+
+      volumes:
+        variations.volumes,
+
       alcoholModelNumbers:
         variations.alcoholModelNumbers,
     });
@@ -274,7 +378,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const onChangeProductBlueprintCategory =
     React.useCallback(
       (
-        nextCategory: ProductBlueprintCategorySnapshot | null,
+        nextCategory:
+          | ProductBlueprintCategorySnapshot
+          | null,
       ) => {
         category.onChangeProductBlueprintCategory(
           nextCategory,
@@ -283,232 +389,338 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         categoryFields.resetCategoryFields();
         variations.resetVariations();
       },
-      [category, categoryFields, variations],
+      [
+        category,
+        categoryFields,
+        variations,
+      ],
     );
 
-  const onCreate = React.useCallback(async () => {
-    const errors = validate();
+  const onCreate =
+    React.useCallback(
+      async () => {
+        const errors =
+          validate();
 
-    if (errors.length > 0) {
-      alert(
-        `入力内容に不備があります。\n\n- ${errors.join(
-          "\n- ",
-        )}`,
-      );
+        if (errors.length > 0) {
+          alert(
+            `入力内容に不備があります。\n\n- ${errors.join(
+              "\n- ",
+            )}`,
+          );
 
-      return;
-    }
+          return;
+        }
 
-    if (!effectiveCompanyId) {
-      alert(
-        "companyId が取得できません。ログインし直してください。",
-      );
+        if (!effectiveCompanyId) {
+          alert(
+            "companyIdが取得できません。ログインし直してください。",
+          );
 
-      return;
-    }
+          return;
+        }
 
-    if (!category.productBlueprintCategory) {
-      alert("商品カテゴリを選択してください。");
+        if (
+          !category.productBlueprintCategory
+        ) {
+          alert(
+            "商品カテゴリを選択してください。",
+          );
 
-      return;
-    }
+          return;
+        }
 
-    const apiParams = {
-      productName,
-      brandId: brand.brandId,
-      productBlueprintCategoryId:
-        category.productBlueprintCategory.id,
-      productBlueprintCategory:
+        const apiParams = {
+          productName,
+
+          brandId:
+            brand.brandId,
+
+          productBlueprintCategoryId:
+            category
+              .productBlueprintCategory
+              .id,
+
+          productBlueprintCategory:
+            category
+              .productBlueprintCategory,
+
+          fit:
+            categoryFields.fit,
+
+          material:
+            categoryFields.material,
+
+          weight:
+            categoryFields.weight,
+
+          qualityAssurance:
+            categoryFields
+              .qualityAssurance,
+
+          productIdTag: {
+            type: "qr" as const,
+          },
+
+          companyId:
+            effectiveCompanyId,
+
+          colors:
+            variations.isApparelCategory
+              ? variations.colors
+              : [],
+
+          colorRgbMap:
+            variations.isApparelCategory
+              ? variations.colorRgbMap
+              : {},
+
+          sizes:
+            variations.isApparelCategory
+              ? variations.sizes
+              : [],
+
+          modelNumbers:
+            variations.isApparelCategory
+              ? variations.modelNumbers
+              : [],
+
+          /**
+           * alcoholの容量はProductBlueprint.categoryFieldsではなく、
+           * model variationとして作成する。
+           */
+          volumes:
+            variations.isAlcoholCategory
+              ? variations.volumes
+              : [],
+
+          alcoholModelNumbers:
+            variations.isAlcoholCategory
+              ? variations
+                  .alcoholModelNumbers
+              : [],
+
+          assigneeId,
+
+          createdBy:
+            currentMember?.id ?? "",
+
+          categoryFields:
+            sanitizedCategoryFields,
+        };
+
+        try {
+          const created =
+            await createProductBlueprint(
+              apiParams,
+            );
+
+          const createdId =
+            String(
+              (created as any)?.id ??
+                "",
+            );
+
+          alert(
+            "商品設計の作成が完了しました。",
+          );
+
+          if (createdId) {
+            navigate(
+              `/productBlueprint/detail/${createdId}`,
+            );
+
+            return;
+          }
+
+          navigate(
+            "/productBlueprint",
+          );
+        } catch (
+          error: unknown
+        ) {
+          alert(
+            error instanceof Error
+              ? error.message
+              : "商品設計の作成に失敗しました。時間をおいて再度お試しください。",
+          );
+
+          throw error;
+        }
+      },
+      [
+        validate,
+        effectiveCompanyId,
         category.productBlueprintCategory,
-
-      fit: categoryFields.fit,
-      material: categoryFields.material,
-      weight: categoryFields.weight,
-      qualityAssurance:
+        productName,
+        brand.brandId,
+        categoryFields.fit,
+        categoryFields.material,
+        categoryFields.weight,
         categoryFields.qualityAssurance,
+        sanitizedCategoryFields,
+        variations.isApparelCategory,
+        variations.isAlcoholCategory,
+        variations.colors,
+        variations.colorRgbMap,
+        variations.sizes,
+        variations.modelNumbers,
+        variations.volumes,
+        variations.alcoholModelNumbers,
+        assigneeId,
+        currentMember?.id,
+        navigate,
+      ],
+    );
 
-      productIdTag: { type: "qr" as const },
-      companyId: effectiveCompanyId,
-
-      colors: variations.isApparelCategory
-        ? variations.colors
-        : [],
-
-      colorRgbMap: variations.isApparelCategory
-        ? variations.colorRgbMap
-        : {},
-
-      sizes: variations.isApparelCategory
-        ? variations.sizes
-        : [],
-
-      modelNumbers: variations.isApparelCategory
-        ? variations.modelNumbers
-        : [],
-
-      /**
-       * alcohol の容量は ProductBlueprint.categoryFields ではなく、
-       * model variation として作成する。
-       */
-      volumes: variations.isAlcoholCategory
-        ? variations.volumes
-        : [],
-
-      alcoholModelNumbers:
-        variations.isAlcoholCategory
-          ? variations.alcoholModelNumbers
-          : [],
-
-      assigneeId,
-      createdBy: currentMember?.id ?? "",
-      categoryFields: sanitizedCategoryFields,
-    };
-
-    try {
-      const created =
-        await createProductBlueprint(apiParams);
-
-      const createdId = String(
-        (created as any)?.id ?? "",
+  const onBack =
+    React.useCallback(() => {
+      navigate(
+        "/productBlueprint",
       );
+    }, [navigate]);
 
-      alert("商品設計の作成が完了しました。");
+  const onSelectAssignee =
+    React.useCallback(
+      (
+        id: string,
+      ) => {
+        const nextId =
+          String(
+            id ?? "",
+          ).trim();
 
-      if (createdId) {
-        navigate(
-          `/productBlueprint/detail/${createdId}`,
-        );
+        if (!nextId) {
+          return;
+        }
 
-        return;
-      }
+        let nextName = "";
 
-      navigate("/productBlueprint");
-    } catch (error: unknown) {
-      alert(
-        error instanceof Error
-          ? error.message
-          : "商品設計の作成に失敗しました。時間をおいて再度お試しください。",
-      );
+        if (
+          currentMember?.id ===
+          nextId
+        ) {
+          nextName =
+            getMemberDisplayLabel(
+              currentMember,
+            );
+        } else {
+          nextName = nextId;
+        }
 
-      throw error;
-    }
-  }, [
-    validate,
-    effectiveCompanyId,
-    category.productBlueprintCategory,
-    productName,
-    brand.brandId,
-    categoryFields.fit,
-    categoryFields.material,
-    categoryFields.weight,
-    categoryFields.qualityAssurance,
-    sanitizedCategoryFields,
-    variations.isApparelCategory,
-    variations.isAlcoholCategory,
-    variations.colors,
-    variations.colorRgbMap,
-    variations.sizes,
-    variations.modelNumbers,
-    variations.volumes,
-    variations.alcoholModelNumbers,
-    assigneeId,
-    currentMember?.id,
-    navigate,
-  ]);
+        setAssigneeId(nextId);
+        setAssigneeName(nextName);
+      },
+      [currentMember],
+    );
 
-  const onBack = React.useCallback(() => {
-    navigate("/productBlueprint");
-  }, [navigate]);
+  const onEditAssignee =
+    React.useCallback(() => {
+      // 担当者選択UIの編集イベント用
+    }, []);
 
-  const onSelectAssignee = React.useCallback(
-    (id: string) => {
-      const nextId = String(id ?? "").trim();
-
-      if (!nextId) {
-        return;
-      }
-
-      let nextName = "";
-
-      if (currentMember?.id === nextId) {
-        nextName =
-          getMemberDisplayLabel(currentMember);
-      } else {
-        nextName = nextId;
-      }
-
-      setAssigneeId(nextId);
-      setAssigneeName(nextName);
-    },
-    [currentMember],
-  );
-
-  const onEditAssignee = React.useCallback(() => {
-    // 担当者選択UIの編集イベント用
-  }, []);
-
-  const onClickAssignee = React.useCallback(() => {
-    // 担当者選択UIのクリックイベント用
-  }, []);
+  const onClickAssignee =
+    React.useCallback(() => {
+      // 担当者選択UIのクリックイベント用
+    }, []);
 
   return {
-    title: "商品設計を作成",
+    title:
+      "商品設計を作成",
 
-    brandId: brand.brandId,
-    brandName: brand.brandName,
-    brandOptions: brand.brandOptions,
-    brandLoading: brand.brandLoading,
-    brandError: brand.brandError,
-    onChangeBrandId: brand.onChangeBrandId,
+    brandId:
+      brand.brandId,
+
+    brandName:
+      brand.brandName,
+
+    brandOptions:
+      brand.brandOptions,
+
+    brandLoading:
+      brand.brandLoading,
+
+    brandError:
+      brand.brandError,
+
+    onChangeBrandId:
+      brand.onChangeBrandId,
 
     productName,
 
     productBlueprintCategoryId:
-      category.productBlueprintCategoryId,
+      category
+        .productBlueprintCategoryId,
 
     productBlueprintCategory:
-      category.productBlueprintCategory,
+      category
+        .productBlueprintCategory,
 
     productBlueprintCategoryLabel:
-      category.productBlueprintCategoryLabel,
+      category
+        .productBlueprintCategoryLabel,
 
     productBlueprintCategoryOptions:
-      category.productBlueprintCategoryOptions,
+      category
+        .productBlueprintCategoryOptions,
 
     productBlueprintCategoryLoading:
-      category.productBlueprintCategoryLoading,
+      category
+        .productBlueprintCategoryLoading,
 
     productBlueprintCategoryError:
-      category.productBlueprintCategoryError,
+      category
+        .productBlueprintCategoryError,
 
     isApparelCategory:
-      variations.isApparelCategory,
+      variations
+        .isApparelCategory,
 
     isAlcoholCategory:
-      variations.isAlcoholCategory,
+      variations
+        .isAlcoholCategory,
 
-    fit: categoryFields.fit,
-    material: categoryFields.material,
-    weight: categoryFields.weight,
+    fit:
+      categoryFields.fit,
+
+    material:
+      categoryFields.material,
+
+    weight:
+      categoryFields.weight,
 
     qualityAssurance:
-      categoryFields.qualityAssurance,
+      categoryFields
+        .qualityAssurance,
 
-    categoryFields: sanitizedCategoryFields,
+    categoryFields:
+      sanitizedCategoryFields,
 
     measurementOptions:
-      variations.measurementOptions,
+      variations
+        .measurementOptions,
 
-    colors: variations.colors,
-    colorInput: variations.colorInput,
-    colorRgbMap: variations.colorRgbMap,
-    sizes: variations.sizes,
-    modelNumbers: variations.modelNumbers,
+    colors:
+      variations.colors,
 
-    volumes: variations.volumes,
+    colorInput:
+      variations.colorInput,
+
+    colorRgbMap:
+      variations.colorRgbMap,
+
+    sizes:
+      variations.sizes,
+
+    modelNumbers:
+      variations.modelNumbers,
+
+    volumes:
+      variations.volumes,
 
     alcoholModelNumbers:
-      variations.alcoholModelNumbers,
+      variations
+        .alcoholModelNumbers,
 
     assigneeId,
     assigneeName,
@@ -518,47 +730,69 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     onCreate,
     onBack,
 
-    onChangeProductName: setProductName,
+    onChangeProductName:
+      setProductName,
+
     onChangeProductBlueprintCategory,
 
-    onChangeFit: categoryFields.onChangeFit,
+    onChangeFit:
+      categoryFields.onChangeFit,
 
     onChangeMaterial:
-      categoryFields.onChangeMaterial,
+      categoryFields
+        .onChangeMaterial,
 
     onChangeWeight:
-      categoryFields.onChangeWeight,
+      categoryFields
+        .onChangeWeight,
 
     onChangeQualityAssurance:
-      categoryFields.onChangeQualityAssurance,
+      categoryFields
+        .onChangeQualityAssurance,
 
     onChangeCategoryField:
-      categoryFields.onChangeCategoryField,
+      categoryFields
+        .onChangeCategoryField,
 
     onChangeColorInput:
-      variations.onChangeColorInput,
+      variations
+        .onChangeColorInput,
 
-    onAddColor: variations.onAddColor,
-    onRemoveColor: variations.onRemoveColor,
+    onAddColor:
+      variations.onAddColor,
+
+    onRemoveColor:
+      variations.onRemoveColor,
 
     onChangeColorRgb:
-      variations.onChangeColorRgb,
+      variations
+        .onChangeColorRgb,
 
-    onAddSize: variations.onAddSize,
-    onRemoveSize: variations.onRemoveSize,
-    onChangeSize: variations.onChangeSize,
+    onAddSize:
+      variations.onAddSize,
+
+    onRemoveSize:
+      variations.onRemoveSize,
+
+    onChangeSize:
+      variations.onChangeSize,
 
     onChangeModelNumber:
-      variations.onChangeModelNumber,
+      variations
+        .onChangeModelNumber,
 
-    onAddVolume: variations.onAddVolume,
-    onRemoveVolume: variations.onRemoveVolume,
+    onAddVolume:
+      variations.onAddVolume,
+
+    onRemoveVolume:
+      variations.onRemoveVolume,
 
     onChangeVolume:
       variations.onChangeVolume,
 
     onChangeAlcoholModelNumber:
-      variations.onChangeAlcoholModelNumber,
+      variations
+        .onChangeAlcoholModelNumber,
 
     onSelectAssignee,
     onEditAssignee,
