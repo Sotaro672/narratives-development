@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/infrastructure/api/productBlueprintCategoryApi.ts
+// frontend\console\shell\src\features\productBlueprint\infrastructure\api\productBlueprintCategoryApi.ts
 
 import { API_BASE } from "../../../../shared/http/apiBase";
 import { getAuthHeadersOrThrow } from "../../../../shared/http/authHeaders";

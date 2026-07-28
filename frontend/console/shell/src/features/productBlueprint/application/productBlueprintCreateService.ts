@@ -1,20 +1,11 @@
 // frontend/console/shell/src/features/productBlueprint/application/productBlueprintCreateService.ts
 
-import {
-  isApparelCategoryCode,
-  normalizeApparelMeasurementsForRequest,
-  type ApparelCategoryCode,
-  type ApparelMeasurements,
-  type ApparelSizeInput,
+import type {
+  ApparelSizeInput,
 } from "../../../shared/types/apparel";
-
-import {
-  isAlcoholCategoryCode,
-} from "../domain/alcohol";
 
 import type {
   AlcoholModelNumber,
-  Volume,
   VolumeRow,
 } from "../../model/application/modelCreateService";
 
@@ -22,10 +13,6 @@ import type {
   CategoryFieldValues,
   ProductBlueprintCategorySnapshot,
 } from "../domain/productBlueprintCategory";
-
-import {
-  hexToRgbInt,
-} from "../../../shared/util/color";
 
 import type {
   ProductBlueprintDetailResponse,
@@ -39,6 +26,11 @@ import {
   createModelVariations,
   type CreateModelVariationRequest,
 } from "../../model/infrastructure/repository/modelRepositoryHTTP";
+
+import {
+  buildModelVariationRequests,
+  type ProductBlueprintModelNumberInput,
+} from "./modelVariationRequestBuilder";
 
 // ------------------------------------------------------
 // Product ID Tag
@@ -61,11 +53,8 @@ export type ApparelSizeRow =
     id: string;
   };
 
-export type CreateProductBlueprintModelNumber = {
-  size: string;
-  color: string;
-  code: string;
-};
+export type CreateProductBlueprintModelNumber =
+  ProductBlueprintModelNumberInput;
 
 export type CreateProductBlueprintParams = {
   productName: string;
@@ -112,18 +101,9 @@ export type CreateProductBlueprintParams = {
 export type ProductBlueprintResponse =
   ProductBlueprintDetailResponse;
 
-export type NewModelVariationPayload = {
-  sizeLabel: string;
-  color: string;
-  modelNumber: string;
-  createdBy?: string;
-  rgb?: number;
-  measurements: ApparelMeasurements;
-};
-
-// ------------------------------
-// validation helpers
-// ------------------------------
+// ------------------------------------------------------
+// Validation helpers
+// ------------------------------------------------------
 
 function assertProductBlueprintCategory(
   params: CreateProductBlueprintParams,
@@ -167,450 +147,9 @@ function extractProductBlueprintId(
     : "";
 }
 
-function toCreateApparelModelVariationRequests(args: {
-  variations: NewModelVariationPayload[];
-}): CreateModelVariationRequest[] {
-  const {
-    variations,
-  } = args;
-
-  return variations.map(
-    (
-      variation,
-    ): CreateModelVariationRequest => ({
-      kind: "apparel",
-
-      modelNumber:
-        String(
-          variation.modelNumber ?? "",
-        ),
-
-      size:
-        String(
-          variation.sizeLabel ?? "",
-        ),
-
-      color:
-        String(
-          variation.color ?? "",
-        ),
-
-      rgb:
-        typeof variation.rgb === "number" &&
-        Number.isFinite(variation.rgb)
-          ? variation.rgb
-          : 0,
-
-      measurements:
-        normalizeApparelMeasurementsForRequest(
-          variation.measurements,
-        ),
-    }),
-  );
-}
-
-// ------------------------------
-// Alcohol helpers
-// ------------------------------
-
-function makeVolumeKey(
-  volume: Volume,
-): string {
-  const value =
-    typeof volume.value === "number" &&
-    Number.isFinite(volume.value)
-      ? volume.value
-      : 0;
-
-  const unit =
-    String(
-      volume.unit ?? "",
-    ).trim() || "ml";
-
-  if (value <= 0) {
-    return "";
-  }
-
-  return `${value}${unit}`;
-}
-
-function volumeRowToVolume(
-  row: VolumeRow,
-): Volume {
-  return {
-    value:
-      row.volumeValue,
-
-    unit:
-      String(
-        row.volumeUnit ?? "",
-      ).trim() || "ml",
-  };
-}
-
-function buildAlcoholModelNumberMap(
-  modelNumbers:
-    | AlcoholModelNumber[]
-    | undefined,
-): Map<string, AlcoholModelNumber> {
-  const map =
-    new Map<
-      string,
-      AlcoholModelNumber
-    >();
-
-  if (
-    !modelNumbers ||
-    modelNumbers.length === 0
-  ) {
-    return map;
-  }
-
-  for (const modelNumber of modelNumbers) {
-    const key =
-      makeVolumeKey(
-        modelNumber.volume,
-      );
-
-    const code =
-      String(
-        modelNumber.code ?? "",
-      ).trim();
-
-    if (
-      !key ||
-      !code
-    ) {
-      continue;
-    }
-
-    map.set(
-      key,
-      {
-        ...modelNumber,
-        code,
-      },
-    );
-  }
-
-  return map;
-}
-
-function toCreateAlcoholModelVariationRequests(args: {
-  volumes: VolumeRow[];
-  alcoholModelNumbers: AlcoholModelNumber[];
-}): CreateModelVariationRequest[] {
-  const {
-    volumes,
-    alcoholModelNumbers,
-  } = args;
-
-  const modelNumberMap =
-    buildAlcoholModelNumberMap(
-      alcoholModelNumbers,
-    );
-
-  const requests:
-    CreateModelVariationRequest[] = [];
-
-  const seen =
-    new Set<string>();
-
-  for (const row of volumes) {
-    const volume =
-      volumeRowToVolume(
-        row,
-      );
-
-    const key =
-      makeVolumeKey(
-        volume,
-      );
-
-    if (
-      !key ||
-      seen.has(key)
-    ) {
-      continue;
-    }
-
-    seen.add(key);
-
-    const modelNumber =
-      modelNumberMap.get(
-        key,
-      );
-
-    if (!modelNumber) {
-      continue;
-    }
-
-    requests.push({
-      kind: "alcohol",
-
-      modelNumber:
-        modelNumber.code,
-
-      volume,
-    });
-  }
-
-  return requests;
-}
-
-// ------------------------------
-// Apparel helpers
-// ------------------------------
-
-function resolveApparelCategoryCode(
-  params: CreateProductBlueprintParams,
-): ApparelCategoryCode | null {
-  const code =
-    String(
-      params
-        .productBlueprintCategory
-        ?.code ?? "",
-    ).trim();
-
-  if (!isApparelCategoryCode(code)) {
-    return null;
-  }
-
-  return code;
-}
-
-function isAlcoholProductBlueprintCategory(
-  params: CreateProductBlueprintParams,
-): boolean {
-  const code =
-    String(
-      params
-        .productBlueprintCategory
-        ?.code ?? "",
-    ).trim();
-
-  return isAlcoholCategoryCode(
-    code,
-  );
-}
-
-/**
- * apparel category codeに応じてmeasurementsを組み立てる。
- *
- * category code:
- * - apparel.tops
- * - apparel.bottoms
- * - apparel.dress
- *
- * measurement key:
- * - 着丈
- * - 身幅
- * - 胸囲
- * - 肩幅
- * - 袖丈
- * - ウエスト
- * - ヒップ
- * - 股上
- * - 股下
- * - わたり幅
- * - 裾幅
- */
-function buildApparelMeasurements(
-  categoryCode: ApparelCategoryCode,
-  size: ApparelSizeRow,
-): ApparelMeasurements {
-  const result:
-    ApparelMeasurements = {};
-
-  switch (categoryCode) {
-    case "apparel.bottoms": {
-      result["ウエスト"] =
-        size.waist ?? null;
-
-      result["ヒップ"] =
-        size.hip ?? null;
-
-      result["股上"] =
-        size.rise ?? null;
-
-      result["股下"] =
-        size.inseam ?? null;
-
-      result["わたり幅"] =
-        size.thigh ?? null;
-
-      result["裾幅"] =
-        size.hemWidth ?? null;
-
-      return result;
-    }
-
-    case "apparel.dress": {
-      result["着丈"] =
-        size.length ?? null;
-
-      result["身幅"] =
-        size.width ?? null;
-
-      result["胸囲"] =
-        size.chest ?? null;
-
-      result["肩幅"] =
-        size.shoulder ?? null;
-
-      result["袖丈"] =
-        size.sleeveLength ?? null;
-
-      result["ウエスト"] =
-        size.waist ?? null;
-
-      result["ヒップ"] =
-        size.hip ?? null;
-
-      return result;
-    }
-
-    case "apparel.tops": {
-      result["着丈"] =
-        size.length ?? null;
-
-      result["身幅"] =
-        size.width ?? null;
-
-      result["胸囲"] =
-        size.chest ?? null;
-
-      result["肩幅"] =
-        size.shoulder ?? null;
-
-      result["袖丈"] =
-        size.sleeveLength ?? null;
-
-      return result;
-    }
-
-    case "apparel.outerwear":
-    case "apparel.shoes":
-    case "apparel.bag":
-    case "apparel.accessory":
-    default: {
-      return result;
-    }
-  }
-}
-
-/**
- * ProductBlueprintCategory / SizeRow / 各種コードから
- * apparel ModelVariation payloadを組み立てる。
- */
-function toApparelModelVariationPayload(
-  categoryCode: ApparelCategoryCode,
-  sizeRow: ApparelSizeRow,
-  base: {
-    sizeLabel: string;
-    color: string;
-    modelNumber: string;
-    createdBy: string;
-    rgb?: number;
-  },
-): NewModelVariationPayload {
-  const measurements =
-    buildApparelMeasurements(
-      categoryCode,
-      sizeRow,
-    );
-
-  return {
-    sizeLabel:
-      base.sizeLabel,
-
-    color:
-      base.color,
-
-    modelNumber:
-      base.modelNumber,
-
-    createdBy:
-      base.createdBy,
-
-    rgb:
-      base.rgb,
-
-    measurements,
-  };
-}
-
-/**
- * modelNumbers配列を
- * (size, color) -> codeのMapに変換する。
- *
- * - trim
- * - 空は除外
- * - 重複キーは後勝ち
- */
-function buildModelNumberMap(
-  modelNumbers:
-    | CreateProductBlueprintModelNumber[]
-    | undefined,
-): Map<string, string> {
-  const map =
-    new Map<string, string>();
-
-  if (
-    !modelNumbers ||
-    modelNumbers.length === 0
-  ) {
-    return map;
-  }
-
-  for (const modelNumber of modelNumbers) {
-    const size =
-      String(
-        modelNumber.size ?? "",
-      ).trim();
-
-    const color =
-      String(
-        modelNumber.color ?? "",
-      ).trim();
-
-    const code =
-      String(
-        modelNumber.code ?? "",
-      ).trim();
-
-    if (
-      !size ||
-      !color ||
-      !code
-    ) {
-      continue;
-    }
-
-    map.set(
-      `${size}__${color}`,
-      code,
-    );
-  }
-
-  return map;
-}
-
-function shouldCreateApparelModelVariations(
-  categoryCode: ApparelCategoryCode,
-): boolean {
-  return (
-    categoryCode === "apparel.tops" ||
-    categoryCode === "apparel.bottoms" ||
-    categoryCode === "apparel.dress" ||
-    categoryCode === "apparel.outerwear" ||
-    categoryCode === "apparel.shoes"
-  );
-}
-
-// ------------------------------
+// ------------------------------------------------------
 // ProductBlueprint creation
-// ------------------------------
+// ------------------------------------------------------
 
 async function createProductBlueprintWithModelRequests(
   params: CreateProductBlueprintParams,
@@ -648,149 +187,46 @@ async function createProductBlueprintWithModelRequests(
   return created;
 }
 
-// ------------------------------
+// ------------------------------------------------------
 // Service本体
-// ------------------------------
+// ------------------------------------------------------
 
 export async function createProductBlueprint(
   params: CreateProductBlueprintParams,
 ): Promise<ProductBlueprintResponse> {
-  const apparelCategoryCode =
-    resolveApparelCategoryCode(
-      params,
-    );
+  const requests =
+    buildModelVariationRequests({
+      productBlueprintCategory:
+        params.productBlueprintCategory,
 
-  if (
-    apparelCategoryCode &&
-    shouldCreateApparelModelVariations(
-      apparelCategoryCode,
-    )
-  ) {
-    const variations:
-      NewModelVariationPayload[] = [];
+      colors:
+        params.colors ?? [],
 
-    // displayOrderの採番元を
-    // 「色登録順 → サイズ登録順」に固定
-    const colors: string[] =
-      (params.colors ?? [])
-        .map(
-          (color: string) =>
-            String(color).trim(),
-        )
-        .filter(
-          (color: string) =>
-            color.length > 0,
-        );
+      sizes:
+        params.sizes ?? [],
 
-    const sizes:
-      ApparelSizeRow[] =
-      (params.sizes ?? []).filter(
-        (size: ApparelSizeRow) =>
-          String(
-            size.sizeLabel ?? "",
-          ).trim() !== "",
-      );
+      modelNumbers:
+        params.modelNumbers ?? [],
 
-    const colorRgbMap =
-      params.colorRgbMap ?? {};
+      colorRgbMap:
+        params.colorRgbMap ?? {},
 
-    const modelNumberMap =
-      buildModelNumberMap(
-        params.modelNumbers,
-      );
+      volumes:
+        params.volumes ?? [],
 
-    for (const color of colors) {
-      for (const sizeRow of sizes) {
-        const sizeLabel =
-          String(
-            sizeRow.sizeLabel ?? "",
-          ).trim();
+      alcoholModelNumbers:
+        params.alcoholModelNumbers ?? [],
 
-        if (!sizeLabel) {
-          continue;
-        }
+      /*
+       * 新規作成では、従来どおりRGBを解決できない場合に
+       * 0を使用する。
+       */
+      missingRgbBehavior:
+        "use-zero",
+    }) ?? [];
 
-        const code =
-          modelNumberMap
-            .get(
-              `${sizeLabel}__${color}`,
-            )
-            ?.trim();
-
-        if (!code) {
-          continue;
-        }
-
-        const hex =
-          colorRgbMap[color];
-
-        const rgbInt =
-          hexToRgbInt(
-            hex,
-          );
-
-        const payload =
-          toApparelModelVariationPayload(
-            apparelCategoryCode,
-            sizeRow,
-            {
-              sizeLabel,
-              color,
-
-              modelNumber:
-                code,
-
-              createdBy:
-                params.createdBy ?? "",
-
-              rgb:
-                rgbInt,
-            },
-          );
-
-        variations.push(
-          payload,
-        );
-      }
-    }
-
-    const requests =
-      toCreateApparelModelVariationRequests({
-        variations,
-      });
-
-    return await createProductBlueprintWithModelRequests(
-      params,
-      requests,
-    );
-  }
-
-  if (
-    isAlcoholProductBlueprintCategory(
-      params,
-    )
-  ) {
-    const requests =
-      toCreateAlcoholModelVariationRequests({
-        volumes:
-          params.volumes ?? [],
-
-        alcoholModelNumbers:
-          params.alcoholModelNumbers ?? [],
-      });
-
-    return await createProductBlueprintWithModelRequests(
-      params,
-      requests,
-    );
-  }
-
-  /**
-   * modelFieldsを持たないカテゴリでは
-   * ModelVariationを作成しない。
-   */
   return await createProductBlueprintWithModelRequests(
     params,
-    [],
+    requests,
   );
 }
