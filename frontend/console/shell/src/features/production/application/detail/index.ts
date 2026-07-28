@@ -13,8 +13,6 @@ export {
   loadModelVariationIndexByProductBlueprintId,
 } from "./buildModelVariationIndex";
 
-export { buildQuantityRowsFromModels } from "./buildQuantityRows";
-
 export { updateProductionDetail } from "./updateProductionDetail";
 
 export { notifyPrintLogCompleted } from "./notifyPrintLogCompleted";

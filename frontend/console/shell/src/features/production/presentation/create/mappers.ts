@@ -4,13 +4,9 @@ import type { Brand } from "../../../../shared/types/brand";
 import type { Member } from "../../../../shared/types/member";
 
 import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
-import type { ModelVariationResponse } from "../../../productBlueprint/application/productBlueprintDetailService";
 import type { ProductBlueprintCategorySnapshot } from "../../../productBlueprint/domain/productBlueprintCategory";
 
-import type {
-  ProductBlueprintForCard,
-  ProductionQuantityRow,
-} from "./types";
+import type { ProductBlueprintForCard } from "./types";
 
 function normalizeProductBlueprintCategorySnapshot(
   value: unknown,
@@ -37,55 +33,6 @@ function getMemberFullName(
   ]
     .filter((value) => value.length > 0)
     .join(" ");
-}
-
-function isApparelModelVariation(
-  mv: ModelVariationResponse,
-): mv is Extract<
-  ModelVariationResponse,
-  { kind: "apparel" }
-> {
-  return (mv as any)?.kind === "apparel";
-}
-
-function isAlcoholModelVariation(
-  mv: ModelVariationResponse,
-): mv is Extract<
-  ModelVariationResponse,
-  { kind: "alcohol" }
-> {
-  return (mv as any)?.kind === "alcohol";
-}
-
-function buildApparelVariationLabel(args: {
-  size?: string;
-  color?: string;
-}): string {
-  return [args.size, args.color]
-    .map((v) => String(v ?? "").trim())
-    .filter(Boolean)
-    .join(" / ");
-}
-
-function buildAlcoholVariationLabel(args: {
-  volumeValue?: unknown;
-  volumeUnit?: unknown;
-}): string {
-  const value =
-    typeof args.volumeValue === "number" &&
-    Number.isFinite(args.volumeValue)
-      ? args.volumeValue
-      : undefined;
-
-  const unit = String(
-    args.volumeUnit ?? "",
-  ).trim();
-
-  if (value === undefined || !unit) {
-    return "";
-  }
-
-  return `${value}${unit}`;
 }
 
 // ======================================================================
@@ -134,7 +81,8 @@ export function buildProductRows(
 // - ProductBlueprintCard が期待する productBlueprintCategory は
 //   string ではなく ProductBlueprintCategorySnapshot | null
 // - ProductBlueprintCard が表示に使うブランド名は brandName
-// - backend の正レスポンスではカテゴリ snapshot は detail.productBlueprintCategory
+// - backend の正レスポンスではカテゴリ snapshot は
+//   detail.productBlueprintCategory
 // ======================================================================
 export function buildSelectedForCard(
   detail: any,
@@ -147,7 +95,9 @@ export function buildSelectedForCard(
       );
 
     return {
-      id: String(detail.id ?? "").trim(),
+      id: String(
+        detail.id ?? "",
+      ).trim(),
       productName: String(
         detail.productName ?? "",
       ).trim(),
@@ -192,7 +142,9 @@ export function buildSelectedForCard(
       );
 
     return {
-      id: String(row.id ?? "").trim(),
+      id: String(
+        row.id ?? "",
+      ).trim(),
       productName: String(
         row.productName ?? "",
       ).trim(),
@@ -235,119 +187,4 @@ export function buildAssigneeOptions(
       };
     })
     .filter((option) => option.id);
-}
-
-// ======================================================================
-// ModelVariations → ProductionQuantityRow（UI入力用の行に変換）
-// - modelId のみを正キーとして採用
-// - displayOrder は detail.modelRefs 側が唯一のソースなので、ここでは注入しない
-// - apparel / alcohol の discriminated union に対応
-// ======================================================================
-export function mapModelVariationsToRows(
-  list: ModelVariationResponse[],
-): ProductionQuantityRow[] {
-  const safe = Array.isArray(list)
-    ? list
-    : [];
-
-  return safe.map((modelVariation, index) => {
-    const modelId =
-      String(
-        (modelVariation as any)?.id ?? "",
-      ).trim() || String(index);
-
-    const modelNumber = String(
-      (modelVariation as any)?.modelNumber ??
-        "",
-    ).trim();
-
-    if (
-      isApparelModelVariation(modelVariation)
-    ) {
-      const size = String(
-        modelVariation.size ?? "",
-      ).trim();
-
-      const color = String(
-        modelVariation.color?.name ?? "",
-      ).trim();
-
-      const rgb = (
-        modelVariation.color?.rgb ?? null
-      ) as number | string | null;
-
-      const variationLabel =
-        buildApparelVariationLabel({
-          size,
-          color,
-        });
-
-      return {
-        modelId,
-        kind: "apparel",
-        modelNumber,
-        variationLabel,
-        size,
-        color,
-        rgb,
-        displayOrder: undefined,
-        quantity: 0,
-      };
-    }
-
-    if (
-      isAlcoholModelVariation(modelVariation)
-    ) {
-      const volumeValueRaw = (
-        modelVariation as any
-      ).volume?.value;
-
-      const volumeUnit = String(
-        (modelVariation as any).volume?.unit ??
-          "",
-      ).trim();
-
-      const volumeValue =
-        typeof volumeValueRaw === "number" &&
-        Number.isFinite(volumeValueRaw)
-          ? volumeValueRaw
-          : undefined;
-
-      const variationLabel =
-        buildAlcoholVariationLabel({
-          volumeValue,
-          volumeUnit,
-        });
-
-      return {
-        modelId,
-        kind: "alcohol",
-        modelNumber,
-        variationLabel,
-        size: undefined,
-        color: undefined,
-        rgb: null,
-        volumeValue,
-        volumeUnit,
-        displayOrder: undefined,
-        quantity: 0,
-      };
-    }
-
-    return {
-      modelId,
-      kind:
-        String(
-          (modelVariation as any)?.kind ??
-            "",
-        ).trim() || undefined,
-      modelNumber,
-      variationLabel: "",
-      size: undefined,
-      color: undefined,
-      rgb: null,
-      displayOrder: undefined,
-      quantity: 0,
-    };
-  });
 }

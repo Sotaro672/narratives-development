@@ -1,4 +1,4 @@
-// frontend/console/production/src/presentation/components/productionQuantityCard.tsx
+// frontend/console/shell/src/features/production/presentation/components/productionQuantityCard.tsx
 
 import * as React from "react";
 import { Palette } from "lucide-react";
@@ -21,7 +21,10 @@ import { rgbIntToHex } from "../../../../shared/util/color";
 
 import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
 
-type ProductBlueprintCategoryKind = "apparel" | "alcohol" | "unknown";
+type ProductBlueprintCategoryKind =
+  | "apparel"
+  | "alcohol"
+  | "unknown";
 
 type ProductionQuantityCardProps = {
   title?: string;
@@ -38,24 +41,35 @@ type ProductionQuantityCardProps = {
 
   className?: string;
   mode?: "view" | "edit";
-  onChangeRows?: (rows: ProductionQuantityRowVM[]) => void;
+  onChangeRows?: (
+    rows: ProductionQuantityRowVM[],
+  ) => void;
 };
 
-function displayOrderRank(v: unknown): number {
-  return Number.isFinite(v as number)
-    ? (v as number)
+function displayOrderRank(
+  value: unknown,
+): number {
+  return Number.isFinite(value as number)
+    ? (value as number)
     : Number.POSITIVE_INFINITY;
 }
 
-function resolveProductBlueprintCategoryKind(args: {
-  productBlueprintCategory?: string;
-  rows: ProductionQuantityRowVM[];
-}): ProductBlueprintCategoryKind {
-  const category = String(args.productBlueprintCategory ?? "")
+function resolveProductBlueprintCategoryKind(
+  args: {
+    productBlueprintCategory?: string;
+    rows: ProductionQuantityRowVM[];
+  },
+): ProductBlueprintCategoryKind {
+  const category = String(
+    args.productBlueprintCategory ?? "",
+  )
     .trim()
     .toLowerCase();
 
-  if (category.startsWith("alcohol") || category.includes(".sake")) {
+  if (
+    category.startsWith("alcohol") ||
+    category.includes(".sake")
+  ) {
     return "alcohol";
   }
 
@@ -63,12 +77,18 @@ function resolveProductBlueprintCategoryKind(args: {
     return "apparel";
   }
 
-  const hasAlcoholRow = args.rows.some((row) => row.kind === "alcohol");
+  const hasAlcoholRow = args.rows.some(
+    (row) => row.kind === "alcohol",
+  );
+
   if (hasAlcoholRow) {
     return "alcohol";
   }
 
-  const hasApparelRow = args.rows.some((row) => row.kind === "apparel");
+  const hasApparelRow = args.rows.some(
+    (row) => row.kind === "apparel",
+  );
+
   if (hasApparelRow) {
     return "apparel";
   }
@@ -76,21 +96,32 @@ function resolveProductBlueprintCategoryKind(args: {
   return "unknown";
 }
 
-function getVolumeValueLabel(row: ProductionQuantityRowVM): string {
+function getVolumeValueLabel(
+  row: ProductionQuantityRowVM,
+): string {
   const value = row.volumeValue;
 
-  if (typeof value === "number" && Number.isFinite(value)) {
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value)
+  ) {
     return String(value);
   }
 
   return "";
 }
 
-function getVolumeUnitLabel(row: ProductionQuantityRowVM): string {
-  return String(row.volumeUnit ?? "").trim();
+function getVolumeUnitLabel(
+  row: ProductionQuantityRowVM,
+): string {
+  return String(
+    row.volumeUnit ?? "",
+  ).trim();
 }
 
-const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
+const ProductionQuantityCard: React.FC<
+  ProductionQuantityCardProps
+> = ({
   title = "モデル別生産数一覧",
   rows,
   productBlueprintCategory,
@@ -101,13 +132,20 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
   const isEditable = mode === "edit";
 
   const sortedRows = React.useMemo(() => {
-    const safe = Array.isArray(rows) ? rows : [];
+    const safe = Array.isArray(rows)
+      ? rows
+      : [];
+
     const copied = [...safe];
 
     copied.sort((a, b) => {
-      const da = displayOrderRank(a.displayOrder);
-      const db = displayOrderRank(b.displayOrder);
-      return da - db;
+      const firstOrder =
+        displayOrderRank(a.displayOrder);
+
+      const secondOrder =
+        displayOrderRank(b.displayOrder);
+
+      return firstOrder - secondOrder;
     });
 
     return copied;
@@ -119,41 +157,79 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
         productBlueprintCategory,
         rows: sortedRows,
       }),
-    [productBlueprintCategory, sortedRows],
+    [
+      productBlueprintCategory,
+      sortedRows,
+    ],
   );
 
-  const isAlcoholCategory = categoryKind === "alcohol";
-  const isApparelCategory = categoryKind === "apparel";
+  const isAlcoholCategory =
+    categoryKind === "alcohol";
 
   const totalQuantity = React.useMemo(
-    () => sortedRows.reduce((sum, r) => sum + (r.quantity || 0), 0),
+    () =>
+      sortedRows.reduce(
+        (sum, row) =>
+          sum + (row.quantity || 0),
+        0,
+      ),
     [sortedRows],
   );
 
-  const handleChangeQuantity = React.useCallback(
-    (modelId: string, value: string) => {
-      if (!onChangeRows) return;
+  const handleChangeQuantity =
+    React.useCallback(
+      (
+        modelId: string,
+        value: string,
+      ) => {
+        if (!onChangeRows) {
+          return;
+        }
 
-      const n = Math.max(0, Math.floor(Number(value || "0")));
-      const safe = Number.isFinite(n) ? n : 0;
+        const quantity = Math.max(
+          0,
+          Math.floor(
+            Number(value || "0"),
+          ),
+        );
 
-      const next = sortedRows.map((row) =>
-        row.modelId === modelId ? { ...row, quantity: safe } : row,
-      );
+        const safeQuantity =
+          Number.isFinite(quantity)
+            ? quantity
+            : 0;
 
-      onChangeRows(next);
-    },
-    [sortedRows, onChangeRows],
-  );
+        const nextRows = sortedRows.map(
+          (row) =>
+            row.modelId === modelId
+              ? {
+                  ...row,
+                  quantity: safeQuantity,
+                }
+              : row,
+        );
 
-  const footerColSpan = isAlcoholCategory ? 3 : 3;
+        onChangeRows(nextRows);
+      },
+      [
+        sortedRows,
+        onChangeRows,
+      ],
+    );
+
+  const footerColSpan =
+    isAlcoholCategory ? 3 : 3;
 
   return (
-    <Card className={`mqc ${className ?? ""}`}>
+    <Card
+      className={`mqc ${className ?? ""}`}
+    >
       <CardHeader className="mqc__header">
         <div className="mqc__header-inner">
           <Palette size={18} />
-          <CardTitle className="mqc__title">{title}</CardTitle>
+
+          <CardTitle className="mqc__title">
+            {title}
+          </CardTitle>
         </div>
       </CardHeader>
 
@@ -161,54 +237,87 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
         <Table className="mqc__table">
           <TableHeader>
             <TableRow>
-              <TableHead className="mqc__th mqc__th--left">型番</TableHead>
+              <TableHead className="mqc__th mqc__th--left">
+                型番
+              </TableHead>
 
               {isAlcoholCategory ? (
                 <>
-                  <TableHead className="mqc__th">容量</TableHead>
-                  <TableHead className="mqc__th">単位</TableHead>
+                  <TableHead className="mqc__th">
+                    容量
+                  </TableHead>
+
+                  <TableHead className="mqc__th">
+                    単位
+                  </TableHead>
                 </>
               ) : (
                 <>
-                  <TableHead className="mqc__th">サイズ</TableHead>
-                  <TableHead className="mqc__th">カラー</TableHead>
+                  <TableHead className="mqc__th">
+                    サイズ
+                  </TableHead>
+
+                  <TableHead className="mqc__th">
+                    カラー
+                  </TableHead>
                 </>
               )}
 
-              <TableHead className="mqc__th mqc__cell">生産数</TableHead>
+              <TableHead className="mqc__th mqc__cell">
+                生産数
+              </TableHead>
             </TableRow>
           </TableHeader>
 
           <TableBody>
             {sortedRows.map((row) => {
-              const rgbHex = rgbIntToHex(row.rgb) ?? null;
-              const bgColor = rgbHex ?? "#ffffff";
+              const rgbHex =
+                rgbIntToHex(row.rgb) ?? null;
+
+              const backgroundColor =
+                rgbHex ?? "#ffffff";
 
               return (
                 <TableRow key={row.modelId}>
-                  <TableCell>{row.modelNumber}</TableCell>
+                  <TableCell>
+                    {row.modelNumber}
+                  </TableCell>
 
                   {isAlcoholCategory ? (
                     <>
                       <TableCell className="mqc__size">
-                        {getVolumeValueLabel(row) || "-"}
+                        {getVolumeValueLabel(
+                          row,
+                        ) || "-"}
                       </TableCell>
+
                       <TableCell className="mqc__size">
-                        {getVolumeUnitLabel(row) || "-"}
+                        {getVolumeUnitLabel(
+                          row,
+                        ) || "-"}
                       </TableCell>
                     </>
                   ) : (
                     <>
-                      <TableCell className="mqc__size">{row.size}</TableCell>
+                      <TableCell className="mqc__size">
+                        {row.size}
+                      </TableCell>
 
                       <TableCell>
                         <span className="mqc__color">
                           <span
                             className="mqc__color-dot"
-                            style={{ backgroundColor: bgColor }}
-                            title={rgbHex ?? ""}
+                            style={{
+                              backgroundColor,
+                            }}
+                            title={
+                              rgbHex ?? ""
+                            }
                           />
-                          <span>{row.color}</span>
+
+                          <span>
+                            {row.color}
+                          </span>
                         </span>
                       </TableCell>
                     </>
@@ -220,15 +329,22 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                         type="number"
                         min={0}
                         step={1}
-                        value={row.quantity ?? 0}
-                        onChange={(e) =>
-                          handleChangeQuantity(row.modelId, e.target.value)
+                        value={
+                          row.quantity ?? 0
+                        }
+                        onChange={(event) =>
+                          handleChangeQuantity(
+                            row.modelId,
+                            event.target.value,
+                          )
                         }
                         className="mqc__input"
                         aria-label={`${row.modelNumber} の生産数`}
                       />
                     ) : (
-                      <span>{row.quantity}</span>
+                      <span>
+                        {row.quantity}
+                      </span>
                     )}
                   </TableCell>
                 </TableRow>
@@ -237,9 +353,13 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
 
             {sortedRows.length > 0 && (
               <TableRow className="mqc__footer-row">
-                <TableCell colSpan={footerColSpan} className="mqc__footer-label">
+                <TableCell
+                  colSpan={footerColSpan}
+                  className="mqc__footer-label"
+                >
                   合計
                 </TableCell>
+
                 <TableCell className="mqc__footer-cell">
                   <span className="mqc__pill mqc__pill--total">
                     {totalQuantity}
