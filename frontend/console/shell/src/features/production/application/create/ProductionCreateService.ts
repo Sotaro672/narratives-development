@@ -1,6 +1,6 @@
-// frontend/console/production/src/application/create/ProductionCreateService.ts
+// frontend/console/shell/src/features/production/application/create/ProductionCreateService.ts
 
-import type { Production } from "./ProductionCreateTypes";
+import type { Production } from "../../../../shared/types/production";
 import type { ProductionRepository } from "./ProductionCreateRepository";
 
 // ======================================================================
@@ -13,8 +13,15 @@ export type ProductionQuantityInput = {
 };
 
 /**
- * Build Production request payload based on the Firestore absolute schema
- * (models: [{ ModelID, Quantity }], printed boolean, printedAt/printedBy optional).
+ * BackendのProduction作成APIへ送信するpayloadを構築する。
+ *
+ * models:
+ * [
+ *   {
+ *     modelId: string;
+ *     quantity: number;
+ *   }
+ * ]
  */
 export function buildProductionRequest(params: {
   productBlueprintId: string;
@@ -38,23 +45,22 @@ export function buildProductionRequest(params: {
     productBlueprintId,
     assigneeId,
 
-    // absolute schema: Firestore doc stores keys as ModelID / Quantity
-    models: quantities.map((q) => ({
-      ModelID: q.modelId,
-      Quantity: q.quantity,
+    models: quantities.map((quantity) => ({
+      modelId: quantity.modelId,
+      quantity: quantity.quantity,
     })),
 
     printed: false,
     printedAt: null,
     printedBy: null,
 
-    // createdBy must store Firebase Auth UID, not members docId
+    // createdByにはmembersのdocument IDではなくFirebase Auth UIDを保存する。
     createdBy: creatorUid,
     createdAt,
 
-    // optional (table shows updatedAt exists after print/update)
+    updatedBy: null,
     updatedAt: null,
-  } as unknown as Production;
+  };
 }
 
 export function buildProductionPayload(params: {
@@ -67,8 +73,13 @@ export function buildProductionPayload(params: {
 
   nowIso?: () => string;
 }): Production {
-  const { productBlueprintId, assigneeId, rows, currentMemberUid, nowIso } =
-    params;
+  const {
+    productBlueprintId,
+    assigneeId,
+    rows,
+    currentMemberUid,
+    nowIso,
+  } = params;
 
   return buildProductionRequest({
     productBlueprintId,
@@ -82,10 +93,10 @@ export function buildProductionPayload(params: {
 // ======================================================================
 // Usecase execution
 // ======================================================================
-// 注意: repo は application 外（composition root / DI）で注入する
+// repoはapplication外のcomposition root / DIから注入する。
 export async function createProduction(
   repo: ProductionRepository,
   payload: Production,
 ): Promise<Production> {
-  return await repo.create(payload);
+  return repo.create(payload);
 }

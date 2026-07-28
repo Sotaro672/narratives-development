@@ -1,14 +1,16 @@
-// frontend\console\production\src\application\detail\notifyPrintLogCompleted.ts
-import type { ProductionStatus } from "../../../../shared/types/production";
+// frontend/console/shell/src/features/production/application/detail/notifyPrintLogCompleted.ts
 
-import { getCurrentUser, getIdTokenOrThrow } from "../../infrastructure/auth/firebaseAuth";
+import {
+  getCurrentUser,
+  getIdTokenOrThrow,
+} from "../../infrastructure/auth/firebaseAuth";
 import { updateProduction } from "../../infrastructure/http/productionClient";
 
 /* ---------------------------------------------------------
  * 印刷完了シグナル受信（usecase）
- *   - Production を printed に更新（初回のみ）
+ *   - Productionをprintedに更新（初回のみ）
  *   - 2回目以降（既存ログ再利用）は更新しない
- *   - ProductBlueprint の printed 更新は printService 側に委譲
+ *   - ProductBlueprintのprinted更新はprintService側に委譲
  * --------------------------------------------------------- */
 export async function notifyPrintLogCompleted(params: {
   productionId: string;
@@ -21,22 +23,20 @@ export async function notifyPrintLogCompleted(params: {
   const id = productionId.trim();
   if (!id) return;
 
-  // ✅ 2回目以降（既存ログ再利用）の場合は production を更新しない
+  // 2回目以降（既存ログ再利用）の場合はProductionを更新しない
   if (reusedExistingLogs) return;
 
   const user = getCurrentUser();
   if (!user) return;
 
   const printedBy = user.uid;
-
-  // ✅ payload は ISO 文字列で送る（API契約として妥当）
   const printedAt = new Date().toISOString();
 
   try {
     const token = await getIdTokenOrThrow();
 
-    const payload: any = {
-      status: "printed" as ProductionStatus,
+    const payload = {
+      printed: true,
       printedAt,
       printedBy,
     };
@@ -45,17 +45,20 @@ export async function notifyPrintLogCompleted(params: {
       productionId: id,
       token,
       payload,
-      // notifyはエラーを握る仕様のため、ここではthrowさせないために catch で吸収する
+      // notifyはエラーを握る仕様のため、updateProduction側で吸収する
       swallowError: true,
       logContext: {
         tag: "[notifyPrintLogCompleted]",
         productionId: id,
       },
     });
-  } catch (e) {
+  } catch (error) {
     console.error(
       "[notifyPrintLogCompleted] unexpected error while updating production printed status",
-      { productionId: id, error: e },
+      {
+        productionId: id,
+        error,
+      },
     );
   }
 }
