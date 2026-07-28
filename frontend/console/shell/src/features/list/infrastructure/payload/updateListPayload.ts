@@ -1,28 +1,21 @@
-// frontend/console/list/src/infrastructure/payload/updateListPayload.ts
+// frontend/console/shell/src/features/list/infrastructure/payload/updateListPayload.ts
+
 import type { UpdateListInput } from "../dto/updateListInput";
 import { getCurrentUserUid } from "../http/authToken";
-import { normalizePricesForBackendUpdate } from "./listPricePayload";
+import { normalizePricesForBackend } from "./listPricePayload";
 
 export function buildUpdateListPayloadArray(
   input: UpdateListInput,
-): Record<string, any> {
+): Record<string, unknown> {
   const uid = getCurrentUserUid();
 
-  const title = String(input?.title ?? "");
-  const description =
-    input?.description === undefined
-      ? undefined
-      : String(input.description ?? "");
-
-  const prices = normalizePricesForBackendUpdate(input?.priceRows);
-
-  const payload: Record<string, any> = {
-    title: title || undefined,
-    description,
-    assigneeId: String(input?.assigneeId ?? "") || undefined,
-    prices,
+  const payload: Record<string, unknown> = {
+    title: input.title || undefined,
+    description: input.description,
+    assigneeId: input.assigneeId || undefined,
+    prices: normalizePricesForBackend(input.priceRows),
     status: input.status,
-    updatedBy: String(input?.updatedBy ?? "") || uid || undefined,
+    updatedBy: input.updatedBy || uid || undefined,
   };
 
   for (const key of Object.keys(payload)) {

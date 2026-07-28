@@ -144,8 +144,3 @@ export async function getCompanyId(): Promise<string | null> {
   const cid = String(member?.companyId ?? "").trim();
   return cid || null;
 }
-
-/** 便利ユーティリティ：companyId を取得して返す */
-export async function ensureCompanyId(): Promise<string | null> {
-  return await getCompanyId();
-}
