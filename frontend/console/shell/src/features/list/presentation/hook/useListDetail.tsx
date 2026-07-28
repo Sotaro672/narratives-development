@@ -25,8 +25,7 @@ import {
 import {
   isValidListStatus,
   type ListStatus,
-} from "../../domain/list";
-
+} from "../../../../shared/types/list";
 // それ以外は service へ
 import {
   resolveListDetailParams,

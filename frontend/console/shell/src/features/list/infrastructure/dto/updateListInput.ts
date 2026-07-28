@@ -1,5 +1,5 @@
 // frontend/console/list/src/infrastructure/dto/updateListInput.ts
-import type { ListStatus } from "../../domain/list";
+import type { ListStatus } from "../../../../shared/types/list";
 
 export type UpdateListInput = {
   listId: string;

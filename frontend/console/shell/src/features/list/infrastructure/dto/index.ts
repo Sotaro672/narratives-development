@@ -3,7 +3,6 @@ export * from "./createListInput";
 export * from "./updateListInput";
 export * from "./listDto";
 export * from "./listDetailDto";
-export * from "./listAggregateDto";
 export * from "./listImageDto";
 export * from "./listPriceRowDto";
 export * from "./listSaveOperationDto";

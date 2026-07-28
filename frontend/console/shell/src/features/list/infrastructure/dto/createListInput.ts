@@ -1,5 +1,6 @@
-// frontend/console/list/src/infrastructure/dto/createListInput.ts
-import type { ListStatus } from "../../domain/list";
+// frontend/console/shell/src/features/list/infrastructure/dto/createListInput.ts
+
+import type { ListStatus } from "../../../../shared/types/list";
 
 export type CreateListInput = {
   id?: string;
