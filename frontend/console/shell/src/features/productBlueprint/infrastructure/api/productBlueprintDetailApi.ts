@@ -1,4 +1,4 @@
-// frontend\console\shell\src\features\productBlueprint\infrastructure\api\productBlueprintDetailApi.ts
+// frontend/console/shell/src/features/productBlueprint/infrastructure/api/productBlueprintDetailApi.ts
 
 import { getAuthHeaders } from "../../../../auth/application/authService";
 import { API_BASE } from "../../../../shared/http/apiBase";
@@ -96,7 +96,10 @@ type ProductBlueprintDetailRawResponse = Omit<
   productBlueprintCategory: ProductBlueprintCategorySnapshotRaw;
 };
 
-export type { ProductBlueprintCategoryKind, ProductBlueprintCategorySnapshot };
+export type {
+  ProductBlueprintCategoryKind,
+  ProductBlueprintCategorySnapshot,
+};
 
 function normalizeProductBlueprintCategorySnapshot(
   raw: ProductBlueprintCategorySnapshotRaw,
@@ -128,48 +131,13 @@ function normalizeProductBlueprintCategorySnapshot(
   };
 }
 
-export function getProductBlueprintDetailCategoryKind(
-  detail: ProductBlueprintDetailResponse | null | undefined,
-): ProductBlueprintCategoryKind | null {
-  return detail?.productBlueprintCategory?.kind ?? null;
-}
-
-export function isApparelProductBlueprintDetail(
-  detail: ProductBlueprintDetailResponse | null | undefined,
-): boolean {
-  return getProductBlueprintDetailCategoryKind(detail) === "apparel";
-}
-
-export function isAlcoholProductBlueprintDetail(
-  detail: ProductBlueprintDetailResponse | null | undefined,
-): boolean {
-  return getProductBlueprintDetailCategoryKind(detail) === "alcohol";
-}
-
-export function isCosmeticsProductBlueprintDetail(
-  detail: ProductBlueprintDetailResponse | null | undefined,
-): boolean {
-  return getProductBlueprintDetailCategoryKind(detail) === "cosmetics";
-}
-
-export function isHealthcareProductBlueprintDetail(
-  detail: ProductBlueprintDetailResponse | null | undefined,
-): boolean {
-  return getProductBlueprintDetailCategoryKind(detail) === "healthcare";
-}
-
-export function isOtherProductBlueprintDetail(
-  detail: ProductBlueprintDetailResponse | null | undefined,
-): boolean {
-  return getProductBlueprintDetailCategoryKind(detail) === "other";
-}
-
 export async function getProductBlueprintDetailApi(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
   const headers = await getAuthHeaders();
 
   const trimmed = String(id ?? "").trim();
+
   if (!trimmed) {
     throw new Error("getProductBlueprintDetailApi: id が空です");
   }
