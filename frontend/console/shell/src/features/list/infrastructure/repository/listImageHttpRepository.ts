@@ -1,93 +1,95 @@
-// frontend/console/list/src/infrastructure/repository/listImageHttpRepository.ts
-import { API_BASE } from "../../../../shared/http/apiBase";
-import type { ListDTO } from "../dto/listDto";
+// frontend/console/shell/src/features/list/infrastructure/repository/listImageHttpRepository.ts
+
+import type { List } from "../../../../shared/types/list";
 import type { SaveListImageFromFirebaseStorageInput } from "../dto/listImageDto";
 import { requestJSON } from "../http/httpClient";
+
 export type SavedListImageDTO = {
   id: string;
+  listId: string;
   url: string;
+  displayOrder: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
 };
+
+export type DeleteListImageResponse = {
+  ok: boolean;
+  listId: string;
+  imageId: string;
+};
+
 export async function saveListImageFromFirebaseStorageHTTP(
   args: SaveListImageFromFirebaseStorageInput,
 ): Promise<SavedListImageDTO> {
   const listId = args.listId;
-  if (!listId) throw new Error("invalid_list_id");
   const id = args.id;
   const url = args.url;
-  const createdBy = args.createdBy;
-  const createdAt = args.createdAt;
+
+  if (!listId) {
+    throw new Error("invalid_list_id");
+  }
+
   if (!id || !url) {
     throw new Error("invalid_list_image_payload");
   }
-  const payload: Record<string, any> = {
-    id,
-    url,
-    displayOrder: Number(args.displayOrder ?? 0),
-    createdBy: createdBy || undefined,
-    createdAt: createdAt || undefined,
-  };
-  for (const key of Object.keys(payload)) {
-    if (payload[key] === undefined) delete payload[key];
-  }
-  return await requestJSON<SavedListImageDTO>({
+
+  return requestJSON<SavedListImageDTO>({
     method: "POST",
     path: `/lists/${encodeURIComponent(listId)}/images`,
-    body: payload,
-    debug: {
-      tag: `POST /lists/${listId}/images`,
-      url: `${API_BASE}/lists/${encodeURIComponent(listId)}/images`,
-      method: "POST",
-      body: payload,
+    body: {
+      id,
+      url,
+      displayOrder: args.displayOrder,
     },
   });
 }
+
 export async function setListPrimaryImageHTTP(args: {
   listId: string;
   imageId: string;
-  updatedBy?: string;
-  now?: string;
-}): Promise<ListDTO> {
+}): Promise<List> {
   const listId = args.listId;
-  if (!listId) throw new Error("invalid_list_id");
-  const payload = {
-    imageId: args.imageId,
-    updatedBy: args.updatedBy || undefined,
-    now: args.now || undefined,
-  };
-  if (!payload.imageId) {
+  const imageId = args.imageId;
+
+  if (!listId) {
+    throw new Error("invalid_list_id");
+  }
+
+  if (!imageId) {
     throw new Error("invalid_image_id");
   }
-  return await requestJSON<ListDTO>({
+
+  return requestJSON<List>({
     method: "PUT",
     path: `/lists/${encodeURIComponent(listId)}/primary-image`,
-    body: payload,
-    debug: {
-      tag: `PUT /lists/${listId}/primary-image`,
-      url: `${API_BASE}/lists/${encodeURIComponent(listId)}/primary-image`,
-      method: "PUT",
-      body: payload,
+    body: {
+      imageId,
     },
   });
 }
+
 export async function deleteListImageHTTP(args: {
   listId: string;
   imageId: string;
-}): Promise<any> {
+}): Promise<DeleteListImageResponse> {
   const listId = args.listId;
-  if (!listId) throw new Error("invalid_list_id");
   const imageId = args.imageId;
-  if (!imageId) throw new Error("invalid_image_id");
-  return await requestJSON<any>({
+
+  if (!listId) {
+    throw new Error("invalid_list_id");
+  }
+
+  if (!imageId) {
+    throw new Error("invalid_image_id");
+  }
+
+  return requestJSON<DeleteListImageResponse>({
     method: "DELETE",
-    path: `/lists/${encodeURIComponent(listId)}/images/${encodeURIComponent(
-      imageId,
-    )}`,
-    debug: {
-      tag: `DELETE /lists/${listId}/images/${imageId}`,
-      url: `${API_BASE}/lists/${encodeURIComponent(
-        listId,
-      )}/images/${encodeURIComponent(imageId)}`,
-      method: "DELETE",
-    },
+    path: `/lists/${encodeURIComponent(
+      listId,
+    )}/images/${encodeURIComponent(imageId)}`,
   });
 }

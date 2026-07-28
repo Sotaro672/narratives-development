@@ -1,4 +1,5 @@
-// frontend/console/list/src/infrastructure/dto/listDetailDto.ts
+// frontend/console/shell/src/features/list/infrastructure/dto/listDetailDto.ts
+
 import type { ListStatus } from "../../../../shared/types/list";
 import type { ListDetailPriceRowDTO } from "./listPriceRowDto";
 

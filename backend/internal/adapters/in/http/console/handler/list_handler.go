@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	middleware "narratives/internal/adapters/in/http/middleware"
 	query "narratives/internal/application/query/console"
 	usecase "narratives/internal/application/usecase"
 	listdom "narratives/internal/domain/list"
@@ -34,7 +35,26 @@ func NewListHandler(p NewListHandlerParams) http.Handler {
 	}
 }
 
-func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func requireCurrentFirebaseUID(
+	w http.ResponseWriter,
+	r *http.Request,
+) (string, bool) {
+	uid, _, ok := middleware.CurrentUIDAndEmail(r)
+	if !ok || uid == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "unauthorized"},
+		)
+		return "", false
+	}
+
+	return uid, true
+}
+
+func (h *ListHandler) ServeHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	w.Header().Set("Content-Type", "application/json")
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
@@ -55,16 +75,21 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if !strings.HasPrefix(path, "/lists/") {
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "not_found"},
+		)
 		return
 	}
 
 	rest := strings.TrimPrefix(path, "/lists/")
 	parts := strings.Split(rest, "/")
 	id := parts[0]
+
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "invalid id"},
+		)
 		return
 	}
 
@@ -72,13 +97,18 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch parts[1] {
 		case "images":
 			sub := ""
+
 			if len(parts) >= 3 {
 				sub = parts[2]
 			}
 
 			if len(parts) == 2 {
 				if r.Method == http.MethodPost {
-					h.createImageFromFirebaseStorage(w, r, id)
+					h.createImageFromFirebaseStorage(
+						w,
+						r,
+						id,
+					)
 					return
 				}
 
@@ -88,7 +118,12 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			if len(parts) == 3 && sub != "" {
 				if r.Method == http.MethodDelete {
-					h.deleteImage(w, r, id, sub)
+					h.deleteImage(
+						w,
+						r,
+						id,
+						sub,
+					)
 					return
 				}
 
@@ -97,7 +132,9 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{"error": "not_found"},
+			)
 			return
 
 		case "primary-image":
@@ -111,7 +148,9 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		default:
 			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{"error": "not_found"},
+			)
 			return
 		}
 	}
@@ -132,47 +171,73 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
+func (h *ListHandler) create(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	ctx := r.Context()
 
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "usecase is nil"},
+		)
 		return
 	}
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	uid, ok := requireCurrentFirebaseUID(w, r)
+	if !ok {
+		return
+	}
+
+	body, err := io.ReadAll(
+		io.LimitReader(r.Body, 1<<20),
+	)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "invalid body"},
+		)
 		return
 	}
 
 	var item listdom.List
+
 	if err := json.Unmarshal(body, &item); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "invalid json"},
+		)
 		return
 	}
 
 	if item.InventoryID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "inventoryId is required"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "inventoryId is required",
+			},
+		)
 		return
 	}
+
 	if item.AssigneeID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "assigneeId is required"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "assigneeId is required",
+			},
+		)
 		return
 	}
+
 	if item.Title == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "title is required"})
-		return
-	}
-	if item.CreatedBy == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "createdBy is required"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "title is required",
+			},
+		)
 		return
 	}
 
@@ -185,6 +250,8 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC()
+
+	item.CreatedBy = uid
 	item.CreatedAt = now
 	item.UpdatedAt = &now
 	item.UpdatedBy = nil
@@ -193,7 +260,11 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "not_implemented",
+				},
+			)
 			return
 		}
 
@@ -205,26 +276,44 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(created)
 }
 
-func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) {
+func (h *ListHandler) update(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	ctx := r.Context()
 
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "usecase is nil"},
+		)
 		return
 	}
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	uid, ok := requireCurrentFirebaseUID(w, r)
+	if !ok {
+		return
+	}
+
+	body, err := io.ReadAll(
+		io.LimitReader(r.Body, 1<<20),
+	)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "invalid body"},
+		)
 		return
 	}
 
 	var item listdom.List
+
 	if err := json.Unmarshal(body, &item); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "invalid json"},
+		)
 		return
 	}
 
@@ -232,18 +321,26 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 
 	if item.ID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id is required"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "id is required"},
+		)
 		return
 	}
 
 	now := time.Now().UTC()
+
+	item.UpdatedBy = &uid
 	item.UpdatedAt = &now
 
 	updated, err := h.uc.Update(ctx, item)
 	if err != nil {
 		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "not_implemented",
+				},
+			)
 			return
 		}
 
@@ -252,7 +349,11 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 	}
 
 	if h.qDetail != nil {
-		if dto, e := h.qDetail.BuildListDetailDTO(ctx, id); e == nil {
+		dto, err := h.qDetail.BuildListDetailDTO(
+			ctx,
+			id,
+		)
+		if err == nil {
 			_ = json.NewEncoder(w).Encode(dto)
 			return
 		}
@@ -261,26 +362,39 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
-func (h *ListHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
+func (h *ListHandler) delete(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	ctx := r.Context()
 
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "usecase is nil"},
+		)
 		return
 	}
 
 	id = strings.TrimSpace(id)
+
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id is required"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "id is required"},
+		)
 		return
 	}
 
 	if err := h.uc.Delete(ctx, id); err != nil {
 		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "not_implemented",
+				},
+			)
 			return
 		}
 
@@ -288,35 +402,44 @@ func (h *ListHandler) delete(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"ok": true,
-		"id": id,
-	})
+	_ = json.NewEncoder(w).Encode(
+		map[string]any{
+			"ok": true,
+			"id": id,
+		},
+	)
 }
 
-func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
+func (h *ListHandler) listIndex(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	ctx := r.Context()
 
 	if h == nil || h.qMgmt == nil {
 		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "not_implemented",
+			},
+		)
 		return
 	}
 
 	qp := r.URL.Query()
 
-	var f listdom.Filter
+	var filter listdom.Filter
 
-	if s := qp.Get("q"); s != "" {
-		f.SearchQuery = s
-	} else if s := qp.Get("search"); s != "" {
-		f.SearchQuery = s
+	if value := qp.Get("q"); value != "" {
+		filter.SearchQuery = value
+	} else if value := qp.Get("search"); value != "" {
+		filter.SearchQuery = value
 	}
 
-	if v := qp.Get("assigneeId"); v != "" {
-		f.AssigneeID = &v
-	} else if v := qp.Get("assignee_id"); v != "" {
-		f.AssigneeID = &v
+	if value := qp.Get("assigneeId"); value != "" {
+		filter.AssigneeID = &value
+	} else if value := qp.Get("assignee_id"); value != "" {
+		filter.AssigneeID = &value
 	}
 
 	statusesRaw := qp.Get("statuses")
@@ -325,57 +448,90 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if statusesRaw != "" {
-		ss := splitCSV(statusesRaw)
-		if len(ss) == 1 {
-			st := listdom.ListStatus(ss[0])
-			if st != "" {
-				f.Status = &st
+		statuses := splitCSV(statusesRaw)
+
+		if len(statuses) == 1 {
+			status := listdom.ListStatus(statuses[0])
+			if status != "" {
+				filter.Status = &status
 			}
-		} else if len(ss) > 1 {
-			out := make([]listdom.ListStatus, 0, len(ss))
-			for _, s := range ss {
-				st := listdom.ListStatus(s)
-				if st != "" {
-					out = append(out, st)
+		} else if len(statuses) > 1 {
+			filter.Statuses = make(
+				[]listdom.ListStatus,
+				0,
+				len(statuses),
+			)
+
+			for _, value := range statuses {
+				status := listdom.ListStatus(value)
+				if status != "" {
+					filter.Statuses = append(
+						filter.Statuses,
+						status,
+					)
 				}
 			}
-			f.Statuses = out
 		}
 	}
 
-	if v := qp.Get("minPrice"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			f.MinPrice = &n
+	if value := qp.Get("minPrice"); value != "" {
+		if price, err := strconv.Atoi(value); err == nil {
+			filter.MinPrice = &price
 		}
 	}
 
-	if v := qp.Get("maxPrice"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			f.MaxPrice = &n
+	if value := qp.Get("maxPrice"); value != "" {
+		if price, err := strconv.Atoi(value); err == nil {
+			filter.MaxPrice = &price
 		}
 	}
 
-	if vv := qp["modelIds"]; len(vv) > 0 {
-		for _, x := range vv {
-			f.ModelIDs = append(f.ModelIDs, splitCSV(x)...)
+	if values := qp["modelIds"]; len(values) > 0 {
+		for _, value := range values {
+			filter.ModelIDs = append(
+				filter.ModelIDs,
+				splitCSV(value)...,
+			)
 		}
-	} else if vv := qp["model_ids"]; len(vv) > 0 {
-		for _, x := range vv {
-			f.ModelIDs = append(f.ModelIDs, splitCSV(x)...)
+	} else if values := qp["model_ids"]; len(values) > 0 {
+		for _, value := range values {
+			filter.ModelIDs = append(
+				filter.ModelIDs,
+				splitCSV(value)...,
+			)
 		}
 	}
 
-	sort := listdom.Sort{}
+	sortOptions := listdom.Sort{}
 
-	pageNum := parseIntDefault(qp.Get("page"), 1)
-	perPage := parseIntDefault(qp.Get("perPage"), 50)
-	page := listdom.Page{Number: pageNum, PerPage: perPage}
+	pageNumber := parseIntDefault(
+		qp.Get("page"),
+		1,
+	)
+	perPage := parseIntDefault(
+		qp.Get("perPage"),
+		50,
+	)
 
-	pr, err := h.qMgmt.ListRows(ctx, f, sort, page)
+	page := listdom.Page{
+		Number:  pageNumber,
+		PerPage: perPage,
+	}
+
+	result, err := h.qMgmt.ListRows(
+		ctx,
+		filter,
+		sortOptions,
+		page,
+	)
 	if err != nil {
 		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "not_implemented",
+				},
+			)
 			return
 		}
 
@@ -383,29 +539,46 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"items":      pr.Items,
-		"totalCount": pr.TotalCount,
-		"totalPages": pr.TotalPages,
-		"page":       pr.Page,
-		"perPage":    pr.PerPage,
-	})
+	_ = json.NewEncoder(w).Encode(
+		map[string]any{
+			"items":      result.Items,
+			"totalCount": result.TotalCount,
+			"totalPages": result.TotalPages,
+			"page":       result.Page,
+			"perPage":    result.PerPage,
+		},
+	)
 }
 
-func (h *ListHandler) get(w http.ResponseWriter, r *http.Request, id string) {
+func (h *ListHandler) get(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	ctx := r.Context()
 
 	if h == nil || h.qDetail == nil {
 		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "not_implemented",
+			},
+		)
 		return
 	}
 
-	dto, err := h.qDetail.BuildListDetailDTO(ctx, id)
+	dto, err := h.qDetail.BuildListDetailDTO(
+		ctx,
+		id,
+	)
 	if err != nil {
 		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "not_implemented",
+				},
+			)
 			return
 		}
 
@@ -426,26 +599,42 @@ func (h *ListHandler) deleteImage(
 
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "usecase is nil"},
+		)
 		return
 	}
 
 	if listID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid listId"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "invalid listId"},
+		)
 		return
 	}
 
 	if imageID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "imageId is required"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "imageId is required",
+			},
+		)
 		return
 	}
 
-	if err := h.uc.DeleteImage(ctx, listID, imageID); err != nil {
+	if err := h.uc.DeleteImage(
+		ctx,
+		listID,
+		imageID,
+	); err != nil {
 		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "not_implemented",
+				},
+			)
 			return
 		}
 
@@ -453,11 +642,13 @@ func (h *ListHandler) deleteImage(
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"ok":      true,
-		"listId":  listID,
-		"imageId": imageID,
-	})
+	_ = json.NewEncoder(w).Encode(
+		map[string]any{
+			"ok":      true,
+			"listId":  listID,
+			"imageId": imageID,
+		},
+	)
 }
 
 // createImageFromFirebaseStorage stores a list image record.
@@ -475,74 +666,100 @@ func (h *ListHandler) createImageFromFirebaseStorage(
 
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "usecase is nil"},
+		)
+		return
+	}
+
+	uid, ok := requireCurrentFirebaseUID(w, r)
+	if !ok {
 		return
 	}
 
 	if listID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid listId"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "invalid listId"},
+		)
 		return
 	}
 
-	var req struct {
+	var request struct {
 		ID           string `json:"id"`
 		URL          string `json:"url"`
 		DisplayOrder int    `json:"displayOrder"`
-		CreatedBy    string `json:"createdBy,omitempty"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(
+		&request,
+	); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "invalid json"},
+		)
 		return
 	}
 
-	req.ID = strings.TrimSpace(req.ID)
-	req.URL = strings.TrimSpace(req.URL)
-	req.CreatedBy = strings.TrimSpace(req.CreatedBy)
+	request.ID = strings.TrimSpace(request.ID)
+	request.URL = strings.TrimSpace(request.URL)
 
-	if req.ID == "" {
+	if request.ID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id is required"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "id is required"},
+		)
 		return
 	}
 
-	if strings.Contains(req.ID, "/") || strings.Contains(req.ID, "://") {
+	if strings.Contains(request.ID, "/") ||
+		strings.Contains(request.ID, "://") {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid image id"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "invalid image id"},
+		)
 		return
 	}
 
-	if req.URL == "" {
+	if request.URL == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "url is required"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "url is required"},
+		)
 		return
 	}
 
-	if req.DisplayOrder < 0 {
+	if request.DisplayOrder < 0 {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "displayOrder must be >= 0"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "displayOrder must be >= 0",
+			},
+		)
 		return
 	}
 
 	now := time.Now().UTC()
 
-	img, err := h.uc.CreateImage(
+	image, err := h.uc.CreateImage(
 		ctx,
 		listdom.ListImage{
-			ID:           req.ID,
+			ID:           request.ID,
 			ListID:       listID,
-			URL:          req.URL,
-			DisplayOrder: req.DisplayOrder,
+			URL:          request.URL,
+			DisplayOrder: request.DisplayOrder,
 			CreatedAt:    now,
-			CreatedBy:    req.CreatedBy,
+			CreatedBy:    uid,
 		},
 	)
 	if err != nil {
 		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "not_implemented",
+				},
+			)
 			return
 		}
 
@@ -551,7 +768,7 @@ func (h *ListHandler) createImageFromFirebaseStorage(
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(img)
+	_ = json.NewEncoder(w).Encode(image)
 }
 
 func (h *ListHandler) setPrimaryImage(
@@ -563,47 +780,59 @@ func (h *ListHandler) setPrimaryImage(
 
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "usecase is nil"},
+		)
 		return
 	}
 
-	var req struct {
-		ImageID   string  `json:"imageId"`
-		UpdatedBy *string `json:"updatedBy"`
-		Now       *string `json:"now"`
+	uid, ok := requireCurrentFirebaseUID(w, r)
+	if !ok {
+		return
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var request struct {
+		ImageID string `json:"imageId"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(
+		&request,
+	); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "invalid json"},
+		)
 		return
 	}
 
-	imageID := strings.TrimSpace(req.ImageID)
+	imageID := strings.TrimSpace(request.ImageID)
 	if imageID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "imageId is required"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "imageId is required",
+			},
+		)
 		return
 	}
 
 	now := time.Now().UTC()
-	if req.Now != nil && *req.Now != "" {
-		if t, err := time.Parse(time.RFC3339, *req.Now); err == nil {
-			now = t.UTC()
-		}
-	}
 
 	item, err := h.uc.SetPrimaryImage(
 		ctx,
 		listID,
 		imageID,
 		now,
-		req.UpdatedBy,
+		&uid,
 	)
 	if err != nil {
 		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "not_implemented",
+				},
+			)
 			return
 		}
 
