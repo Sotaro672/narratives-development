@@ -1,7 +1,7 @@
 // backend/internal/domain/model/apparel.go
 //
 // NOTE:
-//   - common.go側にModelVariation / ModelDataの共通定義があるため、
+//   - common.go側にModelVariationの共通定義があるため、
 //     このファイルでは再定義しない。
 //   - apparel専用のvariationはApparelModelVariationとして定義する。
 //   - apparel.tops / apparel.bottoms / apparel.dressは
@@ -143,14 +143,6 @@ type NewApparelModelVariation struct {
 	Size               string
 	Color              Color
 	Measurements       Measurements
-}
-
-// ApparelItemSpecは商品個体・表示用途向けのread modelです。
-type ApparelItemSpec struct {
-	ModelNumber  string
-	Size         string
-	Color        string
-	Measurements Measurements
 }
 
 type SizeVariation struct {
@@ -357,81 +349,4 @@ func (
 		now,
 		restoredBy,
 	)
-}
-
-func (
-	variation *ApparelModelVariation,
-) SetMeasurement(
-	key string,
-	value int,
-) error {
-	if variation == nil {
-		return ErrInvalid
-	}
-
-	if !variation.CanModify() {
-		return ErrModelModificationForbidden
-	}
-
-	if key == "" ||
-		value < 0 {
-		return ErrInvalidMeasurements
-	}
-
-	if variation.Measurements == nil {
-		variation.Measurements = make(
-			Measurements,
-			1,
-		)
-	}
-
-	variation.Measurements[key] =
-		value
-
-	return nil
-}
-
-func (
-	variation *ApparelModelVariation,
-) RemoveMeasurement(
-	key string,
-) error {
-	if variation == nil {
-		return ErrInvalid
-	}
-
-	if !variation.CanModify() {
-		return ErrModelModificationForbidden
-	}
-
-	if key == "" {
-		return ErrInvalidMeasurements
-	}
-
-	if variation.Measurements == nil {
-		return nil
-	}
-
-	delete(
-		variation.Measurements,
-		key,
-	)
-
-	return nil
-}
-
-func (
-	variation ApparelModelVariation,
-) ToItemSpec() ApparelItemSpec {
-	return ApparelItemSpec{
-		ModelNumber: variation.ModelNumber,
-
-		Size: variation.Size,
-
-		Color: variation.Color.Name,
-
-		Measurements: variation.
-			Measurements.
-			Clone(),
-	}
 }

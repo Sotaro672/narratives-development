@@ -1,86 +1,133 @@
-// frontend/console/production/src/application/detail/buildModelVariationIndex.ts
+// frontend/console/shell/src/features/production/application/detail/buildModelVariationIndex.ts
 
-import type { ModelVariationSummary } from "./types";
-import type { ModelVariationResponse } from "../../../model/infrastructure/repository/modelRepositoryHTTP";
+import type {
+  ModelVariationSummary,
+} from "./types";
 
-import { listModelVariationsByProductBlueprintId } from "../../infrastructure/model/modelVariationGateway";
+import {
+  isAlcoholModelVariationResponse,
+  isApparelModelVariationResponse,
+  type ModelVariationResponse,
+} from "../../../model/infrastructure/codec/modelVariationCodec";
+
+import {
+  listModelVariationsByProductBlueprintId,
+} from "../../infrastructure/model/modelVariationGateway";
 
 /* ---------------------------------------------------------
- * variations → index 変換（名揺れなし・レスポンスを正として読む）
+ * variations → index変換
+ *
+ * Codecによって検証済みのModelVariationResponseを正として扱う。
  * --------------------------------------------------------- */
+
 export function buildModelIndexFromVariations(
   variations: ModelVariationResponse[],
 ): Record<string, ModelVariationSummary> {
-  const index: Record<string, ModelVariationSummary> = {};
+  const index: Record<
+    string,
+    ModelVariationSummary
+  > = {};
 
-  (Array.isArray(variations) ? variations : []).forEach((variation) => {
-    const v = variation as any;
+  for (const variation of variations) {
+    const modelId =
+      variation.id.trim();
 
-    const modelId = String(v?.id ?? "").trim();
-    if (!modelId) return;
+    if (!modelId) {
+      continue;
+    }
 
-    const kind = String(v?.kind ?? "").trim();
-    const modelNumber = String(v?.modelNumber ?? "").trim();
+    const productBlueprintId =
+      variation.productBlueprintId.trim();
 
     const base: ModelVariationSummary = {
       modelId,
-      productBlueprintId: String(v?.productBlueprintId ?? "").trim() || undefined,
-      kind,
-      modelNumber,
+
+      productBlueprintId:
+        productBlueprintId ||
+        undefined,
+
+      kind:
+        variation.kind,
+
+      modelNumber:
+        variation.modelNumber.trim(),
     };
 
-    if (kind === "apparel") {
+    if (
+      isApparelModelVariationResponse(
+        variation,
+      )
+    ) {
       index[modelId] = {
         ...base,
-        size: String(v?.size ?? "").trim(),
-        color: String(v?.color?.name ?? "").trim(),
+
+        size:
+          variation.size.trim(),
+
+        color:
+          variation.color.name.trim(),
+
         rgb:
-          typeof v?.color?.rgb === "number" || typeof v?.color?.rgb === "string"
-            ? v.color.rgb
-            : null,
+          variation.color.rgb,
       };
-      return;
+
+      continue;
     }
 
-    if (kind === "alcohol") {
-      const volumeValueRaw = v?.volume?.value;
+    if (
+      isAlcoholModelVariationResponse(
+        variation,
+      )
+    ) {
       const volumeValue =
-        typeof volumeValueRaw === "number" && Number.isFinite(volumeValueRaw)
-          ? volumeValueRaw
-          : undefined;
+        variation.volume.value;
 
-      const volumeUnit = String(v?.volume?.unit ?? "").trim();
+      const volumeUnit =
+        variation.volume.unit;
 
       index[modelId] = {
         ...base,
-        volumeValue,
-        volumeUnit,
-        volume:
-          volumeValue !== undefined && volumeUnit
-            ? {
-                value: volumeValue,
-                unit: volumeUnit,
-              }
-            : undefined,
-      };
-      return;
-    }
 
-    index[modelId] = base;
-  });
+        volumeValue,
+
+        volumeUnit,
+
+        volume: {
+          value:
+            volumeValue,
+
+          unit:
+            volumeUnit,
+        },
+      };
+    }
+  }
 
   return index;
 }
 
 /* ---------------------------------------------------------
- * productBlueprintId → ModelVariation index（usecase）
+ * productBlueprintId → ModelVariation index
  * --------------------------------------------------------- */
+
 export async function loadModelVariationIndexByProductBlueprintId(
   productBlueprintId: string,
-): Promise<Record<string, ModelVariationSummary>> {
-  const id = productBlueprintId.trim();
-  if (!id) return {};
+): Promise<
+  Record<string, ModelVariationSummary>
+> {
+  const id =
+    productBlueprintId.trim();
 
-  const list = await listModelVariationsByProductBlueprintId(id);
-  return buildModelIndexFromVariations(list);
+  if (!id) {
+    return {};
+  }
+
+  const variations =
+    await listModelVariationsByProductBlueprintId(
+      id,
+    );
+
+  return buildModelIndexFromVariations(
+    variations,
+  );
 }

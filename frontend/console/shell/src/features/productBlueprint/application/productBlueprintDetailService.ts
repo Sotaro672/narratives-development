@@ -1,21 +1,27 @@
-// frontend/console/productBlueprint/src/application/productBlueprintDetailService.ts
+// frontend/console/shell/src/features/productBlueprint/application/productBlueprintDetailService.ts
 
 import {
   isApparelCategoryCode,
+  normalizeApparelMeasurements,
   type ApparelCategoryCode,
   type ApparelMeasurements,
   type ApparelSizeInput,
 } from "../domain/apparel";
 
-import { isAlcoholCategoryCode } from "../domain/alcohol";
+import {
+  isAlcoholCategoryCode,
+} from "../domain/alcohol";
 
-import type {
-  AlcoholModelNumber,
-  Volume,
-  VolumeRow,
+import {
+  volumeRowToVolume,
+  type AlcoholModelNumber,
+  type Volume,
+  type VolumeRow,
 } from "../../model/application/modelCreateService";
 
-import { updateProductBlueprintHTTP } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
+import {
+  updateProductBlueprintHTTP,
+} from "../infrastructure/repository/productBlueprintRepositoryHTTP";
 
 import {
   getProductBlueprintDetailApi,
@@ -23,50 +29,39 @@ import {
   type UpdateProductBlueprintParams,
 } from "../infrastructure/api/productBlueprintDetailApi";
 
-import { authorizedFetch } from "../infrastructure/httpClient/authorizedFetch";
-import { hexToRgbInt } from "../../../shared/util/color";
-
 import {
-  updateModelVariation,
-  type ModelVariationUpdateRequest,
-  deleteRemovedModelVariations,
-  type ModelVariationResponse as ModelUpdateServiceVariationResponse,
-} from "../../model/application/modelUpdateService";
+  hexToRgbInt,
+} from "../../../shared/util/color";
 
 import {
   createModelVariations,
+  listModelVariationsByProductBlueprintId,
   type CreateModelVariationRequest,
 } from "../../model/infrastructure/repository/modelRepositoryHTTP";
 
-const makeApparelKey = (sizeLabel: string, color: string): string =>
-  `${String(sizeLabel ?? "").trim()}__${String(color ?? "").trim()}`;
-
-const makeVolumeKey = (volume: Volume): string => {
-  const value =
-    typeof volume.value === "number" && Number.isFinite(volume.value)
-      ? volume.value
-      : 0;
-
-  const unit = String(volume.unit ?? "").trim() || "ml";
-
-  if (value <= 0) {
-    return "";
-  }
-
-  return `${value}${unit}`;
+export {
+  listModelVariationsByProductBlueprintId,
 };
 
-function volumeRowToVolume(row: VolumeRow): Volume {
-  return {
-    value: row.volumeValue,
-    unit: row.volumeUnit,
-  };
-}
+type ProductBlueprintModelNumber = {
+  size: string;
+  color: string;
+  code?: string;
+};
+
+/* =========================================================
+ * Category helpers
+ * =======================================================*/
 
 function resolveApparelCategoryCode(
-  params: Pick<UpdateProductBlueprintParams, "productBlueprintCategory">,
+  params: Pick<
+    UpdateProductBlueprintParams,
+    "productBlueprintCategory"
+  >,
 ): ApparelCategoryCode | null {
-  const code = String(params.productBlueprintCategory?.code ?? "").trim();
+  const code = String(
+    params.productBlueprintCategory?.code ?? "",
+  ).trim();
 
   if (!isApparelCategoryCode(code)) {
     return null;
@@ -76,25 +71,40 @@ function resolveApparelCategoryCode(
 }
 
 function isAlcoholCategory(
-  params: Pick<UpdateProductBlueprintParams, "productBlueprintCategory">,
+  params: Pick<
+    UpdateProductBlueprintParams,
+    "productBlueprintCategory"
+  >,
 ): boolean {
-  const kind = String(params.productBlueprintCategory?.kind ?? "").trim();
-  const code = String(params.productBlueprintCategory?.code ?? "").trim();
+  const kind = String(
+    params.productBlueprintCategory?.kind ?? "",
+  ).trim();
 
-  return kind === "alcohol" || isAlcoholCategoryCode(code);
+  const code = String(
+    params.productBlueprintCategory?.code ?? "",
+  ).trim();
+
+  return (
+    kind === "alcohol" ||
+    isAlcoholCategoryCode(code)
+  );
 }
 
-function isApparelVariation(
-  variation: ModelVariationResponse,
-): variation is Extract<ModelVariationResponse, { kind: "apparel" }> {
-  return variation.kind === "apparel";
+function shouldCreateApparelModelVariations(
+  categoryCode: ApparelCategoryCode,
+): boolean {
+  return (
+    categoryCode === "apparel.tops" ||
+    categoryCode === "apparel.bottoms" ||
+    categoryCode === "apparel.dress" ||
+    categoryCode === "apparel.outerwear" ||
+    categoryCode === "apparel.shoes"
+  );
 }
 
-function isAlcoholVariation(
-  variation: ModelVariationResponse,
-): variation is Extract<ModelVariationResponse, { kind: "alcohol" }> {
-  return variation.kind === "alcohol";
-}
+/* =========================================================
+ * Apparel helpers
+ * =======================================================*/
 
 function buildApparelMeasurements(
   categoryCode: ApparelCategoryCode,
@@ -104,32 +114,68 @@ function buildApparelMeasurements(
 
   switch (categoryCode) {
     case "apparel.bottoms": {
-      result["ウエスト"] = size.waist ?? null;
-      result["ヒップ"] = size.hip ?? null;
-      result["股上"] = size.rise ?? null;
-      result["股下"] = size.inseam ?? null;
-      result["わたり幅"] = size.thigh ?? null;
-      result["裾幅"] = size.hemWidth ?? null;
+      result["ウエスト"] =
+        size.waist ?? null;
+
+      result["ヒップ"] =
+        size.hip ?? null;
+
+      result["股上"] =
+        size.rise ?? null;
+
+      result["股下"] =
+        size.inseam ?? null;
+
+      result["わたり幅"] =
+        size.thigh ?? null;
+
+      result["裾幅"] =
+        size.hemWidth ?? null;
+
       return result;
     }
 
     case "apparel.dress": {
-      result["着丈"] = size.length ?? null;
-      result["身幅"] = size.width ?? null;
-      result["胸囲"] = size.chest ?? null;
-      result["肩幅"] = size.shoulder ?? null;
-      result["袖丈"] = size.sleeveLength ?? null;
-      result["ウエスト"] = size.waist ?? null;
-      result["ヒップ"] = size.hip ?? null;
+      result["着丈"] =
+        size.length ?? null;
+
+      result["身幅"] =
+        size.width ?? null;
+
+      result["胸囲"] =
+        size.chest ?? null;
+
+      result["肩幅"] =
+        size.shoulder ?? null;
+
+      result["袖丈"] =
+        size.sleeveLength ?? null;
+
+      result["ウエスト"] =
+        size.waist ?? null;
+
+      result["ヒップ"] =
+        size.hip ?? null;
+
       return result;
     }
 
     case "apparel.tops": {
-      result["着丈"] = size.length ?? null;
-      result["身幅"] = size.width ?? null;
-      result["胸囲"] = size.chest ?? null;
-      result["肩幅"] = size.shoulder ?? null;
-      result["袖丈"] = size.sleeveLength ?? null;
+      result["着丈"] =
+        size.length ?? null;
+
+      result["身幅"] =
+        size.width ?? null;
+
+      result["胸囲"] =
+        size.chest ?? null;
+
+      result["肩幅"] =
+        size.shoulder ?? null;
+
+      result["袖丈"] =
+        size.sleeveLength ?? null;
+
       return result;
     }
 
@@ -143,45 +189,45 @@ function buildApparelMeasurements(
   }
 }
 
-function normalizeMeasurementsForRequest(
-  measurements: ApparelMeasurements,
-): Record<string, number> | undefined {
-  const result: Record<string, number> = {};
-
-  Object.entries(measurements).forEach(([key, value]) => {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      result[key] = value;
-    }
-  });
-
-  return Object.keys(result).length > 0 ? result : undefined;
-}
-
 function buildMeasurementsFromSizeRow(
   categoryCode: ApparelCategoryCode,
   size: ApparelSizeInput,
 ): Record<string, number> | undefined {
-  return normalizeMeasurementsForRequest(
-    buildApparelMeasurements(categoryCode, size),
-  );
+  const measurements =
+    normalizeApparelMeasurements(
+      buildApparelMeasurements(
+        categoryCode,
+        size,
+      ),
+    );
+
+  return Object.keys(measurements).length > 0
+    ? measurements
+    : undefined;
 }
 
 function resolveRgbInt(args: {
   colorName: string;
   colorRgbMap?: Record<string, string>;
-  fallbackRgb?: number | null;
 }): number {
-  const { colorName, colorRgbMap = {}, fallbackRgb } = args;
+  const {
+    colorName,
+    colorRgbMap = {},
+  } = args;
 
-  const rgbHex = String(colorRgbMap[colorName] ?? "").trim();
-  const fromHex = rgbHex ? hexToRgbInt(rgbHex) : undefined;
+  const rgbHex = String(
+    colorRgbMap[colorName] ?? "",
+  ).trim();
 
-  if (typeof fromHex === "number" && Number.isFinite(fromHex)) {
-    return fromHex;
-  }
+  const rgb = rgbHex
+    ? hexToRgbInt(rgbHex)
+    : undefined;
 
-  if (typeof fallbackRgb === "number" && Number.isFinite(fallbackRgb)) {
-    return fallbackRgb;
+  if (
+    typeof rgb === "number" &&
+    Number.isFinite(rgb)
+  ) {
+    return rgb;
   }
 
   throw new Error(
@@ -189,33 +235,387 @@ function resolveRgbInt(args: {
   );
 }
 
-// -----------------------------------------
-// GET: 商品設計 詳細
-// -----------------------------------------
+function buildSizeMap(
+  sizes: ApparelSizeInput[],
+): Map<string, ApparelSizeInput> {
+  const sizeMap =
+    new Map<string, ApparelSizeInput>();
+
+  for (const size of sizes) {
+    const sizeLabel = String(
+      size.sizeLabel ?? "",
+    ).trim();
+
+    if (!sizeLabel) {
+      continue;
+    }
+
+    sizeMap.set(
+      sizeLabel,
+      size,
+    );
+  }
+
+  return sizeMap;
+}
+
+function buildApparelModelNumberMap(
+  modelNumbers: ProductBlueprintModelNumber[],
+): Map<string, ProductBlueprintModelNumber> {
+  const modelNumberMap =
+    new Map<
+      string,
+      ProductBlueprintModelNumber
+    >();
+
+  for (const modelNumber of modelNumbers) {
+    const size = String(
+      modelNumber.size ?? "",
+    ).trim();
+
+    const color = String(
+      modelNumber.color ?? "",
+    ).trim();
+
+    const code = String(
+      modelNumber.code ?? "",
+    ).trim();
+
+    if (
+      !size ||
+      !color ||
+      !code
+    ) {
+      continue;
+    }
+
+    modelNumberMap.set(
+      `${size}__${color}`,
+      {
+        size,
+        color,
+        code,
+      },
+    );
+  }
+
+  return modelNumberMap;
+}
+
+function toCreateApparelModelVariationRequests(args: {
+  apparelCategoryCode: ApparelCategoryCode;
+  sizes: ApparelSizeInput[];
+  modelNumbers: ProductBlueprintModelNumber[];
+  colorRgbMap: Record<string, string>;
+}): CreateModelVariationRequest[] {
+  const {
+    apparelCategoryCode,
+    sizes,
+    modelNumbers,
+    colorRgbMap,
+  } = args;
+
+  if (
+    !shouldCreateApparelModelVariations(
+      apparelCategoryCode,
+    )
+  ) {
+    return [];
+  }
+
+  const sizeMap =
+    buildSizeMap(sizes);
+
+  const modelNumberMap =
+    buildApparelModelNumberMap(
+      modelNumbers,
+    );
+
+  const requests:
+    CreateModelVariationRequest[] = [];
+
+  for (
+    const modelNumber
+    of modelNumberMap.values()
+  ) {
+    const sizeRow =
+      sizeMap.get(
+        modelNumber.size,
+      );
+
+    if (!sizeRow) {
+      continue;
+    }
+
+    requests.push({
+      kind: "apparel",
+
+      modelNumber: String(
+        modelNumber.code ?? "",
+      ).trim(),
+
+      size:
+        modelNumber.size,
+
+      color:
+        modelNumber.color,
+
+      rgb: resolveRgbInt({
+        colorName:
+          modelNumber.color,
+
+        colorRgbMap,
+      }),
+
+      measurements:
+        buildMeasurementsFromSizeRow(
+          apparelCategoryCode,
+          sizeRow,
+        ),
+    });
+  }
+
+  return requests;
+}
+
+/* =========================================================
+ * Alcohol helpers
+ * =======================================================*/
+
+function normalizeVolume(
+  volume: Volume,
+): Volume | null {
+  const value =
+    typeof volume.value === "number" &&
+    Number.isFinite(volume.value)
+      ? volume.value
+      : 0;
+
+  const unit =
+    String(
+      volume.unit ?? "",
+    ).trim() || "ml";
+
+  if (
+    value <= 0 ||
+    (
+      unit !== "ml" &&
+      unit !== "L"
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    value,
+    unit,
+  };
+}
+
+function makeVolumeKey(
+  volume: Volume,
+): string {
+  return `${volume.value}:${volume.unit}`;
+}
+
+function buildAlcoholModelNumberMap(
+  modelNumbers: AlcoholModelNumber[],
+): Map<string, AlcoholModelNumber> {
+  const modelNumberMap =
+    new Map<
+      string,
+      AlcoholModelNumber
+    >();
+
+  for (const modelNumber of modelNumbers) {
+    const volume =
+      normalizeVolume(
+        modelNumber.volume,
+      );
+
+    const code = String(
+      modelNumber.code ?? "",
+    ).trim();
+
+    if (
+      !volume ||
+      !code
+    ) {
+      continue;
+    }
+
+    modelNumberMap.set(
+      makeVolumeKey(volume),
+      {
+        ...modelNumber,
+        volume,
+        code,
+      },
+    );
+  }
+
+  return modelNumberMap;
+}
+
+function toCreateAlcoholModelVariationRequests(args: {
+  volumes: VolumeRow[];
+  alcoholModelNumbers: AlcoholModelNumber[];
+}): CreateModelVariationRequest[] {
+  const {
+    volumes,
+    alcoholModelNumbers,
+  } = args;
+
+  const modelNumberMap =
+    buildAlcoholModelNumberMap(
+      alcoholModelNumbers,
+    );
+
+  const requests:
+    CreateModelVariationRequest[] = [];
+
+  const seen =
+    new Set<string>();
+
+  for (const row of volumes) {
+    const volume =
+      normalizeVolume(
+        volumeRowToVolume(row),
+      );
+
+    if (!volume) {
+      continue;
+    }
+
+    const key =
+      makeVolumeKey(volume);
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+
+    const modelNumber =
+      modelNumberMap.get(key);
+
+    if (!modelNumber) {
+      continue;
+    }
+
+    requests.push({
+      kind: "alcohol",
+
+      modelNumber: String(
+        modelNumber.code ?? "",
+      ).trim(),
+
+      volume,
+    });
+  }
+
+  return requests;
+}
+
+/* =========================================================
+ * Final Model Variation request builder
+ * =======================================================*/
+
+function buildFinalModelVariationRequests(args: {
+  productBlueprintCategory:
+    UpdateProductBlueprintParams["productBlueprintCategory"];
+
+  sizes: ApparelSizeInput[];
+
+  modelNumbers:
+    ProductBlueprintModelNumber[];
+
+  colorRgbMap:
+    Record<string, string>;
+
+  volumes:
+    VolumeRow[];
+
+  alcoholModelNumbers:
+    AlcoholModelNumber[];
+}): CreateModelVariationRequest[] | null {
+  const {
+    productBlueprintCategory,
+    sizes,
+    modelNumbers,
+    colorRgbMap,
+    volumes,
+    alcoholModelNumbers,
+  } = args;
+
+  const apparelCategoryCode =
+    resolveApparelCategoryCode({
+      productBlueprintCategory,
+    });
+
+  if (apparelCategoryCode) {
+    return toCreateApparelModelVariationRequests({
+      apparelCategoryCode,
+      sizes,
+      modelNumbers,
+      colorRgbMap,
+    });
+  }
+
+  if (
+    isAlcoholCategory({
+      productBlueprintCategory,
+    })
+  ) {
+    return toCreateAlcoholModelVariationRequests({
+      volumes,
+      alcoholModelNumbers,
+    });
+  }
+
+  return null;
+}
+
+/* =========================================================
+ * GET: Product Blueprint detail
+ * =======================================================*/
 
 export async function getProductBlueprintDetail(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
-  const trimmed = String(id ?? "").trim();
+  const normalizedId =
+    String(id ?? "").trim();
 
-  if (!trimmed) {
-    throw new Error("getProductBlueprintDetail: id が空です");
+  if (!normalizedId) {
+    throw new Error(
+      "getProductBlueprintDetail: id が空です",
+    );
   }
 
-  return await getProductBlueprintDetailApi(trimmed);
+  return getProductBlueprintDetailApi(
+    normalizedId,
+  );
 }
 
-// -----------------------------------------
-// UPDATE: ProductBlueprint 本体 + ModelVariation
-// -----------------------------------------
+/* =========================================================
+ * UPDATE: Product Blueprint + Model Variations
+ * =======================================================*/
 
 export async function updateProductBlueprint(
   params: UpdateProductBlueprintParams & {
     sizes?: ApparelSizeInput[];
-    modelNumbers?: { size: string; color: string; code?: string }[];
-    colorRgbMap?: Record<string, string>;
-    volumes?: VolumeRow[];
-    alcoholModelNumbers?: AlcoholModelNumber[];
+
+    modelNumbers?:
+      ProductBlueprintModelNumber[];
+
+    colorRgbMap?:
+      Record<string, string>;
+
+    volumes?:
+      VolumeRow[];
+
+    alcoholModelNumbers?:
+      AlcoholModelNumber[];
   },
 ): Promise<ProductBlueprintDetailResponse> {
   const {
@@ -237,434 +637,92 @@ export async function updateProductBlueprint(
     categoryFields,
   } = params;
 
-  if (!id) {
-    throw new Error("updateProductBlueprint: id が空です");
+  const productBlueprintId =
+    String(id ?? "").trim();
+
+  if (!productBlueprintId) {
+    throw new Error(
+      "updateProductBlueprint: id が空です",
+    );
   }
 
-  if (!productBlueprintCategoryId?.trim()) {
-    throw new Error("updateProductBlueprint: productBlueprintCategoryId が空です");
+  if (
+    !productBlueprintCategoryId?.trim()
+  ) {
+    throw new Error(
+      "updateProductBlueprint: productBlueprintCategoryId が空です",
+    );
   }
 
-  if (!productBlueprintCategory?.id?.trim()) {
-    throw new Error("updateProductBlueprint: productBlueprintCategory が空です");
+  if (
+    !productBlueprintCategory?.id?.trim()
+  ) {
+    throw new Error(
+      "updateProductBlueprint: productBlueprintCategory が空です",
+    );
   }
 
-  const updated = await updateProductBlueprintHTTP(
-    id,
-    {
-      id,
-      productName,
-      brandId,
-      productBlueprintCategoryId,
+  const finalModelVariationRequests =
+    buildFinalModelVariationRequests({
       productBlueprintCategory,
-      categoryFields: categoryFields ?? null,
-      productIdTagType,
-      companyId,
-      assigneeId,
-      colors: colors ?? [],
-      colorRgbMap: colorRgbMap ?? {},
-      sizes,
-      modelNumbers,
-      updatedBy: updatedBy ?? null,
-    } satisfies UpdateProductBlueprintParams,
-  );
-
-  const apparelCategoryCode = resolveApparelCategoryCode({
-    productBlueprintCategory,
-  });
-
-  if (apparelCategoryCode) {
-    await updateApparelModelVariations({
-      productBlueprintId: id,
-      apparelCategoryCode,
       sizes,
       modelNumbers,
       colorRgbMap,
-    });
-  }
-
-  if (isAlcoholCategory({ productBlueprintCategory })) {
-    await updateAlcoholModelVariations({
-      productBlueprintId: id,
       volumes,
       alcoholModelNumbers,
     });
+
+  const updated =
+    await updateProductBlueprintHTTP(
+      productBlueprintId,
+      {
+        id:
+          productBlueprintId,
+
+        productName,
+
+        brandId,
+
+        productBlueprintCategoryId,
+
+        productBlueprintCategory,
+
+        categoryFields:
+          categoryFields ?? null,
+
+        productIdTagType,
+
+        companyId,
+
+        assigneeId,
+
+        colors:
+          colors ?? [],
+
+        colorRgbMap:
+          colorRgbMap ?? {},
+
+        sizes,
+
+        modelNumbers,
+
+        updatedBy:
+          updatedBy ?? null,
+      } satisfies UpdateProductBlueprintParams,
+    );
+
+  /*
+   * ApparelまたはAlcoholの場合だけModel Variationを一括置換する。
+   *
+   * 空配列も送信することで、Model Variationを0件にする更新にも対応する。
+   * 個別更新・差分削除は行わない。
+   */
+  if (finalModelVariationRequests !== null) {
+    await createModelVariations(
+      productBlueprintId,
+      finalModelVariationRequests,
+    );
   }
 
   return updated;
-}
-
-async function updateApparelModelVariations(args: {
-  productBlueprintId: string;
-  apparelCategoryCode: ApparelCategoryCode;
-  sizes: ApparelSizeInput[];
-  modelNumbers: { size: string; color: string; code?: string }[];
-  colorRgbMap: Record<string, string>;
-}): Promise<void> {
-  const {
-    productBlueprintId,
-    apparelCategoryCode,
-    sizes,
-    modelNumbers,
-    colorRgbMap,
-  } = args;
-
-  const variations = await listModelVariationsByProductBlueprintId(
-    productBlueprintId,
-  );
-
-  const apparelVariations = variations.filter(isApparelVariation);
-
-  const existingMap = new Map<
-    string,
-    Extract<ModelVariationResponse, { kind: "apparel" }>
-  >();
-
-  apparelVariations.forEach((variation) => {
-    const sizeLabel = String(variation.size ?? "").trim();
-    const colorName = String(variation.color?.name ?? "").trim();
-
-    if (!sizeLabel || !colorName) {
-      return;
-    }
-
-    existingMap.set(makeApparelKey(sizeLabel, colorName), variation);
-  });
-
-  const selectedKeys = new Set<string>();
-
-  modelNumbers.forEach((modelNumber) => {
-    const sizeLabel = String(modelNumber.size ?? "").trim();
-    const colorName = String(modelNumber.color ?? "").trim();
-
-    if (!sizeLabel || !colorName) {
-      return;
-    }
-
-    selectedKeys.add(makeApparelKey(sizeLabel, colorName));
-  });
-
-  const measurementsMap = new Map<string, Record<string, number>>();
-
-  sizes.forEach((size) => {
-    const sizeLabel = String(size.sizeLabel ?? "").trim();
-
-    if (!sizeLabel) {
-      return;
-    }
-
-    const measurements = buildMeasurementsFromSizeRow(
-      apparelCategoryCode,
-      size,
-    );
-
-    if (measurements) {
-      measurementsMap.set(sizeLabel, measurements);
-    }
-  });
-
-  const updateTasks: Promise<void>[] = [];
-
-  existingMap.forEach((variation, key) => {
-    if (!selectedKeys.has(key)) {
-      return;
-    }
-
-    const variationId = variation.id;
-
-    if (!variationId) {
-      return;
-    }
-
-    const sizeLabel = String(variation.size ?? "").trim();
-    const colorName = String(variation.color?.name ?? "").trim();
-
-    if (!sizeLabel || !colorName) {
-      return;
-    }
-
-    const rgb = resolveRgbInt({
-      colorName,
-      colorRgbMap,
-      fallbackRgb: variation.color?.rgb ?? null,
-    });
-
-    const modelNumber =
-      modelNumbers.find(
-        (candidate) =>
-          String(candidate.size ?? "").trim() === sizeLabel &&
-          String(candidate.color ?? "").trim() === colorName,
-      )?.code ?? "";
-
-    const measurements = measurementsMap.get(sizeLabel);
-
-    const payload: ModelVariationUpdateRequest = {
-      kind: "apparel",
-      modelNumber,
-      size: sizeLabel,
-      color: colorName,
-      rgb,
-      ...(measurements ? { measurements } : {}),
-    };
-
-    updateTasks.push(
-      updateModelVariation(variationId, payload).then(() => undefined),
-    );
-  });
-
-  await Promise.all(updateTasks);
-
-  const createPayloads: CreateModelVariationRequest[] = [];
-
-  selectedKeys.forEach((key) => {
-    if (existingMap.has(key)) {
-      return;
-    }
-
-    const [sizeLabel, colorName] = key.split("__");
-
-    if (!sizeLabel || !colorName) {
-      return;
-    }
-
-    const sizeRow = sizes.find(
-      (size) => String(size.sizeLabel ?? "").trim() === sizeLabel,
-    );
-
-    if (!sizeRow) {
-      return;
-    }
-
-    const rgb = resolveRgbInt({
-      colorName,
-      colorRgbMap,
-      fallbackRgb: null,
-    });
-
-    const modelNumber =
-      modelNumbers.find(
-        (candidate) =>
-          String(candidate.size ?? "").trim() === sizeLabel &&
-          String(candidate.color ?? "").trim() === colorName,
-      )?.code ?? "";
-
-    const measurements = buildMeasurementsFromSizeRow(
-      apparelCategoryCode,
-      sizeRow,
-    );
-
-    const createReq: CreateModelVariationRequest = {
-      kind: "apparel",
-      modelNumber,
-      size: sizeLabel,
-      color: colorName,
-      rgb,
-      measurements: measurements ?? {},
-    };
-
-    createPayloads.push(createReq);
-  });
-
-  if (createPayloads.length > 0) {
-    await createModelVariations(productBlueprintId, createPayloads);
-  }
-
-  const remainingIds = apparelVariations
-    .filter((variation) => {
-      const key = makeApparelKey(variation.size, variation.color?.name ?? "");
-      return selectedKeys.has(key);
-    })
-    .map((variation) => variation.id);
-
-  await deleteRemovedModelVariations(
-    apparelVariations as ModelUpdateServiceVariationResponse[],
-    remainingIds,
-  );
-}
-
-async function updateAlcoholModelVariations(args: {
-  productBlueprintId: string;
-  volumes: VolumeRow[];
-  alcoholModelNumbers: AlcoholModelNumber[];
-}): Promise<void> {
-  const { productBlueprintId, volumes, alcoholModelNumbers } = args;
-
-  const variations = await listModelVariationsByProductBlueprintId(
-    productBlueprintId,
-  );
-
-  const alcoholVariations = variations.filter(isAlcoholVariation);
-
-  const existingMap = new Map<
-    string,
-    Extract<ModelVariationResponse, { kind: "alcohol" }>
-  >();
-
-  alcoholVariations.forEach((variation) => {
-    const key = makeVolumeKey(variation.volume);
-
-    if (!key) {
-      return;
-    }
-
-    existingMap.set(key, variation);
-  });
-
-  const selectedKeys = new Set<string>();
-
-  volumes.forEach((row) => {
-    const key = makeVolumeKey(volumeRowToVolume(row));
-
-    if (!key) {
-      return;
-    }
-
-    selectedKeys.add(key);
-  });
-
-  const modelNumberMap = new Map<string, AlcoholModelNumber>();
-
-  alcoholModelNumbers.forEach((modelNumber) => {
-    const key = makeVolumeKey(modelNumber.volume);
-
-    if (!key) {
-      return;
-    }
-
-    modelNumberMap.set(key, modelNumber);
-    selectedKeys.add(key);
-  });
-
-  const updateTasks: Promise<void>[] = [];
-
-  existingMap.forEach((variation, key) => {
-    if (!selectedKeys.has(key)) {
-      return;
-    }
-
-    const variationId = variation.id;
-
-    if (!variationId) {
-      return;
-    }
-
-    const modelNumber = modelNumberMap.get(key);
-
-    if (!modelNumber) {
-      return;
-    }
-
-    const payload: ModelVariationUpdateRequest = {
-      kind: "alcohol",
-      modelNumber: modelNumber.code,
-      volume: modelNumber.volume,
-    };
-
-    updateTasks.push(
-      updateModelVariation(variationId, payload).then(() => undefined),
-    );
-  });
-
-  await Promise.all(updateTasks);
-
-  const createPayloads: CreateModelVariationRequest[] = [];
-
-  selectedKeys.forEach((key) => {
-    if (existingMap.has(key)) {
-      return;
-    }
-
-    const modelNumber = modelNumberMap.get(key);
-
-    if (!modelNumber) {
-      return;
-    }
-
-    const createReq: CreateModelVariationRequest = {
-      kind: "alcohol",
-      modelNumber: modelNumber.code,
-      volume: modelNumber.volume,
-    };
-
-    createPayloads.push(createReq);
-  });
-
-  if (createPayloads.length > 0) {
-    await createModelVariations(productBlueprintId, createPayloads);
-  }
-
-  const remainingIds = alcoholVariations
-    .filter((variation) => {
-      const key = makeVolumeKey(variation.volume);
-      return selectedKeys.has(key);
-    })
-    .map((variation) => variation.id);
-
-  await deleteRemovedModelVariations(
-    alcoholVariations as ModelUpdateServiceVariationResponse[],
-    remainingIds,
-  );
-}
-
-// -----------------------------------------
-// ModelVariation list
-// -----------------------------------------
-
-export type ApparelModelVariationResponse = {
-  id: string;
-  productBlueprintId: string;
-  kind: "apparel";
-  modelNumber: string;
-  size: string;
-  color: { name: string; rgb: number };
-  measurements?: Record<string, number>;
-  createdAt?: string | null;
-  createdBy?: string | null;
-  updatedAt?: string | null;
-  updatedBy?: string | null;
-};
-
-export type AlcoholModelVariationResponse = {
-  id: string;
-  productBlueprintId: string;
-  kind: "alcohol";
-  modelNumber: string;
-  volume: Volume;
-  createdAt?: string | null;
-  createdBy?: string | null;
-  updatedAt?: string | null;
-  updatedBy?: string | null;
-};
-
-export type ModelVariationResponse =
-  | ApparelModelVariationResponse
-  | AlcoholModelVariationResponse;
-
-export async function listModelVariationsByProductBlueprintId(
-  productBlueprintId: string,
-): Promise<ModelVariationResponse[]> {
-  const id = productBlueprintId.trim();
-
-  if (!id) {
-    throw new Error("productBlueprintId が空です");
-  }
-
-  const res = await authorizedFetch(
-    `/models/by-blueprint/${encodeURIComponent(id)}/variations`,
-    {
-      method: "GET",
-      throwOnError: false,
-      acceptJson: true,
-    },
-  );
-
-  if (!res.ok) {
-    throw new Error(
-      `モデル一覧の取得に失敗しました（${res.status} ${res.statusText ?? ""}）`,
-    );
-  }
-
-  const raw = (await res.json()) as ModelVariationResponse[] | null;
-
-  return raw ?? [];
 }

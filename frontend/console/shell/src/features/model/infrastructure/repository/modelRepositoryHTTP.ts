@@ -6,16 +6,24 @@ import {
   getAuthJsonHeadersOrThrow,
 } from "../../../../shared/http/authHeaders";
 
+import {
+  parseModelVariationListResponse,
+  type ModelVariationResponse,
+  type Volume,
+} from "../codec/modelVariationCodec";
+
+export type {
+  ModelVariationKind,
+  ModelVariationColor,
+  ApparelModelVariationResponse,
+  AlcoholModelVariationResponse,
+  ModelVariationResponse,
+  Volume,
+} from "../codec/modelVariationCodec";
+
 /* =========================================================
  * Request types
  * =======================================================*/
-
-export type ModelVariationKind = "apparel" | "alcohol";
-
-export type Volume = {
-  value: number;
-  unit: string;
-};
 
 export type CreateApparelModelVariationRequest = {
   kind: "apparel";
@@ -23,7 +31,10 @@ export type CreateApparelModelVariationRequest = {
   size: string;
   color: string;
   rgb: number;
-  measurements?: Record<string, number | null | undefined>;
+  measurements?: Record<
+    string,
+    number | null | undefined
+  >;
 };
 
 export type CreateAlcoholModelVariationRequest = {
@@ -35,39 +46,6 @@ export type CreateAlcoholModelVariationRequest = {
 export type CreateModelVariationRequest =
   | CreateApparelModelVariationRequest
   | CreateAlcoholModelVariationRequest;
-
-/* =========================================================
- * Response types
- * =======================================================*/
-
-export type ApparelModelVariationResponse = {
-  id: string;
-  productBlueprintId: string;
-  kind: "apparel";
-  modelNumber: string;
-  size: string;
-  color: {
-    name: string;
-    rgb: number;
-  };
-  measurements?: Record<string, number>;
-  createdAt?: string;
-  updatedAt?: string;
-};
-
-export type AlcoholModelVariationResponse = {
-  id: string;
-  productBlueprintId: string;
-  kind: "alcohol";
-  modelNumber: string;
-  volume: Volume;
-  createdAt?: string;
-  updatedAt?: string;
-};
-
-export type ModelVariationResponse =
-  | ApparelModelVariationResponse
-  | AlcoholModelVariationResponse;
 
 /* =========================================================
  * Internal request bodies
@@ -293,18 +271,23 @@ function toCreateRequestBody(
 
   return {
     kind: "apparel",
+
     modelNumber,
+
     size: requireNonEmptyString(
       payload.size,
       "size",
     ),
+
     color: requireNonEmptyString(
       payload.color,
       "color",
     ),
+
     rgb: normalizeRGB(
       payload.rgb,
     ),
+
     measurements:
       normalizeMeasurements(
         payload.measurements,
@@ -313,362 +296,8 @@ function toCreateRequestBody(
 }
 
 /* =========================================================
- * Response envelope helpers
+ * Response helpers
  * =======================================================*/
-
-function unwrapSingleResponse(
-  value: unknown,
-): unknown {
-  if (!isRecord(value)) {
-    return value;
-  }
-
-  if (
-    isRecord(value.modelVariation)
-  ) {
-    return value.modelVariation;
-  }
-
-  if (isRecord(value.data)) {
-    if (
-      isRecord(
-        value.data.modelVariation,
-      )
-    ) {
-      return value.data.modelVariation;
-    }
-
-    if (
-      typeof value.data.id ===
-        "string" ||
-      typeof value.data.kind ===
-        "string"
-    ) {
-      return value.data;
-    }
-  }
-
-  return value;
-}
-
-function unwrapListResponse(
-  value: unknown,
-): unknown[] {
-  if (Array.isArray(value)) {
-    return value;
-  }
-
-  if (!isRecord(value)) {
-    throw new Error(
-      "modelRepositoryHTTP: model variation list responseが配列ではありません",
-    );
-  }
-
-  const directCandidates: unknown[] = [
-    value.variations,
-    value.modelVariations,
-    value.items,
-  ];
-
-  for (
-    const candidate
-    of directCandidates
-  ) {
-    if (Array.isArray(candidate)) {
-      return candidate;
-    }
-  }
-
-  if (Array.isArray(value.data)) {
-    return value.data;
-  }
-
-  if (isRecord(value.data)) {
-    const dataCandidates: unknown[] = [
-      value.data.variations,
-      value.data.modelVariations,
-      value.data.items,
-    ];
-
-    for (
-      const candidate
-      of dataCandidates
-    ) {
-      if (Array.isArray(candidate)) {
-        return candidate;
-      }
-    }
-  }
-
-  throw new Error(
-    "modelRepositoryHTTP: model variation list responseに配列がありません",
-  );
-}
-
-function optionalResponseString(
-  value: unknown,
-): string | undefined {
-  return typeof value === "string"
-    ? value
-    : undefined;
-}
-
-function parseResponseMeasurements(
-  value: unknown,
-): Record<string, number> | undefined {
-  if (
-    value === undefined ||
-    value === null
-  ) {
-    return undefined;
-  }
-
-  if (!isRecord(value)) {
-    throw new Error(
-      "modelRepositoryHTTP: measurements responseがobjectではありません",
-    );
-  }
-
-  const measurements: Record<string, number> = {};
-
-  for (
-    const [key, rawValue]
-    of Object.entries(value)
-  ) {
-    if (!key) {
-      throw new Error(
-        "modelRepositoryHTTP: measurements responseの項目名が空です",
-      );
-    }
-
-    if (
-      typeof rawValue !== "number" ||
-      !Number.isFinite(rawValue) ||
-      !Number.isInteger(rawValue) ||
-      rawValue < 0
-    ) {
-      throw new Error(
-        `modelRepositoryHTTP: measurements.${key} responseが不正です`,
-      );
-    }
-
-    measurements[key] =
-      rawValue;
-  }
-
-  if (
-    Object.keys(measurements).length === 0
-  ) {
-    return undefined;
-  }
-
-  return measurements;
-}
-
-function parseResponseColor(
-  json: Record<string, unknown>,
-): {
-  name: string;
-  rgb: number;
-} {
-  if (isRecord(json.color)) {
-    const name =
-      json.color.name;
-
-    const rgb =
-      json.color.rgb;
-
-    if (
-      typeof name !== "string" ||
-      !name ||
-      typeof rgb !== "number" ||
-      !Number.isFinite(rgb) ||
-      !Number.isInteger(rgb) ||
-      rgb < 0 ||
-      rgb > 0xffffff
-    ) {
-      throw new Error(
-        "modelRepositoryHTTP: apparel color responseが不正です",
-      );
-    }
-
-    return {
-      name,
-      rgb,
-    };
-  }
-
-  if (
-    typeof json.color === "string" &&
-    json.color &&
-    typeof json.rgb === "number" &&
-    Number.isFinite(json.rgb) &&
-    Number.isInteger(json.rgb) &&
-    json.rgb >= 0 &&
-    json.rgb <= 0xffffff
-  ) {
-    return {
-      name: json.color,
-      rgb: json.rgb,
-    };
-  }
-
-  throw new Error(
-    "modelRepositoryHTTP: apparel color responseがありません",
-  );
-}
-
-function parseResponseVolume(
-  value: unknown,
-): Volume {
-  if (!isRecord(value)) {
-    throw new Error(
-      "modelRepositoryHTTP: alcohol volume responseがobjectではありません",
-    );
-  }
-
-  if (
-    typeof value.value !== "number" ||
-    !Number.isFinite(value.value) ||
-    !Number.isInteger(value.value) ||
-    value.value <= 0
-  ) {
-    throw new Error(
-      "modelRepositoryHTTP: alcohol volume.value responseが不正です",
-    );
-  }
-
-  if (
-    typeof value.unit !== "string" ||
-    (
-      value.unit !== "ml" &&
-      value.unit !== "L"
-    )
-  ) {
-    throw new Error(
-      "modelRepositoryHTTP: alcohol volume.unit responseが不正です",
-    );
-  }
-
-  return {
-    value: value.value,
-    unit: value.unit,
-  };
-}
-
-function parseModelVariationResponse(
-  value: unknown,
-  fallbackProductBlueprintId?: string,
-): ModelVariationResponse {
-  const unwrapped =
-    unwrapSingleResponse(value);
-
-  if (!isRecord(unwrapped)) {
-    throw new Error(
-      "modelRepositoryHTTP: model variation responseがobjectではありません",
-    );
-  }
-
-  const id =
-    unwrapped.id;
-
-  const kind =
-    unwrapped.kind;
-
-  const modelNumber =
-    unwrapped.modelNumber;
-
-  const productBlueprintId =
-    typeof unwrapped.productBlueprintId ===
-      "string"
-      ? unwrapped.productBlueprintId
-      : fallbackProductBlueprintId;
-
-  if (
-    typeof id !== "string" ||
-    !id ||
-    typeof productBlueprintId !==
-      "string" ||
-    !productBlueprintId ||
-    typeof kind !== "string" ||
-    typeof modelNumber !== "string" ||
-    !modelNumber
-  ) {
-    throw new Error(
-      "modelRepositoryHTTP: model variation responseの共通項目が不正です",
-    );
-  }
-
-  const base = {
-    id,
-    productBlueprintId,
-    modelNumber,
-    createdAt:
-      optionalResponseString(
-        unwrapped.createdAt,
-      ),
-    updatedAt:
-      optionalResponseString(
-        unwrapped.updatedAt,
-      ),
-  };
-
-  if (kind === "alcohol") {
-    return {
-      ...base,
-      kind: "alcohol",
-      volume:
-        parseResponseVolume(
-          unwrapped.volume,
-        ),
-    };
-  }
-
-  if (kind === "apparel") {
-    if (
-      typeof unwrapped.size !==
-        "string" ||
-      !unwrapped.size
-    ) {
-      throw new Error(
-        "modelRepositoryHTTP: apparel size responseが不正です",
-      );
-    }
-
-    return {
-      ...base,
-      kind: "apparel",
-      size: unwrapped.size,
-      color:
-        parseResponseColor(
-          unwrapped,
-        ),
-      measurements:
-        parseResponseMeasurements(
-          unwrapped.measurements,
-        ),
-    };
-  }
-
-  throw new Error(
-    `modelRepositoryHTTP: 未対応のkindです: ${kind}`,
-  );
-}
-
-function parseModelVariationListResponse(
-  value: unknown,
-  fallbackProductBlueprintId?: string,
-): ModelVariationResponse[] {
-  return unwrapListResponse(
-    value,
-  ).map(
-    (variation) =>
-      parseModelVariationResponse(
-        variation,
-        fallbackProductBlueprintId,
-      ),
-  );
-}
 
 function parseResponseIds(
   value: unknown,
@@ -729,23 +358,19 @@ function parseErrorDetail(
     const detail: unknown =
       JSON.parse(text);
 
-    if (
-      typeof detail === "string"
-    ) {
+    if (typeof detail === "string") {
       return detail;
     }
 
     if (isRecord(detail)) {
       if (
-        typeof detail.error ===
-          "string"
+        typeof detail.error === "string"
       ) {
         return detail.error;
       }
 
       if (
-        typeof detail.message ===
-          "string"
+        typeof detail.message === "string"
       ) {
         return detail.message;
       }
@@ -779,10 +404,11 @@ function createHTTPError(
   const detail =
     parseErrorDetail(text);
 
+  const statusText =
+    response.statusText ?? "";
+
   return new Error(
-    `${operation} (${response.status}) ${
-      response.statusText ?? ""
-    } ${detail}`,
+    `${operation} (${response.status}) ${statusText} ${detail}`.trim(),
   );
 }
 
@@ -821,13 +447,18 @@ export async function createModelVariations(
     url,
     {
       method: "PUT",
+
       headers: {
         ...(
           await getAuthJsonHeadersOrThrow()
         ),
+
         Accept: "application/json",
       },
-      body: JSON.stringify(body),
+
+      body: JSON.stringify(
+        body,
+      ),
     },
   );
 
@@ -866,10 +497,14 @@ export async function createModelVariations(
   }
 
   const json =
-    parseJSONResponseText(text);
+    parseJSONResponseText(
+      text,
+    );
 
   const responseIds =
-    parseResponseIds(json);
+    parseResponseIds(
+      json,
+    );
 
   if (responseIds) {
     if (
@@ -899,23 +534,10 @@ export async function createModelVariations(
     );
   }
 
-  const ids =
-    replaced.map(
-      (variation) =>
-        variation.id,
-    );
-
-  if (
-    ids.some(
-      (id) => !id,
-    )
-  ) {
-    throw new Error(
-      "modelRepositoryHTTP: 一括置換responseに空のmodel variation IDがあります",
-    );
-  }
-
-  return ids;
+  return replaced.map(
+    (variation) =>
+      variation.id,
+  );
 }
 
 /* =========================================================
@@ -939,10 +561,12 @@ export async function listModelVariationsByProductBlueprintId(
     url,
     {
       method: "GET",
+
       headers: {
         ...(
           await getAuthHeadersOrThrow()
         ),
+
         Accept: "application/json",
       },
     },
