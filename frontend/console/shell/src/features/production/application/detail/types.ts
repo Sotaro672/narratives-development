@@ -1,13 +1,11 @@
-// frontend/console/production/src/application/detail/types.ts
+// frontend/console/shell/src/features/production/application/detail/types.ts
 
-import type {
-  // quantity の最小表現は domain を正にする
-  ModelQuantity,
-} from "../../domain/production";
+import type { ModelQuantity } from "../../../../shared/types/production";
 
 /**
  * Production 詳細（backend ProductionDetailDTO と整合）
- * - createdAt/updatedAt/printedAt は Date として保持する（未ロード時は null を許容）
+ * - createdAt / updatedAt / printedAt は Date として保持する
+ * - 未ロード時は null を許容する
  */
 export type ProductionDetail = {
   id: string;
@@ -22,7 +20,7 @@ export type ProductionDetail = {
   assigneeName: string;
 
   // Printed
-  // true: 印刷済
+  // true: 印刷済み
   // false: 印刷前
   printed: boolean;
 
@@ -43,10 +41,10 @@ export type ProductionDetail = {
 };
 
 /**
- * model variation summary
+ * ModelVariation の表示用概要。
  *
  * apparel / alcohol の両方を扱う。
- * production 側では modelId を正キーとして扱う。
+ * Production側では modelId を正キーとして扱う。
  */
 export type ModelVariationSummary = {
   modelId: string;
@@ -66,8 +64,8 @@ export type ModelVariationSummary = {
   volumeUnit?: string;
 
   /**
-   * 元 response の volume を保持したい箇所向け。
-   * buildProductionQuantityRowVMs 側が meta.volume を読む場合にも対応する。
+   * 元レスポンスの volume を保持する。
+   * buildProductionQuantityRowVMs が meta.volume を参照する場合にも対応する。
    */
   volume?: {
     value: number;
@@ -78,10 +76,12 @@ export type ModelVariationSummary = {
 };
 
 /**
- * domain の ModelQuantity（modelId, quantity）を正として拡張する
+ * shared/types/production.ts の
+ * ModelQuantity（modelId, quantity）を正として拡張する。
+ *
  * - modelId が正キー
- * - quantity は domain と同一
- * - 表示用のメタ情報だけを追加
+ * - quantity は共有型と同一
+ * - 表示に必要なメタ情報のみ追加する
  */
 export type ProductionQuantityRow = ModelQuantity & {
   kind?: "apparel" | "alcohol" | string;

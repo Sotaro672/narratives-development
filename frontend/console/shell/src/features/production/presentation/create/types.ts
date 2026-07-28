@@ -3,7 +3,7 @@
 import type { ProductBlueprintCategorySnapshot } from "../../../productBlueprint/domain/productBlueprintCategory";
 
 // domain を正にする（modelId/quantity の最小表現）
-import type { ModelQuantity } from "../../domain/production";
+import type { ModelQuantity } from "../../../../shared/types/production";
 
 // ======================================================================
 // ProductBlueprintCard（UI向け ViewModel）

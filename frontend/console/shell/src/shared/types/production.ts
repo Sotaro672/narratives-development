@@ -1,27 +1,25 @@
-// frontend/shell/src/shared/types/production.ts
+// frontend/console/shell/src/shared/types/production.ts
 
 /**
- * This file is aligned to:
- * backend/internal/domain/production/entity.go
+ * backend/internal/domain/production/entity.go の
+ * ProductionおよびModelQuantityに対応する共有型。
  *
- * - ProductionStatus is a strict union of allowed statuses.
- * - Production mirrors the backend Production struct fields (and optionality).
- * - Time fields are represented as ISO8601 strings on the frontend.
+ * - フロントエンドではプロパティ名をcamelCaseで表現する
+ * - 日時はISO 8601形式の文字列として扱う
+ * - ポインタ型はnullまたはundefinedを許容する
  */
 
 /**
- * ProductionStatus
- * backend/internal/domain/production/entity.go の ProductionStatus に準拠
+ * モデル別の生産数量。
+ *
+ * backend:
+ * type ModelQuantity struct {
+ *   ModelID  string
+ *   Quantity int
+ * }
  */
-export type ProductionStatus = "printed" | "planned" | "deleted";
-
-/**
- * ProductionModel
- * backend: type ModelQuantity struct { ModelID string; Quantity int }
- * frontend: JSON 受け取りの都合で camelCase に寄せる
- */
-export type ProductionModel = {
-  /** model_variations の ID（backend: ModelID） */
+export type ModelQuantity = {
+  /** model_variationsのID（backend: ModelID） */
   modelId: string;
 
   /** 生産数量（backend: Quantity） */
@@ -29,54 +27,53 @@ export type ProductionModel = {
 };
 
 /**
- * Production
- * backend/internal/domain/production/entity.go の Production 構造体に準拠
+ * 旧名称との互換性を維持するための型エイリアス。
  *
- * - Backend には companyId / brandId は存在しないため削除
- * - printedAt / createdAt / updatedAt / deletedAt は ISO8601 string で表現
- * - createdBy / updatedBy / deletedBy / printedBy は optional + nullable を許容
+ * 新規コードではModelQuantityを使用する。
+ */
+export type ProductionModel = ModelQuantity;
+
+/**
+ * Production
+ *
+ * backend/internal/domain/production/entity.go の
+ * Production構造体に対応する。
  */
 export type Production = {
-  /** productions の ID（backend: ID） */
+  /** productionsのID（backend: ID） */
   id: string;
 
-  /** 紐づく product_blueprints の ID（backend: ProductBlueprintID） */
+  /** 紐づくproduct_blueprintsのID（backend: ProductBlueprintID） */
   productBlueprintId: string;
 
-  /** 担当者の memberId（backend: AssigneeID） */
+  /** 担当者のmemberId（backend: AssigneeID） */
   assigneeId: string;
 
-  /** 生産ステータス（backend: Status） */
-  status: ProductionStatus;
-
   /** モデル別の生産数量一覧（backend: Models） */
-  models: ProductionModel[];
+  models: ModelQuantity[];
 
   // ─── 印刷関連 ────────────────────────────────
 
-  /** 印刷完了日時（ISO8601）。未印刷なら null / undefined（backend: *time.Time） */
+  /** 印刷済みかどうか（backend: Printed） */
+  printed: boolean;
+
+  /** 印刷完了日時（backend: PrintedAt） */
   printedAt?: string | null;
 
-  /** 印刷担当者の memberId（backend: *string） */
+  /** 印刷担当者のmemberId（backend: PrintedBy） */
   printedBy?: string | null;
 
   // ─── 監査情報 ────────────────────────────────
 
-  /** 作成者の memberId（backend: *string） */
+  /** 作成者のFirebase Auth UIDまたはmemberId（backend: CreatedBy） */
   createdBy?: string | null;
 
-  /** 作成日時（ISO8601）。ゼロ許容のため null / undefined を許容（backend: time.Time optional） */
+  /** 作成日時（backend: CreatedAt） */
   createdAt?: string | null;
 
-  /** 最終更新者の memberId（backend: *string） */
+  /** 最終更新者のFirebase Auth UIDまたはmemberId（backend: UpdatedBy） */
   updatedBy?: string | null;
 
-  /** 更新日時（ISO8601）。ゼロ許容のため null / undefined を許容（backend: time.Time optional） */
+  /** 更新日時（backend: UpdatedAt） */
   updatedAt?: string | null;
-
-  /** 削除日時（ISO8601）。未削除なら null / undefined（backend: *time.Time） */
-  deletedAt?: string | null;
-
-  /** 削除者の memberId（backend: *string） */
-  deletedBy?: string | null;
 };
