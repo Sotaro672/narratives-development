@@ -11,10 +11,6 @@ import {
   useParams,
 } from "react-router-dom";
 
-import {
-  guessTokenBlueprintContentType,
-} from "../../../../shared/types/tokenBlueprint";
-
 import type {
   ContentFile,
   FirebaseStorageTokenContent,
@@ -32,12 +28,12 @@ import {
 } from "../../application/tokenBlueprintDetailService";
 
 import {
-  patchTokenBlueprintContentFiles,
-} from "../../infrastructure/repository/tokenBlueprintRepositoryHTTP";
+  uploadAndAppendTokenBlueprintContents,
+} from "../../application/tokenBlueprintContentService";
 
 import {
-  uploadTokenBlueprintContentToFirebaseStorage,
-} from "../../infrastructure/storage/tokenBlueprintAssetStorage";
+  patchTokenBlueprintContentFiles,
+} from "../../infrastructure/repository/tokenBlueprintRepositoryHTTP";
 
 type UseTokenBlueprintDetailVM = {
   blueprint: TokenBlueprint | null;
@@ -95,20 +91,6 @@ export type UseTokenBlueprintDetailResult = {
   handlers:
     UseTokenBlueprintDetailHandlers;
 };
-
-function createContentId(): string {
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID ===
-      "function"
-  ) {
-    return crypto.randomUUID();
-  }
-
-  return `c_${Date.now()}_${Math.random()
-    .toString(16)
-    .slice(2)}`;
-}
 
 function toIsoStringOrFallback(
   value: unknown,
@@ -614,118 +596,21 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         );
 
         try {
-          const existing = [
-            ...blueprint.contentFiles,
-          ];
-
-          const newContentFiles:
-            ContentFile[] = [];
-
-          for (
-            const file of files
-          ) {
-            const contentId =
-              createContentId();
-
-            const nowIso =
-              new Date().toISOString();
-
-            const uploaded =
-              await uploadTokenBlueprintContentToFirebaseStorage(
-                {
-                  companyId,
-                  tokenBlueprintId:
-                    id,
-                  contentId,
-                  file,
-                },
-              );
-
-            newContentFiles.push({
-              id:
-                contentId,
-
-              name:
-                uploaded.fileName ||
-                file.name ||
-                contentId,
-
-              type:
-                uploaded.kind ??
-                guessTokenBlueprintContentType(
-                  file,
-                ),
-
-              contentType:
-                uploaded.contentType ||
-                file.type ||
-                "application/octet-stream",
-
-              size:
-                Number.isFinite(
-                  uploaded.size,
-                ) &&
-                uploaded.size >= 0
-                  ? uploaded.size
-                  : file.size,
-
-              objectPath:
-                uploaded.objectPath,
-
-              url:
-                uploaded.downloadUrl,
-
-              isPublic:
-                false,
-
-              createdAt:
-                nowIso,
-
-              createdBy:
-                memberId,
-
-              updatedAt:
-                nowIso,
-
-              updatedBy:
-                memberId,
-            });
-          }
-
-          const mergedContentFiles =
-            new Map<
-              string,
-              ContentFile
-            >();
-
-          for (
-            const contentFile of existing
-          ) {
-            mergedContentFiles.set(
-              contentFile.id,
-              contentFile,
-            );
-          }
-
-          for (
-            const contentFile of newContentFiles
-          ) {
-            mergedContentFiles.set(
-              contentFile.id,
-              contentFile,
-            );
-          }
-
           const updated =
-            await patchTokenBlueprintContentFiles(
+            await uploadAndAppendTokenBlueprintContents(
               {
+                companyId,
+
                 tokenBlueprintId:
                   id,
 
-                contentFiles:
-                  Array.from(
-                    mergedContentFiles.values(),
-                  ),
+                actorId:
+                  memberId,
+
+                files,
+
+                existingContentFiles:
+                  blueprint.contentFiles,
               },
             );
 

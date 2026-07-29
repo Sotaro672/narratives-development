@@ -17,9 +17,6 @@ import {
 } from "../../../../shared/ui/card";
 import { Button } from "../../../../shared/ui/button";
 
-import {
-  guessTokenBlueprintContentType,
-} from "../../../../shared/types/tokenBlueprint";
 import type {
   FirebaseStorageTokenContent,
 } from "../../../../shared/types/tokenBlueprint";
@@ -30,13 +27,20 @@ type TokenContentsCardProps = {
   /**
    * 表示するコンテンツ一覧。
    * 未指定の場合は空表示。
+   *
+   * コンテンツの状態管理は親コンポーネントで行う。
    */
   contents?: FirebaseStorageTokenContent[];
 
   /**
    * 表示モード。
-   * edit: 追加・削除可能
-   * view: 閲覧専用
+   *
+   * edit:
+   * - ファイル追加可能
+   * - コンテンツ削除可能
+   *
+   * view:
+   * - 閲覧専用
    *
    * 既定値はedit。
    */
@@ -45,15 +49,18 @@ type TokenContentsCardProps = {
   /**
    * file pickerでファイルが選択されたときに呼ばれる。
    *
-   * 呼び出し側でFirebase Storageへ直接アップロードし、
-   * downloadURLとobjectPathをcontentFilesに保存する。
+   * ファイルのプレビュー生成、Firebase Storageへのアップロード、
+   * contentFilesへの保存は、すべて呼び出し側で行う。
    */
-  onFilesSelected?: (files: File[]) => void | Promise<void>;
+  onFilesSelected?: (
+    files: File[],
+  ) => void | Promise<void>;
 
   /**
    * editモードでコンテンツを削除するときに呼ばれる。
    *
-   * backendへの反映は呼び出し側で実装する。
+   * 表示一覧からの削除、Firebase Storageやbackendへの反映は
+   * すべて呼び出し側で行う。
    */
   onDelete?: (
     item: FirebaseStorageTokenContent,
@@ -61,41 +68,15 @@ type TokenContentsCardProps = {
   ) => void | Promise<void>;
 };
 
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
-function buildLocalContent(
-  file: File,
-  index: number,
-  url: string,
-  createdAt: string,
-): FirebaseStorageTokenContent {
-  const timestamp = Date.now();
-
-  return {
-    id: `local_${timestamp}_${index}`,
-    name: file.name || `local_${index}`,
-    type: guessTokenBlueprintContentType(file),
-    contentType:
-      file.type || "application/octet-stream",
-    url,
-    objectPath: `local/${timestamp}_${index}`,
-    isPublic: false,
-    size: file.size,
-    createdAt,
-    createdBy: "local",
-    updatedAt: createdAt,
-    updatedBy: "local",
-  };
-}
-
 function getVideoMimeType(
   item: FirebaseStorageTokenContent,
 ): string {
-  const url = item.url.toLowerCase();
+  const url =
+    item.url.toLowerCase();
 
-  if (url.includes(".webm")) {
+  if (
+    url.includes(".webm")
+  ) {
     return "video/webm";
   }
 
@@ -106,19 +87,29 @@ function getVideoMimeType(
     return "video/ogg";
   }
 
-  return item.contentType || "video/mp4";
+  return (
+    item.contentType ||
+    "video/mp4"
+  );
 }
 
 function getContentLabel(
   item: FirebaseStorageTokenContent,
 ): string {
-  return item.name || item.id || "content";
+  return (
+    item.name ||
+    item.id ||
+    "content"
+  );
 }
 
 function renderMain(
   item: FirebaseStorageTokenContent,
 ) {
-  const label = getContentLabel(item);
+  const label =
+    getContentLabel(
+      item,
+    );
 
   switch (item.type) {
     case "image":
@@ -134,7 +125,8 @@ function renderMain(
               item.url,
             );
 
-            event.currentTarget.style.display = "none";
+            event.currentTarget.style.display =
+              "none";
           }}
         />
       );
@@ -151,7 +143,9 @@ function renderMain(
         >
           <source
             src={item.url}
-            type={getVideoMimeType(item)}
+            type={getVideoMimeType(
+              item,
+            )}
           />
 
           お使いのブラウザは動画再生に対応していません。
@@ -190,138 +184,88 @@ export default function TokenContentsCard({
   onFilesSelected,
   onDelete,
 }: TokenContentsCardProps) {
-  const isEditMode = mode === "edit";
+  const isEditMode =
+    mode === "edit";
 
-  const derivedItems = React.useMemo<
-    FirebaseStorageTokenContent[]
-  >(() => {
-    return contents ?? [];
-  }, [contents]);
+  /**
+   * コンテンツの唯一の入力元は、
+   * 親コンポーネントから渡されるcontentsとする。
+   */
+  const items =
+    contents ?? [];
 
-  const [localItems, setLocalItems] = React.useState<
-    FirebaseStorageTokenContent[]
-  >([]);
-
-  const [index, setIndex] =
-    React.useState<number>(0);
-
-  const inputRef =
-    React.useRef<HTMLInputElement | null>(null);
-
-  const objectUrlsRef = React.useRef<Set<string>>(
-    new Set<string>(),
+  const [
+    index,
+    setIndex,
+  ] = React.useState<number>(
+    0,
   );
 
-  /**
-   * viewモードでは保存済みコンテンツだけを表示する。
-   *
-   * editモードでは、保存済みコンテンツの後ろに
-   * 今回追加したローカルコンテンツを結合して表示する。
-   */
-  const items = React.useMemo<
-    FirebaseStorageTokenContent[]
-  >(() => {
-    if (!isEditMode) {
-      return derivedItems;
-    }
-
-    return [
-      ...derivedItems,
-      ...localItems,
-    ];
-  }, [
-    derivedItems,
-    localItems,
-    isEditMode,
-  ]);
-
-  const hasItems = items.length > 0;
-
-  const safeIndex = React.useMemo(() => {
-    if (items.length === 0) {
-      return 0;
-    }
-
-    return Math.min(
-      index,
-      items.length - 1,
+  const inputRef =
+    React.useRef<HTMLInputElement | null>(
+      null,
     );
-  }, [
-    index,
-    items.length,
-  ]);
 
-  const currentItem = hasItems
-    ? items[safeIndex]
-    : undefined;
+  const hasItems =
+    items.length > 0;
 
-  /**
-   * コンテンツ数が減少した場合に、
-   * 現在位置が配列範囲外にならないよう補正する。
-   */
-  React.useEffect(() => {
-    setIndex((current) => {
-      if (items.length === 0) {
+  const safeIndex =
+    React.useMemo(() => {
+      if (
+        items.length === 0
+      ) {
         return 0;
       }
 
       return Math.min(
-        current,
+        index,
         items.length - 1,
       );
-    });
+    }, [
+      index,
+      items.length,
+    ]);
+
+  const currentItem =
+    hasItems
+      ? items[safeIndex]
+      : undefined;
+
+  /**
+   * 親コンポーネント側でコンテンツが削除された場合に、
+   * 現在位置が配列範囲外にならないよう補正する。
+   */
+  React.useEffect(() => {
+    setIndex(
+      (currentIndex) => {
+        if (
+          items.length === 0
+        ) {
+          return 0;
+        }
+
+        return Math.min(
+          currentIndex,
+          items.length - 1,
+        );
+      },
+    );
   }, [items.length]);
-
-  /**
-   * 保存またはキャンセルによってviewモードへ戻ったときに、
-   * ローカルプレビューを破棄する。
-   *
-   * editモード中は、保存済みコンテンツが存在していても
-   * localItemsを削除しない。
-   */
-  React.useEffect(() => {
-    if (isEditMode) {
-      return;
-    }
-
-    for (
-      const objectUrl of objectUrlsRef.current
-    ) {
-      URL.revokeObjectURL(objectUrl);
-    }
-
-    objectUrlsRef.current.clear();
-    setLocalItems([]);
-    setIndex(0);
-  }, [isEditMode]);
-
-  /**
-   * コンポーネント破棄時にBlob URLを解放する。
-   */
-  React.useEffect(() => {
-    return () => {
-      for (
-        const objectUrl of objectUrlsRef.current
-      ) {
-        URL.revokeObjectURL(objectUrl);
-      }
-
-      objectUrlsRef.current.clear();
-    };
-  }, []);
 
   const prev = () => {
     if (!hasItems) {
       return;
     }
 
-    setIndex((current) => {
-      return (
-        current -
-        1 +
-        items.length
-      ) % items.length;
-    });
+    setIndex(
+      (currentIndex) => {
+        return (
+          currentIndex -
+          1 +
+          items.length
+        ) % items.length;
+      },
+    );
   };
 
   const next = () => {
@@ -329,171 +273,114 @@ export default function TokenContentsCard({
       return;
     }
 
-    setIndex((current) => {
-      return (
-        current +
-        1
-      ) % items.length;
-    });
+    setIndex(
+      (currentIndex) => {
+        return (
+          currentIndex +
+          1
+        ) % items.length;
+      },
+    );
   };
 
-  const openFilePicker = () => {
-    inputRef.current?.click();
-  };
+  const openFilePicker =
+    () => {
+      inputRef.current?.click();
+    };
 
-  const handleUploadClick = () => {
-    if (!isEditMode) {
-      return;
-    }
+  const handleUploadClick =
+    () => {
+      if (!isEditMode) {
+        return;
+      }
 
-    openFilePicker();
-  };
+      openFilePicker();
+    };
 
-  const handleFilesChange = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    if (!isEditMode) {
-      event.target.value = "";
-      return;
-    }
-
-    const fileList = event.target.files;
-
-    if (
-      !fileList ||
-      fileList.length === 0
-    ) {
-      event.target.value = "";
-      return;
-    }
-
-    const files = Array.from(fileList);
-
-    if (!onFilesSelected) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[TokenContentsCard] onFilesSelected is not provided. No request will be sent to backend.",
-      );
-
-      event.target.value = "";
-      return;
-    }
-
-    try {
-      await onFilesSelected(files);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(
-        "[TokenContentsCard] onFilesSelected failed",
-        error,
-      );
-
-      event.target.value = "";
-      return;
-    }
-
-    const createdAt = nowIso();
-
-    const newItems: FirebaseStorageTokenContent[] =
-      files.map((file, fileIndex) => {
-        const url =
-          URL.createObjectURL(file);
-
-        objectUrlsRef.current.add(url);
-
-        return buildLocalContent(
-          file,
-          fileIndex,
-          url,
-          createdAt,
-        );
-      });
-
-    setLocalItems((previousItems) => {
-      const nextItems = [
-        ...previousItems,
-        ...newItems,
-      ];
-
-      /**
-       * 保存済みコンテンツ数と既存ローカル数の後ろ、
-       * つまり今回追加した最初のファイルへ移動する。
-       */
-      setIndex(
-        derivedItems.length +
-          previousItems.length,
-      );
-
-      return nextItems;
-    });
-
-    event.target.value = "";
-  };
-
-  const handleDelete = async (
-    targetIndex: number,
-  ) => {
-    if (!isEditMode) {
-      return;
-    }
-
-    const target = items[targetIndex];
-
-    if (!target) {
-      return;
-    }
-
-    if (onDelete) {
-      try {
-        await onDelete(
-          target,
-          targetIndex,
-        );
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error(
-          "[TokenContentsCard] onDelete failed",
-          error,
-        );
+  /**
+   * 選択されたファイルを親コンポーネントへ渡す。
+   *
+   * このコンポーネント内では、
+   * Blob URLの作成、ローカルstateへの追加、
+   * Firebase Storageへのアップロードは行わない。
+   */
+  const handleFilesChange =
+    async (
+      event:
+        React.ChangeEvent<HTMLInputElement>,
+    ): Promise<void> => {
+      if (!isEditMode) {
+        event.target.value =
+          "";
 
         return;
       }
-    }
 
-    /**
-     * 保存前のローカルコンテンツの場合は、
-     * このコンポーネント内のstateから削除する。
-     */
-    if (target.id.startsWith("local_")) {
-      if (target.url.startsWith("blob:")) {
-        URL.revokeObjectURL(target.url);
+      const fileList =
+        event.target.files;
 
-        objectUrlsRef.current.delete(
-          target.url,
-        );
+      if (
+        !fileList ||
+        fileList.length === 0
+      ) {
+        event.target.value =
+          "";
+
+        return;
       }
 
-      setLocalItems((previousItems) => {
-        return previousItems.filter(
-          (item) => item.id !== target.id,
+      const files =
+        Array.from(
+          fileList,
         );
-      });
 
-      setIndex((current) => {
-        const nextLength =
-          items.length - 1;
+      if (!onFilesSelected) {
+        event.target.value =
+          "";
 
-        if (nextLength <= 0) {
-          return 0;
-        }
+        return;
+      }
 
-        return Math.min(
-          current,
-          nextLength - 1,
+      try {
+        await onFilesSelected(
+          files,
         );
-      });
-    }
-  };
+      } finally {
+        event.target.value =
+          "";
+      }
+    };
+
+  /**
+   * 削除対象を親コンポーネントへ通知する。
+   *
+   * このコンポーネント内では、
+   * contentsの削除やBlob URLの解放は行わない。
+   */
+  const handleDelete =
+    async (
+      targetIndex: number,
+    ): Promise<void> => {
+      if (!isEditMode) {
+        return;
+      }
+
+      const target =
+        items[targetIndex];
+
+      if (!target) {
+        return;
+      }
+
+      if (!onDelete) {
+        return;
+      }
+
+      await onDelete(
+        target,
+        targetIndex,
+      );
+    };
 
   return (
     <Card className="token-contents-card">
@@ -516,7 +403,9 @@ export default function TokenContentsCard({
             display: "none",
           }}
           onChange={(event) => {
-            void handleFilesChange(event);
+            void handleFilesChange(
+              event,
+            );
           }}
         />
 
@@ -524,7 +413,9 @@ export default function TokenContentsCard({
           <Button
             type="button"
             className="token-contents-card__add-btn"
-            onClick={handleUploadClick}
+            onClick={
+              handleUploadClick
+            }
           >
             <Upload className="token-contents-card__add-btn-icon" />
             ファイル追加
@@ -545,9 +436,12 @@ export default function TokenContentsCard({
           </button>
 
           <div className="token-contents-card__image-slot">
-            {hasItems && currentItem ? (
+            {hasItems &&
+            currentItem ? (
               <div className="token-contents-card__image-main-wrap">
-                {renderMain(currentItem)}
+                {renderMain(
+                  currentItem,
+                )}
 
                 {isEditMode && (
                   <button
@@ -586,9 +480,13 @@ export default function TokenContentsCard({
           items.length > 1 && (
             <div className="token-contents-card__thumbs">
               {items.map(
-                (item, itemIndex) => {
+                (
+                  item,
+                  itemIndex,
+                ) => {
                   const isActive =
-                    itemIndex === safeIndex;
+                    itemIndex ===
+                    safeIndex;
 
                   return (
                     <div
@@ -610,13 +508,16 @@ export default function TokenContentsCard({
                           );
                         }}
                         aria-label={`コンテンツ ${
-                          itemIndex + 1
+                          itemIndex +
+                          1
                         }を表示`}
                       >
                         {item.type ===
                         "image" ? (
                           <img
-                            src={item.url}
+                            src={
+                              item.url
+                            }
                             alt={`コンテンツ サムネイル ${
                               itemIndex +
                               1
@@ -640,7 +541,8 @@ export default function TokenContentsCard({
                             );
                           }}
                           aria-label={`コンテンツ ${
-                            itemIndex + 1
+                            itemIndex +
+                            1
                           }を削除`}
                         >
                           <Trash2 className="token-contents-card__thumb-delete-icon" />

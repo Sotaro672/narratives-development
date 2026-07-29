@@ -19,13 +19,14 @@ import { useTokenBlueprintCard } from "../features/tokenBlueprint/presentation/h
 import { useTokenBlueprintCreate } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCreate";
 
 import type {
-  ContentFile,
   FirebaseStorageTokenContent,
   TokenBlueprint,
 } from "../shared/types/tokenBlueprint";
 
-import { patchTokenBlueprintContentFiles } from "../features/tokenBlueprint/infrastructure/repository/tokenBlueprintRepositoryHTTP";
-import { uploadTokenBlueprintContentToFirebaseStorage } from "../features/tokenBlueprint/infrastructure/storage/tokenBlueprintAssetStorage";
+import {
+  createTokenBlueprintContentId,
+  uploadAndAppendTokenBlueprintContents,
+} from "../features/tokenBlueprint/application/tokenBlueprintContentService";
 
 import "../styles/tokenBlueprint.css";
 
@@ -47,19 +48,6 @@ function guessContentType(
   }
 
   return "document";
-}
-
-function createContentId(): string {
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
-  ) {
-    return crypto.randomUUID();
-  }
-
-  return `c_${Date.now()}_${Math.random()
-    .toString(16)
-    .slice(2)}`;
 }
 
 type AssigneeCandidateLike = {
@@ -350,7 +338,7 @@ export default function TokenBlueprintCreate() {
 
           for (const file of files) {
             const id =
-              `local_${createContentId()}`;
+              `local_${createTokenBlueprintContentId()}`;
 
             const previewUrl =
               URL.createObjectURL(
@@ -471,123 +459,6 @@ export default function TokenBlueprintCreate() {
       assigneeId,
     ]);
 
-  const uploadContentsAfterCreate =
-    useCallback(
-      async (
-        tokenBlueprintId: string,
-        pendingItems: PendingContent[],
-      ): Promise<void> => {
-        if (
-          !tokenBlueprintId ||
-          pendingItems.length === 0
-        ) {
-          return;
-        }
-
-        if (!companyId) {
-          throw new Error(
-            "companyId is required",
-          );
-        }
-
-        const actor =
-          createdBy ||
-          assigneeId ||
-          "";
-
-        if (!actor) {
-          throw new Error(
-            "createdBy is required",
-          );
-        }
-
-        const newContentFiles:
-          ContentFile[] = [];
-
-        for (
-          const pendingItem of pendingItems
-        ) {
-          const contentId =
-            createContentId();
-
-          const file =
-            pendingItem.file;
-
-          const nowIso =
-            new Date().toISOString();
-
-          const uploaded =
-            await uploadTokenBlueprintContentToFirebaseStorage(
-              {
-                companyId,
-                tokenBlueprintId,
-                contentId,
-                file,
-              },
-            );
-
-          newContentFiles.push({
-            id:
-              contentId,
-
-            name:
-              uploaded.fileName ||
-              file.name ||
-              contentId,
-
-            type:
-              uploaded.kind ??
-              pendingItem.type,
-
-            contentType:
-              uploaded.contentType ||
-              file.type ||
-              "application/octet-stream",
-
-            objectPath:
-              uploaded.objectPath,
-
-            url:
-              uploaded.downloadUrl,
-
-            size:
-              Number.isFinite(
-                uploaded.size,
-              ) &&
-              uploaded.size >= 0
-                ? uploaded.size
-                : file.size,
-
-            isPublic:
-              false,
-
-            createdAt:
-              nowIso,
-
-            createdBy:
-              actor,
-
-            updatedAt:
-              nowIso,
-
-            updatedBy:
-              actor,
-          });
-        }
-
-        await patchTokenBlueprintContentFiles({
-          tokenBlueprintId,
-          contentFiles:
-            newContentFiles,
-        });
-      },
-      [
-        companyId,
-        createdBy,
-        assigneeId,
-      ],
-    );
-
   const handleSave =
     useCallback(
       async (): Promise<void> => {
@@ -660,10 +531,32 @@ export default function TokenBlueprintCreate() {
             );
 
             try {
-              await uploadContentsAfterCreate(
-                createdId,
-                pending,
-              );
+              const actor =
+                createdBy ||
+                assigneeId ||
+                "";
+
+              if (!actor) {
+                throw new Error(
+                  "createdBy is required",
+                );
+              }
+
+              await uploadAndAppendTokenBlueprintContents({
+                companyId,
+                tokenBlueprintId:
+                  createdId,
+                actorId:
+                  actor,
+                files:
+                  pending.map(
+                    (pendingItem) => {
+                      return pendingItem.file;
+                    },
+                  ),
+                existingContentFiles:
+                  [],
+              });
 
               for (
                 const pendingItem of pending
@@ -725,7 +618,8 @@ export default function TokenBlueprintCreate() {
         selectedIconFile,
         onSave,
         pending,
-        uploadContentsAfterCreate,
+        companyId,
+        createdBy,
         navigate,
       ],
     );
