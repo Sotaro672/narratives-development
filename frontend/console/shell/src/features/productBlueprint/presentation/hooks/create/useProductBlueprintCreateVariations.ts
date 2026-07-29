@@ -12,7 +12,6 @@ import {
 export type UseProductBlueprintCreateVariationsResult = Omit<
   UseProductBlueprintVariationsResult,
   | "categoryCode"
-  | "getCode"
   | "setFromUiState"
 >;
 

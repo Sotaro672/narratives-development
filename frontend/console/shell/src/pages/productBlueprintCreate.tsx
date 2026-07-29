@@ -21,9 +21,6 @@ import ModelNumberCard from "../features/model/presentation/components/ModelNumb
 import VolumeCard from "../features/model/presentation/components/VolumeCard";
 import AlcoholModelNumberCard from "../features/model/presentation/components/AlcoholModelNumberCard";
 
-// モデルナンバー用のロジックはmodel側のhookを利用
-import { useModelCard } from "../features/model/presentation/hook/useModelCard";
-
 import { useProductBlueprintCreate } from "../features/productBlueprint/presentation/hooks/create/useProductBlueprintCreate";
 
 function shouldShowApparelVariationCards(
@@ -81,7 +78,6 @@ export default function ProductBlueprintCreate() {
     colors,
     colorRgbMap,
     sizes,
-    modelNumbers,
 
     // alcoholバリエーション
     volumes,
@@ -102,6 +98,7 @@ export default function ProductBlueprintCreate() {
     onChangeSize,
 
     // apparelモデルナンバー操作
+    getCode,
     onChangeModelNumber,
 
     // alcohol容量操作
@@ -158,47 +155,6 @@ export default function ProductBlueprintCreate() {
     Boolean(productBlueprintCategory) &&
     !showApparelVariationCards &&
     !showAlcoholVariationCards;
-
-  // -----------------------------
-  // apparelモデルナンバー表示用のhook（model側）
-  // rgbをhook経由で渡すためcolorRgbMapも渡す
-  // -----------------------------
-  const {
-    getCode,
-    onChangeModelNumber:
-      uiOnChangeModelNumber,
-  } = useModelCard({
-    sizes,
-    colors,
-    modelNumbers,
-    colorRgbMap,
-  });
-
-  // UI変更時にmodel側とproductBlueprint側の両方を更新する
-  const handleChangeModelNumber =
-    React.useCallback(
-      (
-        sizeLabel: string,
-        color: string,
-        nextCode: string,
-      ) => {
-        uiOnChangeModelNumber(
-          sizeLabel,
-          color,
-          nextCode,
-        );
-
-        onChangeModelNumber(
-          sizeLabel,
-          color,
-          nextCode,
-        );
-      },
-      [
-        uiOnChangeModelNumber,
-        onChangeModelNumber,
-      ],
-    );
 
   return (
     <PageStyle
@@ -303,7 +259,7 @@ export default function ProductBlueprintCreate() {
               colors={colors}
               getCode={getCode}
               onChangeModelNumber={
-                handleChangeModelNumber
+                onChangeModelNumber
               }
             />
           </>

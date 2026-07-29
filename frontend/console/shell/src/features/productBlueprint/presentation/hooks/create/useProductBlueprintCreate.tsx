@@ -154,6 +154,11 @@ export interface UseProductBlueprintCreateResult {
     patch: Partial<Omit<SizeRow, "id">>,
   ) => void;
 
+  getCode: (
+    sizeLabel: string,
+    color: string,
+  ) => string;
+
   onChangeModelNumber: (
     sizeLabel: string,
     color: string,
@@ -779,6 +784,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
     onChangeSize:
       variations.onChangeSize,
+
+    getCode:
+      variations.getCode,
 
     onChangeModelNumber:
       variations
