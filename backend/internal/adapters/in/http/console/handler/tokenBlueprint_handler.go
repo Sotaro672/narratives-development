@@ -557,8 +557,7 @@ func writeTokenBlueprintErr(w http.ResponseWriter, err error) {
 		errors.Is(err, tbdom.ErrInvalidIconContentType),
 		errors.Is(err, tbdom.ErrInvalidIconSize),
 		errors.Is(err, tbdom.ErrInvalidContentFile),
-		errors.Is(err, tbdom.ErrInvalidContentType),
-		errors.Is(err, tbdom.ErrInvalidContentVisibility):
+		errors.Is(err, tbdom.ErrInvalidContentType):
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return

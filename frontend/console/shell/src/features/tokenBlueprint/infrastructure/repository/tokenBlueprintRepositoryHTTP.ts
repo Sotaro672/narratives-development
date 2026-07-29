@@ -1,18 +1,26 @@
-// frontend/console/tokenBlueprint/src/infrastructure/repository/tokenBlueprintRepositoryHTTP.ts
+// frontend/console/shell/src/features/tokenBlueprint/infrastructure/repository/tokenBlueprintRepositoryHTTP.ts
 
-import type { TokenBlueprint } from "../../domain/tokenBlueprint";
+import type { TokenBlueprint } from "../../../../shared/types/tokenBlueprint";
 import type { ContentFileDTO } from "../dto/tokenBlueprint.dto";
 
+import {
+  apiDelete,
+  apiGet,
+  apiPostJson,
+  apiPutJson,
+} from "../http/client";
+
 import { handleJsonResponse } from "../http/json";
-import { apiDelete, apiGet, apiPostJson, apiPutJson } from "../http/client";
+
 import {
   normalizePageResult,
   normalizeTokenBlueprint,
 } from "../dto/tokenBlueprint.mapper";
 
 // ---------------------------------------------------------
-// API レスポンス型（UI側で使いやすい形）
+// APIレスポンス型
 // ---------------------------------------------------------
+
 export interface TokenBlueprintPageResult {
   items: TokenBlueprint[];
   totalCount: number;
@@ -22,23 +30,18 @@ export interface TokenBlueprintPageResult {
 }
 
 // ---------------------------------------------------------
-// Send payload types
-// - tokenBlueprintIcon / tokenBlueprintContents は Firebase Storage に
-//   frontend から直接アップロードする
-// - iconUrl は Firebase Storage downloadURL
-// - iconObjectPath は Firebase Storage objectPath
-// - contentFiles[].url は Firebase Storage downloadURL
-// - contentFiles[].objectPath は Firebase Storage objectPath
+// API送信payload型
 // ---------------------------------------------------------
+
 export type CreateTokenBlueprintPayload = {
   name: string;
   symbol: string;
-  brandId: string;
 
-  /** entity.go 正: companyId は必須（互換のため optional 入力は許すが、送信時は必須化） */
-  companyId?: string;
+  brandId: string;
+  companyId: string;
 
   description: string;
+
   assigneeId: string;
   createdBy: string;
 
@@ -54,6 +57,7 @@ export type CreateTokenBlueprintPayload = {
 export type UpdateTokenBlueprintPayload = Partial<{
   name: string;
   symbol: string;
+
   description: string;
   assigneeId: string;
 
@@ -67,57 +71,63 @@ export type UpdateTokenBlueprintPayload = Partial<{
 }>;
 
 // ---------------------------------------------------------
-// Public API
+// TokenBlueprint API
 // ---------------------------------------------------------
 
-export async function fetchTokenBlueprints(params?: {
-  page?: number;
-  perPage?: number;
-}): Promise<TokenBlueprintPageResult> {
-  const url = new URL("/token-blueprints", "http://local");
+export async function fetchTokenBlueprints(
+  params?: {
+    page?: number;
+    perPage?: number;
+  },
+): Promise<TokenBlueprintPageResult> {
+  const url = new URL(
+    "/token-blueprints",
+    "http://local",
+  );
 
-  if (params?.page != null) {
-    url.searchParams.set("page", String(params.page));
+  if (params?.page !== undefined) {
+    url.searchParams.set(
+      "page",
+      String(params.page),
+    );
   }
 
-  if (params?.perPage != null) {
-    url.searchParams.set("perPage", String(params.perPage));
+  if (params?.perPage !== undefined) {
+    url.searchParams.set(
+      "perPage",
+      String(params.perPage),
+    );
   }
 
-  const res = await apiGet(url.pathname + url.search);
-  const raw = await handleJsonResponse<unknown>(res);
+  const response = await apiGet(
+    url.pathname + url.search,
+  );
+
+  const raw =
+    await handleJsonResponse<unknown>(
+      response,
+    );
 
   return normalizePageResult(raw);
-}
-
-/**
- * 互換用。
- *
- * backend 側で CompanyIDFromContext(ctx) により company boundary を張るため、
- * 通常は fetchTokenBlueprints を使う。
- */
-export async function listTokenBlueprintsByCompanyId(
-  companyId: string,
-): Promise<TokenBlueprint[]> {
-  const cid = companyId;
-  if (!cid) return [];
-
-  const res = await apiGet("/token-blueprints?perPage=200");
-  const raw = await handleJsonResponse<unknown>(res);
-  const page = normalizePageResult(raw);
-
-  return page.items.filter((x) => {
-    return String(x.companyId ?? "") === cid;
-  });
 }
 
 export async function fetchTokenBlueprintById(
   id: string,
 ): Promise<TokenBlueprint> {
-  if (!id) throw new Error("id is empty");
+  if (!id) {
+    throw new Error(
+      "id is required",
+    );
+  }
 
-  const res = await apiGet(`/token-blueprints/${encodeURIComponent(id)}`);
-  const raw = await handleJsonResponse<unknown>(res);
+  const response = await apiGet(
+    `/token-blueprints/${encodeURIComponent(id)}`,
+  );
+
+  const raw =
+    await handleJsonResponse<unknown>(
+      response,
+    );
 
   return normalizeTokenBlueprint(raw);
 }
@@ -125,31 +135,15 @@ export async function fetchTokenBlueprintById(
 export async function createTokenBlueprint(
   payload: CreateTokenBlueprintPayload,
 ): Promise<TokenBlueprint> {
-  const companyId = String(payload.companyId ?? "");
-  if (!companyId) {
-    throw new Error("companyId is required");
-  }
+  const response = await apiPostJson(
+    "/token-blueprints",
+    payload,
+  );
 
-  const body: CreateTokenBlueprintPayload = {
-    name: String(payload.name ?? ""),
-    symbol: String(payload.symbol ?? ""),
-    brandId: String(payload.brandId ?? ""),
-    companyId,
-    description: String(payload.description ?? ""),
-    assigneeId: String(payload.assigneeId ?? ""),
-    createdBy: String(payload.createdBy ?? ""),
-
-    iconUrl: normalizeOptionalString(payload.iconUrl),
-    iconObjectPath: normalizeOptionalString(payload.iconObjectPath),
-    iconFileName: normalizeOptionalString(payload.iconFileName),
-    iconContentType: normalizeOptionalString(payload.iconContentType),
-    iconSize: normalizeOptionalNumber(payload.iconSize),
-
-    contentFiles: (payload.contentFiles ?? []).map(normalizeContentFileForSend),
-  };
-
-  const res = await apiPostJson("/token-blueprints", body);
-  const raw = await handleJsonResponse<unknown>(res);
+  const raw =
+    await handleJsonResponse<unknown>(
+      response,
+    );
 
   return normalizeTokenBlueprint(raw);
 }
@@ -158,254 +152,119 @@ export async function updateTokenBlueprint(
   id: string,
   payload: UpdateTokenBlueprintPayload,
 ): Promise<TokenBlueprint> {
-  if (!id) throw new Error("id is empty");
-
-  const body: UpdateTokenBlueprintPayload = {};
-
-  if (payload.name !== undefined) {
-    body.name = payload.name;
-  }
-
-  if (payload.symbol !== undefined) {
-    body.symbol = payload.symbol;
-  }
-
-  if (payload.description !== undefined) {
-    body.description = payload.description;
-  }
-
-  if (payload.assigneeId !== undefined) {
-    body.assigneeId = payload.assigneeId;
-  }
-
-  if (payload.iconUrl !== undefined) {
-    body.iconUrl = normalizeNullableString(payload.iconUrl);
-  }
-
-  if (payload.iconObjectPath !== undefined) {
-    body.iconObjectPath = normalizeNullableString(payload.iconObjectPath);
-  }
-
-  if (payload.iconFileName !== undefined) {
-    body.iconFileName = normalizeNullableString(payload.iconFileName);
-  }
-
-  if (payload.iconContentType !== undefined) {
-    body.iconContentType = normalizeNullableString(payload.iconContentType);
-  }
-
-  if (payload.iconSize !== undefined) {
-    body.iconSize = normalizeNullableNumber(payload.iconSize);
-  }
-
-  if (payload.contentFiles !== undefined) {
-    body.contentFiles = (payload.contentFiles ?? []).map(
-      normalizeContentFileForSend,
+  if (!id) {
+    throw new Error(
+      "id is required",
     );
   }
 
-  const res = await apiPutJson(
+  const response = await apiPutJson(
     `/token-blueprints/${encodeURIComponent(id)}`,
-    body,
+    payload,
   );
-  const raw = await handleJsonResponse<unknown>(res);
+
+  const raw =
+    await handleJsonResponse<unknown>(
+      response,
+    );
 
   return normalizeTokenBlueprint(raw);
 }
 
-export async function deleteTokenBlueprint(id: string): Promise<void> {
-  if (!id) throw new Error("id is empty");
+export async function deleteTokenBlueprint(
+  id: string,
+): Promise<void> {
+  if (!id) {
+    throw new Error(
+      "id is required",
+    );
+  }
 
-  const res = await apiDelete(`/token-blueprints/${encodeURIComponent(id)}`);
+  const response = await apiDelete(
+    `/token-blueprints/${encodeURIComponent(id)}`,
+  );
 
-  await handleJsonResponse<unknown>(res);
+  await handleJsonResponse<unknown>(
+    response,
+  );
 }
 
 // ---------------------------------------------------------
-// token-contents helpers
+// TokenBlueprint content API
 // ---------------------------------------------------------
 
-/**
- * PUT /token-blueprints/{id}
- * - Firebase Storage へ frontend から直接 upload した後、
- *   downloadURL / objectPath を含む contentFiles を backend に保存する。
- */
-export async function patchTokenBlueprintContentFiles(params: {
-  tokenBlueprintId: string;
-  contentFiles: ContentFileDTO[];
-}): Promise<TokenBlueprint> {
-  const id = params.tokenBlueprintId;
-  if (!id) throw new Error("tokenBlueprintId is empty");
+export async function patchTokenBlueprintContentFiles(
+  params: {
+    tokenBlueprintId: string;
+    contentFiles: ContentFileDTO[];
+  },
+): Promise<TokenBlueprint> {
+  if (!params.tokenBlueprintId) {
+    throw new Error(
+      "tokenBlueprintId is required",
+    );
+  }
 
-  const contentFiles = (params.contentFiles ?? []).map(
-    normalizeContentFileForSend,
+  const response = await apiPutJson(
+    `/token-blueprints/${encodeURIComponent(
+      params.tokenBlueprintId,
+    )}`,
+    {
+      contentFiles: params.contentFiles,
+    },
   );
 
-  const res = await apiPutJson(
-    `/token-blueprints/${encodeURIComponent(id)}`,
-    { contentFiles },
-  );
-
-  const raw = await handleJsonResponse<unknown>(res);
+  const raw =
+    await handleJsonResponse<unknown>(
+      response,
+    );
 
   return normalizeTokenBlueprint(raw);
 }
 
 // ---------------------------------------------------------
-// Icon helpers
+// TokenBlueprint icon API
 // ---------------------------------------------------------
 
-export async function attachTokenBlueprintIcon(params: {
-  tokenBlueprintId: string;
-  iconUrl: string;
-  iconObjectPath: string;
-  iconFileName?: string | null;
-  iconContentType?: string | null;
-  iconSize?: number | null;
-}): Promise<TokenBlueprint> {
-  const id = params.tokenBlueprintId;
-  if (!id) throw new Error("tokenBlueprintId is empty");
+export async function attachTokenBlueprintIcon(
+  params: {
+    tokenBlueprintId: string;
 
-  const iconUrl = String(params.iconUrl ?? "");
-  if (!iconUrl) throw new Error("iconUrl is empty");
+    iconUrl: string;
+    iconObjectPath: string;
 
-  const iconObjectPath = String(params.iconObjectPath ?? "");
-  if (!iconObjectPath) throw new Error("iconObjectPath is empty");
-
-  return await updateTokenBlueprint(id, {
-    iconUrl,
-    iconObjectPath,
-    iconFileName: params.iconFileName ?? null,
-    iconContentType: params.iconContentType ?? null,
-    iconSize: params.iconSize ?? null,
-  });
-}
-
-// ---------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------
-
-function normalizeOptionalString(value: unknown): string | undefined {
-  if (value === undefined) return undefined;
-  if (value === null) return undefined;
-
-  return String(value);
-}
-
-function normalizeNullableString(value: unknown): string | null {
-  if (value === undefined) return null;
-  if (value === null) return null;
-
-  const s = String(value);
-  return s || null;
-}
-
-function normalizeOptionalNumber(value: unknown): number | undefined {
-  if (value === undefined || value === null) return undefined;
-
-  const n = Number(value);
-  if (!Number.isFinite(n)) return undefined;
-
-  return n >= 0 ? n : 0;
-}
-
-function normalizeNullableNumber(value: unknown): number | null {
-  if (value === undefined || value === null) return null;
-
-  const n = Number(value);
-  if (!Number.isFinite(n)) return null;
-
-  return n >= 0 ? n : 0;
-}
-
-function toIsoStringOrNow(value: unknown): string {
-  if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) {
-      return new Date().toISOString();
-    }
-
-    return value.toISOString();
+    iconFileName?: string | null;
+    iconContentType?: string | null;
+    iconSize?: number | null;
+  },
+): Promise<TokenBlueprint> {
+  if (!params.tokenBlueprintId) {
+    throw new Error(
+      "tokenBlueprintId is required",
+    );
   }
 
-  const raw = String(value ?? "");
-  if (!raw) {
-    return new Date().toISOString();
-  }
+  const response = await apiPutJson(
+    `/token-blueprints/${encodeURIComponent(
+      params.tokenBlueprintId,
+    )}`,
+    {
+      iconUrl: params.iconUrl,
+      iconObjectPath:
+        params.iconObjectPath,
+      iconFileName:
+        params.iconFileName,
+      iconContentType:
+        params.iconContentType,
+      iconSize:
+        params.iconSize,
+    },
+  );
 
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) {
-    return new Date().toISOString();
-  }
+  const raw =
+    await handleJsonResponse<unknown>(
+      response,
+    );
 
-  return parsed.toISOString();
-}
-
-function normalizeContentFileType(value: unknown): ContentFileDTO["type"] {
-  const raw = String(value ?? "").toLowerCase();
-
-  if (
-    raw === "image" ||
-    raw === "video" ||
-    raw === "pdf" ||
-    raw === "document"
-  ) {
-    return raw as ContentFileDTO["type"];
-  }
-
-  return "document" as ContentFileDTO["type"];
-}
-
-function normalizeContentVisibility(
-  value: unknown,
-): ContentFileDTO["visibility"] {
-  const raw = String(value ?? "").toLowerCase();
-
-  if (raw === "public" || raw === "private") {
-    return raw as ContentFileDTO["visibility"];
-  }
-
-  return "private" as ContentFileDTO["visibility"];
-}
-
-function normalizeContentFileForSend(x: ContentFileDTO): ContentFileDTO {
-  const obj: any = x && typeof x === "object" ? (x as any) : {};
-
-  const id = String(obj.id ?? "");
-  const name = String(obj.name ?? "");
-  const type = normalizeContentFileType(obj.type);
-  const contentType =
-    String(obj.contentType ?? "") || "application/octet-stream";
-  const objectPath = String(obj.objectPath ?? "");
-  const url = String(obj.url ?? "");
-  const visibility = normalizeContentVisibility(obj.visibility);
-
-  const size = Number(obj.size ?? 0);
-  const safeSize = Number.isFinite(size) && size >= 0 ? size : 0;
-
-  const nowIso = new Date().toISOString();
-
-  const createdBy = obj.createdBy != null ? String(obj.createdBy) : "";
-  const updatedBy = obj.updatedBy != null ? String(obj.updatedBy) : "";
-
-  if (!id) throw new Error("contentFile.id is required");
-  if (!name) throw new Error("contentFile.name is required");
-  if (!url) throw new Error("contentFile.url is required");
-  if (!objectPath) throw new Error("contentFile.objectPath is required");
-  if (!createdBy) throw new Error("contentFile.createdBy is required");
-  if (!updatedBy) throw new Error("contentFile.updatedBy is required");
-
-  return {
-    id,
-    name,
-    type,
-    contentType,
-    objectPath,
-    url,
-    visibility,
-    size: safeSize,
-    createdBy,
-    updatedBy,
-    createdAt: toIsoStringOrNow(obj.createdAt || nowIso),
-    updatedAt: toIsoStringOrNow(obj.updatedAt || nowIso),
-  };
+  return normalizeTokenBlueprint(raw);
 }

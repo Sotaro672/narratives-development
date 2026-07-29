@@ -1,22 +1,28 @@
 // frontend/console/shell/src/features/tokenBlueprint/application/tokenBlueprintCreateService.tsx
 
 /**
- * TokenBlueprint 作成カードのアプリケーションサービス
- * - Brand 一覧取得
- * - TokenBlueprint 作成
- * - iconFile がある場合は create 後に Firebase Storage へ frontend から直接アップロード
- * - Firebase Storage の downloadURL / objectPath / fileName / contentType / size を
- *   TokenBlueprint の icon 情報として backend に保存
+ * TokenBlueprint作成カードのアプリケーションサービス。
+ *
+ * - Brand一覧取得
+ * - TokenBlueprint作成
+ * - iconFileがある場合は、作成後にFirebase Storageへ
+ *   frontendから直接アップロードする
+ * - Firebase StorageのdownloadURL / objectPath /
+ *   fileName / contentType / sizeを
+ *   TokenBlueprintのicon情報としてbackendへ保存する
  *
  * 方針:
- * - ブランド名は /brands の一覧レスポンス items[].name を正とする
- * - brandId → brandName の個別名前解決は行わない
- * - tokenBlueprintIcon は GCS signed URL を廃止し、Firebase Storage へ移行済み
- * - icon の永続化は iconId / GCS object ではなく、
- *   Firebase Storage の downloadURL + objectPath を保存する
+ * - ブランド名は/brandsの一覧レスポンスitems[].nameを正とする
+ * - brandIdからbrandNameの個別名前解決は行わない
+ * - tokenBlueprintIconはGCS signed URLを廃止し、
+ *   Firebase Storageへ移行済み
+ * - iconの永続化はiconIdやGCS objectではなく、
+ *   Firebase StorageのdownloadURLとobjectPathを保存する
  */
 
-import type { TokenBlueprint } from "../domain/tokenBlueprint";
+import type { TokenBlueprint } from "../../../shared/types/tokenBlueprint";
+
+import type { CreateTokenBlueprintPayload } from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
 
 import {
   createTokenBlueprint,
@@ -27,14 +33,12 @@ import { fetchBrandsForCurrentCompany } from "../../brand/infrastructure/http/br
 
 import { uploadTokenBlueprintIconToFirebaseStorage } from "../infrastructure/storage/tokenBlueprintAssetStorage";
 
-import type { CreateTokenBlueprintPayload } from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
-
-// ---------------------------
-// Brand 一覧取得
-// ---------------------------
+// ---------------------------------------------------------
+// Brand一覧取得
+// ---------------------------------------------------------
 
 /**
- * /brands の一覧レスポンスを正とする。
+ * /brandsの一覧レスポンスを正とする。
  *
  * 正レスポンス:
  * {
@@ -50,7 +54,10 @@ import type { CreateTokenBlueprintPayload } from "../infrastructure/repository/t
  * }
  */
 export async function loadBrandsForCompany(): Promise<
-  { id: string; name: string }[]
+  {
+    id: string;
+    name: string;
+  }[]
 > {
   try {
     return await fetchBrandsForCurrentCompany();
@@ -59,14 +66,19 @@ export async function loadBrandsForCompany(): Promise<
   }
 }
 
-// ---------------------------
-// TokenBlueprint 作成（画像なし/あり両対応）
-// ---------------------------
+// ---------------------------------------------------------
+// TokenBlueprint作成
+// ---------------------------------------------------------
 
-export type CreateTokenBlueprintInput = CreateTokenBlueprintPayload & {
-  // UI 側で File を持っている場合だけ渡す（未選択なら undefined）
-  iconFile?: File | null;
-};
+export type CreateTokenBlueprintInput =
+  CreateTokenBlueprintPayload & {
+    /**
+     * UI側で選択されたiconファイル。
+     *
+     * 未選択の場合はnullまたはundefined。
+     */
+    iconFile?: File | null;
+  };
 
 function normalizeIconUrlForSend(
   raw: unknown,
@@ -94,7 +106,8 @@ function normalizeOptionalString(
     return undefined;
   }
 
-  const value = String(raw).trim();
+  const value =
+    String(raw).trim();
 
   return value || undefined;
 }
@@ -106,7 +119,8 @@ function normalizeOptionalNumber(
     return undefined;
   }
 
-  const value = Number(raw);
+  const value =
+    Number(raw);
 
   if (!Number.isFinite(value)) {
     return undefined;
@@ -118,21 +132,26 @@ function normalizeOptionalNumber(
 }
 
 /**
- * TokenBlueprint を作成する。
+ * TokenBlueprintを作成する。
  *
- * - iconFile がない場合:
- *   通常の create のみ。
- *   すでに iconUrl / iconObjectPath 等が input に入っている場合は、その値を送る。
+ * iconFileがない場合:
+ * - 通常のcreateだけを行う
+ * - iconUrl / iconObjectPathなどがinputにある場合は
+ *   その値を送信する
  *
- * - iconFile がある場合:
- *   1. TokenBlueprint を create
- *   2. 作成後の tokenBlueprintId を使って Firebase Storage へ iconFile をアップロード
- *   3. getDownloadURL で取得した URL と objectPath 等を TokenBlueprint に update
+ * iconFileがある場合:
+ * 1. icon情報を含めずTokenBlueprintを作成する
+ * 2. 作成後のtokenBlueprintIdを使って
+ *    Firebase StorageへiconFileをアップロードする
+ * 3. 取得したdownloadURL / objectPath /
+ *    fileName / contentType / sizeを
+ *    TokenBlueprintのicon情報として更新する
  */
 export async function createTokenBlueprintWithOptionalIcon(
   input: CreateTokenBlueprintInput,
 ): Promise<TokenBlueprint> {
-  const iconFile = input.iconFile ?? null;
+  const iconFile =
+    input.iconFile ?? null;
 
   const payload: CreateTokenBlueprintPayload = {
     name: input.name,
@@ -143,27 +162,42 @@ export async function createTokenBlueprintWithOptionalIcon(
     assigneeId: input.assigneeId,
     createdBy: input.createdBy,
 
-    iconUrl: normalizeIconUrlForSend(
-      input.iconUrl,
-    ),
-    iconObjectPath: normalizeOptionalString(
-      input.iconObjectPath,
-    ),
-    iconFileName: normalizeOptionalString(
-      input.iconFileName,
-    ),
-    iconContentType: normalizeOptionalString(
-      input.iconContentType,
-    ),
-    iconSize: normalizeOptionalNumber(
-      input.iconSize,
-    ),
+    iconUrl:
+      normalizeIconUrlForSend(
+        input.iconUrl,
+      ),
 
-    contentFiles: input.contentFiles ?? [],
+    iconObjectPath:
+      normalizeOptionalString(
+        input.iconObjectPath,
+      ),
+
+    iconFileName:
+      normalizeOptionalString(
+        input.iconFileName,
+      ),
+
+    iconContentType:
+      normalizeOptionalString(
+        input.iconContentType,
+      ),
+
+    iconSize:
+      normalizeOptionalNumber(
+        input.iconSize,
+      ),
+
+    contentFiles:
+      input.contentFiles ?? [],
   };
 
-  // iconFile がある場合、blob URL 等を create payload で保存しない。
-  // Firebase Storage upload 後に downloadURL / objectPath で確定させる。
+  /*
+   * iconFileがある場合、
+   * blob URLや未確定のicon情報を作成時に保存しない。
+   *
+   * Firebase Storageへのアップロード完了後に、
+   * 確定したdownloadURLとobjectPathで更新する。
+   */
   if (iconFile) {
     delete payload.iconUrl;
     delete payload.iconObjectPath;
@@ -173,25 +207,29 @@ export async function createTokenBlueprintWithOptionalIcon(
   }
 
   const created =
-    await createTokenBlueprint(payload);
+    await createTokenBlueprint(
+      payload,
+    );
 
   if (!iconFile) {
     return created;
   }
 
-  const tokenBlueprintId = created.id;
+  const tokenBlueprintId =
+    created.id;
 
   if (!tokenBlueprintId) {
     throw new Error(
-      "tokenBlueprint.id is empty after create.",
+      "tokenBlueprint.id is required after create",
     );
   }
 
-  const companyId = input.companyId;
+  const companyId =
+    input.companyId;
 
   if (!companyId) {
     throw new Error(
-      "companyId is required before uploading token blueprint icon.",
+      "companyId is required before uploading token blueprint icon",
     );
   }
 
@@ -205,11 +243,20 @@ export async function createTokenBlueprintWithOptionalIcon(
   return updateTokenBlueprint(
     tokenBlueprintId,
     {
-      iconUrl: uploaded.downloadUrl,
-      iconObjectPath: uploaded.objectPath,
-      iconFileName: uploaded.fileName,
-      iconContentType: uploaded.contentType,
-      iconSize: uploaded.size,
+      iconUrl:
+        uploaded.downloadUrl,
+
+      iconObjectPath:
+        uploaded.objectPath,
+
+      iconFileName:
+        uploaded.fileName,
+
+      iconContentType:
+        uploaded.contentType,
+
+      iconSize:
+        uploaded.size,
     },
   );
 }

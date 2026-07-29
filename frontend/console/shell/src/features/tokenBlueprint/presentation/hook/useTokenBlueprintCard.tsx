@@ -2,17 +2,18 @@
 
 import * as React from "react";
 
-import type { TokenBlueprint } from "../../domain/tokenBlueprint";
+import type { TokenBlueprint } from "../../../../shared/types/tokenBlueprint";
 
 import type {
-  TokenBlueprintCardViewModel,
   TokenBlueprintCardHandlers,
+  TokenBlueprintCardViewModel,
 } from "../components/tokenBlueprintCard";
 
 import { loadBrandsForCompany } from "../../application/tokenBlueprintCreateService";
 
 /**
- * TokenBlueprintCard用のロジックフック
+ * TokenBlueprintCard用のロジックフック。
+ *
  * - UI状態管理
  * - アイコンファイルの選択
  * - アイコンのローカルプレビュー
@@ -27,9 +28,7 @@ import { loadBrandsForCompany } from "../../application/tokenBlueprintCreateServ
  * - brandIdからの個別名前解決は行わない
  */
 export function useTokenBlueprintCard(params: {
-  initialTokenBlueprint?: Partial<TokenBlueprint> & {
-    brandName?: string;
-  };
+  initialTokenBlueprint?: Partial<TokenBlueprint>;
   initialBurnAt?: string;
   initialIconUrl?: string;
   initialEditMode?: boolean;
@@ -38,93 +37,123 @@ export function useTokenBlueprintCard(params: {
     params.initialTokenBlueprint ?? {};
 
   const pickBrandName = React.useCallback(
-    (source: unknown): string => {
-      const value = source as {
-        brandName?: unknown;
-      };
-
+    (
+      source: Partial<TokenBlueprint>,
+    ): string => {
       return String(
-        value?.brandName ?? "",
+        source.brandName ?? "",
       ).trim();
     },
     [],
   );
 
   const pickString = React.useCallback(
-    (value: unknown): string => {
-      return String(value ?? "").trim();
+    (
+      value: unknown,
+    ): string => {
+      return String(
+        value ?? "",
+      ).trim();
     },
     [],
   );
 
-  const [id, setId] = React.useState(
-    pickString(tokenBlueprint.id),
-  );
-
-  const [name, setName] = React.useState(
-    pickString(tokenBlueprint.name),
-  );
-
-  const [symbol, setSymbol] = React.useState(
-    pickString(tokenBlueprint.symbol),
-  );
-
-  const [brandId, setBrandId] = React.useState(
-    pickString(tokenBlueprint.brandId),
-  );
-
-  const [brandName, setBrandName] = React.useState(
-    pickBrandName(tokenBlueprint),
-  );
-
-  const [description, setDescription] =
+  const [id, setId] =
     React.useState(
-      pickString(tokenBlueprint.description),
+      pickString(
+        tokenBlueprint.id,
+      ),
     );
 
-  const [burnAt, setBurnAt] = React.useState(
-    params.initialBurnAt ?? "",
+  const [name, setName] =
+    React.useState(
+      pickString(
+        tokenBlueprint.name,
+      ),
+    );
+
+  const [symbol, setSymbol] =
+    React.useState(
+      pickString(
+        tokenBlueprint.symbol,
+      ),
+    );
+
+  const [brandId, setBrandId] =
+    React.useState(
+      pickString(
+        tokenBlueprint.brandId,
+      ),
+    );
+
+  const [brandName, setBrandName] =
+    React.useState(
+      pickBrandName(
+        tokenBlueprint,
+      ),
+    );
+
+  const [
+    description,
+    setDescription,
+  ] = React.useState(
+    pickString(
+      tokenBlueprint.description,
+    ),
   );
+
+  const [burnAt, setBurnAt] =
+    React.useState(
+      params.initialBurnAt ?? "",
+    );
 
   const [minted, setMinted] =
     React.useState<boolean>(
-      typeof tokenBlueprint.minted === "boolean"
-        ? tokenBlueprint.minted
-        : false,
+      tokenBlueprint.minted ??
+        false,
     );
 
-  const [remoteIconUrl, setRemoteIconUrl] =
-    React.useState(
-      params.initialIconUrl ?? "",
-    );
+  const [
+    remoteIconUrl,
+    setRemoteIconUrl,
+  ] = React.useState(
+    params.initialIconUrl ?? "",
+  );
 
-  const [localPreviewUrl, setLocalPreviewUrl] =
-    React.useState<string>("");
+  const [
+    localPreviewUrl,
+    setLocalPreviewUrl,
+  ] = React.useState<string>("");
 
   const [
     selectedIconFile,
     setSelectedIconFile,
-  ] = React.useState<File | null>(null);
+  ] = React.useState<File | null>(
+    null,
+  );
 
-  const [isEditMode, setIsEditMode] =
-    React.useState(
-      params.initialEditMode ?? false,
-    );
+  const [
+    isEditMode,
+    setIsEditMode,
+  ] = React.useState(
+    params.initialEditMode ??
+      false,
+  );
 
-  const [brandOptions, setBrandOptions] =
-    React.useState<
-      {
-        id: string;
-        name: string;
-      }[]
-    >([]);
+  const [
+    brandOptions,
+    setBrandOptions,
+  ] = React.useState<
+    {
+      id: string;
+      name: string;
+    }[]
+  >([]);
 
-  const initialRef = React.useRef<
-    | (Partial<TokenBlueprint> & {
-        brandName?: string;
-      })
-    | null
-  >(tokenBlueprint);
+  const initialRef =
+    React.useRef<
+      Partial<TokenBlueprint> | null
+    >(tokenBlueprint);
 
   const descriptionRef =
     React.useRef<HTMLTextAreaElement | null>(
@@ -136,23 +165,48 @@ export function useTokenBlueprintCard(params: {
       null,
     );
 
+  const localPreviewUrlRef =
+    React.useRef<string>("");
+
   const canEditIcon = Boolean(
-    isEditMode || minted,
+    isEditMode ||
+      minted,
   );
 
-  const isIdentityLocked = Boolean(minted);
+  const isIdentityLocked =
+    Boolean(minted);
+
+  const clearLocalPreview =
+    React.useCallback(() => {
+      const currentUrl =
+        localPreviewUrlRef.current;
+
+      if (currentUrl) {
+        URL.revokeObjectURL(
+          currentUrl,
+        );
+
+        localPreviewUrlRef.current =
+          "";
+
+        setLocalPreviewUrl("");
+      }
+    }, []);
 
   React.useEffect(() => {
     let cancelled = false;
 
-    const loadBrands = async () => {
-      const brands =
-        await loadBrandsForCompany();
+    const loadBrands =
+      async () => {
+        const brands =
+          await loadBrandsForCompany();
 
-      if (!cancelled) {
-        setBrandOptions(brands);
-      }
-    };
+        if (!cancelled) {
+          setBrandOptions(
+            brands,
+          );
+        }
+      };
 
     void loadBrands();
 
@@ -169,62 +223,71 @@ export function useTokenBlueprintCard(params: {
       return;
     }
 
-    initialRef.current = source;
+    initialRef.current =
+      source;
 
     if (isEditMode) {
       return;
     }
 
     setId(
-      pickString(source.id),
+      pickString(
+        source.id,
+      ),
     );
 
     setName(
-      pickString(source.name),
+      pickString(
+        source.name,
+      ),
     );
 
     setSymbol(
-      pickString(source.symbol),
+      pickString(
+        source.symbol,
+      ),
     );
 
     setBrandId(
-      pickString(source.brandId),
+      pickString(
+        source.brandId,
+      ),
     );
 
     setBrandName(
-      pickBrandName(source),
+      pickBrandName(
+        source,
+      ),
     );
 
     setDescription(
-      pickString(source.description),
+      pickString(
+        source.description,
+      ),
     );
 
     setMinted(
-      typeof source.minted === "boolean"
-        ? source.minted
-        : false,
+      source.minted ??
+        false,
     );
 
     setBurnAt(
-      params.initialBurnAt ?? "",
+      params.initialBurnAt ??
+        "",
     );
 
-    setSelectedIconFile(null);
+    setSelectedIconFile(
+      null,
+    );
 
-    if (localPreviewUrl) {
-      URL.revokeObjectURL(
-        localPreviewUrl,
-      );
-
-      setLocalPreviewUrl("");
-    }
+    clearLocalPreview();
   }, [
     params.initialTokenBlueprint,
     params.initialBurnAt,
     isEditMode,
-    localPreviewUrl,
     pickBrandName,
     pickString,
+    clearLocalPreview,
   ]);
 
   React.useEffect(() => {
@@ -233,7 +296,8 @@ export function useTokenBlueprintCard(params: {
     }
 
     setRemoteIconUrl(
-      params.initialIconUrl ?? "",
+      params.initialIconUrl ??
+        "",
     );
   }, [
     params.initialIconUrl,
@@ -248,20 +312,28 @@ export function useTokenBlueprintCard(params: {
       return;
     }
 
-    element.style.height = "auto";
+    element.style.height =
+      "auto";
+
     element.style.height =
       `${element.scrollHeight}px`;
   }, [description]);
 
   React.useEffect(() => {
     return () => {
-      if (localPreviewUrl) {
+      const currentUrl =
+        localPreviewUrlRef.current;
+
+      if (currentUrl) {
         URL.revokeObjectURL(
-          localPreviewUrl,
+          currentUrl,
         );
+
+        localPreviewUrlRef.current =
+          "";
       }
     };
-  }, [localPreviewUrl]);
+  }, []);
 
   const requestPickIconFile =
     React.useCallback(() => {
@@ -275,17 +347,22 @@ export function useTokenBlueprintCard(params: {
   const onIconInputChange =
     React.useCallback(
       (
-        event: React.ChangeEvent<HTMLInputElement>,
+        event:
+          React.ChangeEvent<HTMLInputElement>,
       ) => {
         if (!canEditIcon) {
-          event.target.value = "";
+          event.target.value =
+            "";
+
           return;
         }
 
         const file =
-          event.target.files?.[0] ?? null;
+          event.target.files?.[0] ??
+          null;
 
-        event.target.value = "";
+        event.target.value =
+          "";
 
         if (!file) {
           return;
@@ -293,32 +370,41 @@ export function useTokenBlueprintCard(params: {
 
         if (
           !file.type
-            ?.toLowerCase()
-            .startsWith("image/")
+            .toLowerCase()
+            .startsWith(
+              "image/",
+            )
         ) {
           return;
         }
 
-        setSelectedIconFile(file);
+        setSelectedIconFile(
+          file,
+        );
 
-        if (localPreviewUrl) {
-          URL.revokeObjectURL(
-            localPreviewUrl,
+        clearLocalPreview();
+
+        const previewUrl =
+          URL.createObjectURL(
+            file,
           );
-        }
+
+        localPreviewUrlRef.current =
+          previewUrl;
 
         setLocalPreviewUrl(
-          URL.createObjectURL(file),
+          previewUrl,
         );
       },
       [
         canEditIcon,
-        localPreviewUrl,
+        clearLocalPreview,
       ],
     );
 
   const shownIconUrl =
-    localPreviewUrl || remoteIconUrl;
+    localPreviewUrl ||
+    remoteIconUrl;
 
   const vm: TokenBlueprintCardViewModel = {
     id,
@@ -327,13 +413,15 @@ export function useTokenBlueprintCard(params: {
     brandId,
     brandName,
     description,
-    iconUrl: shownIconUrl,
+    iconUrl:
+      shownIconUrl,
 
     minted,
     isEditMode,
     brandOptions,
 
-    iconFile: selectedIconFile,
+    iconFile:
+      selectedIconFile,
   };
 
   const handlers: TokenBlueprintCardHandlers = {
@@ -367,44 +455,52 @@ export function useTokenBlueprintCard(params: {
         return;
       }
 
-      setBrandId(nextBrandId);
-      setBrandName(nextBrandName);
+      setBrandId(
+        nextBrandId,
+      );
+
+      setBrandName(
+        nextBrandName,
+      );
     },
 
     onChangeDescription: (
       value: string,
     ) => {
-      setDescription(value);
+      setDescription(
+        value,
+      );
     },
 
     iconInputRef,
     descriptionRef,
+
     onRequestPickIconFile:
       requestPickIconFile,
+
     onIconInputChange,
 
     onClearLocalIconFile: () => {
-      setSelectedIconFile(null);
+      setSelectedIconFile(
+        null,
+      );
 
-      if (localPreviewUrl) {
-        URL.revokeObjectURL(
-          localPreviewUrl,
-        );
-
-        setLocalPreviewUrl("");
-      }
+      clearLocalPreview();
     },
 
     onToggleEditMode: () => {
       setIsEditMode(
-        (current) => !current,
+        (current) =>
+          !current,
       );
     },
 
     setEditMode: (
       edit: boolean,
     ) => {
-      setIsEditMode(edit);
+      setIsEditMode(
+        edit,
+      );
     },
 
     reset: () => {
@@ -416,52 +512,61 @@ export function useTokenBlueprintCard(params: {
       }
 
       setId(
-        pickString(source.id),
+        pickString(
+          source.id,
+        ),
       );
 
       setName(
-        pickString(source.name),
+        pickString(
+          source.name,
+        ),
       );
 
       setSymbol(
-        pickString(source.symbol),
+        pickString(
+          source.symbol,
+        ),
       );
 
       setBrandId(
-        pickString(source.brandId),
+        pickString(
+          source.brandId,
+        ),
       );
 
       setBrandName(
-        pickBrandName(source),
+        pickBrandName(
+          source,
+        ),
       );
 
       setDescription(
-        pickString(source.description),
+        pickString(
+          source.description,
+        ),
       );
 
       setMinted(
-        typeof source.minted === "boolean"
-          ? source.minted
-          : false,
+        source.minted ??
+          false,
       );
 
       setBurnAt(
-        params.initialBurnAt ?? "",
+        params.initialBurnAt ??
+          "",
       );
 
       setRemoteIconUrl(
-        params.initialIconUrl ?? "",
+        params.initialIconUrl ??
+          "",
       );
 
-      setSelectedIconFile(null);
+      setSelectedIconFile(
+        null,
+      );
 
-      if (localPreviewUrl) {
-        URL.revokeObjectURL(
-          localPreviewUrl,
-        );
-
-        setLocalPreviewUrl("");
-      }
+      clearLocalPreview();
     },
   };
 

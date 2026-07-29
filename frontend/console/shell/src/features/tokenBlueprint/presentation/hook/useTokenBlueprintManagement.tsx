@@ -1,225 +1,544 @@
-// frontend/console/tokenBlueprint/src/presentation/hook/useTokenBlueprintManagement.tsx
+// frontend/console/shell/src/features/tokenBlueprint/presentation/hook/useTokenBlueprintManagement.tsx
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
-import type { TokenBlueprint } from "../../domain/tokenBlueprint";
 import {
-  SortKey,
-  SortDir,
-  fetchTokenBlueprintsForCompany,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { useNavigate } from "react-router-dom";
+
+import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
+
+import type { TokenBlueprint } from "../../../../shared/types/tokenBlueprint";
+
+import {
   buildOptionsFromTokenBlueprints,
+  fetchTokenBlueprintsForCompany,
   filterAndSortTokenBlueprints,
+  type SortDir,
+  type SortKey,
 } from "../../application/tokenBlueprintManagementService";
 
 export type UseTokenBlueprintManagementResult = {
   rows: TokenBlueprint[];
-  brandOptions: { value: string; label: string }[];
-  assigneeOptions: { value: string; label: string }[];
-  mintedOptions: { value: string; label: string }[];
+
+  brandOptions: {
+    value: string;
+    label: string;
+  }[];
+
+  assigneeOptions: {
+    value: string;
+    label: string;
+  }[];
+
+  mintedOptions: {
+    value: string;
+    label: string;
+  }[];
+
   brandFilter: string[];
   assigneeFilter: string[];
   mintedFilter: string[];
+
   sortKey: SortKey;
   sortDir: SortDir;
 
   isResetting: boolean;
 
-  handleChangeBrandFilter: (vals: string[]) => void;
-  handleChangeAssigneeFilter: (vals: string[]) => void;
-  handleChangeMintedFilter: (vals: string[]) => void;
-  handleChangeSort: (key: string | null, dir: SortDir) => void;
+  handleChangeBrandFilter: (
+    values: string[],
+  ) => void;
+
+  handleChangeAssigneeFilter: (
+    values: string[],
+  ) => void;
+
+  handleChangeMintedFilter: (
+    values: string[],
+  ) => void;
+
+  handleChangeSort: (
+    key: string | null,
+    direction: SortDir,
+  ) => void;
+
   handleReset: () => void;
   handleCreate: () => void;
-  handleRowClick: (id: string) => void;
+
+  handleRowClick: (
+    id: string,
+  ) => void;
 };
 
 /**
- * ISO8601 → yyyy/MM/dd HH:mm 形式に整形
- * - 例: 2026/01/24 13:05
+ * ISO 8601文字列をyyyy/MM/dd HH:mm形式に整形する。
+ *
+ * 例:
+ * 2026/01/24 13:05
  */
-function formatDateYYYYMMDDHHmm(iso: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) {
+function formatDateYYYYMMDDHHmm(
+  iso: string,
+): string {
+  if (!iso) {
+    return "";
+  }
+
+  const date =
+    new Date(iso);
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
     return iso;
   }
 
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  const year =
+    date.getFullYear();
 
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
+  const month =
+    String(
+      date.getMonth() + 1,
+    ).padStart(
+      2,
+      "0",
+    );
 
-  return `${y}/${m}/${day} ${hh}:${mm}`;
+  const day =
+    String(
+      date.getDate(),
+    ).padStart(
+      2,
+      "0",
+    );
+
+  const hour =
+    String(
+      date.getHours(),
+    ).padStart(
+      2,
+      "0",
+    );
+
+  const minute =
+    String(
+      date.getMinutes(),
+    ).padStart(
+      2,
+      "0",
+    );
+
+  return `${year}/${month}/${day} ${hour}:${minute}`;
 }
 
 export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult {
-  const navigate = useNavigate();
-  const { currentMember } = useAuth();
+  const navigate =
+    useNavigate();
 
-  const [rows, setRows] = useState<TokenBlueprint[]>([]);
+  const {
+    currentMember,
+  } = useAuth();
 
-  const [brandFilter, setBrandFilter] = useState<string[]>([]);
-  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
-  const [mintedFilter, setMintedFilter] = useState<string[]>([]);
+  const [
+    rows,
+    setRows,
+  ] = useState<
+    TokenBlueprint[]
+  >([]);
 
-  const [sortKey, setSortKey] = useState<SortKey>(null);
-  const [sortDir, setSortDir] = useState<SortDir>(null);
+  const [
+    brandFilter,
+    setBrandFilter,
+  ] = useState<string[]>(
+    [],
+  );
 
-  const [isResetting, setIsResetting] = useState(false);
+  const [
+    assigneeFilter,
+    setAssigneeFilter,
+  ] = useState<string[]>(
+    [],
+  );
 
-  const reload = useCallback(async () => {
-    const companyId = currentMember?.companyId;
-    if (!companyId) {
-      setRows([]);
-      return;
-    }
+  const [
+    mintedFilter,
+    setMintedFilter,
+  ] = useState<string[]>(
+    [],
+  );
 
-    setIsResetting(true);
-    try {
-      const result = await fetchTokenBlueprintsForCompany(companyId);
-      setRows(result);
-    } catch {
-      setRows([]);
-    } finally {
-      setIsResetting(false);
-    }
-  }, [currentMember?.companyId]);
+  const [
+    sortKey,
+    setSortKey,
+  ] = useState<SortKey>(
+    null,
+  );
+
+  const [
+    sortDir,
+    setSortDir,
+  ] = useState<SortDir>(
+    null,
+  );
+
+  const [
+    isResetting,
+    setIsResetting,
+  ] = useState<boolean>(
+    false,
+  );
+
+  /**
+   * 認証中の会社に属するTokenBlueprint一覧を再取得する。
+   *
+   * companyIdはリクエスト引数として送信せず、
+   * backendが認証コンテキストから会社境界を判定する。
+   */
+  const reload =
+    useCallback(
+      async (): Promise<void> => {
+        if (
+          !currentMember?.companyId
+        ) {
+          setRows(
+            [],
+          );
+
+          return;
+        }
+
+        setIsResetting(
+          true,
+        );
+
+        try {
+          const result =
+            await fetchTokenBlueprintsForCompany();
+
+          setRows(
+            result,
+          );
+        } catch {
+          setRows(
+            [],
+          );
+        } finally {
+          setIsResetting(
+            false,
+          );
+        }
+      },
+      [
+        currentMember?.companyId,
+      ],
+    );
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  const { brandOptions, assigneeOptions } = useMemo(() => {
-    const base = buildOptionsFromTokenBlueprints(rows);
+  const {
+    brandOptions,
+    assigneeOptions,
+  } = useMemo(() => {
+    const baseOptions =
+      buildOptionsFromTokenBlueprints(
+        rows,
+      );
 
-    const brandNameById = new Map<string, string>();
-    const assigneeNameById = new Map<string, string>();
+    const brandNameById =
+      new Map<
+        string,
+        string
+      >();
 
-    rows.forEach((r) => {
-      const bid = r.brandId;
-      if (bid) {
-        const bname = r.brandName ?? "";
-        if (bname && !brandNameById.has(bid)) {
-          brandNameById.set(bid, bname);
-        }
+    const assigneeNameById =
+      new Map<
+        string,
+        string
+      >();
+
+    for (
+      const row of rows
+    ) {
+      if (
+        row.brandId &&
+        row.brandName &&
+        !brandNameById.has(
+          row.brandId,
+        )
+      ) {
+        brandNameById.set(
+          row.brandId,
+          row.brandName,
+        );
       }
 
-      const aid = r.assigneeId;
-      if (aid) {
-        const aname = r.assigneeName ?? "";
-        if (aname && !assigneeNameById.has(aid)) {
-          assigneeNameById.set(aid, aname);
-        }
+      if (
+        row.assigneeId &&
+        row.assigneeName &&
+        !assigneeNameById.has(
+          row.assigneeId,
+        )
+      ) {
+        assigneeNameById.set(
+          row.assigneeId,
+          row.assigneeName,
+        );
       }
-    });
-
-    const brandOptions = base.brandOptions.map((opt) => ({
-      ...opt,
-      label: brandNameById.get(opt.value) || opt.label || opt.value,
-    }));
-
-    const assigneeOptions = base.assigneeOptions.map((opt) => ({
-      ...opt,
-      label: assigneeNameById.get(opt.value) || opt.label || opt.value,
-    }));
-
-    return { brandOptions, assigneeOptions };
-  }, [rows]);
-
-  const mintedOptions = useMemo(
-    () => [
-      { value: "true", label: "true" },
-      { value: "false", label: "false" },
-    ],
-    [],
-  );
-
-  const filteredRows: TokenBlueprint[] = useMemo(() => {
-    const base = filterAndSortTokenBlueprints(rows, {
-      brandFilter,
-      assigneeFilter,
-      sortKey,
-      sortDir,
-    });
-
-    if (mintedFilter.length === 0) {
-      return base;
     }
 
-    return base.filter((tb) => {
-      const mintedValue = String(Boolean(tb.minted));
-      return mintedFilter.includes(mintedValue);
-    });
-  }, [rows, brandFilter, assigneeFilter, mintedFilter, sortKey, sortDir]);
+    const nextBrandOptions =
+      baseOptions.brandOptions.map(
+        (option) => {
+          return {
+            ...option,
 
-  const displayRows: TokenBlueprint[] = useMemo(() => {
-    return filteredRows.map((tb) => ({
-      ...tb,
-      createdAt: tb.createdAt
-        ? formatDateYYYYMMDDHHmm(tb.createdAt)
-        : tb.createdAt,
-      updatedAt: tb.updatedAt
-        ? formatDateYYYYMMDDHHmm(tb.updatedAt)
-        : tb.updatedAt,
-    }));
-  }, [filteredRows]);
+            label:
+              brandNameById.get(
+                option.value,
+              ) ||
+              option.label ||
+              option.value,
+          };
+        },
+      );
 
-  const handleRowClick = useCallback(
-    (id: string) => {
-      navigate(`/tokenBlueprint/${encodeURIComponent(id)}`);
-    },
-    [navigate],
-  );
+    const nextAssigneeOptions =
+      baseOptions.assigneeOptions.map(
+        (option) => {
+          return {
+            ...option,
 
-  const handleCreate = useCallback(() => {
-    navigate("/tokenBlueprint/create");
-  }, [navigate]);
+            label:
+              assigneeNameById.get(
+                option.value,
+              ) ||
+              option.label ||
+              option.value,
+          };
+        },
+      );
 
-  const handleReset = useCallback(() => {
-    setBrandFilter([]);
-    setAssigneeFilter([]);
-    setMintedFilter([]);
-    setSortKey(null);
-    setSortDir(null);
+    return {
+      brandOptions:
+        nextBrandOptions,
 
-    void reload();
-  }, [reload]);
+      assigneeOptions:
+        nextAssigneeOptions,
+    };
+  }, [rows]);
 
-  const handleChangeBrandFilter = useCallback((vals: string[]) => {
-    setBrandFilter(vals);
-  }, []);
+  const mintedOptions =
+    useMemo(
+      () => {
+        return [
+          {
+            value: "true",
+            label: "true",
+          },
+          {
+            value: "false",
+            label: "false",
+          },
+        ];
+      },
+      [],
+    );
 
-  const handleChangeAssigneeFilter = useCallback((vals: string[]) => {
-    setAssigneeFilter(vals);
-  }, []);
+  const filteredRows =
+    useMemo<
+      TokenBlueprint[]
+    >(() => {
+      const baseRows =
+        filterAndSortTokenBlueprints(
+          rows,
+          {
+            brandFilter,
+            assigneeFilter,
+            sortKey,
+            sortDir,
+          },
+        );
 
-  const handleChangeMintedFilter = useCallback((vals: string[]) => {
-    setMintedFilter(vals);
-  }, []);
+      if (
+        mintedFilter.length === 0
+      ) {
+        return baseRows;
+      }
 
-  const handleChangeSort = useCallback((key: string | null, dir: SortDir) => {
-    setSortKey((key as SortKey) ?? null);
-    setSortDir(dir);
-  }, []);
+      return baseRows.filter(
+        (tokenBlueprint) => {
+          const mintedValue =
+            String(
+              tokenBlueprint.minted,
+            );
+
+          return mintedFilter.includes(
+            mintedValue,
+          );
+        },
+      );
+    }, [
+      rows,
+      brandFilter,
+      assigneeFilter,
+      mintedFilter,
+      sortKey,
+      sortDir,
+    ]);
+
+  const displayRows =
+    useMemo<
+      TokenBlueprint[]
+    >(() => {
+      return filteredRows.map(
+        (tokenBlueprint) => {
+          return {
+            ...tokenBlueprint,
+
+            createdAt:
+              tokenBlueprint.createdAt
+                ? formatDateYYYYMMDDHHmm(
+                    tokenBlueprint.createdAt,
+                  )
+                : tokenBlueprint.createdAt,
+
+            updatedAt:
+              tokenBlueprint.updatedAt
+                ? formatDateYYYYMMDDHHmm(
+                    tokenBlueprint.updatedAt,
+                  )
+                : tokenBlueprint.updatedAt,
+          };
+        },
+      );
+    }, [filteredRows]);
+
+  const handleRowClick =
+    useCallback(
+      (
+        id: string,
+      ) => {
+        navigate(
+          `/tokenBlueprint/${encodeURIComponent(id)}`,
+        );
+      },
+      [navigate],
+    );
+
+  const handleCreate =
+    useCallback(() => {
+      navigate(
+        "/tokenBlueprint/create",
+      );
+    }, [navigate]);
+
+  const handleReset =
+    useCallback(() => {
+      setBrandFilter(
+        [],
+      );
+
+      setAssigneeFilter(
+        [],
+      );
+
+      setMintedFilter(
+        [],
+      );
+
+      setSortKey(
+        null,
+      );
+
+      setSortDir(
+        null,
+      );
+
+      void reload();
+    }, [reload]);
+
+  const handleChangeBrandFilter =
+    useCallback(
+      (
+        values: string[],
+      ) => {
+        setBrandFilter(
+          values,
+        );
+      },
+      [],
+    );
+
+  const handleChangeAssigneeFilter =
+    useCallback(
+      (
+        values: string[],
+      ) => {
+        setAssigneeFilter(
+          values,
+        );
+      },
+      [],
+    );
+
+  const handleChangeMintedFilter =
+    useCallback(
+      (
+        values: string[],
+      ) => {
+        setMintedFilter(
+          values,
+        );
+      },
+      [],
+    );
+
+  const handleChangeSort =
+    useCallback(
+      (
+        key: string | null,
+        direction: SortDir,
+      ) => {
+        setSortKey(
+          key === "createdAt"
+            ? "createdAt"
+            : null,
+        );
+
+        setSortDir(
+          direction,
+        );
+      },
+      [],
+    );
 
   return {
-    rows: displayRows,
+    rows:
+      displayRows,
+
     brandOptions,
     assigneeOptions,
     mintedOptions,
+
     brandFilter,
     assigneeFilter,
     mintedFilter,
+
     sortKey,
     sortDir,
+
     isResetting,
+
     handleChangeBrandFilter,
     handleChangeAssigneeFilter,
     handleChangeMintedFilter,
     handleChangeSort,
+
     handleReset,
     handleCreate,
     handleRowClick,

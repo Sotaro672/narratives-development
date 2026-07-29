@@ -1,10 +1,14 @@
-// frontend\console\shell\src\pages\tokenBlueprintManagement.tsx
+// frontend/console/shell/src/pages/tokenBlueprintManagement.tsx
+
 import React from "react";
+
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../layout/List/List";
-import type { TokenBlueprint } from "../features/tokenBlueprint/domain/tokenBlueprint";
+
+import type { TokenBlueprint } from "../shared/types/tokenBlueprint";
+
 import { useTokenBlueprintManagement } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintManagement";
 
 export default function TokenBlueprintManagementPage() {
@@ -30,6 +34,7 @@ export default function TokenBlueprintManagementPage() {
 
   const headers: React.ReactNode[] = [
     "トークン名",
+
     <FilterableTableHeader
       key="brand"
       label="ブランド"
@@ -37,6 +42,7 @@ export default function TokenBlueprintManagementPage() {
       selected={brandFilter}
       onChange={handleChangeBrandFilter}
     />,
+
     <FilterableTableHeader
       key="assignee"
       label="担当者"
@@ -44,6 +50,7 @@ export default function TokenBlueprintManagementPage() {
       selected={assigneeFilter}
       onChange={handleChangeAssigneeFilter}
     />,
+
     <FilterableTableHeader
       key="minted"
       label="ミント"
@@ -51,6 +58,7 @@ export default function TokenBlueprintManagementPage() {
       selected={mintedFilter}
       onChange={handleChangeMintedFilter}
     />,
+
     <SortableTableHeader
       key="createdAt"
       label="作成日"
@@ -59,6 +67,7 @@ export default function TokenBlueprintManagementPage() {
       direction={sortDir}
       onChange={handleChangeSort}
     />,
+
     <SortableTableHeader
       key="updatedAt"
       label="更新日"
@@ -81,28 +90,61 @@ export default function TokenBlueprintManagementPage() {
         onCreate={handleCreate}
         onReset={handleReset}
       >
-        {rows.map((t: TokenBlueprint) => (
-          <tr
-            key={t.id}
-            role="button"
-            tabIndex={0}
-            className="cursor-pointer hover:bg-slate-50 transition-colors"
-            onClick={() => handleRowClick(t.id)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleRowClick(t.id);
-              }
-            }}
-          >
-            <td>{t.name}</td>
-            <td>{t.brandName || t.brandId}</td>
-            <td>{t.assigneeName || ""}</td>
-            <td>{String(t.minted)}</td>
-            <td>{t.createdAt}</td>
-            <td>{t.updatedAt}</td>
-          </tr>
-        ))}
+        {rows.map((tokenBlueprint: TokenBlueprint) => {
+          return (
+            <tr
+              key={tokenBlueprint.id}
+              role="button"
+              tabIndex={0}
+              className="cursor-pointer hover:bg-slate-50 transition-colors"
+              onClick={() => {
+                handleRowClick(
+                  tokenBlueprint.id,
+                );
+              }}
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Enter" ||
+                  event.key === " "
+                ) {
+                  event.preventDefault();
+
+                  handleRowClick(
+                    tokenBlueprint.id,
+                  );
+                }
+              }}
+            >
+              <td>
+                {tokenBlueprint.name}
+              </td>
+
+              <td>
+                {tokenBlueprint.brandName ||
+                  tokenBlueprint.brandId}
+              </td>
+
+              <td>
+                {tokenBlueprint.assigneeName ||
+                  ""}
+              </td>
+
+              <td>
+                {String(
+                  tokenBlueprint.minted,
+                )}
+              </td>
+
+              <td>
+                {tokenBlueprint.createdAt}
+              </td>
+
+              <td>
+                {tokenBlueprint.updatedAt}
+              </td>
+            </tr>
+          );
+        })}
       </List>
     </div>
   );

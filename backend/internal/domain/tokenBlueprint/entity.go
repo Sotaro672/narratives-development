@@ -23,13 +23,6 @@ const (
 	ContentDocument ContentFileType = "document"
 )
 
-type ContentVisibility string
-
-const (
-	VisibilityPrivate ContentVisibility = "private"
-	VisibilityPublic  ContentVisibility = "public"
-)
-
 var (
 	ErrNotFound = errors.New("tokenBlueprint: not found")
 	ErrConflict = errors.New("tokenBlueprint: conflict")
@@ -74,15 +67,6 @@ func IsValidContentType(t ContentFileType) bool {
 	}
 }
 
-func IsValidVisibility(v ContentVisibility) bool {
-	switch v {
-	case VisibilityPrivate, VisibilityPublic:
-		return true
-	default:
-		return false
-	}
-}
-
 // ContentFile is embedded in TokenBlueprint.
 //
 // Firebase Storage 移行後:
@@ -92,14 +76,14 @@ func IsValidVisibility(v ContentVisibility) bool {
 // - objectPath は Firebase Storage 上の実体を差し替え・削除するための正規キー
 // - name / contentType / size は表示・監査・差し替え判断用に保持する
 type ContentFile struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	Type        ContentFileType   `json:"type"`
-	ContentType string            `json:"contentType,omitempty"`
-	URL         string            `json:"url"`
-	ObjectPath  string            `json:"objectPath"`
-	Visibility  ContentVisibility `json:"visibility"`
-	Size        int64             `json:"size"`
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	Type        ContentFileType `json:"type"`
+	ContentType string          `json:"contentType,omitempty"`
+	URL         string          `json:"url"`
+	ObjectPath  string          `json:"objectPath"`
+	IsPublic    bool            `json:"isPublic"`
+	Size        int64           `json:"size"`
 
 	CreatedAt time.Time `json:"createdAt"`
 	CreatedBy string    `json:"createdBy"`
@@ -122,9 +106,6 @@ func (f ContentFile) Validate() error {
 	}
 	if f.ObjectPath == "" {
 		return ErrInvalidContentFile
-	}
-	if !IsValidVisibility(f.Visibility) {
-		return ErrInvalidContentVisibility
 	}
 	if f.Size < 0 {
 		return ErrInvalidContentFile
@@ -250,10 +231,9 @@ var (
 	ErrInvalidIconContentType = errors.New("tokenBlueprint: invalid iconContentType")
 	ErrInvalidIconSize        = errors.New("tokenBlueprint: invalid iconSize")
 
-	ErrInvalidContentFiles      = errors.New("tokenBlueprint: invalid contentFiles")
-	ErrInvalidContentFile       = errors.New("tokenBlueprint: invalid contentFile")
-	ErrInvalidContentType       = errors.New("tokenBlueprint: invalid contentFile.type")
-	ErrInvalidContentVisibility = errors.New("tokenBlueprint: invalid contentFile.visibility")
+	ErrInvalidContentFiles = errors.New("tokenBlueprint: invalid contentFiles")
+	ErrInvalidContentFile  = errors.New("tokenBlueprint: invalid contentFile")
+	ErrInvalidContentType  = errors.New("tokenBlueprint: invalid contentFile.type")
 
 	ErrAlreadyMinted = errors.New("tokenBlueprint: already minted; core fields are not allowed")
 )
@@ -664,26 +644,30 @@ func (t *TokenBlueprint) ReplaceContentFile(contentID string, nextFile ContentFi
 	return replaced, nil
 }
 
-func (t *TokenBlueprint) SetContentVisibility(contentID string, v ContentVisibility, actorID string, now time.Time) error {
+func (t *TokenBlueprint) SetContentIsPublic(
+	contentID string,
+	isPublic bool,
+	actorID string,
+	now time.Time,
+) error {
 	if t == nil {
 		return ErrNilTokenBlueprint
 	}
 	if contentID == "" {
 		return ErrInvalidContentFile
 	}
-	if !IsValidVisibility(v) {
-		return ErrInvalidContentVisibility
-	}
 
 	for i := range t.ContentFiles {
 		if t.ContentFiles[i].ID == contentID {
-			t.ContentFiles[i].Visibility = v
+			t.ContentFiles[i].IsPublic = isPublic
+
 			if !now.IsZero() {
 				t.ContentFiles[i].UpdatedAt = now.UTC()
 			}
 			if actorID != "" {
 				t.ContentFiles[i].UpdatedBy = actorID
 			}
+
 			return nil
 		}
 	}

@@ -599,7 +599,7 @@ func toFSContentFiles(xs []tbdom.ContentFile) []map[string]any {
 			"contentType": f.ContentType,
 			"url":         f.URL,
 			"objectPath":  f.ObjectPath,
-			"visibility":  string(f.Visibility),
+			"isPublic":    f.IsPublic,
 			"size":        f.Size,
 			"createdAt":   f.CreatedAt,
 			"createdBy":   f.CreatedBy,
@@ -653,11 +653,11 @@ func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 		}
 		f.ObjectPath = v
 
-		vv, ok := m["visibility"].(string)
-		if !ok || vv == "" {
-			return nil, fmt.Errorf("%w: contentFiles[%d].visibility", tbdom.ErrInvalidContentVisibility, i)
+		isPublic, ok := m["isPublic"].(bool)
+		if !ok {
+			return nil, fmt.Errorf("%w: contentFiles[%d].isPublic", tbdom.ErrInvalidContentFile, i)
 		}
-		f.Visibility = tbdom.ContentVisibility(vv)
+		f.IsPublic = isPublic
 
 		size, err := int64FromAny(m["size"])
 		if err != nil {

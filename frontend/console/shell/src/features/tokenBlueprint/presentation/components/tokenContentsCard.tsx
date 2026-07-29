@@ -17,7 +17,12 @@ import {
 } from "../../../../shared/ui/card";
 import { Button } from "../../../../shared/ui/button";
 
-import type { FirebaseStorageTokenContent } from "../../domain/tokenBlueprint";
+import {
+  guessTokenBlueprintContentType,
+} from "../../../../shared/types/tokenBlueprint";
+import type {
+  FirebaseStorageTokenContent,
+} from "../../../../shared/types/tokenBlueprint";
 
 type Mode = "edit" | "view";
 
@@ -56,26 +61,6 @@ type TokenContentsCardProps = {
   ) => void | Promise<void>;
 };
 
-function guessContentType(
-  file: File,
-): FirebaseStorageTokenContent["type"] {
-  const mime = file.type.toLowerCase();
-
-  if (mime.startsWith("image/")) {
-    return "image";
-  }
-
-  if (mime.startsWith("video/")) {
-    return "video";
-  }
-
-  if (mime === "application/pdf") {
-    return "pdf";
-  }
-
-  return "document";
-}
-
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -91,12 +76,12 @@ function buildLocalContent(
   return {
     id: `local_${timestamp}_${index}`,
     name: file.name || `local_${index}`,
-    type: guessContentType(file),
+    type: guessTokenBlueprintContentType(file),
     contentType:
       file.type || "application/octet-stream",
     url,
     objectPath: `local/${timestamp}_${index}`,
-    visibility: "private",
+    isPublic: false,
     size: file.size,
     createdAt,
     createdBy: "local",

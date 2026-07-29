@@ -1,7 +1,10 @@
-// frontend/console/tokenBlueprint/src/infrastructure/dto/tokenBlueprint.dto.ts
-export type ContentVisibilityDTO = "private" | "public";
+// frontend/console/shell/src/features/tokenBlueprint/infrastructure/dto/tokenBlueprint.dto.ts
 
-export type ContentFileTypeDTO = "image" | "video" | "pdf" | "document";
+export type ContentFileTypeDTO =
+  | "image"
+  | "video"
+  | "pdf"
+  | "document";
 
 export type ContentFileDTO = {
   id: string;
@@ -10,7 +13,7 @@ export type ContentFileDTO = {
   contentType: string;
   url: string;
   objectPath: string;
-  visibility: ContentVisibilityDTO;
+  isPublic: boolean;
   size: number;
 
   createdAt: string;

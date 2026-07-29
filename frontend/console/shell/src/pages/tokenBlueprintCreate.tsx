@@ -1,43 +1,65 @@
-// frontend\console\shell\src\pages\tokenBlueprintReviewDetail.tsx
-import { useCallback, useMemo, useState, useEffect } from "react";
+// frontend/console/shell/src/pages/tokenBlueprintCreate.tsx
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useNavigate } from "react-router-dom";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
+
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import TokenBlueprintCard from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 import TokenContentsCard from "../features/tokenBlueprint/presentation/components/tokenContentsCard";
 
-import { useTokenBlueprintCreate } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCreate";
-import { useTokenBlueprintCard } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCard";
 import { useAdminCard as useAdminCardHook } from "../features/admin/presentation/hook/useAdminCard";
+import { useTokenBlueprintCard } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCard";
+import { useTokenBlueprintCreate } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCreate";
 
 import type {
-  TokenBlueprint,
   ContentFile,
   FirebaseStorageTokenContent,
-} from "../features/tokenBlueprint/domain/tokenBlueprint";
+  TokenBlueprint,
+} from "../shared/types/tokenBlueprint";
 
 import { patchTokenBlueprintContentFiles } from "../features/tokenBlueprint/infrastructure/repository/tokenBlueprintRepositoryHTTP";
 import { uploadTokenBlueprintContentToFirebaseStorage } from "../features/tokenBlueprint/infrastructure/storage/tokenBlueprintAssetStorage";
+
 import "../styles/tokenBlueprint.css";
-function guessContentType(file: File): FirebaseStorageTokenContent["type"] {
+
+function guessContentType(
+  file: File,
+): FirebaseStorageTokenContent["type"] {
   const mime = file.type.toLowerCase();
-  if (mime.startsWith("image/")) return "image";
-  if (mime.startsWith("video/")) return "video";
-  if (mime === "application/pdf") return "pdf";
+
+  if (mime.startsWith("image/")) {
+    return "image";
+  }
+
+  if (mime.startsWith("video/")) {
+    return "video";
+  }
+
+  if (mime === "application/pdf") {
+    return "pdf";
+  }
+
   return "document";
 }
 
-function uuidLike(): string {
+function createContentId(): string {
   if (
     typeof crypto !== "undefined" &&
-    "randomUUID" in crypto &&
     typeof crypto.randomUUID === "function"
   ) {
     return crypto.randomUUID();
   }
 
-  return `c_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  return `c_${Date.now()}_${Math.random()
+    .toString(16)
+    .slice(2)}`;
 }
 
 type AssigneeCandidateLike = {
@@ -68,7 +90,11 @@ export default function TokenBlueprintCreate() {
     initialEditMode,
   } = useTokenBlueprintCreate();
 
-  const { vm, handlers, selectedIconFile } = useTokenBlueprintCard({
+  const {
+    vm,
+    handlers,
+    selectedIconFile,
+  } = useTokenBlueprintCard({
     initialTokenBlueprint,
     initialBurnAt: "",
     initialIconUrl: undefined,
@@ -85,14 +111,19 @@ export default function TokenBlueprintCreate() {
   const normalizeAssigneeDocId = useCallback(
     (rawId: string): string => {
       const key = rawId.trim();
-      if (!key) return "";
 
-      const matched = (assigneeCandidates as AssigneeCandidateLike[]).find(
-        (candidate) => {
-          const candidateDocId = candidate.uid?.trim() ?? "";
-          return candidateDocId === key;
-        },
-      );
+      if (!key) {
+        return "";
+      }
+
+      const matched = (
+        assigneeCandidates as AssigneeCandidateLike[]
+      ).find((candidate) => {
+        const candidateDocId =
+          candidate.uid?.trim() ?? "";
+
+        return candidateDocId === key;
+      });
 
       return matched?.uid?.trim() || key;
     },
@@ -102,14 +133,19 @@ export default function TokenBlueprintCreate() {
   const getCandidateNameByDocId = useCallback(
     (docId: string): string => {
       const key = docId.trim();
-      if (!key) return "";
 
-      const matched = (assigneeCandidates as AssigneeCandidateLike[]).find(
-        (candidate) => {
-          const candidateDocId = candidate.uid?.trim() ?? "";
-          return candidateDocId === key;
-        },
-      );
+      if (!key) {
+        return "";
+      }
+
+      const matched = (
+        assigneeCandidates as AssigneeCandidateLike[]
+      ).find((candidate) => {
+        const candidateDocId =
+          candidate.uid?.trim() ?? "";
+
+        return candidateDocId === key;
+      });
 
       return (
         matched?.name?.trim() ||
@@ -123,31 +159,55 @@ export default function TokenBlueprintCreate() {
   );
 
   const initialAssigneeId = useMemo(() => {
-    const raw = initialTokenBlueprint.assigneeId?.trim() ?? "";
-    if (!raw) return null;
+    const raw =
+      initialTokenBlueprint.assigneeId?.trim() ?? "";
+
+    if (!raw) {
+      return null;
+    }
 
     return normalizeAssigneeDocId(raw) || raw;
-  }, [initialTokenBlueprint, normalizeAssigneeDocId]);
+  }, [
+    initialTokenBlueprint.assigneeId,
+    normalizeAssigneeDocId,
+  ]);
 
   const companyId = useMemo(() => {
     return initialTokenBlueprint.companyId?.trim() ?? "";
-  }, [initialTokenBlueprint]);
+  }, [initialTokenBlueprint.companyId]);
 
   const createdBy = useMemo(() => {
     return initialTokenBlueprint.createdBy?.trim() ?? "";
   }, [initialTokenBlueprint.createdBy]);
 
-  const [assigneeId, setAssigneeId] = useState<string | null>(
+  const [
+    assigneeId,
+    setAssigneeId,
+  ] = useState<string | null>(
     initialAssigneeId,
   );
 
-  const [selectedAssigneeName, setSelectedAssigneeName] = useState<string>(
+  const [
+    selectedAssigneeName,
+    setSelectedAssigneeName,
+  ] = useState<string>(
     initialAssigneeName ?? "未設定",
   );
 
-  const [pending, setPending] = useState<PendingContent[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isUploadingContents, setIsUploadingContents] = useState(false);
+  const [
+    pending,
+    setPending,
+  ] = useState<PendingContent[]>([]);
+
+  const [
+    isSaving,
+    setIsSaving,
+  ] = useState(false);
+
+  const [
+    isUploadingContents,
+    setIsUploadingContents,
+  ] = useState(false);
 
   useEffect(() => {
     if (initialAssigneeId) {
@@ -157,40 +217,63 @@ export default function TokenBlueprintCreate() {
 
   useEffect(() => {
     return () => {
-      for (const p of pending) {
-        URL.revokeObjectURL(p.previewUrl);
+      for (const pendingItem of pending) {
+        URL.revokeObjectURL(
+          pendingItem.previewUrl,
+        );
       }
     };
+
+    // pendingはコンポーネント破棄時の初回登録値を参照する。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     let cancelled = false;
 
-    const resolveInitialAssigneeName = async () => {
-      if (assigneeId) {
-        const localName = getCandidateNameByDocId(assigneeId);
-        if (localName) {
-          if (!cancelled) {
-            setSelectedAssigneeName(localName);
+    const resolveInitialAssigneeName =
+      async (): Promise<void> => {
+        if (assigneeId) {
+          const localName =
+            getCandidateNameByDocId(
+              assigneeId,
+            );
+
+          if (localName) {
+            if (!cancelled) {
+              setSelectedAssigneeName(
+                localName,
+              );
+            }
+
+            return;
           }
+
+          const resolved =
+            await getAssigneeNameById(
+              assigneeId,
+            );
+
+          if (!cancelled) {
+            setSelectedAssigneeName(
+              resolved || "未設定",
+            );
+          }
+
           return;
         }
 
-        const resolved = await getAssigneeNameById(assigneeId);
+        const fallback =
+          initialAssigneeName?.trim() ||
+          getDefaultAssigneeName() ||
+          "未設定";
+
         if (!cancelled) {
-          setSelectedAssigneeName(resolved || "未設定");
+          setSelectedAssigneeName(
+            fallback,
+          );
         }
-        return;
-      }
-
-      const fallback =
-        initialAssigneeName?.trim() || getDefaultAssigneeName() || "未設定";
-
-      if (!cancelled) {
-        setSelectedAssigneeName(fallback);
-      }
-    };
+      };
 
     void resolveInitialAssigneeName();
 
@@ -206,224 +289,482 @@ export default function TokenBlueprintCreate() {
   ]);
 
   const handleSelectAssignee = useCallback(
-    async (docId: string) => {
-      const normalized = normalizeAssigneeDocId(docId);
-      if (!normalized) return;
+    async (
+      docId: string,
+    ): Promise<void> => {
+      const normalized =
+        normalizeAssigneeDocId(
+          docId,
+        );
 
-      setAssigneeId(normalized);
-
-      const localName = getCandidateNameByDocId(normalized);
-      if (localName) {
-        setSelectedAssigneeName(localName);
+      if (!normalized) {
         return;
       }
 
-      const resolved = await getAssigneeNameById(normalized);
-      setSelectedAssigneeName(resolved || "未設定");
-    },
-    [normalizeAssigneeDocId, getCandidateNameByDocId, getAssigneeNameById],
-  );
+      setAssigneeId(
+        normalized,
+      );
 
-  const handleTokenContentsFilesSelected = useCallback(async (files: File[]) => {
-    if (files.length === 0) return;
+      const localName =
+        getCandidateNameByDocId(
+          normalized,
+        );
 
-    setPending((prev) => {
-      const next = [...prev];
+      if (localName) {
+        setSelectedAssigneeName(
+          localName,
+        );
 
-      for (const f of files) {
-        const id = `local_${uuidLike()}`;
-        const previewUrl = URL.createObjectURL(f);
-
-        next.push({
-          id,
-          file: f,
-          previewUrl,
-          type: guessContentType(f),
-        });
+        return;
       }
 
-      return next;
-    });
-  }, []);
+      const resolved =
+        await getAssigneeNameById(
+          normalized,
+        );
 
-  const handleDeleteTokenContent = useCallback(
-    async (_item: FirebaseStorageTokenContent, index: number) => {
-      setPending((prev) => {
-        const target = prev[index];
+      setSelectedAssigneeName(
+        resolved || "未設定",
+      );
+    },
+    [
+      normalizeAssigneeDocId,
+      getCandidateNameByDocId,
+      getAssigneeNameById,
+    ],
+  );
 
-        if (target?.previewUrl) {
-          URL.revokeObjectURL(target.previewUrl);
+  const handleTokenContentsFilesSelected =
+    useCallback(
+      async (
+        files: File[],
+      ): Promise<void> => {
+        if (files.length === 0) {
+          return;
         }
 
-        return prev.filter((_, i) => i !== index);
-      });
-    },
-    [],
-  );
+        setPending((previousItems) => {
+          const nextItems = [
+            ...previousItems,
+          ];
 
-  const pendingContents: FirebaseStorageTokenContent[] = useMemo(() => {
-    const nowIso = new Date().toISOString();
-    const actor = createdBy || assigneeId || "";
+          for (const file of files) {
+            const id =
+              `local_${createContentId()}`;
 
-    return pending.map((p) => ({
-      id: p.id,
-      name: p.file.name || p.id,
-      type: p.type,
-      contentType: p.file.type || "application/octet-stream",
-      url: p.previewUrl,
-      objectPath: "",
-      visibility: "private",
-      size: p.file.size,
-      createdAt: nowIso,
-      createdBy: actor,
-      updatedAt: nowIso,
-      updatedBy: actor,
-    }));
-  }, [pending, createdBy, assigneeId]);
+            const previewUrl =
+              URL.createObjectURL(
+                file,
+              );
 
-  const uploadContentsAfterCreate = useCallback(
-    async (tokenBlueprintId: string, pendingItems: PendingContent[]) => {
-      if (!tokenBlueprintId || pendingItems.length === 0) return;
-
-      if (!companyId) {
-        throw new Error("companyId is missing");
-      }
-
-      const actor = createdBy || assigneeId || "";
-      if (!actor) {
-        throw new Error("createdBy is missing");
-      }
-
-      const newOnes: ContentFile[] = [];
-
-      for (const pendingItem of pendingItems) {
-        const contentId = uuidLike();
-        const file = pendingItem.file;
-        const nowIso = new Date().toISOString();
-
-        const uploaded = await uploadTokenBlueprintContentToFirebaseStorage({
-          companyId,
-          tokenBlueprintId,
-          contentId,
-          file,
-        });
-
-        newOnes.push({
-          id: contentId,
-          name: uploaded.fileName || file.name || contentId,
-          type: uploaded.kind ?? pendingItem.type,
-          contentType:
-            uploaded.contentType || file.type || "application/octet-stream",
-          objectPath: uploaded.objectPath,
-          url: uploaded.downloadUrl,
-          size:
-            Number.isFinite(uploaded.size) && uploaded.size >= 0
-              ? uploaded.size
-              : file.size,
-          visibility: "private",
-          createdAt: nowIso,
-          createdBy: actor,
-          updatedAt: nowIso,
-          updatedBy: actor,
-        });
-      }
-
-      await patchTokenBlueprintContentFiles({
-        tokenBlueprintId,
-        contentFiles: newOnes,
-      });
-    },
-    [companyId, createdBy, assigneeId],
-  );
-
-  const handleSave = useCallback(async () => {
-    if (isSaving || isUploadingContents) return;
-
-    setIsSaving(true);
-
-    try {
-      const assigneeDocId = assigneeId
-        ? normalizeAssigneeDocId(assigneeId)
-        : undefined;
-
-      const input: Partial<TokenBlueprint> & {
-        iconFile?: File | null;
-        assigneeId?: string;
-      } = {
-        name: vm.name,
-        symbol: vm.symbol,
-        brandId: vm.brandId,
-        description: vm.description,
-        contentFiles: [],
-        iconFile: selectedIconFile ?? null,
-        assigneeId: assigneeDocId || undefined,
-      };
-
-      const created = await onSave(input);
-      const createdId = created.id;
-
-      if (!createdId) {
-        throw new Error(
-          "created tokenBlueprint id is missing (onSave must return created entity with id)",
-        );
-      }
-
-      if (pending.length > 0) {
-        setIsUploadingContents(true);
-
-        try {
-          await uploadContentsAfterCreate(createdId, pending);
-
-          for (const p of pending) {
-            URL.revokeObjectURL(p.previewUrl);
+            nextItems.push({
+              id,
+              file,
+              previewUrl,
+              type:
+                guessContentType(
+                  file,
+                ),
+            });
           }
 
-          setPending([]);
-        } finally {
-          setIsUploadingContents(false);
-        }
-      }
+          return nextItems;
+        });
+      },
+      [],
+    );
 
-      window.alert("トークン設計が完了しました。");
-      navigate(`/tokenBlueprint/${createdId}`, { replace: true });
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error("[TokenBlueprintCreate.page] save failed", e);
-      window.alert(
-        e instanceof Error ? e.message : "トークン設計の保存に失敗しました。",
+  const handleDeleteTokenContent =
+    useCallback(
+      async (
+        item: FirebaseStorageTokenContent,
+        _index: number,
+      ): Promise<void> => {
+        setPending((previousItems) => {
+          const target =
+            previousItems.find(
+              (pendingItem) => {
+                return (
+                  pendingItem.id ===
+                  item.id
+                );
+              },
+            );
+
+          if (target?.previewUrl) {
+            URL.revokeObjectURL(
+              target.previewUrl,
+            );
+          }
+
+          return previousItems.filter(
+            (pendingItem) => {
+              return (
+                pendingItem.id !==
+                item.id
+              );
+            },
+          );
+        });
+      },
+      [],
+    );
+
+  const pendingContents =
+    useMemo<
+      FirebaseStorageTokenContent[]
+    >(() => {
+      const nowIso =
+        new Date().toISOString();
+
+      const actor =
+        createdBy ||
+        assigneeId ||
+        "";
+
+      return pending.map(
+        (pendingItem) => {
+          return {
+            id:
+              pendingItem.id,
+
+            name:
+              pendingItem.file.name ||
+              pendingItem.id,
+
+            type:
+              pendingItem.type,
+
+            contentType:
+              pendingItem.file.type ||
+              "application/octet-stream",
+
+            url:
+              pendingItem.previewUrl,
+
+            objectPath:
+              "",
+
+            isPublic:
+              false,
+
+            size:
+              pendingItem.file.size,
+
+            createdAt:
+              nowIso,
+
+            createdBy:
+              actor,
+
+            updatedAt:
+              nowIso,
+
+            updatedBy:
+              actor,
+          };
+        },
       );
-    } finally {
-      setIsSaving(false);
-    }
-  }, [
-    assigneeId,
-    normalizeAssigneeDocId,
-    isSaving,
-    isUploadingContents,
-    vm.name,
-    vm.symbol,
-    vm.brandId,
-    vm.description,
-    selectedIconFile,
-    onSave,
-    pending,
-    uploadContentsAfterCreate,
-    navigate,
-  ]);
+    }, [
+      pending,
+      createdBy,
+      assigneeId,
+    ]);
 
-  const title = useMemo(() => "トークン設計を作成", []);
+  const uploadContentsAfterCreate =
+    useCallback(
+      async (
+        tokenBlueprintId: string,
+        pendingItems: PendingContent[],
+      ): Promise<void> => {
+        if (
+          !tokenBlueprintId ||
+          pendingItems.length === 0
+        ) {
+          return;
+        }
+
+        if (!companyId) {
+          throw new Error(
+            "companyId is required",
+          );
+        }
+
+        const actor =
+          createdBy ||
+          assigneeId ||
+          "";
+
+        if (!actor) {
+          throw new Error(
+            "createdBy is required",
+          );
+        }
+
+        const newContentFiles:
+          ContentFile[] = [];
+
+        for (
+          const pendingItem of pendingItems
+        ) {
+          const contentId =
+            createContentId();
+
+          const file =
+            pendingItem.file;
+
+          const nowIso =
+            new Date().toISOString();
+
+          const uploaded =
+            await uploadTokenBlueprintContentToFirebaseStorage(
+              {
+                companyId,
+                tokenBlueprintId,
+                contentId,
+                file,
+              },
+            );
+
+          newContentFiles.push({
+            id:
+              contentId,
+
+            name:
+              uploaded.fileName ||
+              file.name ||
+              contentId,
+
+            type:
+              uploaded.kind ??
+              pendingItem.type,
+
+            contentType:
+              uploaded.contentType ||
+              file.type ||
+              "application/octet-stream",
+
+            objectPath:
+              uploaded.objectPath,
+
+            url:
+              uploaded.downloadUrl,
+
+            size:
+              Number.isFinite(
+                uploaded.size,
+              ) &&
+              uploaded.size >= 0
+                ? uploaded.size
+                : file.size,
+
+            isPublic:
+              false,
+
+            createdAt:
+              nowIso,
+
+            createdBy:
+              actor,
+
+            updatedAt:
+              nowIso,
+
+            updatedBy:
+              actor,
+          });
+        }
+
+        await patchTokenBlueprintContentFiles({
+          tokenBlueprintId,
+          contentFiles:
+            newContentFiles,
+        });
+      },
+      [
+        companyId,
+        createdBy,
+        assigneeId,
+      ],
+    );
+
+  const handleSave =
+    useCallback(
+      async (): Promise<void> => {
+        if (
+          isSaving ||
+          isUploadingContents
+        ) {
+          return;
+        }
+
+        setIsSaving(
+          true,
+        );
+
+        try {
+          const assigneeDocId =
+            assigneeId
+              ? normalizeAssigneeDocId(
+                  assigneeId,
+                )
+              : undefined;
+
+          const input:
+            Partial<TokenBlueprint> & {
+              iconFile?: File | null;
+            } = {
+              name:
+                vm.name,
+
+              symbol:
+                vm.symbol,
+
+              brandId:
+                vm.brandId,
+
+              description:
+                vm.description,
+
+              contentFiles:
+                [],
+
+              iconFile:
+                selectedIconFile ??
+                null,
+
+              assigneeId:
+                assigneeDocId ||
+                undefined,
+            };
+
+          const created =
+            await onSave(
+              input,
+            );
+
+          const createdId =
+            created.id;
+
+          if (!createdId) {
+            throw new Error(
+              "作成結果にtokenBlueprint.idがありません。",
+            );
+          }
+
+          if (
+            pending.length > 0
+          ) {
+            setIsUploadingContents(
+              true,
+            );
+
+            try {
+              await uploadContentsAfterCreate(
+                createdId,
+                pending,
+              );
+
+              for (
+                const pendingItem of pending
+              ) {
+                URL.revokeObjectURL(
+                  pendingItem.previewUrl,
+                );
+              }
+
+              setPending(
+                [],
+              );
+            } finally {
+              setIsUploadingContents(
+                false,
+              );
+            }
+          }
+
+          window.alert(
+            "トークン設計が完了しました。",
+          );
+
+          navigate(
+            `/tokenBlueprint/${encodeURIComponent(
+              createdId,
+            )}`,
+            {
+              replace: true,
+            },
+          );
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error(
+            "[TokenBlueprintCreate.page] save failed",
+            error,
+          );
+
+          window.alert(
+            error instanceof Error
+              ? error.message
+              : "トークン設計の保存に失敗しました。",
+          );
+        } finally {
+          setIsSaving(
+            false,
+          );
+        }
+      },
+      [
+        assigneeId,
+        normalizeAssigneeDocId,
+        isSaving,
+        isUploadingContents,
+        vm.name,
+        vm.symbol,
+        vm.brandId,
+        vm.description,
+        selectedIconFile,
+        onSave,
+        pending,
+        uploadContentsAfterCreate,
+        navigate,
+      ],
+    );
+
+  const title =
+    useMemo(
+      () => {
+        return "トークン設計を作成";
+      },
+      [],
+    );
 
   return (
-    <PageStyle layout="grid-2" title={title} onBack={onBack} onSave={handleSave}>
+    <PageStyle
+      layout="grid-2"
+      title={title}
+      onBack={onBack}
+      onSave={handleSave}
+    >
       <div>
-        <TokenBlueprintCard vm={vm} handlers={handlers} />
+        <TokenBlueprintCard
+          vm={vm}
+          handlers={handlers}
+        />
 
-        <div style={{ marginTop: 16 }}>
+        <div
+          style={{
+            marginTop: 16,
+          }}
+        >
           <TokenContentsCard
             mode="edit"
             contents={pendingContents}
-            onFilesSelected={handleTokenContentsFilesSelected}
-            onDelete={handleDeleteTokenContent}
+            onFilesSelected={
+              handleTokenContentsFilesSelected
+            }
+            onDelete={
+              handleDeleteTokenContent
+            }
           />
         </div>
       </div>
@@ -431,13 +772,28 @@ export default function TokenBlueprintCreate() {
       <AdminCard
         title="管理情報"
         mode="edit"
-        assigneeId={assigneeId ?? undefined}
-        assigneeName={selectedAssigneeName}
-        assigneeCandidates={assigneeCandidates}
-        loadingMembers={loadingMembers}
-        onSelectAssignee={handleSelectAssignee}
-        onEditAssignee={onEditAssignee}
-        onClickAssignee={onClickAssignee}
+        assigneeId={
+          assigneeId ??
+          undefined
+        }
+        assigneeName={
+          selectedAssigneeName
+        }
+        assigneeCandidates={
+          assigneeCandidates
+        }
+        loadingMembers={
+          loadingMembers
+        }
+        onSelectAssignee={
+          handleSelectAssignee
+        }
+        onEditAssignee={
+          onEditAssignee
+        }
+        onClickAssignee={
+          onClickAssignee
+        }
       />
     </PageStyle>
   );
