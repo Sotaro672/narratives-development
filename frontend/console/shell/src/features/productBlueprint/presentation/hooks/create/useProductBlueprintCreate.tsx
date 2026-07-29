@@ -36,7 +36,10 @@ import {
   useProductBlueprintCreateCategoryFields,
 } from "./useProductBlueprintCreateCategoryFields";
 
-import { useProductBlueprintCreateVariations } from "./useProductBlueprintCreateVariations";
+import {
+  useProductBlueprintVariations,
+} from "../shared/useProductBlueprintVariations";
+
 import { useProductBlueprintCreateValidation } from "./useProductBlueprintCreateValidation";
 
 type SizeRow = ApparelSizeInput & {
@@ -63,11 +66,21 @@ export interface UseProductBlueprintCreateResult {
   productName: string;
 
   productBlueprintCategoryId: string;
-  productBlueprintCategory: ProductBlueprintCategorySnapshot | null;
+  productBlueprintCategory:
+    | ProductBlueprintCategorySnapshot
+    | null;
+
   productBlueprintCategoryLabel: string;
-  productBlueprintCategoryOptions: ProductBlueprintCategorySnapshot[];
-  productBlueprintCategoryLoading: boolean;
-  productBlueprintCategoryError: Error | null;
+
+  productBlueprintCategoryOptions:
+    ProductBlueprintCategorySnapshot[];
+
+  productBlueprintCategoryLoading:
+    boolean;
+
+  productBlueprintCategoryError:
+    Error | null;
+
   isApparelCategory: boolean;
   isAlcoholCategory: boolean;
 
@@ -75,22 +88,33 @@ export interface UseProductBlueprintCreateResult {
   material: string;
   weight: number;
   qualityAssurance: string[];
-  categoryFields: CategoryFieldValues;
 
-  measurementOptions: MeasurementOption[];
+  categoryFields:
+    CategoryFieldValues;
+
+  measurementOptions:
+    MeasurementOption[];
 
   colors: string[];
   colorInput: string;
-  colorRgbMap: Record<string, string>;
+
+  colorRgbMap:
+    Record<string, string>;
+
   sizes: SizeRow[];
-  modelNumbers: ModelNumber[];
+
+  modelNumbers:
+    ModelNumber[];
 
   /**
    * alcohol model variation用。
-   * volumeはProductBlueprint.categoryFieldsではなくmodel domain側で扱う。
+   * volumeはProductBlueprint.categoryFieldsではなく
+   * model domain側で扱う。
    */
   volumes: VolumeRow[];
-  alcoholModelNumbers: AlcoholModelNumber[];
+
+  alcoholModelNumbers:
+    AlcoholModelNumber[];
 
   assigneeId: string;
   assigneeName: string;
@@ -105,7 +129,9 @@ export interface UseProductBlueprintCreateResult {
   ) => void;
 
   onChangeProductBlueprintCategory: (
-    category: ProductBlueprintCategorySnapshot | null,
+    category:
+      | ProductBlueprintCategorySnapshot
+      | null,
   ) => void;
 
   onChangeFit: (
@@ -152,7 +178,13 @@ export interface UseProductBlueprintCreateResult {
 
   onChangeSize: (
     id: string,
-    patch: Partial<Omit<SizeRow, "id">>,
+    patch:
+      Partial<
+        Omit<
+          SizeRow,
+          "id"
+        >
+      >,
   ) => void;
 
   getCode: (
@@ -177,7 +209,13 @@ export interface UseProductBlueprintCreateResult {
 
   onChangeVolume: (
     id: string,
-    patch: Partial<Omit<VolumeRow, "id">>,
+    patch:
+      Partial<
+        Omit<
+          VolumeRow,
+          "id"
+        >
+      >,
   ) => void;
 
   onChangeAlcoholModelNumber: (
@@ -205,11 +243,15 @@ function removeModelOwnedCategoryFields(
     | null,
   fields: CategoryFieldValues,
 ): CategoryFieldValues {
-  const next: CategoryFieldValues = {
+  const next:
+    CategoryFieldValues = {
     ...fields,
   };
 
-  if (category?.kind === "alcohol") {
+  if (
+    category?.kind ===
+    "alcohol"
+  ) {
     delete next.volume;
   }
 
@@ -223,7 +265,8 @@ function getStringCategoryField(
   const value =
     fields[key];
 
-  return typeof value === "string"
+  return typeof value ===
+    "string"
     ? value
     : "";
 }
@@ -236,7 +279,8 @@ function getNumberCategoryField(
     fields[key];
 
   return (
-    typeof value === "number" &&
+    typeof value ===
+      "number" &&
     Number.isFinite(value)
   )
     ? value
@@ -250,13 +294,18 @@ function getStringArrayCategoryField(
   const value =
     fields[key];
 
-  if (!Array.isArray(value)) {
+  if (
+    !Array.isArray(value)
+  ) {
     return [];
   }
 
   return value.filter(
-    (item): item is string =>
-      typeof item === "string" &&
+    (
+      item,
+    ): item is string =>
+      typeof item ===
+        "string" &&
       item.trim() !== "",
   );
 }
@@ -268,17 +317,19 @@ function getMemberDisplayLabel(
     displayName?: string | null;
   },
 ): string {
-  const displayName = String(
-    member.displayName ?? "",
-  ).trim();
+  const displayName =
+    String(
+      member.displayName ?? "",
+    ).trim();
 
   if (displayName) {
     return displayName;
   }
 
-  const email = String(
-    member.email ?? "",
-  ).trim();
+  const email =
+    String(
+      member.email ?? "",
+    ).trim();
 
   if (email) {
     return email;
@@ -287,8 +338,10 @@ function getMemberDisplayLabel(
   return member.id;
 }
 
-export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
-  const navigate = useNavigate();
+export function useProductBlueprintCreate():
+  UseProductBlueprintCreateResult {
+  const navigate =
+    useNavigate();
 
   const {
     currentMember,
@@ -312,7 +365,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const [
     productName,
     setProductName,
-  ] = React.useState("");
+  ] =
+    React.useState("");
 
   const brand =
     useProductBlueprintCreateBrand(
@@ -322,30 +376,36 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const category =
     useProductBlueprintCreateCategory();
 
-  const categoryFields =
-    useProductBlueprintCreateCategoryFields(
-      category.productBlueprintCategory,
-    );
+const categoryFields =
+  useProductBlueprintCreateCategoryFields();
 
   const variations =
-    useProductBlueprintCreateVariations(
-      category.productBlueprintCategory,
-    );
+    useProductBlueprintVariations({
+      productBlueprintCategory:
+        category
+          .productBlueprintCategory,
+    });
 
   const [
     assigneeId,
     setAssigneeId,
-  ] = React.useState("");
+  ] =
+    React.useState("");
 
   const [
     assigneeName,
     setAssigneeName,
-  ] = React.useState("");
-
-  const [createdBy] =
+  ] =
     React.useState("");
 
-  const [createdAt] =
+  const [
+    createdBy,
+  ] =
+    React.useState("");
+
+  const [
+    createdAt,
+  ] =
     React.useState("");
 
   React.useEffect(() => {
@@ -365,8 +425,13 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         currentMember,
       );
 
-    setAssigneeId(memberId);
-    setAssigneeName(label);
+    setAssigneeId(
+      memberId,
+    );
+
+    setAssigneeName(
+      label,
+    );
   }, [
     currentMember,
     assigneeId,
@@ -376,12 +441,18 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     React.useMemo(
       () =>
         removeModelOwnedCategoryFields(
-          category.productBlueprintCategory,
-          categoryFields.categoryFields,
+          category
+            .productBlueprintCategory,
+
+          categoryFields
+            .categoryFields,
         ),
       [
-        category.productBlueprintCategory,
-        categoryFields.categoryFields,
+        category
+          .productBlueprintCategory,
+
+        categoryFields
+          .categoryFields,
       ],
     );
 
@@ -414,13 +485,15 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       (
         value: Fit,
       ) => {
-        categoryFields.onChangeCategoryField(
-          "fit",
-          value,
-        );
+        categoryFields
+          .onChangeCategoryField(
+            "fit",
+            value,
+          );
       },
       [
-        categoryFields.onChangeCategoryField,
+        categoryFields
+          .onChangeCategoryField,
       ],
     );
 
@@ -429,15 +502,18 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       (
         value: string,
       ) => {
-        categoryFields.onChangeCategoryField(
-          "material",
-          value.trim() === ""
-            ? null
-            : value,
-        );
+        categoryFields
+          .onChangeCategoryField(
+            "material",
+
+            value.trim() === ""
+              ? null
+              : value,
+          );
       },
       [
-        categoryFields.onChangeCategoryField,
+        categoryFields
+          .onChangeCategoryField,
       ],
     );
 
@@ -448,16 +524,21 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       ) => {
         const next =
           Number.isFinite(value)
-            ? Math.max(0, value)
+            ? Math.max(
+                0,
+                value,
+              )
             : 0;
 
-        categoryFields.onChangeCategoryField(
-          "weight",
-          next,
-        );
+        categoryFields
+          .onChangeCategoryField(
+            "weight",
+            next,
+          );
       },
       [
-        categoryFields.onChangeCategoryField,
+        categoryFields
+          .onChangeCategoryField,
       ],
     );
 
@@ -470,18 +551,22 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
           Array.isArray(value)
             ? value.filter(
                 (item) =>
-                  typeof item === "string" &&
-                  item.trim() !== "",
+                  typeof item ===
+                    "string" &&
+                  item.trim() !==
+                    "",
               )
             : [];
 
-        categoryFields.onChangeCategoryField(
-          "washTags",
-          next,
-        );
+        categoryFields
+          .onChangeCategoryField(
+            "washTags",
+            next,
+          );
       },
       [
-        categoryFields.onChangeCategoryField,
+        categoryFields
+          .onChangeCategoryField,
       ],
     );
 
@@ -496,10 +581,12 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         brand.brandId,
 
       productBlueprintCategoryId:
-        category.productBlueprintCategoryId,
+        category
+          .productBlueprintCategoryId,
 
       productBlueprintCategory:
-        category.productBlueprintCategory,
+        category
+          .productBlueprintCategory,
 
       categoryFields:
         sanitizedCategoryFields,
@@ -507,10 +594,12 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       weight,
 
       isApparelCategory:
-        variations.isApparelCategory,
+        variations
+          .isApparelCategory,
 
       isAlcoholCategory:
-        variations.isAlcoholCategory,
+        variations
+          .isAlcoholCategory,
 
       colors:
         variations.colors,
@@ -525,7 +614,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         variations.volumes,
 
       alcoholModelNumbers:
-        variations.alcoholModelNumbers,
+        variations
+          .alcoholModelNumbers,
     });
 
   const onChangeProductBlueprintCategory =
@@ -535,12 +625,16 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
           | ProductBlueprintCategorySnapshot
           | null,
       ) => {
-        category.onChangeProductBlueprintCategory(
-          nextCategory,
-        );
+        category
+          .onChangeProductBlueprintCategory(
+            nextCategory,
+          );
 
-        categoryFields.resetCategoryFields();
-        variations.resetVariations();
+        categoryFields
+          .resetCategoryFields();
+
+        variations
+          .resetVariations();
       },
       [
         category,
@@ -555,7 +649,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         const errors =
           validate();
 
-        if (errors.length > 0) {
+        if (
+          errors.length > 0
+        ) {
           alert(
             `入力内容に不備があります。\n\n- ${errors.join(
               "\n- ",
@@ -565,7 +661,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
           return;
         }
 
-        if (!effectiveCompanyId) {
+        if (
+          !effectiveCompanyId
+        ) {
           alert(
             "companyIdが取得できません。ログインし直してください。",
           );
@@ -574,7 +672,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         }
 
         if (
-          !category.productBlueprintCategory
+          !category
+            .productBlueprintCategory
         ) {
           alert(
             "商品カテゴリを選択してください。",
@@ -607,30 +706,37 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
           qualityAssurance,
 
           productIdTag: {
-            type: "qr" as const,
+            type:
+              "qr" as const,
           },
 
           companyId:
             effectiveCompanyId,
 
           colors:
-            variations.isApparelCategory
+            variations
+              .isApparelCategory
               ? variations.colors
               : [],
 
           colorRgbMap:
-            variations.isApparelCategory
-              ? variations.colorRgbMap
+            variations
+              .isApparelCategory
+              ? variations
+                  .colorRgbMap
               : {},
 
           sizes:
-            variations.isApparelCategory
+            variations
+              .isApparelCategory
               ? variations.sizes
               : [],
 
           modelNumbers:
-            variations.isApparelCategory
-              ? variations.modelNumbers
+            variations
+              .isApparelCategory
+              ? variations
+                  .modelNumbers
               : [],
 
           /**
@@ -638,12 +744,14 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
            * model variationとして作成する。
            */
           volumes:
-            variations.isAlcoholCategory
+            variations
+              .isAlcoholCategory
               ? variations.volumes
               : [],
 
           alcoholModelNumbers:
-            variations.isAlcoholCategory
+            variations
+              .isAlcoholCategory
               ? variations
                   .alcoholModelNumbers
               : [],
@@ -651,7 +759,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
           assigneeId,
 
           createdBy:
-            currentMember?.id ?? "",
+            currentMember?.id ??
+            "",
 
           categoryFields:
             sanitizedCategoryFields,
@@ -665,8 +774,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
           const createdId =
             String(
-              (created as any)?.id ??
-                "",
+              (
+                created as any
+              )?.id ?? "",
             );
 
           alert(
@@ -699,22 +809,35 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       [
         validate,
         effectiveCompanyId,
-        category.productBlueprintCategory,
+
+        category
+          .productBlueprintCategory,
+
         productName,
         brand.brandId,
+
         fit,
         material,
         weight,
         qualityAssurance,
+
         sanitizedCategoryFields,
-        variations.isApparelCategory,
-        variations.isAlcoholCategory,
+
+        variations
+          .isApparelCategory,
+
+        variations
+          .isAlcoholCategory,
+
         variations.colors,
         variations.colorRgbMap,
         variations.sizes,
         variations.modelNumbers,
         variations.volumes,
-        variations.alcoholModelNumbers,
+
+        variations
+          .alcoholModelNumbers,
+
         assigneeId,
         currentMember?.id,
         navigate,
@@ -726,7 +849,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       navigate(
         "/productBlueprint",
       );
-    }, [navigate]);
+    }, [
+      navigate,
+    ]);
 
   const onSelectAssignee =
     React.useCallback(
@@ -753,13 +878,21 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
               currentMember,
             );
         } else {
-          nextName = nextId;
+          nextName =
+            nextId;
         }
 
-        setAssigneeId(nextId);
-        setAssigneeName(nextName);
+        setAssigneeId(
+          nextId,
+        );
+
+        setAssigneeName(
+          nextName,
+        );
       },
-      [currentMember],
+      [
+        currentMember,
+      ],
     );
 
   const onEditAssignee =

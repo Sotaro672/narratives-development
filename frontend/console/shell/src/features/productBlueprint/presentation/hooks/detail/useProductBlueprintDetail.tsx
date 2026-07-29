@@ -47,8 +47,8 @@ import {
 } from "../shared/useBrandOptions";
 
 import {
-  useVariationsEditor,
-} from "./useVariationsEditor";
+  useProductBlueprintVariations,
+} from "../shared/useProductBlueprintVariations";
 
 type SizeRow =
   ApparelSizeInput & {
@@ -451,10 +451,6 @@ export function useProductBlueprintDetail():
   ] =
     React.useState("");
 
-  const categoryCode =
-    productBlueprintCategory?.code ??
-    "";
-
   const productBlueprintCategoryId =
     productBlueprintCategory?.id ??
     "";
@@ -466,22 +462,14 @@ export function useProductBlueprintDetail():
     productBlueprintCategory?.id ||
     "";
 
-  const isApparelCategory =
-    isApparelCategoryCode(
-      categoryCode,
-    );
-
-  const isAlcoholCategory =
-    isAlcoholCategoryCode(
-      categoryCode,
-    );
-
   const pageTitle =
     productName ||
     blueprintId ||
     "";
 
   const {
+    isApparelCategory,
+    isAlcoholCategory,
     colors,
     colorInput,
     sizes,
@@ -491,6 +479,7 @@ export function useProductBlueprintDetail():
     alcoholModelNumbers,
     getCode,
     setFromUiState,
+    resetVariations,
     onChangeColorInput,
     onAddColor,
     onRemoveColor,
@@ -504,9 +493,9 @@ export function useProductBlueprintDetail():
     onChangeVolume,
     onChangeAlcoholModelNumber,
   } =
-    useVariationsEditor(
+    useProductBlueprintVariations({
       productBlueprintCategory,
-    );
+    });
 
   const {
     brandOptions,
@@ -605,14 +594,10 @@ export function useProductBlueprintDetail():
               }),
             );
           } catch {
-            setFromUiState(
-              {},
-            );
+            resetVariations();
           }
         } else {
-          setFromUiState(
-            {},
-          );
+          resetVariations();
         }
 
         setAssignee(
@@ -661,13 +646,12 @@ export function useProductBlueprintDetail():
           setUpdatedAt("");
         }
       } catch {
-        setFromUiState(
-          {},
-        );
+        resetVariations();
       }
     })();
   }, [
     blueprintId,
+    resetVariations,
     setFromUiState,
   ]);
 
@@ -840,12 +824,10 @@ export function useProductBlueprintDetail():
           {},
         );
 
-        setFromUiState(
-          {},
-        );
+        resetVariations();
       },
       [
-        setFromUiState,
+        resetVariations,
       ],
     );
 
