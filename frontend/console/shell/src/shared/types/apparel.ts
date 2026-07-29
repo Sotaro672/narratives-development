@@ -427,13 +427,25 @@ export type ApparelModelNumberRow = {
 // Size field mapping
 // ============================
 
-type ApparelMeasurementSizeField =
+/**
+ * ApparelSizeInputのうち、採寸値を保持するfield。
+ *
+ * sizeLabelはサイズ名であり採寸値ではないため除外する。
+ */
+export type ApparelMeasurementSizeField =
   Exclude<
     keyof ApparelSizeInput,
     "sizeLabel"
   >;
 
-const SIZE_FIELD_TO_MEASUREMENT_KEY:
+/**
+ * UIで使用する英語field名と、
+ * API・Repositoryで使用する日本語採寸キーの対応表。
+ *
+ * UI → API、API → UIの両方向で
+ * この定義を唯一の対応表として使用する。
+ */
+export const APPAREL_SIZE_FIELD_TO_MEASUREMENT_KEY:
   Readonly<
     Record<
       ApparelMeasurementSizeField,
@@ -454,21 +466,118 @@ const SIZE_FIELD_TO_MEASUREMENT_KEY:
   hemWidth: "裾幅",
 };
 
+/**
+ * ApparelSizeInputのfield名から、
+ * API・Repository用の日本語採寸キーを取得する。
+ */
 function toMeasurementKeyFromSizeField(
   key: string,
 ): MeasurementKey | null {
   if (
     !Object.prototype.hasOwnProperty.call(
-      SIZE_FIELD_TO_MEASUREMENT_KEY,
+      APPAREL_SIZE_FIELD_TO_MEASUREMENT_KEY,
       key,
     )
   ) {
     return null;
   }
 
-  return SIZE_FIELD_TO_MEASUREMENT_KEY[
+  return APPAREL_SIZE_FIELD_TO_MEASUREMENT_KEY[
     key as ApparelMeasurementSizeField
   ];
+}
+
+/**
+ * API・Repositoryのmeasurementsを
+ * UI用のApparelSizeInputへ変換する。
+ *
+ * - カテゴリに許可された採寸項目だけを返す
+ * - null / undefinedを除外
+ * - NaN / Infinity / -Infinityを除外
+ * - sizeLabelは含めない
+ */
+export function mapMeasurementsToApparelSizeInput(
+  measurements:
+    ApparelMeasurementInput,
+  categoryCode: string,
+): Partial<
+  Omit<
+    ApparelSizeInput,
+    "sizeLabel"
+  >
+> {
+  const normalizedCategoryCode =
+    String(
+      categoryCode ?? "",
+    )
+      .trim()
+      .toLowerCase();
+
+  if (
+    !isApparelCategoryCode(
+      normalizedCategoryCode,
+    )
+  ) {
+    return {};
+  }
+
+  const allowedMeasurementKeys =
+    new Set<MeasurementKey>(
+      APPAREL_CATEGORY_MEASUREMENT_KEYS[
+        normalizedCategoryCode
+      ],
+    );
+
+  const result:
+    Partial<
+      Record<
+        ApparelMeasurementSizeField,
+        number
+      >
+    > = {};
+
+  const mappings =
+    Object.entries(
+      APPAREL_SIZE_FIELD_TO_MEASUREMENT_KEY,
+    ) as Array<
+      [
+        ApparelMeasurementSizeField,
+        MeasurementKey,
+      ]
+    >;
+
+  for (
+    const [
+      sizeField,
+      measurementKey,
+    ]
+    of mappings
+  ) {
+    if (
+      !allowedMeasurementKeys.has(
+        measurementKey,
+      )
+    ) {
+      continue;
+    }
+
+    const value =
+      measurements?.[
+        measurementKey
+      ];
+
+    if (
+      typeof value !== "number" ||
+      !Number.isFinite(value)
+    ) {
+      continue;
+    }
+
+    result[sizeField] =
+      value;
+  }
+
+  return result;
 }
 
 // ============================

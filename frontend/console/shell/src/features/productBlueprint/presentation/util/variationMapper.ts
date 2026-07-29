@@ -1,8 +1,9 @@
 // frontend/console/shell/src/features/productBlueprint/presentation/util/variationMapper.ts
 
-import type {
-  ApparelModelNumberRow as ModelNumberRow,
-  ApparelSizeInput,
+import {
+  mapMeasurementsToApparelSizeInput,
+  type ApparelModelNumberRow as ModelNumberRow,
+  type ApparelSizeInput,
 } from "../../../../shared/types/apparel";
 
 import type {
@@ -112,7 +113,10 @@ function pickMeasurements(
   if (
     !measurements ||
     typeof measurements !==
-      "object"
+      "object" ||
+    Array.isArray(
+      measurements,
+    )
   ) {
     return undefined;
   }
@@ -140,7 +144,10 @@ function pickVolume(
   if (
     !rawVolume ||
     typeof rawVolume !==
-      "object"
+      "object" ||
+    Array.isArray(
+      rawVolume,
+    )
   ) {
     return null;
   }
@@ -153,7 +160,9 @@ function pickVolume(
 
   if (
     typeof rawValue !== "number" ||
-    !Number.isFinite(rawValue)
+    !Number.isFinite(
+      rawValue,
+    )
   ) {
     return null;
   }
@@ -211,34 +220,8 @@ function isAlcoholVariation(
   );
 }
 
-function isBottomsLikeCategory(
-  categoryCode: string,
-): boolean {
-  const normalized =
-    s(categoryCode)
-      .toLowerCase();
-
-  return (
-    normalized ===
-    "apparel.bottoms"
-  );
-}
-
-function isDressLikeCategory(
-  categoryCode: string,
-): boolean {
-  const normalized =
-    s(categoryCode)
-      .toLowerCase();
-
-  return (
-    normalized ===
-    "apparel.dress"
-  );
-}
-
 /**
- * variations から color 名のユニーク配列を抽出
+ * variations からcolor名のユニーク配列を抽出する。
  */
 export function extractColors(
   varsAny: unknown[],
@@ -273,11 +256,13 @@ export function extractColors(
     }
   }
 
-  return Array.from(set);
+  return Array.from(
+    set,
+  );
 }
 
 /**
- * variations から sizeLabel のユニーク配列を抽出
+ * variations からsizeLabelのユニーク配列を抽出する。
  */
 export function extractSizes(
   varsAny: unknown[],
@@ -312,11 +297,13 @@ export function extractSizes(
     }
   }
 
-  return Array.from(set);
+  return Array.from(
+    set,
+  );
 }
 
 /**
- * variations から volume label のユニーク配列を抽出
+ * variations からvolume labelのユニーク配列を抽出する。
  */
 export function extractVolumeLabels(
   varsAny: unknown[],
@@ -360,14 +347,17 @@ export function extractVolumeLabels(
     }
   }
 
-  return Array.from(set);
+  return Array.from(
+    set,
+  );
 }
 
 /**
- * 同一サイズの variations 群から measurements をマージする。
+ * 同一サイズのvariations群からmeasurementsをマージする。
  *
- * - 先に入っている値を優先
- * - 未設定項目だけ後続 variation から補完
+ * - 先に入っている値を優先する
+ * - 未設定項目だけ後続variationから補完する
+ * - NaN、Infinity、-Infinityは除外する
  */
 function mergeMeasurementsBySize(
   variations: AnyVar[],
@@ -395,14 +385,19 @@ function mergeMeasurementsBySize(
     }
 
     for (
-      const [key, value]
+      const [
+        key,
+        value,
+      ]
       of Object.entries(
         measurements,
       )
     ) {
       if (
         typeof value !== "number" ||
-        Number.isNaN(value)
+        !Number.isFinite(
+          value,
+        )
       ) {
         continue;
       }
@@ -423,10 +418,12 @@ function mergeMeasurementsBySize(
 }
 
 /**
- * variations から SizeRow[] を構築する。
+ * variationsからSizeRow[]を構築する。
  *
- * - backend の id を代表 variation から使う
- * - 同じサイズの複数色 variation から measurements をマージする
+ * - backendのidを代表variationから使う
+ * - 同じサイズの複数色variationからmeasurementsをマージする
+ * - 採寸field変換はshared/types/apparel.tsの共通定義を使う
+ * - カテゴリに許可された採寸値だけをUI stateへ戻す
  */
 export function buildSizeRows(
   varsAny: unknown[],
@@ -442,7 +439,9 @@ export function buildSizeRows(
       : [];
 
   const sizeLabels =
-    extractSizes(list);
+    extractSizes(
+      list,
+    );
 
   return sizeLabels.map(
     (label) => {
@@ -457,13 +456,18 @@ export function buildSizeRows(
       const representative =
         sameSizeVars[0];
 
-      const merged =
+      const mergedMeasurements =
         mergeMeasurementsBySize(
           sameSizeVars,
         );
 
-      const base:
-        SizeRow = {
+      const sizeMeasurements =
+        mapMeasurementsToApparelSizeInput(
+          mergedMeasurements,
+          categoryCode,
+        );
+
+      return {
         id:
           pickId(
             representative,
@@ -472,86 +476,16 @@ export function buildSizeRows(
 
         sizeLabel:
           label,
+
+        ...sizeMeasurements,
       };
-
-      if (
-        isBottomsLikeCategory(
-          categoryCode,
-        )
-      ) {
-        base.waist =
-          merged["ウエスト"];
-
-        base.hip =
-          merged["ヒップ"];
-
-        base.rise =
-          merged["股上"];
-
-        base.inseam =
-          merged["股下"];
-
-        base.thigh =
-          merged["わたり幅"];
-
-        base.hemWidth =
-          merged["裾幅"];
-
-        return base;
-      }
-
-      if (
-        isDressLikeCategory(
-          categoryCode,
-        )
-      ) {
-        base.length =
-          merged["着丈"];
-
-        base.width =
-          merged["身幅"];
-
-        base.chest =
-          merged["胸囲"];
-
-        base.shoulder =
-          merged["肩幅"];
-
-        base.sleeveLength =
-          merged["袖丈"];
-
-        base.waist =
-          merged["ウエスト"];
-
-        base.hip =
-          merged["ヒップ"];
-
-        return base;
-      }
-
-      base.length =
-        merged["着丈"];
-
-      base.width =
-        merged["身幅"];
-
-      base.chest =
-        merged["胸囲"];
-
-      base.shoulder =
-        merged["肩幅"];
-
-      base.sleeveLength =
-        merged["袖丈"];
-
-      return base;
     },
   );
 }
 
 /**
- * apparel variations から
- * ModelNumberRow[]（size / color / code）を構築する。
+ * apparel variationsから
+ * ModelNumberRow[]を構築する。
  */
 export function buildModelNumberRows(
   varsAny: unknown[],
@@ -565,28 +499,30 @@ export function buildModelNumberRows(
     .filter(
       isApparelVariation,
     )
-    .map((variation) => {
-      const size =
-        pickSizeLabel(
-          variation,
-        );
+    .map(
+      (variation) => {
+        const size =
+          pickSizeLabel(
+            variation,
+          );
 
-      const color =
-        pickColorName(
-          variation,
-        );
+        const color =
+          pickColorName(
+            variation,
+          );
 
-      const code =
-        pickModelNumber(
-          variation,
-        );
+        const code =
+          pickModelNumber(
+            variation,
+          );
 
-      return {
-        size,
-        color,
-        code,
-      };
-    })
+        return {
+          size,
+          color,
+          code,
+        };
+      },
+    )
     .filter(
       (row) =>
         row.size ||
@@ -596,7 +532,7 @@ export function buildModelNumberRows(
 }
 
 /**
- * alcohol variations から VolumeRow[] を構築する。
+ * alcohol variationsからVolumeRow[]を構築する。
  */
 export function buildVolumeRows(
   varsAny: unknown[],
@@ -666,7 +602,8 @@ export function buildVolumeRows(
 }
 
 /**
- * alcohol variations から AlcoholModelNumber[] を構築する。
+ * alcohol variationsから
+ * AlcoholModelNumber[]を構築する。
  */
 export function buildAlcoholModelNumberRows(
   varsAny: unknown[],
@@ -716,7 +653,7 @@ export function buildAlcoholModelNumberRows(
 }
 
 /**
- * apparel variations から colorRgbMap を構築する。
+ * apparel variationsからcolorRgbMapを構築する。
  */
 export function buildColorRgbMap(
   varsAny: unknown[],
@@ -772,7 +709,7 @@ export function buildColorRgbMap(
 }
 
 /**
- * variations をまとめて UI state に使える形へ変換する。
+ * variationsをまとめてUI stateに使える形へ変換する。
  */
 export function mapVariationsToUiState(
   args: {
