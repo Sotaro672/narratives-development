@@ -19,7 +19,7 @@ import type {
 
 import { patchTokenBlueprintContentFiles } from "../features/tokenBlueprint/infrastructure/repository/tokenBlueprintRepositoryHTTP";
 import { uploadTokenBlueprintContentToFirebaseStorage } from "../features/tokenBlueprint/infrastructure/storage/tokenBlueprintAssetStorage";
-
+import "../styles/tokenBlueprint.css";
 function guessContentType(file: File): FirebaseStorageTokenContent["type"] {
   const mime = file.type.toLowerCase();
   if (mime.startsWith("image/")) return "image";

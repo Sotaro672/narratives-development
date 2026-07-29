@@ -1,0 +1,1144 @@
+/* frontend/console/shell/src/styles/tokenBlueprint.css */
+
+/* =========================================================
+ * TokenBlueprint shared design tokens
+ * =======================================================*/
+
+:root {
+  --token-blueprint-surface: #ffffff;
+  --token-blueprint-surface-subtle: #f8fafc;
+  --token-blueprint-surface-muted: #f1f5f9;
+
+  --token-blueprint-border: #e2e8f0;
+  --token-blueprint-border-strong: #cbd5e1;
+
+  --token-blueprint-text: #0f172a;
+  --token-blueprint-text-subtle: #475569;
+  --token-blueprint-text-muted: #64748b;
+
+  --token-blueprint-primary: #4f46e5;
+  --token-blueprint-primary-hover: #4338ca;
+  --token-blueprint-primary-soft: #eef2ff;
+  --token-blueprint-primary-border: #c7d2fe;
+
+  --token-blueprint-danger: #dc2626;
+  --token-blueprint-danger-hover: #b91c1c;
+  --token-blueprint-danger-soft: #fef2f2;
+  --token-blueprint-danger-border: #fecaca;
+
+  --token-blueprint-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 8px 24px rgba(15, 23, 42, 0.04);
+
+  --token-blueprint-focus-ring: rgba(79, 70, 229, 0.2);
+}
+
+/* =========================================================
+ * TokenBlueprintCard
+ * =======================================================*/
+
+.token-blueprint-card {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--token-blueprint-border);
+  border-radius: 16px;
+  background: var(--token-blueprint-surface);
+  color: var(--token-blueprint-text);
+  box-shadow: var(--token-blueprint-shadow);
+}
+
+/* -------------------------
+ * Header
+ * ---------------------- */
+
+.token-blueprint-card__header {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--token-blueprint-border);
+  background: var(--token-blueprint-surface);
+}
+
+.token-blueprint-card__header-left {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.token-blueprint-card__header-icon {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--token-blueprint-primary-border);
+  border-radius: 10px;
+  background: var(--token-blueprint-primary-soft);
+  color: var(--token-blueprint-primary);
+}
+
+.token-blueprint-card__link-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+}
+
+.token-blueprint-card__header-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--token-blueprint-text);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-blueprint-card__header-badge {
+  display: inline-flex;
+  min-height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  border: 1px solid var(--token-blueprint-primary-border);
+  border-radius: 999px;
+  background: var(--token-blueprint-primary-soft);
+  padding: 3px 9px;
+  color: var(--token-blueprint-primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.token-blueprint-card__preview-btn {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--token-blueprint-border);
+  border-radius: 10px;
+  background: var(--token-blueprint-surface);
+  color: var(--token-blueprint-text-subtle);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.token-blueprint-card__preview-btn:hover {
+  border-color: var(--token-blueprint-primary-border);
+  background: var(--token-blueprint-primary-soft);
+  color: var(--token-blueprint-primary);
+}
+
+.token-blueprint-card__preview-btn:focus-visible {
+  outline: none;
+  border-color: var(--token-blueprint-primary);
+  box-shadow: 0 0 0 3px var(--token-blueprint-focus-ring);
+}
+
+.token-blueprint-card__preview-icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* -------------------------
+ * Main layout
+ * ---------------------- */
+
+.token-blueprint-card > div:last-child {
+  padding: 22px;
+}
+
+.token-blueprint-card__top {
+  display: grid;
+  grid-template-columns: minmax(152px, 176px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.token-blueprint-card__icon-area {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.token-blueprint-card__icon-wrap {
+  position: relative;
+  display: flex;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px dashed var(--token-blueprint-border-strong);
+  border-radius: 14px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(79, 70, 229, 0.04),
+      rgba(99, 102, 241, 0)
+    ),
+    var(--token-blueprint-surface-subtle);
+}
+
+.token-blueprint-card__icon-wrap img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.token-blueprint-card__icon-wrap img:hover {
+  opacity: 0.92;
+  transform: scale(1.015);
+}
+
+.token-blueprint-card__icon-placeholder {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  padding: 16px;
+  color: var(--token-blueprint-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.token-blueprint-card__icon-placeholder:not(:disabled):hover {
+  background: var(--token-blueprint-primary-soft);
+  color: var(--token-blueprint-primary);
+}
+
+.token-blueprint-card__icon-placeholder:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.token-blueprint-card__upload-btn {
+  display: inline-flex;
+  width: 100%;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--token-blueprint-primary-border);
+  border-radius: 10px;
+  background: var(--token-blueprint-primary-soft);
+  padding: 8px 12px;
+  color: var(--token-blueprint-primary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.token-blueprint-card__upload-btn:hover {
+  border-color: var(--token-blueprint-primary);
+  background: var(--token-blueprint-primary);
+  color: #ffffff;
+}
+
+.token-blueprint-card__upload-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--token-blueprint-focus-ring);
+}
+
+.token-blueprint-card__upload-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.token-blueprint-card__icon-selected {
+  min-width: 0;
+  color: var(--token-blueprint-text-muted);
+  line-height: 1.5;
+}
+
+.token-blueprint-card__icon-selected > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.token-blueprint-card__icon-selected button {
+  flex: 0 0 auto;
+  border-radius: 6px;
+  color: var(--token-blueprint-text-muted);
+}
+
+.token-blueprint-card__icon-selected button:hover {
+  background: var(--token-blueprint-danger-soft) !important;
+  color: var(--token-blueprint-danger);
+}
+
+/* -------------------------
+ * Fields
+ * ---------------------- */
+
+.token-blueprint-card__spacer {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 16px;
+}
+
+.token-blueprint-card__field-col,
+.token-blueprint-card__brand-label-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.token-blueprint-card__brand-label-cell {
+  grid-column: 1 / -1;
+}
+
+.token-blueprint-card__label {
+  display: block;
+  color: var(--token-blueprint-text-subtle);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.token-blueprint-card__readonly-input,
+.token-blueprint-card__select-input {
+  width: 100%;
+  height: 42px;
+  border: 1px solid var(--token-blueprint-border-strong);
+  border-radius: 10px;
+  background: var(--token-blueprint-surface);
+  padding: 0 12px;
+  color: var(--token-blueprint-text);
+  font-size: 14px;
+  line-height: 42px;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.token-blueprint-card__readonly-input:hover:not(.readonly),
+.token-blueprint-card__select:hover .token-blueprint-card__select-input {
+  border-color: #a5b4fc;
+}
+
+.token-blueprint-card__readonly-input:focus,
+.token-blueprint-card__select-input:focus {
+  outline: none;
+  border-color: var(--token-blueprint-primary);
+  box-shadow: 0 0 0 3px var(--token-blueprint-focus-ring);
+}
+
+.token-blueprint-card__readonly-input.readonly {
+  border-color: var(--token-blueprint-border);
+  background: var(--token-blueprint-surface-muted);
+  color: var(--token-blueprint-text-subtle);
+  cursor: default;
+}
+
+.token-blueprint-card__readonly-input.readonly:focus {
+  box-shadow: none;
+}
+
+.token-blueprint-card__select {
+  position: relative;
+  width: 100%;
+  border-radius: 10px;
+}
+
+.token-blueprint-card__select::after {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--token-blueprint-text-muted);
+  border-bottom: 2px solid var(--token-blueprint-text-muted);
+  content: "";
+  pointer-events: none;
+  transform: translateY(-65%) rotate(45deg);
+}
+
+.token-blueprint-card__select-input {
+  padding-right: 38px;
+  cursor: pointer;
+}
+
+/* -------------------------
+ * Brand popover
+ * ---------------------- */
+
+.token-blueprint-card__popover {
+  width: var(--radix-popover-trigger-width, 300px);
+  max-width: min(360px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid var(--token-blueprint-border);
+  border-radius: 12px;
+  background: var(--token-blueprint-surface);
+  padding: 6px;
+  box-shadow:
+    0 12px 32px rgba(15, 23, 42, 0.12),
+    0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.token-blueprint-card__popover-empty {
+  padding: 18px 14px;
+  color: var(--token-blueprint-text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.token-blueprint-card__popover-list {
+  display: flex;
+  max-height: 260px;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+}
+
+.token-blueprint-card__popover-item {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 9px 10px;
+  color: var(--token-blueprint-text);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.token-blueprint-card__popover-item:hover {
+  background: var(--token-blueprint-surface-muted);
+}
+
+.token-blueprint-card__popover-item.is-active {
+  background: var(--token-blueprint-primary-soft);
+  color: var(--token-blueprint-primary);
+  font-weight: 700;
+}
+
+/* -------------------------
+ * Description
+ * ---------------------- */
+
+.token-blueprint-card__description {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 20px;
+}
+
+.token-blueprint-card__description-input {
+  width: 100%;
+  min-height: 132px;
+  resize: vertical;
+  border: 1px solid var(--token-blueprint-border-strong);
+  border-radius: 10px;
+  background: var(--token-blueprint-surface);
+  padding: 11px 12px;
+  color: var(--token-blueprint-text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.token-blueprint-card__description-input::placeholder,
+.token-blueprint-card__readonly-input::placeholder {
+  color: #94a3b8;
+}
+
+.token-blueprint-card__description-input:hover:not(.readonly) {
+  border-color: #a5b4fc;
+}
+
+.token-blueprint-card__description-input:focus {
+  outline: none;
+  border-color: var(--token-blueprint-primary);
+  box-shadow: 0 0 0 3px var(--token-blueprint-focus-ring);
+}
+
+.token-blueprint-card__description-input.readonly {
+  resize: none;
+  border-color: var(--token-blueprint-border);
+  background: var(--token-blueprint-surface-muted);
+  color: var(--token-blueprint-text-subtle);
+  cursor: default;
+}
+
+.token-blueprint-card__description-input.readonly:focus {
+  box-shadow: none;
+}
+
+/* =========================================================
+ * TokenContentsCard
+ * =======================================================*/
+
+.token-contents-card {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--token-blueprint-border);
+  border-radius: 16px;
+  background: var(--token-blueprint-surface);
+  color: var(--token-blueprint-text);
+  box-shadow: var(--token-blueprint-shadow);
+}
+
+/* -------------------------
+ * Header
+ * ---------------------- */
+
+.token-contents-card__header {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--token-blueprint-border);
+  background: var(--token-blueprint-surface);
+}
+
+.token-contents-card__title-wrap {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.token-contents-card__title-icon {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--token-blueprint-primary-border);
+  border-radius: 10px;
+  background: var(--token-blueprint-primary-soft);
+  color: var(--token-blueprint-primary);
+}
+
+.token-contents-card__title-icon-svg {
+  width: 18px;
+  height: 18px;
+}
+
+.token-contents-card__title {
+  color: var(--token-blueprint-text);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.token-contents-card__add-btn {
+  display: inline-flex;
+  min-height: 38px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--token-blueprint-primary);
+  border-radius: 10px;
+  background: var(--token-blueprint-primary);
+  padding: 8px 13px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.token-contents-card__add-btn:hover {
+  border-color: var(--token-blueprint-primary-hover);
+  background: var(--token-blueprint-primary-hover);
+  transform: translateY(-1px);
+}
+
+.token-contents-card__add-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--token-blueprint-focus-ring);
+}
+
+.token-contents-card__add-btn-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* -------------------------
+ * Viewer
+ * ---------------------- */
+
+.token-contents-card > div:last-child {
+  padding: 20px;
+}
+
+.token-contents-card__viewer {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  gap: 12px;
+  align-items: center;
+}
+
+.token-contents-card__nav {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--token-blueprint-border);
+  border-radius: 50%;
+  background: var(--token-blueprint-surface);
+  color: var(--token-blueprint-text-subtle);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.token-contents-card__nav:hover:not(:disabled) {
+  border-color: var(--token-blueprint-primary-border);
+  background: var(--token-blueprint-primary-soft);
+  color: var(--token-blueprint-primary);
+}
+
+.token-contents-card__nav:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--token-blueprint-focus-ring);
+}
+
+.token-contents-card__nav:disabled {
+  cursor: default;
+  opacity: 0.32;
+}
+
+.token-contents-card__nav-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.token-contents-card__image-slot {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 310px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--token-blueprint-border);
+  border-radius: 14px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(79, 70, 229, 0.035),
+      rgba(79, 70, 229, 0)
+    ),
+    var(--token-blueprint-surface-subtle);
+}
+
+.token-contents-card__image-main-wrap {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 310px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.token-contents-card__image,
+.token-contents-card__video {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 310px;
+  max-height: 60vh;
+  border: 0;
+  background: #0f172a;
+  object-fit: contain;
+}
+
+.token-contents-card__file-link {
+  display: inline-flex;
+  max-width: calc(100% - 48px);
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--token-blueprint-primary-border);
+  border-radius: 10px;
+  background: var(--token-blueprint-primary-soft);
+  padding: 10px 16px;
+  color: var(--token-blueprint-primary);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.token-contents-card__file-link:hover {
+  border-color: var(--token-blueprint-primary);
+  background: var(--token-blueprint-primary);
+  color: #ffffff;
+}
+
+.token-contents-card__delete-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--token-blueprint-danger-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--token-blueprint-danger);
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(6px);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.token-contents-card__delete-btn:hover {
+  border-color: var(--token-blueprint-danger);
+  background: var(--token-blueprint-danger);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.token-contents-card__delete-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(220, 38, 38, 0.18),
+    0 4px 14px rgba(15, 23, 42, 0.12);
+}
+
+.token-contents-card__delete-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.token-contents-card__placeholder {
+  display: flex;
+  min-height: 310px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: var(--token-blueprint-text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+/* -------------------------
+ * Thumbnails
+ * ---------------------- */
+
+.token-contents-card__thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.token-contents-card__thumb-wrap {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 11px;
+  background: var(--token-blueprint-surface-muted);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.token-contents-card__thumb-wrap:hover {
+  transform: translateY(-1px);
+}
+
+.token-contents-card__thumb-wrap.is-active {
+  border-color: var(--token-blueprint-primary);
+  box-shadow: 0 0 0 2px var(--token-blueprint-focus-ring);
+}
+
+.token-contents-card__thumb-click {
+  display: flex;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 0;
+  border-radius: 8px;
+  background: var(--token-blueprint-surface-muted);
+  padding: 0;
+  cursor: pointer;
+}
+
+.token-contents-card__thumb-click:focus-visible {
+  outline: none;
+}
+
+.token-contents-card__thumb-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.token-contents-card__thumb-nonimage {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--token-blueprint-text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.token-contents-card__thumb-delete-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  width: 25px;
+  height: 25px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--token-blueprint-danger-border);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--token-blueprint-danger);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.token-contents-card__thumb-delete-btn:hover {
+  background: var(--token-blueprint-danger);
+  color: #ffffff;
+  transform: scale(1.04);
+}
+
+.token-contents-card__thumb-delete-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
+}
+
+.token-contents-card__thumb-delete-icon {
+  width: 13px;
+  height: 13px;
+}
+
+/* =========================================================
+ * Shared disabled states
+ * =======================================================*/
+
+.token-blueprint-card button:disabled,
+.token-contents-card button:disabled {
+  pointer-events: none;
+}
+
+/* =========================================================
+ * Responsive
+ * =======================================================*/
+
+@media (max-width: 900px) {
+  .token-blueprint-card__top {
+    grid-template-columns: 140px minmax(0, 1fr);
+    gap: 20px;
+  }
+
+  .token-blueprint-card__spacer {
+    grid-template-columns: 1fr;
+  }
+
+  .token-blueprint-card__brand-label-cell {
+    grid-column: auto;
+  }
+
+  .token-contents-card__image-slot,
+  .token-contents-card__image-main-wrap,
+  .token-contents-card__placeholder {
+    min-height: 280px;
+  }
+
+  .token-contents-card__image,
+  .token-contents-card__video {
+    height: 280px;
+  }
+}
+
+@media (max-width: 640px) {
+  .token-blueprint-card,
+  .token-contents-card {
+    border-radius: 12px;
+  }
+
+  .token-blueprint-card__header,
+  .token-contents-card__header {
+    min-height: 60px;
+    padding: 13px 14px;
+  }
+
+  .token-blueprint-card__header-left,
+  .token-contents-card__title-wrap {
+    gap: 8px;
+  }
+
+  .token-blueprint-card__header-icon,
+  .token-contents-card__title-icon {
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+  }
+
+  .token-blueprint-card__header-title,
+  .token-contents-card__title {
+    font-size: 14px;
+  }
+
+  .token-blueprint-card__header-badge {
+    display: none;
+  }
+
+  .token-blueprint-card > div:last-child,
+  .token-contents-card > div:last-child {
+    padding: 14px;
+  }
+
+  .token-blueprint-card__top {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .token-blueprint-card__icon-area {
+    width: min(180px, 100%);
+    margin: 0 auto;
+  }
+
+  .token-blueprint-card__spacer {
+    gap: 14px;
+  }
+
+  .token-blueprint-card__description {
+    margin-top: 16px;
+  }
+
+  .token-contents-card__add-btn {
+    min-height: 36px;
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+
+  .token-contents-card__viewer {
+    grid-template-columns: 34px minmax(0, 1fr) 34px;
+    gap: 6px;
+  }
+
+  .token-contents-card__nav {
+    width: 34px;
+    height: 34px;
+  }
+
+  .token-contents-card__nav-icon {
+    width: 17px;
+    height: 17px;
+  }
+
+  .token-contents-card__image-slot,
+  .token-contents-card__image-main-wrap,
+  .token-contents-card__placeholder {
+    min-height: 220px;
+  }
+
+  .token-contents-card__image,
+  .token-contents-card__video {
+    height: 220px;
+  }
+
+  .token-contents-card__delete-btn {
+    top: 8px;
+    right: 8px;
+    width: 34px;
+    height: 34px;
+  }
+
+  .token-contents-card__thumbs {
+    grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+    gap: 8px;
+  }
+}
+
+@media (max-width: 420px) {
+  .token-blueprint-card__preview-btn {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+  }
+
+  .token-contents-card__header {
+    align-items: flex-start;
+  }
+
+  .token-contents-card__add-btn {
+    flex-shrink: 1;
+    white-space: nowrap;
+  }
+
+  .token-contents-card__viewer {
+    position: relative;
+    display: block;
+  }
+
+  .token-contents-card__nav {
+    position: absolute;
+    top: 50%;
+    z-index: 3;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 3px 12px rgba(15, 23, 42, 0.12);
+    transform: translateY(-50%);
+    backdrop-filter: blur(6px);
+  }
+
+  .token-contents-card__nav--left {
+    left: 7px;
+  }
+
+  .token-contents-card__nav--right {
+    right: 7px;
+  }
+
+  .token-contents-card__file-link {
+    max-width: calc(100% - 72px);
+  }
+}
+
+/* =========================================================
+ * Dark mode
+ * =======================================================*/
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --token-blueprint-surface: #171717;
+    --token-blueprint-surface-subtle: #111827;
+    --token-blueprint-surface-muted: #262626;
+
+    --token-blueprint-border: rgba(255, 255, 255, 0.12);
+    --token-blueprint-border-strong: rgba(255, 255, 255, 0.2);
+
+    --token-blueprint-text: rgba(255, 255, 255, 0.94);
+    --token-blueprint-text-subtle: rgba(255, 255, 255, 0.76);
+    --token-blueprint-text-muted: rgba(255, 255, 255, 0.58);
+
+    --token-blueprint-primary: #a5b4fc;
+    --token-blueprint-primary-hover: #818cf8;
+    --token-blueprint-primary-soft: rgba(99, 102, 241, 0.16);
+    --token-blueprint-primary-border: rgba(129, 140, 248, 0.4);
+
+    --token-blueprint-danger: #fca5a5;
+    --token-blueprint-danger-hover: #f87171;
+    --token-blueprint-danger-soft: rgba(220, 38, 38, 0.16);
+    --token-blueprint-danger-border: rgba(248, 113, 113, 0.36);
+
+    --token-blueprint-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.24),
+      0 12px 28px rgba(0, 0, 0, 0.18);
+  }
+
+  .token-blueprint-card__readonly-input.readonly,
+  .token-blueprint-card__description-input.readonly {
+    color: var(--token-blueprint-text-subtle);
+  }
+
+  .token-blueprint-card__description-input::placeholder,
+  .token-blueprint-card__readonly-input::placeholder {
+    color: rgba(255, 255, 255, 0.38);
+  }
+
+  .token-contents-card__delete-btn,
+  .token-contents-card__thumb-delete-btn {
+    background: rgba(23, 23, 23, 0.92);
+  }
+
+  .token-contents-card__nav {
+    background: var(--token-blueprint-surface);
+  }
+
+  @media (max-width: 420px) {
+    .token-contents-card__nav {
+      background: rgba(23, 23, 23, 0.92);
+    }
+  }
+}
+
+/* =========================================================
+ * Reduced motion
+ * =======================================================*/
+
+@media (prefers-reduced-motion: reduce) {
+  .token-blueprint-card *,
+  .token-contents-card * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

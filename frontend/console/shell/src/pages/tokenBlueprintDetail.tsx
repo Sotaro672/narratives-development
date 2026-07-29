@@ -7,7 +7,7 @@ import TokenContentsCard from "../features/tokenBlueprint/presentation/component
 import LogCard from "../features/log/presentation/LogCard";
 
 import { useTokenBlueprintDetail } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintDetail";
-
+import "../styles/tokenBlueprint.css";
 export default function TokenBlueprintDetail() {
   const { vm, handlers } = useTokenBlueprintDetail();
 

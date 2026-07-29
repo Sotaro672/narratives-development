@@ -1,0 +1,22 @@
+{
+  "allowedMimeTypes": [
+    "image/jpeg",
+    "image/png",
+    "image/webp"
+  ],
+  "defaultMaxBytes": 5242880,
+  "targets": {
+    "brandIcon": {
+      "maxBytes": 2097152
+    },
+    "brandBackgroundImage": {
+      "maxBytes": 5242880
+    },
+    "tokenBlueprintIcon": {
+      "maxBytes": 10485760
+    },
+    "tokenBlueprintContentImage": {
+      "maxBytes": 10485760
+    }
+  }
+}
