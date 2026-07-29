@@ -1,6 +1,7 @@
 // frontend/console/shell/src/features/productBlueprint/presentation/hooks/detail/useProductBlueprintDetail.tsx
 
 import * as React from "react";
+
 import {
   useNavigate,
   useParams,
@@ -47,6 +48,10 @@ import {
 } from "../shared/useBrandOptions";
 
 import {
+  useProductBlueprintValidation,
+} from "../shared/useProductBlueprintValidation";
+
+import {
   useProductBlueprintVariations,
 } from "../shared/useProductBlueprintVariations";
 
@@ -67,14 +72,13 @@ function orderVariationsByModelRefs(
     | undefined,
 ): any[] {
   if (
-    !Array.isArray(variations) ||
     variations.length === 0
   ) {
     return [];
   }
 
   if (
-    !Array.isArray(modelRefs) ||
+    !modelRefs ||
     modelRefs.length === 0
   ) {
     return variations;
@@ -88,15 +92,15 @@ function orderVariationsByModelRefs(
     of variations
   ) {
     const id =
-      typeof variation?.id === "string"
+      typeof variation?.id ===
+        "string"
         ? variation.id
         : "";
 
-    if (!id) {
-      continue;
-    }
-
-    if (!byId.has(id)) {
+    if (
+      id &&
+      !byId.has(id)
+    ) {
       byId.set(
         id,
         variation,
@@ -105,7 +109,7 @@ function orderVariationsByModelRefs(
   }
 
   const sortedRefs =
-    [...modelRefs]
+    modelRefs
       .filter(
         (
           ref,
@@ -166,7 +170,8 @@ function orderVariationsByModelRefs(
     of variations
   ) {
     const id =
-      typeof variation?.id === "string"
+      typeof variation?.id ===
+        "string"
         ? variation.id
         : "";
 
@@ -178,7 +183,6 @@ function orderVariationsByModelRefs(
     }
 
     used.add(id);
-
     ordered.push(
       variation,
     );
@@ -228,11 +232,8 @@ export interface UseProductBlueprintDetailResult {
   productBlueprintCategoryLabel:
     string;
 
-  isApparelCategory:
-    boolean;
-
-  isAlcoholCategory:
-    boolean;
+  isApparelCategory: boolean;
+  isAlcoholCategory: boolean;
 
   categoryFields:
     CategoryFieldValues;
@@ -470,24 +471,30 @@ export function useProductBlueprintDetail():
   const {
     isApparelCategory,
     isAlcoholCategory,
+
     colors,
     colorInput,
     sizes,
     modelNumbers,
     colorRgbMap,
+
     volumes,
     alcoholModelNumbers,
+
     getCode,
     setFromUiState,
     resetVariations,
+
     onChangeColorInput,
     onAddColor,
     onRemoveColor,
     onChangeColorRgb,
+
     onRemoveSize,
     onAddSize,
     onChangeSize,
     onChangeModelNumber,
+
     onAddVolume,
     onRemoveVolume,
     onChangeVolume,
@@ -511,6 +518,28 @@ export function useProductBlueprintDetail():
   const brand =
     resolvedBrandName;
 
+  const validate =
+    useProductBlueprintValidation({
+      companyId,
+      productName,
+      brandId,
+
+      productBlueprintCategoryId,
+      productBlueprintCategory,
+
+      categoryFields,
+
+      isApparelCategory,
+      isAlcoholCategory,
+
+      colors,
+      sizes,
+      modelNumbers,
+
+      volumes,
+      alcoholModelNumbers,
+    });
+
   React.useEffect(() => {
     if (!blueprintId) {
       return;
@@ -526,10 +555,6 @@ export function useProductBlueprintDetail():
         const categoryFromDetail =
           detail
             .productBlueprintCategory;
-
-        const nextCategoryFields =
-          detail.categoryFields ??
-          {};
 
         setProductName(
           detail.productName,
@@ -558,7 +583,8 @@ export function useProductBlueprintDetail():
         );
 
         setCategoryFields(
-          nextCategoryFields,
+          detail.categoryFields ??
+            {},
         );
 
         const nextCategoryCode =
@@ -682,13 +708,24 @@ export function useProductBlueprintDetail():
         return;
       }
 
+      const errors =
+        validate();
+
+      if (
+        errors.length > 0
+      ) {
+        alert(
+          `入力内容に不備があります。\n\n- ${errors.join(
+            "\n- ",
+          )}`,
+        );
+
+        return;
+      }
+
       if (
         !productBlueprintCategory
       ) {
-        alert(
-          "商品カテゴリを選択してください。",
-        );
-
         return;
       }
 
@@ -758,19 +795,27 @@ export function useProductBlueprintDetail():
         );
     }, [
       blueprintId,
+      validate,
+
       productName,
+
       productBlueprintCategoryId,
       productBlueprintCategory,
+
       categoryFields,
+
       sizes,
       modelNumbers,
       colorRgbMap,
       colors,
+
       volumes,
       alcoholModelNumbers,
+
       brandId,
       assigneeId,
       companyId,
+
       isApparelCategory,
       isAlcoholCategory,
     ]);

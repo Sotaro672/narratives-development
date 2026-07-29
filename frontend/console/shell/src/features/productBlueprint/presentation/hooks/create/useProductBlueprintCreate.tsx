@@ -1,15 +1,19 @@
 // frontend/console/shell/src/features/productBlueprint/presentation/hooks/create/useProductBlueprintCreate.tsx
 
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
+import {
+  useNavigate,
+} from "react-router-dom";
 
 import type {
+  AlcoholModelNumber,
   ModelNumber,
   VolumeRow,
-  AlcoholModelNumber,
 } from "../../../../model/application/modelCreateService";
 
-import { useAuth } from "../../../../../auth/presentation/hook/useCurrentMember";
+import {
+  useAuth,
+} from "../../../../../auth/presentation/hook/useCurrentMember";
 
 import type {
   ApparelSizeInput,
@@ -23,30 +27,38 @@ import type {
   ProductBlueprintCategorySnapshot,
 } from "../../../domain/productBlueprintCategory";
 
-import { createProductBlueprint } from "../../../application/productBlueprintCreateService";
+import {
+  createProductBlueprint,
+} from "../../../application/productBlueprintCreateService";
 
 import {
   useProductBlueprintCreateBrand,
   type BrandOption,
 } from "./useProductBlueprintCreateBrand";
 
-import { useProductBlueprintCreateCategory } from "./useProductBlueprintCreateCategory";
+import {
+  useProductBlueprintCreateCategory,
+} from "./useProductBlueprintCreateCategory";
 
 import {
   useProductBlueprintCreateCategoryFields,
 } from "./useProductBlueprintCreateCategoryFields";
 
 import {
+  useProductBlueprintValidation,
+} from "../shared/useProductBlueprintValidation";
+
+import {
   useProductBlueprintVariations,
 } from "../shared/useProductBlueprintVariations";
 
-import { useProductBlueprintCreateValidation } from "./useProductBlueprintCreateValidation";
+type SizeRow =
+  ApparelSizeInput & {
+    id: string;
+  };
 
-type SizeRow = ApparelSizeInput & {
-  id: string;
-};
-
-type FitInputValue = Fit | "";
+type FitInputValue =
+  Fit | "";
 
 export {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
@@ -61,16 +73,22 @@ export interface UseProductBlueprintCreateResult {
   brandOptions: BrandOption[];
   brandLoading: boolean;
   brandError: Error | null;
-  onChangeBrandId: (id: string) => void;
+
+  onChangeBrandId: (
+    id: string,
+  ) => void;
 
   productName: string;
 
-  productBlueprintCategoryId: string;
+  productBlueprintCategoryId:
+    string;
+
   productBlueprintCategory:
     | ProductBlueprintCategorySnapshot
     | null;
 
-  productBlueprintCategoryLabel: string;
+  productBlueprintCategoryLabel:
+    string;
 
   productBlueprintCategoryOptions:
     ProductBlueprintCategorySnapshot[];
@@ -106,11 +124,6 @@ export interface UseProductBlueprintCreateResult {
   modelNumbers:
     ModelNumber[];
 
-  /**
-   * alcohol model variation用。
-   * volumeはProductBlueprint.categoryFieldsではなく
-   * model domain側で扱う。
-   */
   volumes: VolumeRow[];
 
   alcoholModelNumbers:
@@ -152,7 +165,8 @@ export interface UseProductBlueprintCreateResult {
 
   onChangeCategoryField: (
     key: string,
-    value: CategoryFieldValue,
+    value:
+      CategoryFieldValue,
   ) => void;
 
   onChangeColorInput: (
@@ -198,9 +212,6 @@ export interface UseProductBlueprintCreateResult {
     nextCode: string,
   ) => void;
 
-  /**
-   * alcohol volume variation操作用。
-   */
   onAddVolume: () => void;
 
   onRemoveVolume: (
@@ -231,17 +242,12 @@ export interface UseProductBlueprintCreateResult {
   onClickAssignee: () => void;
 }
 
-/**
- * model domain管轄のカテゴリフィールドを除外する。
- *
- * - alcoholのvolumeはmodel variationへ保存する。
- * - cosmeticsのvolumeはProductBlueprint.categoryFieldsへ保存する。
- */
 function removeModelOwnedCategoryFields(
   category:
     | ProductBlueprintCategorySnapshot
     | null,
-  fields: CategoryFieldValues,
+  fields:
+    CategoryFieldValues,
 ): CategoryFieldValues {
   const next:
     CategoryFieldValues = {
@@ -259,7 +265,8 @@ function removeModelOwnedCategoryFields(
 }
 
 function getStringCategoryField(
-  fields: CategoryFieldValues,
+  fields:
+    CategoryFieldValues,
   key: string,
 ): string {
   const value =
@@ -272,7 +279,8 @@ function getStringCategoryField(
 }
 
 function getNumberCategoryField(
-  fields: CategoryFieldValues,
+  fields:
+    CategoryFieldValues,
   key: string,
 ): number {
   const value =
@@ -288,15 +296,14 @@ function getNumberCategoryField(
 }
 
 function getStringArrayCategoryField(
-  fields: CategoryFieldValues,
+  fields:
+    CategoryFieldValues,
   key: string,
 ): string[] {
   const value =
     fields[key];
 
-  if (
-    !Array.isArray(value)
-  ) {
+  if (!Array.isArray(value)) {
     return [];
   }
 
@@ -376,8 +383,8 @@ export function useProductBlueprintCreate():
   const category =
     useProductBlueprintCreateCategory();
 
-const categoryFields =
-  useProductBlueprintCreateCategoryFields();
+  const categoryFields =
+    useProductBlueprintCreateCategoryFields();
 
   const variations =
     useProductBlueprintVariations({
@@ -409,28 +416,21 @@ const categoryFields =
     React.useState("");
 
   React.useEffect(() => {
-    if (!currentMember) {
+    if (
+      !currentMember ||
+      assigneeId
+    ) {
       return;
     }
-
-    if (assigneeId) {
-      return;
-    }
-
-    const memberId =
-      currentMember.id;
-
-    const label =
-      getMemberDisplayLabel(
-        currentMember,
-      );
 
     setAssigneeId(
-      memberId,
+      currentMember.id,
     );
 
     setAssigneeName(
-      label,
+      getMemberDisplayLabel(
+        currentMember,
+      ),
     );
   }, [
     currentMember,
@@ -505,7 +505,6 @@ const categoryFields =
         categoryFields
           .onChangeCategoryField(
             "material",
-
             value.trim() === ""
               ? null
               : value,
@@ -522,18 +521,15 @@ const categoryFields =
       (
         value: number,
       ) => {
-        const next =
-          Number.isFinite(value)
-            ? Math.max(
-                0,
-                value,
-              )
-            : 0;
-
         categoryFields
           .onChangeCategoryField(
             "weight",
-            next,
+            Number.isFinite(value)
+              ? Math.max(
+                  0,
+                  value,
+                )
+              : 0,
           );
       },
       [
@@ -547,21 +543,13 @@ const categoryFields =
       (
         value: string[],
       ) => {
-        const next =
-          Array.isArray(value)
-            ? value.filter(
-                (item) =>
-                  typeof item ===
-                    "string" &&
-                  item.trim() !==
-                    "",
-              )
-            : [];
-
         categoryFields
           .onChangeCategoryField(
             "washTags",
-            next,
+            value.filter(
+              (item) =>
+                item.trim() !== "",
+            ),
           );
       },
       [
@@ -571,7 +559,7 @@ const categoryFields =
     );
 
   const validate =
-    useProductBlueprintCreateValidation({
+    useProductBlueprintValidation({
       companyId:
         effectiveCompanyId,
 
@@ -590,8 +578,6 @@ const categoryFields =
 
       categoryFields:
         sanitizedCategoryFields,
-
-      weight,
 
       isApparelCategory:
         variations
@@ -637,9 +623,14 @@ const categoryFields =
           .resetVariations();
       },
       [
-        category,
-        categoryFields,
-        variations,
+        category
+          .onChangeProductBlueprintCategory,
+
+        categoryFields
+          .resetCategoryFields,
+
+        variations
+          .resetVariations,
       ],
     );
 
@@ -662,23 +653,9 @@ const categoryFields =
         }
 
         if (
-          !effectiveCompanyId
-        ) {
-          alert(
-            "companyIdが取得できません。ログインし直してください。",
-          );
-
-          return;
-        }
-
-        if (
           !category
             .productBlueprintCategory
         ) {
-          alert(
-            "商品カテゴリを選択してください。",
-          );
-
           return;
         }
 
@@ -698,11 +675,8 @@ const categoryFields =
               .productBlueprintCategory,
 
           fit,
-
           material,
-
           weight,
-
           qualityAssurance,
 
           productIdTag: {
@@ -722,8 +696,7 @@ const categoryFields =
           colorRgbMap:
             variations
               .isApparelCategory
-              ? variations
-                  .colorRgbMap
+              ? variations.colorRgbMap
               : {},
 
           sizes:
@@ -735,14 +708,9 @@ const categoryFields =
           modelNumbers:
             variations
               .isApparelCategory
-              ? variations
-                  .modelNumbers
+              ? variations.modelNumbers
               : [],
 
-          /**
-           * alcoholの容量はProductBlueprint.categoryFieldsではなく、
-           * model variationとして作成する。
-           */
           volumes:
             variations
               .isAlcoholCategory
@@ -815,12 +783,10 @@ const categoryFields =
 
         productName,
         brand.brandId,
-
         fit,
         material,
         weight,
         qualityAssurance,
-
         sanitizedCategoryFields,
 
         variations
@@ -859,27 +825,10 @@ const categoryFields =
         id: string,
       ) => {
         const nextId =
-          String(
-            id ?? "",
-          ).trim();
+          id.trim();
 
         if (!nextId) {
           return;
-        }
-
-        let nextName = "";
-
-        if (
-          currentMember?.id ===
-          nextId
-        ) {
-          nextName =
-            getMemberDisplayLabel(
-              currentMember,
-            );
-        } else {
-          nextName =
-            nextId;
         }
 
         setAssigneeId(
@@ -887,7 +836,12 @@ const categoryFields =
         );
 
         setAssigneeName(
-          nextName,
+          currentMember?.id ===
+            nextId
+            ? getMemberDisplayLabel(
+                currentMember,
+              )
+            : nextId,
         );
       },
       [
@@ -896,14 +850,16 @@ const categoryFields =
     );
 
   const onEditAssignee =
-    React.useCallback(() => {
-      // 担当者選択UIの編集イベント用
-    }, []);
+    React.useCallback(
+      () => {},
+      [],
+    );
 
   const onClickAssignee =
-    React.useCallback(() => {
-      // 担当者選択UIのクリックイベント用
-    }, []);
+    React.useCallback(
+      () => {},
+      [],
+    );
 
   return {
     title:
@@ -962,11 +918,8 @@ const categoryFields =
         .isAlcoholCategory,
 
     fit,
-
     material,
-
     weight,
-
     qualityAssurance,
 
     categoryFields:
@@ -1012,11 +965,8 @@ const categoryFields =
     onChangeProductBlueprintCategory,
 
     onChangeFit,
-
     onChangeMaterial,
-
     onChangeWeight,
-
     onChangeQualityAssurance,
 
     onChangeCategoryField:
