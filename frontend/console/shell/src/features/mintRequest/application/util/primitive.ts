@@ -3,35 +3,71 @@
 /**
  * Returns trimmed string if non-empty, otherwise empty string.
  */
-export function asNonEmptyString(v: unknown): string {
-  return typeof v === "string" && v.trim() ? v.trim() : "";
+export function asNonEmptyString(
+  value: unknown,
+): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim();
 }
 
 /**
  * Returns trimmed string if non-empty, otherwise null.
  */
-export function asStringOrNull(v: unknown): string | null {
-  const s = typeof v === "string" ? v.trim() : "";
-  return s ? s : null;
+export function asStringOrNull(
+  value: unknown,
+): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalizedValue =
+    value.trim();
+
+  return normalizedValue || null;
 }
 
 /**
  * Parse number safely. Non-finite -> 0.
  */
-export function asNumber0(v: unknown): number {
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : 0;
+export function asNumber0(
+  value: unknown,
+): number {
+  const numberValue =
+    typeof value === "number"
+      ? value
+      : Number(value);
+
+  return Number.isFinite(numberValue)
+    ? numberValue
+    : 0;
 }
 
 /**
  * Attempt to produce ISO string from common inputs.
  * - string: return as-is
  * - Date: toISOString
- * - other: String(v)
+ * - other: String(value)
  */
-export function asMaybeISO(v: unknown): string {
-  if (v === null || v === undefined) return "";
-  if (typeof v === "string") return v;
-  if (v instanceof Date) return v.toISOString();
-  return String(v);
+export function asMaybeISO(
+  value: unknown,
+): string {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return "";
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return String(value);
 }

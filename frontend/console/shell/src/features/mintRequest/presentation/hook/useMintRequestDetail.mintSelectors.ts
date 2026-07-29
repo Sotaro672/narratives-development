@@ -3,7 +3,6 @@
 import * as React from "react";
 
 import type { MintInfo } from "../../application/mapper/mintInfoMapper";
-import { asNonEmptyString } from "../../application/util/primitive";
 
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
@@ -111,18 +110,16 @@ export function useMintInfo({
    * Mint側にbrandIdが存在しない場合だけ、
    * Product Blueprint側のbrandIdを使用する。
    *
-   * mint.brandIdはApplication層で正規化済み。
-   * pbPatch.brandIdだけは未正規化のため、
-   * asNonEmptyStringを適用する。
+   * MintInfoとProductBlueprintPatchDTOは、
+   * それぞれApplication層またはInfrastructure層で
+   * 正規化済みの値として扱う。
    */
   const mintRequestedBrandId =
     React.useMemo(() => {
-      if (mint?.brandId) {
-        return mint.brandId;
-      }
-
-      return asNonEmptyString(
-        pbPatch?.brandId,
+      return (
+        mint?.brandId ||
+        pbPatch?.brandId ||
+        ""
       );
     }, [
       mint?.brandId,

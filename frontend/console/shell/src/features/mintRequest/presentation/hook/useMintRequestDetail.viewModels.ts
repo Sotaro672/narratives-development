@@ -10,15 +10,11 @@ import type {
   BrandSummary,
   TokenBlueprintSummary,
 } from "../../application/port/MintRequestRepository";
-import { asNonEmptyString } from "../../application/util/primitive";
 
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
 import type { ProductBlueprintCardProps } from "../../../productBlueprint/presentation/cards/productBlueprintForm/productBlueprintCard";
-import type {
-  TokenBlueprintCardHandlers,
-  TokenBlueprintCardViewModel,
-} from "../../../tokenBlueprint/presentation/components/tokenBlueprintCard";
+import type { TokenBlueprintCardViewModel } from "../../../tokenBlueprint/presentation/components/tokenBlueprintCard";
 
 type ProductBlueprintCardViewModel =
   Pick<
@@ -37,14 +33,12 @@ export function buildProductBlueprintCardView(
 
   return {
     productName:
-      asNonEmptyString(
-        pbPatch.productName,
-      ) || undefined,
+      pbPatch.productName ??
+      undefined,
 
     brandName:
-      asNonEmptyString(
-        pbPatch.brandName,
-      ) || undefined,
+      pbPatch.brandName ??
+      undefined,
 
     productBlueprintCategory:
       pbPatch.productBlueprintCategory ??
@@ -70,53 +64,37 @@ export function buildTokenBlueprintCardVm(params: {
   } = params;
 
   const tokenBlueprintId =
-    asNonEmptyString(
-      selectedTokenBlueprint?.id,
-    ) ||
-    asNonEmptyString(
-      tokenBlueprintIdForPatch,
-    );
+    selectedTokenBlueprint?.id ||
+    tokenBlueprintIdForPatch;
 
   if (!tokenBlueprintId) {
     return null;
   }
 
   const tokenName =
-    asNonEmptyString(
-      selectedTokenBlueprint?.tokenName,
-    ) ||
+    selectedTokenBlueprint?.tokenName ||
     tokenBlueprintId;
 
   const symbol =
-    asNonEmptyString(
-      selectedTokenBlueprint?.symbol,
-    );
+    selectedTokenBlueprint?.symbol ??
+    "";
 
   const brandId =
-    asNonEmptyString(
-      selectedTokenBlueprint?.brandId,
-    );
+    selectedTokenBlueprint?.brandId ??
+    "";
 
   const brandName =
-    asNonEmptyString(
-      selectedBrandName,
-    ) ||
-    asNonEmptyString(
-      selectedTokenBlueprint?.brandName,
-    ) ||
-    asNonEmptyString(
-      pbPatch?.brandName,
-    );
+    selectedBrandName ||
+    selectedTokenBlueprint?.brandName ||
+    pbPatch?.brandName ||
+    "";
 
   const description =
-    asNonEmptyString(
-      selectedTokenBlueprint?.description,
-    );
+    selectedTokenBlueprint?.description ??
+    "";
 
   const iconUrl =
-    asNonEmptyString(
-      selectedTokenBlueprint?.iconUrl,
-    ) || undefined;
+    selectedTokenBlueprint?.iconUrl;
 
   return {
     id: tokenBlueprintId,
@@ -132,24 +110,6 @@ export function buildTokenBlueprintCardVm(params: {
     iconFile: null,
     isEditMode: false,
     brandOptions,
-  };
-}
-
-export function buildTokenBlueprintCardHandlers(
-  iconUrl?: string,
-): TokenBlueprintCardHandlers {
-  return {
-    onPreview: () => {
-      if (!iconUrl) {
-        return;
-      }
-
-      window.open(
-        iconUrl,
-        "_blank",
-        "noopener,noreferrer",
-      );
-    },
   };
 }
 

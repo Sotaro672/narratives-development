@@ -34,7 +34,6 @@ import { useMintAutoSelection } from "./useMintRequestDetail.useMintAutoSelectio
 import {
   buildMintLabels,
   buildProductBlueprintCardView,
-  buildTokenBlueprintCardHandlers,
   buildTokenBlueprintCardVm,
 } from "./useMintRequestDetail.viewModels";
 
@@ -770,17 +769,6 @@ export function useMintRequestDetail() {
       ],
     );
 
-  const tokenBlueprintCardHandlers =
-    React.useMemo(
-      () =>
-        buildTokenBlueprintCardHandlers(
-          tokenBlueprintCardVm?.iconUrl,
-        ),
-      [
-        tokenBlueprintCardVm?.iconUrl,
-      ],
-    );
-
   const {
     mintCreatedAtLabel,
     mintCreatedByLabel,
@@ -847,7 +835,6 @@ export function useMintRequestDetail() {
     handleSelectTokenBlueprint,
 
     tokenBlueprintCardVm,
-    tokenBlueprintCardHandlers,
 
     mintCreatedAtLabel,
     mintCreatedByLabel,
