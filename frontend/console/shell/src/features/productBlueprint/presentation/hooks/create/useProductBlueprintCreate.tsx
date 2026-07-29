@@ -34,7 +34,6 @@ import { useProductBlueprintCreateCategory } from "./useProductBlueprintCreateCa
 
 import {
   useProductBlueprintCreateCategoryFields,
-  type FitInputValue,
 } from "./useProductBlueprintCreateCategoryFields";
 
 import { useProductBlueprintCreateVariations } from "./useProductBlueprintCreateVariations";
@@ -43,6 +42,8 @@ import { useProductBlueprintCreateValidation } from "./useProductBlueprintCreate
 type SizeRow = ApparelSizeInput & {
   id: string;
 };
+
+type FitInputValue = Fit | "";
 
 export {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
@@ -215,6 +216,51 @@ function removeModelOwnedCategoryFields(
   return next;
 }
 
+function getStringCategoryField(
+  fields: CategoryFieldValues,
+  key: string,
+): string {
+  const value =
+    fields[key];
+
+  return typeof value === "string"
+    ? value
+    : "";
+}
+
+function getNumberCategoryField(
+  fields: CategoryFieldValues,
+  key: string,
+): number {
+  const value =
+    fields[key];
+
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value)
+  )
+    ? value
+    : 0;
+}
+
+function getStringArrayCategoryField(
+  fields: CategoryFieldValues,
+  key: string,
+): string[] {
+  const value =
+    fields[key];
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(
+    (item): item is string =>
+      typeof item === "string" &&
+      item.trim() !== "",
+  );
+}
+
 function getMemberDisplayLabel(
   member: {
     id: string;
@@ -339,6 +385,106 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       ],
     );
 
+  const fit =
+    getStringCategoryField(
+      sanitizedCategoryFields,
+      "fit",
+    ) as FitInputValue;
+
+  const material =
+    getStringCategoryField(
+      sanitizedCategoryFields,
+      "material",
+    );
+
+  const weight =
+    getNumberCategoryField(
+      sanitizedCategoryFields,
+      "weight",
+    );
+
+  const qualityAssurance =
+    getStringArrayCategoryField(
+      sanitizedCategoryFields,
+      "washTags",
+    );
+
+  const onChangeFit =
+    React.useCallback(
+      (
+        value: Fit,
+      ) => {
+        categoryFields.onChangeCategoryField(
+          "fit",
+          value,
+        );
+      },
+      [
+        categoryFields.onChangeCategoryField,
+      ],
+    );
+
+  const onChangeMaterial =
+    React.useCallback(
+      (
+        value: string,
+      ) => {
+        categoryFields.onChangeCategoryField(
+          "material",
+          value.trim() === ""
+            ? null
+            : value,
+        );
+      },
+      [
+        categoryFields.onChangeCategoryField,
+      ],
+    );
+
+  const onChangeWeight =
+    React.useCallback(
+      (
+        value: number,
+      ) => {
+        const next =
+          Number.isFinite(value)
+            ? Math.max(0, value)
+            : 0;
+
+        categoryFields.onChangeCategoryField(
+          "weight",
+          next,
+        );
+      },
+      [
+        categoryFields.onChangeCategoryField,
+      ],
+    );
+
+  const onChangeQualityAssurance =
+    React.useCallback(
+      (
+        value: string[],
+      ) => {
+        const next =
+          Array.isArray(value)
+            ? value.filter(
+                (item) =>
+                  typeof item === "string" &&
+                  item.trim() !== "",
+              )
+            : [];
+
+        categoryFields.onChangeCategoryField(
+          "washTags",
+          next,
+        );
+      },
+      [
+        categoryFields.onChangeCategoryField,
+      ],
+    );
+
   const validate =
     useProductBlueprintCreateValidation({
       companyId:
@@ -358,8 +504,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       categoryFields:
         sanitizedCategoryFields,
 
-      weight:
-        categoryFields.weight,
+      weight,
 
       isApparelCategory:
         variations.isApparelCategory,
@@ -453,18 +598,13 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
             category
               .productBlueprintCategory,
 
-          fit:
-            categoryFields.fit,
+          fit,
 
-          material:
-            categoryFields.material,
+          material,
 
-          weight:
-            categoryFields.weight,
+          weight,
 
-          qualityAssurance:
-            categoryFields
-              .qualityAssurance,
+          qualityAssurance,
 
           productIdTag: {
             type: "qr" as const,
@@ -562,10 +702,10 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         category.productBlueprintCategory,
         productName,
         brand.brandId,
-        categoryFields.fit,
-        categoryFields.material,
-        categoryFields.weight,
-        categoryFields.qualityAssurance,
+        fit,
+        material,
+        weight,
+        qualityAssurance,
         sanitizedCategoryFields,
         variations.isApparelCategory,
         variations.isAlcoholCategory,
@@ -688,18 +828,13 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       variations
         .isAlcoholCategory,
 
-    fit:
-      categoryFields.fit,
+    fit,
 
-    material:
-      categoryFields.material,
+    material,
 
-    weight:
-      categoryFields.weight,
+    weight,
 
-    qualityAssurance:
-      categoryFields
-        .qualityAssurance,
+    qualityAssurance,
 
     categoryFields:
       sanitizedCategoryFields,
@@ -743,20 +878,13 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
     onChangeProductBlueprintCategory,
 
-    onChangeFit:
-      categoryFields.onChangeFit,
+    onChangeFit,
 
-    onChangeMaterial:
-      categoryFields
-        .onChangeMaterial,
+    onChangeMaterial,
 
-    onChangeWeight:
-      categoryFields
-        .onChangeWeight,
+    onChangeWeight,
 
-    onChangeQualityAssurance:
-      categoryFields
-        .onChangeQualityAssurance,
+    onChangeQualityAssurance,
 
     onChangeCategoryField:
       categoryFields

@@ -404,40 +404,6 @@ function getStringArrayFromFields(
   );
 }
 
-function buildApparelCategoryFieldsForSave(
-  args: {
-    base:
-      CategoryFieldValues;
-
-    fit: Fit;
-    material: string;
-    weight: number;
-    washTags: string[];
-  },
-): CategoryFieldValues {
-  return removeModelOwnedCategoryFields({
-    ...args.base,
-
-    fit:
-      args.fit || null,
-
-    material:
-      args.material.trim() === ""
-        ? null
-        : args.material,
-
-    weight:
-      Number.isFinite(
-        args.weight,
-      )
-        ? args.weight
-        : 0,
-
-    washTags:
-      args.washTags,
-  });
-}
-
 function emptyVariationsUiState():
   VariationsUiState {
   return {
@@ -714,44 +680,41 @@ export function useProductBlueprintDetail():
     ]);
 
   const [
-    fit,
-    setFit,
-  ] =
-    React.useState<Fit>(
-      "" as Fit,
-    );
-
-  const [
-    materials,
-    setMaterials,
-  ] =
-    React.useState<string>(
-      "",
-    );
-
-  const [
-    weight,
-    setWeight,
-  ] =
-    React.useState<number>(
-      0,
-    );
-
-  const [
-    washTags,
-    setWashTags,
-  ] =
-    React.useState<string[]>(
-      [],
-    );
-
-  const [
     categoryFields,
     setCategoryFields,
   ] =
     React.useState<
       CategoryFieldValues
     >({});
+
+  const fit =
+    (
+      typeof categoryFields.fit ===
+      "string"
+        ? categoryFields.fit
+        : ""
+    ) as Fit;
+
+  const materials =
+    typeof categoryFields.material ===
+    "string"
+      ? categoryFields.material
+      : "";
+
+  const weight =
+    typeof categoryFields.weight ===
+      "number" &&
+    Number.isFinite(
+      categoryFields.weight,
+    )
+      ? categoryFields.weight
+      : 0;
+
+  const washTags =
+    getStringArrayFromFields(
+      categoryFields,
+      "washTags",
+    );
 
   const [
     assignee,
@@ -827,32 +790,32 @@ export function useProductBlueprintDetail():
       "",
     );
 
-const {
-  colors,
-  colorInput,
-  sizes,
-  modelNumbers,
-  colorRgbMap,
-  volumes,
-  alcoholModelNumbers,
-  getCode,
-  setFromUiState,
-  onChangeColorInput,
-  onAddColor,
-  onRemoveColor,
-  onChangeColorRgb,
-  onRemoveSize,
-  onAddSize,
-  onChangeSize,
-  onChangeModelNumber,
-  onAddVolume,
-  onRemoveVolume,
-  onChangeVolume,
-  onChangeAlcoholModelNumber,
-} =
-  useVariationsEditor(
-    productBlueprintCategory,
-  );
+  const {
+    colors,
+    colorInput,
+    sizes,
+    modelNumbers,
+    colorRgbMap,
+    volumes,
+    alcoholModelNumbers,
+    getCode,
+    setFromUiState,
+    onChangeColorInput,
+    onAddColor,
+    onRemoveColor,
+    onChangeColorRgb,
+    onRemoveSize,
+    onAddSize,
+    onChangeSize,
+    onChangeModelNumber,
+    onAddVolume,
+    onRemoveVolume,
+    onChangeVolume,
+    onChangeAlcoholModelNumber,
+  } =
+    useVariationsEditor(
+      productBlueprintCategory,
+    );
 
   const {
     brandOptions,
@@ -926,11 +889,35 @@ const {
             "fit",
           );
 
+        const fitFromDetail =
+          fitFromCategoryFields ||
+          String(
+            (detail as any).fit ??
+              "",
+          ).trim();
+
+        if (fitFromDetail) {
+          categoryFieldsFromDetail.fit =
+            fitFromDetail;
+        }
+
         const materialFromCategoryFields =
           getStringFromFields(
             categoryFieldsFromDetail,
             "material",
           );
+
+        const materialFromDetail =
+          materialFromCategoryFields ||
+          String(
+            (detail as any).material ??
+              "",
+          );
+
+        if (materialFromDetail) {
+          categoryFieldsFromDetail.material =
+            materialFromDetail;
+        }
 
         const weightFromCategoryFields =
           getNumberFromFields(
@@ -938,11 +925,61 @@ const {
             "weight",
           );
 
+        const weightFromDetail =
+          weightFromCategoryFields ??
+          (
+            typeof (
+              detail as any
+            ).weight === "number" &&
+            Number.isFinite(
+              (detail as any).weight,
+            )
+              ? (
+                  detail as any
+                ).weight as number
+              : null
+          );
+
+        if (weightFromDetail !== null) {
+          categoryFieldsFromDetail.weight =
+            weightFromDetail;
+        }
+
         const washTagsFromCategoryFields =
           getStringArrayFromFields(
             categoryFieldsFromDetail,
             "washTags",
           );
+
+        const washTagsFromDetail =
+          washTagsFromCategoryFields
+            .length > 0
+            ? washTagsFromCategoryFields
+            : Array.isArray(
+                  (detail as any)
+                    .qualityAssurance,
+                )
+              ? (
+                  (
+                    detail as any
+                  )
+                    .qualityAssurance as
+                    unknown[]
+                ).filter(
+                  (
+                    tag,
+                  ): tag is string =>
+                    typeof tag ===
+                      "string" &&
+                    tag.trim() !==
+                      "",
+                )
+              : [];
+
+        if (washTagsFromDetail.length > 0) {
+          categoryFieldsFromDetail.washTags =
+            washTagsFromDetail;
+        }
 
         setPageTitle(
           detail.productName ??
@@ -985,73 +1022,6 @@ const {
 
         setCategoryFields(
           categoryFieldsFromDetail,
-        );
-
-        setFit(
-          (
-            fitFromCategoryFields ||
-            (
-              (detail as any)
-                .fit as
-                | string
-                | undefined
-            ) ||
-            ""
-          ) as Fit,
-        );
-
-        setMaterials(
-          materialFromCategoryFields ||
-            (
-              (detail as any)
-                .material as
-                | string
-                | undefined
-            ) ||
-            "",
-        );
-
-        setWeight(
-          weightFromCategoryFields ??
-            (
-              typeof (
-                detail as any
-              ).weight ===
-              "number"
-                ? (
-                    (
-                      detail as any
-                    )
-                      .weight as number
-                  )
-                : 0
-            ),
-        );
-
-        setWashTags(
-          washTagsFromCategoryFields
-            .length > 0
-            ? washTagsFromCategoryFields
-            : Array.isArray(
-                  (detail as any)
-                    .qualityAssurance,
-                )
-              ? (
-                  (
-                    detail as any
-                  )
-                    .qualityAssurance as
-                    unknown[]
-                ).filter(
-                  (
-                    tag,
-                  ): tag is string =>
-                    typeof tag ===
-                      "string" &&
-                    tag.trim() !==
-                      "",
-                )
-              : [],
         );
 
         const modelRefs =
@@ -1214,65 +1184,42 @@ const {
           return;
         }
 
+        if (
+          key === "washTags" ||
+          key ===
+            "qualityAssurance"
+        ) {
+          const nextWashTags =
+            getStringArrayFromFields(
+              {
+                [key]: value,
+              },
+              key,
+            );
+
+          setCategoryFields(
+            (previous) => {
+              const next: CategoryFieldValues = {
+                ...previous,
+                washTags:
+                  nextWashTags,
+              };
+
+              delete next["qualityAssurance"];
+
+              return next;
+            },
+          );
+
+          return;
+        }
+
         setCategoryFields(
           (previous) => ({
             ...previous,
             [key]: value,
           }),
         );
-
-        if (
-          key === "fit" &&
-          typeof value ===
-            "string"
-        ) {
-          setFit(
-            value as Fit,
-          );
-
-          return;
-        }
-
-        if (
-          key === "material"
-        ) {
-          setMaterials(
-            typeof value ===
-              "string"
-              ? value
-              : "",
-          );
-
-          return;
-        }
-
-        if (
-          key === "weight"
-        ) {
-          setWeight(
-            typeof value ===
-              "number"
-              ? value
-              : 0,
-          );
-
-          return;
-        }
-
-        if (
-          key === "washTags" ||
-          key ===
-            "qualityAssurance"
-        ) {
-          setWashTags(
-            getStringArrayFromFields(
-              {
-                [key]: value,
-              },
-              key,
-            ),
-          );
-        }
       },
       [],
     );
@@ -1282,19 +1229,14 @@ const {
       (
         value: Fit,
       ) => {
-        setFit(value);
-
-        setCategoryFields(
-          (previous) =>
-            removeModelOwnedCategoryFields({
-              ...previous,
-
-              fit:
-                value || null,
-            }),
+        onChangeCategoryField(
+          "fit",
+          value || null,
         );
       },
-      [],
+      [
+        onChangeCategoryField,
+      ],
     );
 
   const onChangeMaterials =
@@ -1302,22 +1244,16 @@ const {
       (
         value: string,
       ) => {
-        setMaterials(value);
-
-        setCategoryFields(
-          (previous) =>
-            removeModelOwnedCategoryFields({
-              ...previous,
-
-              material:
-                value.trim() ===
-                ""
-                  ? null
-                  : value,
-            }),
+        onChangeCategoryField(
+          "material",
+          value.trim() === ""
+            ? null
+            : value,
         );
       },
-      [],
+      [
+        onChangeCategoryField,
+      ],
     );
 
   const onChangeWeight =
@@ -1332,17 +1268,14 @@ const {
             ? value
             : 0;
 
-        setWeight(next);
-
-        setCategoryFields(
-          (previous) =>
-            removeModelOwnedCategoryFields({
-              ...previous,
-              weight: next,
-            }),
+        onChangeCategoryField(
+          "weight",
+          next,
         );
       },
-      [],
+      [
+        onChangeCategoryField,
+      ],
     );
 
   const onChangeWashTags =
@@ -1361,19 +1294,14 @@ const {
               )
             : [];
 
-        setWashTags(next);
-
-        setCategoryFields(
-          (previous) =>
-            removeModelOwnedCategoryFields({
-              ...previous,
-
-              washTags:
-                next,
-            }),
+        onChangeCategoryField(
+          "washTags",
+          next,
         );
       },
-      [],
+      [
+        onChangeCategoryField,
+      ],
     );
 
   const onSave =
@@ -1549,23 +1477,9 @@ const {
       (async () => {
         try {
           const nextCategoryFields =
-            isApparelCategory
-              ? buildApparelCategoryFieldsForSave({
-                  base:
-                    categoryFields,
-
-                  fit,
-
-                  material:
-                    materials,
-
-                  weight,
-
-                  washTags,
-                })
-              : removeModelOwnedCategoryFields(
-                  categoryFields,
-                );
+            removeModelOwnedCategoryFields(
+              categoryFields,
+            );
 
           await updateProductBlueprint({
             id:
@@ -1632,10 +1546,6 @@ const {
       productName,
       productBlueprintCategoryId,
       productBlueprintCategory,
-      fit,
-      materials,
-      weight,
-      washTags,
       categoryFields,
       sizes,
       modelNumbers,
