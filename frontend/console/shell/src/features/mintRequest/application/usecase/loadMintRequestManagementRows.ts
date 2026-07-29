@@ -5,7 +5,7 @@ import type { InspectionStatus } from "../../domain/inspections";
 import { fetchMintRequestRowsHTTP } from "../../infrastructure/repository/http/mintRequests";
 import { fetchProductionIdsForCurrentCompanyHTTP } from "../../infrastructure/repository/http/productions";
 
-import type { MintRequestManagementRowDTO } from "../dto/mintRequestManagementRow";
+import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
 
 import {
   asNonEmptyString,

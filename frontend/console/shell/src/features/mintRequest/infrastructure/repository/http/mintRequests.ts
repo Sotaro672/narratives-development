@@ -6,7 +6,7 @@ import { getAuthJsonHeadersOrThrow } from "../../../../../shared/http/authHeader
 import type { MintDTO } from "../../dto/mint.dto";
 
 import type { MintTaskProgress } from "../../../application/port/MintRequestRepository";
-import type { MintRequestManagementRowDTO } from "../../../application/dto/mintRequestManagementRow";
+import type { MintRequestManagementRowDTO } from "../../dto/mintRequestManagementRow";
 import type { MintStatus } from "../../../domain/mints";
 
 // ===============================
