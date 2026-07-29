@@ -1,21 +1,160 @@
 // frontend/console/shell/src/features/tokenBlueprint/infrastructure/repository/tokenBlueprintRepositoryHTTP.ts
 
+import { auth } from "../../../../auth/infrastructure/config/firebaseClient";
+
 import type { TokenBlueprint } from "../../../../shared/types/tokenBlueprint";
-import type { ContentFileDTO } from "../dto/tokenBlueprint.dto";
+
+import { buildConsoleUrl } from "../../../../shared/http/apiBase";
 
 import {
-  apiDelete,
-  apiGet,
-  apiPostJson,
-  apiPutJson,
-} from "../http/client";
+  getAuthHeadersOrThrow,
+  getAuthJsonHeadersOrThrow,
+} from "../../../../shared/http/authHeaders";
 
-import { handleJsonResponse } from "../http/json";
+import { fetchJSON } from "../../../../shared/http/fetchJSON";
+
+import type { ContentFileDTO } from "../dto/tokenBlueprint.dto";
 
 import {
   normalizePageResult,
   normalizeTokenBlueprint,
 } from "../dto/tokenBlueprint.mapper";
+
+// ---------------------------------------------------------
+// HTTP共通処理
+// ---------------------------------------------------------
+
+type JsonRequestMethod =
+  | "GET"
+  | "POST"
+  | "PUT";
+
+function getActorIdOrEmpty(): string {
+  try {
+    return (
+      auth.currentUser?.uid?.trim?.() ??
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
+
+function withActorHeader(
+  headers: Record<string, string>,
+): Record<string, string> {
+  const actorId =
+    getActorIdOrEmpty();
+
+  if (!actorId) {
+    return headers;
+  }
+
+  return {
+    ...headers,
+    "X-Actor-Id": actorId,
+  };
+}
+
+async function requestJson<T>(
+  path: string,
+  method: JsonRequestMethod,
+  body?: unknown,
+): Promise<T> {
+  const baseHeaders =
+    method === "GET"
+      ? await getAuthHeadersOrThrow()
+      : await getAuthJsonHeadersOrThrow();
+
+  const headers =
+    withActorHeader(
+      baseHeaders,
+    );
+
+  return fetchJSON<T>(
+    buildConsoleUrl(path),
+    {
+      method,
+      headers,
+      ...(method === "GET"
+        ? {}
+        : {
+            body: JSON.stringify(
+              body ?? {},
+            ),
+          }),
+    },
+  );
+}
+
+async function requestDelete(
+  path: string,
+): Promise<void> {
+  const baseHeaders =
+    await getAuthHeadersOrThrow();
+
+  const headers =
+    withActorHeader(
+      baseHeaders,
+    );
+
+  const url =
+    buildConsoleUrl(path);
+
+  const response =
+    await fetch(
+      url,
+      {
+        method: "DELETE",
+        headers,
+      },
+    );
+
+  if (response.ok) {
+    return;
+  }
+
+  const text =
+    await response.text();
+
+  if (text) {
+    try {
+      const data =
+        JSON.parse(text) as {
+          error?: unknown;
+          message?: unknown;
+        };
+
+      const message =
+        typeof data.error === "string"
+          ? data.error
+          : typeof data.message === "string"
+            ? data.message
+            : "";
+
+      if (message) {
+        throw new Error(
+          message,
+        );
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        if (
+          error.message !==
+          "Unexpected end of JSON input"
+        ) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  throw new Error(
+    text ||
+      response.statusText ||
+      `HTTP ${response.status}`,
+  );
+}
 
 // ---------------------------------------------------------
 // APIレスポンス型
@@ -99,13 +238,10 @@ export async function fetchTokenBlueprints(
     );
   }
 
-  const response = await apiGet(
-    url.pathname + url.search,
-  );
-
   const raw =
-    await handleJsonResponse<unknown>(
-      response,
+    await requestJson<unknown>(
+      url.pathname + url.search,
+      "GET",
     );
 
   return normalizePageResult(raw);
@@ -120,13 +256,10 @@ export async function fetchTokenBlueprintById(
     );
   }
 
-  const response = await apiGet(
-    `/token-blueprints/${encodeURIComponent(id)}`,
-  );
-
   const raw =
-    await handleJsonResponse<unknown>(
-      response,
+    await requestJson<unknown>(
+      `/token-blueprints/${encodeURIComponent(id)}`,
+      "GET",
     );
 
   return normalizeTokenBlueprint(raw);
@@ -135,14 +268,11 @@ export async function fetchTokenBlueprintById(
 export async function createTokenBlueprint(
   payload: CreateTokenBlueprintPayload,
 ): Promise<TokenBlueprint> {
-  const response = await apiPostJson(
-    "/token-blueprints",
-    payload,
-  );
-
   const raw =
-    await handleJsonResponse<unknown>(
-      response,
+    await requestJson<unknown>(
+      "/token-blueprints",
+      "POST",
+      payload,
     );
 
   return normalizeTokenBlueprint(raw);
@@ -158,14 +288,11 @@ export async function updateTokenBlueprint(
     );
   }
 
-  const response = await apiPutJson(
-    `/token-blueprints/${encodeURIComponent(id)}`,
-    payload,
-  );
-
   const raw =
-    await handleJsonResponse<unknown>(
-      response,
+    await requestJson<unknown>(
+      `/token-blueprints/${encodeURIComponent(id)}`,
+      "PUT",
+      payload,
     );
 
   return normalizeTokenBlueprint(raw);
@@ -180,12 +307,8 @@ export async function deleteTokenBlueprint(
     );
   }
 
-  const response = await apiDelete(
+  await requestDelete(
     `/token-blueprints/${encodeURIComponent(id)}`,
-  );
-
-  await handleJsonResponse<unknown>(
-    response,
   );
 }
 
@@ -205,18 +328,16 @@ export async function patchTokenBlueprintContentFiles(
     );
   }
 
-  const response = await apiPutJson(
-    `/token-blueprints/${encodeURIComponent(
-      params.tokenBlueprintId,
-    )}`,
-    {
-      contentFiles: params.contentFiles,
-    },
-  );
-
   const raw =
-    await handleJsonResponse<unknown>(
-      response,
+    await requestJson<unknown>(
+      `/token-blueprints/${encodeURIComponent(
+        params.tokenBlueprintId,
+      )}`,
+      "PUT",
+      {
+        contentFiles:
+          params.contentFiles,
+      },
     );
 
   return normalizeTokenBlueprint(raw);
@@ -244,26 +365,28 @@ export async function attachTokenBlueprintIcon(
     );
   }
 
-  const response = await apiPutJson(
-    `/token-blueprints/${encodeURIComponent(
-      params.tokenBlueprintId,
-    )}`,
-    {
-      iconUrl: params.iconUrl,
-      iconObjectPath:
-        params.iconObjectPath,
-      iconFileName:
-        params.iconFileName,
-      iconContentType:
-        params.iconContentType,
-      iconSize:
-        params.iconSize,
-    },
-  );
-
   const raw =
-    await handleJsonResponse<unknown>(
-      response,
+    await requestJson<unknown>(
+      `/token-blueprints/${encodeURIComponent(
+        params.tokenBlueprintId,
+      )}`,
+      "PUT",
+      {
+        iconUrl:
+          params.iconUrl,
+
+        iconObjectPath:
+          params.iconObjectPath,
+
+        iconFileName:
+          params.iconFileName,
+
+        iconContentType:
+          params.iconContentType,
+
+        iconSize:
+          params.iconSize,
+      },
     );
 
   return normalizeTokenBlueprint(raw);
