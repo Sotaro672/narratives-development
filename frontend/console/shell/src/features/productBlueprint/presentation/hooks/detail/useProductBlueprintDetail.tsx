@@ -827,30 +827,32 @@ export function useProductBlueprintDetail():
       "",
     );
 
-  const {
-    colors,
-    colorInput,
-    sizes,
-    modelNumbers,
-    colorRgbMap,
-    volumes,
-    alcoholModelNumbers,
-    getCode,
-    setFromUiState,
-    onChangeColorInput,
-    onAddColor,
-    onRemoveColor,
-    onChangeColorRgb,
-    onRemoveSize,
-    onAddSize,
-    onChangeSize,
-    onChangeModelNumber,
-    onAddVolume,
-    onRemoveVolume,
-    onChangeVolume,
-    onChangeAlcoholModelNumber,
-  } =
-    useVariationsEditor();
+const {
+  colors,
+  colorInput,
+  sizes,
+  modelNumbers,
+  colorRgbMap,
+  volumes,
+  alcoholModelNumbers,
+  getCode,
+  setFromUiState,
+  onChangeColorInput,
+  onAddColor,
+  onRemoveColor,
+  onChangeColorRgb,
+  onRemoveSize,
+  onAddSize,
+  onChangeSize,
+  onChangeModelNumber,
+  onAddVolume,
+  onRemoveVolume,
+  onChangeVolume,
+  onChangeAlcoholModelNumber,
+} =
+  useVariationsEditor(
+    productBlueprintCategory,
+  );
 
   const {
     brandOptions,
