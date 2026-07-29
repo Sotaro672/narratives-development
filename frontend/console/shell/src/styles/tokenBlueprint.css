@@ -114,42 +114,6 @@
   line-height: 1;
 }
 
-.token-blueprint-card__preview-btn {
-  display: inline-flex;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 38px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--token-blueprint-border);
-  border-radius: 10px;
-  background: var(--token-blueprint-surface);
-  color: var(--token-blueprint-text-subtle);
-  cursor: pointer;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    color 160ms ease,
-    box-shadow 160ms ease;
-}
-
-.token-blueprint-card__preview-btn:hover {
-  border-color: var(--token-blueprint-primary-border);
-  background: var(--token-blueprint-primary-soft);
-  color: var(--token-blueprint-primary);
-}
-
-.token-blueprint-card__preview-btn:focus-visible {
-  outline: none;
-  border-color: var(--token-blueprint-primary);
-  box-shadow: 0 0 0 3px var(--token-blueprint-focus-ring);
-}
-
-.token-blueprint-card__preview-icon {
-  width: 18px;
-  height: 18px;
-}
-
 /* -------------------------
  * Main layout
  * ---------------------- */
@@ -192,17 +156,22 @@
     var(--token-blueprint-surface-subtle);
 }
 
-.token-blueprint-card__icon-wrap img {
+.token-blueprint-card__icon-image {
   display: block;
   width: 100%;
   height: 100%;
+  cursor: default;
   object-fit: cover;
   transition:
     opacity 160ms ease,
     transform 160ms ease;
 }
 
-.token-blueprint-card__icon-wrap img:hover {
+.token-blueprint-card__icon-image.is-clickable {
+  cursor: pointer;
+}
+
+.token-blueprint-card__icon-image.is-clickable:hover {
   opacity: 0.92;
   transform: scale(1.015);
 }
@@ -215,6 +184,7 @@
   justify-content: center;
   border: 0;
   background: transparent;
+  cursor: pointer;
   padding: 16px;
   color: var(--token-blueprint-text-muted);
   font-size: 13px;
@@ -231,6 +201,10 @@
 .token-blueprint-card__icon-placeholder:disabled {
   cursor: default;
   opacity: 0.72;
+}
+
+.token-blueprint-card__icon-input {
+  display: none;
 }
 
 .token-blueprint-card__upload-btn {
@@ -272,9 +246,15 @@
 }
 
 .token-blueprint-card__icon-selected {
+  display: flex;
   min-width: 0;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
   color: var(--token-blueprint-text-muted);
+  font-size: 12px;
   line-height: 1.5;
+  opacity: 0.85;
 }
 
 .token-blueprint-card__icon-selected > span {
@@ -282,15 +262,30 @@
   overflow-wrap: anywhere;
 }
 
-.token-blueprint-card__icon-selected button {
+.token-blueprint-card__icon-clear-btn {
+  display: inline-flex;
   flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 0;
   border-radius: 6px;
+  background: transparent;
+  padding: 0;
   color: var(--token-blueprint-text-muted);
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
 }
 
-.token-blueprint-card__icon-selected button:hover {
-  background: var(--token-blueprint-danger-soft) !important;
+.token-blueprint-card__icon-clear-btn:hover {
+  background: var(--token-blueprint-danger-soft);
   color: var(--token-blueprint-danger);
+}
+
+.token-blueprint-card__icon-clear-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
 }
 
 /* -------------------------
@@ -314,6 +309,14 @@
 
 .token-blueprint-card__brand-label-cell {
   grid-column: 1 / -1;
+}
+
+.token-blueprint-card__identity-lock-message {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  color: var(--token-blueprint-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .token-blueprint-card__label {
@@ -368,6 +371,7 @@
   position: relative;
   width: 100%;
   border-radius: 10px;
+  cursor: pointer;
 }
 
 .token-blueprint-card__select::after {
@@ -910,7 +914,8 @@
     grid-template-columns: 1fr;
   }
 
-  .token-blueprint-card__brand-label-cell {
+  .token-blueprint-card__brand-label-cell,
+  .token-blueprint-card__identity-lock-message {
     grid-column: auto;
   }
 
@@ -1028,12 +1033,6 @@
 }
 
 @media (max-width: 420px) {
-  .token-blueprint-card__preview-btn {
-    width: 34px;
-    height: 34px;
-    flex-basis: 34px;
-  }
-
   .token-contents-card__header {
     align-items: flex-start;
   }

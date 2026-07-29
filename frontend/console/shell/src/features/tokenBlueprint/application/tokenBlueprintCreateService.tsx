@@ -1,4 +1,4 @@
-// frontend/console/tokenBlueprint/src/application/tokenBlueprintCreateService.tsx
+// frontend/console/shell/src/features/tokenBlueprint/application/tokenBlueprintCreateService.tsx
 
 /**
  * TokenBlueprint 作成カードのアプリケーションサービス
@@ -23,9 +23,7 @@ import {
   updateTokenBlueprint,
 } from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
 
-import {
-  fetchBrandsForCurrentCompany,
-} from "../../brand/infrastructure/http/brandRepositoryHTTP";
+import { fetchBrandsForCurrentCompany } from "../../brand/infrastructure/http/brandRepositoryHTTP";
 
 import { uploadTokenBlueprintIconToFirebaseStorage } from "../infrastructure/storage/tokenBlueprintAssetStorage";
 
@@ -56,8 +54,7 @@ export async function loadBrandsForCompany(): Promise<
 > {
   try {
     return await fetchBrandsForCurrentCompany();
-  } catch (e) {
-    console.error("[tokenBlueprintCreateService] loadBrandsForCompany error:", e);
+  } catch {
     return [];
   }
 }
@@ -71,27 +68,53 @@ export type CreateTokenBlueprintInput = CreateTokenBlueprintPayload & {
   iconFile?: File | null;
 };
 
-function normalizeIconUrlForSend(raw: unknown): string | undefined {
-  const u = typeof raw === "string" ? raw.trim() : undefined;
-  if (!u) return undefined;
-  if (u.startsWith("blob:")) return undefined;
-  return u;
+function normalizeIconUrlForSend(
+  raw: unknown,
+): string | undefined {
+  const url =
+    typeof raw === "string"
+      ? raw.trim()
+      : undefined;
+
+  if (!url) {
+    return undefined;
+  }
+
+  if (url.startsWith("blob:")) {
+    return undefined;
+  }
+
+  return url;
 }
 
-function normalizeOptionalString(raw: unknown): string | undefined {
-  if (raw == null) return undefined;
+function normalizeOptionalString(
+  raw: unknown,
+): string | undefined {
+  if (raw == null) {
+    return undefined;
+  }
 
   const value = String(raw).trim();
+
   return value || undefined;
 }
 
-function normalizeOptionalNumber(raw: unknown): number | undefined {
-  if (raw == null) return undefined;
+function normalizeOptionalNumber(
+  raw: unknown,
+): number | undefined {
+  if (raw == null) {
+    return undefined;
+  }
 
   const value = Number(raw);
-  if (!Number.isFinite(value)) return undefined;
 
-  return value >= 0 ? value : 0;
+  if (!Number.isFinite(value)) {
+    return undefined;
+  }
+
+  return value >= 0
+    ? value
+    : 0;
 }
 
 /**
@@ -120,11 +143,21 @@ export async function createTokenBlueprintWithOptionalIcon(
     assigneeId: input.assigneeId,
     createdBy: input.createdBy,
 
-    iconUrl: normalizeIconUrlForSend(input.iconUrl),
-    iconObjectPath: normalizeOptionalString(input.iconObjectPath),
-    iconFileName: normalizeOptionalString(input.iconFileName),
-    iconContentType: normalizeOptionalString(input.iconContentType),
-    iconSize: normalizeOptionalNumber(input.iconSize),
+    iconUrl: normalizeIconUrlForSend(
+      input.iconUrl,
+    ),
+    iconObjectPath: normalizeOptionalString(
+      input.iconObjectPath,
+    ),
+    iconFileName: normalizeOptionalString(
+      input.iconFileName,
+    ),
+    iconContentType: normalizeOptionalString(
+      input.iconContentType,
+    ),
+    iconSize: normalizeOptionalNumber(
+      input.iconSize,
+    ),
 
     contentFiles: input.contentFiles ?? [],
   };
@@ -139,78 +172,44 @@ export async function createTokenBlueprintWithOptionalIcon(
     delete payload.iconSize;
   }
 
-  console.log("[tokenBlueprintCreateService] create start", {
-    name: payload.name,
-    symbol: payload.symbol,
-    brandId: payload.brandId,
-    companyId: payload.companyId,
-    hasIconFile: Boolean(iconFile),
-    iconFile: iconFile
-      ? { name: iconFile.name, type: iconFile.type, size: iconFile.size }
-      : null,
-  });
-
-  const created = await createTokenBlueprint(payload);
-
-  console.log("[tokenBlueprintCreateService] create success", {
-    id: created.id,
-  });
+  const created =
+    await createTokenBlueprint(payload);
 
   if (!iconFile) {
     return created;
   }
 
   const tokenBlueprintId = created.id;
+
   if (!tokenBlueprintId) {
-    throw new Error("tokenBlueprint.id is empty after create.");
+    throw new Error(
+      "tokenBlueprint.id is empty after create.",
+    );
   }
 
   const companyId = input.companyId;
+
   if (!companyId) {
-    throw new Error("companyId is required before uploading token blueprint icon.");
+    throw new Error(
+      "companyId is required before uploading token blueprint icon.",
+    );
   }
 
-  console.log("[tokenBlueprintCreateService] Firebase Storage icon upload start", {
+  const uploaded =
+    await uploadTokenBlueprintIconToFirebaseStorage({
+      companyId,
+      tokenBlueprintId,
+      file: iconFile,
+    });
+
+  return updateTokenBlueprint(
     tokenBlueprintId,
-    companyId,
-    file: {
-      name: iconFile.name,
-      type: iconFile.type,
-      size: iconFile.size,
+    {
+      iconUrl: uploaded.downloadUrl,
+      iconObjectPath: uploaded.objectPath,
+      iconFileName: uploaded.fileName,
+      iconContentType: uploaded.contentType,
+      iconSize: uploaded.size,
     },
-  });
-
-  const uploaded = await uploadTokenBlueprintIconToFirebaseStorage({
-    companyId,
-    tokenBlueprintId,
-    file: iconFile,
-  });
-
-  console.log("[tokenBlueprintCreateService] Firebase Storage icon upload success", {
-    tokenBlueprintId,
-    objectPath: uploaded.objectPath,
-    downloadUrl: uploaded.downloadUrl,
-    fileName: uploaded.fileName,
-    contentType: uploaded.contentType,
-    size: uploaded.size,
-  });
-
-  const updated = await updateTokenBlueprint(tokenBlueprintId, {
-    iconUrl: uploaded.downloadUrl,
-    iconObjectPath: uploaded.objectPath,
-    iconFileName: uploaded.fileName,
-    iconContentType: uploaded.contentType,
-    iconSize: uploaded.size,
-  });
-
-  console.log("[tokenBlueprintCreateService] icon attach success", {
-    id: updated.id,
-    iconUrl: updated.iconUrl,
-    iconObjectPath: updated.iconObjectPath,
-    iconFileName: updated.iconFileName,
-    iconContentType: updated.iconContentType,
-    iconSize: updated.iconSize,
-  });
-
-  return updated;
+  );
 }
