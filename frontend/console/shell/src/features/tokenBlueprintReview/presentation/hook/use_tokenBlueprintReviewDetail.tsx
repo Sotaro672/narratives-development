@@ -6,7 +6,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import type {
   TokenBlueprint,
   ContentFile,
-} from "../../../tokenBlueprint/domain/tokenBlueprint";
+} from "../../../../shared/types/tokenBlueprint";
 
 import {
   fetchTokenBlueprintReviewDetail,

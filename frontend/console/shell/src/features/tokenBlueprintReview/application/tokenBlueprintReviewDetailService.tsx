@@ -1,6 +1,6 @@
 // frontend/console/tokenBlueprintReview/src/application/tokenBlueprintReviewDetailService.tsx
 
-import type { TokenBlueprint } from "../../tokenBlueprint/domain/tokenBlueprint";
+import type { TokenBlueprint } from "../../../shared/types/tokenBlueprint";
 import type {
   Comment,
   TokenBlueprintReviewAggregate,
