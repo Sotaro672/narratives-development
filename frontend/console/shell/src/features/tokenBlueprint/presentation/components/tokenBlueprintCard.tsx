@@ -69,10 +69,10 @@ export type TokenBlueprintCardHandlers = {
 
 export default function TokenBlueprintCard({
   vm,
-  handlers,
+  handlers = {},
 }: {
   vm: TokenBlueprintCardViewModel;
-  handlers: TokenBlueprintCardHandlers;
+  handlers?: TokenBlueprintCardHandlers;
 }) {
   const canEditIcon = Boolean(
     vm.isEditMode || vm.minted,

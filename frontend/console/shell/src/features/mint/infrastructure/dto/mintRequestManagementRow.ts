@@ -1,6 +1,12 @@
 // frontend/console/shell/src/features/mintRequest/application/dto/mintRequestManagementRow.ts
 
-import type { InspectionStatus } from "../../../../shared/types/inspections";
+import type {
+  InspectionStatus,
+} from "../../../../shared/types/inspections";
+
+import type {
+  MintStatus,
+} from "../../../../shared/types/mints";
 
 /**
  * MintRequestQueryServiceが返す一覧用DTO。
@@ -21,7 +27,35 @@ export type MintRequestManagementRowDTO = {
   mintQuantity?: number | null;
   productionQuantity?: number | null;
 
-  inspectionStatus?: InspectionStatus | string | null;
+  inspectionStatus?:
+    | InspectionStatus
+    | string
+    | null;
+
+  /**
+   * Backendが親Mintの状態を
+   * トップレベルへ展開して返す場合の状態。
+   *
+   * 通常はmint.statusを優先し、
+   * この項目はフラット形式との互換用に使用する。
+   */
+  status?:
+    | MintStatus
+    | string
+    | null;
+
+  /**
+   * Backendが返す親Mintの概要。
+   *
+   * 一覧画面では、ミント申請後の処理状態を
+   * mint.statusから判定する。
+   */
+  mint?: {
+    status?:
+      | MintStatus
+      | string
+      | null;
+  } | null;
 
   /**
    * mintsドキュメントを作成したmemberId。

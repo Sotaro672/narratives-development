@@ -12,7 +12,6 @@ import ProductBlueprintCard from "../features/productBlueprint/presentation/card
 import InventoryCard from "../features/inventory/presentation/components/inventoryCard";
 
 import TokenBlueprintCard, {
-  type TokenBlueprintCardHandlers,
   type TokenBlueprintCardViewModel,
 } from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 
@@ -35,16 +34,6 @@ type ProductBlueprintCardCategory =
       ProductBlueprintCardPatch
     >["productBlueprintCategory"]
   >;
-
-/**
- * InventoryDetailではTokenBlueprintCardを
- * 参照専用として使用する。
- *
- * TokenBlueprintCardのhandlersは必須だが、
- * この画面では編集処理を行わないため空オブジェクトを渡す。
- */
-const READ_ONLY_TOKEN_BLUEPRINT_CARD_HANDLERS:
-  TokenBlueprintCardHandlers = {};
 
 function toProductBlueprintCardPatch(
   patch:
@@ -257,9 +246,6 @@ export default function InventoryDetail() {
           <div className="mt-3">
             <TokenBlueprintCard
               vm={tokenCardVM}
-              handlers={
-                READ_ONLY_TOKEN_BLUEPRINT_CARD_HANDLERS
-              }
             />
           </div>
         )}

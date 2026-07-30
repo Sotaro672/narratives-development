@@ -1,11 +1,24 @@
 // frontend/console/shell/src/features/mintRequest/application/usecase/loadMintRequestManagementRows.ts
 
-import type { InspectionStatus } from "../../../../shared/types/inspections";
+import type {
+  InspectionStatus,
+} from "../../../../shared/types/inspections";
 
-import { fetchMintRequestRowsHTTP } from "../../infrastructure/repository/http/mintRequests";
-import { fetchProductionIdsForCurrentCompanyHTTP } from "../../infrastructure/repository/http/productions";
+import type {
+  MintStatus,
+} from "../../../../shared/types/mints";
 
-import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
+import {
+  fetchMintRequestRowsHTTP,
+} from "../../infrastructure/repository/http/mintRequests";
+
+import {
+  fetchProductionIdsForCurrentCompanyHTTP,
+} from "../../infrastructure/repository/http/productions";
+
+import type {
+  MintRequestManagementRowDTO,
+} from "../../infrastructure/dto/mintRequestManagementRow";
 
 import {
   asNonEmptyString,
@@ -20,6 +33,7 @@ import {
 export type MintRequestRowStatus =
   | "planning"
   | "requested"
+  | "minting"
   | "minted";
 
 export type ViewRow = {
@@ -77,7 +91,8 @@ export type ViewRow = {
 function normalizeInspectionStatus(
   value: unknown,
 ): InspectionStatus {
-  const status = String(value ?? "").trim();
+  const status =
+    String(value ?? "").trim();
 
   if (status === "completed") {
     return "completed";
@@ -99,22 +114,80 @@ function normalizeInspectionStatus(
   return "notYet" as InspectionStatus;
 }
 
+/**
+ * Backendから返される親Mintの状態を正規化する。
+ *
+ * Backendでは大文字のMintStatusを正とする。
+ * 不明な値や空文字はnullとして扱う。
+ */
+function normalizeMintStatus(
+  value: unknown,
+): MintStatus | null {
+  const status =
+    String(value ?? "")
+      .trim()
+      .toUpperCase();
+
+  switch (status) {
+    case "CREATED":
+    case "QUEUED":
+    case "MINTING":
+    case "PARTIALLY_MINTED":
+    case "MINTED":
+    case "FAILED_RETRYABLE":
+    case "FAILED_FATAL":
+      return status;
+
+    default:
+      return null;
+  }
+}
+
+/**
+ * Backendの親Mint状態と、一覧DTOの各項目から
+ * 一覧表示用の状態を算出する。
+ */
 function deriveRowStatus(args: {
   tokenBlueprintId: string | null;
   tokenName: string | null;
   requestedBy: string | null;
   mintedAt: string | null;
   minted: boolean;
+  mintStatus: MintStatus | null;
 }): MintRequestRowStatus {
+  /**
+   * Mint完了を最優先する。
+   */
   if (
+    args.mintStatus === "MINTED" ||
     args.minted ||
     Boolean(
-      asNonEmptyString(args.mintedAt),
+      asNonEmptyString(
+        args.mintedAt,
+      ),
     )
   ) {
     return "minted";
   }
 
+  /**
+   * 非同期Mint処理の受付後から完了前までを
+   * 一覧上では「ミント中」として扱う。
+   */
+  if (
+    args.mintStatus === "QUEUED" ||
+    args.mintStatus === "MINTING" ||
+    args.mintStatus ===
+      "PARTIALLY_MINTED"
+  ) {
+    return "minting";
+  }
+
+  /**
+   * CREATEDまたは失敗状態の場合でも、
+   * Mint申請を示す情報が存在すれば
+   * 申請済みとして扱う。
+   */
   const hasRequestSignal =
     Boolean(
       asNonEmptyString(
@@ -142,6 +215,30 @@ function mapDTOToRow(
 ): ViewRow {
   const raw =
     dto as Record<string, unknown>;
+
+  /**
+   * Backendが返すネストされたMint概要。
+   *
+   * mint.statusを優先し、
+   * トップレベルのstatusは互換用として使用する。
+   */
+  const mintRaw =
+    raw.mint &&
+    typeof raw.mint === "object" &&
+    !Array.isArray(raw.mint)
+      ? (
+          raw.mint as Record<
+            string,
+            unknown
+          >
+        )
+      : null;
+
+  const mintStatus =
+    normalizeMintStatus(
+      mintRaw?.status ??
+        raw.status,
+    );
 
   /**
    * productionIdを正とする。
@@ -226,16 +323,23 @@ function mapDTOToRow(
   const mintedAt =
     asStringOrNull(
       raw.mintedAt,
+    ) ??
+    asStringOrNull(
+      mintRaw?.mintedAt,
     );
 
+  /**
+   * mintedフラグ、MintStatus、mintedAtの
+   * いずれかでMint完了を判定する。
+   */
   const minted =
-    typeof raw.minted === "boolean"
-      ? raw.minted
-      : Boolean(
-          asNonEmptyString(
-            mintedAt,
-          ),
-        );
+    raw.minted === true ||
+    mintStatus === "MINTED" ||
+    Boolean(
+      asNonEmptyString(
+        mintedAt,
+      ),
+    );
 
   const tokenBlueprintId =
     asStringOrNull(
@@ -259,6 +363,7 @@ function mapDTOToRow(
       requestedBy,
       mintedAt,
       minted,
+      mintStatus,
     });
 
   return {
@@ -318,5 +423,7 @@ export async function loadMintRequestManagementRows(): Promise<
       "list",
     );
 
-  return rows.map(mapDTOToRow);
+  return rows.map(
+    mapDTOToRow,
+  );
 }

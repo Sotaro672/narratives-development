@@ -736,7 +736,12 @@ export function useMintRequestDetail() {
       ],
     );
 
+  /**
+   * Mint申請に関する入力UIは、
+   * 検品完了後かつMint処理開始前だけ表示する。
+   */
   const showMintControls =
+    isInspectionCompleted &&
     !isMinting &&
     !isMintCompleted;
 
@@ -857,6 +862,7 @@ export function useMintRequestDetail() {
     React.useCallback(
       async () => {
         if (
+          !isInspectionCompleted ||
           isMinting ||
           isMintCompleted
         ) {
@@ -953,6 +959,7 @@ export function useMintRequestDetail() {
       },
       [
         inspectionBatch,
+        isInspectionCompleted,
         isMinting,
         isMintCompleted,
         mintRequestRepo,

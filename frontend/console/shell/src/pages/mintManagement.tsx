@@ -1,14 +1,16 @@
-// frontend\console\shell\src\pages\mintRequestManagement.tsx
+// frontend/console/shell/src/pages/mintManagement.tsx
+
 import List from "../layout/List/List";
-import "../styles/mintRequest.css";
 import { useMintRequestManagement } from "../features/mint/presentation/hook/useMintRequestManagement";
+
+import "../styles/mintRequest.css";
 
 export default function MintRequestManagementPage() {
   const {
     headers,
     rows,
     onReset,
-    isResetting, // ✅ 追加
+    isResetting,
     handleRowClick,
     handleRowKeyDown,
   } = useMintRequestManagement();
@@ -23,54 +25,100 @@ export default function MintRequestManagementPage() {
         isResetting={isResetting}
         onReset={onReset}
       >
-        {rows.map((r) => {
-          // ★ リクエスト者: mints.createdByName のみを使用（無ければ "-"）
-          const requesterName = (r as any).createdByName ?? "-";
+        {rows.map((row) => {
+          /**
+           * mints.createdByNameのみを使用する。
+           */
+          const requesterName =
+            row.createdByName ?? "-";
 
-          // ★ ミント日時: minted 状態のときだけ mintedAt を表示（それ以外は "-"）
-          const mintedAtLabel = r.status === "minted" ? r.mintedAt ?? "-" : "-";
+          /**
+           * Mint完了時だけ実行日時を表示する。
+           */
+          const mintedAtLabel =
+            row.status === "minted"
+              ? row.mintedAt ?? "-"
+              : "-";
 
-          // ★ トークン設計: tokenName を表示（無ければ tokenBlueprintId か "-"）
-          //   ※ tokenBlueprintId は detail/API 用に保持しているだけで、基本表示は tokenName
-          const tokenLabel = r.tokenName ?? r.tokenBlueprintId ?? "-";
+          /**
+           * tokenNameを優先して表示し、
+           * 存在しない場合はtokenBlueprintIdを表示する。
+           */
+          const tokenLabel =
+            row.tokenName ??
+            row.tokenBlueprintId ??
+            "-";
+
+          const productName =
+            row.productName ?? "-";
 
           return (
             <tr
-              key={r.id}
-              onClick={() => handleRowClick(r.id)}
-              style={{ cursor: "pointer" }}
+              key={row.id}
+              onClick={() =>
+                handleRowClick(
+                  row.id,
+                )
+              }
+              style={{
+                cursor: "pointer",
+              }}
               tabIndex={0}
-              onKeyDown={(e) => handleRowKeyDown(e, r.id)}
-              aria-label={`ミント申請 ${r.productName} の詳細へ`}
+              onKeyDown={(event) =>
+                handleRowKeyDown(
+                  event,
+                  row.id,
+                )
+              }
+              aria-label={`ミント申請 ${productName} の詳細へ`}
             >
-              {/* ✅ ラベル表示を廃止して “文字列” として表示 */}
               <td>
-                <span className="truncate">{tokenLabel}</span>
+                <span className="truncate">
+                  {tokenLabel}
+                </span>
               </td>
 
-              {/* ✅ ラベル表示を廃止して “文字列” として表示 */}
               <td>
-                <span className="truncate">{r.productName ?? "-"}</span>
+                <span className="truncate">
+                  {productName}
+                </span>
               </td>
 
-              <td>{r.mintQuantity}</td>
-              <td>{r.productionQuantity ?? "-"}</td>
+              <td>
+                {row.mintQuantity}
+              </td>
 
               <td>
-                {r.status === "minted" ? (
-                  <span className="mint-badge is-done">{r.statusLabel}</span>
-                ) : r.status === "requested" ? (
-                  <span className="mint-badge is-requested">{r.statusLabel}</span>
+                {row.productionQuantity}
+              </td>
+
+              <td>
+                {row.status === "minted" ? (
+                  <span className="mint-badge is-done">
+                    {row.statusLabel}
+                  </span>
+                ) : row.status === "minting" ? (
+                  <span className="mint-badge is-minting">
+                    {row.statusLabel}
+                  </span>
+                ) : row.status === "requested" ? (
+                  <span className="mint-badge is-requested">
+                    {row.statusLabel}
+                  </span>
                 ) : (
-                  <span className="mint-badge is-planned">{r.statusLabel}</span>
+                  <span className="mint-badge is-planned">
+                    {row.statusLabel}
+                  </span>
                 )}
               </td>
 
-              {/* ★ リクエスト者（mints.createdByName） */}
-              <td>{requesterName}</td>
+              <td>
+                {requesterName}
+              </td>
 
-              {/* ★ ミント日時（mintedAt） */}
-              <td>{mintedAtLabel}</td>
+              <td>
+                {mintedAtLabel}
+              </td>
             </tr>
           );
         })}

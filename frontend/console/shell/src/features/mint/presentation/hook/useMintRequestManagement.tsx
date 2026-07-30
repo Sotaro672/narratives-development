@@ -59,15 +59,18 @@ function toPresentationRow(
   row: ManagementRow,
 ): ManagementPresentationRow {
   /**
-   * mintedの場合は「ミント完了」を優先し、
+   * mintedの場合は「ミント完了」、
+   * mintingの場合は「ミント中」を優先し、
    * それ以外は検品ステータスを表示する。
    */
   const statusLabel =
     row.status === "minted"
       ? "ミント完了"
-      : inspectionStatusLabel(
-          row.inspectionStatus,
-        );
+      : row.status === "minting"
+        ? "ミント中"
+        : inspectionStatusLabel(
+            row.inspectionStatus,
+          );
 
   return {
     ...row,
