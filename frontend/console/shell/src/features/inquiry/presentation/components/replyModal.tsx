@@ -1,8 +1,12 @@
-//frontend\console\inquiry\presentation\components\replyModal.tsx
+// frontend/console/shell/src/features/inquiry/presentation/components/replyModal.tsx
+
 import * as React from "react";
 import { createPortal } from "react-dom";
 
-const MAX_REPLY_IMAGES = 10;
+import {
+  MAX_REPLY_IMAGES,
+  MAX_REPLY_IMAGE_SIZE_MB,
+} from "../../constants/inquiryReply";
 
 export type ReplyUploadImage = {
   id: string;
@@ -63,6 +67,7 @@ export default function ReplyModal({
             >
               返信を入力
             </h2>
+
             <p className="inq-reply-modal__description">
               この問い合わせに対する返信内容を入力してください。
             </p>
@@ -81,7 +86,9 @@ export default function ReplyModal({
 
         <div className="inq-reply-modal__body">
           {errorMessage ? (
-            <div className="inq__empty">{errorMessage}</div>
+            <div className="inq__empty">
+              {errorMessage}
+            </div>
           ) : null}
 
           <label
@@ -99,7 +106,9 @@ export default function ReplyModal({
             rows={8}
             maxLength={2000}
             disabled={submitting}
-            onChange={(event) => onChangeContent(event.target.value)}
+            onChange={(event) =>
+              onChangeContent(event.target.value)
+            }
           />
 
           <div className="inq-reply-modal__counter">
@@ -108,7 +117,10 @@ export default function ReplyModal({
 
           <div className="inq-reply-modal__upload">
             <div className="inq-reply-modal__upload-header">
-              <span className="inq-reply-modal__label">添付画像</span>
+              <span className="inq-reply-modal__label">
+                添付画像
+              </span>
+
               <span className="inq-reply-modal__upload-count">
                 {images.length} / {MAX_REPLY_IMAGES}
               </span>
@@ -120,12 +132,21 @@ export default function ReplyModal({
                 accept="image/*"
                 multiple
                 className="inq-reply-modal__upload-input"
-                disabled={submitting || images.length >= MAX_REPLY_IMAGES}
+                disabled={
+                  submitting ||
+                  images.length >= MAX_REPLY_IMAGES
+                }
                 onChange={onChangeImages}
               />
-              <span className="inq-reply-modal__upload-main">画像を選択</span>
+
+              <span className="inq-reply-modal__upload-main">
+                画像を選択
+              </span>
+
               <span className="inq-reply-modal__upload-sub">
-                JPG / PNG / WebP / GIF、1枚20MBまで
+                JPG / PNG / WebP / GIF、1枚
+                {MAX_REPLY_IMAGE_SIZE_MB}
+                MBまで
               </span>
             </label>
 
@@ -146,7 +167,9 @@ export default function ReplyModal({
                       type="button"
                       className="inq-reply-modal__preview-remove"
                       disabled={submitting}
-                      onClick={() => onRemoveImage(image.id)}
+                      onClick={() =>
+                        onRemoveImage(image.id)
+                      }
                       aria-label={`${image.file.name}を削除`}
                     >
                       ×
@@ -171,7 +194,10 @@ export default function ReplyModal({
           <button
             type="button"
             className="inq-reply-modal__button"
-            disabled={submitting || !content.trim()}
+            disabled={
+              submitting ||
+              !content.trim()
+            }
             onClick={onSubmit}
           >
             {submitting ? "送信中" : "送信"}
@@ -181,5 +207,8 @@ export default function ReplyModal({
     </div>
   );
 
-  return createPortal(modal, document.body);
+  return createPortal(
+    modal,
+    document.body,
+  );
 }

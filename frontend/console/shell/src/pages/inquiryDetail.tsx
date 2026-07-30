@@ -23,6 +23,12 @@ import ReplyModal, {
 import { useInquiryDetailPage } from "../features/inquiry/presentation/hooks/useInquiryDetailPage";
 
 import {
+  MAX_REPLY_IMAGES,
+  MAX_REPLY_IMAGE_SIZE_BYTES,
+  MAX_REPLY_IMAGE_SIZE_MB,
+} from "../features/inquiry/constants/inquiryReply";
+
+import {
   getInquiryStatusButtonVariant,
   getInquiryStatusLabel,
   isClosedStatus,
@@ -36,9 +42,6 @@ import type {
 } from "../shared/types/inquiry";
 
 import "../styles/inquiry-page.css";
-
-const MAX_REPLY_IMAGES = 10;
-const MAX_REPLY_IMAGE_SIZE_BYTES = 20 * 1024 * 1024;
 
 type InquiryImageView = {
   id: string;
@@ -565,7 +568,7 @@ export default function InquiryDetail() {
                 MAX_REPLY_IMAGE_SIZE_BYTES
               ) {
                 setReplyErrorMessage(
-                  "画像サイズは1枚あたり20MB以下にしてください。",
+                  `画像サイズは1枚あたり${MAX_REPLY_IMAGE_SIZE_MB}MB以下にしてください。`,
                 );
 
                 continue;
