@@ -19,6 +19,11 @@ import {
   resolveInquiryHTTP,
 } from "../../infrastructure/inquiryRepositoryHTTP";
 
+import {
+  isClosedStatus,
+  isResolvedStatus,
+} from "../utils/inquiryStatus";
+
 import type {
   InquiryDetail as InquiryDetailDTO,
 } from "../../../../shared/types/inquiry";
@@ -50,18 +55,6 @@ function normalizeID(
   value: string | null | undefined,
 ): string {
   return String(value ?? "").trim();
-}
-
-function isResolvedStatus(
-  value: string | null | undefined,
-): boolean {
-  return normalizeID(value) === "resolved";
-}
-
-function isClosedStatus(
-  value: string | null | undefined,
-): boolean {
-  return normalizeID(value) === "closed";
 }
 
 function replaceDetailInquiry(

@@ -22,6 +22,12 @@ import ReplyModal, {
 
 import { useInquiryDetailPage } from "../features/inquiry/presentation/hooks/useInquiryDetailPage";
 
+import {
+  getInquiryStatusButtonVariant,
+  getInquiryStatusLabel,
+  isClosedStatus,
+} from "../features/inquiry/presentation/utils/inquiryStatus";
+
 import type {
   InquiryDetail as InquiryDetailDTO,
   InquiryOrderItemSummary,
@@ -54,47 +60,6 @@ function textOrDash(
 
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
-}
-
-function statusLabel(
-  value: string | null | undefined,
-): string {
-  const status = normalizeText(value);
-
-  switch (status) {
-    case "open":
-      return "未対応";
-
-    case "in_progress":
-      return "対応中";
-
-    case "resolved":
-      return "対応済み";
-
-    case "closed":
-      return "クローズ";
-
-    default:
-      return status || "-";
-  }
-}
-
-function isClosedStatus(
-  value: string | null | undefined,
-): boolean {
-  return normalizeText(value) === "closed";
-}
-
-function isUnresolvedStatus(
-  value: string | null | undefined,
-): boolean {
-  const status = normalizeText(value);
-
-  return (
-    status === "" ||
-    status === "open" ||
-    status === "unresolved"
-  );
 }
 
 function typeLabel(
@@ -450,7 +415,7 @@ export default function InquiryDetail() {
     textOrDash(detail?.userFullName);
 
   const status =
-    statusLabel(inquiry?.status);
+    getInquiryStatusLabel(inquiry?.status);
 
   const inquiryType =
     typeLabel(inquiry?.inquiryType);
@@ -502,9 +467,9 @@ export default function InquiryDetail() {
   );
 
   const statusButtonVariant =
-    isUnresolvedStatus(inquiry?.status)
-      ? "danger"
-      : "neutral";
+    getInquiryStatusButtonVariant(
+      inquiry?.status,
+    );
 
   const statusButtonDisabled =
     !detail ||
@@ -848,25 +813,6 @@ export default function InquiryDetail() {
             </Card>
           </div>
         </PageStyle>
-
-        <ReplyModal
-          open={replyModalOpen}
-          content={replyContent}
-          images={replyImages}
-          submitting={replySubmitting}
-          errorMessage={replyErrorMessage}
-          onClose={onCloseReplyModal}
-          onChangeContent={setReplyContent}
-          onChangeImages={
-            onChangeReplyImages
-          }
-          onRemoveImage={
-            onRemoveReplyImage
-          }
-          onSubmit={() =>
-            void onSubmitReply()
-          }
-        />
       </>
     );
   }
@@ -927,25 +873,6 @@ export default function InquiryDetail() {
             </Card>
           </div>
         </PageStyle>
-
-        <ReplyModal
-          open={replyModalOpen}
-          content={replyContent}
-          images={replyImages}
-          submitting={replySubmitting}
-          errorMessage={replyErrorMessage}
-          onClose={onCloseReplyModal}
-          onChangeContent={setReplyContent}
-          onChangeImages={
-            onChangeReplyImages
-          }
-          onRemoveImage={
-            onRemoveReplyImage
-          }
-          onSubmit={() =>
-            void onSubmitReply()
-          }
-        />
       </>
     );
   }
