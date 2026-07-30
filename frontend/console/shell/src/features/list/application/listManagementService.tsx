@@ -12,7 +12,7 @@ import { safeDateTimeLabelJa } from "../../../shared/util/dateJa";
 import type { ListManagementRowDTO } from "../infrastructure/repository";
 import { fetchListsHTTP } from "../infrastructure/repository";
 
-export type SortKey = "id" | "createdAt" | null;
+export type SortKey = "createdAt" | null;
 
 export type ListManagementRowVM = {
   id: string;
@@ -21,7 +21,6 @@ export type ListManagementRowVM = {
   tokenName: string;
   assigneeName: string;
   status: ListStatus;
-  statusLabel: string;
   createdAt: string;
   createdAtRaw: string;
   statusBadgeText: string;
@@ -34,7 +33,6 @@ type FilterOption = {
 };
 
 export type FilterOptions = {
-  titleOptions: FilterOption[];
   productOptions: FilterOption[];
   tokenOptions: FilterOption[];
   managerOptions: FilterOption[];
@@ -45,7 +43,6 @@ export type FilterOptions = {
 };
 
 export type Filters = {
-  titleFilter: string[];
   productFilter: string[];
   tokenFilter: string[];
   managerFilter: string[];
@@ -84,7 +81,6 @@ function mapListDTOToVMRow(
     tokenName: dto.tokenName ?? "",
     assigneeName: dto.assigneeName || "未設定",
     status,
-    statusLabel: statusPresentation.label,
     createdAt: safeDateTimeLabelJa(createdAtRaw, ""),
     createdAtRaw,
     statusBadgeText: statusPresentation.label,
@@ -134,9 +130,6 @@ export function buildFilterOptions(
   );
 
   return {
-    titleOptions: buildTextFilterOptions(
-      rows.map((row) => row.title),
-    ),
     productOptions: buildTextFilterOptions(
       rows.map((row) => row.productName),
     ),
@@ -159,8 +152,6 @@ export function applyFilters(
 ): ListManagementRowVM[] {
   return rows.filter(
     (row) =>
-      (filters.titleFilter.length === 0 ||
-        filters.titleFilter.includes(row.title)) &&
       (filters.productFilter.length === 0 ||
         filters.productFilter.includes(
           row.productName,
@@ -194,17 +185,9 @@ export function applySort(
   const sortedRows = [...rows];
 
   sortedRows.sort((a, b) => {
-    if (activeKey === "createdAt") {
-      const comparison =
-        toTimeMs(a.createdAtRaw) -
-        toTimeMs(b.createdAtRaw);
-
-      return direction === "asc"
-        ? comparison
-        : -comparison;
-    }
-
-    const comparison = a.id.localeCompare(b.id);
+    const comparison =
+      toTimeMs(a.createdAtRaw) -
+      toTimeMs(b.createdAtRaw);
 
     return direction === "asc"
       ? comparison
@@ -218,7 +201,6 @@ export function buildHeaders(args: {
   options: FilterOptions;
   selected: Filters;
   onChange: {
-    setTitleFilter: (value: string[]) => void;
     setProductFilter: (value: string[]) => void;
     setTokenFilter: (value: string[]) => void;
     setManagerFilter: (value: string[]) => void;
@@ -243,13 +225,7 @@ export function buildHeaders(args: {
   };
 
   return [
-    <FilterableTableHeader
-      key="title"
-      label="タイトル"
-      options={options.titleOptions}
-      selected={selected.titleFilter}
-      onChange={onChange.setTitleFilter}
-    />,
+    <span key="title">タイトル</span>,
     <FilterableTableHeader
       key="product"
       label="プロダクト名"

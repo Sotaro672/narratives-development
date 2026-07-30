@@ -18,10 +18,6 @@ import {
   setListPrimaryImageHTTP,
 } from "../../../list/infrastructure/repository";
 
-import type {
-  CreateListInput as ListPostCreateListInput,
-} from "../../../list/infrastructure/dto";
-
 import { uploadListImageToFirebaseStorage } from "../../../list/infrastructure/firebase/listImageStorage";
 
 /**
@@ -427,7 +423,7 @@ export function validateCreateListInput(
 /**
  * 複数画像をFirebase Storageへ直接アップロード
  * → backendに画像レコード登録
- * → primary image設定
+ * →primary image設定
  *
  * Policy B:
  * - List作成後のlistIdを使ってFirebase Storageへupload
@@ -545,12 +541,6 @@ export async function uploadListImagesPolicyB(
   };
 }
 
-export function _internal_getListIdFromListDTO(
-  list: List,
-): string {
-  return list.id;
-}
-
 /**
  * ListCreateDTOを取得する。
  *
@@ -655,13 +645,11 @@ export async function createListWithImages(
 
   const created =
     await createListHTTP(
-      input as ListPostCreateListInput,
+      input,
     );
 
   const listId =
-    _internal_getListIdFromListDTO(
-      created,
-    );
+    created.id;
 
   if (!listId) {
     throw new Error(

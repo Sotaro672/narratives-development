@@ -1,4 +1,5 @@
-// frontend/console/list/src/infrastructure/http/list/httpClient.ts
+// frontend/console/shell/src/features/list/infrastructure/http/httpClient.ts
+
 import { API_BASE } from "../../../../shared/http/apiBase";
 import { getAuthJsonHeaders } from "../../../../shared/http/authHeaders";
 import { fetchJSON, HttpError } from "../../../../shared/http/fetchJSON";
@@ -7,12 +8,6 @@ export async function requestJSON<T>(args: {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   body?: unknown;
-  debug?: {
-    tag: string;
-    url: string;
-    method: string;
-    body?: unknown;
-  };
 }): Promise<T> {
   const url = `${API_BASE}${args.path.startsWith("/") ? "" : "/"}${args.path}`;
 

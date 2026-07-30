@@ -1,4 +1,4 @@
-// frontend/console/list/src/application/listDetail/listDetailSave.usecase.ts
+// frontend/console/shell/src/features/list/application/listDetail/listDetailSave.usecase.ts
 import type {
   ListDetailDTO,
   ListSaveOperationDTO,
@@ -29,7 +29,6 @@ export type SaveListDetailDraftImage = {
 
 export type SaveListDetailChangesInput = {
   listId: string;
-  inventoryIdHint?: string;
   currentDTO: ListDetailDTO | null;
   title: string;
   description: string;
@@ -217,7 +216,6 @@ function normalizePriceRows(
 function buildTargetList(args: {
   listId: string;
   currentDTO: ListDetailDTO;
-  inventoryIdHint?: string;
   title: string;
   description: string;
   status?: ListStatus;
@@ -231,7 +229,7 @@ function buildTargetList(args: {
     args.assigneeId ?? args.currentDTO.assigneeId ?? "",
   ).trim();
   const inventoryId = String(
-    args.currentDTO.inventoryId ?? args.inventoryIdHint ?? "",
+    args.currentDTO.inventoryId ?? "",
   ).trim();
   const createdBy = String(
     args.currentDTO.createdBy ?? args.updatedBy,
@@ -546,7 +544,6 @@ export async function saveListDetailChanges(
   const targetList = buildTargetList({
     listId,
     currentDTO: input.currentDTO,
-    inventoryIdHint: input.inventoryIdHint,
     title: input.title,
     description: input.description,
     status: input.status,
@@ -615,7 +612,6 @@ export async function saveListDetailChanges(
 
   const dto = await loadListDetailDTO({
     listId,
-    inventoryIdHint: input.inventoryIdHint,
   });
 
   return {

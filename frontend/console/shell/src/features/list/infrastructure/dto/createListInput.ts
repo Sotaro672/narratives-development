@@ -1,6 +1,9 @@
 // frontend/console/shell/src/features/list/infrastructure/dto/createListInput.ts
 
-import type { ListStatus } from "../../../../shared/types/list";
+import type {
+  ListPriceRow,
+  ListStatus,
+} from "../../../../shared/types/list";
 
 export type CreateListInput = {
   id?: string;
@@ -9,18 +12,9 @@ export type CreateListInput = {
   title: string;
   description: string;
 
-  priceRows?: Array<{
-    modelId: string;
-    price: number;
-
-    size: string;
-    color: string;
-    stock: number;
-    rgb?: number | null;
-  }>;
+  priceRows?: ListPriceRow[];
 
   status?: ListStatus;
 
   assigneeId?: string;
-  createdBy?: string;
 };

@@ -3,61 +3,36 @@
 import { fetchListByIdHTTP } from "../infrastructure/repository";
 
 import type { ListDetailDTO } from "../infrastructure/dto";
-import type { ListStatus } from "../../../shared/types/list";
 
-import {
-  computeListDetailPageTitle,
-  deriveListDetail,
-  formatYMDHM,
-  normalizeImageUrls,
-  normalizePriceRows,
-  updatePriceRowPrice,
-} from "./listDetail/listDetailMapper";
+import { deriveListDetail } from "./listDetail/listDetailMapper";
 
 export type {
   ListDetailDTO,
-  ListStatus,
 };
 
 export {
-  computeListDetailPageTitle,
   deriveListDetail,
-  formatYMDHM,
-  normalizeImageUrls,
-  normalizePriceRows,
-  updatePriceRowPrice,
 };
 
 export type ListDetailRouteParams = {
   listId?: string;
-  id?: string;
-  inventoryId?: string;
 };
 
 export function resolveListDetailParams(
   params: ListDetailRouteParams | undefined,
 ) {
   const listId = String(
-    params?.listId ||
-      params?.id ||
-      "",
-  ).trim();
-
-  const inventoryId = String(
-    params?.inventoryId ?? "",
+    params?.listId ?? "",
   ).trim();
 
   return {
     listId,
-    inventoryId,
-    raw: params,
   };
 }
 
 export async function loadListDetailDTO(
   args: {
     listId: string;
-    inventoryIdHint?: string;
   },
 ): Promise<ListDetailDTO> {
   const listId = String(

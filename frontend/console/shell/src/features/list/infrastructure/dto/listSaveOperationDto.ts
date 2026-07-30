@@ -1,5 +1,7 @@
-// frontend/console/list/infrastructure/dto/listSaveOperationDto.ts
+// frontend/console/shell/src/features/list/infrastructure/dto/listSaveOperationDto.ts
+
 export type ListSaveOperationTypeDTO = "create" | "update";
+
 export type ListSaveOperationStatusDTO =
   | "pending"
   | "uploading"
@@ -12,11 +14,16 @@ export type ListSaveOperationStatusDTO =
   | "failed_fatal"
   | "compensating"
   | "compensated";
-export type ListSaveOperationListStatusDTO = "listing" | "suspended";
+
+export type ListSaveOperationListStatusDTO =
+  | "listing"
+  | "suspended";
+
 export type ListSaveOperationListPriceRowDTO = {
   modelId: string;
   price: number;
 };
+
 export type ListSaveOperationTargetListDTO = {
   id?: string;
   readableId?: string;
@@ -32,12 +39,14 @@ export type ListSaveOperationTargetListDTO = {
   updatedBy?: string;
   updatedAt?: string;
 };
+
 export type ListSaveOperationImageDTO = {
   imageId: string;
   url: string;
   storagePath: string;
   displayOrder: number;
 };
+
 export type ListSaveOperationPreviousImageDTO = {
   id: string;
   listId: string;
@@ -48,6 +57,7 @@ export type ListSaveOperationPreviousImageDTO = {
   updatedAt?: string;
   updatedBy?: string;
 };
+
 export type StartListSaveOperationRequestDTO = {
   operationId?: string;
   idempotencyKey: string;
@@ -56,14 +66,17 @@ export type StartListSaveOperationRequestDTO = {
   targetList: ListSaveOperationTargetListDTO;
   newImages: ListSaveOperationImageDTO[];
   deleteImageIds: string[];
+
   /**
    * undefined: 現在のprimary imageを維持する。
    * 空文字: primary imageを解除する。
    * imageId: 指定した画像をprimary imageにする。
    */
   primaryImageId?: string;
+
   maxRetries?: number;
 };
+
 export type ListSaveOperationPayloadDTO = {
   targetList: ListSaveOperationTargetListDTO;
   previousList?: ListSaveOperationTargetListDTO | null;
@@ -73,6 +86,7 @@ export type ListSaveOperationPayloadDTO = {
   primaryImageId: string;
   previousPrimaryImageId: string;
 };
+
 export type ListSaveOperationProgressDTO = {
   uploadedImageIds: string[];
   registeredImageIds: string[];
@@ -81,6 +95,7 @@ export type ListSaveOperationProgressDTO = {
   listUpdated: boolean;
   primaryImageUpdated: boolean;
 };
+
 export type ListSaveOperationDTO = {
   id: string;
   idempotencyKey: string;
@@ -100,25 +115,3 @@ export type ListSaveOperationDTO = {
   completedAt?: string | null;
   compensatedAt?: string | null;
 };
-export type ListSaveOperationResponseDTO = ListSaveOperationDTO;
-export type ListSaveOperationErrorResponseDTO = {
-  error: string;
-  message: string;
-};
-export function isListSaveOperationTerminalStatus(
-  status: ListSaveOperationStatusDTO,
-): boolean {
-  return (
-    status === "completed" ||
-    status === "failed_fatal" ||
-    status === "compensated"
-  );
-}
-export function isListSaveOperationRetryable(
-  operation: ListSaveOperationDTO,
-): boolean {
-  return (
-    operation.status === "failed_retryable" &&
-    operation.retryCount < operation.maxRetries
-  );
-}
