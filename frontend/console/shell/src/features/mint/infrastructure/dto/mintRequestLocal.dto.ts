@@ -1,7 +1,16 @@
-// frontend/console/shell/src/features/mintRequest/infrastructure/dto/mintRequestLocal.dto.ts
+// frontend/console/shell/src/features/mint/infrastructure/dto/mintRequestLocal.dto.ts
 
-import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
-import type { MintDTO } from "./mint.dto";
+import type {
+  InspectionBatchDTO,
+} from "../../../../shared/types/inspections";
+
+import type {
+  ProductIDTag,
+} from "../../../../shared/types/productBlueprint";
+
+import type {
+  MintDTO,
+} from "./mint.dto";
 
 import type {
   ProductBlueprintCategorySnapshot,
@@ -42,23 +51,23 @@ export type ProductBlueprintPatchDTO = {
 
   /**
    * カテゴリ別入力値。
-   *
-   * alcoholの例:
-   * {
-   *   vintage,
-   *   region,
-   *   material,
-   *   alcoholContent
-   * }
    */
   categoryFields?:
     | CategoryFieldValues
     | null;
 
-  productIdTag?: {
-    type?: string | null;
-    Type?: string | null;
-  } | null;
+  /**
+   * 商品へ付与する識別タグ。
+   *
+   * shared/types/productBlueprint.tsの
+   * ProductIDTagを正規型として使用する。
+   *
+   * フィールド名はtypeのみを使用し、
+   * 旧形式のTypeは保持しない。
+   */
+  productIdTag?:
+    | ProductIDTag
+    | null;
 
   assigneeId?: string | null;
 
@@ -70,35 +79,6 @@ export type ProductBlueprintPatchDTO = {
   modelRefs?:
     | ProductBlueprintModelRefDTO[]
     | null;
-};
-
-export type TokenBlueprintForMintDTO = {
-  id: string;
-
-  /**
-   * selector表示用。
-   *
-   * Backend responseの正はtokenNameだが、
-   * 既存UIはnameを表示用fieldとして使用する。
-   */
-  name: string;
-
-  /**
-   * TokenBlueprintCard表示用。
-   */
-  tokenName?: string;
-
-  symbol: string;
-
-  brandId?: string;
-  brandName?: string;
-  companyId?: string;
-
-  description?: string;
-  minted?: boolean;
-  metadataUri?: string;
-
-  iconUrl?: string;
 };
 
 /**
