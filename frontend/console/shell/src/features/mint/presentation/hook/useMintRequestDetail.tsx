@@ -78,7 +78,7 @@ function getErrorMessage(
 }
 
 const MINT_REQUEST_MANAGEMENT_PATH =
-  "/mintRequest";
+  "/mint";
 
 export function useMintRequestDetail() {
   const navigate =

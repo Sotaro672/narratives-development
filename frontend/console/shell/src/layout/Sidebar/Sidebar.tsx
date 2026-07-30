@@ -180,7 +180,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   const tokenSubItems: SubItem[] = useMemo(
     () => [
       { label: "設計", path: "/tokenBlueprint" },
-      { label: "ミント", path: "/mintRequest" },
+      { label: "ミント", path: "/mint" },
       { label: "告知", path: "/sales" },
     ],
     [],
@@ -242,7 +242,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     } else if (
       (p.startsWith("/token") ||
         p.startsWith("/tokenBlueprint") ||
-        p.startsWith("/mintRequest") ||
+        p.startsWith("/mint") ||
         p.startsWith("/sales")) &&
       !p.startsWith("/tokenBlueprintReview")
     ) {

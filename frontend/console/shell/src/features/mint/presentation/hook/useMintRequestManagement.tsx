@@ -390,7 +390,7 @@ export const useMintRequestManagement =
       useCallback(
         (productionId: string) => {
           navigate(
-            `/mintRequest/${encodeURIComponent(
+            `/mint/${encodeURIComponent(
               productionId,
             )}`,
           );
