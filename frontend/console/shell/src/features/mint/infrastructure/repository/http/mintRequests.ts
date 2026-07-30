@@ -7,7 +7,7 @@ import type { MintDTO } from "../../dto/mint.dto";
 
 import type { MintTaskProgress } from "../../../application/port/MintRequestRepository";
 import type { MintRequestManagementRowDTO } from "../../dto/mintRequestManagementRow";
-import type { MintStatus } from "../../../domain/mints";
+import type { MintStatus } from "../../../../../shared/types/mints";
 
 // ===============================
 // types

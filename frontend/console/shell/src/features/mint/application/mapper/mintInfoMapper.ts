@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/mintRequest/application/mapper/mintInfoMapper.ts
 
-import type { InspectionBatchDTO } from "../../domain/inspections";
-import type { MintStatus } from "../../domain/mints";
+import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
+import type { MintStatus } from "../../../../shared/types/mints";
 import type { MintDTO } from "../../infrastructure/dto/mint.dto";
 
 import {

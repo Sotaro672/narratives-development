@@ -1,5 +1,5 @@
 // frontend/console/mintRequest/src/presentation/formatter/inspectionStatusLabel.ts
-import type { InspectionStatus } from "../../domain/inspections";
+import type { InspectionStatus } from "../../../../shared/types/inspections";
 
 export function inspectionStatusLabel(
   s: InspectionStatus | null | undefined,

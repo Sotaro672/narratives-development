@@ -1,6 +1,6 @@
 // frontend/console/shell/src/features/mintRequest/infrastructure/dto/mintRequestLocal.dto.ts
 
-import type { InspectionBatchDTO } from "../../domain/inspections";
+import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
 import type { MintDTO } from "./mint.dto";
 
 import type {

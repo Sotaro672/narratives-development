@@ -1,6 +1,6 @@
 // frontend/console/mintRequest/src/application/mapper/buildInspectionResultCardData.ts
 
-import type { InspectionBatch } from "../../domain/inspections";
+import type { InspectionBatch } from "../../../../shared/types/inspections";
 import type {
   MintModelMetaEntryDTO,
   ProductBlueprintPatchDTO,

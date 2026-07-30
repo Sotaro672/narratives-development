@@ -1,6 +1,6 @@
 // frontend/console/shell/src/features/mintRequest/application/validator/validateMintRequestSubmit.ts
 
-import type { InspectionBatchDTO } from "../../domain/inspections";
+import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
 
 export type ValidateMintRequestSubmitInput = {
   inspectionBatch: InspectionBatchDTO | null | undefined;

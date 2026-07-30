@@ -1,6 +1,6 @@
 // frontend/console/shell/src/features/mintRequest/application/usecase/loadMintRequestManagementRows.ts
 
-import type { InspectionStatus } from "../../domain/inspections";
+import type { InspectionStatus } from "../../../../shared/types/inspections";
 
 import { fetchMintRequestRowsHTTP } from "../../infrastructure/repository/http/mintRequests";
 import { fetchProductionIdsForCurrentCompanyHTTP } from "../../infrastructure/repository/http/productions";

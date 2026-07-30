@@ -3,7 +3,7 @@
 import { API_BASE } from "../../../../../shared/http/apiBase";
 import { getAuthHeadersOrThrow } from "../../../../../shared/http/authHeaders";
 
-import type { InspectionBatchDTO } from "../../../domain/inspections";
+import type { InspectionBatchDTO } from "../../../../../shared/types/inspections";
 import type { MintRequestDetailDTO } from "../../dto/mintRequestLocal.dto";
 
 import { fetchProductionIdsForCurrentCompanyHTTP } from "./productions";

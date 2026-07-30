@@ -18,9 +18,11 @@ import {
 } from "../shared/ui/popover";
 
 import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
-import InspectionResultCard from "../features/mintRequest/presentation/components/inspectionResultCard";
-import { useMintRequestDetail } from "../features/mintRequest/presentation/hook/useMintRequestDetail";
-import TokenBlueprintCard from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
+import InspectionResultCard from "../features/mint/presentation/components/inspectionResultCard";
+import { useMintRequestDetail } from "../features/mint/presentation/hook/useMintRequestDetail";
+import TokenBlueprintCard, {
+  type TokenBlueprintCardHandlers,
+} from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 
 import "../styles/mintRequest.css";
 
@@ -63,6 +65,9 @@ function MintingEffectOverlay() {
     </div>
   );
 }
+
+const READ_ONLY_TOKEN_BLUEPRINT_CARD_HANDLERS:
+  TokenBlueprintCardHandlers = {};
 
 export default function MintRequestDetail() {
   const {
@@ -107,7 +112,6 @@ export default function MintRequestDetail() {
     setScheduledBurnDate,
 
     tokenBlueprintCardVm,
-    tokenBlueprintCardHandlers,
 
     mintCreatedAtLabel,
     mintCreatedByLabel,
@@ -237,9 +241,9 @@ export default function MintRequestDetail() {
 
           {tokenBlueprintCardVm && (
             <TokenBlueprintCard
-              vm={tokenBlueprintCardVm as any}
+              vm={tokenBlueprintCardVm}
               handlers={
-                tokenBlueprintCardHandlers as any
+                READ_ONLY_TOKEN_BLUEPRINT_CARD_HANDLERS
               }
             />
           )}

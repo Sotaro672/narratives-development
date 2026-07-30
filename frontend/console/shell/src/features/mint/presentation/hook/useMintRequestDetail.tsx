@@ -38,7 +38,7 @@ import {
 
 import type {
   InspectionBatchDTO,
-} from "../../domain/inspections";
+} from "../../../../shared/types/inspections";
 
 import type {
   MintModelMetaEntryDTO,

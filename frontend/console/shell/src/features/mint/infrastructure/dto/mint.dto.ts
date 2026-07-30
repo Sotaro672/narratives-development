@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/mintRequest/infrastructure/dto/mint.dto.ts
 
 import type { MintTaskProgress } from "../../application/port/MintRequestRepository";
-import type { Mint } from "../../domain/mints";
+import type { Mint } from "../../../../shared/types/mints";
 
 export type MintDTO = Mint & {
   createdByName?: string | null;

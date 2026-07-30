@@ -1,6 +1,6 @@
 // frontend/console/shell/src/features/mintRequest/application/dto/mintRequestManagementRow.ts
 
-import type { InspectionStatus } from "../../domain/inspections";
+import type { InspectionStatus } from "../../../../shared/types/inspections";
 
 /**
  * MintRequestQueryServiceが返す一覧用DTO。
