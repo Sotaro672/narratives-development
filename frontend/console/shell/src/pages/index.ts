@@ -22,8 +22,8 @@ export { default as TokenBlueprintManagement } from "./tokenBlueprintManagement"
 export { default as TokenBlueprintDetail } from "./tokenBlueprintDetail";
 export { default as TokenBlueprintCreate } from "./tokenBlueprintCreate";
 
-export { default as MintRequestManagement } from "./mintRequestManagement";
-export { default as MintRequestDetail } from "./mintRequestDetail";
+export { default as MintManagement } from "./mintManagement";
+export { default as MintDetail } from "./mintDetail";
 
 export { default as ProductBlueprintReviewManagement } from "./productBlueprintReviewManagement";
 export { default as ProductBlueprintReviewDetail } from "./productBlueprintReviewDetail";

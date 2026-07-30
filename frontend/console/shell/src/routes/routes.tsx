@@ -19,8 +19,8 @@ import {
   TokenBlueprintManagement,
   TokenBlueprintDetail,
   TokenBlueprintCreate,
-  MintRequestManagement,
-  MintRequestDetail,
+  MintManagement,
+  MintDetail,
   ProductBlueprintReviewManagement,
   ProductBlueprintReviewDetail,
   TokenBlueprintReviewManagement,
@@ -141,11 +141,11 @@ export const routes: RouteObject[] = [
     children: [
       {
         path: "",
-        element: <MintRequestManagement />,
+        element: <MintManagement />,
       },
       {
         path: ":requestId",
-        element: <MintRequestDetail />,
+        element: <MintDetail />,
       },
     ],
   },
