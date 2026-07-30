@@ -1,8 +1,16 @@
 // frontend/console/shell/src/shared/types/inquiry.ts
 
+import type {
+  ShippingAddress,
+} from "./shippingAddress";
+
 export type InquiryStatus = string;
 export type InquiryType = string;
-export type InquiryReplySenderType = "avatar" | "member" | string;
+
+export type InquiryReplySenderType =
+  | "avatar"
+  | "member"
+  | string;
 
 export type InquiryImageFile = {
   inquiryId?: string;
@@ -60,32 +68,6 @@ export type Inquiry = {
   closedBy?: string | null;
 };
 
-export type InquiryShippingAddress = {
-  id: string;
-  userId: string;
-
-  name?: string;
-  phoneNumber?: string;
-
-  zipCode?: string;
-  state?: string;
-  city?: string;
-  street?: string;
-  street2?: string;
-  country?: string;
-
-  isDefault?: boolean;
-
-  createdAt?: string;
-  createdBy?: string;
-  updatedAt?: string | null;
-  updatedBy?: string | null;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
-
-  [key: string]: unknown;
-};
-
 export type InquiryOrderItemSummary = {
   modelId: string;
   inventoryId: string;
@@ -120,7 +102,7 @@ export type InquiryManagementItem = {
   avatarName: string;
   userId: string;
   userFullName: string;
-  shippingAddresses: InquiryShippingAddress[];
+  shippingAddresses: ShippingAddress[];
   orders: InquiryOrderSummary[];
   companyId: string;
 };
@@ -136,7 +118,7 @@ export type InquiryDetail = {
   avatarName: string;
   userId: string;
   userFullName: string;
-  shippingAddresses: InquiryShippingAddress[];
+  shippingAddresses: ShippingAddress[];
   orders: InquiryOrderSummary[];
   companyId: string;
 
@@ -156,7 +138,7 @@ export type InquiryAggregate = {
   avatarName: string;
   userId: string;
   userFullName: string;
-  shippingAddresses: InquiryShippingAddress[];
+  shippingAddresses: ShippingAddress[];
   orders: InquiryOrderSummary[];
   companyId: string;
 
@@ -191,7 +173,8 @@ export type ListInquiriesParams = {
   closed?: boolean;
 };
 
-export type CountUnreadInquiriesParams = ListInquiriesParams;
+export type CountUnreadInquiriesParams =
+  ListInquiriesParams;
 
 export type ResolveInquiryParams = {
   memberId: string;

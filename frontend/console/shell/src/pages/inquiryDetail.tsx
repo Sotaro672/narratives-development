@@ -36,10 +36,14 @@ import {
 
 import type {
   InquiryDetail as InquiryDetailDTO,
+  InquiryImageFile,
   InquiryOrderItemSummary,
   InquiryOrderSummary,
-  InquiryShippingAddress,
 } from "../shared/types/inquiry";
+
+import type {
+  ShippingAddress,
+} from "../shared/types/shippingAddress";
 
 import "../styles/inquiry-page.css";
 
@@ -127,27 +131,26 @@ function createClientID(prefix: string): string {
 }
 
 function getShippingAddressLine(
-  address: Record<string, unknown>,
+  address: ShippingAddress,
 ): string {
-  const postalCode =
-    normalizeText(address.zipCode) ||
-    normalizeText(address.postalCode) ||
-    normalizeText(address.postCode);
+  const zipCode = normalizeText(
+    address.zipCode,
+  );
 
-  const state =
-    normalizeText(address.state) ||
-    normalizeText(address.prefecture) ||
-    normalizeText(address.region);
+  const state = normalizeText(
+    address.state,
+  );
 
-  const city = normalizeText(address.city);
+  const city = normalizeText(
+    address.city,
+  );
 
-  const street =
-    normalizeText(address.street) ||
-    normalizeText(address.address1) ||
-    normalizeText(address.line1);
+  const street = normalizeText(
+    address.street,
+  );
 
   const parts = [
-    postalCode ? `〒${postalCode}` : "",
+    zipCode ? `〒${zipCode}` : "",
     state,
     city,
     street,
@@ -159,26 +162,21 @@ function getShippingAddressLine(
 }
 
 function getShippingAddressStreet2(
-  address: Record<string, unknown>,
+  address: ShippingAddress,
 ): string {
-  return (
-    normalizeText(address.street2) ||
-    normalizeText(address.address2) ||
-    normalizeText(address.line2)
+  return normalizeText(
+    address.street2,
   );
 }
 
 function getShippingAddresses(
   detail: InquiryDetailDTO | null,
-): Record<string, unknown>[] {
-  if (!detail?.shippingAddresses?.length) {
-    return [];
-  }
-
-  return detail.shippingAddresses.map(
-    (address: InquiryShippingAddress) =>
-      address as unknown as Record<string, unknown>,
-  );
+): ShippingAddress[] {
+  return Array.isArray(
+    detail?.shippingAddresses,
+  )
+    ? detail.shippingAddresses
+    : [];
 }
 
 function getOrderItemsLabel(
@@ -232,51 +230,45 @@ function getOrderTransferredAtLabel(
 }
 
 function normalizeImages(
-  rawImages: unknown,
-  fallbackNamePrefix: string,
+  images:
+    | InquiryImageFile[]
+    | null
+    | undefined,
 ): InquiryImageView[] {
-  if (!Array.isArray(rawImages)) {
+  if (!Array.isArray(images)) {
     return [];
   }
 
-  return rawImages
+  return images
     .map(
       (
-        rawImage: unknown,
+        image: InquiryImageFile,
         index: number,
       ): InquiryImageView | null => {
-        const image =
-          rawImage as Record<string, unknown>;
-
-        const fileUrl =
-          normalizeText(image.fileUrl) ||
-          normalizeText(image.FileURL) ||
-          normalizeText(image.url) ||
-          normalizeText(image.URL);
+        const fileUrl = normalizeText(
+          image.fileUrl,
+        );
 
         if (!fileUrl) {
           return null;
         }
 
-        const fileName =
-          normalizeText(image.fileName) ||
-          normalizeText(image.FileName) ||
-          `${fallbackNamePrefix}${index + 1}`;
+        const fileName = normalizeText(
+          image.fileName,
+        );
 
-        const mimeType =
-          normalizeText(image.mimeType) ||
-          normalizeText(image.MimeType) ||
-          "image/*";
+        const mimeType = normalizeText(
+          image.mimeType,
+        );
 
-        const id =
-          normalizeText(image.id) ||
-          normalizeText(image.ID) ||
-          normalizeText(image.objectPath) ||
-          normalizeText(image.ObjectPath) ||
-          `${fileUrl}-${index}`;
+        const objectPath = normalizeText(
+          image.objectPath,
+        );
 
         return {
-          id,
+          id:
+            objectPath ||
+            `${fileUrl}-${index}`,
           fileName,
           fileUrl,
           mimeType,
@@ -299,7 +291,6 @@ function getInquiryImages(
 ): InquiryImageView[] {
   return normalizeImages(
     inquiry?.images,
-    "問い合わせ画像",
   );
 }
 
@@ -311,7 +302,6 @@ function getReplyImages(
 ): InquiryImageView[] {
   return normalizeImages(
     reply?.images,
-    "返信画像",
   );
 }
 
@@ -1125,11 +1115,7 @@ export default function InquiryDetail() {
                         {shippingAddresses.map(
                           (
                             address:
-                              Record<
-                                string,
-                                unknown
-                              >,
-                            index: number,
+                              ShippingAddress,
                           ) => {
                             const addressLine =
                               getShippingAddressLine(
@@ -1143,12 +1129,7 @@ export default function InquiryDetail() {
 
                             return (
                               <span
-                                key={
-                                  normalizeText(
-                                    address.id,
-                                  ) ||
-                                  index
-                                }
+                                key={address.id}
                               >
                                 {
                                   addressLine
