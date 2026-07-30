@@ -1,4 +1,4 @@
-// frontend/console/inquiry/infrastructure/inquiryRepositoryHTTP.ts
+// frontend/console/shell/src/features/inquiry/infrastructure/inquiryRepositoryHTTP.ts
 
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
@@ -9,228 +9,22 @@ import {
   getAuthJsonHeadersOrThrow,
 } from "../../../shared/http/authHeaders";
 
-// -----------------------------------------------------------
-// Types
-// -----------------------------------------------------------
+import type {
+  CountUnreadInquiriesParams,
+  Inquiry,
+  InquiryDetail,
+  InquiryImageFile,
+  InquiryManagementItem,
+  InquiryPageResult,
+  InquiryReply,
+  InquiryUnreadCountResult,
+  ListInquiriesParams,
+  ReopenInquiryParams,
+  ReplyInquiryParams,
+  ResolveInquiryParams,
+} from "../../../shared/types/inquiry";
 
-export type InquiryStatus = string;
-export type InquiryType = string;
-export type InquiryReplySenderType = "avatar" | "member" | string;
-
-export type InquiryImageFile = {
-  inquiryId?: string;
-  fileName: string;
-  fileUrl: string;
-  objectPath?: string | null;
-  fileSize: number;
-  mimeType: string;
-  createdAt?: string;
-  createdBy?: string;
-  updatedAt?: string | null;
-  updatedBy?: string | null;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
-};
-
-export type InquiryReply = {
-  id: string;
-  inquiryId: string;
-  senderType: InquiryReplySenderType;
-  senderId: string;
-  content: string;
-  isRead?: boolean;
-  images?: InquiryImageFile[];
-
-  createdAt?: string;
-  createdBy?: string;
-  updatedAt?: string | null;
-  updatedBy?: string | null;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
-};
-
-export type Inquiry = {
-  id: string;
-  productId: string;
-  avatarId: string;
-  subject: string;
-  content: string;
-  status: InquiryStatus;
-  inquiryType: InquiryType;
-  isRead?: boolean;
-  images?: InquiryImageFile[];
-
-  createdAt?: string;
-  createdBy?: string;
-  updatedAt?: string;
-  updatedBy?: string;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
-
-  resolvedAt?: string | null;
-  resolvedBy?: string | null;
-  closedAt?: string | null;
-  closedBy?: string | null;
-};
-
-export type InquiryShippingAddress = {
-  id: string;
-  userId: string;
-
-  name?: string;
-  phoneNumber?: string;
-
-  zipCode?: string;
-  state?: string;
-  city?: string;
-  street?: string;
-  street2?: string;
-  country?: string;
-
-  isDefault?: boolean;
-
-  createdAt?: string;
-  createdBy?: string;
-  updatedAt?: string | null;
-  updatedBy?: string | null;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
-
-  [key: string]: unknown;
-};
-
-export type InquiryOrderItemSummary = {
-  modelId: string;
-  inventoryId: string;
-  tokenBlueprintId: string;
-  tokenName: string;
-  listId: string;
-  qty: number;
-  price: number;
-  isCanceled: boolean;
-  isDispatched: boolean;
-  transferred: boolean;
-  transferredAt?: string | null;
-};
-
-export type InquiryOrderSummary = {
-  id: string;
-  userId: string;
-  avatarId: string;
-  cartId: string;
-  paid: boolean;
-  items: InquiryOrderItemSummary[];
-  createdAt: string;
-};
-
-export type InquiryManagementItem = {
-  inquiry: Inquiry;
-  modelId: string;
-  productBlueprintId: string;
-  productName: string;
-  brandId: string;
-  brandName: string;
-  avatarName: string;
-  userId: string;
-  userFullName: string;
-  shippingAddresses: InquiryShippingAddress[];
-  orders: InquiryOrderSummary[];
-  companyId: string;
-};
-
-export type InquiryDetail = {
-  inquiry: Inquiry;
-  replies?: InquiryReply[];
-  modelId: string;
-  productBlueprintId: string;
-  productName: string;
-  brandId: string;
-  brandName: string;
-  avatarName: string;
-  userId: string;
-  userFullName: string;
-  shippingAddresses: InquiryShippingAddress[];
-  orders: InquiryOrderSummary[];
-  companyId: string;
-
-  mintAddress?: string;
-  transferredAt?: string | null;
-};
-
-export type InquiryAggregate = {
-  inquiry: Inquiry;
-  replies?: InquiryReply[];
-  images: InquiryImageFile[];
-  modelId: string;
-  productBlueprintId: string;
-  productName: string;
-  brandId: string;
-  brandName: string;
-  avatarName: string;
-  userId: string;
-  userFullName: string;
-  shippingAddresses: InquiryShippingAddress[];
-  orders: InquiryOrderSummary[];
-  companyId: string;
-
-  mintAddress?: string;
-  transferredAt?: string | null;
-};
-
-export type InquiryPageResult<T> = {
-  items: T[];
-};
-
-export type InquiryUnreadCountResult = {
-  count: number;
-};
-
-export type ListInquiriesParams = {
-  companyId: string;
-
-  searchQuery?: string;
-  productId?: string;
-  avatarId?: string;
-  status?: InquiryStatus;
-  inquiryType?: InquiryType;
-  updatedBy?: string;
-  deletedBy?: string;
-  resolvedBy?: string;
-  closedBy?: string;
-  imageFileName?: string;
-
-  deleted?: boolean;
-  resolved?: boolean;
-  closed?: boolean;
-};
-
-export type CountUnreadInquiriesParams = ListInquiriesParams;
-
-export type AddInquiryImageParams = {
-  fileName: string;
-  fileUrl: string;
-  objectPath?: string | null;
-  fileSize: number;
-  mimeType: string;
-  createdAt?: string | null;
-  createdBy?: string | null;
-};
-
-export type ResolveInquiryParams = {
-  memberId: string;
-};
-
-export type ReopenInquiryParams = {
-  memberId: string;
-};
-
-export type ReplyInquiryParams = {
-  memberId: string;
-  content: string;
-  images?: InquiryImageFile[];
-};
-
-export type UploadInquiryReplyImageParams = {
+type UploadInquiryReplyImageParams = {
   inquiryId: string;
   memberId: string;
   file: File;
@@ -246,16 +40,23 @@ export type UploadInquiryReplyImagesParams = {
 // internal helpers
 // -----------------------------------------------------------
 
-function assertID(id: string, label: string) {
+function assertID(id: string, label: string): string {
   const trimmed = String(id ?? "").trim();
+
   if (!trimmed) {
     throw new Error(`inquiryRepositoryHTTP: ${label} が空です`);
   }
+
   return trimmed;
 }
 
-function appendStringParam(params: URLSearchParams, key: string, value: unknown) {
+function appendStringParam(
+  params: URLSearchParams,
+  key: string,
+  value: unknown,
+): void {
   const trimmed = String(value ?? "").trim();
+
   if (trimmed) {
     params.set(key, trimmed);
   }
@@ -265,7 +66,7 @@ function appendBooleanParam(
   params: URLSearchParams,
   key: string,
   value: boolean | undefined,
-) {
+): void {
   if (typeof value === "boolean") {
     params.set(key, value ? "true" : "false");
   }
@@ -289,12 +90,13 @@ function buildInquiryListQuery(params: ListInquiriesParams): string {
   appendBooleanParam(query, "resolved", params.resolved);
   appendBooleanParam(query, "closed", params.closed);
 
-  const qs = query.toString();
-  return qs ? `?${qs}` : "";
+  const queryString = query.toString();
+
+  return queryString ? `?${queryString}` : "";
 }
 
-async function readErrorDetail(res: Response): Promise<string> {
-  return res.text().catch(() => "");
+async function readErrorDetail(response: Response): Promise<string> {
+  return response.text().catch(() => "");
 }
 
 function sanitizeFileName(fileName: string): string {
@@ -337,7 +139,7 @@ function assertImageFile(file: File): File {
 //   backend の POST /inquiries/{id}/reply の images に渡す。
 // -----------------------------------------------------------
 
-export async function uploadInquiryReplyImageToStorage(
+async function uploadInquiryReplyImageToStorage(
   params: UploadInquiryReplyImageParams,
 ): Promise<InquiryImageFile> {
   const inquiryId = assertID(params.inquiryId, "inquiryId");
@@ -347,6 +149,7 @@ export async function uploadInquiryReplyImageToStorage(
   const imageId = createClientID("reply_image");
   const fileName = sanitizeFileName(file.name);
   const mimeType = file.type || "application/octet-stream";
+
   const objectPath = `inquiry-replies/${encodeURIComponent(
     inquiryId,
   )}/${encodeURIComponent(imageId)}/${encodeURIComponent(fileName)}`;
@@ -400,10 +203,6 @@ export async function uploadInquiryReplyImagesToStorage(
 // -----------------------------------------------------------
 // GET: Inquiry 一覧
 //   backend: GET /inquiries/company/{companyId}
-//
-// NOTE:
-//   URL 上の companyId は既存 route 互換のため渡す。
-//   実際の company boundary は backend middleware の companyId が使われる。
 // -----------------------------------------------------------
 
 export async function listInquiriesHTTP(
@@ -413,29 +212,30 @@ export async function listInquiriesHTTP(
   const headers = await getAuthHeadersOrThrow();
 
   const query = buildInquiryListQuery(params);
-  const url = `${API_BASE}/inquiries/company/${encodeURIComponent(companyId)}${query}`;
 
-  const res = await fetch(url, {
+  const url = `${API_BASE}/inquiries/company/${encodeURIComponent(
+    companyId,
+  )}${query}`;
+
+  const response = await fetch(url, {
     method: "GET",
     headers,
   });
 
-  if (!res.ok) {
-    const detail = await readErrorDetail(res);
+  if (!response.ok) {
+    const detail = await readErrorDetail(response);
+
     throw new Error(
-      `問い合わせ一覧の取得に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
+      `問い合わせ一覧の取得に失敗しました（${response.status} ${response.statusText}）\n${detail}`,
     );
   }
 
-  return (await res.json()) as InquiryPageResult<InquiryManagementItem>;
+  return (await response.json()) as InquiryPageResult<InquiryManagementItem>;
 }
 
 // -----------------------------------------------------------
 // GET: Inquiry 未読件数
 //   backend: GET /inquiries/company/{companyId}/unread-count
-//
-// Query:
-//   listInquiriesHTTP と同じ filter を利用可能。
 // -----------------------------------------------------------
 
 export async function countUnreadInquiriesHTTP(
@@ -445,51 +245,53 @@ export async function countUnreadInquiriesHTTP(
   const headers = await getAuthHeadersOrThrow();
 
   const query = buildInquiryListQuery(params);
+
   const url = `${API_BASE}/inquiries/company/${encodeURIComponent(
     companyId,
   )}/unread-count${query}`;
 
-  const res = await fetch(url, {
+  const response = await fetch(url, {
     method: "GET",
     headers,
   });
 
-  if (!res.ok) {
-    const detail = await readErrorDetail(res);
+  if (!response.ok) {
+    const detail = await readErrorDetail(response);
+
     throw new Error(
-      `問い合わせ未読件数の取得に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
+      `問い合わせ未読件数の取得に失敗しました（${response.status} ${response.statusText}）\n${detail}`,
     );
   }
 
-  return (await res.json()) as InquiryUnreadCountResult;
+  return (await response.json()) as InquiryUnreadCountResult;
 }
 
 // -----------------------------------------------------------
 // GET: Inquiry 詳細
 //   backend: GET /inquiries/{id}
-//
-// NOTE:
-//   backend 側で未読の場合は MarkAsRead される。
-//   response.replies には inquiries/{id}/replies 配下の返信一覧が入る。
 // -----------------------------------------------------------
 
 export async function getInquiryHTTP(id: string): Promise<InquiryDetail> {
-  const trimmedId = assertID(id, "id");
+  const inquiryId = assertID(id, "id");
   const headers = await getAuthHeadersOrThrow();
 
-  const res = await fetch(`${API_BASE}/inquiries/${encodeURIComponent(trimmedId)}`, {
-    method: "GET",
-    headers,
-  });
+  const response = await fetch(
+    `${API_BASE}/inquiries/${encodeURIComponent(inquiryId)}`,
+    {
+      method: "GET",
+      headers,
+    },
+  );
 
-  if (!res.ok) {
-    const detail = await readErrorDetail(res);
+  if (!response.ok) {
+    const detail = await readErrorDetail(response);
+
     throw new Error(
-      `問い合わせ詳細の取得に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
+      `問い合わせ詳細の取得に失敗しました（${response.status} ${response.statusText}）\n${detail}`,
     );
   }
 
-  const detail = (await res.json()) as InquiryDetail;
+  const detail = (await response.json()) as InquiryDetail;
 
   return {
     ...detail,
@@ -506,12 +308,12 @@ export async function resolveInquiryHTTP(
   id: string,
   params: ResolveInquiryParams,
 ): Promise<Inquiry> {
-  const trimmedId = assertID(id, "id");
+  const inquiryId = assertID(id, "id");
   const memberId = assertID(params.memberId, "memberId");
   const headers = await getAuthJsonHeadersOrThrow();
 
-  const res = await fetch(
-    `${API_BASE}/inquiries/${encodeURIComponent(trimmedId)}/resolve`,
+  const response = await fetch(
+    `${API_BASE}/inquiries/${encodeURIComponent(inquiryId)}/resolve`,
     {
       method: "POST",
       headers,
@@ -521,14 +323,15 @@ export async function resolveInquiryHTTP(
     },
   );
 
-  if (!res.ok) {
-    const detail = await readErrorDetail(res);
+  if (!response.ok) {
+    const detail = await readErrorDetail(response);
+
     throw new Error(
-      `問い合わせの対応済み更新に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
+      `問い合わせの対応済み更新に失敗しました（${response.status} ${response.statusText}）\n${detail}`,
     );
   }
 
-  return (await res.json()) as Inquiry;
+  return (await response.json()) as Inquiry;
 }
 
 // -----------------------------------------------------------
@@ -540,12 +343,12 @@ export async function reopenInquiryHTTP(
   id: string,
   params: ReopenInquiryParams,
 ): Promise<Inquiry> {
-  const trimmedId = assertID(id, "id");
+  const inquiryId = assertID(id, "id");
   const memberId = assertID(params.memberId, "memberId");
   const headers = await getAuthJsonHeadersOrThrow();
 
-  const res = await fetch(
-    `${API_BASE}/inquiries/${encodeURIComponent(trimmedId)}/reopen`,
+  const response = await fetch(
+    `${API_BASE}/inquiries/${encodeURIComponent(inquiryId)}/reopen`,
     {
       method: "POST",
       headers,
@@ -555,47 +358,33 @@ export async function reopenInquiryHTTP(
     },
   );
 
-  if (!res.ok) {
-    const detail = await readErrorDetail(res);
+  if (!response.ok) {
+    const detail = await readErrorDetail(response);
+
     throw new Error(
-      `問い合わせの再オープンに失敗しました（${res.status} ${res.statusText}）\n${detail}`,
+      `問い合わせの再オープンに失敗しました（${response.status} ${response.statusText}）\n${detail}`,
     );
   }
 
-  return (await res.json()) as Inquiry;
+  return (await response.json()) as Inquiry;
 }
 
 // -----------------------------------------------------------
 // POST: Inquiry 返信
 //   backend: POST /inquiries/{id}/reply
-//
-// Body:
-//   {
-//     "memberId": "member_document_id",
-//     "content": "返信本文",
-//     "images": [
-//       {
-//         "fileName": "sample.png",
-//         "fileUrl": "https://firebasestorage.googleapis.com/...",
-//         "objectPath": "inquiry-replies/{inquiryId}/{imageId}/sample.png",
-//         "fileSize": 12345,
-//         "mimeType": "image/png"
-//       }
-//     ]
-//   }
 // -----------------------------------------------------------
 
 export async function replyInquiryHTTP(
   id: string,
   params: ReplyInquiryParams,
 ): Promise<InquiryReply> {
-  const trimmedId = assertID(id, "id");
+  const inquiryId = assertID(id, "id");
   const memberId = assertID(params.memberId, "memberId");
   const content = assertID(params.content, "content");
   const headers = await getAuthJsonHeadersOrThrow();
 
-  const res = await fetch(
-    `${API_BASE}/inquiries/${encodeURIComponent(trimmedId)}/reply`,
+  const response = await fetch(
+    `${API_BASE}/inquiries/${encodeURIComponent(inquiryId)}/reply`,
     {
       method: "POST",
       headers,
@@ -607,100 +396,13 @@ export async function replyInquiryHTTP(
     },
   );
 
-  if (!res.ok) {
-    const detail = await readErrorDetail(res);
+  if (!response.ok) {
+    const detail = await readErrorDetail(response);
+
     throw new Error(
-      `問い合わせ返信の送信に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
+      `問い合わせ返信の送信に失敗しました（${response.status} ${response.statusText}）\n${detail}`,
     );
   }
 
-  return (await res.json()) as InquiryReply;
-}
-
-// -----------------------------------------------------------
-// POST: Inquiry 画像追加
-//   backend: POST /inquiries/{id}/images
-//
-// NOTE:
-//   画像バイナリは frontend から Firebase Storage へ直接保存する。
-//   backend へは Firebase Storage の downloadURL(fileUrl) と objectPath のみ渡す。
-// -----------------------------------------------------------
-
-export async function addInquiryImageHTTP(
-  id: string,
-  params: AddInquiryImageParams,
-): Promise<InquiryImageFile> {
-  const trimmedId = assertID(id, "id");
-  const headers = await getAuthJsonHeadersOrThrow();
-
-  const fileName = assertID(params.fileName, "fileName");
-  const fileUrl = assertID(params.fileUrl, "fileUrl");
-  const mimeType = assertID(params.mimeType, "mimeType");
-
-  const payload = {
-    fileName,
-    fileUrl,
-    objectPath: params.objectPath ?? null,
-    fileSize: Number(params.fileSize ?? 0),
-    mimeType,
-    createdAt: params.createdAt ?? null,
-    createdBy: params.createdBy ?? null,
-  };
-
-  const res = await fetch(
-    `${API_BASE}/inquiries/${encodeURIComponent(trimmedId)}/images`,
-    {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-    },
-  );
-
-  if (!res.ok) {
-    const detail = await readErrorDetail(res);
-    throw new Error(
-      `問い合わせ画像の追加に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
-    );
-  }
-
-  return (await res.json()) as InquiryImageFile;
-}
-
-// -----------------------------------------------------------
-// DELETE: Inquiry 画像削除
-//   backend: DELETE /inquiries/{id}/images?fileName=...
-//
-// NOTE:
-//   この endpoint は Firestore 上の Inquiry.Images から画像メタデータを削除する。
-//   Firebase Storage の実ファイル削除は別処理で行う必要がある。
-// -----------------------------------------------------------
-
-export async function deleteInquiryImageHTTP(
-  id: string,
-  fileName: string,
-): Promise<InquiryImageFile[]> {
-  const trimmedId = assertID(id, "id");
-  const trimmedFileName = assertID(fileName, "fileName");
-  const headers = await getAuthHeadersOrThrow();
-
-  const query = new URLSearchParams({
-    fileName: trimmedFileName,
-  });
-
-  const res = await fetch(
-    `${API_BASE}/inquiries/${encodeURIComponent(trimmedId)}/images?${query.toString()}`,
-    {
-      method: "DELETE",
-      headers,
-    },
-  );
-
-  if (!res.ok) {
-    const detail = await readErrorDetail(res);
-    throw new Error(
-      `問い合わせ画像の削除に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
-    );
-  }
-
-  return (await res.json()) as InquiryImageFile[];
+  return (await response.json()) as InquiryReply;
 }

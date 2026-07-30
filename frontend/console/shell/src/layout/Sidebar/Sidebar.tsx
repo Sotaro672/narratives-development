@@ -1,7 +1,7 @@
-// frontend/shell/src/layout/Sidebar/Sidebar.tsx
+// frontend/console/shell/src/layout/Sidebar/Sidebar.tsx
 
-import { useLocation, useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   MessageSquare,
   Box,
@@ -14,9 +14,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-import { buildConsoleUrl } from "../../shared/http/apiBase";
-import { getAuthHeaders } from "../../shared/http/authHeaders";
-import { fetchJSON } from "../../shared/http/fetchJSON";
+import { countUnreadInquiriesHTTP } from "../../features/inquiry/infrastructure/inquiryRepositoryHTTP";
 
 import "./Sidebar.css";
 
@@ -32,13 +30,12 @@ type MenuItem = {
   badgeCount?: number | null;
 };
 
-type SubItem = { label: string; path: string };
+type SubItem = {
+  label: string;
+  path: string;
+};
 
 type OpenKey = "products" | "tokens" | "reviews" | "org" | "finance" | null;
-
-type InquiryUnreadCountResponse = {
-  count?: number | null;
-};
 
 const CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER = "current";
 const INQUIRY_READ_STATE_CHANGED_EVENT = "inquiry:read-state-changed";
@@ -53,35 +50,6 @@ function toSafeCount(value: unknown): number | null {
   return count > 0 ? count : null;
 }
 
-function isInquiryDetailPath(pathname: string): boolean {
-  const normalized = String(pathname ?? "").trim();
-
-  if (!normalized.startsWith("/inquiry/")) {
-    return false;
-  }
-
-  const id = normalized.replace(/^\/inquiry\//, "").split("/")[0];
-
-  return id !== "";
-}
-
-async function fetchInquiryUnreadCount(): Promise<number | null> {
-  const headers = await getAuthHeaders();
-
-  const url = buildConsoleUrl(
-    `/inquiries/company/${encodeURIComponent(
-      CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER,
-    )}/unread-count`,
-  );
-
-  const data = await fetchJSON<InquiryUnreadCountResponse>(url, {
-    method: "GET",
-    headers,
-  });
-
-  return toSafeCount(data.count);
-}
-
 export default function Sidebar({ isOpen }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -89,51 +57,23 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   const [inquiryUnreadCount, setInquiryUnreadCount] = useState<number | null>(
     null,
   );
+  const [openKey, setOpenKey] = useState<OpenKey>(null);
 
   const loadInquiryUnreadCount = useCallback(async () => {
     try {
-      const count = await fetchInquiryUnreadCount();
-      setInquiryUnreadCount(count);
+      const result = await countUnreadInquiriesHTTP({
+        companyId: CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER,
+      });
+
+      setInquiryUnreadCount(toSafeCount(result.count));
     } catch {
       setInquiryUnreadCount(null);
     }
   }, []);
 
   useEffect(() => {
-    let active = true;
-    let timer: number | null = null;
-
-    async function load() {
-      try {
-        const count = await fetchInquiryUnreadCount();
-        if (!active) return;
-
-        setInquiryUnreadCount(count);
-      } catch {
-        if (!active) return;
-
-        setInquiryUnreadCount(null);
-      }
-    }
-
-    void load();
-
-    if (isInquiryDetailPath(location.pathname)) {
-      timer = window.setTimeout(() => {
-        if (!active) return;
-
-        void load();
-      }, 400);
-    }
-
-    return () => {
-      active = false;
-
-      if (timer !== null) {
-        window.clearTimeout(timer);
-      }
-    };
-  }, [location.pathname]);
+    void loadInquiryUnreadCount();
+  }, [loadInquiryUnreadCount]);
 
   useEffect(() => {
     const refresh = () => {
@@ -157,365 +97,570 @@ export default function Sidebar({ isOpen }: SidebarProps) {
         icon: MessageSquare,
         badgeCount: inquiryUnreadCount,
       },
-      { label: "商品", path: "/product", icon: Box, hasSubmenu: true },
-      { label: "トークン", path: "/token", icon: Coins, hasSubmenu: true },
-      { label: "出品", path: "/list", icon: Store },
-      { label: "注文", path: "/order", icon: ShoppingCart },
-      { label: "レビュー", path: "/review", icon: MessagesSquare, hasSubmenu: true },
-      { label: "組織", path: "/company", icon: Building2, hasSubmenu: true },
-      { label: "財務", path: "/finance", icon: Wallet, hasSubmenu: true },
+      {
+        label: "商品",
+        path: "/product",
+        icon: Box,
+        hasSubmenu: true,
+      },
+      {
+        label: "トークン",
+        path: "/token",
+        icon: Coins,
+        hasSubmenu: true,
+      },
+      {
+        label: "出品",
+        path: "/list",
+        icon: Store,
+      },
+      {
+        label: "注文",
+        path: "/order",
+        icon: ShoppingCart,
+      },
+      {
+        label: "レビュー",
+        path: "/review",
+        icon: MessagesSquare,
+        hasSubmenu: true,
+      },
+      {
+        label: "組織",
+        path: "/company",
+        icon: Building2,
+        hasSubmenu: true,
+      },
+      {
+        label: "財務",
+        path: "/finance",
+        icon: Wallet,
+        hasSubmenu: true,
+      },
     ],
     [inquiryUnreadCount],
   );
 
   const productSubItems: SubItem[] = useMemo(
     () => [
-      { label: "設計", path: "/productBlueprint" },
-      { label: "生産", path: "/production" },
-      { label: "在庫", path: "/inventory" },
+      {
+        label: "設計",
+        path: "/productBlueprint",
+      },
+      {
+        label: "生産",
+        path: "/production",
+      },
+      {
+        label: "在庫",
+        path: "/inventory",
+      },
     ],
     [],
   );
 
   const tokenSubItems: SubItem[] = useMemo(
     () => [
-      { label: "設計", path: "/tokenBlueprint" },
-      { label: "ミント", path: "/mint" },
-      { label: "告知", path: "/sales" },
+      {
+        label: "設計",
+        path: "/tokenBlueprint",
+      },
+      {
+        label: "ミント",
+        path: "/mint",
+      },
+      {
+        label: "告知",
+        path: "/sales",
+      },
     ],
     [],
   );
 
   const reviewSubItems: SubItem[] = useMemo(
     () => [
-      { label: "商品", path: "/productBlueprintReview" },
-      { label: "トークン", path: "/tokenBlueprintReview" },
+      {
+        label: "商品",
+        path: "/productBlueprintReview",
+      },
+      {
+        label: "トークン",
+        path: "/tokenBlueprintReview",
+      },
     ],
     [],
   );
 
   const orgSubItems: SubItem[] = useMemo(
     () => [
-      { label: "メンバー", path: "/member" },
-      { label: "ブランド", path: "/brand" },
-      { label: "権限", path: "/permission" },
+      {
+        label: "メンバー",
+        path: "/member",
+      },
+      {
+        label: "ブランド",
+        path: "/brand",
+      },
+      {
+        label: "権限",
+        path: "/permission",
+      },
     ],
     [],
   );
 
   const financeSubItems: SubItem[] = useMemo(
     () => [
-      { label: "入出金履歴", path: "/transaction" },
-      { label: "口座", path: "/account" },
+      {
+        label: "入出金履歴",
+        path: "/transaction",
+      },
+      {
+        label: "口座",
+        path: "/account",
+      },
     ],
     [],
   );
 
-  const [openKey, setOpenKey] = useState<OpenKey>(null);
-
   useEffect(() => {
     if (location.pathname === "/" || location.pathname === "") {
-      navigate("/inquiry", { replace: true });
+      navigate("/inquiry", {
+        replace: true,
+      });
     }
   }, [location.pathname, navigate]);
 
   useEffect(() => {
-    const p = location.pathname;
+    const path = location.pathname;
 
     if (
-      p.startsWith("/review") ||
-      p.startsWith("/productBlueprintReview") ||
-      p.startsWith("/tokenBlueprintReview")
+      path.startsWith("/review") ||
+      path.startsWith("/productBlueprintReview") ||
+      path.startsWith("/tokenBlueprintReview")
     ) {
       setOpenKey("reviews");
       return;
     }
 
     if (
-      (p.startsWith("/product") ||
-        p.startsWith("/productBlueprint") ||
-        p.startsWith("/production") ||
-        p.startsWith("/inventory")) &&
-      !p.startsWith("/productBlueprintReview")
+      (path.startsWith("/product") ||
+        path.startsWith("/productBlueprint") ||
+        path.startsWith("/production") ||
+        path.startsWith("/inventory")) &&
+      !path.startsWith("/productBlueprintReview")
     ) {
       setOpenKey("products");
-    } else if (
-      (p.startsWith("/token") ||
-        p.startsWith("/tokenBlueprint") ||
-        p.startsWith("/mint") ||
-        p.startsWith("/sales")) &&
-      !p.startsWith("/tokenBlueprintReview")
+      return;
+    }
+
+    if (
+      (path.startsWith("/token") ||
+        path.startsWith("/tokenBlueprint") ||
+        path.startsWith("/mint") ||
+        path.startsWith("/sales")) &&
+      !path.startsWith("/tokenBlueprintReview")
     ) {
       setOpenKey("tokens");
-    } else if (
-      p.startsWith("/company") ||
-      p.startsWith("/member") ||
-      p.startsWith("/brand") ||
-      p.startsWith("/permission")
+      return;
+    }
+
+    if (
+      path.startsWith("/company") ||
+      path.startsWith("/member") ||
+      path.startsWith("/brand") ||
+      path.startsWith("/permission")
     ) {
       setOpenKey("org");
-    } else if (
-      p.startsWith("/finance") ||
-      p.startsWith("/transaction") ||
-      p.startsWith("/account")
+      return;
+    }
+
+    if (
+      path.startsWith("/finance") ||
+      path.startsWith("/transaction") ||
+      path.startsWith("/account")
     ) {
       setOpenKey("finance");
-    } else {
-      setOpenKey(null);
+      return;
     }
+
+    setOpenKey(null);
   }, [location.pathname]);
 
-  const toggleExclusive = (key: Exclude<OpenKey, null>) =>
-    setOpenKey((curr) => (curr === key ? null : key));
+  const toggleExclusive = (key: Exclude<OpenKey, null>) => {
+    setOpenKey((current) => {
+      return current === key ? null : key;
+    });
+  };
 
   const navigateAndCloseAll = (path: string) => {
     setOpenKey(null);
     navigate(path);
   };
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    return null;
+  }
 
   return (
-    <aside className="sidebar" style={{ height: "calc(100vh - 103px)" }}>
+    <aside
+      className="sidebar"
+      style={{
+        height: "calc(100vh - 103px)",
+      }}
+    >
       <nav className="sidebar-nav">
-        {menuItems.map(({ label, path, icon: Icon, hasSubmenu, badgeCount }) => {
-          const isActiveTop =
-            location.pathname === path || location.pathname.startsWith(path + "/");
+        {menuItems.map(
+          ({ label, path, icon: Icon, hasSubmenu, badgeCount }) => {
+            const isActiveTop =
+              location.pathname === path ||
+              location.pathname.startsWith(`${path}/`);
 
-          const isProductsOpen = openKey === "products";
-          const isTokensOpen = openKey === "tokens";
-          const isReviewsOpen = openKey === "reviews";
-          const isOrgOpen = openKey === "org";
-          const isFinanceOpen = openKey === "finance";
+            const isProductsOpen = openKey === "products";
+            const isTokensOpen = openKey === "tokens";
+            const isReviewsOpen = openKey === "reviews";
+            const isOrgOpen = openKey === "org";
+            const isFinanceOpen = openKey === "finance";
 
-          if (label === "商品") {
-            const isOpen = isProductsOpen;
-            return (
-              <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
-                <button
-                  type="button"
-                  onClick={() => toggleExclusive("products")}
-                  className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
-                  aria-expanded={isOpen}
-                  aria-controls="submenu-products"
+            if (label === "商品") {
+              const isGroupOpen = isProductsOpen;
+
+              return (
+                <div
+                  key={path}
+                  className={`group-block ${
+                    isGroupOpen ? "group-open" : ""
+                  }`}
                 >
-                  <Icon className="icon-left" aria-hidden />
-                  <span className="label">{label}</span>
-                  <span className="right">
-                    {typeof badgeCount === "number" && badgeCount > 0 && (
-                      <span className="badge">{badgeCount}</span>
-                    )}
-                    <ChevronRight className="chevron" aria-hidden />
-                  </span>
-                </button>
-                {isOpen && (
-                  <div id="submenu-products" className="submenu-container">
-                    {productSubItems.map((si) => {
-                      const activeSub =
-                        location.pathname === si.path ||
-                        location.pathname.startsWith(si.path + "/");
-                      return (
-                        <button
-                          key={si.path}
-                          onClick={() => navigate(si.path)}
-                          className={`submenu-item ${activeSub ? "active" : ""}`}
-                        >
-                          <span className="submenu-label">{si.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          }
+                  <button
+                    type="button"
+                    onClick={() => toggleExclusive("products")}
+                    className={`sidebar-item parent ${
+                      isActiveTop ? "active" : ""
+                    }`}
+                    aria-expanded={isGroupOpen}
+                    aria-controls="submenu-products"
+                  >
+                    <Icon className="icon-left" aria-hidden />
 
-          if (label === "トークン") {
-            const isOpen = isTokensOpen;
-            return (
-              <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
-                <button
-                  type="button"
-                  onClick={() => toggleExclusive("tokens")}
-                  className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
-                  aria-expanded={isOpen}
-                  aria-controls="submenu-tokens"
+                    <span className="label">{label}</span>
+
+                    <span className="right">
+                      {typeof badgeCount === "number" && badgeCount > 0 ? (
+                        <span className="badge">{badgeCount}</span>
+                      ) : null}
+
+                      <ChevronRight className="chevron" aria-hidden />
+                    </span>
+                  </button>
+
+                  {isGroupOpen ? (
+                    <div
+                      id="submenu-products"
+                      className="submenu-container"
+                    >
+                      {productSubItems.map((subItem) => {
+                        const activeSub =
+                          location.pathname === subItem.path ||
+                          location.pathname.startsWith(`${subItem.path}/`);
+
+                        return (
+                          <button
+                            key={subItem.path}
+                            type="button"
+                            onClick={() => navigate(subItem.path)}
+                            className={`submenu-item ${
+                              activeSub ? "active" : ""
+                            }`}
+                          >
+                            <span className="submenu-label">
+                              {subItem.label}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            }
+
+            if (label === "トークン") {
+              const isGroupOpen = isTokensOpen;
+
+              return (
+                <div
+                  key={path}
+                  className={`group-block ${
+                    isGroupOpen ? "group-open" : ""
+                  }`}
                 >
-                  <Icon className="icon-left" aria-hidden />
-                  <span className="label">{label}</span>
-                  <span className="right">
-                    {typeof badgeCount === "number" && badgeCount > 0 && (
-                      <span className="badge">{badgeCount}</span>
-                    )}
-                    <ChevronRight className="chevron" aria-hidden />
-                  </span>
-                </button>
-                {isOpen && (
-                  <div id="submenu-tokens" className="submenu-container">
-                    {tokenSubItems.map((si) => {
-                      const activeSub =
-                        location.pathname === si.path ||
-                        location.pathname.startsWith(si.path + "/");
-                      return (
-                        <button
-                          key={si.path}
-                          onClick={() => navigate(si.path)}
-                          className={`submenu-item ${activeSub ? "active" : ""}`}
-                        >
-                          <span className="submenu-label">{si.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          }
+                  <button
+                    type="button"
+                    onClick={() => toggleExclusive("tokens")}
+                    className={`sidebar-item parent ${
+                      isActiveTop ? "active" : ""
+                    }`}
+                    aria-expanded={isGroupOpen}
+                    aria-controls="submenu-tokens"
+                  >
+                    <Icon className="icon-left" aria-hidden />
 
-          if (label === "レビュー") {
-            const isOpen = isReviewsOpen;
-            return (
-              <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
-                <button
-                  type="button"
-                  onClick={() => toggleExclusive("reviews")}
-                  className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
-                  aria-expanded={isOpen}
-                  aria-controls="submenu-reviews"
+                    <span className="label">{label}</span>
+
+                    <span className="right">
+                      {typeof badgeCount === "number" && badgeCount > 0 ? (
+                        <span className="badge">{badgeCount}</span>
+                      ) : null}
+
+                      <ChevronRight className="chevron" aria-hidden />
+                    </span>
+                  </button>
+
+                  {isGroupOpen ? (
+                    <div
+                      id="submenu-tokens"
+                      className="submenu-container"
+                    >
+                      {tokenSubItems.map((subItem) => {
+                        const activeSub =
+                          location.pathname === subItem.path ||
+                          location.pathname.startsWith(`${subItem.path}/`);
+
+                        return (
+                          <button
+                            key={subItem.path}
+                            type="button"
+                            onClick={() => navigate(subItem.path)}
+                            className={`submenu-item ${
+                              activeSub ? "active" : ""
+                            }`}
+                          >
+                            <span className="submenu-label">
+                              {subItem.label}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            }
+
+            if (label === "レビュー") {
+              const isGroupOpen = isReviewsOpen;
+
+              return (
+                <div
+                  key={path}
+                  className={`group-block ${
+                    isGroupOpen ? "group-open" : ""
+                  }`}
                 >
-                  <Icon className="icon-left" aria-hidden />
-                  <span className="label">{label}</span>
-                  <span className="right">
-                    {typeof badgeCount === "number" && badgeCount > 0 && (
-                      <span className="badge">{badgeCount}</span>
-                    )}
-                    <ChevronRight className="chevron" aria-hidden />
-                  </span>
-                </button>
-                {isOpen && (
-                  <div id="submenu-reviews" className="submenu-container">
-                    {reviewSubItems.map((si) => {
-                      const activeSub =
-                        location.pathname === si.path ||
-                        location.pathname.startsWith(si.path + "/");
-                      return (
-                        <button
-                          key={si.path}
-                          onClick={() => navigate(si.path)}
-                          className={`submenu-item ${activeSub ? "active" : ""}`}
-                        >
-                          <span className="submenu-label">{si.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          }
+                  <button
+                    type="button"
+                    onClick={() => toggleExclusive("reviews")}
+                    className={`sidebar-item parent ${
+                      isActiveTop ? "active" : ""
+                    }`}
+                    aria-expanded={isGroupOpen}
+                    aria-controls="submenu-reviews"
+                  >
+                    <Icon className="icon-left" aria-hidden />
 
-          if (label === "組織") {
-            const isOpen = isOrgOpen;
-            return (
-              <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
-                <button
-                  type="button"
-                  onClick={() => toggleExclusive("org")}
-                  className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
-                  aria-expanded={isOpen}
-                  aria-controls="submenu-org"
+                    <span className="label">{label}</span>
+
+                    <span className="right">
+                      {typeof badgeCount === "number" && badgeCount > 0 ? (
+                        <span className="badge">{badgeCount}</span>
+                      ) : null}
+
+                      <ChevronRight className="chevron" aria-hidden />
+                    </span>
+                  </button>
+
+                  {isGroupOpen ? (
+                    <div
+                      id="submenu-reviews"
+                      className="submenu-container"
+                    >
+                      {reviewSubItems.map((subItem) => {
+                        const activeSub =
+                          location.pathname === subItem.path ||
+                          location.pathname.startsWith(`${subItem.path}/`);
+
+                        return (
+                          <button
+                            key={subItem.path}
+                            type="button"
+                            onClick={() => navigate(subItem.path)}
+                            className={`submenu-item ${
+                              activeSub ? "active" : ""
+                            }`}
+                          >
+                            <span className="submenu-label">
+                              {subItem.label}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            }
+
+            if (label === "組織") {
+              const isGroupOpen = isOrgOpen;
+
+              return (
+                <div
+                  key={path}
+                  className={`group-block ${
+                    isGroupOpen ? "group-open" : ""
+                  }`}
                 >
-                  <Icon className="icon-left" aria-hidden />
-                  <span className="label">{label}</span>
-                  <span className="right">
-                    {typeof badgeCount === "number" && badgeCount > 0 && (
-                      <span className="badge">{badgeCount}</span>
-                    )}
-                    <ChevronRight className="chevron" aria-hidden />
-                  </span>
-                </button>
-                {isOpen && (
-                  <div id="submenu-org" className="submenu-container">
-                    {orgSubItems.map((si) => {
-                      const activeSub =
-                        location.pathname === si.path ||
-                        location.pathname.startsWith(si.path + "/");
-                      return (
-                        <button
-                          key={si.path}
-                          onClick={() => navigate(si.path)}
-                          className={`submenu-item ${activeSub ? "active" : ""}`}
-                        >
-                          <span className="submenu-label">{si.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          }
+                  <button
+                    type="button"
+                    onClick={() => toggleExclusive("org")}
+                    className={`sidebar-item parent ${
+                      isActiveTop ? "active" : ""
+                    }`}
+                    aria-expanded={isGroupOpen}
+                    aria-controls="submenu-org"
+                  >
+                    <Icon className="icon-left" aria-hidden />
 
-          if (label === "財務") {
-            const isOpen = isFinanceOpen;
-            return (
-              <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
-                <button
-                  type="button"
-                  onClick={() => toggleExclusive("finance")}
-                  className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
-                  aria-expanded={isOpen}
-                  aria-controls="submenu-finance"
+                    <span className="label">{label}</span>
+
+                    <span className="right">
+                      {typeof badgeCount === "number" && badgeCount > 0 ? (
+                        <span className="badge">{badgeCount}</span>
+                      ) : null}
+
+                      <ChevronRight className="chevron" aria-hidden />
+                    </span>
+                  </button>
+
+                  {isGroupOpen ? (
+                    <div id="submenu-org" className="submenu-container">
+                      {orgSubItems.map((subItem) => {
+                        const activeSub =
+                          location.pathname === subItem.path ||
+                          location.pathname.startsWith(`${subItem.path}/`);
+
+                        return (
+                          <button
+                            key={subItem.path}
+                            type="button"
+                            onClick={() => navigate(subItem.path)}
+                            className={`submenu-item ${
+                              activeSub ? "active" : ""
+                            }`}
+                          >
+                            <span className="submenu-label">
+                              {subItem.label}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            }
+
+            if (label === "財務") {
+              const isGroupOpen = isFinanceOpen;
+
+              return (
+                <div
+                  key={path}
+                  className={`group-block ${
+                    isGroupOpen ? "group-open" : ""
+                  }`}
                 >
-                  <Icon className="icon-left" aria-hidden />
-                  <span className="label">{label}</span>
-                  <span className="right">
-                    {typeof badgeCount === "number" && badgeCount > 0 && (
-                      <span className="badge">{badgeCount}</span>
-                    )}
-                    <ChevronRight className="chevron" aria-hidden />
-                  </span>
-                </button>
-                {isOpen && (
-                  <div id="submenu-finance" className="submenu-container">
-                    {financeSubItems.map((si) => {
-                      const activeSub =
-                        location.pathname === si.path ||
-                        location.pathname.startsWith(si.path + "/");
-                      return (
-                        <button
-                          key={si.path}
-                          onClick={() => navigate(si.path)}
-                          className={`submenu-item ${activeSub ? "active" : ""}`}
-                        >
-                          <span className="submenu-label">{si.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          }
+                  <button
+                    type="button"
+                    onClick={() => toggleExclusive("finance")}
+                    className={`sidebar-item parent ${
+                      isActiveTop ? "active" : ""
+                    }`}
+                    aria-expanded={isGroupOpen}
+                    aria-controls="submenu-finance"
+                  >
+                    <Icon className="icon-left" aria-hidden />
 
-          return (
-            <button
-              key={path}
-              onClick={() => navigateAndCloseAll(path)}
-              className={`sidebar-item ${isActiveTop ? "active" : ""}`}
-              aria-current={isActiveTop ? "page" : undefined}
-            >
-              <Icon className="icon-left" aria-hidden />
-              <span className="label">{label}</span>
-              <span className="right">
-                {typeof badgeCount === "number" && badgeCount > 0 && (
-                  <span className="badge">{badgeCount}</span>
-                )}
-                {hasSubmenu && <ChevronRight className="chevron" aria-hidden />}
-              </span>
-            </button>
-          );
-        })}
+                    <span className="label">{label}</span>
+
+                    <span className="right">
+                      {typeof badgeCount === "number" && badgeCount > 0 ? (
+                        <span className="badge">{badgeCount}</span>
+                      ) : null}
+
+                      <ChevronRight className="chevron" aria-hidden />
+                    </span>
+                  </button>
+
+                  {isGroupOpen ? (
+                    <div
+                      id="submenu-finance"
+                      className="submenu-container"
+                    >
+                      {financeSubItems.map((subItem) => {
+                        const activeSub =
+                          location.pathname === subItem.path ||
+                          location.pathname.startsWith(`${subItem.path}/`);
+
+                        return (
+                          <button
+                            key={subItem.path}
+                            type="button"
+                            onClick={() => navigate(subItem.path)}
+                            className={`submenu-item ${
+                              activeSub ? "active" : ""
+                            }`}
+                          >
+                            <span className="submenu-label">
+                              {subItem.label}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            }
+
+            return (
+              <button
+                key={path}
+                type="button"
+                onClick={() => navigateAndCloseAll(path)}
+                className={`sidebar-item ${
+                  isActiveTop ? "active" : ""
+                }`}
+                aria-current={isActiveTop ? "page" : undefined}
+              >
+                <Icon className="icon-left" aria-hidden />
+
+                <span className="label">{label}</span>
+
+                <span className="right">
+                  {typeof badgeCount === "number" && badgeCount > 0 ? (
+                    <span className="badge">{badgeCount}</span>
+                  ) : null}
+
+                  {hasSubmenu ? (
+                    <ChevronRight className="chevron" aria-hidden />
+                  ) : null}
+                </span>
+              </button>
+            );
+          },
+        )}
       </nav>
     </aside>
   );
