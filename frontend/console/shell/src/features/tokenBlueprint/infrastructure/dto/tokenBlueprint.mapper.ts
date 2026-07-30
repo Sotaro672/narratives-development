@@ -1,7 +1,6 @@
 // frontend/console/shell/src/features/tokenBlueprint/infrastructure/dto/tokenBlueprint.mapper.ts
 
 import {
-  normalizeContentIsPublic,
   normalizeContentType,
   normalizeTokenBlueprintMimeType,
 } from "../../../../shared/types/tokenBlueprint";
@@ -18,10 +17,15 @@ import type {
 
 type RawRecord = Record<string, unknown>;
 
-function asRecord(value: unknown): RawRecord {
-  return value && typeof value === "object"
-    ? (value as RawRecord)
-    : {};
+function asRecord(
+  value: unknown,
+): RawRecord {
+  return (
+    value &&
+    typeof value === "object"
+      ? value as RawRecord
+      : {}
+  );
 }
 
 function toStringValue(
@@ -42,33 +46,10 @@ function toNullableStringValue(
     return null;
   }
 
-  const stringValue = String(value);
+  const stringValue =
+    String(value);
 
   return stringValue || null;
-}
-
-function toBooleanValue(
-  value: unknown,
-  fallback = false,
-): boolean {
-  if (typeof value === "boolean") {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const normalized =
-      value.toLowerCase();
-
-    if (normalized === "true") {
-      return true;
-    }
-
-    if (normalized === "false") {
-      return false;
-    }
-  }
-
-  return fallback;
 }
 
 function toNumberValue(
@@ -83,9 +64,14 @@ function toNumberValue(
   }
 
   if (typeof value === "string") {
-    const numberValue = Number(value);
+    const numberValue =
+      Number(value);
 
-    if (Number.isFinite(numberValue)) {
+    if (
+      Number.isFinite(
+        numberValue,
+      )
+    ) {
       return numberValue;
     }
   }
@@ -104,7 +90,9 @@ function normalizeDateString(
       : value.toISOString();
   }
 
-  return toStringValue(value);
+  return toStringValue(
+    value,
+  );
 }
 
 /**
@@ -113,6 +101,7 @@ function normalizeDateString(
  * ContentFileへ変換する。
  *
  * backend正仕様:
+ * - id: ContentFile ID
  * - url: Firebase Storage downloadURL
  * - objectPath: Firebase Storage object path
  * - name: 元ファイル名または表示名
@@ -120,69 +109,82 @@ function normalizeDateString(
  * - size: byte size
  * - createdAt / updatedAt: ISO string
  *
+ * id、createdBy、updatedBy、isPublicは
+ * Backend DTOの型を正とし、値の変換や補完を行わない。
+ *
  * frontendでの表示・差し替え・削除に必要な
  * id / url / objectPathが存在するものだけを採用する。
  */
 function normalizeContentFile(
   raw: unknown,
 ): ContentFile | null {
-  const obj = asRecord(raw);
+  const obj =
+    asRecord(raw);
 
-  const id = toStringValue(
-    obj.id,
-  );
+  /**
+   * IDはBackend DTOの値をそのまま使用する。
+   */
+  const id =
+    obj.id as ContentFileDTO["id"];
 
-  const name = toStringValue(
-    obj.name,
-  );
+  const name =
+    toStringValue(
+      obj.name,
+    );
 
-  const type = normalizeContentType(
-    obj.type,
-  );
+  const type =
+    normalizeContentType(
+      obj.type,
+    );
 
   const contentType =
     normalizeTokenBlueprintMimeType(
       obj.contentType,
     );
 
-  const url = toStringValue(
-    obj.url,
-  );
-
-  const objectPath = toStringValue(
-    obj.objectPath,
-  );
-
-  const isPublic =
-    normalizeContentIsPublic(
-      obj.isPublic,
-      false,
+  const url =
+    toStringValue(
+      obj.url,
     );
 
-  const size = toNumberValue(
-    obj.size,
-    0,
-  );
+  const objectPath =
+    toStringValue(
+      obj.objectPath,
+    );
+
+  /**
+   * booleanはBackend DTOの値をそのまま使用する。
+   */
+  const isPublic =
+    obj.isPublic as ContentFileDTO["isPublic"];
+
+  const size =
+    toNumberValue(
+      obj.size,
+      0,
+    );
 
   const createdAt =
     normalizeDateString(
       obj.createdAt,
     );
 
+  /**
+   * Member IDはBackend DTOの値をそのまま使用する。
+   */
   const createdBy =
-    toStringValue(
-      obj.createdBy,
-    );
+    obj.createdBy as ContentFileDTO["createdBy"];
 
   const updatedAt =
     normalizeDateString(
       obj.updatedAt,
     );
 
+  /**
+   * Member IDはBackend DTOの値をそのまま使用する。
+   */
   const updatedBy =
-    toStringValue(
-      obj.updatedBy,
-    );
+    obj.updatedBy as ContentFileDTO["updatedBy"];
 
   if (
     !id ||
@@ -217,7 +219,11 @@ function normalizeContentFile(
 function normalizeContentFiles(
   contentFiles: unknown,
 ): ContentFile[] {
-  if (!Array.isArray(contentFiles)) {
+  if (
+    !Array.isArray(
+      contentFiles,
+    )
+  ) {
     return [];
   }
 
@@ -239,35 +245,44 @@ function normalizeContentFiles(
 export function normalizeTokenBlueprint(
   raw: unknown,
 ): TokenBlueprint {
-  const obj = asRecord(raw);
+  const obj =
+    asRecord(raw);
 
-  const id = toStringValue(
-    obj.id,
-  );
+  /**
+   * TokenBlueprint IDはBackend DTOの値を
+   * そのまま使用する。
+   */
+  const id =
+    obj.id as TokenBlueprintDTO["id"];
 
-  const name = toStringValue(
-    obj.name,
-  );
+  const name =
+    toStringValue(
+      obj.name,
+    );
 
-  const symbol = toStringValue(
-    obj.symbol,
-  );
+  const symbol =
+    toStringValue(
+      obj.symbol,
+    );
 
-  const brandId = toStringValue(
-    obj.brandId,
-  );
+  /**
+   * 各IDはBackend DTOの値をそのまま使用する。
+   */
+  const brandId =
+    obj.brandId as TokenBlueprintDTO["brandId"];
 
-  const brandName = toStringValue(
-    obj.brandName,
-  );
+  const brandName =
+    toStringValue(
+      obj.brandName,
+    );
 
-  const companyId = toStringValue(
-    obj.companyId,
-  );
+  const companyId =
+    obj.companyId as TokenBlueprintDTO["companyId"];
 
-  const description = toStringValue(
-    obj.description,
-  );
+  const description =
+    toStringValue(
+      obj.description,
+    );
 
   const iconUrl =
     toNullableStringValue(
@@ -308,19 +323,18 @@ export function normalizeTokenBlueprint(
     );
 
   const assigneeId =
-    toStringValue(
-      obj.assigneeId,
-    );
+    obj.assigneeId as TokenBlueprintDTO["assigneeId"];
 
   const assigneeName =
     toStringValue(
       obj.assigneeName,
     );
 
+  /**
+   * booleanはBackend DTOの値をそのまま使用する。
+   */
   const minted =
-    toBooleanValue(
-      obj.minted,
-    );
+    obj.minted as TokenBlueprintDTO["minted"];
 
   const createdAt =
     normalizeDateString(
@@ -328,9 +342,7 @@ export function normalizeTokenBlueprint(
     );
 
   const createdBy =
-    toStringValue(
-      obj.createdBy,
-    );
+    obj.createdBy as TokenBlueprintDTO["createdBy"];
 
   const createdByName =
     toStringValue(
@@ -343,9 +355,7 @@ export function normalizeTokenBlueprint(
     );
 
   const updatedBy =
-    toStringValue(
-      obj.updatedBy,
-    );
+    obj.updatedBy as TokenBlueprintDTO["updatedBy"];
 
   const updatedByName =
     toStringValue(
@@ -358,9 +368,7 @@ export function normalizeTokenBlueprint(
     );
 
   const deletedBy =
-    toNullableStringValue(
-      obj.deletedBy,
-    );
+    obj.deletedBy as TokenBlueprintDTO["deletedBy"];
 
   const metadataUri =
     toStringValue(
@@ -415,7 +423,8 @@ export function normalizePageResult(
   page: number;
   perPage: number;
 } {
-  const obj = asRecord(raw);
+  const obj =
+    asRecord(raw);
 
   const itemsRaw =
     obj.items as
@@ -423,32 +432,39 @@ export function normalizePageResult(
       | undefined;
 
   return {
-    items: Array.isArray(itemsRaw)
-      ? itemsRaw.map((item) => {
-          return normalizeTokenBlueprint(
-            item,
-          );
-        })
-      : [],
+    items:
+      Array.isArray(itemsRaw)
+        ? itemsRaw.map(
+            (item) => {
+              return normalizeTokenBlueprint(
+                item,
+              );
+            },
+          )
+        : [],
 
-    totalCount: toNumberValue(
-      obj.totalCount,
-      0,
-    ),
+    totalCount:
+      toNumberValue(
+        obj.totalCount,
+        0,
+      ),
 
-    totalPages: toNumberValue(
-      obj.totalPages,
-      0,
-    ),
+    totalPages:
+      toNumberValue(
+        obj.totalPages,
+        0,
+      ),
 
-    page: toNumberValue(
-      obj.page,
-      1,
-    ),
+    page:
+      toNumberValue(
+        obj.page,
+        1,
+      ),
 
-    perPage: toNumberValue(
-      obj.perPage,
-      50,
-    ),
+    perPage:
+      toNumberValue(
+        obj.perPage,
+        50,
+      ),
   };
 }
