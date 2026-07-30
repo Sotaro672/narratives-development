@@ -1,7 +1,6 @@
 // frontend/console/shell/src/features/list/infrastructure/payload/createListPayload.ts
 
 import type { CreateListInput } from "../dto/createListInput";
-import { normalizePricesForBackend } from "./listPricePayload";
 
 export function buildCreateListPayloadArray(
   input: CreateListInput,
@@ -24,6 +23,6 @@ export function buildCreateListPayloadArray(
     description: input.description,
     status: input.status,
     assigneeId: input.assigneeId || undefined,
-    prices: normalizePricesForBackend(input.priceRows),
+    prices: input.priceRows,
   };
 }

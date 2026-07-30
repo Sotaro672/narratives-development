@@ -7,7 +7,7 @@ import {
   SortableTableHeader,
 } from "../../../layout/List/List";
 
-import { fetchInventoryListDTO } from "../infrastructure/http/inventoryRepositoryHTTP";
+import { getInventoryListRaw } from "../infrastructure/api/inventoryApi";
 
 // ============================================================
 // Types（Inventory Management table ViewModel）
@@ -140,11 +140,11 @@ export function buildInventoryFilterOptionsFromRows(
 // ============================================================
 
 /**
- * Inventory一覧DTOを取得し、画面表示単位に集約する。
+ * Inventory一覧を取得し、画面表示単位に集約する。
  *
  * 方針:
  * - GET /inventoryを1回だけ呼び出す
- * - fetchInventoryListDTOの戻り値を正とする
+ * - getInventoryListRawの戻り値を正とする
  * - frontendで文字列・数値の再normalizeは行わない
  * - productBlueprintIdとtokenBlueprintIdの組み合わせで集約する
  *
@@ -156,7 +156,7 @@ export async function loadInventoryRowsFromBackend(): Promise<
   InventoryManagementRow[]
 > {
   const items =
-    await fetchInventoryListDTO();
+    await getInventoryListRaw();
 
   const aggregatedRows =
     new Map<

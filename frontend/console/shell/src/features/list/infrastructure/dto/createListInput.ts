@@ -11,7 +11,7 @@ export type CreateListInput = {
 
   priceRows?: Array<{
     modelId: string;
-    price: number | null;
+    price: number;
 
     size: string;
     color: string;

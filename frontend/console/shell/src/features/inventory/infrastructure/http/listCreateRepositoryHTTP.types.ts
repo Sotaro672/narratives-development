@@ -1,4 +1,4 @@
-// frontend/console/inventory/src/infrastructure/http/listCreateRepositoryHTTP.types.ts
+// frontend/console/shell/src/features/inventory/infrastructure/http/listCreateRepositoryHTTP.types.ts
 
 // ---------------------------------------------------------
 // ListCreate DTO（出品作成画面）
@@ -7,7 +7,10 @@
 // - priceRows は backend 側で productCategory / model kind に応じた完成形になっている
 // ---------------------------------------------------------
 
-export type ListCreateModelKind = "apparel" | "alcohol" | string;
+export type ListCreateModelKind =
+  | "apparel"
+  | "alcohol"
+  | string;
 
 export type ListCreateModelRefDTO = {
   modelId: string;
@@ -72,7 +75,14 @@ export type ListCreatePriceRowDTO = {
    */
   volumeUnit?: string | null;
 
-  price?: number | null;
+  /**
+   * 価格。
+   *
+   * - 未入力: undefined
+   * - 入力済み: number
+   * - nullは使用しない
+   */
+  price?: number;
 };
 
 export type ListCreateDTO = {

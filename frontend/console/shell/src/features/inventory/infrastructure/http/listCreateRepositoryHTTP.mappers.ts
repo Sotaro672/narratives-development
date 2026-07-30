@@ -1,4 +1,4 @@
-// frontend/console/inventory/src/infrastructure/http/listCreateRepositoryHTTP.mappers.ts
+// frontend/console/shell/src/features/inventory/infrastructure/http/listCreateRepositoryHTTP.mappers.ts
 
 import type {
   ListCreateDTO,
@@ -6,102 +6,173 @@ import type {
   ListCreatePriceRowDTO,
 } from "./listCreateRepositoryHTTP.types";
 
+const PRICE_REQUIRED_MESSAGE =
+  "価格が未入力の商品があります。";
+
 function toNullableNumber(value: unknown): number | null {
   if (value === undefined || value === null) return null;
 
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue)
+    ? numberValue
+    : null;
 }
 
 function toOptionalNumber(value: unknown): number | undefined {
   if (value === undefined || value === null) return undefined;
 
-  const n = Number(value);
-  return Number.isFinite(n) ? n : undefined;
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue)
+    ? numberValue
+    : undefined;
 }
 
 function toNullableString(value: unknown): string | null {
   if (value === undefined || value === null) return null;
 
-  const s = String(value).trim();
-  return s || null;
+  const stringValue = String(value).trim();
+
+  return stringValue || null;
 }
 
-function mapListCreateModelRefs(data: any): ListCreateModelRefDTO[] {
-  const rawRefs: any[] = Array.isArray(data?.modelRefs) ? data.modelRefs : [];
+function mapListCreateModelRefs(
+  data: any,
+): ListCreateModelRefDTO[] {
+  const rawRefs: any[] =
+    Array.isArray(data?.modelRefs)
+      ? data.modelRefs
+      : [];
 
-  return rawRefs.flatMap((r: any) => {
-    const modelId = toNullableString(r?.modelId);
-    if (!modelId) return [];
+  return rawRefs.flatMap((rawRef: any) => {
+    const modelId =
+      toNullableString(rawRef?.modelId);
+
+    if (!modelId) {
+      return [];
+    }
 
     return [
       {
         modelId,
-        displayOrder: toNullableNumber(r?.displayOrder),
+        displayOrder:
+          toNullableNumber(rawRef?.displayOrder),
       },
     ];
   });
 }
 
-function mapListCreatePriceRows(data: any): ListCreatePriceRowDTO[] {
-  const rawRows: any[] = Array.isArray(data?.priceRows) ? data.priceRows : [];
+function mapListCreatePriceRows(
+  data: any,
+): ListCreatePriceRowDTO[] {
+  const rawRows: any[] =
+    Array.isArray(data?.priceRows)
+      ? data.priceRows
+      : [];
 
-  return rawRows.flatMap((r: any) => {
-    const modelId = toNullableString(r?.modelId);
-    if (!modelId) return [];
+  return rawRows.flatMap((rawRow: any) => {
+    const modelId =
+      toNullableString(rawRow?.modelId);
 
-    const hasPriceField = r?.price !== undefined;
-    const rawPrice = r?.price;
-    const price: number | null | undefined =
-      !hasPriceField ? undefined : rawPrice === null ? null : Number(rawPrice);
+    if (!modelId) {
+      return [];
+    }
+
+    if (
+      typeof rawRow.price !== "number" ||
+      !Number.isFinite(rawRow.price)
+    ) {
+      throw new Error(
+        PRICE_REQUIRED_MESSAGE,
+      );
+    }
 
     const row: ListCreatePriceRowDTO = {
       modelId,
-      kind: toNullableString(r?.kind),
-      modelNumber: toNullableString(r?.modelNumber),
-      displayOrder: toNullableNumber(r?.displayOrder),
-      stock: toOptionalNumber(r?.stock) ?? 0,
 
-      size: toNullableString(r?.size),
-      color: toNullableString(r?.color),
-      rgb: toNullableNumber(r?.rgb),
+      kind:
+        toNullableString(rawRow?.kind),
 
-      volumeValue: toNullableNumber(r?.volumeValue),
-      volumeUnit: toNullableString(r?.volumeUnit),
+      modelNumber:
+        toNullableString(rawRow?.modelNumber),
 
-      ...(price === undefined ? {} : { price }),
+      displayOrder:
+        toNullableNumber(rawRow?.displayOrder),
+
+      stock:
+        toOptionalNumber(rawRow?.stock) ?? 0,
+
+      size:
+        toNullableString(rawRow?.size),
+
+      color:
+        toNullableString(rawRow?.color),
+
+      rgb:
+        toNullableNumber(rawRow?.rgb),
+
+      volumeValue:
+        toNullableNumber(rawRow?.volumeValue),
+
+      volumeUnit:
+        toNullableString(rawRow?.volumeUnit),
+
+      price:
+        rawRow.price,
     };
 
     return [row];
   });
 }
 
-export function mapListCreateDTO(data: any): ListCreateDTO {
-  const totalStockRaw = data?.totalStock;
+export function mapListCreateDTO(
+  data: any,
+): ListCreateDTO {
+  const totalStockRaw =
+    data?.totalStock;
 
   return {
-    inventoryId: data?.inventoryId,
-    productBlueprintId: data?.productBlueprintId,
-    tokenBlueprintId: data?.tokenBlueprintId,
+    inventoryId:
+      data?.inventoryId,
 
-    productBrandName: data?.productBrandName,
-    productName: data?.productName,
+    productBlueprintId:
+      data?.productBlueprintId,
 
-    tokenBrandName: data?.tokenBrandName,
-    tokenName: data?.tokenName,
+    tokenBlueprintId:
+      data?.tokenBlueprintId,
 
-    listImageUrl: data?.listImageUrl ?? null,
+    productBrandName:
+      data?.productBrandName,
 
-    modelRefs: mapListCreateModelRefs(data),
+    productName:
+      data?.productName,
 
-    priceRows: mapListCreatePriceRows(data),
+    tokenBrandName:
+      data?.tokenBrandName,
+
+    tokenName:
+      data?.tokenName,
+
+    listImageUrl:
+      data?.listImageUrl ?? null,
+
+    modelRefs:
+      mapListCreateModelRefs(data),
+
+    priceRows:
+      mapListCreatePriceRows(data),
 
     totalStock:
-      totalStockRaw === undefined || totalStockRaw === null
+      totalStockRaw === undefined ||
+      totalStockRaw === null
         ? undefined
         : Number(totalStockRaw),
 
-    priceNote: data?.priceNote ?? null,
-    currencyJpy: Boolean(data?.currencyJpy),
+    priceNote:
+      data?.priceNote ?? null,
+
+    currencyJpy:
+      Boolean(data?.currencyJpy),
   };
 }

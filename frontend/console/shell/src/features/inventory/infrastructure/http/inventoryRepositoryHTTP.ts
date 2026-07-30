@@ -15,6 +15,5 @@ export type {
 } from "./listCreateRepositoryHTTP.types";
 
 export {
-  fetchInventoryListDTO,
   fetchInventoryDetailDTO,
 } from "./inventoryRepositoryHTTP.fetchers";

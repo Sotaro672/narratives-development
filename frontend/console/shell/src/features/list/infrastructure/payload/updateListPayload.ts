@@ -1,7 +1,6 @@
 // frontend/console/shell/src/features/list/infrastructure/payload/updateListPayload.ts
 
 import type { UpdateListInput } from "../dto/updateListInput";
-import { normalizePricesForBackend } from "./listPricePayload";
 
 export function buildUpdateListPayloadArray(
   input: UpdateListInput,
@@ -13,7 +12,7 @@ export function buildUpdateListPayloadArray(
     prices:
       input.priceRows === undefined
         ? undefined
-        : normalizePricesForBackend(input.priceRows),
+        : input.priceRows,
     status: input.status,
   };
 

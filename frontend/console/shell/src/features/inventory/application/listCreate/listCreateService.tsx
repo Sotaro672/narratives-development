@@ -10,6 +10,7 @@ import { auth } from "../../../../auth/infrastructure/config/firebaseClient";
 
 import type {
   List,
+  ListPriceRow,
   ListStatus,
 } from "../../../../shared/types/list";
 
@@ -40,19 +41,6 @@ export type ResolvedListCreateParams = {
   raw: ListCreateRouteParams;
 };
 
-/**
- * POST /listsのpriceRows。
- *
- * - modelIdを識別子として使う
- * - 未入力priceはundefinedのまま素通りさせる
- * - 明示的な未設定はnull
- * - 入力済み価格はnumber
- */
-export type CreateListPriceRow = {
-  modelId: string;
-  price?: number | null;
-};
-
 export type PriceCardMode =
   | "view"
   | "edit";
@@ -68,11 +56,9 @@ export type PriceRowKind =
  * backend responseを正とする。
  *
  * - modelIdを識別子として使う
- * - id / modelID / model_idなどの名揺れは持たない
  * - React keyはdisplayOrderではなくmodelIdを使う
  * - displayOrderは重複または未設定があり得る
  * - 並び順はdisplayOrder昇順のみ
- * - 未設定はnullを保持し、UI側で末尾扱いにする
  *
  * categoryごとの表示:
  * - apparel: size / color / rgb
@@ -83,14 +69,11 @@ export type PriceRow = {
 
   /**
    * モデル種別。
-   *
-   * model domainのvariation.kind由来。
    */
   kind?: PriceRowKind | null;
 
   /**
    * 並び順。
-   * 未設定はnullのまま保持する。
    */
   displayOrder?: number | null;
 
@@ -127,9 +110,10 @@ export type PriceRow = {
   /**
    * 価格。
    *
-   * 未入力はundefined、明示的な未設定はnull。
+   * 入力中の空欄はundefinedで保持する。
+   * nullは使用しない。
    */
-  price?: number | null;
+  price?: number;
 };
 
 export type PriceCardProps = {
@@ -151,12 +135,11 @@ export type PriceCardProps = {
   /**
    * edit時に価格を更新するコールバック。
    *
-   * hook内でdisplayOrderにより並べ替えても、
-   * indexは元のrows配列のindexを返す。
+   * 空欄の場合はundefinedを渡す。
    */
   onChangePrice?: (
     index: number,
-    price: number | null,
+    price: number | undefined,
     row: PriceRow,
   ) => void;
 
@@ -176,7 +159,6 @@ export type PriceRowVM = {
 
   /**
    * 並び順。
-   * 未設定はnull。
    */
   displayOrder: number | null;
 
@@ -225,14 +207,28 @@ export type UsePriceCardResult = {
   isEmpty: boolean;
 };
 
+type CompletedPriceRow =
+  PriceRow & {
+    price: number;
+  };
+
 export type CreateListInput = {
   inventoryId: string;
   title: string;
   description: string;
   status: ListStatus;
   assigneeId?: string;
-  priceRows: CreateListPriceRow[];
+  priceRows: ListPriceRow[];
 };
+
+export const IMAGE_REQUIRED_MESSAGE =
+  "画像が必須です。";
+
+export const PRICE_REQUIRED_MESSAGE =
+  "価格が未入力の商品があります。";
+
+export const LIST_IMAGE_UPLOAD_FAILED_MESSAGE =
+  "画像アップロードに失敗しました。後から追加できます。";
 
 /**
  * - UIルートはinventoryId（= inventoryKey: "pb__tb"）のみを正とする
@@ -331,31 +327,23 @@ export function extractDisplayStrings(
   };
 }
 
-export function normalizeCreateListPriceRows(
-  rows: unknown[],
-): CreateListPriceRow[] {
-  const sourceRows =
-    Array.isArray(rows)
-      ? rows
-      : [];
+function assertCompletedPriceRows(
+  rows: PriceRow[],
+): asserts rows is CompletedPriceRow[] {
+  const hasMissingPrice =
+    rows.length === 0 ||
+    rows.some((row) => {
+      return (
+        typeof row.price !== "number" ||
+        !Number.isFinite(row.price)
+      );
+    });
 
-  return sourceRows.map(
-    (rawRow) => {
-      const row =
-        rawRow as {
-          modelId: string;
-          price?: number | null;
-        };
-
-      return {
-        modelId:
-          row.modelId,
-
-        price:
-          row.price,
-      };
-    },
-  );
+  if (hasMissingPrice) {
+    throw new Error(
+      PRICE_REQUIRED_MESSAGE,
+    );
+  }
 }
 
 export function buildCreateListInput(
@@ -363,16 +351,11 @@ export function buildCreateListInput(
     params: ResolvedListCreateParams;
     listingTitle: string;
     description: string;
-    priceRows: unknown[];
+    priceRows: CompletedPriceRow[];
     status: ListStatus;
     assigneeId?: string;
   },
 ): CreateListInput {
-  const priceRows =
-    normalizeCreateListPriceRows(
-      args.priceRows,
-    );
-
   return {
     inventoryId:
       args.params.inventoryId,
@@ -389,7 +372,16 @@ export function buildCreateListInput(
     assigneeId:
       args.assigneeId,
 
-    priceRows,
+    priceRows:
+      args.priceRows.map(
+        (row): ListPriceRow => ({
+          modelId:
+            row.modelId,
+
+          price:
+            row.price,
+        }),
+      ),
   };
 }
 
@@ -402,29 +394,34 @@ export function validateCreateListInput(
     );
   }
 
-  const rows =
-    Array.isArray(
-      input.priceRows,
-    )
-      ? input.priceRows
-      : [];
-
-  if (rows.length === 0) {
+  if (input.priceRows.length === 0) {
     throw new Error(
-      "価格が未設定です（価格行がありません）。",
+      PRICE_REQUIRED_MESSAGE,
     );
   }
 
   const missingModelId =
-    rows.find(
-      (row) => {
-        return !row.modelId;
-      },
-    );
+    input.priceRows.some((row) => {
+      return !row.modelId;
+    });
 
   if (missingModelId) {
     throw new Error(
       "価格行に modelId が含まれていません。",
+    );
+  }
+
+  const missingPrice =
+    input.priceRows.some((row) => {
+      return (
+        typeof row.price !== "number" ||
+        !Number.isFinite(row.price)
+      );
+    });
+
+  if (missingPrice) {
+    throw new Error(
+      PRICE_REQUIRED_MESSAGE,
     );
   }
 }
@@ -462,42 +459,24 @@ export async function uploadListImagesPolicyB(
       args.listId ?? "",
     ).trim();
 
-  const files =
-    Array.isArray(
-      args.files,
-    )
-      ? args.files
-      : [];
-
-  const requestedMainImageIndex =
-    Number.isFinite(
-      Number(
-        args.mainImageIndex,
-      ),
-    )
-      ? Number(
-          args.mainImageIndex,
-        )
-      : 0;
-
-  const mainImageIndex =
-    requestedMainImageIndex >= 0 &&
-    requestedMainImageIndex <
-      files.length
-      ? requestedMainImageIndex
-      : 0;
-
   if (!listId) {
     throw new Error(
       "invalid_list_id",
     );
   }
 
-  if (files.length === 0) {
-    return {
-      registered: [],
-    };
+  if (args.files.length === 0) {
+    throw new Error(
+      IMAGE_REQUIRED_MESSAGE,
+    );
   }
+
+  const mainImageIndex =
+    args.mainImageIndex >= 0 &&
+    args.mainImageIndex <
+      args.files.length
+      ? args.mainImageIndex
+      : 0;
 
   const uid =
     args.createdBy ||
@@ -514,11 +493,11 @@ export async function uploadListImagesPolicyB(
 
   for (
     let index = 0;
-    index < files.length;
+    index < args.files.length;
     index += 1
   ) {
     const file =
-      files[index];
+      args.files[index];
 
     if (!file) {
       continue;
@@ -589,9 +568,6 @@ export function _internal_getListIdFromListDTO(
   return list.id;
 }
 
-export const LIST_IMAGE_UPLOAD_FAILED_MESSAGE =
-  "画像アップロードに失敗しました。後から追加できます。";
-
 /**
  * ListCreateDTOを取得する。
  *
@@ -626,10 +602,11 @@ export async function loadListCreateDTOFromParams(
  * list作成（POST /lists）と画像登録。
  *
  * Policy B:
- * 1. 画像なしでListを先に作成する
- * 2. 作成済みlistIdを使ってFirebase Storageへuploadする
- * 3. backendにimage recordを作成する
- * 4. primary imageを設定する
+ * 1. 必須項目を検証する
+ * 2. 画像なしでListを先に作成する
+ * 3. 作成済みlistIdを使ってFirebase Storageへuploadする
+ * 4. backendにimage recordを作成する
+ * 5. primary imageを設定する
  *
  * List作成後に画像登録が失敗しても、
  * List作成自体は成功として扱う。
@@ -639,12 +616,12 @@ export async function createListWithImages(
     params: ResolvedListCreateParams;
     listingTitle: string;
     description: string;
-    priceRows: any[];
+    priceRows: PriceRow[];
     status: ListStatus;
     assigneeId?: string;
 
-    images?: File[];
-    mainImageIndex?: number;
+    images: File[];
+    mainImageIndex: number;
 
     onImageUploadFailed?: (
       message: string,
@@ -652,26 +629,23 @@ export async function createListWithImages(
     ) => void;
   },
 ): Promise<List> {
-  const images =
-    Array.isArray(
-      args.images,
-    )
-      ? args.images
-      : [];
+  if (!args.listingTitle) {
+    throw new Error(
+      "タイトルを入力してください。",
+    );
+  }
 
-  const mainImageIndex =
-    Number.isFinite(
-      Number(
-        args.mainImageIndex,
-      ),
-    )
-      ? Number(
-          args.mainImageIndex,
-        )
-      : 0;
+  if (args.images.length === 0) {
+    throw new Error(
+      IMAGE_REQUIRED_MESSAGE,
+    );
+  }
 
-  const input:
-    CreateListInput =
+  assertCompletedPriceRows(
+    args.priceRows,
+  );
+
+  const input =
     buildCreateListInput({
       params:
         args.params,
@@ -712,25 +686,24 @@ export async function createListWithImages(
     );
   }
 
-  if (images.length > 0) {
-    try {
-      await uploadListImagesPolicyB({
-        listId,
+  try {
+    await uploadListImagesPolicyB({
+      listId,
 
-        files:
-          images,
+      files:
+        args.images,
 
-        mainImageIndex,
+      mainImageIndex:
+        args.mainImageIndex,
 
-        createdBy:
-          auth.currentUser?.uid,
-      });
-    } catch (error) {
-      args.onImageUploadFailed?.(
-        LIST_IMAGE_UPLOAD_FAILED_MESSAGE,
-        error,
-      );
-    }
+      createdBy:
+        auth.currentUser?.uid,
+    });
+  } catch (error) {
+    args.onImageUploadFailed?.(
+      LIST_IMAGE_UPLOAD_FAILED_MESSAGE,
+      error,
+    );
   }
 
   return created;

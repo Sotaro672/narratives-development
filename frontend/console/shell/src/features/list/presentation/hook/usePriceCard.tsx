@@ -1,10 +1,9 @@
-// frontend/console/list/src/presentation/hook/usePriceCard.tsx
+// frontend/console/shell/src/features/list/presentation/hook/usePriceCard.tsx
 
 import * as React from "react";
 
 import { rgbIntToHex } from "../../../../shared/util/color";
 
-// 型は inventory/application を正とする
 import type {
   PriceCardProps,
   PriceRow,
@@ -13,7 +12,7 @@ import type {
 } from "../../../inventory/application/listCreate/listCreateService";
 
 // ----------------------------------------------------------
-// Helpers
+// Types
 // ----------------------------------------------------------
 
 type IndexedPriceRow = {
@@ -21,59 +20,50 @@ type IndexedPriceRow = {
   originalIdx: number;
 };
 
-/**
- * 数値入力の正規化
- * - 全角数字 → 半角
- * - カンマ除去（1,000 → 1000）
- * - 空白除去
- */
-function normalizeNumericString(raw: string): string {
-  const t = String(raw ?? "").trim();
-  if (!t) return "";
+// ----------------------------------------------------------
+// Helpers
+// ----------------------------------------------------------
 
-  const half = t.replace(/[０-９]/g, (ch) => {
-    const code = ch.charCodeAt(0) - 0xfee0;
-    return String.fromCharCode(code);
-  });
+function parsePriceInput(
+  value: string,
+): number | undefined {
+  if (value === "") {
+    return undefined;
+  }
 
-  return half.replace(/[, \t]/g, "");
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+
+  return Math.max(
+    0,
+    Math.floor(parsed),
+  );
 }
 
-function parsePriceInput(v: string): number | null {
-  const normalized = normalizeNumericString(v);
-  if (!normalized) return null;
+function getBgColor(
+  rgb: PriceRow["rgb"],
+): string {
+  const rgbHex =
+    rgbIntToHex(rgb) ?? null;
 
-  const num = Number(normalized);
-  if (!Number.isFinite(num)) return null;
-
-  const int = Math.floor(num);
-  return int < 0 ? 0 : int;
-}
-
-function toDisplayOrder(v: unknown): number | null {
-  if (v === null || v === undefined) return null;
-
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-function toStock(v: unknown): number {
-  const n = Number(v ?? 0);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function getBgColor(rgb: unknown): string {
-  const rgbHex = rgbIntToHex(rgb as number | string | null | undefined) ?? null;
-
-  if (typeof rgb === "string" && rgb.trim().startsWith("#")) {
-    return rgb.trim();
+  if (
+    typeof rgb === "string" &&
+    rgb.startsWith("#")
+  ) {
+    return rgb;
   }
 
   return rgbHex ?? "#ffffff";
 }
 
-function getRgbTitle(rgb: unknown): string {
-  const rgbHex = rgbIntToHex(rgb as number | string | null | undefined) ?? null;
+function getRgbTitle(
+  rgb: PriceRow["rgb"],
+): string {
+  const rgbHex =
+    rgbIntToHex(rgb) ?? null;
 
   if (rgbHex) {
     return rgbHex;
@@ -86,44 +76,36 @@ function getRgbTitle(rgb: unknown): string {
   return "";
 }
 
-function getPriceInputValue(price: unknown): string {
-  if (price === null || price === undefined) return "";
+function getPriceInputValue(
+  price: number | undefined,
+): string {
+  if (price === undefined) {
+    return "";
+  }
+
   return String(price);
 }
 
-function getPriceDisplayText(args: {
-  price: unknown;
-  currencySymbol: string;
-}): string {
-  const { price, currencySymbol } = args;
-
-  if (price === null || price === undefined) {
+function getPriceDisplayText(
+  args: {
+    price: number | undefined;
+    currencySymbol: string;
+  },
+): string {
+  if (args.price === undefined) {
     return "-";
   }
 
-  return `${currencySymbol ?? ""}${price}`;
-}
-
-function getVolumeValue(row: { volumeValue?: number | null }): number | null {
-  const value = row.volumeValue;
-
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  return null;
-}
-
-function getVolumeUnit(row: { volumeUnit?: string | null }): string | null {
-  const unit = String(row.volumeUnit ?? "").trim();
-  return unit || null;
+  return `${args.currencySymbol}${args.price}`;
 }
 
 // ----------------------------------------------------------
 // Hook
 // ----------------------------------------------------------
 
-export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
+export function usePriceCard(
+  props: PriceCardProps,
+): UsePriceCardResult {
   const {
     title = "価格設定",
     rows,
@@ -132,81 +114,143 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
     currencySymbol = "¥",
   } = props;
 
-  const isEdit = mode === "edit";
-  const showModeBadge = mode !== "view";
+  const isEdit =
+    mode === "edit";
 
-  const rowsVM = React.useMemo<PriceRowVM[]>(() => {
-    const sourceRows: PriceRow[] = Array.isArray(rows) ? rows : [];
+  const showModeBadge =
+    mode !== "view";
 
-    const sorted: IndexedPriceRow[] = sourceRows
-      .map(
-        (row: PriceRow, originalIdx: number): IndexedPriceRow => ({
+  const rowsVM =
+    React.useMemo<
+      PriceRowVM[]
+    >(() => {
+      const sortedRows:
+        IndexedPriceRow[] =
+        rows
+          .map(
+            (
+              row,
+              originalIdx,
+            ) => ({
+              row,
+              originalIdx,
+            }),
+          )
+          .sort(
+            (
+              first,
+              second,
+            ) => {
+              const firstOrder =
+                first.row
+                  .displayOrder ??
+                Number.POSITIVE_INFINITY;
+
+              const secondOrder =
+                second.row
+                  .displayOrder ??
+                Number.POSITIVE_INFINITY;
+
+              if (
+                firstOrder !==
+                secondOrder
+              ) {
+                return (
+                  firstOrder -
+                  secondOrder
+                );
+              }
+
+              return (
+                first.originalIdx -
+                second.originalIdx
+              );
+            },
+          );
+
+      return sortedRows.map(
+        ({
           row,
           originalIdx,
-        }),
-      )
-      .sort((a: IndexedPriceRow, b: IndexedPriceRow) => {
-        const ao =
-          a.row.displayOrder === null || a.row.displayOrder === undefined
-            ? Number.POSITIVE_INFINITY
-            : Number(a.row.displayOrder);
+        }) => {
+          const priceInputValue =
+            getPriceInputValue(
+              row.price,
+            );
 
-        const bo =
-          b.row.displayOrder === null || b.row.displayOrder === undefined
-            ? Number.POSITIVE_INFINITY
-            : Number(b.row.displayOrder);
+          const priceDisplayText =
+            getPriceDisplayText({
+              price:
+                row.price,
 
-        if (ao !== bo) return ao - bo;
+              currencySymbol,
+            });
 
-        // displayOrder が同じ場合は、元の rows 配列の順序を維持する
-        return a.originalIdx - b.originalIdx;
-      });
+          const onChangePriceInput = (
+            event:
+              React.ChangeEvent<HTMLInputElement>,
+          ) => {
+            const nextPrice =
+              parsePriceInput(
+                event.target.value,
+              );
 
-    return sorted.map(({ row, originalIdx }: IndexedPriceRow) => {
-      const modelId = String(row.modelId ?? "").trim();
+            onChangePrice?.(
+              originalIdx,
+              nextPrice,
+              row,
+            );
+          };
 
-      const priceInputValue = getPriceInputValue(row.price);
+          return {
+            modelId:
+              row.modelId,
 
-      const priceDisplayText = getPriceDisplayText({
-        price: row.price,
-        currencySymbol,
-      });
+            kind:
+              row.kind ?? null,
 
-      const onChangePriceInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const raw = e.target.value;
-        const next = parsePriceInput(raw);
+            displayOrder:
+              row.displayOrder ??
+              null,
 
-        // 元の rows 配列の index を返す
-        onChangePrice?.(originalIdx, next, row);
-      };
+            size:
+              row.size ?? null,
 
-      return {
-        modelId,
+            color:
+              row.color ?? null,
 
-        kind: row.kind ?? null,
+            volumeValue:
+              row.volumeValue ??
+              null,
 
-        displayOrder: toDisplayOrder(row.displayOrder),
+            volumeUnit:
+              row.volumeUnit ??
+              null,
 
-        // apparel category 用
-        size: row.size ?? null,
-        color: row.color ?? null,
+            stock:
+              row.stock,
 
-        // alcohol category 用
-        volumeValue: getVolumeValue(row),
-        volumeUnit: getVolumeUnit(row),
+            bgColor:
+              getBgColor(
+                row.rgb,
+              ),
 
-        stock: toStock(row.stock),
+            rgbTitle:
+              getRgbTitle(
+                row.rgb,
+              ),
 
-        bgColor: getBgColor(row.rgb),
-        rgbTitle: getRgbTitle(row.rgb),
-
-        priceInputValue,
-        priceDisplayText,
-
-        onChangePriceInput,
-      };
-    });
-  }, [rows, onChangePrice, currencySymbol]);
+            priceInputValue,
+            priceDisplayText,
+            onChangePriceInput,
+          };
+        },
+      );
+    }, [
+      rows,
+      onChangePrice,
+      currencySymbol,
+    ]);
 
   return {
     title,
@@ -215,6 +259,7 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
     showModeBadge,
     currencySymbol,
     rowsVM,
-    isEmpty: (rows ?? []).length === 0,
+    isEmpty:
+      rows.length === 0,
   };
 }
