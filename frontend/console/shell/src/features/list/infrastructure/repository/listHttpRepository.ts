@@ -1,12 +1,12 @@
 // frontend/console/shell/src/features/list/infrastructure/repository/listHttpRepository.ts
 
 import type { List } from "../../../../shared/types/list";
+
 import type { CreateListInput } from "../dto/createListInput";
 import type { ListDetailDTO } from "../dto/listDetailDto";
-import type { UpdateListInput } from "../dto/updateListInput";
+
 import { requestJSON } from "../http/httpClient";
 import { buildCreateListPayloadArray } from "../payload/createListPayload";
-import { buildUpdateListPayloadArray } from "../payload/updateListPayload";
 
 export type ListManagementRowDTO = Pick<
   ListDetailDTO,
@@ -38,7 +38,8 @@ type ListPageResponseDTO = {
 export async function createListHTTP(
   input: CreateListInput,
 ): Promise<List> {
-  const payload = buildCreateListPayloadArray(input);
+  const payload =
+    buildCreateListPayloadArray(input);
 
   return requestJSON<List>({
     method: "POST",
@@ -47,31 +48,14 @@ export async function createListHTTP(
   });
 }
 
-export async function updateListByIdHTTP(
-  input: UpdateListInput,
-): Promise<ListDetailDTO> {
-  const listId = input.listId;
-
-  if (!listId) {
-    throw new Error("invalid_list_id");
-  }
-
-  const payload = buildUpdateListPayloadArray(input);
-
-  return requestJSON<ListDetailDTO>({
-    method: "PUT",
-    path: `/lists/${encodeURIComponent(listId)}`,
-    body: payload,
-  });
-}
-
 export async function fetchListsHTTP(): Promise<
   ListManagementRowDTO[]
 > {
-  const response = await requestJSON<ListPageResponseDTO>({
-    method: "GET",
-    path: "/lists",
-  });
+  const response =
+    await requestJSON<ListPageResponseDTO>({
+      method: "GET",
+      path: "/lists",
+    });
 
   return response.items;
 }

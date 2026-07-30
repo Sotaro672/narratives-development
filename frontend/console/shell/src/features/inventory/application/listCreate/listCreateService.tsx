@@ -6,8 +6,6 @@ import { getListCreateRaw } from "../../infrastructure/api/listCreateApi";
 import type { ListCreateDTO } from "../../infrastructure/http/listCreateRepositoryHTTP.types";
 import { mapListCreateDTO } from "../../infrastructure/http/listCreateRepositoryHTTP.mappers";
 
-import { auth } from "../../../../auth/infrastructure/config/firebaseClient";
-
 import type {
   List,
   ListPriceRow,
@@ -445,7 +443,6 @@ export async function uploadListImagesPolicyB(
     listId: string;
     files: File[];
     mainImageIndex: number;
-    createdBy?: string;
   },
 ): Promise<{
   registered: Array<{
@@ -477,14 +474,6 @@ export async function uploadListImagesPolicyB(
       args.files.length
       ? args.mainImageIndex
       : 0;
-
-  const uid =
-    args.createdBy ||
-    auth.currentUser?.uid ||
-    "system";
-
-  const now =
-    new Date().toISOString();
 
   const registered: Array<{
     imageId: string;
@@ -520,12 +509,6 @@ export async function uploadListImagesPolicyB(
 
       displayOrder:
         index,
-
-      createdBy:
-        uid,
-
-      createdAt:
-        now,
     });
 
     registered.push({
@@ -695,9 +678,6 @@ export async function createListWithImages(
 
       mainImageIndex:
         args.mainImageIndex,
-
-      createdBy:
-        auth.currentUser?.uid,
     });
   } catch (error) {
     args.onImageUploadFailed?.(

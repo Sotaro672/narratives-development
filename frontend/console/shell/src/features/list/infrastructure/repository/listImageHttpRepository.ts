@@ -1,7 +1,9 @@
 // frontend/console/shell/src/features/list/infrastructure/repository/listImageHttpRepository.ts
 
 import type { List } from "../../../../shared/types/list";
+
 import type { SaveListImageFromFirebaseStorageInput } from "../dto/listImageDto";
+
 import { requestJSON } from "../http/httpClient";
 
 export type SavedListImageDTO = {
@@ -13,12 +15,6 @@ export type SavedListImageDTO = {
   createdBy: string;
   updatedAt?: string;
   updatedBy?: string;
-};
-
-export type DeleteListImageResponse = {
-  ok: boolean;
-  listId: string;
-  imageId: string;
 };
 
 export async function saveListImageFromFirebaseStorageHTTP(
@@ -33,12 +29,16 @@ export async function saveListImageFromFirebaseStorageHTTP(
   }
 
   if (!id || !url) {
-    throw new Error("invalid_list_image_payload");
+    throw new Error(
+      "invalid_list_image_payload",
+    );
   }
 
   return requestJSON<SavedListImageDTO>({
     method: "POST",
-    path: `/lists/${encodeURIComponent(listId)}/images`,
+    path: `/lists/${encodeURIComponent(
+      listId,
+    )}/images`,
     body: {
       id,
       url,
@@ -47,10 +47,12 @@ export async function saveListImageFromFirebaseStorageHTTP(
   });
 }
 
-export async function setListPrimaryImageHTTP(args: {
-  listId: string;
-  imageId: string;
-}): Promise<List> {
+export async function setListPrimaryImageHTTP(
+  args: {
+    listId: string;
+    imageId: string;
+  },
+): Promise<List> {
   const listId = args.listId;
   const imageId = args.imageId;
 
@@ -64,32 +66,11 @@ export async function setListPrimaryImageHTTP(args: {
 
   return requestJSON<List>({
     method: "PUT",
-    path: `/lists/${encodeURIComponent(listId)}/primary-image`,
+    path: `/lists/${encodeURIComponent(
+      listId,
+    )}/primary-image`,
     body: {
       imageId,
     },
-  });
-}
-
-export async function deleteListImageHTTP(args: {
-  listId: string;
-  imageId: string;
-}): Promise<DeleteListImageResponse> {
-  const listId = args.listId;
-  const imageId = args.imageId;
-
-  if (!listId) {
-    throw new Error("invalid_list_id");
-  }
-
-  if (!imageId) {
-    throw new Error("invalid_image_id");
-  }
-
-  return requestJSON<DeleteListImageResponse>({
-    method: "DELETE",
-    path: `/lists/${encodeURIComponent(
-      listId,
-    )}/images/${encodeURIComponent(imageId)}`,
   });
 }
