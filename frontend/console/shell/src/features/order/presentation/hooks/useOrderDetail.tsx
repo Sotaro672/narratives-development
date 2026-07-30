@@ -5,7 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   createOrderRepository,
   Order,
-} from "../../infrastructure/repostiroty";
+} from "../../infrastructure/repository";
 import { safeDateLabelJa } from "../../../../shared/util/dateJa";
 
 import {

@@ -6,7 +6,7 @@ import {
   FilterableTableHeader,
 } from "../../../../layout/List/List";
 
-import { createOrderRepository } from "../../infrastructure/repostiroty";
+import { createOrderRepository } from "../../infrastructure/repository";
 import {
   mapOrderItemInventoryRowsToOrderManagementRows,
   OrderManagementRow,

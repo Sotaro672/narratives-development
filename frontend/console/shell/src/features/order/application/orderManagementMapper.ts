@@ -1,5 +1,5 @@
 // frontend/console/order/src/application/orderManagementMapper.ts
-import { OrderItemInventoryRowDTO } from "../infrastructure/repostiroty";
+import { OrderItemInventoryRowDTO } from "../infrastructure/repository";
 
 export type OrderManagementRow = {
   orderId: string;

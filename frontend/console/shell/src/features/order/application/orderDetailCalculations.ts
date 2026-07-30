@@ -1,36 +1,61 @@
-// frontend/console/order/src/application/orderDetailCalculations.ts
-import { OrderDetailItemDTO } from "./orderDetailBuilder";
+// frontend/console/shell/src/features/order/application/orderDetailCalculations.ts
 
-export function formatJPY(n: number | null | undefined): string {
-  const v = typeof n === "number" && Number.isFinite(n) ? n : 0;
-  return `¥${v.toLocaleString()}`;
+import type { OrderDetailItemDTO } from "./orderDetailBuilder";
+
+export function formatJPY(
+  value: number,
+): string {
+  const amount =
+    Number.isFinite(value)
+      ? value
+      : 0;
+
+  return `¥${amount.toLocaleString()}`;
 }
 
-export function calculateOrderQuantity(items: OrderDetailItemDTO[]): number {
-  return items.reduce((sum, it) => sum + (Number(it?.qty ?? 0) || 0), 0);
-}
-
-export function calculateOrderTotalPrice(items: OrderDetailItemDTO[]): number {
+export function calculateOrderQuantity(
+  items: OrderDetailItemDTO[],
+): number {
   return items.reduce(
-    (sum, it) =>
-      sum + (Number(it?.price ?? 0) || 0) * (Number(it?.qty ?? 0) || 0),
+    (total, item) =>
+      total + item.qty,
     0,
   );
 }
 
-export function hasTransferredItem(items: OrderDetailItemDTO[]): boolean {
-  return items.some((it) => Boolean(it?.transferred));
+export function calculateOrderTotalPrice(
+  items: OrderDetailItemDTO[],
+): number {
+  return items.reduce(
+    (total, item) =>
+      total +
+      item.price * item.qty,
+    0,
+  );
 }
 
-export function extractListIds(items: OrderDetailItemDTO[]): string[] {
-  const set = new Set<string>();
+export function hasTransferredItem(
+  items: OrderDetailItemDTO[],
+): boolean {
+  return items.some(
+    (item) => item.transferred,
+  );
+}
 
-  for (const it of items) {
-    const v = String(it?.listId ?? "").trim();
-    if (v) {
-      set.add(v);
+export function extractListIds(
+  items: OrderDetailItemDTO[],
+): string[] {
+  const listIds =
+    new Set<string>();
+
+  for (const item of items) {
+    const listId =
+      item.listId?.trim();
+
+    if (listId) {
+      listIds.add(listId);
     }
   }
 
-  return Array.from(set);
+  return Array.from(listIds);
 }

@@ -1,4 +1,5 @@
-// frontend\console\shell\src\pages\orderManagement.tsx
+// frontend/console/shell/src/pages/orderManagement.tsx
+
 import List from "../layout/List/List";
 import "../styles/order.css";
 
@@ -6,8 +7,14 @@ import { safeDateLabelJa } from "../shared/util/dateJa";
 import { useOrderManagement } from "../features/order/presentation/hooks/useOrderManagement";
 
 export default function OrderManagementPage() {
-  const { rows, headers, errorMsg, isResetting, goDetail, reset } =
-    useOrderManagement();
+  const {
+    rows,
+    headers,
+    errorMsg,
+    isResetting,
+    goDetail,
+    reset,
+  } = useOrderManagement();
 
   return (
     <div className="p-0">
@@ -21,41 +28,61 @@ export default function OrderManagementPage() {
       >
         {errorMsg ? (
           <tr>
-            <td colSpan={headers.length} style={{ padding: 16 }}>
+            <td
+              colSpan={headers.length}
+              style={{ padding: 16 }}
+            >
               {errorMsg}
             </td>
           </tr>
         ) : (
-          rows.map((o) => (
+          rows.map((order) => (
             <tr
-              key={`${o.orderId}__${o.inventoryId}__${o.listId}`}
-              onClick={() => goDetail(o.orderId)}
+              key={`${order.orderId}__${order.inventoryId}__${order.listId}`}
+              onClick={() => {
+                goDetail(order.orderId);
+              }}
+              onKeyDown={(event) => {
+                if (
+                  event.key !== "Enter" &&
+                  event.key !== " "
+                ) {
+                  return;
+                }
+
+                event.preventDefault();
+                goDetail(order.orderId);
+              }}
               className="is-rowlink cursor-pointer hover:bg-slate-50 transition-colors"
               tabIndex={0}
               role="button"
             >
               <td>
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    goDetail(o.orderId);
-                  }}
-                  className="text-blue-600 hover:underline"
-                >
-                  {o.orderId}
-                </a>
+                <span className="text-blue-600 hover:underline">
+                  {order.orderId}
+                </span>
               </td>
 
-              <td>{o.listId || "-"}</td>
+              <td>{order.listId || "-"}</td>
 
-              <td>{o.productName || "-"}</td>
-              <td>{o.tokenName || "-"}</td>
+              <td>{order.productName || "-"}</td>
 
-              <td>{o.avatarName || "-"}</td>
+              <td>{order.tokenName || "-"}</td>
 
-              <td>{safeDateLabelJa(o.createdAt, "-")}</td>
-              <td>{o.transferred ? "移譲済" : "未移譲"}</td>
+              <td>{order.avatarName || "-"}</td>
+
+              <td>
+                {safeDateLabelJa(
+                  order.createdAt,
+                  "-",
+                )}
+              </td>
+
+              <td>
+                {order.transferred
+                  ? "移譲済"
+                  : "未移譲"}
+              </td>
             </tr>
           ))
         )}
