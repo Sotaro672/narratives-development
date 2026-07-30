@@ -137,7 +137,7 @@ export const routes: RouteObject[] = [
     ],
   },
   {
-    path: "/mintRequest",
+    path: "/mint",
     children: [
       {
         path: "",
