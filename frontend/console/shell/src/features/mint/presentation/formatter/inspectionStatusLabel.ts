@@ -1,4 +1,4 @@
-// frontend/console/mintRequest/src/presentation/formatter/inspectionStatusLabel.ts
+// frontend\console\shell\src\features\mint\presentation\formatter\inspectionStatusLabel.ts
 import type { InspectionStatus } from "../../../../shared/types/inspections";
 
 export function inspectionStatusLabel(

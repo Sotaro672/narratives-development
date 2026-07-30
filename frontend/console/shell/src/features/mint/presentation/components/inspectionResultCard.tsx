@@ -1,5 +1,4 @@
-// frontend/console/mintRequest/src/presentation/components/inspectionResultCard.tsx
-
+// frontend\console\shell\src\features\mint\presentation\components\inspectionResultCard.tsx
 import * as React from "react";
 import { Palette } from "lucide-react";
 import {
