@@ -7,61 +7,22 @@ service firebase.storage {
     }
 
     function belongsToCompany(companyId) {
+      let memberUIDDocument = firestore.get(
+        /databases/(default)/documents/memberUIDs/$(request.auth.uid)
+      );
+
+      let memberDocument = firestore.get(
+        /databases/(default)/documents/members/$(memberUIDDocument.data.memberId)
+      );
+
       return isSignedIn()
-        && firestore.exists(
-          /databases/(default)/documents/memberUIDs/$(request.auth.uid)
-        )
-        && firestore.get(
-          /databases/(default)/documents/memberUIDs/$(request.auth.uid)
-        ).data.memberId is string
-        && firestore.exists(
-          /databases/(default)/documents/members/$(
-            firestore.get(
-              /databases/(default)/documents/memberUIDs/$(request.auth.uid)
-            ).data.memberId
-          )
-        )
-        && firestore.get(
-          /databases/(default)/documents/members/$(
-            firestore.get(
-              /databases/(default)/documents/memberUIDs/$(request.auth.uid)
-            ).data.memberId
-          )
-        ).data.companyId is string
-        && firestore.get(
-          /databases/(default)/documents/members/$(
-            firestore.get(
-              /databases/(default)/documents/memberUIDs/$(request.auth.uid)
-            ).data.memberId
-          )
-        ).data.companyId == companyId;
+        && memberUIDDocument.data.memberId is string
+        && memberDocument.data.companyId is string
+        && memberDocument.data.companyId == companyId;
     }
 
-    /**
-     * Listの作成者であるか確認する。
-     *
-     * lists/{listId}.created_byには、
-     * Backendで認証済みFirebase UIDが保存される。
-     */
-    function isListOwner(listId) {
-      return isSignedIn()
-        && firestore.exists(
-          /databases/(default)/documents/lists/$(listId)
-        )
-        && firestore.get(
-          /databases/(default)/documents/lists/$(listId)
-        ).data.created_by is string
-        && firestore.get(
-          /databases/(default)/documents/lists/$(listId)
-        ).data.created_by == request.auth.uid;
-    }
-
-    /**
-     * 全画像共通の許可MIMEタイプ。
-     */
-    function isAllowedImageMimeType() {
-      return request.resource != null
-        && request.resource.contentType is string
+    function isAllowedMimeType() {
+      return request.resource.contentType is string
         && (
           request.resource.contentType == 'image/jpeg'
           || request.resource.contentType == 'image/png'
@@ -69,105 +30,36 @@ service firebase.storage {
         );
     }
 
-    /**
-     * 全画像共通の検証。
-     */
-    function isValidImage(maxBytes) {
+    function isValidBrandIcon() {
       return request.resource != null
-        && request.resource.size > 0
-        && request.resource.size <= maxBytes
-        && isAllowedImageMimeType();
+        && request.resource.size <= 2097152
+        && isAllowedMimeType();
     }
 
-    /**
-     * Brand icon
-     * 最大2MB
-     */
+    function isValidBrandBackgroundImage() {
+      return request.resource != null
+        && request.resource.size <= 5242880
+        && isAllowedMimeType();
+    }
+
     match /brands/{companyId}/{brandId}/brandIcon {
       allow read: if true;
 
-      allow create, update:
-        if belongsToCompany(companyId)
-        && isValidImage(2097152);
+      allow create, update: if belongsToCompany(companyId)
+        && isValidBrandIcon();
 
-      allow delete:
-        if belongsToCompany(companyId);
+      allow delete: if belongsToCompany(companyId);
     }
 
-    /**
-     * Brand background image
-     * 最大5MB
-     */
     match /brands/{companyId}/{brandId}/brandBackgroundImage {
       allow read: if true;
 
-      allow create, update:
-        if belongsToCompany(companyId)
-        && isValidImage(5242880);
+      allow create, update: if belongsToCompany(companyId)
+        && isValidBrandBackgroundImage();
 
-      allow delete:
-        if belongsToCompany(companyId);
+      allow delete: if belongsToCompany(companyId);
     }
 
-    /**
-     * TokenBlueprint icon
-     * 最大10MB
-     */
-    match /token-blueprints/{companyId}/{tokenBlueprintId}/icon/{fileName} {
-      allow read:
-        if belongsToCompany(companyId);
-
-      allow create, update:
-        if belongsToCompany(companyId)
-        && isValidImage(10485760);
-
-      allow delete:
-        if belongsToCompany(companyId);
-    }
-
-    /**
-     * TokenBlueprint image contents
-     * 最大10MB
-     *
-     * contentsの後に、
-     * contentIdとfileNameの2階層が存在する。
-     */
-    match /token-blueprints/{companyId}/{tokenBlueprintId}/contents/{contentId}/{fileName} {
-      allow read:
-        if belongsToCompany(companyId);
-
-      allow create, update:
-        if belongsToCompany(companyId)
-        && isValidImage(10485760);
-
-      allow delete:
-        if belongsToCompany(companyId);
-    }
-
-    /**
-     * List images
-     * 最大10MB
-     *
-     * 保存先:
-     * lists/{listId}/images/{imageId}/{fileName}
-     *
-     * 一覧商品画像として利用するため、readは公開する。
-     * create、update、deleteはList作成者だけに許可する。
-     */
-    match /lists/{listId}/images/{imageId}/{fileName} {
-      allow read: if true;
-
-      allow create, update:
-        if isListOwner(listId)
-        && isValidImage(10485760);
-
-      allow delete:
-        if isListOwner(listId);
-    }
-
-    /**
-     * 未定義パスはすべて拒否する。
-     */
     match /{allPaths=**} {
       allow read, write: if false;
     }

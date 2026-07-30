@@ -1,39 +1,33 @@
-// frontend/console/list/src/presentation/hook/useListDetail.tsx
+// frontend/console/shell/src/features/list/presentation/hook/useListDetail.tsx
 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-// PriceCard hook
 import { usePriceCard } from "./usePriceCard";
 
-// 型は inventory/application を正とする
 import type { PriceRow } from "../../../inventory/application/listCreate/listCreateService";
 
-// Firebase Auth
 import { auth } from "../../../../auth/infrastructure/config/firebaseClient";
 
-// internal hooks（presentation 層内で完結）
 import { useMainImageIndexGuard } from "./internal/useMainImageIndexGuard";
 import { useCancelledRef } from "./internal/useCancelledRef";
 
 import { saveListDetailChanges } from "../../application/listDetail/listDetailSave.usecase";
 
-import {
-  updatePriceRowPrice,
-} from "../../application/listDetail/listDetailMapper";
+import { updatePriceRowPrice } from "../../application/listDetail/listDetailMapper";
 
 import {
   isValidListStatus,
   type ListStatus,
 } from "../../../../shared/types/list";
-// それ以外は service へ
+
 import {
-  resolveListDetailParams,
-  loadListDetailDTO,
-  deriveListDetail,
   computeListDetailPageTitle,
-  type ListDetailRouteParams,
+  deriveListDetail,
+  loadListDetailDTO,
+  resolveListDetailParams,
   type ListDetailDTO,
+  type ListDetailRouteParams,
 } from "../../application/listDetailService";
 
 export type DraftImage = {
@@ -46,53 +40,34 @@ export type UseListDetailResult = {
   pageTitle: string;
   onBack: () => void;
 
-  // loading/error (load)
   loading: boolean;
   error: string;
 
-  // save state (save)
   saving: boolean;
   saveError: string;
 
-  // raw dto
   dto: ListDetailDTO | null;
-
-  // reload (optional but handy)
   reload: () => Promise<void>;
 
-  // =========================
-  // Edit mode (page header)
-  // =========================
   isEdit: boolean;
   onEdit: () => void;
   onCancel: () => void;
-
-  // listDetail.tsx が payload を渡してくるので受け取れる形にする（payload 無しでも動く）
   onSave: (payload?: any) => Promise<void>;
 
-  // =========================
-  // listing (view/edit)
-  // =========================
   listingTitle: string;
   description: string;
 
-  // draft (edit UI 用)
   draftListingTitle: string;
   setDraftListingTitle: React.Dispatch<React.SetStateAction<string>>;
+
   draftDescription: string;
   setDraftDescription: React.Dispatch<React.SetStateAction<string>>;
 
-  // =========================
-  // status (view/edit)
-  // =========================
   status: ListStatus | "";
   draftStatus: ListStatus;
   setDraftStatus: React.Dispatch<React.SetStateAction<ListStatus>>;
   onToggleStatus: (next: ListStatus) => void;
 
-  // =========================
-  // display strings (already normalized by mapper)
-  // =========================
   productBrandId: string;
   productBrandName: string;
   productName: string;
@@ -101,11 +76,9 @@ export type UseListDetailResult = {
   tokenBrandName: string;
   tokenName: string;
 
-  // =========================
-  // images (view/edit)
-  // =========================
   imageUrls: string[];
   draftImages: DraftImage[];
+
   onAddImages: (files: FileList | null) => void;
   onRemoveImageAt: (idx: number) => void;
   onClearImages: () => void;
@@ -113,28 +86,24 @@ export type UseListDetailResult = {
   mainImageIndex: number;
   setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
 
-  // =========================
-  // price (PriceCard 用)
-  // =========================
   priceRows: PriceRow[];
   draftPriceRows: PriceRow[];
   setDraftPriceRows: React.Dispatch<React.SetStateAction<PriceRow[]>>;
+
   onChangePrice: (
     index: number,
-    price: number | null,
+    price: number | undefined,
     row: PriceRow,
   ) => void;
 
-  // PriceCard result（page が参照するため）
   priceCard: ReturnType<typeof usePriceCard>;
 
-  // =========================
-  // admin (view/edit)
-  // =========================
   assigneeId: string;
   assigneeName: string;
+
   draftAssigneeId: string;
   setDraftAssigneeId: React.Dispatch<React.SetStateAction<string>>;
+
   onSelectAssignee: (id: string) => void;
   onChangeAssignee: (id: string) => void;
   onEditAssignee: () => void;
@@ -148,45 +117,43 @@ export type UseListDetailResult = {
 };
 
 // ==============================
-// local helpers（UI-only）
+// Local helpers
 // ==============================
 
 function clonePriceRows(rows: PriceRow[]): PriceRow[] {
   return Array.isArray(rows)
-    ? rows.map((row) => ({ ...(row as any) }))
+    ? rows.map((row) => ({ ...row }))
     : [];
 }
 
-function cloneDraftImagesFromUrls(
-  urls: string[],
-): DraftImage[] {
+function cloneDraftImagesFromUrls(urls: string[]): DraftImage[] {
   return (Array.isArray(urls) ? urls : [])
     .map((url) => String(url ?? "").trim())
     .filter(Boolean)
     .map((url) => ({
       url,
-      isNew: false as const,
+      isNew: false,
     }));
 }
 
-function revokeDraftBlobUrls(items: DraftImage[]) {
+function revokeDraftBlobUrls(items: DraftImage[]): void {
   for (const item of Array.isArray(items) ? items : []) {
     if (
-      item?.isNew &&
-      typeof item?.url === "string" &&
+      item.isNew &&
+      typeof item.url === "string" &&
       item.url.startsWith("blob:")
     ) {
       try {
         URL.revokeObjectURL(item.url);
       } catch {
-        // noop
+        // Blob URLの解放失敗は無視する。
       }
     }
   }
 }
 
 // ==============================
-// listImage draft hook（UI-only）
+// List image draft hook
 // ==============================
 
 function fileKey(file: File): string {
@@ -194,7 +161,7 @@ function fileKey(file: File): string {
 }
 
 function isImageFile(file: File): boolean {
-  return String((file as any)?.type ?? "").startsWith("image/");
+  return file.type.startsWith("image/");
 }
 
 function useListImages(args: {
@@ -202,137 +169,192 @@ function useListImages(args: {
   saving: boolean;
   initialUrls: string[];
 }) {
-  const { isEdit, saving, initialUrls } = args;
+  const {
+    isEdit,
+    saving,
+    initialUrls,
+  } = args;
 
-  const [draftImages, setDraftImages] =
-    React.useState<DraftImage[]>(
-      cloneDraftImagesFromUrls(initialUrls),
-    );
+  const [
+    draftImages,
+    setDraftImages,
+  ] = React.useState<DraftImage[]>(
+    cloneDraftImagesFromUrls(initialUrls),
+  );
 
   React.useEffect(() => {
-    if (isEdit) return;
+    if (isEdit) {
+      return;
+    }
 
-    setDraftImages(cloneDraftImagesFromUrls(initialUrls));
-  }, [isEdit, initialUrls]);
+    setDraftImages(
+      cloneDraftImagesFromUrls(initialUrls),
+    );
+  }, [
+    isEdit,
+    initialUrls,
+  ]);
 
   const addFiles = React.useCallback(
     (files: File[]) => {
-      if (!isEdit) return;
-      if (saving) return;
+      if (!isEdit || saving) {
+        return;
+      }
 
-      const incoming = (Array.isArray(files) ? files : [])
+      const incoming = (
+        Array.isArray(files)
+          ? files
+          : []
+      )
         .filter(Boolean)
         .filter(isImageFile);
 
-      if (incoming.length === 0) return;
+      if (incoming.length === 0) {
+        return;
+      }
 
-      setDraftImages((prev) => {
-        const prevItems = Array.isArray(prev) ? prev : [];
+      setDraftImages((previousImages) => {
+        const currentImages =
+          Array.isArray(previousImages)
+            ? previousImages
+            : [];
 
-        const exists = new Set(
-          prevItems
-            .filter((item) => item?.isNew && item?.file)
-            .map((item) => fileKey(item.file as File)),
+        const existingFileKeys = new Set(
+          currentImages
+            .filter(
+              (item) =>
+                item.isNew &&
+                item.file,
+            )
+            .map(
+              (item) =>
+                fileKey(item.file as File),
+            ),
         );
 
-        const next: DraftImage[] = [];
+        const newImages: DraftImage[] = [];
 
         for (const file of incoming) {
           const key = fileKey(file);
 
-          if (exists.has(key)) continue;
+          if (existingFileKeys.has(key)) {
+            continue;
+          }
 
-          exists.add(key);
+          existingFileKeys.add(key);
 
-          const url = URL.createObjectURL(file);
-
-          next.push({
-            url,
+          newImages.push({
+            url: URL.createObjectURL(file),
             file,
             isNew: true,
           });
         }
 
-        return [...prevItems, ...next];
+        return [
+          ...currentImages,
+          ...newImages,
+        ];
       });
     },
-    [isEdit, saving],
+    [
+      isEdit,
+      saving,
+    ],
   );
 
   const onAddImages = React.useCallback(
     (files: FileList | null) => {
-      if (!files || files.length === 0) return;
+      if (!files || files.length === 0) {
+        return;
+      }
 
-      const items = Array.from(files).filter(Boolean) as File[];
-
-      addFiles(items);
+      addFiles(
+        Array.from(files).filter(Boolean),
+      );
     },
     [addFiles],
   );
 
   const onRemoveImageAt = React.useCallback(
-    (idx: number) => {
-      if (!isEdit) return;
-      if (saving) return;
+    (index: number) => {
+      if (!isEdit || saving) {
+        return;
+      }
 
-      setDraftImages((prev) => {
-        const items = Array.isArray(prev) ? prev : [];
-
-        if (idx < 0 || idx >= items.length) {
-          return items;
-        }
-
-        const target = items[idx];
+      setDraftImages((previousImages) => {
+        const currentImages =
+          Array.isArray(previousImages)
+            ? previousImages
+            : [];
 
         if (
-          target?.isNew &&
-          target?.url?.startsWith("blob:")
+          index < 0 ||
+          index >= currentImages.length
+        ) {
+          return currentImages;
+        }
+
+        const target =
+          currentImages[index];
+
+        if (
+          target.isNew &&
+          target.url.startsWith("blob:")
         ) {
           try {
             URL.revokeObjectURL(target.url);
           } catch {
-            // noop
+            // Blob URLの解放失敗は無視する。
           }
         }
 
-        return items
-          .slice(0, idx)
-          .concat(items.slice(idx + 1));
+        return currentImages
+          .slice(0, index)
+          .concat(
+            currentImages.slice(index + 1),
+          );
       });
     },
-    [isEdit, saving],
+    [
+      isEdit,
+      saving,
+    ],
   );
 
   const onClearImages = React.useCallback(() => {
-    if (!isEdit) return;
-    if (saving) return;
+    if (!isEdit || saving) {
+      return;
+    }
 
-    setDraftImages((prev) => {
-      const items = Array.isArray(prev) ? prev : [];
+    setDraftImages((previousImages) => {
+      const currentImages =
+        Array.isArray(previousImages)
+          ? previousImages
+          : [];
 
-      for (const item of items) {
-        if (
-          item?.isNew &&
-          typeof item?.url === "string" &&
-          item.url.startsWith("blob:")
-        ) {
-          try {
-            URL.revokeObjectURL(item.url);
-          } catch {
-            // noop
-          }
-        }
-      }
+      revokeDraftBlobUrls(currentImages);
 
       return [];
     });
-  }, [isEdit, saving]);
+  }, [
+    isEdit,
+    saving,
+  ]);
 
-  const imageUrls = React.useMemo(() => {
-    return (Array.isArray(draftImages) ? draftImages : [])
-      .map((item) => String(item?.url ?? "").trim())
-      .filter(Boolean);
-  }, [draftImages]);
+  const imageUrls = React.useMemo(
+    () =>
+      (
+        Array.isArray(draftImages)
+          ? draftImages
+          : []
+      )
+        .map(
+          (item) =>
+            String(item.url ?? "").trim(),
+        )
+        .filter(Boolean),
+    [draftImages],
+  );
 
   return {
     draftImages,
@@ -344,16 +366,26 @@ function useListImages(args: {
   };
 }
 
+// ==============================
+// Hook
+// ==============================
+
 export function useListDetail(): UseListDetailResult {
   const navigate = useNavigate();
-  const params = useParams<ListDetailRouteParams>();
+
+  const params =
+    useParams<ListDetailRouteParams>();
 
   const resolved = React.useMemo(
-    () => resolveListDetailParams(params),
+    () =>
+      resolveListDetailParams(params),
     [params],
   );
 
-  const { listId, inventoryId } = resolved;
+  const {
+    listId,
+    inventoryId,
+  } = resolved;
 
   const onBack = React.useCallback(() => {
     navigate(-1);
@@ -363,51 +395,83 @@ export function useListDetail(): UseListDetailResult {
   // Load DTO
   // -----------------------------
 
-  const [dto, setDTO] =
-    React.useState<ListDetailDTO | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState("");
+  const [
+    dto,
+    setDTO,
+  ] = React.useState<ListDetailDTO | null>(
+    null,
+  );
 
-  const cancelledRef = useCancelledRef();
+  const [
+    loading,
+    setLoading,
+  ] = React.useState(false);
 
-  const reload = React.useCallback(async () => {
-    const id = String(listId ?? "").trim();
+  const [
+    error,
+    setError,
+  ] = React.useState("");
 
-    if (!id) {
-      setDTO(null);
-      setError(
-        "listId がありません（ルートパラメータを確認してください）。",
-      );
-      return;
-    }
+  const cancelledRef =
+    useCancelledRef();
 
-    setLoading(true);
-    setError("");
+  const reload = React.useCallback(
+    async () => {
+      const id =
+        String(listId ?? "").trim();
 
-    try {
-      const data = await loadListDetailDTO({
-        listId: id,
-        inventoryIdHint: inventoryId,
-      });
+      if (!id) {
+        setDTO(null);
+        setError(
+          "listId がありません（ルートパラメータを確認してください）。",
+        );
+        return;
+      }
 
-      if (cancelledRef.current) return;
+      setLoading(true);
+      setError("");
 
-      setDTO(data);
-    } catch (e) {
-      if (cancelledRef.current) return;
+      try {
+        const data =
+          await loadListDetailDTO({
+            listId: id,
+            inventoryIdHint:
+              inventoryId,
+          });
 
-      const message = String(
-        e instanceof Error ? e.message : e,
-      );
+        if (cancelledRef.current) {
+          return;
+        }
 
-      setError(message);
-      setDTO(null);
-    } finally {
-      if (cancelledRef.current) return;
+        setDTO(data);
+      } catch (caughtError) {
+        if (cancelledRef.current) {
+          return;
+        }
 
-      setLoading(false);
-    }
-  }, [listId, inventoryId, cancelledRef]);
+        setError(
+          String(
+            caughtError instanceof Error
+              ? caughtError.message
+              : caughtError,
+          ),
+        );
+
+        setDTO(null);
+      } finally {
+        if (cancelledRef.current) {
+          return;
+        }
+
+        setLoading(false);
+      }
+    },
+    [
+      listId,
+      inventoryId,
+      cancelledRef,
+    ],
+  );
 
   React.useEffect(() => {
     void reload();
@@ -418,7 +482,8 @@ export function useListDetail(): UseListDetailResult {
   // -----------------------------
 
   const derived = React.useMemo(
-    () => deriveListDetail<PriceRow>(dto),
+    () =>
+      deriveListDetail<PriceRow>(dto),
     [dto],
   );
 
@@ -449,17 +514,22 @@ export function useListDetail(): UseListDetailResult {
   } = derived;
 
   const statusForEdit =
-    React.useMemo<ListStatus>(() => {
-      return status === "listing"
-        ? "listing"
-        : "suspended";
-    }, [status]);
+    React.useMemo<ListStatus>(
+      () =>
+        status === "listing"
+          ? "listing"
+          : "suspended",
+      [status],
+    );
 
-  // ============================================================
-  // Edit state + drafts
-  // ============================================================
+  // -----------------------------
+  // Edit state
+  // -----------------------------
 
-  const [isEdit, setIsEdit] = React.useState(false);
+  const [
+    isEdit,
+    setIsEdit,
+  ] = React.useState(false);
 
   const [
     draftListingTitle,
@@ -478,37 +548,64 @@ export function useListDetail(): UseListDetailResult {
     clonePriceRows(viewPriceRows),
   );
 
-  const [draftStatus, setDraftStatus] =
-    React.useState<ListStatus>(statusForEdit);
+  const [
+    draftStatus,
+    setDraftStatus,
+  ] = React.useState<ListStatus>(
+    statusForEdit,
+  );
 
   const [
     draftAssigneeId,
     setDraftAssigneeId,
   ] = React.useState(assigneeId);
 
-  // save state
-  const [saving, setSaving] = React.useState(false);
-  const [saveError, setSaveError] = React.useState("");
+  const [
+    saving,
+    setSaving,
+  ] = React.useState(false);
 
-  // images draft
+  const [
+    saveError,
+    setSaveError,
+  ] = React.useState("");
+
   const img = useListImages({
     isEdit,
     saving,
-    initialUrls: viewImageUrls,
+    initialUrls:
+      viewImageUrls,
   });
 
-  // DTO/derived が更新されたら、編集していない時だけ draft を同期
   React.useEffect(() => {
-    if (isEdit) return;
+    if (isEdit) {
+      return;
+    }
 
-    setDraftListingTitle(listingTitle);
-    setDraftDescription(description);
-    setDraftPriceRows(clonePriceRows(viewPriceRows));
-    setDraftStatus(statusForEdit);
-    setDraftAssigneeId(assigneeId);
+    setDraftListingTitle(
+      listingTitle,
+    );
+
+    setDraftDescription(
+      description,
+    );
+
+    setDraftPriceRows(
+      clonePriceRows(viewPriceRows),
+    );
+
+    setDraftStatus(
+      statusForEdit,
+    );
+
+    setDraftAssigneeId(
+      assigneeId,
+    );
 
     img.setDraftImages(
-      cloneDraftImagesFromUrls(viewImageUrls),
+      cloneDraftImagesFromUrls(
+        viewImageUrls,
+      ),
     );
   }, [
     isEdit,
@@ -518,18 +615,34 @@ export function useListDetail(): UseListDetailResult {
     statusForEdit,
     assigneeId,
     viewImageUrls,
-    img,
+    img.setDraftImages,
   ]);
 
   const onEdit = React.useCallback(() => {
-    setDraftListingTitle(listingTitle);
-    setDraftDescription(description);
-    setDraftPriceRows(clonePriceRows(viewPriceRows));
-    setDraftStatus(statusForEdit);
-    setDraftAssigneeId(assigneeId);
+    setDraftListingTitle(
+      listingTitle,
+    );
+
+    setDraftDescription(
+      description,
+    );
+
+    setDraftPriceRows(
+      clonePriceRows(viewPriceRows),
+    );
+
+    setDraftStatus(
+      statusForEdit,
+    );
+
+    setDraftAssigneeId(
+      assigneeId,
+    );
 
     img.setDraftImages(
-      cloneDraftImagesFromUrls(viewImageUrls),
+      cloneDraftImagesFromUrls(
+        viewImageUrls,
+      ),
     );
 
     setSaveError("");
@@ -541,144 +654,215 @@ export function useListDetail(): UseListDetailResult {
     statusForEdit,
     assigneeId,
     viewImageUrls,
-    img,
+    img.setDraftImages,
   ]);
 
   const onCancel = React.useCallback(() => {
-    revokeDraftBlobUrls(img.draftImages);
+    revokeDraftBlobUrls(
+      img.draftImages,
+    );
 
-    setDraftListingTitle(listingTitle);
-    setDraftDescription(description);
-    setDraftPriceRows(clonePriceRows(viewPriceRows));
-    setDraftStatus(statusForEdit);
-    setDraftAssigneeId(assigneeId);
+    setDraftListingTitle(
+      listingTitle,
+    );
+
+    setDraftDescription(
+      description,
+    );
+
+    setDraftPriceRows(
+      clonePriceRows(viewPriceRows),
+    );
+
+    setDraftStatus(
+      statusForEdit,
+    );
+
+    setDraftAssigneeId(
+      assigneeId,
+    );
 
     img.setDraftImages(
-      cloneDraftImagesFromUrls(viewImageUrls),
+      cloneDraftImagesFromUrls(
+        viewImageUrls,
+      ),
     );
 
     setSaveError("");
     setIsEdit(false);
   }, [
     img.draftImages,
+    img.setDraftImages,
     listingTitle,
     description,
     viewPriceRows,
     statusForEdit,
     assigneeId,
     viewImageUrls,
-    img,
   ]);
 
-  const onToggleStatus = React.useCallback(
-    (next: ListStatus) => {
-      if (!isEdit) return;
-      if (saving) return;
+  const onToggleStatus =
+    React.useCallback(
+      (next: ListStatus) => {
+        if (!isEdit || saving) {
+          return;
+        }
 
-      setDraftStatus(next);
-    },
-    [isEdit, saving],
-  );
+        setDraftStatus(next);
+      },
+      [
+        isEdit,
+        saving,
+      ],
+    );
 
-  const onSelectAssignee = React.useCallback(
-    (id: string) => {
-      if (!isEdit) return;
-      if (saving) return;
+  const onSelectAssignee =
+    React.useCallback(
+      (id: string) => {
+        if (!isEdit || saving) {
+          return;
+        }
 
-      setDraftAssigneeId(String(id ?? "").trim());
-    },
-    [isEdit, saving],
-  );
+        setDraftAssigneeId(
+          String(id ?? "").trim(),
+        );
+      },
+      [
+        isEdit,
+        saving,
+      ],
+    );
 
-  const onChangeAssignee = React.useCallback(
-    (id: string) => {
-      if (!isEdit) return;
-      if (saving) return;
+  const onChangeAssignee =
+    React.useCallback(
+      (id: string) => {
+        if (!isEdit || saving) {
+          return;
+        }
 
-      setDraftAssigneeId(String(id ?? "").trim());
-    },
-    [isEdit, saving],
-  );
+        setDraftAssigneeId(
+          String(id ?? "").trim(),
+        );
+      },
+      [
+        isEdit,
+        saving,
+      ],
+    );
 
-  const onEditAssignee = React.useCallback(() => {
-    // AdminCard 側の編集導線用。
-    // ListDetail 全体の edit mode で制御しているため、現状は no-op。
-  }, []);
+  const onEditAssignee =
+    React.useCallback(() => {
+      // ListDetail全体の編集モードで制御する。
+    }, []);
 
-  const onClickAssignee = React.useCallback(() => {
-    // 担当者クリック時の導線用。
-    // 遷移先やモーダルが決まったらここに処理を追加する。
-  }, []);
+  const onClickAssignee =
+    React.useCallback(() => {
+      // 遷移先またはモーダル確定後に処理を追加する。
+    }, []);
 
-  // effective urls (view/edit)
-  const effectiveImageUrls = React.useMemo(() => {
-    return isEdit
-      ? img.imageUrls
-      : viewImageUrls;
-  }, [isEdit, img.imageUrls, viewImageUrls]);
+  const effectiveImageUrls =
+    React.useMemo(
+      () =>
+        isEdit
+          ? img.imageUrls
+          : viewImageUrls,
+      [
+        isEdit,
+        img.imageUrls,
+        viewImageUrls,
+      ],
+    );
 
-  // images: main index
   const [
     mainImageIndex,
     setMainImageIndex,
   ] = React.useState(0);
 
   useMainImageIndexGuard({
-    imageUrls: effectiveImageUrls,
+    imageUrls:
+      effectiveImageUrls,
     mainImageIndex,
     setMainImageIndex,
   });
 
-  // Price change -> draftPriceRows
-  const onChangePrice = React.useCallback(
-    (
-      index: number,
-      price: number | null,
-      _row: PriceRow,
-    ) => {
-      if (!isEdit) return;
+  // -----------------------------
+  // Price
+  // -----------------------------
 
-      setDraftPriceRows((prev) =>
-        updatePriceRowPrice(prev, index, price),
-      );
-    },
-    [isEdit],
-  );
+  const onChangePrice =
+    React.useCallback(
+      (
+        index: number,
+        price: number | undefined,
+        _row: PriceRow,
+      ) => {
+        if (!isEdit) {
+          return;
+        }
 
-  // Save -> application usecase
+        setDraftPriceRows(
+          (previousRows) =>
+            updatePriceRowPrice(
+              previousRows,
+              index,
+              price,
+            ),
+        );
+      },
+      [isEdit],
+    );
+
+  // -----------------------------
+  // Save
+  // -----------------------------
+
   const onSave = React.useCallback(
     async (payload?: any) => {
-      const id = String(listId ?? "").trim();
+      const id =
+        String(listId ?? "").trim();
 
       if (!id) {
-        setSaveError("invalid_list_id");
+        setSaveError(
+          "invalid_list_id",
+        );
         return;
       }
 
       const nextTitle =
-        String(payload?.title ?? "").trim() ||
-        String(payload?.listingTitle ?? "").trim() ||
-        String(draftListingTitle ?? "").trim() ||
-        "";
+        String(
+          payload?.title ?? "",
+        ).trim() ||
+        String(
+          payload?.listingTitle ?? "",
+        ).trim() ||
+        String(
+          draftListingTitle ?? "",
+        ).trim();
 
       const nextDescription =
         payload &&
         payload.description !== undefined
-          ? String(payload.description ?? "")
-          : String(draftDescription ?? "");
+          ? String(
+              payload.description ?? "",
+            )
+          : String(
+              draftDescription ?? "",
+            );
 
-      const payloadStatus = String(
-        payload?.status ?? "",
-      ).trim();
+      const payloadStatus =
+        String(
+          payload?.status ?? "",
+        ).trim();
 
-      const nextStatus = isValidListStatus(
-        payloadStatus,
-      )
-        ? payloadStatus
-        : draftStatus;
+      const nextStatus =
+        isValidListStatus(payloadStatus)
+          ? payloadStatus
+          : draftStatus;
 
       const uid =
-        String(auth.currentUser?.uid ?? "").trim() ||
+        String(
+          auth.currentUser?.uid ?? "",
+        ).trim() ||
         "system";
 
       setSaving(true);
@@ -688,12 +872,17 @@ export function useListDetail(): UseListDetailResult {
         const result =
           await saveListDetailChanges({
             listId: id,
-            inventoryIdHint: inventoryId,
-            currentDTO: dto,
+            inventoryIdHint:
+              inventoryId,
+            currentDTO:
+              dto,
 
-            title: nextTitle,
-            description: nextDescription,
-            status: nextStatus,
+            title:
+              nextTitle,
+            description:
+              nextDescription,
+            status:
+              nextStatus,
 
             assigneeId:
               String(
@@ -703,43 +892,56 @@ export function useListDetail(): UseListDetailResult {
                 draftAssigneeId ?? "",
               ).trim() ||
               String(
-                (dto as any)?.assigneeId ?? "",
+                dto?.assigneeId ?? "",
               ).trim() ||
               undefined,
 
-            updatedBy: uid,
+            updatedBy:
+              uid,
 
-            draftPriceRows: Array.isArray(
-              draftPriceRows,
-            )
-              ? draftPriceRows
-              : [],
+            draftPriceRows:
+              Array.isArray(
+                draftPriceRows,
+              )
+                ? draftPriceRows
+                : [],
 
-            draftImages: Array.isArray(
-              img.draftImages,
-            )
-              ? img.draftImages
-              : [],
+            draftImages:
+              Array.isArray(
+                img.draftImages,
+              )
+                ? img.draftImages
+                : [],
 
             mainImageIndex,
           });
 
-        if (cancelledRef.current) return;
+        if (cancelledRef.current) {
+          return;
+        }
 
-        revokeDraftBlobUrls(img.draftImages);
+        revokeDraftBlobUrls(
+          img.draftImages,
+        );
 
         setDTO(result.dto);
         setIsEdit(false);
-      } catch (e) {
-        const message = String(
-          e instanceof Error ? e.message : e,
+      } catch (caughtError) {
+        if (cancelledRef.current) {
+          return;
+        }
+
+        setSaveError(
+          String(
+            caughtError instanceof Error
+              ? caughtError.message
+              : caughtError,
+          ),
         );
-
-        if (cancelledRef.current) return;
-
-        setSaveError(message);
       } finally {
-        if (cancelledRef.current) return;
+        if (cancelledRef.current) {
+          return;
+        }
 
         setSaving(false);
       }
@@ -759,29 +961,37 @@ export function useListDetail(): UseListDetailResult {
     ],
   );
 
-  // PriceCard
-  const effectiveForPriceCard = isEdit
-    ? draftPriceRows
-    : viewPriceRows;
+  const effectiveForPriceCard =
+    isEdit
+      ? draftPriceRows
+      : viewPriceRows;
 
   const priceCard = usePriceCard({
     title: "価格",
     rows: effectiveForPriceCard,
-    mode: isEdit ? "edit" : "view",
+    mode:
+      isEdit
+        ? "edit"
+        : "view",
     currencySymbol: "¥",
-    onChangePrice: isEdit
-      ? onChangePrice
-      : undefined,
+    onChangePrice:
+      isEdit
+        ? onChangePrice
+        : undefined,
   });
 
-  const pageTitle = React.useMemo(
-    () =>
-      computeListDetailPageTitle({
+  const pageTitle =
+    React.useMemo(
+      () =>
+        computeListDetailPageTitle({
+          listId,
+          listingTitle,
+        }),
+      [
         listId,
         listingTitle,
-      }),
-    [listId, listingTitle],
-  );
+      ],
+    );
 
   return {
     pageTitle,
@@ -806,6 +1016,7 @@ export function useListDetail(): UseListDetailResult {
 
     draftListingTitle,
     setDraftListingTitle,
+
     draftDescription,
     setDraftDescription,
 
@@ -822,16 +1033,27 @@ export function useListDetail(): UseListDetailResult {
     tokenBrandName,
     tokenName,
 
-    imageUrls: effectiveImageUrls,
-    draftImages: img.draftImages,
-    onAddImages: img.onAddImages,
-    onRemoveImageAt: img.onRemoveImageAt,
-    onClearImages: img.onClearImages,
+    imageUrls:
+      effectiveImageUrls,
+
+    draftImages:
+      img.draftImages,
+
+    onAddImages:
+      img.onAddImages,
+
+    onRemoveImageAt:
+      img.onRemoveImageAt,
+
+    onClearImages:
+      img.onClearImages,
 
     mainImageIndex,
     setMainImageIndex,
 
-    priceRows: viewPriceRows,
+    priceRows:
+      viewPriceRows,
+
     draftPriceRows,
     setDraftPriceRows,
     onChangePrice,
@@ -840,8 +1062,10 @@ export function useListDetail(): UseListDetailResult {
 
     assigneeId,
     assigneeName,
+
     draftAssigneeId,
     setDraftAssigneeId,
+
     onSelectAssignee,
     onChangeAssignee,
     onEditAssignee,

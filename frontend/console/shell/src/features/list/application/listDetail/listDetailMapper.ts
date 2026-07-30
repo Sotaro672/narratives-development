@@ -4,7 +4,9 @@ import {
   isValidListStatus,
   type ListStatus,
 } from "../../../../shared/types/list";
+
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
+
 import type { ListDetailDTO } from "../../infrastructure/dto/listDetailDto";
 
 type ListDetailPriceRowSource = {
@@ -30,7 +32,10 @@ type ListDetailSource = Omit<
   "imageUrls" | "priceRows"
 > & {
   imageUrls?: readonly unknown[] | null;
-  priceRows?: readonly ListDetailPriceRowSource[] | null;
+
+  priceRows?:
+    | readonly ListDetailPriceRowSource[]
+    | null;
 };
 
 export type NormalizedListDetailPriceRow = {
@@ -42,7 +47,12 @@ export type NormalizedListDetailPriceRow = {
 
   displayOrder: number | null;
   stock: number;
-  price: number | null;
+
+  /**
+   * 未入力時はプロパティを持たない。
+   * nullは使用しない。
+   */
+  price?: number;
 
   size: string | null;
   color: string | null;
@@ -55,7 +65,9 @@ export type NormalizedListDetailPriceRow = {
 function dedupeUrlsKeepOrder(
   urls: readonly unknown[],
 ): string[] {
-  const seen = new Set<string>();
+  const seen =
+    new Set<string>();
+
   const result: string[] = [];
 
   for (const value of urls) {
@@ -64,7 +76,10 @@ function dedupeUrlsKeepOrder(
         ? value
         : "";
 
-    if (!url || seen.has(url)) {
+    if (
+      !url ||
+      seen.has(url)
+    ) {
       continue;
     }
 
@@ -75,52 +90,88 @@ function dedupeUrlsKeepOrder(
   return result;
 }
 
-function toInt(value: unknown): number {
-  const numberValue = Number(value);
+function toInt(
+  value: unknown,
+): number {
+  const numberValue =
+    Number(value);
 
-  if (!Number.isFinite(numberValue)) {
+  if (
+    !Number.isFinite(numberValue)
+  ) {
     return 0;
   }
 
-  return Math.trunc(numberValue);
+  return Math.trunc(
+    numberValue,
+  );
 }
 
 function toNumberOrNull(
   value: unknown,
 ): number | null {
-  if (value === null || value === undefined) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
     return null;
   }
 
-  const numberValue = Number(value);
+  const numberValue =
+    Number(value);
 
-  if (!Number.isFinite(numberValue)) {
-    return null;
+  return Number.isFinite(numberValue)
+    ? numberValue
+    : null;
+}
+
+function toOptionalNumber(
+  value: unknown,
+): number | undefined {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return undefined;
   }
 
-  return numberValue;
+  const numberValue =
+    Number(value);
+
+  return Number.isFinite(numberValue)
+    ? numberValue
+    : undefined;
 }
 
 function toDisplayOrderOrNull(
   value: unknown,
 ): number | null {
-  const numberValue = toNumberOrNull(value);
+  const numberValue =
+    toNumberOrNull(value);
 
   if (numberValue === null) {
     return null;
   }
 
-  return Math.trunc(numberValue);
+  return Math.trunc(
+    numberValue,
+  );
 }
 
 function toStringOrNull(
   value: unknown,
 ): string | null {
-  if (value === null || value === undefined) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
     return null;
   }
 
-  if (typeof value === "string") {
+  if (
+    typeof value === "string"
+  ) {
     return value || null;
   }
 
@@ -130,23 +181,32 @@ function toStringOrNull(
 export function normalizeStatus(
   value: unknown,
 ): ListStatus | "" {
-  return isValidListStatus(value) ? value : "";
+  return isValidListStatus(value)
+    ? value
+    : "";
 }
 
 export function formatYMDHM(
   value: unknown,
 ): string {
-  if (typeof value !== "string") {
+  if (
+    typeof value !== "string"
+  ) {
     return "";
   }
 
-  return safeDateTimeLabelJa(value, "");
+  return safeDateTimeLabelJa(
+    value,
+    "",
+  );
 }
 
 export function normalizeImageUrls(
   dto:
     | {
-        imageUrls?: readonly unknown[] | null;
+        imageUrls?:
+          | readonly unknown[]
+          | null;
       }
     | null
     | undefined,
@@ -157,7 +217,8 @@ export function normalizeImageUrls(
 }
 
 export function normalizePriceRows<
-  TRow extends object = NormalizedListDetailPriceRow,
+  TRow extends object =
+    NormalizedListDetailPriceRow,
 >(
   dto:
     | {
@@ -168,106 +229,205 @@ export function normalizePriceRows<
     | null
     | undefined,
 ): TRow[] {
-  const rows = dto?.priceRows ?? [];
+  const rows =
+    dto?.priceRows ?? [];
 
-  return rows.map((row, index) => {
-    const modelId =
-      typeof row.modelId === "string"
-        ? row.modelId
-        : "";
+  return rows.map(
+    (
+      row,
+      index,
+    ) => {
+      const modelId =
+        typeof row.modelId === "string"
+          ? row.modelId
+          : "";
 
-    const normalizedRow: NormalizedListDetailPriceRow = {
-      id: modelId || String(index),
-      modelId,
+      const price =
+        toOptionalNumber(
+          row.price,
+        );
 
-      kind: toStringOrNull(row.kind),
-      modelNumber: toStringOrNull(
-        row.modelNumber,
-      ),
+      const normalizedRow:
+        NormalizedListDetailPriceRow = {
+        id:
+          modelId ||
+          String(index),
 
-      displayOrder: toDisplayOrderOrNull(
-        row.displayOrder,
-      ),
-      stock: toInt(row.stock),
-      price: toNumberOrNull(row.price),
+        modelId,
 
-      size: toStringOrNull(row.size),
-      color: toStringOrNull(row.color),
-      rgb: toNumberOrNull(row.rgb),
+        kind:
+          toStringOrNull(
+            row.kind,
+          ),
 
-      volumeValue: toNumberOrNull(
-        row.volumeValue,
-      ),
-      volumeUnit: toStringOrNull(
-        row.volumeUnit,
-      ),
-    };
+        modelNumber:
+          toStringOrNull(
+            row.modelNumber,
+          ),
 
-    return normalizedRow as unknown as TRow;
-  });
+        displayOrder:
+          toDisplayOrderOrNull(
+            row.displayOrder,
+          ),
+
+        stock:
+          toInt(
+            row.stock,
+          ),
+
+        size:
+          toStringOrNull(
+            row.size,
+          ),
+
+        color:
+          toStringOrNull(
+            row.color,
+          ),
+
+        rgb:
+          toNumberOrNull(
+            row.rgb,
+          ),
+
+        volumeValue:
+          toNumberOrNull(
+            row.volumeValue,
+          ),
+
+        volumeUnit:
+          toStringOrNull(
+            row.volumeUnit,
+          ),
+
+        ...(
+          price === undefined
+            ? {}
+            : {
+                price,
+              }
+        ),
+      };
+
+      return normalizedRow as unknown as TRow;
+    },
+  );
 }
 
 export function updatePriceRowPrice<
   TRow extends object,
 >(
-  rows: readonly TRow[] | null | undefined,
+  rows:
+    | readonly TRow[]
+    | null
+    | undefined,
   index: number,
-  price: number | null,
+  price: number | undefined,
 ): TRow[] {
-  const source = rows ?? [];
+  const source =
+    rows ?? [];
 
-  return source.map((row, rowIndex) => {
-    if (rowIndex !== index) {
-      return row;
-    }
+  return source.map(
+    (
+      row,
+      rowIndex,
+    ) => {
+      if (
+        rowIndex !== index
+      ) {
+        return row;
+      }
 
-    return {
-      ...row,
-      price,
-    };
-  });
+      if (
+        price === undefined
+      ) {
+        const nextRow = {
+          ...row,
+        } as TRow & {
+          price?: number;
+        };
+
+        delete nextRow.price;
+
+        return nextRow;
+      }
+
+      return {
+        ...row,
+        price,
+      } as TRow;
+    },
+  );
 }
 
 export function deriveListDetail<
-  TRow extends object = NormalizedListDetailPriceRow,
+  TRow extends object =
+    NormalizedListDetailPriceRow,
 >(
-  dto: ListDetailSource | null | undefined,
+  dto:
+    | ListDetailSource
+    | null
+    | undefined,
 ) {
-  const listingTitle = dto?.title ?? "";
-  const description = dto?.description ?? "";
-  const status = normalizeStatus(dto?.status);
+  const listingTitle =
+    dto?.title ?? "";
+
+  const description =
+    dto?.description ?? "";
+
+  const status =
+    normalizeStatus(
+      dto?.status,
+    );
 
   const productBrandId =
     dto?.productBrandId ?? "";
+
   const productBrandName =
     dto?.productBrandName ?? "";
-  const productName = dto?.productName ?? "";
+
+  const productName =
+    dto?.productName ?? "";
 
   const tokenBrandId =
     dto?.tokenBrandId ?? "";
+
   const tokenBrandName =
     dto?.tokenBrandName ?? "";
-  const tokenName = dto?.tokenName ?? "";
 
-  const assigneeId = dto?.assigneeId ?? "";
+  const tokenName =
+    dto?.tokenName ?? "";
+
+  const assigneeId =
+    dto?.assigneeId ?? "";
+
   const assigneeName =
-    dto?.assigneeName || "未設定";
+    dto?.assigneeName ||
+    "未設定";
 
   const createdByName =
     dto?.createdByName ?? "";
-  const createdAt = formatYMDHM(
-    dto?.createdAt,
-  );
+
+  const createdAt =
+    formatYMDHM(
+      dto?.createdAt,
+    );
 
   const updatedByName =
     dto?.updatedByName ?? "";
-  const updatedAt = formatYMDHM(
-    dto?.updatedAt,
-  );
 
-  const imageUrls = normalizeImageUrls(dto);
+  const updatedAt =
+    formatYMDHM(
+      dto?.updatedAt,
+    );
+
+  const imageUrls =
+    normalizeImageUrls(dto);
+
   const priceRows =
-    normalizePriceRows<TRow>(dto);
+    normalizePriceRows<TRow>(
+      dto,
+    );
 
   return {
     listingTitle,
@@ -302,9 +462,12 @@ export function computeListDetailPageTitle(
     listingTitle?: string;
   },
 ): string {
-  const id = args.listId ?? "";
+  const id =
+    args.listId ?? "";
+
   const title =
-    args.listingTitle || "出品詳細";
+    args.listingTitle ||
+    "出品詳細";
 
   return id
     ? `${title}（listId: ${id}）`
