@@ -5,19 +5,21 @@ import { useParams } from "react-router-dom";
 
 import type { PriceRow } from "../../../inventory/application/listCreate/listCreateService";
 
-import { auth } from "../../../../auth/infrastructure/config/firebaseClient";
+import { useAuthContext } from "../../../../auth/application/AuthContext";
 
 import { useMainImageIndexGuard } from "./internal/useMainImageIndexGuard";
 import { useCancelledRef } from "./internal/useCancelledRef";
+import { useListImages } from "./useListImages";
 
 import { saveListDetailChanges } from "../../application/listDetail/listDetailSave.usecase";
 
 import { updatePriceRowPrice } from "../../application/listDetail/listDetailMapper";
 
-import {
-  isValidListStatus,
-  type ListStatus,
-} from "../../../../shared/types/list";
+import { buildListDetailSaveInput } from "../../application/listDetail/buildListDetailSaveInput";
+import { normalizeListStatusForEdit } from "../../application/listDetail/listDetailEdit";
+import type { ListDetailSavePayload } from "../../application/listDetail/listDetailSavePayload";
+
+import type { ListStatus } from "../../../../shared/types/list";
 
 import {
   deriveListDetail,
@@ -27,11 +29,9 @@ import {
   type ListDetailRouteParams,
 } from "../../application/listDetailService";
 
-export type DraftImage = {
-  url: string;
-  isNew: boolean;
-  file?: File;
-};
+export type {
+  DraftImage,
+} from "./useListImages";
 
 export type UseListDetailResult = {
   loading: boolean;
@@ -43,7 +43,10 @@ export type UseListDetailResult = {
   isEdit: boolean;
   onEdit: () => void;
   onCancel: () => void;
-  onSave: (payload?: any) => Promise<void>;
+
+  onSave: (
+    payload?: ListDetailSavePayload,
+  ) => Promise<void>;
 
   listingTitle: string;
   description: string;
@@ -60,7 +63,9 @@ export type UseListDetailResult = {
 
   status: ListStatus | "";
   draftStatus: ListStatus;
-  onToggleStatus: (next: ListStatus) => void;
+  onToggleStatus: (
+    next: ListStatus,
+  ) => void;
 
   productBrandName: string;
   productName: string;
@@ -70,8 +75,14 @@ export type UseListDetailResult = {
 
   imageUrls: string[];
 
-  onAddImages: (files: FileList | null) => void;
-  onRemoveImageAt: (index: number) => void;
+  onAddImages: (
+    files: FileList | null,
+  ) => void;
+
+  onRemoveImageAt: (
+    index: number,
+  ) => void;
+
   onClearImages: () => void;
 
   mainImageIndex: number;
@@ -92,7 +103,9 @@ export type UseListDetailResult = {
   assigneeName: string;
   draftAssigneeId: string;
 
-  onSelectAssignee: (id: string) => void;
+  onSelectAssignee: (
+    id: string,
+  ) => void;
 
   createdByName: string;
   createdAt: string;
@@ -113,352 +126,16 @@ function clonePriceRows(
   }));
 }
 
-function cloneDraftImagesFromUrls(
-  urls: string[],
-): DraftImage[] {
-  if (!Array.isArray(urls)) {
-    return [];
-  }
-
-  return urls
-    .map((url) =>
-      String(url ?? "").trim(),
-    )
-    .filter(Boolean)
-    .map((url) => ({
-      url,
-      isNew: false,
-    }));
-}
-
-function revokeDraftBlobUrls(
-  items: DraftImage[],
-): void {
-  if (!Array.isArray(items)) {
-    return;
-  }
-
-  for (const item of items) {
-    if (
-      !item.isNew ||
-      typeof item.url !== "string" ||
-      !item.url.startsWith("blob:")
-    ) {
-      continue;
-    }
-
-    try {
-      URL.revokeObjectURL(item.url);
-    } catch {
-      // Blob URLの解放失敗は無視する。
-    }
-  }
-}
-
-function fileKey(
-  file: File,
-): string {
-  return [
-    file.name,
-    file.size,
-    file.lastModified,
-  ].join("__");
-}
-
-function isImageFile(
-  file: File,
-): boolean {
-  return file.type.startsWith("image/");
-}
-
-function useListImages(args: {
-  isEdit: boolean;
-  saving: boolean;
-  initialUrls: string[];
-}) {
-  const {
-    isEdit,
-    saving,
-    initialUrls,
-  } = args;
-
-  const [
-    draftImages,
-    setDraftImages,
-  ] = React.useState<DraftImage[]>(
-    cloneDraftImagesFromUrls(
-      initialUrls,
-    ),
-  );
-
-  React.useEffect(() => {
-    if (isEdit) {
-      return;
-    }
-
-    setDraftImages(
-      cloneDraftImagesFromUrls(
-        initialUrls,
-      ),
-    );
-  }, [
-    isEdit,
-    initialUrls,
-  ]);
-
-  const addFiles =
-    React.useCallback(
-      (files: File[]) => {
-        if (
-          !isEdit ||
-          saving
-        ) {
-          return;
-        }
-
-        const incomingFiles =
-          (
-            Array.isArray(files)
-              ? files
-              : []
-          )
-            .filter(Boolean)
-            .filter(isImageFile);
-
-        if (
-          incomingFiles.length === 0
-        ) {
-          return;
-        }
-
-        setDraftImages(
-          (previousImages) => {
-            const currentImages =
-              Array.isArray(
-                previousImages,
-              )
-                ? previousImages
-                : [];
-
-            const existingFileKeys =
-              new Set(
-                currentImages
-                  .filter(
-                    (
-                      image,
-                    ): image is DraftImage & {
-                      file: File;
-                    } =>
-                      image.isNew &&
-                      Boolean(
-                        image.file,
-                      ),
-                  )
-                  .map((image) =>
-                    fileKey(
-                      image.file,
-                    ),
-                  ),
-              );
-
-            const newImages:
-              DraftImage[] = [];
-
-            for (
-              const file
-              of incomingFiles
-            ) {
-              const key =
-                fileKey(file);
-
-              if (
-                existingFileKeys.has(
-                  key,
-                )
-              ) {
-                continue;
-              }
-
-              existingFileKeys.add(
-                key,
-              );
-
-              newImages.push({
-                url:
-                  URL.createObjectURL(
-                    file,
-                  ),
-                file,
-                isNew: true,
-              });
-            }
-
-            return [
-              ...currentImages,
-              ...newImages,
-            ];
-          },
-        );
-      },
-      [
-        isEdit,
-        saving,
-      ],
-    );
-
-  const onAddImages =
-    React.useCallback(
-      (
-        files:
-          FileList |
-          null,
-      ) => {
-        if (
-          !files ||
-          files.length === 0
-        ) {
-          return;
-        }
-
-        addFiles(
-          Array.from(
-            files,
-          ).filter(Boolean),
-        );
-      },
-      [addFiles],
-    );
-
-  const onRemoveImageAt =
-    React.useCallback(
-      (
-        index: number,
-      ) => {
-        if (
-          !isEdit ||
-          saving
-        ) {
-          return;
-        }
-
-        setDraftImages(
-          (previousImages) => {
-            const currentImages =
-              Array.isArray(
-                previousImages,
-              )
-                ? previousImages
-                : [];
-
-            if (
-              index < 0 ||
-              index >=
-                currentImages.length
-            ) {
-              return currentImages;
-            }
-
-            const target =
-              currentImages[
-                index
-              ];
-
-            if (
-              target?.isNew &&
-              target.url.startsWith(
-                "blob:",
-              )
-            ) {
-              try {
-                URL.revokeObjectURL(
-                  target.url,
-                );
-              } catch {
-                // Blob URLの解放失敗は無視する。
-              }
-            }
-
-            return [
-              ...currentImages.slice(
-                0,
-                index,
-              ),
-              ...currentImages.slice(
-                index + 1,
-              ),
-            ];
-          },
-        );
-      },
-      [
-        isEdit,
-        saving,
-      ],
-    );
-
-  const onClearImages =
-    React.useCallback(
-      () => {
-        if (
-          !isEdit ||
-          saving
-        ) {
-          return;
-        }
-
-        setDraftImages(
-          (
-            previousImages,
-          ) => {
-            const currentImages =
-              Array.isArray(
-                previousImages,
-              )
-                ? previousImages
-                : [];
-
-            revokeDraftBlobUrls(
-              currentImages,
-            );
-
-            return [];
-          },
-        );
-      },
-      [
-        isEdit,
-        saving,
-      ],
-    );
-
-  const imageUrls =
-    React.useMemo(
-      () =>
-        draftImages
-          .map((image) =>
-            String(
-              image.url ?? "",
-            ).trim(),
-          )
-          .filter(Boolean),
-      [draftImages],
-    );
-
-  return {
-    draftImages,
-    imageUrls,
-    onAddImages,
-    onRemoveImageAt,
-    onClearImages,
-  };
-}
-
 export function useListDetail():
   UseListDetailResult {
   const params =
     useParams<
       ListDetailRouteParams
     >();
+
+  const {
+    user,
+  } = useAuthContext();
 
   const resolved =
     React.useMemo(
@@ -611,14 +288,11 @@ export function useListDetail():
   } = derived;
 
   const statusForEdit =
-    React.useMemo<
-      ListStatus
-    >(
+    React.useMemo(
       () =>
-        status ===
-        "listing"
-          ? "listing"
-          : "suspended",
+        normalizeListStatusForEdit(
+          status,
+        ),
       [status],
     );
 
@@ -760,16 +434,14 @@ export function useListDetail():
   const onCancel =
     React.useCallback(
       () => {
-        revokeDraftBlobUrls(
-          images.draftImages,
-        );
+        images.releaseDraftBlobUrls();
 
         resetDraftFromView();
         setSaveError("");
         setIsEdit(false);
       },
       [
-        images.draftImages,
+        images.releaseDraftBlobUrls,
         resetDraftFromView,
       ],
     );
@@ -880,7 +552,8 @@ export function useListDetail():
   const onSave =
     React.useCallback(
       async (
-        payload?: any,
+        payload?:
+          ListDetailSavePayload,
       ) => {
         const id =
           String(
@@ -895,57 +568,21 @@ export function useListDetail():
           return;
         }
 
-        const nextTitle =
-          String(
-            payload
-              ?.title ??
-              "",
-          ).trim() ||
-          String(
-            payload
-              ?.listingTitle ??
-              "",
-          ).trim() ||
-          String(
-            draftListingTitle ??
-              "",
-          ).trim();
+        const saveInput =
+          buildListDetailSaveInput({
+            payload,
 
-        const nextDescription =
-          payload &&
-          payload.description !==
-            undefined
-            ? String(
-                payload
-                  .description ??
-                  "",
-              )
-            : String(
-                draftDescription ??
-                  "",
-              );
+            draftListingTitle,
+            draftDescription,
+            draftStatus,
+            draftAssigneeId,
 
-        const payloadStatus =
-          String(
-            payload
-              ?.status ??
-              "",
-          ).trim();
+            currentAssigneeId:
+              dto?.assigneeId,
 
-        const nextStatus =
-          isValidListStatus(
-            payloadStatus,
-          )
-            ? payloadStatus
-            : draftStatus;
-
-        const uid =
-          String(
-            auth.currentUser
-              ?.uid ??
-              "",
-          ).trim() ||
-          "system";
+            currentUserUid:
+              user?.uid,
+          });
 
         setSaving(true);
         setSaveError("");
@@ -953,55 +590,31 @@ export function useListDetail():
         try {
           const result =
             await saveListDetailChanges({
-              listId: id,
+              listId:
+                id,
 
               currentDTO:
                 dto,
 
               title:
-                nextTitle,
+                saveInput.title,
 
               description:
-                nextDescription,
+                saveInput.description,
 
               status:
-                nextStatus,
+                saveInput.status,
 
               assigneeId:
-                String(
-                  payload
-                    ?.assigneeId ??
-                    "",
-                ).trim() ||
-                String(
-                  draftAssigneeId ??
-                    "",
-                ).trim() ||
-                String(
-                  dto
-                    ?.assigneeId ??
-                    "",
-                ).trim() ||
-                undefined,
+                saveInput.assigneeId,
 
               updatedBy:
-                uid,
+                saveInput.updatedBy,
 
-              draftPriceRows:
-                Array.isArray(
-                  draftPriceRows,
-                )
-                  ? draftPriceRows
-                  : [],
+              draftPriceRows,
 
               draftImages:
-                Array.isArray(
-                  images
-                    .draftImages,
-                )
-                  ? images
-                      .draftImages
-                  : [],
+                images.draftImages,
 
               mainImageIndex,
             });
@@ -1012,9 +625,7 @@ export function useListDetail():
             return;
           }
 
-          revokeDraftBlobUrls(
-            images.draftImages,
-          );
+          images.releaseDraftBlobUrls();
 
           setDTO(
             result.dto,
@@ -1036,8 +647,7 @@ export function useListDetail():
             String(
               caughtError
                 instanceof Error
-                ? caughtError
-                    .message
+                ? caughtError.message
                 : caughtError,
             ),
           );
@@ -1054,12 +664,14 @@ export function useListDetail():
       [
         listId,
         dto,
+        user?.uid,
         draftStatus,
         draftListingTitle,
         draftDescription,
         draftAssigneeId,
         draftPriceRows,
         images.draftImages,
+        images.releaseDraftBlobUrls,
         mainImageIndex,
         cancelledRef,
       ],
