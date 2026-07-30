@@ -35,15 +35,6 @@ export default function ListDetail() {
     ? vm.draftPriceRows
     : vm.priceRows;
 
-  const handleSelectAssignee = React.useCallback(
-    (id: string) => {
-      vm.setDraftAssigneeId(id);
-      vm.onSelectAssignee(id);
-      vm.onChangeAssignee(id);
-    },
-    [vm],
-  );
-
   return (
     <PageStyle
       layout="grid-2"
@@ -177,20 +168,15 @@ export default function ListDetail() {
         <AdminCard
           title="担当者"
           mode={isEdit ? "edit" : "view"}
+          assigneeId={
+            isEdit
+              ? vm.draftAssigneeId
+              : vm.assigneeId
+          }
           assigneeName={vm.assigneeName}
           onSelectAssignee={
             isEdit
-              ? handleSelectAssignee
-              : undefined
-          }
-          onEditAssignee={
-            isEdit
-              ? vm.onEditAssignee
-              : undefined
-          }
-          onClickAssignee={
-            isEdit
-              ? vm.onClickAssignee
+              ? vm.onSelectAssignee
               : undefined
           }
           createdByName={vm.createdByName}
