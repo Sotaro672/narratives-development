@@ -119,12 +119,6 @@ function renderMain(
           alt={label}
           className="token-contents-card__image"
           onError={(event) => {
-            // eslint-disable-next-line no-console
-            console.warn(
-              "[TokenContentsCard] image load failed:",
-              item.url,
-            );
-
             event.currentTarget.style.display =
               "none";
           }}

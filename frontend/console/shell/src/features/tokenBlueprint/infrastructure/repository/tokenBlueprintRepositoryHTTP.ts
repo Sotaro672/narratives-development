@@ -16,7 +16,6 @@ import { fetchJSON } from "../../../../shared/http/fetchJSON";
 import type { ContentFileDTO } from "../dto/tokenBlueprint.dto";
 
 import {
-  normalizePageResult,
   normalizeTokenBlueprint,
 } from "../dto/tokenBlueprint.mapper";
 
@@ -219,32 +218,35 @@ export async function fetchTokenBlueprints(
     perPage?: number;
   },
 ): Promise<TokenBlueprintPageResult> {
-  const url = new URL(
-    "/token-blueprints",
-    "http://local",
-  );
+  const searchParams =
+    new URLSearchParams();
 
   if (params?.page !== undefined) {
-    url.searchParams.set(
+    searchParams.set(
       "page",
       String(params.page),
     );
   }
 
   if (params?.perPage !== undefined) {
-    url.searchParams.set(
+    searchParams.set(
       "perPage",
       String(params.perPage),
     );
   }
 
-  const raw =
-    await requestJson<unknown>(
-      url.pathname + url.search,
-      "GET",
-    );
+  const query =
+    searchParams.toString();
 
-  return normalizePageResult(raw);
+  const path =
+    query
+      ? `/token-blueprints?${query}`
+      : "/token-blueprints";
+
+  return requestJson<TokenBlueprintPageResult>(
+    path,
+    "GET",
+  );
 }
 
 export async function fetchTokenBlueprintById(
@@ -256,13 +258,10 @@ export async function fetchTokenBlueprintById(
     );
   }
 
-  const raw =
-    await requestJson<unknown>(
-      `/token-blueprints/${encodeURIComponent(id)}`,
-      "GET",
-    );
-
-  return normalizeTokenBlueprint(raw);
+  return requestJson<TokenBlueprint>(
+    `/token-blueprints/${encodeURIComponent(id)}`,
+    "GET",
+  );
 }
 
 export async function createTokenBlueprint(
@@ -275,7 +274,9 @@ export async function createTokenBlueprint(
       payload,
     );
 
-  return normalizeTokenBlueprint(raw);
+  return normalizeTokenBlueprint(
+    raw,
+  );
 }
 
 export async function updateTokenBlueprint(
@@ -295,7 +296,9 @@ export async function updateTokenBlueprint(
       payload,
     );
 
-  return normalizeTokenBlueprint(raw);
+  return normalizeTokenBlueprint(
+    raw,
+  );
 }
 
 export async function deleteTokenBlueprint(
@@ -340,7 +343,9 @@ export async function patchTokenBlueprintContentFiles(
       },
     );
 
-  return normalizeTokenBlueprint(raw);
+  return normalizeTokenBlueprint(
+    raw,
+  );
 }
 
 // ---------------------------------------------------------
@@ -389,5 +394,7 @@ export async function attachTokenBlueprintIcon(
       },
     );
 
-  return normalizeTokenBlueprint(raw);
+  return normalizeTokenBlueprint(
+    raw,
+  );
 }
