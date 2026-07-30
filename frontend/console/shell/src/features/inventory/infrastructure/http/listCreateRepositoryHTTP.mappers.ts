@@ -6,11 +6,10 @@ import type {
   ListCreatePriceRowDTO,
 } from "./listCreateRepositoryHTTP.types";
 
-const PRICE_REQUIRED_MESSAGE =
-  "価格が未入力の商品があります。";
-
 function toNullableNumber(value: unknown): number | null {
-  if (value === undefined || value === null) return null;
+  if (value === undefined || value === null) {
+    return null;
+  }
 
   const numberValue = Number(value);
 
@@ -20,7 +19,9 @@ function toNullableNumber(value: unknown): number | null {
 }
 
 function toOptionalNumber(value: unknown): number | undefined {
-  if (value === undefined || value === null) return undefined;
+  if (value === undefined || value === null) {
+    return undefined;
+  }
 
   const numberValue = Number(value);
 
@@ -30,7 +31,9 @@ function toOptionalNumber(value: unknown): number | undefined {
 }
 
 function toNullableString(value: unknown): string | null {
-  if (value === undefined || value === null) return null;
+  if (value === undefined || value === null) {
+    return null;
+  }
 
   const stringValue = String(value).trim();
 
@@ -79,15 +82,6 @@ function mapListCreatePriceRows(
       return [];
     }
 
-    if (
-      typeof rawRow.price !== "number" ||
-      !Number.isFinite(rawRow.price)
-    ) {
-      throw new Error(
-        PRICE_REQUIRED_MESSAGE,
-      );
-    }
-
     const row: ListCreatePriceRowDTO = {
       modelId,
 
@@ -118,8 +112,15 @@ function mapListCreatePriceRows(
       volumeUnit:
         toNullableString(rawRow?.volumeUnit),
 
-      price:
-        rawRow.price,
+      ...(
+        rawRow?.price === undefined ||
+        rawRow?.price === null
+          ? {}
+          : {
+              price:
+                rawRow.price,
+            }
+      ),
     };
 
     return [row];
