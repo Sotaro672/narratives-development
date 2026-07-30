@@ -1,11 +1,7 @@
 // frontend/console/inventory/src/infrastructure/http/inventoryRepositoryHTTP.ts
 
 export type {
-  InventoryProductSummary,
   InventoryListRowDTO,
-  InventoryIDsByProductAndTokenDTO,
-  TokenBlueprintSummaryDTO,
-  ProductBlueprintSummaryDTO,
   ProductBlueprintPatchDTO,
   TokenBlueprintPatchDTO,
   InventoryDetailRowDTO,

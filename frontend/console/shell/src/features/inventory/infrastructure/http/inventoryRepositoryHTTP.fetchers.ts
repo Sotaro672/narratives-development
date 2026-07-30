@@ -1,13 +1,16 @@
-// frontend/console/inventory/src/infrastructure/http/inventoryRepositoryHTTP.fetchers.ts
+// frontend/console/shell/src/features/inventory/infrastructure/http/inventoryRepositoryHTTP.fetchers.ts
 
-import { getInventoryListRaw, getInventoryDetailRaw } from "../api/inventoryApi";
+import {
+  getInventoryDetailRaw,
+  getInventoryListRaw,
+} from "../api/inventoryApi";
+
 import type {
-  InventoryListRowDTO,
   InventoryDetailDTO,
+  InventoryListRowDTO,
 } from "./inventoryRepositoryHTTP.types";
 
 import {
-  normalizeInventoryListRow,
   mapInventoryDetailDTO,
 } from "./inventoryRepositoryHTTP.mappers";
 
@@ -17,20 +20,24 @@ import {
  * GET /inventory
  *
  * 前提:
- * - backend response は配列。
+ * - backend response は InventoryListRowDTO[]。
  * - 旧 items wrapper などの後方互換は扱わない。
- * - row は normalizeInventoryListRow で画面 DTO に変換する。
+ * - backend response のフィールド名と型を正とする。
+ * - frontend では一覧行の normalize を行わない。
  */
-export async function fetchInventoryListDTO(): Promise<InventoryListRowDTO[]> {
-  const data = await getInventoryListRaw();
+export async function fetchInventoryListDTO(): Promise<
+  InventoryListRowDTO[]
+> {
+  const data =
+    await getInventoryListRaw();
 
   if (!Array.isArray(data)) {
-    throw new Error("inventory list response must be an array");
+    throw new Error(
+      "inventory list response must be an array",
+    );
   }
 
-  return data
-    .map(normalizeInventoryListRow)
-    .filter((x): x is InventoryListRowDTO => x !== null);
+  return data as InventoryListRowDTO[];
 }
 
 /**
@@ -47,11 +54,24 @@ export async function fetchInventoryListDTO(): Promise<InventoryListRowDTO[]> {
 export async function fetchInventoryDetailDTO(
   inventoryId: string,
 ): Promise<InventoryDetailDTO> {
-  const id = String(inventoryId ?? "").trim();
+  const id =
+    String(
+      inventoryId ?? "",
+    ).trim();
+
   if (!id) {
-    throw new Error("inventoryId is empty");
+    throw new Error(
+      "inventoryId is empty",
+    );
   }
 
-  const data = await getInventoryDetailRaw(id);
-  return mapInventoryDetailDTO(data, id);
+  const data =
+    await getInventoryDetailRaw(
+      id,
+    );
+
+  return mapInventoryDetailDTO(
+    data,
+    id,
+  );
 }

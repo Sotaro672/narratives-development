@@ -1,21 +1,19 @@
-// frontend/console/inventory/src/infrastructure/http/inventoryRepositoryHTTP.mappers.ts
+// frontend/console/shell/src/features/inventory/infrastructure/http/inventoryRepositoryHTTP.mappers.ts
 
 import type {
-  InventoryListRowDTO,
-  ProductBlueprintPatchDTO,
-  TokenBlueprintPatchDTO,
   InventoryDetailDTO,
   InventoryDetailRowDTO,
-  InventoryProductSummary,
-  InventoryIDsByProductAndTokenDTO,
+  ProductBlueprintPatchDTO,
+  TokenBlueprintPatchDTO,
 } from "./inventoryRepositoryHTTP.types";
+
 import type {
   ProductBlueprintCategoryKind,
   ProductBlueprintCategorySnapshot,
 } from "../../../productBlueprint/domain/productBlueprintCategory";
 
 // =========================================================
-// /inventory を正とする mapper
+// Inventory Detail mapper
 //
 // 方針:
 // - 後方互換の揺れ吸収はしない。
@@ -27,7 +25,9 @@ import type {
 function mapProductBlueprintCategory(
   raw: any,
 ): ProductBlueprintCategorySnapshot | null {
-  if (!raw) return null;
+  if (!raw) {
+    return null;
+  }
 
   return {
     id: raw.ID,
@@ -35,47 +35,25 @@ function mapProductBlueprintCategory(
     nameJa: raw.NameJa,
     nameEn: raw.NameEn,
     kind: raw.Kind as ProductBlueprintCategoryKind,
-    path: Array.isArray(raw.Path) ? raw.Path : [],
-    parentId: raw.ParentID ?? null,
+    path: Array.isArray(raw.Path)
+      ? raw.Path
+      : [],
+    parentId:
+      raw.ParentID ?? null,
   };
 }
 
-function mapProductIdTag(raw: any): { type?: string } | null {
-  if (!raw) return null;
+function mapProductIdTag(
+  raw: any,
+): {
+  type?: string;
+} | null {
+  if (!raw) {
+    return null;
+  }
 
   return {
     type: raw.Type,
-  };
-}
-
-// ---------------------------------------------------------
-// Inventory List Row mapper
-//
-// 期待 row:
-// {
-//   productBlueprintId,
-//   productName,
-//   tokenBlueprintId,
-//   tokenName,
-//   modelNumber,
-//   availableStock,
-//   reservedCount
-// }
-// ---------------------------------------------------------
-export function normalizeInventoryListRow(raw: any): InventoryListRowDTO | null {
-  const productBlueprintId = raw.productBlueprintId;
-  const tokenBlueprintId = raw.tokenBlueprintId;
-
-  if (!productBlueprintId || !tokenBlueprintId) return null;
-
-  return {
-    productBlueprintId,
-    productName: raw.productName,
-    tokenBlueprintId,
-    tokenName: raw.tokenName,
-    modelNumber: raw.modelNumber,
-    availableStock: raw.availableStock,
-    reservedCount: raw.reservedCount,
   };
 }
 
@@ -92,35 +70,68 @@ export function normalizeInventoryListRow(raw: any): InventoryListRowDTO | null 
 // - productIdTag: type
 // - modelRefs: modelId / displayOrder
 // ---------------------------------------------------------
-export function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
-  const p = raw ?? {};
+
+export function mapProductBlueprintPatch(
+  raw: any,
+): ProductBlueprintPatchDTO {
+  const patch =
+    raw ?? {};
 
   return {
-    productName: p.productName,
-    description: p.description,
+    productName:
+      patch.productName,
 
-    brandId: p.brandId,
-    brandName: p.brandName,
-    companyId: p.companyId,
+    description:
+      patch.description,
 
-    productBlueprintCategory: mapProductBlueprintCategory(
-      p.productBlueprintCategory,
-    ),
-    categoryFields: p.categoryFields ?? null,
+    brandId:
+      patch.brandId,
 
-    fit: p.fit,
-    material: p.material,
-    weight: p.weight,
-    qualityAssurance: p.qualityAssurance,
+    brandName:
+      patch.brandName,
 
-    productIdTag: mapProductIdTag(p.productIdTag),
+    companyId:
+      patch.companyId,
 
-    modelRefs: Array.isArray(p.modelRefs)
-      ? p.modelRefs.map((r: any) => ({
-          modelId: r.ModelID,
-          displayOrder: r.DisplayOrder,
-        }))
-      : null,
+    productBlueprintCategory:
+      mapProductBlueprintCategory(
+        patch.productBlueprintCategory,
+      ),
+
+    categoryFields:
+      patch.categoryFields ?? null,
+
+    fit:
+      patch.fit,
+
+    material:
+      patch.material,
+
+    weight:
+      patch.weight,
+
+    qualityAssurance:
+      patch.qualityAssurance,
+
+    productIdTag:
+      mapProductIdTag(
+        patch.productIdTag,
+      ),
+
+    modelRefs:
+      Array.isArray(
+        patch.modelRefs,
+      )
+        ? patch.modelRefs.map(
+            (ref: any) => ({
+              modelId:
+                ref.ModelID,
+
+              displayOrder:
+                ref.DisplayOrder,
+            }),
+          )
+        : null,
   };
 }
 
@@ -137,77 +148,40 @@ export function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
 //   iconUrl
 // }
 // ---------------------------------------------------------
+
 export function mapTokenBlueprintPatch(
   raw: any,
 ): TokenBlueprintPatchDTO | undefined {
-  if (raw === undefined || raw === null) return undefined;
+  if (
+    raw === undefined ||
+    raw === null
+  ) {
+    return undefined;
+  }
 
   return {
-    tokenName: raw.tokenName,
-    symbol: raw.symbol,
-    brandId: raw.brandId,
-    brandName: raw.brandName,
-    description: raw.description,
-    iconUrl: raw.iconUrl,
+    tokenName:
+      raw.tokenName,
+
+    symbol:
+      raw.symbol,
+
+    brandId:
+      raw.brandId,
+
+    brandName:
+      raw.brandName,
+
+    description:
+      raw.description,
+
+    iconUrl:
+      raw.iconUrl,
   };
 }
 
 // ---------------------------------------------------------
-// Product summary mapper
-//
-// 期待 row:
-// {
-//   productBlueprintId,
-//   productName
-// }
-// ---------------------------------------------------------
-export function mapPrintedInventorySummaries(
-  data: any,
-): InventoryProductSummary[] {
-  if (!Array.isArray(data)) return [];
-
-  const byPbId = new Map<string, InventoryProductSummary>();
-
-  for (const row of data) {
-    const id = row.productBlueprintId;
-    if (!id) continue;
-
-    if (!byPbId.has(id)) {
-      byPbId.set(id, {
-        id,
-        productName: row.productName || "-",
-      });
-    }
-  }
-
-  return Array.from(byPbId.values());
-}
-
-// ---------------------------------------------------------
-// Inventory IDs mapper
-//
-// NOTE:
-// 後方互換削除後、Inventory Detail では使用しない。
-// 他画面で未使用なら、この mapper も削除可能。
-// ---------------------------------------------------------
-export function mapInventoryIDsByProductAndToken(
-  productBlueprintId: string,
-  tokenBlueprintId: string,
-  data: any,
-): InventoryIDsByProductAndTokenDTO {
-  if (!Array.isArray(data.inventoryIds)) {
-    throw new Error("inventoryIds response must contain inventoryIds array");
-  }
-
-  return {
-    productBlueprintId,
-    tokenBlueprintId,
-    inventoryIds: data.inventoryIds,
-  };
-}
-
-// ---------------------------------------------------------
-// InventoryDetail mapper
+// Inventory Detail mapper
 //
 // GET /inventory/{inventoryId} の response を唯一の正とする。
 // rows は backend 側で productBlueprintCategory.Kind に応じて完成済み。
@@ -233,62 +207,86 @@ export function mapInventoryIDsByProductAndToken(
 //   volumeUnit
 // }
 // ---------------------------------------------------------
+
 export function mapInventoryDetailDTO(
   data: any,
   requestedId: string,
 ): InventoryDetailDTO {
   if (!data) {
-    throw new Error("inventory detail response is empty");
+    throw new Error(
+      "inventory detail response is empty",
+    );
   }
 
   if (!Array.isArray(data.rows)) {
-    throw new Error("inventory detail rows must be an array");
+    throw new Error(
+      "inventory detail rows must be an array",
+    );
   }
 
-  const patch = mapProductBlueprintPatch(data.productBlueprintPatch);
-  const tokenBlueprintPatch = mapTokenBlueprintPatch(data.tokenBlueprintPatch);
+  const productBlueprintPatch =
+    mapProductBlueprintPatch(
+      data.productBlueprintPatch,
+    );
 
-  const rows: InventoryDetailRowDTO[] = data.rows.map((r: any) => ({
-    modelId: r.modelId,
-    kind: r.kind ?? null,
+  const tokenBlueprintPatch =
+    mapTokenBlueprintPatch(
+      data.tokenBlueprintPatch,
+    );
 
-    modelNumber: r.modelNumber,
-    stock: r.stock,
+  const rows:
+    InventoryDetailRowDTO[] =
+    data.rows.map(
+      (row: any) => ({
+        modelId:
+          row.modelId,
 
-    size: r.size ?? null,
-    color: r.color ?? null,
-    rgb: r.rgb ?? null,
+        kind:
+          row.kind ?? null,
 
-    volumeValue: r.volumeValue ?? null,
-    volumeUnit: r.volumeUnit ?? null,
-  }));
+        modelNumber:
+          row.modelNumber,
+
+        stock:
+          row.stock,
+
+        size:
+          row.size ?? null,
+
+        color:
+          row.color ?? null,
+
+        rgb:
+          row.rgb ?? null,
+
+        volumeValue:
+          row.volumeValue ?? null,
+
+        volumeUnit:
+          row.volumeUnit ?? null,
+      }),
+    );
 
   return {
-    inventoryId: data.inventoryId ?? requestedId,
+    inventoryId:
+      data.inventoryId ??
+      requestedId,
 
-    tokenBlueprintId: data.tokenBlueprintId,
-    productBlueprintId: data.productBlueprintId,
+    tokenBlueprintId:
+      data.tokenBlueprintId,
 
-    productBlueprintPatch: patch,
+    productBlueprintId:
+      data.productBlueprintId,
+
+    productBlueprintPatch,
     tokenBlueprintPatch,
 
-    tokenBlueprint: data.tokenBlueprint
-      ? {
-          id: data.tokenBlueprint.id,
-          name: data.tokenBlueprint.name,
-          symbol: data.tokenBlueprint.symbol,
-        }
-      : undefined,
-
-    productBlueprint: data.productBlueprint
-      ? {
-          id: data.productBlueprint.id,
-          name: data.productBlueprint.name,
-        }
-      : undefined,
-
     rows,
-    totalStock: data.totalStock,
-    updatedAt: data.updatedAt,
+
+    totalStock:
+      data.totalStock,
+
+    updatedAt:
+      data.updatedAt,
   };
 }

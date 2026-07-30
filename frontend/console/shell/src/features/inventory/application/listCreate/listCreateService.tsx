@@ -1,13 +1,17 @@
-// frontend\console\features\inventory\application\listCreate\listCreateService.tsx
+// frontend/console/shell/src/features/inventory/application/listCreate/listCreateService.tsx
 
 import type * as React from "react";
-import type { RefObject } from "react";
 
 import { getListCreateRaw } from "../../infrastructure/api/listCreateApi";
 import type { ListCreateDTO } from "../../infrastructure/http/listCreateRepositoryHTTP.types";
 import { mapListCreateDTO } from "../../infrastructure/http/listCreateRepositoryHTTP.mappers";
 
 import { auth } from "../../../../auth/infrastructure/config/firebaseClient";
+
+import type {
+  List,
+  ListStatus,
+} from "../../../../shared/types/list";
 
 import {
   createListHTTP,
@@ -17,23 +21,15 @@ import {
 
 import type {
   CreateListInput as ListPostCreateListInput,
-  ListDTO,
 } from "../../../list/infrastructure/dto";
-
-import type { ListStatus } from "../../../list/domain/list";
 
 import { uploadListImageToFirebaseStorage } from "../../../list/infrastructure/firebase/listImageStorage";
 
 /**
- * Hook 側で使う Ref 型（useRef<HTMLInputElement | null>(null) を許容）
- */
-export type ImageInputRef = RefObject<HTMLInputElement | null>;
-
-/**
  * List create route params
  *
- * UI ルートは inventoryId（= inventoryKey: "pb__tb"）のみを正とする。
- * productBlueprintId / tokenBlueprintId は互換用途では扱わない。
+ * UIルートはinventoryId（= inventoryKey: "pb__tb"）のみを正とする。
+ * productBlueprintId / tokenBlueprintIdは互換用途では扱わない。
  */
 export type ListCreateRouteParams = {
   inventoryId?: string;
@@ -45,35 +41,40 @@ export type ResolvedListCreateParams = {
 };
 
 /**
- * POST /lists の priceRows
+ * POST /listsのpriceRows。
  *
- * - modelId を識別子として使う
- * - 未入力 price は undefined のまま素通りさせる
- * - 明示的な未設定は null
- * - 入力済み価格は number
+ * - modelIdを識別子として使う
+ * - 未入力priceはundefinedのまま素通りさせる
+ * - 明示的な未設定はnull
+ * - 入力済み価格はnumber
  */
 export type CreateListPriceRow = {
   modelId: string;
   price?: number | null;
 };
 
-export type PriceCardMode = "view" | "edit";
+export type PriceCardMode =
+  | "view"
+  | "edit";
 
-export type PriceRowKind = "apparel" | "alcohol" | string;
+export type PriceRowKind =
+  | "apparel"
+  | "alcohol"
+  | string;
 
 /**
- * PriceCard 用 row
+ * PriceCard用row。
  *
- * backend response を正とする。
+ * backend responseを正とする。
  *
- * - modelId を識別子として使う
- * - id / modelID / model_id などの名揺れは持たない
- * - React key は displayOrder ではなく modelId を使う
- * - displayOrder は重複/未設定があり得る
- * - 並び順は displayOrder 昇順のみ
- * - 未設定は null を保持し、UI 側で末尾扱いにする
+ * - modelIdを識別子として使う
+ * - id / modelID / model_idなどの名揺れは持たない
+ * - React keyはdisplayOrderではなくmodelIdを使う
+ * - displayOrderは重複または未設定があり得る
+ * - 並び順はdisplayOrder昇順のみ
+ * - 未設定はnullを保持し、UI側で末尾扱いにする
  *
- * category ごとの表示:
+ * categoryごとの表示:
  * - apparel: size / color / rgb
  * - alcohol: volumeValue / volumeUnit
  */
@@ -83,46 +84,41 @@ export type PriceRow = {
   /**
    * モデル種別。
    *
-   * model domain の variation.kind 由来。
-   * - apparel
-   * - alcohol
+   * model domainのvariation.kind由来。
    */
   kind?: PriceRowKind | null;
 
   /**
    * 並び順。
-   * 未設定は null のまま保持する。
+   * 未設定はnullのまま保持する。
    */
   displayOrder?: number | null;
 
   /**
-   * apparel category 用。
+   * apparel category用。
    */
   size?: string | null;
 
   /**
-   * apparel category 用。
+   * apparel category用。
    */
   color?: string | null;
 
   /**
    * RGB。
-   * backend response では number が基本。
-   * 既存 UI 互換として "#RRGGBB" string も許容する。
+   *
+   * backend responseではnumberが基本。
+   * 既存UI互換として"#RRGGBB"形式のstringも許容する。
    */
   rgb?: number | string | null;
 
   /**
-   * alcohol category 用。
-   *
-   * 例: 720, 1000
+   * alcohol category用。
    */
   volumeValue?: number | null;
 
   /**
-   * alcohol category 用。
-   *
-   * 例: "ml", "L"
+   * alcohol category用。
    */
   volumeUnit?: string | null;
 
@@ -130,7 +126,8 @@ export type PriceRow = {
 
   /**
    * 価格。
-   * 未入力は undefined、明示的な未設定は null。
+   *
+   * 未入力はundefined、明示的な未設定はnull。
    */
   price?: number | null;
 };
@@ -143,7 +140,7 @@ export type PriceCardProps = {
   mode?: PriceCardMode;
 
   /**
-   * ProductBlueprintCategory.code を渡す想定。
+   * ProductBlueprintCategory.codeを渡す想定。
    *
    * 例:
    * - "apparel.tops"
@@ -152,10 +149,10 @@ export type PriceCardProps = {
   productBlueprintCategory?: string;
 
   /**
-   * edit 時に価格を更新するコールバック。
+   * edit時に価格を更新するコールバック。
    *
-   * hook 内で displayOrder で並べ替えても、
-   * index は「元の rows 配列の index」を返す。
+   * hook内でdisplayOrderにより並べ替えても、
+   * indexは元のrows配列のindexを返す。
    */
   onChangePrice?: (
     index: number,
@@ -168,40 +165,38 @@ export type PriceCardProps = {
 
 export type PriceRowVM = {
   /**
-   * React key 用の識別子。
+   * React key用の識別子。
    */
   modelId: string;
 
   /**
    * モデル種別。
-   *
-   * PriceCard の category 表示分岐で使う。
    */
   kind?: PriceRowKind | null;
 
   /**
    * 並び順。
-   * 未設定は null。
+   * 未設定はnull。
    */
   displayOrder: number | null;
 
   /**
-   * apparel category 用。
+   * apparel category用。
    */
   size?: string | null;
 
   /**
-   * apparel category 用。
+   * apparel category用。
    */
   color?: string | null;
 
   /**
-   * alcohol category 用。
+   * alcohol category用。
    */
   volumeValue?: number | null;
 
   /**
-   * alcohol category 用。
+   * alcohol category用。
    */
   volumeUnit?: string | null;
 
@@ -214,7 +209,7 @@ export type PriceRowVM = {
   priceDisplayText: string;
 
   onChangePriceInput: (
-    e: React.ChangeEvent<HTMLInputElement>,
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => void;
 };
 
@@ -240,9 +235,9 @@ export type CreateListInput = {
 };
 
 /**
- * - UI ルートは inventoryId（= inventoryKey: "pb__tb"）のみを正とする
- * - backend fetch も inventoryId のみを使う（/inventory/list-create/:inventoryId）
- * - productBlueprintId / tokenBlueprintId は一切扱わない（互換も廃止）
+ * - UIルートはinventoryId（= inventoryKey: "pb__tb"）のみを正とする
+ * - backend fetchもinventoryIdのみを使う
+ * - productBlueprintId / tokenBlueprintIdは一切扱わない
  */
 export function resolveListCreateParams(
   raw: ListCreateRouteParams,
@@ -254,75 +249,60 @@ export function resolveListCreateParams(
 }
 
 export function canFetchListCreate(
-  p: ResolvedListCreateParams,
+  params: ResolvedListCreateParams,
 ): boolean {
-  return Boolean(p.inventoryId);
+  return Boolean(
+    params.inventoryId,
+  );
 }
 
 export function buildListCreateFetchInput(
-  p: ResolvedListCreateParams,
+  params: ResolvedListCreateParams,
 ): {
   inventoryId?: string;
 } {
-  if (!p.inventoryId) {
+  if (!params.inventoryId) {
     return {
       inventoryId: undefined,
     };
   }
 
   return {
-    inventoryId: p.inventoryId,
+    inventoryId: params.inventoryId,
   };
-}
-
-export function getInventoryIdFromDTO(
-  dto: ListCreateDTO | null | undefined,
-): string {
-  return dto?.inventoryId ?? "";
-}
-
-/**
- * リダイレクトは不要
- */
-export function shouldRedirectToInventoryIdRoute(_: {
-  currentInventoryId: string;
-  gotInventoryId: string;
-  alreadyRedirected: boolean;
-}): boolean {
-  return false;
 }
 
 export function buildInventoryDetailPath(
   inventoryId: string,
 ): string {
-  if (!inventoryId) return "/inventory";
+  if (!inventoryId) {
+    return "/inventory";
+  }
 
-  return `/inventory/detail/${encodeURIComponent(inventoryId)}`;
-}
-
-export function buildInventoryListCreatePath(
-  inventoryId: string,
-): string {
-  if (!inventoryId) return "/inventory/list/create";
-
-  return `/inventory/list/create/${encodeURIComponent(inventoryId)}`;
+  return `/inventory/detail/${encodeURIComponent(
+    inventoryId,
+  )}`;
 }
 
 export function buildBackPath(
-  p: ResolvedListCreateParams,
+  params: ResolvedListCreateParams,
 ): string {
-  if (p.inventoryId) {
-    return buildInventoryDetailPath(p.inventoryId);
+  if (params.inventoryId) {
+    return buildInventoryDetailPath(
+      params.inventoryId,
+    );
   }
 
   return "/inventory";
 }
 
 export function buildAfterCreatePath(
-  p: ResolvedListCreateParams,
+  params: ResolvedListCreateParams,
 ): string {
-  if (p.inventoryId) {
-    return buildInventoryDetailPath(p.inventoryId);
+  if (params.inventoryId) {
+    return buildInventoryDetailPath(
+      params.inventoryId,
+    );
   }
 
   return "/inventory";
@@ -337,96 +317,78 @@ export function extractDisplayStrings(
   tokenName: string;
 } {
   return {
-    productBrandName: dto?.productBrandName ?? "",
-    productName: dto?.productName ?? "",
-    tokenBrandName: dto?.tokenBrandName ?? "",
-    tokenName: dto?.tokenName ?? "",
+    productBrandName:
+      dto?.productBrandName ?? "",
+
+    productName:
+      dto?.productName ?? "",
+
+    tokenBrandName:
+      dto?.tokenBrandName ?? "",
+
+    tokenName:
+      dto?.tokenName ?? "",
   };
-}
-
-/**
- * backend の ListCreateDTO.priceRows を PriceCard 用 PriceRow[] に変換
- * - 期待値: inventory/application の PriceRow を正とする
- * - 識別子は modelId を正とする
- * - 並び順は displayOrder（未設定は null を保持）
- * - 名揺れ補完はしない
- */
-export function mapDTOToPriceRows(
-  dto: ListCreateDTO | null,
-): PriceRow[] {
-  const rows = Array.isArray(dto?.priceRows) ? dto.priceRows : [];
-
-  return rows.map((r: any) => {
-    const displayOrderRaw = r.displayOrder;
-    const displayOrder =
-      displayOrderRaw === null || displayOrderRaw === undefined
-        ? null
-        : Number(displayOrderRaw);
-
-    const stockRaw = Number(r.stock ?? 0);
-    const stock = Number.isFinite(stockRaw) ? stockRaw : 0;
-
-    const row: PriceRow = {
-      modelId: r.modelId,
-      kind: r.kind ?? null,
-      displayOrder,
-      size: r.size,
-      color: r.color,
-      stock,
-      rgb: r.rgb as any,
-      volumeValue: r.volumeValue ?? null,
-      volumeUnit: r.volumeUnit ?? null,
-      price: r.price === undefined ? null : (r.price as any),
-    };
-
-    return row;
-  });
-}
-
-/**
- * 初期表示用: PriceRow[] を返す
- */
-export function initPriceRowsFromDTO(
-  dto: ListCreateDTO | null,
-): PriceRow[] {
-  return mapDTOToPriceRows(dto);
 }
 
 export function normalizeCreateListPriceRows(
   rows: unknown[],
 ): CreateListPriceRow[] {
-  const arr = Array.isArray(rows) ? rows : [];
+  const sourceRows =
+    Array.isArray(rows)
+      ? rows
+      : [];
 
-  return arr.map((r) => {
-    const row = r as {
-      modelId: string;
-      price?: number | null;
-    };
+  return sourceRows.map(
+    (rawRow) => {
+      const row =
+        rawRow as {
+          modelId: string;
+          price?: number | null;
+        };
 
-    return {
-      modelId: row.modelId,
-      price: row.price,
-    };
-  });
+      return {
+        modelId:
+          row.modelId,
+
+        price:
+          row.price,
+      };
+    },
+  );
 }
 
-export function buildCreateListInput(args: {
-  params: ResolvedListCreateParams;
-  listingTitle: string;
-  description: string;
-  priceRows: unknown[];
-  status: ListStatus;
-  assigneeId?: string;
-}): CreateListInput {
-  const priceRows = normalizeCreateListPriceRows(args.priceRows);
+export function buildCreateListInput(
+  args: {
+    params: ResolvedListCreateParams;
+    listingTitle: string;
+    description: string;
+    priceRows: unknown[];
+    status: ListStatus;
+    assigneeId?: string;
+  },
+): CreateListInput {
+  const priceRows =
+    normalizeCreateListPriceRows(
+      args.priceRows,
+    );
 
   return {
-    // inventoryId(pb__tb) をそのまま送る
-    inventoryId: args.params.inventoryId,
-    title: args.listingTitle,
-    description: args.description,
-    status: args.status,
-    assigneeId: args.assigneeId,
+    inventoryId:
+      args.params.inventoryId,
+
+    title:
+      args.listingTitle,
+
+    description:
+      args.description,
+
+    status:
+      args.status,
+
+    assigneeId:
+      args.assigneeId,
+
     priceRows,
   };
 }
@@ -435,69 +397,100 @@ export function validateCreateListInput(
   input: CreateListInput,
 ): void {
   if (!input.title) {
-    throw new Error("タイトルを入力してください。");
+    throw new Error(
+      "タイトルを入力してください。",
+    );
   }
 
-  const rows = Array.isArray(input.priceRows)
-    ? input.priceRows
-    : [];
+  const rows =
+    Array.isArray(
+      input.priceRows,
+    )
+      ? input.priceRows
+      : [];
 
   if (rows.length === 0) {
-    throw new Error("価格が未設定です（価格行がありません）。");
+    throw new Error(
+      "価格が未設定です（価格行がありません）。",
+    );
   }
 
-  const missingModelId = rows.find((r) => {
-    return !r.modelId;
-  });
+  const missingModelId =
+    rows.find(
+      (row) => {
+        return !row.modelId;
+      },
+    );
 
   if (missingModelId) {
-    throw new Error("価格行に modelId が含まれていません。");
+    throw new Error(
+      "価格行に modelId が含まれていません。",
+    );
   }
 }
 
 /**
- * 複数画像を Firebase Storage へ直接アップロード
- * → backend に画像レコード登録
- * → primary image 設定
+ * 複数画像をFirebase Storageへ直接アップロード
+ * → backendに画像レコード登録
+ * → primary image設定
  *
  * Policy B:
- * - List 作成後の listId を使って Firebase Storage へ upload
- * - Firebase Storage download URL を取得
- * - saveListImageFromFirebaseStorageHTTP で image record を登録
+ * - List作成後のlistIdを使ってFirebase Storageへupload
+ * - Firebase Storage download URLを取得
+ * - saveListImageFromFirebaseStorageHTTPでimage recordを登録
  *
  * primary:
- * - backend の List.imageId は images subcollection docID
- * - objectPath ではなく imageId を渡す
+ * - backendのList.imageIdはimages subcollectionのdocID
+ * - objectPathではなくimageIdを渡す
  */
-export async function uploadListImagesPolicyB(args: {
-  listId: string;
-  files: File[];
-  mainImageIndex: number;
-  createdBy?: string;
-}): Promise<{
+export async function uploadListImagesPolicyB(
+  args: {
+    listId: string;
+    files: File[];
+    mainImageIndex: number;
+    createdBy?: string;
+  },
+): Promise<{
   registered: Array<{
     imageId: string;
     displayOrder: number;
   }>;
   primaryImageId?: string;
 }> {
-  const listId = String(args.listId ?? "").trim();
-  const files = Array.isArray(args.files) ? args.files : [];
+  const listId =
+    String(
+      args.listId ?? "",
+    ).trim();
 
-  const requestedMainImageIndex = Number.isFinite(
-    Number(args.mainImageIndex),
-  )
-    ? Number(args.mainImageIndex)
-    : 0;
+  const files =
+    Array.isArray(
+      args.files,
+    )
+      ? args.files
+      : [];
+
+  const requestedMainImageIndex =
+    Number.isFinite(
+      Number(
+        args.mainImageIndex,
+      ),
+    )
+      ? Number(
+          args.mainImageIndex,
+        )
+      : 0;
 
   const mainImageIndex =
     requestedMainImageIndex >= 0 &&
-    requestedMainImageIndex < files.length
+    requestedMainImageIndex <
+      files.length
       ? requestedMainImageIndex
       : 0;
 
   if (!listId) {
-    throw new Error("invalid_list_id");
+    throw new Error(
+      "invalid_list_id",
+    );
   }
 
   if (files.length === 0) {
@@ -507,166 +500,230 @@ export async function uploadListImagesPolicyB(args: {
   }
 
   const uid =
-    args.createdBy || auth.currentUser?.uid || "system";
-  const now = new Date().toISOString();
+    args.createdBy ||
+    auth.currentUser?.uid ||
+    "system";
+
+  const now =
+    new Date().toISOString();
 
   const registered: Array<{
     imageId: string;
     displayOrder: number;
   }> = [];
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
+  for (
+    let index = 0;
+    index < files.length;
+    index += 1
+  ) {
+    const file =
+      files[index];
 
-    if (!file) continue;
+    if (!file) {
+      continue;
+    }
 
-    const uploaded = await uploadListImageToFirebaseStorage({
-      listId,
-      file,
-    });
+    const uploaded =
+      await uploadListImageToFirebaseStorage({
+        listId,
+        file,
+      });
 
     await saveListImageFromFirebaseStorageHTTP({
       listId,
-      id: uploaded.imageId,
-      url: uploaded.url,
-      displayOrder: i,
-      createdBy: uid,
-      createdAt: now,
+
+      id:
+        uploaded.imageId,
+
+      url:
+        uploaded.url,
+
+      displayOrder:
+        index,
+
+      createdBy:
+        uid,
+
+      createdAt:
+        now,
     });
 
     registered.push({
-      imageId: uploaded.imageId,
-      displayOrder: i,
+      imageId:
+        uploaded.imageId,
+
+      displayOrder:
+        index,
     });
   }
 
   const primary =
     registered.find(
-      (item) => item.displayOrder === mainImageIndex,
-    ) || registered[0];
+      (item) =>
+        item.displayOrder ===
+        mainImageIndex,
+    ) ??
+    registered[0];
 
   if (primary?.imageId) {
     await setListPrimaryImageHTTP({
       listId,
-      imageId: primary.imageId,
-      updatedBy: uid,
-      now,
+
+      imageId:
+        primary.imageId,
     });
   }
 
   return {
     registered,
-    primaryImageId: primary?.imageId,
+
+    primaryImageId:
+      primary?.imageId,
   };
 }
 
 export function _internal_getListIdFromListDTO(
-  dto: ListDTO,
+  list: List,
 ): string {
-  return dto.id;
+  return list.id;
 }
 
 export const LIST_IMAGE_UPLOAD_FAILED_MESSAGE =
   "画像アップロードに失敗しました。後から追加できます。";
 
 /**
- * ListCreateDTO を取得する（Hook からはこれだけ呼ぶ）
+ * ListCreateDTOを取得する。
  *
  * 方針:
- * - GET /inventory/list-create/{inventoryId} の response を唯一の正とする。
- * - frontend では model variations API を呼ばない。
- * - priceRows は backend 側で productCategory / model kind に応じた完成形になっている前提。
+ * - GET /inventory/list-create/{inventoryId}のresponseを唯一の正とする
+ * - frontendではmodel variations APIを呼ばない
+ * - priceRowsはbackend側で完成形になっている前提とする
  *
- * category ごとの表示:
- * - apparel: priceRows[].modelNumber / size / color / rgb
- * - alcohol: priceRows[].modelNumber / volumeValue / volumeUnit
+ * categoryごとの表示:
+ * - apparel: modelNumber / size / color / rgb
+ * - alcohol: modelNumber / volumeValue / volumeUnit
  */
 export async function loadListCreateDTOFromParams(
-  p: ResolvedListCreateParams,
+  params: ResolvedListCreateParams,
 ): Promise<ListCreateDTO> {
-  const input = buildListCreateFetchInput(p);
+  const input =
+    buildListCreateFetchInput(
+      params,
+    );
 
-  const raw = await getListCreateRaw(input);
+  const raw =
+    await getListCreateRaw(
+      input,
+    );
 
-  return mapListCreateDTO(raw);
+  return mapListCreateDTO(
+    raw,
+  );
 }
 
 /**
- * list 作成（POST /lists） + 画像（Policy B）
+ * list作成（POST /lists）と画像登録。
  *
  * Policy B:
- * 1. 画像なしで List を先に作成する
- * 2. 作成済み listId を使って Firebase Storage へ upload する
- * 3. backend に /lists/{listId}/images として image record を作成する
- * 4. primary image を設定する
+ * 1. 画像なしでListを先に作成する
+ * 2. 作成済みlistIdを使ってFirebase Storageへuploadする
+ * 3. backendにimage recordを作成する
+ * 4. primary imageを設定する
  *
- * 重要:
- * - List 作成後に画像 upload / image record 登録 / primary image 設定が失敗しても、
- *   List 作成自体は成功として返す。
- * - UI には onImageUploadFailed で
- *   「画像アップロードに失敗しました。後から追加できます。」
- *   を表示する。
+ * List作成後に画像登録が失敗しても、
+ * List作成自体は成功として扱う。
  */
-export async function createListWithImages(args: {
-  params: ResolvedListCreateParams;
-  listingTitle: string;
-  description: string;
-  priceRows: any[];
-  status: ListStatus;
-  assigneeId?: string;
+export async function createListWithImages(
+  args: {
+    params: ResolvedListCreateParams;
+    listingTitle: string;
+    description: string;
+    priceRows: any[];
+    status: ListStatus;
+    assigneeId?: string;
 
-  images?: File[];
-  mainImageIndex?: number;
+    images?: File[];
+    mainImageIndex?: number;
 
-  onImageUploadFailed?: (
-    message: string,
-    error: unknown,
-  ) => void;
-}): Promise<ListDTO> {
-  const images = Array.isArray(args.images)
-    ? args.images
-    : [];
+    onImageUploadFailed?: (
+      message: string,
+      error: unknown,
+    ) => void;
+  },
+): Promise<List> {
+  const images =
+    Array.isArray(
+      args.images,
+    )
+      ? args.images
+      : [];
 
-  const mainImageIndex = Number.isFinite(
-    Number(args.mainImageIndex),
-  )
-    ? Number(args.mainImageIndex)
-    : 0;
+  const mainImageIndex =
+    Number.isFinite(
+      Number(
+        args.mainImageIndex,
+      ),
+    )
+      ? Number(
+          args.mainImageIndex,
+        )
+      : 0;
 
-  // 1) build + validate
-  const input: CreateListInput = buildCreateListInput({
-    params: args.params, // inventoryId(pb__tb) を保持
-    listingTitle: args.listingTitle,
-    description: args.description,
-    priceRows: args.priceRows,
-    status: args.status,
-    assigneeId: args.assigneeId,
-  });
+  const input:
+    CreateListInput =
+    buildCreateListInput({
+      params:
+        args.params,
 
-  validateCreateListInput(input);
+      listingTitle:
+        args.listingTitle,
 
-  // 2) create list
-  const created = await createListHTTP(
-    input as ListPostCreateListInput,
+      description:
+        args.description,
+
+      priceRows:
+        args.priceRows,
+
+      status:
+        args.status,
+
+      assigneeId:
+        args.assigneeId,
+    });
+
+  validateCreateListInput(
+    input,
   );
 
-  const listId = _internal_getListIdFromListDTO(created);
+  const created =
+    await createListHTTP(
+      input as ListPostCreateListInput,
+    );
+
+  const listId =
+    _internal_getListIdFromListDTO(
+      created,
+    );
 
   if (!listId) {
-    throw new Error("created_list_missing_id");
+    throw new Error(
+      "created_list_missing_id",
+    );
   }
 
-  // 3) images (Policy B)
-  //
-  // List 作成後の画像失敗は List 作成を失敗扱いにしない。
-  // 画面側で「画像アップロードに失敗しました。後から追加できます。」を出せるようにする。
   if (images.length > 0) {
     try {
       await uploadListImagesPolicyB({
         listId,
-        files: images,
+
+        files:
+          images,
+
         mainImageIndex,
-        createdBy: auth.currentUser?.uid,
+
+        createdBy:
+          auth.currentUser?.uid,
       });
     } catch (error) {
       args.onImageUploadFailed?.(

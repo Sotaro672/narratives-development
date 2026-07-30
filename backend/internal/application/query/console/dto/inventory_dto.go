@@ -15,13 +15,3 @@ type InventoryManagementRowDTO struct {
 	AvailableStock     int    `json:"availableStock"`
 	ReservedCount      int    `json:"reservedCount"`
 }
-
-// ============================================================
-// ✅ /inventory/ids response
-// ============================================================
-
-type InventoryIDsByProductAndTokenDTO struct {
-	ProductBlueprintID string   `json:"productBlueprintId"`
-	TokenBlueprintID   string   `json:"tokenBlueprintId"`
-	InventoryIDs       []string `json:"inventoryIds"`
-}

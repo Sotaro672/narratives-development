@@ -1,6 +1,7 @@
-// frontend\console\inventory\src\application\inventoryManagementService.tsx
+// frontend/console/shell/src/features/inventory/application/inventoryManagementService.tsx
 
 import React from "react";
+
 import {
   FilterableTableHeader,
   SortableTableHeader,
@@ -9,9 +10,16 @@ import {
 import { fetchInventoryListDTO } from "../infrastructure/http/inventoryRepositoryHTTP";
 
 // ============================================================
-// Types (ViewModel for Inventory Management table)
-//   columns: [productName, tokenName, availableStock, reservedCount]
-//   - key: productBlueprintId + tokenBlueprintId
+// Types（Inventory Management table ViewModel）
+//
+// columns:
+// - productName
+// - tokenName
+// - availableStock
+// - reservedCount
+//
+// key:
+// - productBlueprintId + tokenBlueprintId
 // ============================================================
 
 export type InventoryManagementRow = {
@@ -22,7 +30,7 @@ export type InventoryManagementRow = {
   tokenName: string;
 
   availableStock: number;
-  reservedCount: number; // ✅ 注文数
+  reservedCount: number;
 };
 
 export type InventorySortKey =
@@ -31,53 +39,99 @@ export type InventorySortKey =
   | "availableStock"
   | "reservedCount";
 
-/** ヘッダー生成時に必要なコンテキスト型 */
+/**
+ * ヘッダー生成時に必要なコンテキスト。
+ */
 export type InventoryHeaderContext = {
   productFilter: string[];
   tokenFilter: string[];
 
-  setProductFilter: (v: string[]) => void;
-  setTokenFilter: (v: string[]) => void;
+  setProductFilter: (
+    values: string[],
+  ) => void;
+
+  setTokenFilter: (
+    values: string[],
+  ) => void;
 
   sortKey: InventorySortKey;
-  sortDir: "asc" | "desc" | null;
-  setSortKey: (k: InventorySortKey) => void;
-  setSortDir: (d: "asc" | "desc" | null) => void;
+  sortDir:
+    | "asc"
+    | "desc"
+    | null;
+
+  setSortKey: (
+    key: InventorySortKey,
+  ) => void;
+
+  setSortDir: (
+    direction:
+      | "asc"
+      | "desc"
+      | null,
+  ) => void;
 };
 
 // ============================================================
-// helpers
+// Filter options
 // ============================================================
 
-function asString(v: unknown): string {
-  return String(v ?? "").trim();
-}
-
-function asNumber(v: unknown): number {
-  const n = Number(v ?? 0);
-  return Number.isFinite(n) ? n : 0;
-}
-
-export function buildInventoryFilterOptionsFromRows(rows: InventoryManagementRow[]): {
-  productOptions: Array<{ value: string; label: string }>;
-  tokenOptions: Array<{ value: string; label: string }>;
+export function buildInventoryFilterOptionsFromRows(
+  rows: InventoryManagementRow[],
+): {
+  productOptions: Array<{
+    value: string;
+    label: string;
+  }>;
+  tokenOptions: Array<{
+    value: string;
+    label: string;
+  }>;
 } {
-  const productMap = new Map<string, string>();
-  const tokenMap = new Map<string, string>();
+  const productMap =
+    new Map<string, string>();
 
-  for (const r of rows) {
-    const p = asString(r.productName);
-    const t = asString(r.tokenName);
-    if (p) productMap.set(p, p);
-    if (t) tokenMap.set(t, t);
+  const tokenMap =
+    new Map<string, string>();
+
+  for (const row of rows) {
+    if (row.productName) {
+      productMap.set(
+        row.productName,
+        row.productName,
+      );
+    }
+
+    if (row.tokenName) {
+      tokenMap.set(
+        row.tokenName,
+        row.tokenName,
+      );
+    }
   }
 
-  const toOptions = (m: Map<string, string>) =>
-    Array.from(m.entries()).map(([value, label]) => ({ value, label }));
+  const toOptions = (
+    source: Map<string, string>,
+  ): Array<{
+    value: string;
+    label: string;
+  }> => {
+    return Array.from(
+      source.entries(),
+    ).map(
+      ([value, label]) => ({
+        value,
+        label,
+      }),
+    );
+  };
 
   return {
-    productOptions: toOptions(productMap),
-    tokenOptions: toOptions(tokenMap),
+    productOptions:
+      toOptions(productMap),
+
+    tokenOptions:
+      toOptions(tokenMap),
   };
 }
 
@@ -86,92 +140,87 @@ export function buildInventoryFilterOptionsFromRows(rows: InventoryManagementRow
 // ============================================================
 
 /**
- * ✅ 一覧DTO担当:
+ * Inventory一覧DTOを取得し、画面表示単位に集約する。
+ *
  * 方針:
- * - GET /inventory（ListByCurrentCompany の一覧DTO）を 1 回だけ取得
- * - inventories を (pbId, tbId) で集約して表示用 rows を返す
+ * - GET /inventoryを1回だけ呼び出す
+ * - fetchInventoryListDTOの戻り値を正とする
+ * - frontendで文字列・数値の再normalizeは行わない
+ * - productBlueprintIdとtokenBlueprintIdの組み合わせで集約する
+ *
+ * backend側ではmodelNumber単位で行が分かれるため、
+ * 画面では同一ProductBlueprint・TokenBlueprintの在庫数と
+ * 注文数を合算する。
  */
-export async function loadInventoryRowsFromBackend(): Promise<InventoryManagementRow[]> {
-  console.log("[inventoryMgmt/loadInventoryRowsFromBackend] start");
+export async function loadInventoryRowsFromBackend(): Promise<
+  InventoryManagementRow[]
+> {
+  const items =
+    await fetchInventoryListDTO();
 
-  // inventories（一覧DTO）を 1 回だけ
-  // 期待: [{ productBlueprintId, productName, tokenBlueprintId, tokenName, modelNumber, availableStock, reservedCount }, ...]
-  const items: any[] = await fetchInventoryListDTO();
+  const aggregatedRows =
+    new Map<
+      string,
+      InventoryManagementRow
+    >();
 
-  console.log("[inventoryMgmt/loadInventoryRowsFromBackend] inventory list raw", {
-    count: items.length,
-    sample: items.slice(0, 5),
-  });
+  for (const item of items) {
+    const productBlueprintId =
+      item.productBlueprintId;
 
-  // (pbId, tbId) で集約
-  const agg = new Map<
-    string,
-    {
-      productBlueprintId: string;
-      productName: string;
-      tokenBlueprintId: string;
-      tokenName: string;
-      availableStock: number;
-      reservedCount: number;
-    }
-  >();
+    const tokenBlueprintId =
+      item.tokenBlueprintId;
 
-  for (const it of items) {
-    const pbId = asString(it?.productBlueprintId);
-    const tbId = asString(it?.tokenBlueprintId);
-
-    // ✅ pbId/tbId は必須（無いなら集計不能）
-    if (!pbId || !tbId) {
-      console.warn("[inventoryMgmt/loadInventoryRowsFromBackend] skip: missing ids", {
-        pbId,
-        tbId,
-        raw: it,
-      });
+    if (
+      !productBlueprintId ||
+      !tokenBlueprintId
+    ) {
       continue;
     }
 
-    const productName = asString(it?.productName) || "-";
-    const tokenName = asString(it?.tokenName) || tbId;
+    const key =
+      `${productBlueprintId}__${tokenBlueprintId}`;
 
-    // ✅ 在庫数(表示)は availableStock を正（無ければ stock）
-    const availableStock = asNumber(it?.availableStock ?? it?.stock);
+    const current =
+      aggregatedRows.get(key);
 
-    // ✅ 注文数（reservedCount）
-    const reservedCount = asNumber(it?.reservedCount);
+    if (!current) {
+      aggregatedRows.set(
+        key,
+        {
+          productBlueprintId,
 
-    const key = `${pbId}__${tbId}`;
-    const cur = agg.get(key);
-    if (!cur) {
-      agg.set(key, {
-        productBlueprintId: pbId,
-        productName,
-        tokenBlueprintId: tbId,
-        tokenName,
-        availableStock,
-        reservedCount,
-      });
-    } else {
-      cur.availableStock += availableStock;
-      cur.reservedCount += reservedCount;
-      // productName / tokenName は先勝ち
+          productName:
+            item.productName ||
+            "-",
+
+          tokenBlueprintId,
+
+          tokenName:
+            item.tokenName ||
+            tokenBlueprintId,
+
+          availableStock:
+            item.availableStock,
+
+          reservedCount:
+            item.reservedCount,
+        },
+      );
+
+      continue;
     }
+
+    current.availableStock +=
+      item.availableStock;
+
+    current.reservedCount +=
+      item.reservedCount;
   }
 
-  const out: InventoryManagementRow[] = Array.from(agg.values()).map((v) => ({
-    productBlueprintId: v.productBlueprintId,
-    productName: v.productName || "-",
-    tokenBlueprintId: v.tokenBlueprintId,
-    tokenName: v.tokenName || "-",
-    availableStock: v.availableStock,
-    reservedCount: v.reservedCount,
-  }));
-
-  console.log("[inventoryMgmt/loadInventoryRowsFromBackend] done", {
-    rows: out.length,
-    sample: out.slice(0, 10),
-  });
-
-  return out;
+  return Array.from(
+    aggregatedRows.values(),
+  );
 }
 
 // ============================================================
@@ -179,49 +228,85 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
 // ============================================================
 
 /**
- * 在庫管理一覧テーブルのヘッダー生成ロジック
- * 列順: [プロダクト名, トークン名, 在庫数, 注文数]
+ * 在庫管理一覧テーブルのヘッダーを生成する。
+ *
+ * 列順:
+ * - プロダクト名
+ * - トークン名
+ * - 在庫数
+ * - 注文数
  */
 export function buildInventoryHeaders(
-  productOptions: Array<{ value: string; label: string }>,
-  tokenOptions: Array<{ value: string; label: string }>,
-  ctx: InventoryHeaderContext,
+  productOptions: Array<{
+    value: string;
+    label: string;
+  }>,
+  tokenOptions: Array<{
+    value: string;
+    label: string;
+  }>,
+  context: InventoryHeaderContext,
 ): React.ReactNode[] {
   return [
     <FilterableTableHeader
       key="productName"
       label="プロダクト名"
       options={productOptions}
-      selected={ctx.productFilter}
-      onChange={(vals: string[]) => ctx.setProductFilter(vals)}
+      selected={context.productFilter}
+      onChange={(values: string[]) => {
+        context.setProductFilter(
+          values,
+        );
+      }}
     />,
+
     <FilterableTableHeader
       key="tokenName"
       label="トークン名"
       options={tokenOptions}
-      selected={ctx.tokenFilter}
-      onChange={(vals: string[]) => ctx.setTokenFilter(vals)}
+      selected={context.tokenFilter}
+      onChange={(values: string[]) => {
+        context.setTokenFilter(
+          values,
+        );
+      }}
     />,
+
     <SortableTableHeader
       key="availableStock"
       label="在庫数"
       sortKey="availableStock"
-      activeKey={ctx.sortKey}
-      direction={ctx.sortDir ?? null}
-      onChange={(key, dir) => {
-        ctx.setSortKey(key as InventorySortKey);
-        ctx.setSortDir(dir);
+      activeKey={context.sortKey}
+      direction={
+        context.sortDir ?? null
+      }
+      onChange={(key, direction) => {
+        context.setSortKey(
+          key as InventorySortKey,
+        );
+
+        context.setSortDir(
+          direction,
+        );
       }}
     />,
+
     <SortableTableHeader
       key="reservedCount"
       label="注文数"
       sortKey="reservedCount"
-      activeKey={ctx.sortKey}
-      direction={ctx.sortDir ?? null}
-      onChange={(key, dir) => {
-        ctx.setSortKey(key as InventorySortKey);
-        ctx.setSortDir(dir);
+      activeKey={context.sortKey}
+      direction={
+        context.sortDir ?? null
+      }
+      onChange={(key, direction) => {
+        context.setSortKey(
+          key as InventorySortKey,
+        );
+
+        context.setSortDir(
+          direction,
+        );
       }}
     />,
   ];

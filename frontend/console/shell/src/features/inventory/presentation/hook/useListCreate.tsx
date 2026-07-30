@@ -1,4 +1,4 @@
-// frontend/console/inventory/src/presentation/hook/useListCreate.tsx
+// frontend/console/shell/src/features/inventory/presentation/hook/useListCreate.tsx
 
 import * as React from "react";
 import {
@@ -11,19 +11,16 @@ import { usePriceCard } from "../../../list/presentation/hook/usePriceCard";
 import { useAdminCard } from "../../../admin/presentation/hook/useAdminCard";
 import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
 
-import type { ListStatus } from "../../../list/domain/list";
+import type { ListStatus } from "../../../../shared/types/list";
 
 import {
   buildAfterCreatePath,
   buildBackPath,
-  buildInventoryListCreatePath,
   canFetchListCreate,
   createListWithImages,
   extractDisplayStrings,
-  getInventoryIdFromDTO,
   loadListCreateDTOFromParams,
   resolveListCreateParams,
-  shouldRedirectToInventoryIdRoute,
   type ListCreateRouteParams,
   type PriceRow,
   type ResolvedListCreateParams,
@@ -56,23 +53,32 @@ export type UseListCreateResult = {
 
   // price
   priceRows: PriceRow[];
-  onChangePrice: (index: number, price: number | null) => void;
+  onChangePrice: (
+    index: number,
+    price: number | null,
+  ) => void;
   priceCard: ReturnType<typeof usePriceCard>;
 
   // listing local states
   listingTitle: string;
-  setListingTitle: React.Dispatch<React.SetStateAction<string>>;
+  setListingTitle: React.Dispatch<
+    React.SetStateAction<string>
+  >;
   description: string;
-  setDescription: React.Dispatch<React.SetStateAction<string>>;
+  setDescription: React.Dispatch<
+    React.SetStateAction<string>
+  >;
 
   // images
   images: File[];
   imagePreviewUrls: string[];
   mainImageIndex: number;
-  setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
+  setMainImageIndex: React.Dispatch<
+    React.SetStateAction<number>
+  >;
   imageInputRef: ImageInputRef;
   onAddImages: (files: FileList | null) => void;
-  onRemoveImageAt: (idx: number) => void;
+  onRemoveImageAt: (index: number) => void;
   onClearImages: () => void;
 
   // assignee
@@ -83,68 +89,135 @@ export type UseListCreateResult = {
 
   // status
   status: ListStatus;
-  setStatus: React.Dispatch<React.SetStateAction<ListStatus>>;
+  setStatus: React.Dispatch<
+    React.SetStateAction<ListStatus>
+  >;
 };
 
 type UsePriceRowsResult = {
   priceRows: PriceRow[];
-  setPriceRows: React.Dispatch<React.SetStateAction<PriceRow[]>>;
-  initializedPriceRowsRef: React.MutableRefObject<boolean>;
-  onChangePrice: (index: number, price: number | null) => void;
+  setPriceRows: React.Dispatch<
+    React.SetStateAction<PriceRow[]>
+  >;
+  initializedPriceRowsRef:
+    React.MutableRefObject<boolean>;
+  onChangePrice: (
+    index: number,
+    price: number | null,
+  ) => void;
   priceCard: ReturnType<typeof usePriceCard>;
 };
 
-function getMemberUid(member: unknown): string {
-  const m = member as any;
+function getMemberUid(
+  member: unknown,
+): string {
+  const target =
+    member as any;
 
-  return String(m?.uid ?? "");
+  return String(
+    target?.uid ?? "",
+  );
 }
 
-function getMemberDisplayName(member: unknown): string {
-  const m = member as any;
+function getMemberDisplayName(
+  member: unknown,
+): string {
+  const target =
+    member as any;
 
-  const fullName = String(m?.fullName ?? "");
-  if (fullName) return fullName;
+  const fullName =
+    String(
+      target?.fullName ?? "",
+    );
 
-  const nameParts = [m?.lastName, m?.firstName]
-    .map((v) => String(v ?? ""))
+  if (fullName) {
+    return fullName;
+  }
+
+  const nameParts = [
+    target?.lastName,
+    target?.firstName,
+  ]
+    .map((value) =>
+      String(value ?? ""),
+    )
     .filter(Boolean);
 
-  const joinedName = nameParts.join(" ");
-  if (joinedName) return joinedName;
+  const joinedName =
+    nameParts.join(" ");
 
-  const email = String(m?.email ?? "");
-  if (email) return email;
+  if (joinedName) {
+    return joinedName;
+  }
 
-  const uid = getMemberUid(member);
-  if (uid) return uid;
+  const email =
+    String(
+      target?.email ?? "",
+    );
 
-  return String(m?.id ?? "");
+  if (email) {
+    return email;
+  }
+
+  const uid =
+    getMemberUid(member);
+
+  if (uid) {
+    return uid;
+  }
+
+  return String(
+    target?.id ?? "",
+  );
 }
 
 function normalizeAssigneeCandidates(
   rawCandidates: unknown,
 ): AssigneeCandidate[] {
-  const rows = Array.isArray(rawCandidates) ? rawCandidates : [];
+  const rows =
+    Array.isArray(rawCandidates)
+      ? rawCandidates
+      : [];
 
   return rows
-    .map((raw) => {
-      const c = raw as any;
+    .map((rawCandidate) => {
+      const candidate =
+        rawCandidate as any;
 
-      const id = String(c?.uid ?? c?.id ?? "");
-      if (!id) return null;
+      const id =
+        String(
+          candidate?.uid ??
+            candidate?.id ??
+            "",
+        );
 
-      const nameParts = [c?.lastName, c?.firstName]
-        .map((v) => String(v ?? ""))
+      if (!id) {
+        return null;
+      }
+
+      const nameParts = [
+        candidate?.lastName,
+        candidate?.firstName,
+      ]
+        .map((value) =>
+          String(value ?? ""),
+        )
         .filter(Boolean);
 
-      const joinedName = nameParts.join(" ");
+      const joinedName =
+        nameParts.join(" ");
 
       const name =
-        String(c?.name ?? "") ||
-        String(c?.fullName ?? "") ||
+        String(
+          candidate?.name ?? "",
+        ) ||
+        String(
+          candidate?.fullName ?? "",
+        ) ||
         joinedName ||
-        String(c?.email ?? "") ||
+        String(
+          candidate?.email ?? "",
+        ) ||
         id;
 
       return {
@@ -152,66 +225,95 @@ function normalizeAssigneeCandidates(
         name,
       };
     })
-    .filter(Boolean) as AssigneeCandidate[];
+    .filter(
+      Boolean,
+    ) as AssigneeCandidate[];
 }
 
-function dedupeFiles(prev: File[], add: File[]): File[] {
-  const exists = new Set(
-    prev.map(
-      (file: File) =>
-        `${file.name}__${file.size}__${file.lastModified}`,
-    ),
-  );
-
-  const filtered = add.filter(
-    (file: File) =>
-      !exists.has(
-        `${file.name}__${file.size}__${file.lastModified}`,
+function dedupeFiles(
+  previousFiles: File[],
+  addedFiles: File[],
+): File[] {
+  const existingKeys =
+    new Set(
+      previousFiles.map(
+        (file) =>
+          `${file.name}__${file.size}__${file.lastModified}`,
       ),
-  );
+    );
 
-  return [...prev, ...filtered];
+  const filteredFiles =
+    addedFiles.filter(
+      (file) =>
+        !existingKeys.has(
+          `${file.name}__${file.size}__${file.lastModified}`,
+        ),
+    );
+
+  return [
+    ...previousFiles,
+    ...filteredFiles,
+  ];
 }
 
 function normalizeImageFiles(
-  files: FileList | File[] | null | undefined,
+  files:
+    | FileList
+    | File[]
+    | null
+    | undefined,
 ): File[] {
-  return Array.from(files ?? [])
+  return Array.from(
+    files ?? [],
+  )
     .filter(Boolean)
-    .filter((file: File) =>
-      String(file.type || "").startsWith("image/"),
+    .filter((file) =>
+      String(
+        file.type || "",
+      ).startsWith("image/"),
     ) as File[];
 }
 
 function useListCreateParamsAndTitle(): {
-  resolvedParams: ResolvedListCreateParams;
-  inventoryId: string | undefined;
+  resolvedParams:
+    ResolvedListCreateParams;
   title: string;
 } {
-  const params = useParams<ListCreateRouteParams>();
+  const params =
+    useParams<ListCreateRouteParams>();
 
-  const resolvedParams: ResolvedListCreateParams = React.useMemo(
-    () => resolveListCreateParams(params),
-    [params],
-  );
+  const resolvedParams:
+    ResolvedListCreateParams =
+    React.useMemo(
+      () =>
+        resolveListCreateParams(
+          params,
+        ),
+      [params],
+    );
 
-  const { inventoryId } = resolvedParams;
-
-  const title = "出品作成";
+  const title =
+    "出品作成";
 
   return {
     resolvedParams,
-    inventoryId,
     title,
   };
 }
 
 function useListingStatus(): {
   status: ListStatus;
-  setStatus: React.Dispatch<React.SetStateAction<ListStatus>>;
+  setStatus: React.Dispatch<
+    React.SetStateAction<ListStatus>
+  >;
 } {
-  const [status, setStatus] =
-    React.useState<ListStatus>("listing");
+  const [
+    status,
+    setStatus,
+  ] =
+    React.useState<ListStatus>(
+      "listing",
+    );
 
   return {
     status,
@@ -221,13 +323,24 @@ function useListingStatus(): {
 
 function useListingFields(): {
   listingTitle: string;
-  setListingTitle: React.Dispatch<React.SetStateAction<string>>;
+  setListingTitle: React.Dispatch<
+    React.SetStateAction<string>
+  >;
   description: string;
-  setDescription: React.Dispatch<React.SetStateAction<string>>;
+  setDescription: React.Dispatch<
+    React.SetStateAction<string>
+  >;
 } {
-  const [listingTitle, setListingTitle] =
+  const [
+    listingTitle,
+    setListingTitle,
+  ] =
     React.useState<string>("");
-  const [description, setDescription] =
+
+  const [
+    description,
+    setDescription,
+  ] =
     React.useState<string>("");
 
   return {
@@ -242,114 +355,209 @@ function useListingImages(): {
   images: File[];
   imagePreviewUrls: string[];
   mainImageIndex: number;
-  setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
+  setMainImageIndex: React.Dispatch<
+    React.SetStateAction<number>
+  >;
   imageInputRef: ImageInputRef;
-  onSelectImages: (files: FileList | null) => void;
-  onDropImages: (e: React.DragEvent<HTMLDivElement>) => void;
-  onDragOverImages: (
-    e: React.DragEvent<HTMLDivElement>,
+  onSelectImages: (
+    files: FileList | null,
   ) => void;
-  removeImageAt: (idx: number) => void;
+  removeImageAt: (
+    index: number,
+  ) => void;
   clearImages: () => void;
 } {
-  const [images, setImages] = React.useState<File[]>([]);
-  const [mainImageIndex, setMainImageIndex] =
+  const [
+    images,
+    setImages,
+  ] =
+    React.useState<File[]>([]);
+
+  const [
+    mainImageIndex,
+    setMainImageIndex,
+  ] =
     React.useState<number>(0);
-  const [imagePreviewUrls, setImagePreviewUrls] =
+
+  const [
+    imagePreviewUrls,
+    setImagePreviewUrls,
+  ] =
     React.useState<string[]>([]);
 
   const imageInputRef =
-    React.useRef<HTMLInputElement | null>(null);
-
-  const appendImages = React.useCallback(
-    (filesLike: FileList | File[] | null) => {
-      const files = normalizeImageFiles(filesLike);
-      if (files.length === 0) return;
-
-      setImages((prev) => dedupeFiles(prev, files));
-    },
-    [],
-  );
-
-  const onSelectImages = React.useCallback(
-    (files: FileList | null) => {
-      appendImages(files);
-    },
-    [appendImages],
-  );
-
-  const onDropImages = React.useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      appendImages(e.dataTransfer.files);
-    },
-    [appendImages],
-  );
-
-  const onDragOverImages = React.useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-    },
-    [],
-  );
-
-  const removeImageAt = React.useCallback((idx: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== idx));
-
-    setMainImageIndex((prevMain) => {
-      if (idx === prevMain) return 0;
-      if (idx < prevMain) return Math.max(0, prevMain - 1);
-      return prevMain;
-    });
-  }, []);
-
-  const clearImages = React.useCallback(() => {
-    setImages([]);
-    setMainImageIndex(0);
-  }, []);
-
-  React.useEffect(() => {
-    if (images.length === 0) {
-      setImagePreviewUrls([]);
-      return;
-    }
-
-    const urls = images.map((file: File) =>
-      URL.createObjectURL(file),
+    React.useRef<HTMLInputElement | null>(
+      null,
     );
 
-    setImagePreviewUrls(urls);
+  const appendImages =
+    React.useCallback(
+      (
+        filesLike:
+          | FileList
+          | File[]
+          | null,
+      ) => {
+        const files =
+          normalizeImageFiles(
+            filesLike,
+          );
 
-    return () => {
-      urls.forEach((url: string) => {
-        try {
-          URL.revokeObjectURL(url);
-        } catch {
-          // noop
+        if (
+          files.length === 0
+        ) {
+          return;
         }
-      });
-    };
-  }, [images]);
 
-  React.useEffect(() => {
-    if (images.length === 0) {
-      if (mainImageIndex !== 0) {
+        setImages(
+          (previousFiles) =>
+            dedupeFiles(
+              previousFiles,
+              files,
+            ),
+        );
+      },
+      [],
+    );
+
+  const onSelectImages =
+    React.useCallback(
+      (
+        files:
+          FileList | null,
+      ) => {
+        appendImages(files);
+      },
+      [appendImages],
+    );
+
+  const removeImageAt =
+    React.useCallback(
+      (
+        index: number,
+      ) => {
+        setImages(
+          (previousFiles) =>
+            previousFiles.filter(
+              (
+                _,
+                previousIndex,
+              ) =>
+                previousIndex !==
+                index,
+            ),
+        );
+
+        setMainImageIndex(
+          (
+            previousMainIndex,
+          ) => {
+            if (
+              index ===
+              previousMainIndex
+            ) {
+              return 0;
+            }
+
+            if (
+              index <
+              previousMainIndex
+            ) {
+              return Math.max(
+                0,
+                previousMainIndex -
+                  1,
+              );
+            }
+
+            return previousMainIndex;
+          },
+        );
+      },
+      [],
+    );
+
+  const clearImages =
+    React.useCallback(
+      () => {
+        setImages([]);
         setMainImageIndex(0);
+      },
+      [],
+    );
+
+  React.useEffect(
+    () => {
+      if (
+        images.length === 0
+      ) {
+        setImagePreviewUrls(
+          [],
+        );
+
+        return;
       }
 
-      return;
-    }
+      const urls =
+        images.map(
+          (file) =>
+            URL.createObjectURL(
+              file,
+            ),
+        );
 
-    if (
-      mainImageIndex < 0 ||
-      mainImageIndex > images.length - 1
-    ) {
-      setMainImageIndex(0);
-    }
-  }, [images.length, mainImageIndex]);
+      setImagePreviewUrls(
+        urls,
+      );
+
+      return () => {
+        urls.forEach(
+          (url) => {
+            try {
+              URL.revokeObjectURL(
+                url,
+              );
+            } catch {
+              // noop
+            }
+          },
+        );
+      };
+    },
+    [images],
+  );
+
+  React.useEffect(
+    () => {
+      if (
+        images.length === 0
+      ) {
+        if (
+          mainImageIndex !== 0
+        ) {
+          setMainImageIndex(
+            0,
+          );
+        }
+
+        return;
+      }
+
+      if (
+        mainImageIndex < 0 ||
+        mainImageIndex >
+          images.length - 1
+      ) {
+        setMainImageIndex(
+          0,
+        );
+      }
+    },
+    [
+      images.length,
+      mainImageIndex,
+    ],
+  );
 
   return {
     images,
@@ -358,44 +566,67 @@ function useListingImages(): {
     setMainImageIndex,
     imageInputRef,
     onSelectImages,
-    onDropImages,
-    onDragOverImages,
     removeImageAt,
     clearImages,
   };
 }
 
-function usePriceRows(): UsePriceRowsResult {
-  const [priceRows, setPriceRows] =
-    React.useState<PriceRow[]>([]);
+function usePriceRows():
+  UsePriceRowsResult {
+  const [
+    priceRows,
+    setPriceRows,
+  ] =
+    React.useState<PriceRow[]>(
+      [],
+    );
 
-  const initializedPriceRowsRef = React.useRef(false);
+  const initializedPriceRowsRef =
+    React.useRef(false);
 
-  const onChangePrice = React.useCallback(
-    (index: number, price: number | null) => {
-      setPriceRows((prev) => {
-        const next = [...prev];
+  const onChangePrice =
+    React.useCallback(
+      (
+        index: number,
+        price:
+          number | null,
+      ) => {
+        setPriceRows(
+          (previousRows) => {
+            const nextRows = [
+              ...previousRows,
+            ];
 
-        if (!next[index]) return prev;
+            if (
+              !nextRows[
+                index
+              ]
+            ) {
+              return previousRows;
+            }
 
-        next[index] = {
-          ...next[index],
-          price,
-        };
+            nextRows[index] = {
+              ...nextRows[
+                index
+              ],
+              price,
+            };
 
-        return next;
-      });
-    },
-    [],
-  );
+            return nextRows;
+          },
+        );
+      },
+      [],
+    );
 
-  const priceCard = usePriceCard({
-    title: "価格",
-    rows: priceRows,
-    mode: "edit",
-    currencySymbol: "¥",
-    onChangePrice,
-  });
+  const priceCard =
+    usePriceCard({
+      title: "価格",
+      rows: priceRows,
+      mode: "edit",
+      currencySymbol: "¥",
+      onChangePrice,
+    });
 
   return {
     priceRows,
@@ -407,16 +638,29 @@ function usePriceRows(): UsePriceRowsResult {
 }
 
 function useListCreateNavigation(
-  resolvedParams: ResolvedListCreateParams,
+  resolvedParams:
+    ResolvedListCreateParams,
 ): {
   navigate: NavigateFunction;
   onBack: () => void;
 } {
-  const navigate = useNavigate();
+  const navigate =
+    useNavigate();
 
-  const onBack = React.useCallback(() => {
-    navigate(buildBackPath(resolvedParams));
-  }, [navigate, resolvedParams]);
+  const onBack =
+    React.useCallback(
+      () => {
+        navigate(
+          buildBackPath(
+            resolvedParams,
+          ),
+        );
+      },
+      [
+        navigate,
+        resolvedParams,
+      ],
+    );
 
   return {
     navigate,
@@ -424,13 +668,20 @@ function useListCreateNavigation(
   };
 }
 
-function useListCreateDTO(args: {
-  navigate: NavigateFunction;
-  inventoryId: string | undefined;
-  resolvedParams: ResolvedListCreateParams;
-  initializedPriceRowsRef: React.MutableRefObject<boolean>;
-  setPriceRows: React.Dispatch<React.SetStateAction<PriceRow[]>>;
-}): {
+function useListCreateDTO(
+  args: {
+    resolvedParams:
+      ResolvedListCreateParams;
+    initializedPriceRowsRef:
+      React.MutableRefObject<boolean>;
+    setPriceRows:
+      React.Dispatch<
+        React.SetStateAction<
+          PriceRow[]
+        >
+      >;
+  },
+): {
   dto: ListCreateDTO | null;
   loadingDTO: boolean;
   dtoError: string;
@@ -440,100 +691,131 @@ function useListCreateDTO(args: {
   tokenName: string;
 } {
   const {
-    navigate,
-    inventoryId,
     resolvedParams,
     initializedPriceRowsRef,
     setPriceRows,
   } = args;
 
-  const [dto, setDTO] =
-    React.useState<ListCreateDTO | null>(null);
-  const [loadingDTO, setLoadingDTO] = React.useState(false);
-  const [dtoError, setDTOError] = React.useState<string>("");
+  const [
+    dto,
+    setDTO,
+  ] =
+    React.useState<
+      ListCreateDTO | null
+    >(null);
 
-  const redirectedRef = React.useRef(false);
+  const [
+    loadingDTO,
+    setLoadingDTO,
+  ] =
+    React.useState(false);
 
-  React.useEffect(() => {
-    let cancelled = false;
+  const [
+    dtoError,
+    setDTOError,
+  ] =
+    React.useState<string>(
+      "",
+    );
 
-    const run = async () => {
-      const canFetch = canFetchListCreate(resolvedParams);
+  React.useEffect(
+    () => {
+      let cancelled =
+        false;
 
-      if (!canFetch) return;
+      const run =
+        async () => {
+          const canFetch =
+            canFetchListCreate(
+              resolvedParams,
+            );
 
-      setLoadingDTO(true);
-      setDTOError("");
+          if (!canFetch) {
+            return;
+          }
 
-      try {
-        const data =
-          await loadListCreateDTOFromParams(resolvedParams);
-
-        if (cancelled) return;
-
-        const gotInventoryId = getInventoryIdFromDTO(data);
-        const currentInventoryId = String(inventoryId ?? "");
-
-        if (
-          shouldRedirectToInventoryIdRoute({
-            currentInventoryId,
-            gotInventoryId,
-            alreadyRedirected: redirectedRef.current,
-          })
-        ) {
-          redirectedRef.current = true;
-
-          navigate(
-            buildInventoryListCreatePath(gotInventoryId),
-            {
-              replace: true,
-            },
+          setLoadingDTO(
+            true,
           );
-        }
 
-        setDTO(data);
+          setDTOError("");
 
-        if (!initializedPriceRowsRef.current) {
-          setPriceRows(data.priceRows);
-          initializedPriceRowsRef.current = true;
-        }
-      } catch (e) {
-        if (cancelled) return;
+          try {
+            const data =
+              await loadListCreateDTOFromParams(
+                resolvedParams,
+              );
 
-        const msg = String(
-          e instanceof Error ? e.message : e,
-        );
+            if (cancelled) {
+              return;
+            }
 
-        setDTOError(msg);
-      } finally {
-        if (cancelled) return;
+            setDTO(data);
 
-        setLoadingDTO(false);
-      }
-    };
+            if (
+              !initializedPriceRowsRef.current
+            ) {
+              setPriceRows(
+                data.priceRows,
+              );
 
-    void run();
+              initializedPriceRowsRef.current =
+                true;
+            }
+          } catch (error) {
+            if (cancelled) {
+              return;
+            }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    navigate,
-    inventoryId,
-    resolvedParams,
-    setPriceRows,
-    initializedPriceRowsRef,
-  ]);
+            const message =
+              String(
+                error instanceof
+                  Error
+                  ? error.message
+                  : error,
+              );
+
+            setDTOError(
+              message,
+            );
+          } finally {
+            if (cancelled) {
+              return;
+            }
+
+            setLoadingDTO(
+              false,
+            );
+          }
+        };
+
+      void run();
+
+      return () => {
+        cancelled =
+          true;
+      };
+    },
+    [
+      resolvedParams,
+      setPriceRows,
+      initializedPriceRowsRef,
+    ],
+  );
 
   const {
     productBrandName,
     productName,
     tokenBrandName,
     tokenName,
-  } = React.useMemo(
-    () => extractDisplayStrings(dto),
-    [dto],
-  );
+  } =
+    React.useMemo(
+      () =>
+        extractDisplayStrings(
+          dto,
+        ),
+      [dto],
+    );
 
   return {
     dto,
@@ -546,18 +828,30 @@ function useListCreateDTO(args: {
   };
 }
 
-function useCreateList(args: {
-  navigate: NavigateFunction;
-  resolvedParams: ResolvedListCreateParams;
-  status: ListStatus;
-  listingTitle: string;
-  description: string;
-  priceRows: PriceRow[];
-  assigneeId: string | undefined;
-  images: File[];
-  mainImageIndex: number;
-}): {
-  onCreate: () => Promise<void>;
+function useCreateList(
+  args: {
+    navigate:
+      NavigateFunction;
+    resolvedParams:
+      ResolvedListCreateParams;
+    status:
+      ListStatus;
+    listingTitle:
+      string;
+    description:
+      string;
+    priceRows:
+      PriceRow[];
+    assigneeId:
+      string | undefined;
+    images:
+      File[];
+    mainImageIndex:
+      number;
+  },
+): {
+  onCreate: () =>
+    Promise<void>;
 } {
   const {
     navigate,
@@ -571,88 +865,127 @@ function useCreateList(args: {
     mainImageIndex,
   } = args;
 
-  const onCreate = React.useCallback(async () => {
-    let imageUploadFailedMessage = "";
+  const onCreate =
+    React.useCallback(
+      async () => {
+        let imageUploadFailedMessage =
+          "";
 
-    try {
-      if (images.length === 0) {
-        const msg =
-          "商品画像は1枚以上必須です。画像を追加してください。";
+        try {
+          if (
+            images.length ===
+            0
+          ) {
+            const message =
+              "商品画像は1枚以上必須です。画像を追加してください。";
 
-        alert(msg);
+            alert(message);
 
-        throw new Error(msg);
-      }
+            throw new Error(
+              message,
+            );
+          }
 
-      const inventoryId = String(
-        resolvedParams.inventoryId ?? "",
-      );
+          const inventoryId =
+            String(
+              resolvedParams.inventoryId ??
+                "",
+            );
 
-      await createListWithImages({
-        params: {
-          ...resolvedParams,
-          inventoryId,
-        },
-        listingTitle,
-        description,
-        priceRows,
-        status,
+          await createListWithImages({
+            params: {
+              ...resolvedParams,
+              inventoryId,
+            },
+            listingTitle,
+            description,
+            priceRows,
+            status,
+            assigneeId,
+            images,
+            mainImageIndex,
+            onImageUploadFailed:
+              (
+                message,
+              ) => {
+                imageUploadFailedMessage =
+                  message;
+              },
+          });
+
+          if (
+            imageUploadFailedMessage
+          ) {
+            alert(
+              imageUploadFailedMessage,
+            );
+          } else {
+            alert(
+              "作成しました",
+            );
+          }
+
+          navigate(
+            buildAfterCreatePath(
+              resolvedParams,
+            ),
+          );
+        } catch (error) {
+          const message =
+            String(
+              error instanceof
+                Error
+                ? error.message
+                : error,
+            );
+
+          alert(message);
+        }
+      },
+      [
         assigneeId,
+        status,
+        description,
         images,
+        listingTitle,
         mainImageIndex,
-        onImageUploadFailed: (message) => {
-          imageUploadFailedMessage = message;
-        },
-      });
-
-      if (imageUploadFailedMessage) {
-        alert(imageUploadFailedMessage);
-      } else {
-        alert("作成しました");
-      }
-
-      navigate(buildAfterCreatePath(resolvedParams));
-    } catch (e) {
-      const msg = String(
-        e instanceof Error ? e.message : e,
-      );
-
-      alert(msg);
-    }
-  }, [
-    assigneeId,
-    status,
-    description,
-    images,
-    listingTitle,
-    mainImageIndex,
-    navigate,
-    priceRows,
-    resolvedParams,
-  ]);
+        navigate,
+        priceRows,
+        resolvedParams,
+      ],
+    );
 
   return {
     onCreate,
   };
 }
 
-export function useListCreate(): UseListCreateResult {
+export function useListCreate():
+  UseListCreateResult {
   const {
     resolvedParams,
-    inventoryId,
     title,
-  } = useListCreateParamsAndTitle();
+  } =
+    useListCreateParamsAndTitle();
 
-  const { currentMember } = useAuth();
+  const {
+    currentMember,
+  } =
+    useAuth();
 
-  const { status, setStatus } = useListingStatus();
+  const {
+    status,
+    setStatus,
+  } =
+    useListingStatus();
 
   const {
     listingTitle,
     setListingTitle,
     description,
     setDescription,
-  } = useListingFields();
+  } =
+    useListingFields();
 
   const {
     images,
@@ -663,7 +996,8 @@ export function useListCreate(): UseListCreateResult {
     onSelectImages,
     removeImageAt,
     clearImages,
-  } = useListingImages();
+  } =
+    useListingImages();
 
   const {
     priceRows,
@@ -671,71 +1005,147 @@ export function useListCreate(): UseListCreateResult {
     initializedPriceRowsRef,
     onChangePrice,
     priceCard,
-  } = usePriceRows();
-
-  const { navigate, onBack } =
-    useListCreateNavigation(resolvedParams);
+  } =
+    usePriceRows();
 
   const {
-    assigneeCandidates: rawAssigneeCandidates,
+    navigate,
+    onBack,
+  } =
+    useListCreateNavigation(
+      resolvedParams,
+    );
+
+  const {
+    assigneeCandidates:
+      rawAssigneeCandidates,
     loadingMembers,
-  } = useAdminCard();
+  } =
+    useAdminCard();
 
-  const assigneeCandidates = React.useMemo(
-    () =>
-      normalizeAssigneeCandidates(
+  const assigneeCandidates =
+    React.useMemo(
+      () =>
+        normalizeAssigneeCandidates(
+          rawAssigneeCandidates,
+        ),
+      [
         rawAssigneeCandidates,
-      ),
-    [rawAssigneeCandidates],
-  );
+      ],
+    );
 
-  const [assigneeId, setAssigneeId] =
+  const [
+    assigneeId,
+    setAssigneeId,
+  ] =
     React.useState("");
-  const [assigneeName, setAssigneeName] =
+
+  const [
+    assigneeName,
+    setAssigneeName,
+  ] =
     React.useState("");
 
-  React.useEffect(() => {
-    if (!currentMember) return;
-    if (assigneeId) return;
-
-    const memberUid = getMemberUid(currentMember);
-
-    if (!memberUid) return;
-
-    const label = getMemberDisplayName(currentMember);
-
-    setAssigneeId(memberUid);
-    setAssigneeName(label);
-  }, [currentMember, assigneeId]);
-
-  const handleSelectAssignee = React.useCallback(
-    (id: string) => {
-      const nextId = String(id ?? "");
-
-      if (!nextId) return;
-
-      const matched = assigneeCandidates.find(
-        (candidate) => candidate.id === nextId,
-      );
-
-      let nextName = "";
-
-      if (matched) {
-        nextName = matched.name;
-      } else if (
-        getMemberUid(currentMember) === nextId
+  React.useEffect(
+    () => {
+      if (
+        !currentMember
       ) {
-        nextName =
-          getMemberDisplayName(currentMember);
-      } else {
-        nextName = nextId;
+        return;
       }
 
-      setAssigneeId(nextId);
-      setAssigneeName(nextName);
+      if (
+        assigneeId
+      ) {
+        return;
+      }
+
+      const memberUid =
+        getMemberUid(
+          currentMember,
+        );
+
+      if (
+        !memberUid
+      ) {
+        return;
+      }
+
+      const label =
+        getMemberDisplayName(
+          currentMember,
+        );
+
+      setAssigneeId(
+        memberUid,
+      );
+
+      setAssigneeName(
+        label,
+      );
     },
-    [assigneeCandidates, currentMember],
+    [
+      currentMember,
+      assigneeId,
+    ],
   );
+
+  const handleSelectAssignee =
+    React.useCallback(
+      (
+        id: string,
+      ) => {
+        const nextId =
+          String(
+            id ?? "",
+          );
+
+        if (!nextId) {
+          return;
+        }
+
+        const matched =
+          assigneeCandidates.find(
+            (
+              candidate,
+            ) =>
+              candidate.id ===
+              nextId,
+          );
+
+        let nextName =
+          "";
+
+        if (matched) {
+          nextName =
+            matched.name;
+        } else if (
+          getMemberUid(
+            currentMember,
+          ) === nextId
+        ) {
+          nextName =
+            getMemberDisplayName(
+              currentMember,
+            );
+        } else {
+          nextName =
+            nextId;
+        }
+
+        setAssigneeId(
+          nextId,
+        );
+
+        setAssigneeName(
+          nextName,
+        );
+      },
+      [
+        assigneeCandidates,
+        currentMember,
+      ],
+    );
 
   const {
     dto,
@@ -745,25 +1155,27 @@ export function useListCreate(): UseListCreateResult {
     productName,
     tokenBrandName,
     tokenName,
-  } = useListCreateDTO({
-    navigate,
-    inventoryId,
-    resolvedParams,
-    initializedPriceRowsRef,
-    setPriceRows,
-  });
+  } =
+    useListCreateDTO({
+      resolvedParams,
+      initializedPriceRowsRef,
+      setPriceRows,
+    });
 
-  const { onCreate } = useCreateList({
-    navigate,
-    resolvedParams,
-    status,
-    listingTitle,
-    description,
-    priceRows,
-    assigneeId,
-    images,
-    mainImageIndex,
-  });
+  const {
+    onCreate,
+  } =
+    useCreateList({
+      navigate,
+      resolvedParams,
+      status,
+      listingTitle,
+      description,
+      priceRows,
+      assigneeId,
+      images,
+      mainImageIndex,
+    });
 
   return {
     title,
@@ -793,13 +1205,19 @@ export function useListCreate(): UseListCreateResult {
     mainImageIndex,
     setMainImageIndex,
     imageInputRef,
-    onAddImages: onSelectImages,
-    onRemoveImageAt: removeImageAt,
-    onClearImages: clearImages,
+    onAddImages:
+      onSelectImages,
+    onRemoveImageAt:
+      removeImageAt,
+    onClearImages:
+      clearImages,
 
     assigneeName,
     assigneeCandidates,
-    loadingMembers: Boolean(loadingMembers),
+    loadingMembers:
+      Boolean(
+        loadingMembers,
+      ),
     handleSelectAssignee,
 
     status,
