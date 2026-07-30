@@ -1,81 +1,33 @@
 // frontend/console/shell/src/pages/inventoryDetail.tsx
 
 import * as React from "react";
-import {
-  useNavigate,
-  useParams,
-} from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
 
-import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
+import ProductBlueprintCard, {
+  type ProductBlueprintPatchInput,
+} from "../features/productBlueprint/presentation/cards/productBlueprintForm";
+
 import InventoryCard from "../features/inventory/presentation/components/inventoryCard";
 
 import TokenBlueprintCard, {
   type TokenBlueprintCardViewModel,
 } from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 
-import {
-  useInventoryDetail,
-} from "../features/inventory/presentation/hook/useInventoryDetail";
-
-import type {
-  InventoryDetailViewModel,
-} from "../features/inventory/application/inventoryDetail/inventoryDetail.types";
-
-type ProductBlueprintCardPatch =
-  React.ComponentProps<
-    typeof ProductBlueprintCard
-  >["productBlueprintPatch"];
-
-type ProductBlueprintCardCategory =
-  NonNullable<
-    NonNullable<
-      ProductBlueprintCardPatch
-    >["productBlueprintCategory"]
-  >;
-
-function toProductBlueprintCardPatch(
-  patch:
-    | InventoryDetailViewModel["productBlueprintPatch"]
-    | undefined,
-): ProductBlueprintCardPatch {
-  if (!patch) {
-    return undefined;
-  }
-
-  const category =
-    patch.productBlueprintCategory;
-
-  return {
-    ...patch,
-
-    productBlueprintCategory:
-      category
-        ? ({
-            ...category,
-            kind: category.kind,
-          } as ProductBlueprintCardCategory)
-        : category,
-  } as ProductBlueprintCardPatch;
-}
+import { useInventoryDetail } from "../features/inventory/presentation/hook/useInventoryDetail";
 
 export default function InventoryDetail() {
-  const navigate =
-    useNavigate();
+  const navigate = useNavigate();
 
   /**
    * URLではinventoryIdのみを受け取る。
    */
-  const {
-    inventoryId:
-      inventoryIdParam,
-  } = useParams<{
+  const { inventoryId: inventoryIdParam } = useParams<{
     inventoryId?: string;
   }>();
 
-  const inventoryId =
-    inventoryIdParam ?? "";
+  const inventoryId = inventoryIdParam ?? "";
 
   /**
    * inventoryIdが存在しない場合は、
@@ -83,142 +35,94 @@ export default function InventoryDetail() {
    */
   React.useEffect(() => {
     if (!inventoryId) {
-      navigate(
-        "/inventory",
-        {
-          replace: true,
-        },
-      );
+      navigate("/inventory", {
+        replace: true,
+      });
     }
-  }, [
-    inventoryId,
-    navigate,
-  ]);
+  }, [inventoryId, navigate]);
 
   /**
    * 戻るボタンでは在庫一覧画面へ遷移する。
    */
-  const onBack =
-    React.useCallback(() => {
-      navigate(
-        "/inventory",
-      );
-    }, [navigate]);
+  const onBack = React.useCallback(() => {
+    navigate("/inventory");
+  }, [navigate]);
 
   const {
     rows,
     loading,
     error,
     vm,
-  } = useInventoryDetail(
-    inventoryId,
-  );
+  } = useInventoryDetail(inventoryId);
 
-  const title =
-    vm?.headerTitle
-      ? `在庫詳細：${vm.headerTitle}`
-      : "在庫詳細";
+  const title = vm?.headerTitle
+    ? `在庫詳細：${vm.headerTitle}`
+    : "在庫詳細";
 
   /**
    * 出品作成画面へ遷移する。
    */
-  const onList =
-    React.useCallback(() => {
-      if (!inventoryId) {
-        return;
-      }
+  const onList = React.useCallback(() => {
+    if (!inventoryId) {
+      return;
+    }
 
-      navigate(
-        `/inventory/list/create/${encodeURIComponent(
-          inventoryId,
-        )}`,
-      );
-    }, [
-      navigate,
-      inventoryId,
-    ]);
-
-  const productBlueprintPatchForCard =
-    React.useMemo(
-      () =>
-        toProductBlueprintCardPatch(
-          vm?.productBlueprintPatch,
-        ),
-      [
-        vm?.productBlueprintPatch,
-      ],
+    navigate(
+      `/inventory/list/create/${encodeURIComponent(inventoryId)}`,
     );
+  }, [inventoryId, navigate]);
+
+  /**
+   * ProductBlueprintPatchDTOは
+   * ProductBlueprintPatchInputと互換性があるため、
+   * 個別の型変換や型アサーションは行わない。
+   */
+  const productBlueprintPatchForCard:
+    | ProductBlueprintPatchInput
+    | undefined = vm?.productBlueprintPatch;
 
   /**
    * TokenBlueprintCardを参照専用で表示する。
    */
-  const tokenBlueprintId =
-    vm?.tokenBlueprintId ?? "";
+  const tokenBlueprintId = vm?.tokenBlueprintId ?? "";
+  const tokenBlueprintPatch = vm?.tokenBlueprintPatch;
 
-  const tokenBlueprintPatch =
-    vm?.tokenBlueprintPatch;
-
-  const tokenCardVM:
-    TokenBlueprintCardViewModel =
-    React.useMemo(() => {
+  const tokenCardVM =
+    React.useMemo<TokenBlueprintCardViewModel>(() => {
       const tokenName =
-        tokenBlueprintPatch
-          ?.tokenName ?? "";
-
-      const symbol =
-        tokenBlueprintPatch
-          ?.symbol ?? "";
-
-      const brandName =
-        tokenBlueprintPatch
-          ?.brandName ?? "";
-
-      const description =
-        tokenBlueprintPatch
-          ?.description ?? "";
-
-      const iconUrl =
-        tokenBlueprintPatch
-          ?.iconUrl ??
-        undefined;
+        tokenBlueprintPatch?.tokenName ?? "";
 
       return {
-        id:
-          tokenBlueprintId,
+        id: tokenBlueprintId,
 
         name:
           tokenName ||
           tokenBlueprintId ||
           "-",
 
-        symbol,
+        symbol:
+          tokenBlueprintPatch?.symbol ?? "",
 
-        /**
-         * InventoryDetailViewModelではbrandIdを
-         * 保持していないため空文字を設定する。
-         */
         brandId:
-          "",
+          tokenBlueprintPatch?.brandId ?? "",
 
-        brandName,
-        description,
-        iconUrl,
+        brandName:
+          tokenBlueprintPatch?.brandName ?? "",
+
+        description:
+          tokenBlueprintPatch?.description ?? "",
+
+        iconUrl:
+          tokenBlueprintPatch?.iconUrl ?? undefined,
 
         /**
-         * この画面では編集しないため、
-         * Mint済み状態による編集制御は使用しない。
+         * この画面は参照専用であり、
+         * 編集モードへ移行しない。
          */
-        minted:
-          false,
-
-        iconFile:
-          null,
-
-        isEditMode:
-          false,
-
-        brandOptions:
-          [],
+        minted: false,
+        iconFile: null,
+        isEditMode: false,
+        brandOptions: [],
       };
     }, [
       tokenBlueprintId,
@@ -242,30 +146,28 @@ export default function InventoryDetail() {
           }
         />
 
-        {tokenBlueprintId && (
+        {tokenBlueprintId ? (
           <div className="mt-3">
             <TokenBlueprintCard
               vm={tokenCardVM}
             />
           </div>
-        )}
+        ) : null}
 
-        {loading && (
-          <div className="text-sm text-[hsl(var(--muted-foreground))] mt-2">
+        {loading ? (
+          <div className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
             読み込み中...
           </div>
-        )}
+        ) : null}
 
-        {error && (
-          <div className="text-sm text-red-600 mt-2">
+        {error ? (
+          <div className="mt-2 text-sm text-red-600">
             読み込みに失敗しました:{" "}
             {error}
           </div>
-        )}
+        ) : null}
 
-        <InventoryCard
-          rows={rows}
-        />
+        <InventoryCard rows={rows} />
       </div>
 
       {/* 右カラム：grid-2維持用 */}
