@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/domain/entity/healthcare.ts
+// frontend\console\shell\src\features\productBlueprint\domain\healthcare.ts
 
 export type HealthcareCategoryCode =
   | "healthcare.medical_device"

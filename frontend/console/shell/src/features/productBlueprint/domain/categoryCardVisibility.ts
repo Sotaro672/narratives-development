@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/domain/entity/categoryCardVisibility.ts
+// frontend\console\shell\src\features\productBlueprint\domain\categoryCardVisibility.ts
 
 export type CategoryCardVisibility = {
   showVintage: boolean;

@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/domain/entity/other.ts
+// frontend\console\shell\src\features\productBlueprint\domain\other.ts
 
 export type OtherCategoryCode = "other.general";
 

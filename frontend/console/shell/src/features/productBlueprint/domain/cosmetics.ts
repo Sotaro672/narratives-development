@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/domain/entity/cosmetics.ts
+// frontend\console\shell\src\features\productBlueprint\domain\cosmetics.ts
 
 export type CosmeticsCategoryCode =
   | "cosmetics.bodycare"
