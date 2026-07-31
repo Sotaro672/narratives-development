@@ -146,7 +146,7 @@ export default function ListDetail() {
 
         <PriceCard
           title="価格"
-          rows={effectivePriceRows as any}
+          rows={effectivePriceRows}
           mode={isEdit ? "edit" : "view"}
           currencySymbol="¥"
           onChangePrice={
