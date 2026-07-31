@@ -14,7 +14,7 @@ import { Button } from "../shared/ui/button";
 import {
   ratingToStars,
   statusLabelJa,
-} from "../shared/format/review";
+} from "../features/productBlueprintReview/presentation/component/review";
 
 import type { ReviewStatus } from "../shared/types/productBlueprintReview";
 

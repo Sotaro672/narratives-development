@@ -1,6 +1,6 @@
-// frontend/console/shell/src/shared/format/review.ts
+// frontend\console\shell\src\features\productBlueprintReview\presentation\component\review.ts
 
-import type { ReviewStatus } from "../types/productBlueprintReview";
+import type { ReviewStatus } from "../../../../shared/types/productBlueprintReview";
 
 export const ReviewStatusLabelJa: Record<ReviewStatus, string> = {
   PUBLISHED: "公開",
