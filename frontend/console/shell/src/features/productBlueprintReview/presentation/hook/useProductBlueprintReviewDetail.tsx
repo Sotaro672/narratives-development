@@ -11,7 +11,7 @@ import {
   type ProductBlueprintReviewDetailRow,
 } from "../../application/productBlueprintReviewDetailService";
 
-import type { ReviewStatus } from "../../../../shared/types/productBluleprintReview";
+import type { ReviewStatus } from "../../../../shared/types/productBlueprintReview";
 
 const PER_PAGE = 20;
 

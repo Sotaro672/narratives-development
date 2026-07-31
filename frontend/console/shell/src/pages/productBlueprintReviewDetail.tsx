@@ -16,7 +16,7 @@ import {
   statusLabelJa,
 } from "../shared/format/review";
 
-import type { ReviewStatus } from "../shared/types/productBluleprintReview";
+import type { ReviewStatus } from "../shared/types/productBlueprintReview";
 
 import { useProductBlueprintReviewDetail } from "../features/productBlueprintReview/presentation/hook/useProductBlueprintReviewDetail";
 

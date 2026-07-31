@@ -6,7 +6,7 @@ import type {
   ListCompanyReviewAggregatesParams,
   ProductBlueprintReviewAggregate,
   ReviewStatus,
-} from "../../../shared/types/productBluleprintReview";
+} from "../../../shared/types/productBlueprintReview";
 
 export type UiRow = ProductBlueprintReviewAggregate;
 

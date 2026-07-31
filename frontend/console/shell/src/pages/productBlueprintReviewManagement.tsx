@@ -1,9 +1,26 @@
-// frontend\console\shell\src\pages\productBlueprintReviewManagement.tsx
+// frontend/console/shell/src/pages/productBlueprintReviewManagement.tsx
 
-import List, { FilterableTableHeader } from "../layout/List/List";
+import List, {
+  FilterableTableHeader,
+} from "../layout/List/List";
+
 import { useProductBlueprintReviewManagement } from "../features/productBlueprintReview/presentation/hook/useProductBlueprintReviewManagement";
 
-type Option = { Value: string; Label: string };
+type FilterOption = {
+  value: string;
+  label: string;
+};
+
+function BuildFilterOptions(
+  Values: string[],
+): FilterOption[] {
+  return Array.from(
+    new Set(Values.filter(Boolean)),
+  ).map((Value) => ({
+    value: Value,
+    label: Value,
+  }));
+}
 
 export default function ProductBlueprintReviewManagement() {
   const {
@@ -17,14 +34,13 @@ export default function ProductBlueprintReviewManagement() {
     IsResetting,
   } = useProductBlueprintReviewManagement();
 
-  // ✅ Name 解決済みのみを候補にする（ID fallback はしない）
-  const BrandOptions: Option[] = Array.from(
-    new Set(Rows.map((R: any) => String(R.BrandName ?? "")).filter(Boolean)),
-  ).map((Name) => ({ Value: String(Name), Label: String(Name) }));
+  const BrandOptions = BuildFilterOptions(
+    Rows.map((Row) => Row.BrandName),
+  );
 
-  const AssigneeOptions: Option[] = Array.from(
-    new Set(Rows.map((R: any) => String(R.AssigneeName ?? "")).filter(Boolean)),
-  ).map((Name) => ({ Value: String(Name), Label: String(Name) }));
+  const AssigneeOptions = BuildFilterOptions(
+    Rows.map((Row) => Row.AssigneeName),
+  );
 
   const Headers = [
     "商品名",
@@ -36,36 +52,18 @@ export default function ProductBlueprintReviewManagement() {
     <FilterableTableHeader
       key="brand"
       label="ブランド"
-      options={BrandOptions.map((O) => ({ value: O.Value, label: O.Label }))}
+      options={BrandOptions}
       selected={BrandFilter}
       onChange={HandleBrandFilterChange}
     />,
     <FilterableTableHeader
       key="assignee"
       label="担当者"
-      options={AssigneeOptions.map((O) => ({ value: O.Value, label: O.Label }))}
+      options={AssigneeOptions}
       selected={AssigneeFilter}
       onChange={HandleAssigneeFilterChange}
     />,
   ];
-
-  const ToCount = (V: any): number => {
-    const N = typeof V === "number" ? V : Number(V);
-    return Number.isFinite(N) ? N : 0;
-  };
-
-  // ✅ Name 解決済みのみを表示（ID fallback はしない）
-  const Get = (R: any) => ({
-    ID: R.ID ?? R.ProductBlueprintID ?? "",
-    ProductName: R.ProductName ?? "",
-    BrandName: R.BrandName ?? "",
-    AssigneeName: R.AssigneeName ?? "",
-    Rating1Count: R.Rating1Count ?? 0,
-    Rating2Count: R.Rating2Count ?? 0,
-    Rating3Count: R.Rating3Count ?? 0,
-    Rating4Count: R.Rating4Count ?? 0,
-    Rating5Count: R.Rating5Count ?? 0,
-  });
 
   return (
     <List
@@ -75,28 +73,24 @@ export default function ProductBlueprintReviewManagement() {
       isResetting={IsResetting}
       onReset={HandleReset}
     >
-      {Rows.map((R: any) => {
-        const V = Get(R);
-        return (
-          <tr
-            key={String(V.ID)}
-            className="cursor-pointer hover:bg-[rgba(0,0,0,0.03)] transition"
-            onClick={() => HandleRowClick(R)}
-          >
-            <td>{V.ProductName}</td>
+      {Rows.map((Row) => (
+        <tr
+          key={Row.ID || Row.ProductBlueprintID}
+          className="cursor-pointer transition hover:bg-[rgba(0,0,0,0.03)]"
+          onClick={() => HandleRowClick(Row)}
+        >
+          <td>{Row.ProductName}</td>
 
-            {/* 各レートの投稿数（1〜5） */}
-            <td>{ToCount(V.Rating1Count)}</td>
-            <td>{ToCount(V.Rating2Count)}</td>
-            <td>{ToCount(V.Rating3Count)}</td>
-            <td>{ToCount(V.Rating4Count)}</td>
-            <td>{ToCount(V.Rating5Count)}</td>
+          <td>{Row.Rating1Count}</td>
+          <td>{Row.Rating2Count}</td>
+          <td>{Row.Rating3Count}</td>
+          <td>{Row.Rating4Count}</td>
+          <td>{Row.Rating5Count}</td>
 
-            <td>{V.BrandName}</td>
-            <td>{V.AssigneeName}</td>
-          </tr>
-        );
-      })}
+          <td>{Row.BrandName}</td>
+          <td>{Row.AssigneeName}</td>
+        </tr>
+      ))}
     </List>
   );
 }

@@ -8,7 +8,7 @@ import type {
   ListCompanyReviewAggregatesResponse,
   ListProductBlueprintReviewsParams,
   ListProductBlueprintReviewsResponse,
-} from "../../../shared/types/productBluleprintReview";
+} from "../../../shared/types/productBlueprintReview";
 
 // ==============================
 // Query builder (PascalCase keys)
