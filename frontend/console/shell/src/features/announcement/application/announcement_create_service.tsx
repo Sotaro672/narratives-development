@@ -1,19 +1,18 @@
-// frontend/console/sales/application/announcement_create_service.tsx
+// frontend/console/shell/src/features/announcement/application/announcement_create_service.tsx
+
 import type { TokenBlueprint } from "../../../shared/types/tokenBlueprint";
 import { fetchTokenBlueprintDetail } from "../../tokenBlueprint/application/tokenBlueprintDetailService";
 import { safeDateTimeLabelJa } from "../../../shared/util/dateJa";
+
 import {
   createAnnouncement,
   markAnnouncementPublished,
-  type AnnouncementAttachmentInput,
 } from "../infrastructure/announcement_repository_http";
 
 import {
-  getDownloadURL,
-  getStorage,
-  ref as storageRef,
-  uploadBytes,
-} from "firebase/storage";
+  createAnnouncementClientId,
+  uploadAnnouncementImages,
+} from "./announcement_attachment_service";
 
 // ============================================================
 // View model
@@ -103,172 +102,18 @@ function toOwnersFromState(
       return "";
     }
 
-    const item = owner as AnnouncementCreateLocationOwner;
+    const item =
+      owner as AnnouncementCreateLocationOwner;
 
-    return String(item.avatarId ?? "").trim();
+    return String(
+      item.avatarId ?? "",
+    ).trim();
   });
 
-  return uniqueStrings(avatarIds).map((avatarId) => ({
-    avatarId,
-  }));
-}
-
-function uniqueAvatarIds(values: unknown): string[] {
-  return uniqueStrings(values);
-}
-
-// ============================================================
-// Client ID
-// ============================================================
-
-function createClientId(): string {
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
-  ) {
-    return crypto.randomUUID();
-  }
-
-  return `${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2, 12)}`;
-}
-
-// ============================================================
-// Attachment helpers
-// ============================================================
-
-function sanitizePathSegment(value: string): string {
-  const normalized = value.trim();
-
-  if (!normalized) {
-    return "file";
-  }
-
-  return normalized
-    .replace(/[\\/#?[\]*]/g, "_")
-    .replace(/\s+/g, "_")
-    .replace(/_+/g, "_");
-}
-
-function getFileExtension(fileName: string): string {
-  const normalized = fileName.trim();
-  const index = normalized.lastIndexOf(".");
-
-  if (
-    index < 0 ||
-    index === normalized.length - 1
-  ) {
-    return "";
-  }
-
-  return normalized.slice(index);
-}
-
-function buildAnnouncementAttachmentStorageFileName(params: {
-  file: File;
-  index: number;
-}): string {
-  const extension = getFileExtension(
-    params.file.name || "image",
-  );
-
-  const attachmentId = createClientId();
-  const displayOrder = String(params.index + 1).padStart(
-    2,
-    "0",
-  );
-
-  return sanitizePathSegment(
-    `${displayOrder}-${attachmentId}${extension}`,
-  );
-}
-
-function buildAnnouncementAttachmentObjectPath(params: {
-  announcementId: string;
-  storageFileName: string;
-}): string {
-  const announcementId = sanitizePathSegment(
-    params.announcementId,
-  );
-
-  const storageFileName = sanitizePathSegment(
-    params.storageFileName,
-  );
-
-  return [
-    "announcements",
-    announcementId,
-    "attachments",
-    storageFileName,
-  ].join("/");
-}
-
-async function uploadAnnouncementImage(params: {
-  announcementId: string;
-  file: File;
-  index: number;
-}): Promise<AnnouncementAttachmentInput> {
-  const storageFileName =
-    buildAnnouncementAttachmentStorageFileName({
-      file: params.file,
-      index: params.index,
-    });
-
-  const mimeType =
-    params.file.type || "application/octet-stream";
-
-  const objectPath =
-    buildAnnouncementAttachmentObjectPath({
-      announcementId: params.announcementId,
-      storageFileName,
-    });
-
-  const storage = getStorage();
-  const ref = storageRef(storage, objectPath);
-
-  await uploadBytes(ref, params.file, {
-    contentType: mimeType,
-    customMetadata: {
-      announcementId: params.announcementId,
-      fileName: storageFileName,
-      originalFileName: params.file.name,
-    },
-  });
-
-  const fileUrl = await getDownloadURL(ref);
-
-  return {
-    fileName: storageFileName,
-    fileUrl,
-    fileSize: params.file.size,
-    mimeType,
-    objectPath,
-  };
-}
-
-async function uploadAnnouncementImages(params: {
-  announcementId: string;
-  images: File[];
-}): Promise<AnnouncementAttachmentInput[]> {
-  const validImages = params.images.filter(
-    (file) =>
-      file instanceof File &&
-      file.type.startsWith("image/"),
-  );
-
-  if (validImages.length === 0) {
-    return [];
-  }
-
-  return Promise.all(
-    validImages.map((file, index) =>
-      uploadAnnouncementImage({
-        announcementId: params.announcementId,
-        file,
-        index,
-      }),
-    ),
+  return uniqueStrings(avatarIds).map(
+    (avatarId) => ({
+      avatarId,
+    }),
   );
 }
 
@@ -318,7 +163,9 @@ export function buildAnnouncementCreateVM(
     | null;
 
   const id = String(
-    blueprintValue?.id ?? tokenBlueprintId ?? "",
+    blueprintValue?.id ??
+      tokenBlueprintId ??
+      "",
   ).trim();
 
   const createdById = String(
@@ -347,7 +194,9 @@ export function buildAnnouncementCreateVM(
       : null,
 
     title: "告知",
-    minted: Boolean(blueprintValue?.minted),
+    minted: Boolean(
+      blueprintValue?.minted,
+    ),
 
     createdById,
     createdByName,
@@ -419,7 +268,7 @@ function validateTargetAvatarIds(
   targetAvatarIds: string[],
 ): string[] {
   const normalizedIds =
-    uniqueAvatarIds(targetAvatarIds);
+    uniqueStrings(targetAvatarIds);
 
   if (normalizedIds.length === 0) {
     throw new Error(
@@ -438,7 +287,8 @@ function validateAnnouncementActionParams(
   targetAvatarIds: string[];
 } {
   const tokenBlueprintId =
-    params.sales?.tokenBlueprintId.trim() ?? "";
+    params.sales?.tokenBlueprintId.trim() ??
+    "";
 
   if (!tokenBlueprintId) {
     throw new Error(
@@ -446,7 +296,8 @@ function validateAnnouncementActionParams(
     );
   }
 
-  const createdBy = params.createdBy.trim();
+  const createdBy =
+    params.createdBy.trim();
 
   if (!createdBy) {
     throw new Error(
@@ -454,7 +305,9 @@ function validateAnnouncementActionParams(
     );
   }
 
-  validateAnnouncementPayload(params.payload);
+  validateAnnouncementPayload(
+    params.payload,
+  );
 
   return {
     tokenBlueprintId,
@@ -470,16 +323,19 @@ function validateAnnouncementActionParams(
 // Service
 // ============================================================
 
-export async function saveAnnouncement(
+async function createDraftAnnouncement(
   params: AnnouncementActionParams,
 ) {
   const {
     tokenBlueprintId,
     createdBy,
     targetAvatarIds,
-  } = validateAnnouncementActionParams(params);
+  } = validateAnnouncementActionParams(
+    params,
+  );
 
-  const announcementId = createClientId();
+  const announcementId =
+    createAnnouncementClientId();
 
   const attachments =
     await uploadAnnouncementImages({
@@ -487,50 +343,46 @@ export async function saveAnnouncement(
       images: params.payload.images,
     });
 
-  return createAnnouncement({
-    id: announcementId,
-    title: params.payload.title.trim(),
-    content: params.payload.text.trim(),
-    targetToken: tokenBlueprintId,
-    targetAvatars: targetAvatarIds,
-    attachments,
-    published: false,
-    publishedAt: null,
+  const announcement =
+    await createAnnouncement({
+      id: announcementId,
+      title: params.payload.title.trim(),
+      content: params.payload.text.trim(),
+      targetToken: tokenBlueprintId,
+      targetAvatars: targetAvatarIds,
+      attachments,
+      published: false,
+      publishedAt: null,
+      createdBy,
+    });
+
+  return {
+    announcement,
     createdBy,
-  });
+  };
+}
+
+export async function saveAnnouncement(
+  params: AnnouncementActionParams,
+) {
+  const { announcement } =
+    await createDraftAnnouncement(params);
+
+  return announcement;
 }
 
 export async function sendAnnouncement(
   params: AnnouncementActionParams,
 ) {
   const {
-    tokenBlueprintId,
+    announcement,
     createdBy,
-    targetAvatarIds,
-  } = validateAnnouncementActionParams(params);
-
-  const announcementId = createClientId();
-
-  const attachments =
-    await uploadAnnouncementImages({
-      announcementId,
-      images: params.payload.images,
-    });
-
-  await createAnnouncement({
-    id: announcementId,
-    title: params.payload.title.trim(),
-    content: params.payload.text.trim(),
-    targetToken: tokenBlueprintId,
-    targetAvatars: targetAvatarIds,
-    attachments,
-    published: false,
-    publishedAt: null,
-    createdBy,
-  });
+  } = await createDraftAnnouncement(
+    params,
+  );
 
   return markAnnouncementPublished(
-    announcementId,
+    announcement.id,
     {
       updatedBy: createdBy,
     },

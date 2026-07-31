@@ -1,9 +1,8 @@
-// frontend/console/sales/src/presentation/hook/useAnnouncementTokenListPage.tsx
+// frontend/console/shell/src/features/announcement/presentation/hook/useAnnouncementTokenListPage.tsx
+
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 import {
-  buildAnnouncementTokenListNavigateState,
   enrichAnnouncementTokenListRows,
   fetchAnnouncementTokenListRows,
   normalizeAnnouncementTokenListSortKey,
@@ -15,21 +14,39 @@ import type { SalesRow } from "../../infrastructure/sales_repository_http";
 import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
 
 export function useAnnouncementTokenListPage() {
-  const navigate = useNavigate();
-  const { user, loading, currentMember, loadingMember } = useAuth();
+  const {
+    user,
+    loading,
+    currentMember,
+    loadingMember,
+  } = useAuth();
 
-  const [sourceRows, setSourceRows] = useState<SalesRow[]>([]);
+  const [sourceRows, setSourceRows] =
+    useState<SalesRow[]>([]);
+
   const [sortKey, setSortKey] =
-    useState<AnnouncementTokenListSortKey>("tokenName");
+    useState<AnnouncementTokenListSortKey>(
+      "tokenName",
+    );
+
   const [sortDir, setSortDir] =
-    useState<AnnouncementTokenListSortDir>("asc");
-  const [isResetting, setIsResetting] = useState(false);
+    useState<AnnouncementTokenListSortDir>(
+      "asc",
+    );
+
+  const [isResetting, setIsResetting] =
+    useState(false);
 
   const companyId = useMemo(() => {
-    return String(currentMember?.companyId ?? user?.companyId ?? "").trim();
+    return String(
+      currentMember?.companyId ??
+        user?.companyId ??
+        "",
+    ).trim();
   }, [currentMember, user]);
 
-  const isAuthLoading = loading || loadingMember;
+  const isAuthLoading =
+    loading || loadingMember;
 
   const load = useCallback(async () => {
     if (isAuthLoading) {
@@ -42,7 +59,9 @@ export function useAnnouncementTokenListPage() {
     }
 
     try {
-      const rows = await fetchAnnouncementTokenListRows(companyId);
+      const rows =
+        await fetchAnnouncementTokenListRows();
+
       setSourceRows(rows);
     } catch {
       setSourceRows([]);
@@ -54,53 +73,57 @@ export function useAnnouncementTokenListPage() {
   }, [load]);
 
   const rows = useMemo(() => {
-    const enrichedRows = enrichAnnouncementTokenListRows(sourceRows);
-    return sortAnnouncementTokenListRows(enrichedRows, sortKey, sortDir);
+    const enrichedRows =
+      enrichAnnouncementTokenListRows(
+        sourceRows,
+      );
+
+    return sortAnnouncementTokenListRows(
+      enrichedRows,
+      sortKey,
+      sortDir,
+    );
   }, [sourceRows, sortDir, sortKey]);
 
-  const handleChangeSort = useCallback((nextKey: string) => {
-    const normalizedKey = normalizeAnnouncementTokenListSortKey(nextKey);
+  const handleChangeSort = useCallback(
+    (nextKey: string) => {
+      const normalizedKey =
+        normalizeAnnouncementTokenListSortKey(
+          nextKey,
+        );
 
-    setSortKey((prevKey) => {
-      if (prevKey === normalizedKey) {
-        setSortDir((prevDir) => (prevDir === "asc" ? "desc" : "asc"));
-        return prevKey;
-      }
+      setSortKey((prevKey) => {
+        if (prevKey === normalizedKey) {
+          setSortDir((prevDir) =>
+            prevDir === "asc"
+              ? "desc"
+              : "asc",
+          );
 
-      setSortDir("asc");
-      return normalizedKey;
-    });
-  }, []);
+          return prevKey;
+        }
 
-  const handleReset = useCallback(async () => {
-    setIsResetting(true);
+        setSortDir("asc");
 
-    try {
-      setSortKey("tokenName");
-      setSortDir("asc");
-      await load();
-    } finally {
-      setIsResetting(false);
-    }
-  }, [load]);
-
-  const handleBack = useCallback(() => {
-    navigate("/sales");
-  }, [navigate]);
-
-  const handleRowClick = useCallback(
-    (tokenBlueprintId: string) => {
-      const id = String(tokenBlueprintId ?? "").trim();
-      if (!id) return;
-
-      const row = sourceRows.find((x) => x.tokenBlueprintId === id);
-
-      navigate(`/sales/${encodeURIComponent(id)}/create`, {
-        state: buildAnnouncementTokenListNavigateState(row),
+        return normalizedKey;
       });
     },
-    [navigate, sourceRows],
+    [],
   );
+
+  const handleReset =
+    useCallback(async () => {
+      setIsResetting(true);
+
+      try {
+        setSortKey("tokenName");
+        setSortDir("asc");
+
+        await load();
+      } finally {
+        setIsResetting(false);
+      }
+    }, [load]);
 
   return {
     rows,
@@ -108,10 +131,6 @@ export function useAnnouncementTokenListPage() {
     sortDir,
     handleChangeSort,
     handleReset,
-    handleBack,
-    handleRowClick,
     isResetting,
   };
 }
-
-export default useAnnouncementTokenListPage;

@@ -1,9 +1,9 @@
-// frontend/console/sales/src/presentation/hook/useAnnouncementManagement.tsx
+// frontend/console/shell/src/features/announcement/presentation/hook/useAnnouncementManagement.tsx
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
-  createEmptyAnnouncementManagementListResult,
   fetchAnnouncementManagementRows,
   normalizeAnnouncementManagementSortKey,
   sortAnnouncementManagementRows,
@@ -21,9 +21,6 @@ export function useAnnouncementManagement() {
   const { user, loading, currentMember, loadingMember } = useAuth();
 
   const [sourceRows, setSourceRows] = useState<AnnouncementManagementRow[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(DEFAULT_PAGE);
-  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
   const [sortKey, setSortKey] =
     useState<AnnouncementManagementSortKey>("createdAt");
   const [sortDir, setSortDir] =
@@ -32,81 +29,78 @@ export function useAnnouncementManagement() {
   const [isLoading, setIsLoading] = useState(false);
 
   const companyId = useMemo(() => {
-    return String(currentMember?.companyId ?? user?.companyId ?? "").trim();
+    return String(
+      currentMember?.companyId ??
+        user?.companyId ??
+        "",
+    ).trim();
   }, [currentMember, user]);
 
   const isAuthLoading = loading || loadingMember;
 
-  const load = useCallback(
-    async (nextPage = page, nextPerPage = perPage) => {
-      if (isAuthLoading) {
-        return;
-      }
+  const load = useCallback(async () => {
+    if (isAuthLoading) {
+      return;
+    }
 
-      if (!companyId) {
-        const empty = createEmptyAnnouncementManagementListResult(
-          nextPage,
-          nextPerPage,
-        );
+    if (!companyId) {
+      setSourceRows([]);
+      return;
+    }
 
-        setSourceRows(empty.rows);
-        setTotalCount(empty.totalCount);
-        setPage(empty.page);
-        setPerPage(empty.perPage);
-        return;
-      }
+    setIsLoading(true);
 
-      setIsLoading(true);
-
-      try {
-        const result = await fetchAnnouncementManagementRows({
+    try {
+      const result =
+        await fetchAnnouncementManagementRows({
           companyId,
-          page: nextPage,
-          perPage: nextPerPage,
+          page: DEFAULT_PAGE,
+          perPage: DEFAULT_PER_PAGE,
         });
 
-        setSourceRows(result.rows);
-        setTotalCount(result.totalCount);
-        setPage(result.page || nextPage);
-        setPerPage(result.perPage || nextPerPage);
-      } catch {
-        const empty = createEmptyAnnouncementManagementListResult(
-          nextPage,
-          nextPerPage,
-        );
-
-        setSourceRows(empty.rows);
-        setTotalCount(empty.totalCount);
-        setPage(empty.page);
-        setPerPage(empty.perPage);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [companyId, isAuthLoading, page, perPage],
-  );
+      setSourceRows(result.rows);
+    } catch {
+      setSourceRows([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [companyId, isAuthLoading]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const rows = useMemo(() => {
-    return sortAnnouncementManagementRows(sourceRows, sortKey, sortDir);
+    return sortAnnouncementManagementRows(
+      sourceRows,
+      sortKey,
+      sortDir,
+    );
   }, [sourceRows, sortDir, sortKey]);
 
-  const handleChangeSort = useCallback((nextKey: string) => {
-    const normalizedKey = normalizeAnnouncementManagementSortKey(nextKey);
+  const handleChangeSort = useCallback(
+    (nextKey: string) => {
+      const normalizedKey =
+        normalizeAnnouncementManagementSortKey(
+          nextKey,
+        );
 
-    setSortKey((prevKey) => {
-      if (prevKey === normalizedKey) {
-        setSortDir((prevDir) => (prevDir === "asc" ? "desc" : "asc"));
-        return prevKey;
-      }
+      setSortKey((prevKey) => {
+        if (prevKey === normalizedKey) {
+          setSortDir((prevDir) =>
+            prevDir === "asc" ? "desc" : "asc",
+          );
 
-      setSortDir("asc");
-      return normalizedKey;
-    });
-  }, []);
+          return prevKey;
+        }
+
+        setSortDir("asc");
+
+        return normalizedKey;
+      });
+    },
+    [],
+  );
 
   const handleReset = useCallback(async () => {
     setIsResetting(true);
@@ -114,7 +108,8 @@ export function useAnnouncementManagement() {
     try {
       setSortKey("createdAt");
       setSortDir("desc");
-      await load(DEFAULT_PAGE, DEFAULT_PER_PAGE);
+
+      await load();
     } finally {
       setIsResetting(false);
     }
@@ -126,19 +121,23 @@ export function useAnnouncementManagement() {
 
   const handleRowClick = useCallback(
     (announcementId: string) => {
-      const id = String(announcementId ?? "").trim();
-      if (!id) return;
+      const id = String(
+        announcementId ?? "",
+      ).trim();
 
-      navigate(`/sales/announcements/${encodeURIComponent(id)}`);
+      if (!id) {
+        return;
+      }
+
+      navigate(
+        `/sales/announcements/${encodeURIComponent(id)}`,
+      );
     },
     [navigate],
   );
 
   return {
     rows,
-    totalCount,
-    page,
-    perPage,
     sortKey,
     sortDir,
     handleChangeSort,
@@ -149,5 +148,3 @@ export function useAnnouncementManagement() {
     isLoading,
   };
 }
-
-export default useAnnouncementManagement;
