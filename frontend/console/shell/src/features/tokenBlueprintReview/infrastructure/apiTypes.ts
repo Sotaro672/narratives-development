@@ -4,7 +4,7 @@
 // These represent backend JSON as-is.
 // Firestore / backend response field names are treated as the source of truth.
 
-import type { AuthorType } from "../domain/entity";
+import type { AuthorType } from "../../../shared/types/tokenBlueprintReview";
 
 export type ApiTokenBlueprintReviewAggregate = {
   TokenBlueprintID: string;

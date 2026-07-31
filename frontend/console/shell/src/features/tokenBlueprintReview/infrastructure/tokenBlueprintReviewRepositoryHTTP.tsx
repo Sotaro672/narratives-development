@@ -3,7 +3,7 @@ import type {
   TokenBlueprintReviewAggregate,
   Comment,
   ReactionType,
-} from "../domain/entity";
+} from "../../../shared/types/tokenBlueprintReview";
 
 import type {
   ApiTokenBlueprintReviewAggregate,

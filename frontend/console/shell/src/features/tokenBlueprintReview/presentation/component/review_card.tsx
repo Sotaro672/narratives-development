@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import type {
   Comment,
   ReactionType,
-} from "../../domain/entity";
+} from "../../../../shared/types/tokenBlueprintReview";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import { Button } from "../../../../shared/ui/button";
 

@@ -5,9 +5,9 @@ import type {
   AuthorType,
   Comment,
   TokenBlueprintReviewAggregate,
-} from "../domain/entity";
+} from "../../../shared/types/tokenBlueprintReview";
 
-import { validateAuthorType } from "../domain/entity";
+import { validateAuthorType } from "../../../shared/types/tokenBlueprintReview";
 
 import type {
   ApiComment,

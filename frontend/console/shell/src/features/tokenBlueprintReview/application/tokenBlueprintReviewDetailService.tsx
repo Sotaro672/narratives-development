@@ -5,7 +5,7 @@ import type {
   Comment,
   TokenBlueprintReviewAggregate,
   ReactionType,
-} from "../domain/entity";
+} from "../../../shared/types/tokenBlueprintReview";
 
 import {
   listTokenBlueprintCommentsByTokenBlueprintId,

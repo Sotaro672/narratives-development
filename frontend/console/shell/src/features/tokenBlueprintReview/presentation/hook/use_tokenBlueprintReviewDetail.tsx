@@ -22,7 +22,7 @@ import type {
   TokenBlueprintReviewAggregate,
   Comment,
   ReactionType,
-} from "../../domain/entity";
+} from "../../../../shared/types/tokenBlueprintReview";
 
 type UseTokenBlueprintReviewDetailVM = {
   blueprint: TokenBlueprint | null;

@@ -7,7 +7,7 @@ import List, {
 } from "../layout/List/List";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 import { useTokenBlueprintReviewManagement } from "../features/tokenBlueprintReview/presentation/hook/use_tokenBlueprintReviewManagement";
-import type { TokenBlueprintReviewAggregate } from "../features/tokenBlueprintReview/domain/entity";
+import type { TokenBlueprintReviewAggregate } from "../shared/types/tokenBlueprintReview";
 
 export default function TokenBlueprintReviewManagementPage() {
   const {

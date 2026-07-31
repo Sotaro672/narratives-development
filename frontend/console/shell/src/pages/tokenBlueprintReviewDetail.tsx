@@ -13,7 +13,7 @@ import ReviewAggregateCard from "../features/tokenBlueprintReview/presentation/c
 import ReviewCard from "../features/tokenBlueprintReview/presentation/component/review_card";
 
 import { useTokenBlueprintReviewDetail } from "../features/tokenBlueprintReview/presentation/hook/use_tokenBlueprintReviewDetail";
-import type { Comment } from "../features/tokenBlueprintReview/domain/entity";
+import type { Comment } from "../shared/types/tokenBlueprintReview";
 
 import "../styles/tokenBlueprintReview.css";
 

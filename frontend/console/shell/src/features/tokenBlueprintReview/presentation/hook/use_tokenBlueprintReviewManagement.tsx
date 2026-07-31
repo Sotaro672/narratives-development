@@ -8,7 +8,7 @@ import {
   fetchTokenBlueprintReviewsForCompany,
   filterAndSortTokenBlueprintReviews,
 } from "../../application/tokenBlueprintReviewManagementService";
-import type { TokenBlueprintReviewAggregate } from "../../domain/entity";
+import type { TokenBlueprintReviewAggregate } from "../../../../shared/types/tokenBlueprintReview";
 
 export type UseTokenBlueprintReviewManagementResult = {
   rows: TokenBlueprintReviewAggregate[];

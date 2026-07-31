@@ -1,6 +1,6 @@
 // frontend/console/shell/src/features/tokenBlueprintReview/application/tokenBlueprintReviewManagementService.tsx
 
-import type { TokenBlueprintReviewAggregate } from "../domain/entity";
+import type { TokenBlueprintReviewAggregate } from "../../../shared/types/tokenBlueprintReview";
 import { listTokenBlueprintReviewAggregatesByCompanyId } from "../infrastructure/tokenBlueprintReviewRepositoryHTTP";
 
 /** ISO8601 -> timestamp（不正値は 0 扱い） */
