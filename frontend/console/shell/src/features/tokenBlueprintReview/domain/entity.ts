@@ -1,4 +1,4 @@
-// frontend/console/tokenBlueprintReview/src/domain/entity.ts
+// frontend/console/shell/src/features/tokenBlueprintReview/domain/entity.ts
 // Domain models for TokenBlueprint Review (frontend)
 //
 // Policy:
@@ -7,41 +7,21 @@
 // - No API raw DTOs.
 // - No API -> domain mappers.
 
-export const ErrInvalidReactionType = "invalid reaction type" as const;
 export const ErrInvalidAuthorType = "invalid author type" as const;
-export const ErrInvalidActorType = "invalid actor type" as const;
 
 export type ReactionType = "comment" | "like" | "dislike";
-
-export const ReactionComment: ReactionType = "comment";
-export const ReactionLike: ReactionType = "like";
-export const ReactionDislike: ReactionType = "dislike";
-
-export function validateReactionType(t: ReactionType): void {
-  if (t !== ReactionComment && t !== ReactionLike && t !== ReactionDislike) {
-    throw new Error(ErrInvalidReactionType);
-  }
-}
 
 export type AuthorType = "avatar" | "brand";
 
 export const AuthorTypeAvatar: AuthorType = "avatar";
 export const AuthorTypeBrand: AuthorType = "brand";
 
-export function validateAuthorType(t: AuthorType): void {
-  if (t !== AuthorTypeAvatar && t !== AuthorTypeBrand) {
+export function validateAuthorType(authorType: AuthorType): void {
+  if (
+    authorType !== AuthorTypeAvatar &&
+    authorType !== AuthorTypeBrand
+  ) {
     throw new Error(ErrInvalidAuthorType);
-  }
-}
-
-export type ActorType = "avatar" | "brand";
-
-export const ActorTypeAvatar: ActorType = "avatar";
-export const ActorTypeBrand: ActorType = "brand";
-
-export function validateActorType(t: ActorType): void {
-  if (t !== ActorTypeAvatar && t !== ActorTypeBrand) {
-    throw new Error(ErrInvalidActorType);
   }
 }
 
@@ -58,15 +38,6 @@ export type TokenBlueprintReviewAggregate = {
   topLevelCommentCount: number;
   totalCommentCount: number;
   pinnedCommentId: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type TokenBlueprintReaction = {
-  tokenBlueprintId: string;
-  actorId: string;
-  actorType: ActorType;
-  type: ReactionType;
   createdAt: string;
   updatedAt: string;
 };
@@ -97,14 +68,4 @@ export type Comment = {
 
   brandName?: string;
   brandIcon?: string;
-};
-
-export type CommentReaction = {
-  tokenBlueprintId: string;
-  commentId: string;
-  actorId: string;
-  actorType: ActorType;
-  type: ReactionType;
-  createdAt: string;
-  updatedAt: string;
 };

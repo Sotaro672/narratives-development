@@ -1,16 +1,30 @@
-// frontend/console/tokenBlueprintReview/src/presentation/component/review_card.tsx
+// frontend/console/shell/src/features/tokenBlueprintReview/presentation/component/review_card.tsx
 
 import { useMemo, useState } from "react";
-import type { Comment, ReactionType } from "../../domain/entity";
+
+import type {
+  Comment,
+  ReactionType,
+} from "../../domain/entity";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import { Button } from "../../../../shared/ui/button";
+
 type ReviewCardProps = {
   item: Comment;
   repliesByParentId?: Map<string, Comment[]>;
   fallbackIndex?: number;
   submitting?: boolean;
-  onReply?: (parentCommentId: string, body: string) => Promise<void> | void;
-  onReact?: (commentId: string, type: ReactionType) => Promise<void> | void;
+  onReply?: (
+    parentCommentId: string,
+    body: string,
+  ) => Promise<void> | void;
+  onDelete?: (
+    commentId: string,
+  ) => Promise<void> | void;
+  onReact?: (
+    commentId: string,
+    type: ReactionType,
+  ) => Promise<void> | void;
 };
 
 export default function ReviewCard({
@@ -19,21 +33,36 @@ export default function ReviewCard({
   fallbackIndex = 0,
   submitting = false,
   onReply,
+  onDelete,
   onReact,
 }: ReviewCardProps) {
-  const [isReplyFormOpen, setIsReplyFormOpen] = useState(false);
-  const [isRepliesOpen, setIsRepliesOpen] = useState(false);
+  const [isReplyFormOpen, setIsReplyFormOpen] =
+    useState(false);
+  const [isRepliesOpen, setIsRepliesOpen] =
+    useState(false);
   const [replyBody, setReplyBody] = useState("");
-  const [isSubmittingReply, setIsSubmittingReply] = useState(false);
-  const [isSubmittingReaction, setIsSubmittingReaction] = useState(false);
+  const [isSubmittingReply, setIsSubmittingReply] =
+    useState(false);
+  const [isSubmittingDelete, setIsSubmittingDelete] =
+    useState(false);
+  const [
+    isSubmittingReaction,
+    setIsSubmittingReaction,
+  ] = useState(false);
 
-  const commentId = String(item.commentId ?? `cm_${fallbackIndex}`);
+  const commentId = String(
+    item.commentId ?? `cm_${fallbackIndex}`,
+  );
   const body = String(item.body ?? "");
 
   const authorId = String(item.authorId ?? "");
   const authorType = String(item.authorType ?? "");
-  const authorAvatarName = String(item.authorAvatarName ?? "");
-  const authorAvatarIcon = String(item.authorAvatarIcon ?? "");
+  const authorAvatarName = String(
+    item.authorAvatarName ?? "",
+  );
+  const authorAvatarIcon = String(
+    item.authorAvatarIcon ?? "",
+  );
   const brandName = String(item.brandName ?? "");
   const brandIcon = String(item.brandIcon ?? "");
 
@@ -41,11 +70,15 @@ export default function ReviewCard({
   const dislikeCount = Number(item.dislikeCount ?? 0);
   const childCount = Number(item.childCount ?? 0);
 
-  const createdAtRaw = item.createdAt ?? null;
-  const createdAt = safeDateTimeLabelJa(createdAtRaw, "-");
+  const createdAt = safeDateTimeLabelJa(
+    item.createdAt ?? null,
+    "-",
+  );
 
   const deleted = Boolean(item.deleted ?? false);
-  const isOwnerComment = Boolean(item.isOwnerComment ?? false);
+  const isOwnerComment = Boolean(
+    item.isOwnerComment ?? false,
+  );
 
   const authorPrimary =
     authorType === "brand"
@@ -57,55 +90,102 @@ export default function ReviewCard({
       ? brandIcon
       : authorAvatarIcon;
 
-  const disabled = submitting || isSubmittingReply || isSubmittingReaction;
+  const disabled =
+    submitting ||
+    isSubmittingReply ||
+    isSubmittingDelete ||
+    isSubmittingReaction;
 
-  const canReply = useMemo(() => {
-    return !deleted && commentId !== "";
-  }, [deleted, commentId]);
+  const canInteract =
+    !deleted && commentId !== "";
 
-  const canReact = useMemo(() => {
-    return !deleted && commentId !== "";
-  }, [deleted, commentId]);
+  const canDelete =
+    canInteract &&
+    authorType === "brand" &&
+    isOwnerComment &&
+    Boolean(onDelete);
 
   const replies = useMemo(() => {
-    if (!repliesByParentId || commentId === "") return [];
+    if (!repliesByParentId || commentId === "") {
+      return [];
+    }
+
     return repliesByParentId.get(commentId) ?? [];
   }, [repliesByParentId, commentId]);
 
   const sortedReplies = useMemo(() => {
     return [...replies].sort((a, b) => {
-      const at = Date.parse(String(a.createdAt ?? ""));
-      const bt = Date.parse(String(b.createdAt ?? ""));
-      if (Number.isNaN(at) && Number.isNaN(bt)) return 0;
-      if (Number.isNaN(at)) return -1;
-      if (Number.isNaN(bt)) return 1;
-      return at - bt;
+      const leftTimestamp = Date.parse(
+        String(a.createdAt ?? ""),
+      );
+      const rightTimestamp = Date.parse(
+        String(b.createdAt ?? ""),
+      );
+
+      if (
+        Number.isNaN(leftTimestamp) &&
+        Number.isNaN(rightTimestamp)
+      ) {
+        return 0;
+      }
+
+      if (Number.isNaN(leftTimestamp)) {
+        return -1;
+      }
+
+      if (Number.isNaN(rightTimestamp)) {
+        return 1;
+      }
+
+      return leftTimestamp - rightTimestamp;
     });
   }, [replies]);
 
   const toggleReplyForm = () => {
-    if (!canReply || disabled) return;
-    setIsReplyFormOpen((prev) => !prev);
+    if (!canInteract || disabled) {
+      return;
+    }
+
+    setIsReplyFormOpen((previous) => !previous);
   };
 
   const toggleRepliesAccordion = () => {
-    if (childCount <= 0 && sortedReplies.length <= 0) return;
-    setIsRepliesOpen((prev) => !prev);
+    if (
+      childCount <= 0 &&
+      sortedReplies.length <= 0
+    ) {
+      return;
+    }
+
+    setIsRepliesOpen((previous) => !previous);
   };
 
   const closeReplyForm = () => {
-    if (isSubmittingReply) return;
+    if (isSubmittingReply) {
+      return;
+    }
+
     setIsReplyFormOpen(false);
     setReplyBody("");
   };
 
   const handleReplySubmit = async () => {
-    const trimmed = replyBody.trim();
-    if (!trimmed || !onReply || !canReply || disabled) return;
+    const content = replyBody.trim();
+
+    if (
+      !content ||
+      !onReply ||
+      !canInteract ||
+      disabled
+    ) {
+      return;
+    }
 
     try {
       setIsSubmittingReply(true);
-      await onReply(commentId, trimmed);
+
+      await onReply(commentId, content);
+
       setReplyBody("");
       setIsReplyFormOpen(false);
       setIsRepliesOpen(true);
@@ -114,8 +194,37 @@ export default function ReviewCard({
     }
   };
 
-  const handleReaction = async (type: ReactionType) => {
-    if (!onReact || !canReact || disabled) return;
+  const handleDelete = async () => {
+    if (!onDelete || !canDelete || disabled) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "このコメントを削除しますか？",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setIsSubmittingDelete(true);
+      await onDelete(commentId);
+    } finally {
+      setIsSubmittingDelete(false);
+    }
+  };
+
+  const handleReaction = async (
+    type: ReactionType,
+  ) => {
+    if (
+      !onReact ||
+      !canInteract ||
+      disabled
+    ) {
+      return;
+    }
 
     try {
       setIsSubmittingReaction(true);
@@ -126,10 +235,7 @@ export default function ReviewCard({
   };
 
   return (
-    <div
-      key={commentId}
-      className="bg-white border border-slate-200 rounded-xl shadow-sm tbrd-review-item-card"
-    >
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm tbrd-review-item-card">
       <div className="tbrd-author-row">
         {authorIcon ? (
           <img
@@ -141,17 +247,24 @@ export default function ReviewCard({
 
         <span>{authorPrimary}</span>
 
-        {authorType === "brand" && isOwnerComment ? (
+        {authorType === "brand" &&
+        isOwnerComment ? (
           <span className="inline-flex items-center rounded-full border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600">
             投稿者
           </span>
         ) : null}
 
-        <span className="tbrd-created-at">{createdAt}</span>
+        <span className="tbrd-created-at">
+          {createdAt}
+        </span>
       </div>
 
       <div className="tbrd-body">
-        {body || <span className="tbrd-body-empty">（本文なし）</span>}
+        {body || (
+          <span className="tbrd-body-empty">
+            （本文なし）
+          </span>
+        )}
       </div>
 
       <div className="tbrd-meta-row">
@@ -160,12 +273,15 @@ export default function ReviewCard({
           variant="outline"
           size="sm"
           className="tbrd-reaction-button"
-          disabled={!canReact || disabled}
+          disabled={!canInteract || disabled}
           onClick={() => {
             void handleReaction("like");
           }}
         >
-          👍 {Number.isFinite(likeCount) ? likeCount : 0}
+          👍{" "}
+          {Number.isFinite(likeCount)
+            ? likeCount
+            : 0}
         </Button>
 
         <Button
@@ -173,12 +289,15 @@ export default function ReviewCard({
           variant="outline"
           size="sm"
           className="tbrd-reaction-button"
-          disabled={!canReact || disabled}
+          disabled={!canInteract || disabled}
           onClick={() => {
             void handleReaction("dislike");
           }}
         >
-          👎 {Number.isFinite(dislikeCount) ? dislikeCount : 0}
+          👎{" "}
+          {Number.isFinite(dislikeCount)
+            ? dislikeCount
+            : 0}
         </Button>
 
         <Button
@@ -186,23 +305,52 @@ export default function ReviewCard({
           variant="outline"
           size="sm"
           className="tbrd-reply-button"
-          disabled={!canReply || disabled}
+          disabled={!canInteract || disabled}
           onClick={toggleReplyForm}
         >
-          {isReplyFormOpen ? "返信を閉じる" : "返信"}
+          {isReplyFormOpen
+            ? "返信を閉じる"
+            : "返信"}
         </Button>
 
-        {(childCount > 0 || sortedReplies.length > 0) ? (
+        {childCount > 0 ||
+        sortedReplies.length > 0 ? (
           <Button
             type="button"
             variant="outline"
             size="sm"
             className="tbrd-reply-button"
+            disabled={disabled}
             onClick={toggleRepliesAccordion}
           >
             {isRepliesOpen
-              ? `返信を隠す (${Number.isFinite(childCount) ? childCount : sortedReplies.length})`
-              : `返信を表示 (${Number.isFinite(childCount) ? childCount : sortedReplies.length})`}
+              ? `返信を隠す (${
+                  Number.isFinite(childCount)
+                    ? childCount
+                    : sortedReplies.length
+                })`
+              : `返信を表示 (${
+                  Number.isFinite(childCount)
+                    ? childCount
+                    : sortedReplies.length
+                })`}
+          </Button>
+        ) : null}
+
+        {canDelete ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+            disabled={disabled}
+            onClick={() => {
+              void handleDelete();
+            }}
+          >
+            {isSubmittingDelete
+              ? "削除中..."
+              : "削除"}
           </Button>
         ) : null}
 
@@ -210,14 +358,21 @@ export default function ReviewCard({
       </div>
 
       <div className="tbrd-meta-row">
-        <span>返信数: {Number.isFinite(childCount) ? childCount : 0}</span>
+        <span>
+          返信数:{" "}
+          {Number.isFinite(childCount)
+            ? childCount
+            : 0}
+        </span>
       </div>
 
       {isReplyFormOpen ? (
         <div className="mt-3 border-t border-slate-200 pt-3">
           <textarea
             value={replyBody}
-            onChange={(e) => setReplyBody(e.target.value)}
+            onChange={(event) =>
+              setReplyBody(event.target.value)
+            }
             placeholder="返信を入力してください"
             className="w-full min-h-[96px] rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-400"
             disabled={disabled}
@@ -233,15 +388,21 @@ export default function ReviewCard({
             >
               キャンセル
             </Button>
+
             <Button
               type="button"
               size="sm"
-              disabled={replyBody.trim().length === 0 || disabled}
+              disabled={
+                replyBody.trim().length === 0 ||
+                disabled
+              }
               onClick={() => {
                 void handleReplySubmit();
               }}
             >
-              {isSubmittingReply ? "送信中..." : "送信"}
+              {isSubmittingReply
+                ? "送信中..."
+                : "送信"}
             </Button>
           </div>
         </div>
@@ -250,24 +411,34 @@ export default function ReviewCard({
       {isRepliesOpen ? (
         <div className="mt-3 border-t border-slate-200 pt-3">
           {sortedReplies.length === 0 ? (
-            <div className="text-sm text-slate-500">返信はありません</div>
+            <div className="text-sm text-slate-500">
+              返信はありません
+            </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {sortedReplies.map((reply, idx) => (
-                <div
-                  key={String(reply.commentId ?? `${commentId}_reply_${idx}`)}
-                  className="ml-4 rounded-lg border border-slate-200 bg-slate-50 p-3"
-                >
-                  <ReviewCard
-                    item={reply}
-                    repliesByParentId={repliesByParentId}
-                    fallbackIndex={idx}
-                    submitting={submitting}
-                    onReply={onReply}
-                    onReact={onReact}
-                  />
-                </div>
-              ))}
+              {sortedReplies.map(
+                (reply, index) => (
+                  <div
+                    key={String(
+                      reply.commentId ??
+                        `${commentId}_reply_${index}`,
+                    )}
+                    className="ml-4 rounded-lg border border-slate-200 bg-slate-50 p-3"
+                  >
+                    <ReviewCard
+                      item={reply}
+                      repliesByParentId={
+                        repliesByParentId
+                      }
+                      fallbackIndex={index}
+                      submitting={submitting}
+                      onReply={onReply}
+                      onDelete={onDelete}
+                      onReact={onReact}
+                    />
+                  </div>
+                ),
+              )}
             </div>
           )}
         </div>

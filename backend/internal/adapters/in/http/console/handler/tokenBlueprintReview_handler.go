@@ -46,32 +46,59 @@ func NewTokenBlueprintReviewHandler(
 // - POST   /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}/replies
 //
 // console handler では brand 側からのみ comment / reply / comment reaction を許可する。
-func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *TokenBlueprintReviewHandler) ServeHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if h == nil || h.uc == nil || h.query == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "handler not configured"})
+		writeJSON(
+			w,
+			http.StatusInternalServerError,
+			map[string]any{
+				"error": "handler not configured",
+			},
+		)
 		return
 	}
 
-	rest := strings.TrimPrefix(r.URL.Path, "/token-blueprint-reviews")
+	rest := strings.TrimPrefix(
+		r.URL.Path,
+		"/token-blueprint-reviews",
+	)
 	rest = strings.TrimPrefix(rest, "/")
+
 	if rest == "" {
 		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			http.Error(
+				w,
+				"method not allowed",
+				http.StatusMethodNotAllowed,
+			)
 			return
 		}
+
 		h.ListAggregatesByCompanyTokenBlueprints(w, r)
 		return
 	}
 
 	parts := strings.Split(rest, "/")
 	tbID := parts[0]
+
 	if tbID == "" {
-		http.Error(w, "tokenBlueprintId is required", http.StatusBadRequest)
+		http.Error(
+			w,
+			"tokenBlueprintId is required",
+			http.StatusBadRequest,
+		)
 		return
 	}
 
 	if len(parts) == 1 {
-		http.Error(w, "not found", http.StatusNotFound)
+		http.Error(
+			w,
+			"not found",
+			http.StatusNotFound,
+		)
 		return
 	}
 
@@ -80,53 +107,113 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		if len(parts) == 2 {
 			switch r.Method {
 			case http.MethodGet:
-				h.ListCommentsByTokenBlueprintID(w, r, tbID)
+				h.ListCommentsByTokenBlueprintID(
+					w,
+					r,
+					tbID,
+				)
+
 			case http.MethodPost:
-				h.CreateCommentAsBrand(w, r, tbID)
+				h.CreateCommentAsBrand(
+					w,
+					r,
+					tbID,
+				)
+
 			default:
-				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				http.Error(
+					w,
+					"method not allowed",
+					http.StatusMethodNotAllowed,
+				)
 			}
+
 			return
 		}
 
 		commentID := parts[2]
+
 		if commentID == "" {
-			http.Error(w, "commentId is required", http.StatusBadRequest)
+			http.Error(
+				w,
+				"commentId is required",
+				http.StatusBadRequest,
+			)
 			return
 		}
 
 		if len(parts) == 3 {
 			if r.Method != http.MethodDelete {
-				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				http.Error(
+					w,
+					"method not allowed",
+					http.StatusMethodNotAllowed,
+				)
 				return
 			}
-			h.DeleteComment(w, r, tbID, commentID)
+
+			h.DeleteComment(
+				w,
+				r,
+				tbID,
+				commentID,
+			)
 			return
 		}
 
-		if len(parts) == 4 && parts[3] == "reactions" {
+		if len(parts) == 4 &&
+			parts[3] == "reactions" {
 			if r.Method != http.MethodPost {
-				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				http.Error(
+					w,
+					"method not allowed",
+					http.StatusMethodNotAllowed,
+				)
 				return
 			}
-			h.ReactToCommentAsBrand(w, r, tbID, commentID)
+
+			h.ReactToCommentAsBrand(
+				w,
+				r,
+				tbID,
+				commentID,
+			)
 			return
 		}
 
-		if len(parts) == 4 && parts[3] == "replies" {
+		if len(parts) == 4 &&
+			parts[3] == "replies" {
 			if r.Method != http.MethodPost {
-				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				http.Error(
+					w,
+					"method not allowed",
+					http.StatusMethodNotAllowed,
+				)
 				return
 			}
-			h.CreateBrandReply(w, r, tbID, commentID)
+
+			h.CreateBrandReply(
+				w,
+				r,
+				tbID,
+				commentID,
+			)
 			return
 		}
 
-		http.Error(w, "not found", http.StatusNotFound)
+		http.Error(
+			w,
+			"not found",
+			http.StatusNotFound,
+		)
 		return
 
 	default:
-		http.Error(w, "not found", http.StatusNotFound)
+		http.Error(
+			w,
+			"not found",
+			http.StatusNotFound,
+		)
 		return
 	}
 }
@@ -153,9 +240,13 @@ type createBrandCommentResponse struct {
 // Helpers
 // ================================
 
-func decodeJSONBody(r *http.Request, dst any) error {
+func decodeJSONBody(
+	r *http.Request,
+	dst any,
+) error {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
+
 	return dec.Decode(dst)
 }
 
@@ -163,10 +254,14 @@ func ptrStr(v *string) string {
 	if v == nil {
 		return ""
 	}
+
 	return strings.TrimSpace(*v)
 }
 
-func queryStringPtr(r *http.Request, key string) *string {
+func queryStringPtr(
+	r *http.Request,
+	key string,
+) *string {
 	if r == nil {
 		return nil
 	}
@@ -177,10 +272,14 @@ func queryStringPtr(r *http.Request, key string) *string {
 	}
 
 	v := raw[0]
+
 	return &v
 }
 
-func queryBoolPtr(r *http.Request, key string) *bool {
+func queryBoolPtr(
+	r *http.Request,
+	key string,
+) *bool {
 	if r == nil {
 		return nil
 	}
@@ -191,10 +290,14 @@ func queryBoolPtr(r *http.Request, key string) *bool {
 	}
 
 	v := strings.EqualFold(raw, "true")
+
 	return &v
 }
 
-func queryIntPtr(r *http.Request, key string) *int {
+func queryIntPtr(
+	r *http.Request,
+	key string,
+) *int {
 	if r == nil {
 		return nil
 	}
@@ -205,6 +308,7 @@ func queryIntPtr(r *http.Request, key string) *int {
 	}
 
 	v := parseIntDefault(raw, 0)
+
 	return &v
 }
 
@@ -243,6 +347,7 @@ func formatRFC3339NanoUTC(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
+
 	return t.UTC().Format(time.RFC3339Nano)
 }
 
@@ -250,106 +355,228 @@ func formatRFC3339NanoUTC(t time.Time) string {
 // Read handlers
 // ================================
 
-func (h *TokenBlueprintReviewHandler) ListAggregatesByCompanyTokenBlueprints(w http.ResponseWriter, r *http.Request) {
+func (h *TokenBlueprintReviewHandler) ListAggregatesByCompanyTokenBlueprints(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	companyID, ok := middleware.CompanyID(r)
+
 	if !ok || companyID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": errUnauthorized.Error()})
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]any{
+				"error": errUnauthorized.Error(),
+			},
+		)
 		return
 	}
 
-	res, err := h.query.ListAggregatesByCompanyTokenBlueprints(
-		r.Context(),
-		appquery.ListConsoleTokenBlueprintReviewAggregatesInput{
-			CompanyID: companyID,
-		},
-	)
+	res, err :=
+		h.query.ListAggregatesByCompanyTokenBlueprints(
+			r.Context(),
+			appquery.ListConsoleTokenBlueprintReviewAggregatesInput{
+				CompanyID: companyID,
+			},
+		)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		writeJSON(
+			w,
+			http.StatusInternalServerError,
+			map[string]any{
+				"error": err.Error(),
+			},
+		)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, res)
+	writeJSON(
+		w,
+		http.StatusOK,
+		res,
+	)
 }
 
-func (h *TokenBlueprintReviewHandler) ListCommentsByTokenBlueprintID(w http.ResponseWriter, r *http.Request, tokenBlueprintID string) {
+func (h *TokenBlueprintReviewHandler) ListCommentsByTokenBlueprintID(
+	w http.ResponseWriter,
+	r *http.Request,
+	tokenBlueprintID string,
+) {
 	companyID, ok := middleware.CompanyID(r)
+
 	if !ok || companyID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": errUnauthorized.Error()})
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]any{
+				"error": errUnauthorized.Error(),
+			},
+		)
 		return
 	}
 
-	res, err := h.query.ListCommentsByTokenBlueprintID(
-		r.Context(),
-		appquery.ListConsoleTokenBlueprintCommentsInput{
-			CompanyID:        companyID,
-			TokenBlueprintID: tokenBlueprintID,
+	res, err :=
+		h.query.ListCommentsByTokenBlueprintID(
+			r.Context(),
+			appquery.ListConsoleTokenBlueprintCommentsInput{
+				CompanyID:        companyID,
+				TokenBlueprintID: tokenBlueprintID,
 
-			SearchQuery:     r.URL.Query().Get("q"),
-			ParentCommentID: queryStringPtr(r, "parentCommentId"),
-			RootCommentID:   r.URL.Query().Get("rootCommentId"),
-			AuthorID:        r.URL.Query().Get("authorId"),
-			Deleted:         queryBoolPtr(r, "deleted"),
-			Depth:           queryIntPtr(r, "depth"),
+				SearchQuery: r.URL.Query().Get("q"),
+				ParentCommentID: queryStringPtr(
+					r,
+					"parentCommentId",
+				),
+				RootCommentID: r.URL.Query().Get(
+					"rootCommentId",
+				),
+				AuthorID: r.URL.Query().Get(
+					"authorId",
+				),
+				Deleted: queryBoolPtr(
+					r,
+					"deleted",
+				),
+				Depth: queryIntPtr(
+					r,
+					"depth",
+				),
 
-			Sort: common.Sort{
-				Column: r.URL.Query().Get("sort"),
-				Order:  common.SortOrder(strings.ToLower(r.URL.Query().Get("order"))),
+				Sort: common.Sort{
+					Column: r.URL.Query().Get(
+						"sort",
+					),
+					Order: common.SortOrder(
+						strings.ToLower(
+							r.URL.Query().Get(
+								"order",
+							),
+						),
+					),
+				},
+				Page: common.Page{
+					Number: parseIntDefault(
+						r.URL.Query().Get(
+							"page",
+						),
+						1,
+					),
+					PerPage: parseIntDefault(
+						r.URL.Query().Get(
+							"perPage",
+						),
+						200,
+					),
+				},
 			},
-			Page: common.Page{
-				Number:  parseIntDefault(r.URL.Query().Get("page"), 1),
-				PerPage: parseIntDefault(r.URL.Query().Get("perPage"), 200),
-			},
-		},
-	)
+		)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		writeJSON(
+			w,
+			http.StatusInternalServerError,
+			map[string]any{
+				"error": err.Error(),
+			},
+		)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, res)
+	writeJSON(
+		w,
+		http.StatusOK,
+		res,
+	)
 }
 
 // ================================
 // Command handlers
 // ================================
 
-func (h *TokenBlueprintReviewHandler) CreateCommentAsBrand(w http.ResponseWriter, r *http.Request, tokenBlueprintID string) {
+func (h *TokenBlueprintReviewHandler) CreateCommentAsBrand(
+	w http.ResponseWriter,
+	r *http.Request,
+	tokenBlueprintID string,
+) {
 	companyID, ok := middleware.CompanyID(r)
+
 	if !ok || companyID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": errUnauthorized.Error()})
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]any{
+				"error": errUnauthorized.Error(),
+			},
+		)
 		return
 	}
-	_ = companyID
 
 	var req createBrandCommentRequest
+
 	if err := decodeJSONBody(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]any{
+				"error": err.Error(),
+			},
+		)
 		return
 	}
 
-	actor, err := h.query.ResolveBrandActor(r.Context(), tokenBlueprintID)
+	actor, err := h.query.ResolveBrandActor(
+		r.Context(),
+		tokenBlueprintID,
+	)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]any{
+				"error": err.Error(),
+			},
+		)
 		return
 	}
 
-	created, err := h.uc.CreateComment(r.Context(), usecase.CreateCommentInput{
-		CommentID:        ptrStr(req.CommentID),
-		TokenBlueprintID: tokenBlueprintID,
-		ParentCommentID:  ptrStr(req.ParentCommentID),
-		AuthorID:         actor.BrandID,
-		AuthorType:       h.query.AuthorType(),
-		IsOwnerComment:   true,
-		Body:             req.Body,
-	})
+	created, err := h.uc.CreateComment(
+		r.Context(),
+		usecase.CreateCommentInput{
+			CommentID: ptrStr(
+				req.CommentID,
+			),
+			TokenBlueprintID: tokenBlueprintID,
+			ParentCommentID: ptrStr(
+				req.ParentCommentID,
+			),
+			AuthorID:       actor.BrandID,
+			AuthorType:     h.query.AuthorType(),
+			IsOwnerComment: true,
+			Body:           req.Body,
+		},
+	)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]any{
+				"error": err.Error(),
+			},
+		)
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, createBrandCommentResponse{
-		Item: toConsoleCommentReadModel(h.uc.BuildComment(r.Context(), created)),
-	})
+	writeJSON(
+		w,
+		http.StatusCreated,
+		createBrandCommentResponse{
+			Item: toConsoleCommentReadModel(
+				h.uc.BuildComment(
+					r.Context(),
+					created,
+				),
+			),
+		},
+	)
 }
 
 func (h *TokenBlueprintReviewHandler) CreateBrandReply(
@@ -359,41 +586,83 @@ func (h *TokenBlueprintReviewHandler) CreateBrandReply(
 	parentCommentID string,
 ) {
 	companyID, ok := middleware.CompanyID(r)
+
 	if !ok || companyID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": errUnauthorized.Error()})
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]any{
+				"error": errUnauthorized.Error(),
+			},
+		)
 		return
 	}
-	_ = companyID
 
 	var req createBrandCommentRequest
+
 	if err := decodeJSONBody(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]any{
+				"error": err.Error(),
+			},
+		)
 		return
 	}
 
-	actor, err := h.query.ResolveBrandActor(r.Context(), tokenBlueprintID)
+	actor, err := h.query.ResolveBrandActor(
+		r.Context(),
+		tokenBlueprintID,
+	)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]any{
+				"error": err.Error(),
+			},
+		)
 		return
 	}
 
-	created, err := h.uc.CreateComment(r.Context(), usecase.CreateCommentInput{
-		CommentID:        ptrStr(req.CommentID),
-		TokenBlueprintID: tokenBlueprintID,
-		ParentCommentID:  parentCommentID,
-		AuthorID:         actor.BrandID,
-		AuthorType:       h.query.AuthorType(),
-		IsOwnerComment:   true,
-		Body:             req.Body,
-	})
+	created, err := h.uc.CreateComment(
+		r.Context(),
+		usecase.CreateCommentInput{
+			CommentID: ptrStr(
+				req.CommentID,
+			),
+			TokenBlueprintID: tokenBlueprintID,
+			ParentCommentID:  parentCommentID,
+			AuthorID:         actor.BrandID,
+			AuthorType:       h.query.AuthorType(),
+			IsOwnerComment:   true,
+			Body:             req.Body,
+		},
+	)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]any{
+				"error": err.Error(),
+			},
+		)
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, createBrandCommentResponse{
-		Item: toConsoleCommentReadModel(h.uc.BuildComment(r.Context(), created)),
-	})
+	writeJSON(
+		w,
+		http.StatusCreated,
+		createBrandCommentResponse{
+			Item: toConsoleCommentReadModel(
+				h.uc.BuildComment(
+					r.Context(),
+					created,
+				),
+			),
+		},
+	)
 }
 
 func (h *TokenBlueprintReviewHandler) DeleteComment(
@@ -403,14 +672,64 @@ func (h *TokenBlueprintReviewHandler) DeleteComment(
 	commentID string,
 ) {
 	companyID, ok := middleware.CompanyID(r)
+
 	if !ok || companyID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": errUnauthorized.Error()})
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]any{
+				"error": errUnauthorized.Error(),
+			},
+		)
 		return
 	}
-	_ = companyID
 
-	if err := h.uc.DeleteComment(r.Context(), tokenBlueprintID, commentID); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+	actor, err := h.query.ResolveBrandActor(
+		r.Context(),
+		tokenBlueprintID,
+	)
+	if err != nil {
+		writeJSON(
+			w,
+			http.StatusForbidden,
+			map[string]any{
+				"error": err.Error(),
+			},
+		)
+		return
+	}
+
+	err = h.uc.DeleteComment(
+		r.Context(),
+		usecase.DeleteCommentInput{
+			TokenBlueprintID: tokenBlueprintID,
+			CommentID:        commentID,
+			AuthorID:         actor.BrandID,
+			AuthorType:       h.query.AuthorType(),
+		},
+	)
+	if err != nil {
+		if errors.Is(
+			err,
+			usecase.ErrCommentDeleteForbidden,
+		) {
+			writeJSON(
+				w,
+				http.StatusForbidden,
+				map[string]any{
+					"error": err.Error(),
+				},
+			)
+			return
+		}
+
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]any{
+				"error": err.Error(),
+			},
+		)
 		return
 	}
 
@@ -424,25 +743,54 @@ func (h *TokenBlueprintReviewHandler) ReactToCommentAsBrand(
 	commentID string,
 ) {
 	companyID, ok := middleware.CompanyID(r)
+
 	if !ok || companyID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": errUnauthorized.Error()})
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]any{
+				"error": errUnauthorized.Error(),
+			},
+		)
 		return
 	}
-	_ = companyID
 
 	var req reactAsBrandRequest
+
 	if err := decodeJSONBody(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	if err := req.Type.Validate(); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]any{
+				"error": err.Error(),
+			},
+		)
 		return
 	}
 
-	actor, err := h.query.ResolveBrandActor(r.Context(), tokenBlueprintID)
+	if err := req.Type.Validate(); err != nil {
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]any{
+				"error": err.Error(),
+			},
+		)
+		return
+	}
+
+	actor, err := h.query.ResolveBrandActor(
+		r.Context(),
+		tokenBlueprintID,
+	)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]any{
+				"error": err.Error(),
+			},
+		)
 		return
 	}
 
@@ -455,18 +803,33 @@ func (h *TokenBlueprintReviewHandler) ReactToCommentAsBrand(
 		req.Type,
 	)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]any{
+				"error": err.Error(),
+			},
+		)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"item": toConsoleCommentReadModel(h.uc.BuildComment(r.Context(), updated)),
-		"actor": map[string]any{
-			"actorType":  h.query.ActorType(),
-			"authorType": h.query.AuthorType(),
-			"brandId":    actor.BrandID,
-			"brandName":  actor.BrandName,
-			"brandIcon":  actor.BrandIcon,
+	writeJSON(
+		w,
+		http.StatusOK,
+		map[string]any{
+			"item": toConsoleCommentReadModel(
+				h.uc.BuildComment(
+					r.Context(),
+					updated,
+				),
+			),
+			"actor": map[string]any{
+				"actorType":  h.query.ActorType(),
+				"authorType": h.query.AuthorType(),
+				"brandId":    actor.BrandID,
+				"brandName":  actor.BrandName,
+				"brandIcon":  actor.BrandIcon,
+			},
 		},
-	})
+	)
 }

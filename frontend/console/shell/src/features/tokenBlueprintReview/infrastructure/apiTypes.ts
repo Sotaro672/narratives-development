@@ -1,14 +1,10 @@
-// frontend/console/tokenBlueprintReview/src/infrastructure/apiTypes.ts
+// frontend/console/shell/src/features/tokenBlueprintReview/infrastructure/apiTypes.ts
 // Raw API DTOs returned by backend.
 //
 // These represent backend JSON as-is.
 // Firestore / backend response field names are treated as the source of truth.
 
-import type {
-  ReactionType,
-  ActorType,
-  AuthorType,
-} from "../domain/entity";
+import type { AuthorType } from "../domain/entity";
 
 export type ApiTokenBlueprintReviewAggregate = {
   TokenBlueprintID: string;
@@ -23,15 +19,6 @@ export type ApiTokenBlueprintReviewAggregate = {
   // GET /token-blueprint-reviews returns resolved display names in camelCase.
   tokenBlueprintName: string;
   brandName: string;
-};
-
-export type ApiTokenBlueprintReaction = {
-  TokenBlueprintID: string;
-  ActorID: string;
-  ActorType: ActorType;
-  Type: ReactionType;
-  CreatedAt: string;
-  UpdatedAt: string;
 };
 
 export type ApiComment = {
@@ -57,16 +44,6 @@ export type ApiComment = {
   ChildCount: number;
   Deleted: boolean;
 
-  CreatedAt: string;
-  UpdatedAt: string;
-};
-
-export type ApiCommentReaction = {
-  TokenBlueprintID: string;
-  CommentID: string;
-  ActorID: string;
-  ActorType: ActorType;
-  Type: ReactionType;
   CreatedAt: string;
   UpdatedAt: string;
 };

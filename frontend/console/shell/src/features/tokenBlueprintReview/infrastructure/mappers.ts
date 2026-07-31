@@ -2,110 +2,71 @@
 // API DTO -> domain model mappers
 
 import type {
-  Comment,
-  CommentReaction,
-  TokenBlueprintReaction,
-  TokenBlueprintReviewAggregate,
-  ReactionType,
   AuthorType,
-  ActorType,
+  Comment,
+  TokenBlueprintReviewAggregate,
 } from "../domain/entity";
 
-import {
-  validateReactionType,
-  validateAuthorType,
-  validateActorType,
-} from "../domain/entity";
+import { validateAuthorType } from "../domain/entity";
 
 import type {
   ApiComment,
-  ApiCommentReaction,
-  ApiTokenBlueprintReaction,
   ApiTokenBlueprintReviewAggregate,
 } from "./apiTypes";
 
-function resolveCommentAuthorType(authorType: AuthorType): AuthorType {
+function resolveCommentAuthorType(
+  authorType: AuthorType,
+): AuthorType {
   validateAuthorType(authorType);
   return authorType;
 }
 
-function resolveActorType(actorType: ActorType): ActorType {
-  validateActorType(actorType);
-  return actorType;
-}
-
-function resolveReactionType(type: ReactionType): ReactionType {
-  validateReactionType(type);
-  return type;
-}
-
 export function fromApiTokenBlueprintReviewAggregate(
-  a: ApiTokenBlueprintReviewAggregate,
+  aggregate: ApiTokenBlueprintReviewAggregate,
 ): TokenBlueprintReviewAggregate {
   return {
-    tokenBlueprintId: a.TokenBlueprintID,
-    tokenBlueprintName: a.tokenBlueprintName,
-    brandName: a.brandName,
-    likeCount: a.LikeCount,
-    dislikeCount: a.DislikeCount,
-    topLevelCommentCount: a.TopLevelCommentCount,
-    totalCommentCount: a.TotalCommentCount,
-    pinnedCommentId: a.PinnedCommentID,
-    createdAt: a.CreatedAt,
-    updatedAt: a.UpdatedAt,
+    tokenBlueprintId: aggregate.TokenBlueprintID,
+    tokenBlueprintName: aggregate.tokenBlueprintName,
+    brandName: aggregate.brandName,
+    likeCount: aggregate.LikeCount,
+    dislikeCount: aggregate.DislikeCount,
+    topLevelCommentCount: aggregate.TopLevelCommentCount,
+    totalCommentCount: aggregate.TotalCommentCount,
+    pinnedCommentId: aggregate.PinnedCommentID,
+    createdAt: aggregate.CreatedAt,
+    updatedAt: aggregate.UpdatedAt,
   };
 }
 
-export function fromApiTokenBlueprintReaction(
-  a: ApiTokenBlueprintReaction,
-): TokenBlueprintReaction {
+export function fromApiComment(
+  comment: ApiComment,
+): Comment {
   return {
-    tokenBlueprintId: a.TokenBlueprintID,
-    actorId: a.ActorID,
-    actorType: resolveActorType(a.ActorType),
-    type: resolveReactionType(a.Type),
-    createdAt: a.CreatedAt,
-    updatedAt: a.UpdatedAt,
-  };
-}
+    commentId: comment.CommentID,
+    tokenBlueprintId: comment.TokenBlueprintID,
+    parentCommentId: comment.ParentCommentID,
+    rootCommentId: comment.RootCommentID,
+    depth: comment.Depth,
 
-export function fromApiComment(a: ApiComment): Comment {
-  return {
-    commentId: a.CommentID,
-    tokenBlueprintId: a.TokenBlueprintID,
-    parentCommentId: a.ParentCommentID,
-    rootCommentId: a.RootCommentID,
-    depth: a.Depth,
+    authorId: comment.AuthorID,
+    authorType: resolveCommentAuthorType(
+      comment.AuthorType,
+    ),
+    isOwnerComment: comment.IsOwnerComment,
 
-    authorId: a.AuthorID,
-    authorType: resolveCommentAuthorType(a.AuthorType),
-    isOwnerComment: a.IsOwnerComment,
+    body: comment.Body,
+    likeCount: comment.LikeCount,
+    dislikeCount: comment.DislikeCount,
+    childCount: comment.ChildCount,
+    deleted: comment.Deleted,
 
-    body: a.Body,
-    likeCount: a.LikeCount,
-    dislikeCount: a.DislikeCount,
-    childCount: a.ChildCount,
-    deleted: a.Deleted,
+    createdAt: comment.CreatedAt,
+    updatedAt: comment.UpdatedAt,
 
-    createdAt: a.CreatedAt,
-    updatedAt: a.UpdatedAt,
+    authorAvatarName: comment.AuthorAvatarName,
+    authorAvatarIcon: comment.AuthorAvatarIcon,
 
-    authorAvatarName: a.AuthorAvatarName,
-    authorAvatarIcon: a.AuthorAvatarIcon,
-
-    brandName: a.BrandName,
-    brandIcon: a.BrandIcon,
-  };
-}
-
-export function fromApiCommentReaction(a: ApiCommentReaction): CommentReaction {
-  return {
-    tokenBlueprintId: a.TokenBlueprintID,
-    commentId: a.CommentID,
-    actorId: a.ActorID,
-    actorType: resolveActorType(a.ActorType),
-    type: resolveReactionType(a.Type),
-    createdAt: a.CreatedAt,
-    updatedAt: a.UpdatedAt,
+    brandName: comment.BrandName,
+    brandIcon: comment.BrandIcon,
   };
 }
