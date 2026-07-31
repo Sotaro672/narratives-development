@@ -21,7 +21,9 @@ var (
 	ErrForbidden    = errors.New("productBlueprintCategory: forbidden")
 	ErrInternal     = errors.New("productBlueprintCategory: internal")
 
-	ErrRepositoryInvalidInput = errors.New("productBlueprintCategory: repository invalid input")
+	ErrRepositoryInvalidInput = errors.New(
+		"productBlueprintCategory: repository invalid input",
+	)
 )
 
 func IsNotFound(err error) bool {
@@ -50,26 +52,53 @@ func IsInternal(err error) bool {
 
 func WrapInvalid(err error, msg string) error {
 	if err == nil {
-		return fmt.Errorf("%w: %s", ErrInvalid, msg)
+		return fmt.Errorf(
+			"%w: %s",
+			ErrInvalid,
+			msg,
+		)
 	}
 
-	return fmt.Errorf("%w: %s: %v", ErrInvalid, msg, err)
+	return fmt.Errorf(
+		"%w: %s: %v",
+		ErrInvalid,
+		msg,
+		err,
+	)
 }
 
 func WrapConflict(err error, msg string) error {
 	if err == nil {
-		return fmt.Errorf("%w: %s", ErrConflict, msg)
+		return fmt.Errorf(
+			"%w: %s",
+			ErrConflict,
+			msg,
+		)
 	}
 
-	return fmt.Errorf("%w: %s: %v", ErrConflict, msg, err)
+	return fmt.Errorf(
+		"%w: %s: %v",
+		ErrConflict,
+		msg,
+		err,
+	)
 }
 
 func WrapNotFound(err error, msg string) error {
 	if err == nil {
-		return fmt.Errorf("%w: %s", ErrNotFound, msg)
+		return fmt.Errorf(
+			"%w: %s",
+			ErrNotFound,
+			msg,
+		)
 	}
 
-	return fmt.Errorf("%w: %s: %v", ErrNotFound, msg, err)
+	return fmt.Errorf(
+		"%w: %s: %v",
+		ErrNotFound,
+		msg,
+		err,
+	)
 }
 
 // ======================================
@@ -81,13 +110,19 @@ type CategoryCode string
 type CategoryKind = common.ProductCategoryKind
 
 const (
-	CategoryKindApparel    = common.ProductCategoryKindApparel
-	CategoryKindFood       = common.ProductCategoryKindFood
-	CategoryKindAlcohol    = common.ProductCategoryKindAlcohol
-	CategoryKindCosmetics  = common.ProductCategoryKindCosmetics
-	CategoryKindGoods      = common.ProductCategoryKindGoods
+	CategoryKindApparel = common.ProductCategoryKindApparel
+
+	CategoryKindFood = common.ProductCategoryKindFood
+
+	CategoryKindAlcohol = common.ProductCategoryKindAlcohol
+
+	CategoryKindCosmetics = common.ProductCategoryKindCosmetics
+
+	CategoryKindGoods = common.ProductCategoryKindGoods
+
 	CategoryKindHealthcare = common.ProductCategoryKindHealthcare
-	CategoryKindOther      = common.ProductCategoryKindOther
+
+	CategoryKindOther = common.ProductCategoryKindOther
 )
 
 // ======================================
@@ -126,12 +161,16 @@ type CategoryAttributes struct {
 }
 
 type Snapshot struct {
-	ID     CategoryID
-	Code   CategoryCode
-	NameJa string
-	NameEn string
-	Kind   CategoryKind
-	Path   []string
+	ID CategoryID `json:"id"`
+
+	Code CategoryCode `json:"code"`
+
+	NameJa string `json:"nameJa"`
+	NameEn string `json:"nameEn"`
+
+	Kind CategoryKind `json:"kind"`
+
+	Path []string `json:"path"`
 }
 
 // ======================================
@@ -154,31 +193,50 @@ func Reconstruct(
 	updatedAt time.Time,
 ) (ProductBlueprintCategory, error) {
 	category := ProductBlueprintCategory{
-		ID:           id,
-		Code:         code,
-		NameJa:       nameJa,
-		NameEn:       nameEn,
-		ParentID:     parentID,
-		Path:         append([]string(nil), path...),
-		Kind:         kind,
+		ID: id,
+
+		Code: code,
+
+		NameJa: nameJa,
+		NameEn: nameEn,
+
+		ParentID: parentID,
+
+		Path: append(
+			[]string(nil),
+			path...,
+		),
+
+		Kind: kind,
+
 		DisplayOrder: displayOrder,
-		Attributes:   attributes,
-		CreatedAt:    createdAt.UTC(),
-		UpdatedAt:    updatedAt.UTC(),
+
+		Attributes: attributes,
+
+		CreatedAt: createdAt.UTC(),
+		UpdatedAt: updatedAt.UTC(),
 	}
 
 	return category, nil
 }
 
-// ToSnapshot は productBlueprint へ denormalize 保存するための表示用スナップショットを返す。
+// ToSnapshot は productBlueprint へ denormalize 保存するための
+// 表示用スナップショットを返す。
 func (c ProductBlueprintCategory) ToSnapshot() Snapshot {
 	return Snapshot{
-		ID:     c.ID,
-		Code:   c.Code,
+		ID: c.ID,
+
+		Code: c.Code,
+
 		NameJa: c.NameJa,
 		NameEn: c.NameEn,
-		Kind:   c.Kind,
-		Path:   append([]string(nil), c.Path...),
+
+		Kind: c.Kind,
+
+		Path: append(
+			[]string(nil),
+			c.Path...,
+		),
 	}
 }
 
@@ -187,16 +245,43 @@ func (c ProductBlueprintCategory) ToSnapshot() Snapshot {
 // ======================================
 
 var (
-	ErrInvalidID           = errors.New("productBlueprintCategory: invalid id")
-	ErrInvalidCode         = errors.New("productBlueprintCategory: invalid code")
-	ErrInvalidNameJa       = errors.New("productBlueprintCategory: invalid nameJa")
-	ErrInvalidKind         = errors.New("productBlueprintCategory: invalid kind")
-	ErrInvalidPath         = errors.New("productBlueprintCategory: invalid path")
-	ErrInvalidDisplayOrder = errors.New("productBlueprintCategory: invalid displayOrder")
-	ErrInvalidCreatedAt    = errors.New("productBlueprintCategory: invalid createdAt")
-	ErrInvalidUpdatedAt    = errors.New("productBlueprintCategory: invalid updatedAt")
+	ErrInvalidID = errors.New(
+		"productBlueprintCategory: invalid id",
+	)
+
+	ErrInvalidCode = errors.New(
+		"productBlueprintCategory: invalid code",
+	)
+
+	ErrInvalidNameJa = errors.New(
+		"productBlueprintCategory: invalid nameJa",
+	)
+
+	ErrInvalidKind = errors.New(
+		"productBlueprintCategory: invalid kind",
+	)
+
+	ErrInvalidPath = errors.New(
+		"productBlueprintCategory: invalid path",
+	)
+
+	ErrInvalidDisplayOrder = errors.New(
+		"productBlueprintCategory: invalid displayOrder",
+	)
+
+	ErrInvalidCreatedAt = errors.New(
+		"productBlueprintCategory: invalid createdAt",
+	)
+
+	ErrInvalidUpdatedAt = errors.New(
+		"productBlueprintCategory: invalid updatedAt",
+	)
 )
 
-func IsValidCategoryKind(v CategoryKind) bool {
-	return common.IsValidProductCategoryKind(v)
+func IsValidCategoryKind(
+	v CategoryKind,
+) bool {
+	return common.IsValidProductCategoryKind(
+		v,
+	)
 }

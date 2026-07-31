@@ -261,7 +261,7 @@ const PriceCard:
                           </>
                         )}
 
-                        <TableCell className="prc__stock text-center">
+                        <TableCell className="prc__stock text-left">
                           <span className="prc__stock-number">
                             {
                               row.stock
@@ -269,7 +269,7 @@ const PriceCard:
                           </span>
                         </TableCell>
 
-                        <TableCell className="prc__price text-center">
+                        <TableCell className="prc__price text-left">
                           {isEdit ? (
                             <div className="flex items-center justify-end gap-2">
                               {currencySymbol ? (
