@@ -228,6 +228,8 @@ func NewContainer(
 
 	brandRepo :=
 		outfs.NewBrandRepositoryFS(fsClient)
+	c.BrandRepo = brandRepo
+
 	companyRepo :=
 		outfs.NewCompanyRepositoryFS(fsClient)
 	cartRepo :=
