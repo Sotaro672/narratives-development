@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/presentation/cards/productBlueprintForm/ProductBlueprintBasicFields.tsx
+// frontend\console\shell\src\features\productBlueprint\presentation\cards\productBlueprintForm\ProductBlueprintBasicFields.tsx
 
 import * as React from "react";
 import { Input } from "../../../../../shared/ui/input";

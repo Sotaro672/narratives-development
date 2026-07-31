@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/presentation/cards/productBlueprintForm/index.ts
+// frontend\console\shell\src\features\productBlueprint\presentation\cards\productBlueprintForm\index.ts
 
 export { default } from "./productBlueprintCard";
 export { default as ProductBlueprintCard } from "./productBlueprintCard";

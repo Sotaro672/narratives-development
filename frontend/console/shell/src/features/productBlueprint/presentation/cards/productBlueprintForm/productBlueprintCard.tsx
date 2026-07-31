@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/presentation/cards/productBlueprintForm/productBlueprintCard.tsx
+// frontend\console\shell\src\features\productBlueprint\presentation\cards\productBlueprintForm\productBlueprintCard.tsx
 
 import * as React from "react";
 import { Package2 } from "lucide-react";
