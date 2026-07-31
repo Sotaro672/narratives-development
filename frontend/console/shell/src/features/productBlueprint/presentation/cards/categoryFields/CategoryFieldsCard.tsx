@@ -48,17 +48,26 @@ type CategoryFieldsCardProps = {
   ) => void;
 };
 
+type NumericInputNoteProps = {
+  id: string;
+  example: string;
+};
+
 function normalizeCategoryCode(
   categoryCode: string,
 ): string {
-  return String(categoryCode ?? "").trim();
+  return String(
+    categoryCode ?? "",
+  ).trim();
 }
 
 function isChildCategoryCode(
   categoryCode: string,
 ): boolean {
   const code =
-    normalizeCategoryCode(categoryCode);
+    normalizeCategoryCode(
+      categoryCode,
+    );
 
   if (!code) {
     return false;
@@ -79,25 +88,47 @@ function resolveCategoryFieldsCardTitle(
   categoryCode: string,
 ): string {
   const code =
-    normalizeCategoryCode(categoryCode);
+    normalizeCategoryCode(
+      categoryCode,
+    );
 
-  if (code.startsWith("apparel.")) {
+  if (
+    code.startsWith(
+      "apparel.",
+    )
+  ) {
     return "衣類情報";
   }
 
-  if (code.startsWith("alcohol.")) {
+  if (
+    code.startsWith(
+      "alcohol.",
+    )
+  ) {
     return "酒類情報";
   }
 
-  if (code.startsWith("cosmetics.")) {
+  if (
+    code.startsWith(
+      "cosmetics.",
+    )
+  ) {
     return "化粧品情報";
   }
 
-  if (code.startsWith("healthcare.")) {
+  if (
+    code.startsWith(
+      "healthcare.",
+    )
+  ) {
     return "ヘルスケア情報";
   }
 
-  if (code.startsWith("other.")) {
+  if (
+    code.startsWith(
+      "other.",
+    )
+  ) {
     return "その他情報";
   }
 
@@ -111,7 +142,8 @@ function getCategoryFieldValue(
     | undefined,
   key: string,
 ): CategoryFieldValue {
-  const value = categoryFields?.[key];
+  const value =
+    categoryFields?.[key];
 
   if (
     typeof value === "string" ||
@@ -132,9 +164,11 @@ function getStringFieldValue(
     | undefined,
   key: string,
 ): string {
-  const value = categoryFields?.[key];
+  const value =
+    categoryFields?.[key];
 
-  return typeof value === "string"
+  return typeof value ===
+    "string"
     ? value
     : "";
 }
@@ -146,10 +180,12 @@ function getNumberFieldValue(
     | undefined,
   key: string,
 ): number | "" {
-  const value = categoryFields?.[key];
+  const value =
+    categoryFields?.[key];
 
   return (
-    typeof value === "number" &&
+    typeof value ===
+      "number" &&
     Number.isFinite(value)
   )
     ? value
@@ -163,501 +199,643 @@ function getWashTagsValue(
     | undefined,
 ): string[] {
   const rawValue =
-    categoryFields?.washTags ??
-    categoryFields?.qualityAssurance ??
+    categoryFields
+      ?.washTags ??
+    categoryFields
+      ?.qualityAssurance ??
     [];
 
-  if (!Array.isArray(rawValue)) {
+  if (
+    !Array.isArray(
+      rawValue,
+    )
+  ) {
     return [];
   }
 
   return rawValue.filter(
-    (item): item is string =>
-      typeof item === "string" &&
+    (
+      item,
+    ): item is string =>
+      typeof item ===
+        "string" &&
       item.trim() !== "",
   );
 }
 
-const CategoryFieldsCard: React.FC<
-  CategoryFieldsCardProps
-> = ({
-  categoryCode,
-  categoryFields,
-  mode = "edit",
-  onChangeCategoryField,
-}) => {
-  const normalizedCategoryCode =
-    normalizeCategoryCode(categoryCode);
-
-  const isEdit = mode === "edit";
-
-  const visibility = React.useMemo(
-    () =>
-      getCategoryCardVisibility(
-        normalizedCategoryCode,
-      ),
-    [normalizedCategoryCode],
+function NumericInputNote({
+  id,
+  example,
+}: NumericInputNoteProps) {
+  return (
+    <p
+      id={id}
+      className="mt-1 text-xs text-slate-500"
+    >
+      半角数字のみ入力できます
+      （例：{example}）。
+    </p>
   );
+}
 
-  /**
-   * alcoholのvolumeはmodel variation側で扱う。
-   * CategoryFieldsCardでは化粧品のvolumeだけを表示する。
-   */
-  const showCosmeticsVolume =
-    visibility.showVolume &&
-    isCosmeticsCategoryCode(
-      normalizedCategoryCode,
-    );
+const CategoryFieldsCard:
+  React.FC<
+    CategoryFieldsCardProps
+  > = ({
+    categoryCode,
+    categoryFields,
+    mode = "edit",
+    onChangeCategoryField,
+  }) => {
+    const normalizedCategoryCode =
+      normalizeCategoryCode(
+        categoryCode,
+      );
 
-  const handleChangeCategoryField =
-    React.useCallback(
-      (
-        key: string,
-        rawValue: string,
-      ) => {
-        if (!onChangeCategoryField) {
-          return;
-        }
+    const isEdit =
+      mode === "edit";
 
-        if (
-          isNumberCategoryField(key)
-        ) {
+    const visibility =
+      React.useMemo(
+        () =>
+          getCategoryCardVisibility(
+            normalizedCategoryCode,
+          ),
+        [
+          normalizedCategoryCode,
+        ],
+      );
+
+    /**
+     * alcoholのvolumeはmodel variation側で扱う。
+     * CategoryFieldsCardでは化粧品のvolumeだけを表示する。
+     */
+    const showCosmeticsVolume =
+      visibility.showVolume &&
+      isCosmeticsCategoryCode(
+        normalizedCategoryCode,
+      );
+
+    const handleChangeCategoryField =
+      React.useCallback(
+        (
+          key: string,
+          rawValue: string,
+        ) => {
+          if (
+            !onChangeCategoryField
+          ) {
+            return;
+          }
+
+          if (
+            isNumberCategoryField(
+              key,
+            )
+          ) {
+            onChangeCategoryField(
+              key,
+              toCategoryNumberOrNull(
+                rawValue,
+              ),
+            );
+
+            return;
+          }
+
           onChangeCategoryField(
             key,
-            toCategoryNumberOrNull(
-              rawValue,
-            ),
+            rawValue.trim() ===
+              ""
+              ? null
+              : rawValue,
           );
+        },
+        [
+          onChangeCategoryField,
+        ],
+      );
 
-          return;
-        }
+    const handleChangeWashTags =
+      React.useCallback(
+        (
+          nextTags: string[],
+        ) => {
+          onChangeCategoryField?.(
+            "washTags",
+            nextTags as CategoryFieldValue,
+          );
+        },
+        [
+          onChangeCategoryField,
+        ],
+      );
 
-        onChangeCategoryField(
-          key,
-          rawValue.trim() === ""
-            ? null
-            : rawValue,
-        );
-      },
-      [onChangeCategoryField],
-    );
+    const fitValue =
+      getStringFieldValue(
+        categoryFields,
+        "fit",
+      ) as Fit;
 
-  const handleChangeWashTags =
-    React.useCallback(
-      (nextTags: string[]) => {
-        onChangeCategoryField?.(
-          "washTags",
-          nextTags as CategoryFieldValue,
-        );
-      },
-      [onChangeCategoryField],
-    );
+    const materialValue =
+      getStringFieldValue(
+        categoryFields,
+        "material",
+      );
 
-  const fitValue =
-    getStringFieldValue(
-      categoryFields,
-      "fit",
-    ) as Fit;
+    const weightValue =
+      getNumberFieldValue(
+        categoryFields,
+        "weight",
+      );
 
-  const materialValue =
-    getStringFieldValue(
-      categoryFields,
-      "material",
-    );
+    const washTagsValue =
+      getWashTagsValue(
+        categoryFields,
+      );
 
-  const weightValue =
-    getNumberFieldValue(
-      categoryFields,
-      "weight",
-    );
+    const cardTitle =
+      resolveCategoryFieldsCardTitle(
+        normalizedCategoryCode,
+      );
 
-  const washTagsValue =
-    getWashTagsValue(categoryFields);
+    const hasVisibleFields =
+      visibility.showVintage ||
+      visibility.showRegion ||
+      visibility.showWeight ||
+      visibility.showFit ||
+      visibility.showMaterial ||
+      visibility.showAlcoholContent ||
+      showCosmeticsVolume ||
+      visibility.showWashTags;
 
-  const cardTitle =
-    resolveCategoryFieldsCardTitle(
-      normalizedCategoryCode,
-    );
+    /**
+     * hooksをすべて呼び出した後でreturnする。
+     * 親カテゴリだけ選択されている状態では非表示。
+     */
+    if (
+      !isChildCategoryCode(
+        normalizedCategoryCode,
+      )
+    ) {
+      return null;
+    }
 
-  const hasVisibleFields =
-    visibility.showVintage ||
-    visibility.showRegion ||
-    visibility.showWeight ||
-    visibility.showFit ||
-    visibility.showMaterial ||
-    visibility.showAlcoholContent ||
-    showCosmeticsVolume ||
-    visibility.showWashTags;
+    /**
+     * 子カテゴリでも表示対象fieldがない場合は非表示。
+     */
+    if (!hasVisibleFields) {
+      return null;
+    }
 
-  /**
-   * hooksをすべて呼び出した後でreturnする。
-   * 親カテゴリだけ選択されている状態では非表示。
-   */
-  if (
-    !isChildCategoryCode(
-      normalizedCategoryCode,
-    )
-  ) {
-    return null;
-  }
+    return (
+      <Card
+        className={`pbc ${
+          !isEdit
+            ? "view-mode"
+            : ""
+        }`}
+      >
+        <CardHeader className="box__header">
+          <SlidersHorizontal
+            size={16}
+          />
 
-  /**
-   * 子カテゴリでも表示対象fieldがない場合は非表示。
-   */
-  if (!hasVisibleFields) {
-    return null;
-  }
+          <CardTitle className="box__title">
+            {cardTitle}
+          </CardTitle>
+        </CardHeader>
 
-  return (
-    <Card
-      className={`pbc ${
-        !isEdit ? "view-mode" : ""
-      }`}
-    >
-      <CardHeader className="box__header">
-        <SlidersHorizontal size={16} />
+        <CardContent className="box__body">
+          {visibility.showVintage && (
+            <>
+              <div className="label">
+                ヴィンテージ
+              </div>
 
-        <CardTitle className="box__title">
-          {cardTitle}
-        </CardTitle>
-      </CardHeader>
+              <div>
+                <div className="flex gap-8 items-center">
+                  {isEdit ? (
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      step={1}
+                      value={toCategoryInputValue(
+                        getCategoryFieldValue(
+                          categoryFields,
+                          "vintage",
+                        ),
+                      )}
+                      placeholder="例：2020"
+                      onChange={(
+                        event,
+                      ) =>
+                        handleChangeCategoryField(
+                          "vintage",
+                          event
+                            .target
+                            .value,
+                        )
+                      }
+                      aria-label="ヴィンテージ"
+                      aria-describedby="vintage-input-note"
+                    />
+                  ) : (
+                    <Input
+                      value={toCategoryInputValue(
+                        getCategoryFieldValue(
+                          categoryFields,
+                          "vintage",
+                        ),
+                      )}
+                      variant="readonly"
+                      readOnly
+                      aria-label="ヴィンテージ"
+                    />
+                  )}
+                </div>
 
-      <CardContent className="box__body">
-        {visibility.showVintage && (
-          <>
-            <div className="label">
-              ヴィンテージ
-            </div>
+                {isEdit && (
+                  <NumericInputNote
+                    id="vintage-input-note"
+                    example="2020"
+                  />
+                )}
+              </div>
+            </>
+          )}
 
-            <div className="flex gap-8 items-center">
+          {visibility.showRegion && (
+            <>
+              <div className="label">
+                地域・産地
+              </div>
+
               {isEdit ? (
                 <Input
-                  type="number"
                   value={toCategoryInputValue(
                     getCategoryFieldValue(
                       categoryFields,
-                      "vintage",
+                      "region",
                     ),
                   )}
-                  onChange={(event) =>
+                  onChange={(
+                    event,
+                  ) =>
                     handleChangeCategoryField(
-                      "vintage",
-                      event.target.value,
+                      "region",
+                      event
+                        .target
+                        .value,
                     )
                   }
-                  aria-label="ヴィンテージ"
+                  aria-label="地域・産地"
                 />
               ) : (
                 <Input
                   value={toCategoryInputValue(
                     getCategoryFieldValue(
                       categoryFields,
-                      "vintage",
+                      "region",
                     ),
                   )}
                   variant="readonly"
                   readOnly
-                  aria-label="ヴィンテージ"
+                  aria-label="地域・産地"
                 />
               )}
-            </div>
-          </>
-        )}
+            </>
+          )}
 
-        {visibility.showRegion && (
-          <>
-            <div className="label">
-              地域・産地
-            </div>
+          {visibility.showWeight && (
+            <>
+              <div className="label">
+                重さ
+              </div>
 
-            {isEdit ? (
-              <Input
-                value={toCategoryInputValue(
-                  getCategoryFieldValue(
-                    categoryFields,
-                    "region",
-                  ),
-                )}
-                onChange={(event) =>
-                  handleChangeCategoryField(
-                    "region",
-                    event.target.value,
-                  )
-                }
-                aria-label="地域・産地"
-              />
-            ) : (
-              <Input
-                value={toCategoryInputValue(
-                  getCategoryFieldValue(
-                    categoryFields,
-                    "region",
-                  ),
-                )}
-                variant="readonly"
-                readOnly
-                aria-label="地域・産地"
-              />
-            )}
-          </>
-        )}
-
-        {visibility.showWeight && (
-          <>
-            <div className="label">
-              重さ
-            </div>
-
-            <div className="flex gap-8 items-center">
-              {isEdit ? (
-                <>
-                  <Input
-                    type="number"
-                    value={weightValue}
-                    placeholder="0"
-                    onChange={(event) =>
-                      handleChangeCategoryField(
-                        "weight",
-                        event.target.value,
-                      )
-                    }
-                    aria-label="重さ"
-                  />
-
-                  <span className="suffix">
-                    g
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Input
-                    value={
-                      weightValue === ""
-                        ? ""
-                        : String(weightValue)
-                    }
-                    variant="readonly"
-                    readOnly
-                    aria-label="重さ"
-                  />
-
-                  <span className="suffix">
-                    g
-                  </span>
-                </>
-              )}
-            </div>
-          </>
-        )}
-
-        {visibility.showFit && (
-          <>
-            <div className="label">
-              フィット
-            </div>
-
-            {isEdit ? (
-              <Popover>
-                <PopoverTrigger>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-between pbc-select-trigger"
-                    aria-label="フィットを選択"
-                  >
-                    {fitValue ||
-                      "フィットを選択してください。"}
-                  </Button>
-                </PopoverTrigger>
-
-                <PopoverContent
-                  align="start"
-                  className="p-1"
-                >
-                  {FIT_OPTIONS.map(
-                    (
-                      option: {
-                        value: Fit;
-                        label: string;
-                      },
-                    ) => (
-                      <div
-                        key={option.value}
-                        className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
-                          fitValue ===
-                          option.value
-                            ? "bg-blue-100 text-blue-700 font-medium"
-                            : ""
-                        }`}
-                        onClick={() =>
-                          onChangeCategoryField?.(
-                            "fit",
-                            option.value,
+              <div>
+                <div className="flex gap-8 items-center">
+                  {isEdit ? (
+                    <>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="any"
+                        value={
+                          weightValue
+                        }
+                        placeholder="例：350"
+                        onChange={(
+                          event,
+                        ) =>
+                          handleChangeCategoryField(
+                            "weight",
+                            event
+                              .target
+                              .value,
                           )
                         }
-                      >
-                        {option.label}
-                      </div>
-                    ),
+                        aria-label="重さ"
+                        aria-describedby="weight-input-note"
+                      />
+
+                      <span className="suffix">
+                        g
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Input
+                        value={
+                          weightValue ===
+                          ""
+                            ? ""
+                            : String(
+                                weightValue,
+                              )
+                        }
+                        variant="readonly"
+                        readOnly
+                        aria-label="重さ"
+                      />
+
+                      <span className="suffix">
+                        g
+                      </span>
+                    </>
                   )}
-                </PopoverContent>
-              </Popover>
-            ) : (
-              <Input
-                value={fitValue}
-                variant="readonly"
-                readOnly
-                aria-label="フィット"
-              />
-            )}
-          </>
-        )}
+                </div>
 
-        {visibility.showMaterial && (
-          <>
-            <div className="label">
-              素材
-            </div>
+                {isEdit && (
+                  <NumericInputNote
+                    id="weight-input-note"
+                    example="350"
+                  />
+                )}
+              </div>
+            </>
+          )}
 
-            {isEdit ? (
-              <Input
-                value={materialValue}
-                onChange={(event) =>
-                  handleChangeCategoryField(
-                    "material",
-                    event.target.value,
-                  )
-                }
-                aria-label="素材"
-              />
-            ) : (
-              <Input
-                value={materialValue}
-                variant="readonly"
-                readOnly
-                aria-label="素材"
-              />
-            )}
-          </>
-        )}
+          {visibility.showFit && (
+            <>
+              <div className="label">
+                フィット
+              </div>
 
-        {visibility.showAlcoholContent && (
-          <>
-            <div className="label">
-              アルコール度数
-            </div>
-
-            <div className="flex gap-8 items-center">
               {isEdit ? (
-                <>
-                  <Input
-                    type="number"
-                    value={toCategoryInputValue(
-                      getCategoryFieldValue(
-                        categoryFields,
-                        "alcoholContent",
+                <Popover>
+                  <PopoverTrigger>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-between pbc-select-trigger"
+                      aria-label="フィットを選択"
+                    >
+                      {fitValue ||
+                        "フィットを選択してください。"}
+                    </Button>
+                  </PopoverTrigger>
+
+                  <PopoverContent
+                    align="start"
+                    className="p-1"
+                  >
+                    {FIT_OPTIONS.map(
+                      (
+                        option: {
+                          value: Fit;
+                          label: string;
+                        },
+                      ) => (
+                        <div
+                          key={
+                            option.value
+                          }
+                          className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
+                            fitValue ===
+                            option.value
+                              ? "bg-blue-100 text-blue-700 font-medium"
+                              : ""
+                          }`}
+                          onClick={() =>
+                            onChangeCategoryField?.(
+                              "fit",
+                              option.value,
+                            )
+                          }
+                        >
+                          {
+                            option.label
+                          }
+                        </div>
                       ),
                     )}
-                    onChange={(event) =>
-                      handleChangeCategoryField(
-                        "alcoholContent",
-                        event.target.value,
-                      )
-                    }
-                    aria-label="アルコール度数"
-                  />
-
-                  <span className="suffix">
-                    %
-                  </span>
-                </>
+                  </PopoverContent>
+                </Popover>
               ) : (
-                <>
-                  <Input
-                    value={toCategoryInputValue(
-                      getCategoryFieldValue(
-                        categoryFields,
-                        "alcoholContent",
-                      ),
-                    )}
-                    variant="readonly"
-                    readOnly
-                    aria-label="アルコール度数"
-                  />
-
-                  <span className="suffix">
-                    %
-                  </span>
-                </>
+                <Input
+                  value={fitValue}
+                  variant="readonly"
+                  readOnly
+                  aria-label="フィット"
+                />
               )}
-            </div>
-          </>
-        )}
+            </>
+          )}
 
-        {showCosmeticsVolume && (
-          <>
-            <div className="label">
-              容量
-            </div>
+          {visibility.showMaterial && (
+            <>
+              <div className="label">
+                素材
+              </div>
 
-            <div className="flex gap-8 items-center">
               {isEdit ? (
-                <>
-                  <Input
-                    type="number"
-                    value={toCategoryInputValue(
-                      getCategoryFieldValue(
-                        categoryFields,
-                        "volume",
-                      ),
-                    )}
-                    onChange={(event) =>
-                      handleChangeCategoryField(
-                        "volume",
-                        event.target.value,
-                      )
-                    }
-                    aria-label="容量"
-                  />
-
-                  <span className="suffix">
-                    ml
-                  </span>
-                </>
+                <Input
+                  value={
+                    materialValue
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    handleChangeCategoryField(
+                      "material",
+                      event
+                        .target
+                        .value,
+                    )
+                  }
+                  aria-label="素材"
+                />
               ) : (
-                <>
-                  <Input
-                    value={toCategoryInputValue(
-                      getCategoryFieldValue(
-                        categoryFields,
-                        "volume",
-                      ),
-                    )}
-                    variant="readonly"
-                    readOnly
-                    aria-label="容量"
-                  />
-
-                  <span className="suffix">
-                    ml
-                  </span>
-                </>
+                <Input
+                  value={
+                    materialValue
+                  }
+                  variant="readonly"
+                  readOnly
+                  aria-label="素材"
+                />
               )}
-            </div>
-          </>
-        )}
+            </>
+          )}
 
-        {visibility.showWashTags && (
-          <WashTagField
-            value={washTagsValue}
-            mode={mode}
-            onChange={
-              handleChangeWashTags
-            }
-          />
-        )}
-      </CardContent>
-    </Card>
-  );
-};
+          {visibility.showAlcoholContent && (
+            <>
+              <div className="label">
+                アルコール度数
+              </div>
+
+              <div>
+                <div className="flex gap-8 items-center">
+                  {isEdit ? (
+                    <>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="any"
+                        value={toCategoryInputValue(
+                          getCategoryFieldValue(
+                            categoryFields,
+                            "alcoholContent",
+                          ),
+                        )}
+                        placeholder="例：15"
+                        onChange={(
+                          event,
+                        ) =>
+                          handleChangeCategoryField(
+                            "alcoholContent",
+                            event
+                              .target
+                              .value,
+                          )
+                        }
+                        aria-label="アルコール度数"
+                        aria-describedby="alcohol-content-input-note"
+                      />
+
+                      <span className="suffix">
+                        %
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Input
+                        value={toCategoryInputValue(
+                          getCategoryFieldValue(
+                            categoryFields,
+                            "alcoholContent",
+                          ),
+                        )}
+                        variant="readonly"
+                        readOnly
+                        aria-label="アルコール度数"
+                      />
+
+                      <span className="suffix">
+                        %
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                {isEdit && (
+                  <NumericInputNote
+                    id="alcohol-content-input-note"
+                    example="15、12.5"
+                  />
+                )}
+              </div>
+            </>
+          )}
+
+          {showCosmeticsVolume && (
+            <>
+              <div className="label">
+                容量
+              </div>
+
+              <div>
+                <div className="flex gap-8 items-center">
+                  {isEdit ? (
+                    <>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="any"
+                        value={toCategoryInputValue(
+                          getCategoryFieldValue(
+                            categoryFields,
+                            "volume",
+                          ),
+                        )}
+                        placeholder="例：100"
+                        onChange={(
+                          event,
+                        ) =>
+                          handleChangeCategoryField(
+                            "volume",
+                            event
+                              .target
+                              .value,
+                          )
+                        }
+                        aria-label="容量"
+                        aria-describedby="volume-input-note"
+                      />
+
+                      <span className="suffix">
+                        ml
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Input
+                        value={toCategoryInputValue(
+                          getCategoryFieldValue(
+                            categoryFields,
+                            "volume",
+                          ),
+                        )}
+                        variant="readonly"
+                        readOnly
+                        aria-label="容量"
+                      />
+
+                      <span className="suffix">
+                        ml
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                {isEdit && (
+                  <NumericInputNote
+                    id="volume-input-note"
+                    example="100、250.5"
+                  />
+                )}
+              </div>
+            </>
+          )}
+
+          {visibility.showWashTags && (
+            <WashTagField
+              value={
+                washTagsValue
+              }
+              mode={mode}
+              onChange={
+                handleChangeWashTags
+              }
+            />
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
 
 export default CategoryFieldsCard;
