@@ -1,7 +1,7 @@
-// frontend/console/sales/application/announcement_management_service.tsx
+// frontend/console/shell/src/features/announcement/application/announcement_management_service.tsx
+
 import {
   listAnnouncementManagementByCompanyId,
-  listAnnouncements,
   type Announcement,
   type AnnouncementManagementApiResult,
 } from "../infrastructure/announcement_repository_http";
@@ -9,159 +9,123 @@ import {
 export type AnnouncementManagementRow = {
   id: string;
   title: string;
-  content: string;
   targetToken: string | null;
-  targetAvatars: string[];
   published: boolean;
-  publishedAt: string | null;
-  attachments: string[];
   createdAt: string;
-  createdBy: string;
   updatedAt: string | null;
-  updatedBy: string | null;
 
-  tokenBlueprintId: string;
   tokenName: string;
-  brandId: string;
-
   targetAvatarCount: number;
-  attachmentCount: number;
 };
 
 export type AnnouncementManagementSortKey =
   | "title"
   | "tokenName"
-  | "published"
-  | "publishedAt"
   | "createdAt"
   | "updatedAt"
   | "targetAvatarCount";
 
-export type AnnouncementManagementSortDir = "asc" | "desc";
+export type AnnouncementManagementSortDir =
+  | "asc"
+  | "desc";
 
 export type AnnouncementManagementListParams = {
-  companyId?: string | null;
-  targetToken?: string | null;
+  companyId: string;
   page?: number;
   perPage?: number;
 };
 
 export type AnnouncementManagementListResult = {
   rows: AnnouncementManagementRow[];
-  totalCount: number;
-  page: number;
-  perPage: number;
 };
 
 export async function fetchAnnouncementManagementRows({
   companyId,
-  targetToken,
   page = 1,
   perPage = 50,
 }: AnnouncementManagementListParams): Promise<AnnouncementManagementListResult> {
-  const normalizedCompanyId = String(companyId ?? "").trim();
-  const normalizedTargetToken = String(targetToken ?? "").trim();
+  const normalizedCompanyId = String(
+    companyId ?? "",
+  ).trim();
 
-  if (normalizedCompanyId) {
-    const result = await listAnnouncementManagementByCompanyId({
+  if (!normalizedCompanyId) {
+    throw new Error(
+      "companyId is required",
+    );
+  }
+
+  const result =
+    await listAnnouncementManagementByCompanyId({
       companyId: normalizedCompanyId,
       page,
       perPage,
     });
 
-    const rows = enrichAnnouncementManagementRowsFromCompanyResult(result);
-
-    return {
-      rows,
-      totalCount: rows.length,
-      page,
-      perPage,
-    };
-  }
-
-  if (normalizedTargetToken) {
-    const result = await listAnnouncements({
-      targetToken: normalizedTargetToken,
-      page,
-      perPage,
-    });
-
-    return {
-      rows: enrichAnnouncementManagementRows(result.items),
-      totalCount: result.totalCount,
-      page: result.page || page,
-      perPage: result.perPage || perPage,
-    };
-  }
-
-  return createEmptyAnnouncementManagementListResult(page, perPage);
+  return {
+    rows:
+      enrichAnnouncementManagementRows(
+        result,
+      ),
+  };
 }
 
-export function enrichAnnouncementManagementRowsFromCompanyResult(
+function enrichAnnouncementManagementRows(
   result: AnnouncementManagementApiResult,
 ): AnnouncementManagementRow[] {
-  const sourceRows = Array.isArray(result?.rows) ? result.rows : [];
+  const sourceRows = Array.isArray(
+    result?.rows,
+  )
+    ? result.rows
+    : [];
 
-  return sourceRows.flatMap((sourceRow) => {
-    const tokenBlueprint = sourceRow.tokenBlueprint;
-    const announcements = Array.isArray(sourceRow.announcements)
-      ? sourceRow.announcements
-      : [];
+  return sourceRows.flatMap(
+    (sourceRow) => {
+      const tokenName = String(
+        sourceRow.tokenBlueprint
+          ?.tokenName ?? "",
+      );
 
-    return announcements.map((announcement) =>
-      toAnnouncementManagementRow(announcement, {
-        tokenBlueprintId: tokenBlueprint?.tokenBlueprintId ?? "",
-        tokenName: tokenBlueprint?.tokenName ?? "",
-        brandId: tokenBlueprint?.brandId ?? "",
-      }),
-    );
-  });
-}
+      const announcements =
+        Array.isArray(
+          sourceRow.announcements,
+        )
+          ? sourceRow.announcements
+          : [];
 
-export function enrichAnnouncementManagementRows(
-  announcements: Announcement[],
-): AnnouncementManagementRow[] {
-  return announcements.map((announcement) =>
-    toAnnouncementManagementRow(announcement, {
-      tokenBlueprintId: announcement.targetToken ?? "",
-      tokenName: announcement.targetToken ?? "",
-      brandId: "",
-    }),
+      return announcements.map(
+        (announcement) =>
+          toAnnouncementManagementRow(
+            announcement,
+            tokenName,
+          ),
+      );
+    },
   );
 }
 
 function toAnnouncementManagementRow(
   announcement: Announcement,
-  tokenBlueprint: {
-    tokenBlueprintId: string;
-    tokenName: string;
-    brandId: string;
-  },
+  tokenName: string,
 ): AnnouncementManagementRow {
   return {
     id: announcement.id,
     title: announcement.title,
-    content: announcement.content,
-    targetToken: announcement.targetToken,
-    targetAvatars: announcement.targetAvatars,
-    published: announcement.published,
-    publishedAt: announcement.publishedAt,
-    attachments: announcement.attachments,
-    createdAt: announcement.createdAt,
-    createdBy: announcement.createdBy,
-    updatedAt: announcement.updatedAt,
-    updatedBy: announcement.updatedBy,
+    targetToken:
+      announcement.targetToken ?? null,
+    published:
+      announcement.published,
+    createdAt:
+      announcement.createdAt,
+    updatedAt:
+      announcement.updatedAt,
 
-    tokenBlueprintId: tokenBlueprint.tokenBlueprintId,
-    tokenName: tokenBlueprint.tokenName,
-    brandId: tokenBlueprint.brandId,
-
-    targetAvatarCount: Array.isArray(announcement.targetAvatars)
-      ? announcement.targetAvatars.length
-      : 0,
-    attachmentCount: Array.isArray(announcement.attachments)
-      ? announcement.attachments.length
-      : 0,
+    tokenName,
+    targetAvatarCount:
+      Array.isArray(
+        announcement.targetAvatars,
+      )
+        ? announcement.targetAvatars.length
+        : 0,
   };
 }
 
@@ -173,36 +137,52 @@ export function sortAnnouncementManagementRows(
   const next = [...rows];
 
   next.sort((a, b) => {
-    let result = 0;
+    let result: number;
 
     switch (sortKey) {
       case "title":
-        result = compareStrings(a.title, b.title);
+        result = compareStrings(
+          a.title,
+          b.title,
+        );
         break;
+
       case "tokenName":
-        result = compareStrings(a.tokenName, b.tokenName);
+        result = compareStrings(
+          a.tokenName,
+          b.tokenName,
+        );
         break;
-      case "published":
-        result = compareBooleans(a.published, b.published);
-        break;
-      case "publishedAt":
-        result = compareDateStrings(a.publishedAt, b.publishedAt);
-        break;
+
       case "createdAt":
-        result = compareDateStrings(a.createdAt, b.createdAt);
+        result = compareDateStrings(
+          a.createdAt,
+          b.createdAt,
+        );
         break;
+
       case "updatedAt":
-        result = compareDateStrings(a.updatedAt, b.updatedAt);
+        result = compareDateStrings(
+          a.updatedAt,
+          b.updatedAt,
+        );
         break;
+
       case "targetAvatarCount":
-        result = compareNumbers(a.targetAvatarCount, b.targetAvatarCount);
+        result = compareNumbers(
+          a.targetAvatarCount,
+          b.targetAvatarCount,
+        );
         break;
+
       default:
         result = 0;
         break;
     }
 
-    return sortDir === "asc" ? result : -result;
+    return sortDir === "asc"
+      ? result
+      : -result;
   });
 
   return next;
@@ -219,14 +199,6 @@ export function normalizeAnnouncementManagementSortKey(
     return "tokenName";
   }
 
-  if (value === "published") {
-    return "published";
-  }
-
-  if (value === "publishedAt") {
-    return "publishedAt";
-  }
-
   if (value === "updatedAt") {
     return "updatedAt";
   }
@@ -238,52 +210,45 @@ export function normalizeAnnouncementManagementSortKey(
   return "createdAt";
 }
 
-export function createEmptyAnnouncementManagementListResult(
-  page = 1,
-  perPage = 50,
-): AnnouncementManagementListResult {
-  return {
-    rows: [],
-    totalCount: 0,
-    page,
-    perPage,
-  };
+function compareStrings(
+  a: string,
+  b: string,
+): number {
+  return String(a ?? "").localeCompare(
+    String(b ?? ""),
+    "ja",
+  );
 }
 
-function compareStrings(a: string, b: string): number {
-  return String(a ?? "").localeCompare(String(b ?? ""), "ja");
-}
-
-function compareNumbers(a: number, b: number): number {
+function compareNumbers(
+  a: number,
+  b: number,
+): number {
   return a - b;
-}
-
-function compareBooleans(a: boolean, b: boolean): number {
-  return Number(a) - Number(b);
 }
 
 function compareDateStrings(
   a: string | null | undefined,
   b: string | null | undefined,
 ): number {
-  const timeA = toTime(a);
-  const timeB = toTime(b);
-
-  return timeA - timeB;
+  return toTime(a) - toTime(b);
 }
 
-function toTime(value: string | null | undefined): number {
-  const text = String(value ?? "").trim();
+function toTime(
+  value: string | null | undefined,
+): number {
+  const text = String(
+    value ?? "",
+  ).trim();
 
   if (!text) {
     return 0;
   }
 
-  const time = new Date(text).getTime();
+  const time =
+    new Date(text).getTime();
 
-  if (!Number.isFinite(time)) {
-    return 0;
-  }
-
-  return time;
+  return Number.isFinite(time)
+    ? time
+    : 0;
 }

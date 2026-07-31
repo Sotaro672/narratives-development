@@ -1,5 +1,10 @@
-// frontend\console\shell\src\pages\announcementTokenListPage.tsx
-import React, { useMemo, useState } from "react";
+// frontend/console/shell/src/pages/announcementTokenListPage.tsx
+
+import {
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useNavigate } from "react-router-dom";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
@@ -7,6 +12,7 @@ import List, {
   SortableTableHeader,
 } from "../layout/List/List";
 import FilterableTableHeader from "../shared/ui/filterable-table-header";
+
 import { buildAnnouncementTokenListNavigateState } from "../features/announcement/application/announcement_token_list_service";
 import { useAnnouncementTokenListPage } from "../features/announcement/presentation/hook/useAnnouncementTokenListPage";
 
@@ -22,15 +28,21 @@ export default function AnnouncementTokenListPage() {
     isResetting,
   } = useAnnouncementTokenListPage();
 
-  const [selectedBrandNames, setSelectedBrandNames] = useState<string[]>([]);
+  const [
+    selectedBrandNames,
+    setSelectedBrandNames,
+  ] = useState<string[]>([]);
 
   const brandOptions = useMemo(() => {
+    const brandNames = rows
+      .map((row) => row.brandName)
+      .filter(
+        (brandName): brandName is string =>
+          Boolean(brandName),
+      );
+
     return Array.from(
-      new Set(
-        rows
-          .map((row) => row.brandName)
-          .filter((brandName): brandName is string => Boolean(brandName)),
-      ),
+      new Set(brandNames),
     ).map((brandName) => ({
       label: brandName,
       value: brandName,
@@ -42,42 +54,73 @@ export default function AnnouncementTokenListPage() {
       return rows;
     }
 
-    return rows.filter((row) => selectedBrandNames.includes(row.brandName));
+    return rows.filter((row) =>
+      selectedBrandNames.includes(
+        row.brandName,
+      ),
+    );
   }, [rows, selectedBrandNames]);
 
-  const handleBrandFilterChange = (next: string[]) => {
+  const handleBrandFilterChange = (
+    next: string[],
+  ) => {
     setSelectedBrandNames(next);
   };
 
   const handlePageReset = async () => {
     setSelectedBrandNames([]);
+
     await handleReset();
   };
 
   const handleBack = () => {
-    navigate("/sales", { replace: true });
-  };
-
-  const handleRowClick = (tokenBlueprintId: string) => {
-    const id = String(tokenBlueprintId ?? "").trim();
-    if (!id) return;
-
-    const row = rows.find((item) => item.tokenBlueprintId === id);
-
-    navigate(`/sales/${encodeURIComponent(id)}/create`, {
-      state: buildAnnouncementTokenListNavigateState(row),
+    navigate("/sales", {
+      replace: true,
     });
   };
 
-  const headers: React.ReactNode[] = [
-    <span key="tokenName">トークン名</span>,
+  const handleRowClick = (
+    tokenBlueprintId: string,
+  ) => {
+    const id = String(
+      tokenBlueprintId ?? "",
+    ).trim();
+
+    if (!id) {
+      return;
+    }
+
+    const row = rows.find(
+      (item) =>
+        item.tokenBlueprintId === id,
+    );
+
+    navigate(
+      `/sales/${encodeURIComponent(id)}/create`,
+      {
+        state:
+          buildAnnouncementTokenListNavigateState(
+            row,
+          ),
+      },
+    );
+  };
+
+  const headers: ReactNode[] = [
+    <span key="tokenName">
+      トークン名
+    </span>,
+
     <FilterableTableHeader
       key="brandName"
       label="ブランド名"
       options={brandOptions}
       selected={selectedBrandNames}
-      onChange={handleBrandFilterChange}
+      onChange={
+        handleBrandFilterChange
+      }
     />,
+
     <SortableTableHeader
       key="issueCount"
       label="発行数"
@@ -86,6 +129,7 @@ export default function AnnouncementTokenListPage() {
       direction={sortDir}
       onChange={handleChangeSort}
     />,
+
     <SortableTableHeader
       key="distributionCount"
       label="所有者数"
@@ -105,29 +149,43 @@ export default function AnnouncementTokenListPage() {
       isRefreshing={isResetting}
     >
       <div className="p-0">
-        <List headerCells={headers} showResetButton={false}>
+        <List
+          headerCells={headers}
+          showResetButton={false}
+        >
           {filteredRows.map((row) => (
             <tr
-              key={row.tokenBlueprintId}
+              key={
+                row.tokenBlueprintId
+              }
               role="button"
               tabIndex={0}
-              className="cursor-pointer hover:bg-slate-50 transition-colors"
-              onClick={() => handleRowClick(row.tokenBlueprintId)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  handleRowClick(row.tokenBlueprintId);
+              className="cursor-pointer transition-colors hover:bg-slate-50"
+              onClick={() =>
+                handleRowClick(
+                  row.tokenBlueprintId,
+                )
+              }
+              onKeyDown={(event) => {
+                if (
+                  event.key ===
+                    "Enter" ||
+                  event.key === " "
+                ) {
+                  event.preventDefault();
+
+                  handleRowClick(
+                    row.tokenBlueprintId,
+                  );
                 }
               }}
             >
               <td>{row.tokenName}</td>
               <td>{row.brandName}</td>
+              <td>{row.issueCount}</td>
               <td>
-                {Array.isArray(row.mintAddresses)
-                  ? row.mintAddresses.length
-                  : 0}
+                {row.distributionCount}
               </td>
-              <td>{Array.isArray(row.owners) ? row.owners.length : 0}</td>
             </tr>
           ))}
         </List>

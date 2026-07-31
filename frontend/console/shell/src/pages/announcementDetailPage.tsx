@@ -1,4 +1,5 @@
-// frontend\console\shell\src\pages\announcementDetailPage.tsx
+// frontend/console/shell/src/pages/announcementDetailPage.tsx
+
 import {
   useCallback,
   useEffect,
@@ -16,6 +17,8 @@ import LogCard from "../features/log/presentation/LogCard";
 import InputCard from "../features/announcement/presentation/components/inputCard";
 import type { SubmitPayload } from "../features/announcement/presentation/components/inputCard";
 
+import { uploadAnnouncementImages } from "../features/announcement/application/announcement_attachment_service";
+
 import {
   getAnnouncement,
   markAnnouncementPublished,
@@ -30,24 +33,6 @@ const emptyInputPayload: SubmitPayload = {
   images: [],
   imageUrls: [],
 };
-
-type AnnouncementAttachmentFileLike = {
-  announcementId?: string | null;
-  id?: string | null;
-  fileName?: string | null;
-  fileUrl?: string | null;
-  fileSize?: number | null;
-  mimeType?: string | null;
-  objectPath?: string | null;
-};
-
-type AnnouncementWithResolvedFields =
-  Announcement & {
-    attachmentFiles?:
-      AnnouncementAttachmentFileLike[];
-    createdByName?: string | null;
-    updatedByName?: string | null;
-  };
 
 function normalizeAvatarIds(
   values: string[] | undefined | null,
@@ -64,7 +49,10 @@ function normalizeAvatarIds(
       value ?? "",
     ).trim();
 
-    if (!avatarId || seen.has(avatarId)) {
+    if (
+      !avatarId ||
+      seen.has(avatarId)
+    ) {
       continue;
     }
 
@@ -77,7 +65,7 @@ function normalizeAvatarIds(
 
 function normalizeAttachmentImageUrls(
   values:
-    | AnnouncementAttachmentFileLike[]
+    | Announcement["attachmentFiles"]
     | undefined
     | null,
 ): string[] {
@@ -121,51 +109,8 @@ function normalizeAttachmentImageUrls(
   return result;
 }
 
-function toSafeNumber(
-  value: unknown,
-): number {
-  if (
-    typeof value === "number" &&
-    Number.isFinite(value)
-  ) {
-    return value;
-  }
-
-  const numberValue = Number(value);
-
-  if (!Number.isFinite(numberValue)) {
-    return 0;
-  }
-
-  return numberValue;
-}
-
-function getAnnouncementCreatedByName(
-  announcement:
-    | AnnouncementWithResolvedFields
-    | null,
-): string {
-  return String(
-    announcement?.createdByName ||
-      announcement?.createdBy ||
-      "",
-  ).trim();
-}
-
-function getAnnouncementUpdatedByName(
-  announcement:
-    | AnnouncementWithResolvedFields
-    | null,
-): string {
-  return String(
-    announcement?.updatedByName ||
-      announcement?.updatedBy ||
-      "",
-  ).trim();
-}
-
 function buildRetainedAttachmentInputs(params: {
-  announcement: AnnouncementWithResolvedFields;
+  announcement: Announcement;
   imageUrls: string[];
 }): AnnouncementAttachmentInput[] {
   const files = Array.isArray(
@@ -176,11 +121,11 @@ function buildRetainedAttachmentInputs(params: {
 
   const retainedUrlSet = new Set(
     params.imageUrls
-      .map((url) => url.trim())
+      .map((url) => String(url ?? "").trim())
       .filter(Boolean),
   );
 
-  const seen = new Set<string>();
+  const seenObjectPaths = new Set<string>();
   const result: AnnouncementAttachmentInput[] =
     [];
 
@@ -208,22 +153,21 @@ function buildRetainedAttachmentInputs(params: {
       file?.mimeType ?? "",
     ).trim();
 
-    const fileSize = toSafeNumber(
+    const fileSize = Number.isFinite(
       file?.fileSize,
-    );
+    )
+      ? file.fileSize
+      : 0;
 
-    if (!fileName || !objectPath) {
+    if (
+      !fileName ||
+      !objectPath ||
+      seenObjectPaths.has(objectPath)
+    ) {
       continue;
     }
 
-    const dedupeKey =
-      objectPath || fileUrl || fileName;
-
-    if (seen.has(dedupeKey)) {
-      continue;
-    }
-
-    seen.add(dedupeKey);
+    seenObjectPaths.add(objectPath);
 
     result.push({
       fileName,
@@ -237,6 +181,56 @@ function buildRetainedAttachmentInputs(params: {
   return result;
 }
 
+function mergeAttachmentInputs(
+  retainedAttachments: AnnouncementAttachmentInput[],
+  uploadedAttachments: AnnouncementAttachmentInput[],
+): AnnouncementAttachmentInput[] {
+  const seenObjectPaths = new Set<string>();
+  const result: AnnouncementAttachmentInput[] =
+    [];
+
+  for (const attachment of [
+    ...retainedAttachments,
+    ...uploadedAttachments,
+  ]) {
+    const objectPath = String(
+      attachment.objectPath ?? "",
+    ).trim();
+
+    if (
+      !objectPath ||
+      seenObjectPaths.has(objectPath)
+    ) {
+      continue;
+    }
+
+    seenObjectPaths.add(objectPath);
+    result.push(attachment);
+  }
+
+  return result;
+}
+
+function getAnnouncementCreatedByName(
+  announcement: Announcement | null,
+): string {
+  return String(
+    announcement?.createdByName ||
+      announcement?.createdBy ||
+      "",
+  ).trim();
+}
+
+function getAnnouncementUpdatedByName(
+  announcement: Announcement | null,
+): string {
+  return String(
+    announcement?.updatedByName ||
+      announcement?.updatedBy ||
+      "",
+  ).trim();
+}
+
 export default function AnnouncementDetailPage() {
   const navigate = useNavigate();
 
@@ -245,7 +239,7 @@ export default function AnnouncementDetailPage() {
   }>();
 
   const [announcement, setAnnouncement] =
-    useState<AnnouncementWithResolvedFields | null>(
+    useState<Announcement | null>(
       null,
     );
 
@@ -270,20 +264,15 @@ export default function AnnouncementDetailPage() {
     useState<string | null>(null);
 
   const normalizedAnnouncementId =
-    useMemo(
-      () =>
-        String(
-          announcementId ?? "",
-        ).trim(),
-      [announcementId],
-    );
+    useMemo(() => {
+      return String(
+        announcementId ?? "",
+      ).trim();
+    }, [announcementId]);
 
   const resetFormFromAnnouncement =
     useCallback(
-      (
-        source:
-          AnnouncementWithResolvedFields,
-      ) => {
+      (source: Announcement) => {
         setInputPayload({
           title: source.title,
           text: source.content,
@@ -310,13 +299,12 @@ export default function AnnouncementDetailPage() {
     setErrorMessage(null);
 
     try {
-      const result = await getAnnouncement(
-        normalizedAnnouncementId,
-      );
+      const result =
+        await getAnnouncement(
+          normalizedAnnouncementId,
+        );
 
-      setAnnouncement(
-        result as AnnouncementWithResolvedFields,
-      );
+      setAnnouncement(result);
     } catch (error) {
       setAnnouncement(null);
 
@@ -332,21 +320,22 @@ export default function AnnouncementDetailPage() {
 
   const reloadAnnouncement = useCallback(
     async (id: string) => {
-      const normalizedId = id.trim();
+      const normalizedId = String(
+        id ?? "",
+      ).trim();
 
       if (!normalizedId) {
         return null;
       }
 
       const refreshed =
-        await getAnnouncement(normalizedId);
+        await getAnnouncement(
+          normalizedId,
+        );
 
-      const next =
-        refreshed as AnnouncementWithResolvedFields;
+      setAnnouncement(refreshed);
 
-      setAnnouncement(next);
-
-      return next;
+      return refreshed;
     },
     [],
   );
@@ -357,12 +346,16 @@ export default function AnnouncementDetailPage() {
 
   useEffect(() => {
     if (!announcement) {
-      setInputPayload(emptyInputPayload);
+      setInputPayload(
+        emptyInputPayload,
+      );
       setIsEditMode(false);
       return;
     }
 
-    resetFormFromAnnouncement(announcement);
+    resetFormFromAnnouncement(
+      announcement,
+    );
 
     if (announcement.published) {
       setIsEditMode(false);
@@ -385,16 +378,15 @@ export default function AnnouncementDetailPage() {
   const targetAvatarCount =
     targetAvatarIds.length;
 
-  const initialImageUrls = useMemo(
-    () =>
-      normalizeAttachmentImageUrls(
-        announcement?.attachmentFiles,
-      ),
-    [announcement],
-  );
+  const initialImageUrls = useMemo(() => {
+    return normalizeAttachmentImageUrls(
+      announcement?.attachmentFiles,
+    );
+  }, [announcement]);
 
   const pageTitle =
-    announcement?.title || "告知詳細";
+    announcement?.title ||
+    "告知詳細";
 
   const handleBack = useCallback(() => {
     navigate("/sales");
@@ -408,7 +400,10 @@ export default function AnnouncementDetailPage() {
       return;
     }
 
-    resetFormFromAnnouncement(announcement);
+    resetFormFromAnnouncement(
+      announcement,
+    );
+
     setIsEditMode(true);
   }, [
     announcement,
@@ -455,6 +450,59 @@ export default function AnnouncementDetailPage() {
     ).trim();
   }, [announcement]);
 
+  const updateDraftAnnouncement =
+    useCallback(
+      async (
+        payload: SubmitPayload,
+      ): Promise<Announcement | null> => {
+        if (
+          !announcement ||
+          announcement.published
+        ) {
+          return null;
+        }
+
+        const retainedAttachments =
+          buildRetainedAttachmentInputs({
+            announcement,
+            imageUrls:
+              payload.imageUrls,
+          });
+
+        const uploadedAttachments =
+          await uploadAnnouncementImages({
+            announcementId:
+              announcement.id,
+            images: payload.images,
+          });
+
+        const attachments =
+          mergeAttachmentInputs(
+            retainedAttachments,
+            uploadedAttachments,
+          );
+
+        return updateAnnouncement(
+          announcement.id,
+          {
+            title: payload.title,
+            content: payload.text,
+            targetToken:
+              announcement.targetToken,
+            targetAvatars:
+              targetAvatarIds,
+            attachments,
+            updatedBy: getUpdatedBy(),
+          },
+        );
+      },
+      [
+        announcement,
+        getUpdatedBy,
+        targetAvatarIds,
+      ],
+    );
+
   const handleSave =
     useCallback(async () => {
       if (
@@ -472,29 +520,8 @@ export default function AnnouncementDetailPage() {
       setIsSavingInput(true);
 
       try {
-        await updateAnnouncement(
-          announcement.id,
-          {
-            title: payload.title,
-            content: payload.text,
-            targetToken:
-              announcement.targetToken,
-            targetAvatars:
-              targetAvatarIds,
-            published:
-              announcement.published,
-            publishedAt:
-              announcement.publishedAt,
-            attachments:
-              buildRetainedAttachmentInputs(
-                {
-                  announcement,
-                  imageUrls:
-                    payload.imageUrls,
-                },
-              ),
-            updatedBy: getUpdatedBy(),
-          },
+        await updateDraftAnnouncement(
+          payload,
         );
 
         await reloadAnnouncement(
@@ -523,11 +550,10 @@ export default function AnnouncementDetailPage() {
     }, [
       announcement,
       buildSubmitPayload,
-      getUpdatedBy,
       isSavingInput,
       isSendingInput,
       reloadAnnouncement,
-      targetAvatarIds,
+      updateDraftAnnouncement,
     ]);
 
   const handleSend =
@@ -548,29 +574,8 @@ export default function AnnouncementDetailPage() {
 
       try {
         if (isEditMode) {
-          await updateAnnouncement(
-            announcement.id,
-            {
-              title: payload.title,
-              content: payload.text,
-              targetToken:
-                announcement.targetToken,
-              targetAvatars:
-                targetAvatarIds,
-              published:
-                announcement.published,
-              publishedAt:
-                announcement.publishedAt,
-              attachments:
-                buildRetainedAttachmentInputs(
-                  {
-                    announcement,
-                    imageUrls:
-                      payload.imageUrls,
-                  },
-                ),
-              updatedBy: getUpdatedBy(),
-            },
+          await updateDraftAnnouncement(
+            payload,
           );
         }
 
@@ -612,7 +617,7 @@ export default function AnnouncementDetailPage() {
       isSavingInput,
       isSendingInput,
       reloadAnnouncement,
-      targetAvatarIds,
+      updateDraftAnnouncement,
     ]);
 
   const createdByName =
@@ -636,7 +641,10 @@ export default function AnnouncementDetailPage() {
       !announcement.published,
   );
 
-  if (isLoading && !announcement) {
+  if (
+    isLoading &&
+    !announcement
+  ) {
     return (
       <PageStyle
         layout="single"
@@ -684,17 +692,20 @@ export default function AnnouncementDetailPage() {
       title={pageTitle}
       onBack={handleBack}
       onEdit={
-        canEditOrSend && !isEditMode
+        canEditOrSend &&
+        !isEditMode
           ? handleEdit
           : undefined
       }
       onCancel={
-        canEditOrSend && isEditMode
+        canEditOrSend &&
+        isEditMode
           ? handleCancelEdit
           : undefined
       }
       onSave={
-        canEditOrSend && isEditMode
+        canEditOrSend &&
+        isEditMode
           ? handleSave
           : undefined
       }

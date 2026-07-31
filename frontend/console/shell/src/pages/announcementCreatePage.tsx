@@ -1,4 +1,5 @@
-// frontend\console\shell\src\pages\announcementCreatePage.tsx
+// frontend/console/shell/src/pages/announcementCreatePage.tsx
+
 import {
   useCallback,
   useMemo,
@@ -9,15 +10,18 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import LogCard from "../features/log/presentation/LogCard";
 import InputCard from "../features/announcement/presentation/components/inputCard";
+
 import type { SubmitPayload } from "../features/announcement/presentation/components/inputCard";
 
-import { useAnnouncementCreatePage } from "../features/announcement/presentation/hook/useAnnouncementCreatePage";
+import {
+  useAnnouncementCreatePage,
+  type AnnouncementCreateInputPayload,
+} from "../features/announcement/presentation/hook/useAnnouncementCreatePage";
 
-const initialInputPayload: SubmitPayload = {
+const initialInputPayload: AnnouncementCreateInputPayload = {
   title: "",
   text: "",
   images: [],
-  imageUrls: [],
 };
 
 export default function AnnouncementCreatePage() {
@@ -25,7 +29,7 @@ export default function AnnouncementCreatePage() {
     useAnnouncementCreatePage();
 
   const [inputPayload, setInputPayload] =
-    useState<SubmitPayload>(
+    useState<AnnouncementCreateInputPayload>(
       initialInputPayload,
     );
 
@@ -63,21 +67,26 @@ export default function AnnouncementCreatePage() {
 
   const handleInputChange = useCallback(
     (payload: SubmitPayload) => {
-      setInputPayload(payload);
+      setInputPayload({
+        title: payload.title,
+        text: payload.text,
+        images: payload.images,
+      });
     },
     [],
   );
 
   const buildSubmitPayload =
-    useCallback((): SubmitPayload => {
-      return {
-        title: inputPayload.title.trim(),
-        text: inputPayload.text.trim(),
-        images: inputPayload.images,
-        imageUrls:
-          inputPayload.imageUrls,
-      };
-    }, [inputPayload]);
+    useCallback(
+      (): AnnouncementCreateInputPayload => {
+        return {
+          title: inputPayload.title.trim(),
+          text: inputPayload.text.trim(),
+          images: inputPayload.images,
+        };
+      },
+      [inputPayload],
+    );
 
   const handleSave =
     useCallback(async () => {

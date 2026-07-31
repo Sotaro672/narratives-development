@@ -115,5 +115,3 @@ export function useAnnouncementCreatePage(): UseAnnouncementCreatePageResult {
 
   return { vm, handlers };
 }
-
-export default useAnnouncementCreatePage;
