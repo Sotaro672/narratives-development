@@ -14,10 +14,10 @@ import LogCard from "../features/log/presentation/LogCard";
 
 // usePrintCard Hook（print_log + QR 情報取得）
 // modelId を正にした版（QuantityRowBase: modelId）
-import { usePrintCard } from "../features/product/presentation/hook/usePrintCard";
+import { usePrintCard } from "../features/print/presentation/hook/usePrintCard";
 
 // 分離した印刷カードコンポーネント
-import PrintCard from "../features/product/presentation/component/printCard";
+import PrintCard from "../features/print/presentation/component/printCard";
 
 // Presentation 正: ProductionQuantityRowVM（キーは modelId）
 import type { ProductionQuantityRowVM } from "../features/production/presentation/viewModels/productionQuantityRowVM";
