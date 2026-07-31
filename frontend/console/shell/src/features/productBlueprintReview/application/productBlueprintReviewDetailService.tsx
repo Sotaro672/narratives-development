@@ -1,4 +1,4 @@
-// frontend/console/productBlueprintReview/src/application/productBlueprintReviewDetailService.tsx
+// frontend\console\shell\src\features\productBlueprintReview\application\productBlueprintReviewDetailService.tsx
 
 import { productBlueprintReviewHTTP } from "../infrastructure/productBlueprintReviewHTTP";
 import { safeDateTimeLabelJa } from "../../../shared/util/dateJa";
@@ -8,7 +8,7 @@ import type {
   ListProductBlueprintReviewsResponse,
   Review,
   ReviewStatus,
-} from "../domain/entity";
+} from "../../../shared/types/productBluleprintReview";
 
 /**
  * Detail 画面で扱う ViewModel（PascalCase）

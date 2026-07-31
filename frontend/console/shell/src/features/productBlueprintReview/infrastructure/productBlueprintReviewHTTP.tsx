@@ -1,4 +1,4 @@
-// frontend/console/productBlueprintReview/src/infrastructure/productBlueprintReviewHTTP.tsx
+// frontend/console/shell/src/features/productBlueprintReview/infrastructure/productBlueprintReviewHTTP.tsx
 
 import { API_BASE } from "../../../shared/http/apiBase";
 import { getAuthJsonHeadersOrThrow } from "../../../shared/http/authHeaders";
@@ -8,7 +8,7 @@ import type {
   ListCompanyReviewAggregatesResponse,
   ListProductBlueprintReviewsParams,
   ListProductBlueprintReviewsResponse,
-} from "../domain/entity";
+} from "../../../shared/types/productBluleprintReview";
 
 // ==============================
 // Query builder (PascalCase keys)
@@ -16,15 +16,25 @@ import type {
 
 function BuildQuery(Params?: Record<string, unknown>): string {
   const Sp = new URLSearchParams();
-  if (!Params) return "";
+
+  if (!Params) {
+    return "";
+  }
 
   for (const [K, V] of Object.entries(Params)) {
-    if (V === undefined || V === null) continue;
-    if (typeof V === "string" && !V.trim()) continue;
+    if (V === undefined || V === null) {
+      continue;
+    }
+
+    if (typeof V === "string" && !V.trim()) {
+      continue;
+    }
+
     Sp.set(K, String(V));
   }
 
   const Qs = Sp.toString();
+
   return Qs ? `?${Qs}` : "";
 }
 
@@ -45,10 +55,12 @@ async function HttpGetJSON<T>(Url: string): Promise<T> {
   });
 
   const Ct = Res.headers.get("content-type") || "";
+
   if (!Ct.includes("application/json")) {
-    const T = await Res.text().catch(() => "");
+    const Body = await Res.text().catch(() => "");
+
     throw new Error(
-      `Expected JSON but got "${Ct}". URL=${Url}. Body(head)=${T.slice(0, 200)}`
+      `Expected JSON but got "${Ct}". URL=${Url}. Body(head)=${Body.slice(0, 200)}`,
     );
   }
 
@@ -56,6 +68,7 @@ async function HttpGetJSON<T>(Url: string): Promise<T> {
 
   if (!Res.ok) {
     const Msg = Data?.Error || JSON.stringify(Data);
+
     throw new Error(Msg || `HTTP ${Res.status}`);
   }
 
@@ -78,13 +91,15 @@ export class ProductBlueprintReviewHTTP {
    * Query: ProductBlueprintID (required), Status, Page, PerPage
    */
   async ListReviewsByProductBlueprintID(
-    Params: ListProductBlueprintReviewsParams
+    Params: ListProductBlueprintReviewsParams,
   ): Promise<ListProductBlueprintReviewsResponse> {
-    if (!Params?.ProductBlueprintID?.trim()) {
+    if (!Params.ProductBlueprintID.trim()) {
       throw new Error("ProductBlueprintID is required");
     }
+
     const Path = `/product-blueprint-reviews${BuildQuery(Params)}`;
     const Url = `${this.BaseURL}${Path}`;
+
     return await HttpGetJSON<ListProductBlueprintReviewsResponse>(Url);
   }
 
@@ -93,13 +108,16 @@ export class ProductBlueprintReviewHTTP {
    * Query: Status, Page, PerPage
    */
   async ListCompanyReviewAggregates(
-    Params?: ListCompanyReviewAggregatesParams
+    Params?: ListCompanyReviewAggregatesParams,
   ): Promise<ListCompanyReviewAggregatesResponse> {
-    const Path = `/product-blueprint-reviews/aggregates${BuildQuery(Params)}`;
+    const Path =
+      `/product-blueprint-reviews/aggregates${BuildQuery(Params)}`;
+
     const Url = `${this.BaseURL}${Path}`;
+
     return await HttpGetJSON<ListCompanyReviewAggregatesResponse>(Url);
   }
 }
 
-export const ProductBlueprintReviewHTTPClient = new ProductBlueprintReviewHTTP();
-export const productBlueprintReviewHTTP = ProductBlueprintReviewHTTPClient;
+export const productBlueprintReviewHTTP =
+  new ProductBlueprintReviewHTTP();

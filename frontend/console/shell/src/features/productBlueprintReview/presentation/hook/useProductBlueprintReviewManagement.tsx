@@ -1,17 +1,18 @@
-// frontend/console/productBlueprintReview/src/presentation/hook/useProductBlueprintReviewManagement.tsx
+// frontend/console/shell/src/features/productBlueprintReview/presentation/hook/useProductBlueprintReviewManagement.tsx
 
-import { useMemo, useState, useCallback, useEffect } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
   FetchProductBlueprintReviewManagementRows,
-  FilterAndSortProductBlueprintReviewRows,
+  FilterProductBlueprintReviewRows,
   type UiRow,
-  type ProductBlueprintReviewSortKey,
-  type SortDirection,
 } from "../../application/productBlueprintReviewManagementService";
-
-import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
 export interface UseProductBlueprintReviewManagementResult {
   Rows: UiRow[];
@@ -19,124 +20,125 @@ export interface UseProductBlueprintReviewManagementResult {
   BrandFilter: string[];
   AssigneeFilter: string[];
 
-  HandleBrandFilterChange: (Values: string[]) => void;
-  HandleAssigneeFilterChange: (Values: string[]) => void;
+  HandleBrandFilterChange: (
+    values: string[],
+  ) => void;
 
-  HandleSortChange: (Key: string | null, Dir: "Asc" | "Desc" | null) => void;
+  HandleAssigneeFilterChange: (
+    values: string[],
+  ) => void;
 
-  HandleRowClick: (Row: UiRow) => void;
+  HandleRowClick: (row: UiRow) => void;
   HandleReset: () => void;
 
   IsResetting: boolean;
 }
 
-function FormatDateTimeYYYYMMDDHHmm(V: string | null | undefined): string {
-  const Label = safeDateTimeLabelJa(V, "");
-  if (!Label) return "";
-
-  const M = Label.match(/^(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2})(?::\d{2})?$/);
-  if (M) return M[1];
-
-  return Label;
-}
-
 export function useProductBlueprintReviewManagement(): UseProductBlueprintReviewManagementResult {
-  const Navigate = useNavigate();
+  const navigate = useNavigate();
 
-  const [AllRows, SetAllRows] = useState<UiRow[]>([]);
-  const [BrandFilter, SetBrandFilter] = useState<string[]>([]);
-  const [AssigneeFilter, SetAssigneeFilter] = useState<string[]>([]);
-  const [SortedKey, SetSortedKey] = useState<ProductBlueprintReviewSortKey>(null);
-  const [SortedDir, SetSortedDir] = useState<SortDirection>(null);
-  const [IsResetting, SetIsResetting] = useState<boolean>(false);
+  const [allRows, setAllRows] = useState<UiRow[]>([]);
+  const [brandFilter, setBrandFilter] = useState<string[]>([]);
+  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
+  const [isResetting, setIsResetting] = useState(false);
 
-  const Load = useCallback(async () => {
-    SetIsResetting(true);
+  const load = useCallback(async () => {
+    setIsResetting(true);
+
     try {
-      const UiRows = await FetchProductBlueprintReviewManagementRows({});
-      SetAllRows(UiRows);
+      const rows =
+        await FetchProductBlueprintReviewManagementRows({});
+
+      setAllRows(rows);
     } catch {
-      SetAllRows([]);
+      setAllRows([]);
     } finally {
-      SetIsResetting(false);
+      setIsResetting(false);
     }
   }, []);
 
   useEffect(() => {
-    void Load();
-  }, [Load]);
+    void load();
+  }, [load]);
 
-  const FilteredSortedRows: UiRow[] = useMemo(
+  const rows = useMemo(
     () =>
-      FilterAndSortProductBlueprintReviewRows({
-        AllRows,
-        BrandFilter,
-        AssigneeFilter,
-        SortedKey,
-        SortedDir,
+      FilterProductBlueprintReviewRows({
+        AllRows: allRows,
+        BrandFilter: brandFilter,
+        AssigneeFilter: assigneeFilter,
       }),
-    [AllRows, BrandFilter, AssigneeFilter, SortedKey, SortedDir],
+    [
+      allRows,
+      brandFilter,
+      assigneeFilter,
+    ],
   );
 
-  const Rows: UiRow[] = useMemo(() => {
-    return FilteredSortedRows.map((R: any) => ({
-      ...R,
-      CreatedAt: FormatDateTimeYYYYMMDDHHmm(R.CreatedAt),
-      UpdatedAt: FormatDateTimeYYYYMMDDHHmm(R.UpdatedAt),
-    }));
-  }, [FilteredSortedRows]);
-
-  const HandleBrandFilterChange = useCallback((Values: string[]) => {
-    SetBrandFilter(Values);
-  }, []);
-
-  const HandleAssigneeFilterChange = useCallback((Values: string[]) => {
-    SetAssigneeFilter(Values);
-  }, []);
-
-  const HandleSortChange = useCallback(
-    (Key: string | null, Dir: "Asc" | "Desc" | null) => {
-      SetSortedKey((Key as ProductBlueprintReviewSortKey) ?? null);
-      SetSortedDir(Dir as SortDirection);
+  const handleBrandFilterChange = useCallback(
+    (values: string[]) => {
+      setBrandFilter(values);
     },
     [],
   );
 
-  const HandleRowClick = useCallback(
-    (Row: UiRow) => {
-      // ✅ B案のURLに統一: /productBlueprintReview/<id>
-      const ProductBlueprintID = String((Row as any).ProductBlueprintID || (Row as any).ID || "");
-      const ProductName = String((Row as any).ProductName || "");
-      const AssigneeName = String((Row as any).AssigneeName || "");
-
-      Navigate(`/productBlueprintReview/${encodeURIComponent(ProductBlueprintID)}`, {
-        state: {
-          ProductBlueprintID,
-          ProductName,
-          AssigneeName,
-        },
-      });
+  const handleAssigneeFilterChange = useCallback(
+    (values: string[]) => {
+      setAssigneeFilter(values);
     },
-    [Navigate],
+    [],
   );
 
-  const HandleReset = useCallback(() => {
-    SetBrandFilter([]);
-    SetAssigneeFilter([]);
-    SetSortedKey(null);
-    SetSortedDir(null);
-    void Load();
-  }, [Load]);
+  const handleRowClick = useCallback(
+    (row: UiRow) => {
+      const productBlueprintID = String(
+        row.ProductBlueprintID || row.ID || "",
+      );
+
+      if (!productBlueprintID) {
+        return;
+      }
+
+      navigate(
+        `/productBlueprintReview/${encodeURIComponent(
+          productBlueprintID,
+        )}`,
+        {
+          state: {
+            ProductName: String(
+              row.ProductName || "",
+            ),
+            AssigneeName: String(
+              row.AssigneeName || "",
+            ),
+          },
+        },
+      );
+    },
+    [navigate],
+  );
+
+  const handleReset = useCallback(() => {
+    setBrandFilter([]);
+    setAssigneeFilter([]);
+    void load();
+  }, [load]);
 
   return {
-    Rows,
-    BrandFilter,
-    AssigneeFilter,
-    HandleBrandFilterChange,
-    HandleAssigneeFilterChange,
-    HandleSortChange,
-    HandleRowClick,
-    HandleReset,
-    IsResetting,
+    Rows: rows,
+
+    BrandFilter: brandFilter,
+    AssigneeFilter: assigneeFilter,
+
+    HandleBrandFilterChange:
+      handleBrandFilterChange,
+
+    HandleAssigneeFilterChange:
+      handleAssigneeFilterChange,
+
+    HandleRowClick: handleRowClick,
+    HandleReset: handleReset,
+
+    IsResetting: isResetting,
   };
 }

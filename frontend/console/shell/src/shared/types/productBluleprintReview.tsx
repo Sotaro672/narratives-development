@@ -1,4 +1,4 @@
-// frontend/console/productBlueprintReview/src/domain/entity.tsx
+// frontend\console\shell\src\shared\types\productBluleprintReview.tsx
 
 // ==============================
 // Backend-aligned domain entities (PascalCase only)

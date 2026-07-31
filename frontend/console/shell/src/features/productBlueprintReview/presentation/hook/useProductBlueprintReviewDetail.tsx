@@ -1,24 +1,27 @@
-// frontend/console/productBlueprintReview/src/presentation/hook/useProductBlueprintReviewDetail.tsx
+// frontend/console/shell/src/features/productBlueprintReview/presentation/hook/useProductBlueprintReviewDetail.tsx
 
 import * as React from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import {
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 
 import {
   FetchProductBlueprintReviewDetailRows,
   type ProductBlueprintReviewDetailRow,
 } from "../../application/productBlueprintReviewDetailService";
 
-import type { ReviewStatus } from "../../domain/entity";
+import type { ReviewStatus } from "../../../../shared/types/productBluleprintReview";
+
+const PER_PAGE = 20;
 
 export type UseProductBlueprintReviewDetailResult = {
   ProductBlueprintID: string;
 
   Status: ReviewStatus;
   Page: number;
-  PerPage: number;
 
   Items: ProductBlueprintReviewDetailRow[];
-  TotalCount: number;
   TotalPages: number;
 
   IsLoading: boolean;
@@ -29,31 +32,38 @@ export type UseProductBlueprintReviewDetailResult = {
 
   SetStatus: (Next: ReviewStatus) => void;
   SetPage: (Next: number) => void;
-  SetPerPage: (Next: number) => void;
 };
 
 export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDetailResult {
   const Params = useParams();
   const Navigate = useNavigate();
 
-  // routes.tsx: { path: ":productBlueprintReviewId", element: <ProductBlueprintReviewDetail /> }
-  const ProductBlueprintID = String(Params.productBlueprintReviewId ?? "");
+  const ProductBlueprintID = String(
+    Params.productBlueprintReviewId ?? "",
+  );
 
-  const [Status, SetStatusState] = React.useState<ReviewStatus>("PUBLISHED");
-  const [Page, SetPageState] = React.useState<number>(1);
-  const [PerPage, SetPerPageState] = React.useState<number>(20);
+  const [Status, SetStatusState] =
+    React.useState<ReviewStatus>("PUBLISHED");
 
-  const [Items, SetItems] = React.useState<ProductBlueprintReviewDetailRow[]>([]);
-  const [TotalCount, SetTotalCount] = React.useState<number>(0);
-  const [TotalPages, SetTotalPages] = React.useState<number>(0);
+  const [Page, SetPageState] =
+    React.useState<number>(1);
 
-  const [IsLoading, SetIsLoading] = React.useState<boolean>(false);
-  const [ErrorMessage, SetErrorMessage] = React.useState<string>("");
+  const [Items, SetItems] = React.useState<
+    ProductBlueprintReviewDetailRow[]
+  >([]);
+
+  const [TotalPages, SetTotalPages] =
+    React.useState<number>(0);
+
+  const [IsLoading, SetIsLoading] =
+    React.useState<boolean>(false);
+
+  const [ErrorMessage, SetErrorMessage] =
+    React.useState<string>("");
 
   const Load = React.useCallback(async () => {
     if (!ProductBlueprintID) {
       SetItems([]);
-      SetTotalCount(0);
       SetTotalPages(0);
       return;
     }
@@ -62,25 +72,34 @@ export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDeta
     SetErrorMessage("");
 
     try {
-      const Res = await FetchProductBlueprintReviewDetailRows({
-        ProductBlueprintID,
-        Status,
-        Page,
-        PerPage,
-      });
+      const Response =
+        await FetchProductBlueprintReviewDetailRows({
+          ProductBlueprintID,
+          Status,
+          Page,
+          PerPage: PER_PAGE,
+        });
 
-      SetItems(Res.Items ?? []);
-      SetTotalCount(Res.TotalCount ?? 0);
-      SetTotalPages(Res.TotalPages ?? 0);
-    } catch (E: any) {
-      SetItems([]);
-      SetTotalCount(0);
-      SetTotalPages(0);
-      SetErrorMessage(String(E?.message ?? E ?? "UnknownError"));
-    } finally {
+      SetItems(Response.Items ?? []);
+      SetTotalPages(Response.TotalPages ?? 0);
+      } catch (error: unknown) {
+        SetItems([]);
+        SetTotalPages(0);
+
+        const Message =
+          error instanceof Error
+            ? error.message
+            : String(error ?? "UnknownError");
+
+        SetErrorMessage(Message);
+      } finally {
       SetIsLoading(false);
     }
-  }, [ProductBlueprintID, Status, Page, PerPage]);
+  }, [
+    ProductBlueprintID,
+    Status,
+    Page,
+  ]);
 
   React.useEffect(() => {
     void Load();
@@ -94,32 +113,35 @@ export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDeta
     void Load();
   }, [Load]);
 
-  const SetStatus = React.useCallback((Next: ReviewStatus) => {
-    SetStatusState(Next);
-    SetPageState(1);
-  }, []);
+  const SetStatus = React.useCallback(
+    (Next: ReviewStatus) => {
+      SetStatusState(Next);
+      SetPageState(1);
+    },
+    [],
+  );
 
-  const SetPage = React.useCallback((Next: number) => {
-    const N = Number(Next);
-    SetPageState(Number.isFinite(N) && N > 0 ? N : 1);
-  }, []);
+  const SetPage = React.useCallback(
+    (Next: number) => {
+      const NormalizedPage = Number(Next);
 
-  const SetPerPage = React.useCallback((Next: number) => {
-    const N = Number(Next);
-    const V = Number.isFinite(N) && N > 0 ? N : 20;
-    SetPerPageState(V);
-    SetPageState(1);
-  }, []);
+      SetPageState(
+        Number.isFinite(NormalizedPage) &&
+          NormalizedPage > 0
+          ? NormalizedPage
+          : 1,
+      );
+    },
+    [],
+  );
 
   return {
     ProductBlueprintID,
 
     Status,
     Page,
-    PerPage,
 
     Items,
-    TotalCount,
     TotalPages,
 
     IsLoading,
@@ -130,6 +152,5 @@ export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDeta
 
     SetStatus,
     SetPage,
-    SetPerPage,
   };
 }

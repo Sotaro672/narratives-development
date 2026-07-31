@@ -1,5 +1,6 @@
-//frontend\console\shell\src\shared\format\review.ts
-import type { ReviewStatus } from "../../../../productBlueprintReview/src/domain/entity";
+// frontend/console/shell/src/shared/format/review.ts
+
+import type { ReviewStatus } from "../types/productBluleprintReview";
 
 export const ReviewStatusLabelJa: Record<ReviewStatus, string> = {
   PUBLISHED: "公開",
@@ -7,11 +8,34 @@ export const ReviewStatusLabelJa: Record<ReviewStatus, string> = {
   REMOVED: "削除",
 };
 
-export function statusLabelJa(s: ReviewStatus | string | null | undefined): string {
-  return (ReviewStatusLabelJa as any)[s ?? ""] ?? String(s ?? "-");
+export function statusLabelJa(
+  status: ReviewStatus | string | null | undefined,
+): string {
+  return (
+    ReviewStatusLabelJa[status as ReviewStatus] ??
+    String(status ?? "-")
+  );
 }
 
-export function ratingToStars(rating: number, max = 5): string {
-  const r = Math.max(0, Math.min(max, Math.round(Number(rating || 0))));
-  return "★".repeat(r) + "☆".repeat(max - r);
+export function ratingToStars(
+  rating: number,
+  max = 5,
+): string {
+  const normalizedMax = Math.max(
+    0,
+    Math.floor(Number(max) || 0),
+  );
+
+  const normalizedRating = Math.max(
+    0,
+    Math.min(
+      normalizedMax,
+      Math.round(Number(rating) || 0),
+    ),
+  );
+
+  return (
+    "★".repeat(normalizedRating) +
+    "☆".repeat(normalizedMax - normalizedRating)
+  );
 }
