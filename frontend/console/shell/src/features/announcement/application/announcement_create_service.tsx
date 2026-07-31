@@ -1,5 +1,5 @@
 // frontend/console/sales/application/announcement_create_service.tsx
-import type { TokenBlueprint } from "../../tokenBlueprint/domain/tokenBlueprint";
+import type { TokenBlueprint } from "../../../shared/types/tokenBlueprint";
 import { fetchTokenBlueprintDetail } from "../../tokenBlueprint/application/tokenBlueprintDetailService";
 import { safeDateTimeLabelJa } from "../../../shared/util/dateJa";
 import {

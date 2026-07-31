@@ -13,8 +13,8 @@ import {
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import LogCard from "../features/log/presentation/LogCard";
-import InputCard from "../features/sales/presentation/components/inputCard";
-import type { SubmitPayload } from "../features/sales/presentation/components/inputCard";
+import InputCard from "../features/announcement/presentation/components/inputCard";
+import type { SubmitPayload } from "../features/announcement/presentation/components/inputCard";
 
 import {
   getAnnouncement,
@@ -22,7 +22,7 @@ import {
   updateAnnouncement,
   type Announcement,
   type AnnouncementAttachmentInput,
-} from "../features/sales/infrastructure/announcement_repository_http";
+} from "../features/announcement/infrastructure/announcement_repository_http";
 
 const emptyInputPayload: SubmitPayload = {
   title: "",
