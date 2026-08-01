@@ -1,6 +1,11 @@
 // frontend/amol/src/features/token-commnet/api/tokenTransferApi.ts
+
 import { getAuth } from "firebase/auth";
 
+import {
+  isFiniteNumber,
+  isRecord,
+} from "../../shared/utils/typeGuards";
 import type {
   FetchTokenTransferFollowStateParams,
   TokenTransferFollowState,
@@ -8,10 +13,6 @@ import type {
   TransferTokenToAvatarParams,
   TransferTokenToAvatarResponse,
 } from "../types/tokenTransferTypes";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function unwrapData(value: unknown): unknown {
   if (!isRecord(value)) {
@@ -22,11 +23,11 @@ function unwrapData(value: unknown): unknown {
 }
 
 function toStringValue(value: unknown): string {
-  return (value ?? "").toString().trim();
+  return String(value ?? "").trim();
 }
 
 function toNumberValue(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
+  if (isFiniteNumber(value)) {
     return value;
   }
 
@@ -55,8 +56,11 @@ function normalizeBackendUrl(backendUrl: string): string {
   return backendUrl.trim().replace(/\/+$/, "");
 }
 
-async function readJsonOrNull(response: Response): Promise<unknown> {
-  const contentType = response.headers.get("content-type") || "";
+async function readJsonOrNull(
+  response: Response,
+): Promise<unknown> {
+  const contentType =
+    response.headers.get("content-type") || "";
 
   if (!contentType.includes("application/json")) {
     return null;
@@ -65,15 +69,21 @@ async function readJsonOrNull(response: Response): Promise<unknown> {
   return response.json();
 }
 
-function extractErrorMessage(responseBody: unknown): string {
+function extractErrorMessage(
+  responseBody: unknown,
+): string {
   if (!isRecord(responseBody)) {
     return "";
   }
 
-  return toStringValue(responseBody.error || responseBody.message);
+  return toStringValue(
+    responseBody.error || responseBody.message,
+  );
 }
 
-function parseTargetAvatar(value: unknown): TokenTransferTargetAvatar | null {
+function parseTargetAvatar(
+  value: unknown,
+): TokenTransferTargetAvatar | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -92,53 +102,86 @@ function parseTargetAvatar(value: unknown): TokenTransferTargetAvatar | null {
   };
 }
 
-function parseTargetAvatars(value: unknown): TokenTransferTargetAvatar[] {
+function parseTargetAvatars(
+  value: unknown,
+): TokenTransferTargetAvatar[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
   return value
-    .map((item) => parseTargetAvatar(item))
-    .filter((item): item is TokenTransferTargetAvatar => item !== null);
+    .map(parseTargetAvatar)
+    .filter(
+      (
+        item,
+      ): item is TokenTransferTargetAvatar =>
+        item !== null,
+    );
 }
 
 function parseFollowState(
   value: unknown,
-  fallbackAvatarId: string
+  fallbackAvatarId: string,
 ): TokenTransferFollowState {
   const body = unwrapData(value);
 
   if (!isRecord(body)) {
-    throw new Error("フォロー情報APIのレスポンス形式が不正です。");
+    throw new Error(
+      "フォロー情報APIのレスポンス形式が不正です。",
+    );
   }
 
   return {
-    avatarId: toStringValue(body.avatarId) || fallbackAvatarId,
-    followerCount: toNumberValue(body.followerCount),
-    followingCount: toNumberValue(body.followingCount),
-    followers: parseTargetAvatars(body.followers),
-    following: parseTargetAvatars(body.following),
+    avatarId:
+      toStringValue(body.avatarId) ||
+      fallbackAvatarId,
+    followerCount: toNumberValue(
+      body.followerCount,
+    ),
+    followingCount: toNumberValue(
+      body.followingCount,
+    ),
+    followers: parseTargetAvatars(
+      body.followers,
+    ),
+    following: parseTargetAvatars(
+      body.following,
+    ),
     updatedAt: toStringValue(body.updatedAt),
   };
 }
 
-function parseTransferResponse(value: unknown): TransferTokenToAvatarResponse {
+function parseTransferResponse(
+  value: unknown,
+): TransferTokenToAvatarResponse {
   const body = unwrapData(value);
 
   if (!isRecord(body)) {
-    throw new Error("トークン移譲APIのレスポンス形式が不正です。");
+    throw new Error(
+      "トークン移譲APIのレスポンス形式が不正です。",
+    );
   }
 
   return {
     avatarId: toStringValue(body.avatarId),
-    targetAvatarId: toStringValue(body.targetAvatarId),
+    targetAvatarId: toStringValue(
+      body.targetAvatarId,
+    ),
     productId: toStringValue(body.productId),
-    txSignature: toStringValue(body.txSignature),
+    txSignature: toStringValue(
+      body.txSignature,
+    ),
     fromWallet: toStringValue(body.fromWallet),
     toWallet: toStringValue(body.toWallet),
-    updatedToAddress: toBooleanValue(body.updatedToAddress),
-    mintAddress: toStringValue(body.mintAddress),
-    tokenBlueprintId: toStringValue(body.tokenBlueprintId),
+    updatedToAddress: toBooleanValue(
+      body.updatedToAddress,
+    ),
+    mintAddress: toStringValue(
+      body.mintAddress,
+    ),
+    tokenBlueprintId: toStringValue(
+      body.tokenBlueprintId,
+    ),
   };
 }
 
@@ -158,7 +201,8 @@ export async function fetchTokenTransferFollowState({
   idToken,
   avatarId,
 }: FetchTokenTransferFollowStateParams): Promise<TokenTransferFollowState> {
-  const normalizedBackendUrl = normalizeBackendUrl(backendUrl);
+  const normalizedBackendUrl =
+    normalizeBackendUrl(backendUrl);
   const normalizedAvatarId = avatarId.trim();
 
   if (!normalizedBackendUrl) {
@@ -169,7 +213,8 @@ export async function fetchTokenTransferFollowState({
     throw new Error("avatarId が空です。");
   }
 
-  const encodedAvatarId = encodeURIComponent(normalizedAvatarId);
+  const encodedAvatarId =
+    encodeURIComponent(normalizedAvatarId);
 
   const response = await fetch(
     `${normalizedBackendUrl}/mall/avatars/${encodedAvatarId}/state`,
@@ -179,22 +224,29 @@ export async function fetchTokenTransferFollowState({
         Accept: "application/json",
         Authorization: `Bearer ${idToken}`,
       },
-    }
+    },
   );
 
-  const responseBody = await readJsonOrNull(response);
+  const responseBody =
+    await readJsonOrNull(response);
 
   if (!response.ok) {
-    const message = extractErrorMessage(responseBody);
+    const message =
+      extractErrorMessage(responseBody);
 
     if (message) {
       throw new Error(message);
     }
 
-    throw new Error("フォロー情報の取得に失敗しました。");
+    throw new Error(
+      "フォロー情報の取得に失敗しました。",
+    );
   }
 
-  return parseFollowState(responseBody, normalizedAvatarId);
+  return parseFollowState(
+    responseBody,
+    normalizedAvatarId,
+  );
 }
 
 export async function transferTokenToAvatar({
@@ -203,9 +255,11 @@ export async function transferTokenToAvatar({
   productId,
   targetAvatarId,
 }: TransferTokenToAvatarParams): Promise<TransferTokenToAvatarResponse> {
-  const normalizedBackendUrl = normalizeBackendUrl(backendUrl);
+  const normalizedBackendUrl =
+    normalizeBackendUrl(backendUrl);
   const normalizedProductId = productId.trim();
-  const normalizedTargetAvatarId = targetAvatarId.trim();
+  const normalizedTargetAvatarId =
+    targetAvatarId.trim();
 
   if (!normalizedBackendUrl) {
     throw new Error("backendUrl が空です。");
@@ -216,26 +270,34 @@ export async function transferTokenToAvatar({
   }
 
   if (!normalizedTargetAvatarId) {
-    throw new Error("渡す相手を選択してください。");
+    throw new Error(
+      "渡す相手を選択してください。",
+    );
   }
 
-  const response = await fetch(`${normalizedBackendUrl}/mall/me/contents/share`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${idToken}`,
+  const response = await fetch(
+    `${normalizedBackendUrl}/mall/me/contents/share`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({
+        productId: normalizedProductId,
+        targetAvatarId:
+          normalizedTargetAvatarId,
+      }),
     },
-    body: JSON.stringify({
-      productId: normalizedProductId,
-      targetAvatarId: normalizedTargetAvatarId,
-    }),
-  });
+  );
 
-  const responseBody = await readJsonOrNull(response);
+  const responseBody =
+    await readJsonOrNull(response);
 
   if (!response.ok) {
-    const message = extractErrorMessage(responseBody);
+    const message =
+      extractErrorMessage(responseBody);
 
     if (message) {
       throw new Error(message);
@@ -246,14 +308,20 @@ export async function transferTokenToAvatar({
     }
 
     if (response.status === 503) {
-      throw new Error("アバター情報を取得できませんでした。");
+      throw new Error(
+        "アバター情報を取得できませんでした。",
+      );
     }
 
     if (response.status === 404) {
-      throw new Error("トークンまたはアバターが見つかりませんでした。");
+      throw new Error(
+        "トークンまたはアバターが見つかりませんでした。",
+      );
     }
 
-    throw new Error("トークンの移譲に失敗しました。");
+    throw new Error(
+      "トークンの移譲に失敗しました。",
+    );
   }
 
   return parseTransferResponse(responseBody);

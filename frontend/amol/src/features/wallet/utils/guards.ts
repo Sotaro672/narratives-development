@@ -1,16 +1,18 @@
 // frontend/amol/src/features/wallet/utils/guards.ts
+
+import { isRecord } from "../../shared/utils/typeGuards";
 import type {
   AvatarResponse,
   AvatarStateResponse,
   PublicAvatarAggregateResponse,
 } from "../types";
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-export function isAvatarResponse(value: unknown): value is AvatarResponse {
-  if (!isRecord(value)) return false;
+export function isAvatarResponse(
+  value: unknown,
+): value is AvatarResponse {
+  if (!isRecord(value)) {
+    return false;
+  }
 
   const avatar = value as Partial<AvatarResponse>;
 
@@ -33,9 +35,11 @@ export function isAvatarResponse(value: unknown): value is AvatarResponse {
 }
 
 export function isAvatarStateResponse(
-  value: unknown
+  value: unknown,
 ): value is AvatarStateResponse {
-  if (!isRecord(value)) return false;
+  if (!isRecord(value)) {
+    return false;
+  }
 
   const state = value as Partial<AvatarStateResponse>;
 
@@ -55,11 +59,14 @@ export function isAvatarStateResponse(
 }
 
 export function isPublicAvatarAggregateResponse(
-  value: unknown
+  value: unknown,
 ): value is PublicAvatarAggregateResponse {
-  if (!isRecord(value)) return false;
+  if (!isRecord(value)) {
+    return false;
+  }
 
-  const aggregate = value as Partial<PublicAvatarAggregateResponse>;
+  const aggregate =
+    value as Partial<PublicAvatarAggregateResponse>;
 
   return (
     (isAvatarResponse(aggregate.avatar) ||

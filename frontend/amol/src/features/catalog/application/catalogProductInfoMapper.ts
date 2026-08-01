@@ -1,48 +1,66 @@
 // frontend/amol/src/features/catalog/application/catalogProductInfoMapper.ts
 
+import {
+  isFiniteNumber,
+  isRecord,
+} from "../../shared/utils/typeGuards";
 import type { CatalogProductBlueprint } from "../../shared/types/catalog";
 
-export type ProductCategoryKind = "apparel" | "alcohol" | "unknown";
+export type ProductCategoryKind =
+  | "apparel"
+  | "alcohol"
+  | "unknown";
 
-export type CatalogProductBlueprintDisplayFields = CatalogProductBlueprint & {
-  category?: string | null;
-  categoryCode?: string | null;
-  classification?: string | null;
-  region?: string | null;
-  vintage?: string | number | null;
-  alcoholContent?: string | number | null;
-};
+export type CatalogProductBlueprintDisplayFields =
+  CatalogProductBlueprint & {
+    category?: string | null;
+    categoryCode?: string | null;
+    classification?: string | null;
+    region?: string | null;
+    vintage?: string | number | null;
+    alcoholContent?: string | number | null;
+  };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object";
+export function isNonEmptyText(
+  value: unknown,
+): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim() !== ""
+  );
 }
 
-export function isNonEmptyText(value: unknown): value is string {
-  return typeof value === "string" && value.trim() !== "";
-}
-
-export function formatNullableText(value: unknown): string {
+export function formatNullableText(
+  value: unknown,
+): string {
   if (typeof value === "string") {
     return value.trim();
   }
 
-  if (typeof value === "number" && Number.isFinite(value)) {
+  if (isFiniteNumber(value)) {
     return String(value);
   }
 
   return "";
 }
 
-export function formatWeight(value: unknown): string {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+export function formatWeight(
+  value: unknown,
+): string {
+  if (
+    !isFiniteNumber(value) ||
+    value <= 0
+  ) {
     return "";
   }
 
   return `${value}g`;
 }
 
-export function formatAlcoholContent(value: unknown): string {
-  if (typeof value === "number" && Number.isFinite(value)) {
+export function formatAlcoholContent(
+  value: unknown,
+): string {
+  if (isFiniteNumber(value)) {
     return `${value}%`;
   }
 
@@ -53,7 +71,9 @@ export function formatAlcoholContent(value: unknown): string {
       return "";
     }
 
-    return text.includes("%") ? text : `${text}%`;
+    return text.includes("%")
+      ? text
+      : `${text}%`;
   }
 
   return "";
@@ -63,9 +83,15 @@ export function resolveCategoryLabel(
   productBlueprint: CatalogProductBlueprintDisplayFields,
 ): string {
   return (
-    formatNullableText(productBlueprint.category) ||
-    formatNullableText(productBlueprint.categoryCode) ||
-    formatNullableText(productBlueprint.classification)
+    formatNullableText(
+      productBlueprint.category,
+    ) ||
+    formatNullableText(
+      productBlueprint.categoryCode,
+    ) ||
+    formatNullableText(
+      productBlueprint.classification,
+    )
   );
 }
 
@@ -84,27 +110,33 @@ export function resolveQualityAssuranceItems(
           const title = item.title;
           const value = item.value;
 
-          if (typeof label === "string" && label.trim() !== "") {
+          if (isNonEmptyText(label)) {
             return label.trim();
           }
 
-          if (typeof title === "string" && title.trim() !== "") {
+          if (isNonEmptyText(title)) {
             return title.trim();
           }
 
-          if (typeof value === "string" && value.trim() !== "") {
+          if (isNonEmptyText(value)) {
             return value.trim();
           }
         }
 
         return "";
       })
-      .filter((item): item is string => item !== "");
+      .filter(
+        (item): item is string =>
+          item !== "",
+      );
   }
 
   if (typeof qualityAssurance === "string") {
     const text = qualityAssurance.trim();
-    return text ? [text] : [];
+
+    return text
+      ? [text]
+      : [];
   }
 
   return [];

@@ -3,6 +3,10 @@
 import { getFirebaseIdToken } from "../../../lib/authToken";
 import { fetchCurrentAvatarId } from "../../catalog/infrastructure/avatarStateRepository";
 import { readResponseErrorMessage } from "../../catalog/infrastructure/httpErrorReader";
+import {
+  isFiniteNumber,
+  isRecord,
+} from "../../shared/utils/typeGuards";
 
 import type {
   CartCatalogSnapshot,
@@ -10,6 +14,40 @@ import type {
   CartDisplayItem,
   CartItemDTO,
 } from "../../shared/types/cart";
+
+function normalizeApiBaseUrl(
+  apiBaseUrl: string,
+): string {
+  return apiBaseUrl.replace(/\/+$/, "");
+}
+
+function normalizeCartDTO(
+  data: Partial<CartDTO>,
+  fallbackAvatarId: string,
+): CartDTO {
+  return {
+    avatarId:
+      typeof data.avatarId === "string" &&
+      data.avatarId.trim() !== ""
+        ? data.avatarId
+        : fallbackAvatarId,
+
+    items:
+      isRecord(data.items) &&
+      !Array.isArray(data.items)
+        ? data.items
+        : {},
+
+    createdAt:
+      data.createdAt ?? null,
+
+    updatedAt:
+      data.updatedAt ?? null,
+
+    expiresAt:
+      data.expiresAt ?? null,
+  };
+}
 
 async function fetchCartFromPath(args: {
   apiBaseUrl: string;
@@ -23,7 +61,7 @@ async function fetchCartFromPath(args: {
   } = args;
 
   const base =
-    apiBaseUrl.replace(/\/+$/, "");
+    normalizeApiBaseUrl(apiBaseUrl);
 
   return fetch(`${base}${path}`, {
     method: "GET",
@@ -92,29 +130,10 @@ export async function fetchCart(
   const data =
     (await response.json()) as Partial<CartDTO>;
 
-  return {
-    avatarId:
-      typeof data.avatarId === "string" &&
-      data.avatarId.trim() !== ""
-        ? data.avatarId
-        : normalizedAvatarId,
-
-    items:
-      data.items &&
-      !Array.isArray(data.items) &&
-      typeof data.items === "object"
-        ? data.items
-        : {},
-
-    createdAt:
-      data.createdAt ?? null,
-
-    updatedAt:
-      data.updatedAt ?? null,
-
-    expiresAt:
-      data.expiresAt ?? null,
-  };
+  return normalizeCartDTO(
+    data,
+    normalizedAvatarId,
+  );
 }
 
 export async function removeCartItem(args: {
@@ -138,7 +157,7 @@ export async function removeCartItem(args: {
       : "/mall/me/cart/items";
 
   const base =
-    apiBaseUrl.replace(/\/+$/, "");
+    normalizeApiBaseUrl(apiBaseUrl);
 
   const body =
     isResale
@@ -215,29 +234,10 @@ export async function removeCartItem(args: {
   const data =
     (await response.json()) as Partial<CartDTO>;
 
-  return {
-    avatarId:
-      typeof data.avatarId === "string" &&
-      data.avatarId.trim() !== ""
-        ? data.avatarId
-        : item.avatarId,
-
-    items:
-      data.items &&
-      !Array.isArray(data.items) &&
-      typeof data.items === "object"
-        ? data.items
-        : {},
-
-    createdAt:
-      data.createdAt ?? null,
-
-    updatedAt:
-      data.updatedAt ?? null,
-
-    expiresAt:
-      data.expiresAt ?? null,
-  };
+  return normalizeCartDTO(
+    data,
+    item.avatarId,
+  );
 }
 
 export async function fetchCatalog(
@@ -248,7 +248,7 @@ export async function fetchCatalog(
     await getFirebaseIdToken();
 
   const base =
-    apiBaseUrl.replace(/\/+$/, "");
+    normalizeApiBaseUrl(apiBaseUrl);
 
   const response =
     await fetch(
@@ -365,9 +365,8 @@ function cartDTOToDisplayItems(
     cart.items;
 
   if (
-    !rawItems ||
-    Array.isArray(rawItems) ||
-    typeof rawItems !== "object"
+    !isRecord(rawItems) ||
+    Array.isArray(rawItems)
   ) {
     return [];
   }
@@ -598,8 +597,7 @@ function normalizeQty(
   value: unknown,
 ): number {
   if (
-    typeof value !== "number" ||
-    !Number.isFinite(value) ||
+    !isFiniteNumber(value) ||
     value <= 0
   ) {
     return 1;
@@ -614,8 +612,7 @@ function normalizePrice(
   value: unknown,
 ): number {
   if (
-    typeof value !== "number" ||
-    !Number.isFinite(value) ||
+    !isFiniteNumber(value) ||
     value < 0
   ) {
     return 0;

@@ -1,4 +1,9 @@
 // frontend/amol/src/features/scan-result/application/scanProductInfoFactory.ts
+
+import {
+  isFiniteNumber,
+  isRecord,
+} from "../../shared/utils/typeGuards";
 import type { PreviewState } from "../../shared/types/scanResult";
 import {
   createScanAlcoholInfo,
@@ -24,26 +29,35 @@ export type ScanProductInfoViewModel = {
   alcoholInfo: ScanAlcoholInfo | null;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
 function getString(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+  return typeof value === "string"
+    ? value.trim()
+    : "";
 }
 
-function getNumberOrNull(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+function getNumberOrNull(
+  value: unknown,
+): number | null {
+  return isFiniteNumber(value)
+    ? value
+    : null;
 }
 
-function getMeasurements(value: unknown): Record<string, number> {
-  if (!isRecord(value)) {
+function getMeasurements(
+  value: unknown,
+): Record<string, number> {
+  if (
+    !isRecord(value) ||
+    Array.isArray(value)
+  ) {
     return {};
   }
 
-  return Object.entries(value).reduce<Record<string, number>>(
+  return Object.entries(value).reduce<
+    Record<string, number>
+  >(
     (acc, [key, rawValue]) => {
-      if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
+      if (isFiniteNumber(rawValue)) {
         acc[key] = rawValue;
       }
 
@@ -53,11 +67,19 @@ function getMeasurements(value: unknown): Record<string, number> {
   );
 }
 
-function getProductName(raw: Record<string, unknown>): string {
+function getProductName(
+  raw: Record<string, unknown>,
+): string {
   const patch = raw.productBlueprintPatch;
 
-  if (isRecord(patch)) {
-    const productName = getString(patch.productName);
+  if (
+    isRecord(patch) &&
+    !Array.isArray(patch)
+  ) {
+    const productName = getString(
+      patch.productName,
+    );
+
     if (productName) {
       return productName;
     }
@@ -71,37 +93,63 @@ export function createScanProductInfoViewModel(
 ): ScanProductInfoViewModel | null {
   const raw = previewState?.raw;
 
-  if (!raw || !isRecord(raw)) {
+  if (
+    !isRecord(raw) ||
+    Array.isArray(raw)
+  ) {
     return null;
   }
 
-  const patch = isRecord(raw.productBlueprintPatch)
-    ? raw.productBlueprintPatch
-    : {};
+  const rawPatch =
+    raw.productBlueprintPatch;
 
-  const categoryFields = patch.categoryFields;
+  const patch =
+    isRecord(rawPatch) &&
+    !Array.isArray(rawPatch)
+      ? rawPatch
+      : {};
 
-  const alcoholInfo = createScanAlcoholInfo({
-    categoryFields,
-    volumeValue: raw.volumeValue,
-    volumeUnit: raw.volumeUnit,
-  });
+  const categoryFields =
+    patch.categoryFields;
+
+  const alcoholInfo =
+    createScanAlcoholInfo({
+      categoryFields,
+      volumeValue: raw.volumeValue,
+      volumeUnit: raw.volumeUnit,
+    });
 
   return {
-    productId: getString(raw.productId),
-    productBlueprintId: getString(raw.productBlueprintId),
+    productId: getString(
+      raw.productId,
+    ),
+    productBlueprintId: getString(
+      raw.productBlueprintId,
+    ),
     productName: getProductName(raw),
-    brandName: getString(raw.brandName),
-    companyName: getString(raw.companyName),
+    brandName: getString(
+      raw.brandName,
+    ),
+    companyName: getString(
+      raw.companyName,
+    ),
 
-    modelKind: getString(raw.modelKind),
-    modelNumber: getString(raw.modelNumber),
-    modelLabel: getString(raw.modelLabel),
+    modelKind: getString(
+      raw.modelKind,
+    ),
+    modelNumber: getString(
+      raw.modelNumber,
+    ),
+    modelLabel: getString(
+      raw.modelLabel,
+    ),
 
     size: getString(raw.size),
     color: getString(raw.color),
     rgb: getNumberOrNull(raw.rgb),
-    measurements: getMeasurements(raw.measurements),
+    measurements: getMeasurements(
+      raw.measurements,
+    ),
 
     alcoholInfo,
   };

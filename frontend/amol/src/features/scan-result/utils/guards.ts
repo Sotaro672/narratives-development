@@ -1,11 +1,13 @@
 // frontend/amol/src/features/scan-result/utils/guards.ts
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
+
+import {
+  isFiniteNumber,
+  isRecord,
+} from "../../shared/utils/typeGuards";
 
 export function getRecord(
   value: unknown,
-  key: string
+  key: string,
 ): Record<string, unknown> | null {
   if (!isRecord(value)) {
     return null;
@@ -16,27 +18,40 @@ export function getRecord(
   return isRecord(raw) ? raw : null;
 }
 
-export function getString(value: unknown, key: string): string {
+export function getString(
+  value: unknown,
+  key: string,
+): string {
   if (!isRecord(value)) {
     return "";
   }
 
   const raw = value[key];
 
-  return typeof raw === "string" ? raw : "";
+  return typeof raw === "string"
+    ? raw
+    : "";
 }
 
-export function getNumber(value: unknown, key: string): number | null {
+export function getNumber(
+  value: unknown,
+  key: string,
+): number | null {
   if (!isRecord(value)) {
     return null;
   }
 
   const raw = value[key];
 
-  return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+  return isFiniteNumber(raw)
+    ? raw
+    : null;
 }
 
-export function getStringArray(value: unknown, key: string): string[] {
+export function getStringArray(
+  value: unknown,
+  key: string,
+): string[] {
   if (!isRecord(value)) {
     return [];
   }
@@ -48,7 +63,10 @@ export function getStringArray(value: unknown, key: string): string[] {
   }
 
   return raw
-    .filter((item): item is string => typeof item === "string")
+    .filter(
+      (item): item is string =>
+        typeof item === "string",
+    )
     .map((item) => item.trim())
     .filter(Boolean);
 }

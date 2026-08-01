@@ -1,5 +1,10 @@
 // frontend/amol/src/features/scan-result/application/scanAlcoholInfoFactory.ts
 
+import {
+  isFiniteNumber,
+  isRecord,
+} from "../../shared/utils/typeGuards";
+
 export type ScanCategoryFields = Record<string, unknown>;
 
 export type ScanAlcoholInfo = {
@@ -11,42 +16,55 @@ export type ScanAlcoholInfo = {
   volumeLabel: string;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function getStringValue(fields: ScanCategoryFields, key: string): string {
+function getStringValue(
+  fields: ScanCategoryFields,
+  key: string,
+): string {
   const value = fields[key];
 
   if (typeof value === "string") {
     return value.trim();
   }
 
-  if (typeof value === "number" && Number.isFinite(value)) {
+  if (isFiniteNumber(value)) {
     return String(value);
   }
 
   return "";
 }
 
-function getNumberValue(fields: ScanCategoryFields, key: string): string {
+function getNumberValue(
+  fields: ScanCategoryFields,
+  key: string,
+): string {
   const value = fields[key];
 
-  if (typeof value === "number" && Number.isFinite(value)) {
+  if (isFiniteNumber(value)) {
     return String(value);
   }
 
-  if (typeof value === "string" && value.trim()) {
+  if (
+    typeof value === "string" &&
+    value.trim()
+  ) {
     const parsed = Number(value);
 
-    return Number.isFinite(parsed) ? String(parsed) : "";
+    return isFiniteNumber(parsed)
+      ? String(parsed)
+      : "";
   }
 
   return "";
 }
 
-function getStringFromRecord(value: unknown, key: string): string {
-  if (!isRecord(value)) {
+function getStringFromRecord(
+  value: unknown,
+  key: string,
+): string {
+  if (
+    !isRecord(value) ||
+    Array.isArray(value)
+  ) {
     return "";
   }
 
@@ -59,33 +77,59 @@ function getStringFromRecord(value: unknown, key: string): string {
   return "";
 }
 
-function isAlcoholKind(value: unknown): boolean {
-  return typeof value === "string" && value.trim().toLowerCase() === "alcohol";
+function isAlcoholKind(
+  value: unknown,
+): boolean {
+  return (
+    typeof value === "string" &&
+    value.trim().toLowerCase() === "alcohol"
+  );
 }
 
-function isAlcoholCode(value: unknown): boolean {
+function isAlcoholCode(
+  value: unknown,
+): boolean {
   if (typeof value !== "string") {
     return false;
   }
 
   const code = value.trim().toLowerCase();
 
-  return code === "alcohol" || code.startsWith("alcohol.");
+  return (
+    code === "alcohol" ||
+    code.startsWith("alcohol.")
+  );
 }
 
-export function getScanCategoryFields(value: unknown): ScanCategoryFields {
-  if (!isRecord(value)) {
+export function getScanCategoryFields(
+  value: unknown,
+): ScanCategoryFields {
+  if (
+    !isRecord(value) ||
+    Array.isArray(value)
+  ) {
     return {};
   }
 
   return value;
 }
 
-export function isAlcoholCategoryFields(fields: ScanCategoryFields): boolean {
+export function isAlcoholCategoryFields(
+  fields: ScanCategoryFields,
+): boolean {
   return (
-    Object.prototype.hasOwnProperty.call(fields, "alcoholContent") ||
-    Object.prototype.hasOwnProperty.call(fields, "vintage") ||
-    Object.prototype.hasOwnProperty.call(fields, "region")
+    Object.prototype.hasOwnProperty.call(
+      fields,
+      "alcoholContent",
+    ) ||
+    Object.prototype.hasOwnProperty.call(
+      fields,
+      "vintage",
+    ) ||
+    Object.prototype.hasOwnProperty.call(
+      fields,
+      "region",
+    )
   );
 }
 
@@ -100,35 +144,83 @@ function resolveIsAlcohol(input: {
     return true;
   }
 
-  if (isAlcoholKind(input.productBlueprintCategoryKind)) {
+  if (
+    isAlcoholKind(
+      input.productBlueprintCategoryKind,
+    )
+  ) {
     return true;
   }
 
-  if (isAlcoholKind(getStringFromRecord(input.productBlueprintCategory, "Kind"))) {
+  if (
+    isAlcoholKind(
+      getStringFromRecord(
+        input.productBlueprintCategory,
+        "Kind",
+      ),
+    )
+  ) {
     return true;
   }
 
-  if (isAlcoholKind(getStringFromRecord(input.productBlueprintCategory, "kind"))) {
+  if (
+    isAlcoholKind(
+      getStringFromRecord(
+        input.productBlueprintCategory,
+        "kind",
+      ),
+    )
+  ) {
     return true;
   }
 
-  if (isAlcoholCode(getStringFromRecord(input.productBlueprintCategory, "Code"))) {
+  if (
+    isAlcoholCode(
+      getStringFromRecord(
+        input.productBlueprintCategory,
+        "Code",
+      ),
+    )
+  ) {
     return true;
   }
 
-  if (isAlcoholCode(getStringFromRecord(input.productBlueprintCategory, "code"))) {
+  if (
+    isAlcoholCode(
+      getStringFromRecord(
+        input.productBlueprintCategory,
+        "code",
+      ),
+    )
+  ) {
     return true;
   }
 
-  if (isAlcoholKind(getStringFromRecord(input.categoryInputSchema, "categoryKind"))) {
+  if (
+    isAlcoholKind(
+      getStringFromRecord(
+        input.categoryInputSchema,
+        "categoryKind",
+      ),
+    )
+  ) {
     return true;
   }
 
-  if (isAlcoholCode(getStringFromRecord(input.categoryInputSchema, "categoryCode"))) {
+  if (
+    isAlcoholCode(
+      getStringFromRecord(
+        input.categoryInputSchema,
+        "categoryCode",
+      ),
+    )
+  ) {
     return true;
   }
 
-  return isAlcoholCategoryFields(input.categoryFields);
+  return isAlcoholCategoryFields(
+    input.categoryFields,
+  );
 }
 
 export function buildScanVolumeLabel(input: {
@@ -136,21 +228,39 @@ export function buildScanVolumeLabel(input: {
   volumeUnit?: unknown;
   modelLabel?: unknown;
 }): string {
-  const { volumeValue, volumeUnit, modelLabel } = input;
+  const {
+    volumeValue,
+    volumeUnit,
+    modelLabel,
+  } = input;
 
-  const unit = typeof volumeUnit === "string" ? volumeUnit.trim() : "";
+  const unit =
+    typeof volumeUnit === "string"
+      ? volumeUnit.trim()
+      : "";
 
-  if (typeof volumeValue === "number" && Number.isFinite(volumeValue)) {
-    return unit ? `${volumeValue}${unit}` : String(volumeValue);
+  if (isFiniteNumber(volumeValue)) {
+    return unit
+      ? `${volumeValue}${unit}`
+      : String(volumeValue);
   }
 
-  if (typeof volumeValue === "string" && volumeValue.trim()) {
-    const normalizedVolumeValue = volumeValue.trim();
+  if (
+    typeof volumeValue === "string" &&
+    volumeValue.trim()
+  ) {
+    const normalizedVolumeValue =
+      volumeValue.trim();
 
-    return unit ? `${normalizedVolumeValue}${unit}` : normalizedVolumeValue;
+    return unit
+      ? `${normalizedVolumeValue}${unit}`
+      : normalizedVolumeValue;
   }
 
-  if (typeof modelLabel === "string" && modelLabel.trim()) {
+  if (
+    typeof modelLabel === "string" &&
+    modelLabel.trim()
+  ) {
     return modelLabel.trim();
   }
 
@@ -167,14 +277,19 @@ export function createScanAlcoholInfo(input: {
   productBlueprintCategory?: unknown;
   categoryInputSchema?: unknown;
 }): ScanAlcoholInfo | null {
-  const fields = getScanCategoryFields(input.categoryFields);
+  const fields = getScanCategoryFields(
+    input.categoryFields,
+  );
 
   const isAlcohol = resolveIsAlcohol({
     categoryFields: fields,
     modelKind: input.modelKind,
-    productBlueprintCategoryKind: input.productBlueprintCategoryKind,
-    productBlueprintCategory: input.productBlueprintCategory,
-    categoryInputSchema: input.categoryInputSchema,
+    productBlueprintCategoryKind:
+      input.productBlueprintCategoryKind,
+    productBlueprintCategory:
+      input.productBlueprintCategory,
+    categoryInputSchema:
+      input.categoryInputSchema,
   });
 
   if (!isAlcohol) {
@@ -183,10 +298,22 @@ export function createScanAlcoholInfo(input: {
 
   return {
     isAlcohol: true,
-    vintage: getNumberValue(fields, "vintage"),
-    region: getStringValue(fields, "region"),
-    material: getStringValue(fields, "material"),
-    alcoholContent: getNumberValue(fields, "alcoholContent"),
+    vintage: getNumberValue(
+      fields,
+      "vintage",
+    ),
+    region: getStringValue(
+      fields,
+      "region",
+    ),
+    material: getStringValue(
+      fields,
+      "material",
+    ),
+    alcoholContent: getNumberValue(
+      fields,
+      "alcoholContent",
+    ),
     volumeLabel: buildScanVolumeLabel({
       volumeValue: input.volumeValue,
       volumeUnit: input.volumeUnit,

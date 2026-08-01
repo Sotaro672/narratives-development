@@ -5,13 +5,7 @@ import type {
   CartDisplayItem,
   CartModelSnapshot,
 } from "../../shared/types/cart";
-
-function isValidPrice(value: unknown): value is number {
-  return (
-    typeof value === "number" &&
-    Number.isFinite(value)
-  );
-}
+import { isFiniteNumber } from "../../shared/utils/typeGuards";
 
 function getModelVariations(
   catalog: CartCatalogSnapshot | null | undefined,
@@ -47,7 +41,7 @@ export function getModelPrice(
     modelId,
   );
 
-  if (isValidPrice(model?.price)) {
+  if (isFiniteNumber(model?.price)) {
     return model.price;
   }
 
@@ -55,7 +49,7 @@ export function getModelPrice(
     (price) => price.modelId === modelId,
   );
 
-  if (isValidPrice(listPrice?.price)) {
+  if (isFiniteNumber(listPrice?.price)) {
     return listPrice.price;
   }
 
@@ -65,7 +59,7 @@ export function getModelPrice(
 export function getCartItemPrice(
   item: CartDisplayItem,
 ): number | null {
-  if (isValidPrice(item.price)) {
+  if (isFiniteNumber(item.price)) {
     return item.price;
   }
 

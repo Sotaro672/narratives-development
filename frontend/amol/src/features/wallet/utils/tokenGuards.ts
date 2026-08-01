@@ -1,15 +1,12 @@
 // frontend/amol/src/features/wallet/utils/tokenGuards.ts
 
+import { isRecord } from "../../shared/utils/typeGuards";
 import type {
   TokenMetadataAttributeDTO,
   TokenMetadataDTO,
   TokenResolveDTO,
   WalletDTO,
 } from "../types/tokenTypes";
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 export function unwrapData(value: unknown): unknown {
   if (!isRecord(value)) {
@@ -23,12 +20,17 @@ export function unwrapData(value: unknown): unknown {
   return value;
 }
 
-export function extractWallet(value: unknown): WalletDTO | null {
+export function extractWallet(
+  value: unknown,
+): WalletDTO | null {
   if (!isRecord(value)) {
     return null;
   }
 
-  if (Array.isArray(value.wallets) && value.wallets.length > 0) {
+  if (
+    Array.isArray(value.wallets) &&
+    value.wallets.length > 0
+  ) {
     return toWalletDTO(value.wallets[0]);
   }
 
@@ -43,17 +45,32 @@ export function extractWallet(value: unknown): WalletDTO | null {
   return null;
 }
 
-export function toWalletDTO(value: unknown): WalletDTO | null {
+export function toWalletDTO(
+  value: unknown,
+): WalletDTO | null {
   if (!isRecord(value)) {
     return null;
   }
 
-  const walletAddress = getString(value, "WalletAddress");
-  const status = getString(value, "Status");
-  const lastUpdatedAt = getNullableString(value, "LastUpdatedAt");
+  const walletAddress = getString(
+    value,
+    "WalletAddress",
+  );
+  const status = getString(
+    value,
+    "Status",
+  );
+  const lastUpdatedAt = getNullableString(
+    value,
+    "LastUpdatedAt",
+  );
 
   const tokens = Array.isArray(value.Tokens)
-    ? value.Tokens.filter((item): item is string => typeof item === "string")
+    ? value.Tokens
+        .filter(
+          (item): item is string =>
+            typeof item === "string",
+        )
         .map((item) => item.trim())
         .filter(Boolean)
     : [];
@@ -66,46 +83,86 @@ export function toWalletDTO(value: unknown): WalletDTO | null {
   };
 }
 
-export function toTokenMetadataDTO(value: unknown): TokenMetadataDTO | null {
+export function toTokenMetadataDTO(
+  value: unknown,
+): TokenMetadataDTO | null {
   if (!isRecord(value)) {
     return null;
   }
 
-  const attributes = toTokenMetadataAttributes(value.attributes);
-  const tokenBlueprintId = getTokenBlueprintId(attributes);
+  const attributes =
+    toTokenMetadataAttributes(value.attributes);
+
+  const tokenBlueprintId =
+    getTokenBlueprintId(attributes);
 
   return {
     name: getString(value, "name"),
     symbol: getString(value, "symbol"),
-    description: getString(value, "description"),
+    description: getString(
+      value,
+      "description",
+    ),
     image: getString(value, "image"),
-    externalUrl: getString(value, "external_url"),
+    externalUrl: getString(
+      value,
+      "external_url",
+    ),
     attributes,
-    createdAt: getString(value, "created_at"),
+    createdAt: getString(
+      value,
+      "created_at",
+    ),
     tokenBlueprintId,
     raw: value,
   };
 }
 
-export function toTokenResolveDTO(value: unknown): TokenResolveDTO | null {
+export function toTokenResolveDTO(
+  value: unknown,
+): TokenResolveDTO | null {
   if (!isRecord(value)) {
     return null;
   }
 
   return {
-    productId: getString(value, "productId"),
-    brandId: getString(value, "brandId"),
-    brandName: getString(value, "brandName"),
-    productName: getString(value, "productName"),
-    metadataUri: getString(value, "metadataUri"),
-    mintAddress: getString(value, "mintAddress"),
-    productBlueprintId: getString(value, "productBlueprintId"),
-    tokenBlueprintId: getString(value, "tokenBlueprintId"),
+    productId: getString(
+      value,
+      "productId",
+    ),
+    brandId: getString(
+      value,
+      "brandId",
+    ),
+    brandName: getString(
+      value,
+      "brandName",
+    ),
+    productName: getString(
+      value,
+      "productName",
+    ),
+    metadataUri: getString(
+      value,
+      "metadataUri",
+    ),
+    mintAddress: getString(
+      value,
+      "mintAddress",
+    ),
+    productBlueprintId: getString(
+      value,
+      "productBlueprintId",
+    ),
+    tokenBlueprintId: getString(
+      value,
+      "tokenBlueprintId",
+    ),
   };
 }
 
 function toTokenMetadataAttributes(
-  value: unknown
+  value: unknown,
 ): TokenMetadataAttributeDTO[] {
   if (!Array.isArray(value)) {
     return [];
@@ -114,23 +171,38 @@ function toTokenMetadataAttributes(
   return value
     .filter(isRecord)
     .map((item) => ({
-      traitType: getString(item, "trait_type"),
-      value: getString(item, "value"),
+      traitType: getString(
+        item,
+        "trait_type",
+      ),
+      value: getString(
+        item,
+        "value",
+      ),
     }))
-    .filter((item) => item.traitType || item.value);
+    .filter(
+      (item) =>
+        Boolean(item.traitType) ||
+        Boolean(item.value),
+    );
 }
 
 function getTokenBlueprintId(
-  attributes: TokenMetadataAttributeDTO[]
+  attributes: TokenMetadataAttributeDTO[],
 ): string {
   const attribute = attributes.find(
-    (item) => item.traitType === "TokenBlueprintID"
+    (item) =>
+      item.traitType ===
+      "TokenBlueprintID",
   );
 
   return attribute?.value || "";
 }
 
-function getString(value: Record<string, unknown>, key: string): string {
+function getString(
+  value: Record<string, unknown>,
+  key: string,
+): string {
   const raw = value[key];
 
   if (typeof raw !== "string") {
@@ -142,7 +214,7 @@ function getString(value: Record<string, unknown>, key: string): string {
 
 function getNullableString(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): string | null {
   const raw = value[key];
 

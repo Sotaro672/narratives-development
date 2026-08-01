@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import { getApiBaseUrl } from "../lib/apiBaseUrl";
 import {
   fetchCartItemsWithCatalog,
   fetchCurrentAvatarId,
@@ -37,16 +38,6 @@ type CartDisplayItemWithResolvedFields = CartDisplayItem & {
   size?: string;
   price?: number;
 };
-
-function getApiBaseUrl(): string {
-  const env = import.meta.env.VITE_API_BASE_URL;
-
-  if (typeof env === "string" && env.trim() !== "") {
-    return env.replace(/\/$/, "");
-  }
-
-  return "";
-}
 
 function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";

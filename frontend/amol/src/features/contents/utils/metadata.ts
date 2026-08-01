@@ -1,23 +1,24 @@
-//frontend\amol\src\features\contents\utils\metadata.ts
+// frontend/amol/src/features/contents/utils/metadata.ts
+
+import { isRecord } from "../../shared/utils/typeGuards";
 import type {
   ContentsMetadata,
   ContentsMetadataFile,
 } from "../../shared/types/contents";
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 export function getString(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): string {
   const raw = value[key];
-  return typeof raw === "string" ? raw : "";
+
+  return typeof raw === "string"
+    ? raw
+    : "";
 }
 
 export function parseMetadataFile(
-  value: unknown
+  value: unknown,
 ): ContentsMetadataFile | null {
   if (!isRecord(value)) {
     return null;
@@ -39,26 +40,43 @@ export function parseMetadataFile(
 }
 
 export function parseContentsMetadata(
-  value: unknown
+  value: unknown,
 ): ContentsMetadata | null {
   if (!isRecord(value)) {
     return null;
   }
 
-  const properties = isRecord(value.properties) ? value.properties : null;
+  const properties = isRecord(value.properties)
+    ? value.properties
+    : null;
+
   const filesRaw =
-    properties && Array.isArray(properties.files) ? properties.files : [];
+    properties &&
+    Array.isArray(properties.files)
+      ? properties.files
+      : [];
 
   const files = filesRaw
     .map(parseMetadataFile)
-    .filter((file): file is ContentsMetadataFile => file !== null);
+    .filter(
+      (
+        file,
+      ): file is ContentsMetadataFile =>
+        file !== null,
+    );
 
   return {
     name: getString(value, "name"),
     symbol: getString(value, "symbol"),
-    description: getString(value, "description"),
+    description: getString(
+      value,
+      "description",
+    ),
     image: getString(value, "image"),
-    createdAt: getString(value, "created_at"),
+    createdAt: getString(
+      value,
+      "created_at",
+    ),
     files,
   };
 }

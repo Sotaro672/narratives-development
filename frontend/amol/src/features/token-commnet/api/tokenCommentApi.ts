@@ -2,6 +2,11 @@
 
 import { getAuth } from "firebase/auth";
 
+import {
+  isFiniteNumber,
+  isRecord,
+} from "../../shared/utils/typeGuards";
+
 import type {
   TokenBlueprintReactionInput,
   TokenBlueprintReviewAggregate,
@@ -40,7 +45,7 @@ async function getIdToken(): Promise<string> {
 
 async function requestJson<T>(
   path: string,
-  init?: RequestInit
+  init?: RequestInit,
 ): Promise<T> {
   const baseUrl = assertBackendBaseUrl();
   const idToken = await getIdToken();
@@ -49,21 +54,31 @@ async function requestJson<T>(
     ...init,
     headers: {
       Accept: "application/json",
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...(init?.body
+        ? { "Content-Type": "application/json" }
+        : {}),
       Authorization: `Bearer ${idToken}`,
       ...init?.headers,
     },
   });
 
   if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`token comment API failed: ${response.status} ${body}`);
+    const body = await response
+      .text()
+      .catch(() => "");
+
+    throw new Error(
+      `token comment API failed: ${response.status} ${body}`,
+    );
   }
 
-  const contentType = response.headers.get("content-type") || "";
+  const contentType =
+    response.headers.get("content-type") || "";
 
   if (!contentType.includes("application/json")) {
-    throw new Error("token comment API が JSON 以外を返しました。");
+    throw new Error(
+      "token comment API が JSON 以外を返しました。",
+    );
   }
 
   return response.json() as Promise<T>;
@@ -71,7 +86,7 @@ async function requestJson<T>(
 
 async function requestNoContent(
   path: string,
-  init?: RequestInit
+  init?: RequestInit,
 ): Promise<void> {
   const baseUrl = assertBackendBaseUrl();
   const idToken = await getIdToken();
@@ -80,28 +95,36 @@ async function requestNoContent(
     ...init,
     headers: {
       Accept: "application/json",
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...(init?.body
+        ? { "Content-Type": "application/json" }
+        : {}),
       Authorization: `Bearer ${idToken}`,
       ...init?.headers,
     },
   });
 
   if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`token comment API failed: ${response.status} ${body}`);
-  }
-}
+    const body = await response
+      .text()
+      .catch(() => "");
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+    throw new Error(
+      `token comment API failed: ${response.status} ${body}`,
+    );
+  }
 }
 
 function pick(
   value: Record<string, unknown>,
-  keys: readonly string[]
+  keys: readonly string[],
 ): unknown {
   for (const key of keys) {
-    if (Object.prototype.hasOwnProperty.call(value, key)) {
+    if (
+      Object.prototype.hasOwnProperty.call(
+        value,
+        key,
+      )
+    ) {
       return value[key];
     }
   }
@@ -110,7 +133,10 @@ function pick(
 }
 
 function asString(value: unknown): string {
-  if (value === null || value === undefined) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
     return "";
   }
 
@@ -121,8 +147,13 @@ function asString(value: unknown): string {
   return String(value);
 }
 
-function asNullableString(value: unknown): string | null {
-  if (value === null || value === undefined) {
+function asNullableString(
+  value: unknown,
+): string | null {
+  if (
+    value === null ||
+    value === undefined
+  ) {
     return null;
   }
 
@@ -134,13 +165,16 @@ function asNullableString(value: unknown): string | null {
 }
 
 function asNumber(value: unknown): number {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
+  if (isFiniteNumber(value)) {
+    return value;
   }
 
   if (typeof value === "string") {
     const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
+
+    return isFiniteNumber(parsed)
+      ? parsed
+      : 0;
   }
 
   return 0;
@@ -156,8 +190,13 @@ function asBoolean(value: unknown): boolean {
   }
 
   if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    return normalized === "true" || normalized === "1";
+    const normalized =
+      value.trim().toLowerCase();
+
+    return (
+      normalized === "true" ||
+      normalized === "1"
+    );
   }
 
   return false;
@@ -165,11 +204,12 @@ function asBoolean(value: unknown): boolean {
 
 function parseTokenBlueprintReviewAggregate(
   value: unknown,
-  fallbackTokenBlueprintId = ""
+  fallbackTokenBlueprintId = "",
 ): TokenBlueprintReviewAggregate {
   if (!isRecord(value)) {
     return {
-      tokenBlueprintId: fallbackTokenBlueprintId,
+      tokenBlueprintId:
+        fallbackTokenBlueprintId,
       likeCount: 0,
       dislikeCount: 0,
       topLevelCommentCount: 0,
@@ -181,61 +221,178 @@ function parseTokenBlueprintReviewAggregate(
 
   return {
     tokenBlueprintId:
-      asString(pick(value, ["tokenBlueprintId", "TokenBlueprintID"])) ||
-      fallbackTokenBlueprintId,
-    likeCount: asNumber(pick(value, ["likeCount", "LikeCount"])),
-    dislikeCount: asNumber(pick(value, ["dislikeCount", "DislikeCount"])),
+      asString(
+        pick(value, [
+          "tokenBlueprintId",
+          "TokenBlueprintID",
+        ]),
+      ) || fallbackTokenBlueprintId,
+    likeCount: asNumber(
+      pick(value, [
+        "likeCount",
+        "LikeCount",
+      ]),
+    ),
+    dislikeCount: asNumber(
+      pick(value, [
+        "dislikeCount",
+        "DislikeCount",
+      ]),
+    ),
     topLevelCommentCount: asNumber(
-      pick(value, ["topLevelCommentCount", "TopLevelCommentCount"])
+      pick(value, [
+        "topLevelCommentCount",
+        "TopLevelCommentCount",
+      ]),
     ),
     totalCommentCount: asNumber(
-      pick(value, ["totalCommentCount", "TotalCommentCount"])
+      pick(value, [
+        "totalCommentCount",
+        "TotalCommentCount",
+      ]),
     ),
-    createdAt: asNullableString(pick(value, ["createdAt", "CreatedAt"])),
-    updatedAt: asNullableString(pick(value, ["updatedAt", "UpdatedAt"])),
+    createdAt: asNullableString(
+      pick(value, [
+        "createdAt",
+        "CreatedAt",
+      ]),
+    ),
+    updatedAt: asNullableString(
+      pick(value, [
+        "updatedAt",
+        "UpdatedAt",
+      ]),
+    ),
   };
 }
 
-function parseTokenComment(value: unknown): TokenComment | null {
+function parseTokenComment(
+  value: unknown,
+): TokenComment | null {
   if (!isRecord(value)) {
     return null;
   }
 
   return {
-    commentId: asString(pick(value, ["commentId", "CommentID"])),
+    commentId: asString(
+      pick(value, [
+        "commentId",
+        "CommentID",
+      ]),
+    ),
     tokenBlueprintId: asString(
-      pick(value, ["tokenBlueprintId", "TokenBlueprintID"])
+      pick(value, [
+        "tokenBlueprintId",
+        "TokenBlueprintID",
+      ]),
     ),
     parentCommentId: asString(
-      pick(value, ["parentCommentId", "ParentCommentID"])
+      pick(value, [
+        "parentCommentId",
+        "ParentCommentID",
+      ]),
     ),
-    rootCommentId: asString(pick(value, ["rootCommentId", "RootCommentID"])),
-    depth: asNumber(pick(value, ["depth", "Depth"])),
-    authorId: asString(pick(value, ["authorId", "AuthorID"])),
-    authorType: asString(pick(value, ["authorType", "AuthorType"])),
+    rootCommentId: asString(
+      pick(value, [
+        "rootCommentId",
+        "RootCommentID",
+      ]),
+    ),
+    depth: asNumber(
+      pick(value, [
+        "depth",
+        "Depth",
+      ]),
+    ),
+    authorId: asString(
+      pick(value, [
+        "authorId",
+        "AuthorID",
+      ]),
+    ),
+    authorType: asString(
+      pick(value, [
+        "authorType",
+        "AuthorType",
+      ]),
+    ),
     isOwnerComment: asBoolean(
-      pick(value, ["isOwnerComment", "IsOwnerComment"])
+      pick(value, [
+        "isOwnerComment",
+        "IsOwnerComment",
+      ]),
     ),
-    body: asString(pick(value, ["body", "Body"])),
-    likeCount: asNumber(pick(value, ["likeCount", "LikeCount"])),
-    dislikeCount: asNumber(pick(value, ["dislikeCount", "DislikeCount"])),
-    childCount: asNumber(pick(value, ["childCount", "ChildCount"])),
-    deleted: asBoolean(pick(value, ["deleted", "Deleted"])),
-    createdAt: asString(pick(value, ["createdAt", "CreatedAt"])),
-    updatedAt: asString(pick(value, ["updatedAt", "UpdatedAt"])),
+    body: asString(
+      pick(value, [
+        "body",
+        "Body",
+      ]),
+    ),
+    likeCount: asNumber(
+      pick(value, [
+        "likeCount",
+        "LikeCount",
+      ]),
+    ),
+    dislikeCount: asNumber(
+      pick(value, [
+        "dislikeCount",
+        "DislikeCount",
+      ]),
+    ),
+    childCount: asNumber(
+      pick(value, [
+        "childCount",
+        "ChildCount",
+      ]),
+    ),
+    deleted: asBoolean(
+      pick(value, [
+        "deleted",
+        "Deleted",
+      ]),
+    ),
+    createdAt: asString(
+      pick(value, [
+        "createdAt",
+        "CreatedAt",
+      ]),
+    ),
+    updatedAt: asString(
+      pick(value, [
+        "updatedAt",
+        "UpdatedAt",
+      ]),
+    ),
     authorAvatarName: asNullableString(
-      pick(value, ["authorAvatarName", "AuthorAvatarName"])
+      pick(value, [
+        "authorAvatarName",
+        "AuthorAvatarName",
+      ]),
     ),
     authorAvatarIcon: asNullableString(
-      pick(value, ["authorAvatarIcon", "AuthorAvatarIcon"])
+      pick(value, [
+        "authorAvatarIcon",
+        "AuthorAvatarIcon",
+      ]),
     ),
-    brandName: asNullableString(pick(value, ["brandName", "BrandName"])),
-    brandIcon: asNullableString(pick(value, ["brandIcon", "BrandIcon"])),
+    brandName: asNullableString(
+      pick(value, [
+        "brandName",
+        "BrandName",
+      ]),
+    ),
+    brandIcon: asNullableString(
+      pick(value, [
+        "brandIcon",
+        "BrandIcon",
+      ]),
+    ),
   };
 }
 
 function parseTokenCommentListResponse(
-  value: unknown
+  value: unknown,
 ): TokenCommentListResponse {
   if (!isRecord(value)) {
     return {
@@ -248,33 +405,69 @@ function parseTokenCommentListResponse(
     };
   }
 
-  const rawItems = pick(value, ["items", "Items"]);
+  const rawItems = pick(
+    value,
+    ["items", "Items"],
+  );
+
   const items = Array.isArray(rawItems)
     ? rawItems
         .map(parseTokenComment)
-        .filter((comment): comment is TokenComment => comment !== null)
+        .filter(
+          (
+            comment,
+          ): comment is TokenComment =>
+            comment !== null,
+        )
     : [];
 
   return {
     items,
-    page: asNumber(pick(value, ["page", "Page"])) || 1,
-    perPage: asNumber(pick(value, ["perPage", "PerPage"])) || 20,
+    page:
+      asNumber(
+        pick(value, [
+          "page",
+          "Page",
+        ]),
+      ) || 1,
+    perPage:
+      asNumber(
+        pick(value, [
+          "perPage",
+          "PerPage",
+        ]),
+      ) || 20,
     total: asNumber(
-      pick(value, ["totalCount", "TotalCount", "total", "Total"])
+      pick(value, [
+        "totalCount",
+        "TotalCount",
+        "total",
+        "Total",
+      ]),
     ),
     tokenBlueprintName: asNullableString(
-      pick(value, ["tokenBlueprintName", "TokenBlueprintName"])
+      pick(value, [
+        "tokenBlueprintName",
+        "TokenBlueprintName",
+      ]),
     ),
-    brandName: asNullableString(pick(value, ["brandName", "BrandName"])),
+    brandName: asNullableString(
+      pick(value, [
+        "brandName",
+        "BrandName",
+      ]),
+    ),
   };
 }
 
-function encodePathSegment(value: string): string {
+function encodePathSegment(
+  value: string,
+): string {
   return encodeURIComponent(value);
 }
 
 export async function fetchTokenBlueprintReviewAggregate(
-  tokenBlueprintId: string
+  tokenBlueprintId: string,
 ): Promise<TokenBlueprintReviewAggregate> {
   if (!tokenBlueprintId) {
     return {
@@ -290,14 +483,17 @@ export async function fetchTokenBlueprintReviewAggregate(
 
   const body = await requestJson<unknown>(
     `${TOKEN_BLUEPRINT_BASE_PATH}/${encodePathSegment(
-      tokenBlueprintId
+      tokenBlueprintId,
     )}/reviews/aggregate`,
     {
       method: "GET",
-    }
+    },
   );
 
-  return parseTokenBlueprintReviewAggregate(body, tokenBlueprintId);
+  return parseTokenBlueprintReviewAggregate(
+    body,
+    tokenBlueprintId,
+  );
 }
 
 export async function upsertTokenBlueprintReaction({
@@ -310,19 +506,19 @@ export async function upsertTokenBlueprintReaction({
 
   await requestNoContent(
     `${TOKEN_BLUEPRINT_BASE_PATH}/${encodePathSegment(
-      tokenBlueprintId
+      tokenBlueprintId,
     )}/reactions`,
     {
       method: "POST",
       body: JSON.stringify({
         type,
       }),
-    }
+    },
   );
 }
 
 export async function fetchTokenComments(
-  tokenBlueprintId: string
+  tokenBlueprintId: string,
 ): Promise<TokenCommentListResponse> {
   if (!tokenBlueprintId) {
     return {
@@ -337,14 +533,16 @@ export async function fetchTokenComments(
 
   const body = await requestJson<unknown>(
     `${TOKEN_BLUEPRINT_BASE_PATH}/${encodePathSegment(
-      tokenBlueprintId
+      tokenBlueprintId,
     )}/comments`,
     {
       method: "GET",
-    }
+    },
   );
 
-  return parseTokenCommentListResponse(body);
+  return parseTokenCommentListResponse(
+    body,
+  );
 }
 
 export async function postTokenComment({
@@ -353,20 +551,23 @@ export async function postTokenComment({
 }: TokenCommentPostInput): Promise<void> {
   const trimmedBody = body.trim();
 
-  if (!tokenBlueprintId || !trimmedBody) {
+  if (
+    !tokenBlueprintId ||
+    !trimmedBody
+  ) {
     return;
   }
 
   await requestNoContent(
     `${TOKEN_BLUEPRINT_BASE_PATH}/${encodePathSegment(
-      tokenBlueprintId
+      tokenBlueprintId,
     )}/comments`,
     {
       method: "POST",
       body: JSON.stringify({
         body: trimmedBody,
       }),
-    }
+    },
   );
 }
 
@@ -377,20 +578,26 @@ export async function postTokenCommentReply({
 }: TokenCommentReplyInput): Promise<void> {
   const trimmedBody = body.trim();
 
-  if (!tokenBlueprintId || !parentCommentId || !trimmedBody) {
+  if (
+    !tokenBlueprintId ||
+    !parentCommentId ||
+    !trimmedBody
+  ) {
     return;
   }
 
   await requestNoContent(
     `${TOKEN_BLUEPRINT_BASE_PATH}/${encodePathSegment(
-      tokenBlueprintId
-    )}/comments/${encodePathSegment(parentCommentId)}/replies`,
+      tokenBlueprintId,
+    )}/comments/${encodePathSegment(
+      parentCommentId,
+    )}/replies`,
     {
       method: "POST",
       body: JSON.stringify({
         body: trimmedBody,
       }),
-    }
+    },
   );
 }
 
@@ -398,20 +605,25 @@ export async function likeTokenComment({
   tokenBlueprintId,
   commentId,
 }: TokenCommentVoteInput): Promise<void> {
-  if (!tokenBlueprintId || !commentId) {
+  if (
+    !tokenBlueprintId ||
+    !commentId
+  ) {
     return;
   }
 
   await requestNoContent(
     `${TOKEN_BLUEPRINT_BASE_PATH}/${encodePathSegment(
-      tokenBlueprintId
-    )}/comments/${encodePathSegment(commentId)}/reactions`,
+      tokenBlueprintId,
+    )}/comments/${encodePathSegment(
+      commentId,
+    )}/reactions`,
     {
       method: "POST",
       body: JSON.stringify({
         type: "like",
       }),
-    }
+    },
   );
 }
 
@@ -419,19 +631,24 @@ export async function dislikeTokenComment({
   tokenBlueprintId,
   commentId,
 }: TokenCommentVoteInput): Promise<void> {
-  if (!tokenBlueprintId || !commentId) {
+  if (
+    !tokenBlueprintId ||
+    !commentId
+  ) {
     return;
   }
 
   await requestNoContent(
     `${TOKEN_BLUEPRINT_BASE_PATH}/${encodePathSegment(
-      tokenBlueprintId
-    )}/comments/${encodePathSegment(commentId)}/reactions`,
+      tokenBlueprintId,
+    )}/comments/${encodePathSegment(
+      commentId,
+    )}/reactions`,
     {
       method: "POST",
       body: JSON.stringify({
         type: "dislike",
       }),
-    }
+    },
   );
 }
