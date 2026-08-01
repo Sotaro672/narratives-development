@@ -1,21 +1,100 @@
-// frontend/amol/src/features/cart/types/types.ts
+// frontend/amol/src/features/cart/types.ts
 
-export type CartModelKind = "apparel" | "alcohol" | "unknown" | string;
+export type CartModelKind =
+  | "apparel"
+  | "alcohol"
+  | "unknown";
 
-export type CartItemType = "list" | "resale";
+export type CartItemType =
+  | "list"
+  | "resale";
 
-export type CartItemDTO = {
-  avatarId?: string;
+/**
+ * カート画面で使用する価格情報。
+ *
+ * catalog featureの型には依存せず、
+ * cart featureで必要な項目だけを定義する。
+ */
+export type CartPrice = {
+  modelId: string;
+  price: number;
+};
+
+/**
+ * カート画面で使用するリスト情報。
+ */
+export type CartListSnapshot = {
+  id: string;
+  title: string;
+  image: string;
+  prices: CartPrice[];
+};
+
+/**
+ * カート画面で使用するリスト画像情報。
+ */
+export type CartListImageSnapshot = {
+  url: string;
+};
+
+/**
+ * カート画面で使用する商品設計情報。
+ */
+export type CartProductSnapshot = {
+  productName: string;
+  brandName: string;
+};
+
+/**
+ * カート画面で使用するモデル情報。
+ */
+export type CartModelSnapshot = {
+  id: string;
+
+  kind?: CartModelKind | null;
+
+  modelNumber?: string;
+  modelLabel?: string;
+
+  size?: string | null;
+  colorName?: string | null;
+  colorRGB?: number | null;
+
+  volumeValue?: number | null;
+  volumeUnit?: string | null;
 
   /**
-   * item type
-   * - list: 通常販売 item
-   * - resale: 二次流通 item
-   *
-   * 既存レスポンス互換のため optional。
-   * 未指定で inventoryId/listId/modelId があれば list として扱う。
+   * APIレスポンスにモデル単位の価格が含まれる場合に使用する。
+   * 通常はlist.pricesを参照する。
    */
-  type?: CartItemType | string;
+  price?: number;
+};
+
+/**
+ * カート画面で表示に使用するカタログ情報。
+ *
+ * features/catalog/types.tsには依存しない。
+ */
+export type CartCatalogSnapshot = {
+  list: CartListSnapshot;
+  listImages: CartListImageSnapshot[];
+  productBlueprint: CartProductSnapshot;
+  modelVariations: CartModelSnapshot[];
+};
+
+/**
+ * GET /mall/me/cart の各カート項目。
+ *
+ * バックエンドの現行DTOを正とし、
+ * 旧レスポンスとの互換項目は保持しない。
+ */
+export type CartItemDTO = {
+  /**
+   * item type
+   * - list: 通常販売item
+   * - resale: 二次流通item
+   */
+  type: CartItemType;
 
   /**
    * list item identifiers
@@ -37,70 +116,76 @@ export type CartItemDTO = {
   tokenBlueprintId?: string;
   brandId?: string;
 
-  qty?: number;
-  quantity?: number;
-  itemKey?: string;
+  /**
+   * 商品数量。
+   *
+   * resaleでは常に1。
+   */
+  qty: number;
 
   /**
-   * cart response から直接表示に使う商品情報。
-   * catalog が取得できない場合も cart response だけで表示できるように保持する。
+   * cart responseから直接表示に使用する商品情報。
    */
   title?: string;
   listImage?: string;
   imageUrl?: string;
   price?: number;
+  brandName?: string;
   productName?: string;
 
   /**
-   * apparel / alcohol 共通の model 情報。
+   * apparel / alcohol共通のmodel情報。
    */
   modelKind?: CartModelKind;
-  kind?: CartModelKind;
   modelNumber?: string;
   modelLabel?: string;
 
   /**
-   * apparel 用。
+   * apparel用。
    */
   size?: string;
-  colorName?: string;
   color?: string;
-  colorRGB?: number;
 
   /**
-   * alcohol 用。
+   * alcohol用。
    */
   volumeValue?: number;
   volumeUnit?: string;
-
-  [key: string]: unknown;
 };
 
+/**
+ * GET /mall/me/cart のレスポンス。
+ *
+ * itemsはitemKeyをキーとするmap形式。
+ */
 export type CartDTO = {
   avatarId: string;
-  items: Record<string, CartItemDTO> | CartItemDTO[];
+  items: Record<string, CartItemDTO>;
   createdAt?: string | null;
   updatedAt?: string | null;
   expiresAt?: string | null;
 };
 
+/**
+ * CartPage / PaymentPageで使用する表示用カート項目。
+ */
 export type CartDisplayItem = {
+  /**
+   * CartDTO.itemsのmapキー。
+   */
   itemKey: string;
+
   avatarId: string;
 
   /**
    * item type
-   * - list: 通常販売 item
-   * - resale: 二次流通 item
-   *
-   * 既存データ互換のため optional。
+   * - list: 通常販売item
+   * - resale: 二次流通item
    */
-  type?: CartItemType;
+  type: CartItemType;
 
   /**
    * list item identifiers
-   *
-   * resale item では存在しないため optional。
    */
   inventoryId?: string;
   listId?: string;
@@ -122,172 +207,43 @@ export type CartDisplayItem = {
   qty: number;
 
   /**
-   * cart response 由来の表示用情報。
-   * catalog が null の場合でも CartPage / PaymentPage で表示できるようにする。
+   * cart response由来の表示情報。
    */
   title?: string;
   listImage?: string;
   imageUrl?: string;
   price?: number;
+  brandName?: string;
   productName?: string;
 
   /**
-   * apparel / alcohol の表示切り替え用。
-   *
-   * resale item では存在しないことがあるため optional。
+   * apparel / alcoholの表示切り替えに使用する。
    */
   modelKind?: CartModelKind;
   modelNumber?: string;
   modelLabel?: string;
 
   /**
-   * apparel 用。
+   * apparel用。
+   *
+   * colorはcart response、
+   * colorNameとcolorRGBはcatalog response由来の値に使用する。
    */
   size?: string;
-  colorName?: string;
   color?: string;
-  colorRGB?: number;
-
-  /**
-   * alcohol 用。
-   */
-  volumeValue?: number;
-  volumeUnit?: string;
-
-  catalog: CatalogResponse | null;
-};
-
-export type CatalogListPrice = {
-  modelId: string;
-  price: number;
-};
-
-export type CatalogList = {
-  id: string;
-  title: string;
-  description: string;
-  image: string;
-  prices: CatalogListPrice[];
-  inventoryId: string;
-};
-
-export type CatalogListImage = {
-  id: string;
-  listId: string;
-  url: string;
-  objectPath: string;
-  fileName: string;
-  displayOrder: number;
-  size: number;
-};
-
-export type CatalogInventoryStockItem = {
-  accumulation: number;
-  reservedCount: number;
-};
-
-export type CatalogInventory = {
-  id: string;
-  productBlueprintId: string;
-  tokenBlueprintId: string;
-  modelIds: string[];
-  stock: Record<string, CatalogInventoryStockItem>;
-};
-
-export type CatalogProductBlueprintModelRef = {
-  modelId: string;
-  displayOrder: number;
-};
-
-export type CatalogQualityAssurance = {
-  title?: string;
-  body?: string;
-  label?: string;
-  value?: string;
-  [key: string]: unknown;
-};
-
-export type CatalogProductBlueprint = {
-  id: string;
-  productName: string;
-  brandId: string;
-  companyId: string;
-  brandName: string;
-  companyName: string;
-  itemType: string;
-  fit: string;
-  material: string;
-  weight?: number | null;
-  printed: boolean;
-  qualityAssurance: CatalogQualityAssurance[] | string[] | string | null;
-  productIdTagType: string;
-  modelRefs: CatalogProductBlueprintModelRef[];
-};
-
-export type CatalogTokenBlueprint = {
-  id: string;
-  tokenName: string;
-  symbol: string;
-  brandId: string;
-  brandName: string;
-  companyName: string;
-  description: string;
-  tokenIcon: string;
-};
-
-export type CatalogModelKind = "apparel" | "alcohol" | "unknown";
-
-export type CatalogModelVariation = {
-  id: string;
-  productBlueprintId: string;
-
-  /**
-   * apparel / alcohol を判定するための種別。
-   * backend から未返却の古いデータもあり得るため optional にする。
-   */
-  kind?: CatalogModelKind | string;
-
-  /**
-   * apparel / alcohol 共通で使える型番。
-   */
-  modelNumber: string;
-
-  /**
-   * apparel 用。
-   * alcohol では返らないため optional。
-   */
-  size?: string;
   colorName?: string;
   colorRGB?: number;
-  measurements?: Record<string, number>;
 
   /**
-   * alcohol 用。
+   * alcohol用。
    */
   volumeValue?: number;
   volumeUnit?: string;
 
-  stockKeys: number;
-};
-
-export type CatalogProductReviewSummary = {
-  productBlueprintId: string;
-  status: string;
-  totalCount: number;
-  averageRating: number;
-  rating5Count: number;
-  rating4Count: number;
-  rating3Count: number;
-  rating2Count: number;
-  rating1Count: number;
-};
-
-export type CatalogResponse = {
-  list: CatalogList;
-  listImages: CatalogListImage[];
-  inventory: CatalogInventory;
-  productBlueprint: CatalogProductBlueprint;
-  tokenBlueprint: CatalogTokenBlueprint;
-  modelVariations: CatalogModelVariation[];
-  productReviewSummary?: CatalogProductReviewSummary;
+  /**
+   * 通常販売itemのカタログ情報。
+   *
+   * resale itemまたはカタログ取得失敗時はnull。
+   */
+  catalog: CartCatalogSnapshot | null;
 };

@@ -5,11 +5,10 @@ import { fetchCurrentAvatarId } from "../../catalog/infrastructure/avatarStateRe
 import { readResponseErrorMessage } from "../../catalog/infrastructure/httpErrorReader";
 
 import type {
+  CartCatalogSnapshot,
   CartDTO,
   CartDisplayItem,
   CartItemDTO,
-  CartItemType,
-  CatalogResponse,
 } from "../types";
 
 async function fetchCartFromPath(args: {
@@ -17,8 +16,14 @@ async function fetchCartFromPath(args: {
   idToken: string;
   path: string;
 }): Promise<Response> {
-  const { apiBaseUrl, idToken, path } = args;
-  const base = apiBaseUrl.replace(/\/+$/, "");
+  const {
+    apiBaseUrl,
+    idToken,
+    path,
+  } = args;
+
+  const base =
+    apiBaseUrl.replace(/\/+$/, "");
 
   return fetch(`${base}${path}`, {
     method: "GET",
@@ -30,38 +35,62 @@ async function fetchCartFromPath(args: {
   });
 }
 
-export { fetchCurrentAvatarId };
+export {
+  fetchCurrentAvatarId,
+};
 
 export async function fetchCart(
   apiBaseUrl: string,
   avatarId: string,
 ): Promise<CartDTO> {
-  const normalizedAvatarId = avatarId.trim();
+  const normalizedAvatarId =
+    avatarId.trim();
 
   if (!normalizedAvatarId) {
-    throw new Error("現在のavatarIdが見つかりません。");
+    throw new Error(
+      "現在のavatarIdが見つかりません。",
+    );
   }
 
-  const idToken = await getFirebaseIdToken();
+  const idToken =
+    await getFirebaseIdToken();
 
-  const response = await fetchCartFromPath({
-    apiBaseUrl,
-    idToken,
-    path: "/mall/me/cart",
-  });
+  const response =
+    await fetchCartFromPath({
+      apiBaseUrl,
+      idToken,
+      path: "/mall/me/cart",
+    });
 
   if (!response.ok) {
-    const message = await readResponseErrorMessage(response);
-    throw new Error(message || "カートの取得に失敗しました。");
+    const message =
+      await readResponseErrorMessage(
+        response,
+      );
+
+    throw new Error(
+      message ||
+        "カートの取得に失敗しました。",
+    );
   }
 
-  const contentType = response.headers.get("content-type") ?? "";
+  const contentType =
+    response.headers.get(
+      "content-type",
+    ) ?? "";
 
-  if (!contentType.includes("application/json")) {
-    throw new Error("カート取得APIがJSON以外を返しました。");
+  if (
+    !contentType.includes(
+      "application/json",
+    )
+  ) {
+    throw new Error(
+      "カート取得APIがJSON以外を返しました。",
+    );
   }
 
-  const data = (await response.json()) as Partial<CartDTO>;
+  const data =
+    (await response.json()) as Partial<CartDTO>;
 
   return {
     avatarId:
@@ -69,15 +98,22 @@ export async function fetchCart(
       data.avatarId.trim() !== ""
         ? data.avatarId
         : normalizedAvatarId,
+
     items:
       data.items &&
       !Array.isArray(data.items) &&
       typeof data.items === "object"
         ? data.items
         : {},
-    createdAt: data.createdAt ?? null,
-    updatedAt: data.updatedAt ?? null,
-    expiresAt: data.expiresAt ?? null,
+
+    createdAt:
+      data.createdAt ?? null,
+
+    updatedAt:
+      data.updatedAt ?? null,
+
+    expiresAt:
+      data.expiresAt ?? null,
   };
 }
 
@@ -85,54 +121,99 @@ export async function removeCartItem(args: {
   apiBaseUrl: string;
   item: CartDisplayItem;
 }): Promise<CartDTO> {
-  const { apiBaseUrl, item } = args;
-  const idToken = await getFirebaseIdToken();
+  const {
+    apiBaseUrl,
+    item,
+  } = args;
 
-  const isResale = item.type === "resale";
-  const path = isResale
-    ? "/mall/me/cart/resales"
-    : "/mall/me/cart/items";
+  const idToken =
+    await getFirebaseIdToken();
 
-  const base = apiBaseUrl.replace(/\/+$/, "");
+  const isResale =
+    item.type === "resale";
 
-  const body = isResale
-    ? {
-        resaleId: item.resaleId,
-        productId: item.productId,
-      }
-    : {
-        inventoryId: item.inventoryId,
-        listId: item.listId,
-        modelId: item.modelId,
-      };
+  const path =
+    isResale
+      ? "/mall/me/cart/resales"
+      : "/mall/me/cart/items";
 
-  const response = await fetch(`${base}${path}`, {
-    method: "DELETE",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
-    credentials: "include",
-    body: JSON.stringify(body),
-  });
+  const base =
+    apiBaseUrl.replace(/\/+$/, "");
+
+  const body =
+    isResale
+      ? {
+          resaleId:
+            item.resaleId,
+
+          productId:
+            item.productId,
+        }
+      : {
+          inventoryId:
+            item.inventoryId,
+
+          listId:
+            item.listId,
+
+          modelId:
+            item.modelId,
+        };
+
+  const response =
+    await fetch(
+      `${base}${path}`,
+      {
+        method: "DELETE",
+
+        headers: {
+          Accept:
+            "application/json",
+
+          "Content-Type":
+            "application/json",
+
+          Authorization:
+            `Bearer ${idToken}`,
+        },
+
+        credentials:
+          "include",
+
+        body:
+          JSON.stringify(body),
+      },
+    );
 
   if (!response.ok) {
-    const message = await readResponseErrorMessage(response);
+    const message =
+      await readResponseErrorMessage(
+        response,
+      );
+
     throw new Error(
-      message || "カート商品の削除に失敗しました。",
+      message ||
+        "カート商品の削除に失敗しました。",
     );
   }
 
-  const contentType = response.headers.get("content-type") ?? "";
+  const contentType =
+    response.headers.get(
+      "content-type",
+    ) ?? "";
 
-  if (!contentType.includes("application/json")) {
+  if (
+    !contentType.includes(
+      "application/json",
+    )
+  ) {
     throw new Error(
       "カート商品削除APIがJSON以外を返しました。",
     );
   }
 
-  const data = (await response.json()) as Partial<CartDTO>;
+  const data =
+    (await response.json()) as Partial<CartDTO>;
 
   return {
     avatarId:
@@ -140,92 +221,148 @@ export async function removeCartItem(args: {
       data.avatarId.trim() !== ""
         ? data.avatarId
         : item.avatarId,
+
     items:
       data.items &&
       !Array.isArray(data.items) &&
       typeof data.items === "object"
         ? data.items
         : {},
-    createdAt: data.createdAt ?? null,
-    updatedAt: data.updatedAt ?? null,
-    expiresAt: data.expiresAt ?? null,
+
+    createdAt:
+      data.createdAt ?? null,
+
+    updatedAt:
+      data.updatedAt ?? null,
+
+    expiresAt:
+      data.expiresAt ?? null,
   };
 }
 
 export async function fetchCatalog(
   apiBaseUrl: string,
   listId: string,
-): Promise<CatalogResponse | null> {
-  const idToken = await getFirebaseIdToken();
-  const base = apiBaseUrl.replace(/\/+$/, "");
+): Promise<CartCatalogSnapshot | null> {
+  const idToken =
+    await getFirebaseIdToken();
 
-  const response = await fetch(
-    `${base}/mall/catalog/${encodeURIComponent(listId)}`,
-    {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${idToken}`,
+  const base =
+    apiBaseUrl.replace(/\/+$/, "");
+
+  const response =
+    await fetch(
+      `${base}/mall/catalog/${encodeURIComponent(
+        listId,
+      )}`,
+      {
+        method: "GET",
+
+        headers: {
+          Accept:
+            "application/json",
+
+          Authorization:
+            `Bearer ${idToken}`,
+        },
+
+        credentials:
+          "include",
       },
-      credentials: "include",
-    },
-  );
+    );
 
   if (!response.ok) {
     return null;
   }
 
-  const contentType = response.headers.get("content-type") ?? "";
+  const contentType =
+    response.headers.get(
+      "content-type",
+    ) ?? "";
 
-  if (!contentType.includes("application/json")) {
+  if (
+    !contentType.includes(
+      "application/json",
+    )
+  ) {
     return null;
   }
 
-  return (await response.json()) as CatalogResponse;
+  return (
+    await response.json()
+  ) as CartCatalogSnapshot;
 }
 
-export async function fetchCartItemsWithCatalog(args: {
-  apiBaseUrl: string;
-  avatarId: string;
-}): Promise<CartDisplayItem[]> {
-  const { apiBaseUrl, avatarId } = args;
+export async function fetchCartItemsWithCatalog(
+  args: {
+    apiBaseUrl: string;
+    avatarId: string;
+  },
+): Promise<CartDisplayItem[]> {
+  const {
+    apiBaseUrl,
+    avatarId,
+  } = args;
 
-  const cart = await fetchCart(apiBaseUrl, avatarId);
-  const baseItems = cartDTOToDisplayItems(cart);
+  const cart =
+    await fetchCart(
+      apiBaseUrl,
+      avatarId,
+    );
+
+  const baseItems =
+    cartDTOToDisplayItems(
+      cart,
+    );
 
   return Promise.all(
-    baseItems.map(async (item) => {
-      if (isResaleDisplayItem(item)) {
-        return {
-          ...item,
-          catalog: null,
-        };
-      }
+    baseItems.map(
+      async (
+        item,
+      ): Promise<CartDisplayItem> => {
+        if (
+          isResaleDisplayItem(
+            item,
+          )
+        ) {
+          return {
+            ...item,
+            catalog: null,
+          };
+        }
 
-      try {
-        const catalog = item.listId
-          ? await fetchCatalog(apiBaseUrl, item.listId)
-          : null;
+        try {
+          const catalog =
+            item.listId
+              ? await fetchCatalog(
+                  apiBaseUrl,
+                  item.listId,
+                )
+              : null;
 
-        return {
-          ...item,
-          catalog,
-        };
-      } catch {
-        return {
-          ...item,
-          catalog: null,
-        };
-      }
-    }),
+          return {
+            ...item,
+            catalog,
+          };
+        } catch {
+          return {
+            ...item,
+            catalog: null,
+          };
+        }
+      },
+    ),
   );
 }
 
 function cartDTOToDisplayItems(
   cart: CartDTO,
 ): CartDisplayItem[] {
-  const avatarId = cart.avatarId;
-  const rawItems = cart.items;
+  const avatarId =
+    cart.avatarId;
+
+  const rawItems =
+    cart.items;
 
   if (
     !rawItems ||
@@ -235,28 +372,44 @@ function cartDTOToDisplayItems(
     return [];
   }
 
-  return Object.entries(rawItems)
-    .map(([itemKey, item]) =>
-      cartItemToDisplayItem({
-        avatarId,
+  return Object.entries(
+    rawItems,
+  )
+    .map(
+      ([
         itemKey,
         item,
-      }),
+      ]) =>
+        cartItemToDisplayItem({
+          avatarId,
+          itemKey,
+          item,
+        }),
     )
     .filter(
-      (item): item is CartDisplayItem =>
+      (
+        item,
+      ): item is CartDisplayItem =>
         item !== null,
     );
 }
 
-function cartItemToDisplayItem(args: {
-  avatarId: string;
-  itemKey: string;
-  item: CartItemDTO;
-}): CartDisplayItem | null {
-  const { avatarId, itemKey, item } = args;
+function cartItemToDisplayItem(
+  args: {
+    avatarId: string;
+    itemKey: string;
+    item: CartItemDTO;
+  },
+): CartDisplayItem | null {
+  const {
+    avatarId,
+    itemKey,
+    item,
+  } = args;
 
-  if (item.type === "resale") {
+  if (
+    item.type === "resale"
+  ) {
     return resaleCartItemToDisplayItem({
       avatarId,
       itemKey,
@@ -264,7 +417,9 @@ function cartItemToDisplayItem(args: {
     });
   }
 
-  if (item.type === "list") {
+  if (
+    item.type === "list"
+  ) {
     return listCartItemToDisplayItem({
       avatarId,
       itemKey,
@@ -275,19 +430,38 @@ function cartItemToDisplayItem(args: {
   return null;
 }
 
-function listCartItemToDisplayItem(args: {
-  avatarId: string;
-  itemKey: string;
-  item: CartItemDTO;
-}): CartDisplayItem | null {
-  const { avatarId, itemKey, item } = args;
+function listCartItemToDisplayItem(
+  args: {
+    avatarId: string;
+    itemKey: string;
+    item: CartItemDTO;
+  },
+): CartDisplayItem | null {
+  const {
+    avatarId,
+    itemKey,
+    item,
+  } = args;
 
-  const inventoryId = asNonEmptyString(
-    item.inventoryId,
-  );
-  const listId = asNonEmptyString(item.listId);
-  const modelId = asNonEmptyString(item.modelId);
-  const qty = normalizeQty(item.qty);
+  const inventoryId =
+    asNonEmptyString(
+      item.inventoryId,
+    );
+
+  const listId =
+    asNonEmptyString(
+      item.listId,
+    );
+
+  const modelId =
+    asNonEmptyString(
+      item.modelId,
+    );
+
+  const qty =
+    normalizeQty(
+      item.qty,
+    );
 
   if (
     !inventoryId ||
@@ -300,62 +474,129 @@ function listCartItemToDisplayItem(args: {
 
   return {
     ...item,
+
     avatarId,
     itemKey,
-    type: "list",
+
+    type:
+      "list",
+
     inventoryId,
     listId,
     modelId,
     qty,
-    catalog: null,
+
+    catalog:
+      null,
   };
 }
 
-function resaleCartItemToDisplayItem(args: {
-  avatarId: string;
-  itemKey: string;
-  item: CartItemDTO;
-}): CartDisplayItem | null {
-  const { avatarId, itemKey, item } = args;
+function resaleCartItemToDisplayItem(
+  args: {
+    avatarId: string;
+    itemKey: string;
+    item: CartItemDTO;
+  },
+): CartDisplayItem | null {
+  const {
+    avatarId,
+    itemKey,
+    item,
+  } = args;
 
-  const resaleId = asNonEmptyString(item.resaleId);
-  const productId = asNonEmptyString(item.productId);
+  const resaleId =
+    asNonEmptyString(
+      item.resaleId,
+    );
 
-  if (!resaleId || !productId) {
+  const productId =
+    asNonEmptyString(
+      item.productId,
+    );
+
+  if (
+    !resaleId ||
+    !productId
+  ) {
     return null;
   }
 
   return {
     ...item,
+
     avatarId,
     itemKey,
-    type: "resale",
+
+    type:
+      "resale",
+
     resaleId,
     productId,
-    productBlueprintId: asNonEmptyString(
-      item.productBlueprintId,
-    ),
-    tokenBlueprintId: asNonEmptyString(
-      item.tokenBlueprintId,
-    ),
-    brandId: asNonEmptyString(item.brandId),
-    title: asNonEmptyString(item.title),
-    productName: asNonEmptyString(item.productName),
-    listImage: asNonEmptyString(item.listImage),
-    imageUrl: asNonEmptyString(item.imageUrl),
-    price: normalizePrice(item.price),
-    qty: 1,
-    catalog: null,
+
+    productBlueprintId:
+      asNonEmptyString(
+        item.productBlueprintId,
+      ),
+
+    tokenBlueprintId:
+      asNonEmptyString(
+        item.tokenBlueprintId,
+      ),
+
+    brandId:
+      asNonEmptyString(
+        item.brandId,
+      ),
+
+    title:
+      asNonEmptyString(
+        item.title,
+      ),
+
+    productName:
+      asNonEmptyString(
+        item.productName,
+      ),
+
+    brandName:
+      asNonEmptyString(
+        item.brandName,
+      ),
+
+    listImage:
+      asNonEmptyString(
+        item.listImage,
+      ),
+
+    imageUrl:
+      asNonEmptyString(
+        item.imageUrl,
+      ),
+
+    price:
+      normalizePrice(
+        item.price,
+      ),
+
+    qty:
+      1,
+
+    catalog:
+      null,
   };
 }
 
 function isResaleDisplayItem(
   item: CartDisplayItem,
 ): boolean {
-  return item.type === "resale";
+  return (
+    item.type === "resale"
+  );
 }
 
-function normalizeQty(value: unknown): number {
+function normalizeQty(
+  value: unknown,
+): number {
   if (
     typeof value !== "number" ||
     !Number.isFinite(value) ||
@@ -364,10 +605,14 @@ function normalizeQty(value: unknown): number {
     return 1;
   }
 
-  return Math.floor(value);
+  return Math.floor(
+    value,
+  );
 }
 
-function normalizePrice(value: unknown): number {
+function normalizePrice(
+  value: unknown,
+): number {
   if (
     typeof value !== "number" ||
     !Number.isFinite(value) ||
@@ -376,13 +621,17 @@ function normalizePrice(value: unknown): number {
     return 0;
   }
 
-  return Math.floor(value);
+  return Math.floor(
+    value,
+  );
 }
 
 function asNonEmptyString(
   value: unknown,
 ): string {
-  if (typeof value !== "string") {
+  if (
+    typeof value !== "string"
+  ) {
     return "";
   }
 

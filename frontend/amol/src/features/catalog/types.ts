@@ -1,4 +1,4 @@
-// frontend/amol/src/features/catalog/types.ts
+// frontend\amol\src\features\catalog\types.ts
 
 export type CatalogListPrice = {
   modelId: string;
