@@ -1,4 +1,4 @@
-// frontend/console/mintRequest/src/application/util/primitive.ts
+// frontend\console\shell\src\shared\util\primitive.ts
 
 /**
  * Returns trimmed string if non-empty, otherwise empty string.

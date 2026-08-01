@@ -10,7 +10,7 @@ import type {
 
 import {
   asNonEmptyString,
-} from "../util/primitive";
+} from "../../../../shared/util/primitive";
 
 import {
   validateMintRequestSubmit,

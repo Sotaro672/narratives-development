@@ -5,7 +5,7 @@ import {
   extractMintInfoFromMintDTO,
 } from "../mapper/mintInfoMapper";
 import type { MintRequestRepository } from "../port/MintRequestRepository";
-import { asNonEmptyString } from "../util/primitive";
+import { asNonEmptyString } from "../../../../shared/util/primitive";
 
 async function resolveProductBlueprintId(
   repo: MintRequestRepository,

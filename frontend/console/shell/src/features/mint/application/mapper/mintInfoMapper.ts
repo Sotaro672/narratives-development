@@ -7,7 +7,7 @@ import type { MintDTO } from "../../infrastructure/dto/mint.dto";
 import {
   asMaybeISO,
   asNonEmptyString,
-} from "../util/primitive";
+} from "../../../../shared/util/primitive";
 
 // ============================================================
 // Types

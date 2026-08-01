@@ -1,91 +1,88 @@
-// frontend\console\shell\src\shared\http\apiBase.ts
-/// <reference types="vite/client" />
+// frontend/console/shell/src/shared/http/apiBase.ts
 
 /**
- * Shared API base resolver for module federation remotes.
+ * Console共通のBackend API URLを解決する。
  *
  * Policy:
- * - env VITE_BACKEND_BASE_URL は「originのみ」（例: https://...run.app）を想定
- * - console API は現状 /console プレフィックス無しで動いているため、console は origin を返す
- * - 事故防止のため、env に /console 等が入っていても除去して正規化する
+ * - VITE_BACKEND_BASE_URLはoriginのみを想定する
+ * - Console APIは現在、/consoleプレフィックスなしで提供される
+ * - 環境変数に/console、/mall、/snsなどが含まれていても除去する
  */
 
-type ApiScope = "console" | "mall";
-
-/** Cloud Run fallback. */
+/** Cloud Run fallback origin. */
 export const FALLBACK_BACKEND_ORIGIN =
   "https://narratives-backend-871263659099.asia-northeast1.run.app";
 
-/** Read Vite env safely and normalize. */
-function readEnvBackendBase(): string {
-  const raw =
-    ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined) ?? "";
-  return String(raw).trim();
-}
-
 /**
- * Normalize backend origin:
- * - trim
- * - strip trailing slashes
- * - strip known path suffixes (/console, /mall, /sns) if mistakenly included
- */
-function normalizeOrigin(input: string): string {
-  let s = String(input ?? "").trim();
-  if (!s) return "";
-
-  s = s.replace(/\/+$/g, "");
-  s = s.replace(/\/(console|mall|sns)(\/.*)?$/i, "");
-  s = s.replace(/\/+$/g, "");
-
-  return s;
-}
-
-/** Join base and path safely. */
-function join(base: string, path: string): string {
-  const b = (base ?? "").replace(/\/+$/g, "");
-  const p = (path ?? "").replace(/^\/+/g, "");
-  if (!b) return `/${p}`;
-  if (!p) return b;
-  return `${b}/${p}`;
-}
-
-/** Backend origin. */
-export function getBackendOrigin(): string {
-  const env = normalizeOrigin(readEnvBackendBase());
-  return env || FALLBACK_BACKEND_ORIGIN;
-}
-
-/**
- * Base URL for a scope.
+ * Backend URLをorigin形式へ正規化する。
  *
- * console API は現状 /console ではなくルート直下で提供しているため、
- * scope === "console" は origin を返す。
+ * - 前後の空白を削除
+ * - 末尾のスラッシュを削除
+ * - 誤って付与された既知のAPIパスを削除
  */
-export function getApiBase(scope: ApiScope): string {
-  const origin = getBackendOrigin();
-  if (scope === "console") return origin;
-  return join(origin, scope);
-}
-
-/** Console API base. */
-export function getConsoleApiBase(): string {
-  return getApiBase("console");
+function normalizeBackendOrigin(
+  input: string,
+): string {
+  return input
+    .trim()
+    .replace(/\/+$/g, "")
+    .replace(/\/(console|mall|sns)(\/.*)?$/i, "");
 }
 
 /**
- * Console API base.
+ * Vite環境変数からBackend originを取得する。
  *
- * Existing repositories can import this as:
- * import { API_BASE } from ".../apiBase";
+ * 有効な値を取得できない場合はCloud Runの
+ * fallback originを使用する。
  */
-export const API_BASE = getConsoleApiBase();
+function resolveBackendOrigin(): string {
+  const envValue =
+    (import.meta as {
+      env?: {
+        VITE_BACKEND_BASE_URL?: string;
+      };
+    }).env?.VITE_BACKEND_BASE_URL ?? "";
 
-/** Build a full URL under console base with a given path. */
-export function buildConsoleUrl(path: string): string {
-  return join(getConsoleApiBase(), path);
+  return (
+    normalizeBackendOrigin(envValue) ||
+    FALLBACK_BACKEND_ORIGIN
+  );
 }
 
-/** Build a full URL for a given API scope. */
-export function buildApiUrl(scope: ApiScope, path: string): string {
-  return join(getApiBase(scope), path);
+/**
+ * Backend originとAPI pathを結合する。
+ */
+function joinUrl(
+  base: string,
+  path: string,
+): string {
+  const normalizedPath =
+    path.replace(/^\/+/g, "");
+
+  if (!normalizedPath) {
+    return base;
+  }
+
+  return `${base}/${normalizedPath}`;
+}
+
+/**
+ * Console APIのBackend origin。
+ *
+ * 環境変数は実行中に変化しないため、
+ * モジュール読み込み時に一度だけ解決する。
+ */
+export const API_BASE =
+  resolveBackendOrigin();
+
+/**
+ * Console APIの完全なURLを生成する。
+ */
+export function buildConsoleUrl(
+  path: string,
+): string {
+  return joinUrl(
+    API_BASE,
+    path,
+  );
 }
