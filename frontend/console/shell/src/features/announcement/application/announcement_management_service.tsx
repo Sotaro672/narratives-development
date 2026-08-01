@@ -2,9 +2,12 @@
 
 import {
   listAnnouncementManagementByCompanyId,
-  type Announcement,
-  type AnnouncementManagementApiResult,
 } from "../infrastructure/announcement_repository_http";
+
+import type {
+  Announcement,
+  AnnouncementManagementApiResult,
+} from "../../../shared/types/announcements";
 
 export type AnnouncementManagementRow = {
   id: string;
@@ -43,12 +46,10 @@ export async function fetchAnnouncementManagementRows({
   companyId,
   page = 1,
   perPage = 50,
-}: AnnouncementManagementListParams): Promise<AnnouncementManagementListResult> {
-  const normalizedCompanyId = String(
-    companyId ?? "",
-  ).trim();
-
-  if (!normalizedCompanyId) {
+}: AnnouncementManagementListParams): Promise<
+  AnnouncementManagementListResult
+> {
+  if (!companyId) {
     throw new Error(
       "companyId is required",
     );
@@ -56,7 +57,7 @@ export async function fetchAnnouncementManagementRows({
 
   const result =
     await listAnnouncementManagementByCompanyId({
-      companyId: normalizedCompanyId,
+      companyId,
       page,
       perPage,
     });
@@ -72,18 +73,20 @@ export async function fetchAnnouncementManagementRows({
 function enrichAnnouncementManagementRows(
   result: AnnouncementManagementApiResult,
 ): AnnouncementManagementRow[] {
-  const sourceRows = Array.isArray(
-    result?.rows,
-  )
-    ? result.rows
-    : [];
+  const sourceRows =
+    Array.isArray(
+      result.rows,
+    )
+      ? result.rows
+      : [];
 
   return sourceRows.flatMap(
     (sourceRow) => {
-      const tokenName = String(
-        sourceRow.tokenBlueprint
-          ?.tokenName ?? "",
-      );
+      const tokenName =
+        String(
+          sourceRow.tokenBlueprint
+            ?.tokenName ?? "",
+        );
 
       const announcements =
         Array.isArray(
@@ -93,11 +96,12 @@ function enrichAnnouncementManagementRows(
           : [];
 
       return announcements.map(
-        (announcement) =>
-          toAnnouncementManagementRow(
+        (announcement) => {
+          return toAnnouncementManagementRow(
             announcement,
             tokenName,
-          ),
+          );
+        },
       );
     },
   );
@@ -108,18 +112,27 @@ function toAnnouncementManagementRow(
   tokenName: string,
 ): AnnouncementManagementRow {
   return {
-    id: announcement.id,
-    title: announcement.title,
+    id:
+      announcement.id,
+
+    title:
+      announcement.title,
+
     targetToken:
-      announcement.targetToken ?? null,
+      announcement.targetToken ??
+      null,
+
     published:
       announcement.published,
+
     createdAt:
       announcement.createdAt,
+
     updatedAt:
       announcement.updatedAt,
 
     tokenName,
+
     targetAvatarCount:
       Array.isArray(
         announcement.targetAvatars,
@@ -134,56 +147,67 @@ export function sortAnnouncementManagementRows(
   sortKey: AnnouncementManagementSortKey,
   sortDir: AnnouncementManagementSortDir,
 ): AnnouncementManagementRow[] {
-  const next = [...rows];
+  const next =
+    [...rows];
 
-  next.sort((a, b) => {
-    let result: number;
+  next.sort(
+    (
+      a,
+      b,
+    ) => {
+      let result: number;
 
-    switch (sortKey) {
-      case "title":
-        result = compareStrings(
-          a.title,
-          b.title,
-        );
-        break;
+      switch (sortKey) {
+        case "title":
+          result =
+            compareStrings(
+              a.title,
+              b.title,
+            );
+          break;
 
-      case "tokenName":
-        result = compareStrings(
-          a.tokenName,
-          b.tokenName,
-        );
-        break;
+        case "tokenName":
+          result =
+            compareStrings(
+              a.tokenName,
+              b.tokenName,
+            );
+          break;
 
-      case "createdAt":
-        result = compareDateStrings(
-          a.createdAt,
-          b.createdAt,
-        );
-        break;
+        case "createdAt":
+          result =
+            compareDateStrings(
+              a.createdAt,
+              b.createdAt,
+            );
+          break;
 
-      case "updatedAt":
-        result = compareDateStrings(
-          a.updatedAt,
-          b.updatedAt,
-        );
-        break;
+        case "updatedAt":
+          result =
+            compareDateStrings(
+              a.updatedAt,
+              b.updatedAt,
+            );
+          break;
 
-      case "targetAvatarCount":
-        result = compareNumbers(
-          a.targetAvatarCount,
-          b.targetAvatarCount,
-        );
-        break;
+        case "targetAvatarCount":
+          result =
+            compareNumbers(
+              a.targetAvatarCount,
+              b.targetAvatarCount,
+            );
+          break;
 
-      default:
-        result = 0;
-        break;
-    }
+        default:
+          result = 0;
+          break;
+      }
 
-    return sortDir === "asc"
-      ? result
-      : -result;
-  });
+      return sortDir === "asc"
+        ? result
+        : -result;
+    },
+  );
 
   return next;
 }
@@ -191,19 +215,27 @@ export function sortAnnouncementManagementRows(
 export function normalizeAnnouncementManagementSortKey(
   value: string,
 ): AnnouncementManagementSortKey {
-  if (value === "title") {
+  if (
+    value === "title"
+  ) {
     return "title";
   }
 
-  if (value === "tokenName") {
+  if (
+    value === "tokenName"
+  ) {
     return "tokenName";
   }
 
-  if (value === "updatedAt") {
+  if (
+    value === "updatedAt"
+  ) {
     return "updatedAt";
   }
 
-  if (value === "targetAvatarCount") {
+  if (
+    value === "targetAvatarCount"
+  ) {
     return "targetAvatarCount";
   }
 
@@ -214,8 +246,12 @@ function compareStrings(
   a: string,
   b: string,
 ): number {
-  return String(a ?? "").localeCompare(
-    String(b ?? ""),
+  return String(
+    a ?? "",
+  ).localeCompare(
+    String(
+      b ?? "",
+    ),
     "ja",
   );
 }
@@ -231,24 +267,36 @@ function compareDateStrings(
   a: string | null | undefined,
   b: string | null | undefined,
 ): number {
-  return toTime(a) - toTime(b);
+  return (
+    toTime(
+      a,
+    ) -
+    toTime(
+      b,
+    )
+  );
 }
 
 function toTime(
   value: string | null | undefined,
 ): number {
-  const text = String(
-    value ?? "",
-  ).trim();
+  const text =
+    String(
+      value ?? "",
+    ).trim();
 
   if (!text) {
     return 0;
   }
 
   const time =
-    new Date(text).getTime();
+    new Date(
+      text,
+    ).getTime();
 
-  return Number.isFinite(time)
+  return Number.isFinite(
+    time,
+  )
     ? time
     : 0;
 }

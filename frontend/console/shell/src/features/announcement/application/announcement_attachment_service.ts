@@ -7,7 +7,9 @@ import {
   uploadBytes,
 } from "firebase/storage";
 
-import type { AnnouncementAttachmentInput } from "../infrastructure/announcement_repository_http";
+import type {
+  AnnouncementAttachmentInput,
+} from "../../../shared/types/announcements";
 
 type UploadAnnouncementImageParams = {
   announcementId: string;
@@ -41,29 +43,15 @@ export function createAnnouncementClientId(): string {
 // Validation
 // ============================================================
 
-function normalizeAnnouncementId(
-  announcementId: string,
-): string {
-  const normalizedId = String(
-    announcementId ?? "",
-  ).trim();
-
-  if (!normalizedId) {
-    throw new Error(
-      "announcementId is required",
-    );
-  }
-
-  return normalizedId;
-}
-
 function isImageFile(
   value: unknown,
 ): value is File {
   return (
     typeof File !== "undefined" &&
     value instanceof File &&
-    value.type.startsWith("image/")
+    value.type.startsWith(
+      "image/",
+    )
   );
 }
 
@@ -71,32 +59,18 @@ function isImageFile(
 // Storage path
 // ============================================================
 
-function sanitizeStoragePathSegment(
-  value: string,
-): string {
-  const normalizedValue = String(
-    value ?? "",
-  ).trim();
-
-  if (!normalizedValue) {
-    return "file";
-  }
-
-  return normalizedValue
-    .replace(/[\\/#?[\]*]/g, "_")
-    .replace(/\s+/g, "_")
-    .replace(/_+/g, "_");
-}
-
 function getFileExtension(
   fileName: string,
 ): string {
-  const normalizedFileName = String(
-    fileName ?? "",
-  ).trim();
+  const normalizedFileName =
+    String(
+      fileName ?? "",
+    ).trim();
 
   const extensionIndex =
-    normalizedFileName.lastIndexOf(".");
+    normalizedFileName.lastIndexOf(
+      ".",
+    );
 
   if (
     extensionIndex < 0 ||
@@ -115,20 +89,23 @@ function buildAnnouncementAttachmentStorageFileName(
   file: File,
   index: number,
 ): string {
-  const extension = getFileExtension(
-    file.name || "image",
-  );
+  const extension =
+    getFileExtension(
+      file.name || "image",
+    );
 
   const attachmentId =
     createAnnouncementClientId();
 
-  const displayOrder = String(
-    index + 1,
-  ).padStart(2, "0");
+  const displayOrder =
+    String(
+      index + 1,
+    ).padStart(
+      2,
+      "0",
+    );
 
-  return sanitizeStoragePathSegment(
-    `${displayOrder}-${attachmentId}${extension}`,
-  );
+  return `${displayOrder}-${attachmentId}${extension}`;
 }
 
 function buildAnnouncementAttachmentObjectPath(
@@ -137,14 +114,12 @@ function buildAnnouncementAttachmentObjectPath(
 ): string {
   return [
     "announcements",
-    sanitizeStoragePathSegment(
-      announcementId,
-    ),
+    announcementId,
     "attachments",
-    sanitizeStoragePathSegment(
-      storageFileName,
-    ),
-  ].join("/");
+    storageFileName,
+  ].join(
+    "/",
+  );
 }
 
 // ============================================================
@@ -155,12 +130,9 @@ async function uploadAnnouncementImage({
   announcementId,
   file,
   index,
-}: UploadAnnouncementImageParams): Promise<AnnouncementAttachmentInput> {
-  const normalizedAnnouncementId =
-    normalizeAnnouncementId(
-      announcementId,
-    );
-
+}: UploadAnnouncementImageParams): Promise<
+  AnnouncementAttachmentInput
+> {
   const storageFileName =
     buildAnnouncementAttachmentStorageFileName(
       file,
@@ -169,7 +141,7 @@ async function uploadAnnouncementImage({
 
   const objectPath =
     buildAnnouncementAttachmentObjectPath(
-      normalizedAnnouncementId,
+      announcementId,
       storageFileName,
     );
 
@@ -177,36 +149,50 @@ async function uploadAnnouncementImage({
     file.type ||
     "application/octet-stream";
 
-  const storage = getStorage();
+  const storage =
+    getStorage();
 
-  const attachmentRef = storageRef(
-    storage,
-    objectPath,
-  );
+  const attachmentRef =
+    storageRef(
+      storage,
+      objectPath,
+    );
 
   await uploadBytes(
     attachmentRef,
     file,
     {
-      contentType: mimeType,
+      contentType:
+        mimeType,
+
       customMetadata: {
-        announcementId:
-          normalizedAnnouncementId,
-        fileName: storageFileName,
-        originalFileName: file.name,
+        announcementId,
+
+        fileName:
+          storageFileName,
+
+        originalFileName:
+          file.name,
       },
     },
   );
 
-  const fileUrl = await getDownloadURL(
-    attachmentRef,
-  );
+  const fileUrl =
+    await getDownloadURL(
+      attachmentRef,
+    );
 
   return {
-    fileName: storageFileName,
+    fileName:
+      storageFileName,
+
     fileUrl,
-    fileSize: file.size,
+
+    fileSize:
+      file.size,
+
     mimeType,
+
     objectPath,
   };
 }
@@ -217,27 +203,32 @@ export async function uploadAnnouncementImages({
 }: UploadAnnouncementImagesParams): Promise<
   AnnouncementAttachmentInput[]
 > {
-  const normalizedAnnouncementId =
-    normalizeAnnouncementId(
-      announcementId,
-    );
+  const validImages =
+    Array.isArray(
+      images,
+    )
+      ? images.filter(
+          isImageFile,
+        )
+      : [];
 
-  const validImages = Array.isArray(images)
-    ? images.filter(isImageFile)
-    : [];
-
-  if (validImages.length === 0) {
+  if (
+    validImages.length === 0
+  ) {
     return [];
   }
 
   return Promise.all(
-    validImages.map((file, index) =>
-      uploadAnnouncementImage({
-        announcementId:
-          normalizedAnnouncementId,
+    validImages.map(
+      (
         file,
         index,
-      }),
+      ) =>
+        uploadAnnouncementImage({
+          announcementId,
+          file,
+          index,
+        }),
     ),
   );
 }
