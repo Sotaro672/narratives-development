@@ -7,13 +7,10 @@
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
 import { API_BASE } from "../../../shared/http/apiBase";
 
-export type PageResult<T> = {
-  items: T[];
-  totalCount: number;
-  totalPages: number;
-  page: number;
-  perPage: number;
-};
+import type {
+  PageParams,
+  PageResult,
+} from "../../../shared/types/common/common";
 
 export type ShippingSnapshot = {
   zipCode?: string;
@@ -115,28 +112,15 @@ export type OrderItemInventoryRowDTO = {
   transferredAt?: string;
 };
 
-export type OrderListParams = {
-  page?: number;
-  perPage?: number;
+export interface OrderListParams
+  extends PageParams {
   id?: string;
   userId?: string;
   avatarId?: string;
   cartId?: string;
   createdFrom?: string;
   createdTo?: string;
-};
-
-export type RepositoryConfig = {
-  /**
-   * テスト用にfetchを差し替える。
-   */
-  fetcher?: typeof fetch;
-
-  /**
-   * 例外的にAPI baseを差し替える場合のみ使用する。
-   */
-  baseUrl?: string;
-};
+}
 
 function buildQuery(
   params: Record<
@@ -176,25 +160,6 @@ function buildQuery(
     : "";
 }
 
-function isLikelyHtml(
-  text: string,
-): boolean {
-  const normalized =
-    text.trimStart();
-
-  return (
-    normalized.startsWith(
-      "<!DOCTYPE html",
-    ) ||
-    normalized.startsWith(
-      "<html",
-    ) ||
-    normalized.startsWith(
-      "<!--",
-    )
-  );
-}
-
 async function readErrorMessage(
   response: Response,
 ): Promise<string> {
@@ -228,14 +193,6 @@ async function readErrorMessage(
     const text =
       await response.text();
 
-    if (isLikelyHtml(text)) {
-      return (
-        "API returned HTML (not JSON). " +
-        "Check API_BASE/rewrite/auth. " +
-        `status=${response.status}`
-      );
-    }
-
     return text
       ? text.slice(0, 200)
       : `${response.status} ${response.statusText}`;
@@ -245,7 +202,6 @@ async function readErrorMessage(
 }
 
 async function requestJSON<T>(
-  fetcher: typeof fetch,
   url: string,
   init?: RequestInit,
 ): Promise<T> {
@@ -288,7 +244,7 @@ async function requestJSON<T>(
   }
 
   const response =
-    await fetcher(
+    await fetch(
       url,
       {
         ...init,
@@ -316,20 +272,19 @@ async function requestJSON<T>(
     )
   ) {
     const text =
-      await response.text();
-
-    if (isLikelyHtml(text)) {
-      throw new Error(
-        "API returned HTML (not JSON). " +
-          "Most likely wrong API_BASE or hosting rewrite. " +
-          `url=${url}`,
-      );
-    }
+      await response
+        .text()
+        .catch(() => "");
 
     throw new Error(
       "API returned non-JSON response. " +
         `url=${url} ` +
-        `content-type=${contentType}`,
+        `content-type=${contentType}` +
+        (
+          text
+            ? ` body=${text.slice(0, 200)}`
+            : ""
+        ),
     );
   }
 
@@ -351,21 +306,13 @@ export interface OrderRepository {
 /**
  * OrderRepositoryを生成する。
  *
- * - URL構築はAPI_BASEを正とする
- * - config.baseUrl指定時のみ上書きする
+ * - URL構築はAPI_BASEを使用する
+ * - 通信には標準のfetchを使用する
  * - 認証ヘッダー付与はrequestJSONへ集約する
  */
-export function createOrderRepository(
-  config: RepositoryConfig = {},
-): OrderRepository {
-  const fetcher =
-    config.fetcher ?? fetch;
-
+export function createOrderRepository(): OrderRepository {
   const resolvedBaseUrl =
-    (
-      config.baseUrl ??
-      API_BASE
-    ).replace(
+    API_BASE.replace(
       /\/+$/g,
       "",
     );
@@ -401,7 +348,6 @@ export function createOrderRepository(
         );
 
       return requestJSON<Order>(
-        fetcher,
         url,
         {
           method: "GET",
@@ -449,7 +395,6 @@ export function createOrderRepository(
       return requestJSON<
         PageResult<OrderItemInventoryRowDTO>
       >(
-        fetcher,
         url,
         {
           method: "GET",
