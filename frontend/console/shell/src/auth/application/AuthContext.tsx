@@ -75,12 +75,9 @@ function mapFirebaseUserBase(
   | "assignedBrands"
 > {
   return {
-    uid:
-      user.uid,
-    email:
-      user.email ?? null,
-    displayName:
-      user.displayName ?? null,
+    uid: user.uid,
+    email: user.email ?? null,
+    displayName: user.displayName ?? null,
   };
 }
 

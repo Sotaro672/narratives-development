@@ -43,12 +43,23 @@ export class HttpError extends Error {
 
     super(message);
 
-    this.url = init.url;
-    this.method = init.method;
-    this.status = init.status;
-    this.statusText = init.statusText;
-    this.contentType = init.contentType;
-    this.bodyText = init.bodyText;
+    this.url =
+      init.url;
+
+    this.method =
+      init.method;
+
+    this.status =
+      init.status;
+
+    this.statusText =
+      init.statusText;
+
+    this.contentType =
+      init.contentType;
+
+    this.bodyText =
+      init.bodyText;
   }
 }
 
@@ -115,6 +126,9 @@ type RequestAuthResult = {
 
 /**
  * bodyTextを指定された最大文字数に制限する。
+ *
+ * 正常レスポンスの解析には使用せず、
+ * HttpErrorへ格納する文字列だけに適用する。
  */
 function limitText(
   text: string,
@@ -125,25 +139,21 @@ function limitText(
   }
 
   return text.length > limit
-    ? text.slice(0, limit)
+    ? text.slice(
+        0,
+        limit,
+      )
     : text;
 }
 
 /**
- * Response bodyを安全に文字列として取得する。
+ * Response bodyを省略せず、安全に文字列として取得する。
  */
 async function readTextSafely(
   response: Response,
-  limit: number,
 ): Promise<string> {
   try {
-    const text =
-      await response.text();
-
-    return limitText(
-      text,
-      limit,
-    );
+    return await response.text();
   } catch {
     return "";
   }
@@ -219,7 +229,9 @@ async function buildRequestHeaders(
   return {
     headers,
     hasGeneratedAuthorization:
-      Boolean(authorization),
+      Boolean(
+        authorization,
+      ),
   };
 }
 
@@ -272,29 +284,43 @@ async function createHttpError(
   const bodyText =
     await readTextSafely(
       response,
-      errorBodyLimit,
     );
 
   return new HttpError({
     url:
       response.url ||
       request.url,
+
     method:
       request.method,
+
     status:
       response.status,
+
     statusText:
       response.statusText,
+
     contentType:
       response.headers.get(
         "content-type",
       ) ?? "",
-    bodyText,
+
+    bodyText:
+      limitText(
+        bodyText,
+        errorBodyLimit,
+      ),
   });
 }
 
 /**
  * 正常レスポンスのbodyを解析する。
+ *
+ * 正常レスポンスは省略せず全文を読み込み、
+ * JSON解析後にTとして返す。
+ *
+ * errorBodyLimitは、解析失敗などでHttpErrorへ
+ * bodyを格納するときだけ適用する。
  */
 async function parseSuccessResponse<T>(
   response: Response,
@@ -319,81 +345,96 @@ async function parseSuccessResponse<T>(
       contentType,
     );
 
+  const bodyText =
+    await readTextSafely(
+      response,
+    );
+
   if (
     !jsonResponse &&
     !allowNonJson
   ) {
-    const bodyText =
-      await readTextSafely(
-        response,
-        errorBodyLimit,
-      );
-
     throw new HttpError({
       url:
         response.url ||
         request.url,
+
       method:
         request.method,
+
       status:
         response.status,
+
       statusText:
         response.statusText,
+
       contentType,
-      bodyText: limitText(
-        [
-          `Unexpected content-type: ${contentType || "(empty)"}`,
-          bodyText,
-        ]
-          .filter(Boolean)
-          .join("\n"),
-        errorBodyLimit,
-      ),
+
+      bodyText:
+        limitText(
+          [
+            `Unexpected content-type: ${contentType || "(empty)"}`,
+            bodyText,
+          ]
+            .filter(
+              Boolean,
+            )
+            .join(
+              "\n",
+            ),
+          errorBodyLimit,
+        ),
     });
   }
-
-  const bodyText =
-    await readTextSafely(
-      response,
-      errorBodyLimit,
-    );
 
   if (!bodyText) {
     return undefined as T;
   }
 
   if (!jsonResponse) {
-    return bodyText as T;
+    return bodyText as unknown as T;
   }
 
   try {
     return JSON.parse(
       bodyText,
     ) as T;
-  } catch (error: unknown) {
+  } catch (
+    error: unknown
+  ) {
     const message =
       error instanceof Error
         ? error.message
-        : String(error);
+        : String(
+            error,
+          );
 
     throw new HttpError({
       url:
         response.url ||
         request.url,
+
       method:
         request.method,
+
       status:
         response.status,
+
       statusText:
         response.statusText,
+
       contentType,
-      bodyText: limitText(
-        [
-          `Failed to parse JSON: ${message}`,
-          bodyText,
-        ].join("\n"),
-        errorBodyLimit,
-      ),
+
+      bodyText:
+        limitText(
+          [
+            `Failed to parse JSON: ${message}`,
+            bodyText,
+          ].join(
+            "\n",
+          ),
+          errorBodyLimit,
+        ),
     });
   }
 }
@@ -443,7 +484,9 @@ export async function fetchJSON<
 
   const shouldRetryUnauthorized =
     retryUnauthorized ??
-    authMode !== "none";
+    (
+      authMode !== "none"
+    );
 
   /**
    * 再送時にbodyを再利用できるよう、
@@ -467,7 +510,9 @@ export async function fetchJSON<
     firstAttempt.request;
 
   let response =
-    await fetch(request);
+    await fetch(
+      request,
+    );
 
   /**
    * 認証付きリクエストが401になった場合のみ、
@@ -499,7 +544,9 @@ export async function fetchJSON<
         retryAttempt.request;
 
       response =
-        await fetch(request);
+        await fetch(
+          request,
+        );
     }
   }
 
