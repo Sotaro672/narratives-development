@@ -6,6 +6,13 @@ import type {
   CartModelSnapshot,
 } from "../../shared/types/cart";
 
+function isValidPrice(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value)
+  );
+}
+
 function getModelVariations(
   catalog: CartCatalogSnapshot | null | undefined,
 ): CartModelSnapshot[] {
@@ -20,12 +27,10 @@ export function getModelVariation(
     return null;
   }
 
-  const models = getModelVariations(catalog);
-
   return (
-    models.find((model) => {
-      return model.id === modelId;
-    }) ?? null
+    getModelVariations(catalog).find(
+      (model) => model.id === modelId,
+    ) ?? null
   );
 }
 
@@ -42,23 +47,16 @@ export function getModelPrice(
     modelId,
   );
 
-  if (
-    model &&
-    typeof model.price === "number" &&
-    Number.isFinite(model.price)
-  ) {
+  if (isValidPrice(model?.price)) {
     return model.price;
   }
 
-  const price = catalog?.list.prices.find(
-    (item) => item.modelId === modelId,
+  const listPrice = catalog?.list.prices.find(
+    (price) => price.modelId === modelId,
   );
 
-  if (
-    typeof price?.price === "number" &&
-    Number.isFinite(price.price)
-  ) {
-    return price.price;
+  if (isValidPrice(listPrice?.price)) {
+    return listPrice.price;
   }
 
   return null;
@@ -67,10 +65,7 @@ export function getModelPrice(
 export function getCartItemPrice(
   item: CartDisplayItem,
 ): number | null {
-  if (
-    typeof item.price === "number" &&
-    Number.isFinite(item.price)
-  ) {
+  if (isValidPrice(item.price)) {
     return item.price;
   }
 
@@ -83,26 +78,21 @@ export function getCartItemPrice(
 export function calculateCartTotalAmount(
   items: CartDisplayItem[],
 ): number {
-  return items.reduce(
-    (total, item) => {
-      const price =
-        getCartItemPrice(item);
+  return items.reduce((total, item) => {
+    const price = getCartItemPrice(item);
 
-      if (price === null) {
-        return total;
-      }
+    if (price === null) {
+      return total;
+    }
 
-      return total + price * item.qty;
-    },
-    0,
-  );
+    return total + price * item.qty;
+  }, 0);
 }
 
 export function getPrimaryCatalogImage(
   catalog: CartCatalogSnapshot | null | undefined,
 ): string {
-  const primaryImage =
-    catalog?.listImages?.[0];
+  const primaryImage = catalog?.listImages?.[0];
 
   if (
     typeof primaryImage?.url === "string" &&

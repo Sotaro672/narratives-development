@@ -1,4 +1,5 @@
 // frontend/amol/src/pages/PaymentPage.tsx
+
 import { useNavigate, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
@@ -6,8 +7,9 @@ import { PaymentErrorModal } from "../features/payment/components/PaymentErrorMo
 import { PaymentItemsCard } from "../features/payment/components/PaymentItemsCard";
 import { PaymentMethodsCard } from "../features/payment/components/PaymentMethodsCard";
 import { ShippingAddressCard } from "../features/payment/components/ShippingAddressCard";
-import { useMobilePortrait } from "../features/payment/hooks/useMobilePortrait";
 import { usePaymentPage } from "../features/payment/hooks/usePaymentPage";
+import { useMobilePortrait } from "../features/shared/hooks/useMobilePortrait";
+
 import "../styles/payment-page.css";
 
 export default function PaymentPage() {
@@ -38,9 +40,9 @@ export default function PaymentPage() {
     navigate,
   });
 
-  return (
-    <>
-      {isLoading ? (
+  if (isLoading) {
+    return (
+      <>
         <Layout
           title="お支払い"
           titleClickable={false}
@@ -56,60 +58,81 @@ export default function PaymentPage() {
             <p>決済情報を読み込んでいます。</p>
           </section>
         </Layout>
-      ) : (
-        <Layout
-          title="お支払い"
-          titleClickable={false}
-          mode="mypage"
-          showBackButton
-          backTo={backTo}
-          showFooter={isMobilePortrait}
-          hideHamburgerMenu
-          hideSettingsButton
-          mainClassName="payment-page"
-          actionButtonLabel={!isMobilePortrait ? paymentButtonLabel : undefined}
-          onActionButtonClick={
-            !isMobilePortrait ? handleSubmitPayment : undefined
-          }
-          actionButtonDisabled={isPaymentDisabled}
-          footerProps={
-            isMobilePortrait
-              ? {
-                  variant: "action",
-                  buttonLabel: paymentButtonLabel,
-                  disabled: isPaymentDisabled,
-                  onButtonClick: handleSubmitPayment,
-                }
-              : undefined
-          }
-        >
-          <section className="payment-page__section">
-            <div className="payment-page__content">
-              <div className="payment-page__left-column">
-                <PaymentItemsCard amount={amount} cartItems={cartItems} />
-              </div>
 
-              <div className="payment-page__right-column">
-                <ShippingAddressCard
-                  primaryShippingAddress={primaryShippingAddress}
-                  shippingAddressLabel={shippingAddressLabel}
-                  userFullName={userFullName}
-                  onGoToShippingAddress={handleGoToShippingAddress}
-                />
+        <PaymentErrorModal
+          message={modalMessage}
+          onClose={closeErrorModal}
+        />
+      </>
+    );
+  }
 
-                <PaymentMethodsCard
-                  paymentMethods={paymentMethods}
-                  selectedPaymentMethodId={selectedPaymentMethodId}
-                  onSelectPaymentMethod={setSelectedPaymentMethodId}
-                  onGoToPaymentMethod={handleGoToPaymentMethod}
-                />
-              </div>
+  return (
+    <>
+      <Layout
+        title="お支払い"
+        titleClickable={false}
+        mode="mypage"
+        showBackButton
+        backTo={backTo}
+        showFooter={isMobilePortrait}
+        hideHamburgerMenu
+        hideSettingsButton
+        mainClassName="payment-page"
+        actionButtonLabel={
+          isMobilePortrait
+            ? undefined
+            : paymentButtonLabel
+        }
+        onActionButtonClick={
+          isMobilePortrait
+            ? undefined
+            : handleSubmitPayment
+        }
+        actionButtonDisabled={isPaymentDisabled}
+        footerProps={
+          isMobilePortrait
+            ? {
+                variant: "action",
+                buttonLabel: paymentButtonLabel,
+                disabled: isPaymentDisabled,
+                onButtonClick: handleSubmitPayment,
+              }
+            : undefined
+        }
+      >
+        <section className="payment-page__section">
+          <div className="payment-page__content">
+            <div className="payment-page__left-column">
+              <PaymentItemsCard
+                amount={amount}
+                cartItems={cartItems}
+              />
             </div>
-          </section>
-        </Layout>
-      )}
 
-      <PaymentErrorModal message={modalMessage} onClose={closeErrorModal} />
+            <div className="payment-page__right-column">
+              <ShippingAddressCard
+                primaryShippingAddress={primaryShippingAddress}
+                shippingAddressLabel={shippingAddressLabel}
+                userFullName={userFullName}
+                onGoToShippingAddress={handleGoToShippingAddress}
+              />
+
+              <PaymentMethodsCard
+                paymentMethods={paymentMethods}
+                selectedPaymentMethodId={selectedPaymentMethodId}
+                onSelectPaymentMethod={setSelectedPaymentMethodId}
+                onGoToPaymentMethod={handleGoToPaymentMethod}
+              />
+            </div>
+          </div>
+        </section>
+      </Layout>
+
+      <PaymentErrorModal
+        message={modalMessage}
+        onClose={closeErrorModal}
+      />
     </>
   );
 }

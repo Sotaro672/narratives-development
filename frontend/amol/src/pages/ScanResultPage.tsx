@@ -1,12 +1,13 @@
 // frontend/amol/src/pages/ScanResultPage.tsx
+
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import ScanResultCard from "../features/scan-result/presentation/components/ScanResultCard";
 import ScanTransferSuccessModal from "../features/scan-result/presentation/components/ScanTransferSuccessModal";
-import { useMobilePortrait } from "../features/catalog/presentation/hooks/useMobilePortrait";
 import { useScanResultPage } from "../features/scan-result/presentation/hooks/useScanResultPage";
+import { useMobilePortrait } from "../features/shared/hooks/useMobilePortrait";
 
 import "../styles/scan-result-page.css";
 
@@ -33,13 +34,20 @@ export default function ScanResultPage() {
   } = useScanResultPage();
 
   const handleSubmitReview = useCallback(async () => {
-    const ok = await submitReview(reviewBody, reviewRating);
+    const ok = await submitReview(
+      reviewBody,
+      reviewRating,
+    );
 
     if (ok) {
       setReviewBody("");
       setReviewRating(5);
     }
-  }, [reviewBody, reviewRating, submitReview]);
+  }, [
+    reviewBody,
+    reviewRating,
+    submitReview,
+  ]);
 
   const handleOpenInquiryPage = useCallback(() => {
     const productId = state.productId.trim();
@@ -48,10 +56,16 @@ export default function ScanResultPage() {
       return;
     }
 
-    navigate(`/inquiries/new?productId=${encodeURIComponent(productId)}`);
-  }, [navigate, state.productId]);
+    navigate(
+      `/inquiries/new?productId=${encodeURIComponent(productId)}`,
+    );
+  }, [
+    navigate,
+    state.productId,
+  ]);
 
-  const isLoggedIn = state.authAvailable === true;
+  const isLoggedIn =
+    state.authAvailable === true;
 
   const canPostReview =
     state.ownedByWallet === true &&
@@ -69,56 +83,99 @@ export default function ScanResultPage() {
       title="AMOL"
       mode={isLoggedIn ? "mypage" : "landing"}
       showHeader
-      showBackButton={isLoggedIn && isMobilePortrait}
+      showBackButton={
+        isLoggedIn &&
+        isMobilePortrait
+      }
       showFooter={isLoggedIn}
       backTo="/wallet"
       hideHamburgerMenu={false}
       hideSettingsButton={!isLoggedIn}
       mainClassName="scan-result-page"
-      secondaryActionButtonLabel={canOpenInquiryPage ? "問い合わせ" : undefined}
-      onSecondaryActionButtonClick={
-        canOpenInquiryPage ? handleOpenInquiryPage : undefined
+      secondaryActionButtonLabel={
+        canOpenInquiryPage
+          ? "問い合わせ"
+          : undefined
       }
-      secondaryActionButtonDisabled={!canOpenInquiryPage}
+      onSecondaryActionButtonClick={
+        canOpenInquiryPage
+          ? handleOpenInquiryPage
+          : undefined
+      }
+      secondaryActionButtonDisabled={
+        !canOpenInquiryPage
+      }
       footerProps={
-        isLoggedIn && isMobilePortrait && state.ownedByWallet === true
+        isLoggedIn &&
+        isMobilePortrait &&
+        state.ownedByWallet === true
           ? {
               variant: "reviewAction",
               value: reviewBody,
               rating: reviewRating,
               placeholder: "口コミを入力",
-              buttonLabel: state.postingReview ? "投稿中" : "投稿",
+              buttonLabel:
+                state.postingReview
+                  ? "投稿中"
+                  : "投稿",
               disabled: !canPostReview,
               posting: state.postingReview,
               onChange: setReviewBody,
-              onRatingChange: setReviewRating,
-              onSubmit: handleSubmitReview,
+              onRatingChange:
+                setReviewRating,
+              onSubmit:
+                handleSubmitReview,
             }
-          : { variant: "default" }
+          : {
+              variant: "default",
+            }
       }
     >
       <ScanResultCard
         state={state}
         onRefresh={load}
-        onPrevReviewsPage={prevReviewsPage}
-        onNextReviewsPage={nextReviewsPage}
-        onOpenTokenContents={openTokenContentsByMintAddress}
+        onPrevReviewsPage={
+          prevReviewsPage
+        }
+        onNextReviewsPage={
+          nextReviewsPage
+        }
+        onOpenTokenContents={
+          openTokenContentsByMintAddress
+        }
         reviewBody={reviewBody}
         reviewRating={reviewRating}
-        onReviewBodyChange={setReviewBody}
-        onReviewRatingChange={setReviewRating}
-        onSubmitReviewForm={handleSubmitReview}
-        hideReviewForm={isMobilePortrait}
+        onReviewBodyChange={
+          setReviewBody
+        }
+        onReviewRatingChange={
+          setReviewRating
+        }
+        onSubmitReviewForm={
+          handleSubmitReview
+        }
+        hideReviewForm={
+          isMobilePortrait
+        }
       />
 
       <ScanTransferSuccessModal
         open={transferModalOpen}
-        loading={state.busyTransfer || state.resolvingTransferredToken}
+        loading={
+          state.busyTransfer ||
+          state.resolvingTransferredToken
+        }
         error={transferModalError}
-        viewModel={transferSuccessModalViewModel}
-        resolvedContentsReady={Boolean(state.resolvedTransferredToken)}
+        viewModel={
+          transferSuccessModalViewModel
+        }
+        resolvedContentsReady={Boolean(
+          state.resolvedTransferredToken,
+        )}
         onClose={closeTransferModal}
-        onOpenContents={openContentsAfterResolve}
+        onOpenContents={
+          openContentsAfterResolve
+        }
       />
     </Layout>
   );

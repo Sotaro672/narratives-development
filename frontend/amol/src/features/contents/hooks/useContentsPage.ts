@@ -6,10 +6,13 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import type { MediaGalleryItem } from "../../../components/ui/MediaGallery";
 import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
 import { fetchCurrentAvatarId } from "../../catalog/infrastructure/avatarStateRepository";
-import { useMobilePortrait } from "../../catalog/presentation/hooks/useMobilePortrait";
+import { useMobilePortrait } from "../../shared/hooks/useMobilePortrait";
+import type {
+  ContentsMetadata,
+  ContentsSearchParams,
+} from "../../shared/types/contents";
 import { useTokenCommentCard } from "../../token-commnet/hooks/useTokenCommentCard";
 import { fetchContentsMetadata } from "../api/contentsApi";
-import type { ContentsMetadata, ContentsSearchParams } from "../../shared/types/contents";
 
 function buildContentsSearchParams(
   searchParams: URLSearchParams,
@@ -43,7 +46,8 @@ export function useContentsPage() {
     tokenBlueprintId: contents.tokenBlueprintId,
   });
 
-  const [metadata, setMetadata] = useState<ContentsMetadata | null>(null);
+  const [metadata, setMetadata] =
+    useState<ContentsMetadata | null>(null);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [currentAvatarId, setCurrentAvatarId] = useState("");
   const [loading, setLoading] = useState(false);
@@ -55,7 +59,11 @@ export function useContentsPage() {
       return;
     }
 
-    navigate(`/scan/result?productId=${encodeURIComponent(contents.productId)}`);
+    navigate(
+      `/scan/result?productId=${encodeURIComponent(
+        contents.productId,
+      )}`,
+    );
   };
 
   const handleBrandNameClick = () => {
@@ -65,7 +73,9 @@ export function useContentsPage() {
       return;
     }
 
-    navigate(`/brands/${encodeURIComponent(brandId)}`);
+    navigate(
+      `/brands/${encodeURIComponent(brandId)}`,
+    );
   };
 
   useEffect(() => {
@@ -75,7 +85,8 @@ export function useContentsPage() {
       setLoadingAvatarId(true);
 
       try {
-        const avatarId = await fetchCurrentAvatarId(apiBaseUrl);
+        const avatarId =
+          await fetchCurrentAvatarId(apiBaseUrl);
 
         if (!isMounted) {
           return;
@@ -116,7 +127,10 @@ export function useContentsPage() {
       setError("");
 
       try {
-        const result = await fetchContentsMetadata(contents.metadataUri);
+        const result =
+          await fetchContentsMetadata(
+            contents.metadataUri,
+          );
 
         if (!isMounted) {
           return;
@@ -150,12 +164,16 @@ export function useContentsPage() {
     };
   }, [contents.metadataUri]);
 
-  const tokenName = metadata?.name || contents.tokenName;
-  const tokenIconUrl = metadata?.image || contents.tokenIconUrl;
-  const pageTitle = tokenName || "トークン詳細";
+  const tokenName =
+    metadata?.name || contents.tokenName;
+  const tokenIconUrl =
+    metadata?.image || contents.tokenIconUrl;
+  const pageTitle =
+    tokenName || "トークン詳細";
 
   const mediaItems = useMemo<MediaGalleryItem[]>(() => {
-    const iconUri = metadata?.image || contents.tokenIconUrl;
+    const iconUri =
+      metadata?.image || contents.tokenIconUrl;
 
     return (metadata?.files || [])
       .filter((file) => {
@@ -163,7 +181,10 @@ export function useContentsPage() {
           return false;
         }
 
-        if (iconUri && file.uri === iconUri) {
+        if (
+          iconUri &&
+          file.uri === iconUri
+        ) {
           return false;
         }
 
@@ -175,15 +196,26 @@ export function useContentsPage() {
         fileName: file.name,
         type: file.type,
       }));
-  }, [metadata?.files, metadata?.image, contents.tokenIconUrl]);
+  }, [
+    metadata?.files,
+    metadata?.image,
+    contents.tokenIconUrl,
+  ]);
 
   useEffect(() => {
-    if (activeFileIndex >= mediaItems.length) {
+    if (
+      activeFileIndex >=
+      mediaItems.length
+    ) {
       setActiveFileIndex(0);
     }
-  }, [activeFileIndex, mediaItems.length]);
+  }, [
+    activeFileIndex,
+    mediaItems.length,
+  ]);
 
-  const hasMediaItems = mediaItems.length > 0;
+  const hasMediaItems =
+    mediaItems.length > 0;
 
   const handlePrevFile = () => {
     if (!hasMediaItems) {
@@ -191,7 +223,9 @@ export function useContentsPage() {
     }
 
     setActiveFileIndex((current) =>
-      current === 0 ? mediaItems.length - 1 : current - 1,
+      current === 0
+        ? mediaItems.length - 1
+        : current - 1,
     );
   };
 
@@ -201,24 +235,36 @@ export function useContentsPage() {
     }
 
     setActiveFileIndex((current) =>
-      current === mediaItems.length - 1 ? 0 : current + 1,
+      current === mediaItems.length - 1
+        ? 0
+        : current + 1,
     );
   };
 
   const handleOpenResalePage = () => {
-    if (!contents.productId || !contents.tokenBlueprintId) {
+    if (
+      !contents.productId ||
+      !contents.tokenBlueprintId
+    ) {
       return;
     }
 
     navigate("/resale", {
       state: {
-        mintAddress: contents.mintAddress,
-        productId: contents.productId,
-        brandId: contents.brandId,
-        brandName: contents.brandName,
-        productName: contents.productName,
-        productBlueprintId: contents.productBlueprintId,
-        tokenBlueprintId: contents.tokenBlueprintId,
+        mintAddress:
+          contents.mintAddress,
+        productId:
+          contents.productId,
+        brandId:
+          contents.brandId,
+        brandName:
+          contents.brandName,
+        productName:
+          contents.productName,
+        productBlueprintId:
+          contents.productBlueprintId,
+        tokenBlueprintId:
+          contents.tokenBlueprintId,
         tokenName,
         tokenIconUrl,
         currentAvatarId,

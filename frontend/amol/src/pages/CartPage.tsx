@@ -1,4 +1,5 @@
 // frontend/amol/src/pages/CartPage.tsx
+
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -8,18 +9,17 @@ import {
   fetchCurrentAvatarId,
   removeCartItem,
 } from "../features/cart/api/cartApi";
-import type { CartDisplayItem } from "../features/shared/types/cart";
 import {
   calculateCartTotalAmount,
   formatPrice,
-  getModelPrice,
+  getCartItemPrice,
   getModelVariation,
   getPrimaryCatalogImage,
 } from "../features/cart/utils/cartUtils";
-import "../styles/cart-page.css";
+import { useMobilePortrait } from "../features/shared/hooks/useMobilePortrait";
+import type { CartDisplayItem } from "../features/shared/types/cart";
 
-const MOBILE_PORTRAIT_MEDIA_QUERY =
-  "(max-width: 959px) and (orientation: portrait)";
+import "../styles/cart-page.css";
 
 type CartDisplayItemWithResolvedFields = CartDisplayItem & {
   brandName?: string;
@@ -52,7 +52,9 @@ function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function asResolvedItem(item: CartDisplayItem): CartDisplayItemWithResolvedFields {
+function asResolvedItem(
+  item: CartDisplayItem,
+): CartDisplayItemWithResolvedFields {
   return item as CartDisplayItemWithResolvedFields;
 }
 
@@ -139,48 +141,14 @@ function getCartItemNavigationPath(item: CartDisplayItem): string {
 
 export default function CartPage() {
   const navigate = useNavigate();
+  const isMobilePortrait = useMobilePortrait();
 
   const [items, setItems] = useState<CartDisplayItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [removingItemKey, setRemovingItemKey] = useState("");
-  const [isMobilePortrait, setIsMobilePortrait] = useState(false);
 
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const mobilePortraitQuery = window.matchMedia(MOBILE_PORTRAIT_MEDIA_QUERY);
-
-    const updateMobilePortraitState = () => {
-      setIsMobilePortrait(mobilePortraitQuery.matches);
-    };
-
-    updateMobilePortraitState();
-
-    if (typeof mobilePortraitQuery.addEventListener === "function") {
-      mobilePortraitQuery.addEventListener(
-        "change",
-        updateMobilePortraitState,
-      );
-
-      return () => {
-        mobilePortraitQuery.removeEventListener(
-          "change",
-          updateMobilePortraitState,
-        );
-      };
-    }
-
-    mobilePortraitQuery.addListener(updateMobilePortraitState);
-
-    return () => {
-      mobilePortraitQuery.removeListener(updateMobilePortraitState);
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -232,7 +200,10 @@ export default function CartPage() {
   }, [items]);
 
   const hasItems = items.length > 0;
-  const isPurchaseDisabled = !hasItems || isLoading || removingItemKey !== "";
+  const isPurchaseDisabled =
+    !hasItems ||
+    isLoading ||
+    removingItemKey !== "";
 
   function handlePurchase() {
     if (isPurchaseDisabled) {
@@ -258,7 +229,8 @@ export default function CartPage() {
 
       setItems((currentItems) =>
         currentItems.filter(
-          (currentItem) => currentItem.itemKey !== item.itemKey,
+          (currentItem) =>
+            currentItem.itemKey !== item.itemKey,
         ),
       );
     } catch (error) {
@@ -282,8 +254,16 @@ export default function CartPage() {
       showFooter={isMobilePortrait}
       hideHamburgerMenu
       hideSettingsButton
-      actionButtonLabel={isMobilePortrait ? undefined : "購入する"}
-      onActionButtonClick={isMobilePortrait ? undefined : handlePurchase}
+      actionButtonLabel={
+        isMobilePortrait
+          ? undefined
+          : "購入する"
+      }
+      onActionButtonClick={
+        isMobilePortrait
+          ? undefined
+          : handlePurchase
+      }
       actionButtonDisabled={isPurchaseDisabled}
       footerProps={
         isMobilePortrait
@@ -299,11 +279,16 @@ export default function CartPage() {
       <section className="content-page-section cart-page-section-root">
         {isLoading ? (
           <div className="cart-page-empty">
-            <div className="cart-page-empty__icon" aria-hidden="true">
+            <div
+              className="cart-page-empty__icon"
+              aria-hidden="true"
+            >
               🛒
             </div>
 
-            <h1 className="cart-page-empty__title">カートを読み込んでいます</h1>
+            <h1 className="cart-page-empty__title">
+              カートを読み込んでいます
+            </h1>
 
             <p className="cart-page-empty__text">
               追加済みのアイテムを確認しています。
@@ -313,7 +298,10 @@ export default function CartPage() {
 
         {!isLoading && errorMessage ? (
           <div className="cart-page-empty">
-            <div className="cart-page-empty__icon" aria-hidden="true">
+            <div
+              className="cart-page-empty__icon"
+              aria-hidden="true"
+            >
               ⚠️
             </div>
 
@@ -321,17 +309,24 @@ export default function CartPage() {
               カートを取得できませんでした
             </h1>
 
-            <p className="cart-page-empty__text">{errorMessage}</p>
+            <p className="cart-page-empty__text">
+              {errorMessage}
+            </p>
           </div>
         ) : null}
 
         {!isLoading && !errorMessage && !hasItems ? (
           <div className="cart-page-empty">
-            <div className="cart-page-empty__icon" aria-hidden="true">
+            <div
+              className="cart-page-empty__icon"
+              aria-hidden="true"
+            >
               🛒
             </div>
 
-            <h1 className="cart-page-empty__title">カートは空です</h1>
+            <h1 className="cart-page-empty__title">
+              カートは空です
+            </h1>
 
             <p className="cart-page-empty__text">
               応援したいリストやアイテムを追加すると、ここに表示されます。
@@ -346,19 +341,35 @@ export default function CartPage() {
                 const resolvedItem = asResolvedItem(item);
                 const catalog = resolvedItem.catalog;
                 const modelId = resolvedItem.modelId || "";
-                const model = getModelVariation(catalog, modelId);
-                const imageUrl = getCartItemImageUrl(resolvedItem);
-                const catalogPrice = getModelPrice(catalog, modelId);
-                const price = catalogPrice ?? resolvedItem.price ?? null;
+                const model = getModelVariation(
+                  catalog,
+                  modelId,
+                );
+                const imageUrl =
+                  getCartItemImageUrl(resolvedItem);
+                const price =
+                  getCartItemPrice(resolvedItem);
                 const lineAmount =
-                  price === null ? null : price * resolvedItem.qty;
-                const isRemoving = removingItemKey === resolvedItem.itemKey;
-                const isAlcohol = resolvedItem.modelKind === "alcohol";
-                const brandName = getCartItemBrandName(resolvedItem);
-                const productName = getCartItemProductName(resolvedItem);
-                const listTitle = getCartItemListTitle(resolvedItem);
-                const navigationPath = getCartItemNavigationPath(resolvedItem);
-                const canNavigate = navigationPath !== "";
+                  price === null
+                    ? null
+                    : price * resolvedItem.qty;
+                const isRemoving =
+                  removingItemKey ===
+                  resolvedItem.itemKey;
+                const isAlcohol =
+                  resolvedItem.modelKind === "alcohol";
+                const brandName =
+                  getCartItemBrandName(resolvedItem);
+                const productName =
+                  getCartItemProductName(resolvedItem);
+                const listTitle =
+                  getCartItemListTitle(resolvedItem);
+                const navigationPath =
+                  getCartItemNavigationPath(
+                    resolvedItem,
+                  );
+                const canNavigate =
+                  navigationPath !== "";
 
                 return (
                   <article
@@ -372,7 +383,9 @@ export default function CartPage() {
                       disabled={removingItemKey !== ""}
                       onClick={(event) => {
                         event.stopPropagation();
-                        void handleRemoveItem(resolvedItem);
+                        void handleRemoveItem(
+                          resolvedItem,
+                        );
                       }}
                     >
                       {isRemoving ? "…" : "×"}
@@ -404,9 +417,13 @@ export default function CartPage() {
                     </button>
 
                     <div className="cart-page-item__body">
-                      <p className="cart-page-item__brand">{brandName}</p>
+                      <p className="cart-page-item__brand">
+                        {brandName}
+                      </p>
 
-                      <h2 className="cart-page-item__title">{productName}</h2>
+                      <h2 className="cart-page-item__title">
+                        {productName}
+                      </h2>
 
                       {listTitle ? (
                         <p className="cart-page-item__list-title">
@@ -419,11 +436,19 @@ export default function CartPage() {
                           <>
                             <div>
                               <dt>品番</dt>
-                              <dd>{resolvedItem.modelNumber || "-"}</dd>
+                              <dd>
+                                {resolvedItem.modelNumber ||
+                                  "-"}
+                              </dd>
                             </div>
+
                             <div>
                               <dt>容量</dt>
-                              <dd>{formatAlcoholVolume(resolvedItem)}</dd>
+                              <dd>
+                                {formatAlcoholVolume(
+                                  resolvedItem,
+                                )}
+                              </dd>
                             </div>
                           </>
                         ) : (
@@ -437,9 +462,14 @@ export default function CartPage() {
                                   "-"}
                               </dd>
                             </div>
+
                             <div>
                               <dt>サイズ</dt>
-                              <dd>{model?.size || resolvedItem.size || "-"}</dd>
+                              <dd>
+                                {model?.size ||
+                                  resolvedItem.size ||
+                                  "-"}
+                              </dd>
                             </div>
                           </>
                         )}
@@ -462,13 +492,16 @@ export default function CartPage() {
             </div>
 
             <aside className="cart-page-summary">
-              <h2 className="cart-page-summary__title">注文内容</h2>
+              <h2 className="cart-page-summary__title">
+                注文内容
+              </h2>
 
               <dl className="cart-page-summary__list">
                 <div>
                   <dt>商品数</dt>
                   <dd>{items.length}</dd>
                 </div>
+
                 <div>
                   <dt>合計</dt>
                   <dd>{formatPrice(totalAmount)}</dd>

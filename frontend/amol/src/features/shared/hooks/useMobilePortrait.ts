@@ -1,7 +1,9 @@
-//frontend\amol\src\features\catalog\hooks\useMobilePortrait.ts
+// frontend/amol/src/features/shared/hooks/useMobilePortrait.ts
+
 import { useEffect, useState } from "react";
 
-import { MOBILE_PORTRAIT_MEDIA_QUERY } from "../../constants";
+export const MOBILE_PORTRAIT_MEDIA_QUERY =
+  "(max-width: 959px) and (orientation: portrait)";
 
 export function useMobilePortrait(): boolean {
   const [isMobilePortrait, setIsMobilePortrait] = useState(false);
@@ -11,32 +13,32 @@ export function useMobilePortrait(): boolean {
       return;
     }
 
-    const mobilePortraitQuery = window.matchMedia(MOBILE_PORTRAIT_MEDIA_QUERY);
+    const mediaQuery = window.matchMedia(MOBILE_PORTRAIT_MEDIA_QUERY);
 
     const updateMobilePortraitState = () => {
-      setIsMobilePortrait(mobilePortraitQuery.matches);
+      setIsMobilePortrait(mediaQuery.matches);
     };
 
     updateMobilePortraitState();
 
-    if (typeof mobilePortraitQuery.addEventListener === "function") {
-      mobilePortraitQuery.addEventListener(
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener(
         "change",
         updateMobilePortraitState,
       );
 
       return () => {
-        mobilePortraitQuery.removeEventListener(
+        mediaQuery.removeEventListener(
           "change",
           updateMobilePortraitState,
         );
       };
     }
 
-    mobilePortraitQuery.addListener(updateMobilePortraitState);
+    mediaQuery.addListener(updateMobilePortraitState);
 
     return () => {
-      mobilePortraitQuery.removeListener(updateMobilePortraitState);
+      mediaQuery.removeListener(updateMobilePortraitState);
     };
   }, []);
 
