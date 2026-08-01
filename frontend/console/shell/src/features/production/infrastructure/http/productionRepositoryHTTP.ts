@@ -1,5 +1,5 @@
 // frontend/console/production/src/infrastructure/http/productionRepositoryHTTP.ts
-import type { Production } from "../../application/create/ProductionCreateTypes";
+import type { Production } from "../../../../shared/types/production";
 import type { ProductionRepository } from "../../application/create/ProductionCreateRepository";
 
 // ✅ shared を single source of truth にする

@@ -11,11 +11,14 @@ import { useNavigate } from "react-router-dom";
 import {
   FetchProductBlueprintReviewManagementRows,
   FilterProductBlueprintReviewRows,
-  type UiRow,
 } from "../../application/productBlueprintReviewManagementService";
 
+import type {
+  ProductBlueprintReviewAggregate,
+} from "../../../../shared/types/productBlueprintReview";
+
 export interface UseProductBlueprintReviewManagementResult {
-  Rows: UiRow[];
+  Rows: ProductBlueprintReviewAggregate[];
 
   BrandFilter: string[];
   AssigneeFilter: string[];
@@ -28,7 +31,10 @@ export interface UseProductBlueprintReviewManagementResult {
     values: string[],
   ) => void;
 
-  HandleRowClick: (row: UiRow) => void;
+  HandleRowClick: (
+    row: ProductBlueprintReviewAggregate,
+  ) => void;
+
   HandleReset: () => void;
 
   IsResetting: boolean;
@@ -37,19 +43,30 @@ export interface UseProductBlueprintReviewManagementResult {
 export function useProductBlueprintReviewManagement(): UseProductBlueprintReviewManagementResult {
   const navigate = useNavigate();
 
-  const [allRows, setAllRows] = useState<UiRow[]>([]);
-  const [brandFilter, setBrandFilter] = useState<string[]>([]);
-  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
-  const [isResetting, setIsResetting] = useState(false);
+  const [allRows, setAllRows] =
+    useState<ProductBlueprintReviewAggregate[]>([]);
+
+  const [brandFilter, setBrandFilter] =
+    useState<string[]>([]);
+
+  const [assigneeFilter, setAssigneeFilter] =
+    useState<string[]>([]);
+
+  const [isResetting, setIsResetting] =
+    useState(false);
 
   const load = useCallback(async () => {
     setIsResetting(true);
 
     try {
-      const rows =
-        await FetchProductBlueprintReviewManagementRows({});
+      const result =
+        await FetchProductBlueprintReviewManagementRows(
+          {},
+        );
 
-      setAllRows(rows);
+      setAllRows(
+        result.items,
+      );
     } catch {
       setAllRows([]);
     } finally {
@@ -90,9 +107,13 @@ export function useProductBlueprintReviewManagement(): UseProductBlueprintReview
   );
 
   const handleRowClick = useCallback(
-    (row: UiRow) => {
+    (
+      row: ProductBlueprintReviewAggregate,
+    ) => {
       const productBlueprintID = String(
-        row.ProductBlueprintID || row.ID || "",
+        row.ProductBlueprintID ||
+          row.ID ||
+          "",
       );
 
       if (!productBlueprintID) {

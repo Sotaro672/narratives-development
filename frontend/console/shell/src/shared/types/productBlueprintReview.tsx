@@ -1,10 +1,17 @@
 // frontend\console\shell\src\shared\types\productBluleprintReview.tsx
 
+import type {
+  PageResult,
+} from "./common/common";
+
 // ==============================
 // Backend-aligned domain entities (PascalCase only)
 // ==============================
 
-export type ReviewStatus = "PUBLISHED" | "HIDDEN" | "REMOVED";
+export type ReviewStatus =
+  | "PUBLISHED"
+  | "HIDDEN"
+  | "REMOVED";
 
 export type Review = {
   ID: string;
@@ -35,6 +42,16 @@ export type Review = {
   ModerationReason?: string | null;
 };
 
+// ==============================
+// PascalCase page result
+// ==============================
+
+type PascalCasePageResult<T> = {
+  [K in keyof PageResult<T> as Capitalize<
+    K & string
+  >]: PageResult<T>[K];
+};
+
 // Detail page: GET /product-blueprint-reviews?ProductBlueprintID=...
 export type ListProductBlueprintReviewsParams = {
   ProductBlueprintID: string; // required
@@ -43,15 +60,11 @@ export type ListProductBlueprintReviewsParams = {
   PerPage?: number;
 };
 
-export type ListProductBlueprintReviewsResponse = {
-  ProductBlueprintID: string;
-  Status: ReviewStatus;
-  Page: number;
-  PerPage: number;
-  Items: Review[]; // ✅ Review に AvatarName/Icon が含まれるようになった
-  TotalCount: number;
-  TotalPages: number;
-};
+export type ListProductBlueprintReviewsResponse =
+  PascalCasePageResult<Review> & {
+    ProductBlueprintID: string;
+    Status: ReviewStatus;
+  };
 
 // Management page aggregates: GET /product-blueprint-reviews/aggregates
 export type ProductBlueprintReviewAggregate = {
@@ -82,12 +95,19 @@ export type ListCompanyReviewAggregatesParams = {
   PerPage?: number;
 };
 
-export type ListCompanyReviewAggregatesResponse = {
-  CompanyID: string;
-  Status: ReviewStatus;
-  Page: number;
-  PerPage: number;
-  Items: ProductBlueprintReviewAggregate[];
-  TotalCount?: number;
-  TotalPages?: number;
-};
+type CompanyReviewAggregatesPageResult =
+  Omit<
+    PascalCasePageResult<
+      ProductBlueprintReviewAggregate
+    >,
+    "TotalCount" | "TotalPages"
+  > & {
+    TotalCount?: number;
+    TotalPages?: number;
+  };
+
+export type ListCompanyReviewAggregatesResponse =
+  CompanyReviewAggregatesPageResult & {
+    CompanyID: string;
+    Status: ReviewStatus;
+  };

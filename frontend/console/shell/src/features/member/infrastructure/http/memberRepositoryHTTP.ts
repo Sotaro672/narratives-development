@@ -6,7 +6,7 @@ import type {
   MemberFilter,
 } from "../../domain/repository/memberRepository";
 import type {
-  Page,
+  PageRequest,
   PageResult,
 } from "../../../../shared/types/common/common";
 import type { Member } from "../../../../shared/types/member";
@@ -231,7 +231,7 @@ export class MemberRepositoryHTTP
    * GET /members
    */
   async list(
-    page: Page,
+    page: PageRequest,
     filter?: MemberFilter,
   ): Promise<PageResult<Member>> {
     const headers =

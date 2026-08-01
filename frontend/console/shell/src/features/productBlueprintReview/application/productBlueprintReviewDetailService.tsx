@@ -9,7 +9,9 @@ import type {
   ReviewStatus,
 } from "../../../shared/types/productBlueprintReview";
 
-export type ProductBlueprintReviewDetailRow = Review;
+import type {
+  PageResult,
+} from "../../../shared/types/common/common";
 
 export type FetchProductBlueprintReviewDetailParams = {
   ProductBlueprintID: string;
@@ -18,10 +20,8 @@ export type FetchProductBlueprintReviewDetailParams = {
   PerPage?: number;
 };
 
-export type FetchProductBlueprintReviewDetailResult = {
-  Items: ProductBlueprintReviewDetailRow[];
-  TotalPages: number;
-};
+export type FetchProductBlueprintReviewDetailResult =
+  PageResult<Review>;
 
 export async function FetchProductBlueprintReviewDetailRows(
   Params: FetchProductBlueprintReviewDetailParams,
@@ -38,7 +38,7 @@ export async function FetchProductBlueprintReviewDetailRows(
       Query,
     );
 
-  const Items: ProductBlueprintReviewDetailRow[] =
+  const items: Review[] =
     Response.Items.map((ReviewItem) => ({
       ...ReviewItem,
       ReviewedAt: safeDateTimeLabelJa(
@@ -48,7 +48,10 @@ export async function FetchProductBlueprintReviewDetailRows(
     }));
 
   return {
-    Items,
-    TotalPages: Response.TotalPages ?? 0,
+    items,
+    totalCount: Response.TotalCount,
+    totalPages: Response.TotalPages,
+    page: Response.Page,
+    perPage: Response.PerPage,
   };
 }

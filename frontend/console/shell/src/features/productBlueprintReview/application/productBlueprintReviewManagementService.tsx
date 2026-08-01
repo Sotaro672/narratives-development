@@ -8,13 +8,15 @@ import type {
   ReviewStatus,
 } from "../../../shared/types/productBlueprintReview";
 
-export type UiRow = ProductBlueprintReviewAggregate;
+import type {
+  PageResult,
+} from "../../../shared/types/common/common";
 
 export async function FetchProductBlueprintReviewManagementRows(Params: {
   Status?: ReviewStatus;
   Page?: number;
   PerPage?: number;
-}): Promise<UiRow[]> {
+}): Promise<PageResult<ProductBlueprintReviewAggregate>> {
   const Query: ListCompanyReviewAggregatesParams = {
     Status: Params.Status,
     Page: Params.Page,
@@ -22,16 +24,24 @@ export async function FetchProductBlueprintReviewManagementRows(Params: {
   };
 
   const Response =
-    await productBlueprintReviewHTTP.ListCompanyReviewAggregates(Query);
+    await productBlueprintReviewHTTP.ListCompanyReviewAggregates(
+      Query,
+    );
 
-  return Response.Items ?? [];
+  return {
+    items: Response.Items ?? [],
+    totalCount: Response.TotalCount ?? 0,
+    totalPages: Response.TotalPages ?? 0,
+    page: Response.Page,
+    perPage: Response.PerPage,
+  };
 }
 
 export function FilterProductBlueprintReviewRows(Params: {
-  AllRows: UiRow[];
+  AllRows: ProductBlueprintReviewAggregate[];
   BrandFilter: string[];
   AssigneeFilter: string[];
-}): UiRow[] {
+}): ProductBlueprintReviewAggregate[] {
   const {
     AllRows,
     BrandFilter,

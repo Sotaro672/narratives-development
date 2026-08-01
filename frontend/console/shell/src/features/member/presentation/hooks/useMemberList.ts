@@ -9,7 +9,7 @@ import {
 
 import type { Member } from "../../../../shared/types/member";
 import type { MemberFilter } from "../../domain/repository/memberRepository";
-import type { Page } from "../../../../shared/types/common/common";
+import type { PageState } from "../../../../shared/types/common/common";
 import {
   DEFAULT_PAGE,
   DEFAULT_PAGE_LIMIT,
@@ -30,7 +30,7 @@ export type SortDirection = "asc" | "desc";
 
 export function useMemberList(
   initialFilter: MemberFilter = {},
-  initialPage?: Page,
+  initialPage?: PageState,
 ) {
   const [members, setMembers] =
     useState<Member[]>([]);
@@ -38,12 +38,13 @@ export function useMemberList(
   const [filter] =
     useState<MemberFilter>(initialFilter);
 
-  // PageにtotalPagesを含めた構造
-  const [page, setPage] = useState<Page>({
-    ...DEFAULT_PAGE,
-    ...(initialPage ?? {}),
-    totalPages: 1,
-  });
+  // UIで保持するページ状態
+  const [page, setPage] =
+    useState<PageState>({
+      ...DEFAULT_PAGE,
+      ...(initialPage ?? {}),
+      totalPages: 1,
+    });
 
   const [loading, setLoading] =
     useState(false);
@@ -83,7 +84,7 @@ export function useMemberList(
   // ─────────────────────────────────────────────
   const load = useCallback(
     async (
-      targetPage: Page,
+      targetPage: PageState,
       targetFilter: MemberFilter,
     ) => {
       setLoading(true);
@@ -96,7 +97,7 @@ export function useMemberList(
           targetFilter,
         );
 
-        setMembers(result.members ?? []);
+        setMembers(result.items ?? []);
 
         setPage((previousPage) => ({
           ...previousPage,
@@ -192,7 +193,7 @@ export function useMemberList(
         pageNumber,
       );
 
-      const nextPage: Page = {
+      const nextPage: PageState = {
         ...page,
         number: safePageNumber,
       };
@@ -455,7 +456,7 @@ export function useMemberList(
     setSortKey(null);
     setSortDirection("desc");
 
-    const nextPage: Page = {
+    const nextPage: PageState = {
       ...page,
       number: 1,
     };

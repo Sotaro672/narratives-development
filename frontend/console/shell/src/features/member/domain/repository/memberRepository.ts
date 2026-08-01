@@ -2,7 +2,7 @@
 
 import type { Member } from "../../../../shared/types/member";
 import type {
-  Page,
+  PageRequest,
   PageResult,
 } from "../../../../shared/types/common/common";
 
@@ -72,7 +72,7 @@ export interface MemberRepository {
    * Backend側で認証中MemberのcompanyIdにスコープする。
    */
   list(
-    page: Page,
+    page: PageRequest,
     filter?: MemberFilter,
   ): Promise<PageResult<Member>>;
 

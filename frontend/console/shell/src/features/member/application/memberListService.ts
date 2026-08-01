@@ -2,7 +2,10 @@
 
 import type { Member } from "../../../shared/types/member";
 import type { MemberFilter } from "../domain/repository/memberRepository";
-import type { Page } from "../../../shared/types/common/common";
+import type {
+  PageRequest,
+  PageResult,
+} from "../../../shared/types/common/common";
 
 // 認証（IDトークン取得用）
 import { auth } from "../../../auth/infrastructure/config/firebaseClient";
@@ -25,11 +28,6 @@ import { BrandRepositoryHTTP } from "../../brand/infrastructure/http/brandReposi
 
 // Member Repository（HTTP 層）
 import { MemberRepositoryHTTP } from "../infrastructure/http/memberRepositoryHTTP";
-
-export type MemberListResult = {
-  members: Member[];
-  totalPages: number;
-};
 
 // Singletons
 const permissionRepo = new PermissionRepositoryHTTP();
@@ -137,9 +135,9 @@ export async function fetchBrandsByCompany(
 // ─────────────────────────────────────────────
 
 export async function fetchMemberList(
-  page: Page,
+  page: PageRequest,
   filter: MemberFilter,
-): Promise<MemberListResult> {
+): Promise<PageResult<Member>> {
   const currentUser = auth.currentUser;
 
   if (!currentUser) {
@@ -148,15 +146,10 @@ export async function fetchMemberList(
     );
   }
 
-  const pageResult = await memberRepo.list(
+  return memberRepo.list(
     page,
     filter,
   );
-
-  return {
-    members: pageResult.items,
-    totalPages: pageResult.totalPages,
-  };
 }
 
 export { API_BASE };

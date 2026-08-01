@@ -8,10 +8,12 @@ import {
 
 import {
   FetchProductBlueprintReviewDetailRows,
-  type ProductBlueprintReviewDetailRow,
 } from "../../application/productBlueprintReviewDetailService";
 
-import type { ReviewStatus } from "../../../../shared/types/productBlueprintReview";
+import type {
+  Review,
+  ReviewStatus,
+} from "../../../../shared/types/productBlueprintReview";
 
 const PER_PAGE = 20;
 
@@ -21,7 +23,7 @@ export type UseProductBlueprintReviewDetailResult = {
   Status: ReviewStatus;
   Page: number;
 
-  Items: ProductBlueprintReviewDetailRow[];
+  Items: Review[];
   TotalPages: number;
 
   IsLoading: boolean;
@@ -48,9 +50,8 @@ export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDeta
   const [Page, SetPageState] =
     React.useState<number>(1);
 
-  const [Items, SetItems] = React.useState<
-    ProductBlueprintReviewDetailRow[]
-  >([]);
+  const [Items, SetItems] =
+    React.useState<Review[]>([]);
 
   const [TotalPages, SetTotalPages] =
     React.useState<number>(0);
@@ -80,19 +81,26 @@ export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDeta
           PerPage: PER_PAGE,
         });
 
-      SetItems(Response.Items ?? []);
-      SetTotalPages(Response.TotalPages ?? 0);
-      } catch (error: unknown) {
-        SetItems([]);
-        SetTotalPages(0);
+      SetItems(
+        Response.items ?? [],
+      );
 
-        const Message =
-          error instanceof Error
-            ? error.message
-            : String(error ?? "UnknownError");
+      SetTotalPages(
+        Response.totalPages ?? 0,
+      );
+    } catch (error: unknown) {
+      SetItems([]);
+      SetTotalPages(0);
 
-        SetErrorMessage(Message);
-      } finally {
+      const Message =
+        error instanceof Error
+          ? error.message
+          : String(
+              error ?? "UnknownError",
+            );
+
+      SetErrorMessage(Message);
+    } finally {
       SetIsLoading(false);
     }
   }, [
@@ -123,10 +131,13 @@ export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDeta
 
   const SetPage = React.useCallback(
     (Next: number) => {
-      const NormalizedPage = Number(Next);
+      const NormalizedPage =
+        Number(Next);
 
       SetPageState(
-        Number.isFinite(NormalizedPage) &&
+        Number.isFinite(
+          NormalizedPage,
+        ) &&
           NormalizedPage > 0
           ? NormalizedPage
           : 1,

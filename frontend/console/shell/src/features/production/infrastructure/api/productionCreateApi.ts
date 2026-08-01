@@ -9,6 +9,8 @@ import type { ProductBlueprintManagementRow } from "../../../productBlueprint/in
 import type { Member } from "../../../../shared/types/member";
 import type { ModelVariationResponse } from "../../../productBlueprint/application/productBlueprintDetailService";
 
+import { createPageFromCurrent } from "../../../../shared/types/common/common";
+
 import { brandRepositoryHTTP } from "../../../brand/infrastructure/http/brandRepositoryHTTP";
 import { fetchProductBlueprintManagementRows } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
 import {
@@ -89,11 +91,10 @@ export async function loadAssigneeCandidates(): Promise<
     const repository =
       new MemberRepositoryHTTP();
 
-    const page = {
-      number: 1,
-      perPage: 200,
-      totalPages: 1,
-    };
+    const page = createPageFromCurrent(
+      1,
+      200,
+    );
 
     const result = await repository.list(
       page,
