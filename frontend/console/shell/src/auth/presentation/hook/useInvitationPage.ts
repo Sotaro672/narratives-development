@@ -3,10 +3,12 @@
 import {
   useCallback,
   useEffect,
-  useRef,
   useState,
+  type FormEvent,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import {
+  useNavigate,
+} from "react-router-dom";
 
 import {
   completeInvitation,
@@ -16,44 +18,76 @@ import {
 export function useInvitationPage() {
   const navigate = useNavigate();
 
-  const formRef =
-    useRef<HTMLFormElement>(null);
+  // -------------------------
+  // 招待トークン
+  // -------------------------
 
-  const [token, setToken] =
-    useState("");
+  const [
+    token,
+    setToken,
+  ] = useState("");
 
-  const [, setLoading] =
-    useState(false);
+  // -------------------------
+  // 処理状態
+  // -------------------------
 
-  const [, setError] =
-    useState<string | null>(null);
+  const [
+    loadingInvitationInfo,
+    setLoadingInvitationInfo,
+  ] = useState(false);
 
-  const [email, setEmail] =
-    useState("");
+  const [
+    submitting,
+    setSubmitting,
+  ] = useState(false);
 
-  const [lastName, setLastName] =
-    useState("");
+  const [
+    error,
+    setError,
+  ] = useState<string | null>(null);
+
+  // -------------------------
+  // 入力値
+  // -------------------------
+
+  const [
+    email,
+    setEmail,
+  ] = useState("");
+
+  const [
+    lastName,
+    setLastName,
+  ] = useState("");
 
   const [
     lastNameKana,
     setLastNameKana,
   ] = useState("");
 
-  const [firstName, setFirstName] =
-    useState("");
+  const [
+    firstName,
+    setFirstName,
+  ] = useState("");
 
   const [
     firstNameKana,
     setFirstNameKana,
   ] = useState("");
 
-  const [password, setPassword] =
-    useState("");
+  const [
+    password,
+    setPassword,
+  ] = useState("");
 
   const [
     passwordConfirm,
     setPasswordConfirm,
   ] = useState("");
+
+  // -------------------------
+  // 招待情報
+  // -------------------------
 
   const [
     companyName,
@@ -66,19 +100,25 @@ export function useInvitationPage() {
   ] = useState<string[]>([]);
 
   // ============================================================
-  // tokenが設定されたらBackendから公開可能な招待情報を取得
+  // 招待情報取得
   // ============================================================
+
   useEffect(() => {
+    let disposed = false;
+
     if (!token) {
       setCompanyName("");
       setAssignedBrandNames([]);
-      return;
+      setLoadingInvitationInfo(false);
+      setError(null);
+
+      return () => {
+        disposed = true;
+      };
     }
 
-    let disposed = false;
-
     async function loadInvitationInfo() {
-      setLoading(true);
+      setLoadingInvitationInfo(true);
       setError(null);
 
       try {
@@ -109,11 +149,11 @@ export function useInvitationPage() {
         setError(
           error instanceof Error
             ? error.message
-            : "Unknown error",
+            : "招待情報の取得に失敗しました。",
         );
       } finally {
         if (!disposed) {
-          setLoading(false);
+          setLoadingInvitationInfo(false);
         }
       }
     }
@@ -128,95 +168,117 @@ export function useInvitationPage() {
   // ============================================================
   // 招待完了
   // ============================================================
-  const handleSubmit = useCallback(
-    async (
-      event: React.FormEvent,
-    ) => {
-      event.preventDefault();
-      setError(null);
 
-      if (!token) {
-        setError(
-          "招待トークンが無効です。招待リンクを再度ご確認ください。",
-        );
-        return;
-      }
+  const handleSubmit =
+    useCallback(
+      async (
+        event: FormEvent<HTMLFormElement>,
+      ) => {
+        event.preventDefault();
 
-      if (!email) {
-        setError(
-          "メールアドレスを入力してください。",
-        );
-        return;
-      }
+        if (submitting) {
+          return;
+        }
 
-      if (
-        !password ||
-        !passwordConfirm
-      ) {
-        setError(
-          "パスワードを入力してください。",
-        );
-        return;
-      }
+        setError(null);
 
-      if (
-        password !==
-        passwordConfirm
-      ) {
-        setError(
-          "パスワードが一致しません。",
-        );
-        return;
-      }
+        const normalizedEmail =
+          email.trim();
 
-      setLoading(true);
+        if (!token) {
+          setError(
+            "招待トークンが無効です。招待リンクを再度ご確認ください。",
+          );
+          return;
+        }
 
-      try {
-        await completeInvitation({
-          token,
-          email,
-          lastName,
-          lastNameKana,
-          firstName,
-          firstNameKana,
-          password,
-          passwordConfirm,
-        });
+        if (!normalizedEmail) {
+          setError(
+            "メールアドレスを入力してください。",
+          );
+          return;
+        }
 
-        navigate("/", {
-          replace: true,
-        });
-      } catch (error: unknown) {
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Unexpected error",
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [
-      navigate,
-      token,
-      email,
-      lastName,
-      lastNameKana,
-      firstName,
-      firstNameKana,
-      password,
-      passwordConfirm,
-    ],
-  );
+        if (
+          !password ||
+          !passwordConfirm
+        ) {
+          setError(
+            "パスワードを入力してください。",
+          );
+          return;
+        }
+
+        if (
+          password !==
+          passwordConfirm
+        ) {
+          setError(
+            "パスワードが一致しません。",
+          );
+          return;
+        }
+
+        setSubmitting(true);
+
+        try {
+          await completeInvitation({
+            token,
+            email: normalizedEmail,
+            lastName,
+            lastNameKana,
+            firstName,
+            firstNameKana,
+            password,
+            passwordConfirm,
+          });
+
+          navigate("/", {
+            replace: true,
+          });
+        } catch (error: unknown) {
+          setError(
+            error instanceof Error
+              ? error.message
+              : "招待の完了処理に失敗しました。",
+          );
+        } finally {
+          setSubmitting(false);
+        }
+      },
+      [
+        navigate,
+        submitting,
+        token,
+        email,
+        lastName,
+        lastNameKana,
+        firstName,
+        firstNameKana,
+        password,
+        passwordConfirm,
+      ],
+    );
+
+  const loading =
+    loadingInvitationInfo ||
+    submitting;
 
   return {
-    formRef,
-
+    // 招待トークン
     setToken,
 
+    // 処理状態
+    loading,
+    loadingInvitationInfo,
+    submitting,
+    error,
+
+    // メールアドレス
     email,
     setEmail,
 
+    // 氏名
     lastName,
     setLastName,
     lastNameKana,
@@ -226,14 +288,17 @@ export function useInvitationPage() {
     firstNameKana,
     setFirstNameKana,
 
+    // パスワード
     password,
     setPassword,
     passwordConfirm,
     setPasswordConfirm,
 
+    // 招待情報
     companyName,
     assignedBrandNames,
 
+    // 送信
     handleSubmit,
   };
 }

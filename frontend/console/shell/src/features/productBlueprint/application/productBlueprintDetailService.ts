@@ -22,6 +22,7 @@ import {
 import {
   createModelVariations,
   listModelVariationsByProductBlueprintId,
+  type ModelVariationResponse,
 } from "../../model/infrastructure/repository/modelRepositoryHTTP";
 
 import {
@@ -31,6 +32,10 @@ import {
 
 export {
   listModelVariationsByProductBlueprintId,
+};
+
+export type {
+  ModelVariationResponse,
 };
 
 type ProductBlueprintModelNumber =

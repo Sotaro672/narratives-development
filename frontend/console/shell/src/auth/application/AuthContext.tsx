@@ -1,23 +1,69 @@
-//frontend\console\shell\src\auth\application\AuthContext.tsx
+// frontend/console/shell/src/auth/application/AuthContext.tsx
+
 import * as React from "react";
-import type { User } from "firebase/auth";
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "../infrastructure/config/firebaseClient";
-import type { Auth } from "../domain/entity/auth";
+import {
+  onAuthStateChanged,
+  type User,
+} from "firebase/auth";
+import {
+  doc,
+  getDoc,
+} from "firebase/firestore";
+
+import {
+  auth,
+  db,
+} from "../infrastructure/config/firebaseClient";
+import {
+  getCompanyNameByIdCached,
+} from "./companyService";
+import {
+  fetchCurrentMember,
+} from "./memberService";
+
+import type {
+  Auth,
+} from "../domain/entity/auth";
+import type {
+  MemberDTO,
+} from "../../shared/types/member";
 
 type AuthContextValue = {
+  // Firebase Authenticationとusersドキュメント
   user: Auth | null;
   loading: boolean;
+
+  // Backendのmembers/me
+  currentMember: MemberDTO | null;
+  loadingMember: boolean;
+  memberError: string | null;
+
+  // Backendのcompanies/{companyId}
+  companyName: string | null;
 };
 
-const AuthContext = React.createContext<AuthContextValue | undefined>(undefined);
+const initialAuthContextValue: AuthContextValue = {
+  user: null,
+  loading: true,
+
+  currentMember: null,
+  loadingMember: false,
+  memberError: null,
+
+  companyName: null,
+};
+
+const AuthContext =
+  React.createContext<AuthContextValue | undefined>(
+    undefined,
+  );
 
 function mapFirebaseUserBase(
-  user: User | null
-): Omit<Auth, "companyId" | "permissions" | "assignedBrands"> | null {
-  if (!user) return null;
-
+  user: User,
+): Omit<
+  Auth,
+  "companyId" | "permissions" | "assignedBrands"
+> {
   return {
     uid: user.uid,
     email: user.email ?? null,
@@ -25,31 +71,60 @@ function mapFirebaseUserBase(
   };
 }
 
-async function loadAuthUser(firebaseUser: User): Promise<Auth> {
+async function loadAuthUser(
+  firebaseUser: User,
+): Promise<Auth> {
   const base = mapFirebaseUserBase(firebaseUser);
 
-  if (!base) {
-    throw new Error("Failed to map firebase user.");
-  }
-
   try {
-    const userRef = doc(db, "users", firebaseUser.uid);
-    const snap = await getDoc(userRef);
-    const data = snap.exists() ? (snap.data() as Record<string, unknown>) : {};
+    const userRef = doc(
+      db,
+      "users",
+      firebaseUser.uid,
+    );
+
+    const snapshot = await getDoc(userRef);
+
+    const data = snapshot.exists()
+      ? (
+          snapshot.data() as Record<
+            string,
+            unknown
+          >
+        )
+      : {};
 
     const companyId =
-      typeof data.companyId === "string" ? data.companyId : null;
+      typeof data.companyId === "string"
+        ? data.companyId.trim() || null
+        : null;
 
-    const permissions = Array.isArray(data.permissions)
-      ? data.permissions.filter(
-          (value): value is string => typeof value === "string"
-        )
+    const permissions = Array.isArray(
+      data.permissions,
+    )
+      ? data.permissions
+          .filter(
+            (value): value is string =>
+              typeof value === "string",
+          )
+          .map((value) => value.trim())
+          .filter(
+            (value) => value.length > 0,
+          )
       : [];
 
-    const assignedBrands = Array.isArray(data.assignedBrands)
-      ? data.assignedBrands.filter(
-          (value): value is string => typeof value === "string"
-        )
+    const assignedBrands = Array.isArray(
+      data.assignedBrands,
+    )
+      ? data.assignedBrands
+          .filter(
+            (value): value is string =>
+              typeof value === "string",
+          )
+          .map((value) => value.trim())
+          .filter(
+            (value) => value.length > 0,
+          )
       : [];
 
     return {
@@ -58,8 +133,11 @@ async function loadAuthUser(firebaseUser: User): Promise<Auth> {
       permissions,
       assignedBrands,
     };
-  } catch (error) {
-    console.error("[AuthContext] failed to load user profile:", error);
+  } catch (error: unknown) {
+    console.error(
+      "[AuthContext] failed to load user profile:",
+      error,
+    );
 
     return {
       ...base,
@@ -70,69 +148,270 @@ async function loadAuthUser(firebaseUser: User): Promise<Auth> {
   }
 }
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+function sleep(
+  milliseconds: number,
+): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+/**
+ * 新規登録直後はBackend側のmember作成が
+ * 完了していない場合があるため、短時間だけ再試行する。
+ *
+ * MemberDTOへの変換はmemberServiceが担当する。
+ */
+async function fetchCurrentMemberWithRetry(
+  retries: number,
+  retryDelayMs: number,
+): Promise<MemberDTO | null> {
+  for (
+    let attempt = 0;
+    attempt <= retries;
+    attempt += 1
+  ) {
+    try {
+      const member =
+        await fetchCurrentMember();
+
+      if (
+        member?.id &&
+        member.companyId
+      ) {
+        return member;
+      }
+
+      if (attempt < retries) {
+        await sleep(
+          retryDelayMs *
+            (attempt + 1),
+        );
+
+        continue;
+      }
+
+      return member;
+    } catch (error: unknown) {
+      if (attempt < retries) {
+        await sleep(
+          retryDelayMs *
+            (attempt + 1),
+        );
+
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  return null;
+}
+
+export const AuthProvider: React.FC<{
+  children: React.ReactNode;
+}> = ({
   children,
 }) => {
-  const [state, setState] = React.useState<AuthContextValue>({
-    user: null,
-    loading: true,
-  });
-
-  const initializedRef = React.useRef(false);
-  const lastResolvedUidRef = React.useRef<string | null>(null);
+  const [
+    state,
+    setState,
+  ] = React.useState<AuthContextValue>(
+    initialAuthContextValue,
+  );
 
   React.useEffect(() => {
     let active = true;
+    let requestSequence = 0;
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (!active) return;
+    const unsubscribe =
+      onAuthStateChanged(
+        auth,
+        (firebaseUser) => {
+          const currentRequest =
+            ++requestSequence;
 
-      if (!initializedRef.current) {
-        initializedRef.current = true;
-      }
+          async function resolveAuthState() {
+            if (!active) {
+              return;
+            }
 
-      if (!firebaseUser) {
-        lastResolvedUidRef.current = null;
-        setState({
-          user: null,
-          loading: false,
-        });
-        return;
-      }
+            if (!firebaseUser) {
+              setState({
+                user: null,
+                loading: false,
 
-      if (lastResolvedUidRef.current !== firebaseUser.uid) {
-        setState((prev) => ({
-          ...prev,
-          loading: true,
-        }));
-      }
+                currentMember: null,
+                loadingMember: false,
+                memberError: null,
 
-      const authUser = await loadAuthUser(firebaseUser);
+                companyName: null,
+              });
 
-      if (!active) return;
+              return;
+            }
 
-      lastResolvedUidRef.current = firebaseUser.uid;
-      setState({
-        user: authUser,
-        loading: false,
-      });
-    });
+            setState({
+              user: null,
+              loading: true,
+
+              currentMember: null,
+              loadingMember: true,
+              memberError: null,
+
+              companyName: null,
+            });
+
+            const authUser =
+              await loadAuthUser(
+                firebaseUser,
+              );
+
+            if (
+              !active ||
+              currentRequest !==
+                requestSequence
+            ) {
+              return;
+            }
+
+            // Firebaseの認証情報はMember取得より先に公開する
+            setState((current) => ({
+              ...current,
+              user: authUser,
+              loading: false,
+            }));
+
+            let currentMember:
+              | MemberDTO
+              | null = null;
+
+            let memberError:
+              | string
+              | null = null;
+
+            try {
+              const member =
+                await fetchCurrentMemberWithRetry(
+                  8,
+                  250,
+                );
+
+              if (
+                member?.id &&
+                member.companyId
+              ) {
+                currentMember = member;
+              } else {
+                memberError =
+                  "ログインユーザーの会社情報を確認できませんでした。";
+              }
+            } catch (error: unknown) {
+              memberError =
+                error instanceof Error
+                  ? error.message
+                  : "failed to fetch member";
+            }
+
+            if (
+              !active ||
+              currentRequest !==
+                requestSequence
+            ) {
+              return;
+            }
+
+            setState((current) => ({
+              ...current,
+              currentMember,
+              loadingMember: false,
+              memberError,
+            }));
+
+            const effectiveCompanyId =
+              currentMember?.companyId.trim() ||
+              authUser.companyId?.trim() ||
+              "";
+
+            if (!effectiveCompanyId) {
+              setState((current) => ({
+                ...current,
+                companyName: null,
+              }));
+
+              return;
+            }
+
+            try {
+              const companyName =
+                await getCompanyNameByIdCached(
+                  effectiveCompanyId,
+                );
+
+              if (
+                !active ||
+                currentRequest !==
+                  requestSequence
+              ) {
+                return;
+              }
+
+              setState((current) => ({
+                ...current,
+                companyName,
+              }));
+            } catch {
+              if (
+                !active ||
+                currentRequest !==
+                  requestSequence
+              ) {
+                return;
+              }
+
+              setState((current) => ({
+                ...current,
+                companyName: null,
+              }));
+            }
+          }
+
+          void resolveAuthState();
+        },
+      );
 
     return () => {
       active = false;
+      requestSequence += 1;
       unsubscribe();
     };
   }, []);
 
-  return <AuthContext.Provider value={state}>{children}</AuthContext.Provider>;
+  const contextValue =
+    React.useMemo(
+      () => state,
+      [state],
+    );
+
+  return (
+    <AuthContext.Provider
+      value={contextValue}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export function useAuthContext(): AuthContextValue {
-  const ctx = React.useContext(AuthContext);
+  const context =
+    React.useContext(AuthContext);
 
-  if (!ctx) {
-    throw new Error("useAuthContext must be used within AuthProvider");
+  if (!context) {
+    throw new Error(
+      "useAuthContext must be used within AuthProvider",
+    );
   }
 
-  return ctx;
+  return context;
 }

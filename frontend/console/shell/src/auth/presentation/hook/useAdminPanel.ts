@@ -1,8 +1,15 @@
 // frontend/console/shell/src/auth/presentation/hook/useAdminPanel.ts
-import { useEffect, useState, useCallback } from "react";
-import { auth } from "../../infrastructure/config/firebaseClient";
+
 import {
-  fetchCurrentMember,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  useAuthContext,
+} from "../../application/AuthContext";
+import {
   updateCurrentMemberProfile,
 } from "../../application/memberService";
 import {
@@ -10,158 +17,236 @@ import {
   sendPasswordResetForCurrentUser,
 } from "../../application/profileService";
 
-// -------------------------
-// かな関連ヘルパ
-// -------------------------
+function isHiraganaOnly(
+  input: string,
+): boolean {
+  if (!input) {
+    return false;
+  }
 
-// 「ひらがな + スペースのみか」をチェック
-function isHiraganaOnly(input: string): boolean {
-  if (!input) return false;
   return /^[\u3041-\u3096\s]+$/.test(input);
 }
 
 export function useAdminPanel() {
-  // dialog flags
-  const [showProfileDialog, setShowProfileDialog] = useState(false);
-  const [showEmailDialog, setShowEmailDialog] = useState(false);
-  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const {
+    currentMember,
+  } = useAuthContext();
 
-  // currentMember の id
-  const [memberId, setMemberId] = useState<string | null>(null);
+  // -------------------------
+  // ダイアログ表示状態
+  // -------------------------
 
-  // profile fields
-  const [lastName, setLastName] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastNameKana, setLastNameKana] = useState("");
-  const [firstNameKana, setFirstNameKana] = useState("");
+  const [
+    showProfileDialog,
+    setShowProfileDialog,
+  ] = useState(false);
 
-  // email fields
-  const [newEmail, setNewEmail] = useState("");
-  const [currentPasswordForEmail, setCurrentPasswordForEmail] = useState("");
+  const [
+    showEmailDialog,
+    setShowEmailDialog,
+  ] = useState(false);
 
-  // ─────────────────────────────
-  // currentMember を取得 & Auth email と差分があれば同期
-  // ─────────────────────────────
+  const [
+    showPasswordDialog,
+    setShowPasswordDialog,
+  ] = useState(false);
+
+  // -------------------------
+  // プロフィール入力値
+  // -------------------------
+
+  const [
+    lastName,
+    setLastName,
+  ] = useState("");
+
+  const [
+    firstName,
+    setFirstName,
+  ] = useState("");
+
+  const [
+    lastNameKana,
+    setLastNameKana,
+  ] = useState("");
+
+  const [
+    firstNameKana,
+    setFirstNameKana,
+  ] = useState("");
+
+  // -------------------------
+  // メールアドレス変更入力値
+  // -------------------------
+
+  const [
+    newEmail,
+    setNewEmail,
+  ] = useState("");
+
+  const [
+    currentPasswordForEmail,
+    setCurrentPasswordForEmail,
+  ] = useState("");
+
+  // -------------------------
+  // AuthProviderのcurrentMemberを
+  // プロフィール入力値へ反映
+  // -------------------------
+
   useEffect(() => {
-    async function loadAndSyncCurrentMember() {
-      const user = auth.currentUser;
-      if (!user) {
-        console.warn("[useAdminPanel] no currentUser, skip loadCurrentMember");
-        return;
-      }
-
-      try {
-        const member = await fetchCurrentMember();
-        if (!member) {
-          console.warn("[useAdminPanel] fetchCurrentMember returned null");
-          return;
-        }
-
-        const memberIdResolved = member.id;
-        if (!memberIdResolved) {
-          console.warn("[useAdminPanel] member.id is missing");
-          return;
-        }
-
-        setMemberId(memberIdResolved);
-
-        setFirstName(member.firstName ?? "");
-        setLastName(member.lastName ?? "");
-        setFirstNameKana(member.firstNameKana ?? "");
-        setLastNameKana(member.lastNameKana ?? "");
-
-        // Auth の email と members.email を比較して差分があれば同期
-        const authEmail = user.email ?? null;
-        const memberEmail = member.email ?? null;
-
-        if (authEmail && authEmail !== memberEmail) {
-          console.log(
-            "[useAdminPanel] email mismatch detected. Syncing Firestore members.email",
-            { authEmail, memberEmail },
-          );
-
-          await updateCurrentMemberProfile({
-            id: memberIdResolved,
-            firstName: member.firstName ?? "",
-            lastName: member.lastName ?? "",
-            firstNameKana: member.firstNameKana ?? "",
-            lastNameKana: member.lastNameKana ?? "",
-            email: authEmail,
-          });
-        }
-      } catch (e) {
-        console.error("[useAdminPanel] failed to load/sync currentMember:", e);
-      }
-    }
-
-    void loadAndSyncCurrentMember();
-  }, []);
-
-  // ─────────────────────────────
-  // プロフィール保存（名前系のみ更新）
-  // ─────────────────────────────
-  const saveProfile = useCallback(async () => {
-    if (!memberId) {
-      console.warn("[useAdminPanel] memberId is missing, skip saveProfile");
+    if (!currentMember) {
+      setLastName("");
+      setFirstName("");
+      setLastNameKana("");
+      setFirstNameKana("");
       return;
     }
 
-    const lastKana = lastNameKana.trim();
-    const firstKana = firstNameKana.trim();
+    setLastName(
+      currentMember.lastName ?? "",
+    );
 
-    if (!isHiraganaOnly(lastKana) || !isHiraganaOnly(firstKana)) {
-      window.alert("姓・名のかなはひらがなのみで入力してください。");
-      return;
-    }
+    setFirstName(
+      currentMember.firstName ?? "",
+    );
 
-    try {
-      await updateCurrentMemberProfile({
-        id: memberId,
-        firstName,
-        lastName,
-        firstNameKana: firstKana,
-        lastNameKana: lastKana,
-      });
+    setLastNameKana(
+      currentMember.lastNameKana ?? "",
+    );
 
-      setFirstNameKana(firstKana);
-      setLastNameKana(lastKana);
+    setFirstNameKana(
+      currentMember.firstNameKana ?? "",
+    );
+  }, [currentMember]);
+
+  // -------------------------
+  // プロフィール保存
+  // -------------------------
+
+  const saveProfile =
+    useCallback(async () => {
+      const memberId =
+        currentMember?.id.trim() ?? "";
+
+      if (!memberId) {
+        throw new Error(
+          "MEMBER_NOT_FOUND",
+        );
+      }
+
+      const normalizedLastNameKana =
+        lastNameKana.trim();
+
+      const normalizedFirstNameKana =
+        firstNameKana.trim();
+
+      if (
+        !isHiraganaOnly(
+          normalizedLastNameKana,
+        ) ||
+        !isHiraganaOnly(
+          normalizedFirstNameKana,
+        )
+      ) {
+        throw new Error(
+          "KANA_INVALID",
+        );
+      }
+
+      const updatedMember =
+        await updateCurrentMemberProfile({
+          id: memberId,
+          firstName,
+          lastName,
+          firstNameKana:
+            normalizedFirstNameKana,
+          lastNameKana:
+            normalizedLastNameKana,
+        });
+
+      if (!updatedMember) {
+        throw new Error(
+          "PROFILE_UPDATE_FAILED",
+        );
+      }
+
+      setLastName(
+        updatedMember.lastName ??
+          lastName,
+      );
+
+      setFirstName(
+        updatedMember.firstName ??
+          firstName,
+      );
+
+      setLastNameKana(
+        updatedMember.lastNameKana ??
+          normalizedLastNameKana,
+      );
+
+      setFirstNameKana(
+        updatedMember.firstNameKana ??
+          normalizedFirstNameKana,
+      );
 
       setShowProfileDialog(false);
-    } catch (e) {
-      console.error("[useAdminPanel] failed to update profile:", e);
-    }
-  }, [memberId, firstName, lastName, firstNameKana, lastNameKana]);
+    }, [
+      currentMember?.id,
+      firstName,
+      lastName,
+      firstNameKana,
+      lastNameKana,
+    ]);
 
-  // ─────────────────────────────
-  // メールアドレス変更（verifyBeforeUpdateEmail まで）
-  // Firestore 同期は useEffect の auto sync に任せる
-  // ─────────────────────────────
-  const saveEmail = useCallback(async () => {
-    if (!newEmail.trim()) {
-      throw new Error("EMAIL_REQUIRED");
-    }
-    if (!currentPasswordForEmail) {
-      throw new Error("PASSWORD_REQUIRED");
-    }
+  // -------------------------
+  // メールアドレス変更
+  // -------------------------
 
-    const normalizedEmail = newEmail.trim();
-    await changeEmail(currentPasswordForEmail, normalizedEmail);
+  const saveEmail =
+    useCallback(async () => {
+      const normalizedEmail =
+        newEmail.trim();
 
-    setNewEmail("");
-    setCurrentPasswordForEmail("");
-  }, [newEmail, currentPasswordForEmail]);
+      if (!normalizedEmail) {
+        throw new Error(
+          "EMAIL_REQUIRED",
+        );
+      }
 
-  // ─────────────────────────────
+      if (!currentPasswordForEmail) {
+        throw new Error(
+          "PASSWORD_REQUIRED",
+        );
+      }
+
+      await changeEmail(
+        currentPasswordForEmail,
+        normalizedEmail,
+      );
+
+      setNewEmail("");
+      setCurrentPasswordForEmail("");
+      setShowEmailDialog(false);
+    }, [
+      newEmail,
+      currentPasswordForEmail,
+    ]);
+
+  // -------------------------
   // パスワード再設定メール送信
-  // Firebase テンプレート「%APP_NAME% のパスワードを再設定してください」が送信される
-  // 新しいパスワードはメール先の画面で入力
-  // ─────────────────────────────
-  const savePassword = useCallback(async () => {
-    await sendPasswordResetForCurrentUser();
-  }, []);
+  // -------------------------
+
+  const savePassword =
+    useCallback(async () => {
+      await sendPasswordResetForCurrentUser();
+
+      setShowPasswordDialog(false);
+    }, []);
 
   return {
-    // dialog flags
+    // ダイアログ
     showProfileDialog,
     setShowProfileDialog,
     showEmailDialog,
@@ -169,8 +254,7 @@ export function useAdminPanel() {
     showPasswordDialog,
     setShowPasswordDialog,
 
-    // profile fields
-    memberId,
+    // プロフィール
     lastName,
     setLastName,
     lastNameKana,
@@ -180,13 +264,13 @@ export function useAdminPanel() {
     firstNameKana,
     setFirstNameKana,
 
-    // email fields
+    // メールアドレス
     newEmail,
     setNewEmail,
     currentPasswordForEmail,
     setCurrentPasswordForEmail,
 
-    // handlers
+    // 保存処理
     saveProfile,
     saveEmail,
     savePassword,

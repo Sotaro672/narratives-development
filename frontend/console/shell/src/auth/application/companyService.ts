@@ -1,70 +1,90 @@
-/// <reference types="vite/client" />
-
 // frontend/console/shell/src/auth/application/companyService.ts
 
 import type { CompanyDTO } from "../domain/entity/company";
 import { fetchCompanyByIdRaw } from "../infrastructure/repository/authRepositoryHTTP";
 
 // -------------------------------
-// In-memory cache for company names (OPTIONAL / opt-in)
+// 会社名キャッシュ
 // -------------------------------
-const nameCache = new Map<string, Promise<string | null>>();
+
+const companyNameCache = new Map<
+  string,
+  Promise<string | null>
+>();
 
 // -------------------------------
-// Company: fetchers
+// Company取得
 // -------------------------------
-export async function getCompanyById(
+
+async function getCompanyById(
   companyId: string,
 ): Promise<CompanyDTO | null> {
-  const id = (companyId ?? "").trim();
-  if (!id) return null;
+  const normalizedCompanyId = companyId.trim();
 
-  const raw = await fetchCompanyByIdRaw(id);
-  if (!raw) return null;
+  if (!normalizedCompanyId) {
+    return null;
+  }
 
-  // backend が CompanyDTO 互換 JSON を返している前提
+  const raw = await fetchCompanyByIdRaw(
+    normalizedCompanyId,
+  );
+
+  if (!raw) {
+    return null;
+  }
+
   return raw as CompanyDTO;
 }
 
-/**
- * Always fetch fresh (no cache).
- * Header で「アクセスの度に最新反映」を期待する場合はこちらを使う。
- */
-export async function getCompanyNameById(
+async function getCompanyNameById(
   companyId: string,
 ): Promise<string | null> {
-  const data = await getCompanyById(companyId);
-  const name = (data?.name ?? "").trim();
-  return name || null;
+  const company = await getCompanyById(companyId);
+  const companyName = company?.name?.trim() ?? "";
+
+  return companyName || null;
 }
 
 /**
- * Cached version (explicit opt-in).
- * 同一 companyId を短時間に何度も引く必要がある箇所だけで使用。
+ * companyIdに対応する会社名を取得する。
+ *
+ * 同じcompanyIdへの重複リクエストを防ぐため、
+ * 取得中および取得済みのPromiseをメモリ上に保持する。
  */
 export function getCompanyNameByIdCached(
   companyId: string,
 ): Promise<string | null> {
-  const id = (companyId ?? "").trim();
-  if (!id) return Promise.resolve(null);
+  const normalizedCompanyId = companyId.trim();
 
-  const cached = nameCache.get(id);
-  if (cached) return cached;
+  if (!normalizedCompanyId) {
+    return Promise.resolve(null);
+  }
 
-  const p = getCompanyNameById(id).catch((err) => {
-    console.error("[companyService] getCompanyNameByIdCached error", err);
-    nameCache.delete(id);
+  const cachedRequest = companyNameCache.get(
+    normalizedCompanyId,
+  );
+
+  if (cachedRequest) {
+    return cachedRequest;
+  }
+
+  const request = getCompanyNameById(
+    normalizedCompanyId,
+  ).catch((error: unknown) => {
+    companyNameCache.delete(normalizedCompanyId);
+
+    console.error(
+      "[companyService] failed to fetch company name:",
+      error,
+    );
+
     return null;
   });
 
-  nameCache.set(id, p);
-  return p;
-}
+  companyNameCache.set(
+    normalizedCompanyId,
+    request,
+  );
 
-export function clearCompanyNameCache(companyId?: string) {
-  if (!companyId) {
-    nameCache.clear();
-  } else {
-    nameCache.delete((companyId ?? "").trim());
-  }
+  return request;
 }
