@@ -1,4 +1,4 @@
-// frontend/shell/src/shared/types/company.ts
+// frontend\console\shell\src\shared\types\company.ts
 
 /**
  * Company
@@ -58,4 +58,12 @@ export function validateCompany(c: Company): boolean {
   if (c.deletedBy != null && c.deletedBy !== "" && !c.deletedBy.trim()) return false;
 
   return true;
+}
+
+export interface CompanyDTO {
+  /** 企業 ID */
+  id?: string;
+
+  /** 企業名 */
+  name?: string;
 }

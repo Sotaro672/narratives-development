@@ -1,6 +1,13 @@
 // frontend/console/shell/src/auth/infrastructure/repository/invitationRepositoryHTTP.ts
-import { auth } from "../config/firebaseClient";
-import { buildConsoleUrl } from "../../../shared/http/apiBase";
+
+import {
+  buildConsoleUrl,
+} from "../../../shared/http/apiBase";
+
+import {
+  fetchJSON,
+  HttpError,
+} from "../../../shared/http/fetchJSON";
 
 // ------------------------------
 // 型定義
@@ -26,121 +33,225 @@ export type CompleteInvitationBackendPayload = {
 
 type ErrorResponse = {
   error?: string;
+  message?: string;
 };
 
 // ------------------------------
 // Helpers
 // ------------------------------
 
-function safeTrim(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-async function getFirebaseIdToken(): Promise<string> {
-  const currentUser = auth.currentUser;
-
-  if (!currentUser) {
-    throw new Error(
-      "Firebase Authenticationへのサインインが確認できません。",
-    );
-  }
-
-  const idToken = await currentUser.getIdToken();
-
-  if (!idToken) {
-    throw new Error("Firebase ID tokenを取得できませんでした。");
-  }
-
-  return idToken;
+function safeTrim(
+  value: unknown,
+): string {
+  return typeof value === "string"
+    ? value.trim()
+    : "";
 }
 
 function normalizeCompleteInvitationPayload(
   payload: CompleteInvitationBackendPayload,
 ): CompleteInvitationBackendPayload {
-  const normalized: CompleteInvitationBackendPayload = {
-    token: safeTrim(payload.token),
-    lastName: safeTrim(payload.lastName),
-    lastNameKana: safeTrim(payload.lastNameKana),
-    firstName: safeTrim(payload.firstName),
-    firstNameKana: safeTrim(payload.firstNameKana),
-  };
+  const normalized:
+    CompleteInvitationBackendPayload = {
+      token:
+        safeTrim(
+          payload.token,
+        ),
+      lastName:
+        safeTrim(
+          payload.lastName,
+        ),
+      lastNameKana:
+        safeTrim(
+          payload.lastNameKana,
+        ),
+      firstName:
+        safeTrim(
+          payload.firstName,
+        ),
+      firstNameKana:
+        safeTrim(
+          payload.firstNameKana,
+        ),
+    };
 
   if (!normalized.token) {
-    throw new Error("token が指定されていません。");
+    throw new Error(
+      "token が指定されていません。",
+    );
   }
 
   if (!normalized.lastName) {
-    throw new Error("lastName が指定されていません。");
+    throw new Error(
+      "lastName が指定されていません。",
+    );
   }
 
   if (!normalized.lastNameKana) {
-    throw new Error("lastNameKana が指定されていません。");
+    throw new Error(
+      "lastNameKana が指定されていません。",
+    );
   }
 
   if (!normalized.firstName) {
-    throw new Error("firstName が指定されていません。");
+    throw new Error(
+      "firstName が指定されていません。",
+    );
   }
 
   if (!normalized.firstNameKana) {
-    throw new Error("firstNameKana が指定されていません。");
+    throw new Error(
+      "firstNameKana が指定されていません。",
+    );
   }
 
   return normalized;
 }
 
-function normalizeStringArray(value: unknown): string[] {
+function normalizeStringArray(
+  value: unknown,
+): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  const normalized = value
-    .map((item) => safeTrim(item))
-    .filter((item) => item.length > 0);
+  const normalized =
+    value
+      .map((item) =>
+        safeTrim(
+          item,
+        ),
+      )
+      .filter(
+        (item) =>
+          item.length > 0,
+      );
 
-  return Array.from(new Set(normalized));
+  return Array.from(
+    new Set(
+      normalized,
+    ),
+  );
 }
 
 function normalizeValidateResponse(
-  data: ValidateResponse,
+  data: unknown,
 ): ValidateResponse {
-  const companyName = safeTrim(data.companyName);
-  const brandNames = normalizeStringArray(data.brandNames);
+  if (
+    typeof data !== "object" ||
+    data === null
+  ) {
+    return {};
+  }
+
+  const record =
+    data as Record<
+      string,
+      unknown
+    >;
+
+  const companyName =
+    safeTrim(
+      record.companyName,
+    );
+
+  const brandNames =
+    normalizeStringArray(
+      record.brandNames,
+    );
 
   return {
-    companyName: companyName || undefined,
-    brandNames: brandNames.length > 0 ? brandNames : undefined,
+    companyName:
+      companyName ||
+      undefined,
+    brandNames:
+      brandNames.length > 0
+        ? brandNames
+        : undefined,
   };
 }
 
 function validateResponseToInvitationInfo(
   data: ValidateResponse,
 ): InvitationInfo {
-  const normalized = normalizeValidateResponse(data);
-
   return {
-    companyName: normalized.companyName,
-    brandNames: normalized.brandNames,
+    companyName:
+      data.companyName,
+    brandNames:
+      data.brandNames,
   };
 }
 
-async function parseErrorMessage(
-  res: Response,
-  text: string,
-  fallback: string,
-): Promise<string> {
-  let message = `${fallback} (status ${res.status})`;
-
-  try {
-    const errorResponse = JSON.parse(text) as ErrorResponse;
-
-    if (errorResponse.error) {
-      message = errorResponse.error;
-    }
-  } catch {
-    // JSON形式でないエラーレスポンスはfallbackを使用する。
+/**
+ * Backendのエラーレスポンスから、
+ * 画面表示用のメッセージを取得する。
+ */
+function parseBackendErrorBody(
+  bodyText: string | undefined,
+): string | null {
+  if (!bodyText) {
+    return null;
   }
 
-  return message;
+  try {
+    const parsed =
+      JSON.parse(
+        bodyText,
+      ) as ErrorResponse;
+
+    const backendMessage =
+      safeTrim(
+        parsed.error,
+      ) ||
+      safeTrim(
+        parsed.message,
+      );
+
+    return (
+      backendMessage ||
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * fetchJSONから送出されたエラーを、
+ * Repository用のメッセージへ変換する。
+ */
+function toInvitationRepositoryError(
+  error: unknown,
+  fallback: string,
+): Error {
+  if (
+    error instanceof HttpError
+  ) {
+    const backendMessage =
+      parseBackendErrorBody(
+        error.bodyText,
+      );
+
+    if (backendMessage) {
+      return new Error(
+        backendMessage,
+      );
+    }
+
+    return new Error(
+      `${fallback} (status ${error.status})`,
+    );
+  }
+
+  if (
+    error instanceof Error
+  ) {
+    return error;
+  }
+
+  return new Error(
+    fallback,
+  );
 }
 
 // ------------------------------
@@ -151,9 +262,14 @@ async function parseErrorMessage(
 export async function fetchInvitationInfo(
   token: string,
 ): Promise<InvitationInfo> {
-  const data = await validateInvitation(token);
+  const data =
+    await validateInvitation(
+      token,
+    );
 
-  return validateResponseToInvitationInfo(data);
+  return validateResponseToInvitationInfo(
+    data,
+  );
 }
 
 // ------------------------------
@@ -166,78 +282,100 @@ export async function fetchInvitationInfo(
 export async function validateInvitation(
   token: string,
 ): Promise<ValidateResponse> {
-  const normalizedToken = safeTrim(token);
-
-  if (!normalizedToken) {
-    throw new Error("token が指定されていません。");
-  }
-
-  const url = buildConsoleUrl("/invitations/validate");
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      token: normalizedToken,
-    }),
-  });
-
-  const text = await res.text();
-
-  if (!res.ok) {
-    const message = await parseErrorMessage(
-      res,
-      text,
-      "招待の検証に失敗しました",
+  const normalizedToken =
+    safeTrim(
+      token,
     );
 
-    throw new Error(message);
+  if (!normalizedToken) {
+    throw new Error(
+      "token が指定されていません。",
+    );
   }
 
-  if (!text) {
-    return {};
+  const url =
+    buildConsoleUrl(
+      "/invitations/validate",
+    );
+
+  try {
+    const data =
+      await fetchJSON<unknown>(
+        url,
+        {
+          method: "POST",
+          auth: "none",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body:
+            JSON.stringify({
+              token:
+                normalizedToken,
+            }),
+        },
+      );
+
+    return normalizeValidateResponse(
+      data,
+    );
+  } catch (error: unknown) {
+    throw toInvitationRepositoryError(
+      error,
+      "招待の検証に失敗しました",
+    );
   }
-
-  const data = JSON.parse(text) as ValidateResponse;
-
-  return normalizeValidateResponse(data);
 }
 
 // ------------------------------
 // completeInvitationOnBackend
 // - POST /invitations/complete
 // - UIDとemailはbodyへ送信しない
-// - Firebase ID tokenをAuthorizationへ付与する
+// - Firebase ID tokenはfetchJSONがAuthorizationへ付与する
+// - 401時はID tokenを強制更新して1回だけ再送する
 // - Backend側でID tokenからUIDとemailを取得する
 // ------------------------------
 
 export async function completeInvitationOnBackend(
   payload: CompleteInvitationBackendPayload,
 ): Promise<void> {
-  const url = buildConsoleUrl("/invitations/complete");
-  const body = normalizeCompleteInvitationPayload(payload);
-  const idToken = await getFirebaseIdToken();
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  const text = await res.text();
-
-  if (!res.ok) {
-    const message = await parseErrorMessage(
-      res,
-      text,
-      "招待の完了処理に失敗しました",
+  const url =
+    buildConsoleUrl(
+      "/invitations/complete",
     );
 
-    throw new Error(message);
+  const body =
+    normalizeCompleteInvitationPayload(
+      payload,
+    );
+
+  try {
+    await fetchJSON<void>(
+      url,
+      {
+        method: "POST",
+        auth: "required",
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+        body:
+          JSON.stringify(
+            body,
+          ),
+
+        /**
+         * complete APIが204、空body、
+         * またはJSON以外を返す場合も成功として扱う。
+         */
+        allowNonJson: true,
+      },
+    );
+  } catch (error: unknown) {
+    throw toInvitationRepositoryError(
+      error,
+      "招待の完了処理に失敗しました",
+    );
   }
 }

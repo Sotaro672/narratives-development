@@ -1,10 +1,6 @@
 // frontend/console/shell/src/features/productBlueprint/infrastructure/api/productBlueprintDetailApi.ts
 
 import {
-  getAuthHeaders,
-} from "../../../../auth/application/authService";
-
-import {
   API_BASE,
 } from "../../../../shared/http/apiBase";
 
@@ -129,9 +125,6 @@ export async function getProductBlueprintDetailApi(
     );
   }
 
-  const headers =
-    await getAuthHeaders();
-
   const url =
     `${API_BASE}/product-blueprints/${encodeURIComponent(
       normalizedId,
@@ -141,7 +134,7 @@ export async function getProductBlueprintDetailApi(
     url,
     {
       method: "GET",
-      headers,
+      auth: "required",
     },
   );
 }

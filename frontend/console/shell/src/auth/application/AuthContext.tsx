@@ -23,7 +23,7 @@ import {
 
 import type {
   Auth,
-} from "../domain/entity/auth";
+} from "../../shared/types/auth";
 import type {
   MemberDTO,
 } from "../../shared/types/member";

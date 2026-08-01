@@ -1,117 +1,140 @@
-/// <reference types="vite/client" />
+// frontend/console/shell/src/auth/infrastructure/repository/authRepositoryHTTP.ts
 
-// frontend\console\shell\src\auth\infrastructure\repository\authRepositoryHTTP.ts
+import {
+  buildConsoleUrl,
+} from "../../../shared/http/apiBase";
 
-import { auth } from "../config/firebaseClient";
-import { buildConsoleUrl } from "../../../shared/http/apiBase";
+import {
+  fetchJSON,
+} from "../../../shared/http/fetchJSON";
 
-// -------------------------------
-// HTTP functions (Auth / Member / Company 用)
-// -------------------------------
+/**
+ * JSONオブジェクトの共通型。
+ */
+type JsonObject =
+  Record<string, unknown>;
 
-async function getIdToken(forceRefresh = false): Promise<string | null> {
-  const token = await auth.currentUser?.getIdToken(forceRefresh);
-  return token ?? null;
-}
-
-function buildAuthHeaders(token: string, initHeaders?: HeadersInit): Headers {
-  const headers = new Headers(initHeaders);
-
-  headers.set("Authorization", `Bearer ${token}`);
-
-  if (!headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  return headers;
-}
-
-async function fetchJsonWithAuth(
+/**
+ * 認証必須APIへリクエストし、
+ * 成功時はJSONレスポンスを返す。
+ *
+ * ID token取得、Authorizationヘッダー設定、
+ * 401時のtoken強制更新と1回限りの再送は、
+ * shared/http/fetchJSON.tsへ委譲する。
+ *
+ * 既存のRepository契約を維持するため、
+ * 認証失敗・通信失敗・非2xxレスポンス・
+ * JSON解析失敗時はnullを返す。
+ */
+async function requestAuthenticatedJsonOrNull<
+  T,
+>(
   url: string,
   init: RequestInit = {},
-): Promise<any | null> {
-  const token = await getIdToken(false);
-  if (!token) return null;
-
-  let res = await fetch(url, {
-    ...init,
-    headers: buildAuthHeaders(token, init.headers),
-  });
-
-  if (res.status === 401) {
-    const refreshedToken = await getIdToken(true);
-    if (!refreshedToken) return null;
-
-    res = await fetch(url, {
-      ...init,
-      headers: buildAuthHeaders(refreshedToken, init.headers),
-    });
-  }
-
-  if (!res.ok) {
-    await res.text().catch(() => "");
+): Promise<T | null> {
+  try {
+    return await fetchJSON<T>(
+      url,
+      {
+        ...init,
+        auth: "required",
+      },
+    );
+  } catch {
     return null;
   }
-
-  const ct = res.headers.get("Content-Type") ?? "";
-  if (!ct.includes("application/json")) {
-    return null;
-  }
-
-  return await res.json();
 }
 
 /**
- * Authorization token から現在 member を取得して「生の JSON」を返す関数。
+ * Authorization tokenから現在のmemberを取得し、
+ * Backendから返された生のJSONを返す。
  *
- * Backend 側の使い分け:
- * - GET /members/me
- *   - ログイン中ユーザー自身の member 取得用
- *   - Firebase Auth UID は URL ではなく Authorization token から backend が取得する
+ * Backend側の使い分け:
  *
- * - PATCH /members/{docId}
- *   - Firestore members の docId 用
+ * GET /members/me
+ * - ログイン中ユーザー自身のmember取得用
+ * - Firebase Auth UIDはURLではなく
+ *   Authorization tokenからBackendが取得する
+ *
+ * PATCH /members/{docId}
+ * - Firestore membersのdocument IDを使用する
  */
-export async function fetchCurrentMemberRaw(): Promise<any | null> {
-  return await fetchJsonWithAuth(buildConsoleUrl("/members/me"), {
-    method: "GET",
-  });
-}
-
-/**
- * members/{docId} に PATCH する HTTP 関数。
- *
- * 注意:
- * - ここで渡す id は Firebase Auth UID ではなく、Firestore members の docId。
- * - fetchCurrentMemberRaw の response.id を使う。
- */
-export async function updateCurrentMemberProfileRaw(
-  id: string,
-  payload: any,
-): Promise<any | null> {
-  const memberDocId = (id ?? "").trim();
-  if (!memberDocId) return null;
-
-  return await fetchJsonWithAuth(
-    buildConsoleUrl(`/members/${encodeURIComponent(memberDocId)}`),
+export async function fetchCurrentMemberRaw():
+  Promise<JsonObject | null> {
+  return requestAuthenticatedJsonOrNull<
+    JsonObject
+  >(
+    buildConsoleUrl(
+      "/members/me",
+    ),
     {
-      method: "PATCH",
-      body: JSON.stringify(payload),
+      method: "GET",
     },
   );
 }
 
 /**
- * companies/{id} を叩いて「生の JSON」を返す関数。
+ * members/{docId}へPATCHする。
+ *
+ * 注意:
+ * - idはFirebase Auth UIDではない
+ * - Firestore membersのdocument IDを渡す
+ * - fetchCurrentMemberRaw()のresponse.idを使用する
+ */
+export async function updateCurrentMemberProfileRaw(
+  id: string,
+  payload: JsonObject,
+): Promise<JsonObject | null> {
+  const memberDocId =
+    String(
+      id ?? "",
+    ).trim();
+
+  if (!memberDocId) {
+    return null;
+  }
+
+  return requestAuthenticatedJsonOrNull<
+    JsonObject
+  >(
+    buildConsoleUrl(
+      `/members/${encodeURIComponent(memberDocId)}`,
+    ),
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify(
+        payload,
+      ),
+    },
+  );
+}
+
+/**
+ * companies/{id}を取得し、
+ * Backendから返された生のJSONを返す。
  */
 export async function fetchCompanyByIdRaw(
   companyId: string,
-): Promise<any | null> {
-  const id = (companyId ?? "").trim();
-  if (!id) return null;
+): Promise<JsonObject | null> {
+  const id =
+    String(
+      companyId ?? "",
+    ).trim();
 
-  return await fetchJsonWithAuth(
-    buildConsoleUrl(`/companies/${encodeURIComponent(id)}`),
+  if (!id) {
+    return null;
+  }
+
+  return requestAuthenticatedJsonOrNull<
+    JsonObject
+  >(
+    buildConsoleUrl(
+      `/companies/${encodeURIComponent(id)}`,
+    ),
     {
       method: "GET",
     },

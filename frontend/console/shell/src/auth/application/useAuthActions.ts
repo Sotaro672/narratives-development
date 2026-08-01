@@ -1,6 +1,9 @@
 // frontend/console/shell/src/auth/application/useAuthActions.ts
 
-import { useState } from "react";
+import {
+  useState,
+} from "react";
+
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -11,10 +14,67 @@ import {
   auth,
 } from "../infrastructure/config/firebaseClient";
 
+import {
+  API_BASE,
+} from "../../shared/http/apiBase";
+
+import {
+  fetchJSON,
+} from "../../shared/http/fetchJSON";
+
 /**
- * 認証エラーメッセージ
+ * 認証エラーからFirebaseのエラーコードを取得する。
  */
-function messageForAuthError(
+function getAuthErrorCode(
+  error: unknown,
+): string | undefined {
+  if (
+    typeof error !== "object" ||
+    error === null ||
+    !("code" in error)
+  ) {
+    return undefined;
+  }
+
+  const code =
+    error.code;
+
+  return typeof code === "string"
+    ? code
+    : undefined;
+}
+
+/**
+ * unknown型のエラーからメッセージを取得する。
+ */
+function getErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  if (
+    error instanceof Error &&
+    error.message
+  ) {
+    return error.message;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message
+  ) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
+/**
+ * 新規登録時の認証エラーメッセージ。
+ */
+function messageForSignUpError(
   code?: string,
 ): string {
   switch (code) {
@@ -33,12 +93,59 @@ function messageForAuthError(
     case "auth/weak-password":
       return "パスワードが弱すぎます。より強力なパスワードを設定してください。";
 
+    case "auth/missing-password":
+      return "パスワードを入力してください。";
+
+    case "auth/network-request-failed":
+      return "通信に失敗しました。ネットワーク接続を確認してください。";
+
+    case "auth/too-many-requests":
+      return "短時間に多数の操作が行われました。時間を置いて再度お試しください。";
+
     default:
       return "新規登録に失敗しました。設定を確認してください。";
   }
 }
 
-function s(
+/**
+ * ログイン時の認証エラーメッセージ。
+ */
+function messageForSignInError(
+  code?: string,
+): string {
+  switch (code) {
+    case "auth/invalid-email":
+      return "メールアドレスの形式が正しくありません。";
+
+    case "auth/missing-password":
+      return "パスワードを入力してください。";
+
+    case "auth/invalid-credential":
+    case "auth/user-not-found":
+    case "auth/wrong-password":
+      return "メールアドレスまたはパスワードが正しくありません。";
+
+    case "auth/user-disabled":
+      return "このアカウントは無効化されています。";
+
+    case "auth/network-request-failed":
+      return "通信に失敗しました。ネットワーク接続を確認してください。";
+
+    case "auth/too-many-requests":
+      return "短時間に多数のログイン操作が行われました。時間を置いて再度お試しください。";
+
+    case "auth/operation-not-allowed":
+      return "Email/Password のサインイン方法が無効です。Firebase Console で有効化してください。";
+
+    default:
+      return "ログインに失敗しました。";
+  }
+}
+
+/**
+ * 値を前後空白除去済みの文字列へ変換する。
+ */
+function normalizeString(
   value: unknown,
 ): string {
   return String(
@@ -54,100 +161,12 @@ export type SignUpProfile = {
   companyName?: string;
 };
 
-// ─────────────────────────────────────────────
-// Backend base URL
-// ─────────────────────────────────────────────
-
-const RAW_ENV_BASE =
-  (
-    (import.meta as any).env
-      ?.VITE_BACKEND_BASE_URL as
-      | string
-      | undefined
-  ) ?? "";
-
-const FALLBACK_BASE =
-  "https://narratives-backend-871263659099.asia-northeast1.run.app";
-
-function sanitizeBase(
-  url: string,
-): string {
-  return (
-    url || ""
-  ).replace(
-    /\/+$/g,
-    "",
-  );
-}
-
-const ENV_BASE =
-  sanitizeBase(
-    RAW_ENV_BASE,
-  );
-
-const FINAL_BASE =
-  sanitizeBase(
-    ENV_BASE ||
-      FALLBACK_BASE,
-  );
-
-if (!FINAL_BASE) {
-  throw new Error(
-    "[useAuthActions] BACKEND BASE URL is empty. Set VITE_BACKEND_BASE_URL in .env.local",
-  );
-}
-
-// Backend bootstrap endpoint
 const BOOTSTRAP_URL =
-  `${FINAL_BASE}/auth/bootstrap`;
-
-// 共通HTTPラッパ
-async function httpRequest<T>(
-  input: string,
-  init: RequestInit = {},
-): Promise<T> {
-  const response = await fetch(
-    input,
-    {
-      mode: "cors",
-      ...init,
-      headers: {
-        "Content-Type":
-          "application/json",
-        ...(init.headers ?? {}),
-      },
-    },
-  );
-
-  if (response.status === 204) {
-    return undefined as unknown as T;
-  }
-
-  const text =
-    await response
-      .text()
-      .catch(() => "");
-
-  if (!response.ok) {
-    throw new Error(
-      `[useAuthActions] ${response.status} ${response.statusText} :: ${text.slice(0, 300)}`,
-    );
-  }
-
-  try {
-    return text
-      ? JSON.parse(text) as T
-      : undefined as unknown as T;
-  } catch {
-    throw new Error(
-      `[useAuthActions] JSON parse error. head: ${text.slice(0, 120)}`,
-    );
-  }
-}
+  `${API_BASE}/auth/bootstrap`;
 
 /**
- * サーバーに送るprofile bodyを、
- * 空文字を含めない形で組み立てる。
+ * サーバーへ送信するprofile bodyを、
+ * 空文字を含めない形式で組み立てる。
  *
  * Backendが*stringでvalidationしている場合に、
  * 空文字による上書きで
@@ -160,19 +179,29 @@ function buildBootstrapBody(
     Record<string, string> = {};
 
   const lastName =
-    s(profile?.lastName);
+    normalizeString(
+      profile?.lastName,
+    );
 
   const firstName =
-    s(profile?.firstName);
+    normalizeString(
+      profile?.firstName,
+    );
 
   const lastNameKana =
-    s(profile?.lastNameKana);
+    normalizeString(
+      profile?.lastNameKana,
+    );
 
   const firstNameKana =
-    s(profile?.firstNameKana);
+    normalizeString(
+      profile?.firstNameKana,
+    );
 
   const companyName =
-    s(profile?.companyName);
+    normalizeString(
+      profile?.companyName,
+    );
 
   if (lastName) {
     body.lastName =
@@ -203,40 +232,36 @@ function buildBootstrapBody(
 }
 
 /**
- * Bootstrap APIを呼び出す。
+ * BackendのBootstrap APIを呼び出す。
  *
- * BackendにMemberとCompanyの作成を委譲する。
- * Backend側では冪等に処理される前提。
+ * ID tokenの取得、Authorizationヘッダーの設定、
+ * 401時のtoken強制更新と1回限りの再送は
+ * shared/http/fetchJSON.tsへ委譲する。
+ *
+ * Backend側ではMemberとCompanyが
+ * 冪等に作成される前提。
  */
 async function callBootstrap(
   profile?: SignUpProfile,
 ): Promise<void> {
-  const token =
-    await auth.currentUser
-      ?.getIdToken();
-
-  if (!token) {
-    throw new Error(
-      "[useAuthActions] Not authenticated (no ID token).",
-    );
-  }
-
   const body =
     buildBootstrapBody(
       profile,
     );
 
-  await httpRequest<void>(
+  await fetchJSON<void>(
     BOOTSTRAP_URL,
     {
       method: "POST",
+      mode: "cors",
+      auth: "required",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
       body: JSON.stringify(
         body,
       ),
-      headers: {
-        Authorization:
-          `Bearer ${token}`,
-      },
     },
   );
 }
@@ -251,10 +276,14 @@ function validateProfileForSignUp(
   profile?: SignUpProfile,
 ): string | null {
   const lastName =
-    s(profile?.lastName);
+    normalizeString(
+      profile?.lastName,
+    );
 
   const firstName =
-    s(profile?.firstName);
+    normalizeString(
+      profile?.firstName,
+    );
 
   if (
     !lastName ||
@@ -281,14 +310,15 @@ export function useAuthActions() {
 
   /**
    * サインアップ
-   * - Firebase Authenticationでユーザーを作成
+   *
+   * - Firebase Authenticationでユーザーを作成する
    * - 作成後にBackendのbootstrapを呼び出す
    */
   async function signUp(
     email: string,
     password: string,
     profile?: SignUpProfile,
-  ) {
+  ): Promise<void> {
     setSubmitting(true);
     setError(null);
 
@@ -314,12 +344,9 @@ export function useAuthActions() {
           password,
         );
 
-      const user =
-        credential.user;
-
-      if (!user?.uid) {
+      if (!credential.user?.uid) {
         throw new Error(
-          "ユーザー作成後に uid を取得できませんでした。",
+          "ユーザー作成後にuidを取得できませんでした。",
         );
       }
 
@@ -328,13 +355,20 @@ export function useAuthActions() {
           profile,
         );
       } catch {
-        // 新規登録自体は成功しているため、
-        // bootstrapの失敗は致命的エラーとして扱わない。
+        /**
+         * Firebase Authenticationへの新規登録自体は
+         * 完了しているため、bootstrapの失敗によって
+         * Firebaseユーザー作成成功を取り消さない。
+         *
+         * 次回サインイン時に冪等なbootstrapを再実行する。
+         */
       }
-    } catch (error: any) {
+    } catch (caughtError: unknown) {
       setError(
-        messageForAuthError(
-          error?.code,
+        messageForSignUpError(
+          getAuthErrorCode(
+            caughtError,
+          ),
         ),
       );
     } finally {
@@ -344,14 +378,15 @@ export function useAuthActions() {
 
   /**
    * サインイン
-   * - EmailとPasswordでログイン
+   *
+   * - EmailとPasswordでログインする
    * - ログイン成功後にBackendのbootstrapを呼び出す
    */
   async function signIn(
     email: string,
     password: string,
     profile?: SignUpProfile,
-  ) {
+  ): Promise<void> {
     setSubmitting(true);
     setError(null);
 
@@ -367,29 +402,52 @@ export function useAuthActions() {
           profile,
         );
       } catch {
-        // ログイン自体は成功しているため、
-        // bootstrapの失敗は致命的エラーとして扱わない。
+        /**
+         * Firebase Authenticationへのログイン自体は
+         * 完了しているため、bootstrapの失敗によって
+         * ログイン成功を取り消さない。
+         *
+         * bootstrapは次回サインイン時にも再実行される。
+         */
       }
-    } catch (error: any) {
+    } catch (caughtError: unknown) {
+      const code =
+        getAuthErrorCode(
+          caughtError,
+        );
+
       setError(
-        error?.message ??
-          "ログインに失敗しました",
+        code
+          ? messageForSignInError(
+              code,
+            )
+          : getErrorMessage(
+              caughtError,
+              "ログインに失敗しました。",
+            ),
       );
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function signOutCurrentUser() {
+  /**
+   * 現在のFirebaseユーザーをログアウトする。
+   */
+  async function signOutCurrentUser(): Promise<void> {
     setSubmitting(true);
     setError(null);
 
     try {
-      await signOut(auth);
-    } catch (error: any) {
+      await signOut(
+        auth,
+      );
+    } catch (caughtError: unknown) {
       setError(
-        error?.message ??
-          "ログアウトに失敗しました",
+        getErrorMessage(
+          caughtError,
+          "ログアウトに失敗しました。",
+        ),
       );
     } finally {
       setSubmitting(false);

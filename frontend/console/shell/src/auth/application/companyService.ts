@@ -1,7 +1,12 @@
 // frontend/console/shell/src/auth/application/companyService.ts
 
-import type { CompanyDTO } from "../domain/entity/company";
-import { fetchCompanyByIdRaw } from "../infrastructure/repository/authRepositoryHTTP";
+import type {
+  CompanyDTO,
+} from "../../shared/types/company";
+
+import {
+  fetchCompanyByIdRaw,
+} from "../infrastructure/repository/authRepositoryHTTP";
 
 // -------------------------------
 // 会社名キャッシュ
@@ -19,15 +24,17 @@ const companyNameCache = new Map<
 async function getCompanyById(
   companyId: string,
 ): Promise<CompanyDTO | null> {
-  const normalizedCompanyId = companyId.trim();
+  const normalizedCompanyId =
+    companyId.trim();
 
   if (!normalizedCompanyId) {
     return null;
   }
 
-  const raw = await fetchCompanyByIdRaw(
-    normalizedCompanyId,
-  );
+  const raw =
+    await fetchCompanyByIdRaw(
+      normalizedCompanyId,
+    );
 
   if (!raw) {
     return null;
@@ -39,8 +46,13 @@ async function getCompanyById(
 async function getCompanyNameById(
   companyId: string,
 ): Promise<string | null> {
-  const company = await getCompanyById(companyId);
-  const companyName = company?.name?.trim() ?? "";
+  const company =
+    await getCompanyById(
+      companyId,
+    );
+
+  const companyName =
+    company?.name?.trim() ?? "";
 
   return companyName || null;
 }
@@ -54,32 +66,43 @@ async function getCompanyNameById(
 export function getCompanyNameByIdCached(
   companyId: string,
 ): Promise<string | null> {
-  const normalizedCompanyId = companyId.trim();
+  const normalizedCompanyId =
+    companyId.trim();
 
   if (!normalizedCompanyId) {
-    return Promise.resolve(null);
+    return Promise.resolve(
+      null,
+    );
   }
 
-  const cachedRequest = companyNameCache.get(
-    normalizedCompanyId,
-  );
+  const cachedRequest =
+    companyNameCache.get(
+      normalizedCompanyId,
+    );
 
   if (cachedRequest) {
     return cachedRequest;
   }
 
-  const request = getCompanyNameById(
-    normalizedCompanyId,
-  ).catch((error: unknown) => {
-    companyNameCache.delete(normalizedCompanyId);
+  const request =
+    getCompanyNameById(
+      normalizedCompanyId,
+    ).catch(
+      (
+        error: unknown,
+      ) => {
+        companyNameCache.delete(
+          normalizedCompanyId,
+        );
 
-    console.error(
-      "[companyService] failed to fetch company name:",
-      error,
+        console.error(
+          "[companyService] failed to fetch company name:",
+          error,
+        );
+
+        return null;
+      },
     );
-
-    return null;
-  });
 
   companyNameCache.set(
     normalizedCompanyId,
