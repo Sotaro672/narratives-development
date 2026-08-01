@@ -1,132 +1,305 @@
-// frontend/console/tokenBlueprintReview/src/presentation/hook/use_tokenBlueprintReviewManagement.tsx
-import { useCallback, useEffect, useMemo, useState } from "react";
+// frontend/console/shell/src/features/tokenBlueprintReview/presentation/hook/use_tokenBlueprintReviewManagement.tsx
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
+
+import {
+  useAuthContext,
+} from "../../../../auth/application/AuthContext";
+
 import {
   type SortKey,
   type SortDir,
   fetchTokenBlueprintReviewsForCompany,
   filterAndSortTokenBlueprintReviews,
 } from "../../application/tokenBlueprintReviewManagementService";
-import type { TokenBlueprintReviewAggregate } from "../../../../shared/types/tokenBlueprintReview";
+
+import type {
+  TokenBlueprintReviewAggregate,
+} from "../../../../shared/types/tokenBlueprintReview";
 
 export type UseTokenBlueprintReviewManagementResult = {
   rows: TokenBlueprintReviewAggregate[];
 
-  brandOptions: { value: string; label: string }[];
+  brandOptions: {
+    value: string;
+    label: string;
+  }[];
+
   brandFilter: string[];
-  handleChangeBrandFilter: (vals: string[]) => void;
+
+  handleChangeBrandFilter: (
+    values: string[],
+  ) => void;
 
   sortKey: SortKey;
   sortDir: SortDir;
 
   isResetting: boolean;
 
-  handleChangeSort: (key: string | null, dir: SortDir) => void;
+  handleChangeSort: (
+    key: string | null,
+    direction: SortDir,
+  ) => void;
+
   handleReset: () => void;
 
-  handleRowClick: (tokenBlueprintId: string) => void;
+  handleRowClick: (
+    tokenBlueprintId: string,
+  ) => void;
 };
 
 /**
- * TokenBlueprintReview Management ページ用ロジック（Hook）
- * - backend は companyId を auth context から解決する想定のため、フロントでは companyId ガードしない
- * - brandName フィルタ / ソート / 行クリック など UI 以外の要素を集約
+ * TokenBlueprintReview Managementページ用ロジック。
+ *
+ * - backendはcompanyIdを認証コンテキストから解決する想定
+ * - brandNameフィルタ、ソート、行クリックなどの
+ *   UI以外の処理を集約する
  */
 export function useTokenBlueprintReviewManagement(): UseTokenBlueprintReviewManagementResult {
   const navigate = useNavigate();
-  const { currentMember } = useAuth();
 
-  const [rows, setRows] = useState<TokenBlueprintReviewAggregate[]>([]);
-  const [brandFilter, setBrandFilter] = useState<string[]>([]);
+  const {
+    currentMember,
+  } = useAuthContext();
 
-  const [sortKey, setSortKey] = useState<SortKey>(null);
-  const [sortDir, setSortDir] = useState<SortDir>(null);
+  const [
+    rows,
+    setRows,
+  ] = useState<
+    TokenBlueprintReviewAggregate[]
+  >([]);
 
-  const [isResetting, setIsResetting] = useState(false);
+  const [
+    brandFilter,
+    setBrandFilter,
+  ] = useState<string[]>([]);
 
-  // ─────────────────────────────
-  // データ取得: 集計一覧を取得（service に委譲）
-  // ─────────────────────────────
-  const reload = useCallback(async () => {
-    const companyId = String(currentMember?.companyId ?? "");
+  const [
+    sortKey,
+    setSortKey,
+  ] = useState<SortKey>(
+    null,
+  );
 
-    setIsResetting(true);
-    try {
-      const result = await fetchTokenBlueprintReviewsForCompany(companyId);
-      setRows(result ?? []);
-    } catch {
-      setRows([]);
-    } finally {
-      setIsResetting(false);
-    }
-  }, [currentMember?.companyId]);
+  const [
+    sortDir,
+    setSortDir,
+  ] = useState<SortDir>(
+    null,
+  );
+
+  const [
+    isResetting,
+    setIsResetting,
+  ] = useState(false);
+
+  /**
+   * 集計一覧を取得する。
+   */
+  const reload = useCallback(
+    async (): Promise<void> => {
+      const companyId = String(
+        currentMember?.companyId ?? "",
+      );
+
+      setIsResetting(true);
+
+      try {
+        const result =
+          await fetchTokenBlueprintReviewsForCompany(
+            companyId,
+          );
+
+        setRows(
+          result ?? [],
+        );
+      } catch {
+        setRows([]);
+      } finally {
+        setIsResetting(false);
+      }
+    },
+    [
+      currentMember?.companyId,
+    ],
+  );
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  // brandName options（ユニーク）
+  /**
+   * brandNameの選択肢を生成する。
+   */
   const brandOptions = useMemo(() => {
-    const set = new Set<string>();
+    const brandNames =
+      new Set<string>();
 
-    for (const r of rows) {
-      const name = String(r.brandName ?? "");
-      if (name) set.add(name);
+    for (const row of rows) {
+      const brandName = String(
+        row.brandName ?? "",
+      );
+
+      if (brandName) {
+        brandNames.add(
+          brandName,
+        );
+      }
     }
 
-    return Array.from(set)
-      .sort((a, b) => a.localeCompare(b))
-      .map((v) => ({ value: v, label: v }));
+    return Array.from(
+      brandNames,
+    )
+      .sort(
+        (
+          first,
+          second,
+        ) =>
+          first.localeCompare(
+            second,
+          ),
+      )
+      .map((brandName) => ({
+        value:
+          brandName,
+        label:
+          brandName,
+      }));
   }, [rows]);
 
-  // brandName フィルタ適用
-  const brandFilteredRows = useMemo(() => {
-    if (!brandFilter || brandFilter.length === 0) return rows;
+  /**
+   * brandNameフィルタを適用する。
+   */
+  const brandFilteredRows =
+    useMemo(() => {
+      if (
+        brandFilter.length === 0
+      ) {
+        return rows;
+      }
 
-    return rows.filter((r) => {
-      const brandName = String(r.brandName ?? "");
-      return brandName !== "" && brandFilter.includes(brandName);
-    });
-  }, [rows, brandFilter]);
+      return rows.filter(
+        (row) => {
+          const brandName =
+            String(
+              row.brandName ?? "",
+            );
 
-  // ソート適用後の行（SortKey は camelCase: createdAt / updatedAt）
-  const sortedRows = useMemo(() => {
-    return filterAndSortTokenBlueprintReviews(brandFilteredRows, {
+          return (
+            brandName !== "" &&
+            brandFilter.includes(
+              brandName,
+            )
+          );
+        },
+      );
+    }, [
+      rows,
+      brandFilter,
+    ]);
+
+  /**
+   * ソートを適用する。
+   *
+   * SortKey:
+   * - createdAt
+   * - updatedAt
+   */
+  const sortedRows =
+    useMemo(() => {
+      return filterAndSortTokenBlueprintReviews(
+        brandFilteredRows,
+        {
+          sortKey,
+          sortDir,
+        },
+      );
+    }, [
+      brandFilteredRows,
       sortKey,
       sortDir,
-    });
-  }, [brandFilteredRows, sortKey, sortDir]);
+    ]);
 
-  const handleRowClick = useCallback(
-    (tokenBlueprintId: string) => {
-      navigate(`/tokenBlueprintReview/${encodeURIComponent(tokenBlueprintId)}`);
-    },
-    [navigate],
-  );
+  const handleRowClick =
+    useCallback(
+      (
+        tokenBlueprintId: string,
+      ) => {
+        const normalizedId =
+          String(
+            tokenBlueprintId ?? "",
+          ).trim();
 
-  const handleReset = useCallback(() => {
-    setBrandFilter([]);
-    setSortKey(null);
-    setSortDir(null);
-    void reload();
-  }, [reload]);
+        if (!normalizedId) {
+          return;
+        }
 
-  const handleChangeBrandFilter = useCallback((vals: string[]) => {
-    setBrandFilter(vals ?? []);
-  }, []);
+        navigate(
+          `/tokenBlueprintReview/${encodeURIComponent(
+            normalizedId,
+          )}`,
+        );
+      },
+      [navigate],
+    );
 
-  const handleChangeSort = useCallback((key: string | null, dir: SortDir) => {
-    if (key === "createdAt" || key === "updatedAt" || key === null) {
-      setSortKey(key);
-    } else {
+  const handleReset =
+    useCallback(() => {
+      setBrandFilter([]);
       setSortKey(null);
-    }
-    setSortDir(dir);
-  }, []);
+      setSortDir(null);
+
+      void reload();
+    }, [reload]);
+
+  const handleChangeBrandFilter =
+    useCallback(
+      (
+        values: string[],
+      ) => {
+        setBrandFilter(
+          values ?? [],
+        );
+      },
+      [],
+    );
+
+  const handleChangeSort =
+    useCallback(
+      (
+        key: string | null,
+        direction: SortDir,
+      ) => {
+        if (
+          key === "createdAt" ||
+          key === "updatedAt" ||
+          key === null
+        ) {
+          setSortKey(
+            key,
+          );
+        } else {
+          setSortKey(
+            null,
+          );
+        }
+
+        setSortDir(
+          direction,
+        );
+      },
+      [],
+    );
 
   return {
-    rows: sortedRows,
+    rows:
+      sortedRows,
 
     brandOptions,
     brandFilter,
@@ -134,7 +307,9 @@ export function useTokenBlueprintReviewManagement(): UseTokenBlueprintReviewMana
 
     sortKey,
     sortDir,
+
     isResetting,
+
     handleChangeSort,
     handleReset,
     handleRowClick,

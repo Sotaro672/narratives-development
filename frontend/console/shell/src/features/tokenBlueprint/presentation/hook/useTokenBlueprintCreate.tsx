@@ -3,7 +3,9 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
+import {
+  useAuthContext,
+} from "../../../../auth/application/AuthContext";
 
 import type {
   TokenBlueprint,
@@ -43,7 +45,7 @@ export function useTokenBlueprintCreate() {
 
   const {
     currentMember,
-  } = useAuth();
+  } = useAuthContext();
 
   const companyId =
     currentMember?.companyId ??
@@ -80,9 +82,8 @@ export function useTokenBlueprintCreate() {
 
   const createdAt =
     React.useMemo(
-      () => {
-        return new Date().toISOString();
-      },
+      () =>
+        new Date().toISOString(),
       [],
     );
 
@@ -94,11 +95,17 @@ export function useTokenBlueprintCreate() {
         }`.trim();
 
       return (
+        currentMember?.displayName?.trim() ||
         fullName ||
-        currentMember?.email ||
+        currentMember?.email?.trim() ||
         "未設定"
       );
-    }, [currentMember]);
+    }, [
+      currentMember?.displayName,
+      currentMember?.lastName,
+      currentMember?.firstName,
+      currentMember?.email,
+    ]);
 
   const onBack =
     React.useCallback(() => {
@@ -212,40 +219,38 @@ export function useTokenBlueprintCreate() {
     React.useMemo<
       Partial<TokenBlueprint>
     >(
-      () => {
-        return {
-          id: "",
-          name: "",
-          symbol: "",
-          brandId: "",
-          brandName: "",
-          description: "",
-          companyId,
+      () => ({
+        id: "",
+        name: "",
+        symbol: "",
+        brandId: "",
+        brandName: "",
+        description: "",
+        companyId,
 
-          contentFiles: [],
+        contentFiles: [],
 
-          assigneeId:
-            assignee ||
-            memberId,
+        assigneeId:
+          assignee ||
+          memberId,
 
-          createdBy:
-            memberId,
+        createdBy:
+          memberId,
 
+        createdAt,
+
+        updatedBy:
+          memberId,
+
+        updatedAt:
           createdAt,
 
-          updatedBy:
-            memberId,
+        deletedAt:
+          null,
 
-          updatedAt:
-            createdAt,
-
-          deletedAt:
-            null,
-
-          deletedBy:
-            null,
-        };
-      },
+        deletedBy:
+          null,
+      }),
       [
         companyId,
         assignee,

@@ -10,7 +10,9 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
+import {
+  useAuthContext,
+} from "../../../../auth/application/AuthContext";
 
 import type { Member } from "../../../../shared/types/member";
 import type { MemberFilter } from "../../../member/domain/repository/memberRepository";
@@ -62,7 +64,10 @@ function getErrorMessage(error: unknown): string {
 
 export function useBrandCreate() {
   const navigate = useNavigate();
-  const { currentMember } = useAuth();
+
+  const {
+    currentMember,
+  } = useAuthContext();
 
   const companyId = useMemo(
     () => String(currentMember?.companyId ?? ""),

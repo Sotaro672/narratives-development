@@ -9,7 +9,9 @@ import {
 
 import { usePriceCard } from "../../../list/presentation/hook/usePriceCard";
 import { useAdminCard } from "../../../admin/presentation/hook/useAdminCard";
-import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
+import {
+  useAuthContext,
+} from "../../../../auth/application/AuthContext";
 
 import type { ListStatus } from "../../../../shared/types/list";
 
@@ -1010,7 +1012,7 @@ export function useListCreate():
   const {
     currentMember,
   } =
-    useAuth();
+    useAuthContext();
 
   const {
     status,

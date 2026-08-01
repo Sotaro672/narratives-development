@@ -1,7 +1,15 @@
-// frontend/console/admin/src/presentation/hook/useAdminCard.tsx
+// frontend/console/shell/src/features/admin/presentation/hook/useAdminCard.tsx
 
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  useAuthContext,
+} from "../../../../auth/application/AuthContext";
 
 // AdminService
 import {
@@ -14,57 +22,75 @@ export type UseAdminCardResult = {
   loadingMembers: boolean;
 
   /**
-   * assigneeId から表示名を取得する。
+   * assigneeIdから表示名を取得する。
    *
    * NOTE:
-   * フロント側で /members/{uid} を叩く名前解決は行わない。
-   * backend response の assigneeName / createdByName / displayName / name を正とする。
+   * フロント側で/members/{uid}を叩く名前解決は行わない。
+   * Backend responseのassigneeName、createdByName、
+   * displayName、nameを正とする。
    */
-  getAssigneeNameById: (assigneeId: string | null | undefined) => Promise<string>;
+  getAssigneeNameById: (
+    assigneeId:
+      | string
+      | null
+      | undefined,
+  ) => Promise<string>;
 
   getDefaultAssigneeName: () => string;
 };
 
-function s(value: unknown): string {
-  return String(value ?? "").trim();
+function s(
+  value: unknown,
+): string {
+  return String(
+    value ?? "",
+  ).trim();
 }
 
 /**
- * Candidate 側の ID 正規化。
+ * Candidate側のIDを正規化する。
  *
- * ProductBlueprint response の正:
+ * ProductBlueprint responseの正:
  * - assigneeId
  * - assigneeName
  * - createdBy
  * - createdByName
  *
- * AssigneeCandidate 側は AdminService の response に合わせて id/name を正とする。
+ * AssigneeCandidate側はAdminServiceのresponseに合わせて
+ * idとnameを正とする。
  */
-function getCandidateId(candidate: unknown): string {
-  const c = candidate as any;
+function getCandidateId(
+  candidate: unknown,
+): string {
+  const value =
+    candidate as any;
 
   return (
-    s(c?.id) ||
-    s(c?.assigneeId) ||
-    s(c?.createdBy) ||
+    s(value?.id) ||
+    s(value?.assigneeId) ||
+    s(value?.createdBy) ||
     ""
   );
 }
 
 /**
- * Candidate 側の表示名。
+ * Candidate側の表示名を取得する。
  *
- * backend response の name 系を正として使う。
+ * Backend responseのname系を正として使用する。
  */
-function getCandidateName(candidate: unknown, fallback = ""): string {
-  const c = candidate as any;
+function getCandidateName(
+  candidate: unknown,
+  fallback = "",
+): string {
+  const value =
+    candidate as any;
 
   return (
-    s(c?.assigneeName) ||
-    s(c?.createdByName) ||
-    s(c?.displayName) ||
-    s(c?.name) ||
-    s(c?.email) ||
+    s(value?.assigneeName) ||
+    s(value?.createdByName) ||
+    s(value?.displayName) ||
+    s(value?.name) ||
+    s(value?.email) ||
     s(fallback)
   );
 }
@@ -72,88 +98,184 @@ function getCandidateName(candidate: unknown, fallback = ""): string {
 function normalizeAssigneeCandidates(
   candidates: AssigneeCandidate[],
 ): AssigneeCandidate[] {
-  return (Array.isArray(candidates) ? candidates : [])
+  return (
+    Array.isArray(candidates)
+      ? candidates
+      : []
+  )
     .map((candidate) => {
-      const c = candidate as any;
+      const value =
+        candidate as any;
 
-      const id = getCandidateId(c);
-      if (!id) return null;
+      const id =
+        getCandidateId(value);
 
-      const name = getCandidateName(c, id);
+      if (!id) {
+        return null;
+      }
+
+      const name =
+        getCandidateName(
+          value,
+          id,
+        );
 
       return {
-        ...c,
+        ...value,
         id,
         name,
       } as AssigneeCandidate;
     })
-    .filter(Boolean) as AssigneeCandidate[];
+    .filter(
+      (
+        candidate,
+      ): candidate is AssigneeCandidate =>
+        candidate !== null,
+    );
 }
 
-function normalizeNameMapById(args: {
-  candidates: AssigneeCandidate[];
-  nameMap: Record<string, string>;
-}): Record<string, string> {
-  const out: Record<string, string> = {};
+function normalizeNameMapById(
+  args: {
+    candidates:
+      AssigneeCandidate[];
+    nameMap:
+      Record<string, string>;
+  },
+): Record<string, string> {
+  const output:
+    Record<string, string> = {};
 
-  const rawNameMap = args.nameMap ?? {};
-  for (const [key, value] of Object.entries(rawNameMap)) {
-    const k = s(key);
-    const v = s(value);
-    if (!k || !v) continue;
-    out[k] = v;
+  const rawNameMap =
+    args.nameMap ?? {};
+
+  for (
+    const [
+      key,
+      value,
+    ] of Object.entries(
+      rawNameMap,
+    )
+  ) {
+    const normalizedKey =
+      s(key);
+
+    const normalizedValue =
+      s(value);
+
+    if (
+      !normalizedKey ||
+      !normalizedValue
+    ) {
+      continue;
+    }
+
+    output[normalizedKey] =
+      normalizedValue;
   }
 
-  for (const candidate of Array.isArray(args.candidates) ? args.candidates : []) {
-    const id = getCandidateId(candidate);
-    if (!id) continue;
+  const candidates =
+    Array.isArray(
+      args.candidates,
+    )
+      ? args.candidates
+      : [];
 
-    const name = getCandidateName(candidate);
-    if (!name) continue;
+  for (
+    const candidate of candidates
+  ) {
+    const id =
+      getCandidateId(
+        candidate,
+      );
 
-    out[id] = name;
+    if (!id) {
+      continue;
+    }
+
+    const name =
+      getCandidateName(
+        candidate,
+      );
+
+    if (!name) {
+      continue;
+    }
+
+    output[id] = name;
   }
 
-  return out;
+  return output;
 }
 
 export function useAdminCard(): UseAdminCardResult {
-  const { currentMember } = useAuth();
+  const {
+    currentMember,
+  } = useAuthContext();
 
-  const [loadingMembers, setLoadingMembers] = useState(false);
-  const [assigneeCandidates, setAssigneeCandidates] = useState<
+  const [
+    loadingMembers,
+    setLoadingMembers,
+  ] = useState(false);
+
+  const [
+    assigneeCandidates,
+    setAssigneeCandidates,
+  ] = useState<
     AssigneeCandidate[]
   >([]);
-  const [assigneeNameMap, setAssigneeNameMap] =
-    useState<Record<string, string>>({});
+
+  const [
+    assigneeNameMap,
+    setAssigneeNameMap,
+  ] = useState<
+    Record<string, string>
+  >({});
 
   useEffect(() => {
     let alive = true;
 
-    (async () => {
+    async function loadCandidates() {
       setLoadingMembers(true);
 
       try {
-        const { candidates, nameMap } =
+        const {
+          candidates,
+          nameMap,
+        } =
           await fetchAssigneeCandidatesForCurrentCompany();
 
-        if (!alive) return;
+        if (!alive) {
+          return;
+        }
 
-        const normalizedCandidates = normalizeAssigneeCandidates(candidates);
+        const normalizedCandidates =
+          normalizeAssigneeCandidates(
+            candidates,
+          );
 
-        const normalizedNameMap = normalizeNameMapById({
-          candidates: normalizedCandidates,
-          nameMap: nameMap ?? {},
-        });
+        const normalizedNameMap =
+          normalizeNameMapById({
+            candidates:
+              normalizedCandidates,
+            nameMap:
+              nameMap ?? {},
+          });
 
-        setAssigneeCandidates(normalizedCandidates);
-        setAssigneeNameMap(normalizedNameMap);
+        setAssigneeCandidates(
+          normalizedCandidates,
+        );
+
+        setAssigneeNameMap(
+          normalizedNameMap,
+        );
       } finally {
         if (alive) {
           setLoadingMembers(false);
         }
       }
-    })();
+    }
+
+    void loadCandidates();
 
     return () => {
       alive = false;
@@ -161,7 +283,7 @@ export function useAdminCard(): UseAdminCardResult {
   }, []);
 
   /**
-   * currentMember は GET /members/{uid} の response を正とする。
+   * currentMemberはGET /members/meのresponseを正とする。
    *
    * 正:
    * - id
@@ -171,53 +293,111 @@ export function useAdminCard(): UseAdminCardResult {
    * - email
    * - displayName
    */
-  const currentMemberId = useMemo(() => {
-    return s(currentMember?.id);
-  }, [currentMember]);
+  const currentMemberId =
+    useMemo(
+      () =>
+        s(currentMember?.id),
+      [currentMember?.id],
+    );
 
-  const defaultAssigneeName = useMemo(() => {
-    const displayName = s(currentMember?.displayName);
-    if (displayName) return displayName;
+  const defaultAssigneeName =
+    useMemo(() => {
+      const displayName =
+        s(
+          currentMember
+            ?.displayName,
+        );
 
-    const fullName = `${currentMember?.lastName ?? ""} ${
-      currentMember?.firstName ?? ""
-    }`.trim();
-    if (fullName) return fullName;
-
-    return s(currentMember?.email) || currentMemberId || "未設定";
-  }, [currentMember, currentMemberId]);
-
-  const getDefaultAssigneeName = useCallback(() => {
-    return defaultAssigneeName;
-  }, [defaultAssigneeName]);
-
-  const getAssigneeNameById = useCallback(
-    async (assigneeId: string | null | undefined): Promise<string> => {
-      const normalizedId = s(assigneeId);
-
-      if (!normalizedId) {
-        return "未設定";
+      if (displayName) {
+        return displayName;
       }
 
-      const matched = assigneeCandidates.find((candidate) => {
-        const candidateId = getCandidateId(candidate);
-        return candidateId === normalizedId;
-      });
+      const fullName =
+        `${
+          currentMember
+            ?.lastName ?? ""
+        } ${
+          currentMember
+            ?.firstName ?? ""
+        }`.trim();
 
-      const candidateName = getCandidateName(matched);
-      if (candidateName) {
-        return candidateName;
+      if (fullName) {
+        return fullName;
       }
 
-      const mappedName = assigneeNameMap[normalizedId];
-      if (mappedName) {
-        return mappedName;
-      }
+      return (
+        s(
+          currentMember
+            ?.email,
+        ) ||
+        currentMemberId ||
+        "未設定"
+      );
+    }, [
+      currentMember?.displayName,
+      currentMember?.lastName,
+      currentMember?.firstName,
+      currentMember?.email,
+      currentMemberId,
+    ]);
 
-      return defaultAssigneeName;
-    },
-    [assigneeCandidates, assigneeNameMap, defaultAssigneeName],
-  );
+  const getDefaultAssigneeName =
+    useCallback(
+      () =>
+        defaultAssigneeName,
+      [defaultAssigneeName],
+    );
+
+  const getAssigneeNameById =
+    useCallback(
+      async (
+        assigneeId:
+          | string
+          | null
+          | undefined,
+      ): Promise<string> => {
+        const normalizedId =
+          s(assigneeId);
+
+        if (!normalizedId) {
+          return "未設定";
+        }
+
+        const matched =
+          assigneeCandidates.find(
+            (candidate) =>
+              getCandidateId(
+                candidate,
+              ) ===
+              normalizedId,
+          );
+
+        const candidateName =
+          getCandidateName(
+            matched,
+          );
+
+        if (candidateName) {
+          return candidateName;
+        }
+
+        const mappedName =
+          assigneeNameMap[
+            normalizedId
+          ];
+
+        if (mappedName) {
+          return mappedName;
+        }
+
+        return defaultAssigneeName;
+      },
+      [
+        assigneeCandidates,
+        assigneeNameMap,
+        defaultAssigneeName,
+      ],
+    );
 
   return {
     assigneeCandidates,

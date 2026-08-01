@@ -1,7 +1,15 @@
 // frontend/console/shell/src/features/announcement/presentation/hook/useAnnouncementTokenListPage.tsx
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
+import {
+  useAuthContext,
+} from "../../../../auth/application/AuthContext";
 import {
   enrichAnnouncementTokenListRows,
   fetchAnnouncementTokenListRows,
@@ -10,63 +18,79 @@ import {
   type AnnouncementTokenListSortDir,
   type AnnouncementTokenListSortKey,
 } from "../../application/announcement_token_list_service";
-import type { SalesRow } from "../../infrastructure/sales_repository_http";
-import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
+import type {
+  SalesRow,
+} from "../../infrastructure/sales_repository_http";
 
 export function useAnnouncementTokenListPage() {
   const {
-    user,
     loading,
     currentMember,
     loadingMember,
-  } = useAuth();
+  } = useAuthContext();
 
-  const [sourceRows, setSourceRows] =
-    useState<SalesRow[]>([]);
+  const [
+    sourceRows,
+    setSourceRows,
+  ] = useState<SalesRow[]>([]);
 
-  const [sortKey, setSortKey] =
+  const [
+    sortKey,
+    setSortKey,
+  ] =
     useState<AnnouncementTokenListSortKey>(
       "tokenName",
     );
 
-  const [sortDir, setSortDir] =
+  const [
+    sortDir,
+    setSortDir,
+  ] =
     useState<AnnouncementTokenListSortDir>(
       "asc",
     );
 
-  const [isResetting, setIsResetting] =
-    useState(false);
+  const [
+    isResetting,
+    setIsResetting,
+  ] = useState(false);
 
-  const companyId = useMemo(() => {
-    return String(
-      currentMember?.companyId ??
-        user?.companyId ??
-        "",
-    ).trim();
-  }, [currentMember, user]);
+  const companyId = useMemo(
+    () =>
+      String(
+        currentMember?.companyId ?? "",
+      ).trim(),
+    [currentMember?.companyId],
+  );
 
   const isAuthLoading =
     loading || loadingMember;
 
-  const load = useCallback(async () => {
-    if (isAuthLoading) {
-      return;
-    }
+  const load = useCallback(
+    async () => {
+      if (isAuthLoading) {
+        return;
+      }
 
-    if (!companyId) {
-      setSourceRows([]);
-      return;
-    }
+      if (!companyId) {
+        setSourceRows([]);
+        return;
+      }
 
-    try {
-      const rows =
-        await fetchAnnouncementTokenListRows();
+      try {
+        const rows =
+          await fetchAnnouncementTokenListRows();
 
-      setSourceRows(rows);
-    } catch {
-      setSourceRows([]);
-    }
-  }, [companyId, isAuthLoading]);
+        setSourceRows(rows);
+      } catch {
+        setSourceRows([]);
+      }
+    },
+    [
+      companyId,
+      isAuthLoading,
+    ],
+  );
 
   useEffect(() => {
     void load();
@@ -83,33 +107,45 @@ export function useAnnouncementTokenListPage() {
       sortKey,
       sortDir,
     );
-  }, [sourceRows, sortDir, sortKey]);
+  }, [
+    sourceRows,
+    sortKey,
+    sortDir,
+  ]);
 
-  const handleChangeSort = useCallback(
-    (nextKey: string) => {
-      const normalizedKey =
-        normalizeAnnouncementTokenListSortKey(
-          nextKey,
-        );
-
-      setSortKey((prevKey) => {
-        if (prevKey === normalizedKey) {
-          setSortDir((prevDir) =>
-            prevDir === "asc"
-              ? "desc"
-              : "asc",
+  const handleChangeSort =
+    useCallback(
+      (nextKey: string) => {
+        const normalizedKey =
+          normalizeAnnouncementTokenListSortKey(
+            nextKey,
           );
 
-          return prevKey;
-        }
+        setSortKey(
+          (previousKey) => {
+            if (
+              previousKey ===
+              normalizedKey
+            ) {
+              setSortDir(
+                (previousDirection) =>
+                  previousDirection ===
+                  "asc"
+                    ? "desc"
+                    : "asc",
+              );
 
-        setSortDir("asc");
+              return previousKey;
+            }
 
-        return normalizedKey;
-      });
-    },
-    [],
-  );
+            setSortDir("asc");
+
+            return normalizedKey;
+          },
+        );
+      },
+      [],
+    );
 
   const handleReset =
     useCallback(async () => {

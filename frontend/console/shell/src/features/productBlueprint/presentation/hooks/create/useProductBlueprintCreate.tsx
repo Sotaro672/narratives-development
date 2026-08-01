@@ -1,9 +1,7 @@
 // frontend/console/shell/src/features/productBlueprint/presentation/hooks/create/useProductBlueprintCreate.tsx
 
 import * as React from "react";
-import {
-  useNavigate,
-} from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import type {
   AlcoholModelNumber,
@@ -12,8 +10,8 @@ import type {
 } from "../../../../model/application/modelCreateService";
 
 import {
-  useAuth,
-} from "../../../../../auth/presentation/hook/useCurrentMember";
+  useAuthContext,
+} from "../../../../../auth/application/AuthContext";
 
 import type {
   ApparelSizeInput,
@@ -251,8 +249,8 @@ function removeModelOwnedCategoryFields(
 ): CategoryFieldValues {
   const next:
     CategoryFieldValues = {
-    ...fields,
-  };
+      ...fields,
+    };
 
   if (
     category?.kind ===
@@ -353,7 +351,7 @@ export function useProductBlueprintCreate():
   const {
     currentMember,
     user,
-  } = useAuth();
+  } = useAuthContext();
 
   const effectiveCompanyId =
     React.useMemo(

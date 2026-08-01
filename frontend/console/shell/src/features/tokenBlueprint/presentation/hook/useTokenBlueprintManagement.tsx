@@ -8,7 +8,9 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
+import {
+  useAuthContext,
+} from "../../../../auth/application/AuthContext";
 
 import type { TokenBlueprint } from "../../../../shared/types/tokenBlueprint";
 
@@ -140,7 +142,7 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
 
   const {
     currentMember,
-  } = useAuth();
+  } = useAuthContext();
 
   const [
     rows,

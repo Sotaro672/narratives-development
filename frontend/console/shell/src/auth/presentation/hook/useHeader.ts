@@ -1,9 +1,17 @@
 // frontend/console/shell/src/auth/presentation/hook/useHeader.ts
 
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
-import { useAuthActions } from "../../application/useAuthActions";
-import { useAuth } from "./useCurrentMember";
+import {
+  useAuthContext,
+} from "../../application/AuthContext";
+import {
+  useAuthActions,
+} from "../../application/useAuthActions";
 
 type UseHeaderParams = {
   username?: string;
@@ -14,18 +22,26 @@ export function useHeader({
   username = "管理者",
   email = "admin@narratives.com",
 }: UseHeaderParams) {
-  const [openAdmin, setOpenAdmin] = useState(false);
+  const [
+    openAdmin,
+    setOpenAdmin,
+  ] = useState(false);
 
-  const panelContainerRef = useRef<HTMLDivElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const panelContainerRef =
+    useRef<HTMLDivElement | null>(null);
 
-  const { signOut } = useAuthActions();
+  const triggerRef =
+    useRef<HTMLButtonElement | null>(null);
+
+  const {
+    signOut,
+  } = useAuthActions();
 
   const {
     user,
     companyName,
     currentMember,
-  } = useAuth();
+  } = useAuthContext();
 
   // ─────────────────────────────────────────────
   // 外側クリックで閉じる
@@ -96,7 +112,7 @@ export function useHeader({
     try {
       await signOut();
       setOpenAdmin(false);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         "logout failed",
         error,
@@ -105,7 +121,9 @@ export function useHeader({
   };
 
   const handleToggleAdmin = () => {
-    setOpenAdmin((current) => !current);
+    setOpenAdmin(
+      (current) => !current,
+    );
   };
 
   // 会社名

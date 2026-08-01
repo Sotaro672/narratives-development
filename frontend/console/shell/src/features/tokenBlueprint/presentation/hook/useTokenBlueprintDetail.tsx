@@ -17,7 +17,9 @@ import type {
   TokenBlueprint,
 } from "../../../../shared/types/tokenBlueprint";
 
-import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
+import {
+  useAuthContext,
+} from "../../../../auth/application/AuthContext";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
 import { useTokenBlueprintCard } from "./useTokenBlueprintCard";
@@ -199,7 +201,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
   const {
     currentMember,
-  } = useAuth();
+  } = useAuthContext();
 
   const memberId =
     currentMember?.id ??

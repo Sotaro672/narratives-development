@@ -11,7 +11,9 @@ import {
   useParams,
 } from "react-router-dom";
 
-import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
+import {
+  useAuthContext,
+} from "../../../../auth/application/AuthContext";
 
 import {
   getInquiryHTTP,
@@ -87,7 +89,7 @@ export function useInquiryDetailPage(): UseInquiryDetailPageResult {
 
   const {
     currentMember,
-  } = useAuth();
+  } = useAuthContext();
 
   const inquiryId = normalizeID(
     inquiryIdParam,
@@ -186,7 +188,7 @@ export function useInquiryDetailPage(): UseInquiryDetailPageResult {
         );
 
         return result;
-      } catch (error) {
+      } catch (error: unknown) {
         if (
           !mountedRef.current ||
           requestId !==
@@ -311,7 +313,7 @@ export function useInquiryDetailPage(): UseInquiryDetailPageResult {
               updatedInquiry,
             );
           });
-        } catch (error) {
+        } catch (error: unknown) {
           if (!mountedRef.current) {
             return;
           }

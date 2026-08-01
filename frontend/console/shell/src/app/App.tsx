@@ -2,25 +2,36 @@
 
 import {
   BrowserRouter,
-  Routes,
-  Route,
   Navigate,
+  Route,
+  Routes,
   useLocation,
 } from "react-router-dom";
 
-import MainPage from "../pages/MainPage";
+import {
+  AuthProvider,
+  useAuthContext,
+} from "../auth/application/AuthContext";
 import AuthPage from "../pages/AuthPage";
 import InvitationPage from "../pages/InvitationPage";
-import { AuthProvider } from "../auth/application/AuthContext";
-import { useAuth } from "../auth/presentation/hook/useCurrentMember";
+import MainPage from "../pages/MainPage";
 
 function InvitationRoute() {
   const location = useLocation();
-  const searchParams = new URLSearchParams(location.search);
-  const token = searchParams.get("token");
+
+  const searchParams =
+    new URLSearchParams(location.search);
+
+  const token =
+    searchParams.get("token");
 
   if (!token) {
-    return <Navigate to="/" replace />;
+    return (
+      <Navigate
+        to="/"
+        replace
+      />
+    );
   }
 
   return <InvitationPage />;
@@ -33,7 +44,7 @@ function RootContent() {
     currentMember,
     loadingMember,
     memberError,
-  } = useAuth();
+  } = useAuthContext();
 
   const location = useLocation();
 
@@ -47,7 +58,10 @@ function RootContent() {
 
   return (
     <Routes>
-      <Route path="/invitation" element={<InvitationRoute />} />
+      <Route
+        path="/invitation"
+        element={<InvitationRoute />}
+      />
 
       <Route
         path="/*"
@@ -69,7 +83,9 @@ function RootContent() {
           ) : (
             // 会社情報の取得完了後にのみMainPageを構築する
             // ルート遷移のたびにMainPage/Headerを必ず構築し直す
-            <MainPage key={location.key} />
+            <MainPage
+              key={location.key}
+            />
           )
         }
       />

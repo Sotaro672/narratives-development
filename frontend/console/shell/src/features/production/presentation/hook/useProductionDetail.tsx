@@ -6,7 +6,9 @@ import {
   useParams,
 } from "react-router-dom";
 
-import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
+import {
+  useAuthContext,
+} from "../../../../auth/application/AuthContext";
 
 import {
   loadProductionDetail,
@@ -16,29 +18,52 @@ import {
   type ModelVariationSummary,
 } from "../../application/detail/index";
 
-import { getProductBlueprintDetail } from "../../../productBlueprint/application/productBlueprintDetailService";
+import {
+  getProductBlueprintDetail,
+} from "../../../productBlueprint/application/productBlueprintDetailService";
 
-import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
-import { buildProductionQuantityRowVMs } from "../viewModels/buildProductionQuantityRowVMs";
-import { toProductionDetailUpdateRows } from "../viewModels/toProductionDetailUpdateRows";
+import type {
+  ProductionQuantityRowVM,
+} from "../viewModels/productionQuantityRowVM";
+import {
+  buildProductionQuantityRowVMs,
+} from "../viewModels/buildProductionQuantityRowVMs";
+import {
+  toProductionDetailUpdateRows,
+} from "../viewModels/toProductionDetailUpdateRows";
 
-type Mode = "view" | "edit";
+type Mode =
+  | "view"
+  | "edit";
 
-type ProductBlueprintDetailForProduction = Awaited<
-  ReturnType<typeof getProductBlueprintDetail>
->;
+type ProductBlueprintDetailForProduction =
+  Awaited<
+    ReturnType<
+      typeof getProductBlueprintDetail
+    >
+  >;
 
 export function useProductionDetail() {
   const navigate = useNavigate();
-  const { productionId } = useParams<{
+
+  const {
+    productionId,
+  } = useParams<{
     productionId: string;
   }>();
 
-  const { currentMember } = useAuth();
-  const creator =
-    currentMember?.displayName ?? "-";
+  const {
+    currentMember,
+  } = useAuthContext();
 
-  const [production, setProduction] =
+  const creator =
+    currentMember?.displayName ??
+    "-";
+
+  const [
+    production,
+    setProduction,
+  ] =
     React.useState<ProductionDetail | null>(
       null,
     );
@@ -46,43 +71,63 @@ export function useProductionDetail() {
   // ======================================================
   // 画面全体のモード（view / edit）
   // ======================================================
-  const [mode, setMode] =
-    React.useState<Mode>("view");
+  const [
+    mode,
+    setMode,
+  ] =
+    React.useState<Mode>(
+      "view",
+    );
 
-  const isViewMode = mode === "view";
-  const isEditMode = mode === "edit";
+  const isViewMode =
+    mode === "view";
+
+  const isEditMode =
+    mode === "edit";
 
   // printed=true（印刷済）のときは編集不可
   const canEdit =
     production?.printed !== true;
 
-  const switchToView = React.useCallback(
-    () => {
-      setMode("view");
-    },
-    [],
-  );
+  const switchToView =
+    React.useCallback(
+      () => {
+        setMode("view");
+      },
+      [],
+    );
 
-  const switchToEdit = React.useCallback(
-    () => {
-      if (!canEdit) {
-        return;
-      }
+  const switchToEdit =
+    React.useCallback(
+      () => {
+        if (!canEdit) {
+          return;
+        }
 
-      setMode("edit");
-    },
-    [canEdit],
-  );
+        setMode("edit");
+      },
+      [canEdit],
+    );
 
-  // AdminCard 用モード
-  const adminMode: "view" | "edit" =
+  // AdminCard用モード
+  const adminMode:
+    | "view"
+    | "edit" =
     mode;
 
-  const [loading, setLoading] =
+  const [
+    loading,
+    setLoading,
+  ] =
     React.useState(false);
 
-  const [error, setError] =
-    React.useState<string | null>(null);
+  const [
+    error,
+    setError,
+  ] =
+    React.useState<string | null>(
+      null,
+    );
 
   const [
     productBlueprint,
@@ -92,34 +137,56 @@ export function useProductionDetail() {
       null,
     );
 
-  const [pbLoading, setPbLoading] =
+  const [
+    pbLoading,
+    setPbLoading,
+  ] =
     React.useState(false);
 
-  const [pbError, setPbError] =
-    React.useState<string | null>(null);
+  const [
+    pbError,
+    setPbError,
+  ] =
+    React.useState<string | null>(
+      null,
+    );
 
-  const [modelIndex, setModelIndex] =
+  const [
+    modelIndex,
+    setModelIndex,
+  ] =
     React.useState<
-      Record<string, ModelVariationSummary>
+      Record<
+        string,
+        ModelVariationSummary
+      >
     >({});
 
-  // 画面 state / 返却は VM を正にする
-  const [quantityRows, setQuantityRows] =
+  // 画面stateと返却値はVMを正にする
+  const [
+    quantityRows,
+    setQuantityRows,
+  ] =
     React.useState<
       ProductionQuantityRowVM[]
     >([]);
 
   // ======================================================
-  // Production 詳細取得
+  // Production詳細取得
   // ======================================================
   React.useEffect(() => {
     if (!productionId) {
       return;
     }
 
+    const targetProductionId =
+      productionId;
+
     let cancelled = false;
 
-    void (async () => {
+    async function loadDetail(
+      id: string,
+    ) {
       try {
         setLoading(true);
         setError(null);
@@ -131,7 +198,7 @@ export function useProductionDetail() {
 
         const data =
           await loadProductionDetail(
-            productionId,
+            id,
           );
 
         if (cancelled) {
@@ -140,21 +207,28 @@ export function useProductionDetail() {
 
         setProduction(data);
       } catch {
-        if (!cancelled) {
-          setError(
-            "生産情報の取得に失敗しました",
-          );
-          setProduction(null);
-          setQuantityRows([]);
-          setProductBlueprint(null);
-          setModelIndex({});
+        if (cancelled) {
+          return;
         }
+
+        setError(
+          "生産情報の取得に失敗しました",
+        );
+
+        setProduction(null);
+        setQuantityRows([]);
+        setProductBlueprint(null);
+        setModelIndex({});
       } finally {
         if (!cancelled) {
           setLoading(false);
         }
       }
-    })();
+    }
+
+    void loadDetail(
+      targetProductionId,
+    );
 
     return () => {
       cancelled = true;
@@ -162,7 +236,7 @@ export function useProductionDetail() {
   }, [productionId]);
 
   // ======================================================
-  // ProductBlueprint 詳細取得
+  // ProductBlueprint詳細取得
   // ======================================================
   React.useEffect(() => {
     const productBlueprintId =
@@ -174,36 +248,48 @@ export function useProductionDetail() {
       return;
     }
 
+    const targetProductBlueprintId =
+      productBlueprintId;
+
     let cancelled = false;
 
-    void (async () => {
+    async function loadProductBlueprint(
+      id: string,
+    ) {
       try {
         setPbLoading(true);
         setPbError(null);
 
-        const pb =
+        const data =
           await getProductBlueprintDetail(
-            productBlueprintId,
+            id,
           );
 
         if (cancelled) {
           return;
         }
 
-        setProductBlueprint(pb);
+        setProductBlueprint(data);
       } catch {
-        if (!cancelled) {
-          setPbError(
-            "商品設計情報の取得に失敗しました",
-          );
-          setProductBlueprint(null);
+        if (cancelled) {
+          return;
         }
+
+        setPbError(
+          "商品設計情報の取得に失敗しました",
+        );
+
+        setProductBlueprint(null);
       } finally {
         if (!cancelled) {
           setPbLoading(false);
         }
       }
-    })();
+    }
+
+    void loadProductBlueprint(
+      targetProductBlueprintId,
+    );
 
     return () => {
       cancelled = true;
@@ -211,7 +297,7 @@ export function useProductionDetail() {
   }, [production?.productBlueprintId]);
 
   // ======================================================
-  // ModelVariation index 取得
+  // ModelVariation index取得
   // ======================================================
   React.useEffect(() => {
     const productBlueprintId =
@@ -222,13 +308,18 @@ export function useProductionDetail() {
       return;
     }
 
+    const targetProductBlueprintId =
+      productBlueprintId;
+
     let cancelled = false;
 
-    void (async () => {
+    async function loadModelIndex(
+      id: string,
+    ) {
       try {
         const index =
           await loadModelVariationIndexByProductBlueprintId(
-            productBlueprintId,
+            id,
           );
 
         if (cancelled) {
@@ -241,7 +332,11 @@ export function useProductionDetail() {
           setModelIndex({});
         }
       }
-    })();
+    }
+
+    void loadModelIndex(
+      targetProductBlueprintId,
+    );
 
     return () => {
       cancelled = true;
@@ -250,11 +345,12 @@ export function useProductionDetail() {
 
   // ======================================================
   // production.Models × modelIndex → quantityRows
-  // backendレスポンスのPascalCaseを正とする
+  // BackendレスポンスのPascalCaseを正とする
   // ======================================================
   React.useEffect(() => {
     const raw =
-      (production as any)?.Models;
+      (production as any)
+        ?.Models;
 
     if (!Array.isArray(raw)) {
       setQuantityRows([]);
@@ -267,65 +363,82 @@ export function useProductionDetail() {
         modelIndex,
       );
 
-    setQuantityRows(viewModels);
-  }, [production, modelIndex]);
+    setQuantityRows(
+      viewModels,
+    );
+  }, [
+    production,
+    modelIndex,
+  ]);
 
   // ======================================================
   // 保存処理（quantity + assigneeId）
   // ======================================================
   const onSave =
-    React.useCallback(async () => {
-      if (
-        !productionId ||
-        !production
-      ) {
-        return;
-      }
-
-      if (!canEdit) {
-        alert(
-          "この生産は編集できません（印刷済みです）。",
-        );
-        return;
-      }
-
-      try {
-        const rowsForUpdate =
-          toProductionDetailUpdateRows(
-            quantityRows,
-          );
-
-        const updated =
-          await updateProductionDetail({
-            productionId,
-            rows: rowsForUpdate,
-            assigneeId:
-              production.assigneeId ??
-              null,
-          });
-
-        if (updated) {
-          setProduction(updated);
+    React.useCallback(
+      async () => {
+        if (
+          !productionId ||
+          !production
+        ) {
+          return;
         }
 
-        setMode("view");
-      } catch {
-        alert("更新に失敗しました");
-      }
-    }, [
-      productionId,
-      production,
-      quantityRows,
-      canEdit,
-    ]);
+        if (!canEdit) {
+          alert(
+            "この生産は編集できません（印刷済みです）。",
+          );
+          return;
+        }
+
+        try {
+          const rowsForUpdate =
+            toProductionDetailUpdateRows(
+              quantityRows,
+            );
+
+          const updated =
+            await updateProductionDetail({
+              productionId,
+              rows: rowsForUpdate,
+              assigneeId:
+                production.assigneeId ??
+                null,
+            });
+
+          if (updated) {
+            setProduction(
+              updated,
+            );
+          }
+
+          setMode("view");
+        } catch {
+          alert(
+            "更新に失敗しました",
+          );
+        }
+      },
+      [
+        productionId,
+        production,
+        quantityRows,
+        canEdit,
+      ],
+    );
 
   // ======================================================
   // 戻る
   // ======================================================
   const handleBack =
-    React.useCallback(() => {
-      navigate("/production");
-    }, [navigate]);
+    React.useCallback(
+      () => {
+        navigate(
+          "/production",
+        );
+      },
+      [navigate],
+    );
 
   return {
     isViewMode,
@@ -336,11 +449,14 @@ export function useProductionDetail() {
     canEdit,
     adminMode,
 
-    onBack: handleBack,
+    onBack:
+      handleBack,
     onSave,
 
     productionId:
-      productionId ?? null,
+      productionId ??
+      null,
+
     production,
     loading,
     error,
