@@ -1,49 +1,111 @@
-// frontend/console/production/src/application/detail/updateProductionDetail.ts
+// frontend/console/shell/src/features/production/application/detail/updateProductionDetail.ts
 
-import type { ProductionDetail, ProductionQuantityRow } from "./types";
+import type {
+  ProductionDetail,
+  ProductionQuantityRow,
+} from "./types";
 
-import { getAuthHeadersOrThrow } from "../../../../shared/http/authHeaders";
-import { updateProduction } from "../../infrastructure/http/productionClient";
-import { loadProductionDetail } from "./loadProductionDetail";
+import {
+  ProductionRepositoryHTTP,
+} from "../../infrastructure/http/productionRepositoryHTTP";
+
+import {
+  loadProductionDetail,
+} from "./loadProductionDetail";
 
 /* ---------------------------------------------------------
  * Production 更新リクエスト（usecase）
  * --------------------------------------------------------- */
-export async function updateProductionDetail(params: {
-  productionId: string;
-  rows: ProductionQuantityRow[];
-  assigneeId?: string | null;
-}): Promise<ProductionDetail | null> {
-  const { productionId, rows, assigneeId } = params;
+export async function updateProductionDetail(
+  params: {
+    productionId: string;
+    rows: ProductionQuantityRow[];
+    assigneeId?: string | null;
+  },
+): Promise<ProductionDetail | null> {
+  const {
+    productionId,
+    rows,
+    assigneeId,
+  } = params;
 
-  const id = productionId.trim();
-  if (!id) throw new Error("productionId is required");
+  const id =
+    productionId.trim();
 
-  const headers = await getAuthHeadersOrThrow();
-  const tokenRaw = (headers as Record<string, string>)["Authorization"] ?? "";
-  const token = tokenRaw.replace(/^Bearer\s+/i, "");
+  if (!id) {
+    throw new Error(
+      "productionId is required",
+    );
+  }
 
-  // ✅ modelId を正として送る（ProductionQuantityRow のキーは modelId）
-  const modelsPayload = (Array.isArray(rows) ? rows : []).map((r) => ({
-    modelId: String((r as any).modelId ?? "").trim(),
-    quantity: Number.isFinite(Number((r as any).quantity))
-      ? Math.max(0, Math.floor(Number((r as any).quantity)))
-      : 0,
-  }));
+  const normalizedAssigneeId =
+    String(
+      assigneeId ?? "",
+    ).trim();
 
-  // guard: modelId 欠損行を落とす（空文字は送らない）
-  const safeModelsPayload = modelsPayload.filter((m) => m.modelId !== "");
+  if (!normalizedAssigneeId) {
+    throw new Error(
+      "assigneeId is required",
+    );
+  }
 
-  const payload: any = {
-    assigneeId: assigneeId ?? null,
-    models: safeModelsPayload,
-  };
+  // modelIdを正として送る。
+  const modelsPayload =
+    (
+      Array.isArray(rows)
+        ? rows
+        : []
+    )
+      .map((row) => {
+        const modelId =
+          String(
+            row.modelId ?? "",
+          ).trim();
 
-  await updateProduction({
-    productionId: id,
-    token,
-    payload,
-  });
+        const quantityNumber =
+          Number(
+            row.quantity,
+          );
 
-  return loadProductionDetail(id);
+        const quantity =
+          Number.isFinite(
+            quantityNumber,
+          )
+            ? Math.max(
+                0,
+                Math.floor(
+                  quantityNumber,
+                ),
+              )
+            : 0;
+
+        return {
+          modelId,
+          quantity,
+        };
+      })
+      .filter(
+        (model) =>
+          model.modelId !== "",
+      );
+
+  const repository =
+    new ProductionRepositoryHTTP();
+
+  await repository.update(
+    id,
+    {
+      assigneeId:
+        normalizedAssigneeId,
+
+      models:
+        modelsPayload,
+    },
+  );
+
+  // Backendの更新結果を画面用ProductionDetailへ変換するため、
+  // 詳細を再取得する。
+  return loadProductionDetail(
+    id,
+  );
 }

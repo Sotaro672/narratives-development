@@ -78,10 +78,10 @@ func IsValidCategory(c PermissionCategory) bool {
 // Name の action は read-only に限定（read / list / view / export）
 // ※ 書き込み系（create / update / delete / patch / approve など）は禁止
 type Permission struct {
-	ID          string
-	Name        string
-	Description string
-	Category    PermissionCategory
+	ID          string             `json:"id"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	Category    PermissionCategory `json:"category"`
 }
 
 var (

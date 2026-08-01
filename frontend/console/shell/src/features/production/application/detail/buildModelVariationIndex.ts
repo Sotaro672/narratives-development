@@ -12,7 +12,7 @@ import {
 
 import {
   listModelVariationsByProductBlueprintId,
-} from "../../infrastructure/model/modelVariationGateway";
+} from "../../../model/infrastructure/repository/modelRepositoryHTTP";
 
 /* ---------------------------------------------------------
  * variations → index変換

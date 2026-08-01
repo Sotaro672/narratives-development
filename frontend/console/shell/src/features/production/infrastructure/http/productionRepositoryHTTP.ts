@@ -1,135 +1,197 @@
-// frontend/console/production/src/infrastructure/http/productionRepositoryHTTP.ts
-import type { Production } from "../../../../shared/types/production";
-import type { ProductionRepository } from "../../application/create/ProductionCreateRepository";
+// frontend/console/shell/src/features/production/infrastructure/http/productionRepositoryHTTP.ts
 
-// ✅ shared を single source of truth にする
-import { API_BASE } from "../../../../shared/http/apiBase";
+import type {
+  Production,
+} from "../../../../shared/types/production";
 
-// ✅ shared auth headers（shell の authService に委譲）
-import { getAuthJsonHeadersOrThrow } from "../../../../shared/http/authHeaders";
+import type {
+  ProductionRepository,
+} from "../../application/create/ProductionCreateService";
+
+import {
+  API_BASE,
+} from "../../../../shared/http/apiBase";
+
+import {
+  getAuthJsonHeadersOrThrow,
+} from "../../../../shared/http/authHeaders";
 
 // ----------------------------------------------------------------------
-// API ベース URL（末尾スラッシュ除去）
+// HTTP実装
 // ----------------------------------------------------------------------
-function sanitizeBase(u: string): string {
-  return (u || "").replace(/\/+$/g, "");
-}
-
-// ----------------------------------------------------------------------
-// HTTP 実装（Adapter）
-// ----------------------------------------------------------------------
-// - Application Port: ProductionRepository を実装する
-// - I/O の詳細（HTTP / Auth / BaseURL）をここで吸収する
-export class ProductionRepositoryHTTP implements ProductionRepository {
+// Application層で定義したProductionRepositoryを実装し、
+// HTTP、認証、API URLなどのI/O処理をここで扱う。
+export class ProductionRepositoryHTTP
+  implements ProductionRepository
+{
   private readonly baseUrl: string;
 
-  constructor(baseUrl: string = API_BASE) {
-    this.baseUrl = sanitizeBase(baseUrl);
+  constructor(
+    baseUrl: string = API_BASE,
+  ) {
+    this.baseUrl = baseUrl;
   }
 
-  // 共通リクエストラッパー
-  private async request<T>(path: string, init: RequestInit): Promise<T> {
-    const url = `${this.baseUrl}${path}`;
+  private async request<T>(
+    path: string,
+    init: RequestInit,
+  ): Promise<T> {
+    const url =
+      `${this.baseUrl}${path}`;
 
-    const method = (init.method ?? "GET").toUpperCase();
+    const authHeaders =
+      await getAuthJsonHeadersOrThrow();
 
-    const authHeaders = await getAuthJsonHeadersOrThrow();
+    const response =
+      await fetch(
+        url,
+        {
+          ...init,
 
-    const res = await fetch(url, {
-      ...init,
-      headers: {
-        ...authHeaders,
-        ...(init.headers ?? {}),
-      },
-    });
+          headers: {
+            ...authHeaders,
+            ...(init.headers ?? {}),
+          },
+        },
+      );
 
-    // DELETE 等の 204 → 空を返す
-    if (res.status === 204) {
-      return undefined as unknown as T;
+    // DELETEなど、レスポンス本文がない場合
+    if (
+      response.status === 204
+    ) {
+      return undefined as T;
     }
 
-    if (!res.ok) {
-      let bodyText = "";
-      try {
-        bodyText = await res.text();
-      } catch {
-        /* ignore */
-      }
+    if (!response.ok) {
+      const bodyText =
+        await response
+          .text()
+          .catch(
+            () => "",
+          );
 
-      // body が JSON なら {"error":"..."} を優先して読みやすくする
       let extracted = "";
+
       try {
-        const obj = bodyText ? JSON.parse(bodyText) : null;
-        if (obj && typeof obj.error === "string") extracted = obj.error;
+        const body: unknown =
+          bodyText
+            ? JSON.parse(
+                bodyText,
+              )
+            : null;
+
+        if (
+          body !== null &&
+          typeof body === "object" &&
+          !Array.isArray(body) &&
+          "error" in body &&
+          typeof body.error ===
+            "string"
+        ) {
+          extracted =
+            body.error;
+        }
       } catch {
-        /* ignore */
+        // JSON以外のレスポンス本文は
+        // bodyTextをそのままエラーへ含める。
       }
 
-      console.error("[ProductionRepositoryHTTP] response error", {
-        method,
-        url,
-        status: res.status,
-        statusText: res.statusText,
-        extracted,
-        bodyHead: bodyText?.slice(0, 200),
-      });
-
-      // ★ hook 側で JSON 末尾を拾えるように、可能なら JSON を末尾に残す
-      const suffix = bodyText ? `\n${bodyText}` : "";
+      const suffix =
+        bodyText
+          ? `\n${bodyText}`
+          : "";
 
       throw new Error(
-        `Production API error: ${res.status} ${res.statusText}${
-          extracted ? ` :: ${extracted}` : ""
+        `Production API error: ${response.status} ${response.statusText}${
+          extracted
+            ? ` :: ${extracted}`
+            : ""
         }${suffix}`,
       );
     }
 
-    // 正常系: JSON を返す前提
-    const json = (await res.json()) as T;
-    return json;
+    return (
+      await response.json()
+    ) as T;
   }
 
   // --------------------------------------------------------------------
-  // create: POST /productions
+  // POST /productions
   // --------------------------------------------------------------------
-  async create(payload: Production): Promise<Production> {
-    return this.request<Production>("/productions", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
+  async create(
+    payload: Production,
+  ): Promise<Production> {
+    return this.request<Production>(
+      "/productions",
+      {
+        method: "POST",
+
+        body: JSON.stringify(
+          payload,
+        ),
+      },
+    );
   }
 
   // --------------------------------------------------------------------
-  // getById: GET /productions/{id}
+  // GET /productions/{id}
   // --------------------------------------------------------------------
-  async getById(id: string): Promise<Production> {
-    const safeId = encodeURIComponent(id.trim());
+  async getById(
+    id: string,
+  ): Promise<Production> {
+    const safeId =
+      encodeURIComponent(
+        id.trim(),
+      );
 
-    return this.request<Production>(`/productions/${safeId}`, {
-      method: "GET",
-    });
+    return this.request<Production>(
+      `/productions/${safeId}`,
+      {
+        method: "GET",
+      },
+    );
   }
 
   // --------------------------------------------------------------------
-  // update: PUT /productions/{id}
+  // PUT /productions/{id}
   // --------------------------------------------------------------------
-  async update(id: string, patch: Partial<Production>): Promise<Production> {
-    const safeId = encodeURIComponent(id.trim());
+  async update(
+    id: string,
+    patch: Partial<Production>,
+  ): Promise<Production> {
+    const safeId =
+      encodeURIComponent(
+        id.trim(),
+      );
 
-    return this.request<Production>(`/productions/${safeId}`, {
-      method: "PUT",
-      body: JSON.stringify(patch),
-    });
+    return this.request<Production>(
+      `/productions/${safeId}`,
+      {
+        method: "PUT",
+
+        body: JSON.stringify(
+          patch,
+        ),
+      },
+    );
   }
 
   // --------------------------------------------------------------------
-  // delete: DELETE /productions/{id}
+  // DELETE /productions/{id}
   // --------------------------------------------------------------------
-  async delete(id: string): Promise<void> {
-    const safeId = encodeURIComponent(id.trim());
+  async delete(
+    id: string,
+  ): Promise<void> {
+    const safeId =
+      encodeURIComponent(
+        id.trim(),
+      );
 
-    await this.request<void>(`/productions/${safeId}`, {
-      method: "DELETE",
-    });
+    await this.request<void>(
+      `/productions/${safeId}`,
+      {
+        method: "DELETE",
+      },
+    );
   }
 }
