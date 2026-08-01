@@ -1,49 +1,48 @@
 // frontend/console/shell/src/features/permission/infrastructure/http/permissionRepositoryHTTP.ts
 
-import { auth } from "../../../../auth/infrastructure/config/firebaseClient";
-import type { Permission } from "../../domain/entity/permission";
+import {
+  buildConsoleUrl,
+} from "../../../../shared/http/apiBase";
+
+import {
+  getAuthHeadersOrThrow,
+} from "../../../../shared/http/authHeaders";
+
 import type {
   PageRequest,
   PageResult,
   Sort,
 } from "../../../../shared/types/common/common";
 
-// ─────────────────────────────────────────────
-// Backend base URL（.env 未設定でも Cloud Run にフォールバック）
-// ─────────────────────────────────────────────
-const ENV_BASE =
-  (
-    (import.meta as any).env
-      ?.VITE_BACKEND_BASE_URL as
-      | string
-      | undefined
-  )?.replace(
-    /\/+$/g,
-    "",
-  ) ?? "";
-
-const FALLBACK_BASE =
-  window.location.origin ===
-  "https://amol.jp"
-    ? "https://narratives-backend-871263659099.asia-northeast1.run.app"
-    : "http://localhost:8080";
-
-export const BACKEND_BASE_URL =
-  ENV_BASE || FALLBACK_BASE;
+import type {
+  Permission,
+  PermissionCategory,
+} from "../../../../shared/types/permission";
 
 // ─────────────────────────────────────────────
-// Filter 型（backend/internal/domain/permission.Filter に対応）
+// Backend API URL
 // ─────────────────────────────────────────────
 
+const PERMISSIONS_URL =
+  buildConsoleUrl(
+    "/permissions",
+  );
+
+// ─────────────────────────────────────────────
+// Filter
+// ─────────────────────────────────────────────
+
+/**
+ * backend/internal/domain/permission.Filter に対応する。
+ */
 export type PermissionFilter = {
-  // FilterCommon 相当
   searchQuery?: string;
-
-  // カテゴリフィルタ（CategoryWallet などの string 値）
-  categories?: string[];
+  categories?: PermissionCategory[];
 };
 
-// 一覧 API 呼び出し時のオプション
+/**
+ * Permission一覧取得時のオプション。
+ */
 export type ListPermissionOptions = {
   filter?: PermissionFilter;
   sort?: Sort;
@@ -51,53 +50,162 @@ export type ListPermissionOptions = {
 };
 
 // ─────────────────────────────────────────────
-// HTTP Utility
+// Error response
 // ─────────────────────────────────────────────
 
-// 認証付き fetch ヘルパ
-async function authedFetch(
-  input: RequestInfo,
-  init: RequestInit = {},
-): Promise<Response> {
-  const user = auth.currentUser;
-  const headers =
-    new Headers(
-      init.headers || {},
-    );
+type ErrorResponse = {
+  error?: unknown;
+  message?: unknown;
+};
 
-  if (user) {
-    const token =
-      await user.getIdToken();
+class PermissionHttpError extends Error {
+  readonly status: number;
 
-    headers.set(
-      "Authorization",
-      `Bearer ${token}`,
-    );
-  }
-
-  // JSON 前提のヘッダ（必要に応じて上書き）
-  if (
-    !headers.has(
-      "Content-Type",
-    ) &&
-    init.body
+  constructor(
+    status: number,
+    message: string,
   ) {
-    headers.set(
-      "Content-Type",
-      "application/json",
-    );
-  }
+    super(message);
 
-  return fetch(
-    input,
-    {
-      ...init,
-      headers,
-    },
-  );
+    this.name =
+      "PermissionHttpError";
+
+    this.status =
+      status;
+  }
 }
 
-// クエリストリング生成
+// ─────────────────────────────────────────────
+// HTTP utilities
+// ─────────────────────────────────────────────
+
+async function requestJson<T>(
+  input: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const authHeaders =
+    await getAuthHeadersOrThrow();
+
+  const headers =
+    new Headers(
+      init.headers,
+    );
+
+  for (
+    const [
+      key,
+      value,
+    ] of Object.entries(
+      authHeaders,
+    )
+  ) {
+    headers.set(
+      key,
+      value,
+    );
+  }
+
+  const response =
+    await fetch(
+      input,
+      {
+        ...init,
+        headers,
+      },
+    );
+
+  const text =
+    await response
+      .text()
+      .catch(
+        () => "",
+      );
+
+  if (!response.ok) {
+    throw new PermissionHttpError(
+      response.status,
+      resolveErrorMessage(
+        response,
+        text,
+      ),
+    );
+  }
+
+  if (!text) {
+    return undefined as T;
+  }
+
+  const looksLikeHTML =
+    /^\s*<!doctype html>|^\s*<html/i.test(
+      text,
+    );
+
+  if (looksLikeHTML) {
+    throw new Error(
+      "[PermissionRepositoryHTTP] response is not JSON (HTML received). " +
+        `VITE_BACKEND_BASE_URL の設定を確認してください。received head: ${text.slice(
+          0,
+          120,
+        )}`,
+    );
+  }
+
+  try {
+    return JSON.parse(
+      text,
+    ) as T;
+  } catch {
+    throw new Error(
+      `[PermissionRepositoryHTTP] JSON parse error. head: ${text.slice(
+        0,
+        120,
+      )}`,
+    );
+  }
+}
+
+function resolveErrorMessage(
+  response: Response,
+  text: string,
+): string {
+  const fallbackMessage =
+    `[PermissionRepositoryHTTP] ${response.status} ${response.statusText}`;
+
+  if (!text) {
+    return fallbackMessage;
+  }
+
+  try {
+    const body =
+      JSON.parse(
+        text,
+      ) as ErrorResponse;
+
+    const backendMessage =
+      body.error ??
+      body.message;
+
+    if (
+      typeof backendMessage ===
+        "string" &&
+      backendMessage
+    ) {
+      return backendMessage;
+    }
+  } catch {
+    // JSON形式ではない場合はfallbackを使用する。
+  }
+
+  return `${fallbackMessage} :: ${text.slice(
+    0,
+    300,
+  )}`;
+}
+
+// ─────────────────────────────────────────────
+// Query utilities
+// ─────────────────────────────────────────────
+
 function buildQuery(
   params: Record<
     string,
@@ -107,46 +215,51 @@ function buildQuery(
     | null
   >,
 ): string {
-  const usp =
+  const searchParams =
     new URLSearchParams();
 
-  Object.entries(
-    params,
-  ).forEach(
-    ([key, value]) => {
-      if (
-        value === undefined ||
-        value === null ||
-        value === ""
-      ) {
-        return;
-      }
+  for (
+    const [
+      key,
+      value,
+    ] of Object.entries(
+      params,
+    )
+  ) {
+    if (
+      value === undefined ||
+      value === null ||
+      value === ""
+    ) {
+      continue;
+    }
 
-      usp.set(
-        key,
-        String(value),
-      );
-    },
-  );
+    searchParams.set(
+      key,
+      String(
+        value,
+      ),
+    );
+  }
 
-  const qs =
-    usp.toString();
+  const query =
+    searchParams.toString();
 
-  return qs
-    ? `?${qs}`
+  return query
+    ? `?${query}`
     : "";
 }
 
 // ─────────────────────────────────────────────
-// Repository 実装
+// Repository
 // ─────────────────────────────────────────────
 
 export class PermissionRepositoryHTTP {
-  private baseUrl: string;
+  private readonly baseUrl: string;
 
   constructor(
     baseUrl: string =
-      BACKEND_BASE_URL,
+      PERMISSIONS_URL,
   ) {
     this.baseUrl =
       baseUrl.replace(
@@ -155,7 +268,11 @@ export class PermissionRepositoryHTTP {
       );
   }
 
-  // 一覧取得（GET /permissions）
+  /**
+   * Permission一覧を取得する。
+   *
+   * GET /permissions
+   */
   async list(
     options: ListPermissionOptions = {},
   ): Promise<
@@ -167,220 +284,83 @@ export class PermissionRepositoryHTTP {
       page,
     } = options;
 
-    const qs = buildQuery({
-      page:
-        page?.number,
-      perPage:
-        page?.perPage,
-      sort:
-        sort?.column,
-      order:
-        sort?.order,
-      search:
-        filter?.searchQuery,
+    const query =
+      buildQuery({
+        page:
+          page?.number,
 
-      // categories は CSV で渡す（例: "wallet,brand,member"）
-      categories:
-        filter?.categories?.length
-          ? filter.categories.join(
-              ",",
-            )
-          : undefined,
-    });
+        perPage:
+          page?.perPage,
 
-    const url =
-      `${this.baseUrl}/permissions${qs}`;
+        sort:
+          sort?.column,
 
-    const res =
-      await authedFetch(
-        url,
-        {
-          method: "GET",
-        },
-      );
+        order:
+          sort?.order,
 
-    if (!res.ok) {
-      // エラーレスポンスのメッセージをできるだけ拾う
-      let message =
-        `Failed to load permissions: ${res.status} ${res.statusText}`;
+        search:
+          filter?.searchQuery,
 
-      try {
-        const body =
-          await res.json();
+        categories:
+          filter
+            ?.categories
+            ?.length
+            ? filter.categories.join(
+                ",",
+              )
+            : undefined,
+      });
 
-        if (
-          (body as any)?.error
-        ) {
-          message =
-            String(
-              (body as any).error,
-            );
-        }
-      } catch {
-        // ignore JSON parse error
-      }
-
-      throw new Error(
-        message,
-      );
-    }
-
-    const raw =
-      await res.json();
-
-    // items を camelCase に正規化
-    // Go 側の Permission は ID/Name/Category/Description
-    const rawItems = (
-      raw.items ??
-      raw.Items ??
-      []
-    ) as any[];
-
-    const normalizedItems:
-      Permission[] =
-      rawItems.map(
-        (item) => ({
-          id:
-            item.id ??
-            item.ID ??
-            "",
-          name:
-            item.name ??
-            item.Name ??
-            "",
-          category:
-            item.category ??
-            item.Category ??
-            "",
-          description:
-            item.description ??
-            item.Description ??
-            "",
-        }),
-      );
-
-    const data:
-      PageResult<Permission> = {
-      items:
-        normalizedItems,
-
-      totalCount:
-        Number(
-          raw.totalCount ??
-            raw.TotalCount ??
-            0,
-        ),
-
-      totalPages:
-        Number(
-          raw.totalPages ??
-            raw.TotalPages ??
-            1,
-        ),
-
-      page:
-        Number(
-          raw.page ??
-            raw.Page ??
-            1,
-        ),
-
-      perPage:
-        Number(
-          raw.perPage ??
-            raw.PerPage ??
-            (
-              normalizedItems.length ||
-              10
-            ),
-        ),
-    };
-
-    return data;
+    return requestJson<
+      PageResult<Permission>
+    >(
+      `${this.baseUrl}${query}`,
+      {
+        method: "GET",
+      },
+    );
   }
 
-  // 単体取得（GET /permissions/:id）
+  /**
+   * IDを指定してPermissionを取得する。
+   *
+   * GET /permissions/:id
+   */
   async getById(
     id: string,
   ): Promise<Permission> {
-    const trimmed =
+    const permissionId =
       id.trim();
 
-    if (!trimmed) {
+    if (!permissionId) {
       throw new Error(
         "permission id is required",
       );
     }
 
-    const url =
-      `${this.baseUrl}/permissions/${encodeURIComponent(
-        trimmed,
-      )}`;
-
-    const res =
-      await authedFetch(
-        url,
+    try {
+      return await requestJson<
+        Permission
+      >(
+        `${this.baseUrl}/${encodeURIComponent(
+          permissionId,
+        )}`,
         {
           method: "GET",
         },
       );
-
-    if (
-      res.status === 404
-    ) {
-      throw new Error(
-        "permission not found",
-      );
-    }
-
-    if (!res.ok) {
-      let message =
-        `Failed to load permission: ${res.status} ${res.statusText}`;
-
-      try {
-        const body =
-          await res.json();
-
-        if (
-          (body as any)?.error
-        ) {
-          message =
-            String(
-              (body as any).error,
-            );
-        }
-      } catch {
-        // ignore
+    } catch (error: unknown) {
+      if (
+        error instanceof
+          PermissionHttpError &&
+        error.status === 404
+      ) {
+        throw new Error(
+          "permission not found",
+        );
       }
 
-      throw new Error(
-        message,
-      );
+      throw error;
     }
-
-    const raw =
-      await res.json();
-
-    const data:
-      Permission = {
-      id:
-        raw.id ??
-        raw.ID ??
-        "",
-      name:
-        raw.name ??
-        raw.Name ??
-        "",
-      category:
-        raw.category ??
-        raw.Category ??
-        "",
-      description:
-        raw.description ??
-        raw.Description ??
-        "",
-    };
-
-    return data;
   }
 }

@@ -1,22 +1,117 @@
 // frontend/console/shell/src/features/member/application/memberDetailService.ts
 
-import type { Member } from "../../../shared/types/member";
-import { auth } from "../../../auth/infrastructure/config/firebaseClient";
-import { MemberRepositoryHTTP } from "../infrastructure/http/memberRepositoryHTTP";
+import {
+  auth,
+} from "../../../auth/infrastructure/config/firebaseClient";
+
+import type {
+  Member,
+} from "../../../shared/types/member";
 
 import {
-  groupPermissionsByCategory,
+  PERMISSION_CATEGORIES,
   type PermissionCategory,
-} from "../../permission/application/permissionCatalog";
+} from "../../../shared/types/permission";
 
-const memberRepo = new MemberRepositoryHTTP();
+import {
+  MemberRepositoryHTTP,
+} from "../infrastructure/http/memberRepositoryHTTP";
 
-export type MemberDetail = Member & {
-  permissionGroups: ReturnType<
-    typeof groupPermissionsByCategory
+const memberRepo =
+  new MemberRepositoryHTTP();
+
+export type PermissionGroups =
+  Partial<
+    Record<
+      PermissionCategory,
+      string[]
+    >
   >;
-  permissionCategories: PermissionCategory[];
-};
+
+export type MemberDetail =
+  Member & {
+    permissionGroups:
+      PermissionGroups;
+
+    permissionCategories:
+      PermissionCategory[];
+  };
+
+/**
+ * 文字列がPermissionCategoryか判定する。
+ *
+ * カテゴリの定義元は
+ * shared/types/permission.ts の
+ * PERMISSION_CATEGORIESだけとする。
+ */
+function isPermissionCategory(
+  value: string,
+): value is PermissionCategory {
+  return PERMISSION_CATEGORIES.some(
+    (category) =>
+      category === value,
+  );
+}
+
+/**
+ * Permission名をカテゴリごとに分類する。
+ *
+ * 例:
+ * - brand.view → brand
+ * - brand.detail.view → brand
+ * - member.roles.view → member
+ */
+function groupPermissionsByCategory(
+  permissionNames: string[],
+): PermissionGroups {
+  const groups:
+    PermissionGroups = {};
+
+  for (
+    const permissionName of
+    permissionNames
+  ) {
+    const name =
+      permissionName.trim();
+
+    if (!name) {
+      continue;
+    }
+
+    const separatorIndex =
+      name.indexOf(".");
+
+    if (
+      separatorIndex <= 0
+    ) {
+      continue;
+    }
+
+    const category =
+      name.slice(
+        0,
+        separatorIndex,
+      );
+
+    if (
+      !isPermissionCategory(
+        category,
+      )
+    ) {
+      continue;
+    }
+
+    const categoryPermissions =
+      groups[category] ?? [];
+
+    groups[category] = [
+      ...categoryPermissions,
+      name,
+    ];
+  }
+
+  return groups;
+}
 
 /**
  * メンバー詳細取得
@@ -27,14 +122,20 @@ export type MemberDetail = Member & {
  */
 export async function fetchMemberDetailByUid(
   uid: string,
-): Promise<MemberDetail | null> {
-  const firebaseUid = String(uid ?? "").trim();
+): Promise<
+  MemberDetail | null
+> {
+  const firebaseUid =
+    String(
+      uid ?? "",
+    ).trim();
 
   if (!firebaseUid) {
     return null;
   }
 
-  const currentUser = auth.currentUser;
+  const currentUser =
+    auth.currentUser;
 
   if (!currentUser) {
     throw new Error(
@@ -42,9 +143,10 @@ export async function fetchMemberDetailByUid(
     );
   }
 
-  const member = await memberRepo.getByUid(
-    firebaseUid,
-  );
+  const member =
+    await memberRepo.getByUid(
+      firebaseUid,
+    );
 
   if (!member) {
     return null;
@@ -58,16 +160,21 @@ export async function fetchMemberDetailByUid(
   const permissionCategories =
     Object.keys(
       permissionGroups,
-    ) as PermissionCategory[];
+    ).filter(
+      isPermissionCategory,
+    );
 
   return {
     ...member,
 
     // member.idはBackendが返すFirestore MemberのdocId
-    id: member.id,
+    id:
+      member.id,
 
     // 招待前などで空の場合は検索に使用したFirebase UIDを補完
-    uid: member.uid || firebaseUid,
+    uid:
+      member.uid ||
+      firebaseUid,
 
     permissionGroups,
     permissionCategories,

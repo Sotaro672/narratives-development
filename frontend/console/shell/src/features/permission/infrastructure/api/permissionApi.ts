@@ -1,63 +1,75 @@
-// frontend/permission/src/infrastructure/api/permissionApi.ts
+// frontend/console/shell/src/features/permission/infrastructure/api/permissionApi.ts
 
-import type { Permission } from "../../domain/entity/permission";
+import type {
+  Permission,
+} from "../../../../shared/types/permission";
 
-// Firebase Auth（member の useMemberList.ts と同じパターン）
-import { auth } from "../../../../auth/infrastructure/config/firebaseClient";
+import {
+  buildConsoleUrl,
+} from "../../../../shared/http/apiBase";
+
+import {
+  getAuthHeadersOrThrow,
+} from "../../../../shared/http/authHeaders";
 
 // ─────────────────────────────────────────────
-// Backend base URL
+// Backend API URL
 // ─────────────────────────────────────────────
 
-const RAW_ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined) ?? "";
-
-const FALLBACK_BASE =
-  "https://narratives-backend-871263659099.asia-northeast1.run.app";
-
-function sanitizeBase(u: string): string {
-  return (u || "").replace(/\/+$/g, "");
-}
-
-const ENV_BASE = sanitizeBase(RAW_ENV_BASE);
-const FINAL_BASE = sanitizeBase(ENV_BASE || FALLBACK_BASE);
-
-if (!FINAL_BASE) {
-  throw new Error(
-    "[permissionApi] BACKEND BASE URL is empty. Set VITE_BACKEND_BASE_URL in .env.local",
+const PERMISSIONS_URL =
+  buildConsoleUrl(
+    "/permissions",
   );
-}
-
-// e.g. https://.../permissions/
-const PERMISSIONS_URL = `${FINAL_BASE}/permissions/`;
 
 // ─────────────────────────────────────────────
-// 共通: 認証付き fetch
+// HTTP
 // ─────────────────────────────────────────────
 
-async function authFetch<T>(input: string, init: RequestInit = {}): Promise<T> {
-  const currentUser = auth.currentUser;
-  const token = await currentUser?.getIdToken();
+async function requestJson<T>(
+  input: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const authHeaders =
+    await getAuthHeadersOrThrow();
 
-  if (!token) {
-    throw new Error("[permissionApi] Not authenticated (no ID token).");
+  const headers =
+    new Headers(
+      init.headers,
+    );
+
+  for (
+    const [
+      key,
+      value,
+    ] of Object.entries(
+      authHeaders,
+    )
+  ) {
+    headers.set(
+      key,
+      value,
+    );
   }
 
-  const res = await fetch(input, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...(init.headers ?? {}),
-    },
-  });
+  const response =
+    await fetch(
+      input,
+      {
+        ...init,
+        headers,
+      },
+    );
 
-  const text = await res.text().catch(() => "");
+  const text =
+    await response
+      .text()
+      .catch(
+        () => "",
+      );
 
-  if (!res.ok) {
-    // 401/403 はそのままエラーにしておく
+  if (!response.ok) {
     throw new Error(
-      `[permissionApi] ${res.status} ${res.statusText} :: ${text.slice(
+      `[permissionApi] ${response.status} ${response.statusText} :: ${text.slice(
         0,
         300,
       )}`,
@@ -65,41 +77,62 @@ async function authFetch<T>(input: string, init: RequestInit = {}): Promise<T> {
   }
 
   if (!text) {
-    return [] as T; // Permission[] を想定
+    return [] as T;
+  }
+
+  const looksLikeHTML =
+    /^\s*<!doctype html>|^\s*<html/i.test(
+      text,
+    );
+
+  if (looksLikeHTML) {
+    throw new Error(
+      "[permissionApi] response is not JSON (HTML received). " +
+        `VITE_BACKEND_BASE_URL の設定を確認してください。received head: ${text.slice(
+          0,
+          120,
+        )}`,
+    );
   }
 
   try {
-    return JSON.parse(text) as T;
+    return JSON.parse(
+      text,
+    ) as T;
   } catch {
     throw new Error(
-      `[permissionApi] JSON parse error. head: ${text.slice(0, 120)}`,
+      `[permissionApi] JSON parse error. head: ${text.slice(
+        0,
+        120,
+      )}`,
     );
   }
 }
 
 // ─────────────────────────────────────────────
-// 公開 API
+// Public API
 // ─────────────────────────────────────────────
 
 /**
- * 現在ログイン中ユーザー向けに、利用可能な Permission 一覧を取得する。
- *
- * 想定レスポンス: Permission[]
- *   [
- *     { id: "perm_wallet_view", name: "wallet.view", ... },
- *     ...
- *   ]
- *
- * バックエンド側で:
- *   - 全 Permission を返す
- *   - もしくは ロール/メンバーに応じてフィルタした Permission を返す
- * などの振る舞いを持たせることができます。
+ * 現在ログイン中のユーザー向けに、
+ * 利用可能なPermission一覧を取得する。
  */
-export async function fetchPermissions(): Promise<Permission[]> {
-  const perms = await authFetch<Permission[]>(PERMISSIONS_URL, {
-    method: "GET",
-  });
+export async function fetchPermissions(): Promise<
+  Permission[]
+> {
+  const permissions =
+    await requestJson<
+      Permission[]
+    >(
+      PERMISSIONS_URL,
+      {
+        method: "GET",
+      },
+    );
 
-  // 念のため null/undefined を防ぐ
-  return Array.isArray(perms) ? perms : [];
+  return Array.isArray(
+    permissions,
+  )
+    ? permissions
+    : [];
 }
