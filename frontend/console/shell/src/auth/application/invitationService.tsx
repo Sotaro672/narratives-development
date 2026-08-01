@@ -1,16 +1,30 @@
 // frontend/console/shell/src/auth/application/invitationService.tsx
-import { createUserWithEmailAndPassword } from "firebase/auth";
+
+import {
+  createUserWithEmailAndPassword,
+} from "firebase/auth";
+
+import {
+  auth,
+} from "../infrastructure/config/firebaseClient";
+
 import {
   completeInvitationOnBackend,
-  fetchInvitationInfo as fetchInvitationInfoApi,
   validateInvitation,
 } from "../infrastructure/repository/invitationRepositoryHTTP";
-import type { InvitationInfo as InvitationInfoApi } from "../infrastructure/repository/invitationRepositoryHTTP";
-import { auth } from "../infrastructure/config/firebaseClient";
+
+export {
+  fetchInvitationInfo,
+} from "../infrastructure/repository/invitationRepositoryHTTP";
+
+export type {
+  InvitationInfo,
+} from "../infrastructure/repository/invitationRepositoryHTTP";
+
 // ------------------------------
 // 型定義
 // ------------------------------
-export type InvitationInfo = InvitationInfoApi;
+
 export type CompleteInvitationParams = {
   token: string;
   email: string;
@@ -21,17 +35,23 @@ export type CompleteInvitationParams = {
   password: string;
   passwordConfirm: string;
 };
+
 // ------------------------------
-// APIラッパー
+// Helpers
 // ------------------------------
-export async function fetchInvitationInfo(
-  token: string,
-): Promise<InvitationInfo> {
-  return fetchInvitationInfoApi(token);
+
+function normalizeString(
+  value: unknown,
+): string {
+  return typeof value === "string"
+    ? value.trim()
+    : "";
 }
+
 // ------------------------------
 // 招待の完了フロー
 // ------------------------------
+
 export async function completeInvitation(
   params: CompleteInvitationParams,
 ): Promise<void> {
@@ -45,54 +65,131 @@ export async function completeInvitation(
     password,
     passwordConfirm,
   } = params;
-  const trimmedToken = token.trim();
-  const normalizedEmail = email.trim().toLowerCase();
-  const trimmedLastName = lastName.trim();
-  const trimmedLastNameKana = lastNameKana.trim();
-  const trimmedFirstName = firstName.trim();
-  const trimmedFirstNameKana = firstNameKana.trim();
-  if (!trimmedToken) {
-    throw new Error("招待トークンが指定されていません。");
+
+  const normalizedToken =
+    normalizeString(
+      token,
+    );
+
+  const normalizedEmail =
+    normalizeString(
+      email,
+    ).toLowerCase();
+
+  const normalizedLastName =
+    normalizeString(
+      lastName,
+    );
+
+  const normalizedLastNameKana =
+    normalizeString(
+      lastNameKana,
+    );
+
+  const normalizedFirstName =
+    normalizeString(
+      firstName,
+    );
+
+  const normalizedFirstNameKana =
+    normalizeString(
+      firstNameKana,
+    );
+
+  if (!normalizedToken) {
+    throw new Error(
+      "招待トークンが指定されていません。",
+    );
   }
+
   if (!normalizedEmail) {
-    throw new Error("メールアドレスが指定されていません。");
+    throw new Error(
+      "メールアドレスが指定されていません。",
+    );
   }
-  if (!trimmedLastName) {
-    throw new Error("姓が指定されていません。");
+
+  if (!normalizedLastName) {
+    throw new Error(
+      "姓が指定されていません。",
+    );
   }
-  if (!trimmedLastNameKana) {
-    throw new Error("姓（かな）が指定されていません。");
+
+  if (!normalizedLastNameKana) {
+    throw new Error(
+      "姓（かな）が指定されていません。",
+    );
   }
-  if (!trimmedFirstName) {
-    throw new Error("名が指定されていません。");
+
+  if (!normalizedFirstName) {
+    throw new Error(
+      "名が指定されていません。",
+    );
   }
-  if (!trimmedFirstNameKana) {
-    throw new Error("名（かな）が指定されていません。");
+
+  if (!normalizedFirstNameKana) {
+    throw new Error(
+      "名（かな）が指定されていません。",
+    );
   }
-  if (!password || !passwordConfirm) {
-    throw new Error("パスワードが指定されていません。");
+
+  if (
+    !password ||
+    !passwordConfirm
+  ) {
+    throw new Error(
+      "パスワードが指定されていません。",
+    );
   }
-  if (password !== passwordConfirm) {
-    throw new Error("パスワードが一致していません。");
+
+  if (
+    password !==
+    passwordConfirm
+  ) {
+    throw new Error(
+      "パスワードが一致していません。",
+    );
   }
-  // 1. 招待トークンの有効性だけを検証する。
-  // validateレスポンスからemail、権限、内部IDは取得しない。
-  await validateInvitation(trimmedToken);
-  // 2. 入力されたメールアドレスでFirebase Authenticationユーザーを作成する。
-  // 招待先メールアドレスとの一致はBackendの招待完了transactionで検証する。
+
+  /**
+   * 1. 招待トークンの有効性を検証する。
+   *
+   * validateレスポンスからemail、権限、
+   * 内部IDなどの機微情報は取得しない。
+   */
+  await validateInvitation(
+    normalizedToken,
+  );
+
+  /**
+   * 2. 入力されたメールアドレスで
+   * Firebase Authenticationユーザーを作成する。
+   *
+   * 招待先メールアドレスとの一致は、
+   * Backendの招待完了処理で検証する。
+   */
   await createUserWithEmailAndPassword(
     auth,
     normalizedEmail,
     password,
   );
-  // 3. Backendで招待を完了する。
-  // Repositoryがauth.currentUserからID tokenを取得して
-  // Authorizationヘッダーへ設定する。
+
+  /**
+   * 3. Backendで招待を完了する。
+   *
+   * ID token取得、Authorizationヘッダー設定、
+   * 401時のtoken強制更新と再送は、
+   * Repositoryから共通fetch処理へ委譲される。
+   */
   await completeInvitationOnBackend({
-    token: trimmedToken,
-    lastName: trimmedLastName,
-    lastNameKana: trimmedLastNameKana,
-    firstName: trimmedFirstName,
-    firstNameKana: trimmedFirstNameKana,
+    token:
+      normalizedToken,
+    lastName:
+      normalizedLastName,
+    lastNameKana:
+      normalizedLastNameKana,
+    firstName:
+      normalizedFirstName,
+    firstNameKana:
+      normalizedFirstNameKana,
   });
 }

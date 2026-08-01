@@ -173,14 +173,6 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 	})
 }
 
-func returnErr(w http.ResponseWriter, err error) {
-	if err == nil {
-		http.Error(w, "error", http.StatusInternalServerError)
-		return
-	}
-	http.Error(w, err.Error(), http.StatusInternalServerError)
-}
-
 // CurrentMember は現在ログイン中の Member を取得します。
 func CurrentMember(r *http.Request) (*memdom.Member, bool) {
 	v := r.Context().Value(ctxKeyMember)

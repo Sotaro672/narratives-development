@@ -8,32 +8,19 @@ import {
   fetchCompanyByIdRaw,
 } from "../infrastructure/repository/authRepositoryHTTP";
 
-// -------------------------------
-// 会社名キャッシュ
-// -------------------------------
-
-const companyNameCache = new Map<
-  string,
-  Promise<string | null>
->();
-
-// -------------------------------
-// Company取得
-// -------------------------------
-
+/**
+ * companyIdに対応する会社情報を取得する。
+ */
 async function getCompanyById(
   companyId: string,
 ): Promise<CompanyDTO | null> {
-  const normalizedCompanyId =
-    companyId.trim();
-
-  if (!normalizedCompanyId) {
+  if (!companyId) {
     return null;
   }
 
   const raw =
     await fetchCompanyByIdRaw(
-      normalizedCompanyId,
+      companyId,
     );
 
   if (!raw) {
@@ -43,9 +30,19 @@ async function getCompanyById(
   return raw as CompanyDTO;
 }
 
-async function getCompanyNameById(
+/**
+ * companyIdに対応する会社名を取得する。
+ *
+ * キャッシュは保持せず、呼び出しのたびに
+ * Backendから最新の会社情報を取得する。
+ */
+export async function getCompanyNameById(
   companyId: string,
 ): Promise<string | null> {
+  if (!companyId) {
+    return null;
+  }
+
   const company =
     await getCompanyById(
       companyId,
@@ -55,59 +52,4 @@ async function getCompanyNameById(
     company?.name?.trim() ?? "";
 
   return companyName || null;
-}
-
-/**
- * companyIdに対応する会社名を取得する。
- *
- * 同じcompanyIdへの重複リクエストを防ぐため、
- * 取得中および取得済みのPromiseをメモリ上に保持する。
- */
-export function getCompanyNameByIdCached(
-  companyId: string,
-): Promise<string | null> {
-  const normalizedCompanyId =
-    companyId.trim();
-
-  if (!normalizedCompanyId) {
-    return Promise.resolve(
-      null,
-    );
-  }
-
-  const cachedRequest =
-    companyNameCache.get(
-      normalizedCompanyId,
-    );
-
-  if (cachedRequest) {
-    return cachedRequest;
-  }
-
-  const request =
-    getCompanyNameById(
-      normalizedCompanyId,
-    ).catch(
-      (
-        error: unknown,
-      ) => {
-        companyNameCache.delete(
-          normalizedCompanyId,
-        );
-
-        console.error(
-          "[companyService] failed to fetch company name:",
-          error,
-        );
-
-        return null;
-      },
-    );
-
-  companyNameCache.set(
-    normalizedCompanyId,
-    request,
-  );
-
-  return request;
 }
