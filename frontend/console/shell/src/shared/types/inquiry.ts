@@ -1,6 +1,10 @@
 // frontend/console/shell/src/shared/types/inquiry.ts
 
 import type {
+  ItemsResult,
+} from "./common/common";
+
+import type {
   ShippingAddress,
 } from "./shippingAddress";
 
@@ -146,9 +150,8 @@ export type InquiryAggregate = {
   transferredAt?: string | null;
 };
 
-export type InquiryPageResult<T> = {
-  items: T[];
-};
+export type InquiryPageResult<T> =
+  ItemsResult<T>;
 
 export type InquiryUnreadCountResult = {
   count: number;

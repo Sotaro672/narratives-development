@@ -2,18 +2,31 @@
 
 import { auth } from "../../../../auth/infrastructure/config/firebaseClient";
 
-import type { TokenBlueprint } from "../../../../shared/types/tokenBlueprint";
+import type {
+  TokenBlueprint,
+} from "../../../../shared/types/tokenBlueprint";
 
-import { buildConsoleUrl } from "../../../../shared/http/apiBase";
+import type {
+  PageParams,
+  PageResult,
+} from "../../../../shared/types/common/common";
+
+import {
+  buildConsoleUrl,
+} from "../../../../shared/http/apiBase";
 
 import {
   getAuthHeadersOrThrow,
   getAuthJsonHeadersOrThrow,
 } from "../../../../shared/http/authHeaders";
 
-import { fetchJSON } from "../../../../shared/http/fetchJSON";
+import {
+  fetchJSON,
+} from "../../../../shared/http/fetchJSON";
 
-import type { ContentFileDTO } from "../dto/tokenBlueprint.dto";
+import type {
+  ContentFileDTO,
+} from "../dto/tokenBlueprint.dto";
 
 import {
   normalizeTokenBlueprint,
@@ -71,17 +84,22 @@ async function requestJson<T>(
     );
 
   return fetchJSON<T>(
-    buildConsoleUrl(path),
+    buildConsoleUrl(
+      path,
+    ),
     {
       method,
       headers,
-      ...(method === "GET"
-        ? {}
-        : {
-            body: JSON.stringify(
-              body ?? {},
-            ),
-          }),
+      ...(
+        method === "GET"
+          ? {}
+          : {
+              body:
+                JSON.stringify(
+                  body ?? {},
+                ),
+            }
+      ),
     },
   );
 }
@@ -98,7 +116,9 @@ async function requestDelete(
     );
 
   const url =
-    buildConsoleUrl(path);
+    buildConsoleUrl(
+      path,
+    );
 
   const response =
     await fetch(
@@ -119,7 +139,9 @@ async function requestDelete(
   if (text) {
     try {
       const data =
-        JSON.parse(text) as {
+        JSON.parse(
+          text,
+        ) as {
           error?: unknown;
           message?: unknown;
         };
@@ -159,13 +181,8 @@ async function requestDelete(
 // APIレスポンス型
 // ---------------------------------------------------------
 
-export interface TokenBlueprintPageResult {
-  items: TokenBlueprint[];
-  totalCount: number;
-  totalPages: number;
-  page: number;
-  perPage: number;
-}
+export type TokenBlueprintPageResult =
+  PageResult<TokenBlueprint>;
 
 // ---------------------------------------------------------
 // API送信payload型
@@ -192,31 +209,29 @@ export type CreateTokenBlueprintPayload = {
   contentFiles: ContentFileDTO[];
 };
 
-export type UpdateTokenBlueprintPayload = Partial<{
-  name: string;
-  symbol: string;
+export type UpdateTokenBlueprintPayload =
+  Partial<{
+    name: string;
+    symbol: string;
 
-  description: string;
-  assigneeId: string;
+    description: string;
+    assigneeId: string;
 
-  iconUrl: string | null;
-  iconObjectPath: string | null;
-  iconFileName: string | null;
-  iconContentType: string | null;
-  iconSize: number | null;
+    iconUrl: string | null;
+    iconObjectPath: string | null;
+    iconFileName: string | null;
+    iconContentType: string | null;
+    iconSize: number | null;
 
-  contentFiles: ContentFileDTO[];
-}>;
+    contentFiles: ContentFileDTO[];
+  }>;
 
 // ---------------------------------------------------------
 // TokenBlueprint API
 // ---------------------------------------------------------
 
 export async function fetchTokenBlueprints(
-  params?: {
-    page?: number;
-    perPage?: number;
-  },
+  params?: PageParams,
 ): Promise<TokenBlueprintPageResult> {
   const searchParams =
     new URLSearchParams();
@@ -224,14 +239,18 @@ export async function fetchTokenBlueprints(
   if (params?.page !== undefined) {
     searchParams.set(
       "page",
-      String(params.page),
+      String(
+        params.page,
+      ),
     );
   }
 
   if (params?.perPage !== undefined) {
     searchParams.set(
       "perPage",
-      String(params.perPage),
+      String(
+        params.perPage,
+      ),
     );
   }
 
@@ -243,7 +262,9 @@ export async function fetchTokenBlueprints(
       ? `/token-blueprints?${query}`
       : "/token-blueprints";
 
-  return requestJson<TokenBlueprintPageResult>(
+  return requestJson<
+    TokenBlueprintPageResult
+  >(
     path,
     "GET",
   );

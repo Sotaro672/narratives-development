@@ -3,15 +3,17 @@
 import { API_BASE } from "../../../../../shared/http/apiBase";
 import { getAuthHeadersOrThrow } from "../../../../../shared/http/authHeaders";
 
-import type { BrandSummary } from "../../../application/port/MintRequestRepository";
+import type {
+  ItemsResult,
+} from "../../../../../shared/types/common/common";
+
+import type {
+  BrandSummary,
+} from "../../../application/port/MintRequestRepository";
 
 type BrandRecordRaw = {
   id?: unknown;
   name?: unknown;
-};
-
-type BrandPageResultRaw = {
-  items?: BrandRecordRaw[] | null;
 };
 
 function toText(
@@ -31,21 +33,25 @@ export async function fetchBrandsForMintHTTP(): Promise<
   const url =
     `${API_BASE}/mint/brands`;
 
-  const response = await fetch(
-    url,
-    {
-      method: "GET",
-      headers: authHeaders,
-    },
-  );
+  const response =
+    await fetch(
+      url,
+      {
+        method: "GET",
+        headers: authHeaders,
+      },
+    );
 
   if (!response.ok) {
-    const body = await response
-      .text()
-      .catch(() => "");
+    const body =
+      await response
+        .text()
+        .catch(
+          () => "",
+        );
 
     throw new Error(
-      `Failed to fetch brands (mint): ` +
+      "Failed to fetch brands (mint): " +
         `${response.status} ${response.statusText}` +
         (
           body
@@ -57,7 +63,7 @@ export async function fetchBrandsForMintHTTP(): Promise<
 
   const responsePayload =
     await response.json() as
-      | BrandPageResultRaw
+      | ItemsResult<BrandRecordRaw>
       | null
       | undefined;
 
@@ -73,8 +79,15 @@ export async function fetchBrandsForMintHTTP(): Promise<
       (
         brand,
       ): BrandSummary => ({
-        id: toText(brand.id),
-        name: toText(brand.name),
+        id:
+          toText(
+            brand.id,
+          ),
+
+        name:
+          toText(
+            brand.name,
+          ),
       }),
     )
     .filter(

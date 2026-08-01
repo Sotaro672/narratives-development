@@ -1,6 +1,12 @@
 // frontend/console/sales/infrastructure/announcement_repository_http.ts
+
 import { API_BASE } from "../../../shared/http/apiBase";
 import { getAuthJsonHeaders } from "../../../shared/http/authHeaders";
+
+import type {
+  PageParams,
+  Sort,
+} from "../../../shared/types/common/common";
 
 // ============================================================
 // Domain types
@@ -65,17 +71,17 @@ export type AnnouncementManagementApiResult = {
   rows: AnnouncementManagementApiRow[];
 };
 
-export type ListAnnouncementsParams = {
+export interface ListAnnouncementsParams
+  extends PageParams,
+    Sort {
   targetToken: string;
-  page?: number;
-  perPage?: number;
-};
+}
 
-export type ListAnnouncementManagementByCompanyIdParams = {
+export interface ListAnnouncementManagementByCompanyIdParams
+  extends PageParams,
+    Sort {
   companyId: string;
-  page?: number;
-  perPage?: number;
-};
+}
 
 export type CreateAnnouncementInput = {
   id?: string;
@@ -108,77 +114,133 @@ export type MarkPublishedInput = {
 // Endpoint
 // ============================================================
 
-const ANNOUNCEMENTS_ENDPOINT = "/announcements";
+const ANNOUNCEMENTS_ENDPOINT =
+  "/announcements";
 
 // ============================================================
 // HTTP helpers
 // ============================================================
 
-async function apiGetJson<T>(path: string): Promise<T> {
-  const headers = await getAuthJsonHeaders();
+async function apiGetJson<T>(
+  path: string,
+): Promise<T> {
+  const headers =
+    await getAuthJsonHeaders();
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "GET",
-    headers: {
-      ...headers,
-      Accept: "application/json",
-    },
-    credentials: "include",
-  });
+  const res =
+    await fetch(
+      `${API_BASE}${path}`,
+      {
+        method: "GET",
+        headers: {
+          ...headers,
+          Accept: "application/json",
+        },
+        credentials: "include",
+      },
+    );
 
-  return parseJsonResponse<T>(res, `GET ${path}`);
+  return parseJsonResponse<T>(
+    res,
+    `GET ${path}`,
+  );
 }
 
-async function apiPostJson<T>(path: string, body: unknown): Promise<T> {
-  const headers = await getAuthJsonHeaders();
+async function apiPostJson<T>(
+  path: string,
+  body: unknown,
+): Promise<T> {
+  const headers =
+    await getAuthJsonHeaders();
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: {
-      ...headers,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-    body: JSON.stringify(body),
-  });
+  const res =
+    await fetch(
+      `${API_BASE}${path}`,
+      {
+        method: "POST",
+        headers: {
+          ...headers,
+          Accept: "application/json",
+          "Content-Type":
+            "application/json",
+        },
+        credentials: "include",
+        body:
+          JSON.stringify(
+            body,
+          ),
+      },
+    );
 
-  return parseJsonResponse<T>(res, `POST ${path}`);
+  return parseJsonResponse<T>(
+    res,
+    `POST ${path}`,
+  );
 }
 
-async function apiPutJson<T>(path: string, body: unknown): Promise<T> {
-  const headers = await getAuthJsonHeaders();
+async function apiPutJson<T>(
+  path: string,
+  body: unknown,
+): Promise<T> {
+  const headers =
+    await getAuthJsonHeaders();
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "PUT",
-    headers: {
-      ...headers,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-    body: JSON.stringify(body),
-  });
+  const res =
+    await fetch(
+      `${API_BASE}${path}`,
+      {
+        method: "PUT",
+        headers: {
+          ...headers,
+          Accept: "application/json",
+          "Content-Type":
+            "application/json",
+        },
+        credentials: "include",
+        body:
+          JSON.stringify(
+            body,
+          ),
+      },
+    );
 
-  return parseJsonResponse<T>(res, `PUT ${path}`);
+  return parseJsonResponse<T>(
+    res,
+    `PUT ${path}`,
+  );
 }
 
-async function apiDelete(path: string): Promise<void> {
-  const headers = await getAuthJsonHeaders();
+async function apiDelete(
+  path: string,
+): Promise<void> {
+  const headers =
+    await getAuthJsonHeaders();
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "DELETE",
-    headers: {
-      ...headers,
-      Accept: "application/json",
-    },
-    credentials: "include",
-  });
+  const res =
+    await fetch(
+      `${API_BASE}${path}`,
+      {
+        method: "DELETE",
+        headers: {
+          ...headers,
+          Accept: "application/json",
+        },
+        credentials: "include",
+      },
+    );
 
-  const text = await res.text().catch(() => "");
+  const text =
+    await res
+      .text()
+      .catch(
+        () => "",
+      );
 
   if (!res.ok) {
-    throw new Error(text || `DELETE ${path} failed: ${res.status}`);
+    throw new Error(
+      text ||
+        `DELETE ${path} failed: ${res.status}`,
+    );
   }
 }
 
@@ -186,20 +248,34 @@ async function parseJsonResponse<T>(
   res: Response,
   label: string,
 ): Promise<T> {
-  const text = await res.text().catch(() => "");
+  const text =
+    await res
+      .text()
+      .catch(
+        () => "",
+      );
 
   if (!res.ok) {
-    throw new Error(text || `${label} failed: ${res.status}`);
+    throw new Error(
+      text ||
+        `${label} failed: ${res.status}`,
+    );
   }
 
   if (!text) {
-    throw new Error(`${label} returned an empty response`);
+    throw new Error(
+      `${label} returned an empty response`,
+    );
   }
 
   try {
-    return JSON.parse(text) as T;
+    return JSON.parse(
+      text,
+    ) as T;
   } catch {
-    throw new Error(`${label} returned invalid JSON`);
+    throw new Error(
+      `${label} returned invalid JSON`,
+    );
   }
 }
 
@@ -207,37 +283,65 @@ async function parseJsonResponse<T>(
 // Request helpers
 // ============================================================
 
-function uniqueStrings(values: string[] | undefined): string[] {
+function uniqueStrings(
+  values: string[] | undefined,
+): string[] {
   if (!values) {
     return [];
   }
 
-  return [...new Set(values.filter((value) => value !== ""))];
+  return [
+    ...new Set(
+      values.filter(
+        (value) =>
+          value !== "",
+      ),
+    ),
+  ];
 }
 
 function normalizeAttachmentInputs(
-  values: AnnouncementAttachmentInput[] | undefined,
+  values:
+    | AnnouncementAttachmentInput[]
+    | undefined,
 ): AnnouncementAttachmentInput[] {
   if (!values) {
     return [];
   }
 
-  const seen = new Set<string>();
-  const result: AnnouncementAttachmentInput[] = [];
+  const seen =
+    new Set<string>();
+
+  const result:
+    AnnouncementAttachmentInput[] = [];
 
   for (const item of values) {
-    if (!item.fileName || !item.fileUrl || !item.objectPath) {
+    if (
+      !item.fileName ||
+      !item.fileUrl ||
+      !item.objectPath
+    ) {
       continue;
     }
 
-    const dedupeKey = item.objectPath;
+    const dedupeKey =
+      item.objectPath;
 
-    if (seen.has(dedupeKey)) {
+    if (
+      seen.has(
+        dedupeKey,
+      )
+    ) {
       continue;
     }
 
-    seen.add(dedupeKey);
-    result.push(item);
+    seen.add(
+      dedupeKey,
+    );
+
+    result.push(
+      item,
+    );
   }
 
   return result;
@@ -250,61 +354,146 @@ function normalizeAttachmentInputs(
 function buildAnnouncementListPath(
   params: ListAnnouncementsParams,
 ): string {
-  const targetToken = params.targetToken;
+  const targetToken =
+    params.targetToken;
 
   if (!targetToken) {
-    throw new Error("targetToken is required");
+    throw new Error(
+      "targetToken is required",
+    );
   }
 
-  const searchParams = new URLSearchParams({
-    targetToken,
-  });
+  const searchParams =
+    new URLSearchParams({
+      targetToken,
+    });
 
-  if (params.page !== undefined) {
-    searchParams.set("page", String(params.page));
+  if (
+    params.page !== undefined
+  ) {
+    searchParams.set(
+      "page",
+      String(
+        params.page,
+      ),
+    );
   }
 
-  if (params.perPage !== undefined) {
-    searchParams.set("perPage", String(params.perPage));
+  if (
+    params.perPage !== undefined
+  ) {
+    searchParams.set(
+      "perPage",
+      String(
+        params.perPage,
+      ),
+    );
   }
 
-  return `${ANNOUNCEMENTS_ENDPOINT}?${searchParams.toString()}`;
+  if (params.column) {
+    searchParams.set(
+      "sort",
+      params.column,
+    );
+  }
+
+  if (params.order) {
+    searchParams.set(
+      "order",
+      params.order,
+    );
+  }
+
+  return (
+    `${ANNOUNCEMENTS_ENDPOINT}?` +
+    searchParams.toString()
+  );
 }
 
 function buildAnnouncementManagementByCompanyIdPath(
-  params: ListAnnouncementManagementByCompanyIdParams,
+  params:
+    ListAnnouncementManagementByCompanyIdParams,
 ): string {
-  const companyId = params.companyId;
+  const companyId =
+    params.companyId;
 
   if (!companyId) {
-    throw new Error("companyId is required");
+    throw new Error(
+      "companyId is required",
+    );
   }
 
-  const searchParams = new URLSearchParams({
-    companyId,
-  });
+  const searchParams =
+    new URLSearchParams({
+      companyId,
+    });
 
-  if (params.page !== undefined) {
-    searchParams.set("page", String(params.page));
+  if (
+    params.page !== undefined
+  ) {
+    searchParams.set(
+      "page",
+      String(
+        params.page,
+      ),
+    );
   }
 
-  if (params.perPage !== undefined) {
-    searchParams.set("perPage", String(params.perPage));
+  if (
+    params.perPage !== undefined
+  ) {
+    searchParams.set(
+      "perPage",
+      String(
+        params.perPage,
+      ),
+    );
   }
 
-  return `${ANNOUNCEMENTS_ENDPOINT}?${searchParams.toString()}`;
+  if (params.column) {
+    searchParams.set(
+      "sort",
+      params.column,
+    );
+  }
+
+  if (params.order) {
+    searchParams.set(
+      "order",
+      params.order,
+    );
+  }
+
+  return (
+    `${ANNOUNCEMENTS_ENDPOINT}?` +
+    searchParams.toString()
+  );
 }
 
-function buildAnnouncementDetailPath(id: string): string {
+function buildAnnouncementDetailPath(
+  id: string,
+): string {
   if (!id) {
-    throw new Error("announcement id is required");
+    throw new Error(
+      "announcement id is required",
+    );
   }
 
-  return `${ANNOUNCEMENTS_ENDPOINT}/${encodeURIComponent(id)}`;
+  return (
+    `${ANNOUNCEMENTS_ENDPOINT}/` +
+    encodeURIComponent(
+      id,
+    )
+  );
 }
 
-function buildAnnouncementPublishPath(id: string): string {
-  return `${buildAnnouncementDetailPath(id)}/publish`;
+function buildAnnouncementPublishPath(
+  id: string,
+): string {
+  return (
+    `${buildAnnouncementDetailPath(id)}` +
+    "/publish"
+  );
 }
 
 // ============================================================
@@ -315,67 +504,129 @@ function buildCreateAnnouncementBody(
   input: CreateAnnouncementInput,
 ): Record<string, unknown> {
   if (!input.title) {
-    throw new Error("title is required");
+    throw new Error(
+      "title is required",
+    );
   }
 
   if (!input.content) {
-    throw new Error("content is required");
+    throw new Error(
+      "content is required",
+    );
   }
 
   if (!input.createdBy) {
-    throw new Error("createdBy is required");
+    throw new Error(
+      "createdBy is required",
+    );
   }
 
   return {
-    ...(input.id !== undefined && {
-      id: input.id,
-    }),
-    title: input.title,
-    content: input.content,
-    targetToken: input.targetToken ?? null,
-    targetAvatars: uniqueStrings(input.targetAvatars),
-    attachments: normalizeAttachmentInputs(input.attachments),
-    published: input.published ?? false,
-    publishedAt: input.publishedAt ?? null,
-    createdBy: input.createdBy,
+    ...(
+      input.id !== undefined
+        ? {
+            id: input.id,
+          }
+        : {}
+    ),
+
+    title:
+      input.title,
+
+    content:
+      input.content,
+
+    targetToken:
+      input.targetToken ??
+      null,
+
+    targetAvatars:
+      uniqueStrings(
+        input.targetAvatars,
+      ),
+
+    attachments:
+      normalizeAttachmentInputs(
+        input.attachments,
+      ),
+
+    published:
+      input.published ??
+      false,
+
+    publishedAt:
+      input.publishedAt ??
+      null,
+
+    createdBy:
+      input.createdBy,
   };
 }
 
 function buildUpdateAnnouncementBody(
   input: UpdateAnnouncementInput,
 ): Record<string, unknown> {
-  const body: Record<string, unknown> = {};
+  const body:
+    Record<string, unknown> = {};
 
-  if (input.title !== undefined) {
-    body.title = input.title;
+  if (
+    input.title !== undefined
+  ) {
+    body.title =
+      input.title;
   }
 
-  if (input.content !== undefined) {
-    body.content = input.content;
+  if (
+    input.content !== undefined
+  ) {
+    body.content =
+      input.content;
   }
 
-  if (input.targetToken !== undefined) {
-    body.targetToken = input.targetToken;
+  if (
+    input.targetToken !== undefined
+  ) {
+    body.targetToken =
+      input.targetToken;
   }
 
-  if (input.targetAvatars !== undefined) {
-    body.targetAvatars = uniqueStrings(input.targetAvatars);
+  if (
+    input.targetAvatars !== undefined
+  ) {
+    body.targetAvatars =
+      uniqueStrings(
+        input.targetAvatars,
+      );
   }
 
-  if (input.published !== undefined) {
-    body.published = input.published;
+  if (
+    input.published !== undefined
+  ) {
+    body.published =
+      input.published;
   }
 
-  if (input.publishedAt !== undefined) {
-    body.publishedAt = input.publishedAt;
+  if (
+    input.publishedAt !== undefined
+  ) {
+    body.publishedAt =
+      input.publishedAt;
   }
 
-  if (input.attachments !== undefined) {
-    body.attachments = normalizeAttachmentInputs(input.attachments);
+  if (
+    input.attachments !== undefined
+  ) {
+    body.attachments =
+      normalizeAttachmentInputs(
+        input.attachments,
+      );
   }
 
-  if (input.updatedBy !== undefined) {
-    body.updatedBy = input.updatedBy;
+  if (
+    input.updatedBy !== undefined
+  ) {
+    body.updatedBy =
+      input.updatedBy;
   }
 
   return body;
@@ -385,7 +636,9 @@ function buildMarkPublishedBody(
   input: MarkPublishedInput = {},
 ): Record<string, unknown> {
   return {
-    updatedBy: input.updatedBy ?? null,
+    updatedBy:
+      input.updatedBy ??
+      null,
   };
 }
 
@@ -394,24 +647,43 @@ function buildMarkPublishedBody(
 // ============================================================
 
 /**
- * GET /announcements?targetToken={targetToken}&page={page}&perPage={perPage}
+ * GET /announcements
+ * ?targetToken={targetToken}
+ * &page={page}
+ * &perPage={perPage}
+ * &sort={column}
+ * &order={order}
  */
 export async function listAnnouncements(
   params: ListAnnouncementsParams,
 ): Promise<AnnouncementListResult> {
-  return apiGetJson<AnnouncementListResult>(
-    buildAnnouncementListPath(params),
+  return apiGetJson<
+    AnnouncementListResult
+  >(
+    buildAnnouncementListPath(
+      params,
+    ),
   );
 }
 
 /**
- * GET /announcements?companyId={companyId}&page={page}&perPage={perPage}
+ * GET /announcements
+ * ?companyId={companyId}
+ * &page={page}
+ * &perPage={perPage}
+ * &sort={column}
+ * &order={order}
  */
 export async function listAnnouncementManagementByCompanyId(
-  params: ListAnnouncementManagementByCompanyIdParams,
+  params:
+    ListAnnouncementManagementByCompanyIdParams,
 ): Promise<AnnouncementManagementApiResult> {
-  return apiGetJson<AnnouncementManagementApiResult>(
-    buildAnnouncementManagementByCompanyIdPath(params),
+  return apiGetJson<
+    AnnouncementManagementApiResult
+  >(
+    buildAnnouncementManagementByCompanyIdPath(
+      params,
+    ),
   );
 }
 
@@ -422,7 +694,9 @@ export async function getAnnouncement(
   id: string,
 ): Promise<Announcement> {
   return apiGetJson<Announcement>(
-    buildAnnouncementDetailPath(id),
+    buildAnnouncementDetailPath(
+      id,
+    ),
   );
 }
 
@@ -437,7 +711,9 @@ export async function createAnnouncement(
 ): Promise<Announcement> {
   return apiPostJson<Announcement>(
     ANNOUNCEMENTS_ENDPOINT,
-    buildCreateAnnouncementBody(input),
+    buildCreateAnnouncementBody(
+      input,
+    ),
   );
 }
 
@@ -452,8 +728,12 @@ export async function updateAnnouncement(
   input: UpdateAnnouncementInput,
 ): Promise<Announcement> {
   return apiPutJson<Announcement>(
-    buildAnnouncementDetailPath(id),
-    buildUpdateAnnouncementBody(input),
+    buildAnnouncementDetailPath(
+      id,
+    ),
+    buildUpdateAnnouncementBody(
+      input,
+    ),
   );
 }
 
@@ -465,14 +745,24 @@ export async function markAnnouncementPublished(
   input: MarkPublishedInput = {},
 ): Promise<Announcement> {
   return apiPostJson<Announcement>(
-    buildAnnouncementPublishPath(id),
-    buildMarkPublishedBody(input),
+    buildAnnouncementPublishPath(
+      id,
+    ),
+    buildMarkPublishedBody(
+      input,
+    ),
   );
 }
 
 /**
  * DELETE /announcements/{id}
  */
-export async function deleteAnnouncement(id: string): Promise<void> {
-  await apiDelete(buildAnnouncementDetailPath(id));
+export async function deleteAnnouncement(
+  id: string,
+): Promise<void> {
+  await apiDelete(
+    buildAnnouncementDetailPath(
+      id,
+    ),
+  );
 }

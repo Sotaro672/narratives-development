@@ -2,6 +2,10 @@
 
 import type { List } from "../../../../shared/types/list";
 
+import type {
+  PageResult,
+} from "../../../../shared/types/common/common";
+
 import type { CreateListInput } from "../dto/createListInput";
 import type { ListDetailDTO } from "../dto/listDetailDto";
 
@@ -27,14 +31,6 @@ export type ListManagementRowDTO = Pick<
   | "createdAt"
 >;
 
-type ListPageResponseDTO = {
-  items: ListManagementRowDTO[];
-  page: number;
-  perPage: number;
-  totalCount: number;
-  totalPages: number;
-};
-
 export async function createListHTTP(
   input: CreateListInput,
 ): Promise<List> {
@@ -52,7 +48,9 @@ export async function fetchListsHTTP(): Promise<
   ListManagementRowDTO[]
 > {
   const response =
-    await requestJSON<ListPageResponseDTO>({
+    await requestJSON<
+      PageResult<ListManagementRowDTO>
+    >({
       method: "GET",
       path: "/lists",
     });
@@ -64,7 +62,9 @@ export async function fetchListByIdHTTP(
   listId: string,
 ): Promise<ListDetailDTO> {
   if (!listId) {
-    throw new Error("invalid_list_id");
+    throw new Error(
+      "invalid_list_id",
+    );
   }
 
   return requestJSON<ListDetailDTO>({

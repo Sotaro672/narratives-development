@@ -5,6 +5,11 @@ import type {
   BrandPatch,
 } from "../../../../shared/types/brand";
 
+import type {
+  PageParams,
+  PageResult,
+} from "../../../../shared/types/common/common";
+
 import {
   buildConsoleUrl,
 } from "../../../../shared/http/apiBase";
@@ -39,19 +44,6 @@ export interface CreateBrandInput {
   brandBackgroundImage?: string;
   managerId?: string | null;
   createdBy?: string | null;
-}
-
-export interface PageParams {
-  page?: number;
-  perPage?: number;
-}
-
-export interface PageResult<T> {
-  items: T[];
-  totalCount: number;
-  totalPages: number;
-  page: number;
-  perPage: number;
 }
 
 const BASE_URL =

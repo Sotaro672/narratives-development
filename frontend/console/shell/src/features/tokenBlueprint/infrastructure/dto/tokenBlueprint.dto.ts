@@ -1,5 +1,9 @@
 // frontend/console/shell/src/features/tokenBlueprint/infrastructure/dto/tokenBlueprint.dto.ts
 
+import type {
+  PageResult,
+} from "../../../../shared/types/common/common";
+
 export type ContentFileTypeDTO =
   | "image"
   | "video"
@@ -60,10 +64,5 @@ export type TokenBlueprintDTO = {
   metadataUri?: string;
 };
 
-export type TokenBlueprintPageResultDTO = {
-  items: TokenBlueprintDTO[];
-  totalCount: number;
-  totalPages: number;
-  page: number;
-  perPage: number;
-};
+export type TokenBlueprintPageResultDTO =
+  PageResult<TokenBlueprintDTO>;

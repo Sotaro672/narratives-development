@@ -11,6 +11,10 @@ import type {
 } from "../../../../shared/types/tokenBlueprint";
 
 import type {
+  PageResult,
+} from "../../../../shared/types/common/common";
+
+import type {
   ContentFileDTO,
   TokenBlueprintDTO,
 } from "./tokenBlueprint.dto";
@@ -416,13 +420,7 @@ export function normalizeTokenBlueprint(
 
 export function normalizePageResult(
   raw: unknown,
-): {
-  items: TokenBlueprint[];
-  totalCount: number;
-  totalPages: number;
-  page: number;
-  perPage: number;
-} {
+): PageResult<TokenBlueprint> {
   const obj =
     asRecord(raw);
 

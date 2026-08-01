@@ -4,17 +4,13 @@ import { API_BASE } from "../../../../shared/http/apiBase";
 import { getAuthHeadersOrThrow } from "../../../../shared/http/authHeaders";
 
 import type {
+  PageResult,
+} from "../../../../shared/types/common/common";
+
+import type {
   ProductBlueprintCategory,
   ProductBlueprintCategoryKind,
 } from "../../domain/productBlueprintCategory";
-
-type ProductBlueprintCategoryListResponse = {
-  items: ProductBlueprintCategory[];
-  totalCount: number;
-  totalPages: number;
-  page: number;
-  perPage: number;
-};
 
 export type ListProductBlueprintCategoriesParams = {
   kind?: ProductBlueprintCategoryKind;
@@ -43,7 +39,8 @@ export type ListProductBlueprintCategoriesParams = {
 export async function listProductBlueprintCategoriesApi(
   params?: ListProductBlueprintCategoriesParams,
 ): Promise<ProductBlueprintCategory[]> {
-  const searchParams = new URLSearchParams();
+  const searchParams =
+    new URLSearchParams();
 
   const queryParams: Array<
     [
@@ -51,18 +48,50 @@ export async function listProductBlueprintCategoriesApi(
       string | number | boolean | null | undefined,
     ]
   > = [
-    ["kind", params?.kind],
-    ["code", params?.code],
-    ["parentId", params?.parentId],
-    ["rootOnly", params?.rootOnly],
-    ["search", params?.search],
-    ["page", params?.page ?? 1],
-    ["perPage", params?.perPage ?? 100],
-    ["sort", params?.sort ?? "displayOrder"],
-    ["order", params?.order ?? "asc"],
+    [
+      "kind",
+      params?.kind,
+    ],
+    [
+      "code",
+      params?.code,
+    ],
+    [
+      "parentId",
+      params?.parentId,
+    ],
+    [
+      "rootOnly",
+      params?.rootOnly,
+    ],
+    [
+      "search",
+      params?.search,
+    ],
+    [
+      "page",
+      params?.page ?? 1,
+    ],
+    [
+      "perPage",
+      params?.perPage ?? 100,
+    ],
+    [
+      "sort",
+      params?.sort ?? "displayOrder",
+    ],
+    [
+      "order",
+      params?.order ?? "asc",
+    ],
   ];
 
-  for (const [key, value] of queryParams) {
+  for (
+    const [
+      key,
+      value,
+    ] of queryParams
+  ) {
     if (
       value === null ||
       value === undefined ||
@@ -71,24 +100,41 @@ export async function listProductBlueprintCategoriesApi(
       continue;
     }
 
-    searchParams.set(key, String(value));
+    searchParams.set(
+      key,
+      String(value),
+    );
   }
 
-  const query = searchParams.toString();
+  const query =
+    searchParams.toString();
 
-  const url = `${API_BASE}/console/product-blueprint-categories${
-    query ? `?${query}` : ""
-  }`;
+  const url =
+    `${API_BASE}/console/product-blueprint-categories${
+      query
+        ? `?${query}`
+        : ""
+    }`;
 
-  const headers = await getAuthHeadersOrThrow();
+  const headers =
+    await getAuthHeadersOrThrow();
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers,
-  });
+  const res =
+    await fetch(
+      url,
+      {
+        method: "GET",
+        headers,
+      },
+    );
 
   if (!res.ok) {
-    const detail = await res.text().catch(() => "");
+    const detail =
+      await res
+        .text()
+        .catch(
+          () => "",
+        );
 
     throw new Error(
       `商品カテゴリ一覧の取得に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
@@ -96,18 +142,38 @@ export async function listProductBlueprintCategoriesApi(
   }
 
   const json =
-    (await res.json()) as ProductBlueprintCategoryListResponse;
+    await res.json() as PageResult<
+      ProductBlueprintCategory
+    >;
 
-  return [...(json.items ?? [])].sort((a, b) => {
-    const ao = Number(a.displayOrder ?? 0);
-    const bo = Number(b.displayOrder ?? 0);
+  return [
+    ...(json.items ?? []),
+  ].sort(
+    (
+      a,
+      b,
+    ) => {
+      const ao =
+        Number(
+          a.displayOrder ?? 0,
+        );
 
-    if (ao !== bo) {
-      return ao - bo;
-    }
+      const bo =
+        Number(
+          b.displayOrder ?? 0,
+        );
 
-    return String(a.code ?? "").localeCompare(
-      String(b.code ?? ""),
-    );
-  });
+      if (ao !== bo) {
+        return ao - bo;
+      }
+
+      return String(
+        a.code ?? "",
+      ).localeCompare(
+        String(
+          b.code ?? "",
+        ),
+      );
+    },
+  );
 }
