@@ -3,7 +3,7 @@ import type {
   MallPreviewTransferInfo,
   PreviewState,
   ScanResultPageState,
-} from "../types";
+} from "../../shared/types/scanResult";
 import {
   createScanProductInfoViewModel,
   type ScanProductInfoViewModel,

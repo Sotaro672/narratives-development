@@ -1,5 +1,5 @@
 // frontend/amol/src/features/scan-result/application/scanTransferUsecase.ts
-import type { MallScanTransferResponse } from "../types";
+import type { MallScanTransferResponse } from "../../shared/types/scanResult";
 
 export type ScanWalletSnapshot = {
   tokens?: string[] | null;

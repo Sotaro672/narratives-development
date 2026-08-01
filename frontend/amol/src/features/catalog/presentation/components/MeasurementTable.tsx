@@ -1,5 +1,5 @@
 //frontend\amol\src\features\catalog\components\MeasurementTable.tsx
-import type { MeasurementTableRow } from "../../types";
+import type { MeasurementTableRow } from "../../../shared/types/catalog";
 
 type MeasurementTableProps = {
   measurementRows: MeasurementTableRow[];

@@ -1,5 +1,5 @@
-//frontend\amol\src\features\contents\types.ts
-import type { useTokenCommentCard } from "../token-commnet/hooks/useTokenCommentCard";
+//frontend\amol\src\features\shared\types\contents.ts
+import type { useTokenCommentCard } from "../../token-commnet/hooks/useTokenCommentCard";
 
 export type ContentsMetadataFile = {
   name: string;

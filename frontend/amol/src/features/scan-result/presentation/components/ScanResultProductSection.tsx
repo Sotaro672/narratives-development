@@ -7,7 +7,7 @@ import SectionHeader from "../../../../components/ui/SectionHeader";
 import Tab from "../../../../components/ui/Tab";
 import TextState from "../../../../components/ui/TextState";
 import type { ScanAlcoholInfo } from "../../application/scanAlcoholInfoFactory";
-import type { MallOwnerInfo } from "../../types";
+import type { MallOwnerInfo } from "../../../shared/types/scanResult";
 import { ownerLabel, withCm } from "../../utils/format";
 import type { InfoRow as ProductInfoRow } from "../../utils/productBlueprint";
 

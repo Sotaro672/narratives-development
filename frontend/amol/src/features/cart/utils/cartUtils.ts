@@ -4,7 +4,7 @@ import type {
   CartCatalogSnapshot,
   CartDisplayItem,
   CartModelSnapshot,
-} from "../types";
+} from "../../shared/types/cart";
 
 function getModelVariations(
   catalog: CartCatalogSnapshot | null | undefined,

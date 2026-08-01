@@ -1,6 +1,6 @@
 // frontend/amol/src/features/payment/components/PaymentItemsCard.tsx
 import { formatYen, getModelPrice, getModelVariation } from "../../cart/utils/cartUtils";
-import type { CanonicalCartDisplayItem } from "../types";
+import type { CanonicalCartDisplayItem } from "../../shared/types/payment";
 
 type PaymentItemsCardProps = {
   amount: number;

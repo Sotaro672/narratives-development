@@ -1,5 +1,5 @@
 //frontend\amol\src\features\payment\components\PaymentMethodsCard.tsx
-import type { PaymentMethod } from "../types";
+import type { PaymentMethod } from "../../shared/types/payment";
 import {
   formatCardBrand,
   formatCardExpiry,

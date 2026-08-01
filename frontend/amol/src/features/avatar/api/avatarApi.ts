@@ -6,7 +6,7 @@ import type {
   MyAvatarResponse,
   UpdateAvatarPayload,
   UpdateAvatarResponse,
-} from "../types/avatarCreateTypes";
+} from "../../shared/types/avatar";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");

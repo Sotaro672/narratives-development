@@ -1,6 +1,6 @@
 //frontend\amol\src\features\order-confirmed\types.ts
-import type { CartDisplayItem } from "../cart/types";
-import type { ShippingAddress } from "../shipping-address/types";
+import type { CartDisplayItem } from "./cart";
+import type { ShippingAddress } from "../../shipping-address/types";
 
 export type ConfirmedPayment = {
   id?: string;

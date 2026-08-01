@@ -1,6 +1,6 @@
 //frontend\amol\src\features\order-confirmed\components\OrderConfirmedItemsCard.tsx
 import { formatYen } from "../../cart/utils/cartUtils";
-import type { OrderConfirmedItemViewModel } from "../types";
+import type { OrderConfirmedItemViewModel } from "../../shared/types/orderConfirmed";
 
 type OrderConfirmedItemsCardProps = {
   items: OrderConfirmedItemViewModel[];

@@ -1,6 +1,6 @@
 // frontend/amol/src/features/catalog/application/catalogImageFactory.ts
 
-import type { CatalogListImage } from "../types";
+import type { CatalogListImage } from "../../shared/types/catalog";
 
 export function createCatalogImages(
   images: CatalogListImage[] | undefined,

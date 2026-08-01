@@ -1,5 +1,5 @@
 //frontend\amol\src\features\payment\components\ShippingAddressCard.tsx
-import type { CanonicalShippingAddress } from "../types";
+import type { CanonicalShippingAddress } from "../../shared/types/payment";
 
 type ShippingAddressCardProps = {
   primaryShippingAddress: CanonicalShippingAddress | null;

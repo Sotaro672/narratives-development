@@ -5,7 +5,7 @@ import { signOut as firebaseSignOut } from "firebase/auth";
 
 import { auth } from "../../../lib/firebase";
 import { AvatarCreateService } from "../services/avatarCreateService";
-import type { AvatarFormMode } from "../types/avatarCreateTypes";
+import type { AvatarFormMode } from "../../shared/types/avatar";
 
 function revokePreviewUrl(url: string | null) {
   if (url && url.startsWith("blob:")) {

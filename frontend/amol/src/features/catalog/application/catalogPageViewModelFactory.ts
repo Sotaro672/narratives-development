@@ -7,7 +7,7 @@ import type {
   CatalogResponse,
   MeasurementTableRow,
   ModelColorOption,
-} from "../types";
+} from "../../shared/types/catalog";
 import {
   createCatalogImages,
   hasMultipleCatalogImages,

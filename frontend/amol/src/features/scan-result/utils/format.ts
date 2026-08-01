@@ -4,7 +4,7 @@ import type {
   MallPreviewTransferInfo,
   ProductBlueprintPatchItem,
   TokenBlueprintPatchVM,
-} from "../types";
+} from "../../shared/types/scanResult";
 
 export function trimText(value: unknown): string {
   return String(value ?? "").trim();

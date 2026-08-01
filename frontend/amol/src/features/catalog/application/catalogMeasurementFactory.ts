@@ -3,7 +3,7 @@
 import type {
   CatalogModelVariation,
   MeasurementTableRow,
-} from "../types";
+} from "../../shared/types/catalog";
 import {
   formatApparelSizeLabel,
   mapCatalogModelKind,

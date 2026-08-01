@@ -8,7 +8,7 @@ import {
   fetchCurrentAvatarId,
   removeCartItem,
 } from "../features/cart/api/cartApi";
-import type { CartDisplayItem } from "../features/cart/types";
+import type { CartDisplayItem } from "../features/shared/types/cart";
 import {
   calculateCartTotalAmount,
   formatPrice,

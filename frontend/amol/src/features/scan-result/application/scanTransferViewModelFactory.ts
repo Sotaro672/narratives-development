@@ -4,7 +4,7 @@ import type {
   MallScanTransferResponse,
   MallTokenInfo,
   TokenBlueprintPatchVM,
-} from "../types";
+} from "../../shared/types/scanResult";
 
 export type ScanTransferHistoryViewModel = {
   transfers: MallPreviewTransferInfo[];

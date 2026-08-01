@@ -1,5 +1,5 @@
 //frontend\amol\src\features\payment-method\components\PaymentMethodStatusCard.tsx
-import type { CardPaymentMethod } from "../types";
+import type { CardPaymentMethod } from "../../shared/types/paymentMethods";
 import { cardBrandLabel } from "../utils/paymentMethodUtils";
 
 type PaymentMethodStatusCardProps = {

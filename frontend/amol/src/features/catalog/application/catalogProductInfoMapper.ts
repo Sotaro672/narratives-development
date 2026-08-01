@@ -1,6 +1,6 @@
 // frontend/amol/src/features/catalog/application/catalogProductInfoMapper.ts
 
-import type { CatalogProductBlueprint } from "../types";
+import type { CatalogProductBlueprint } from "../../shared/types/catalog";
 
 export type ProductCategoryKind = "apparel" | "alcohol" | "unknown";
 

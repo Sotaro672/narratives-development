@@ -10,7 +10,7 @@ import type {
   AvatarUpdateResult,
   MyAvatarResponse,
   PickIconResult,
-} from "../types/avatarCreateTypes";
+} from "../../shared/types/avatar";
 
 type AvatarCreateServiceParams = {
   auth: Auth;

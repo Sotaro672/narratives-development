@@ -6,7 +6,7 @@ import SectionCard from "../../../../components/ui/SectionCard";
 import TextState from "../../../../components/ui/TextState";
 import { rgbToCssColor } from "../../../../components/utils/color";
 import { createScanAlcoholInfo } from "../../application/scanAlcoholInfoFactory";
-import type { MallOwnerInfo, ScanResultPageState } from "../../types";
+import type { MallOwnerInfo, ScanResultPageState } from "../../../shared/types/scanResult";
 import {
   getNumber,
   getRecord,

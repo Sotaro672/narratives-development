@@ -20,7 +20,7 @@ import type {
   CanonicalShippingAddress,
   CreateOrderRequest,
   PaymentMethod,
-} from "../types";
+} from "../../shared/types/payment";
 import { getShippingAddressLabel, getUserFullName } from "../utils/format";
 import {
   isPaymentRequiresAction,

@@ -4,7 +4,7 @@ import {
   DEFAULT_REVIEW_PAGE,
   DEFAULT_REVIEW_PER_PAGE,
 } from "../constants";
-import type { CatalogProductBlueprintReviewPage } from "../types";
+import type { CatalogProductBlueprintReviewPage } from "../../shared/types/catalog";
 
 export async function fetchCatalogReviews(
   apiBaseUrl: string,

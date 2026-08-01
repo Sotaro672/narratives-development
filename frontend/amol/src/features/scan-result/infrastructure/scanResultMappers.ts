@@ -19,7 +19,7 @@ import type {
   TokenContentFile,
   TokenResolveDTO,
   WalletDTO,
-} from "../types";
+} from "../../shared/types/scanResult";
 import { isRecord, tokenBlueprintPatchHasAnyField } from "../utils/format";
 
 export type WalletResolvedTokenResponse = {

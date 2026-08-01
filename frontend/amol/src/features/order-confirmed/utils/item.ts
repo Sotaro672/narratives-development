@@ -1,6 +1,6 @@
-import type { CartDisplayItem } from "../../cart/types";
+import type { CartDisplayItem } from "../../shared/types/cart";
 import { getModelPrice, getModelVariation } from "../../cart/utils/cartUtils";
-import type { OrderConfirmedItemViewModel } from "../types";
+import type { OrderConfirmedItemViewModel } from "../../shared/types/orderConfirmed";
 
 type CartItemWithDirectFields = CartDisplayItem & {
   price?: number;

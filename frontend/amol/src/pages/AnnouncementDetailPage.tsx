@@ -7,7 +7,7 @@ import {
   fetchMeAnnouncements,
   markMeAnnouncementRead,
 } from "../features/announcement/api/announcementApi";
-import type { AnnouncementListItem } from "../features/announcement/types";
+import type { AnnouncementListItem } from "../features/shared/types/announcements";
 
 import "../styles/page-layout.css";
 import "../styles/announcement-page.css";

@@ -1,4 +1,4 @@
-// frontend/src/features/avatar/types/avatarCreateTypes.ts
+// frontend\amol\src\features\shared\types\avatar.ts
 
 export type AvatarFormMode = "create" | "edit";
 

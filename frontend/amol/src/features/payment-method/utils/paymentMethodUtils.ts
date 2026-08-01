@@ -5,7 +5,7 @@ import type {
   SetupIntentResponse,
   StripeConfigResponse,
   CardPaymentMethod,
-} from "../types";
+} from "../../shared/types/paymentMethods";
 
 export function cardBrandLabel(brand: string): string {
   if (!brand) {

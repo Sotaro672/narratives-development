@@ -7,7 +7,7 @@ import type {
   SavePaymentMethodResponse,
   SetupIntentResponse,
   StripeConfigResponse,
-} from "../types";
+} from "../../shared/types/paymentMethods";
 import {
   readJsonResponse,
   selectPrimaryPaymentMethod,

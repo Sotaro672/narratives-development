@@ -1,6 +1,6 @@
 // frontend/amol/src/features/catalog/infrastructure/catalogRepository.ts
 
-import type { CatalogResponse } from "../types";
+import type { CatalogResponse } from "../../shared/types/catalog";
 import { mapCatalogResponse } from "./catalogResponseMapper";
 
 export async function fetchCatalogDetail(args: {

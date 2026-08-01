@@ -5,7 +5,7 @@ import type {
   CatalogListPrice,
   CatalogModelVariation,
   ModelColorOption,
-} from "../../types";
+} from "../../../shared/types/catalog";
 import { formatPrice } from "../../utils/format";
 
 type ModelSelectorProps = {

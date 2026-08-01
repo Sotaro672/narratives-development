@@ -16,7 +16,7 @@ import type {
   ConfirmedCardPayload,
   PaymentMethodPageLocationState,
   UsePaymentMethodPageResult,
-} from "../types";
+} from "../../shared/types/paymentMethods";
 import {
   extractSetupIntentClientSecret,
   extractSetupIntentStripeCustomerId,

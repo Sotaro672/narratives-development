@@ -7,7 +7,7 @@ import type {
   PreviewState,
   TokenResolveDTO,
   WalletDTO,
-} from "../types";
+} from "../../shared/types/scanResult";
 import { safeUrl } from "../utils/format";
 import {
   getAuthHeadersOrUndefined,

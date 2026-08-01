@@ -8,7 +8,7 @@ import {
   createProductInfoCardViewModel,
   type ProductCategoryKind,
 } from "../../application/catalogProductInfoViewModelFactory";
-import type { CatalogProductBlueprint } from "../../types";
+import type { CatalogProductBlueprint } from "../../../shared/types/catalog";
 
 type ProductInfoCardProps = {
   productBlueprint: CatalogProductBlueprint;

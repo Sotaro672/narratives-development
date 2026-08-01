@@ -2,7 +2,7 @@
 
 import { createUserWithEmailAndPassword, type Auth } from "firebase/auth";
 
-import type { CreateAccountParams, CreateAccountResult } from "../types";
+import type { CreateAccountParams, CreateAccountResult } from "../../shared/types/auth";
 import {
   isEmailValid,
   isPasswordMatch,

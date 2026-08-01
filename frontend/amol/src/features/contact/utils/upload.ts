@@ -6,7 +6,7 @@ import { CONTACT_ATTACHMENT_ROOT_PATH } from "../constants";
 import type {
   ContactAttachmentItem,
   UploadedContactAttachment,
-} from "../types";
+} from "../../shared/types/contact";
 
 export function createUploadFolderId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {

@@ -9,7 +9,7 @@ import type {
   CartDTO,
   CartDisplayItem,
   CartItemDTO,
-} from "../types";
+} from "../../shared/types/cart";
 
 async function fetchCartFromPath(args: {
   apiBaseUrl: string;

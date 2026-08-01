@@ -8,7 +8,7 @@ import type {
   PaymentMethod,
   PaymentMethodDefaultResponse,
   PaymentMethodListResponse,
-} from "../types";
+} from "../../shared/types/payment";
 import {
   API_BASE_URL,
   getAuthHeaders,

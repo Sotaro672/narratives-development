@@ -1,5 +1,5 @@
 // frontend/amol/src/features/scan-result/application/scanProductInfoFactory.ts
-import type { PreviewState } from "../types";
+import type { PreviewState } from "../../shared/types/scanResult";
 import {
   createScanAlcoholInfo,
   type ScanAlcoholInfo,

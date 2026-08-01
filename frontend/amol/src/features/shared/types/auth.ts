@@ -1,4 +1,4 @@
-// frontend/src/features/auth/types.ts
+// frontend\amol\src\features\shared\types\auth.ts
 
 export type CreateAccountResult =
   | {

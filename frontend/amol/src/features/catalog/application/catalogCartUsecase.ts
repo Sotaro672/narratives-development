@@ -3,7 +3,7 @@ import { addCatalogItemToCart } from "../infrastructure/catalogCartRepository";
 import type {
   CatalogModelVariation,
   CatalogResponse,
-} from "../types";
+} from "../../shared/types/catalog";
 
 export async function addSelectedCatalogItemToCart(args: {
   apiBaseUrl: string;

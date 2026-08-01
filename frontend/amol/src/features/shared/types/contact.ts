@@ -1,5 +1,5 @@
-// frontend/src/features/contact/types.ts
-import type { MediaUploaderItem } from "../../components/ui/MediaUploader";
+// frontend\amol\src\features\shared\types\contact.ts
+import type { MediaUploaderItem } from "../../../components/ui/MediaUploader";
 
 export type ContactAttachmentItem = MediaUploaderItem & {
   file: File;

@@ -2,7 +2,7 @@
 import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
 import { getFirebaseIdToken } from "../../../lib/authToken";
 
-import type { AnnouncementListResult } from "../types";
+import type { AnnouncementListResult } from "../../shared/types/announcements";
 
 const ANNOUNCEMENTS_ENDPOINT = "/mall/me/announcement";
 

@@ -1,7 +1,7 @@
 // frontend/amol/src/features/contents/components/ContentsTokenSummaryCard.tsx
 import Tab from "../../../components/ui/Tab";
 import TokenReviewAggregateCard from "../../token-commnet/components/TokenReviewAggregateCard";
-import type { ContentsSearchParams } from "../types";
+import type { ContentsSearchParams } from "../../shared/types/contents";
 
 type ContentsTokenSummaryCardProps = {
   contents: ContentsSearchParams;

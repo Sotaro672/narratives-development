@@ -5,7 +5,7 @@ import type {
   CreateOrderItemRequest,
   OrderShippingSnapshot,
   PaymentMethod,
-} from "../types";
+} from "../../shared/types/payment";
 
 export function selectPrimaryPaymentMethod(
   methods: PaymentMethod[],

@@ -1,5 +1,5 @@
 // frontend/amol/src/features/scan-result/application/scanNavigationFactory.ts
-import type { TokenResolveDTO } from "../types";
+import type { TokenResolveDTO } from "../../shared/types/scanResult";
 
 export function createTransferredTokenContentsPath(input: {
   mintAddress: string;

@@ -1,6 +1,6 @@
 // frontend/amol/src/features/catalog/application/catalogModelMapper.ts
 
-import type { CatalogModelVariation } from "../types";
+import type { CatalogModelVariation } from "../../shared/types/catalog";
 
 export type CatalogModelKind = "apparel" | "alcohol" | "unknown";
 

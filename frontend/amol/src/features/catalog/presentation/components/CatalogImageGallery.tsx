@@ -7,7 +7,7 @@ import MediaGallery, {
 import type {
   CatalogListImage,
   CatalogProductBlueprint,
-} from "../../types";
+} from "../../../shared/types/catalog";
 
 type CatalogImageGalleryProps = {
   activeImage: CatalogListImage | undefined;

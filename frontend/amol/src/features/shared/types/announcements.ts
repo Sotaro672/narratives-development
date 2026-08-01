@@ -1,4 +1,4 @@
-// frontend/amol/src/features/announcement/types.ts
+// frontend\amol\src\features\shared\types\announcements.ts
 export type AnnouncementAttachmentFileItem = {
   announcementId: string;
   id: string;

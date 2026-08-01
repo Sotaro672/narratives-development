@@ -1,5 +1,5 @@
 // frontend\amol\src\features\scan-result\infrastructure\scanResultSolanaApi.ts
-import type { MallPreviewTransferInfo } from "../types";
+import type { MallPreviewTransferInfo } from "../../shared/types/scanResult";
 import { isRecord, trimText } from "../utils/format";
 
 function resolveSolanaRpcUrl(): string {

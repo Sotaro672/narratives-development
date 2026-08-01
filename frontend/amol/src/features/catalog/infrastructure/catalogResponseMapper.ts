@@ -1,6 +1,6 @@
 // frontend/amol/src/features/catalog/infrastructure/catalogResponseMapper.ts
 
-import type { CatalogResponse } from "../types";
+import type { CatalogResponse } from "../../shared/types/catalog";
 
 export function mapCatalogResponse(raw: Partial<CatalogResponse>): CatalogResponse {
   if (!raw.list || typeof raw.list.title !== "string") {

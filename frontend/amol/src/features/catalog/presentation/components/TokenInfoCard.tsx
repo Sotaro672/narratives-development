@@ -1,5 +1,5 @@
 //frontend\amol\src\features\catalog\components\TokenInfoCard.tsx
-import type { CatalogTokenBlueprint } from "../../types";
+import type { CatalogTokenBlueprint } from "../../../shared/types/catalog";
 
 type TokenInfoCardProps = {
   tokenBlueprint: CatalogTokenBlueprint;

@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { fetchMeAnnouncements } from "../api/announcementApi";
-import type { AnnouncementListItem } from "../types";
+import type { AnnouncementListItem } from "../../shared/types/announcements";
 
 type UseAnnouncementUnreadCountParams = {
   enabled?: boolean;

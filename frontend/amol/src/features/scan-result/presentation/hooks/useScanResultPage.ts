@@ -32,7 +32,7 @@ import type {
   PreviewState,
   ScanResultPageState,
   TokenResolveDTO,
-} from "../../types";
+} from "../../../shared/types/scanResult";
 
 function safeDecodeURIComponent(value: string): string {
   try {

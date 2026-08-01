@@ -3,7 +3,7 @@ import { getFirebaseIdToken } from "../../../lib/authToken";
 import type {
   CatalogModelVariation,
   CatalogResponse,
-} from "../types";
+} from "../../shared/types/catalog";
 import { readResponseErrorMessage } from "./httpErrorReader";
 
 export async function addCatalogItemToCart(args: {

@@ -6,7 +6,7 @@ import type {
   CatalogListPrice,
   CatalogModelVariation,
   ModelColorOption,
-} from "../types";
+} from "../../shared/types/catalog";
 import { getAvailableStock, getModelColorKey } from "../utils/model";
 import {
   createAlcoholSelectionKey,

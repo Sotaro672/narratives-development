@@ -1,5 +1,5 @@
 // frontend/amol/src/features/scan-result/application/scanReviewUsecase.ts
-import type { CatalogReviewPage } from "../types";
+import type { CatalogReviewPage } from "../../shared/types/scanResult";
 
 export type ScanReviewUsecaseDeps = {
   fetchReviewsByProductBlueprintId: (input: {

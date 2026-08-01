@@ -2,7 +2,7 @@
 import { Dispatch, SetStateAction, useState } from "react";
 import type { User } from "firebase/auth";
 
-import type { ContactAttachmentItem } from "../types";
+import type { ContactAttachmentItem } from "../../shared/types/contact";
 import { uploadContactAttachments } from "../utils/upload";
 
 type UseContactSubmitParams = {

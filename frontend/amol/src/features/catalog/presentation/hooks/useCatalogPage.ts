@@ -17,7 +17,7 @@ import { getApiBaseUrl } from "../../../../lib/apiBaseUrl";
 import type {
   CatalogProductBlueprintReviewPage,
   CatalogResponse,
-} from "../../types";
+} from "../../../shared/types/catalog";
 import { useMobilePortrait } from "./useMobilePortrait";
 
 export function useCatalogPage() {

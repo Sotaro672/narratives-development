@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import type {
   OrderConfirmedLocationState,
   OrderConfirmedViewModel,
-} from "../types";
+} from "../../shared/types/orderConfirmed";
 import { formatPaymentStatus, getShippingAddressLines } from "../utils/format";
 import { toOrderConfirmedItemViewModels } from "../utils/item";
 

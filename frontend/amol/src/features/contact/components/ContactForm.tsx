@@ -4,7 +4,7 @@ import { ChangeEvent, RefObject } from "react";
 import Input from "../../../components/ui/Input";
 import Textbox from "../../../components/ui/Textbox";
 import MediaUploader from "../../../components/ui/MediaUploader";
-import type { ContactAttachmentItem } from "../types";
+import type { ContactAttachmentItem } from "../../shared/types/contact";
 
 type ContactFormProps = {
   shouldShowGuestEmailInput: boolean;

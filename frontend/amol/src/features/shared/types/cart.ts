@@ -1,4 +1,4 @@
-// frontend/amol/src/features/cart/types.ts
+// frontend\amol\src\features\shared\types\cart.ts
 
 export type CartModelKind =
   | "apparel"

@@ -1,6 +1,6 @@
 // frontend/amol/src/features/catalog/application/catalogProductInfoViewModelFactory.ts
 
-import type { CatalogProductBlueprint } from "../types";
+import type { CatalogProductBlueprint } from "../../shared/types/catalog";
 import {
   formatAlcoholContent,
   formatNullableText,

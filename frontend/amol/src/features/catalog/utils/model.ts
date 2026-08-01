@@ -2,7 +2,7 @@
 import type {
   CatalogInventory,
   CatalogModelVariation,
-} from "../types";
+} from "../../shared/types/catalog";
 
 export function getModelColorKey(model: CatalogModelVariation): string {
   const colorName = model.colorName?.trim() || "-";

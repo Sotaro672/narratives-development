@@ -5,7 +5,7 @@ import { fetchCatalogReviews } from "../infrastructure/catalogReviewRepository";
 import type {
   CatalogProductBlueprintReviewPage,
   CatalogResponse,
-} from "../types";
+} from "../../shared/types/catalog";
 
 export type LoadCatalogPageResult = {
   catalog: CatalogResponse;

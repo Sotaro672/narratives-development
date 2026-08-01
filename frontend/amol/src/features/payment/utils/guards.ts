@@ -1,11 +1,11 @@
 // frontend/amol/src/features/payment/utils/guards.ts
-import type { CartDisplayItem } from "../../cart/types";
+import type { CartDisplayItem } from "../../shared/types/cart";
 import type { ShippingAddress } from "../../shipping-address/types";
 import type {
   CanonicalCartDisplayItem,
   CanonicalShippingAddress,
   CreatedPayment,
-} from "../types";
+} from "../../shared/types/payment";
 
 export function isPaymentSucceeded(payment: CreatedPayment): boolean {
   const normalizedStatus = payment.status?.trim().toLowerCase();

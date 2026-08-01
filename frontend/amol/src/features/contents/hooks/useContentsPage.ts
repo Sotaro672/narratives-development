@@ -9,7 +9,7 @@ import { fetchCurrentAvatarId } from "../../catalog/infrastructure/avatarStateRe
 import { useMobilePortrait } from "../../catalog/presentation/hooks/useMobilePortrait";
 import { useTokenCommentCard } from "../../token-commnet/hooks/useTokenCommentCard";
 import { fetchContentsMetadata } from "../api/contentsApi";
-import type { ContentsMetadata, ContentsSearchParams } from "../types";
+import type { ContentsMetadata, ContentsSearchParams } from "../../shared/types/contents";
 
 function buildContentsSearchParams(
   searchParams: URLSearchParams,

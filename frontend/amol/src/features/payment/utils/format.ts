@@ -1,6 +1,6 @@
 //frontend\amol\src\features\payment\utils\format.ts
 import type { UserProfile } from "../../shipping-address/types";
-import type { CanonicalShippingAddress, PaymentMethod } from "../types";
+import type { CanonicalShippingAddress, PaymentMethod } from "../../shared/types/payment";
 
 export function formatCardBrand(brand: string): string {
   if (!brand) {

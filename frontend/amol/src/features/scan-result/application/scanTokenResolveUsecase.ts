@@ -1,5 +1,5 @@
 // frontend/amol/src/features/scan-result/application/scanTokenResolveUsecase.ts
-import type { TokenResolveDTO } from "../types";
+import type { TokenResolveDTO } from "../../shared/types/scanResult";
 
 export type ScanTokenResolveUsecaseDeps = {
   getAuthHeadersOrUndefined: () => Promise<HeadersInit | undefined>;

@@ -3,7 +3,7 @@ import TokenCommentCard from "../../token-commnet/components/TokenCommentCard";
 import type {
   ContentsSearchParams,
   TokenCommentCardController,
-} from "../types";
+} from "../../shared/types/contents";
 import ContentsTokenSummaryCard from "./ContentsTokenSummaryCard";
 
 type ContentsDetailPanelProps = {

@@ -1,7 +1,7 @@
 // frontend/src/features/contact/hooks/useContactAttachments.ts
 import { ChangeEvent, useRef, useState } from "react";
 
-import type { ContactAttachmentItem } from "../types";
+import type { ContactAttachmentItem } from "../../shared/types/contact";
 
 export function useContactAttachments() {
   const mediaInputRef = useRef<HTMLInputElement>(null);

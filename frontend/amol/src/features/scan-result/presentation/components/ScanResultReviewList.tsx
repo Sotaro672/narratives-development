@@ -7,7 +7,7 @@ import SectionCard from "../../../../components/ui/SectionCard";
 import SectionHeader from "../../../../components/ui/SectionHeader";
 import TextState from "../../../../components/ui/TextState";
 import { formatDateTime } from "../../../../components/utils/date";
-import type { CatalogReviewPage } from "../../types";
+import type { CatalogReviewPage } from "../../../shared/types/scanResult";
 
 type ScanResultReviewListProps = {
   reviews: CatalogReviewPage | null;

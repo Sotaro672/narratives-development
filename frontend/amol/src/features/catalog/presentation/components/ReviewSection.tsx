@@ -3,7 +3,7 @@ import { formatDateTime } from "../../../../components/utils/date";
 import type {
   CatalogProductBlueprintReview,
   CatalogProductReviewSummary,
-} from "../../types";
+} from "../../../shared/types/catalog";
 import { renderRatingStars } from "../../utils/format";
 
 type ReviewSectionProps = {

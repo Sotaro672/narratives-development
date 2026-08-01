@@ -4,7 +4,7 @@ import type { FormEvent } from "react";
 import { CardElement, useElements, useStripe } from "@stripe/react-stripe-js";
 
 import Button from "../../../components/ui/Button";
-import type { ConfirmedCardPayload } from "../types";
+import type { ConfirmedCardPayload } from "../../shared/types/paymentMethods";
 
 type PaymentMethodFormProps = {
   cardholderName: string;

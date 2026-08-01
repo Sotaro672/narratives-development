@@ -1,7 +1,7 @@
 //frontend\amol\src\features\contents\api\contentsApi.ts
 import { getAuth } from "firebase/auth";
 
-import type { ContentsMetadata } from "../types";
+import type { ContentsMetadata } from "../../shared/types/contents";
 import { parseContentsMetadata } from "../utils/metadata";
 
 const BACKEND_BASE_URL = import.meta.env.VITE_API_BASE_URL;
