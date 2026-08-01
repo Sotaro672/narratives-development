@@ -149,14 +149,6 @@ export function useAuth() {
   const [companyName, setCompanyName] =
     useState<string | null>(null);
 
-  const [
-    loadingCompanyName,
-    setLoadingCompanyName,
-  ] = useState(false);
-
-  const [companyError, setCompanyError] =
-    useState<string | null>(null);
-
   const [currentMember, setCurrentMember] =
     useState<MemberDTO | null>(null);
 
@@ -181,13 +173,8 @@ export function useAuth() {
 
       if (!effectiveCompanyId) {
         setCompanyName(null);
-        setCompanyError(null);
-        setLoadingCompanyName(false);
         return;
       }
-
-      setLoadingCompanyName(true);
-      setCompanyError(null);
 
       try {
         const name =
@@ -198,18 +185,9 @@ export function useAuth() {
         if (!disposed) {
           setCompanyName(name);
         }
-      } catch (error: unknown) {
+      } catch {
         if (!disposed) {
           setCompanyName(null);
-          setCompanyError(
-            error instanceof Error
-              ? error.message
-              : "failed to fetch company name",
-          );
-        }
-      } finally {
-        if (!disposed) {
-          setLoadingCompanyName(false);
         }
       }
     }
@@ -298,8 +276,6 @@ export function useAuth() {
 
       // company
       companyName,
-      loadingCompanyName,
-      companyError,
 
       // currentMember
       currentMember,
@@ -312,8 +288,6 @@ export function useAuth() {
     [
       ctx,
       companyName,
-      loadingCompanyName,
-      companyError,
       currentMember,
       loadingMember,
       memberError,

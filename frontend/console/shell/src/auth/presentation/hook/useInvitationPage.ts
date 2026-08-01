@@ -1,5 +1,11 @@
 // frontend/console/shell/src/auth/presentation/hook/useInvitationPage.ts
-import { useCallback, useEffect, useRef, useState } from "react";
+
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -10,32 +16,54 @@ import {
 export function useInvitationPage() {
   const navigate = useNavigate();
 
-  // ---- フォーム ref ----
-  const formRef = useRef<HTMLFormElement>(null);
+  const formRef =
+    useRef<HTMLFormElement>(null);
 
-  // ---- 招待トークン ----
-  const [token, setToken] = useState<string>("");
+  const [token, setToken] =
+    useState("");
 
-  // ---- ローディング / エラー ----
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [, setLoading] =
+    useState(false);
 
-  // ---- email ----
-  const [email, setEmail] = useState<string>("");
+  const [, setError] =
+    useState<string | null>(null);
 
-  // ---- 氏名系 ----
-  const [lastName, setLastName] = useState("");
-  const [lastNameKana, setLastNameKana] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [firstNameKana, setFirstNameKana] = useState("");
+  const [email, setEmail] =
+    useState("");
 
-  // ---- パスワード ----
-  const [password, setPassword] = useState("");
-  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [lastName, setLastName] =
+    useState("");
 
-  // ---- 表示用の所属情報 ----
-  const [companyName, setCompanyName] = useState<string>("");
-  const [assignedBrandNames, setAssignedBrandNames] = useState<string[]>([]);
+  const [
+    lastNameKana,
+    setLastNameKana,
+  ] = useState("");
+
+  const [firstName, setFirstName] =
+    useState("");
+
+  const [
+    firstNameKana,
+    setFirstNameKana,
+  ] = useState("");
+
+  const [password, setPassword] =
+    useState("");
+
+  const [
+    passwordConfirm,
+    setPasswordConfirm,
+  ] = useState("");
+
+  const [
+    companyName,
+    setCompanyName,
+  ] = useState("");
+
+  const [
+    assignedBrandNames,
+    setAssignedBrandNames,
+  ] = useState<string[]>([]);
 
   // ============================================================
   // tokenが設定されたらBackendから公開可能な招待情報を取得
@@ -47,40 +75,64 @@ export function useInvitationPage() {
       return;
     }
 
-    const run = async () => {
+    let disposed = false;
+
+    async function loadInvitationInfo() {
       setLoading(true);
       setError(null);
 
       try {
-        const data = await fetchInvitationInfo(token);
+        const data =
+          await fetchInvitationInfo(
+            token,
+          );
 
-        setCompanyName(data.companyName ?? "");
-        setAssignedBrandNames(data.brandNames ?? []);
-      } catch (e: any) {
+        if (disposed) {
+          return;
+        }
+
+        setCompanyName(
+          data.companyName ?? "",
+        );
+
+        setAssignedBrandNames(
+          data.brandNames ?? [],
+        );
+      } catch (error: unknown) {
+        if (disposed) {
+          return;
+        }
+
         setCompanyName("");
         setAssignedBrandNames([]);
-        setError(e?.message ?? "Unknown error");
-      } finally {
-        setLoading(false);
-      }
-    };
 
-    void run();
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Unknown error",
+        );
+      } finally {
+        if (!disposed) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadInvitationInfo();
+
+    return () => {
+      disposed = true;
+    };
   }, [token]);
 
-  // ---- Navigation ----
-  const handleBack = useCallback(() => {
-    history.back();
-  }, []);
-
-  const handleCreate = useCallback(() => {
-    formRef.current?.requestSubmit();
-  }, []);
-
-  // ---- Submit ----
+  // ============================================================
+  // 招待完了
+  // ============================================================
   const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
+    async (
+      event: React.FormEvent,
+    ) => {
+      event.preventDefault();
       setError(null);
 
       if (!token) {
@@ -91,24 +143,35 @@ export function useInvitationPage() {
       }
 
       if (!email) {
-        setError("メールアドレスを入力してください。");
+        setError(
+          "メールアドレスを入力してください。",
+        );
         return;
       }
 
-      if (!password || !passwordConfirm) {
-        setError("パスワードを入力してください。");
+      if (
+        !password ||
+        !passwordConfirm
+      ) {
+        setError(
+          "パスワードを入力してください。",
+        );
         return;
       }
 
-      if (password !== passwordConfirm) {
-        setError("パスワードが一致しません。");
+      if (
+        password !==
+        passwordConfirm
+      ) {
+        setError(
+          "パスワードが一致しません。",
+        );
         return;
       }
 
       setLoading(true);
 
       try {
-        // Firebaseユーザー作成、Auth state更新、Backend招待完了を実行する。
         await completeInvitation({
           token,
           email,
@@ -120,9 +183,15 @@ export function useInvitationPage() {
           passwordConfirm,
         });
 
-        navigate("/", { replace: true });
-      } catch (e: any) {
-        setError(e?.message ?? "Unexpected error");
+        navigate("/", {
+          replace: true,
+        });
+      } catch (error: unknown) {
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Unexpected error",
+        );
       } finally {
         setLoading(false);
       }
@@ -143,19 +212,11 @@ export function useInvitationPage() {
   return {
     formRef,
 
-    // token
-    token,
     setToken,
 
-    // email
     email,
     setEmail,
 
-    // ローディング・エラー
-    loading,
-    error,
-
-    // 氏名
     lastName,
     setLastName,
     lastNameKana,
@@ -165,19 +226,14 @@ export function useInvitationPage() {
     firstNameKana,
     setFirstNameKana,
 
-    // パスワード
     password,
     setPassword,
     passwordConfirm,
     setPasswordConfirm,
 
-    // 表示用の所属情報
     companyName,
     assignedBrandNames,
 
-    // Actions
-    handleBack,
-    handleCreate,
     handleSubmit,
   };
 }

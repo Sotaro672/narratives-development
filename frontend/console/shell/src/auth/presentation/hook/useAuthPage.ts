@@ -1,68 +1,112 @@
 // frontend/console/shell/src/auth/presentation/hook/useAuthPage.ts
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuthActions } from "../../application/useAuthActions";
-import { sendPasswordResetEmail } from "firebase/auth";
-import { auth } from "../../infrastructure/config/firebaseClient";
 
-export type AuthMode = "signup" | "signin";
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
+import {
+  sendPasswordResetEmail,
+} from "firebase/auth";
+
+import {
+  useAuthActions,
+} from "../../application/useAuthActions";
+import {
+  auth,
+} from "../../infrastructure/config/firebaseClient";
+
+export type AuthMode =
+  | "signup"
+  | "signin";
 
 // -------------------------
 // かな関連ヘルパ
 // -------------------------
 
 // 「ひらがな + スペースのみか」をチェック
-function isHiraganaOnly(input: string): boolean {
-  if (!input) return false;
-  return /^[\u3041-\u3096\s]+$/.test(input);
-}
+function isHiraganaOnly(
+  input: string,
+): boolean {
+  if (!input) {
+    return false;
+  }
 
-// -------------------------
-// 会社名の正規化
-//   ※ アルファベットも許可するので、ここでは不要な削除は行わない
-// -------------------------
-function normalizeCompanyName(input: string): string {
-  if (!input) return "";
-  // 必要ならここで trim や 連続スペースの正規化などだけを行う
-  return input;
+  return /^[\u3041-\u3096\s]+$/.test(
+    input,
+  );
 }
 
 export function useAuthPage() {
-  const navigate = useNavigate();
-  const { signUp, signIn, submitting, error, setError } = useAuthActions();
+  const {
+    signUp,
+    signIn,
+    submitting,
+    error,
+    setError,
+  } = useAuthActions();
 
   // -------------------------
   // モード
   // -------------------------
-  const [mode, setMode] = useState<AuthMode>("signin");
+  const [mode, setMode] =
+    useState<AuthMode>("signin");
 
   // -------------------------
   // 「パスワードをお忘れの方」モード
   // -------------------------
-  const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
+  const [
+    forgotPasswordMode,
+    setForgotPasswordMode,
+  ] = useState(false);
 
   // -------------------------
   // 入力値
   // -------------------------
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [email, setEmail] =
+    useState("");
 
-  const [lastName, setLastName] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastNameKana, setLastNameKana] = useState("");
-  const [firstNameKana, setFirstNameKana] = useState("");
+  const [password, setPassword] =
+    useState("");
 
-  const [companyName, _setCompanyName] = useState("");
+  const [
+    confirmPassword,
+    setConfirmPassword,
+  ] = useState("");
 
-  // 会社名（アルファベットも含めそのまま保持・必要なら軽い正規化のみ）
-  const setCompanyName = (v: string) => _setCompanyName(normalizeCompanyName(v));
+  const [lastName, setLastName] =
+    useState("");
+
+  const [firstName, setFirstName] =
+    useState("");
+
+  const [
+    lastNameKana,
+    setLastNameKana,
+  ] = useState("");
+
+  const [
+    firstNameKana,
+    setFirstNameKana,
+  ] = useState("");
+
+  const [
+    companyName,
+    setCompanyName,
+  ] = useState("");
 
   // -------------------------
   // 新規登録フロー管理
   // -------------------------
-  const [signupRequested, setSignupRequested] = useState(false);
-  const [signupCompleted, setSignupCompleted] = useState(false);
+  const [
+    signupRequested,
+    setSignupRequested,
+  ] = useState(false);
+
+  const [
+    signupCompleted,
+    setSignupCompleted,
+  ] = useState(false);
 
   const resetForm = useCallback(() => {
     setEmail("");
@@ -74,7 +118,7 @@ export function useAuthPage() {
     setLastNameKana("");
     setFirstNameKana("");
 
-    _setCompanyName("");
+    setCompanyName("");
 
     setForgotPasswordMode(false);
     setError(null);
@@ -94,61 +138,103 @@ export function useAuthPage() {
   // submit handler
   // -------------------------
   const handleFormSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
+    async (
+      event: React.FormEvent,
+    ) => {
+      event.preventDefault();
 
-      // ▼ パスワードをお忘れの方（signin + forgotPasswordMode）
-      if (mode === "signin" && forgotPasswordMode) {
-        if (!email.trim()) {
-          setError("パスワード再設定メールを送るメールアドレスを入力してください。");
+      // パスワードをお忘れの方
+      if (
+        mode === "signin" &&
+        forgotPasswordMode
+      ) {
+        const normalizedEmail =
+          email.trim();
+
+        if (!normalizedEmail) {
+          setError(
+            "パスワード再設定メールを送るメールアドレスを入力してください。",
+          );
           return;
         }
 
         try {
-          await sendPasswordResetEmail(auth, email.trim());
+          await sendPasswordResetEmail(
+            auth,
+            normalizedEmail,
+          );
+
           window.alert(
             "パスワード再設定用のメールを送信しました。\nメールに記載されたリンクからパスワードを再設定してください。",
           );
+
           setForgotPasswordMode(false);
           setError(null);
-        } catch (err: any) {
-          console.error("[useAuthPage] sendPasswordResetEmail error:", err);
+        } catch (error: unknown) {
+          console.error(
+            "[useAuthPage] sendPasswordResetEmail error:",
+            error,
+          );
+
           setError(
             "パスワード再設定メールの送信に失敗しました。メールアドレスをご確認ください。",
           );
         }
+
         return;
       }
 
+      // 新規登録
       if (mode === "signup") {
-        if (password !== confirmPassword) {
-          setError("パスワードが一致していません。");
+        if (
+          password !==
+          confirmPassword
+        ) {
+          setError(
+            "パスワードが一致していません。",
+          );
           return;
         }
 
-        const lastKana = lastNameKana.trim();
-        const firstKana = firstNameKana.trim();
+        const lastKana =
+          lastNameKana.trim();
 
-        if (!isHiraganaOnly(lastKana) || !isHiraganaOnly(firstKana)) {
-          setError("姓・名のかなはひらがなのみで入力してください。");
+        const firstKana =
+          firstNameKana.trim();
+
+        if (
+          !isHiraganaOnly(lastKana) ||
+          !isHiraganaOnly(firstKana)
+        ) {
+          setError(
+            "姓・名のかなはひらがなのみで入力してください。",
+          );
           return;
         }
 
         setSignupRequested(true);
         setSignupCompleted(false);
 
-        await signUp(email, password, {
-          lastName,
-          firstName,
-          lastNameKana: lastKana,
-          firstNameKana: firstKana,
-          companyName,
-        });
+        await signUp(
+          email,
+          password,
+          {
+            lastName,
+            firstName,
+            lastNameKana: lastKana,
+            firstNameKana: firstKana,
+            companyName,
+          },
+        );
+
         return;
       }
 
-      // ▼ 通常ログイン
-      await signIn(email, password);
+      // 通常ログイン
+      await signIn(
+        email,
+        password,
+      );
     },
     [
       mode,
@@ -168,21 +254,33 @@ export function useAuthPage() {
   );
 
   // -------------------------
-  // signup 完了判定
+  // signup完了判定
   // -------------------------
   useEffect(() => {
-    if (mode !== "signup") return;
+    if (mode !== "signup") {
+      return;
+    }
 
-    if (signupRequested && !submitting && !error) {
+    if (
+      signupRequested &&
+      !submitting &&
+      !error
+    ) {
       setSignupCompleted(true);
       setSignupRequested(false);
     }
-  }, [mode, signupRequested, submitting, error, navigate]);
+  }, [
+    mode,
+    signupRequested,
+    submitting,
+    error,
+  ]);
 
-  const resetSignupFlow = useCallback(() => {
-    setSignupRequested(false);
-    setSignupCompleted(false);
-  }, []);
+  const resetSignupFlow =
+    useCallback(() => {
+      setSignupRequested(false);
+      setSignupCompleted(false);
+    }, []);
 
   return {
     // モード
@@ -200,6 +298,7 @@ export function useAuthPage() {
     setPassword,
     confirmPassword,
     setConfirmPassword,
+
     lastName,
     setLastName,
     firstName,
@@ -219,11 +318,10 @@ export function useAuthPage() {
     setError,
 
     // サインアップフロー
-    signupRequested,
     signupCompleted,
     resetSignupFlow,
 
-    // submit ラッパ
+    // submit
     handleFormSubmit,
   };
 }
