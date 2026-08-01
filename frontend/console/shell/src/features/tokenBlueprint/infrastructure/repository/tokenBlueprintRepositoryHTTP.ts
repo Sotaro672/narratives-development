@@ -231,12 +231,12 @@ export type UpdateTokenBlueprintPayload =
 // ---------------------------------------------------------
 
 export async function fetchTokenBlueprints(
-  params?: PageParams,
+  params: PageParams = {},
 ): Promise<TokenBlueprintPageResult> {
   const searchParams =
     new URLSearchParams();
 
-  if (params?.page !== undefined) {
+  if (params.page !== undefined) {
     searchParams.set(
       "page",
       String(
@@ -245,7 +245,7 @@ export async function fetchTokenBlueprints(
     );
   }
 
-  if (params?.perPage !== undefined) {
+  if (params.perPage !== undefined) {
     searchParams.set(
       "perPage",
       String(

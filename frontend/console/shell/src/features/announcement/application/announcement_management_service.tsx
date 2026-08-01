@@ -1,4 +1,4 @@
-// frontend/console/shell/src/features/announcement/application/announcement_management_service.tsx
+// frontend\console\shell\src\features\announcement\application\announcement_management_service.tsx
 
 import {
   listAnnouncementManagementByCompanyId,

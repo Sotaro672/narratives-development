@@ -112,15 +112,15 @@ export type OrderItemInventoryRowDTO = {
   transferredAt?: string;
 };
 
-export interface OrderListParams
-  extends PageParams {
-  id?: string;
-  userId?: string;
-  avatarId?: string;
-  cartId?: string;
-  createdFrom?: string;
-  createdTo?: string;
-}
+export type OrderListParams =
+  PageParams & {
+    id?: string;
+    userId?: string;
+    avatarId?: string;
+    cartId?: string;
+    createdFrom?: string;
+    createdTo?: string;
+  };
 
 function buildQuery(
   params: Record<
