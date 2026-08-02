@@ -1,4 +1,5 @@
 // frontend/amol/src/features/catalog/presentation/components/ReviewSection.tsx
+
 import { formatDateTime } from "../../../../components/utils/date";
 import type {
   CatalogProductBlueprintReview,
@@ -9,7 +10,6 @@ import { renderRatingStars } from "../../utils/format";
 type ReviewSectionProps = {
   reviewSummary: CatalogProductReviewSummary | undefined;
   reviewItems: CatalogProductBlueprintReview[];
-  isLoadingReviews: boolean;
   reviewErrorMessage: string;
   onAvatarClick?: (avatarId: string) => void;
 };
@@ -17,7 +17,6 @@ type ReviewSectionProps = {
 export default function ReviewSection({
   reviewSummary,
   reviewItems,
-  isLoadingReviews,
   reviewErrorMessage,
   onAvatarClick,
 }: ReviewSectionProps) {
@@ -32,29 +31,19 @@ export default function ReviewSection({
         </div>
       ) : null}
 
-      {isLoadingReviews ? (
-        <p className="catalog-page-model-help">
-          レビューを読み込んでいます。
-        </p>
-      ) : null}
-
-      {!isLoadingReviews && reviewErrorMessage ? (
+      {reviewErrorMessage ? (
         <p className="catalog-page-error" role="alert">
           {reviewErrorMessage}
         </p>
       ) : null}
 
-      {!isLoadingReviews &&
-      !reviewErrorMessage &&
-      reviewItems.length === 0 ? (
+      {!reviewErrorMessage && reviewItems.length === 0 ? (
         <p className="catalog-page-model-help">
           まだレビューはありません。
         </p>
       ) : null}
 
-      {!isLoadingReviews &&
-      !reviewErrorMessage &&
-      reviewItems.length > 0 ? (
+      {!reviewErrorMessage && reviewItems.length > 0 ? (
         <div className="catalog-page-review-list">
           {reviewItems.map((review) => (
             <ReviewItem
@@ -78,7 +67,10 @@ function ReviewItem({
 }) {
   const reviewedAt = formatDateTime(review.reviewedAt);
   const avatarName = review.avatarName || "匿名ユーザー";
-  const canOpenAvatar = Boolean(review.avatarId && onAvatarClick);
+  const canOpenAvatar = Boolean(
+    review.avatarId &&
+    onAvatarClick,
+  );
 
   const avatarContent = (
     <>
@@ -95,10 +87,15 @@ function ReviewItem({
       )}
 
       <div className="catalog-page-review-avatar-body">
-        <p className="catalog-page-review-avatar-name">{avatarName}</p>
+        <p className="catalog-page-review-avatar-name">
+          {avatarName}
+        </p>
+
         <p className="catalog-page-review-meta">
           {renderRatingStars(review.rating)}
-          {reviewedAt !== "-" ? `・${reviewedAt}` : ""}
+          {reviewedAt !== "-"
+            ? `・${reviewedAt}`
+            : ""}
         </p>
       </div>
     </>
@@ -111,7 +108,9 @@ function ReviewItem({
           <button
             type="button"
             className="catalog-page-review-avatar-button"
-            onClick={() => onAvatarClick?.(review.avatarId)}
+            onClick={() =>
+              onAvatarClick?.(review.avatarId)
+            }
           >
             {avatarContent}
           </button>
@@ -123,7 +122,9 @@ function ReviewItem({
       </div>
 
       {review.body ? (
-        <p className="catalog-page-review-body">{review.body}</p>
+        <p className="catalog-page-review-body">
+          {review.body}
+        </p>
       ) : null}
 
       <p className="catalog-page-review-votes">

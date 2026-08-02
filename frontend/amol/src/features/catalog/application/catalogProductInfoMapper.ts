@@ -11,7 +11,7 @@ export type ProductCategoryKind =
   | "alcohol"
   | "unknown";
 
-export type CatalogProductBlueprintDisplayFields =
+type CatalogProductBlueprintDisplayFields =
   CatalogProductBlueprint & {
     category?: string | null;
     categoryCode?: string | null;
@@ -21,7 +21,7 @@ export type CatalogProductBlueprintDisplayFields =
     alcoholContent?: string | number | null;
   };
 
-export function isNonEmptyText(
+function isNonEmptyText(
   value: unknown,
 ): value is string {
   return (
@@ -42,19 +42,6 @@ export function formatNullableText(
   }
 
   return "";
-}
-
-export function formatWeight(
-  value: unknown,
-): string {
-  if (
-    !isFiniteNumber(value) ||
-    value <= 0
-  ) {
-    return "";
-  }
-
-  return `${value}g`;
 }
 
 export function formatAlcoholContent(

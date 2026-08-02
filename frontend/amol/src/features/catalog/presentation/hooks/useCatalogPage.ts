@@ -24,27 +24,47 @@ export function useCatalogPage() {
   const navigate = useNavigate();
   const { listId } = useParams();
 
-  const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
+  const [catalog, setCatalog] =
+    useState<CatalogResponse | null>(null);
+
   const [reviews, setReviews] =
     useState<CatalogProductBlueprintReviewPage | null>(null);
 
-  const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
-  const [isLoadingReviews, setIsLoadingReviews] = useState(false);
-  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [isLoadingCatalog, setIsLoadingCatalog] =
+    useState(true);
 
-  const [errorMessage, setErrorMessage] = useState("");
-  const [reviewErrorMessage, setReviewErrorMessage] = useState("");
-  const [cartMessage, setCartMessage] = useState("");
-  const [cartErrorMessage, setCartErrorMessage] = useState("");
+  const [isAddingToCart, setIsAddingToCart] =
+    useState(false);
 
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
-  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [errorMessage, setErrorMessage] =
+    useState("");
 
-  const [selectedColorKey, setSelectedColorKey] = useState("");
-  const [selectedSize, setSelectedSize] = useState("");
+  const [reviewErrorMessage, setReviewErrorMessage] =
+    useState("");
 
-  const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
+  const [cartErrorMessage, setCartErrorMessage] =
+    useState("");
+
+  const [activeImageIndex, setActiveImageIndex] =
+    useState(0);
+
+  const [touchStartX, setTouchStartX] =
+    useState<number | null>(null);
+
+  const [touchStartY, setTouchStartY] =
+    useState<number | null>(null);
+
+  const [selectedColorKey, setSelectedColorKey] =
+    useState("");
+
+  const [selectedSize, setSelectedSize] =
+    useState("");
+
+  const apiBaseUrl = useMemo(
+    () => getApiBaseUrl(),
+    [],
+  );
+
   const isMobilePortrait = useMobilePortrait();
 
   const viewModel = useMemo(() => {
@@ -72,19 +92,18 @@ export function useCatalogPage() {
       if (!listId) {
         setCatalog(null);
         setReviews(null);
-        setErrorMessage("listIdが見つかりません。");
+        setErrorMessage(
+          "listIdが見つかりません。",
+        );
         setReviewErrorMessage("");
         setIsLoadingCatalog(false);
-        setIsLoadingReviews(false);
         return;
       }
 
       setIsLoadingCatalog(true);
-      setIsLoadingReviews(true);
 
       setErrorMessage("");
       setReviewErrorMessage("");
-      setCartMessage("");
       setCartErrorMessage("");
 
       setCatalog(null);
@@ -108,7 +127,9 @@ export function useCatalogPage() {
 
         setCatalog(result.catalog);
         setReviews(result.reviews);
-        setReviewErrorMessage(result.reviewErrorMessage);
+        setReviewErrorMessage(
+          result.reviewErrorMessage,
+        );
       } catch (error) {
         if (cancelled) {
           return;
@@ -125,7 +146,6 @@ export function useCatalogPage() {
       } finally {
         if (!cancelled) {
           setIsLoadingCatalog(false);
-          setIsLoadingReviews(false);
         }
       }
     }
@@ -135,61 +155,108 @@ export function useCatalogPage() {
     return () => {
       cancelled = true;
     };
-  }, [apiBaseUrl, listId]);
+  }, [
+    apiBaseUrl,
+    listId,
+  ]);
 
   useEffect(() => {
-    if (viewModel.colorOptions.length === 1 && !selectedColorKey) {
-      setSelectedColorKey(viewModel.colorOptions[0].key);
+    if (
+      viewModel.colorOptions.length === 1 &&
+      !selectedColorKey
+    ) {
+      setSelectedColorKey(
+        viewModel.colorOptions[0].key,
+      );
       return;
     }
 
     if (
       selectedColorKey &&
-      !viewModel.colorOptions.some((option) => option.key === selectedColorKey)
+      !viewModel.colorOptions.some(
+        (option) =>
+          option.key === selectedColorKey,
+      )
     ) {
       setSelectedColorKey("");
     }
-  }, [selectedColorKey, viewModel.colorOptions]);
+  }, [
+    selectedColorKey,
+    viewModel.colorOptions,
+  ]);
 
   useEffect(() => {
-    if (viewModel.sizeOptions.length === 1 && !selectedSize) {
-      setSelectedSize(viewModel.sizeOptions[0]);
+    if (
+      viewModel.sizeOptions.length === 1 &&
+      !selectedSize
+    ) {
+      setSelectedSize(
+        viewModel.sizeOptions[0],
+      );
       return;
     }
 
-    if (selectedSize && !viewModel.sizeOptions.includes(selectedSize)) {
+    if (
+      selectedSize &&
+      !viewModel.sizeOptions.includes(
+        selectedSize,
+      )
+    ) {
       setSelectedSize("");
     }
-  }, [selectedSize, viewModel.sizeOptions]);
+  }, [
+    selectedSize,
+    viewModel.sizeOptions,
+  ]);
 
   useEffect(() => {
-    if (activeImageIndex > viewModel.catalogImages.length - 1) {
+    if (
+      activeImageIndex >
+      viewModel.catalogImages.length - 1
+    ) {
       setActiveImageIndex(0);
     }
-  }, [activeImageIndex, viewModel.catalogImages.length]);
+  }, [
+    activeImageIndex,
+    viewModel.catalogImages.length,
+  ]);
 
   function handlePrevImage() {
-    if (viewModel.catalogImages.length === 0) {
+    if (
+      viewModel.catalogImages.length === 0
+    ) {
       return;
     }
 
     setActiveImageIndex((current) =>
-      current === 0 ? viewModel.catalogImages.length - 1 : current - 1,
+      current === 0
+        ? viewModel.catalogImages.length - 1
+        : current - 1,
     );
   }
 
   function handleNextImage() {
-    if (viewModel.catalogImages.length === 0) {
+    if (
+      viewModel.catalogImages.length === 0
+    ) {
       return;
     }
 
     setActiveImageIndex((current) =>
-      current === viewModel.catalogImages.length - 1 ? 0 : current + 1,
+      current ===
+      viewModel.catalogImages.length - 1
+        ? 0
+        : current + 1,
     );
   }
 
-  function handleImageTouchStart(event: TouchEvent<HTMLDivElement>) {
-    if (!isMobilePortrait || viewModel.catalogImages.length <= 1) {
+  function handleImageTouchStart(
+    event: TouchEvent<HTMLDivElement>,
+  ) {
+    if (
+      !isMobilePortrait ||
+      viewModel.catalogImages.length <= 1
+    ) {
       return;
     }
 
@@ -203,7 +270,9 @@ export function useCatalogPage() {
     setTouchStartY(touch.clientY);
   }
 
-  function handleImageTouchEnd(event: TouchEvent<HTMLDivElement>) {
+  function handleImageTouchEnd(
+    event: TouchEvent<HTMLDivElement>,
+  ) {
     if (
       !isMobilePortrait ||
       viewModel.catalogImages.length <= 1 ||
@@ -215,7 +284,8 @@ export function useCatalogPage() {
       return;
     }
 
-    const touch = event.changedTouches[0];
+    const touch =
+      event.changedTouches[0];
 
     setTouchStartX(null);
     setTouchStartY(null);
@@ -224,13 +294,14 @@ export function useCatalogPage() {
       return;
     }
 
-    const direction = resolveCatalogSwipeDirection({
-      startX: touchStartX,
-      startY: touchStartY,
-      endX: touch.clientX,
-      endY: touch.clientY,
-      thresholdPx: SWIPE_THRESHOLD_PX,
-    });
+    const direction =
+      resolveCatalogSwipeDirection({
+        startX: touchStartX,
+        startY: touchStartY,
+        endX: touch.clientX,
+        endY: touch.clientY,
+        thresholdPx: SWIPE_THRESHOLD_PX,
+      });
 
     if (direction === "next") {
       handleNextImage();
@@ -242,41 +313,50 @@ export function useCatalogPage() {
     }
   }
 
-  function handleSelectColor(colorKey: string) {
+  function handleSelectColor(
+    colorKey: string,
+  ) {
     setSelectedColorKey(colorKey);
     setSelectedSize("");
-    setCartMessage("");
     setCartErrorMessage("");
   }
 
-  function handleSelectSize(size: string) {
+  function handleSelectSize(
+    size: string,
+  ) {
     setSelectedSize(size);
-    setCartMessage("");
     setCartErrorMessage("");
   }
 
   function handleBrandClick() {
-    const brandId = catalog?.productBlueprint.brandId?.trim();
+    const brandId =
+      catalog?.productBlueprint.brandId?.trim();
 
     if (!brandId) {
       return;
     }
 
-    navigate(`/brands/${encodeURIComponent(brandId)}`);
+    navigate(
+      `/brands/${encodeURIComponent(
+        brandId,
+      )}`,
+    );
   }
 
   async function handleAddToCart() {
     setIsAddingToCart(true);
-    setCartMessage("");
     setCartErrorMessage("");
 
     try {
       await addSelectedCatalogItemToCart({
         apiBaseUrl,
         catalog,
-        selectedModel: viewModel.selectedModel,
-        hasSelectedModelStock: viewModel.hasSelectedModelStock,
-        isAlcoholCatalog: viewModel.isAlcoholCatalog,
+        selectedModel:
+          viewModel.selectedModel,
+        hasSelectedModelStock:
+          viewModel.hasSelectedModelStock,
+        isAlcoholCatalog:
+          viewModel.isAlcoholCatalog,
       });
 
       navigate("/cart");
@@ -298,11 +378,9 @@ export function useCatalogPage() {
   return {
     catalog,
     isLoadingCatalog,
-    isLoadingReviews,
     isAddingToCart,
     errorMessage,
     reviewErrorMessage,
-    cartMessage,
     cartErrorMessage,
 
     selectedColorKey,

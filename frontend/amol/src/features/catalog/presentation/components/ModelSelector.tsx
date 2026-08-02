@@ -1,6 +1,9 @@
 // frontend/amol/src/features/catalog/presentation/components/ModelSelector.tsx
 
 import { rgbToCssColor } from "../../../../components/utils/color";
+import {
+  formatAlcoholVolumeLabel,
+} from "../../application/catalogModelMapper";
 import type {
   CatalogListPrice,
   CatalogModelVariation,
@@ -16,29 +19,15 @@ type ModelSelectorProps = {
   selectedModel: CatalogModelVariation | null;
   selectedModelPrice: CatalogListPrice | undefined;
   selectedModelStock: number | undefined;
-  cartMessage: string;
   cartErrorMessage: string;
   isAlcoholCatalog?: boolean;
   onSelectColor: (colorKey: string) => void;
   onSelectSize: (size: string) => void;
 };
 
-function formatVolumeLabel(model: CatalogModelVariation): string {
-  const value = model.volumeValue;
-  const unit = model.volumeUnit?.trim() ?? "";
-
-  if (typeof value === "number" && Number.isFinite(value) && unit) {
-    return `${value}${unit}`;
-  }
-
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return String(value);
-  }
-
-  return "";
-}
-
-function formatModelNumber(model: CatalogModelVariation): string {
+function formatModelNumber(
+  model: CatalogModelVariation,
+): string {
   return model.modelNumber?.trim() || "-";
 }
 
@@ -50,28 +39,40 @@ export default function ModelSelector({
   selectedModel,
   selectedModelPrice,
   selectedModelStock,
-  cartMessage,
   cartErrorMessage,
   isAlcoholCatalog = false,
   onSelectColor,
   onSelectSize,
 }: ModelSelectorProps) {
-  const hasColorOptions = colorOptions.length > 0;
-  const hasSizeOptions = sizeOptions.length > 0;
+  const hasColorOptions =
+    colorOptions.length > 0;
+
+  const hasSizeOptions =
+    sizeOptions.length > 0;
 
   return (
     <section className="catalog-page-card">
-      <h2 className="catalog-page-card-title">モデル</h2>
+      <h2 className="catalog-page-card-title">
+        モデル
+      </h2>
 
       <div className="catalog-page-option-section">
         <p className="catalog-page-option-label">
-          {isAlcoholCatalog ? "容量" : "カラー"}
+          {isAlcoholCatalog
+            ? "容量"
+            : "カラー"}
         </p>
 
         <div className="catalog-page-option-list">
           {colorOptions.map((option) => {
-            const colorHex = rgbToCssColor(option.colorRGB);
-            const isSelected = selectedColorKey === option.key;
+            const colorHex =
+              rgbToCssColor(
+                option.colorRGB,
+              );
+
+            const isSelected =
+              selectedColorKey ===
+              option.key;
 
             return (
               <button
@@ -79,22 +80,35 @@ export default function ModelSelector({
                 type="button"
                 className={[
                   "catalog-page-option-button",
-                  !isAlcoholCatalog ? "catalog-page-color-option-button" : "",
-                  isSelected ? "catalog-page-option-button--selected" : "",
+                  !isAlcoholCatalog
+                    ? "catalog-page-color-option-button"
+                    : "",
+                  isSelected
+                    ? "catalog-page-option-button--selected"
+                    : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}
-                onClick={() => onSelectColor(option.key)}
+                onClick={() =>
+                  onSelectColor(
+                    option.key,
+                  )
+                }
               >
                 {!isAlcoholCatalog ? (
                   <span
                     className="catalog-page-color-swatch"
-                    style={{ backgroundColor: colorHex }}
+                    style={{
+                      backgroundColor:
+                        colorHex,
+                    }}
                     aria-hidden="true"
                   />
                 ) : null}
 
-                <span>{option.colorName}</span>
+                <span>
+                  {option.colorName}
+                </span>
               </button>
             );
           })}
@@ -103,11 +117,14 @@ export default function ModelSelector({
 
       {!isAlcoholCatalog ? (
         <div className="catalog-page-option-section">
-          <p className="catalog-page-option-label">サイズ</p>
+          <p className="catalog-page-option-label">
+            サイズ
+          </p>
 
           <div className="catalog-page-option-list">
             {sizeOptions.map((size) => {
-              const isSelected = selectedSize === size;
+              const isSelected =
+                selectedSize === size;
 
               return (
                 <button
@@ -115,11 +132,15 @@ export default function ModelSelector({
                   type="button"
                   className={[
                     "catalog-page-option-button",
-                    isSelected ? "catalog-page-option-button--selected" : "",
+                    isSelected
+                      ? "catalog-page-option-button--selected"
+                      : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
-                  onClick={() => onSelectSize(size)}
+                  onClick={() =>
+                    onSelectSize(size)
+                  }
                 >
                   {size}
                 </button>
@@ -135,23 +156,42 @@ export default function ModelSelector({
             {isAlcoholCatalog ? (
               <>
                 <div>
-                  <dt>モデル番号</dt>
-                  <dd>{formatModelNumber(selectedModel)}</dd>
+                  <dt>
+                    モデル番号
+                  </dt>
+                  <dd>
+                    {formatModelNumber(
+                      selectedModel,
+                    )}
+                  </dd>
                 </div>
+
                 <div>
                   <dt>容量</dt>
-                  <dd>{formatVolumeLabel(selectedModel) || "-"}</dd>
+                  <dd>
+                    {formatAlcoholVolumeLabel(
+                      selectedModel,
+                    ) || "-"}
+                  </dd>
                 </div>
               </>
             ) : (
               <>
                 <div>
                   <dt>カラー</dt>
-                  <dd>{selectedModel.colorName || "-"}</dd>
+                  <dd>
+                    {selectedModel
+                      .colorName ||
+                      "-"}
+                  </dd>
                 </div>
+
                 <div>
                   <dt>サイズ</dt>
-                  <dd>{selectedModel.size || "-"}</dd>
+                  <dd>
+                    {selectedModel.size ||
+                      "-"}
+                  </dd>
                 </div>
               </>
             )}
@@ -160,7 +200,9 @@ export default function ModelSelector({
               <dt>価格</dt>
               <dd>
                 {selectedModelPrice
-                  ? formatPrice(selectedModelPrice.price)
+                  ? formatPrice(
+                      selectedModelPrice.price,
+                    )
                   : "価格未設定"}
               </dd>
             </div>
@@ -168,7 +210,8 @@ export default function ModelSelector({
             <div>
               <dt>在庫</dt>
               <dd>
-                {typeof selectedModelStock === "number"
+                {typeof selectedModelStock ===
+                "number"
                   ? selectedModelStock
                   : "-"}
               </dd>
@@ -181,18 +224,18 @@ export default function ModelSelector({
             ? hasColorOptions
               ? "容量を選択してください。"
               : "選択できる容量がありません。"
-            : hasColorOptions || hasSizeOptions
+            : hasColorOptions ||
+                hasSizeOptions
               ? "カラーとサイズを選択してください。"
               : "選択できるモデルがありません。"}
         </p>
       )}
 
-      {cartMessage ? (
-        <p className="catalog-page-cart-message">{cartMessage}</p>
-      ) : null}
-
       {cartErrorMessage ? (
-        <p className="catalog-page-cart-error" role="alert">
+        <p
+          className="catalog-page-cart-error"
+          role="alert"
+        >
           {cartErrorMessage}
         </p>
       ) : null}
