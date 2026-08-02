@@ -14,8 +14,6 @@ type ContentsDetailPanelProps = {
   tokenName: string;
   tokenIconUrl: string;
   loading: boolean;
-  loadingAvatarId: boolean;
-  currentAvatarId: string;
   isMobilePortrait: boolean;
   commentCard: TokenCommentCardController;
   onProductNameClick: () => void;
@@ -28,8 +26,6 @@ export default function ContentsDetailPanel({
   tokenName,
   tokenIconUrl,
   loading,
-  loadingAvatarId,
-  currentAvatarId,
   isMobilePortrait,
   commentCard,
   onProductNameClick,
@@ -42,12 +38,6 @@ export default function ContentsDetailPanel({
         contents={contents}
         tokenName={tokenName}
         tokenIconUrl={tokenIconUrl}
-        loadingAvatarId={
-          loadingAvatarId
-        }
-        currentAvatarId={
-          currentAvatarId
-        }
         onProductNameClick={
           onProductNameClick
         }

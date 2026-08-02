@@ -5,7 +5,6 @@ import { useTokenReviewAggregateCard } from "../hooks/useTokenReviewAggregateCar
 type TokenReviewAggregateCardProps = {
   tokenBlueprintId: string;
   productId: string;
-  currentAvatarId: string;
   shareTitle?: string;
   shareText?: string;
   shareUrl?: string;
@@ -15,7 +14,6 @@ type TokenReviewAggregateCardProps = {
 export default function TokenReviewAggregateCard({
   tokenBlueprintId,
   productId,
-  currentAvatarId,
   shareTitle = "トークン詳細",
   shareText = "",
   shareUrl,
@@ -88,7 +86,7 @@ export default function TokenReviewAggregateCard({
           ↗
         </span>
         <span className="token-review-aggregate__label">
-          {currentAvatarId.trim() ? "出品" : "出品"}
+          出品
         </span>
       </button>
 

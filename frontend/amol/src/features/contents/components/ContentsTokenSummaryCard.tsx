@@ -1,4 +1,5 @@
 // frontend/amol/src/features/contents/components/ContentsTokenSummaryCard.tsx
+
 import Tab from "../../../components/ui/Tab";
 import TokenReviewAggregateCard from "../../token-commnet/components/TokenReviewAggregateCard";
 import type { ContentsSearchParams } from "../../shared/types/contents";
@@ -7,8 +8,6 @@ type ContentsTokenSummaryCardProps = {
   contents: ContentsSearchParams;
   tokenName: string;
   tokenIconUrl: string;
-  loadingAvatarId: boolean;
-  currentAvatarId: string;
   onProductNameClick: () => void;
   onBrandNameClick: () => void;
   onResaleClick: () => void;
@@ -18,8 +17,6 @@ export default function ContentsTokenSummaryCard({
   contents,
   tokenName,
   tokenIconUrl,
-  loadingAvatarId,
-  currentAvatarId,
   onProductNameClick,
   onBrandNameClick,
   onResaleClick,
@@ -78,18 +75,11 @@ export default function ContentsTokenSummaryCard({
       <TokenReviewAggregateCard
         tokenBlueprintId={contents.tokenBlueprintId}
         productId={contents.productId}
-        currentAvatarId={currentAvatarId}
         shareTitle={tokenName || "トークン詳細"}
         shareText={contents.productName || contents.brandName || ""}
         shareUrl={window.location.href}
         onResaleClick={onResaleClick}
       />
-
-      {loadingAvatarId ? (
-        <p className="contents-page-card__message">
-          アバター情報を確認しています...
-        </p>
-      ) : null}
     </div>
   );
 }

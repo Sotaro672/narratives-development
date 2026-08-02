@@ -1,4 +1,5 @@
 // frontend/amol/src/pages/ContentsPage.tsx
+
 import "../styles/page-layout.css";
 import "../styles/contents-page.css";
 
@@ -26,7 +27,9 @@ export default function ContentsPage() {
               variant: "commentAction",
               value: page.commentCard.commentBody,
               placeholder: "コメントを書く…",
-              buttonLabel: page.commentCard.posting ? "投稿中" : "投稿",
+              buttonLabel: page.commentCard.posting
+                ? "投稿中"
+                : "投稿",
               disabled:
                 page.commentCard.posting ||
                 page.loading ||
@@ -36,7 +39,9 @@ export default function ContentsPage() {
               onChange: page.commentCard.setCommentBody,
               onSubmit: page.commentCard.postComment,
             }
-          : { variant: "default" }
+          : {
+              variant: "default",
+            }
       }
     >
       <section className="split-page contents-page">
@@ -59,8 +64,6 @@ export default function ContentsPage() {
             tokenName={page.tokenName}
             tokenIconUrl={page.tokenIconUrl}
             loading={page.loading}
-            loadingAvatarId={page.loadingAvatarId}
-            currentAvatarId={page.currentAvatarId}
             isMobilePortrait={page.isMobilePortrait}
             commentCard={page.commentCard}
             onProductNameClick={page.handleProductNameClick}

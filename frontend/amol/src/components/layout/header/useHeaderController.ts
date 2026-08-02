@@ -14,7 +14,12 @@ import {
   type User,
 } from "firebase/auth";
 
-import { getMyAvatar } from "../../../features/avatar/api/avatarApi";
+import { fetchCart } from "../../../features/cart/api/cartApi";
+import type {
+  CartDTO,
+  CartItemDTO,
+} from "../../../features/shared/types/cart";
+import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
 import { auth } from "../../../lib/firebase";
 import { WALLET_PATH } from "../../../lib/navigation";
 import type {
@@ -22,175 +27,37 @@ import type {
   HeaderProps,
 } from "./types";
 
-type CartItemDTO = {
-  qty?: number;
-  quantity?: number;
-  [key: string]: unknown;
-};
-
-type CartDTO = {
-  avatarId?: string;
-  items?:
-    | Record<string, CartItemDTO>
-    | CartItemDTO[];
-};
-
-function getApiBaseUrl(): string {
-  const env =
-    import.meta.env.VITE_API_BASE_URL;
-
-  if (
-    typeof env === "string" &&
-    env.trim() !== ""
-  ) {
-    return env.replace(/\/$/, "");
-  }
-
-  return "";
-}
-
 function getCartItemQty(
   item: CartItemDTO,
 ): number {
-  const rawQty =
-    item.qty ?? item.quantity;
-
   if (
-    typeof rawQty === "number" &&
-    Number.isFinite(rawQty)
+    !Number.isFinite(item.qty) ||
+    item.qty <= 0
   ) {
-    return Math.max(0, rawQty);
+    return 0;
   }
 
-  if (typeof rawQty === "string") {
-    const parsed = Number(rawQty);
-
-    if (Number.isFinite(parsed)) {
-      return Math.max(0, parsed);
-    }
-  }
-
-  return 0;
+  return item.qty;
 }
 
 function sumCartItemQty(
   cart: CartDTO,
 ): number {
-  const items = cart.items;
-
-  if (!items) {
-    return 0;
-  }
-
-  if (Array.isArray(items)) {
-    return items.reduce(
-      (sum, item) =>
-        sum + getCartItemQty(item),
-      0,
-    );
-  }
-
-  return Object.values(items).reduce(
+  return Object.values(cart.items).reduce(
     (sum, item) =>
       sum + getCartItemQty(item),
     0,
   );
 }
 
-async function fetchCurrentAvatarId(
-  args: {
-    apiBaseUrl: string;
-    currentUser: User;
-  },
-): Promise<string> {
-  const {
-    apiBaseUrl,
-    currentUser,
-  } = args;
-
-  const idToken =
-    await currentUser.getIdToken();
-
-  const avatar = await getMyAvatar({
-    backendUrl: apiBaseUrl,
-    idToken,
-  });
-
-  if (!avatar?.avatarId) {
-    throw new Error(
-      "現在のavatarIdが見つかりません。",
-    );
-  }
-
-  return avatar.avatarId;
-}
-
 async function fetchCartItemCount(
-  args: {
-    apiBaseUrl: string;
-    currentUser: User;
-  },
+  apiBaseUrl: string,
 ): Promise<number> {
-  const {
+  const cart = await fetchCart(
     apiBaseUrl,
-    currentUser,
-  } = args;
-
-  const avatarId =
-    await fetchCurrentAvatarId({
-      apiBaseUrl,
-      currentUser,
-    });
-
-  const idToken =
-    await currentUser.getIdToken();
-
-  const searchParams =
-    new URLSearchParams({
-      avatarId,
-    });
-
-  const response = await fetch(
-    `${apiBaseUrl}/mall/me/cart?${searchParams.toString()}`,
-    {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization:
-          `Bearer ${idToken}`,
-      },
-      credentials: "include",
-    },
   );
 
-  if (!response.ok) {
-    return 0;
-  }
-
-  const contentType =
-    response.headers.get(
-      "content-type",
-    ) ?? "";
-
-  if (
-    !contentType.includes(
-      "application/json",
-    )
-  ) {
-    return 0;
-  }
-
-  const data = (
-    await response
-      .json()
-      .catch(() => null)
-  ) as CartDTO | null;
-
-  if (!data) {
-    return 0;
-  }
-
-  return sumCartItemQty(data);
+  return sumCartItemQty(cart);
 }
 
 export function useHeaderController({
@@ -386,10 +253,9 @@ export function useHeaderController({
 
       try {
         const count =
-          await fetchCartItemCount({
+          await fetchCartItemCount(
             apiBaseUrl,
-            currentUser,
-          });
+          );
 
         if (!cancelled) {
           setFetchedCartItemCount(
