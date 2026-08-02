@@ -93,12 +93,6 @@ export type MarketResaleListResponse = {
   perPage: number;
 };
 
-export type MarketResaleCursorListResponse = {
-  items: MarketResaleListing[];
-  nextCursor: string | null;
-  limit: number;
-};
-
 export type MarketResaleDetailResponse = {
   data: MarketResaleListing;
 };
@@ -159,15 +153,6 @@ export type FetchMarketResalesParams = {
   order?: MarketResaleSortOrder;
   sortOrder?: MarketResaleSortOrder;
   direction?: MarketResaleSortOrder;
-};
-
-export type FetchMarketResalesByCursorParams = Omit<
-  FetchMarketResalesParams,
-  "page" | "perPage"
-> & {
-  after?: string;
-  cursor?: string;
-  limit?: number;
 };
 
 const MARKET_RESALES_PATH = "/mall/market/resales";
@@ -280,9 +265,7 @@ function appendStringList(
 }
 
 function buildMarketResaleSearchParams(
-  params:
-    | FetchMarketResalesParams
-    | FetchMarketResalesByCursorParams = {},
+  params: FetchMarketResalesParams = {},
 ): URLSearchParams {
   const searchParams =
     new URLSearchParams();
@@ -290,17 +273,13 @@ function buildMarketResaleSearchParams(
   appendNumber(
     searchParams,
     "page",
-    "page" in params
-      ? params.page
-      : undefined,
+    params.page,
   );
 
   appendNumber(
     searchParams,
     "perPage",
-    "perPage" in params
-      ? params.perPage
-      : undefined,
+    params.perPage,
   );
 
   appendString(
@@ -452,30 +431,6 @@ function buildMarketResaleSearchParams(
     "direction",
     params.direction,
   );
-
-  if ("after" in params) {
-    appendString(
-      searchParams,
-      "after",
-      params.after,
-    );
-  }
-
-  if ("cursor" in params) {
-    appendString(
-      searchParams,
-      "cursor",
-      params.cursor,
-    );
-  }
-
-  if ("limit" in params) {
-    appendNumber(
-      searchParams,
-      "limit",
-      params.limit,
-    );
-  }
 
   return searchParams;
 }
@@ -779,97 +734,6 @@ export async function fetchMarketResales(
     });
 
   return readJsonResponse<MarketResaleListResponse>(
-    response,
-    "マーケット一覧APIがJSON以外を返しました。",
-  );
-}
-
-export async function fetchMarketResalesByCursor(
-  params: FetchMarketResalesByCursorParams = {},
-): Promise<MarketResaleCursorListResponse> {
-  const apiBaseUrl =
-    normalizeApiBaseUrl();
-
-  if (!apiBaseUrl) {
-    throw new Error(
-      "API Base URLが未設定です。",
-    );
-  }
-
-  const searchParams =
-    buildMarketResaleSearchParams(
-      params,
-    );
-
-  searchParams.set(
-    "mode",
-    "cursor",
-  );
-
-  const query =
-    searchParams.toString();
-
-  const url =
-    `${apiBaseUrl}${MARKET_RESALES_PATH}` +
-    `${query ? `?${query}` : ""}`;
-
-  const response =
-    await fetch(url, {
-      method: "GET",
-
-      headers: {
-        Accept:
-          "application/json",
-      },
-
-      credentials:
-        "include",
-    });
-
-  return readJsonResponse<MarketResaleCursorListResponse>(
-    response,
-    "マーケット一覧APIがJSON以外を返しました。",
-  );
-}
-
-export async function fetchMarketResalesCursorEndpoint(
-  params: FetchMarketResalesByCursorParams = {},
-): Promise<MarketResaleCursorListResponse> {
-  const apiBaseUrl =
-    normalizeApiBaseUrl();
-
-  if (!apiBaseUrl) {
-    throw new Error(
-      "API Base URLが未設定です。",
-    );
-  }
-
-  const searchParams =
-    buildMarketResaleSearchParams(
-      params,
-    );
-
-  const query =
-    searchParams.toString();
-
-  const url =
-    `${apiBaseUrl}${MARKET_RESALES_PATH}/cursor` +
-    `${query ? `?${query}` : ""}`;
-
-  const response =
-    await fetch(url, {
-      method: "GET",
-
-      headers: {
-        Accept:
-          "application/json",
-      },
-
-      credentials:
-        "include",
-    });
-
-  return readJsonResponse<MarketResaleCursorListResponse>(
     response,
     "マーケット一覧APIがJSON以外を返しました。",
   );

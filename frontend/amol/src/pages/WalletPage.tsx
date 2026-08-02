@@ -1,4 +1,5 @@
 // frontend/amol/src/pages/WalletPage.tsx
+
 import { useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
@@ -20,7 +21,6 @@ export default function WalletPage() {
   const navigate = useNavigate();
 
   const {
-    avatarId,
     avatarName,
     avatarIcon,
     profile,
@@ -44,23 +44,44 @@ export default function WalletPage() {
 
     params.set("mintAddress", token.mintAddress);
 
-    if (token.productId) params.set("productId", token.productId);
-    if (token.brandId) params.set("brandId", token.brandId);
-    if (token.brandName) params.set("brandName", token.brandName);
-    if (token.productName) params.set("productName", token.productName);
+    if (token.productId) {
+      params.set("productId", token.productId);
+    }
+
+    if (token.brandId) {
+      params.set("brandId", token.brandId);
+    }
+
+    if (token.brandName) {
+      params.set("brandName", token.brandName);
+    }
+
+    if (token.productName) {
+      params.set("productName", token.productName);
+    }
+
     if (token.productBlueprintId) {
       params.set("productBlueprintId", token.productBlueprintId);
     }
+
     if (token.tokenBlueprintId) {
       params.set("tokenBlueprintId", token.tokenBlueprintId);
     }
-    if (token.metadataUri) params.set("metadataUri", token.metadataUri);
+
+    if (token.metadataUri) {
+      params.set("metadataUri", token.metadataUri);
+    }
 
     const tokenName = token.metadata?.name || "";
     const tokenIconUrl = token.metadata?.image || "";
 
-    if (tokenName) params.set("tokenName", tokenName);
-    if (tokenIconUrl) params.set("tokenIconUrl", tokenIconUrl);
+    if (tokenName) {
+      params.set("tokenName", tokenName);
+    }
+
+    if (tokenIconUrl) {
+      params.set("tokenIconUrl", tokenIconUrl);
+    }
 
     navigate(`/contents?${params.toString()}`);
   };
@@ -97,11 +118,16 @@ export default function WalletPage() {
         </div>
       ) : null}
 
-      {!tokenLoading && !tokenError && !hasTokens ? <WalletTokenEmpty /> : null}
+      {!tokenLoading && !tokenError && !hasTokens ? (
+        <WalletTokenEmpty />
+      ) : null}
 
       {!tokenLoading && !tokenError && hasTokens
         ? walletTokens.map((token) => (
-            <div key={token.mintAddress} className="wallet-page-token-list__item">
+            <div
+              key={token.mintAddress}
+              className="wallet-page-token-list__item"
+            >
               <WalletTokenContentsCard
                 tokenIconUrl={token.metadata?.image || null}
                 tokenName={token.metadata?.name || ""}
@@ -123,14 +149,17 @@ export default function WalletPage() {
               avatarName={avatarName}
               avatarIcon={avatarIcon}
               profile={profile}
-              isOwnAvatar={true}
+              isOwnAvatar
             />
 
-            <WalletProfileActions avatarId={avatarId} isOwnAvatar={true} />
+            <WalletProfileActions />
           </aside>
 
           <div className="wallet-page-layout__main">
-            <WalletTabs activeTab={activeTab} onChange={setActiveTab} />
+            <WalletTabs
+              activeTab={activeTab}
+              onChange={setActiveTab}
+            />
 
             {activeTab === "history" ? (
               <WalletHistoryPanel
@@ -145,7 +174,9 @@ export default function WalletPage() {
             {activeTab === "tokens" ? renderTokenList() : null}
 
             {activeTab === "resales" ? (
-              <WalletResalePanel onItemClick={handleOpenResaleDetail} />
+              <WalletResalePanel
+                onItemClick={handleOpenResaleDetail}
+              />
             ) : null}
           </div>
         </div>

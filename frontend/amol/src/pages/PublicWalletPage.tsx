@@ -1,4 +1,5 @@
 // frontend/amol/src/pages/PublicWalletPage.tsx
+
 import { useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
@@ -7,7 +8,6 @@ import "../styles/wallet-page/resale-panel.css";
 
 import Layout from "../components/layout/Layout";
 import WalletProfile from "../features/wallet/components/WalletProfile";
-import WalletProfileActions from "../features/wallet/components/WalletProfileActions";
 import WalletResalePanel from "../features/wallet/components/WalletResalePanel";
 import { useWalletPage } from "../features/wallet/hooks/useWalletPage";
 
@@ -53,19 +53,12 @@ export default function PublicWalletPage() {
             ) : null}
 
             {!loading && !error ? (
-              <>
-                <WalletProfile
-                  avatarName={avatarName}
-                  avatarIcon={avatarIcon}
-                  profile={profile}
-                  isOwnAvatar={false}
-                />
-
-                <WalletProfileActions
-                  avatarId={targetAvatarId}
-                  isOwnAvatar={false}
-                />
-              </>
+              <WalletProfile
+                avatarName={avatarName}
+                avatarIcon={avatarIcon}
+                profile={profile}
+                isOwnAvatar={false}
+              />
             ) : null}
           </aside>
 

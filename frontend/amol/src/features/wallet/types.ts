@@ -4,8 +4,6 @@ export type WalletAvatar = {
   avatarName: string;
   avatarIcon: string;
   profile: string;
-  followerCount: number;
-  followingCount: number;
 };
 
 export type WalletTabKey =

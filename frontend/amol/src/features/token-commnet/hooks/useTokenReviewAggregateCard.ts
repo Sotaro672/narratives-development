@@ -17,39 +17,20 @@ import type {
 
 type UseTokenReviewAggregateCardOptions = {
   tokenBlueprintId: string;
-  autoFetch?: boolean;
 };
 
 type UseTokenReviewAggregateCardReturn = {
-  aggregate: TokenBlueprintReviewAggregate | null;
   likeCount: number;
   dislikeCount: number;
   commentCount: number;
   loading: boolean;
-  errorMessage: string;
   enabled: boolean;
-  refreshAggregate: () => Promise<void>;
   handleLike: () => Promise<void>;
   handleDislike: () => Promise<void>;
 };
 
-function getErrorMessage(
-  error: unknown,
-  fallback: string,
-): string {
-  if (
-    error instanceof Error &&
-    error.message
-  ) {
-    return error.message;
-  }
-
-  return fallback;
-}
-
 export function useTokenReviewAggregateCard({
   tokenBlueprintId,
-  autoFetch = true,
 }: UseTokenReviewAggregateCardOptions): UseTokenReviewAggregateCardReturn {
   const [
     aggregate,
@@ -63,11 +44,6 @@ export function useTokenReviewAggregateCard({
     loading,
     setLoading,
   ] = useState(false);
-
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] = useState("");
 
   const enabled =
     Boolean(tokenBlueprintId);
@@ -85,13 +61,10 @@ export function useTokenReviewAggregateCard({
     useCallback(async () => {
       if (!tokenBlueprintId) {
         setAggregate(null);
-        setErrorMessage("");
-
         return;
       }
 
       setLoading(true);
-      setErrorMessage("");
 
       try {
         const result =
@@ -100,15 +73,8 @@ export function useTokenReviewAggregateCard({
           );
 
         setAggregate(result);
-      } catch (error) {
+      } catch {
         setAggregate(null);
-
-        setErrorMessage(
-          getErrorMessage(
-            error,
-            "レビュー集計の取得に失敗しました。",
-          ),
-        );
       } finally {
         setLoading(false);
       }
@@ -124,7 +90,6 @@ export function useTokenReviewAggregateCard({
       }
 
       setLoading(true);
-      setErrorMessage("");
 
       try {
         await upsertTokenBlueprintReaction({
@@ -138,13 +103,8 @@ export function useTokenReviewAggregateCard({
           );
 
         setAggregate(result);
-      } catch (error) {
-        setErrorMessage(
-          getErrorMessage(
-            error,
-            "いいねの更新に失敗しました。",
-          ),
-        );
+      } catch {
+        return;
       } finally {
         setLoading(false);
       }
@@ -163,7 +123,6 @@ export function useTokenReviewAggregateCard({
       }
 
       setLoading(true);
-      setErrorMessage("");
 
       try {
         await upsertTokenBlueprintReaction({
@@ -177,13 +136,8 @@ export function useTokenReviewAggregateCard({
           );
 
         setAggregate(result);
-      } catch (error) {
-        setErrorMessage(
-          getErrorMessage(
-            error,
-            "よくないねの更新に失敗しました。",
-          ),
-        );
+      } catch {
+        return;
       } finally {
         setLoading(false);
       }
@@ -193,31 +147,20 @@ export function useTokenReviewAggregateCard({
     ]);
 
   useEffect(() => {
-    if (!autoFetch) {
-      return;
-    }
-
     void refreshAggregate();
-  }, [
-    autoFetch,
-    refreshAggregate,
-  ]);
+  }, [refreshAggregate]);
 
   useEffect(() => {
     setAggregate(null);
-    setErrorMessage("");
     setLoading(false);
   }, [tokenBlueprintId]);
 
   return {
-    aggregate,
     likeCount,
     dislikeCount,
     commentCount,
     loading,
-    errorMessage,
     enabled,
-    refreshAggregate,
     handleLike,
     handleDislike,
   };

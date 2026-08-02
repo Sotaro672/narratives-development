@@ -1,4 +1,5 @@
 // frontend/amol/src/features/resale/api/resaleApi.ts
+
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
@@ -18,11 +19,9 @@ export type ResaleListing = {
   condition?: string;
   description?: string;
   imageId?: string;
-
   productName?: string;
   tokenName?: string;
   brandName?: string;
-
   createdBy?: string;
   createdAt?: string;
   updatedBy?: string | null;
@@ -104,8 +103,8 @@ async function readApiJson<T>(res: Response): Promise<T> {
 
 async function fetchWithAuth<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await getFirebaseIdToken();
-
   const headers = new Headers(init?.headers);
+
   headers.set("Authorization", `Bearer ${token}`);
 
   if (init?.body && !headers.has("Content-Type")) {
@@ -133,7 +132,8 @@ async function uploadResaleConditionImage(params: {
 }): Promise<ResaleConditionImage> {
   const imageID = createUploadImageID();
   const safeFileName = sanitizeStorageFileName(params.file.name);
-  const objectPath = `resale-condition-images/${params.resaleId}/${imageID}/${safeFileName}`;
+  const objectPath =
+    `resale-condition-images/${params.resaleId}/${imageID}/${safeFileName}`;
   const storageRef = ref(storage, objectPath);
   const mimeType = params.file.type || "application/octet-stream";
 
@@ -170,23 +170,6 @@ async function createResaleConditionImage(
         id: image.id,
         url: image.url,
         displayOrder: image.displayOrder,
-      }),
-    },
-  );
-
-  return json.data ?? null;
-}
-
-async function setPrimaryResaleImage(params: {
-  resaleId: string;
-  imageId: string;
-}): Promise<ResaleListing | null> {
-  const json = await fetchWithAuth<ApiDataResponse<ResaleListing>>(
-    `/mall/me/resales/${encodeURIComponent(params.resaleId)}/primary-image`,
-    {
-      method: "PUT",
-      body: JSON.stringify({
-        imageId: params.imageId,
       }),
     },
   );
@@ -237,7 +220,7 @@ export async function createResaleListing(
     return created;
   }
 
-  const updated = await setPrimaryResaleImage({
+  const updated = await updatePrimaryResaleImage({
     resaleId,
     imageId: uploadedImages[0].id,
   });
@@ -266,6 +249,7 @@ export async function updateResaleListing(
   }
 
   const condition = nonEmptyOrUndefined(params.condition);
+
   if (condition) {
     body.condition = condition;
   }
@@ -275,6 +259,7 @@ export async function updateResaleListing(
   }
 
   const status = nonEmptyOrUndefined(params.status);
+
   if (status) {
     body.status = status;
   }
@@ -284,6 +269,25 @@ export async function updateResaleListing(
     {
       method: "PUT",
       body: JSON.stringify(body),
+    },
+  );
+
+  return json.data ?? null;
+}
+
+export async function getMyResaleListing(
+  resaleId: string,
+): Promise<ResaleListing | null> {
+  const id = resaleId.trim();
+
+  if (!id) {
+    throw new Error("resaleId is required");
+  }
+
+  const json = await fetchWithAuth<ApiDataResponse<ResaleListing>>(
+    `/mall/me/resales/${encodeURIComponent(id)}`,
+    {
+      method: "GET",
     },
   );
 
@@ -346,7 +350,9 @@ export async function listResaleListingsByAvatarId(
   searchParams.set("perPage", String(params.perPage ?? 50));
 
   return fetchWithAuth<ListMyResaleListingsResponse>(
-    `/mall/resales/avatar/${encodeURIComponent(avatarId)}?${searchParams.toString()}`,
+    `/mall/resales/avatar/${encodeURIComponent(
+      avatarId,
+    )}?${searchParams.toString()}`,
     {
       method: "GET",
     },
@@ -392,8 +398,6 @@ export async function listPublicResaleConditionImages(
 
   return result.data ?? result.items ?? [];
 }
-
-// frontend/amol/src/features/resale/api/resaleApi.ts に追加
 
 export async function addMyResaleConditionImages(params: {
   resaleId: string;
@@ -446,10 +450,13 @@ export async function deleteMyResaleConditionImage(params: {
     throw new Error("imageId is required");
   }
 
-  await fetchWithAuth<{ ok?: boolean; error?: string }>(
-    `/mall/me/resales/${encodeURIComponent(resaleId)}/images/${encodeURIComponent(
-      imageId,
-    )}`,
+  await fetchWithAuth<{
+    ok?: boolean;
+    error?: string;
+  }>(
+    `/mall/me/resales/${encodeURIComponent(
+      resaleId,
+    )}/images/${encodeURIComponent(imageId)}`,
     {
       method: "DELETE",
     },
@@ -460,20 +467,44 @@ export async function updatePrimaryResaleImage(params: {
   resaleId: string;
   imageId: string;
 }): Promise<ResaleListing | null> {
-  return setPrimaryResaleImage(params);
+  const resaleId = params.resaleId.trim();
+  const imageId = params.imageId.trim();
+
+  if (!resaleId) {
+    throw new Error("resaleId is required");
+  }
+
+  if (!imageId) {
+    throw new Error("imageId is required");
+  }
+
+  const json = await fetchWithAuth<ApiDataResponse<ResaleListing>>(
+    `/mall/me/resales/${encodeURIComponent(resaleId)}/primary-image`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        imageId,
+      }),
+    },
+  );
+
+  return json.data ?? null;
 }
 
-export async function deleteResaleListing(resaleId: string): Promise<void> {
+export async function deleteResaleListing(
+  resaleId: string,
+): Promise<void> {
   const id = resaleId.trim();
 
   if (!id) {
     throw new Error("resaleId is required");
   }
 
-  await fetchWithAuth<{ ok?: boolean; resaleId?: string; error?: string }>(
-    `/mall/me/resales/${encodeURIComponent(id)}`,
-    {
-      method: "DELETE",
-    },
-  );
+  await fetchWithAuth<{
+    ok?: boolean;
+    resaleId?: string;
+    error?: string;
+  }>(`/mall/me/resales/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }

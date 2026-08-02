@@ -76,8 +76,6 @@ function parseWalletAvatar(
       toStringValue(body.avatarIcon),
     profile:
       toStringValue(body.profile),
-    followerCount: 0,
-    followingCount: 0,
   };
 }
 
