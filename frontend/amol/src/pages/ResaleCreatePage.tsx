@@ -25,7 +25,6 @@ type ResalePageLocationState = {
   tokenBlueprintId?: string;
   tokenName?: string;
   tokenIconUrl?: string;
-  currentAvatarId?: string;
 };
 
 type ConditionMediaItem = MediaUploaderItem & {
@@ -86,7 +85,6 @@ export default function ResalePage() {
   const tokenBlueprintId = normalizeText(locationState.tokenBlueprintId);
   const tokenName = normalizeText(locationState.tokenName);
   const tokenIconUrl = normalizeText(locationState.tokenIconUrl);
-  const currentAvatarId = normalizeText(locationState.currentAvatarId);
 
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
@@ -108,7 +106,6 @@ export default function ResalePage() {
 
   const canSubmit =
     hasRequiredListingTarget &&
-    Boolean(currentAvatarId) &&
     Boolean(price.replace(/[^\d]/g, "")) &&
     hasConditionMedia;
 
@@ -210,7 +207,6 @@ export default function ResalePage() {
         productId,
         brandId,
         productBlueprintId,
-        avatarId: currentAvatarId,
         price: Number(price),
         condition,
         description,
@@ -306,12 +302,6 @@ export default function ResalePage() {
                   ) : null}
                 </div>
               </div>
-
-              {!currentAvatarId ? (
-                <p className="page-error" role="alert">
-                  出品者情報が取得できていません。再度ウォレットから開き直してください。
-                </p>
-              ) : null}
             </section>
 
             <section className="page-card">

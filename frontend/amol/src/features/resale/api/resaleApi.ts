@@ -46,7 +46,6 @@ export type CreateResaleListingParams = {
   productId: string;
   brandId?: string;
   productBlueprintId?: string;
-  avatarId?: string;
   price: number;
   condition: string;
   description: string;
@@ -208,7 +207,6 @@ export async function createResaleListing(
         productId: params.productId,
         brandId: nonEmptyOrUndefined(params.brandId),
         productBlueprintId: nonEmptyOrUndefined(params.productBlueprintId),
-        avatarId: nonEmptyOrUndefined(params.avatarId),
         price: params.price,
         condition: params.condition,
         description: params.description,
@@ -464,6 +462,7 @@ export async function updatePrimaryResaleImage(params: {
 }): Promise<ResaleListing | null> {
   return setPrimaryResaleImage(params);
 }
+
 export async function deleteResaleListing(resaleId: string): Promise<void> {
   const id = resaleId.trim();
 
