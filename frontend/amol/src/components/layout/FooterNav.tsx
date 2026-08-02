@@ -1,4 +1,5 @@
 // frontend/amol/src/components/layout/FooterNav.tsx
+
 import { useEffect, useState } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { NavLink, useLocation } from "react-router-dom";
@@ -10,6 +11,9 @@ import {
   Store,
   UserRound,
 } from "lucide-react";
+
+import { getMyAvatar } from "../../features/avatar/api/avatarApi";
+
 import "./footer.css";
 
 type FooterNavProps =
@@ -62,22 +66,18 @@ type FooterNavProps =
       onSubmit: () => void | Promise<void>;
     };
 
-type AvatarResponse = {
-  avatarId?: string;
-  avatarName?: string;
-  avatarIcon?: string | null;
-};
-
-function isAvatarResponse(value: unknown): value is AvatarResponse {
-  if (!value || typeof value !== "object") return false;
-
-  return "avatarIcon" in value || "avatarName" in value || "avatarId" in value;
-}
-
-export default function FooterNav(props: FooterNavProps) {
+export default function FooterNav(
+  props: FooterNavProps,
+) {
   const location = useLocation();
-  const [avatarIcon, setAvatarIcon] = useState("");
-  const [reviewRatingOpen, setReviewRatingOpen] = useState(false);
+
+  const [avatarIcon, setAvatarIcon] =
+    useState("");
+
+  const [
+    reviewRatingOpen,
+    setReviewRatingOpen,
+  ] = useState(false);
 
   useEffect(() => {
     if (
@@ -91,58 +91,39 @@ export default function FooterNav(props: FooterNavProps) {
 
     const auth = getAuth();
 
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setAvatarIcon("");
-        return;
-      }
-
-      try {
-        const backendUrl = import.meta.env.VITE_API_BASE_URL;
-
-        if (!backendUrl) {
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      async (user) => {
+        if (!user) {
           setAvatarIcon("");
           return;
         }
 
-        const idToken = await user.getIdToken(true);
+        try {
+          const backendUrl =
+            import.meta.env.VITE_API_BASE_URL;
 
-        const response = await fetch(
-          `${String(backendUrl).replace(/\/$/, "")}/mall/me/avatars`,
-          {
-            method: "GET",
-            headers: {
-              Accept: "application/json",
-              Authorization: `Bearer ${idToken}`,
-            },
-            credentials: "include",
-          },
-        );
+          if (!backendUrl) {
+            setAvatarIcon("");
+            return;
+          }
 
-        if (!response.ok) {
-          setAvatarIcon("");
-          return;
-        }
+          const idToken =
+            await user.getIdToken(true);
 
-        const contentType = response.headers.get("content-type") || "";
+          const avatar = await getMyAvatar({
+            backendUrl: String(backendUrl),
+            idToken,
+          });
 
-        if (!contentType.includes("application/json")) {
-          setAvatarIcon("");
-          return;
-        }
-
-        const responseBody: unknown = await response.json();
-
-        if (isAvatarResponse(responseBody) && responseBody.avatarIcon) {
-          setAvatarIcon(responseBody.avatarIcon);
-        } else {
+          setAvatarIcon(
+            avatar?.avatarIcon ?? "",
+          );
+        } catch {
           setAvatarIcon("");
         }
-      } catch (error) {
-        console.error(error);
-        setAvatarIcon("");
-      }
-    });
+      },
+    );
 
     return unsubscribe;
   }, [props.variant]);
@@ -152,12 +133,20 @@ export default function FooterNav(props: FooterNavProps) {
   }, [location.pathname]);
 
   if (props.variant === "action") {
-    const { buttonLabel, disabled = false, onButtonClick } = props;
-    const isResalePageAction = location.pathname === "/resale";
+    const {
+      buttonLabel,
+      disabled = false,
+      onButtonClick,
+    } = props;
+
+    const isResalePageAction =
+      location.pathname === "/resale";
 
     const footerClassName = [
       "footer-nav--action",
-      isResalePageAction ? "footer-nav--resale-action" : "",
+      isResalePageAction
+        ? "footer-nav--resale-action"
+        : "",
     ]
       .filter(Boolean)
       .join(" ");
@@ -194,7 +183,10 @@ export default function FooterNav(props: FooterNavProps) {
       <footer className="footer-nav--triple-action">
         <button
           type="button"
-          className="footer-nav__triple-action-button footer-nav__triple-action-button--secondary"
+          className={[
+            "footer-nav__triple-action-button",
+            "footer-nav__triple-action-button--secondary",
+          ].join(" ")}
           onClick={onLeftButtonClick}
           disabled={leftButtonDisabled}
           aria-label={leftButtonLabel}
@@ -204,7 +196,10 @@ export default function FooterNav(props: FooterNavProps) {
 
         <button
           type="button"
-          className="footer-nav__triple-action-button footer-nav__triple-action-button--primary"
+          className={[
+            "footer-nav__triple-action-button",
+            "footer-nav__triple-action-button--primary",
+          ].join(" ")}
           onClick={onCenterButtonClick}
           disabled={centerButtonDisabled}
           aria-label={centerButtonLabel}
@@ -214,7 +209,10 @@ export default function FooterNav(props: FooterNavProps) {
 
         <button
           type="button"
-          className="footer-nav__triple-action-button footer-nav__triple-action-button--danger"
+          className={[
+            "footer-nav__triple-action-button",
+            "footer-nav__triple-action-button--danger",
+          ].join(" ")}
           onClick={onRightButtonClick}
           disabled={rightButtonDisabled}
           aria-label={rightButtonLabel}
@@ -236,7 +234,9 @@ export default function FooterNav(props: FooterNavProps) {
       onSubmit,
     } = props;
 
-    const canSubmit = !disabled && value.trim().length > 0;
+    const canSubmit =
+      !disabled &&
+      value.trim().length > 0;
 
     return (
       <footer className="footer-nav--comment-action">
@@ -247,7 +247,9 @@ export default function FooterNav(props: FooterNavProps) {
           placeholder={placeholder}
           disabled={posting}
           aria-label={placeholder}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) =>
+            onChange(event.target.value)
+          }
         />
 
         <button
@@ -257,7 +259,9 @@ export default function FooterNav(props: FooterNavProps) {
           aria-label={buttonLabel}
           onClick={() => void onSubmit()}
         >
-          {posting ? "投稿中" : buttonLabel}
+          {posting
+            ? "投稿中"
+            : buttonLabel}
         </button>
       </footer>
     );
@@ -276,10 +280,22 @@ export default function FooterNav(props: FooterNavProps) {
       onSubmit,
     } = props;
 
-    const canSubmit = !disabled && !posting && value.trim().length > 0;
-    const ratingOptions = [5, 4, 3, 2, 1];
+    const canSubmit =
+      !disabled &&
+      !posting &&
+      value.trim().length > 0;
 
-    const handleRatingChange = (nextRating: number) => {
+    const ratingOptions = [
+      5,
+      4,
+      3,
+      2,
+      1,
+    ];
+
+    const handleRatingChange = (
+      nextRating: number,
+    ) => {
       onRatingChange(nextRating);
       setReviewRatingOpen(false);
     };
@@ -293,10 +309,19 @@ export default function FooterNav(props: FooterNavProps) {
             disabled={posting}
             aria-label="評価"
             aria-haspopup="listbox"
-            aria-expanded={reviewRatingOpen}
-            onClick={() => setReviewRatingOpen((open) => !open)}
+            aria-expanded={
+              reviewRatingOpen
+            }
+            onClick={() =>
+              setReviewRatingOpen(
+                (open) => !open,
+              )
+            }
           >
-            <span className="footer-nav__review-rating-stars">★{rating}</span>
+            <span className="footer-nav__review-rating-stars">
+              ★{rating}
+            </span>
+
             <span
               className="footer-nav__review-rating-caret"
               aria-hidden="true"
@@ -306,38 +331,56 @@ export default function FooterNav(props: FooterNavProps) {
           </button>
 
           {reviewRatingOpen ? (
-            <div className="footer-nav__review-rating-popover" role="listbox">
-              {ratingOptions.map((nextRating) => (
-                <button
-                  key={nextRating}
-                  type="button"
-                  className={[
-                    "footer-nav__review-rating-option",
-                    rating === nextRating
-                      ? "footer-nav__review-rating-option--selected"
-                      : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  role="option"
-                  aria-selected={rating === nextRating}
-                  onClick={() => handleRatingChange(nextRating)}
-                >
-                  ★{nextRating}
-                </button>
-              ))}
+            <div
+              className="footer-nav__review-rating-popover"
+              role="listbox"
+            >
+              {ratingOptions.map(
+                (nextRating) => (
+                  <button
+                    key={nextRating}
+                    type="button"
+                    className={[
+                      "footer-nav__review-rating-option",
+                      rating ===
+                      nextRating
+                        ? "footer-nav__review-rating-option--selected"
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    role="option"
+                    aria-selected={
+                      rating ===
+                      nextRating
+                    }
+                    onClick={() =>
+                      handleRatingChange(
+                        nextRating,
+                      )
+                    }
+                  >
+                    ★{nextRating}
+                  </button>
+                ),
+              )}
             </div>
           ) : null}
         </div>
 
         <textarea
-          className="footer-nav__comment-input footer-nav__review-input"
+          className={[
+            "footer-nav__comment-input",
+            "footer-nav__review-input",
+          ].join(" ")}
           value={value}
           rows={1}
           placeholder={placeholder}
           disabled={posting}
           aria-label={placeholder}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) =>
+            onChange(event.target.value)
+          }
         />
 
         <button
@@ -347,20 +390,33 @@ export default function FooterNav(props: FooterNavProps) {
           aria-label={buttonLabel}
           onClick={() => void onSubmit()}
         >
-          {posting ? "投稿中" : buttonLabel}
+          {posting
+            ? "投稿中"
+            : buttonLabel}
         </button>
       </footer>
     );
   }
 
-  const renderMode = props.renderMode ?? "bottom";
-  const onNavigate = props.onNavigate;
-  const centerActionLabel = props.centerActionLabel?.trim() ?? "";
+  const renderMode =
+    props.renderMode ?? "bottom";
+
+  const onNavigate =
+    props.onNavigate;
+
+  const centerActionLabel =
+    props.centerActionLabel?.trim() ??
+    "";
+
   const hasCenterAction =
-    centerActionLabel !== "" && typeof props.onCenterActionClick === "function";
+    centerActionLabel !== "" &&
+    typeof props.onCenterActionClick ===
+      "function";
 
   const footerClassName =
-    renderMode === "sidebar" ? "footer-nav footer-nav--sidebar" : "footer-nav";
+    renderMode === "sidebar"
+      ? "footer-nav footer-nav--sidebar"
+      : "footer-nav";
 
   return (
     <footer className={footerClassName}>
@@ -368,53 +424,110 @@ export default function FooterNav(props: FooterNavProps) {
         to="/lists"
         onClick={onNavigate}
         className={({ isActive }) =>
-          `footer-nav__item${isActive ? " footer-nav__item--active" : ""}`
+          `footer-nav__item${
+            isActive
+              ? " footer-nav__item--active"
+              : ""
+          }`
         }
       >
-        <span className="footer-nav__icon" aria-hidden="true">
-          <ShoppingBag className="footer-nav__svg-icon" strokeWidth={2.2} />
+        <span
+          className="footer-nav__icon"
+          aria-hidden="true"
+        >
+          <ShoppingBag
+            className="footer-nav__svg-icon"
+            strokeWidth={2.2}
+          />
         </span>
-        <span className="footer-nav__label">モール</span>
+
+        <span className="footer-nav__label">
+          モール
+        </span>
       </NavLink>
 
       <NavLink
         to="/market"
         onClick={onNavigate}
         className={({ isActive }) =>
-          `footer-nav__item${isActive ? " footer-nav__item--active" : ""}`
+          `footer-nav__item${
+            isActive
+              ? " footer-nav__item--active"
+              : ""
+          }`
         }
       >
-        <span className="footer-nav__icon" aria-hidden="true">
-          <Store className="footer-nav__svg-icon" strokeWidth={2.2} />
+        <span
+          className="footer-nav__icon"
+          aria-hidden="true"
+        >
+          <Store
+            className="footer-nav__svg-icon"
+            strokeWidth={2.2}
+          />
         </span>
-        <span className="footer-nav__label">マーケット</span>
+
+        <span className="footer-nav__label">
+          マーケット
+        </span>
       </NavLink>
 
       {hasCenterAction ? (
         <button
           type="button"
-          onClick={() => void props.onCenterActionClick?.()}
-          disabled={props.centerActionDisabled}
-          className="footer-nav__item footer-nav__item--button"
-          aria-label={centerActionLabel}
+          onClick={() =>
+            void props.onCenterActionClick?.()
+          }
+          disabled={
+            props.centerActionDisabled
+          }
+          className={[
+            "footer-nav__item",
+            "footer-nav__item--button",
+          ].join(" ")}
+          aria-label={
+            centerActionLabel
+          }
         >
-          <span className="footer-nav__icon" aria-hidden="true">
-            <MessageCircle className="footer-nav__svg-icon" strokeWidth={2.2} />
+          <span
+            className="footer-nav__icon"
+            aria-hidden="true"
+          >
+            <MessageCircle
+              className="footer-nav__svg-icon"
+              strokeWidth={2.2}
+            />
           </span>
-          <span className="footer-nav__label">{centerActionLabel}</span>
+
+          <span className="footer-nav__label">
+            {centerActionLabel}
+          </span>
         </button>
       ) : (
         <NavLink
           to="/scan"
           onClick={onNavigate}
           className={({ isActive }) =>
-            `footer-nav__item${isActive ? " footer-nav__item--active" : ""}`
+            `footer-nav__item${
+              isActive
+                ? " footer-nav__item--active"
+                : ""
+            }`
           }
         >
-          <span className="footer-nav__icon" aria-hidden="true">
-            <ScanLine className="footer-nav__svg-icon" strokeWidth={2.2} />
+          <span
+            className="footer-nav__icon"
+            aria-hidden="true"
+          >
+            <ScanLine
+              className="footer-nav__svg-icon"
+              strokeWidth={2.2}
+            />
           </span>
-          <span className="footer-nav__label">スキャン</span>
+
+          <span className="footer-nav__label">
+            スキャン
+          </span>
         </NavLink>
       )}
 
@@ -422,30 +535,60 @@ export default function FooterNav(props: FooterNavProps) {
         to="/favorites"
         onClick={onNavigate}
         className={({ isActive }) =>
-          `footer-nav__item${isActive ? " footer-nav__item--active" : ""}`
+          `footer-nav__item${
+            isActive
+              ? " footer-nav__item--active"
+              : ""
+          }`
         }
       >
-        <span className="footer-nav__icon" aria-hidden="true">
-          <Heart className="footer-nav__svg-icon" strokeWidth={2.2} />
+        <span
+          className="footer-nav__icon"
+          aria-hidden="true"
+        >
+          <Heart
+            className="footer-nav__svg-icon"
+            strokeWidth={2.2}
+          />
         </span>
-        <span className="footer-nav__label">お気に入り</span>
+
+        <span className="footer-nav__label">
+          お気に入り
+        </span>
       </NavLink>
 
       <NavLink
         to="/wallet"
         onClick={onNavigate}
         className={({ isActive }) =>
-          `footer-nav__item${isActive ? " footer-nav__item--active" : ""}`
+          `footer-nav__item${
+            isActive
+              ? " footer-nav__item--active"
+              : ""
+          }`
         }
       >
-        <span className="footer-nav__icon" aria-hidden="true">
+        <span
+          className="footer-nav__icon"
+          aria-hidden="true"
+        >
           {avatarIcon ? (
-            <img src={avatarIcon} alt="" className="footer-nav__avatar-icon" />
+            <img
+              src={avatarIcon}
+              alt=""
+              className="footer-nav__avatar-icon"
+            />
           ) : (
-            <UserRound className="footer-nav__svg-icon" strokeWidth={2.2} />
+            <UserRound
+              className="footer-nav__svg-icon"
+              strokeWidth={2.2}
+            />
           )}
         </span>
-        <span className="footer-nav__label">ウォレット</span>
+
+        <span className="footer-nav__label">
+          ウォレット
+        </span>
       </NavLink>
     </footer>
   );

@@ -1,15 +1,26 @@
 // frontend/amol/src/components/layout/header/useHeaderController.ts
-import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { onAuthStateChanged, type User } from "firebase/auth";
 
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import {
+  onAuthStateChanged,
+  type User,
+} from "firebase/auth";
+
+import { getMyAvatar } from "../../../features/avatar/api/avatarApi";
 import { auth } from "../../../lib/firebase";
 import { WALLET_PATH } from "../../../lib/navigation";
-import type { HeaderActionState, HeaderProps } from "./types";
-
-type MeAvatarResponse = {
-  avatarId?: string;
-};
+import type {
+  HeaderActionState,
+  HeaderProps,
+} from "./types";
 
 type CartItemDTO = {
   qty?: number;
@@ -19,43 +30,35 @@ type CartItemDTO = {
 
 type CartDTO = {
   avatarId?: string;
-  items?: Record<string, CartItemDTO> | CartItemDTO[];
+  items?:
+    | Record<string, CartItemDTO>
+    | CartItemDTO[];
 };
 
 function getApiBaseUrl(): string {
-  const env = import.meta.env.VITE_API_BASE_URL;
+  const env =
+    import.meta.env.VITE_API_BASE_URL;
 
-  if (typeof env === "string" && env.trim() !== "") {
+  if (
+    typeof env === "string" &&
+    env.trim() !== ""
+  ) {
     return env.replace(/\/$/, "");
   }
 
   return "";
 }
 
-function unwrapData(value: unknown): unknown {
-  if (!value || typeof value !== "object") {
-    return value;
-  }
+function getCartItemQty(
+  item: CartItemDTO,
+): number {
+  const rawQty =
+    item.qty ?? item.quantity;
 
-  const record = value as Record<string, unknown>;
-
-  return record.data ?? value;
-}
-
-function isMeAvatarResponse(value: unknown): value is MeAvatarResponse {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const record = value as Record<string, unknown>;
-
-  return typeof record.avatarId === "string";
-}
-
-function getCartItemQty(item: CartItemDTO): number {
-  const rawQty = item.qty ?? item.quantity;
-
-  if (typeof rawQty === "number" && Number.isFinite(rawQty)) {
+  if (
+    typeof rawQty === "number" &&
+    Number.isFinite(rawQty)
+  ) {
     return Math.max(0, rawQty);
   }
 
@@ -70,7 +73,9 @@ function getCartItemQty(item: CartItemDTO): number {
   return 0;
 }
 
-function sumCartItemQty(cart: CartDTO): number {
+function sumCartItemQty(
+  cart: CartDTO,
+): number {
   const items = cart.items;
 
   if (!items) {
@@ -78,72 +83,72 @@ function sumCartItemQty(cart: CartDTO): number {
   }
 
   if (Array.isArray(items)) {
-    return items.reduce((sum, item) => sum + getCartItemQty(item), 0);
+    return items.reduce(
+      (sum, item) =>
+        sum + getCartItemQty(item),
+      0,
+    );
   }
 
   return Object.values(items).reduce(
-    (sum, item) => sum + getCartItemQty(item),
+    (sum, item) =>
+      sum + getCartItemQty(item),
     0,
   );
 }
 
-async function fetchCurrentAvatarId(args: {
-  apiBaseUrl: string;
-  currentUser: User;
-}): Promise<string> {
-  const { apiBaseUrl, currentUser } = args;
-  const idToken = await currentUser.getIdToken();
-
-  const response = await fetch(`${apiBaseUrl}/mall/me/avatars`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error("現在のアバター情報の取得に失敗しました。");
-  }
-
-  const contentType = response.headers.get("content-type") ?? "";
-
-  if (!contentType.includes("application/json")) {
-    throw new Error("現在のアバター情報APIがJSON以外を返しました。");
-  }
-
-  const responseBody: unknown = await response.json();
-  const data = unwrapData(responseBody);
-
-  if (!isMeAvatarResponse(data)) {
-    throw new Error("現在のアバター情報APIのレスポンス形式が不正です。");
-  }
-
-  const avatarId = data.avatarId?.trim();
-
-  if (!avatarId) {
-    throw new Error("現在のavatarIdが見つかりません。");
-  }
-
-  return avatarId;
-}
-
-async function fetchCartItemCount(args: {
-  apiBaseUrl: string;
-  currentUser: User;
-}): Promise<number> {
-  const { apiBaseUrl, currentUser } = args;
-
-  const avatarId = await fetchCurrentAvatarId({
+async function fetchCurrentAvatarId(
+  args: {
+    apiBaseUrl: string;
+    currentUser: User;
+  },
+): Promise<string> {
+  const {
     apiBaseUrl,
     currentUser,
+  } = args;
+
+  const idToken =
+    await currentUser.getIdToken();
+
+  const avatar = await getMyAvatar({
+    backendUrl: apiBaseUrl,
+    idToken,
   });
 
-  const idToken = await currentUser.getIdToken();
-  const searchParams = new URLSearchParams({
-    avatarId,
-  });
+  if (!avatar?.avatarId) {
+    throw new Error(
+      "現在のavatarIdが見つかりません。",
+    );
+  }
+
+  return avatar.avatarId;
+}
+
+async function fetchCartItemCount(
+  args: {
+    apiBaseUrl: string;
+    currentUser: User;
+  },
+): Promise<number> {
+  const {
+    apiBaseUrl,
+    currentUser,
+  } = args;
+
+  const avatarId =
+    await fetchCurrentAvatarId({
+      apiBaseUrl,
+      currentUser,
+    });
+
+  const idToken =
+    await currentUser.getIdToken();
+
+  const searchParams =
+    new URLSearchParams({
+      avatarId,
+    });
 
   const response = await fetch(
     `${apiBaseUrl}/mall/me/cart?${searchParams.toString()}`,
@@ -151,7 +156,8 @@ async function fetchCartItemCount(args: {
       method: "GET",
       headers: {
         Accept: "application/json",
-        Authorization: `Bearer ${idToken}`,
+        Authorization:
+          `Bearer ${idToken}`,
       },
       credentials: "include",
     },
@@ -161,13 +167,24 @@ async function fetchCartItemCount(args: {
     return 0;
   }
 
-  const contentType = response.headers.get("content-type") ?? "";
+  const contentType =
+    response.headers.get(
+      "content-type",
+    ) ?? "";
 
-  if (!contentType.includes("application/json")) {
+  if (
+    !contentType.includes(
+      "application/json",
+    )
+  ) {
     return 0;
   }
 
-  const data = (await response.json().catch(() => null)) as CartDTO | null;
+  const data = (
+    await response
+      .json()
+      .catch(() => null)
+  ) as CartDTO | null;
 
   if (!data) {
     return 0;
@@ -201,14 +218,40 @@ export function useHeaderController({
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [authResolved, setAuthResolved] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(false);
-  const [fetchedCartItemCount, setFetchedCartItemCount] = useState(0);
+  const [
+    menuOpen,
+    setMenuOpen,
+  ] = useState(false);
 
-  const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
+  const [
+    settingsOpen,
+    setSettingsOpen,
+  ] = useState(false);
+
+  const [
+    currentUser,
+    setCurrentUser,
+  ] = useState<User | null>(null);
+
+  const [
+    authResolved,
+    setAuthResolved,
+  ] = useState(false);
+
+  const [
+    isDesktop,
+    setIsDesktop,
+  ] = useState(false);
+
+  const [
+    fetchedCartItemCount,
+    setFetchedCartItemCount,
+  ] = useState(0);
+
+  const apiBaseUrl = useMemo(
+    () => getApiBaseUrl(),
+    [],
+  );
 
   useEffect(() => {
     setMenuOpen(false);
@@ -216,74 +259,115 @@ export function useHeaderController({
   }, [location.pathname]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      setAuthResolved(true);
-    });
+    const unsubscribe =
+      onAuthStateChanged(
+        auth,
+        (user) => {
+          setCurrentUser(user);
+          setAuthResolved(true);
+        },
+      );
 
     return unsubscribe;
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    if (
+      typeof window === "undefined"
+    ) {
       return;
     }
 
-    const desktopQuery = window.matchMedia("(min-width: 1024px)");
+    const desktopQuery =
+      window.matchMedia(
+        "(min-width: 1024px)",
+      );
 
-    const updateViewportState = () => {
-      setIsDesktop(desktopQuery.matches);
-    };
+    const updateViewportState =
+      () => {
+        setIsDesktop(
+          desktopQuery.matches,
+        );
+      };
 
     updateViewportState();
 
-    if (typeof desktopQuery.addEventListener === "function") {
-      desktopQuery.addEventListener("change", updateViewportState);
+    if (
+      typeof desktopQuery.addEventListener ===
+      "function"
+    ) {
+      desktopQuery.addEventListener(
+        "change",
+        updateViewportState,
+      );
 
       return () => {
-        desktopQuery.removeEventListener("change", updateViewportState);
+        desktopQuery.removeEventListener(
+          "change",
+          updateViewportState,
+        );
       };
     }
 
-    desktopQuery.addListener(updateViewportState);
+    desktopQuery.addListener(
+      updateViewportState,
+    );
 
     return () => {
-      desktopQuery.removeListener(updateViewportState);
+      desktopQuery.removeListener(
+        updateViewportState,
+      );
     };
   }, []);
 
-  const isLoggedIn = !!currentUser;
-  const isContactPage = location.pathname === "/contact";
+  const isLoggedIn =
+    !!currentUser;
+
+  const isContactPage =
+    location.pathname === "/contact";
 
   const isInfoPage =
     location.pathname === "/" ||
-    location.pathname === "/landing" ||
-    location.pathname === "/specified-commercial-transactions" ||
-    location.pathname === "/terms" ||
-    location.pathname === "/privacy-policy" ||
-    location.pathname === "/contact";
+    location.pathname ===
+      "/landing" ||
+    location.pathname ===
+      "/specified-commercial-transactions" ||
+    location.pathname ===
+      "/terms" ||
+    location.pathname ===
+      "/privacy-policy" ||
+    location.pathname ===
+      "/contact";
 
-  const isRoomDetailPage = /^\/lists\/[^/]+$/.test(location.pathname);
+  const isRoomDetailPage =
+    /^\/lists\/[^/]+$/.test(
+      location.pathname,
+    );
 
-  const shouldHideHamburgerMenu = hideHamburgerMenu || isRoomDetailPage;
+  const shouldHideHamburgerMenu =
+    hideHamburgerMenu ||
+    isRoomDetailPage;
 
   const hasActionButton =
     mode !== "signin" &&
     authResolved &&
     !!actionButtonLabel &&
-    typeof onActionButtonClick === "function";
+    typeof onActionButtonClick ===
+      "function";
 
   const hasSecondaryActionButton =
     mode !== "signin" &&
     authResolved &&
     !!secondaryActionButtonLabel &&
-    typeof onSecondaryActionButtonClick === "function";
+    typeof onSecondaryActionButtonClick ===
+      "function";
 
   const shouldShowCartButton =
     mode !== "signin" &&
     authResolved &&
     !!showCartButton &&
-    typeof onCartButtonClick === "function";
+    typeof onCartButtonClick ===
+      "function";
 
   useEffect(() => {
     let cancelled = false;
@@ -293,20 +377,24 @@ export function useHeaderController({
         !authResolved ||
         !currentUser ||
         !shouldShowCartButton ||
-        typeof cartItemCount === "number"
+        typeof cartItemCount ===
+          "number"
       ) {
         setFetchedCartItemCount(0);
         return;
       }
 
       try {
-        const count = await fetchCartItemCount({
-          apiBaseUrl,
-          currentUser,
-        });
+        const count =
+          await fetchCartItemCount({
+            apiBaseUrl,
+            currentUser,
+          });
 
         if (!cancelled) {
-          setFetchedCartItemCount(count);
+          setFetchedCartItemCount(
+            count,
+          );
         }
       } catch {
         if (!cancelled) {
@@ -334,16 +422,20 @@ export function useHeaderController({
       ? Math.max(0, cartItemCount)
       : fetchedCartItemCount;
 
-  const displayTitle = title ?? "AMOL";
+  const displayTitle =
+    title ?? "AMOL";
 
-  const shouldShowBackButton = isContactPage
-    ? isLoggedIn
-    : isInfoPage
-      ? false
-      : showBackButton;
+  const shouldShowBackButton =
+    isContactPage
+      ? isLoggedIn
+      : isInfoPage
+        ? false
+        : showBackButton;
 
   const shouldShowLoginButton =
-    mode !== "signin" && authResolved && !isLoggedIn;
+    mode !== "signin" &&
+    authResolved &&
+    !isLoggedIn;
 
   const shouldShowAnnouncementButton =
     mode !== "signin" &&
@@ -383,10 +475,12 @@ export function useHeaderController({
     isLoggedIn &&
     !shouldHideHamburgerMenu;
 
-  const shouldShowLandscapeSidebarMenuButton = false;
+  const shouldShowLandscapeSidebarMenuButton =
+    false;
 
   const shouldShowMenuButton =
-    shouldShowGuestMenuButton || shouldShowAuthenticatedMenuButton;
+    shouldShowGuestMenuButton ||
+    shouldShowAuthenticatedMenuButton;
 
   const closeMenu = () => {
     setMenuOpen(false);
@@ -398,12 +492,18 @@ export function useHeaderController({
 
   const toggleMenu = () => {
     setSettingsOpen(false);
-    setMenuOpen((prev) => !prev);
+
+    setMenuOpen(
+      (previous) => !previous,
+    );
   };
 
   const toggleSettings = () => {
     setMenuOpen(false);
-    setSettingsOpen((prev) => !prev);
+
+    setSettingsOpen(
+      (previous) => !previous,
+    );
   };
 
   const handleBack = () => {
@@ -412,9 +512,13 @@ export function useHeaderController({
       return;
     }
 
-    const normalizedBackTo = backTo.trim();
+    const normalizedBackTo =
+      backTo.trim();
 
-    navigate(normalizedBackTo || WALLET_PATH);
+    navigate(
+      normalizedBackTo ||
+        WALLET_PATH,
+    );
   };
 
   const handleTitleClick = () => {
@@ -423,12 +527,15 @@ export function useHeaderController({
 
   const actions: HeaderActionState = {
     hasActionButton,
-    actionButtonLabel: actionButtonLabel ?? "",
+    actionButtonLabel:
+      actionButtonLabel ?? "",
     onActionButtonClick,
     actionButtonDisabled,
 
     hasSecondaryActionButton,
-    secondaryActionButtonLabel: secondaryActionButtonLabel ?? "",
+    secondaryActionButtonLabel:
+      secondaryActionButtonLabel ??
+      "",
     onSecondaryActionButtonClick,
     secondaryActionButtonDisabled,
 
@@ -436,7 +543,8 @@ export function useHeaderController({
     cartButtonLabel,
     onCartButtonClick,
     cartButtonDisabled,
-    cartItemCount: displayCartItemCount,
+    cartItemCount:
+      displayCartItemCount,
 
     shouldShowLoginButton,
     shouldShowAnnouncementButton,

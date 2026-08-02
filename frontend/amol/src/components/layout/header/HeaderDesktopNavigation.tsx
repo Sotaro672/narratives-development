@@ -1,7 +1,15 @@
 // frontend/amol/src/components/layout/header/HeaderDesktopNavigation.tsx
+
 import { useEffect, useState } from "react";
-import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
-import { Link, NavLink } from "react-router-dom";
+import {
+  getAuth,
+  onAuthStateChanged,
+  type User,
+} from "firebase/auth";
+import {
+  Link,
+  NavLink,
+} from "react-router-dom";
 import {
   Heart,
   ScanLine,
@@ -10,26 +18,17 @@ import {
   UserRound,
 } from "lucide-react";
 
+import { getMyAvatar } from "../../../features/avatar/api/avatarApi";
 import { publicHeaderNavigationItems } from "./headerNavigationItems";
 
-type AvatarResponse = {
-  avatarId?: string;
-  avatarName?: string;
-  avatarIcon?: string | null;
-};
-
-function isAvatarResponse(value: unknown): value is AvatarResponse {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  return "avatarIcon" in value || "avatarName" in value || "avatarId" in value;
-}
-
 function getApiBaseUrl(): string {
-  const env = import.meta.env.VITE_API_BASE_URL;
+  const env =
+    import.meta.env.VITE_API_BASE_URL;
 
-  if (typeof env === "string" && env.trim() !== "") {
+  if (
+    typeof env === "string" &&
+    env.trim() !== ""
+  ) {
     return env.replace(/\/$/, "");
   }
 
@@ -37,17 +36,32 @@ function getApiBaseUrl(): string {
 }
 
 export default function HeaderDesktopNavigation() {
-  const [authResolved, setAuthResolved] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [avatarIcon, setAvatarIcon] = useState("");
+  const [
+    authResolved,
+    setAuthResolved,
+  ] = useState(false);
+
+  const [
+    currentUser,
+    setCurrentUser,
+  ] = useState<User | null>(null);
+
+  const [
+    avatarIcon,
+    setAvatarIcon,
+  ] = useState("");
 
   useEffect(() => {
     const auth = getAuth();
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      setAuthResolved(true);
-    });
+    const unsubscribe =
+      onAuthStateChanged(
+        auth,
+        (user) => {
+          setCurrentUser(user);
+          setAuthResolved(true);
+        },
+      );
 
     return unsubscribe;
   }, []);
@@ -62,57 +76,33 @@ export default function HeaderDesktopNavigation() {
       }
 
       try {
-        const apiBaseUrl = getApiBaseUrl();
+        const apiBaseUrl =
+          getApiBaseUrl();
 
         if (!apiBaseUrl) {
           setAvatarIcon("");
           return;
         }
 
-        const idToken = await currentUser.getIdToken(true);
+        const idToken =
+          await currentUser.getIdToken(
+            true,
+          );
 
-        const response = await fetch(`${apiBaseUrl}/mall/me/avatars`, {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-            Authorization: `Bearer ${idToken}`,
-          },
-          credentials: "include",
-        });
+        const avatar =
+          await getMyAvatar({
+            backendUrl: apiBaseUrl,
+            idToken,
+          });
 
-        if (!response.ok) {
-          if (!cancelled) {
-            setAvatarIcon("");
-          }
+        if (cancelled) {
           return;
         }
 
-        const contentType = response.headers.get("content-type") ?? "";
-
-        if (!contentType.includes("application/json")) {
-          if (!cancelled) {
-            setAvatarIcon("");
-          }
-          return;
-        }
-
-        const responseBody: unknown = await response.json();
-
-        if (
-          !cancelled &&
-          isAvatarResponse(responseBody) &&
-          responseBody.avatarIcon
-        ) {
-          setAvatarIcon(responseBody.avatarIcon);
-          return;
-        }
-
-        if (!cancelled) {
-          setAvatarIcon("");
-        }
-      } catch (error) {
-        console.error(error);
-
+        setAvatarIcon(
+          avatar?.avatarIcon ?? "",
+        );
+      } catch {
         if (!cancelled) {
           setAvatarIcon("");
         }
@@ -132,23 +122,31 @@ export default function HeaderDesktopNavigation() {
 
   if (!currentUser) {
     return (
-      <nav className="header__desktop-nav" aria-label="ページナビゲーション">
-        {publicHeaderNavigationItems.map((item) => (
-          <Link
-            key={item.to}
-            to={item.to}
-            className="header__desktop-nav-link"
-          >
-            {item.label}
-          </Link>
-        ))}
+      <nav
+        className="header__desktop-nav"
+        aria-label="ページナビゲーション"
+      >
+        {publicHeaderNavigationItems.map(
+          (item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              className="header__desktop-nav-link"
+            >
+              {item.label}
+            </Link>
+          ),
+        )}
       </nav>
     );
   }
 
   return (
     <nav
-      className="header__desktop-nav header__desktop-nav--authenticated"
+      className={[
+        "header__desktop-nav",
+        "header__desktop-nav--authenticated",
+      ].join(" ")}
       aria-label="メインナビゲーション"
     >
       <NavLink
@@ -157,7 +155,9 @@ export default function HeaderDesktopNavigation() {
           [
             "header__desktop-nav-link",
             "header__desktop-nav-link--with-icon",
-            isActive ? "header__desktop-nav-link--active" : "",
+            isActive
+              ? "header__desktop-nav-link--active"
+              : "",
           ]
             .filter(Boolean)
             .join(" ")
@@ -168,6 +168,7 @@ export default function HeaderDesktopNavigation() {
           strokeWidth={2.2}
           aria-hidden="true"
         />
+
         <span>モール</span>
       </NavLink>
 
@@ -177,7 +178,9 @@ export default function HeaderDesktopNavigation() {
           [
             "header__desktop-nav-link",
             "header__desktop-nav-link--with-icon",
-            isActive ? "header__desktop-nav-link--active" : "",
+            isActive
+              ? "header__desktop-nav-link--active"
+              : "",
           ]
             .filter(Boolean)
             .join(" ")
@@ -188,6 +191,7 @@ export default function HeaderDesktopNavigation() {
           strokeWidth={2.2}
           aria-hidden="true"
         />
+
         <span>マーケット</span>
       </NavLink>
 
@@ -197,7 +201,9 @@ export default function HeaderDesktopNavigation() {
           [
             "header__desktop-nav-link",
             "header__desktop-nav-link--with-icon",
-            isActive ? "header__desktop-nav-link--active" : "",
+            isActive
+              ? "header__desktop-nav-link--active"
+              : "",
           ]
             .filter(Boolean)
             .join(" ")
@@ -208,6 +214,7 @@ export default function HeaderDesktopNavigation() {
           strokeWidth={2.2}
           aria-hidden="true"
         />
+
         <span>スキャン</span>
       </NavLink>
 
@@ -217,7 +224,9 @@ export default function HeaderDesktopNavigation() {
           [
             "header__desktop-nav-link",
             "header__desktop-nav-link--with-icon",
-            isActive ? "header__desktop-nav-link--active" : "",
+            isActive
+              ? "header__desktop-nav-link--active"
+              : "",
           ]
             .filter(Boolean)
             .join(" ")
@@ -228,6 +237,7 @@ export default function HeaderDesktopNavigation() {
           strokeWidth={2.2}
           aria-hidden="true"
         />
+
         <span>お気に入り</span>
       </NavLink>
 
@@ -237,13 +247,18 @@ export default function HeaderDesktopNavigation() {
           [
             "header__desktop-nav-link",
             "header__desktop-nav-link--with-icon",
-            isActive ? "header__desktop-nav-link--active" : "",
+            isActive
+              ? "header__desktop-nav-link--active"
+              : "",
           ]
             .filter(Boolean)
             .join(" ")
         }
       >
-        <span className="header__desktop-nav-avatar-wrap" aria-hidden="true">
+        <span
+          className="header__desktop-nav-avatar-wrap"
+          aria-hidden="true"
+        >
           {avatarIcon ? (
             <img
               src={avatarIcon}
@@ -257,6 +272,7 @@ export default function HeaderDesktopNavigation() {
             />
           )}
         </span>
+
         <span>ウォレット</span>
       </NavLink>
     </nav>

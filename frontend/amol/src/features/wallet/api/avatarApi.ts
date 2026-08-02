@@ -1,11 +1,7 @@
 // frontend/amol/src/features/wallet/api/avatarApi.ts
-import type {
-  AvatarResponse,
-  WalletAvatar,
-} from "../types";
-import {
-  isAvatarResponse,
-} from "../utils/guards";
+
+import { isRecord } from "../../shared/utils/typeGuards";
+import type { WalletAvatar } from "../types";
 
 type FetchWalletPageDataInput = {
   backendUrl: string;
@@ -19,39 +15,67 @@ type FetchPublicWalletAvatarInput = {
 };
 
 function unwrapData(value: unknown): unknown {
-  if (!value || typeof value !== "object") {
+  if (!isRecord(value)) {
     return value;
   }
 
-  const record = value as Record<string, unknown>;
-
-  return record.data ?? value;
+  return value.data ?? value;
 }
 
-function getErrorMessageFromBody(value: unknown): string | null {
+function getErrorMessageFromBody(
+  value: unknown,
+): string | null {
   const body = unwrapData(value);
 
-  if (!body || typeof body !== "object") {
+  if (!isRecord(body)) {
     return null;
   }
 
-  const record = body as Record<string, unknown>;
-  const error = record.error;
+  const error = body.error;
 
-  return typeof error === "string" && error ? error : null;
+  return typeof error === "string" && error
+    ? error
+    : null;
 }
 
-function toWalletAvatar(params: {
-  avatar?: AvatarResponse | null;
-  fallbackAvatarId?: string;
-}): WalletAvatar {
-  const avatar = params.avatar;
+function toStringValue(
+  value: unknown,
+): string {
+  return typeof value === "string"
+    ? value
+    : "";
+}
+
+function parseWalletAvatar(
+  value: unknown,
+  fallbackAvatarId = "",
+): WalletAvatar {
+  const body = unwrapData(value);
+
+  if (!isRecord(body)) {
+    throw new Error(
+      "アバター情報APIのレスポンス形式が不正です。",
+    );
+  }
+
+  const avatarId =
+    toStringValue(body.avatarId) ||
+    fallbackAvatarId;
+
+  if (!avatarId) {
+    throw new Error(
+      "アバター情報APIのレスポンスにavatarIdがありません。",
+    );
+  }
 
   return {
-    avatarId: avatar?.avatarId || params.fallbackAvatarId || "",
-    avatarName: avatar?.avatarName || "",
-    avatarIcon: avatar?.avatarIcon || "",
-    profile: avatar?.profile || "",
+    avatarId,
+    avatarName:
+      toStringValue(body.avatarName),
+    avatarIcon:
+      toStringValue(body.avatarIcon),
+    profile:
+      toStringValue(body.profile),
     followerCount: 0,
     followingCount: 0,
   };
@@ -61,42 +85,60 @@ export async function fetchWalletAvatar({
   backendUrl,
   idToken,
 }: FetchWalletPageDataInput): Promise<WalletAvatar> {
-  const response = await fetch(`${backendUrl}/mall/me/avatars`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
+  const response = await fetch(
+    `${backendUrl}/mall/me/avatars`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
     },
-  });
+  );
 
-  const contentType = response.headers.get("content-type") || "";
+  const contentType =
+    response.headers.get("content-type") ||
+    "";
 
   if (!response.ok) {
-    if (contentType.includes("application/json")) {
-      const responseBody: unknown = await response.json();
-      const error = getErrorMessageFromBody(responseBody);
+    if (
+      contentType.includes(
+        "application/json",
+      )
+    ) {
+      const responseBody: unknown =
+        await response.json();
+
+      const error =
+        getErrorMessageFromBody(
+          responseBody,
+        );
 
       if (error) {
         throw new Error(error);
       }
     }
 
-    throw new Error("アバター情報の取得に失敗しました。");
+    throw new Error(
+      "アバター情報の取得に失敗しました。",
+    );
   }
 
-  if (!contentType.includes("application/json")) {
-    throw new Error("アバター情報APIがJSON以外を返しました。");
+  if (
+    !contentType.includes(
+      "application/json",
+    )
+  ) {
+    throw new Error(
+      "アバター情報APIがJSON以外を返しました。",
+    );
   }
 
-  const responseBody: unknown = await response.json();
-  const body = unwrapData(responseBody);
+  const responseBody: unknown =
+    await response.json();
 
-  if (!isAvatarResponse(body)) {
-    throw new Error("アバター情報APIのレスポンス形式が不正です。");
-  }
-
-  return toWalletAvatar({
-    avatar: body,
-  });
+  return parseWalletAvatar(
+    responseBody,
+  );
 }
 
 export async function fetchPublicWalletAvatar({
@@ -104,43 +146,62 @@ export async function fetchPublicWalletAvatar({
   idToken,
   avatarId,
 }: FetchPublicWalletAvatarInput): Promise<WalletAvatar> {
-  const encodedAvatarId = encodeURIComponent(avatarId);
+  const encodedAvatarId =
+    encodeURIComponent(avatarId);
 
-  const response = await fetch(`${backendUrl}/mall/avatars/${encodedAvatarId}`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
+  const response = await fetch(
+    `${backendUrl}/mall/avatars/${encodedAvatarId}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
     },
-  });
+  );
 
-  const contentType = response.headers.get("content-type") || "";
+  const contentType =
+    response.headers.get("content-type") ||
+    "";
 
   if (!response.ok) {
-    if (contentType.includes("application/json")) {
-      const responseBody: unknown = await response.json();
-      const error = getErrorMessageFromBody(responseBody);
+    if (
+      contentType.includes(
+        "application/json",
+      )
+    ) {
+      const responseBody: unknown =
+        await response.json();
+
+      const error =
+        getErrorMessageFromBody(
+          responseBody,
+        );
 
       if (error) {
         throw new Error(error);
       }
     }
 
-    throw new Error("アバター情報の取得に失敗しました。");
+    throw new Error(
+      "アバター情報の取得に失敗しました。",
+    );
   }
 
-  if (!contentType.includes("application/json")) {
-    throw new Error("アバター情報APIがJSON以外を返しました。");
+  if (
+    !contentType.includes(
+      "application/json",
+    )
+  ) {
+    throw new Error(
+      "アバター情報APIがJSON以外を返しました。",
+    );
   }
 
-  const responseBody: unknown = await response.json();
-  const body = unwrapData(responseBody);
+  const responseBody: unknown =
+    await response.json();
 
-  if (!isAvatarResponse(body)) {
-    throw new Error("アバター情報APIのレスポンス形式が不正です。");
-  }
-
-  return toWalletAvatar({
-    avatar: body,
-    fallbackAvatarId: avatarId,
-  });
+  return parseWalletAvatar(
+    responseBody,
+    avatarId,
+  );
 }
