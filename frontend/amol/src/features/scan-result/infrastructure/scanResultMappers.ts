@@ -143,14 +143,6 @@ export function unwrapData(
   return value;
 }
 
-export function objectOrNull(
-  raw: unknown,
-): Record<string, unknown> | null {
-  return isRecord(raw)
-    ? raw
-    : null;
-}
-
 function stringArrayFromJson(
   raw: unknown,
 ): string[] | undefined {
@@ -385,9 +377,9 @@ export function productBlueprintPatchFromJson(
   }
 
   const categoryFields =
-    objectOrNull(
-      raw.categoryFields,
-    );
+    isRecord(raw.categoryFields)
+      ? raw.categoryFields
+      : null;
 
   const productBlueprintCategory =
     productBlueprintCategorySnapshotFromJson(

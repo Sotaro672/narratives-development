@@ -101,19 +101,6 @@ function isAlcoholCode(
   );
 }
 
-export function getScanCategoryFields(
-  value: unknown,
-): ScanCategoryFields {
-  if (
-    !isRecord(value) ||
-    Array.isArray(value)
-  ) {
-    return {};
-  }
-
-  return value;
-}
-
 export function isAlcoholCategoryFields(
   fields: ScanCategoryFields,
 ): boolean {
@@ -277,9 +264,11 @@ export function createScanAlcoholInfo(input: {
   productBlueprintCategory?: unknown;
   categoryInputSchema?: unknown;
 }): ScanAlcoholInfo | null {
-  const fields = getScanCategoryFields(
-    input.categoryFields,
-  );
+  const fields: ScanCategoryFields =
+    isRecord(input.categoryFields) &&
+    !Array.isArray(input.categoryFields)
+      ? input.categoryFields
+      : {};
 
   const isAlcohol = resolveIsAlcohol({
     categoryFields: fields,

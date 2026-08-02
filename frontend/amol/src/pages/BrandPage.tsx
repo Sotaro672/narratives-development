@@ -14,6 +14,7 @@ import {
 import Layout from "../components/layout/Layout";
 import MediaIcon from "../components/ui/MediaIcon";
 import { formatPrice } from "../features/shared/utils/price";
+import { isRecord } from "../features/shared/utils/typeGuards";
 
 import "../styles/brand_page.css";
 
@@ -93,16 +94,6 @@ function resolveApiBase(): string {
   );
 }
 
-function isRecord(
-  value: unknown,
-): value is Record<string, unknown> {
-  return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    !Array.isArray(value)
-  );
-}
-
 function textValue(
   value: unknown,
 ): string {
@@ -151,7 +142,10 @@ function stringArrayValue(
 function unwrapData(
   value: unknown,
 ): Record<string, unknown> {
-  if (!isRecord(value)) {
+  if (
+    !isRecord(value) ||
+    Array.isArray(value)
+  ) {
     throw new Error(
       "invalid response shape",
     );
@@ -159,7 +153,10 @@ function unwrapData(
 
   const data = value.data;
 
-  if (isRecord(data)) {
+  if (
+    isRecord(data) &&
+    !Array.isArray(data)
+  ) {
     return unwrapData(data);
   }
 
@@ -171,11 +168,17 @@ function unwrapListItem(
 ): Record<string, unknown> {
   const root = unwrapData(value);
 
-  if (isRecord(root.item)) {
+  if (
+    isRecord(root.item) &&
+    !Array.isArray(root.item)
+  ) {
     return root.item;
   }
 
-  if (isRecord(root.list)) {
+  if (
+    isRecord(root.list) &&
+    !Array.isArray(root.list)
+  ) {
     return root.list;
   }
 
@@ -190,7 +193,13 @@ function priceRowsValue(
   }
 
   return value
-    .filter(isRecord)
+    .filter(
+      (
+        row,
+      ): row is Record<string, unknown> =>
+        isRecord(row) &&
+        !Array.isArray(row),
+    )
     .map((row) => ({
       currency: textValue(
         row.currency,

@@ -5,19 +5,6 @@ import {
   isRecord,
 } from "../../shared/utils/typeGuards";
 
-export function getRecord(
-  value: unknown,
-  key: string,
-): Record<string, unknown> | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const raw = value[key];
-
-  return isRecord(raw) ? raw : null;
-}
-
 export function getString(
   value: unknown,
   key: string,
