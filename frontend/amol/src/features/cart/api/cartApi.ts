@@ -1,7 +1,6 @@
 // frontend/amol/src/features/cart/api/cartApi.ts
 
 import { getFirebaseIdToken } from "../../../lib/authToken";
-import { fetchCurrentAvatarId } from "../../catalog/infrastructure/avatarStateRepository";
 import { readResponseErrorMessage } from "../../catalog/infrastructure/httpErrorReader";
 import {
   isFiniteNumber,
@@ -23,19 +22,20 @@ function normalizeApiBaseUrl(
 
 function normalizeCartDTO(
   data: Partial<CartDTO>,
-  fallbackAvatarId: string,
 ): CartDTO {
   return {
     avatarId:
-      typeof data.avatarId === "string" &&
-      data.avatarId.trim() !== ""
-        ? data.avatarId
-        : fallbackAvatarId,
+      typeof data.avatarId === "string"
+        ? data.avatarId.trim()
+        : "",
 
     items:
       isRecord(data.items) &&
       !Array.isArray(data.items)
-        ? data.items
+        ? (data.items as Record<
+            string,
+            CartItemDTO
+          >)
         : {},
 
     createdAt:
@@ -73,23 +73,9 @@ async function fetchCartFromPath(args: {
   });
 }
 
-export {
-  fetchCurrentAvatarId,
-};
-
 export async function fetchCart(
   apiBaseUrl: string,
-  avatarId: string,
 ): Promise<CartDTO> {
-  const normalizedAvatarId =
-    avatarId.trim();
-
-  if (!normalizedAvatarId) {
-    throw new Error(
-      "現在のavatarIdが見つかりません。",
-    );
-  }
-
   const idToken =
     await getFirebaseIdToken();
 
@@ -130,10 +116,7 @@ export async function fetchCart(
   const data =
     (await response.json()) as Partial<CartDTO>;
 
-  return normalizeCartDTO(
-    data,
-    normalizedAvatarId,
-  );
+  return normalizeCartDTO(data);
 }
 
 export async function removeCartItem(args: {
@@ -234,10 +217,7 @@ export async function removeCartItem(args: {
   const data =
     (await response.json()) as Partial<CartDTO>;
 
-  return normalizeCartDTO(
-    data,
-    item.avatarId,
-  );
+  return normalizeCartDTO(data);
 }
 
 export async function fetchCatalog(
@@ -296,18 +276,15 @@ export async function fetchCatalog(
 export async function fetchCartItemsWithCatalog(
   args: {
     apiBaseUrl: string;
-    avatarId: string;
   },
 ): Promise<CartDisplayItem[]> {
   const {
     apiBaseUrl,
-    avatarId,
   } = args;
 
   const cart =
     await fetchCart(
       apiBaseUrl,
-      avatarId,
     );
 
   const baseItems =
@@ -382,7 +359,8 @@ function cartDTOToDisplayItems(
         cartItemToDisplayItem({
           avatarId,
           itemKey,
-          item,
+          item:
+            item as CartItemDTO,
         }),
     )
     .filter(

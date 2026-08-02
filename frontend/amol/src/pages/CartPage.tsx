@@ -6,7 +6,6 @@ import { useNavigate } from "react-router-dom";
 import Layout from "../components/layout/Layout";
 import {
   fetchCartItemsWithCatalog,
-  fetchCurrentAvatarId,
   removeCartItem,
 } from "../features/cart/api/cartApi";
 import {
@@ -103,12 +102,15 @@ function getCartItemListTitle(
   item: CartDisplayItem,
 ): string {
   const resolvedItem = asResolvedItem(item);
+
   const catalogTitle = normalizeText(
     resolvedItem.catalog?.list.title,
   );
+
   const itemTitle = normalizeText(
     resolvedItem.title,
   );
+
   const productName = getCartItemProductName(
     resolvedItem,
   );
@@ -168,6 +170,7 @@ function getCartItemNavigationPath(
 
 export default function CartPage() {
   const navigate = useNavigate();
+
   const isMobilePortrait =
     useMobilePortrait();
 
@@ -198,15 +201,9 @@ export default function CartPage() {
       setErrorMessage("");
 
       try {
-        const avatarId =
-          await fetchCurrentAvatarId(
-            apiBaseUrl,
-          );
-
         const itemsWithCatalog =
           await fetchCartItemsWithCatalog({
             apiBaseUrl,
-            avatarId,
           });
 
         if (cancelled) {
@@ -220,6 +217,7 @@ export default function CartPage() {
         }
 
         setItems([]);
+
         setErrorMessage(
           error instanceof Error
             ? error.message
@@ -589,6 +587,7 @@ export default function CartPage() {
 
                         <div>
                           <dt>数量</dt>
+
                           <dd>
                             {
                               resolvedItem.qty
@@ -616,6 +615,7 @@ export default function CartPage() {
               <dl className="cart-page-summary__list">
                 <div>
                   <dt>商品数</dt>
+
                   <dd>
                     {items.length}
                   </dd>
@@ -623,6 +623,7 @@ export default function CartPage() {
 
                 <div>
                   <dt>合計</dt>
+
                   <dd>
                     {formatPrice(
                       totalAmount,

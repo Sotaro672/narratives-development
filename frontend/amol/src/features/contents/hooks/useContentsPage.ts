@@ -1,122 +1,146 @@
 // frontend/amol/src/features/contents/hooks/useContentsPage.ts
 
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  useNavigate,
+  useSearchParams,
+} from "react-router-dom";
 
-import type { MediaGalleryItem } from "../../../components/ui/MediaGallery";
-import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
-import { fetchCurrentAvatarId } from "../../catalog/infrastructure/avatarStateRepository";
-import { useMobilePortrait } from "../../shared/hooks/useMobilePortrait";
+import type {
+  MediaGalleryItem,
+} from "../../../components/ui/MediaGallery";
+import {
+  useMobilePortrait,
+} from "../../shared/hooks/useMobilePortrait";
 import type {
   ContentsMetadata,
   ContentsSearchParams,
 } from "../../shared/types/contents";
-import { useTokenCommentCard } from "../../token-commnet/hooks/useTokenCommentCard";
-import { fetchContentsMetadata } from "../api/contentsApi";
+import {
+  useTokenCommentCard,
+} from "../../token-commnet/hooks/useTokenCommentCard";
+import {
+  fetchContentsMetadata,
+} from "../api/contentsApi";
 
 function buildContentsSearchParams(
   searchParams: URLSearchParams,
 ): ContentsSearchParams {
   return {
-    mintAddress: searchParams.get("mintAddress") || "",
-    productId: searchParams.get("productId") || "",
-    brandId: searchParams.get("brandId") || "",
-    brandName: searchParams.get("brandName") || "",
-    productName: searchParams.get("productName") || "",
-    productBlueprintId: searchParams.get("productBlueprintId") || "",
-    tokenBlueprintId: searchParams.get("tokenBlueprintId") || "",
-    metadataUri: searchParams.get("metadataUri") || "",
-    tokenName: searchParams.get("tokenName") || "",
-    tokenIconUrl: searchParams.get("tokenIconUrl") || "",
+    mintAddress:
+      searchParams.get("mintAddress") || "",
+    productId:
+      searchParams.get("productId") || "",
+    brandId:
+      searchParams.get("brandId") || "",
+    brandName:
+      searchParams.get("brandName") || "",
+    productName:
+      searchParams.get("productName") || "",
+    productBlueprintId:
+      searchParams.get(
+        "productBlueprintId",
+      ) || "",
+    tokenBlueprintId:
+      searchParams.get(
+        "tokenBlueprintId",
+      ) || "",
+    metadataUri:
+      searchParams.get("metadataUri") || "",
+    tokenName:
+      searchParams.get("tokenName") || "",
+    tokenIconUrl:
+      searchParams.get("tokenIconUrl") || "",
   };
 }
 
 export function useContentsPage() {
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const isMobilePortrait = useMobilePortrait();
-  const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
+  const [searchParams] =
+    useSearchParams();
+
+  const navigate =
+    useNavigate();
+
+  const isMobilePortrait =
+    useMobilePortrait();
 
   const contents = useMemo(
-    () => buildContentsSearchParams(searchParams),
+    () =>
+      buildContentsSearchParams(
+        searchParams,
+      ),
     [searchParams],
   );
 
-  const commentCard = useTokenCommentCard({
-    tokenBlueprintId: contents.tokenBlueprintId,
-  });
+  const commentCard =
+    useTokenCommentCard({
+      tokenBlueprintId:
+        contents.tokenBlueprintId,
+    });
 
-  const [metadata, setMetadata] =
-    useState<ContentsMetadata | null>(null);
-  const [activeFileIndex, setActiveFileIndex] = useState(0);
-  const [currentAvatarId, setCurrentAvatarId] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [loadingAvatarId, setLoadingAvatarId] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleProductNameClick = () => {
-    if (!contents.productId) {
-      return;
-    }
-
-    navigate(
-      `/scan/result?productId=${encodeURIComponent(
-        contents.productId,
-      )}`,
+  const [
+    metadata,
+    setMetadata,
+  ] =
+    useState<ContentsMetadata | null>(
+      null,
     );
-  };
 
-  const handleBrandNameClick = () => {
-    const brandId = contents.brandId;
+  const [
+    activeFileIndex,
+    setActiveFileIndex,
+  ] = useState(0);
 
-    if (!brandId) {
-      return;
-    }
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
 
-    navigate(
-      `/brands/${encodeURIComponent(brandId)}`,
-    );
-  };
+  const [
+    error,
+    setError,
+  ] = useState("");
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadCurrentAvatarId = async () => {
-      setLoadingAvatarId(true);
-
-      try {
-        const avatarId =
-          await fetchCurrentAvatarId(apiBaseUrl);
-
-        if (!isMounted) {
-          return;
-        }
-
-        setCurrentAvatarId(avatarId);
-      } catch {
-        if (!isMounted) {
-          return;
-        }
-
-        setCurrentAvatarId("");
-      } finally {
-        if (isMounted) {
-          setLoadingAvatarId(false);
-        }
+  const handleProductNameClick =
+    () => {
+      if (!contents.productId) {
+        return;
       }
+
+      navigate(
+        `/scan/result?productId=${encodeURIComponent(
+          contents.productId,
+        )}`,
+      );
     };
 
-    void loadCurrentAvatarId();
+  const handleBrandNameClick =
+    () => {
+      const brandId =
+        contents.brandId;
 
-    return () => {
-      isMounted = false;
+      if (!brandId) {
+        return;
+      }
+
+      navigate(
+        `/brands/${encodeURIComponent(
+          brandId,
+        )}`,
+      );
     };
-  }, [apiBaseUrl]);
 
   useEffect(() => {
     if (!contents.metadataUri) {
       setMetadata(null);
+      setActiveFileIndex(0);
       setError("");
+      setLoading(false);
+
       return;
     }
 
@@ -145,6 +169,7 @@ export function useContentsPage() {
 
         setMetadata(null);
         setActiveFileIndex(0);
+
         setError(
           err instanceof Error
             ? err.message
@@ -165,42 +190,59 @@ export function useContentsPage() {
   }, [contents.metadataUri]);
 
   const tokenName =
-    metadata?.name || contents.tokenName;
+    metadata?.name ||
+    contents.tokenName;
+
   const tokenIconUrl =
-    metadata?.image || contents.tokenIconUrl;
+    metadata?.image ||
+    contents.tokenIconUrl;
+
   const pageTitle =
-    tokenName || "トークン詳細";
+    tokenName ||
+    "トークン詳細";
 
-  const mediaItems = useMemo<MediaGalleryItem[]>(() => {
-    const iconUri =
-      metadata?.image || contents.tokenIconUrl;
+  const mediaItems =
+    useMemo<MediaGalleryItem[]>(
+      () => {
+        const iconUri =
+          metadata?.image ||
+          contents.tokenIconUrl;
 
-    return (metadata?.files || [])
-      .filter((file) => {
-        if (!file.uri) {
-          return false;
-        }
+        return (
+          metadata?.files || []
+        )
+          .filter((file) => {
+            if (!file.uri) {
+              return false;
+            }
 
-        if (
-          iconUri &&
-          file.uri === iconUri
-        ) {
-          return false;
-        }
+            if (
+              iconUri &&
+              file.uri === iconUri
+            ) {
+              return false;
+            }
 
-        return true;
-      })
-      .map((file, index) => ({
-        id: `${index}-${file.uri}`,
-        url: file.uri,
-        fileName: file.name,
-        type: file.type,
-      }));
-  }, [
-    metadata?.files,
-    metadata?.image,
-    contents.tokenIconUrl,
-  ]);
+            return true;
+          })
+          .map(
+            (
+              file,
+              index,
+            ) => ({
+              id: `${index}-${file.uri}`,
+              url: file.uri,
+              fileName: file.name,
+              type: file.type,
+            }),
+          );
+      },
+      [
+        metadata?.files,
+        metadata?.image,
+        contents.tokenIconUrl,
+      ],
+    );
 
   useEffect(() => {
     if (
@@ -217,60 +259,66 @@ export function useContentsPage() {
   const hasMediaItems =
     mediaItems.length > 0;
 
-  const handlePrevFile = () => {
-    if (!hasMediaItems) {
-      return;
-    }
+  const handlePrevFile =
+    () => {
+      if (!hasMediaItems) {
+        return;
+      }
 
-    setActiveFileIndex((current) =>
-      current === 0
-        ? mediaItems.length - 1
-        : current - 1,
-    );
-  };
+      setActiveFileIndex(
+        (current) =>
+          current === 0
+            ? mediaItems.length -
+              1
+            : current - 1,
+      );
+    };
 
-  const handleNextFile = () => {
-    if (!hasMediaItems) {
-      return;
-    }
+  const handleNextFile =
+    () => {
+      if (!hasMediaItems) {
+        return;
+      }
 
-    setActiveFileIndex((current) =>
-      current === mediaItems.length - 1
-        ? 0
-        : current + 1,
-    );
-  };
+      setActiveFileIndex(
+        (current) =>
+          current ===
+          mediaItems.length - 1
+            ? 0
+            : current + 1,
+      );
+    };
 
-  const handleOpenResalePage = () => {
-    if (
-      !contents.productId ||
-      !contents.tokenBlueprintId
-    ) {
-      return;
-    }
+  const handleOpenResalePage =
+    () => {
+      if (
+        !contents.productId ||
+        !contents.tokenBlueprintId
+      ) {
+        return;
+      }
 
-    navigate("/resale", {
-      state: {
-        mintAddress:
-          contents.mintAddress,
-        productId:
-          contents.productId,
-        brandId:
-          contents.brandId,
-        brandName:
-          contents.brandName,
-        productName:
-          contents.productName,
-        productBlueprintId:
-          contents.productBlueprintId,
-        tokenBlueprintId:
-          contents.tokenBlueprintId,
-        tokenName,
-        tokenIconUrl,
-        currentAvatarId,
-      },
-    });
-  };
+      navigate("/resale", {
+        state: {
+          mintAddress:
+            contents.mintAddress,
+          productId:
+            contents.productId,
+          brandId:
+            contents.brandId,
+          brandName:
+            contents.brandName,
+          productName:
+            contents.productName,
+          productBlueprintId:
+            contents.productBlueprintId,
+          tokenBlueprintId:
+            contents.tokenBlueprintId,
+          tokenName,
+          tokenIconUrl,
+        },
+      });
+    };
 
   return {
     contents,
@@ -279,9 +327,7 @@ export function useContentsPage() {
     mediaItems,
     activeFileIndex,
     setActiveFileIndex,
-    currentAvatarId,
     loading,
-    loadingAvatarId,
     error,
     tokenName,
     tokenIconUrl,

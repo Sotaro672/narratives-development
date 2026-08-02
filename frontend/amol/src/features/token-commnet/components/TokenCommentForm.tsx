@@ -1,34 +1,51 @@
 // frontend/amol/src/features/token-commnet/components/TokenCommentForm.tsx
 
-import type { ChangeEvent } from "react";
+import type {
+  ChangeEvent,
+} from "react";
 
 type TokenCommentFormProps = {
   value: string;
   posting: boolean;
   loading?: boolean;
+  rows?: number;
   placeholder?: string;
   buttonLabel?: string;
   postingLabel?: string;
-  onChange: (value: string) => void;
-  onSubmit: () => void | Promise<void>;
+  onChange: (
+    value: string,
+  ) => void;
+  onSubmit: () =>
+    void | Promise<void>;
 };
 
 export default function TokenCommentForm({
   value,
   posting,
   loading = false,
+  rows = 4,
   placeholder = "コメントを書く…",
   buttonLabel = "投稿",
   postingLabel = "投稿中...",
   onChange,
   onSubmit,
 }: TokenCommentFormProps) {
-  const trimmedValue = value.trim();
-  const disabled = posting || loading;
-  const canSubmit = !disabled && trimmedValue.length > 0;
+  const trimmedValue =
+    value.trim();
 
-  const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    onChange(event.target.value);
+  const disabled =
+    posting || loading;
+
+  const canSubmit =
+    !disabled &&
+    trimmedValue.length > 0;
+
+  const handleChange = (
+    event: ChangeEvent<HTMLTextAreaElement>,
+  ) => {
+    onChange(
+      event.target.value,
+    );
   };
 
   const handleSubmit = () => {
@@ -44,7 +61,7 @@ export default function TokenCommentForm({
       <textarea
         className="token-comment-form__textarea"
         value={value}
-        rows={4}
+        rows={rows}
         disabled={disabled}
         placeholder={placeholder}
         onChange={handleChange}
@@ -56,7 +73,9 @@ export default function TokenCommentForm({
         disabled={!canSubmit}
         onClick={handleSubmit}
       >
-        {posting ? postingLabel : buttonLabel}
+        {posting
+          ? postingLabel
+          : buttonLabel}
       </button>
     </div>
   );
