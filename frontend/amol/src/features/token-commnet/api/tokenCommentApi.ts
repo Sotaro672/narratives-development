@@ -5,7 +5,7 @@ import { getAuth } from "firebase/auth";
 import {
   isFiniteNumber,
   isRecord,
-} from "../../shared/utils/typeGuards";
+} from "../../../components/utils/typeGuards";
 
 import type {
   TokenBlueprintReactionInput,

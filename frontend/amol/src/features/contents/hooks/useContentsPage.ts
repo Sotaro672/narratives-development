@@ -15,7 +15,7 @@ import type {
 } from "../../../components/ui/MediaGallery";
 import {
   useMobilePortrait,
-} from "../../shared/hooks/useMobilePortrait";
+} from "../../../components/hooks/useMobilePortrait";
 import type {
   ContentsMetadata,
   ContentsSearchParams,

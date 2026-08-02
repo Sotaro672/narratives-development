@@ -8,7 +8,7 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
-import { formatPrice } from "../features/shared/utils/price";
+import { formatPrice } from "../components/utils/price";
 
 import "../styles/lists-page.css";
 

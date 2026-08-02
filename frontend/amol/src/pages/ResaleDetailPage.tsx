@@ -11,6 +11,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import { formatDateTime } from "../components/utils/date";
 import Dropdown from "../components/ui/Dropdown";
 import Input from "../components/ui/Input";
 import MediaGallery from "../components/ui/MediaGallery";
@@ -137,28 +138,6 @@ function formatPriceInput(value: string): string {
   }
 
   return Number(digits).toLocaleString("ja-JP");
-}
-
-function formatDateTime(
-  value: string | undefined | null,
-): string {
-  if (!value) {
-    return "-";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "-";
-  }
-
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
 }
 
 function formatResaleStatus(value: string): string {

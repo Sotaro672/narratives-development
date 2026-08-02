@@ -13,7 +13,7 @@ import {
 } from "../features/market/marketApi";
 import {
   formatPrice,
-} from "../features/shared/utils/price";
+} from "../components/utils/price";
 
 import "../styles/lists-page.css";
 

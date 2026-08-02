@@ -4,7 +4,7 @@ import type { MallPreviewTransferInfo } from "../../shared/types/scanResult";
 import {
   isFiniteNumber,
   isRecord,
-} from "../../shared/utils/typeGuards";
+} from "../../../components/utils/typeGuards";
 import { trimText } from "../utils/format";
 
 function resolveSolanaRpcUrl(): string {

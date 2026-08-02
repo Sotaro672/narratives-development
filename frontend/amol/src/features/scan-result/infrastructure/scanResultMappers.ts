@@ -24,7 +24,7 @@ import type {
 import {
   isFiniteNumber,
   isRecord,
-} from "../../shared/utils/typeGuards";
+} from "../../../components/utils/typeGuards";
 import { tokenBlueprintPatchHasAnyField } from "../utils/format";
 
 export type WalletResolvedTokenResponse = {

@@ -1,6 +1,6 @@
 // frontend/amol/src/features/wallet/utils/tokenGuards.ts
 
-import { isRecord } from "../../shared/utils/typeGuards";
+import { isRecord } from "../../../components/utils/typeGuards";
 import type {
   TokenMetadataAttributeDTO,
   TokenMetadataDTO,

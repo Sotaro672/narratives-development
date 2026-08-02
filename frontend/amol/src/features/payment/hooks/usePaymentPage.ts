@@ -33,7 +33,7 @@ import type {
 } from "../../shared/types/payment";
 import {
   formatPrice,
-} from "../../shared/utils/price";
+} from "../../../components/utils/price";
 import {
   createOrder,
   createPayment,

@@ -13,9 +13,9 @@ import {
 
 import Layout from "../components/layout/Layout";
 import MediaIcon from "../components/ui/MediaIcon";
-import { formatPrice } from "../features/shared/utils/price";
+import { formatPrice } from "../components/utils/price";
 import { getApiBaseUrl } from "../lib/apiBaseUrl";
-import { isRecord } from "../features/shared/utils/typeGuards";
+import { isRecord } from "../components/utils/typeGuards";
 
 import "../styles/brand_page.css";
 

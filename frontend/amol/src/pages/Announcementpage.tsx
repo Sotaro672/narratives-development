@@ -1,12 +1,16 @@
 // frontend/amol/src/pages/AnnouncementPage.tsx
+
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import { formatDateTime } from "../components/utils/date";
+
 import {
   fetchMeAnnouncements,
   markMeAnnouncementRead,
 } from "../features/announcement/api/announcementApi";
+
 import type { AnnouncementListItem } from "../features/shared/types/announcements";
 
 import "../styles/page-layout.css";
@@ -168,14 +172,12 @@ export default function AnnouncementPage() {
                         {tokenLabel}
                       </span>
 
-                      {publishedAtLabel ? (
-                        <time
-                          className="announcement-page__date"
-                          dateTime={item.publishedAt ?? undefined}
-                        >
-                          {publishedAtLabel}
-                        </time>
-                      ) : null}
+                      <time
+                        className="announcement-page__date"
+                        dateTime={item.publishedAt ?? undefined}
+                      >
+                        {publishedAtLabel}
+                      </time>
                     </div>
 
                     {isUnread ? (
@@ -212,24 +214,4 @@ export default function AnnouncementPage() {
       </section>
     </Layout>
   );
-}
-
-function formatDateTime(value?: string | null): string {
-  if (!value) {
-    return "";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
 }

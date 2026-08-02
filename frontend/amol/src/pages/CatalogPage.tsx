@@ -18,8 +18,8 @@ import ProductInfoCard from "../features/catalog/presentation/components/Product
 import ReviewSection from "../features/catalog/presentation/components/ReviewSection";
 import TokenInfoCard from "../features/catalog/presentation/components/TokenInfoCard";
 import { useCatalogPage } from "../features/catalog/presentation/hooks/useCatalogPage";
-import { useMobilePortrait } from "../features/shared/hooks/useMobilePortrait";
-import { formatPrice } from "../features/shared/utils/price";
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
+import { formatPrice } from "../components/utils/price";
 import { auth } from "../lib/firebase";
 
 export default function CatalogPage() {

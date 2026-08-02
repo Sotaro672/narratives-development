@@ -18,7 +18,7 @@ import type {
   CatalogProductBlueprintReviewPage,
   CatalogResponse,
 } from "../../../shared/types/catalog";
-import { useMobilePortrait } from "../../../shared/hooks/useMobilePortrait";
+import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
 
 export function useCatalogPage() {
   const navigate = useNavigate();

@@ -8,7 +8,7 @@ import { PaymentItemsCard } from "../features/payment/components/PaymentItemsCar
 import { PaymentMethodsCard } from "../features/payment/components/PaymentMethodsCard";
 import { ShippingAddressCard } from "../features/payment/components/ShippingAddressCard";
 import { usePaymentPage } from "../features/payment/hooks/usePaymentPage";
-import { useMobilePortrait } from "../features/shared/hooks/useMobilePortrait";
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 
 import "../styles/payment-page.css";
 

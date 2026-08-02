@@ -3,7 +3,7 @@
 import { getIdToken } from "firebase/auth";
 
 import { auth } from "../../../lib/firebase";
-import { isRecord } from "../../shared/utils/typeGuards";
+import { isRecord } from "../../../components/utils/typeGuards";
 
 export function jsonHeaders(): HeadersInit {
   return {

@@ -7,7 +7,7 @@ import Layout from "../components/layout/Layout";
 import ScanResultCard from "../features/scan-result/presentation/components/ScanResultCard";
 import ScanTransferSuccessModal from "../features/scan-result/presentation/components/ScanTransferSuccessModal";
 import { useScanResultPage } from "../features/scan-result/presentation/hooks/useScanResultPage";
-import { useMobilePortrait } from "../features/shared/hooks/useMobilePortrait";
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 
 import "../styles/scan-result-page.css";
 

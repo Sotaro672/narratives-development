@@ -1,6 +1,6 @@
 // frontend/amol/src/features/wallet/api/avatarApi.ts
 
-import { isRecord } from "../../shared/utils/typeGuards";
+import { isRecord } from "../../../components/utils/typeGuards";
 import type { WalletAvatar } from "../types";
 
 type FetchWalletPageDataInput = {

@@ -2,6 +2,8 @@
 
 import { useNavigate } from "react-router-dom";
 
+import { formatDateTime } from "../../../components/utils/date";
+
 import type {
   TokenComment,
   TokenCommentTreeNode,
@@ -44,31 +46,6 @@ type TokenCommentItemProps = {
     parentCommentId: string,
   ) => void | Promise<void>;
 };
-
-function formatCommentDate(
-  value: string,
-): string {
-  if (!value) {
-    return "";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat(
-    "ja-JP",
-    {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    },
-  ).format(date);
-}
 
 function getAuthorAvatarId(
   comment: TokenComment,
@@ -233,8 +210,11 @@ export default function TokenCommentItem({
           />
 
           {comment.createdAt ? (
-            <time className="token-comment-item__date">
-              {formatCommentDate(
+            <time
+              className="token-comment-item__date"
+              dateTime={comment.createdAt}
+            >
+              {formatDateTime(
                 comment.createdAt,
               )}
             </time>

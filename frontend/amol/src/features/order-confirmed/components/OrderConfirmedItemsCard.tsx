@@ -5,7 +5,7 @@ import type {
 } from "../../shared/types/orderConfirmed";
 import {
   formatPrice,
-} from "../../shared/utils/price";
+} from "../../../components/utils/price";
 
 type OrderConfirmedItemsCardProps = {
   items: OrderConfirmedItemViewModel[];

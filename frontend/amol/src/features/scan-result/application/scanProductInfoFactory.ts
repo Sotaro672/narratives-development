@@ -3,7 +3,7 @@
 import {
   isFiniteNumber,
   isRecord,
-} from "../../shared/utils/typeGuards";
+} from "../../../components/utils/typeGuards";
 import type { PreviewState } from "../../shared/types/scanResult";
 import {
   createScanAlcoholInfo,

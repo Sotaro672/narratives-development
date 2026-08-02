@@ -11,7 +11,7 @@ import type {
   MallOwnerInfo,
   ScanResultPageState,
 } from "../../../shared/types/scanResult";
-import { isRecord } from "../../../shared/utils/typeGuards";
+import { isRecord } from "../../../../components/utils/typeGuards";
 import {
   getNumber,
   getString,

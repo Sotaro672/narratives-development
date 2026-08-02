@@ -4,7 +4,7 @@ import { getApiBaseUrl } from "../../lib/apiBaseUrl";
 import {
   isFiniteNumber,
   isRecord,
-} from "../shared/utils/typeGuards";
+} from "../../components/utils/typeGuards";
 
 export type MarketResaleStatus = "listing" | "suspended";
 

@@ -1,6 +1,6 @@
 // frontend/amol/src/features/scan-result/utils/format.ts
 
-import { isRecord } from "../../shared/utils/typeGuards";
+import { isRecord } from "../../../components/utils/typeGuards";
 import type {
   MallOwnerInfo,
   MallPreviewTransferInfo,

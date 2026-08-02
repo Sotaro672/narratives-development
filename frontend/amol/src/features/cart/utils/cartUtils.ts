@@ -5,7 +5,7 @@ import type {
   CartDisplayItem,
   CartModelSnapshot,
 } from "../../shared/types/cart";
-import { isFiniteNumber } from "../../shared/utils/typeGuards";
+import { isFiniteNumber } from "../../../components/utils/typeGuards";
 
 function getModelVariations(
   catalog: CartCatalogSnapshot | null | undefined,

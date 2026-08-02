@@ -3,7 +3,7 @@
 import {
   isFiniteNumber,
   isRecord,
-} from "../../shared/utils/typeGuards";
+} from "../../../components/utils/typeGuards";
 
 export type ScanCategoryFields = Record<string, unknown>;
 

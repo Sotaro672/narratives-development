@@ -14,9 +14,9 @@ import {
   getModelVariation,
   getPrimaryCatalogImage,
 } from "../features/cart/utils/cartUtils";
-import { useMobilePortrait } from "../features/shared/hooks/useMobilePortrait";
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import type { CartDisplayItem } from "../features/shared/types/cart";
-import { formatPrice } from "../features/shared/utils/price";
+import { formatPrice } from "../components/utils/price";
 import { getApiBaseUrl } from "../lib/apiBaseUrl";
 
 import "../styles/cart-page.css";

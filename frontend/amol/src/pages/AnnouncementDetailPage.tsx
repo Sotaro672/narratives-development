@@ -1,12 +1,16 @@
 // frontend/amol/src/pages/AnnouncementDetailPage.tsx
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import { formatDateTime } from "../components/utils/date";
+
 import {
   fetchMeAnnouncements,
   markMeAnnouncementRead,
 } from "../features/announcement/api/announcementApi";
+
 import type { AnnouncementListItem } from "../features/shared/types/announcements";
 
 import "../styles/page-layout.css";
@@ -17,15 +21,26 @@ type AnnouncementDetailLocationState = {
 };
 
 export default function AnnouncementDetailPage() {
-  const { announcementId = "" } = useParams<{ announcementId: string }>();
+  const { announcementId = "" } = useParams<{
+    announcementId: string;
+  }>();
+
   const location = useLocation();
 
-  const locationState = location.state as AnnouncementDetailLocationState | null;
+  const locationState =
+    location.state as AnnouncementDetailLocationState | null;
+
   const initialAnnouncement = locationState?.announcement;
 
   const [announcement, setAnnouncement] =
-    useState<AnnouncementListItem | null>(initialAnnouncement ?? null);
-  const [loading, setLoading] = useState<boolean>(!initialAnnouncement);
+    useState<AnnouncementListItem | null>(
+      initialAnnouncement ?? null,
+    );
+
+  const [loading, setLoading] = useState<boolean>(
+    !initialAnnouncement,
+  );
+
   const [error, setError] = useState<string>("");
 
   const markedReadRef = useRef<string>("");
@@ -39,11 +54,13 @@ export default function AnnouncementDetailPage() {
       if (!effectiveAnnouncementId) {
         setLoading(false);
         setError("お知らせが見つかりません。");
+
         return;
       }
 
       if (announcement) {
         setLoading(false);
+
         return;
       }
 
@@ -58,8 +75,9 @@ export default function AnnouncementDetailPage() {
         });
 
         const found =
-          result.items.find((item) => item.id === effectiveAnnouncementId) ??
-          null;
+          result.items.find(
+            (item) => item.id === effectiveAnnouncementId,
+          ) ?? null;
 
         setAnnouncement(found);
 
@@ -72,6 +90,7 @@ export default function AnnouncementDetailPage() {
         }
 
         setAnnouncement(null);
+
         setError(
           caught instanceof Error
             ? caught.message
@@ -117,7 +136,9 @@ export default function AnnouncementDetailPage() {
           return {
             ...current,
             isRead: true,
-            readAt: current.readAt ?? new Date().toISOString(),
+            readAt:
+              current.readAt ??
+              new Date().toISOString(),
           };
         });
       })
@@ -131,9 +152,17 @@ export default function AnnouncementDetailPage() {
   }, [effectiveAnnouncementId]);
 
   const tokenLabel =
-    announcement?.tokenName || announcement?.targetToken || "対象トークン";
-  const publishedAtLabel = formatDateTime(announcement?.publishedAt);
-  const attachmentFiles = Array.isArray(announcement?.attachmentFiles)
+    announcement?.tokenName ||
+    announcement?.targetToken ||
+    "対象トークン";
+
+  const publishedAtLabel = formatDateTime(
+    announcement?.publishedAt,
+  );
+
+  const attachmentFiles = Array.isArray(
+    announcement?.attachmentFiles,
+  )
     ? announcement.attachmentFiles
     : [];
 
@@ -148,13 +177,18 @@ export default function AnnouncementDetailPage() {
     >
       <section className="page-section content-page-section announcement-page">
         {error ? (
-          <div className="announcement-page__error" role="alert">
+          <div
+            className="announcement-page__error"
+            role="alert"
+          >
             {error}
           </div>
         ) : null}
 
         {loading ? (
-          <div className="announcement-page__state">読み込み中...</div>
+          <div className="announcement-page__state">
+            読み込み中...
+          </div>
         ) : null}
 
         {!loading && !announcement ? (
@@ -171,16 +205,19 @@ export default function AnnouncementDetailPage() {
 
             <div className="announcement-page__card-head">
               <div className="announcement-page__card-meta">
-                <span className="announcement-page__token">{tokenLabel}</span>
+                <span className="announcement-page__token">
+                  {tokenLabel}
+                </span>
 
-                {publishedAtLabel ? (
-                  <time
-                    className="announcement-page__date"
-                    dateTime={announcement.publishedAt ?? undefined}
-                  >
-                    {publishedAtLabel}
-                  </time>
-                ) : null}
+                <time
+                  className="announcement-page__date"
+                  dateTime={
+                    announcement.publishedAt ??
+                    undefined
+                  }
+                >
+                  {publishedAtLabel}
+                </time>
               </div>
             </div>
 
@@ -191,41 +228,76 @@ export default function AnnouncementDetailPage() {
             {attachmentFiles.length > 0 ? (
               <div className="announcement-page__detail-attachments">
                 <div className="announcement-page__attachment-list">
-                  {attachmentFiles.map((file, index) => {
-                    const fileName =
-                      file.fileName || file.id || `添付ファイル ${index + 1}`;
-                    const fileUrl = file.fileUrl || "";
-                    const mimeType = file.mimeType || "";
-                    const isImage = mimeType.startsWith("image/");
+                  {attachmentFiles.map(
+                    (file, index) => {
+                      const fileName =
+                        file.fileName ||
+                        file.id ||
+                        `添付ファイル ${index + 1}`;
 
-                    if (isImage && fileUrl) {
-                      return (
-                        <a
-                          key={`${file.id ?? fileName}-${index}`}
-                          className="announcement-page__image-attachment"
-                          href={fileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label={`${fileName} を開く`}
-                        >
-                          <img
-                            className="announcement-page__attachment-image"
-                            src={fileUrl}
-                            alt={fileName}
-                            loading="lazy"
-                          />
-                        </a>
-                      );
-                    }
+                      const fileUrl =
+                        file.fileUrl || "";
 
-                    if (fileUrl) {
+                      const mimeType =
+                        file.mimeType || "";
+
+                      const isImage =
+                        mimeType.startsWith(
+                          "image/",
+                        );
+
+                      if (isImage && fileUrl) {
+                        return (
+                          <a
+                            key={`${
+                              file.id ?? fileName
+                            }-${index}`}
+                            className="announcement-page__image-attachment"
+                            href={fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`${fileName} を開く`}
+                          >
+                            <img
+                              className="announcement-page__attachment-image"
+                              src={fileUrl}
+                              alt={fileName}
+                              loading="lazy"
+                            />
+                          </a>
+                        );
+                      }
+
+                      if (fileUrl) {
+                        return (
+                          <a
+                            key={`${
+                              file.id ?? fileName
+                            }-${index}`}
+                            className="announcement-page__attachment-item announcement-page__attachment-link"
+                            href={fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <span className="announcement-page__attachment-name">
+                              {fileName}
+                            </span>
+
+                            {mimeType ? (
+                              <span className="announcement-page__attachment-meta">
+                                {mimeType}
+                              </span>
+                            ) : null}
+                          </a>
+                        );
+                      }
+
                       return (
-                        <a
-                          key={`${file.id ?? fileName}-${index}`}
-                          className="announcement-page__attachment-item announcement-page__attachment-link"
-                          href={fileUrl}
-                          target="_blank"
-                          rel="noreferrer"
+                        <div
+                          key={`${
+                            file.id ?? fileName
+                          }-${index}`}
+                          className="announcement-page__attachment-item"
                         >
                           <span className="announcement-page__attachment-name">
                             {fileName}
@@ -236,27 +308,10 @@ export default function AnnouncementDetailPage() {
                               {mimeType}
                             </span>
                           ) : null}
-                        </a>
+                        </div>
                       );
-                    }
-
-                    return (
-                      <div
-                        key={`${file.id ?? fileName}-${index}`}
-                        className="announcement-page__attachment-item"
-                      >
-                        <span className="announcement-page__attachment-name">
-                          {fileName}
-                        </span>
-
-                        {mimeType ? (
-                          <span className="announcement-page__attachment-meta">
-                            {mimeType}
-                          </span>
-                        ) : null}
-                      </div>
-                    );
-                  })}
+                    },
+                  )}
                 </div>
               </div>
             ) : null}
@@ -265,24 +320,4 @@ export default function AnnouncementDetailPage() {
       </section>
     </Layout>
   );
-}
-
-function formatDateTime(value?: string | null): string {
-  if (!value) {
-    return "";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
 }

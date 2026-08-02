@@ -6,7 +6,7 @@ import type {
   CatalogModelVariation,
   ModelColorOption,
 } from "../../../shared/types/catalog";
-import { formatPrice } from "../../../shared/utils/price";
+import { formatPrice } from "../../../../components/utils/price";
 import {
   formatAlcoholVolumeLabel,
 } from "../../application/catalogModelMapper";
