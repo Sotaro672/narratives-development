@@ -1,10 +1,18 @@
 // frontend/amol/src/features/wallet/api/walletTokenApi.ts
 
 import {
+  readJsonResponse,
+} from "../../../components/utils/apiResponse";
+import {
   buildApiUrl,
   getApiBaseUrl,
 } from "../../../lib/apiBaseUrl";
 import { getFirebaseIdToken } from "../../../lib/authToken";
+
+import {
+  fetchMeWalletRaw,
+  resolveWalletTokenRaw,
+} from "./walletApiClient";
 
 import type {
   TokenMetadataDTO,
@@ -17,7 +25,6 @@ import {
   extractWallet,
   toTokenMetadataDTO,
   toTokenResolveDTO,
-  unwrapData,
 } from "../utils/tokenGuards";
 
 type WalletApiContext = {
@@ -92,62 +99,29 @@ function createWalletTokenItem(
   };
 }
 
-async function readJsonObject(
-  response: Response,
-): Promise<unknown> {
-  const contentType =
-    response.headers.get(
-      "content-type",
-    ) || "";
-
-  if (
-    !contentType.includes(
-      "application/json",
-    )
-  ) {
-    const body = await response
-      .text()
-      .catch(() => "");
-
-    throw new Error(
-      body
-        ? `APIがJSON以外を返しました: ${body}`
-        : "APIがJSON以外を返しました。",
-    );
-  }
-
-  return response.json();
-}
-
 async function fetchMeWalletWithContext(
   context: WalletApiContext,
 ): Promise<WalletDTO | null> {
-  const response = await fetch(
-    buildApiUrl(
-      context.baseUrl,
-      "/mall/me/wallets",
-    ),
-    {
-      method: "GET",
-      headers: buildAuthHeaders(
+  const result =
+    await fetchMeWalletRaw(
+      buildAuthHeaders(
         context.idToken,
       ),
-    },
+    );
+
+  if (!result.ok) {
+    if (result.status === 404) {
+      return null;
+    }
+
+    throw new Error(
+      "ウォレット情報の取得が許可されていません。",
+    );
+  }
+
+  return extractWallet(
+    result.data,
   );
-
-  if (response.status === 404) {
-    return null;
-  }
-
-  if (!response.ok) {
-    return null;
-  }
-
-  const body =
-    await readJsonObject(response);
-  const decoded = unwrapData(body);
-
-  return extractWallet(decoded);
 }
 
 async function resolveTokenByMintAddressWithContext(
@@ -161,57 +135,35 @@ async function resolveTokenByMintAddressWithContext(
     return null;
   }
 
-  const url = new URL(
-    buildApiUrl(
-      context.baseUrl,
-      "/mall/me/wallets/tokens/resolve",
-    ),
-  );
-
-  url.searchParams.set(
-    "mintAddress",
-    normalizedMintAddress,
-  );
-
-  const response = await fetch(
-    url.toString(),
-    {
-      method: "GET",
+  const result =
+    await resolveWalletTokenRaw({
+      mintAddress:
+        normalizedMintAddress,
       headers: buildAuthHeaders(
         context.idToken,
       ),
-    },
-  );
+    });
 
-  if (response.status === 404) {
-    return null;
-  }
-
-  if (!response.ok) {
-    const body = await response
-      .text()
-      .catch(() => "");
+  if (!result.ok) {
+    if (result.status === 404) {
+      return null;
+    }
 
     throw new Error(
-      `resolve failed: ${response.status} ${body}`,
+      "トークン情報の取得が許可されていません。",
     );
   }
 
-  const body =
-    await readJsonObject(response);
-  const decoded = unwrapData(body);
-
-  return toTokenResolveDTO(decoded);
+  return toTokenResolveDTO(
+    result.data,
+  );
 }
 
 async function fetchTokenMetadataWithContext(
   context: WalletApiContext,
   metadataUri: string,
 ): Promise<TokenMetadataDTO | null> {
-  const normalizedMetadataUri =
-    metadataUri.trim();
-
-  if (!normalizedMetadataUri) {
+  if (!metadataUri) {
     return null;
   }
 
@@ -224,7 +176,7 @@ async function fetchTokenMetadataWithContext(
 
   url.searchParams.set(
     "url",
-    normalizedMetadataUri,
+    metadataUri,
   );
 
   const response = await fetch(
@@ -241,20 +193,22 @@ async function fetchTokenMetadataWithContext(
     return null;
   }
 
-  if (!response.ok) {
-    const body = await response
-      .text()
-      .catch(() => "");
-
-    throw new Error(
-      `metadata fetch failed: ${response.status} ${body}`,
-    );
-  }
-
   const body =
-    await readJsonObject(response);
+    await readJsonResponse<unknown>(
+      response,
+      {
+        requestErrorMessage:
+          "トークンメタデータの取得に失敗しました。",
+        nonJsonErrorMessage:
+          "トークンメタデータAPIがJSON以外を返しました。",
+        invalidJsonErrorMessage:
+          "トークンメタデータAPIのJSON形式が不正です。",
+      },
+    );
 
-  return toTokenMetadataDTO(body);
+  return toTokenMetadataDTO(
+    body,
+  );
 }
 
 export async function fetchMeWallet(): Promise<WalletDTO | null> {
@@ -326,6 +280,7 @@ export async function fetchMeWalletTokens(): Promise<WalletTokenListResult> {
             mintAddress,
           ),
         );
+
         continue;
       }
 

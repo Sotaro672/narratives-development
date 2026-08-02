@@ -2,6 +2,11 @@
 
 import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
 import { getMyAvatar } from "../../avatar/api/avatarApi";
+import {
+  fetchMeWalletRaw,
+  resolveWalletTokenRaw,
+} from "../../wallet/api/walletApiClient";
+
 import type {
   CatalogReviewPage,
   MallOwnerInfo,
@@ -11,8 +16,10 @@ import type {
   TokenResolveDTO,
   WalletDTO,
 } from "../../shared/types/scanResult";
+
 import { isRecord } from "../../../components/utils/typeGuards";
 import { safeUrl } from "../utils/format";
+
 import {
   getAuthHeadersOrUndefined,
   getAuthorizationHeader,
@@ -21,6 +28,7 @@ import {
   mergeHeaders,
   readJsonObject,
 } from "./scanResultHttp";
+
 import {
   catalogReviewPageFromJson,
   mallPreviewResponseFromJson,
@@ -37,9 +45,11 @@ import {
 export {
   getAuthHeadersOrUndefined,
 } from "./scanResultHttp";
+
 export {
   listSolanaTransfersByMintAddress,
 } from "./scanResultSolanaApi";
+
 export type {
   WalletResolvedTokenResponse,
 } from "./scanResultMappers";
@@ -111,9 +121,12 @@ export async function loadPreviewState(
   );
 
   const data =
-    mallPreviewResponseFromJson(raw);
+    mallPreviewResponseFromJson(
+      raw,
+    );
 
-  const unwrapped = unwrapData(raw);
+  const unwrapped =
+    unwrapData(raw);
 
   const tokenBlueprintPatchValue =
     unwrapped.tokenBlueprintPatch;
@@ -148,7 +161,8 @@ export async function loadPreviewState(
 export async function fetchMeAvatar(
   headers?: HeadersInit,
 ): Promise<MallOwnerInfo> {
-  const backendUrl = getApiBaseUrl();
+  const backendUrl =
+    getApiBaseUrl();
 
   if (!backendUrl) {
     throw new Error(
@@ -157,7 +171,9 @@ export async function fetchMeAvatar(
   }
 
   const authorization =
-    getAuthorizationHeader(headers);
+    getAuthorizationHeader(
+      headers,
+    );
 
   if (!authorization) {
     throw new Error(
@@ -166,7 +182,10 @@ export async function fetchMeAvatar(
   }
 
   const idToken = authorization
-    .replace(/^Bearer\s+/i, "")
+    .replace(
+      /^Bearer\s+/i,
+      "",
+    )
     .trim();
 
   if (!idToken) {
@@ -175,10 +194,11 @@ export async function fetchMeAvatar(
     );
   }
 
-  const avatar = await getMyAvatar({
-    backendUrl,
-    idToken,
-  });
+  const avatar =
+    await getMyAvatar({
+      backendUrl,
+      idToken,
+    });
 
   if (!avatar) {
     throw new Error(
@@ -186,8 +206,8 @@ export async function fetchMeAvatar(
     );
   }
 
-  const avatarWithBrand = avatar as
-    typeof avatar & {
+  const avatarWithBrand =
+    avatar as typeof avatar & {
       brandId?: unknown;
       brandName?: unknown;
     };
@@ -198,13 +218,15 @@ export async function fetchMeAvatar(
       "string"
         ? avatarWithBrand.brandId
         : "",
-    avatarId: avatar.avatarId,
+    avatarId:
+      avatar.avatarId,
     brandName:
       typeof avatarWithBrand.brandName ===
       "string"
         ? avatarWithBrand.brandName
         : "",
-    avatarName: avatar.avatarName,
+    avatarName:
+      avatar.avatarName,
   };
 }
 
@@ -223,7 +245,8 @@ export async function verifyScanPurchased(
     );
   }
 
-  const base = getApiBaseUrl();
+  const base =
+    getApiBaseUrl();
 
   if (!base) {
     throw new Error(
@@ -234,10 +257,11 @@ export async function verifyScanPurchased(
   const url =
     `${base}/mall/me/orders/scan/verify`;
 
-  const headers = mergeHeaders(
-    jsonPostHeaders(),
-    args.headers,
-  );
+  const headers =
+    mergeHeaders(
+      jsonPostHeaders(),
+      args.headers,
+    );
 
   const authHeader =
     getAuthorizationHeader(
@@ -257,13 +281,16 @@ export async function verifyScanPurchased(
 
   const decoded =
     await readJsonObject(
-      await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          productId,
-        }),
-      }),
+      await fetch(
+        url,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            productId,
+          }),
+        },
+      ),
       "verifyScanPurchased",
       url,
     );
@@ -288,7 +315,8 @@ export async function transferScanPurchased(
     );
   }
 
-  const base = getApiBaseUrl();
+  const base =
+    getApiBaseUrl();
 
   if (!base) {
     throw new Error(
@@ -299,10 +327,11 @@ export async function transferScanPurchased(
   const url =
     `${base}/mall/me/orders/scan/transfer`;
 
-  const headers = mergeHeaders(
-    jsonPostHeaders(),
-    args.headers,
-  );
+  const headers =
+    mergeHeaders(
+      jsonPostHeaders(),
+      args.headers,
+    );
 
   const authHeader =
     getAuthorizationHeader(
@@ -322,13 +351,16 @@ export async function transferScanPurchased(
 
   const decoded =
     await readJsonObject(
-      await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          productId,
-        }),
-      }),
+      await fetch(
+        url,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            productId,
+          }),
+        },
+      ),
       "transferScanPurchased",
       url,
     );
@@ -354,7 +386,8 @@ export async function fetchReviewsByProductBlueprintId(
     );
   }
 
-  const base = getApiBaseUrl();
+  const base =
+    getApiBaseUrl();
 
   if (!base) {
     throw new Error(
@@ -380,9 +413,13 @@ export async function fetchReviewsByProductBlueprintId(
 
   const decoded =
     await readJsonObject(
-      await fetch(url, {
-        headers: jsonHeaders(),
-      }),
+      await fetch(
+        url,
+        {
+          headers:
+            jsonHeaders(),
+        },
+      ),
       "fetchReviewsByProductBlueprintId",
       url.toString(),
     );
@@ -406,7 +443,8 @@ export async function createProductBlueprintReview(
   const productBlueprintId =
     args.productBlueprintId.trim();
 
-  const body = args.body.trim();
+  const body =
+    args.body.trim();
 
   if (!productBlueprintId) {
     throw new Error(
@@ -420,7 +458,8 @@ export async function createProductBlueprintReview(
     );
   }
 
-  const base = getApiBaseUrl();
+  const base =
+    getApiBaseUrl();
 
   if (!base) {
     throw new Error(
@@ -432,7 +471,9 @@ export async function createProductBlueprintReview(
     1,
     Math.min(
       5,
-      Math.trunc(args.rating),
+      Math.trunc(
+        args.rating,
+      ),
     ),
   );
 
@@ -446,18 +487,22 @@ export async function createProductBlueprintReview(
     )}/reviews`;
 
   return readJsonObject(
-    await fetch(url, {
-      method: "POST",
-      headers: mergeHeaders(
-        jsonPostHeaders(),
-        args.headers,
-      ),
-      body: JSON.stringify({
-        body,
-        rating,
-        title,
-      }),
-    }),
+    await fetch(
+      url,
+      {
+        method: "POST",
+        headers:
+          mergeHeaders(
+            jsonPostHeaders(),
+            args.headers,
+          ),
+        body: JSON.stringify({
+          body,
+          rating,
+          title,
+        }),
+      },
+    ),
     "createProductBlueprintReview",
     url,
   );
@@ -467,7 +512,8 @@ export async function resolveOwnedWalletTokenByMintAddress(
   mintAddress: string,
   headers?: HeadersInit,
 ): Promise<WalletResolvedTokenResponse> {
-  const mint = mintAddress.trim();
+  const mint =
+    mintAddress.trim();
 
   if (!mint) {
     throw new Error(
@@ -475,38 +521,20 @@ export async function resolveOwnedWalletTokenByMintAddress(
     );
   }
 
-  const base = getApiBaseUrl();
+  const result =
+    await resolveWalletTokenRaw({
+      mintAddress: mint,
+      headers,
+    });
 
-  if (!base) {
+  if (!result.ok) {
     throw new Error(
-      "VITE_API_BASE_URL is not configured",
+      `resolveOwnedWalletTokenByMintAddress failed: ${result.status}`,
     );
   }
 
-  const url = new URL(
-    `${base}/mall/me/wallets/tokens/resolve`,
-  );
-
-  url.searchParams.set(
-    "mintAddress",
-    mint,
-  );
-
-  const decoded =
-    await readJsonObject(
-      await fetch(url, {
-        method: "GET",
-        headers: mergeHeaders(
-          jsonHeaders(),
-          headers,
-        ),
-      }),
-      "resolveOwnedWalletTokenByMintAddress",
-      url.toString(),
-    );
-
   return walletResolvedTokenResponseFromJson(
-    decoded,
+    result.data,
   );
 }
 
@@ -514,92 +542,42 @@ export async function isOwnedByWalletMintAddress(
   mintAddress: string,
   headers?: HeadersInit,
 ): Promise<boolean> {
-  const mint = mintAddress.trim();
+  const mint =
+    mintAddress.trim();
 
   if (!mint) {
     return false;
   }
 
-  const base = getApiBaseUrl();
+  const result =
+    await resolveWalletTokenRaw({
+      mintAddress: mint,
+      headers,
+    });
 
-  if (!base) {
-    throw new Error(
-      "VITE_API_BASE_URL is not configured",
-    );
-  }
-
-  const url = new URL(
-    `${base}/mall/me/wallets/tokens/resolve`,
-  );
-
-  url.searchParams.set(
-    "mintAddress",
-    mint,
-  );
-
-  const response = await fetch(
-    url,
-    {
-      method: "GET",
-      headers: mergeHeaders(
-        jsonHeaders(),
-        headers,
-      ),
-    },
-  );
-
-  if (response.ok) {
-    return true;
-  }
-
-  if (
-    response.status === 403 ||
-    response.status === 404
-  ) {
+  if (!result.ok) {
     return false;
   }
 
-  const text =
-    await response.text();
-
-  const body =
-    text.length > 300
-      ? text.slice(0, 300)
-      : text;
-
-  throw new Error(
-    `isOwnedByWalletMintAddress failed: ${response.status} url=${url.toString()} body=${body}`,
-  );
+  return true;
 }
 
 export async function fetchMeWallet(
   headers?: HeadersInit,
 ): Promise<WalletDTO> {
-  const base = getApiBaseUrl();
+  const result =
+    await fetchMeWalletRaw(
+      headers,
+    );
 
-  if (!base) {
+  if (!result.ok) {
     throw new Error(
-      "VITE_API_BASE_URL is not configured",
+      `fetchMeWallet failed: ${result.status}`,
     );
   }
 
-  const url =
-    `${base}/mall/me/wallets`;
-
-  const decoded =
-    await readJsonObject(
-      await fetch(url, {
-        headers: mergeHeaders(
-          jsonHeaders(),
-          headers,
-        ),
-      }),
-      "fetchMeWallet",
-      url,
-    );
-
   return walletDTOFromJson(
-    decoded,
+    result.data,
   );
 }
 
@@ -607,7 +585,8 @@ export async function resolveTokenByMintAddress(
   mintAddress: string,
   headers?: HeadersInit,
 ): Promise<TokenResolveDTO> {
-  const mint = mintAddress.trim();
+  const mint =
+    mintAddress.trim();
 
   if (!mint) {
     throw new Error(
@@ -615,37 +594,20 @@ export async function resolveTokenByMintAddress(
     );
   }
 
-  const base = getApiBaseUrl();
+  const result =
+    await resolveWalletTokenRaw({
+      mintAddress: mint,
+      headers,
+    });
 
-  if (!base) {
+  if (!result.ok) {
     throw new Error(
-      "VITE_API_BASE_URL is not configured",
+      `resolveTokenByMintAddress failed: ${result.status}`,
     );
   }
 
-  const url = new URL(
-    `${base}/mall/me/wallets/tokens/resolve`,
-  );
-
-  url.searchParams.set(
-    "mintAddress",
-    mint,
-  );
-
-  const decoded =
-    await readJsonObject(
-      await fetch(url, {
-        headers: mergeHeaders(
-          jsonHeaders(),
-          headers,
-        ),
-      }),
-      "resolveTokenByMintAddress",
-      url.toString(),
-    );
-
   return tokenResolveDTOFromJson(
-    decoded,
+    result.data,
     mint,
   );
 }
