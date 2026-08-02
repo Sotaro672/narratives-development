@@ -18,7 +18,8 @@ import ProductInfoCard from "../features/catalog/presentation/components/Product
 import ReviewSection from "../features/catalog/presentation/components/ReviewSection";
 import TokenInfoCard from "../features/catalog/presentation/components/TokenInfoCard";
 import { useCatalogPage } from "../features/catalog/presentation/hooks/useCatalogPage";
-import { formatPrice } from "../features/catalog/utils/format";
+import { useMobilePortrait } from "../features/shared/hooks/useMobilePortrait";
+import { formatPrice } from "../features/shared/utils/price";
 import { auth } from "../lib/firebase";
 
 export default function CatalogPage() {
@@ -75,8 +76,6 @@ export default function CatalogPage() {
     selectedModelStock,
     canAddToCart,
 
-    isMobilePortrait,
-
     setActiveImageIndex,
     handlePrevImage,
     handleNextImage,
@@ -88,6 +87,9 @@ export default function CatalogPage() {
     handleAddToCart,
     handleCartButtonClick,
   } = useCatalogPage();
+
+  const isMobilePortrait =
+    useMobilePortrait();
 
   const handleBackButtonClick = () => {
     if (isLoggedIn) {
@@ -236,11 +238,9 @@ export default function CatalogPage() {
                 ) : null}
 
                 <p className="catalog-page-price">
-                  {firstPrice
-                    ? formatPrice(
-                        firstPrice.price,
-                      )
-                    : "価格未設定"}
+                  {formatPrice(
+                    firstPrice?.price,
+                  )}
                 </p>
               </div>
 

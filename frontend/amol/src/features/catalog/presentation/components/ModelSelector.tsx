@@ -1,15 +1,15 @@
 // frontend/amol/src/features/catalog/presentation/components/ModelSelector.tsx
 
 import { rgbToCssColor } from "../../../../components/utils/color";
-import {
-  formatAlcoholVolumeLabel,
-} from "../../application/catalogModelMapper";
 import type {
   CatalogListPrice,
   CatalogModelVariation,
   ModelColorOption,
 } from "../../../shared/types/catalog";
-import { formatPrice } from "../../utils/format";
+import { formatPrice } from "../../../shared/utils/price";
+import {
+  formatAlcoholVolumeLabel,
+} from "../../application/catalogModelMapper";
 
 type ModelSelectorProps = {
   colorOptions: ModelColorOption[];
@@ -159,6 +159,7 @@ export default function ModelSelector({
                   <dt>
                     モデル番号
                   </dt>
+
                   <dd>
                     {formatModelNumber(
                       selectedModel,
@@ -168,6 +169,7 @@ export default function ModelSelector({
 
                 <div>
                   <dt>容量</dt>
+
                   <dd>
                     {formatAlcoholVolumeLabel(
                       selectedModel,
@@ -179,6 +181,7 @@ export default function ModelSelector({
               <>
                 <div>
                   <dt>カラー</dt>
+
                   <dd>
                     {selectedModel
                       .colorName ||
@@ -188,6 +191,7 @@ export default function ModelSelector({
 
                 <div>
                   <dt>サイズ</dt>
+
                   <dd>
                     {selectedModel.size ||
                       "-"}
@@ -198,17 +202,17 @@ export default function ModelSelector({
 
             <div>
               <dt>価格</dt>
+
               <dd>
-                {selectedModelPrice
-                  ? formatPrice(
-                      selectedModelPrice.price,
-                    )
-                  : "価格未設定"}
+                {formatPrice(
+                  selectedModelPrice?.price,
+                )}
               </dd>
             </div>
 
             <div>
               <dt>在庫</dt>
+
               <dd>
                 {typeof selectedModelStock ===
                 "number"

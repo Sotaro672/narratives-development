@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
-import { getApiBaseUrl } from "../lib/apiBaseUrl";
 import {
   fetchCartItemsWithCatalog,
   fetchCurrentAvatarId,
@@ -12,13 +11,14 @@ import {
 } from "../features/cart/api/cartApi";
 import {
   calculateCartTotalAmount,
-  formatPrice,
   getCartItemPrice,
   getModelVariation,
   getPrimaryCatalogImage,
 } from "../features/cart/utils/cartUtils";
 import { useMobilePortrait } from "../features/shared/hooks/useMobilePortrait";
 import type { CartDisplayItem } from "../features/shared/types/cart";
+import { formatPrice } from "../features/shared/utils/price";
+import { getApiBaseUrl } from "../lib/apiBaseUrl";
 
 import "../styles/cart-page.css";
 
@@ -49,7 +49,9 @@ function asResolvedItem(
   return item as CartDisplayItemWithResolvedFields;
 }
 
-function formatAlcoholVolume(item: CartDisplayItem): string {
+function formatAlcoholVolume(
+  item: CartDisplayItem,
+): string {
   const resolvedItem = asResolvedItem(item);
 
   if (
@@ -67,21 +69,29 @@ function formatAlcoholVolume(item: CartDisplayItem): string {
   return "-";
 }
 
-function getCartItemBrandName(item: CartDisplayItem): string {
+function getCartItemBrandName(
+  item: CartDisplayItem,
+): string {
   const resolvedItem = asResolvedItem(item);
 
   return (
-    normalizeText(resolvedItem.catalog?.productBlueprint.brandName) ||
+    normalizeText(
+      resolvedItem.catalog?.productBlueprint.brandName,
+    ) ||
     normalizeText(resolvedItem.brandName) ||
     "ブランド未設定"
   );
 }
 
-function getCartItemProductName(item: CartDisplayItem): string {
+function getCartItemProductName(
+  item: CartDisplayItem,
+): string {
   const resolvedItem = asResolvedItem(item);
 
   return (
-    normalizeText(resolvedItem.catalog?.productBlueprint.productName) ||
+    normalizeText(
+      resolvedItem.catalog?.productBlueprint.productName,
+    ) ||
     normalizeText(resolvedItem.productName) ||
     normalizeText(resolvedItem.catalog?.list.title) ||
     normalizeText(resolvedItem.title) ||
@@ -89,42 +99,68 @@ function getCartItemProductName(item: CartDisplayItem): string {
   );
 }
 
-function getCartItemListTitle(item: CartDisplayItem): string {
+function getCartItemListTitle(
+  item: CartDisplayItem,
+): string {
   const resolvedItem = asResolvedItem(item);
-  const catalogTitle = normalizeText(resolvedItem.catalog?.list.title);
-  const itemTitle = normalizeText(resolvedItem.title);
-  const productName = getCartItemProductName(resolvedItem);
+  const catalogTitle = normalizeText(
+    resolvedItem.catalog?.list.title,
+  );
+  const itemTitle = normalizeText(
+    resolvedItem.title,
+  );
+  const productName = getCartItemProductName(
+    resolvedItem,
+  );
 
-  if (catalogTitle && catalogTitle !== productName) {
+  if (
+    catalogTitle &&
+    catalogTitle !== productName
+  ) {
     return catalogTitle;
   }
 
-  if (itemTitle && itemTitle !== productName) {
+  if (
+    itemTitle &&
+    itemTitle !== productName
+  ) {
     return itemTitle;
   }
 
   return "";
 }
 
-function getCartItemImageUrl(item: CartDisplayItem): string {
+function getCartItemImageUrl(
+  item: CartDisplayItem,
+): string {
   const resolvedItem = asResolvedItem(item);
 
   return (
-    normalizeText(getPrimaryCatalogImage(resolvedItem.catalog)) ||
+    normalizeText(
+      getPrimaryCatalogImage(
+        resolvedItem.catalog,
+      ),
+    ) ||
     normalizeText(resolvedItem.imageUrl) ||
     normalizeText(resolvedItem.listImage)
   );
 }
 
-function getCartItemNavigationPath(item: CartDisplayItem): string {
+function getCartItemNavigationPath(
+  item: CartDisplayItem,
+): string {
   const resolvedItem = asResolvedItem(item);
 
   if (resolvedItem.listId) {
-    return `/lists/${encodeURIComponent(resolvedItem.listId)}`;
+    return `/lists/${encodeURIComponent(
+      resolvedItem.listId,
+    )}`;
   }
 
   if (resolvedItem.resaleId) {
-    return `/market/resales/${encodeURIComponent(resolvedItem.resaleId)}`;
+    return `/market/resales/${encodeURIComponent(
+      resolvedItem.resaleId,
+    )}`;
   }
 
   return "";
@@ -132,14 +168,27 @@ function getCartItemNavigationPath(item: CartDisplayItem): string {
 
 export default function CartPage() {
   const navigate = useNavigate();
-  const isMobilePortrait = useMobilePortrait();
+  const isMobilePortrait =
+    useMobilePortrait();
 
-  const [items, setItems] = useState<CartDisplayItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [removingItemKey, setRemovingItemKey] = useState("");
+  const [items, setItems] =
+    useState<CartDisplayItem[]>([]);
 
-  const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
+  const [isLoading, setIsLoading] =
+    useState(true);
+
+  const [errorMessage, setErrorMessage] =
+    useState("");
+
+  const [
+    removingItemKey,
+    setRemovingItemKey,
+  ] = useState("");
+
+  const apiBaseUrl = useMemo(
+    () => getApiBaseUrl(),
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -149,12 +198,16 @@ export default function CartPage() {
       setErrorMessage("");
 
       try {
-        const avatarId = await fetchCurrentAvatarId(apiBaseUrl);
+        const avatarId =
+          await fetchCurrentAvatarId(
+            apiBaseUrl,
+          );
 
-        const itemsWithCatalog = await fetchCartItemsWithCatalog({
-          apiBaseUrl,
-          avatarId,
-        });
+        const itemsWithCatalog =
+          await fetchCartItemsWithCatalog({
+            apiBaseUrl,
+            avatarId,
+          });
 
         if (cancelled) {
           return;
@@ -191,6 +244,7 @@ export default function CartPage() {
   }, [items]);
 
   const hasItems = items.length > 0;
+
   const isPurchaseDisabled =
     !hasItems ||
     isLoading ||
@@ -204,7 +258,9 @@ export default function CartPage() {
     navigate("/payments/cart");
   }
 
-  async function handleRemoveItem(item: CartDisplayItem) {
+  async function handleRemoveItem(
+    item: CartDisplayItem,
+  ) {
     if (removingItemKey !== "") {
       return;
     }
@@ -221,7 +277,8 @@ export default function CartPage() {
       setItems((currentItems) =>
         currentItems.filter(
           (currentItem) =>
-            currentItem.itemKey !== item.itemKey,
+            currentItem.itemKey !==
+            item.itemKey,
         ),
       );
     } catch (error) {
@@ -255,14 +312,18 @@ export default function CartPage() {
           ? undefined
           : handlePurchase
       }
-      actionButtonDisabled={isPurchaseDisabled}
+      actionButtonDisabled={
+        isPurchaseDisabled
+      }
       footerProps={
         isMobilePortrait
           ? {
               variant: "action",
               buttonLabel: "購入する",
-              disabled: isPurchaseDisabled,
-              onButtonClick: handlePurchase,
+              disabled:
+                isPurchaseDisabled,
+              onButtonClick:
+                handlePurchase,
             }
           : undefined
       }
@@ -287,7 +348,8 @@ export default function CartPage() {
           </div>
         ) : null}
 
-        {!isLoading && errorMessage ? (
+        {!isLoading &&
+        errorMessage ? (
           <div className="cart-page-empty">
             <div
               className="cart-page-empty__icon"
@@ -306,7 +368,9 @@ export default function CartPage() {
           </div>
         ) : null}
 
-        {!isLoading && !errorMessage && !hasItems ? (
+        {!isLoading &&
+        !errorMessage &&
+        !hasItems ? (
           <div className="cart-page-empty">
             <div
               className="cart-page-empty__icon"
@@ -325,73 +389,118 @@ export default function CartPage() {
           </div>
         ) : null}
 
-        {!isLoading && !errorMessage && hasItems ? (
+        {!isLoading &&
+        !errorMessage &&
+        hasItems ? (
           <div className="cart-page-content">
             <div className="cart-page-list">
               {items.map((item) => {
-                const resolvedItem = asResolvedItem(item);
-                const catalog = resolvedItem.catalog;
-                const modelId = resolvedItem.modelId || "";
-                const model = getModelVariation(
-                  catalog,
-                  modelId,
-                );
+                const resolvedItem =
+                  asResolvedItem(item);
+
+                const catalog =
+                  resolvedItem.catalog;
+
+                const modelId =
+                  resolvedItem.modelId || "";
+
+                const model =
+                  getModelVariation(
+                    catalog,
+                    modelId,
+                  );
+
                 const imageUrl =
-                  getCartItemImageUrl(resolvedItem);
+                  getCartItemImageUrl(
+                    resolvedItem,
+                  );
+
                 const price =
-                  getCartItemPrice(resolvedItem);
+                  getCartItemPrice(
+                    resolvedItem,
+                  );
+
                 const lineAmount =
                   price === null
                     ? null
-                    : price * resolvedItem.qty;
+                    : price *
+                      resolvedItem.qty;
+
                 const isRemoving =
                   removingItemKey ===
                   resolvedItem.itemKey;
+
                 const isAlcohol =
-                  resolvedItem.modelKind === "alcohol";
+                  resolvedItem.modelKind ===
+                  "alcohol";
+
                 const brandName =
-                  getCartItemBrandName(resolvedItem);
+                  getCartItemBrandName(
+                    resolvedItem,
+                  );
+
                 const productName =
-                  getCartItemProductName(resolvedItem);
+                  getCartItemProductName(
+                    resolvedItem,
+                  );
+
                 const listTitle =
-                  getCartItemListTitle(resolvedItem);
+                  getCartItemListTitle(
+                    resolvedItem,
+                  );
+
                 const navigationPath =
                   getCartItemNavigationPath(
                     resolvedItem,
                   );
+
                 const canNavigate =
                   navigationPath !== "";
 
                 return (
                   <article
-                    key={resolvedItem.itemKey}
+                    key={
+                      resolvedItem.itemKey
+                    }
                     className="cart-page-item"
                   >
                     <button
                       type="button"
                       className="cart-page-item__remove-button"
                       aria-label="カートから商品を削除"
-                      disabled={removingItemKey !== ""}
+                      disabled={
+                        removingItemKey !==
+                        ""
+                      }
                       onClick={(event) => {
                         event.stopPropagation();
+
                         void handleRemoveItem(
                           resolvedItem,
                         );
                       }}
                     >
-                      {isRemoving ? "…" : "×"}
+                      {isRemoving
+                        ? "…"
+                        : "×"}
                     </button>
 
                     <button
                       type="button"
                       className="cart-page-item__image-button"
-                      disabled={!canNavigate}
+                      disabled={
+                        !canNavigate
+                      }
                       onClick={() => {
-                        if (!navigationPath) {
+                        if (
+                          !navigationPath
+                        ) {
                           return;
                         }
 
-                        navigate(navigationPath);
+                        navigate(
+                          navigationPath,
+                        );
                       }}
                     >
                       {imageUrl ? (
@@ -426,15 +535,22 @@ export default function CartPage() {
                         {isAlcohol ? (
                           <>
                             <div>
-                              <dt>品番</dt>
+                              <dt>
+                                品番
+                              </dt>
+
                               <dd>
-                                {resolvedItem.modelNumber ||
+                                {resolvedItem
+                                  .modelNumber ||
                                   "-"}
                               </dd>
                             </div>
 
                             <div>
-                              <dt>容量</dt>
+                              <dt>
+                                容量
+                              </dt>
+
                               <dd>
                                 {formatAlcoholVolume(
                                   resolvedItem,
@@ -445,7 +561,10 @@ export default function CartPage() {
                         ) : (
                           <>
                             <div>
-                              <dt>カラー</dt>
+                              <dt>
+                                カラー
+                              </dt>
+
                               <dd>
                                 {model?.colorName ||
                                   resolvedItem.colorName ||
@@ -455,7 +574,10 @@ export default function CartPage() {
                             </div>
 
                             <div>
-                              <dt>サイズ</dt>
+                              <dt>
+                                サイズ
+                              </dt>
+
                               <dd>
                                 {model?.size ||
                                   resolvedItem.size ||
@@ -467,14 +589,18 @@ export default function CartPage() {
 
                         <div>
                           <dt>数量</dt>
-                          <dd>{resolvedItem.qty}</dd>
+                          <dd>
+                            {
+                              resolvedItem.qty
+                            }
+                          </dd>
                         </div>
                       </dl>
 
                       <p className="cart-page-item__price">
-                        {lineAmount === null
-                          ? "価格未設定"
-                          : formatPrice(lineAmount)}
+                        {formatPrice(
+                          lineAmount,
+                        )}
                       </p>
                     </div>
                   </article>
@@ -490,12 +616,18 @@ export default function CartPage() {
               <dl className="cart-page-summary__list">
                 <div>
                   <dt>商品数</dt>
-                  <dd>{items.length}</dd>
+                  <dd>
+                    {items.length}
+                  </dd>
                 </div>
 
                 <div>
                   <dt>合計</dt>
-                  <dd>{formatPrice(totalAmount)}</dd>
+                  <dd>
+                    {formatPrice(
+                      totalAmount,
+                    )}
+                  </dd>
                 </div>
               </dl>
             </aside>
