@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import { formatPrice } from "../components/utils/price";
+import { getApiBaseUrl } from "../lib/apiBaseUrl";
 
 import "../styles/lists-page.css";
 
@@ -71,20 +72,6 @@ function formatListPrice(
   return formatPrice(amount, {
     currency: firstPrice?.currency,
   });
-}
-
-function getApiBaseUrl(): string {
-  const env =
-    import.meta.env.VITE_API_BASE_URL;
-
-  if (
-    typeof env === "string" &&
-    env.trim() !== ""
-  ) {
-    return env.replace(/\/$/, "");
-  }
-
-  return "";
 }
 
 async function fetchCatalogCardItem(

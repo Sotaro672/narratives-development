@@ -1,17 +1,9 @@
 // frontend/amol/src/features/payment/api/paymentHttp.ts
+
+import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
 import { getFirebaseIdToken } from "../../../lib/authToken";
 
 export const API_BASE_URL = getApiBaseUrl();
-
-export function getApiBaseUrl(): string {
-  const env = import.meta.env.VITE_API_BASE_URL;
-
-  if (typeof env === "string" && env.trim() !== "") {
-    return env.replace(/\/+$/, "");
-  }
-
-  return "";
-}
 
 export function getResponseErrorMessage(
   body: unknown,
@@ -47,7 +39,9 @@ export async function getAuthHeaders(): Promise<HeadersInit> {
   };
 }
 
-export async function parseJsonOrThrow<T>(response: Response): Promise<T> {
+export async function parseJsonOrThrow<T>(
+  response: Response,
+): Promise<T> {
   const text = await response.text();
 
   let body: unknown = null;
@@ -56,7 +50,9 @@ export async function parseJsonOrThrow<T>(response: Response): Promise<T> {
     try {
       body = JSON.parse(text);
     } catch {
-      throw new Error("APIがJSON以外を返しました。");
+      throw new Error(
+        "APIがJSON以外を返しました。",
+      );
     }
   }
 
@@ -75,9 +71,14 @@ export async function parseJsonOrThrow<T>(response: Response): Promise<T> {
 export async function parseJsonOrNull<T>(
   response: Response,
 ): Promise<T | null> {
-  const contentType = response.headers.get("content-type") || "";
+  const contentType =
+    response.headers.get("content-type") || "";
 
-  if (!contentType.includes("application/json")) {
+  if (
+    !contentType.includes(
+      "application/json",
+    )
+  ) {
     return null;
   }
 

@@ -19,21 +19,8 @@ import {
 } from "lucide-react";
 
 import { getMyAvatar } from "../../../features/avatar/api/avatarApi";
+import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
 import { publicHeaderNavigationItems } from "./headerNavigationItems";
-
-function getApiBaseUrl(): string {
-  const env =
-    import.meta.env.VITE_API_BASE_URL;
-
-  if (
-    typeof env === "string" &&
-    env.trim() !== ""
-  ) {
-    return env.replace(/\/$/, "");
-  }
-
-  return "";
-}
 
 export default function HeaderDesktopNavigation() {
   const [
