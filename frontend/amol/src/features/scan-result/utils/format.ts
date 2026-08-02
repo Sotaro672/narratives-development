@@ -1,16 +1,14 @@
 // frontend/amol/src/features/scan-result/utils/format.ts
 
+import { textOrEmpty } from "../../../components/utils/textOrEmpty";
 import { isRecord } from "../../../components/utils/typeGuards";
+
 import type {
   MallOwnerInfo,
   MallPreviewTransferInfo,
   ProductBlueprintPatchItem,
   TokenBlueprintPatchVM,
 } from "../../shared/types/scanResult";
-
-export function trimText(value: unknown): string {
-  return String(value ?? "").trim();
-}
 
 export function ownerLabel(
   owner: MallOwnerInfo | null | undefined,
@@ -43,7 +41,9 @@ export function ownerLabel(
   return "-";
 }
 
-export function shortAddress(value: string): string {
+export function shortAddress(
+  value: string,
+): string {
   const address = value.trim();
 
   if (address.length <= 16) {
@@ -53,8 +53,10 @@ export function shortAddress(value: string): string {
   return `${address.slice(0, 8)}...${address.slice(-8)}`;
 }
 
-export function withCm(value: unknown): string {
-  const text = trimText(value);
+export function withCm(
+  value: unknown,
+): string {
+  const text = textOrEmpty(value);
 
   if (!text) {
     return "-";
@@ -67,7 +69,9 @@ export function withCm(value: unknown): string {
   return `${text}cm`;
 }
 
-export function safeUrl(raw: string): string {
+export function safeUrl(
+  raw: string,
+): string {
   const value = raw.trim();
 
   if (!value) {
@@ -108,6 +112,7 @@ export function shouldHidePatchKey(
   const keyParts = key.split(".");
   const tail =
     keyParts[keyParts.length - 1] || "";
+
   const tailNoIndex = tail.replace(
     /\[\d+\]/g,
     "",
@@ -153,6 +158,7 @@ export function jpLabelForPatchKey(
   const keyParts = normalizedKey.split(".");
   const tail =
     keyParts[keyParts.length - 1] || "";
+
   const tailNoIndex = tail.replace(
     /\[\d+\]/g,
     "",
@@ -228,6 +234,7 @@ export function flattenProductBlueprintPatch(
   ) => {
     if (value == null) {
       add(prefix, null);
+
       return;
     }
 

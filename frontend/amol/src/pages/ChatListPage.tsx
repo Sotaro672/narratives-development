@@ -1,8 +1,10 @@
 // frontend/amol/src/pages/ChatListPage.tsx
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import { textOrEmpty } from "../components/utils/textOrEmpty";
 import {
   listInquiryReplies,
   listMeInquiries,
@@ -139,14 +141,19 @@ export default function ChatListPage() {
         ) : null}
 
         {!loading && sortedItems.length > 0 ? (
-          <div className="chat-list-page__list" aria-label="チャット一覧">
+          <div
+            className="chat-list-page__list"
+            aria-label="チャット一覧"
+          >
             {sortedItems.map((item) => {
               const isUnread = item.isRead === false;
               const isNavigating = navigatingId === item.id;
 
               const title = getChatTitle(item);
               const preview = getChatPreview(item);
-              const dateLabel = formatChatDate(getLatestActivityAt(item));
+              const dateLabel = formatChatDate(
+                getLatestActivityAt(item),
+              );
               const subLabel = getChatSubLabel(item);
               const statusLabel = getChatStatusLabel(item);
               const countLabel = getChatCountLabel(item);
@@ -167,13 +174,19 @@ export default function ChatListPage() {
                   aria-busy={isNavigating}
                   onClick={() => void handleOpenChat(item)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
+                    if (
+                      event.key === "Enter" ||
+                      event.key === " "
+                    ) {
                       event.preventDefault();
                       void handleOpenChat(item);
                     }
                   }}
                 >
-                  <div className="chat-list-page__avatar" aria-hidden="true">
+                  <div
+                    className="chat-list-page__avatar"
+                    aria-hidden="true"
+                  >
                     {avatarIcon ? (
                       <img
                         src={avatarIcon}
@@ -192,6 +205,7 @@ export default function ChatListPage() {
 
                           const fallback =
                             event.currentTarget.nextElementSibling;
+
                           if (fallback instanceof HTMLElement) {
                             fallback.style.display = "inline";
                           }
@@ -199,7 +213,13 @@ export default function ChatListPage() {
                       />
                     ) : null}
 
-                    <span style={avatarIcon ? { display: "none" } : undefined}>
+                    <span
+                      style={
+                        avatarIcon
+                          ? { display: "none" }
+                          : undefined
+                      }
+                    >
                       {avatarInitial}
                     </span>
                   </div>
@@ -207,7 +227,9 @@ export default function ChatListPage() {
                   <div className="chat-list-page__body">
                     <div className="chat-list-page__head">
                       <div className="chat-list-page__title-wrap">
-                        <h2 className="chat-list-page__title">{title}</h2>
+                        <h2 className="chat-list-page__title">
+                          {title}
+                        </h2>
 
                         {subLabel ? (
                           <span className="chat-list-page__sub-label">
@@ -219,7 +241,9 @@ export default function ChatListPage() {
                       {dateLabel ? (
                         <time
                           className="chat-list-page__date"
-                          dateTime={getLatestActivityAt(item) ?? undefined}
+                          dateTime={
+                            getLatestActivityAt(item) ?? undefined
+                          }
                         >
                           {dateLabel}
                         </time>
@@ -227,7 +251,9 @@ export default function ChatListPage() {
                     </div>
 
                     <div className="chat-list-page__content">
-                      <p className="chat-list-page__preview">{preview}</p>
+                      <p className="chat-list-page__preview">
+                        {preview}
+                      </p>
 
                       <div className="chat-list-page__meta">
                         {countLabel ? (
@@ -275,37 +301,43 @@ async function loadInquiryItems(
   }
 
   return Promise.all(
-    result.items.map(async (item): Promise<InquiryChatListItem> => {
-      if (!item.id) {
-        return {
-          ...item,
-          chatKind: "inquiry",
-          replies: [],
-        };
-      }
+    result.items.map(
+      async (
+        item,
+      ): Promise<InquiryChatListItem> => {
+        if (!item.id) {
+          return {
+            ...item,
+            chatKind: "inquiry",
+            replies: [],
+          };
+        }
 
-      try {
-        const replies = await listInquiryReplies(item.id);
+        try {
+          const replies = await listInquiryReplies(item.id);
 
-        return {
-          ...item,
-          chatKind: "inquiry",
-          replies,
-        };
-      } catch {
-        return {
-          ...item,
-          chatKind: "inquiry",
-          replies: [],
-        };
-      }
-    }),
+          return {
+            ...item,
+            chatKind: "inquiry",
+            replies,
+          };
+        } catch {
+          return {
+            ...item,
+            chatKind: "inquiry",
+            replies: [],
+          };
+        }
+      },
+    ),
   );
 }
 
 async function openInquiryChat(
   item: InquiryChatListItem,
-  setItems: React.Dispatch<React.SetStateAction<ChatListItem[]>>,
+  setItems: React.Dispatch<
+    React.SetStateAction<ChatListItem[]>
+  >,
   navigate: ReturnType<typeof useNavigate>,
 ): Promise<void> {
   const inquiryId = item.id;
@@ -332,7 +364,9 @@ async function openInquiryChat(
 
     setItems((current) =>
       current.map((currentItem) =>
-        currentItem.id === inquiryId ? nextItem : currentItem,
+        currentItem.id === inquiryId
+          ? nextItem
+          : currentItem,
       ),
     );
   }
@@ -349,38 +383,55 @@ async function openInquiryChat(
   });
 }
 
-function getChatTitle(item: ChatListItem): string {
+function getChatTitle(
+  item: ChatListItem,
+): string {
   return getInquiryTitle(item);
 }
 
-function getChatPreview(item: ChatListItem): string {
+function getChatPreview(
+  item: ChatListItem,
+): string {
   return getInquiryPreview(item);
 }
 
-function getChatSubLabel(item: ChatListItem): string {
+function getChatSubLabel(
+  item: ChatListItem,
+): string {
   return getInquirySubLabel(item);
 }
 
-function getChatStatusLabel(item: ChatListItem): string {
+function getChatStatusLabel(
+  item: ChatListItem,
+): string {
   return getStatusLabel(item.status);
 }
 
-function getChatCountLabel(item: ChatListItem): string {
-  return item.replies.length > 0 ? `返信 ${item.replies.length} 件` : "";
+function getChatCountLabel(
+  item: ChatListItem,
+): string {
+  return item.replies.length > 0
+    ? `返信 ${item.replies.length} 件`
+    : "";
 }
 
-function getInquiryTitle(item: InquiryChatListItem): string {
+function getInquiryTitle(
+  item: InquiryChatListItem,
+): string {
   const subject = textOrEmpty(item.subject);
+
   if (subject) {
     return subject;
   }
 
   const productName = textOrEmpty(item.productName);
+
   if (productName) {
     return productName;
   }
 
   const tokenName = textOrEmpty(item.tokenName);
+
   if (tokenName) {
     return tokenName;
   }
@@ -388,31 +439,43 @@ function getInquiryTitle(item: InquiryChatListItem): string {
   return "問い合わせ";
 }
 
-function getInquiryPreview(item: InquiryChatListItem): string {
+function getInquiryPreview(
+  item: InquiryChatListItem,
+): string {
   const latestReply = getLatestReply(item.replies);
-  const latestReplyContent = textOrEmpty(latestReply?.content);
+  const latestReplyContent = textOrEmpty(
+    latestReply?.content,
+  );
 
   if (latestReplyContent) {
     return latestReplyContent;
   }
 
   const content = textOrEmpty(item.content);
+
   if (content) {
     return content;
   }
 
-  if (Array.isArray(item.images) && item.images.length > 0) {
+  if (
+    Array.isArray(item.images) &&
+    item.images.length > 0
+  ) {
     return `画像 ${item.images.length} 件`;
   }
 
   return "メッセージはありません";
 }
 
-function getChatAvatarIcon(_item: ChatListItem): string {
+function getChatAvatarIcon(
+  _item: ChatListItem,
+): string {
   return "";
 }
 
-function getInquirySubLabel(item: InquiryChatListItem): string {
+function getInquirySubLabel(
+  item: InquiryChatListItem,
+): string {
   return (
     textOrEmpty(item.brandName) ||
     textOrEmpty(item.avatarName) ||
@@ -422,14 +485,19 @@ function getInquirySubLabel(item: InquiryChatListItem): string {
   );
 }
 
-function getStatusLabel(status?: string | null): string {
+function getStatusLabel(
+  status?: string | null,
+): string {
   switch (status) {
     case "open":
       return "未対応";
+
     case "resolved":
       return "解決済み";
+
     case "closed":
       return "クローズ";
+
     default:
       return "";
   }
@@ -445,7 +513,9 @@ function getInitial(value: string): string {
   return Array.from(trimmed)[0] ?? "？";
 }
 
-function getLatestActivityAt(item: ChatListItem): string | null | undefined {
+function getLatestActivityAt(
+  item: ChatListItem,
+): string | null | undefined {
   const latestReply = getLatestReply(item.replies);
 
   return (
@@ -456,20 +526,34 @@ function getLatestActivityAt(item: ChatListItem): string | null | undefined {
   );
 }
 
-function getLatestReply(replies: InquiryReply[]): InquiryReply | null {
-  if (!Array.isArray(replies) || replies.length === 0) {
+function getLatestReply(
+  replies: InquiryReply[],
+): InquiryReply | null {
+  if (
+    !Array.isArray(replies) ||
+    replies.length === 0
+  ) {
     return null;
   }
 
-  return [...replies].sort((a, b) => {
-    const aTime = getComparableTime(a.updatedAt ?? a.createdAt);
-    const bTime = getComparableTime(b.updatedAt ?? b.createdAt);
+  return (
+    [...replies].sort((a, b) => {
+      const aTime = getComparableTime(
+        a.updatedAt ?? a.createdAt,
+      );
 
-    return bTime - aTime;
-  })[0] ?? null;
+      const bTime = getComparableTime(
+        b.updatedAt ?? b.createdAt,
+      );
+
+      return bTime - aTime;
+    })[0] ?? null
+  );
 }
 
-function formatChatDate(value?: string | null): string {
+function formatChatDate(
+  value?: string | null,
+): string {
   if (!value) {
     return "";
   }
@@ -481,9 +565,12 @@ function formatChatDate(value?: string | null): string {
   }
 
   const now = new Date();
-  const sameYear = date.getFullYear() === now.getFullYear();
-  const sameMonth = date.getMonth() === now.getMonth();
-  const sameDate = date.getDate() === now.getDate();
+  const sameYear =
+    date.getFullYear() === now.getFullYear();
+  const sameMonth =
+    date.getMonth() === now.getMonth();
+  const sameDate =
+    date.getDate() === now.getDate();
 
   if (sameYear && sameMonth && sameDate) {
     return new Intl.DateTimeFormat("ja-JP", {
@@ -506,7 +593,9 @@ function formatChatDate(value?: string | null): string {
   }).format(date);
 }
 
-function getComparableTime(value?: string | null): number {
+function getComparableTime(
+  value?: string | null,
+): number {
   if (!value) {
     return 0;
   }
@@ -518,8 +607,4 @@ function getComparableTime(value?: string | null): number {
   }
 
   return date.getTime();
-}
-
-function textOrEmpty(value: unknown): string {
-  return String(value ?? "").trim();
 }

@@ -12,6 +12,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import { formatDateTime } from "../components/utils/date";
+import { textOrEmpty } from "../components/utils/textOrEmpty";
 import Dropdown from "../components/ui/Dropdown";
 import Input from "../components/ui/Input";
 import MediaGallery from "../components/ui/MediaGallery";
@@ -116,10 +117,6 @@ type EditableConditionMediaItem = MediaUploaderItem & {
   image?: ResaleConditionImage;
 };
 
-function normalizeText(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
 function formatPrice(value: number | undefined): string {
   const price = Number(value ?? 0);
 
@@ -171,7 +168,7 @@ function formatModelColor(
     return "-";
   }
 
-  const name = normalizeText(color.name);
+  const name = textOrEmpty(color.name);
   const rgb = Number(color.rgb);
 
   if (!name && !Number.isFinite(rgb)) {
@@ -197,7 +194,7 @@ function formatModelVolume(
   const amount = Number(
     volume.amount ?? volume.value ?? 0,
   );
-  const unit = normalizeText(volume.unit);
+  const unit = textOrEmpty(volume.unit);
 
   if (!Number.isFinite(amount) || amount <= 0) {
     return unit || "-";
@@ -217,7 +214,7 @@ function formatMeasurements(
 
   const entries = Object.entries(measurements).filter(
     ([key, value]) => {
-      const label = normalizeText(key);
+      const label = textOrEmpty(key);
       const numericValue = Number(value);
 
       return label !== "" && Number.isFinite(numericValue);
@@ -248,7 +245,7 @@ function normalizeEditableStatus(
 function normalizeCondition(
   value: unknown,
 ): ResaleConditionValue {
-  const text = normalizeText(value);
+  const text = textOrEmpty(value);
 
   if (
     text === "新品・未使用" ||
@@ -359,10 +356,10 @@ function getTokenIconUrl(
   };
 
   return (
-    normalizeText(record.tokenIconUrl) ||
-    normalizeText(record.tokenIcon) ||
-    normalizeText(record.imageUrl) ||
-    normalizeText(record.metadata?.image)
+    textOrEmpty(record.tokenIconUrl) ||
+    textOrEmpty(record.tokenIcon) ||
+    textOrEmpty(record.imageUrl) ||
+    textOrEmpty(record.metadata?.image)
   );
 }
 
@@ -377,7 +374,7 @@ export default function ResaleDetailPage() {
   const conditionMediaCarouselRef =
     useRef<HTMLDivElement>(null);
 
-  const normalizedResaleId = normalizeText(resaleId);
+  const normalizedResaleId = textOrEmpty(resaleId);
 
   const [item, setItem] =
     useState<ResaleListingWithModel | null>(null);
@@ -416,17 +413,17 @@ export default function ResaleDetailPage() {
     [sortedImages],
   );
 
-  const productName = normalizeText(item?.productName);
-  const tokenName = normalizeText(item?.tokenName);
-  const brandName = normalizeText(item?.brandName);
-  const condition = normalizeText(item?.condition);
-  const description = normalizeText(item?.description);
-  const status = normalizeText(item?.status);
+  const productName = textOrEmpty(item?.productName);
+  const tokenName = textOrEmpty(item?.tokenName);
+  const brandName = textOrEmpty(item?.brandName);
+  const condition = textOrEmpty(item?.condition);
+  const description = textOrEmpty(item?.description);
+  const status = textOrEmpty(item?.status);
   const tokenIconUrl = getTokenIconUrl(item);
-  const modelId = normalizeText(item?.modelId);
-  const modelKind = normalizeText(item?.kind);
-  const modelNumber = normalizeText(item?.modelNumber);
-  const modelSize = normalizeText(item?.size);
+  const modelId = textOrEmpty(item?.modelId);
+  const modelKind = textOrEmpty(item?.kind);
+  const modelNumber = textOrEmpty(item?.modelNumber);
+  const modelSize = textOrEmpty(item?.size);
   const modelColorLabel = formatModelColor(item?.color);
   const modelVolumeLabel = formatModelVolume(item?.volume);
   const measurementsLabel =
@@ -500,7 +497,7 @@ export default function ResaleDetailPage() {
       );
       setConditionInput(nextCondition);
       setDescriptionInput(
-        normalizeText(nextItem?.description),
+        textOrEmpty(nextItem?.description),
       );
       setStatusInput(nextStatus);
       setConditionMediaItems(

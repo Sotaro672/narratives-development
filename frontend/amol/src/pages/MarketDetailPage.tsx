@@ -18,6 +18,7 @@ import {
 import { getApiBaseUrl } from "../lib/apiBaseUrl";
 import { auth } from "../lib/firebase";
 import { rgbToCssColor, toSafeColorRGB } from "../components/utils/color";
+import { textOrEmpty } from "../components/utils/textOrEmpty";
 
 import "../styles/page-layout.css";
 import "../styles/market-detail-page.css";
@@ -43,10 +44,6 @@ type MarketResaleListingWithModel = MarketResaleListing & {
   volume?: MarketResaleModelVolume | null;
 };
 
-function normalizeText(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
 function formatModelKind(value: string): string {
   switch (value) {
     case "apparel":
@@ -61,7 +58,7 @@ function formatModelKind(value: string): string {
 }
 
 function formatReviewDate(value: string | undefined): string {
-  const text = normalizeText(value);
+  const text = textOrEmpty(value);
 
   if (!text) {
     return "";
@@ -99,7 +96,7 @@ function getRatingStars(value: number | undefined): string {
 function getModelColorName(
   color: MarketResaleModelColor | null | undefined,
 ): string {
-  return normalizeText(color?.name);
+  return textOrEmpty(color?.name);
 }
 
 function getModelColorCssValue(
@@ -138,7 +135,7 @@ function formatModelVolume(
       0,
   );
 
-  const unit = normalizeText(volume.unit);
+  const unit = textOrEmpty(volume.unit);
 
   if (!Number.isFinite(amount) || amount <= 0) {
     return unit || "-";
@@ -158,7 +155,7 @@ function formatMeasurements(
 
   const entries = Object.entries(measurements).filter(
     ([key, value]) => {
-      const label = normalizeText(key);
+      const label = textOrEmpty(key);
       const numericValue = Number(value);
 
       return label !== "" && Number.isFinite(numericValue);
@@ -227,7 +224,7 @@ function createGalleryItemFromImage(
 function createFallbackGalleryItem(
   item: MarketResaleListingWithModel,
 ): MediaGalleryItem | null {
-  const imageUrl = normalizeText(item.imageUrl);
+  const imageUrl = textOrEmpty(item.imageUrl);
 
   if (!imageUrl) {
     return null;
@@ -235,8 +232,8 @@ function createFallbackGalleryItem(
 
   return {
     id:
-      normalizeText(item.imageId) ||
-      normalizeText(item.id) ||
+      textOrEmpty(item.imageId) ||
+      textOrEmpty(item.id) ||
       imageUrl,
     url: imageUrl,
     fileName:
@@ -343,9 +340,9 @@ function ReviewAvatar({
 }: {
   review: MarketProductBlueprintReview;
 }) {
-  const avatarName = normalizeText(review.avatarName);
-  const avatarIcon = normalizeText(review.avatarIcon);
-  const avatarId = normalizeText(review.avatarId);
+  const avatarName = textOrEmpty(review.avatarName);
+  const avatarIcon = textOrEmpty(review.avatarIcon);
+  const avatarId = textOrEmpty(review.avatarId);
 
   return (
     <div className="market-detail-page__review-author">
@@ -468,7 +465,7 @@ export default function MarketDetailPage() {
         setActiveMediaIndex(0);
 
         const productBlueprintId =
-          normalizeText(data.productBlueprintId);
+          textOrEmpty(data.productBlueprintId);
 
         if (!productBlueprintId) {
           setReviews(null);
@@ -540,19 +537,19 @@ export default function MarketDetailPage() {
       ? `${item.price.toLocaleString("ja-JP")}円`
       : "価格未設定";
 
-  const modelId = normalizeText(item?.modelId);
-  const modelKind = normalizeText(item?.kind);
-  const modelNumber = normalizeText(
+  const modelId = textOrEmpty(item?.modelId);
+  const modelKind = textOrEmpty(item?.kind);
+  const modelNumber = textOrEmpty(
     item?.modelNumber,
   );
-  const modelSize = normalizeText(item?.size);
-  const tokenName = normalizeText(item?.tokenName);
-  const tokenIcon = normalizeText(item?.tokenIcon);
-  const sellerAvatarId = normalizeText(
+  const modelSize = textOrEmpty(item?.size);
+  const tokenName = textOrEmpty(item?.tokenName);
+  const tokenIcon = textOrEmpty(item?.tokenIcon);
+  const sellerAvatarId = textOrEmpty(
     item?.avatarId,
   );
-  const avatarName = normalizeText(item?.avatarName);
-  const avatarIcon = normalizeText(item?.avatarIcon);
+  const avatarName = textOrEmpty(item?.avatarName);
+  const avatarIcon = textOrEmpty(item?.avatarIcon);
 
   const galleryItems = useMemo<
     MediaGalleryItem[]
@@ -964,11 +961,11 @@ export default function MarketDetailPage() {
                 reviews?.items.length ? (
                   <div className="market-detail-page__review-list">
                     {reviews.items.map((review) => {
-                      const title = normalizeText(
+                      const title = textOrEmpty(
                         review.title,
                       );
 
-                      const body = normalizeText(
+                      const body = textOrEmpty(
                         review.body,
                       );
 

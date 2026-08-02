@@ -17,6 +17,7 @@ import {
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import type { CartDisplayItem } from "../features/shared/types/cart";
 import { formatPrice } from "../components/utils/price";
+import { textOrEmpty } from "../components/utils/textOrEmpty";
 import { getApiBaseUrl } from "../lib/apiBaseUrl";
 
 import "../styles/cart-page.css";
@@ -37,10 +38,6 @@ type CartDisplayItemWithResolvedFields = CartDisplayItem & {
   size?: string;
   price?: number;
 };
-
-function normalizeText(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
 
 function asResolvedItem(
   item: CartDisplayItem,
@@ -74,10 +71,10 @@ function getCartItemBrandName(
   const resolvedItem = asResolvedItem(item);
 
   return (
-    normalizeText(
+    textOrEmpty(
       resolvedItem.catalog?.productBlueprint.brandName,
     ) ||
-    normalizeText(resolvedItem.brandName) ||
+    textOrEmpty(resolvedItem.brandName) ||
     "ブランド未設定"
   );
 }
@@ -88,12 +85,12 @@ function getCartItemProductName(
   const resolvedItem = asResolvedItem(item);
 
   return (
-    normalizeText(
+    textOrEmpty(
       resolvedItem.catalog?.productBlueprint.productName,
     ) ||
-    normalizeText(resolvedItem.productName) ||
-    normalizeText(resolvedItem.catalog?.list.title) ||
-    normalizeText(resolvedItem.title) ||
+    textOrEmpty(resolvedItem.productName) ||
+    textOrEmpty(resolvedItem.catalog?.list.title) ||
+    textOrEmpty(resolvedItem.title) ||
     "商品名未設定"
   );
 }
@@ -103,11 +100,11 @@ function getCartItemListTitle(
 ): string {
   const resolvedItem = asResolvedItem(item);
 
-  const catalogTitle = normalizeText(
+  const catalogTitle = textOrEmpty(
     resolvedItem.catalog?.list.title,
   );
 
-  const itemTitle = normalizeText(
+  const itemTitle = textOrEmpty(
     resolvedItem.title,
   );
 
@@ -138,13 +135,13 @@ function getCartItemImageUrl(
   const resolvedItem = asResolvedItem(item);
 
   return (
-    normalizeText(
+    textOrEmpty(
       getPrimaryCatalogImage(
         resolvedItem.catalog,
       ),
     ) ||
-    normalizeText(resolvedItem.imageUrl) ||
-    normalizeText(resolvedItem.listImage)
+    textOrEmpty(resolvedItem.imageUrl) ||
+    textOrEmpty(resolvedItem.listImage)
   );
 }
 

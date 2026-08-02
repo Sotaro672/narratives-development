@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { formatDateTime } from "../../../components/utils/date";
+import { textOrEmpty } from "../../../components/utils/textOrEmpty";
 import {
   listMyResaleConditionImages,
   listMyResaleListings,
@@ -34,12 +35,6 @@ function formatPrice(
   }
 
   return `¥${price.toLocaleString("ja-JP")}`;
-}
-
-function textOrEmpty(
-  value: string | undefined | null,
-): string {
-  return String(value ?? "").trim();
 }
 
 function normalizeStatus(

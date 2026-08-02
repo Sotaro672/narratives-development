@@ -1,11 +1,11 @@
 // frontend/amol/src/features/scan-result/infrastructure/scanResultSolanaApi.ts
 
 import type { MallPreviewTransferInfo } from "../../shared/types/scanResult";
+import { textOrEmpty } from "../../../components/utils/textOrEmpty";
 import {
   isFiniteNumber,
   isRecord,
 } from "../../../components/utils/typeGuards";
-import { trimText } from "../utils/format";
 
 function resolveSolanaRpcUrl(): string {
   return String(
@@ -52,11 +52,12 @@ async function postSolanaRpc(args: {
     isRecord(decoded.error) &&
     !Array.isArray(decoded.error)
   ) {
-    const code = trimText(
+    const code = textOrEmpty(
       decoded.error.code,
     );
+
     const message =
-      trimText(decoded.error.message) ||
+      textOrEmpty(decoded.error.message) ||
       "unknown";
 
     throw new Error(
@@ -110,7 +111,7 @@ function extractTransfersFromTransaction(
         isRecord(entry) &&
         !Array.isArray(entry)
       ) {
-        return trimText(entry.pubkey);
+        return textOrEmpty(entry.pubkey);
       }
 
       return "";
@@ -151,7 +152,7 @@ function extractTransfersFromTransaction(
   ) => {
     balances.forEach((row) => {
       if (
-        trimText(row.mint) !==
+        textOrEmpty(row.mint) !==
         mintAddress
       ) {
         return;
@@ -168,7 +169,10 @@ function extractTransfersFromTransaction(
 
       const tokenAccount =
         accountKeys[Math.trunc(index)] || "";
-      const owner = trimText(row.owner);
+
+      const owner = textOrEmpty(
+        row.owner,
+      );
 
       if (tokenAccount && owner) {
         ownerByTokenAccount[tokenAccount] =
@@ -201,8 +205,11 @@ function extractTransfersFromTransaction(
         return;
       }
 
-      const program = trimText(raw.program);
-      const programId = trimText(
+      const program = textOrEmpty(
+        raw.program,
+      );
+
+      const programId = textOrEmpty(
         raw.programId,
       );
 
@@ -224,7 +231,9 @@ function extractTransfersFromTransaction(
         return;
       }
 
-      const type = trimText(parsed.type);
+      const type = textOrEmpty(
+        parsed.type,
+      );
 
       if (
         type !== "transfer" &&
@@ -244,7 +253,7 @@ function extractTransfersFromTransaction(
       }
 
       const instructionMint =
-        trimText(info.mint) ||
+        textOrEmpty(info.mint) ||
         mintAddress;
 
       if (
@@ -253,10 +262,11 @@ function extractTransfersFromTransaction(
         return;
       }
 
-      const sourceToken = trimText(
+      const sourceToken = textOrEmpty(
         info.source,
       );
-      const destinationToken = trimText(
+
+      const destinationToken = textOrEmpty(
         info.destination,
       );
 
@@ -270,6 +280,7 @@ function extractTransfersFromTransaction(
       const fromWallet =
         ownerByTokenAccount[sourceToken] ||
         "";
+
       const toWallet =
         ownerByTokenAccount[
           destinationToken
@@ -380,7 +391,7 @@ export async function listSolanaTransfersByMintAddress(
         !Array.isArray(value),
     )
     .map((row) =>
-      trimText(row.signature),
+      textOrEmpty(row.signature),
     )
     .filter(Boolean);
 
@@ -390,6 +401,7 @@ export async function listSolanaTransfersByMintAddress(
 
   const output: MallPreviewTransferInfo[] =
     [];
+
   const seen = new Set<string>();
 
   for (const signature of signatures) {

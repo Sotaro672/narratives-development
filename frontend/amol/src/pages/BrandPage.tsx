@@ -14,6 +14,7 @@ import {
 import Layout from "../components/layout/Layout";
 import MediaIcon from "../components/ui/MediaIcon";
 import { formatPrice } from "../components/utils/price";
+import { textOrEmpty } from "../components/utils/textOrEmpty";
 import { getApiBaseUrl } from "../lib/apiBaseUrl";
 import { isRecord } from "../components/utils/typeGuards";
 
@@ -71,16 +72,6 @@ type BrandPageState =
       error: string;
     };
 
-function textValue(
-  value: unknown,
-): string {
-  if (value == null) {
-    return "";
-  }
-
-  return String(value).trim();
-}
-
 function numberValue(
   value: unknown,
 ): number | undefined {
@@ -110,7 +101,7 @@ function stringArrayValue(
   }
 
   return value
-    .map(textValue)
+    .map(textOrEmpty)
     .filter(
       (item) => item.length > 0,
     );
@@ -178,7 +169,7 @@ function priceRowsValue(
         !Array.isArray(row),
     )
     .map((row) => ({
-      currency: textValue(
+      currency: textOrEmpty(
         row.currency,
       ),
       amount: numberValue(
@@ -197,30 +188,30 @@ function brandDetailFromJson(
   const json = unwrapData(raw);
 
   return {
-    brandId: textValue(
+    brandId: textOrEmpty(
       json.brandId,
     ),
-    brandName: textValue(
+    brandName: textOrEmpty(
       json.brandName,
     ),
-    websiteUrl: textValue(
+    websiteUrl: textOrEmpty(
       json.websiteUrl ||
         json.url,
     ),
-    brandIcon: textValue(
+    brandIcon: textOrEmpty(
       json.brandIcon,
     ),
     brandBackgroundImage:
-      textValue(
+      textOrEmpty(
         json.brandBackgroundImage,
       ),
-    description: textValue(
+    description: textOrEmpty(
       json.description,
     ),
-    companyId: textValue(
+    companyId: textOrEmpty(
       json.companyId,
     ),
-    companyName: textValue(
+    companyName: textOrEmpty(
       json.companyName,
     ),
     inventoryIds:
@@ -241,15 +232,15 @@ function mallListItemFromJson(
 
   return {
     id:
-      textValue(json.id) ||
+      textOrEmpty(json.id) ||
       fallbackId,
-    title: textValue(
+    title: textOrEmpty(
       json.title,
     ),
-    description: textValue(
+    description: textOrEmpty(
       json.description,
     ),
-    image: textValue(
+    image: textOrEmpty(
       json.image ||
         json.imageUrl ||
         json.thumbnailUrl,
@@ -258,15 +249,15 @@ function mallListItemFromJson(
       json.prices,
     ),
     inventoryId:
-      textValue(
+      textOrEmpty(
         json.inventoryId,
       ) || undefined,
     productBlueprintId:
-      textValue(
+      textOrEmpty(
         json.productBlueprintId,
       ) || undefined,
     tokenBlueprintId:
-      textValue(
+      textOrEmpty(
         json.tokenBlueprintId,
       ) || undefined,
   };
@@ -777,6 +768,7 @@ export default function BrandPage() {
           error:
             "brandId is empty",
         });
+
         return;
       }
 

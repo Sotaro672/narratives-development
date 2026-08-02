@@ -12,6 +12,7 @@ import { useLocation, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import { formatDateTime } from "../components/utils/date";
+import { textOrEmpty } from "../components/utils/textOrEmpty";
 
 import {
   closeInquiry,
@@ -770,10 +771,4 @@ function getComparableTime(
   }
 
   return date.getTime();
-}
-
-function textOrEmpty(
-  value: unknown,
-): string {
-  return String(value ?? "").trim();
 }

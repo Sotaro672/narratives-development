@@ -10,6 +10,7 @@ import MediaUploader, {
 } from "../components/ui/MediaUploader";
 import SectionHeader from "../components/ui/SectionHeader";
 import Textbox from "../components/ui/Textbox";
+import { textOrEmpty } from "../components/utils/textOrEmpty";
 import { createResaleListing } from "../features/resale/api/resaleApi";
 
 import "../styles/page-layout.css";
@@ -37,10 +38,6 @@ function getLocationState(value: unknown): ResalePageLocationState {
   }
 
   return value as ResalePageLocationState;
-}
-
-function normalizeText(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
 }
 
 function formatPrice(value: string): string {
@@ -76,15 +73,15 @@ export default function ResalePage() {
     [location.state],
   );
 
-  const mintAddress = normalizeText(locationState.mintAddress);
-  const productId = normalizeText(locationState.productId);
-  const brandId = normalizeText(locationState.brandId);
-  const brandName = normalizeText(locationState.brandName);
-  const productName = normalizeText(locationState.productName);
-  const productBlueprintId = normalizeText(locationState.productBlueprintId);
-  const tokenBlueprintId = normalizeText(locationState.tokenBlueprintId);
-  const tokenName = normalizeText(locationState.tokenName);
-  const tokenIconUrl = normalizeText(locationState.tokenIconUrl);
+  const mintAddress = textOrEmpty(locationState.mintAddress);
+  const productId = textOrEmpty(locationState.productId);
+  const brandId = textOrEmpty(locationState.brandId);
+  const brandName = textOrEmpty(locationState.brandName);
+  const productName = textOrEmpty(locationState.productName);
+  const productBlueprintId = textOrEmpty(locationState.productBlueprintId);
+  const tokenBlueprintId = textOrEmpty(locationState.tokenBlueprintId);
+  const tokenName = textOrEmpty(locationState.tokenName);
+  const tokenIconUrl = textOrEmpty(locationState.tokenIconUrl);
 
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
