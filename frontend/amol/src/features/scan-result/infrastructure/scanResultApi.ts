@@ -1,6 +1,7 @@
 // frontend/amol/src/features/scan-result/infrastructure/scanResultApi.ts
 
 import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
+import { getMyAvatar } from "../../avatar/api/avatarApi";
 import type {
   CatalogReviewPage,
   MallOwnerInfo,
@@ -22,7 +23,6 @@ import {
 } from "./scanResultHttp";
 import {
   catalogReviewPageFromJson,
-  mallOwnerInfoFromJson,
   mallPreviewResponseFromJson,
   mallScanTransferResponseFromJson,
   mallScanVerifyResponseFromJson,
@@ -148,44 +148,64 @@ export async function loadPreviewState(
 export async function fetchMeAvatar(
   headers?: HeadersInit,
 ): Promise<MallOwnerInfo> {
-  const base = getApiBaseUrl();
+  const backendUrl = getApiBaseUrl();
 
-  if (!base) {
+  if (!backendUrl) {
     throw new Error(
       "VITE_API_BASE_URL is not configured",
     );
   }
 
-  const url =
-    `${base}/mall/me/avatars`;
+  const authorization =
+    getAuthorizationHeader(headers);
 
-  const mergedHeaders = mergeHeaders(
-    jsonHeaders(),
-    headers,
-  );
-
-  if (
-    !getAuthorizationHeader(
-      mergedHeaders,
-    )
-  ) {
+  if (!authorization) {
     throw new Error(
       "Authorization header is required for /mall/me/avatars",
     );
   }
 
-  const decoded =
-    await readJsonObject(
-      await fetch(url, {
-        headers: mergedHeaders,
-      }),
-      "fetchMeAvatar",
-      url,
-    );
+  const idToken = authorization
+    .replace(/^Bearer\s+/i, "")
+    .trim();
 
-  return mallOwnerInfoFromJson(
-    decoded,
-  );
+  if (!idToken) {
+    throw new Error(
+      "Firebase ID token is required for /mall/me/avatars",
+    );
+  }
+
+  const avatar = await getMyAvatar({
+    backendUrl,
+    idToken,
+  });
+
+  if (!avatar) {
+    throw new Error(
+      "ログイン中のアバター情報が見つかりません。",
+    );
+  }
+
+  const avatarWithBrand = avatar as
+    typeof avatar & {
+      brandId?: unknown;
+      brandName?: unknown;
+    };
+
+  return {
+    brandId:
+      typeof avatarWithBrand.brandId ===
+      "string"
+        ? avatarWithBrand.brandId
+        : "",
+    avatarId: avatar.avatarId,
+    brandName:
+      typeof avatarWithBrand.brandName ===
+      "string"
+        ? avatarWithBrand.brandName
+        : "",
+    avatarName: avatar.avatarName,
+  };
 }
 
 export async function verifyScanPurchased(

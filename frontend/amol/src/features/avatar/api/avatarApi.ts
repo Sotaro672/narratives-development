@@ -10,6 +10,16 @@ import type {
   UpdateAvatarResponse,
 } from "../../shared/types/avatar";
 
+type AuthedRequestParams = {
+  backendUrl: string;
+  idToken: string;
+};
+
+type GetPublicAvatarParams =
+  AuthedRequestParams & {
+    avatarId: string;
+  };
+
 async function readApiError(
   response: Response,
 ): Promise<string> {
@@ -39,20 +49,15 @@ async function readApiError(
     }
   }
 
-  const text = await response.text().catch(
-    () => "",
-  );
+  const text = await response
+    .text()
+    .catch(() => "");
 
   return (
     text ||
     `API request failed (${response.status})`
   );
 }
-
-type AuthedRequestParams = {
-  backendUrl: string;
-  idToken: string;
-};
 
 function unwrapData<T>(
   body: unknown,
@@ -69,6 +74,15 @@ function unwrapData<T>(
   return body as T;
 }
 
+function buildAuthHeaders(
+  idToken: string,
+): HeadersInit {
+  return {
+    Accept: "application/json",
+    Authorization: `Bearer ${idToken}`,
+  };
+}
+
 export async function getMyAvatar({
   backendUrl,
   idToken,
@@ -80,10 +94,7 @@ export async function getMyAvatar({
     ),
     {
       method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${idToken}`,
-      },
+      headers: buildAuthHeaders(idToken),
     },
   );
 
@@ -105,6 +116,57 @@ export async function getMyAvatar({
   );
 }
 
+export async function getPublicAvatar({
+  backendUrl,
+  idToken,
+  avatarId,
+}: GetPublicAvatarParams): Promise<MyAvatarResponse | null> {
+  const normalizedAvatarId =
+    avatarId.trim();
+
+  if (!normalizedAvatarId) {
+    throw new Error(
+      "avatarIdが指定されていません。",
+    );
+  }
+
+  const response = await fetch(
+    buildApiUrl(
+      backendUrl,
+      `/mall/avatars/${encodeURIComponent(
+        normalizedAvatarId,
+      )}`,
+    ),
+    {
+      method: "GET",
+      headers: buildAuthHeaders(idToken),
+    },
+  );
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiError(response),
+    );
+  }
+
+  const body: unknown =
+    await response.json();
+
+  const avatar =
+    unwrapData<MyAvatarResponse>(body);
+
+  return {
+    ...avatar,
+    avatarId:
+      avatar.avatarId ||
+      normalizedAvatarId,
+  };
+}
+
 export async function createAvatar({
   backendUrl,
   idToken,
@@ -120,10 +182,9 @@ export async function createAvatar({
     {
       method: "POST",
       headers: {
+        ...buildAuthHeaders(idToken),
         "Content-Type":
           "application/json",
-        Accept: "application/json",
-        Authorization: `Bearer ${idToken}`,
       },
       body: JSON.stringify(payload),
     },
@@ -162,10 +223,9 @@ export async function updateAvatar({
     {
       method: "PATCH",
       headers: {
+        ...buildAuthHeaders(idToken),
         "Content-Type":
           "application/json",
-        Accept: "application/json",
-        Authorization: `Bearer ${idToken}`,
       },
       body: JSON.stringify(payload),
     },

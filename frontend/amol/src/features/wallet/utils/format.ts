@@ -1,9 +1,18 @@
 // frontend/amol/src/features/wallet/utils/format.ts
+
 import type { WalletOrderItemSnapshot } from "../types/orderTypes";
 
-export function formatAmount(amount: number, currency?: string): string {
-  const normalizedAmount = Number.isFinite(amount) ? amount : 0;
-  const normalizedCurrency = (currency || "JPY").toUpperCase();
+export function formatAmount(
+  amount: number,
+  currency?: string,
+): string {
+  const normalizedAmount = Number.isFinite(amount)
+    ? amount
+    : 0;
+
+  const normalizedCurrency = (
+    currency || "JPY"
+  ).toUpperCase();
 
   try {
     return new Intl.NumberFormat("ja-JP", {
@@ -12,7 +21,9 @@ export function formatAmount(amount: number, currency?: string): string {
       maximumFractionDigits: 0,
     }).format(normalizedAmount);
   } catch {
-    return `${normalizedAmount.toLocaleString("ja-JP")} ${normalizedCurrency}`;
+    return `${normalizedAmount.toLocaleString(
+      "ja-JP",
+    )} ${normalizedCurrency}`;
   }
 }
 
@@ -30,42 +41,30 @@ export function formatWalletOrderItemVolume(
   return "";
 }
 
-export function formatWalletOrderItemModelLabel(
-  item: WalletOrderItemSnapshot,
-): string {
-  if (item.kind === "alcohol") {
-    const volume = formatWalletOrderItemVolume(item);
-
-    return [item.modelNumber, volume].filter(Boolean).join(" / ");
-  }
-
-  const colorName = item.color?.name ?? "";
-  const size = item.size ?? "";
-
-  return [
-    item.modelNumber ? `品番: ${item.modelNumber}` : "",
-    size ? `サイズ: ${size}` : "",
-    colorName ? `色: ${colorName}` : "",
-  ]
-    .filter(Boolean)
-    .join("　");
-}
-
 export function getWalletOrderItemMetaEntries(
   item: WalletOrderItemSnapshot,
 ): string[] {
   if (item.kind === "alcohol") {
+    const volume =
+      formatWalletOrderItemVolume(item);
+
     return [
-      item.modelNumber ? `品番: ${item.modelNumber}` : "",
-      formatWalletOrderItemVolume(item)
-        ? `容量: ${formatWalletOrderItemVolume(item)}`
+      item.modelNumber
+        ? `品番: ${item.modelNumber}`
         : "",
+      volume ? `容量: ${volume}` : "",
     ].filter(Boolean);
   }
 
   return [
-    item.modelNumber ? `品番: ${item.modelNumber}` : "",
-    item.size ? `サイズ: ${item.size}` : "",
-    item.color?.name ? `色: ${item.color.name}` : "",
+    item.modelNumber
+      ? `品番: ${item.modelNumber}`
+      : "",
+    item.size
+      ? `サイズ: ${item.size}`
+      : "",
+    item.color?.name
+      ? `色: ${item.color.name}`
+      : "",
   ].filter(Boolean);
 }
