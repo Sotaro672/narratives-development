@@ -1,7 +1,25 @@
-// frontend/src/components/auth/ProtectedRoute.tsx
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Navigate, useLocation } from "react-router-dom";
-import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
+// frontend/amol/src/components/auth/ProtectedRoute.tsx
+
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  Navigate,
+  useLocation,
+} from "react-router-dom";
+import {
+  getAuth,
+  onAuthStateChanged,
+  type User,
+} from "firebase/auth";
+
+import {
+  buildApiUrl,
+  getApiBaseUrl,
+} from "../../lib/apiBaseUrl";
 
 type ProtectedRouteProps = {
   children: ReactNode;
@@ -22,64 +40,43 @@ type AvatarStatusState = {
   checked: boolean;
 };
 
-function normalizeBaseUrl(value: string): string {
-  return value.replace(/\/+$/, "");
-}
-
-function joinPaths(basePath: string, path: string): string {
-  if (!basePath || basePath === "/") {
-    return path.startsWith("/") ? path : `/${path}`;
+function readBoolean(
+  value: unknown,
+): boolean {
+  if (typeof value === "boolean") {
+    return value;
   }
 
-  if (!path || path === "/") {
-    return basePath;
+  if (typeof value === "string") {
+    return value === "true";
   }
 
-  if (basePath.endsWith("/") && path.startsWith("/")) {
-    return basePath + path.slice(1);
+  if (typeof value === "number") {
+    return value !== 0;
   }
 
-  if (!basePath.endsWith("/") && !path.startsWith("/")) {
-    return `${basePath}/${path}`;
-  }
-
-  return basePath + path;
-}
-
-function buildApiUrl(baseUrl: string, path: string): string {
-  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
-
-  if (!normalizedBaseUrl) {
-    throw new Error("API base が未設定です。");
-  }
-
-  const url = new URL(normalizedBaseUrl);
-  url.pathname = joinPaths(url.pathname, path);
-  url.search = "";
-  url.hash = "";
-
-  return url.toString();
-}
-
-function readBoolean(value: unknown): boolean {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") return value === "true";
-  if (typeof value === "number") return value !== 0;
   return false;
 }
 
 async function fetchAvatarSetupStatus(
   user: User,
-  backendUrl: string
+  backendUrl: string,
 ): Promise<AvatarSetupStatus | null> {
   if (!backendUrl) {
     return null;
   }
 
-  const url = buildApiUrl(backendUrl, "/mall/me/setup-status");
+  const url = buildApiUrl(
+    backendUrl,
+    "/mall/me/setup-status",
+  );
 
-  async function getToken(forceRefresh: boolean): Promise<string | null> {
-    const token = await user.getIdToken(forceRefresh);
+  async function getToken(
+    forceRefresh: boolean,
+  ): Promise<string | null> {
+    const token =
+      await user.getIdToken(forceRefresh);
+
     return token || null;
   }
 
@@ -100,7 +97,10 @@ async function fetchAvatarSetupStatus(
     headers,
   });
 
-  if (response.status === 401 || response.status === 403) {
+  if (
+    response.status === 401 ||
+    response.status === 403
+  ) {
     token = await getToken(true);
 
     if (!token) {
@@ -120,7 +120,9 @@ async function fetchAvatarSetupStatus(
     return null;
   }
 
-  const body = (await response.json().catch(() => null)) as
+  const body = (await response
+    .json()
+    .catch(() => null)) as
     | {
         data?: {
           hasAvatar?: unknown;
@@ -139,45 +141,56 @@ async function fetchAvatarSetupStatus(
 
   return {
     hasAvatar:
-      readBoolean(data.hasAvatar) || readBoolean(data.setupCompleted),
+      readBoolean(data.hasAvatar) ||
+      readBoolean(data.setupCompleted),
   };
 }
 
-export default function ProtectedRoute({ children }: ProtectedRouteProps) {
+export default function ProtectedRoute({
+  children,
+}: ProtectedRouteProps) {
   const location = useLocation();
 
-  const backendUrl = useMemo(() => {
-    return import.meta.env.VITE_API_BASE_URL || "";
-  }, []);
+  const backendUrl = useMemo(
+    () => getApiBaseUrl(),
+    [],
+  );
 
-  const [authState, setAuthState] = useState<AuthState>({
-    user: null,
-    loading: true,
-  });
+  const [authState, setAuthState] =
+    useState<AuthState>({
+      user: null,
+      loading: true,
+    });
 
-  const [avatarStatus, setAvatarStatus] = useState<AvatarStatusState>({
-    status: null,
-    loading: false,
-    checked: false,
-  });
+  const [avatarStatus, setAvatarStatus] =
+    useState<AvatarStatusState>({
+      status: null,
+      loading: false,
+      checked: false,
+    });
 
-  const isAvatarPage = location.pathname === "/avatar";
+  const isAvatarPage =
+    location.pathname === "/avatar";
 
   useEffect(() => {
     const auth = getAuth();
 
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setAuthState({
-        user: currentUser,
-        loading: false,
-      });
+    const unsubscribe =
+      onAuthStateChanged(
+        auth,
+        (currentUser) => {
+          setAuthState({
+            user: currentUser,
+            loading: false,
+          });
 
-      setAvatarStatus({
-        status: null,
-        loading: false,
-        checked: false,
-      });
-    });
+          setAvatarStatus({
+            status: null,
+            loading: false,
+            checked: false,
+          });
+        },
+      );
 
     return () => unsubscribe();
   }, []);
@@ -194,6 +207,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
           loading: false,
           checked: true,
         });
+
         return;
       }
 
@@ -205,6 +219,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
           loading: false,
           checked: true,
         });
+
         return;
       }
 
@@ -214,7 +229,11 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
         checked: false,
       });
 
-      const status = await fetchAvatarSetupStatus(user, backendUrl);
+      const status =
+        await fetchAvatarSetupStatus(
+          user,
+          backendUrl,
+        );
 
       if (cancelled) {
         return;
@@ -234,7 +253,12 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     return () => {
       cancelled = true;
     };
-  }, [authState.loading, authState.user, backendUrl, isAvatarPage]);
+  }, [
+    authState.loading,
+    authState.user,
+    backendUrl,
+    isAvatarPage,
+  ]);
 
   if (authState.loading) {
     return null;
@@ -244,12 +268,23 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <>{children}</>;
   }
 
-  if (avatarStatus.loading || !avatarStatus.checked) {
+  if (
+    avatarStatus.loading ||
+    !avatarStatus.checked
+  ) {
     return null;
   }
 
-  if (!isAvatarPage && !avatarStatus.status?.hasAvatar) {
-    return <Navigate to="/avatar" replace />;
+  if (
+    !isAvatarPage &&
+    !avatarStatus.status?.hasAvatar
+  ) {
+    return (
+      <Navigate
+        to="/avatar"
+        replace
+      />
+    );
   }
 
   return <>{children}</>;

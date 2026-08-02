@@ -14,7 +14,6 @@ import type {
 import { isRecord } from "../../../shared/utils/typeGuards";
 import {
   getNumber,
-  getRecord,
   getString,
   getStringArray,
 } from "../../utils/guards";
@@ -73,43 +72,72 @@ export default function ScanResultCard(
     hideReviewForm = false,
   } = props;
 
-  const previewStateRecord = isRecord(
-    state.previewState,
-  )
-    ? state.previewState
-    : null;
-
-  const rawPreview =
-    state.previewState?.raw ?? null;
+  const previewStateRecord =
+    isRecord(state.previewState) &&
+    !Array.isArray(state.previewState)
+      ? state.previewState
+      : null;
 
   const preview =
-    getRecord(rawPreview, "data") ??
-    rawPreview;
+    state.previewState?.raw ?? null;
 
-  const productBlueprintPatch = getRecord(
-    preview,
-    "productBlueprintPatch",
-  );
+  const rawProductBlueprintPatch =
+    isRecord(preview) &&
+    !Array.isArray(preview)
+      ? preview.productBlueprintPatch
+      : null;
 
-  const categoryFields = getRecord(
-    productBlueprintPatch,
-    "categoryFields",
-  );
+  const productBlueprintPatch =
+    isRecord(rawProductBlueprintPatch) &&
+    !Array.isArray(rawProductBlueprintPatch)
+      ? rawProductBlueprintPatch
+      : null;
 
-  const token = getRecord(
-    preview,
-    "token",
-  );
+  const rawCategoryFields =
+    productBlueprintPatch?.categoryFields;
+
+  const categoryFields =
+    isRecord(rawCategoryFields) &&
+    !Array.isArray(rawCategoryFields)
+      ? rawCategoryFields
+      : null;
+
+  const rawToken =
+    isRecord(preview) &&
+    !Array.isArray(preview)
+      ? preview.token
+      : null;
+
+  const token =
+    isRecord(rawToken) &&
+    !Array.isArray(rawToken)
+      ? rawToken
+      : null;
+
+  const rawPreviewTokenBlueprintPatch =
+    isRecord(preview) &&
+    !Array.isArray(preview)
+      ? preview.tokenBlueprintPatch
+      : null;
+
+  const previewTokenBlueprintPatch =
+    isRecord(rawPreviewTokenBlueprintPatch) &&
+    !Array.isArray(rawPreviewTokenBlueprintPatch)
+      ? rawPreviewTokenBlueprintPatch
+      : null;
+
+  const rawStateTokenBlueprintPatch =
+    previewStateRecord?.tokenBlueprintPatch;
+
+  const stateTokenBlueprintPatch =
+    isRecord(rawStateTokenBlueprintPatch) &&
+    !Array.isArray(rawStateTokenBlueprintPatch)
+      ? rawStateTokenBlueprintPatch
+      : null;
 
   const tokenBlueprintPatch =
-    getRecord(
-      preview,
-      "tokenBlueprintPatch",
-    ) ??
-    getRecord(
-      previewStateRecord,
-      "tokenBlueprintPatch",
-    );
+    previewTokenBlueprintPatch ??
+    stateTokenBlueprintPatch;
 
   const brandId =
     getString(preview, "brandId") ||
@@ -185,10 +213,17 @@ export default function ScanResultCard(
   );
 
   const measurementEntries = useMemo(() => {
-    const measurements = getRecord(
-      preview,
-      "measurements",
-    );
+    const rawMeasurements =
+      isRecord(preview) &&
+      !Array.isArray(preview)
+        ? preview.measurements
+        : null;
+
+    const measurements =
+      isRecord(rawMeasurements) &&
+      !Array.isArray(rawMeasurements)
+        ? rawMeasurements
+        : null;
 
     return Object.entries(
       measurements ?? {},
@@ -200,6 +235,32 @@ export default function ScanResultCard(
   }, [preview]);
 
   const alcoholInfo = useMemo(() => {
+    const rawProductBlueprintCategory =
+      isRecord(preview) &&
+      !Array.isArray(preview)
+        ? preview.productBlueprintCategory
+        : null;
+
+    const productBlueprintCategory =
+      isRecord(rawProductBlueprintCategory) &&
+      !Array.isArray(
+        rawProductBlueprintCategory,
+      )
+        ? rawProductBlueprintCategory
+        : null;
+
+    const rawCategoryInputSchema =
+      isRecord(preview) &&
+      !Array.isArray(preview)
+        ? preview.categoryInputSchema
+        : null;
+
+    const categoryInputSchema =
+      isRecord(rawCategoryInputSchema) &&
+      !Array.isArray(rawCategoryInputSchema)
+        ? rawCategoryInputSchema
+        : null;
+
     return createScanAlcoholInfo({
       categoryFields,
       volumeValue: getNumber(
@@ -223,15 +284,8 @@ export default function ScanResultCard(
           preview,
           "productBlueprintCategoryKind",
         ),
-      productBlueprintCategory:
-        getRecord(
-          preview,
-          "productBlueprintCategory",
-        ),
-      categoryInputSchema: getRecord(
-        preview,
-        "categoryInputSchema",
-      ),
+      productBlueprintCategory,
+      categoryInputSchema,
     });
   }, [categoryFields, preview]);
 
@@ -264,7 +318,10 @@ export default function ScanResultCard(
     );
   }
 
-  if (!isRecord(preview)) {
+  if (
+    !isRecord(preview) ||
+    Array.isArray(preview)
+  ) {
     return (
       <SectionCard>
         <h1>Scan Result</h1>
@@ -305,9 +362,18 @@ export default function ScanResultCard(
     "color",
   );
 
-  const owner = mallOwnerInfoFromRecord(
-    getRecord(preview, "owner"),
-  );
+  const rawOwner = preview.owner;
+
+  const ownerRecord =
+    isRecord(rawOwner) &&
+    !Array.isArray(rawOwner)
+      ? rawOwner
+      : null;
+
+  const owner =
+    mallOwnerInfoFromRecord(
+      ownerRecord,
+    );
 
   const title =
     productName ||

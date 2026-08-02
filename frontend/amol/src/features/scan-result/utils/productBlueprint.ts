@@ -1,13 +1,19 @@
 // frontend/amol/src/features/scan-result/utils/productBlueprint.ts
 
-import { getNumber, getRecord, getString } from "./guards";
+import { isRecord } from "../../shared/utils/typeGuards";
+import {
+  getNumber,
+  getString,
+} from "./guards";
 
 export type InfoRow = {
   label: string;
   value: string;
 };
 
-function toDisplayValue(value: string | number | null): string {
+function toDisplayValue(
+  value: string | number | null,
+): string {
   if (value === null) {
     return "";
   }
@@ -24,7 +30,10 @@ function getPatchOrCategoryString(
   categoryFields: Record<string, unknown> | null,
   key: string,
 ): string {
-  return getString(categoryFields, key) || getString(productBlueprintPatch, key);
+  return (
+    getString(categoryFields, key) ||
+    getString(productBlueprintPatch, key)
+  );
 }
 
 function getPatchOrCategoryNumber(
@@ -32,7 +41,10 @@ function getPatchOrCategoryNumber(
   categoryFields: Record<string, unknown> | null,
   key: string,
 ): number | null {
-  return getNumber(categoryFields, key) ?? getNumber(productBlueprintPatch, key);
+  return (
+    getNumber(categoryFields, key) ??
+    getNumber(productBlueprintPatch, key)
+  );
 }
 
 export function createProductBlueprintRows(
@@ -42,8 +54,23 @@ export function createProductBlueprintRows(
     return [];
   }
 
-  const productIdTag = getRecord(productBlueprintPatch, "productIdTag");
-  const categoryFields = getRecord(productBlueprintPatch, "categoryFields");
+  const rawProductIdTag =
+    productBlueprintPatch.productIdTag;
+
+  const productIdTag =
+    isRecord(rawProductIdTag) &&
+    !Array.isArray(rawProductIdTag)
+      ? rawProductIdTag
+      : null;
+
+  const rawCategoryFields =
+    productBlueprintPatch.categoryFields;
+
+  const categoryFields =
+    isRecord(rawCategoryFields) &&
+    !Array.isArray(rawCategoryFields)
+      ? rawCategoryFields
+      : null;
 
   const rows: InfoRow[] = [
     {
@@ -82,9 +109,13 @@ export function createProductBlueprintRows(
     },
     {
       label: "商品IDタグ",
-      value: getString(productIdTag, "Type") || getString(productIdTag, "type"),
+      value:
+        getString(productIdTag, "Type") ||
+        getString(productIdTag, "type"),
     },
   ];
 
-  return rows.filter((row) => row.value);
+  return rows.filter(
+    (row) => row.value,
+  );
 }

@@ -5,24 +5,6 @@ import { getIdToken } from "firebase/auth";
 import { auth } from "../../../lib/firebase";
 import { isRecord } from "../../shared/utils/typeGuards";
 
-export function resolveApiBase(): string {
-  return normalizeBaseUrl(
-    String(import.meta.env.VITE_API_BASE_URL || ""),
-  );
-}
-
-export function normalizeBaseUrl(
-  value: string,
-): string {
-  let normalizedValue = value.trim();
-
-  while (normalizedValue.endsWith("/")) {
-    normalizedValue = normalizedValue.slice(0, -1);
-  }
-
-  return normalizedValue;
-}
-
 export function jsonHeaders(): HeadersInit {
   return {
     Accept: "application/json",
@@ -56,11 +38,16 @@ export function mergeHeaders(
 export function getAuthorizationHeader(
   headers?: HeadersInit,
 ): string {
-  const normalizedHeaders = new Headers(headers);
+  const normalizedHeaders =
+    new Headers(headers);
 
   return (
-    normalizedHeaders.get("Authorization") ||
-    normalizedHeaders.get("authorization") ||
+    normalizedHeaders.get(
+      "Authorization",
+    ) ||
+    normalizedHeaders.get(
+      "authorization",
+    ) ||
     ""
   ).trim();
 }
@@ -117,12 +104,17 @@ export async function getAuthHeadersOrUndefined(): Promise<
   }
 
   try {
-    const token = await getIdToken(user);
-    const normalizedToken = String(token || "").trim();
+    const token =
+      await getIdToken(user);
+
+    const normalizedToken = String(
+      token || "",
+    ).trim();
 
     return normalizedToken
       ? {
-          Authorization: `Bearer ${normalizedToken}`,
+          Authorization:
+            `Bearer ${normalizedToken}`,
         }
       : undefined;
   } catch {

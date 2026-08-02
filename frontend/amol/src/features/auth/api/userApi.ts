@@ -1,5 +1,8 @@
-//frontend\amol\src\features\auth\api\userApi.ts
+// frontend/amol/src/features/auth/api/userApi.ts
+
 import type { User } from "firebase/auth";
+
+import { buildApiUrl } from "../../../lib/apiBaseUrl";
 
 export type SaveUserResult =
   | {
@@ -24,52 +27,43 @@ type SaveUserParams = {
   body: SaveUserBody;
 };
 
-function normalizeBaseUrl(value: string): string {
-  if (!value) return "";
-  return value.replace(/\/+$/, "");
-}
+async function readErrorMessage(
+  response: Response,
+): Promise<string> {
+  const contentType =
+    response.headers.get("content-type") || "";
 
-function joinPaths(basePath: string, path: string): string {
-  const a = basePath;
-  const b = path;
-
-  if (!a || a === "/") return b.startsWith("/") ? b : `/${b}`;
-  if (!b || b === "/") return a;
-  if (a.endsWith("/") && b.startsWith("/")) return a + b.slice(1);
-  if (!a.endsWith("/") && !b.startsWith("/")) return `${a}/${b}`;
-
-  return a + b;
-}
-
-function buildApiUrl(baseUrl: string, path: string): string {
-  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
-
-  if (!normalizedBaseUrl) {
-    throw new Error("API base が未設定です。");
-  }
-
-  const url = new URL(normalizedBaseUrl);
-  url.pathname = joinPaths(url.pathname, path);
-  url.search = "";
-  url.hash = "";
-
-  return url.toString();
-}
-
-async function readErrorMessage(response: Response): Promise<string> {
-  const contentType = response.headers.get("content-type") || "";
-
-  if (contentType.includes("application/json")) {
-    const body = (await response.json().catch(() => null)) as
-      | { error?: string; message?: string }
+  if (
+    contentType.includes(
+      "application/json",
+    )
+  ) {
+    const body = (await response.json().catch(
+      () => null,
+    )) as
+      | {
+          error?: string;
+          message?: string;
+        }
       | null;
 
-    if (body?.error) return body.error;
-    if (body?.message) return body.message;
+    if (body?.error) {
+      return body.error;
+    }
+
+    if (body?.message) {
+      return body.message;
+    }
   }
 
-  const text = await response.text().catch(() => "");
-  return text || `保存に失敗しました (${response.status})`;
+  const text = await response.text().catch(
+    () => "",
+  );
+
+  return (
+    text ||
+    `保存に失敗しました (${response.status})`
+  );
 }
 
 export async function saveUserProfile({
@@ -91,17 +85,22 @@ export async function saveUserProfile({
     };
   }
 
-  const token = await currentUser.getIdToken(true);
+  const token =
+    await currentUser.getIdToken(true);
 
   if (!token) {
     return {
       ok: false,
-      error: "認証トークンが取得できませんでした。再ログインしてください。",
+      error:
+        "認証トークンが取得できませんでした。再ログインしてください。",
     };
   }
 
   try {
-    const url = buildApiUrl(backendUrl, "/mall/me/users");
+    const url = buildApiUrl(
+      backendUrl,
+      "/mall/me/users",
+    );
 
     const response = await fetch(url, {
       method: "POST",
@@ -114,14 +113,16 @@ export async function saveUserProfile({
         last_name: body.lastName,
         last_name_kana: body.lastNameKana,
         first_name: body.firstName,
-        first_name_kana: body.firstNameKana,
+        first_name_kana:
+          body.firstNameKana,
       }),
     });
 
     if (!response.ok) {
       return {
         ok: false,
-        error: await readErrorMessage(response),
+        error:
+          await readErrorMessage(response),
       };
     }
 
@@ -139,7 +140,8 @@ export async function saveUserProfile({
 
     return {
       ok: false,
-      error: "ユーザー情報の保存に失敗しました。",
+      error:
+        "ユーザー情報の保存に失敗しました。",
     };
   }
 }

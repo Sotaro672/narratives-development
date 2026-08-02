@@ -14,6 +14,7 @@ import {
 import Layout from "../components/layout/Layout";
 import MediaIcon from "../components/ui/MediaIcon";
 import { formatPrice } from "../features/shared/utils/price";
+import { getApiBaseUrl } from "../lib/apiBaseUrl";
 import { isRecord } from "../features/shared/utils/typeGuards";
 
 import "../styles/brand_page.css";
@@ -69,30 +70,6 @@ type BrandPageState =
       listItems: MallListItem[];
       error: string;
     };
-
-function normalizeBaseUrl(
-  value: string,
-): string {
-  let normalizedValue = value.trim();
-
-  while (
-    normalizedValue.endsWith("/")
-  ) {
-    normalizedValue =
-      normalizedValue.slice(0, -1);
-  }
-
-  return normalizedValue;
-}
-
-function resolveApiBase(): string {
-  return normalizeBaseUrl(
-    String(
-      import.meta.env
-        .VITE_API_BASE_URL || "",
-    ),
-  );
-}
 
 function textValue(
   value: unknown,
@@ -324,7 +301,7 @@ async function fetchBrandById(
     );
   }
 
-  const base = resolveApiBase();
+  const base = getApiBaseUrl();
 
   if (!base) {
     throw new Error(
@@ -389,7 +366,7 @@ async function fetchMallListItemById(
     );
   }
 
-  const base = resolveApiBase();
+  const base = getApiBaseUrl();
 
   if (!base) {
     throw new Error(
