@@ -75,9 +75,6 @@ export default function ContentsTokenSummaryCard({
       <TokenReviewAggregateCard
         tokenBlueprintId={contents.tokenBlueprintId}
         productId={contents.productId}
-        shareTitle={tokenName || "トークン詳細"}
-        shareText={contents.productName || contents.brandName || ""}
-        shareUrl={window.location.href}
         onResaleClick={onResaleClick}
       />
     </div>

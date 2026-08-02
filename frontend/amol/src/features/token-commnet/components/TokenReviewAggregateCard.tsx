@@ -5,18 +5,12 @@ import { useTokenReviewAggregateCard } from "../hooks/useTokenReviewAggregateCar
 type TokenReviewAggregateCardProps = {
   tokenBlueprintId: string;
   productId: string;
-  shareTitle?: string;
-  shareText?: string;
-  shareUrl?: string;
   onResaleClick?: () => void;
 };
 
 export default function TokenReviewAggregateCard({
   tokenBlueprintId,
   productId,
-  shareTitle = "トークン詳細",
-  shareText = "",
-  shareUrl,
   onResaleClick,
 }: TokenReviewAggregateCardProps) {
   const {
@@ -29,9 +23,6 @@ export default function TokenReviewAggregateCard({
     handleDislike,
   } = useTokenReviewAggregateCard({
     tokenBlueprintId,
-    shareTitle,
-    shareText,
-    shareUrl,
   });
 
   const canTap = enabled && !loading;
