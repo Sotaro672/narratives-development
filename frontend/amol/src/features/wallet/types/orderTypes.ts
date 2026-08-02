@@ -1,5 +1,7 @@
 // frontend/amol/src/features/wallet/types/orderTypes.ts
 
+import type { PageResultResponse } from "../../shared/pageResult";
+
 export type WalletOrderColor = {
   name?: string;
   hex?: string;
@@ -8,7 +10,11 @@ export type WalletOrderColor = {
 
 export type WalletOrderMeasurements = Record<string, number>;
 
-export type WalletOrderItemKind = "apparel" | "alcohol" | "unknown" | string;
+export type WalletOrderItemKind =
+  | "apparel"
+  | "alcohol"
+  | "unknown"
+  | string;
 
 export type WalletOrderItemSnapshot = {
   modelId: string;
@@ -67,13 +73,13 @@ export type WalletOrder = {
   updatedAt?: string;
 };
 
-export type WalletOrdersPage = {
-  items: WalletOrder[];
-  totalCount?: number;
-  totalPages?: number;
-  page?: number;
-  perPage?: number;
-};
+export type WalletOrdersPage =
+  Omit<
+    PageResultResponse<WalletOrder>,
+    "items"
+  > & {
+    items: WalletOrder[];
+  };
 
 export type FetchWalletOrdersInput = {
   backendUrl: string;

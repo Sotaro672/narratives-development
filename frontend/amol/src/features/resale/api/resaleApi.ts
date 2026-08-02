@@ -1,7 +1,14 @@
 // frontend/amol/src/features/resale/api/resaleApi.ts
 
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import {
+  getDownloadURL,
+  ref,
+  uploadBytes,
+} from "firebase/storage";
 
+import type {
+  PageResultResponse,
+} from "../../shared/pageResult";
 import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
 import { getFirebaseIdToken } from "../../../lib/authToken";
 import { storage } from "../../../lib/firebase";
@@ -75,73 +82,138 @@ function buildApiUrl(path: string): string {
 }
 
 function createUploadImageID(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+  if (
+    typeof crypto !== "undefined" &&
+    "randomUUID" in crypto
+  ) {
     return crypto.randomUUID();
   }
 
-  return `img_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  return `img_${Date.now()}_${Math.random()
+    .toString(36)
+    .slice(2)}`;
 }
 
-function sanitizeStorageFileName(fileName: string): string {
+function sanitizeStorageFileName(
+  fileName: string,
+): string {
   const trimmed = fileName.trim();
 
   if (!trimmed) {
     return "image";
   }
 
-  return trimmed.replace(/[^\w.\-()]/g, "_");
+  return trimmed.replace(
+    /[^\w.\-()]/g,
+    "_",
+  );
 }
 
-function nonEmptyOrUndefined(value: string | undefined): string | undefined {
+function nonEmptyOrUndefined(
+  value: string | undefined,
+): string | undefined {
   const normalized = value?.trim();
-  return normalized ? normalized : undefined;
+
+  return normalized
+    ? normalized
+    : undefined;
 }
 
-async function readApiJson<T>(res: Response): Promise<T> {
-  return (await res.json().catch(() => ({}))) as T;
+async function readApiJson<T>(
+  res: Response,
+): Promise<T> {
+  return (
+    await res.json().catch(() => ({}))
+  ) as T;
 }
 
-async function fetchWithAuth<T>(path: string, init?: RequestInit): Promise<T> {
+async function fetchWithAuth<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
   const token = await getFirebaseIdToken();
-  const headers = new Headers(init?.headers);
+  const headers = new Headers(
+    init?.headers,
+  );
 
-  headers.set("Authorization", `Bearer ${token}`);
+  headers.set(
+    "Authorization",
+    `Bearer ${token}`,
+  );
 
-  if (init?.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+  if (
+    init?.body &&
+    !headers.has("Content-Type")
+  ) {
+    headers.set(
+      "Content-Type",
+      "application/json",
+    );
   }
 
-  const res = await fetch(buildApiUrl(path), {
-    ...init,
-    headers,
-  });
+  const res = await fetch(
+    buildApiUrl(path),
+    {
+      ...init,
+      headers,
+    },
+  );
 
-  const json = await readApiJson<T & { error?: string }>(res);
+  const json =
+    await readApiJson<
+      T & {
+        error?: string;
+      }
+    >(res);
 
   if (!res.ok) {
-    throw new Error(json.error || "APIリクエストに失敗しました。");
+    throw new Error(
+      json.error ||
+        "APIリクエストに失敗しました。",
+    );
   }
 
   return json;
 }
 
-async function uploadResaleConditionImage(params: {
-  resaleId: string;
-  file: File;
-  displayOrder: number;
-}): Promise<ResaleConditionImage> {
-  const imageID = createUploadImageID();
-  const safeFileName = sanitizeStorageFileName(params.file.name);
+async function uploadResaleConditionImage(
+  params: {
+    resaleId: string;
+    file: File;
+    displayOrder: number;
+  },
+): Promise<ResaleConditionImage> {
+  const imageID =
+    createUploadImageID();
+
+  const safeFileName =
+    sanitizeStorageFileName(
+      params.file.name,
+    );
+
   const objectPath =
-    `resale-condition-images/${params.resaleId}/${imageID}/${safeFileName}`;
-  const storageRef = ref(storage, objectPath);
-  const mimeType = params.file.type || "application/octet-stream";
+    `resale-condition-images/${params.resaleId}` +
+    `/${imageID}/${safeFileName}`;
 
-  await uploadBytes(storageRef, params.file, {
-    contentType: mimeType,
-  });
+  const storageRef = ref(
+    storage,
+    objectPath,
+  );
 
-  const url = await getDownloadURL(storageRef);
+  const mimeType =
+    params.file.type ||
+    "application/octet-stream";
+
+  await uploadBytes(
+    storageRef,
+    params.file,
+    {
+      contentType: mimeType,
+    },
+  );
+
+  const url =
+    await getDownloadURL(storageRef);
 
   return {
     id: imageID,
@@ -151,7 +223,8 @@ async function uploadResaleConditionImage(params: {
     fileName: params.file.name,
     fileSize: params.file.size,
     mimeType,
-    displayOrder: params.displayOrder,
+    displayOrder:
+      params.displayOrder,
   };
 }
 
@@ -159,20 +232,30 @@ async function createResaleConditionImage(
   image: ResaleConditionImage,
 ): Promise<ResaleConditionImage | null> {
   if (!image.resaleId) {
-    throw new Error("resaleId is required");
+    throw new Error(
+      "resaleId is required",
+    );
   }
 
-  const json = await fetchWithAuth<ApiDataResponse<ResaleConditionImage>>(
-    `/mall/me/resales/${encodeURIComponent(image.resaleId)}/images`,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        id: image.id,
-        url: image.url,
-        displayOrder: image.displayOrder,
-      }),
-    },
-  );
+  const json =
+    await fetchWithAuth<
+      ApiDataResponse<
+        ResaleConditionImage
+      >
+    >(
+      `/mall/me/resales/${encodeURIComponent(
+        image.resaleId,
+      )}/images`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          id: image.id,
+          url: image.url,
+          displayOrder:
+            image.displayOrder,
+        }),
+      },
+    );
 
   return json.data ?? null;
 }
@@ -180,50 +263,77 @@ async function createResaleConditionImage(
 export async function createResaleListing(
   params: CreateResaleListingParams,
 ): Promise<ResaleListing | null> {
-  const json = await fetchWithAuth<ApiDataResponse<ResaleListing>>(
-    "/mall/me/resales",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        mintAddress: params.mintAddress,
-        tokenBlueprintId: params.tokenBlueprintId,
-        productId: params.productId,
-        brandId: nonEmptyOrUndefined(params.brandId),
-        productBlueprintId: nonEmptyOrUndefined(params.productBlueprintId),
-        price: params.price,
-        condition: params.condition,
-        description: params.description,
-      }),
-    },
-  );
+  const json =
+    await fetchWithAuth<
+      ApiDataResponse<ResaleListing>
+    >(
+      "/mall/me/resales",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          mintAddress:
+            params.mintAddress,
+          tokenBlueprintId:
+            params.tokenBlueprintId,
+          productId:
+            params.productId,
+          brandId:
+            nonEmptyOrUndefined(
+              params.brandId,
+            ),
+          productBlueprintId:
+            nonEmptyOrUndefined(
+              params.productBlueprintId,
+            ),
+          price: params.price,
+          condition:
+            params.condition,
+          description:
+            params.description,
+        }),
+      },
+    );
 
-  const created = json.data ?? null;
-  const resaleId = created?.id;
+  const created =
+    json.data ?? null;
+
+  const resaleId =
+    created?.id;
 
   if (!resaleId) {
     return created;
   }
 
-  const uploadedImages = await Promise.all(
-    params.conditionImages.map((file, index) =>
-      uploadResaleConditionImage({
-        resaleId,
-        file,
-        displayOrder: index,
-      }),
+  const uploadedImages =
+    await Promise.all(
+      params.conditionImages.map(
+        (file, index) =>
+          uploadResaleConditionImage({
+            resaleId,
+            file,
+            displayOrder: index,
+          }),
+      ),
+    );
+
+  await Promise.all(
+    uploadedImages.map(
+      createResaleConditionImage,
     ),
   );
 
-  await Promise.all(uploadedImages.map(createResaleConditionImage));
-
-  if (uploadedImages.length === 0) {
+  if (
+    uploadedImages.length === 0
+  ) {
     return created;
   }
 
-  const updated = await updatePrimaryResaleImage({
-    resaleId,
-    imageId: uploadedImages[0].id,
-  });
+  const updated =
+    await updatePrimaryResaleImage({
+      resaleId,
+      imageId:
+        uploadedImages[0].id,
+    });
 
   return updated ?? created;
 }
@@ -231,10 +341,13 @@ export async function createResaleListing(
 export async function updateResaleListing(
   params: UpdateResaleListingParams,
 ): Promise<ResaleListing | null> {
-  const resaleId = params.resaleId.trim();
+  const resaleId =
+    params.resaleId.trim();
 
   if (!resaleId) {
-    throw new Error("resaleId is required");
+    throw new Error(
+      "resaleId is required",
+    );
   }
 
   const body: {
@@ -244,33 +357,51 @@ export async function updateResaleListing(
     status?: string;
   } = {};
 
-  if (typeof params.price === "number") {
+  if (
+    typeof params.price ===
+    "number"
+  ) {
     body.price = params.price;
   }
 
-  const condition = nonEmptyOrUndefined(params.condition);
+  const condition =
+    nonEmptyOrUndefined(
+      params.condition,
+    );
 
   if (condition) {
     body.condition = condition;
   }
 
-  if (typeof params.description === "string") {
-    body.description = params.description.trim();
+  if (
+    typeof params.description ===
+    "string"
+  ) {
+    body.description =
+      params.description.trim();
   }
 
-  const status = nonEmptyOrUndefined(params.status);
+  const status =
+    nonEmptyOrUndefined(
+      params.status,
+    );
 
   if (status) {
     body.status = status;
   }
 
-  const json = await fetchWithAuth<ApiDataResponse<ResaleListing>>(
-    `/mall/me/resales/${encodeURIComponent(resaleId)}`,
-    {
-      method: "PUT",
-      body: JSON.stringify(body),
-    },
-  );
+  const json =
+    await fetchWithAuth<
+      ApiDataResponse<ResaleListing>
+    >(
+      `/mall/me/resales/${encodeURIComponent(
+        resaleId,
+      )}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(body),
+      },
+    );
 
   return json.data ?? null;
 }
@@ -281,15 +412,22 @@ export async function getMyResaleListing(
   const id = resaleId.trim();
 
   if (!id) {
-    throw new Error("resaleId is required");
+    throw new Error(
+      "resaleId is required",
+    );
   }
 
-  const json = await fetchWithAuth<ApiDataResponse<ResaleListing>>(
-    `/mall/me/resales/${encodeURIComponent(id)}`,
-    {
-      method: "GET",
-    },
-  );
+  const json =
+    await fetchWithAuth<
+      ApiDataResponse<ResaleListing>
+    >(
+      `/mall/me/resales/${encodeURIComponent(
+        id,
+      )}`,
+      {
+        method: "GET",
+      },
+    );
 
   return json.data ?? null;
 }
@@ -299,23 +437,28 @@ export type ListMyResaleListingsParams = {
   perPage?: number;
 };
 
-export type ListMyResaleListingsResponse = {
-  items?: ResaleListing[];
-  totalCount?: number;
-  totalPages?: number;
-  page?: number;
-  perPage?: number;
-};
+export type ListMyResaleListingsResponse =
+  PageResultResponse<ResaleListing>;
 
 export async function listMyResaleListings(
   params: ListMyResaleListingsParams = {},
 ): Promise<ListMyResaleListingsResponse> {
-  const searchParams = new URLSearchParams();
+  const searchParams =
+    new URLSearchParams();
 
-  searchParams.set("page", String(params.page ?? 1));
-  searchParams.set("perPage", String(params.perPage ?? 50));
+  searchParams.set(
+    "page",
+    String(params.page ?? 1),
+  );
 
-  return fetchWithAuth<ListMyResaleListingsResponse>(
+  searchParams.set(
+    "perPage",
+    String(params.perPage ?? 50),
+  );
+
+  return fetchWithAuth<
+    ListMyResaleListingsResponse
+  >(
     `/mall/me/resales?${searchParams.toString()}`,
     {
       method: "GET",
@@ -332,7 +475,8 @@ export type ListResaleListingsByAvatarIdParams = {
 export async function listResaleListingsByAvatarId(
   params: ListResaleListingsByAvatarIdParams,
 ): Promise<ListMyResaleListingsResponse> {
-  const avatarId = params.avatarId.trim();
+  const avatarId =
+    params.avatarId.trim();
 
   if (!avatarId) {
     return {
@@ -340,16 +484,27 @@ export async function listResaleListingsByAvatarId(
       totalCount: 0,
       totalPages: 0,
       page: params.page ?? 1,
-      perPage: params.perPage ?? 50,
+      perPage:
+        params.perPage ?? 50,
     };
   }
 
-  const searchParams = new URLSearchParams();
+  const searchParams =
+    new URLSearchParams();
 
-  searchParams.set("page", String(params.page ?? 1));
-  searchParams.set("perPage", String(params.perPage ?? 50));
+  searchParams.set(
+    "page",
+    String(params.page ?? 1),
+  );
 
-  return fetchWithAuth<ListMyResaleListingsResponse>(
+  searchParams.set(
+    "perPage",
+    String(params.perPage ?? 50),
+  );
+
+  return fetchWithAuth<
+    ListMyResaleListingsResponse
+  >(
     `/mall/resales/avatar/${encodeURIComponent(
       avatarId,
     )}?${searchParams.toString()}`,
@@ -368,15 +523,28 @@ export async function listMyResaleConditionImages(
     return [];
   }
 
-  const result = await fetchWithAuth<{
-    data?: ResaleConditionImage[] | null;
-    items?: ResaleConditionImage[];
-    error?: string;
-  }>(`/mall/me/resales/${encodeURIComponent(id)}/images`, {
-    method: "GET",
-  });
+  const result =
+    await fetchWithAuth<{
+      data?:
+        | ResaleConditionImage[]
+        | null;
+      items?:
+        ResaleConditionImage[];
+      error?: string;
+    }>(
+      `/mall/me/resales/${encodeURIComponent(
+        id,
+      )}/images`,
+      {
+        method: "GET",
+      },
+    );
 
-  return result.data ?? result.items ?? [];
+  return (
+    result.data ??
+    result.items ??
+    []
+  );
 }
 
 export async function listPublicResaleConditionImages(
@@ -388,66 +556,121 @@ export async function listPublicResaleConditionImages(
     return [];
   }
 
-  const result = await fetchWithAuth<{
-    data?: ResaleConditionImage[] | null;
-    items?: ResaleConditionImage[];
-    error?: string;
-  }>(`/mall/resales/${encodeURIComponent(id)}/images`, {
-    method: "GET",
-  });
+  const result =
+    await fetchWithAuth<{
+      data?:
+        | ResaleConditionImage[]
+        | null;
+      items?:
+        ResaleConditionImage[];
+      error?: string;
+    }>(
+      `/mall/resales/${encodeURIComponent(
+        id,
+      )}/images`,
+      {
+        method: "GET",
+      },
+    );
 
-  return result.data ?? result.items ?? [];
+  return (
+    result.data ??
+    result.items ??
+    []
+  );
 }
 
-export async function addMyResaleConditionImages(params: {
-  resaleId: string;
-  files: File[];
-  startDisplayOrder?: number;
-}): Promise<ResaleConditionImage[]> {
-  const resaleId = params.resaleId.trim();
+export async function addMyResaleConditionImages(
+  params: {
+    resaleId: string;
+    files: File[];
+    startDisplayOrder?: number;
+  },
+): Promise<ResaleConditionImage[]> {
+  const resaleId =
+    params.resaleId.trim();
 
   if (!resaleId) {
-    throw new Error("resaleId is required");
+    throw new Error(
+      "resaleId is required",
+    );
   }
 
-  const uploadedImages = await Promise.all(
-    params.files.map((file, index) =>
-      uploadResaleConditionImage({
-        resaleId,
-        file,
-        displayOrder: (params.startDisplayOrder ?? 0) + index,
-      }),
-    ),
-  );
+  const uploadedImages =
+    await Promise.all(
+      params.files.map(
+        (file, index) =>
+          uploadResaleConditionImage({
+            resaleId,
+            file,
+            displayOrder:
+              (params.startDisplayOrder ??
+                0) + index,
+          }),
+      ),
+    );
 
-  const createdImages = await Promise.all(
-    uploadedImages.map(createResaleConditionImage),
-  );
+  const createdImages =
+    await Promise.all(
+      uploadedImages.map(
+        createResaleConditionImage,
+      ),
+    );
 
   return createdImages
-    .filter((image): image is ResaleConditionImage => Boolean(image))
+    .filter(
+      (
+        image,
+      ): image is ResaleConditionImage =>
+        Boolean(image),
+    )
     .map((image, index) => ({
       ...image,
-      fileName: image.fileName || uploadedImages[index]?.fileName || "",
-      fileSize: image.fileSize || uploadedImages[index]?.fileSize || 0,
-      mimeType: image.mimeType || uploadedImages[index]?.mimeType || "",
-      objectPath: image.objectPath || uploadedImages[index]?.objectPath || "",
+      fileName:
+        image.fileName ||
+        uploadedImages[index]
+          ?.fileName ||
+        "",
+      fileSize:
+        image.fileSize ||
+        uploadedImages[index]
+          ?.fileSize ||
+        0,
+      mimeType:
+        image.mimeType ||
+        uploadedImages[index]
+          ?.mimeType ||
+        "",
+      objectPath:
+        image.objectPath ||
+        uploadedImages[index]
+          ?.objectPath ||
+        "",
     }));
 }
 
-export async function deleteMyResaleConditionImage(params: {
-  resaleId: string;
-  imageId: string;
-}): Promise<void> {
-  const resaleId = params.resaleId.trim();
-  const imageId = params.imageId.trim();
+export async function deleteMyResaleConditionImage(
+  params: {
+    resaleId: string;
+    imageId: string;
+  },
+): Promise<void> {
+  const resaleId =
+    params.resaleId.trim();
+
+  const imageId =
+    params.imageId.trim();
 
   if (!resaleId) {
-    throw new Error("resaleId is required");
+    throw new Error(
+      "resaleId is required",
+    );
   }
 
   if (!imageId) {
-    throw new Error("imageId is required");
+    throw new Error(
+      "imageId is required",
+    );
   }
 
   await fetchWithAuth<{
@@ -456,37 +679,53 @@ export async function deleteMyResaleConditionImage(params: {
   }>(
     `/mall/me/resales/${encodeURIComponent(
       resaleId,
-    )}/images/${encodeURIComponent(imageId)}`,
+    )}/images/${encodeURIComponent(
+      imageId,
+    )}`,
     {
       method: "DELETE",
     },
   );
 }
 
-export async function updatePrimaryResaleImage(params: {
-  resaleId: string;
-  imageId: string;
-}): Promise<ResaleListing | null> {
-  const resaleId = params.resaleId.trim();
-  const imageId = params.imageId.trim();
+export async function updatePrimaryResaleImage(
+  params: {
+    resaleId: string;
+    imageId: string;
+  },
+): Promise<ResaleListing | null> {
+  const resaleId =
+    params.resaleId.trim();
+
+  const imageId =
+    params.imageId.trim();
 
   if (!resaleId) {
-    throw new Error("resaleId is required");
+    throw new Error(
+      "resaleId is required",
+    );
   }
 
   if (!imageId) {
-    throw new Error("imageId is required");
+    throw new Error(
+      "imageId is required",
+    );
   }
 
-  const json = await fetchWithAuth<ApiDataResponse<ResaleListing>>(
-    `/mall/me/resales/${encodeURIComponent(resaleId)}/primary-image`,
-    {
-      method: "PUT",
-      body: JSON.stringify({
-        imageId,
-      }),
-    },
-  );
+  const json =
+    await fetchWithAuth<
+      ApiDataResponse<ResaleListing>
+    >(
+      `/mall/me/resales/${encodeURIComponent(
+        resaleId,
+      )}/primary-image`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          imageId,
+        }),
+      },
+    );
 
   return json.data ?? null;
 }
@@ -497,14 +736,21 @@ export async function deleteResaleListing(
   const id = resaleId.trim();
 
   if (!id) {
-    throw new Error("resaleId is required");
+    throw new Error(
+      "resaleId is required",
+    );
   }
 
   await fetchWithAuth<{
     ok?: boolean;
     resaleId?: string;
     error?: string;
-  }>(`/mall/me/resales/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
+  }>(
+    `/mall/me/resales/${encodeURIComponent(
+      id,
+    )}`,
+    {
+      method: "DELETE",
+    },
+  );
 }

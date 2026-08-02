@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import { formatPrice } from "../components/utils/price";
+import type { PageResult } from "../features/shared/pageResult";
 import { getApiBaseUrl } from "../lib/apiBaseUrl";
 
 import "../styles/lists-page.css";
@@ -32,13 +33,8 @@ type MallListItem = {
   tokenBlueprintId?: string;
 };
 
-type MallListIndexResponse = {
-  items: MallListItem[];
-  totalCount: number;
-  totalPages: number;
-  page: number;
-  perPage: number;
-};
+type MallListIndexResponse =
+  PageResult<MallListItem>;
 
 type CatalogProductBlueprint = {
   id?: string;

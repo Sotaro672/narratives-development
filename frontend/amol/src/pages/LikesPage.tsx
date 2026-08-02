@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import { formatPrice } from "../components/utils/price";
+import type { PageResult } from "../features/shared/pageResult";
 import { getApiBaseUrl } from "../lib/apiBaseUrl";
 
 import "../styles/lists-page.css";
@@ -42,13 +43,8 @@ type LikeListItem = {
   updatedAt?: string;
 };
 
-type LikeIndexResponse = {
-  items: LikeListItem[];
-  totalCount: number;
-  totalPages: number;
-  page: number;
-  perPage: number;
-};
+type LikeIndexResponse =
+  PageResult<LikeListItem>;
 
 type CatalogProductBlueprint = {
   id?: string;
