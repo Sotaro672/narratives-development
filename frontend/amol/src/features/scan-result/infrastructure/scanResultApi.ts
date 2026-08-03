@@ -12,7 +12,7 @@ import { getMyAvatar } from "../../avatar/api/avatarApi";
 import {
   fetchMeWalletRaw,
   resolveWalletTokenRaw,
-} from "../../wallet/api/walletApiClient";
+} from "../../shared/api/walletApiClient";
 
 import type {
   CatalogReviewPage,
@@ -52,27 +52,18 @@ export type {
   WalletResolvedTokenResponse,
 } from "./scanResultMappers";
 
-/**
- * 段階移行用の互換関数。
- *
- * Firebase ID tokenの取得自体は共通のgetFirebaseIdTokenへ集約し、
- * ログインしていない場合やtoken取得に失敗した場合だけundefinedへ変換する。
- */
-export async function getAuthHeadersOrUndefined(): Promise<
+async function getOptionalAuthHeaders(): Promise<
   Record<string, string> | undefined
 > {
   try {
-    const token = (
-      await getFirebaseIdToken()
-    ).trim();
+    const token = (await getFirebaseIdToken()).trim();
 
     if (!token) {
       return undefined;
     }
 
     return {
-      Authorization:
-        `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     };
   } catch {
     return undefined;
@@ -104,41 +95,31 @@ async function fetchPreviewRaw(
     ? "/mall/me/preview"
     : "/mall/preview";
 
-  const url = new URL(
-    `${base}${path}`,
-  );
-
-  url.searchParams.set(
-    "productId",
-    id,
-  );
+  const url = new URL(`${base}${path}`);
+  url.searchParams.set("productId", id);
 
   const label = isMe
     ? "fetchMyPreviewByProductId"
     : "fetchPreviewByProductId";
 
-  const response = await fetch(
-    url,
+  const response = await fetch(url, {
+    headers: mergeHeaders(
+      jsonHeaders(),
+      headers,
+    ),
+  });
+
+  const decoded = await readJsonResponse<unknown>(
+    response,
     {
-      headers: mergeHeaders(
-        jsonHeaders(),
-        headers,
-      ),
+      requestErrorMessage:
+        `${label} failed`,
+      nonJsonErrorMessage:
+        `${label} failed: response is not json url=${url.toString()}`,
+      invalidJsonErrorMessage:
+        `${label} failed: invalid json url=${url.toString()}`,
     },
   );
-
-  const decoded =
-    await readJsonResponse<unknown>(
-      response,
-      {
-        requestErrorMessage:
-          `${label} failed`,
-        nonJsonErrorMessage:
-          `${label} failed: response is not json url=${url.toString()}`,
-        invalidJsonErrorMessage:
-          `${label} failed: invalid json url=${url.toString()}`,
-      },
-    );
 
   if (
     !isRecord(decoded) ||
@@ -156,12 +137,10 @@ export async function loadPreviewState(
   productId: string,
 ): Promise<PreviewState> {
   const authHeaders =
-    await getAuthHeadersOrUndefined();
+    await getOptionalAuthHeaders();
 
   const isMe = Boolean(
-    getAuthorizationHeader(
-      authHeaders,
-    ),
+    getAuthorizationHeader(authHeaders),
   );
 
   const raw = await fetchPreviewRaw(
@@ -171,23 +150,15 @@ export async function loadPreviewState(
   );
 
   const data =
-    mallPreviewResponseFromJson(
-      raw,
-    );
+    mallPreviewResponseFromJson(raw);
 
-  const unwrapped =
-    unwrapData(raw);
-
+  const unwrapped = unwrapData(raw);
   const tokenBlueprintPatchValue =
     unwrapped.tokenBlueprintPatch;
 
   const tokenBlueprintPatchMap =
-    isRecord(
-      tokenBlueprintPatchValue,
-    ) &&
-    !Array.isArray(
-      tokenBlueprintPatchValue,
-    )
+    isRecord(tokenBlueprintPatchValue) &&
+    !Array.isArray(tokenBlueprintPatchValue)
       ? tokenBlueprintPatchValue
       : null;
 
@@ -201,9 +172,7 @@ export async function loadPreviewState(
     tokenBlueprintPatch,
     tokenIconUrlEncoded:
       tokenBlueprintPatch?.tokenIcon.trim()
-        ? safeUrl(
-            tokenBlueprintPatch.tokenIcon,
-          )
+        ? safeUrl(tokenBlueprintPatch.tokenIcon)
         : null,
   };
 }
@@ -211,8 +180,7 @@ export async function loadPreviewState(
 export async function fetchMeAvatar(
   headers?: HeadersInit,
 ): Promise<MallOwnerInfo> {
-  const backendUrl =
-    getApiBaseUrl();
+  const backendUrl = getApiBaseUrl();
 
   if (!backendUrl) {
     throw new Error(
@@ -221,9 +189,7 @@ export async function fetchMeAvatar(
   }
 
   const authorization =
-    getAuthorizationHeader(
-      headers,
-    );
+    getAuthorizationHeader(headers);
 
   if (!authorization) {
     throw new Error(
@@ -232,10 +198,7 @@ export async function fetchMeAvatar(
   }
 
   const idToken = authorization
-    .replace(
-      /^Bearer\s+/i,
-      "",
-    )
+    .replace(/^Bearer\s+/i, "")
     .trim();
 
   if (!idToken) {
@@ -244,11 +207,10 @@ export async function fetchMeAvatar(
     );
   }
 
-  const avatar =
-    await getMyAvatar({
-      backendUrl,
-      idToken,
-    });
+  const avatar = await getMyAvatar({
+    backendUrl,
+    idToken,
+  });
 
   if (!avatar) {
     throw new Error(
@@ -264,19 +226,15 @@ export async function fetchMeAvatar(
 
   return {
     brandId:
-      typeof avatarWithBrand.brandId ===
-      "string"
+      typeof avatarWithBrand.brandId === "string"
         ? avatarWithBrand.brandId
         : "",
-    avatarId:
-      avatar.avatarId,
+    avatarId: avatar.avatarId,
     brandName:
-      typeof avatarWithBrand.brandName ===
-      "string"
+      typeof avatarWithBrand.brandName === "string"
         ? avatarWithBrand.brandName
         : "",
-    avatarName:
-      avatar.avatarName,
+    avatarName: avatar.avatarName,
   };
 }
 
@@ -286,8 +244,7 @@ export async function transferScanPurchased(
     headers?: HeadersInit;
   },
 ): Promise<MallScanTransferResponse> {
-  const productId =
-    args.productId.trim();
+  const productId = args.productId.trim();
 
   if (!productId) {
     throw new Error(
@@ -295,8 +252,7 @@ export async function transferScanPurchased(
     );
   }
 
-  const base =
-    getApiBaseUrl();
+  const base = getApiBaseUrl();
 
   if (!base) {
     throw new Error(
@@ -307,16 +263,13 @@ export async function transferScanPurchased(
   const url =
     `${base}/mall/me/orders/scan/transfer`;
 
-  const headers =
-    mergeHeaders(
-      jsonPostHeaders(),
-      args.headers,
-    );
+  const headers = mergeHeaders(
+    jsonPostHeaders(),
+    args.headers,
+  );
 
   const authHeader =
-    getAuthorizationHeader(
-      headers,
-    );
+    getAuthorizationHeader(headers);
 
   if (!authHeader) {
     throw new Error(
@@ -329,17 +282,13 @@ export async function transferScanPurchased(
     authHeader,
   );
 
-  const response =
-    await fetch(
-      url,
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          productId,
-        }),
-      },
-    );
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      productId,
+    }),
+  });
 
   const decoded =
     await readJsonDataResponse<unknown>(
@@ -375,8 +324,7 @@ export async function fetchReviewsByProductBlueprintId(
     );
   }
 
-  const base =
-    getApiBaseUrl();
+  const base = getApiBaseUrl();
 
   if (!base) {
     throw new Error(
@@ -384,30 +332,25 @@ export async function fetchReviewsByProductBlueprintId(
     );
   }
 
+  const encodedProductBlueprintId =
+    encodeURIComponent(productBlueprintId);
+
   const url = new URL(
-    `${base}/mall/catalog/product-blueprints/${encodeURIComponent(
-      productBlueprintId,
-    )}/reviews`,
+    `${base}/mall/catalog/product-blueprints/${encodedProductBlueprintId}/reviews`,
   );
 
   url.searchParams.set(
     "page",
     String(args.page),
   );
-
   url.searchParams.set(
     "perPage",
     String(args.perPage),
   );
 
-  const response =
-    await fetch(
-      url,
-      {
-        headers:
-          jsonHeaders(),
-      },
-    );
+  const response = await fetch(url, {
+    headers: jsonHeaders(),
+  });
 
   const decoded =
     await readJsonDataResponse<unknown>(
@@ -440,9 +383,7 @@ export async function createProductBlueprintReview(
 ): Promise<Record<string, unknown>> {
   const productBlueprintId =
     args.productBlueprintId.trim();
-
-  const body =
-    args.body.trim();
+  const body = args.body.trim();
 
   if (!productBlueprintId) {
     throw new Error(
@@ -456,8 +397,7 @@ export async function createProductBlueprintReview(
     );
   }
 
-  const base =
-    getApiBaseUrl();
+  const base = getApiBaseUrl();
 
   if (!base) {
     throw new Error(
@@ -469,38 +409,31 @@ export async function createProductBlueprintReview(
     1,
     Math.min(
       5,
-      Math.trunc(
-        args.rating,
-      ),
+      Math.trunc(args.rating),
     ),
   );
 
   const title =
-    args.title?.trim() ||
-    "Review";
+    args.title?.trim() || "Review";
+
+  const encodedProductBlueprintId =
+    encodeURIComponent(productBlueprintId);
 
   const url =
-    `${base}/mall/me/catalog/product-blueprints/${encodeURIComponent(
-      productBlueprintId,
-    )}/reviews`;
+    `${base}/mall/me/catalog/product-blueprints/${encodedProductBlueprintId}/reviews`;
 
-  const response =
-    await fetch(
-      url,
-      {
-        method: "POST",
-        headers:
-          mergeHeaders(
-            jsonPostHeaders(),
-            args.headers,
-          ),
-        body: JSON.stringify({
-          body,
-          rating,
-          title,
-        }),
-      },
-    );
+  const response = await fetch(url, {
+    method: "POST",
+    headers: mergeHeaders(
+      jsonPostHeaders(),
+      args.headers,
+    ),
+    body: JSON.stringify({
+      body,
+      rating,
+      title,
+    }),
+  });
 
   const decoded =
     await readJsonDataResponse<unknown>(
@@ -532,8 +465,7 @@ export async function resolveOwnedWalletTokenByMintAddress(
   mintAddress: string,
   headers?: HeadersInit,
 ): Promise<WalletResolvedTokenResponse> {
-  const mint =
-    mintAddress.trim();
+  const mint = mintAddress.trim();
 
   if (!mint) {
     throw new Error(
@@ -562,8 +494,7 @@ export async function isOwnedByWalletMintAddress(
   mintAddress: string,
   headers?: HeadersInit,
 ): Promise<boolean> {
-  const mint =
-    mintAddress.trim();
+  const mint = mintAddress.trim();
 
   if (!mint) {
     return false;
@@ -575,20 +506,14 @@ export async function isOwnedByWalletMintAddress(
       headers,
     });
 
-  if (!result.ok) {
-    return false;
-  }
-
-  return true;
+  return result.ok;
 }
 
 export async function fetchMeWallet(
   headers?: HeadersInit,
 ): Promise<WalletDTO> {
   const result =
-    await fetchMeWalletRaw(
-      headers,
-    );
+    await fetchMeWalletRaw(headers);
 
   if (!result.ok) {
     throw new Error(
@@ -605,8 +530,7 @@ export async function resolveTokenByMintAddress(
   mintAddress: string,
   headers?: HeadersInit,
 ): Promise<TokenResolveDTO> {
-  const mint =
-    mintAddress.trim();
+  const mint = mintAddress.trim();
 
   if (!mint) {
     throw new Error(
