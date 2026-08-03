@@ -189,17 +189,8 @@ export function useScanResultPage() {
     transferResult?.matched ??
     false;
 
-  const displayTransfers = useMemo(
-    () =>
-      previewState?.raw.transfers ??
-      [],
-    [
-      previewState?.raw.transfers,
-    ],
-  );
-
   const hasMultipleTransfers =
-    displayTransfers.length >= 2;
+    (previewState?.raw.transfers.length ?? 0) >= 2;
 
   const state: ScanResultPageState = {
     productId,
@@ -234,15 +225,10 @@ export function useScanResultPage() {
 
   const viewModel = useMemo(() => {
     return createScanResultPageViewModel({
-      state,
       previewState,
-      chainTransfers:
-        displayTransfers,
     });
   }, [
-    displayTransfers,
     previewState,
-    state,
   ]);
 
   const transferSuccessModalViewModel =
@@ -1032,7 +1018,6 @@ export function useScanResultPage() {
     state,
     viewModel,
     transferSuccessModalViewModel,
-    displayTransfers,
     hasMultipleTransfers,
     load,
     loadReviews,

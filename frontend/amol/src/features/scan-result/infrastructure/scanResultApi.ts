@@ -44,10 +44,6 @@ import {
   type WalletResolvedTokenResponse,
 } from "./scanResultMappers";
 
-export {
-  listSolanaTransfersByMintAddress,
-} from "./scanResultSolanaApi";
-
 export type {
   WalletResolvedTokenResponse,
 } from "./scanResultMappers";

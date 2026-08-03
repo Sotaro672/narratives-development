@@ -5,7 +5,6 @@ import { isRecord } from "../../../components/utils/typeGuards";
 
 import type {
   MallOwnerInfo,
-  MallPreviewTransferInfo,
   ProductBlueprintPatchItem,
   TokenBlueprintPatchVM,
 } from "../../shared/types/scanResult";
@@ -39,18 +38,6 @@ export function ownerLabel(
   }
 
   return "-";
-}
-
-export function shortAddress(
-  value: string,
-): string {
-  const address = value.trim();
-
-  if (address.length <= 16) {
-    return address;
-  }
-
-  return `${address.slice(0, 8)}...${address.slice(-8)}`;
 }
 
 export function withCm(
@@ -310,99 +297,4 @@ export function tokenBlueprintPatchHasAnyField(
       vm.description.trim() ||
       vm.tokenIcon.trim(),
   );
-}
-
-export function transferDisplayName(
-  transfer: MallPreviewTransferInfo,
-  side: "from" | "to",
-): string {
-  const prefix =
-    side === "from"
-      ? "from"
-      : "to";
-
-  const avatarName =
-    transfer[
-      `${prefix}AvatarName`
-    ].trim();
-
-  const brandName =
-    transfer[
-      `${prefix}BrandName`
-    ].trim();
-
-  const avatarId =
-    transfer[
-      `${prefix}AvatarId`
-    ].trim();
-
-  const brandId =
-    transfer[
-      `${prefix}BrandId`
-    ].trim();
-
-  const walletAddress =
-    side === "from"
-      ? transfer.fromWalletAddress.trim()
-      : transfer.toWalletAddress.trim();
-
-  if (avatarName) {
-    return avatarName;
-  }
-
-  if (brandName) {
-    return brandName;
-  }
-
-  if (avatarId) {
-    return avatarId;
-  }
-
-  if (brandId) {
-    return brandId;
-  }
-
-  if (walletAddress) {
-    return walletAddress;
-  }
-
-  return "-";
-}
-
-export function transferIconUrl(
-  transfer: MallPreviewTransferInfo,
-  side: "from" | "to",
-): string {
-  const prefix =
-    side === "from"
-      ? "from"
-      : "to";
-
-  const avatarIcon =
-    transfer[
-      `${prefix}AvatarIcon`
-    ].trim();
-
-  const brandIcon =
-    transfer[
-      `${prefix}BrandIcon`
-    ].trim();
-
-  return safeUrl(
-    avatarIcon || brandIcon,
-  );
-}
-
-export function transferBrandId(
-  transfer: MallPreviewTransferInfo,
-  side: "from" | "to",
-): string {
-  const prefix =
-    side === "from"
-      ? "from"
-      : "to";
-
-  return transfer[
-    `${prefix}BrandId`
-  ].trim();
 }
