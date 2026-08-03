@@ -15,13 +15,16 @@ import type {
   PreviewState,
   TokenBlueprintPatchVM,
   TokenContentFile,
-  WalletDTO,
 } from "../../shared/types/scanResult";
 
 import type {
   ProductBlueprintReview,
   ProductBlueprintReviewPage,
 } from "../../shared/types/review";
+
+import type {
+  ScanWalletSnapshot,
+} from "../application/scanTransferUsecase";
 
 import {
   isFiniteNumber,
@@ -1185,9 +1188,9 @@ export function walletResolvedTokenResponseFromJson(
   };
 }
 
-export function walletDTOFromJson(
+export function scanWalletSnapshotFromJson(
   raw: unknown,
-): WalletDTO {
+): ScanWalletSnapshot {
   const root = unwrapData(raw);
 
   const walletsRaw = Array.isArray(

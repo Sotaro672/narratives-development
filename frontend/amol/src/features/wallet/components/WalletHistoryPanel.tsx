@@ -4,7 +4,7 @@ import { formatDateTime } from "../../../components/utils/date";
 import type {
   WalletOrder,
   WalletOrderItemSnapshot,
-} from "../types/orderTypes";
+} from "../../shared/types/orderTypes";
 import { formatAmount } from "../utils/format";
 
 type WalletHistoryPanelProps = {

@@ -1,6 +1,6 @@
 // frontend/amol/src/features/wallet/utils/format.ts
 
-import type { WalletOrderItemSnapshot } from "../types/orderTypes";
+import type { WalletOrderItemSnapshot } from "../../shared/types/orderTypes";
 
 export function formatAmount(
   amount: number,

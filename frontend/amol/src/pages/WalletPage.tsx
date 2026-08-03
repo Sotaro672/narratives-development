@@ -15,7 +15,7 @@ import WalletTabs from "../features/wallet/components/WalletTabs";
 import WalletTokenContentsCard from "../features/wallet/components/WalletTokenContentsCard";
 import WalletTokenEmpty from "../features/wallet/components/WalletTokenEmpty";
 import { useWalletPage } from "../features/wallet/hooks/useWalletPage";
-import type { WalletTokenItem } from "../features/wallet/types/tokenTypes";
+import type { WalletTokenItem } from "../features/shared/types/tokenTypes";
 
 export default function WalletPage() {
   const navigate = useNavigate();

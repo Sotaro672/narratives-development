@@ -13,7 +13,7 @@ import type {
   WalletOrderItemSnapshot,
   WalletOrderMeasurements,
   WalletOrdersPage,
-} from "../types/orderTypes";
+} from "../../shared/types/orderTypes";
 
 function getString(
   record: Record<string, unknown>,

@@ -7,7 +7,7 @@ import type {
   TokenMetadataDTO,
   TokenResolveDTO,
   WalletDTO,
-} from "../types/tokenTypes";
+} from "../../shared/types/tokenTypes";
 
 export function extractWallet(
   value: unknown,

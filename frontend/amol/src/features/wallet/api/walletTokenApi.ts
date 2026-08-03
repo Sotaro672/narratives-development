@@ -18,7 +18,7 @@ import type {
   WalletDTO,
   WalletTokenItem,
   WalletTokenListResult,
-} from "../types/tokenTypes";
+} from "../../shared/types/tokenTypes";
 import {
   extractWallet,
   toTokenMetadataDTO,

@@ -253,10 +253,6 @@ export type TokenContentFile = {
   isPreviewable: boolean;
 };
 
-export type WalletDTO = {
-  tokens: string[];
-};
-
 export type ScanResultPageState = {
   productId: string;
 

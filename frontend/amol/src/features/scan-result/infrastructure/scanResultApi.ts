@@ -30,8 +30,11 @@ import type {
   MallOwnerInfo,
   MallScanTransferResponse,
   PreviewState,
-  WalletDTO,
 } from "../../shared/types/scanResult";
+
+import type {
+  ScanWalletSnapshot,
+} from "../application/scanTransferUsecase";
 
 import {
   getAuthorizationHeader,
@@ -44,7 +47,7 @@ import {
   catalogReviewPageFromJson,
   mallScanTransferResponseFromJson,
   previewStateFromJson,
-  walletDTOFromJson,
+  scanWalletSnapshotFromJson,
   walletResolvedTokenResponseFromJson,
   type WalletResolvedTokenResponse,
 } from "./scanResultMappers";
@@ -517,7 +520,7 @@ export async function isOwnedByWalletMintAddress(
 
 export async function fetchMeWallet(
   headers?: HeadersInit,
-): Promise<WalletDTO> {
+): Promise<ScanWalletSnapshot> {
   const result =
     await fetchMeWalletRaw(
       headers,
@@ -529,7 +532,7 @@ export async function fetchMeWallet(
     );
   }
 
-  return walletDTOFromJson(
+  return scanWalletSnapshotFromJson(
     result.data,
   );
 }

@@ -1,6 +1,6 @@
 // frontend/amol/src/features/wallet/types/orderTypes.ts
 
-import type { PageResultResponse } from "../../shared/pageResult";
+import type { PageResultResponse } from "../pageResult";
 
 export type WalletOrderColor = {
   name?: string;

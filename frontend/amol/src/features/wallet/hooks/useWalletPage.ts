@@ -25,11 +25,11 @@ import { fetchWalletOrders } from "../api/historyApi";
 import { fetchMeWalletTokens } from "../api/walletTokenApi";
 
 import type { WalletTabKey } from "../types";
-import type { WalletOrder } from "../types/orderTypes";
+import type { WalletOrder } from "../../shared/types/orderTypes";
 import type {
   WalletDTO,
   WalletTokenItem,
-} from "../types/tokenTypes";
+} from "../../shared/types/tokenTypes";
 
 export function useWalletPage() {
   const navigate = useNavigate();
