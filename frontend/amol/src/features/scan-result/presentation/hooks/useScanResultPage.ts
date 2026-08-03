@@ -43,9 +43,7 @@ import type {
   TokenResolveDTO,
 } from "../../../shared/types/scanResult";
 
-function safeDecodeURIComponent(
-  value: string,
-): string {
+function safeDecodeURIComponent(value: string): string {
   try {
     return decodeURIComponent(value);
   } catch {
@@ -53,24 +51,17 @@ function safeDecodeURIComponent(
   }
 }
 
-function hasAuthorization(
-  headers?: HeadersInit,
-): boolean {
+function hasAuthorization(headers?: HeadersInit): boolean {
   if (!headers) {
     return false;
   }
 
-  const normalizedHeaders =
-    new Headers(headers);
+  const normalizedHeaders = new Headers(headers);
 
   return Boolean(
     (
-      normalizedHeaders.get(
-        "Authorization",
-      ) ||
-      normalizedHeaders.get(
-        "authorization",
-      ) ||
+      normalizedHeaders.get("Authorization") ||
+      normalizedHeaders.get("authorization") ||
       ""
     ).trim(),
   );
@@ -92,24 +83,19 @@ function verifyResultFromTransferResult(
 
 export function useScanProductIdFromUrl(): string {
   const params = useParams();
-  const [searchParams] =
-    useSearchParams();
+  const [searchParams] = useSearchParams();
 
   return useMemo(() => {
-    const fromQuery =
-      searchParams.get("productId");
+    const fromQuery = searchParams.get("productId");
 
     if (fromQuery?.trim()) {
       return fromQuery.trim();
     }
 
-    const fromParams =
-      params.productId;
+    const fromParams = params.productId;
 
     if (fromParams?.trim()) {
-      return safeDecodeURIComponent(
-        fromParams.trim(),
-      );
+      return safeDecodeURIComponent(fromParams.trim());
     }
 
     return "";
@@ -121,174 +107,74 @@ export function useScanProductIdFromUrl(): string {
 
 export function useScanResultPage() {
   const navigate = useNavigate();
+  const productId = useScanProductIdFromUrl();
 
-  const productId =
-    useScanProductIdFromUrl();
-
-  const [
-    previewState,
-    setPreviewState,
-  ] = useState<PreviewState | null>(
-    null,
-  );
-
-  const [
-    meAvatar,
-    setMeAvatar,
-  ] = useState<MallOwnerInfo | null>(
-    null,
-  );
-
-  const [
-    verifyResult,
-    setVerifyResult,
-  ] =
-    useState<MallScanVerifyResponse | null>(
-      null,
-    );
-
-  const [
-    transferResult,
-    setTransferResult,
-  ] =
-    useState<MallScanTransferResponse | null>(
-      null,
-    );
-
+  const [previewState, setPreviewState] =
+    useState<PreviewState | null>(null);
+  const [meAvatar, setMeAvatar] =
+    useState<MallOwnerInfo | null>(null);
+  const [verifyResult, setVerifyResult] =
+    useState<MallScanVerifyResponse | null>(null);
+  const [transferResult, setTransferResult] =
+    useState<MallScanTransferResponse | null>(null);
   const [reviews, setReviews] =
-    useState<CatalogReviewPage | null>(
-      null,
-    );
-
-  const [
-    reviewsError,
-    setReviewsError,
-  ] = useState<string | null>(null);
-
-  const [
-    reviewPage,
-    setReviewPage,
-  ] = useState(1);
-
-  const [reviewPerPage] =
-    useState(20);
-
-  const [
-    busyReviews,
-    setBusyReviews,
-  ] = useState(false);
-
-  const [
-    ownedByWallet,
-    setOwnedByWallet,
-  ] = useState<boolean | null>(null);
-
-  const [
-    ownedByWalletError,
-    setOwnedByWalletError,
-  ] = useState<string | null>(
-    null,
-  );
-
-  const [
-    busyOwnedByWallet,
-    setBusyOwnedByWallet,
-  ] = useState(false);
-
-  const [
-    postingReview,
-    setPostingReview,
-  ] = useState(false);
-
-  const [
-    postReviewError,
-    setPostReviewError,
-  ] = useState<string | null>(null);
-
+    useState<CatalogReviewPage | null>(null);
+  const [reviewsError, setReviewsError] =
+    useState<string | null>(null);
+  const [reviewPage, setReviewPage] = useState(1);
+  const [reviewPerPage] = useState(20);
+  const [busyReviews, setBusyReviews] = useState(false);
+  const [ownedByWallet, setOwnedByWallet] =
+    useState<boolean | null>(null);
+  const [ownedByWalletError, setOwnedByWalletError] =
+    useState<string | null>(null);
+  const [busyOwnedByWallet, setBusyOwnedByWallet] =
+    useState(false);
+  const [postingReview, setPostingReview] = useState(false);
+  const [postReviewError, setPostReviewError] =
+    useState<string | null>(null);
   const [
     transferredMintOverride,
     setTransferredMintOverride,
   ] = useState("");
-
-  const [
-    resolvingTransferredToken,
-  ] = useState(false);
-
+  const [resolvingTransferredToken] = useState(false);
   const [
     resolvedTransferredToken,
     setResolvedTransferredToken,
-  ] =
-    useState<TokenResolveDTO | null>(
-      null,
-    );
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [
-    busyTransfer,
-    setBusyTransfer,
-  ] = useState(false);
-
-  const [
-    authAvailable,
-    setAuthAvailable,
-  ] = useState(false);
-
-  const [error, setError] =
+  ] = useState<TokenResolveDTO | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busyTransfer, setBusyTransfer] = useState(false);
+  const [authAvailable, setAuthAvailable] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [transferModalOpen, setTransferModalOpen] =
+    useState(false);
+  const [transferModalError, setTransferModalError] =
     useState<string | null>(null);
 
-  const [
-    transferModalOpen,
-    setTransferModalOpen,
-  ] = useState(false);
-
-  const [
-    transferModalError,
-    setTransferModalError,
-  ] = useState<string | null>(
-    null,
-  );
-
-  const autoTransferTriggeredRef =
-    useRef(false);
-
-  const mountedRef =
-    useRef(true);
-
-  const loadingProductIdRef =
-    useRef("");
-
-  const transferringRef =
-    useRef(false);
+  const autoTransferTriggeredRef = useRef(false);
+  const mountedRef = useRef(true);
+  const loadingProductIdRef = useRef("");
+  const transferringRef = useRef(false);
 
   const productBlueprintId =
-    previewState?.raw.productBlueprintId.trim() ||
-    "";
+    previewState?.raw.productBlueprintId.trim() || "";
 
   const previewMintAddress =
-    previewState?.raw.token?.mintAddress.trim() ||
-    "";
+    previewState?.raw.token?.mintAddress.trim() || "";
 
   const transferredMintAddress =
     transferResult?.mintAddress.trim() ||
     transferredMintOverride.trim();
 
   const transferTxSignature =
-    transferResult?.txSignature.trim() ||
-    "";
+    transferResult?.txSignature.trim() || "";
 
   const transferMatched =
-    transferResult?.matched ??
-    false;
+    transferResult?.matched ?? false;
 
   const displayTransfers = useMemo(
-    () =>
-      previewState?.raw.transfers ??
-      [],
-    [
-      previewState?.raw.transfers,
-    ],
+    () => previewState?.raw.transfers ?? [],
+    [previewState?.raw.transfers],
   );
 
   const hasMultipleTransfers =
@@ -327,315 +213,237 @@ export function useScanResultPage() {
   };
 
   const viewModel = useMemo(() => {
-    return createScanResultPageViewModel(
-      {
-        state,
-        previewState,
-        chainTransfers:
-          displayTransfers,
-      },
-    );
+    return createScanResultPageViewModel({
+      state,
+      previewState,
+      chainTransfers: displayTransfers,
+    });
   }, [
     displayTransfers,
     previewState,
     state,
   ]);
 
-  const transferSuccessModalViewModel =
-    useMemo(() => {
-      return createScanTransferSuccessModalViewModel(
-        {
-          result: transferResult,
-          transferredMintAddress,
-          token:
-            previewState?.raw.token ??
-            null,
-          tokenBlueprintPatch:
-            previewState
-              ?.tokenBlueprintPatch ??
-            null,
-          productName:
-            previewState?.raw
-              .productBlueprintPatch
-              ?.productName ?? "",
-        },
-      );
-    }, [
-      previewState?.raw
-        .productBlueprintPatch
-        ?.productName,
-      previewState?.raw.token,
-      previewState
-        ?.tokenBlueprintPatch,
-      transferResult,
+  const transferSuccessModalViewModel = useMemo(() => {
+    return createScanTransferSuccessModalViewModel({
+      result: transferResult,
       transferredMintAddress,
-    ]);
-
-  const closeTransferModal =
-    useCallback(() => {
-      setTransferModalOpen(false);
-      setTransferModalError(null);
-    }, []);
-
-  const runAutoTransferIfNeeded =
-    useCallback(
-      async (
-        pid: string,
-        headers?: HeadersInit,
-      ) => {
-        const normalizedProductId =
-          pid.trim();
-
-        if (
-          !normalizedProductId
-        ) {
-          return;
-        }
-
-        if (
-          !hasAuthorization(headers)
-        ) {
-          return;
-        }
-
-        if (
-          autoTransferTriggeredRef.current ||
-          transferringRef.current
-        ) {
-          return;
-        }
-
-        autoTransferTriggeredRef.current =
-          true;
-
-        transferringRef.current =
-          true;
-
-        setBusyTransfer(true);
-
-        try {
-          const result =
-            await runScanAutoTransfer(
-              {
-                fetchMeWallet,
-                transferScanPurchased,
-              },
-              {
-                productId:
-                  normalizedProductId,
-                headers,
-              },
-            );
-
-          if (
-            result.transferredMintAddress
-          ) {
-            setTransferredMintOverride(
-              result.transferredMintAddress,
-            );
-          }
-
-          if (
-            !mountedRef.current
-          ) {
-            return;
-          }
-
-          setTransferResult(
-            result.transferResult,
-          );
-
-          setVerifyResult(
-            verifyResultFromTransferResult(
-              result.transferResult,
-            ),
-          );
-
-          if (
-            result.transferResult
-              .matched
-          ) {
-            setTransferModalError(
-              null,
-            );
-
-            setTransferModalOpen(
-              true,
-            );
-          }
-        } catch {
-          // Auto transfer is best-effort.
-          // Backend owns verification / ownership / purchase checks.
-        } finally {
-          transferringRef.current =
-            false;
-
-          if (
-            mountedRef.current
-          ) {
-            setBusyTransfer(false);
-          }
-        }
-      },
-      [],
-    );
-
-  const loadAuthFlow =
-    useCallback(
-      async (pid: string) => {
-        const normalizedProductId =
-          pid.trim();
-
-        if (
-          !normalizedProductId
-        ) {
-          return;
-        }
-
-        const headers =
-          await getAuthHeadersOrUndefined();
-
-        const hasAuth =
-          hasAuthorization(headers);
-
-        setAuthAvailable(hasAuth);
-
-        if (!hasAuth) {
-          return;
-        }
-
-        try {
-          const avatar =
-            await fetchMeAvatar(
-              headers,
-            );
-
-          if (
-            !mountedRef.current
-          ) {
-            return;
-          }
-
-          setMeAvatar(avatar);
-
-          /**
-           * Frontend verify is intentionally disabled.
-           * transferScanPurchased is the single authoritative operation.
-           * Backend handles purchase / ownership / eligibility checks.
-           */
-          await runAutoTransferIfNeeded(
-            normalizedProductId,
-            headers,
-          );
-        } catch {
-          // Auth-scoped scan flow is best-effort.
-        }
-      },
-      [
-        runAutoTransferIfNeeded,
-      ],
-    );
-
-  const load = useCallback(
-    async () => {
-      const pid =
-        productId.trim();
-
-      setLoading(true);
-      setError(null);
-      setPreviewState(null);
-      setMeAvatar(null);
-      setVerifyResult(null);
-      setTransferResult(null);
-      setTransferredMintOverride(
+      token: previewState?.raw.token ?? null,
+      tokenBlueprintPatch:
+        previewState?.tokenBlueprintPatch ?? null,
+      productName:
+        previewState?.raw.productBlueprintPatch?.productName ??
         "",
-      );
-      setResolvedTransferredToken(
-        null,
-      );
-      setTransferModalOpen(false);
-      setTransferModalError(null);
-      setReviews(null);
-      setReviewsError(null);
-      setOwnedByWallet(null);
-      setOwnedByWalletError(null);
-      setPostReviewError(null);
-      setReviewPage(1);
+    });
+  }, [
+    previewState?.raw.productBlueprintPatch?.productName,
+    previewState?.raw.token,
+    previewState?.tokenBlueprintPatch,
+    transferResult,
+    transferredMintAddress,
+  ]);
 
-      autoTransferTriggeredRef.current =
-        false;
+  const closeTransferModal = useCallback(() => {
+    setTransferModalOpen(false);
+    setTransferModalError(null);
+  }, []);
 
-      transferringRef.current =
-        false;
+  const runAutoTransferIfNeeded = useCallback(
+    async (
+      pid: string,
+      headers?: HeadersInit,
+    ) => {
+      const normalizedProductId = pid.trim();
+
+      if (!normalizedProductId) {
+        return;
+      }
+
+      if (!hasAuthorization(headers)) {
+        return;
+      }
+
+      if (
+        autoTransferTriggeredRef.current ||
+        transferringRef.current
+      ) {
+        return;
+      }
+
+      autoTransferTriggeredRef.current = true;
+      transferringRef.current = true;
+
+      setBusyTransfer(true);
 
       try {
-        if (!pid) {
-          throw new Error(
-            "商品ID が無いため、プレビューを取得しません。",
+        const result = await runScanAutoTransfer(
+          {
+            fetchMeWallet,
+            transferScanPurchased,
+          },
+          {
+            productId: normalizedProductId,
+            headers,
+          },
+        );
+
+        if (result.transferredMintAddress) {
+          setTransferredMintOverride(
+            result.transferredMintAddress,
           );
         }
 
-        loadingProductIdRef.current =
-          pid;
-
-        const nextState =
-          await loadPreviewState(
-            pid,
-          );
-
-        if (
-          !mountedRef.current ||
-          loadingProductIdRef.current !==
-            pid
-        ) {
+        if (!mountedRef.current) {
           return;
         }
 
-        setPreviewState(
-          nextState,
+        setTransferResult(result.transferResult);
+
+        setVerifyResult(
+          verifyResultFromTransferResult(
+            result.transferResult,
+          ),
         );
 
-        await loadAuthFlow(pid);
-      } catch (caughtError) {
-        if (
-          !mountedRef.current
-        ) {
-          return;
+        if (result.transferResult.matched) {
+          setTransferModalError(null);
+          setTransferModalOpen(true);
         }
-
-        setError(
-          caughtError instanceof Error
-            ? caughtError.message
-            : String(caughtError),
-        );
+      } catch {
+        // Auto transfer is best-effort.
+        // Backend owns verification / ownership / purchase checks.
       } finally {
-        if (
-          mountedRef.current
-        ) {
-          setLoading(false);
+        transferringRef.current = false;
+
+        if (mountedRef.current) {
+          setBusyTransfer(false);
         }
       }
     },
-    [
-      loadAuthFlow,
-      productId,
-    ],
+    [],
   );
 
+  const loadAuthFlow = useCallback(
+    async (pid: string) => {
+      const normalizedProductId = pid.trim();
+
+      if (!normalizedProductId) {
+        return;
+      }
+
+      const headers =
+        await getAuthHeadersOrUndefined();
+
+      const hasAuth =
+        hasAuthorization(headers);
+
+      setAuthAvailable(hasAuth);
+
+      if (!hasAuth) {
+        return;
+      }
+
+      try {
+        const avatar =
+          await fetchMeAvatar(headers);
+
+        if (!mountedRef.current) {
+          return;
+        }
+
+        setMeAvatar(avatar);
+
+        /**
+         * Frontend verify is intentionally disabled.
+         * transferScanPurchased is the single authoritative operation.
+         * Backend handles purchase / ownership / eligibility checks.
+         */
+        await runAutoTransferIfNeeded(
+          normalizedProductId,
+          headers,
+        );
+      } catch {
+        // Auth-scoped scan flow is best-effort.
+      }
+    },
+    [runAutoTransferIfNeeded],
+  );
+
+  const load = useCallback(async () => {
+    const pid = productId.trim();
+
+    setLoading(true);
+    setError(null);
+    setPreviewState(null);
+    setMeAvatar(null);
+    setVerifyResult(null);
+    setTransferResult(null);
+    setTransferredMintOverride("");
+    setResolvedTransferredToken(null);
+    setTransferModalOpen(false);
+    setTransferModalError(null);
+    setReviews(null);
+    setReviewsError(null);
+    setOwnedByWallet(null);
+    setOwnedByWalletError(null);
+    setPostReviewError(null);
+    setReviewPage(1);
+
+    autoTransferTriggeredRef.current = false;
+    transferringRef.current = false;
+
+    try {
+      if (!pid) {
+        throw new Error(
+          "商品ID が無いため、プレビューを取得しません。",
+        );
+      }
+
+      loadingProductIdRef.current = pid;
+
+      const nextState =
+        await loadPreviewState(pid);
+
+      if (
+        !mountedRef.current ||
+        loadingProductIdRef.current !== pid
+      ) {
+        return;
+      }
+
+      setPreviewState(nextState);
+
+      await loadAuthFlow(pid);
+    } catch (caughtError) {
+      if (!mountedRef.current) {
+        return;
+      }
+
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : String(caughtError),
+      );
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [
+    loadAuthFlow,
+    productId,
+  ]);
+
   const loadReviews = useCallback(
-    async (
-      nextPage = reviewPage,
-    ) => {
+    async (nextPage = reviewPage) => {
       const pbId =
         productBlueprintId.trim();
 
       if (!pbId) {
         setReviews(null);
-
         setReviewsError(
           "productBlueprintId is empty",
         );
-
         return;
       }
 
@@ -647,25 +455,20 @@ export function useScanResultPage() {
       setReviewsError(null);
 
       try {
-        const response =
-          await loadScanReviews(
-            {
-              fetchReviewsByProductBlueprintId,
-              createProductBlueprintReview,
-              getAuthHeadersOrUndefined,
-            },
-            {
-              productBlueprintId:
-                pbId,
-              page: nextPage,
-              perPage:
-                reviewPerPage,
-            },
-          );
+        const response = await loadScanReviews(
+          {
+            fetchReviewsByProductBlueprintId,
+            createProductBlueprintReview,
+            getAuthHeadersOrUndefined,
+          },
+          {
+            productBlueprintId: pbId,
+            page: nextPage,
+            perPage: reviewPerPage,
+          },
+        );
 
-        if (
-          !mountedRef.current
-        ) {
+        if (!mountedRef.current) {
           return;
         }
 
@@ -673,9 +476,7 @@ export function useScanResultPage() {
         setReviewsError(null);
         setReviewPage(nextPage);
       } catch (caughtError) {
-        if (
-          !mountedRef.current
-        ) {
+        if (!mountedRef.current) {
           return;
         }
 
@@ -687,9 +488,7 @@ export function useScanResultPage() {
             : String(caughtError),
         );
       } finally {
-        if (
-          mountedRef.current
-        ) {
+        if (mountedRef.current) {
           setBusyReviews(false);
         }
       }
@@ -702,114 +501,88 @@ export function useScanResultPage() {
     ],
   );
 
-  const loadOwnedState =
-    useCallback(async () => {
-      const mintAddress =
-        previewMintAddress.trim();
+  const loadOwnedState = useCallback(async () => {
+    const mintAddress =
+      previewMintAddress.trim();
 
-      if (!mintAddress) {
-        setOwnedByWallet(null);
+    if (!mintAddress) {
+      setOwnedByWallet(null);
+      setOwnedByWalletError(null);
+      return;
+    }
 
-        setOwnedByWalletError(
-          null,
+    if (busyOwnedByWallet) {
+      return;
+    }
+
+    setBusyOwnedByWallet(true);
+    setOwnedByWalletError(null);
+
+    try {
+      const owned =
+        await resolveScanOwnedWalletState(
+          {
+            getAuthHeadersOrUndefined,
+            isOwnedByWalletMintAddress,
+            hasAuthorization,
+          },
+          mintAddress,
         );
 
+      if (!mountedRef.current) {
         return;
       }
 
-      if (
-        busyOwnedByWallet
-      ) {
+      setOwnedByWallet(owned);
+      setOwnedByWalletError(null);
+    } catch (caughtError) {
+      if (!mountedRef.current) {
         return;
       }
 
-      setBusyOwnedByWallet(
-        true,
-      );
+      setOwnedByWallet(null);
 
       setOwnedByWalletError(
-        null,
+        caughtError instanceof Error
+          ? caughtError.message
+          : String(caughtError),
       );
-
-      try {
-        const owned =
-          await resolveScanOwnedWalletState(
-            {
-              getAuthHeadersOrUndefined,
-              isOwnedByWalletMintAddress,
-              hasAuthorization,
-            },
-            mintAddress,
-          );
-
-        if (
-          !mountedRef.current
-        ) {
-          return;
-        }
-
-        setOwnedByWallet(owned);
-
-        setOwnedByWalletError(
-          null,
-        );
-      } catch (caughtError) {
-        if (
-          !mountedRef.current
-        ) {
-          return;
-        }
-
-        setOwnedByWallet(null);
-
-        setOwnedByWalletError(
-          caughtError instanceof Error
-            ? caughtError.message
-            : String(caughtError),
-        );
-      } finally {
-        if (
-          mountedRef.current
-        ) {
-          setBusyOwnedByWallet(
-            false,
-          );
-        }
+    } finally {
+      if (mountedRef.current) {
+        setBusyOwnedByWallet(false);
       }
-    }, [
-      busyOwnedByWallet,
-      previewMintAddress,
-    ]);
+    }
+  }, [
+    busyOwnedByWallet,
+    previewMintAddress,
+  ]);
 
   const openContentsAfterResolve =
     useCallback(async () => {
-      if (
-        !transferSuccessModalViewModel
-      ) {
+      if (!transferSuccessModalViewModel) {
         return;
       }
 
-      const searchParams =
-        new URLSearchParams({
-          mintAddress:
-            transferSuccessModalViewModel.mintAddress,
-          productId:
-            transferSuccessModalViewModel.productId,
-          brandId:
-            transferSuccessModalViewModel.brandId,
-          brandName:
-            transferSuccessModalViewModel.brandName,
-          productName:
-            transferSuccessModalViewModel.productName,
-          metadataUri:
-            transferSuccessModalViewModel.metadataUri,
-          tokenBlueprintId:
-            transferSuccessModalViewModel.tokenBlueprintId,
-          tokenName:
-            transferSuccessModalViewModel.tokenName,
-          tokenIconUrl:
-            transferSuccessModalViewModel.tokenIconUrl,
-        });
+      const searchParams = new URLSearchParams({
+        mintAddress:
+          transferSuccessModalViewModel.mintAddress,
+        productId:
+          transferSuccessModalViewModel.productId,
+        brandId:
+          transferSuccessModalViewModel.brandId,
+        brandName:
+          transferSuccessModalViewModel.brandName,
+        productName:
+          transferSuccessModalViewModel.productName,
+        metadataUri:
+          transferSuccessModalViewModel.metadataUri,
+        tokenBlueprintId:
+          transferSuccessModalViewModel.tokenBlueprintId,
+        tokenName:
+          transferSuccessModalViewModel.tokenName,
+        tokenIconUrl:
+          transferSuccessModalViewModel.tokenIconUrl,
+      });
 
       closeTransferModal();
 
@@ -822,193 +595,153 @@ export function useScanResultPage() {
       transferSuccessModalViewModel,
     ]);
 
-  const openTokenContentsByMintAddress =
-    useCallback(
-      async (
-        mintAddress: string,
-      ) => {
-        const normalizedMintAddress =
-          mintAddress.trim();
+  const openTokenContentsByMintAddress = useCallback(
+    async (mintAddress: string) => {
+      const normalizedMintAddress =
+        mintAddress.trim();
 
-        if (
-          !normalizedMintAddress
-        ) {
-          return;
-        }
+      if (!normalizedMintAddress) {
+        return;
+      }
 
-        const headers =
-          await getAuthHeadersOrUndefined();
+      const headers =
+        await getAuthHeadersOrUndefined();
 
-        if (
-          !hasAuthorization(headers)
-        ) {
-          navigate("/signin");
-          return;
-        }
+      if (!hasAuthorization(headers)) {
+        navigate("/signin");
+        return;
+      }
 
-        const resolved =
-          await resolveOwnedWalletTokenByMintAddress(
-            normalizedMintAddress,
-            headers,
-          );
+      const resolved =
+        await resolveOwnedWalletTokenByMintAddress(
+          normalizedMintAddress,
+          headers,
+        );
 
-        const fallbackToken =
-          previewState?.raw.token ??
-          null;
+      const fallbackToken =
+        previewState?.raw.token ?? null;
 
-        const fallbackTokenBlueprintPatch =
-          previewState
-            ?.tokenBlueprintPatch ??
-          null;
+      const fallbackTokenBlueprintPatch =
+        previewState?.tokenBlueprintPatch ?? null;
 
-        const fallbackProductBlueprintPatch =
-          previewState?.raw
-            .productBlueprintPatch ??
-          null;
+      const metadataUri =
+        resolved.metadataUri.trim();
 
-        const metadataUri =
-          resolved.metadataUri.trim() ||
-          fallbackToken?.metadataUri.trim() ||
-          "";
+      const tokenBlueprintId =
+        resolved.tokenBlueprintId.trim() ||
+        fallbackToken?.tokenBlueprintId.trim() ||
+        fallbackTokenBlueprintPatch?.id.trim() ||
+        "";
 
-        const tokenBlueprintId =
-          resolved.tokenBlueprintId.trim() ||
-          fallbackToken?.tokenBlueprintId.trim() ||
-          fallbackTokenBlueprintPatch?.id.trim() ||
-          "";
+      if (!metadataUri) {
+        return;
+      }
 
-        if (!metadataUri) {
-          return;
-        }
+      const resolvedMintAddress =
+        resolved.mintAddress.trim() ||
+        normalizedMintAddress;
 
-        const resolvedMintAddress =
-          resolved.mintAddress.trim() ||
-          normalizedMintAddress;
+      const resolvedProductId =
+        resolved.productId.trim() ||
+        productId.trim();
 
-        const resolvedProductId =
-          resolved.productId.trim() ||
-          productId.trim();
+      const resolvedBrandId =
+        resolved.brandId.trim();
 
-        const resolvedBrandId =
-          resolved.brandId.trim() ||
-          fallbackToken?.brandId.trim() ||
-          "";
+      const resolvedBrandName =
+        resolved.brandName.trim();
 
-        const resolvedBrandName =
-          resolved.brandName.trim() ||
-          fallbackToken?.brandName.trim() ||
-          "";
+      const resolvedProductName =
+        resolved.productName.trim();
 
-        const resolvedProductName =
-          resolved.productName.trim() ||
-          fallbackProductBlueprintPatch
-            ?.productName ||
-          "";
+      const productBlueprintIdForContents =
+        resolved.productBlueprintId.trim();
 
-        const productBlueprintIdForContents =
-          resolved.productBlueprintId.trim() ||
-          previewState?.raw.productBlueprintId.trim() ||
-          "";
+      const tokenName =
+        fallbackTokenBlueprintPatch?.tokenName || "";
 
-        const tokenName =
-          fallbackTokenBlueprintPatch
-            ?.tokenName || "";
+      const tokenIconUrl =
+        fallbackTokenBlueprintPatch?.tokenIcon || "";
 
-        const tokenIconUrl =
-          fallbackTokenBlueprintPatch
-            ?.tokenIcon || "";
+      const searchParams =
+        new URLSearchParams();
 
-        const searchParams =
-          new URLSearchParams();
+      searchParams.set(
+        "mintAddress",
+        resolvedMintAddress,
+      );
 
+      searchParams.set(
+        "metadataUri",
+        metadataUri,
+      );
+
+      if (resolvedProductId) {
         searchParams.set(
-          "mintAddress",
-          resolvedMintAddress,
+          "productId",
+          resolvedProductId,
         );
+      }
 
+      if (resolvedBrandId) {
         searchParams.set(
-          "metadataUri",
-          metadataUri,
+          "brandId",
+          resolvedBrandId,
         );
+      }
 
-        if (
-          resolvedProductId
-        ) {
-          searchParams.set(
-            "productId",
-            resolvedProductId,
-          );
-        }
-
-        if (
-          resolvedBrandId
-        ) {
-          searchParams.set(
-            "brandId",
-            resolvedBrandId,
-          );
-        }
-
-        if (
-          resolvedBrandName
-        ) {
-          searchParams.set(
-            "brandName",
-            resolvedBrandName,
-          );
-        }
-
-        if (
-          resolvedProductName
-        ) {
-          searchParams.set(
-            "productName",
-            resolvedProductName,
-          );
-        }
-
-        if (
-          productBlueprintIdForContents
-        ) {
-          searchParams.set(
-            "productBlueprintId",
-            productBlueprintIdForContents,
-          );
-        }
-
-        if (
-          tokenBlueprintId
-        ) {
-          searchParams.set(
-            "tokenBlueprintId",
-            tokenBlueprintId,
-          );
-        }
-
-        if (tokenName) {
-          searchParams.set(
-            "tokenName",
-            tokenName,
-          );
-        }
-
-        if (tokenIconUrl) {
-          searchParams.set(
-            "tokenIconUrl",
-            tokenIconUrl,
-          );
-        }
-
-        navigate(
-          `/contents?${searchParams.toString()}`,
+      if (resolvedBrandName) {
+        searchParams.set(
+          "brandName",
+          resolvedBrandName,
         );
-      },
-      [
-        navigate,
-        previewState,
-        productId,
-      ],
-    );
+      }
+
+      if (resolvedProductName) {
+        searchParams.set(
+          "productName",
+          resolvedProductName,
+        );
+      }
+
+      if (productBlueprintIdForContents) {
+        searchParams.set(
+          "productBlueprintId",
+          productBlueprintIdForContents,
+        );
+      }
+
+      if (tokenBlueprintId) {
+        searchParams.set(
+          "tokenBlueprintId",
+          tokenBlueprintId,
+        );
+      }
+
+      if (tokenName) {
+        searchParams.set(
+          "tokenName",
+          tokenName,
+        );
+      }
+
+      if (tokenIconUrl) {
+        searchParams.set(
+          "tokenIconUrl",
+          tokenIconUrl,
+        );
+      }
+
+      navigate(
+        `/contents?${searchParams.toString()}`,
+      );
+    },
+    [
+      navigate,
+      previewState,
+      productId,
+    ],
+  );
 
   const submitReview = useCallback(
     async (
@@ -1033,8 +766,7 @@ export function useScanResultPage() {
             getAuthHeadersOrUndefined,
           },
           {
-            productBlueprintId:
-              pbId,
+            productBlueprintId: pbId,
             body,
             rating,
           },
@@ -1042,9 +774,7 @@ export function useScanResultPage() {
 
         await loadReviews(1);
 
-        setPostReviewError(
-          null,
-        );
+        setPostReviewError(null);
 
         return true;
       } catch (caughtError) {
@@ -1056,12 +786,8 @@ export function useScanResultPage() {
 
         return false;
       } finally {
-        if (
-          mountedRef.current
-        ) {
-          setPostingReview(
-            false,
-          );
+        if (mountedRef.current) {
+          setPostingReview(false);
         }
       }
     },
@@ -1074,8 +800,7 @@ export function useScanResultPage() {
 
   const manualTransfer =
     useCallback(async () => {
-      const pid =
-        productId.trim();
+      const pid = productId.trim();
 
       if (!pid) {
         return;
@@ -1089,28 +814,23 @@ export function useScanResultPage() {
         const headers =
           await getAuthHeadersOrUndefined();
 
-        if (
-          !hasAuthorization(headers)
-        ) {
+        if (!hasAuthorization(headers)) {
           navigate("/signin");
           return;
         }
 
-        const result =
-          await runScanAutoTransfer(
-            {
-              fetchMeWallet,
-              transferScanPurchased,
-            },
-            {
-              productId: pid,
-              headers,
-            },
-          );
+        const result = await runScanAutoTransfer(
+          {
+            fetchMeWallet,
+            transferScanPurchased,
+          },
+          {
+            productId: pid,
+            headers,
+          },
+        );
 
-        if (
-          result.transferredMintAddress
-        ) {
+        if (result.transferredMintAddress) {
           setTransferredMintOverride(
             result.transferredMintAddress,
           );
@@ -1126,25 +846,14 @@ export function useScanResultPage() {
           ),
         );
 
-        if (
-          result.transferResult
-            .matched
-        ) {
-          setTransferModalError(
-            null,
-          );
-
-          setTransferModalOpen(
-            true,
-          );
+        if (result.transferResult.matched) {
+          setTransferModalError(null);
+          setTransferModalOpen(true);
         } else {
           setTransferModalError(
             "この商品は現在のアバターに紐づく受け取り対象ではありません。",
           );
-
-          setTransferModalOpen(
-            true,
-          );
+          setTransferModalOpen(true);
         }
       } catch (caughtError) {
         const message =
@@ -1153,18 +862,10 @@ export function useScanResultPage() {
             : String(caughtError);
 
         setError(message);
-
-        setTransferModalError(
-          message,
-        );
-
-        setTransferModalOpen(
-          true,
-        );
+        setTransferModalError(message);
+        setTransferModalOpen(true);
       } finally {
-        if (
-          mountedRef.current
-        ) {
+        if (mountedRef.current) {
           setBusyTransfer(false);
         }
       }
@@ -1179,15 +880,11 @@ export function useScanResultPage() {
         return;
       }
 
-      if (
-        reviews?.hasNext !== true
-      ) {
+      if (reviews?.hasNext !== true) {
         return;
       }
 
-      await loadReviews(
-        reviewPage + 1,
-      );
+      await loadReviews(reviewPage + 1);
     }, [
       busyReviews,
       loadReviews,
@@ -1205,9 +902,7 @@ export function useScanResultPage() {
         return;
       }
 
-      await loadReviews(
-        reviewPage - 1,
-      );
+      await loadReviews(reviewPage - 1);
     }, [
       busyReviews,
       loadReviews,
@@ -1220,8 +915,7 @@ export function useScanResultPage() {
     void load();
 
     return () => {
-      mountedRef.current =
-        false;
+      mountedRef.current = false;
     };
 
     // Intentionally depend only on productId.
@@ -1231,9 +925,7 @@ export function useScanResultPage() {
   }, [productId]);
 
   useEffect(() => {
-    if (
-      !productBlueprintId
-    ) {
+    if (!productBlueprintId) {
       return;
     }
 
@@ -1243,9 +935,7 @@ export function useScanResultPage() {
   }, [productBlueprintId]);
 
   useEffect(() => {
-    if (
-      !previewMintAddress
-    ) {
+    if (!previewMintAddress) {
       return;
     }
 
