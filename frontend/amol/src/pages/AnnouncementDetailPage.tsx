@@ -1,15 +1,18 @@
 // frontend/amol/src/pages/AnnouncementDetailPage.tsx
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useParams } from "react-router-dom";
+import { useEffect, useMemo, useRef } from "react";
+import {
+  useLocation,
+  useParams,
+} from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import { formatDateTime } from "../components/utils/date";
 
 import {
-  fetchMeAnnouncements,
-  markMeAnnouncementRead,
-} from "../features/announcement/api/announcementApi";
+  useAnnouncementsQuery,
+  useMarkAnnouncementReadMutation,
+} from "../features/announcement/hooks/useAnnouncementsQuery";
 
 import type { AnnouncementListItem } from "../features/shared/types/announcements";
 
@@ -30,141 +33,154 @@ export default function AnnouncementDetailPage() {
   const locationState =
     location.state as AnnouncementDetailLocationState | null;
 
-  const initialAnnouncement = locationState?.announcement;
+  const stateAnnouncement =
+    locationState?.announcement;
 
-  const [announcement, setAnnouncement] =
-    useState<AnnouncementListItem | null>(
-      initialAnnouncement ?? null,
+  const effectiveAnnouncementId = useMemo(() => {
+    return (
+      announcementId.trim() ||
+      stateAnnouncement?.id?.trim() ||
+      ""
     );
+  }, [
+    announcementId,
+    stateAnnouncement?.id,
+  ]);
 
-  const [loading, setLoading] = useState<boolean>(
-    !initialAnnouncement,
-  );
+  const initialAnnouncement = useMemo(() => {
+    if (
+      !stateAnnouncement ||
+      stateAnnouncement.id !==
+        effectiveAnnouncementId
+    ) {
+      return null;
+    }
 
-  const [error, setError] = useState<string>("");
+    return stateAnnouncement;
+  }, [
+    effectiveAnnouncementId,
+    stateAnnouncement,
+  ]);
+
+  const announcementsQuery =
+    useAnnouncementsQuery({
+      page: 1,
+      perPage: 100,
+      enabled: Boolean(
+        effectiveAnnouncementId,
+      ),
+    });
+
+  const markAnnouncementReadMutation =
+    useMarkAnnouncementReadMutation();
+
+  const announcementFromQuery = useMemo(() => {
+    if (!announcementsQuery.data) {
+      return null;
+    }
+
+    return (
+      announcementsQuery.data.items.find(
+        (item) =>
+          item.id ===
+          effectiveAnnouncementId,
+      ) ?? null
+    );
+  }, [
+    announcementsQuery.data,
+    effectiveAnnouncementId,
+  ]);
+
+  const announcement =
+    announcementsQuery.data !== undefined
+      ? announcementFromQuery
+      : initialAnnouncement;
+
+  const loading =
+    Boolean(effectiveAnnouncementId) &&
+    announcementsQuery.isPending &&
+    !initialAnnouncement;
 
   const markedReadRef = useRef<string>("");
 
-  const effectiveAnnouncementId = useMemo(() => {
-    return announcementId || announcement?.id || "";
-  }, [announcementId, announcement?.id]);
-
-  const loadAnnouncement = useCallback(
-    async (signal?: AbortSignal) => {
-      if (!effectiveAnnouncementId) {
-        setLoading(false);
-        setError("お知らせが見つかりません。");
-
-        return;
-      }
-
-      if (announcement) {
-        setLoading(false);
-
-        return;
-      }
-
-      setLoading(true);
-      setError("");
-
-      try {
-        const result = await fetchMeAnnouncements({
-          page: 1,
-          perPage: 100,
-          signal,
-        });
-
-        const found =
-          result.items.find(
-            (item) => item.id === effectiveAnnouncementId,
-          ) ?? null;
-
-        setAnnouncement(found);
-
-        if (!found) {
-          setError("お知らせが見つかりません。");
-        }
-      } catch (caught) {
-        if (signal?.aborted) {
-          return;
-        }
-
-        setAnnouncement(null);
-
-        setError(
-          caught instanceof Error
-            ? caught.message
-            : "お知らせの取得に失敗しました",
-        );
-      } finally {
-        if (!signal?.aborted) {
-          setLoading(false);
-        }
-      }
-    },
-    [announcement, effectiveAnnouncementId],
-  );
-
   useEffect(() => {
-    const controller = new AbortController();
-
-    void loadAnnouncement(controller.signal);
-
-    return () => {
-      controller.abort();
-    };
-  }, [loadAnnouncement]);
-
-  useEffect(() => {
-    if (!effectiveAnnouncementId) {
+    if (
+      !effectiveAnnouncementId ||
+      !announcement
+    ) {
       return;
     }
 
-    if (markedReadRef.current === effectiveAnnouncementId) {
+    if (announcement.isRead === true) {
+      markedReadRef.current =
+        effectiveAnnouncementId;
+
       return;
     }
 
-    markedReadRef.current = effectiveAnnouncementId;
+    if (
+      markedReadRef.current ===
+      effectiveAnnouncementId
+    ) {
+      return;
+    }
 
-    void markMeAnnouncementRead(effectiveAnnouncementId)
-      .then(() => {
-        setAnnouncement((current) => {
-          if (!current) {
-            return current;
-          }
+    markedReadRef.current =
+      effectiveAnnouncementId;
 
-          return {
-            ...current,
-            isRead: true,
-            readAt:
-              current.readAt ??
-              new Date().toISOString(),
-          };
-        });
-      })
-      .catch((caught) => {
-        setError(
-          caught instanceof Error
-            ? caught.message
-            : "お知らせの既読化に失敗しました",
-        );
-      });
-  }, [effectiveAnnouncementId]);
+    markAnnouncementReadMutation.mutate(
+      effectiveAnnouncementId,
+    );
+  }, [
+    announcement,
+    effectiveAnnouncementId,
+    markAnnouncementReadMutation,
+  ]);
+
+  const queryError =
+    announcementsQuery.error instanceof Error
+      ? announcementsQuery.error.message
+      : announcementsQuery.error
+        ? "お知らせの取得に失敗しました"
+        : "";
+
+  const mutationError =
+    markAnnouncementReadMutation.error instanceof
+    Error
+      ? markAnnouncementReadMutation.error.message
+      : markAnnouncementReadMutation.error
+        ? "お知らせの既読化に失敗しました"
+        : "";
+
+  const notFoundError =
+    !effectiveAnnouncementId
+      ? "お知らせが見つかりません。"
+      : announcementsQuery.isSuccess &&
+          !announcement
+        ? "お知らせが見つかりません。"
+        : "";
+
+  const error =
+    mutationError ||
+    queryError ||
+    notFoundError;
 
   const tokenLabel =
     announcement?.tokenName ||
     announcement?.targetToken ||
     "対象トークン";
 
-  const publishedAtLabel = formatDateTime(
-    announcement?.publishedAt,
-  );
+  const publishedAtLabel =
+    formatDateTime(
+      announcement?.publishedAt,
+    );
 
-  const attachmentFiles = Array.isArray(
-    announcement?.attachmentFiles,
-  )
-    ? announcement.attachmentFiles
-    : [];
+  const attachmentFiles =
+    Array.isArray(
+      announcement?.attachmentFiles,
+    )
+      ? announcement.attachmentFiles
+      : [];
 
   return (
     <Layout
@@ -191,7 +207,9 @@ export default function AnnouncementDetailPage() {
           </div>
         ) : null}
 
-        {!loading && !announcement ? (
+        {!loading &&
+        !announcement &&
+        !queryError ? (
           <div className="announcement-page__empty">
             お知らせが見つかりません。
           </div>
@@ -233,7 +251,9 @@ export default function AnnouncementDetailPage() {
                       const fileName =
                         file.fileName ||
                         file.id ||
-                        `添付ファイル ${index + 1}`;
+                        `添付ファイル ${
+                          index + 1
+                        }`;
 
                       const fileUrl =
                         file.fileUrl || "";
@@ -246,12 +266,21 @@ export default function AnnouncementDetailPage() {
                           "image/",
                         );
 
-                      if (isImage && fileUrl) {
+                      const attachmentKey =
+                        `${
+                          file.id ||
+                          fileName
+                        }-${index}`;
+
+                      if (
+                        isImage &&
+                        fileUrl
+                      ) {
                         return (
                           <a
-                            key={`${
-                              file.id ?? fileName
-                            }-${index}`}
+                            key={
+                              attachmentKey
+                            }
                             className="announcement-page__image-attachment"
                             href={fileUrl}
                             target="_blank"
@@ -271,9 +300,9 @@ export default function AnnouncementDetailPage() {
                       if (fileUrl) {
                         return (
                           <a
-                            key={`${
-                              file.id ?? fileName
-                            }-${index}`}
+                            key={
+                              attachmentKey
+                            }
                             className="announcement-page__attachment-item announcement-page__attachment-link"
                             href={fileUrl}
                             target="_blank"
@@ -294,9 +323,9 @@ export default function AnnouncementDetailPage() {
 
                       return (
                         <div
-                          key={`${
-                            file.id ?? fileName
-                          }-${index}`}
+                          key={
+                            attachmentKey
+                          }
                           className="announcement-page__attachment-item"
                         >
                           <span className="announcement-page__attachment-name">

@@ -1,3 +1,5 @@
+/* frontend/amol/src/styles/announcement-page.css */
+
 .announcement-page {
   width: 100%;
   max-width: 760px;
@@ -5,46 +7,10 @@
   align-items: stretch;
 }
 
-.announcement-page__header {
-  width: 100%;
-  text-align: center;
-  margin-bottom: 24px;
-}
-
-.announcement-page__eyebrow {
-  margin-bottom: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #6b7280;
-}
-
-.announcement-page__title {
-  margin-bottom: 8px;
-}
-
-.announcement-page__description {
-  margin-bottom: 16px;
-}
-
-.announcement-page__summary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 32px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: #111827;
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 700;
-}
-
 .announcement-page__error {
   width: 100%;
-  padding: 12px 14px;
   margin-bottom: 16px;
+  padding: 12px 14px;
   border-radius: 12px;
   background: #fef2f2;
   color: #991b1b;
@@ -65,8 +31,8 @@
 }
 
 .announcement-page__list {
-  width: 100%;
   display: flex;
+  width: 100%;
   flex-direction: column;
   gap: 14px;
 }
@@ -74,10 +40,26 @@
 .announcement-page__card {
   width: 100%;
   padding: 16px;
+  border: 1px solid rgba(17, 24, 39, 0.08);
   border-radius: 18px;
   background: #ffffff;
-  border: 1px solid rgba(17, 24, 39, 0.08);
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.announcement-page__card:hover {
+  border-color: rgba(17, 24, 39, 0.16);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  transform: translateY(-1px);
+}
+
+.announcement-page__card:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.24);
+  outline-offset: 3px;
 }
 
 .announcement-page__card--unread {
@@ -94,33 +76,34 @@
 }
 
 .announcement-page__card-meta {
-  min-width: 0;
   display: flex;
+  min-width: 0;
+  flex: 1;
   flex-direction: column;
   gap: 4px;
 }
 
 .announcement-page__token {
+  overflow: hidden;
+  color: #2563eb;
   font-size: 12px;
   font-weight: 700;
-  color: #2563eb;
-  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .announcement-page__date {
-  font-size: 12px;
   color: #6b7280;
+  font-size: 12px;
 }
 
 .announcement-page__unread-badge,
 .announcement-page__read-badge {
-  flex: 0 0 auto;
   display: inline-flex;
+  min-height: 24px;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  min-height: 24px;
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 12px;
@@ -138,18 +121,12 @@
 }
 
 .announcement-page__card-title {
-  margin-bottom: 8px;
+  margin: 0 0 8px;
   color: var(--color-text);
   font-size: 18px;
   font-weight: 700;
   line-height: 1.45;
-}
-
-.announcement-page__content {
-  color: #374151;
-  font-size: 14px;
-  line-height: 1.8;
-  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .announcement-page__attachments {
@@ -158,27 +135,107 @@
   font-size: 12px;
 }
 
-.announcement-page__card-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 14px;
+.announcement-page__detail {
+  width: 100%;
+  padding: 24px;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
 }
 
-.announcement-page__read-button {
-  appearance: none;
-  border: 0;
-  border-radius: 999px;
-  padding: 8px 14px;
-  background: #111827;
-  color: #ffffff;
-  font-size: 13px;
+.announcement-page__detail-title {
+  margin: 0 0 18px;
+  color: var(--color-text);
+  font-size: 24px;
   font-weight: 700;
-  cursor: pointer;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
-.announcement-page__read-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
+.announcement-page__detail-content {
+  margin-top: 20px;
+  color: #374151;
+  font-size: 14px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.announcement-page__detail-attachments {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(17, 24, 39, 0.08);
+}
+
+.announcement-page__attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.announcement-page__attachment-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.announcement-page__attachment-link {
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.announcement-page__attachment-link:hover {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: #eff6ff;
+}
+
+.announcement-page__attachment-link:focus-visible,
+.announcement-page__image-attachment:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.24);
+  outline-offset: 3px;
+}
+
+.announcement-page__attachment-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.announcement-page__attachment-meta {
+  flex: 0 0 auto;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.announcement-page__image-attachment {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  border-radius: 14px;
+  background: #f9fafb;
+}
+
+.announcement-page__attachment-image {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
 }
 
 @media (max-width: 520px) {
@@ -193,5 +250,30 @@
 
   .announcement-page__card-title {
     font-size: 16px;
+  }
+
+  .announcement-page__detail {
+    padding: 18px 14px;
+    border-radius: 16px;
+  }
+
+  .announcement-page__detail-title {
+    font-size: 20px;
+  }
+
+  .announcement-page__attachment-item {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .announcement-page__attachment-name {
+    width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .announcement-page__attachment-image {
+    max-height: 360px;
   }
 }

@@ -1,15 +1,15 @@
 // frontend/amol/src/pages/AnnouncementPage.tsx
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import { formatDateTime } from "../components/utils/date";
 
 import {
-  fetchMeAnnouncements,
-  markMeAnnouncementRead,
-} from "../features/announcement/api/announcementApi";
+  useAnnouncementsQuery,
+  useMarkAnnouncementReadMutation,
+} from "../features/announcement/hooks/useAnnouncementsQuery";
 
 import type { AnnouncementListItem } from "../features/shared/types/announcements";
 
@@ -19,50 +19,28 @@ import "../styles/announcement-page.css";
 export default function AnnouncementPage() {
   const navigate = useNavigate();
 
-  const [items, setItems] = useState<AnnouncementListItem[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
-  const [error, setError] = useState<string>("");
+  const [actionError, setActionError] = useState<string>("");
 
-  const loadAnnouncements = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
-    setError("");
+  const announcementsQuery = useAnnouncementsQuery({
+    page: 1,
+    perPage: 100,
+  });
 
-    try {
-      const result = await fetchMeAnnouncements({
-        page: 1,
-        perPage: 100,
-        signal,
-      });
+  const markAnnouncementReadMutation =
+    useMarkAnnouncementReadMutation();
 
-      setItems(result.items);
-    } catch (caught) {
-      if (signal?.aborted) {
-        return;
-      }
+  const items = announcementsQuery.data?.items ?? [];
+  const loading = announcementsQuery.isPending;
 
-      setItems([]);
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "お知らせの取得に失敗しました",
-      );
-    } finally {
-      if (!signal?.aborted) {
-        setLoading(false);
-      }
-    }
-  }, []);
+  const queryError =
+    announcementsQuery.error instanceof Error
+      ? announcementsQuery.error.message
+      : announcementsQuery.error
+        ? "お知らせの取得に失敗しました"
+        : "";
 
-  useEffect(() => {
-    const controller = new AbortController();
-
-    void loadAnnouncements(controller.signal);
-
-    return () => {
-      controller.abort();
-    };
-  }, [loadAnnouncements]);
+  const error = actionError || queryError;
 
   const handleOpenAnnouncement = useCallback(
     async (item: AnnouncementListItem) => {
@@ -71,26 +49,27 @@ export default function AnnouncementPage() {
       }
 
       setNavigatingId(item.id);
-      setError("");
+      setActionError("");
+
+      let announcementForNavigation = item;
 
       try {
         if (item.isRead === false) {
-          await markMeAnnouncementRead(item.id);
+          const readAt =
+            item.readAt ?? new Date().toISOString();
 
-          setItems((current) =>
-            current.map((currentItem) =>
-              currentItem.id === item.id
-                ? {
-                    ...currentItem,
-                    isRead: true,
-                    readAt: currentItem.readAt ?? new Date().toISOString(),
-                  }
-                : currentItem,
-            ),
+          await markAnnouncementReadMutation.mutateAsync(
+            item.id,
           );
+
+          announcementForNavigation = {
+            ...item,
+            isRead: true,
+            readAt,
+          };
         }
       } catch (caught) {
-        setError(
+        setActionError(
           caught instanceof Error
             ? caught.message
             : "お知らせの既読化に失敗しました",
@@ -100,16 +79,16 @@ export default function AnnouncementPage() {
 
         navigate(`/announcements/${item.id}`, {
           state: {
-            announcement: {
-              ...item,
-              isRead: true,
-              readAt: item.readAt ?? new Date().toISOString(),
-            },
+            announcement: announcementForNavigation,
           },
         });
       }
     },
-    [navigate, navigatingId],
+    [
+      markAnnouncementReadMutation,
+      navigate,
+      navigatingId,
+    ],
   );
 
   return (
@@ -122,13 +101,18 @@ export default function AnnouncementPage() {
     >
       <section className="page-section content-page-section announcement-page">
         {error ? (
-          <div className="announcement-page__error" role="alert">
+          <div
+            className="announcement-page__error"
+            role="alert"
+          >
             {error}
           </div>
         ) : null}
 
         {loading ? (
-          <div className="announcement-page__state">読み込み中...</div>
+          <div className="announcement-page__state">
+            読み込み中...
+          </div>
         ) : null}
 
         {!loading && items.length === 0 ? (
@@ -141,10 +125,18 @@ export default function AnnouncementPage() {
           <div className="announcement-page__list">
             {items.map((item) => {
               const isUnread = item.isRead === false;
+
               const tokenLabel =
-                item.tokenName || item.targetToken || "対象トークン";
-              const publishedAtLabel = formatDateTime(item.publishedAt);
-              const isNavigating = navigatingId === item.id;
+                item.tokenName ||
+                item.targetToken ||
+                "対象トークン";
+
+              const publishedAtLabel = formatDateTime(
+                item.publishedAt,
+              );
+
+              const isNavigating =
+                navigatingId === item.id;
 
               return (
                 <article
@@ -158,10 +150,16 @@ export default function AnnouncementPage() {
                   tabIndex={0}
                   aria-label={`${item.title} の詳細を開く`}
                   aria-busy={isNavigating}
-                  onClick={() => void handleOpenAnnouncement(item)}
+                  onClick={() =>
+                    void handleOpenAnnouncement(item)
+                  }
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
+                    if (
+                      event.key === "Enter" ||
+                      event.key === " "
+                    ) {
                       event.preventDefault();
+
                       void handleOpenAnnouncement(item);
                     }
                   }}
@@ -174,7 +172,9 @@ export default function AnnouncementPage() {
 
                       <time
                         className="announcement-page__date"
-                        dateTime={item.publishedAt ?? undefined}
+                        dateTime={
+                          item.publishedAt ?? undefined
+                        }
                       >
                         {publishedAtLabel}
                       </time>
@@ -195,7 +195,9 @@ export default function AnnouncementPage() {
                     {item.title}
                   </h2>
 
-                  {Array.isArray(item.attachmentFiles) &&
+                  {Array.isArray(
+                    item.attachmentFiles,
+                  ) &&
                   item.attachmentFiles.length > 0 ? (
                     <div className="announcement-page__attachments">
                       添付 {item.attachmentFiles.length} 件
