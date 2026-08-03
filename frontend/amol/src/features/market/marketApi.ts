@@ -6,15 +6,11 @@ import {
 } from "../../components/utils/typeGuards";
 import { getApiBaseUrl } from "../../lib/apiBaseUrl";
 import type { PageResult } from "../shared/pageResult";
-
-export type MarketResaleStatus = "listing" | "suspended";
-
-export type MarketResaleCondition =
-  | "新品・未使用"
-  | "未使用に近い"
-  | "目立った傷や汚れなし"
-  | "やや傷や汚れあり"
-  | "傷や汚れあり";
+import type {
+  ResaleCondition,
+  ResaleListingBase,
+  ResaleStatus,
+} from "../shared/types/resale";
 
 export type MarketResaleConditionImage = {
   id: string;
@@ -55,31 +51,13 @@ export type MarketProductBlueprintReviewPage = {
   hasNext: boolean;
 };
 
-export type MarketResaleListing = {
-  id: string;
-  status?: MarketResaleStatus;
-  mintAddress?: string;
-  tokenBlueprintId?: string;
-  productId?: string;
-  brandId?: string;
-  productBlueprintId?: string;
-  avatarId?: string;
-  price?: number;
-  condition?: MarketResaleCondition;
-  description?: string;
-  imageId?: string;
+export type MarketResaleListing = ResaleListingBase & {
   imageUrl?: string;
-
-  productName?: string;
-  tokenName?: string;
   tokenIcon?: string;
-  brandName?: string;
   avatarName?: string;
   avatarIcon?: string;
-
   images?: MarketResaleConditionImage[];
   conditionImages?: MarketResaleConditionImage[];
-
   createdBy?: string;
   createdAt?: string;
   updatedBy?: string | null;
@@ -137,10 +115,10 @@ export type FetchMarketResalesParams = {
   viewerAvatarId?: string;
   viewerAvatarIds?: string[];
 
-  status?: MarketResaleStatus;
-  statuses?: MarketResaleStatus[];
-  condition?: MarketResaleCondition;
-  conditions?: MarketResaleCondition[];
+  status?: ResaleStatus;
+  statuses?: ResaleStatus[];
+  condition?: ResaleCondition;
+  conditions?: ResaleCondition[];
   minPrice?: number;
   maxPrice?: number;
   sort?: string;
@@ -189,10 +167,7 @@ function toFiniteNumber(
     value.trim() !== ""
   ) {
     const parsed = Number(value);
-
-    return isFiniteNumber(parsed)
-      ? parsed
-      : fallback;
+    return isFiniteNumber(parsed) ? parsed : fallback;
   }
 
   return fallback;
@@ -316,11 +291,7 @@ function buildMarketResaleSearchParams(
     "viewerAvatarIds",
     params.viewerAvatarIds,
   );
-  appendString(
-    searchParams,
-    "status",
-    params.status,
-  );
+  appendString(searchParams, "status", params.status);
   appendStringList(
     searchParams,
     "statuses",
@@ -347,11 +318,7 @@ function buildMarketResaleSearchParams(
     params.maxPrice,
   );
   appendString(searchParams, "sort", params.sort);
-  appendString(
-    searchParams,
-    "sortBy",
-    params.sortBy,
-  );
+  appendString(searchParams, "sortBy", params.sortBy);
   appendString(
     searchParams,
     "orderBy",
@@ -410,9 +377,7 @@ async function readJsonResponse<T>(
   const data = (await response.json()) as T;
 
   if (!response.ok) {
-    throw new Error(
-      getErrorMessage(response.status),
-    );
+    throw new Error(getErrorMessage(response.status));
   }
 
   return data;
@@ -421,10 +386,7 @@ async function readJsonResponse<T>(
 function isMarketResaleConditionImage(
   value: unknown,
 ): value is MarketResaleConditionImage {
-  if (
-    !isRecord(value) ||
-    Array.isArray(value)
-  ) {
+  if (!isRecord(value) || Array.isArray(value)) {
     return false;
   }
 
@@ -461,10 +423,7 @@ function normalizeMarketResaleConditionImagesResponse(
 function normalizeReview(
   value: unknown,
 ): MarketProductBlueprintReview | null {
-  if (
-    !isRecord(value) ||
-    Array.isArray(value)
-  ) {
+  if (!isRecord(value) || Array.isArray(value)) {
     return null;
   }
 
@@ -502,16 +461,14 @@ function normalizeMarketProductBlueprintReviewsResponse(
   fallbackPerPage: number,
 ): MarketProductBlueprintReviewPage {
   const root: Record<string, unknown> =
-    isRecord(response) &&
-    !Array.isArray(response)
+    isRecord(response) && !Array.isArray(response)
       ? response
       : {};
 
   const rawData = root["data"];
 
   const data: Record<string, unknown> | null =
-    isRecord(rawData) &&
-    !Array.isArray(rawData)
+    isRecord(rawData) && !Array.isArray(rawData)
       ? rawData
       : null;
 
