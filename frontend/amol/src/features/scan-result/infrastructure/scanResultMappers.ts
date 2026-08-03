@@ -906,16 +906,14 @@ export function previewStateFromJson(
   const preview =
     mallPreviewResponseFromJson(raw);
 
-  const tokenBlueprintPatch =
-    preview.tokenBlueprintPatch ?? null;
-
   const tokenIcon =
-    tokenBlueprintPatch?.tokenIcon.trim() ??
+    preview.tokenBlueprintPatch
+      ?.tokenIcon
+      .trim() ??
     "";
 
   return {
     raw: preview,
-    tokenBlueprintPatch,
     tokenIconUrlEncoded: tokenIcon
       ? safeUrl(tokenIcon)
       : null,

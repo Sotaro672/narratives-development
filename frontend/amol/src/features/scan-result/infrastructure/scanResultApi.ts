@@ -6,7 +6,9 @@ import {
 } from "../../../components/utils/apiResponse";
 import { isRecord } from "../../../components/utils/typeGuards";
 import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
-import { getFirebaseIdToken } from "../../../lib/authToken";
+import {
+  getOptionalAuthHeaders,
+} from "../../../lib/authHeaders";
 
 import { getMyAvatar } from "../../avatar/api/avatarApi";
 import {
@@ -41,26 +43,6 @@ import {
 export type {
   WalletResolvedTokenResponse,
 } from "./scanResultMappers";
-
-async function getOptionalAuthHeaders(): Promise<
-  Record<string, string> | undefined
-> {
-  try {
-    const token = (
-      await getFirebaseIdToken()
-    ).trim();
-
-    if (!token) {
-      return undefined;
-    }
-
-    return {
-      Authorization: `Bearer ${token}`,
-    };
-  } catch {
-    return undefined;
-  }
-}
 
 async function fetchPreviewRaw(
   productId: string,

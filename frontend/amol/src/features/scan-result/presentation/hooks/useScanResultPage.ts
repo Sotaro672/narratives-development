@@ -35,7 +35,9 @@ import {
 import {
   getAuthorizationHeader,
 } from "../../infrastructure/scanResultHttp";
-import { getFirebaseIdToken } from "../../../../lib/authToken";
+import {
+  getOptionalAuthHeaders,
+} from "../../../../lib/authHeaders";
 import type {
   CatalogReviewPage,
   MallOwnerInfo,
@@ -49,26 +51,6 @@ function safeDecodeURIComponent(value: string): string {
     return decodeURIComponent(value);
   } catch {
     return value;
-  }
-}
-
-async function getOptionalAuthHeaders(): Promise<
-  Record<string, string> | undefined
-> {
-  try {
-    const token = (
-      await getFirebaseIdToken()
-    ).trim();
-
-    if (!token) {
-      return undefined;
-    }
-
-    return {
-      Authorization: `Bearer ${token}`,
-    };
-  } catch {
-    return undefined;
   }
 }
 
@@ -234,8 +216,8 @@ export function useScanResultPage() {
             previewState?.raw.token ??
             null,
           tokenBlueprintPatch:
-            previewState
-              ?.tokenBlueprintPatch ??
+            previewState?.raw
+              .tokenBlueprintPatch ??
             null,
           productName:
             previewState?.raw
@@ -249,8 +231,8 @@ export function useScanResultPage() {
         .productBlueprintPatch
         ?.productName,
       previewState?.raw.token,
-      previewState
-        ?.tokenBlueprintPatch,
+      previewState?.raw
+        .tokenBlueprintPatch,
       transferResult,
       transferredMintAddress,
     ]);
@@ -709,8 +691,8 @@ export function useScanResultPage() {
           null;
 
         const fallbackTokenBlueprintPatch =
-          previewState
-            ?.tokenBlueprintPatch ??
+          previewState?.raw
+            .tokenBlueprintPatch ??
           null;
 
         const metadataUri =

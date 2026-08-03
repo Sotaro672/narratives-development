@@ -250,8 +250,7 @@ function createTokenViewModel(input: {
     preview.token;
 
   const tokenBlueprintPatch =
-    preview.tokenBlueprintPatch ??
-    previewState.tokenBlueprintPatch;
+    preview.tokenBlueprintPatch;
 
   const tokenName =
     normalizeText(
@@ -333,8 +332,7 @@ export function createScanResultPageViewModel(
     preview.token;
 
   const tokenBlueprintPatch =
-    preview.tokenBlueprintPatch ??
-    previewState.tokenBlueprintPatch;
+    preview.tokenBlueprintPatch;
 
   const productId =
     normalizeText(

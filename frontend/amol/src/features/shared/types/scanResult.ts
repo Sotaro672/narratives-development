@@ -196,16 +196,21 @@ export type MallPreviewResponse = {
   owner: MallOwnerInfo | null;
   transfers: MallPreviewTransferInfo[];
 
-  tokenBlueprintPatch?:
+  /**
+   * TokenBlueprintの確定済みpatch情報。
+   * Token表示情報の唯一の参照元として使用する。
+   */
+  tokenBlueprintPatch:
     TokenBlueprintPatchVM | null;
 };
 
 export type PreviewState = {
   raw: MallPreviewResponse;
 
-  tokenBlueprintPatch:
-    TokenBlueprintPatchVM | null;
-
+  /**
+   * tokenBlueprintPatch.tokenIconから生成した
+   * 画面表示用の安全なURL。
+   */
   tokenIconUrlEncoded:
     string | null;
 };
