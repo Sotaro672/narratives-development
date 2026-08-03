@@ -14,6 +14,7 @@ import {
 } from "react-router-dom";
 
 import {
+  createScanResultPageViewModel,
   createScanTransferSuccessModalViewModel,
   loadScanReviews,
   resolveScanOwnedWalletState,
@@ -211,6 +212,16 @@ export function useScanResultPage() {
     authAvailable,
     busyTransfer,
   };
+
+  const viewModel = useMemo(() => {
+    return createScanResultPageViewModel({
+      previewState,
+      ownedByWallet,
+    });
+  }, [
+    ownedByWallet,
+    previewState,
+  ]);
 
   const transferSuccessModalViewModel =
     useMemo(() => {
@@ -994,6 +1005,7 @@ export function useScanResultPage() {
 
   return {
     state,
+    viewModel,
     transferSuccessModalViewModel,
     hasMultipleTransfers,
     load,

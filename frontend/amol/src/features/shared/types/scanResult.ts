@@ -1,4 +1,4 @@
-// frontend\amol\src\features\shared\types\scanResult.ts
+// frontend/amol/src/features/shared/types/scanResult.ts
 
 export type MallOwnerInfo = {
   brandId: string;
@@ -67,8 +67,11 @@ export type ProductBlueprintPatch = {
   brandId?: string;
   companyId?: string;
 
-  productBlueprintCategory?: ProductBlueprintCategorySnapshot;
-  categoryFields?: ProductBlueprintCategoryFields;
+  productBlueprintCategory?:
+    ProductBlueprintCategorySnapshot;
+
+  categoryFields?:
+    ProductBlueprintCategoryFields;
 
   productIdTag?: {
     Type?: string;
@@ -115,8 +118,10 @@ export type CategoryInputSchema = {
   categoryCode: string;
   categoryKind: ProductCategoryKind;
   categoryNameJa: string;
+
   productBlueprintFields:
     CategoryInputFieldDefinition[];
+
   modelFields:
     CategoryInputFieldDefinition[];
 };
@@ -138,8 +143,8 @@ export type MallPreviewResponse = {
   modelId: string;
 
   /**
-   * apparel / alcohol などの model 表示種別。
-   * backend の model resolver が返す値。
+   * apparel / alcoholなどのmodel表示種別。
+   * Backendのmodel resolverが返す値。
    */
   modelKind?: ProductCategoryKind;
 
@@ -147,32 +152,39 @@ export type MallPreviewResponse = {
   modelLabel?: string;
 
   /**
-   * apparel 用。
+   * apparel用。
    */
   size: string;
   color: string;
   rgb: number;
-  measurements: Record<string, number> | null;
+  measurements:
+    Record<string, number> | null;
 
   /**
-   * alcohol 用。
+   * alcohol用。
    */
   volumeValue?: number;
   volumeUnit?: string;
 
   /**
-   * productBlueprint category 情報。
+   * ProductBlueprintのcategory情報。
    */
   productBlueprintCategoryCode?: string;
-  productBlueprintCategoryKind?: ProductCategoryKind;
+
+  productBlueprintCategoryKind?:
+    ProductCategoryKind;
+
   productBlueprintCategoryName?: string;
+
   productBlueprintCategory?:
     ProductBlueprintCategorySnapshot | null;
-  categoryInputSchema?: CategoryInputSchema | null;
+
+  categoryInputSchema?:
+    CategoryInputSchema | null;
 
   /**
-   * productBlueprintPatch.categoryFields を
-   * alcohol 判定・表示に使う。
+   * ProductBlueprintの確定済みpatch情報。
+   * Application層のViewModel生成に使用する。
    */
   productBlueprintPatch:
     ProductBlueprintPatch | null;
@@ -188,17 +200,14 @@ export type MallPreviewResponse = {
     TokenBlueprintPatchVM | null;
 };
 
-export type ProductBlueprintPatchItem = {
-  key: string;
-  label: string;
-  value: string;
-};
-
 export type PreviewState = {
   raw: MallPreviewResponse;
+
   tokenBlueprintPatch:
     TokenBlueprintPatchVM | null;
-  tokenIconUrlEncoded: string | null;
+
+  tokenIconUrlEncoded:
+    string | null;
 };
 
 export type MallTransferFlowStep = {
@@ -219,8 +228,8 @@ export type MallScanTransferResponse = {
   flow: MallTransferFlowStep[];
 
   /**
-   * Backend-resolved display names for transfer result.
-   * Frontend should display these instead of wallet addresses.
+   * Backendで解決したTransfer当事者の表示名。
+   * FrontendではWallet Addressではなくこちらを表示する。
    */
   fromDisplayName: string;
   toDisplayName: string;
@@ -256,39 +265,54 @@ export type TokenContentFile = {
   isPreviewable: boolean;
 };
 
-export type TokenResolveDTO = {
-  mintAddress: string;
-  tokenContentsFiles: TokenContentFile[];
-};
-
 export type WalletDTO = {
   tokens: string[];
 };
 
 export type ScanResultPageState = {
   productId: string;
-  previewState: PreviewState | null;
-  meAvatar: MallOwnerInfo | null;
-  transferResult: MallScanTransferResponse | null;
+
+  previewState:
+    PreviewState | null;
+
+  meAvatar:
+    MallOwnerInfo | null;
+
+  transferResult:
+    MallScanTransferResponse | null;
+
   transferredMintAddress: string;
   transferTxSignature: string;
   transferMatched: boolean;
 
-  reviews: CatalogReviewPage | null;
-  reviewsError: string | null;
+  reviews:
+    CatalogReviewPage | null;
+
+  reviewsError:
+    string | null;
+
   reviewPage: number;
   reviewPerPage: number;
   busyReviews: boolean;
 
-  ownedByWallet: boolean | null;
-  ownedByWalletError: string | null;
+  ownedByWallet:
+    boolean | null;
+
+  ownedByWalletError:
+    string | null;
+
   busyOwnedByWallet: boolean;
 
   postingReview: boolean;
-  postReviewError: string | null;
+
+  postReviewError:
+    string | null;
 
   loading: boolean;
-  error: string | null;
+
+  error:
+    string | null;
+
   authAvailable: boolean;
   busyTransfer: boolean;
 };

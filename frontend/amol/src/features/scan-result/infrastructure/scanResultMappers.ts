@@ -14,16 +14,19 @@ import type {
   ProductBlueprintCategorySnapshot,
   ProductBlueprintPatch,
   ProductCategoryKind,
+  PreviewState,
   TokenBlueprintPatchVM,
   TokenContentFile,
-  TokenResolveDTO,
   WalletDTO,
 } from "../../shared/types/scanResult";
 import {
   isFiniteNumber,
   isRecord,
 } from "../../../components/utils/typeGuards";
-import { tokenBlueprintPatchHasAnyField } from "../utils/format";
+import {
+  safeUrl,
+  tokenBlueprintPatchHasAnyField,
+} from "../utils/format";
 
 export type WalletResolvedTokenResponse = {
   productId: string;
@@ -897,6 +900,28 @@ export function mallPreviewResponseFromJson(
   };
 }
 
+export function previewStateFromJson(
+  raw: unknown,
+): PreviewState {
+  const preview =
+    mallPreviewResponseFromJson(raw);
+
+  const tokenBlueprintPatch =
+    preview.tokenBlueprintPatch ?? null;
+
+  const tokenIcon =
+    tokenBlueprintPatch?.tokenIcon.trim() ??
+    "";
+
+  return {
+    raw: preview,
+    tokenBlueprintPatch,
+    tokenIconUrlEncoded: tokenIcon
+      ? safeUrl(tokenIcon)
+      : null,
+  };
+}
+
 export function mallTransferFlowStepFromJson(
   raw: unknown,
 ): MallTransferFlowStep | null {
@@ -1188,36 +1213,5 @@ export function walletDTOFromJson(
 
   return {
     tokens,
-  };
-}
-
-export function tokenResolveDTOFromJson(
-  raw: unknown,
-  fallbackMintAddress: string,
-): TokenResolveDTO {
-  const root = unwrapData(raw);
-
-  const rawFiles = Array.isArray(
-    root.tokenContentsFiles,
-  )
-    ? root.tokenContentsFiles
-    : Array.isArray(root.files)
-      ? root.files
-      : [];
-
-  return {
-    mintAddress:
-      textValue(root.mintAddress) ||
-      fallbackMintAddress,
-    tokenContentsFiles: rawFiles
-      .map(
-        tokenContentFileFromJson,
-      )
-      .filter(
-        (
-          value,
-        ): value is TokenContentFile =>
-          Boolean(value),
-      ),
   };
 }

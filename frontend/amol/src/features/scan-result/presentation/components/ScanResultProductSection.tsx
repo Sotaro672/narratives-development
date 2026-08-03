@@ -1,40 +1,57 @@
-// frontend/amol/src/features/scan-result/components/ScanResultProductSection.tsx
+// frontend/amol/src/features/scan-result/presentation/components/ScanResultProductSection.tsx
+
 import { useNavigate } from "react-router-dom";
 
-import InfoList, { InfoRow } from "../../../../components/ui/InfoList";
+import InfoList, {
+  InfoRow,
+} from "../../../../components/ui/InfoList";
 import SectionCard from "../../../../components/ui/SectionCard";
 import SectionHeader from "../../../../components/ui/SectionHeader";
 import Tab from "../../../../components/ui/Tab";
 import TextState from "../../../../components/ui/TextState";
-import type { ScanAlcoholInfo } from "../../application/scanAlcoholInfoFactory";
-import type { MallOwnerInfo } from "../../../shared/types/scanResult";
-import { ownerLabel, withCm } from "../../utils/format";
-import type { InfoRow as ProductInfoRow } from "../../utils/productBlueprint";
+
+import type {
+  ScanAlcoholInfo,
+} from "../../application/scanAlcoholInfoFactory";
+import type {
+  ScanDisplayRowViewModel,
+} from "../../application/scanPageViewModelFactory";
 
 type ScanResultProductSectionProps = {
   title: string;
+
   owned: boolean | null;
   ownedError: string;
-  owner: MallOwnerInfo | null;
+
+  ownerLabel: string;
+
   brandId: string;
   brandName: string;
   hasBrandInfo: boolean;
-  productBlueprintRows: ProductInfoRow[];
+
+  productBlueprintRows:
+    ScanDisplayRowViewModel[];
+
   qualityAssuranceTabs: string[];
+
   modelNumber: string;
   size: string;
   color: string;
   swatch: string;
-  measurementEntries: [string, unknown][];
+
+  measurementEntries:
+    ScanDisplayRowViewModel[];
 
   /**
-   * alcohol 用の表示情報。
-   * productBlueprintPatch.categoryFields を正として application 層で生成する。
+   * alcohol用の表示情報。
+   * Application層で生成された値のみを表示する。
    */
   alcoholInfo?: ScanAlcoholInfo | null;
 };
 
-function hasAlcoholDisplayInfo(alcoholInfo?: ScanAlcoholInfo | null): boolean {
+function hasAlcoholDisplayInfo(
+  alcoholInfo?: ScanAlcoholInfo | null,
+): boolean {
   if (!alcoholInfo?.isAlcohol) {
     return false;
   }
@@ -55,32 +72,53 @@ export default function ScanResultProductSection(
 
   const {
     title,
+
     owned,
     ownedError,
-    owner,
+
+    ownerLabel,
+
     brandId,
     brandName,
     hasBrandInfo,
+
     productBlueprintRows,
     qualityAssuranceTabs,
+
     modelNumber,
     size,
     color,
     swatch,
+
     measurementEntries,
+
     alcoholInfo,
   } = props;
 
-  const isAlcohol = alcoholInfo?.isAlcohol === true;
-  const shouldShowAlcoholInfo = hasAlcoholDisplayInfo(alcoholInfo);
-  const canOpenBrand = Boolean(brandId);
+  const isAlcohol =
+    alcoholInfo?.isAlcohol === true;
+
+  const shouldShowAlcoholInfo =
+    hasAlcoholDisplayInfo(
+      alcoholInfo,
+    );
+
+  const canOpenBrand =
+    Boolean(brandId.trim());
 
   const handleOpenBrand = () => {
-    if (!brandId) {
+    const normalizedBrandId =
+      brandId.trim();
+
+    if (!normalizedBrandId) {
       return;
     }
 
-    navigate(`/brands/${encodeURIComponent(brandId)}`);
+    navigate(
+      `/brands/${encodeURIComponent(
+        normalizedBrandId,
+      )}`,
+    );
   };
 
   return (
@@ -90,52 +128,78 @@ export default function ScanResultProductSection(
         title={title}
         right={
           owned === true ? (
-            <span className="scan-result-owned-badge">Owned</span>
+            <span className="scan-result-owned-badge">
+              Owned
+            </span>
           ) : null
         }
       />
 
-      <TextState>所有者: {ownerLabel(owner)}</TextState>
+      <TextState>
+        所有者: {ownerLabel || "-"}
+      </TextState>
 
-      {owned === null && ownedError ? (
-        <TextState>保有判定に失敗しました: {ownedError}</TextState>
+      {owned === null &&
+      ownedError ? (
+        <TextState>
+          保有判定に失敗しました:{" "}
+          {ownedError}
+        </TextState>
       ) : null}
 
       {hasBrandInfo ||
       productBlueprintRows.length > 0 ||
-      qualityAssuranceTabs.length > 0 ? (
+      qualityAssuranceTabs.length >
+        0 ? (
         <InfoList>
           {hasBrandInfo ? (
             <InfoRow label="ブランド">
               <button
                 type="button"
                 className="scan-result-brand-value scan-result-brand-value--button"
-                onClick={handleOpenBrand}
-                disabled={!canOpenBrand}
+                onClick={
+                  handleOpenBrand
+                }
+                disabled={
+                  !canOpenBrand
+                }
               >
-                <span>{brandName || "-"}</span>
+                <span>
+                  {brandName || "-"}
+                </span>
               </button>
             </InfoRow>
           ) : null}
 
-          {productBlueprintRows.map((row) => (
-            <InfoRow label={row.label} key={row.label}>
-              {row.value}
-            </InfoRow>
-          ))}
+          {productBlueprintRows.map(
+            (row) => (
+              <InfoRow
+                label={row.label}
+                key={row.label}
+              >
+                {row.value || "-"}
+              </InfoRow>
+            ),
+          )}
 
-          {qualityAssuranceTabs.length > 0 ? (
+          {qualityAssuranceTabs.length >
+          0 ? (
             <InfoRow label="品質保証">
               <span className="scan-result-quality-tabs">
-                {qualityAssuranceTabs.map((quality) => (
-                  <Tab
-                    key={quality}
-                    className="scan-result-quality-tab"
-                    disabled
-                  >
-                    {quality}
-                  </Tab>
-                ))}
+                {qualityAssuranceTabs.map(
+                  (
+                    quality,
+                    index,
+                  ) => (
+                    <Tab
+                      key={`${quality}-${index}`}
+                      className="scan-result-quality-tab"
+                      disabled
+                    >
+                      {quality}
+                    </Tab>
+                  ),
+                )}
               </span>
             </InfoRow>
           ) : null}
@@ -143,40 +207,59 @@ export default function ScanResultProductSection(
       ) : null}
 
       <InfoList>
-        <InfoRow label="型番">{modelNumber || "-"}</InfoRow>
+        <InfoRow label="型番">
+          {modelNumber || "-"}
+        </InfoRow>
 
         {isAlcohol ? (
           <>
-            <InfoRow label="容量">{alcoholInfo?.volumeLabel || "-"}</InfoRow>
+            <InfoRow label="容量">
+              {alcoholInfo
+                ?.volumeLabel ||
+                "-"}
+            </InfoRow>
 
             <InfoRow label="ヴィンテージ">
-              {alcoholInfo?.vintage || "-"}
+              {alcoholInfo
+                ?.vintage ||
+                "-"}
             </InfoRow>
 
             <InfoRow label="地域・産地">
-              {alcoholInfo?.region || "-"}
+              {alcoholInfo
+                ?.region ||
+                "-"}
             </InfoRow>
 
             <InfoRow label="原材料">
-              {alcoholInfo?.material || "-"}
+              {alcoholInfo
+                ?.material ||
+                "-"}
             </InfoRow>
 
             <InfoRow label="アルコール度数">
-              {alcoholInfo?.alcoholContent
+              {alcoholInfo
+                ?.alcoholContent
                 ? `${alcoholInfo.alcoholContent}%`
                 : "-"}
             </InfoRow>
           </>
         ) : (
           <>
-            <InfoRow label="サイズ">{size || "-"}</InfoRow>
+            <InfoRow label="サイズ">
+              {size || "-"}
+            </InfoRow>
 
             <InfoRow label="色名">
               <span className="scan-result-color-value">
                 {color || "-"}
+
                 <span
                   className="scan-result-swatch"
-                  style={{ backgroundColor: swatch }}
+                  style={{
+                    backgroundColor:
+                      swatch,
+                  }}
                 />
               </span>
             </InfoRow>
@@ -184,22 +267,34 @@ export default function ScanResultProductSection(
         )}
       </InfoList>
 
-      {!isAlcohol && measurementEntries.length > 0 ? (
+      {!isAlcohol &&
+      measurementEntries.length > 0 ? (
         <div className="scan-result-measurements">
           <h2>採寸</h2>
 
           <InfoList>
-            {measurementEntries.map(([key, value]) => (
-              <InfoRow label={key} key={key}>
-                {withCm(value)}
-              </InfoRow>
-            ))}
+            {measurementEntries.map(
+              (
+                row,
+                index,
+              ) => (
+                <InfoRow
+                  label={row.label}
+                  key={`${row.label}-${index}`}
+                >
+                  {row.value || "-"}
+                </InfoRow>
+              ),
+            )}
           </InfoList>
         </div>
       ) : null}
 
-      {isAlcohol && !shouldShowAlcoholInfo ? (
-        <TextState>酒類情報を取得できませんでした。</TextState>
+      {isAlcohol &&
+      !shouldShowAlcoholInfo ? (
+        <TextState>
+          酒類情報を取得できませんでした。
+        </TextState>
       ) : null}
     </SectionCard>
   );
