@@ -1,22 +1,31 @@
 // frontend/amol/src/features/scan-result/application/scanReviewUsecase.ts
-import type { CatalogReviewPage } from "../../shared/types/scanResult";
+
+import type {
+  CatalogReviewPage,
+} from "../../shared/types/scanResult";
 
 export type ScanReviewUsecaseDeps = {
-  fetchReviewsByProductBlueprintId: (input: {
-    productBlueprintId: string;
-    page: number;
-    perPage: number;
-  }) => Promise<CatalogReviewPage>;
+  fetchReviewsByProductBlueprintId: (
+    input: {
+      productBlueprintId: string;
+      page: number;
+      perPage: number;
+    },
+  ) => Promise<CatalogReviewPage>;
 
-  createProductBlueprintReview: (input: {
-    productBlueprintId: string;
-    body: string;
-    rating: number;
-    title: string;
-    headers?: HeadersInit;
-  }) => Promise<unknown>;
+  createProductBlueprintReview: (
+    input: {
+      productBlueprintId: string;
+      body: string;
+      rating: number;
+      title: string;
+      headers?: HeadersInit;
+    },
+  ) => Promise<unknown>;
 
-  getAuthHeadersOrUndefined: () => Promise<HeadersInit | undefined>;
+  getOptionalAuthHeaders: () => Promise<
+    HeadersInit | undefined
+  >;
 };
 
 export type SubmitScanReviewInput = {
@@ -32,17 +41,31 @@ export function validateScanReviewInput(
     return "本文を入力してください";
   }
 
-  if (!input.productBlueprintId.trim()) {
+  if (
+    !input.productBlueprintId.trim()
+  ) {
     return "productBlueprintId が取得できませんでした";
   }
 
   return null;
 }
 
-export function toScanReviewErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
+export function toScanReviewErrorMessage(
+  error: unknown,
+): string {
+  const message =
+    error instanceof Error
+      ? error.message
+      : String(error);
 
-  if (message.includes("verified purchase required") || message.includes("403")) {
+  if (
+    message.includes(
+      "verified purchase required",
+    ) ||
+    message.includes(
+      "403",
+    )
+  ) {
     return "購入済み（Verified）の方のみ投稿できます";
   }
 
@@ -53,19 +76,29 @@ export async function submitScanReview(
   deps: ScanReviewUsecaseDeps,
   input: SubmitScanReviewInput,
 ): Promise<void> {
-  const validationError = validateScanReviewInput(input);
+  const validationError =
+    validateScanReviewInput(
+      input,
+    );
 
   if (validationError) {
-    throw new Error(validationError);
+    throw new Error(
+      validationError,
+    );
   }
 
-  const headers = await deps.getAuthHeadersOrUndefined();
+  const headers =
+    await deps.getOptionalAuthHeaders();
 
   await deps.createProductBlueprintReview({
-    productBlueprintId: input.productBlueprintId.trim(),
-    body: input.body.trim(),
-    rating: input.rating,
-    title: "Review",
+    productBlueprintId:
+      input.productBlueprintId.trim(),
+    body:
+      input.body.trim(),
+    rating:
+      input.rating,
+    title:
+      "Review",
     headers,
   });
 }
@@ -78,15 +111,20 @@ export async function loadScanReviews(
     perPage: number;
   },
 ): Promise<CatalogReviewPage> {
-  const productBlueprintId = input.productBlueprintId.trim();
+  const productBlueprintId =
+    input.productBlueprintId.trim();
 
   if (!productBlueprintId) {
-    throw new Error("productBlueprintId is empty");
+    throw new Error(
+      "productBlueprintId is empty",
+    );
   }
 
   return deps.fetchReviewsByProductBlueprintId({
     productBlueprintId,
-    page: input.page,
-    perPage: input.perPage,
+    page:
+      input.page,
+    perPage:
+      input.perPage,
   });
 }

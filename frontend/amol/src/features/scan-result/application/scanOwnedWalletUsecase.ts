@@ -1,29 +1,35 @@
 // frontend/amol/src/features/scan-result/application/scanOwnedWalletUsecase.ts
 
 export type ScanOwnedWalletUsecaseDeps = {
-  getAuthHeadersOrUndefined: () => Promise<HeadersInit | undefined>;
+  getOptionalAuthHeaders: () => Promise<
+    HeadersInit | undefined
+  >;
   isOwnedByWalletMintAddress: (
     mintAddress: string,
     headers?: HeadersInit,
   ) => Promise<boolean>;
-  hasAuthorization: (headers?: HeadersInit) => boolean;
 };
 
 export async function resolveScanOwnedWalletState(
   deps: ScanOwnedWalletUsecaseDeps,
   mintAddress: string,
 ): Promise<boolean | null> {
-  const normalizedMintAddress = mintAddress.trim();
+  const normalizedMintAddress =
+    mintAddress.trim();
 
   if (!normalizedMintAddress) {
     return null;
   }
 
-  const headers = await deps.getAuthHeadersOrUndefined();
+  const headers =
+    await deps.getOptionalAuthHeaders();
 
-  if (!deps.hasAuthorization(headers)) {
+  if (!headers) {
     return null;
   }
 
-  return deps.isOwnedByWalletMintAddress(normalizedMintAddress, headers);
+  return deps.isOwnedByWalletMintAddress(
+    normalizedMintAddress,
+    headers,
+  );
 }

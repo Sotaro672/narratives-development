@@ -7,21 +7,6 @@ export type MallOwnerInfo = {
   avatarName: string;
 };
 
-export type MallModelTokenPair = {
-  modelId: string;
-  tokenBlueprintId: string;
-};
-
-export type MallScanVerifyResponse = {
-  avatarId: string;
-  productId: string;
-  scannedModelId: string;
-  scannedTokenBlueprintId: string;
-  purchasedPairs: MallModelTokenPair[];
-  matched: boolean;
-  match: MallModelTokenPair | null;
-};
-
 export type MallPreviewTransferInfo = {
   transferredAt: string | null;
 
@@ -101,7 +86,10 @@ export type ProductBlueprintPatch = {
   [key: string]: unknown;
 };
 
-export type CategoryInputFieldScope = "productBlueprint" | "model" | string;
+export type CategoryInputFieldScope =
+  | "productBlueprint"
+  | "model"
+  | string;
 
 export type CategoryInputFieldType =
   | "text"
@@ -273,7 +261,6 @@ export type ScanResultPageState = {
   productId: string;
   previewState: PreviewState | null;
   meAvatar: MallOwnerInfo | null;
-  verifyResult: MallScanVerifyResponse | null;
   transferResult: MallScanTransferResponse | null;
   transferredMintAddress: string;
   transferTxSignature: string;

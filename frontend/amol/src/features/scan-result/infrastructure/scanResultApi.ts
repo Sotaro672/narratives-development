@@ -1,6 +1,13 @@
 // frontend/amol/src/features/scan-result/infrastructure/scanResultApi.ts
 
+import {
+  readJsonDataResponse,
+  readJsonResponse,
+} from "../../../components/utils/apiResponse";
+import { isRecord } from "../../../components/utils/typeGuards";
 import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
+import { getFirebaseIdToken } from "../../../lib/authToken";
+
 import { getMyAvatar } from "../../avatar/api/avatarApi";
 import {
   fetchMeWalletRaw,
@@ -11,29 +18,24 @@ import type {
   CatalogReviewPage,
   MallOwnerInfo,
   MallScanTransferResponse,
-  MallScanVerifyResponse,
   PreviewState,
   TokenResolveDTO,
   WalletDTO,
 } from "../../shared/types/scanResult";
 
-import { isRecord } from "../../../components/utils/typeGuards";
 import { safeUrl } from "../utils/format";
 
 import {
-  getAuthHeadersOrUndefined,
   getAuthorizationHeader,
   jsonHeaders,
   jsonPostHeaders,
   mergeHeaders,
-  readJsonObject,
 } from "./scanResultHttp";
 
 import {
   catalogReviewPageFromJson,
   mallPreviewResponseFromJson,
   mallScanTransferResponseFromJson,
-  mallScanVerifyResponseFromJson,
   tokenBlueprintPatchVMFromMap,
   tokenResolveDTOFromJson,
   unwrapData,
@@ -43,16 +45,39 @@ import {
 } from "./scanResultMappers";
 
 export {
-  getAuthHeadersOrUndefined,
-} from "./scanResultHttp";
-
-export {
   listSolanaTransfersByMintAddress,
 } from "./scanResultSolanaApi";
 
 export type {
   WalletResolvedTokenResponse,
 } from "./scanResultMappers";
+
+/**
+ * 段階移行用の互換関数。
+ *
+ * Firebase ID tokenの取得自体は共通のgetFirebaseIdTokenへ集約し、
+ * ログインしていない場合やtoken取得に失敗した場合だけundefinedへ変換する。
+ */
+export async function getAuthHeadersOrUndefined(): Promise<
+  Record<string, string> | undefined
+> {
+  try {
+    const token = (
+      await getFirebaseIdToken()
+    ).trim();
+
+    if (!token) {
+      return undefined;
+    }
+
+    return {
+      Authorization:
+        `Bearer ${token}`,
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 async function fetchPreviewRaw(
   productId: string,
@@ -88,18 +113,43 @@ async function fetchPreviewRaw(
     id,
   );
 
-  return readJsonObject(
-    await fetch(url, {
+  const label = isMe
+    ? "fetchMyPreviewByProductId"
+    : "fetchPreviewByProductId";
+
+  const response = await fetch(
+    url,
+    {
       headers: mergeHeaders(
         jsonHeaders(),
         headers,
       ),
-    }),
-    isMe
-      ? "fetchMyPreviewByProductId"
-      : "fetchPreviewByProductId",
-    url.toString(),
+    },
   );
+
+  const decoded =
+    await readJsonResponse<unknown>(
+      response,
+      {
+        requestErrorMessage:
+          `${label} failed`,
+        nonJsonErrorMessage:
+          `${label} failed: response is not json url=${url.toString()}`,
+        invalidJsonErrorMessage:
+          `${label} failed: invalid json url=${url.toString()}`,
+      },
+    );
+
+  if (
+    !isRecord(decoded) ||
+    Array.isArray(decoded)
+  ) {
+    throw new Error(
+      "invalid json shape (expected object)",
+    );
+  }
+
+  return decoded;
 }
 
 export async function loadPreviewState(
@@ -230,76 +280,6 @@ export async function fetchMeAvatar(
   };
 }
 
-export async function verifyScanPurchased(
-  args: {
-    productId: string;
-    headers?: HeadersInit;
-  },
-): Promise<MallScanVerifyResponse> {
-  const productId =
-    args.productId.trim();
-
-  if (!productId) {
-    throw new Error(
-      "productId is empty",
-    );
-  }
-
-  const base =
-    getApiBaseUrl();
-
-  if (!base) {
-    throw new Error(
-      "VITE_API_BASE_URL is not configured",
-    );
-  }
-
-  const url =
-    `${base}/mall/me/orders/scan/verify`;
-
-  const headers =
-    mergeHeaders(
-      jsonPostHeaders(),
-      args.headers,
-    );
-
-  const authHeader =
-    getAuthorizationHeader(
-      headers,
-    );
-
-  if (!authHeader) {
-    throw new Error(
-      "Authorization header is required for scan verify",
-    );
-  }
-
-  headers.set(
-    "Authorization",
-    authHeader,
-  );
-
-  const decoded =
-    await readJsonObject(
-      await fetch(
-        url,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            productId,
-          }),
-        },
-      ),
-      "verifyScanPurchased",
-      url,
-    );
-
-  return mallScanVerifyResponseFromJson(
-    decoded,
-  );
-}
-
 export async function transferScanPurchased(
   args: {
     productId: string;
@@ -349,20 +329,29 @@ export async function transferScanPurchased(
     authHeader,
   );
 
-  const decoded =
-    await readJsonObject(
-      await fetch(
-        url,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            productId,
-          }),
-        },
-      ),
-      "transferScanPurchased",
+  const response =
+    await fetch(
       url,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          productId,
+        }),
+      },
+    );
+
+  const decoded =
+    await readJsonDataResponse<unknown>(
+      response,
+      {
+        requestErrorMessage:
+          "transferScanPurchased failed",
+        nonJsonErrorMessage:
+          "transferScanPurchased failed: response is not json",
+        invalidJsonErrorMessage:
+          "transferScanPurchased failed: invalid json",
+      },
     );
 
   return mallScanTransferResponseFromJson(
@@ -411,17 +400,26 @@ export async function fetchReviewsByProductBlueprintId(
     String(args.perPage),
   );
 
+  const response =
+    await fetch(
+      url,
+      {
+        headers:
+          jsonHeaders(),
+      },
+    );
+
   const decoded =
-    await readJsonObject(
-      await fetch(
-        url,
-        {
-          headers:
-            jsonHeaders(),
-        },
-      ),
-      "fetchReviewsByProductBlueprintId",
-      url.toString(),
+    await readJsonDataResponse<unknown>(
+      response,
+      {
+        requestErrorMessage:
+          "fetchReviewsByProductBlueprintId failed",
+        nonJsonErrorMessage:
+          "fetchReviewsByProductBlueprintId failed: response is not json",
+        invalidJsonErrorMessage:
+          "fetchReviewsByProductBlueprintId failed: invalid json",
+      },
     );
 
   return catalogReviewPageFromJson(
@@ -486,7 +484,7 @@ export async function createProductBlueprintReview(
       productBlueprintId,
     )}/reviews`;
 
-  return readJsonObject(
+  const response =
     await fetch(
       url,
       {
@@ -502,10 +500,32 @@ export async function createProductBlueprintReview(
           title,
         }),
       },
-    ),
-    "createProductBlueprintReview",
-    url,
-  );
+    );
+
+  const decoded =
+    await readJsonDataResponse<unknown>(
+      response,
+      {
+        requestErrorMessage:
+          "createProductBlueprintReview failed",
+        nonJsonErrorMessage:
+          "createProductBlueprintReview failed: response is not json",
+        invalidJsonErrorMessage:
+          "createProductBlueprintReview failed: invalid json",
+        fallbackValue: {},
+      },
+    );
+
+  if (
+    !isRecord(decoded) ||
+    Array.isArray(decoded)
+  ) {
+    throw new Error(
+      "invalid json shape (expected object)",
+    );
+  }
+
+  return decoded;
 }
 
 export async function resolveOwnedWalletTokenByMintAddress(

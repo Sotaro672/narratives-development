@@ -5,12 +5,10 @@ import type {
   CatalogReviewPage,
   CategoryInputFieldDefinition,
   CategoryInputSchema,
-  MallModelTokenPair,
   MallOwnerInfo,
   MallPreviewResponse,
   MallPreviewTransferInfo,
   MallScanTransferResponse,
-  MallScanVerifyResponse,
   MallTokenInfo,
   MallTransferFlowStep,
   ProductBlueprintCategorySnapshot,
@@ -439,66 +437,6 @@ export function mallOwnerInfoFromJson(
       textValue(json.brandName),
     avatarName:
       textValue(json.avatarName),
-  };
-}
-
-export function mallModelTokenPairFromJson(
-  raw: unknown,
-): MallModelTokenPair | null {
-  if (!isRecord(raw)) {
-    return null;
-  }
-
-  return {
-    modelId:
-      textValue(raw.modelId),
-    tokenBlueprintId:
-      textValue(
-        raw.tokenBlueprintId,
-      ),
-  };
-}
-
-export function mallScanVerifyResponseFromJson(
-  raw: unknown,
-): MallScanVerifyResponse {
-  const json = unwrapData(raw);
-
-  const purchasedPairs = Array.isArray(
-    json.purchasedPairs,
-  )
-    ? json.purchasedPairs
-        .map(
-          mallModelTokenPairFromJson,
-        )
-        .filter(
-          (
-            value,
-          ): value is MallModelTokenPair =>
-            Boolean(value),
-        )
-    : [];
-
-  return {
-    avatarId:
-      textValue(json.avatarId),
-    productId:
-      textValue(json.productId),
-    scannedModelId:
-      textValue(
-        json.scannedModelId,
-      ),
-    scannedTokenBlueprintId:
-      textValue(
-        json.scannedTokenBlueprintId,
-      ),
-    purchasedPairs,
-    matched:
-      boolValue(json.matched),
-    match:
-      mallModelTokenPairFromJson(
-        json.match,
-      ),
   };
 }
 
