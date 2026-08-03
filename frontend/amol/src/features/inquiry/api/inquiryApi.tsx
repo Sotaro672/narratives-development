@@ -1,5 +1,10 @@
 // frontend/amol/src/features/inquiry/api/inquiryApi.tsx
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+
+import {
+  getDownloadURL,
+  ref,
+  uploadBytes,
+} from "firebase/storage";
 
 import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
 import { getFirebaseIdToken } from "../../../lib/authToken";
@@ -76,6 +81,13 @@ export type InquiryThread = {
   replies: InquiryReply[];
 };
 
+export type GetUnreadInquiryCountParams = {
+  productId?: string;
+  status?: string;
+  inquiryType?: string;
+  searchQuery?: string;
+};
+
 type ApiDataResponse<T> = {
   data?: T;
   error?: string;
@@ -96,11 +108,9 @@ type ApiUnreadCountResponse = {
   error?: string;
 };
 
-type GetUnreadInquiryCountParams = {
-  productId?: string;
-  status?: string;
-  inquiryType?: string;
-  searchQuery?: string;
+type UploadInquiryImageFileParams = {
+  directoryPath: string;
+  file: File;
 };
 
 function buildApiUrl(path: string): string {
@@ -113,8 +123,11 @@ function buildApiUrl(path: string): string {
   return `${baseUrl}${path}`;
 }
 
-function createUploadImageID(file: File): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+function createUploadImageId(file: File): string {
+  if (
+    typeof crypto !== "undefined" &&
+    "randomUUID" in crypto
+  ) {
     return crypto.randomUUID();
   }
 
@@ -123,7 +136,9 @@ function createUploadImageID(file: File): string {
     .slice(2)}`;
 }
 
-function sanitizeStorageFileName(fileName: string): string {
+function sanitizeStorageFileName(
+  fileName: string,
+): string {
   const trimmed = fileName.trim();
 
   if (!trimmed) {
@@ -137,8 +152,11 @@ function appendOptionalQuery(
   query: URLSearchParams,
   key: string,
   value: string | number | null | undefined,
-) {
-  if (value === null || value === undefined) {
+): void {
+  if (
+    value === null ||
+    value === undefined
+  ) {
     return;
   }
 
@@ -151,94 +169,148 @@ function appendOptionalQuery(
   query.set(key, normalized);
 }
 
-async function readApiJson<T>(res: Response): Promise<T> {
-  return (await res.json().catch(() => ({}))) as T;
+async function readApiJson<T>(
+  response: Response,
+): Promise<T> {
+  return (
+    await response
+      .json()
+      .catch(() => ({}))
+  ) as T;
 }
 
-async function fetchWithAuth<T>(path: string, init?: RequestInit): Promise<T> {
+async function fetchWithAuth<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
   const token = await getFirebaseIdToken();
-
   const headers = new Headers(init?.headers);
-  headers.set("Authorization", `Bearer ${token}`);
 
-  if (init?.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+  headers.set(
+    "Authorization",
+    `Bearer ${token}`,
+  );
+
+  if (
+    init?.body &&
+    !headers.has("Content-Type")
+  ) {
+    headers.set(
+      "Content-Type",
+      "application/json",
+    );
   }
 
-  const res = await fetch(buildApiUrl(path), {
-    ...init,
-    headers,
-  });
+  const response = await fetch(
+    buildApiUrl(path),
+    {
+      ...init,
+      headers,
+    },
+  );
 
-  const json = await readApiJson<T & { error?: string }>(res);
+  const json = await readApiJson<
+    T & {
+      error?: string;
+    }
+  >(response);
 
-  if (!res.ok) {
-    throw new Error(json.error || "APIリクエストに失敗しました。");
+  if (!response.ok) {
+    throw new Error(
+      json.error ||
+        "APIリクエストに失敗しました。",
+    );
   }
 
   return json;
 }
 
-export async function uploadInquiryImage(params: {
-  productId: string;
-  file: File;
-}): Promise<InquiryImage> {
-  const imageID = createUploadImageID(params.file);
-  const safeFileName = sanitizeStorageFileName(params.file.name);
-  const objectPath = `inquiry-images/${params.productId}/${imageID}/${safeFileName}`;
-  const storageRef = ref(storage, objectPath);
-  const mimeType = params.file.type || "application/octet-stream";
+async function uploadInquiryImageFile({
+  directoryPath,
+  file,
+}: UploadInquiryImageFileParams): Promise<InquiryImage> {
+  const imageId =
+    createUploadImageId(file);
 
-  await uploadBytes(storageRef, params.file, {
-    contentType: mimeType,
-  });
+  const safeFileName =
+    sanitizeStorageFileName(
+      file.name,
+    );
 
-  const fileUrl = await getDownloadURL(storageRef);
+  const objectPath =
+    `${directoryPath}/${imageId}/${safeFileName}`;
+
+  const storageRef = ref(
+    storage,
+    objectPath,
+  );
+
+  const mimeType =
+    file.type ||
+    "application/octet-stream";
+
+  await uploadBytes(
+    storageRef,
+    file,
+    {
+      contentType: mimeType,
+    },
+  );
+
+  const fileUrl =
+    await getDownloadURL(
+      storageRef,
+    );
 
   return {
-    fileName: params.file.name,
+    fileName: file.name,
     fileUrl,
     objectPath,
-    fileSize: params.file.size,
+    fileSize: file.size,
     mimeType,
-    createdAt: new Date().toISOString(),
+    createdAt:
+      new Date().toISOString(),
   };
 }
 
-export async function uploadReplyImage(params: {
-  inquiryId: string;
-  file: File;
-}): Promise<InquiryImage> {
-  const imageID = createUploadImageID(params.file);
-  const safeFileName = sanitizeStorageFileName(params.file.name);
-  const objectPath = `inquiry-replies/${params.inquiryId}/${imageID}/${safeFileName}`;
-  const storageRef = ref(storage, objectPath);
-  const mimeType = params.file.type || "application/octet-stream";
-
-  await uploadBytes(storageRef, params.file, {
-    contentType: mimeType,
+export async function uploadInquiryImage(
+  params: {
+    productId: string;
+    file: File;
+  },
+): Promise<InquiryImage> {
+  return uploadInquiryImageFile({
+    directoryPath:
+      `inquiry-images/${params.productId}`,
+    file: params.file,
   });
+}
 
-  const fileUrl = await getDownloadURL(storageRef);
-
-  return {
-    fileName: params.file.name,
-    fileUrl,
-    objectPath,
-    fileSize: params.file.size,
-    mimeType,
-    createdAt: new Date().toISOString(),
-  };
+export async function uploadReplyImage(
+  params: {
+    inquiryId: string;
+    file: File;
+  },
+): Promise<InquiryImage> {
+  return uploadInquiryImageFile({
+    directoryPath:
+      `inquiry-replies/${params.inquiryId}`,
+    file: params.file,
+  });
 }
 
 export async function createInquiry(
   payload: CreateInquiryRequest,
 ): Promise<Inquiry | null> {
-  const json = await fetchWithAuth<ApiDataResponse<Inquiry>>(
+  const json = await fetchWithAuth<
+    ApiDataResponse<Inquiry>
+  >(
     "/mall/me/inquiries",
     {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(
+        payload,
+      ),
     },
   );
 
@@ -248,44 +320,89 @@ export async function createInquiry(
 export async function listMeInquiries(
   params: ListMeInquiriesParams = {},
 ): Promise<ListMeInquiriesResult> {
-  const query = new URLSearchParams();
+  const query =
+    new URLSearchParams();
 
-  appendOptionalQuery(query, "page", params.page);
-  appendOptionalQuery(query, "perPage", params.perPage);
-  appendOptionalQuery(query, "productId", params.productId);
-  appendOptionalQuery(query, "status", params.status);
-  appendOptionalQuery(query, "inquiryType", params.inquiryType);
-  appendOptionalQuery(query, "searchQuery", params.searchQuery);
+  appendOptionalQuery(
+    query,
+    "page",
+    params.page,
+  );
 
-  const queryString = query.toString();
+  appendOptionalQuery(
+    query,
+    "perPage",
+    params.perPage,
+  );
+
+  appendOptionalQuery(
+    query,
+    "productId",
+    params.productId,
+  );
+
+  appendOptionalQuery(
+    query,
+    "status",
+    params.status,
+  );
+
+  appendOptionalQuery(
+    query,
+    "inquiryType",
+    params.inquiryType,
+  );
+
+  appendOptionalQuery(
+    query,
+    "searchQuery",
+    params.searchQuery,
+  );
+
+  const queryString =
+    query.toString();
+
   const path = queryString
     ? `/mall/me/inquiries?${queryString}`
     : "/mall/me/inquiries";
 
-  const json = await fetchWithAuth<ApiItemsResponse<Inquiry>>(path, {
+  const json = await fetchWithAuth<
+    ApiItemsResponse<Inquiry>
+  >(path, {
     method: "GET",
     signal: params.signal,
   });
 
   return {
-    items: Array.isArray(json.items) ? json.items : [],
+    items: Array.isArray(
+      json.items,
+    )
+      ? json.items
+      : [],
     page: json.page,
     perPage: json.perPage,
     total: json.total,
-    totalCount: json.totalCount,
+    totalCount:
+      json.totalCount,
   };
 }
 
-// ChatListPage などから使いやすい互換 alias です。
+// ChatListPageなどから利用するための互換alias。
 export async function fetchMeInquiries(
   params: ListMeInquiriesParams = {},
 ): Promise<ListMeInquiriesResult> {
   return listMeInquiries(params);
 }
 
-export async function getInquiry(inquiryId: string): Promise<Inquiry | null> {
-  const json = await fetchWithAuth<ApiDataResponse<Inquiry>>(
-    `/mall/me/inquiries/${encodeURIComponent(inquiryId)}`,
+export async function getInquiry(
+  inquiryId: string,
+): Promise<Inquiry | null> {
+  const json = await fetchWithAuth<
+    ApiDataResponse<Inquiry>
+  >(
+    `/mall/me/inquiries/${encodeURIComponent(
+      inquiryId,
+    )}`,
     {
       method: "GET",
     },
@@ -297,22 +414,35 @@ export async function getInquiry(inquiryId: string): Promise<Inquiry | null> {
 export async function listInquiryReplies(
   inquiryId: string,
 ): Promise<InquiryReply[]> {
-  const json = await fetchWithAuth<ApiItemsResponse<InquiryReply>>(
-    `/mall/me/inquiries/${encodeURIComponent(inquiryId)}/replies`,
+  const json = await fetchWithAuth<
+    ApiItemsResponse<InquiryReply>
+  >(
+    `/mall/me/inquiries/${encodeURIComponent(
+      inquiryId,
+    )}/replies`,
     {
       method: "GET",
     },
   );
 
-  return Array.isArray(json.items) ? json.items : [];
+  return Array.isArray(
+    json.items,
+  )
+    ? json.items
+    : [];
 }
 
 export async function getInquiryThread(
   inquiryId: string,
 ): Promise<InquiryThread> {
-  const [inquiry, replies] = await Promise.all([
+  const [
+    inquiry,
+    replies,
+  ] = await Promise.all([
     getInquiry(inquiryId),
-    listInquiryReplies(inquiryId),
+    listInquiryReplies(
+      inquiryId,
+    ),
   ]);
 
   return {
@@ -324,30 +454,77 @@ export async function getInquiryThread(
 export async function getUnreadInquiryCount(
   params: GetUnreadInquiryCountParams = {},
 ): Promise<number> {
-  const query = new URLSearchParams();
+  const query =
+    new URLSearchParams();
 
-  appendOptionalQuery(query, "productId", params.productId);
-  appendOptionalQuery(query, "status", params.status);
-  appendOptionalQuery(query, "inquiryType", params.inquiryType);
-  appendOptionalQuery(query, "searchQuery", params.searchQuery);
+  appendOptionalQuery(
+    query,
+    "productId",
+    params.productId,
+  );
 
-  const queryString = query.toString();
+  appendOptionalQuery(
+    query,
+    "status",
+    params.status,
+  );
+
+  appendOptionalQuery(
+    query,
+    "inquiryType",
+    params.inquiryType,
+  );
+
+  appendOptionalQuery(
+    query,
+    "searchQuery",
+    params.searchQuery,
+  );
+
+  const queryString =
+    query.toString();
+
   const path = queryString
     ? `/mall/me/inquiries/unread-count?${queryString}`
     : "/mall/me/inquiries/unread-count";
 
-  const json = await fetchWithAuth<ApiUnreadCountResponse>(path, {
+  const json = await fetchWithAuth<
+    ApiUnreadCountResponse
+  >(path, {
     method: "GET",
   });
 
-  return Number(json.count ?? json.unreadCount ?? 0);
+  const unreadCount = Number(
+    json.count ??
+      json.unreadCount ??
+      0,
+  );
+
+  if (
+    !Number.isFinite(
+      unreadCount,
+    )
+  ) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    Math.floor(
+      unreadCount,
+    ),
+  );
 }
 
 export async function markInquiryAsRead(
   inquiryId: string,
 ): Promise<Inquiry | null> {
-  const json = await fetchWithAuth<ApiDataResponse<Inquiry>>(
-    `/mall/me/inquiries/${encodeURIComponent(inquiryId)}/mark-as-read`,
+  const json = await fetchWithAuth<
+    ApiDataResponse<Inquiry>
+  >(
+    `/mall/me/inquiries/${encodeURIComponent(
+      inquiryId,
+    )}/mark-as-read`,
     {
       method: "POST",
     },
@@ -360,11 +537,17 @@ export async function replyInquiry(
   inquiryId: string,
   payload: ReplyInquiryRequest,
 ): Promise<InquiryReply | null> {
-  const json = await fetchWithAuth<ApiDataResponse<InquiryReply>>(
-    `/mall/me/inquiries/${encodeURIComponent(inquiryId)}/reply`,
+  const json = await fetchWithAuth<
+    ApiDataResponse<InquiryReply>
+  >(
+    `/mall/me/inquiries/${encodeURIComponent(
+      inquiryId,
+    )}/reply`,
     {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(
+        payload,
+      ),
     },
   );
 
@@ -374,8 +557,12 @@ export async function replyInquiry(
 export async function closeInquiry(
   inquiryId: string,
 ): Promise<Inquiry | null> {
-  const json = await fetchWithAuth<ApiDataResponse<Inquiry>>(
-    `/mall/me/inquiries/${encodeURIComponent(inquiryId)}/close`,
+  const json = await fetchWithAuth<
+    ApiDataResponse<Inquiry>
+  >(
+    `/mall/me/inquiries/${encodeURIComponent(
+      inquiryId,
+    )}/close`,
     {
       method: "POST",
     },

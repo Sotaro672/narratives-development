@@ -1,3 +1,4 @@
+//frontend\amol\src\features\inquiry\hooks\useInquiryUnreadCounter.tsx
 import { useCallback, useEffect, useState } from "react";
 
 import { getUnreadInquiryCount } from "../api/inquiryApi";
