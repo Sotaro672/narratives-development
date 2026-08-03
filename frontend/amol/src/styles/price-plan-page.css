@@ -1,10 +1,11 @@
 /* frontend/amol/src/styles/price-plan-page.css */
 
 .price-plan-table-wrap {
-  width: fit-content;
+  width: 100%;
   max-width: 100%;
   min-width: 0;
   margin: 0 auto;
+  box-sizing: border-box;
   overflow-x: auto;
   overflow-y: hidden;
   border: 1px solid rgba(15, 23, 42, 0.1);
@@ -12,6 +13,7 @@
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }
 
 .price-plan-table {
@@ -97,6 +99,8 @@
 
 @media (max-width: 560px) {
   .price-plan-table-wrap {
+    width: 100%;
+    max-width: 100%;
     border-radius: 20px;
   }
 
