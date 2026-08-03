@@ -1,4 +1,4 @@
-// frontend/amol/src/features/scan-result/types.ts
+// frontend\amol\src\features\shared\types\scanResult.ts
 
 export type MallOwnerInfo = {
   brandId: string;
@@ -58,7 +58,8 @@ export type ProductBlueprintCategorySnapshot = {
   Path?: string[];
 };
 
-export type ProductBlueprintCategoryFields = Record<string, unknown>;
+export type ProductBlueprintCategoryFields =
+  Record<string, unknown>;
 
 export type ProductBlueprintPatch = {
   productName?: string;
@@ -114,8 +115,10 @@ export type CategoryInputSchema = {
   categoryCode: string;
   categoryKind: ProductCategoryKind;
   categoryNameJa: string;
-  productBlueprintFields: CategoryInputFieldDefinition[];
-  modelFields: CategoryInputFieldDefinition[];
+  productBlueprintFields:
+    CategoryInputFieldDefinition[];
+  modelFields:
+    CategoryInputFieldDefinition[];
 };
 
 export type TokenBlueprintPatchVM = {
@@ -163,13 +166,16 @@ export type MallPreviewResponse = {
   productBlueprintCategoryCode?: string;
   productBlueprintCategoryKind?: ProductCategoryKind;
   productBlueprintCategoryName?: string;
-  productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+  productBlueprintCategory?:
+    ProductBlueprintCategorySnapshot | null;
   categoryInputSchema?: CategoryInputSchema | null;
 
   /**
-   * productBlueprintPatch.categoryFields を alcohol 判定・表示に使う。
+   * productBlueprintPatch.categoryFields を
+   * alcohol 判定・表示に使う。
    */
-  productBlueprintPatch: ProductBlueprintPatch | null;
+  productBlueprintPatch:
+    ProductBlueprintPatch | null;
 
   brandName?: string;
   companyName?: string;
@@ -178,7 +184,8 @@ export type MallPreviewResponse = {
   owner: MallOwnerInfo | null;
   transfers: MallPreviewTransferInfo[];
 
-  tokenBlueprintPatch?: TokenBlueprintPatchVM | null;
+  tokenBlueprintPatch?:
+    TokenBlueprintPatchVM | null;
 };
 
 export type ProductBlueprintPatchItem = {
@@ -189,7 +196,8 @@ export type ProductBlueprintPatchItem = {
 
 export type PreviewState = {
   raw: MallPreviewResponse;
-  tokenBlueprintPatch: TokenBlueprintPatchVM | null;
+  tokenBlueprintPatch:
+    TokenBlueprintPatchVM | null;
   tokenIconUrlEncoded: string | null;
 };
 
@@ -278,9 +286,6 @@ export type ScanResultPageState = {
 
   postingReview: boolean;
   postReviewError: string | null;
-
-  resolvingTransferredToken: boolean;
-  resolvedTransferredToken: TokenResolveDTO | null;
 
   loading: boolean;
   error: string | null;

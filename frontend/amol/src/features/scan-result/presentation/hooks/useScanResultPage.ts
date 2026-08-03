@@ -14,7 +14,6 @@ import {
 } from "react-router-dom";
 
 import {
-  createScanResultPageViewModel,
   createScanTransferSuccessModalViewModel,
   loadScanReviews,
   resolveScanOwnedWalletState,
@@ -42,7 +41,6 @@ import type {
   MallScanTransferResponse,
   PreviewState,
   ScanResultPageState,
-  TokenResolveDTO,
 } from "../../../shared/types/scanResult";
 
 function safeDecodeURIComponent(value: string): string {
@@ -137,12 +135,6 @@ export function useScanResultPage() {
     transferredMintOverride,
     setTransferredMintOverride,
   ] = useState("");
-  const [resolvingTransferredToken] =
-    useState(false);
-  const [
-    resolvedTransferredToken,
-    setResolvedTransferredToken,
-  ] = useState<TokenResolveDTO | null>(null);
   const [loading, setLoading] =
     useState(true);
   const [busyTransfer, setBusyTransfer] =
@@ -214,22 +206,11 @@ export function useScanResultPage() {
     postingReview,
     postReviewError,
 
-    resolvingTransferredToken,
-    resolvedTransferredToken,
-
     loading,
     error,
     authAvailable,
     busyTransfer,
   };
-
-  const viewModel = useMemo(() => {
-    return createScanResultPageViewModel({
-      previewState,
-    });
-  }, [
-    previewState,
-  ]);
 
   const transferSuccessModalViewModel =
     useMemo(() => {
@@ -419,9 +400,6 @@ export function useScanResultPage() {
       setMeAvatar(null);
       setTransferResult(null);
       setTransferredMintOverride("");
-      setResolvedTransferredToken(
-        null,
-      );
       setTransferModalOpen(false);
       setTransferModalError(null);
       setReviews(null);
@@ -1016,7 +994,6 @@ export function useScanResultPage() {
 
   return {
     state,
-    viewModel,
     transferSuccessModalViewModel,
     hasMultipleTransfers,
     load,
