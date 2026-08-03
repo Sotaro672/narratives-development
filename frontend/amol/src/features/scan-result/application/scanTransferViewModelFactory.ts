@@ -22,6 +22,12 @@ export type ScanTransferSuccessModalViewModel = {
   brandId: string;
   brandName: string;
 
+  /**
+   * ContentsPageを開けるかどうかの唯一の判定値。
+   * mintAddressとmetadataUriの両方がある場合のみtrue。
+   */
+  canOpenContents: boolean;
+
   fromName: string;
   toName: string;
   walletUpdated: boolean;
@@ -58,6 +64,7 @@ export function createScanTransferSuccessModalViewModel(
 
   const fromName =
     normalize(result.fromDisplayName);
+
   const toName =
     normalize(result.toDisplayName);
 
@@ -66,26 +73,42 @@ export function createScanTransferSuccessModalViewModel(
   }
 
   const token = input.token;
+
   const tokenBlueprintPatch =
     input.tokenBlueprintPatch;
 
   const productName =
     normalize(input.productName);
+
   const metadataUri =
     normalize(token?.metadataUri);
+
   const tokenBlueprintId =
     normalize(token?.tokenBlueprintId);
+
   const tokenName =
-    normalize(tokenBlueprintPatch?.tokenName);
+    normalize(
+      tokenBlueprintPatch?.tokenName,
+    );
+
   const tokenIconUrl =
-    normalize(tokenBlueprintPatch?.tokenIcon);
+    normalize(
+      tokenBlueprintPatch?.tokenIcon,
+    );
+
   const brandId =
     normalize(token?.brandId);
+
   const brandName =
     normalize(token?.brandName);
 
+  const canOpenContents =
+    Boolean(mintAddress) &&
+    Boolean(metadataUri);
+
   return {
-    productId: result.productId,
+    productId:
+      normalize(result.productId),
     productName,
     mintAddress,
     metadataUri,
@@ -94,8 +117,10 @@ export function createScanTransferSuccessModalViewModel(
     tokenIconUrl,
     brandId,
     brandName,
+    canOpenContents,
     fromName,
     toName,
-    walletUpdated: result.updatedToAddress,
+    walletUpdated:
+      result.updatedToAddress,
   };
 }

@@ -1,17 +1,22 @@
 // frontend/amol/src/features/scan-result/presentation/components/ScanTransferSuccessModal.tsx
-import type { ScanTransferSuccessModalViewModel } from "../../application";
+
+import type {
+  ScanTransferSuccessModalViewModel,
+} from "../../application";
 
 type Props = {
   open: boolean;
   loading: boolean;
   error: string | null;
-  viewModel: ScanTransferSuccessModalViewModel | null;
-  resolvedContentsReady: boolean;
+  viewModel:
+    ScanTransferSuccessModalViewModel | null;
   onClose: () => void;
   onOpenContents: () => void;
 };
 
-function displayText(value: string): string {
+function displayText(
+  value: string,
+): string {
   return value.trim() || "-";
 }
 
@@ -20,24 +25,33 @@ export default function ScanTransferSuccessModal({
   loading,
   error,
   viewModel,
-  resolvedContentsReady,
   onClose,
   onOpenContents,
 }: Props) {
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
 
-  const canOpenContents = Boolean(viewModel?.mintAddress);
+  const canOpenContents =
+    viewModel?.canOpenContents === true;
 
   return (
-    <div className="scan-transfer-modal-backdrop" onClick={onClose}>
+    <div
+      className="scan-transfer-modal-backdrop"
+      onClick={onClose}
+    >
       <div
         className="scan-transfer-modal"
         role="dialog"
         aria-modal="true"
-        onClick={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
       >
         <div className="scan-transfer-modal__header">
-          <h2 className="scan-transfer-modal__title">トークン移譲結果</h2>
+          <h2 className="scan-transfer-modal__title">
+            トークン移譲結果
+          </h2>
 
           <button
             type="button"
@@ -50,9 +64,13 @@ export default function ScanTransferSuccessModal({
         </div>
 
         {loading ? (
-          <p className="scan-transfer-modal__message">移譲処理中です...</p>
+          <p className="scan-transfer-modal__message">
+            移譲処理中です...
+          </p>
         ) : error ? (
-          <p className="scan-transfer-modal__error">{error}</p>
+          <p className="scan-transfer-modal__error">
+            {error}
+          </p>
         ) : viewModel ? (
           <div className="scan-transfer-modal__body">
             <p className="scan-transfer-modal__message">
@@ -62,22 +80,38 @@ export default function ScanTransferSuccessModal({
             <dl className="scan-transfer-modal__list">
               <div>
                 <dt>商品名</dt>
-                <dd>{displayText(viewModel.productName)}</dd>
+                <dd>
+                  {displayText(
+                    viewModel.productName,
+                  )}
+                </dd>
               </div>
 
               <div>
                 <dt>トークン名</dt>
-                <dd>{displayText(viewModel.tokenName)}</dd>
+                <dd>
+                  {displayText(
+                    viewModel.tokenName,
+                  )}
+                </dd>
               </div>
 
               <div>
                 <dt>移譲元</dt>
-                <dd>{displayText(viewModel.fromName)}</dd>
+                <dd>
+                  {displayText(
+                    viewModel.fromName,
+                  )}
+                </dd>
               </div>
 
               <div>
                 <dt>移譲先</dt>
-                <dd>{displayText(viewModel.toName)}</dd>
+                <dd>
+                  {displayText(
+                    viewModel.toName,
+                  )}
+                </dd>
               </div>
 
               {viewModel.walletUpdated ? (
@@ -88,7 +122,7 @@ export default function ScanTransferSuccessModal({
               ) : null}
             </dl>
 
-            {resolvedContentsReady ? (
+            {canOpenContents ? (
               <p className="scan-transfer-modal__message">
                 トークンコンテンツを表示できる状態になりました。
               </p>

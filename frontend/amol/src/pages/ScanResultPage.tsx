@@ -114,18 +114,6 @@ export default function ScanResultPage() {
     ) &&
     !hasMultipleTransfers;
 
-  const resolvedContentsReady =
-    Boolean(
-      transferSuccessModalViewModel
-        ?.mintAddress
-        .trim(),
-    ) &&
-    Boolean(
-      transferSuccessModalViewModel
-        ?.metadataUri
-        .trim(),
-    );
-
   return (
     <Layout
       title="AMOL"
@@ -238,9 +226,6 @@ export default function ScanResultPage() {
         }
         viewModel={
           transferSuccessModalViewModel
-        }
-        resolvedContentsReady={
-          resolvedContentsReady
         }
         onClose={
           closeTransferModal

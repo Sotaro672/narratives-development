@@ -606,6 +606,7 @@ export function useScanResultPage() {
     useCallback(async () => {
       if (
         !transferSuccessModalViewModel
+          ?.canOpenContents
       ) {
         return;
       }

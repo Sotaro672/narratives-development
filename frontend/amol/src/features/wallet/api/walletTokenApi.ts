@@ -10,7 +10,7 @@ import { getFirebaseIdToken } from "../../../lib/authToken";
 import {
   fetchMeWalletRaw,
   resolveWalletTokenRaw,
-} from "../../shared/api/walletApiClient";
+} from "../../shared/api";
 
 import type {
   TokenMetadataDTO,
@@ -117,16 +117,22 @@ async function resolveTokenByMintAddressWithContext(
   context: WalletApiContext,
   mintAddress: string,
 ): Promise<TokenResolveDTO | null> {
-  const normalizedMintAddress = mintAddress.trim();
+  const normalizedMintAddress =
+    mintAddress.trim();
 
   if (!normalizedMintAddress) {
     return null;
   }
 
-  const result = await resolveWalletTokenRaw({
-    mintAddress: normalizedMintAddress,
-    headers: buildAuthHeaders(context.idToken),
-  });
+  const result =
+    await resolveWalletTokenRaw({
+      mintAddress:
+        normalizedMintAddress,
+      headers:
+        buildAuthHeaders(
+          context.idToken,
+        ),
+    });
 
   if (!result.ok) {
     if (result.status === 404) {
@@ -138,7 +144,9 @@ async function resolveTokenByMintAddressWithContext(
     );
   }
 
-  return toTokenResolveDTO(result.data);
+  return toTokenResolveDTO(
+    result.data,
+  );
 }
 
 async function fetchTokenMetadataWithContext(
@@ -156,42 +164,60 @@ async function fetchTokenMetadataWithContext(
     ),
   );
 
-  url.searchParams.set("url", metadataUri);
+  url.searchParams.set(
+    "url",
+    metadataUri,
+  );
 
-  const response = await fetch(url.toString(), {
-    method: "GET",
-    headers: buildAuthHeaders(context.idToken),
-  });
+  const response = await fetch(
+    url.toString(),
+    {
+      method: "GET",
+      headers:
+        buildAuthHeaders(
+          context.idToken,
+        ),
+    },
+  );
 
   if (response.status === 404) {
     return null;
   }
 
-  const body = await readJsonResponse<unknown>(
-    response,
-    {
-      requestErrorMessage:
-        "トークンメタデータの取得に失敗しました。",
-      nonJsonErrorMessage:
-        "トークンメタデータAPIがJSON以外を返しました。",
-      invalidJsonErrorMessage:
-        "トークンメタデータAPIのJSON形式が不正です。",
-    },
-  );
+  const body =
+    await readJsonResponse<unknown>(
+      response,
+      {
+        requestErrorMessage:
+          "トークンメタデータの取得に失敗しました。",
+        nonJsonErrorMessage:
+          "トークンメタデータAPIがJSON以外を返しました。",
+        invalidJsonErrorMessage:
+          "トークンメタデータAPIのJSON形式が不正です。",
+      },
+    );
 
-  return toTokenMetadataDTO(body);
+  return toTokenMetadataDTO(
+    body,
+  );
 }
 
-export async function fetchMeWallet(): Promise<WalletDTO | null> {
-  const context = await createWalletApiContext();
+export async function fetchMeWallet(): Promise<
+  WalletDTO | null
+> {
+  const context =
+    await createWalletApiContext();
 
-  return fetchMeWalletWithContext(context);
+  return fetchMeWalletWithContext(
+    context,
+  );
 }
 
 export async function resolveTokenByMintAddress(
   mintAddress: string,
 ): Promise<TokenResolveDTO | null> {
-  const context = await createWalletApiContext();
+  const context =
+    await createWalletApiContext();
 
   return resolveTokenByMintAddressWithContext(
     context,
@@ -202,7 +228,8 @@ export async function resolveTokenByMintAddress(
 export async function fetchTokenMetadata(
   metadataUri: string,
 ): Promise<TokenMetadataDTO | null> {
-  const context = await createWalletApiContext();
+  const context =
+    await createWalletApiContext();
 
   return fetchTokenMetadataWithContext(
     context,
@@ -210,9 +237,16 @@ export async function fetchTokenMetadata(
   );
 }
 
-export async function fetchMeWalletTokens(): Promise<WalletTokenListResult> {
-  const context = await createWalletApiContext();
-  const wallet = await fetchMeWalletWithContext(context);
+export async function fetchMeWalletTokens(): Promise<
+  WalletTokenListResult
+> {
+  const context =
+    await createWalletApiContext();
+
+  const wallet =
+    await fetchMeWalletWithContext(
+      context,
+    );
 
   if (!wallet) {
     return {
@@ -222,10 +256,14 @@ export async function fetchMeWalletTokens(): Promise<WalletTokenListResult> {
   }
 
   const mints = wallet.tokens
-    .map((token) => token.trim())
+    .map(
+      (token) =>
+        token.trim(),
+    )
     .filter(Boolean);
 
-  const tokens: WalletTokenItem[] = [];
+  const tokens: WalletTokenItem[] =
+    [];
 
   for (const mintAddress of mints) {
     try {
@@ -237,13 +275,17 @@ export async function fetchMeWalletTokens(): Promise<WalletTokenListResult> {
 
       if (!resolved) {
         tokens.push(
-          createEmptyWalletTokenItem(mintAddress),
+          createEmptyWalletTokenItem(
+            mintAddress,
+          ),
         );
 
         continue;
       }
 
-      let metadata: TokenMetadataDTO | null = null;
+      let metadata:
+        TokenMetadataDTO | null =
+        null;
 
       if (resolved.metadataUri) {
         try {
@@ -266,7 +308,9 @@ export async function fetchMeWalletTokens(): Promise<WalletTokenListResult> {
       );
     } catch {
       tokens.push(
-        createEmptyWalletTokenItem(mintAddress),
+        createEmptyWalletTokenItem(
+          mintAddress,
+        ),
       );
     }
   }

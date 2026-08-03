@@ -14,7 +14,7 @@ import { getMyAvatar } from "../../avatar/api/avatarApi";
 import {
   fetchMeWalletRaw,
   resolveWalletTokenRaw,
-} from "../../shared/api/walletApiClient";
+} from "../../shared/api";
 
 import type {
   CatalogReviewPage,
