@@ -1,16 +1,17 @@
 // frontend/amol/src/features/payment/utils/order.ts
+
+import type { CartDisplayItem } from "../../shared/types/cart";
 import type {
-  CanonicalCartDisplayItem,
   CanonicalShippingAddress,
   CreateOrderItemRequest,
   OrderShippingSnapshot,
-  PaymentMethod,
 } from "../../shared/types/payment";
+import type { CardPaymentMethod } from "../../shared/types/paymentMethods";
 
 export function selectPrimaryPaymentMethod(
-  methods: PaymentMethod[],
-  defaultMethod: PaymentMethod | null,
-): PaymentMethod | null {
+  methods: CardPaymentMethod[],
+  defaultMethod: CardPaymentMethod | null,
+): CardPaymentMethod | null {
   if (defaultMethod) {
     return defaultMethod;
   }
@@ -32,7 +33,7 @@ export function buildShippingSnapshot(
 }
 
 export function buildOrderItems(
-  cartItems: CanonicalCartDisplayItem[],
+  cartItems: CartDisplayItem[],
 ): CreateOrderItemRequest[] {
   return cartItems.map((item): CreateOrderItemRequest => {
     if (item.type === "resale") {
@@ -66,6 +67,7 @@ export function validateOrderItems(
   for (const item of items) {
     if (item.type === "resale") {
       const error = validateResaleOrderItem(item);
+
       if (error) {
         return error;
       }
@@ -74,6 +76,7 @@ export function validateOrderItems(
     }
 
     const error = validateListOrderItem(item);
+
     if (error) {
       return error;
     }

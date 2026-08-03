@@ -1,8 +1,6 @@
 // frontend/amol/src/features/scan-result/infrastructure/scanResultMappers.ts
 
 import type {
-  CatalogReview,
-  CatalogReviewPage,
   CategoryInputFieldDefinition,
   CategoryInputSchema,
   MallOwnerInfo,
@@ -19,10 +17,17 @@ import type {
   TokenContentFile,
   WalletDTO,
 } from "../../shared/types/scanResult";
+
+import type {
+  ProductBlueprintReview,
+  ProductBlueprintReviewPage,
+} from "../../shared/types/review";
+
 import {
   isFiniteNumber,
   isRecord,
 } from "../../../components/utils/typeGuards";
+
 import {
   safeUrl,
   tokenBlueprintPatchHasAnyField,
@@ -1023,7 +1028,7 @@ export function tokenBlueprintPatchVMFromMap(
 
 export function catalogReviewFromJson(
   raw: unknown,
-): CatalogReview | null {
+): ProductBlueprintReview | null {
   if (!isRecord(raw)) {
     return null;
   }
@@ -1058,6 +1063,8 @@ export function catalogReviewFromJson(
         raw.reviewedAt ||
           raw.createdAt,
       ),
+    status:
+      textValue(raw.status),
   };
 }
 
@@ -1065,7 +1072,7 @@ export function catalogReviewPageFromJson(
   raw: unknown,
   fallbackPage: number,
   fallbackPerPage: number,
-): CatalogReviewPage {
+): ProductBlueprintReviewPage {
   const root = unwrapData(raw);
 
   const rawItems = Array.isArray(
@@ -1081,7 +1088,7 @@ export function catalogReviewPageFromJson(
     .filter(
       (
         value,
-      ): value is CatalogReview =>
+      ): value is ProductBlueprintReview =>
         Boolean(value),
     );
 

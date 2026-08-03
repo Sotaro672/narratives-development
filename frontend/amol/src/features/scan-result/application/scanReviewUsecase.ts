@@ -1,8 +1,8 @@
 // frontend/amol/src/features/scan-result/application/scanReviewUsecase.ts
 
 import type {
-  CatalogReviewPage,
-} from "../../shared/types/scanResult";
+  ProductBlueprintReviewPage,
+} from "../../shared/types/review";
 
 export type ScanReviewUsecaseDeps = {
   fetchReviewsByProductBlueprintId: (
@@ -11,7 +11,7 @@ export type ScanReviewUsecaseDeps = {
       page: number;
       perPage: number;
     },
-  ) => Promise<CatalogReviewPage>;
+  ) => Promise<ProductBlueprintReviewPage>;
 
   createProductBlueprintReview: (
     input: {
@@ -110,7 +110,7 @@ export async function loadScanReviews(
     page: number;
     perPage: number;
   },
-): Promise<CatalogReviewPage> {
+): Promise<ProductBlueprintReviewPage> {
   const productBlueprintId =
     input.productBlueprintId.trim();
 

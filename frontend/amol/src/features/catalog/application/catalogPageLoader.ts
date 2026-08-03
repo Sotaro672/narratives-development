@@ -1,15 +1,24 @@
 // frontend/amol/src/features/catalog/application/catalogPageLoader.ts
 
-import { fetchCatalogDetail } from "../infrastructure/catalogRepository";
-import { fetchCatalogReviews } from "../infrastructure/catalogReviewRepository";
+import {
+  fetchCatalogDetail,
+} from "../infrastructure/catalogRepository";
+
+import {
+  fetchCatalogReviews,
+} from "../infrastructure/catalogReviewRepository";
+
 import type {
-  CatalogProductBlueprintReviewPage,
   CatalogResponse,
 } from "../../shared/types/catalog";
 
+import type {
+  ProductBlueprintReviewPage,
+} from "../../shared/types/review";
+
 export type LoadCatalogPageResult = {
   catalog: CatalogResponse;
-  reviews: CatalogProductBlueprintReviewPage | null;
+  reviews: ProductBlueprintReviewPage | null;
   reviewErrorMessage: string;
 };
 

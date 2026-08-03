@@ -5,9 +5,12 @@ import {
 } from "../../../components/utils/color";
 
 import type {
+  ProductBlueprintCategoryFields,
+} from "../../shared/types/category";
+
+import type {
   MallOwnerInfo,
   PreviewState,
-  ProductBlueprintCategoryFields,
   ProductBlueprintPatch,
 } from "../../shared/types/scanResult";
 

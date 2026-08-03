@@ -1,4 +1,8 @@
-// frontend\amol\src\features\shared\types\catalog.ts
+// frontend/amol/src/features/shared/types/catalog.ts
+
+import type {
+  ProductBlueprintCategoryFields,
+} from "./category";
 
 export type CatalogListPrice = {
   modelId: string;
@@ -42,8 +46,6 @@ export type CatalogProductBlueprintModelRef = {
   displayOrder: number;
 };
 
-export type CatalogCategoryFields = Record<string, unknown>;
-
 export type CatalogProductBlueprint = {
   id: string;
   productName: string;
@@ -71,7 +73,7 @@ export type CatalogProductBlueprint = {
    *
    * category ごとに項目が変わるため、固定 field ではなく map として扱う。
    */
-  categoryFields?: CatalogCategoryFields | null;
+  categoryFields?: ProductBlueprintCategoryFields | null;
 
   modelRefs: CatalogProductBlueprintModelRef[];
 };
@@ -139,29 +141,6 @@ export type CatalogResponse = {
   tokenBlueprint: CatalogTokenBlueprint;
   modelVariations: CatalogModelVariation[];
   productReviewSummary: CatalogProductReviewSummary;
-};
-
-export type CatalogProductBlueprintReview = {
-  id: string;
-  productBlueprintId: string;
-  avatarId: string;
-  rating: number;
-  title: string;
-  body: string;
-  helpfulVotes: number;
-  totalVotes: number;
-  reviewedAt: string;
-  status: string;
-  avatarName: string;
-  avatarIcon: string;
-};
-
-export type CatalogProductBlueprintReviewPage = {
-  items: CatalogProductBlueprintReview[];
-  page: number;
-  perPage: number;
-  total: number;
-  hasNext: boolean;
 };
 
 export type MeasurementTableRow = {

@@ -7,6 +7,10 @@ import {
 import { getApiBaseUrl } from "../../lib/apiBaseUrl";
 import type { PageResult } from "../shared/pageResult";
 import type {
+  ProductBlueprintReview,
+  ProductBlueprintReviewPage,
+} from "../shared/types/review";
+import type {
   ResaleCondition,
   ResaleListingBase,
   ResaleStatus,
@@ -28,41 +32,19 @@ export type MarketResaleConditionImage = {
   updatedBy?: string | null;
 };
 
-export type MarketProductBlueprintReview = {
-  id: string;
-  productBlueprintId?: string;
-  avatarId?: string;
-  avatarName?: string;
-  avatarIcon?: string;
-  rating?: number;
-  title?: string;
-  body?: string;
-  helpfulVotes?: number;
-  totalVotes?: number;
-  reviewedAt?: string;
-  status?: string;
-};
-
-export type MarketProductBlueprintReviewPage = {
-  items: MarketProductBlueprintReview[];
-  page: number;
-  perPage: number;
-  total: number;
-  hasNext: boolean;
-};
-
-export type MarketResaleListing = ResaleListingBase & {
-  imageUrl?: string;
-  tokenIcon?: string;
-  avatarName?: string;
-  avatarIcon?: string;
-  images?: MarketResaleConditionImage[];
-  conditionImages?: MarketResaleConditionImage[];
-  createdBy?: string;
-  createdAt?: string;
-  updatedBy?: string | null;
-  updatedAt?: string | null;
-};
+export type MarketResaleListing =
+  ResaleListingBase & {
+    imageUrl?: string;
+    tokenIcon?: string;
+    avatarName?: string;
+    avatarIcon?: string;
+    images?: MarketResaleConditionImage[];
+    conditionImages?: MarketResaleConditionImage[];
+    createdBy?: string;
+    createdAt?: string;
+    updatedBy?: string | null;
+    updatedAt?: string | null;
+  };
 
 export type MarketResaleListResponse =
   PageResult<MarketResaleListing>;
@@ -79,7 +61,7 @@ export type MarketResaleConditionImagesResponse =
     };
 
 export type MarketProductBlueprintReviewsResponse =
-  | MarketProductBlueprintReviewPage
+  | ProductBlueprintReviewPage
   | {
       data?: unknown;
       items?: unknown;
@@ -91,7 +73,9 @@ export type MarketProductBlueprintReviewsResponse =
       hasNext?: unknown;
     };
 
-export type MarketResaleSortOrder = "asc" | "desc";
+export type MarketResaleSortOrder =
+  | "asc"
+  | "desc";
 
 export type FetchMarketResalesParams = {
   page?: number;
@@ -129,7 +113,9 @@ export type FetchMarketResalesParams = {
   direction?: MarketResaleSortOrder;
 };
 
-const MARKET_RESALES_PATH = "/mall/market/resales";
+const MARKET_RESALES_PATH =
+  "/mall/market/resales";
+
 const MARKET_CATALOG_PRODUCT_BLUEPRINTS_PATH =
   "/mall/catalog/product-blueprints";
 
@@ -146,7 +132,9 @@ function normalizeApiBaseUrl(): string {
   return "";
 }
 
-function normalizeString(value: unknown): string {
+function normalizeString(
+  value: unknown,
+): string {
   if (typeof value !== "string") {
     return "";
   }
@@ -167,13 +155,18 @@ function toFiniteNumber(
     value.trim() !== ""
   ) {
     const parsed = Number(value);
-    return isFiniteNumber(parsed) ? parsed : fallback;
+
+    return isFiniteNumber(parsed)
+      ? parsed
+      : fallback;
   }
 
   return fallback;
 }
 
-function toBoolean(value: unknown): boolean {
+function toBoolean(
+  value: unknown,
+): boolean {
   return value === true;
 }
 
@@ -192,7 +185,10 @@ function appendString(
     return;
   }
 
-  searchParams.set(key, trimmed);
+  searchParams.set(
+    key,
+    trimmed,
+  );
 }
 
 function appendNumber(
@@ -204,7 +200,10 @@ function appendNumber(
     return;
   }
 
-  searchParams.set(key, String(value));
+  searchParams.set(
+    key,
+    String(value),
+  );
 }
 
 function appendStringList(
@@ -228,108 +227,174 @@ function appendStringList(
     return;
   }
 
-  searchParams.set(key, cleaned.join(","));
+  searchParams.set(
+    key,
+    cleaned.join(","),
+  );
 }
 
 function buildMarketResaleSearchParams(
   params: FetchMarketResalesParams = {},
 ): URLSearchParams {
-  const searchParams = new URLSearchParams();
+  const searchParams =
+    new URLSearchParams();
 
-  appendNumber(searchParams, "page", params.page);
-  appendNumber(searchParams, "perPage", params.perPage);
-  appendString(searchParams, "q", params.q);
-  appendString(searchParams, "search", params.search);
+  appendNumber(
+    searchParams,
+    "page",
+    params.page,
+  );
+
+  appendNumber(
+    searchParams,
+    "perPage",
+    params.perPage,
+  );
+
+  appendString(
+    searchParams,
+    "q",
+    params.q,
+  );
+
+  appendString(
+    searchParams,
+    "search",
+    params.search,
+  );
+
   appendString(
     searchParams,
     "searchQuery",
     params.searchQuery,
   );
-  appendStringList(searchParams, "ids", params.ids);
+
+  appendStringList(
+    searchParams,
+    "ids",
+    params.ids,
+  );
+
   appendStringList(
     searchParams,
     "mintAddresses",
     params.mintAddresses,
   );
+
   appendStringList(
     searchParams,
     "tokenBlueprintIds",
     params.tokenBlueprintIds,
   );
+
   appendStringList(
     searchParams,
     "productIds",
     params.productIds,
   );
+
   appendStringList(
     searchParams,
     "brandIds",
     params.brandIds,
   );
+
   appendStringList(
     searchParams,
     "productBlueprintIds",
     params.productBlueprintIds,
   );
+
   appendStringList(
     searchParams,
     "avatarIds",
     params.avatarIds,
   );
+
   appendString(
     searchParams,
     "avatarId",
     params.avatarId,
   );
+
   appendString(
     searchParams,
     "viewerAvatarId",
     params.viewerAvatarId,
   );
+
   appendStringList(
     searchParams,
     "viewerAvatarIds",
     params.viewerAvatarIds,
   );
-  appendString(searchParams, "status", params.status);
+
+  appendString(
+    searchParams,
+    "status",
+    params.status,
+  );
+
   appendStringList(
     searchParams,
     "statuses",
     params.statuses,
   );
+
   appendString(
     searchParams,
     "condition",
     params.condition,
   );
+
   appendStringList(
     searchParams,
     "conditions",
     params.conditions,
   );
+
   appendNumber(
     searchParams,
     "minPrice",
     params.minPrice,
   );
+
   appendNumber(
     searchParams,
     "maxPrice",
     params.maxPrice,
   );
-  appendString(searchParams, "sort", params.sort);
-  appendString(searchParams, "sortBy", params.sortBy);
+
+  appendString(
+    searchParams,
+    "sort",
+    params.sort,
+  );
+
+  appendString(
+    searchParams,
+    "sortBy",
+    params.sortBy,
+  );
+
   appendString(
     searchParams,
     "orderBy",
     params.orderBy,
   );
-  appendString(searchParams, "order", params.order);
+
+  appendString(
+    searchParams,
+    "order",
+    params.order,
+  );
+
   appendString(
     searchParams,
     "sortOrder",
     params.sortOrder,
   );
+
   appendString(
     searchParams,
     "direction",
@@ -339,7 +404,9 @@ function buildMarketResaleSearchParams(
   return searchParams;
 }
 
-function getErrorMessage(status: number): string {
+function getErrorMessage(
+  status: number,
+): string {
   if (status === 400) {
     return "マーケット一覧の取得条件が不正です。";
   }
@@ -368,16 +435,29 @@ async function readJsonResponse<T>(
   fallbackMessage: string,
 ): Promise<T> {
   const contentType =
-    response.headers.get("content-type") ?? "";
+    response.headers.get(
+      "content-type",
+    ) ?? "";
 
-  if (!contentType.includes("application/json")) {
-    throw new Error(fallbackMessage);
+  if (
+    !contentType.includes(
+      "application/json",
+    )
+  ) {
+    throw new Error(
+      fallbackMessage,
+    );
   }
 
-  const data = (await response.json()) as T;
+  const data =
+    (await response.json()) as T;
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(response.status));
+    throw new Error(
+      getErrorMessage(
+        response.status,
+      ),
+    );
   }
 
   return data;
@@ -386,7 +466,10 @@ async function readJsonResponse<T>(
 function isMarketResaleConditionImage(
   value: unknown,
 ): value is MarketResaleConditionImage {
-  if (!isRecord(value) || Array.isArray(value)) {
+  if (
+    !isRecord(value) ||
+    Array.isArray(value)
+  ) {
     return false;
   }
 
@@ -422,12 +505,16 @@ function normalizeMarketResaleConditionImagesResponse(
 
 function normalizeReview(
   value: unknown,
-): MarketProductBlueprintReview | null {
-  if (!isRecord(value) || Array.isArray(value)) {
+): ProductBlueprintReview | null {
+  if (
+    !isRecord(value) ||
+    Array.isArray(value)
+  ) {
     return null;
   }
 
-  const id = normalizeString(value.id);
+  const id =
+    normalizeString(value.id);
 
   if (!id) {
     return null;
@@ -435,23 +522,51 @@ function normalizeReview(
 
   return {
     id,
-    productBlueprintId: normalizeString(
-      value.productBlueprintId,
-    ),
-    avatarId: normalizeString(value.avatarId),
-    avatarName: normalizeString(value.avatarName),
-    avatarIcon: normalizeString(value.avatarIcon),
-    rating: toFiniteNumber(value.rating),
-    title: normalizeString(value.title),
-    body: normalizeString(value.body),
-    helpfulVotes: toFiniteNumber(
-      value.helpfulVotes,
-    ),
-    totalVotes: toFiniteNumber(value.totalVotes),
-    reviewedAt: normalizeString(
-      value.reviewedAt || value.createdAt,
-    ),
-    status: normalizeString(value.status),
+    productBlueprintId:
+      normalizeString(
+        value.productBlueprintId,
+      ),
+    avatarId:
+      normalizeString(
+        value.avatarId,
+      ),
+    avatarName:
+      normalizeString(
+        value.avatarName,
+      ),
+    avatarIcon:
+      normalizeString(
+        value.avatarIcon,
+      ),
+    rating:
+      toFiniteNumber(
+        value.rating,
+      ),
+    title:
+      normalizeString(
+        value.title,
+      ),
+    body:
+      normalizeString(
+        value.body,
+      ),
+    helpfulVotes:
+      toFiniteNumber(
+        value.helpfulVotes,
+      ),
+    totalVotes:
+      toFiniteNumber(
+        value.totalVotes,
+      ),
+    reviewedAt:
+      normalizeString(
+        value.reviewedAt ||
+          value.createdAt,
+      ),
+    status:
+      normalizeString(
+        value.status,
+      ),
   };
 }
 
@@ -459,38 +574,49 @@ function normalizeMarketProductBlueprintReviewsResponse(
   response: MarketProductBlueprintReviewsResponse,
   fallbackPage: number,
   fallbackPerPage: number,
-): MarketProductBlueprintReviewPage {
+): ProductBlueprintReviewPage {
   const root: Record<string, unknown> =
-    isRecord(response) && !Array.isArray(response)
+    isRecord(response) &&
+    !Array.isArray(response)
       ? response
       : {};
 
-  const rawData = root["data"];
+  const rawData =
+    root["data"];
 
-  const data: Record<string, unknown> | null =
-    isRecord(rawData) && !Array.isArray(rawData)
-      ? rawData
-      : null;
+  const data:
+    Record<string, unknown> | null =
+      isRecord(rawData) &&
+      !Array.isArray(rawData)
+        ? rawData
+        : null;
 
-  const source: Record<string, unknown> =
-    data ?? root;
+  const source:
+    Record<string, unknown> =
+      data ?? root;
 
-  const rawItems: unknown[] = Array.isArray(
-    source["items"],
-  )
-    ? source["items"]
-    : Array.isArray(source["reviews"])
-      ? source["reviews"]
-      : [];
+  const rawItems: unknown[] =
+    Array.isArray(
+      source["items"],
+    )
+      ? source["items"]
+      : Array.isArray(
+            source["reviews"],
+          )
+        ? source["reviews"]
+        : [];
 
   const items = rawItems
-    .map((item: unknown) => normalizeReview(item))
+    .map(
+      (item: unknown) =>
+        normalizeReview(item),
+    )
     .filter(
       (
         item:
-          | MarketProductBlueprintReview
+          | ProductBlueprintReview
           | null,
-      ): item is MarketProductBlueprintReview =>
+      ): item is ProductBlueprintReview =>
         item !== null,
     );
 
@@ -500,43 +626,61 @@ function normalizeMarketProductBlueprintReviewsResponse(
       toFiniteNumber(
         source["page"],
         fallbackPage,
-      ) || fallbackPage,
+      ) ||
+      fallbackPage,
     perPage:
       toFiniteNumber(
         source["perPage"],
         fallbackPerPage,
-      ) || fallbackPerPage,
-    total: toFiniteNumber(
-      source["total"] ?? source["totalCount"],
-      items.length,
-    ),
-    hasNext: toBoolean(source["hasNext"]),
+      ) ||
+      fallbackPerPage,
+    total:
+      toFiniteNumber(
+        source["total"] ??
+          source["totalCount"],
+        items.length,
+      ),
+    hasNext:
+      toBoolean(
+        source["hasNext"],
+      ),
   };
 }
 
 export async function fetchMarketResales(
   params: FetchMarketResalesParams = {},
 ): Promise<MarketResaleListResponse> {
-  const apiBaseUrl = normalizeApiBaseUrl();
+  const apiBaseUrl =
+    normalizeApiBaseUrl();
 
   if (!apiBaseUrl) {
-    throw new Error("API Base URLが未設定です。");
+    throw new Error(
+      "API Base URLが未設定です。",
+    );
   }
 
   const searchParams =
-    buildMarketResaleSearchParams(params);
-  const query = searchParams.toString();
+    buildMarketResaleSearchParams(
+      params,
+    );
+
+  const query =
+    searchParams.toString();
+
   const url =
     `${apiBaseUrl}${MARKET_RESALES_PATH}` +
     `${query ? `?${query}` : ""}`;
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
+  const response = await fetch(
+    url,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      credentials: "include",
     },
-    credentials: "include",
-  });
+  );
 
   return readJsonResponse<MarketResaleListResponse>(
     response,
@@ -547,15 +691,22 @@ export async function fetchMarketResales(
 export async function fetchMarketResaleById(
   resaleId: string,
 ): Promise<MarketResaleListing> {
-  const apiBaseUrl = normalizeApiBaseUrl();
-  const id = resaleId.trim();
+  const apiBaseUrl =
+    normalizeApiBaseUrl();
+
+  const id =
+    resaleId.trim();
 
   if (!apiBaseUrl) {
-    throw new Error("API Base URLが未設定です。");
+    throw new Error(
+      "API Base URLが未設定です。",
+    );
   }
 
   if (!id) {
-    throw new Error("マーケット出品IDが未指定です。");
+    throw new Error(
+      "マーケット出品IDが未指定です。",
+    );
   }
 
   const response = await fetch(
@@ -583,15 +734,22 @@ export async function fetchMarketResaleById(
 export async function fetchMarketResaleConditionImages(
   resaleId: string,
 ): Promise<MarketResaleConditionImage[]> {
-  const apiBaseUrl = normalizeApiBaseUrl();
-  const id = resaleId.trim();
+  const apiBaseUrl =
+    normalizeApiBaseUrl();
+
+  const id =
+    resaleId.trim();
 
   if (!apiBaseUrl) {
-    throw new Error("API Base URLが未設定です。");
+    throw new Error(
+      "API Base URLが未設定です。",
+    );
   }
 
   if (!id) {
-    throw new Error("マーケット出品IDが未指定です。");
+    throw new Error(
+      "マーケット出品IDが未指定です。",
+    );
   }
 
   const response = await fetch(
@@ -624,13 +782,16 @@ export async function fetchMarketProductBlueprintReviews(
     page?: number;
     perPage?: number;
   },
-): Promise<MarketProductBlueprintReviewPage> {
-  const apiBaseUrl = normalizeApiBaseUrl();
+): Promise<ProductBlueprintReviewPage> {
+  const apiBaseUrl =
+    normalizeApiBaseUrl();
+
   const productBlueprintId =
     args.productBlueprintId.trim();
 
   const page =
-    isFiniteNumber(args.page) && args.page > 0
+    isFiniteNumber(args.page) &&
+    args.page > 0
       ? args.page
       : 1;
 
@@ -641,11 +802,15 @@ export async function fetchMarketProductBlueprintReviews(
       : 20;
 
   if (!apiBaseUrl) {
-    throw new Error("API Base URLが未設定です。");
+    throw new Error(
+      "API Base URLが未設定です。",
+    );
   }
 
   if (!productBlueprintId) {
-    throw new Error("商品IDが未指定です。");
+    throw new Error(
+      "商品IDが未指定です。",
+    );
   }
 
   const url = new URL(
@@ -654,16 +819,26 @@ export async function fetchMarketProductBlueprintReviews(
     )}/reviews`,
   );
 
-  url.searchParams.set("page", String(page));
-  url.searchParams.set("perPage", String(perPage));
+  url.searchParams.set(
+    "page",
+    String(page),
+  );
 
-  const response = await fetch(url.toString(), {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
+  url.searchParams.set(
+    "perPage",
+    String(perPage),
+  );
+
+  const response = await fetch(
+    url.toString(),
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      credentials: "include",
     },
-    credentials: "include",
-  });
+  );
 
   const result =
     await readJsonResponse<MarketProductBlueprintReviewsResponse>(

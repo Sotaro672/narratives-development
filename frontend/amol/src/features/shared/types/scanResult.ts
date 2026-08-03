@@ -1,5 +1,13 @@
 // frontend/amol/src/features/shared/types/scanResult.ts
 
+import type {
+  ProductBlueprintCategoryFields,
+} from "./category";
+
+import type {
+  ProductBlueprintReviewPage,
+} from "./review";
+
 export type MallOwnerInfo = {
   brandId: string;
   avatarId: string;
@@ -57,9 +65,6 @@ export type ProductBlueprintCategorySnapshot = {
   Kind?: ProductCategoryKind;
   Path?: string[];
 };
-
-export type ProductBlueprintCategoryFields =
-  Record<string, unknown>;
 
 export type ProductBlueprintPatch = {
   productName?: string;
@@ -240,28 +245,6 @@ export type MallScanTransferResponse = {
   toDisplayName: string;
 };
 
-export type CatalogReview = {
-  id: string;
-  productBlueprintId: string;
-  avatarId: string;
-  avatarName: string;
-  avatarIcon: string;
-  rating: number;
-  title: string;
-  body: string;
-  helpfulVotes: number;
-  totalVotes: number;
-  reviewedAt: string;
-};
-
-export type CatalogReviewPage = {
-  items: CatalogReview[];
-  page: number;
-  perPage: number;
-  total: number;
-  hasNext: boolean;
-};
-
 export type TokenContentFile = {
   id: string;
   name: string;
@@ -291,7 +274,7 @@ export type ScanResultPageState = {
   transferMatched: boolean;
 
   reviews:
-    CatalogReviewPage | null;
+    ProductBlueprintReviewPage | null;
 
   reviewsError:
     string | null;

@@ -1,24 +1,15 @@
 // frontend/amol/src/features/payment/components/PaymentItemsCard.tsx
 
-import {
-  getModelPrice,
-  getModelVariation,
-} from "../../cart/utils/cartUtils";
-import type {
-  CanonicalCartDisplayItem,
-} from "../../shared/types/payment";
-import {
-  formatPrice,
-} from "../../../components/utils/price";
+import { formatPrice } from "../../../components/utils/price";
+import { getModelPrice, getModelVariation } from "../../cart/utils/cartUtils";
+import type { CartDisplayItem } from "../../shared/types/cart";
 
 type PaymentItemsCardProps = {
   amount: number;
-  cartItems: CanonicalCartDisplayItem[];
+  cartItems: CartDisplayItem[];
 };
 
-function getItemTitle(
-  item: CanonicalCartDisplayItem,
-): string {
+function getItemTitle(item: CartDisplayItem): string {
   const catalog = item.catalog;
 
   return (
@@ -30,73 +21,41 @@ function getItemTitle(
   );
 }
 
-function getItemPrice(
-  item: CanonicalCartDisplayItem,
-): number | null {
+function getItemPrice(item: CartDisplayItem): number | null {
   if (typeof item.price === "number") {
     return item.price;
   }
 
-  return getModelPrice(
-    item.catalog,
-    item.modelId ?? "",
-  );
+  return getModelPrice(item.catalog, item.modelId ?? "");
 }
 
-function getAlcoholModelLabel(
-  item: CanonicalCartDisplayItem,
-): string {
+function getAlcoholModelLabel(item: CartDisplayItem): string {
   if (item.modelLabel) {
     return item.modelLabel;
   }
 
   const volumeLabel =
-    typeof item.volumeValue === "number" &&
-    item.volumeUnit
+    typeof item.volumeValue === "number" && item.volumeUnit
       ? `${item.volumeValue}${item.volumeUnit}`
       : "";
 
+  return [item.modelNumber, volumeLabel].filter(Boolean).join(" / ");
+}
+
+function getApparelModelLabel(item: CartDisplayItem): string {
+  const model = getModelVariation(item.catalog, item.modelId ?? "");
+  const colorName = item.colorName ?? model?.colorName ?? "";
+  const size = item.size ?? model?.size ?? "";
+
   return [
-    item.modelNumber,
-    volumeLabel,
+    colorName ? `カラー: ${colorName}` : "",
+    size ? `サイズ: ${size}` : "",
   ]
     .filter(Boolean)
     .join(" / ");
 }
 
-function getApparelModelLabel(
-  item: CanonicalCartDisplayItem,
-): string {
-  const model = getModelVariation(
-    item.catalog,
-    item.modelId ?? "",
-  );
-
-  const colorName =
-    item.colorName ??
-    model?.colorName ??
-    "";
-
-  const size =
-    item.size ??
-    model?.size ??
-    "";
-
-  return [
-    colorName
-      ? `カラー: ${colorName}`
-      : "",
-    size
-      ? `サイズ: ${size}`
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" / ");
-}
-
-function getItemModelLabel(
-  item: CanonicalCartDisplayItem,
-): string {
+function getItemModelLabel(item: CartDisplayItem): string {
   if (item.modelKind === "alcohol") {
     return getAlcoholModelLabel(item);
   }
@@ -110,41 +69,23 @@ export function PaymentItemsCard({
 }: PaymentItemsCardProps) {
   return (
     <section className="payment-page__card">
-      <h2 className="payment-page__section-title">
-        注文内容
-      </h2>
+      <h2 className="payment-page__section-title">注文内容</h2>
 
       {cartItems.length > 0 ? (
         <ul className="payment-page__items">
           {cartItems.map((item) => {
-            const price =
-              getItemPrice(item);
-
-            const lineAmount =
-              price === null
-                ? null
-                : price * item.qty;
-
-            const title =
-              getItemTitle(item);
-
-            const modelLabel =
-              getItemModelLabel(item);
+            const price = getItemPrice(item);
+            const lineAmount = price === null ? null : price * item.qty;
+            const title = getItemTitle(item);
+            const modelLabel = getItemModelLabel(item);
 
             return (
-              <li
-                className="payment-page__item"
-                key={item.itemKey}
-              >
+              <li className="payment-page__item" key={item.itemKey}>
                 <div>
-                  <p className="payment-page__item-title">
-                    {title}
-                  </p>
+                  <p className="payment-page__item-title">{title}</p>
 
                   {modelLabel ? (
-                    <p className="payment-page__item-meta">
-                      {modelLabel}
-                    </p>
+                    <p className="payment-page__item-meta">{modelLabel}</p>
                   ) : null}
 
                   <p className="payment-page__item-meta">
@@ -153,9 +94,7 @@ export function PaymentItemsCard({
                 </div>
 
                 <p className="payment-page__item-price">
-                  {formatPrice(
-                    lineAmount,
-                  )}
+                  {formatPrice(lineAmount)}
                 </p>
               </li>
             );
@@ -169,10 +108,7 @@ export function PaymentItemsCard({
 
       <div className="payment-page__total">
         <span>合計</span>
-
-        <strong>
-          {formatPrice(amount)}
-        </strong>
+        <strong>{formatPrice(amount)}</strong>
       </div>
     </section>
   );

@@ -6,19 +6,46 @@ import {
   useState,
   type TouchEvent,
 } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import {
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 
-import { addSelectedCatalogItemToCart } from "../../application/catalogCartUsecase";
-import { loadCatalogPage } from "../../application/catalogPageLoader";
-import { createCatalogPageViewModel } from "../../application/catalogPageViewModelFactory";
-import { resolveCatalogSwipeDirection } from "../../application/catalogSwipeUsecase";
-import { SWIPE_THRESHOLD_PX } from "../../constants";
-import { getApiBaseUrl } from "../../../../lib/apiBaseUrl";
+import {
+  addSelectedCatalogItemToCart,
+} from "../../application/catalogCartUsecase";
+
+import {
+  loadCatalogPage,
+} from "../../application/catalogPageLoader";
+
+import {
+  createCatalogPageViewModel,
+} from "../../application/catalogPageViewModelFactory";
+
+import {
+  resolveCatalogSwipeDirection,
+} from "../../application/catalogSwipeUsecase";
+
+import {
+  SWIPE_THRESHOLD_PX,
+} from "../../constants";
+
+import {
+  getApiBaseUrl,
+} from "../../../../lib/apiBaseUrl";
+
 import type {
-  CatalogProductBlueprintReviewPage,
   CatalogResponse,
 } from "../../../shared/types/catalog";
-import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
+
+import type {
+  ProductBlueprintReviewPage,
+} from "../../../shared/types/review";
+
+import {
+  useMobilePortrait,
+} from "../../../../components/hooks/useMobilePortrait";
 
 export function useCatalogPage() {
   const navigate = useNavigate();
@@ -28,44 +55,67 @@ export function useCatalogPage() {
     useState<CatalogResponse | null>(null);
 
   const [reviews, setReviews] =
-    useState<CatalogProductBlueprintReviewPage | null>(null);
+    useState<ProductBlueprintReviewPage | null>(
+      null,
+    );
 
-  const [isLoadingCatalog, setIsLoadingCatalog] =
-    useState(true);
+  const [
+    isLoadingCatalog,
+    setIsLoadingCatalog,
+  ] = useState(true);
 
-  const [isAddingToCart, setIsAddingToCart] =
-    useState(false);
+  const [
+    isAddingToCart,
+    setIsAddingToCart,
+  ] = useState(false);
 
-  const [errorMessage, setErrorMessage] =
-    useState("");
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState("");
 
-  const [reviewErrorMessage, setReviewErrorMessage] =
-    useState("");
+  const [
+    reviewErrorMessage,
+    setReviewErrorMessage,
+  ] = useState("");
 
-  const [cartErrorMessage, setCartErrorMessage] =
-    useState("");
+  const [
+    cartErrorMessage,
+    setCartErrorMessage,
+  ] = useState("");
 
-  const [activeImageIndex, setActiveImageIndex] =
-    useState(0);
+  const [
+    activeImageIndex,
+    setActiveImageIndex,
+  ] = useState(0);
 
-  const [touchStartX, setTouchStartX] =
-    useState<number | null>(null);
+  const [
+    touchStartX,
+    setTouchStartX,
+  ] = useState<number | null>(null);
 
-  const [touchStartY, setTouchStartY] =
-    useState<number | null>(null);
+  const [
+    touchStartY,
+    setTouchStartY,
+  ] = useState<number | null>(null);
 
-  const [selectedColorKey, setSelectedColorKey] =
-    useState("");
+  const [
+    selectedColorKey,
+    setSelectedColorKey,
+  ] = useState("");
 
-  const [selectedSize, setSelectedSize] =
-    useState("");
+  const [
+    selectedSize,
+    setSelectedSize,
+  ] = useState("");
 
   const apiBaseUrl = useMemo(
     () => getApiBaseUrl(),
     [],
   );
 
-  const isMobilePortrait = useMobilePortrait();
+  const isMobilePortrait =
+    useMobilePortrait();
 
   const viewModel = useMemo(() => {
     return createCatalogPageViewModel({
@@ -116,10 +166,11 @@ export function useCatalogPage() {
       setTouchStartY(null);
 
       try {
-        const result = await loadCatalogPage({
-          apiBaseUrl,
-          listId,
-        });
+        const result =
+          await loadCatalogPage({
+            apiBaseUrl,
+            listId,
+          });
 
         if (cancelled) {
           return;
@@ -300,7 +351,8 @@ export function useCatalogPage() {
         startY: touchStartY,
         endX: touch.clientX,
         endY: touch.clientY,
-        thresholdPx: SWIPE_THRESHOLD_PX,
+        thresholdPx:
+          SWIPE_THRESHOLD_PX,
       });
 
     if (direction === "next") {
@@ -330,7 +382,10 @@ export function useCatalogPage() {
 
   function handleBrandClick() {
     const brandId =
-      catalog?.productBlueprint.brandId?.trim();
+      catalog
+        ?.productBlueprint
+        .brandId
+        ?.trim();
 
     if (!brandId) {
       return;

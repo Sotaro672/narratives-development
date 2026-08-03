@@ -1,6 +1,8 @@
-//frontend\amol\src\features\payment\utils\format.ts
+// frontend/amol/src/features/payment/utils/format.ts
+
 import type { UserProfile } from "../../shipping-address/types";
-import type { CanonicalShippingAddress, PaymentMethod } from "../../shared/types/payment";
+import type { CanonicalShippingAddress } from "../../shared/types/payment";
+import type { CardPaymentMethod } from "../../shared/types/paymentMethods";
 
 export function formatCardBrand(brand: string): string {
   if (!brand) {
@@ -25,15 +27,21 @@ export function formatCardBrand(brand: string): string {
   }
 }
 
-export function formatCardholderName(method: PaymentMethod): string {
+export function formatCardholderName(
+  method: CardPaymentMethod,
+): string {
   return method.cardholderName.trim() || "-";
 }
 
-export function formatCardLast4(method: PaymentMethod): string {
+export function formatCardLast4(
+  method: CardPaymentMethod,
+): string {
   return method.last4 ? `•••• ${method.last4}` : "-";
 }
 
-export function formatCardExpiry(method: PaymentMethod): string {
+export function formatCardExpiry(
+  method: CardPaymentMethod,
+): string {
   if (!method.expMonth || !method.expYear) {
     return "-";
   }
@@ -41,18 +49,22 @@ export function formatCardExpiry(method: PaymentMethod): string {
   return `${String(method.expMonth).padStart(2, "0")}/${method.expYear}`;
 }
 
-export function getUserFullName(userProfile: UserProfile | null): string {
+export function getUserFullName(
+  userProfile: UserProfile | null,
+): string {
   if (!userProfile) {
     return "";
   }
 
   const lastName =
-    "last_name" in userProfile && typeof userProfile.last_name === "string"
+    "last_name" in userProfile &&
+    typeof userProfile.last_name === "string"
       ? userProfile.last_name
       : "";
 
   const firstName =
-    "first_name" in userProfile && typeof userProfile.first_name === "string"
+    "first_name" in userProfile &&
+    typeof userProfile.first_name === "string"
       ? userProfile.first_name
       : "";
 
@@ -62,9 +74,14 @@ export function getUserFullName(userProfile: UserProfile | null): string {
 export function getShippingAddressLabel(
   address: CanonicalShippingAddress,
 ): string {
-  const zipLine = address.zipCode ? `〒${address.zipCode}` : "";
+  const zipLine = address.zipCode
+    ? `〒${address.zipCode}`
+    : "";
+
   const addressLine =
     `${address.state}${address.city}${address.street}${address.street2}`.trim();
 
-  return [zipLine, addressLine].filter(Boolean).join("\n");
+  return [zipLine, addressLine]
+    .filter(Boolean)
+    .join("\n");
 }

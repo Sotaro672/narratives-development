@@ -1,17 +1,30 @@
 // frontend/amol/src/features/catalog/presentation/components/ReviewSection.tsx
 
-import { formatDateTime } from "../../../../components/utils/date";
+import {
+  formatDateTime,
+} from "../../../../components/utils/date";
+
 import type {
-  CatalogProductBlueprintReview,
   CatalogProductReviewSummary,
 } from "../../../shared/types/catalog";
-import { renderRatingStars } from "../../utils/format";
+
+import type {
+  ProductBlueprintReview,
+} from "../../../shared/types/review";
+
+import {
+  renderRatingStars,
+} from "../../utils/format";
 
 type ReviewSectionProps = {
-  reviewSummary: CatalogProductReviewSummary | undefined;
-  reviewItems: CatalogProductBlueprintReview[];
+  reviewSummary:
+    CatalogProductReviewSummary | undefined;
+  reviewItems:
+    ProductBlueprintReview[];
   reviewErrorMessage: string;
-  onAvatarClick?: (avatarId: string) => void;
+  onAvatarClick?: (
+    avatarId: string,
+  ) => void;
 };
 
 export default function ReviewSection({
@@ -22,34 +35,49 @@ export default function ReviewSection({
 }: ReviewSectionProps) {
   return (
     <section className="catalog-page-card">
-      <h2 className="catalog-page-card-title">レビュー</h2>
+      <h2 className="catalog-page-card-title">
+        レビュー
+      </h2>
 
       {reviewSummary ? (
         <div className="catalog-page-review-summary">
-          <strong>{reviewSummary.averageRating.toFixed(1)}</strong>
-          <span>{reviewSummary.totalCount}件</span>
+          <strong>
+            {reviewSummary.averageRating.toFixed(
+              1,
+            )}
+          </strong>
+          <span>
+            {reviewSummary.totalCount}件
+          </span>
         </div>
       ) : null}
 
       {reviewErrorMessage ? (
-        <p className="catalog-page-error" role="alert">
+        <p
+          className="catalog-page-error"
+          role="alert"
+        >
           {reviewErrorMessage}
         </p>
       ) : null}
 
-      {!reviewErrorMessage && reviewItems.length === 0 ? (
+      {!reviewErrorMessage &&
+      reviewItems.length === 0 ? (
         <p className="catalog-page-model-help">
           まだレビューはありません。
         </p>
       ) : null}
 
-      {!reviewErrorMessage && reviewItems.length > 0 ? (
+      {!reviewErrorMessage &&
+      reviewItems.length > 0 ? (
         <div className="catalog-page-review-list">
           {reviewItems.map((review) => (
             <ReviewItem
               key={review.id}
               review={review}
-              onAvatarClick={onAvatarClick}
+              onAvatarClick={
+                onAvatarClick
+              }
             />
           ))}
         </div>
@@ -62,11 +90,20 @@ function ReviewItem({
   review,
   onAvatarClick,
 }: {
-  review: CatalogProductBlueprintReview;
-  onAvatarClick?: (avatarId: string) => void;
+  review: ProductBlueprintReview;
+  onAvatarClick?: (
+    avatarId: string,
+  ) => void;
 }) {
-  const reviewedAt = formatDateTime(review.reviewedAt);
-  const avatarName = review.avatarName || "匿名ユーザー";
+  const reviewedAt =
+    formatDateTime(
+      review.reviewedAt,
+    );
+
+  const avatarName =
+    review.avatarName ||
+    "匿名ユーザー";
+
   const canOpenAvatar = Boolean(
     review.avatarId &&
     onAvatarClick,
@@ -92,7 +129,9 @@ function ReviewItem({
         </p>
 
         <p className="catalog-page-review-meta">
-          {renderRatingStars(review.rating)}
+          {renderRatingStars(
+            review.rating,
+          )}
           {reviewedAt !== "-"
             ? `・${reviewedAt}`
             : ""}
@@ -109,7 +148,9 @@ function ReviewItem({
             type="button"
             className="catalog-page-review-avatar-button"
             onClick={() =>
-              onAvatarClick?.(review.avatarId)
+              onAvatarClick?.(
+                review.avatarId,
+              )
             }
           >
             {avatarContent}
@@ -128,7 +169,9 @@ function ReviewItem({
       ) : null}
 
       <p className="catalog-page-review-votes">
-        参考になった: {review.helpfulVotes} / {review.totalVotes}
+        参考になった:{" "}
+        {review.helpfulVotes} /{" "}
+        {review.totalVotes}
       </p>
     </article>
   );

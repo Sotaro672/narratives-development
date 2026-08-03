@@ -4,20 +4,29 @@ import {
   readJsonDataResponse,
   readJsonResponse,
 } from "../../../components/utils/apiResponse";
-import { isRecord } from "../../../components/utils/typeGuards";
-import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
+import {
+  isRecord,
+} from "../../../components/utils/typeGuards";
+import {
+  getApiBaseUrl,
+} from "../../../lib/apiBaseUrl";
 import {
   getOptionalAuthHeaders,
 } from "../../../lib/authHeaders";
 
-import { getMyAvatar } from "../../avatar/api/avatarApi";
+import {
+  getMyAvatar,
+} from "../../avatar/api/avatarApi";
 import {
   fetchMeWalletRaw,
   resolveWalletTokenRaw,
 } from "../../shared/api";
 
 import type {
-  CatalogReviewPage,
+  ProductBlueprintReviewPage,
+} from "../../shared/types/review";
+
+import type {
   MallOwnerInfo,
   MallScanTransferResponse,
   PreviewState,
@@ -293,7 +302,7 @@ export async function fetchReviewsByProductBlueprintId(
     page: number;
     perPage: number;
   },
-): Promise<CatalogReviewPage> {
+): Promise<ProductBlueprintReviewPage> {
   const productBlueprintId =
     args.productBlueprintId.trim();
 

@@ -4,12 +4,15 @@ import {
   DEFAULT_REVIEW_PAGE,
   DEFAULT_REVIEW_PER_PAGE,
 } from "../constants";
-import type { CatalogProductBlueprintReviewPage } from "../../shared/types/catalog";
+
+import type {
+  ProductBlueprintReviewPage,
+} from "../../shared/types/review";
 
 export async function fetchCatalogReviews(
   apiBaseUrl: string,
   productBlueprintId: string,
-): Promise<CatalogProductBlueprintReviewPage> {
+): Promise<ProductBlueprintReviewPage> {
   const searchParams = new URLSearchParams({
     page: String(DEFAULT_REVIEW_PAGE),
     perPage: String(DEFAULT_REVIEW_PER_PAGE),
@@ -28,30 +31,45 @@ export async function fetchCatalogReviews(
     },
   );
 
-  const contentType = response.headers.get("content-type") ?? "";
+  const contentType =
+    response.headers.get("content-type") ?? "";
 
   if (!contentType.includes("application/json")) {
-    throw new Error("レビュー一覧APIがJSON以外を返しました。");
+    throw new Error(
+      "レビュー一覧APIがJSON以外を返しました。",
+    );
   }
 
   const data =
-    (await response.json()) as Partial<CatalogProductBlueprintReviewPage>;
+    (await response.json()) as Partial<ProductBlueprintReviewPage>;
 
   if (!response.ok) {
-    throw new Error("レビュー一覧の取得に失敗しました。");
+    throw new Error(
+      "レビュー一覧の取得に失敗しました。",
+    );
   }
 
   return {
-    items: Array.isArray(data.items) ? data.items : [],
+    items:
+      Array.isArray(data.items)
+        ? data.items
+        : [],
     page:
-      typeof data.page === "number" && data.page > 0
+      typeof data.page === "number" &&
+      data.page > 0
         ? data.page
         : DEFAULT_REVIEW_PAGE,
     perPage:
-      typeof data.perPage === "number" && data.perPage > 0
+      typeof data.perPage === "number" &&
+      data.perPage > 0
         ? data.perPage
         : DEFAULT_REVIEW_PER_PAGE,
-    total: typeof data.total === "number" && data.total > 0 ? data.total : 0,
-    hasNext: Boolean(data.hasNext),
+    total:
+      typeof data.total === "number" &&
+      data.total > 0
+        ? data.total
+        : 0,
+    hasNext:
+      Boolean(data.hasNext),
   };
 }

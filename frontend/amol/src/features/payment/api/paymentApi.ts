@@ -1,14 +1,17 @@
 // frontend/amol/src/features/payment/api/paymentApi.ts
+
 import type {
   CreateOrderRequest,
   CreatePaymentRequest,
   CreatedOrder,
   CreatedPayment,
   PaymentContext,
-  PaymentMethod,
+} from "../../shared/types/payment";
+import type {
+  CardPaymentMethod,
   PaymentMethodDefaultResponse,
   PaymentMethodListResponse,
-} from "../../shared/types/payment";
+} from "../../shared/types/paymentMethods";
 import {
   API_BASE_URL,
   getAuthHeaders,
@@ -30,8 +33,8 @@ export async function fetchPaymentContext(): Promise<PaymentContext> {
 }
 
 export async function fetchPaymentMethods(): Promise<{
-  methods: PaymentMethod[];
-  defaultMethod: PaymentMethod | null;
+  methods: CardPaymentMethod[];
+  defaultMethod: CardPaymentMethod | null;
 }> {
   const headers = await getAuthHeaders();
 

@@ -3,11 +3,10 @@
 import { buildApiUrl } from "../../../lib/apiBaseUrl";
 
 import type {
+  AvatarMutationResponse,
   CreateAvatarPayload,
-  CreateAvatarResponse,
   MyAvatarResponse,
   UpdateAvatarPayload,
-  UpdateAvatarResponse,
 } from "../../shared/types/avatar";
 
 type AuthedRequestParams = {
@@ -15,10 +14,9 @@ type AuthedRequestParams = {
   idToken: string;
 };
 
-type GetPublicAvatarParams =
-  AuthedRequestParams & {
-    avatarId: string;
-  };
+type GetPublicAvatarParams = AuthedRequestParams & {
+  avatarId: string;
+};
 
 async function readApiError(
   response: Response,
@@ -26,11 +24,7 @@ async function readApiError(
   const contentType =
     response.headers.get("content-type") || "";
 
-  if (
-    contentType.includes(
-      "application/json",
-    )
-  ) {
+  if (contentType.includes("application/json")) {
     const body = (await response.json().catch(
       () => null,
     )) as
@@ -173,7 +167,7 @@ export async function createAvatar({
   payload,
 }: AuthedRequestParams & {
   payload: CreateAvatarPayload;
-}): Promise<CreateAvatarResponse> {
+}): Promise<AvatarMutationResponse> {
   const response = await fetch(
     buildApiUrl(
       backendUrl,
@@ -199,7 +193,7 @@ export async function createAvatar({
   const body: unknown =
     await response.json();
 
-  return unwrapData<CreateAvatarResponse>(
+  return unwrapData<AvatarMutationResponse>(
     body,
   );
 }
@@ -212,7 +206,7 @@ export async function updateAvatar({
 }: AuthedRequestParams & {
   avatarId: string;
   payload: UpdateAvatarPayload;
-}): Promise<UpdateAvatarResponse> {
+}): Promise<AvatarMutationResponse> {
   void avatarId;
 
   const response = await fetch(
@@ -242,7 +236,7 @@ export async function updateAvatar({
       .json()
       .catch(() => ({ avatarId }));
 
-  return unwrapData<UpdateAvatarResponse>(
+  return unwrapData<AvatarMutationResponse>(
     body,
   );
 }

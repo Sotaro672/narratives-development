@@ -39,12 +39,14 @@ import {
   getOptionalAuthHeaders,
 } from "../../../../lib/authHeaders";
 import type {
-  CatalogReviewPage,
   MallOwnerInfo,
   MallScanTransferResponse,
   PreviewState,
   ScanResultPageState,
 } from "../../../shared/types/scanResult";
+import type {
+  ProductBlueprintReviewPage,
+} from "../../../shared/types/review";
 
 function safeDecodeURIComponent(value: string): string {
   try {
@@ -91,7 +93,7 @@ export function useScanResultPage() {
   const [transferResult, setTransferResult] =
     useState<MallScanTransferResponse | null>(null);
   const [reviews, setReviews] =
-    useState<CatalogReviewPage | null>(null);
+    useState<ProductBlueprintReviewPage | null>(null);
   const [reviewsError, setReviewsError] =
     useState<string | null>(null);
   const [reviewPage, setReviewPage] =

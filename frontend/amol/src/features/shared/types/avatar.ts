@@ -1,4 +1,4 @@
-// frontend\amol\src\features\shared\types\avatar.ts
+// frontend/amol/src/features/shared/types/avatar.ts
 
 export type AvatarFormMode = "create" | "edit";
 
@@ -23,16 +23,7 @@ export type AvatarUpdateResult = {
   avatarId?: string;
 };
 
-export type CreateAvatarResponse = {
-  avatarId: string;
-  userId?: string;
-  avatarName?: string;
-  avatarIcon?: string | null;
-  profile?: string | null;
-  externalLink?: string | null;
-};
-
-export type UpdateAvatarResponse = {
+export type AvatarMutationResponse = {
   avatarId: string;
   userId?: string;
   avatarName?: string;
