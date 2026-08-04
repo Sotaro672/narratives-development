@@ -7,7 +7,7 @@ import {
 import type {
   MarketResaleConditionImage,
   MarketResaleConditionImagesResponse,
-} from "../types/marketResaleImage";
+} from "../../shared/types/marketResaleImage";
 
 function normalizeString(
   value: unknown,

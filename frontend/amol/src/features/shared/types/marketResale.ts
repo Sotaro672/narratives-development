@@ -1,12 +1,12 @@
 //frontend\amol\src\features\market\types\marketResale.ts
 import type {
   PageResult,
-} from "../../shared/pageResult";
+} from "../pageResult";
 import type {
   ResaleCondition,
   ResaleListingBase,
   ResaleStatus,
-} from "../../shared/types/resale";
+} from "./resale";
 import type {
   MarketResaleConditionImage,
 } from "./marketResaleImage";

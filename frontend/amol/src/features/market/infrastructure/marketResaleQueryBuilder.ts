@@ -6,7 +6,7 @@ import {
 
 import type {
   FetchMarketResalesParams,
-} from "../types/marketResale";
+} from "../../shared/types/marketResale";
 
 function appendString(
   searchParams: URLSearchParams,

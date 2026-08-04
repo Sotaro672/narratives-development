@@ -16,7 +16,7 @@ import {
 import type {
   MarketResaleConditionImage,
   MarketResaleConditionImagesResponse,
-} from "../types/marketResaleImage";
+} from "../../shared/types/marketResaleImage";
 
 export async function fetchMarketResaleConditionImages(
   resaleId: string,

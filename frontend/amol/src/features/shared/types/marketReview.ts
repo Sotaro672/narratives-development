@@ -1,7 +1,7 @@
 //frontend\amol\src\features\market\types\marketReview.ts
 import type {
   ProductBlueprintReviewPage,
-} from "../../shared/types/review";
+} from "./review";
 
 export type MarketProductBlueprintReviewsResponse =
   | ProductBlueprintReviewPage

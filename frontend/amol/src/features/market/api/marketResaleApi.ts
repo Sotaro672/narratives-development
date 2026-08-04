@@ -18,7 +18,7 @@ import type {
   MarketResaleDetailResponse,
   MarketResaleListing,
   MarketResaleListResponse,
-} from "../types/marketResale";
+} from "../../shared/types/marketResale";
 
 export async function fetchMarketResales(
   params: FetchMarketResalesParams = {},

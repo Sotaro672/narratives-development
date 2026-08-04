@@ -17,10 +17,10 @@ import {
 } from "../features/market/api/marketResaleImageApi";
 import type {
   MarketResaleListing,
-} from "../features/market/types/marketResale";
+} from "../features/shared/types/marketResale";
 import type {
   MarketResaleConditionImage,
-} from "../features/market/types/marketResaleImage";
+} from "../features/shared/types/marketResaleImage";
 import type {
   ProductBlueprintReview,
   ProductBlueprintReviewPage,

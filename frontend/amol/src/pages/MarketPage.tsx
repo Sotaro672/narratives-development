@@ -12,7 +12,7 @@ import {
 } from "../features/market/api/marketResaleApi";
 import type {
   MarketResaleListing,
-} from "../features/market/types/marketResale";
+} from "../features/shared/types/marketResale";
 import {
   formatPrice,
 } from "../components/utils/price";

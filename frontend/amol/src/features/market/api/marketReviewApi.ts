@@ -23,7 +23,7 @@ import type {
 
 import type {
   MarketProductBlueprintReviewsResponse,
-} from "../types/marketReview";
+} from "../../shared/types/marketReview";
 
 export async function fetchMarketProductBlueprintReviews(
   args: {

@@ -12,7 +12,7 @@ import type {
 
 import type {
   MarketProductBlueprintReviewsResponse,
-} from "../types/marketReview";
+} from "../../shared/types/marketReview";
 
 function normalizeString(
   value: unknown,
