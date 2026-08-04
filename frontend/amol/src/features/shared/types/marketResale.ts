@@ -1,15 +1,12 @@
-//frontend\amol\src\features\market\types\marketResale.ts
+// frontend/amol/src/features/shared/types/marketResale.ts
+
 import type {
   PageResult,
 } from "../pageResult";
 import type {
   ResaleCondition,
   ResaleListingBase,
-  ResaleStatus,
 } from "./resale";
-import type {
-  MarketResaleConditionImage,
-} from "./marketResaleImage";
 
 export type MarketResaleListing =
   ResaleListingBase & {
@@ -17,8 +14,6 @@ export type MarketResaleListing =
     tokenIcon?: string;
     avatarName?: string;
     avatarIcon?: string;
-    images?: MarketResaleConditionImage[];
-    conditionImages?: MarketResaleConditionImage[];
     createdBy?: string;
     createdAt?: string;
     updatedBy?: string | null;
@@ -32,6 +27,13 @@ export type MarketResaleDetailResponse = {
   data: MarketResaleListing;
 };
 
+export type MarketResaleSortField =
+  | "createdAt"
+  | "price"
+  | "productName"
+  | "brandName"
+  | "tokenName";
+
 export type MarketResaleSortOrder =
   | "asc"
   | "desc";
@@ -40,28 +42,16 @@ export type FetchMarketResalesParams = {
   page?: number;
   perPage?: number;
   q?: string;
-  search?: string;
-  searchQuery?: string;
   ids?: string[];
   mintAddresses?: string[];
   tokenBlueprintIds?: string[];
   productIds?: string[];
   brandIds?: string[];
   productBlueprintIds?: string[];
-  avatarIds?: string[];
-  avatarId?: string;
-  viewerAvatarId?: string;
   viewerAvatarIds?: string[];
-  status?: ResaleStatus;
-  statuses?: ResaleStatus[];
-  condition?: ResaleCondition;
   conditions?: ResaleCondition[];
   minPrice?: number;
   maxPrice?: number;
-  sort?: string;
-  sortBy?: string;
-  orderBy?: string;
+  sort?: MarketResaleSortField;
   order?: MarketResaleSortOrder;
-  sortOrder?: MarketResaleSortOrder;
-  direction?: MarketResaleSortOrder;
 };

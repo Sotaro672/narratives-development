@@ -95,18 +95,6 @@ export function buildMarketResaleSearchParams(
     params.q,
   );
 
-  appendString(
-    searchParams,
-    "search",
-    params.search,
-  );
-
-  appendString(
-    searchParams,
-    "searchQuery",
-    params.searchQuery,
-  );
-
   appendStringList(
     searchParams,
     "ids",
@@ -145,44 +133,8 @@ export function buildMarketResaleSearchParams(
 
   appendStringList(
     searchParams,
-    "avatarIds",
-    params.avatarIds,
-  );
-
-  appendString(
-    searchParams,
-    "avatarId",
-    params.avatarId,
-  );
-
-  appendString(
-    searchParams,
-    "viewerAvatarId",
-    params.viewerAvatarId,
-  );
-
-  appendStringList(
-    searchParams,
     "viewerAvatarIds",
     params.viewerAvatarIds,
-  );
-
-  appendString(
-    searchParams,
-    "status",
-    params.status,
-  );
-
-  appendStringList(
-    searchParams,
-    "statuses",
-    params.statuses,
-  );
-
-  appendString(
-    searchParams,
-    "condition",
-    params.condition,
   );
 
   appendStringList(
@@ -211,32 +163,8 @@ export function buildMarketResaleSearchParams(
 
   appendString(
     searchParams,
-    "sortBy",
-    params.sortBy,
-  );
-
-  appendString(
-    searchParams,
-    "orderBy",
-    params.orderBy,
-  );
-
-  appendString(
-    searchParams,
     "order",
     params.order,
-  );
-
-  appendString(
-    searchParams,
-    "sortOrder",
-    params.sortOrder,
-  );
-
-  appendString(
-    searchParams,
-    "direction",
-    params.direction,
   );
 
   return searchParams;

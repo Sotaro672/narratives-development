@@ -8,14 +8,14 @@ import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import {
+  formatPrice,
+} from "../components/utils/price";
+import {
   fetchMarketResales,
 } from "../features/market/api/marketResaleApi";
 import type {
   MarketResaleListing,
 } from "../features/shared/types/marketResale";
-import {
-  formatPrice,
-} from "../components/utils/price";
 
 import "../styles/lists-page.css";
 
@@ -133,7 +133,7 @@ export default function MarketPage() {
           await fetchMarketResales({
             page,
             perPage,
-            sort: "updatedAt",
+            sort: "createdAt",
             order: "desc",
           });
 
