@@ -1,12 +1,8 @@
 // frontend/amol/src/features/inquiry/api/inquiryHttpClient.ts
 
 import {
-  getApiBaseUrl,
-} from "../../../lib/apiBaseUrl";
-
-import {
-  getFirebaseIdToken,
-} from "../../../lib/authToken";
+  requestJson,
+} from "../../../lib/http";
 
 export const INQUIRY_BASE_PATH =
   "/mall/me/inquiries";
@@ -31,28 +27,44 @@ export type ApiUnreadCountResponse = {
   error?: string;
 };
 
-type ApiErrorResponse = {
-  error?: string;
-};
+/**
+ * 既存のRequestInit.bodyを、
+ * 共通HTTPクライアントのjsonオプションへ変換します。
+ *
+ * inquiry APIではJSON本文のみを扱います。
+ */
+function parseJsonRequestBody(
+  body: BodyInit | null | undefined,
+): unknown {
+  if (
+    body === undefined ||
+    body === null
+  ) {
+    return undefined;
+  }
 
-function buildApiUrl(
-  path: string,
-): string {
-  const baseUrl = getApiBaseUrl();
+  if (typeof body !== "string") {
+    throw new Error(
+      "問い合わせAPIのリクエスト本文はJSON文字列で指定してください。",
+    );
+  }
 
-  return baseUrl
-    ? `${baseUrl}${path}`
-    : path;
-}
+  const normalizedBody =
+    body.trim();
 
-async function readApiJson<T>(
-  response: Response,
-): Promise<T> {
-  return (
-    await response
-      .json()
-      .catch(() => ({}))
-  ) as T;
+  if (!normalizedBody) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(
+      normalizedBody,
+    ) as unknown;
+  } catch {
+    throw new Error(
+      "問い合わせAPIのリクエスト本文が不正なJSONです。",
+    );
+  }
 }
 
 export function buildInquiryPath(
@@ -63,50 +75,42 @@ export function buildInquiryPath(
   )}`;
 }
 
+/**
+ * 認証が必要な問い合わせAPIを実行します。
+ *
+ * URL生成、Firebase認証、ヘッダー設定、
+ * JSON解析、HTTPエラー処理は共通HTTPクライアントへ委譲します。
+ */
 export async function fetchInquiryWithAuth<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const token =
-    await getFirebaseIdToken();
-
-  const headers =
-    new Headers(init?.headers);
-
-  headers.set(
-    "Authorization",
-    `Bearer ${token}`,
-  );
-
-  if (
-    init?.body &&
-    !headers.has("Content-Type")
-  ) {
-    headers.set(
-      "Content-Type",
-      "application/json",
-    );
-  }
-
-  const response = await fetch(
-    buildApiUrl(path),
-    {
-      ...init,
-      headers,
-    },
-  );
+  const {
+    body,
+    ...requestInit
+  } = init ?? {};
 
   const json =
-    await readApiJson<
-      T & ApiErrorResponse
-    >(response);
+    parseJsonRequestBody(body);
 
-  if (!response.ok) {
-    throw new Error(
-      json.error ||
-        "APIリクエストに失敗しました。",
-    );
-  }
+  return requestJson<T>(
+    path,
+    {
+      ...requestInit,
 
-  return json;
+      auth:
+        "required",
+
+      ...(json !== undefined
+        ? {
+            json,
+          }
+        : {}),
+
+      messages: {
+        requestErrorMessage:
+          "APIリクエストに失敗しました。",
+      },
+    },
+  );
 }

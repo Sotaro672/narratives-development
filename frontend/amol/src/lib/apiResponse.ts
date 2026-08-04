@@ -22,21 +22,26 @@ function isRecord(
 }
 
 /**
- * APIレスポンスの data ラッパーを展開します。
+ * APIレスポンスのdataラッパーを展開します。
  *
  * {
  *   data: {...}
  * }
  *
- * の場合は data を返し、それ以外は受け取った値をそのまま返します。
+ * の場合はdataを返し、それ以外は受け取った値をそのまま返します。
+ *
+ * dataがnullまたはundefinedの場合も、
+ * dataプロパティが存在すればその値を返します。
  */
 export function unwrapApiData<T>(
   value: unknown,
 ): T {
   if (
     isRecord(value) &&
-    value.data !== undefined &&
-    value.data !== null
+    Object.prototype.hasOwnProperty.call(
+      value,
+      "data",
+    )
   ) {
     return value.data as T;
   }
@@ -47,7 +52,7 @@ export function unwrapApiData<T>(
 /**
  * APIのエラーレスポンスから表示用メッセージを取得します。
  *
- * errorMessage、detail、message、error の順で確認します。
+ * errorMessage、detail、message、errorの順で確認します。
  */
 function extractApiErrorMessage(
   value: unknown,

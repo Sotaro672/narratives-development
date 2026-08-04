@@ -4,6 +4,10 @@ import {
   getFirebaseIdToken,
 } from "./authToken";
 
+import {
+  auth,
+} from "./firebase";
+
 export async function getAuthHeaders(): Promise<
   Record<string, string>
 > {
@@ -18,9 +22,9 @@ export async function getAuthHeaders(): Promise<
 export async function getOptionalAuthHeaders(): Promise<
   Record<string, string> | undefined
 > {
-  try {
-    return await getAuthHeaders();
-  } catch {
+  if (!auth.currentUser) {
     return undefined;
   }
+
+  return getAuthHeaders();
 }

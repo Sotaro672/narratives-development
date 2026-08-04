@@ -1,110 +1,130 @@
 // frontend/amol/src/features/resale/api/resaleHttpClient.ts
 
 import {
-  getApiBaseUrl,
-} from "../../../lib/apiBaseUrl";
-
-import {
-  getFirebaseIdToken,
-} from "../../../lib/authToken";
-
-type ApiErrorResponse = {
-  error?: string;
-};
-
-function buildApiUrl(
-  path: string,
-): string {
-  const baseUrl = getApiBaseUrl();
-
-  return baseUrl
-    ? `${baseUrl}${path}`
-    : path;
-}
-
-async function readApiJson<T>(
-  response: Response,
-): Promise<T> {
-  return (
-    await response
-      .json()
-      .catch(() => ({}))
-  ) as T;
-}
-
-export async function fetchResaleWithAuth<T>(
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
-  const token =
-    await getFirebaseIdToken();
-
-  const headers =
-    new Headers(init?.headers);
-
-  headers.set(
-    "Authorization",
-    `Bearer ${token}`,
-  );
-
-  if (
-    init?.body &&
-    !headers.has("Content-Type")
-  ) {
-    headers.set(
-      "Content-Type",
-      "application/json",
-    );
-  }
-
-  const response = await fetch(
-    buildApiUrl(path),
-    {
-      ...init,
-      headers,
-    },
-  );
-
-  const json =
-    await readApiJson<
-      T & ApiErrorResponse
-    >(response);
-
-  if (!response.ok) {
-    throw new Error(
-      json.error ||
-        "APIリクエストに失敗しました。",
-    );
-  }
-
-  return json;
-}
-
-export async function fetchPublicResale<T>(
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
-  const response = await fetch(
-    buildApiUrl(path),
-    init,
-  );
-
-  const json =
-    await readApiJson<
-      T & ApiErrorResponse
-    >(response);
-
-  if (!response.ok) {
-    throw new Error(
-      json.error ||
-        "APIリクエストに失敗しました。",
-    );
-  }
-
-  return json;
-}
+  requestJson,
+} from "../../../lib/http";
 
 export type ApiDataResponse<T> = {
   data?: T;
   error?: string;
 };
+
+/**
+ * 既存のRequestInit.bodyを、
+ * 共通HTTPクライアントのjsonオプションへ変換します。
+ *
+ * resale APIではJSON本文のみを扱います。
+ */
+function parseJsonRequestBody(
+  body: BodyInit | null | undefined,
+): unknown {
+  if (
+    body === undefined ||
+    body === null
+  ) {
+    return undefined;
+  }
+
+  if (typeof body !== "string") {
+    throw new Error(
+      "再販APIのリクエスト本文はJSON文字列で指定してください。",
+    );
+  }
+
+  const normalizedBody =
+    body.trim();
+
+  if (!normalizedBody) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(
+      normalizedBody,
+    ) as unknown;
+  } catch {
+    throw new Error(
+      "再販APIのリクエスト本文が不正なJSONです。",
+    );
+  }
+}
+
+/**
+ * 認証が必要な再販APIを実行します。
+ *
+ * URL生成、Firebase認証、ヘッダー設定、
+ * JSON解析、HTTPエラー処理は共通HTTPクライアントへ委譲します。
+ */
+export async function fetchResaleWithAuth<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const {
+    body,
+    ...requestInit
+  } = init ?? {};
+
+  const json =
+    parseJsonRequestBody(body);
+
+  return requestJson<T>(
+    path,
+    {
+      ...requestInit,
+
+      auth:
+        "required",
+
+      ...(json !== undefined
+        ? {
+            json,
+          }
+        : {}),
+
+      messages: {
+        requestErrorMessage:
+          "APIリクエストに失敗しました。",
+      },
+    },
+  );
+}
+
+/**
+ * 認証不要の公開再販APIを実行します。
+ *
+ * URL生成、ヘッダー設定、JSON解析、
+ * HTTPエラー処理は共通HTTPクライアントへ委譲します。
+ */
+export async function fetchPublicResale<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const {
+    body,
+    ...requestInit
+  } = init ?? {};
+
+  const json =
+    parseJsonRequestBody(body);
+
+  return requestJson<T>(
+    path,
+    {
+      ...requestInit,
+
+      auth:
+        "none",
+
+      ...(json !== undefined
+        ? {
+            json,
+          }
+        : {}),
+
+      messages: {
+        requestErrorMessage:
+          "APIリクエストに失敗しました。",
+      },
+    },
+  );
+}

@@ -134,40 +134,50 @@ export async function requestJson<T>(
   options:
     ApiJsonRequestOptions<T> = {},
 ): Promise<T> {
+  const {
+    unwrapData,
+    fallbackValue,
+    messages,
+    ...requestOptions
+  } = options;
+
   const response =
     await requestRaw(
       path,
-      options,
+      requestOptions,
     );
 
-  const messages = {
+  const responseMessages = {
     requestErrorMessage:
-      options.messages?.requestErrorMessage ??
+      messages?.requestErrorMessage ??
       "APIリクエストに失敗しました。",
 
     nonJsonErrorMessage:
-      options.messages?.nonJsonErrorMessage ??
+      messages?.nonJsonErrorMessage ??
       "APIがJSON以外を返しました。",
 
     invalidJsonErrorMessage:
-      options.messages?.invalidJsonErrorMessage ??
+      messages?.invalidJsonErrorMessage ??
       "APIのJSON形式が不正です。",
   };
 
-  const readOptions = {
-    ...messages,
-    ...(Object.prototype.hasOwnProperty.call(
+  const hasFallbackValue =
+    Object.prototype.hasOwnProperty.call(
       options,
       "fallbackValue",
-    )
+    );
+
+  const readOptions = {
+    ...responseMessages,
+
+    ...(hasFallbackValue
       ? {
-          fallbackValue:
-            options.fallbackValue,
+          fallbackValue,
         }
       : {}),
   };
 
-  if (options.unwrapData) {
+  if (unwrapData) {
     return readJsonDataResponse<T>(
       response,
       readOptions,
