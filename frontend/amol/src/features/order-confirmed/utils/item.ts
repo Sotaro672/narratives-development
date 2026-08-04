@@ -1,86 +1,40 @@
 // frontend/amol/src/features/order-confirmed/utils/item.ts
 
 import {
-  getModelPrice,
+  getCartItemPrice,
   getModelVariation,
 } from "../../cart/utils/cartUtils";
-import type { CartDisplayItem } from "../../shared/types/cart";
-import type { OrderConfirmedItemViewModel } from "../../shared/types/orderConfirmed";
-
-type CartItemWithDirectFields = CartDisplayItem & {
-  price?: number;
-  productName?: string;
-  title?: string;
-  modelKind?: string;
-  kind?: string;
-  modelNumber?: string;
-  modelLabel?: string;
-  volumeValue?: number;
-  volumeUnit?: string;
-  colorName?: string;
-  size?: string;
-};
-
-type ModelWithExtraFields = {
-  colorName?: string;
-  size?: string;
-  modelKind?: string;
-  kind?: string;
-  modelNumber?: string;
-  modelLabel?: string;
-  volumeValue?: number;
-  volumeUnit?: string;
-  price?: number;
-};
+import type {
+  CartDisplayItem,
+} from "../../shared/types/cart";
+import type {
+  OrderConfirmedItemViewModel,
+} from "../../shared/types/orderConfirmed";
 
 function getItemTitle(
   item: CartDisplayItem,
 ): string {
-  const typedItem =
-    item as CartItemWithDirectFields;
-
   const catalog = item.catalog;
 
   return (
-    typedItem.productName ||
-    typedItem.title ||
+    item.productName ||
+    item.title ||
     catalog?.productBlueprint.productName ||
     catalog?.list.title ||
     "商品名未設定"
   );
 }
 
-function getItemPrice(
-  item: CartDisplayItem,
-): number | null {
-  const typedItem =
-    item as CartItemWithDirectFields;
-
-  if (
-    typeof typedItem.price === "number"
-  ) {
-    return typedItem.price;
-  }
-
-  return getModelPrice(
-    item.catalog,
-    item.modelId ?? "",
-  );
-}
-
 function getAlcoholModelLabel(
   item: CartDisplayItem,
 ): string {
-  const typedItem =
-    item as CartItemWithDirectFields;
-
   const model = getModelVariation(
     item.catalog,
     item.modelId ?? "",
-  ) as ModelWithExtraFields | null;
+  );
 
-  if (typedItem.modelLabel) {
-    return typedItem.modelLabel;
+  if (item.modelLabel) {
+    return item.modelLabel;
   }
 
   if (model?.modelLabel) {
@@ -88,16 +42,16 @@ function getAlcoholModelLabel(
   }
 
   const modelNumber =
-    typedItem.modelNumber ??
+    item.modelNumber ??
     model?.modelNumber ??
     "";
 
   const volumeValue =
-    typedItem.volumeValue ??
+    item.volumeValue ??
     model?.volumeValue;
 
   const volumeUnit =
-    typedItem.volumeUnit ??
+    item.volumeUnit ??
     model?.volumeUnit ??
     "";
 
@@ -118,21 +72,18 @@ function getAlcoholModelLabel(
 function getApparelModelLabel(
   item: CartDisplayItem,
 ): string {
-  const typedItem =
-    item as CartItemWithDirectFields;
-
   const model = getModelVariation(
     item.catalog,
     item.modelId ?? "",
-  ) as ModelWithExtraFields | null;
+  );
 
   const colorName =
-    typedItem.colorName ??
+    item.colorName ??
     model?.colorName ??
     "";
 
   const size =
-    typedItem.size ??
+    item.size ??
     model?.size ??
     "";
 
@@ -151,18 +102,13 @@ function getApparelModelLabel(
 function getItemModelKind(
   item: CartDisplayItem,
 ): string {
-  const typedItem =
-    item as CartItemWithDirectFields;
-
   const model = getModelVariation(
     item.catalog,
     item.modelId ?? "",
-  ) as ModelWithExtraFields | null;
+  );
 
   return (
-    typedItem.modelKind ??
-    typedItem.kind ??
-    model?.modelKind ??
+    item.modelKind ??
     model?.kind ??
     ""
   );
@@ -184,7 +130,8 @@ function getItemModelLabel(
 export function toOrderConfirmedItemViewModel(
   item: CartDisplayItem,
 ): OrderConfirmedItemViewModel {
-  const price = getItemPrice(item);
+  const price =
+    getCartItemPrice(item);
 
   const lineAmount =
     price === null
