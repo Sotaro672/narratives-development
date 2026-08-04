@@ -2,7 +2,7 @@
 
 import type {
   TokenCommentTreeNode,
-} from "../types/tokenCommentTypes";
+} from "../../shared/types/tokenCommentTypes";
 
 import TokenCommentForm from "./TokenCommentForm";
 import TokenCommentList from "./TokenCommentList";

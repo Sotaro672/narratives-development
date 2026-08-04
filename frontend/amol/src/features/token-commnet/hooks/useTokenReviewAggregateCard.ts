@@ -13,7 +13,7 @@ import {
 
 import type {
   TokenBlueprintReviewAggregate,
-} from "../types/tokenCommentTypes";
+} from "../../shared/types/tokenCommentTypes";
 
 type UseTokenReviewAggregateCardOptions = {
   tokenBlueprintId: string;

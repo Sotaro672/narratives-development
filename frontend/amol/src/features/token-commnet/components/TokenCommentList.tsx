@@ -1,7 +1,7 @@
 // frontend/amol/src/features/token-commnet/components/TokenCommentList.tsx
 
 import TokenCommentItem from "./TokenCommentItem";
-import type { TokenCommentTreeNode } from "../types/tokenCommentTypes";
+import type { TokenCommentTreeNode } from "../../shared/types/tokenCommentTypes";
 
 type TokenCommentListProps = {
   commentTree: TokenCommentTreeNode[];

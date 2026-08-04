@@ -7,12 +7,12 @@ import { formatDateTime } from "../../../components/utils/date";
 import type {
   TokenComment,
   TokenCommentTreeNode,
-} from "../types/tokenCommentTypes";
+} from "../../shared/types/tokenCommentTypes";
 
 import {
   getTokenCommentDisplayIconUrl,
   getTokenCommentDisplayName,
-} from "../types/tokenCommentTypes";
+} from "../../shared/types/tokenCommentTypes";
 
 import {
   hasTokenCommentChildren,

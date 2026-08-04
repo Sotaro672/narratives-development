@@ -17,7 +17,7 @@ import {
 
 import type {
   TokenComment,
-} from "../types/tokenCommentTypes";
+} from "../../shared/types/tokenCommentTypes";
 
 import {
   buildTokenCommentTree,

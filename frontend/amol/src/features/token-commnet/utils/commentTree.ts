@@ -3,7 +3,7 @@
 import type {
   TokenComment,
   TokenCommentTreeNode,
-} from "../types/tokenCommentTypes";
+} from "../../shared/types/tokenCommentTypes";
 
 function compareCreatedAtAsc(
   a: TokenCommentTreeNode,

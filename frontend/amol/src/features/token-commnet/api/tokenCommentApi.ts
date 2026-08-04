@@ -16,7 +16,7 @@ import type {
   TokenCommentPostInput,
   TokenCommentReplyInput,
   TokenCommentVoteInput,
-} from "../types/tokenCommentTypes";
+} from "../../shared/types/tokenCommentTypes";
 
 const TOKEN_BLUEPRINT_BASE_PATH = "/mall/me/token-blueprints";
 
