@@ -1,7 +1,7 @@
 // frontend/amol/src/pages/InquiryCreatePage.tsx
 import Layout from "../components/layout/Layout";
 import MediaUploader from "../components/ui/MediaUploader";
-import { useInquiryCreatePage } from "../features/inquiry/hooks/useInquiryCreatePage";
+import { useInquiryCreatePage } from "../features/inquiry/presentation/hooks/useInquiryCreatePage";
 import "../styles/inquiry-page.css";
 
 export default function InquiryCreatePage() {

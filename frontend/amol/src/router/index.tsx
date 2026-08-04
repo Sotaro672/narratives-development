@@ -237,14 +237,6 @@ export const router = createBrowserRouter([
     ),
   },
   {
-    path: "/chats/messages/:peerAvatarId",
-    element: (
-      <ProtectedRoute>
-        <ChatDetailPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
     path: "/chats/:inquiryId",
     element: (
       <ProtectedRoute>

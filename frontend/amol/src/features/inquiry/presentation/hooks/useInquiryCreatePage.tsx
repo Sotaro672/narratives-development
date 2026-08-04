@@ -15,13 +15,13 @@ import {
 
 import type {
   MediaUploaderItem,
-} from "../../../components/ui/MediaUploader";
+} from "../../../../components/ui/MediaUploader";
 
 import {
   createInquiry,
   uploadInquiryImage,
   type CreateInquiryRequest,
-} from "../api/inquiryApi";
+} from "../../api/inquiryApi";
 
 export type InquiryMediaItem =
   MediaUploaderItem & {

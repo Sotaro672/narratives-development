@@ -2,7 +2,7 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAnnouncementUnreadCount } from "../../../features/announcement/hooks/useAnnouncementUnreadCount";
-import { useInquiryUnreadCounter } from "../../../features/inquiry/hooks/useInquiryUnreadCounter";
+import { useInquiryUnreadCounter } from "../../../features/inquiry/presentation/hooks/useInquiryUnreadCounter";
 import type { HeaderActionState } from "./types";
 
 type HeaderActionsProps = {

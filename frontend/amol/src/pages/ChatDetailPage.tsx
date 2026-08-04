@@ -1,320 +1,45 @@
 // frontend/amol/src/pages/ChatDetailPage.tsx
 
-import {
-  type ChangeEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import { createPortal } from "react-dom";
-import { useLocation, useParams } from "react-router-dom";
-
 import Layout from "../components/layout/Layout";
-import { formatDateTime } from "../components/utils/date";
-import { textOrEmpty } from "../components/utils/textOrEmpty";
 
-import {
-  closeInquiry,
-  getInquiry,
-  listInquiryReplies,
-  markInquiryAsRead,
-  replyInquiry,
-  uploadReplyImage,
-  type Inquiry,
-  type InquiryImage,
-  type InquiryReply,
-} from "../features/inquiry/api/inquiryApi";
+import InquiryClosePrompt from "../features/inquiry/presentation/components/InquiryClosePrompt";
+import InquiryMessageCard from "../features/inquiry/presentation/components/InquiryMessageCard";
+import InquiryReplyList from "../features/inquiry/presentation/components/InquiryReplyList";
+import InquiryReplyModal from "../features/inquiry/presentation/components/InquiryReplyModal";
+import { useInquiryDetailPage } from "../features/inquiry/presentation/hooks/useInquiryDetailPage";
 
 import "../styles/page-layout.css";
-import "../styles/chat-detail-page.css";
-
-type ChatDetailLocationState = {
-  inquiry?: Inquiry | null;
-  replies?: InquiryReply[] | null;
-};
-
-type ChatRouteParams = {
-  inquiryId?: string;
-};
+import "../features/inquiry/presentation/styles/inquiry-detail-page.css";
 
 export default function ChatDetailPage() {
-  const { inquiryId } = useParams<ChatRouteParams>();
-  const location = useLocation();
+  const {
+    title,
+    inquiry,
+    sortedReplies,
+    loading,
+    error,
 
-  const state = location.state as ChatDetailLocationState | null;
-
-  const [inquiry, setInquiry] = useState<Inquiry | null>(
-    state?.inquiry ?? null,
-  );
-
-  const [replies, setReplies] = useState<InquiryReply[]>(
-    Array.isArray(state?.replies) ? state.replies : [],
-  );
-
-  const [loading, setLoading] = useState<boolean>(!state?.inquiry);
-  const [error, setError] = useState<string>("");
-
-  const [isReplyModalOpen, setIsReplyModalOpen] = useState(false);
-  const [replyContent, setReplyContent] = useState("");
-  const [replyFiles, setReplyFiles] = useState<File[]>([]);
-  const [replyError, setReplyError] = useState("");
-  const [postingReply, setPostingReply] = useState(false);
-
-  const [closingInquiry, setClosingInquiry] = useState(false);
-  const [closeError, setCloseError] = useState("");
-
-  const canSubmitReply =
-    replyContent.trim() !== "" ||
-    replyFiles.length > 0;
-
-  const sortedReplies = useMemo(() => {
-    return [...replies].sort((a, b) => {
-      const aTime = getComparableTime(
-        a.createdAt ?? a.updatedAt,
-      );
-
-      const bTime = getComparableTime(
-        b.createdAt ?? b.updatedAt,
-      );
-
-      return aTime - bTime;
-    });
-  }, [replies]);
-
-  const loadThread = useCallback(async () => {
-    if (!inquiryId) {
-      setInquiry(null);
-      setReplies([]);
-      setError("問い合わせIDが見つかりません。");
-      setLoading(false);
-
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-    setCloseError("");
-
-    try {
-      const [
-        nextInquiry,
-        nextReplies,
-        updatedInquiry,
-      ] = await Promise.all([
-        getInquiry(inquiryId),
-        listInquiryReplies(inquiryId),
-        markInquiryAsRead(inquiryId),
-      ]);
-
-      setInquiry(updatedInquiry ?? nextInquiry);
-      setReplies(nextReplies);
-    } catch (caught) {
-      setInquiry(null);
-      setReplies([]);
-
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "チャット内容の取得に失敗しました。",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [inquiryId]);
-
-  useEffect(() => {
-    void loadThread();
-  }, [loadThread]);
-
-  useEffect(() => {
-    if (!isReplyModalOpen) {
-      return;
-    }
-
-    const previousOverflow =
-      document.body.style.overflow;
-
-    const previousTouchAction =
-      document.body.style.touchAction;
-
-    document.body.style.overflow = "hidden";
-    document.body.style.touchAction = "none";
-
-    return () => {
-      document.body.style.overflow =
-        previousOverflow;
-
-      document.body.style.touchAction =
-        previousTouchAction;
-    };
-  }, [isReplyModalOpen]);
-
-  const openReplyModal = useCallback(() => {
-    setReplyError("");
-    setIsReplyModalOpen(true);
-  }, []);
-
-  const closeReplyModal = useCallback(() => {
-    if (postingReply) {
-      return;
-    }
-
-    setIsReplyModalOpen(false);
-    setReplyContent("");
-    setReplyFiles([]);
-    setReplyError("");
-  }, [postingReply]);
-
-  const handleReplyFilesChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(
-        event.target.files ?? [],
-      );
-
-      if (files.length > 0) {
-        setReplyFiles((current) => [
-          ...current,
-          ...files,
-        ]);
-      }
-
-      event.target.value = "";
-    },
-    [],
-  );
-
-  const removeReplyFile = useCallback(
-    (index: number) => {
-      setReplyFiles((current) =>
-        current.filter(
-          (_, currentIndex) =>
-            currentIndex !== index,
-        ),
-      );
-    },
-    [],
-  );
-
-  const submitReply = useCallback(async () => {
-    if (postingReply) {
-      return;
-    }
-
-    const content = replyContent.trim();
-
-    if (!content && replyFiles.length === 0) {
-      setReplyError(
-        "本文または画像を入力してください。",
-      );
-
-      return;
-    }
-
-    if (!inquiryId) {
-      setReplyError(
-        "問い合わせIDが見つかりません。",
-      );
-
-      return;
-    }
-
-    setPostingReply(true);
-    setReplyError("");
-
-    try {
-      const images = await Promise.all(
-        replyFiles.map((file) =>
-          uploadReplyImage({
-            inquiryId,
-            file,
-          }),
-        ),
-      );
-
-      const createdReply = await replyInquiry(
-        inquiryId,
-        {
-          content,
-          images,
-        },
-      );
-
-      if (createdReply) {
-        setReplies((current) => [
-          ...current,
-          createdReply,
-        ]);
-      } else {
-        const nextReplies =
-          await listInquiryReplies(inquiryId);
-
-        setReplies(nextReplies);
-      }
-
-      setIsReplyModalOpen(false);
-      setReplyContent("");
-      setReplyFiles([]);
-    } catch (caught) {
-      setReplyError(
-        caught instanceof Error
-          ? caught.message
-          : "送信に失敗しました。",
-      );
-    } finally {
-      setPostingReply(false);
-    }
-  }, [
-    inquiryId,
-    postingReply,
+    isReplyModalOpen,
     replyContent,
     replyFiles,
-  ]);
+    replyError,
+    postingReply,
+    canSubmitReply,
 
-  const handleCloseInquiry =
-    useCallback(async () => {
-      if (!inquiryId || closingInquiry) {
-        return;
-      }
+    closingInquiry,
+    closeError,
 
-      setClosingInquiry(true);
-      setCloseError("");
+    shouldShowClosePrompt,
+    replyActionDisabled,
 
-      try {
-        const closedInquiry =
-          await closeInquiry(inquiryId);
-
-        setInquiry((current) =>
-          closedInquiry ??
-          (current
-            ? {
-                ...current,
-                status: "closed",
-              }
-            : current),
-        );
-      } catch (caught) {
-        setCloseError(
-          caught instanceof Error
-            ? caught.message
-            : "クローズに失敗しました。",
-        );
-      } finally {
-        setClosingInquiry(false);
-      }
-    }, [inquiryId, closingInquiry]);
-
-  const title = getInquiryTitle(inquiry);
-
-  const shouldShowClosePrompt =
-    inquiry?.status === "resolved";
-
-  const replyActionDisabled =
-    !inquiryId ||
-    loading ||
-    !inquiry ||
-    postingReply ||
-    inquiry.status === "closed";
+    setReplyContent,
+    openReplyModal,
+    closeReplyModal,
+    handleReplyFilesChange,
+    removeReplyFile,
+    submitReply,
+    handleCloseInquiry,
+  } = useInquiryDetailPage();
 
   return (
     <>
@@ -330,10 +55,8 @@ export default function ChatDetailPage() {
         footerProps={{
           variant: "default",
           centerActionLabel: "返信",
-          centerActionDisabled:
-            replyActionDisabled,
-          onCenterActionClick:
-            openReplyModal,
+          centerActionDisabled: replyActionDisabled,
+          onCenterActionClick: openReplyModal,
         }}
       >
         <section className="page-section content-page-section chat-detail-page">
@@ -360,52 +83,9 @@ export default function ChatDetailPage() {
 
           {!loading && inquiry ? (
             <div className="chat-detail-page__thread">
-              <article className="chat-detail-page__inquiry">
-                <div className="chat-detail-page__message-head">
-                  <div>
-                    <span className="chat-detail-page__sender">
-                      あなたの問い合わせ
-                    </span>
-
-                    {inquiry.createdAt ? (
-                      <time
-                        className="chat-detail-page__date"
-                        dateTime={
-                          inquiry.createdAt
-                        }
-                      >
-                        {formatDateTime(
-                          inquiry.createdAt,
-                        )}
-                      </time>
-                    ) : null}
-                  </div>
-
-                  {inquiry.status ? (
-                    <span className="chat-detail-page__status">
-                      {getStatusLabel(
-                        inquiry.status,
-                      )}
-                    </span>
-                  ) : null}
-                </div>
-
-                {inquiry.subject ? (
-                  <h2 className="chat-detail-page__subject">
-                    {inquiry.subject}
-                  </h2>
-                ) : null}
-
-                {inquiry.content ? (
-                  <p className="chat-detail-page__content">
-                    {inquiry.content}
-                  </p>
-                ) : null}
-
-                <ImageGrid
-                  images={inquiry.images}
-                />
-              </article>
+              <InquiryMessageCard
+                inquiry={inquiry}
+              />
 
               <div className="chat-detail-page__reply-section">
                 <h3 className="chat-detail-page__section-title">
@@ -419,102 +99,18 @@ export default function ChatDetailPage() {
                   </div>
                 ) : (
                   <div className="chat-detail-page__replies">
-                    {sortedReplies.map(
-                      (reply, index) => {
-                        const isAvatarReply =
-                          reply.senderType ===
-                          "avatar";
-
-                        return (
-                          <article
-                            key={
-                              reply.id ||
-                              `${reply.inquiryId}-${index}`
-                            }
-                            className={
-                              isAvatarReply
-                                ? "chat-detail-page__reply chat-detail-page__reply--avatar"
-                                : "chat-detail-page__reply"
-                            }
-                          >
-                            <div className="chat-detail-page__message-head">
-                              <div>
-                                <span className="chat-detail-page__sender">
-                                  {isAvatarReply
-                                    ? "あなた"
-                                    : "テナント"}
-                                </span>
-
-                                {reply.createdAt ? (
-                                  <time
-                                    className="chat-detail-page__date"
-                                    dateTime={
-                                      reply.createdAt
-                                    }
-                                  >
-                                    {formatDateTime(
-                                      reply.createdAt,
-                                    )}
-                                  </time>
-                                ) : null}
-                              </div>
-                            </div>
-
-                            {reply.content ? (
-                              <p className="chat-detail-page__content">
-                                {reply.content}
-                              </p>
-                            ) : null}
-
-                            <ImageGrid
-                              images={
-                                reply.images
-                              }
-                            />
-                          </article>
-                        );
-                      },
-                    )}
+                    <InquiryReplyList
+                      replies={sortedReplies}
+                    />
 
                     {shouldShowClosePrompt ? (
-                      <article className="chat-detail-page__reply chat-detail-page__reply--system">
-                        <div className="chat-detail-page__message-head">
-                          <div>
-                            <span className="chat-detail-page__sender">
-                              テナント
-                            </span>
-                          </div>
-                        </div>
-
-                        <p className="chat-detail-page__content">
-                          クローズしますか？
-                        </p>
-
-                        {closeError ? (
-                          <div
-                            className="chat-detail-page__modal-error"
-                            role="alert"
-                          >
-                            {closeError}
-                          </div>
-                        ) : null}
-
-                        <div className="chat-detail-page__close-prompt-actions">
-                          <button
-                            type="button"
-                            onClick={
-                              handleCloseInquiry
-                            }
-                            disabled={
-                              closingInquiry
-                            }
-                          >
-                            {closingInquiry
-                              ? "クローズ中..."
-                              : "クローズする"}
-                          </button>
-                        </div>
-                      </article>
+                      <InquiryClosePrompt
+                        error={closeError}
+                        closing={closingInquiry}
+                        onClose={() => {
+                          void handleCloseInquiry();
+                        }}
+                      />
                     ) : null}
                   </div>
                 )}
@@ -524,251 +120,21 @@ export default function ChatDetailPage() {
         </section>
       </Layout>
 
-      {isReplyModalOpen
-        ? createPortal(
-            <div className="chat-detail-page__modal-backdrop">
-              <div
-                className="chat-detail-page__modal"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="chat-detail-reply-modal-title"
-              >
-                <div className="chat-detail-page__modal-header">
-                  <h2 id="chat-detail-reply-modal-title">
-                    返信する
-                  </h2>
-
-                  <button
-                    type="button"
-                    className="chat-detail-page__modal-close"
-                    onClick={closeReplyModal}
-                    disabled={postingReply}
-                    aria-label="閉じる"
-                  >
-                    ×
-                  </button>
-                </div>
-
-                <textarea
-                  className="chat-detail-page__reply-input"
-                  value={replyContent}
-                  onChange={(event) =>
-                    setReplyContent(
-                      event.target.value,
-                    )
-                  }
-                  placeholder="返信内容を入力"
-                  rows={6}
-                  disabled={postingReply}
-                />
-
-                <label className="chat-detail-page__file-picker">
-                  <span>画像を追加</span>
-
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={
-                      handleReplyFilesChange
-                    }
-                    disabled={postingReply}
-                  />
-                </label>
-
-                {replyFiles.length > 0 ? (
-                  <div className="chat-detail-page__selected-files">
-                    {replyFiles.map(
-                      (file, index) => (
-                        <div
-                          key={`${file.name}-${file.lastModified}-${index}`}
-                          className="chat-detail-page__selected-file"
-                        >
-                          <span>
-                            {file.name}
-                          </span>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              removeReplyFile(
-                                index,
-                              )
-                            }
-                            disabled={
-                              postingReply
-                            }
-                          >
-                            削除
-                          </button>
-                        </div>
-                      ),
-                    )}
-                  </div>
-                ) : null}
-
-                {replyError ? (
-                  <div
-                    className="chat-detail-page__modal-error"
-                    role="alert"
-                  >
-                    {replyError}
-                  </div>
-                ) : null}
-
-                <div className="chat-detail-page__modal-actions">
-                  <button
-                    type="button"
-                    onClick={closeReplyModal}
-                    disabled={postingReply}
-                  >
-                    キャンセル
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={submitReply}
-                    disabled={
-                      !canSubmitReply ||
-                      postingReply
-                    }
-                  >
-                    {postingReply
-                      ? "送信中..."
-                      : "送信"}
-                  </button>
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
+      <InquiryReplyModal
+        open={isReplyModalOpen}
+        content={replyContent}
+        files={replyFiles}
+        error={replyError}
+        submitting={postingReply}
+        canSubmit={canSubmitReply}
+        onContentChange={setReplyContent}
+        onFilesChange={handleReplyFilesChange}
+        onRemoveFile={removeReplyFile}
+        onCancel={closeReplyModal}
+        onSubmit={() => {
+          void submitReply();
+        }}
+      />
     </>
   );
-}
-
-function ImageGrid({
-  images,
-}: {
-  images?: InquiryImage[] | null;
-}) {
-  if (
-    !Array.isArray(images) ||
-    images.length === 0
-  ) {
-    return null;
-  }
-
-  return (
-    <div className="chat-detail-page__images">
-      {images.map((image, index) => {
-        const src = getImageSrc(image);
-
-        if (!src) {
-          return null;
-        }
-
-        const label = getImageLabel(
-          image,
-          index,
-        );
-
-        return (
-          <a
-            key={`${getImageKey(
-              image,
-              src,
-            )}-${index}`}
-            className="chat-detail-page__image-link"
-            href={src}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <img
-              className="chat-detail-page__image"
-              src={src}
-              alt={label}
-              loading="lazy"
-            />
-          </a>
-        );
-      })}
-    </div>
-  );
-}
-
-function getImageSrc(
-  image: InquiryImage,
-): string {
-  return image.fileUrl || "";
-}
-
-function getImageLabel(
-  image: InquiryImage,
-  index: number,
-): string {
-  if (image.fileName) {
-    return image.fileName;
-  }
-
-  return `添付画像 ${index + 1}`;
-}
-
-function getImageKey(
-  image: InquiryImage,
-  src: string,
-): string {
-  if (image.objectPath) {
-    return image.objectPath;
-  }
-
-  return src;
-}
-
-function getInquiryTitle(
-  inquiry: Inquiry | null,
-): string {
-  const subject = textOrEmpty(
-    inquiry?.subject,
-  );
-
-  if (subject) {
-    return subject;
-  }
-
-  return "チャット詳細";
-}
-
-function getStatusLabel(
-  status?: string | null,
-): string {
-  switch (status) {
-    case "open":
-      return "未対応";
-
-    case "resolved":
-      return "解決済み";
-
-    case "closed":
-      return "クローズ";
-
-    default:
-      return "";
-  }
-}
-
-function getComparableTime(
-  value?: string | null,
-): number {
-  if (!value) {
-    return 0;
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return 0;
-  }
-
-  return date.getTime();
 }
