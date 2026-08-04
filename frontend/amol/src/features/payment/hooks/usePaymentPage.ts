@@ -13,7 +13,7 @@ import { getFirebaseIdToken } from "../../../lib/authToken";
 import { fetchCartItemsWithCatalog } from "../../cart/api/cartApi";
 import { calculateCartTotalAmount } from "../../cart/utils/cartUtils";
 import { fetchShippingAddressPageInitialData } from "../../shipping-address/api/shippingAddressApi";
-import type { UserProfile } from "../../shipping-address/types";
+import type { UserProfile } from "../../shared/types/types";
 import type { CartDisplayItem } from "../../shared/types/cart";
 import type {
   CanonicalShippingAddress,

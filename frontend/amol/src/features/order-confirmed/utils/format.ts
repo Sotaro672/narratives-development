@@ -1,5 +1,5 @@
 //frontend\amol\src\features\order-confirmed\utils\format.ts
-import type { ShippingAddress } from "../../shipping-address/types";
+import type { ShippingAddress } from "../../shared/types/types";
 
 export function getShippingAddressLabel(
   address: ShippingAddress | null | undefined,

@@ -17,7 +17,7 @@ import type {
   ShippingAddress,
   ShippingAddressFormValues,
   ShippingAddressPageMode,
-} from "../types";
+} from "../../shared/types/types";
 import {
   getShippingAddressId,
   isUserProfile,

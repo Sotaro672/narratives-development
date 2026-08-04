@@ -4,7 +4,7 @@ import type {
   ShippingAddress,
   UserProfile,
   ZipCloudResponse,
-} from "../types";
+} from "../../shared/types/types";
 
 export function getShippingAddressId(
   address: ShippingAddress | null

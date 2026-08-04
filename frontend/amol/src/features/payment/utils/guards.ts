@@ -5,7 +5,7 @@ import type {
 } from "../../shared/types/cart";
 import type {
   ShippingAddress,
-} from "../../shipping-address/types";
+} from "../../shared/types/types";
 import type {
   CanonicalShippingAddress,
   CreatedPayment,

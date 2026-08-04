@@ -3,7 +3,7 @@ import type {
   ErrorResponse,
   ShippingAddress,
   UserProfile,
-} from "../types";
+} from "../../shared/types/types";
 import {
   isErrorResponse,
   isShippingAddress,

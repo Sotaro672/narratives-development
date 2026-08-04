@@ -1,6 +1,6 @@
 // frontend/amol/src/features/payment/utils/format.ts
 
-import type { UserProfile } from "../../shipping-address/types";
+import type { UserProfile } from "../../shared/types/types";
 import type { CanonicalShippingAddress } from "../../shared/types/payment";
 import type { CardPaymentMethod } from "../../shared/types/paymentMethods";
 

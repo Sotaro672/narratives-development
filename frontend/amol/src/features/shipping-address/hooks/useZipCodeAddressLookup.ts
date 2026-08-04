@@ -1,7 +1,7 @@
 //frontend\amol\src\features\shipping-address\hooks\useZipCodeAddressLookup.ts
 import { useEffect, useRef, useState } from "react";
 
-import type { ShippingAddressFormValues } from "../types";
+import type { ShippingAddressFormValues } from "../../shared/types/types";
 import {
   formatZipCode,
   isZipCloudResponse,
