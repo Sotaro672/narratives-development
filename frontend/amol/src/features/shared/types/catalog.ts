@@ -2,6 +2,7 @@
 
 import type {
   ProductBlueprintCategoryFields,
+  ProductCategoryKind,
 } from "./category";
 
 export type CatalogListPrice = {
@@ -38,7 +39,10 @@ export type CatalogInventory = {
   productBlueprintId: string;
   tokenBlueprintId: string;
   modelIds: string[];
-  stock: Record<string, CatalogInventoryStockItem>;
+  stock: Record<
+    string,
+    CatalogInventoryStockItem
+  >;
 };
 
 export type CatalogProductBlueprintModelRef = {
@@ -57,12 +61,23 @@ export type CatalogProductBlueprint = {
   printed: boolean;
   productIdTagType: string;
 
-  productBlueprintCategoryId?: string | null;
-  productBlueprintCategoryCode?: string | null;
-  productBlueprintCategoryKind?: string | null;
-  productBlueprintCategoryNameEn?: string | null;
-  productBlueprintCategoryNameJa?: string | null;
-  productBlueprintCategoryPath?: string[] | null;
+  productBlueprintCategoryId?:
+    string | null;
+
+  productBlueprintCategoryCode?:
+    string | null;
+
+  productBlueprintCategoryKind?:
+    ProductCategoryKind | null;
+
+  productBlueprintCategoryNameEn?:
+    string | null;
+
+  productBlueprintCategoryNameJa?:
+    string | null;
+
+  productBlueprintCategoryPath?:
+    string[] | null;
 
   /**
    * category ごとの productBlueprint 入力値。
@@ -71,11 +86,14 @@ export type CatalogProductBlueprint = {
    * - alcohol.sake: material / region / vintage / alcoholContent
    * - apparel.tops: material / fit / weight
    *
-   * category ごとに項目が変わるため、固定 field ではなく map として扱う。
+   * category ごとに項目が変わるため、
+   * 固定 field ではなく map として扱う。
    */
-  categoryFields?: ProductBlueprintCategoryFields | null;
+  categoryFields?:
+    ProductBlueprintCategoryFields | null;
 
-  modelRefs: CatalogProductBlueprintModelRef[];
+  modelRefs:
+    CatalogProductBlueprintModelRef[];
 };
 
 export type CatalogTokenBlueprint = {
@@ -89,11 +107,6 @@ export type CatalogTokenBlueprint = {
   tokenIcon: string;
 };
 
-export type CatalogModelVariationKind =
-  | "apparel"
-  | "alcohol"
-  | (string & {});
-
 export type CatalogModelVariation = {
   id: string;
   productBlueprintId: string;
@@ -101,10 +114,13 @@ export type CatalogModelVariation = {
   /**
    * model variation kind.
    *
-   * - apparel: size / colorName / colorRGB / measurements を使う
-   * - alcohol: volumeValue / volumeUnit を使う
+   * - apparel:
+   *   size / colorName / colorRGB /
+   *   measurements を使う
+   * - alcohol:
+   *   volumeValue / volumeUnit を使う
    */
-  kind?: CatalogModelVariationKind | null;
+  kind?: ProductCategoryKind | null;
 
   modelNumber: string;
 
@@ -112,7 +128,8 @@ export type CatalogModelVariation = {
   size?: string | null;
   colorName?: string | null;
   colorRGB?: number | null;
-  measurements?: Record<string, number>;
+  measurements?:
+    Record<string, number>;
 
   // alcohol
   volumeValue?: number | null;
@@ -137,16 +154,21 @@ export type CatalogResponse = {
   list: CatalogList;
   listImages: CatalogListImage[];
   inventory: CatalogInventory;
-  productBlueprint: CatalogProductBlueprint;
-  tokenBlueprint: CatalogTokenBlueprint;
-  modelVariations: CatalogModelVariation[];
-  productReviewSummary: CatalogProductReviewSummary;
+  productBlueprint:
+    CatalogProductBlueprint;
+  tokenBlueprint:
+    CatalogTokenBlueprint;
+  modelVariations:
+    CatalogModelVariation[];
+  productReviewSummary:
+    CatalogProductReviewSummary;
 };
 
 export type MeasurementTableRow = {
   id: string;
   size: string;
-  measurements: Record<string, number>;
+  measurements:
+    Record<string, number>;
 };
 
 export type ModelColorOption = {

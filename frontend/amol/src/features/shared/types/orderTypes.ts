@@ -1,6 +1,12 @@
-// frontend/amol/src/features/wallet/types/orderTypes.ts
+// frontend/amol/src/features/shared/types/orderTypes.ts
 
-import type { PageResultResponse } from "../pageResult";
+import type {
+  PageResultResponse,
+} from "../pageResult";
+
+import type {
+  ProductCategoryKind,
+} from "./category";
 
 export type WalletOrderColor = {
   name?: string;
@@ -8,13 +14,8 @@ export type WalletOrderColor = {
   rgb?: number;
 };
 
-export type WalletOrderMeasurements = Record<string, number>;
-
-export type WalletOrderItemKind =
-  | "apparel"
-  | "alcohol"
-  | "unknown"
-  | string;
+export type WalletOrderMeasurements =
+  Record<string, number>;
 
 export type WalletOrderItemSnapshot = {
   modelId: string;
@@ -30,7 +31,7 @@ export type WalletOrderItemSnapshot = {
   brandName?: string;
   brandIcon?: string;
 
-  kind?: WalletOrderItemKind;
+  kind?: ProductCategoryKind;
   modelNumber?: string;
 
   /**

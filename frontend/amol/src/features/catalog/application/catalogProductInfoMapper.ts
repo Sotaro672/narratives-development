@@ -4,12 +4,10 @@ import {
   isFiniteNumber,
   isRecord,
 } from "../../../components/utils/typeGuards";
-import type { CatalogProductBlueprint } from "../../shared/types/catalog";
 
-export type ProductCategoryKind =
-  | "apparel"
-  | "alcohol"
-  | "unknown";
+import type {
+  CatalogProductBlueprint,
+} from "../../shared/types/catalog";
 
 type CatalogProductBlueprintDisplayFields =
   CatalogProductBlueprint & {
@@ -67,7 +65,8 @@ export function formatAlcoholContent(
 }
 
 export function resolveCategoryLabel(
-  productBlueprint: CatalogProductBlueprintDisplayFields,
+  productBlueprint:
+    CatalogProductBlueprintDisplayFields,
 ): string {
   return (
     formatNullableText(
@@ -118,8 +117,12 @@ export function resolveQualityAssuranceItems(
       );
   }
 
-  if (typeof qualityAssurance === "string") {
-    const text = qualityAssurance.trim();
+  if (
+    typeof qualityAssurance ===
+    "string"
+  ) {
+    const text =
+      qualityAssurance.trim();
 
     return text
       ? [text]

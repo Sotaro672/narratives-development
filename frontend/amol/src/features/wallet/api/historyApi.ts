@@ -6,10 +6,13 @@ import {
 } from "../../../components/utils/apiResponse";
 
 import type {
+  ProductCategoryKind,
+} from "../../shared/types/category";
+
+import type {
   FetchWalletOrdersInput,
   WalletOrder,
   WalletOrderColor,
-  WalletOrderItemKind,
   WalletOrderItemSnapshot,
   WalletOrderMeasurements,
   WalletOrdersPage,
@@ -87,10 +90,10 @@ function getOptionalBoolean(
     : undefined;
 }
 
-function getOptionalWalletOrderItemKind(
+function getOptionalProductCategoryKind(
   record: Record<string, unknown>,
   key: string,
-): WalletOrderItemKind | undefined {
+): ProductCategoryKind | undefined {
   const value = record[key];
 
   return typeof value === "string"
@@ -251,7 +254,7 @@ function toWalletOrderItemSnapshot(
       ),
 
     kind:
-      getOptionalWalletOrderItemKind(
+      getOptionalProductCategoryKind(
         record,
         "kind",
       ),
