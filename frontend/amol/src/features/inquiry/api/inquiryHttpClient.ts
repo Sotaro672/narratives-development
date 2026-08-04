@@ -2,6 +2,7 @@
 
 import {
   requestJson,
+  type ApiQueryParams,
 } from "../../../lib/http";
 
 export const INQUIRY_BASE_PATH =
@@ -26,6 +27,15 @@ export type ApiUnreadCountResponse = {
   unreadCount?: number;
   error?: string;
 };
+
+export type InquiryRequestInit =
+  Omit<
+    RequestInit,
+    "body"
+  > & {
+    body?: BodyInit | null;
+    query?: ApiQueryParams;
+  };
 
 /**
  * 既存のRequestInit.bodyを、
@@ -83,10 +93,11 @@ export function buildInquiryPath(
  */
 export async function fetchInquiryWithAuth<T>(
   path: string,
-  init?: RequestInit,
+  init?: InquiryRequestInit,
 ): Promise<T> {
   const {
     body,
+    query,
     ...requestInit
   } = init ?? {};
 
@@ -98,8 +109,9 @@ export async function fetchInquiryWithAuth<T>(
     {
       ...requestInit,
 
-      auth:
-        "required",
+      auth: "required",
+
+      query,
 
       ...(json !== undefined
         ? {

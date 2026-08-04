@@ -1,5 +1,9 @@
 // frontend/amol/src/features/inquiry/api/inquiryListApi.ts
 
+import type {
+  ApiQueryParams,
+} from "../../../lib/http";
+
 import {
   fetchInquiryWithAuth,
   INQUIRY_BASE_PATH,
@@ -14,101 +18,96 @@ import type {
   ListMeInquiriesResult,
 } from "../../shared/types/inquiryTypes";
 
-function appendOptionalQuery(
-  query: URLSearchParams,
-  key: string,
+function normalizeQueryValue(
   value:
     | string
     | number
     | null
     | undefined,
-): void {
+): string | number | undefined {
   if (
     value === null ||
     value === undefined
   ) {
-    return;
+    return undefined;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value)
+      ? value
+      : undefined;
   }
 
   const normalized =
-    String(value).trim();
+    value.trim();
 
-  if (!normalized) {
-    return;
-  }
-
-  query.set(
-    key,
-    normalized,
-  );
+  return normalized ||
+    undefined;
 }
 
-function appendInquiryFilters(
-  query: URLSearchParams,
+function buildInquiryFilterQuery(
   params: GetUnreadInquiryCountParams,
-): void {
-  appendOptionalQuery(
-    query,
-    "productId",
-    params.productId,
-  );
+): ApiQueryParams {
+  return {
+    productId:
+      normalizeQueryValue(
+        params.productId,
+      ),
 
-  appendOptionalQuery(
-    query,
-    "status",
-    params.status,
-  );
+    status:
+      normalizeQueryValue(
+        params.status,
+      ),
 
-  appendOptionalQuery(
-    query,
-    "inquiryType",
-    params.inquiryType,
-  );
+    inquiryType:
+      normalizeQueryValue(
+        params.inquiryType,
+      ),
 
-  appendOptionalQuery(
-    query,
-    "searchQuery",
-    params.searchQuery,
-  );
+    searchQuery:
+      normalizeQueryValue(
+        params.searchQuery,
+      ),
+  };
+}
+
+function buildInquiryListQuery(
+  params: ListMeInquiriesParams,
+): ApiQueryParams {
+  return {
+    page:
+      normalizeQueryValue(
+        params.page,
+      ),
+
+    perPage:
+      normalizeQueryValue(
+        params.perPage,
+      ),
+
+    ...buildInquiryFilterQuery(
+      params,
+    ),
+  };
 }
 
 export async function listMeInquiries(
   params: ListMeInquiriesParams = {},
 ): Promise<ListMeInquiriesResult> {
-  const query =
-    new URLSearchParams();
-
-  appendOptionalQuery(
-    query,
-    "page",
-    params.page,
-  );
-
-  appendOptionalQuery(
-    query,
-    "perPage",
-    params.perPage,
-  );
-
-  appendInquiryFilters(
-    query,
-    params,
-  );
-
-  const queryString =
-    query.toString();
-
-  const path = queryString
-    ? `${INQUIRY_BASE_PATH}?${queryString}`
-    : INQUIRY_BASE_PATH;
-
   const json =
     await fetchInquiryWithAuth<
       ApiItemsResponse<Inquiry>
-    >(path, {
-      method: "GET",
-      signal: params.signal,
-    });
+    >(
+      INQUIRY_BASE_PATH,
+      {
+        method: "GET",
+        signal: params.signal,
+        query:
+          buildInquiryListQuery(
+            params,
+          ),
+      },
+    );
 
   return {
     items: Array.isArray(
@@ -116,6 +115,7 @@ export async function listMeInquiries(
     )
       ? json.items
       : [],
+
     page: json.page,
     perPage: json.perPage,
   };
@@ -124,33 +124,26 @@ export async function listMeInquiries(
 export async function getUnreadInquiryCount(
   params: GetUnreadInquiryCountParams = {},
 ): Promise<number> {
-  const query =
-    new URLSearchParams();
-
-  appendInquiryFilters(
-    query,
-    params,
-  );
-
-  const queryString =
-    query.toString();
-
-  const path = queryString
-    ? `${INQUIRY_BASE_PATH}/unread-count?${queryString}`
-    : `${INQUIRY_BASE_PATH}/unread-count`;
-
   const json =
     await fetchInquiryWithAuth<
       ApiUnreadCountResponse
-    >(path, {
-      method: "GET",
-    });
+    >(
+      `${INQUIRY_BASE_PATH}/unread-count`,
+      {
+        method: "GET",
+        query:
+          buildInquiryFilterQuery(
+            params,
+          ),
+      },
+    );
 
-  const unreadCount = Number(
-    json.count ??
-      json.unreadCount ??
-      0,
-  );
+  const unreadCount =
+    Number(
+      json.count ??
+        json.unreadCount ??
+        0,
+    );
 
   if (
     !Number.isFinite(
