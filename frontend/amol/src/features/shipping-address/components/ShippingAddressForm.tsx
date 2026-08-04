@@ -2,7 +2,7 @@
 import type { FormEvent, ChangeEvent } from "react";
 
 import Input from "../../../components/ui/Input";
-import type { ShippingAddressFormValues } from "../../shared/types/types";
+import type { ShippingAddressFormValues } from "../../shared/types/shippingAddress";
 
 type ShippingAddressFormProps = {
   form: ShippingAddressFormValues;
