@@ -20,6 +20,15 @@ import {
   createResaleListing,
 } from "../../api/resaleApi";
 
+import {
+  DEFAULT_RESALE_CONDITION,
+  normalizeResaleCondition,
+} from "../../constants/resaleConditions";
+
+import type {
+  ResaleCondition,
+} from "../../../shared/types/resale";
+
 import type {
   ResaleCreatePageLocationState,
   ResaleCreateTarget,
@@ -28,9 +37,6 @@ import type {
 import {
   useResaleConditionMedia,
 } from "./useResaleConditionMedia";
-
-const DEFAULT_RESALE_CONDITION =
-  "未使用に近い";
 
 const INVALID_FORM_MESSAGE =
   "販売価格と商品状態の写真を入力してください。";
@@ -177,7 +183,7 @@ export function useResaleCreatePage() {
   const [
     condition,
     setCondition,
-  ] = useState(
+  ] = useState<ResaleCondition>(
     DEFAULT_RESALE_CONDITION,
   );
 
@@ -276,7 +282,9 @@ export function useResaleCreatePage() {
         value: string,
       ) => {
         setCondition(
-          value,
+          normalizeResaleCondition(
+            value,
+          ),
         );
 
         setErrorMessage("");
