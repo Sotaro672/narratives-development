@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
+
 import type {
   NavigateFunction,
 } from "react-router-dom";
@@ -13,49 +14,62 @@ import type {
 import {
   formatPrice,
 } from "../../../components/utils/price";
+
 import {
   getApiBaseUrl,
 } from "../../../lib/apiBaseUrl";
+
 import {
   getFirebaseIdToken,
 } from "../../../lib/authToken";
+
 import {
-  fetchCartItemsWithCatalog,
-} from "../../cart/api/cartApi";
+  loadCartPage,
+} from "../../cart/application/loadCartPage";
+
+import type {
+  CartDisplayItem,
+} from "../../cart/types/cart";
+
 import {
   calculateCartTotalAmount,
 } from "../../cart/utils/cartUtils";
+
 import {
   fetchShippingAddressPageInitialData,
 } from "../../shipping-address/api/shippingAddressApi";
-import type {
-  CartDisplayItem,
-} from "../../shared/types/cart";
+
 import type {
   CanonicalShippingAddress,
   CreateOrderRequest,
 } from "../../shared/types/payment";
+
 import type {
   CardPaymentMethod,
 } from "../../shared/types/paymentMethods";
+
 import type {
   UserProfile,
 } from "../../shared/types/shippingAddress";
+
 import {
   createOrder,
   createPayment,
   fetchPaymentMethods,
 } from "../api/paymentApi";
+
 import {
   getShippingAddressLabel,
   getUserFullName,
 } from "../utils/format";
+
 import {
   isPaymentRequiresAction,
   isPaymentSucceeded,
   normalizeCartItems,
   normalizeShippingAddress,
 } from "../utils/guards";
+
 import {
   buildOrderItems,
   buildShippingSnapshot,
@@ -63,7 +77,8 @@ import {
   validateOrderItems,
 } from "../utils/order";
 
-const API_BASE_URL = getApiBaseUrl();
+const API_BASE_URL =
+  getApiBaseUrl();
 
 type UsePaymentPageParams = {
   listId?: string;
@@ -77,22 +92,30 @@ export function usePaymentPage({
   const [
     paymentMethods,
     setPaymentMethods,
-  ] = useState<CardPaymentMethod[]>([]);
+  ] = useState<
+    CardPaymentMethod[]
+  >([]);
 
   const [
     cartItems,
     setCartItems,
-  ] = useState<CartDisplayItem[]>([]);
+  ] = useState<
+    CartDisplayItem[]
+  >([]);
 
   const [
     userProfile,
     setUserProfile,
-  ] = useState<UserProfile | null>(null);
+  ] = useState<
+    UserProfile | null
+  >(null);
 
   const [
     shippingAddresses,
     setShippingAddresses,
-  ] = useState<CanonicalShippingAddress[]>([]);
+  ] = useState<
+    CanonicalShippingAddress[]
+  >([]);
 
   const [
     selectedPaymentMethodId,
@@ -114,90 +137,111 @@ export function usePaymentPage({
     setModalMessage,
   ] = useState("");
 
-  const primaryShippingAddress = useMemo(
-    () =>
-      shippingAddresses[0] ?? null,
-    [shippingAddresses],
-  );
+  const primaryShippingAddress =
+    useMemo(
+      () =>
+        shippingAddresses[0] ??
+        null,
+      [shippingAddresses],
+    );
 
-  const userFullName = useMemo(
-    () =>
-      getUserFullName(
-        userProfile,
-      ),
-    [userProfile],
-  );
+  const userFullName =
+    useMemo(
+      () =>
+        getUserFullName(
+          userProfile,
+        ),
+      [userProfile],
+    );
 
-  const shippingAddressLabel = useMemo(
-    () => {
-      if (!primaryShippingAddress) {
-        return "";
-      }
+  const shippingAddressLabel =
+    useMemo(
+      () => {
+        if (
+          !primaryShippingAddress
+        ) {
+          return "";
+        }
 
-      return getShippingAddressLabel(
+        return getShippingAddressLabel(
+          primaryShippingAddress,
+        );
+      },
+      [
         primaryShippingAddress,
-      );
-    },
-    [primaryShippingAddress],
-  );
+      ],
+    );
 
-  const orderId = useMemo(
-    () => {
-      if (cartItems.length === 0) {
-        return "";
-      }
+  const orderId =
+    useMemo(
+      () => {
+        if (
+          cartItems.length === 0
+        ) {
+          return "";
+        }
 
-      const firstItem =
-        cartItems[0];
+        const firstItem =
+          cartItems[0];
 
-      if (!firstItem.avatarId) {
-        return "";
-      }
+        if (
+          !firstItem.avatarId
+        ) {
+          return "";
+        }
 
-      return `${firstItem.avatarId}__${Date.now()}`;
-    },
-    [cartItems],
-  );
+        return `${firstItem.avatarId}__${Date.now()}`;
+      },
+      [cartItems],
+    );
 
-  const amount = useMemo(
-    () =>
-      calculateCartTotalAmount(
-        cartItems,
-      ),
-    [cartItems],
-  );
+  const amount =
+    useMemo(
+      () =>
+        calculateCartTotalAmount(
+          cartItems,
+        ),
+      [cartItems],
+    );
 
-  const selectedPaymentMethod = useMemo(
-    () => {
-      if (!selectedPaymentMethodId) {
-        return null;
-      }
+  const selectedPaymentMethod =
+    useMemo(
+      () => {
+        if (
+          !selectedPaymentMethodId
+        ) {
+          return null;
+        }
 
-      return (
-        paymentMethods.find(
-          (method) =>
-            method.id ===
-            selectedPaymentMethodId,
-        ) ?? null
-      );
-    },
-    [
-      paymentMethods,
-      selectedPaymentMethodId,
-    ],
-  );
+        return (
+          paymentMethods.find(
+            (method) =>
+              method.id ===
+              selectedPaymentMethodId,
+          ) ?? null
+        );
+      },
+      [
+        paymentMethods,
+        selectedPaymentMethodId,
+      ],
+    );
 
   const backTo =
     listId === "cart"
       ? "/cart"
       : listId
-        ? `/lists/${listId}`
+        ? `/lists/${encodeURIComponent(
+            listId,
+          )}`
         : "/lists";
 
   const paymentButtonLabel =
     isPaying
       ? "決済中..."
-      : `${formatPrice(amount)}を支払う`;
+      : `${formatPrice(
+          amount,
+        )}を支払う`;
 
   const isPaymentDisabled =
     isPaying ||
@@ -209,102 +253,124 @@ export function usePaymentPage({
     amount <= 0 ||
     cartItems.length === 0;
 
-  const showErrorModal = useCallback(
-    (
-      message: string,
-    ) => {
-      setModalMessage(message);
-    },
-    [],
-  );
-
-  const closeErrorModal = useCallback(
-    () => {
-      setModalMessage("");
-    },
-    [],
-  );
-
-  const loadPaymentPage = useCallback(
-    async () => {
-      setIsLoading(true);
-      setModalMessage("");
-
-      try {
-        const idToken =
-          await getFirebaseIdToken();
-
-        const [
-          paymentMethodResult,
-          shippingAddressInitialData,
-          items,
-        ] = await Promise.all([
-          fetchPaymentMethods(),
-          fetchShippingAddressPageInitialData({
-            backendUrl:
-              API_BASE_URL,
-            idToken,
-          }),
-          fetchCartItemsWithCatalog({
-            apiBaseUrl:
-              API_BASE_URL,
-          }),
-        ]);
-
-        setPaymentMethods(
-          paymentMethodResult.methods,
+  const showErrorModal =
+    useCallback(
+      (
+        message: string,
+      ) => {
+        setModalMessage(
+          message,
         );
+      },
+      [],
+    );
 
-        setUserProfile(
-          shippingAddressInitialData.userProfile,
-        );
+  const closeErrorModal =
+    useCallback(
+      () => {
+        setModalMessage("");
+      },
+      [],
+    );
 
-        const nextShippingAddress =
-          normalizeShippingAddress(
+  const loadPaymentPage =
+    useCallback(
+      async (): Promise<void> => {
+        setIsLoading(true);
+        setModalMessage("");
+
+        try {
+          const idToken =
+            await getFirebaseIdToken();
+
+          const [
+            paymentMethodResult,
+            shippingAddressInitialData,
+            cartPageResult,
+          ] = await Promise.all([
+            fetchPaymentMethods(),
+
+            fetchShippingAddressPageInitialData(
+              {
+                backendUrl:
+                  API_BASE_URL,
+
+                idToken,
+              },
+            ),
+
+            loadCartPage(),
+          ]);
+
+          setPaymentMethods(
+            paymentMethodResult
+              .methods,
+          );
+
+          setUserProfile(
             shippingAddressInitialData
-              .shippingAddresses[0] ??
-              null,
+              .userProfile,
           );
 
-        setShippingAddresses(
-          nextShippingAddress
-            ? [nextShippingAddress]
-            : [],
-        );
+          const nextShippingAddress =
+            normalizeShippingAddress(
+              shippingAddressInitialData
+                .shippingAddresses[0] ??
+                null,
+            );
 
-        const selectedMethod =
-          selectPrimaryPaymentMethod(
-            paymentMethodResult.methods,
-            paymentMethodResult.defaultMethod,
+          setShippingAddresses(
+            nextShippingAddress
+              ? [
+                  nextShippingAddress,
+                ]
+              : [],
           );
 
-        setSelectedPaymentMethodId(
-          selectedMethod?.id ?? "",
-        );
+          const selectedMethod =
+            selectPrimaryPaymentMethod(
+              paymentMethodResult
+                .methods,
 
-        setCartItems(
-          normalizeCartItems(
-            items,
-          ),
-        );
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "決済情報の取得に失敗しました。";
+              paymentMethodResult
+                .defaultMethod,
+            );
 
-        showErrorModal(message);
-        setPaymentMethods([]);
-        setSelectedPaymentMethodId("");
-        setCartItems([]);
-        setUserProfile(null);
-        setShippingAddresses([]);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [showErrorModal],
-  );
+          setSelectedPaymentMethodId(
+            selectedMethod?.id ??
+              "",
+          );
+
+          setCartItems(
+            normalizeCartItems(
+              cartPageResult.items,
+            ),
+          );
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "決済情報の取得に失敗しました。";
+
+          showErrorModal(
+            message,
+          );
+
+          setPaymentMethods([]);
+          setSelectedPaymentMethodId(
+            "",
+          );
+          setCartItems([]);
+          setUserProfile(null);
+          setShippingAddresses(
+            [],
+          );
+        } finally {
+          setIsLoading(false);
+        }
+      },
+      [showErrorModal],
+    );
 
   useEffect(
     () => {
@@ -314,7 +380,7 @@ export function usePaymentPage({
   );
 
   const handleSubmitPayment =
-    async () => {
+    async (): Promise<void> => {
       if (isPaying) {
         return;
       }
@@ -323,20 +389,27 @@ export function usePaymentPage({
         showErrorModal(
           "注文IDを生成できませんでした。",
         );
+
         return;
       }
 
-      if (!selectedPaymentMethod) {
+      if (
+        !selectedPaymentMethod
+      ) {
         showErrorModal(
           "支払い方法を選択してください。",
         );
+
         return;
       }
 
-      if (!selectedPaymentMethod.id) {
+      if (
+        !selectedPaymentMethod.id
+      ) {
         showErrorModal(
           "支払い方法IDを取得できませんでした。",
         );
+
         return;
       }
 
@@ -347,6 +420,7 @@ export function usePaymentPage({
         showErrorModal(
           "Stripe customer ID を取得できませんでした。",
         );
+
         return;
       }
 
@@ -357,13 +431,17 @@ export function usePaymentPage({
         showErrorModal(
           "Stripe payment method ID を取得できませんでした。",
         );
+
         return;
       }
 
-      if (!primaryShippingAddress) {
+      if (
+        !primaryShippingAddress
+      ) {
         showErrorModal(
           "配送先情報を登録してください。",
         );
+
         return;
       }
 
@@ -371,6 +449,7 @@ export function usePaymentPage({
         showErrorModal(
           "決済金額が不正です。",
         );
+
         return;
       }
 
@@ -388,6 +467,7 @@ export function usePaymentPage({
         showErrorModal(
           orderItemsError,
         );
+
         return;
       }
 
@@ -398,12 +478,15 @@ export function usePaymentPage({
         const orderPayload:
           CreateOrderRequest = {
             id: orderId,
+
             shippingSnapshot:
               buildShippingSnapshot(
                 primaryShippingAddress,
               ),
+
             paymentMethodId:
               selectedPaymentMethod.id,
+
             items: orderItems,
           };
 
@@ -413,20 +496,25 @@ export function usePaymentPage({
           );
 
         const resolvedOrderId =
-          order.id ?? orderId;
+          order.id ??
+          orderId;
 
         const payment =
           await createPayment({
             paymentId:
               resolvedOrderId,
+
             paymentMethodId:
               selectedPaymentMethod.id,
+
             stripeCustomerId:
               selectedPaymentMethod
                 .stripeCustomerId,
+
             stripePaymentMethodId:
               selectedPaymentMethod
                 .stripePaymentMethodId,
+
             amount,
           });
 
@@ -438,6 +526,7 @@ export function usePaymentPage({
           showErrorModal(
             "追加認証が必要な決済です。現在の画面では3Dセキュア認証に未対応です。",
           );
+
           return;
         }
 
@@ -452,6 +541,7 @@ export function usePaymentPage({
               "UNKNOWN"
             }`,
           );
+
           return;
         }
 
@@ -459,9 +549,11 @@ export function usePaymentPage({
           "/order-confirmed",
           {
             replace: true,
+
             state: {
               payment,
               cartItems,
+
               shippingAddress:
                 primaryShippingAddress,
             },
@@ -473,7 +565,9 @@ export function usePaymentPage({
             ? error.message
             : "注文または決済処理に失敗しました。";
 
-        showErrorModal(message);
+        showErrorModal(
+          message,
+        );
       } finally {
         setIsPaying(false);
       }
