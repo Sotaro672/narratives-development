@@ -1,6 +1,8 @@
-// frontend/amol/src/components/utils/apiResponse.ts
+// frontend/amol/src/lib/apiResponse.ts
 
-import { isRecord } from "./typeGuards";
+import {
+  HttpError,
+} from "./http/httpError";
 
 export type ReadJsonResponseOptions<T> = {
   requestErrorMessage: string;
@@ -8,6 +10,16 @@ export type ReadJsonResponseOptions<T> = {
   invalidJsonErrorMessage?: string;
   fallbackValue?: T;
 };
+
+function isRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
 
 /**
  * APIレスポンスの data ラッパーを展開します。
@@ -35,7 +47,7 @@ export function unwrapApiData<T>(
 /**
  * APIのエラーレスポンスから表示用メッセージを取得します。
  *
- * error、message の順で確認します。
+ * errorMessage、detail、message、error の順で確認します。
  */
 function extractApiErrorMessage(
   value: unknown,
@@ -47,25 +59,23 @@ function extractApiErrorMessage(
     return null;
   }
 
-  const error = body.error;
+  const candidates = [
+    body.errorMessage,
+    body.detail,
+    body.message,
+    body.error,
+  ];
 
-  if (typeof error === "string") {
-    const normalizedError =
-      error.trim();
-
-    if (normalizedError) {
-      return normalizedError;
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") {
+      continue;
     }
-  }
 
-  const message = body.message;
+    const normalizedCandidate =
+      candidate.trim();
 
-  if (typeof message === "string") {
-    const normalizedMessage =
-      message.trim();
-
-    if (normalizedMessage) {
-      return normalizedMessage;
+    if (normalizedCandidate) {
+      return normalizedCandidate;
     }
   }
 
@@ -84,10 +94,11 @@ function hasFallbackValue<T>(
 /**
  * ResponseをJSONとして読み込みます。
  *
- * - HTTPエラー時は error / message を抽出
+ * - HTTPエラー時はAPIレスポンスからメッセージを抽出
  * - JSON以外の正常レスポンスはエラー
- * - 空レスポンスが許可される場合は fallbackValue を使用
- * - response.text() は一度だけ実行
+ * - 空レスポンスが許可される場合はfallbackValueを使用
+ * - response.text()は一度だけ実行
+ * - HTTPエラーはHttpErrorとして返す
  */
 export async function readJsonResponse<T>(
   response: Response,
@@ -113,7 +124,9 @@ export async function readJsonResponse<T>(
 
   if (isJsonResponse && text) {
     try {
-      decoded = JSON.parse(text);
+      decoded =
+        JSON.parse(text) as unknown;
+
       jsonParsed = true;
     } catch {
       decoded = undefined;
@@ -128,11 +141,23 @@ export async function readJsonResponse<T>(
           )
         : null;
 
-    throw new Error(
-      apiErrorMessage ||
-        text ||
+    throw new HttpError({
+      message:
+        apiErrorMessage ||
+        text.trim() ||
         options.requestErrorMessage,
-    );
+
+      status:
+        response.status,
+
+      url:
+        response.url,
+
+      body:
+        jsonParsed
+          ? decoded
+          : text || undefined,
+    });
   }
 
   if (!isJsonResponse) {
@@ -171,7 +196,8 @@ export async function readJsonResponse<T>(
 }
 
 /**
- * JSONレスポンスを読み込み、data ラッパーを展開して返します。
+ * JSONレスポンスを読み込み、
+ * dataラッパーを展開して返します。
  */
 export async function readJsonDataResponse<T>(
   response: Response,
@@ -181,11 +207,13 @@ export async function readJsonDataResponse<T>(
     ReadJsonResponseOptions<unknown> = {
       requestErrorMessage:
         options.requestErrorMessage,
+
       nonJsonErrorMessage:
         options.nonJsonErrorMessage,
+
       invalidJsonErrorMessage:
         options.invalidJsonErrorMessage,
-  };
+    };
 
   if (hasFallbackValue(options)) {
     readOptions.fallbackValue =

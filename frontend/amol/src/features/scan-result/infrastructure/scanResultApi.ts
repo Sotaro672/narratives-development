@@ -3,7 +3,7 @@
 import {
   readJsonDataResponse,
   readJsonResponse,
-} from "../../../components/utils/apiResponse";
+} from "../../../lib/apiResponse";
 import {
   isRecord,
 } from "../../../components/utils/typeGuards";

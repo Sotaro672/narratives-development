@@ -3,7 +3,7 @@
 import {
   readJsonResponse,
   unwrapApiData,
-} from "../../../components/utils/apiResponse";
+} from "../../../lib/apiResponse";
 
 import type {
   ProductCategoryKind,

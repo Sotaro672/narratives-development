@@ -1,6 +1,6 @@
 // frontend/amol/src/features/wallet/api/walletTokenApi.ts
 
-import { readJsonResponse } from "../../../components/utils/apiResponse";
+import { readJsonResponse } from "../../../lib/apiResponse";
 import {
   buildApiUrl,
   getApiBaseUrl,

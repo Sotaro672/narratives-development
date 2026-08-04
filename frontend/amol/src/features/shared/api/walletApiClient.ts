@@ -2,7 +2,7 @@
 
 import {
   readJsonDataResponse,
-} from "../../../components/utils/apiResponse";
+} from "../../../lib/apiResponse";
 import {
   buildApiUrl,
   getApiBaseUrl,
