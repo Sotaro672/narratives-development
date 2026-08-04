@@ -1,20 +1,30 @@
 // frontend/amol/src/features/payment/utils/guards.ts
-import type { CartDisplayItem } from "../../shared/types/cart";
-import type { ShippingAddress } from "../../shipping-address/types";
+
 import type {
-  CanonicalCartDisplayItem,
+  CartDisplayItem,
+} from "../../shared/types/cart";
+import type {
+  ShippingAddress,
+} from "../../shipping-address/types";
+import type {
   CanonicalShippingAddress,
   CreatedPayment,
 } from "../../shared/types/payment";
 
-export function isPaymentSucceeded(payment: CreatedPayment): boolean {
-  const normalizedStatus = payment.status?.trim().toLowerCase();
+export function isPaymentSucceeded(
+  payment: CreatedPayment,
+): boolean {
+  const normalizedStatus =
+    payment.status?.trim().toLowerCase();
 
   return normalizedStatus === "succeeded";
 }
 
-export function isPaymentRequiresAction(payment: CreatedPayment): boolean {
-  const normalizedStatus = payment.status?.trim().toLowerCase();
+export function isPaymentRequiresAction(
+  payment: CreatedPayment,
+): boolean {
+  const normalizedStatus =
+    payment.status?.trim().toLowerCase();
 
   return (
     payment.requiresAction === true ||
@@ -25,8 +35,10 @@ export function isPaymentRequiresAction(payment: CreatedPayment): boolean {
 
 export function normalizeCartItems(
   items: CartDisplayItem[],
-): CanonicalCartDisplayItem[] {
-  return items.map((item) => normalizeCartItem(item));
+): CartDisplayItem[] {
+  return items.map((item) =>
+    normalizeCartItem(item),
+  );
 }
 
 export function normalizeShippingAddress(
@@ -39,29 +51,39 @@ export function normalizeShippingAddress(
   return address as CanonicalShippingAddress;
 }
 
-function normalizeCartItem(item: CartDisplayItem): CanonicalCartDisplayItem {
-  const raw = item as CanonicalCartDisplayItem;
-
+function normalizeCartItem(
+  item: CartDisplayItem,
+): CartDisplayItem {
   const type =
-    raw.type === "resale" || raw.resaleId || raw.productId ? "resale" : "list";
+    item.type === "resale" ||
+    item.resaleId ||
+    item.productId
+      ? "resale"
+      : "list";
 
   if (type === "resale") {
     return {
-      ...raw,
+      ...item,
       type: "resale",
       qty: 1,
     };
   }
 
   return {
-    ...raw,
+    ...item,
     type: "list",
-    qty: normalizeQty(raw.qty),
+    qty: normalizeQty(item.qty),
   };
 }
 
-function normalizeQty(qty: number | undefined): number {
-  if (typeof qty !== "number" || !Number.isFinite(qty) || qty <= 0) {
+function normalizeQty(
+  qty: number | undefined,
+): number {
+  if (
+    typeof qty !== "number" ||
+    !Number.isFinite(qty) ||
+    qty <= 0
+  ) {
     return 1;
   }
 

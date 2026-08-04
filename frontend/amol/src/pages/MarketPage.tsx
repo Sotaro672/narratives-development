@@ -9,8 +9,10 @@ import { useNavigate } from "react-router-dom";
 import Layout from "../components/layout/Layout";
 import {
   fetchMarketResales,
-  type MarketResaleListing,
-} from "../features/market/marketApi";
+} from "../features/market/api/marketResaleApi";
+import type {
+  MarketResaleListing,
+} from "../features/market/types/marketResale";
 import {
   formatPrice,
 } from "../components/utils/price";

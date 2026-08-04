@@ -8,13 +8,23 @@ import MediaGallery, {
 } from "../components/ui/MediaGallery";
 import {
   fetchMarketProductBlueprintReviews,
+} from "../features/market/api/marketReviewApi";
+import {
   fetchMarketResaleById,
+} from "../features/market/api/marketResaleApi";
+import {
   fetchMarketResaleConditionImages,
-  type MarketProductBlueprintReview,
-  type MarketProductBlueprintReviewPage,
-  type MarketResaleConditionImage,
-  type MarketResaleListing,
-} from "../features/market/marketApi";
+} from "../features/market/api/marketResaleImageApi";
+import type {
+  MarketResaleListing,
+} from "../features/market/types/marketResale";
+import type {
+  MarketResaleConditionImage,
+} from "../features/market/types/marketResaleImage";
+import type {
+  ProductBlueprintReview,
+  ProductBlueprintReviewPage,
+} from "../features/shared/types/review";
 import { getApiBaseUrl } from "../lib/apiBaseUrl";
 import { auth } from "../lib/firebase";
 import { rgbToCssColor, toSafeColorRGB } from "../components/utils/color";
@@ -338,7 +348,7 @@ async function addResaleProductToCart(args: {
 function ReviewAvatar({
   review,
 }: {
-  review: MarketProductBlueprintReview;
+  review: ProductBlueprintReview;
 }) {
   const avatarName = textOrEmpty(review.avatarName);
   const avatarIcon = textOrEmpty(review.avatarIcon);
@@ -389,7 +399,7 @@ export default function MarketDetailPage() {
   >([]);
 
   const [reviews, setReviews] =
-    useState<MarketProductBlueprintReviewPage | null>(
+    useState<ProductBlueprintReviewPage | null>(
       null,
     );
 
