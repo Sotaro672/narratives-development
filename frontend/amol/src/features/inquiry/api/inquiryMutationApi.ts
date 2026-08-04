@@ -12,7 +12,7 @@ import type {
   Inquiry,
   InquiryReply,
   ReplyInquiryRequest,
-} from "../types/inquiryTypes";
+} from "../../shared/types/inquiryTypes";
 
 export async function createInquiry(
   payload: CreateInquiryRequest,

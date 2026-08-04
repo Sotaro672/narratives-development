@@ -11,7 +11,7 @@ import type {
   Inquiry,
   InquiryReply,
   InquiryThread,
-} from "../types/inquiryTypes";
+} from "../../shared/types/inquiryTypes";
 
 export async function getInquiry(
   inquiryId: string,

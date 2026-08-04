@@ -14,7 +14,7 @@ import type {
   InquiryImage,
   UploadInquiryImageParams,
   UploadReplyImageParams,
-} from "../types/inquiryTypes";
+} from "../../shared/types/inquiryTypes";
 
 type UploadInquiryImageFileParams = {
   directoryPath: string;

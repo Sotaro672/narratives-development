@@ -36,4 +36,4 @@ export type {
   ReplyInquiryRequest,
   UploadInquiryImageParams,
   UploadReplyImageParams,
-} from "../types/inquiryTypes";
+} from "../../shared/types/inquiryTypes";

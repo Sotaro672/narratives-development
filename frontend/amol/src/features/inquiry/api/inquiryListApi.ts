@@ -12,7 +12,7 @@ import type {
   Inquiry,
   ListMeInquiriesParams,
   ListMeInquiriesResult,
-} from "../types/inquiryTypes";
+} from "../../shared/types/inquiryTypes";
 
 function appendOptionalQuery(
   query: URLSearchParams,
