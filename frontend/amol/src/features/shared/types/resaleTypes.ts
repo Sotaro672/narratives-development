@@ -4,27 +4,48 @@ import type {
   PageResultResponse,
 } from "../pageResult";
 
-export type ResaleListing = {
-  id?: string;
-  status?: string;
-  mintAddress?: string;
-  tokenBlueprintId?: string;
-  productId?: string;
-  brandId?: string;
-  productBlueprintId?: string;
-  avatarId?: string;
-  price?: number;
-  condition?: string;
-  description?: string;
-  imageId?: string;
-  productName?: string;
-  tokenName?: string;
-  brandName?: string;
-  createdBy?: string;
-  createdAt?: string;
-  updatedBy?: string | null;
-  updatedAt?: string | null;
-};
+import type {
+  ResaleEditableStatus,
+  ResaleListingBase,
+} from "../../shared/types/resale";
+
+type ResaleCreateRequiredFields =
+  Required<
+    Pick<
+      ResaleListingBase,
+      | "mintAddress"
+      | "tokenBlueprintId"
+      | "productId"
+      | "price"
+      | "condition"
+      | "description"
+    >
+  >;
+
+type ResaleCreateOptionalFields =
+  Pick<
+    ResaleListingBase,
+    | "brandId"
+    | "productBlueprintId"
+  >;
+
+type ResaleUpdateFields =
+  Partial<
+    Pick<
+      ResaleListingBase,
+      | "price"
+      | "condition"
+      | "description"
+    >
+  >;
+
+export type ResaleListing =
+  Partial<ResaleListingBase> & {
+    createdBy?: string;
+    createdAt?: string;
+    updatedBy?: string | null;
+    updatedAt?: string | null;
+  };
 
 export type ResaleConditionImage = {
   id: string;
@@ -37,17 +58,11 @@ export type ResaleConditionImage = {
   displayOrder: number;
 };
 
-export type CreateResaleListingParams = {
-  mintAddress: string;
-  tokenBlueprintId: string;
-  productId: string;
-  brandId?: string;
-  productBlueprintId?: string;
-  price: number;
-  condition: string;
-  description: string;
-  conditionImages: File[];
-};
+export type CreateResaleListingParams =
+  ResaleCreateRequiredFields &
+  ResaleCreateOptionalFields & {
+    conditionImages: File[];
+  };
 
 export type CreateResaleListingRecordParams =
   Omit<
@@ -57,11 +72,8 @@ export type CreateResaleListingRecordParams =
 
 export type UpdateResaleListingParams = {
   resaleId: string;
-  price?: number;
-  condition?: string;
-  description?: string;
-  status?: string;
-};
+  status?: ResaleEditableStatus;
+} & ResaleUpdateFields;
 
 export type ListMyResaleListingsParams = {
   page?: number;

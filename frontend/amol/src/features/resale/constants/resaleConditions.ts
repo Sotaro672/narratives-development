@@ -1,19 +1,21 @@
 // frontend/amol/src/features/resale/constants/resaleConditions.ts
 
-export const RESALE_CONDITIONS = [
-  "新品・未使用",
-  "未使用に近い",
-  "目立った傷や汚れなし",
-  "やや傷や汚れあり",
-  "傷や汚れあり",
-] as const;
-
-export type ResaleCondition =
-  (typeof RESALE_CONDITIONS)[number];
+import {
+  RESALE_CONDITIONS,
+  type ResaleCondition,
+} from "../../shared/types/resale";
 
 export const DEFAULT_RESALE_CONDITION:
   ResaleCondition =
     "未使用に近い";
+
+export const RESALE_CONDITION_OPTIONS =
+  RESALE_CONDITIONS.map(
+    (condition) => ({
+      value: condition,
+      label: condition,
+    }),
+  );
 
 /**
  * 値が再販商品の状態として有効か判定する。
@@ -28,4 +30,18 @@ export function isResaleCondition(
         readonly string[]
     ).includes(value)
   );
+}
+
+/**
+ * 値を再販商品の状態へ正規化する。
+ *
+ * 未定義または不正な値の場合は、
+ * デフォルトの商品状態を返す。
+ */
+export function normalizeResaleCondition(
+  value: unknown,
+): ResaleCondition {
+  return isResaleCondition(value)
+    ? value
+    : DEFAULT_RESALE_CONDITION;
 }

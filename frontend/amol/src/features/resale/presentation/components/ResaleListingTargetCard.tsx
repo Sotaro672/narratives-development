@@ -3,12 +3,15 @@
 import MediaIcon from "../../../../components/ui/MediaIcon";
 import SectionHeader from "../../../../components/ui/SectionHeader";
 
-import type {
-  ResaleCreateTarget,
-} from "../types/resaleCreatePageTypes";
+export type ResaleListingTargetCardTarget = {
+  brandName: string;
+  productName: string;
+  tokenIconUrl: string;
+  tokenName: string;
+};
 
 export type ResaleListingTargetCardProps = {
-  target: ResaleCreateTarget;
+  target: ResaleListingTargetCardTarget;
 };
 
 export default function ResaleListingTargetCard({

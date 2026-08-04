@@ -8,11 +8,11 @@ import type {
 import MediaUploader from "../../../../components/ui/MediaUploader";
 
 import type {
-  ResaleConditionMediaItem,
-} from "../types/resaleCreatePageTypes";
+  MediaUploaderItem,
+} from "../../../../components/ui/MediaUploader";
 
 export type ResaleConditionMediaFieldProps = {
-  items: ResaleConditionMediaItem[];
+  items: MediaUploaderItem[];
   currentIndex: number;
   inputRef: RefObject<HTMLInputElement>;
   carouselRef: RefObject<HTMLDivElement>;

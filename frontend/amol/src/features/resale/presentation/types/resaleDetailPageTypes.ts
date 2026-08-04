@@ -1,0 +1,179 @@
+// frontend/amol/src/features/resale/presentation/types/resaleDetailPageTypes.ts
+
+import type {
+  ChangeEvent,
+  RefObject,
+} from "react";
+
+import type {
+  MediaGalleryItem,
+} from "../../../../components/ui/MediaGallery";
+import type {
+  MediaUploaderItem,
+} from "../../../../components/ui/MediaUploader";
+
+import type {
+  ResaleConditionImage,
+  ResaleListing,
+} from "../../api/resaleApi";
+
+import type {
+  ResaleCondition,
+  ResaleEditableStatus,
+} from "../../../shared/types/resale";
+
+export type ResaleModelColor = {
+  name?: string;
+  rgb?: number;
+};
+
+export type ResaleModelVolume = {
+  amount?: number;
+  value?: number;
+  unit?: string;
+};
+
+export type ResaleListingWithModel =
+  ResaleListing & {
+    modelId?: string;
+    kind?: string;
+    modelNumber?: string;
+    size?: string;
+    color?: ResaleModelColor | null;
+    measurements?: Record<string, number> | null;
+    volume?: ResaleModelVolume | null;
+
+    imageUrl?: string;
+    tokenIcon?: string;
+    tokenIconUrl?: string;
+    metadata?: {
+      image?: string;
+    } | null;
+  };
+
+export type ResaleDetailConditionMediaItem =
+  Omit<
+    MediaUploaderItem,
+    "type"
+  > & {
+    type: "image";
+    source: "existing" | "new";
+    file?: File;
+    image?: ResaleConditionImage;
+  };
+
+export type ResaleListingTargetSummary = {
+  tokenIconUrl: string;
+  tokenName: string;
+  brandName: string;
+  productName: string;
+};
+
+export type ResaleDetailModelInfoProps = {
+  hasModelInfo: boolean;
+  kindLabel: string;
+  modelNumber: string;
+  size: string;
+  colorLabel: string;
+  measurementsLabel: string;
+  volumeLabel: string;
+};
+
+export type ResaleDetailReadonlyInfoProps = {
+  galleryItems: MediaGalleryItem[];
+  activeGalleryIndex: number;
+
+  priceLabel: string;
+  conditionLabel: string;
+  statusLabel: string;
+  createdAtLabel: string;
+  updatedAtLabel: string;
+  description: string;
+
+  onPrevGalleryItem: () => void;
+  onNextGalleryItem: () => void;
+  onSelectGalleryItem: (index: number) => void;
+};
+
+export type ResaleDetailEditFormProps = {
+  priceValue: string;
+  condition: ResaleCondition;
+  status: ResaleEditableStatus;
+  description: string;
+  saving: boolean;
+
+  createdAtLabel: string;
+  updatedAtLabel: string;
+
+  conditionMediaItems:
+    ResaleDetailConditionMediaItem[];
+  conditionMediaCurrentIndex: number;
+  conditionMediaInputRef:
+    RefObject<HTMLInputElement>;
+  conditionMediaCarouselRef:
+    RefObject<HTMLDivElement>;
+
+  onPriceChange: (value: string) => void;
+  onConditionChange: (
+    value: ResaleCondition,
+  ) => void;
+  onStatusChange: (
+    value: ResaleEditableStatus,
+  ) => void;
+  onDescriptionChange: (value: string) => void;
+
+  onConditionMediaSelected: (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => void;
+  onRemoveConditionMedia: (id: string) => void;
+  onConditionMediaCarouselScroll: () => void;
+  onMoveToConditionMediaSlide: (
+    index: number,
+  ) => void;
+};
+
+export type ResaleDetailActionFooterProps = {
+  variant: "action";
+  buttonLabel: string;
+  disabled?: boolean;
+  onButtonClick: () => void | Promise<void>;
+};
+
+export type ResaleDetailTripleActionFooterProps = {
+  variant: "tripleAction";
+  leftButtonLabel: string;
+  centerButtonLabel: string;
+  rightButtonLabel: string;
+  leftButtonDisabled?: boolean;
+  centerButtonDisabled?: boolean;
+  rightButtonDisabled?: boolean;
+  onLeftButtonClick: () => void | Promise<void>;
+  onCenterButtonClick: () => void | Promise<void>;
+  onRightButtonClick: () => void | Promise<void>;
+};
+
+export type ResaleDetailFooterProps =
+  | ResaleDetailActionFooterProps
+  | ResaleDetailTripleActionFooterProps;
+
+export type ResaleDetailPageViewModel = {
+  title: string;
+  footerProps?: ResaleDetailFooterProps;
+
+  loading: boolean;
+  item: ResaleListingWithModel | null;
+  isEditing: boolean;
+  isSold: boolean;
+
+  errorMessage: string;
+  saveMessage: string;
+
+  listingTarget: ResaleListingTargetSummary;
+  modelInfoProps: ResaleDetailModelInfoProps;
+  readonlyInfoProps: ResaleDetailReadonlyInfoProps;
+  editFormProps: ResaleDetailEditFormProps;
+
+  handleBack: () => void;
+  handleReload: () => Promise<void>;
+  handleBackToWallet: () => void;
+};

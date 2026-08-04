@@ -1,4 +1,5 @@
-//frontend\amol\src\features\shared\types\resale.ts
+// frontend/amol/src/features/shared/types/resale.ts
+
 export const RESALE_CONDITIONS = [
   "新品・未使用",
   "未使用に近い",
@@ -12,7 +13,14 @@ export type ResaleCondition =
 
 export type ResaleStatus =
   | "listing"
-  | "suspended";
+  | "suspended"
+  | "sold";
+
+export type ResaleEditableStatus =
+  Exclude<
+    ResaleStatus,
+    "sold"
+  >;
 
 export type ResaleListingBase = {
   id: string;
