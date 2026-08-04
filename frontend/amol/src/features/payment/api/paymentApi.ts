@@ -1,5 +1,10 @@
 // frontend/amol/src/features/payment/api/paymentApi.ts
 
+import {
+  HttpError,
+  requestJson,
+} from "../../../lib/http";
+
 import type {
   CreateOrderRequest,
   CreatePaymentRequest,
@@ -12,65 +17,57 @@ import type {
   PaymentMethodDefaultResponse,
   PaymentMethodListResponse,
 } from "../../shared/types/paymentMethods";
-import {
-  API_BASE_URL,
-  getAuthHeaders,
-  getResponseErrorMessage,
-  parseJsonOrNull,
-  parseJsonOrThrow,
-} from "./paymentHttp";
 
 export async function fetchPaymentContext(): Promise<PaymentContext> {
-  const headers = await getAuthHeaders();
-
-  const response = await fetch(`${API_BASE_URL}/mall/me/payments`, {
-    method: "GET",
-    headers,
-    credentials: "include",
-  });
-
-  return parseJsonOrThrow<PaymentContext>(response);
+  return requestJson<PaymentContext>(
+    "/mall/me/payments",
+    {
+      method: "GET",
+      auth: "required",
+      credentials: "include",
+    },
+  );
 }
 
 export async function fetchPaymentMethods(): Promise<{
   methods: CardPaymentMethod[];
   defaultMethod: CardPaymentMethod | null;
 }> {
-  const headers = await getAuthHeaders();
+  const [listBody, defaultBody] = await Promise.all([
+    requestJson<PaymentMethodListResponse>(
+      "/mall/me/payment-methods",
+      {
+        method: "GET",
+        auth: "required",
+        credentials: "include",
+        messages: {
+          requestErrorMessage:
+            "支払い方法の取得に失敗しました。",
+        },
+      },
+    ),
+    requestJson<PaymentMethodDefaultResponse>(
+      "/mall/me/payment-methods/default",
+      {
+        method: "GET",
+        auth: "required",
+        credentials: "include",
+        messages: {
+          requestErrorMessage:
+            "既定の支払い方法の取得に失敗しました。",
+        },
+      },
+    ).catch((error: unknown) => {
+      if (
+        error instanceof HttpError &&
+        error.status === 404
+      ) {
+        return null;
+      }
 
-  const [listResponse, defaultResponse] = await Promise.all([
-    fetch(`${API_BASE_URL}/mall/me/payment-methods`, {
-      method: "GET",
-      headers,
-      credentials: "include",
-    }),
-    fetch(`${API_BASE_URL}/mall/me/payment-methods/default`, {
-      method: "GET",
-      headers,
-      credentials: "include",
+      throw error;
     }),
   ]);
-
-  const listBody =
-    await parseJsonOrNull<PaymentMethodListResponse>(listResponse);
-
-  const defaultBody =
-    await parseJsonOrNull<PaymentMethodDefaultResponse>(defaultResponse);
-
-  if (!listResponse.ok) {
-    throw new Error(
-      getResponseErrorMessage(listBody, "支払い方法の取得に失敗しました。"),
-    );
-  }
-
-  if (!defaultResponse.ok && defaultResponse.status !== 404) {
-    throw new Error(
-      getResponseErrorMessage(
-        defaultBody,
-        "既定の支払い方法の取得に失敗しました。",
-      ),
-    );
-  }
 
   return {
     methods: Array.isArray(listBody?.data) ? listBody.data : [],
@@ -81,16 +78,15 @@ export async function fetchPaymentMethods(): Promise<{
 export async function createOrder(
   input: CreateOrderRequest,
 ): Promise<CreatedOrder> {
-  const headers = await getAuthHeaders();
-
-  const response = await fetch(`${API_BASE_URL}/mall/me/orders`, {
-    method: "POST",
-    headers,
-    credentials: "include",
-    body: JSON.stringify(input),
-  });
-
-  const order = await parseJsonOrThrow<CreatedOrder>(response);
+  const order = await requestJson<CreatedOrder>(
+    "/mall/me/orders",
+    {
+      method: "POST",
+      auth: "required",
+      credentials: "include",
+      json: input,
+    },
+  );
 
   return {
     ...order,
@@ -102,22 +98,21 @@ export async function createOrder(
 export async function createPayment(
   input: CreatePaymentRequest,
 ): Promise<CreatedPayment> {
-  const headers = await getAuthHeaders();
-
-  const response = await fetch(`${API_BASE_URL}/mall/me/payments`, {
-    method: "POST",
-    headers,
-    credentials: "include",
-    body: JSON.stringify({
-      paymentId: input.paymentId,
-      paymentMethodId: input.paymentMethodId,
-      stripeCustomerId: input.stripeCustomerId,
-      stripePaymentMethodId: input.stripePaymentMethodId,
-      amount: input.amount,
-    }),
-  });
-
-  const data = await parseJsonOrThrow<CreatedPayment>(response);
+  const data = await requestJson<CreatedPayment>(
+    "/mall/me/payments",
+    {
+      method: "POST",
+      auth: "required",
+      credentials: "include",
+      json: {
+        paymentId: input.paymentId,
+        paymentMethodId: input.paymentMethodId,
+        stripeCustomerId: input.stripeCustomerId,
+        stripePaymentMethodId: input.stripePaymentMethodId,
+        amount: input.amount,
+      },
+    },
+  );
 
   return {
     ...data,

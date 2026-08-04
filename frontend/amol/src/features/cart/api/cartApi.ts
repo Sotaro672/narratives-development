@@ -1,7 +1,9 @@
 // frontend/amol/src/features/cart/api/cartApi.ts
 
-import { getFirebaseIdToken } from "../../../lib/authToken";
-import { readResponseErrorMessage } from "../../catalog/infrastructure/httpErrorReader";
+import {
+  HttpError,
+  requestJson,
+} from "../../../lib/http";
 import {
   isFiniteNumber,
   isRecord,
@@ -13,12 +15,6 @@ import type {
   CartDisplayItem,
   CartItemDTO,
 } from "../../shared/types/cart";
-
-function normalizeApiBaseUrl(
-  apiBaseUrl: string,
-): string {
-  return apiBaseUrl.replace(/\/+$/, "");
-}
 
 function normalizeCartDTO(
   data: Partial<CartDTO>,
@@ -49,72 +45,26 @@ function normalizeCartDTO(
   };
 }
 
-async function fetchCartFromPath(args: {
-  apiBaseUrl: string;
-  idToken: string;
-  path: string;
-}): Promise<Response> {
-  const {
-    apiBaseUrl,
-    idToken,
-    path,
-  } = args;
-
-  const base =
-    normalizeApiBaseUrl(apiBaseUrl);
-
-  return fetch(`${base}${path}`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
-    credentials: "include",
-  });
-}
-
 export async function fetchCart(
   apiBaseUrl: string,
 ): Promise<CartDTO> {
-  const idToken =
-    await getFirebaseIdToken();
-
-  const response =
-    await fetchCartFromPath({
-      apiBaseUrl,
-      idToken,
-      path: "/mall/me/cart",
-    });
-
-  if (!response.ok) {
-    const message =
-      await readResponseErrorMessage(
-        response,
-      );
-
-    throw new Error(
-      message ||
-        "カートの取得に失敗しました。",
-    );
-  }
-
-  const contentType =
-    response.headers.get(
-      "content-type",
-    ) ?? "";
-
-  if (
-    !contentType.includes(
-      "application/json",
-    )
-  ) {
-    throw new Error(
-      "カート取得APIがJSON以外を返しました。",
-    );
-  }
+  void apiBaseUrl;
 
   const data =
-    (await response.json()) as Partial<CartDTO>;
+    await requestJson<Partial<CartDTO>>(
+      "/mall/me/cart",
+      {
+        method: "GET",
+        auth: "required",
+        credentials: "include",
+        messages: {
+          requestErrorMessage:
+            "カートの取得に失敗しました。",
+          nonJsonErrorMessage:
+            "カート取得APIがJSON以外を返しました。",
+        },
+      },
+    );
 
   return normalizeCartDTO(data);
 }
@@ -128,8 +78,7 @@ export async function removeCartItem(args: {
     item,
   } = args;
 
-  const idToken =
-    await getFirebaseIdToken();
+  void apiBaseUrl;
 
   const isResale =
     item.type === "resale";
@@ -138,9 +87,6 @@ export async function removeCartItem(args: {
     isResale
       ? "/mall/me/cart/resales"
       : "/mall/me/cart/items";
-
-  const base =
-    normalizeApiBaseUrl(apiBaseUrl);
 
   const body =
     isResale
@@ -162,60 +108,22 @@ export async function removeCartItem(args: {
             item.modelId,
         };
 
-  const response =
-    await fetch(
-      `${base}${path}`,
+  const data =
+    await requestJson<Partial<CartDTO>>(
+      path,
       {
         method: "DELETE",
-
-        headers: {
-          Accept:
-            "application/json",
-
-          "Content-Type":
-            "application/json",
-
-          Authorization:
-            `Bearer ${idToken}`,
+        auth: "required",
+        credentials: "include",
+        json: body,
+        messages: {
+          requestErrorMessage:
+            "カート商品の削除に失敗しました。",
+          nonJsonErrorMessage:
+            "カート商品削除APIがJSON以外を返しました。",
         },
-
-        credentials:
-          "include",
-
-        body:
-          JSON.stringify(body),
       },
     );
-
-  if (!response.ok) {
-    const message =
-      await readResponseErrorMessage(
-        response,
-      );
-
-    throw new Error(
-      message ||
-        "カート商品の削除に失敗しました。",
-    );
-  }
-
-  const contentType =
-    response.headers.get(
-      "content-type",
-    ) ?? "";
-
-  if (
-    !contentType.includes(
-      "application/json",
-    )
-  ) {
-    throw new Error(
-      "カート商品削除APIがJSON以外を返しました。",
-    );
-  }
-
-  const data =
-    (await response.json()) as Partial<CartDTO>;
 
   return normalizeCartDTO(data);
 }
@@ -224,53 +132,37 @@ export async function fetchCatalog(
   apiBaseUrl: string,
   listId: string,
 ): Promise<CartCatalogSnapshot | null> {
-  const idToken =
-    await getFirebaseIdToken();
+  void apiBaseUrl;
 
-  const base =
-    normalizeApiBaseUrl(apiBaseUrl);
-
-  const response =
-    await fetch(
-      `${base}/mall/catalog/${encodeURIComponent(
+  try {
+    return await requestJson<CartCatalogSnapshot>(
+      `/mall/catalog/${encodeURIComponent(
         listId,
       )}`,
       {
         method: "GET",
-
-        headers: {
-          Accept:
-            "application/json",
-
-          Authorization:
-            `Bearer ${idToken}`,
+        auth: "required",
+        credentials: "include",
+        messages: {
+          nonJsonErrorMessage:
+            "カート用カタログAPIがJSON以外を返しました。",
         },
-
-        credentials:
-          "include",
       },
     );
+  } catch (error) {
+    if (
+      error instanceof HttpError ||
+      (
+        error instanceof Error &&
+        error.message ===
+          "カート用カタログAPIがJSON以外を返しました。"
+      )
+    ) {
+      return null;
+    }
 
-  if (!response.ok) {
-    return null;
+    throw error;
   }
-
-  const contentType =
-    response.headers.get(
-      "content-type",
-    ) ?? "";
-
-  if (
-    !contentType.includes(
-      "application/json",
-    )
-  ) {
-    return null;
-  }
-
-  return (
-    await response.json()
-  ) as CartCatalogSnapshot;
 }
 
 export async function fetchCartItemsWithCatalog(

@@ -1,13 +1,12 @@
 // frontend/amol/src/features/market/api/marketResaleApi.ts
 
 import {
-  MARKET_RESALES_PATH,
-} from "../constants/marketPaths";
+  requestJson,
+} from "../../../lib/http";
 
 import {
-  getMarketApiBaseUrl,
-  readMarketJsonResponse,
-} from "../infrastructure/marketHttpClient";
+  MARKET_RESALES_PATH,
+} from "../constants/marketPaths";
 
 import {
   buildMarketResaleSearchParams,
@@ -23,44 +22,33 @@ import type {
 export async function fetchMarketResales(
   params: FetchMarketResalesParams = {},
 ): Promise<MarketResaleListResponse> {
-  const apiBaseUrl =
-    getMarketApiBaseUrl();
-
   const searchParams =
     buildMarketResaleSearchParams(
       params,
     );
 
-  const query =
-    searchParams.toString();
-
-  const url =
-    `${apiBaseUrl}${MARKET_RESALES_PATH}` +
-    `${query ? `?${query}` : ""}`;
-
-  const response = await fetch(
-    url,
+  return requestJson<MarketResaleListResponse>(
+    MARKET_RESALES_PATH,
     {
       method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
+      auth: "none",
+      query: Object.fromEntries(
+        searchParams.entries(),
+      ),
       credentials: "include",
+      messages: {
+        requestErrorMessage:
+          "マーケット情報の取得に失敗しました。",
+        nonJsonErrorMessage:
+          "マーケット一覧APIがJSON以外を返しました。",
+      },
     },
-  );
-
-  return readMarketJsonResponse<MarketResaleListResponse>(
-    response,
-    "マーケット一覧APIがJSON以外を返しました。",
   );
 }
 
 export async function fetchMarketResaleById(
   resaleId: string,
 ): Promise<MarketResaleListing> {
-  const apiBaseUrl =
-    getMarketApiBaseUrl();
-
   const normalizedResaleId =
     resaleId.trim();
 
@@ -70,26 +58,22 @@ export async function fetchMarketResaleById(
     );
   }
 
-  const url =
-    `${apiBaseUrl}${MARKET_RESALES_PATH}/${encodeURIComponent(
-      normalizedResaleId,
-    )}`;
-
-  const response = await fetch(
-    url,
-    {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-      credentials: "include",
-    },
-  );
-
   const result =
-    await readMarketJsonResponse<MarketResaleDetailResponse>(
-      response,
-      "マーケット詳細APIがJSON以外を返しました。",
+    await requestJson<MarketResaleDetailResponse>(
+      `${MARKET_RESALES_PATH}/${encodeURIComponent(
+        normalizedResaleId,
+      )}`,
+      {
+        method: "GET",
+        auth: "none",
+        credentials: "include",
+        messages: {
+          requestErrorMessage:
+            "マーケット情報の取得に失敗しました。",
+          nonJsonErrorMessage:
+            "マーケット詳細APIがJSON以外を返しました。",
+        },
+      },
     );
 
   return result.data;

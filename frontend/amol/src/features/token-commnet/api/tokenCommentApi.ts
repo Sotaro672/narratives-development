@@ -1,7 +1,9 @@
 // frontend/amol/src/features/token-commnet/api/tokenCommentApi.ts
 
-import { buildApiUrl, getApiBaseUrl } from "../../../lib/apiBaseUrl";
-import { getFirebaseIdToken } from "../../../lib/authToken";
+import {
+  requestJson,
+  requestVoid,
+} from "../../../lib/http";
 import { textOrEmpty } from "../../../components/utils/textOrEmpty";
 import {
   isFiniteNumber,
@@ -19,83 +21,6 @@ import type {
 } from "../../shared/types/tokenCommentTypes";
 
 const TOKEN_BLUEPRINT_BASE_PATH = "/mall/me/token-blueprints";
-
-function assertBackendBaseUrl(): string {
-  const baseUrl = getApiBaseUrl();
-
-  if (!baseUrl) {
-    throw new Error("VITE_API_BASE_URL is not configured.");
-  }
-
-  return baseUrl;
-}
-
-async function requestJson<T>(
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
-  const baseUrl = assertBackendBaseUrl();
-  const idToken = await getFirebaseIdToken();
-
-  const response = await fetch(buildApiUrl(baseUrl, path), {
-    ...init,
-    headers: {
-      Accept: "application/json",
-      ...(init?.body
-        ? { "Content-Type": "application/json" }
-        : {}),
-      Authorization: `Bearer ${idToken}`,
-      ...init?.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-
-    throw new Error(
-      `token comment API failed: ${response.status} ${body}`,
-    );
-  }
-
-  const contentType =
-    response.headers.get("content-type") || "";
-
-  if (!contentType.includes("application/json")) {
-    throw new Error(
-      "token comment API が JSON 以外を返しました。",
-    );
-  }
-
-  return response.json() as Promise<T>;
-}
-
-async function requestNoContent(
-  path: string,
-  init?: RequestInit,
-): Promise<void> {
-  const baseUrl = assertBackendBaseUrl();
-  const idToken = await getFirebaseIdToken();
-
-  const response = await fetch(buildApiUrl(baseUrl, path), {
-    ...init,
-    headers: {
-      Accept: "application/json",
-      ...(init?.body
-        ? { "Content-Type": "application/json" }
-        : {}),
-      Authorization: `Bearer ${idToken}`,
-      ...init?.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-
-    throw new Error(
-      `token comment API failed: ${response.status} ${body}`,
-    );
-  }
-}
 
 function pick(
   value: Record<string, unknown>,
@@ -371,6 +296,13 @@ export async function fetchTokenBlueprintReviewAggregate(
     )}/reviews/aggregate`,
     {
       method: "GET",
+      auth: "required",
+      messages: {
+        requestErrorMessage:
+          "token comment API failed.",
+        nonJsonErrorMessage:
+          "token comment API が JSON 以外を返しました。",
+      },
     },
   );
 
@@ -388,13 +320,14 @@ export async function upsertTokenBlueprintReaction({
     return;
   }
 
-  await requestNoContent(
+  await requestVoid(
     `${TOKEN_BLUEPRINT_BASE_PATH}/${encodePathSegment(
       tokenBlueprintId,
     )}/reactions`,
     {
       method: "POST",
-      body: JSON.stringify({ type }),
+      auth: "required",
+      json: { type },
     },
   );
 }
@@ -419,6 +352,13 @@ export async function fetchTokenComments(
     )}/comments`,
     {
       method: "GET",
+      auth: "required",
+      messages: {
+        requestErrorMessage:
+          "token comment API failed.",
+        nonJsonErrorMessage:
+          "token comment API が JSON 以外を返しました。",
+      },
     },
   );
 
@@ -435,15 +375,16 @@ export async function postTokenComment({
     return;
   }
 
-  await requestNoContent(
+  await requestVoid(
     `${TOKEN_BLUEPRINT_BASE_PATH}/${encodePathSegment(
       tokenBlueprintId,
     )}/comments`,
     {
       method: "POST",
-      body: JSON.stringify({
+      auth: "required",
+      json: {
         body: trimmedBody,
-      }),
+      },
     },
   );
 }
@@ -463,7 +404,7 @@ export async function postTokenCommentReply({
     return;
   }
 
-  await requestNoContent(
+  await requestVoid(
     `${TOKEN_BLUEPRINT_BASE_PATH}/${encodePathSegment(
       tokenBlueprintId,
     )}/comments/${encodePathSegment(
@@ -471,9 +412,10 @@ export async function postTokenCommentReply({
     )}/replies`,
     {
       method: "POST",
-      body: JSON.stringify({
+      auth: "required",
+      json: {
         body: trimmedBody,
-      }),
+      },
     },
   );
 }
@@ -486,7 +428,7 @@ export async function likeTokenComment({
     return;
   }
 
-  await requestNoContent(
+  await requestVoid(
     `${TOKEN_BLUEPRINT_BASE_PATH}/${encodePathSegment(
       tokenBlueprintId,
     )}/comments/${encodePathSegment(
@@ -494,9 +436,10 @@ export async function likeTokenComment({
     )}/reactions`,
     {
       method: "POST",
-      body: JSON.stringify({
+      auth: "required",
+      json: {
         type: "like",
-      }),
+      },
     },
   );
 }
@@ -509,7 +452,7 @@ export async function dislikeTokenComment({
     return;
   }
 
-  await requestNoContent(
+  await requestVoid(
     `${TOKEN_BLUEPRINT_BASE_PATH}/${encodePathSegment(
       tokenBlueprintId,
     )}/comments/${encodePathSegment(
@@ -517,9 +460,10 @@ export async function dislikeTokenComment({
     )}/reactions`,
     {
       method: "POST",
-      body: JSON.stringify({
+      auth: "required",
+      json: {
         type: "dislike",
-      }),
+      },
     },
   );
 }

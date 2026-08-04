@@ -1,6 +1,9 @@
 // frontend/amol/src/features/avatar/api/avatarApi.ts
 
-import { buildApiUrl } from "../../../lib/apiBaseUrl";
+import {
+  HttpError,
+  requestJson,
+} from "../../../lib/http";
 
 import type {
   AvatarMutationResponse,
@@ -18,96 +21,32 @@ type GetPublicAvatarParams = AuthedRequestParams & {
   avatarId: string;
 };
 
-async function readApiError(
-  response: Response,
-): Promise<string> {
-  const contentType =
-    response.headers.get("content-type") || "";
-
-  if (contentType.includes("application/json")) {
-    const body = (await response.json().catch(
-      () => null,
-    )) as
-      | {
-          error?: string;
-          message?: string;
-        }
-      | null;
-
-    if (body?.error) {
-      return body.error;
-    }
-
-    if (body?.message) {
-      return body.message;
-    }
-  }
-
-  const text = await response
-    .text()
-    .catch(() => "");
-
-  return (
-    text ||
-    `API request failed (${response.status})`
-  );
-}
-
-function unwrapData<T>(
-  body: unknown,
-): T {
-  if (
-    body &&
-    typeof body === "object" &&
-    "data" in body &&
-    (body as { data?: unknown }).data
-  ) {
-    return (body as { data: T }).data;
-  }
-
-  return body as T;
-}
-
-function buildAuthHeaders(
-  idToken: string,
-): HeadersInit {
-  return {
-    Accept: "application/json",
-    Authorization: `Bearer ${idToken}`,
-  };
-}
-
 export async function getMyAvatar({
   backendUrl,
   idToken,
 }: AuthedRequestParams): Promise<MyAvatarResponse | null> {
-  const response = await fetch(
-    buildApiUrl(
-      backendUrl,
+  void backendUrl;
+  void idToken;
+
+  try {
+    return await requestJson<MyAvatarResponse>(
       "/mall/me/avatars",
-    ),
-    {
-      method: "GET",
-      headers: buildAuthHeaders(idToken),
-    },
-  );
-
-  if (response.status === 404) {
-    return null;
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      await readApiError(response),
+      {
+        method: "GET",
+        auth: "required",
+        unwrapData: true,
+      },
     );
+  } catch (error) {
+    if (
+      error instanceof HttpError &&
+      error.status === 404
+    ) {
+      return null;
+    }
+
+    throw error;
   }
-
-  const body: unknown =
-    await response.json();
-
-  return unwrapData<MyAvatarResponse>(
-    body,
-  );
 }
 
 export async function getPublicAvatar({
@@ -115,6 +54,9 @@ export async function getPublicAvatar({
   idToken,
   avatarId,
 }: GetPublicAvatarParams): Promise<MyAvatarResponse | null> {
+  void backendUrl;
+  void idToken;
+
   const normalizedAvatarId =
     avatarId.trim();
 
@@ -124,41 +66,35 @@ export async function getPublicAvatar({
     );
   }
 
-  const response = await fetch(
-    buildApiUrl(
-      backendUrl,
-      `/mall/avatars/${encodeURIComponent(
+  try {
+    const avatar =
+      await requestJson<MyAvatarResponse>(
+        `/mall/avatars/${encodeURIComponent(
+          normalizedAvatarId,
+        )}`,
+        {
+          method: "GET",
+          auth: "required",
+          unwrapData: true,
+        },
+      );
+
+    return {
+      ...avatar,
+      avatarId:
+        avatar.avatarId ||
         normalizedAvatarId,
-      )}`,
-    ),
-    {
-      method: "GET",
-      headers: buildAuthHeaders(idToken),
-    },
-  );
+    };
+  } catch (error) {
+    if (
+      error instanceof HttpError &&
+      error.status === 404
+    ) {
+      return null;
+    }
 
-  if (response.status === 404) {
-    return null;
+    throw error;
   }
-
-  if (!response.ok) {
-    throw new Error(
-      await readApiError(response),
-    );
-  }
-
-  const body: unknown =
-    await response.json();
-
-  const avatar =
-    unwrapData<MyAvatarResponse>(body);
-
-  return {
-    ...avatar,
-    avatarId:
-      avatar.avatarId ||
-      normalizedAvatarId,
-  };
 }
 
 export async function createAvatar({
@@ -168,33 +104,17 @@ export async function createAvatar({
 }: AuthedRequestParams & {
   payload: CreateAvatarPayload;
 }): Promise<AvatarMutationResponse> {
-  const response = await fetch(
-    buildApiUrl(
-      backendUrl,
-      "/mall/avatars",
-    ),
+  void backendUrl;
+  void idToken;
+
+  return requestJson<AvatarMutationResponse>(
+    "/mall/avatars",
     {
       method: "POST",
-      headers: {
-        ...buildAuthHeaders(idToken),
-        "Content-Type":
-          "application/json",
-      },
-      body: JSON.stringify(payload),
+      auth: "required",
+      json: payload,
+      unwrapData: true,
     },
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      await readApiError(response),
-    );
-  }
-
-  const body: unknown =
-    await response.json();
-
-  return unwrapData<AvatarMutationResponse>(
-    body,
   );
 }
 
@@ -207,36 +127,19 @@ export async function updateAvatar({
   avatarId: string;
   payload: UpdateAvatarPayload;
 }): Promise<AvatarMutationResponse> {
-  void avatarId;
+  void backendUrl;
+  void idToken;
 
-  const response = await fetch(
-    buildApiUrl(
-      backendUrl,
-      "/mall/me/avatars",
-    ),
+  return requestJson<AvatarMutationResponse>(
+    "/mall/me/avatars",
     {
       method: "PATCH",
-      headers: {
-        ...buildAuthHeaders(idToken),
-        "Content-Type":
-          "application/json",
-      },
-      body: JSON.stringify(payload),
+      auth: "required",
+      json: payload,
+      unwrapData: true,
+      fallbackValue: {
+        avatarId,
+      } as AvatarMutationResponse,
     },
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      await readApiError(response),
-    );
-  }
-
-  const body: unknown =
-    await response
-      .json()
-      .catch(() => ({ avatarId }));
-
-  return unwrapData<AvatarMutationResponse>(
-    body,
   );
 }

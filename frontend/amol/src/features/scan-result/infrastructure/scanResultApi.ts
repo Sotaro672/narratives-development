@@ -1,9 +1,8 @@
 // frontend/amol/src/features/scan-result/infrastructure/scanResultApi.ts
 
 import {
-  readJsonDataResponse,
-  readJsonResponse,
-} from "../../../lib/apiResponse";
+  requestJson,
+} from "../../../lib/http";
 import {
   isRecord,
 } from "../../../components/utils/typeGuards";
@@ -38,9 +37,6 @@ import type {
 
 import {
   getAuthorizationHeader,
-  jsonHeaders,
-  jsonPostHeaders,
-  mergeHeaders,
 } from "./scanResultHttp";
 
 import {
@@ -69,51 +65,31 @@ async function fetchPreviewRaw(
     );
   }
 
-  const base = getApiBaseUrl();
-
-  if (!base) {
-    throw new Error(
-      "VITE_API_BASE_URL is not configured",
-    );
-  }
-
   const path = isMe
     ? "/mall/me/preview"
     : "/mall/preview";
-
-  const url = new URL(
-    `${base}${path}`,
-  );
-
-  url.searchParams.set(
-    "productId",
-    id,
-  );
 
   const label = isMe
     ? "fetchMyPreviewByProductId"
     : "fetchPreviewByProductId";
 
-  const response = await fetch(
-    url,
-    {
-      headers: mergeHeaders(
-        jsonHeaders(),
-        headers,
-      ),
-    },
-  );
-
   const decoded =
-    await readJsonResponse<unknown>(
-      response,
+    await requestJson<unknown>(
+      path,
       {
-        requestErrorMessage:
-          `${label} failed`,
-        nonJsonErrorMessage:
-          `${label} failed: response is not json url=${url.toString()}`,
-        invalidJsonErrorMessage:
-          `${label} failed: invalid json url=${url.toString()}`,
+        method: "GET",
+        headers,
+        query: {
+          productId: id,
+        },
+        messages: {
+          requestErrorMessage:
+            `${label} failed`,
+          nonJsonErrorMessage:
+            `${label} failed: response is not json`,
+          invalidJsonErrorMessage:
+            `${label} failed: invalid json`,
+        },
       },
     );
 
@@ -237,26 +213,9 @@ export async function transferScanPurchased(
     );
   }
 
-  const base = getApiBaseUrl();
-
-  if (!base) {
-    throw new Error(
-      "VITE_API_BASE_URL is not configured",
-    );
-  }
-
-  const url =
-    `${base}/mall/me/orders/scan/transfer`;
-
-  const headers =
-    mergeHeaders(
-      jsonPostHeaders(),
-      args.headers,
-    );
-
   const authHeader =
     getAuthorizationHeader(
-      headers,
+      args.headers,
     );
 
   if (!authHeader) {
@@ -265,32 +224,24 @@ export async function transferScanPurchased(
     );
   }
 
-  headers.set(
-    "Authorization",
-    authHeader,
-  );
-
-  const response = await fetch(
-    url,
-    {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        productId,
-      }),
-    },
-  );
-
   const decoded =
-    await readJsonDataResponse<unknown>(
-      response,
+    await requestJson<unknown>(
+      "/mall/me/orders/scan/transfer",
       {
-        requestErrorMessage:
-          "transferScanPurchased failed",
-        nonJsonErrorMessage:
-          "transferScanPurchased failed: response is not json",
-        invalidJsonErrorMessage:
-          "transferScanPurchased failed: invalid json",
+        method: "POST",
+        headers: args.headers,
+        json: {
+          productId,
+        },
+        unwrapData: true,
+        messages: {
+          requestErrorMessage:
+            "transferScanPurchased failed",
+          nonJsonErrorMessage:
+            "transferScanPurchased failed: response is not json",
+          invalidJsonErrorMessage:
+            "transferScanPurchased failed: invalid json",
+        },
       },
     );
 
@@ -315,50 +266,30 @@ export async function fetchReviewsByProductBlueprintId(
     );
   }
 
-  const base = getApiBaseUrl();
-
-  if (!base) {
-    throw new Error(
-      "VITE_API_BASE_URL is not configured",
-    );
-  }
-
   const encodedProductBlueprintId =
     encodeURIComponent(
       productBlueprintId,
     );
 
-  const url = new URL(
-    `${base}/mall/catalog/product-blueprints/${encodedProductBlueprintId}/reviews`,
-  );
-
-  url.searchParams.set(
-    "page",
-    String(args.page),
-  );
-
-  url.searchParams.set(
-    "perPage",
-    String(args.perPage),
-  );
-
-  const response = await fetch(
-    url,
-    {
-      headers: jsonHeaders(),
-    },
-  );
-
   const decoded =
-    await readJsonDataResponse<unknown>(
-      response,
+    await requestJson<unknown>(
+      `/mall/catalog/product-blueprints/${encodedProductBlueprintId}/reviews`,
       {
-        requestErrorMessage:
-          "fetchReviewsByProductBlueprintId failed",
-        nonJsonErrorMessage:
-          "fetchReviewsByProductBlueprintId failed: response is not json",
-        invalidJsonErrorMessage:
-          "fetchReviewsByProductBlueprintId failed: invalid json",
+        method: "GET",
+        auth: "none",
+        query: {
+          page: args.page,
+          perPage: args.perPage,
+        },
+        unwrapData: true,
+        messages: {
+          requestErrorMessage:
+            "fetchReviewsByProductBlueprintId failed",
+          nonJsonErrorMessage:
+            "fetchReviewsByProductBlueprintId failed: response is not json",
+          invalidJsonErrorMessage:
+            "fetchReviewsByProductBlueprintId failed: invalid json",
+        },
       },
     );
 
@@ -396,14 +327,6 @@ export async function createProductBlueprintReview(
     );
   }
 
-  const base = getApiBaseUrl();
-
-  if (!base) {
-    throw new Error(
-      "VITE_API_BASE_URL is not configured",
-    );
-  }
-
   const rating = Math.max(
     1,
     Math.min(
@@ -423,36 +346,27 @@ export async function createProductBlueprintReview(
       productBlueprintId,
     );
 
-  const url =
-    `${base}/mall/me/catalog/product-blueprints/${encodedProductBlueprintId}/reviews`;
-
-  const response = await fetch(
-    url,
-    {
-      method: "POST",
-      headers: mergeHeaders(
-        jsonPostHeaders(),
-        args.headers,
-      ),
-      body: JSON.stringify({
-        body,
-        rating,
-        title,
-      }),
-    },
-  );
-
   const decoded =
-    await readJsonDataResponse<unknown>(
-      response,
+    await requestJson<unknown>(
+      `/mall/me/catalog/product-blueprints/${encodedProductBlueprintId}/reviews`,
       {
-        requestErrorMessage:
-          "createProductBlueprintReview failed",
-        nonJsonErrorMessage:
-          "createProductBlueprintReview failed: response is not json",
-        invalidJsonErrorMessage:
-          "createProductBlueprintReview failed: invalid json",
+        method: "POST",
+        headers: args.headers,
+        json: {
+          body,
+          rating,
+          title,
+        },
+        unwrapData: true,
         fallbackValue: {},
+        messages: {
+          requestErrorMessage:
+            "createProductBlueprintReview failed",
+          nonJsonErrorMessage:
+            "createProductBlueprintReview failed: response is not json",
+          invalidJsonErrorMessage:
+            "createProductBlueprintReview failed: invalid json",
+        },
       },
     );
 

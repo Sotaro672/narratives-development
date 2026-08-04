@@ -1,6 +1,11 @@
 // frontend/amol/src/features/announcement/api/announcementApi.ts
-import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
-import { getFirebaseIdToken } from "../../../lib/authToken";
+
+import {
+  HttpError,
+  requestJson,
+  requestVoid,
+} from "../../../lib/http";
+import { getOptionalAuthHeaders } from "../../../lib/authHeaders";
 
 import type { AnnouncementListResult } from "../../shared/types/announcements";
 
@@ -18,9 +23,9 @@ export async function fetchMeAnnouncements(
   const page = params.page ?? 1;
   const perPage = params.perPage ?? 100;
 
-  const token = await getOptionalFirebaseIdToken();
+  const headers = await getOptionalAuthHeaders();
 
-  if (!token) {
+  if (!headers) {
     return {
       items: [],
       totalCount: 0,
@@ -29,59 +34,60 @@ export async function fetchMeAnnouncements(
     };
   }
 
-  const searchParams = new URLSearchParams({
-    page: String(page),
-    perPage: String(perPage),
-  });
-
-  const response = await fetch(
-    `${apiUrl(ANNOUNCEMENTS_ENDPOINT)}?${searchParams}`,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
+  try {
+    const json = await requestJson<Partial<AnnouncementListResult>>(
+      ANNOUNCEMENTS_ENDPOINT,
+      {
+        method: "GET",
+        headers,
+        query: {
+          page,
+          perPage,
+        },
+        signal: params.signal,
+        cache: "no-store",
+        messages: {
+          requestErrorMessage:
+            "failed to fetch announcements",
+          nonJsonErrorMessage:
+            "failed to fetch announcements: response is not json",
+        },
       },
-      signal: params.signal,
-      cache: "no-store",
-    },
-  );
+    );
 
-  if (response.status === 401 || response.status === 403) {
     return {
-      items: [],
-      totalCount: 0,
-      page,
-      perPage,
+      items: Array.isArray(json.items) ? json.items : [],
+      totalCount:
+        typeof json.totalCount === "number" &&
+        Number.isFinite(json.totalCount)
+          ? json.totalCount
+          : 0,
+      page:
+        typeof json.page === "number" &&
+        Number.isFinite(json.page)
+          ? json.page
+          : page,
+      perPage:
+        typeof json.perPage === "number" &&
+        Number.isFinite(json.perPage)
+          ? json.perPage
+          : perPage,
     };
+  } catch (error) {
+    if (
+      error instanceof HttpError &&
+      (error.status === 401 || error.status === 403)
+    ) {
+      return {
+        items: [],
+        totalCount: 0,
+        page,
+        perPage,
+      };
+    }
+
+    throw error;
   }
-
-  if (!response.ok) {
-    throw new Error(`failed to fetch announcements: ${response.status}`);
-  }
-
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) {
-    throw new Error("failed to fetch announcements: response is not json");
-  }
-
-  const json = (await response.json()) as Partial<AnnouncementListResult>;
-
-  return {
-    items: Array.isArray(json.items) ? json.items : [],
-    totalCount:
-      typeof json.totalCount === "number" && Number.isFinite(json.totalCount)
-        ? json.totalCount
-        : 0,
-    page:
-      typeof json.page === "number" && Number.isFinite(json.page)
-        ? json.page
-        : page,
-    perPage:
-      typeof json.perPage === "number" && Number.isFinite(json.perPage)
-        ? json.perPage
-        : perPage,
-  };
 }
 
 export async function markMeAnnouncementRead(
@@ -91,47 +97,31 @@ export async function markMeAnnouncementRead(
     return;
   }
 
-  const token = await getOptionalFirebaseIdToken();
+  const headers = await getOptionalAuthHeaders();
 
-  if (!token) {
+  if (!headers) {
     return;
   }
 
-  const response = await fetch(
-    apiUrl(`${ANNOUNCEMENTS_ENDPOINT}/${announcementId}/read`),
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    },
-  );
-
-  if (response.status === 401 || response.status === 403) {
-    return;
-  }
-
-  if (!response.ok) {
-    throw new Error(`failed to mark announcement read: ${response.status}`);
-  }
-}
-
-function apiUrl(path: string): string {
-  const baseUrl = getApiBaseUrl();
-
-  if (!baseUrl) {
-    return path;
-  }
-
-  return `${baseUrl}${path}`;
-}
-
-async function getOptionalFirebaseIdToken(): Promise<string | null> {
   try {
-    return await getFirebaseIdToken();
-  } catch {
-    return null;
+    await requestVoid(
+      `${ANNOUNCEMENTS_ENDPOINT}/${encodeURIComponent(
+        announcementId,
+      )}/read`,
+      {
+        method: "POST",
+        headers,
+        cache: "no-store",
+      },
+    );
+  } catch (error) {
+    if (
+      error instanceof HttpError &&
+      (error.status === 401 || error.status === 403)
+    ) {
+      return;
+    }
+
+    throw error;
   }
 }

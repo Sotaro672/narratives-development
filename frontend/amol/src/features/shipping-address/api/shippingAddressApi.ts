@@ -1,11 +1,14 @@
-//frontend\amol\src\features\shipping-address\api\shippingAddressApi.ts
+// frontend/amol/src/features/shipping-address/api/shippingAddressApi.ts
+
+import {
+  requestJson,
+} from "../../../lib/http";
+
 import type {
-  ErrorResponse,
   ShippingAddress,
   UserProfile,
-} from "../../shared/types/types";
+} from "../../shared/types/shippingAddress";
 import {
-  isErrorResponse,
   isShippingAddress,
   isUserProfile,
 } from "../utils/zipCode";
@@ -41,139 +44,107 @@ type SaveUserProfileInput = {
   };
 };
 
-export async function fetchShippingAddressPageInitialData({
-  backendUrl,
-  idToken,
-}: FetchInitialDataInput): Promise<{
+export async function fetchShippingAddressPageInitialData(
+  _input: FetchInitialDataInput,
+): Promise<{
   userProfile: UserProfile | null;
   shippingAddresses: ShippingAddress[];
 }> {
-  const [userResponse, shippingAddressResponse] = await Promise.all([
-    fetch(`${backendUrl}/mall/me/users`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${idToken}`,
+  const [
+    userResponseBody,
+    shippingAddressResponseBody,
+  ] = await Promise.all([
+    requestJson<unknown>(
+      "/mall/me/users",
+      {
+        method: "GET",
+        auth: "required",
+        fallbackValue: null,
+        messages: {
+          requestErrorMessage:
+            "ユーザー情報の取得に失敗しました。",
+        },
       },
-    }),
-    fetch(`${backendUrl}/mall/me/shipping-addresses`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${idToken}`,
+    ),
+    requestJson<unknown>(
+      "/mall/me/shipping-addresses",
+      {
+        method: "GET",
+        auth: "required",
+        fallbackValue: null,
+        messages: {
+          requestErrorMessage:
+            "配送先情報の取得に失敗しました。",
+        },
       },
-    }),
+    ),
   ]);
 
-  const userContentType = userResponse.headers.get("content-type") || "";
-  let userResponseBody: UserProfile | ErrorResponse | null = null;
-
-  if (userContentType.includes("application/json")) {
-    userResponseBody = await userResponse.json();
-  }
-
-  if (!userResponse.ok) {
-    const errorMessage = isErrorResponse(userResponseBody)
-      ? userResponseBody.error || "ユーザー情報の取得に失敗しました。"
-      : "ユーザー情報の取得に失敗しました。";
-
-    throw new Error(errorMessage);
-  }
-
-  const shippingAddressContentType =
-    shippingAddressResponse.headers.get("content-type") || "";
-
-  let shippingAddressResponseBody:
-    | ShippingAddress[]
-    | ErrorResponse
-    | null = null;
-
-  if (shippingAddressContentType.includes("application/json")) {
-    shippingAddressResponseBody = await shippingAddressResponse.json();
-  }
-
-  if (!shippingAddressResponse.ok) {
-    const errorMessage = isErrorResponse(shippingAddressResponseBody)
-      ? shippingAddressResponseBody.error || "配送先情報の取得に失敗しました。"
-      : "配送先情報の取得に失敗しました。";
-
-    throw new Error(errorMessage);
-  }
-
-  const shippingAddresses = Array.isArray(shippingAddressResponseBody)
-    ? shippingAddressResponseBody.filter(isShippingAddress)
-    : [];
+  const shippingAddresses =
+    Array.isArray(shippingAddressResponseBody)
+      ? shippingAddressResponseBody.filter(
+          isShippingAddress,
+        )
+      : [];
 
   return {
-    userProfile: isUserProfile(userResponseBody) ? userResponseBody : null,
+    userProfile: isUserProfile(userResponseBody)
+      ? userResponseBody
+      : null,
     shippingAddresses,
   };
 }
 
 export async function saveUserProfile({
-  backendUrl,
-  idToken,
   payload,
 }: SaveUserProfileInput): Promise<UserProfile | null> {
-  const response = await fetch(`${backendUrl}/mall/me/users`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  const responseBody =
+    await requestJson<unknown>(
+      "/mall/me/users",
+      {
+        method: "PATCH",
+        auth: "required",
+        json: payload,
+        fallbackValue: null,
+        messages: {
+          requestErrorMessage:
+            "ユーザー情報の保存に失敗しました。",
+        },
+      },
+    );
 
-  const contentType = response.headers.get("content-type") || "";
-  let responseBody: UserProfile | ErrorResponse | null = null;
-
-  if (contentType.includes("application/json")) {
-    responseBody = await response.json();
-  }
-
-  if (!response.ok) {
-    const errorMessage = isErrorResponse(responseBody)
-      ? responseBody.error || "ユーザー情報の保存に失敗しました。"
-      : "ユーザー情報の保存に失敗しました。";
-
-    throw new Error(errorMessage);
-  }
-
-  return isUserProfile(responseBody) ? responseBody : null;
+  return isUserProfile(responseBody)
+    ? responseBody
+    : null;
 }
 
 export async function saveShippingAddress({
-  backendUrl,
-  idToken,
   isEditMode,
   shippingAddressId,
   payload,
 }: SaveShippingAddressInput): Promise<ShippingAddress | null> {
-  const url = isEditMode
-    ? `${backendUrl}/mall/me/shipping-addresses/${shippingAddressId}`
-    : `${backendUrl}/mall/me/shipping-addresses`;
+  const path = isEditMode
+    ? `/mall/me/shipping-addresses/${shippingAddressId}`
+    : "/mall/me/shipping-addresses";
 
-  const response = await fetch(url, {
-    method: isEditMode ? "PATCH" : "POST",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  const responseBody =
+    await requestJson<unknown>(
+      path,
+      {
+        method: isEditMode
+          ? "PATCH"
+          : "POST",
+        auth: "required",
+        json: payload,
+        fallbackValue: null,
+        messages: {
+          requestErrorMessage:
+            "配送先情報の保存に失敗しました。",
+        },
+      },
+    );
 
-  const contentType = response.headers.get("content-type") || "";
-  let responseBody: ShippingAddress | ErrorResponse | null = null;
-
-  if (contentType.includes("application/json")) {
-    responseBody = await response.json();
-  }
-
-  if (!response.ok) {
-    const errorMessage = isErrorResponse(responseBody)
-      ? responseBody.error || "配送先情報の保存に失敗しました。"
-      : "配送先情報の保存に失敗しました。";
-
-    throw new Error(errorMessage);
-  }
-
-  return isShippingAddress(responseBody) ? responseBody : null;
+  return isShippingAddress(responseBody)
+    ? responseBody
+    : null;
 }

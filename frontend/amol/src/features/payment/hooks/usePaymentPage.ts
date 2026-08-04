@@ -14,6 +14,9 @@ import {
   formatPrice,
 } from "../../../components/utils/price";
 import {
+  getApiBaseUrl,
+} from "../../../lib/apiBaseUrl";
+import {
   getFirebaseIdToken,
 } from "../../../lib/authToken";
 import {
@@ -44,9 +47,6 @@ import {
   fetchPaymentMethods,
 } from "../api/paymentApi";
 import {
-  API_BASE_URL,
-} from "../api/paymentHttp";
-import {
   getShippingAddressLabel,
   getUserFullName,
 } from "../utils/format";
@@ -62,6 +62,8 @@ import {
   selectPrimaryPaymentMethod,
   validateOrderItems,
 } from "../utils/order";
+
+const API_BASE_URL = getApiBaseUrl();
 
 type UsePaymentPageParams = {
   listId?: string;
