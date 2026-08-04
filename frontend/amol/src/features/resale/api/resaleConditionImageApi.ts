@@ -8,7 +8,7 @@ import {
 import type {
   ResaleConditionImage,
   ResaleImageIdentifier,
-} from "../types/resaleTypes";
+} from "../../shared/types/resaleTypes";
 
 type ResaleConditionImageListResponse = {
   data?: ResaleConditionImage[] | null;

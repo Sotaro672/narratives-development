@@ -16,7 +16,7 @@ import {
 import type {
   CreateResaleListingParams,
   ResaleListing,
-} from "../types/resaleTypes";
+} from "../../shared/types/resaleTypes";
 
 export async function createResaleListing(
   params: CreateResaleListingParams,

@@ -36,4 +36,4 @@ export type {
   ResaleImageIdentifier,
   ResaleListing,
   UpdateResaleListingParams,
-} from "../types/resaleTypes";
+} from "../../shared/types/resaleTypes";

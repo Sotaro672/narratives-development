@@ -12,7 +12,7 @@ import type {
   ResaleImageIdentifier,
   ResaleListing,
   UpdateResaleListingParams,
-} from "../types/resaleTypes";
+} from "../../shared/types/resaleTypes";
 
 function nonEmptyOrUndefined(
   value: string | undefined,

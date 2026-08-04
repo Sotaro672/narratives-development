@@ -2,7 +2,7 @@
 
 import type {
   PageResultResponse,
-} from "../../shared/pageResult";
+} from "../pageResult";
 
 export type ResaleListing = {
   id?: string;

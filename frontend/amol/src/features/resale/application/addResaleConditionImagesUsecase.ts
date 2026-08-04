@@ -11,7 +11,7 @@ import {
 import type {
   AddResaleConditionImagesParams,
   ResaleConditionImage,
-} from "../types/resaleTypes";
+} from "../../shared/types/resaleTypes";
 
 type UploadedAndCreatedImage = {
   uploaded:

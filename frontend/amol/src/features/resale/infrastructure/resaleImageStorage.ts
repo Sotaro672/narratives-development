@@ -12,7 +12,7 @@ import {
 
 import type {
   ResaleConditionImage,
-} from "../types/resaleTypes";
+} from "../../shared/types/resaleTypes";
 
 function createUploadImageId(): string {
   if (

@@ -8,7 +8,7 @@ import type {
   ListMyResaleListingsResponse,
   ListResaleListingsByAvatarIdParams,
   ResaleConditionImage,
-} from "../types/resaleTypes";
+} from "../../shared/types/resaleTypes";
 
 type PublicResaleConditionImageListResponse = {
   data?: ResaleConditionImage[] | null;
