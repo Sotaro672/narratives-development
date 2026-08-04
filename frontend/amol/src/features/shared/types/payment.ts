@@ -1,14 +1,16 @@
-// frontend/amol/src/features/payment/types.ts
+// frontend/amol/src/features/shared/types/payment.ts
 
-import type { ShippingAddress } from "./shippingAddress";
+import type {
+  ShippingAddress,
+} from "./shippingAddress";
 
 export type PaymentContext = {
+  uid?: string;
   avatarId?: string;
-  avatarUid?: string;
+  userId?: string;
 };
 
 export type CreatedPayment = {
-  id?: string;
   paymentId?: string;
   paymentMethodId?: string;
   stripeCustomerId?: string;
@@ -30,13 +32,14 @@ export type CreatedOrder = {
   createdAt?: string;
 };
 
-export type CanonicalShippingAddress = ShippingAddress & {
-  zipCode: string;
-  state: string;
-  city: string;
-  street: string;
-  street2: string;
-};
+export type CanonicalShippingAddress =
+  ShippingAddress & {
+    zipCode: string;
+    state: string;
+    city: string;
+    street: string;
+    street2: string;
+  };
 
 export type OrderShippingSnapshot = {
   zipCode: string;
@@ -70,9 +73,11 @@ export type CreateOrderItemRequest =
 
 export type CreateOrderRequest = {
   id: string;
-  shippingSnapshot: OrderShippingSnapshot;
+  shippingSnapshot:
+    OrderShippingSnapshot;
   paymentMethodId: string;
-  items: CreateOrderItemRequest[];
+  items:
+    CreateOrderItemRequest[];
 };
 
 export type CreatePaymentRequest = {

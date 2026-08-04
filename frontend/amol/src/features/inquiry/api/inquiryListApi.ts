@@ -118,19 +118,7 @@ export async function listMeInquiries(
       : [],
     page: json.page,
     perPage: json.perPage,
-    total: json.total,
-    totalCount:
-      json.totalCount,
   };
-}
-
-// ChatListPageなどから利用するための互換alias。
-export async function fetchMeInquiries(
-  params: ListMeInquiriesParams = {},
-): Promise<ListMeInquiriesResult> {
-  return listMeInquiries(
-    params,
-  );
 }
 
 export async function getUnreadInquiryCount(

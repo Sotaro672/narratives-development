@@ -6,14 +6,12 @@ export {
 } from "./inquiryImageApi";
 
 export {
-  fetchMeInquiries,
   getUnreadInquiryCount,
   listMeInquiries,
 } from "./inquiryListApi";
 
 export {
   getInquiry,
-  getInquiryThread,
   listInquiryReplies,
 } from "./inquiryThreadApi";
 
@@ -30,7 +28,6 @@ export type {
   Inquiry,
   InquiryImage,
   InquiryReply,
-  InquiryThread,
   ListMeInquiriesParams,
   ListMeInquiriesResult,
   ReplyInquiryRequest,

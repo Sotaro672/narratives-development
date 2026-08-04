@@ -7,137 +7,16 @@ import {
 
 import Layout from "../components/layout/Layout";
 
+import {
+  addResaleCartItem,
+} from "../features/cart/api/cartApi";
 import MarketDetailContent from "../features/market/presentation/components/MarketDetailContent";
 import {
   useMarketDetailPage,
 } from "../features/market/presentation/hooks/useMarketDetailPage";
 
-import {
-  getApiBaseUrl,
-} from "../lib/apiBaseUrl";
-import {
-  auth,
-} from "../lib/firebase";
-
 import "../styles/page-layout.css";
 import "../styles/market-detail-page.css";
-
-async function readResponseErrorMessage(
-  response: Response,
-): Promise<string> {
-  const contentType =
-    response.headers.get(
-      "content-type",
-    ) ?? "";
-
-  if (
-    contentType.includes(
-      "application/json",
-    )
-  ) {
-    const data = (
-      await response
-        .json()
-        .catch(() => null)
-    ) as
-      | {
-          error?: unknown;
-        }
-      | null;
-
-    if (
-      typeof data?.error ===
-        "string" &&
-      data.error.trim() !== ""
-    ) {
-      return data.error;
-    }
-  }
-
-  const text =
-    await response
-      .text()
-      .catch(() => "");
-
-  if (
-    text.trim() !== ""
-  ) {
-    return text;
-  }
-
-  return "リクエストに失敗しました。";
-}
-
-async function addResaleProductToCart(
-  args: {
-    resaleId: string;
-    productId: string;
-  },
-): Promise<void> {
-  const currentUser =
-    auth.currentUser;
-
-  if (!currentUser) {
-    throw new Error(
-      "カートに追加するにはログインが必要です。",
-    );
-  }
-
-  const apiBaseUrl =
-    getApiBaseUrl();
-
-  if (!apiBaseUrl) {
-    throw new Error(
-      "APIの接続先が設定されていません。",
-    );
-  }
-
-  const normalizedApiBaseUrl =
-    apiBaseUrl.replace(
-      /\/+$/,
-      "",
-    );
-
-  const idToken =
-    await currentUser
-      .getIdToken();
-
-  const response =
-    await fetch(
-      `${normalizedApiBaseUrl}/mall/me/cart/resales`,
-      {
-        method: "POST",
-        headers: {
-          Accept:
-            "application/json",
-          "Content-Type":
-            "application/json",
-          Authorization:
-            `Bearer ${idToken}`,
-        },
-        credentials:
-          "include",
-        body: JSON.stringify({
-          resaleId:
-            args.resaleId,
-          productId:
-            args.productId,
-        }),
-      },
-    );
-
-  if (!response.ok) {
-    const message =
-      await readResponseErrorMessage(
-        response,
-      );
-
-    throw new Error(
-      message ||
-        "カートへの追加に失敗しました。",
-    );
-  }
-}
 
 export default function MarketDetailPage() {
   const navigate =
@@ -152,7 +31,8 @@ export default function MarketDetailPage() {
   const detail =
     useMarketDetailPage({
       resaleId,
-      addResaleProductToCart,
+      addResaleProductToCart:
+        addResaleCartItem,
     });
 
   const {
@@ -162,6 +42,11 @@ export default function MarketDetailPage() {
     sellerAvatarId,
     handleAddToCart,
   } = detail;
+
+  const addToCartButtonLabel =
+    addingToCart
+      ? "追加中"
+      : "カートに入れる";
 
   function handleOpenSellerAvatar() {
     if (!sellerAvatarId) {
@@ -192,9 +77,7 @@ export default function MarketDetailPage() {
         navigate("/cart")
       }
       actionButtonLabel={
-        addingToCart
-          ? "追加中"
-          : "カートに入れる"
+        addToCartButtonLabel
       }
       onActionButtonClick={
         handleAddToCart
@@ -207,9 +90,7 @@ export default function MarketDetailPage() {
         variant:
           "action",
         buttonLabel:
-          addingToCart
-            ? "追加中"
-            : "カートに入れる",
+          addToCartButtonLabel,
         disabled:
           !canAddToCart,
         onButtonClick:

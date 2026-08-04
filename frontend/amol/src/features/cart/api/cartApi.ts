@@ -66,13 +66,58 @@ export async function fetchCart(
       },
     );
 
-  return normalizeCartDTO(data);
+  return normalizeCartDTO(
+    data,
+  );
 }
 
-export async function removeCartItem(args: {
-  apiBaseUrl: string;
-  item: CartDisplayItem;
-}): Promise<CartDTO> {
+export async function addResaleCartItem(
+  args: {
+    resaleId: string;
+    productId: string;
+  },
+): Promise<void> {
+  const resaleId =
+    args.resaleId.trim();
+
+  const productId =
+    args.productId.trim();
+
+  if (
+    !resaleId ||
+    !productId
+  ) {
+    throw new Error(
+      "出品情報が不足しています。",
+    );
+  }
+
+  await requestJson<Partial<CartDTO>>(
+    "/mall/me/cart/resales",
+    {
+      method: "POST",
+      auth: "required",
+      credentials: "include",
+      json: {
+        resaleId,
+        productId,
+      },
+      messages: {
+        requestErrorMessage:
+          "カートへの追加に失敗しました。",
+        nonJsonErrorMessage:
+          "カート追加APIがJSON以外を返しました。",
+      },
+    },
+  );
+}
+
+export async function removeCartItem(
+  args: {
+    apiBaseUrl: string;
+    item: CartDisplayItem;
+  },
+): Promise<CartDTO> {
   const {
     apiBaseUrl,
     item,
@@ -125,7 +170,9 @@ export async function removeCartItem(args: {
       },
     );
 
-  return normalizeCartDTO(data);
+  return normalizeCartDTO(
+    data,
+  );
 }
 
 export async function fetchCatalog(

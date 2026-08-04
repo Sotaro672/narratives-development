@@ -1,4 +1,4 @@
-// frontend/amol/src/features/inquiry/types/inquiryTypes.ts
+// frontend/amol/src/features/shared/types/inquiryTypes.ts
 
 export type InquiryImage = {
   fileName: string;
@@ -25,11 +25,9 @@ export type ReplyInquiryRequest = {
 export type Inquiry = {
   id?: string;
   productId?: string;
-  avatarId?: string;
   subject?: string;
   content?: string;
   status?: string;
-  inquiryType?: string;
   isRead?: boolean;
   images?: InquiryImage[];
   createdAt?: string;
@@ -40,9 +38,7 @@ export type InquiryReply = {
   id?: string;
   inquiryId?: string;
   senderType?: string;
-  senderId?: string;
   content?: string;
-  isRead?: boolean;
   images?: InquiryImage[];
   createdAt?: string;
   updatedAt?: string | null;
@@ -62,13 +58,6 @@ export type ListMeInquiriesResult = {
   items: Inquiry[];
   page?: number;
   perPage?: number;
-  total?: number;
-  totalCount?: number;
-};
-
-export type InquiryThread = {
-  inquiry: Inquiry | null;
-  replies: InquiryReply[];
 };
 
 export type GetUnreadInquiryCountParams = {

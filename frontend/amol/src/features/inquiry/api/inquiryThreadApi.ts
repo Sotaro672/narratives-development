@@ -10,7 +10,6 @@ import {
 import type {
   Inquiry,
   InquiryReply,
-  InquiryThread,
 } from "../../shared/types/inquiryTypes";
 
 export async function getInquiry(
@@ -20,9 +19,7 @@ export async function getInquiry(
     await fetchInquiryWithAuth<
       ApiDataResponse<Inquiry>
     >(
-      buildInquiryPath(
-        inquiryId,
-      ),
+      buildInquiryPath(inquiryId),
       {
         method: "GET",
       },
@@ -35,9 +32,7 @@ export async function listInquiryReplies(
   inquiryId: string,
 ): Promise<InquiryReply[]> {
   const path =
-    `${buildInquiryPath(
-      inquiryId,
-    )}/replies`;
+    `${buildInquiryPath(inquiryId)}/replies`;
 
   const json =
     await fetchInquiryWithAuth<
@@ -46,30 +41,7 @@ export async function listInquiryReplies(
       method: "GET",
     });
 
-  return Array.isArray(
-    json.items,
-  )
+  return Array.isArray(json.items)
     ? json.items
     : [];
-}
-
-export async function getInquiryThread(
-  inquiryId: string,
-): Promise<InquiryThread> {
-  const [
-    inquiry,
-    replies,
-  ] = await Promise.all([
-    getInquiry(
-      inquiryId,
-    ),
-    listInquiryReplies(
-      inquiryId,
-    ),
-  ]);
-
-  return {
-    inquiry,
-    replies,
-  };
 }

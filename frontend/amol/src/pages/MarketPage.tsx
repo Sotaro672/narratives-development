@@ -4,11 +4,13 @@ import {
   useEffect,
   useState,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import {
+  useNavigate,
+} from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import {
-  formatPrice,
+  formatYen,
 } from "../components/utils/price";
 import {
   fetchMarketResales,
@@ -24,19 +26,6 @@ type MarketCardItem =
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 20;
-
-function formatMarketPrice(
-  item: MarketCardItem,
-): string {
-  const amount =
-    typeof item.price === "number"
-      ? item.price
-      : typeof item.price === "string"
-        ? Number(item.price)
-        : undefined;
-
-  return formatPrice(amount);
-}
 
 function getItemTitle(
   item: MarketCardItem,
@@ -74,11 +63,12 @@ function getItemBrandName(
 function getItemImage(
   item: MarketCardItem,
 ): string {
-  const image = item as MarketCardItem & {
-    image?: unknown;
-    imageUrl?: unknown;
-    url?: unknown;
-  };
+  const image =
+    item as MarketCardItem & {
+      image?: unknown;
+      imageUrl?: unknown;
+      url?: unknown;
+    };
 
   if (
     typeof image.image === "string" &&
@@ -105,36 +95,57 @@ function getItemImage(
 }
 
 export default function MarketPage() {
-  const navigate = useNavigate();
+  const navigate =
+    useNavigate();
 
-  const [items, setItems] =
-    useState<MarketCardItem[]>([]);
+  const [
+    items,
+    setItems,
+  ] = useState<MarketCardItem[]>(
+    [],
+  );
 
-  const [page, setPage] =
-    useState(DEFAULT_PAGE);
+  const [
+    page,
+    setPage,
+  ] = useState(
+    DEFAULT_PAGE,
+  );
 
-  const [perPage] =
-    useState(DEFAULT_PER_PAGE);
+  const [
+    perPage,
+  ] = useState(
+    DEFAULT_PER_PAGE,
+  );
 
-  const [totalPages, setTotalPages] =
-    useState(1);
+  const [
+    totalPages,
+    setTotalPages,
+  ] = useState(1);
 
-  const [isLoading, setIsLoading] =
-    useState(true);
+  const [
+    isLoading,
+    setIsLoading,
+  ] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
+    let cancelled =
+      false;
 
     async function fetchMarketItems() {
-      setIsLoading(true);
+      setIsLoading(
+        true,
+      );
 
       try {
         const data =
           await fetchMarketResales({
             page,
             perPage,
-            sort: "createdAt",
-            order: "desc",
+            sort:
+              "createdAt",
+            order:
+              "desc",
           });
 
         if (cancelled) {
@@ -142,7 +153,9 @@ export default function MarketPage() {
         }
 
         setItems(
-          Array.isArray(data.items)
+          Array.isArray(
+            data.items,
+          )
             ? data.items
             : [],
         );
@@ -156,7 +169,8 @@ export default function MarketPage() {
         );
 
         setPage(
-          typeof data.page === "number" &&
+          typeof data.page ===
+            "number" &&
           data.page > 0
             ? data.page
             : page,
@@ -170,7 +184,9 @@ export default function MarketPage() {
         setTotalPages(1);
       } finally {
         if (!cancelled) {
-          setIsLoading(false);
+          setIsLoading(
+            false,
+          );
         }
       }
     }
@@ -178,7 +194,8 @@ export default function MarketPage() {
     void fetchMarketItems();
 
     return () => {
-      cancelled = true;
+      cancelled =
+        true;
     };
   }, [
     page,
@@ -207,72 +224,92 @@ export default function MarketPage() {
         {!isLoading &&
         items.length > 0 ? (
           <div className="lists-page-grid">
-            {items.map((item) => {
-              const cardTitle =
-                getItemTitle(item);
+            {items.map(
+              (item) => {
+                const cardTitle =
+                  getItemTitle(
+                    item,
+                  );
 
-              const cardBrandName =
-                getItemBrandName(item);
+                const cardBrandName =
+                  getItemBrandName(
+                    item,
+                  );
 
-              const image =
-                getItemImage(item);
+                const image =
+                  getItemImage(
+                    item,
+                  );
 
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="lists-page-card"
-                  onClick={() =>
-                    navigate(
-                      `/market/${encodeURIComponent(
-                        item.id,
-                      )}`,
-                    )
-                  }
-                >
-                  <div className="lists-page-card-image-wrap">
-                    {image ? (
-                      <img
-                        src={image}
-                        alt={cardTitle}
-                        className="lists-page-card-image"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="lists-page-card-image-placeholder">
-                        No Image
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="lists-page-card-body">
-                    <h2 className="lists-page-card-title">
-                      {cardTitle}
-                    </h2>
-
-                    {cardBrandName ? (
-                      <p className="lists-page-card-description">
-                        {cardBrandName}
-                      </p>
-                    ) : null}
-
-                    {item.condition ? (
-                      <p className="lists-page-card-description">
-                        {item.condition}
-                      </p>
-                    ) : null}
-
-                    <div className="lists-page-card-footer">
-                      <span className="lists-page-card-price">
-                        {formatMarketPrice(
-                          item,
-                        )}
-                      </span>
+                return (
+                  <button
+                    key={
+                      item.id
+                    }
+                    type="button"
+                    className="lists-page-card"
+                    onClick={() =>
+                      navigate(
+                        `/market/${encodeURIComponent(
+                          item.id,
+                        )}`,
+                      )
+                    }
+                  >
+                    <div className="lists-page-card-image-wrap">
+                      {image ? (
+                        <img
+                          src={
+                            image
+                          }
+                          alt={
+                            cardTitle
+                          }
+                          className="lists-page-card-image"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="lists-page-card-image-placeholder">
+                          No Image
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </button>
-              );
-            })}
+
+                    <div className="lists-page-card-body">
+                      <h2 className="lists-page-card-title">
+                        {
+                          cardTitle
+                        }
+                      </h2>
+
+                      {cardBrandName ? (
+                        <p className="lists-page-card-description">
+                          {
+                            cardBrandName
+                          }
+                        </p>
+                      ) : null}
+
+                      {item.condition ? (
+                        <p className="lists-page-card-description">
+                          {
+                            item.condition
+                          }
+                        </p>
+                      ) : null}
+
+                      <div className="lists-page-card-footer">
+                        <span className="lists-page-card-price">
+                          {formatYen(
+                            item.price,
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              },
+            )}
           </div>
         ) : null}
 
@@ -294,13 +331,19 @@ export default function MarketPage() {
             <button
               type="button"
               className="lists-page-pagination-button"
-              disabled={!canGoPrev}
+              disabled={
+                !canGoPrev
+              }
               onClick={() =>
-                setPage((current) =>
-                  Math.max(
-                    1,
-                    current - 1,
-                  ),
+                setPage(
+                  (
+                    current,
+                  ) =>
+                    Math.max(
+                      1,
+                      current -
+                        1,
+                    ),
                 )
               }
             >
@@ -308,19 +351,26 @@ export default function MarketPage() {
             </button>
 
             <span className="lists-page-pagination-status">
-              {page} / {totalPages}
+              {page} /{" "}
+              {totalPages}
             </span>
 
             <button
               type="button"
               className="lists-page-pagination-button"
-              disabled={!canGoNext}
+              disabled={
+                !canGoNext
+              }
               onClick={() =>
-                setPage((current) =>
-                  Math.min(
-                    totalPages,
-                    current + 1,
-                  ),
+                setPage(
+                  (
+                    current,
+                  ) =>
+                    Math.min(
+                      totalPages,
+                      current +
+                        1,
+                    ),
                 )
               }
             >

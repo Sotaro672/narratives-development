@@ -18,6 +18,16 @@ import type {
   PaymentMethodListResponse,
 } from "../../shared/types/paymentMethods";
 
+type CreatePaymentResponse =
+  Pick<
+    CreatedPayment,
+    | "paymentId"
+    | "stripePaymentIntentId"
+    | "status"
+    | "clientSecret"
+    | "requiresAction"
+  >;
+
 export async function fetchPaymentContext(): Promise<PaymentContext> {
   return requestJson<PaymentContext>(
     "/mall/me/payments",
@@ -31,9 +41,13 @@ export async function fetchPaymentContext(): Promise<PaymentContext> {
 
 export async function fetchPaymentMethods(): Promise<{
   methods: CardPaymentMethod[];
-  defaultMethod: CardPaymentMethod | null;
+  defaultMethod:
+    CardPaymentMethod | null;
 }> {
-  const [listBody, defaultBody] = await Promise.all([
+  const [
+    listBody,
+    defaultBody,
+  ] = await Promise.all([
     requestJson<PaymentMethodListResponse>(
       "/mall/me/payment-methods",
       {
@@ -46,6 +60,7 @@ export async function fetchPaymentMethods(): Promise<{
         },
       },
     ),
+
     requestJson<PaymentMethodDefaultResponse>(
       "/mall/me/payment-methods/default",
       {
@@ -57,70 +72,110 @@ export async function fetchPaymentMethods(): Promise<{
             "既定の支払い方法の取得に失敗しました。",
         },
       },
-    ).catch((error: unknown) => {
-      if (
-        error instanceof HttpError &&
-        error.status === 404
-      ) {
-        return null;
-      }
+    ).catch(
+      (
+        error: unknown,
+      ) => {
+        if (
+          error instanceof HttpError &&
+          error.status === 404
+        ) {
+          return null;
+        }
 
-      throw error;
-    }),
+        throw error;
+      },
+    ),
   ]);
 
   return {
-    methods: Array.isArray(listBody?.data) ? listBody.data : [],
-    defaultMethod: defaultBody?.data ?? null,
+    methods:
+      Array.isArray(
+        listBody?.data,
+      )
+        ? listBody.data
+        : [],
+
+    defaultMethod:
+      defaultBody?.data ??
+      null,
   };
 }
 
 export async function createOrder(
   input: CreateOrderRequest,
 ): Promise<CreatedOrder> {
-  const order = await requestJson<CreatedOrder>(
-    "/mall/me/orders",
-    {
-      method: "POST",
-      auth: "required",
-      credentials: "include",
-      json: input,
-    },
-  );
+  const order =
+    await requestJson<CreatedOrder>(
+      "/mall/me/orders",
+      {
+        method: "POST",
+        auth: "required",
+        credentials: "include",
+        json: input,
+      },
+    );
 
   return {
     ...order,
-    id: order.id ?? input.id,
-    paid: order.paid ?? false,
+
+    id:
+      order.id ??
+      input.id,
+
+    paid:
+      order.paid ??
+      false,
   };
 }
 
 export async function createPayment(
   input: CreatePaymentRequest,
 ): Promise<CreatedPayment> {
-  const data = await requestJson<CreatedPayment>(
-    "/mall/me/payments",
-    {
-      method: "POST",
-      auth: "required",
-      credentials: "include",
-      json: {
-        paymentId: input.paymentId,
-        paymentMethodId: input.paymentMethodId,
-        stripeCustomerId: input.stripeCustomerId,
-        stripePaymentMethodId: input.stripePaymentMethodId,
-        amount: input.amount,
+  const data =
+    await requestJson<CreatePaymentResponse>(
+      "/mall/me/payments",
+      {
+        method: "POST",
+        auth: "required",
+        credentials: "include",
+        json: {
+          paymentId:
+            input.paymentId,
+
+          paymentMethodId:
+            input.paymentMethodId,
+
+          stripeCustomerId:
+            input.stripeCustomerId,
+
+          stripePaymentMethodId:
+            input.stripePaymentMethodId,
+
+          amount:
+            input.amount,
+        },
       },
-    },
-  );
+    );
 
   return {
-    ...data,
-    paymentId: data.paymentId ?? data.id ?? input.paymentId,
-    paymentMethodId: data.paymentMethodId ?? input.paymentMethodId,
-    stripeCustomerId: data.stripeCustomerId ?? input.stripeCustomerId,
-    stripePaymentMethodId:
-      data.stripePaymentMethodId ?? input.stripePaymentMethodId,
-    amount: data.amount ?? input.amount,
+    paymentId:
+      data.paymentId ??
+      input.paymentId,
+
+    amount:
+      input.amount,
+
+    status:
+      data.status,
+
+    stripePaymentIntentId:
+      data.stripePaymentIntentId,
+
+    clientSecret:
+      data.clientSecret,
+
+    requiresAction:
+      data.requiresAction,
   };
 }
