@@ -1,4 +1,5 @@
-//frontend\amol\src\features\shipping-address\hooks\useShippingAddressPage.ts
+// frontend/amol/src/features/shipping-address/hooks/useShippingAddressPage.ts
+
 import {
   FormEvent,
   useEffect,
@@ -20,7 +21,6 @@ import type {
 } from "../../shared/types/shippingAddress";
 import {
   getShippingAddressId,
-  isUserProfile,
 } from "../utils/zipCode";
 import { useZipCodeAddressLookup } from "./useZipCodeAddressLookup";
 
@@ -108,18 +108,10 @@ export function useShippingAddressPage() {
 
         setForm((current) => ({
           ...current,
-          lastName: isUserProfile(userProfile)
-            ? userProfile.last_name || ""
-            : "",
-          firstName: isUserProfile(userProfile)
-            ? userProfile.first_name || ""
-            : "",
-          lastNameKana: isUserProfile(userProfile)
-            ? userProfile.last_name_kana || ""
-            : "",
-          firstNameKana: isUserProfile(userProfile)
-            ? userProfile.first_name_kana || ""
-            : "",
+          lastName: userProfile?.last_name || "",
+          firstName: userProfile?.first_name || "",
+          lastNameKana: userProfile?.last_name_kana || "",
+          firstNameKana: userProfile?.first_name_kana || "",
           zipCode: firstAddress?.zipCode || "",
           state: firstAddress?.state || "",
           city: firstAddress?.city || "",
@@ -217,7 +209,7 @@ export function useShippingAddressPage() {
       window.alert(
         isEditMode
           ? "配送先情報を更新しました。"
-          : "配送先情報を登録しました。"
+          : "配送先情報を登録しました.",
       );
     } catch (error) {
       console.error(error);
@@ -228,7 +220,7 @@ export function useShippingAddressPage() {
         window.alert(
           isEditMode
             ? "配送先情報の更新に失敗しました。"
-            : "配送先情報の登録に失敗しました。"
+            : "配送先情報の登録に失敗しました。",
         );
       }
     } finally {
