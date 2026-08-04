@@ -1,6 +1,6 @@
 // frontend/amol/src/features/payment/types.ts
 
-import type { ShippingAddress } from "./types";
+import type { ShippingAddress } from "./shippingAddress";
 
 export type PaymentContext = {
   avatarId?: string;

@@ -1,23 +1,17 @@
-//frontend\amol\src\features\order-confirmed\types.ts
-import type { CartDisplayItem } from "./cart";
-import type { ShippingAddress } from "./types";
+// frontend\amol\src\features\shared\types\orderConfirmed.ts
 
-export type ConfirmedPayment = {
-  id?: string;
-  paymentId?: string;
-  invoiceId?: string;
-  paymentMethodId?: string;
-  amount?: number;
-  status?: string;
-  createdAt?: string;
-};
+import type {
+  CartDisplayItem,
+} from "./cart";
+import type {
+  CreatedPayment,
+} from "./payment";
+import type {
+  ShippingAddress,
+} from "./shippingAddress";
 
 export type OrderConfirmedLocationState = {
-  payment?: ConfirmedPayment;
-  invoiceId?: string;
-  paymentId?: string;
-  paymentMethodId?: string;
-  amount?: number;
+  payment?: CreatedPayment;
   cartItems?: CartDisplayItem[];
   shippingAddress?: ShippingAddress | null;
 };
@@ -31,7 +25,6 @@ export type OrderConfirmedItemViewModel = {
 };
 
 export type OrderConfirmedViewModel = {
-  invoiceId: string;
   paymentId: string;
   amount: number;
   statusLabel: string;

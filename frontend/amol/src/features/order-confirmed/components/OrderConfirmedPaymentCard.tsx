@@ -1,22 +1,25 @@
-//frontend\amol\src\features\order-confirmed\components\OrderConfirmedPaymentCard.tsx
-import { formatYen } from "../../cart/utils/cartUtils";
+// frontend/amol/src/features/order-confirmed/components/OrderConfirmedPaymentCard.tsx
+
+import {
+  formatPrice,
+} from "../../../components/utils/price";
 
 type OrderConfirmedPaymentCardProps = {
   statusLabel: string;
   amount: number;
-  invoiceId: string;
   paymentId: string;
 };
 
 export function OrderConfirmedPaymentCard({
   statusLabel,
   amount,
-  invoiceId,
   paymentId,
 }: OrderConfirmedPaymentCardProps) {
   return (
     <section className="order-confirmed-page__card">
-      <h2 className="order-confirmed-page__card-title">決済情報</h2>
+      <h2 className="order-confirmed-page__card-title">
+        決済情報
+      </h2>
 
       <dl className="order-confirmed-page__details">
         <div className="order-confirmed-page__detail-row">
@@ -26,15 +29,10 @@ export function OrderConfirmedPaymentCard({
 
         <div className="order-confirmed-page__detail-row">
           <dt>金額</dt>
-          <dd>{formatYen(amount)}</dd>
+          <dd>
+            {formatPrice(amount)}
+          </dd>
         </div>
-
-        {invoiceId ? (
-          <div className="order-confirmed-page__detail-row">
-            <dt>請求ID</dt>
-            <dd>{invoiceId}</dd>
-          </div>
-        ) : null}
 
         {paymentId ? (
           <div className="order-confirmed-page__detail-row">

@@ -1,17 +1,30 @@
 // frontend/amol/src/pages/OrderConfirmedPage.tsx
+
 import Layout from "../components/layout/Layout";
-import { OrderConfirmedActions } from "../features/order-confirmed/components/OrderConfirmedActions";
-import { OrderConfirmedHero } from "../features/order-confirmed/components/OrderConfirmedHero";
-import { OrderConfirmedItemsCard } from "../features/order-confirmed/components/OrderConfirmedItemsCard";
-import { OrderConfirmedPaymentCard } from "../features/order-confirmed/components/OrderConfirmedPaymentCard";
-import { OrderConfirmedShippingCard } from "../features/order-confirmed/components/OrderConfirmedShippingCard";
-import { useOrderConfirmedPage } from "../features/order-confirmed/hooks/useOrderConfirmedPage";
+import {
+  OrderConfirmedActions,
+} from "../features/order-confirmed/components/OrderConfirmedActions";
+import {
+  OrderConfirmedHero,
+} from "../features/order-confirmed/components/OrderConfirmedHero";
+import {
+  OrderConfirmedItemsCard,
+} from "../features/order-confirmed/components/OrderConfirmedItemsCard";
+import {
+  OrderConfirmedPaymentCard,
+} from "../features/order-confirmed/components/OrderConfirmedPaymentCard";
+import {
+  OrderConfirmedShippingCard,
+} from "../features/order-confirmed/components/OrderConfirmedShippingCard";
+import {
+  useOrderConfirmedPage,
+} from "../features/order-confirmed/hooks/useOrderConfirmedPage";
+
 import "../styles/order-confirmed-page.css";
 
 export default function OrderConfirmedPage() {
   const {
     amount,
-    invoiceId,
     paymentId,
     statusLabel,
     items,
@@ -38,13 +51,16 @@ export default function OrderConfirmedPage() {
           <OrderConfirmedPaymentCard
             statusLabel={statusLabel}
             amount={amount}
-            invoiceId={invoiceId}
             paymentId={paymentId}
           />
 
-          <OrderConfirmedItemsCard items={items} />
+          <OrderConfirmedItemsCard
+            items={items}
+          />
 
-          <OrderConfirmedShippingCard lines={shippingAddressLines} />
+          <OrderConfirmedShippingCard
+            lines={shippingAddressLines}
+          />
 
           <OrderConfirmedActions
             onGoToWallet={handleGoToWallet}
