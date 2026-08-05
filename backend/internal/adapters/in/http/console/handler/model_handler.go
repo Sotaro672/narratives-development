@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -83,8 +82,7 @@ func (p *ModelAccessPolicy) RequireProductBlueprint(
 	productBlueprintID string,
 	mode ModelAccessMode,
 ) error {
-	if p == nil ||
-		p.loadProductBlueprintAccess == nil {
+	if p == nil || p.loadProductBlueprintAccess == nil {
 		return ErrModelAccessPolicyNotConfigured
 	}
 
@@ -105,13 +103,11 @@ func (p *ModelAccessPolicy) RequireProductBlueprint(
 		return err
 	}
 
-	if access.CompanyID == "" ||
-		access.CompanyID != companyID {
+	if access.CompanyID == "" || access.CompanyID != companyID {
 		return ErrModelForbidden
 	}
 
-	if mode == ModelAccessWrite &&
-		access.Printed {
+	if mode == ModelAccessWrite && access.Printed {
 		return ErrProductBlueprintPrinted
 	}
 
@@ -146,7 +142,7 @@ func (h *ModelHandler) ServeHTTP(
 	)
 
 	if h == nil || h.uc == nil {
-		writeJSONError(
+		writeError(
 			w,
 			http.StatusServiceUnavailable,
 			"model handler is not initialized",
@@ -159,10 +155,7 @@ func (h *ModelHandler) ServeHTTP(
 	// GET /models/by-blueprint/{productBlueprintID}/variations
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet &&
-		strings.HasPrefix(
-			r.URL.Path,
-			"/models/by-blueprint/",
-		):
+		strings.HasPrefix(r.URL.Path, "/models/by-blueprint/"):
 		rest := strings.TrimPrefix(
 			r.URL.Path,
 			"/models/by-blueprint/",
@@ -189,10 +182,7 @@ func (h *ModelHandler) ServeHTTP(
 	// GET /models/{id}
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet &&
-		strings.HasPrefix(
-			r.URL.Path,
-			"/models/",
-		):
+		strings.HasPrefix(r.URL.Path, "/models/"):
 		id := strings.TrimPrefix(
 			r.URL.Path,
 			"/models/",
@@ -216,10 +206,7 @@ func (h *ModelHandler) ServeHTTP(
 	// POST /models/{productBlueprintID}/variations
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost &&
-		strings.HasPrefix(
-			r.URL.Path,
-			"/models/",
-		):
+		strings.HasPrefix(r.URL.Path, "/models/"):
 		rest := strings.TrimPrefix(
 			r.URL.Path,
 			"/models/",
@@ -247,10 +234,7 @@ func (h *ModelHandler) ServeHTTP(
 	// PUT /models/{id}
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPut &&
-		strings.HasPrefix(
-			r.URL.Path,
-			"/models/",
-		):
+		strings.HasPrefix(r.URL.Path, "/models/"):
 		rest := strings.TrimPrefix(
 			r.URL.Path,
 			"/models/",
@@ -286,10 +270,7 @@ func (h *ModelHandler) ServeHTTP(
 	// DELETE /models/{id}
 	// ------------------------------------------------------------
 	case r.Method == http.MethodDelete &&
-		strings.HasPrefix(
-			r.URL.Path,
-			"/models/",
-		):
+		strings.HasPrefix(r.URL.Path, "/models/"):
 		id := strings.TrimPrefix(
 			r.URL.Path,
 			"/models/",
@@ -316,20 +297,12 @@ func (h *ModelHandler) ServeHTTP(
 }
 
 // isSingleModelIDPathは/models/{id}系の単体ID pathだけを許可します。
-func isSingleModelIDPath(
-	id string,
-) bool {
+func isSingleModelIDPath(id string) bool {
 	return id != "" &&
 		id != "by-blueprint" &&
 		id != "variations" &&
-		!strings.HasPrefix(
-			id,
-			"by-blueprint/",
-		) &&
-		!strings.HasPrefix(
-			id,
-			"variations/",
-		) &&
+		!strings.HasPrefix(id, "by-blueprint/") &&
+		!strings.HasPrefix(id, "variations/") &&
 		!strings.Contains(id, "/")
 }
 
@@ -399,7 +372,7 @@ func (h *ModelHandler) createVariation(
 	ctx := r.Context()
 
 	if productBlueprintID == "" {
-		writeJSONError(
+		writeError(
 			w,
 			http.StatusBadRequest,
 			"invalid productBlueprintID",
@@ -418,11 +391,8 @@ func (h *ModelHandler) createVariation(
 
 	var request modelVariationRequest
 
-	if err := decodeStrictJSON(
-		r,
-		&request,
-	); err != nil {
-		writeJSONError(
+	if err := decodeStrictJSON(r, &request); err != nil {
+		writeError(
 			w,
 			http.StatusBadRequest,
 			"invalid json",
@@ -480,7 +450,7 @@ func (h *ModelHandler) replaceVariations(
 	ctx := r.Context()
 
 	if productBlueprintID == "" {
-		writeJSONError(
+		writeError(
 			w,
 			http.StatusBadRequest,
 			"invalid productBlueprintID",
@@ -499,11 +469,8 @@ func (h *ModelHandler) replaceVariations(
 
 	var request replaceModelVariationsRequest
 
-	if err := decodeStrictJSON(
-		r,
-		&request,
-	); err != nil {
-		writeJSONError(
+	if err := decodeStrictJSON(r, &request); err != nil {
+		writeError(
 			w,
 			http.StatusBadRequest,
 			"invalid json",
@@ -570,7 +537,7 @@ func (h *ModelHandler) listVariationsByProductBlueprintID(
 	ctx := r.Context()
 
 	if productBlueprintID == "" {
-		writeJSONError(
+		writeError(
 			w,
 			http.StatusBadRequest,
 			"invalid productBlueprintID",
@@ -618,7 +585,7 @@ func (h *ModelHandler) getVariation(
 	ctx := r.Context()
 
 	if id == "" {
-		writeJSONError(
+		writeError(
 			w,
 			http.StatusBadRequest,
 			"invalid id",
@@ -674,7 +641,7 @@ func (h *ModelHandler) updateVariation(
 	ctx := r.Context()
 
 	if id == "" {
-		writeJSONError(
+		writeError(
 			w,
 			http.StatusBadRequest,
 			"invalid id",
@@ -710,11 +677,8 @@ func (h *ModelHandler) updateVariation(
 
 	var request modelVariationRequest
 
-	if err := decodeStrictJSON(
-		r,
-		&request,
-	); err != nil {
-		writeJSONError(
+	if err := decodeStrictJSON(r, &request); err != nil {
+		writeError(
 			w,
 			http.StatusBadRequest,
 			"invalid json",
@@ -767,7 +731,7 @@ func (h *ModelHandler) deleteVariation(
 	ctx := r.Context()
 
 	if id == "" {
-		writeJSONError(
+		writeError(
 			w,
 			http.StatusBadRequest,
 			"invalid id",
@@ -1078,70 +1042,8 @@ func timePtrToRFC3339(
 }
 
 // ------------------------------------------------------------
-// JSON helpers
-// ------------------------------------------------------------
-
-// decodeStrictJSONは未定義フィールドを拒否します。
-// body側へproductBlueprintIdを送った場合も400を返します。
-func decodeStrictJSON(
-	r *http.Request,
-	destination any,
-) error {
-	if r == nil || r.Body == nil {
-		return errors.New("request body is required")
-	}
-
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(destination); err != nil {
-		return err
-	}
-
-	var trailingValue any
-
-	if err := decoder.Decode(
-		&trailingValue,
-	); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return errors.New(
-				"multiple json values are not allowed",
-			)
-		}
-
-		return err
-	}
-
-	return nil
-}
-
-// ------------------------------------------------------------
 // Error helpers
 // ------------------------------------------------------------
-
-func writeNotFound(
-	w http.ResponseWriter,
-) {
-	writeJSONError(
-		w,
-		http.StatusNotFound,
-		"not_found",
-	)
-}
-
-func writeJSONError(
-	w http.ResponseWriter,
-	statusCode int,
-	message string,
-) {
-	w.WriteHeader(statusCode)
-
-	_ = json.NewEncoder(w).Encode(
-		map[string]string{
-			"error": message,
-		},
-	)
-}
 
 func writeModelErr(
 	w http.ResponseWriter,
@@ -1150,92 +1052,38 @@ func writeModelErr(
 	statusCode := http.StatusInternalServerError
 
 	switch {
-	case errors.Is(
-		err,
-		ErrModelUnauthenticated,
-	):
+	case errors.Is(err, ErrModelUnauthenticated):
 		statusCode = http.StatusUnauthorized
 
-	case errors.Is(
-		err,
-		ErrModelForbidden,
-	):
+	case errors.Is(err, ErrModelForbidden):
 		statusCode = http.StatusForbidden
 
-	case errors.Is(
-		err,
-		ErrProductBlueprintPrinted,
-	):
+	case errors.Is(err, ErrProductBlueprintPrinted):
 		statusCode = http.StatusConflict
 
-	case errors.Is(
-		err,
-		modeldom.ErrInvalidID,
-	),
-		errors.Is(
-			err,
-			modeldom.ErrInvalidProductID,
-		),
-		errors.Is(
-			err,
-			modeldom.ErrInvalidBlueprintID,
-		),
-		errors.Is(
-			err,
-			modeldom.ErrInvalidModelNumber,
-		),
-		errors.Is(
-			err,
-			modeldom.ErrInvalidSize,
-		),
-		errors.Is(
-			err,
-			modeldom.ErrInvalidColor,
-		),
-		errors.Is(
-			err,
-			modeldom.ErrInvalidMeasurements,
-		),
-		errors.Is(
-			err,
-			modeldom.ErrInvalidVolume,
-		),
-		errors.Is(
-			err,
-			modeldom.ErrInvalidVolumeUnit,
-		),
-		errors.Is(
-			err,
-			modeldom.ErrInvalidKind,
-		),
-		errors.Is(
-			err,
-			modeldom.ErrProductMismatch,
-		),
-		errors.Is(
-			err,
-			modeldom.ErrInvalid,
-		):
+	case errors.Is(err, modeldom.ErrInvalidID),
+		errors.Is(err, modeldom.ErrInvalidProductID),
+		errors.Is(err, modeldom.ErrInvalidBlueprintID),
+		errors.Is(err, modeldom.ErrInvalidModelNumber),
+		errors.Is(err, modeldom.ErrInvalidSize),
+		errors.Is(err, modeldom.ErrInvalidColor),
+		errors.Is(err, modeldom.ErrInvalidMeasurements),
+		errors.Is(err, modeldom.ErrInvalidVolume),
+		errors.Is(err, modeldom.ErrInvalidVolumeUnit),
+		errors.Is(err, modeldom.ErrInvalidKind),
+		errors.Is(err, modeldom.ErrProductMismatch),
+		errors.Is(err, modeldom.ErrInvalid):
 		statusCode = http.StatusBadRequest
 
-	case errors.Is(
-		err,
-		modeldom.ErrNotFound,
-	):
+	case errors.Is(err, modeldom.ErrNotFound):
 		statusCode = http.StatusNotFound
 
-	case errors.Is(
-		err,
-		modeldom.ErrAtomicReplaceLimitExceeded,
-	),
-		errors.Is(
-			err,
-			modeldom.ErrConflict,
-		):
+	case errors.Is(err, modeldom.ErrAtomicReplaceLimitExceeded),
+		errors.Is(err, modeldom.ErrConflict):
 		statusCode = http.StatusConflict
 	}
 
-	writeJSONError(
+	writeError(
 		w,
 		statusCode,
 		err.Error(),

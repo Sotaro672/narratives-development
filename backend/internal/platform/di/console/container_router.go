@@ -3,30 +3,32 @@ package console
 
 import (
 	"context"
+	"net/http"
+
 	httpin "narratives/internal/adapters/in/http/console"
 	consoleHandler "narratives/internal/adapters/in/http/console/handler"
 	internalHandler "narratives/internal/adapters/in/http/handler"
 	"narratives/internal/adapters/in/http/middleware"
 	usecase "narratives/internal/application/usecase"
 	walletdom "narratives/internal/domain/wallet"
-	"net/http"
 )
 
 func (c *Container) RouterDeps() httpin.RouterDeps {
 	var authMw *middleware.AuthMiddleware
-	if c.Infra.FirebaseAuth != nil &&
-		c.MemberRepo != nil {
+	if c.Infra.FirebaseAuth != nil && c.MemberRepo != nil {
 		authMw = &middleware.AuthMiddleware{
 			FirebaseAuth: c.Infra.FirebaseAuth,
 			MemberRepo:   c.MemberRepo,
 		}
 	}
+
 	var bootstrapMw *middleware.BootstrapAuthMiddleware
 	if c.Infra.FirebaseAuth != nil {
 		bootstrapMw = &middleware.BootstrapAuthMiddleware{
 			FirebaseAuth: c.Infra.FirebaseAuth,
 		}
 	}
+
 	var (
 		authBootstrapH                      http.Handler
 		accountsH                           http.Handler
@@ -52,7 +54,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		membersH                            http.Handler
 		productionsH                        http.Handler
 		modelsH                             http.Handler
-		usersH                              http.Handler
 		inspectorH                          http.Handler
 		mintH                               http.Handler
 		internalMintTasksH                  http.Handler
@@ -61,71 +62,63 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		internalInvitationDeliveryDispatchH http.Handler
 		ownerResolveH                       http.Handler
 	)
-	if c.AuthBootstrap != nil &&
-		bootstrapMw != nil {
-		authBootstrapH =
-			consoleHandler.NewAuthBootstrapHandler(
-				c.AuthBootstrap,
-			)
+
+	if c.AuthBootstrap != nil && bootstrapMw != nil {
+		authBootstrapH = consoleHandler.NewAuthBootstrapHandler(c.AuthBootstrap)
 	}
+
 	if c.AccountUC != nil {
-		accountsH = consoleHandler.NewAccountHandler(
-			c.AccountUC,
-		)
+		accountsH = consoleHandler.NewAccountHandler(c.AccountUC)
 	}
+
 	if c.AnnouncementUC != nil &&
 		c.AnnouncementManagementQuery != nil &&
 		c.AnnouncementDetailQuery != nil {
-		announcementsH =
-			consoleHandler.NewAnnouncementHandler(
-				c.AnnouncementUC,
-				c.AnnouncementManagementQuery,
-				c.AnnouncementDetailQuery,
-			)
+		announcementsH = consoleHandler.NewAnnouncementHandler(
+			c.AnnouncementUC,
+			c.AnnouncementManagementQuery,
+			c.AnnouncementDetailQuery,
+		)
 	}
+
 	if c.PermissionUC != nil {
-		permissionsH =
-			consoleHandler.NewPermissionHandler(
-				c.PermissionUC,
-			)
+		permissionsH = consoleHandler.NewPermissionHandler(c.PermissionUC)
 	}
+
 	if c.BrandUC != nil &&
 		c.BrandManagementQuery != nil &&
 		c.BrandDetailQuery != nil {
-		brandsH =
-			consoleHandler.NewBrandHandler(
-				c.BrandUC,
-				c.BrandManagementQuery,
-				c.BrandDetailQuery,
-			)
+		brandsH = consoleHandler.NewBrandHandler(
+			c.BrandUC,
+			c.BrandManagementQuery,
+			c.BrandDetailQuery,
+		)
 	}
+
 	if c.CompanyUC != nil {
-		companiesH =
-			consoleHandler.NewCompanyHandler(
-				c.CompanyUC,
-			)
+		companiesH = consoleHandler.NewCompanyHandler(c.CompanyUC)
 	}
+
 	if c.InquiryUC != nil &&
 		c.InquiryManagementQuery != nil &&
 		c.InquiryDetailQuery != nil {
-		inquiriesH =
-			consoleHandler.NewInquiryHandler(
-				c.InquiryUC,
-				c.InquiryManagementQuery,
-				c.InquiryDetailQuery,
-			)
+		inquiriesH = consoleHandler.NewInquiryHandler(
+			c.InquiryUC,
+			c.InquiryManagementQuery,
+			c.InquiryDetailQuery,
+		)
 	}
+
 	if c.InventoryManagementQuery != nil &&
 		c.InventoryDetailQuery != nil &&
 		c.ListCreateQuery != nil {
-		inventoriesH =
-			consoleHandler.
-				NewInventoryHandlerWithListCreateQuery(
-					c.InventoryManagementQuery,
-					c.InventoryDetailQuery,
-					c.ListCreateQuery,
-				)
+		inventoriesH = consoleHandler.NewInventoryHandlerWithListCreateQuery(
+			c.InventoryManagementQuery,
+			c.InventoryDetailQuery,
+			c.ListCreateQuery,
+		)
 	}
+
 	if c.ListUC != nil {
 		listsH = consoleHandler.NewListHandler(
 			consoleHandler.NewListHandlerParams{
@@ -135,227 +128,197 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			},
 		)
 	}
+
 	if c.ListSaveOperationUC != nil {
-		listSaveOperationsH =
-			consoleHandler.
-				NewListSaveOperationHandler(
-					consoleHandler.
-						NewListSaveOperationHandlerParams{
-						UC: c.ListSaveOperationUC,
-					},
-				)
-		internalListSaveOperationTasksH =
-			consoleHandler.
-				NewListSaveOperationTaskHandler(
-					consoleHandler.
-						NewListSaveOperationTaskHandlerParams{
-						UC: c.ListSaveOperationUC,
-					},
-				)
+		listSaveOperationsH = consoleHandler.NewListSaveOperationHandler(
+			consoleHandler.NewListSaveOperationHandlerParams{
+				UC: c.ListSaveOperationUC,
+			},
+		)
+
+		internalListSaveOperationTasksH = consoleHandler.NewListSaveOperationTaskHandler(
+			consoleHandler.NewListSaveOperationTaskHandlerParams{
+				UC: c.ListSaveOperationUC,
+			},
+		)
 	}
+
 	if c.SalesQuery != nil {
 		salesH = &consoleHandler.SalesHandler{
 			SalesQuery: c.SalesQuery,
 		}
 	}
-	if c.PrintUC != nil &&
-		c.PrintQueryService != nil {
-		productsPrintH =
-			consoleHandler.NewPrintHandler(
-				c.PrintUC,
-				c.PrintQueryService,
-			)
+
+	if c.PrintUC != nil && c.PrintQueryService != nil {
+		productsPrintH = consoleHandler.NewPrintHandler(
+			c.PrintUC,
+			c.PrintQueryService,
+		)
 	}
+
 	if c.ProductBlueprintUC != nil &&
 		c.ProductBlueprintManagementQuery != nil &&
 		c.ProductBlueprintDetailQuery != nil {
-		productBPH =
-			consoleHandler.
-				NewProductBlueprintHandler(
-					c.ProductBlueprintUC,
-					c.ProductBlueprintManagementQuery,
-					c.ProductBlueprintDetailQuery,
-				)
+		productBPH = consoleHandler.NewProductBlueprintHandler(
+			c.ProductBlueprintUC,
+			c.ProductBlueprintManagementQuery,
+			c.ProductBlueprintDetailQuery,
+		)
 	}
+
 	if c.ProductBlueprintCategoryUC != nil {
-		productBPCategoriesH =
-			consoleHandler.
-				NewProductBlueprintCategoryHandler(
-					c.ProductBlueprintCategoryUC,
-				)
+		productBPCategoriesH = consoleHandler.NewProductBlueprintCategoryHandler(
+			c.ProductBlueprintCategoryUC,
+		)
 	}
+
 	if c.TokenBlueprintUC != nil &&
 		c.TokenBlueprintManagementQuery != nil &&
 		c.TokenBlueprintDetailQuery != nil {
-		tokenBPH =
-			consoleHandler.NewTokenBlueprintHandler(
-				c.TokenBlueprintUC,
-				c.TokenBlueprintDetailQuery,
-				c.TokenBlueprintManagementQuery,
-			)
+		tokenBPH = consoleHandler.NewTokenBlueprintHandler(
+			c.TokenBlueprintUC,
+			c.TokenBlueprintDetailQuery,
+			c.TokenBlueprintManagementQuery,
+		)
 	}
+
 	if c.TokenBlueprintRepo != nil &&
 		c.TokenBlueprintReviewRepo != nil &&
 		c.BrandRepo != nil {
-		tbReviewUC :=
-			usecase.NewTokenBlueprintReviewUsecase(
-				c.TokenBlueprintReviewRepo,
-				c.AvatarRepo,
-				c.TokenBlueprintRepo,
-				c.BrandRepo,
-			)
-		tokenBPReviewH =
-			consoleHandler.
-				NewTokenBlueprintReviewHandler(
-					tbReviewUC,
-				)
+		tbReviewUC := usecase.NewTokenBlueprintReviewUsecase(
+			c.TokenBlueprintReviewRepo,
+			c.AvatarRepo,
+			c.TokenBlueprintRepo,
+			c.BrandRepo,
+		)
+
+		tokenBPReviewH = consoleHandler.NewTokenBlueprintReviewHandler(tbReviewUC)
 	}
+
 	if c.ProductBlueprintRepo != nil &&
 		c.ProductBlueprintReviewRepo != nil &&
 		c.BrandRepo != nil {
 		var walletRepo walletdom.Repository
-		pbReviewUC :=
-			usecase.NewProductBlueprintReviewUsecase(
-				c.ProductBlueprintReviewRepo,
-				walletRepo,
-				c.ProductBlueprintRepo,
-				c.BrandRepo,
-				c.MemberRepo,
-				nil,
-				nil,
-				nil,
-				nil,
-				c.AvatarRepo,
-				nil,
-			)
-		productBPReviewH =
-			consoleHandler.
-				NewProductBlueprintReviewHandler(
-					pbReviewUC,
-				)
+
+		pbReviewUC := usecase.NewProductBlueprintReviewUsecase(
+			c.ProductBlueprintReviewRepo,
+			walletRepo,
+			c.ProductBlueprintRepo,
+			c.BrandRepo,
+			c.MemberRepo,
+			nil,
+			nil,
+			nil,
+			nil,
+			c.AvatarRepo,
+			nil,
+		)
+
+		productBPReviewH = consoleHandler.NewProductBlueprintReviewHandler(pbReviewUC)
 	}
-	if c.OrderManagementQuery != nil ||
-		c.OrderDetailQuery != nil {
-		ordersH =
-			consoleHandler.NewOrderHandler(
-				c.OrderManagementQuery,
-				c.OrderDetailQuery,
-			)
+
+	if c.OrderManagementQuery != nil || c.OrderDetailQuery != nil {
+		ordersH = consoleHandler.NewOrderHandler(
+			c.OrderManagementQuery,
+			c.OrderDetailQuery,
+		)
 	}
+
 	if c.WalletUC != nil {
-		walletsH =
-			consoleHandler.NewWalletHandler(
-				c.WalletUC,
-			)
+		walletsH = consoleHandler.NewWalletHandler(c.WalletUC)
 	}
+
 	if c.MemberRepo != nil {
-		membersH =
-			consoleHandler.NewMemberHandler(
-				c.MemberRepo,
-			)
+		membersH = consoleHandler.NewMemberHandler(c.MemberRepo)
 	}
-	if c.ProductionUC != nil &&
-		c.CompanyProductionQueryService != nil {
-		productionsH =
-			consoleHandler.NewProductionHandler(
-				c.CompanyProductionQueryService,
-				c.ProductionUC,
-			)
+
+	if c.ProductionUC != nil && c.CompanyProductionQueryService != nil {
+		productionsH = consoleHandler.NewProductionHandler(
+			c.CompanyProductionQueryService,
+			c.ProductionUC,
+		)
 	}
-	if c.ModelUC != nil &&
-		c.ProductBlueprintRepo != nil {
-		modelAccessPolicy :=
-			consoleHandler.NewModelAccessPolicy(
-				func(
-					ctx context.Context,
-					productBlueprintID string,
-				) (
-					consoleHandler.ProductBlueprintAccess,
-					error,
-				) {
-					productBlueprint, err :=
-						c.ProductBlueprintRepo.GetByID(
-							ctx,
-							productBlueprintID,
-						)
-					if err != nil {
-						return consoleHandler.
-								ProductBlueprintAccess{},
-							err
-					}
-					return consoleHandler.
-						ProductBlueprintAccess{
-						CompanyID: productBlueprint.CompanyID,
-						Printed:   productBlueprint.Printed,
-					}, nil
-				},
-			)
-		modelsH =
-			consoleHandler.NewModelHandler(
-				c.ModelUC,
-				modelAccessPolicy,
-			)
+
+	if c.ModelUC != nil && c.ProductBlueprintRepo != nil {
+		modelAccessPolicy := consoleHandler.NewModelAccessPolicy(
+			func(
+				ctx context.Context,
+				productBlueprintID string,
+			) (consoleHandler.ProductBlueprintAccess, error) {
+				productBlueprint, err := c.ProductBlueprintRepo.GetByID(
+					ctx,
+					productBlueprintID,
+				)
+				if err != nil {
+					return consoleHandler.ProductBlueprintAccess{}, err
+				}
+
+				return consoleHandler.ProductBlueprintAccess{
+					CompanyID: productBlueprint.CompanyID,
+					Printed:   productBlueprint.Printed,
+				}, nil
+			},
+		)
+
+		modelsH = consoleHandler.NewModelHandler(
+			c.ModelUC,
+			modelAccessPolicy,
+		)
 	}
-	if c.InspectionUC != nil &&
-		c.InspectorQuery != nil {
-		var pbGetter consoleHandler.
-			ProductBlueprintModelRefGetter
+
+	if c.InspectionUC != nil && c.InspectorQuery != nil {
+		var pbGetter consoleHandler.ProductBlueprintModelRefGetter
+
 		if c.ProductBlueprintRepo != nil {
 			if getter, ok := any(c.ProductBlueprintRepo).(consoleHandler.ProductBlueprintModelRefGetter); ok {
 				pbGetter = getter
 			}
 		}
-		inspectorH =
-			consoleHandler.NewInspectorHandler(
-				c.InspectionUC,
-				c.InspectorQuery,
-				c.NameResolver,
-				pbGetter,
-			)
+
+		inspectorH = consoleHandler.NewInspectorHandler(
+			c.InspectionUC,
+			c.InspectorQuery,
+			c.NameResolver,
+			pbGetter,
+		)
 	}
+
 	if c.MintUC != nil {
-		mintH =
-			consoleHandler.NewMintHandler(
-				c.MintUC,
-				c.MintRequestQueryService,
-			)
-		internalMintTasksH =
-			internalHandler.NewMintTaskHandler(
-				c.MintUC,
-			)
+		mintH = consoleHandler.NewMintHandler(
+			c.MintUC,
+			c.MintRequestQueryService,
+		)
+
+		internalMintTasksH = internalHandler.NewMintTaskHandler(c.MintUC)
 	}
+
 	if c.InvitationDeliveryUC != nil {
-		invitationDeliveryHandler :=
-			internalHandler.
-				NewInvitationDeliveryHandler(
-					c.InvitationDeliveryUC,
-				)
-		internalInvitationDeliveryProcessH =
-			http.HandlerFunc(
-				invitationDeliveryHandler.Process,
-			)
-		internalInvitationDeliveryDispatchH =
-			http.HandlerFunc(
-				invitationDeliveryHandler.DispatchDue,
-			)
+		invitationDeliveryHandler := internalHandler.NewInvitationDeliveryHandler(
+			c.InvitationDeliveryUC,
+		)
+
+		internalInvitationDeliveryProcessH = http.HandlerFunc(
+			invitationDeliveryHandler.Process,
+		)
+
+		internalInvitationDeliveryDispatchH = http.HandlerFunc(
+			invitationDeliveryHandler.DispatchDue,
+		)
 	}
+
 	if c.OwnerResolveQ != nil {
-		ownerResolveH =
-			consoleHandler.
-				NewOwnerResolveHandler(
-					c.OwnerResolveQ,
-				)
+		ownerResolveH = consoleHandler.NewOwnerResolveHandler(c.OwnerResolveQ)
 	}
-	if c.InvitationUC != nil &&
-		c.Infra.FirebaseAuth != nil {
-		invitationH =
-			consoleHandler.NewInvitationHandler(
-				c.InvitationUC,
-				c.CompanyRepo,
-				c.BrandRepo,
-				c.Infra.FirebaseAuth,
-			)
+
+	if c.InvitationUC != nil && c.Infra.FirebaseAuth != nil {
+		invitationH = consoleHandler.NewInvitationHandler(
+			c.InvitationUC,
+			c.CompanyRepo,
+			c.BrandRepo,
+			c.Infra.FirebaseAuth,
+		)
 	}
+
 	return httpin.RouterDeps{
 		AuthMw:                             authMw,
 		BootstrapMw:                        bootstrapMw,
@@ -368,28 +331,27 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		Inquiries:                          inquiriesH,
 		Inventories:                        inventoriesH,
 		Lists:                              listsH,
-		Sales:                              salesH,
+		ListSaveOperations:                 listSaveOperationsH,
 		ProductsPrint:                      productsPrintH,
 		ProductBP:                          productBPH,
+		ProductBPCategories:                productBPCategoriesH,
 		TokenBP:                            tokenBPH,
-		TokenBPReview:                      tokenBPReviewH,
-		ProductBPReview:                    productBPReviewH,
 		Messages:                           messagesH,
 		Orders:                             ordersH,
 		Wallets:                            walletsH,
 		Members:                            membersH,
 		Productions:                        productionsH,
 		Models:                             modelsH,
-		Users:                              usersH,
-		Invitation:                         invitationH,
 		Inspector:                          inspectorH,
 		Mint:                               mintH,
-		OwnerResolve:                       ownerResolveH,
-		ListSaveOperations:                 listSaveOperationsH,
-		InternalListSaveOperationTasks:     internalListSaveOperationTasksH,
-		ProductBPCategories:                productBPCategoriesH,
 		InternalMintTasks:                  internalMintTasksH,
+		InternalListSaveOperationTasks:     internalListSaveOperationTasksH,
 		InternalInvitationDeliveryProcess:  internalInvitationDeliveryProcessH,
 		InternalInvitationDeliveryDispatch: internalInvitationDeliveryDispatchH,
+		OwnerResolve:                       ownerResolveH,
+		Invitation:                         invitationH,
+		Sales:                              salesH,
+		TokenBPReview:                      tokenBPReviewH,
+		ProductBPReview:                    productBPReviewH,
 	}
 }

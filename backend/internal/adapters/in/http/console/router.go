@@ -66,7 +66,6 @@ type RouterDeps struct {
 	InternalInvitationDeliveryDispatch http.Handler
 
 	OwnerResolve    http.Handler
-	Users           http.Handler
 	Invitation      http.Handler
 	Sales           http.Handler
 	TokenBPReview   http.Handler
@@ -174,7 +173,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		h := withAuth(deps.ProductsPrint)
 		mux.Handle("/products", h)
 		mux.Handle("/products/", h)
-		mux.Handle("/products/print-logs", h)
 	}
 
 	if deps.ProductBP != nil {
@@ -306,12 +304,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		h := withAuth(deps.OwnerResolve)
 		mux.Handle("/owners/resolve", h)
 		mux.Handle("/owners/resolve/", h)
-	}
-
-	if deps.Users != nil {
-		h := withAuth(deps.Users)
-		mux.Handle("/users", h)
-		mux.Handle("/users/", h)
 	}
 
 	if deps.Sales != nil {
