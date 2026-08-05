@@ -1,8 +1,8 @@
 // frontend/amol/src/features/list/infrastructure/listApi.ts
 
 import {
-  getApiBaseUrl,
-} from "../../../lib/apiBaseUrl";
+  requestJson,
+} from "../../../lib/http";
 
 import type {
   MallCatalogResponse,
@@ -14,19 +14,6 @@ type FetchMallListsArgs = {
   perPage: number;
 };
 
-function isJsonResponse(
-  response: Response,
-): boolean {
-  const contentType =
-    response.headers.get(
-      "content-type",
-    ) ?? "";
-
-  return contentType.includes(
-    "application/json",
-  );
-}
-
 /**
  * 商品一覧を取得します。
  *
@@ -36,43 +23,36 @@ export async function fetchMallLists({
   page,
   perPage,
 }: FetchMallListsArgs): Promise<MallListIndexResponse> {
-  const apiBaseUrl =
-    getApiBaseUrl();
-
-  const searchParams =
-    new URLSearchParams({
-      page: String(page),
-      perPage: String(perPage),
-    });
-
-  const response =
-    await fetch(
-      `${apiBaseUrl}/mall/lists?${searchParams.toString()}`,
+  const data =
+    await requestJson<
+      Partial<MallListIndexResponse>
+    >(
+      "/mall/lists",
       {
         method: "GET",
-        headers: {
-          Accept: "application/json",
+        auth: "none",
+        credentials:
+          "include",
+        query: {
+          page,
+          perPage,
         },
-        credentials: "include",
+        messages: {
+          requestErrorMessage:
+            "商品一覧の取得に失敗しました。",
+          nonJsonErrorMessage:
+            "商品一覧APIがJSON以外を返しました。",
+          invalidJsonErrorMessage:
+            "商品一覧APIのJSON形式が不正です。",
+        },
       },
     );
 
-  if (!isJsonResponse(response)) {
-    throw new Error(
-      "商品一覧APIがJSON以外を返しました。",
-    );
-  }
-
-  const data =
-    (await response.json()) as Partial<MallListIndexResponse>;
-
-  if (!response.ok) {
-    throw new Error(
-      "商品一覧の取得に失敗しました。",
-    );
-  }
-
-  if (!Array.isArray(data.items)) {
+  if (
+    !Array.isArray(
+      data.items,
+    )
+  ) {
     throw new Error(
       "商品一覧APIのitemsが配列ではありません。",
     );
@@ -80,9 +60,11 @@ export async function fetchMallLists({
 
   return {
     ...data,
-    items: data.items,
+    items:
+      data.items,
     page:
-      typeof data.page === "number" &&
+      typeof data.page ===
+        "number" &&
       data.page > 0
         ? data.page
         : page,
@@ -111,34 +93,31 @@ export async function fetchListCatalog(
     return null;
   }
 
-  const apiBaseUrl =
-    getApiBaseUrl();
+  const encodedListId =
+    encodeURIComponent(
+      normalizedListId,
+    );
 
   try {
-    const response =
-      await fetch(
-        `${apiBaseUrl}/mall/catalog/${encodeURIComponent(
-          normalizedListId,
-        )}`,
-        {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-          },
-          credentials: "include",
+    return await requestJson<
+      MallCatalogResponse
+    >(
+      `/mall/catalog/${encodedListId}`,
+      {
+        method: "GET",
+        auth: "none",
+        credentials:
+          "include",
+        messages: {
+          requestErrorMessage:
+            "カタログの取得に失敗しました。",
+          nonJsonErrorMessage:
+            "カタログAPIがJSON以外を返しました。",
+          invalidJsonErrorMessage:
+            "カタログAPIのJSON形式が不正です。",
         },
-      );
-
-    if (
-      !response.ok ||
-      !isJsonResponse(response)
-    ) {
-      return null;
-    }
-
-    return (
-      await response.json()
-    ) as MallCatalogResponse;
+      },
+    );
   } catch {
     return null;
   }

@@ -1,4 +1,5 @@
-/*frontend\src\styles\scan-page.css*/
+/* frontend/amol/src/features/scan/presentation/styles/scan-page.css */
+
 .scan-page {
   position: relative;
   width: 100%;
@@ -33,7 +34,9 @@
   height: min(72vw, 280px);
   border: 3px solid rgba(255, 255, 255, 0.95);
   border-radius: 16px;
-  box-shadow: 0 0 0 9999px rgba(17, 24, 39, 0.18);
+  box-shadow:
+    0 0 0 9999px
+    rgba(17, 24, 39, 0.18);
 }
 
 .scan-page__guide-text {
@@ -42,7 +45,9 @@
   font-size: 14px;
   line-height: 1.6;
   text-align: center;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  text-shadow:
+    0 1px 4px
+    rgba(0, 0, 0, 0.6);
 }
 
 .scan-page__bottom-actions {
@@ -53,7 +58,13 @@
   z-index: 30;
   display: flex;
   justify-content: center;
-  padding: 0 16px calc(24px + env(safe-area-inset-bottom));
+  padding:
+    0
+    16px
+    calc(
+      24px +
+      env(safe-area-inset-bottom)
+    );
   box-sizing: border-box;
   pointer-events: none;
 }
@@ -70,7 +81,9 @@
   font-size: 16px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  box-shadow:
+    0 8px 24px
+    rgba(0, 0, 0, 0.28);
 }
 
 .scan-page__my-qr-button:disabled {
@@ -86,7 +99,8 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(17, 24, 39, 0.72);
+  background:
+    rgba(17, 24, 39, 0.72);
   box-sizing: border-box;
 }
 
@@ -168,7 +182,8 @@
 
 .scan-page__back-button {
   pointer-events: auto;
-  background: rgba(17, 24, 39, 0.55);
+  background:
+    rgba(17, 24, 39, 0.55);
   border: none;
   border-radius: 9999px;
   width: 44px;
@@ -182,7 +197,8 @@
   color: #ffffff;
   font-size: 28px;
   line-height: 1;
-  backdrop-filter: blur(4px);
+  backdrop-filter:
+    blur(4px);
 }
 
 .scan-page__error-overlay {
@@ -193,7 +209,8 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background-color: rgba(17, 24, 39, 0.5);
+  background-color:
+    rgba(17, 24, 39, 0.5);
   box-sizing: border-box;
 }
 
@@ -201,7 +218,8 @@
   max-width: 320px;
   padding: 16px;
   border-radius: 12px;
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color:
+    rgba(0, 0, 0, 0.7);
 }
 
 .scan-page__error-text {
