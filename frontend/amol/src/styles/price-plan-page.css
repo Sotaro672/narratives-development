@@ -17,9 +17,11 @@
 }
 
 .price-plan-table {
-  width: max-content;
+  width: 100%;
   min-width: 860px;
+  box-sizing: border-box;
   border-collapse: collapse;
+  table-layout: auto;
 }
 
 .price-plan-table th,
@@ -105,6 +107,7 @@
   }
 
   .price-plan-table {
+    width: 100%;
     min-width: 720px;
   }
 
