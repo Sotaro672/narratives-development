@@ -12,7 +12,7 @@ import { formatPrice } from "../components/utils/price";
 import type { PageResult } from "../features/shared/pageResult";
 import { getApiBaseUrl } from "../lib/apiBaseUrl";
 
-import "../styles/lists-page.css";
+import "../features/list/presentation/styles/lists-page.css";
 
 type LikePriceRow = {
   currency?: string;

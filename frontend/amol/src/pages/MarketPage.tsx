@@ -19,7 +19,7 @@ import type {
   MarketResaleListing,
 } from "../features/shared/types/marketResale";
 
-import "../styles/lists-page.css";
+import "../features/list/presentation/styles/lists-page.css";
 
 type MarketCardItem =
   MarketResaleListing;
