@@ -398,6 +398,23 @@ export function useCatalogPage() {
     );
   }
 
+  function handleAvatarClick(
+    avatarId: string,
+  ) {
+    const normalizedAvatarId =
+      avatarId.trim();
+
+    if (!normalizedAvatarId) {
+      return;
+    }
+
+    navigate(
+      `/avatars/${encodeURIComponent(
+        normalizedAvatarId,
+      )}`,
+    );
+  }
+
   async function handleAddToCart() {
     setIsAddingToCart(true);
     setCartErrorMessage("");
@@ -453,6 +470,7 @@ export function useCatalogPage() {
     handleSelectColor,
     handleSelectSize,
     handleBrandClick,
+    handleAvatarClick,
     handleAddToCart,
     handleCartButtonClick,
   };

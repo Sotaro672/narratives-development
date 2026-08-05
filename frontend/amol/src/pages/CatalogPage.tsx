@@ -1,48 +1,36 @@
 // frontend/amol/src/pages/CatalogPage.tsx
 
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
-  onAuthStateChanged,
-  type User,
-} from "firebase/auth";
+  useNavigate,
+} from "react-router-dom";
 
-import "../styles/catalog-page.css";
-
-import FooterNav from "../components/layout/FooterNav";
 import Layout from "../components/layout/Layout";
+import FooterNav from "../components/layout/FooterNav";
+
+import CatalogSummary from "../features/catalog/presentation/components/CatalogSummary";
 import CatalogImageGallery from "../features/catalog/presentation/components/CatalogImageGallery";
 import MeasurementTable from "../features/catalog/presentation/components/MeasurementTable";
 import ModelSelector from "../features/catalog/presentation/components/ModelSelector";
 import ProductInfoCard from "../features/catalog/presentation/components/ProductInfoCard";
 import ReviewSection from "../features/catalog/presentation/components/ReviewSection";
 import TokenInfoCard from "../features/catalog/presentation/components/TokenInfoCard";
-import { useCatalogPage } from "../features/catalog/presentation/hooks/useCatalogPage";
-import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
-import { formatPrice } from "../components/utils/price";
-import { auth } from "../lib/firebase";
+
+import {
+  useCatalogPage,
+} from "../features/catalog/presentation/hooks/useCatalogPage";
+
+import {
+  useAuthState,
+} from "../features/shared/hooks/useAuthState";
+
+import "../features/catalog/presentation/styles/catalog-page.css";
 
 export default function CatalogPage() {
   const navigate = useNavigate();
 
-  const [user, setUser] =
-    useState<User | null | undefined>(
-      undefined,
-    );
-
-  useEffect(() => {
-    const unsubscribe =
-      onAuthStateChanged(
-        auth,
-        (nextUser) => {
-          setUser(nextUser);
-        },
-      );
-
-    return unsubscribe;
-  }, []);
-
-  const isLoggedIn = Boolean(user);
+  const {
+    isLoggedIn,
+  } = useAuthState();
 
   const {
     catalog,
@@ -76,6 +64,8 @@ export default function CatalogPage() {
     selectedModelStock,
     canAddToCart,
 
+    isMobilePortrait,
+
     setActiveImageIndex,
     handlePrevImage,
     handleNextImage,
@@ -84,12 +74,10 @@ export default function CatalogPage() {
     handleSelectColor,
     handleSelectSize,
     handleBrandClick,
+    handleAvatarClick,
     handleAddToCart,
     handleCartButtonClick,
   } = useCatalogPage();
-
-  const isMobilePortrait =
-    useMobilePortrait();
 
   const handleBackButtonClick = () => {
     if (isLoggedIn) {
@@ -98,20 +86,6 @@ export default function CatalogPage() {
     }
 
     navigate(-1);
-  };
-
-  const handleAvatarClick = (
-    avatarId: string,
-  ) => {
-    if (!avatarId) {
-      return;
-    }
-
-    navigate(
-      `/avatars/${encodeURIComponent(
-        avatarId,
-      )}`,
-    );
   };
 
   return (
@@ -222,27 +196,17 @@ export default function CatalogPage() {
             </div>
 
             <div className="split-page-right catalog-page-detail">
-              <div className="catalog-page-summary">
-                <h1 className="catalog-page-title">
-                  {catalog.list.title}
-                </h1>
-
-                {catalog.list
-                  .description ? (
-                  <p className="catalog-page-description">
-                    {
-                      catalog.list
-                        .description
-                    }
-                  </p>
-                ) : null}
-
-                <p className="catalog-page-price">
-                  {formatPrice(
-                    firstPrice?.price,
-                  )}
-                </p>
-              </div>
+              <CatalogSummary
+                title={
+                  catalog.list.title
+                }
+                description={
+                  catalog.list.description
+                }
+                price={
+                  firstPrice?.price
+                }
+              />
 
               <ProductInfoCard
                 productBlueprint={
