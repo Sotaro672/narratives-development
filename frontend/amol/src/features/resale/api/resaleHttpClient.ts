@@ -2,12 +2,18 @@
 
 import {
   requestJson,
+  type ApiQueryParams,
 } from "../../../lib/http";
 
 export type ApiDataResponse<T> = {
   data?: T;
   error?: string;
 };
+
+type ResaleRequestInit =
+  RequestInit & {
+    query?: ApiQueryParams;
+  };
 
 /**
  * 既存のRequestInit.bodyを、
@@ -57,10 +63,11 @@ function parseJsonRequestBody(
  */
 export async function fetchResaleWithAuth<T>(
   path: string,
-  init?: RequestInit,
+  init?: ResaleRequestInit,
 ): Promise<T> {
   const {
     body,
+    query,
     ...requestInit
   } = init ?? {};
 
@@ -74,6 +81,12 @@ export async function fetchResaleWithAuth<T>(
 
       auth:
         "required",
+
+      ...(query !== undefined
+        ? {
+            query,
+          }
+        : {}),
 
       ...(json !== undefined
         ? {
@@ -97,10 +110,11 @@ export async function fetchResaleWithAuth<T>(
  */
 export async function fetchPublicResale<T>(
   path: string,
-  init?: RequestInit,
+  init?: ResaleRequestInit,
 ): Promise<T> {
   const {
     body,
+    query,
     ...requestInit
   } = init ?? {};
 
@@ -114,6 +128,12 @@ export async function fetchPublicResale<T>(
 
       auth:
         "none",
+
+      ...(query !== undefined
+        ? {
+            query,
+          }
+        : {}),
 
       ...(json !== undefined
         ? {

@@ -166,25 +166,18 @@ export async function getMyResaleListing(
 export async function listMyResaleListings(
   params: ListMyResaleListingsParams = {},
 ): Promise<ListMyResaleListingsResponse> {
-  const searchParams =
-    new URLSearchParams();
-
-  searchParams.set(
-    "page",
-    String(params.page ?? 1),
-  );
-
-  searchParams.set(
-    "perPage",
-    String(params.perPage ?? 50),
-  );
-
   return fetchResaleWithAuth<
     ListMyResaleListingsResponse
   >(
-    `/mall/me/resales?${searchParams.toString()}`,
+    "/mall/me/resales",
     {
       method: "GET",
+      query: {
+        page:
+          params.page ?? 1,
+        perPage:
+          params.perPage ?? 50,
+      },
     },
   );
 }
