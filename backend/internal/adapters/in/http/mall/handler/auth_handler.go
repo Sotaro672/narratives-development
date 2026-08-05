@@ -3,7 +3,6 @@ package mallHandler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -49,24 +48,13 @@ func NewAuthHandler(
 	}
 }
 
-func (h *AuthHandler) ServeHTTP(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	w.Header().Set(
-		"Content-Type",
-		"application/json",
-	)
-
+func (h *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
-	path0 := strings.TrimSuffix(
-		r.URL.Path,
-		"/",
-	)
+	path0 := strings.TrimSuffix(r.URL.Path, "/")
 
 	switch {
 	case r.Method == http.MethodPost &&
@@ -75,14 +63,9 @@ func (h *AuthHandler) ServeHTTP(
 		return
 
 	default:
-		w.WriteHeader(http.StatusNotFound)
-
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "not_found",
-			},
-		)
-
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "not_found",
+		})
 		return
 	}
 }
@@ -92,100 +75,57 @@ func (h *AuthHandler) handleSendEmailVerification(
 	r *http.Request,
 ) {
 	if h == nil {
-		writeAuthErr(
-			w,
-			errors.New("auth handler is nil"),
-		)
+		writeAuthErr(w, errors.New("auth handler is nil"))
 		return
 	}
 
 	if h.FirebaseAuth == nil {
-		w.WriteHeader(
-			http.StatusServiceUnavailable,
-		)
-
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "firebase_auth_not_configured",
-			},
-		)
-
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "firebase_auth_not_configured",
+		})
 		return
 	}
 
 	if h.Mailer == nil {
-		w.WriteHeader(
-			http.StatusServiceUnavailable,
-		)
-
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "auth_mailer_not_configured",
-			},
-		)
-
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "auth_mailer_not_configured",
+		})
 		return
 	}
 
-	uid, ok :=
-		middleware.CurrentUserUID(r)
-
+	uid, ok := middleware.CurrentUserUID(r)
 	if !ok || uid == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "unauthorized: missing uid",
-			},
-		)
-
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized: missing uid",
+		})
 		return
 	}
 
-	userRecord, err :=
-		h.FirebaseAuth.GetUser(
-			r.Context(),
-			uid,
-		)
+	userRecord, err := h.FirebaseAuth.GetUser(r.Context(), uid)
 	if err != nil {
-		writeAuthErr(
-			w,
-			fmt.Errorf(
-				"get firebase user: %w",
-				err,
-			),
-		)
+		writeAuthErr(w, fmt.Errorf("get firebase user: %w", err))
 		return
 	}
 
 	if userRecord.Email == "" {
-		w.WriteHeader(http.StatusBadRequest)
-
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "user_email_empty",
-			},
-		)
-
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "user_email_empty",
+		})
 		return
 	}
 
 	if userRecord.EmailVerified {
-		_ = json.NewEncoder(w).Encode(
-			map[string]any{
-				"ok":      true,
-				"message": "email_already_verified",
-			},
-		)
-
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":      true,
+			"message": "email_already_verified",
+		})
 		return
 	}
 
-	verifyURL, err :=
-		h.buildEmailVerificationLink(
-			r.Context(),
-			userRecord.Email,
-		)
+	verifyURL, err := h.buildEmailVerificationLink(
+		r.Context(),
+		userRecord.Email,
+	)
 	if err != nil {
 		writeAuthErr(w, err)
 		return
@@ -196,21 +136,13 @@ func (h *AuthHandler) handleSendEmailVerification(
 		userRecord.Email,
 		verifyURL,
 	); err != nil {
-		writeAuthErr(
-			w,
-			fmt.Errorf(
-				"send verification email: %w",
-				err,
-			),
-		)
+		writeAuthErr(w, fmt.Errorf("send verification email: %w", err))
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(
-		map[string]any{
-			"ok": true,
-		},
-	)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true,
+	})
 }
 
 func (h *AuthHandler) buildEmailVerificationLink(
@@ -218,17 +150,12 @@ func (h *AuthHandler) buildEmailVerificationLink(
 	email string,
 ) (string, error) {
 	if h == nil || h.FirebaseAuth == nil {
-		return "",
-			errors.New(
-				"firebase auth is not configured",
-			)
+		return "", errors.New("firebase auth is not configured")
 	}
 
 	email = strings.TrimSpace(email)
-
 	if email == "" {
-		return "",
-			errors.New("email is empty")
+		return "", errors.New("email is empty")
 	}
 
 	settings := &auth.ActionCodeSettings{
@@ -236,18 +163,16 @@ func (h *AuthHandler) buildEmailVerificationLink(
 		HandleCodeInApp: false,
 	}
 
-	link, err :=
-		h.FirebaseAuth.EmailVerificationLinkWithSettings(
-			ctx,
-			email,
-			settings,
-		)
+	link, err := h.FirebaseAuth.EmailVerificationLinkWithSettings(
+		ctx,
+		email,
+		settings,
+	)
 	if err != nil {
-		return "",
-			fmt.Errorf(
-				"generate email verification link: %w",
-				err,
-			)
+		return "", fmt.Errorf(
+			"generate email verification link: %w",
+			err,
+		)
 	}
 
 	return link, nil
@@ -256,84 +181,40 @@ func (h *AuthHandler) buildEmailVerificationLink(
 func (h *AuthHandler) authSignInURL() string {
 	baseURL := defaultAuthActionBaseURL
 
-	if h != nil &&
-		strings.TrimSpace(h.ActionBaseURL) != "" {
+	if h != nil && strings.TrimSpace(h.ActionBaseURL) != "" {
 		baseURL = strings.TrimRight(
 			strings.TrimSpace(h.ActionBaseURL),
 			"/",
 		)
 	}
 
-	baseURL = strings.TrimSuffix(
-		baseURL,
-		"/auth/action",
-	)
+	baseURL = strings.TrimSuffix(baseURL, "/auth/action")
 
-	if strings.HasSuffix(
-		baseURL,
-		"/signin",
-	) {
+	if strings.HasSuffix(baseURL, "/signin") {
 		return baseURL
 	}
 
 	return baseURL + "/signin"
 }
 
-func writeAuthErr(
-	w http.ResponseWriter,
-	err error,
-) {
-	if err == nil {
-		w.WriteHeader(
-			http.StatusInternalServerError,
-		)
-
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "internal_error",
-			},
-		)
-
-		return
-	}
+func writeAuthErr(w http.ResponseWriter, err error) {
+	code := http.StatusInternalServerError
+	errorCode := "internal_error"
 
 	switch {
-	case errors.Is(
-		err,
-		context.Canceled,
-	),
-		errors.Is(
-			err,
-			context.DeadlineExceeded,
-		):
-		w.WriteHeader(
-			http.StatusRequestTimeout,
-		)
+	case err == nil:
+		// Default response values are used.
 
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "request_timeout",
-			},
-		)
-
-		return
+	case errors.Is(err, context.Canceled),
+		errors.Is(err, context.DeadlineExceeded):
+		code = http.StatusRequestTimeout
+		errorCode = "request_timeout"
 
 	default:
-		log.Printf(
-			"[auth_handler] error: %v",
-			err,
-		)
-
-		w.WriteHeader(
-			http.StatusInternalServerError,
-		)
-
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "internal_error",
-			},
-		)
-
-		return
+		log.Printf("[auth_handler] error: %v", err)
 	}
+
+	writeJSON(w, code, map[string]string{
+		"error": errorCode,
+	})
 }

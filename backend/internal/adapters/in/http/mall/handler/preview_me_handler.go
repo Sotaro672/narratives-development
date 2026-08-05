@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\handler\preview_me_handler.go
+// backend/internal/adapters/in/http/mall/handler/preview_me_handler.go
 package mallHandler
 
 import (
@@ -38,9 +38,10 @@ func NewPreviewMeHandler(
 	}
 }
 
-func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
+func (h *PreviewMeHandler) ServeHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -70,7 +71,9 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	avatarID, _ := middleware.CurrentAvatarID(r)
 
-	productID := strings.TrimSpace(r.URL.Query().Get("productId"))
+	productID := strings.TrimSpace(
+		r.URL.Query().Get("productId"),
+	)
 	if productID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": "productId is required",
@@ -78,32 +81,37 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	info, err := h.q.ResolveModelInfoByProductID(r.Context(), productID)
+	info, err := h.q.ResolveModelInfoByProductID(
+		r.Context(),
+		productID,
+	)
 	if err != nil {
-		if isNotFound(err) {
+		switch {
+		case isNotFound(err):
 			writeJSON(w, http.StatusNotFound, map[string]any{
 				"error":     "not found",
 				"productId": productID,
 				"avatarId":  avatarID,
 			})
 			return
-		}
 
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		case errors.Is(err, context.Canceled),
+			errors.Is(err, context.DeadlineExceeded):
 			writeJSON(w, http.StatusRequestTimeout, map[string]any{
 				"error":     "request canceled",
 				"productId": productID,
 				"avatarId":  avatarID,
 			})
 			return
-		}
 
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":     "resolve failed",
-			"productId": productID,
-			"avatarId":  avatarID,
-		})
-		return
+		default:
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":     "resolve failed",
+				"productId": productID,
+				"avatarId":  avatarID,
+			})
+			return
+		}
 	}
 
 	if info == nil {
@@ -115,55 +123,13 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if info.Owner == nil && h.ownerQ != nil && info.Token != nil {
-		addr := strings.TrimSpace(info.Token.ToAddress)
-		if addr != "" {
-			res, rerr := h.ownerQ.Resolve(r.Context(), addr)
-			if rerr == nil {
-				info.Owner = res
-			}
-		}
-	}
-
-	tbPatch := resolveTokenBlueprintPatch(r.Context(), info, h.tbRepo)
-	tbDTO := buildTokenBlueprintPatchDTO(r.Context(), tbPatch, h.nameR)
-
-	data := map[string]any{
-		"productId":   info.ProductID,
-		"modelId":     info.ModelID,
-		"modelKind":   info.ModelKind,
-		"modelNumber": info.ModelNumber,
-		"modelLabel":  info.ModelLabel,
-
-		// apparel
-		"size":         info.Size,
-		"color":        info.Color,
-		"rgb":          info.RGB,
-		"measurements": info.Measurements,
-
-		// alcohol
-		"volumeValue": info.VolumeValue,
-		"volumeUnit":  info.VolumeUnit,
-
-		// category / productBlueprint
-		"productBlueprintId":           info.ProductBlueprintID,
-		"productBlueprintCategoryCode": info.ProductBlueprintCategoryCode,
-		"productBlueprintCategoryKind": info.ProductBlueprintCategoryKind,
-		"productBlueprintCategoryName": info.ProductBlueprintCategoryName,
-		"productBlueprintCategory":     info.ProductBlueprintCategory,
-		"productBlueprintPatch":        info.ProductBlueprintPatch,
-		"categoryInputSchema":          info.CategoryInputSchema,
-
-		// display
-		"brandName":   info.BrandName,
-		"companyName": info.CompanyName,
-
-		// token / owner / transfer
-		"token":               info.Token,
-		"owner":               info.Owner,
-		"transfers":           info.Transfers,
-		"tokenBlueprintPatch": tbDTO,
-	}
+	data := buildPreviewData(
+		r.Context(),
+		info,
+		h.ownerQ,
+		h.tbRepo,
+		h.nameR,
+	)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data":     data,

@@ -23,8 +23,6 @@ func NewAvatarHandler(avatarUC *avataruc.AvatarUsecase) http.Handler {
 }
 
 func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -49,8 +47,7 @@ func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 
 	default:
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{
+		writeJSON(w, http.StatusNotFound, map[string]string{
 			"error": "not_found",
 		})
 		return
@@ -79,8 +76,7 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h == nil || h.uc == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "avatar usecase not configured",
 		})
 		return
@@ -96,8 +92,7 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
+		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "invalid json",
 		})
 		return
@@ -108,8 +103,7 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 		if s != "" &&
 			!strings.HasPrefix(s, "http://") &&
 			!strings.HasPrefix(s, "https://") {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
+			writeJSON(w, http.StatusBadRequest, map[string]string{
 				"error": "invalid_avatar_icon",
 			})
 			return
@@ -133,8 +127,7 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(toAvatarResponse(created))
+	writeJSON(w, http.StatusCreated, toAvatarResponse(created))
 }
 
 type avatarResponse struct {
@@ -173,16 +166,14 @@ func (h *AvatarHandler) get(
 	ctx := r.Context()
 
 	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
+		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "invalid id",
 		})
 		return
 	}
 
 	if h == nil || h.uc == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "avatar usecase not configured",
 		})
 		return
@@ -194,7 +185,7 @@ func (h *AvatarHandler) get(
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(toAvatarResponse(avatar))
+	writeJSON(w, http.StatusOK, toAvatarResponse(avatar))
 }
 
 func writeAvatarErr(w http.ResponseWriter, err error) {
@@ -210,22 +201,11 @@ func writeAvatarErr(w http.ResponseWriter, err error) {
 		code = http.StatusBadRequest
 	}
 
-	if hasErrNotFound(err) {
+	if isNotFoundLike(err) {
 		code = http.StatusNotFound
 	}
 
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{
+	writeJSON(w, code, map[string]string{
 		"error": err.Error(),
 	})
-}
-
-func hasErrNotFound(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "not found") ||
-		strings.Contains(msg, "not_found")
 }

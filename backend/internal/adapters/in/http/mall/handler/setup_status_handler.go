@@ -3,8 +3,6 @@ package mallHandler
 
 import (
 	"context"
-	"encoding/json"
-	"log"
 	"net/http"
 
 	"narratives/internal/adapters/in/http/middleware"
@@ -27,24 +25,30 @@ func NewSetupStatusHandler(setupUsecase SetupStatusUsecase) http.Handler {
 
 func (h *SetupStatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		methodNotAllowed(w)
 		return
 	}
 
 	if h == nil || h.Usecase == nil {
-		http.Error(w, "setup-status usecase is not configured", http.StatusInternalServerError)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "setup-status usecase is not configured",
+		})
 		return
 	}
 
 	uid, ok := middleware.CurrentUserUID(r)
 	if !ok || uid == "" {
-		w.WriteHeader(http.StatusUnauthorized)
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized",
+		})
 		return
 	}
 
 	status, err := h.Usecase.GetSetupStatus(r.Context(), uid)
 	if err != nil {
-		http.Error(w, "failed to get setup status", http.StatusInternalServerError)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to get setup status",
+		})
 		return
 	}
 
@@ -58,13 +62,5 @@ func (h *SetupStatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	log.Printf(
-		"[mall_setup_status_handler] uid=%q requiredAvatarOnly=true hasAvatar=%t setupCompleted=%t",
-		uid,
-		status.HasAvatar,
-		status.SetupCompleted,
-	)
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, resp)
 }

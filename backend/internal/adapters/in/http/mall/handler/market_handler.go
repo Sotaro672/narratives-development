@@ -485,8 +485,8 @@ func buildMarketResaleSortFromQuery(r *http.Request) resaledom.Sort {
 func buildMarketResalePageFromQuery(r *http.Request) resaledom.Page {
 	qp := r.URL.Query()
 
-	pageNum := parseMarketResalePositiveInt(qp.Get("page"), 1)
-	perPage := parseMarketResalePositiveInt(qp.Get("perPage"), 50)
+	pageNum := parsePositiveIntDefault(qp.Get("page"), 1)
+	perPage := parsePositiveIntDefault(qp.Get("perPage"), 50)
 	if perPage > 100 {
 		perPage = 100
 	}
@@ -505,7 +505,7 @@ func buildMarketResaleCursorPageFromQuery(r *http.Request) resaledom.CursorPage 
 		after = strings.TrimSpace(qp.Get("cursor"))
 	}
 
-	limit := parseMarketResalePositiveInt(qp.Get("limit"), 50)
+	limit := parsePositiveIntDefault(qp.Get("limit"), 50)
 	if limit > 100 {
 		limit = 100
 	}
@@ -514,15 +514,6 @@ func buildMarketResaleCursorPageFromQuery(r *http.Request) resaledom.CursorPage 
 		After: after,
 		Limit: limit,
 	}
-}
-
-func parseMarketResalePositiveInt(raw string, fallback int) int {
-	n, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || n <= 0 {
-		return fallback
-	}
-
-	return n
 }
 
 func splitMarketResaleCSV(raw string) []string {

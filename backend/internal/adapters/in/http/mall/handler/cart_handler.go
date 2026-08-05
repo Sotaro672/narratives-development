@@ -33,10 +33,7 @@ func NewCartHandler(
 	}
 }
 
-func (h *CartHandler) ServeHTTP(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.uc == nil {
 		writeErr(
 			w,
@@ -82,10 +79,7 @@ func (h *CartHandler) ServeHTTP(
 	}
 }
 
-func (h *CartHandler) handleGet(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *CartHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	avatarID, ok := currentCartAvatarID(w, r)
 	if !ok {
 		return
@@ -94,10 +88,7 @@ func (h *CartHandler) handleGet(
 	h.respondCartDTO(w, r, avatarID)
 }
 
-func (h *CartHandler) handleAddItem(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request) {
 	avatarID, ok := currentCartAvatarID(w, r)
 	if !ok {
 		return
@@ -130,17 +121,14 @@ func (h *CartHandler) handleAddItem(
 		request.Qty,
 	)
 	if err != nil {
-		h.writeMutationErr(w, err)
+		h.writeCartErr(w, err)
 		return
 	}
 
 	h.respondCartDTO(w, r, avatarID)
 }
 
-func (h *CartHandler) handleAddResaleItem(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *CartHandler) handleAddResaleItem(w http.ResponseWriter, r *http.Request) {
 	avatarID, ok := currentCartAvatarID(w, r)
 	if !ok {
 		return
@@ -152,8 +140,7 @@ func (h *CartHandler) handleAddResaleItem(
 		return
 	}
 
-	if request.ResaleID == "" ||
-		request.ProductID == "" {
+	if request.ResaleID == "" || request.ProductID == "" {
 		writeErr(
 			w,
 			http.StatusBadRequest,
@@ -169,17 +156,14 @@ func (h *CartHandler) handleAddResaleItem(
 		request.ProductID,
 	)
 	if err != nil {
-		h.writeMutationErr(w, err)
+		h.writeCartErr(w, err)
 		return
 	}
 
 	h.respondCartDTO(w, r, avatarID)
 }
 
-func (h *CartHandler) handleSetItemQty(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request) {
 	avatarID, ok := currentCartAvatarID(w, r)
 	if !ok {
 		return
@@ -211,17 +195,14 @@ func (h *CartHandler) handleSetItemQty(
 		request.Qty,
 	)
 	if err != nil {
-		h.writeMutationErr(w, err)
+		h.writeCartErr(w, err)
 		return
 	}
 
 	h.respondCartDTO(w, r, avatarID)
 }
 
-func (h *CartHandler) handleRemoveItem(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request) {
 	avatarID, ok := currentCartAvatarID(w, r)
 	if !ok {
 		return
@@ -252,17 +233,14 @@ func (h *CartHandler) handleRemoveItem(
 		request.ModelID,
 	)
 	if err != nil {
-		h.writeMutationErr(w, err)
+		h.writeCartErr(w, err)
 		return
 	}
 
 	h.respondCartDTO(w, r, avatarID)
 }
 
-func (h *CartHandler) handleRemoveResaleItem(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *CartHandler) handleRemoveResaleItem(w http.ResponseWriter, r *http.Request) {
 	avatarID, ok := currentCartAvatarID(w, r)
 	if !ok {
 		return
@@ -274,8 +252,7 @@ func (h *CartHandler) handleRemoveResaleItem(
 		return
 	}
 
-	if request.ResaleID == "" ||
-		request.ProductID == "" {
+	if request.ResaleID == "" || request.ProductID == "" {
 		writeErr(
 			w,
 			http.StatusBadRequest,
@@ -291,27 +268,21 @@ func (h *CartHandler) handleRemoveResaleItem(
 		request.ProductID,
 	)
 	if err != nil {
-		h.writeMutationErr(w, err)
+		h.writeCartErr(w, err)
 		return
 	}
 
 	h.respondCartDTO(w, r, avatarID)
 }
 
-func (h *CartHandler) handleClear(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *CartHandler) handleClear(w http.ResponseWriter, r *http.Request) {
 	avatarID, ok := currentCartAvatarID(w, r)
 	if !ok {
 		return
 	}
 
-	if err := h.uc.Clear(
-		r.Context(),
-		avatarID,
-	); err != nil {
-		h.writeMutationErr(w, err)
+	if err := h.uc.Clear(r.Context(), avatarID); err != nil {
+		h.writeCartErr(w, err)
 		return
 	}
 
@@ -349,39 +320,16 @@ func (h *CartHandler) respondCartDTO(
 		return
 	}
 
-	result, err := h.cartQuery.GetCartQuery(
-		r.Context(),
-		avatarID,
-	)
+	result, err := h.cartQuery.GetCartQuery(r.Context(), avatarID)
 	if err != nil {
-		h.writeQueryErr(w, err)
+		h.writeCartErr(w, err)
 		return
 	}
 
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (h *CartHandler) writeMutationErr(
-	w http.ResponseWriter,
-	err error,
-) {
-	if errors.Is(err, usecase.ErrCartInvalidArgument) ||
-		errors.Is(err, cartdom.ErrInvalidCart) {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	writeErr(
-		w,
-		http.StatusInternalServerError,
-		err.Error(),
-	)
-}
-
-func (h *CartHandler) writeQueryErr(
-	w http.ResponseWriter,
-	err error,
-) {
+func (h *CartHandler) writeCartErr(w http.ResponseWriter, err error) {
 	if err == nil {
 		writeErr(
 			w,
@@ -397,11 +345,7 @@ func (h *CartHandler) writeQueryErr(
 		return
 	}
 
-	writeErr(
-		w,
-		http.StatusInternalServerError,
-		err.Error(),
-	)
+	writeErr(w, http.StatusInternalServerError, err.Error())
 }
 
 type cartItemReq struct {
@@ -411,7 +355,6 @@ type cartItemReq struct {
 	ResaleID    string `json:"resaleId"`
 	ProductID   string `json:"productId"`
 	Qty         int    `json:"qty"`
-	ItemKey     string `json:"itemKey"`
 }
 
 func writeErr(

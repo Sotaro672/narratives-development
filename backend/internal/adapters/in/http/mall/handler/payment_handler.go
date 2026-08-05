@@ -17,7 +17,6 @@ import (
 )
 
 type PaymentHandler struct {
-	uc     *usecase.PaymentUsecase
 	flowUC *usecase.PaymentFlowUsecase
 	orderQ OrderQuery
 }
@@ -31,12 +30,10 @@ type OrderQuery interface {
 }
 
 func NewPaymentHandler(
-	uc *usecase.PaymentUsecase,
 	orderQ OrderQuery,
 	flowUC *usecase.PaymentFlowUsecase,
 ) http.Handler {
 	return &PaymentHandler{
-		uc:     uc,
 		flowUC: flowUC,
 		orderQ: orderQ,
 	}

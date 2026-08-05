@@ -3,10 +3,8 @@ package mallHandler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"narratives/internal/adapters/in/http/middleware"
@@ -54,35 +52,37 @@ const (
 )
 
 func (h *MeAnnouncementHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
 	if h == nil || h.Repo == nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "me_announcement_handler_not_initialized"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "me_announcement_handler_not_initialized",
+		})
 		return
 	}
 
 	if h.AnnouncementUC == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "announcement_usecase_not_configured"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "announcement_usecase_not_configured",
+		})
 		return
 	}
 
 	if h.AnnouncementQuery == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "announcement_query_not_configured"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "announcement_query_not_configured",
+		})
 		return
 	}
 
 	uid, ok := middleware.CurrentUserUID(r)
 	if !ok || uid == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized: missing uid"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized: missing uid",
+		})
 		return
 	}
 
@@ -93,13 +93,16 @@ func (h *MeAnnouncementHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		h.handleList(w, r, uid)
 		return
 
-	case r.Method == http.MethodPost && strings.HasPrefix(path0, meAnnouncementsPath+"/") && strings.HasSuffix(path0, "/read"):
+	case r.Method == http.MethodPost &&
+		strings.HasPrefix(path0, meAnnouncementsPath+"/") &&
+		strings.HasSuffix(path0, "/read"):
 		h.handleMarkRead(w, r, uid, path0)
 		return
 
 	default:
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "not_found",
+		})
 		return
 	}
 }
@@ -111,8 +114,8 @@ func (h *MeAnnouncementHandler) handleList(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	pageNumber := parseMeAnnouncementPositiveInt(r.URL.Query().Get("page"), 1)
-	perPage := parseMeAnnouncementPositiveInt(r.URL.Query().Get("perPage"), 50)
+	pageNumber := parsePositiveIntDefault(r.URL.Query().Get("page"), 1)
+	perPage := parsePositiveIntDefault(r.URL.Query().Get("perPage"), 50)
 
 	result, err := h.AnnouncementQuery.ListByTargetAvatar(
 		r.Context(),
@@ -127,14 +130,20 @@ func (h *MeAnnouncementHandler) handleList(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(result)
+	writeJSON(w, http.StatusOK, result)
 }
 
-func (h *MeAnnouncementHandler) handleMarkRead(w http.ResponseWriter, r *http.Request, uid string, path0 string) {
+func (h *MeAnnouncementHandler) handleMarkRead(
+	w http.ResponseWriter,
+	r *http.Request,
+	uid string,
+	path0 string,
+) {
 	announcementID := extractAnnouncementIDForRead(path0)
 	if announcementID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "announcementId is required"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "announcementId is required",
+		})
 		return
 	}
 
@@ -150,7 +159,7 @@ func (h *MeAnnouncementHandler) handleMarkRead(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(result)
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *MeAnnouncementHandler) resolveAvatarID(
@@ -182,48 +191,36 @@ func extractAnnouncementIDForRead(path0 string) string {
 	if len(parts) != 5 {
 		return ""
 	}
-	if parts[0] != "mall" || parts[1] != "me" || parts[2] != "announcement" || parts[4] != "read" {
+	if parts[0] != "mall" ||
+		parts[1] != "me" ||
+		parts[2] != "announcement" ||
+		parts[4] != "read" {
 		return ""
 	}
 
 	return parts[3]
 }
 
-func parseMeAnnouncementPositiveInt(raw string, fallback int) int {
-	if raw == "" {
-		return fallback
-	}
-
-	n, err := strconv.Atoi(raw)
-	if err != nil || n <= 0 {
-		return fallback
-	}
-
-	return n
-}
-
 func writeMeAnnouncementErr(w http.ResponseWriter, err error) {
-	if err == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal_error"})
-		return
-	}
+	code := http.StatusInternalServerError
+	message := "internal_error"
 
 	switch {
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
-		w.WriteHeader(http.StatusRequestTimeout)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "request_timeout"})
-		return
+	case err == nil:
+		// Default response values are used.
+
+	case errors.Is(err, context.Canceled),
+		errors.Is(err, context.DeadlineExceeded):
+		code = http.StatusRequestTimeout
+		message = "request_timeout"
 
 	case errors.Is(err, ann.ErrNotFound):
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
+		code = http.StatusNotFound
+		message = err.Error()
 
 	case errors.Is(err, avatardom.ErrInvalidID):
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar_not_found_for_uid"})
-		return
+		code = http.StatusNotFound
+		message = "avatar_not_found_for_uid"
 
 	case errors.Is(err, ann.ErrInvalidID),
 		errors.Is(err, ann.ErrInvalidTitle),
@@ -240,18 +237,18 @@ func writeMeAnnouncementErr(w http.ResponseWriter, err error) {
 		errors.Is(err, ann.ErrInvalidFileSize),
 		errors.Is(err, ann.ErrInvalidMimeType),
 		errors.Is(err, ann.ErrInvalidObjectPath):
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
+		code = http.StatusBadRequest
+		message = err.Error()
 
 	case isNotFoundLike(err):
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
+		code = http.StatusNotFound
+		message = err.Error()
 
 	default:
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
+		message = err.Error()
 	}
+
+	writeJSON(w, code, map[string]string{
+		"error": message,
+	})
 }

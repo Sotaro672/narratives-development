@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\handler\preview_handler.go
+// backend/internal/adapters/in/http/mall/handler/preview_handler.go
 package mallHandler
 
 import (
@@ -9,7 +9,6 @@ import (
 
 	dto "narratives/internal/application/query/mall/dto"
 	sharedquery "narratives/internal/application/query/shared"
-
 	tokenbpdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -18,11 +17,17 @@ import (
 // ------------------------------------------------------------
 
 type PreviewQuery interface {
-	ResolveModelInfoByProductID(ctx context.Context, productID string) (*dto.PreviewModelInfo, error)
+	ResolveModelInfoByProductID(
+		ctx context.Context,
+		productID string,
+	) (*dto.PreviewModelInfo, error)
 }
 
 type TokenBlueprintPatchReader interface {
-	GetPatchByID(ctx context.Context, id string) (tokenbpdom.Patch, error)
+	GetPatchByID(
+		ctx context.Context,
+		id string,
+	) (tokenbpdom.Patch, error)
 }
 
 type PreviewNameResolver interface {
@@ -37,33 +42,45 @@ type PreviewNameResolver interface {
 
 type PreviewHandler struct {
 	q      PreviewQuery
-	ownerQ *sharedquery.OwnerResolveQuery // optional
+	ownerQ *sharedquery.OwnerResolveQuery
 
-	tbRepo TokenBlueprintPatchReader // optional
-	nameR  PreviewNameResolver       // optional
+	tbRepo TokenBlueprintPatchReader
+	nameR  PreviewNameResolver
 }
 
 type PreviewHandlerOption func(*PreviewHandler)
 
-func WithOwnerResolveQuery(ownerQ *sharedquery.OwnerResolveQuery) PreviewHandlerOption {
-	return func(h *PreviewHandler) { h.ownerQ = ownerQ }
+func WithOwnerResolveQuery(
+	ownerQ *sharedquery.OwnerResolveQuery,
+) PreviewHandlerOption {
+	return func(h *PreviewHandler) {
+		h.ownerQ = ownerQ
+	}
 }
 
-func WithTokenBlueprintPatchRepo(tbRepo TokenBlueprintPatchReader) PreviewHandlerOption {
-	return func(h *PreviewHandler) { h.tbRepo = tbRepo }
+func WithTokenBlueprintPatchRepo(
+	tbRepo TokenBlueprintPatchReader,
+) PreviewHandlerOption {
+	return func(h *PreviewHandler) {
+		h.tbRepo = tbRepo
+	}
 }
 
-func WithNameResolver(nameR PreviewNameResolver) PreviewHandlerOption {
-	return func(h *PreviewHandler) { h.nameR = nameR }
+func WithNameResolver(
+	nameR PreviewNameResolver,
+) PreviewHandlerOption {
+	return func(h *PreviewHandler) {
+		h.nameR = nameR
+	}
 }
 
 // 唯一の出入り口
-func NewPreviewHandler(q PreviewQuery, opts ...PreviewHandlerOption) http.Handler {
+func NewPreviewHandler(
+	q PreviewQuery,
+	opts ...PreviewHandlerOption,
+) http.Handler {
 	h := &PreviewHandler{
-		q:      q,
-		ownerQ: nil,
-		tbRepo: nil,
-		nameR:  nil,
+		q: q,
 	}
 
 	for _, opt := range opts {
@@ -76,203 +93,89 @@ func NewPreviewHandler(q PreviewQuery, opts ...PreviewHandlerOption) http.Handle
 }
 
 // ------------------------------------------------------------
-// DTO
-// ------------------------------------------------------------
-
-type tokenBlueprintPatchDTO struct {
-	ID          string `json:"id"`
-	TokenName   string `json:"tokenName"`
-	Symbol      string `json:"symbol"`
-	BrandName   string `json:"brandName,omitempty"`
-	CompanyName string `json:"companyName,omitempty"`
-	Description string `json:"description,omitempty"`
-	TokenIcon   string `json:"tokenIcon,omitempty"`
-}
-
-// ------------------------------------------------------------
 // ServeHTTP
 // ------------------------------------------------------------
 
-func (h *PreviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
+func (h *PreviewHandler) ServeHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
 	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{
+			"error": "method not allowed",
+		})
 		return
 	}
 
 	if h == nil || h.q == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "preview query not configured"})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "preview query not configured",
+		})
 		return
 	}
 
-	productID := strings.TrimSpace(r.URL.Query().Get("productId"))
+	productID := strings.TrimSpace(
+		r.URL.Query().Get("productId"),
+	)
 	if productID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "productId is required"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": "productId is required",
+		})
 		return
 	}
 
-	info, err := h.q.ResolveModelInfoByProductID(r.Context(), productID)
+	info, err := h.q.ResolveModelInfoByProductID(
+		r.Context(),
+		productID,
+	)
 	if err != nil {
-		if isNotFound(err) {
-			writeJSON(w, http.StatusNotFound, map[string]any{"error": "not found", "productId": productID})
+		switch {
+		case isNotFound(err):
+			writeJSON(w, http.StatusNotFound, map[string]any{
+				"error":     "not found",
+				"productId": productID,
+			})
+			return
+
+		case errors.Is(err, context.Canceled),
+			errors.Is(err, context.DeadlineExceeded):
+			writeJSON(w, http.StatusRequestTimeout, map[string]any{
+				"error":     "request canceled",
+				"productId": productID,
+			})
+			return
+
+		default:
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":     "resolve failed",
+				"productId": productID,
+			})
 			return
 		}
-
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			writeJSON(w, http.StatusRequestTimeout, map[string]any{"error": "request canceled", "productId": productID})
-			return
-		}
-
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "resolve failed", "productId": productID})
-		return
 	}
 
 	if info == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "resolve failed (nil result)", "productId": productID})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":     "resolve failed (nil result)",
+			"productId": productID,
+		})
 		return
 	}
 
-	// owner resolve (best-effort)
-	if info.Owner == nil && h.ownerQ != nil && info.Token != nil {
-		addr := strings.TrimSpace(info.Token.ToAddress)
-		if addr != "" {
-			res, rerr := h.ownerQ.Resolve(r.Context(), addr)
-			if rerr == nil {
-				info.Owner = res
-			}
-		}
-	}
+	data := buildPreviewData(
+		r.Context(),
+		info,
+		h.ownerQ,
+		h.tbRepo,
+		h.nameR,
+	)
 
-	// tokenBlueprint patch (best-effort)
-	tbPatch := resolveTokenBlueprintPatch(r.Context(), info, h.tbRepo)
-	tbDTO := buildTokenBlueprintPatchDTO(r.Context(), tbPatch, h.nameR)
-
-	// 期待値：productBlueprint は返さず patch のみ
-	data := map[string]any{
-		"productId":   info.ProductID,
-		"modelId":     info.ModelID,
-		"modelKind":   info.ModelKind,
-		"modelNumber": info.ModelNumber,
-		"modelLabel":  info.ModelLabel,
-
-		// apparel
-		"size":         info.Size,
-		"color":        info.Color,
-		"rgb":          info.RGB,
-		"measurements": info.Measurements,
-
-		// alcohol
-		"volumeValue": info.VolumeValue,
-		"volumeUnit":  info.VolumeUnit,
-
-		// category / productBlueprint
-		"productBlueprintId":           info.ProductBlueprintID,
-		"productBlueprintCategoryCode": info.ProductBlueprintCategoryCode,
-		"productBlueprintCategoryKind": info.ProductBlueprintCategoryKind,
-		"productBlueprintCategoryName": info.ProductBlueprintCategoryName,
-		"productBlueprintCategory":     info.ProductBlueprintCategory,
-		"productBlueprintPatch":        info.ProductBlueprintPatch,
-		"categoryInputSchema":          info.CategoryInputSchema,
-
-		// display
-		"brandName":   info.BrandName,
-		"companyName": info.CompanyName,
-
-		// token / owner / transfer
-		"token":               info.Token,
-		"owner":               info.Owner,
-		"transfers":           info.Transfers,
-		"tokenBlueprintPatch": tbDTO,
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"data": data})
-}
-
-// ------------------------------------------------------------
-// Helpers
-// ------------------------------------------------------------
-
-func resolveTokenBlueprintPatch(
-	ctx context.Context,
-	info *dto.PreviewModelInfo,
-	tbRepo TokenBlueprintPatchReader,
-) *tokenbpdom.Patch {
-	if info == nil {
-		return nil
-	}
-
-	if info.TokenBlueprintPatch != nil {
-		return info.TokenBlueprintPatch
-	}
-
-	if tbRepo == nil || info.Token == nil {
-		return nil
-	}
-
-	tbID := strings.TrimSpace(info.Token.TokenBlueprintID)
-	if tbID == "" {
-		return nil
-	}
-
-	p, err := tbRepo.GetPatchByID(ctx, tbID)
-	if err != nil {
-		return nil
-	}
-
-	return &p
-}
-
-func buildTokenBlueprintPatchDTO(
-	ctx context.Context,
-	p *tokenbpdom.Patch,
-	nameR PreviewNameResolver,
-) *tokenBlueprintPatchDTO {
-	if p == nil {
-		return nil
-	}
-
-	brandName := strings.TrimSpace(p.BrandName)
-	companyName := ""
-
-	if nameR != nil {
-		brandID := strings.TrimSpace(p.BrandID)
-		companyID := strings.TrimSpace(p.CompanyID)
-
-		if brandName == "" && brandID != "" {
-			brandName = nameR.ResolveBrandName(ctx, brandID)
-		}
-
-		if companyID != "" {
-			companyName = nameR.ResolveCompanyName(ctx, companyID)
-		}
-
-		if companyName == "" && brandID != "" {
-			brandCompanyID := nameR.ResolveBrandCompanyID(ctx, brandID)
-			if brandCompanyID != "" {
-				companyName = nameR.ResolveCompanyName(ctx, brandCompanyID)
-			}
-		}
-	}
-
-	// Firebase Storage 移行後:
-	// - Patch.IconURL には Firebase Storage の downloadURL が入る
-	// - GCS objectPath から URL を解決しない
-	// - gcs.NewTokenIconURLResolver / TokenIconObjectPath は使わない
-	resolvedIconURL := strings.TrimSpace(p.IconURL)
-
-	return &tokenBlueprintPatchDTO{
-		ID:          p.ID,
-		TokenName:   p.TokenName,
-		Symbol:      p.Symbol,
-		BrandName:   brandName,
-		CompanyName: companyName,
-		Description: p.Description,
-		TokenIcon:   resolvedIconURL,
-	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": data,
+	})
 }

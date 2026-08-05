@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"narratives/internal/adapters/in/http/middleware"
@@ -339,8 +338,8 @@ func (h *OrderHandler) enrichOrderHistoryPage(
 func parseOrderPage(r *http.Request) common.Page {
 	q := r.URL.Query()
 
-	page := parsePositiveInt(q.Get("page"), 1)
-	perPage := parsePositiveInt(q.Get("perPage"), 20)
+	page := parsePositiveIntDefault(q.Get("page"), 1)
+	perPage := parsePositiveIntDefault(q.Get("perPage"), 20)
 
 	if perPage > 100 {
 		perPage = 100
@@ -374,19 +373,6 @@ func parseOrderSort(r *http.Request) common.Sort {
 		Column: column,
 		Order:  sortOrder,
 	}
-}
-
-func parsePositiveInt(raw string, fallback int) int {
-	if raw == "" {
-		return fallback
-	}
-
-	n, err := strconv.Atoi(raw)
-	if err != nil || n <= 0 {
-		return fallback
-	}
-
-	return n
 }
 
 func writeOrderErr(w http.ResponseWriter, err error) {

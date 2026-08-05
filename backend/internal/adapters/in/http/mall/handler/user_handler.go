@@ -8,10 +8,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"narratives/internal/adapters/in/http/middleware"
-
 	usecase "narratives/internal/application/usecase"
 	userdom "narratives/internal/domain/user"
 )
@@ -28,8 +26,6 @@ func NewUserHandler(uc *usecase.UserUsecase) http.Handler {
 
 // ServeHTTP はHTTPルーティングの入口です。
 func (h *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	// Allow CORS preflight
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -70,26 +66,24 @@ func (h *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 
 	default:
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "not_found",
+		})
 		return
 	}
 }
 
 // ============================================================
-// Single source of truth: entity.go に合わせる
-// - names: snake_case
-// - times: camelCase (createdAt/updatedAt)
+// Request body
+// - id は認証UIDを使用するため受け取らない
+// - createdAt/updatedAt はUsecase側で設定するため受け取らない
 // ============================================================
 
 type userBody struct {
-	ID            string     `json:"id"`
-	FirstName     *string    `json:"first_name"`
-	FirstNameKana *string    `json:"first_name_kana"`
-	LastNameKana  *string    `json:"last_name_kana"`
-	LastName      *string    `json:"last_name"`
-	CreatedAt     *time.Time `json:"createdAt"`
-	UpdatedAt     *time.Time `json:"updatedAt"`
+	FirstName     *string `json:"first_name"`
+	FirstNameKana *string `json:"first_name_kana"`
+	LastNameKana  *string `json:"last_name_kana"`
+	LastName      *string `json:"last_name"`
 }
 
 func readJSONBody(r *http.Request, dst any) error {
@@ -111,25 +105,27 @@ func readJSONBody(r *http.Request, dst any) error {
 // - uid を docID として users/{uid} を返す
 // - 無ければ “空の user” を Create して 200 で返す
 // ============================================================
+
 func (h *UserHandler) getMe(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.uc == nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "user_usecase_not_initialized"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "user_usecase_not_initialized",
+		})
 		return
 	}
 
 	uid, ok := middleware.CurrentUserUID(r)
 	if !ok || uid == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized",
+		})
 		return
 	}
 
 	ctx := r.Context()
 
 	if u, err := h.uc.GetByID(ctx, uid); err == nil {
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(u)
+		writeJSON(w, http.StatusOK, u)
 		return
 	} else if !errors.Is(err, userdom.ErrNotFound) {
 		writeUserErr(w, err)
@@ -154,8 +150,7 @@ func (h *UserHandler) getMe(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode(got)
+			writeJSON(w, http.StatusOK, got)
 			return
 		}
 
@@ -163,29 +158,31 @@ func (h *UserHandler) getMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(u)
+	writeJSON(w, http.StatusOK, u)
 }
 
 // ============================================================
 // UNIFIED: POST /mall/me/users
 // - uid を docID として強制
-// - body の id は信用しない
+// - request body から id、createdAt、updatedAt は受け取らない
 // - Create のみ行う
 // - 既存 users/{uid} がある場合は ErrConflict -> 409
 // - createdAt/updatedAt は usecase が server now を入れる
 // ============================================================
+
 func (h *UserHandler) postMe(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.uc == nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "user_usecase_not_initialized"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "user_usecase_not_initialized",
+		})
 		return
 	}
 
 	uid, ok := middleware.CurrentUserUID(r)
 	if !ok || uid == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized",
+		})
 		return
 	}
 
@@ -193,8 +190,9 @@ func (h *UserHandler) postMe(w http.ResponseWriter, r *http.Request) {
 
 	var b userBody
 	if err := readJSONBody(r, &b); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "invalid json",
+		})
 		return
 	}
 
@@ -211,8 +209,7 @@ func (h *UserHandler) postMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(u)
+	writeJSON(w, http.StatusCreated, u)
 }
 
 // ============================================================
@@ -220,18 +217,22 @@ func (h *UserHandler) postMe(w http.ResponseWriter, r *http.Request) {
 // - uid を docID として強制
 // - nil は「未指定」
 // - 空文字は「フィールド削除」
+// - updatedAt は usecase が server now を入れる
 // ============================================================
+
 func (h *UserHandler) patchMe(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.uc == nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "user_usecase_not_initialized"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "user_usecase_not_initialized",
+		})
 		return
 	}
 
 	uid, ok := middleware.CurrentUserUID(r)
 	if !ok || uid == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized",
+		})
 		return
 	}
 
@@ -239,8 +240,9 @@ func (h *UserHandler) patchMe(w http.ResponseWriter, r *http.Request) {
 
 	var b userBody
 	if err := readJSONBody(r, &b); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "invalid json",
+		})
 		return
 	}
 
@@ -258,24 +260,26 @@ func (h *UserHandler) patchMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(u)
+	writeJSON(w, http.StatusOK, u)
 }
 
 // ============================================================
 // UNIFIED: DELETE /mall/me/users
 // ============================================================
+
 func (h *UserHandler) deleteMe(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.uc == nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "user_usecase_not_initialized"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "user_usecase_not_initialized",
+		})
 		return
 	}
 
 	uid, ok := middleware.CurrentUserUID(r)
 	if !ok || uid == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized",
+		})
 		return
 	}
 
@@ -284,15 +288,17 @@ func (h *UserHandler) deleteMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status": "ok",
+	})
 }
 
 // エラーハンドリング
 func writeUserErr(w http.ResponseWriter, err error) {
 	if err == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unknown"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "unknown",
+		})
 		return
 	}
 
@@ -315,6 +321,7 @@ func writeUserErr(w http.ResponseWriter, err error) {
 		code = http.StatusConflict
 	}
 
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	writeJSON(w, code, map[string]string{
+		"error": err.Error(),
+	})
 }

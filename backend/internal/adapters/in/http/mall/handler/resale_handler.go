@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -75,9 +74,11 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case http.MethodPost:
 			h.create(w, r)
 			return
+
 		case http.MethodGet:
 			h.listIndex(w, r)
 			return
+
 		default:
 			methodNotAllowed(w)
 			return
@@ -93,6 +94,7 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(path, meResalesPath+"/")
 	parts := strings.Split(rest, "/")
 	resaleID := strings.TrimSpace(parts[0])
+
 	if resaleID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid resaleId"})
@@ -112,9 +114,11 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				case http.MethodGet:
 					h.listImages(w, r, resaleID)
 					return
+
 				case http.MethodPost:
 					h.createImageFromFirebaseStorage(w, r, resaleID)
 					return
+
 				default:
 					methodNotAllowed(w)
 					return
@@ -155,19 +159,26 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		h.get(w, r, resaleID)
 		return
+
 	case http.MethodPut:
 		h.update(w, r, resaleID)
 		return
+
 	case http.MethodDelete:
 		h.delete(w, r, resaleID)
 		return
+
 	default:
 		methodNotAllowed(w)
 		return
 	}
 }
 
-func (h *ResaleHandler) servePublic(w http.ResponseWriter, r *http.Request, path string) {
+func (h *ResaleHandler) servePublic(
+	w http.ResponseWriter,
+	r *http.Request,
+	path string,
+) {
 	if h == nil || h.query == nil {
 		w.WriteHeader(http.StatusNotImplemented)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
@@ -205,7 +216,8 @@ func (h *ResaleHandler) servePublic(w http.ResponseWriter, r *http.Request, path
 		return
 	}
 
-	if len(parts) == 2 && (parts[1] == "images" || parts[1] == "condition-images") {
+	if len(parts) == 2 &&
+		(parts[1] == "images" || parts[1] == "condition-images") {
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w)
 			return
@@ -220,13 +232,19 @@ func (h *ResaleHandler) servePublic(w http.ResponseWriter, r *http.Request, path
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 }
 
-func (h *ResaleHandler) listPublicByAvatarID(w http.ResponseWriter, r *http.Request, avatarID string) {
+func (h *ResaleHandler) listPublicByAvatarID(
+	w http.ResponseWriter,
+	r *http.Request,
+	avatarID string,
+) {
 	ctx := r.Context()
 
 	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatarId is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "avatarId is required",
+		})
 		return
 	}
 
@@ -236,57 +254,27 @@ func (h *ResaleHandler) listPublicByAvatarID(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	page := buildResalePageFromQuery(r)
+	page := buildResalePageResponse(
+		items,
+		buildResalePageFromQuery(r),
+	)
 
-	pageNum := page.Number
-	if pageNum <= 0 {
-		pageNum = 1
-	}
-
-	perPage := page.PerPage
-	if perPage <= 0 {
-		perPage = 50
-	}
-	if perPage > 100 {
-		perPage = 100
-	}
-
-	totalCount := len(items)
-	totalPages := 0
-	if totalCount > 0 {
-		totalPages = (totalCount + perPage - 1) / perPage
-	}
-
-	offset := (pageNum - 1) * perPage
-	if offset < 0 {
-		offset = 0
-	}
-
-	pagedItems := []resaledom.Resale{}
-	if offset < totalCount {
-		end := offset + perPage
-		if end > totalCount {
-			end = totalCount
-		}
-		pagedItems = items[offset:end]
-	}
-
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"items":      pagedItems,
-		"totalCount": totalCount,
-		"totalPages": totalPages,
-		"page":       pageNum,
-		"perPage":    perPage,
-	})
+	_ = json.NewEncoder(w).Encode(page)
 }
 
-func (h *ResaleHandler) getPublic(w http.ResponseWriter, r *http.Request, resaleID string) {
+func (h *ResaleHandler) getPublic(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+) {
 	ctx := r.Context()
 
 	resaleID = strings.TrimSpace(resaleID)
 	if resaleID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resaleId is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "resaleId is required",
+		})
 		return
 	}
 
@@ -301,13 +289,19 @@ func (h *ResaleHandler) getPublic(w http.ResponseWriter, r *http.Request, resale
 	})
 }
 
-func (h *ResaleHandler) listPublicImages(w http.ResponseWriter, r *http.Request, resaleID string) {
+func (h *ResaleHandler) listPublicImages(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+) {
 	ctx := r.Context()
 
 	resaleID = strings.TrimSpace(resaleID)
 	if resaleID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resaleId is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "resaleId is required",
+		})
 		return
 	}
 
@@ -327,7 +321,9 @@ func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resale usecase is nil"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "resale usecase is nil",
+		})
 		return
 	}
 
@@ -339,14 +335,18 @@ func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid body",
+		})
 		return
 	}
 
 	var item resaledom.Resale
 	if err := json.Unmarshal(body, &item); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid json",
+		})
 		return
 	}
 
@@ -360,31 +360,44 @@ func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	if item.MintAddress == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintAddress is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "mintAddress is required",
+		})
 		return
 	}
+
 	if item.TokenBlueprintID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "tokenBlueprintId is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "tokenBlueprintId is required",
+		})
 		return
 	}
+
 	if item.ProductID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "productId is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "productId is required",
+		})
 		return
 	}
+
 	if item.Price <= 0 {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "price must be greater than 0"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "price must be greater than 0",
+		})
 		return
 	}
 
 	if item.Status == "" {
 		item.Status = resaledom.StatusListing
 	}
+
 	if item.Condition == "" {
 		item.Condition = resaledom.ConditionLikeNew
 	}
+
 	item.CreatedBy = avatarID
 
 	now := time.Now().UTC()
@@ -409,7 +422,9 @@ func (h *ResaleHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 
 	if h == nil || h.query == nil {
 		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "not_implemented",
+		})
 		return
 	}
 
@@ -424,51 +439,19 @@ func (h *ResaleHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	page := buildResalePageFromQuery(r)
+	page := buildResalePageResponse(
+		items,
+		buildResalePageFromQuery(r),
+	)
 
-	pageNum := page.Number
-	if pageNum <= 0 {
-		pageNum = 1
-	}
-
-	perPage := page.PerPage
-	if perPage <= 0 {
-		perPage = 50
-	}
-	if perPage > 100 {
-		perPage = 100
-	}
-
-	totalCount := len(items)
-	totalPages := 0
-	if totalCount > 0 {
-		totalPages = (totalCount + perPage - 1) / perPage
-	}
-
-	offset := (pageNum - 1) * perPage
-	if offset < 0 {
-		offset = 0
-	}
-
-	pagedItems := []resaledom.Resale{}
-	if offset < totalCount {
-		end := offset + perPage
-		if end > totalCount {
-			end = totalCount
-		}
-		pagedItems = items[offset:end]
-	}
-
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"items":      pagedItems,
-		"totalCount": totalCount,
-		"totalPages": totalPages,
-		"page":       pageNum,
-		"perPage":    perPage,
-	})
+	_ = json.NewEncoder(w).Encode(page)
 }
 
-func (h *ResaleHandler) get(w http.ResponseWriter, r *http.Request, resaleID string) {
+func (h *ResaleHandler) get(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+) {
 	ctx := r.Context()
 
 	item, ok := h.getOwnedResale(w, r, ctx, resaleID)
@@ -481,12 +464,18 @@ func (h *ResaleHandler) get(w http.ResponseWriter, r *http.Request, resaleID str
 	})
 }
 
-func (h *ResaleHandler) update(w http.ResponseWriter, r *http.Request, resaleID string) {
+func (h *ResaleHandler) update(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+) {
 	ctx := r.Context()
 
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resale usecase is nil"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "resale usecase is nil",
+		})
 		return
 	}
 
@@ -503,14 +492,18 @@ func (h *ResaleHandler) update(w http.ResponseWriter, r *http.Request, resaleID 
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid body",
+		})
 		return
 	}
 
 	var item resaledom.Resale
 	if err := json.Unmarshal(body, &item); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid json",
+		})
 		return
 	}
 
@@ -534,9 +527,11 @@ func (h *ResaleHandler) update(w http.ResponseWriter, r *http.Request, resaleID 
 	if item.Price <= 0 {
 		item.Price = existing.Price
 	}
+
 	if item.Status == "" {
 		item.Status = existing.Status
 	}
+
 	if item.Condition == "" {
 		item.Condition = existing.Condition
 	}
@@ -552,12 +547,18 @@ func (h *ResaleHandler) update(w http.ResponseWriter, r *http.Request, resaleID 
 	})
 }
 
-func (h *ResaleHandler) delete(w http.ResponseWriter, r *http.Request, resaleID string) {
+func (h *ResaleHandler) delete(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+) {
 	ctx := r.Context()
 
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resale usecase is nil"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "resale usecase is nil",
+		})
 		return
 	}
 
@@ -576,12 +577,18 @@ func (h *ResaleHandler) delete(w http.ResponseWriter, r *http.Request, resaleID 
 	})
 }
 
-func (h *ResaleHandler) listImages(w http.ResponseWriter, r *http.Request, resaleID string) {
+func (h *ResaleHandler) listImages(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+) {
 	ctx := r.Context()
 
 	if h == nil || h.query == nil {
 		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "not_implemented",
+		})
 		return
 	}
 
@@ -606,12 +613,18 @@ func (h *ResaleHandler) listImages(w http.ResponseWriter, r *http.Request, resal
 // - frontend uploads images directly to Firebase Storage.
 // - backend receives and stores only the Firebase Storage download URL.
 // - backend does not validate or persist objectPath, fileName, contentType, or size.
-func (h *ResaleHandler) createImageFromFirebaseStorage(w http.ResponseWriter, r *http.Request, resaleID string) {
+func (h *ResaleHandler) createImageFromFirebaseStorage(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+) {
 	ctx := r.Context()
 
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resale usecase is nil"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "resale usecase is nil",
+		})
 		return
 	}
 
@@ -633,7 +646,9 @@ func (h *ResaleHandler) createImageFromFirebaseStorage(w http.ResponseWriter, r 
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid json",
+		})
 		return
 	}
 
@@ -643,25 +658,34 @@ func (h *ResaleHandler) createImageFromFirebaseStorage(w http.ResponseWriter, r 
 
 	if req.ID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "id is required",
+		})
 		return
 	}
 
-	if strings.Contains(req.ID, "/") || strings.Contains(req.ID, "://") {
+	if strings.Contains(req.ID, "/") ||
+		strings.Contains(req.ID, "://") {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid image id"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid image id",
+		})
 		return
 	}
 
 	if req.URL == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "url is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "url is required",
+		})
 		return
 	}
 
 	if req.DisplayOrder < 0 {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "displayOrder must be >= 0"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "displayOrder must be >= 0",
+		})
 		return
 	}
 
@@ -689,12 +713,19 @@ func (h *ResaleHandler) createImageFromFirebaseStorage(w http.ResponseWriter, r 
 	})
 }
 
-func (h *ResaleHandler) deleteImage(w http.ResponseWriter, r *http.Request, resaleID string, imageID string) {
+func (h *ResaleHandler) deleteImage(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+	imageID string,
+) {
 	ctx := r.Context()
 
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resale usecase is nil"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "resale usecase is nil",
+		})
 		return
 	}
 
@@ -704,7 +735,9 @@ func (h *ResaleHandler) deleteImage(w http.ResponseWriter, r *http.Request, resa
 
 	if imageID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "imageId is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "imageId is required",
+		})
 		return
 	}
 
@@ -720,12 +753,18 @@ func (h *ResaleHandler) deleteImage(w http.ResponseWriter, r *http.Request, resa
 	})
 }
 
-func (h *ResaleHandler) setPrimaryImage(w http.ResponseWriter, r *http.Request, resaleID string) {
+func (h *ResaleHandler) setPrimaryImage(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+) {
 	ctx := r.Context()
 
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resale usecase is nil"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "resale usecase is nil",
+		})
 		return
 	}
 
@@ -746,14 +785,18 @@ func (h *ResaleHandler) setPrimaryImage(w http.ResponseWriter, r *http.Request, 
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid json",
+		})
 		return
 	}
 
 	imageID := strings.TrimSpace(req.ImageID)
 	if imageID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "imageId is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "imageId is required",
+		})
 		return
 	}
 
@@ -761,12 +804,21 @@ func (h *ResaleHandler) setPrimaryImage(w http.ResponseWriter, r *http.Request, 
 
 	now := time.Now().UTC()
 	if req.Now != nil && strings.TrimSpace(*req.Now) != "" {
-		if t, err := time.Parse(time.RFC3339, strings.TrimSpace(*req.Now)); err == nil {
+		if t, err := time.Parse(
+			time.RFC3339,
+			strings.TrimSpace(*req.Now),
+		); err == nil {
 			now = t.UTC()
 		}
 	}
 
-	item, err := h.uc.SetPrimaryImage(ctx, resaleID, imageID, now, req.UpdatedBy)
+	item, err := h.uc.SetPrimaryImage(
+		ctx,
+		resaleID,
+		imageID,
+		now,
+		req.UpdatedBy,
+	)
 	if err != nil {
 		writeResaleErr(w, err)
 		return
@@ -785,7 +837,9 @@ func (h *ResaleHandler) getOwnedResale(
 ) (resaledom.Resale, bool) {
 	if h == nil || h.query == nil {
 		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "not_implemented",
+		})
 		return resaledom.Resale{}, false
 	}
 
@@ -802,29 +856,90 @@ func (h *ResaleHandler) getOwnedResale(
 
 	if item.AvatarID != avatarID {
 		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resale_access_denied"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "resale_access_denied",
+		})
 		return resaledom.Resale{}, false
 	}
 
 	return item, true
 }
 
-func currentResaleAvatarIDFromRequest(w http.ResponseWriter, r *http.Request) (string, bool) {
+func currentResaleAvatarIDFromRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+) (string, bool) {
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || strings.TrimSpace(avatarID) == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar context is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "avatar context is required",
+		})
 		return "", false
 	}
 
 	return strings.TrimSpace(avatarID), true
 }
 
+type resalePageResponse struct {
+	Items      []resaledom.Resale `json:"items"`
+	TotalCount int                `json:"totalCount"`
+	TotalPages int                `json:"totalPages"`
+	Page       int                `json:"page"`
+	PerPage    int                `json:"perPage"`
+}
+
+func buildResalePageResponse(
+	items []resaledom.Resale,
+	page resaledom.Page,
+) resalePageResponse {
+	pageNum := page.Number
+	if pageNum <= 0 {
+		pageNum = 1
+	}
+
+	perPage := page.PerPage
+	if perPage <= 0 {
+		perPage = 50
+	}
+	if perPage > 100 {
+		perPage = 100
+	}
+
+	totalCount := len(items)
+	totalPages := 0
+	if totalCount > 0 {
+		totalPages = (totalCount + perPage - 1) / perPage
+	}
+
+	offset := (pageNum - 1) * perPage
+	if offset < 0 {
+		offset = 0
+	}
+
+	pagedItems := []resaledom.Resale{}
+	if offset < totalCount {
+		end := offset + perPage
+		if end > totalCount {
+			end = totalCount
+		}
+		pagedItems = items[offset:end]
+	}
+
+	return resalePageResponse{
+		Items:      pagedItems,
+		TotalCount: totalCount,
+		TotalPages: totalPages,
+		Page:       pageNum,
+		PerPage:    perPage,
+	}
+}
+
 func buildResalePageFromQuery(r *http.Request) resaledom.Page {
 	qp := r.URL.Query()
 
-	pageNum := parseResalePositiveInt(qp.Get("page"), 1)
-	perPage := parseResalePositiveInt(qp.Get("perPage"), 50)
+	pageNum := parsePositiveIntDefault(qp.Get("page"), 1)
+	perPage := parsePositiveIntDefault(qp.Get("perPage"), 50)
 	if perPage > 100 {
 		perPage = 100
 	}
@@ -835,40 +950,40 @@ func buildResalePageFromQuery(r *http.Request) resaledom.Page {
 	}
 }
 
-func parseResalePositiveInt(raw string, fallback int) int {
-	n, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || n <= 0 {
-		return fallback
-	}
-
-	return n
-}
-
 func writeResaleErr(w http.ResponseWriter, err error) {
 	if err == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal_error"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "internal_error",
+		})
 		return
 	}
 
 	msg := err.Error()
 
 	switch {
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+	case errors.Is(err, context.Canceled),
+		errors.Is(err, context.DeadlineExceeded):
 		w.WriteHeader(http.StatusRequestTimeout)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "request_timeout"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "request_timeout",
+		})
 		return
 
 	case errors.Is(err, resaledom.ErrNotFound),
 		errors.Is(err, resaledom.ErrConditionImageNotFound):
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": err.Error(),
+		})
 		return
 
 	case errors.Is(err, resaledom.ErrConflict),
 		errors.Is(err, resaledom.ErrConditionImageConflict):
 		w.WriteHeader(http.StatusConflict)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": err.Error(),
+		})
 		return
 
 	case errors.Is(err, resaledom.ErrInvalidID),
@@ -898,17 +1013,23 @@ func writeResaleErr(w http.ResponseWriter, err error) {
 		errors.Is(err, resaledom.ErrInvalidConditionImageUpdatedBy),
 		msg == "invalid_image_id":
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": msg,
+		})
 		return
 
 	case strings.Contains(msg, "not supported"):
 		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "not_implemented",
+		})
 		return
 
 	default:
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal_error"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "internal_error",
+		})
 		return
 	}
 }

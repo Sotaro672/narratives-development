@@ -8,10 +8,10 @@ import type {
   MemberFilter,
 } from "../../member/domain/repository/memberRepository";
 import type {
-  Page,
+  PageRequest,
 } from "../../../shared/types/common/common";
 import {
-  DEFAULT_PAGE,
+  DEFAULT_PAGE_REQUEST,
 } from "../../../shared/types/common/common";
 import type {
   Member,
@@ -43,7 +43,10 @@ export function buildAssigneeCandidates(
         member.lastName,
         member.firstName,
       ]
-        .filter((value) => value.length > 0)
+        .filter(
+          (value) =>
+            value.length > 0,
+        )
         .join(" ");
 
       const name =
@@ -62,7 +65,8 @@ export function buildAssigneeCandidates(
   const nameMap: Record<string, string> = {};
 
   for (const candidate of candidates) {
-    nameMap[candidate.id] = candidate.name;
+    nameMap[candidate.id] =
+      candidate.name;
   }
 
   return {
@@ -82,20 +86,21 @@ export async function fetchAssigneeCandidatesForCurrentCompany(): Promise<{
   candidates: AssigneeCandidate[];
   nameMap: Record<string, string>;
 }> {
-  const page: Page = {
-    ...DEFAULT_PAGE,
+  const page: PageRequest = {
+    ...DEFAULT_PAGE_REQUEST,
     number: 1,
     perPage: 200,
   };
 
   const filter: MemberFilter = {};
 
-  const result = await fetchMemberList(
-    page,
-    filter,
-  );
+  const result =
+    await fetchMemberList(
+      page,
+      filter,
+    );
 
   return buildAssigneeCandidates(
-    result.members,
+    result.items,
   );
 }

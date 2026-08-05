@@ -282,7 +282,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// Payment
 	if cont.PaymentUC != nil {
 		payH = mallhandler.NewPaymentHandler(
-			cont.PaymentUC,
 			cont.OrderQ,
 			cont.PaymentFlowUC,
 		)

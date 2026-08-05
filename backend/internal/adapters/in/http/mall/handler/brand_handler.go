@@ -1,8 +1,7 @@
-// backend\internal\adapters\in\http\mall\handler\brand_handler.go
+// backend/internal/adapters/in/http/mall/handler/brand_handler.go
 package mallHandler
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -13,72 +12,136 @@ import (
 // MallBrandHandler serves buyer-facing brand endpoint.
 //
 // Route:
-// - GET /mall/brands/{id}
+//   - GET /mall/brands/{id}
 type MallBrandHandler struct {
 	q *mallquery.BrandQuery
 }
 
-func NewMallBrandHandler(q *mallquery.BrandQuery) http.Handler {
-	return &MallBrandHandler{q: q}
+func NewMallBrandHandler(
+	q *mallquery.BrandQuery,
+) http.Handler {
+	return &MallBrandHandler{
+		q: q,
+	}
 }
 
-func (h *MallBrandHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
+func (h *MallBrandHandler) ServeHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if h == nil || h.q == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "brand handler is not ready"})
+		writeJSON(
+			w,
+			http.StatusInternalServerError,
+			map[string]string{
+				"error": "brand handler is not ready",
+			},
+		)
 		return
 	}
 
 	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "method_not_allowed"})
+		writeJSON(
+			w,
+			http.StatusMethodNotAllowed,
+			map[string]string{
+				"error": "method_not_allowed",
+			},
+		)
 		return
 	}
 
-	path := strings.TrimSuffix(r.URL.Path, "/")
+	path := strings.TrimSuffix(
+		r.URL.Path,
+		"/",
+	)
 
 	// GET /mall/brands/{id}
-	if strings.HasPrefix(path, "/mall/brands/") {
-		id := strings.TrimPrefix(path, "/mall/brands/")
-		h.get(w, r, id)
+	if strings.HasPrefix(
+		path,
+		"/mall/brands/",
+	) {
+		id := strings.TrimPrefix(
+			path,
+			"/mall/brands/",
+		)
+
+		h.get(
+			w,
+			r,
+			id,
+		)
 		return
 	}
 
-	w.WriteHeader(http.StatusNotFound)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+	writeJSON(
+		w,
+		http.StatusNotFound,
+		map[string]string{
+			"error": "not_found",
+		},
+	)
 }
 
-// ---- GET /mall/brands/{id} ----
-func (h *MallBrandHandler) get(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
+// get handles GET /mall/brands/{id}.
+func (h *MallBrandHandler) get(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid id",
+			},
+		)
 		return
 	}
 
-	brand, err := h.q.GetBrandDetailByID(ctx, id)
+	brand, err := h.q.GetBrandDetailByID(
+		r.Context(),
+		id,
+	)
 	if err != nil {
-		writeMallBrandErr(w, err)
+		writeMallBrandErr(
+			w,
+			err,
+		)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(brand)
+	writeJSON(
+		w,
+		http.StatusOK,
+		brand,
+	)
 }
 
-func writeMallBrandErr(w http.ResponseWriter, err error) {
+// writeMallBrandErr converts a brand domain error into an HTTP response.
+func writeMallBrandErr(
+	w http.ResponseWriter,
+	err error,
+) {
 	code := http.StatusInternalServerError
+
 	switch err {
 	case branddom.ErrInvalidID:
 		code = http.StatusBadRequest
+
 	case branddom.ErrNotFound:
 		code = http.StatusNotFound
+
 	case branddom.ErrConflict:
 		code = http.StatusConflict
 	}
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+
+	writeJSON(
+		w,
+		code,
+		map[string]string{
+			"error": err.Error(),
+		},
+	)
 }

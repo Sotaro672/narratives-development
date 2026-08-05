@@ -63,8 +63,6 @@ func (h *ShippingAddressHandler) ServeHTTP(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	w.Header().Set("Content-Type", "application/json")
-
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
 	switch {
@@ -74,10 +72,7 @@ func (h *ShippingAddressHandler) ServeHTTP(
 		return
 
 	case r.Method == http.MethodGet &&
-		strings.HasPrefix(
-			path,
-			"/mall/me/shipping-addresses/",
-		):
+		strings.HasPrefix(path, "/mall/me/shipping-addresses/"):
 		id := strings.TrimPrefix(
 			path,
 			"/mall/me/shipping-addresses/",
@@ -91,10 +86,7 @@ func (h *ShippingAddressHandler) ServeHTTP(
 		return
 
 	case r.Method == http.MethodPatch &&
-		strings.HasPrefix(
-			path,
-			"/mall/me/shipping-addresses/",
-		):
+		strings.HasPrefix(path, "/mall/me/shipping-addresses/"):
 		id := strings.TrimPrefix(
 			path,
 			"/mall/me/shipping-addresses/",
@@ -103,10 +95,7 @@ func (h *ShippingAddressHandler) ServeHTTP(
 		return
 
 	case r.Method == http.MethodDelete &&
-		strings.HasPrefix(
-			path,
-			"/mall/me/shipping-addresses/",
-		):
+		strings.HasPrefix(path, "/mall/me/shipping-addresses/"):
 		id := strings.TrimPrefix(
 			path,
 			"/mall/me/shipping-addresses/",
@@ -115,13 +104,9 @@ func (h *ShippingAddressHandler) ServeHTTP(
 		return
 
 	default:
-		writeShippingAddressJSON(
-			w,
-			http.StatusNotFound,
-			map[string]string{
-				"error": "not_found",
-			},
-		)
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "not_found",
+		})
 	}
 }
 
@@ -136,13 +121,9 @@ func (h *ShippingAddressHandler) requireUsecase(
 		return true
 	}
 
-	writeShippingAddressJSON(
-		w,
-		http.StatusServiceUnavailable,
-		map[string]string{
-			"error": "shipping_address_usecase_not_initialized",
-		},
-	)
+	writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+		"error": "shipping_address_usecase_not_initialized",
+	})
 
 	return false
 }
@@ -159,13 +140,9 @@ func (h *ShippingAddressHandler) requireUID(
 		return uid, true
 	}
 
-	writeShippingAddressJSON(
-		w,
-		http.StatusUnauthorized,
-		map[string]string{
-			"error": "unauthorized",
-		},
-	)
+	writeJSON(w, http.StatusUnauthorized, map[string]string{
+		"error": "unauthorized",
+	})
 
 	return "", false
 }
@@ -209,25 +186,10 @@ func decodeShippingAddressJSON(
 	return nil
 }
 
-func writeShippingAddressJSON(
-	w http.ResponseWriter,
-	status int,
-	body any,
-) {
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
-}
-
-func writeInvalidShippingAddressJSON(
-	w http.ResponseWriter,
-) {
-	writeShippingAddressJSON(
-		w,
-		http.StatusBadRequest,
-		map[string]string{
-			"error": "invalid_json",
-		},
-	)
+func writeInvalidShippingAddressJSON(w http.ResponseWriter) {
+	writeJSON(w, http.StatusBadRequest, map[string]string{
+		"error": "invalid_json",
+	})
 }
 
 // --------------------
@@ -256,11 +218,7 @@ func (h *ShippingAddressHandler) listMe(
 		return
 	}
 
-	writeShippingAddressJSON(
-		w,
-		http.StatusOK,
-		addresses,
-	)
+	writeJSON(w, http.StatusOK, addresses)
 }
 
 // --------------------
@@ -293,11 +251,7 @@ func (h *ShippingAddressHandler) get(
 		return
 	}
 
-	writeShippingAddressJSON(
-		w,
-		http.StatusOK,
-		address,
-	)
+	writeJSON(w, http.StatusOK, address)
 }
 
 // --------------------
@@ -318,11 +272,7 @@ func (h *ShippingAddressHandler) post(
 	}
 
 	var request shippingAddressCreateRequest
-	if err := decodeShippingAddressJSON(
-		w,
-		r,
-		&request,
-	); err != nil {
+	if err := decodeShippingAddressJSON(w, r, &request); err != nil {
 		writeInvalidShippingAddressJSON(w)
 		return
 	}
@@ -359,11 +309,7 @@ func (h *ShippingAddressHandler) post(
 		return
 	}
 
-	writeShippingAddressJSON(
-		w,
-		http.StatusCreated,
-		created,
-	)
+	writeJSON(w, http.StatusCreated, created)
 }
 
 // --------------------
@@ -385,11 +331,7 @@ func (h *ShippingAddressHandler) patch(
 	}
 
 	var request shippingAddressUpdateRequest
-	if err := decodeShippingAddressJSON(
-		w,
-		r,
-		&request,
-	); err != nil {
+	if err := decodeShippingAddressJSON(w, r, &request); err != nil {
 		writeInvalidShippingAddressJSON(w)
 		return
 	}
@@ -417,11 +359,7 @@ func (h *ShippingAddressHandler) patch(
 		return
 	}
 
-	writeShippingAddressJSON(
-		w,
-		http.StatusOK,
-		updated,
-	)
+	writeJSON(w, http.StatusOK, updated)
 }
 
 // --------------------
@@ -487,11 +425,7 @@ func writeShippingAddressErr(
 		statusCode = http.StatusConflict
 	}
 
-	writeShippingAddressJSON(
-		w,
-		statusCode,
-		map[string]string{
-			"error": err.Error(),
-		},
-	)
+	writeJSON(w, statusCode, map[string]string{
+		"error": err.Error(),
+	})
 }

@@ -531,8 +531,8 @@ func buildInquiryFilterFromQuery(r *http.Request) inquirydom.Filter {
 func buildInquiryPageFromQuery(r *http.Request) inquirydom.Page {
 	q := r.URL.Query()
 
-	pageNumber := parsePositiveInt(q.Get("page"), 1)
-	perPage := parsePositiveInt(q.Get("perPage"), 100)
+	pageNumber := parsePositiveIntDefault(q.Get("page"), 1)
+	perPage := parsePositiveIntDefault(q.Get("perPage"), 100)
 
 	if perPage > 100 {
 		perPage = 100
