@@ -9,7 +9,6 @@ import (
 type RepositoryPort interface {
 	Create(ctx context.Context, log PrintLog) (PrintLog, error)
 	GetByProductionID(ctx context.Context, productionID string) (PrintLog, error)
-	ExistsByProductionID(ctx context.Context, productionID string) (bool, error)
 }
 
 var (

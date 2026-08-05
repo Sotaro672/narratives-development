@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -82,12 +81,17 @@ func NewMintTaskQueueFromEnv(ctx context.Context) (*MintTaskQueue, error) {
 		return nil, errors.New("CLOUD_TASKS_QUEUE_ID is required")
 	}
 
-	internalBaseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("INTERNAL_BASE_URL")), "/")
+	internalBaseURL := strings.TrimRight(
+		strings.TrimSpace(os.Getenv("INTERNAL_BASE_URL")),
+		"/",
+	)
 	if internalBaseURL == "" {
 		return nil, errors.New("INTERNAL_BASE_URL is required")
 	}
 
-	serviceAccountEmail := strings.TrimSpace(os.Getenv("CLOUD_TASKS_SERVICE_ACCOUNT"))
+	serviceAccountEmail := strings.TrimSpace(
+		os.Getenv("CLOUD_TASKS_SERVICE_ACCOUNT"),
+	)
 	if serviceAccountEmail == "" {
 		return nil, errors.New("CLOUD_TASKS_SERVICE_ACCOUNT is required")
 	}
@@ -97,15 +101,26 @@ func NewMintTaskQueueFromEnv(ctx context.Context) (*MintTaskQueue, error) {
 		audience = internalBaseURL
 	}
 
-	dispatchDelay := time.Duration(0)
-	if raw := strings.TrimSpace(os.Getenv("MINT_TASK_DISPATCH_DELAY_SECONDS")); raw != "" {
-		parsed, err := time.ParseDuration(raw + "s")
+	var dispatchDelay time.Duration
+
+	rawDispatchDelay := strings.TrimSpace(
+		os.Getenv("MINT_TASK_DISPATCH_DELAY_SECONDS"),
+	)
+	if rawDispatchDelay != "" {
+		parsed, err := time.ParseDuration(rawDispatchDelay + "s")
 		if err != nil {
-			return nil, fmt.Errorf("invalid MINT_TASK_DISPATCH_DELAY_SECONDS: %w", err)
+			return nil, fmt.Errorf(
+				"invalid MINT_TASK_DISPATCH_DELAY_SECONDS: %w",
+				err,
+			)
 		}
+
 		if parsed < 0 {
-			return nil, errors.New("MINT_TASK_DISPATCH_DELAY_SECONDS must be >= 0")
+			return nil, errors.New(
+				"MINT_TASK_DISPATCH_DELAY_SECONDS must be >= 0",
+			)
 		}
+
 		dispatchDelay = parsed
 	}
 
@@ -131,14 +146,19 @@ func (q *MintTaskQueue) Close() error {
 	if q == nil || q.Client == nil {
 		return nil
 	}
+
 	return q.Client.Close()
 }
 
 // EnqueueMintTask は mintID の次の product mint を1件進める worker を enqueue します。
 //
 // 呼び出し先:
-// POST {INTERNAL_BASE_URL}/internal/mint/tasks/{mintID}/execute
-func (q *MintTaskQueue) EnqueueMintTask(ctx context.Context, mintID string) error {
+//
+//	POST {INTERNAL_BASE_URL}/internal/mint/tasks/{mintID}/execute
+func (q *MintTaskQueue) EnqueueMintTask(
+	ctx context.Context,
+	mintID string,
+) error {
 	if q == nil {
 		return errors.New("mint task queue is nil")
 	}
@@ -207,7 +227,9 @@ func (q *MintTaskQueue) EnqueueMintTask(ctx context.Context, mintID string) erro
 	}
 
 	if q.DispatchDelay > 0 {
-		task.ScheduleTime = timestamppb.New(time.Now().UTC().Add(q.DispatchDelay))
+		task.ScheduleTime = timestamppb.New(
+			time.Now().UTC().Add(q.DispatchDelay),
+		)
 	}
 
 	req := &taskspb.CreateTaskRequest{
@@ -216,97 +238,19 @@ func (q *MintTaskQueue) EnqueueMintTask(ctx context.Context, mintID string) erro
 	}
 
 	if _, err := q.Client.CreateTask(ctx, req); err != nil {
-		return fmt.Errorf("create mint cloud task mintID=%s: %w", id, err)
+		return fmt.Errorf(
+			"create mint cloud task mintID=%s: %w",
+			id,
+			err,
+		)
 	}
 
 	return nil
 }
 
 func urlPathEscape(s string) string {
-	// mintID / productionID は通常 Firestore docId なので "/" を含めない想定です。
+	// mintID / productionID は通常 Firestore docId なので
+	// "/" を含めない想定です。
 	// 念のため path segment として安全にします。
 	return strings.ReplaceAll(strings.TrimSpace(s), "/", "%2F")
-}
-
-// NewNoopMintTaskQueue はローカル・テスト用の noop 実装です。
-type NoopMintTaskQueue struct{}
-
-func NewNoopMintTaskQueue() *NoopMintTaskQueue {
-	return &NoopMintTaskQueue{}
-}
-
-func (q *NoopMintTaskQueue) EnqueueMintTask(ctx context.Context, mintID string) error {
-	_ = ctx
-
-	if strings.TrimSpace(mintID) == "" {
-		return errors.New("mintID is empty")
-	}
-
-	return nil
-}
-
-// InternalMintTaskHTTPClient は、Cloud Tasks を使わずHTTPで直接internal endpointを叩く簡易実装です。
-// 基本は使わず、Cloud Tasks 導入前の動作確認用です。
-type InternalMintTaskHTTPClient struct {
-	BaseURL    string
-	HTTPClient *http.Client
-}
-
-func NewInternalMintTaskHTTPClient(baseURL string) *InternalMintTaskHTTPClient {
-	return &InternalMintTaskHTTPClient{
-		BaseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		HTTPClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-	}
-}
-
-func (c *InternalMintTaskHTTPClient) EnqueueMintTask(ctx context.Context, mintID string) error {
-	if c == nil {
-		return errors.New("internal mint task http client is nil")
-	}
-
-	id := strings.TrimSpace(mintID)
-	if id == "" {
-		return errors.New("mintID is empty")
-	}
-
-	if c.BaseURL == "" {
-		return errors.New("baseURL is empty")
-	}
-
-	client := c.HTTPClient
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
-	}
-
-	url := fmt.Sprintf(
-		"%s/internal/mint/tasks/%s/execute",
-		c.BaseURL,
-		urlPathEscape(id),
-	)
-
-	payload, err := json.Marshal(mintTaskPayload{MintID: id})
-	if err != nil {
-		return fmt.Errorf("marshal mint task payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(payload)))
-	if err != nil {
-		return fmt.Errorf("create internal mint task request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	res, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("call internal mint task endpoint: %w", err)
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return fmt.Errorf("internal mint task endpoint returned status=%d", res.StatusCode)
-	}
-
-	return nil
 }

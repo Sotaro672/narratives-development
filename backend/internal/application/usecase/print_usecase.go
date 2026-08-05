@@ -3,6 +3,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -24,7 +25,6 @@ type ProductRepo interface {
 type PrintLogRepo interface {
 	Create(ctx context.Context, log printdom.PrintLog) (printdom.PrintLog, error)
 	GetByProductionID(ctx context.Context, productionID string) (printdom.PrintLog, error)
-	ExistsByProductionID(ctx context.Context, productionID string) (bool, error)
 }
 
 type InspectionRepo interface {
@@ -62,7 +62,10 @@ func NewPrintUsecase(
 	}
 }
 
-func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, productionID string) (printdom.PrintLog, error) {
+func (u *PrintUsecase) CreatePrintLogForProduction(
+	ctx context.Context,
+	productionID string,
+) (printdom.PrintLog, error) {
 	if u.productionRepo == nil {
 		return printdom.PrintLog{}, fmt.Errorf("productionRepo is nil")
 	}
@@ -94,26 +97,30 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 
 	printedAt := u.now().UTC()
 
-	exists, err := u.printLogRepo.ExistsByProductionID(ctx, pid)
-	if err != nil {
-		return printdom.PrintLog{}, err
-	}
-	if exists {
-		existing, err := u.printLogRepo.GetByProductionID(ctx, pid)
-		if err != nil {
+	existing, err := u.printLogRepo.GetByProductionID(ctx, pid)
+	if err == nil {
+		if err := u.markProductionPrinted(
+			ctx,
+			*production,
+			printedAt,
+		); err != nil {
 			return printdom.PrintLog{}, err
 		}
 
-		if err := u.markProductionPrinted(ctx, *production, printedAt); err != nil {
-			return printdom.PrintLog{}, err
-		}
-
-		if err := u.markProductBlueprintsPrintedByProduction(ctx, *production); err != nil {
+		if err := u.markProductBlueprintsPrintedByProduction(
+			ctx,
+			*production,
+		); err != nil {
 			return printdom.PrintLog{}, err
 		}
 
 		existing.QrPayloads = buildQrPayloads(existing.Items)
+
 		return existing, nil
+	}
+
+	if !errors.Is(err, printdom.ErrNotFound) {
+		return printdom.PrintLog{}, err
 	}
 
 	products, err := u.repo.ListByProductionID(ctx, pid)
@@ -122,7 +129,11 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 	}
 
 	if len(products) == 0 {
-		if err := u.createProductsForProduction(ctx, *production, printedAt); err != nil {
+		if err := u.createProductsForProduction(
+			ctx,
+			*production,
+			printedAt,
+		); err != nil {
 			return printdom.PrintLog{}, err
 		}
 
@@ -133,7 +144,11 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 	}
 
 	if len(products) == 0 {
-		return printdom.PrintLog{}, fmt.Errorf("no products found for productionId=%s", pid)
+		return printdom.PrintLog{},
+			fmt.Errorf(
+				"no products found for productionId=%s",
+				pid,
+			)
 	}
 
 	productIDs := make([]string, 0, len(products))
@@ -148,7 +163,11 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 
 		modelID := p.ModelID
 		if modelID == "" {
-			return printdom.PrintLog{}, fmt.Errorf("modelId is empty for productId=%s", productID)
+			return printdom.PrintLog{},
+				fmt.Errorf(
+					"modelId is empty for productId=%s",
+					productID,
+				)
 		}
 
 		productIDs = append(productIDs, productID)
@@ -158,49 +177,87 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 			continue
 		}
 
-		productBlueprintID, modelRefs, err := u.productBlueprintRepo.GetIDByModelID(ctx, modelID)
+		productBlueprintID, modelRefs, err :=
+			u.productBlueprintRepo.GetIDByModelID(
+				ctx,
+				modelID,
+			)
 		if err != nil {
-			return printdom.PrintLog{}, fmt.Errorf("get productBlueprint by modelId failed: modelId=%s: %w", modelID, err)
+			return printdom.PrintLog{},
+				fmt.Errorf(
+					"get productBlueprint by modelId failed: modelId=%s: %w",
+					modelID,
+					err,
+				)
 		}
 		if productBlueprintID == "" {
-			return printdom.PrintLog{}, fmt.Errorf("productBlueprintId not found for modelId=%s", modelID)
+			return printdom.PrintLog{},
+				fmt.Errorf(
+					"productBlueprintId not found for modelId=%s",
+					modelID,
+				)
 		}
 		if len(modelRefs) == 0 {
-			return printdom.PrintLog{}, fmt.Errorf("modelRefs not found for modelId=%s", modelID)
+			return printdom.PrintLog{},
+				fmt.Errorf(
+					"modelRefs not found for modelId=%s",
+					modelID,
+				)
 		}
 
 		found := false
+
 		for _, ref := range modelRefs {
 			if ref.ModelID != modelID {
 				continue
 			}
 			if ref.DisplayOrder <= 0 {
-				return printdom.PrintLog{}, fmt.Errorf("invalid displayOrder for modelId=%s", modelID)
+				return printdom.PrintLog{},
+					fmt.Errorf(
+						"invalid displayOrder for modelId=%s",
+						modelID,
+					)
 			}
 
 			displayOrderByModelID[modelID] = ref.DisplayOrder
 			found = true
+
 			break
 		}
+
 		if !found {
-			return printdom.PrintLog{}, fmt.Errorf("displayOrder not found in modelRefs for modelId=%s", modelID)
+			return printdom.PrintLog{},
+				fmt.Errorf(
+					"displayOrder not found in modelRefs for modelId=%s",
+					modelID,
+				)
 		}
 	}
 
 	if len(productIDs) == 0 {
-		return printdom.PrintLog{}, inspectiondom.ErrInvalidInspectionProductIDs
+		return printdom.PrintLog{},
+			inspectiondom.ErrInvalidInspectionProductIDs
 	}
 
 	items := make([]printdom.PrintedItem, 0, len(productIDs))
+
 	for _, productID := range productIDs {
 		modelID := modelIDByProductID[productID]
 		if modelID == "" {
-			return printdom.PrintLog{}, fmt.Errorf("modelId is empty for productId=%s", productID)
+			return printdom.PrintLog{},
+				fmt.Errorf(
+					"modelId is empty for productId=%s",
+					productID,
+				)
 		}
 
 		displayOrder, ok := displayOrderByModelID[modelID]
 		if !ok {
-			return printdom.PrintLog{}, fmt.Errorf("displayOrder not resolved for modelId=%s", modelID)
+			return printdom.PrintLog{},
+				fmt.Errorf(
+					"displayOrder not resolved for modelId=%s",
+					modelID,
+				)
 		}
 
 		items = append(items, printdom.PrintedItem{
@@ -214,6 +271,7 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 	})
 
 	logID := pid
+
 	log, err := printdom.NewPrintLog(
 		logID,
 		pid,
@@ -234,8 +292,9 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 
 	for i := range batch.Inspections {
 		productID := batch.Inspections[i].ProductID
-		if mid, ok := modelIDByProductID[productID]; ok {
-			batch.Inspections[i].ModelID = mid
+
+		if modelID, ok := modelIDByProductID[productID]; ok {
+			batch.Inspections[i].ModelID = modelID
 		}
 	}
 
@@ -248,11 +307,18 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 		return printdom.PrintLog{}, err
 	}
 
-	if err := u.markProductionPrinted(ctx, *production, printedAt); err != nil {
+	if err := u.markProductionPrinted(
+		ctx,
+		*production,
+		printedAt,
+	); err != nil {
 		return printdom.PrintLog{}, err
 	}
 
-	if err := u.markProductBlueprintsPrintedByProduction(ctx, *production); err != nil {
+	if err := u.markProductBlueprintsPrintedByProduction(
+		ctx,
+		*production,
+	); err != nil {
 		return printdom.PrintLog{}, err
 	}
 
@@ -271,12 +337,18 @@ func (u *PrintUsecase) createProductsForProduction(
 	}
 
 	if len(production.Models) == 0 {
-		return fmt.Errorf("production models is empty: productionId=%s", production.ID)
+		return fmt.Errorf(
+			"production models is empty: productionId=%s",
+			production.ID,
+		)
 	}
 
 	for _, model := range production.Models {
 		if model.ModelID == "" {
-			return fmt.Errorf("modelId is empty: productionId=%s", production.ID)
+			return fmt.Errorf(
+				"modelId is empty: productionId=%s",
+				production.ID,
+			)
 		}
 
 		if model.Quantity < 0 {
@@ -355,7 +427,10 @@ func (u *PrintUsecase) markProductBlueprintsPrintedByProduction(
 	}
 
 	if len(production.Models) == 0 {
-		return fmt.Errorf("production models is empty: productionId=%s", production.ID)
+		return fmt.Errorf(
+			"production models is empty: productionId=%s",
+			production.ID,
+		)
 	}
 
 	productBlueprintIDs := make(map[string]struct{})
@@ -363,7 +438,10 @@ func (u *PrintUsecase) markProductBlueprintsPrintedByProduction(
 	for _, model := range production.Models {
 		modelID := model.ModelID
 		if modelID == "" {
-			return fmt.Errorf("modelId is empty: productionId=%s", production.ID)
+			return fmt.Errorf(
+				"modelId is empty: productionId=%s",
+				production.ID,
+			)
 		}
 
 		if model.Quantity < 0 {
@@ -379,19 +457,33 @@ func (u *PrintUsecase) markProductBlueprintsPrintedByProduction(
 			continue
 		}
 
-		productBlueprintID, _, err := u.productBlueprintRepo.GetIDByModelID(ctx, modelID)
+		productBlueprintID, _, err :=
+			u.productBlueprintRepo.GetIDByModelID(
+				ctx,
+				modelID,
+			)
 		if err != nil {
-			return fmt.Errorf("get productBlueprint by modelId failed: modelId=%s: %w", modelID, err)
+			return fmt.Errorf(
+				"get productBlueprint by modelId failed: modelId=%s: %w",
+				modelID,
+				err,
+			)
 		}
 		if productBlueprintID == "" {
-			return fmt.Errorf("productBlueprintId not found for modelId=%s", modelID)
+			return fmt.Errorf(
+				"productBlueprintId not found for modelId=%s",
+				modelID,
+			)
 		}
 
 		productBlueprintIDs[productBlueprintID] = struct{}{}
 	}
 
 	for productBlueprintID := range productBlueprintIDs {
-		if _, err := u.productBlueprintRepo.MarkPrinted(ctx, productBlueprintID); err != nil {
+		if _, err := u.productBlueprintRepo.MarkPrinted(
+			ctx,
+			productBlueprintID,
+		); err != nil {
 			return fmt.Errorf(
 				"mark productBlueprint printed failed: productBlueprintId=%s: %w",
 				productBlueprintID,
@@ -403,7 +495,10 @@ func (u *PrintUsecase) markProductBlueprintsPrintedByProduction(
 	return nil
 }
 
-func (u *PrintUsecase) Create(ctx context.Context, p productdom.Product) (productdom.Product, error) {
+func (u *PrintUsecase) Create(
+	ctx context.Context,
+	p productdom.Product,
+) (productdom.Product, error) {
 	created, err := u.repo.Create(ctx, p)
 	if err != nil {
 		return productdom.Product{}, err
@@ -412,15 +507,24 @@ func (u *PrintUsecase) Create(ctx context.Context, p productdom.Product) (produc
 	return created, nil
 }
 
-func buildQrPayloads(items []printdom.PrintedItem) []string {
+func buildQrPayloads(
+	items []printdom.PrintedItem,
+) []string {
 	payloads := make([]string, 0, len(items))
 
-	for _, it := range items {
-		if it.ProductID == "" {
+	for _, item := range items {
+		if item.ProductID == "" {
 			continue
 		}
 
-		payloads = append(payloads, fmt.Sprintf("%s/%s", publicQRBaseURL, it.ProductID))
+		payloads = append(
+			payloads,
+			fmt.Sprintf(
+				"%s/%s",
+				publicQRBaseURL,
+				item.ProductID,
+			),
+		)
 	}
 
 	return payloads

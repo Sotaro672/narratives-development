@@ -11,6 +11,7 @@ func asString(v any) string {
 	if v == nil {
 		return ""
 	}
+
 	switch t := v.(type) {
 	case string:
 		return t
@@ -23,6 +24,7 @@ func asInt(v any) int {
 	if v == nil {
 		return 0
 	}
+
 	switch t := v.(type) {
 	case int:
 		return t
@@ -52,17 +54,20 @@ func asInt(v any) int {
 		if t == "" {
 			return 0
 		}
+
 		var n int
 		_, _ = fmt.Sscanf(t, "%d", &n)
+
 		return n
 	default:
-		// best-effort
 		s := fmt.Sprint(v)
 		if s == "" {
 			return 0
 		}
+
 		var n int
 		_, _ = fmt.Sscanf(s, "%d", &n)
+
 		return n
 	}
 }
@@ -102,16 +107,17 @@ func asBool(v any) bool {
 	case float64:
 		return t != 0
 	default:
-		s := strings.TrimSpace(fmt.Sprint(v))
+		s := fmt.Sprint(v)
 		return strings.EqualFold(s, "true") || s == "1"
 	}
 }
 
-// asTime returns (time, ok)
+// asTime returns (time, ok).
 func asTime(v any) (time.Time, bool) {
 	if v == nil {
 		return time.Time{}, false
 	}
+
 	switch t := v.(type) {
 	case time.Time:
 		return t, true
@@ -120,79 +126,44 @@ func asTime(v any) (time.Time, bool) {
 	}
 }
 
-func lowerFirst(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToLower(s[:1]) + s[1:]
-}
-
-func getFilterString(v any, field string) (string, bool) {
-	rv := reflect.ValueOf(v)
-	if !rv.IsValid() {
-		return "", false
-	}
-	if rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
-			return "", false
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return "", false
-	}
-	f := rv.FieldByName(field)
-	if !f.IsValid() {
-		// try lowerCamel (e.g., userId / avatarId)
-		f = rv.FieldByName(lowerFirst(field))
-		if !f.IsValid() {
-			return "", false
-		}
-	}
-	// string
-	if f.Kind() == reflect.String {
-		return f.String(), true
-	}
-	// *string
-	if f.Kind() == reflect.Pointer && f.Type().Elem().Kind() == reflect.String {
-		if f.IsNil() {
-			return "", true
-		}
-		return f.Elem().String(), true
-	}
-	return "", false
-}
-
 func containsString(xs []string, v string) bool {
 	if v == "" || len(xs) == 0 {
 		return false
 	}
+
 	for _, x := range xs {
 		if x == v {
 			return true
 		}
 	}
+
 	return false
 }
 
 func getStringField(obj any, field string) string {
 	rv := reflect.ValueOf(obj)
-	if rv.Kind() == reflect.Ptr {
+
+	if rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			return ""
 		}
+
 		rv = rv.Elem()
 	}
+
 	if rv.Kind() != reflect.Struct {
 		return ""
 	}
+
 	f := rv.FieldByName(field)
 	if !f.IsValid() {
 		return ""
 	}
+
 	if f.Kind() == reflect.String {
 		return f.String()
 	}
+
 	return ""
 }
 
@@ -214,6 +185,7 @@ func optionalStringFromPatch(value *string) *string {
 	}
 
 	v := *value
+
 	return &v
 }
 
@@ -223,6 +195,7 @@ func optionalTimeFromPatch(value *time.Time) *time.Time {
 	}
 
 	utc := value.UTC()
+
 	return &utc
 }
 
@@ -231,11 +204,13 @@ func ptrStringFromMap(m map[string]any, key string) *string {
 	if s == "" {
 		return nil
 	}
+
 	return &s
 }
 
 func timeFromMap(m map[string]any, key string) time.Time {
 	t, _ := asTime(m[key])
+
 	return t.UTC()
 }
 
@@ -246,6 +221,7 @@ func ptrTimeFromMap(m map[string]any, key string) *time.Time {
 	}
 
 	utc := t.UTC()
+
 	return &utc
 }
 
@@ -253,6 +229,7 @@ func ptrOrEmpty(p *string) string {
 	if p == nil {
 		return ""
 	}
+
 	return *p
 }
 
@@ -262,5 +239,6 @@ func anyImageMatches[T any](items []T, fn func(T) bool) bool {
 			return true
 		}
 	}
+
 	return false
 }

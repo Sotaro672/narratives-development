@@ -10,7 +10,6 @@ require (
 	firebase.google.com/go/v4 v4.18.0
 	github.com/blocto/solana-go-sdk v1.30.0
 	github.com/google/uuid v1.6.0
-	github.com/lib/pq v1.10.9
 	google.golang.org/api v0.274.0
 	google.golang.org/genproto v0.0.0-20260319201613-d00831a3d3e7
 	google.golang.org/grpc v1.80.0

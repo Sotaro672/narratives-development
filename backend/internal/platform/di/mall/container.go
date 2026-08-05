@@ -18,6 +18,7 @@ import (
 
 	outfs "narratives/internal/adapters/out/firestore"
 	mallfs "narratives/internal/adapters/out/firestore/mall"
+	sharedfs "narratives/internal/adapters/out/firestore/shared"
 	mailadp "narratives/internal/adapters/out/mail"
 	outsolana "narratives/internal/adapters/out/solana"
 	stripeadapter "narratives/internal/adapters/out/stripe"
@@ -489,12 +490,12 @@ func NewContainer(
 		avatarsCol := infra.AvatarsCollection
 
 		brandReader :=
-			mallfs.NewBrandWalletAddressReaderFS(
+			sharedfs.NewBrandWalletAddressReaderFS(
 				fsClient,
 				brandsCol,
 			)
 		avatarReader :=
-			mallfs.NewAvatarWalletAddressReaderFS(
+			sharedfs.NewAvatarWalletAddressReaderFS(
 				fsClient,
 				avatarsCol,
 			)
