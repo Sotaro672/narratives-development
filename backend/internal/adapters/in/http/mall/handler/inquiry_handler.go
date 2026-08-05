@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"narratives/internal/adapters/in/http/middleware"
 	mallquery "narratives/internal/application/query/mall"
 	usecase "narratives/internal/application/usecase"
 	inquirydom "narratives/internal/domain/inquiry"
@@ -46,15 +45,17 @@ func NewInquiryHandler(
 func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	if h.uc == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "inquiry usecase is nil"})
+	if h == nil || h.uc == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "inquiry usecase is nil",
+		})
 		return
 	}
 
 	if h.query == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "inquiry query is nil"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "inquiry query is nil",
+		})
 		return
 	}
 
@@ -85,8 +86,7 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !strings.HasPrefix(r.URL.Path, "/mall/me/inquiries/") {
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		notFound(w)
 		return
 	}
 
@@ -94,8 +94,7 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(rest, "/")
 
 	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid inquiry id"})
+		badRequest(w, "invalid inquiry id")
 		return
 	}
 
@@ -112,8 +111,7 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(parts) != 2 || strings.TrimSpace(parts[1]) == "" {
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		notFound(w)
 		return
 	}
 
@@ -123,37 +121,35 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
+
 		h.listReplies(w, r, inquiryID)
-		return
 
 	case "mark-as-read":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
 			return
 		}
+
 		h.markAsRead(w, r, inquiryID)
-		return
 
 	case "reply":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
 			return
 		}
+
 		h.reply(w, r, inquiryID)
-		return
 
 	case "close":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
 			return
 		}
+
 		h.close(w, r, inquiryID)
-		return
 
 	default:
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
-		return
+		notFound(w)
 	}
 }
 
@@ -197,7 +193,7 @@ type replyInquiryRequest struct {
 func (h *InquiryHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	avatarID, ok := currentAvatarIDFromRequest(w, r)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
@@ -217,7 +213,7 @@ func (h *InquiryHandler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"items":   result.Items,
 		"page":    page.Number,
 		"perPage": page.PerPage,
@@ -228,15 +224,14 @@ func (h *InquiryHandler) list(w http.ResponseWriter, r *http.Request) {
 func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	avatarID, ok := currentAvatarIDFromRequest(w, r)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
 	var req createInquiryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		badRequest(w, "invalid json")
 		return
 	}
 
@@ -251,7 +246,7 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 
-	inq := inquirydom.Inquiry{
+	inquiry := inquirydom.Inquiry{
 		ID:          "",
 		ProductID:   req.ProductID,
 		AvatarID:    avatarID,
@@ -266,23 +261,27 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(req.Images) > 0 {
-		images, err := buildInquiryImagesForMall("", avatarID, now, req.Images)
+		images, err := buildInquiryImagesForMall(
+			"",
+			avatarID,
+			now,
+			req.Images,
+		)
 		if err != nil {
 			writeInquiryErr(w, err)
 			return
 		}
 
-		inq.Images = images
+		inquiry.Images = images
 	}
 
-	created, err := h.uc.Create(ctx, inq)
+	created, err := h.uc.Create(ctx, inquiry)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusCreated, map[string]any{
 		"data": created,
 	})
 }
@@ -295,23 +294,26 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 func (h *InquiryHandler) countUnread(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	avatarID, ok := currentAvatarIDFromRequest(w, r)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
 	filter := buildInquiryFilterFromQuery(r)
 
-	count, err := h.uc.CountUnreadByAvatarID(ctx, usecase.CountUnreadByAvatarIDInput{
-		AvatarID: avatarID,
-		Filter:   filter,
-	})
+	count, err := h.uc.CountUnreadByAvatarID(
+		ctx,
+		usecase.CountUnreadByAvatarIDInput{
+			AvatarID: avatarID,
+			Filter:   filter,
+		},
+	)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"unreadCount": count,
 		"count":       count,
 	})
@@ -320,22 +322,26 @@ func (h *InquiryHandler) countUnread(w http.ResponseWriter, r *http.Request) {
 // GET /mall/me/inquiries/{id}
 //
 // avatar 側が自分の問い合わせ本体を取得します。
-func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) {
+func (h *InquiryHandler) get(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	ctx := r.Context()
 
-	avatarID, ok := currentAvatarIDFromRequest(w, r)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
-	in, err := h.query.GetByIDForAvatar(ctx, id, avatarID)
+	inquiry, err := h.query.GetByIDForAvatar(ctx, id, avatarID)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data": in,
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": inquiry,
 	})
 }
 
@@ -346,21 +352,29 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 // Expected flow:
 //
 //	ListByAvatarID -> GetByID -> ListByInquiryID
-func (h *InquiryHandler) listReplies(w http.ResponseWriter, r *http.Request, id string) {
+func (h *InquiryHandler) listReplies(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	ctx := r.Context()
 
-	avatarID, ok := currentAvatarIDFromRequest(w, r)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
-	replies, err := h.query.ListRepliesByInquiryIDForAvatar(ctx, id, avatarID)
+	replies, err := h.query.ListRepliesByInquiryIDForAvatar(
+		ctx,
+		id,
+		avatarID,
+	)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"items": replies,
 	})
 }
@@ -369,30 +383,41 @@ func (h *InquiryHandler) listReplies(w http.ResponseWriter, r *http.Request, id 
 //
 // avatar 側が問い合わせを開いたタイミングなどで、
 // 自分が送信した reply 以外を既読化します。
-func (h *InquiryHandler) markAsRead(w http.ResponseWriter, r *http.Request, id string) {
+func (h *InquiryHandler) markAsRead(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	ctx := r.Context()
 
-	avatarID, ok := currentAvatarIDFromRequest(w, r)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
-	if _, err := h.query.GetByIDForAvatar(ctx, id, avatarID); err != nil {
+	if _, err := h.query.GetByIDForAvatar(
+		ctx,
+		id,
+		avatarID,
+	); err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	updated, err := h.uc.MarkAsRead(ctx, usecase.MarkInquiryAsReadInput{
-		InquiryID:        id,
-		ReaderSenderType: inquirydom.ReplySenderTypeAvatar,
-		ReaderSenderID:   avatarID,
-	})
+	updated, err := h.uc.MarkAsRead(
+		ctx,
+		usecase.MarkInquiryAsReadInput{
+			InquiryID:        id,
+			ReaderSenderType: inquirydom.ReplySenderTypeAvatar,
+			ReaderSenderID:   avatarID,
+		},
+	)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"data": updated,
 	})
 }
@@ -416,44 +441,52 @@ func (h *InquiryHandler) markAsRead(w http.ResponseWriter, r *http.Request, id s
 //	}
 //
 // avatar 側が company member からの返信を受けた後、追加返信を入力する endpoint です。
-func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string) {
+func (h *InquiryHandler) reply(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	ctx := r.Context()
 
-	avatarID, ok := currentAvatarIDFromRequest(w, r)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
 	var req replyInquiryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		badRequest(w, "invalid json")
 		return
 	}
 
 	req.Content = strings.TrimSpace(req.Content)
+
 	if req.Content == "" && len(req.Images) == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "content or images is required"})
+		badRequest(w, "content or images is required")
 		return
 	}
 
-	in, err := h.query.GetByIDForAvatar(ctx, id, avatarID)
+	inquiry, err := h.query.GetByIDForAvatar(ctx, id, avatarID)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	if in.Status == inquirydom.InquiryStatusClosed {
+	if inquiry.Status == inquirydom.InquiryStatusClosed {
 		writeInquiryErr(w, inquirydom.ErrInquiryAlreadyClosed)
 		return
 	}
 
 	now := time.Now().UTC()
-
 	images := []inquirydom.ImageFile{}
+
 	if len(req.Images) > 0 {
-		replyImages, err := buildInquiryImagesForMall(id, avatarID, now, req.Images)
+		replyImages, err := buildInquiryImagesForMall(
+			id,
+			avatarID,
+			now,
+			req.Images,
+		)
 		if err != nil {
 			writeInquiryErr(w, err)
 			return
@@ -462,13 +495,19 @@ func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string
 		images = replyImages
 	}
 
-	created, err := h.uc.CreateReplyByAvatar(ctx, id, avatarID, req.Content, images)
+	created, err := h.uc.CreateReplyByAvatar(
+		ctx,
+		id,
+		avatarID,
+		req.Content,
+		images,
+	)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"data": created,
 	})
 }
@@ -476,51 +515,62 @@ func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string
 // POST /mall/me/inquiries/{id}/close
 //
 // avatar 側が案件対応済みを確認した後、チケットを close する endpoint です。
-func (h *InquiryHandler) close(w http.ResponseWriter, r *http.Request, id string) {
+func (h *InquiryHandler) close(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	ctx := r.Context()
 
-	avatarID, ok := currentAvatarIDFromRequest(w, r)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
-	if _, err := h.query.GetByIDForAvatar(ctx, id, avatarID); err != nil {
+	if _, err := h.query.GetByIDForAvatar(
+		ctx,
+		id,
+		avatarID,
+	); err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	updated, err := h.uc.CloseByAvatar(ctx, usecase.CloseInquiryByAvatarInput{
-		InquiryID: id,
-		AvatarID:  avatarID,
-	})
+	updated, err := h.uc.CloseByAvatar(
+		ctx,
+		usecase.CloseInquiryByAvatarInput{
+			InquiryID: id,
+			AvatarID:  avatarID,
+		},
+	)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"data": updated,
 	})
 }
 
 func buildInquiryFilterFromQuery(r *http.Request) inquirydom.Filter {
-	q := r.URL.Query()
+	query := r.URL.Query()
 	filter := inquirydom.Filter{}
 
-	if searchQuery := strings.TrimSpace(q.Get("searchQuery")); searchQuery != "" {
+	if searchQuery := strings.TrimSpace(query.Get("searchQuery")); searchQuery != "" {
 		filter.SearchQuery = searchQuery
 	}
 
-	if productID := strings.TrimSpace(q.Get("productId")); productID != "" {
+	if productID := strings.TrimSpace(query.Get("productId")); productID != "" {
 		filter.ProductID = &productID
 	}
 
-	if statusRaw := strings.TrimSpace(q.Get("status")); statusRaw != "" {
+	if statusRaw := strings.TrimSpace(query.Get("status")); statusRaw != "" {
 		status := inquirydom.InquiryStatus(statusRaw)
 		filter.Status = &status
 	}
 
-	if inquiryTypeRaw := strings.TrimSpace(q.Get("inquiryType")); inquiryTypeRaw != "" {
+	if inquiryTypeRaw := strings.TrimSpace(query.Get("inquiryType")); inquiryTypeRaw != "" {
 		inquiryType := inquirydom.InquiryType(inquiryTypeRaw)
 		filter.InquiryType = &inquiryType
 	}
@@ -529,10 +579,10 @@ func buildInquiryFilterFromQuery(r *http.Request) inquirydom.Filter {
 }
 
 func buildInquiryPageFromQuery(r *http.Request) inquirydom.Page {
-	q := r.URL.Query()
+	query := r.URL.Query()
 
-	pageNumber := parsePositiveIntDefault(q.Get("page"), 1)
-	perPage := parsePositiveIntDefault(q.Get("perPage"), 100)
+	pageNumber := parsePositiveIntDefault(query.Get("page"), 1)
+	perPage := parsePositiveIntDefault(query.Get("perPage"), 100)
 
 	if perPage > 100 {
 		perPage = 100
@@ -554,56 +604,72 @@ func buildInquiryImagesForMall(
 		return []inquirydom.ImageFile{}, nil
 	}
 
-	images := make([]inquirydom.ImageFile, 0, len(rawImages))
+	images := make(
+		[]inquirydom.ImageFile,
+		0,
+		len(rawImages),
+	)
 
 	for _, raw := range rawImages {
 		imgCreatedAt := now
-		if raw.CreatedAt != nil && strings.TrimSpace(*raw.CreatedAt) != "" {
-			t, err := time.Parse(time.RFC3339, strings.TrimSpace(*raw.CreatedAt))
+
+		if raw.CreatedAt != nil &&
+			strings.TrimSpace(*raw.CreatedAt) != "" {
+			parsed, err := time.Parse(
+				time.RFC3339,
+				strings.TrimSpace(*raw.CreatedAt),
+			)
 			if err != nil {
 				return nil, inquirydom.ErrInvalidImageCreatedAt
 			}
-			imgCreatedAt = t.UTC()
+
+			imgCreatedAt = parsed.UTC()
 		}
 
 		var objectPath *string
 		if strings.TrimSpace(raw.ObjectPath) != "" {
-			v := strings.TrimSpace(raw.ObjectPath)
-			objectPath = &v
+			value := strings.TrimSpace(raw.ObjectPath)
+			objectPath = &value
 		}
 
-		img := inquirydom.ImageFile{
-			InquiryID:  inquiryID,
-			FileName:   strings.TrimSpace(raw.FileName),
-			FileURL:    strings.TrimSpace(raw.FileURL),
-			ObjectPath: objectPath,
-			FileSize:   raw.FileSize,
-			MimeType:   strings.TrimSpace(raw.MimeType),
-			CreatedAt:  imgCreatedAt,
-			CreatedBy:  avatarID,
-		}
-
-		images = append(images, img)
+		images = append(
+			images,
+			inquirydom.ImageFile{
+				InquiryID:  inquiryID,
+				FileName:   strings.TrimSpace(raw.FileName),
+				FileURL:    strings.TrimSpace(raw.FileURL),
+				ObjectPath: objectPath,
+				FileSize:   raw.FileSize,
+				MimeType:   strings.TrimSpace(raw.MimeType),
+				CreatedAt:  imgCreatedAt,
+				CreatedBy:  avatarID,
+			},
+		)
 	}
 
 	return images, nil
 }
 
-func currentAvatarIDFromRequest(w http.ResponseWriter, r *http.Request) (string, bool) {
-	avatarID, ok := middleware.CurrentAvatarID(r)
-	if !ok || strings.TrimSpace(avatarID) == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar context is required"})
-		return "", false
+// エラーハンドリング
+func writeInquiryErr(
+	w http.ResponseWriter,
+	err error,
+) {
+	message := "internal_error"
+	if err != nil {
+		message = err.Error()
 	}
 
-	return strings.TrimSpace(avatarID), true
+	writeJSON(
+		w,
+		inquiryHTTPStatus(err),
+		map[string]string{
+			"error": message,
+		},
+	)
 }
 
-// エラーハンドリング
-func writeInquiryErr(w http.ResponseWriter, err error) {
-	code := http.StatusInternalServerError
-
+func inquiryHTTPStatus(err error) int {
 	switch {
 	case errors.Is(err, inquirydom.ErrInvalidID),
 		errors.Is(err, inquirydom.ErrInvalidProductID),
@@ -648,18 +714,18 @@ func writeInquiryErr(w http.ResponseWriter, err error) {
 		errors.Is(err, inquirydom.ErrTooManyImages),
 		errors.Is(err, inquirydom.ErrInquiryAlreadyClosed),
 		errors.Is(err, inquirydom.ErrInquiryInvalidWorkflow):
-		code = http.StatusBadRequest
+		return http.StatusBadRequest
 
 	case errors.Is(err, inquirydom.ErrInquiryForbidden):
-		code = http.StatusForbidden
+		return http.StatusForbidden
 
 	case errors.Is(err, inquirydom.ErrNotFound):
-		code = http.StatusNotFound
+		return http.StatusNotFound
 
 	case errors.Is(err, inquirydom.ErrConflict):
-		code = http.StatusConflict
-	}
+		return http.StatusConflict
 
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	default:
+		return http.StatusInternalServerError
+	}
 }

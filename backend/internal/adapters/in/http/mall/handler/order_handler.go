@@ -96,8 +96,7 @@ type orderItemRequest struct {
 }
 
 type createOrderRequest struct {
-	ID     string `json:"id"`
-	UserID string `json:"userId"`
+	ID string `json:"id"`
 
 	ShippingSnapshot shippingSnapshotRequest `json:"shippingSnapshot"`
 	PaymentMethodID  string                  `json:"paymentMethodId"`
@@ -134,17 +133,6 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-
-	bodyUID := req.UserID
-	if bodyUID != "" && bodyUID != authUID {
-		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "userId_mismatch",
-		})
-		return
-	}
-
-	userID := authUID
 
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
@@ -214,7 +202,7 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	in := usecase.CreateOrderInput{
 		ID:       req.ID,
-		UserID:   userID,
+		UserID:   authUID,
 		AvatarID: avatarID,
 		CartID:   cartID,
 
@@ -375,13 +363,22 @@ func parseOrderSort(r *http.Request) common.Sort {
 	}
 }
 
-func writeOrderErr(w http.ResponseWriter, err error) {
-	code := orderHTTPStatus(err)
+func writeOrderErr(
+	w http.ResponseWriter,
+	err error,
+) {
+	message := "internal_error"
+	if err != nil {
+		message = err.Error()
+	}
 
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error": err.Error(),
-	})
+	writeJSON(
+		w,
+		orderHTTPStatus(err),
+		map[string]string{
+			"error": message,
+		},
+	)
 }
 
 func orderHTTPStatus(err error) int {

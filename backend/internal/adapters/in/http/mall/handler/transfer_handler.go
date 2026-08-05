@@ -4,7 +4,6 @@ package mallHandler
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 
 	"narratives/internal/adapters/in/http/middleware"
@@ -13,9 +12,6 @@ import (
 
 // ScanTransferUsecase is the dependency for:
 // POST /mall/me/orders/scan/transfer
-//
-// 螳溯｣・・ usecase.TransferUsecase 遲峨↓謗･邯壹＠縺ｦ縺上□縺輔＞縲・
-// 縺薙％縺ｧ縺ｯ handler 蛛ｴ縺悟ｿ・ｦ√→縺吶ｋ譛蟆上・蠖｢縺縺代ｒ螳夂ｾｩ縺励∪縺吶・
 type ScanTransferUsecase interface {
 	TransferToAvatarByVerifiedScan(
 		ctx context.Context,
@@ -47,10 +43,6 @@ type ScanTransferResult struct {
 
 // TransferHandler handles:
 // POST /mall/me/orders/scan/transfer
-//
-// Option A: anti-spoof 繧・AvatarContextMiddleware 縺ｫ荳譛ｬ蛹悶☆繧九・
-// - handler 縺ｯ uid->avatarId resolver 繧呈戟縺溘↑縺・
-// - avatarId 縺ｯ request context 縺九ｉ縺ｮ縺ｿ蜿門ｾ励☆繧具ｼ・ody 縺ｮ avatarId 縺ｯ菴ｿ繧上↑縺・ｼ・
 type TransferHandler struct {
 	uc ScanTransferUsecase
 }
@@ -134,7 +126,6 @@ func (h *TransferHandler) ServeHTTP(
 		},
 	)
 	if err != nil {
-		// NotMatched 縺ｯ 200 + matched=false 繧定ｿ斐☆・亥ｾ捺擂縺ｮ繧｢繝繝励ち謖吝虚繧堤ｶｭ謖・ｼ・
 		if errors.Is(err, usecase.ErrTransferNotMatched) {
 			out := &ScanTransferResult{
 				AvatarID:  avatarID,
@@ -166,13 +157,6 @@ func (h *TransferHandler) ServeHTTP(
 			return
 		}
 
-		log.Printf(
-			"[mall/order-scan-transfer] failed avatarId=%s productId=%s err=%v",
-			avatarID,
-			productID,
-			err,
-		)
-
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":     "transfer failed",
 			"avatarId":  avatarID,
@@ -188,7 +172,7 @@ func (h *TransferHandler) ServeHTTP(
 		TxSignature:      ucOut.TxSignature,
 		FromDisplayName:  ucOut.FromDisplayName,
 		ToDisplayName:    ucOut.ToDisplayName,
-		UpdatedToAddress: true, // TransferUsecase 蜀・〒 UpdateToAddressByProductID 繧貞ｮ溯｡梧ｸ医∩・・ail-fast・・
+		UpdatedToAddress: true,
 		MintAddress:      ucOut.MintAddress,
 	}
 

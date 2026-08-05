@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -321,6 +320,7 @@ func extractProductBlueprintID(path string, isMe bool) (string, bool) {
 	if isMe {
 		base = "/mall/me/catalog/"
 	}
+
 	if !strings.HasPrefix(path, base) {
 		return "", false
 	}
@@ -330,12 +330,15 @@ func extractProductBlueprintID(path string, isMe bool) (string, bool) {
 	if len(parts) < 3 {
 		return "", false
 	}
+
 	if parts[0] != "product-blueprints" {
 		return "", false
 	}
+
 	if parts[2] != "reviews" {
 		return "", false
 	}
+
 	return parts[1], true
 }
 
@@ -343,12 +346,15 @@ func splitPath(p string) []string {
 	for len(p) > 0 && p[0] == '/' {
 		p = p[1:]
 	}
+
 	for len(p) > 0 && p[len(p)-1] == '/' {
 		p = p[:len(p)-1]
 	}
+
 	if p == "" {
 		return nil
 	}
+
 	return strings.Split(p, "/")
 }
 
@@ -358,19 +364,18 @@ func splitPath(p string) []string {
 
 func parsePage(r *http.Request) domcommon.Page {
 	q := r.URL.Query()
-	p := domcommon.Page{Number: 1, PerPage: 20}
 
-	if v := q.Get("page"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			p.Number = n
-		}
+	page := parsePositiveIntDefault(q.Get("page"), 1)
+	perPage := parsePositiveIntDefault(q.Get("perPage"), 20)
+
+	if perPage > 100 {
+		perPage = 100
 	}
-	if v := q.Get("perPage"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			p.PerPage = n
-		}
+
+	return domcommon.Page{
+		Number:  page,
+		PerPage: perPage,
 	}
-	return p
 }
 
 // ============================================================

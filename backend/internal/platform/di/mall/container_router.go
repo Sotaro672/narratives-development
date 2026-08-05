@@ -201,10 +201,13 @@ func Register(mux *http.ServeMux, cont *Container) {
 			)
 	}
 
-	if cont.PaymentMethodUC != nil {
+	if cont.PaymentMethodUC != nil &&
+		cont.Infra != nil {
+
 		paymentMethodH =
 			mallhandler.NewPaymentMethodHandler(
 				cont.PaymentMethodUC,
+				cont.Infra,
 			)
 	}
 

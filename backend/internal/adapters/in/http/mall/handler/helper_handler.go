@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"narratives/internal/adapters/in/http/middleware"
 )
 
 // ============================================================
@@ -180,4 +182,25 @@ func parsePositiveIntDefault(
 	}
 
 	return n
+}
+
+func requireAvatarID(
+	w http.ResponseWriter,
+	r *http.Request,
+) (string, bool) {
+	avatarID, ok := middleware.CurrentAvatarID(r)
+	avatarID = strings.TrimSpace(avatarID)
+
+	if !ok || avatarID == "" {
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]string{
+				"error": "avatar context is required",
+			},
+		)
+		return "", false
+	}
+
+	return avatarID, true
 }

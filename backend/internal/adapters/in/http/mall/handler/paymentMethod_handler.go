@@ -8,12 +8,8 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
-
-	secretmanager "cloud.google.com/go/secretmanager/apiv1"
-	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 
 	"narratives/internal/adapters/in/http/middleware"
 	usecase "narratives/internal/application/usecase"
@@ -27,10 +23,17 @@ const (
 	paymentMethodMaxRequestBodyBytes int64 = 64 * 1024
 )
 
+// SecretVersionAccessorは、共有インフラが提供する
+// Secret Manager参照処理のポートです。
+type SecretVersionAccessor interface {
+	AccessSecretVersion(ctx context.Context, secretID string) (string, error)
+}
+
 // PaymentMethodHandlerは、/mall/me/payment-methods関連の
 // HTTPエンドポイントを処理します。
 type PaymentMethodHandler struct {
-	uc *usecase.PaymentMethodUsecase
+	uc             *usecase.PaymentMethodUsecase
+	secretAccessor SecretVersionAccessor
 
 	stripePublicKeyOnce sync.Once
 	stripePublicKey     string
@@ -40,21 +43,17 @@ type PaymentMethodHandler struct {
 // NewPaymentMethodHandlerはHTTPハンドラーを初期化します。
 func NewPaymentMethodHandler(
 	uc *usecase.PaymentMethodUsecase,
+	secretAccessor SecretVersionAccessor,
 ) http.Handler {
 	return &PaymentMethodHandler{
-		uc: uc,
+		uc:             uc,
+		secretAccessor: secretAccessor,
 	}
 }
 
 // ServeHTTPはHTTPルーティングの入口です。
-func (h *PaymentMethodHandler) ServeHTTP(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	w.Header().Set(
-		"Content-Type",
-		"application/json; charset=utf-8",
-	)
+func (h *PaymentMethodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
@@ -75,47 +74,36 @@ func (h *PaymentMethodHandler) ServeHTTP(
 
 	switch {
 	// GET /mall/config/stripe
-	case r.Method == http.MethodGet &&
-		path == "/mall/config/stripe":
+	case r.Method == http.MethodGet && path == "/mall/config/stripe":
 		h.getStripeConfig(w, r)
 		return
 
 	// GET /mall/me/payment-methods
-	case r.Method == http.MethodGet &&
-		path == "/mall/me/payment-methods":
+	case r.Method == http.MethodGet && path == "/mall/me/payment-methods":
 		h.list(w, r)
 		return
 
 	// GET /mall/me/payment-methods/default
-	case r.Method == http.MethodGet &&
-		path == "/mall/me/payment-methods/default":
+	case r.Method == http.MethodGet && path == "/mall/me/payment-methods/default":
 		h.getDefault(w, r)
 		return
 
 	// POST /mall/me/payment-methods/setup-intent
-	case r.Method == http.MethodPost &&
-		path == "/mall/me/payment-methods/setup-intent":
+	case r.Method == http.MethodPost && path == "/mall/me/payment-methods/setup-intent":
 		h.postSetupIntent(w, r)
 		return
 
 	// POST /mall/me/payment-methods
-	case r.Method == http.MethodPost &&
-		path == "/mall/me/payment-methods":
+	case r.Method == http.MethodPost && path == "/mall/me/payment-methods":
 		h.post(w, r)
 		return
 
 	// PUT /mall/me/payment-methods/{id}/default
 	case r.Method == http.MethodPut &&
-		strings.HasPrefix(
-			path,
-			"/mall/me/payment-methods/",
-		) &&
+		strings.HasPrefix(path, "/mall/me/payment-methods/") &&
 		strings.HasSuffix(path, "/default"):
 		id := strings.TrimSuffix(
-			strings.TrimPrefix(
-				path,
-				"/mall/me/payment-methods/",
-			),
+			strings.TrimPrefix(path, "/mall/me/payment-methods/"),
 			"/default",
 		)
 		h.setDefault(w, r, id)
@@ -123,37 +111,23 @@ func (h *PaymentMethodHandler) ServeHTTP(
 
 	// GET /mall/me/payment-methods/{id}
 	case r.Method == http.MethodGet &&
-		strings.HasPrefix(
-			path,
-			"/mall/me/payment-methods/",
-		):
-		id := strings.TrimPrefix(
-			path,
-			"/mall/me/payment-methods/",
-		)
+		strings.HasPrefix(path, "/mall/me/payment-methods/"):
+		id := strings.TrimPrefix(path, "/mall/me/payment-methods/")
 		h.get(w, r, id)
 		return
 
 	// DELETE /mall/me/payment-methods/{id}
 	case r.Method == http.MethodDelete &&
-		strings.HasPrefix(
-			path,
-			"/mall/me/payment-methods/",
-		):
-		id := strings.TrimPrefix(
-			path,
-			"/mall/me/payment-methods/",
-		)
+		strings.HasPrefix(path, "/mall/me/payment-methods/"):
+		id := strings.TrimPrefix(path, "/mall/me/payment-methods/")
 		h.delete(w, r, id)
 		return
 
 	default:
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "not_found",
-			},
-		)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "not_found",
+		})
 		return
 	}
 }
@@ -163,10 +137,7 @@ func (h *PaymentMethodHandler) ServeHTTP(
 // ------------------------------------------------------------
 
 // requireUIDは、認証Middlewareがcontextへ設定したUIDを取得します。
-func requireUID(
-	w http.ResponseWriter,
-	r *http.Request,
-) (string, bool) {
+func requireUID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	uid, ok := middleware.CurrentUserUID(r)
 	uid = strings.TrimSpace(uid)
 
@@ -175,11 +146,9 @@ func requireUID(
 	}
 
 	w.WriteHeader(http.StatusUnauthorized)
-	_ = json.NewEncoder(w).Encode(
-		map[string]string{
-			"error": "unauthorized",
-		},
-	)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error": "unauthorized",
+	})
 
 	return "", false
 }
@@ -189,10 +158,7 @@ func requireUID(
 // ------------------------------------------------------------
 
 // GET /mall/config/stripe
-func (h *PaymentMethodHandler) getStripeConfig(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *PaymentMethodHandler) getStripeConfig(w http.ResponseWriter, r *http.Request) {
 	publicKey, err := h.getStripePublicKey(r.Context())
 	if err != nil {
 		log.Printf(
@@ -202,26 +168,19 @@ func (h *PaymentMethodHandler) getStripeConfig(
 		)
 
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "stripe_public_key_not_configured",
-			},
-		)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "stripe_public_key_not_configured",
+		})
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(
-		map[string]string{
-			"publishableKey": publicKey,
-		},
-	)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"publishableKey": publicKey,
+	})
 }
 
 // GET /mall/me/payment-methods
-func (h *PaymentMethodHandler) list(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *PaymentMethodHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	uid, ok := requireUID(w, r)
@@ -235,18 +194,13 @@ func (h *PaymentMethodHandler) list(
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(
-		map[string]any{
-			"data": items,
-		},
-	)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": items,
+	})
 }
 
 // GET /mall/me/payment-methods/default
-func (h *PaymentMethodHandler) getDefault(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *PaymentMethodHandler) getDefault(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	uid, ok := requireUID(w, r)
@@ -260,11 +214,9 @@ func (h *PaymentMethodHandler) getDefault(
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(
-		map[string]any{
-			"data": item,
-		},
-	)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": item,
+	})
 }
 
 // GET /mall/me/payment-methods/{id}
@@ -283,11 +235,9 @@ func (h *PaymentMethodHandler) get(
 	id = strings.TrimSpace(id)
 	if id == "" || strings.Contains(id, "/") {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "invalid id",
-			},
-		)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid id",
+		})
 		return
 	}
 
@@ -303,18 +253,13 @@ func (h *PaymentMethodHandler) get(
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(
-		map[string]any{
-			"data": item,
-		},
-	)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": item,
+	})
 }
 
 // POST /mall/me/payment-methods/setup-intent
-func (h *PaymentMethodHandler) postSetupIntent(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *PaymentMethodHandler) postSetupIntent(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	uid, ok := requireUID(w, r)
@@ -326,12 +271,7 @@ func (h *PaymentMethodHandler) postSetupIntent(
 
 	// 空のbodyは許容します。
 	// JSONが送信された場合、cardholderName以外のフィールドは拒否します。
-	if err := decodePaymentMethodJSON(
-		w,
-		r,
-		&in,
-		true,
-	); err != nil {
+	if err := decodePaymentMethodJSON(w, r, &in, true); err != nil {
 		log.Printf(
 			"%s postSetupIntent decode failed uid=%q err=%v",
 			paymentMethodHandlerTag,
@@ -340,11 +280,9 @@ func (h *PaymentMethodHandler) postSetupIntent(
 		)
 
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "invalid json",
-			},
-		)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid json",
+		})
 		return
 	}
 
@@ -355,21 +293,15 @@ func (h *PaymentMethodHandler) postSetupIntent(
 		strings.TrimSpace(in.CardholderName) != "",
 	)
 
-	result, err := h.uc.CreateSetupIntent(
-		ctx,
-		uid,
-		in.CardholderName,
-	)
+	result, err := h.uc.CreateSetupIntent(ctx, uid, in.CardholderName)
 	if err != nil {
 		writePaymentMethodErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(
-		map[string]any{
-			"data": result,
-		},
-	)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": result,
+	})
 }
 
 // POST /mall/me/payment-methods
@@ -377,10 +309,7 @@ func (h *PaymentMethodHandler) postSetupIntent(
 // Stripe.js / ElementsによるSetupIntent完了後、
 // Stripeが発行したPaymentMethod IDと表示用カード情報を保存します。
 // cardNumberおよびcvcは受け付けません。
-func (h *PaymentMethodHandler) post(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *PaymentMethodHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	uid, ok := requireUID(w, r)
@@ -389,12 +318,7 @@ func (h *PaymentMethodHandler) post(
 	}
 
 	var in pm.CreatePaymentMethodInput
-	if err := decodePaymentMethodJSON(
-		w,
-		r,
-		&in,
-		false,
-	); err != nil {
+	if err := decodePaymentMethodJSON(w, r, &in, false); err != nil {
 		log.Printf(
 			"%s post decode failed uid=%q err=%v",
 			paymentMethodHandlerTag,
@@ -403,11 +327,9 @@ func (h *PaymentMethodHandler) post(
 		)
 
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "invalid json",
-			},
-		)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid json",
+		})
 		return
 	}
 
@@ -415,12 +337,8 @@ func (h *PaymentMethodHandler) post(
 	// 認証Middlewareが設定したUIDで上書きします。
 	in.UserID = uid
 
-	maskedStripeCustomerID := maskIDForLog(
-		in.StripeCustomerID,
-	)
-	maskedStripePaymentMethodID := maskIDForLog(
-		in.StripePaymentMethodID,
-	)
+	maskedStripeCustomerID := maskIDForLog(in.StripeCustomerID)
+	maskedStripePaymentMethodID := maskIDForLog(in.StripePaymentMethodID)
 
 	// 生のリクエスト本文、カード番号、CVCはログへ出力しません。
 	log.Printf(
@@ -443,11 +361,9 @@ func (h *PaymentMethodHandler) post(
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(
-		map[string]any{
-			"data": created,
-		},
-	)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": created,
+	})
 }
 
 // PUT /mall/me/payment-methods/{id}/default
@@ -466,11 +382,9 @@ func (h *PaymentMethodHandler) setDefault(
 	id = strings.TrimSpace(id)
 	if id == "" || strings.Contains(id, "/") {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "invalid id",
-			},
-		)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid id",
+		})
 		return
 	}
 
@@ -491,11 +405,7 @@ func (h *PaymentMethodHandler) setDefault(
 		uid,
 	)
 
-	updated, err := h.uc.SetDefault(
-		ctx,
-		id,
-		uid,
-	)
+	updated, err := h.uc.SetDefault(ctx, id, uid)
 	if err != nil {
 		writePaymentMethodErr(w, err)
 		return
@@ -508,11 +418,9 @@ func (h *PaymentMethodHandler) setDefault(
 		updated.UserID,
 	)
 
-	_ = json.NewEncoder(w).Encode(
-		map[string]any{
-			"data": updated,
-		},
-	)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": updated,
+	})
 }
 
 // DELETE /mall/me/payment-methods/{id}
@@ -531,11 +439,9 @@ func (h *PaymentMethodHandler) delete(
 	id = strings.TrimSpace(id)
 	if id == "" || strings.Contains(id, "/") {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "invalid id",
-			},
-		)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid id",
+		})
 		return
 	}
 
@@ -573,58 +479,8 @@ func (h *PaymentMethodHandler) delete(
 // Error handling
 // ------------------------------------------------------------
 
-func writePaymentMethodErr(
-	w http.ResponseWriter,
-	err error,
-) {
-	code := http.StatusInternalServerError
-
-	switch {
-	case errors.Is(err, pm.ErrInvalidID):
-		code = http.StatusBadRequest
-
-	case errors.Is(err, pm.ErrInvalidUserID):
-		code = http.StatusBadRequest
-
-	case errors.Is(err, pm.ErrInvalidStripeCustomerID):
-		code = http.StatusBadRequest
-
-	case errors.Is(err, pm.ErrInvalidStripePaymentMethod):
-		code = http.StatusBadRequest
-
-	case errors.Is(err, pm.ErrInvalidBrand):
-		code = http.StatusBadRequest
-
-	case errors.Is(err, pm.ErrInvalidLast4):
-		code = http.StatusBadRequest
-
-	case errors.Is(err, pm.ErrInvalidExpMonth):
-		code = http.StatusBadRequest
-
-	case errors.Is(err, pm.ErrInvalidExpYear):
-		code = http.StatusBadRequest
-
-	case errors.Is(err, pm.ErrInvalidCardholderName):
-		code = http.StatusBadRequest
-
-	case errors.Is(err, pm.ErrInvalidCreatedAt):
-		code = http.StatusBadRequest
-
-	case errors.Is(err, pm.ErrInvalidUpdatedAt):
-		code = http.StatusBadRequest
-
-	case errors.Is(err, pm.ErrNotFound):
-		code = http.StatusNotFound
-
-	case errors.Is(err, pm.ErrConflict):
-		code = http.StatusConflict
-
-	case errors.Is(
-		err,
-		usecase.ErrSetupIntentNotImplemented,
-	):
-		code = http.StatusNotImplemented
-	}
+func writePaymentMethodErr(w http.ResponseWriter, err error) {
+	code := paymentMethodHTTPStatus(err)
 
 	if code == http.StatusInternalServerError {
 		log.Printf(
@@ -634,12 +490,43 @@ func writePaymentMethodErr(
 		)
 	}
 
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(
-		map[string]string{
-			"error": err.Error(),
-		},
-	)
+	message := "internal_error"
+	if err != nil {
+		message = err.Error()
+	}
+
+	writeJSON(w, code, map[string]string{
+		"error": message,
+	})
+}
+
+func paymentMethodHTTPStatus(err error) int {
+	switch {
+	case errors.Is(err, pm.ErrInvalidID),
+		errors.Is(err, pm.ErrInvalidUserID),
+		errors.Is(err, pm.ErrInvalidStripeCustomerID),
+		errors.Is(err, pm.ErrInvalidStripePaymentMethod),
+		errors.Is(err, pm.ErrInvalidBrand),
+		errors.Is(err, pm.ErrInvalidLast4),
+		errors.Is(err, pm.ErrInvalidExpMonth),
+		errors.Is(err, pm.ErrInvalidExpYear),
+		errors.Is(err, pm.ErrInvalidCardholderName),
+		errors.Is(err, pm.ErrInvalidCreatedAt),
+		errors.Is(err, pm.ErrInvalidUpdatedAt):
+		return http.StatusBadRequest
+
+	case errors.Is(err, pm.ErrNotFound):
+		return http.StatusNotFound
+
+	case errors.Is(err, pm.ErrConflict):
+		return http.StatusConflict
+
+	case errors.Is(err, usecase.ErrSetupIntentNotImplemented):
+		return http.StatusNotImplemented
+
+	default:
+		return http.StatusInternalServerError
+	}
 }
 
 // ============================================================
@@ -650,81 +537,19 @@ type paymentMethodSetupIntentRequest struct {
 	CardholderName string `json:"cardholderName"`
 }
 
-func (h *PaymentMethodHandler) getStripePublicKey(
-	ctx context.Context,
-) (string, error) {
+func (h *PaymentMethodHandler) getStripePublicKey(ctx context.Context) (string, error) {
+	if h == nil || h.secretAccessor == nil {
+		return "", errors.New("secret version accessor is not configured")
+	}
+
 	h.stripePublicKeyOnce.Do(func() {
-		h.stripePublicKey,
-			h.stripePublicKeyErr = accessSecretVersion(
+		h.stripePublicKey, h.stripePublicKeyErr = h.secretAccessor.AccessSecretVersion(
 			ctx,
 			"stripe-public-key",
 		)
 	})
 
-	return h.stripePublicKey,
-		h.stripePublicKeyErr
-}
-
-func accessSecretVersion(
-	ctx context.Context,
-	secretID string,
-) (string, error) {
-	projectID := strings.TrimSpace(
-		os.Getenv("GOOGLE_CLOUD_PROJECT"),
-	)
-	if projectID == "" {
-		projectID = strings.TrimSpace(
-			os.Getenv("GCP_PROJECT"),
-		)
-	}
-	if projectID == "" {
-		projectID = strings.TrimSpace(
-			os.Getenv("PROJECT_ID"),
-		)
-	}
-	if projectID == "" {
-		return "", errors.New(
-			"google cloud project id is not configured",
-		)
-	}
-
-	client, err := secretmanager.NewClient(ctx)
-	if err != nil {
-		return "", err
-	}
-	defer client.Close()
-
-	name := "projects/" +
-		projectID +
-		"/secrets/" +
-		secretID +
-		"/versions/latest"
-
-	result, err := client.AccessSecretVersion(
-		ctx,
-		&secretmanagerpb.AccessSecretVersionRequest{
-			Name: name,
-		},
-	)
-	if err != nil {
-		return "", err
-	}
-	if result.Payload == nil {
-		return "", errors.New(
-			secretID + " payload is nil",
-		)
-	}
-
-	value := strings.TrimSpace(
-		string(result.Payload.Data),
-	)
-	if value == "" {
-		return "", errors.New(
-			secretID + " is empty",
-		)
-	}
-
-	return value, nil
+	return h.stripePublicKey, h.stripePublicKeyErr
 }
 
 // decodePaymentMethodJSONは、リクエスト本文をストリームで読み取ります。
@@ -776,9 +601,7 @@ func decodePaymentMethodJSON(
 		return err
 	}
 
-	return errors.New(
-		"request body must contain exactly one JSON value",
-	)
+	return errors.New("request body must contain exactly one JSON value")
 }
 
 func maskIDForLog(value string) string {
@@ -790,7 +613,5 @@ func maskIDForLog(value string) string {
 		return "***"
 	}
 
-	return value[:3] +
-		"***" +
-		value[len(value)-3:]
+	return value[:3] + "***" + value[len(value)-3:]
 }

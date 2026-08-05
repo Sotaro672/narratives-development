@@ -2,7 +2,6 @@
 package mallHandler
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -63,8 +62,7 @@ func (h *MarketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !strings.HasPrefix(path, marketResalesPath+"/") {
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		notFound(w)
 		return
 	}
 
@@ -73,8 +71,7 @@ func (h *MarketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resaleID := strings.TrimSpace(parts[0])
 
 	if resaleID == "" {
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		notFound(w)
 		return
 	}
 
@@ -89,8 +86,7 @@ func (h *MarketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(parts) != 1 {
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		notFound(w)
 		return
 	}
 
@@ -106,8 +102,9 @@ func (h *MarketHandler) listResales(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h == nil || h.marketQ == nil {
-		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
 		return
 	}
 
@@ -123,7 +120,7 @@ func (h *MarketHandler) listResales(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"items":      result.Items,
 		"totalCount": result.TotalCount,
 		"totalPages": result.TotalPages,
@@ -136,8 +133,9 @@ func (h *MarketHandler) listResalesByCursor(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 
 	if h == nil || h.marketQ == nil {
-		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
 		return
 	}
 
@@ -153,7 +151,7 @@ func (h *MarketHandler) listResalesByCursor(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"items":      result.Items,
 		"nextCursor": result.NextCursor,
 		"limit":      result.Limit,
@@ -164,8 +162,9 @@ func (h *MarketHandler) getResale(w http.ResponseWriter, r *http.Request, resale
 	ctx := r.Context()
 
 	if h == nil || h.marketQ == nil {
-		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
 		return
 	}
 
@@ -176,12 +175,11 @@ func (h *MarketHandler) getResale(w http.ResponseWriter, r *http.Request, resale
 	}
 
 	if item.Status != resaledom.StatusListing {
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		notFound(w)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"data": item,
 	})
 }
@@ -190,8 +188,9 @@ func (h *MarketHandler) listResaleImages(w http.ResponseWriter, r *http.Request,
 	ctx := r.Context()
 
 	if h == nil || h.marketQ == nil {
-		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
 		return
 	}
 
@@ -201,7 +200,7 @@ func (h *MarketHandler) listResaleImages(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"items": images,
 	})
 }

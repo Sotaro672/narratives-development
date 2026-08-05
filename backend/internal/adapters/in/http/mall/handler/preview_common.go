@@ -3,6 +3,8 @@ package mallHandler
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"strings"
 
 	dto "narratives/internal/application/query/mall/dto"
@@ -21,7 +23,142 @@ type tokenBlueprintPatchDTO struct {
 	TokenIcon   string `json:"tokenIcon,omitempty"`
 }
 
-// Preview共通のdata生成
+// validatePreviewGETRequest はPreview API共通のHTTPメソッド検証を行います。
+//
+// falseを返した場合は、この関数内でレスポンスを書き込み済みです。
+func validatePreviewGETRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+) bool {
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return false
+	}
+
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{
+			"error": "method not allowed",
+		})
+		return false
+	}
+
+	return true
+}
+
+// resolvePreviewModelInfoFromRequest はPreview API共通の入力検証と
+// PreviewModelInfo取得処理を行います。
+//
+// extraResponseFieldsには、Preview Me固有のavatarIdなど、
+// エラー応答へ追加したい値を渡します。
+//
+// falseを返した場合は、この関数内でレスポンスを書き込み済みです。
+func resolvePreviewModelInfoFromRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	q PreviewQuery,
+	extraResponseFields map[string]any,
+) (*dto.PreviewModelInfo, bool) {
+	if q == nil {
+		writePreviewError(
+			w,
+			http.StatusInternalServerError,
+			"preview query not configured",
+			"",
+			extraResponseFields,
+		)
+		return nil, false
+	}
+
+	productID := strings.TrimSpace(r.URL.Query().Get("productId"))
+	if productID == "" {
+		writePreviewError(
+			w,
+			http.StatusBadRequest,
+			"productId is required",
+			"",
+			extraResponseFields,
+		)
+		return nil, false
+	}
+
+	info, err := q.ResolveModelInfoByProductID(
+		r.Context(),
+		productID,
+	)
+	if err != nil {
+		switch {
+		case isNotFoundLike(err):
+			writePreviewError(
+				w,
+				http.StatusNotFound,
+				"not found",
+				productID,
+				extraResponseFields,
+			)
+
+		case errors.Is(err, context.Canceled),
+			errors.Is(err, context.DeadlineExceeded):
+			writePreviewError(
+				w,
+				http.StatusRequestTimeout,
+				"request canceled",
+				productID,
+				extraResponseFields,
+			)
+
+		default:
+			writePreviewError(
+				w,
+				http.StatusInternalServerError,
+				"resolve failed",
+				productID,
+				extraResponseFields,
+			)
+		}
+
+		return nil, false
+	}
+
+	if info == nil {
+		writePreviewError(
+			w,
+			http.StatusInternalServerError,
+			"resolve failed (nil result)",
+			productID,
+			extraResponseFields,
+		)
+		return nil, false
+	}
+
+	return info, true
+}
+
+func writePreviewError(
+	w http.ResponseWriter,
+	status int,
+	message string,
+	productID string,
+	extraResponseFields map[string]any,
+) {
+	response := make(
+		map[string]any,
+		len(extraResponseFields)+2,
+	)
+
+	for key, value := range extraResponseFields {
+		response[key] = value
+	}
+
+	response["error"] = message
+
+	if productID != "" {
+		response["productId"] = productID
+	}
+
+	writeJSON(w, status, response)
+}
+
+// buildPreviewData はPreview API共通のレスポンスdataを生成します。
 func buildPreviewData(
 	ctx context.Context,
 	info *dto.PreviewModelInfo,

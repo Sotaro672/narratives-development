@@ -38,43 +38,47 @@ type MallMeWalletHandler struct {
 // NewMallMeWalletHandler wires mall /me wallet endpoints.
 func NewMallMeWalletHandler(walletUC *usecase.WalletUsecase) http.Handler {
 	return &MallMeWalletHandler{
-		walletUC: walletUC,
-		allowedProxyHosts: map[string]struct{}{
-			"gateway.irys.xyz":             {},
-			"uploader.irys.xyz":            {},
-			"mainnet-1.datasprite-cdn.com": {},
-			"arweave.net":                  {},
-			"www.arweave.net":              {},
-			"ipfs.io":                      {},
-			"cloudflare-ipfs.com":          {},
-			"storage.googleapis.com":       {},
-		},
+		walletUC:          walletUC,
+		allowedProxyHosts: defaultWalletMetadataProxyHosts(),
+	}
+}
+
+func defaultWalletMetadataProxyHosts() map[string]struct{} {
+	return map[string]struct{}{
+		"gateway.irys.xyz":             {},
+		"uploader.irys.xyz":            {},
+		"mainnet-1.datasprite-cdn.com": {},
+		"arweave.net":                  {},
+		"www.arweave.net":              {},
+		"ipfs.io":                      {},
+		"cloudflare-ipfs.com":          {},
+		"storage.googleapis.com":       {},
 	}
 }
 
 func (h *MallMeWalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	path0 := strings.TrimSuffix(r.URL.Path, "/")
+	path := strings.TrimSuffix(r.URL.Path, "/")
 
 	switch {
-	case r.Method == http.MethodGet && path0 == "/mall/me/wallets":
+	case r.Method == http.MethodGet && path == "/mall/me/wallets":
 		h.getMeWallets(w, r)
 		return
 
-	case r.Method == http.MethodPost && path0 == "/mall/me/wallets/sync":
+	case r.Method == http.MethodPost && path == "/mall/me/wallets/sync":
 		h.syncMeWallets(w, r)
 		return
 
-	case r.Method == http.MethodGet && path0 == "/mall/me/wallets/tokens/resolve":
+	case r.Method == http.MethodGet && path == "/mall/me/wallets/tokens/resolve":
 		h.resolveMeTokenByMintAddress(w, r)
 		return
 
-	case r.Method == http.MethodOptions && path0 == "/mall/me/wallets/metadata/proxy":
+	case r.Method == http.MethodOptions && path == "/mall/me/wallets/metadata/proxy":
 		h.preflightMeWalletMetadataProxy(w)
 		return
 
-	case r.Method == http.MethodGet && path0 == "/mall/me/wallets/metadata/proxy":
+	case r.Method == http.MethodGet && path == "/mall/me/wallets/metadata/proxy":
 		h.meWalletMetadataProxy(w, r)
 		return
 
@@ -93,14 +97,18 @@ func (h *MallMeWalletHandler) getMeWallets(w http.ResponseWriter, r *http.Reques
 
 	if h == nil || h.walletUC == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet usecase not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "wallet usecase not configured",
+		})
 		return
 	}
 
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "unauthorized",
+		})
 		return
 	}
 
@@ -110,7 +118,9 @@ func (h *MallMeWalletHandler) getMeWallets(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"wallets": []walletdom.Wallet{wallet},
+	})
 }
 
 // POST /mall/me/wallets/sync
@@ -119,14 +129,18 @@ func (h *MallMeWalletHandler) syncMeWallets(w http.ResponseWriter, r *http.Reque
 
 	if h == nil || h.walletUC == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet usecase not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "wallet usecase not configured",
+		})
 		return
 	}
 
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "unauthorized",
+		})
 		return
 	}
 
@@ -136,7 +150,9 @@ func (h *MallMeWalletHandler) syncMeWallets(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"wallets": []walletdom.Wallet{wallet},
+	})
 }
 
 // GET /mall/me/wallets/tokens/resolve?mintAddress=...
@@ -145,38 +161,48 @@ func (h *MallMeWalletHandler) resolveMeTokenByMintAddress(w http.ResponseWriter,
 
 	if h == nil || h.walletUC == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet usecase not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "wallet usecase not configured",
+		})
 		return
 	}
 
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "unauthorized",
+		})
 		return
 	}
 
 	mintAddress := r.URL.Query().Get("mintAddress")
 	if mintAddress == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintAddress is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "mintAddress is required",
+		})
 		return
 	}
 
-	res, err := h.walletUC.ResolveOwnedTokenByMintAddressWithBrandName(ctx, avatarID, mintAddress)
+	result, err := h.walletUC.ResolveOwnedTokenByMintAddressWithBrandName(
+		ctx,
+		avatarID,
+		mintAddress,
+	)
 	if err != nil {
 		writeMallMeWalletErr(w, err)
 		return
 	}
 
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"productId":          res.ProductID,
-		"brandId":            res.BrandID,
-		"brandName":          res.BrandName,
-		"productBlueprintId": res.ProductBlueprintID,
-		"productName":        res.ProductName,
-		"metadataUri":        res.MetadataURI,
-		"mintAddress":        res.MintAddress,
+		"productId":          result.ProductID,
+		"brandId":            result.BrandID,
+		"brandName":          result.BrandName,
+		"productBlueprintId": result.ProductBlueprintID,
+		"productName":        result.ProductName,
+		"metadataUri":        result.MetadataURI,
+		"mintAddress":        result.MintAddress,
 	})
 }
 
@@ -192,64 +218,74 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 
 	if h == nil || h.walletUC == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet usecase not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "wallet usecase not configured",
+		})
 		return
 	}
 
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "unauthorized",
+		})
 		return
 	}
 
 	rawURL := r.URL.Query().Get("url")
 	if rawURL == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "url is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "url is required",
+		})
 		return
 	}
 
-	u, err := url.Parse(rawURL)
-	if err != nil || u == nil {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil || parsedURL == nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid url"})
-		return
-	}
-	if strings.ToLower(u.Scheme) != "https" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "only https is allowed"})
-		return
-	}
-	if u.Port() != "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "explicit port is not allowed"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid url",
+		})
 		return
 	}
 
-	host := strings.ToLower(u.Hostname())
+	if strings.ToLower(parsedURL.Scheme) != "https" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "only https is allowed",
+		})
+		return
+	}
+
+	if parsedURL.Port() != "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "explicit port is not allowed",
+		})
+		return
+	}
+
+	host := strings.ToLower(parsedURL.Hostname())
 	if host == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid url host"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid url host",
+		})
 		return
 	}
 
 	allow := h.allowedProxyHosts
 	if len(allow) == 0 {
-		allow = map[string]struct{}{
-			"gateway.irys.xyz":             {},
-			"uploader.irys.xyz":            {},
-			"mainnet-1.datasprite-cdn.com": {},
-			"arweave.net":                  {},
-			"www.arweave.net":              {},
-			"ipfs.io":                      {},
-			"cloudflare-ipfs.com":          {},
-			"storage.googleapis.com":       {},
-		}
+		allow = defaultWalletMetadataProxyHosts()
 	}
+
 	if !isAllowedMetadataProxyHost(host, allow) {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "host is not allowed"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "host is not allowed",
+		})
 		return
 	}
 
@@ -274,68 +310,89 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 			if len(via) >= 3 {
 				return errors.New("too many redirects")
 			}
+
 			if req == nil || req.URL == nil {
 				return errors.New("invalid redirect url")
 			}
+
 			if strings.ToLower(req.URL.Scheme) != "https" {
 				return errors.New("redirect to non-https is not allowed")
 			}
+
 			if req.URL.Port() != "" {
 				return errors.New("redirect with explicit port is not allowed")
 			}
-			hh := strings.ToLower(req.URL.Hostname())
-			if hh == "" {
+
+			redirectHost := strings.ToLower(req.URL.Hostname())
+			if redirectHost == "" {
 				return errors.New("redirect host is empty")
 			}
-			if !isAllowedMetadataProxyHost(hh, allow) {
+
+			if !isAllowedMetadataProxyHost(redirectHost, allow) {
 				return errors.New("redirect host is not allowed")
 			}
+
 			return nil
 		},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		parsedURL.String(),
+		nil,
+	)
 	if err != nil {
-		w.WriteHeader(http.StatusBadGateway)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to create upstream request"})
-		return
-	}
-	req.Header.Set("Accept", "application/json")
-
-	res, err := client.Do(req)
-	if err != nil {
-		w.WriteHeader(http.StatusBadGateway)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "upstream fetch failed"})
-		return
-	}
-	defer res.Body.Close()
-
-	const maxBytes = 1 << 20
-	body, err := io.ReadAll(io.LimitReader(res.Body, maxBytes))
-	if err != nil {
-		w.WriteHeader(http.StatusBadGateway)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to read upstream"})
-		return
-	}
-
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		w.WriteHeader(http.StatusBadGateway)
 		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error":        "upstream returned non-2xx",
-			"status":       res.Status,
-			"statusText":   http.StatusText(res.StatusCode),
-			"upstreamCode": strconv.Itoa(res.StatusCode),
+			"error": "failed to create upstream request",
 		})
 		return
 	}
 
-	if filtered, ok, e := filterMetadataJSON(body); e == nil && ok {
+	req.Header.Set("Accept", "application/json")
+
+	response, err := client.Do(req)
+	if err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "upstream fetch failed",
+		})
+		return
+	}
+	defer response.Body.Close()
+
+	const maxBytes = 1 << 20
+
+	body, err := io.ReadAll(
+		io.LimitReader(response.Body, maxBytes),
+	)
+	if err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "failed to read upstream",
+		})
+		return
+	}
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		w.WriteHeader(http.StatusBadGateway)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error":        "upstream returned non-2xx",
+			"status":       response.Status,
+			"statusText":   http.StatusText(response.StatusCode),
+			"upstreamCode": strconv.Itoa(response.StatusCode),
+		})
+		return
+	}
+
+	if filtered, ok, filterErr := filterMetadataJSON(body); filterErr == nil && ok {
 		body = filtered
 	}
 
-	ct := res.Header.Get("Content-Type")
-	if ct != "" {
-		w.Header().Set("Content-Type", ct)
+	contentType := response.Header.Get("Content-Type")
+	if contentType != "" {
+		w.Header().Set("Content-Type", contentType)
 	} else {
 		w.Header().Set("Content-Type", "application/json")
 	}
@@ -344,18 +401,22 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 	_, _ = w.Write(body)
 }
 
-func isAllowedMetadataProxyHost(host string, allow map[string]struct{}) bool {
-	h := strings.ToLower(strings.TrimSpace(host))
-	if h == "" {
+func isAllowedMetadataProxyHost(
+	host string,
+	allow map[string]struct{},
+) bool {
+	normalized := strings.ToLower(strings.TrimSpace(host))
+	if normalized == "" {
 		return false
 	}
 
-	if _, ok := allow[h]; ok {
+	if _, ok := allow[normalized]; ok {
 		return true
 	}
 
 	// Irys gateway may redirect to generated subdomains under datasprite CDN.
-	if h == "mainnet-1.datasprite-cdn.com" || strings.HasSuffix(h, ".mainnet-1.datasprite-cdn.com") {
+	if normalized == "mainnet-1.datasprite-cdn.com" ||
+		strings.HasSuffix(normalized, ".mainnet-1.datasprite-cdn.com") {
 		return true
 	}
 
@@ -366,29 +427,41 @@ func (h *MallMeWalletHandler) setCORSHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Vary", "Origin")
 	w.Header().Set("Access-Control-Allow-Methods", "GET,OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,Accept")
+	w.Header().Set(
+		"Access-Control-Allow-Headers",
+		"Authorization,Content-Type,Accept",
+	)
 	w.Header().Set("Access-Control-Max-Age", "600")
 }
 
 func writeMallMeWalletErr(w http.ResponseWriter, err error) {
-	code := http.StatusInternalServerError
+	message := "internal_error"
+	if err != nil {
+		message = err.Error()
+	}
 
+	writeJSON(w, mallMeWalletHTTPStatus(err), map[string]string{
+		"error": message,
+	})
+}
+
+func mallMeWalletHTTPStatus(err error) int {
 	switch {
-	case errors.Is(err, walletdom.ErrNotFound):
-		code = http.StatusNotFound
-	case errors.Is(err, tokendom.ErrNotFound):
-		code = http.StatusNotFound
+	case err == nil:
+		return http.StatusInternalServerError
+
+	case errors.Is(err, walletdom.ErrNotFound),
+		errors.Is(err, tokendom.ErrNotFound):
+		return http.StatusNotFound
 
 	case errors.Is(err, usecase.ErrWalletMintAddressNotOwned):
-		code = http.StatusForbidden
+		return http.StatusForbidden
 
 	case errors.Is(err, usecase.ErrWalletSyncAvatarIDEmpty),
-		errors.Is(err, usecase.ErrWalletSyncWalletAddressEmpty):
-		code = http.StatusBadRequest
-
-	case errors.Is(err, usecase.ErrMintAddressEmpty),
+		errors.Is(err, usecase.ErrWalletSyncWalletAddressEmpty),
+		errors.Is(err, usecase.ErrMintAddressEmpty),
 		errors.Is(err, tokendom.ErrInvalidMintAddress):
-		code = http.StatusBadRequest
+		return http.StatusBadRequest
 
 	case errors.Is(err, usecase.ErrWalletSyncOnchainNotConfigured),
 		errors.Is(err, usecase.ErrWalletUsecaseNotConfigured),
@@ -396,60 +469,68 @@ func writeMallMeWalletErr(w http.ResponseWriter, err error) {
 		errors.Is(err, usecase.ErrWalletProductReaderNotConfigured),
 		errors.Is(err, usecase.ErrWalletModelProductBlueprintNotConfigured),
 		errors.Is(err, usecase.ErrWalletProductBlueprintReaderNotConfigured):
-		code = http.StatusServiceUnavailable
-	}
+		return http.StatusServiceUnavailable
 
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	default:
+		return http.StatusInternalServerError
+	}
 }
 
 func isKeepObjectURI(raw string) bool {
-	s := raw
-	if s == "" {
+	if raw == "" {
 		return false
 	}
 
-	u, err := url.Parse(s)
-	if err != nil || u == nil {
-		return strings.Contains(s, "/.keep") || strings.HasSuffix(s, ".keep")
+	parsedURL, err := url.Parse(raw)
+	if err != nil || parsedURL == nil {
+		return strings.Contains(raw, "/.keep") ||
+			strings.HasSuffix(raw, ".keep")
 	}
 
-	p := u.Path
-	if p == "" {
+	path := parsedURL.Path
+	if path == "" {
 		return false
 	}
-	p = strings.TrimSuffix(p, "/")
-	return strings.HasSuffix(p, "/.keep") || strings.HasSuffix(p, ".keep")
+
+	path = strings.TrimSuffix(path, "/")
+
+	return strings.HasSuffix(path, "/.keep") ||
+		strings.HasSuffix(path, ".keep")
 }
 
 func filterMetadataJSON(body []byte) ([]byte, bool, error) {
 	var root map[string]any
-	dec := json.NewDecoder(bytes.NewReader(body))
-	dec.UseNumber()
-	if err := dec.Decode(&root); err != nil {
+
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+
+	if err := decoder.Decode(&root); err != nil {
 		return nil, false, err
 	}
+
 	if len(root) == 0 {
 		return body, false, nil
 	}
 
-	props, ok := root["properties"].(map[string]any)
-	if !ok || props == nil {
+	properties, ok := root["properties"].(map[string]any)
+	if !ok || properties == nil {
 		return body, false, nil
 	}
 
-	filesAny, ok := props["files"].([]any)
-	if !ok || len(filesAny) == 0 {
+	files, ok := properties["files"].([]any)
+	if !ok || len(files) == 0 {
 		return body, false, nil
 	}
 
-	outFiles := make([]any, 0, len(filesAny))
-	for _, item := range filesAny {
-		m, ok := item.(map[string]any)
-		if !ok || m == nil {
+	filteredFiles := make([]any, 0, len(files))
+
+	for _, item := range files {
+		file, ok := item.(map[string]any)
+		if !ok || file == nil {
 			continue
 		}
-		uri, _ := m["uri"].(string)
+
+		uri, _ := file["uri"].(string)
 		if uri == "" {
 			continue
 		}
@@ -458,15 +539,16 @@ func filterMetadataJSON(body []byte) ([]byte, bool, error) {
 			continue
 		}
 
-		outFiles = append(outFiles, m)
+		filteredFiles = append(filteredFiles, file)
 	}
 
-	props["files"] = outFiles
-	root["properties"] = props
+	properties["files"] = filteredFiles
+	root["properties"] = properties
 
-	b, err := json.Marshal(root)
+	filteredBody, err := json.Marshal(root)
 	if err != nil {
 		return nil, false, err
 	}
-	return b, true, nil
+
+	return filteredBody, true, nil
 }

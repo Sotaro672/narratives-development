@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"narratives/internal/adapters/in/http/middleware"
 	usecase "narratives/internal/application/usecase"
 	resaledom "narratives/internal/domain/resale"
 )
@@ -23,9 +22,20 @@ import (
 // /mall/resales/avatar/{avatarId} は公開アバターの出品一覧表示専用。
 // 公開マーケット一覧の List / ListByCursor は market_handler.go に移譲する。
 type ResaleQuery interface {
-	ListByAvatarID(ctx context.Context, avatarID string) ([]resaledom.Resale, error)
-	GetByID(ctx context.Context, id string) (resaledom.Resale, error)
-	ListImages(ctx context.Context, resaleID string) ([]resaledom.ResaleImage, error)
+	ListByAvatarID(
+		ctx context.Context,
+		avatarID string,
+	) ([]resaledom.Resale, error)
+
+	GetByID(
+		ctx context.Context,
+		id string,
+	) (resaledom.Resale, error)
+
+	ListImages(
+		ctx context.Context,
+		resaleID string,
+	) ([]resaledom.ResaleImage, error)
 }
 
 type ResaleHandler struct {
@@ -59,12 +69,12 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
-
 	if path == "" {
 		path = r.URL.Path
 	}
 
-	if path == publicResalesPath || strings.HasPrefix(path, publicResalesPath+"/") {
+	if path == publicResalesPath ||
+		strings.HasPrefix(path, publicResalesPath+"/") {
 		h.servePublic(w, r, path)
 		return
 	}
@@ -87,7 +97,9 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if !strings.HasPrefix(path, meResalesPath+"/") {
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "not_found",
+		})
 		return
 	}
 
@@ -97,7 +109,9 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if resaleID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid resaleId"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid resaleId",
+		})
 		return
 	}
 
@@ -105,6 +119,7 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch parts[1] {
 		case "images", "condition-images":
 			imageID := ""
+
 			if len(parts) >= 3 {
 				imageID = strings.TrimSpace(parts[2])
 			}
@@ -136,7 +151,9 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "not_found",
+			})
 			return
 
 		case "primary-image":
@@ -150,7 +167,9 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		default:
 			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "not_found",
+			})
 			return
 		}
 	}
@@ -181,13 +200,17 @@ func (h *ResaleHandler) servePublic(
 ) {
 	if h == nil || h.query == nil {
 		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "not_implemented",
+		})
 		return
 	}
 
 	if path == publicResalesPath {
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "not_found",
+		})
 		return
 	}
 
@@ -217,7 +240,8 @@ func (h *ResaleHandler) servePublic(
 	}
 
 	if len(parts) == 2 &&
-		(parts[1] == "images" || parts[1] == "condition-images") {
+		(parts[1] == "images" ||
+			parts[1] == "condition-images") {
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w)
 			return
@@ -229,7 +253,9 @@ func (h *ResaleHandler) servePublic(
 	}
 
 	w.WriteHeader(http.StatusNotFound)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error": "not_found",
+	})
 }
 
 func (h *ResaleHandler) listPublicByAvatarID(
@@ -327,12 +353,14 @@ func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	avatarID, ok := currentResaleAvatarIDFromRequest(w, r)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	body, err := io.ReadAll(
+		io.LimitReader(r.Body, 1<<20),
+	)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -401,6 +429,7 @@ func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 	item.CreatedBy = avatarID
 
 	now := time.Now().UTC()
+
 	item.CreatedAt = now
 	item.UpdatedAt = &now
 	item.UpdatedBy = nil
@@ -428,7 +457,7 @@ func (h *ResaleHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	avatarID, ok := currentResaleAvatarIDFromRequest(w, r)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
@@ -454,7 +483,12 @@ func (h *ResaleHandler) get(
 ) {
 	ctx := r.Context()
 
-	item, ok := h.getOwnedResale(w, r, ctx, resaleID)
+	item, ok := h.getOwnedResale(
+		w,
+		r,
+		ctx,
+		resaleID,
+	)
 	if !ok {
 		return
 	}
@@ -479,17 +513,24 @@ func (h *ResaleHandler) update(
 		return
 	}
 
-	avatarID, ok := currentResaleAvatarIDFromRequest(w, r)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
-	existing, ok := h.getOwnedResale(w, r, ctx, resaleID)
+	existing, ok := h.getOwnedResale(
+		w,
+		r,
+		ctx,
+		resaleID,
+	)
 	if !ok {
 		return
 	}
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	body, err := io.ReadAll(
+		io.LimitReader(r.Body, 1<<20),
+	)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -518,7 +559,9 @@ func (h *ResaleHandler) update(
 	item.BrandID = existing.BrandID
 	item.ProductBlueprintID = existing.ProductBlueprintID
 	item.ImageID = existing.ImageID
+
 	item.Description = strings.TrimSpace(item.Description)
+
 	item.CreatedAt = existing.CreatedAt
 	item.CreatedBy = existing.CreatedBy
 	item.UpdatedAt = &now
@@ -562,7 +605,12 @@ func (h *ResaleHandler) delete(
 		return
 	}
 
-	if _, ok := h.getOwnedResale(w, r, ctx, resaleID); !ok {
+	if _, ok := h.getOwnedResale(
+		w,
+		r,
+		ctx,
+		resaleID,
+	); !ok {
 		return
 	}
 
@@ -592,7 +640,12 @@ func (h *ResaleHandler) listImages(
 		return
 	}
 
-	if _, ok := h.getOwnedResale(w, r, ctx, resaleID); !ok {
+	if _, ok := h.getOwnedResale(
+		w,
+		r,
+		ctx,
+		resaleID,
+	); !ok {
 		return
 	}
 
@@ -628,12 +681,17 @@ func (h *ResaleHandler) createImageFromFirebaseStorage(
 		return
 	}
 
-	avatarID, ok := currentResaleAvatarIDFromRequest(w, r)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
-	if _, ok := h.getOwnedResale(w, r, ctx, resaleID); !ok {
+	if _, ok := h.getOwnedResale(
+		w,
+		r,
+		ctx,
+		resaleID,
+	); !ok {
 		return
 	}
 
@@ -641,7 +699,6 @@ func (h *ResaleHandler) createImageFromFirebaseStorage(
 		ID           string `json:"id"`
 		URL          string `json:"url"`
 		DisplayOrder int    `json:"displayOrder"`
-		CreatedBy    string `json:"createdBy,omitempty"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -654,7 +711,6 @@ func (h *ResaleHandler) createImageFromFirebaseStorage(
 
 	req.ID = strings.TrimSpace(req.ID)
 	req.URL = strings.TrimSpace(req.URL)
-	req.CreatedBy = avatarID
 
 	if req.ID == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -699,7 +755,7 @@ func (h *ResaleHandler) createImageFromFirebaseStorage(
 			URL:          req.URL,
 			DisplayOrder: req.DisplayOrder,
 			CreatedAt:    now,
-			CreatedBy:    req.CreatedBy,
+			CreatedBy:    avatarID,
 		},
 	)
 	if err != nil {
@@ -729,7 +785,12 @@ func (h *ResaleHandler) deleteImage(
 		return
 	}
 
-	if _, ok := h.getOwnedResale(w, r, ctx, resaleID); !ok {
+	if _, ok := h.getOwnedResale(
+		w,
+		r,
+		ctx,
+		resaleID,
+	); !ok {
 		return
 	}
 
@@ -741,7 +802,11 @@ func (h *ResaleHandler) deleteImage(
 		return
 	}
 
-	if err := h.uc.DeleteImage(ctx, resaleID, imageID); err != nil {
+	if err := h.uc.DeleteImage(
+		ctx,
+		resaleID,
+		imageID,
+	); err != nil {
 		writeResaleErr(w, err)
 		return
 	}
@@ -768,19 +833,23 @@ func (h *ResaleHandler) setPrimaryImage(
 		return
 	}
 
-	avatarID, ok := currentResaleAvatarIDFromRequest(w, r)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
-	if _, ok := h.getOwnedResale(w, r, ctx, resaleID); !ok {
+	if _, ok := h.getOwnedResale(
+		w,
+		r,
+		ctx,
+		resaleID,
+	); !ok {
 		return
 	}
 
 	var req struct {
-		ImageID   string  `json:"imageId"`
-		UpdatedBy *string `json:"updatedBy"`
-		Now       *string `json:"now"`
+		ImageID string  `json:"imageId"`
+		Now     *string `json:"now"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -800,15 +869,15 @@ func (h *ResaleHandler) setPrimaryImage(
 		return
 	}
 
-	req.UpdatedBy = &avatarID
-
 	now := time.Now().UTC()
-	if req.Now != nil && strings.TrimSpace(*req.Now) != "" {
-		if t, err := time.Parse(
+
+	if req.Now != nil &&
+		strings.TrimSpace(*req.Now) != "" {
+		if parsed, err := time.Parse(
 			time.RFC3339,
 			strings.TrimSpace(*req.Now),
 		); err == nil {
-			now = t.UTC()
+			now = parsed.UTC()
 		}
 	}
 
@@ -817,7 +886,7 @@ func (h *ResaleHandler) setPrimaryImage(
 		resaleID,
 		imageID,
 		now,
-		req.UpdatedBy,
+		&avatarID,
 	)
 	if err != nil {
 		writeResaleErr(w, err)
@@ -843,7 +912,7 @@ func (h *ResaleHandler) getOwnedResale(
 		return resaledom.Resale{}, false
 	}
 
-	avatarID, ok := currentResaleAvatarIDFromRequest(w, r)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return resaledom.Resale{}, false
 	}
@@ -865,28 +934,14 @@ func (h *ResaleHandler) getOwnedResale(
 	return item, true
 }
 
-func currentResaleAvatarIDFromRequest(
-	w http.ResponseWriter,
-	r *http.Request,
-) (string, bool) {
-	avatarID, ok := middleware.CurrentAvatarID(r)
-	if !ok || strings.TrimSpace(avatarID) == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "avatar context is required",
-		})
-		return "", false
-	}
-
-	return strings.TrimSpace(avatarID), true
-}
-
 type resalePageResponse struct {
-	Items      []resaledom.Resale `json:"items"`
-	TotalCount int                `json:"totalCount"`
-	TotalPages int                `json:"totalPages"`
-	Page       int                `json:"page"`
-	PerPage    int                `json:"perPage"`
+	Items []resaledom.Resale `json:"items"`
+
+	TotalCount int `json:"totalCount"`
+	TotalPages int `json:"totalPages"`
+
+	Page    int `json:"page"`
+	PerPage int `json:"perPage"`
 }
 
 func buildResalePageResponse(
@@ -907,6 +962,7 @@ func buildResalePageResponse(
 	}
 
 	totalCount := len(items)
+
 	totalPages := 0
 	if totalCount > 0 {
 		totalPages = (totalCount + perPage - 1) / perPage
@@ -918,28 +974,33 @@ func buildResalePageResponse(
 	}
 
 	pagedItems := []resaledom.Resale{}
+
 	if offset < totalCount {
 		end := offset + perPage
 		if end > totalCount {
 			end = totalCount
 		}
+
 		pagedItems = items[offset:end]
 	}
 
 	return resalePageResponse{
-		Items:      pagedItems,
+		Items: pagedItems,
+
 		TotalCount: totalCount,
 		TotalPages: totalPages,
-		Page:       pageNum,
-		PerPage:    perPage,
+
+		Page:    pageNum,
+		PerPage: perPage,
 	}
 }
 
 func buildResalePageFromQuery(r *http.Request) resaledom.Page {
-	qp := r.URL.Query()
+	query := r.URL.Query()
 
-	pageNum := parsePositiveIntDefault(qp.Get("page"), 1)
-	perPage := parsePositiveIntDefault(qp.Get("perPage"), 50)
+	pageNum := parsePositiveIntDefault(query.Get("page"), 1)
+	perPage := parsePositiveIntDefault(query.Get("perPage"), 50)
+
 	if perPage > 100 {
 		perPage = 100
 	}
@@ -951,40 +1012,30 @@ func buildResalePageFromQuery(r *http.Request) resaledom.Page {
 }
 
 func writeResaleErr(w http.ResponseWriter, err error) {
+	writeJSON(w, resaleHTTPStatus(err), map[string]string{
+		"error": resaleErrorMessage(err),
+	})
+}
+
+func resaleHTTPStatus(err error) int {
 	if err == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "internal_error",
-		})
-		return
+		return http.StatusInternalServerError
 	}
 
-	msg := err.Error()
+	message := err.Error()
 
 	switch {
 	case errors.Is(err, context.Canceled),
 		errors.Is(err, context.DeadlineExceeded):
-		w.WriteHeader(http.StatusRequestTimeout)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "request_timeout",
-		})
-		return
+		return http.StatusRequestTimeout
 
 	case errors.Is(err, resaledom.ErrNotFound),
 		errors.Is(err, resaledom.ErrConditionImageNotFound):
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": err.Error(),
-		})
-		return
+		return http.StatusNotFound
 
 	case errors.Is(err, resaledom.ErrConflict),
 		errors.Is(err, resaledom.ErrConditionImageConflict):
-		w.WriteHeader(http.StatusConflict)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": err.Error(),
-		})
-		return
+		return http.StatusConflict
 
 	case errors.Is(err, resaledom.ErrInvalidID),
 		errors.Is(err, resaledom.ErrInvalidStatus),
@@ -1011,25 +1062,36 @@ func writeResaleErr(w http.ResponseWriter, err error) {
 		errors.Is(err, resaledom.ErrInvalidConditionImageCreatedBy),
 		errors.Is(err, resaledom.ErrInvalidConditionImageUpdatedAt),
 		errors.Is(err, resaledom.ErrInvalidConditionImageUpdatedBy),
-		msg == "invalid_image_id":
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": msg,
-		})
-		return
+		message == "invalid_image_id":
+		return http.StatusBadRequest
 
-	case strings.Contains(msg, "not supported"):
-		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "not_implemented",
-		})
-		return
+	case strings.Contains(message, "not supported"):
+		return http.StatusNotImplemented
 
 	default:
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "internal_error",
-		})
-		return
+		return http.StatusInternalServerError
+	}
+}
+
+func resaleErrorMessage(err error) string {
+	if err == nil {
+		return "internal_error"
+	}
+
+	message := err.Error()
+
+	switch {
+	case errors.Is(err, context.Canceled),
+		errors.Is(err, context.DeadlineExceeded):
+		return "request_timeout"
+
+	case strings.Contains(message, "not supported"):
+		return "not_implemented"
+
+	case resaleHTTPStatus(err) == http.StatusInternalServerError:
+		return "internal_error"
+
+	default:
+		return message
 	}
 }
