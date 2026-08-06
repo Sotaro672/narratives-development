@@ -2,15 +2,18 @@
 
 import * as React from "react";
 
-import { listProductBlueprintCategoriesApi } from "../../../infrastructure/api/productBlueprintApi";
-
-import {
-  toProductBlueprintCategorySnapshot,
-  type ProductBlueprintCategorySnapshot,
+import type {
+  ProductBlueprintCategorySnapshot,
 } from "../../../domain/productBlueprintCategory";
 
+import {
+  useProductBlueprintCategoryOptions,
+} from "../shared/useProductBlueprintCategoryOptions";
+
 function getCategoryLabel(
-  category: ProductBlueprintCategorySnapshot | null,
+  category:
+    | ProductBlueprintCategorySnapshot
+    | null,
 ): string {
   if (!category) {
     return "";
@@ -27,86 +30,45 @@ function getCategoryLabel(
 
 export type UseProductBlueprintCreateCategoryResult = {
   productBlueprintCategoryId: string;
-  productBlueprintCategory: ProductBlueprintCategorySnapshot | null;
+
+  productBlueprintCategory:
+    | ProductBlueprintCategorySnapshot
+    | null;
+
   productBlueprintCategoryLabel: string;
-  productBlueprintCategoryOptions: ProductBlueprintCategorySnapshot[];
-  productBlueprintCategoryLoading: boolean;
-  productBlueprintCategoryError: Error | null;
+
+  productBlueprintCategoryOptions:
+    ProductBlueprintCategorySnapshot[];
+
+  productBlueprintCategoryLoading:
+    boolean;
+
+  productBlueprintCategoryError:
+    Error | null;
+
   onChangeProductBlueprintCategory: (
-    category: ProductBlueprintCategorySnapshot | null,
+    category:
+      | ProductBlueprintCategorySnapshot
+      | null,
   ) => void;
 };
 
-export function useProductBlueprintCreateCategory(): UseProductBlueprintCreateCategoryResult {
+export function useProductBlueprintCreateCategory():
+  UseProductBlueprintCreateCategoryResult {
   const [
     productBlueprintCategory,
     setProductBlueprintCategory,
   ] =
-    React.useState<ProductBlueprintCategorySnapshot | null>(
-      null,
-    );
+    React.useState<
+      ProductBlueprintCategorySnapshot | null
+    >(null);
 
-  const [
+  const {
     productBlueprintCategoryOptions,
-    setProductBlueprintCategoryOptions,
-  ] = React.useState<
-    ProductBlueprintCategorySnapshot[]
-  >([]);
-
-  const [
     productBlueprintCategoryLoading,
-    setProductBlueprintCategoryLoading,
-  ] = React.useState(false);
-
-  const [
     productBlueprintCategoryError,
-    setProductBlueprintCategoryError,
-  ] = React.useState<Error | null>(null);
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    async function loadCategories() {
-      setProductBlueprintCategoryLoading(true);
-      setProductBlueprintCategoryError(null);
-
-      try {
-        const categories =
-          await listProductBlueprintCategoriesApi();
-
-        const snapshots = categories.map(
-          toProductBlueprintCategorySnapshot,
-        );
-
-        if (!cancelled) {
-          setProductBlueprintCategoryOptions(
-            snapshots,
-          );
-        }
-      } catch (error) {
-        const err =
-          error instanceof Error
-            ? error
-            : new Error(String(error));
-
-        if (!cancelled) {
-          setProductBlueprintCategoryError(err);
-        }
-      } finally {
-        if (!cancelled) {
-          setProductBlueprintCategoryLoading(
-            false,
-          );
-        }
-      }
-    }
-
-    void loadCategories();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  } =
+    useProductBlueprintCategoryOptions();
 
   const productBlueprintCategoryId =
     React.useMemo(

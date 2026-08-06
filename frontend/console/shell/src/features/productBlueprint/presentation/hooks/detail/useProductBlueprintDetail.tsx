@@ -48,6 +48,10 @@ import {
 } from "../shared/useBrandOptions";
 
 import {
+  useProductBlueprintCategoryOptions,
+} from "../shared/useProductBlueprintCategoryOptions";
+
+import {
   useProductBlueprintValidation,
 } from "../shared/useProductBlueprintValidation";
 
@@ -183,6 +187,7 @@ function orderVariationsByModelRefs(
     }
 
     used.add(id);
+
     ordered.push(
       variation,
     );
@@ -231,6 +236,15 @@ export interface UseProductBlueprintDetailResult {
 
   productBlueprintCategoryLabel:
     string;
+
+  productBlueprintCategoryOptions:
+    ProductBlueprintCategorySnapshot[];
+
+  productBlueprintCategoryLoading:
+    boolean;
+
+  productBlueprintCategoryError:
+    Error | null;
 
   isApparelCategory: boolean;
   isAlcoholCategory: boolean;
@@ -517,6 +531,13 @@ export function useProductBlueprintDetail():
 
   const brand =
     resolvedBrandName;
+
+  const {
+    productBlueprintCategoryOptions,
+    productBlueprintCategoryLoading,
+    productBlueprintCategoryError,
+  } =
+    useProductBlueprintCategoryOptions();
 
   const validate =
     useProductBlueprintValidation({
@@ -885,6 +906,9 @@ export function useProductBlueprintDetail():
     productBlueprintCategoryId,
     productBlueprintCategory,
     productBlueprintCategoryLabel,
+    productBlueprintCategoryOptions,
+    productBlueprintCategoryLoading,
+    productBlueprintCategoryError,
 
     isApparelCategory,
     isAlcoholCategory,
