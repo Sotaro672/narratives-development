@@ -24,6 +24,56 @@ export type ListProductBlueprintCategoriesParams = {
   order?: "asc" | "desc";
 };
 
+export type ProductBlueprintCategoryTreeResponse = {
+  items?: ProductBlueprintCategory[];
+
+  data?: {
+    items?: ProductBlueprintCategory[];
+  };
+};
+
+function sortProductBlueprintCategories(
+  categories:
+    ProductBlueprintCategory[],
+): ProductBlueprintCategory[] {
+  return [
+    ...categories,
+  ].sort(
+    (
+      a,
+      b,
+    ) => {
+      const aDisplayOrder =
+        Number(
+          a.displayOrder ?? 0,
+        );
+
+      const bDisplayOrder =
+        Number(
+          b.displayOrder ?? 0,
+        );
+
+      if (
+        aDisplayOrder !==
+        bDisplayOrder
+      ) {
+        return (
+          aDisplayOrder -
+          bDisplayOrder
+        );
+      }
+
+      return String(
+        a.code ?? "",
+      ).localeCompare(
+        String(
+          b.code ?? "",
+        ),
+      );
+    },
+  );
+}
+
 /**
  * GET /console/product-blueprint-categories
  *
@@ -37,7 +87,8 @@ export type ListProductBlueprintCategoriesParams = {
  * }
  */
 export async function listProductBlueprintCategoriesApi(
-  params?: ListProductBlueprintCategoriesParams,
+  params?:
+    ListProductBlueprintCategoriesParams,
 ): Promise<ProductBlueprintCategory[]> {
   const searchParams =
     new URLSearchParams();
@@ -45,7 +96,11 @@ export async function listProductBlueprintCategoriesApi(
   const queryParams: Array<
     [
       string,
-      string | number | boolean | null | undefined,
+      | string
+      | number
+      | boolean
+      | null
+      | undefined,
     ]
   > = [
     [
@@ -78,7 +133,8 @@ export async function listProductBlueprintCategoriesApi(
     ],
     [
       "sort",
-      params?.sort ?? "displayOrder",
+      params?.sort ??
+        "displayOrder",
     ],
     [
       "order",
@@ -119,7 +175,7 @@ export async function listProductBlueprintCategoriesApi(
   const headers =
     await getAuthHeadersOrThrow();
 
-  const res =
+  const response =
     await fetch(
       url,
       {
@@ -128,52 +184,90 @@ export async function listProductBlueprintCategoriesApi(
       },
     );
 
-  if (!res.ok) {
+  if (!response.ok) {
     const detail =
-      await res
+      await response
         .text()
         .catch(
           () => "",
         );
 
     throw new Error(
-      `商品カテゴリ一覧の取得に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
+      `商品カテゴリ一覧の取得に失敗しました（${response.status} ${response.statusText}）\n${detail}`,
     );
   }
 
   const json =
-    await res.json() as PageResult<
-      ProductBlueprintCategory
-    >;
+    await response.json() as
+      PageResult<
+        ProductBlueprintCategory
+      > & {
+        data?: PageResult<
+          ProductBlueprintCategory
+        >;
+      };
 
-  return [
-    ...(json.items ?? []),
-  ].sort(
-    (
-      a,
-      b,
-    ) => {
-      const ao =
-        Number(
-          a.displayOrder ?? 0,
+  const items =
+    json.items ??
+    json.data?.items ??
+    [];
+
+  return sortProductBlueprintCategories(
+    items,
+  );
+}
+
+/**
+ * GET /console/product-blueprint-categories/tree
+ *
+ * 商品カテゴリ選択UI向けに、
+ * 親カテゴリと詳細カテゴリを含むツリー一覧を取得する。
+ *
+ * backend response:
+ * {
+ *   items: ProductBlueprintCategory[]
+ * }
+ */
+export async function listProductBlueprintCategoryTreeApi():
+  Promise<ProductBlueprintCategory[]> {
+  const url =
+    `${API_BASE}/console/product-blueprint-categories/tree`;
+
+  const headers =
+    await getAuthHeadersOrThrow();
+
+  const response =
+    await fetch(
+      url,
+      {
+        method: "GET",
+        headers,
+      },
+    );
+
+  if (!response.ok) {
+    const detail =
+      await response
+        .text()
+        .catch(
+          () => "",
         );
 
-      const bo =
-        Number(
-          b.displayOrder ?? 0,
-        );
+    throw new Error(
+      `商品カテゴリツリーの取得に失敗しました（${response.status} ${response.statusText}）\n${detail}`,
+    );
+  }
 
-      if (ao !== bo) {
-        return ao - bo;
-      }
+  const json =
+    await response.json() as
+      ProductBlueprintCategoryTreeResponse;
 
-      return String(
-        a.code ?? "",
-      ).localeCompare(
-        String(
-          b.code ?? "",
-        ),
-      );
-    },
+  const items =
+    json.items ??
+    json.data?.items ??
+    [];
+
+  return sortProductBlueprintCategories(
+    items,
   );
 }

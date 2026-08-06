@@ -1,8 +1,7 @@
 // frontend/console/shell/src/features/productBlueprint/application/productBlueprintCategoryService.ts
 
 import {
-  listProductBlueprintCategoriesApi,
-  type ListProductBlueprintCategoriesParams,
+  listProductBlueprintCategoryTreeApi,
 } from "../infrastructure/api/productBlueprintApi";
 
 import {
@@ -11,16 +10,21 @@ import {
 } from "../domain/productBlueprintCategory";
 
 /**
- * 商品カテゴリマスタを取得し、
+ * 商品カテゴリツリーを取得し、
  * ProductBlueprintで利用するcategory snapshotの配列へ変換する。
  */
-export async function listProductBlueprintCategorySnapshots(
-  params?: ListProductBlueprintCategoriesParams,
-): Promise<ProductBlueprintCategorySnapshot[]> {
+export async function listProductBlueprintCategorySnapshots():
+  Promise<ProductBlueprintCategorySnapshot[]> {
   const categories =
-    await listProductBlueprintCategoriesApi(
-      params,
+    await listProductBlueprintCategoryTreeApi();
+
+  if (
+    categories.length === 0
+  ) {
+    throw new Error(
+      "商品カテゴリマスタが0件です。",
     );
+  }
 
   return categories.map(
     toProductBlueprintCategorySnapshot,
