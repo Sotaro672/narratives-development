@@ -32,12 +32,37 @@ type ProductBlueprintCategoryFieldProps = {
 const EMPTY_CATEGORY_OPTIONS: ProductBlueprintCategoryOption[] = [];
 
 export function resolveProductBlueprintCategoryLabel(
-  category:
-    | ProductBlueprintCategorySnapshot
-    | null
-    | undefined,
+  category: ProductBlueprintCategorySnapshot | null | undefined,
 ): string {
   return category?.nameJa ?? "";
+}
+
+function resolveProductBlueprintParentCategoryLabel(
+  category: ProductBlueprintCategorySnapshot | null | undefined,
+): string {
+  const rootCode = category?.path?.[0] ?? category?.kind ?? "";
+
+  if (rootCode === "apparel") {
+    return "衣類";
+  }
+
+  if (rootCode === "alcohol") {
+    return "酒類";
+  }
+
+  if (rootCode === "cosmetics") {
+    return "化粧品";
+  }
+
+  if (rootCode === "healthcare") {
+    return "ヘルスケア";
+  }
+
+  if (rootCode === "other") {
+    return "その他";
+  }
+
+  return "";
 }
 
 function findCategoryById(
@@ -63,6 +88,7 @@ const ProductBlueprintCategoryField: React.FC<
   onChangeCategory,
 }) => {
   const isEdit = mode === "edit";
+  const canEditCategory = isEdit && Boolean(onChangeCategory);
   const options = categoryOptions ?? EMPTY_CATEGORY_OPTIONS;
 
   const parentCategories = React.useMemo(
@@ -73,6 +99,7 @@ const ProductBlueprintCategoryField: React.FC<
   const selectedCategory = React.useMemo(() => {
     if (categoryId !== "") {
       const categoryOption = findCategoryById(options, categoryId);
+
       if (categoryOption) {
         return categoryOption;
       }
@@ -84,13 +111,12 @@ const ProductBlueprintCategoryField: React.FC<
   const selectedParentIdFromCategory =
     selectedCategory?.parentId ?? "";
 
-  const [selectedParentId, setSelectedParentId] =
-    React.useState(selectedParentIdFromCategory);
+  const [selectedParentId, setSelectedParentId] = React.useState(
+    selectedParentIdFromCategory,
+  );
 
   React.useEffect(() => {
-    if (selectedParentIdFromCategory !== "") {
-      setSelectedParentId(selectedParentIdFromCategory);
-    }
+    setSelectedParentId(selectedParentIdFromCategory);
   }, [selectedParentIdFromCategory]);
 
   const selectedParent = React.useMemo(
@@ -119,15 +145,18 @@ const ProductBlueprintCategoryField: React.FC<
     return selectedCategory;
   }, [selectedCategory, selectedParentId]);
 
-  const displayParentLabel =
-    resolveProductBlueprintCategoryLabel(selectedParent);
+  const displayParentLabel = canEditCategory
+    ? resolveProductBlueprintCategoryLabel(selectedParent)
+    : resolveProductBlueprintParentCategoryLabel(selectedCategory);
 
-  const displayChildLabel =
-    resolveProductBlueprintCategoryLabel(selectedChild);
+  const displayChildLabel = canEditCategory
+    ? resolveProductBlueprintCategoryLabel(selectedChild)
+    : resolveProductBlueprintCategoryLabel(selectedCategory);
 
   const handleSelectParent = React.useCallback(
     (parent: ProductBlueprintCategoryOption) => {
       const nextParentId = parent.id;
+
       setSelectedParentId(nextParentId);
 
       if (
@@ -153,7 +182,7 @@ const ProductBlueprintCategoryField: React.FC<
         <div>
           <div className="label">商品カテゴリ</div>
 
-          {isEdit && onChangeCategory ? (
+          {canEditCategory ? (
             <Popover>
               <PopoverTrigger>
                 <Button
@@ -161,7 +190,10 @@ const ProductBlueprintCategoryField: React.FC<
                   variant="outline"
                   className="w-full justify-between pbc-select-trigger"
                   aria-label="商品カテゴリを選択"
-                  disabled={categoryLoading || parentCategories.length === 0}
+                  disabled={
+                    categoryLoading ||
+                    parentCategories.length === 0
+                  }
                 >
                   {displayParentLabel || "選択してください。"}
                 </Button>
@@ -210,8 +242,8 @@ const ProductBlueprintCategoryField: React.FC<
         <div>
           <div className="label">詳細カテゴリ</div>
 
-          {selectedParentId !== "" ? (
-            isEdit && onChangeCategory ? (
+          {canEditCategory ? (
+            selectedParentId !== "" ? (
               <Popover>
                 <PopoverTrigger>
                   <Button
@@ -219,7 +251,10 @@ const ProductBlueprintCategoryField: React.FC<
                     variant="outline"
                     className="w-full justify-between pbc-select-trigger"
                     aria-label="詳細カテゴリを選択"
-                    disabled={categoryLoading || childCategories.length === 0}
+                    disabled={
+                      categoryLoading ||
+                      childCategories.length === 0
+                    }
                   >
                     {displayChildLabel || "選択してください。"}
                   </Button>
@@ -257,7 +292,7 @@ const ProductBlueprintCategoryField: React.FC<
               </Popover>
             ) : (
               <Input
-                value={displayChildLabel}
+                value=""
                 variant="readonly"
                 readOnly
                 aria-label="詳細カテゴリ"
@@ -265,7 +300,7 @@ const ProductBlueprintCategoryField: React.FC<
             )
           ) : (
             <Input
-              value=""
+              value={displayChildLabel}
               variant="readonly"
               readOnly
               aria-label="詳細カテゴリ"
@@ -274,13 +309,13 @@ const ProductBlueprintCategoryField: React.FC<
         </div>
       </div>
 
-      {isEdit && categoryLoading && (
+      {canEditCategory && categoryLoading && (
         <p className="text-xs text-slate-400">
           商品カテゴリを取得中…
         </p>
       )}
 
-      {isEdit && categoryError && (
+      {canEditCategory && categoryError && (
         <p className="text-xs text-red-500">
           商品カテゴリ一覧の取得に失敗しました。
         </p>

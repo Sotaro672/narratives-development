@@ -44,18 +44,9 @@ export default function ProductBlueprintDetail() {
     pageTitle,
     productName,
     brand,
-    brandId,
-    brandOptions,
-    brandLoading,
-    brandError,
-    onChangeBrandId,
 
-    productBlueprintCategoryId,
     productBlueprintCategory,
     productBlueprintCategoryLabel,
-    productBlueprintCategoryOptions,
-    productBlueprintCategoryLoading,
-    productBlueprintCategoryError,
     isApparelCategory,
     isAlcoholCategory,
 
@@ -82,7 +73,6 @@ export default function ProductBlueprintDetail() {
     onSave,
     onDelete,
     onChangeProductName,
-    onChangeProductBlueprintCategory,
     onChangeColorInput,
     onAddColor,
     onRemoveColor,
@@ -167,20 +157,8 @@ export default function ProductBlueprintDetail() {
         <ProductBlueprintCard
           mode={editMode ? "edit" : "view"}
           productName={productName}
-          brandId={brandId}
           brandName={brand}
-          brandOptions={brandOptions}
-          brandLoading={brandLoading}
-          brandError={brandError}
-          onChangeBrandId={editMode ? onChangeBrandId : undefined}
-          productBlueprintCategoryId={productBlueprintCategoryId}
           productBlueprintCategory={productBlueprintCategory}
-          productBlueprintCategoryOptions={productBlueprintCategoryOptions}
-          productBlueprintCategoryLoading={productBlueprintCategoryLoading}
-          productBlueprintCategoryError={productBlueprintCategoryError}
-          onChangeProductBlueprintCategory={
-            editMode ? onChangeProductBlueprintCategory : undefined
-          }
           onChangeProductName={editMode ? onChangeProductName : undefined}
         />
 
