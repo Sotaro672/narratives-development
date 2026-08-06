@@ -7,26 +7,17 @@ import {
   type ApparelMeasurements,
   type ApparelSizeInput,
 } from "../../../shared/types/apparel";
-
-import {
-  hexToRgbInt,
-} from "../../../shared/util/color";
-
+import { hexToRgbInt } from "../../../shared/util/color";
 import {
   volumeRowToVolume,
   type AlcoholModelNumber,
   type Volume,
   type VolumeRow,
 } from "../../model/application/modelCreateService";
-
 import type {
   CreateModelVariationRequest,
 } from "../../model/infrastructure/repository/modelRepositoryHTTP";
-
-import {
-  isAlcoholCategoryCode,
-} from "../domain/alcohol";
-
+import { isAlcoholCategoryCode } from "../domain/alcohol";
 import type {
   ProductBlueprintCategorySnapshot,
 } from "../domain/productBlueprintCategory";
@@ -41,188 +32,113 @@ export type ProductBlueprintModelNumberInput = {
   code?: string;
 };
 
-export type MissingRgbBehavior =
-  | "use-zero"
-  | "throw";
+export type MissingRgbBehavior = "use-zero" | "throw";
 
 export type BuildModelVariationRequestsArgs = {
-  productBlueprintCategory:
-    ProductBlueprintCategorySnapshot;
-
+  productBlueprintCategory: ProductBlueprintCategorySnapshot;
   colors?: string[];
-
   sizes?: ApparelSizeInput[];
-
-  modelNumbers?:
-    ProductBlueprintModelNumberInput[];
-
-  colorRgbMap?:
-    Record<string, string>;
-
+  modelNumbers?: ProductBlueprintModelNumberInput[];
+  colorRgbMap?: Record<string, string>;
   volumes?: VolumeRow[];
-
-  alcoholModelNumbers?:
-    AlcoholModelNumber[];
+  alcoholModelNumbers?: AlcoholModelNumber[];
 
   /**
    * colorRgbMapからRGBを解決できなかった場合の処理。
    *
    * use-zero:
-   * - 従来の新規作成処理と同じく0を使用する。
+   * - 既存の新規作成処理との互換性を維持し、0を使用する。
    *
    * throw:
-   * - 従来の更新処理と同じくエラーにする。
+   * - RGBが解決できない場合にエラーを返す。
    */
-  missingRgbBehavior?:
-    MissingRgbBehavior;
+  missingRgbBehavior?: MissingRgbBehavior;
 };
+
+/* =========================================================
+ * Constants
+ * =======================================================*/
+
+const APPAREL_MODEL_VARIATION_CATEGORY_CODES: ReadonlySet<ApparelCategoryCode> =
+  new Set<ApparelCategoryCode>([
+    "apparel.tops",
+    "apparel.bottoms",
+    "apparel.dress",
+    "apparel.outerwear",
+    "apparel.shoes",
+  ]);
 
 /* =========================================================
  * Common helpers
  * =======================================================*/
 
-function normalizeString(
-  value: unknown,
+/**
+ * 色、サイズ、型番など、ユーザーが入力できる値だけを正規化する。
+ * seedから取得するcategory codeには使用しない。
+ */
+function normalizeUserText(
+  value: string | null | undefined,
 ): string {
-  return String(value ?? "").trim();
+  return value?.trim() ?? "";
 }
 
 function makeApparelVariationKey(
   size: string,
   color: string,
 ): string {
-  return `${size}__${color}`;
-}
-
-/* =========================================================
- * Category helpers
- * =======================================================*/
-
-function resolveApparelCategoryCode(
-  category: ProductBlueprintCategorySnapshot,
-): ApparelCategoryCode | null {
-  const code =
-    normalizeString(category.code);
-
-  if (!isApparelCategoryCode(code)) {
-    return null;
-  }
-
-  return code;
-}
-
-function isAlcoholCategory(
-  category: ProductBlueprintCategorySnapshot,
-): boolean {
-  const kind =
-    normalizeString(category.kind);
-
-  const code =
-    normalizeString(category.code);
-
-  return (
-    kind === "alcohol" ||
-    isAlcoholCategoryCode(code)
-  );
-}
-
-function shouldBuildApparelModelVariations(
-  categoryCode: ApparelCategoryCode,
-): boolean {
-  return (
-    categoryCode === "apparel.tops" ||
-    categoryCode === "apparel.bottoms" ||
-    categoryCode === "apparel.dress" ||
-    categoryCode === "apparel.outerwear" ||
-    categoryCode === "apparel.shoes"
-  );
+  return JSON.stringify([size, color]);
 }
 
 /* =========================================================
  * Apparel measurement helpers
  * =======================================================*/
 
+function shouldBuildApparelModelVariations(
+  categoryCode: ApparelCategoryCode,
+): boolean {
+  return APPAREL_MODEL_VARIATION_CATEGORY_CODES.has(categoryCode);
+}
+
 function buildApparelMeasurements(
   categoryCode: ApparelCategoryCode,
   size: ApparelSizeInput,
 ): ApparelMeasurements {
-  const result:
-    ApparelMeasurements = {};
-
   switch (categoryCode) {
-    case "apparel.bottoms": {
-      result["ウエスト"] =
-        size.waist ?? null;
+    case "apparel.bottoms":
+      return {
+        ウエスト: size.waist ?? null,
+        ヒップ: size.hip ?? null,
+        股上: size.rise ?? null,
+        股下: size.inseam ?? null,
+        わたり幅: size.thigh ?? null,
+        裾幅: size.hemWidth ?? null,
+      };
 
-      result["ヒップ"] =
-        size.hip ?? null;
+    case "apparel.dress":
+      return {
+        着丈: size.length ?? null,
+        身幅: size.width ?? null,
+        胸囲: size.chest ?? null,
+        肩幅: size.shoulder ?? null,
+        袖丈: size.sleeveLength ?? null,
+        ウエスト: size.waist ?? null,
+        ヒップ: size.hip ?? null,
+      };
 
-      result["股上"] =
-        size.rise ?? null;
-
-      result["股下"] =
-        size.inseam ?? null;
-
-      result["わたり幅"] =
-        size.thigh ?? null;
-
-      result["裾幅"] =
-        size.hemWidth ?? null;
-
-      return result;
-    }
-
-    case "apparel.dress": {
-      result["着丈"] =
-        size.length ?? null;
-
-      result["身幅"] =
-        size.width ?? null;
-
-      result["胸囲"] =
-        size.chest ?? null;
-
-      result["肩幅"] =
-        size.shoulder ?? null;
-
-      result["袖丈"] =
-        size.sleeveLength ?? null;
-
-      result["ウエスト"] =
-        size.waist ?? null;
-
-      result["ヒップ"] =
-        size.hip ?? null;
-
-      return result;
-    }
-
-    case "apparel.tops": {
-      result["着丈"] =
-        size.length ?? null;
-
-      result["身幅"] =
-        size.width ?? null;
-
-      result["胸囲"] =
-        size.chest ?? null;
-
-      result["肩幅"] =
-        size.shoulder ?? null;
-
-      result["袖丈"] =
-        size.sleeveLength ?? null;
-
-      return result;
-    }
+    case "apparel.tops":
+      return {
+        着丈: size.length ?? null,
+        身幅: size.width ?? null,
+        胸囲: size.chest ?? null,
+        肩幅: size.shoulder ?? null,
+        袖丈: size.sleeveLength ?? null,
+      };
 
     case "apparel.outerwear":
     case "apparel.shoes":
     case "apparel.bag":
     case "apparel.accessory":
-    default: {
-      return result;
-    }
+      return {};
   }
 }
 
@@ -231,10 +147,7 @@ function buildMeasurementsFromSize(
   size: ApparelSizeInput,
 ): Record<string, number> | undefined {
   return normalizeApparelMeasurementsForRequest(
-    buildApparelMeasurements(
-      categoryCode,
-      size,
-    ),
+    buildApparelMeasurements(categoryCode, size),
   );
 }
 
@@ -242,23 +155,14 @@ function buildMeasurementsFromSize(
  * Apparel input normalization
  * =======================================================*/
 
-function normalizeColors(
-  colors: string[],
-): string[] {
-  const normalizedColors:
-    string[] = [];
-
-  const seen =
-    new Set<string>();
+function normalizeColors(colors: string[]): string[] {
+  const normalizedColors: string[] = [];
+  const seen = new Set<string>();
 
   for (const rawColor of colors) {
-    const color =
-      normalizeString(rawColor);
+    const color = normalizeUserText(rawColor);
 
-    if (
-      !color ||
-      seen.has(color)
-    ) {
+    if (color === "" || seen.has(color)) {
       continue;
     }
 
@@ -272,76 +176,47 @@ function normalizeColors(
 function normalizeSizes(
   sizes: ApparelSizeInput[],
 ): ApparelSizeInput[] {
-  const sizeMap =
-    new Map<
-      string,
-      ApparelSizeInput
-    >();
+  const sizeMap = new Map<string, ApparelSizeInput>();
 
   for (const size of sizes) {
-    const sizeLabel =
-      normalizeString(
-        size.sizeLabel,
-      );
+    const sizeLabel = normalizeUserText(size.sizeLabel);
 
-    if (!sizeLabel) {
+    if (sizeLabel === "") {
       continue;
     }
 
     /*
      * 同じsizeLabelが複数存在する場合は後勝ち。
-     * Mapの挿入順は最初に登録された順序を維持する。
+     * Mapの並び順は最初に登録された位置を維持する。
      */
-    sizeMap.set(
+    sizeMap.set(sizeLabel, {
+      ...size,
       sizeLabel,
-      size,
-    );
+    });
   }
 
-  return Array.from(
-    sizeMap.values(),
-  );
+  return Array.from(sizeMap.values());
 }
 
 function buildApparelModelNumberMap(
-  modelNumbers:
-    ProductBlueprintModelNumberInput[],
+  modelNumbers: ProductBlueprintModelNumberInput[],
 ): Map<string, string> {
-  const modelNumberMap =
-    new Map<string, string>();
+  const modelNumberMap = new Map<string, string>();
 
   for (const modelNumber of modelNumbers) {
-    const size =
-      normalizeString(
-        modelNumber.size,
-      );
+    const size = normalizeUserText(modelNumber.size);
+    const color = normalizeUserText(modelNumber.color);
+    const code = normalizeUserText(modelNumber.code);
 
-    const color =
-      normalizeString(
-        modelNumber.color,
-      );
-
-    const code =
-      normalizeString(
-        modelNumber.code,
-      );
-
-    if (
-      !size ||
-      !color ||
-      !code
-    ) {
+    if (size === "" || color === "" || code === "") {
       continue;
     }
 
     /*
-     * 同じsize・colorの組み合わせが複数ある場合は後勝ち。
+     * 同じsize・colorの組み合わせが複数存在する場合は後勝ち。
      */
     modelNumberMap.set(
-      makeApparelVariationKey(
-        size,
-        color,
-      ),
+      makeApparelVariationKey(size, color),
       code,
     );
   }
@@ -360,27 +235,14 @@ function resolveRgbInt(args: {
     missingRgbBehavior,
   } = args;
 
-  const rgbHex =
-    normalizeString(
-      colorRgbMap[colorName],
-    );
+  const rgbHex = normalizeUserText(colorRgbMap[colorName]);
+  const rgb = rgbHex === "" ? undefined : hexToRgbInt(rgbHex);
 
-  const rgb =
-    rgbHex
-      ? hexToRgbInt(rgbHex)
-      : undefined;
-
-  if (
-    typeof rgb === "number" &&
-    Number.isFinite(rgb)
-  ) {
+  if (typeof rgb === "number" && Number.isFinite(rgb)) {
     return rgb;
   }
 
-  if (
-    missingRgbBehavior ===
-    "use-zero"
-  ) {
+  if (missingRgbBehavior === "use-zero") {
     return 0;
   }
 
@@ -397,12 +259,9 @@ function buildApparelModelVariationRequests(args: {
   categoryCode: ApparelCategoryCode;
   colors: string[];
   sizes: ApparelSizeInput[];
-  modelNumbers:
-    ProductBlueprintModelNumberInput[];
-  colorRgbMap:
-    Record<string, string>;
-  missingRgbBehavior:
-    MissingRgbBehavior;
+  modelNumbers: ProductBlueprintModelNumberInput[];
+  colorRgbMap: Record<string, string>;
+  missingRgbBehavior: MissingRgbBehavior;
 }): CreateModelVariationRequest[] {
   const {
     categoryCode,
@@ -413,56 +272,26 @@ function buildApparelModelVariationRequests(args: {
     missingRgbBehavior,
   } = args;
 
-  if (
-    !shouldBuildApparelModelVariations(
-      categoryCode,
-    )
-  ) {
+  if (!shouldBuildApparelModelVariations(categoryCode)) {
     return [];
   }
 
-  const normalizedColors =
-    normalizeColors(colors);
-
-  const normalizedSizes =
-    normalizeSizes(sizes);
-
+  const normalizedColors = normalizeColors(colors);
+  const normalizedSizes = normalizeSizes(sizes);
   const modelNumberMap =
-    buildApparelModelNumberMap(
-      modelNumbers,
-    );
-
-  const requests:
-    CreateModelVariationRequest[] = [];
+    buildApparelModelNumberMap(modelNumbers);
+  const requests: CreateModelVariationRequest[] = [];
 
   /*
    * Model Variationの並び順を
    * 「色登録順 → サイズ登録順」に固定する。
    */
-  for (
-    const color
-    of normalizedColors
-  ) {
-    for (
-      const size
-      of normalizedSizes
-    ) {
-      const sizeLabel =
-        normalizeString(
-          size.sizeLabel,
-        );
-
-      if (!sizeLabel) {
-        continue;
-      }
-
-      const modelNumber =
-        modelNumberMap.get(
-          makeApparelVariationKey(
-            sizeLabel,
-            color,
-          ),
-        );
+  for (const color of normalizedColors) {
+    for (const size of normalizedSizes) {
+      const sizeLabel = size.sizeLabel;
+      const modelNumber = modelNumberMap.get(
+        makeApparelVariationKey(sizeLabel, color),
+      );
 
       if (!modelNumber) {
         continue;
@@ -470,29 +299,18 @@ function buildApparelModelVariationRequests(args: {
 
       requests.push({
         kind: "apparel",
-
         modelNumber,
-
-        size:
-          sizeLabel,
-
+        size: sizeLabel,
         color,
-
-        rgb:
-          resolveRgbInt({
-            colorName:
-              color,
-
-            colorRgbMap,
-
-            missingRgbBehavior,
-          }),
-
-        measurements:
-          buildMeasurementsFromSize(
-            categoryCode,
-            size,
-          ),
+        rgb: resolveRgbInt({
+          colorName: color,
+          colorRgbMap,
+          missingRgbBehavior,
+        }),
+        measurements: buildMeasurementsFromSize(
+          categoryCode,
+          size,
+        ),
       });
     }
   }
@@ -504,81 +322,50 @@ function buildApparelModelVariationRequests(args: {
  * Alcohol helpers
  * =======================================================*/
 
-function normalizeVolume(
-  volume: Volume,
-): Volume | null {
-  const value =
-    typeof volume.value === "number" &&
-    Number.isFinite(volume.value)
-      ? volume.value
-      : 0;
-
-  const unit =
-    normalizeString(
-      volume.unit,
-    ) || "ml";
-
+function normalizeVolume(volume: Volume): Volume | null {
   if (
-    value <= 0 ||
-    (
-      unit !== "ml" &&
-      unit !== "L"
-    )
+    typeof volume.value !== "number" ||
+    !Number.isFinite(volume.value) ||
+    volume.value <= 0
   ) {
     return null;
   }
 
+  if (volume.unit !== "ml" && volume.unit !== "L") {
+    return null;
+  }
+
   return {
-    value,
-    unit,
+    value: volume.value,
+    unit: volume.unit,
   };
 }
 
-function makeVolumeKey(
-  volume: Volume,
-): string {
+function makeVolumeKey(volume: Volume): string {
   return `${volume.value}:${volume.unit}`;
 }
 
 function buildAlcoholModelNumberMap(
-  modelNumbers:
-    AlcoholModelNumber[],
+  modelNumbers: AlcoholModelNumber[],
 ): Map<string, AlcoholModelNumber> {
-  const modelNumberMap =
-    new Map<
-      string,
-      AlcoholModelNumber
-    >();
+  const modelNumberMap = new Map<string, AlcoholModelNumber>();
 
   for (const modelNumber of modelNumbers) {
-    const volume =
-      normalizeVolume(
-        modelNumber.volume,
-      );
+    const volume = normalizeVolume(modelNumber.volume);
+    const code = normalizeUserText(modelNumber.code);
 
-    const code =
-      normalizeString(
-        modelNumber.code,
-      );
-
-    if (
-      !volume ||
-      !code
-    ) {
+    if (!volume || code === "") {
       continue;
     }
 
     /*
      * 同じ容量が複数存在する場合は後勝ち。
      */
-    modelNumberMap.set(
-      makeVolumeKey(volume),
-      {
-        ...modelNumber,
-        volume,
-        code,
-      },
-    );
+    modelNumberMap.set(makeVolumeKey(volume), {
+      ...modelNumber,
+      volume,
+      code,
+    });
   }
 
   return modelNumberMap;
@@ -590,8 +377,7 @@ function buildAlcoholModelNumberMap(
 
 function buildAlcoholModelVariationRequests(args: {
   volumes: VolumeRow[];
-  alcoholModelNumbers:
-    AlcoholModelNumber[];
+  alcoholModelNumbers: AlcoholModelNumber[];
 }): CreateModelVariationRequest[] {
   const {
     volumes,
@@ -599,28 +385,18 @@ function buildAlcoholModelVariationRequests(args: {
   } = args;
 
   const modelNumberMap =
-    buildAlcoholModelNumberMap(
-      alcoholModelNumbers,
-    );
-
-  const requests:
-    CreateModelVariationRequest[] = [];
-
-  const seen =
-    new Set<string>();
+    buildAlcoholModelNumberMap(alcoholModelNumbers);
+  const requests: CreateModelVariationRequest[] = [];
+  const seen = new Set<string>();
 
   for (const row of volumes) {
-    const volume =
-      normalizeVolume(
-        volumeRowToVolume(row),
-      );
+    const volume = normalizeVolume(volumeRowToVolume(row));
 
     if (!volume) {
       continue;
     }
 
-    const key =
-      makeVolumeKey(volume);
+    const key = makeVolumeKey(volume);
 
     if (seen.has(key)) {
       continue;
@@ -628,8 +404,7 @@ function buildAlcoholModelVariationRequests(args: {
 
     seen.add(key);
 
-    const modelNumber =
-      modelNumberMap.get(key);
+    const modelNumber = modelNumberMap.get(key);
 
     if (!modelNumber) {
       continue;
@@ -637,10 +412,7 @@ function buildAlcoholModelVariationRequests(args: {
 
     requests.push({
       kind: "alcohol",
-
-      modelNumber:
-        modelNumber.code,
-
+      modelNumber: modelNumber.code,
       volume,
     });
   }
@@ -661,7 +433,10 @@ function buildAlcoholModelVariationRequests(args: {
  * - Alcohol: CreateModelVariationRequest[]
  * - Model Variationを扱わないカテゴリ: null
  *
- * Apparelのうち、Model Variation対象外のカテゴリでは
+ * カテゴリコードはseed由来の値をそのまま使用し、
+ * frontend側でtrimやkindからの推測は行わない。
+ *
+ * ApparelのうちModel Variation対象外のカテゴリでは
  * 空配列を返す。
  */
 export function buildModelVariationRequests(
@@ -678,33 +453,20 @@ export function buildModelVariationRequests(
     missingRgbBehavior = "throw",
   } = args;
 
-  const apparelCategoryCode =
-    resolveApparelCategoryCode(
-      productBlueprintCategory,
-    );
+  const categoryCode = productBlueprintCategory.code;
 
-  if (apparelCategoryCode) {
+  if (isApparelCategoryCode(categoryCode)) {
     return buildApparelModelVariationRequests({
-      categoryCode:
-        apparelCategoryCode,
-
+      categoryCode,
       colors,
-
       sizes,
-
       modelNumbers,
-
       colorRgbMap,
-
       missingRgbBehavior,
     });
   }
 
-  if (
-    isAlcoholCategory(
-      productBlueprintCategory,
-    )
-  ) {
+  if (isAlcoholCategoryCode(categoryCode)) {
     return buildAlcoholModelVariationRequests({
       volumes,
       alcoholModelNumbers,

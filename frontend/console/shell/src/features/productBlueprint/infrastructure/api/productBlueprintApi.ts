@@ -25,52 +25,77 @@ export type ListProductBlueprintCategoriesParams = {
 };
 
 export type ProductBlueprintCategoryTreeResponse = {
-  items?: ProductBlueprintCategory[];
-
-  data?: {
-    items?: ProductBlueprintCategory[];
-  };
+  items: ProductBlueprintCategory[];
 };
 
-function sortProductBlueprintCategories(
-  categories:
-    ProductBlueprintCategory[],
+type ProductBlueprintCategoryListResponse =
+  PageResult<ProductBlueprintCategory>;
+
+function isRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+function parseProductBlueprintCategoryItems(
+  value: unknown,
+  responseName: string,
 ): ProductBlueprintCategory[] {
-  return [
-    ...categories,
-  ].sort(
-    (
-      a,
-      b,
-    ) => {
-      const aDisplayOrder =
-        Number(
-          a.displayOrder ?? 0,
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.items)
+  ) {
+    throw new Error(
+      `${responseName}のレスポンス形式が不正です。`,
+    );
+  }
+
+  return value.items as ProductBlueprintCategory[];
+}
+
+async function getProductBlueprintCategories(
+  url: string,
+  responseName: string,
+): Promise<ProductBlueprintCategory[]> {
+  const headers =
+    await getAuthHeadersOrThrow();
+
+  const response =
+    await fetch(
+      url,
+      {
+        method: "GET",
+        headers,
+      },
+    );
+
+  if (!response.ok) {
+    const detail =
+      await response
+        .text()
+        .catch(
+          () => "",
         );
 
-      const bDisplayOrder =
-        Number(
-          b.displayOrder ?? 0,
-        );
+    throw new Error(
+      `${responseName}の取得に失敗しました（${response.status} ${response.statusText}）${
+        detail
+          ? `\n${detail}`
+          : ""
+      }`,
+    );
+  }
 
-      if (
-        aDisplayOrder !==
-        bDisplayOrder
-      ) {
-        return (
-          aDisplayOrder -
-          bDisplayOrder
-        );
-      }
+  const json: unknown =
+    await response.json();
 
-      return String(
-        a.code ?? "",
-      ).localeCompare(
-        String(
-          b.code ?? "",
-        ),
-      );
-    },
+  return parseProductBlueprintCategoryItems(
+    json,
+    responseName,
   );
 }
 
@@ -87,8 +112,7 @@ function sortProductBlueprintCategories(
  * }
  */
 export async function listProductBlueprintCategoriesApi(
-  params?:
-    ListProductBlueprintCategoriesParams,
+  params?: ListProductBlueprintCategoriesParams,
 ): Promise<ProductBlueprintCategory[]> {
   const searchParams =
     new URLSearchParams();
@@ -96,11 +120,7 @@ export async function listProductBlueprintCategoriesApi(
   const queryParams: Array<
     [
       string,
-      | string
-      | number
-      | boolean
-      | null
-      | undefined,
+      string | number | boolean | undefined,
     ]
   > = [
     [
@@ -133,8 +153,7 @@ export async function listProductBlueprintCategoriesApi(
     ],
     [
       "sort",
-      params?.sort ??
-        "displayOrder",
+      params?.sort ?? "displayOrder",
     ],
     [
       "order",
@@ -149,7 +168,6 @@ export async function listProductBlueprintCategoriesApi(
     ] of queryParams
   ) {
     if (
-      value === null ||
       value === undefined ||
       value === ""
     ) {
@@ -172,56 +190,21 @@ export async function listProductBlueprintCategoriesApi(
         : ""
     }`;
 
-  const headers =
-    await getAuthHeadersOrThrow();
-
-  const response =
-    await fetch(
-      url,
-      {
-        method: "GET",
-        headers,
-      },
-    );
-
-  if (!response.ok) {
-    const detail =
-      await response
-        .text()
-        .catch(
-          () => "",
-        );
-
-    throw new Error(
-      `商品カテゴリ一覧の取得に失敗しました（${response.status} ${response.statusText}）\n${detail}`,
-    );
-  }
-
-  const json =
-    await response.json() as
-      PageResult<
-        ProductBlueprintCategory
-      > & {
-        data?: PageResult<
-          ProductBlueprintCategory
-        >;
-      };
-
   const items =
-    json.items ??
-    json.data?.items ??
-    [];
+    await getProductBlueprintCategories(
+      url,
+      "商品カテゴリ一覧",
+    );
 
-  return sortProductBlueprintCategories(
-    items,
-  );
+  return items;
 }
 
 /**
  * GET /console/product-blueprint-categories/tree
  *
  * 商品カテゴリ選択UI向けに、
- * 親カテゴリと詳細カテゴリを含むツリー一覧を取得する。
+ * 親カテゴリと詳細カテゴリを含む一覧を
+ * backendのdisplayOrder順で取得する。
  *
  * backend response:
  * {
@@ -233,41 +216,25 @@ export async function listProductBlueprintCategoryTreeApi():
   const url =
     `${API_BASE}/console/product-blueprint-categories/tree`;
 
-  const headers =
-    await getAuthHeadersOrThrow();
-
-  const response =
-    await fetch(
+  const items =
+    await getProductBlueprintCategories(
       url,
-      {
-        method: "GET",
-        headers,
-      },
+      "商品カテゴリツリー",
     );
 
-  if (!response.ok) {
-    const detail =
-      await response
-        .text()
-        .catch(
-          () => "",
-        );
-
+  if (items.length === 0) {
     throw new Error(
-      `商品カテゴリツリーの取得に失敗しました（${response.status} ${response.statusText}）\n${detail}`,
+      "商品カテゴリマスタが登録されていません。",
     );
   }
 
-  const json =
-    await response.json() as
-      ProductBlueprintCategoryTreeResponse;
-
-  const items =
-    json.items ??
-    json.data?.items ??
-    [];
-
-  return sortProductBlueprintCategories(
-    items,
-  );
+  return items;
 }
+
+// Response contracts used for compile-time consistency.
+void (
+  null as
+    | ProductBlueprintCategoryListResponse
+    | ProductBlueprintCategoryTreeResponse
+    | null
+);

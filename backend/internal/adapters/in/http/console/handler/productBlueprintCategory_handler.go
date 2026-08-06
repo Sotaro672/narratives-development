@@ -1,9 +1,13 @@
+// backend\internal\adapters\in\http\console\handler\productBlueprintCategory_handler.go
 package consoleHandler
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,19 +21,14 @@ import (
 // ------------------------------------------------------------
 
 type ProductBlueprintCategoryUsecase interface {
-	GetByID(
-		ctx context.Context,
-		id string,
-	) (categorydom.ProductBlueprintCategory, error)
+	GetByID(ctx context.Context, id string) (categorydom.ProductBlueprintCategory, error)
 
 	List(
 		ctx context.Context,
 		q usecase.ListProductBlueprintCategoriesQuery,
 	) (common.PageResult[categorydom.ProductBlueprintCategory], error)
 
-	ListTree(
-		ctx context.Context,
-	) ([]categorydom.ProductBlueprintCategory, error)
+	ListTree(ctx context.Context) ([]categorydom.ProductBlueprintCategory, error)
 }
 
 // ------------------------------------------------------------
@@ -40,12 +39,8 @@ type Handler struct {
 	uc ProductBlueprintCategoryUsecase
 }
 
-func NewProductBlueprintCategoryHandler(
-	uc ProductBlueprintCategoryUsecase,
-) *Handler {
-	return &Handler{
-		uc: uc,
-	}
+func NewProductBlueprintCategoryHandler(uc ProductBlueprintCategoryUsecase) *Handler {
+	return &Handler{uc: uc}
 }
 
 // NewHandler is kept for backward compatibility.
@@ -74,7 +69,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		h.list(w, r)
-		return
 
 	case path == "/console/product-blueprint-categories/tree":
 		if r.Method != http.MethodGet {
@@ -83,7 +77,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		h.listTree(w, r)
-		return
 
 	case strings.HasPrefix(path, "/console/product-blueprint-categories/"):
 		id := strings.TrimPrefix(path, "/console/product-blueprint-categories/")
@@ -98,11 +91,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		h.getByID(w, r, id)
-		return
 
 	default:
 		notFound(w)
-		return
 	}
 }
 
@@ -117,12 +108,11 @@ type ProductBlueprintCategoryResponse struct {
 	NameJa string `json:"nameJa"`
 	NameEn string `json:"nameEn"`
 
-	ParentID *string  `json:"parentId,omitempty"`
+	ParentID *string  `json:"parentId"`
 	Path     []string `json:"path"`
 
-	Kind string `json:"kind"`
-
-	DisplayOrder int `json:"displayOrder"`
+	Kind         string `json:"kind"`
+	DisplayOrder int    `json:"displayOrder"`
 
 	Attributes CategoryAttributesResponse `json:"attributes"`
 
@@ -162,52 +152,16 @@ func (h *Handler) getByID(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toResponse(category))
+	writeJSON(w, http.StatusOK, toProductBlueprintCategoryResponse(category))
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	qp := r.URL.Query()
-
-	query := usecase.ListProductBlueprintCategoriesQuery{
-		SearchQuery: qp.Get("search"),
-
-		IDs: parseCSV(qp.Get("ids")),
-
-		RootOnly: parseBoolDefaultFalse(qp.Get("rootOnly")),
-
-		SortColumn: qp.Get("sort"),
-		SortOrder:  parseSortOrder(qp.Get("order")),
-
-		Page:    parseIntDefault(qp.Get("page"), 1),
-		PerPage: parseIntDefault(qp.Get("perPage"), 20),
-	}
-
-	if v := qp.Get("code"); v != "" {
-		query.Code = &v
-	}
-
-	if v := qp.Get("kind"); v != "" {
-		query.Kind = &v
-	}
-
-	if v := qp.Get("parentId"); v != "" {
-		query.ParentID = &v
-	}
-
-	if t := parseTimePtr(qp.Get("createdFrom")); t != nil {
-		query.CreatedFrom = t
-	}
-
-	if t := parseTimePtr(qp.Get("createdTo")); t != nil {
-		query.CreatedTo = t
-	}
-
-	if t := parseTimePtr(qp.Get("updatedFrom")); t != nil {
-		query.UpdatedFrom = t
-	}
-
-	if t := parseTimePtr(qp.Get("updatedTo")); t != nil {
-		query.UpdatedTo = t
+	query, err := buildListProductBlueprintCategoriesQuery(r.URL.Query())
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": err.Error(),
+		})
+		return
 	}
 
 	result, err := h.uc.List(r.Context(), query)
@@ -216,13 +170,8 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]ProductBlueprintCategoryResponse, 0, len(result.Items))
-	for _, item := range result.Items {
-		items = append(items, toResponse(item))
-	}
-
 	writeJSON(w, http.StatusOK, ProductBlueprintCategoryListResponse{
-		Items:      items,
+		Items:      toProductBlueprintCategoryResponses(result.Items),
 		TotalCount: result.TotalCount,
 		TotalPages: result.TotalPages,
 		Page:       result.Page,
@@ -237,40 +186,148 @@ func (h *Handler) listTree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out := make([]ProductBlueprintCategoryResponse, 0, len(items))
-	for _, item := range items {
-		out = append(out, toResponse(item))
+	if len(items) == 0 {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "product blueprint category master is empty",
+		})
+		return
 	}
 
 	writeJSON(w, http.StatusOK, ProductBlueprintCategoryTreeResponse{
-		Items: out,
+		Items: toProductBlueprintCategoryResponses(items),
 	})
 }
 
 // ------------------------------------------------------------
-// Mapping
+// Query mapping
 // ------------------------------------------------------------
 
-func toResponse(
+func buildListProductBlueprintCategoriesQuery(
+	values url.Values,
+) (usecase.ListProductBlueprintCategoriesQuery, error) {
+	ids, err := parseCategoryIDs(values.Get("ids"))
+	if err != nil {
+		return usecase.ListProductBlueprintCategoriesQuery{}, err
+	}
+
+	rootOnly, err := parseOptionalBool("rootOnly", values.Get("rootOnly"))
+	if err != nil {
+		return usecase.ListProductBlueprintCategoriesQuery{}, err
+	}
+
+	sortOrder, err := parseOptionalSortOrder(values.Get("order"))
+	if err != nil {
+		return usecase.ListProductBlueprintCategoriesQuery{}, err
+	}
+
+	page, err := parseStrictPositiveInt("page", values.Get("page"), 1)
+	if err != nil {
+		return usecase.ListProductBlueprintCategoriesQuery{}, err
+	}
+
+	perPage, err := parseStrictPositiveInt("perPage", values.Get("perPage"), 20)
+	if err != nil {
+		return usecase.ListProductBlueprintCategoriesQuery{}, err
+	}
+
+	if perPage > 500 {
+		return usecase.ListProductBlueprintCategoriesQuery{},
+			errors.New("perPage must be less than or equal to 500")
+	}
+
+	createdFrom, err := parseOptionalTime("createdFrom", values.Get("createdFrom"))
+	if err != nil {
+		return usecase.ListProductBlueprintCategoriesQuery{}, err
+	}
+
+	createdTo, err := parseOptionalTime("createdTo", values.Get("createdTo"))
+	if err != nil {
+		return usecase.ListProductBlueprintCategoriesQuery{}, err
+	}
+
+	updatedFrom, err := parseOptionalTime("updatedFrom", values.Get("updatedFrom"))
+	if err != nil {
+		return usecase.ListProductBlueprintCategoriesQuery{}, err
+	}
+
+	updatedTo, err := parseOptionalTime("updatedTo", values.Get("updatedTo"))
+	if err != nil {
+		return usecase.ListProductBlueprintCategoriesQuery{}, err
+	}
+
+	if createdFrom != nil && createdTo != nil && createdFrom.After(*createdTo) {
+		return usecase.ListProductBlueprintCategoriesQuery{},
+			errors.New("createdFrom must not be after createdTo")
+	}
+
+	if updatedFrom != nil && updatedTo != nil && updatedFrom.After(*updatedTo) {
+		return usecase.ListProductBlueprintCategoriesQuery{},
+			errors.New("updatedFrom must not be after updatedTo")
+	}
+
+	query := usecase.ListProductBlueprintCategoriesQuery{
+		SearchQuery: values.Get("search"),
+		IDs:         ids,
+		RootOnly:    rootOnly,
+		CreatedFrom: createdFrom,
+		CreatedTo:   createdTo,
+		UpdatedFrom: updatedFrom,
+		UpdatedTo:   updatedTo,
+		SortColumn:  values.Get("sort"),
+		SortOrder:   sortOrder,
+		Page:        page,
+		PerPage:     perPage,
+	}
+
+	if value := values.Get("code"); value != "" {
+		query.Code = &value
+	}
+
+	if value := values.Get("kind"); value != "" {
+		query.Kind = &value
+	}
+
+	if value := values.Get("parentId"); value != "" {
+		query.ParentID = &value
+	}
+
+	return query, nil
+}
+
+// ------------------------------------------------------------
+// Response mapping
+// ------------------------------------------------------------
+
+func toProductBlueprintCategoryResponses(
+	categories []categorydom.ProductBlueprintCategory,
+) []ProductBlueprintCategoryResponse {
+	responses := make([]ProductBlueprintCategoryResponse, 0, len(categories))
+
+	for _, category := range categories {
+		responses = append(responses, toProductBlueprintCategoryResponse(category))
+	}
+
+	return responses
+}
+
+func toProductBlueprintCategoryResponse(
 	category categorydom.ProductBlueprintCategory,
 ) ProductBlueprintCategoryResponse {
 	var parentID *string
 	if category.ParentID != nil {
-		v := string(*category.ParentID)
-		parentID = &v
+		value := string(*category.ParentID)
+		parentID = &value
 	}
 
 	return ProductBlueprintCategoryResponse{
-		ID:       string(category.ID),
-		Code:     string(category.Code),
-		NameJa:   category.NameJa,
-		NameEn:   category.NameEn,
-		ParentID: parentID,
-		Path:     append([]string(nil), category.Path...),
-
+		ID:           string(category.ID),
+		Code:         string(category.Code),
+		NameJa:       category.NameJa,
+		NameEn:       category.NameEn,
+		ParentID:     parentID,
+		Path:         append([]string(nil), category.Path...),
 		Kind:         string(category.Kind),
 		DisplayOrder: category.DisplayOrder,
-
 		Attributes: CategoryAttributesResponse{
 			RequiresExpirationDate: category.Attributes.RequiresExpirationDate,
 			RequiresLotNumber:      category.Attributes.RequiresLotNumber,
@@ -279,14 +336,13 @@ func toResponse(
 			RequiresCosmeticNotice: category.Attributes.RequiresCosmeticNotice,
 			RequiresStorageMethod:  category.Attributes.RequiresStorageMethod,
 		},
-
 		CreatedAt: formatTime(category.CreatedAt),
 		UpdatedAt: formatTime(category.UpdatedAt),
 	}
 }
 
 // ------------------------------------------------------------
-// Helpers
+// Error handling
 // ------------------------------------------------------------
 
 func writeProductBlueprintCategoryErr(w http.ResponseWriter, err error) {
@@ -294,27 +350,26 @@ func writeProductBlueprintCategoryErr(w http.ResponseWriter, err error) {
 		return
 	}
 
-	code := http.StatusInternalServerError
+	statusCode := http.StatusInternalServerError
 
 	switch {
 	case errors.Is(err, categorydom.ErrNotFound):
-		code = http.StatusNotFound
+		statusCode = http.StatusNotFound
 
 	case errors.Is(err, categorydom.ErrConflict):
-		code = http.StatusConflict
+		statusCode = http.StatusConflict
 
 	case errors.Is(err, categorydom.ErrUnauthorized):
-		code = http.StatusUnauthorized
+		statusCode = http.StatusUnauthorized
 
 	case errors.Is(err, categorydom.ErrForbidden):
-		code = http.StatusForbidden
+		statusCode = http.StatusForbidden
 
-	case errors.Is(err, categorydom.ErrInvalid) ||
-		isCategoryValidationErr(err):
-		code = http.StatusBadRequest
+	case errors.Is(err, categorydom.ErrInvalid), isCategoryValidationErr(err):
+		statusCode = http.StatusBadRequest
 	}
 
-	writeJSON(w, code, map[string]string{
+	writeJSON(w, statusCode, map[string]string{
 		"error": err.Error(),
 	})
 }
@@ -341,69 +396,96 @@ func notFound(w http.ResponseWriter) {
 	})
 }
 
-func parseCSV(s string) []string {
-	if s == "" {
-		return nil
+// ------------------------------------------------------------
+// Query helpers
+// ------------------------------------------------------------
+
+func parseCategoryIDs(value string) ([]string, error) {
+	if value == "" {
+		return nil, nil
 	}
 
-	parts := strings.Split(s, ",")
-	out := make([]string, 0, len(parts))
+	parts := strings.Split(value, ",")
+	ids := make([]string, 0, len(parts))
 	seen := make(map[string]struct{}, len(parts))
 
-	for _, part := range parts {
-		if part == "" {
-			continue
+	for _, id := range parts {
+		if id == "" {
+			return nil, errors.New("ids must not contain an empty value")
 		}
 
-		if _, ok := seen[part]; ok {
-			continue
+		if _, exists := seen[id]; exists {
+			return nil, fmt.Errorf("ids contains a duplicate value: %s", id)
 		}
 
-		seen[part] = struct{}{}
-		out = append(out, part)
+		seen[id] = struct{}{}
+		ids = append(ids, id)
 	}
 
-	return out
+	return ids, nil
 }
 
-func parseBoolDefaultFalse(s string) bool {
-	switch s {
+func parseOptionalBool(name string, value string) (bool, error) {
+	switch value {
+	case "":
+		return false, nil
 	case "true":
-		return true
+		return true, nil
+	case "false":
+		return false, nil
 	default:
-		return false
+		return false, fmt.Errorf("%s must be true or false", name)
 	}
 }
 
-func parseSortOrder(s string) common.SortOrder {
-	switch s {
-	case string(common.SortDesc):
-		return common.SortDesc
+func parseOptionalSortOrder(value string) (common.SortOrder, error) {
+	switch value {
+	case "":
+		return "", nil
 	case string(common.SortAsc):
-		return common.SortAsc
+		return common.SortAsc, nil
+	case string(common.SortDesc):
+		return common.SortDesc, nil
 	default:
-		return ""
+		return "", errors.New("order must be asc or desc")
 	}
 }
 
-func parseTimePtr(s string) *time.Time {
-	if s == "" {
-		return nil
+func parseStrictPositiveInt(name string, value string, defaultValue int) (int, error) {
+	if value == "" {
+		return defaultValue, nil
 	}
 
-	t, err := time.Parse(time.RFC3339, s)
+	parsed, err := strconv.Atoi(value)
 	if err != nil {
-		return nil
+		return 0, fmt.Errorf("%s must be an integer", name)
 	}
 
-	utc := t.UTC()
-	return &utc
+	if parsed <= 0 {
+		return 0, fmt.Errorf("%s must be greater than zero", name)
+	}
+
+	return parsed, nil
 }
 
-func formatTime(t time.Time) string {
-	if t.IsZero() {
+func parseOptionalTime(name string, value string) (*time.Time, error) {
+	if value == "" {
+		return nil, nil
+	}
+
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return nil, fmt.Errorf("%s must be RFC3339: %w", name, err)
+	}
+
+	utc := parsed.UTC()
+	return &utc, nil
+}
+
+func formatTime(value time.Time) string {
+	if value.IsZero() {
 		return ""
 	}
 
-	return t.UTC().Format(time.RFC3339)
+	return value.UTC().Format(time.RFC3339)
 }
