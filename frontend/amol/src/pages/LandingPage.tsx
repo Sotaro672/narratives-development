@@ -84,6 +84,10 @@ const companyOverviewRows = [
     value: "30万円",
   },
   {
+    label: "電気通信事業届出番号",
+    value: "A-08-23960",
+  },
+  {
     label: "代表者",
     value: "奥岡 曹太朗",
   },
@@ -727,9 +731,6 @@ export default function LandingPage() {
                 <h3 className="landing-page-pricing-card__price">
                   4,990円/月～
                 </h3>
-
-                <p className="landing-page-pricing-card__badge">初月無料</p>
-
                 <p className="landing-page-pricing-card__text">
                   試験運用価格であり、今後金額が上下する可能性があります。
                 </p>
@@ -756,14 +757,6 @@ export default function LandingPage() {
 
                 <p className="landing-page-pricing-card__text">
                   AMOLモール上で商品が販売された場合に発生します。
-                </p>
-
-                <p className="landing-page-pricing-card__text price-plan-fee-card__description--emphasis">
-                  自社EC接続の場合は販売手数料をいただきません。
-                </p>
-
-                <p className="landing-page-pricing-card__text">
-                  自社ECとの接続工事費は別途相談させてください。
                 </p>
               </article>
             </div>
