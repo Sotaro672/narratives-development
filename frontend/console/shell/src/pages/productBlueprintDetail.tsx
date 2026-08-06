@@ -5,7 +5,6 @@ import * as React from "react";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
-import ProductBlueprintClassificationCard from "../features/productBlueprint/presentation/cards/classification/ProductBlueprintClassificationCard";
 import CategoryFieldsCard from "../features/productBlueprint/presentation/cards/categoryFields";
 import ColorVariationCard from "../features/model/presentation/components/ColorVariationCard";
 import SizeVariationCard from "../features/model/presentation/components/SizeVariationCard";
@@ -13,19 +12,13 @@ import ModelNumberCard from "../features/model/presentation/components/ModelNumb
 import VolumeCard from "../features/model/presentation/components/VolumeCard";
 import AlcoholModelNumberCard from "../features/model/presentation/components/AlcoholModelNumberCard";
 import LogCard from "../features/log/presentation/LogCard";
-
-import {
-  useProductBlueprintDetail,
-} from "../features/productBlueprint/presentation/hooks/detail/useProductBlueprintDetail";
-
+import { useProductBlueprintDetail } from "../features/productBlueprint/presentation/hooks/detail/useProductBlueprintDetail";
 import {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
   isApparelCategoryCode,
 } from "../shared/types/apparel";
 
-function shouldShowApparelVariationCards(
-  categoryCode: string,
-): boolean {
+function shouldShowApparelVariationCards(categoryCode: string): boolean {
   return (
     categoryCode === "apparel.tops" ||
     categoryCode === "apparel.bottoms" ||
@@ -35,9 +28,7 @@ function shouldShowApparelVariationCards(
   );
 }
 
-function shouldShowAlcoholVariationCards(
-  categoryCode: string,
-): boolean {
+function shouldShowAlcoholVariationCards(categoryCode: string): boolean {
   return (
     categoryCode === "alcohol.beer" ||
     categoryCode === "alcohol.sake" ||
@@ -86,11 +77,8 @@ export default function ProductBlueprintDetail() {
     createdAt,
     updater,
     updatedAt,
-
     printed,
-
     onBack,
-
     onSave,
     onDelete,
     onChangeProductName,
@@ -99,176 +87,101 @@ export default function ProductBlueprintDetail() {
     onAddColor,
     onRemoveColor,
     onChangeColorRgb,
-
     onAddSize,
     onRemoveSize,
     onChangeSize,
-
     onChangeModelNumber,
-
     onAddVolume,
     onRemoveVolume,
     onChangeVolume,
     onChangeAlcoholModelNumber,
-
     onClickAssignee,
-
     getCode,
   } = useProductBlueprintDetail();
 
-  const categoryCode =
-    String(
-      productBlueprintCategory?.code ?? "",
-    ).trim();
+  const categoryCode = String(productBlueprintCategory?.code ?? "").trim();
 
-  const measurementOptions =
-    isApparelCategoryCode(categoryCode)
-      ? APPAREL_CATEGORY_MEASUREMENT_OPTIONS[
-          categoryCode
-        ]
-      : undefined;
+  const measurementOptions = isApparelCategoryCode(categoryCode)
+    ? APPAREL_CATEGORY_MEASUREMENT_OPTIONS[categoryCode]
+    : undefined;
 
-  const showApparelVariationCards =
-    React.useMemo(
-      () =>
-        isApparelCategory &&
-        shouldShowApparelVariationCards(
-          categoryCode,
-        ),
-      [
-        isApparelCategory,
-        categoryCode,
-      ],
-    );
+  const showApparelVariationCards = React.useMemo(
+    () => isApparelCategory && shouldShowApparelVariationCards(categoryCode),
+    [isApparelCategory, categoryCode],
+  );
 
-  const showAlcoholVariationCards =
-    React.useMemo(
-      () =>
-        isAlcoholCategory &&
-        shouldShowAlcoholVariationCards(
-          categoryCode,
-        ),
-      [
-        isAlcoholCategory,
-        categoryCode,
-      ],
-    );
+  const showAlcoholVariationCards = React.useMemo(
+    () => isAlcoholCategory && shouldShowAlcoholVariationCards(categoryCode),
+    [isAlcoholCategory, categoryCode],
+  );
 
   const showCategoryOnlyMessage =
     Boolean(productBlueprintCategory) &&
     !showApparelVariationCards &&
     !showAlcoholVariationCards;
 
-  const [editMode, setEditMode] =
-    React.useState(false);
+  const [editMode, setEditMode] = React.useState(false);
 
-  const noop =
-    React.useCallback(
-      () => {},
-      [],
-    );
+  const noop = React.useCallback(() => {}, []);
+  const noopStr = React.useCallback((_value: string) => {}, []);
+  const noopColor = React.useCallback((_value: string) => {}, []);
 
-  const noopStr =
-    React.useCallback(
-      (_value: string) => {},
-      [],
-    );
+  const noopVolumePatch = React.useCallback(
+    (_id: string, _patch: Parameters<typeof onChangeVolume>[1]) => {},
+    [],
+  );
 
-  const noopColor =
-    React.useCallback(
-      (_value: string) => {},
-      [],
-    );
+  const noopAlcoholModelNumber = React.useCallback(
+    (_volumeLabel: string, _nextCode: string) => {},
+    [],
+  );
 
-  const noopVolumePatch =
-    React.useCallback(
-      (
-        _id: string,
-        _patch: Parameters<
-          typeof onChangeVolume
-        >[1],
-      ) => {},
-      [],
-    );
+  const handleSave = React.useCallback(() => {
+    onSave();
+    setEditMode(false);
+  }, [onSave]);
 
-  const noopAlcoholModelNumber =
-    React.useCallback(
-      (
-        _volumeLabel: string,
-        _nextCode: string,
-      ) => {},
-      [],
-    );
-
-  const handleSave =
-    React.useCallback(() => {
-      onSave();
-      setEditMode(false);
-    }, [onSave]);
-
-  const handleDelete =
-    React.useCallback(() => {
-      onDelete();
-    }, [onDelete]);
+  const handleDelete = React.useCallback(() => {
+    onDelete();
+  }, [onDelete]);
 
   React.useEffect(() => {
-    if (
-      printed &&
-      editMode
-    ) {
+    if (printed && editMode) {
       setEditMode(false);
     }
-  }, [
-    printed,
-    editMode,
-  ]);
+  }, [printed, editMode]);
 
-  const canEdit =
-    !printed;
+  const canEdit = !printed;
 
   return (
     <PageStyle
       layout="grid-2"
       title={pageTitle}
       onBack={onBack}
-      onSave={
-        editMode
-          ? handleSave
-          : undefined
-      }
-      onEdit={
-        !editMode && canEdit
-          ? () => setEditMode(true)
-          : undefined
-      }
-      onDelete={
-        editMode
-          ? handleDelete
-          : undefined
-      }
-      onCancel={
-        editMode
-          ? () => setEditMode(false)
-          : undefined
-      }
+      onSave={editMode ? handleSave : undefined}
+      onEdit={!editMode && canEdit ? () => setEditMode(true) : undefined}
+      onDelete={editMode ? handleDelete : undefined}
+      onCancel={editMode ? () => setEditMode(false) : undefined}
     >
-      <div>
+      <div className="space-y-4">
         <ProductBlueprintCard
-          mode={
-            editMode
-              ? "edit"
-              : "view"
-          }
+          mode={editMode ? "edit" : "view"}
           productName={productName}
+          brandId={brandId}
           brandName={brand}
-          productBlueprintCategory={
-            productBlueprintCategory
+          brandOptions={brandOptions}
+          brandLoading={brandLoading}
+          brandError={brandError}
+          onChangeBrandId={editMode ? onChangeBrandId : undefined}
+          productBlueprintCategoryId={productBlueprintCategoryId}
+          productBlueprintCategory={productBlueprintCategory}
+          productBlueprintCategoryOptions={productBlueprintCategoryOptions}
+          productBlueprintCategoryLoading={productBlueprintCategoryLoading}
+          productBlueprintCategoryError={productBlueprintCategoryError}
+          onChangeProductBlueprintCategory={
+            editMode ? onChangeProductBlueprintCategory : undefined
           }
-          onChangeProductName={
-            editMode
-              ? onChangeProductName
-              : undefined
-          }
+          onChangeProductName={editMode ? onChangeProductName : undefined}
         />
 
         {!productBlueprintCategory && (
@@ -280,104 +193,49 @@ export default function ProductBlueprintDetail() {
         {productBlueprintCategory && (
           <CategoryFieldsCard
             categoryCode={categoryCode}
-            categoryFields={
-              categoryFields
-            }
-            mode={
-              editMode
-                ? "edit"
-                : "view"
-            }
+            categoryFields={categoryFields}
+            mode={editMode ? "edit" : "view"}
             onChangeCategoryField={
-              editMode
-                ? onChangeCategoryField
-                : undefined
+              editMode ? onChangeCategoryField : undefined
             }
           />
         )}
 
         {showCategoryOnlyMessage && (
           <p className="mt-2 text-xs text-slate-500">
-            選択中の商品カテゴリ:{" "}
-            {productBlueprintCategoryLabel}
+            選択中の商品カテゴリ: {productBlueprintCategoryLabel}
           </p>
         )}
 
         {showApparelVariationCards && (
           <>
             <ColorVariationCard
-              mode={
-                editMode
-                  ? "edit"
-                  : "view"
-              }
+              mode={editMode ? "edit" : "view"}
               colors={colors}
               colorInput={colorInput}
-              colorRgbMap={
-                colorRgbMap
-              }
-              onChangeColorInput={
-                editMode
-                  ? onChangeColorInput
-                  : noopStr
-              }
-              onAddColor={
-                editMode
-                  ? onAddColor
-                  : noop
-              }
-              onRemoveColor={
-                editMode
-                  ? onRemoveColor
-                  : noopColor
-              }
-              onChangeColorRgb={
-                editMode
-                  ? onChangeColorRgb
-                  : undefined
-              }
+              colorRgbMap={colorRgbMap}
+              onChangeColorInput={editMode ? onChangeColorInput : noopStr}
+              onAddColor={editMode ? onAddColor : noop}
+              onRemoveColor={editMode ? onRemoveColor : noopColor}
+              onChangeColorRgb={editMode ? onChangeColorRgb : undefined}
             />
 
             <SizeVariationCard
-              mode={
-                editMode
-                  ? "edit"
-                  : "view"
-              }
+              mode={editMode ? "edit" : "view"}
               sizes={sizes}
-              measurementOptions={
-                measurementOptions
-              }
-              onAddSize={
-                editMode
-                  ? onAddSize
-                  : undefined
-              }
-              onRemove={
-                editMode
-                  ? onRemoveSize
-                  : noop
-              }
-              onChangeSize={
-                editMode
-                  ? onChangeSize
-                  : undefined
-              }
+              measurementOptions={measurementOptions}
+              onAddSize={editMode ? onAddSize : undefined}
+              onRemove={editMode ? onRemoveSize : noop}
+              onChangeSize={editMode ? onChangeSize : undefined}
             />
 
             <ModelNumberCard
-              mode={
-                editMode
-                  ? "edit"
-                  : "view"
-              }
+              mode={editMode ? "edit" : "view"}
               sizes={sizes}
               colors={colors}
               getCode={getCode}
               onChangeModelNumber={
-                editMode
-                  ? onChangeModelNumber
-                  : undefined
+                editMode ? onChangeModelNumber : undefined
               }
             />
           </>
@@ -386,39 +244,17 @@ export default function ProductBlueprintDetail() {
         {showAlcoholVariationCards && (
           <>
             <VolumeCard
-              mode={
-                editMode
-                  ? "edit"
-                  : "view"
-              }
+              mode={editMode ? "edit" : "view"}
               volumes={volumes}
-              onAddVolume={
-                editMode
-                  ? onAddVolume
-                  : undefined
-              }
-              onRemoveVolume={
-                editMode
-                  ? onRemoveVolume
-                  : undefined
-              }
-              onChangeVolume={
-                editMode
-                  ? onChangeVolume
-                  : noopVolumePatch
-              }
+              onAddVolume={editMode ? onAddVolume : undefined}
+              onRemoveVolume={editMode ? onRemoveVolume : undefined}
+              onChangeVolume={editMode ? onChangeVolume : noopVolumePatch}
             />
 
             <AlcoholModelNumberCard
-              mode={
-                editMode
-                  ? "edit"
-                  : "view"
-              }
+              mode={editMode ? "edit" : "view"}
               volumes={volumes}
-              modelNumbers={
-                alcoholModelNumbers
-              }
+              modelNumbers={alcoholModelNumbers}
               onChangeModelNumber={
                 editMode
                   ? onChangeAlcoholModelNumber
@@ -437,54 +273,8 @@ export default function ProductBlueprintDetail() {
           createdAt={createdAt}
           updatedByName={updater}
           updatedAt={updatedAt}
-          mode={
-            editMode
-              ? "edit"
-              : "view"
-          }
-          onClickAssignee={
-            editMode
-              ? onClickAssignee
-              : noop
-          }
-        />
-
-        <ProductBlueprintClassificationCard
-          mode={
-            editMode
-              ? "edit"
-              : "view"
-          }
-          brandId={brandId}
-          brandName={brand}
-          brandOptions={brandOptions}
-          brandLoading={brandLoading}
-          brandError={brandError}
-          onChangeBrandId={
-            editMode
-              ? onChangeBrandId
-              : undefined
-          }
-          productBlueprintCategoryId={
-            productBlueprintCategoryId
-          }
-          productBlueprintCategory={
-            productBlueprintCategory
-          }
-          productBlueprintCategoryOptions={
-            productBlueprintCategoryOptions
-          }
-          productBlueprintCategoryLoading={
-            productBlueprintCategoryLoading
-          }
-          productBlueprintCategoryError={
-            productBlueprintCategoryError
-          }
-          onChangeProductBlueprintCategory={
-            editMode
-              ? onChangeProductBlueprintCategory
-              : undefined
-          }
+          mode={editMode ? "edit" : "view"}
+          onClickAssignee={editMode ? onClickAssignee : noop}
         />
 
         <LogCard />

@@ -2,21 +2,28 @@
 
 import * as React from "react";
 import { Package2 } from "lucide-react";
+
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "../../../../../shared/ui";
-import { Input } from "../../../../../shared/ui/input";
 
 import type {
   CategoryFieldValues,
   ProductBlueprintCategorySnapshot,
 } from "../../../domain/productBlueprintCategory";
 
+import ProductBlueprintBrandField, {
+  type BrandOption,
+} from "../classification/ProductBlueprintBrandField";
+
+import ProductBlueprintCategoryField, {
+  type ProductBlueprintCategoryOption,
+} from "../classification/ProductBlueprintCategoryField";
+
 import ProductBlueprintBasicFields from "./ProductBlueprintBasicFields";
-import { resolveProductBlueprintCategoryLabel } from "../classification/ProductBlueprintCategoryField";
 
 export type ProductBlueprintPatchInput = {
   productName?: string | null;
@@ -40,53 +47,31 @@ export type ProductBlueprintCardProps = {
 
   productName?: string;
 
-  /**
-   * 閲覧モードでは左カラムの基本情報カードに表示する。
-   * 編集モードでは右カラム/ブランドカード側で表示する。
-   */
+  brandId?: string;
   brandName?: string;
+  brandOptions?: BrandOption[];
+  brandLoading?: boolean;
+  brandError?: Error | null;
+  onChangeBrandId?: (id: string) => void;
 
-  /**
-   * 編集モードでは、子カテゴリまで選択された場合のみこのカードを表示する。
-   * 閲覧モードでは既存画面への影響を避けるため、未設定でもカード表示する。
-   */
+  productBlueprintCategoryId?: string;
   productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+  productBlueprintCategoryOptions?: ProductBlueprintCategoryOption[];
+  productBlueprintCategoryLoading?: boolean;
+  productBlueprintCategoryError?: Error | null;
+  onChangeProductBlueprintCategory?: (
+    category: ProductBlueprintCategorySnapshot | null,
+  ) => void;
 
-  onChangeProductName?: (v: string) => void;
+  onChangeProductName?: (value: string) => void;
 
   mode?: "edit" | "view";
 };
 
-function hasText(value: unknown): boolean {
-  return String(value ?? "").trim() !== "";
-}
-
-function getCategoryPath(
-  category: ProductBlueprintCategorySnapshot | null | undefined,
-): string[] {
-  return Array.isArray(category?.path)
-    ? category.path.map((item) => String(item ?? "").trim()).filter(Boolean)
-    : [];
-}
-
-function isChildCategory(
-  category: ProductBlueprintCategorySnapshot | null | undefined,
-): boolean {
-  if (!category) {
-    return false;
-  }
-
-  if (hasText(category.parentId)) {
-    return true;
-  }
-
-  return getCategoryPath(category).length > 1;
-}
-
 function resolveCardTitle(
   category: ProductBlueprintCategorySnapshot | null | undefined,
 ): string {
-  const kind = String(category?.kind ?? "").trim();
+  const kind = category?.kind ?? "";
 
   if (kind === "apparel") {
     return "基本情報（衣類）";
@@ -115,9 +100,20 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   productBlueprintPatch,
 
   productName,
-  brandName,
 
+  brandId,
+  brandName,
+  brandOptions,
+  brandLoading,
+  brandError,
+  onChangeBrandId,
+
+  productBlueprintCategoryId,
   productBlueprintCategory,
+  productBlueprintCategoryOptions,
+  productBlueprintCategoryLoading,
+  productBlueprintCategoryError,
+  onChangeProductBlueprintCategory,
 
   onChangeProductName,
 
@@ -126,64 +122,98 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   const isEdit = mode === "edit";
 
   const mergedProductName =
-    productName ?? productBlueprintPatch?.productName ?? "";
+    productName ??
+    productBlueprintPatch?.productName ??
+    "";
 
-  const mergedBrandName = brandName ?? productBlueprintPatch?.brandName ?? "";
+  const mergedBrandId =
+    brandId ??
+    productBlueprintPatch?.brandId ??
+    "";
 
-  const mergedCategory =
+  const mergedBrandName =
+    brandName ??
+    productBlueprintPatch?.brandName ??
+    "";
+
+  const mergedProductBlueprintCategoryId =
+    productBlueprintCategoryId ??
+    productBlueprintPatch?.productBlueprintCategoryId ??
+    "";
+
+  const mergedProductBlueprintCategory =
     productBlueprintCategory ??
     productBlueprintPatch?.productBlueprintCategory ??
     null;
 
-  /**
-   * 編集モードでは、親カテゴリだけ選択された状態では基本情報カードを出さない。
-   * 子カテゴリまで確定したら表示する。
-   *
-   * 閲覧モードは既存の detail / inventory / production / mintRequest 画面への影響を避けるため、
-   * category が無くても表示する。
-   */
-  if (isEdit && !isChildCategory(mergedCategory)) {
-    return null;
-  }
-
-  const mergedCategoryLabel =
-    resolveProductBlueprintCategoryLabel(mergedCategory);
-
-  const cardTitle = resolveCardTitle(mergedCategory);
+  const cardTitle = resolveCardTitle(
+    mergedProductBlueprintCategory,
+  );
 
   return (
-    <Card className={`pbc ${!isEdit ? "view-mode" : ""}`}>
+    <Card
+      className={`pbc ${
+        !isEdit
+          ? "view-mode"
+          : ""
+      }`}
+    >
       <CardHeader className="box__header">
         <Package2 size={16} />
-        <CardTitle className="box__title">{cardTitle}</CardTitle>
+
+        <CardTitle className="box__title">
+          {cardTitle}
+        </CardTitle>
       </CardHeader>
 
       <CardContent className="box__body">
         <ProductBlueprintBasicFields
           productName={mergedProductName}
           mode={mode}
-          onChangeProductName={onChangeProductName}
+          onChangeProductName={
+            isEdit
+              ? onChangeProductName
+              : undefined
+          }
         />
 
-        {!isEdit && (
-          <>
-            <div className="label">ブランド</div>
-            <Input
-              value={mergedBrandName}
-              variant="readonly"
-              readOnly
-              aria-label="ブランド"
-            />
+        <ProductBlueprintBrandField
+          brandId={mergedBrandId}
+          brandName={mergedBrandName}
+          brandOptions={brandOptions}
+          brandLoading={brandLoading}
+          brandError={brandError}
+          mode={mode}
+          onChangeBrandId={
+            isEdit
+              ? onChangeBrandId
+              : undefined
+          }
+        />
 
-            <div className="label">商品カテゴリ</div>
-            <Input
-              value={mergedCategoryLabel}
-              variant="readonly"
-              readOnly
-              aria-label="商品カテゴリ"
-            />
-          </>
-        )}
+        <ProductBlueprintCategoryField
+          categoryId={
+            mergedProductBlueprintCategoryId
+          }
+          category={
+            mergedProductBlueprintCategory
+          }
+          categoryOptions={
+            productBlueprintCategoryOptions
+          }
+          categoryLoading={
+            productBlueprintCategoryLoading
+          }
+          categoryError={
+            productBlueprintCategoryError
+          }
+          mode={mode}
+          onChangeCategory={
+            isEdit
+              ? onChangeProductBlueprintCategory
+              : undefined
+          }
+        />
       </CardContent>
     </Card>
   );
