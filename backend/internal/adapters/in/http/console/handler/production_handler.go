@@ -279,6 +279,10 @@ func writeProductionErr(w http.ResponseWriter, err error) {
 		code = http.StatusBadRequest
 	} else if errors.Is(err, productiondom.ErrInvalidCreatedAt) {
 		code = http.StatusBadRequest
+	} else if errors.Is(err, productiondom.ErrNotFound) {
+		code = http.StatusNotFound
+	} else if errors.Is(err, productiondom.ErrConflict) {
+		code = http.StatusConflict
 	}
 
 	w.WriteHeader(code)

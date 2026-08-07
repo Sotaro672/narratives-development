@@ -19,6 +19,10 @@ import {
 } from "../../application/detail/index";
 
 import {
+  ProductionRepositoryHTTP,
+} from "../../infrastructure/http/productionRepositoryHTTP";
+
+import {
   getProductBlueprintDetail,
 } from "../../../productBlueprint/application/productBlueprintDetailService";
 
@@ -68,9 +72,6 @@ export function useProductionDetail() {
       null,
     );
 
-  // ======================================================
-  // 画面全体のモード（view / edit）
-  // ======================================================
   const [
     mode,
     setMode,
@@ -85,7 +86,6 @@ export function useProductionDetail() {
   const isEditMode =
     mode === "edit";
 
-  // printed=true（印刷済）のときは編集不可
   const canEdit =
     production?.printed !== true;
 
@@ -109,7 +109,6 @@ export function useProductionDetail() {
       [canEdit],
     );
 
-  // AdminCard用モード
   const adminMode:
     | "view"
     | "edit" =
@@ -118,6 +117,12 @@ export function useProductionDetail() {
   const [
     loading,
     setLoading,
+  ] =
+    React.useState(false);
+
+  const [
+    deleting,
+    setDeleting,
   ] =
     React.useState(false);
 
@@ -162,7 +167,6 @@ export function useProductionDetail() {
       >
     >({});
 
-  // 画面stateと返却値はVMを正にする
   const [
     quantityRows,
     setQuantityRows,
@@ -345,7 +349,6 @@ export function useProductionDetail() {
 
   // ======================================================
   // production.Models × modelIndex → quantityRows
-  // BackendレスポンスのPascalCaseを正とする
   // ======================================================
   React.useEffect(() => {
     const raw =
@@ -372,7 +375,7 @@ export function useProductionDetail() {
   ]);
 
   // ======================================================
-  // 保存処理（quantity + assigneeId）
+  // 保存処理
   // ======================================================
   const onSave =
     React.useCallback(
@@ -428,6 +431,56 @@ export function useProductionDetail() {
     );
 
   // ======================================================
+  // 削除処理
+  // ======================================================
+  const onDelete =
+    React.useCallback(
+      async () => {
+        if (
+          !productionId ||
+          !production ||
+          deleting
+        ) {
+          return;
+        }
+
+        if (production.printed === true) {
+          alert(
+            "印刷済みの生産は削除できません。",
+          );
+          return;
+        }
+
+        try {
+          setDeleting(true);
+
+          const repository =
+            new ProductionRepositoryHTTP();
+
+          await repository.delete(
+            productionId,
+          );
+
+          navigate(
+            "/production",
+          );
+        } catch {
+          alert(
+            "生産情報の削除に失敗しました。",
+          );
+        } finally {
+          setDeleting(false);
+        }
+      },
+      [
+        productionId,
+        production,
+        deleting,
+        navigate,
+      ],
+    );
+
+  // ======================================================
   // 戻る
   // ======================================================
   const handleBack =
@@ -452,6 +505,8 @@ export function useProductionDetail() {
     onBack:
       handleBack,
     onSave,
+    onDelete,
+    deleting,
 
     productionId:
       productionId ??

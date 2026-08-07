@@ -1,3 +1,4 @@
+// backend\internal\application\usecase\production_usecase.go
 package usecase
 
 import (
@@ -165,6 +166,19 @@ func (u *ProductionUsecase) Delete(ctx context.Context, id string) error {
 	if id == "" {
 		return productiondom.ErrInvalidID
 	}
+
+	current, err := u.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if current == nil {
+		return productiondom.ErrNotFound
+	}
+
+	if current.Printed {
+		return productiondom.ErrConflict
+	}
+
 	return u.repo.Delete(ctx, id)
 }
 

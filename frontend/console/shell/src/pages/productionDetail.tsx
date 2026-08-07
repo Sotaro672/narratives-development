@@ -39,6 +39,8 @@ export default function ProductionDetail() {
     // 戻る
     onBack,
     onSave,
+    onDelete,
+    deleting,
 
     // データ関連
     productionId,
@@ -112,9 +114,22 @@ export default function ProductionDetail() {
     void onSave();
   }, [onSave]);
 
-  const handleDelete = React.useCallback(() => {
-    // TODO: 削除処理
-  }, []);
+  const handleDelete = React.useCallback(async () => {
+    if (isPrinted) {
+      window.alert(
+        "印刷済みの生産は削除できません。",
+      );
+      return;
+    }
+
+    const ok = window.confirm(
+      "この生産情報を削除します。\nこの操作は取り消せません。",
+    );
+
+    if (!ok) return;
+
+    await onDelete();
+  }, [isPrinted, onDelete]);
 
   // ==========================
   // 印刷ボタン押下時処理
@@ -155,7 +170,13 @@ export default function ProductionDetail() {
         onBack={handleBack}
         // printed:true の場合は編集ボタン（onEdit）を非表示
         onEdit={isViewMode && canEdit ? handleEnterEdit : undefined}
-        onDelete={isEditMode ? handleDelete : undefined}
+        onDelete={
+          isEditMode &&
+          canEdit &&
+          !deleting
+            ? handleDelete
+            : undefined
+        }
         onCancel={isEditMode ? handleCancelEdit : undefined}
         onSave={isEditMode ? handleSave : undefined}
       >
