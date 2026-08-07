@@ -1,7 +1,5 @@
 // frontend/console/shell/src/features/productBlueprint/presentation/hooks/shared/useBrandOptions.ts
-
 import * as React from "react";
-
 import { listBrands } from "../../../../brand/application/brandService";
 
 export type BrandOption = {
@@ -17,13 +15,11 @@ export type UseBrandOptionsArgs = {
    * BackendへのQuery Parameterとしては送信しない。
    */
   companyId?: string | null;
-
   /**
    * 詳細に設定されているbrandId。
    * 表示名解決のfallbackに使用する。
    */
   brandId?: string | null;
-
   /**
    * Service側で解決済みのbrandName。
    * 値がある場合は最優先で使用する。
@@ -35,7 +31,6 @@ export type UseBrandOptionsResult = {
   brandOptions: BrandOption[];
   brandLoading: boolean;
   brandError: Error | null;
-
   /**
    * 表示用ブランド名。
    *
@@ -43,34 +38,22 @@ export type UseBrandOptionsResult = {
    * なければbrandOptionsからbrandIdに対応する名前を取得する。
    */
   resolvedBrandName: string;
-
   /**
    * brandIdに対応するブランド名を返す。
    */
   getBrandNameById: (id: string) => string;
 };
 
-export function useBrandOptions(
-  args: UseBrandOptionsArgs,
-): UseBrandOptionsResult {
+export function useBrandOptions(args: UseBrandOptionsArgs): UseBrandOptionsResult {
   const companyId = String(args.companyId ?? "");
   const brandId = String(args.brandId ?? "");
-  const brandNameFromService = String(
-    args.brandNameFromService ?? "",
-  );
-
-  const [brandOptions, setBrandOptions] =
-    React.useState<BrandOption[]>([]);
-
-  const [brandLoading, setBrandLoading] =
-    React.useState(false);
-
-  const [brandError, setBrandError] =
-    React.useState<Error | null>(null);
+  const brandNameFromService = String(args.brandNameFromService ?? "");
+  const [brandOptions, setBrandOptions] = React.useState<BrandOption[]>([]);
+  const [brandLoading, setBrandLoading] = React.useState(false);
+  const [brandError, setBrandError] = React.useState<Error | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
-
     const loadBrandOptions = async () => {
       if (!companyId) {
         setBrandOptions([]);
@@ -78,30 +61,20 @@ export function useBrandOptions(
         setBrandError(null);
         return;
       }
-
       try {
         setBrandLoading(true);
         setBrandError(null);
-
         const brands = await listBrands();
-
-        const options: BrandOption[] = brands.map(
-          (brand) => ({
-            id: brand.id,
-            name: brand.name,
-          }),
-        );
-
+        const options: BrandOption[] = brands.map((brand) => ({
+          id: brand.id,
+          name: brand.name,
+        }));
         if (!cancelled) {
           setBrandOptions(options);
         }
       } catch (error: unknown) {
         if (!cancelled) {
-          const normalizedError =
-            error instanceof Error
-              ? error
-              : new Error(String(error));
-
+          const normalizedError = error instanceof Error ? error : new Error(String(error));
           setBrandError(normalizedError);
           setBrandOptions([]);
         }
@@ -111,9 +84,7 @@ export function useBrandOptions(
         }
       }
     };
-
     void loadBrandOptions();
-
     return () => {
       cancelled = true;
     };
@@ -122,37 +93,23 @@ export function useBrandOptions(
   const getBrandNameById = React.useCallback(
     (id: string): string => {
       const brandIdToFind = String(id ?? "");
-
       if (!brandIdToFind) {
         return "";
       }
-
-      return (
-        brandOptions.find(
-          (option) =>
-            option.id === brandIdToFind,
-        )?.name ?? ""
-      );
+      return brandOptions.find((option) => option.id === brandIdToFind)?.name ?? "";
     },
     [brandOptions],
   );
 
-  const resolvedBrandName =
-    React.useMemo(() => {
-      if (brandNameFromService) {
-        return brandNameFromService;
-      }
-
-      if (!brandId) {
-        return "";
-      }
-
-      return getBrandNameById(brandId);
-    }, [
-      brandNameFromService,
-      brandId,
-      getBrandNameById,
-    ]);
+  const resolvedBrandName = React.useMemo(() => {
+    if (brandNameFromService) {
+      return brandNameFromService;
+    }
+    if (!brandId) {
+      return "";
+    }
+    return getBrandNameById(brandId);
+  }, [brandNameFromService, brandId, getBrandNameById]);
 
   return {
     brandOptions,
