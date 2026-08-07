@@ -154,11 +154,6 @@ func buildUsecases(
 		},
 	)
 
-	listUC := uc.NewListUsecase(
-		r.listRepoFS,
-		r.listImageRecordRepo,
-	)
-
 	listSaveOperationStorage, err :=
 		firebaseadp.NewListSaveOperationStorageFromEnv(
 			ctx,
@@ -166,6 +161,12 @@ func buildUsecases(
 	if err != nil {
 		return nil, err
 	}
+
+	listUC := uc.NewListUsecase(
+		r.listRepoFS,
+		r.listImageRecordRepo,
+		listSaveOperationStorage,
+	)
 
 	listSaveOperationRetryQueue, err :=
 		listcloudtasksadp.NewListSaveOperationQueueFromEnv(
@@ -264,6 +265,7 @@ func buildUsecases(
 	baseURL := os.Getenv(
 		"ARWEAVE_BASE_URL",
 	)
+
 	apiKey := os.Getenv(
 		"IRYS_SERVICE_API_KEY",
 	)

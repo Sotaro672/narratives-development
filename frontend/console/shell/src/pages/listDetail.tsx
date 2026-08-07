@@ -40,7 +40,16 @@ export default function ListDetail() {
       layout="grid-2"
       title={headerTitle}
       onBack={onBackToListManagement}
-      onEdit={!isEdit ? vm.onEdit : undefined}
+      onEdit={
+        !isEdit && !vm.deleting
+          ? vm.onEdit
+          : undefined
+      }
+      onDelete={
+        !isEdit && !vm.deleting
+          ? vm.onDelete
+          : undefined
+      }
       onCancel={isEdit ? vm.onCancel : undefined}
       onSave={isEdit ? vm.onSave : undefined}
       onCreate={undefined}
@@ -55,6 +64,18 @@ export default function ListDetail() {
         {vm.error && (
           <div className="text-sm text-red-600">
             読み込みに失敗しました: {vm.error}
+          </div>
+        )}
+
+        {!isEdit && vm.deleteError && (
+          <div className="text-sm text-red-600">
+            削除に失敗しました: {vm.deleteError}
+          </div>
+        )}
+
+        {!isEdit && vm.deleting && (
+          <div className="text-xs text-[hsl(var(--muted-foreground))]">
+            削除中...
           </div>
         )}
 

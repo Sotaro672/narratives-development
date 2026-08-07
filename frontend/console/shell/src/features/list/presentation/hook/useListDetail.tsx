@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/list/presentation/hook/useListDetail.tsx
 
 import * as React from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import type { PriceRow } from "../../../inventory/application/listCreate/listCreateService";
 
@@ -22,6 +22,7 @@ import type { ListDetailSavePayload } from "../../application/listDetail/listDet
 import type { ListStatus } from "../../../../shared/types/list";
 
 import {
+  deleteListDetail,
   deriveListDetail,
   loadListDetailDTO,
   resolveListDetailParams,
@@ -40,9 +41,13 @@ export type UseListDetailResult = {
   saving: boolean;
   saveError: string;
 
+  deleting: boolean;
+  deleteError: string;
+
   isEdit: boolean;
   onEdit: () => void;
   onCancel: () => void;
+  onDelete: () => Promise<void>;
 
   onSave: (
     payload?: ListDetailSavePayload,
@@ -52,14 +57,10 @@ export type UseListDetailResult = {
   description: string;
 
   draftListingTitle: string;
-  setDraftListingTitle: React.Dispatch<
-    React.SetStateAction<string>
-  >;
+  setDraftListingTitle: React.Dispatch<React.SetStateAction<string>>;
 
   draftDescription: string;
-  setDraftDescription: React.Dispatch<
-    React.SetStateAction<string>
-  >;
+  setDraftDescription: React.Dispatch<React.SetStateAction<string>>;
 
   status: ListStatus | "";
   draftStatus: ListStatus;
@@ -86,9 +87,7 @@ export type UseListDetailResult = {
   onClearImages: () => void;
 
   mainImageIndex: number;
-  setMainImageIndex: React.Dispatch<
-    React.SetStateAction<number>
-  >;
+  setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
 
   priceRows: PriceRow[];
   draftPriceRows: PriceRow[];
@@ -126,12 +125,12 @@ function clonePriceRows(
   }));
 }
 
-export function useListDetail():
-  UseListDetailResult {
+export function useListDetail(): UseListDetailResult {
   const params =
-    useParams<
-      ListDetailRouteParams
-    >();
+    useParams<ListDetailRouteParams>();
+
+  const navigate =
+    useNavigate();
 
   const {
     user,
@@ -154,26 +153,19 @@ export function useListDetail():
     dto,
     setDTO,
   ] =
-    React.useState<
-      ListDetailDTO |
-      null
-    >(null);
+    React.useState<ListDetailDTO | null>(null);
 
   const [
     loading,
     setLoading,
   ] =
-    React.useState(
-      false,
-    );
+    React.useState(false);
 
   const [
     error,
     setError,
   ] =
-    React.useState(
-      "",
-    );
+    React.useState("");
 
   const cancelledRef =
     useCancelledRef();
@@ -182,17 +174,13 @@ export function useListDetail():
     React.useCallback(
       async () => {
         const id =
-          String(
-            listId ?? "",
-          ).trim();
+          String(listId ?? "").trim();
 
         if (!id) {
           setDTO(null);
-
           setError(
             "listId がありません（ルートパラメータを確認してください）。",
           );
-
           return;
         }
 
@@ -205,26 +193,19 @@ export function useListDetail():
               listId: id,
             });
 
-          if (
-            cancelledRef.current
-          ) {
+          if (cancelledRef.current) {
             return;
           }
 
           setDTO(data);
-        } catch (
-          caughtError
-        ) {
-          if (
-            cancelledRef.current
-          ) {
+        } catch (caughtError) {
+          if (cancelledRef.current) {
             return;
           }
 
           setError(
             String(
-              caughtError
-                instanceof Error
+              caughtError instanceof Error
                 ? caughtError.message
                 : caughtError,
             ),
@@ -232,9 +213,7 @@ export function useListDetail():
 
           setDTO(null);
         } finally {
-          if (
-            cancelledRef.current
-          ) {
+          if (cancelledRef.current) {
             return;
           }
 
@@ -254,9 +233,7 @@ export function useListDetail():
   const derived =
     React.useMemo(
       () =>
-        deriveListDetail<
-          PriceRow
-        >(dto),
+        deriveListDetail<PriceRow>(dto),
       [dto],
     );
 
@@ -300,33 +277,25 @@ export function useListDetail():
     isEdit,
     setIsEdit,
   ] =
-    React.useState(
-      false,
-    );
+    React.useState(false);
 
   const [
     draftListingTitle,
     setDraftListingTitle,
   ] =
-    React.useState(
-      listingTitle,
-    );
+    React.useState(listingTitle);
 
   const [
     draftDescription,
     setDraftDescription,
   ] =
-    React.useState(
-      description,
-    );
+    React.useState(description);
 
   const [
     draftPriceRows,
     setDraftPriceRows,
   ] =
-    React.useState<
-      PriceRow[]
-    >(
+    React.useState<PriceRow[]>(
       clonePriceRows(
         viewPriceRows,
       ),
@@ -336,9 +305,7 @@ export function useListDetail():
     draftStatus,
     setDraftStatus,
   ] =
-    React.useState<
-      ListStatus
-    >(
+    React.useState<ListStatus>(
       statusForEdit,
     );
 
@@ -346,25 +313,31 @@ export function useListDetail():
     draftAssigneeId,
     setDraftAssigneeId,
   ] =
-    React.useState(
-      assigneeId,
-    );
+    React.useState(assigneeId);
 
   const [
     saving,
     setSaving,
   ] =
-    React.useState(
-      false,
-    );
+    React.useState(false);
 
   const [
     saveError,
     setSaveError,
   ] =
-    React.useState(
-      "",
-    );
+    React.useState("");
+
+  const [
+    deleting,
+    setDeleting,
+  ] =
+    React.useState(false);
+
+  const [
+    deleteError,
+    setDeleteError,
+  ] =
+    React.useState("");
 
   const images =
     useListImages({
@@ -422,11 +395,17 @@ export function useListDetail():
   const onEdit =
     React.useCallback(
       () => {
+        if (deleting) {
+          return;
+        }
+
         resetDraftFromView();
         setSaveError("");
+        setDeleteError("");
         setIsEdit(true);
       },
       [
+        deleting,
         resetDraftFromView,
       ],
     );
@@ -438,11 +417,88 @@ export function useListDetail():
 
         resetDraftFromView();
         setSaveError("");
+        setDeleteError("");
         setIsEdit(false);
       },
       [
         images.releaseDraftBlobUrls,
         resetDraftFromView,
+      ],
+    );
+
+  const onDelete =
+    React.useCallback(
+      async () => {
+        const id =
+          String(listId ?? "").trim();
+
+        if (!id) {
+          setDeleteError(
+            "invalid_list_id",
+          );
+          return;
+        }
+
+        if (
+          isEdit ||
+          saving ||
+          deleting
+        ) {
+          return;
+        }
+
+        const confirmed =
+          window.confirm(
+            "この出品を削除しますか？削除後は元に戻せません。",
+          );
+
+        if (!confirmed) {
+          return;
+        }
+
+        setDeleting(true);
+        setDeleteError("");
+
+        try {
+          await deleteListDetail(id);
+
+          if (cancelledRef.current) {
+            return;
+          }
+
+          navigate(
+            "/list",
+            {
+              replace: true,
+            },
+          );
+        } catch (caughtError) {
+          if (cancelledRef.current) {
+            return;
+          }
+
+          setDeleteError(
+            String(
+              caughtError instanceof Error
+                ? caughtError.message
+                : caughtError,
+            ),
+          );
+        } finally {
+          if (cancelledRef.current) {
+            return;
+          }
+
+          setDeleting(false);
+        }
+      },
+      [
+        listId,
+        isEdit,
+        saving,
+        deleting,
+        cancelledRef,
+        navigate,
       ],
     );
 
@@ -482,9 +538,7 @@ export function useListDetail():
         }
 
         setDraftAssigneeId(
-          String(
-            id ?? "",
-          ).trim(),
+          String(id ?? "").trim(),
         );
       },
       [
@@ -510,9 +564,7 @@ export function useListDetail():
     mainImageIndex,
     setMainImageIndex,
   ] =
-    React.useState(
-      0,
-    );
+    React.useState(0);
 
   useMainImageIndexGuard({
     imageUrls:
@@ -556,15 +608,16 @@ export function useListDetail():
           ListDetailSavePayload,
       ) => {
         const id =
-          String(
-            listId ?? "",
-          ).trim();
+          String(listId ?? "").trim();
 
         if (!id) {
           setSaveError(
             "invalid_list_id",
           );
+          return;
+        }
 
+        if (deleting) {
           return;
         }
 
@@ -586,6 +639,7 @@ export function useListDetail():
 
         setSaving(true);
         setSaveError("");
+        setDeleteError("");
 
         try {
           const result =
@@ -619,9 +673,7 @@ export function useListDetail():
               mainImageIndex,
             });
 
-          if (
-            cancelledRef.current
-          ) {
+          if (cancelledRef.current) {
             return;
           }
 
@@ -634,27 +686,20 @@ export function useListDetail():
           setIsEdit(
             false,
           );
-        } catch (
-          caughtError
-        ) {
-          if (
-            cancelledRef.current
-          ) {
+        } catch (caughtError) {
+          if (cancelledRef.current) {
             return;
           }
 
           setSaveError(
             String(
-              caughtError
-                instanceof Error
+              caughtError instanceof Error
                 ? caughtError.message
                 : caughtError,
             ),
           );
         } finally {
-          if (
-            cancelledRef.current
-          ) {
+          if (cancelledRef.current) {
             return;
           }
 
@@ -673,6 +718,7 @@ export function useListDetail():
         images.draftImages,
         images.releaseDraftBlobUrls,
         mainImageIndex,
+        deleting,
         cancelledRef,
       ],
     );
@@ -684,9 +730,13 @@ export function useListDetail():
     saving,
     saveError,
 
+    deleting,
+    deleteError,
+
     isEdit,
     onEdit,
     onCancel,
+    onDelete,
     onSave,
 
     listingTitle,

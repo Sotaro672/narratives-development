@@ -3,7 +3,7 @@
 import type { List } from "../../../../shared/types/list";
 
 import type {
-  PageResult,
+PageResult,
 } from "../../../../shared/types/common/common";
 
 import type { CreateListInput } from "../dto/createListInput";
@@ -13,62 +13,84 @@ import { requestJSON } from "../http/httpClient";
 import { buildCreateListPayloadArray } from "../payload/createListPayload";
 
 export type ListManagementRowDTO = Pick<
-  ListDetailDTO,
-  | "id"
-  | "inventoryId"
-  | "title"
-  | "productBlueprintId"
-  | "tokenBlueprintId"
-  | "productName"
-  | "productBrandId"
-  | "productBrandName"
-  | "tokenName"
-  | "tokenBrandId"
-  | "tokenBrandName"
-  | "assigneeId"
-  | "assigneeName"
-  | "status"
-  | "createdAt"
->;
+ListDetailDTO,
+| "id"
+| "inventoryId"
+| "title"
+| "productBlueprintId"
+| "tokenBlueprintId"
+| "productName"
+| "productBrandId"
+| "productBrandName"
+| "tokenName"
+| "tokenBrandId"
+| "tokenBrandName"
+| "assigneeId"
+| "assigneeName"
+| "status"
+| "createdAt"
+
+> ;
+
+export type DeleteListResponseDTO = {
+ok: boolean;
+id: string;
+};
 
 export async function createListHTTP(
-  input: CreateListInput,
+input: CreateListInput,
 ): Promise<List> {
-  const payload =
-    buildCreateListPayloadArray(input);
+const payload =
+buildCreateListPayloadArray(input);
 
-  return requestJSON<List>({
-    method: "POST",
-    path: "/lists",
-    body: payload,
-  });
+return requestJSON<List>({
+method: "POST",
+path: "/lists",
+body: payload,
+});
 }
 
 export async function fetchListsHTTP(): Promise<
-  ListManagementRowDTO[]
-> {
-  const response =
-    await requestJSON<
-      PageResult<ListManagementRowDTO>
-    >({
-      method: "GET",
-      path: "/lists",
-    });
+ListManagementRowDTO[]
 
-  return response.items;
+> {
+const response =
+await requestJSON<
+PageResult<ListManagementRowDTO>
+>({
+method: "GET",
+path: "/lists",
+});
+
+return response.items;
 }
 
 export async function fetchListByIdHTTP(
-  listId: string,
+listId: string,
 ): Promise<ListDetailDTO> {
-  if (!listId) {
-    throw new Error(
-      "invalid_list_id",
-    );
-  }
+if (!listId) {
+throw new Error(
+"invalid_list_id",
+);
+}
 
-  return requestJSON<ListDetailDTO>({
-    method: "GET",
-    path: `/lists/${encodeURIComponent(listId)}`,
-  });
+return requestJSON<ListDetailDTO>({
+method: "GET",
+path: `/lists/${encodeURIComponent(listId)}`,
+});
+}
+
+export async function deleteListHTTP(
+listId: string,
+): Promise<void> {
+if (!listId) {
+throw new Error(
+"invalid_list_id",
+);
+}
+
+await requestJSON<DeleteListResponseDTO>({
+method: "DELETE",
+path: `/lists/${encodeURIComponent(listId)}`,
+});
 }

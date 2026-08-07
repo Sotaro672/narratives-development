@@ -13,18 +13,25 @@ import (
 	listdom "narratives/internal/domain/list"
 )
 
+type ListAssetStorage interface {
+	DeleteAll(ctx context.Context, listID string) error
+}
+
 type ListUsecase struct {
 	listRepo  listdom.Repository
 	imageRepo listdom.ImageRepository
+	storage   ListAssetStorage
 }
 
 func NewListUsecase(
 	listRepo listdom.Repository,
 	imageRepo listdom.ImageRepository,
+	storage ListAssetStorage,
 ) *ListUsecase {
 	return &ListUsecase{
 		listRepo:  listRepo,
 		imageRepo: imageRepo,
+		storage:   storage,
 	}
 }
 
@@ -107,6 +114,14 @@ func (uc *ListUsecase) Delete(
 
 	if id == "" {
 		return listdom.ErrInvalidID
+	}
+
+	if uc.storage == nil {
+		return ErrNotSupported("List.Delete.Storage")
+	}
+
+	if err := uc.storage.DeleteAll(ctx, id); err != nil {
+		return err
 	}
 
 	return uc.listRepo.Delete(ctx, id)

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"strings"
 
 	firebaseauth "firebase.google.com/go/v4/auth"
 
@@ -366,6 +365,7 @@ func NewContainer(
 	c.ListUC = usecase.NewListUsecase(
 		listRepoFS,
 		listImageRecordRepo,
+		nil,
 	)
 
 	c.ListQ = mallquery.NewListQuery(
@@ -548,9 +548,7 @@ func NewContainer(
 			outfs.NewTokenReaderFS(fsClient)
 
 		solanaRPCURL :=
-			strings.TrimSpace(
-				os.Getenv("SOLANA_RPC_URL"),
-			)
+			os.Getenv("SOLANA_RPC_URL")
 		if solanaRPCURL == "" {
 			return nil,
 				errors.New(
