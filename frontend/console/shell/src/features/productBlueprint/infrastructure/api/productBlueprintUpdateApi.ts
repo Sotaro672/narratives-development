@@ -1,11 +1,9 @@
 // frontend/console/shell/src/features/productBlueprint/infrastructure/api/productBlueprintUpdateApi.ts
-
 import type {
   ApparelModelNumberRow,
   ApparelSizeInput,
   Fit,
 } from "../../../../shared/types/apparel";
-
 import type {
   CategoryFieldValues,
   ProductBlueprintCategorySnapshot,
@@ -17,17 +15,11 @@ import type {
 
 export type UpdateProductBlueprintParams = {
   id: string;
-
   productName: string;
   brandId: string;
-
   productBlueprintCategoryId: string;
-
-  productBlueprintCategory:
-    ProductBlueprintCategorySnapshot;
-
-  categoryFields?:
-    CategoryFieldValues | null;
+  productBlueprintCategory: ProductBlueprintCategorySnapshot;
+  categoryFields?: CategoryFieldValues | null;
 
   /**
    * Apparel category fields.
@@ -42,7 +34,6 @@ export type UpdateProductBlueprintParams = {
   qualityAssurance?: string[] | null;
 
   productIdTagType: string | null;
-
   companyId: string;
   assigneeId: string;
 
@@ -54,15 +45,8 @@ export type UpdateProductBlueprintParams = {
    * ModelVariation側の責務。
    */
   colors: string[];
-
-  colorRgbMap?:
-    Record<string, string>;
-
-  sizes?:
-    ApparelSizeInput[];
-
-  modelNumbers?:
-    ApparelModelNumberRow[];
-
+  colorRgbMap?: Record<string, string>;
+  sizes?: ApparelSizeInput[];
+  modelNumbers?: ApparelModelNumberRow[];
   updatedBy?: string | null;
 };
