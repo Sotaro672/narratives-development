@@ -10,6 +10,7 @@ import type {
 } from "../../model/application/modelCreateService";
 
 import {
+  deleteProductBlueprintHTTP,
   updateProductBlueprintHTTP,
 } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
 
@@ -214,4 +215,25 @@ export async function updateProductBlueprint(
   }
 
   return updated;
+}
+
+/* =========================================================
+ * DELETE: Product Blueprint
+ * =======================================================*/
+
+export async function deleteProductBlueprint(
+  id: string,
+): Promise<void> {
+  const productBlueprintId =
+    String(id ?? "").trim();
+
+  if (!productBlueprintId) {
+    throw new Error(
+      "deleteProductBlueprint: id が空です",
+    );
+  }
+
+  await deleteProductBlueprintHTTP(
+    productBlueprintId,
+  );
 }

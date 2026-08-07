@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/infrastructure/repository/productBlueprintRepositoryHTTP.ts
+// frontend/console/shell/src/features/productBlueprint/infrastructure/repository/productBlueprintRepositoryHTTP.ts
 
 import { API_BASE } from "../../../../shared/http/apiBase";
 import {
@@ -180,6 +180,42 @@ export async function updateProductBlueprintHTTP(
   }
 
   return (await res.json()) as ProductBlueprintDetailResponse;
+}
+
+// -----------------------------------------------------------
+// DELETE: 商品設計 物理削除
+//   - backend: DELETE /product-blueprints/{id}
+//   - backend 側で ProductBlueprint / Models / Review Aggregate を削除する。
+//   - 成功時は 204 No Content のため response body は読まない。
+// -----------------------------------------------------------
+
+export async function deleteProductBlueprintHTTP(
+  id: string,
+): Promise<void> {
+  const trimmedId = String(id ?? "").trim();
+
+  if (!trimmedId) {
+    throw new Error(
+      "deleteProductBlueprintHTTP: id が空です",
+    );
+  }
+
+  const headers = await getAuthHeadersOrThrow();
+
+  const res = await fetch(
+    `${API_BASE}/product-blueprints/${encodeURIComponent(trimmedId)}`,
+    {
+      method: "DELETE",
+      headers,
+    },
+  );
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(
+      `商品設計の削除に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
+    );
+  }
 }
 
 // -----------------------------------------------------------

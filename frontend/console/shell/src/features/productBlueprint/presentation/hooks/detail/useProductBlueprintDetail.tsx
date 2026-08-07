@@ -4,6 +4,7 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { safeDateTimeLabelJa } from "../../../../../shared/util/dateJa";
 import {
+  deleteProductBlueprint,
   getProductBlueprintDetail,
   listModelVariationsByProductBlueprintId,
   updateProductBlueprint,
@@ -405,8 +406,47 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   ]);
 
   const onDelete = React.useCallback(() => {
-    alert("削除機能は現在無効です。");
-  }, []);
+    if (!blueprintId) {
+      alert("商品設計IDが不明です。");
+      return;
+    }
+
+    if (printed) {
+      alert(
+        "印刷済みの商品設計は削除できません。",
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "この商品設計を完全に削除します。\n" +
+        "関連するモデルも削除されます。\n" +
+        "この操作は取り消せません。\n\n" +
+        "削除しますか？",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    void deleteProductBlueprint(
+      blueprintId,
+    )
+      .then(() => {
+        navigate("/productBlueprint");
+      })
+      .catch((error: unknown) => {
+        alert(
+          error instanceof Error
+            ? error.message
+            : "削除に失敗しました。",
+        );
+      });
+  }, [
+    blueprintId,
+    printed,
+    navigate,
+  ]);
 
   const onBack = React.useCallback(() => {
     navigate("/productBlueprint");
