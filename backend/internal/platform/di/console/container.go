@@ -90,6 +90,7 @@ type Container struct {
 	AuthBootstrap                   *uc.BootstrapService
 	NameResolver                    *resolver.NameResolver
 	listSaveOperationStorage        *firebaseadp.ListSaveOperationStorage
+	tokenBlueprintAssetStorage      *firebaseadp.TokenBlueprintAssetStorage
 	listSaveOperationRetryQueue     *listcloudtasksadp.ListSaveOperationQueue
 	invitationDeliveryQueue         *listcloudtasksadp.InvitationDeliveryQueue
 }
@@ -137,6 +138,11 @@ func NewContainer(
 			listQueueErr = u.listSaveOperationRetryQueue.Close()
 		}
 
+		var tokenBlueprintStorageErr error
+		if u != nil && u.tokenBlueprintAssetStorage != nil {
+			tokenBlueprintStorageErr = u.tokenBlueprintAssetStorage.Close()
+		}
+
 		var storageErr error
 		if u != nil && u.listSaveOperationStorage != nil {
 			storageErr = u.listSaveOperationStorage.Close()
@@ -146,6 +152,7 @@ func NewContainer(
 			errors.New("clients/infra is nil"),
 			invitationQueueErr,
 			listQueueErr,
+			tokenBlueprintStorageErr,
 			storageErr,
 		)
 	}
@@ -252,6 +259,7 @@ func NewContainer(
 		AuthBootstrap:                   u.authBootstrapSvc,
 		NameResolver:                    res.nameResolver,
 		listSaveOperationStorage:        u.listSaveOperationStorage,
+		tokenBlueprintAssetStorage:      u.tokenBlueprintAssetStorage,
 		listSaveOperationRetryQueue:     u.listSaveOperationRetryQueue,
 		invitationDeliveryQueue:         u.invitationDeliveryQueue,
 	}, nil
@@ -272,6 +280,11 @@ func (c *Container) Close() error {
 		listQueueErr = c.listSaveOperationRetryQueue.Close()
 	}
 
+	var tokenBlueprintStorageErr error
+	if c.tokenBlueprintAssetStorage != nil {
+		tokenBlueprintStorageErr = c.tokenBlueprintAssetStorage.Close()
+	}
+
 	var storageErr error
 	if c.listSaveOperationStorage != nil {
 		storageErr = c.listSaveOperationStorage.Close()
@@ -285,6 +298,7 @@ func (c *Container) Close() error {
 	return errors.Join(
 		invitationQueueErr,
 		listQueueErr,
+		tokenBlueprintStorageErr,
 		storageErr,
 		infraErr,
 	)

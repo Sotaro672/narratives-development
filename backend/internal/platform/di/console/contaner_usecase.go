@@ -42,6 +42,7 @@ type usecases struct {
 	mintUC                      *uc.MintUsecase
 	shippingAddressUC           *uc.ShippingAddressUsecase
 	tokenBlueprintUC            *uc.TokenBlueprintUsecase
+	tokenBlueprintAssetStorage  *firebaseadp.TokenBlueprintAssetStorage
 	tokenBlueprintReviewUC      *uc.TokenBlueprintReviewUsecase
 	productBlueprintReviewUC    *uc.ProductBlueprintReviewUsecase
 	userUC                      *uc.UserUsecase
@@ -277,9 +278,19 @@ func buildUsecases(
 			c.fsClient,
 		)
 
+	tokenBlueprintAssetStorage, err :=
+		firebaseadp.NewTokenBlueprintAssetStorageFromEnv(
+			ctx,
+		)
+	if err != nil {
+		_ = listSaveOperationStorage.Close()
+		return nil, err
+	}
+
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
 		r.tokenBlueprintRepo,
 		tbReviewRepo,
+		tokenBlueprintAssetStorage,
 		uploader,
 	)
 
@@ -334,6 +345,7 @@ func buildUsecases(
 			ctx,
 		)
 	if err != nil {
+		_ = tokenBlueprintAssetStorage.Close()
 		_ = listSaveOperationStorage.Close()
 		return nil, err
 	}
@@ -397,6 +409,7 @@ func buildUsecases(
 		mintUC:                      mintUC,
 		shippingAddressUC:           shippingAddressUC,
 		tokenBlueprintUC:            tokenBlueprintUC,
+		tokenBlueprintAssetStorage:  tokenBlueprintAssetStorage,
 		tokenBlueprintReviewUC:      tokenBlueprintReviewUC,
 
 		productBlueprintReviewUC: func() *uc.ProductBlueprintReviewUsecase {

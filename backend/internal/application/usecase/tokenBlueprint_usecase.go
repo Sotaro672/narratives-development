@@ -18,6 +18,7 @@ type arweaveUploader interface {
 type TokenBlueprintUsecase struct {
 	tbRepo       tbdom.RepositoryPort
 	tbReviewRepo tbReview.RepositoryPort
+	assetStorage TokenBlueprintAssetStorage
 
 	metadata *tokenBlueprintMetadataUsecase
 	command  *tokenBlueprintCommandUsecase
@@ -26,6 +27,7 @@ type TokenBlueprintUsecase struct {
 func NewTokenBlueprintUsecase(
 	tbRepo tbdom.RepositoryPort,
 	tbReviewRepo tbReview.RepositoryPort,
+	assetStorage TokenBlueprintAssetStorage,
 	uploader arweaveUploader,
 ) *TokenBlueprintUsecase {
 	if tbRepo == nil {
@@ -35,6 +37,7 @@ func NewTokenBlueprintUsecase(
 	return &TokenBlueprintUsecase{
 		tbRepo:       tbRepo,
 		tbReviewRepo: tbReviewRepo,
+		assetStorage: assetStorage,
 		metadata:     newTokenBlueprintMetadataUsecase(tbRepo, uploader),
 		command:      newTokenBlueprintCommandUsecase(tbRepo),
 	}
@@ -207,7 +210,48 @@ func (u *TokenBlueprintUsecase) Delete(ctx context.Context, id string) error {
 		return tbdom.ErrInvalidID
 	}
 
-	return u.tbRepo.Delete(ctx, id)
+	current, err := u.tbRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if current == nil {
+		return tbdom.ErrNotFound
+	}
+
+	if current.Minted {
+		return tbdom.ErrConflict
+	}
+
+	if u.assetStorage == nil {
+		return fmt.Errorf("tokenBlueprint asset storage is nil")
+	}
+
+	if u.tbReviewRepo == nil {
+		return fmt.Errorf("tokenBlueprint review repo is nil")
+	}
+
+	aggRepo := u.tbReviewRepo.TokenBlueprintAggregates()
+	if aggRepo == nil {
+		return fmt.Errorf("tokenBlueprint review aggregate repo is nil")
+	}
+
+	if err := u.assetStorage.DeleteAll(
+		ctx,
+		current.CompanyID,
+		current.ID,
+	); err != nil {
+		return err
+	}
+
+	if err := aggRepo.Delete(
+		ctx,
+		current.ID,
+	); err != nil {
+		return err
+	}
+
+	return u.tbRepo.Delete(ctx, current.ID)
 }
 
 func (u *TokenBlueprintUsecase) EnsureMetadataURI(

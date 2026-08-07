@@ -16,6 +16,7 @@ import type { UpdateTokenBlueprintPayload } from "../infrastructure/repository/t
 import { safeDateLabelJa } from "../../../shared/util/dateJa";
 
 import {
+  deleteTokenBlueprint,
   fetchTokenBlueprintById,
   updateTokenBlueprint,
 } from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
@@ -26,8 +27,7 @@ type UpdateFromCardOptions = {
   iconFile?: File | null;
 };
 
-type ContentFileForSend =
-  Partial<ContentFile>;
+type ContentFileForSend = Partial<ContentFile>;
 
 type TokenBlueprintCardFields =
   Partial<Omit<TokenBlueprint, "contentFiles">> & {
@@ -47,12 +47,32 @@ export async function fetchTokenBlueprintDetail(
   id: string,
 ): Promise<TokenBlueprint> {
   if (!id) {
-    throw new Error(
-      "id is required",
-    );
+    throw new Error("id is required");
   }
 
   return fetchTokenBlueprintById(id);
+}
+
+/**
+ * TokenBlueprintを物理削除する。
+ *
+ * backend側で以下を実行する。
+ *
+ * - minted=trueの場合は削除不可
+ * - Firebase Storageの
+ *   token-blueprints/{companyId}/{tokenBlueprintId}/
+ *   prefix以下を全削除
+ * - tokenBlueprintReviews/{tokenBlueprintId}を物理削除
+ * - token_blueprints/{tokenBlueprintId}を物理削除
+ */
+export async function deleteTokenBlueprintDetail(
+  id: string,
+): Promise<void> {
+  if (!id) {
+    throw new Error("id is required");
+  }
+
+  await deleteTokenBlueprint(id);
 }
 
 /**
@@ -63,10 +83,7 @@ export async function fetchTokenBlueprintDetail(
 export function formatCreatedAt(
   raw: string,
 ): string {
-  return safeDateLabelJa(
-    raw,
-    "",
-  );
+  return safeDateLabelJa(raw, "");
 }
 
 /**
@@ -74,6 +91,7 @@ export function formatCreatedAt(
  * UpdateTokenBlueprintPayloadを組み立てる。
  *
  * 正仕様:
+ *
  * - iconUrlはFirebase Storage downloadURL
  * - iconObjectPathはFirebase Storage objectPath
  * - iconFileName / iconContentType / iconSizeも保存する
@@ -83,6 +101,7 @@ export function formatCreatedAt(
  * - contentFiles[].name / sizeも保存する
  *
  * 更新対象:
+ *
  * - name
  * - symbol
  * - assigneeId
@@ -94,6 +113,7 @@ export function formatCreatedAt(
  * - contentFiles
  *
  * 更新対象外:
+ *
  * - brandId
  * - brandName
  * - companyId
@@ -110,8 +130,7 @@ export function buildUpdatePayloadFromCardVm(
   blueprint: TokenBlueprint,
   cardVm: TokenBlueprintCardVm,
 ): UpdateTokenBlueprintPayload {
-  const fields =
-    getCardFields(cardVm);
+  const fields = getCardFields(cardVm);
 
   const iconUrlRaw =
     fields.iconUrl ??
@@ -154,12 +173,11 @@ export function buildUpdatePayloadFromCardVm(
       fields.iconSize ??
       blueprint.iconSize,
 
-    contentFiles:
-      buildContentFilesForSend(
-        fields.contentFiles ??
-          blueprint.contentFiles ??
-          [],
-      ),
+    contentFiles: buildContentFilesForSend(
+      fields.contentFiles ??
+      blueprint.contentFiles ??
+      [],
+    ),
   };
 }
 
@@ -168,11 +186,13 @@ export function buildUpdatePayloadFromCardVm(
  * 更新後のTokenBlueprintを返す。
  *
  * iconFileがある場合:
+ *
  * 1. icon関連項目を除外して通常更新する
  * 2. Firebase StorageへiconFileをアップロードする
  * 3. アップロード結果をicon情報として再更新する
  *
  * iconFileがない場合:
+ *
  * - 通常更新のみを行う
  */
 export async function updateTokenBlueprintFromCard(
@@ -240,20 +260,11 @@ export async function updateTokenBlueprintFromCard(
   return updateTokenBlueprint(
     tokenBlueprintId,
     {
-      iconUrl:
-        uploaded.downloadUrl,
-
-      iconObjectPath:
-        uploaded.objectPath,
-
-      iconFileName:
-        uploaded.fileName,
-
-      iconContentType:
-        uploaded.contentType,
-
-      iconSize:
-        uploaded.size,
+      iconUrl: uploaded.downloadUrl,
+      iconObjectPath: uploaded.objectPath,
+      iconFileName: uploaded.fileName,
+      iconContentType: uploaded.contentType,
+      iconSize: uploaded.size,
     },
   );
 }
@@ -262,6 +273,7 @@ export async function updateTokenBlueprintFromCard(
  * contentFilesをbackendへ送信するDTOへ変換する。
  *
  * 正仕様:
+ *
  * - id: string
  * - name: string
  * - type: "image" | "video" | "pdf" | "document"
@@ -293,22 +305,10 @@ function buildContentFilesForSend(
           return null;
         }
 
-        const nowIso =
-          new Date().toISOString();
-
-        const id = String(
-          content.id ?? "",
-        );
-
-        const name = String(
-          content.name ?? "",
-        );
-
-        const type =
-          normalizeContentType(
-            content.type,
-          );
-
+        const nowIso = new Date().toISOString();
+        const id = String(content.id ?? "");
+        const name = String(content.name ?? "");
+        const type = normalizeContentType(content.type);
         const contentType =
           normalizeTokenBlueprintMimeType(
             content.contentType,
@@ -317,37 +317,38 @@ function buildContentFilesForSend(
         const createdAt =
           toIsoStringOrNow(
             content.createdAt ??
-              nowIso,
+            nowIso,
           );
 
         const createdBy =
           String(
-            content.createdBy ?? "",
+            content.createdBy ??
+            "",
           );
 
         const updatedAt =
           toIsoStringOrNow(
             content.updatedAt ??
-              nowIso,
+            nowIso,
           );
 
         const updatedBy =
           String(
-            content.updatedBy ?? "",
+            content.updatedBy ??
+            "",
           );
 
-        const url = String(
-          content.url ?? "",
-        );
-
+        const url = String(content.url ?? "");
         const objectPath =
           String(
-            content.objectPath ?? "",
+            content.objectPath ??
+            "",
           );
 
         const rawSize =
           Number(
-            content.size ?? 0,
+            content.size ??
+            0,
           );
 
         const size =
@@ -374,8 +375,7 @@ function buildContentFilesForSend(
           name,
           type,
           contentType,
-          isPublic:
-            content.isPublic,
+          isPublic: content.isPublic,
           createdAt,
           createdBy,
           updatedAt,
@@ -411,7 +411,10 @@ function toIsoStringOrNow(
   }
 
   const raw =
-    String(value ?? "");
+    String(
+      value ??
+      "",
+    );
 
   if (!raw) {
     return new Date().toISOString();
@@ -434,8 +437,5 @@ function toIsoStringOrNow(
 function getCardFields(
   cardVm: TokenBlueprintCardVm,
 ): TokenBlueprintCardFields {
-  return (
-    cardVm.fields ??
-    cardVm
-  );
+  return cardVm.fields ?? cardVm;
 }

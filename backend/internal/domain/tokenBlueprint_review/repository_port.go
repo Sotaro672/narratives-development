@@ -94,6 +94,7 @@ type TokenBlueprintAggregateRepository interface {
 	GetByID(ctx context.Context, id string) (TokenBlueprintReviewAggregate, error)
 	Create(ctx context.Context, entity TokenBlueprintReviewAggregate) (TokenBlueprintReviewAggregate, error)
 	Update(ctx context.Context, id string, patch PatchTokenBlueprintReviewAggregate) (TokenBlueprintReviewAggregate, error)
+	Delete(ctx context.Context, id string) error
 }
 
 // CommentRepository manages comments collection under a tokenBlueprint:

@@ -168,6 +168,25 @@ func (a *tokenBlueprintAggregateRepoFS) Update(ctx context.Context, id string, p
 	return a.GetByID(ctx, id)
 }
 
+func (a *tokenBlueprintAggregateRepoFS) Delete(ctx context.Context, id string) error {
+	if a.root == nil || a.root.fs == nil {
+		return errTBReviewNotConfigured
+	}
+	if id == "" {
+		return errors.New("tokenBlueprint_review_fs: id is required")
+	}
+
+	_, err := a.root.rootDoc(id).Delete(ctx)
+	if err != nil {
+		if isNotFoundErr(err) {
+			return nil
+		}
+		return err
+	}
+
+	return nil
+}
+
 // ============================================================
 // Comment Repo: tokenBlueprintReviews/{tokenBlueprintId}/comments/{commentId}
 // ============================================================

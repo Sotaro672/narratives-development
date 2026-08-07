@@ -25,6 +25,7 @@ import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import { useTokenBlueprintCard } from "./useTokenBlueprintCard";
 
 import {
+  deleteTokenBlueprintDetail,
   fetchTokenBlueprintDetail,
   updateTokenBlueprintFromCard,
 } from "../../application/tokenBlueprintDetailService";
@@ -53,8 +54,7 @@ type UseTokenBlueprintDetailVM = {
   updatedByName: string;
   updatedAt: string;
 
-  tokenContents:
-    FirebaseStorageTokenContent[];
+  tokenContents: FirebaseStorageTokenContent[];
 
   cardVm: any;
 
@@ -67,11 +67,9 @@ type UseTokenBlueprintDetailHandlers = {
   onEdit: () => void;
   onCancel: () => void;
   onSave: () => Promise<void>;
-  onDelete: () => void;
+  onDelete: () => Promise<void>;
 
-  onSelectAssignee: (
-    id: string,
-  ) => void;
+  onSelectAssignee: (id: string) => void;
 
   onEditAssignee: () => void;
   onClickAssignee: () => void;
@@ -90,8 +88,7 @@ type UseTokenBlueprintDetailHandlers = {
 
 export type UseTokenBlueprintDetailResult = {
   vm: UseTokenBlueprintDetailVM;
-  handlers:
-    UseTokenBlueprintDetailHandlers;
+  handlers: UseTokenBlueprintDetailHandlers;
 };
 
 function toIsoStringOrFallback(
@@ -106,14 +103,9 @@ function toIsoStringOrFallback(
     return fallback;
   }
 
-  const parsed =
-    new Date(raw);
+  const parsed = new Date(raw);
 
-  if (
-    Number.isNaN(
-      parsed.getTime(),
-    )
-  ) {
+  if (Number.isNaN(parsed.getTime())) {
     return fallback;
   }
 
@@ -127,44 +119,31 @@ function toTokenContents(
     .filter((contentFile) => {
       return Boolean(
         contentFile.id &&
-          contentFile.url &&
-          contentFile.objectPath,
+        contentFile.url &&
+        contentFile.objectPath,
       );
     })
     .map((contentFile) => {
-      const nowIso =
-        new Date().toISOString();
+      const nowIso = new Date().toISOString();
 
       return {
-        id:
-          contentFile.id,
-
-        name:
-          contentFile.name,
-
-        type:
-          contentFile.type,
+        id: contentFile.id,
+        name: contentFile.name,
+        type: contentFile.type,
 
         contentType:
           contentFile.contentType ||
           "application/octet-stream",
 
         size:
-          Number.isFinite(
-            contentFile.size,
-          ) &&
+          Number.isFinite(contentFile.size) &&
           contentFile.size >= 0
             ? contentFile.size
             : 0,
 
-        objectPath:
-          contentFile.objectPath,
-
-        url:
-          contentFile.url,
-
-        isPublic:
-          contentFile.isPublic,
+        objectPath: contentFile.objectPath,
+        url: contentFile.url,
+        isPublic: contentFile.isPublic,
 
         createdAt:
           toIsoStringOrFallback(
@@ -190,8 +169,7 @@ function toTokenContents(
 }
 
 export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
-  const navigate =
-    useNavigate();
+  const navigate = useNavigate();
 
   const {
     tokenBlueprintId,
@@ -250,36 +228,26 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
       return;
     }
 
-    let cancelled =
-      false;
+    let cancelled = false;
 
     const load =
       async (): Promise<void> => {
         try {
-          setLoading(
-            true,
-          );
+          setLoading(true);
 
           const result =
-            await fetchTokenBlueprintDetail(
-              id,
-            );
+            await fetchTokenBlueprintDetail(id);
 
           if (cancelled) {
             return;
           }
 
-          setBlueprint(
-            result,
-          );
-
-          setAssigneeId(
-            result.assigneeId,
-          );
+          setBlueprint(result);
+          setAssigneeId(result.assigneeId);
 
           setAssigneeName(
             result.assigneeName ||
-              result.assigneeId,
+            result.assigneeId,
           );
         } catch {
           if (!cancelled) {
@@ -292,9 +260,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
           }
         } finally {
           if (!cancelled) {
-            setLoading(
-              false,
-            );
+            setLoading(false);
           }
         }
       };
@@ -302,8 +268,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     void load();
 
     return () => {
-      cancelled =
-        true;
+      cancelled = true;
     };
   }, [
     tokenBlueprintId,
@@ -312,10 +277,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
   const minted =
     useMemo(() => {
-      return (
-        blueprint?.minted ??
-        false
-      );
+      return blueprint?.minted ?? false;
     }, [blueprint]);
 
   const createdByName =
@@ -339,8 +301,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   const createdAt =
     useMemo(() => {
       return safeDateTimeLabelJa(
-        blueprint?.createdAt ??
-          "",
+        blueprint?.createdAt ?? "",
         "",
       );
     }, [blueprint]);
@@ -348,8 +309,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   const updatedAt =
     useMemo(() => {
       return safeDateTimeLabelJa(
-        blueprint?.updatedAt ??
-          "",
+        blueprint?.updatedAt ?? "",
         "",
       );
     }, [blueprint]);
@@ -369,13 +329,11 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     initialTokenBlueprint:
       blueprint ?? {},
 
-    initialBurnAt:
-      "",
+    initialBurnAt: "",
 
     initialIconUrl,
 
-    initialEditMode:
-      false,
+    initialEditMode: false,
   });
 
   const isEditMode: boolean =
@@ -388,7 +346,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     >(() => {
       return toTokenContents(
         blueprint?.contentFiles ??
-          [],
+        [],
       );
     }, [blueprint]);
 
@@ -412,20 +370,13 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   const handleCancel =
     useCallback(() => {
       cardHandlers?.reset?.();
-
       cardHandlers?.setEditMode?.(
         false,
       );
 
       if (!blueprint) {
-        setAssigneeId(
-          "",
-        );
-
-        setAssigneeName(
-          "",
-        );
-
+        setAssigneeId("");
+        setAssigneeName("");
         return;
       }
 
@@ -435,7 +386,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
       setAssigneeName(
         blueprint.assigneeName ||
-          blueprint.assigneeId,
+        blueprint.assigneeId,
       );
     }, [
       cardHandlers,
@@ -453,9 +404,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         }
 
         try {
-          setLoading(
-            true,
-          );
+          setLoading(true);
 
           const sourceBlueprint:
             TokenBlueprint = {
@@ -470,17 +419,14 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
               cardVm,
             );
 
-          setBlueprint(
-            updated,
-          );
-
+          setBlueprint(updated);
           setAssigneeId(
             updated.assigneeId,
           );
 
           setAssigneeName(
             updated.assigneeName ||
-              updated.assigneeId,
+            updated.assigneeId,
           );
 
           cardHandlers?.setEditMode?.(
@@ -493,9 +439,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         } catch {
           // 保存失敗時は現在の編集状態を維持する。
         } finally {
-          setLoading(
-            false,
-          );
+          setLoading(false);
         }
       },
       [
@@ -509,21 +453,45 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     );
 
   const handleDelete =
-    useCallback(() => {
-      if (!blueprint) {
-        return;
-      }
+    useCallback(
+      async (): Promise<void> => {
+        if (
+          loading ||
+          !blueprint ||
+          blueprint.minted
+        ) {
+          return;
+        }
 
-      navigate(
-        "/tokenBlueprint",
-        {
-          replace: true,
-        },
-      );
-    }, [
-      blueprint,
-      navigate,
-    ]);
+        const id = blueprint.id;
+
+        if (!id) {
+          return;
+        }
+
+        try {
+          setLoading(true);
+
+          await deleteTokenBlueprintDetail(
+            id,
+          );
+
+          navigate(
+            "/tokenBlueprint",
+            {
+              replace: true,
+            },
+          );
+        } catch {
+          setLoading(false);
+        }
+      },
+      [
+        loading,
+        blueprint,
+        navigate,
+      ],
+    );
 
   const handleSelectAssignee =
     useCallback(
@@ -540,13 +508,8 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
               currentMember.id
             : id;
 
-        setAssigneeId(
-          id,
-        );
-
-        setAssigneeName(
-          nextName,
-        );
+        setAssigneeId(id);
+        setAssigneeName(nextName);
       },
       [currentMember],
     );
@@ -593,32 +556,22 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
           );
         }
 
-        setIsUploadingContents(
-          true,
-        );
+        setIsUploadingContents(true);
 
         try {
           const updated =
             await uploadAndAppendTokenBlueprintContents(
               {
                 companyId,
-
-                tokenBlueprintId:
-                  id,
-
-                actorId:
-                  memberId,
-
+                tokenBlueprintId: id,
+                actorId: memberId,
                 files,
-
                 existingContentFiles:
                   blueprint.contentFiles,
               },
             );
 
-          setBlueprint(
-            updated,
-          );
+          setBlueprint(updated);
 
           try {
             const refreshed =
@@ -626,16 +579,12 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
                 id,
               );
 
-            setBlueprint(
-              refreshed,
-            );
+            setBlueprint(refreshed);
           } catch {
             // 更新レスポンスをそのまま使用する。
           }
         } finally {
-          setIsUploadingContents(
-            false,
-          );
+          setIsUploadingContents(false);
         }
       },
       [
@@ -664,9 +613,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         }
 
         if (
-          item.id.startsWith(
-            "local_",
-          )
+          item.id.startsWith("local_",)
         ) {
           return;
         }
@@ -684,17 +631,13 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         const updated =
           await patchTokenBlueprintContentFiles(
             {
-              tokenBlueprintId:
-                id,
-
+              tokenBlueprintId: id,
               contentFiles:
                 nextContentFiles,
             },
           );
 
-        setBlueprint(
-          updated,
-        );
+        setBlueprint(updated);
 
         try {
           const refreshed =
@@ -702,9 +645,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
               id,
             );
 
-          setBlueprint(
-            refreshed,
-          );
+          setBlueprint(refreshed);
         } catch {
           // 更新レスポンスをそのまま使用する。
         }
@@ -719,8 +660,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     UseTokenBlueprintDetailVM = {
       blueprint,
 
-      title:
-        "トークン設計",
+      title: "トークン設計",
 
       assigneeId:
         assigneeId ||
@@ -734,51 +674,28 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         "",
 
       minted,
-
       createdByName,
       createdAt,
-
       updatedByName,
       updatedAt,
-
       tokenContents,
-
       cardVm,
-
       isEditMode,
       isUploadingContents,
     };
 
   const handlers:
     UseTokenBlueprintDetailHandlers = {
-      onBack:
-        handleBack,
-
-      onEdit:
-        handleEdit,
-
-      onCancel:
-        handleCancel,
-
-      onSave:
-        handleSave,
-
-      onDelete:
-        handleDelete,
-
-      onSelectAssignee:
-        handleSelectAssignee,
-
-      onEditAssignee:
-        handleEditAssignee,
-
-      onClickAssignee:
-        handleClickAssignee,
-
+      onBack: handleBack,
+      onEdit: handleEdit,
+      onCancel: handleCancel,
+      onSave: handleSave,
+      onDelete: handleDelete,
+      onSelectAssignee:handleSelectAssignee,
+      onEditAssignee:handleEditAssignee,
+      onClickAssignee:handleClickAssignee,
       cardHandlers,
-
       onTokenContentsFilesSelected,
-
       onDeleteTokenContent,
     };
 
