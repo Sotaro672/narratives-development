@@ -97,7 +97,10 @@ func (uc *ListUsecase) Update(
 	return uc.listRepo.Update(ctx, id, item)
 }
 
-func (uc *ListUsecase) Delete(ctx context.Context, id string) error {
+func (uc *ListUsecase) Delete(
+	ctx context.Context,
+	id string,
+) error {
 	if uc == nil || uc.listRepo == nil {
 		return ErrNotSupported("List.Delete")
 	}
@@ -155,53 +158,11 @@ func (uc *ListUsecase) CreateImage(
 	return created, nil
 }
 
-func (uc *ListUsecase) UpdateImage(
+func (uc *ListUsecase) DeleteImage(
 	ctx context.Context,
 	listID string,
 	imageID string,
-	patch listdom.ListImagePatch,
-) (listdom.ListImage, error) {
-	if uc == nil {
-		return listdom.ListImage{}, ErrNotSupported("List.UpdateImage")
-	}
-
-	if uc.imageRepo == nil {
-		return listdom.ListImage{}, ErrNotSupported("List.UpdateImage.ImageRepo")
-	}
-
-	if listID == "" {
-		return listdom.ListImage{}, listdom.ErrInvalidListImageListID
-	}
-
-	if imageID == "" {
-		return listdom.ListImage{}, listdom.ErrInvalidListImageID
-	}
-
-	if strings.Contains(imageID, "/") || strings.Contains(imageID, "://") {
-		return listdom.ListImage{}, ErrInvalidArgument("invalid_image_id")
-	}
-
-	if patch.DisplayOrder != nil && *patch.DisplayOrder < 0 {
-		return listdom.ListImage{}, listdom.ErrInvalidListImageDisplayOrder
-	}
-
-	if patch.UpdatedAt == nil {
-		now := time.Now().UTC()
-		patch.UpdatedAt = &now
-	} else if !patch.UpdatedAt.IsZero() {
-		t := patch.UpdatedAt.UTC()
-		patch.UpdatedAt = &t
-	}
-
-	updated, err := uc.imageRepo.Update(ctx, listID, imageID, patch)
-	if err != nil {
-		return listdom.ListImage{}, err
-	}
-
-	return updated, nil
-}
-
-func (uc *ListUsecase) DeleteImage(ctx context.Context, listID string, imageID string) error {
+) error {
 	if uc == nil {
 		return ErrNotSupported("List.DeleteImage")
 	}

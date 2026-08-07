@@ -7,85 +7,104 @@ import (
 	"fmt"
 	"time"
 
-	transferdom "narratives/internal/domain/transfer"
 	walletdom "narratives/internal/domain/wallet"
 )
 
 // AvatarSecretProvider provides a signing capability for an avatar wallet owner.
 type AvatarSecretProvider interface {
-	GetAvatarSigner(ctx context.Context, avatarID string) (any, error)
+	GetAvatarSigner(
+		ctx context.Context,
+		avatarID string,
+	) (any, error)
 }
 
 // AvatarWalletItemTransferUpdater updates sender / receiver wallet token caches.
 type AvatarWalletItemTransferUpdater interface {
-	RemoveMintFromAvatarWalletItems(ctx context.Context, avatarID string, mintAddress string, now time.Time) error
-	AddMintToAvatarWalletItems(ctx context.Context, avatarID string, mintAddress string, now time.Time) error
+	RemoveMintFromAvatarWalletItems(
+		ctx context.Context,
+		avatarID string,
+		mintAddress string,
+		now time.Time,
+	) error
+
+	AddMintToAvatarWalletItems(
+		ctx context.Context,
+		avatarID string,
+		mintAddress string,
+		now time.Time,
+	) error
 }
 
 // AvatarWalletSyncer fully syncs wallet tokens from on-chain after transfer.
 type AvatarWalletSyncer interface {
-	SyncWalletTokens(ctx context.Context, avatarID string) (walletdom.Wallet, error)
+	SyncWalletTokens(
+		ctx context.Context,
+		avatarID string,
+	) (walletdom.Wallet, error)
 }
 
 type ShareTransferUsecase struct {
-	tokenRepo    TokenResolver
-	tokenUpdate  TokenOwnerUpdater
-	walletUpdate AvatarWalletItemTransferUpdater
-	walletSync   AvatarWalletSyncer
-	transferRepo transferdom.RepositoryPort
+	tokenRepo TokenResolver
 
 	avatarWallet AvatarWalletResolver
 	secrets      AvatarSecretProvider
-	executor     TokenTransferExecutor
 
-	resolveWarmer PostTransferResolveWarmer
-	now           func() time.Time
+	executionUC *TokenTransferExecutionUsecase
 }
 
 func NewShareTransferUsecase(
 	tokenRepo TokenResolver,
-	tokenUpdate TokenOwnerUpdater,
-	walletUpdate AvatarWalletItemTransferUpdater,
-	walletSync AvatarWalletSyncer,
-	transferRepo transferdom.RepositoryPort,
 	avatarWallet AvatarWalletResolver,
 	secrets AvatarSecretProvider,
-	executor TokenTransferExecutor,
+	executionUC *TokenTransferExecutionUsecase,
 ) *ShareTransferUsecase {
 	return &ShareTransferUsecase{
-		tokenRepo:     tokenRepo,
-		tokenUpdate:   tokenUpdate,
-		walletUpdate:  walletUpdate,
-		walletSync:    walletSync,
-		transferRepo:  transferRepo,
-		avatarWallet:  avatarWallet,
-		secrets:       secrets,
-		executor:      executor,
-		resolveWarmer: nil,
-		now:           time.Now,
-	}
-}
+		tokenRepo: tokenRepo,
 
-func (u *ShareTransferUsecase) WithPostTransferResolveWarmer(w PostTransferResolveWarmer) *ShareTransferUsecase {
-	if u != nil {
-		u.resolveWarmer = w
+		avatarWallet: avatarWallet,
+		secrets:      secrets,
+
+		executionUC: executionUC,
 	}
-	return u
 }
 
 var (
-	ErrShareTransferNotConfigured      = errors.New("share_transfer_uc: not configured")
-	ErrShareTransferFromAvatarEmpty    = errors.New("share_transfer_uc: fromAvatarId is empty")
-	ErrShareTransferToAvatarEmpty      = errors.New("share_transfer_uc: toAvatarId is empty")
-	ErrShareTransferProductIDEmpty     = errors.New("share_transfer_uc: productId is empty")
-	ErrShareTransferSameAvatar         = errors.New("share_transfer_uc: fromAvatarId and toAvatarId must be different")
-	ErrShareTransferMintEmpty          = errors.New("share_transfer_uc: mintAddress is empty")
-	ErrShareTransferFromWalletEmpty    = errors.New("share_transfer_uc: from avatar walletAddress is empty")
-	ErrShareTransferToWalletEmpty      = errors.New("share_transfer_uc: to avatar walletAddress is empty")
-	ErrShareTransferOwnerMismatch      = errors.New("share_transfer_uc: token current owner mismatch")
-	ErrShareTransferResolveAfterFailed = errors.New("share_transfer_uc: post-transfer resolve failed")
-	ErrShareTransferWalletSyncFailed   = errors.New("share_transfer_uc: wallet sync failed")
-	ErrShareTransferAttemptNotCreated  = errors.New("share_transfer_uc: transfer attempt was not created")
+	ErrShareTransferNotConfigured = errors.New(
+		"share_transfer_uc: not configured",
+	)
+	ErrShareTransferFromAvatarEmpty = errors.New(
+		"share_transfer_uc: fromAvatarId is empty",
+	)
+	ErrShareTransferToAvatarEmpty = errors.New(
+		"share_transfer_uc: toAvatarId is empty",
+	)
+	ErrShareTransferProductIDEmpty = errors.New(
+		"share_transfer_uc: productId is empty",
+	)
+	ErrShareTransferSameAvatar = errors.New(
+		"share_transfer_uc: fromAvatarId and toAvatarId must be different",
+	)
+	ErrShareTransferMintEmpty = errors.New(
+		"share_transfer_uc: mintAddress is empty",
+	)
+	ErrShareTransferFromWalletEmpty = errors.New(
+		"share_transfer_uc: from avatar walletAddress is empty",
+	)
+	ErrShareTransferToWalletEmpty = errors.New(
+		"share_transfer_uc: to avatar walletAddress is empty",
+	)
+	ErrShareTransferOwnerMismatch = errors.New(
+		"share_transfer_uc: token current owner mismatch",
+	)
+	ErrShareTransferResolveAfterFailed = errors.New(
+		"share_transfer_uc: post-transfer resolve failed",
+	)
+	ErrShareTransferWalletSyncFailed = errors.New(
+		"share_transfer_uc: wallet sync failed",
+	)
+	ErrShareTransferAttemptNotCreated = errors.New(
+		"share_transfer_uc: transfer attempt was not created",
+	)
 )
 
 type ShareTransferInput struct {
@@ -109,35 +128,37 @@ type ShareTransferResult struct {
 
 // ShareToAvatar transfers the token currently owned by fromAvatar to toAvatar.
 //
-// Flow:
-//  1. resolve tokens/{productId} to get mintAddress / tokenBlueprintId / current owner(toAddress)
-//  2. resolve sender / receiver avatar wallets
-//  3. create transfer(PENDING)
-//  4. validate token.toAddress == sender wallet
-//  5. get sender avatar signer
-//  6. execute avatar -> avatar transfer
-//     - fee payer is handled by TokenTransferExecutor implementation
-//     - current solana executor uses mint authority(master wallet) as fee payer
-//  7. transfer(SUCCEEDED)
-//  8. update tokens/{productId}.toAddress = receiver wallet
-//  9. remove mint from sender wallet cache
+// ShareTransferUsecase is responsible for:
+//  1. Validate sender / receiver avatar IDs.
+//  2. Resolve tokens/{productId}.
+//  3. Resolve sender / receiver avatar wallets.
+//  4. Resolve the sender avatar signer.
+//  5. Build the share transfer reference.
+//  6. Delegate common transfer execution to TokenTransferExecutionUsecase.
 //
-// 10. add mint to receiver wallet cache
-// 11. sync sender wallet from on-chain
-// 12. sync receiver wallet from on-chain
-// 13. resolve warmup for receiver
-// 14. on failure, transfer(FAILED) update
-func (u *ShareTransferUsecase) ShareToAvatar(ctx context.Context, in ShareTransferInput) (res ShareTransferResult, retErr error) {
+// TokenTransferExecutionUsecase is responsible for:
+//  1. Create transfer(PENDING).
+//  2. Validate token.toAddress == sender wallet.
+//  3. Execute the on-chain transfer.
+//  4. Update tokens/{productId}.toAddress.
+//  5. Remove the mint from the sender wallet cache.
+//  6. Add the mint to the receiver wallet cache.
+//  7. Sync sender / receiver wallets from on-chain.
+//  8. Warm the receiver token resolver.
+//  9. Mark transfer(SUCCEEDED).
+//
+// 10. Mark transfer(FAILED) when execution or post-processing fails.
+func (u *ShareTransferUsecase) ShareToAvatar(
+	ctx context.Context,
+	in ShareTransferInput,
+) (ShareTransferResult, error) {
 	if u == nil ||
 		u.tokenRepo == nil ||
-		u.tokenUpdate == nil ||
-		u.walletUpdate == nil ||
-		u.walletSync == nil ||
-		u.transferRepo == nil ||
 		u.avatarWallet == nil ||
 		u.secrets == nil ||
-		u.executor == nil {
-		return ShareTransferResult{}, ErrShareTransferNotConfigured
+		u.executionUC == nil {
+		return ShareTransferResult{},
+			ErrShareTransferNotConfigured
 	}
 
 	fromAvatarID := in.FromAvatarID
@@ -145,230 +166,296 @@ func (u *ShareTransferUsecase) ShareToAvatar(ctx context.Context, in ShareTransf
 	productID := in.ProductID
 
 	if fromAvatarID == "" {
-		return ShareTransferResult{}, ErrShareTransferFromAvatarEmpty
+		return ShareTransferResult{},
+			ErrShareTransferFromAvatarEmpty
 	}
+
 	if toAvatarID == "" {
-		return ShareTransferResult{}, ErrShareTransferToAvatarEmpty
+		return ShareTransferResult{},
+			ErrShareTransferToAvatarEmpty
 	}
+
 	if productID == "" {
-		return ShareTransferResult{}, ErrShareTransferProductIDEmpty
+		return ShareTransferResult{},
+			ErrShareTransferProductIDEmpty
 	}
+
 	if fromAvatarID == toAvatarID {
-		return ShareTransferResult{}, ErrShareTransferSameAvatar
+		return ShareTransferResult{},
+			ErrShareTransferSameAvatar
 	}
 
-	now := u.now().UTC()
-
-	tok, err := u.tokenRepo.ResolveTokenByProductID(ctx, productID)
+	token, err := u.tokenRepo.ResolveTokenByProductID(
+		ctx,
+		productID,
+	)
 	if err != nil {
-		return ShareTransferResult{}, fmt.Errorf("share_transfer_uc: resolve token failed productId=%s: %w", productID, err)
+		return ShareTransferResult{},
+			fmt.Errorf(
+				"share_transfer_uc: resolve token failed productId=%s: %w",
+				productID,
+				err,
+			)
 	}
 
-	mint := tok.MintAddress
-	tokenTBID := tok.TokenBlueprintID
-	currentOwner := tok.ToAddress
-	brandID := tok.BrandID
+	mintAddress := token.MintAddress
+	tokenBlueprintID := token.TokenBlueprintID
+	currentOwner := token.ToAddress
+	brandID := token.BrandID
 
-	if mint == "" {
-		return ShareTransferResult{}, ErrShareTransferMintEmpty
+	if mintAddress == "" {
+		return ShareTransferResult{},
+			ErrShareTransferMintEmpty
 	}
 
-	fromWallet, err := u.avatarWallet.ResolveAvatarWalletAddress(ctx, fromAvatarID)
-	if err != nil {
-		return ShareTransferResult{}, fmt.Errorf(
-			"share_transfer_uc: resolve sender avatar wallet failed avatarId=%s: %w",
-			fromAvatarID, err,
+	fromWallet, err :=
+		u.avatarWallet.ResolveAvatarWalletAddress(
+			ctx,
+			fromAvatarID,
 		)
+	if err != nil {
+		return ShareTransferResult{},
+			fmt.Errorf(
+				"share_transfer_uc: resolve sender avatar wallet failed avatarId=%s: %w",
+				fromAvatarID,
+				err,
+			)
 	}
+
 	if fromWallet == "" {
-		return ShareTransferResult{}, ErrShareTransferFromWalletEmpty
+		return ShareTransferResult{},
+			ErrShareTransferFromWalletEmpty
 	}
 
-	toWallet, err := u.avatarWallet.ResolveAvatarWalletAddress(ctx, toAvatarID)
-	if err != nil {
-		return ShareTransferResult{}, fmt.Errorf(
-			"share_transfer_uc: resolve receiver avatar wallet failed avatarId=%s: %w",
-			toAvatarID, err,
+	toWallet, err :=
+		u.avatarWallet.ResolveAvatarWalletAddress(
+			ctx,
+			toAvatarID,
 		)
+	if err != nil {
+		return ShareTransferResult{},
+			fmt.Errorf(
+				"share_transfer_uc: resolve receiver avatar wallet failed avatarId=%s: %w",
+				toAvatarID,
+				err,
+			)
 	}
+
 	if toWallet == "" {
-		return ShareTransferResult{}, ErrShareTransferToWalletEmpty
+		return ShareTransferResult{},
+			ErrShareTransferToWalletEmpty
 	}
 
-	shareRef := buildShareTransferRef(fromAvatarID, toAvatarID, productID)
-
-	tr, err := u.transferRepo.CreateAttempt(ctx, transferdom.CreateAttemptInput{
-		ProductID:       productID,
-		OrderID:         shareRef,
-		AvatarID:        toAvatarID,
-		ToWalletAddress: toWallet,
-		MintAddress:     mint,
-		CreatedAt:       now,
-	})
+	fromSigner, err := u.secrets.GetAvatarSigner(
+		ctx,
+		fromAvatarID,
+	)
 	if err != nil {
-		return ShareTransferResult{}, fmt.Errorf(
-			"share_transfer_uc: create transfer attempt failed productId=%s: %w",
-			productID, err,
-		)
-	}
-	if tr == nil || tr.Attempt <= 0 {
-		return ShareTransferResult{}, ErrShareTransferAttemptNotCreated
-	}
-
-	transferCreated := true
-	transferAttempt := tr.Attempt
-
-	defer func() {
-		if retErr != nil && transferCreated {
-			et := transferdom.ErrorTypeUnknown
-			msg := retErr.Error()
-			st := transferdom.StatusFailed
-			p := transferdom.TransferPatch{
-				Status:    &st,
-				ErrorType: &et,
-				ErrorMsg:  &msg,
-			}
-			_, _ = u.transferRepo.Patch(context.Background(), productID, transferAttempt, p)
-		}
-	}()
-
-	markFailed := func(et transferdom.ErrorType, msg string, txSig *string) {
-		if !transferCreated {
-			return
-		}
-		st := transferdom.StatusFailed
-		m := msg
-		p := transferdom.TransferPatch{
-			Status:    &st,
-			ErrorType: &et,
-			ErrorMsg:  &m,
-		}
-		if txSig != nil {
-			s := *txSig
-			p.TxSignature = &s
-		}
-		_, _ = u.transferRepo.Patch(context.Background(), productID, transferAttempt, p)
+		return ShareTransferResult{},
+			fmt.Errorf(
+				"share_transfer_uc: get sender avatar signer failed avatarId=%s wallet=%s: %w",
+				fromAvatarID,
+				fromWallet,
+				err,
+			)
 	}
 
-	markSucceeded := func(txSig string) {
-		if !transferCreated {
-			return
-		}
-		st := transferdom.StatusSucceeded
-		s := txSig
-		p := transferdom.TransferPatch{
-			Status:      &st,
-			TxSignature: &s,
-		}
-		_, _ = u.transferRepo.Patch(context.Background(), productID, transferAttempt, p)
-	}
+	shareRef := buildShareTransferRef(
+		fromAvatarID,
+		toAvatarID,
+		productID,
+	)
 
-	if currentOwner != "" && currentOwner != fromWallet {
-		msg := fmt.Sprintf(
-			"productId=%s tokenOwner=%s expectedSenderWallet=%s",
-			productID, currentOwner, fromWallet,
-		)
-		markFailed(transferdom.ErrorTypeMismatch, msg, nil)
-		return ShareTransferResult{}, fmt.Errorf("%w: %s", ErrShareTransferOwnerMismatch, msg)
-	}
+	executionResult, err := u.executionUC.Execute(
+		ctx,
+		TokenTransferExecutionInput{
+			ProductID: productID,
 
-	fromSigner, err := u.secrets.GetAvatarSigner(ctx, fromAvatarID)
+			AttemptReference: shareRef,
+
+			FromAvatarID: fromAvatarID,
+			ToAvatarID:   toAvatarID,
+
+			BrandID:          brandID,
+			ModelID:          "",
+			TokenBlueprintID: tokenBlueprintID,
+
+			MintAddress:  mintAddress,
+			CurrentOwner: currentOwner,
+
+			FromWallet: fromWallet,
+			ToWallet:   toWallet,
+
+			FromSigner: fromSigner,
+			ToSigner:   nil,
+
+			Amount: 1,
+
+			RemoveFromSenderWallet: true,
+			SyncSenderWallet:       true,
+			SyncReceiverWallet:     true,
+
+			AfterOnChain:  nil,
+			BeforeSuccess: nil,
+		},
+	)
 	if err != nil {
-		msg := fmt.Sprintf("get sender avatar signer failed avatarId=%s wallet=%s: %v", fromAvatarID, fromWallet, err)
-		markFailed(transferdom.ErrorTypeSecretInvalid, msg, nil)
-		return ShareTransferResult{}, fmt.Errorf(
-			"share_transfer_uc: get sender avatar signer failed avatarId=%s wallet=%s: %w",
-			fromAvatarID, fromWallet, err,
-		)
-	}
-
-	var toSigner any = nil
-
-	execOut, err := u.executor.ExecuteTransfer(ctx, ExecuteTransferInput{
-		ProductID:        productID,
-		AvatarID:         toAvatarID,
-		BrandID:          brandID,
-		ModelID:          "",
-		TokenBlueprintID: tokenTBID,
-
-		MintAddress: mint,
-		Amount:      1,
-
-		FromWalletAddress: fromWallet,
-		ToWalletAddress:   toWallet,
-
-		FromSigner: fromSigner,
-		ToSigner:   toSigner,
-	})
-	if err != nil {
-		msg := fmt.Sprintf(
-			"execute share transfer failed fromAvatarId=%s toAvatarId=%s mint=%s: %v",
-			fromAvatarID, toAvatarID, mint, err,
-		)
-		markFailed(transferdom.ErrorTypeTransferFailed, msg, nil)
-		return ShareTransferResult{}, fmt.Errorf(
-			"share_transfer_uc: execute share transfer failed fromAvatarId=%s toAvatarId=%s mint=%s: %w",
-			fromAvatarID, toAvatarID, mint, err,
-		)
-	}
-
-	tx := execOut.TxSignature
-
-	markSucceeded(tx)
-
-	if err := u.tokenUpdate.UpdateToAddressByProductID(ctx, productID, toWallet, now, tx); err != nil {
-		msg := fmt.Sprintf("update token owner failed productId=%s to=%s tx=%s: %v", productID, toWallet, tx, err)
-		markFailed(transferdom.ErrorTypeUnknown, msg, &tx)
-		return ShareTransferResult{}, fmt.Errorf(
-			"share_transfer_uc: update token owner failed productId=%s to=%s tx=%s: %w",
-			productID, toWallet, tx, err,
-		)
-	}
-
-	if err := u.walletUpdate.RemoveMintFromAvatarWalletItems(ctx, fromAvatarID, mint, now); err != nil {
-		msg := fmt.Sprintf("remove sender wallet item failed avatarId=%s mint=%s tx=%s: %v", fromAvatarID, mint, tx, err)
-		markFailed(transferdom.ErrorTypeUnknown, msg, &tx)
-		return ShareTransferResult{}, fmt.Errorf("share_transfer_uc: %s", msg)
-	}
-
-	if err := u.walletUpdate.AddMintToAvatarWalletItems(ctx, toAvatarID, mint, now); err != nil {
-		msg := fmt.Sprintf("add receiver wallet item failed avatarId=%s mint=%s tx=%s: %v", toAvatarID, mint, tx, err)
-		markFailed(transferdom.ErrorTypeUnknown, msg, &tx)
-		return ShareTransferResult{}, fmt.Errorf("share_transfer_uc: %s", msg)
-	}
-
-	if _, err := u.walletSync.SyncWalletTokens(ctx, fromAvatarID); err != nil {
-		msg := fmt.Sprintf("sync sender wallet failed avatarId=%s wallet=%s mint=%s tx=%s: %v", fromAvatarID, fromWallet, mint, tx, err)
-		markFailed(transferdom.ErrorTypeUnknown, msg, &tx)
-		return ShareTransferResult{}, fmt.Errorf("%w: %s", ErrShareTransferWalletSyncFailed, msg)
-	}
-
-	if _, err := u.walletSync.SyncWalletTokens(ctx, toAvatarID); err != nil {
-		msg := fmt.Sprintf("sync receiver wallet failed avatarId=%s wallet=%s mint=%s tx=%s: %v", toAvatarID, toWallet, mint, tx, err)
-		markFailed(transferdom.ErrorTypeUnknown, msg, &tx)
-		return ShareTransferResult{}, fmt.Errorf("%w: %s", ErrShareTransferWalletSyncFailed, msg)
-	}
-
-	if u.resolveWarmer != nil {
-		if err := u.resolveWarmer.ResolveAfterTransfer(ctx, toAvatarID, mint); err != nil {
-			msg := fmt.Sprintf("post-transfer resolve failed avatarId=%s mint=%s tx=%s: %v", toAvatarID, mint, tx, err)
-			markFailed(transferdom.ErrorTypeUnknown, msg, &tx)
-			return ShareTransferResult{}, fmt.Errorf("%w: %s", ErrShareTransferResolveAfterFailed, msg)
-		}
+		return ShareTransferResult{},
+			mapShareTransferExecutionError(err)
 	}
 
 	return ShareTransferResult{
 		ProductID:        productID,
-		MintAddress:      mint,
-		TokenBlueprintID: tokenTBID,
-		FromAvatarID:     fromAvatarID,
-		ToAvatarID:       toAvatarID,
-		FromWallet:       fromWallet,
-		ToWallet:         toWallet,
-		TxSignature:      tx,
+		MintAddress:      mintAddress,
+		TokenBlueprintID: tokenBlueprintID,
+
+		FromAvatarID: fromAvatarID,
+		ToAvatarID:   toAvatarID,
+
+		FromWallet:  fromWallet,
+		ToWallet:    toWallet,
+		TxSignature: executionResult.TxSignature,
 	}, nil
 }
 
-func buildShareTransferRef(fromAvatarID string, toAvatarID string, productID string) string {
-	return fmt.Sprintf("share:%s:%s:%s", fromAvatarID, toAvatarID, productID)
+func mapShareTransferExecutionError(
+	err error,
+) error {
+	switch {
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionNotConfigured,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrShareTransferNotConfigured,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionProductIDEmpty,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrShareTransferProductIDEmpty,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionFromAvatarIDEmpty,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrShareTransferFromAvatarEmpty,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionToAvatarIDEmpty,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrShareTransferToAvatarEmpty,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionMintAddressEmpty,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrShareTransferMintEmpty,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionFromWalletEmpty,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrShareTransferFromWalletEmpty,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionToWalletEmpty,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrShareTransferToWalletEmpty,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionOwnerMismatch,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrShareTransferOwnerMismatch,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionAttemptNotCreated,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrShareTransferAttemptNotCreated,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionWalletSyncNotConfigured,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrShareTransferNotConfigured,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionWalletSyncFailed,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrShareTransferWalletSyncFailed,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionResolveAfterFailed,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrShareTransferResolveAfterFailed,
+			err,
+		)
+
+	default:
+		return err
+	}
+}
+
+func buildShareTransferRef(
+	fromAvatarID string,
+	toAvatarID string,
+	productID string,
+) string {
+	return fmt.Sprintf(
+		"share:%s:%s:%s",
+		fromAvatarID,
+		toAvatarID,
+		productID,
+	)
 }

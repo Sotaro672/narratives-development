@@ -52,23 +52,13 @@ func NewProductBlueprintUsecase(
 // ModelRefsの同期はModelUsecase側でmodels collectionを正として
 // 実行します。
 type ProductBlueprintRepo interface {
-	// GetByIDはactive状態のProductBlueprintだけを取得します。
-	//
-	// 通常の更新・印刷処理ではこのメソッドを使用します。
+	// GetByIDはProductBlueprintをIDで取得します。
 	GetByID(
 		ctx context.Context,
 		id string,
 	) (productbpdom.ProductBlueprint, error)
 
-	// GetByIDIncludingDeletedはactiveとdeletedの両方を取得します。
-	//
-	// 論理削除と復旧処理で使用します。
-	GetByIDIncludingDeleted(
-		ctx context.Context,
-		id string,
-	) (productbpdom.ProductBlueprint, error)
-
-	// MarkPrintedはactive状態のProductBlueprintの
+	// MarkPrintedはProductBlueprintの
 	// printedをtrueへ更新します。
 	MarkPrinted(
 		ctx context.Context,
@@ -87,28 +77,13 @@ type ProductBlueprintRepo interface {
 		patch productbpdom.Patch,
 	) (productbpdom.ProductBlueprint, error)
 
-	// SoftDeleteはProductBlueprintと配下Modelを論理削除します。
-	//
-	// ProductBlueprintと配下Modelには同一のdeletedAtとpurgeAtを
-	// 設定します。
-	SoftDelete(
+	// Deleteはprinted=falseのProductBlueprintと
+	// 配下Modelを物理削除します。
+	Delete(
 		ctx context.Context,
 		id string,
 		companyID string,
-		deletedBy *string,
-		deletedAt time.Time,
-	) (productbpdom.ProductBlueprint, error)
-
-	// RestoreはProductBlueprintと配下Modelを同時に復旧します。
-	//
-	// restoredAtがpurgeAtより前の場合だけ復旧できます。
-	Restore(
-		ctx context.Context,
-		id string,
-		companyID string,
-		restoredBy *string,
-		restoredAt time.Time,
-	) (productbpdom.ProductBlueprint, error)
+	) error
 }
 
 // ProductBlueprintReviewInitializerはProductBlueprint起票時に、
@@ -285,7 +260,7 @@ func (
 //   - ModelRefsの同期はModelUsecaseを正とする。
 //   - UpdatedByはHTTP bodyから直接受け取らず、
 //     Usecaseが保持する更新者情報をRepositoryへ渡す。
-//   - 印刷済みまたは論理削除済みの場合は更新しない。
+//   - 印刷済みの場合は更新しない。
 func (
 	u *ProductBlueprintUsecase,
 ) Update(
@@ -309,7 +284,7 @@ func (
 			productbpdom.ErrInvalidCompanyID
 	}
 
-	// active状態の既存Entityを取得し、
+	// 既存Entityを取得し、
 	// company境界と変更可能状態を確認する。
 	current, err := u.repo.GetByID(
 		ctx,
@@ -398,161 +373,60 @@ func (
 	return updated, nil
 }
 
-// SoftDeleteはProductBlueprintと配下Modelを論理削除します。
+// DeleteはProductBlueprintと配下Modelを物理削除します。
 //
 // 削除条件:
 //   - 認証中companyとProductBlueprint.companyIdが一致する
 //   - printed == false
-//   - status == active
 //
-// deletedByはHTTP bodyから受け取らず、Handlerまたは呼出元が
-// 認証Contextから取得した更新者IDを渡します。
-//
-// 同じProductBlueprintがすでに論理削除済みの場合は、
-// Repository側で最初のdeletedAtとpurgeAtを維持して
-// 冪等に処理します。
+// Repository側でも同じ条件を再確認し、
+// models.productBlueprintId == idのModelをすべて物理削除した後、
+// ProductBlueprint本体を物理削除します。
 func (
 	u *ProductBlueprintUsecase,
-) SoftDelete(
+) Delete(
 	ctx context.Context,
 	id string,
-	deletedBy *string,
-) (productbpdom.ProductBlueprint, error) {
+) error {
 	if u == nil || u.repo == nil {
-		return productbpdom.ProductBlueprint{},
-			productbpdom.ErrInternal
+		return productbpdom.ErrInternal
 	}
 
 	if id == "" {
-		return productbpdom.ProductBlueprint{},
-			productbpdom.ErrInvalidID
+		return productbpdom.ErrInvalidID
 	}
 
 	companyID := CompanyIDFromContext(ctx)
 	if companyID == "" {
-		return productbpdom.ProductBlueprint{},
-			productbpdom.ErrInvalidCompanyID
+		return productbpdom.ErrInvalidCompanyID
 	}
 
-	current, err := u.repo.GetByIDIncludingDeleted(
+	current, err := u.repo.GetByID(
 		ctx,
 		id,
 	)
 	if err != nil {
-		return productbpdom.ProductBlueprint{}, err
+		return err
 	}
 
 	if current.CompanyID == "" ||
 		current.CompanyID != companyID {
-		return productbpdom.ProductBlueprint{},
-			productbpdom.ErrForbidden
+		return productbpdom.ErrForbidden
 	}
 
 	if current.Printed {
-		return productbpdom.ProductBlueprint{},
-			productbpdom.ErrForbidden
+		return productbpdom.ErrForbidden
 	}
 
-	if current.IsDeleted() {
-		return current, nil
-	}
-
-	if !current.CanModify() {
-		return productbpdom.ProductBlueprint{},
-			productbpdom.ErrForbidden
-	}
-
-	deletedAt := time.Now().UTC()
-
-	deleted, err := u.repo.SoftDelete(
+	if err := u.repo.Delete(
 		ctx,
 		id,
 		companyID,
-		deletedBy,
-		deletedAt,
-	)
-	if err != nil {
-		return productbpdom.ProductBlueprint{}, err
+	); err != nil {
+		return err
 	}
 
-	return deleted, nil
-}
-
-// Restoreは論理削除済みProductBlueprintと配下Modelを復旧します。
-//
-// 復旧条件:
-//   - 認証中companyとProductBlueprint.companyIdが一致する
-//   - printed == false
-//   - status == deleted
-//   - 現在時刻がpurgeAtより前
-//
-// restoredByはHTTP bodyから受け取らず、Handlerまたは呼出元が
-// 認証Contextから取得した更新者IDを渡します。
-func (
-	u *ProductBlueprintUsecase,
-) Restore(
-	ctx context.Context,
-	id string,
-	restoredBy *string,
-) (productbpdom.ProductBlueprint, error) {
-	if u == nil || u.repo == nil {
-		return productbpdom.ProductBlueprint{},
-			productbpdom.ErrInternal
-	}
-
-	if id == "" {
-		return productbpdom.ProductBlueprint{},
-			productbpdom.ErrInvalidID
-	}
-
-	companyID := CompanyIDFromContext(ctx)
-	if companyID == "" {
-		return productbpdom.ProductBlueprint{},
-			productbpdom.ErrInvalidCompanyID
-	}
-
-	current, err := u.repo.GetByIDIncludingDeleted(
-		ctx,
-		id,
-	)
-	if err != nil {
-		return productbpdom.ProductBlueprint{}, err
-	}
-
-	if current.CompanyID == "" ||
-		current.CompanyID != companyID {
-		return productbpdom.ProductBlueprint{},
-			productbpdom.ErrForbidden
-	}
-
-	if current.Printed {
-		return productbpdom.ProductBlueprint{},
-			productbpdom.ErrForbidden
-	}
-
-	if current.IsActive() {
-		return current, nil
-	}
-
-	restoredAt := time.Now().UTC()
-
-	if !current.CanRestore(restoredAt) {
-		return productbpdom.ProductBlueprint{},
-			productbpdom.ErrRestorePeriodExpired
-	}
-
-	restored, err := u.repo.Restore(
-		ctx,
-		id,
-		companyID,
-		restoredBy,
-		restoredAt,
-	)
-	if err != nil {
-		return productbpdom.ProductBlueprint{}, err
-	}
-
-	return restored, nil
+	return nil
 }
 
 // ------------------------------------------------------------

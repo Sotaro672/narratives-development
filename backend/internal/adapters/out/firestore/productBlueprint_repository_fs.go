@@ -14,17 +14,15 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	commondom "narratives/internal/domain/common"
 	pbdom "narratives/internal/domain/productBlueprint"
 	categorydom "narratives/internal/domain/productBlueprintCategory"
 )
 
-const maxModelsPerLifecycleTransaction = 499
+const maxModelsPerDeleteTransaction = 498
 
 // ProductBlueprintRepositoryFS implements pbdom.Repository using Firestore.
 //
-// このRepositoryは通常の作成・参照・更新・論理削除・復旧を担当します。
-// 復旧期限経過後の物理削除は、別のPurgeRepository実装へ分離します。
+// このRepositoryは通常の作成・参照・更新・物理削除を担当します。
 type ProductBlueprintRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -125,30 +123,8 @@ func (r *ProductBlueprintRepositoryFS) Create(
 	return docToProductBlueprint(snapshot)
 }
 
-// GetByID returns only an active ProductBlueprint by ID.
-//
-// 論理削除済みProductBlueprintは通常の参照経路へ返さず、
-// ErrNotFoundとして扱います。
+// GetByID returns a ProductBlueprint by ID.
 func (r *ProductBlueprintRepositoryFS) GetByID(
-	ctx context.Context,
-	id string,
-) (pbdom.ProductBlueprint, error) {
-	productBlueprint, err := r.GetByIDIncludingDeleted(ctx, id)
-	if err != nil {
-		return pbdom.ProductBlueprint{}, err
-	}
-
-	if !productBlueprint.IsActive() {
-		return pbdom.ProductBlueprint{}, pbdom.ErrNotFound
-	}
-
-	return productBlueprint, nil
-}
-
-// GetByIDIncludingDeleted returns an active or deleted ProductBlueprint.
-//
-// 論理削除・復旧などのライフサイクル処理専用です。
-func (r *ProductBlueprintRepositoryFS) GetByIDIncludingDeleted(
 	ctx context.Context,
 	id string,
 ) (pbdom.ProductBlueprint, error) {
@@ -171,12 +147,11 @@ func (r *ProductBlueprintRepositoryFS) GetByIDIncludingDeleted(
 	return docToProductBlueprint(snapshot)
 }
 
-// GetIDByModelID returns productBlueprintID and modelRefs for the active
-// ProductBlueprint that owns the given active modelID.
+// GetIDByModelID returns productBlueprintID and modelRefs for the
+// ProductBlueprint that owns the given modelID.
 //
 // 方針:
 //   - models/{modelID}.productBlueprintIdを正としてProductBlueprintを特定する。
-//   - ModelまたはProductBlueprintが論理削除済みの場合はErrNotFoundを返す。
 //   - productBlueprintIdだけが必要なcallerは第1戻り値を使う。
 //   - displayOrderが必要なcallerは第2戻り値のmodelRefsから対象modelIdを探す。
 func (r *ProductBlueprintRepositoryFS) GetIDByModelID(
@@ -204,15 +179,6 @@ func (r *ProductBlueprintRepositoryFS) GetIDByModelID(
 		return "", nil, pbdom.ErrNotFound
 	}
 
-	modelLifecycle, err := deletionLifecycleFromData(data)
-	if err != nil {
-		return "", nil, err
-	}
-
-	if !modelLifecycle.IsActive() {
-		return "", nil, pbdom.ErrNotFound
-	}
-
 	productBlueprintID, ok := data["productBlueprintId"].(string)
 	if !ok || productBlueprintID == "" {
 		return "", nil, pbdom.ErrNotFound
@@ -226,30 +192,10 @@ func (r *ProductBlueprintRepositoryFS) GetIDByModelID(
 	return productBlueprintID, cloneModelRefs(productBlueprint.ModelRefs), nil
 }
 
-// ListByCompanyID returns active ProductBlueprints for the given companyID.
-//
-// status未設定の既存Documentはactiveとして扱うため、バックフィル完了までは
-// companyIdで取得した後にDomainのLifecycleで絞り込みます。
+// ListByCompanyID returns ProductBlueprints for the given companyID.
 func (r *ProductBlueprintRepositoryFS) ListByCompanyID(
 	ctx context.Context,
 	companyID string,
-) ([]pbdom.ProductBlueprint, error) {
-	return r.listByCompanyIDAndDeletionState(ctx, companyID, false)
-}
-
-// ListDeletedByCompanyID returns logically deleted ProductBlueprints for the
-// given companyID.
-func (r *ProductBlueprintRepositoryFS) ListDeletedByCompanyID(
-	ctx context.Context,
-	companyID string,
-) ([]pbdom.ProductBlueprint, error) {
-	return r.listByCompanyIDAndDeletionState(ctx, companyID, true)
-}
-
-func (r *ProductBlueprintRepositoryFS) listByCompanyIDAndDeletionState(
-	ctx context.Context,
-	companyID string,
-	deleted bool,
 ) ([]pbdom.ProductBlueprint, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -280,17 +226,13 @@ func (r *ProductBlueprintRepositoryFS) listByCompanyIDAndDeletionState(
 			return nil, err
 		}
 
-		if deleted != productBlueprint.IsDeleted() {
-			continue
-		}
-
 		productBlueprints = append(productBlueprints, productBlueprint)
 	}
 
 	return productBlueprints, nil
 }
 
-// ListIDsByBrandID returns active blueprint IDs for the given brandID.
+// ListIDsByBrandID returns blueprint IDs for the given brandID.
 func (r *ProductBlueprintRepositoryFS) ListIDsByBrandID(
 	ctx context.Context,
 	brandID string,
@@ -324,10 +266,6 @@ func (r *ProductBlueprintRepositoryFS) ListIDsByBrandID(
 			return nil, err
 		}
 
-		if !productBlueprint.IsActive() {
-			continue
-		}
-
 		ids = append(ids, productBlueprint.ID)
 	}
 
@@ -337,7 +275,7 @@ func (r *ProductBlueprintRepositoryFS) ListIDsByBrandID(
 // ReplaceModelRefsWithoutTouch replaces modelRefs only, without touching
 // updatedAt/updatedBy.
 //
-//   - activeかつprinted=falseの場合だけ更新する。
+//   - printed=falseの場合だけ更新する。
 //   - updatedAt / updatedByを更新しない。
 //   - modelRefsのみ部分更新する。
 //   - refsはdisplayOrder昇順に正規化し、1..Nに再採番する。
@@ -411,7 +349,7 @@ func (r *ProductBlueprintRepositoryFS) ReplaceModelRefsWithoutTouch(
 	return result, nil
 }
 
-// Update updates an active and unprinted ProductBlueprint by patch.
+// Update updates an unprinted ProductBlueprint by patch.
 func (r *ProductBlueprintRepositoryFS) Update(
 	ctx context.Context,
 	id string,
@@ -596,7 +534,7 @@ func (r *ProductBlueprintRepositoryFS) Update(
 	return result, nil
 }
 
-// MarkPrinted sets printed=true on an active ProductBlueprint and returns it.
+// MarkPrinted sets printed=true on a ProductBlueprint and returns it.
 func (r *ProductBlueprintRepositoryFS) MarkPrinted(
 	ctx context.Context,
 	id string,
@@ -628,10 +566,6 @@ func (r *ProductBlueprintRepositoryFS) MarkPrinted(
 			if productBlueprint.Printed {
 				result = productBlueprint
 				return nil
-			}
-
-			if !productBlueprint.IsActive() {
-				return pbdom.ErrForbidden
 			}
 
 			now := time.Now().UTC()
@@ -679,39 +613,34 @@ func (r *ProductBlueprintRepositoryFS) MarkPrinted(
 	return result, nil
 }
 
-// SoftDelete logically deletes a ProductBlueprint and all of its models.
+// Delete physically deletes an unprinted ProductBlueprint and all of its models.
 //
-// ProductBlueprintと配下Modelには同一のdeletedAt、deletedBy、purgeAtを
-// 設定します。printed=trueの場合は削除できません。
-func (r *ProductBlueprintRepositoryFS) SoftDelete(
+// models collectionのproductBlueprintId == idを正として配下Modelを取得し、
+// 同一Transaction内でModelを先に削除した後、
+// productBlueprintReviewAggregates/{id}とProductBlueprint本体を削除します。
+func (r *ProductBlueprintRepositoryFS) Delete(
 	ctx context.Context,
 	id string,
 	companyID string,
-	deletedBy *string,
-	deletedAt time.Time,
-) (pbdom.ProductBlueprint, error) {
+) error {
 	if r == nil || r.Client == nil {
-		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
+		return errors.New("firestore client is nil")
 	}
 
 	if id == "" {
-		return pbdom.ProductBlueprint{}, pbdom.ErrInvalidID
+		return pbdom.ErrInvalidID
 	}
 
 	if companyID == "" {
-		return pbdom.ProductBlueprint{}, pbdom.ErrInvalidCompanyID
-	}
-
-	if deletedAt.IsZero() {
-		deletedAt = time.Now().UTC()
-	} else {
-		deletedAt = deletedAt.UTC()
+		return pbdom.ErrInvalidCompanyID
 	}
 
 	documentReference := r.col().Doc(id)
-	var result pbdom.ProductBlueprint
+	reviewAggregateReference := r.Client.
+		Collection("productBlueprintReviewAggregates").
+		Doc(id)
 
-	err := r.Client.RunTransaction(
+	return r.Client.RunTransaction(
 		ctx,
 		func(ctx context.Context, transaction *firestore.Transaction) error {
 			snapshot, err := transaction.Get(documentReference)
@@ -733,11 +662,6 @@ func (r *ProductBlueprintRepositoryFS) SoftDelete(
 				return pbdom.ErrForbidden
 			}
 
-			if productBlueprint.IsDeleted() {
-				result = productBlueprint
-				return nil
-			}
-
 			modelSnapshots, err := r.listModelSnapshotsInTransaction(
 				transaction,
 				id,
@@ -746,225 +670,34 @@ func (r *ProductBlueprintRepositoryFS) SoftDelete(
 				return err
 			}
 
-			if len(modelSnapshots) > maxModelsPerLifecycleTransaction {
+			if len(modelSnapshots) > maxModelsPerDeleteTransaction {
 				return pbdom.WrapConflict(
 					nil,
-					"too many models for one lifecycle transaction",
+					"too many models for one delete transaction",
 				)
-			}
-
-			if err := validateExpectedModels(
-				productBlueprint.ModelRefs,
-				modelSnapshots,
-			); err != nil {
-				return err
 			}
 
 			for _, modelSnapshot := range modelSnapshots {
-				modelLifecycle, err := deletionLifecycleFromData(
-					modelSnapshot.Data(),
-				)
-				if err != nil {
+				if modelSnapshot == nil || modelSnapshot.Ref == nil {
+					continue
+				}
+
+				if err := transaction.Delete(modelSnapshot.Ref); err != nil {
 					return err
 				}
-
-				if !modelLifecycle.IsActive() {
-					return pbdom.WrapConflict(
-						nil,
-						"model deletion state is not active",
-					)
-				}
 			}
 
-			if err := productBlueprint.SoftDelete(
-				deletedAt,
-				deletedBy,
-			); err != nil {
+			if err := transaction.Delete(reviewAggregateReference); err != nil {
 				return err
 			}
 
-			productUpdates := deletedLifecycleUpdates(
-				productBlueprint.DeletionLifecycle,
-				productBlueprint.UpdatedAt,
-				productBlueprint.UpdatedBy,
-			)
-
-			if err := transaction.Update(
-				documentReference,
-				productUpdates,
-			); err != nil {
-				return mapFirestoreNotFound(err)
+			if err := transaction.Delete(documentReference); err != nil {
+				return err
 			}
 
-			for _, modelSnapshot := range modelSnapshots {
-				if err := transaction.Update(
-					modelSnapshot.Ref,
-					deletedLifecycleUpdates(
-						productBlueprint.DeletionLifecycle,
-						productBlueprint.UpdatedAt,
-						productBlueprint.UpdatedBy,
-					),
-				); err != nil {
-					return mapFirestoreNotFound(err)
-				}
-			}
-
-			result = productBlueprint
 			return nil
 		},
 	)
-	if err != nil {
-		return pbdom.ProductBlueprint{}, err
-	}
-
-	return result, nil
-}
-
-// Restore restores a logically deleted ProductBlueprint and all of its models.
-func (r *ProductBlueprintRepositoryFS) Restore(
-	ctx context.Context,
-	id string,
-	companyID string,
-	restoredBy *string,
-	restoredAt time.Time,
-) (pbdom.ProductBlueprint, error) {
-	if r == nil || r.Client == nil {
-		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
-	}
-
-	if id == "" {
-		return pbdom.ProductBlueprint{}, pbdom.ErrInvalidID
-	}
-
-	if companyID == "" {
-		return pbdom.ProductBlueprint{}, pbdom.ErrInvalidCompanyID
-	}
-
-	if restoredAt.IsZero() {
-		restoredAt = time.Now().UTC()
-	} else {
-		restoredAt = restoredAt.UTC()
-	}
-
-	documentReference := r.col().Doc(id)
-	var result pbdom.ProductBlueprint
-
-	err := r.Client.RunTransaction(
-		ctx,
-		func(ctx context.Context, transaction *firestore.Transaction) error {
-			snapshot, err := transaction.Get(documentReference)
-			if err != nil {
-				return mapFirestoreNotFound(err)
-			}
-
-			productBlueprint, err := docToProductBlueprint(snapshot)
-			if err != nil {
-				return err
-			}
-
-			if productBlueprint.CompanyID == "" ||
-				productBlueprint.CompanyID != companyID {
-				return pbdom.ErrForbidden
-			}
-
-			if productBlueprint.Printed {
-				return pbdom.ErrForbidden
-			}
-
-			if productBlueprint.IsActive() {
-				result = productBlueprint
-				return nil
-			}
-
-			if !productBlueprint.CanRestore(restoredAt) {
-				return pbdom.ErrRestorePeriodExpired
-			}
-
-			modelSnapshots, err := r.listModelSnapshotsInTransaction(
-				transaction,
-				id,
-			)
-			if err != nil {
-				return err
-			}
-
-			if len(modelSnapshots) > maxModelsPerLifecycleTransaction {
-				return pbdom.WrapConflict(
-					nil,
-					"too many models for one lifecycle transaction",
-				)
-			}
-
-			if err := validateExpectedModels(
-				productBlueprint.ModelRefs,
-				modelSnapshots,
-			); err != nil {
-				return err
-			}
-
-			for _, modelSnapshot := range modelSnapshots {
-				modelLifecycle, err := deletionLifecycleFromData(
-					modelSnapshot.Data(),
-				)
-				if err != nil {
-					return err
-				}
-
-				if !modelLifecycle.IsDeleted() ||
-					modelLifecycle.PurgeAt == nil ||
-					productBlueprint.PurgeAt == nil ||
-					!modelLifecycle.PurgeAt.Equal(*productBlueprint.PurgeAt) {
-					return pbdom.WrapConflict(
-						nil,
-						"model deletion state does not match productBlueprint",
-					)
-				}
-
-				if !modelLifecycle.CanRestore(restoredAt) {
-					return pbdom.ErrRestorePeriodExpired
-				}
-			}
-
-			if err := productBlueprint.Restore(
-				restoredAt,
-				restoredBy,
-			); err != nil {
-				return err
-			}
-
-			productUpdates := restoredLifecycleUpdates(
-				productBlueprint.UpdatedAt,
-				productBlueprint.UpdatedBy,
-			)
-
-			if err := transaction.Update(
-				documentReference,
-				productUpdates,
-			); err != nil {
-				return mapFirestoreNotFound(err)
-			}
-
-			for _, modelSnapshot := range modelSnapshots {
-				if err := transaction.Update(
-					modelSnapshot.Ref,
-					restoredLifecycleUpdates(
-						productBlueprint.UpdatedAt,
-						productBlueprint.UpdatedBy,
-					),
-				); err != nil {
-					return mapFirestoreNotFound(err)
-				}
-			}
-
-			result = productBlueprint
-			return nil
-		},
-	)
-	if err != nil {
-		return pbdom.ProductBlueprint{}, err
-	}
-
-	return result, nil
 }
 
 func (r *ProductBlueprintRepositoryFS) listModelSnapshotsInTransaction(
@@ -1043,14 +776,6 @@ func docToProductBlueprint(
 		return value.UTC()
 	}
 
-	getTimePointer := func(key string) *time.Time {
-		value := getTime(key)
-		if value.IsZero() {
-			return nil
-		}
-		return &value
-	}
-
 	printed, _ := data["printed"].(bool)
 
 	category, err := docToProductBlueprintCategorySnapshot(document)
@@ -1092,15 +817,6 @@ func docToProductBlueprint(
 		AssigneeID: getString("assigneeId"),
 		ModelRefs:  modelRefs,
 		Printed:    printed,
-
-		DeletionLifecycle: commondom.DeletionLifecycle{
-			Status: commondom.NormalizeDeletionStatus(
-				commondom.DeletionStatus(getString("status")),
-			),
-			DeletedAt: getTimePointer("deletedAt"),
-			DeletedBy: getStringPointer("deletedBy"),
-			PurgeAt:   getTimePointer("purgeAt"),
-		},
 
 		CreatedBy: getStringPointer("createdBy"),
 		CreatedAt: getTime("createdAt"),
@@ -1248,9 +964,6 @@ func productBlueprintToDoc(
 		"createdAt":  createdAt.UTC(),
 		"updatedAt":  updatedAt.UTC(),
 		"printed":    productBlueprint.Printed,
-		"status": string(
-			commondom.NormalizeDeletionStatus(productBlueprint.Status),
-		),
 	}
 
 	if productBlueprint.CategoryFields != nil {
@@ -1292,21 +1005,6 @@ func productBlueprintToDoc(
 		}
 
 		document["modelRefs"] = modelRefsDocument
-	}
-
-	if productBlueprint.IsDeleted() {
-		if productBlueprint.DeletedAt == nil ||
-			productBlueprint.PurgeAt == nil {
-			return nil, pbdom.ErrInvalidDeletionState
-		}
-
-		document["deletedAt"] = productBlueprint.DeletedAt.UTC()
-		document["purgeAt"] = productBlueprint.PurgeAt.UTC()
-
-		if productBlueprint.DeletedBy != nil &&
-			*productBlueprint.DeletedBy != "" {
-			document["deletedBy"] = *productBlueprint.DeletedBy
-		}
 	}
 
 	if productBlueprint.CreatedBy != nil &&
@@ -1351,169 +1049,6 @@ func appendOptionalStringUpdate(
 			Value: *value,
 		},
 	)
-}
-
-func deletedLifecycleUpdates(
-	lifecycle commondom.DeletionLifecycle,
-	updatedAt time.Time,
-	updatedBy *string,
-) []firestore.Update {
-	updates := []firestore.Update{
-		{
-			Path:  "status",
-			Value: string(commondom.DeletionStatusDeleted),
-		},
-		{
-			Path:  "deletedAt",
-			Value: lifecycle.DeletedAt.UTC(),
-		},
-		{
-			Path:  "purgeAt",
-			Value: lifecycle.PurgeAt.UTC(),
-		},
-		{
-			Path:  "updatedAt",
-			Value: updatedAt.UTC(),
-		},
-	}
-
-	updates = appendOptionalStringUpdate(
-		updates,
-		"deletedBy",
-		lifecycle.DeletedBy,
-	)
-
-	return appendOptionalStringUpdate(
-		updates,
-		"updatedBy",
-		updatedBy,
-	)
-}
-
-func restoredLifecycleUpdates(
-	updatedAt time.Time,
-	updatedBy *string,
-) []firestore.Update {
-	updates := []firestore.Update{
-		{
-			Path:  "status",
-			Value: string(commondom.DeletionStatusActive),
-		},
-		{
-			Path:  "deletedAt",
-			Value: firestore.Delete,
-		},
-		{
-			Path:  "deletedBy",
-			Value: firestore.Delete,
-		},
-		{
-			Path:  "purgeAt",
-			Value: firestore.Delete,
-		},
-		{
-			Path:  "updatedAt",
-			Value: updatedAt.UTC(),
-		},
-	}
-
-	return appendOptionalStringUpdate(
-		updates,
-		"updatedBy",
-		updatedBy,
-	)
-}
-
-func deletionLifecycleFromData(
-	data map[string]any,
-) (commondom.DeletionLifecycle, error) {
-	if data == nil {
-		return commondom.DeletionLifecycle{},
-			pbdom.ErrInvalidDeletionState
-	}
-
-	statusValue, _ := data["status"].(string)
-
-	lifecycle := commondom.DeletionLifecycle{
-		Status: commondom.NormalizeDeletionStatus(
-			commondom.DeletionStatus(statusValue),
-		),
-		DeletedAt: timePointerFromData(data, "deletedAt"),
-		DeletedBy: stringPointerFromData(data, "deletedBy"),
-		PurgeAt:   timePointerFromData(data, "purgeAt"),
-	}
-
-	if !lifecycle.HasConsistentDeletionState() {
-		return commondom.DeletionLifecycle{},
-			pbdom.ErrInvalidDeletionState
-	}
-
-	return lifecycle, nil
-}
-
-func timePointerFromData(
-	data map[string]any,
-	key string,
-) *time.Time {
-	value, ok := data[key].(time.Time)
-	if !ok || value.IsZero() {
-		return nil
-	}
-
-	value = value.UTC()
-	return &value
-}
-
-func stringPointerFromData(
-	data map[string]any,
-	key string,
-) *string {
-	value, ok := data[key].(string)
-	if !ok || value == "" {
-		return nil
-	}
-
-	return &value
-}
-
-func validateExpectedModels(
-	modelRefs []pbdom.ModelRef,
-	modelSnapshots []*firestore.DocumentSnapshot,
-) error {
-	if len(modelRefs) == 0 {
-		return nil
-	}
-
-	modelIDs := make(
-		map[string]struct{},
-		len(modelSnapshots),
-	)
-
-	for _, snapshot := range modelSnapshots {
-		if snapshot == nil || snapshot.Ref == nil {
-			continue
-		}
-
-		modelIDs[snapshot.Ref.ID] = struct{}{}
-	}
-
-	for _, modelRef := range modelRefs {
-		if modelRef.ModelID == "" {
-			continue
-		}
-
-		if _, exists := modelIDs[modelRef.ModelID]; !exists {
-			return pbdom.WrapConflict(
-				nil,
-				fmt.Sprintf(
-					"model %s referenced by productBlueprint is missing",
-					modelRef.ModelID,
-				),
-			)
-		}
-	}
-
-	return nil
 }
 
 func modelRefsToDoc(

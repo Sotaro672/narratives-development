@@ -360,7 +360,6 @@ func buildUsecases(
 
 	memberUC := uc.NewMemberUsecase(
 		r.memberRepo,
-		invitationUC,
 	)
 
 	authBootstrapSvc := &uc.BootstrapService{
@@ -409,14 +408,10 @@ func buildUsecases(
 
 			return uc.NewProductBlueprintReviewUsecase(
 				r.productBlueprintReviewRepo,
-				r.walletRepo,
 				r.productBlueprintRepo,
 				r.brandRepo,
 				r.memberRepo,
-				onchainReader,
-				tokenQuery,
-				r.productRepo,
-				r.productBlueprintRepo,
+				walletUC,
 				r.avatarRepo,
 				nil,
 			)

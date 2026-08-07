@@ -11,7 +11,6 @@ import (
 	branddom "narratives/internal/domain/brand"
 	orderdom "narratives/internal/domain/order"
 	resaledom "narratives/internal/domain/resale"
-	transferdom "narratives/internal/domain/transfer"
 )
 
 // ============================================================
@@ -130,15 +129,6 @@ type TokenOwnerUpdater interface {
 	) error
 }
 
-type WalletItemUpdater interface {
-	AddMintToAvatarWalletItems(
-		ctx context.Context,
-		avatarID string,
-		mintAddress string,
-		now time.Time,
-	) error
-}
-
 type BrandWalletResolver interface {
 	ResolveBrandWalletAddress(
 		ctx context.Context,
@@ -222,14 +212,9 @@ type PostTransferResolveWarmer interface {
 // ============================================================
 
 type TransferUsecase struct {
-	verifier     ScanVerifier
-	orderRepo    OrderRepoForTransfer
-	tokenRepo    TokenResolver
-	tokenUpdate  TokenOwnerUpdater
-	walletUpdate WalletItemUpdater
-
-	// Transferの永続化契約はDomain RepositoryPortへ統一する。
-	transferRepo transferdom.RepositoryPort
+	verifier  ScanVerifier
+	orderRepo OrderRepoForTransfer
+	tokenRepo TokenResolver
 
 	brandWallet  BrandWalletResolver
 	avatarWallet AvatarWalletResolver
@@ -237,16 +222,12 @@ type TransferUsecase struct {
 	brandDisplay  BrandDisplayResolver
 	avatarDisplay AvatarDisplayResolver
 
-	secrets  WalletSecretProvider
-	executor TokenTransferExecutor
+	secrets WalletSecretProvider
 
-	resaleRepo           ResaleReaderForTransfer
-	avatarSecrets        AvatarSecretProvider
-	walletTransferUpdate AvatarWalletItemTransferUpdater
-	walletSync           AvatarWalletSyncer
+	resaleRepo    ResaleReaderForTransfer
+	avatarSecrets AvatarSecretProvider
 
-	resolveWarmer PostTransferResolveWarmer
-
+	executionUC *TokenTransferExecutionUsecase
 	inventoryUC *InventoryUsecase
 
 	now func() time.Time
@@ -256,25 +237,18 @@ func NewTransferUsecase(
 	verifier ScanVerifier,
 	orderRepo OrderRepoForTransfer,
 	tokenRepo TokenResolver,
-	tokenUpdate TokenOwnerUpdater,
-	walletUpdate WalletItemUpdater,
-	transferRepo transferdom.RepositoryPort,
 	brandWallet BrandWalletResolver,
 	avatarWallet AvatarWalletResolver,
 	brandDisplay BrandDisplayResolver,
 	avatarDisplay AvatarDisplayResolver,
 	secrets WalletSecretProvider,
-	executor TokenTransferExecutor,
-	resolveWarmer PostTransferResolveWarmer,
+	executionUC *TokenTransferExecutionUsecase,
 	inventoryUC *InventoryUsecase,
 ) *TransferUsecase {
 	return &TransferUsecase{
-		verifier:     verifier,
-		orderRepo:    orderRepo,
-		tokenRepo:    tokenRepo,
-		tokenUpdate:  tokenUpdate,
-		walletUpdate: walletUpdate,
-		transferRepo: transferRepo,
+		verifier:  verifier,
+		orderRepo: orderRepo,
+		tokenRepo: tokenRepo,
 
 		brandWallet:  brandWallet,
 		avatarWallet: avatarWallet,
@@ -282,11 +256,10 @@ func NewTransferUsecase(
 		brandDisplay:  brandDisplay,
 		avatarDisplay: avatarDisplay,
 
-		secrets:  secrets,
-		executor: executor,
+		secrets: secrets,
 
-		resolveWarmer: resolveWarmer,
-		inventoryUC:   inventoryUC,
+		executionUC: executionUC,
+		inventoryUC: inventoryUC,
 
 		now: time.Now,
 	}
@@ -295,14 +268,10 @@ func NewTransferUsecase(
 func (u *TransferUsecase) WithResaleTransferDependencies(
 	resaleRepo ResaleReaderForTransfer,
 	avatarSecrets AvatarSecretProvider,
-	walletTransferUpdate AvatarWalletItemTransferUpdater,
-	walletSync AvatarWalletSyncer,
 ) *TransferUsecase {
 	if u != nil {
 		u.resaleRepo = resaleRepo
 		u.avatarSecrets = avatarSecrets
-		u.walletTransferUpdate = walletTransferUpdate
-		u.walletSync = walletSync
 	}
 
 	return u
@@ -369,21 +338,15 @@ type transferExecutionSource struct {
 func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 	ctx context.Context,
 	in TransferByVerifiedScanInput,
-) (
-	result TransferByVerifiedScanResult,
-	retErr error,
-) {
+) (TransferByVerifiedScanResult, error) {
 	if u == nil ||
 		u.verifier == nil ||
 		u.orderRepo == nil ||
 		u.tokenRepo == nil ||
-		u.tokenUpdate == nil ||
-		u.walletUpdate == nil ||
-		u.transferRepo == nil ||
 		u.brandWallet == nil ||
 		u.avatarWallet == nil ||
 		u.secrets == nil ||
-		u.executor == nil ||
+		u.executionUC == nil ||
 		u.now == nil {
 		return TransferByVerifiedScanResult{},
 			ErrTransferNotConfigured
@@ -498,13 +461,13 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 			ErrTransferNoEligibleOrder
 	}
 
-	now := u.now().UTC()
+	lockAt := u.now().UTC()
 
 	if err := u.orderRepo.LockTransferItem(
 		ctx,
 		target.OrderID,
 		target.ItemIndex,
-		now,
+		lockAt,
 	); err != nil {
 		return TransferByVerifiedScanResult{},
 			fmt.Errorf(
@@ -516,43 +479,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 	}
 
 	locked := true
-	transferAttempt := 0
-	transferCreated := false
-	transferFailed := false
-
-	patchTransfer := func(
-		patch transferdom.TransferPatch,
-	) error {
-		if !transferCreated {
-			return nil
-		}
-
-		_, err := u.transferRepo.Patch(
-			context.Background(),
-			productID,
-			transferAttempt,
-			patch,
-		)
-		return err
-	}
-
 	defer func() {
-		if retErr != nil &&
-			transferCreated &&
-			!transferFailed {
-			status := transferdom.StatusFailed
-			errorType := transferdom.ErrorTypeUnknown
-			message := retErr.Error()
-
-			_ = patchTransfer(
-				transferdom.TransferPatch{
-					Status:    &status,
-					ErrorType: &errorType,
-					ErrorMsg:  &message,
-				},
-			)
-		}
-
 		if locked {
 			_ = u.orderRepo.UnlockTransferItem(
 				context.Background(),
@@ -590,317 +517,103 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 		return TransferByVerifiedScanResult{}, err
 	}
 
-	createdTransfer, err := u.transferRepo.CreateAttempt(
-		ctx,
-		transferdom.CreateAttemptInput{
-			ProductID:       productID,
-			OrderID:         target.OrderID,
-			AvatarID:        avatarID,
-			ToWalletAddress: toWallet,
-			MintAddress:     mintAddress,
-			CreatedAt:       now,
-		},
-	)
-	if err != nil {
-		return TransferByVerifiedScanResult{},
-			fmt.Errorf(
-				"transfer_uc: create transfer attempt failed productId=%s: %w",
-				productID,
-				err,
-			)
-	}
-	if createdTransfer == nil ||
-		createdTransfer.Attempt <= 0 {
-		return TransferByVerifiedScanResult{},
-			ErrTransferAttemptNotCreated
-	}
+	removeFromSenderWallet :=
+		target.ItemType == orderdom.OrderItemTypeResale
+	syncSenderWallet :=
+		target.ItemType == orderdom.OrderItemTypeResale
+	syncReceiverWallet :=
+		target.ItemType == orderdom.OrderItemTypeResale
 
-	transferAttempt = createdTransfer.Attempt
-	transferCreated = true
-
-	markFailed := func(
-		errorType transferdom.ErrorType,
-		message string,
-		txSignature *string,
-	) {
-		if !transferCreated {
-			return
-		}
-
-		status := transferdom.StatusFailed
-
-		patch := transferdom.TransferPatch{
-			Status:    &status,
-			ErrorType: &errorType,
-			ErrorMsg:  &message,
-		}
-
-		if txSignature != nil {
-			signature := *txSignature
-			patch.TxSignature = &signature
-		}
-
-		_ = patchTransfer(patch)
-		transferFailed = true
-	}
-
-	markSucceeded := func(
+	afterOnChain := func(
+		ctx context.Context,
 		txSignature string,
+		now time.Time,
 	) error {
-		if !transferCreated {
-			return ErrTransferAttemptNotCreated
-		}
-		if txSignature == "" {
-			return transferdom.ErrEmptyTxSignature
-		}
-
-		status := transferdom.StatusSucceeded
-		signature := txSignature
-
-		return patchTransfer(
-			transferdom.TransferPatch{
-				Status:      &status,
-				TxSignature: &signature,
-			},
-		)
-	}
-
-	if currentOwner != "" &&
-		currentOwner != source.FromWallet {
-		message := fmt.Sprintf(
-			"productId=%s tokenOwner=%s expectedFromWallet=%s itemType=%s",
-			productID,
-			currentOwner,
-			source.FromWallet,
-			target.ItemType,
-		)
-
-		markFailed(
-			transferdom.ErrorTypeMismatch,
-			message,
-			nil,
-		)
-
-		return TransferByVerifiedScanResult{},
-			fmt.Errorf(
-				"%w: %s",
-				ErrTransferOwnerMismatch,
-				message,
-			)
-	}
-
-	executeResult, err := u.executor.ExecuteTransfer(
-		ctx,
-		ExecuteTransferInput{
-			ProductID:        productID,
-			AvatarID:         avatarID,
-			BrandID:          brandID,
-			ModelID:          target.ModelID,
-			TokenBlueprintID: scannedTokenBlueprintID,
-
-			MintAddress: mintAddress,
-			Amount:      1,
-
-			FromWalletAddress: source.FromWallet,
-			ToWalletAddress:   toWallet,
-
-			FromSigner: source.FromSigner,
-			ToSigner:   nil,
-		},
-	)
-	if err != nil {
-		message := fmt.Sprintf(
-			"execute transfer failed orderId=%s itemIndex=%d mint=%s: %v",
+		if err := u.orderRepo.MarkTransferredItem(
+			ctx,
 			target.OrderID,
 			target.ItemIndex,
-			mintAddress,
-			err,
-		)
-
-		markFailed(
-			transferdom.ErrorTypeTransferFailed,
-			message,
-			nil,
-		)
-
-		return TransferByVerifiedScanResult{},
-			fmt.Errorf(
-				"transfer_uc: execute transfer failed orderId=%s itemIndex=%d mint=%s: %w",
-				target.OrderID,
-				target.ItemIndex,
-				mintAddress,
-				err,
-			)
-	}
-
-	txSignature := executeResult.TxSignature
-	if txSignature == "" {
-		message := "transfer executor returned an empty txSignature"
-
-		markFailed(
-			transferdom.ErrorTypeTransferFailed,
-			message,
-			nil,
-		)
-
-		return TransferByVerifiedScanResult{},
-			transferdom.ErrEmptyTxSignature
-	}
-
-	if err := markSucceeded(txSignature); err != nil {
-		return TransferByVerifiedScanResult{},
-			fmt.Errorf(
-				"transfer_uc: mark transfer succeeded failed productId=%s attempt=%d tx=%s: %w",
-				productID,
-				transferAttempt,
-				txSignature,
-				err,
-			)
-	}
-
-	if err := u.orderRepo.MarkTransferredItem(
-		ctx,
-		target.OrderID,
-		target.ItemIndex,
-		now,
-	); err != nil {
-		message := fmt.Sprintf(
-			"mark transferred failed orderId=%s itemIndex=%d tx=%s: %v",
-			target.OrderID,
-			target.ItemIndex,
-			txSignature,
-			err,
-		)
-
-		markFailed(
-			transferdom.ErrorTypeUnknown,
-			message,
-			&txSignature,
-		)
-
-		return TransferByVerifiedScanResult{},
-			fmt.Errorf(
-				"transfer_uc: mark transferred failed orderId=%s itemIndex=%d tx=%s: %w",
-				target.OrderID,
-				target.ItemIndex,
-				txSignature,
-				err,
-			)
-	}
-
-	if err := u.tokenUpdate.UpdateToAddressByProductID(
-		ctx,
-		productID,
-		toWallet,
-		now,
-		txSignature,
-	); err != nil {
-		message := fmt.Sprintf(
-			"update token owner failed productId=%s to=%s tx=%s: %v",
-			productID,
-			toWallet,
-			txSignature,
-			err,
-		)
-
-		markFailed(
-			transferdom.ErrorTypeUnknown,
-			message,
-			&txSignature,
-		)
-
-		return TransferByVerifiedScanResult{},
-			fmt.Errorf(
-				"transfer_uc: update token owner failed productId=%s to=%s tx=%s: %w",
-				productID,
-				toWallet,
-				txSignature,
-				err,
-			)
-	}
-
-	if err := u.updateWalletsAfterTransfer(
-		ctx,
-		target,
-		source.FromAvatarID,
-		avatarID,
-		mintAddress,
-		now,
-		txSignature,
-	); err != nil {
-		message := err.Error()
-
-		markFailed(
-			transferdom.ErrorTypeUnknown,
-			message,
-			&txSignature,
-		)
-
-		return TransferByVerifiedScanResult{}, err
-	}
-
-	if u.resolveWarmer != nil {
-		if err := u.resolveWarmer.ResolveAfterTransfer(
-			ctx,
-			avatarID,
-			mintAddress,
-		); err != nil {
-			message := fmt.Sprintf(
-				"post-transfer resolve failed avatarId=%s mint=%s tx=%s: %v",
-				avatarID,
-				mintAddress,
-				txSignature,
-				err,
-			)
-
-			markFailed(
-				transferdom.ErrorTypeUnknown,
-				message,
-				&txSignature,
-			)
-
-			return TransferByVerifiedScanResult{},
-				fmt.Errorf(
-					"%w: %s",
-					ErrTransferResolveAfterFailed,
-					message,
-				)
-		}
-	}
-
-	if target.ItemType == orderdom.OrderItemTypeList &&
-		u.inventoryUC != nil {
-		if err := u.inventoryUC.ReleaseAfterTransfer(
-			ctx,
-			target.InventoryID,
-			target.ModelID,
-			productID,
-			target.OrderID,
 			now,
 		); err != nil {
-			message := fmt.Sprintf(
-				"inventory cleanup failed inventoryId=%s modelId=%s productId=%s orderId=%s tx=%s: %v",
+			return fmt.Errorf(
+				"mark transferred failed orderId=%s itemIndex=%d tx=%s: %w",
+				target.OrderID,
+				target.ItemIndex,
+				txSignature,
+				err,
+			)
+		}
+
+		return nil
+	}
+
+	var beforeSuccess TokenTransferExecutionHook
+	if target.ItemType == orderdom.OrderItemTypeList &&
+		u.inventoryUC != nil {
+		beforeSuccess = func(
+			ctx context.Context,
+			txSignature string,
+			now time.Time,
+		) error {
+			if err := u.inventoryUC.ReleaseAfterTransfer(
+				ctx,
 				target.InventoryID,
 				target.ModelID,
 				productID,
 				target.OrderID,
-				txSignature,
-				err,
-			)
-
-			markFailed(
-				transferdom.ErrorTypeUnknown,
-				message,
-				&txSignature,
-			)
-
-			return TransferByVerifiedScanResult{},
-				fmt.Errorf(
-					"%w: %s",
-					ErrTransferInventoryCleanupFailed,
-					message,
+				now,
+			); err != nil {
+				return fmt.Errorf(
+					"inventory cleanup failed inventoryId=%s modelId=%s productId=%s orderId=%s tx=%s: %w",
+					target.InventoryID,
+					target.ModelID,
+					productID,
+					target.OrderID,
+					txSignature,
+					err,
 				)
+			}
+
+			return nil
 		}
+	}
+
+	executionResult, err := u.executionUC.Execute(
+		ctx,
+		TokenTransferExecutionInput{
+			ProductID: productID,
+
+			AttemptReference: target.OrderID,
+
+			FromAvatarID: source.FromAvatarID,
+			ToAvatarID:   avatarID,
+
+			BrandID:          brandID,
+			ModelID:          target.ModelID,
+			TokenBlueprintID: scannedTokenBlueprintID,
+
+			MintAddress:  mintAddress,
+			CurrentOwner: currentOwner,
+
+			FromWallet: source.FromWallet,
+			ToWallet:   toWallet,
+
+			FromSigner: source.FromSigner,
+			ToSigner:   nil,
+
+			Amount: 1,
+
+			RemoveFromSenderWallet: removeFromSenderWallet,
+			SyncSenderWallet:       syncSenderWallet,
+			SyncReceiverWallet:     syncReceiverWallet,
+
+			AfterOnChain:  afterOnChain,
+			BeforeSuccess: beforeSuccess,
+		},
+	)
+	if err != nil {
+		return TransferByVerifiedScanResult{},
+			mapTransferExecutionError(err)
 	}
 
 	fromDisplayName := ""
@@ -938,11 +651,88 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 
 		FromWallet:  source.FromWallet,
 		ToWallet:    toWallet,
-		TxSignature: txSignature,
+		TxSignature: executionResult.TxSignature,
 
 		FromDisplayName: fromDisplayName,
 		ToDisplayName:   toDisplayName,
 	}, nil
+}
+
+func mapTransferExecutionError(err error) error {
+	switch {
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionNotConfigured,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrTransferNotConfigured,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionAttemptNotCreated,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrTransferAttemptNotCreated,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionOwnerMismatch,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrTransferOwnerMismatch,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionWalletSyncNotConfigured,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrTransferResaleNotConfigured,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionWalletSyncFailed,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrTransferWalletSyncFailed,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionResolveAfterFailed,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrTransferResolveAfterFailed,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionBeforeSuccessFailed,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrTransferInventoryCleanupFailed,
+			err,
+		)
+
+	default:
+		return err
+	}
 }
 
 // ============================================================
@@ -1029,9 +819,7 @@ func (u *TransferUsecase) resolveResaleTransferSource(
 	buyerAvatarID string,
 ) (transferExecutionSource, error) {
 	if u.resaleRepo == nil ||
-		u.avatarSecrets == nil ||
-		u.walletTransferUpdate == nil ||
-		u.walletSync == nil {
+		u.avatarSecrets == nil {
 		return transferExecutionSource{},
 			ErrTransferResaleNotConfigured
 	}
@@ -1103,136 +891,6 @@ func (u *TransferUsecase) resolveResaleTransferSource(
 		FromWallet:   fromWallet,
 		FromSigner:   fromSigner,
 	}, nil
-}
-
-// ============================================================
-// Wallet update helpers
-// ============================================================
-
-func (u *TransferUsecase) updateWalletsAfterTransfer(
-	ctx context.Context,
-	target TransferTargetItem,
-	fromAvatarID string,
-	toAvatarID string,
-	mintAddress string,
-	now time.Time,
-	txSignature string,
-) error {
-	switch target.ItemType {
-	case orderdom.OrderItemTypeList:
-		if err := u.walletUpdate.AddMintToAvatarWalletItems(
-			ctx,
-			toAvatarID,
-			mintAddress,
-			now,
-		); err != nil {
-			return fmt.Errorf(
-				"transfer_uc: update receiver wallet items failed avatarId=%s mint=%s tx=%s: %w",
-				toAvatarID,
-				mintAddress,
-				txSignature,
-				err,
-			)
-		}
-
-		return nil
-
-	case orderdom.OrderItemTypeResale:
-		return u.updateResaleWalletsAfterTransfer(
-			ctx,
-			fromAvatarID,
-			toAvatarID,
-			mintAddress,
-			now,
-			txSignature,
-		)
-
-	default:
-		return ErrTransferNoEligibleOrder
-	}
-}
-
-func (u *TransferUsecase) updateResaleWalletsAfterTransfer(
-	ctx context.Context,
-	fromAvatarID string,
-	toAvatarID string,
-	mintAddress string,
-	now time.Time,
-	txSignature string,
-) error {
-	if u.walletTransferUpdate == nil ||
-		u.walletSync == nil {
-		return ErrTransferResaleNotConfigured
-	}
-	if fromAvatarID == "" {
-		return ErrTransferResaleSellerAvatarIDEmpty
-	}
-	if toAvatarID == "" {
-		return ErrTransferAvatarIDEmpty
-	}
-	if mintAddress == "" {
-		return ErrTransferMintEmpty
-	}
-
-	if err := u.walletTransferUpdate.RemoveMintFromAvatarWalletItems(
-		ctx,
-		fromAvatarID,
-		mintAddress,
-		now,
-	); err != nil {
-		return fmt.Errorf(
-			"transfer_uc: remove seller wallet item failed avatarId=%s mint=%s tx=%s: %w",
-			fromAvatarID,
-			mintAddress,
-			txSignature,
-			err,
-		)
-	}
-
-	if err := u.walletTransferUpdate.AddMintToAvatarWalletItems(
-		ctx,
-		toAvatarID,
-		mintAddress,
-		now,
-	); err != nil {
-		return fmt.Errorf(
-			"transfer_uc: add buyer wallet item failed avatarId=%s mint=%s tx=%s: %w",
-			toAvatarID,
-			mintAddress,
-			txSignature,
-			err,
-		)
-	}
-
-	if _, err := u.walletSync.SyncWalletTokens(
-		ctx,
-		fromAvatarID,
-	); err != nil {
-		return fmt.Errorf(
-			"%w: sync seller wallet failed avatarId=%s mint=%s tx=%s: %v",
-			ErrTransferWalletSyncFailed,
-			fromAvatarID,
-			mintAddress,
-			txSignature,
-			err,
-		)
-	}
-
-	if _, err := u.walletSync.SyncWalletTokens(
-		ctx,
-		toAvatarID,
-	); err != nil {
-		return fmt.Errorf(
-			"%w: sync buyer wallet failed avatarId=%s mint=%s tx=%s: %v",
-			ErrTransferWalletSyncFailed,
-			toAvatarID,
-			mintAddress,
-			txSignature,
-			err,
-		)
-	}
-
-	return nil
 }
 
 // ============================================================

@@ -90,6 +90,8 @@ func NewWalletUsecase(
 	}
 }
 
+var _ OwnedProductResolver = (*WalletUsecase)(nil)
+
 var (
 	ErrWalletUsecaseNotConfigured     = errors.New("wallet usecase: not configured")
 	ErrWalletSyncAvatarIDEmpty        = errors.New("wallet usecase: avatarID is empty")
@@ -111,6 +113,105 @@ var (
 	ErrWalletResolvedModelIDEmpty                = errors.New("wallet usecase: resolved modelId is empty")
 	ErrWalletResolvedProductBlueprintIDEmpty     = errors.New("wallet usecase: resolved productBlueprintId is empty")
 )
+
+// HasOwnedProductBlueprint は avatar が指定 productBlueprint の token を
+// on-chain 上で現在保有しているかを判定します.
+//
+// 判定順:
+// 1. avatarId から wallet を取得
+// 2. walletAddress から on-chain 保有 mint 一覧を取得
+// 3. mintAddress -> token.productId
+// 4. productId -> product.modelId
+// 5. modelId -> productBlueprintId
+// 6. 指定 productBlueprintId と一致するものがあれば true
+//
+// mint ごとの token / product / model 逆引き失敗は、既存の verified purchase
+// 判定と同じくその mint をスキップします。
+func (uc *WalletUsecase) HasOwnedProductBlueprint(
+	ctx context.Context,
+	avatarID string,
+	productBlueprintID string,
+) (bool, error) {
+	if uc == nil || uc.walletRepo == nil {
+		return false, ErrWalletUsecaseNotConfigured
+	}
+	if uc.onchainReader == nil {
+		return false, ErrWalletSyncOnchainNotConfigured
+	}
+	if uc.tokenQuery == nil {
+		return false, ErrWalletTokenQueryNotConfigured
+	}
+	if uc.productReader == nil {
+		return false, ErrWalletProductReaderNotConfigured
+	}
+	if uc.modelProductBlueprintID == nil {
+		return false, ErrWalletModelProductBlueprintNotConfigured
+	}
+
+	if avatarID == "" {
+		return false, ErrWalletSyncAvatarIDEmpty
+	}
+	if productBlueprintID == "" {
+		return false, productdom.ErrInvalidID
+	}
+
+	w, err := uc.walletRepo.GetByAvatarID(ctx, avatarID)
+	if err != nil {
+		return false, err
+	}
+
+	if w.WalletAddress == "" {
+		return false, ErrWalletSyncWalletAddressEmpty
+	}
+
+	mints, err := uc.onchainReader.ListOwnedTokenMints(ctx, w.WalletAddress)
+	if err != nil {
+		return false, err
+	}
+	if len(mints) == 0 {
+		return false, nil
+	}
+
+	for _, mintAddress := range mints {
+		if mintAddress == "" {
+			continue
+		}
+
+		resolvedToken, err := uc.tokenQuery.ResolveTokenByMintAddress(ctx, mintAddress)
+		if err != nil {
+			continue
+		}
+
+		productID := resolvedToken.ProductID
+		if productID == "" {
+			continue
+		}
+
+		product, err := uc.productReader.GetByID(ctx, productID)
+		if err != nil {
+			continue
+		}
+
+		modelID := product.ModelID
+		if modelID == "" {
+			continue
+		}
+
+		resolvedProductBlueprintID, _, err := uc.modelProductBlueprintID.GetIDByModelID(ctx, modelID)
+		if err != nil {
+			continue
+		}
+		if resolvedProductBlueprintID == "" {
+			continue
+		}
+
+		if resolvedProductBlueprintID == productBlueprintID {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
 
 // GetWalletByAvatarIDWithReadThroughSync は avatarId から wallet を取得し、
 // persisted wallet.tokens と on-chain 保有 mint 一覧に差分があれば同期して返します。

@@ -4,7 +4,6 @@ package consoleHandler
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -59,29 +58,6 @@ func (
 		path == "/product-blueprints":
 		h.post(w, r)
 
-	case r.Method == http.MethodPost &&
-		strings.HasPrefix(
-			path,
-			"/product-blueprints/",
-		) &&
-		strings.HasSuffix(
-			path,
-			"/restore",
-		):
-		id := strings.TrimSuffix(
-			strings.TrimPrefix(
-				path,
-				"/product-blueprints/",
-			),
-			"/restore",
-		)
-
-		h.restore(
-			w,
-			r,
-			id,
-		)
-
 	case (r.Method == http.MethodPut ||
 		r.Method == http.MethodPatch) &&
 		strings.HasPrefix(
@@ -109,7 +85,7 @@ func (
 			"/product-blueprints/",
 		)
 
-		h.softDelete(
+		h.delete(
 			w,
 			r,
 			id,
@@ -628,13 +604,11 @@ func (
 // DELETE /product-blueprints/{id}
 // ---------------------------------------------------
 
-// softDeleteはProductBlueprintと配下Modelを論理削除します。
-//
-// DocumentはこのHandlerから物理削除しません。
-// 物理削除は復旧期限経過後にPurge batchだけが実行します。
+// deleteはprinted=falseのProductBlueprintと配下Modelを
+// 物理削除します。
 func (
 	h *ProductBlueprintHandler,
-) softDelete(
+) delete(
 	w http.ResponseWriter,
 	r *http.Request,
 	id string,
@@ -655,14 +629,10 @@ func (
 		return
 	}
 
-	_, err := h.uc.SoftDelete(
+	if err := h.uc.Delete(
 		ctx,
 		id,
-		memberIDPointerFromContext(
-			ctx,
-		),
-	)
-	if err != nil {
+	); err != nil {
 		writeProductBlueprintErr(
 			w,
 			err,
@@ -673,75 +643,6 @@ func (
 
 	w.WriteHeader(
 		http.StatusNoContent,
-	)
-}
-
-// ---------------------------------------------------
-// POST /product-blueprints/{id}/restore
-// ---------------------------------------------------
-
-// restoreは論理削除から30日以内のProductBlueprintと
-// 配下Modelを復旧します。
-func (
-	h *ProductBlueprintHandler,
-) restore(
-	w http.ResponseWriter,
-	r *http.Request,
-	id string,
-) {
-	ctx := r.Context()
-
-	if !validProductBlueprintID(id) {
-		w.WriteHeader(
-			http.StatusBadRequest,
-		)
-
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "invalid id",
-			},
-		)
-
-		return
-	}
-
-	restored, err := h.uc.Restore(
-		ctx,
-		id,
-		memberIDPointerFromContext(
-			ctx,
-		),
-	)
-	if err != nil {
-		writeProductBlueprintErr(
-			w,
-			err,
-		)
-
-		return
-	}
-
-	// Restore後はactive状態へ戻っているため、
-	// 通常のDetailQueryから取得します。
-	row, err := h.detailQuery.GetByID(
-		ctx,
-		restored.ID,
-	)
-	if err != nil {
-		writeProductBlueprintErr(
-			w,
-			err,
-		)
-
-		return
-	}
-
-	output := h.toDetailOutput(
-		row,
-	)
-
-	_ = json.NewEncoder(w).Encode(
-		output,
 	)
 }
 
@@ -1046,18 +947,6 @@ func writeProductBlueprintErr(
 	code := http.StatusInternalServerError
 
 	switch {
-	case errors.Is(
-		err,
-		pbdom.ErrRestorePeriodExpired,
-	):
-		code = http.StatusGone
-
-	case errors.Is(
-		err,
-		pbdom.ErrInvalidDeletionState,
-	):
-		code = http.StatusConflict
-
 	case pbdom.IsInvalid(err):
 		code = http.StatusBadRequest
 

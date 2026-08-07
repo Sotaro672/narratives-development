@@ -11,25 +11,9 @@ import (
 	branddom "narratives/internal/domain/brand"
 	domcommon "narratives/internal/domain/common"
 	memberdom "narratives/internal/domain/member"
-	productdom "narratives/internal/domain/product"
 	pbdomain "narratives/internal/domain/productBlueprint"
 	pbr "narratives/internal/domain/productBlueprintReview"
-	walletdom "narratives/internal/domain/wallet"
 )
-
-// Wallet関連のPortはdomain/walletで定義されたものを使用する。
-// - walletdom.Repository
-// - walletdom.OnchainReader
-//
-// Application固有の以下のIFとエラーはwallet_usecase.goの定義を再利用する。
-// - TokenQuery
-// - ProductReader
-// - ModelProductBlueprintIDResolver
-// - ErrWalletUsecaseNotConfigured
-// - ErrWalletSyncOnchainNotConfigured
-// - ErrWalletTokenQueryNotConfigured
-// - ErrWalletProductReaderNotConfigured
-// - ErrWalletModelProductBlueprintNotConfigured
 
 // Avatar 取得
 type AvatarGetter interface {
@@ -85,11 +69,8 @@ type ProductBlueprintReviewUsecase struct {
 	// そのため AssigneeName 解決では GetByUID ではなく GetByID を使う。
 	MemberRepo memberdom.Repository
 
-	walletRepo              walletdom.Repository
-	onchainReader           walletdom.OnchainReader
-	TokenQuery              TokenQuery
-	ProductReader           ProductReader
-	ModelProductBlueprintID ModelProductBlueprintIDResolver
+	// verified purchase 判定
+	ownedProductResolver OwnedProductResolver
 
 	// avatarId -> Avatar
 	// 実体は avatar.Repository を注入して使う想定
@@ -100,14 +81,10 @@ type ProductBlueprintReviewUsecase struct {
 
 func NewProductBlueprintReviewUsecase(
 	reviewRepo pbr.Repository,
-	walletRepo walletdom.Repository,
 	productBlueprintRepo pbdomain.Repository,
 	brandGetter BrandGetter,
 	memberRepo memberdom.Repository,
-	onchainReader walletdom.OnchainReader,
-	tokenQuery TokenQuery,
-	productReader ProductReader,
-	modelProductBlueprintID ModelProductBlueprintIDResolver,
+	ownedProductResolver OwnedProductResolver,
 	avatarRepo AvatarGetter,
 	now func() time.Time,
 ) *ProductBlueprintReviewUsecase {
@@ -116,17 +93,13 @@ func NewProductBlueprintReviewUsecase(
 	}
 
 	return &ProductBlueprintReviewUsecase{
-		ReviewRepo:              reviewRepo,
-		ProductBlueprintRepo:    productBlueprintRepo,
-		BrandGetter:             brandGetter,
-		MemberRepo:              memberRepo,
-		walletRepo:              walletRepo,
-		onchainReader:           onchainReader,
-		TokenQuery:              tokenQuery,
-		ProductReader:           productReader,
-		ModelProductBlueprintID: modelProductBlueprintID,
-		AvatarRepo:              avatarRepo,
-		now:                     now,
+		ReviewRepo:           reviewRepo,
+		ProductBlueprintRepo: productBlueprintRepo,
+		BrandGetter:          brandGetter,
+		MemberRepo:           memberRepo,
+		ownedProductResolver: ownedProductResolver,
+		AvatarRepo:           avatarRepo,
+		now:                  now,
 	}
 }
 
@@ -147,12 +120,15 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 	if uc == nil || uc.ReviewRepo == nil || uc.ProductBlueprintRepo == nil {
 		return domcommon.PageResult[ProductBlueprintReviewAggregateItem]{}, pbr.ErrInternal
 	}
+
 	if companyID == "" {
 		return domcommon.PageResult[ProductBlueprintReviewAggregateItem]{}, pbr.ErrInternal
 	}
+
 	if page.Number <= 0 {
 		page.Number = 1
 	}
+
 	if page.PerPage <= 0 {
 		page.PerPage = 100
 	}
@@ -167,6 +143,7 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 	if page.PerPage > 0 {
 		totalPages = int(math.Ceil(float64(totalCount) / float64(page.PerPage)))
 	}
+
 	if totalPages < 0 {
 		totalPages = 0
 	}
@@ -213,6 +190,7 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 				if brand, err := uc.BrandGetter.GetByID(ctx, livePB.BrandID); err == nil {
 					brandName = brand.Name
 				}
+
 				brandNameCache[livePB.BrandID] = brandName
 			}
 		}
@@ -226,6 +204,7 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 					ctx,
 					livePB.AssigneeID,
 				)
+
 				memberNameCache[livePB.AssigneeID] = assigneeName
 			}
 		}
@@ -255,6 +234,7 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 		TotalCount: totalCount,
 		TotalPages: totalPages,
 	}
+
 	return out, nil
 }
 
@@ -280,6 +260,7 @@ func (uc *ProductBlueprintReviewUsecase) resolveAssigneeNameByMemberID(
 		if errors.Is(err, memberdom.ErrNotFound) {
 			return memberID
 		}
+
 		return memberID
 	}
 
@@ -287,6 +268,7 @@ func (uc *ProductBlueprintReviewUsecase) resolveAssigneeNameByMemberID(
 		rec.Member.LastName,
 		rec.Member.FirstName,
 	)
+
 	if name == "" {
 		return memberID
 	}
@@ -351,6 +333,7 @@ func (uc *ProductBlueprintReviewUsecase) ListByProductBlueprintID(
 		TotalCount: base.TotalCount,
 		TotalPages: base.TotalPages,
 	}
+
 	return out, nil
 }
 
@@ -359,129 +342,22 @@ func (uc *ProductBlueprintReviewUsecase) ListByProductBlueprintID(
 // ============================================================
 
 // IsVerifiedPurchase exposes verified-purchase check for handlers.
-// avatarID: docId=avatarId（walletRepo.GetByAvatarID のキー）
+// avatarID: docId=avatarId
 // productBlueprintID: review target productBlueprintId
 func (uc *ProductBlueprintReviewUsecase) IsVerifiedPurchase(
 	ctx context.Context,
 	avatarID string,
 	productBlueprintID string,
 ) (bool, error) {
-	return uc.resolveVerifiedPurchase(ctx, avatarID, productBlueprintID)
-}
-
-// ============================================================
-// VerifiedPurchase 判定 “query”
-// ============================================================
-//
-// 要件：
-// wallets の tokens の mintAddress を取得
-// mintAddress から tokens の docId を取得
-// docId から products の modelId を取得
-// modelId から models の productBlueprintId を取得
-// productBlueprintReview の productBlueprintId と一致した場合 VerifiedPurchase=true
-//
-// 既存wallet関連の依存を使って実現：
-// - mintAddress 一覧: walletdom.OnchainReader.ListOwnedTokenMints(walletAddress)
-// - mintAddress -> token(docId相当=productId): TokenQuery.ResolveTokenByMintAddress().ProductID
-// - productId -> modelId: ProductReader.GetByID(productId).ModelID
-// - modelId -> productBlueprintId: ModelProductBlueprintID.GetIDByModelID(modelId)
-// - productBlueprintReview の productBlueprintId と一致した場合 VerifiedPurchase=true
-func (uc *ProductBlueprintReviewUsecase) resolveVerifiedPurchase(
-	ctx context.Context,
-	avatarID string,
-	reviewProductBlueprintID string,
-) (bool, error) {
-	if uc == nil || uc.walletRepo == nil {
-		return false, ErrWalletUsecaseNotConfigured
-	}
-	if uc.onchainReader == nil {
-		return false, ErrWalletSyncOnchainNotConfigured
-	}
-	if uc.TokenQuery == nil {
-		return false, ErrWalletTokenQueryNotConfigured
-	}
-	if uc.ProductReader == nil {
-		return false, ErrWalletProductReaderNotConfigured
-	}
-	if uc.ModelProductBlueprintID == nil {
-		return false, ErrWalletModelProductBlueprintNotConfigured
+	if uc == nil || uc.ownedProductResolver == nil {
+		return false, pbr.ErrInternal
 	}
 
-	if avatarID == "" {
-		return false, ErrWalletSyncAvatarIDEmpty
-	}
-	if reviewProductBlueprintID == "" {
-		return false, productdom.ErrInvalidID
-	}
-
-	// 1) docId=avatarId で wallet を取得
-	wallet, err := uc.walletRepo.GetByAvatarID(ctx, avatarID)
-	if err != nil {
-		return false, err
-	}
-
-	// 2) walletAddress から on-chain の mint 一覧
-	if wallet.WalletAddress == "" {
-		return false, ErrWalletSyncWalletAddressEmpty
-	}
-
-	mints, err := uc.onchainReader.ListOwnedTokenMints(
+	return uc.ownedProductResolver.HasOwnedProductBlueprint(
 		ctx,
-		wallet.WalletAddress,
+		avatarID,
+		productBlueprintID,
 	)
-	if err != nil {
-		return false, err
-	}
-	if len(mints) == 0 {
-		return false, nil
-	}
-
-	// 3) mintAddress
-	//    -> token(docId=productId)
-	//    -> product.modelId
-	//    -> model.productBlueprintId
-	for _, mint := range mints {
-		if mint == "" {
-			continue
-		}
-
-		resolvedToken, err := uc.TokenQuery.ResolveTokenByMintAddress(ctx, mint)
-		if err != nil {
-			// 逆引き失敗は「未購入扱い」でスキップ
-			// 厳密運用にする場合は return false, err に変更する。
-			continue
-		}
-
-		productID := resolvedToken.ProductID
-		if productID == "" {
-			continue
-		}
-
-		product, err := uc.ProductReader.GetByID(ctx, productID)
-		if err != nil {
-			continue
-		}
-
-		modelID := product.ModelID
-		if modelID == "" {
-			continue
-		}
-
-		productBlueprintID, _, err :=
-			uc.ModelProductBlueprintID.GetIDByModelID(ctx, modelID)
-		if err != nil {
-			continue
-		}
-		if productBlueprintID == "" {
-			continue
-		}
-
-		if productBlueprintID == reviewProductBlueprintID {
-			return true, nil
-		}
-	}
-
-	return false, nil
 }
 
 // ============================================================

@@ -405,14 +405,10 @@ func NewContainer(
 	c.ProductBlueprintReviewUC =
 		usecase.NewProductBlueprintReviewUsecase(
 			productBlueprintReviewRepo,
-			walletRepo,
 			productBlueprintRepoFS,
 			brandRepo,
 			memberRepo,
-			onchainReader,
-			tokenQuery,
-			productRepo,
-			productBlueprintRepoFS,
+			c.WalletUC,
 			avatarRepo,
 			nil,
 		)
@@ -623,8 +619,6 @@ func NewContainer(
 
 		var tokenOwnerUpdater usecase.TokenOwnerUpdater = outfs.NewTokenOwnerUpdaterFS(fsClient)
 
-		var walletItemUpdater usecase.WalletItemUpdater = walletRepo
-
 		var transferRepo transferdom.RepositoryPort = outfs.NewTransferRepositoryFS(fsClient)
 
 		var walletResolver usecase.BrandWalletResolver = outfs.NewWalletResolverRepoFS(
@@ -639,6 +633,7 @@ func NewContainer(
 		if err != nil {
 			return nil, err
 		}
+
 		if secrets == nil {
 			return nil,
 				errors.New(
@@ -651,7 +646,7 @@ func NewContainer(
 		if !walletTransferOK {
 			return nil,
 				errors.New(
-					"di.mall: wallet repository does not implement AvatarWalletItemTransferUpdater for resale transfer",
+					"di.mall: wallet repository does not implement AvatarWalletItemTransferUpdater for transfer execution",
 				)
 		}
 
@@ -660,7 +655,7 @@ func NewContainer(
 		if !avatarSecretOK {
 			return nil,
 				errors.New(
-					"di.mall: wallet secret provider does not implement AvatarSecretProvider for resale transfer",
+					"di.mall: wallet secret provider does not implement AvatarSecretProvider for transfer execution",
 				)
 		}
 
@@ -669,91 +664,46 @@ func NewContainer(
 		if !walletSyncOK {
 			return nil,
 				errors.New(
-					"di.mall: wallet usecase does not implement AvatarWalletSyncer for resale transfer",
+					"di.mall: wallet usecase does not implement AvatarWalletSyncer for transfer execution",
 				)
 		}
 
 		var executor usecase.TokenTransferExecutor = solana.NewTokenTransferExecutorSolana("")
+
+		transferExecutionUC :=
+			usecase.NewTokenTransferExecutionUsecase(
+				tokenOwnerUpdater,
+				walletTransferUpdate,
+				walletSync,
+				transferRepo,
+				executor,
+				nil,
+			)
 
 		c.TransferUC =
 			usecase.NewTransferUsecase(
 				scanVerifier,
 				orderRepoForTransfer,
 				tokenResolver,
-				tokenOwnerUpdater,
-				walletItemUpdater,
-				transferRepo,
 				walletResolver,
 				avatarWalletResolver,
 				brandRepo,
 				avatarRepo,
 				secrets,
-				executor,
-				nil,
+				transferExecutionUC,
 				c.InventoryUC,
 			).WithResaleTransferDependencies(
 				resaleRepo,
 				avatarSecrets,
-				walletTransferUpdate,
-				walletSync,
 			)
-	}
 
-	{
-		var tokenResolver usecase.TokenResolver = mallfs.NewTokenResolverFS(
-			fsClient,
-			"tokens",
-		)
-
-		var tokenOwnerUpdater usecase.TokenOwnerUpdater = outfs.NewTokenOwnerUpdaterFS(fsClient)
-
-		var transferRepo transferdom.RepositoryPort = outfs.NewTransferRepositoryFS(fsClient)
-
-		var walletResolver usecase.BrandWalletResolver = outfs.NewWalletResolverRepoFS(
-			brandRepo,
-			walletRepo,
-		)
-
-		var avatarWalletResolver usecase.AvatarWalletResolver = walletResolver.(usecase.AvatarWalletResolver)
-
-		secretsBase, err :=
-			buildWalletSecretProvider(infra)
-		if err != nil {
-			return nil, err
-		}
-
-		var executor usecase.TokenTransferExecutor = solana.NewTokenTransferExecutorSolana("")
-
-		walletUpdate, walletOK :=
-			any(walletRepo).(usecase.AvatarWalletItemTransferUpdater)
-		avatarSecrets, secretOK :=
-			any(secretsBase).(usecase.AvatarSecretProvider)
-		walletSync, syncOK :=
-			any(c.WalletUC).(usecase.AvatarWalletSyncer)
-
-		switch {
-		case !walletOK:
-			c.ShareTransferUC = nil
-
-		case !secretOK:
-			c.ShareTransferUC = nil
-
-		case !syncOK:
-			c.ShareTransferUC = nil
-
-		default:
-			c.ShareTransferUC =
-				usecase.NewShareTransferUsecase(
-					tokenResolver,
-					tokenOwnerUpdater,
-					walletUpdate,
-					walletSync,
-					transferRepo,
-					avatarWalletResolver,
-					avatarSecrets,
-					executor,
-				)
-		}
+		c.ShareTransferUC =
+			usecase.NewShareTransferUsecase(
+				tokenResolver,
+				avatarWalletResolver,
+				avatarSecrets,
+				transferExecutionUC,
+			)
 	}
 
 	return c, nil

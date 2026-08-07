@@ -98,26 +98,6 @@ func NewPaymentFlowUsecase(
 	}
 }
 
-func (u *PaymentFlowUsecase) SetOrderReader(
-	orderReader OrderReaderForPaymentFlow,
-) {
-	if u == nil {
-		return
-	}
-
-	u.orderReader = orderReader
-}
-
-func (u *PaymentFlowUsecase) SetPaymentIntentGateway(
-	paymentIntentGateway StripePaymentIntentGateway,
-) {
-	if u == nil {
-		return
-	}
-
-	u.paymentIntentGateway = paymentIntentGateway
-}
-
 var (
 	ErrPaymentFlowPaymentUsecaseMissing = errors.New(
 		"payment_flow: payment usecase is not configured",

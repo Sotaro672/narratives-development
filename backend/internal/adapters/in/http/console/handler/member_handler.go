@@ -31,7 +31,7 @@ func NewMemberHandler(
 	repo memberdom.Repository,
 ) http.Handler {
 	return &MemberHandler{
-		memberUC: memberusecase.NewMemberUsecase(repo, nil),
+		memberUC: memberusecase.NewMemberUsecase(repo),
 
 		detailQuery:     consolequery.NewMemberDetailQuery(repo),
 		managementQuery: consolequery.NewMemberManagementQuery(repo),

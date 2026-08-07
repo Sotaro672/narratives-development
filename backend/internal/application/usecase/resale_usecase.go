@@ -54,7 +54,10 @@ func (uc *ResaleUsecase) Update(
 	return uc.resaleRepo.Update(ctx, id, item)
 }
 
-func (uc *ResaleUsecase) Delete(ctx context.Context, id string) error {
+func (uc *ResaleUsecase) Delete(
+	ctx context.Context,
+	id string,
+) error {
 	if uc == nil || uc.resaleRepo == nil {
 		return ErrNotSupported("Resale.Delete")
 	}
@@ -118,66 +121,11 @@ func (uc *ResaleUsecase) CreateImage(
 	return created, nil
 }
 
-func (uc *ResaleUsecase) UpdateImage(
+func (uc *ResaleUsecase) DeleteImage(
 	ctx context.Context,
 	resaleID string,
 	imageID string,
-	patch resaledom.ResaleImagePatch,
-) (resaledom.ResaleImage, error) {
-	if uc == nil {
-		return resaledom.ResaleImage{}, ErrNotSupported("Resale.UpdateImage")
-	}
-
-	if uc.imageRepo == nil {
-		return resaledom.ResaleImage{}, ErrNotSupported("Resale.UpdateImage.ImageRepo")
-	}
-
-	resaleID = strings.TrimSpace(resaleID)
-	imageID = strings.TrimSpace(imageID)
-
-	if resaleID == "" {
-		return resaledom.ResaleImage{}, resaledom.ErrInvalidConditionImageResaleID
-	}
-
-	if imageID == "" {
-		return resaledom.ResaleImage{}, resaledom.ErrInvalidConditionImageID
-	}
-
-	if strings.Contains(imageID, "/") || strings.Contains(imageID, "://") {
-		return resaledom.ResaleImage{}, ErrInvalidArgument("invalid_image_id")
-	}
-
-	if patch.URL != nil {
-		v := strings.TrimSpace(*patch.URL)
-		patch.URL = &v
-	}
-
-	if patch.DisplayOrder != nil && *patch.DisplayOrder < 0 {
-		return resaledom.ResaleImage{}, resaledom.ErrInvalidConditionImageDisplayOrder
-	}
-
-	if patch.UpdatedBy != nil {
-		v := strings.TrimSpace(*patch.UpdatedBy)
-		patch.UpdatedBy = &v
-	}
-
-	if patch.UpdatedAt == nil {
-		now := time.Now().UTC()
-		patch.UpdatedAt = &now
-	} else if !patch.UpdatedAt.IsZero() {
-		t := patch.UpdatedAt.UTC()
-		patch.UpdatedAt = &t
-	}
-
-	updated, err := uc.imageRepo.Update(ctx, resaleID, imageID, patch)
-	if err != nil {
-		return resaledom.ResaleImage{}, err
-	}
-
-	return updated, nil
-}
-
-func (uc *ResaleUsecase) DeleteImage(ctx context.Context, resaleID string, imageID string) error {
+) error {
 	if uc == nil {
 		return ErrNotSupported("Resale.DeleteImage")
 	}
@@ -284,7 +232,9 @@ func (uc *ResaleUsecase) SetPrimaryImage(
 	}
 
 	if selected.ResaleID != "" && selected.ResaleID != resaleID {
-		return resaledom.Resale{}, errors.New("resale: image belongs to other resale")
+		return resaledom.Resale{}, errors.New(
+			"resale: image belongs to other resale",
+		)
 	}
 
 	if strings.TrimSpace(selected.URL) == "" {

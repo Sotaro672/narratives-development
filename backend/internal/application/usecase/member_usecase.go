@@ -28,7 +28,6 @@ type MemberUsecase struct {
 
 func NewMemberUsecase(
 	repo memdom.Repository,
-	_ InvitationCommandPort,
 ) *MemberUsecase {
 	return &MemberUsecase{
 		repo: repo,
@@ -60,7 +59,10 @@ type CreateMemberInput struct {
 	CreatedAt *time.Time
 }
 
-func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (MemberRecord, error) {
+func (u *MemberUsecase) Create(
+	ctx context.Context,
+	in CreateMemberInput,
+) (MemberRecord, error) {
 	createdAt := in.CreatedAt
 	if createdAt == nil || createdAt.IsZero() {
 		t := u.now().UTC()
@@ -116,7 +118,10 @@ type UpdateMemberInput struct {
 	Status    *string
 }
 
-func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (MemberRecord, error) {
+func (u *MemberUsecase) Update(
+	ctx context.Context,
+	in UpdateMemberInput,
+) (MemberRecord, error) {
 	memberID := in.MemberID
 	if memberID == "" {
 		return MemberRecord{}, memdom.ErrNotFound
@@ -168,7 +173,10 @@ type GetCurrentMemberInput struct {
 	FirebaseUID string
 }
 
-func (u *MemberUsecase) GetCurrentMember(ctx context.Context, in GetCurrentMemberInput) (MemberRecord, error) {
+func (u *MemberUsecase) GetCurrentMember(
+	ctx context.Context,
+	in GetCurrentMemberInput,
+) (MemberRecord, error) {
 	firebaseUID := in.FirebaseUID
 	if firebaseUID == "" {
 		return MemberRecord{}, memdom.ErrInvalidUID
@@ -185,7 +193,10 @@ func (u *MemberUsecase) GetCurrentMember(ctx context.Context, in GetCurrentMembe
 	}, nil
 }
 
-func (u *MemberUsecase) Delete(ctx context.Context, memberID string) error {
+func (u *MemberUsecase) Delete(
+	ctx context.Context,
+	memberID string,
+) error {
 	if memberID == "" {
 		return memdom.ErrNotFound
 	}

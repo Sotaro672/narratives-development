@@ -17,8 +17,6 @@ package model
 import (
 	"errors"
 	"time"
-
-	commondom "narratives/internal/domain/common"
 )
 
 var (
@@ -122,13 +120,6 @@ type ApparelModelVariation struct {
 	Measurements       Measurements
 	Color              Color
 
-	// DeletionLifecycleはModel Documentの
-	// 論理削除・復旧・物理削除予定時刻を保持します。
-	//
-	// statusが未設定の既存Documentは、
-	// common.NormalizeDeletionStatusによりactiveとして扱います。
-	commondom.DeletionLifecycle
-
 	CreatedAt time.Time
 	CreatedBy *string
 	UpdatedAt time.Time
@@ -228,12 +219,6 @@ func (
 		return err
 	}
 
-	if err := validateModelDeletionLifecycle(
-		variation.DeletionLifecycle,
-	); err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -259,94 +244,4 @@ func (
 	variation ApparelModelVariation,
 ) GetModelNumber() string {
 	return variation.ModelNumber
-}
-
-// GetDeletionLifecycleは、ポインタを共有しないLifecycleを返します。
-func (
-	variation ApparelModelVariation,
-) GetDeletionLifecycle() commondom.DeletionLifecycle {
-	return variation.
-		DeletionLifecycle.
-		Clone()
-}
-
-// CanModifyはModel自身が変更可能な状態か返します。
-//
-// ProductBlueprintのprinted状態はModel自身には保持しないため、
-// UsecaseまたはRepository側でProductBlueprint.CanModifyと
-// 組み合わせて判定します。
-func (
-	variation ApparelModelVariation,
-) CanModify() bool {
-	return canModifyModelDeletionLifecycle(
-		variation.DeletionLifecycle,
-	)
-}
-
-// CanRestoreは指定時刻時点で復旧可能か返します。
-func (
-	variation ApparelModelVariation,
-) CanRestore(
-	now time.Time,
-) bool {
-	return variation.
-		DeletionLifecycle.
-		CanRestore(now)
-}
-
-// IsPurgeEligibleは指定時刻時点で
-// 物理削除対象か返します。
-func (
-	variation ApparelModelVariation,
-) IsPurgeEligible(
-	now time.Time,
-) bool {
-	return variation.
-		DeletionLifecycle.
-		IsPurgeEligible(now)
-}
-
-// SoftDeleteはModelを論理削除状態へ遷移させます。
-//
-// 同じModelへ複数回実行された場合は、
-// 最初のDeletedAtとPurgeAtを維持します。
-func (
-	variation *ApparelModelVariation,
-) SoftDelete(
-	now time.Time,
-	deletedBy *string,
-) error {
-	if variation == nil {
-		return ErrInvalid
-	}
-
-	return softDeleteModelDeletionLifecycle(
-		&variation.DeletionLifecycle,
-		&variation.UpdatedAt,
-		&variation.UpdatedBy,
-		now,
-		deletedBy,
-	)
-}
-
-// Restoreは論理削除済みModelを復旧します。
-//
-// now < PurgeAtの場合だけ復旧可能です。
-func (
-	variation *ApparelModelVariation,
-) Restore(
-	now time.Time,
-	restoredBy *string,
-) error {
-	if variation == nil {
-		return ErrInvalid
-	}
-
-	return restoreModelDeletionLifecycle(
-		&variation.DeletionLifecycle,
-		&variation.UpdatedAt,
-		&variation.UpdatedBy,
-		now,
-		restoredBy,
-	)
 }
