@@ -2,7 +2,6 @@
 
 import {
   useEffect,
-  useMemo,
   useState,
 } from "react";
 import {
@@ -19,7 +18,6 @@ import type {
   CartDTO,
   CartItemDTO,
 } from "../../../features/shared/types/cart";
-import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
 import { auth } from "../../../lib/firebase";
 import { WALLET_PATH } from "../../../lib/navigation";
 import type {
@@ -50,12 +48,8 @@ function sumCartItemQty(
   );
 }
 
-async function fetchCartItemCount(
-  apiBaseUrl: string,
-): Promise<number> {
-  const cart = await fetchCart(
-    apiBaseUrl,
-  );
+async function fetchCartItemCount(): Promise<number> {
+  const cart = await fetchCart();
 
   return sumCartItemQty(cart);
 }
@@ -69,13 +63,21 @@ export function useHeaderController({
   hideHamburgerMenu = false,
   hideSettingsButton = false,
   hideAnnouncementButton = false,
+
   onBackButtonClick,
+
   actionButtonLabel,
   onActionButtonClick,
   actionButtonDisabled = false,
+
   secondaryActionButtonLabel,
   onSecondaryActionButtonClick,
   secondaryActionButtonDisabled = false,
+
+  tertiaryActionButtonLabel,
+  onTertiaryActionButtonClick,
+  tertiaryActionButtonDisabled = false,
+
   showCartButton = false,
   cartButtonLabel = "カート",
   onCartButtonClick,
@@ -115,15 +117,12 @@ export function useHeaderController({
     setFetchedCartItemCount,
   ] = useState(0);
 
-  const apiBaseUrl = useMemo(
-    () => getApiBaseUrl(),
-    [],
-  );
-
   useEffect(() => {
     setMenuOpen(false);
     setSettingsOpen(false);
-  }, [location.pathname]);
+  }, [
+    location.pathname,
+  ]);
 
   useEffect(() => {
     const unsubscribe =
@@ -229,6 +228,13 @@ export function useHeaderController({
     typeof onSecondaryActionButtonClick ===
       "function";
 
+  const hasTertiaryActionButton =
+    mode !== "signin" &&
+    authResolved &&
+    !!tertiaryActionButtonLabel &&
+    typeof onTertiaryActionButtonClick ===
+      "function";
+
   const shouldShowCartButton =
     mode !== "signin" &&
     authResolved &&
@@ -253,9 +259,7 @@ export function useHeaderController({
 
       try {
         const count =
-          await fetchCartItemCount(
-            apiBaseUrl,
-          );
+          await fetchCartItemCount();
 
         if (!cancelled) {
           setFetchedCartItemCount(
@@ -275,7 +279,6 @@ export function useHeaderController({
       cancelled = true;
     };
   }, [
-    apiBaseUrl,
     authResolved,
     currentUser,
     shouldShowCartButton,
@@ -317,6 +320,7 @@ export function useHeaderController({
     !hideSettingsButton &&
     !hasActionButton &&
     !hasSecondaryActionButton &&
+    !hasTertiaryActionButton &&
     !shouldShowCartButton;
 
   const shouldShowEditButton =
@@ -326,6 +330,7 @@ export function useHeaderController({
     showEditButton &&
     !hasActionButton &&
     !hasSecondaryActionButton &&
+    !hasTertiaryActionButton &&
     !shouldShowCartButton;
 
   const shouldShowGuestMenuButton =
@@ -404,6 +409,13 @@ export function useHeaderController({
       "",
     onSecondaryActionButtonClick,
     secondaryActionButtonDisabled,
+
+    hasTertiaryActionButton,
+    tertiaryActionButtonLabel:
+      tertiaryActionButtonLabel ??
+      "",
+    onTertiaryActionButtonClick,
+    tertiaryActionButtonDisabled,
 
     shouldShowCartButton,
     cartButtonLabel,

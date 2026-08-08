@@ -40,6 +40,41 @@ export default function ResaleDetailPage() {
     !loading &&
     Boolean(item);
 
+  const headerActionProps =
+    footerProps?.variant === "action"
+      ? {
+          actionButtonLabel:
+            footerProps.buttonLabel,
+          onActionButtonClick:
+            footerProps.onButtonClick,
+          actionButtonDisabled:
+            footerProps.disabled,
+        }
+      : footerProps?.variant === "tripleAction"
+        ? {
+            actionButtonLabel:
+              footerProps.centerButtonLabel,
+            onActionButtonClick:
+              footerProps.onCenterButtonClick,
+            actionButtonDisabled:
+              footerProps.centerButtonDisabled,
+
+            secondaryActionButtonLabel:
+              footerProps.leftButtonLabel,
+            onSecondaryActionButtonClick:
+              footerProps.onLeftButtonClick,
+            secondaryActionButtonDisabled:
+              footerProps.leftButtonDisabled,
+
+            tertiaryActionButtonLabel:
+              footerProps.rightButtonLabel,
+            onTertiaryActionButtonClick:
+              footerProps.onRightButtonClick,
+            tertiaryActionButtonDisabled:
+              footerProps.rightButtonDisabled,
+          }
+        : {};
+
   return (
     <Layout
       title={title}
@@ -51,6 +86,7 @@ export default function ResaleDetailPage() {
       hideSettingsButton
       showFooter={Boolean(footerProps)}
       footerProps={footerProps}
+      {...headerActionProps}
     >
       <section className="page-section resale-detail-page">
         {loading ? (

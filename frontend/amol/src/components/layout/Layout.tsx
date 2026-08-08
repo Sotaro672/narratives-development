@@ -6,8 +6,16 @@ import FooterNav from "./FooterNav";
 import { WALLET_PATH } from "../../lib/navigation";
 import "./layout.css";
 
-type LayoutMode = "default" | "signin" | "mypage" | "landing";
-type HeaderMode = "default" | "signin" | "landing";
+type LayoutMode =
+  | "default"
+  | "signin"
+  | "mypage"
+  | "landing";
+
+type HeaderMode =
+  | "default"
+  | "signin"
+  | "landing";
 
 type FooterProps =
   | {
@@ -84,6 +92,10 @@ type LayoutProps = {
   onSecondaryActionButtonClick?: () => void | Promise<void>;
   secondaryActionButtonDisabled?: boolean;
 
+  tertiaryActionButtonLabel?: string;
+  onTertiaryActionButtonClick?: () => void | Promise<void>;
+  tertiaryActionButtonDisabled?: boolean;
+
   showCartButton?: boolean;
   cartButtonLabel?: string;
   onCartButtonClick?: () => void | Promise<void>;
@@ -117,6 +129,10 @@ export default function Layout({
   onSecondaryActionButtonClick,
   secondaryActionButtonDisabled = false,
 
+  tertiaryActionButtonLabel,
+  onTertiaryActionButtonClick,
+  tertiaryActionButtonDisabled = false,
+
   showCartButton = false,
   cartButtonLabel = "カート",
   onCartButtonClick,
@@ -124,12 +140,21 @@ export default function Layout({
 
   footerProps,
 }: LayoutProps) {
-  const shouldShowFooter = showFooter ?? mode === "mypage";
-  const headerMode: HeaderMode = mode === "mypage" ? "default" : mode;
+  const shouldShowFooter =
+    showFooter ??
+    mode === "mypage";
+
+  const headerMode: HeaderMode =
+    mode === "mypage"
+      ? "default"
+      : mode;
+
   const isActionFooter =
     shouldShowFooter &&
-    (footerProps?.variant === "action" ||
-      footerProps?.variant === "tripleAction");
+    (
+      footerProps?.variant === "action" ||
+      footerProps?.variant === "tripleAction"
+    );
 
   return (
     <div className="layout-shell">
@@ -148,9 +173,24 @@ export default function Layout({
           actionButtonLabel={actionButtonLabel}
           onActionButtonClick={onActionButtonClick}
           actionButtonDisabled={actionButtonDisabled}
-          secondaryActionButtonLabel={secondaryActionButtonLabel}
-          onSecondaryActionButtonClick={onSecondaryActionButtonClick}
-          secondaryActionButtonDisabled={secondaryActionButtonDisabled}
+          secondaryActionButtonLabel={
+            secondaryActionButtonLabel
+          }
+          onSecondaryActionButtonClick={
+            onSecondaryActionButtonClick
+          }
+          secondaryActionButtonDisabled={
+            secondaryActionButtonDisabled
+          }
+          tertiaryActionButtonLabel={
+            tertiaryActionButtonLabel
+          }
+          onTertiaryActionButtonClick={
+            onTertiaryActionButtonClick
+          }
+          tertiaryActionButtonDisabled={
+            tertiaryActionButtonDisabled
+          }
           showCartButton={showCartButton}
           cartButtonLabel={cartButtonLabel}
           onCartButtonClick={onCartButtonClick}
@@ -162,11 +202,16 @@ export default function Layout({
         className={[
           "layout-main",
           mainClassName ?? "",
-          !showHeader ? "layout-main--without-header" : "",
-          shouldShowFooter && !isActionFooter
+          !showHeader
+            ? "layout-main--without-header"
+            : "",
+          shouldShowFooter &&
+          !isActionFooter
             ? "layout-main--with-footer"
             : "",
-          isActionFooter ? "layout-main--with-action-footer" : "",
+          isActionFooter
+            ? "layout-main--with-action-footer"
+            : "",
           disableFooterPaddingOnDesktop
             ? "layout-main--disable-footer-padding-desktop"
             : "",
@@ -178,7 +223,13 @@ export default function Layout({
       </main>
 
       {shouldShowFooter ? (
-        <FooterNav {...(footerProps ?? { variant: "default" })} />
+        <FooterNav
+          {...(
+            footerProps ?? {
+              variant: "default",
+            }
+          )}
+        />
       ) : null}
     </div>
   );

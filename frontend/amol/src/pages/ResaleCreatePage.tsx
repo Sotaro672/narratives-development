@@ -50,6 +50,9 @@ export default function ResaleCreatePage() {
       title="出品"
       showBackButton
       mode="mypage"
+      actionButtonLabel="出品"
+      onActionButtonClick={handleSubmit}
+      actionButtonDisabled={isSubmitting}
       showFooter
       footerProps={{
         variant: "action",

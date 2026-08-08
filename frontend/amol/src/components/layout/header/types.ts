@@ -20,6 +20,10 @@ export type HeaderProps = {
   onSecondaryActionButtonClick?: () => void | Promise<void>;
   secondaryActionButtonDisabled?: boolean;
 
+  tertiaryActionButtonLabel?: string;
+  onTertiaryActionButtonClick?: () => void | Promise<void>;
+  tertiaryActionButtonDisabled?: boolean;
+
   showCartButton?: boolean;
   cartButtonLabel?: string;
   onCartButtonClick?: () => void | Promise<void>;
@@ -37,6 +41,11 @@ export type HeaderActionState = {
   secondaryActionButtonLabel: string;
   onSecondaryActionButtonClick?: () => void | Promise<void>;
   secondaryActionButtonDisabled: boolean;
+
+  hasTertiaryActionButton: boolean;
+  tertiaryActionButtonLabel: string;
+  onTertiaryActionButtonClick?: () => void | Promise<void>;
+  tertiaryActionButtonDisabled: boolean;
 
   shouldShowCartButton: boolean;
   cartButtonLabel: string;
