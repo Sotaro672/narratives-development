@@ -23,6 +23,10 @@ function isResalePagePath(pathname: string): boolean {
   return pathname === "/resale" || pathname === "/resale/";
 }
 
+function isResaleDetailPagePath(pathname: string): boolean {
+  return /^\/resales\/[^/]+\/?$/.test(pathname);
+}
+
 export default function HeaderActions({ actions }: HeaderActionsProps) {
   const location = useLocation();
 
@@ -36,6 +40,11 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     secondaryActionButtonLabel,
     onSecondaryActionButtonClick,
     secondaryActionButtonDisabled,
+
+    hasTertiaryActionButton,
+    tertiaryActionButtonLabel,
+    onTertiaryActionButtonClick,
+    tertiaryActionButtonDisabled,
 
     shouldShowLoginButton,
     shouldShowAnnouncementButton,
@@ -76,12 +85,50 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     location.pathname,
   );
 
+  const shouldShowResaleDetailActions = isResaleDetailPagePath(
+    location.pathname,
+  );
+
   const resaleButtonLabel =
     actionButtonLabel || "出品";
 
   const resaleButtonDisabled =
     !onActionButtonClick ||
     actionButtonDisabled;
+
+  const primaryActionClassName = [
+    "header__settings-link",
+    "header__action-button",
+    "header__add-to-cart-button",
+    shouldShowResaleDetailActions
+      ? "header__resale-detail-action-button"
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const secondaryActionClassName = [
+    "header__settings-link",
+    "header__action-button",
+    "header__secondary-action-button",
+    "header__buy-button",
+    shouldShowResaleDetailActions
+      ? "header__resale-detail-action-button"
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const tertiaryActionClassName = [
+    "header__settings-link",
+    "header__action-button",
+    "header__tertiary-action-button",
+    shouldShowResaleDetailActions
+      ? "header__resale-detail-action-button"
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className="header__right">
@@ -101,7 +148,7 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
       {hasActionButton && !shouldShowResaleButton ? (
         <button
           type="button"
-          className="header__settings-link header__action-button header__add-to-cart-button"
+          className={primaryActionClassName}
           aria-label={actionButtonLabel}
           title={actionButtonLabel}
           onClick={onActionButtonClick}
@@ -114,13 +161,26 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
       {hasSecondaryActionButton ? (
         <button
           type="button"
-          className="header__settings-link header__action-button header__secondary-action-button header__buy-button"
+          className={secondaryActionClassName}
           aria-label={secondaryActionButtonLabel}
           title={secondaryActionButtonLabel}
           onClick={onSecondaryActionButtonClick}
           disabled={secondaryActionButtonDisabled}
         >
           {secondaryActionButtonLabel}
+        </button>
+      ) : null}
+
+      {hasTertiaryActionButton ? (
+        <button
+          type="button"
+          className={tertiaryActionClassName}
+          aria-label={tertiaryActionButtonLabel}
+          title={tertiaryActionButtonLabel}
+          onClick={onTertiaryActionButtonClick}
+          disabled={tertiaryActionButtonDisabled}
+        >
+          {tertiaryActionButtonLabel}
         </button>
       ) : null}
 

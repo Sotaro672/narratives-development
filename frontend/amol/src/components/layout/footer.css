@@ -543,3 +543,19 @@
   background: #f2281f;
   border: 1px solid #f2281f;
 }
+
+@media (min-width: 1024px) {
+  .footer-nav,
+  .footer-nav--action,
+  .footer-nav--triple-action,
+  .footer-nav--comment-action,
+  .footer-nav--review-action {
+    display: none;
+  }
+}
+
+@media (orientation: landscape) {
+  .footer-nav--triple-action {
+    display: none;
+  }
+}
