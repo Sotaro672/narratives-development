@@ -6,12 +6,7 @@ import (
 
 	mallshared "narratives/internal/application/query/mall/shared"
 	avatardom "narratives/internal/domain/avatar"
-	branddom "narratives/internal/domain/brand"
-	modeldom "narratives/internal/domain/model"
-	productdom "narratives/internal/domain/product"
-	productblueprintdom "narratives/internal/domain/productBlueprint"
 	resaledom "narratives/internal/domain/resale"
-	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // resaleDisplayEnricher centralizes resale display enrichment shared by
@@ -45,12 +40,6 @@ type resaleDisplayEnricher struct {
 type resaleDisplayEnricherConfig struct {
 	displayResolver mallshared.MallDisplayResolver
 
-	productRepo          productdom.Repository
-	modelRepo            modeldom.RepositoryPort
-	productBlueprintRepo productblueprintdom.Repository
-	tokenBlueprintRepo   tokenblueprintdom.RepositoryPort
-	brandRepo            branddom.Repository
-
 	imageRepo  resaledom.ImageRepository
 	avatarRepo avatardom.Repository
 
@@ -63,19 +52,8 @@ type resaleDisplayEnricherConfig struct {
 func newResaleDisplayEnricher(
 	cfg resaleDisplayEnricherConfig,
 ) *resaleDisplayEnricher {
-	displayResolver := cfg.displayResolver
-	if displayResolver == nil {
-		displayResolver = mallshared.NewDisplayResolver(
-			cfg.productRepo,
-			cfg.modelRepo,
-			cfg.productBlueprintRepo,
-			cfg.tokenBlueprintRepo,
-			cfg.brandRepo,
-		)
-	}
-
 	return &resaleDisplayEnricher{
-		displayResolver: displayResolver,
+		displayResolver: cfg.displayResolver,
 
 		imageRepo:  cfg.imageRepo,
 		avatarRepo: cfg.avatarRepo,

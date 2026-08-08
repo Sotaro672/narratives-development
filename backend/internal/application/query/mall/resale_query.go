@@ -5,41 +5,25 @@ import (
 	"context"
 	"errors"
 
-	branddom "narratives/internal/domain/brand"
-	modeldom "narratives/internal/domain/model"
-	productdom "narratives/internal/domain/product"
-	productblueprintdom "narratives/internal/domain/productBlueprint"
+	mallshared "narratives/internal/application/query/mall/shared"
 	resaledom "narratives/internal/domain/resale"
-	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
 
 type ResaleQuery struct {
-	resaleRepo           resaledom.Repository
-	imageRepo            resaledom.ImageRepository
-	productRepo          productdom.Repository
-	modelRepo            modeldom.RepositoryPort
-	productBlueprintRepo productblueprintdom.Repository
-	tokenBlueprintRepo   tokenblueprintdom.RepositoryPort
-	brandRepo            branddom.Repository
+	resaleRepo      resaledom.Repository
+	imageRepo       resaledom.ImageRepository
+	displayResolver mallshared.MallDisplayResolver
 }
 
 func NewResaleQuery(
 	resaleRepo resaledom.Repository,
 	imageRepo resaledom.ImageRepository,
-	productRepo productdom.Repository,
-	modelRepo modeldom.RepositoryPort,
-	productBlueprintRepo productblueprintdom.Repository,
-	tokenBlueprintRepo tokenblueprintdom.RepositoryPort,
-	brandRepo branddom.Repository,
+	displayResolver mallshared.MallDisplayResolver,
 ) *ResaleQuery {
 	return &ResaleQuery{
-		resaleRepo:           resaleRepo,
-		imageRepo:            imageRepo,
-		productRepo:          productRepo,
-		modelRepo:            modelRepo,
-		productBlueprintRepo: productBlueprintRepo,
-		tokenBlueprintRepo:   tokenBlueprintRepo,
-		brandRepo:            brandRepo,
+		resaleRepo:      resaleRepo,
+		imageRepo:       imageRepo,
+		displayResolver: displayResolver,
 	}
 }
 
@@ -162,11 +146,7 @@ func (q *ResaleQuery) newDisplayEnricher() *resaleDisplayEnricher {
 	}
 
 	return newResaleDisplayEnricher(resaleDisplayEnricherConfig{
-		productRepo:          q.productRepo,
-		modelRepo:            q.modelRepo,
-		productBlueprintRepo: q.productBlueprintRepo,
-		tokenBlueprintRepo:   q.tokenBlueprintRepo,
-		brandRepo:            q.brandRepo,
+		displayResolver: q.displayResolver,
 
 		// ResaleQuery の既存挙動:
 		// - avatarName/avatarIcon は補完しない

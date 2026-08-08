@@ -351,7 +351,7 @@ func (
 	}
 
 	tokenBlueprintPatch :=
-		toTokenBlueprintPatch(
+		tbdom.NewPatchFromTokenBlueprint(
 			tokenBlueprint,
 		)
 
@@ -790,36 +790,6 @@ func toCatalogInventoryDTOFromMint(
 	}
 
 	return output
-}
-
-func toTokenBlueprintPatch(
-	tokenBlueprint *tbdom.TokenBlueprint,
-) tbdom.Patch {
-	if tokenBlueprint == nil {
-		return tbdom.Patch{}
-	}
-
-	return tbdom.Patch{
-		ID: tokenBlueprint.ID,
-
-		TokenName: tokenBlueprint.Name,
-
-		Symbol: tokenBlueprint.Symbol,
-
-		BrandID: tokenBlueprint.BrandID,
-
-		BrandName: "",
-
-		CompanyID: tokenBlueprint.CompanyID,
-
-		Description: tokenBlueprint.Description,
-
-		Minted: tokenBlueprint.Minted,
-
-		MetadataURI: tokenBlueprint.MetadataURI,
-
-		IconURL: tokenBlueprint.IconURL,
-	}
 }
 
 func toCatalogProductReviewSummaryDTO(

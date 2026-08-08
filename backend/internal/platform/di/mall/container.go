@@ -9,6 +9,7 @@ import (
 	firebaseauth "firebase.google.com/go/v4/auth"
 
 	mallquery "narratives/internal/application/query/mall"
+	mallshared "narratives/internal/application/query/mall/shared"
 	sharedquery "narratives/internal/application/query/shared"
 	appresolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
@@ -252,6 +253,15 @@ func NewContainer(
 		outfs.NewProductBlueprintRepositoryFS(fsClient)
 	modelRepoFS :=
 		outfs.NewModelRepositoryFS(fsClient)
+
+	mallDisplayResolver := mallshared.NewDisplayResolver(
+		productRepo,
+		modelRepoFS,
+		productBlueprintRepoFS,
+		tokenBlueprintRepo,
+		brandRepo,
+	)
+
 	inquiryRepo :=
 		outfs.NewInquiryRepositoryFS(fsClient)
 	inquiryReplyRepo :=
@@ -320,21 +330,13 @@ func NewContainer(
 	c.ResaleQ = mallquery.NewResaleQuery(
 		resaleRepo,
 		resaleImageRepo,
-		productRepo,
-		modelRepoFS,
-		productBlueprintRepoFS,
-		tokenBlueprintRepo,
-		brandRepo,
+		mallDisplayResolver,
 	)
 
 	c.MarketQ = mallquery.NewMarketQuery(
 		resaleRepo,
 		resaleImageRepo,
-		productRepo,
-		modelRepoFS,
-		productBlueprintRepoFS,
-		tokenBlueprintRepo,
-		brandRepo,
+		mallDisplayResolver,
 		avatarRepo,
 	)
 
@@ -540,13 +542,7 @@ func NewContainer(
 			productBlueprintRepoFS,
 			resaleRepo,
 			resaleImageRepo,
-			c.NameResolver,
-			mallquery.WithCartQueryProductRepo(
-				productRepo,
-			),
-			mallquery.WithCartQueryModelRepo(
-				modelRepoFS,
-			),
+			mallDisplayResolver,
 			mallquery.WithCartQueryBrandRepo(
 				brandRepo,
 			),
@@ -599,10 +595,7 @@ func NewContainer(
 
 		c.HistoryQ = mallquery.NewHistoryQuery(
 			inventoryRepo,
-			productBlueprintRepoFS,
-			tokenBlueprintRepo,
-			brandRepo,
-			c.NameResolver,
+			mallDisplayResolver,
 		)
 	}
 

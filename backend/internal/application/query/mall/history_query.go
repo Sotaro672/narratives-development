@@ -6,11 +6,7 @@ import (
 	"errors"
 
 	historydto "narratives/internal/application/query/mall/dto"
-	appresolver "narratives/internal/application/resolver"
-
-	branddom "narratives/internal/domain/brand"
-	pbdom "narratives/internal/domain/productBlueprint"
-	tokenbpdom "narratives/internal/domain/tokenBlueprint"
+	mallshared "narratives/internal/application/query/mall/shared"
 )
 
 var (
@@ -35,69 +31,18 @@ type HistoryInventoryBlueprintResolver interface {
 	) (productBlueprintID string, tokenBlueprintID string, err error)
 }
 
-// HistoryProductBlueprintResolver resolves product display base data
-// from productBlueprintId.
-//
-// Concrete implementation can be productBlueprint.Repository because it has:
-//
-//	GetByID(ctx, productBlueprintID)
-//
-// ProductBlueprint provides:
-// - ProductName
-// - BrandID
-type HistoryProductBlueprintResolver interface {
-	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
-}
-
-// HistoryTokenBlueprintResolver resolves token display base data
-// from tokenBlueprintId.
-//
-// Concrete implementation can be tokenBlueprint.RepositoryPort because it has:
-//
-//	GetByID(ctx, tokenBlueprintID)
-//
-// TokenBlueprint provides:
-// - Name
-// - IconURL
-// - BrandID
-type HistoryTokenBlueprintResolver interface {
-	GetByID(ctx context.Context, id string) (*tokenbpdom.TokenBlueprint, error)
-}
-
-// HistoryBrandResolver resolves brand display data from brandId.
-//
-// Concrete implementation can be brand.RepositoryPort / brand.Repository because it has:
-//
-//	GetByID(ctx, brandID)
-//
-// Brand provides:
-// - Name
-// - BrandIcon
-type HistoryBrandResolver interface {
-	GetByID(ctx context.Context, id string) (branddom.Brand, error)
-}
-
 type HistoryQuery struct {
 	inventoryBlueprintResolver HistoryInventoryBlueprintResolver
-	productBlueprintResolver   HistoryProductBlueprintResolver
-	tokenBlueprintResolver     HistoryTokenBlueprintResolver
-	brandResolver              HistoryBrandResolver
-	nameResolver               *appresolver.NameResolver
+	displayResolver            mallshared.MallDisplayResolver
 }
 
 func NewHistoryQuery(
 	inventoryBlueprintResolver HistoryInventoryBlueprintResolver,
-	productBlueprintResolver HistoryProductBlueprintResolver,
-	tokenBlueprintResolver HistoryTokenBlueprintResolver,
-	brandResolver HistoryBrandResolver,
-	nameResolver *appresolver.NameResolver,
+	displayResolver mallshared.MallDisplayResolver,
 ) *HistoryQuery {
 	return &HistoryQuery{
 		inventoryBlueprintResolver: inventoryBlueprintResolver,
-		productBlueprintResolver:   productBlueprintResolver,
-		tokenBlueprintResolver:     tokenBlueprintResolver,
-		brandResolver:              brandResolver,
-		nameResolver:               nameResolver,
+		displayResolver:            displayResolver,
 	}
 }
 
@@ -126,10 +71,7 @@ func (q *HistoryQuery) EnrichOrderPage(
 ) (historydto.HistoryOrderPage, error) {
 	if q == nil ||
 		q.inventoryBlueprintResolver == nil ||
-		q.productBlueprintResolver == nil ||
-		q.tokenBlueprintResolver == nil ||
-		q.brandResolver == nil ||
-		q.nameResolver == nil {
+		q.displayResolver == nil {
 		return historydto.HistoryOrderPage{}, ErrHistoryQueryNotConfigured
 	}
 
@@ -142,9 +84,9 @@ func (q *HistoryQuery) EnrichOrderPage(
 	}
 
 	blueprintCache := make(map[string]historyBlueprintIDs)
-	productBlueprintCache := make(map[string]historyProductBlueprintInfo)
-	tokenBlueprintCache := make(map[string]historyTokenBlueprintInfo)
-	brandCache := make(map[string]historyBrandInfo)
+	productBlueprintCache := make(map[string]mallshared.ProductBlueprintDisplay)
+	tokenBlueprintCache := make(map[string]mallshared.TokenBlueprintDisplay)
+	brandCache := make(map[string]mallshared.BrandDisplay)
 	modelCache := make(map[string]historydto.HistoryResolvedModel)
 
 	for orderIndex := range out.Items {
@@ -171,8 +113,12 @@ func (q *HistoryQuery) EnrichOrderPage(
 							ProductBlueprintID: productBlueprintID,
 							TokenBlueprintID:   tokenBlueprintID,
 						}
+
 						blueprintCache[inventoryID] = resolvedFromInventory
-						blueprintIDs = mergeHistoryBlueprintIDs(blueprintIDs, resolvedFromInventory)
+						blueprintIDs = mergeHistoryBlueprintIDs(
+							blueprintIDs,
+							resolvedFromInventory,
+						)
 					}
 				}
 			}
@@ -187,7 +133,10 @@ func (q *HistoryQuery) EnrichOrderPage(
 			if blueprintIDs.ProductBlueprintID != "" {
 				pbInfo, ok := productBlueprintCache[blueprintIDs.ProductBlueprintID]
 				if !ok {
-					pbInfo = q.resolveProductBlueprintInfo(ctx, blueprintIDs.ProductBlueprintID)
+					pbInfo = q.resolveProductBlueprintInfo(
+						ctx,
+						blueprintIDs.ProductBlueprintID,
+					)
 					productBlueprintCache[blueprintIDs.ProductBlueprintID] = pbInfo
 				}
 
@@ -202,7 +151,10 @@ func (q *HistoryQuery) EnrichOrderPage(
 			if blueprintIDs.TokenBlueprintID != "" {
 				tbInfo, ok := tokenBlueprintCache[blueprintIDs.TokenBlueprintID]
 				if !ok {
-					tbInfo = q.resolveTokenBlueprintInfo(ctx, blueprintIDs.TokenBlueprintID)
+					tbInfo = q.resolveTokenBlueprintInfo(
+						ctx,
+						blueprintIDs.TokenBlueprintID,
+					)
 					tokenBlueprintCache[blueprintIDs.TokenBlueprintID] = tbInfo
 				}
 
@@ -238,20 +190,23 @@ func (q *HistoryQuery) EnrichOrderPage(
 
 			resolved, ok := modelCache[modelID]
 			if !ok {
-				nextResolved, err := q.resolveHistoryModelByID(ctx, historydto.HistoryResolveModelInput{
-					ItemType: item.ItemType,
+				nextResolved, err := q.resolveHistoryModelByID(
+					ctx,
+					historydto.HistoryResolveModelInput{
+						ItemType: item.ItemType,
 
-					ModelID:     modelID,
-					InventoryID: inventoryID,
-					ListID:      item.ListID,
+						ModelID:     modelID,
+						InventoryID: inventoryID,
+						ListID:      item.ListID,
 
-					ResaleID: item.ResaleID,
+						ResaleID: item.ResaleID,
 
-					ProductID:          item.ProductID,
-					ProductBlueprintID: blueprintIDs.ProductBlueprintID,
-					TokenBlueprintID:   blueprintIDs.TokenBlueprintID,
-					BrandID:            item.BrandID,
-				})
+						ProductID:          item.ProductID,
+						ProductBlueprintID: blueprintIDs.ProductBlueprintID,
+						TokenBlueprintID:   blueprintIDs.TokenBlueprintID,
+						BrandID:            item.BrandID,
+					},
+				)
 				if err != nil {
 					continue
 				}
@@ -264,6 +219,7 @@ func (q *HistoryQuery) EnrichOrderPage(
 
 			if blueprintIDs.ProductBlueprintID != "" {
 				pbInfo := productBlueprintCache[blueprintIDs.ProductBlueprintID]
+
 				if item.ProductName == "" {
 					item.ProductName = pbInfo.ProductName
 				}
@@ -274,6 +230,7 @@ func (q *HistoryQuery) EnrichOrderPage(
 
 			if blueprintIDs.TokenBlueprintID != "" {
 				tbInfo := tokenBlueprintCache[blueprintIDs.TokenBlueprintID]
+
 				if item.TokenName == "" {
 					item.TokenName = tbInfo.TokenName
 				}
@@ -317,14 +274,17 @@ func (q *HistoryQuery) ResolveBlueprintIDsByInventoryID(
 		return "", "", ErrHistoryInventoryIDEmpty
 	}
 
-	return q.inventoryBlueprintResolver.ResolveBlueprintIDsByInventoryID(ctx, inventoryID)
+	return q.inventoryBlueprintResolver.ResolveBlueprintIDsByInventoryID(
+		ctx,
+		inventoryID,
+	)
 }
 
 func (q *HistoryQuery) ResolveProductBlueprintInfo(
 	ctx context.Context,
 	productBlueprintID string,
 ) (productName string, brandID string, err error) {
-	if q == nil || q.productBlueprintResolver == nil {
+	if q == nil || q.displayResolver == nil {
 		return "", "", ErrHistoryQueryNotConfigured
 	}
 
@@ -332,19 +292,22 @@ func (q *HistoryQuery) ResolveProductBlueprintInfo(
 		return "", "", nil
 	}
 
-	pb, pbErr := q.productBlueprintResolver.GetByID(ctx, productBlueprintID)
-	if pbErr != nil {
-		return "", "", pbErr
+	info, err := q.displayResolver.ResolveProductBlueprintInfo(
+		ctx,
+		productBlueprintID,
+	)
+	if err != nil {
+		return "", "", err
 	}
 
-	return pb.ProductName, pb.BrandID, nil
+	return info.ProductName, info.BrandID, nil
 }
 
 func (q *HistoryQuery) ResolveTokenBlueprintInfo(
 	ctx context.Context,
 	tokenBlueprintID string,
 ) (tokenName string, tokenIcon string, brandID string, err error) {
-	if q == nil || q.tokenBlueprintResolver == nil {
+	if q == nil || q.displayResolver == nil {
 		return "", "", "", ErrHistoryQueryNotConfigured
 	}
 
@@ -352,17 +315,17 @@ func (q *HistoryQuery) ResolveTokenBlueprintInfo(
 		return "", "", "", nil
 	}
 
-	tb, tbErr := q.tokenBlueprintResolver.GetByID(ctx, tokenBlueprintID)
-	if tbErr != nil {
-		return "", "", "", tbErr
-	}
-	if tb == nil {
-		return "", "", "", nil
+	info, err := q.displayResolver.ResolveTokenBlueprintInfo(
+		ctx,
+		tokenBlueprintID,
+	)
+	if err != nil {
+		return "", "", "", err
 	}
 
-	return tb.Name,
-		tb.IconURL,
-		tb.BrandID,
+	return info.TokenName,
+		info.TokenIcon,
+		info.BrandID,
 		nil
 }
 
@@ -370,7 +333,7 @@ func (q *HistoryQuery) ResolveBrandInfo(
 	ctx context.Context,
 	brandID string,
 ) (brandName string, brandIcon string, err error) {
-	if q == nil || q.brandResolver == nil {
+	if q == nil || q.displayResolver == nil {
 		return "", "", ErrHistoryQueryNotConfigured
 	}
 
@@ -378,19 +341,22 @@ func (q *HistoryQuery) ResolveBrandInfo(
 		return "", "", nil
 	}
 
-	b, brandErr := q.brandResolver.GetByID(ctx, brandID)
-	if brandErr != nil {
-		return "", "", brandErr
+	info, err := q.displayResolver.ResolveBrandInfo(
+		ctx,
+		brandID,
+	)
+	if err != nil {
+		return "", "", err
 	}
 
-	return b.Name, b.BrandIcon, nil
+	return info.BrandName, info.BrandIcon, nil
 }
 
 func (q *HistoryQuery) ResolveModel(
 	ctx context.Context,
 	in historydto.HistoryResolveModelInput,
 ) (historydto.HistoryResolvedModel, error) {
-	if q == nil || q.nameResolver == nil {
+	if q == nil || q.displayResolver == nil {
 		return historydto.HistoryResolvedModel{}, ErrHistoryQueryNotConfigured
 	}
 
@@ -417,7 +383,10 @@ func (q *HistoryQuery) ResolveModel(
 		(nextInput.ProductBlueprintID == "" || nextInput.TokenBlueprintID == "") &&
 		q.inventoryBlueprintResolver != nil {
 		productBlueprintID, tokenBlueprintID, err :=
-			q.inventoryBlueprintResolver.ResolveBlueprintIDsByInventoryID(ctx, nextInput.InventoryID)
+			q.inventoryBlueprintResolver.ResolveBlueprintIDsByInventoryID(
+				ctx,
+				nextInput.InventoryID,
+			)
 		if err == nil {
 			if nextInput.ProductBlueprintID == "" {
 				nextInput.ProductBlueprintID = productBlueprintID
@@ -455,8 +424,11 @@ func (q *HistoryQuery) ResolveModel(
 		resolved.BrandID = nextInput.BrandID
 	}
 
-	if q.productBlueprintResolver != nil && resolved.ProductBlueprintID != "" {
-		pbInfo := q.resolveProductBlueprintInfo(ctx, resolved.ProductBlueprintID)
+	if resolved.ProductBlueprintID != "" {
+		pbInfo := q.resolveProductBlueprintInfo(
+			ctx,
+			resolved.ProductBlueprintID,
+		)
 
 		if resolved.ProductName == "" {
 			resolved.ProductName = pbInfo.ProductName
@@ -466,8 +438,11 @@ func (q *HistoryQuery) ResolveModel(
 		}
 	}
 
-	if q.tokenBlueprintResolver != nil && resolved.TokenBlueprintID != "" {
-		tbInfo := q.resolveTokenBlueprintInfo(ctx, resolved.TokenBlueprintID)
+	if resolved.TokenBlueprintID != "" {
+		tbInfo := q.resolveTokenBlueprintInfo(
+			ctx,
+			resolved.TokenBlueprintID,
+		)
 
 		if resolved.TokenName == "" {
 			resolved.TokenName = tbInfo.TokenName
@@ -480,7 +455,7 @@ func (q *HistoryQuery) ResolveModel(
 		}
 	}
 
-	if q.brandResolver != nil && resolved.BrandID != "" {
+	if resolved.BrandID != "" {
 		brandInfo := q.resolveBrandInfo(ctx, resolved.BrandID)
 
 		if resolved.BrandName == "" {
@@ -498,7 +473,7 @@ func (q *HistoryQuery) resolveHistoryModelByID(
 	ctx context.Context,
 	in historydto.HistoryResolveModelInput,
 ) (historydto.HistoryResolvedModel, error) {
-	if q == nil || q.nameResolver == nil {
+	if q == nil || q.displayResolver == nil {
 		return historydto.HistoryResolvedModel{}, ErrHistoryQueryNotConfigured
 	}
 
@@ -506,14 +481,20 @@ func (q *HistoryQuery) resolveHistoryModelByID(
 		return historydto.HistoryResolvedModel{}, ErrHistoryModelIDEmpty
 	}
 
-	model := q.nameResolver.ResolveModelResolved(ctx, in.ModelID)
+	model, err := q.displayResolver.ResolveModelByModelID(
+		ctx,
+		in.ModelID,
+	)
+	if err != nil {
+		return historydto.HistoryResolvedModel{}, err
+	}
 
-	return historyResolvedModelFromNameResolver(in, model), nil
+	return historyResolvedModelFromDisplayResolver(in, model), nil
 }
 
-func historyResolvedModelFromNameResolver(
+func historyResolvedModelFromDisplayResolver(
 	in historydto.HistoryResolveModelInput,
-	model appresolver.ModelResolved,
+	model mallshared.ModelDisplay,
 ) historydto.HistoryResolvedModel {
 	out := historydto.HistoryResolvedModel{
 		ItemType: in.ItemType,
@@ -529,17 +510,28 @@ func historyResolvedModelFromNameResolver(
 		TokenBlueprintID:   in.TokenBlueprintID,
 		BrandID:            in.BrandID,
 
-		Kind:        model.Kind,
-		ModelNumber: model.ModelNumber,
-		Size:        model.Size,
-		VolumeValue: model.VolumeValue,
-		VolumeUnit:  model.VolumeUnit,
+		Kind:         model.Kind,
+		ModelNumber:  model.ModelNumber,
+		Size:         model.Size,
+		Measurements: cloneMeasurements(model.Measurements),
+		VolumeValue:  model.VolumeValue,
+		VolumeUnit:   model.VolumeUnit,
 	}
 
-	if model.Color != "" || model.RGB != nil {
+	if model.ModelID != "" {
+		out.ModelID = model.ModelID
+	}
+
+	if out.ProductBlueprintID == "" && model.ProductBlueprintID != "" {
+		out.ProductBlueprintID = model.ProductBlueprintID
+	}
+
+	if model.ColorName != "" || model.ColorRGB != 0 {
+		rgb := model.ColorRGB
+
 		out.Color = &historydto.HistoryColor{
-			Name: model.Color,
-			RGB:  model.RGB,
+			Name: model.ColorName,
+			RGB:  &rgb,
 		}
 	}
 
@@ -549,60 +541,64 @@ func historyResolvedModelFromNameResolver(
 func (q *HistoryQuery) resolveProductBlueprintInfo(
 	ctx context.Context,
 	productBlueprintID string,
-) historyProductBlueprintInfo {
-	if productBlueprintID == "" || q == nil || q.productBlueprintResolver == nil {
-		return historyProductBlueprintInfo{}
+) mallshared.ProductBlueprintDisplay {
+	if productBlueprintID == "" ||
+		q == nil ||
+		q.displayResolver == nil {
+		return mallshared.ProductBlueprintDisplay{}
 	}
 
-	productName, brandID, err := q.ResolveProductBlueprintInfo(ctx, productBlueprintID)
+	info, err := q.displayResolver.ResolveProductBlueprintInfo(
+		ctx,
+		productBlueprintID,
+	)
 	if err != nil {
-		return historyProductBlueprintInfo{}
+		return mallshared.ProductBlueprintDisplay{}
 	}
 
-	return historyProductBlueprintInfo{
-		ProductName: productName,
-		BrandID:     brandID,
-	}
+	return info
 }
 
 func (q *HistoryQuery) resolveTokenBlueprintInfo(
 	ctx context.Context,
 	tokenBlueprintID string,
-) historyTokenBlueprintInfo {
-	if tokenBlueprintID == "" || q == nil || q.tokenBlueprintResolver == nil {
-		return historyTokenBlueprintInfo{}
+) mallshared.TokenBlueprintDisplay {
+	if tokenBlueprintID == "" ||
+		q == nil ||
+		q.displayResolver == nil {
+		return mallshared.TokenBlueprintDisplay{}
 	}
 
-	tokenName, tokenIcon, brandID, err := q.ResolveTokenBlueprintInfo(ctx, tokenBlueprintID)
+	info, err := q.displayResolver.ResolveTokenBlueprintInfo(
+		ctx,
+		tokenBlueprintID,
+	)
 	if err != nil {
-		return historyTokenBlueprintInfo{}
+		return mallshared.TokenBlueprintDisplay{}
 	}
 
-	return historyTokenBlueprintInfo{
-		TokenName: tokenName,
-		TokenIcon: tokenIcon,
-		BrandID:   brandID,
-	}
+	return info
 }
 
 func (q *HistoryQuery) resolveBrandInfo(
 	ctx context.Context,
 	brandID string,
-) historyBrandInfo {
-	if brandID == "" || q == nil || q.brandResolver == nil {
-		return historyBrandInfo{}
+) mallshared.BrandDisplay {
+	if brandID == "" ||
+		q == nil ||
+		q.displayResolver == nil {
+		return mallshared.BrandDisplay{}
 	}
 
-	brandName, brandIcon, err := q.ResolveBrandInfo(ctx, brandID)
+	info, err := q.displayResolver.ResolveBrandInfo(
+		ctx,
+		brandID,
+	)
 	if err != nil {
-		return historyBrandInfo{}
+		return mallshared.BrandDisplay{}
 	}
 
-	return historyBrandInfo{
-		BrandName: brandName,
-		BrandID:   brandID,
-		BrandIcon: brandIcon,
-	}
+	return info
 }
 
 type historyBlueprintIDs struct {
@@ -610,31 +606,19 @@ type historyBlueprintIDs struct {
 	TokenBlueprintID   string
 }
 
-type historyProductBlueprintInfo struct {
-	ProductName string
-	BrandID     string
-}
-
-type historyTokenBlueprintInfo struct {
-	TokenName string
-	TokenIcon string
-	BrandID   string
-}
-
-type historyBrandInfo struct {
-	BrandName string
-	BrandID   string
-	BrandIcon string
-}
-
-func cloneHistoryOrders(in []historydto.HistoryOrder) []historydto.HistoryOrder {
+func cloneHistoryOrders(
+	in []historydto.HistoryOrder,
+) []historydto.HistoryOrder {
 	out := make([]historydto.HistoryOrder, 0, len(in))
 
 	for _, order := range in {
 		next := order
 
 		if len(order.Items) > 0 {
-			next.Items = make([]historydto.HistoryOrderItem, len(order.Items))
+			next.Items = make(
+				[]historydto.HistoryOrderItem,
+				len(order.Items),
+			)
 			copy(next.Items, order.Items)
 		} else {
 			next.Items = []historydto.HistoryOrderItem{}
@@ -710,6 +694,12 @@ func applyResolvedModelToItem(
 		item.Color = resolved.Color
 	}
 
+	if len(resolved.Measurements) > 0 {
+		item.Measurements = cloneMeasurements(
+			resolved.Measurements,
+		)
+	}
+
 	if resolved.VolumeValue != nil {
 		item.VolumeValue = resolved.VolumeValue
 	}
@@ -745,5 +735,6 @@ func mergeHistoryBlueprintIDs(
 	if base.TokenBlueprintID == "" {
 		base.TokenBlueprintID = next.TokenBlueprintID
 	}
+
 	return base
 }

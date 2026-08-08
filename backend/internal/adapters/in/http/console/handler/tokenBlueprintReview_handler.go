@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"narratives/internal/adapters/in/http/middleware"
 	appquery "narratives/internal/application/query/console"
@@ -263,45 +262,6 @@ func queryIntPtr(
 	return &value
 }
 
-func toConsoleCommentReadModel(
-	view usecase.CommentView,
-) appquery.ConsoleTokenBlueprintCommentReadModel {
-	comment := view.Comment
-
-	return appquery.ConsoleTokenBlueprintCommentReadModel{
-		CommentID:        comment.CommentID,
-		TokenBlueprintID: comment.TokenBlueprintID,
-		ParentCommentID:  comment.ParentCommentID,
-		RootCommentID:    comment.RootCommentID,
-		Depth:            comment.Depth,
-		AuthorID:         comment.AuthorID,
-		AuthorType:       string(comment.AuthorType),
-
-		AuthorAvatarName: view.AuthorAvatarName,
-		AuthorAvatarIcon: view.AuthorAvatarIcon,
-		BrandName:        view.BrandName,
-		BrandIcon:        view.BrandIcon,
-		IsOwnerComment:   comment.IsOwnerComment,
-
-		Body:         comment.Body,
-		LikeCount:    comment.LikeCount,
-		DislikeCount: comment.DislikeCount,
-		ChildCount:   comment.ChildCount,
-		Deleted:      comment.Deleted,
-
-		CreatedAt: formatRFC3339NanoUTC(comment.CreatedAt),
-		UpdatedAt: formatRFC3339NanoUTC(comment.UpdatedAt),
-	}
-}
-
-func formatRFC3339NanoUTC(value time.Time) string {
-	if value.IsZero() {
-		return ""
-	}
-
-	return value.UTC().Format(time.RFC3339Nano)
-}
-
 // ================================
 // Read handlers
 // ================================
@@ -490,7 +450,7 @@ func (h *TokenBlueprintReviewHandler) CreateCommentAsBrand(
 		w,
 		http.StatusCreated,
 		createBrandCommentResponse{
-			Item: toConsoleCommentReadModel(
+			Item: h.query.ToCommentReadModel(
 				h.uc.BuildComment(
 					r.Context(),
 					created,
@@ -564,7 +524,7 @@ func (h *TokenBlueprintReviewHandler) CreateBrandReply(
 		w,
 		http.StatusCreated,
 		createBrandCommentResponse{
-			Item: toConsoleCommentReadModel(
+			Item: h.query.ToCommentReadModel(
 				h.uc.BuildComment(
 					r.Context(),
 					created,
@@ -705,7 +665,7 @@ func (h *TokenBlueprintReviewHandler) ReactToCommentAsBrand(
 		w,
 		http.StatusOK,
 		map[string]any{
-			"item": toConsoleCommentReadModel(
+			"item": h.query.ToCommentReadModel(
 				h.uc.BuildComment(
 					r.Context(),
 					updated,

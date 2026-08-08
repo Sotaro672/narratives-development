@@ -285,12 +285,12 @@ func (q *TokenBlueprintReviewConsoleQuery) toCommentReadModels(
 ) []ConsoleTokenBlueprintCommentReadModel {
 	out := make([]ConsoleTokenBlueprintCommentReadModel, 0, len(views))
 	for _, v := range views {
-		out = append(out, q.toCommentReadModel(v))
+		out = append(out, q.ToCommentReadModel(v))
 	}
 	return out
 }
 
-func (q *TokenBlueprintReviewConsoleQuery) toCommentReadModel(
+func (q *TokenBlueprintReviewConsoleQuery) ToCommentReadModel(
 	view usecase.CommentView,
 ) ConsoleTokenBlueprintCommentReadModel {
 	c := view.Comment

@@ -7,12 +7,7 @@ import (
 
 	mallshared "narratives/internal/application/query/mall/shared"
 	avatardom "narratives/internal/domain/avatar"
-	branddom "narratives/internal/domain/brand"
-	modeldom "narratives/internal/domain/model"
-	productdom "narratives/internal/domain/product"
-	productblueprintdom "narratives/internal/domain/productBlueprint"
 	resaledom "narratives/internal/domain/resale"
-	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // MarketResaleRepository is the repository dependency used by MarketQuery.
@@ -32,34 +27,22 @@ type MarketResaleRepository interface {
 // - Display fields are enriched here.
 // - Images are visible only when the parent resale is listing and not owned by the viewer.
 type MarketQuery struct {
-	resaleRepo           MarketResaleRepository
-	imageRepo            resaledom.ImageRepository
-	productRepo          productdom.Repository
-	modelRepo            modeldom.RepositoryPort
-	productBlueprintRepo productblueprintdom.Repository
-	tokenBlueprintRepo   tokenblueprintdom.RepositoryPort
-	brandRepo            branddom.Repository
-	avatarRepo           avatardom.Repository
+	resaleRepo      MarketResaleRepository
+	imageRepo       resaledom.ImageRepository
+	displayResolver mallshared.MallDisplayResolver
+	avatarRepo      avatardom.Repository
 }
 
 func NewMarketQuery(
 	resaleRepo MarketResaleRepository,
 	imageRepo resaledom.ImageRepository,
-	productRepo productdom.Repository,
-	modelRepo modeldom.RepositoryPort,
-	productBlueprintRepo productblueprintdom.Repository,
-	tokenBlueprintRepo tokenblueprintdom.RepositoryPort,
-	brandRepo branddom.Repository,
+	displayResolver mallshared.MallDisplayResolver,
 	avatarRepo ...avatardom.Repository,
 ) *MarketQuery {
 	q := &MarketQuery{
-		resaleRepo:           resaleRepo,
-		imageRepo:            imageRepo,
-		productRepo:          productRepo,
-		modelRepo:            modelRepo,
-		productBlueprintRepo: productBlueprintRepo,
-		tokenBlueprintRepo:   tokenBlueprintRepo,
-		brandRepo:            brandRepo,
+		resaleRepo:      resaleRepo,
+		imageRepo:       imageRepo,
+		displayResolver: displayResolver,
 	}
 
 	if len(avatarRepo) > 0 {
@@ -214,13 +197,9 @@ func (q *MarketQuery) newDisplayEnricher() *resaleDisplayEnricher {
 	}
 
 	return newResaleDisplayEnricher(resaleDisplayEnricherConfig{
-		productRepo:          q.productRepo,
-		modelRepo:            q.modelRepo,
-		productBlueprintRepo: q.productBlueprintRepo,
-		tokenBlueprintRepo:   q.tokenBlueprintRepo,
-		brandRepo:            q.brandRepo,
-		imageRepo:            q.imageRepo,
-		avatarRepo:           q.avatarRepo,
+		displayResolver: q.displayResolver,
+		imageRepo:       q.imageRepo,
+		avatarRepo:      q.avatarRepo,
 
 		// MarketQuery の既存挙動:
 		// - avatarName/avatarIcon を補完する

@@ -7,15 +7,13 @@ import (
 	"net/http"
 
 	middleware "narratives/internal/adapters/in/http/middleware"
+	malldto "narratives/internal/application/query/mall/dto"
 	usecase "narratives/internal/application/usecase"
 	cartdom "narratives/internal/domain/cart"
 )
 
 type CartQueryService interface {
-	GetCartQuery(
-		ctx context.Context,
-		avatarID string,
-	) (any, error)
+	GetByAvatarID(ctx context.Context, avatarID string) (malldto.CartDTO, error)
 }
 
 type CartHandler struct {
@@ -23,10 +21,7 @@ type CartHandler struct {
 	cartQuery CartQueryService
 }
 
-func NewCartHandler(
-	uc *usecase.CartUsecase,
-	cartQuery CartQueryService,
-) http.Handler {
+func NewCartHandler(uc *usecase.CartUsecase, cartQuery CartQueryService) http.Handler {
 	return &CartHandler{
 		uc:        uc,
 		cartQuery: cartQuery,
@@ -35,43 +30,32 @@ func NewCartHandler(
 
 func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.uc == nil {
-		writeErr(
-			w,
-			http.StatusInternalServerError,
-			"cart handler is not configured",
-		)
+		writeErr(w, http.StatusInternalServerError, "cart handler is not configured")
 		return
 	}
 
 	path := r.URL.Path
 
 	switch {
-	case r.Method == http.MethodGet &&
-		path == "/mall/me/cart":
+	case r.Method == http.MethodGet && path == "/mall/me/cart":
 		h.handleGet(w, r)
 
-	case r.Method == http.MethodDelete &&
-		path == "/mall/me/cart":
+	case r.Method == http.MethodDelete && path == "/mall/me/cart":
 		h.handleClear(w, r)
 
-	case r.Method == http.MethodPost &&
-		path == "/mall/me/cart/items":
+	case r.Method == http.MethodPost && path == "/mall/me/cart/items":
 		h.handleAddItem(w, r)
 
-	case r.Method == http.MethodPut &&
-		path == "/mall/me/cart/items":
+	case r.Method == http.MethodPut && path == "/mall/me/cart/items":
 		h.handleSetItemQty(w, r)
 
-	case r.Method == http.MethodDelete &&
-		path == "/mall/me/cart/items":
+	case r.Method == http.MethodDelete && path == "/mall/me/cart/items":
 		h.handleRemoveItem(w, r)
 
-	case r.Method == http.MethodPost &&
-		path == "/mall/me/cart/resales":
+	case r.Method == http.MethodPost && path == "/mall/me/cart/resales":
 		h.handleAddResaleItem(w, r)
 
-	case r.Method == http.MethodDelete &&
-		path == "/mall/me/cart/resales":
+	case r.Method == http.MethodDelete && path == "/mall/me/cart/resales":
 		h.handleRemoveResaleItem(w, r)
 
 	default:
@@ -100,10 +84,7 @@ func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if request.InventoryID == "" ||
-		request.ListID == "" ||
-		request.ModelID == "" ||
-		request.Qty <= 0 {
+	if request.InventoryID == "" || request.ListID == "" || request.ModelID == "" || request.Qty <= 0 {
 		writeErr(
 			w,
 			http.StatusBadRequest,
@@ -141,11 +122,7 @@ func (h *CartHandler) handleAddResaleItem(w http.ResponseWriter, r *http.Request
 	}
 
 	if request.ResaleID == "" || request.ProductID == "" {
-		writeErr(
-			w,
-			http.StatusBadRequest,
-			"resaleId and productId are required",
-		)
+		writeErr(w, http.StatusBadRequest, "resaleId and productId are required")
 		return
 	}
 
@@ -175,9 +152,7 @@ func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if request.InventoryID == "" ||
-		request.ListID == "" ||
-		request.ModelID == "" {
+	if request.InventoryID == "" || request.ListID == "" || request.ModelID == "" {
 		writeErr(
 			w,
 			http.StatusBadRequest,
@@ -214,9 +189,7 @@ func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if request.InventoryID == "" ||
-		request.ListID == "" ||
-		request.ModelID == "" {
+	if request.InventoryID == "" || request.ListID == "" || request.ModelID == "" {
 		writeErr(
 			w,
 			http.StatusBadRequest,
@@ -253,11 +226,7 @@ func (h *CartHandler) handleRemoveResaleItem(w http.ResponseWriter, r *http.Requ
 	}
 
 	if request.ResaleID == "" || request.ProductID == "" {
-		writeErr(
-			w,
-			http.StatusBadRequest,
-			"resaleId and productId are required",
-		)
+		writeErr(w, http.StatusBadRequest, "resaleId and productId are required")
 		return
 	}
 
@@ -289,17 +258,10 @@ func (h *CartHandler) handleClear(w http.ResponseWriter, r *http.Request) {
 	h.respondCartDTO(w, r, avatarID)
 }
 
-func currentCartAvatarID(
-	w http.ResponseWriter,
-	r *http.Request,
-) (string, bool) {
+func currentCartAvatarID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
-		writeErr(
-			w,
-			http.StatusUnauthorized,
-			"unauthorized: missing avatarId",
-		)
+		writeErr(w, http.StatusUnauthorized, "unauthorized: missing avatarId")
 		return "", false
 	}
 
@@ -312,15 +274,11 @@ func (h *CartHandler) respondCartDTO(
 	avatarID string,
 ) {
 	if h.cartQuery == nil {
-		writeErr(
-			w,
-			http.StatusInternalServerError,
-			"cart query is not configured",
-		)
+		writeErr(w, http.StatusInternalServerError, "cart query is not configured")
 		return
 	}
 
-	result, err := h.cartQuery.GetCartQuery(r.Context(), avatarID)
+	result, err := h.cartQuery.GetByAvatarID(r.Context(), avatarID)
 	if err != nil {
 		h.writeCartErr(w, err)
 		return
@@ -331,11 +289,7 @@ func (h *CartHandler) respondCartDTO(
 
 func (h *CartHandler) writeCartErr(w http.ResponseWriter, err error) {
 	if err == nil {
-		writeErr(
-			w,
-			http.StatusInternalServerError,
-			"unknown error",
-		)
+		writeErr(w, http.StatusInternalServerError, "unknown error")
 		return
 	}
 
@@ -357,11 +311,7 @@ type cartItemReq struct {
 	Qty         int    `json:"qty"`
 }
 
-func writeErr(
-	w http.ResponseWriter,
-	status int,
-	message string,
-) {
+func writeErr(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]any{
 		"error": message,
 	})

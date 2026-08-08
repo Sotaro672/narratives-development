@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	mw "narratives/internal/adapters/in/http/middleware"
 	appquery "narratives/internal/application/query/mall"
@@ -375,49 +374,6 @@ func queryIntPtr(
 	return &value
 }
 
-func toMallCommentReadModel(
-	view appusecase.CommentView,
-) appquery.MallTokenBlueprintCommentReadModel {
-	comment := view.Comment
-
-	return appquery.MallTokenBlueprintCommentReadModel{
-		CommentID:        comment.CommentID,
-		TokenBlueprintID: comment.TokenBlueprintID,
-		ParentCommentID:  comment.ParentCommentID,
-		RootCommentID:    comment.RootCommentID,
-		Depth:            comment.Depth,
-		AuthorID:         comment.AuthorID,
-		AuthorType:       string(comment.AuthorType),
-
-		AuthorAvatarName: view.AuthorAvatarName,
-		AuthorAvatarIcon: view.AuthorAvatarIcon,
-		BrandName:        view.BrandName,
-		BrandIcon:        view.BrandIcon,
-		IsOwnerComment:   comment.IsOwnerComment,
-
-		Body:         comment.Body,
-		LikeCount:    comment.LikeCount,
-		DislikeCount: comment.DislikeCount,
-		ChildCount:   comment.ChildCount,
-		Deleted:      comment.Deleted,
-
-		CreatedAt: formatRFC3339NanoUTC(
-			comment.CreatedAt,
-		),
-		UpdatedAt: formatRFC3339NanoUTC(
-			comment.UpdatedAt,
-		),
-	}
-}
-
-func formatRFC3339NanoUTC(t time.Time) string {
-	if t.IsZero() {
-		return ""
-	}
-
-	return t.UTC().Format(time.RFC3339Nano)
-}
-
 // ============================================================
 // Aggregate read handler
 // ============================================================
@@ -643,7 +599,7 @@ func (h *TokenBlueprintReviewHandler) createComment(
 	writeJSON(
 		w,
 		http.StatusCreated,
-		toMallCommentReadModel(
+		h.query.ToCommentReadModel(
 			h.uc.BuildComment(
 				r.Context(),
 				created,
@@ -704,7 +660,7 @@ func (h *TokenBlueprintReviewHandler) createReplyComment(
 	writeJSON(
 		w,
 		http.StatusCreated,
-		toMallCommentReadModel(
+		h.query.ToCommentReadModel(
 			h.uc.BuildComment(
 				r.Context(),
 				created,
@@ -822,7 +778,7 @@ func (h *TokenBlueprintReviewHandler) upsertCommentReaction(
 	writeJSON(
 		w,
 		http.StatusOK,
-		toMallCommentReadModel(
+		h.query.ToCommentReadModel(
 			h.uc.BuildComment(
 				r.Context(),
 				updated,

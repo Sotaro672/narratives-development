@@ -3,10 +3,7 @@ package mall
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"net/http"
-	"strings"
 
 	"narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
@@ -52,7 +49,10 @@ type BrandDetailDTO struct {
 	ListIDs              []string `json:"listIds"`
 }
 
-func (q *BrandQuery) GetBrandDetailByID(ctx context.Context, brandID string) (BrandDetailDTO, error) {
+func (q *BrandQuery) GetBrandDetailByID(
+	ctx context.Context,
+	brandID string,
+) (BrandDetailDTO, error) {
 	if brandID == "" {
 		return BrandDetailDTO{}, brand.ErrInvalidID
 	}
@@ -97,7 +97,10 @@ func (q *BrandQuery) GetBrandDetailByID(ctx context.Context, brandID string) (Br
 	}, nil
 }
 
-func (q *BrandQuery) listInventoryIDsByBrandID(ctx context.Context, brandID string) ([]string, error) {
+func (q *BrandQuery) listInventoryIDsByBrandID(
+	ctx context.Context,
+	brandID string,
+) ([]string, error) {
 	if brandID == "" {
 		return []string{}, brand.ErrInvalidID
 	}
@@ -106,7 +109,10 @@ func (q *BrandQuery) listInventoryIDsByBrandID(ctx context.Context, brandID stri
 		return []string{}, nil
 	}
 
-	productBlueprintIDs, err := q.productBlueprintRepo.ListIDsByBrandID(ctx, brandID)
+	productBlueprintIDs, err := q.productBlueprintRepo.ListIDsByBrandID(
+		ctx,
+		brandID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +129,10 @@ func (q *BrandQuery) listInventoryIDsByBrandID(ctx context.Context, brandID stri
 			continue
 		}
 
-		inventories, err := q.inventoryRepo.ListByProductBlueprintID(ctx, productBlueprintID)
+		inventories, err := q.inventoryRepo.ListByProductBlueprintID(
+			ctx,
+			productBlueprintID,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -145,7 +154,10 @@ func (q *BrandQuery) listInventoryIDsByBrandID(ctx context.Context, brandID stri
 	return inventoryIDs, nil
 }
 
-func (q *BrandQuery) listListingListIDsByInventoryIDs(ctx context.Context, inventoryIDs []string) ([]string, error) {
+func (q *BrandQuery) listListingListIDsByInventoryIDs(
+	ctx context.Context,
+	inventoryIDs []string,
+) ([]string, error) {
 	if q.listRepo == nil || len(inventoryIDs) == 0 {
 		return []string{}, nil
 	}
@@ -219,26 +231,4 @@ func (q *BrandQuery) listListingListIDsByInventoryIDs(ctx context.Context, inven
 	}
 
 	return listIDs, nil
-}
-
-func writeMallBrandErr(w http.ResponseWriter, err error) {
-	code := http.StatusInternalServerError
-	switch err {
-	case brand.ErrInvalidID:
-		code = http.StatusBadRequest
-	case brand.ErrNotFound:
-		code = http.StatusNotFound
-	case brand.ErrConflict:
-		code = http.StatusConflict
-	default:
-		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "invalid") ||
-			strings.Contains(msg, "required") ||
-			strings.Contains(msg, "must") {
-			code = http.StatusBadRequest
-		}
-	}
-
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }
