@@ -20,7 +20,6 @@ export default function ResaleDetailPage() {
     loading,
     item,
     isEditing,
-    isSold,
     errorMessage,
     saveMessage,
     listingTarget,
@@ -128,12 +127,6 @@ export default function ResaleDetailPage() {
                 role="status"
               >
                 {saveMessage}
-              </p>
-            ) : null}
-
-            {!isEditing && isSold ? (
-              <p className="page-card__text">
-                売却済みの出品は編集できません。
               </p>
             ) : null}
 
