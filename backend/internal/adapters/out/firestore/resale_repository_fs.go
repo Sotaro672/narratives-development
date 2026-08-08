@@ -71,7 +71,6 @@ func (r *ResaleRepositoryFS) GetByID(
 		return resaledom.Resale{}, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return resaledom.Resale{}, resaledom.ErrNotFound
 	}
@@ -100,7 +99,6 @@ func (r *ResaleRepositoryFS) ListByAvatarID(
 		return nil, errors.New("firestore client is nil")
 	}
 
-	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		return []resaledom.Resale{}, nil
 	}
@@ -292,7 +290,7 @@ func (r *ResaleRepositoryFS) ListByCursor(
 	sortResales(all, sortSpec)
 
 	items := make([]resaledom.Resale, 0, limit+1)
-	after := strings.TrimSpace(cpage.After)
+	after := cpage.After
 	skipping := after != ""
 	last := ""
 
@@ -353,7 +351,7 @@ func (r *ResaleRepositoryFS) Create(
 	}
 
 	if item.UpdatedBy != nil {
-		v := strings.TrimSpace(*item.UpdatedBy)
+		v := *item.UpdatedBy
 		if v == "" {
 			item.UpdatedBy = nil
 		} else {
@@ -450,7 +448,6 @@ func (r *ResaleRepositoryFS) Update(
 		return resaledom.Resale{}, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return resaledom.Resale{}, resaledom.ErrNotFound
 	}
@@ -504,7 +501,7 @@ func (r *ResaleRepositoryFS) Update(
 		clearUpdatedAt := false
 
 		if item.UpdatedBy != nil {
-			v := strings.TrimSpace(*item.UpdatedBy)
+			v := *item.UpdatedBy
 			if v == "" {
 				cur.UpdatedBy = nil
 				clearUpdatedBy = true
@@ -564,7 +561,6 @@ func (r *ResaleRepositoryFS) Delete(
 		return errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return resaledom.ErrNotFound
 	}
@@ -586,6 +582,10 @@ func (r *ResaleRepositoryFS) Delete(
 
 		item, err := decodeResaleDoc(doc)
 		if err != nil {
+			return err
+		}
+
+		if err := item.ValidateDelete(); err != nil {
 			return err
 		}
 
@@ -647,7 +647,7 @@ func encodeResaleDoc(item resaledom.Resale) map[string]any {
 	}
 
 	if item.UpdatedBy != nil {
-		if v := strings.TrimSpace(*item.UpdatedBy); v != "" {
+		if v := *item.UpdatedBy; v != "" {
 			m["updated_by"] = v
 		}
 	}
@@ -777,7 +777,7 @@ func matchesResaleFilter(item resaledom.Resale, filter resaledom.Filter) bool {
 		return false
 	}
 
-	q := strings.ToLower(strings.TrimSpace(filter.SearchQuery))
+	q := strings.ToLower(filter.SearchQuery)
 	if q != "" {
 		haystack := strings.ToLower(strings.Join([]string{
 			item.ID,
@@ -801,7 +801,7 @@ func matchesResaleFilter(item resaledom.Resale, filter resaledom.Filter) bool {
 }
 
 func sortResales(items []resaledom.Resale, sortSpec resaledom.Sort) {
-	column := strings.TrimSpace(sortSpec.Column)
+	column := sortSpec.Column
 	order := sortSpec.Order
 
 	if column == "" {
@@ -862,6 +862,7 @@ func sortResales(items []resaledom.Resale, sortSpec resaledom.Sort) {
 
 		return less(i, j)
 	})
+
 }
 
 func stringIn(value string, values []string) bool {

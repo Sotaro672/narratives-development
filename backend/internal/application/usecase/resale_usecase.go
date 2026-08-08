@@ -10,18 +10,25 @@ import (
 	resaledom "narratives/internal/domain/resale"
 )
 
+type ResaleImageStorage interface {
+	DeleteAll(ctx context.Context, resaleID string) error
+}
+
 type ResaleUsecase struct {
-	resaleRepo resaledom.Repository
-	imageRepo  resaledom.ImageRepository
+	resaleRepo   resaledom.Repository
+	imageRepo    resaledom.ImageRepository
+	imageStorage ResaleImageStorage
 }
 
 func NewResaleUsecase(
 	resaleRepo resaledom.Repository,
 	imageRepo resaledom.ImageRepository,
+	imageStorage ResaleImageStorage,
 ) *ResaleUsecase {
 	return &ResaleUsecase{
-		resaleRepo: resaleRepo,
-		imageRepo:  imageRepo,
+		resaleRepo:   resaleRepo,
+		imageRepo:    imageRepo,
+		imageStorage: imageStorage,
 	}
 }
 
@@ -44,7 +51,7 @@ func (uc *ResaleUsecase) Update(
 		return resaledom.Resale{}, ErrNotSupported("Resale.Update")
 	}
 
-	id := strings.TrimSpace(item.ID)
+	id := item.ID
 	if id == "" {
 		return resaledom.Resale{}, resaledom.ErrInvalidID
 	}
@@ -62,9 +69,25 @@ func (uc *ResaleUsecase) Delete(
 		return ErrNotSupported("Resale.Delete")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return resaledom.ErrInvalidID
+	}
+
+	item, err := uc.resaleRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if err := item.ValidateDelete(); err != nil {
+		return err
+	}
+
+	if uc.imageStorage == nil {
+		return ErrNotSupported("Resale.Delete.ImageStorage")
+	}
+
+	if err := uc.imageStorage.DeleteAll(ctx, id); err != nil {
+		return err
 	}
 
 	return uc.resaleRepo.Delete(ctx, id)
@@ -81,11 +104,6 @@ func (uc *ResaleUsecase) CreateImage(
 	if uc.imageRepo == nil {
 		return resaledom.ResaleImage{}, ErrNotSupported("Resale.CreateImage.ImageRepo")
 	}
-
-	img.ResaleID = strings.TrimSpace(img.ResaleID)
-	img.ID = strings.TrimSpace(img.ID)
-	img.URL = strings.TrimSpace(img.URL)
-	img.CreatedBy = strings.TrimSpace(img.CreatedBy)
 
 	if img.ResaleID == "" {
 		return resaledom.ResaleImage{}, resaledom.ErrInvalidConditionImageResaleID
@@ -133,9 +151,6 @@ func (uc *ResaleUsecase) DeleteImage(
 	if uc.imageRepo == nil {
 		return ErrNotSupported("Resale.DeleteImage.ImageRepo")
 	}
-
-	resaleID = strings.TrimSpace(resaleID)
-	imageID = strings.TrimSpace(imageID)
 
 	if resaleID == "" {
 		return resaledom.ErrInvalidConditionImageResaleID
@@ -190,9 +205,6 @@ func (uc *ResaleUsecase) SetPrimaryImage(
 		return resaledom.Resale{}, ErrNotSupported("Resale.SetPrimaryImage.ImageRepo")
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
-	imageID = strings.TrimSpace(imageID)
-
 	if resaleID == "" {
 		return resaledom.Resale{}, resaledom.ErrInvalidID
 	}
@@ -237,7 +249,7 @@ func (uc *ResaleUsecase) SetPrimaryImage(
 		)
 	}
 
-	if strings.TrimSpace(selected.URL) == "" {
+	if selected.URL == "" {
 		return resaledom.Resale{}, resaledom.ErrInvalidConditionImageURL
 	}
 
@@ -256,7 +268,7 @@ func (uc *ResaleUsecase) SetPrimaryImage(
 	r.UpdatedAt = &updatedAt
 
 	if updatedBy != nil {
-		v := strings.TrimSpace(*updatedBy)
+		v := *updatedBy
 		if v == "" {
 			r.UpdatedBy = nil
 		} else {

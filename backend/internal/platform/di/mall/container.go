@@ -15,6 +15,7 @@ import (
 
 	mallhandler "narratives/internal/adapters/in/http/mall/handler"
 
+	outfirebase "narratives/internal/adapters/out/firebase"
 	outfs "narratives/internal/adapters/out/firestore"
 	mallfs "narratives/internal/adapters/out/firestore/mall"
 	sharedfs "narratives/internal/adapters/out/firestore/shared"
@@ -301,12 +302,19 @@ func NewContainer(
 	resaleImageRepo :=
 		outfs.NewResaleImageRepositoryFS(fsClient)
 
+	resaleImageStorage, err :=
+		outfirebase.NewResaleImageStorageFromEnv(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	c.ResaleRepo = resaleRepo
 	c.ResaleImageRepo = resaleImageRepo
 
 	c.ResaleUC = usecase.NewResaleUsecase(
 		resaleRepo,
 		resaleImageRepo,
+		resaleImageStorage,
 	)
 
 	c.ResaleQ = mallquery.NewResaleQuery(

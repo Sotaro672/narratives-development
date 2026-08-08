@@ -105,7 +105,7 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	rest := strings.TrimPrefix(path, meResalesPath+"/")
 	parts := strings.Split(rest, "/")
-	resaleID := strings.TrimSpace(parts[0])
+	resaleID := parts[0]
 
 	if resaleID == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -121,7 +121,7 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			imageID := ""
 
 			if len(parts) >= 3 {
-				imageID = strings.TrimSpace(parts[2])
+				imageID = parts[2]
 			}
 
 			if len(parts) == 2 {
@@ -223,7 +223,7 @@ func (h *ResaleHandler) servePublic(
 			return
 		}
 
-		avatarID := strings.TrimSpace(parts[1])
+		avatarID := parts[1]
 		h.listPublicByAvatarID(w, r, avatarID)
 		return
 	}
@@ -234,7 +234,7 @@ func (h *ResaleHandler) servePublic(
 			return
 		}
 
-		resaleID := strings.TrimSpace(parts[0])
+		resaleID := parts[0]
 		h.getPublic(w, r, resaleID)
 		return
 	}
@@ -247,7 +247,7 @@ func (h *ResaleHandler) servePublic(
 			return
 		}
 
-		resaleID := strings.TrimSpace(parts[0])
+		resaleID := parts[0]
 		h.listPublicImages(w, r, resaleID)
 		return
 	}
@@ -265,7 +265,6 @@ func (h *ResaleHandler) listPublicByAvatarID(
 ) {
 	ctx := r.Context()
 
-	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -295,7 +294,6 @@ func (h *ResaleHandler) getPublic(
 ) {
 	ctx := r.Context()
 
-	resaleID = strings.TrimSpace(resaleID)
 	if resaleID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -322,7 +320,6 @@ func (h *ResaleHandler) listPublicImages(
 ) {
 	ctx := r.Context()
 
-	resaleID = strings.TrimSpace(resaleID)
 	if resaleID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -378,13 +375,7 @@ func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item.MintAddress = strings.TrimSpace(item.MintAddress)
-	item.TokenBlueprintID = strings.TrimSpace(item.TokenBlueprintID)
-	item.ProductID = strings.TrimSpace(item.ProductID)
-	item.BrandID = strings.TrimSpace(item.BrandID)
-	item.ProductBlueprintID = strings.TrimSpace(item.ProductBlueprintID)
 	item.AvatarID = avatarID
-	item.Description = strings.TrimSpace(item.Description)
 
 	if item.MintAddress == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -560,8 +551,6 @@ func (h *ResaleHandler) update(
 	item.ProductBlueprintID = existing.ProductBlueprintID
 	item.ImageID = existing.ImageID
 
-	item.Description = strings.TrimSpace(item.Description)
-
 	item.CreatedAt = existing.CreatedAt
 	item.CreatedBy = existing.CreatedBy
 	item.UpdatedAt = &now
@@ -708,9 +697,6 @@ func (h *ResaleHandler) createImageFromFirebaseStorage(
 		})
 		return
 	}
-
-	req.ID = strings.TrimSpace(req.ID)
-	req.URL = strings.TrimSpace(req.URL)
 
 	if req.ID == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -860,7 +846,7 @@ func (h *ResaleHandler) setPrimaryImage(
 		return
 	}
 
-	imageID := strings.TrimSpace(req.ImageID)
+	imageID := req.ImageID
 	if imageID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -872,10 +858,10 @@ func (h *ResaleHandler) setPrimaryImage(
 	now := time.Now().UTC()
 
 	if req.Now != nil &&
-		strings.TrimSpace(*req.Now) != "" {
+		*req.Now != "" {
 		if parsed, err := time.Parse(
 			time.RFC3339,
-			strings.TrimSpace(*req.Now),
+			*req.Now,
 		); err == nil {
 			now = parsed.UTC()
 		}
@@ -1034,7 +1020,8 @@ func resaleHTTPStatus(err error) int {
 		return http.StatusNotFound
 
 	case errors.Is(err, resaledom.ErrConflict),
-		errors.Is(err, resaledom.ErrConditionImageConflict):
+		errors.Is(err, resaledom.ErrConditionImageConflict),
+		errors.Is(err, resaledom.ErrSoldResaleCannotBeDeleted):
 		return http.StatusConflict
 
 	case errors.Is(err, resaledom.ErrInvalidID),

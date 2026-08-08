@@ -12,15 +12,9 @@ import {
   useParams,
 } from "react-router-dom";
 
-import {
-  formatDateTime,
-} from "../../../../components/utils/date";
-import {
-  formatYen,
-} from "../../../../components/utils/price";
-import {
-  textOrEmpty,
-} from "../../../../components/utils/textOrEmpty";
+import { formatDateTime } from "../../../../components/utils/date";
+import { formatYen } from "../../../../components/utils/price";
+import { textOrEmpty } from "../../../../components/utils/textOrEmpty";
 
 import {
   addMyResaleConditionImages,
@@ -87,86 +81,50 @@ import {
 
 export function useResaleDetailPage() {
   const navigate = useNavigate();
+  const { resaleId } = useParams<{ resaleId: string }>();
 
-  const {
-    resaleId,
-  } = useParams<{
-    resaleId: string;
-  }>();
+  const normalizedResaleId = textOrEmpty(resaleId);
+  const loadRequestIdRef = useRef(0);
 
-  const normalizedResaleId =
-    textOrEmpty(resaleId);
+  const [item, setItem] =
+    useState<ResaleListingWithModel | null>(null);
 
-  const loadRequestIdRef =
-    useRef(0);
+  const [images, setImages] =
+    useState<ResaleConditionImage[]>([]);
 
-  const [
-    item,
-    setItem,
-  ] = useState<
-    ResaleListingWithModel | null
-  >(null);
+  const [activeGalleryIndex, setActiveGalleryIndex] =
+    useState(0);
 
-  const [
-    images,
-    setImages,
-  ] = useState<
-    ResaleConditionImage[]
-  >([]);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [
-    activeGalleryIndex,
-    setActiveGalleryIndex,
-  ] = useState(0);
+  const [saving, setSaving] =
+    useState(false);
 
-  const [
-    loading,
-    setLoading,
-  ] = useState(true);
+  const [isEditing, setIsEditing] =
+    useState(false);
 
-  const [
-    saving,
-    setSaving,
-  ] = useState(false);
+  const [errorMessage, setErrorMessage] =
+    useState("");
 
-  const [
-    isEditing,
-    setIsEditing,
-  ] = useState(false);
+  const [saveMessage, setSaveMessage] =
+    useState("");
 
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] = useState("");
+  const [priceInput, setPriceInput] =
+    useState("");
 
-  const [
-    saveMessage,
-    setSaveMessage,
-  ] = useState("");
+  const [conditionInput, setConditionInput] =
+    useState<ResaleCondition>(
+      DEFAULT_RESALE_CONDITION,
+    );
 
-  const [
-    priceInput,
-    setPriceInput,
-  ] = useState("");
+  const [descriptionInput, setDescriptionInput] =
+    useState("");
 
-  const [
-    conditionInput,
-    setConditionInput,
-  ] = useState<ResaleCondition>(
-    DEFAULT_RESALE_CONDITION,
-  );
-
-  const [
-    descriptionInput,
-    setDescriptionInput,
-  ] = useState("");
-
-  const [
-    statusInput,
-    setStatusInput,
-  ] = useState<ResaleEditableStatus>(
-    DEFAULT_RESALE_EDITABLE_STATUS,
-  );
+  const [statusInput, setStatusInput] =
+    useState<ResaleEditableStatus>(
+      DEFAULT_RESALE_EDITABLE_STATUS,
+    );
 
   const {
     conditionMediaItems,
@@ -184,171 +142,151 @@ export function useResaleDetailPage() {
     handleMoveToConditionMediaSlide,
   } = useResaleDetailConditionMedia();
 
-  const clearMessages =
-    useCallback(() => {
+  const clearMessages = useCallback(() => {
+    setErrorMessage("");
+    setSaveMessage("");
+  }, []);
+
+  const resetFormFromItem = useCallback(
+    (
+      nextItem: ResaleListingWithModel | null,
+      nextImages: ResaleConditionImage[],
+    ) => {
+      const nextPrice = Number(
+        nextItem?.price ?? 0,
+      );
+
+      setPriceInput(
+        Number.isFinite(nextPrice) && nextPrice > 0
+          ? String(nextPrice)
+          : "",
+      );
+
+      setConditionInput(
+        normalizeResaleCondition(
+          nextItem?.condition,
+        ),
+      );
+
+      setDescriptionInput(
+        textOrEmpty(
+          nextItem?.description,
+        ),
+      );
+
+      setStatusInput(
+        normalizeResaleEditableStatus(
+          nextItem?.status,
+        ),
+      );
+
+      resetConditionMedia(nextImages);
+    },
+    [
+      resetConditionMedia,
+    ],
+  );
+
+  const loadDetail = useCallback(
+    async (): Promise<void> => {
+      const requestId =
+        ++loadRequestIdRef.current;
+
+      if (!normalizedResaleId) {
+        setItem(null);
+        setImages([]);
+        resetFormFromItem(null, []);
+        setActiveGalleryIndex(0);
+        setIsEditing(false);
+        setErrorMessage(
+          "出品情報が見つかりません。",
+        );
+        setSaveMessage("");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
       setErrorMessage("");
       setSaveMessage("");
-    }, []);
 
-  const resetFormFromItem =
-    useCallback(
-      (
-        nextItem:
-          ResaleListingWithModel | null,
-        nextImages:
-          ResaleConditionImage[],
-      ) => {
-        const nextPrice =
-          Number(
-            nextItem?.price ?? 0,
-          );
-
-        setPriceInput(
-          Number.isFinite(nextPrice) &&
-            nextPrice > 0
-            ? String(nextPrice)
-            : "",
-        );
-
-        setConditionInput(
-          normalizeResaleCondition(
-            nextItem?.condition,
-          ),
-        );
-
-        setDescriptionInput(
-          textOrEmpty(
-            nextItem?.description,
-          ),
-        );
-
-        setStatusInput(
-          normalizeResaleEditableStatus(
-            nextItem?.status,
-          ),
-        );
-
-        resetConditionMedia(
+      try {
+        const [
+          nextItem,
           nextImages,
-        );
-      },
-      [
-        resetConditionMedia,
-      ],
-    );
+        ] = await Promise.all([
+          getMyResaleListing(
+            normalizedResaleId,
+          ),
+          listMyResaleConditionImages(
+            normalizedResaleId,
+          ),
+        ]);
 
-  const loadDetail =
-    useCallback(
-      async (): Promise<void> => {
-        const requestId =
-          ++loadRequestIdRef.current;
+        if (
+          requestId !==
+          loadRequestIdRef.current
+        ) {
+          return;
+        }
 
-        if (!normalizedResaleId) {
+        if (!nextItem) {
           setItem(null);
           setImages([]);
-          resetFormFromItem(
-            null,
-            [],
-          );
+          resetFormFromItem(null, []);
           setActiveGalleryIndex(0);
           setIsEditing(false);
           setErrorMessage(
             "出品情報が見つかりません。",
           );
-          setSaveMessage("");
-          setLoading(false);
           return;
         }
 
-        setLoading(true);
-        setErrorMessage("");
-        setSaveMessage("");
-
-        try {
-          const [
-            nextItem,
+        const sortedNextImages =
+          sortResaleConditionImages(
             nextImages,
-          ] = await Promise.all([
-            getMyResaleListing(
-              normalizedResaleId,
-            ),
-            listMyResaleConditionImages(
-              normalizedResaleId,
-            ),
-          ]);
-
-          if (
-            requestId !==
-            loadRequestIdRef.current
-          ) {
-            return;
-          }
-
-          if (!nextItem) {
-            setItem(null);
-            setImages([]);
-            resetFormFromItem(
-              null,
-              [],
-            );
-            setActiveGalleryIndex(0);
-            setIsEditing(false);
-            setErrorMessage(
-              "出品情報が見つかりません。",
-            );
-            return;
-          }
-
-          const sortedNextImages =
-            sortResaleConditionImages(
-              nextImages,
-            );
-
-          setItem(nextItem);
-          setImages(
-            sortedNextImages,
           );
-          resetFormFromItem(
-            nextItem,
-            sortedNextImages,
-          );
-          setActiveGalleryIndex(0);
-          setIsEditing(false);
-        } catch (error) {
-          if (
-            requestId !==
-            loadRequestIdRef.current
-          ) {
-            return;
-          }
 
-          setItem(null);
-          setImages([]);
-          resetFormFromItem(
-            null,
-            [],
-          );
-          setActiveGalleryIndex(0);
-          setIsEditing(false);
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "出品情報の取得に失敗しました。",
-          );
-        } finally {
-          if (
-            requestId ===
-            loadRequestIdRef.current
-          ) {
-            setLoading(false);
-          }
+        setItem(nextItem);
+        setImages(sortedNextImages);
+        resetFormFromItem(
+          nextItem,
+          sortedNextImages,
+        );
+        setActiveGalleryIndex(0);
+        setIsEditing(false);
+      } catch (error) {
+        if (
+          requestId !==
+          loadRequestIdRef.current
+        ) {
+          return;
         }
-      },
-      [
-        normalizedResaleId,
-        resetFormFromItem,
-      ],
-    );
+
+        setItem(null);
+        setImages([]);
+        resetFormFromItem(null, []);
+        setActiveGalleryIndex(0);
+        setIsEditing(false);
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "出品情報の取得に失敗しました。",
+        );
+      } finally {
+        if (
+          requestId ===
+          loadRequestIdRef.current
+        ) {
+          setLoading(false);
+        }
+      }
+    },
+    [
+      normalizedResaleId,
+      resetFormFromItem,
+    ],
+  );
 
   useEffect(() => {
     void loadDetail();
@@ -360,34 +298,30 @@ export function useResaleDetailPage() {
     loadDetail,
   ]);
 
-  const sortedImages =
-    useMemo(
-      () =>
-        sortResaleConditionImages(
-          images,
-        ),
-      [
+  const sortedImages = useMemo(
+    () =>
+      sortResaleConditionImages(
         images,
-      ],
-    );
+      ),
+    [
+      images,
+    ],
+  );
 
-  const galleryItems =
-    useMemo(
-      () =>
-        createResaleGalleryItems(
-          sortedImages,
-        ),
-      [
+  const galleryItems = useMemo(
+    () =>
+      createResaleGalleryItems(
         sortedImages,
-      ],
-    );
+      ),
+    [
+      sortedImages,
+    ],
+  );
 
   useEffect(() => {
     setActiveGalleryIndex(
       (currentIndex) => {
-        if (
-          galleryItems.length === 0
-        ) {
+        if (galleryItems.length === 0) {
           return 0;
         }
 
@@ -402,65 +336,41 @@ export function useResaleDetailPage() {
   ]);
 
   const productName =
-    textOrEmpty(
-      item?.productName,
-    );
+    textOrEmpty(item?.productName);
 
   const tokenName =
-    textOrEmpty(
-      item?.tokenName,
-    );
+    textOrEmpty(item?.tokenName);
 
   const brandName =
-    textOrEmpty(
-      item?.brandName,
-    );
+    textOrEmpty(item?.brandName);
 
   const condition =
-    textOrEmpty(
-      item?.condition,
-    );
+    textOrEmpty(item?.condition);
 
   const description =
-    textOrEmpty(
-      item?.description,
-    );
+    textOrEmpty(item?.description);
 
   const status =
-    textOrEmpty(
-      item?.status,
-    );
+    textOrEmpty(item?.status);
 
   const modelId =
-    textOrEmpty(
-      item?.modelId,
-    );
+    textOrEmpty(item?.modelId);
 
   const modelKind =
-    textOrEmpty(
-      item?.kind,
-    );
+    textOrEmpty(item?.kind);
 
   const modelNumber =
-    textOrEmpty(
-      item?.modelNumber,
-    );
+    textOrEmpty(item?.modelNumber);
 
   const modelSize =
-    textOrEmpty(
-      item?.size,
-    );
+    textOrEmpty(item?.size);
 
   const tokenIconUrl =
-    resolveResaleTokenIconUrl(
-      item,
-    );
+    resolveResaleTokenIconUrl(item);
 
   const modelKindLabel =
     modelKind
-      ? formatResaleModelKind(
-          modelKind,
-        )
+      ? formatResaleModelKind(modelKind)
       : "";
 
   const modelColorLabel =
@@ -496,16 +406,10 @@ export function useResaleDetailPage() {
     "出品詳細";
 
   const priceLabel =
-    typeof item?.price ===
-      "number" &&
-    Number.isFinite(
-      item.price,
-    ) &&
+    typeof item?.price === "number" &&
+    Number.isFinite(item.price) &&
     item.price > 0
-      ? formatYen(
-          item.price,
-          "-",
-        )
+      ? formatYen(item.price, "-")
       : "-";
 
   const editablePriceLabel =
@@ -541,13 +445,9 @@ export function useResaleDetailPage() {
     isEditing &&
     !isSold &&
     !saving &&
-    Boolean(
-      normalizedResaleId,
-    ) &&
+    Boolean(normalizedResaleId) &&
     hasValidPrice &&
-    isResaleEditableStatus(
-      statusInput,
-    ) &&
+    isResaleEditableStatus(statusInput) &&
     conditionMediaItems.length > 0;
 
   const canEdit =
@@ -558,9 +458,7 @@ export function useResaleDetailPage() {
 
   const handlePrevGalleryItem =
     useCallback(() => {
-      if (
-        galleryItems.length <= 1
-      ) {
+      if (galleryItems.length <= 1) {
         return;
       }
 
@@ -576,9 +474,7 @@ export function useResaleDetailPage() {
 
   const handleNextGalleryItem =
     useCallback(() => {
-      if (
-        galleryItems.length <= 1
-      ) {
+      if (galleryItems.length <= 1) {
         return;
       }
 
@@ -595,20 +491,15 @@ export function useResaleDetailPage() {
 
   const handleSelectGalleryItem =
     useCallback(
-      (
-        index: number,
-      ) => {
+      (index: number) => {
         if (
           index < 0 ||
-          index >=
-            galleryItems.length
+          index >= galleryItems.length
         ) {
           return;
         }
 
-        setActiveGalleryIndex(
-          index,
-        );
+        setActiveGalleryIndex(index);
       },
       [
         galleryItems.length,
@@ -617,13 +508,9 @@ export function useResaleDetailPage() {
 
   const handlePriceChange =
     useCallback(
-      (
-        value: string,
-      ) => {
+      (value: string) => {
         setPriceInput(
-          normalizeResalePriceInput(
-            value,
-          ),
+          normalizeResalePriceInput(value),
         );
         clearMessages();
       },
@@ -634,13 +521,8 @@ export function useResaleDetailPage() {
 
   const handleConditionChange =
     useCallback(
-      (
-        value:
-          ResaleCondition,
-      ) => {
-        setConditionInput(
-          value,
-        );
+      (value: ResaleCondition) => {
+        setConditionInput(value);
         clearMessages();
       },
       [
@@ -650,13 +532,8 @@ export function useResaleDetailPage() {
 
   const handleStatusChange =
     useCallback(
-      (
-        value:
-          ResaleEditableStatus,
-      ) => {
-        setStatusInput(
-          value,
-        );
+      (value: ResaleEditableStatus) => {
+        setStatusInput(value);
         clearMessages();
       },
       [
@@ -666,12 +543,8 @@ export function useResaleDetailPage() {
 
   const handleDescriptionChange =
     useCallback(
-      (
-        value: string,
-      ) => {
-        setDescriptionInput(
-          value,
-        );
+      (value: string) => {
+        setDescriptionInput(value);
         clearMessages();
       },
       [
@@ -792,9 +665,7 @@ export function useResaleDetailPage() {
 
           await Promise.all(
             deletedImageIds.map(
-              (
-                imageId,
-              ) =>
+              (imageId) =>
                 deleteMyResaleConditionImage({
                   resaleId:
                     normalizedResaleId,
@@ -803,9 +674,7 @@ export function useResaleDetailPage() {
             ),
           );
 
-          if (
-            newFiles.length > 0
-          ) {
+          if (newFiles.length > 0) {
             await addMyResaleConditionImages({
               resaleId:
                 normalizedResaleId,
@@ -823,9 +692,7 @@ export function useResaleDetailPage() {
               ),
             );
 
-          if (
-            nextImages.length > 0
-          ) {
+          if (nextImages.length > 0) {
             await updatePrimaryResaleImage({
               resaleId:
                 normalizedResaleId,
@@ -845,12 +712,8 @@ export function useResaleDetailPage() {
             );
           }
 
-          setItem(
-            refreshedItem,
-          );
-          setImages(
-            nextImages,
-          );
+          setItem(refreshedItem);
+          setImages(nextImages);
           resetFormFromItem(
             refreshedItem,
             nextImages,
@@ -889,6 +752,13 @@ export function useResaleDetailPage() {
   const handleDelete =
     useCallback(
       async (): Promise<void> => {
+        if (isSold) {
+          setErrorMessage(
+            "売却済みの出品は削除できません。",
+          );
+          return;
+        }
+
         if (
           !normalizedResaleId ||
           saving
@@ -918,8 +788,7 @@ export function useResaleDetailPage() {
             {
               replace: true,
               state: {
-                resaleDeleted:
-                  true,
+                resaleDeleted: true,
                 resaleId:
                   normalizedResaleId,
               },
@@ -937,6 +806,7 @@ export function useResaleDetailPage() {
       },
       [
         clearMessages,
+        isSold,
         navigate,
         normalizedResaleId,
         saving,
@@ -952,9 +822,7 @@ export function useResaleDetailPage() {
 
   const handleBackToWallet =
     useCallback(() => {
-      navigate(
-        "/wallet",
-      );
+      navigate("/wallet");
     }, [
       navigate,
     ]);
@@ -970,9 +838,7 @@ export function useResaleDetailPage() {
     );
 
   const listingTarget =
-    useMemo<
-      ResaleListingTargetSummary
-    >(
+    useMemo<ResaleListingTargetSummary>(
       () => ({
         tokenIconUrl,
         tokenName,
@@ -988,9 +854,7 @@ export function useResaleDetailPage() {
     );
 
   const modelInfoProps =
-    useMemo<
-      ResaleDetailModelInfoProps
-    >(
+    useMemo<ResaleDetailModelInfoProps>(
       () => ({
         hasModelInfo,
         kindLabel:
@@ -1016,9 +880,7 @@ export function useResaleDetailPage() {
     );
 
   const readonlyInfoProps =
-    useMemo<
-      ResaleDetailReadonlyInfoProps
-    >(
+    useMemo<ResaleDetailReadonlyInfoProps>(
       () => ({
         galleryItems,
         activeGalleryIndex,
@@ -1054,9 +916,7 @@ export function useResaleDetailPage() {
     );
 
   const editFormProps =
-    useMemo<
-      ResaleDetailEditFormProps
-    >(
+    useMemo<ResaleDetailEditFormProps>(
       () => ({
         priceValue:
           editablePriceLabel,

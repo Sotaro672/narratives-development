@@ -64,6 +64,7 @@ var (
 	ErrInvalidCreatedAt          = errors.New("resale: invalid createdAt")
 	ErrInvalidUpdatedAt          = errors.New("resale: invalid updatedAt")
 	ErrInvalidUpdatedBy          = errors.New("resale: invalid updatedBy")
+	ErrSoldResaleCannotBeDeleted = errors.New("resale: sold resale cannot be deleted")
 
 	ErrEmptyImageID   = errors.New("resale: imageId must not be empty")
 	ErrInvalidImageID = errors.New("resale: invalid imageId")
@@ -272,6 +273,14 @@ func (r *Resale) Resume(now time.Time) error {
 func (r *Resale) MarkSold(now time.Time) error {
 	r.Status = StatusSold
 	r.touch(now)
+	return nil
+}
+
+func (r Resale) ValidateDelete() error {
+	if r.Status == StatusSold {
+		return ErrSoldResaleCannotBeDeleted
+	}
+
 	return nil
 }
 
