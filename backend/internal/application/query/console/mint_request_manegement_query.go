@@ -156,12 +156,6 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 
 		m, hasMint := mintsByPID[pid]
 
-		var mintPtr *mintdom.Mint
-		if hasMint {
-			tmp := m
-			mintPtr = &tmp
-		}
-
 		mintQty := 0
 		prodQty := p.TotalQuantity
 		inspStatus := "notYet"
@@ -176,6 +170,7 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 
 		tokenBlueprintID := ""
 		tokenName := ""
+		mintStatus := ""
 
 		createdBy := ""
 		createdByName := ""
@@ -191,6 +186,7 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 
 			mintedAt = m.MintedAt
 			tokenBlueprintID = m.TokenBlueprintID
+			mintStatus = string(m.Status)
 
 			tokenName = s.resolveTokenName(
 				ctx,
@@ -213,7 +209,6 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 		rows = append(
 			rows,
 			querydto.ProductionInspectionMintDTO{
-				ID:           pid,
 				ProductionID: pid,
 
 				TokenBlueprintID: tokenBlueprintID,
@@ -223,6 +218,7 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 				MintQuantity:       mintQty,
 				ProductionQuantity: prodQty,
 				InspectionStatus:   inspStatus,
+				MintStatus:         mintStatus,
 
 				CreatedBy:       createdBy,
 				CreatedByName:   createdByName,
@@ -230,9 +226,6 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 				RequestedByName: requestedByName,
 
 				MintedAt: mintedAt,
-
-				Inspection: nil,
-				Mint:       mintPtr,
 			},
 		)
 	}

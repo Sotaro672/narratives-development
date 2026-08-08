@@ -3,5 +3,4 @@ package dto
 
 type ListMintRequestManagementRowsInput struct {
 	ProductionIDs []string
-	View          string
 }

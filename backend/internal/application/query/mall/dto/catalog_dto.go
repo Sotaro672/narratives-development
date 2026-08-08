@@ -13,24 +13,17 @@ type CatalogDTO struct {
 	List CatalogListDTO `json:"list"`
 
 	// listId 配下の画像一覧（displayOrder 付き）
-	// 取得失敗しても画面は壊さない想定なので Error は best-effort
-	ListImages      []CatalogListImageDTO `json:"listImages,omitempty"`
-	ListImagesError string                `json:"listImagesError,omitempty"`
+	ListImages []CatalogListImageDTO `json:"listImages,omitempty"`
 
-	Inventory      *CatalogInventoryDTO `json:"inventory,omitempty"`
-	InventoryError string               `json:"inventoryError,omitempty"`
+	Inventory *CatalogInventoryDTO `json:"inventory,omitempty"`
 
-	ProductBlueprint      *CatalogProductBlueprintDTO `json:"productBlueprint,omitempty"`
-	ProductBlueprintError string                      `json:"productBlueprintError,omitempty"`
+	ProductBlueprint *CatalogProductBlueprintDTO `json:"productBlueprint,omitempty"`
 
-	TokenBlueprint      *CatalogTokenBlueprintDTO `json:"tokenBlueprint,omitempty"`
-	TokenBlueprintError string                    `json:"tokenBlueprintError,omitempty"`
+	TokenBlueprint *CatalogTokenBlueprintDTO `json:"tokenBlueprint,omitempty"`
 
-	ModelVariations      []CatalogModelVariationDTO `json:"modelVariations,omitempty"`
-	ModelVariationsError string                     `json:"modelVariationsError,omitempty"`
+	ModelVariations []CatalogModelVariationDTO `json:"modelVariations,omitempty"`
 
-	ProductReviewSummary      *CatalogProductReviewSummaryDTO `json:"productReviewSummary,omitempty"`
-	ProductReviewSummaryError string                          `json:"productReviewSummaryError,omitempty"`
+	ProductReviewSummary *CatalogProductReviewSummaryDTO `json:"productReviewSummary,omitempty"`
 }
 
 type CatalogListDTO struct {
@@ -40,9 +33,7 @@ type CatalogListDTO struct {
 	Image       string              `json:"image"`
 	Prices      []ldom.ListPriceRow `json:"prices"`
 
-	InventoryID        string `json:"inventoryId,omitempty"`
-	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
-	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
+	InventoryID string `json:"inventoryId,omitempty"`
 }
 
 // ============================================================

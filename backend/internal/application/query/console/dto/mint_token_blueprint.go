@@ -12,13 +12,10 @@ type TokenBlueprintForMintDTO struct {
 	TokenName string `json:"tokenName"`
 	Symbol    string `json:"symbol"`
 
-	BrandID   string `json:"brandId,omitempty"`
-	BrandName string `json:"brandName,omitempty"`
-	CompanyID string `json:"companyId,omitempty"`
+	BrandID string `json:"brandId,omitempty"`
 
 	Description string `json:"description,omitempty"`
 	Minted      bool   `json:"minted"`
 
-	MetadataURI string `json:"metadataUri,omitempty"`
-	IconURL     string `json:"iconUrl,omitempty"`
+	IconURL string `json:"iconUrl,omitempty"`
 }

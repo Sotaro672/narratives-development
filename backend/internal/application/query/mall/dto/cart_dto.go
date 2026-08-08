@@ -46,14 +46,6 @@ type CartItemDTO struct {
 	// product fields
 	ProductName string `json:"productName,omitempty"`
 
-	// category fields
-	ProductBlueprintCategoryID     string   `json:"productBlueprintCategoryId,omitempty"`
-	ProductBlueprintCategoryCode   string   `json:"productBlueprintCategoryCode,omitempty"`
-	ProductBlueprintCategoryKind   string   `json:"productBlueprintCategoryKind,omitempty"`
-	ProductBlueprintCategoryNameEn string   `json:"productBlueprintCategoryNameEn,omitempty"`
-	ProductBlueprintCategoryNameJa string   `json:"productBlueprintCategoryNameJa,omitempty"`
-	ProductBlueprintCategoryPath   []string `json:"productBlueprintCategoryPath,omitempty"`
-
 	// model common fields
 	//
 	// ModelKind:

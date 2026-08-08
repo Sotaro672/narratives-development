@@ -215,18 +215,12 @@ func (h *MintHandler) listMintRequestsByCurrentCompany(w http.ResponseWriter, r 
 		return
 	}
 
-	view := r.URL.Query().Get("view")
-	if view == "" {
-		view = "management"
-	}
-
 	productionIDs := parseCommaSeparatedIDs(r.URL.Query().Get("productionIds"))
 
 	rows, err := h.mintRequestQS.ListMintRequestManagementRows(
 		ctx,
 		querydto.ListMintRequestManagementRowsInput{
 			ProductionIDs: productionIDs,
-			View:          view,
 		},
 	)
 	if err != nil {
@@ -269,6 +263,7 @@ func (h *MintHandler) getProductBlueprintByID(w http.ResponseWriter, r *http.Req
 		if errors.Is(err, pbpdom.ErrNotFound) {
 			statusCode = http.StatusNotFound
 		}
+
 		writeJSON(w, statusCode, map[string]string{"error": err.Error()})
 		return
 	}
@@ -290,6 +285,7 @@ func (h *MintHandler) listBrandsForCurrentCompany(w http.ResponseWriter, r *http
 		if errors.Is(err, mintapp.ErrCompanyIDMissing) {
 			statusCode = http.StatusBadRequest
 		}
+
 		writeJSON(w, statusCode, map[string]string{"error": err.Error()})
 		return
 	}
@@ -319,6 +315,7 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 			pageNumber = n
 		}
 	}
+
 	if perPageParam := r.URL.Query().Get("perPage"); perPageParam != "" {
 		if n, err := strconv.Atoi(perPageParam); err == nil && n > 0 {
 			perPage = n
@@ -355,6 +352,7 @@ func parseCommaSeparatedIDs(raw string) []string {
 		if id == "" {
 			continue
 		}
+
 		if _, ok := seen[id]; ok {
 			continue
 		}

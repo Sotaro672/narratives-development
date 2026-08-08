@@ -1,7 +1,10 @@
 // backend/internal/application/query/mall/dto/history_dto.go
 package dto
 
-import "narratives/internal/domain/common"
+import (
+	"narratives/internal/domain/common"
+	orderdom "narratives/internal/domain/order"
+)
 
 type HistoryResolveModelInput struct {
 	ItemType string
@@ -63,9 +66,9 @@ type HistoryColor struct {
 	RGB *int `json:"rgb,omitempty"`
 }
 
-type EnrichHistoryOrderPageInput = common.PageResult[HistoryOrder]
-
 type HistoryOrderPage = common.PageResult[HistoryOrder]
+
+type EnrichHistoryOrderPageInput = HistoryOrderPage
 
 type HistoryOrder struct {
 	ID       string `json:"id"`
@@ -73,33 +76,14 @@ type HistoryOrder struct {
 	AvatarID string `json:"avatarId"`
 	CartID   string `json:"cartId"`
 
-	ShippingSnapshot      HistoryShippingSnapshot      `json:"shippingSnapshot"`
-	PaymentMethodSnapshot HistoryPaymentMethodSnapshot `json:"paymentMethodSnapshot"`
+	ShippingSnapshot      orderdom.ShippingSnapshot      `json:"shippingSnapshot"`
+	PaymentMethodSnapshot orderdom.PaymentMethodSnapshot `json:"paymentMethodSnapshot"`
 
 	Paid  bool               `json:"paid"`
 	Items []HistoryOrderItem `json:"items"`
 
 	CreatedAt string `json:"createdAt,omitempty"`
 	UpdatedAt string `json:"updatedAt,omitempty"`
-}
-
-type HistoryShippingSnapshot struct {
-	ZipCode string `json:"zipCode"`
-	State   string `json:"state"`
-	City    string `json:"city"`
-	Street  string `json:"street"`
-	Street2 string `json:"street2"`
-	Country string `json:"country"`
-}
-
-type HistoryPaymentMethodSnapshot struct {
-	CustomerID     string `json:"customerId"`
-	Brand          string `json:"brand"`
-	Last4          string `json:"last4"`
-	ExpMonth       int    `json:"expMonth"`
-	ExpYear        int    `json:"expYear"`
-	CardholderName string `json:"cardholderName"`
-	IsDefault      bool   `json:"isDefault"`
 }
 
 type HistoryOrderItem struct {

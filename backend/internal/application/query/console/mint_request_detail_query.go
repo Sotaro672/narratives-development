@@ -62,21 +62,8 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		}
 	}
 
-	mintsByPID, err := s.listMintsByProductionIDs(
-		ctx,
-		[]string{pid},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	m, hasMint := mintsByPID[pid]
-
 	productName := prod.ProductName
-
-	mintQty := 0
 	prodQty := prod.TotalQuantity
-	inspStatus := "notYet"
 
 	inspectionItems := make(
 		[]querydto.InspectionItemDTO,
@@ -84,12 +71,6 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	)
 
 	if hasInsp {
-		mintQty = insp.TotalPassed
-
-		if insp.Status != "" {
-			inspStatus = string(insp.Status)
-		}
-
 		inspectionItems = make(
 			[]querydto.InspectionItemDTO,
 			0,
@@ -98,12 +79,8 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 
 		for _, it := range insp.Inspections {
 			row := querydto.InspectionItemDTO{
-				ProductID:   it.ProductID,
-				ModelID:     it.ModelID,
-				ModelNumber: "",
-				Size:        "",
-				Color:       "",
-				RGB:         nil,
+				ProductID: it.ProductID,
+				ModelID:   it.ModelID,
 				InspectionResult: inspectionResultString(
 					it.InspectionResult,
 				),
@@ -122,85 +99,6 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		}
 	}
 
-	tokenBlueprintID := ""
-	tokenName := ""
-
-	createdBy := ""
-	createdByName := ""
-
-	requestedBy := ""
-	requestedByName := ""
-
-	var mintedAt *time.Time
-	var mintSummary *querydto.MintSummaryDTO
-	var mintProgress *querydto.MintTaskProgressDTO
-
-	if hasMint {
-		createdBy = m.CreatedBy
-		requestedBy = m.RequestedBy
-
-		mintedAt = m.MintedAt
-		tokenBlueprintID = m.TokenBlueprintID
-
-		tokenName = s.resolveTokenName(
-			ctx,
-			tokenBlueprintID,
-		)
-
-		createdByName = s.resolveMemberNameByID(
-			ctx,
-			createdBy,
-		)
-
-		requestedByName = s.resolveMemberNameByID(
-			ctx,
-			requestedBy,
-		)
-
-		products := make(
-			[]string,
-			0,
-			len(m.Products),
-		)
-
-		products = append(
-			products,
-			m.Products...,
-		)
-
-		mintSummary = &querydto.MintSummaryDTO{
-			ID:                 m.ID,
-			BrandID:            m.BrandID,
-			TokenBlueprintID:   m.TokenBlueprintID,
-			Status:             string(m.Status),
-			CreatedBy:          createdBy,
-			CreatedByName:      createdByName,
-			CreatedAt:          &m.CreatedAt,
-			MintedAt:           m.MintedAt,
-			ScheduledBurnDate:  m.ScheduledBurnDate,
-			ProductIDs:         products,
-			OnChainTxSignature: m.OnChainTxSignature,
-		}
-
-		if s.mintTaskProgressQuery != nil {
-			progress, progressErr :=
-				s.mintTaskProgressQuery.GetMintTaskProgress(
-					ctx,
-					pid,
-				)
-
-			if progressErr == nil {
-				mintProgress = progress
-			}
-		}
-	}
-
-	prodSummary := &querydto.ProductionSummaryDTO{
-		ID:          prod.ID,
-		ProductName: prod.ProductName,
-		Quantity:    prodQty,
-	}
-
 	var inspSummary *querydto.InspectionSummaryDTO
 
 	if hasInsp {
@@ -209,33 +107,14 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 			Status:       string(insp.Status),
 			TotalPassed:  insp.TotalPassed,
 			Quantity:     prodQty,
-			ProductName:  "",
 			Inspections:  inspectionItems,
 		}
 	}
 
 	out := &querydto.MintRequestDetailDTO{
-		ID:                 pid,
-		ProductionID:       pid,
-		ProductName:        productName,
-		TokenName:          tokenName,
-		TokenBlueprintID:   tokenBlueprintID,
-		MintQuantity:       mintQty,
-		ProductionQuantity: prodQty,
-		InspectionStatus:   inspStatus,
-
-		CreatedByName:   createdByName,
-		RequestedBy:     requestedBy,
-		RequestedByName: requestedByName,
-
-		MintedAt: mintedAt,
-
-		Production:     prodSummary,
-		Inspection:     inspSummary,
-		Mint:           mintSummary,
-		MintProgress:   mintProgress,
-		ModelMeta:      nil,
-		TokenBlueprint: nil,
+		ProductName: productName,
+		ModelMeta:   nil,
+		Inspection:  inspSummary,
 	}
 
 	return out, nil

@@ -11,67 +11,6 @@ import (
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
-type PreviewDTO struct {
-	AvatarID string `json:"avatarId"`
-	ItemKey  string `json:"itemKey"`
-
-	InventoryID string `json:"inventoryId,omitempty"`
-	ListID      string `json:"listId,omitempty"`
-	ModelID     string `json:"modelId,omitempty"`
-	Qty         int    `json:"qty,omitempty"`
-
-	// list
-	Title     string `json:"title,omitempty"`
-	ListImage string `json:"listImage,omitempty"`
-	Price     *int   `json:"price,omitempty"`
-
-	// ids
-	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
-	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
-
-	// product
-	ProductName        string `json:"productName,omitempty"`
-	ProductBrandID     string `json:"productBrandId,omitempty"`
-	ProductCompanyID   string `json:"productCompanyId,omitempty"`
-	ProductBrandName   string `json:"productBrandName,omitempty"`
-	ProductCompanyName string `json:"productCompanyName,omitempty"`
-
-	// product category
-	ProductBlueprintCategoryCode string                        `json:"productBlueprintCategoryCode,omitempty"`
-	ProductBlueprintCategoryKind commondom.ProductCategoryKind `json:"productBlueprintCategoryKind,omitempty"`
-	ProductBlueprintCategoryName string                        `json:"productBlueprintCategoryName,omitempty"`
-
-	// token flat fields
-	//
-	// preview 表示で頻繁に使う値は flat field として維持する。
-	// 正規の tokenBlueprint 表示情報は TokenBlueprintPatch に入れる。
-	TokenName   string `json:"tokenName,omitempty"`
-	BrandName   string `json:"brandName,omitempty"`
-	CompanyName string `json:"companyName,omitempty"`
-	Description string `json:"description,omitempty"`
-	IconURL     string `json:"iconUrl,omitempty"`
-
-	// tokenBlueprint patch
-	//
-	// backend/internal/domain/tokenBlueprint/repository_port.go の Patch を再利用する。
-	// preview 独自 Patch は持たない。
-	TokenBlueprintPatch *tbdom.Patch `json:"tokenBlueprintPatch,omitempty"`
-
-	// model common
-	ModelKind   commondom.ProductCategoryKind `json:"modelKind,omitempty"`
-	ModelNumber string                        `json:"modelNumber,omitempty"`
-	ModelLabel  string                        `json:"modelLabel,omitempty"`
-
-	// apparel model
-	Size  string `json:"size,omitempty"`
-	Color string `json:"color,omitempty"`
-	RGB   *int   `json:"rgb,omitempty"`
-
-	// alcohol model
-	VolumeValue *int   `json:"volumeValue,omitempty"`
-	VolumeUnit  string `json:"volumeUnit,omitempty"`
-}
-
 // TokenInfo is a minimal view for token doc (tokens/{productId}) used by preview.
 type TokenInfo struct {
 	ProductID string `json:"productId"`

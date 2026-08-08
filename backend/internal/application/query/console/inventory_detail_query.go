@@ -237,7 +237,6 @@ func (q *InventoryDetailQuery) GetDetailByID(ctx context.Context, inventoryID st
 	}
 
 	dto := &querydto.InventoryDetailDTO{
-		InventoryID:           id,
 		TokenBlueprintID:      tbID,
 		ProductBlueprintID:    pbID,
 		ProductBlueprintPatch: pbPatchPtr,

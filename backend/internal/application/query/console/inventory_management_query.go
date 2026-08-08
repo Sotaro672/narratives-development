@@ -52,9 +52,8 @@ func (q *InventoryManagementQuery) ListByCurrentCompany(ctx context.Context) ([]
 	}
 
 	type key struct {
-		pbID     string
-		tbID     string
-		modelNum string
+		pbID string
+		tbID string
 	}
 
 	type agg struct {
@@ -66,7 +65,6 @@ func (q *InventoryManagementQuery) ListByCurrentCompany(ctx context.Context) ([]
 
 	productNameCache := map[string]string{}
 	tokenNameCache := map[string]string{}
-	modelNumberCache := map[string]string{}
 
 	for _, pb := range productBlueprints {
 		pbID := pb.ID
@@ -107,35 +105,25 @@ func (q *InventoryManagementQuery) ListByCurrentCompany(ctx context.Context) ([]
 				tokenNameCache[tbID] = name
 			}
 
+			k := key{
+				pbID: pbID,
+				tbID: tbID,
+			}
+
 			if len(inv.Stock) == 0 {
-				k := key{pbID: pbID, tbID: tbID, modelNum: "-"}
 				if _, ok := group[k]; !ok {
-					group[k] = agg{available: 0, reserved: 0}
+					group[k] = agg{
+						available: 0,
+						reserved:  0,
+					}
 				}
 				continue
 			}
 
-			for modelID0, ms := range inv.Stock {
-				modelID := modelID0
+			for modelID, ms := range inv.Stock {
 				if modelID == "" {
 					continue
 				}
-
-				if _, ok := modelNumberCache[modelID]; !ok {
-					mn := ""
-					if q.nameResolver != nil {
-						attr := q.nameResolver.ResolveModelResolved(ctx, modelID)
-						mn = attr.ModelNumber
-					}
-					if mn == "" {
-						mn = modelID
-					}
-					if mn == "" {
-						mn = "-"
-					}
-					modelNumberCache[modelID] = mn
-				}
-				modelNumber := modelNumberCache[modelID]
 
 				reserved := ms.ReservedCount
 				available := ms.Accumulation - reserved
@@ -143,7 +131,6 @@ func (q *InventoryManagementQuery) ListByCurrentCompany(ctx context.Context) ([]
 					available = 0
 				}
 
-				k := key{pbID: pbID, tbID: tbID, modelNum: modelNumber}
 				a := group[k]
 				a.available += available
 				a.reserved += reserved
@@ -159,7 +146,6 @@ func (q *InventoryManagementQuery) ListByCurrentCompany(ctx context.Context) ([]
 			ProductName:        productNameCache[k.pbID],
 			TokenBlueprintID:   k.tbID,
 			TokenName:          tokenNameCache[k.tbID],
-			ModelNumber:        k.modelNum,
 			AvailableStock:     a.available,
 			ReservedCount:      a.reserved,
 		})
@@ -172,8 +158,11 @@ func (q *InventoryManagementQuery) ListByCurrentCompany(ctx context.Context) ([]
 		if rows[i].TokenName != rows[j].TokenName {
 			return rows[i].TokenName < rows[j].TokenName
 		}
-		if rows[i].ModelNumber != rows[j].ModelNumber {
-			return rows[i].ModelNumber < rows[j].ModelNumber
+		if rows[i].ProductBlueprintID != rows[j].ProductBlueprintID {
+			return rows[i].ProductBlueprintID < rows[j].ProductBlueprintID
+		}
+		if rows[i].TokenBlueprintID != rows[j].TokenBlueprintID {
+			return rows[i].TokenBlueprintID < rows[j].TokenBlueprintID
 		}
 		return rows[i].AvailableStock < rows[j].AvailableStock
 	})

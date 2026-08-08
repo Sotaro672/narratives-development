@@ -28,8 +28,6 @@ type InventoryDetailRowDTO struct {
 }
 
 type InventoryDetailDTO struct {
-	InventoryID string `json:"inventoryId"`
-
 	TokenBlueprintID   string `json:"tokenBlueprintId"`
 	ProductBlueprintID string `json:"productBlueprintId"`
 

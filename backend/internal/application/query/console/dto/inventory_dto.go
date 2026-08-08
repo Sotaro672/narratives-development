@@ -5,13 +5,11 @@ package dto
 // DTOs (Inventory Management List)
 // - ✅ /inventory (management list)
 // ============================================================
-
 type InventoryManagementRowDTO struct {
 	ProductBlueprintID string `json:"productBlueprintId"`
 	ProductName        string `json:"productName"`
 	TokenBlueprintID   string `json:"tokenBlueprintId"`
 	TokenName          string `json:"tokenName"`
-	ModelNumber        string `json:"modelNumber"`
 	AvailableStock     int    `json:"availableStock"`
 	ReservedCount      int    `json:"reservedCount"`
 }

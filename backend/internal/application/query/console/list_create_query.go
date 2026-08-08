@@ -22,12 +22,12 @@ import (
 // - 並べ替え（displayOrder 昇順 / size,color 等）は一切しない。
 // - inventoryId の build/split は廃止（inventoryId は inventory テーブルから拾う）
 // - PriceRows には productBlueprintCategory / model kind に応じた model 情報を含める。
-//   - apparel: modelNumber / size / color / rgb
-//   - alcohol: modelNumber / volumeValue / volumeUnit
+//   - apparel: size / color / rgb
+//   - alcohol: volumeValue / volumeUnit
 // ============================================================
 
 type ListCreateQuery struct {
-	// inventory から stock / inventoryId(pb/tb取得含む) を引くため
+	// inventory から stock / pb/tb を引くため
 	// ※ GetByInventoryID を使うなら必須
 	invRepo inventoryReader // defined in inventory_query.go
 
@@ -82,20 +82,11 @@ func (q *ListCreateQuery) GetByInventoryID(ctx context.Context, inventoryID stri
 		return nil, errors.New("productBlueprintId/tokenBlueprintId is empty in inventory")
 	}
 
-	dto, err := q.buildByIDs(ctx, pbID, tbID)
-	if err != nil {
-		return nil, err
-	}
-
-	// inventoryId は「組み立てず」取得した docId をそのまま返す
-	dto.InventoryID = id
-	return dto, nil
+	return q.buildByIDs(ctx, pbID, tbID)
 }
 
 // ============================================================
 // internal: pbId/tbId -> ListCreateDTO
-// - inventoryId は build しない
-// - invRepo があれば「inventory テーブルから拾った ID」を返す
 // ============================================================
 
 func (q *ListCreateQuery) buildByIDs(
@@ -160,26 +151,19 @@ func (q *ListCreateQuery) buildByIDs(
 	}
 
 	// ------------------------------------------------------------
-	// ModelRefs / PriceRows（並べ替えしない）
+	// PriceRows（並べ替えしない）
 	// ------------------------------------------------------------
 	modelRefs := q.listModelRefs(ctx, pbID)
-	priceRows, totalStock, invID := q.buildPriceRowsByIDs(ctx, pbID, tbID, modelRefs)
+	priceRows := q.buildPriceRowsByIDs(ctx, pbID, tbID, modelRefs)
 
 	dto := &querydto.ListCreateDTO{
-		// inventoryId は build しない。拾えた場合のみ入る。
-		InventoryID:        invID,
-		ProductBlueprintID: pbID,
-		TokenBlueprintID:   tbID,
-
 		ProductBrandName: productBrandName,
 		ProductName:      productName,
 
 		TokenBrandName: tokenBrandName,
 		TokenName:      tokenName,
 
-		ModelRefs:  modelRefs,
-		PriceRows:  priceRows,
-		TotalStock: totalStock,
+		PriceRows: priceRows,
 	}
 
 	return dto, nil
@@ -192,8 +176,8 @@ func (q *ListCreateQuery) buildByIDs(
 // - stock==0 でも行を出す（価格入力のため）
 // - 並べ替えはしない
 // - model 情報は resolver.ModelResolved を正として詰める
-//   - apparel: kind / modelNumber / size / color / rgb
-//   - alcohol: kind / modelNumber / volumeValue / volumeUnit
+//   - apparel: kind / size / color / rgb
+//   - alcohol: kind / volumeValue / volumeUnit
 // ============================================================
 
 func (q *ListCreateQuery) buildPriceRowsByIDs(
@@ -201,21 +185,20 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 	productBlueprintID string,
 	tokenBlueprintID string,
 	modelRefs []querydto.ListCreateModelRefDTO,
-) ([]querydto.ListCreatePriceRowDTO, int, string) {
+) []querydto.ListCreatePriceRowDTO {
 	if q == nil {
-		return nil, 0, ""
+		return nil
 	}
 
 	pbID := productBlueprintID
 	tbID := tokenBlueprintID
 	if pbID == "" || tbID == "" {
-		return nil, 0, ""
+		return nil
 	}
 	if len(modelRefs) == 0 {
-		return nil, 0, ""
+		return nil
 	}
 
-	// inventoryId を build しない。invRepo から「該当Mint」を拾い、その ID を使う。
 	var picked *invdom.Mint
 	if q.invRepo != nil {
 		invs, err := q.invRepo.ListByProductBlueprintID(ctx, pbID)
@@ -230,7 +213,6 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 	}
 
 	rows := make([]querydto.ListCreatePriceRowDTO, 0, len(modelRefs))
-	total := 0
 
 	for _, ref := range modelRefs {
 		mid := ref.ModelID
@@ -256,18 +238,9 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 			attr = q.nameResolver.ResolveModelResolved(ctx, mid)
 		}
 
-		mn := attr.ModelNumber
-		if mn == "" {
-			mn = mid
-		}
-		if mn == "" {
-			mn = "-"
-		}
-
 		row := querydto.ListCreatePriceRowDTO{
 			ModelID:      mid,
 			Kind:         attr.Kind,
-			ModelNumber:  mn,
 			DisplayOrder: ref.DisplayOrder,
 			Stock:        stock,
 			Price:        nil,
@@ -293,15 +266,9 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 		}
 
 		rows = append(rows, row)
-		total += stock
 	}
 
-	invID := ""
-	if picked != nil {
-		invID = picked.ID
-	}
-
-	return rows, total, invID
+	return rows
 }
 
 func toDisplayOrderPtr(v int) *int {
@@ -317,6 +284,7 @@ func (q *ListCreateQuery) listModelRefs(ctx context.Context, productBlueprintID 
 	if q == nil || q.pbRepo == nil {
 		return nil
 	}
+
 	pbID := productBlueprintID
 	if pbID == "" {
 		return nil
@@ -350,5 +318,6 @@ func (q *ListCreateQuery) listModelRefs(ctx context.Context, productBlueprintID 
 			DisplayOrder: toDisplayOrderPtr(r.DisplayOrder),
 		})
 	}
+
 	return out
 }

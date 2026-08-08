@@ -46,10 +46,8 @@ func (s *MintRequestQueryService) ListTokenBlueprintsForMint(
 				TokenName:   tokenBlueprint.Name,
 				Symbol:      tokenBlueprint.Symbol,
 				BrandID:     tokenBlueprint.BrandID,
-				CompanyID:   tokenBlueprint.CompanyID,
 				Description: tokenBlueprint.Description,
 				Minted:      tokenBlueprint.Minted,
-				MetadataURI: tokenBlueprint.MetadataURI,
 				IconURL:     tokenBlueprint.IconURL,
 			},
 		)
