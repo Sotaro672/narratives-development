@@ -1,3 +1,4 @@
+// backend\internal\adapters\in\http\mall\router.go
 package mall
 
 import (
@@ -58,7 +59,7 @@ type Deps struct {
 
 	Order http.Handler
 
-	// market resales (public)
+	// market resales (auth + avatar required)
 	// - GET /mall/market/resales
 	// - GET /mall/market/resales/cursor
 	// - GET /mall/market/resales/{id}
@@ -230,10 +231,10 @@ func handleSafeAuthAvatar(
 // Register registers buyer-facing routes onto mux (mall only).
 //
 // auth:
-//   - /mall/me/** routes requiring user auth
+//   - /mall/market/resales** and /mall/me/** routes requiring user auth
 //
 // avatar:
-//   - /mall/me/** routes requiring avatar context
+//   - /mall/market/resales** and /mall/me/** routes requiring avatar context
 func Register(
 	mux *http.ServeMux,
 	deps Deps,
@@ -345,20 +346,6 @@ func Register(
 	handleSafe(mux, "/mall/preview", deps.Preview, "Preview")
 	handleSafe(mux, "/mall/preview/", deps.Preview, "Preview")
 
-	// market resales (public)
-	handleSafe(
-		mux,
-		"/mall/market/resales",
-		deps.Market,
-		"Market",
-	)
-	handleSafe(
-		mux,
-		"/mall/market/resales/",
-		deps.Market,
-		"Market",
-	)
-
 	// resales by public avatar
 	handleSafe(
 		mux,
@@ -391,6 +378,28 @@ func Register(
 		deps.Auth,
 		"Auth(emailVerification)",
 		auth,
+	)
+
+	// ------------------------------------------------------------
+	// Auth+Avatar-required routes outside /mall/me
+	// ------------------------------------------------------------
+
+	// market resales
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/market/resales",
+		deps.Market,
+		"Market",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/market/resales/",
+		deps.Market,
+		"Market",
+		auth,
+		avatar,
 	)
 
 	// ------------------------------------------------------------
@@ -695,7 +704,7 @@ func Register(
 		mux,
 		"/mall/me/inquiries/",
 		deps.Inquiry,
-		"Inquiry(me)",
+		"Resale(me)",
 		auth,
 		avatar,
 	)

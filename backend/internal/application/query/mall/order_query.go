@@ -4,7 +4,6 @@ package mall
 import (
 	"context"
 	"errors"
-	"log"
 
 	dto "narratives/internal/application/query/mall/dto"
 	mallshared "narratives/internal/application/query/mall/shared"
@@ -89,6 +88,7 @@ func (q *OrderQuery) GetAvatarIDByUID(ctx context.Context, uid string) (string, 
 	if q == nil || q.AvatarRepo == nil {
 		return "", errors.New("mall order query: avatar repository is nil")
 	}
+
 	if uid == "" {
 		return "", errors.New("uid is required")
 	}
@@ -116,6 +116,7 @@ func (q *OrderQuery) GetOrderContextByUID(ctx context.Context, uid string) (dto.
 	if q == nil || q.AvatarRepo == nil {
 		return dto.OrderContextDTO{}, errors.New("mall order query: avatar repository is nil")
 	}
+
 	if uid == "" {
 		return dto.OrderContextDTO{}, errors.New("uid is required")
 	}
@@ -180,6 +181,7 @@ func (q *OrderQuery) findAvatarIdentityByUID(ctx context.Context, uid string) (a
 	if q == nil || q.AvatarRepo == nil {
 		return "", "", errors.New("mall order query: avatar repository is nil")
 	}
+
 	if uid == "" {
 		return "", "", errors.New("uid is required")
 	}
@@ -188,6 +190,7 @@ func (q *OrderQuery) findAvatarIdentityByUID(ctx context.Context, uid string) (a
 	if err != nil {
 		return "", "", err
 	}
+
 	if a.ID == "" {
 		return "", "", ErrNotFound
 	}
@@ -196,13 +199,6 @@ func (q *OrderQuery) findAvatarIdentityByUID(ctx context.Context, uid string) (a
 	if resolvedUserID == "" {
 		resolvedUserID = uid
 	}
-
-	log.Printf(
-		"[mall_order_query] findAvatarIdentityByUID ok uid=%q avatarId=%q userId=%q",
-		uid,
-		a.ID,
-		resolvedUserID,
-	)
 
 	return a.ID, resolvedUserID, nil
 }
@@ -221,9 +217,10 @@ func (q *OrderQuery) fetchShippingSnapshotBestEffort(ctx context.Context, userID
 		if errors.Is(err, shippingaddress.ErrNotFound) {
 			return nil
 		}
-		log.Printf("[mall_order_query] shipping address query error userId=%q err=%v", userID, err)
+
 		return nil
 	}
+
 	if len(addresses) == 0 {
 		return nil
 	}
@@ -256,9 +253,10 @@ func (q *OrderQuery) fetchPaymentMethodSnapshotBestEffort(ctx context.Context, u
 		if errors.Is(err, paymentmethod.ErrNotFound) {
 			return nil
 		}
-		log.Printf("[mall_order_query] payment method query error userId=%q err=%v", userID, err)
+
 		return nil
 	}
+
 	if pm == nil {
 		return nil
 	}
@@ -289,9 +287,9 @@ func (q *OrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID stri
 
 	c, err := q.CartRepo.GetByAvatarID(ctx, avatarID)
 	if err != nil {
-		log.Printf("[mall_order_query] cart query error avatarId=%q err=%v", avatarID, err)
 		return nil
 	}
+
 	if c == nil || len(c.Items) == 0 {
 		return map[string]dto.CartItemDTO{}
 	}
@@ -383,8 +381,6 @@ func (q *OrderQuery) resaleCartItemToDTO(ctx context.Context, item cart.CartItem
 			}
 
 			pbID = r.ProductBlueprintID
-		} else {
-			log.Printf("[mall_order_query] resale query error resaleId=%q err=%v", item.ResaleID, err)
 		}
 	}
 
@@ -394,8 +390,6 @@ func (q *OrderQuery) resaleCartItemToDTO(ctx context.Context, item cart.CartItem
 		images, err := q.ResaleImageRepo.ListByResaleID(ctx, item.ResaleID)
 		if err == nil {
 			imageURL = mallshared.FirstResaleImageURL(images)
-		} else {
-			log.Printf("[mall_order_query] resale image query error resaleId=%q err=%v", item.ResaleID, err)
 		}
 	}
 
@@ -409,8 +403,6 @@ func (q *OrderQuery) resaleCartItemToDTO(ctx context.Context, item cart.CartItem
 		pb, err := q.ProductBlueprintRepo.GetByID(ctx, pbID)
 		if err == nil && pb.ProductName != "" {
 			productName = pb.ProductName
-		} else if err != nil {
-			log.Printf("[mall_order_query] product blueprint query error productBlueprintId=%q err=%v", pbID, err)
 		}
 	}
 

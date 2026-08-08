@@ -36,6 +36,8 @@ type Filter struct {
 	ProductBlueprintIDs []string
 	AvatarIDs           []string
 
+	ExcludeAvatarIDs []string
+
 	Status   *ResaleStatus
 	Statuses []ResaleStatus
 

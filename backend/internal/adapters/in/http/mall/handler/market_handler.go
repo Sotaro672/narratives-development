@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	middleware "narratives/internal/adapters/in/http/middleware"
 	mallquery "narratives/internal/application/query/mall"
 	resaledom "narratives/internal/domain/resale"
 )
@@ -108,8 +109,15 @@ func (h *MarketHandler) listResales(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	viewerAvatarID, ok := currentMarketAvatarID(w, r)
+	if !ok {
+		return
+	}
+
 	filter := buildMarketResaleFilterFromQuery(r)
-	filter = attachViewerAvatarIDsToMarketFilter(r, filter)
+	filter.ExcludeAvatarIDs = []string{
+		viewerAvatarID,
+	}
 
 	sortSpec := buildMarketResaleSortFromQuery(r)
 	page := buildMarketResalePageFromQuery(r)
@@ -139,8 +147,15 @@ func (h *MarketHandler) listResalesByCursor(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	viewerAvatarID, ok := currentMarketAvatarID(w, r)
+	if !ok {
+		return
+	}
+
 	filter := buildMarketResaleFilterFromQuery(r)
-	filter = attachViewerAvatarIDsToMarketFilter(r, filter)
+	filter.ExcludeAvatarIDs = []string{
+		viewerAvatarID,
+	}
 
 	sortSpec := buildMarketResaleSortFromQuery(r)
 	cpage := buildMarketResaleCursorPageFromQuery(r)
@@ -168,13 +183,27 @@ func (h *MarketHandler) getResale(w http.ResponseWriter, r *http.Request, resale
 		return
 	}
 
-	item, err := h.marketQ.GetByID(ctx, resaleID)
+	viewerAvatarID, ok := currentMarketAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	item, err := h.marketQ.GetByID(
+		ctx,
+		resaleID,
+		viewerAvatarID,
+	)
 	if err != nil {
 		writeResaleErr(w, err)
 		return
 	}
 
 	if item.Status != resaledom.StatusListing {
+		notFound(w)
+		return
+	}
+
+	if item.AvatarID == viewerAvatarID {
 		notFound(w)
 		return
 	}
@@ -194,7 +223,16 @@ func (h *MarketHandler) listResaleImages(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	images, err := h.marketQ.ListImagesByResaleID(ctx, resaleID)
+	viewerAvatarID, ok := currentMarketAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	images, err := h.marketQ.ListImagesByResaleID(
+		ctx,
+		resaleID,
+		viewerAvatarID,
+	)
 	if err != nil {
 		writeResaleErr(w, err)
 		return
@@ -203,6 +241,21 @@ func (h *MarketHandler) listResaleImages(w http.ResponseWriter, r *http.Request,
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": images,
 	})
+}
+
+func currentMarketAvatarID(
+	w http.ResponseWriter,
+	r *http.Request,
+) (string, bool) {
+	avatarID, ok := middleware.CurrentAvatarID(r)
+	if !ok || avatarID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized: missing avatarId",
+		})
+		return "", false
+	}
+
+	return avatarID, true
 }
 
 func isCursorMarketRequest(r *http.Request) bool {
@@ -367,85 +420,6 @@ func buildMarketResaleFilterFromQuery(r *http.Request) resaledom.Filter {
 	}
 
 	return filter
-}
-
-// attachViewerAvatarIDsToMarketFilter attaches viewer avatar ids for exclusion.
-//
-// UserAuthMiddleware provides Firebase UID, not avatarId.
-// Since resale.AvatarID is avatar id, this handler cannot derive it from uid alone.
-// Therefore the frontend should pass viewerAvatarId/avatarId/avatarIds as query params.
-func attachViewerAvatarIDsToMarketFilter(
-	r *http.Request,
-	filter resaledom.Filter,
-) resaledom.Filter {
-	qp := r.URL.Query()
-
-	viewerIDs := make([]string, 0)
-
-	if vv := qp["viewerAvatarIds"]; len(vv) > 0 {
-		for _, v := range vv {
-			viewerIDs = append(viewerIDs, splitMarketResaleCSV(v)...)
-		}
-	} else if vv := qp["viewer_avatar_ids"]; len(vv) > 0 {
-		for _, v := range vv {
-			viewerIDs = append(viewerIDs, splitMarketResaleCSV(v)...)
-		}
-	}
-
-	if v := strings.TrimSpace(qp.Get("viewerAvatarId")); v != "" {
-		viewerIDs = append(viewerIDs, v)
-	} else if v := strings.TrimSpace(qp.Get("viewer_avatar_id")); v != "" {
-		viewerIDs = append(viewerIDs, v)
-	}
-
-	if v := strings.TrimSpace(qp.Get("avatarId")); v != "" {
-		viewerIDs = append(viewerIDs, v)
-	} else if v := strings.TrimSpace(qp.Get("avatar_id")); v != "" {
-		viewerIDs = append(viewerIDs, v)
-	}
-
-	if len(viewerIDs) == 0 {
-		return filter
-	}
-
-	filter.AvatarIDs = appendUniqueMarketResaleStrings(filter.AvatarIDs, viewerIDs...)
-
-	return filter
-}
-
-func appendUniqueMarketResaleStrings(base []string, values ...string) []string {
-	seen := make(map[string]struct{}, len(base)+len(values))
-	out := make([]string, 0, len(base)+len(values))
-
-	for _, v := range base {
-		normalized := strings.TrimSpace(v)
-		if normalized == "" {
-			continue
-		}
-
-		if _, ok := seen[normalized]; ok {
-			continue
-		}
-
-		seen[normalized] = struct{}{}
-		out = append(out, normalized)
-	}
-
-	for _, v := range values {
-		normalized := strings.TrimSpace(v)
-		if normalized == "" {
-			continue
-		}
-
-		if _, ok := seen[normalized]; ok {
-			continue
-		}
-
-		seen[normalized] = struct{}{}
-		out = append(out, normalized)
-	}
-
-	return out
 }
 
 func buildMarketResaleSortFromQuery(r *http.Request) resaledom.Sort {

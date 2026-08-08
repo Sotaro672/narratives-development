@@ -80,6 +80,7 @@ func (r *ResaleRepositoryFS) GetByID(
 		if status.Code(err) == codes.NotFound {
 			return resaledom.Resale{}, resaledom.ErrNotFound
 		}
+
 		return resaledom.Resale{}, err
 	}
 
@@ -168,6 +169,7 @@ func (r *ResaleRepositoryFS) List(
 	if perPage <= 0 {
 		perPage = 50
 	}
+
 	if pageNum <= 0 {
 		pageNum = 1
 	}
@@ -299,6 +301,7 @@ func (r *ResaleRepositoryFS) ListByCursor(
 			if item.ID <= after {
 				continue
 			}
+
 			skipping = false
 		}
 
@@ -395,6 +398,7 @@ func (r *ResaleRepositoryFS) Create(
 		if err == nil && existingDoc != nil {
 			return resaledom.ErrConflict
 		}
+
 		if err != nil && !errors.Is(err, iterator.Done) {
 			return err
 		}
@@ -403,6 +407,7 @@ func (r *ResaleRepositoryFS) Create(
 		if err == nil {
 			return resaledom.ErrConflict
 		}
+
 		if status.Code(err) != codes.NotFound {
 			return err
 		}
@@ -417,6 +422,7 @@ func (r *ResaleRepositoryFS) Create(
 			if status.Code(err) == codes.AlreadyExists {
 				return resaledom.ErrConflict
 			}
+
 			return err
 		}
 
@@ -424,6 +430,7 @@ func (r *ResaleRepositoryFS) Create(
 			if status.Code(err) == codes.AlreadyExists {
 				return resaledom.ErrConflict
 			}
+
 			return err
 		}
 
@@ -433,6 +440,7 @@ func (r *ResaleRepositoryFS) Create(
 		if errors.Is(err, resaledom.ErrConflict) {
 			return resaledom.Resale{}, resaledom.ErrConflict
 		}
+
 		return resaledom.Resale{}, err
 	}
 
@@ -464,6 +472,7 @@ func (r *ResaleRepositoryFS) Update(
 			if status.Code(err) == codes.NotFound {
 				return resaledom.ErrNotFound
 			}
+
 			return err
 		}
 
@@ -547,6 +556,7 @@ func (r *ResaleRepositoryFS) Update(
 		if errors.Is(err, resaledom.ErrNotFound) {
 			return resaledom.Resale{}, resaledom.ErrNotFound
 		}
+
 		return resaledom.Resale{}, err
 	}
 
@@ -577,6 +587,7 @@ func (r *ResaleRepositoryFS) Delete(
 			if status.Code(err) == codes.NotFound {
 				return resaledom.ErrNotFound
 			}
+
 			return err
 		}
 
@@ -619,6 +630,7 @@ func (r *ResaleRepositoryFS) Delete(
 		if errors.Is(err, resaledom.ErrNotFound) {
 			return resaledom.ErrNotFound
 		}
+
 		return err
 	}
 
@@ -753,6 +765,10 @@ func matchesResaleFilter(item resaledom.Resale, filter resaledom.Filter) bool {
 		return false
 	}
 
+	if len(filter.ExcludeAvatarIDs) > 0 && stringIn(item.AvatarID, filter.ExcludeAvatarIDs) {
+		return false
+	}
+
 	if filter.Status != nil && item.Status != *filter.Status {
 		return false
 	}
@@ -807,6 +823,7 @@ func sortResales(items []resaledom.Resale, sortSpec resaledom.Sort) {
 	if column == "" {
 		column = "updatedAt"
 	}
+
 	if order == "" {
 		order = resaledom.SortDesc
 	}
@@ -823,12 +840,14 @@ func sortResales(items []resaledom.Resale, sortSpec resaledom.Sort) {
 			if a.Price == b.Price {
 				return a.ID < b.ID
 			}
+
 			return a.Price < b.Price
 
 		case "createdAt", "created_at":
 			if a.CreatedAt.Equal(b.CreatedAt) {
 				return a.ID < b.ID
 			}
+
 			return a.CreatedAt.Before(b.CreatedAt)
 
 		case "updatedAt", "updated_at":
@@ -838,8 +857,10 @@ func sortResales(items []resaledom.Resale, sortSpec resaledom.Sort) {
 				if a.CreatedAt.Equal(b.CreatedAt) {
 					return a.ID < b.ID
 				}
+
 				return a.CreatedAt.Before(b.CreatedAt)
 			}
+
 			return at.Before(bt)
 
 		default:
@@ -849,8 +870,10 @@ func sortResales(items []resaledom.Resale, sortSpec resaledom.Sort) {
 				if a.CreatedAt.Equal(b.CreatedAt) {
 					return a.ID < b.ID
 				}
+
 				return a.CreatedAt.Before(b.CreatedAt)
 			}
+
 			return at.Before(bt)
 		}
 	}
@@ -862,7 +885,6 @@ func sortResales(items []resaledom.Resale, sortSpec resaledom.Sort) {
 
 		return less(i, j)
 	})
-
 }
 
 func stringIn(value string, values []string) bool {
