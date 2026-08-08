@@ -1,5 +1,5 @@
 // frontend/amol/src/components/layout/header/HeaderActions.tsx
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import { useAnnouncementUnreadCount } from "../../../features/announcement/hooks/useAnnouncementUnreadCount";
 import { useInquiryUnreadCounter } from "../../../features/inquiry/presentation/hooks/useInquiryUnreadCounter";
@@ -24,7 +24,6 @@ function isResalePagePath(pathname: string): boolean {
 }
 
 export default function HeaderActions({ actions }: HeaderActionsProps) {
-  const navigate = useNavigate();
   const location = useLocation();
 
   const {
@@ -60,7 +59,9 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
   });
 
   const safeCartItemCount = normalizeCount(cartItemCount);
-  const safeAnnouncementUnreadCount = normalizeCount(announcementUnreadCount);
+  const safeAnnouncementUnreadCount = normalizeCount(
+    announcementUnreadCount,
+  );
   const safeInquiryUnreadCount = normalizeCount(inquiryUnreadCount);
 
   const safeChatUnreadCount = safeInquiryUnreadCount;
@@ -70,7 +71,17 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     safeAnnouncementUnreadCount,
   );
   const chatUnreadBadgeLabel = formatBadgeLabel(safeChatUnreadCount);
-  const shouldShowResaleButton = isResalePagePath(location.pathname);
+
+  const shouldShowResaleButton = isResalePagePath(
+    location.pathname,
+  );
+
+  const resaleButtonLabel =
+    actionButtonLabel || "出品";
+
+  const resaleButtonDisabled =
+    !onActionButtonClick ||
+    actionButtonDisabled;
 
   return (
     <div className="header__right">
@@ -78,15 +89,16 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
         <button
           type="button"
           className="header__settings-link header__resale-button"
-          aria-label="出品"
-          title="出品"
-          onClick={() => navigate("/wallet")}
+          aria-label={resaleButtonLabel}
+          title={resaleButtonLabel}
+          onClick={onActionButtonClick}
+          disabled={resaleButtonDisabled}
         >
-          出品
+          {resaleButtonLabel}
         </button>
       ) : null}
 
-      {hasActionButton ? (
+      {hasActionButton && !shouldShowResaleButton ? (
         <button
           type="button"
           className="header__settings-link header__action-button header__add-to-cart-button"
@@ -113,7 +125,10 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
       ) : null}
 
       {shouldShowLoginButton ? (
-        <Link to="/signin/select" className="header__login-link">
+        <Link
+          to="/signin/select"
+          className="header__login-link"
+        >
           ログイン
         </Link>
       ) : null}
@@ -125,12 +140,18 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           aria-label={`お知らせ ${safeAnnouncementUnreadCount}件`}
           title="お知らせ"
         >
-          <span className="header__cart-icon" aria-hidden="true">
+          <span
+            className="header__cart-icon"
+            aria-hidden="true"
+          >
             🔔
           </span>
 
           {safeAnnouncementUnreadCount > 0 ? (
-            <span className="header__cart-badge" aria-hidden="true">
+            <span
+              className="header__cart-badge"
+              aria-hidden="true"
+            >
               {announcementUnreadBadgeLabel}
             </span>
           ) : null}
@@ -144,12 +165,18 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           aria-label={`メッセージ ${safeChatUnreadCount}件`}
           title="メッセージ"
         >
-          <span className="header__cart-icon" aria-hidden="true">
+          <span
+            className="header__cart-icon"
+            aria-hidden="true"
+          >
             💬
           </span>
 
           {safeChatUnreadCount > 0 ? (
-            <span className="header__cart-badge" aria-hidden="true">
+            <span
+              className="header__cart-badge"
+              aria-hidden="true"
+            >
               {chatUnreadBadgeLabel}
             </span>
           ) : null}
@@ -165,12 +192,18 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           onClick={onCartButtonClick}
           disabled={cartButtonDisabled}
         >
-          <span className="header__cart-icon" aria-hidden="true">
+          <span
+            className="header__cart-icon"
+            aria-hidden="true"
+          >
             🛒
           </span>
 
           {safeCartItemCount > 0 ? (
-            <span className="header__cart-badge" aria-hidden="true">
+            <span
+              className="header__cart-badge"
+              aria-hidden="true"
+            >
               {cartBadgeLabel}
             </span>
           ) : null}
