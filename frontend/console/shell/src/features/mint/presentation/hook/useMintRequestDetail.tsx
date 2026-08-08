@@ -1,14 +1,7 @@
 // frontend/console/shell/src/features/mintRequest/presentation/hook/useMintRequestDetail.tsx
 
 import * as React from "react";
-import {
-  useNavigate,
-  useParams,
-} from "react-router-dom";
-
-import type {
-  MintInfo,
-} from "../../application/mapper/mintInfoMapper";
+import { useNavigate, useParams } from "react-router-dom";
 
 import type {
   BrandSummary,
@@ -16,492 +9,340 @@ import type {
   TokenBlueprintSummary,
 } from "../../application/port/MintRequestRepository";
 
-import {
-  selectMintRequestDetailState,
-} from "../../application/selector/selectMintRequestDetailState";
+import { completeMintInspection } from "../../application/usecase/completeMintInspection";
+import { getMintRequestDetail } from "../../application/usecase/getMintRequestDetail";
+import { getMintRequestProductBlueprintPatch } from "../../application/usecase/getMintRequestProductBlueprintPatch";
+import { submitMintRequest } from "../../application/usecase/submitMintRequest";
 
-import {
-  completeMintInspection,
-} from "../../application/usecase/completeMintInspection";
+import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
+import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
-import {
-  getMintRequestDetail,
-} from "../../application/usecase/getMintRequestDetail";
-
-import {
-  getMintRequestProductBlueprintPatch,
-} from "../../application/usecase/getMintRequestProductBlueprintPatch";
-
-import {
-  submitMintRequest,
-} from "../../application/usecase/submitMintRequest";
-
-import type {
-  InspectionBatchDTO,
-} from "../../../../shared/types/inspections";
-
+import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
 import type {
   MintModelMetaEntryDTO,
   ProductBlueprintPatchDTO,
 } from "../../infrastructure/dto/mintRequestLocal.dto";
 
-import {
-  HttpMintRequestRepository,
-} from "../../infrastructure/repository/HttpMintRequestRepository";
+import { HttpMintRequestRepository } from "../../infrastructure/repository/HttpMintRequestRepository";
 
 import {
-  buildMintLabels,
   buildProductBlueprintCardView,
   buildTokenBlueprintCardVm,
 } from "../viewModel/mintRequestDetailViewModel";
 
-import {
-  useInspectionResultCard,
-} from "./useInspectionResultCard";
-
-import {
-  useMintAutoSelection,
-} from "./useMintRequestDetail.useMintAutoSelection";
+import { useInspectionResultCard } from "./useInspectionResultCard";
+import { useMintAutoSelection } from "./useMintRequestDetail.useMintAutoSelection";
 
 function getErrorMessage(
   error: unknown,
   fallback: string,
 ): string {
-  if (
-    error instanceof Error &&
-    error.message
-  ) {
+  if (error instanceof Error && error.message) {
     return error.message;
   }
 
   return fallback;
 }
 
-const MINT_REQUEST_MANAGEMENT_PATH =
-  "/mint";
+const MINT_REQUEST_MANAGEMENT_PATH = "/mint";
 
 export function useMintRequestDetail() {
-  const navigate =
-    useNavigate();
+  const navigate = useNavigate();
 
   /**
    * route名はrequestIdのままでも、
    * 実体はproductionIdとして扱う。
    */
-  const {
-    requestId,
-  } = useParams<{
+  const { requestId } = useParams<{
     requestId: string;
   }>();
 
-  const productionId =
-    React.useMemo(
-      () =>
-        String(
-          requestId ?? "",
-        ).trim(),
-      [requestId],
-    );
+  const productionId = React.useMemo(
+    () => String(requestId ?? "").trim(),
+    [requestId],
+  );
 
-  const mintRequestRepo =
-    React.useMemo(
-      () =>
-        new HttpMintRequestRepository(),
-      [],
-    );
+  const mintRequestRepo = React.useMemo(
+    () => new HttpMintRequestRepository(),
+    [],
+  );
 
   const [
     inspectionBatch,
     setInspectionBatch,
-  ] =
-    React.useState<
-      InspectionBatchDTO | null
-    >(null);
+  ] = React.useState<InspectionBatchDTO | null>(null);
 
   const [
-    mintInfo,
-    setMintInfo,
-  ] =
-    React.useState<
-      MintInfo | null
-    >(null);
+    mintRequestRow,
+    setMintRequestRow,
+  ] = React.useState<MintRequestManagementRowDTO | null>(null);
 
-  const [
-    mintProgress,
-    setMintProgress,
-  ] =
-    React.useState<
-      MintTaskProgress | null
-    >(null);
+  /**
+   * 現行GET /mint/requests responseには
+   * mintProgressが存在しない。
+   *
+   * mintDetail.tsxとの互換性維持のため、
+   * 現時点では常にnullとして返す。
+   */
+  const [mintProgress] =
+    React.useState<MintTaskProgress | null>(null);
 
   const [
     productBlueprintId,
     setProductBlueprintId,
-  ] =
-    React.useState("");
+  ] = React.useState("");
 
   const [
     loading,
     setLoading,
-  ] =
-    React.useState(false);
+  ] = React.useState(false);
 
   const [
     error,
     setError,
-  ] =
-    React.useState<
-      string | null
-    >(null);
+  ] = React.useState<string | null>(null);
 
   const [
     pbPatch,
     setPbPatch,
-  ] =
-    React.useState<
-      ProductBlueprintPatchDTO | null
-    >(null);
+  ] = React.useState<ProductBlueprintPatchDTO | null>(null);
 
   const [
     pbPatchLoading,
     setPbPatchLoading,
-  ] =
-    React.useState(false);
+  ] = React.useState(false);
 
   const [
     pbPatchError,
     setPbPatchError,
-  ] =
-    React.useState<
-      string | null
-    >(null);
+  ] = React.useState<string | null>(null);
 
   const [
     brandOptions,
     setBrandOptions,
-  ] =
-    React.useState<
-      BrandSummary[]
-    >([]);
+  ] = React.useState<BrandSummary[]>([]);
 
   const [
     selectedBrandId,
     setSelectedBrandId,
-  ] =
-    React.useState("");
+  ] = React.useState("");
 
   const [
     tokenBlueprintOptions,
     setTokenBlueprintOptions,
-  ] =
-    React.useState<
-      TokenBlueprintSummary[]
-    >([]);
+  ] = React.useState<TokenBlueprintSummary[]>([]);
 
   const [
     selectedTokenBlueprintId,
     setSelectedTokenBlueprintId,
-  ] =
-    React.useState("");
+  ] = React.useState("");
 
   const [
     scheduledBurnDate,
     setScheduledBurnDate,
-  ] =
-    React.useState("");
+  ] = React.useState("");
 
   const [
     isSubmittingMintRequest,
     setIsSubmittingMintRequest,
-  ] =
-    React.useState(false);
+  ] = React.useState(false);
 
   const [
     isCompletingInspection,
     setIsCompletingInspection,
-  ] =
-    React.useState(false);
+  ] = React.useState(false);
 
-  const title =
-    "ミント申請詳細";
+  const title = "ミント申請詳細";
 
-  const selectedBrandName =
-    React.useMemo(
-      () => {
-        if (!selectedBrandId) {
-          return "";
-        }
+  const selectedBrandName = React.useMemo(() => {
+    if (!selectedBrandId) {
+      return "";
+    }
 
-        return (
-          brandOptions.find(
-            (brand) =>
-              brand.id ===
-              selectedBrandId,
-          )?.name ?? ""
-        );
-      },
-      [
-        brandOptions,
-        selectedBrandId,
-      ],
+    return (
+      brandOptions.find(
+        (brand) => brand.id === selectedBrandId,
+      )?.name ?? ""
+    );
+  }, [
+    brandOptions,
+    selectedBrandId,
+  ]);
+
+  const reloadDetail = React.useCallback(async () => {
+    if (!productionId) {
+      return;
+    }
+
+    const detail = await getMintRequestDetail(
+      mintRequestRepo,
+      productionId,
     );
 
-  const reloadDetail =
-    React.useCallback(
-      async () => {
-        if (!productionId) {
+    setInspectionBatch(detail.inspectionBatch);
+    setMintRequestRow(detail.mintRequestRow);
+    setProductBlueprintId(
+      detail.productBlueprintId || "",
+    );
+  }, [
+    mintRequestRepo,
+    productionId,
+  ]);
+
+  React.useEffect(() => {
+    if (!productionId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const detail = await getMintRequestDetail(
+          mintRequestRepo,
+          productionId,
+        );
+
+        if (cancelled) {
           return;
         }
 
-        const detail =
-          await getMintRequestDetail(
-            mintRequestRepo,
-            productionId,
-          );
-
-        setInspectionBatch(
-          detail.inspectionBatch,
-        );
-
-        setMintInfo(
-          detail.mint,
-        );
-
-        setMintProgress(
-          detail.mintProgress,
-        );
-
+        setInspectionBatch(detail.inspectionBatch);
+        setMintRequestRow(detail.mintRequestRow);
         setProductBlueprintId(
-          detail.productBlueprintId ||
-            "",
+          detail.productBlueprintId || "",
         );
-      },
-      [
-        mintRequestRepo,
-        productionId,
-      ],
-    );
-
-  React.useEffect(
-    () => {
-      if (!productionId) {
-        return;
-      }
-
-      let cancelled =
-        false;
-
-      const run =
-        async () => {
-          setLoading(true);
-          setError(null);
-
-          try {
-            const detail =
-              await getMintRequestDetail(
-                mintRequestRepo,
-                productionId,
-              );
-
-            if (cancelled) {
-              return;
-            }
-
-            setInspectionBatch(
-              detail.inspectionBatch,
-            );
-
-            setMintInfo(
-              detail.mint,
-            );
-
-            setMintProgress(
-              detail.mintProgress,
-            );
-
-            setProductBlueprintId(
-              detail.productBlueprintId ||
-                "",
-            );
-          } catch (
-            error: unknown
-          ) {
-            if (!cancelled) {
-              setError(
-                getErrorMessage(
-                  error,
-                  "検査結果の取得に失敗しました",
-                ),
-              );
-            }
-          } finally {
-            if (!cancelled) {
-              setLoading(false);
-            }
-          }
-        };
-
-      void run();
-
-      return () => {
-        cancelled =
-          true;
-      };
-    },
-    [
-      mintRequestRepo,
-      productionId,
-    ],
-  );
-
-  React.useEffect(
-    () => {
-      if (
-        !productBlueprintId
-      ) {
-        setPbPatch(null);
-        return;
-      }
-
-      let cancelled =
-        false;
-
-      const run =
-        async () => {
-          setPbPatchLoading(
-            true,
+      } catch (error: unknown) {
+        if (!cancelled) {
+          setError(
+            getErrorMessage(
+              error,
+              "検査結果の取得に失敗しました",
+            ),
           );
-
-          setPbPatchError(
-            null,
-          );
-
-          try {
-            const patch =
-              await getMintRequestProductBlueprintPatch(
-                mintRequestRepo,
-                productBlueprintId,
-              );
-
-            if (!cancelled) {
-              setPbPatch(
-                patch,
-              );
-            }
-          } catch (
-            error: unknown
-          ) {
-            if (!cancelled) {
-              setPbPatchError(
-                getErrorMessage(
-                  error,
-                  "プロダクト基本情報の取得に失敗しました",
-                ),
-              );
-            }
-          } finally {
-            if (!cancelled) {
-              setPbPatchLoading(
-                false,
-              );
-            }
-          }
-        };
-
-      void run();
-
-      return () => {
-        cancelled =
-          true;
-      };
-    },
-    [
-      mintRequestRepo,
-      productBlueprintId,
-    ],
-  );
-
-  const batchForInspectionCard =
-    React.useMemo(
-      () => {
-        if (
-          !inspectionBatch
-        ) {
-          return undefined;
         }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
 
-        /**
-         * InspectionBatchDTO.modelMetaは、
-         * modelIdをRecordのキーとして保持している。
-         *
-         * InspectionResultCard側ではBackendの
-         * MintModelMetaEntryDTOに合わせて、
-         * 値側にもmodelIdを含める。
-         */
-        const modelMeta =
-          Object.entries(
-            inspectionBatch
-              .modelMeta ?? {},
-          ).reduce<
-            Record<
-              string,
-              MintModelMetaEntryDTO
-            >
-          >(
-            (
-              result,
-              [
-                modelId,
-                meta,
-              ],
-            ) => {
-              result[
-                modelId
-              ] = {
-                modelId,
+    void run();
 
-                size:
-                  meta.size,
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    mintRequestRepo,
+    productionId,
+  ]);
 
-                colorName:
-                  meta.colorName,
+  React.useEffect(() => {
+    if (!productBlueprintId) {
+      setPbPatch(null);
+      return;
+    }
 
-                rgb:
-                  meta.rgb,
-              };
+    let cancelled = false;
 
-              return result;
-            },
-            {},
+    const run = async () => {
+      setPbPatchLoading(true);
+      setPbPatchError(null);
+
+      try {
+        const patch =
+          await getMintRequestProductBlueprintPatch(
+            mintRequestRepo,
+            productBlueprintId,
           );
 
-        return {
-          ...inspectionBatch,
+        if (!cancelled) {
+          setPbPatch(patch);
+        }
+      } catch (error: unknown) {
+        if (!cancelled) {
+          setPbPatchError(
+            getErrorMessage(
+              error,
+              "プロダクト基本情報の取得に失敗しました",
+            ),
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setPbPatchLoading(false);
+        }
+      }
+    };
 
-          modelMeta,
+    void run();
 
-          productBlueprintPatch:
-            pbPatch ?? null,
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    mintRequestRepo,
+    productBlueprintId,
+  ]);
+
+  const batchForInspectionCard = React.useMemo(() => {
+    if (!inspectionBatch) {
+      return undefined;
+    }
+
+    /**
+     * InspectionBatchDTO.modelMetaは、
+     * modelIdをRecordのキーとして保持している。
+     *
+     * InspectionResultCard側ではBackendの
+     * MintModelMetaEntryDTOに合わせて、
+     * 値側にもmodelIdを含める。
+     */
+    const modelMeta = Object.entries(
+      inspectionBatch.modelMeta ?? {},
+    ).reduce<
+      Record<string, MintModelMetaEntryDTO>
+    >(
+      (
+        result,
+        [modelId, meta],
+      ) => {
+        result[modelId] = {
+          modelId,
+          size: meta.size,
+          colorName: meta.colorName,
+          rgb: meta.rgb,
         };
+
+        return result;
       },
-      [
-        inspectionBatch,
-        pbPatch,
-      ],
+      {},
     );
+
+    return {
+      ...inspectionBatch,
+      modelMeta,
+      productBlueprintPatch:
+        pbPatch ?? null,
+    };
+  }, [
+    inspectionBatch,
+    pbPatch,
+  ]);
 
   const inspectionCardData =
     useInspectionResultCard({
-      batch:
-        batchForInspectionCard,
-
-      modelMetaRepository:
-        mintRequestRepo,
+      batch: batchForInspectionCard,
+      modelMetaRepository: mintRequestRepo,
     });
 
   const totalMintQuantity =
-    inspectionCardData
-      .totalPassed;
+    mintRequestRow?.mintQuantity ??
+    inspectionCardData.totalPassed;
 
   const productBlueprintCardView =
     React.useMemo(
@@ -512,72 +353,47 @@ export function useMintRequestDetail() {
       [pbPatch],
     );
 
-  const onBack =
-    React.useCallback(
-      () => {
-        navigate(
-          MINT_REQUEST_MANAGEMENT_PATH,
-        );
-      },
-      [navigate],
-    );
+  const onBack = React.useCallback(() => {
+    navigate(MINT_REQUEST_MANAGEMENT_PATH);
+  }, [navigate]);
 
-  React.useEffect(
-    () => {
-      let cancelled =
-        false;
+  React.useEffect(() => {
+    let cancelled = false;
 
-      const run =
-        async () => {
-          try {
-            const brands =
-              await mintRequestRepo
-                .fetchBrandsForMint();
+    const run = async () => {
+      try {
+        const brands =
+          await mintRequestRepo.fetchBrandsForMint();
 
-            if (cancelled) {
-              return;
-            }
+        if (cancelled) {
+          return;
+        }
 
-            setBrandOptions(
-              brands,
-            );
-          } catch {
-            if (!cancelled) {
-              setBrandOptions(
-                [],
-              );
-            }
-          }
-        };
+        setBrandOptions(brands);
+      } catch {
+        if (!cancelled) {
+          setBrandOptions([]);
+        }
+      }
+    };
 
-      void run();
+    void run();
 
-      return () => {
-        cancelled =
-          true;
-      };
-    },
-    [mintRequestRepo],
-  );
+    return () => {
+      cancelled = true;
+    };
+  }, [mintRequestRepo]);
 
   const handleSelectBrand =
     React.useCallback(
       async (
         brandId: string,
       ) => {
-        setSelectedBrandId(
-          brandId,
-        );
+        setSelectedBrandId(brandId);
 
         if (!brandId) {
-          setTokenBlueprintOptions(
-            [],
-          );
-
-          setSelectedTokenBlueprintId(
-            "",
-          );
-
+          setTokenBlueprintOptions([]);
+          setSelectedTokenBlueprintId("");
           return;
         }
 
@@ -588,153 +404,148 @@ export function useMintRequestDetail() {
                 brandId,
               );
 
-          setTokenBlueprintOptions(
-            options,
-          );
-
-          setSelectedTokenBlueprintId(
-            "",
-          );
+          setTokenBlueprintOptions(options);
+          setSelectedTokenBlueprintId("");
         } catch {
-          setTokenBlueprintOptions(
-            [],
-          );
-
-          setSelectedTokenBlueprintId(
-            "",
-          );
+          setTokenBlueprintOptions([]);
+          setSelectedTokenBlueprintId("");
         }
       },
       [mintRequestRepo],
     );
 
-  const {
-    mint,
-    hasMint,
-    isMinting:
-      isMintProcessing,
-    isMintCompleted,
-    createdByName,
-    requestedByName,
-    mintRequestedTokenBlueprintId,
-    mintRequestedBrandId,
-  } =
-    React.useMemo(
-      () =>
-        selectMintRequestDetailState({
-          mint:
-            mintInfo,
+  /**
+   * GET /mint/requests responseのmintStatusを
+   * Mint状態の正とする。
+   */
+  const mintStatus = React.useMemo(
+    () =>
+      String(
+        mintRequestRow?.mintStatus ?? "",
+      )
+        .trim()
+        .toUpperCase(),
+    [mintRequestRow?.mintStatus],
+  );
 
-          productBlueprintBrandId:
-            pbPatch?.brandId ??
-            null,
-        }),
-      [
-        mintInfo,
-        pbPatch?.brandId,
-      ],
+  /**
+   * BackendはMintが存在しないProductionについても
+   * management rowを返し得るため、
+   * rowの存在そのものではhasMintを判定しない。
+   */
+  const hasMint = React.useMemo(() => {
+    return Boolean(
+      mintStatus ||
+        mintRequestRow?.tokenBlueprintId ||
+        mintRequestRow?.requestedBy ||
+        mintRequestRow?.mintedAt,
     );
+  }, [
+    mintStatus,
+    mintRequestRow?.tokenBlueprintId,
+    mintRequestRow?.requestedBy,
+    mintRequestRow?.mintedAt,
+  ]);
+
+  /**
+   * 非同期Mint処理中としてポーリングする状態。
+   */
+  const isMintProcessing =
+    mintStatus === "QUEUED" ||
+    mintStatus === "MINTING" ||
+    mintStatus === "PARTIALLY_MINTED";
+
+  const isMintCompleted =
+    mintStatus === "MINTED";
+
+  const createdByName =
+    mintRequestRow?.createdByName ||
+    mintRequestRow?.createdBy ||
+    null;
+
+  const requestedByName =
+    mintRequestRow?.requestedByName ||
+    mintRequestRow?.requestedBy ||
+    null;
+
+  const mintRequestedTokenBlueprintId =
+    mintRequestRow?.tokenBlueprintId ?? "";
+
+  /**
+   * 現行GET /mint/requests responseにはbrandIdがないため、
+   * ProductBlueprintのbrandIdを使用する。
+   */
+  const mintRequestedBrandId =
+    pbPatch?.brandId ?? "";
 
   /**
    * ミント申請の送信中、またはBackend上で
-   * MintがMINTEDになる前の状態を「ミント中」として扱う。
+   * 非同期Mint処理中の状態を「ミント中」として扱う。
    */
   const isMinting =
     isSubmittingMintRequest ||
     isMintProcessing;
 
-  const showMintProgress =
-    React.useMemo(
+  /**
+   * 現行GET /mint/requests responseには
+   * mintProgressが含まれないため非表示とする。
+   */
+  const showMintProgress = false;
+
+  React.useEffect(() => {
+    if (!productionId || !isMintProcessing) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const timer = window.setInterval(
       () => {
-        return Boolean(
-          isMintProcessing &&
-            mintProgress &&
-            mintProgress.total >
-              0,
-        );
+        if (cancelled) {
+          return;
+        }
+
+        void reloadDetail().catch(() => {
+          // 状態再取得失敗では画面全体をエラーにしない。
+        });
       },
-      [
-        isMintProcessing,
-        mintProgress,
-      ],
+      3000,
     );
 
-  React.useEffect(
-    () => {
-      if (!productionId) {
-        return;
-      }
-
-      if (
-        !isMintProcessing
-      ) {
-        return;
-      }
-
-      let cancelled =
-        false;
-
-      const timer =
-        window.setInterval(
-          () => {
-            if (cancelled) {
-              return;
-            }
-
-            void reloadDetail().catch(
-              () => {
-                // 進捗取得失敗では画面全体をエラーにしない。
-              },
-            );
-          },
-          3000,
-        );
-
-      return () => {
-        cancelled =
-          true;
-
-        window.clearInterval(
-          timer,
-        );
-      };
-    },
-    [
-      productionId,
-      isMintProcessing,
-      reloadDetail,
-    ],
-  );
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    productionId,
+    isMintProcessing,
+    reloadDetail,
+  ]);
 
   const inspectionStatus =
-    inspectionBatch?.status ??
-    "";
+    inspectionBatch?.status ?? "";
 
   const isInspectionCompleted =
-    inspectionStatus ===
-    "completed";
+    inspectionStatus === "completed";
 
   const showCompleteInspectionButton =
-    React.useMemo(
-      () => {
-        return Boolean(
-          inspectionBatch &&
-            !loading &&
-            !error &&
-            !isMinting &&
-            !isMintCompleted &&
-            !isInspectionCompleted,
-        );
-      },
-      [
-        inspectionBatch,
-        loading,
-        error,
-        isMinting,
-        isMintCompleted,
-        isInspectionCompleted,
-      ],
-    );
+    React.useMemo(() => {
+      return Boolean(
+        inspectionBatch &&
+          !loading &&
+          !error &&
+          !isMinting &&
+          !isMintCompleted &&
+          !isInspectionCompleted,
+      );
+    }, [
+      inspectionBatch,
+      loading,
+      error,
+      isMinting,
+      isMintCompleted,
+      isInspectionCompleted,
+    ]);
 
   /**
    * Mint申請に関する入力UIは、
@@ -756,26 +567,26 @@ export function useMintRequestDetail() {
     selectedTokenBlueprintId,
     setSelectedTokenBlueprintId,
 
-    mintScheduledBurnDate:
-      mint?.scheduledBurnDate,
+    /**
+     * 現行GET /mint/requests responseには
+     * scheduledBurnDateが存在しない。
+     */
+    mintScheduledBurnDate: undefined,
 
     scheduledBurnDate,
     setScheduledBurnDate,
   });
 
   const tokenBlueprintIdForPatch =
-    React.useMemo(
-      () => {
-        return (
-          selectedTokenBlueprintId ||
-          mintRequestedTokenBlueprintId
-        );
-      },
-      [
-        selectedTokenBlueprintId,
-        mintRequestedTokenBlueprintId,
-      ],
-    );
+    React.useMemo(() => {
+      return (
+        selectedTokenBlueprintId ||
+        mintRequestedTokenBlueprintId
+      );
+    }, [
+      selectedTokenBlueprintId,
+      mintRequestedTokenBlueprintId,
+    ]);
 
   const handleCompleteInspection =
     React.useCallback(
@@ -797,9 +608,7 @@ export function useMintRequestDetail() {
           return;
         }
 
-        setIsCompletingInspection(
-          true,
-        );
+        setIsCompletingInspection(true);
 
         try {
           const result =
@@ -812,16 +621,11 @@ export function useMintRequestDetail() {
             );
 
           if (!result.ok) {
-            alert(
-              result.message,
-            );
-
+            alert(result.message);
             return;
           }
 
-          if (
-            result.inspectionBatch
-          ) {
+          if (result.inspectionBatch) {
             setInspectionBatch(
               result.inspectionBatch,
             );
@@ -829,12 +633,8 @@ export function useMintRequestDetail() {
 
           await reloadDetail();
 
-          alert(
-            "検品を完了しました。",
-          );
-        } catch (
-          error: unknown
-        ) {
+          alert("検品を完了しました。");
+        } catch (error: unknown) {
           alert(
             `検品完了に失敗しました: ${getErrorMessage(
               error,
@@ -842,9 +642,7 @@ export function useMintRequestDetail() {
             )}`,
           );
         } finally {
-          setIsCompletingInspection(
-            false,
-          );
+          setIsCompletingInspection(false);
         }
       },
       [
@@ -869,10 +667,7 @@ export function useMintRequestDetail() {
           return;
         }
 
-        setIsSubmittingMintRequest(
-          true,
-        );
-
+        setIsSubmittingMintRequest(true);
         setError(null);
 
         try {
@@ -881,11 +676,8 @@ export function useMintRequestDetail() {
               mintRequestRepo,
               {
                 inspectionBatch,
-
                 selectedTokenBlueprintId,
-
                 productionId,
-
                 scheduledBurnDate,
               },
             );
@@ -895,16 +687,11 @@ export function useMintRequestDetail() {
               result.reason ===
               "validation"
             ) {
-              alert(
-                result.message,
-              );
-
+              alert(result.message);
               return;
             }
 
-            setError(
-              result.message,
-            );
+            setError(result.message);
 
             alert(
               `ミント申請に失敗しました: ${result.message}`,
@@ -919,9 +706,7 @@ export function useMintRequestDetail() {
             return;
           }
 
-          const {
-            queuedResponse,
-          } =
+          const { queuedResponse } =
             result;
 
           await reloadDetail();
@@ -929,18 +714,14 @@ export function useMintRequestDetail() {
           alert(
             `ミント申請を受け付けました（生産ID: ${queuedResponse.productionId} / ミント数: ${totalMintQuantity}）。順次ミント処理を実行します。`,
           );
-        } catch (
-          error: unknown
-        ) {
+        } catch (error: unknown) {
           const message =
             getErrorMessage(
               error,
               "不明なエラーが発生しました",
             );
 
-          setError(
-            message,
-          );
+          setError(message);
 
           alert(
             `ミント申請に失敗しました: ${message}`,
@@ -952,9 +733,7 @@ export function useMintRequestDetail() {
             // エラー表示を優先するため、再取得失敗は握りつぶす。
           }
         } finally {
-          setIsSubmittingMintRequest(
-            false,
-          );
+          setIsSubmittingMintRequest(false);
         }
       },
       [
@@ -987,9 +766,7 @@ export function useMintRequestDetail() {
     React.useMemo(
       () =>
         tokenBlueprintOptions.find(
-          (
-            tokenBlueprint,
-          ) =>
+          (tokenBlueprint) =>
             tokenBlueprint.id ===
             selectedTokenBlueprintId,
         ) ?? null,
@@ -1004,13 +781,9 @@ export function useMintRequestDetail() {
       () =>
         buildTokenBlueprintCardVm({
           selectedTokenBlueprint,
-
           tokenBlueprintIdForPatch,
-
           selectedBrandName,
-
           pbPatch,
-
           brandOptions,
         }),
       [
@@ -1022,24 +795,35 @@ export function useMintRequestDetail() {
       ],
     );
 
-  const {
-    mintCreatedAtLabel,
-    mintCreatedByLabel,
-    mintScheduledBurnDateLabel,
-    mintMintedAtLabel,
-    onChainTxSignature,
-  } =
-    React.useMemo(
-      () =>
-        buildMintLabels({
-          mint,
-          createdByName,
-        }),
-      [
-        mint,
-        createdByName,
-      ],
+  /**
+   * 現行GET /mint/requests responseに
+   * createdAtは含まれていない。
+   */
+  const mintCreatedAtLabel =
+    "（未登録）";
+
+  const mintCreatedByLabel =
+    createdByName ||
+    "（不明）";
+
+  /**
+   * 現行GET /mint/requests responseに
+   * scheduledBurnDateは含まれていない。
+   */
+  const mintScheduledBurnDateLabel =
+    "（未設定）";
+
+  const mintMintedAtLabel =
+    safeDateTimeLabelJa(
+      mintRequestRow?.mintedAt ?? null,
+      "（未完了）",
     );
+
+  /**
+   * 現行GET /mint/requests responseに
+   * onChainTxSignatureは含まれていない。
+   */
+  const onChainTxSignature = "";
 
   return {
     title,
@@ -1047,6 +831,13 @@ export function useMintRequestDetail() {
     error,
 
     inspectionCardData,
+
+    /**
+     * 右カラムでGET /mint/requestsの
+     * management rowを直接参照できるよう返す。
+     */
+    mintRequestRow,
+    mintStatus,
 
     totalMintQuantity,
 

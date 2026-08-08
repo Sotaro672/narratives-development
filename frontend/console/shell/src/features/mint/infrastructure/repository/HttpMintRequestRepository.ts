@@ -7,48 +7,26 @@ import type {
   TokenBlueprintSummary,
 } from "../../application/port/MintRequestRepository";
 
-import type {
-  InspectionBatchDTO,
-} from "../../../../shared/types/inspections";
-
-import type {
-  MintDTO,
-} from "../dto/mint.dto";
-
+import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
+import type { MintRequestManagementRowDTO } from "../dto/mintRequestManagementRow";
 import type {
   ModelVariationForMintDTO,
   ProductBlueprintPatchDTO,
 } from "../dto/mintRequestLocal.dto";
 
-import {
-  fetchBrandsForMintHTTP,
-} from "./http/brands";
-
+import { fetchBrandsForMintHTTP } from "./http/brands";
 import {
   completeInspectionHTTP,
   fetchInspectionByProductionIdHTTP,
 } from "./http/inspections";
-
 import {
-  fetchMintByProductionIdHTTP,
+  fetchMintRequestRowByProductionIdHTTP,
   postMintRequestHTTP,
 } from "./http/mintRequests";
-
-import {
-  fetchModelVariationByIdForMintHTTP,
-} from "./http/modelVariations";
-
-import {
-  fetchProductBlueprintIdByProductionIdHTTP,
-} from "./http/productions";
-
-import {
-  fetchProductBlueprintPatchHTTP,
-} from "./http/productBlueprintPatch";
-
-import {
-  fetchTokenBlueprintsByBrandHTTP,
-} from "./http/tokenBlueprints";
+import { fetchModelVariationByIdForMintHTTP } from "./http/modelVariations";
+import { fetchProductBlueprintIdByProductionIdHTTP } from "./http/productions";
+import { fetchProductBlueprintPatchHTTP } from "./http/productBlueprintPatch";
+import { fetchTokenBlueprintsByBrandHTTP } from "./http/tokenBlueprints";
 
 /**
  * MintRequestRepositoryのHTTP実装。
@@ -64,33 +42,28 @@ import {
  * Application層でエラー処理方針を判断できるよう、
  * HTTPエラーを握りつぶさず呼び出し元へ伝播する。
  */
-export class HttpMintRequestRepository
-  implements MintRequestRepository
-{
+export class HttpMintRequestRepository implements MintRequestRepository {
   /**
    * productionIdに紐づく検品バッチを取得する。
    */
   fetchInspectionByProductionId(
     productionId: string,
   ): Promise<InspectionBatchDTO | null> {
-    return fetchInspectionByProductionIdHTTP(
-      productionId,
-    ).catch(() => null);
+    return fetchInspectionByProductionIdHTTP(productionId).catch(() => null);
   }
 
   /**
-   * productionIdに紐づくMint情報を取得する。
+   * productionIdに紐づくMint管理情報を取得する。
    *
-   * productions、inspections、mintsの
-   * ドキュメントIDは同一であり、
-   * フロントエンドではproductionIdを正とする。
+   * GET /mint/requests?productionIds={productionId}&view=management
+   * の対象rowを正とする。
    */
-  fetchMintByProductionId(
+  fetchMintRequestRowByProductionId(
     productionId: string,
-  ): Promise<MintDTO | null> {
-    return fetchMintByProductionIdHTTP(
-      productionId,
-    ).catch(() => null);
+  ): Promise<MintRequestManagementRowDTO | null> {
+    return fetchMintRequestRowByProductionIdHTTP(productionId).catch(
+      () => null,
+    );
   }
 
   /**
@@ -99,9 +72,9 @@ export class HttpMintRequestRepository
   fetchProductBlueprintIdByProductionId(
     productionId: string,
   ): Promise<string | null> {
-    return fetchProductBlueprintIdByProductionIdHTTP(
-      productionId,
-    ).catch(() => null);
+    return fetchProductBlueprintIdByProductionIdHTTP(productionId).catch(
+      () => null,
+    );
   }
 
   /**
@@ -111,18 +84,16 @@ export class HttpMintRequestRepository
   fetchProductBlueprintPatch(
     productBlueprintId: string,
   ): Promise<ProductBlueprintPatchDTO | null> {
-    return fetchProductBlueprintPatchHTTP(
-      productBlueprintId,
-    ).catch(() => null);
+    return fetchProductBlueprintPatchHTTP(productBlueprintId).catch(
+      () => null,
+    );
   }
 
   /**
    * ミント申請画面で選択可能なブランドを取得する。
    */
   fetchBrandsForMint(): Promise<BrandSummary[]> {
-    return fetchBrandsForMintHTTP().catch(
-      () => [],
-    );
+    return fetchBrandsForMintHTTP().catch(() => []);
   }
 
   /**
@@ -131,9 +102,7 @@ export class HttpMintRequestRepository
   fetchTokenBlueprintsByBrand(
     brandId: string,
   ): Promise<TokenBlueprintSummary[]> {
-    return fetchTokenBlueprintsByBrandHTTP(
-      brandId,
-    ).catch(() => []);
+    return fetchTokenBlueprintsByBrandHTTP(brandId).catch(() => []);
   }
 
   /**
@@ -148,9 +117,7 @@ export class HttpMintRequestRepository
   fetchModelVariationByIdForMint(
     modelId: string,
   ): Promise<ModelVariationForMintDTO | null> {
-    return fetchModelVariationByIdForMintHTTP(
-      modelId,
-    );
+    return fetchModelVariationByIdForMintHTTP(modelId);
   }
 
   /**
@@ -162,9 +129,7 @@ export class HttpMintRequestRepository
   completeInspection(
     productionId: string,
   ): Promise<InspectionBatchDTO | null> {
-    return completeInspectionHTTP(
-      productionId,
-    );
+    return completeInspectionHTTP(productionId);
   }
 
   /**

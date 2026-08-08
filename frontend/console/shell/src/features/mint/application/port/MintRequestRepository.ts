@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/mintRequest/application/port/MintRequestRepository.ts
 
 import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
-import type { MintDTO } from "../../infrastructure/dto/mint.dto";
+import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
 export type BrandSummary = {
@@ -23,12 +23,9 @@ export type TokenBlueprintSummary = {
   symbol: string;
 
   brandId?: string;
-  brandName?: string;
-  companyId?: string;
 
   description?: string;
   minted?: boolean;
-  metadataUri?: string;
 
   iconUrl?: string;
 };
@@ -68,11 +65,14 @@ export interface MintRequestRepository {
   ): Promise<InspectionBatchDTO | null>;
 
   /**
-   * productionIdに紐づくMint情報を取得する。
+   * productionIdに紐づくMint管理情報を取得する。
+   *
+   * GET /mint/requests?productionIds={productionId}&view=management
+   * の対象rowを正とする。
    */
-  fetchMintByProductionId(
+  fetchMintRequestRowByProductionId(
     productionId: string,
-  ): Promise<MintDTO | null>;
+  ): Promise<MintRequestManagementRowDTO | null>;
 
   /**
    * productionIdに紐づくproductBlueprintIdを取得する。

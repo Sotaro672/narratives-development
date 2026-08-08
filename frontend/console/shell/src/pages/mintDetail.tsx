@@ -96,13 +96,15 @@ export default function MintRequestDetail() {
     error,
     inspectionCardData,
 
+    mintRequestRow,
+    mintStatus,
+
     totalMintQuantity,
     onBack,
     handleMint,
     isMinting,
 
     hasMint,
-    isMintCompleted,
 
     productBlueprintCardView,
     pbPatchLoading,
@@ -121,9 +123,6 @@ export default function MintRequestDetail() {
     showBrandSelectorCard,
     showTokenSelectorCard,
 
-    mintProgress,
-    showMintProgress,
-
     showCompleteInspectionButton,
     isCompletingInspection,
     handleCompleteInspection,
@@ -133,26 +132,26 @@ export default function MintRequestDetail() {
 
     tokenBlueprintCardVm,
 
-    mintCreatedAtLabel,
-    mintCreatedByLabel,
-    mintScheduledBurnDateLabel,
     mintMintedAtLabel,
-    onChainTxSignature,
-
-    requestedByName,
   } = useMintRequestDetail();
 
-  const progressPercentage =
-    mintProgress?.percentage ?? 0;
-
-  const failedMintCount =
-    (mintProgress?.failedRetryable ?? 0) +
-    (mintProgress?.failedFatal ?? 0);
-
   const mintStatusLabel =
-    isMintCompleted
+    mintStatus === "MINTED"
       ? "ミント完了"
-      : "ミント中";
+      : mintStatus === "QUEUED"
+        ? "ミント待機中"
+        : mintStatus === "MINTING"
+          ? "ミント中"
+          : mintStatus === "PARTIALLY_MINTED"
+            ? "一部ミント完了"
+            : mintStatus === "FAILED_RETRYABLE"
+              ? "再試行待ち"
+              : mintStatus === "FAILED_FATAL"
+                ? "ミント失敗"
+                : mintStatus === "CREATED"
+                  ? "作成済み"
+                  : mintStatus ||
+                    "（未設定）";
 
   return (
     <PageStyle
@@ -313,7 +312,8 @@ export default function MintRequestDetail() {
 
       {/* 右カラム */}
       <div className="space-y-4 mt-4">
-        {hasMint && (
+        {hasMint &&
+          mintRequestRow && (
           <Card className="pb-select">
             <CardHeader>
               <CardTitle>
@@ -324,123 +324,111 @@ export default function MintRequestDetail() {
             <CardContent>
               <div className="space-y-2 text-sm">
                 <div>
-                  状態:{" "}
+                  生産ID:{" "}
                   <strong>
-                    {mintStatusLabel}
+                    {
+                      mintRequestRow.productionId
+                    }
+                  </strong>
+                </div>
+
+                <div>
+                  商品名:{" "}
+                  <strong>
+                    {
+                      mintRequestRow.productName ||
+                      "（未設定）"
+                    }
+                  </strong>
+                </div>
+
+                <div>
+                  トークン名:{" "}
+                  <strong>
+                    {
+                      mintRequestRow.tokenName ||
+                      "（未設定）"
+                    }
+                  </strong>
+                </div>
+
+                <div>
+                  トークン設計ID:{" "}
+                  <span className="break-all">
+                    {
+                      mintRequestRow
+                        .tokenBlueprintId ||
+                      "（未設定）"
+                    }
+                  </span>
+                </div>
+
+                <div>
+                  生産数:{" "}
+                  <strong>
+                    {
+                      mintRequestRow
+                        .productionQuantity ??
+                      0
+                    }
                   </strong>
                 </div>
 
                 <div>
                   ミント数:{" "}
                   <strong>
-                    {totalMintQuantity}
+                    {
+                      mintRequestRow
+                        .mintQuantity ??
+                      0
+                    }
                   </strong>
                 </div>
 
-                {showMintProgress &&
-                  mintProgress && (
-                    <div className="mint-request-progress">
-                      <div className="mint-request-progress__head">
-                        <span>
-                          ミント進捗
-                        </span>
+                <div>
+                  検品状態:{" "}
+                  <strong>
+                    {
+                      mintRequestRow
+                        .inspectionStatus ||
+                      "（未設定）"
+                    }
+                  </strong>
+                </div>
 
-                        <strong>
-                          {
-                            mintProgress.minted
-                          }{" "}
-                          /{" "}
-                          {
-                            mintProgress.total
-                          }
-                        </strong>
-                      </div>
-
-                      <div
-                        className="mint-request-progress__bar"
-                        role="progressbar"
-                        aria-label="ミント進捗"
-                        aria-valuemin={0}
-                        aria-valuemax={
-                          mintProgress.total
-                        }
-                        aria-valuenow={
-                          mintProgress.minted
-                        }
-                      >
-                        <div
-                          className="mint-request-progress__fill"
-                          style={{
-                            width: `${progressPercentage}%`,
-                          }}
-                        />
-                      </div>
-
-                      <div className="mint-request-progress__meta">
-                        <span>
-                          {progressPercentage}%
-                        </span>
-
-                        <span>
-                          処理中:{" "}
-                          {
-                            mintProgress.minting
-                          }{" "}
-                          / 待機中:{" "}
-                          {
-                            mintProgress.pending
-                          }
-                        </span>
-                      </div>
-
-                      {failedMintCount >
-                        0 && (
-                        <div className="mint-request-progress__error">
-                          失敗:{" "}
-                          {failedMintCount}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                <div>
+                  ミント状態:{" "}
+                  <strong>
+                    {mintStatusLabel}
+                  </strong>
+                </div>
 
                 <div>
                   作成者:{" "}
-                  {mintCreatedByLabel}
-                </div>
-
-                <div>
-                  作成日時:{" "}
-                  {mintCreatedAtLabel}
-                </div>
-
-                <div>
-                  焼却予定日:{" "}
                   {
-                    mintScheduledBurnDateLabel
+                    mintRequestRow
+                      .createdByName ||
+                    mintRequestRow
+                      .createdBy ||
+                    "（不明）"
                   }
                 </div>
 
                 <div>
                   リクエスト者:{" "}
-                  {requestedByName ||
-                    "（不明）"}
+                  {
+                    mintRequestRow
+                      .requestedByName ||
+                    mintRequestRow
+                      .requestedBy ||
+                    "（不明）"
+                  }
                 </div>
 
                 <div>
                   ミント日時:{" "}
                   {mintMintedAtLabel}
                 </div>
-
-                {onChainTxSignature && (
-                  <div className="break-all">
-                    txSignature:{" "}
-                    <span className="font-mono text-xs">
-                      {
-                        onChainTxSignature
-                      }
-                    </span>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>
