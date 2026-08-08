@@ -42,27 +42,11 @@ func (q *BrandDetailQuery) GetByID(
 	}
 
 	return BrandDetailResult{
-		Brand:      b,
-		MemberName: q.resolveMemberName(ctx, b.ManagerID),
+		Brand: b,
+		MemberName: resolveMemberNameByID(
+			ctx,
+			q.memberRepo,
+			b.ManagerID,
+		),
 	}, nil
-}
-
-func (q *BrandDetailQuery) resolveMemberName(
-	ctx context.Context,
-	memberID *string,
-) string {
-	if q == nil || q.memberRepo == nil {
-		return ""
-	}
-
-	if memberID == nil || *memberID == "" {
-		return ""
-	}
-
-	rec, err := q.memberRepo.GetByID(ctx, *memberID)
-	if err != nil {
-		return ""
-	}
-
-	return memberdom.FormatLastFirst(rec.Member.LastName, rec.Member.FirstName)
 }

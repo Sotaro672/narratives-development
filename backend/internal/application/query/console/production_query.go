@@ -3,7 +3,6 @@ package query
 
 import (
 	"context"
-	"time"
 
 	resolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
@@ -40,7 +39,6 @@ type CompanyProductionQueryService struct {
 	pbRepo       ProductBlueprintQueryRepo
 	prodRepo     ProductionQueryRepo
 	nameResolver *resolver.NameResolver
-	now          func() time.Time
 }
 
 func NewCompanyProductionQueryService(
@@ -52,70 +50,97 @@ func NewCompanyProductionQueryService(
 		pbRepo:       pbRepo,
 		prodRepo:     prodRepo,
 		nameResolver: nameResolver,
-		now:          time.Now,
 	}
 }
 
 func (s *CompanyProductionQueryService) ListProductionsByCurrentCompany(
 	ctx context.Context,
 ) ([]productiondom.Production, error) {
+	rows, _, err := s.listProductionsByCurrentCompany(
+		ctx,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return rows, nil
+}
+
+func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(
+	ctx context.Context,
+) (
+	[]productiondom.Production,
+	map[string]productbpdom.ProductBlueprint,
+	error,
+) {
 	cid := usecase.CompanyIDFromContext(ctx)
 	if cid == "" {
-		return nil, productbpdom.ErrInvalidCompanyID
+		return nil, nil, productbpdom.ErrInvalidCompanyID
 	}
 	if s.pbRepo == nil || s.prodRepo == nil {
-		return nil, productbpdom.ErrInternal
+		return nil, nil, productbpdom.ErrInternal
 	}
 
 	productBlueprints, err := s.pbRepo.ListByCompanyID(ctx, cid)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(productBlueprints) == 0 {
-		return []productiondom.Production{}, nil
+		return []productiondom.Production{},
+			map[string]productbpdom.ProductBlueprint{},
+			nil
 	}
 
 	pbIDs := make([]string, 0, len(productBlueprints))
-	set := make(map[string]struct{}, len(productBlueprints))
+	pbByID := make(
+		map[string]productbpdom.ProductBlueprint,
+		len(productBlueprints),
+	)
 
 	for _, pb := range productBlueprints {
 		if pb.ID == "" {
 			continue
 		}
-		if _, ok := set[pb.ID]; ok {
+		if _, ok := pbByID[pb.ID]; ok {
 			continue
 		}
-		set[pb.ID] = struct{}{}
+
+		pbByID[pb.ID] = pb
 		pbIDs = append(pbIDs, pb.ID)
 	}
 
 	if len(pbIDs) == 0 {
-		return []productiondom.Production{}, nil
+		return []productiondom.Production{},
+			map[string]productbpdom.ProductBlueprint{},
+			nil
 	}
 
 	rows, err := s.prodRepo.ListByProductBlueprintID(ctx, pbIDs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(rows) == 0 {
-		return []productiondom.Production{}, nil
+		return []productiondom.Production{}, pbByID, nil
 	}
 
 	out := make([]productiondom.Production, 0, len(rows))
 	for _, p := range rows {
-		if _, ok := set[p.ProductBlueprintID]; !ok {
+		if _, ok := pbByID[p.ProductBlueprintID]; !ok {
 			continue
 		}
+
 		out = append(out, p)
 	}
 
-	return out, nil
+	return out, pbByID, nil
 }
 
 func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 	ctx context.Context,
 ) ([]ProductionListItemDTO, error) {
-	list, err := s.ListProductionsByCurrentCompany(ctx)
+	list, pbByID, err := s.listProductionsByCurrentCompany(
+		ctx,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -123,13 +148,17 @@ func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 		return []ProductionListItemDTO{}, nil
 	}
 
-	pbBrandCache := map[string]string{}
 	brandNameCache := map[string]string{}
 
 	out := make([]ProductionListItemDTO, 0, len(list))
 
 	for _, p := range list {
-		item := s.toProductionListItemDTO(ctx, p, pbBrandCache, brandNameCache)
+		item := s.toProductionListItemDTO(
+			ctx,
+			p,
+			pbByID,
+			brandNameCache,
+		)
 		out = append(out, item)
 	}
 
@@ -140,60 +169,105 @@ func (s *CompanyProductionQueryService) GetProductionByIDForCurrentCompany(
 	ctx context.Context,
 	id string,
 ) (productiondom.Production, error) {
+	p, _, err := s.getProductionByIDForCurrentCompany(
+		ctx,
+		id,
+	)
+	if err != nil {
+		return productiondom.Production{}, err
+	}
+
+	return p, nil
+}
+
+func (s *CompanyProductionQueryService) getProductionByIDForCurrentCompany(
+	ctx context.Context,
+	id string,
+) (
+	productiondom.Production,
+	productbpdom.ProductBlueprint,
+	error,
+) {
 	cid := usecase.CompanyIDFromContext(ctx)
 	if cid == "" {
-		return productiondom.Production{}, productbpdom.ErrInvalidCompanyID
+		return productiondom.Production{},
+			productbpdom.ProductBlueprint{},
+			productbpdom.ErrInvalidCompanyID
 	}
 	if s.pbRepo == nil || s.prodRepo == nil {
-		return productiondom.Production{}, productbpdom.ErrInternal
+		return productiondom.Production{},
+			productbpdom.ProductBlueprint{},
+			productbpdom.ErrInternal
 	}
 	if id == "" {
-		return productiondom.Production{}, productiondom.ErrInvalidID
+		return productiondom.Production{},
+			productbpdom.ProductBlueprint{},
+			productiondom.ErrInvalidID
 	}
 
 	p, err := s.prodRepo.GetByID(ctx, id)
 	if err != nil {
-		return productiondom.Production{}, err
+		return productiondom.Production{},
+			productbpdom.ProductBlueprint{},
+			err
 	}
 	if p == nil {
-		return productiondom.Production{}, productiondom.ErrNotFound
+		return productiondom.Production{},
+			productbpdom.ProductBlueprint{},
+			productiondom.ErrNotFound
 	}
 
 	if p.ProductBlueprintID == "" {
-		return productiondom.Production{}, productiondom.ErrInvalidProductBlueprintID
+		return productiondom.Production{},
+			productbpdom.ProductBlueprint{},
+			productiondom.ErrInvalidProductBlueprintID
 	}
 
 	pb, err := s.pbRepo.GetByID(ctx, p.ProductBlueprintID)
 	if err != nil {
-		return productiondom.Production{}, err
+		return productiondom.Production{},
+			productbpdom.ProductBlueprint{},
+			err
 	}
 
 	if pb.CompanyID != cid {
-		return productiondom.Production{}, productiondom.ErrNotFound
+		return productiondom.Production{},
+			productbpdom.ProductBlueprint{},
+			productiondom.ErrNotFound
 	}
 
-	return *p, nil
+	return *p, pb, nil
 }
 
 func (s *CompanyProductionQueryService) GetProductionWithAssigneeNameByID(
 	ctx context.Context,
 	id string,
 ) (ProductionListItemDTO, error) {
-	p, err := s.GetProductionByIDForCurrentCompany(ctx, id)
+	p, pb, err := s.getProductionByIDForCurrentCompany(
+		ctx,
+		id,
+	)
 	if err != nil {
 		return ProductionListItemDTO{}, err
 	}
 
-	pbBrandCache := map[string]string{}
+	pbByID := map[string]productbpdom.ProductBlueprint{
+		pb.ID: pb,
+	}
 	brandNameCache := map[string]string{}
 
-	return s.toProductionListItemDTO(ctx, p, pbBrandCache, brandNameCache), nil
+	return s.toProductionListItemDTO(
+		ctx,
+		p,
+		pbByID,
+		brandNameCache,
+	), nil
 }
 
 func (s *CompanyProductionQueryService) toProductionListItemDTO(
 	ctx context.Context,
 	p productiondom.Production,
-	pbBrandCache map[string]string,
+	pbByID map[string]productbpdom.ProductBlueprint,
 	brandNameCache map[string]string,
 ) ProductionListItemDTO {
 	assigneeName := ""
@@ -205,7 +279,6 @@ func (s *CompanyProductionQueryService) toProductionListItemDTO(
 	printedByName := ""
 
 	if s.nameResolver != nil {
-		productName = s.nameResolver.ResolveProductName(ctx, p.ProductBlueprintID)
 		assigneeName = s.nameResolver.ResolveMemberName(ctx, p.AssigneeID)
 		createdByName = s.nameResolver.ResolveCreatedByName(ctx, p.CreatedBy)
 		updatedByName = s.nameResolver.ResolveUpdatedByName(ctx, p.UpdatedBy)
@@ -213,15 +286,10 @@ func (s *CompanyProductionQueryService) toProductionListItemDTO(
 	}
 
 	pbID := p.ProductBlueprintID
-	if pbID != "" && s.pbRepo != nil {
-		if cached, ok := pbBrandCache[pbID]; ok {
-			brandID = cached
-		} else {
-			pb, err := s.pbRepo.GetByID(ctx, pbID)
-			if err == nil {
-				brandID = extractBrandIDFromProductBlueprint(pb)
-				pbBrandCache[pbID] = brandID
-			}
+	if pbID != "" {
+		if pb, ok := pbByID[pbID]; ok {
+			productName = pb.ProductName
+			brandID = pb.BrandID
 		}
 	}
 
@@ -253,8 +321,4 @@ func (s *CompanyProductionQueryService) toProductionListItemDTO(
 		UpdatedByName: updatedByName,
 		PrintedByName: printedByName,
 	}
-}
-
-func extractBrandIDFromProductBlueprint(pb productbpdom.ProductBlueprint) string {
-	return pb.BrandID
 }

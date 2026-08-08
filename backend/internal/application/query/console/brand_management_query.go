@@ -66,8 +66,12 @@ func (q *BrandManagementQuery) toPageResult(
 	items := make([]BrandManagementItem, 0, len(result.Items))
 	for _, b := range result.Items {
 		items = append(items, BrandManagementItem{
-			Brand:      b,
-			MemberName: q.resolveMemberName(ctx, b.ManagerID),
+			Brand: b,
+			MemberName: resolveMemberNameByID(
+				ctx,
+				q.memberRepo,
+				b.ManagerID,
+			),
 		})
 	}
 
@@ -78,24 +82,4 @@ func (q *BrandManagementQuery) toPageResult(
 		PerPage:    result.PerPage,
 		TotalPages: result.TotalPages,
 	}
-}
-
-func (q *BrandManagementQuery) resolveMemberName(
-	ctx context.Context,
-	memberID *string,
-) string {
-	if q == nil || q.memberRepo == nil {
-		return ""
-	}
-
-	if memberID == nil || *memberID == "" {
-		return ""
-	}
-
-	rec, err := q.memberRepo.GetByID(ctx, *memberID)
-	if err != nil {
-		return ""
-	}
-
-	return memberdom.FormatLastFirst(rec.Member.LastName, rec.Member.FirstName)
 }

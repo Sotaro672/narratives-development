@@ -60,99 +60,6 @@ func (q *TokenBlueprintDetailQuery) GetByID(
 	return tb, names, nil
 }
 
-func (q *TokenBlueprintDetailQuery) ResolveMemberNames(
-	ctx context.Context,
-	ids []string,
-) (map[string]string, error) {
-	if q == nil {
-		return nil, fmt.Errorf("tokenBlueprint detail query is nil")
-	}
-
-	out := make(map[string]string, len(ids))
-
-	seen := make(map[string]struct{}, len(ids))
-	uniq := make([]string, 0, len(ids))
-
-	for _, id := range ids {
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-
-		seen[id] = struct{}{}
-		uniq = append(uniq, id)
-	}
-
-	if q.memberRepo == nil {
-		for _, id := range uniq {
-			out[id] = ""
-		}
-		return out, nil
-	}
-
-	for _, id := range uniq {
-		rec, err := q.memberRepo.GetByID(ctx, id)
-		if err != nil {
-			out[id] = ""
-			continue
-		}
-
-		out[id] = memberdom.FormatLastFirst(
-			rec.Member.LastName,
-			rec.Member.FirstName,
-		)
-	}
-
-	return out, nil
-}
-
-func (q *TokenBlueprintDetailQuery) ResolveBrandNames(
-	ctx context.Context,
-	ids []string,
-) (map[string]string, error) {
-	if q == nil {
-		return nil, fmt.Errorf("tokenBlueprint detail query is nil")
-	}
-
-	out := make(map[string]string, len(ids))
-
-	seen := make(map[string]struct{}, len(ids))
-	uniq := make([]string, 0, len(ids))
-
-	for _, id := range ids {
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-
-		seen[id] = struct{}{}
-		uniq = append(uniq, id)
-	}
-
-	if q.brandRepo == nil {
-		for _, id := range uniq {
-			out[id] = ""
-		}
-		return out, nil
-	}
-
-	for _, id := range uniq {
-		brand, err := q.brandRepo.GetByID(ctx, id)
-		if err != nil {
-			out[id] = ""
-			continue
-		}
-
-		out[id] = brand.Name
-	}
-
-	return out, nil
-}
-
 func (q *TokenBlueprintDetailQuery) resolveNamesForTokenBlueprint(
 	ctx context.Context,
 	tb *tbdom.TokenBlueprint,
@@ -161,15 +68,23 @@ func (q *TokenBlueprintDetailQuery) resolveNamesForTokenBlueprint(
 		return TokenBlueprintMemberNames{}
 	}
 
-	memberNameByID, _ := q.ResolveMemberNames(ctx, []string{
-		tb.AssigneeID,
-		tb.CreatedBy,
-		tb.UpdatedBy,
-	})
+	memberNameByID := resolveMemberNamesByID(
+		ctx,
+		q.memberRepo,
+		[]string{
+			tb.AssigneeID,
+			tb.CreatedBy,
+			tb.UpdatedBy,
+		},
+	)
 
-	brandNameByID, _ := q.ResolveBrandNames(ctx, []string{
-		tb.BrandID,
-	})
+	brandNameByID := resolveBrandNamesByID(
+		ctx,
+		q.brandRepo,
+		[]string{
+			tb.BrandID,
+		},
+	)
 
 	return TokenBlueprintMemberNames{
 		BrandName:     brandNameByID[tb.BrandID],

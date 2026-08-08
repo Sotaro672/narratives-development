@@ -17,8 +17,12 @@ package query
 //   - company-bound inventory filtering は OrderManagementQuery 側で item 単位に適用する。
 //
 // ✅ 重要:
-//   - productName/tokenName は best-effort。
-//     pbName/tbName が DI されていれば埋める、されていなければ空で返す（500にしない）。
+//   - productName/category/categoryFields は best-effort。
+//     productBlueprintResolver が DI されていれば productBlueprintId->ProductBlueprint を1回だけ取得し、
+//     productName と category snapshot/categoryFields を埋める。
+//     なければ空で返す（500にしない）。
+//   - tokenName は best-effort。
+//     tbName が DI されていれば埋める、されていなければ空で返す（500にしない）。
 //   - listReadableId も best-effort。
 //     listReadable が DI されていれば listId->readableId を引いて埋める。なければ空で返す（500にしない）。
 //   - avatarName も best-effort。
@@ -26,9 +30,6 @@ package query
 //     なければ空で返す（500にしない）。
 //   - model fields も best-effort。
 //     modelResolver が DI されていれば modelId(variationID)->apparel/alcohol 表示情報を埋める。なければ空で返す（500にしない）。
-//   - category/categoryFields も best-effort。
-//     productBlueprintResolver が DI されていれば productBlueprintId->category snapshot/categoryFields を埋める。
-//     なければ空で返す（500にしない）。
 //
 import (
 	"context"
@@ -74,12 +75,7 @@ type InventoryBlueprintResolver interface {
 	ResolveBlueprintIDsByInventoryID(ctx context.Context, inventoryID string) (productBlueprintID string, tokenBlueprintID string, err error)
 }
 
-// ProductBlueprintNameResolver resolves productName from productBlueprintId.
-type ProductBlueprintNameResolver interface {
-	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
-}
-
-// ProductBlueprintResolver resolves category snapshot/categoryFields from productBlueprintId.
+// ProductBlueprintResolver resolves productName/category snapshot/categoryFields from productBlueprintId.
 type ProductBlueprintResolver interface {
 	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
@@ -166,7 +162,6 @@ type OrderManagementQuery struct {
 	invRows      InventoryRowsLister        // REQUIRED
 	invBlueprint InventoryBlueprintResolver // REQUIRED
 
-	pbName             ProductBlueprintNameResolver
 	productBlueprint   ProductBlueprintResolver
 	tbName             TokenBlueprintNameResolver
 	listReadable       ListReadableIDResolver
@@ -179,7 +174,6 @@ type NewOrderManagementQueryParams struct {
 	InvRows      InventoryRowsLister        // REQUIRED
 	InvBlueprint InventoryBlueprintResolver // REQUIRED
 
-	PBName           ProductBlueprintNameResolver
 	ProductBlueprint ProductBlueprintResolver
 	TBName           TokenBlueprintNameResolver
 	ListReadable     ListReadableIDResolver
@@ -192,7 +186,6 @@ func NewOrderManagementQuery(p NewOrderManagementQueryParams) *OrderManagementQu
 		lister:             p.Lister,
 		invRows:            p.InvRows,
 		invBlueprint:       p.InvBlueprint,
-		pbName:             p.PBName,
 		productBlueprint:   p.ProductBlueprint,
 		tbName:             p.TBName,
 		listReadable:       p.ListReadable,
@@ -242,7 +235,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 	}
 	blueprintCache := map[string]bt{}
 
-	pbNameCache := map[string]string{}
 	productBlueprintCache := map[string]pbdom.ProductBlueprint{}
 	tbNameCache := map[string]string{}
 	listReadableCache := map[string]string{}
@@ -253,6 +245,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		if invID == "" {
 			return "", "", invdom.ErrInvalidMintID
 		}
+
 		if v, ok := blueprintCache[invID]; ok {
 			return v.pb, v.tb, nil
 		}
@@ -266,28 +259,11 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		return pbID, tbID, nil
 	}
 
-	resolveProductName := func(pbID string) (string, error) {
-		if q.pbName == nil || pbID == "" {
-			return "", nil
-		}
-		if v, ok := pbNameCache[pbID]; ok {
-			return v, nil
-		}
-
-		pb, e := q.pbName.GetByID(ctx, pbID)
-		if e != nil {
-			return "", e
-		}
-
-		name := pb.ProductName
-		pbNameCache[pbID] = name
-		return name, nil
-	}
-
 	resolveProductBlueprint := func(pbID string) (pbdom.ProductBlueprint, error) {
 		if q.productBlueprint == nil || pbID == "" {
 			return pbdom.ProductBlueprint{}, nil
 		}
+
 		if v, ok := productBlueprintCache[pbID]; ok {
 			return v, nil
 		}
@@ -305,6 +281,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		if q.tbName == nil || tbID == "" {
 			return "", nil
 		}
+
 		if v, ok := tbNameCache[tbID]; ok {
 			return v, nil
 		}
@@ -327,6 +304,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		if q.listReadable == nil || listID == "" {
 			return "", nil
 		}
+
 		if v, ok := listReadableCache[listID]; ok {
 			return v, nil
 		}
@@ -344,6 +322,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		if q.avatarNameResolver == nil || avatarID == "" {
 			return "", nil
 		}
+
 		if v, ok := avatarNameCache[avatarID]; ok {
 			return v, nil
 		}
@@ -362,6 +341,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		if q.modelResolver == nil || modelID == "" {
 			return resolver.ModelResolved{}
 		}
+
 		if v, ok := modelCache[modelID]; ok {
 			return v
 		}
@@ -429,6 +409,8 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					return common.PageResult[OrderItemInventoryRowDTO]{}, e2
 				}
 
+				productName := ""
+
 				categoryID := ""
 				categoryCode := ""
 				categoryNameJa := ""
@@ -443,6 +425,8 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 						log.Printf("[OrderManagementQuery] ERROR ProductBlueprint.GetByID failed productBlueprintId=%q err=%v", pbID, ePB)
 						return common.PageResult[OrderItemInventoryRowDTO]{}, ePB
 					}
+
+					productName = pb.ProductName
 
 					categoryID = pb.ProductBlueprintCategory.ID
 					categoryCode = pb.ProductBlueprintCategory.Code
@@ -463,16 +447,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 							categoryFields[k] = v
 						}
 					}
-				}
-
-				productName := ""
-				if pbID != "" {
-					n, e3 := resolveProductName(pbID)
-					if e3 != nil {
-						log.Printf("[OrderManagementQuery] ERROR ProductBlueprint.GetByID failed productBlueprintId=%q err=%v", pbID, e3)
-						return common.PageResult[OrderItemInventoryRowDTO]{}, e3
-					}
-					productName = n
 				}
 
 				tokenName := ""

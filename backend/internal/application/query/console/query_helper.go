@@ -47,7 +47,10 @@ func AllowedInventoryIDsFromContext(
 	return ids, set, nil
 }
 
-func AllowedInventoryIDSetFromContext(ctx context.Context, invRows InventoryRowsLister) (map[string]struct{}, error) {
+func AllowedInventoryIDSetFromContext(
+	ctx context.Context,
+	invRows InventoryRowsLister,
+) (map[string]struct{}, error) {
 	_, set, err := AllowedInventoryIDsFromContext(ctx, invRows)
 	return set, err
 }
@@ -212,12 +215,4 @@ func normalizeStringSlice(values []string) []string {
 	}
 
 	return result
-}
-
-func int64PtrValue(value *int64) int64 {
-	if value == nil {
-		return 0
-	}
-
-	return *value
 }

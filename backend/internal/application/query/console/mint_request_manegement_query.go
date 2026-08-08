@@ -279,34 +279,11 @@ func (s *MintRequestQueryService) listMintsByProductionIDs(
 		return nil, ErrMintRequestQueryServiceNotConfigured
 	}
 
-	seen := make(
-		map[string]struct{},
-		len(productionIDs),
-	)
-	ids := make(
-		[]string,
-		0,
-		len(productionIDs),
-	)
-
-	for _, id := range productionIDs {
-		if id == "" {
-			continue
-		}
-
-		if _, ok := seen[id]; ok {
-			continue
-		}
-
-		seen[id] = struct{}{}
-		ids = append(ids, id)
-	}
+	ids := uniqueNonEmptySortedIDs(productionIDs)
 
 	if len(ids) == 0 {
 		return map[string]mintdom.Mint{}, nil
 	}
-
-	sort.Strings(ids)
 
 	out := make(
 		map[string]mintdom.Mint,
@@ -343,34 +320,11 @@ func (s *MintRequestQueryService) listInspectionBatchesByProductionIDs(
 		return nil, ErrMintRequestQueryServiceNotConfigured
 	}
 
-	seen := make(
-		map[string]struct{},
-		len(productionIDs),
-	)
-	ids := make(
-		[]string,
-		0,
-		len(productionIDs),
-	)
-
-	for _, id := range productionIDs {
-		if id == "" {
-			continue
-		}
-
-		if _, ok := seen[id]; ok {
-			continue
-		}
-
-		seen[id] = struct{}{}
-		ids = append(ids, id)
-	}
+	ids := uniqueNonEmptySortedIDs(productionIDs)
 
 	if len(ids) == 0 {
 		return []inspectiondom.InspectionBatch{}, nil
 	}
-
-	sort.Strings(ids)
 
 	out := make(
 		[]inspectiondom.InspectionBatch,
@@ -399,6 +353,16 @@ func (s *MintRequestQueryService) listInspectionBatchesByProductionIDs(
 	}
 
 	return out, nil
+}
+
+func uniqueNonEmptySortedIDs(
+	ids []string,
+) []string {
+	out := uniqueNonEmptyIDs(ids)
+
+	sort.Strings(out)
+
+	return out
 }
 
 func makeIDSet(

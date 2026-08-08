@@ -171,7 +171,6 @@ func NewContainer(
 				Lister:           repos.orderConsoleLister,
 				InvRows:          q.inventoryManagementQuery,
 				InvBlueprint:     invBlueprint,
-				PBName:           repos.productBlueprintRepo,
 				ProductBlueprint: repos.productBlueprintRepo,
 				TBName:           repos.tokenBlueprintRepo,
 				AvatarName:       repos.avatarRepo,

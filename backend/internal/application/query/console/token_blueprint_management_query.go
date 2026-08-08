@@ -63,39 +63,6 @@ func (q *TokenBlueprintManagementQuery) ListByCompanyID(
 	return q.attachResolvedNames(ctx, result)
 }
 
-func (q *TokenBlueprintManagementQuery) ResolveTokenBlueprintNames(
-	ctx context.Context,
-	ids []string,
-) (map[string]string, error) {
-	if q == nil || q.tbRepo == nil {
-		return nil, fmt.Errorf("tokenBlueprint management query/repo is nil")
-	}
-
-	result := make(map[string]string, len(ids))
-
-	seen := make(map[string]struct{}, len(ids))
-	for _, id := range ids {
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-
-		seen[id] = struct{}{}
-
-		tb, err := q.tbRepo.GetByID(ctx, id)
-		if err != nil || tb == nil {
-			result[id] = ""
-			continue
-		}
-
-		result[id] = tb.Name
-	}
-
-	return result, nil
-}
-
 func (q *TokenBlueprintManagementQuery) attachResolvedNames(
 	ctx context.Context,
 	result domcommon.PageResult[tbdom.TokenBlueprint],
@@ -113,8 +80,16 @@ func (q *TokenBlueprintManagementQuery) attachResolvedNames(
 		brandIDs = append(brandIDs, result.Items[i].BrandID)
 	}
 
-	nameByMemberID := q.resolveMemberNames(ctx, memberIDs)
-	nameByBrandID := q.resolveBrandNames(ctx, brandIDs)
+	nameByMemberID := resolveMemberNamesByID(
+		ctx,
+		q.memberRepo,
+		memberIDs,
+	)
+	nameByBrandID := resolveBrandNamesByID(
+		ctx,
+		q.brandRepo,
+		brandIDs,
+	)
 
 	items := make([]TokenBlueprintWithMemberNames, 0, len(result.Items))
 	for i := range result.Items {
@@ -143,89 +118,4 @@ func (q *TokenBlueprintManagementQuery) attachResolvedNames(
 		Page:       result.Page,
 		PerPage:    result.PerPage,
 	}, nil
-}
-
-func (q *TokenBlueprintManagementQuery) resolveMemberNames(
-	ctx context.Context,
-	ids []string,
-) map[string]string {
-	out := make(map[string]string, len(ids))
-
-	seen := make(map[string]struct{}, len(ids))
-	uniq := make([]string, 0, len(ids))
-
-	for _, id := range ids {
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-
-		seen[id] = struct{}{}
-		uniq = append(uniq, id)
-	}
-
-	if q.memberRepo == nil {
-		for _, id := range uniq {
-			out[id] = ""
-		}
-		return out
-	}
-
-	for _, id := range uniq {
-		rec, err := q.memberRepo.GetByID(ctx, id)
-		if err != nil {
-			out[id] = ""
-			continue
-		}
-
-		out[id] = memberdom.FormatLastFirst(
-			rec.Member.LastName,
-			rec.Member.FirstName,
-		)
-	}
-
-	return out
-}
-
-func (q *TokenBlueprintManagementQuery) resolveBrandNames(
-	ctx context.Context,
-	ids []string,
-) map[string]string {
-	out := make(map[string]string, len(ids))
-
-	seen := make(map[string]struct{}, len(ids))
-	uniq := make([]string, 0, len(ids))
-
-	for _, id := range ids {
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-
-		seen[id] = struct{}{}
-		uniq = append(uniq, id)
-	}
-
-	if q.brandRepo == nil {
-		for _, id := range uniq {
-			out[id] = ""
-		}
-		return out
-	}
-
-	for _, id := range uniq {
-		brand, err := q.brandRepo.GetByID(ctx, id)
-		if err != nil {
-			out[id] = ""
-			continue
-		}
-
-		out[id] = brand.Name
-	}
-
-	return out
 }

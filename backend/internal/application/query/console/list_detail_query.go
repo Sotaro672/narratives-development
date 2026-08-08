@@ -6,7 +6,7 @@
 // - DI 済み依存（ports）を保持する
 // - listID を入力に listDetail.tsx 用の ListDetailDTO を生成する
 // - ListDetailDTO の priceRows / stock / model attributes を生成する
-// - ProductBlueprint.GetByID から displayOrder を抽出する
+// - 取得済み ProductBlueprint.ModelRefs から displayOrder を抽出する
 //
 // Firebase Storage 移行後:
 // - backend は GCS signed URL / GCS object を扱わない
@@ -23,6 +23,7 @@ import (
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
 	listdom "narratives/internal/domain/list"
+	pbdom "narratives/internal/domain/productBlueprint"
 )
 
 // ============================================================
@@ -120,8 +121,21 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 		return querydto.ListDetailDTO{}, listdom.ErrListImageNotFound
 	}
 
-	// ---- names ----
+	// ---- product blueprint ----
 	productName := ""
+	productBrandID := ""
+	displayOrderByModel := map[string]*int{}
+
+	if pbID != "" && q.pbGetter != nil {
+		pb, e := q.pbGetter.GetByID(ctx, pbID)
+		if e == nil {
+			productName = pb.ProductName
+			productBrandID = pb.BrandID
+			displayOrderByModel = buildDisplayOrderByModelID(pb)
+		}
+	}
+
+	// ---- names ----
 	tokenName := ""
 	assigneeName := ""
 	createdByName := ""
@@ -133,7 +147,7 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 	updatedByName := ""
 
 	if q.nameResolver != nil {
-		if pbID != "" {
+		if productName == "" && pbID != "" && q.pbGetter == nil {
 			productName = q.nameResolver.ResolveProductName(ctx, pbID)
 		}
 		if tbID != "" {
@@ -161,15 +175,7 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 	}
 
 	// ---- brand ----
-	productBrandID := ""
 	tokenBrandID := ""
-
-	if pbID != "" && q.pbGetter != nil {
-		pb, e := q.pbGetter.GetByID(ctx, pbID)
-		if e == nil {
-			productBrandID = pb.BrandID
-		}
-	}
 
 	if tbID != "" && q.tbGetter != nil {
 		tb, e := q.tbGetter.GetByID(ctx, tbID)
@@ -216,7 +222,7 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 	// list の price rows を DTO に復元する。
 	// stock は inventory detail が取れる場合は inventory を優先し、
 	// なければ stock=0 とする。
-	priceRows, totalStock, priceRowsMeta := q.buildDetailPriceRows(ctx, it, invID, pbID)
+	priceRows, totalStock, priceRowsMeta := q.buildDetailPriceRows(ctx, it, invID, displayOrderByModel)
 	if priceRowsMeta != "" {
 		log.Printf("[ListDetailQuery] priceRows listID=%q %s", listID, priceRowsMeta)
 	}
@@ -358,7 +364,7 @@ func buildImageURLsFromImages(images []querydto.ListImageDTO) []string {
 // 責任:
 // - listdom.List の価格行を抽出し、DTO(ListDetailPriceRowDTO)へ変換する
 // - 在庫情報は InventoryDetailGetter から優先的に取得し、なければ stock=0 とする
-// - displayOrder は ProductBlueprint.GetByID(ModelRefs) から付与する（取得できない場合は nil）
+// - displayOrder は取得済み ProductBlueprint.ModelRefs から付与する（取得できない場合は nil）
 // - model 情報は resolver.ModelResolved を使って解決する
 //   - apparel: kind / modelNumber / size / color / rgb
 //   - alcohol: kind / modelNumber / volumeValue / volumeUnit
@@ -366,14 +372,12 @@ func (q *ListDetailQuery) buildDetailPriceRows(
 	ctx context.Context,
 	it listdom.List,
 	inventoryID string,
-	productBlueprintID string,
+	displayOrderByModel map[string]*int,
 ) ([]querydto.ListDetailPriceRowDTO, int, string) {
 	rows := it.Prices
 	if len(rows) == 0 {
 		return []querydto.ListDetailPriceRowDTO{}, 0, "rows=0"
 	}
-
-	displayOrderByModel := q.buildDisplayOrderByModelID(ctx, productBlueprintID)
 
 	stockByModel := map[string]int{}
 	attrByModel := map[string]resolver.ModelResolved{}
@@ -540,31 +544,16 @@ func applyModelResolvedToListDetailPriceRow(
 // Display order helpers
 // ============================================================
 
-// buildDisplayOrderByModelID extracts displayOrder from ProductBlueprint.
+// buildDisplayOrderByModelID extracts displayOrder from an already loaded ProductBlueprint.
 //
 // 責任:
 // - ProductBlueprint.ModelRefs の正規構造から modelID/displayOrder を読み取る
 // - modelID -> *displayOrder の辞書を生成する
 // - displayOrder=0 は未設定として nil にする
-func (q *ListDetailQuery) buildDisplayOrderByModelID(
-	ctx context.Context,
-	productBlueprintID string,
+func buildDisplayOrderByModelID(
+	pb pbdom.ProductBlueprint,
 ) map[string]*int {
 	out := map[string]*int{}
-
-	if q == nil || q.pbGetter == nil {
-		return out
-	}
-
-	pbID := productBlueprintID
-	if pbID == "" {
-		return out
-	}
-
-	pb, err := q.pbGetter.GetByID(ctx, pbID)
-	if err != nil {
-		return out
-	}
 
 	if len(pb.ModelRefs) == 0 {
 		return out

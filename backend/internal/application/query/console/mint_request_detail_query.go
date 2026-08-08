@@ -51,78 +51,10 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		return nil, err
 	}
 
-	type inspectionItemLite struct {
-		ProductID        string `json:"productId,omitempty"`
-		ModelID          string `json:"modelId"`
-		InspectionResult string `json:"inspectionResult"`
-		RGB              *int   `json:"rgb,omitempty"`
-		Size             string `json:"size,omitempty"`
-		Color            string `json:"color,omitempty"`
-		ModelNumber      string `json:"modelNumber,omitempty"`
-		InspectedBy      string `json:"inspectedBy,omitempty"`
-		InspectedAt      string `json:"inspectedAt,omitempty"`
-	}
-
-	type inspectionBatchLite struct {
-		ProductionID  string               `json:"productionId"`
-		Status        string               `json:"status"`
-		TotalPassed   int                  `json:"totalPassed"`
-		TotalQuantity int                  `json:"totalQuantity"`
-		Inspections   []inspectionItemLite `json:"inspections"`
-	}
-
-	inspectionBatches := make(
-		[]inspectionBatchLite,
-		0,
-		len(batches),
-	)
-
-	for _, b := range batches {
-		row := inspectionBatchLite{
-			ProductionID:  b.ProductionID,
-			Status:        string(b.Status),
-			TotalPassed:   b.TotalPassed,
-			TotalQuantity: len(b.Inspections),
-			Inspections: make(
-				[]inspectionItemLite,
-				0,
-				len(b.Inspections),
-			),
-		}
-
-		for _, it := range b.Inspections {
-			row.Inspections = append(
-				row.Inspections,
-				inspectionItemLite{
-					ProductID: it.ProductID,
-					ModelID:   it.ModelID,
-					InspectionResult: inspectionResultString(
-						it.InspectionResult,
-					),
-					RGB:         nil,
-					Size:        "",
-					Color:       "",
-					ModelNumber: "",
-					InspectedBy: stringPtrValue(
-						it.InspectedBy,
-					),
-					InspectedAt: timePtrString(
-						it.InspectedAt,
-					),
-				},
-			)
-		}
-
-		inspectionBatches = append(
-			inspectionBatches,
-			row,
-		)
-	}
-
-	var insp inspectionBatchLite
+	var insp inspectiondom.InspectionBatch
 	hasInsp := false
 
-	for _, b := range inspectionBatches {
+	for _, b := range batches {
 		if b.ProductionID == pid {
 			insp = b
 			hasInsp = true
@@ -155,20 +87,32 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		mintQty = insp.TotalPassed
 
 		if insp.Status != "" {
-			inspStatus = insp.Status
+			inspStatus = string(insp.Status)
 		}
+
+		inspectionItems = make(
+			[]querydto.InspectionItemDTO,
+			0,
+			len(insp.Inspections),
+		)
 
 		for _, it := range insp.Inspections {
 			row := querydto.InspectionItemDTO{
-				ProductID:        it.ProductID,
-				ModelID:          it.ModelID,
-				ModelNumber:      it.ModelNumber,
-				Size:             it.Size,
-				Color:            it.Color,
-				RGB:              it.RGB,
-				InspectionResult: it.InspectionResult,
-				InspectedBy:      it.InspectedBy,
-				InspectedAt:      it.InspectedAt,
+				ProductID:   it.ProductID,
+				ModelID:     it.ModelID,
+				ModelNumber: "",
+				Size:        "",
+				Color:       "",
+				RGB:         nil,
+				InspectionResult: inspectionResultString(
+					it.InspectionResult,
+				),
+				InspectedBy: stringPtrValue(
+					it.InspectedBy,
+				),
+				InspectedAt: timePtrString(
+					it.InspectedAt,
+				),
 			}
 
 			inspectionItems = append(
@@ -262,7 +206,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	if hasInsp {
 		inspSummary = &querydto.InspectionSummaryDTO{
 			ProductionID: insp.ProductionID,
-			Status:       insp.Status,
+			Status:       string(insp.Status),
 			TotalPassed:  insp.TotalPassed,
 			Quantity:     prodQty,
 			ProductName:  "",
