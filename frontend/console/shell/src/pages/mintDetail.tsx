@@ -324,46 +324,6 @@ export default function MintRequestDetail() {
             <CardContent>
               <div className="space-y-2 text-sm">
                 <div>
-                  生産ID:{" "}
-                  <strong>
-                    {
-                      mintRequestRow.productionId
-                    }
-                  </strong>
-                </div>
-
-                <div>
-                  商品名:{" "}
-                  <strong>
-                    {
-                      mintRequestRow.productName ||
-                      "（未設定）"
-                    }
-                  </strong>
-                </div>
-
-                <div>
-                  トークン名:{" "}
-                  <strong>
-                    {
-                      mintRequestRow.tokenName ||
-                      "（未設定）"
-                    }
-                  </strong>
-                </div>
-
-                <div>
-                  トークン設計ID:{" "}
-                  <span className="break-all">
-                    {
-                      mintRequestRow
-                        .tokenBlueprintId ||
-                      "（未設定）"
-                    }
-                  </span>
-                </div>
-
-                <div>
                   生産数:{" "}
                   <strong>
                     {
