@@ -28,9 +28,7 @@ type ModelRepositoryFS struct {
 	Client *firestore.Client
 }
 
-func NewModelRepositoryFS(
-	client *firestore.Client,
-) *ModelRepositoryFS {
+func NewModelRepositoryFS(client *firestore.Client) *ModelRepositoryFS {
 	return &ModelRepositoryFS{
 		Client: client,
 	}
@@ -44,10 +42,7 @@ func (r *ModelRepositoryFS) variationsCol() *firestore.CollectionRef {
 // RepositoryPort implementation
 // ------------------------------------------------------------
 
-func (r *ModelRepositoryFS) ListByProductBlueprintID(
-	ctx context.Context,
-	productBlueprintID string,
-) ([]modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -69,10 +64,7 @@ func (r *ModelRepositoryFS) ListByProductBlueprintID(
 	return variations, nil
 }
 
-func (r *ModelRepositoryFS) GetByID(
-	ctx context.Context,
-	variationID string,
-) (modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) GetByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -95,10 +87,7 @@ func (r *ModelRepositoryFS) GetByID(
 	return docToModelVariation(snapshot)
 }
 
-func (r *ModelRepositoryFS) Create(
-	ctx context.Context,
-	variation modeldom.NewModelVariation,
-) (modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) Create(ctx context.Context, variation modeldom.NewModelVariation) (modeldom.ModelVariation, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -139,11 +128,7 @@ func (r *ModelRepositoryFS) Create(
 	return docToModelVariation(snapshot)
 }
 
-func (r *ModelRepositoryFS) Update(
-	ctx context.Context,
-	variationID string,
-	updates modeldom.ModelVariationUpdate,
-) (modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) Update(ctx context.Context, variationID string, updates modeldom.ModelVariationUpdate) (modeldom.ModelVariation, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -247,10 +232,7 @@ func (r *ModelRepositoryFS) Update(
 	return r.GetByID(ctx, variationID)
 }
 
-func (r *ModelRepositoryFS) Delete(
-	ctx context.Context,
-	variationID string,
-) error {
+func (r *ModelRepositoryFS) Delete(ctx context.Context, variationID string) error {
 	if r == nil || r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
@@ -277,11 +259,7 @@ func (r *ModelRepositoryFS) Delete(
 //
 // transaction上限を超える場合は、書込みを開始せず
 // ErrAtomicReplaceLimitExceededを返す。
-func (r *ModelRepositoryFS) ReplaceByProductBlueprintID(
-	ctx context.Context,
-	productBlueprintID string,
-	variations []modeldom.NewModelVariation,
-) ([]modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) ReplaceByProductBlueprintID(ctx context.Context, productBlueprintID string, variations []modeldom.NewModelVariation) ([]modeldom.ModelVariation, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -409,8 +387,8 @@ func (r *ModelRepositoryFS) ReplaceByProductBlueprintID(
 		)
 	}
 
-	sortModelVariations(result)
-
+	// Replace時はrequestの順序をそのまま維持する。
+	// この順序がProductBlueprint.modelRefs.displayOrderの正になる。
 	return result, nil
 }
 
@@ -428,10 +406,7 @@ type preparedModelVariation struct {
 // Query helpers
 // ------------------------------------------------------------
 
-func (r *ModelRepositoryFS) listVariationsByProductBlueprintID(
-	ctx context.Context,
-	productBlueprintID string,
-) ([]modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) listVariationsByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error) {
 	query := r.variationsCol().Where(
 		"productBlueprintId",
 		"==",
@@ -474,11 +449,7 @@ func (r *ModelRepositoryFS) listVariationsByProductBlueprintID(
 // Domain conversion
 // ------------------------------------------------------------
 
-func newModelVariationToDomain(
-	id string,
-	input modeldom.NewModelVariation,
-	now time.Time,
-) (modeldom.ModelVariation, error) {
+func newModelVariationToDomain(id string, input modeldom.NewModelVariation, now time.Time) (modeldom.ModelVariation, error) {
 	if err := input.Validate(); err != nil {
 		return nil, err
 	}
@@ -526,9 +497,7 @@ func newModelVariationToDomain(
 	}
 }
 
-func docToModelVariation(
-	document *firestore.DocumentSnapshot,
-) (modeldom.ModelVariation, error) {
+func docToModelVariation(document *firestore.DocumentSnapshot) (modeldom.ModelVariation, error) {
 	if document == nil {
 		return nil, modeldom.ErrInvalid
 	}
@@ -656,9 +625,7 @@ func docToModelVariation(
 	}
 }
 
-func modelVariationToDoc(
-	variation modeldom.ModelVariation,
-) (map[string]any, error) {
+func modelVariationToDoc(variation modeldom.ModelVariation) (map[string]any, error) {
 	if variation == nil {
 		return nil, modeldom.ErrInvalid
 	}
@@ -683,9 +650,7 @@ func modelVariationToDoc(
 	}
 }
 
-func apparelModelVariationToDoc(
-	variation modeldom.ApparelModelVariation,
-) map[string]any {
+func apparelModelVariationToDoc(variation modeldom.ApparelModelVariation) map[string]any {
 	document := map[string]any{
 		"kind": string(
 			modeldom.ModelVariationKindApparel,
@@ -722,9 +687,7 @@ func apparelModelVariationToDoc(
 	return document
 }
 
-func alcoholModelVariationToDoc(
-	variation modeldom.AlcoholModelVariation,
-) map[string]any {
+func alcoholModelVariationToDoc(variation modeldom.AlcoholModelVariation) map[string]any {
 	document := map[string]any{
 		"kind": string(
 			modeldom.ModelVariationKindAlcohol,
@@ -760,10 +723,7 @@ func alcoholModelVariationToDoc(
 // Firestore decoding
 // ------------------------------------------------------------
 
-func requiredModelString(
-	data map[string]any,
-	key string,
-) (string, error) {
+func requiredModelString(data map[string]any, key string) (string, error) {
 	value, ok := data[key].(string)
 	if !ok || value == "" {
 		return "", modeldom.ErrInvalid
@@ -772,10 +732,7 @@ func requiredModelString(
 	return value, nil
 }
 
-func modelStringPtr(
-	data map[string]any,
-	key string,
-) *string {
+func modelStringPtr(data map[string]any, key string) *string {
 	value, ok := data[key].(string)
 	if !ok || value == "" {
 		return nil
@@ -784,10 +741,7 @@ func modelStringPtr(
 	return &value
 }
 
-func modelColor(
-	data map[string]any,
-	key string,
-) (modeldom.Color, error) {
+func modelColor(data map[string]any, key string) (modeldom.Color, error) {
 	raw, ok := data[key].(map[string]any)
 	if !ok || raw == nil {
 		return modeldom.Color{}, modeldom.ErrInvalidColor
@@ -815,10 +769,7 @@ func modelColor(
 	return color, nil
 }
 
-func modelVolume(
-	data map[string]any,
-	key string,
-) (modeldom.Volume, error) {
+func modelVolume(data map[string]any, key string) (modeldom.Volume, error) {
 	raw, ok := data[key].(map[string]any)
 	if !ok || raw == nil {
 		return modeldom.Volume{}, modeldom.ErrInvalidVolume
@@ -846,10 +797,7 @@ func modelVolume(
 	return volume, nil
 }
 
-func modelMeasurements(
-	data map[string]any,
-	key string,
-) (modeldom.Measurements, error) {
+func modelMeasurements(data map[string]any, key string) (modeldom.Measurements, error) {
 	value, exists := data[key]
 	if !exists || value == nil {
 		return nil, nil
@@ -885,9 +833,7 @@ func modelMeasurements(
 	return measurements, nil
 }
 
-func strictFirestoreInt(
-	value any,
-) (int, bool) {
+func strictFirestoreInt(value any) (int, bool) {
 	switch number := value.(type) {
 	case int:
 		return number, true
@@ -909,9 +855,7 @@ func strictFirestoreInt(
 // Sorting
 // ------------------------------------------------------------
 
-func sortModelVariations(
-	variations []modeldom.ModelVariation,
-) {
+func sortModelVariations(variations []modeldom.ModelVariation) {
 	sort.Slice(
 		variations,
 		func(i, j int) bool {
@@ -940,13 +884,7 @@ func sortModelVariations(
 	)
 }
 
-func modelVariationSortValues(
-	variation modeldom.ModelVariation,
-) (
-	time.Time,
-	time.Time,
-	string,
-) {
+func modelVariationSortValues(variation modeldom.ModelVariation) (time.Time, time.Time, string) {
 	switch modelVariation := variation.(type) {
 	case modeldom.ApparelModelVariation:
 		return modelVariation.UpdatedAt,
@@ -971,9 +909,7 @@ func modelVariationSortValues(
 	}
 }
 
-func normalizeModelTime(
-	value time.Time,
-) time.Time {
+func normalizeModelTime(value time.Time) time.Time {
 	if value.IsZero() {
 		return time.Time{}
 	}
