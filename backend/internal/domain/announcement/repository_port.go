@@ -72,8 +72,8 @@ type Repository interface {
 	// - avatarID is compared with Announcement.TargetAvatars.
 	// - Empty avatarID should return ErrInvalidAvatarID or another validation error.
 	// - Result should be paginated by page.
-	// - In Firestore, this is usually implemented with:
-	//   Where("targetAvatars", "array-contains", avatarID)
+	// - Firestore implementations may resolve this through
+	//   announcements/{announcementId}/avatars/{avatarId}.
 	ListByTargetAvatar(ctx context.Context, avatarID string, page Page) (PageResult[Announcement], error)
 
 	// Read.
@@ -104,9 +104,21 @@ type Repository interface {
 	// - Zero publishedAt should return ErrInvalidPublishedAt or another validation error.
 	MarkPublished(ctx context.Context, id string, publishedAt time.Time, updatedBy *string) (Announcement, error)
 
-	// Delete physically deletes an announcement document.
-	// Implementations may also delete child avatar and attachment records
-	// if the storage supports subcollections.
+	// Delete physically deletes the Announcement aggregate from persistence.
+	//
+	// Expected implementation policy:
+	// - id is the target announcement document id.
+	// - Empty id should return ErrInvalidID or another validation error.
+	// - A missing announcement should return ErrNotFound.
+	// - Firestore implementations must delete child attachment metadata under:
+	//   announcements/{announcementId}/attachments/{attachmentId}
+	// - Firestore implementations must delete child avatar records under:
+	//   announcements/{announcementId}/avatars/{avatarId}
+	// - Child records must be deleted before deleting:
+	//   announcements/{announcementId}
+	// - This repository must not delete Firebase Storage objects.
+	// - Firebase Storage objects are deleted by the application usecase through
+	//   the external storage port implemented by adapters/out/firebase.
 	Delete(ctx context.Context, id string) error
 }
 
@@ -118,6 +130,7 @@ type Repository interface {
 // - Avatar read state is managed by MarkRead / Upsert.
 // - MarkRead should be idempotent.
 // - Upsert creates the avatar record when it does not exist.
+// - Aggregate-wide deletion is handled by Repository.Delete.
 type AvatarRepository interface {
 	// Query.
 	ListByAnnouncementID(ctx context.Context, announcementID string, filter AnnouncementAvatarFilter) ([]AnnouncementAvatar, error)
@@ -138,13 +151,15 @@ type AvatarRepository interface {
 	MarkRead(ctx context.Context, announcementID string, avatarID string, readAt time.Time) (AnnouncementAvatar, error)
 }
 
-// AttachmentRepository is the repository port for announcement attachment file metadata.
+// AttachmentRepository is the repository port for announcement attachment metadata.
 //
 // Attachment policy:
-// - Frontend manages actual Firebase Storage objects.
-// - Backend stores only attachment metadata.
-// - Attachment record is scoped by announcementId.
-// - fileName alone should not be used as a global lookup key.
+//   - Firebase Storage objects are managed by the backend storage adapter under
+//     adapters/out/firebase.
+//   - This repository stores and deletes attachment metadata only.
+//   - Attachment record is scoped by announcementId.
+//   - fileName alone should not be used as a global lookup key.
+//   - Aggregate-wide deletion is handled by Repository.Delete.
 type AttachmentRepository interface {
 	// Query.
 	ListByAnnouncementID(ctx context.Context, announcementID string) ([]AttachmentFile, error)
@@ -152,6 +167,7 @@ type AttachmentRepository interface {
 	// Write.
 	Create(ctx context.Context, f AttachmentFile) (AttachmentFile, error)
 
-	// Delete physically deletes an attachment metadata record.
+	// Delete physically deletes one attachment metadata record.
+	// It does not delete the corresponding Firebase Storage object.
 	Delete(ctx context.Context, announcementID string, fileName string) error
 }

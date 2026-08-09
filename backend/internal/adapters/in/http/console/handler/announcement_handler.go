@@ -327,6 +327,9 @@ func writeAnnouncementErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, ann.ErrNotFound):
 		code = http.StatusNotFound
 
+	case errors.Is(err, ann.ErrConflict):
+		code = http.StatusConflict
+
 	case errors.Is(err, ann.ErrInvalidID),
 		errors.Is(err, ann.ErrInvalidTitle),
 		errors.Is(err, ann.ErrInvalidContent),

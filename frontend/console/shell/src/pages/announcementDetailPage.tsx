@@ -20,12 +20,16 @@ import type { SubmitPayload } from "../features/announcement/presentation/compon
 import { uploadAnnouncementImages } from "../features/announcement/application/announcement_attachment_service";
 
 import {
+  deleteAnnouncement,
   getAnnouncement,
   markAnnouncementPublished,
   updateAnnouncement,
-  type Announcement,
-  type AnnouncementAttachmentInput,
 } from "../features/announcement/infrastructure/announcement_repository_http";
+
+import type {
+  Announcement,
+  AnnouncementAttachmentInput,
+} from "../shared/types/announcements";
 
 const emptyInputPayload: SubmitPayload = {
   title: "",
@@ -260,6 +264,9 @@ export default function AnnouncementDetailPage() {
   const [isSendingInput, setIsSendingInput] =
     useState(false);
 
+  const [isDeleting, setIsDeleting] =
+    useState(false);
+
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
 
@@ -395,7 +402,8 @@ export default function AnnouncementDetailPage() {
   const handleEdit = useCallback(() => {
     if (
       !announcement ||
-      announcement.published
+      announcement.published ||
+      isDeleting
     ) {
       return;
     }
@@ -407,11 +415,18 @@ export default function AnnouncementDetailPage() {
     setIsEditMode(true);
   }, [
     announcement,
+    isDeleting,
     resetFormFromAnnouncement,
   ]);
 
   const handleCancelEdit =
     useCallback(() => {
+      if (
+        isDeleting
+      ) {
+        return;
+      }
+
       if (announcement) {
         resetFormFromAnnouncement(
           announcement,
@@ -421,7 +436,65 @@ export default function AnnouncementDetailPage() {
       setIsEditMode(false);
     }, [
       announcement,
+      isDeleting,
       resetFormFromAnnouncement,
+    ]);
+
+  const handleDelete =
+    useCallback(async () => {
+      if (
+        !announcement ||
+        announcement.published ||
+        !isEditMode ||
+        isSavingInput ||
+        isSendingInput ||
+        isDeleting
+      ) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          "この告知を削除しますか？\n関連する画像と告知データも削除されます。",
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      setIsDeleting(true);
+
+      try {
+        await deleteAnnouncement(
+          announcement.id,
+        );
+
+        window.alert(
+          "告知を削除しました。",
+        );
+
+        navigate("/sales");
+      } catch (error) {
+        console.error(
+          "[AnnouncementDetailPage] delete announcement failed",
+          error,
+        );
+
+        window.alert(
+          error instanceof Error
+            ? error.message
+            : "告知の削除に失敗しました。",
+        );
+      } finally {
+        setIsDeleting(false);
+      }
+    }, [
+      announcement,
+      isDeleting,
+      isEditMode,
+      isSavingInput,
+      isSendingInput,
+      navigate,
     ]);
 
   const handleInputChange = useCallback(
@@ -509,7 +582,8 @@ export default function AnnouncementDetailPage() {
         !announcement ||
         announcement.published ||
         isSavingInput ||
-        isSendingInput
+        isSendingInput ||
+        isDeleting
       ) {
         return;
       }
@@ -550,6 +624,7 @@ export default function AnnouncementDetailPage() {
     }, [
       announcement,
       buildSubmitPayload,
+      isDeleting,
       isSavingInput,
       isSendingInput,
       reloadAnnouncement,
@@ -562,7 +637,8 @@ export default function AnnouncementDetailPage() {
         !announcement ||
         announcement.published ||
         isSavingInput ||
-        isSendingInput
+        isSendingInput ||
+        isDeleting
       ) {
         return;
       }
@@ -613,6 +689,7 @@ export default function AnnouncementDetailPage() {
       announcement,
       buildSubmitPayload,
       getUpdatedBy,
+      isDeleting,
       isEditMode,
       isSavingInput,
       isSendingInput,
@@ -638,7 +715,14 @@ export default function AnnouncementDetailPage() {
 
   const canEditOrSend = Boolean(
     announcement &&
-      !announcement.published,
+      !announcement.published &&
+      !isDeleting,
+  );
+
+  const canDelete = Boolean(
+    announcement &&
+      !announcement.published &&
+      isEditMode,
   );
 
   if (
@@ -695,6 +779,11 @@ export default function AnnouncementDetailPage() {
         canEditOrSend &&
         !isEditMode
           ? handleEdit
+          : undefined
+      }
+      onDelete={
+        canDelete
+          ? handleDelete
           : undefined
       }
       onCancel={

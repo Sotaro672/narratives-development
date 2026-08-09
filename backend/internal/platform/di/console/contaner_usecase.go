@@ -16,42 +16,43 @@ import (
 )
 
 type usecases struct {
-	tokenUC                     *uc.TokenUsecase
-	accountUC                   *uc.AccountUsecase
-	announcementUC              *uc.AnnouncementUsecase
-	avatarUC                    *uc.AvatarUsecase
-	paymentMethodUC             *uc.PaymentMethodUsecase
-	brandUC                     *uc.BrandUsecase
-	companyUC                   *uc.CompanyUsecase
-	inquiryUC                   *uc.InquiryUsecase
-	inventoryUC                 *uc.InventoryUsecase
-	listUC                      *uc.ListUsecase
-	listSaveOperationUC         *uc.ListSaveOperationUsecase
-	listSaveOperationStorage    *firebaseadp.ListSaveOperationStorage
-	listSaveOperationRetryQueue *listcloudtasksadp.ListSaveOperationQueue
-	memberUC                    *uc.MemberUsecase
-	modelUC                     *uc.ModelUsecase
-	orderUC                     *uc.OrderUsecase
-	paymentUC                   *uc.PaymentUsecase
-	permissionUC                *uc.PermissionUsecase
-	printUC                     *uc.PrintUsecase
-	productionUC                *uc.ProductionUsecase
-	productBlueprintUC          *uc.ProductBlueprintUsecase
-	productBlueprintCategoryUC  *uc.ProductBlueprintCategoryUsecase
-	inspectionUC                *uc.InspectionUsecase
-	mintUC                      *uc.MintUsecase
-	shippingAddressUC           *uc.ShippingAddressUsecase
-	tokenBlueprintUC            *uc.TokenBlueprintUsecase
-	tokenBlueprintAssetStorage  *firebaseadp.TokenBlueprintAssetStorage
-	tokenBlueprintReviewUC      *uc.TokenBlueprintReviewUsecase
-	productBlueprintReviewUC    *uc.ProductBlueprintReviewUsecase
-	userUC                      *uc.UserUsecase
-	walletUC                    *uc.WalletUsecase
-	cartUC                      *uc.CartUsecase
-	invitationUC                uc.InvitationUsecasePort
-	invitationDeliveryUC        uc.InvitationDeliveryUsecasePort
-	invitationDeliveryQueue     *listcloudtasksadp.InvitationDeliveryQueue
-	authBootstrapSvc            *uc.BootstrapService
+	tokenUC                       *uc.TokenUsecase
+	accountUC                     *uc.AccountUsecase
+	announcementUC                *uc.AnnouncementUsecase
+	announcementAttachmentStorage *firebaseadp.AnnouncementAttachmentStorage
+	avatarUC                      *uc.AvatarUsecase
+	paymentMethodUC               *uc.PaymentMethodUsecase
+	brandUC                       *uc.BrandUsecase
+	companyUC                     *uc.CompanyUsecase
+	inquiryUC                     *uc.InquiryUsecase
+	inventoryUC                   *uc.InventoryUsecase
+	listUC                        *uc.ListUsecase
+	listSaveOperationUC           *uc.ListSaveOperationUsecase
+	listSaveOperationStorage      *firebaseadp.ListSaveOperationStorage
+	listSaveOperationRetryQueue   *listcloudtasksadp.ListSaveOperationQueue
+	memberUC                      *uc.MemberUsecase
+	modelUC                       *uc.ModelUsecase
+	orderUC                       *uc.OrderUsecase
+	paymentUC                     *uc.PaymentUsecase
+	permissionUC                  *uc.PermissionUsecase
+	printUC                       *uc.PrintUsecase
+	productionUC                  *uc.ProductionUsecase
+	productBlueprintUC            *uc.ProductBlueprintUsecase
+	productBlueprintCategoryUC    *uc.ProductBlueprintCategoryUsecase
+	inspectionUC                  *uc.InspectionUsecase
+	mintUC                        *uc.MintUsecase
+	shippingAddressUC             *uc.ShippingAddressUsecase
+	tokenBlueprintUC              *uc.TokenBlueprintUsecase
+	tokenBlueprintAssetStorage    *firebaseadp.TokenBlueprintAssetStorage
+	tokenBlueprintReviewUC        *uc.TokenBlueprintReviewUsecase
+	productBlueprintReviewUC      *uc.ProductBlueprintReviewUsecase
+	userUC                        *uc.UserUsecase
+	walletUC                      *uc.WalletUsecase
+	cartUC                        *uc.CartUsecase
+	invitationUC                  uc.InvitationUsecasePort
+	invitationDeliveryUC          uc.InvitationDeliveryUsecasePort
+	invitationDeliveryQueue       *listcloudtasksadp.InvitationDeliveryQueue
+	authBootstrapSvc              *uc.BootstrapService
 }
 
 func buildUsecases(
@@ -84,10 +85,20 @@ func buildUsecases(
 			c.fsClient,
 		)
 
+	announcementAttachmentStorage, err :=
+		firebaseadp.NewAnnouncementAttachmentStorageFromEnv(
+			ctx,
+		)
+	if err != nil {
+		return nil, err
+	}
+
 	announcementUC := uc.NewAnnouncementUsecase(
 		r.announcementRepo,
 		announcementAvatarRepo,
 		announcementAttachmentRepo,
+	).WithAttachmentStorage(
+		announcementAttachmentStorage,
 	)
 
 	brandWalletSvc := solanainfra.NewBrandWalletService(
@@ -159,6 +170,7 @@ func buildUsecases(
 			ctx,
 		)
 	if err != nil {
+		_ = announcementAttachmentStorage.Close()
 		return nil, err
 	}
 
@@ -174,6 +186,7 @@ func buildUsecases(
 		)
 	if err != nil {
 		_ = listSaveOperationStorage.Close()
+		_ = announcementAttachmentStorage.Close()
 		return nil, err
 	}
 
@@ -286,6 +299,7 @@ func buildUsecases(
 		)
 	if err != nil {
 		_ = listSaveOperationStorage.Close()
+		_ = announcementAttachmentStorage.Close()
 		return nil, err
 	}
 
@@ -349,6 +363,7 @@ func buildUsecases(
 	if err != nil {
 		_ = tokenBlueprintAssetStorage.Close()
 		_ = listSaveOperationStorage.Close()
+		_ = announcementAttachmentStorage.Close()
 		return nil, err
 	}
 
@@ -385,34 +400,35 @@ func buildUsecases(
 	_ = res
 
 	return &usecases{
-		tokenUC:                     tokenUC,
-		accountUC:                   accountUC,
-		announcementUC:              announcementUC,
-		avatarUC:                    avatarUC,
-		paymentMethodUC:             paymentMethodUC,
-		brandUC:                     brandUC,
-		companyUC:                   companyUC,
-		inquiryUC:                   inquiryUC,
-		inventoryUC:                 inventoryUC,
-		listUC:                      listUC,
-		listSaveOperationUC:         listSaveOperationUC,
-		listSaveOperationStorage:    listSaveOperationStorage,
-		listSaveOperationRetryQueue: listSaveOperationRetryQueue,
-		memberUC:                    memberUC,
-		modelUC:                     modelUC,
-		orderUC:                     orderUC,
-		paymentUC:                   paymentUC,
-		permissionUC:                permissionUC,
-		printUC:                     printUC,
-		productionUC:                productionUC,
-		productBlueprintUC:          productBlueprintUC,
-		productBlueprintCategoryUC:  productBlueprintCategoryUC,
-		inspectionUC:                inspectionUC,
-		mintUC:                      mintUC,
-		shippingAddressUC:           shippingAddressUC,
-		tokenBlueprintUC:            tokenBlueprintUC,
-		tokenBlueprintAssetStorage:  tokenBlueprintAssetStorage,
-		tokenBlueprintReviewUC:      tokenBlueprintReviewUC,
+		tokenUC:                       tokenUC,
+		accountUC:                     accountUC,
+		announcementUC:                announcementUC,
+		announcementAttachmentStorage: announcementAttachmentStorage,
+		avatarUC:                      avatarUC,
+		paymentMethodUC:               paymentMethodUC,
+		brandUC:                       brandUC,
+		companyUC:                     companyUC,
+		inquiryUC:                     inquiryUC,
+		inventoryUC:                   inventoryUC,
+		listUC:                        listUC,
+		listSaveOperationUC:           listSaveOperationUC,
+		listSaveOperationStorage:      listSaveOperationStorage,
+		listSaveOperationRetryQueue:   listSaveOperationRetryQueue,
+		memberUC:                      memberUC,
+		modelUC:                       modelUC,
+		orderUC:                       orderUC,
+		paymentUC:                     paymentUC,
+		permissionUC:                  permissionUC,
+		printUC:                       printUC,
+		productionUC:                  productionUC,
+		productBlueprintUC:            productBlueprintUC,
+		productBlueprintCategoryUC:    productBlueprintCategoryUC,
+		inspectionUC:                  inspectionUC,
+		mintUC:                        mintUC,
+		shippingAddressUC:             shippingAddressUC,
+		tokenBlueprintUC:              tokenBlueprintUC,
+		tokenBlueprintAssetStorage:    tokenBlueprintAssetStorage,
+		tokenBlueprintReviewUC:        tokenBlueprintReviewUC,
 
 		productBlueprintReviewUC: func() *uc.ProductBlueprintReviewUsecase {
 			if r.productBlueprintReviewRepo == nil ||

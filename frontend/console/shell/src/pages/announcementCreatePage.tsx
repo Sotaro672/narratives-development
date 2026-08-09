@@ -5,6 +5,9 @@ import {
   useMemo,
   useState,
 } from "react";
+import {
+  useNavigate,
+} from "react-router-dom";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
@@ -25,6 +28,8 @@ const initialInputPayload: AnnouncementCreateInputPayload = {
 };
 
 export default function AnnouncementCreatePage() {
+  const navigate = useNavigate();
+
   const { vm, handlers } =
     useAnnouncementCreatePage();
 
@@ -109,6 +114,10 @@ export default function AnnouncementCreatePage() {
         window.alert(
           "告知を保存しました。",
         );
+
+        navigate(
+          "/sales",
+        );
       } catch (error) {
         console.error(
           "[AnnouncementCreatePage] save announcement failed",
@@ -127,6 +136,7 @@ export default function AnnouncementCreatePage() {
       buildSubmitPayload,
       isSavingInput,
       isSendingInput,
+      navigate,
       onSaveAnnouncement,
       targetAvatarIds,
     ]);

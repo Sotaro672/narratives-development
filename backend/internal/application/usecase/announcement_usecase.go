@@ -1,21 +1,33 @@
+// backend\internal\application\usecase\announcement_usecase.go
 package usecase
 
 import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"time"
 
 	ann "narratives/internal/domain/announcement"
 	common "narratives/internal/domain/common"
 )
 
+// AnnouncementAttachmentStorage manages Firebase Storage objects
+// associated with an announcement.
+type AnnouncementAttachmentStorage interface {
+	DeleteAll(
+		ctx context.Context,
+		announcementID string,
+	) error
+}
+
 // AnnouncementUsecase coordinates Announcement, avatar read state,
-// and attachment metadata.
+// attachment metadata, and attachment storage.
 type AnnouncementUsecase struct {
-	annRepo    ann.Repository
-	avatarRepo ann.AvatarRepository
-	attRepo    ann.AttachmentRepository
+	annRepo           ann.Repository
+	avatarRepo        ann.AvatarRepository
+	attRepo           ann.AttachmentRepository
+	attachmentStorage AnnouncementAttachmentStorage
 
 	now func() time.Time
 }
@@ -35,6 +47,13 @@ func NewAnnouncementUsecase(
 
 func (u *AnnouncementUsecase) WithNow(now func() time.Time) *AnnouncementUsecase {
 	u.now = now
+	return u
+}
+
+func (u *AnnouncementUsecase) WithAttachmentStorage(
+	attachmentStorage AnnouncementAttachmentStorage,
+) *AnnouncementUsecase {
+	u.attachmentStorage = attachmentStorage
 	return u
 }
 
@@ -247,14 +266,10 @@ func (u *AnnouncementUsecase) DeleteAnnouncement(
 	ctx context.Context,
 	id string,
 ) error {
-	if u.annRepo == nil {
-		return ann.ErrNotFound
-	}
-	if id == "" {
-		return ann.ErrInvalidID
-	}
-
-	return u.annRepo.Delete(ctx, id)
+	return u.DeleteAnnouncementCascade(
+		ctx,
+		id,
+	)
 }
 
 // =======================
@@ -348,9 +363,10 @@ type NewAttachmentInput struct {
 // ReplaceAttachments replaces all attachment metadata of the announcement
 // with the provided inputs.
 //
-// Firebase Storage upload/delete is handled by the frontend.
-// This usecase only persists metadata and returns both the saved records and IDs
-// to set into Announcement.Attachments.
+// Firebase Storage upload and individual file replacement are handled
+// independently from the metadata repository.
+// Full announcement deletion removes Firebase Storage objects through
+// AnnouncementAttachmentStorage.
 func (u *AnnouncementUsecase) ReplaceAttachments(
 	ctx context.Context,
 	announcementID string,
@@ -444,14 +460,19 @@ func (u *AnnouncementUsecase) ReplaceAttachmentsAndSyncAnnouncement(
 
 // =======================
 // Delete with cascade
-// Announcement -> Attachment metadata
+// Firebase Storage -> Firestore children -> Announcement
 // =======================
 
-// DeleteAnnouncementCascade deletes related attachment metadata and then
-// deletes the announcement.
+// DeleteAnnouncementCascade physically deletes the complete draft announcement.
 //
-// Firebase Storage objects are not deleted here because file storage is managed
-// by the frontend.
+// Delete order:
+//  1. Load the Announcement and verify that it is not published.
+//  2. Delete all Firebase Storage objects for the Announcement.
+//  3. Delete Firestore child records and the Announcement parent document
+//     through Announcement.Repository.Delete.
+//
+// Announcement.Repository.Delete is responsible for deleting Firestore
+// attachments and avatars before deleting the parent Announcement document.
 func (u *AnnouncementUsecase) DeleteAnnouncementCascade(
 	ctx context.Context,
 	announcementID string,
@@ -460,31 +481,42 @@ func (u *AnnouncementUsecase) DeleteAnnouncementCascade(
 		return ann.ErrInvalidAnnouncementID
 	}
 
-	if u.attRepo != nil {
-		files, err := u.attRepo.ListByAnnouncementID(
-			ctx,
-			announcementID,
-		)
-		if err != nil {
-			return err
-		}
-
-		for _, f := range files {
-			if err := u.attRepo.Delete(
-				ctx,
-				announcementID,
-				f.FileName,
-			); err != nil {
-				return err
-			}
-		}
-	}
-
 	if u.annRepo == nil {
 		return ann.ErrNotFound
 	}
 
-	if err := u.annRepo.Delete(ctx, announcementID); err != nil {
+	entity, err := u.annRepo.GetByID(
+		ctx,
+		announcementID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if entity.Published {
+		return fmt.Errorf(
+			"%w: published announcement cannot be deleted",
+			ann.ErrConflict,
+		)
+	}
+
+	if u.attachmentStorage == nil {
+		return ErrNotSupported(
+			"Announcement.Delete.AttachmentStorage",
+		)
+	}
+
+	if err := u.attachmentStorage.DeleteAll(
+		ctx,
+		announcementID,
+	); err != nil {
+		return err
+	}
+
+	if err := u.annRepo.Delete(
+		ctx,
+		announcementID,
+	); err != nil {
 		return err
 	}
 

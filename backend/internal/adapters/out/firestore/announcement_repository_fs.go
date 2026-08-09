@@ -247,7 +247,14 @@ func (r *AnnouncementRepositoryFS) MarkPublished(
 	return r.GetByID(ctx, id)
 }
 
-// Delete removes an announcement by ID.
+// Delete physically deletes an announcement aggregate.
+//
+// Child attachment metadata and avatar documents are deleted before
+// deleting the parent announcement document.
+//
+// Firebase Storage objects are not deleted here.
+// They are deleted by AnnouncementAttachmentStorage before this method
+// is called from the application usecase.
 func (r *AnnouncementRepositoryFS) Delete(
 	ctx context.Context,
 	id string,
@@ -265,6 +272,26 @@ func (r *AnnouncementRepositoryFS) Delete(
 		if status.Code(err) == codes.NotFound {
 			return announcement.ErrNotFound
 		}
+		return err
+	}
+
+	if err := deleteCollectionDocuments(
+		ctx,
+		attachmentCollection(
+			r.Client,
+			id,
+		),
+	); err != nil {
+		return err
+	}
+
+	if err := deleteCollectionDocuments(
+		ctx,
+		avatarCollection(
+			r.Client,
+			id,
+		),
+	); err != nil {
 		return err
 	}
 
@@ -628,6 +655,43 @@ func syncAnnouncementAvatars(
 
 	_, err := batch.Commit(ctx)
 	return err
+}
+
+func deleteCollectionDocuments(
+	ctx context.Context,
+	col *firestore.CollectionRef,
+) error {
+	if col == nil {
+		return nil
+	}
+
+	iter := col.Documents(ctx)
+	defer iter.Stop()
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		if doc == nil ||
+			doc.Ref == nil {
+			continue
+		}
+
+		if _, err := doc.Ref.Delete(ctx); err != nil {
+			if status.Code(err) == codes.NotFound {
+				continue
+			}
+
+			return err
+		}
+	}
+
+	return nil
 }
 
 func announcementFromDoc(
