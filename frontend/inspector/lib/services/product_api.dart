@@ -1,4 +1,5 @@
 // frontend/inspector/lib/services/product_api.dart
+
 import '../models/inspector_inspection_batch.dart';
 import '../models/inspector_product_detail.dart';
 
@@ -6,7 +7,6 @@ import 'product_api/api_client.dart';
 import 'product_api/complete_inspection_api.dart';
 import 'product_api/fetch_inspection_batch_api.dart';
 import 'product_api/fetch_inspector_detail_api.dart';
-import 'product_api/submit_inspection_api.dart';
 import 'product_api/update_inspection_batch_api.dart';
 
 class ProductApi {
@@ -20,15 +20,6 @@ class ProductApi {
     String productionId,
   ) {
     return FetchInspectionBatchApi(_client).fetchInspectionBatch(productionId);
-  }
-
-  static Future<void> submitInspection({
-    required String productId,
-    required String result,
-  }) {
-    return SubmitInspectionApi(
-      _client,
-    ).submitInspection(productId: productId, result: result);
   }
 
   static Future<void> updateInspectionBatch({
