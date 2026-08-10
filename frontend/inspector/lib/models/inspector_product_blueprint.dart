@@ -60,6 +60,16 @@ class InspectorProductBlueprint {
         (json['companyName'] ?? json['companyId'] ?? '') as String;
     final brandName = (json['brandName'] ?? json['brandId'] ?? '') as String;
 
+    final rawCategory = json['productBlueprintCategory'];
+    final category = rawCategory is Map<String, dynamic>
+        ? rawCategory
+        : const <String, dynamic>{};
+
+    final rawCategoryFields = json['categoryFields'];
+    final categoryFields = rawCategoryFields is Map<String, dynamic>
+        ? rawCategoryFields
+        : const <String, dynamic>{};
+
     // ✅ modelRefs: [{modelId, displayOrder}] を受け取る
     final rawModelRefs = json['modelRefs'];
     final modelRefs = (rawModelRefs is List)
@@ -84,14 +94,16 @@ class InspectorProductBlueprint {
       productName: (json['productName'] ?? '') as String,
       companyName: companyName,
       brandName: brandName,
-      itemType: (json['itemType'] ?? '') as String,
-      fit: (json['fit'] ?? '') as String,
-      material: (json['material'] ?? '') as String,
-      weight: (json['weight'] is num)
-          ? (json['weight'] as num).toDouble()
+      itemType:
+          (category['nameJa'] ?? category['code'] ?? category['kind'] ?? '')
+              .toString(),
+      fit: (categoryFields['fit'] ?? '').toString(),
+      material: (categoryFields['material'] ?? '').toString(),
+      weight: (categoryFields['weight'] is num)
+          ? (categoryFields['weight'] as num).toDouble()
           : 0.0,
       qualityAssurance:
-          (json['qualityAssurance'] as List<dynamic>?)
+          (categoryFields['washTags'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           const [],

@@ -1,10 +1,15 @@
 // frontend/amol/src/components/layout/header/headerNavigationItems.ts
+
 export type HeaderNavigationItem = {
   label: string;
   to: string;
 };
 
 export const publicHeaderNavigationItems: HeaderNavigationItem[] = [
+  {
+    label: "サービス選択",
+    to: "/signin/select",
+  },
   {
     label: "使い方",
     to: "/how-to-use",

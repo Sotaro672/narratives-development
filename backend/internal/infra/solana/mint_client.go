@@ -119,12 +119,15 @@ func getSolanaBalance(
 	rpcClient := NewJSONRPCClientWithEndpoint(endpoint)
 
 	var out solanaGetBalanceResult
-	if err := rpcClient.call(ctx, "getBalance", []any{
-		address,
-		map[string]any{
-			"commitment": "confirmed",
-		},
-	}, &out); err != nil {
+	if err := withSolanaRPCRetry(ctx, "getBalance", func() error {
+		out = solanaGetBalanceResult{}
+		return rpcClient.call(ctx, "getBalance", []any{
+			address,
+			map[string]any{
+				"commitment": "confirmed",
+			},
+		}, &out)
+	}); err != nil {
 		return 0, err
 	}
 
@@ -150,10 +153,13 @@ func requestDevnetAirdrop(
 	rpcClient := NewJSONRPCClientWithEndpoint(endpoint)
 
 	var signature string
-	if err := rpcClient.call(ctx, "requestAirdrop", []any{
-		address,
-		lamports,
-	}, &signature); err != nil {
+	if err := withSolanaRPCRetry(ctx, "requestAirdrop", func() error {
+		signature = ""
+		return rpcClient.call(ctx, "requestAirdrop", []any{
+			address,
+			lamports,
+		}, &signature)
+	}); err != nil {
 		return "", err
 	}
 
@@ -205,15 +211,8 @@ func (c *MintClient) ensureFeePayerBalance(
 		}
 	}
 
-	var balance uint64
-	if err := withSolanaRPCRetry(ctx, "get fee payer balance", func() error {
-		v, err := getSolanaBalance(ctx, balanceRPCURL, address)
-		if err != nil {
-			return err
-		}
-		balance = v
-		return nil
-	}); err != nil {
+	balance, err := getSolanaBalance(ctx, balanceRPCURL, address)
+	if err != nil {
 		return fmt.Errorf("get fee payer balance: %w", err)
 	}
 
@@ -226,15 +225,24 @@ func (c *MintClient) ensureFeePayerBalance(
 		airdropRPCURL = balanceRPCURL
 	}
 
-	var sig string
-	if err := withSolanaRPCRetry(ctx, "request devnet airdrop", func() error {
-		v, err := requestDevnetAirdrop(ctx, airdropRPCURL, address, airdropLamports)
-		if err != nil {
-			return err
+	sig, err := requestDevnetAirdrop(ctx, airdropRPCURL, address, airdropLamports)
+	if err != nil {
+		// requestAirdrop の RPC 応答だけ失敗し、
+		// 実際には airdrop が成立しているケースを考慮して残高を再確認する。
+		currentBalance, balanceErr := getSolanaBalance(ctx, balanceRPCURL, address)
+		if balanceErr == nil && currentBalance >= minLamports {
+			return nil
 		}
-		sig = v
-		return nil
-	}); err != nil {
+
+		if balanceErr != nil {
+			return fmt.Errorf(
+				"request devnet airdrop for fee payer %s: %w; balance recheck failed: %v",
+				address,
+				err,
+				balanceErr,
+			)
+		}
+
 		return fmt.Errorf("request devnet airdrop for fee payer %s: %w", address, err)
 	}
 
@@ -245,15 +253,8 @@ func (c *MintClient) ensureFeePayerBalance(
 		return fmt.Errorf("confirm devnet airdrop signature=%s: %w", sig, err)
 	}
 
-	var updatedBalance uint64
-	if err := withSolanaRPCRetry(ctx, "get fee payer balance after airdrop", func() error {
-		v, err := getSolanaBalance(ctx, balanceRPCURL, address)
-		if err != nil {
-			return err
-		}
-		updatedBalance = v
-		return nil
-	}); err != nil {
+	updatedBalance, err := getSolanaBalance(ctx, balanceRPCURL, address)
+	if err != nil {
 		return fmt.Errorf("get fee payer balance after airdrop: %w", err)
 	}
 

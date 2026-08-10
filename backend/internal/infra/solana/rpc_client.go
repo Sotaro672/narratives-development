@@ -5,12 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -83,6 +83,40 @@ type rpcResponse struct {
 	Error   *rpcError       `json:"error,omitempty"`
 }
 
+type solanaRPCError struct {
+	Method  string
+	Code    int
+	Message string
+}
+
+func (e *solanaRPCError) Error() string {
+	if e == nil {
+		return ""
+	}
+
+	return fmt.Sprintf(
+		"solana rpc: method=%s error code=%d message=%s",
+		e.Method,
+		e.Code,
+		e.Message,
+	)
+}
+
+func (e *solanaRPCError) retryable() bool {
+	if e == nil {
+		return false
+	}
+
+	switch e.Code {
+	case -32603:
+		// JSON-RPC Internal error.
+		// devnet RPC / faucet の一時障害として bounded retry する。
+		return true
+	default:
+		return false
+	}
+}
+
 type solanaHTTPStatusError struct {
 	StatusCode int
 	Body       string
@@ -115,17 +149,22 @@ func isRetryableSolanaError(err error) bool {
 		return false
 	}
 
-	if err == context.Canceled || err == context.DeadlineExceeded {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
 
+	var rpcErr *solanaRPCError
+	if errors.As(err, &rpcErr) && rpcErr.retryable() {
+		return true
+	}
+
 	var netErr net.Error
-	if ok := errorAs(err, &netErr); ok && netErr.Timeout() {
+	if errors.As(err, &netErr) && netErr.Timeout() {
 		return true
 	}
 
 	var statusErr *solanaHTTPStatusError
-	if ok := errorAs(err, &statusErr); ok && statusErr.retryable() {
+	if errors.As(err, &statusErr) && statusErr.retryable() {
 		return true
 	}
 
@@ -157,51 +196,6 @@ func isRetryableSolanaError(err error) bool {
 	}
 
 	return false
-}
-
-// errorAs は errors.As の薄いラッパーです。
-// Go標準の errors.As を直接使うと呼び出し側のimportが増えるため、このファイル内に閉じ込めます。
-func errorAs(err error, target any) bool {
-	type causer interface {
-		Unwrap() error
-	}
-
-	switch t := target.(type) {
-	case *net.Error:
-		if v, ok := err.(net.Error); ok {
-			*t = v
-			return true
-		}
-	case **solanaHTTPStatusError:
-		if v, ok := err.(*solanaHTTPStatusError); ok {
-			*t = v
-			return true
-		}
-	}
-
-	for {
-		u, ok := err.(causer)
-		if !ok {
-			return false
-		}
-		err = u.Unwrap()
-		if err == nil {
-			return false
-		}
-
-		switch t := target.(type) {
-		case *net.Error:
-			if v, ok := err.(net.Error); ok {
-				*t = v
-				return true
-			}
-		case **solanaHTTPStatusError:
-			if v, ok := err.(*solanaHTTPStatusError); ok {
-				*t = v
-				return true
-			}
-		}
-	}
 }
 
 func withSolanaRPCRetry(ctx context.Context, operation string, fn func() error) error {
@@ -253,27 +247,6 @@ func withSolanaRPCRetry(ctx context.Context, operation string, fn func() error) 
 	return fmt.Errorf("solana rpc %s failed after retries: %w", operation, lastErr)
 }
 
-func retryAfterDuration(headerValue string) time.Duration {
-	headerValue = strings.TrimSpace(headerValue)
-	if headerValue == "" {
-		return 0
-	}
-
-	seconds, err := strconv.Atoi(headerValue)
-	if err == nil && seconds > 0 {
-		return time.Duration(seconds) * time.Second
-	}
-
-	if t, err := http.ParseTime(headerValue); err == nil {
-		d := time.Until(t)
-		if d > 0 {
-			return d
-		}
-	}
-
-	return 0
-}
-
 func (c *JSONRPCClient) call(ctx context.Context, method string, params any, out any) error {
 	if c == nil || c.Endpoint == "" || c.HTTP == nil {
 		return fmt.Errorf("solana rpc: client not configured")
@@ -289,60 +262,7 @@ func (c *JSONRPCClient) call(ctx context.Context, method string, params any, out
 		return fmt.Errorf("solana rpc: marshal request method=%s: %w", method, err)
 	}
 
-	return c.callRawWithRetry(ctx, method, reqBody, out)
-}
-
-func (c *JSONRPCClient) callRawWithRetry(ctx context.Context, method string, reqBody []byte, out any) error {
-	delays := []time.Duration{
-		500 * time.Millisecond,
-		1 * time.Second,
-		2 * time.Second,
-		4 * time.Second,
-		8 * time.Second,
-	}
-
-	var lastErr error
-
-	for attempt := 0; attempt <= len(delays); attempt++ {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-
-		err := c.callRawOnce(ctx, method, reqBody, out)
-		if err == nil {
-			return nil
-		}
-
-		lastErr = err
-
-		if !isRetryableSolanaError(err) {
-			return err
-		}
-
-		if attempt == len(delays) {
-			break
-		}
-
-		delay := delays[attempt]
-
-		var statusErr *solanaHTTPStatusError
-		if ok := errorAs(err, &statusErr); ok && statusErr != nil {
-			// Retry-After は callRawOnce 内で body error にしか残していないため、
-			// HTTP header 自体の待機制御が必要な場合は callRawOnce の戻り値拡張で対応してください。
-			// 現状は指数バックオフを優先します。
-			_ = retryAfterDuration
-		}
-
-		timer := time.NewTimer(delay)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return ctx.Err()
-		case <-timer.C:
-		}
-	}
-
-	return fmt.Errorf("solana rpc method=%s failed after retries: %w", method, lastErr)
+	return c.callRawOnce(ctx, method, reqBody, out)
 }
 
 func (c *JSONRPCClient) callRawOnce(ctx context.Context, method string, reqBody []byte, out any) error {
@@ -374,7 +294,11 @@ func (c *JSONRPCClient) callRawOnce(ctx context.Context, method string, reqBody 
 	}
 
 	if rr.Error != nil {
-		return fmt.Errorf("solana rpc: method=%s error code=%d message=%s", method, rr.Error.Code, rr.Error.Message)
+		return &solanaRPCError{
+			Method:  method,
+			Code:    rr.Error.Code,
+			Message: rr.Error.Message,
+		}
 	}
 
 	if out != nil {
@@ -439,7 +363,9 @@ func (c *JSONRPCClient) GetTokenAccountsByOwner(ctx context.Context, owner strin
 		},
 	}
 
-	if err := c.call(ctx, "getTokenAccountsByOwner", params, &out); err != nil {
+	if err := withSolanaRPCRetry(ctx, "getTokenAccountsByOwner", func() error {
+		return c.call(ctx, "getTokenAccountsByOwner", params, &out)
+	}); err != nil {
 		return GetTokenAccountsByOwnerResult{}, err
 	}
 
