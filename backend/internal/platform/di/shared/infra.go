@@ -14,6 +14,7 @@ import (
 
 	firebase "firebase.google.com/go/v4"
 	firebaseauth "firebase.google.com/go/v4/auth"
+	"github.com/blocto/solana-go-sdk/common"
 	"google.golang.org/api/option"
 
 	stripeadapter "narratives/internal/adapters/out/stripe"
@@ -45,6 +46,7 @@ type Infra struct {
 
 	// Cross-cutting infra
 	MintAuthorityKey *solanainfra.MintAuthorityKey
+	ReserveAuthority *solanainfra.ReserveAuthority
 
 	// Adapters / gateways
 	PaymentMethodGateway *stripeadapter.PaymentMethodGateway
@@ -146,10 +148,82 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 	{
 		mintKey, err := solanainfra.LoadMintAuthorityKeyFromEnv(ctx)
 		if err != nil {
+			if solanainfra.AutoTopUpEnabled() {
+				_ = inf.Close()
+				return nil, fmt.Errorf(
+					"shared.infra: load mint authority key failed while auto top-up is enabled: %w",
+					err,
+				)
+			}
+
 			mintKey = nil
 		}
 
 		inf.MintAuthorityKey = mintKey
+	}
+
+	// --------------------------------------------------------
+	// Solana reserve authority
+	// --------------------------------------------------------
+	//
+	// SOLANA_AUTO_TOP_UP_ENABLED=true の場合のみロードします。
+	// reserve wallet は fee payer の残高が閾値を下回った場合に
+	// native SOL を自動補充するために使用します。
+	{
+		if solanainfra.AutoTopUpEnabled() {
+			if inf.MintAuthorityKey == nil {
+				_ = inf.Close()
+				return nil, errors.New(
+					"shared.infra: mint authority key is required when auto top-up is enabled",
+				)
+			}
+
+			reserve, err := solanainfra.LoadReserveAuthority(ctx)
+			if err != nil {
+				_ = inf.Close()
+				return nil, fmt.Errorf(
+					"shared.infra: load reserve authority failed: %w",
+					err,
+				)
+			}
+
+			if reserve == nil {
+				_ = inf.Close()
+				return nil, errors.New(
+					"shared.infra: reserve authority is nil after load",
+				)
+			}
+
+			mintAddress := common.PublicKeyFromBytes(
+				inf.MintAuthorityKey.PublicKey,
+			).ToBase58()
+
+			reserveAddress := reserve.Account.PublicKey.ToBase58()
+
+			if mintAddress == "" {
+				_ = inf.Close()
+				return nil, errors.New(
+					"shared.infra: mint authority address is empty",
+				)
+			}
+
+			if reserveAddress == "" {
+				_ = inf.Close()
+				return nil, errors.New(
+					"shared.infra: reserve authority address is empty",
+				)
+			}
+
+			if mintAddress == reserveAddress {
+				_ = inf.Close()
+				return nil, fmt.Errorf(
+					"shared.infra: mint authority and reserve authority must be different wallets: address=%s",
+					mintAddress,
+				)
+			}
+
+			inf.ReserveAuthority = reserve
+		}
 	}
 
 	// --------------------------------------------------------
@@ -167,7 +241,11 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 
 		if err != nil {
 			_ = inf.Close()
-			return nil, fmt.Errorf("shared.infra: firestore.NewClient failed (project=%s): %w", inf.ProjectID, err)
+			return nil, fmt.Errorf(
+				"shared.infra: firestore.NewClient failed (project=%s): %w",
+				inf.ProjectID,
+				err,
+			)
 		}
 
 		inf.Firestore = fsClient
@@ -177,7 +255,9 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 	// Firebase App/Auth
 	// --------------------------------------------------------
 	{
-		fbCfg := &firebase.Config{ProjectID: inf.ProjectID}
+		fbCfg := &firebase.Config{
+			ProjectID: inf.ProjectID,
+		}
 
 		var fbApp *firebase.App
 		var err error
@@ -200,19 +280,26 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 
 	if inf.Firestore == nil {
 		_ = inf.Close()
-		return nil, errors.New("shared.infra: firestore client is nil after initialization")
+		return nil, errors.New(
+			"shared.infra: firestore client is nil after initialization",
+		)
 	}
 
 	if inf.SecretManager == nil {
 		_ = inf.Close()
-		return nil, errors.New("shared.infra: secret manager client is nil after initialization")
+		return nil, errors.New(
+			"shared.infra: secret manager client is nil after initialization",
+		)
 	}
 
 	return inf, nil
 }
 
 // AccessSecretVersion reads a secret value from Google Secret Manager.
-func (i *Infra) AccessSecretVersion(ctx context.Context, secretID string) (string, error) {
+func (i *Infra) AccessSecretVersion(
+	ctx context.Context,
+	secretID string,
+) (string, error) {
 	if i == nil {
 		return "", errors.New("shared.infra: infra is nil")
 	}
@@ -235,7 +322,9 @@ func (i *Infra) AccessSecretVersion(ctx context.Context, secretID string) (strin
 
 	result, err := i.SecretManager.AccessSecretVersion(
 		ctx,
-		&secretmanagerpb.AccessSecretVersionRequest{Name: name},
+		&secretmanagerpb.AccessSecretVersionRequest{
+			Name: name,
+		},
 	)
 	if err != nil {
 		return "", err
@@ -243,7 +332,9 @@ func (i *Infra) AccessSecretVersion(ctx context.Context, secretID string) (strin
 
 	value := strings.TrimSpace(string(result.Payload.Data))
 	if value == "" {
-		return "", errors.New("shared.infra: secret value is empty: " + secretID)
+		return "", errors.New(
+			"shared.infra: secret value is empty: " + secretID,
+		)
 	}
 
 	return value, nil
@@ -277,7 +368,9 @@ func (i *Infra) RegisterPaymentMethodGateway(
 	)
 
 	if i.PaymentMethodGateway == nil {
-		return errors.New("shared.infra: stripe payment method gateway is nil after registration")
+		return errors.New(
+			"shared.infra: payment method gateway is nil after registration",
+		)
 	}
 
 	return nil
@@ -297,12 +390,22 @@ func (i *Infra) RegisterPaymentMethodGatewayFromSecret(
 		return errors.New("shared.infra: payment method customer store is nil")
 	}
 
-	stripeSecretKey, err := i.AccessSecretVersion(ctx, stripeSecretKeySecretID)
+	stripeSecretKey, err := i.AccessSecretVersion(
+		ctx,
+		stripeSecretKeySecretID,
+	)
 	if err != nil {
-		return fmt.Errorf("shared.infra: failed to access %s: %w", stripeSecretKeySecretID, err)
+		return fmt.Errorf(
+			"shared.infra: failed to access %s: %w",
+			stripeSecretKeySecretID,
+			err,
+		)
 	}
 
-	if err := i.RegisterPaymentMethodGateway(stripeSecretKey, customerStore); err != nil {
+	if err := i.RegisterPaymentMethodGateway(
+		stripeSecretKey,
+		customerStore,
+	); err != nil {
 		return err
 	}
 

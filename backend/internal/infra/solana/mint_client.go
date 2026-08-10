@@ -27,16 +27,24 @@ const lamportsPerSOL = 1_000_000_000
 // 実際にチェーン上でミント処理を行うクライアントです。
 // usecase.TokenUsecase からは tokendom.MintAuthorityWalletPort として利用されます。
 type MintClient struct {
-	key *MintAuthorityKey
+	key     *MintAuthorityKey
+	reserve *ReserveAuthority
 }
 
 // インターフェース実装チェック:
 // MintClient が tokendom.MintAuthorityWalletPort を満たしていなければコンパイルエラーになります。
 var _ tokendom.MintAuthorityWalletPort = (*MintClient)(nil)
 
-// NewMintClient はミント権限キーを受け取って MintClient を初期化します。
-func NewMintClient(key *MintAuthorityKey) *MintClient {
-	return &MintClient{key: key}
+// NewMintClient はミント権限キーと fee payer 補充用 reserve wallet を受け取って
+// MintClient を初期化します。
+func NewMintClient(
+	key *MintAuthorityKey,
+	reserve *ReserveAuthority,
+) *MintClient {
+	return &MintClient{
+		key:     key,
+		reserve: reserve,
+	}
 }
 
 // PublicKey は tokendom.MintAuthorityWalletPort の実装です。
@@ -69,12 +77,6 @@ func sellerFeeBpsFromEnv() uint16 {
 	}
 
 	return uint16(n)
-}
-
-func autoAirdropEnabled() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("SOLANA_AUTO_AIRDROP_ENABLED")))
-
-	return v == "true" || v == "1" || v == "yes" || v == "on"
 }
 
 func envSOLToLamports(key string, defaultSOL float64) (uint64, error) {
@@ -134,46 +136,10 @@ func getSolanaBalance(
 	return out.Value, nil
 }
 
-func requestDevnetAirdrop(
-	ctx context.Context,
-	endpoint string,
-	address string,
-	lamports uint64,
-) (string, error) {
-	if endpoint == "" {
-		return "", fmt.Errorf("solana airdrop rpc endpoint is empty")
-	}
-	if address == "" {
-		return "", fmt.Errorf("solana address is empty")
-	}
-	if lamports == 0 {
-		return "", fmt.Errorf("airdrop lamports is zero")
-	}
-
-	rpcClient := NewJSONRPCClientWithEndpoint(endpoint)
-
-	var signature string
-	if err := withSolanaRPCRetry(ctx, "requestAirdrop", func() error {
-		signature = ""
-		return rpcClient.call(ctx, "requestAirdrop", []any{
-			address,
-			lamports,
-		}, &signature)
-	}); err != nil {
-		return "", err
-	}
-
-	if signature == "" {
-		return "", fmt.Errorf("requestAirdrop returned empty signature")
-	}
-
-	return signature, nil
-}
-
 // ensureFeePayerBalance は fee payer の残高を確認します。
 // SOLANA_MIN_FEE_PAYER_BALANCE_SOL 未満の場合:
-// - SOLANA_AUTO_AIRDROP_ENABLED=false: 残高不足エラーを返します。
-// - SOLANA_AUTO_AIRDROP_ENABLED=true: devnet の開発補助として自動airdropを試します。
+// - SOLANA_AUTO_TOP_UP_ENABLED=false: 残高不足エラーを返します。
+// - SOLANA_AUTO_TOP_UP_ENABLED=true: reserve wallet から target balance まで自動補充します。
 func (c *MintClient) ensureFeePayerBalance(
 	ctx context.Context,
 	feePayer common.PublicKey,
@@ -209,7 +175,7 @@ func (c *MintClient) ensureFeePayerBalance(
 		return nil
 	}
 
-	if !autoAirdropEnabled() {
+	if !AutoTopUpEnabled() {
 		return fmt.Errorf(
 			"fee payer balance is below minimum: address=%s balance=%d min=%d",
 			address,
@@ -218,58 +184,40 @@ func (c *MintClient) ensureFeePayerBalance(
 		)
 	}
 
-	airdropLamports, err := envSOLToLamports("SOLANA_AIRDROP_AMOUNT_SOL", 2)
-	if err != nil {
-		return err
-	}
-	if airdropLamports == 0 {
-		return fmt.Errorf("SOLANA_AIRDROP_AMOUNT_SOL must be greater than 0 when auto airdrop is enabled")
-	}
-
-	airdropRPCURL := strings.TrimSpace(os.Getenv("SOLANA_AIRDROP_RPC_URL"))
-	if airdropRPCURL == "" {
-		airdropRPCURL = balanceRPCURL
-	}
-
-	sig, err := requestDevnetAirdrop(ctx, airdropRPCURL, address, airdropLamports)
-	if err != nil {
-		// requestAirdrop の RPC 応答だけ失敗し、
-		// 実際には airdrop が成立しているケースを考慮して残高を再確認する。
-		currentBalance, balanceErr := getSolanaBalance(ctx, balanceRPCURL, address)
-		if balanceErr == nil && currentBalance >= minLamports {
-			return nil
-		}
-
-		if balanceErr != nil {
-			return fmt.Errorf(
-				"request devnet airdrop for fee payer %s: %w; balance recheck failed: %v",
-				address,
-				err,
-				balanceErr,
-			)
-		}
-
-		return fmt.Errorf("request devnet airdrop for fee payer %s: %w", address, err)
-	}
-
-	ctxWait, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	if err := waitForSignatureConfirmed(ctxWait, airdropRPCURL, sig); err != nil {
-		return fmt.Errorf("confirm devnet airdrop signature=%s: %w", sig, err)
-	}
-
-	updatedBalance, err := getSolanaBalance(ctx, balanceRPCURL, address)
-	if err != nil {
-		return fmt.Errorf("get fee payer balance after airdrop: %w", err)
-	}
-
-	if updatedBalance < minLamports {
+	if c == nil || c.reserve == nil {
 		return fmt.Errorf(
-			"fee payer balance is still below minimum after airdrop: address=%s balance=%d min=%d",
+			"%w: feePayer=%s balance=%d min=%d",
+			ErrReserveWalletMissing,
 			address,
-			updatedBalance,
+			balance,
 			minLamports,
+		)
+	}
+
+	result, err := topUpFeePayerFromReserve(
+		ctx,
+		balanceRPCURL,
+		c.reserve,
+		feePayer,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"top up fee payer from reserve: %w",
+			err,
+		)
+	}
+
+	if result == nil {
+		return fmt.Errorf("fee payer top-up returned nil result")
+	}
+
+	if result.FeePayerBalanceAfter < minLamports {
+		return fmt.Errorf(
+			"fee payer balance is still below minimum after reserve top-up: address=%s balance=%d min=%d signature=%s",
+			address,
+			result.FeePayerBalanceAfter,
+			minLamports,
+			result.Signature,
 		)
 	}
 
@@ -285,7 +233,7 @@ func (c *MintClient) ensureFeePayerBalance(
 //     MasterEdition (CreateMasterEditionV3) を同一トランザクションで作成します。
 //   - これにより mintAddress から導出される metadata PDA が必ず存在します。
 //   - SendTransaction 後、confirmed / finalized になるまで確認してから成功として返します。
-//   - fee payer 残高は常に確認し、SOLANA_AUTO_AIRDROP_ENABLED=true の場合のみ残高不足時にdevnet自動airdropを試します。
+//   - fee payer 残高は常に確認し、SOLANA_AUTO_TOP_UP_ENABLED=true の場合は reserve wallet から自動補充します。
 func (c *MintClient) MintToken(
 	ctx context.Context,
 	params tokendom.MintParams,

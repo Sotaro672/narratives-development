@@ -74,7 +74,10 @@ func (h *MintTaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.executeNextMintTask(w, r)
 }
 
-func (h *MintTaskHandler) executeNextMintTask(w http.ResponseWriter, r *http.Request) {
+func (h *MintTaskHandler) executeNextMintTask(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	mintID := extractMintIDFromPath(r.URL.Path)
 
 	defer func() {
@@ -94,7 +97,9 @@ func (h *MintTaskHandler) executeNextMintTask(w http.ResponseWriter, r *http.Req
 	}()
 
 	if h.mintUC == nil {
-		log.Printf("[mint-task] mint usecase is not configured")
+		log.Printf(
+			"[mint-task] mint usecase is not configured",
+		)
 
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "mint usecase is not configured",
@@ -139,9 +144,15 @@ func (h *MintTaskHandler) executeNextMintTask(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	log.Printf("[mint-task] execute start mintID=%s", mintID)
+	log.Printf(
+		"[mint-task] execute start mintID=%s",
+		mintID,
+	)
 
-	result, err := h.mintUC.ExecuteNextMintTask(r.Context(), mintID)
+	result, err := h.mintUC.ExecuteNextMintTask(
+		r.Context(),
+		mintID,
+	)
 	if err != nil {
 		// 実行可能な task がない場合:
 		// - 全件完了済み
@@ -150,7 +161,10 @@ func (h *MintTaskHandler) executeNextMintTask(w http.ResponseWriter, r *http.Req
 		//
 		// Cloud Tasks に 5xx を返すと不要な retry が走るため、
 		// ここは 200 で終了扱いにします。
-		if errors.Is(err, mintdom.ErrMintProductTaskNotFound) {
+		if errors.Is(
+			err,
+			mintdom.ErrMintProductTaskNotFound,
+		) {
 			log.Printf(
 				"[mint-task] no executable task mintID=%s error=%v",
 				mintID,
@@ -165,6 +179,37 @@ func (h *MintTaskHandler) executeNextMintTask(w http.ResponseWriter, r *http.Req
 			return
 		}
 
+		// 資金補充や設定変更など、人間の対応が必要なエラーは
+		// Cloud Tasks の自動再配送では自然復旧しません。
+		//
+		// そのため HTTP 200 を返して Cloud Tasks の retry loop を停止します。
+		//
+		// MintUsecase 側では、これらの再開可能エラーを
+		// FAILED_RETRYABLE として保存する必要があります。
+		//
+		// 対応完了後に mint task を1件 enqueue することで、
+		// FAILED_RETRYABLE -> MINTING -> MINTED と再開します。
+		if status, ok := manualRetryStatus(err); ok {
+			log.Printf(
+				"[mint-task] manual retry required mintID=%s status=%s error=%v",
+				mintID,
+				status,
+				err,
+			)
+
+			writeJSON(w, http.StatusOK, mintTaskResponse{
+				MintID:  mintID,
+				Status:  status,
+				Message: err.Error(),
+			})
+			return
+		}
+
+		// RPC 429 / 5xx / timeout / connection failure など、
+		// 短時間で自然復旧する可能性があるエラーは 500 を返します。
+		//
+		// Cloud Tasks が configured retry policy に従って
+		// task を再配送します。
 		log.Printf(
 			"[mint-task] execute failed mintID=%s error=%v",
 			mintID,
@@ -202,19 +247,97 @@ func (h *MintTaskHandler) executeNextMintTask(w http.ResponseWriter, r *http.Req
 		)
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(
+		w,
+		http.StatusOK,
+		resp,
+	)
+}
+
+func manualRetryStatus(err error) (string, bool) {
+	if err == nil {
+		return "", false
+	}
+
+	msg := strings.ToLower(err.Error())
+
+	// reserve wallet の資金不足。
+	//
+	// reserve wallet に SOL を補充すれば再開できます。
+	if strings.Contains(
+		msg,
+		"reserve wallet balance is insufficient",
+	) ||
+		strings.Contains(
+			msg,
+			"reserve wallet balance fell below minimum after top-up",
+		) {
+		return "WAITING_FOR_RESERVE_BALANCE", true
+	}
+
+	// reserve wallet / auto top-up の設定不備。
+	//
+	// 環境変数や Secret Manager の設定を修正して
+	// Cloud Run を再deployした後に再開します。
+	if strings.Contains(
+		msg,
+		"reserve wallet is not configured",
+	) ||
+		strings.Contains(
+			msg,
+			"fee payer top-up config is invalid",
+		) {
+		return "WAITING_FOR_SOLANA_CONFIGURATION", true
+	}
+
+	// auto top-up が無効な環境で fee payer の残高が不足した場合の
+	// fallbackです。
+	//
+	// 通常のCloud Run環境では
+	// SOLANA_AUTO_TOP_UP_ENABLED=true を設定するため、
+	// この分岐には基本的に入りません。
+	if strings.Contains(
+		msg,
+		"fee payer balance is below minimum",
+	) ||
+		strings.Contains(
+			msg,
+			"fee payer auto top-up is disabled",
+		) {
+		return "WAITING_FOR_FEE_PAYER_BALANCE", true
+	}
+
+	return "", false
 }
 
 func extractMintIDFromPath(path string) string {
 	p := strings.TrimSpace(path)
-	p = strings.TrimPrefix(p, "/internal/mint/tasks/")
-	p = strings.TrimSuffix(p, "/execute")
-	p = strings.Trim(p, "/")
+	p = strings.TrimPrefix(
+		p,
+		"/internal/mint/tasks/",
+	)
+	p = strings.TrimSuffix(
+		p,
+		"/execute",
+	)
+	p = strings.Trim(
+		p,
+		"/",
+	)
+
 	return p
 }
 
-func writeJSON(w http.ResponseWriter, statusCode int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
+func writeJSON(
+	w http.ResponseWriter,
+	statusCode int,
+	payload any,
+) {
+	w.Header().Set(
+		"Content-Type",
+		"application/json",
+	)
 	w.WriteHeader(statusCode)
+
 	_ = json.NewEncoder(w).Encode(payload)
 }

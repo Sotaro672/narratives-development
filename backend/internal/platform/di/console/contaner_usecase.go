@@ -67,6 +67,7 @@ func buildUsecases(
 	if c.infra.MintAuthorityKey != nil {
 		solanaClient := solanainfra.NewMintClient(
 			c.infra.MintAuthorityKey,
+			c.infra.ReserveAuthority,
 		)
 		tokenUC = uc.NewTokenUsecase(solanaClient)
 	} else {
