@@ -1234,6 +1234,7 @@ func isRetryableMintError(err error) bool {
 		"status=502",
 		"status=503",
 		"status=504",
+		"fee payer balance is below minimum",
 	}
 
 	for _, pattern := range retryablePatterns {

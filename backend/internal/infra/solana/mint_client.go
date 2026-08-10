@@ -170,37 +170,26 @@ func requestDevnetAirdrop(
 	return signature, nil
 }
 
-// ensureFeePayerBalance は devnet 専用の開発補助機能です。
-// SOLANA_AUTO_AIRDROP_ENABLED=true の場合のみ、fee payer の残高を確認し、
-// SOLANA_MIN_FEE_PAYER_BALANCE_SOL 未満なら SOLANA_AIRDROP_AMOUNT_SOL 分だけ airdrop します。
+// ensureFeePayerBalance は fee payer の残高を確認します。
+// SOLANA_MIN_FEE_PAYER_BALANCE_SOL 未満の場合:
+// - SOLANA_AUTO_AIRDROP_ENABLED=false: 残高不足エラーを返します。
+// - SOLANA_AUTO_AIRDROP_ENABLED=true: devnet の開発補助として自動airdropを試します。
 func (c *MintClient) ensureFeePayerBalance(
 	ctx context.Context,
 	feePayer common.PublicKey,
 	mintRPCURL string,
 ) error {
-	if !autoAirdropEnabled() {
-		return nil
-	}
-
 	address := feePayer.ToBase58()
 	if address == "" {
 		return fmt.Errorf("fee payer address is empty")
 	}
 
-	minLamports, err := envSOLToLamports("SOLANA_MIN_FEE_PAYER_BALANCE_SOL", 2)
+	minLamports, err := envSOLToLamports("SOLANA_MIN_FEE_PAYER_BALANCE_SOL", 0.5)
 	if err != nil {
 		return err
 	}
 	if minLamports == 0 {
 		return nil
-	}
-
-	airdropLamports, err := envSOLToLamports("SOLANA_AIRDROP_AMOUNT_SOL", 2)
-	if err != nil {
-		return err
-	}
-	if airdropLamports == 0 {
-		return fmt.Errorf("SOLANA_AIRDROP_AMOUNT_SOL must be greater than 0 when auto airdrop is enabled")
 	}
 
 	balanceRPCURL := mintRPCURL
@@ -218,6 +207,23 @@ func (c *MintClient) ensureFeePayerBalance(
 
 	if balance >= minLamports {
 		return nil
+	}
+
+	if !autoAirdropEnabled() {
+		return fmt.Errorf(
+			"fee payer balance is below minimum: address=%s balance=%d min=%d",
+			address,
+			balance,
+			minLamports,
+		)
+	}
+
+	airdropLamports, err := envSOLToLamports("SOLANA_AIRDROP_AMOUNT_SOL", 2)
+	if err != nil {
+		return err
+	}
+	if airdropLamports == 0 {
+		return fmt.Errorf("SOLANA_AIRDROP_AMOUNT_SOL must be greater than 0 when auto airdrop is enabled")
 	}
 
 	airdropRPCURL := strings.TrimSpace(os.Getenv("SOLANA_AIRDROP_RPC_URL"))
@@ -279,7 +285,7 @@ func (c *MintClient) ensureFeePayerBalance(
 //     MasterEdition (CreateMasterEditionV3) を同一トランザクションで作成します。
 //   - これにより mintAddress から導出される metadata PDA が必ず存在します。
 //   - SendTransaction 後、confirmed / finalized になるまで確認してから成功として返します。
-//   - SOLANA_AUTO_AIRDROP_ENABLED=true の場合のみ、devnet SOL 残高不足時に自動airdropします。
+//   - fee payer 残高は常に確認し、SOLANA_AUTO_AIRDROP_ENABLED=true の場合のみ残高不足時にdevnet自動airdropを試します。
 func (c *MintClient) MintToken(
 	ctx context.Context,
 	params tokendom.MintParams,
