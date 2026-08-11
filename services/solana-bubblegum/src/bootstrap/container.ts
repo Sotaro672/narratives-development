@@ -13,6 +13,14 @@ import {
 } from "../application/fee-payer-top-up.js";
 
 import {
+  MerkleTreeResolver,
+} from "../application/merkle-tree-resolver.js";
+
+import {
+  MintV2Usecase,
+} from "../application/mint-v2-usecase.js";
+
+import {
   env,
 } from "../config/env.js";
 
@@ -23,6 +31,18 @@ import {
 import {
   FirestoreFaucetRateLimitRepository,
 } from "../infrastructure/firestore/faucet-rate-limit-repository.js";
+
+import {
+  FirestoreMerkleTreeRegistryRepository,
+} from "../infrastructure/firestore/merkle-tree-registry-repository.js";
+
+import {
+  FirestoreMintOperationRegistryRepository,
+} from "../infrastructure/firestore/mint-operation-registry-repository.js";
+
+import {
+  BubblegumMintV2TransactionClient,
+} from "../infrastructure/solana/bubblegum-mint-v2-transaction-client.js";
 
 import {
   createBubblegumRuntime,
@@ -46,6 +66,14 @@ const faucetRateLimit =
 
 const coreCollectionRegistry =
   new FirestoreCoreCollectionRegistryRepository();
+
+
+const merkleTreeRegistry =
+  new FirestoreMerkleTreeRegistryRepository();
+
+
+export const mintOperationRegistry =
+  new FirestoreMintOperationRegistryRepository();
 
 
 const bubblegumRuntimePromise =
@@ -102,3 +130,57 @@ export const coreCollectionResolver =
         env.solanaCluster,
     },
   );
+
+
+export const merkleTreeResolver =
+  new MerkleTreeResolver(
+    merkleTreeRegistry,
+    feePayerTopUpUsecase,
+    {
+      registryKey:
+        "devnet-default",
+
+      cluster:
+        env.solanaCluster,
+
+      maxDepth:
+        14,
+
+      maxBufferSize:
+        64,
+
+      canopyDepth:
+        8,
+
+      public:
+        false,
+    },
+  );
+
+
+const mintV2UsecasePromise =
+  bubblegumRuntimePromise
+    .then(
+      (runtime) => {
+        const mintV2Transaction =
+          new BubblegumMintV2TransactionClient(
+            runtime.umi,
+          );
+
+        return new MintV2Usecase(
+          mintOperationRegistry,
+          mintV2Transaction,
+          merkleTreeResolver,
+          coreCollectionResolver,
+          {
+            cluster:
+              env.solanaCluster,
+          },
+        );
+      },
+    );
+
+
+export async function getMintV2Usecase(): Promise<MintV2Usecase> {
+  return mintV2UsecasePromise;
+}
