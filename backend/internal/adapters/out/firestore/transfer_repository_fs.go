@@ -52,6 +52,7 @@ func (r *TransferRepositoryFS) transfersCol() *firestore.CollectionRef {
 	if collection == "" {
 		collection = os.Getenv("TRANSFERS_COLLECTION")
 	}
+
 	if collection == "" {
 		collection = "transfers"
 	}
@@ -66,6 +67,7 @@ func (r *TransferRepositoryFS) countersCol() *firestore.CollectionRef {
 			"TRANSFER_ATTEMPT_COUNTERS_COLLECTION",
 		)
 	}
+
 	if collection == "" {
 		collection = "transferAttemptCounters"
 	}
@@ -109,6 +111,7 @@ func (r *TransferRepositoryFS) GetLatestByProductID(
 		if errors.Is(err, iterator.Done) {
 			return nil, transferdom.ErrNotFound
 		}
+
 		return nil, err
 	}
 
@@ -137,6 +140,7 @@ func (r *TransferRepositoryFS) GetByProductIDAndAttempt(
 		if status.Code(err) == codes.NotFound {
 			return nil, transferdom.ErrNotFound
 		}
+
 		return nil, err
 	}
 	if snap == nil || !snap.Exists() {
@@ -185,24 +189,24 @@ func (r *TransferRepositoryFS) ListByProductID(
 	return out, nil
 }
 
-func (r *TransferRepositoryFS) ResolveTransferredAtByMintAddress(
+func (r *TransferRepositoryFS) ResolveTransferredAtByAssetID(
 	ctx context.Context,
-	mintAddress string,
+	assetID string,
 ) (
-	transferdom.ResolveTransferredAtByMintAddressResult,
+	transferdom.ResolveTransferredAtByAssetIDResult,
 	error,
 ) {
 	if r == nil || r.Client == nil {
-		return transferdom.ResolveTransferredAtByMintAddressResult{},
+		return transferdom.ResolveTransferredAtByAssetIDResult{},
 			ErrTransferRepoNotConfigured
 	}
-	if mintAddress == "" {
-		return transferdom.ResolveTransferredAtByMintAddressResult{},
-			transferdom.ErrInvalidMintAddress
+	if assetID == "" {
+		return transferdom.ResolveTransferredAtByAssetIDResult{},
+			transferdom.ErrInvalidAssetID
 	}
 
 	iter := r.transfersCol().
-		Where("mintAddress", "==", mintAddress).
+		Where("assetId", "==", assetID).
 		Where(
 			"status",
 			"==",
@@ -216,53 +220,53 @@ func (r *TransferRepositoryFS) ResolveTransferredAtByMintAddress(
 	snap, err := iter.Next()
 	if err != nil {
 		if errors.Is(err, iterator.Done) {
-			return transferdom.ResolveTransferredAtByMintAddressResult{},
+			return transferdom.ResolveTransferredAtByAssetIDResult{},
 				transferdom.ErrNotFound
 		}
 
-		return transferdom.ResolveTransferredAtByMintAddressResult{},
+		return transferdom.ResolveTransferredAtByAssetIDResult{},
 			err
 	}
 	if snap == nil || snap.Ref == nil {
-		return transferdom.ResolveTransferredAtByMintAddressResult{},
+		return transferdom.ResolveTransferredAtByAssetIDResult{},
 			transferdom.ErrNotFound
 	}
 
 	raw := snap.Data()
 	if raw == nil {
-		return transferdom.ResolveTransferredAtByMintAddressResult{},
+		return transferdom.ResolveTransferredAtByAssetIDResult{},
 			transferdom.ErrNotFound
 	}
 
 	productID, ok := raw["productId"].(string)
 	if !ok || productID == "" {
-		return transferdom.ResolveTransferredAtByMintAddressResult{},
+		return transferdom.ResolveTransferredAtByAssetIDResult{},
 			ErrInvalidTransferData
 	}
 
 	avatarID, ok := raw["avatarId"].(string)
 	if !ok || avatarID == "" {
-		return transferdom.ResolveTransferredAtByMintAddressResult{},
+		return transferdom.ResolveTransferredAtByAssetIDResult{},
 			ErrInvalidTransferData
 	}
 
 	rawAttempt, ok := raw["attempt"].(int64)
 	if !ok || rawAttempt <= 0 {
-		return transferdom.ResolveTransferredAtByMintAddressResult{},
+		return transferdom.ResolveTransferredAtByAssetIDResult{},
 			ErrInvalidTransferData
 	}
 
 	transferredAt, ok := raw["transferredAt"].(time.Time)
 	if !ok || transferredAt.IsZero() {
-		return transferdom.ResolveTransferredAtByMintAddressResult{},
+		return transferdom.ResolveTransferredAtByAssetIDResult{},
 			transferdom.ErrInvalidTransferredAt
 	}
 
-	return transferdom.ResolveTransferredAtByMintAddressResult{
+	return transferdom.ResolveTransferredAtByAssetIDResult{
 		ProductID:     productID,
 		Attempt:       int(rawAttempt),
 		AvatarID:      avatarID,
-		MintAddress:   mintAddress,
+		AssetID:       assetID,
 		TransferredAt: transferredAt.UTC(),
 	}, nil
 }
@@ -454,6 +458,7 @@ func (r *TransferRepositoryFS) Patch(
 				if status.Code(err) == codes.NotFound {
 					return transferdom.ErrNotFound
 				}
+
 				return err
 			}
 			if snap == nil || !snap.Exists() {
@@ -489,8 +494,8 @@ func (r *TransferRepositoryFS) Patch(
 			if patch.TxSignature != nil {
 				fields["txSignature"] = t.TxSignature
 			}
-			if patch.MintAddress != nil {
-				fields["mintAddress"] = t.MintAddress
+			if patch.AssetID != nil {
+				fields["assetId"] = t.AssetID
 			}
 			if patch.ToWalletAddress != nil {
 				fields["toWalletAddress"] =
@@ -554,8 +559,8 @@ func transferFromSnapshot(
 		return nil, ErrInvalidTransferData
 	}
 
-	mintAddress, ok := raw["mintAddress"].(string)
-	if !ok || mintAddress == "" {
+	assetID, ok := raw["assetId"].(string)
+	if !ok || assetID == "" {
 		return nil, ErrInvalidTransferData
 	}
 
@@ -580,7 +585,7 @@ func transferFromSnapshot(
 		ProductID:       productID,
 		OrderID:         orderID,
 		AvatarID:        avatarID,
-		MintAddress:     mintAddress,
+		AssetID:         assetID,
 		ToWalletAddress: toWalletAddress,
 		Status:          transferdom.Status(rawStatus),
 		CreatedAt:       createdAt.UTC(),
@@ -592,6 +597,7 @@ func transferFromSnapshot(
 		if !ok {
 			return nil, ErrInvalidTransferData
 		}
+
 		t.TxSignature = &txSignature
 	}
 
@@ -614,6 +620,7 @@ func transferFromSnapshot(
 		if !ok {
 			return nil, ErrInvalidTransferData
 		}
+
 		t.ErrorMsg = &errorMsg
 	}
 
@@ -637,11 +644,11 @@ func transferDocument(
 
 	doc := map[string]any{
 		"attempt":         int64(t.Attempt),
+		"assetId":         t.AssetID,
 		"avatarId":        t.AvatarID,
 		"createdAt":       t.CreatedAt.UTC(),
 		"errorMsg":        t.ErrorMsg,
 		"errorType":       t.ErrorType,
-		"mintAddress":     t.MintAddress,
 		"orderId":         t.OrderID,
 		"productId":       t.ProductID,
 		"status":          t.Status,

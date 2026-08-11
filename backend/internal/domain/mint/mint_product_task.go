@@ -20,7 +20,9 @@ import (
 // - productId          : string
 // - status             : string
 // - attemptCount       : int
-// - mintAddress        : string
+// - assetId            : string
+// - treeAddress        : string
+// - leafIndex          : uint64
 // - signature          : string
 // - errorMessage       : string
 // - createdAt          : time.Time
@@ -41,7 +43,9 @@ type MintProductTask struct {
 
 	AttemptCount int `json:"attemptCount"`
 
-	MintAddress string `json:"mintAddress,omitempty"`
+	AssetID     string `json:"assetId,omitempty"`
+	TreeAddress string `json:"treeAddress,omitempty"`
+	LeafIndex   uint64 `json:"leafIndex"`
 	Signature   string `json:"signature,omitempty"`
 
 	ErrorMessage string `json:"errorMessage,omitempty"`
@@ -149,7 +153,9 @@ func NewMintProductTask(
 
 		AttemptCount: 0,
 
-		MintAddress:  "",
+		AssetID:      "",
+		TreeAddress:  "",
+		LeafIndex:    0,
 		Signature:    "",
 		ErrorMessage: "",
 
@@ -205,7 +211,9 @@ func (t *MintProductTask) MarkMinting(now time.Time) error {
 
 func (t *MintProductTask) MarkMinted(
 	now time.Time,
-	mintAddress string,
+	assetID string,
+	treeAddress string,
+	leafIndex uint64,
 	signature string,
 ) error {
 	if t == nil {
@@ -214,14 +222,16 @@ func (t *MintProductTask) MarkMinted(
 	if now.IsZero() {
 		return ErrInvalidMintProductTaskMintedAt
 	}
-	if mintAddress == "" || signature == "" {
+	if assetID == "" || treeAddress == "" || signature == "" {
 		return ErrInvalidMintProductTaskResult
 	}
 
 	utc := now.UTC()
 
 	t.Status = MintProductTaskStatusMinted
-	t.MintAddress = mintAddress
+	t.AssetID = assetID
+	t.TreeAddress = treeAddress
+	t.LeafIndex = leafIndex
 	t.Signature = signature
 	t.ErrorMessage = ""
 	t.MintedAt = &utc
@@ -287,8 +297,13 @@ func (t *MintProductTask) ResetToPending(now time.Time) error {
 	utc := now.UTC()
 
 	t.Status = MintProductTaskStatusPending
+	t.AssetID = ""
+	t.TreeAddress = ""
+	t.LeafIndex = 0
+	t.Signature = ""
 	t.ErrorMessage = ""
 	t.MintingStartedAt = nil
+	t.MintedAt = nil
 	t.LastFailedAt = nil
 	t.UpdatedAt = utc
 
@@ -332,7 +347,10 @@ func (t MintProductTask) Validate() error {
 		if t.MintedAt != nil {
 			return ErrInconsistentMintProductTaskStatus
 		}
-		if t.MintAddress != "" || t.Signature != "" {
+		if t.AssetID != "" ||
+			t.TreeAddress != "" ||
+			t.LeafIndex != 0 ||
+			t.Signature != "" {
 			return ErrInconsistentMintProductTaskStatus
 		}
 	}
@@ -341,7 +359,10 @@ func (t MintProductTask) Validate() error {
 		if t.MintedAt != nil {
 			return ErrInconsistentMintProductTaskStatus
 		}
-		if t.MintAddress != "" || t.Signature != "" {
+		if t.AssetID != "" ||
+			t.TreeAddress != "" ||
+			t.LeafIndex != 0 ||
+			t.Signature != "" {
 			return ErrInconsistentMintProductTaskStatus
 		}
 	}
@@ -350,7 +371,9 @@ func (t MintProductTask) Validate() error {
 		if t.MintedAt == nil {
 			return ErrInvalidMintProductTaskMintedAt
 		}
-		if t.MintAddress == "" || t.Signature == "" {
+		if t.AssetID == "" ||
+			t.TreeAddress == "" ||
+			t.Signature == "" {
 			return ErrInvalidMintProductTaskResult
 		}
 	}
@@ -360,7 +383,10 @@ func (t MintProductTask) Validate() error {
 		if t.MintedAt != nil {
 			return ErrInconsistentMintProductTaskStatus
 		}
-		if t.MintAddress != "" || t.Signature != "" {
+		if t.AssetID != "" ||
+			t.TreeAddress != "" ||
+			t.LeafIndex != 0 ||
+			t.Signature != "" {
 			return ErrInconsistentMintProductTaskStatus
 		}
 	}

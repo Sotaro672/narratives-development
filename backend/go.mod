@@ -11,7 +11,7 @@ require (
 	github.com/blocto/solana-go-sdk v1.30.0
 	github.com/google/uuid v1.6.0
 	google.golang.org/api v0.274.0
-	google.golang.org/genproto v0.0.0-20260319201613-d00831a3d3e7
+	google.golang.org/genproto v0.0.0-20260319201613-d00831a3d3e7// indirect
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
 )
@@ -43,7 +43,6 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.14 // indirect
 	github.com/googleapis/gax-go/v2 v2.21.0 // indirect
 	github.com/mr-tron/base58 v1.2.0 // indirect
-	github.com/near/borsh-go v0.3.2-0.20220516180422-1ff87d108454 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/resend/resend-go/v3 v3.2.0
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect

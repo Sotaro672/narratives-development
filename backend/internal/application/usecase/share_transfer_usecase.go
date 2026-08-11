@@ -10,7 +10,12 @@ import (
 	walletdom "narratives/internal/domain/wallet"
 )
 
-// AvatarSecretProvider provides a signing capability for an avatar wallet owner.
+// AvatarSecretProvider is kept temporarily as a compatibility contract for
+// existing DI code.
+//
+// Bubblegum V2 transfer execution must not load or pass avatar private keys
+// through the Go application layer. Signer resolution belongs to the internal
+// Bubblegum service.
 type AvatarSecretProvider interface {
 	GetAvatarSigner(
 		ctx context.Context,
@@ -18,24 +23,29 @@ type AvatarSecretProvider interface {
 	) (any, error)
 }
 
-// AvatarWalletItemTransferUpdater updates sender / receiver wallet token caches.
+// AvatarWalletItemTransferUpdater updates sender / receiver wallet asset caches.
+//
+// NOTE:
+// Method names are kept temporarily for compatibility with existing
+// implementations. The identifier passed to these methods is a Bubblegum V2
+// assetId, not a legacy SPL mint address.
 type AvatarWalletItemTransferUpdater interface {
 	RemoveMintFromAvatarWalletItems(
 		ctx context.Context,
 		avatarID string,
-		mintAddress string,
+		assetID string,
 		now time.Time,
 	) error
 
 	AddMintToAvatarWalletItems(
 		ctx context.Context,
 		avatarID string,
-		mintAddress string,
+		assetID string,
 		now time.Time,
 	) error
 }
 
-// AvatarWalletSyncer fully syncs wallet tokens from on-chain after transfer.
+// AvatarWalletSyncer fully syncs wallet assets from on-chain after transfer.
 type AvatarWalletSyncer interface {
 	SyncWalletTokens(
 		ctx context.Context,
@@ -47,7 +57,6 @@ type ShareTransferUsecase struct {
 	tokenRepo TokenResolver
 
 	avatarWallet AvatarWalletResolver
-	secrets      AvatarSecretProvider
 
 	executionUC *TokenTransferExecutionUsecase
 }
@@ -55,14 +64,12 @@ type ShareTransferUsecase struct {
 func NewShareTransferUsecase(
 	tokenRepo TokenResolver,
 	avatarWallet AvatarWalletResolver,
-	secrets AvatarSecretProvider,
 	executionUC *TokenTransferExecutionUsecase,
 ) *ShareTransferUsecase {
 	return &ShareTransferUsecase{
 		tokenRepo: tokenRepo,
 
 		avatarWallet: avatarWallet,
-		secrets:      secrets,
 
 		executionUC: executionUC,
 	}
@@ -84,8 +91,8 @@ var (
 	ErrShareTransferSameAvatar = errors.New(
 		"share_transfer_uc: fromAvatarId and toAvatarId must be different",
 	)
-	ErrShareTransferMintEmpty = errors.New(
-		"share_transfer_uc: mintAddress is empty",
+	ErrShareTransferAssetIDEmpty = errors.New(
+		"share_transfer_uc: assetId is empty",
 	)
 	ErrShareTransferFromWalletEmpty = errors.New(
 		"share_transfer_uc: from avatar walletAddress is empty",
@@ -115,7 +122,7 @@ type ShareTransferInput struct {
 
 type ShareTransferResult struct {
 	ProductID        string
-	MintAddress      string
+	AssetID          string
 	TokenBlueprintID string
 
 	FromAvatarID string
@@ -126,28 +133,30 @@ type ShareTransferResult struct {
 	TxSignature string
 }
 
-// ShareToAvatar transfers the token currently owned by fromAvatar to toAvatar.
+// ShareToAvatar transfers the Bubblegum V2 cNFT currently owned by fromAvatar
+// to toAvatar.
 //
 // ShareTransferUsecase is responsible for:
 //  1. Validate sender / receiver avatar IDs.
 //  2. Resolve tokens/{productId}.
-//  3. Resolve sender / receiver avatar wallets.
-//  4. Resolve the sender avatar signer.
-//  5. Build the share transfer reference.
-//  6. Delegate common transfer execution to TokenTransferExecutionUsecase.
+//  3. Resolve sender / receiver avatar wallet addresses.
+//  4. Build the share transfer reference.
+//  5. Delegate common transfer execution to TokenTransferExecutionUsecase.
 //
 // TokenTransferExecutionUsecase is responsible for:
 //  1. Create transfer(PENDING).
-//  2. Validate token.toAddress == sender wallet.
-//  3. Execute the on-chain transfer.
-//  4. Update tokens/{productId}.toAddress.
-//  5. Remove the mint from the sender wallet cache.
-//  6. Add the mint to the receiver wallet cache.
-//  7. Sync sender / receiver wallets from on-chain.
-//  8. Warm the receiver token resolver.
-//  9. Mark transfer(SUCCEEDED).
+//  2. Delegate the Bubblegum V2 transfer to TokenTransferExecutor.
+//  3. Update cached tokens/{productId}.toAddress.
+//  4. Remove the assetId from the sender wallet cache.
+//  5. Add the assetId to the receiver wallet cache.
+//  6. Sync sender / receiver wallets from on-chain.
+//  7. Warm the receiver token resolver.
+//  8. Mark transfer(SUCCEEDED).
+//  9. Mark transfer(FAILED) when execution or post-processing fails.
 //
-// 10. Mark transfer(FAILED) when execution or post-processing fails.
+// Current ownership verification and signer resolution are responsibilities of
+// the Bubblegum service using DAS / on-chain state. The Go backend must not
+// load or send avatar private keys.
 func (u *ShareTransferUsecase) ShareToAvatar(
 	ctx context.Context,
 	in ShareTransferInput,
@@ -155,7 +164,6 @@ func (u *ShareTransferUsecase) ShareToAvatar(
 	if u == nil ||
 		u.tokenRepo == nil ||
 		u.avatarWallet == nil ||
-		u.secrets == nil ||
 		u.executionUC == nil {
 		return ShareTransferResult{},
 			ErrShareTransferNotConfigured
@@ -198,14 +206,13 @@ func (u *ShareTransferUsecase) ShareToAvatar(
 			)
 	}
 
-	mintAddress := token.MintAddress
+	assetID := token.AssetID
 	tokenBlueprintID := token.TokenBlueprintID
-	currentOwner := token.ToAddress
 	brandID := token.BrandID
 
-	if mintAddress == "" {
+	if assetID == "" {
 		return ShareTransferResult{},
-			ErrShareTransferMintEmpty
+			ErrShareTransferAssetIDEmpty
 	}
 
 	fromWallet, err :=
@@ -246,20 +253,6 @@ func (u *ShareTransferUsecase) ShareToAvatar(
 			ErrShareTransferToWalletEmpty
 	}
 
-	fromSigner, err := u.secrets.GetAvatarSigner(
-		ctx,
-		fromAvatarID,
-	)
-	if err != nil {
-		return ShareTransferResult{},
-			fmt.Errorf(
-				"share_transfer_uc: get sender avatar signer failed avatarId=%s wallet=%s: %w",
-				fromAvatarID,
-				fromWallet,
-				err,
-			)
-	}
-
 	shareRef := buildShareTransferRef(
 		fromAvatarID,
 		toAvatarID,
@@ -274,22 +267,17 @@ func (u *ShareTransferUsecase) ShareToAvatar(
 			AttemptReference: shareRef,
 
 			FromAvatarID: fromAvatarID,
+			FromBrandID:  "",
 			ToAvatarID:   toAvatarID,
 
 			BrandID:          brandID,
 			ModelID:          "",
 			TokenBlueprintID: tokenBlueprintID,
 
-			MintAddress:  mintAddress,
-			CurrentOwner: currentOwner,
+			AssetID: assetID,
 
 			FromWallet: fromWallet,
 			ToWallet:   toWallet,
-
-			FromSigner: fromSigner,
-			ToSigner:   nil,
-
-			Amount: 1,
 
 			RemoveFromSenderWallet: true,
 			SyncSenderWallet:       true,
@@ -306,7 +294,7 @@ func (u *ShareTransferUsecase) ShareToAvatar(
 
 	return ShareTransferResult{
 		ProductID:        productID,
-		MintAddress:      mintAddress,
+		AssetID:          assetID,
 		TokenBlueprintID: tokenBlueprintID,
 
 		FromAvatarID: fromAvatarID,
@@ -364,11 +352,11 @@ func mapShareTransferExecutionError(
 
 	case errors.Is(
 		err,
-		ErrTokenTransferExecutionMintAddressEmpty,
+		ErrTokenTransferExecutionAssetIDEmpty,
 	):
 		return fmt.Errorf(
 			"%w: %v",
-			ErrShareTransferMintEmpty,
+			ErrShareTransferAssetIDEmpty,
 			err,
 		)
 

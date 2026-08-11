@@ -4,7 +4,6 @@ package resolver
 import (
 	"context"
 	"errors"
-	"strings"
 
 	productdom "narratives/internal/domain/product"
 	pbdom "narratives/internal/domain/productBlueprint"
@@ -21,11 +20,11 @@ type MintProductBlueprintResolveResult struct {
 	ProductBlueprints []MintProductBlueprint `json:"productBlueprints"`
 }
 
-type MintTokenResolver interface {
-	ResolveTokenByMintAddress(
+type AssetTokenResolver interface {
+	ResolveTokenByAssetID(
 		ctx context.Context,
-		mintAddress string,
-	) (tokendom.ResolveTokenByMintAddressResult, error)
+		assetID string,
+	) (tokendom.ResolveTokenByAssetIDResult, error)
 }
 
 type ProductReader interface {
@@ -38,13 +37,13 @@ type ProductBlueprintReader interface {
 }
 
 type MintProductBlueprintResolver struct {
-	tokenQueryRepo       MintTokenResolver
+	tokenQueryRepo       AssetTokenResolver
 	productRepo          ProductReader
 	productBlueprintRepo ProductBlueprintReader
 }
 
 func NewMintProductBlueprintResolver(
-	tokenQueryRepo MintTokenResolver,
+	tokenQueryRepo AssetTokenResolver,
 	productRepo ProductReader,
 	productBlueprintRepo ProductBlueprintReader,
 ) *MintProductBlueprintResolver {
@@ -55,9 +54,9 @@ func NewMintProductBlueprintResolver(
 	}
 }
 
-func (r *MintProductBlueprintResolver) ResolveByMintAddresses(
+func (r *MintProductBlueprintResolver) ResolveByAssetIDs(
 	ctx context.Context,
-	mintAddresses []string,
+	assetIDs []string,
 ) (MintProductBlueprintResolveResult, error) {
 	if r == nil {
 		return MintProductBlueprintResolveResult{}, errors.New("mint product blueprint resolver is nil")
@@ -72,22 +71,22 @@ func (r *MintProductBlueprintResolver) ResolveByMintAddresses(
 		return MintProductBlueprintResolveResult{}, errors.New("productBlueprintRepo is nil")
 	}
 
-	mintAddresses = uniqueNonEmptyStrings(mintAddresses)
-	if len(mintAddresses) == 0 {
+	assetIDs = uniqueNonEmptyStrings(assetIDs)
+	if len(assetIDs) == 0 {
 		return MintProductBlueprintResolveResult{
 			ModelIDs:          []string{},
 			ProductBlueprints: []MintProductBlueprint{},
 		}, nil
 	}
 
-	modelIDs := make([]string, 0, len(mintAddresses))
-	seenModelIDs := make(map[string]struct{}, len(mintAddresses))
+	modelIDs := make([]string, 0, len(assetIDs))
+	seenModelIDs := make(map[string]struct{}, len(assetIDs))
 
-	productBlueprints := make([]MintProductBlueprint, 0, len(mintAddresses))
-	seenProductBlueprintIDs := make(map[string]struct{}, len(mintAddresses))
+	productBlueprints := make([]MintProductBlueprint, 0, len(assetIDs))
+	seenProductBlueprintIDs := make(map[string]struct{}, len(assetIDs))
 
-	for _, mintAddress := range mintAddresses {
-		tokenResult, err := r.tokenQueryRepo.ResolveTokenByMintAddress(ctx, mintAddress)
+	for _, assetID := range assetIDs {
+		tokenResult, err := r.tokenQueryRepo.ResolveTokenByAssetID(ctx, assetID)
 		if err != nil {
 			if errors.Is(err, tokendom.ErrNotFound) {
 				continue
@@ -95,7 +94,7 @@ func (r *MintProductBlueprintResolver) ResolveByMintAddresses(
 			return MintProductBlueprintResolveResult{}, err
 		}
 
-		productID := strings.TrimSpace(tokenResult.ProductID)
+		productID := tokenResult.ProductID
 		if productID == "" {
 			continue
 		}
@@ -108,7 +107,7 @@ func (r *MintProductBlueprintResolver) ResolveByMintAddresses(
 			return MintProductBlueprintResolveResult{}, err
 		}
 
-		modelID := strings.TrimSpace(product.ModelID)
+		modelID := product.ModelID
 		if modelID == "" {
 			continue
 		}
@@ -123,7 +122,6 @@ func (r *MintProductBlueprintResolver) ResolveByMintAddresses(
 			continue
 		}
 
-		productBlueprintID = strings.TrimSpace(productBlueprintID)
 		if productBlueprintID == "" {
 			continue
 		}
@@ -159,16 +157,15 @@ func uniqueNonEmptyStrings(values []string) []string {
 	result := make([]string, 0, len(values))
 
 	for _, value := range values {
-		normalized := strings.TrimSpace(value)
-		if normalized == "" {
+		if value == "" {
 			continue
 		}
-		if _, ok := seen[normalized]; ok {
+		if _, ok := seen[value]; ok {
 			continue
 		}
 
-		seen[normalized] = struct{}{}
-		result = append(result, normalized)
+		seen[value] = struct{}{}
+		result = append(result, value)
 	}
 
 	return result

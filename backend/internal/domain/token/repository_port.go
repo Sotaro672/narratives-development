@@ -31,12 +31,13 @@ type TokenBlueprintRepositoryPort interface {
 //
 // Firestore 実データ（tokens/{docId}）の前提:
 // - docId = productId
-// - fields: brandId, tokenBlueprintId, mintAddress, metadataUri, ...
+// - fields: assetStandard, cluster, assetId, treeAddress, leafIndex,
+//   coreCollectionAddress, brandId, tokenBlueprintId, metadataUri, ...
 //
 // 本ポートは以下の read-model query を提供する:
 // 1. productId/docId をキーに token を取得する
-// 2. mintAddress をキーに tokens を逆引きする
-// 3. tokenBlueprintId をキーに同一 blueprint 配下の mintAddress 一覧を取得する
+// 2. assetId をキーに tokens を逆引きする
+// 3. tokenBlueprintId をキーに同一 blueprint 配下の assetId 一覧を取得する
 //
 // ※ metadata の JSON 本体（URI の先の内容）まで取得したい場合は、
 //    別途 HTTP fetch 用ポートを設ける（このポートには含めない）のが推奨です。
@@ -47,13 +48,13 @@ type TokenQueryPort interface {
 		productID string,
 	) (GetTokenByProductIDResult, error)
 
-	ResolveTokenByMintAddress(
+	ResolveTokenByAssetID(
 		ctx context.Context,
-		mintAddress string,
-	) (ResolveTokenByMintAddressResult, error)
+		assetID string,
+	) (ResolveTokenByAssetIDResult, error)
 
-	ListMintAddressesByTokenBlueprintID(
+	ListAssetIDsByTokenBlueprintID(
 		ctx context.Context,
 		tokenBlueprintID string,
-	) (ListMintAddressesByTokenBlueprintIDResult, error)
+	) (ListAssetIDsByTokenBlueprintIDResult, error)
 }

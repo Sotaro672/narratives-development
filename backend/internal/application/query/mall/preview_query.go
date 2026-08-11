@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	dto "narratives/internal/application/query/mall/dto"
 	sharedquery "narratives/internal/application/query/shared"
@@ -82,11 +81,11 @@ type AvatarNameIconReader interface {
 	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 }
 
-// TransferReader resolves mintAddress -> transfer records.
+// TransferReader resolves assetId -> transfer records.
 type TransferReader interface {
-	ListByMintAddress(
+	ListByAssetID(
 		ctx context.Context,
-		mintAddress string,
+		assetID string,
 	) ([]dto.PreviewTransferInfo, error)
 }
 
@@ -177,7 +176,7 @@ type PreviewQuery struct {
 	BrandRepo          BrandReader
 	AvatarNameIconRepo AvatarNameIconReader
 
-	// mintAddress -> transfers を解決
+	// assetId -> transfers を解決
 	TransferRepo TransferReader
 }
 
@@ -222,7 +221,7 @@ func (q *PreviewQuery) ResolveModelIDByProductID(
 		return "", ErrPreviewQueryNotConfigured
 	}
 
-	id := strings.TrimSpace(productID)
+	id := productID
 	if id == "" {
 		return "", ErrInvalidProductID
 	}
@@ -232,7 +231,7 @@ func (q *PreviewQuery) ResolveModelIDByProductID(
 		return "", err
 	}
 
-	modelID := strings.TrimSpace(p.ModelID)
+	modelID := p.ModelID
 	if modelID == "" {
 		return "", ErrModelIDEmpty
 	}
@@ -254,7 +253,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		return nil, ErrPreviewQueryNotConfigured
 	}
 
-	id := strings.TrimSpace(productID)
+	id := productID
 	if id == "" {
 		return nil, ErrInvalidProductID
 	}
@@ -264,7 +263,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		return nil, err
 	}
 
-	modelID := strings.TrimSpace(p.ModelID)
+	modelID := p.ModelID
 	if modelID == "" {
 		return nil, ErrModelIDEmpty
 	}
@@ -279,7 +278,6 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		return nil, err
 	}
 
-	pbID = strings.TrimSpace(pbID)
 	if pbID == "" {
 		return nil, ErrProductBlueprintIDEmpty
 	}
@@ -335,7 +333,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	}
 
 	// brandId -> brandName（tokens側）
-	if brandID := strings.TrimSpace(tok.BrandID); brandID != "" {
+	if brandID := tok.BrandID; brandID != "" {
 		if brandName := q.resolveBrandNameForPreview(
 			ctx,
 			brandID,
@@ -347,7 +345,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 
 	// tokenBlueprint.Patch は domain/tokenBlueprint 側の Patch を再利用する。
 	if q.TokenBlueprintRepo != nil {
-		tokenBlueprintID := strings.TrimSpace(tok.TokenBlueprintID)
+		tokenBlueprintID := tok.TokenBlueprintID
 
 		if tokenBlueprintID != "" {
 			tb, perr := q.TokenBlueprintRepo.GetByID(
@@ -357,8 +355,8 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 			if perr == nil && tb != nil {
 				tbPatch := tbdom.NewPatchFromTokenBlueprint(tb)
 
-				if strings.TrimSpace(tbPatch.BrandID) != "" &&
-					strings.TrimSpace(tbPatch.BrandName) == "" {
+				if tbPatch.BrandID != "" &&
+					tbPatch.BrandName == "" {
 					tbPatch.BrandName = q.resolveBrandNameForPreview(
 						ctx,
 						tbPatch.BrandID,
@@ -393,7 +391,7 @@ func (q *PreviewQuery) resolveCurrentOwner(
 		return
 	}
 
-	walletAddress := strings.TrimSpace(tok.ToAddress)
+	walletAddress := tok.ToAddress
 	if walletAddress == "" {
 		return
 	}
@@ -442,14 +440,14 @@ func (q *PreviewQuery) resolvePreviewTransfers(
 		return
 	}
 
-	mintAddress := strings.TrimSpace(tok.MintAddress)
-	if mintAddress == "" {
+	assetID := tok.AssetID
+	if assetID == "" {
 		return
 	}
 
-	transfers, err := q.TransferRepo.ListByMintAddress(
+	transfers, err := q.TransferRepo.ListByAssetID(
 		ctx,
-		mintAddress,
+		assetID,
 	)
 	if err != nil {
 		return
@@ -485,7 +483,7 @@ func (q *PreviewQuery) ListEligiblePairsByAvatarID(
 		return OrderPurchasedResult{}, ErrOrderPurchasedQueryNotConfigured
 	}
 
-	aid := strings.TrimSpace(avatarID)
+	aid := avatarID
 	if aid == "" {
 		return OrderPurchasedResult{}, ErrInvalidAvatarID
 	}
@@ -537,8 +535,8 @@ func (q *PreviewQuery) VerifyMatch(
 			ErrOrderScanVerifyQueryNotConfigured
 	}
 
-	avatarID := strings.TrimSpace(in.AvatarID)
-	productID := strings.TrimSpace(in.ProductID)
+	avatarID := in.AvatarID
+	productID := in.ProductID
 
 	if avatarID == "" {
 		return appusecase.VerifyResult{},
@@ -567,7 +565,7 @@ func (q *PreviewQuery) VerifyMatch(
 			)
 	}
 
-	scannedModelID := strings.TrimSpace(info.ModelID)
+	scannedModelID := info.ModelID
 	if scannedModelID == "" {
 		return appusecase.VerifyResult{},
 			fmt.Errorf(
@@ -580,9 +578,7 @@ func (q *PreviewQuery) VerifyMatch(
 			ErrOrderScanVerifyTokenNotFound
 	}
 
-	scannedTokenBlueprintID := strings.TrimSpace(
-		info.Token.TokenBlueprintID,
-	)
+	scannedTokenBlueprintID := info.Token.TokenBlueprintID
 	if scannedTokenBlueprintID == "" {
 		return appusecase.VerifyResult{},
 			ErrOrderScanVerifyTokenBlueprintEmpty
@@ -650,16 +646,14 @@ func (q *PreviewQuery) VerifyMatch(
 func purchasedPairFromListItem(
 	item orderdom.EligibleTransferItem,
 ) (PurchasedPair, bool) {
-	modelID := strings.TrimSpace(item.ModelID)
-	inventoryID := strings.TrimSpace(item.InventoryID)
+	modelID := item.ModelID
+	inventoryID := item.InventoryID
 
 	if modelID == "" || inventoryID == "" {
 		return PurchasedPair{}, false
 	}
 
-	tokenBlueprintID := strings.TrimSpace(
-		item.TokenBlueprintID,
-	)
+	tokenBlueprintID := item.TokenBlueprintID
 	if tokenBlueprintID == "" {
 		return PurchasedPair{}, false
 	}
@@ -672,7 +666,7 @@ func purchasedPairFromListItem(
 
 		ModelID:     modelID,
 		InventoryID: inventoryID,
-		ListID:      strings.TrimSpace(item.ListID),
+		ListID:      item.ListID,
 
 		TokenBlueprintID: tokenBlueprintID,
 	}, true
@@ -681,11 +675,9 @@ func purchasedPairFromListItem(
 func purchasedPairFromResaleItem(
 	item orderdom.EligibleTransferItem,
 ) (PurchasedPair, bool) {
-	resaleID := strings.TrimSpace(item.ResaleID)
-	productID := strings.TrimSpace(item.ProductID)
-	tokenBlueprintID := strings.TrimSpace(
-		item.TokenBlueprintID,
-	)
+	resaleID := item.ResaleID
+	productID := item.ProductID
+	tokenBlueprintID := item.TokenBlueprintID
 
 	if resaleID == "" ||
 		productID == "" ||
@@ -702,9 +694,9 @@ func purchasedPairFromResaleItem(
 		ResaleID: resaleID,
 
 		ProductID:          productID,
-		ProductBlueprintID: strings.TrimSpace(item.ProductBlueprintID),
+		ProductBlueprintID: item.ProductBlueprintID,
 		TokenBlueprintID:   tokenBlueprintID,
-		BrandID:            strings.TrimSpace(item.BrandID),
+		BrandID:            item.BrandID,
 	}, true
 }
 
@@ -725,7 +717,7 @@ func productBlueprintPatchForPreview(
 }
 
 func stringPtrOrNil(value string) *string {
-	v := strings.TrimSpace(value)
+	v := value
 	if v == "" {
 		return nil
 	}
@@ -741,7 +733,6 @@ func (q *PreviewQuery) getBrandNameIcon(
 			ErrPreviewQueryNotConfigured
 	}
 
-	brandID = strings.TrimSpace(brandID)
 	if brandID == "" {
 		return branddom.NameIcon{},
 			branddom.ErrInvalidID
@@ -765,7 +756,7 @@ func (q *PreviewQuery) resolveBrandNameForPreview(
 ) string {
 	if q == nil ||
 		q.BrandRepo == nil ||
-		strings.TrimSpace(brandID) == "" {
+		brandID == "" {
 		return ""
 	}
 
@@ -774,11 +765,11 @@ func (q *PreviewQuery) resolveBrandNameForPreview(
 		return ""
 	}
 
-	if strings.TrimSpace(ni.Name) == "" {
+	if ni.Name == "" {
 		return ""
 	}
 
-	if out != nil && strings.TrimSpace(out.BrandName) == "" {
+	if out != nil && out.BrandName == "" {
 		out.BrandName = ni.Name
 	}
 
@@ -934,12 +925,8 @@ func (q *PreviewQuery) resolveTransferOwners(
 	)
 
 	for _, tr := range transfers {
-		fromWalletAddress := strings.TrimSpace(
-			tr.FromWalletAddress,
-		)
-		toWalletAddress := strings.TrimSpace(
-			tr.ToWalletAddress,
-		)
+		fromWalletAddress := tr.FromWalletAddress
+		toWalletAddress := tr.ToWalletAddress
 
 		// 画面へ返す transfer 履歴には、所有者を識別する ID だけを設定する。
 		// 元の transfer が持つ walletAddress、署名、日時、表示名、アイコンなどは
@@ -980,7 +967,6 @@ func (q *PreviewQuery) resolveTransferFromOwnerID(
 		return
 	}
 
-	walletAddress = strings.TrimSpace(walletAddress)
 	if walletAddress == "" {
 		return
 	}
@@ -999,15 +985,11 @@ func (q *PreviewQuery) resolveTransferFromOwnerID(
 
 	switch res.OwnerType {
 	case sharedquery.OwnerTypeAvatar:
-		item.FromAvatarID = strings.TrimSpace(
-			res.AvatarID,
-		)
+		item.FromAvatarID = res.AvatarID
 		item.FromBrandID = ""
 
 	case sharedquery.OwnerTypeBrand:
-		item.FromBrandID = strings.TrimSpace(
-			res.BrandID,
-		)
+		item.FromBrandID = res.BrandID
 		item.FromAvatarID = ""
 	}
 }
@@ -1023,7 +1005,6 @@ func (q *PreviewQuery) resolveTransferToOwnerID(
 		return
 	}
 
-	walletAddress = strings.TrimSpace(walletAddress)
 	if walletAddress == "" {
 		return
 	}
@@ -1042,15 +1023,11 @@ func (q *PreviewQuery) resolveTransferToOwnerID(
 
 	switch res.OwnerType {
 	case sharedquery.OwnerTypeAvatar:
-		item.ToAvatarID = strings.TrimSpace(
-			res.AvatarID,
-		)
+		item.ToAvatarID = res.AvatarID
 		item.ToBrandID = ""
 
 	case sharedquery.OwnerTypeBrand:
-		item.ToBrandID = strings.TrimSpace(
-			res.BrandID,
-		)
+		item.ToBrandID = res.BrandID
 		item.ToAvatarID = ""
 	}
 }

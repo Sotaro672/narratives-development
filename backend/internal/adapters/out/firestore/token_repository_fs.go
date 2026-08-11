@@ -25,16 +25,21 @@ var (
 // Firestore tokens collection DTO（実データのフィールド名を正として固定）
 //
 // NOTE:
-// - mintAddress 逆引き（TokenQuery）と productId 直引き（TokenReader）の両方で共用します。
+// - assetId 逆引き（TokenQuery）と productId 直引き（TokenReader）の両方で共用します。
 // - tokens には productId フィールドは保存せず、docID = productId として扱います。
 type tokenDoc struct {
-	BrandID            string    `firestore:"brandId"`
-	MetadataURI        string    `firestore:"metadataUri"`
-	MintAddress        string    `firestore:"mintAddress"`
-	MintedAt           time.Time `firestore:"mintedAt"`
-	OnChainTxSignature string    `firestore:"onChainTxSignature"`
-	ToAddress          string    `firestore:"toAddress"`
-	TokenBlueprintID   string    `firestore:"tokenBlueprintId"`
+	AssetStandard         string    `firestore:"assetStandard"`
+	Cluster               string    `firestore:"cluster"`
+	AssetID               string    `firestore:"assetId"`
+	TreeAddress           string    `firestore:"treeAddress"`
+	LeafIndex             int64     `firestore:"leafIndex"`
+	CoreCollectionAddress string    `firestore:"coreCollectionAddress"`
+	BrandID               string    `firestore:"brandId"`
+	MetadataURI           string    `firestore:"metadataUri"`
+	MintedAt              time.Time `firestore:"mintedAt"`
+	OnChainTxSignature    string    `firestore:"onChainTxSignature"`
+	ToAddress             string    `firestore:"toAddress"`
+	TokenBlueprintID      string    `firestore:"tokenBlueprintId"`
 }
 
 // ========================================
@@ -84,7 +89,6 @@ func (r *TokenReaderFS) GetByProductID(ctx context.Context, productID string) (*
 		ProductID:          id,
 		BrandID:            d.BrandID,
 		TokenBlueprintID:   d.TokenBlueprintID,
-		MintAddress:        d.MintAddress,
 		ToAddress:          d.ToAddress,
 		MetadataURI:        d.MetadataURI,
 		OnChainTxSignature: d.OnChainTxSignature,
@@ -98,83 +102,83 @@ func (r *TokenReaderFS) GetByProductID(ctx context.Context, productID string) (*
 }
 
 // ============================================================
-// TokenQuery (mintAddress -> productId(docId) + brandId + metadataUri)
+// TokenQuery (assetId -> productId(docId) + brandId + metadataUri)
 // ============================================================
 //
 // 重要:
-// - 見つからない mint は tokendom.ErrNotFound を返す（handler が 404 に変換できる）
+// - 見つからない asset は tokendom.ErrNotFound を返す（handler が 404 に変換できる）
 // - これにより、token テーブル削除済みデータで 500 にならず UI 側が「取得できませんでした」表示に落とせます。
-func (r *TokenReaderFS) ResolveTokenByMintAddress(
+func (r *TokenReaderFS) ResolveTokenByAssetID(
 	ctx context.Context,
-	mintAddress string,
-) (tokendom.ResolveTokenByMintAddressResult, error) {
+	assetID string,
+) (tokendom.ResolveTokenByAssetIDResult, error) {
 	if r == nil || r.Client == nil {
-		return tokendom.ResolveTokenByMintAddressResult{}, errors.New("token_reader_fs: firestore client is nil")
+		return tokendom.ResolveTokenByAssetIDResult{}, errors.New("token_reader_fs: firestore client is nil")
 	}
 
-	m := strings.TrimSpace(mintAddress)
-	if m == "" {
-		return tokendom.ResolveTokenByMintAddressResult{}, tokendom.ErrInvalidMintAddress
+	a := strings.TrimSpace(assetID)
+	if a == "" {
+		return tokendom.ResolveTokenByAssetIDResult{}, tokendom.ErrInvalidAssetID
 	}
 
-	iter := r.Client.Collection("tokens").Where("mintAddress", "==", m).Limit(1).Documents(ctx)
+	iter := r.Client.Collection("tokens").Where("assetId", "==", a).Limit(1).Documents(ctx)
 	defer iter.Stop()
 
 	docSnap, err := iter.Next()
 	if err != nil {
 		if errors.Is(err, iterator.Done) {
-			return tokendom.ResolveTokenByMintAddressResult{}, tokendom.ErrNotFound
+			return tokendom.ResolveTokenByAssetIDResult{}, tokendom.ErrNotFound
 		}
-		return tokendom.ResolveTokenByMintAddressResult{}, err
+		return tokendom.ResolveTokenByAssetIDResult{}, err
 	}
 
 	var d tokenDoc
 	if err := docSnap.DataTo(&d); err != nil {
-		return tokendom.ResolveTokenByMintAddressResult{}, err
+		return tokendom.ResolveTokenByAssetIDResult{}, err
 	}
 
 	productID := docSnap.Ref.ID
 	if productID == "" {
-		return tokendom.ResolveTokenByMintAddressResult{}, errors.New("token_reader_fs: empty doc id")
+		return tokendom.ResolveTokenByAssetIDResult{}, errors.New("token_reader_fs: empty doc id")
 	}
 
-	mint := strings.TrimSpace(d.MintAddress)
-	if mint == "" {
-		return tokendom.ResolveTokenByMintAddressResult{}, tokendom.ErrInvalidMintAddress
+	asset := strings.TrimSpace(d.AssetID)
+	if asset == "" {
+		return tokendom.ResolveTokenByAssetIDResult{}, tokendom.ErrInvalidAssetID
 	}
 
-	return tokendom.ResolveTokenByMintAddressResult{
+	return tokendom.ResolveTokenByAssetIDResult{
 		ProductID:   productID,
 		BrandID:     d.BrandID,
 		MetadataURI: d.MetadataURI,
-		MintAddress: mint,
+		AssetID:     asset,
 	}, nil
 }
 
 // ============================================================
-// TokenQuery (tokenBlueprintId -> []mintAddress)
+// TokenQuery (tokenBlueprintId -> []assetId)
 // ============================================================
 //
-// 同じ tokenBlueprintId を持つ tokens を検索し、mintAddress 一覧を返します。
-// - 空文字の mintAddress は除外
-// - 重複 mintAddress は除外
-func (r *TokenReaderFS) ListMintAddressesByTokenBlueprintID(
+// 同じ tokenBlueprintId を持つ tokens を検索し、assetId 一覧を返します。
+// - 空文字の assetId は除外
+// - 重複 assetId は除外
+func (r *TokenReaderFS) ListAssetIDsByTokenBlueprintID(
 	ctx context.Context,
 	tokenBlueprintID string,
-) (tokendom.ListMintAddressesByTokenBlueprintIDResult, error) {
+) (tokendom.ListAssetIDsByTokenBlueprintIDResult, error) {
 	if r == nil || r.Client == nil {
-		return tokendom.ListMintAddressesByTokenBlueprintIDResult{}, errors.New("token_reader_fs: firestore client is nil")
+		return tokendom.ListAssetIDsByTokenBlueprintIDResult{}, errors.New("token_reader_fs: firestore client is nil")
 	}
 
 	tbID := strings.TrimSpace(tokenBlueprintID)
 	if tbID == "" {
-		return tokendom.ListMintAddressesByTokenBlueprintIDResult{}, tokendom.ErrInvalidTokenBlueprintID
+		return tokendom.ListAssetIDsByTokenBlueprintIDResult{}, tokendom.ErrInvalidTokenBlueprintID
 	}
 
 	iter := r.Client.Collection("tokens").Where("tokenBlueprintId", "==", tbID).Documents(ctx)
 	defer iter.Stop()
 
-	mintAddresses := make([]string, 0)
+	assetIDs := make([]string, 0)
 	seen := make(map[string]struct{})
 
 	for {
@@ -183,30 +187,30 @@ func (r *TokenReaderFS) ListMintAddressesByTokenBlueprintID(
 			if errors.Is(err, iterator.Done) {
 				break
 			}
-			return tokendom.ListMintAddressesByTokenBlueprintIDResult{}, err
+			return tokendom.ListAssetIDsByTokenBlueprintIDResult{}, err
 		}
 
 		var d tokenDoc
 		if err := docSnap.DataTo(&d); err != nil {
-			return tokendom.ListMintAddressesByTokenBlueprintIDResult{}, err
+			return tokendom.ListAssetIDsByTokenBlueprintIDResult{}, err
 		}
 
-		addr := strings.TrimSpace(d.MintAddress)
-		if addr == "" {
+		assetID := strings.TrimSpace(d.AssetID)
+		if assetID == "" {
 			continue
 		}
 
-		if _, exists := seen[addr]; exists {
+		if _, exists := seen[assetID]; exists {
 			continue
 		}
 
-		seen[addr] = struct{}{}
-		mintAddresses = append(mintAddresses, addr)
+		seen[assetID] = struct{}{}
+		assetIDs = append(assetIDs, assetID)
 	}
 
-	return tokendom.ListMintAddressesByTokenBlueprintIDResult{
+	return tokendom.ListAssetIDsByTokenBlueprintIDResult{
 		TokenBlueprintID: tbID,
-		MintAddresses:    mintAddresses,
+		AssetIDs:         assetIDs,
 	}, nil
 }
 
@@ -300,11 +304,21 @@ func (r *TokenReaderFS) GetTokenByProductID(
 		return tokendom.GetTokenByProductIDResult{}, err
 	}
 
+	leafIndex := uint64(0)
+	if d.LeafIndex >= 0 {
+		leafIndex = uint64(d.LeafIndex)
+	}
+
 	return tokendom.GetTokenByProductIDResult{
-		ProductID:        id,
-		BrandID:          d.BrandID,
-		TokenBlueprintID: d.TokenBlueprintID,
-		MetadataURI:      d.MetadataURI,
-		MintAddress:      strings.TrimSpace(d.MintAddress),
+		ProductID:             id,
+		BrandID:               d.BrandID,
+		TokenBlueprintID:      d.TokenBlueprintID,
+		MetadataURI:           d.MetadataURI,
+		AssetStandard:         tokendom.AssetStandard(d.AssetStandard),
+		Cluster:               d.Cluster,
+		AssetID:               strings.TrimSpace(d.AssetID),
+		TreeAddress:           strings.TrimSpace(d.TreeAddress),
+		LeafIndex:             leafIndex,
+		CoreCollectionAddress: strings.TrimSpace(d.CoreCollectionAddress),
 	}, nil
 }

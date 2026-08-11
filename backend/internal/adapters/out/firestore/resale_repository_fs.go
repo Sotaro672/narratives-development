@@ -644,7 +644,7 @@ func (r *ResaleRepositoryFS) Delete(
 func encodeResaleDoc(item resaledom.Resale) map[string]any {
 	m := map[string]any{
 		"status":               string(item.Status),
-		"mint_address":         item.MintAddress,
+		"asset_id":             item.AssetID,
 		"token_blueprint_id":   item.TokenBlueprintID,
 		"product_id":           item.ProductID,
 		"brand_id":             item.BrandID,
@@ -678,7 +678,7 @@ func decodeResaleDoc(doc *gfs.DocumentSnapshot) (resaledom.Resale, error) {
 
 	var raw struct {
 		Status             string     `firestore:"status"`
-		MintAddress        string     `firestore:"mint_address"`
+		AssetID            string     `firestore:"asset_id"`
 		TokenBlueprintID   string     `firestore:"token_blueprint_id"`
 		ProductID          string     `firestore:"product_id"`
 		BrandID            string     `firestore:"brand_id"`
@@ -709,7 +709,7 @@ func decodeResaleDoc(doc *gfs.DocumentSnapshot) (resaledom.Resale, error) {
 	item := resaledom.Resale{
 		ID:                 doc.Ref.ID,
 		Status:             resaledom.ResaleStatus(raw.Status),
-		MintAddress:        raw.MintAddress,
+		AssetID:            raw.AssetID,
 		TokenBlueprintID:   raw.TokenBlueprintID,
 		ProductID:          raw.ProductID,
 		BrandID:            raw.BrandID,
@@ -738,10 +738,6 @@ func decodeResaleDoc(doc *gfs.DocumentSnapshot) (resaledom.Resale, error) {
 
 func matchesResaleFilter(item resaledom.Resale, filter resaledom.Filter) bool {
 	if len(filter.IDs) > 0 && !stringIn(item.ID, filter.IDs) {
-		return false
-	}
-
-	if len(filter.MintAddresses) > 0 && !stringIn(item.MintAddress, filter.MintAddresses) {
 		return false
 	}
 
@@ -797,7 +793,7 @@ func matchesResaleFilter(item resaledom.Resale, filter resaledom.Filter) bool {
 	if q != "" {
 		haystack := strings.ToLower(strings.Join([]string{
 			item.ID,
-			item.MintAddress,
+			item.AssetID,
 			item.TokenBlueprintID,
 			item.ProductID,
 			item.BrandID,

@@ -23,7 +23,7 @@ type TokenInfo struct {
 	ToAddress   string `json:"toAddress,omitempty"`
 	MetadataURI string `json:"metadataUri,omitempty"`
 
-	MintAddress        string `json:"mintAddress,omitempty"`
+	AssetID            string `json:"assetId,omitempty"`
 	OnChainTxSignature string `json:"onChainTxSignature,omitempty"`
 
 	MintedAt string `json:"mintedAt,omitempty"`

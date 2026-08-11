@@ -24,7 +24,7 @@ import (
 // Routes:
 //   - GET     /mall/me/wallets
 //   - POST    /mall/me/wallets/sync
-//   - GET     /mall/me/wallets/tokens/resolve?mintAddress=...
+//   - GET     /mall/me/wallets/tokens/resolve?assetId=...
 //   - OPTIONS /mall/me/wallets/metadata/proxy?url=...
 //   - GET     /mall/me/wallets/metadata/proxy?url=...
 type MallMeWalletHandler struct {
@@ -71,7 +71,7 @@ func (h *MallMeWalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 
 	case r.Method == http.MethodGet && path == "/mall/me/wallets/tokens/resolve":
-		h.resolveMeTokenByMintAddress(w, r)
+		h.resolveMeTokenByAssetID(w, r)
 		return
 
 	case r.Method == http.MethodOptions && path == "/mall/me/wallets/metadata/proxy":
@@ -90,8 +90,8 @@ func (h *MallMeWalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 // GET /mall/me/wallets
 // - returns current wallet snapshot
-// - compares persisted wallet.tokens with Solana devnet owned mints
-// - if different, syncs wallet.tokens from on-chain before returning
+// - compares persisted wallet.assetIds with Solana owned assetIds
+// - if different, syncs wallet.assetIds from on-chain before returning
 func (h *MallMeWalletHandler) getMeWallets(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -144,7 +144,7 @@ func (h *MallMeWalletHandler) syncMeWallets(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	wallet, err := h.walletUC.SyncWalletTokens(ctx, avatarID)
+	wallet, err := h.walletUC.SyncWalletAssetIDs(ctx, avatarID)
 	if err != nil {
 		writeMallMeWalletErr(w, err)
 		return
@@ -155,8 +155,8 @@ func (h *MallMeWalletHandler) syncMeWallets(w http.ResponseWriter, r *http.Reque
 	})
 }
 
-// GET /mall/me/wallets/tokens/resolve?mintAddress=...
-func (h *MallMeWalletHandler) resolveMeTokenByMintAddress(w http.ResponseWriter, r *http.Request) {
+// GET /mall/me/wallets/tokens/resolve?assetId=...
+func (h *MallMeWalletHandler) resolveMeTokenByAssetID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h == nil || h.walletUC == nil {
@@ -176,19 +176,19 @@ func (h *MallMeWalletHandler) resolveMeTokenByMintAddress(w http.ResponseWriter,
 		return
 	}
 
-	mintAddress := r.URL.Query().Get("mintAddress")
-	if mintAddress == "" {
+	assetID := r.URL.Query().Get("assetId")
+	if assetID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "mintAddress is required",
+			"error": "assetId is required",
 		})
 		return
 	}
 
-	result, err := h.walletUC.ResolveOwnedTokenByMintAddressWithBrandName(
+	result, err := h.walletUC.ResolveOwnedTokenByAssetIDWithBrandName(
 		ctx,
 		avatarID,
-		mintAddress,
+		assetID,
 	)
 	if err != nil {
 		writeMallMeWalletErr(w, err)
@@ -202,7 +202,7 @@ func (h *MallMeWalletHandler) resolveMeTokenByMintAddress(w http.ResponseWriter,
 		"productBlueprintId": result.ProductBlueprintID,
 		"productName":        result.ProductName,
 		"metadataUri":        result.MetadataURI,
-		"mintAddress":        result.MintAddress,
+		"assetId":            result.AssetID,
 	})
 }
 
@@ -405,7 +405,7 @@ func isAllowedMetadataProxyHost(
 	host string,
 	allow map[string]struct{},
 ) bool {
-	normalized := strings.ToLower(strings.TrimSpace(host))
+	normalized := strings.ToLower(host)
 	if normalized == "" {
 		return false
 	}
@@ -454,13 +454,13 @@ func mallMeWalletHTTPStatus(err error) int {
 		errors.Is(err, tokendom.ErrNotFound):
 		return http.StatusNotFound
 
-	case errors.Is(err, usecase.ErrWalletMintAddressNotOwned):
+	case errors.Is(err, usecase.ErrWalletAssetIDNotOwned):
 		return http.StatusForbidden
 
 	case errors.Is(err, usecase.ErrWalletSyncAvatarIDEmpty),
 		errors.Is(err, usecase.ErrWalletSyncWalletAddressEmpty),
-		errors.Is(err, usecase.ErrMintAddressEmpty),
-		errors.Is(err, tokendom.ErrInvalidMintAddress):
+		errors.Is(err, usecase.ErrAssetIDEmpty),
+		errors.Is(err, tokendom.ErrInvalidAssetID):
 		return http.StatusBadRequest
 
 	case errors.Is(err, usecase.ErrWalletSyncOnchainNotConfigured),

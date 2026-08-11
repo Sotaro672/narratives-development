@@ -37,8 +37,8 @@ type ScanTransferResult struct {
 	// tokens/{productId}.toAddress updated?
 	UpdatedToAddress bool `json:"updatedToAddress,omitempty"`
 
-	// moved mintAddress
-	MintAddress string `json:"mintAddress,omitempty"`
+	// transferred Bubblegum V2 cNFT assetId
+	AssetID string `json:"assetId,omitempty"`
 }
 
 // TransferHandler handles:
@@ -49,15 +49,22 @@ type TransferHandler struct {
 
 // NewTransferHandler creates handler.
 // NOTE: This handler assumes AvatarContextMiddleware is enabled for this route.
-func NewTransferHandler(uc ScanTransferUsecase) http.Handler {
-	return &TransferHandler{uc: uc}
+func NewTransferHandler(
+	uc ScanTransferUsecase,
+) http.Handler {
+	return &TransferHandler{
+		uc: uc,
+	}
 }
 
 func (h *TransferHandler) ServeHTTP(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(
+		"Content-Type",
+		"application/json",
+	)
 
 	// Preflight
 	if r.Method == http.MethodOptions {
@@ -71,24 +78,35 @@ func (h *TransferHandler) ServeHTTP(
 	}
 
 	if h == nil || h.uc == nil {
-		internalError(w, "transfer usecase not configured")
+		internalError(
+			w,
+			"transfer usecase not configured",
+		)
 		return
 	}
 
 	// /mall/me/... is auth-required (normally enforced by middleware)
 	auth := r.Header.Get("Authorization")
 	if auth == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{
-			"error": "authorization header is required",
-		})
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]any{
+				"error": "authorization header is required",
+			},
+		)
 		return
 	}
 
 	_, ok := middleware.CurrentUserUID(r)
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{
-			"error": "unauthorized: missing uid",
-		})
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]any{
+				"error": "unauthorized: missing uid",
+			},
+		)
 		return
 	}
 
@@ -96,72 +114,114 @@ func (h *TransferHandler) ServeHTTP(
 	var body struct {
 		ProductID string `json:"productId"`
 	}
-	if err := readJSON(r, &body); err != nil {
-		badRequest(w, "invalid json")
+
+	if err := readJSON(
+		r,
+		&body,
+	); err != nil {
+		badRequest(
+			w,
+			"invalid json",
+		)
 		return
 	}
 
 	productID := body.ProductID
 	if productID == "" {
-		badRequest(w, "productId is required")
+		badRequest(
+			w,
+			"productId is required",
+		)
 		return
 	}
 
 	// avatarId is resolved and stored by AvatarContextMiddleware (required)
-	avatarID, ok := middleware.CurrentAvatarID(r)
+	avatarID, ok :=
+		middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
 		// This should not happen if requireAvatarContext is wired.
 		// Treat as service misconfiguration to make the bug obvious.
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error": "avatar_context_missing",
-		})
+		writeJSON(
+			w,
+			http.StatusServiceUnavailable,
+			map[string]any{
+				"error": "avatar_context_missing",
+			},
+		)
 		return
 	}
 
-	ucOut, err := h.uc.TransferToAvatarByVerifiedScan(
-		r.Context(),
-		usecase.TransferByVerifiedScanInput{
-			AvatarID:  avatarID,
-			ProductID: productID,
-		},
-	)
+	ucOut, err :=
+		h.uc.TransferToAvatarByVerifiedScan(
+			r.Context(),
+			usecase.TransferByVerifiedScanInput{
+				AvatarID:  avatarID,
+				ProductID: productID,
+			},
+		)
 	if err != nil {
-		if errors.Is(err, usecase.ErrTransferNotMatched) {
+		if errors.Is(
+			err,
+			usecase.ErrTransferNotMatched,
+		) {
 			out := &ScanTransferResult{
 				AvatarID:  avatarID,
 				ProductID: productID,
 				Matched:   false,
 			}
-			writeJSON(w, http.StatusOK, map[string]any{
-				"data": out,
-			})
+
+			writeJSON(
+				w,
+				http.StatusOK,
+				map[string]any{
+					"data": out,
+				},
+			)
 			return
 		}
 
 		if isNotFoundLike(err) {
-			writeJSON(w, http.StatusNotFound, map[string]any{
-				"error":     "not found",
-				"avatarId":  avatarID,
-				"productId": productID,
-			})
+			writeJSON(
+				w,
+				http.StatusNotFound,
+				map[string]any{
+					"error":     "not found",
+					"avatarId":  avatarID,
+					"productId": productID,
+				},
+			)
 			return
 		}
 
-		if errors.Is(err, context.Canceled) ||
-			errors.Is(err, context.DeadlineExceeded) {
-			writeJSON(w, http.StatusRequestTimeout, map[string]any{
-				"error":     "request canceled",
-				"avatarId":  avatarID,
-				"productId": productID,
-			})
+		if errors.Is(
+			err,
+			context.Canceled,
+		) ||
+			errors.Is(
+				err,
+				context.DeadlineExceeded,
+			) {
+			writeJSON(
+				w,
+				http.StatusRequestTimeout,
+				map[string]any{
+					"error":     "request canceled",
+					"avatarId":  avatarID,
+					"productId": productID,
+				},
+			)
 			return
 		}
 
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":     "transfer failed",
-			"avatarId":  avatarID,
-			"productId": productID,
-		})
+		writeJSON(
+			w,
+			http.StatusInternalServerError,
+			map[string]any{
+				"error":     "transfer failed",
+				"avatarId":  avatarID,
+				"productId": productID,
+			},
+		)
 		return
 	}
 
@@ -173,10 +233,14 @@ func (h *TransferHandler) ServeHTTP(
 		FromDisplayName:  ucOut.FromDisplayName,
 		ToDisplayName:    ucOut.ToDisplayName,
 		UpdatedToAddress: true,
-		MintAddress:      ucOut.MintAddress,
+		AssetID:          ucOut.AssetID,
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data": out,
-	})
+	writeJSON(
+		w,
+		http.StatusOK,
+		map[string]any{
+			"data": out,
+		},
+	)
 }

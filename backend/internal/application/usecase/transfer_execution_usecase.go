@@ -14,26 +14,27 @@ import (
 // Usecase
 // -----------------------------------------------------------------------------
 
-// TokenTransferExecutionUsecase executes the common token transfer flow shared
-// by TransferUsecase and ShareTransferUsecase.
+// TokenTransferExecutionUsecase executes the common Bubblegum V2 cNFT transfer
+// flow shared by TransferUsecase and ShareTransferUsecase.
 //
 // This use case is responsible only for the common transfer execution:
 //
 //  1. Create transfer attempt as PENDING.
-//  2. Verify the current token owner.
-//  3. Execute the on-chain token transfer.
-//  4. Run caller-specific post-on-chain processing when configured.
-//  5. Update the token owner.
-//  6. Update sender / receiver wallet caches.
-//  7. Synchronize wallets from on-chain when configured.
-//  8. Warm the post-transfer token resolver when configured.
-//  9. Run caller-specific finalization when configured.
+//  2. Execute the on-chain Bubblegum V2 cNFT transfer.
+//  3. Run caller-specific post-on-chain processing when configured.
+//  4. Update the cached token owner.
+//  5. Update sender / receiver wallet caches.
+//  6. Synchronize wallets from on-chain when configured.
+//  7. Warm the post-transfer token resolver when configured.
+//  8. Run caller-specific finalization when configured.
+//  9. Mark the transfer as SUCCEEDED.
 //
-// 10. Mark the transfer as SUCCEEDED.
+// Current cNFT ownership verification and signer resolution are responsibilities
+// of the Bubblegum service. The Go backend must not load or send private keys.
 //
 // Scan verification, order lookup / locking, transfer source resolution,
-// signer resolution, order item state transition, and inventory-specific
-// business rules remain responsibilities of the caller.
+// order item state transition, and inventory-specific business rules remain
+// responsibilities of the caller.
 type TokenTransferExecutionUsecase struct {
 	tokenUpdate  TokenOwnerUpdater
 	walletUpdate AvatarWalletItemTransferUpdater
@@ -90,8 +91,8 @@ var (
 		"token_transfer_execution_uc: toAvatarId is empty",
 	)
 
-	ErrTokenTransferExecutionMintAddressEmpty = errors.New(
-		"token_transfer_execution_uc: mintAddress is empty",
+	ErrTokenTransferExecutionAssetIDEmpty = errors.New(
+		"token_transfer_execution_uc: assetId is empty",
 	)
 
 	ErrTokenTransferExecutionFromWalletEmpty = errors.New(
@@ -102,6 +103,8 @@ var (
 		"token_transfer_execution_uc: to walletAddress is empty",
 	)
 
+	// Bubblegum service / DAS side ownership validation error mappingとの
+	// 互換用に残します。Go側でFirestoreのownerを正として検証しません。
 	ErrTokenTransferExecutionOwnerMismatch = errors.New(
 		"token_transfer_execution_uc: token current owner mismatch",
 	)
@@ -165,27 +168,23 @@ type TokenTransferExecutionInput struct {
 	// ShareTransferUsecase passes the generated share reference.
 	AttemptReference string
 
+	// Exactly one of FromAvatarID / FromBrandID identifies the logical sender.
+	// The Bubblegum service resolves the corresponding signer securely.
 	FromAvatarID string
+	FromBrandID  string
 	ToAvatarID   string
 
 	BrandID          string
 	ModelID          string
 	TokenBlueprintID string
 
-	MintAddress string
+	// AssetID is the Bubblegum V2 cNFT asset identifier.
+	AssetID string
 
-	// CurrentOwner is the current tokens/{productId}.toAddress.
-	// When empty, owner verification is skipped.
-	CurrentOwner string
-
+	// FromWallet / ToWallet are public wallet addresses only.
+	// Private keys or signer objects must not be passed through this usecase.
 	FromWallet string
 	ToWallet   string
-
-	FromSigner any
-	ToSigner   any
-
-	// Amount defaults to 1 when zero.
-	Amount uint64
 
 	// RemoveFromSenderWallet is true for avatar -> avatar transfer such as
 	// resale and share.
@@ -219,7 +218,7 @@ type TokenTransferExecutionResult struct {
 
 	ProductID string
 
-	MintAddress string
+	AssetID string
 
 	FromWallet string
 	ToWallet   string
@@ -265,9 +264,9 @@ func (u *TokenTransferExecutionUsecase) Execute(
 			ErrTokenTransferExecutionToAvatarIDEmpty
 	}
 
-	if in.MintAddress == "" {
+	if in.AssetID == "" {
 		return TokenTransferExecutionResult{},
-			ErrTokenTransferExecutionMintAddressEmpty
+			ErrTokenTransferExecutionAssetIDEmpty
 	}
 
 	if in.FromWallet == "" {
@@ -280,14 +279,22 @@ func (u *TokenTransferExecutionUsecase) Execute(
 			ErrTokenTransferExecutionToWalletEmpty
 	}
 
-	if in.RemoveFromSenderWallet || in.SyncSenderWallet {
+	if in.FromAvatarID == "" &&
+		in.FromBrandID == "" {
+		return TokenTransferExecutionResult{},
+			ErrTokenTransferExecutionFromAvatarIDEmpty
+	}
+
+	if in.RemoveFromSenderWallet ||
+		in.SyncSenderWallet {
 		if in.FromAvatarID == "" {
 			return TokenTransferExecutionResult{},
 				ErrTokenTransferExecutionFromAvatarIDEmpty
 		}
 	}
 
-	if in.SyncSenderWallet || in.SyncReceiverWallet {
+	if in.SyncSenderWallet ||
+		in.SyncReceiverWallet {
 		if u.walletSync == nil {
 			return TokenTransferExecutionResult{},
 				ErrTokenTransferExecutionWalletSyncNotConfigured
@@ -296,11 +303,6 @@ func (u *TokenTransferExecutionUsecase) Execute(
 
 	now := u.now().UTC()
 
-	amount := in.Amount
-	if amount == 0 {
-		amount = 1
-	}
-
 	createdTransfer, err := u.transferRepo.CreateAttempt(
 		ctx,
 		transferdom.CreateAttemptInput{
@@ -308,15 +310,16 @@ func (u *TokenTransferExecutionUsecase) Execute(
 			OrderID:         in.AttemptReference,
 			AvatarID:        in.ToAvatarID,
 			ToWalletAddress: in.ToWallet,
-			MintAddress:     in.MintAddress,
+			AssetID:         in.AssetID,
 			CreatedAt:       now,
 		},
 	)
 	if err != nil {
 		return TokenTransferExecutionResult{},
 			fmt.Errorf(
-				"token_transfer_execution_uc: create transfer attempt failed productId=%s: %w",
+				"token_transfer_execution_uc: create transfer attempt failed productId=%s assetId=%s: %w",
 				in.ProductID,
+				in.AssetID,
 				err,
 			)
 	}
@@ -403,62 +406,35 @@ func (u *TokenTransferExecutionUsecase) Execute(
 	}()
 
 	// -------------------------------------------------------------------------
-	// Owner validation
-	// -------------------------------------------------------------------------
-
-	if in.CurrentOwner != "" &&
-		in.CurrentOwner != in.FromWallet {
-		message := fmt.Sprintf(
-			"productId=%s tokenOwner=%s expectedFromWallet=%s",
-			in.ProductID,
-			in.CurrentOwner,
-			in.FromWallet,
-		)
-
-		markFailed(
-			transferdom.ErrorTypeMismatch,
-			message,
-			nil,
-		)
-
-		return TokenTransferExecutionResult{},
-			fmt.Errorf(
-				"%w: %s",
-				ErrTokenTransferExecutionOwnerMismatch,
-				message,
-			)
-	}
-
-	// -------------------------------------------------------------------------
-	// On-chain transfer
+	// On-chain Bubblegum V2 transfer
 	// -------------------------------------------------------------------------
 
 	executeResult, err := u.executor.ExecuteTransfer(
 		ctx,
 		ExecuteTransferInput{
-			ProductID:        in.ProductID,
-			AvatarID:         in.ToAvatarID,
+			ProductID: in.ProductID,
+
+			FromAvatarID: in.FromAvatarID,
+			ToAvatarID:   in.ToAvatarID,
+			FromBrandID:  in.FromBrandID,
+
 			BrandID:          in.BrandID,
 			ModelID:          in.ModelID,
 			TokenBlueprintID: in.TokenBlueprintID,
 
-			MintAddress: in.MintAddress,
-			Amount:      amount,
+			AssetID: in.AssetID,
 
 			FromWalletAddress: in.FromWallet,
 			ToWalletAddress:   in.ToWallet,
-
-			FromSigner: in.FromSigner,
-			ToSigner:   in.ToSigner,
 		},
 	)
 	if err != nil {
 		message := fmt.Sprintf(
-			"execute transfer failed productId=%s fromWallet=%s toWallet=%s mint=%s: %v",
+			"execute transfer failed productId=%s assetId=%s fromWallet=%s toWallet=%s: %v",
 			in.ProductID,
+			in.AssetID,
 			in.FromWallet,
 			in.ToWallet,
-			in.MintAddress,
 			err,
 		)
 
@@ -470,9 +446,9 @@ func (u *TokenTransferExecutionUsecase) Execute(
 
 		return TokenTransferExecutionResult{},
 			fmt.Errorf(
-				"token_transfer_execution_uc: execute transfer failed productId=%s mint=%s: %w",
+				"token_transfer_execution_uc: execute transfer failed productId=%s assetId=%s: %w",
 				in.ProductID,
-				in.MintAddress,
+				in.AssetID,
 				err,
 			)
 	}
@@ -502,8 +478,9 @@ func (u *TokenTransferExecutionUsecase) Execute(
 			now,
 		); err != nil {
 			message := fmt.Sprintf(
-				"after-on-chain processing failed productId=%s tx=%s: %v",
+				"after-on-chain processing failed productId=%s assetId=%s tx=%s: %v",
 				in.ProductID,
+				in.AssetID,
 				txSignature,
 				err,
 			)
@@ -524,7 +501,7 @@ func (u *TokenTransferExecutionUsecase) Execute(
 	}
 
 	// -------------------------------------------------------------------------
-	// Token owner update
+	// Cached token owner update
 	// -------------------------------------------------------------------------
 
 	if err := u.tokenUpdate.UpdateToAddressByProductID(
@@ -535,8 +512,9 @@ func (u *TokenTransferExecutionUsecase) Execute(
 		txSignature,
 	); err != nil {
 		message := fmt.Sprintf(
-			"update token owner failed productId=%s to=%s tx=%s: %v",
+			"update token owner failed productId=%s assetId=%s to=%s tx=%s: %v",
 			in.ProductID,
+			in.AssetID,
 			in.ToWallet,
 			txSignature,
 			err,
@@ -550,8 +528,9 @@ func (u *TokenTransferExecutionUsecase) Execute(
 
 		return TokenTransferExecutionResult{},
 			fmt.Errorf(
-				"token_transfer_execution_uc: update token owner failed productId=%s to=%s tx=%s: %w",
+				"token_transfer_execution_uc: update token owner failed productId=%s assetId=%s to=%s tx=%s: %w",
 				in.ProductID,
+				in.AssetID,
 				in.ToWallet,
 				txSignature,
 				err,
@@ -559,20 +538,20 @@ func (u *TokenTransferExecutionUsecase) Execute(
 	}
 
 	// -------------------------------------------------------------------------
-	// Wallet cache update
+	// Wallet asset cache update
 	// -------------------------------------------------------------------------
 
 	if in.RemoveFromSenderWallet {
 		if err := u.walletUpdate.RemoveMintFromAvatarWalletItems(
 			ctx,
 			in.FromAvatarID,
-			in.MintAddress,
+			in.AssetID,
 			now,
 		); err != nil {
 			message := fmt.Sprintf(
-				"remove sender wallet item failed avatarId=%s mint=%s tx=%s: %v",
+				"remove sender wallet asset failed avatarId=%s assetId=%s tx=%s: %v",
 				in.FromAvatarID,
-				in.MintAddress,
+				in.AssetID,
 				txSignature,
 				err,
 			)
@@ -594,13 +573,13 @@ func (u *TokenTransferExecutionUsecase) Execute(
 	if err := u.walletUpdate.AddMintToAvatarWalletItems(
 		ctx,
 		in.ToAvatarID,
-		in.MintAddress,
+		in.AssetID,
 		now,
 	); err != nil {
 		message := fmt.Sprintf(
-			"add receiver wallet item failed avatarId=%s mint=%s tx=%s: %v",
+			"add receiver wallet asset failed avatarId=%s assetId=%s tx=%s: %v",
 			in.ToAvatarID,
-			in.MintAddress,
+			in.AssetID,
 			txSignature,
 			err,
 		)
@@ -628,10 +607,10 @@ func (u *TokenTransferExecutionUsecase) Execute(
 			in.FromAvatarID,
 		); err != nil {
 			message := fmt.Sprintf(
-				"sync sender wallet failed avatarId=%s wallet=%s mint=%s tx=%s: %v",
+				"sync sender wallet failed avatarId=%s wallet=%s assetId=%s tx=%s: %v",
 				in.FromAvatarID,
 				in.FromWallet,
-				in.MintAddress,
+				in.AssetID,
 				txSignature,
 				err,
 			)
@@ -657,10 +636,10 @@ func (u *TokenTransferExecutionUsecase) Execute(
 			in.ToAvatarID,
 		); err != nil {
 			message := fmt.Sprintf(
-				"sync receiver wallet failed avatarId=%s wallet=%s mint=%s tx=%s: %v",
+				"sync receiver wallet failed avatarId=%s wallet=%s assetId=%s tx=%s: %v",
 				in.ToAvatarID,
 				in.ToWallet,
-				in.MintAddress,
+				in.AssetID,
 				txSignature,
 				err,
 			)
@@ -688,12 +667,12 @@ func (u *TokenTransferExecutionUsecase) Execute(
 		if err := u.resolveWarmer.ResolveAfterTransfer(
 			ctx,
 			in.ToAvatarID,
-			in.MintAddress,
+			in.AssetID,
 		); err != nil {
 			message := fmt.Sprintf(
-				"post-transfer resolve failed avatarId=%s mint=%s tx=%s: %v",
+				"post-transfer resolve failed avatarId=%s assetId=%s tx=%s: %v",
 				in.ToAvatarID,
-				in.MintAddress,
+				in.AssetID,
 				txSignature,
 				err,
 			)
@@ -724,8 +703,9 @@ func (u *TokenTransferExecutionUsecase) Execute(
 			now,
 		); err != nil {
 			message := fmt.Sprintf(
-				"before-success processing failed productId=%s tx=%s: %v",
+				"before-success processing failed productId=%s assetId=%s tx=%s: %v",
 				in.ProductID,
+				in.AssetID,
 				txSignature,
 				err,
 			)
@@ -754,8 +734,9 @@ func (u *TokenTransferExecutionUsecase) Execute(
 	if err := markSucceeded(txSignature); err != nil {
 		return TokenTransferExecutionResult{},
 			fmt.Errorf(
-				"token_transfer_execution_uc: mark transfer succeeded failed productId=%s attempt=%d tx=%s: %w",
+				"token_transfer_execution_uc: mark transfer succeeded failed productId=%s assetId=%s attempt=%d tx=%s: %w",
 				in.ProductID,
+				in.AssetID,
 				transferAttempt,
 				txSignature,
 				err,
@@ -767,7 +748,7 @@ func (u *TokenTransferExecutionUsecase) Execute(
 
 		ProductID: in.ProductID,
 
-		MintAddress: in.MintAddress,
+		AssetID: in.AssetID,
 
 		FromWallet: in.FromWallet,
 		ToWallet:   in.ToWallet,

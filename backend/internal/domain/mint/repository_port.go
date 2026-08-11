@@ -98,13 +98,15 @@ type MintProductTaskRepository interface {
 
 	// MarkMinted:
 	// - 対象 task を MINTED に更新します。
-	// - mintAddress / signature / mintedAt / updatedAt を保存します。
+	// - assetId / treeAddress / leafIndex / signature / mintedAt / updatedAt を保存します。
 	// - productId 単位で1件mintが成功したときに呼び出します。
 	MarkMinted(
 		ctx context.Context,
 		mintID string,
 		productID string,
-		mintAddress string,
+		assetID string,
+		treeAddress string,
+		leafIndex uint64,
 		signature string,
 	) (MintProductTask, error)
 

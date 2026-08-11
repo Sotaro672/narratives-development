@@ -2,448 +2,455 @@
 package solana
 
 import (
+	"bytes"
 	"context"
-	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
-	tokendom "narratives/internal/domain/token"
+	"google.golang.org/api/idtoken"
 
-	"github.com/blocto/solana-go-sdk/client"
-	"github.com/blocto/solana-go-sdk/common"
-	ata "github.com/blocto/solana-go-sdk/program/associated_token_account"
-	"github.com/blocto/solana-go-sdk/program/metaplex/token_metadata"
-	"github.com/blocto/solana-go-sdk/program/system"
-	"github.com/blocto/solana-go-sdk/program/token"
-	"github.com/blocto/solana-go-sdk/types"
+	tokendom "narratives/internal/domain/token"
 )
 
-const lamportsPerSOL = 1_000_000_000
+const (
+	envBubblegumServiceURL = "SOLANA_BUBBLEGUM_SERVICE_URL"
 
-// MintClient は「Narratives が唯一保持するミント権限ウォレット」を使って
-// 実際にチェーン上でミント処理を行うクライアントです。
-// usecase.TokenUsecase からは tokendom.MintAuthorityWalletPort として利用されます。
+	envBubblegumServiceAudience = "SOLANA_BUBBLEGUM_SERVICE_AUDIENCE"
+
+	envBubblegumMintAuthorityPublicKey = "SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY"
+
+	bubblegumMintPath = "/mint"
+
+	bubblegumRequestTimeout = 45 * time.Second
+
+	maxBubblegumResponseBodyBytes int64 = 256 * 1024
+)
+
+// MintClient は Bubblegum V2 internal service を呼び出す
+// tokendom.MintAuthorityWalletPort の実装です。
+//
+// IMPORTANT:
+//   - Go backend では Solana private key を保持しません。
+//   - Go backend から private key を送信しません。
+//   - Bubblegum V2 mint signer / fee payer / tree authority は
+//     solana-bubblegum service 側で解決します。
+//   - 1 productId = 1 cNFT mint とします。
+//   - productId を idempotency key として internal service に渡します。
 type MintClient struct {
-	key     *MintAuthorityKey
-	reserve *ReserveAuthority
+	httpClient *http.Client
+	serviceURL string
 }
 
-// インターフェース実装チェック:
-// MintClient が tokendom.MintAuthorityWalletPort を満たしていなければコンパイルエラーになります。
+// インターフェース実装チェック。
 var _ tokendom.MintAuthorityWalletPort = (*MintClient)(nil)
 
-// NewMintClient はミント権限キーと fee payer 補充用 reserve wallet を受け取って
-// MintClient を初期化します。
-func NewMintClient(
-	key *MintAuthorityKey,
-	reserve *ReserveAuthority,
-) *MintClient {
-	return &MintClient{
-		key:     key,
-		reserve: reserve,
-	}
-}
-
-// PublicKey は tokendom.MintAuthorityWalletPort の実装です。
-// ミント権限ウォレットの公開鍵を string として返します。
+// NewMintClient は環境変数から Bubblegum V2 internal service client を生成します.
 //
-// TODO: 将来的には Solana の base58 アドレス形式に揃える。
-// ひとまずは ed25519.PublicKey ([]byte) を hex 文字列にして返しています。
-func (c *MintClient) PublicKey(ctx context.Context) (string, error) {
-	_ = ctx
-
-	if c == nil || c.key == nil {
-		return "", fmt.Errorf("mint client is not initialized (missing mint authority key)")
-	}
-	if len(c.key.PublicKey) == 0 {
-		return "", fmt.Errorf("mint authority public key is empty")
-	}
-
-	return hex.EncodeToString(c.key.PublicKey), nil
-}
-
-func sellerFeeBpsFromEnv() uint16 {
-	v := os.Getenv("SOLANA_SELLER_FEE_BPS")
-	if v == "" {
-		return 0
-	}
-
-	n, err := strconv.Atoi(v)
-	if err != nil || n < 0 || n > 10000 {
-		return 0
-	}
-
-	return uint16(n)
-}
-
-func envSOLToLamports(key string, defaultSOL float64) (uint64, error) {
-	raw := strings.TrimSpace(os.Getenv(key))
-	if raw == "" {
-		if defaultSOL <= 0 {
-			return 0, nil
-		}
-		return uint64(defaultSOL * lamportsPerSOL), nil
-	}
-
-	v, err := strconv.ParseFloat(raw, 64)
-	if err != nil {
-		return 0, fmt.Errorf("%s must be a number: %w", key, err)
-	}
-	if v < 0 {
-		return 0, fmt.Errorf("%s must be >= 0", key)
-	}
-
-	return uint64(v * lamportsPerSOL), nil
-}
-
-type solanaGetBalanceResult struct {
-	Context struct {
-		Slot uint64 `json:"slot"`
-	} `json:"context"`
-	Value uint64 `json:"value"`
-}
-
-func getSolanaBalance(
+// Required:
+// - SOLANA_BUBBLEGUM_SERVICE_URL
+//
+// Optional:
+// - SOLANA_BUBBLEGUM_SERVICE_AUDIENCE
+//
+// SOLANA_BUBBLEGUM_SERVICE_AUDIENCE が設定されている場合は、
+// Google Cloud ID Token を付与する HTTP client を使用します。
+//
+// ローカル開発で認証なしの internal service を使う場合は、
+// SOLANA_BUBBLEGUM_SERVICE_AUDIENCE を設定しません。
+func NewMintClient(
 	ctx context.Context,
-	endpoint string,
-	address string,
-) (uint64, error) {
-	if endpoint == "" {
-		return 0, fmt.Errorf("solana rpc endpoint is empty")
-	}
-	if address == "" {
-		return 0, fmt.Errorf("solana address is empty")
-	}
-
-	rpcClient := NewJSONRPCClientWithEndpoint(endpoint)
-
-	var out solanaGetBalanceResult
-	if err := withSolanaRPCRetry(ctx, "getBalance", func() error {
-		out = solanaGetBalanceResult{}
-		return rpcClient.call(ctx, "getBalance", []any{
-			address,
-			map[string]any{
-				"commitment": "confirmed",
-			},
-		}, &out)
-	}); err != nil {
-		return 0, err
-	}
-
-	return out.Value, nil
-}
-
-// ensureFeePayerBalance は fee payer の残高を確認します。
-// SOLANA_MIN_FEE_PAYER_BALANCE_SOL 未満の場合:
-// - SOLANA_AUTO_TOP_UP_ENABLED=false: 残高不足エラーを返します。
-// - SOLANA_AUTO_TOP_UP_ENABLED=true: reserve wallet から target balance まで自動補充します。
-func (c *MintClient) ensureFeePayerBalance(
-	ctx context.Context,
-	feePayer common.PublicKey,
-	mintRPCURL string,
-) error {
-	address := feePayer.ToBase58()
-	if address == "" {
-		return fmt.Errorf("fee payer address is empty")
-	}
-
-	minLamports, err := envSOLToLamports("SOLANA_MIN_FEE_PAYER_BALANCE_SOL", 0.5)
-	if err != nil {
-		return err
-	}
-	if minLamports == 0 {
-		return nil
-	}
-
-	balanceRPCURL := mintRPCURL
-	if balanceRPCURL == "" {
-		balanceRPCURL, err = solanaRPCURLFromEnv()
-		if err != nil {
-			return err
-		}
-	}
-
-	balance, err := getSolanaBalance(ctx, balanceRPCURL, address)
-	if err != nil {
-		return fmt.Errorf("get fee payer balance: %w", err)
-	}
-
-	if balance >= minLamports {
-		return nil
-	}
-
-	if !AutoTopUpEnabled() {
-		return fmt.Errorf(
-			"fee payer balance is below minimum: address=%s balance=%d min=%d",
-			address,
-			balance,
-			minLamports,
+) (*MintClient, error) {
+	serviceURL := os.Getenv(envBubblegumServiceURL)
+	if serviceURL == "" {
+		return nil, fmt.Errorf(
+			"%s is empty",
+			envBubblegumServiceURL,
 		)
 	}
 
-	if c == nil || c.reserve == nil {
-		return fmt.Errorf(
-			"%w: feePayer=%s balance=%d min=%d",
-			ErrReserveWalletMissing,
-			address,
-			balance,
-			minLamports,
-		)
-	}
-
-	result, err := topUpFeePayerFromReserve(
-		ctx,
-		balanceRPCURL,
-		c.reserve,
-		feePayer,
-	)
+	parsedURL, err := url.Parse(serviceURL)
 	if err != nil {
-		return fmt.Errorf(
-			"top up fee payer from reserve: %w",
+		return nil, fmt.Errorf(
+			"parse %s: %w",
+			envBubblegumServiceURL,
 			err,
 		)
 	}
 
-	if result == nil {
-		return fmt.Errorf("fee payer top-up returned nil result")
-	}
-
-	if result.FeePayerBalanceAfter < minLamports {
-		return fmt.Errorf(
-			"fee payer balance is still below minimum after reserve top-up: address=%s balance=%d min=%d signature=%s",
-			address,
-			result.FeePayerBalanceAfter,
-			minLamports,
-			result.Signature,
+	if parsedURL == nil ||
+		parsedURL.Host == "" ||
+		(parsedURL.Scheme != "http" &&
+			parsedURL.Scheme != "https") {
+		return nil, fmt.Errorf(
+			"%s must be an absolute http or https URL",
+			envBubblegumServiceURL,
 		)
 	}
 
-	return nil
+	serviceURL = strings.TrimRight(serviceURL, "/")
+
+	audience := os.Getenv(envBubblegumServiceAudience)
+
+	var httpClient *http.Client
+
+	if audience != "" {
+		authenticatedClient, err := idtoken.NewClient(
+			ctx,
+			audience,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"create bubblegum authenticated http client: %w",
+				err,
+			)
+		}
+
+		authenticatedClient.Timeout = bubblegumRequestTimeout
+		httpClient = authenticatedClient
+	} else {
+		httpClient = &http.Client{
+			Timeout: bubblegumRequestTimeout,
+		}
+	}
+
+	return &MintClient{
+		httpClient: httpClient,
+		serviceURL: serviceURL,
+	}, nil
 }
 
-// MintToken は tokendom.MintAuthorityWalletPort インターフェースの実装です。
-// Solana 上で、1 つの新規 Mint アカウントを作成し、指定ウォレット宛てに
-// Amount 枚（NFT なら通常 1）のトークンをミントします。
+// PublicKey は Bubblegum V2 mint authority の公開鍵を返します.
 //
-// 重要:
-//   - Explorer に表示させるため、Metaplex Token Metadata (CreateMetadataAccountV3) と
-//     MasterEdition (CreateMasterEditionV3) を同一トランザクションで作成します。
-//   - これにより mintAddress から導出される metadata PDA が必ず存在します。
-//   - SendTransaction 後、confirmed / finalized になるまで確認してから成功として返します。
-//   - fee payer 残高は常に確認し、SOLANA_AUTO_TOP_UP_ENABLED=true の場合は reserve wallet から自動補充します。
+// private key は solana-bubblegum service / Secret Manager 側で管理し、
+// Go backend には保持しません。
+func (c *MintClient) PublicKey(
+	ctx context.Context,
+) (string, error) {
+	_ = ctx
+
+	if c == nil {
+		return "", errors.New(
+			"bubblegum mint client is nil",
+		)
+	}
+
+	publicKey := os.Getenv(
+		envBubblegumMintAuthorityPublicKey,
+	)
+	if publicKey == "" {
+		return "", fmt.Errorf(
+			"%s is empty",
+			envBubblegumMintAuthorityPublicKey,
+		)
+	}
+
+	return publicKey, nil
+}
+
+type bubblegumMintRequest struct {
+	ProductID string `json:"productId"`
+
+	ToAddress string `json:"toAddress"`
+
+	Name string `json:"name"`
+
+	Symbol string `json:"symbol"`
+
+	MetadataURI string `json:"metadataUri"`
+
+	AssetStandard string `json:"assetStandard"`
+}
+
+type bubblegumMintResponse struct {
+	Signature string `json:"signature"`
+
+	AssetID string `json:"assetId"`
+
+	TreeAddress string `json:"treeAddress"`
+
+	LeafIndex uint64 `json:"leafIndex"`
+
+	Slot uint64 `json:"slot"`
+}
+
+type bubblegumErrorResponse struct {
+	Error string `json:"error"`
+
+	Message string `json:"message"`
+}
+
+// MintToken は Bubblegum V2 internal service を経由して
+// productId 1件分の cNFT を mint します.
+//
+// POST {SOLANA_BUBBLEGUM_SERVICE_URL}/mint
+//
+// Request:
+//
+//	{
+//	  "productId": "...",
+//	  "toAddress": "...",
+//	  "name": "...",
+//	  "symbol": "...",
+//	  "metadataUri": "...",
+//	  "assetStandard": "BUBBLEGUM_V2"
+//	}
+//
+// Response:
+//
+//	{
+//	  "signature": "...",
+//	  "assetId": "...",
+//	  "treeAddress": "...",
+//	  "leafIndex": 0,
+//	  "slot": 0
+//	}
+//
+// IMPORTANT:
+// - productId は internal service 側の idempotency key として使用します。
+// - leafIndex=0 は正当な値です。
+// - HTTP transport error 時に Go 側で POST retry はしません。
+// - retry / 重複排除は productId を使って service 側で保証します。
+// - DAS indexing delay を理由に再mintしてはいけません。
 func (c *MintClient) MintToken(
 	ctx context.Context,
 	params tokendom.MintParams,
 ) (*tokendom.MintResult, error) {
-	if c == nil || c.key == nil {
-		return nil, fmt.Errorf("mint client is not initialized (missing mint authority key)")
+	if c == nil {
+		return nil, errors.New(
+			"bubblegum mint client is nil",
+		)
 	}
 
-	to := params.ToAddress
-	if to == "" {
-		return nil, fmt.Errorf("ToAddress is empty")
+	if c.httpClient == nil {
+		return nil, errors.New(
+			"bubblegum mint http client is nil",
+		)
 	}
 
-	name := params.Name
-	symbol := params.Symbol
-	if name == "" || symbol == "" {
-		return nil, fmt.Errorf("token name or symbol is empty")
+	if c.serviceURL == "" {
+		return nil, errors.New(
+			"bubblegum mint service URL is empty",
+		)
 	}
 
-	metadataURI := params.MetadataURI
-	if metadataURI == "" {
-		return nil, fmt.Errorf("MetadataURI is empty")
+	if params.ProductID == "" {
+		return nil, errors.New(
+			"ProductID is empty",
+		)
 	}
 
-	amount := params.Amount
-	if amount == 0 {
-		amount = 1
+	if params.ToAddress == "" {
+		return nil, errors.New(
+			"ToAddress is empty",
+		)
 	}
 
-	rpcURL, err := solanaRPCURLFromEnv()
-	if err != nil {
-		return nil, err
+	if params.Name == "" {
+		return nil, errors.New(
+			"Name is empty",
+		)
 	}
 
-	cl := client.NewClient(rpcURL)
-
-	if len(c.key.PrivateKey) == 0 {
-		return nil, fmt.Errorf("mint authority private key is empty")
-	}
-	if len(c.key.PublicKey) == 0 {
-		return nil, fmt.Errorf("mint authority public key is empty")
+	if params.Symbol == "" {
+		return nil, errors.New(
+			"Symbol is empty",
+		)
 	}
 
-	feePayer := types.Account{
-		PrivateKey: c.key.PrivateKey,
-		PublicKey:  common.PublicKeyFromBytes(c.key.PublicKey),
+	if params.MetadataURI == "" {
+		return nil, errors.New(
+			"MetadataURI is empty",
+		)
 	}
 
-	if err := c.ensureFeePayerBalance(ctx, feePayer.PublicKey, rpcURL); err != nil {
-		return nil, fmt.Errorf("ensure fee payer balance: %w", err)
+	if params.Amount != 0 && params.Amount != 1 {
+		return nil, fmt.Errorf(
+			"Bubblegum V2 mint requires Amount=1: amount=%d",
+			params.Amount,
+		)
 	}
 
-	recipientPub := common.PublicKeyFromString(to)
+	requestBody := bubblegumMintRequest{
+		ProductID: params.ProductID,
 
-	mintAccount := types.NewAccount()
+		ToAddress: params.ToAddress,
 
-	ataPubkey, _, err := common.FindAssociatedTokenAddress(recipientPub, mintAccount.PublicKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive ATA: %w", err)
-	}
+		Name: params.Name,
 
-	metadataPubkey, err := token_metadata.GetTokenMetaPubkey(mintAccount.PublicKey)
-	if err != nil {
-		return nil, fmt.Errorf("GetTokenMetaPubkey: %w", err)
-	}
+		Symbol: params.Symbol,
 
-	masterEditionPubkey, err := token_metadata.GetMasterEdition(mintAccount.PublicKey)
-	if err != nil {
-		return nil, fmt.Errorf("GetMasterEdition: %w", err)
-	}
+		MetadataURI: params.MetadataURI,
 
-	var mintRent uint64
-	if err := withSolanaRPCRetry(ctx, "get minimum balance for mint account", func() error {
-		v, err := cl.GetMinimumBalanceForRentExemption(ctx, token.MintAccountSize)
-		if err != nil {
-			return err
-		}
-		mintRent = v
-		return nil
-	}); err != nil {
-		return nil, fmt.Errorf("failed to get rent for mint account: %w", err)
-	}
-
-	var recentBlockhash string
-	if err := withSolanaRPCRetry(ctx, "get latest blockhash", func() error {
-		v, err := cl.GetLatestBlockhash(ctx)
-		if err != nil {
-			return err
-		}
-		recentBlockhash = v.Blockhash
-		return nil
-	}); err != nil {
-		return nil, fmt.Errorf("failed to get latest blockhash: %w", err)
-	}
-
-	if recentBlockhash == "" {
-		return nil, fmt.Errorf("latest blockhash is empty")
-	}
-
-	maxSupply := uint64(1)
-
-	instructions := []types.Instruction{
-		system.CreateAccount(system.CreateAccountParam{
-			From:     feePayer.PublicKey,
-			New:      mintAccount.PublicKey,
-			Lamports: mintRent,
-			Space:    token.MintAccountSize,
-			Owner:    common.TokenProgramID,
-		}),
-		token.InitializeMint(token.InitializeMintParam{
-			Decimals:   0,
-			Mint:       mintAccount.PublicKey,
-			MintAuth:   feePayer.PublicKey,
-			FreezeAuth: &feePayer.PublicKey,
-		}),
-		token_metadata.CreateMetadataAccountV3(
-			token_metadata.CreateMetadataAccountV3Param{
-				Metadata:                metadataPubkey,
-				Mint:                    mintAccount.PublicKey,
-				MintAuthority:           feePayer.PublicKey,
-				UpdateAuthority:         feePayer.PublicKey,
-				Payer:                   feePayer.PublicKey,
-				UpdateAuthorityIsSigner: true,
-				IsMutable:               true,
-				Data: token_metadata.DataV2{
-					Name:                 name,
-					Symbol:               symbol,
-					Uri:                  metadataURI,
-					SellerFeeBasisPoints: sellerFeeBpsFromEnv(),
-					Creators: &[]token_metadata.Creator{
-						{
-							Address:  feePayer.PublicKey,
-							Verified: true,
-							Share:    100,
-						},
-					},
-				},
-				CollectionDetails: nil,
-			},
-		),
-		ata.CreateAssociatedTokenAccount(
-			ata.CreateAssociatedTokenAccountParam{
-				Funder:                 feePayer.PublicKey,
-				Owner:                  recipientPub,
-				Mint:                   mintAccount.PublicKey,
-				AssociatedTokenAccount: ataPubkey,
-			},
-		),
-		token.MintTo(token.MintToParam{
-			Mint:   mintAccount.PublicKey,
-			To:     ataPubkey,
-			Auth:   feePayer.PublicKey,
-			Amount: amount,
-		}),
-		token_metadata.CreateMasterEditionV3(
-			token_metadata.CreateMasterEditionParam{
-				Edition:         masterEditionPubkey,
-				Mint:            mintAccount.PublicKey,
-				UpdateAuthority: feePayer.PublicKey,
-				MintAuthority:   feePayer.PublicKey,
-				Metadata:        metadataPubkey,
-				Payer:           feePayer.PublicKey,
-				MaxSupply:       &maxSupply,
-			},
+		AssetStandard: string(
+			tokendom.AssetStandardBubblegumV2,
 		),
 	}
 
-	msg := types.NewMessage(types.NewMessageParam{
-		FeePayer:        feePayer.PublicKey,
-		RecentBlockhash: recentBlockhash,
-		Instructions:    instructions,
-	})
-
-	tx, err := types.NewTransaction(types.NewTransactionParam{
-		Message: msg,
-		Signers: []types.Account{
-			feePayer,
-			mintAccount,
-		},
-	})
+	body, err := json.Marshal(requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build transaction: %w", err)
+		return nil, fmt.Errorf(
+			"marshal bubblegum mint request: %w",
+			err,
+		)
 	}
 
-	var sig string
-	if err := withSolanaRPCRetry(ctx, "send transaction", func() error {
-		v, err := cl.SendTransaction(ctx, tx)
-		if err != nil {
-			return err
-		}
-		sig = v
-		return nil
-	}); err != nil {
-		return nil, fmt.Errorf("failed to send transaction: %w", err)
+	endpoint := c.serviceURL + bubblegumMintPath
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		endpoint,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"create bubblegum mint request: %w",
+			err,
+		)
 	}
 
-	if sig == "" {
-		return nil, fmt.Errorf("send transaction returned empty signature")
+	req.Header.Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	req.Header.Set(
+		"Accept",
+		"application/json",
+	)
+
+	req.Header.Set(
+		"Idempotency-Key",
+		params.ProductID,
+	)
+
+	response, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"call bubblegum mint service: %w",
+			err,
+		)
+	}
+	defer response.Body.Close()
+
+	responseBody, err := io.ReadAll(
+		io.LimitReader(
+			response.Body,
+			maxBubblegumResponseBodyBytes+1,
+		),
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"read bubblegum mint response: %w",
+			err,
+		)
 	}
 
-	ctxWait, cancel := context.WithTimeout(ctx, 45*time.Second)
-	defer cancel()
+	if int64(len(responseBody)) >
+		maxBubblegumResponseBodyBytes {
+		return nil, errors.New(
+			"bubblegum mint response body is too large",
+		)
+	}
 
-	if err := waitForSignatureConfirmed(ctxWait, rpcURL, sig); err != nil {
-		return nil, fmt.Errorf("failed to confirm transaction signature=%s: %w", sig, err)
+	if response.StatusCode < http.StatusOK ||
+		response.StatusCode >= http.StatusMultipleChoices {
+		return nil, decodeBubblegumServiceError(
+			response.StatusCode,
+			responseBody,
+		)
+	}
+
+	var result bubblegumMintResponse
+
+	if err := json.Unmarshal(
+		responseBody,
+		&result,
+	); err != nil {
+		return nil, fmt.Errorf(
+			"decode bubblegum mint response: %w",
+			err,
+		)
+	}
+
+	if result.Signature == "" {
+		return nil, errors.New(
+			"bubblegum mint response signature is empty",
+		)
+	}
+
+	if result.AssetID == "" {
+		return nil, errors.New(
+			"bubblegum mint response assetId is empty",
+		)
+	}
+
+	if result.TreeAddress == "" {
+		return nil, errors.New(
+			"bubblegum mint response treeAddress is empty",
+		)
 	}
 
 	return &tokendom.MintResult{
-		Signature:   sig,
-		MintAddress: mintAccount.PublicKey.ToBase58(),
-		Slot:        0,
+		Signature: result.Signature,
+
+		AssetID: result.AssetID,
+
+		TreeAddress: result.TreeAddress,
+
+		LeafIndex: result.LeafIndex,
+
+		Slot: result.Slot,
 	}, nil
+}
+
+func decodeBubblegumServiceError(
+	statusCode int,
+	body []byte,
+) error {
+	var serviceErr bubblegumErrorResponse
+
+	if len(body) > 0 {
+		if err := json.Unmarshal(
+			body,
+			&serviceErr,
+		); err == nil {
+			switch {
+			case serviceErr.Error != "" &&
+				serviceErr.Message != "":
+				return fmt.Errorf(
+					"bubblegum mint service status=%d error=%s message=%s",
+					statusCode,
+					serviceErr.Error,
+					serviceErr.Message,
+				)
+
+			case serviceErr.Error != "":
+				return fmt.Errorf(
+					"bubblegum mint service status=%d error=%s",
+					statusCode,
+					serviceErr.Error,
+				)
+
+			case serviceErr.Message != "":
+				return fmt.Errorf(
+					"bubblegum mint service status=%d message=%s",
+					statusCode,
+					serviceErr.Message,
+				)
+			}
+		}
+	}
+
+	return fmt.Errorf(
+		"bubblegum mint service returned status=%d",
+		statusCode,
+	)
 }

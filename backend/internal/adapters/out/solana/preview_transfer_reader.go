@@ -1,4 +1,4 @@
-// backend\internal\adapters\out\solana\preview_transfer_reader.go
+// backend/internal/adapters/out/solana/preview_transfer_reader.go
 package solana
 
 import (
@@ -15,31 +15,49 @@ type PreviewTransferReader struct {
 func NewPreviewTransferReader(
 	reader *solanainfra.TokenTransferReaderSolana,
 ) *PreviewTransferReader {
-	return &PreviewTransferReader{Reader: reader}
+	return &PreviewTransferReader{
+		Reader: reader,
+	}
 }
 
-func (r *PreviewTransferReader) ListByMintAddress(
+func (r *PreviewTransferReader) ListByAssetID(
 	ctx context.Context,
-	mintAddress string,
+	assetID string,
 ) ([]dto.PreviewTransferInfo, error) {
 	if r == nil || r.Reader == nil {
 		return []dto.PreviewTransferInfo{}, nil
 	}
 
-	res, err := r.Reader.ListMintTransfers(ctx, solanainfra.ListMintTransfersInput{
-		MintAddress: mintAddress,
-	})
+	if assetID == "" {
+		return []dto.PreviewTransferInfo{}, nil
+	}
+
+	res, err := r.Reader.ListAssetTransfers(
+		ctx,
+		solanainfra.ListAssetTransfersInput{
+			AssetID: assetID,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	out := make([]dto.PreviewTransferInfo, 0, len(res.Transfers))
+	out := make(
+		[]dto.PreviewTransferInfo,
+		0,
+		len(res.Transfers),
+	)
+
 	for _, tr := range res.Transfers {
-		out = append(out, dto.PreviewTransferInfo{
-			TransferredAt:     tr.TransferredAt,
-			FromWalletAddress: tr.FromWalletAddress,
-			ToWalletAddress:   tr.ToWalletAddress,
-		})
+		out = append(
+			out,
+			dto.PreviewTransferInfo{
+				TransferredAt:     tr.TransferredAt,
+				FromWalletAddress: tr.FromWalletAddress,
+				ToWalletAddress:   tr.ToWalletAddress,
+			},
+		)
 	}
+
 	return out, nil
 }

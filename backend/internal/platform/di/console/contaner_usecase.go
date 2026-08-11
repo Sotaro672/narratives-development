@@ -62,17 +62,12 @@ func buildUsecases(
 	s *services,
 	res *resolvers,
 ) (*usecases, error) {
-	var tokenUC *uc.TokenUsecase
-
-	if c.infra.MintAuthorityKey != nil {
-		solanaClient := solanainfra.NewMintClient(
-			c.infra.MintAuthorityKey,
-			c.infra.ReserveAuthority,
-		)
-		tokenUC = uc.NewTokenUsecase(solanaClient)
-	} else {
-		tokenUC = uc.NewTokenUsecase(nil)
+	solanaClient, err := solanainfra.NewMintClient(ctx)
+	if err != nil {
+		return nil, err
 	}
+
+	tokenUC := uc.NewTokenUsecase(solanaClient)
 
 	accountUC := uc.NewAccountUsecase(r.accountRepo)
 

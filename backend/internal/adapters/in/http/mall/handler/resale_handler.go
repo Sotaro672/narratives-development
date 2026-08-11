@@ -377,10 +377,10 @@ func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	item.AvatarID = avatarID
 
-	if item.MintAddress == "" {
+	if item.AssetID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "mintAddress is required",
+			"error": "assetId is required",
 		})
 		return
 	}
@@ -544,7 +544,7 @@ func (h *ResaleHandler) update(
 
 	item.ID = resaleID
 	item.AvatarID = avatarID
-	item.MintAddress = existing.MintAddress
+	item.AssetID = existing.AssetID
 	item.TokenBlueprintID = existing.TokenBlueprintID
 	item.ProductID = existing.ProductID
 	item.BrandID = existing.BrandID
@@ -1026,7 +1026,7 @@ func resaleHTTPStatus(err error) int {
 
 	case errors.Is(err, resaledom.ErrInvalidID),
 		errors.Is(err, resaledom.ErrInvalidStatus),
-		errors.Is(err, resaledom.ErrInvalidMintAddress),
+		errors.Is(err, resaledom.ErrInvalidAssetID),
 		errors.Is(err, resaledom.ErrInvalidTokenBlueprintID),
 		errors.Is(err, resaledom.ErrInvalidProductID),
 		errors.Is(err, resaledom.ErrInvalidBrandID),

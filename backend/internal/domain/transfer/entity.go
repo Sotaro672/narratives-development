@@ -8,9 +8,9 @@ import (
 
 /*
 責任と機能:
-- Token transferの実行結果を永続化するためのドメインエンティティ。
+- Bubblegum V2 cNFT transferの実行結果を永続化するためのドメインエンティティ。
 - カスタマーサポート、監査、再実行のために、成功・失敗、エラー種別、
-  tx署名、対象識別子を保持する。
+  tx署名、対象assetIdを保持する。
 - FirestoreのdocIdは"<productId>__<attempt>"を想定し、
   Transfer自体にはIDフィールドを持たせない。
 - 同一productIdに対する複数試行を扱うため、Attemptを保持する。
@@ -18,8 +18,9 @@ import (
 方針:
 - 永続化および参照の契約はrepository_port.goのRepositoryPortへ統一する。
 - TransferにはtransferredAtを持たせない。
-- mintAddressから転送実行日時を取得する場合は、
-  ResolveTransferredAtByMintAddressResultとして返す。
+- assetIdから転送実行日時を取得する場合は、
+  ResolveTransferredAtByAssetIDResultとして返す。
+- cNFTの識別子はassetIdを正とする。
 */
 
 type Status string
@@ -63,7 +64,7 @@ var (
 	ErrInvalidOrderID         = errors.New("transfer: invalid orderId")
 	ErrInvalidAvatarID        = errors.New("transfer: invalid avatarId")
 	ErrInvalidToWalletAddress = errors.New("transfer: invalid toWalletAddress")
-	ErrInvalidMintAddress     = errors.New("transfer: invalid mintAddress")
+	ErrInvalidAssetID         = errors.New("transfer: invalid assetId")
 	ErrInvalidTransferredAt   = errors.New("transfer: invalid transferredAt")
 	ErrInvalidStatus          = errors.New("transfer: invalid status")
 	ErrInvalidCreatedAt       = errors.New("transfer: invalid createdAt")
@@ -71,7 +72,7 @@ var (
 	ErrEmptyTxSignature       = errors.New("transfer: txSignature is empty")
 )
 
-// Transfer represents one token transfer attempt for a specific product.
+// Transfer represents one Bubblegum V2 cNFT transfer attempt for a specific product.
 type Transfer struct {
 	// Attempt is monotonically increased for the same ProductID.
 	Attempt int `json:"attempt"`
@@ -81,8 +82,8 @@ type Transfer struct {
 	OrderID   string `json:"orderId"`
 	AvatarID  string `json:"avatarId"`
 
-	// Token information
-	MintAddress string `json:"mintAddress"`
+	// Bubblegum V2 cNFT information
+	AssetID string `json:"assetId"`
 
 	// Destination and execution result
 	ToWalletAddress string  `json:"toWalletAddress"`
@@ -97,18 +98,18 @@ type Transfer struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// ResolveTransferredAtByMintAddressResult represents the result of resolving
-// a successful transfer by mintAddress.
+// ResolveTransferredAtByAssetIDResult represents the result of resolving
+// a successful transfer by Bubblegum V2 assetId.
 //
 // Transfer does not contain TransferredAt. It is returned only by the
 // repository query that resolves the successful transfer execution time.
 //
 // Firestore must use the correctly spelled "transferredAt" field.
-type ResolveTransferredAtByMintAddressResult struct {
+type ResolveTransferredAtByAssetIDResult struct {
 	ProductID     string    `json:"productId"`
 	Attempt       int       `json:"attempt"`
 	AvatarID      string    `json:"avatarId"`
-	MintAddress   string    `json:"mintAddress"`
+	AssetID       string    `json:"assetId"`
 	TransferredAt time.Time `json:"transferredAt"`
 }
 
@@ -119,7 +120,7 @@ type TransferPatch struct {
 	ErrorType       *ErrorType
 	ErrorMsg        *string
 	TxSignature     *string
-	MintAddress     *string
+	AssetID         *string
 	ToWalletAddress *string
 }
 
@@ -130,7 +131,7 @@ func NewPending(
 	orderID string,
 	avatarID string,
 	toWalletAddress string,
-	mintAddress string,
+	assetID string,
 	createdAt time.Time,
 ) (Transfer, error) {
 	t := Transfer{
@@ -138,7 +139,7 @@ func NewPending(
 		ProductID:       productID,
 		OrderID:         orderID,
 		AvatarID:        avatarID,
-		MintAddress:     mintAddress,
+		AssetID:         assetID,
 		ToWalletAddress: toWalletAddress,
 		TxSignature:     nil,
 		Status:          StatusPending,
@@ -231,8 +232,8 @@ func (t *Transfer) ApplyPatch(
 			t.TxSignature = &txSignature
 		}
 	}
-	if patch.MintAddress != nil {
-		t.MintAddress = *patch.MintAddress
+	if patch.AssetID != nil {
+		t.AssetID = *patch.AssetID
 	}
 	if patch.ToWalletAddress != nil {
 		t.ToWalletAddress = *patch.ToWalletAddress
@@ -260,8 +261,8 @@ func (t Transfer) validate() error {
 	if t.ToWalletAddress == "" {
 		return ErrInvalidToWalletAddress
 	}
-	if t.MintAddress == "" {
-		return ErrInvalidMintAddress
+	if t.AssetID == "" {
+		return ErrInvalidAssetID
 	}
 	if t.Attempt <= 0 {
 		return ErrInvalidAttempt

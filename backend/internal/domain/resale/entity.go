@@ -51,7 +51,7 @@ func IsValidCondition(c ResaleCondition) bool {
 var (
 	ErrInvalidID                 = errors.New("resale: invalid id")
 	ErrInvalidStatus             = errors.New("resale: invalid status")
-	ErrInvalidMintAddress        = errors.New("resale: invalid mintAddress")
+	ErrInvalidAssetID            = errors.New("resale: invalid assetId")
 	ErrInvalidTokenBlueprintID   = errors.New("resale: invalid tokenBlueprintId")
 	ErrInvalidProductID          = errors.New("resale: invalid productId")
 	ErrInvalidBrandID            = errors.New("resale: invalid brandId")
@@ -83,7 +83,7 @@ var (
 
 var (
 	MaxReferenceIDLength = 128
-	MaxMintAddressLength = 128
+	MaxAssetIDLength     = 128
 	MaxDescriptionLength = 1000
 	MinPrice             = 0
 	MaxPrice             = 10_000_000
@@ -116,7 +116,7 @@ type Resale struct {
 	ID     string       `json:"id,omitempty"`
 	Status ResaleStatus `json:"status,omitempty"`
 
-	MintAddress        string `json:"mintAddress,omitempty"`
+	AssetID            string `json:"assetId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 	ProductID          string `json:"productId,omitempty"`
 	BrandID            string `json:"brandId,omitempty"`
@@ -165,7 +165,7 @@ func (r Resale) GetID() string {
 // - ImageID can be empty because images can be attached later.
 func NewForCreate(
 	status ResaleStatus,
-	mintAddress string,
+	assetID string,
 	tokenBlueprintID string,
 	productID string,
 	brandID string,
@@ -183,7 +183,7 @@ func NewForCreate(
 	r := Resale{
 		ID:                 "",
 		Status:             status,
-		MintAddress:        mintAddress,
+		AssetID:            assetID,
 		TokenBlueprintID:   tokenBlueprintID,
 		ProductID:          productID,
 		BrandID:            brandID,
@@ -348,8 +348,8 @@ func (r Resale) ValidateForCreate() error {
 		return ErrInvalidStatus
 	}
 
-	if !isValidMintAddress(r.MintAddress) {
-		return ErrInvalidMintAddress
+	if !isValidAssetID(r.AssetID) {
+		return ErrInvalidAssetID
 	}
 
 	if !isValidReferenceID(r.TokenBlueprintID) {
@@ -414,8 +414,8 @@ func (r Resale) ValidateForPersist() error {
 		return ErrInvalidStatus
 	}
 
-	if !isValidMintAddress(r.MintAddress) {
-		return ErrInvalidMintAddress
+	if !isValidAssetID(r.AssetID) {
+		return ErrInvalidAssetID
 	}
 
 	if !isValidReferenceID(r.TokenBlueprintID) {
@@ -600,12 +600,12 @@ func priceAllowed(v int) bool {
 	return v >= MinPrice && v <= MaxPrice
 }
 
-func isValidMintAddress(s string) bool {
+func isValidAssetID(s string) bool {
 	if s == "" {
 		return false
 	}
 
-	if len(s) > MaxMintAddressLength {
+	if len(s) > MaxAssetIDLength {
 		return false
 	}
 

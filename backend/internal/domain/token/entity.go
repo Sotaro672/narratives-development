@@ -6,16 +6,20 @@ import (
 	"time"
 )
 
-// MintParams は、Solana 上でトークン/NFT をミントする際に
-// MintAuthorityWalletPort に渡す最小限のパラメータです。
+// MintParams は、Solana Bubblegum V2 で cNFT をミントする際に
+// MintAuthorityWalletPort に渡す最小限のパラメータです.
 //
-// - 「1商品=1Mint」モードでは、Amount は常に 1 を指定します。
-// - 旧来の「まとめてミント」モードでは、Amount に発行枚数を指定します。
+// - 1 productId = 1 cNFT とします。
+// - ProductID は Bubblegum mint service 側の idempotency key として使用します。
+// - Amount は常に 1 を指定します。
 type MintParams struct {
-	// トークンを受け取るウォレットアドレス (base58)
+	// cNFT に紐づく productId
+	ProductID string
+
+	// cNFT を受け取るウォレットアドレス (base58)
 	ToAddress string
 
-	// ミント数量（NFTなら通常 1）
+	// ミント数量
 	Amount uint64
 
 	// Metaplex 形式 JSON メタデータの URI
@@ -26,14 +30,27 @@ type MintParams struct {
 	Symbol string
 }
 
+// AssetStandard は、on-chain asset の方式を表します。
+type AssetStandard string
+
+const (
+	AssetStandardBubblegumV2 AssetStandard = "BUBBLEGUM_V2"
+)
+
 // MintResult は、チェーン上のミント結果です。
 // 1 回の MintToken 実行に対して 1 件生成されます。
 type MintResult struct {
 	// ミントトランザクションのシグネチャ (base58)
 	Signature string
 
-	// 作成された mint アカウントのアドレス (base58)
-	MintAddress string
+	// Bubblegum V2 cNFT の一意な asset ID (base58)
+	AssetID string
+
+	// asset が格納されている Merkle Tree のアドレス (base58)
+	TreeAddress string
+
+	// Merkle Tree 内の leaf index
+	LeafIndex uint64
 
 	// オプション: どのスロットで確定したかなど
 	Slot uint64
@@ -47,50 +64,57 @@ type MintResult struct {
 // productId は "docId" を正とする（= 1 token doc が 1 product に紐づく想定）。
 //
 // Firestore 実データ前提:
-// - tokens/{docId}
-// - docId = productId
-// - fields: brandId, tokenBlueprintId, mintAddress, metadataUri, ...
+//   - tokens/{docId}
+//   - docId = productId
+//   - fields: assetStandard, cluster, assetId, treeAddress, leafIndex,
+//     coreCollectionAddress, brandId, tokenBlueprintId, metadataUri, ...
 type GetTokenByProductIDResult struct {
 	ProductID        string
 	BrandID          string
 	TokenBlueprintID string
 	MetadataURI      string
-	MintAddress      string
+
+	AssetStandard         AssetStandard
+	Cluster               string
+	AssetID               string
+	TreeAddress           string
+	LeafIndex             uint64
+	CoreCollectionAddress string
 }
 
 // ============================================================
-// ResolveTokenByMintAddressResult
+// ResolveTokenByAssetIDResult
 // ============================================================
 //
-// Firestore の tokens コレクションを mintAddress で逆引きした結果。
+// Firestore の tokens コレクションを assetId で逆引きした結果。
 // productId は "docId" を正とする（= 1 token doc が 1 product に紐づく想定）。
-type ResolveTokenByMintAddressResult struct {
+type ResolveTokenByAssetIDResult struct {
 	ProductID   string
 	BrandID     string
 	MetadataURI string
-	MintAddress string
+	AssetID     string
 }
 
 // ============================================================
-// ListMintAddressesByTokenBlueprintIDResult
+// ListAssetIDsByTokenBlueprintIDResult
 // ============================================================
 //
 // Firestore の tokens コレクションを tokenBlueprintId で検索し、
-// 同一 blueprint に紐づく mintAddress 一覧を返す結果です。
-type ListMintAddressesByTokenBlueprintIDResult struct {
+// 同一 blueprint に紐づく assetId 一覧を返す結果です。
+type ListAssetIDsByTokenBlueprintIDResult struct {
 	TokenBlueprintID string
-	MintAddresses    []string
+	AssetIDs         []string
 }
 
-// ResolveTransferredAtByMintAddressResult represents a lookup result for order identification.
+// ResolveTransferredAtByAssetIDResult represents a lookup result for order identification.
 //
 // Transfer entity には transferredAt を持たせない方針のため、
-// mintAddress から transfer 実行日時を引きたい query では、この read result として返す。
-type ResolveTransferredAtByMintAddressResult struct {
+// assetId から transfer 実行日時を引きたい query では、この read result として返す。
+type ResolveTransferredAtByAssetIDResult struct {
 	ProductID     string    `json:"productId"`
 	Attempt       int       `json:"attempt"`
 	AvatarID      string    `json:"avatarId"`
-	MintAddress   string    `json:"mintAddress"`
+	AssetID       string    `json:"assetId"`
 	TransferredAt time.Time `json:"transferredAt"`
 }
 
@@ -101,10 +125,11 @@ var (
 	// TokenQuery が「productId が不正」時に返す
 	ErrInvalidProductID = errors.New("token: invalid productId")
 
-	// TokenQuery が「mintAddress が不正」時に返す
-	ErrInvalidMintAddress = errors.New("token: invalid mintAddress")
+	// TokenQuery が「assetId が不正」時に返す
+	ErrInvalidAssetID = errors.New("token: invalid assetId")
 
 	// TokenQuery が「tokenBlueprintId が不正」時に返す
 	ErrInvalidTokenBlueprintID = errors.New("token: invalid tokenBlueprintId")
-	ErrInvalidTransferredAt    = errors.New("transfer: invalid transferredAt")
+
+	ErrInvalidTransferredAt = errors.New("transfer: invalid transferredAt")
 )

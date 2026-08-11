@@ -9,704 +9,613 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
 	"sort"
+	"strings"
 	"time"
+
+	"google.golang.org/api/idtoken"
 )
 
 var (
-	ErrTokenTransferReaderNotConfigured = errors.New("token_transfer_reader: not configured")
-	ErrTokenTransferReaderMintEmpty     = errors.New("token_transfer_reader: mintAddress is empty")
+	ErrTokenTransferReaderNotConfigured = errors.New(
+		"token_transfer_reader: not configured",
+	)
+
+	ErrTokenTransferReaderServiceURLEmpty = errors.New(
+		"token_transfer_reader: bubblegum service URL is empty",
+	)
+
+	ErrTokenTransferReaderInvalidServiceURL = errors.New(
+		"token_transfer_reader: bubblegum service URL is invalid",
+	)
+
+	ErrTokenTransferReaderAssetIDEmpty = errors.New(
+		"token_transfer_reader: assetId is empty",
+	)
+
+	ErrTokenTransferReaderResponseTooLarge = errors.New(
+		"token_transfer_reader: bubblegum service response is too large",
+	)
+
+	ErrTokenTransferReaderAssetMismatch = errors.New(
+		"token_transfer_reader: bubblegum service returned unexpected assetId",
+	)
 )
 
 const (
-	solanaDevnetRPCURL                        = "https://api.devnet.solana.com"
-	defaultTokenTransferReaderLimitPerAccount = 50
-	defaultTokenTransferReaderHTTPTimeout     = 20 * time.Second
+	envBubblegumTransferReaderServiceURL = "SOLANA_BUBBLEGUM_SERVICE_URL"
+
+	envBubblegumTransferReaderServiceAudience = "SOLANA_BUBBLEGUM_SERVICE_AUDIENCE"
+
+	bubblegumAssetTransfersPath = "/asset-transfers"
+
+	defaultTokenTransferReaderLimit = 50
+
+	defaultTokenTransferReaderHTTPTimeout = 20 * time.Second
+
+	maxTokenTransferReaderResponseBodyBytes int64 = 512 * 1024
 )
 
+// TokenTransferReaderSolana reads Bubblegum V2 cNFT transfer history through
+// the internal solana-bubblegum service.
+//
+// The Go backend does not inspect SPL token accounts or parse SPL Token
+// transfer instructions. Bubblegum cNFT history is resolved by the internal
+// service using DAS / indexed on-chain data.
 type TokenTransferReaderSolana struct {
-	RPCURL     string
+	ServiceURL string
 	HTTPClient *http.Client
-	Commitment string
 	Timeout    time.Duration
+
+	initErr error
 }
 
-func NewTokenTransferReaderSolana(_ string) *TokenTransferReaderSolana {
+// NewTokenTransferReaderSolana keeps the existing constructor signature so
+// current DI code continues to compile.
+//
+// The legacy argument used to be SOLANA_RPC_URL. It is intentionally ignored
+// because this reader must no longer query a standard Solana RPC endpoint
+// directly.
+//
+// Configure the reader with:
+//
+// SOLANA_BUBBLEGUM_SERVICE_URL
+// SOLANA_BUBBLEGUM_SERVICE_AUDIENCE
+func NewTokenTransferReaderSolana(
+	_ string,
+) *TokenTransferReaderSolana {
 	timeout := defaultTokenTransferReaderHTTPTimeout
 
-	return &TokenTransferReaderSolana{
-		RPCURL:     solanaDevnetRPCURL,
-		HTTPClient: &http.Client{Timeout: timeout},
-		Commitment: "finalized",
+	serviceURL := strings.Trim(
+		os.Getenv(
+			envBubblegumTransferReaderServiceURL,
+		),
+		" \t\r\n",
+	)
+
+	reader := &TokenTransferReaderSolana{
+		ServiceURL: serviceURL,
 		Timeout:    timeout,
 	}
+
+	if serviceURL == "" {
+		reader.initErr =
+			ErrTokenTransferReaderServiceURLEmpty
+
+		return reader
+	}
+
+	parsedURL, err := url.Parse(serviceURL)
+	if err != nil {
+		reader.initErr = fmt.Errorf(
+			"%w: %v",
+			ErrTokenTransferReaderInvalidServiceURL,
+			err,
+		)
+
+		return reader
+	}
+
+	if parsedURL.Scheme != "http" &&
+		parsedURL.Scheme != "https" {
+		reader.initErr = fmt.Errorf(
+			"%w: unsupported scheme=%s",
+			ErrTokenTransferReaderInvalidServiceURL,
+			parsedURL.Scheme,
+		)
+
+		return reader
+	}
+
+	if parsedURL.Host == "" {
+		reader.initErr = fmt.Errorf(
+			"%w: host is empty",
+			ErrTokenTransferReaderInvalidServiceURL,
+		)
+
+		return reader
+	}
+
+	reader.ServiceURL = strings.TrimRight(
+		serviceURL,
+		"/",
+	)
+
+	audience := strings.Trim(
+		os.Getenv(
+			envBubblegumTransferReaderServiceAudience,
+		),
+		" \t\r\n",
+	)
+
+	if audience == "" {
+		reader.HTTPClient = &http.Client{
+			Timeout: timeout,
+		}
+
+		return reader
+	}
+
+	authenticatedClient, err := idtoken.NewClient(
+		context.Background(),
+		audience,
+	)
+	if err != nil {
+		reader.initErr = fmt.Errorf(
+			"token_transfer_reader: create authenticated HTTP client: %w",
+			err,
+		)
+
+		return reader
+	}
+
+	authenticatedClient.Timeout = timeout
+	reader.HTTPClient = authenticatedClient
+
+	return reader
 }
 
-type ListMintTransfersInput struct {
-	MintAddress     string
-	LimitPerAccount int
+type ListAssetTransfersInput struct {
+	AssetID string
+
+	Limit int
+
 	BeforeSignature string
 	UntilSignature  string
 }
 
-type ListMintTransfersResult struct {
-	MintAddress string               `json:"mintAddress"`
-	Transfers   []MintTransferRecord `json:"transfers"`
+type ListAssetTransfersResult struct {
+	AssetID   string                `json:"assetId"`
+	Transfers []AssetTransferRecord `json:"transfers"`
 }
 
-type MintTransferRecord struct {
+type AssetTransferRecord struct {
 	FromWalletAddress string     `json:"fromWalletAddress"`
 	ToWalletAddress   string     `json:"toWalletAddress"`
 	TransferredAt     *time.Time `json:"transferredAt,omitempty"`
+
+	TxSignature string `json:"txSignature,omitempty"`
+	Slot        uint64 `json:"slot,omitempty"`
 }
 
-func (e *TokenTransferReaderSolana) ListMintTransfers(
+type bubblegumAssetTransfersRequest struct {
+	AssetStandard string `json:"assetStandard"`
+	AssetID       string `json:"assetId"`
+
+	Limit int `json:"limit,omitempty"`
+
+	BeforeSignature string `json:"beforeSignature,omitempty"`
+	UntilSignature  string `json:"untilSignature,omitempty"`
+}
+
+type bubblegumAssetTransfersResponse struct {
+	AssetID   string                `json:"assetId"`
+	Transfers []AssetTransferRecord `json:"transfers"`
+}
+
+type bubblegumAssetTransfersErrorResponse struct {
+	Error   string `json:"error,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+// ListAssetTransfers returns transfer history for one Bubblegum V2 cNFT.
+//
+// The internal Bubblegum service is responsible for:
+// - resolving the asset by assetId
+// - reading DAS / indexed on-chain transaction history
+// - identifying transfer operations
+// - resolving previous and next wallet owners
+// - returning transfer timestamps and signatures
+//
+// The Go backend treats assetId as the canonical cNFT identifier.
+func (e *TokenTransferReaderSolana) ListAssetTransfers(
 	ctx context.Context,
-	in ListMintTransfersInput,
-) (ListMintTransfersResult, error) {
-	if e == nil || e.RPCURL == "" {
-		return ListMintTransfersResult{}, ErrTokenTransferReaderNotConfigured
+	in ListAssetTransfersInput,
+) (ListAssetTransfersResult, error) {
+	if e == nil {
+		return ListAssetTransfersResult{},
+			ErrTokenTransferReaderNotConfigured
 	}
 
-	mintAddress := in.MintAddress
-	if mintAddress == "" {
-		return ListMintTransfersResult{}, ErrTokenTransferReaderMintEmpty
+	if e.initErr != nil {
+		return ListAssetTransfersResult{},
+			e.initErr
 	}
 
-	limitPerAccount := in.LimitPerAccount
-	if limitPerAccount <= 0 {
-		limitPerAccount = defaultTokenTransferReaderLimitPerAccount
+	if e.ServiceURL == "" ||
+		e.HTTPClient == nil {
+		return ListAssetTransfersResult{},
+			ErrTokenTransferReaderNotConfigured
 	}
 
-	rpcCtx := ctx
-	if e.Timeout > 0 {
-		var cancel context.CancelFunc
-		rpcCtx, cancel = context.WithTimeout(ctx, e.Timeout)
+	assetID := strings.Trim(
+		in.AssetID,
+		" \t\r\n",
+	)
+	if assetID == "" {
+		return ListAssetTransfersResult{},
+			ErrTokenTransferReaderAssetIDEmpty
+	}
+
+	limit := in.Limit
+	if limit <= 0 {
+		limit = defaultTokenTransferReaderLimit
+	}
+
+	payload := bubblegumAssetTransfersRequest{
+		AssetStandard: "BUBBLEGUM_V2",
+		AssetID:       assetID,
+
+		Limit: limit,
+
+		BeforeSignature: strings.Trim(
+			in.BeforeSignature,
+			" \t\r\n",
+		),
+		UntilSignature: strings.Trim(
+			in.UntilSignature,
+			" \t\r\n",
+		),
+	}
+
+	requestBody, err := json.Marshal(payload)
+	if err != nil {
+		return ListAssetTransfersResult{},
+			fmt.Errorf(
+				"token_transfer_reader: marshal request: %w",
+				err,
+			)
+	}
+
+	requestCtx := ctx
+	var cancel context.CancelFunc
+
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline &&
+		e.Timeout > 0 {
+		requestCtx, cancel =
+			context.WithTimeout(
+				ctx,
+				e.Timeout,
+			)
 		defer cancel()
 	}
 
-	tokenAccounts, err := e.getTokenAccountsByMint(rpcCtx, mintAddress)
-	if err != nil {
-		return ListMintTransfersResult{}, fmt.Errorf(
-			"token_transfer_reader: getTokenAccountsByMint: %w",
-			err,
-		)
-	}
-
-	signatureSet := map[string]struct{}{}
-	signatures := make([]string, 0, len(tokenAccounts)*4)
-
-	for _, tokenAccount := range tokenAccounts {
-		sigs, err := e.getSignaturesForAddress(
-			rpcCtx,
-			tokenAccount,
-			limitPerAccount,
-			in.BeforeSignature,
-			in.UntilSignature,
-		)
-		if err != nil {
-			return ListMintTransfersResult{}, fmt.Errorf(
-				"token_transfer_reader: getSignaturesForAddress(%s): %w",
-				tokenAccount,
-				err,
-			)
-		}
-
-		for _, sig := range sigs {
-			if sig == "" {
-				continue
-			}
-
-			if _, ok := signatureSet[sig]; ok {
-				continue
-			}
-
-			signatureSet[sig] = struct{}{}
-			signatures = append(signatures, sig)
-		}
-	}
-
-	type sortableTransfer struct {
-		Record MintTransferRecord
-		Unix   int64
-	}
-
-	records := make([]sortableTransfer, 0, len(signatures))
-
-	for _, sig := range signatures {
-		tx, err := e.getTransaction(rpcCtx, sig)
-		if err != nil {
-			return ListMintTransfersResult{}, fmt.Errorf(
-				"token_transfer_reader: getTransaction(%s): %w",
-				sig,
-				err,
-			)
-		}
-
-		if tx == nil {
-			continue
-		}
-
-		items := extractMintTransferRecordsFromTransaction(
-			tx,
-			mintAddress,
-		)
-
-		for _, it := range items {
-			unix := int64(0)
-			if it.TransferredAt != nil {
-				unix = it.TransferredAt.Unix()
-			}
-
-			records = append(records, sortableTransfer{
-				Record: it,
-				Unix:   unix,
-			})
-		}
-	}
-
-	sort.SliceStable(records, func(i, j int) bool {
-		if records[i].Unix != records[j].Unix {
-			return records[i].Unix > records[j].Unix
-		}
-
-		if records[i].Record.FromWalletAddress !=
-			records[j].Record.FromWalletAddress {
-			return records[i].Record.FromWalletAddress >
-				records[j].Record.FromWalletAddress
-		}
-
-		return records[i].Record.ToWalletAddress >
-			records[j].Record.ToWalletAddress
-	})
-
-	out := make([]MintTransferRecord, 0, len(records))
-	for _, r := range records {
-		out = append(out, r.Record)
-	}
-
-	return ListMintTransfersResult{
-		MintAddress: mintAddress,
-		Transfers:   out,
-	}, nil
-}
-
-func (e *TokenTransferReaderSolana) getTokenAccountsByMint(
-	ctx context.Context,
-	mintAddress string,
-) ([]string, error) {
-	var out rpcGetProgramAccountsResponse
-
-	if err := e.rpcCall(ctx, "getProgramAccounts", []any{
-		TokenProgramID,
-		map[string]any{
-			"encoding":   "base64",
-			"commitment": e.commitment(),
-			"filters": []any{
-				map[string]any{
-					"dataSize": 165,
-				},
-				map[string]any{
-					"memcmp": map[string]any{
-						"offset": 0,
-						"bytes":  mintAddress,
-					},
-				},
-			},
-		},
-	}, &out); err != nil {
-		return nil, err
-	}
-
-	keys := make([]string, 0, len(out))
-
-	for _, row := range out {
-		if row.Pubkey == "" {
-			continue
-		}
-
-		keys = append(keys, row.Pubkey)
-	}
-
-	return keys, nil
-}
-
-func (e *TokenTransferReaderSolana) getSignaturesForAddress(
-	ctx context.Context,
-	address string,
-	limit int,
-	before string,
-	until string,
-) ([]string, error) {
-	cfg := map[string]any{
-		"commitment": e.commitment(),
-		"limit":      limit,
-	}
-
-	if before != "" {
-		cfg["before"] = before
-	}
-
-	if until != "" {
-		cfg["until"] = until
-	}
-
-	var out []rpcSignatureInfo
-
-	if err := e.rpcCall(ctx, "getSignaturesForAddress", []any{
-		address,
-		cfg,
-	}, &out); err != nil {
-		return nil, err
-	}
-
-	res := make([]string, 0, len(out))
-
-	for _, s := range out {
-		if s.Signature == "" {
-			continue
-		}
-
-		res = append(res, s.Signature)
-	}
-
-	return res, nil
-}
-
-func (e *TokenTransferReaderSolana) getTransaction(
-	ctx context.Context,
-	signature string,
-) (*rpcTransactionResponse, error) {
-	var out *rpcTransactionResponse
-
-	if err := e.rpcCall(ctx, "getTransaction", []any{
-		signature,
-		map[string]any{
-			"encoding":                       "jsonParsed",
-			"commitment":                     e.commitment(),
-			"maxSupportedTransactionVersion": 0,
-		},
-	}, &out); err != nil {
-		return nil, err
-	}
-
-	return out, nil
-}
-
-func (e *TokenTransferReaderSolana) rpcCall(
-	ctx context.Context,
-	method string,
-	params []any,
-	out any,
-) error {
-	if e == nil || e.RPCURL == "" {
-		return ErrTokenTransferReaderNotConfigured
-	}
-
-	reqBody := rpcRequest{
-		JSONRPC: "2.0",
-		ID:      1,
-		Method:  method,
-		Params:  params,
-	}
-
-	b, err := json.Marshal(reqBody)
-	if err != nil {
-		return fmt.Errorf("marshal rpc request: %w", err)
-	}
+	endpoint :=
+		e.ServiceURL +
+			bubblegumAssetTransfersPath
 
 	req, err := http.NewRequestWithContext(
-		ctx,
+		requestCtx,
 		http.MethodPost,
-		e.RPCURL,
-		bytes.NewReader(b),
+		endpoint,
+		bytes.NewReader(requestBody),
 	)
 	if err != nil {
-		return fmt.Errorf("new http request: %w", err)
+		return ListAssetTransfersResult{},
+			fmt.Errorf(
+				"token_transfer_reader: create request: %w",
+				err,
+			)
 	}
 
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(
+		"Content-Type",
+		"application/json",
+	)
 
-	client := e.HTTPClient
-	if client == nil {
-		client = &http.Client{
-			Timeout: defaultTokenTransferReaderHTTPTimeout,
-		}
-	}
+	req.Header.Set(
+		"Accept",
+		"application/json",
+	)
 
-	resp, err := client.Do(req)
+	resp, err := e.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("rpc http call: %w", err)
+		return ListAssetTransfersResult{},
+			fmt.Errorf(
+				"token_transfer_reader: bubblegum asset transfer request failed assetId=%s: %w",
+				assetID,
+				err,
+			)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(
+		io.LimitReader(
+			resp.Body,
+			maxTokenTransferReaderResponseBodyBytes+1,
+		),
+	)
 	if err != nil {
-		return fmt.Errorf("read rpc response: %w", err)
+		return ListAssetTransfersResult{},
+			fmt.Errorf(
+				"token_transfer_reader: read bubblegum response: %w",
+				err,
+			)
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf(
-			"rpc http status=%d body=%s",
-			resp.StatusCode,
-			string(respBody),
-		)
+	if int64(len(body)) >
+		maxTokenTransferReaderResponseBodyBytes {
+		return ListAssetTransfersResult{},
+			ErrTokenTransferReaderResponseTooLarge
 	}
 
-	var rpcResp rpcResponse
-	if err := json.Unmarshal(respBody, &rpcResp); err != nil {
-		return fmt.Errorf(
-			"unmarshal rpc envelope: %w body=%s",
-			err,
-			string(respBody),
-		)
+	if resp.StatusCode < http.StatusOK ||
+		resp.StatusCode >= http.StatusMultipleChoices {
+		return ListAssetTransfersResult{},
+			bubblegumAssetTransfersHTTPError(
+				resp.StatusCode,
+				body,
+			)
 	}
 
-	if rpcResp.Error != nil {
-		return fmt.Errorf(
-			"rpc error code=%d message=%s",
-			rpcResp.Error.Code,
-			rpcResp.Error.Message,
-		)
+	var serviceResult bubblegumAssetTransfersResponse
+
+	if err := json.Unmarshal(
+		body,
+		&serviceResult,
+	); err != nil {
+		return ListAssetTransfersResult{},
+			fmt.Errorf(
+				"token_transfer_reader: decode bubblegum response: %w",
+				err,
+			)
 	}
 
-	if out == nil {
-		return nil
+	serviceResult.AssetID = strings.Trim(
+		serviceResult.AssetID,
+		" \t\r\n",
+	)
+
+	if serviceResult.AssetID != "" &&
+		serviceResult.AssetID != assetID {
+		return ListAssetTransfersResult{},
+			fmt.Errorf(
+				"%w: requested=%s returned=%s",
+				ErrTokenTransferReaderAssetMismatch,
+				assetID,
+				serviceResult.AssetID,
+			)
 	}
 
-	if len(rpcResp.Result) == 0 ||
-		string(rpcResp.Result) == "null" {
-		return nil
-	}
+	transfers := normalizeAssetTransferRecords(
+		serviceResult.Transfers,
+	)
 
-	if err := json.Unmarshal(rpcResp.Result, out); err != nil {
-		return fmt.Errorf(
-			"unmarshal rpc result: %w body=%s",
-			err,
-			string(respBody),
-		)
-	}
-
-	return nil
+	return ListAssetTransfersResult{
+		AssetID:   assetID,
+		Transfers: transfers,
+	}, nil
 }
 
-func (e *TokenTransferReaderSolana) commitment() string {
-	c := e.Commitment
-	if c == "" {
-		return "finalized"
+func normalizeAssetTransferRecords(
+	values []AssetTransferRecord,
+) []AssetTransferRecord {
+	if len(values) == 0 {
+		return []AssetTransferRecord{}
 	}
 
-	return c
-}
+	seen := make(
+		map[string]struct{},
+		len(values),
+	)
 
-func extractMintTransferRecordsFromTransaction(
-	tx *rpcTransactionResponse,
-	mintAddress string,
-) []MintTransferRecord {
-	if tx == nil {
-		return nil
-	}
+	result := make(
+		[]AssetTransferRecord,
+		0,
+		len(values),
+	)
 
-	if tx.Meta != nil && tx.Meta.Err != nil {
-		return nil
-	}
-
-	var transferredAt *time.Time
-	if tx.BlockTime != nil {
-		t := time.Unix(*tx.BlockTime, 0).UTC()
-		transferredAt = &t
-	}
-
-	accountIndexToOwner := make(map[int]string)
-
-	if tx.Meta != nil {
-		for _, tb := range tx.Meta.PostTokenBalances {
-			if tb.Owner != "" {
-				accountIndexToOwner[tb.AccountIndex] = tb.Owner
-			}
-		}
-
-		for _, tb := range tx.Meta.PreTokenBalances {
-			if tb.Owner == "" {
-				continue
-			}
-
-			if _, ok := accountIndexToOwner[tb.AccountIndex]; !ok {
-				accountIndexToOwner[tb.AccountIndex] = tb.Owner
-			}
-		}
-	}
-
-	out := make([]MintTransferRecord, 0, 4)
-
-	appendFromInstructions := func(ixs []rpcParsedInstruction) {
-		for _, ix := range ixs {
-			if !isSPLTokenTransferInstruction(ix) {
-				continue
-			}
-
-			info, ok := ix.Parsed.Info.(map[string]any)
-			if !ok {
-				continue
-			}
-
-			mint := stringValue(info["mint"])
-			if mint == "" {
-				mint = mintAddress
-			}
-
-			if mint != mintAddress {
-				continue
-			}
-
-			sourceATA := stringValue(info["source"])
-			destinationATA := stringValue(info["destination"])
-
-			if sourceATA == "" || destinationATA == "" {
-				continue
-			}
-
-			fromWallet := resolveOwnerByTokenAccount(
-				tx,
-				sourceATA,
-				accountIndexToOwner,
-			)
-
-			toWallet := resolveOwnerByTokenAccount(
-				tx,
-				destinationATA,
-				accountIndexToOwner,
-			)
-
-			if fromWallet == "" || toWallet == "" {
-				continue
-			}
-
-			out = append(out, MintTransferRecord{
-				FromWalletAddress: fromWallet,
-				ToWalletAddress:   toWallet,
-				TransferredAt:     transferredAt,
-			})
-		}
-	}
-
-	if tx.Transaction.Message.Instructions != nil {
-		appendFromInstructions(
-			tx.Transaction.Message.Instructions,
+	for _, value := range values {
+		fromWallet := strings.Trim(
+			value.FromWalletAddress,
+			" \t\r\n",
 		)
-	}
 
-	if tx.Meta != nil {
-		for _, inner := range tx.Meta.InnerInstructions {
-			appendFromInstructions(inner.Instructions)
-		}
-	}
+		toWallet := strings.Trim(
+			value.ToWalletAddress,
+			" \t\r\n",
+		)
 
-	return dedupeTransferRecords(out)
-}
+		txSignature := strings.Trim(
+			value.TxSignature,
+			" \t\r\n",
+		)
 
-func dedupeTransferRecords(
-	in []MintTransferRecord,
-) []MintTransferRecord {
-	if len(in) == 0 {
-		return in
-	}
-
-	seen := make(map[string]struct{}, len(in))
-	out := make([]MintTransferRecord, 0, len(in))
-
-	for _, r := range in {
-		ts := ""
-
-		if r.TransferredAt != nil {
-			ts = r.TransferredAt.UTC().Format(
-				time.RFC3339,
-			)
+		if fromWallet == "" ||
+			toWallet == "" {
+			continue
 		}
 
-		key := r.FromWalletAddress +
-			"|" +
-			r.ToWalletAddress +
-			"|" +
-			ts
+		var transferredAt *time.Time
+		if value.TransferredAt != nil &&
+			!value.TransferredAt.IsZero() {
+			normalizedTime :=
+				value.TransferredAt.UTC()
+
+			transferredAt = &normalizedTime
+		}
+
+		key := txSignature
+
+		if key == "" {
+			timestamp := ""
+
+			if transferredAt != nil {
+				timestamp =
+					transferredAt.Format(
+						time.RFC3339Nano,
+					)
+			}
+
+			key =
+				fromWallet +
+					"|" +
+					toWallet +
+					"|" +
+					timestamp +
+					"|" +
+					fmt.Sprintf(
+						"%d",
+						value.Slot,
+					)
+		}
 
 		if _, ok := seen[key]; ok {
 			continue
 		}
 
 		seen[key] = struct{}{}
-		out = append(out, r)
+
+		result = append(
+			result,
+			AssetTransferRecord{
+				FromWalletAddress: fromWallet,
+				ToWalletAddress:   toWallet,
+				TransferredAt:     transferredAt,
+				TxSignature:       txSignature,
+				Slot:              value.Slot,
+			},
+		)
 	}
 
-	return out
+	sort.SliceStable(
+		result,
+		func(i, j int) bool {
+			leftTime := int64(0)
+			rightTime := int64(0)
+
+			if result[i].TransferredAt != nil {
+				leftTime =
+					result[i].
+						TransferredAt.
+						UnixNano()
+			}
+
+			if result[j].TransferredAt != nil {
+				rightTime =
+					result[j].
+						TransferredAt.
+						UnixNano()
+			}
+
+			if leftTime != rightTime {
+				return leftTime > rightTime
+			}
+
+			if result[i].Slot !=
+				result[j].Slot {
+				return result[i].Slot >
+					result[j].Slot
+			}
+
+			if result[i].TxSignature !=
+				result[j].TxSignature {
+				return result[i].TxSignature >
+					result[j].TxSignature
+			}
+
+			if result[i].FromWalletAddress !=
+				result[j].FromWalletAddress {
+				return result[i].
+					FromWalletAddress >
+					result[j].
+						FromWalletAddress
+			}
+
+			return result[i].
+				ToWalletAddress >
+				result[j].
+					ToWalletAddress
+		},
+	)
+
+	return result
 }
 
-func isSPLTokenTransferInstruction(
-	ix rpcParsedInstruction,
-) bool {
-	program := ix.Program
+func bubblegumAssetTransfersHTTPError(
+	statusCode int,
+	body []byte,
+) error {
+	var errorResponse bubblegumAssetTransfersErrorResponse
 
-	if program != "spl-token" &&
-		ix.ProgramID != TokenProgramID {
-		return false
+	if len(body) > 0 {
+		_ = json.Unmarshal(
+			body,
+			&errorResponse,
+		)
 	}
 
-	t := ix.Parsed.Type
+	errorCode := strings.Trim(
+		errorResponse.Error,
+		" \t\r\n",
+	)
 
-	return t == "transfer" || t == "transferChecked"
-}
+	message := strings.Trim(
+		errorResponse.Message,
+		" \t\r\n",
+	)
 
-func resolveOwnerByTokenAccount(
-	tx *rpcTransactionResponse,
-	tokenAccount string,
-	byIndex map[int]string,
-) string {
-	if tx == nil || tokenAccount == "" {
-		return ""
+	if message == "" {
+		message = strings.Trim(
+			string(body),
+			" \t\r\n",
+		)
 	}
 
-	keys := tx.Transaction.Message.AccountKeys
-
-	for i, k := range keys {
-		pubkey := k.Pubkey
-		if pubkey == "" {
-			pubkey = k.String
-		}
-
-		if pubkey != tokenAccount {
-			continue
-		}
-
-		if owner, ok := byIndex[i]; ok {
-			return owner
-		}
-
-		break
+	if len(message) > 1024 {
+		message = message[:1024]
 	}
 
-	return ""
-}
+	switch {
+	case errorCode != "" &&
+		message != "":
+		return fmt.Errorf(
+			"token_transfer_reader: bubblegum service returned status=%d error=%s message=%s",
+			statusCode,
+			errorCode,
+			message,
+		)
 
-func stringValue(v any) string {
-	switch t := v.(type) {
-	case nil:
-		return ""
+	case errorCode != "":
+		return fmt.Errorf(
+			"token_transfer_reader: bubblegum service returned status=%d error=%s",
+			statusCode,
+			errorCode,
+		)
 
-	case string:
-		return t
-
-	case json.Number:
-		return t.String()
-
-	case float64:
-		return fmt.Sprintf("%.0f", t)
-
-	case float32:
-		return fmt.Sprintf("%.0f", t)
-
-	case int:
-		return fmt.Sprintf("%d", t)
-
-	case int64:
-		return fmt.Sprintf("%d", t)
-
-	case uint64:
-		return fmt.Sprintf("%d", t)
+	case message != "":
+		return fmt.Errorf(
+			"token_transfer_reader: bubblegum service returned status=%d message=%s",
+			statusCode,
+			message,
+		)
 
 	default:
-		return ""
+		return fmt.Errorf(
+			"token_transfer_reader: bubblegum service returned status=%d",
+			statusCode,
+		)
 	}
-}
-
-type rpcGetProgramAccountsResponse []struct {
-	Pubkey  string `json:"pubkey"`
-	Account struct {
-		Lamports   uint64 `json:"lamports"`
-		Owner      string `json:"owner"`
-		Executable bool   `json:"executable"`
-		RentEpoch  uint64 `json:"rentEpoch"`
-		Data       []any  `json:"data"`
-	} `json:"account"`
-}
-
-type rpcSignatureInfo struct {
-	Signature string `json:"signature"`
-	Slot      uint64 `json:"slot"`
-	Err       any    `json:"err"`
-}
-
-type rpcTransactionResponse struct {
-	Slot      uint64 `json:"slot"`
-	BlockTime *int64 `json:"blockTime"`
-	Meta      *struct {
-		Err               any                    `json:"err"`
-		PreTokenBalances  []rpcTokenBalance      `json:"preTokenBalances"`
-		PostTokenBalances []rpcTokenBalance      `json:"postTokenBalances"`
-		InnerInstructions []rpcInnerInstructions `json:"innerInstructions"`
-	} `json:"meta"`
-	Transaction struct {
-		Signatures []string `json:"signatures"`
-		Message    struct {
-			AccountKeys  []rpcAccountKey        `json:"accountKeys"`
-			Instructions []rpcParsedInstruction `json:"instructions"`
-		} `json:"message"`
-	} `json:"transaction"`
-}
-
-type rpcTokenBalance struct {
-	AccountIndex int    `json:"accountIndex"`
-	Mint         string `json:"mint"`
-	Owner        string `json:"owner"`
-}
-
-type rpcInnerInstructions struct {
-	Index        int                    `json:"index"`
-	Instructions []rpcParsedInstruction `json:"instructions"`
-}
-
-type rpcAccountKey struct {
-	Pubkey string `json:"pubkey"`
-	String string `json:"-"`
-}
-
-func (k *rpcAccountKey) UnmarshalJSON(
-	b []byte,
-) error {
-	if len(b) == 0 {
-		return nil
-	}
-
-	if b[0] == '"' {
-		var s string
-
-		if err := json.Unmarshal(b, &s); err != nil {
-			return err
-		}
-
-		k.String = s
-		k.Pubkey = s
-
-		return nil
-	}
-
-	var v struct {
-		Pubkey string `json:"pubkey"`
-	}
-
-	if err := json.Unmarshal(b, &v); err != nil {
-		return err
-	}
-
-	k.Pubkey = v.Pubkey
-
-	return nil
-}
-
-type rpcParsedInstruction struct {
-	Program   string `json:"program"`
-	ProgramID string `json:"programId"`
-	Parsed    struct {
-		Type string `json:"type"`
-		Info any    `json:"info"`
-	} `json:"parsed"`
 }

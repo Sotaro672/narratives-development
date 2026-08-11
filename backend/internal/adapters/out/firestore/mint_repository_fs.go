@@ -159,8 +159,10 @@ func encodeMintProductTask(t mintdom.MintProductTask) map[string]any {
 		"updatedAt":    t.UpdatedAt.UTC(),
 	}
 
-	if t.MintAddress != "" {
-		data["mintAddress"] = t.MintAddress
+	if t.AssetID != "" {
+		data["assetId"] = t.AssetID
+		data["treeAddress"] = t.TreeAddress
+		data["leafIndex"] = int64(t.LeafIndex)
 	}
 
 	if t.Signature != "" {
@@ -206,7 +208,9 @@ func decodeMintProductTaskFromDoc(
 
 		AttemptCount: asInt(data["attemptCount"]),
 
-		MintAddress:  asString(data["mintAddress"]),
+		AssetID:      asString(data["assetId"]),
+		TreeAddress:  asString(data["treeAddress"]),
+		LeafIndex:    uint64(asInt(data["leafIndex"])),
 		Signature:    asString(data["signature"]),
 		ErrorMessage: asString(data["errorMessage"]),
 
@@ -722,7 +726,9 @@ func (r *MintRepositoryFS) MarkMinted(
 	ctx context.Context,
 	mintID string,
 	productID string,
-	mintAddress string,
+	assetID string,
+	treeAddress string,
+	leafIndex uint64,
 	signature string,
 ) (mintdom.MintProductTask, error) {
 	if r == nil || r.Client == nil {
@@ -759,7 +765,9 @@ func (r *MintRepositoryFS) MarkMinted(
 
 			if err := task.MarkMinted(
 				time.Now().UTC(),
-				mintAddress,
+				assetID,
+				treeAddress,
+				leafIndex,
 				signature,
 			); err != nil {
 				return err
@@ -1101,7 +1109,7 @@ func (r *MintRepositoryFS) LoadForMinting(
 }
 
 // RecordProductAsMinted は productId 1件分の mint 結果を Firestore に反映します。
-// - tokens コレクションに [productId, mintAddress] を 1:1 で保存（docID=productId）
+// - tokens コレクションに [productId, assetId] を 1:1 で保存（docID=productId）
 // - 親 mints/{mintID} はここでは status=MINTED にしません。
 // - 親の完了更新は、全 MintProductTask が MINTED になった後に MintUsecase.Update 経由で行います。
 func (r *MintRepositoryFS) RecordProductAsMinted(
@@ -1235,7 +1243,9 @@ func (r *MintRepositoryFS) RecordProductAsMinted(
 	data := map[string]any{
 		"brandId":            brandID,
 		"tokenBlueprintId":   tbID,
-		"mintAddress":        mt.Result.MintAddress,
+		"assetId":            mt.Result.AssetID,
+		"treeAddress":        mt.Result.TreeAddress,
+		"leafIndex":          int64(mt.Result.LeafIndex),
 		"onChainTxSignature": mt.Result.Signature,
 		"mintedAt":           firestore.ServerTimestamp,
 		"toAddress":          toAddress,

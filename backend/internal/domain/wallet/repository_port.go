@@ -8,7 +8,7 @@ import "context"
 // Collection design:
 // - collection: wallets
 // - docId: avatarId
-// - fields: walletAddress, tokens, lastUpdatedAt, status
+// - fields: walletAddress, assetIds, lastUpdatedAt, status
 // - avatarId field is NOT stored. docId is the source of truth.
 type Repository interface {
 	// GetByAvatarID は wallets/{avatarId} から Wallet を取得します。
@@ -18,7 +18,7 @@ type Repository interface {
 	Save(ctx context.Context, avatarID string, w Wallet) error
 }
 
-// OnchainReader は Solana 上のウォレットが保持するトークンの mint 一覧を取得するポートです。
+// OnchainReader は Solana 上のウォレットが保持する cNFT の assetId 一覧を取得するポートです。
 type OnchainReader interface {
-	ListOwnedTokenMints(ctx context.Context, walletAddress string) ([]string, error)
+	ListOwnedAssetIDs(ctx context.Context, walletAddress string) ([]string, error)
 }

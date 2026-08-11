@@ -56,9 +56,9 @@ type MintRequestPort interface {
 	LoadForMinting(ctx context.Context, id string) (*MintRequestForUsecase, error)
 }
 
-// MintProductMintRecorder は、1 product の mint 成功結果を保存するためのポートです。
+// MintProductMintRecorder は、1 product の mint 成功結果を保存するためのポートです.
 //
-// - Firestore 実装側では productId と mintAddress の 1:1 token record を保存します。
+// - Firestore 実装側では productId と assetId の 1:1 token record を保存します。
 // - 親 Mint の status=MINTED 更新はここでは行わず、全 task 完了時に MintUsecase 側で行います。
 type MintProductMintRecorder interface {
 	RecordProductAsMinted(
@@ -131,7 +131,9 @@ func NewMintResultMapper() *MintResultMapper {
 func (m *MintResultMapper) FromMint(ent mintdom.Mint) *tokendom.MintResult {
 	return &tokendom.MintResult{
 		Signature:   ent.OnChainTxSignature,
-		MintAddress: "",
+		AssetID:     "",
+		TreeAddress: "",
+		LeafIndex:   0,
 		Slot:        0,
 	}
 }
@@ -275,7 +277,7 @@ func (u *MintUsecase) SetTokenBlueprintMintMarker(
 	u.tbMintMarker = marker
 }
 
-// UpdateRequestInfo は mint request を起票し、productId 単位の mint task を作成します。
+// UpdateRequestInfo は mint request を起票し、productId 単位の mint task を作成します.
 //
 // 処理:
 // - mint request 作成
@@ -490,7 +492,7 @@ func (u *MintUsecase) ensureMetadataURI(
 }
 
 // ReconcileMintCompletion は、親 Mint が MINTING のまま残っている場合に、
-// product task の状態から親 Mint の完了状態を復元します。
+// product task の状態から親 Mint の完了状態を復元します.
 //
 // 親 Mint の全 productID に対応する task が存在し、
 // それらが全て MINTED の場合のみ親 Mint を MINTED へ更新します。
@@ -612,7 +614,7 @@ func (u *MintUsecase) ReconcileMintCompletion(
 	return nil
 }
 
-// ExecuteNextMintTask は mintID に紐づく次の実行可能 task を1件だけ処理します。
+// ExecuteNextMintTask は mintID に紐づく次の実行可能 task を1件だけ処理します.
 //
 // フロー:
 //  1. 親 Mint を取得
@@ -893,7 +895,9 @@ func (u *MintUsecase) ExecuteNextMintTask(
 		ctx,
 		mintRequestID,
 		task.ProductID,
-		mintedOne.Result.MintAddress,
+		mintedOne.Result.AssetID,
+		mintedOne.Result.TreeAddress,
+		mintedOne.Result.LeafIndex,
 		mintedOne.Result.Signature,
 	); err != nil {
 		return mintedOne.Result, fmt.Errorf(

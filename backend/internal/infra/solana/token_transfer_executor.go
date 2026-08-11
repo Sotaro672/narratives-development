@@ -2,424 +2,552 @@
 package solana
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/blocto/solana-go-sdk/client"
-	"github.com/blocto/solana-go-sdk/common"
-	"github.com/blocto/solana-go-sdk/program/token"
-	"github.com/blocto/solana-go-sdk/types"
+	"google.golang.org/api/idtoken"
 
 	usecase "narratives/internal/application/usecase"
 )
 
 var (
-	ErrTokenTransferNotConfigured   = errors.New("token_transfer_executor: not configured")
-	ErrTokenTransferMintEmpty       = errors.New("token_transfer_executor: mintAddress is empty")
-	ErrTokenTransferToWalletEmpty   = errors.New("token_transfer_executor: toWalletAddress is empty")
-	ErrTokenTransferSignerEmpty     = errors.New("token_transfer_executor: signer is nil")
-	ErrTokenTransferInvalidSigner   = errors.New("token_transfer_executor: invalid signer type")
-	ErrTokenTransferInvalidPrivKey  = errors.New("token_transfer_executor: invalid private key bytes")
-	ErrTokenTransferSourceAtaAbsent = errors.New("token_transfer_executor: source ATA not found")
+	ErrTokenTransferNotConfigured = errors.New(
+		"token_transfer_executor: not configured",
+	)
 
-	// ✅ Safety: if FromWalletAddress is provided, it must match signer public key.
-	ErrTokenTransferSignerWalletMismatch = errors.New("token_transfer_executor: signer public key does not match fromWalletAddress")
+	ErrTokenTransferServiceURLEmpty = errors.New(
+		"token_transfer_executor: bubblegum service URL is empty",
+	)
+
+	ErrTokenTransferInvalidServiceURL = errors.New(
+		"token_transfer_executor: bubblegum service URL is invalid",
+	)
+
+	ErrTokenTransferProductIDEmpty = errors.New(
+		"token_transfer_executor: productId is empty",
+	)
+
+	ErrTokenTransferAssetIDEmpty = errors.New(
+		"token_transfer_executor: assetId is empty",
+	)
+
+	ErrTokenTransferSenderEmpty = errors.New(
+		"token_transfer_executor: sender identity is empty",
+	)
+
+	ErrTokenTransferSenderAmbiguous = errors.New(
+		"token_transfer_executor: both fromAvatarId and fromBrandId are set",
+	)
+
+	ErrTokenTransferToAvatarEmpty = errors.New(
+		"token_transfer_executor: toAvatarId is empty",
+	)
+
+	ErrTokenTransferFromWalletEmpty = errors.New(
+		"token_transfer_executor: fromWalletAddress is empty",
+	)
+
+	ErrTokenTransferToWalletEmpty = errors.New(
+		"token_transfer_executor: toWalletAddress is empty",
+	)
+
+	ErrTokenTransferResponseTooLarge = errors.New(
+		"token_transfer_executor: bubblegum service response is too large",
+	)
+
+	ErrTokenTransferEmptySignature = errors.New(
+		"token_transfer_executor: bubblegum service returned empty signature",
+	)
+
+	ErrTokenTransferAssetMismatch = errors.New(
+		"token_transfer_executor: bubblegum service returned unexpected assetId",
+	)
 )
 
 const (
-	defaultDevnetRPC = "https://api.devnet.solana.com"
+	envBubblegumTransferServiceURL = "SOLANA_BUBBLEGUM_SERVICE_URL"
 
-	// Associated Token Account Program
-	associatedTokenProgramID = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+	envBubblegumTransferServiceAudience = "SOLANA_BUBBLEGUM_SERVICE_AUDIENCE"
+
+	bubblegumTransferPath = "/transfer"
+
+	bubblegumTransferRequestTimeout = 45 * time.Second
+
+	maxBubblegumTransferResponseBodyBytes int64 = 256 * 1024
 )
 
+// TokenTransferExecutorSolana delegates Bubblegum V2 cNFT transfer execution
+// to the internal solana-bubblegum service.
+//
+// The Go backend does not:
+// - load avatar or brand private keys
+// - construct Bubblegum instructions
+// - fetch DAS proofs
+// - sign Solana transactions
+// - manage a Solana fee payer
+//
+// Those responsibilities belong to the internal Bubblegum service.
 type TokenTransferExecutorSolana struct {
-	RPC *client.Client
-
-	Commitment string        // e.g. "finalized"
-	Timeout    time.Duration // RPC timeout hint (best-effort)
-
-	// master fee payer (loaded lazily from Secret Manager via SOLANA_MINT_KEY_SECRET)
-	masterOnce sync.Once
-	masterAcc  *types.Account
-	masterErr  error
+	httpClient *http.Client
+	serviceURL string
+	initErr    error
 }
 
-// NewTokenTransferExecutorSolana constructs executor.
-// RPC URL resolves from SOLANA_RPC_URL if url is empty.
-func NewTokenTransferExecutorSolana(rpcURL string) *TokenTransferExecutorSolana {
-	u := rpcURL
-	if u == "" {
-		u = os.Getenv("SOLANA_RPC_URL")
-	}
-	if u == "" {
-		u = defaultDevnetRPC
-	}
-	return &TokenTransferExecutorSolana{
-		RPC:        client.NewClient(u),
-		Commitment: "finalized",
-		Timeout:    20 * time.Second,
-	}
-}
+var _ usecase.TokenTransferExecutor = (*TokenTransferExecutorSolana)(nil)
 
-// loadMasterFeePayer loads master payer account once (best-effort cached).
-// NOTE: LoadMintAuthority must exist in the same package (backend/internal/infra/solana).
-func (e *TokenTransferExecutorSolana) loadMasterFeePayer(ctx context.Context) (*types.Account, error) {
-	if e == nil {
-		return nil, ErrTokenTransferNotConfigured
-	}
+// NewTokenTransferExecutorSolana constructs a Bubblegum V2 transfer executor.
+//
+// The argument is now treated as an optional Bubblegum service URL.
+// Existing DI currently calls NewTokenTransferExecutorSolana(""), so an empty
+// value resolves from SOLANA_BUBBLEGUM_SERVICE_URL.
+//
+// The constructor intentionally keeps the existing one-argument signature so
+// the current DI can migrate without an additional compile break.
+func NewTokenTransferExecutorSolana(
+	serviceURL string,
+) *TokenTransferExecutorSolana {
+	serviceURL = strings.Trim(
+		serviceURL,
+		" \t\r\n",
+	)
 
-	e.masterOnce.Do(func() {
-		auth, err := LoadMintAuthority(ctx)
-		if err != nil {
-			e.masterErr = fmt.Errorf("token_transfer_executor: LoadMintAuthority: %w", err)
-			return
-		}
-		acc := auth.Account
-		e.masterAcc = &acc
-
-		log.Printf(
-			"[token_transfer_executor] loaded master fee payer: pubkey=%s",
-			acc.PublicKey.ToBase58(),
+	if serviceURL == "" {
+		serviceURL = strings.Trim(
+			os.Getenv(
+				envBubblegumTransferServiceURL,
+			),
+			" \t\r\n",
 		)
-	})
+	}
 
-	if e.masterErr != nil {
-		return nil, e.masterErr
+	executor := &TokenTransferExecutorSolana{
+		serviceURL: serviceURL,
 	}
-	if e.masterAcc == nil {
-		return nil, fmt.Errorf("token_transfer_executor: master fee payer is nil after load")
+
+	if serviceURL == "" {
+		executor.initErr =
+			ErrTokenTransferServiceURLEmpty
+
+		return executor
 	}
-	return e.masterAcc, nil
+
+	parsedURL, err := url.Parse(serviceURL)
+	if err != nil {
+		executor.initErr = fmt.Errorf(
+			"%w: %v",
+			ErrTokenTransferInvalidServiceURL,
+			err,
+		)
+
+		return executor
+	}
+
+	if parsedURL.Scheme != "http" &&
+		parsedURL.Scheme != "https" {
+		executor.initErr = fmt.Errorf(
+			"%w: unsupported scheme=%s",
+			ErrTokenTransferInvalidServiceURL,
+			parsedURL.Scheme,
+		)
+
+		return executor
+	}
+
+	if parsedURL.Host == "" {
+		executor.initErr = fmt.Errorf(
+			"%w: host is empty",
+			ErrTokenTransferInvalidServiceURL,
+		)
+
+		return executor
+	}
+
+	executor.serviceURL = strings.TrimRight(
+		serviceURL,
+		"/",
+	)
+
+	audience := strings.Trim(
+		os.Getenv(
+			envBubblegumTransferServiceAudience,
+		),
+		" \t\r\n",
+	)
+
+	if audience == "" {
+		executor.httpClient = &http.Client{
+			Timeout: bubblegumTransferRequestTimeout,
+		}
+
+		return executor
+	}
+
+	authenticatedClient, err := idtoken.NewClient(
+		context.Background(),
+		audience,
+	)
+	if err != nil {
+		executor.initErr = fmt.Errorf(
+			"token_transfer_executor: create authenticated HTTP client: %w",
+			err,
+		)
+
+		return executor
+	}
+
+	authenticatedClient.Timeout =
+		bubblegumTransferRequestTimeout
+
+	executor.httpClient = authenticatedClient
+
+	return executor
 }
 
-// ExecuteTransfer does:
-// - derive ATA(from owner, mint) / ATA(to owner, mint)
-// - create destination ATA if missing (payer=master)
-// - SPL token transfer (amount default=1) (auth=from owner, signer=from)
-// - send tx (FeePayer=master; signed by from signer + master payer)
-func (e *TokenTransferExecutorSolana) ExecuteTransfer(ctx context.Context, in usecase.ExecuteTransferInput) (usecase.ExecuteTransferResult, error) {
-	if e == nil || e.RPC == nil {
-		return usecase.ExecuteTransferResult{}, ErrTokenTransferNotConfigured
+type bubblegumTransferRequest struct {
+	ProductID string `json:"productId"`
+
+	AssetStandard string `json:"assetStandard"`
+	AssetID       string `json:"assetId"`
+
+	FromAvatarID string `json:"fromAvatarId,omitempty"`
+	FromBrandID  string `json:"fromBrandId,omitempty"`
+	ToAvatarID   string `json:"toAvatarId"`
+
+	BrandID          string `json:"brandId,omitempty"`
+	ModelID          string `json:"modelId,omitempty"`
+	TokenBlueprintID string `json:"tokenBlueprintId,omitempty"`
+
+	FromWalletAddress string `json:"fromWalletAddress"`
+	ToWalletAddress   string `json:"toWalletAddress"`
+}
+
+type bubblegumTransferResponse struct {
+	Signature string `json:"signature"`
+	AssetID   string `json:"assetId,omitempty"`
+	Slot      uint64 `json:"slot,omitempty"`
+}
+
+type bubblegumTransferErrorResponse struct {
+	Error   string `json:"error,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+// ExecuteTransfer delegates a Bubblegum V2 cNFT transfer to the internal
+// solana-bubblegum service.
+//
+// The Bubblegum service is responsible for:
+// - resolving the current cNFT owner through DAS
+// - resolving the sender signer from Secret Manager
+// - fetching the Bubblegum asset proof
+// - building transferV2
+// - paying the Solana transaction fee
+// - signing and submitting the transaction
+//
+// The Go backend sends only public identifiers and wallet addresses.
+// Private keys and signer objects must never be included in this request.
+func (e *TokenTransferExecutorSolana) ExecuteTransfer(
+	ctx context.Context,
+	in usecase.ExecuteTransferInput,
+) (
+	usecase.ExecuteTransferResult,
+	error,
+) {
+	if e == nil {
+		return usecase.ExecuteTransferResult{},
+			ErrTokenTransferNotConfigured
 	}
 
-	// best-effort timeout wrapper (do not override caller cancellation)
-	rpcCtx := ctx
-	if e.Timeout > 0 {
-		var cancel context.CancelFunc
-		rpcCtx, cancel = context.WithTimeout(ctx, e.Timeout)
+	if e.initErr != nil {
+		return usecase.ExecuteTransferResult{},
+			e.initErr
+	}
+
+	if e.httpClient == nil ||
+		e.serviceURL == "" {
+		return usecase.ExecuteTransferResult{},
+			ErrTokenTransferNotConfigured
+	}
+
+	if in.ProductID == "" {
+		return usecase.ExecuteTransferResult{},
+			ErrTokenTransferProductIDEmpty
+	}
+
+	if in.AssetID == "" {
+		return usecase.ExecuteTransferResult{},
+			ErrTokenTransferAssetIDEmpty
+	}
+
+	if in.FromAvatarID == "" &&
+		in.FromBrandID == "" {
+		return usecase.ExecuteTransferResult{},
+			ErrTokenTransferSenderEmpty
+	}
+
+	if in.FromAvatarID != "" &&
+		in.FromBrandID != "" {
+		return usecase.ExecuteTransferResult{},
+			ErrTokenTransferSenderAmbiguous
+	}
+
+	if in.ToAvatarID == "" {
+		return usecase.ExecuteTransferResult{},
+			ErrTokenTransferToAvatarEmpty
+	}
+
+	if in.FromWalletAddress == "" {
+		return usecase.ExecuteTransferResult{},
+			ErrTokenTransferFromWalletEmpty
+	}
+
+	if in.ToWalletAddress == "" {
+		return usecase.ExecuteTransferResult{},
+			ErrTokenTransferToWalletEmpty
+	}
+
+	payload := bubblegumTransferRequest{
+		ProductID: in.ProductID,
+
+		AssetStandard: "BUBBLEGUM_V2",
+		AssetID:       in.AssetID,
+
+		FromAvatarID: in.FromAvatarID,
+		FromBrandID:  in.FromBrandID,
+		ToAvatarID:   in.ToAvatarID,
+
+		BrandID:          in.BrandID,
+		ModelID:          in.ModelID,
+		TokenBlueprintID: in.TokenBlueprintID,
+
+		FromWalletAddress: in.FromWalletAddress,
+		ToWalletAddress:   in.ToWalletAddress,
+	}
+
+	requestBody, err := json.Marshal(payload)
+	if err != nil {
+		return usecase.ExecuteTransferResult{},
+			fmt.Errorf(
+				"token_transfer_executor: marshal request: %w",
+				err,
+			)
+	}
+
+	requestCtx := ctx
+	var cancel context.CancelFunc
+
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		requestCtx, cancel =
+			context.WithTimeout(
+				ctx,
+				bubblegumTransferRequestTimeout,
+			)
 		defer cancel()
 	}
 
-	toWallet := in.ToWalletAddress
-	if toWallet == "" {
-		return usecase.ExecuteTransferResult{}, ErrTokenTransferToWalletEmpty
-	}
-	mintAddr := in.MintAddress
-	if mintAddr == "" {
-		return usecase.ExecuteTransferResult{}, ErrTokenTransferMintEmpty
-	}
-	amt := in.Amount
-	if amt == 0 {
-		amt = 1
-	}
+	endpoint :=
+		e.serviceURL +
+			bubblegumTransferPath
 
-	// ✅ 署名者（source owner）: SPL transfer は送付側(owner of source ATA)が署名
-	signerAny := in.FromSigner
-	if signerAny == nil {
-		signerAny = in.ToSigner // legacy fallback
-	}
-	if signerAny == nil {
-		return usecase.ExecuteTransferResult{}, ErrTokenTransferSignerEmpty
-	}
-
-	fromAcc, err := normalizeToAccount(signerAny)
+	req, err := http.NewRequestWithContext(
+		requestCtx,
+		http.MethodPost,
+		endpoint,
+		bytes.NewReader(requestBody),
+	)
 	if err != nil {
-		return usecase.ExecuteTransferResult{}, err
-	}
-
-	// ✅ master fee payer (gas payer)
-	masterAcc, err := e.loadMasterFeePayer(ctx)
-	if err != nil {
-		return usecase.ExecuteTransferResult{}, err
-	}
-	feePayer := *masterAcc
-
-	// ✅ Safety: if FromWalletAddress is provided, ensure it matches signer pubkey
-	fromWalletAddr := in.FromWalletAddress
-	if fromWalletAddr != "" {
-		if fromAcc.PublicKey.ToBase58() != fromWalletAddr {
-			return usecase.ExecuteTransferResult{}, fmt.Errorf(
-				"%w: signer=%s fromWalletAddress=%s",
-				ErrTokenTransferSignerWalletMismatch,
-				fromAcc.PublicKey.ToBase58(),
-				fromWalletAddr,
+		return usecase.ExecuteTransferResult{},
+			fmt.Errorf(
+				"token_transfer_executor: create request: %w",
+				err,
 			)
-		}
 	}
 
-	mint := common.PublicKeyFromString(mintAddr)
-	toOwner := common.PublicKeyFromString(toWallet)
+	req.Header.Set(
+		"Content-Type",
+		"application/json",
+	)
 
-	fromOwner := fromAcc.PublicKey
-	fromATA, _, err := common.FindAssociatedTokenAddress(fromOwner, mint)
-	if err != nil {
-		return usecase.ExecuteTransferResult{}, fmt.Errorf("token_transfer_executor: derive from ATA failed: %w", err)
-	}
-	toATA, _, err := common.FindAssociatedTokenAddress(toOwner, mint)
-	if err != nil {
-		return usecase.ExecuteTransferResult{}, fmt.Errorf("token_transfer_executor: derive to ATA failed: %w", err)
-	}
-
-	log.Printf("[token_transfer_executor] mint=%s fromOwner=%s toOwner=%s fromATA=%s toATA=%s feePayer=%s",
-		mintAddr,
-		fromOwner.ToBase58(),
-		toOwner.ToBase58(),
-		fromATA.ToBase58(),
-		toATA.ToBase58(),
-		feePayer.PublicKey.ToBase58(),
+	req.Header.Set(
+		"Accept",
+		"application/json",
 	)
 
 	log.Printf(
-		"[token_transfer_executor] start productId=%s avatarId=%s brandId=%s mint=%s amount=%d from=%s to=%s feePayer=%s",
+		"[token_transfer_executor] transfer start productId=%s assetId=%s fromAvatarId=%s fromBrandId=%s toAvatarId=%s fromWallet=%s toWallet=%s",
 		in.ProductID,
-		in.AvatarID,
-		in.BrandID,
-		mintAddr,
-		amt,
-		fromOwner.ToBase58(),
-		toWallet,
-		feePayer.PublicKey.ToBase58(),
+		in.AssetID,
+		in.FromAvatarID,
+		in.FromBrandID,
+		in.ToAvatarID,
+		in.FromWalletAddress,
+		in.ToWalletAddress,
 	)
 
-	// 1) existence checks
-	fromExists, err := e.accountExists(rpcCtx, fromATA.ToBase58())
+	resp, err := e.httpClient.Do(req)
 	if err != nil {
-		return usecase.ExecuteTransferResult{}, fmt.Errorf("token_transfer_executor: check from ATA failed: %w", err)
+		return usecase.ExecuteTransferResult{},
+			fmt.Errorf(
+				"token_transfer_executor: bubblegum transfer request failed productId=%s assetId=%s: %w",
+				in.ProductID,
+				in.AssetID,
+				err,
+			)
 	}
-	if !fromExists {
-		return usecase.ExecuteTransferResult{}, ErrTokenTransferSourceAtaAbsent
-	}
+	defer resp.Body.Close()
 
-	toExists, err := e.accountExists(rpcCtx, toATA.ToBase58())
+	body, err := io.ReadAll(
+		io.LimitReader(
+			resp.Body,
+			maxBubblegumTransferResponseBodyBytes+1,
+		),
+	)
 	if err != nil {
-		return usecase.ExecuteTransferResult{}, fmt.Errorf("token_transfer_executor: check to ATA failed: %w", err)
+		return usecase.ExecuteTransferResult{},
+			fmt.Errorf(
+				"token_transfer_executor: read bubblegum transfer response: %w",
+				err,
+			)
 	}
 
-	log.Printf("[token_transfer_executor] exists: fromATA=%t toATA=%t", fromExists, toExists)
+	if int64(len(body)) >
+		maxBubblegumTransferResponseBodyBytes {
+		return usecase.ExecuteTransferResult{},
+			ErrTokenTransferResponseTooLarge
+	}
 
-	// 2) build instructions
-	ins := make([]types.Instruction, 0, 3)
+	if resp.StatusCode < http.StatusOK ||
+		resp.StatusCode >= http.StatusMultipleChoices {
+		return usecase.ExecuteTransferResult{},
+			bubblegumTransferHTTPError(
+				resp.StatusCode,
+				body,
+			)
+	}
 
-	// 2-1) create dest ATA if missing (payer=master fee payer)
-	if !toExists {
-		ins = append(ins, buildCreateAssociatedTokenAccountIx(feePayer.PublicKey, toOwner, mint, toATA))
-		log.Printf(
-			"[token_transfer_executor] will create ATA: owner=%s mint=%s ata=%s payer=%s",
-			toWallet,
-			mintAddr,
-			toATA.ToBase58(),
-			feePayer.PublicKey.ToBase58(),
+	var result bubblegumTransferResponse
+
+	if err := json.Unmarshal(
+		body,
+		&result,
+	); err != nil {
+		return usecase.ExecuteTransferResult{},
+			fmt.Errorf(
+				"token_transfer_executor: decode bubblegum transfer response: %w",
+				err,
+			)
+	}
+
+	result.Signature = strings.Trim(
+		result.Signature,
+		" \t\r\n",
+	)
+
+	result.AssetID = strings.Trim(
+		result.AssetID,
+		" \t\r\n",
+	)
+
+	if result.Signature == "" {
+		return usecase.ExecuteTransferResult{},
+			ErrTokenTransferEmptySignature
+	}
+
+	if result.AssetID != "" &&
+		result.AssetID != in.AssetID {
+		return usecase.ExecuteTransferResult{},
+			fmt.Errorf(
+				"%w: requested=%s returned=%s",
+				ErrTokenTransferAssetMismatch,
+				in.AssetID,
+				result.AssetID,
+			)
+	}
+
+	log.Printf(
+		"[token_transfer_executor] transfer succeeded productId=%s assetId=%s signature=%s slot=%d",
+		in.ProductID,
+		in.AssetID,
+		result.Signature,
+		result.Slot,
+	)
+
+	return usecase.ExecuteTransferResult{
+		TxSignature: result.Signature,
+	}, nil
+}
+
+func bubblegumTransferHTTPError(
+	statusCode int,
+	body []byte,
+) error {
+	var errorResponse bubblegumTransferErrorResponse
+
+	if len(body) > 0 {
+		_ = json.Unmarshal(
+			body,
+			&errorResponse,
 		)
 	}
 
-	// 2-2) token transfer (auth=fromOwner)
-	ins = append(ins, token.Transfer(token.TransferParam{
-		From:   fromATA,
-		To:     toATA,
-		Auth:   fromOwner,
-		Amount: amt,
-	}))
-
-	log.Printf("[token_transfer_executor] instruction_count=%d will_create_ata=%t", len(ins), !toExists)
-
-	// 3) recent blockhash
-	latest, err := e.RPC.GetLatestBlockhash(rpcCtx)
-	if err != nil {
-		return usecase.ExecuteTransferResult{}, fmt.Errorf("token_transfer_executor: GetLatestBlockhash: %w", err)
-	}
-
-	// 4) tx (FeePayer=master)
-	signers := make([]types.Account, 0, 2)
-	signers = append(signers, fromAcc)
-	if feePayer.PublicKey != fromAcc.PublicKey {
-		signers = append(signers, feePayer)
-	}
-
-	tx, err := types.NewTransaction(types.NewTransactionParam{
-		Message: types.NewMessage(types.NewMessageParam{
-			FeePayer:        feePayer.PublicKey,
-			RecentBlockhash: latest.Blockhash,
-			Instructions:    ins,
-		}),
-		Signers: signers,
-	})
-	if err != nil {
-		return usecase.ExecuteTransferResult{}, fmt.Errorf("token_transfer_executor: NewTransaction: %w", err)
-	}
-
-	// 5) send
-	sig, err := e.RPC.SendTransaction(rpcCtx, tx)
-	if err != nil {
-		return usecase.ExecuteTransferResult{}, fmt.Errorf("token_transfer_executor: SendTransaction: %w", err)
-	}
-
-	log.Printf(
-		"[token_transfer_executor] submitted tx=%s mint=%s fromATA=%s toATA=%s createdATA=%t feePayer=%s",
-		sig,
-		mintAddr,
-		fromATA.ToBase58(),
-		toATA.ToBase58(),
-		!toExists,
-		feePayer.PublicKey.ToBase58(),
+	errorCode := strings.Trim(
+		errorResponse.Error,
+		" \t\r\n",
 	)
 
-	return usecase.ExecuteTransferResult{TxSignature: sig}, nil
-}
+	message := strings.Trim(
+		errorResponse.Message,
+		" \t\r\n",
+	)
 
-// buildCreateAssociatedTokenAccountIx builds ATA creation instruction without depending on SDK subpackage.
-// Accounts:
-// 0. [writable,signer] payer
-// 1. [writable] associated token account address
-// 2. [] owner
-// 3. [] mint
-// 4. [] system program
-// 5. [] token program
-// 6. [] rent sysvar
-func buildCreateAssociatedTokenAccountIx(payer, owner, mint, ata common.PublicKey) types.Instruction {
-	ataProg := common.PublicKeyFromString(associatedTokenProgramID)
-
-	// well-known program/sysvar ids
-	systemProgram := common.PublicKeyFromString("11111111111111111111111111111111")
-	tokenProgram := common.PublicKeyFromString("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
-	rentSysvar := common.PublicKeyFromString("SysvarRent111111111111111111111111111111111")
-
-	return types.Instruction{
-		ProgramID: ataProg,
-		Accounts: []types.AccountMeta{
-			{PubKey: payer, IsSigner: true, IsWritable: true},
-			{PubKey: ata, IsSigner: false, IsWritable: true},
-			{PubKey: owner, IsSigner: false, IsWritable: false},
-			{PubKey: mint, IsSigner: false, IsWritable: false},
-			{PubKey: systemProgram, IsSigner: false, IsWritable: false},
-			{PubKey: tokenProgram, IsSigner: false, IsWritable: false},
-			{PubKey: rentSysvar, IsSigner: false, IsWritable: false},
-		},
-		// ATA program: Create instruction has empty data (0 bytes)
-		Data: []byte{},
-	}
-}
-
-func (e *TokenTransferExecutorSolana) accountExists(ctx context.Context, address string) (bool, error) {
-	addr := address
-	if addr == "" {
-		return false, nil
+	if message == "" {
+		message = strings.Trim(
+			string(body),
+			" \t\r\n",
+		)
 	}
 
-	info, err := e.RPC.GetAccountInfo(ctx, addr)
-	if err != nil {
-		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "not found") ||
-			strings.Contains(msg, "could not find account") ||
-			strings.Contains(msg, "invalid param") ||
-			strings.Contains(msg, "account does not exist") {
-			return false, nil
-		}
-		return false, err
+	if len(message) > 1024 {
+		message = message[:1024]
 	}
 
-	// ✅ IMPORTANT:
-	// blocto SDK's GetAccountInfo returns a struct. In some cases, "not found" can be expressed
-	// as a zero-value struct with err=nil. Treat it as "not exists".
-	if isZeroAccountInfo(info) {
-		return false, nil
-	}
+	switch {
+	case errorCode != "" &&
+		message != "":
+		return fmt.Errorf(
+			"token_transfer_executor: bubblegum service returned status=%d error=%s message=%s",
+			statusCode,
+			errorCode,
+			message,
+		)
 
-	return true, nil
-}
+	case errorCode != "":
+		return fmt.Errorf(
+			"token_transfer_executor: bubblegum service returned status=%d error=%s",
+			statusCode,
+			errorCode,
+		)
 
-func isZeroAccountInfo(info client.AccountInfo) bool {
-	// Heuristic: an existing account cannot have lamports=0 and empty owner and empty data simultaneously.
-	// (Lamports can be 0 only if account is not really present or has been reclaimed.)
-	if info.Lamports != 0 {
-		return false
-	}
-	if !isZeroPublicKey(info.Owner) {
-		return false
-	}
-	if len(info.Data) != 0 {
-		return false
-	}
-	if info.Executable {
-		return false
-	}
-	if info.RentEpoch != 0 {
-		return false
-	}
-	return true
-}
+	case message != "":
+		return fmt.Errorf(
+			"token_transfer_executor: bubblegum service returned status=%d message=%s",
+			statusCode,
+			message,
+		)
 
-func isZeroPublicKey(pk common.PublicKey) bool {
-	// common.PublicKey is a fixed-size byte array type; compare against zero value.
-	var z common.PublicKey
-	return pk == z
-}
-
-// normalizeToAccount converts signerAny to blocto types.Account.
-// Supports:
-// - types.Account / *types.Account
-// - []byte (len 64)
-// - string: JSON array "[1,2,...]" (your SecretManager format)
-func normalizeToAccount(signerAny any) (types.Account, error) {
-	switch t := signerAny.(type) {
-	case types.Account:
-		return t, nil
-	case *types.Account:
-		if t == nil {
-			return types.Account{}, ErrTokenTransferSignerEmpty
-		}
-		return *t, nil
-	case []byte:
-		if len(t) != 64 {
-			return types.Account{}, fmt.Errorf("%w: want 64 bytes, got %d", ErrTokenTransferInvalidPrivKey, len(t))
-		}
-		acc, err := types.AccountFromBytes(t)
-		if err != nil {
-			return types.Account{}, fmt.Errorf("token_transfer_executor: AccountFromBytes: %w", err)
-		}
-		return acc, nil
-	case string:
-		s := t
-		if s == "" {
-			return types.Account{}, ErrTokenTransferSignerEmpty
-		}
-		var ints []int
-		if err := json.Unmarshal([]byte(s), &ints); err != nil {
-			return types.Account{}, fmt.Errorf("%w: signer string is not json int array: %v", ErrTokenTransferInvalidSigner, err)
-		}
-		b := make([]byte, len(ints))
-		for i, v := range ints {
-			if v < 0 || v > 255 {
-				return types.Account{}, fmt.Errorf("%w: byte out of range at %d: %d", ErrTokenTransferInvalidPrivKey, i, v)
-			}
-			b[i] = byte(v)
-		}
-		if len(b) != 64 {
-			return types.Account{}, fmt.Errorf("%w: want 64 bytes, got %d", ErrTokenTransferInvalidPrivKey, len(b))
-		}
-		acc, err := types.AccountFromBytes(b)
-		if err != nil {
-			return types.Account{}, fmt.Errorf("token_transfer_executor: AccountFromBytes(json): %w", err)
-		}
-		return acc, nil
 	default:
-		return types.Account{}, fmt.Errorf("%w: %T", ErrTokenTransferInvalidSigner, signerAny)
+		return fmt.Errorf(
+			"token_transfer_executor: bubblegum service returned status=%d",
+			statusCode,
+		)
 	}
 }

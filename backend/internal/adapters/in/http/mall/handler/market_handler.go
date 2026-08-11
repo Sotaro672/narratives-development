@@ -296,13 +296,13 @@ func buildMarketResaleFilterFromQuery(r *http.Request) resaledom.Filter {
 		}
 	}
 
-	if vv := qp["mintAddresses"]; len(vv) > 0 {
+	if vv := qp["assetIds"]; len(vv) > 0 {
 		for _, v := range vv {
-			filter.MintAddresses = append(filter.MintAddresses, splitMarketResaleCSV(v)...)
+			filter.AssetIDs = append(filter.AssetIDs, splitMarketResaleCSV(v)...)
 		}
-	} else if vv := qp["mint_addresses"]; len(vv) > 0 {
+	} else if vv := qp["asset_ids"]; len(vv) > 0 {
 		for _, v := range vv {
-			filter.MintAddresses = append(filter.MintAddresses, splitMarketResaleCSV(v)...)
+			filter.AssetIDs = append(filter.AssetIDs, splitMarketResaleCSV(v)...)
 		}
 	}
 

@@ -65,6 +65,7 @@ func (g *firebaseAuthEmailGetter) GetEmailByUID(
 				"firebase auth email getter is not configured",
 			)
 	}
+
 	if uid == "" {
 		return "",
 			errors.New("firebase auth uid is empty")
@@ -74,6 +75,7 @@ func (g *firebaseAuthEmailGetter) GetEmailByUID(
 	if err != nil {
 		return "", err
 	}
+
 	if userRecord == nil {
 		return "",
 			errors.New(
@@ -147,6 +149,7 @@ func NewContainer(
 ) (*Container, error) {
 	if infra == nil {
 		var err error
+
 		infra, err = shared.NewInfra(ctx)
 		if err != nil {
 			return nil, err
@@ -157,6 +160,7 @@ func NewContainer(
 		return nil,
 			errors.New("di.mall: shared infra is nil")
 	}
+
 	if infra.Config == nil {
 		return nil,
 			errors.New(
@@ -172,37 +176,64 @@ func NewContainer(
 			)
 	}
 
-	c := &Container{Infra: infra}
+	c := &Container{
+		Infra: infra,
+	}
 
 	authUserEmailGetter :=
-		newFirebaseAuthEmailGetter(infra.FirebaseAuth)
+		newFirebaseAuthEmailGetter(
+			infra.FirebaseAuth,
+		)
 
 	avatarRepo :=
-		outfs.NewAvatarRepositoryFS(fsClient)
+		outfs.NewAvatarRepositoryFS(
+			fsClient,
+		)
 
 	c.AvatarRepo = avatarRepo
 	c.MeAvatarResolver = avatarRepo
-	c.SetupUC = usecase.NewSetupUsecase(avatarRepo)
+	c.SetupUC = usecase.NewSetupUsecase(
+		avatarRepo,
+	)
 
 	shippingAddressRepo :=
-		outfs.NewShippingAddressRepositoryFS(fsClient)
+		outfs.NewShippingAddressRepositoryFS(
+			fsClient,
+		)
+
 	paymentMethodRepo :=
-		outfs.NewPaymentMethodRepositoryFS(fsClient)
+		outfs.NewPaymentMethodRepositoryFS(
+			fsClient,
+		)
+
 	userRepo :=
-		outfs.NewUserRepositoryFS(fsClient)
+		outfs.NewUserRepositoryFS(
+			fsClient,
+		)
+
 	memberRepo :=
-		outfs.NewMemberRepositoryFS(fsClient)
+		outfs.NewMemberRepositoryFS(
+			fsClient,
+		)
+
 	walletRepo :=
-		outfs.NewWalletRepositoryFS(fsClient)
+		outfs.NewWalletRepositoryFS(
+			fsClient,
+		)
+
 	productRepo :=
-		outfs.NewProductRepositoryFS(fsClient)
+		outfs.NewProductRepositoryFS(
+			fsClient,
+		)
 
 	{
 		var customerStore stripeadapter.PaymentMethodCustomerStore
 
-		if value, ok := any(paymentMethodRepo).(stripeadapter.PaymentMethodCustomerStore); ok {
+		if value, ok :=
+			any(paymentMethodRepo).(stripeadapter.PaymentMethodCustomerStore); ok {
 			customerStore = value
-		} else if value, ok := any(userRepo).(stripeadapter.PaymentMethodCustomerStore); ok {
+		} else if value, ok :=
+			any(userRepo).(stripeadapter.PaymentMethodCustomerStore); ok {
 			customerStore = value
 		}
 
@@ -213,10 +244,11 @@ func NewContainer(
 				)
 		}
 
-		if err := infra.RegisterPaymentMethodGatewayFromSecret(
-			ctx,
-			customerStore,
-		); err != nil {
+		if err :=
+			infra.RegisterPaymentMethodGatewayFromSecret(
+				ctx,
+				customerStore,
+			); err != nil {
 			return nil, err
 		}
 
@@ -229,55 +261,97 @@ func NewContainer(
 	}
 
 	brandRepo :=
-		outfs.NewBrandRepositoryFS(fsClient)
+		outfs.NewBrandRepositoryFS(
+			fsClient,
+		)
+
 	c.BrandRepo = brandRepo
 
 	companyRepo :=
-		outfs.NewCompanyRepositoryFS(fsClient)
+		outfs.NewCompanyRepositoryFS(
+			fsClient,
+		)
+
 	cartRepo :=
-		outfs.NewCartRepositoryFS(fsClient)
+		outfs.NewCartRepositoryFS(
+			fsClient,
+		)
+
 	paymentRepo :=
-		outfs.NewPaymentRepositoryFS(fsClient)
+		outfs.NewPaymentRepositoryFS(
+			fsClient,
+		)
+
 	orderRepo :=
-		outfs.NewOrderRepositoryFS(fsClient)
+		outfs.NewOrderRepositoryFS(
+			fsClient,
+		)
 
 	// The projection repository is shared by PreviewQuery and TransferUsecase.
 	orderTransferItemRepo :=
-		outfs.NewOrderRepoForTransferFS(fsClient)
+		outfs.NewOrderRepoForTransferFS(
+			fsClient,
+		)
 
 	inventoryRepo :=
-		outfs.NewInventoryRepositoryFS(fsClient)
-	tokenBlueprintRepo :=
-		outfs.NewTokenBlueprintRepositoryFS(fsClient)
-	productBlueprintRepoFS :=
-		outfs.NewProductBlueprintRepositoryFS(fsClient)
-	modelRepoFS :=
-		outfs.NewModelRepositoryFS(fsClient)
+		outfs.NewInventoryRepositoryFS(
+			fsClient,
+		)
 
-	mallDisplayResolver := mallshared.NewDisplayResolver(
-		productRepo,
-		modelRepoFS,
-		productBlueprintRepoFS,
-		tokenBlueprintRepo,
-		brandRepo,
-	)
+	tokenBlueprintRepo :=
+		outfs.NewTokenBlueprintRepositoryFS(
+			fsClient,
+		)
+
+	productBlueprintRepoFS :=
+		outfs.NewProductBlueprintRepositoryFS(
+			fsClient,
+		)
+
+	modelRepoFS :=
+		outfs.NewModelRepositoryFS(
+			fsClient,
+		)
+
+	mallDisplayResolver :=
+		mallshared.NewDisplayResolver(
+			productRepo,
+			modelRepoFS,
+			productBlueprintRepoFS,
+			tokenBlueprintRepo,
+			brandRepo,
+		)
 
 	inquiryRepo :=
-		outfs.NewInquiryRepositoryFS(fsClient)
-	inquiryReplyRepo :=
-		outfs.NewInquiryReplyRepositoryFS(fsClient)
+		outfs.NewInquiryRepositoryFS(
+			fsClient,
+		)
 
-	c.InquiryQ = mallquery.NewInquiryQuery(
-		inquiryRepo,
-		inquiryReplyRepo,
-	)
+	inquiryReplyRepo :=
+		outfs.NewInquiryReplyRepositoryFS(
+			fsClient,
+		)
+
+	c.InquiryQ =
+		mallquery.NewInquiryQuery(
+			inquiryRepo,
+			inquiryReplyRepo,
+		)
 
 	announcementRepo :=
-		outfs.NewAnnouncementRepositoryFS(fsClient)
+		outfs.NewAnnouncementRepositoryFS(
+			fsClient,
+		)
+
 	announcementAvatarRepo :=
-		outfs.NewAnnouncementAvatarRepositoryFS(fsClient)
+		outfs.NewAnnouncementAvatarRepositoryFS(
+			fsClient,
+		)
+
 	announcementAttachmentRepo :=
-		outfs.NewAnnouncementAttachmentRepositoryFS(fsClient)
+		outfs.NewAnnouncementAttachmentRepositoryFS(
+			fsClient,
+		)
 
 	c.AnnouncementUC =
 		usecase.NewAnnouncementUsecase(
@@ -303,17 +377,31 @@ func NewContainer(
 		outfs.NewProductBlueprintReviewRepositoryFS(
 			fsClient,
 		)
+
 	listRepoFS :=
-		outfs.NewListRepositoryFS(fsClient)
+		outfs.NewListRepositoryFS(
+			fsClient,
+		)
+
 	listImageRecordRepo :=
-		outfs.NewListImageRepositoryFS(fsClient)
+		outfs.NewListImageRepositoryFS(
+			fsClient,
+		)
+
 	resaleRepo :=
-		outfs.NewResaleRepositoryFS(fsClient)
+		outfs.NewResaleRepositoryFS(
+			fsClient,
+		)
+
 	resaleImageRepo :=
-		outfs.NewResaleImageRepositoryFS(fsClient)
+		outfs.NewResaleImageRepositoryFS(
+			fsClient,
+		)
 
 	resaleImageStorage, err :=
-		outfirebase.NewResaleImageStorageFromEnv(ctx)
+		outfirebase.NewResaleImageStorageFromEnv(
+			ctx,
+		)
 	if err != nil {
 		return nil, err
 	}
@@ -321,67 +409,82 @@ func NewContainer(
 	c.ResaleRepo = resaleRepo
 	c.ResaleImageRepo = resaleImageRepo
 
-	c.ResaleUC = usecase.NewResaleUsecase(
-		resaleRepo,
-		resaleImageRepo,
-		resaleImageStorage,
-	)
+	c.ResaleUC =
+		usecase.NewResaleUsecase(
+			resaleRepo,
+			resaleImageRepo,
+			resaleImageStorage,
+		)
 
-	c.ResaleQ = mallquery.NewResaleQuery(
-		resaleRepo,
-		resaleImageRepo,
-		mallDisplayResolver,
-	)
+	c.ResaleQ =
+		mallquery.NewResaleQuery(
+			resaleRepo,
+			resaleImageRepo,
+			mallDisplayResolver,
+		)
 
-	c.MarketQ = mallquery.NewMarketQuery(
-		resaleRepo,
-		resaleImageRepo,
-		mallDisplayResolver,
-		avatarRepo,
-	)
+	c.MarketQ =
+		mallquery.NewMarketQuery(
+			resaleRepo,
+			resaleImageRepo,
+			mallDisplayResolver,
+			avatarRepo,
+		)
 
-	c.OrderMailer = mailadp.NewOrderMailer(
-		mailadp.NewResendClient(
-			os.Getenv("RESEND_API_KEY"),
-		),
-		modelRepoFS,
-		inventoryRepo,
-		productBlueprintRepoFS,
-		tokenBlueprintRepo,
-		brandRepo,
-		companyRepo,
-	)
-	c.OrderMailFrom = os.Getenv("RESEND_FROM")
+	c.OrderMailer =
+		mailadp.NewOrderMailer(
+			mailadp.NewResendClient(
+				os.Getenv("RESEND_API_KEY"),
+			),
+			modelRepoFS,
+			inventoryRepo,
+			productBlueprintRepoFS,
+			tokenBlueprintRepo,
+			brandRepo,
+			companyRepo,
+		)
 
-	c.InquiryMailer = mailadp.NewInquiryMailer(
-		mailadp.NewResendClient(
-			os.Getenv("RESEND_API_KEY"),
-		),
-	)
-	c.InquiryMailTo = os.Getenv("INQUIRY_MAIL_TO")
+	c.OrderMailFrom =
+		os.Getenv("RESEND_FROM")
+
+	c.InquiryMailer =
+		mailadp.NewInquiryMailer(
+			mailadp.NewResendClient(
+				os.Getenv("RESEND_API_KEY"),
+			),
+		)
+
+	c.InquiryMailTo =
+		os.Getenv("INQUIRY_MAIL_TO")
 
 	projectID := infra.ProjectID
+
 	avatarWalletSvc :=
-		solana.NewAvatarWalletService(projectID)
+		solana.NewAvatarWalletService(
+			projectID,
+		)
 
-	c.AvatarUC = usecase.NewAvatarUsecase(
-		avatarRepo,
-		avatarWalletSvc,
-		walletRepo,
-		cartRepo,
-		nil,
-	)
+	c.AvatarUC =
+		usecase.NewAvatarUsecase(
+			avatarRepo,
+			avatarWalletSvc,
+			walletRepo,
+			cartRepo,
+			nil,
+		)
 
-	c.ListUC = usecase.NewListUsecase(
-		listRepoFS,
-		listImageRecordRepo,
-		nil,
-	)
+	c.ListUC =
+		usecase.NewListUsecase(
+			listRepoFS,
+			listImageRecordRepo,
+			nil,
+		)
 
-	c.ListQ = mallquery.NewListQuery(
-		listRepoFS,
-		listImageRecordRepo,
-	)
+	c.ListQ =
+		mallquery.NewListQuery(
+			listRepoFS,
+			listImageRecordRepo,
+		)
 
 	c.ShippingAddressUC =
 		usecase.NewShippingAddressUsecase(
@@ -395,22 +498,29 @@ func NewContainer(
 		)
 
 	c.UserUC =
-		usecase.NewUserUsecase(userRepo, nil)
+		usecase.NewUserUsecase(
+			userRepo,
+			nil,
+		)
 
 	onchainReader :=
 		solana.NewOnchainWalletReaderDevnet()
-	tokenQuery :=
-		outfs.NewTokenReaderFS(fsClient)
 
-	c.WalletUC = usecase.NewWalletUsecase(
-		walletRepo,
-		onchainReader,
-		tokenQuery,
-		brandRepo,
-		productRepo,
-		productBlueprintRepoFS,
-		productBlueprintRepoFS,
-	)
+	tokenQuery :=
+		outfs.NewTokenReaderFS(
+			fsClient,
+		)
+
+	c.WalletUC =
+		usecase.NewWalletUsecase(
+			walletRepo,
+			onchainReader,
+			tokenQuery,
+			brandRepo,
+			productRepo,
+			productBlueprintRepoFS,
+			productBlueprintRepoFS,
+		)
 
 	c.ProductBlueprintReviewUC =
 		usecase.NewProductBlueprintReviewUsecase(
@@ -424,7 +534,9 @@ func NewContainer(
 		)
 
 	c.CartUC =
-		usecase.NewCartUsecase(cartRepo)
+		usecase.NewCartUsecase(
+			cartRepo,
+		)
 
 	c.PaymentUC =
 		usecase.NewPaymentUsecase(
@@ -442,23 +554,25 @@ func NewContainer(
 			},
 		)
 
-	c.OrderUC = usecase.NewOrderUsecase(
-		orderRepo,
-		listRepoFS,
-		inventoryRepo,
-		resaleRepo,
-		paymentMethodRepo,
-	)
+	c.OrderUC =
+		usecase.NewOrderUsecase(
+			orderRepo,
+			listRepoFS,
+			inventoryRepo,
+			resaleRepo,
+			paymentMethodRepo,
+		)
 
-	c.InquiryUC = usecase.NewInquiryUsecase(
-		inquiryRepo,
-		inquiryReplyRepo,
-		c.InquiryMailer,
-		c.OrderMailFrom,
-		c.InquiryMailTo,
-		avatarRepo,
-		authUserEmailGetter,
-	)
+	c.InquiryUC =
+		usecase.NewInquiryUsecase(
+			inquiryRepo,
+			inquiryReplyRepo,
+			c.InquiryMailer,
+			c.OrderMailFrom,
+			c.InquiryMailTo,
+			avatarRepo,
+			authUserEmailGetter,
+		)
 
 	{
 		paymentFlowUC, configured, err :=
@@ -476,7 +590,9 @@ func NewContainer(
 	}
 
 	c.InventoryUC =
-		usecase.NewInventoryUsecase(inventoryRepo)
+		usecase.NewInventoryUsecase(
+			inventoryRepo,
+		)
 
 	{
 		c.NameResolver =
@@ -492,14 +608,18 @@ func NewContainer(
 	}
 
 	{
-		brandsCol := infra.BrandsCollection
-		avatarsCol := infra.AvatarsCollection
+		brandsCol :=
+			infra.BrandsCollection
+
+		avatarsCol :=
+			infra.AvatarsCollection
 
 		brandReader :=
 			sharedfs.NewBrandWalletAddressReaderFS(
 				fsClient,
 				brandsCol,
 			)
+
 		avatarReader :=
 			sharedfs.NewAvatarWalletAddressReaderFS(
 				fsClient,
@@ -516,92 +636,94 @@ func NewContainer(
 	}
 
 	{
-		c.BrandQ = mallquery.NewBrandQuery(
-			brandRepo,
-			companyRepo,
-			productBlueprintRepoFS,
-			inventoryRepo,
-			listRepoFS,
-		)
-
-		c.CatalogQ = mallquery.NewCatalogQuery(
-			listRepoFS,
-			inventoryRepo,
-			productBlueprintRepoFS,
-			modelRepoFS,
-			listImageRecordRepo,
-			tokenBlueprintRepo,
-			productBlueprintReviewRepo,
-			c.NameResolver,
-		)
-
-		c.CartQ = mallquery.NewCartQuery(
-			cartRepo,
-			listRepoFS,
-			inventoryRepo,
-			productBlueprintRepoFS,
-			resaleRepo,
-			resaleImageRepo,
-			mallDisplayResolver,
-			mallquery.WithCartQueryBrandRepo(
+		c.BrandQ =
+			mallquery.NewBrandQuery(
 				brandRepo,
-			),
-		)
+				companyRepo,
+				productBlueprintRepoFS,
+				inventoryRepo,
+				listRepoFS,
+			)
+
+		c.CatalogQ =
+			mallquery.NewCatalogQuery(
+				listRepoFS,
+				inventoryRepo,
+				productBlueprintRepoFS,
+				modelRepoFS,
+				listImageRecordRepo,
+				tokenBlueprintRepo,
+				productBlueprintReviewRepo,
+				c.NameResolver,
+			)
+
+		c.CartQ =
+			mallquery.NewCartQuery(
+				cartRepo,
+				listRepoFS,
+				inventoryRepo,
+				productBlueprintRepoFS,
+				resaleRepo,
+				resaleImageRepo,
+				mallDisplayResolver,
+				mallquery.WithCartQueryBrandRepo(
+					brandRepo,
+				),
+			)
 
 		tokenReader :=
-			outfs.NewTokenReaderFS(fsClient)
-
-		solanaRPCURL :=
-			os.Getenv("SOLANA_RPC_URL")
-		if solanaRPCURL == "" {
-			return nil,
-				errors.New(
-					"di.mall: SOLANA_RPC_URL is not configured",
-				)
-		}
+			outfs.NewTokenReaderFS(
+				fsClient,
+			)
 
 		solanaTransferReader :=
 			solana.NewTokenTransferReaderSolana(
-				solanaRPCURL,
+				"",
 			)
+
 		previewTransferReader :=
 			outsolana.NewPreviewTransferReader(
 				solanaTransferReader,
 			)
 
-		c.PreviewQ = mallquery.NewPreviewQuery(
-			productRepo,
-			productBlueprintRepoFS,
-			orderTransferItemRepo,
-			c.NameResolver,
-			tokenReader,
-			tokenBlueprintRepo,
-			c.OwnerResolveQ,
-			brandRepo,
-			avatarRepo,
-			previewTransferReader,
-		)
+		c.PreviewQ =
+			mallquery.NewPreviewQuery(
+				productRepo,
+				productBlueprintRepoFS,
+				orderTransferItemRepo,
+				c.NameResolver,
+				tokenReader,
+				tokenBlueprintRepo,
+				c.OwnerResolveQ,
+				brandRepo,
+				avatarRepo,
+				previewTransferReader,
+			)
 
-		c.OrderQ = mallquery.NewOrderQuery(
-			avatarRepo,
-			cartRepo,
-			shippingAddressRepo,
-			paymentMethodRepo,
-			productBlueprintRepoFS,
-			resaleRepo,
-			resaleImageRepo,
-			c.NameResolver,
-		)
+		c.OrderQ =
+			mallquery.NewOrderQuery(
+				avatarRepo,
+				cartRepo,
+				shippingAddressRepo,
+				paymentMethodRepo,
+				productBlueprintRepoFS,
+				resaleRepo,
+				resaleImageRepo,
+				c.NameResolver,
+			)
 
-		c.HistoryQ = mallquery.NewHistoryQuery(
-			inventoryRepo,
-			mallDisplayResolver,
-		)
+		c.HistoryQ =
+			mallquery.NewHistoryQuery(
+				inventoryRepo,
+				mallDisplayResolver,
+			)
 	}
 
 	{
 		scanVerifier :=
-			buildScanVerifier(c.PreviewQ)
+			buildScanVerifier(
+				c.PreviewQ,
+			)
 		if scanVerifier == nil {
 			return nil,
 				errors.New(
@@ -616,27 +738,25 @@ func NewContainer(
 			"tokens",
 		)
 
-		var tokenOwnerUpdater usecase.TokenOwnerUpdater = outfs.NewTokenOwnerUpdaterFS(fsClient)
+		var tokenOwnerUpdater usecase.TokenOwnerUpdater = outfs.NewTokenOwnerUpdaterFS(
+			fsClient,
+		)
 
-		var transferRepo transferdom.RepositoryPort = outfs.NewTransferRepositoryFS(fsClient)
+		var transferRepo transferdom.RepositoryPort = outfs.NewTransferRepositoryFS(
+			fsClient,
+		)
 
 		var walletResolver usecase.BrandWalletResolver = outfs.NewWalletResolverRepoFS(
 			brandRepo,
 			walletRepo,
 		)
 
-		var avatarWalletResolver usecase.AvatarWalletResolver = walletResolver.(usecase.AvatarWalletResolver)
-
-		secrets, err :=
-			buildWalletSecretProvider(infra)
-		if err != nil {
-			return nil, err
-		}
-
-		if secrets == nil {
+		avatarWalletResolver, ok :=
+			any(walletResolver).(usecase.AvatarWalletResolver)
+		if !ok {
 			return nil,
 				errors.New(
-					"di.mall: wallet secret provider is nil",
+					"di.mall: wallet resolver does not implement AvatarWalletResolver",
 				)
 		}
 
@@ -649,15 +769,6 @@ func NewContainer(
 				)
 		}
 
-		avatarSecrets, avatarSecretOK :=
-			any(secrets).(usecase.AvatarSecretProvider)
-		if !avatarSecretOK {
-			return nil,
-				errors.New(
-					"di.mall: wallet secret provider does not implement AvatarSecretProvider for transfer execution",
-				)
-		}
-
 		walletSync, walletSyncOK :=
 			any(c.WalletUC).(usecase.AvatarWalletSyncer)
 		if !walletSyncOK {
@@ -667,7 +778,9 @@ func NewContainer(
 				)
 		}
 
-		var executor usecase.TokenTransferExecutor = solana.NewTokenTransferExecutorSolana("")
+		var executor usecase.TokenTransferExecutor = solana.NewTokenTransferExecutorSolana(
+			"",
+		)
 
 		transferExecutionUC :=
 			usecase.NewTokenTransferExecutionUsecase(
@@ -688,19 +801,17 @@ func NewContainer(
 				avatarWalletResolver,
 				brandRepo,
 				avatarRepo,
-				secrets,
 				transferExecutionUC,
 				c.InventoryUC,
-			).WithResaleTransferDependencies(
-				resaleRepo,
-				avatarSecrets,
-			)
+			).
+				WithResaleTransferDependencies(
+					resaleRepo,
+				)
 
 		c.ShareTransferUC =
 			usecase.NewShareTransferUsecase(
 				tokenResolver,
 				avatarWalletResolver,
-				avatarSecrets,
 				transferExecutionUC,
 			)
 	}

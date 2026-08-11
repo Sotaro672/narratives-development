@@ -13,7 +13,7 @@ import (
   - productId単位で最新Attemptを取得できる
   - productIdとAttemptを指定して個別取得できる
   - productId単位で全試行履歴を取得できる
-  - mintAddressから成功したtransferの実行日時を取得できる
+  - assetIdから成功したtransferの実行日時を取得できる
   - 次のAttempt採番とpending Transfer作成を原子的に実行できる
 - Firestore実装ではdocId="<productId>__<attempt>"のフラット保存を想定するが、
   RepositoryPort自体は永続化方式に依存しない。
@@ -23,9 +23,8 @@ import (
 - Application層に同等のTransferRepo interfaceを再定義しない。
 - TransferにはIDフィールドを持たせない。
 - TransferにはtransferredAtを持たせない。
-- transferredAtはResolveTransferredAtByMintAddressResultとして返す。
-- Firestoreでは正規フィールド名"transferredAt"だけを使用する。
-- "transferedAt"などの旧表記やtypoは吸収しない。
+- transferredAtはResolveTransferredAtByAssetIDResultとして返す。
+- Firestoreでは正規フィールド名"assetId"と"transferredAt"だけを使用する。
 */
 
 // CreateAttemptInput represents the data required before an Attempt number is
@@ -39,7 +38,7 @@ type CreateAttemptInput struct {
 	OrderID         string
 	AvatarID        string
 	ToWalletAddress string
-	MintAddress     string
+	AssetID         string
 	CreatedAt       time.Time
 }
 
@@ -57,8 +56,8 @@ func (in CreateAttemptInput) Validate() error {
 	if in.ToWalletAddress == "" {
 		return ErrInvalidToWalletAddress
 	}
-	if in.MintAddress == "" {
-		return ErrInvalidMintAddress
+	if in.AssetID == "" {
+		return ErrInvalidAssetID
 	}
 	if in.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
@@ -82,7 +81,7 @@ func (in CreateAttemptInput) NewTransfer(
 		in.OrderID,
 		in.AvatarID,
 		in.ToWalletAddress,
-		in.MintAddress,
+		in.AssetID,
 		in.CreatedAt,
 	)
 }
@@ -118,17 +117,17 @@ type RepositoryPort interface {
 		productID string,
 	) ([]Transfer, error)
 
-	// ResolveTransferredAtByMintAddress returns the latest successful Transfer
-	// execution time for mintAddress.
+	// ResolveTransferredAtByAssetID returns the latest successful Transfer
+	// execution time for assetId.
 	//
-	// The repository must read the canonical "transferredAt" field.
-	// Legacy or misspelled fields are not supported.
+	// The repository must query the canonical "assetId" field and read the
+	// canonical "transferredAt" field.
 	//
 	// It returns ErrNotFound when no successful Transfer exists.
-	ResolveTransferredAtByMintAddress(
+	ResolveTransferredAtByAssetID(
 		ctx context.Context,
-		mintAddress string,
-	) (ResolveTransferredAtByMintAddressResult, error)
+		assetID string,
+	) (ResolveTransferredAtByAssetIDResult, error)
 
 	// CreateAttempt atomically allocates the next Attempt number, creates a
 	// pending Transfer, and persists it.

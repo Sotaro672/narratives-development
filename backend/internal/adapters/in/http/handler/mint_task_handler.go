@@ -31,7 +31,9 @@ type mintTaskResponse struct {
 	MintID      string `json:"mintId"`
 	Status      string `json:"status"`
 	Signature   string `json:"signature,omitempty"`
-	MintAddress string `json:"mintAddress,omitempty"`
+	AssetID     string `json:"assetId,omitempty"`
+	TreeAddress string `json:"treeAddress,omitempty"`
+	LeafIndex   uint64 `json:"leafIndex"`
 	Slot        uint64 `json:"slot,omitempty"`
 	Message     string `json:"message,omitempty"`
 }
@@ -108,6 +110,7 @@ func (h *MintTaskHandler) executeNextMintTask(
 	}
 
 	var body mintTaskRequest
+
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		log.Printf(
 			"[mint-task] request body decode failed path=%s error=%v",
@@ -117,7 +120,10 @@ func (h *MintTaskHandler) executeNextMintTask(
 	}
 
 	if mintID == "" {
-		mintID = strings.TrimSpace(body.MintID)
+		mintID = strings.Trim(
+			body.MintID,
+			" \t\r\n",
+		)
 	}
 
 	if mintID == "" {
@@ -179,37 +185,14 @@ func (h *MintTaskHandler) executeNextMintTask(
 			return
 		}
 
-		// 資金補充や設定変更など、人間の対応が必要なエラーは
-		// Cloud Tasks の自動再配送では自然復旧しません。
+		// Bubblegum V2 service の HTTP error / timeout /
+		// Solana RPC error などは Cloud Tasks の retry 対象とします。
 		//
-		// そのため HTTP 200 を返して Cloud Tasks の retry loop を停止します。
+		// productId を idempotency key として Bubblegum V2 service に渡すため、
+		// worker の再実行によって同一 productId を二重 mint しないことは
+		// Bubblegum V2 service 側で保証します。
 		//
-		// MintUsecase 側では、これらの再開可能エラーを
-		// FAILED_RETRYABLE として保存する必要があります。
-		//
-		// 対応完了後に mint task を1件 enqueue することで、
-		// FAILED_RETRYABLE -> MINTING -> MINTED と再開します。
-		if status, ok := manualRetryStatus(err); ok {
-			log.Printf(
-				"[mint-task] manual retry required mintID=%s status=%s error=%v",
-				mintID,
-				status,
-				err,
-			)
-
-			writeJSON(w, http.StatusOK, mintTaskResponse{
-				MintID:  mintID,
-				Status:  status,
-				Message: err.Error(),
-			})
-			return
-		}
-
-		// RPC 429 / 5xx / timeout / connection failure など、
-		// 短時間で自然復旧する可能性があるエラーは 500 を返します。
-		//
-		// Cloud Tasks が configured retry policy に従って
-		// task を再配送します。
+		// DAS indexing delay のみを理由に再 mint してはいけません。
 		log.Printf(
 			"[mint-task] execute failed mintID=%s error=%v",
 			mintID,
@@ -230,13 +213,17 @@ func (h *MintTaskHandler) executeNextMintTask(
 
 	if result != nil {
 		resp.Signature = result.Signature
-		resp.MintAddress = result.MintAddress
+		resp.AssetID = result.AssetID
+		resp.TreeAddress = result.TreeAddress
+		resp.LeafIndex = result.LeafIndex
 		resp.Slot = result.Slot
 
 		log.Printf(
-			"[mint-task] execute succeeded mintID=%s mintAddress=%s signature=%s slot=%d",
+			"[mint-task] execute succeeded mintID=%s assetId=%s treeAddress=%s leafIndex=%d signature=%s slot=%d",
 			mintID,
-			result.MintAddress,
+			result.AssetID,
+			result.TreeAddress,
+			result.LeafIndex,
 			result.Signature,
 			result.Slot,
 		)
@@ -254,75 +241,25 @@ func (h *MintTaskHandler) executeNextMintTask(
 	)
 }
 
-func manualRetryStatus(err error) (string, bool) {
-	if err == nil {
-		return "", false
-	}
-
-	msg := strings.ToLower(err.Error())
-
-	// reserve wallet の資金不足。
-	//
-	// reserve wallet に SOL を補充すれば再開できます。
-	if strings.Contains(
-		msg,
-		"reserve wallet balance is insufficient",
-	) ||
-		strings.Contains(
-			msg,
-			"reserve wallet balance fell below minimum after top-up",
-		) {
-		return "WAITING_FOR_RESERVE_BALANCE", true
-	}
-
-	// reserve wallet / auto top-up の設定不備。
-	//
-	// 環境変数や Secret Manager の設定を修正して
-	// Cloud Run を再deployした後に再開します。
-	if strings.Contains(
-		msg,
-		"reserve wallet is not configured",
-	) ||
-		strings.Contains(
-			msg,
-			"fee payer top-up config is invalid",
-		) {
-		return "WAITING_FOR_SOLANA_CONFIGURATION", true
-	}
-
-	// auto top-up が無効な環境で fee payer の残高が不足した場合の
-	// fallbackです。
-	//
-	// 通常のCloud Run環境では
-	// SOLANA_AUTO_TOP_UP_ENABLED=true を設定するため、
-	// この分岐には基本的に入りません。
-	if strings.Contains(
-		msg,
-		"fee payer balance is below minimum",
-	) ||
-		strings.Contains(
-			msg,
-			"fee payer auto top-up is disabled",
-		) {
-		return "WAITING_FOR_FEE_PAYER_BALANCE", true
-	}
-
-	return "", false
-}
-
 func extractMintIDFromPath(path string) string {
-	p := strings.TrimSpace(path)
+	p := strings.Trim(
+		path,
+		" \t\r\n",
+	)
+
 	p = strings.TrimPrefix(
 		p,
 		"/internal/mint/tasks/",
 	)
+
 	p = strings.TrimSuffix(
 		p,
 		"/execute",
 	)
+
 	p = strings.Trim(
 		p,
-		"/",
+		" \t\r\n/",
 	)
 
 	return p
@@ -337,6 +274,7 @@ func writeJSON(
 		"Content-Type",
 		"application/json",
 	)
+
 	w.WriteHeader(statusCode)
 
 	_ = json.NewEncoder(w).Encode(payload)

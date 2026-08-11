@@ -31,6 +31,7 @@ func (h *WalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		avatarID := strings.TrimPrefix(path, "/wallets/")
 		h.get(w, r, avatarID)
 		return
+
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
@@ -39,7 +40,7 @@ func (h *WalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /wallets/{avatarId}
-// - docId=avatarId を正とする Wallet を取得し、on-chain と同期して返す
+// - docId=avatarId を正とする Wallet を取得し、on-chain assetId と同期して返す
 func (h *WalletHandler) get(w http.ResponseWriter, r *http.Request, avatarID string) {
 	ctx := r.Context()
 
@@ -55,8 +56,8 @@ func (h *WalletHandler) get(w http.ResponseWriter, r *http.Request, avatarID str
 		return
 	}
 
-	// ✅ 新シグネチャ: SyncWalletTokens(ctx, avatarId)
-	wallet, err := h.uc.SyncWalletTokens(ctx, avatarID)
+	// 新シグネチャ: SyncWalletAssetIDs(ctx, avatarId)
+	wallet, err := h.uc.SyncWalletAssetIDs(ctx, avatarID)
 	if err != nil {
 		writeWalletErr(w, err)
 		return
@@ -68,13 +69,16 @@ func (h *WalletHandler) get(w http.ResponseWriter, r *http.Request, avatarID str
 // エラーハンドリング
 func writeWalletErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
+
 	switch {
 	case errors.Is(err, walletdom.ErrNotFound):
 		code = http.StatusNotFound
 	}
+
 	// usecase 側の validation error は 400 に寄せる（最低限）
 	if err != nil {
 		msg := strings.ToLower(err.Error())
+
 		if strings.Contains(msg, "avatarid is empty") ||
 			strings.Contains(msg, "walletaddress is empty") ||
 			strings.Contains(msg, "onchain reader not configured") {

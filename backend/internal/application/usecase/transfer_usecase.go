@@ -113,10 +113,9 @@ type TokenForTransfer struct {
 
 	BrandID string
 
-	MintAddress string
+	AssetID string
 
 	TokenBlueprintID string
-	ToAddress        string
 }
 
 type TokenOwnerUpdater interface {
@@ -157,13 +156,6 @@ type AvatarDisplayResolver interface {
 	) (avatardom.Avatar, error)
 }
 
-type WalletSecretProvider interface {
-	GetBrandSigner(
-		ctx context.Context,
-		brandID string,
-	) (any, error)
-}
-
 type ResaleReaderForTransfer interface {
 	GetByID(
 		ctx context.Context,
@@ -180,19 +172,17 @@ type TokenTransferExecutor interface {
 
 type ExecuteTransferInput struct {
 	ProductID        string
-	AvatarID         string
+	FromAvatarID     string
+	ToAvatarID       string
+	FromBrandID      string
 	BrandID          string
 	ModelID          string
 	TokenBlueprintID string
 
-	MintAddress string
-	Amount      uint64
+	AssetID string
 
 	FromWalletAddress string
 	ToWalletAddress   string
-
-	FromSigner any
-	ToSigner   any
 }
 
 type ExecuteTransferResult struct {
@@ -203,7 +193,7 @@ type PostTransferResolveWarmer interface {
 	ResolveAfterTransfer(
 		ctx context.Context,
 		avatarID string,
-		mintAddress string,
+		assetID string,
 	) error
 }
 
@@ -222,10 +212,7 @@ type TransferUsecase struct {
 	brandDisplay  BrandDisplayResolver
 	avatarDisplay AvatarDisplayResolver
 
-	secrets WalletSecretProvider
-
-	resaleRepo    ResaleReaderForTransfer
-	avatarSecrets AvatarSecretProvider
+	resaleRepo ResaleReaderForTransfer
 
 	executionUC *TokenTransferExecutionUsecase
 	inventoryUC *InventoryUsecase
@@ -241,7 +228,6 @@ func NewTransferUsecase(
 	avatarWallet AvatarWalletResolver,
 	brandDisplay BrandDisplayResolver,
 	avatarDisplay AvatarDisplayResolver,
-	secrets WalletSecretProvider,
 	executionUC *TokenTransferExecutionUsecase,
 	inventoryUC *InventoryUsecase,
 ) *TransferUsecase {
@@ -256,8 +242,6 @@ func NewTransferUsecase(
 		brandDisplay:  brandDisplay,
 		avatarDisplay: avatarDisplay,
 
-		secrets: secrets,
-
 		executionUC: executionUC,
 		inventoryUC: inventoryUC,
 
@@ -267,11 +251,9 @@ func NewTransferUsecase(
 
 func (u *TransferUsecase) WithResaleTransferDependencies(
 	resaleRepo ResaleReaderForTransfer,
-	avatarSecrets AvatarSecretProvider,
 ) *TransferUsecase {
 	if u != nil {
 		u.resaleRepo = resaleRepo
-		u.avatarSecrets = avatarSecrets
 	}
 
 	return u
@@ -283,7 +265,7 @@ var (
 	ErrTransferProductIDEmpty         = errors.New("transfer_uc: productId is empty")
 	ErrTransferNotMatched             = errors.New("transfer_uc: scan is not matched")
 	ErrTransferNoEligibleOrder        = errors.New("transfer_uc: no eligible order/item found")
-	ErrTransferMintEmpty              = errors.New("transfer_uc: mintAddress is empty")
+	ErrTransferAssetIDEmpty           = errors.New("transfer_uc: assetId is empty")
 	ErrTransferBrandIDEmpty           = errors.New("transfer_uc: brandId is empty")
 	ErrTransferFromWalletEmpty        = errors.New("transfer_uc: from walletAddress is empty")
 	ErrTransferToWalletEmpty          = errors.New("transfer_uc: avatar walletAddress is empty")
@@ -314,7 +296,7 @@ type TransferByVerifiedScanResult struct {
 	MatchedResaleID  string
 
 	ProductID        string
-	MintAddress      string
+	AssetID          string
 	TokenBlueprintID string
 
 	FromWallet  string
@@ -330,7 +312,6 @@ type transferExecutionSource struct {
 	FromBrandID  string
 
 	FromWallet string
-	FromSigner any
 }
 
 // TransferToAvatarByVerifiedScan verifies the scan and transfers the token to
@@ -345,7 +326,6 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 		u.tokenRepo == nil ||
 		u.brandWallet == nil ||
 		u.avatarWallet == nil ||
-		u.secrets == nil ||
 		u.executionUC == nil ||
 		u.now == nil {
 		return TransferByVerifiedScanResult{},
@@ -398,17 +378,16 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 	}
 
 	brandID := token.BrandID
-	mintAddress := token.MintAddress
+	assetID := token.AssetID
 	tokenBlueprintID := token.TokenBlueprintID
-	currentOwner := token.ToAddress
 
 	if brandID == "" {
 		return TransferByVerifiedScanResult{},
 			ErrTransferBrandIDEmpty
 	}
-	if mintAddress == "" {
+	if assetID == "" {
 		return TransferByVerifiedScanResult{},
-			ErrTransferMintEmpty
+			ErrTransferAssetIDEmpty
 	}
 
 	if scannedTokenBlueprintID == "" {
@@ -587,21 +566,16 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 
 			FromAvatarID: source.FromAvatarID,
 			ToAvatarID:   avatarID,
+			FromBrandID:  source.FromBrandID,
 
 			BrandID:          brandID,
 			ModelID:          target.ModelID,
 			TokenBlueprintID: scannedTokenBlueprintID,
 
-			MintAddress:  mintAddress,
-			CurrentOwner: currentOwner,
+			AssetID: assetID,
 
 			FromWallet: source.FromWallet,
 			ToWallet:   toWallet,
-
-			FromSigner: source.FromSigner,
-			ToSigner:   nil,
-
-			Amount: 1,
 
 			RemoveFromSenderWallet: removeFromSenderWallet,
 			SyncSenderWallet:       syncSenderWallet,
@@ -646,7 +620,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 		MatchedResaleID:  target.ResaleID,
 
 		ProductID:        productID,
-		MintAddress:      mintAddress,
+		AssetID:          assetID,
 		TokenBlueprintID: scannedTokenBlueprintID,
 
 		FromWallet:  source.FromWallet,
@@ -792,24 +766,9 @@ func (u *TransferUsecase) resolveListTransferSource(
 			ErrTransferFromWalletEmpty
 	}
 
-	fromSigner, err := u.secrets.GetBrandSigner(
-		ctx,
-		brandID,
-	)
-	if err != nil {
-		return transferExecutionSource{},
-			fmt.Errorf(
-				"transfer_uc: get brand signer failed brandId=%s wallet=%s: %w",
-				brandID,
-				fromWallet,
-				err,
-			)
-	}
-
 	return transferExecutionSource{
 		FromBrandID: brandID,
 		FromWallet:  fromWallet,
-		FromSigner:  fromSigner,
 	}, nil
 }
 
@@ -818,8 +777,7 @@ func (u *TransferUsecase) resolveResaleTransferSource(
 	target TransferTargetItem,
 	buyerAvatarID string,
 ) (transferExecutionSource, error) {
-	if u.resaleRepo == nil ||
-		u.avatarSecrets == nil {
+	if u.resaleRepo == nil {
 		return transferExecutionSource{},
 			ErrTransferResaleNotConfigured
 	}
@@ -871,25 +829,9 @@ func (u *TransferUsecase) resolveResaleTransferSource(
 			ErrTransferFromWalletEmpty
 	}
 
-	fromSigner, err :=
-		u.avatarSecrets.GetAvatarSigner(
-			ctx,
-			fromAvatarID,
-		)
-	if err != nil {
-		return transferExecutionSource{},
-			fmt.Errorf(
-				"transfer_uc: get seller avatar signer failed avatarId=%s wallet=%s: %w",
-				fromAvatarID,
-				fromWallet,
-				err,
-			)
-	}
-
 	return transferExecutionSource{
 		FromAvatarID: fromAvatarID,
 		FromWallet:   fromWallet,
-		FromSigner:   fromSigner,
 	}, nil
 }
 

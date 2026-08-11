@@ -23,12 +23,12 @@ type ResaleImagePatch struct {
 type Filter struct {
 	// Free text search.
 	// Implementation may interpret this as partial match against id,
-	// mintAddress, description, etc.
+	// assetId, description, etc.
 	SearchQuery string
 
 	IDs []string
 
-	MintAddresses []string
+	AssetIDs []string
 
 	TokenBlueprintIDs   []string
 	ProductIDs          []string
@@ -94,7 +94,7 @@ type Repository interface {
 	// Expected implementation policy:
 	// - id is the target document id.
 	// - r.ID may be empty or equal to id.
-	// - immutable fields such as MintAddress, CreatedAt, CreatedBy should not be overwritten
+	// - immutable fields such as AssetID, CreatedAt, CreatedBy should not be overwritten
 	//   unless the implementation intentionally treats Update as full replacement.
 	Update(ctx context.Context, id string, r Resale) (Resale, error)
 
