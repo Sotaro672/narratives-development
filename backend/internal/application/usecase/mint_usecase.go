@@ -815,11 +815,12 @@ func (u *MintUsecase) ExecuteNextMintTask(
 	minted, err := u.tokenMinter.MintProducts(
 		ctx,
 		MintProductsInput{
-			ToAddress:       toAddress,
-			ProductIDs:      []string{task.ProductID},
-			BlueprintName:   name,
-			BlueprintSymbol: symbol,
-			MetadataURI:     metadataURI,
+			ToAddress:        toAddress,
+			ProductIDs:       []string{task.ProductID},
+			TokenBlueprintID: reqTBID,
+			BlueprintName:    name,
+			BlueprintSymbol:  symbol,
+			MetadataURI:      metadataURI,
 		},
 	)
 	if err != nil {

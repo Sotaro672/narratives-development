@@ -79,6 +79,10 @@ var (
 		"token_transfer_execution_uc: productId is empty",
 	)
 
+	ErrTokenTransferExecutionOperationIDEmpty = errors.New(
+		"token_transfer_execution_uc: operationId is empty",
+	)
+
 	ErrTokenTransferExecutionAttemptReferenceEmpty = errors.New(
 		"token_transfer_execution_uc: attempt reference is empty",
 	)
@@ -162,6 +166,13 @@ type TokenTransferExecutionHook func(
 type TokenTransferExecutionInput struct {
 	ProductID string
 
+	// OperationID is the stable idempotency key for one logical transfer.
+	//
+	// The same logical retry must reuse the exact same OperationID.
+	// It is persisted with the transfer attempt and forwarded to the
+	// Bubblegum service as the transfer idempotency key.
+	OperationID string
+
 	// AttemptReference is persisted to transfer.OrderID.
 	//
 	// TransferUsecase passes the actual order ID.
@@ -216,7 +227,8 @@ type TokenTransferExecutionInput struct {
 type TokenTransferExecutionResult struct {
 	Attempt int
 
-	ProductID string
+	ProductID   string
+	OperationID string
 
 	AssetID string
 
@@ -252,6 +264,11 @@ func (u *TokenTransferExecutionUsecase) Execute(
 	if in.ProductID == "" {
 		return TokenTransferExecutionResult{},
 			ErrTokenTransferExecutionProductIDEmpty
+	}
+
+	if in.OperationID == "" {
+		return TokenTransferExecutionResult{},
+			ErrTokenTransferExecutionOperationIDEmpty
 	}
 
 	if in.AttemptReference == "" {
@@ -307,6 +324,7 @@ func (u *TokenTransferExecutionUsecase) Execute(
 		ctx,
 		transferdom.CreateAttemptInput{
 			ProductID:       in.ProductID,
+			OperationID:     in.OperationID,
 			OrderID:         in.AttemptReference,
 			AvatarID:        in.ToAvatarID,
 			ToWalletAddress: in.ToWallet,
@@ -331,6 +349,30 @@ func (u *TokenTransferExecutionUsecase) Execute(
 	}
 
 	transferAttempt := createdTransfer.Attempt
+
+	// CreateAttempt is idempotent by OperationID.
+	// If the same logical operation already completed successfully,
+	// return the persisted result without executing another on-chain transfer.
+	if createdTransfer.Status == transferdom.StatusSucceeded &&
+		createdTransfer.TxSignature != nil &&
+		*createdTransfer.TxSignature != "" {
+		return TokenTransferExecutionResult{
+			Attempt: transferAttempt,
+
+			ProductID:   in.ProductID,
+			OperationID: in.OperationID,
+
+			AssetID: in.AssetID,
+
+			FromWallet: in.FromWallet,
+			ToWallet:   in.ToWallet,
+
+			TxSignature: *createdTransfer.TxSignature,
+
+			ExecutedAt: now,
+		}, nil
+	}
+
 	transferFailed := false
 
 	patchTransfer := func(
@@ -412,7 +454,8 @@ func (u *TokenTransferExecutionUsecase) Execute(
 	executeResult, err := u.executor.ExecuteTransfer(
 		ctx,
 		ExecuteTransferInput{
-			ProductID: in.ProductID,
+			ProductID:   in.ProductID,
+			OperationID: in.OperationID,
 
 			FromAvatarID: in.FromAvatarID,
 			ToAvatarID:   in.ToAvatarID,
@@ -746,7 +789,8 @@ func (u *TokenTransferExecutionUsecase) Execute(
 	return TokenTransferExecutionResult{
 		Attempt: transferAttempt,
 
-		ProductID: in.ProductID,
+		ProductID:   in.ProductID,
+		OperationID: in.OperationID,
 
 		AssetID: in.AssetID,
 

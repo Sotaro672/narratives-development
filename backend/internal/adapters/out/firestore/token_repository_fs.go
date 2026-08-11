@@ -91,6 +91,7 @@ func (r *TokenReaderFS) GetByProductID(ctx context.Context, productID string) (*
 		TokenBlueprintID:   d.TokenBlueprintID,
 		ToAddress:          d.ToAddress,
 		MetadataURI:        d.MetadataURI,
+		AssetID:            d.AssetID,
 		OnChainTxSignature: d.OnChainTxSignature,
 	}
 
@@ -116,7 +117,7 @@ func (r *TokenReaderFS) ResolveTokenByAssetID(
 		return tokendom.ResolveTokenByAssetIDResult{}, errors.New("token_reader_fs: firestore client is nil")
 	}
 
-	a := strings.TrimSpace(assetID)
+	a := strings.Trim(assetID, " \t\r\n")
 	if a == "" {
 		return tokendom.ResolveTokenByAssetIDResult{}, tokendom.ErrInvalidAssetID
 	}
@@ -142,7 +143,7 @@ func (r *TokenReaderFS) ResolveTokenByAssetID(
 		return tokendom.ResolveTokenByAssetIDResult{}, errors.New("token_reader_fs: empty doc id")
 	}
 
-	asset := strings.TrimSpace(d.AssetID)
+	asset := strings.Trim(d.AssetID, " \t\r\n")
 	if asset == "" {
 		return tokendom.ResolveTokenByAssetIDResult{}, tokendom.ErrInvalidAssetID
 	}
@@ -170,7 +171,7 @@ func (r *TokenReaderFS) ListAssetIDsByTokenBlueprintID(
 		return tokendom.ListAssetIDsByTokenBlueprintIDResult{}, errors.New("token_reader_fs: firestore client is nil")
 	}
 
-	tbID := strings.TrimSpace(tokenBlueprintID)
+	tbID := strings.Trim(tokenBlueprintID, " \t\r\n")
 	if tbID == "" {
 		return tokendom.ListAssetIDsByTokenBlueprintIDResult{}, tokendom.ErrInvalidTokenBlueprintID
 	}
@@ -195,7 +196,7 @@ func (r *TokenReaderFS) ListAssetIDsByTokenBlueprintID(
 			return tokendom.ListAssetIDsByTokenBlueprintIDResult{}, err
 		}
 
-		assetID := strings.TrimSpace(d.AssetID)
+		assetID := strings.Trim(d.AssetID, " \t\r\n")
 		if assetID == "" {
 			continue
 		}
@@ -282,7 +283,7 @@ func (r *TokenReaderFS) GetTokenByProductID(
 		return tokendom.GetTokenByProductIDResult{}, errors.New("token_reader_fs: firestore client is nil")
 	}
 
-	id := strings.TrimSpace(productID)
+	id := strings.Trim(productID, " \t\r\n")
 	if id == "" {
 		return tokendom.GetTokenByProductIDResult{}, tokendom.ErrInvalidProductID
 	}
@@ -316,9 +317,9 @@ func (r *TokenReaderFS) GetTokenByProductID(
 		MetadataURI:           d.MetadataURI,
 		AssetStandard:         tokendom.AssetStandard(d.AssetStandard),
 		Cluster:               d.Cluster,
-		AssetID:               strings.TrimSpace(d.AssetID),
-		TreeAddress:           strings.TrimSpace(d.TreeAddress),
+		AssetID:               strings.Trim(d.AssetID, " \t\r\n"),
+		TreeAddress:           strings.Trim(d.TreeAddress, " \t\r\n"),
 		LeafIndex:             leafIndex,
-		CoreCollectionAddress: strings.TrimSpace(d.CoreCollectionAddress),
+		CoreCollectionAddress: strings.Trim(d.CoreCollectionAddress, " \t\r\n"),
 	}, nil
 }

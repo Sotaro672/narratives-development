@@ -11,10 +11,14 @@ import (
 //
 // - 1 productId = 1 cNFT とします。
 // - ProductID は Bubblegum mint service 側の idempotency key として使用します。
+// - TokenBlueprintID は mint 対象の MPL Core Collection 解決に使用します。
 // - Amount は常に 1 を指定します。
 type MintParams struct {
 	// cNFT に紐づく productId
 	ProductID string
+
+	// cNFT が属する TokenBlueprint の ID
+	TokenBlueprintID string
 
 	// cNFT を受け取るウォレットアドレス (base58)
 	ToAddress string
@@ -43,6 +47,12 @@ type MintResult struct {
 	// ミントトランザクションのシグネチャ (base58)
 	Signature string
 
+	// on-chain asset の方式
+	AssetStandard AssetStandard
+
+	// mint が実行された Solana cluster
+	Cluster string
+
 	// Bubblegum V2 cNFT の一意な asset ID (base58)
 	AssetID string
 
@@ -50,9 +60,13 @@ type MintResult struct {
 	TreeAddress string
 
 	// Merkle Tree 内の leaf index
+	// 0 は正当な値です。
 	LeafIndex uint64
 
-	// オプション: どのスロットで確定したかなど
+	// cNFT が属する MPL Core Collection のアドレス (base58)
+	CoreCollectionAddress string
+
+	// mint transaction が確定した slot
 	Slot uint64
 }
 
@@ -67,7 +81,8 @@ type MintResult struct {
 //   - tokens/{docId}
 //   - docId = productId
 //   - fields: assetStandard, cluster, assetId, treeAddress, leafIndex,
-//     coreCollectionAddress, brandId, tokenBlueprintId, metadataUri, ...
+//     coreCollectionAddress, brandId, tokenBlueprintId, metadataUri,
+//     mintedAt, txSignature, toAddress
 type GetTokenByProductIDResult struct {
 	ProductID        string
 	BrandID          string

@@ -741,6 +741,10 @@ func matchesResaleFilter(item resaledom.Resale, filter resaledom.Filter) bool {
 		return false
 	}
 
+	if len(filter.AssetIDs) > 0 && !stringIn(item.AssetID, filter.AssetIDs) {
+		return false
+	}
+
 	if len(filter.TokenBlueprintIDs) > 0 && !stringIn(item.TokenBlueprintID, filter.TokenBlueprintIDs) {
 		return false
 	}

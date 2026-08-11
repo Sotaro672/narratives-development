@@ -14,7 +14,9 @@ import (
   - productIdとAttemptを指定して個別取得できる
   - productId単位で全試行履歴を取得できる
   - assetIdから成功したtransferの実行日時を取得できる
+  - operationId単位で同一の論理transferを識別できる
   - 次のAttempt採番とpending Transfer作成を原子的に実行できる
+  - 同一operationIdの再実行では新しいAttemptを作成せず既存Transferを返す
 - Firestore実装ではdocId="<productId>__<attempt>"のフラット保存を想定するが、
   RepositoryPort自体は永続化方式に依存しない。
 
@@ -25,6 +27,8 @@ import (
 - TransferにはtransferredAtを持たせない。
 - transferredAtはResolveTransferredAtByAssetIDResultとして返す。
 - Firestoreでは正規フィールド名"assetId"と"transferredAt"だけを使用する。
+- OperationIDは1回の論理transferを識別するidempotency keyとして扱う。
+- 同一OperationIDに対して複数のTransfer attemptを作成しない。
 */
 
 // CreateAttemptInput represents the data required before an Attempt number is
@@ -33,8 +37,12 @@ import (
 // Attempt is not included because its allocation is the repository's
 // responsibility. This avoids passing an invalid Transfer whose Attempt is
 // zero to CreateAttempt.
+//
+// OperationID is the stable idempotency key for one logical transfer.
+// The same logical retry must always reuse the exact same OperationID.
 type CreateAttemptInput struct {
 	ProductID       string
+	OperationID     string
 	OrderID         string
 	AvatarID        string
 	ToWalletAddress string
@@ -46,6 +54,9 @@ type CreateAttemptInput struct {
 func (in CreateAttemptInput) Validate() error {
 	if in.ProductID == "" {
 		return ErrInvalidProductID
+	}
+	if in.OperationID == "" {
+		return ErrInvalidOperationID
 	}
 	if in.OrderID == "" {
 		return ErrInvalidOrderID
@@ -78,6 +89,7 @@ func (in CreateAttemptInput) NewTransfer(
 	return NewPending(
 		attempt,
 		in.ProductID,
+		in.OperationID,
 		in.OrderID,
 		in.AvatarID,
 		in.ToWalletAddress,
@@ -129,12 +141,22 @@ type RepositoryPort interface {
 		assetID string,
 	) (ResolveTransferredAtByAssetIDResult, error)
 
-	// CreateAttempt atomically allocates the next Attempt number, creates a
-	// pending Transfer, and persists it.
+	// CreateAttempt creates or reuses one Transfer attempt identified by
+	// OperationID.
 	//
-	// Attempt allocation and Transfer persistence must be completed in the
-	// same transaction. If persistence fails, the Attempt counter must not be
-	// advanced.
+	// When OperationID has not been used:
+	// - atomically allocate the next Attempt number for ProductID
+	// - create a pending Transfer
+	// - persist the Transfer and OperationID mapping in the same transaction
+	//
+	// When the same OperationID already exists:
+	// - do not allocate a new Attempt
+	// - do not create another Transfer
+	// - return the existing Transfer
+	//
+	// Attempt allocation, Transfer persistence, and OperationID reservation
+	// must be completed atomically. If persistence fails, neither the Attempt
+	// counter nor the OperationID reservation may be advanced.
 	CreateAttempt(
 		ctx context.Context,
 		in CreateAttemptInput,
@@ -144,6 +166,7 @@ type RepositoryPort interface {
 	//
 	// The Transfer must be valid before it is written.
 	// Save must not allocate or change Attempt.
+	// Save must not change OperationID.
 	Save(
 		ctx context.Context,
 		t Transfer,
@@ -154,6 +177,7 @@ type RepositoryPort interface {
 	// entity.
 	//
 	// A nil field in TransferPatch means no change.
+	// OperationID is immutable and cannot be changed through Patch.
 	Patch(
 		ctx context.Context,
 		productID string,

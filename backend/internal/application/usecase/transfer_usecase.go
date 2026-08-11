@@ -171,7 +171,9 @@ type TokenTransferExecutor interface {
 }
 
 type ExecuteTransferInput struct {
-	ProductID        string
+	ProductID   string
+	OperationID string
+
 	FromAvatarID     string
 	ToAvatarID       string
 	FromBrandID      string
@@ -263,6 +265,7 @@ var (
 	ErrTransferNotConfigured          = errors.New("transfer_uc: not configured")
 	ErrTransferAvatarIDEmpty          = errors.New("transfer_uc: avatarId is empty")
 	ErrTransferProductIDEmpty         = errors.New("transfer_uc: productId is empty")
+	ErrTransferOperationIDEmpty       = errors.New("transfer_uc: operationId is empty")
 	ErrTransferNotMatched             = errors.New("transfer_uc: scan is not matched")
 	ErrTransferNoEligibleOrder        = errors.New("transfer_uc: no eligible order/item found")
 	ErrTransferAssetIDEmpty           = errors.New("transfer_uc: assetId is empty")
@@ -282,8 +285,9 @@ var (
 )
 
 type TransferByVerifiedScanInput struct {
-	AvatarID  string
-	ProductID string
+	AvatarID    string
+	ProductID   string
+	OperationID string
 }
 
 type TransferByVerifiedScanResult struct {
@@ -334,6 +338,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 
 	avatarID := in.AvatarID
 	productID := in.ProductID
+	operationID := in.OperationID
 
 	if avatarID == "" {
 		return TransferByVerifiedScanResult{},
@@ -342,6 +347,10 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 	if productID == "" {
 		return TransferByVerifiedScanResult{},
 			ErrTransferProductIDEmpty
+	}
+	if operationID == "" {
+		return TransferByVerifiedScanResult{},
+			ErrTransferOperationIDEmpty
 	}
 
 	verifyResult, err := u.verifier.VerifyMatch(
@@ -560,7 +569,8 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 	executionResult, err := u.executionUC.Execute(
 		ctx,
 		TokenTransferExecutionInput{
-			ProductID: productID,
+			ProductID:   productID,
+			OperationID: operationID,
 
 			AttemptReference: target.OrderID,
 

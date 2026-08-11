@@ -51,51 +51,6 @@ function Read-EnvFile([string]$path) {
   return $map
 }
 
-function Test-EnvFlagEnabled([string]$v) {
-  if ($null -eq $v) {
-    return $false
-  }
-
-  $s = $v.Trim().ToLowerInvariant()
-
-  return @(
-    "true",
-    "1",
-    "yes",
-    "on"
-  ) -contains $s
-}
-
-function Convert-EnvNumberOrThrow(
-  [hashtable]$Map,
-  [string]$Key
-) {
-  if (-not $Map.ContainsKey($Key) -or [string]::IsNullOrWhiteSpace($Map[$Key])) {
-    throw "$Key is required."
-  }
-
-  $raw = [string]$Map[$Key]
-  $value = 0.0
-
-  $styles = [System.Globalization.NumberStyles]::Float
-  $culture = [System.Globalization.CultureInfo]::InvariantCulture
-
-  if (-not [double]::TryParse(
-    $raw,
-    $styles,
-    $culture,
-    [ref]$value
-  )) {
-    throw "$Key must be a number. value='$raw'"
-  }
-
-  if ($value -lt 0) {
-    throw "$Key must be greater than or equal to 0. value='$raw'"
-  }
-
-  return $value
-}
-
 function Exec-GCloudOrThrow {
   param(
     [Parameter(Mandatory=$true)][string[]]$Args,
@@ -278,18 +233,11 @@ $AllowedKeys = @(
   "RESEND_CONTACT_ADMIN_TO",
   "CONSOLE_BASE_URL",
 
-  # Solana
-  "SOLANA_RPC_URL",
-  "SOLANA_MIN_FEE_PAYER_BALANCE_SOL",
-  "SOLANA_MINT_KEY_SECRET",
-  "SOLANA_SELLER_FEE_BPS",
-
-  # Solana / fee payer auto top-up
-  "SOLANA_AUTO_TOP_UP_ENABLED",
-  "SOLANA_FEE_PAYER_TARGET_BALANCE_SOL",
-  "SOLANA_RESERVE_KEY_SECRET",
-  "SOLANA_RESERVE_MIN_REMAINING_SOL",
-  "SOLANA_RESERVE_TX_FEE_BUFFER_SOL",
+  # Solana / Bubblegum V2 internal service
+  # signer / fee payer / reserve wallet / gas top-up are managed by Bubblegum service
+  "SOLANA_BUBBLEGUM_SERVICE_URL",
+  "SOLANA_BUBBLEGUM_SERVICE_AUDIENCE",
+  "SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY",
 
   # Arweave / Irys
   "ARWEAVE_BASE_URL",
@@ -393,60 +341,17 @@ if (
 }
 
 if (
-  -not $envMap.ContainsKey("SOLANA_RPC_URL") -or
-  [string]::IsNullOrWhiteSpace($envMap["SOLANA_RPC_URL"])
+  -not $envMap.ContainsKey("SOLANA_BUBBLEGUM_SERVICE_URL") -or
+  [string]::IsNullOrWhiteSpace($envMap["SOLANA_BUBBLEGUM_SERVICE_URL"])
 ) {
-  throw "SOLANA_RPC_URL is required. Set a devnet Solana RPC endpoint in .env before deploying."
+  throw "SOLANA_BUBBLEGUM_SERVICE_URL is required. Set the internal Bubblegum service URL in .env before deploying."
 }
 
 if (
-  -not $envMap.ContainsKey("SOLANA_MINT_KEY_SECRET") -or
-  [string]::IsNullOrWhiteSpace($envMap["SOLANA_MINT_KEY_SECRET"])
+  -not $envMap.ContainsKey("SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY") -or
+  [string]::IsNullOrWhiteSpace($envMap["SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY"])
 ) {
-  throw "SOLANA_MINT_KEY_SECRET is required. Set the Secret Manager version path in .env before deploying."
-}
-
-$autoTopUpEnabled = $false
-
-if ($envMap.ContainsKey("SOLANA_AUTO_TOP_UP_ENABLED")) {
-  $autoTopUpEnabled = Test-EnvFlagEnabled $envMap["SOLANA_AUTO_TOP_UP_ENABLED"]
-}
-
-if ($autoTopUpEnabled) {
-  if (
-    -not $envMap.ContainsKey("SOLANA_RESERVE_KEY_SECRET") -or
-    [string]::IsNullOrWhiteSpace($envMap["SOLANA_RESERVE_KEY_SECRET"])
-  ) {
-    throw "SOLANA_RESERVE_KEY_SECRET is required when SOLANA_AUTO_TOP_UP_ENABLED=true."
-  }
-
-  $minFeePayerBalance = Convert-EnvNumberOrThrow `
-    $envMap `
-    "SOLANA_MIN_FEE_PAYER_BALANCE_SOL"
-
-  $targetFeePayerBalance = Convert-EnvNumberOrThrow `
-    $envMap `
-    "SOLANA_FEE_PAYER_TARGET_BALANCE_SOL"
-
-  $reserveMinRemaining = Convert-EnvNumberOrThrow `
-    $envMap `
-    "SOLANA_RESERVE_MIN_REMAINING_SOL"
-
-  $reserveTxFeeBuffer = Convert-EnvNumberOrThrow `
-    $envMap `
-    "SOLANA_RESERVE_TX_FEE_BUFFER_SOL"
-
-  if ($targetFeePayerBalance -le $minFeePayerBalance) {
-    throw "SOLANA_FEE_PAYER_TARGET_BALANCE_SOL must be greater than SOLANA_MIN_FEE_PAYER_BALANCE_SOL. target=$targetFeePayerBalance min=$minFeePayerBalance"
-  }
-
-  Write-Ok "Solana fee payer auto top-up enabled"
-  Write-Ok "Fee payer minimum balance: $minFeePayerBalance SOL"
-  Write-Ok "Fee payer target balance: $targetFeePayerBalance SOL"
-  Write-Ok "Reserve minimum remaining balance: $reserveMinRemaining SOL"
-  Write-Ok "Reserve transaction fee buffer: $reserveTxFeeBuffer SOL"
-} else {
-  Write-Warn "SOLANA_AUTO_TOP_UP_ENABLED is disabled. Fee payer balance shortages will require manual intervention."
+  throw "SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY is required. Set the Bubblegum mint authority public key in .env before deploying."
 }
 
 if (
@@ -599,7 +504,12 @@ $envArg = [string]::Join(
   $envPairs
 )
 
-Write-Step "Env vars to update: $envArg"
+$envKeysForLog = [string]::Join(
+  ",",
+  ($envMap.Keys | Sort-Object)
+)
+
+Write-Step "Env vars to update: $envKeysForLog"
 
 # ------------------------------------------------------------
 # 6) Cloud Run へデプロイ
@@ -612,11 +522,20 @@ $removeEnvVars = @(
   "GOOGLE_APPLICATION_CREDENTIALS",
   "FIRESTORE_CREDENTIALS_FILE",
 
-  # 旧 Solana env
+  # 旧 Solana / SPL / Go backend signer / fee payer / reserve wallet env
   "SOLANA_RPC_ENDPOINT",
+  "SOLANA_RPC_URL",
   "SOLANA_AIRDROP_RPC_URL",
   "SOLANA_AUTO_AIRDROP_ENABLED",
   "SOLANA_AIRDROP_AMOUNT_SOL",
+  "SOLANA_MIN_FEE_PAYER_BALANCE_SOL",
+  "SOLANA_MINT_KEY_SECRET",
+  "SOLANA_SELLER_FEE_BPS",
+  "SOLANA_AUTO_TOP_UP_ENABLED",
+  "SOLANA_FEE_PAYER_TARGET_BALANCE_SOL",
+  "SOLANA_RESERVE_KEY_SECRET",
+  "SOLANA_RESERVE_MIN_REMAINING_SOL",
+  "SOLANA_RESERVE_TX_FEE_BUFFER_SOL",
 
   # 旧 Stripe env
   # Stripe secret は Secret Manager の stripe-secret-key を使用する
@@ -653,8 +572,8 @@ $deployArgs = @(
   "--min-instances",
   "0",
 
-  # 暫定的にmint時のRPC負荷を抑える。
   # mint専用Cloud Tasks queue側では maxConcurrentDispatches=1 を推奨。
+  # Solana RPC / signer / fee payer / reserve wallet / gas top-up は Bubblegum service 側で管理する。
   "--max-instances",
   "2",
 

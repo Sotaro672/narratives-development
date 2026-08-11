@@ -366,11 +366,17 @@ func (uc *WalletUsecase) SyncWalletAssetIDs(
 	return w, nil
 }
 
-// EnsureAvatarOwnsAssetID は avatar が assetId を保有していることを確認します.
+// EnsureAvatarOwnsAssetID は avatar が assetId を現在保有していることを確認します.
+//
+// IMPORTANT:
+// - Firestore wallet.assetIds は同期済み read model / cache としてのみ扱います。
+// - 所有権判定では persisted wallet.assetIds を信用しません。
+// - current ownership は onchainReader -> Bubblegum service -> DAS を正とします。
 //
 // 判定順:
-// 1. persisted wallet.assetIds
-// 2. on-chain owned assetIds
+// 1. avatarId から wallet を取得
+// 2. walletAddress から on-chain 保有 assetId 一覧を取得
+// 3. 指定 assetId が現在の保有一覧に含まれるか判定
 func (uc *WalletUsecase) EnsureAvatarOwnsAssetID(
 	ctx context.Context,
 	avatarID string,
@@ -378,6 +384,10 @@ func (uc *WalletUsecase) EnsureAvatarOwnsAssetID(
 ) error {
 	if uc == nil || uc.walletRepo == nil {
 		return ErrWalletUsecaseNotConfigured
+	}
+
+	if uc.onchainReader == nil {
+		return ErrWalletSyncOnchainNotConfigured
 	}
 
 	aid := avatarID
@@ -394,22 +404,14 @@ func (uc *WalletUsecase) EnsureAvatarOwnsAssetID(
 		return err
 	}
 
-	if w.HasAssetID(assetID) {
-		return nil
-	}
-
-	if uc.onchainReader == nil {
-		return ErrWalletAssetIDNotOwned
-	}
-
 	addr := w.WalletAddress
 	if addr == "" {
-		return ErrWalletAssetIDNotOwned
+		return ErrWalletSyncWalletAddressEmpty
 	}
 
 	assetIDs, err := uc.onchainReader.ListOwnedAssetIDs(ctx, addr)
 	if err != nil {
-		return ErrWalletAssetIDNotOwned
+		return err
 	}
 
 	for _, ownedAssetID := range assetIDs {

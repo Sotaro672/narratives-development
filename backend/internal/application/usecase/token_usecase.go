@@ -20,6 +20,8 @@ type MintProductsInput struct {
 
 	ProductIDs []string
 
+	TokenBlueprintID string
+
 	BlueprintName   string
 	BlueprintSymbol string
 
@@ -50,10 +52,12 @@ func NewTokenUsecase(
 	}
 }
 
-// MintProducts は、指定された productId ごとに 1 token/NFT を mint します。
+// MintProducts は、指定された productId ごとに 1 cNFT を mint します。
 //
 // 動作方針:
 // - productId ごとに Amount=1 で MintToken を呼び出す
+// - ProductID は Bubblegum service 側の idempotency key として使用する
+// - TokenBlueprintID は Bubblegum service 側の MPL Core Collection 解決に使用する
 // - mint request のロード、metadata URI 確保、Firestore 更新、inventory 更新は MintUsecase 側で行う
 func (u *TokenUsecase) MintProducts(
 	ctx context.Context,
@@ -66,6 +70,11 @@ func (u *TokenUsecase) MintProducts(
 	to := input.ToAddress
 	if to == "" {
 		return nil, fmt.Errorf("toAddress is empty")
+	}
+
+	tokenBlueprintID := input.TokenBlueprintID
+	if tokenBlueprintID == "" {
+		return nil, fmt.Errorf("tokenBlueprintID is empty")
 	}
 
 	metadataURI := input.MetadataURI
@@ -84,6 +93,7 @@ func (u *TokenUsecase) MintProducts(
 		if pid == "" {
 			continue
 		}
+
 		productIDs = append(productIDs, pid)
 	}
 
@@ -95,11 +105,13 @@ func (u *TokenUsecase) MintProducts(
 
 	for _, pid := range productIDs {
 		params := tokendom.MintParams{
-			ToAddress:   to,
-			Amount:      1,
-			MetadataURI: metadataURI,
-			Name:        name,
-			Symbol:      symbol,
+			ProductID:        pid,
+			TokenBlueprintID: tokenBlueprintID,
+			ToAddress:        to,
+			Amount:           1,
+			MetadataURI:      metadataURI,
+			Name:             name,
+			Symbol:           symbol,
 		}
 
 		res, err := u.mintWallet.MintToken(ctx, params)

@@ -88,6 +88,9 @@ var (
 	ErrShareTransferProductIDEmpty = errors.New(
 		"share_transfer_uc: productId is empty",
 	)
+	ErrShareTransferOperationIDEmpty = errors.New(
+		"share_transfer_uc: operationId is empty",
+	)
 	ErrShareTransferSameAvatar = errors.New(
 		"share_transfer_uc: fromAvatarId and toAvatarId must be different",
 	)
@@ -118,6 +121,7 @@ type ShareTransferInput struct {
 	FromAvatarID string
 	ToAvatarID   string
 	ProductID    string
+	OperationID  string
 }
 
 type ShareTransferResult struct {
@@ -138,13 +142,14 @@ type ShareTransferResult struct {
 //
 // ShareTransferUsecase is responsible for:
 //  1. Validate sender / receiver avatar IDs.
-//  2. Resolve tokens/{productId}.
-//  3. Resolve sender / receiver avatar wallet addresses.
-//  4. Build the share transfer reference.
-//  5. Delegate common transfer execution to TokenTransferExecutionUsecase.
+//  2. Validate the stable operationId used for transfer idempotency.
+//  3. Resolve tokens/{productId}.
+//  4. Resolve sender / receiver avatar wallet addresses.
+//  5. Build the share transfer reference.
+//  6. Delegate common transfer execution to TokenTransferExecutionUsecase.
 //
 // TokenTransferExecutionUsecase is responsible for:
-//  1. Create transfer(PENDING).
+//  1. Create or reuse transfer(PENDING) by operationId.
 //  2. Delegate the Bubblegum V2 transfer to TokenTransferExecutor.
 //  3. Update cached tokens/{productId}.toAddress.
 //  4. Remove the assetId from the sender wallet cache.
@@ -172,6 +177,7 @@ func (u *ShareTransferUsecase) ShareToAvatar(
 	fromAvatarID := in.FromAvatarID
 	toAvatarID := in.ToAvatarID
 	productID := in.ProductID
+	operationID := in.OperationID
 
 	if fromAvatarID == "" {
 		return ShareTransferResult{},
@@ -186,6 +192,11 @@ func (u *ShareTransferUsecase) ShareToAvatar(
 	if productID == "" {
 		return ShareTransferResult{},
 			ErrShareTransferProductIDEmpty
+	}
+
+	if operationID == "" {
+		return ShareTransferResult{},
+			ErrShareTransferOperationIDEmpty
 	}
 
 	if fromAvatarID == toAvatarID {
@@ -262,7 +273,8 @@ func (u *ShareTransferUsecase) ShareToAvatar(
 	executionResult, err := u.executionUC.Execute(
 		ctx,
 		TokenTransferExecutionInput{
-			ProductID: productID,
+			ProductID:   productID,
+			OperationID: operationID,
 
 			AttemptReference: shareRef,
 
@@ -327,6 +339,16 @@ func mapShareTransferExecutionError(
 		return fmt.Errorf(
 			"%w: %v",
 			ErrShareTransferProductIDEmpty,
+			err,
+		)
+
+	case errors.Is(
+		err,
+		ErrTokenTransferExecutionOperationIDEmpty,
+	):
+		return fmt.Errorf(
+			"%w: %v",
+			ErrShareTransferOperationIDEmpty,
 			err,
 		)
 

@@ -14,6 +14,7 @@ import (
 - FirestoreのdocIdは"<productId>__<attempt>"を想定し、
   Transfer自体にはIDフィールドを持たせない。
 - 同一productIdに対する複数試行を扱うため、Attemptを保持する。
+- OperationIDは同一の論理transferを識別するidempotency keyとして保持する。
 
 方針:
 - 永続化および参照の契約はrepository_port.goのRepositoryPortへ統一する。
@@ -21,6 +22,7 @@ import (
 - assetIdから転送実行日時を取得する場合は、
   ResolveTransferredAtByAssetIDResultとして返す。
 - cNFTの識別子はassetIdを正とする。
+- OperationIDはTransfer作成後に変更しない。
 */
 
 type Status string
@@ -61,6 +63,7 @@ var (
 	ErrNotFound = errors.New("transfer: not found")
 
 	ErrInvalidProductID       = errors.New("transfer: invalid productId")
+	ErrInvalidOperationID     = errors.New("transfer: invalid operationId")
 	ErrInvalidOrderID         = errors.New("transfer: invalid orderId")
 	ErrInvalidAvatarID        = errors.New("transfer: invalid avatarId")
 	ErrInvalidToWalletAddress = errors.New("transfer: invalid toWalletAddress")
@@ -78,9 +81,10 @@ type Transfer struct {
 	Attempt int `json:"attempt"`
 
 	// Identifiers
-	ProductID string `json:"productId"`
-	OrderID   string `json:"orderId"`
-	AvatarID  string `json:"avatarId"`
+	ProductID   string `json:"productId"`
+	OperationID string `json:"operationId"`
+	OrderID     string `json:"orderId"`
+	AvatarID    string `json:"avatarId"`
 
 	// Bubblegum V2 cNFT information
 	AssetID string `json:"assetId"`
@@ -115,6 +119,9 @@ type ResolveTransferredAtByAssetIDResult struct {
 
 // TransferPatch represents a partial Transfer update.
 // A nil field means no change.
+//
+// OperationID is intentionally excluded because the idempotency key must not
+// change after the Transfer attempt has been created.
 type TransferPatch struct {
 	Status          *Status
 	ErrorType       *ErrorType
@@ -128,6 +135,7 @@ type TransferPatch struct {
 func NewPending(
 	attempt int,
 	productID string,
+	operationID string,
 	orderID string,
 	avatarID string,
 	toWalletAddress string,
@@ -137,6 +145,7 @@ func NewPending(
 	t := Transfer{
 		Attempt:         attempt,
 		ProductID:       productID,
+		OperationID:     operationID,
 		OrderID:         orderID,
 		AvatarID:        avatarID,
 		AssetID:         assetID,
@@ -251,6 +260,9 @@ func (t Transfer) Validate() error {
 func (t Transfer) validate() error {
 	if t.ProductID == "" {
 		return ErrInvalidProductID
+	}
+	if t.OperationID == "" {
+		return ErrInvalidOperationID
 	}
 	if t.OrderID == "" {
 		return ErrInvalidOrderID
