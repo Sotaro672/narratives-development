@@ -1,4 +1,5 @@
-//services\solana-bubblegum\src\config\env.ts
+// services/solana-bubblegum/src/config/env.ts
+
 function requiredEnv(
   key: string,
 ): string {
@@ -41,9 +42,19 @@ function numberEnv(
 }
 
 export const env = {
+  googleCloudProject:
+    requiredEnv(
+      "GOOGLE_CLOUD_PROJECT",
+    ),
+
   solanaCluster:
     requiredEnv(
       "SOLANA_CLUSTER",
+    ),
+
+  solanaRpcURL:
+    requiredEnv(
+      "SOLANA_RPC_URL",
     ),
 
   devnetAirdropRpcURL:

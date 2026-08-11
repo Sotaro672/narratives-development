@@ -1,4 +1,5 @@
-//services\solana-bubblegum\src\bootstrap\container.ts
+// services/solana-bubblegum/src/bootstrap/container.ts
+
 import {
   DevnetReserveRefillUsecase,
 } from "../application/devnet-reserve-refill.js";
@@ -12,16 +13,39 @@ import {
 } from "../infrastructure/firestore/faucet-rate-limit-repository.js";
 
 import {
+  createBubblegumRuntime,
+  type BubblegumRuntime,
+} from "../infrastructure/solana/bubblegum-runtime.js";
+
+import {
   SolanaRpcClient,
 } from "../infrastructure/solana/solana-rpc-client.js";
+
 
 const solanaRpc =
   new SolanaRpcClient(
     env.devnetAirdropRpcURL,
   );
 
+
 const faucetRateLimit =
   new FirestoreFaucetRateLimitRepository();
+
+
+const bubblegumRuntimePromise =
+  createBubblegumRuntime({
+    rpcURL:
+      env.solanaRpcURL,
+
+    googleCloudProject:
+      env.googleCloudProject,
+  });
+
+
+export async function getBubblegumRuntime(): Promise<BubblegumRuntime> {
+  return bubblegumRuntimePromise;
+}
+
 
 export const devnetReserveRefillUsecase =
   new DevnetReserveRefillUsecase(
