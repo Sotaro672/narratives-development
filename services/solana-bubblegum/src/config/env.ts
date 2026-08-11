@@ -72,7 +72,7 @@ export const env = {
   devnetReserveTargetSOL:
     numberEnv(
       "BUBBLEGUM_DEVNET_RESERVE_TARGET_SOL",
-      10,
+      100,
     ),
 
   devnetAirdropSOL:
