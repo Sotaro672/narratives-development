@@ -15,6 +15,7 @@ function requiredEnv(
   return value;
 }
 
+
 function numberEnv(
   key: string,
   fallback: number,
@@ -40,6 +41,7 @@ function numberEnv(
 
   return value;
 }
+
 
 export const env = {
   googleCloudProject:
@@ -77,5 +79,17 @@ export const env = {
     numberEnv(
       "BUBBLEGUM_DEVNET_AIRDROP_SOL",
       5,
+    ),
+
+  feePayerTargetSOL:
+    numberEnv(
+      "BUBBLEGUM_FEE_PAYER_TARGET_SOL",
+      0.1,
+    ),
+
+  reserveMinimumSOL:
+    numberEnv(
+      "BUBBLEGUM_RESERVE_MINIMUM_SOL",
+      1,
     ),
 };

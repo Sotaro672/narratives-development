@@ -1,12 +1,24 @@
 // services/solana-bubblegum/src/bootstrap/container.ts
 
 import {
+  CoreCollectionResolver,
+} from "../application/core-collection-resolver.js";
+
+import {
   DevnetReserveRefillUsecase,
 } from "../application/devnet-reserve-refill.js";
 
 import {
+  FeePayerTopUpUsecase,
+} from "../application/fee-payer-top-up.js";
+
+import {
   env,
 } from "../config/env.js";
+
+import {
+  FirestoreCoreCollectionRegistryRepository,
+} from "../infrastructure/firestore/core-collection-registry-repository.js";
 
 import {
   FirestoreFaucetRateLimitRepository,
@@ -30,6 +42,10 @@ const solanaRpc =
 
 const faucetRateLimit =
   new FirestoreFaucetRateLimitRepository();
+
+
+const coreCollectionRegistry =
+  new FirestoreCoreCollectionRegistryRepository();
 
 
 const bubblegumRuntimePromise =
@@ -63,5 +79,26 @@ export const devnetReserveRefillUsecase =
 
       requestSOL:
         env.devnetAirdropSOL,
+    },
+  );
+
+
+export const feePayerTopUpUsecase =
+  new FeePayerTopUpUsecase({
+    targetSOL:
+      env.feePayerTargetSOL,
+
+    reserveMinimumSOL:
+      env.reserveMinimumSOL,
+  });
+
+
+export const coreCollectionResolver =
+  new CoreCollectionResolver(
+    coreCollectionRegistry,
+    feePayerTopUpUsecase,
+    {
+      cluster:
+        env.solanaCluster,
     },
   );
