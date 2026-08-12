@@ -30,7 +30,8 @@ export type InspectionBatchForCard = InspectionBatch & {
   /**
    * modelId -> model meta
    *
-   * API から来る modelMeta と、hook 側で補完した modelMeta を merge して使う。
+   * Backend response の modelMeta を正として使用する。
+   * frontend から Model Variation の個別補完は行わない。
    */
   modelMeta?: Record<string, MintModelMetaEntryDTO> | null;
 
@@ -48,7 +49,6 @@ export type InspectionBatchForCard = InspectionBatch & {
 
 export type BuildInspectionResultCardDataInput = {
   batch: InspectionBatchForCard | null | undefined;
-  resolvedMeta?: Record<string, MintModelMetaEntryDTO> | null;
 };
 
 export type InspectionResultCardData = {
@@ -103,22 +103,6 @@ function buildDisplayOrderByModelId(
   );
 }
 
-function buildMergedModelMeta(
-  batchMeta:
-    | Record<string, MintModelMetaEntryDTO>
-    | null
-    | undefined,
-  resolvedMeta:
-    | Record<string, MintModelMetaEntryDTO>
-    | null
-    | undefined,
-): Record<string, MintModelMetaEntryDTO> {
-  return {
-    ...(batchMeta ?? {}),
-    ...(resolvedMeta ?? {}),
-  };
-}
-
 function resolveCategoryKind(
   batch: InspectionBatchForCard | null | undefined,
 ): string {
@@ -155,36 +139,6 @@ function buildVolumeLabel(params: {
   return `${volumeText}${unitText}`;
 }
 
-export function getInspectionModelIds(
-  batch: InspectionBatch | null | undefined,
-): string[] {
-  if (!batch?.inspections) {
-    return [];
-  }
-
-  const modelIds = new Set<string>();
-
-  for (const inspection of batch.inspections) {
-    if (inspection.modelId) {
-      modelIds.add(inspection.modelId);
-    }
-  }
-
-  return Array.from(modelIds);
-}
-
-export function getMissingModelIds(input: {
-  modelIds: string[];
-  modelMeta: Record<string, MintModelMetaEntryDTO>;
-}): string[] {
-  const modelIds = input.modelIds ?? [];
-  const modelMeta = input.modelMeta ?? {};
-
-  return modelIds.filter(
-    (modelId) => !modelMeta[modelId],
-  );
-}
-
 export function buildInspectionResultCardData(
   input: BuildInspectionResultCardDataInput,
 ): InspectionResultCardData {
@@ -207,11 +161,12 @@ export function buildInspectionResultCardData(
   const isAlcohol =
     categoryKind === "alcohol";
 
-  const mergedModelMeta =
-    buildMergedModelMeta(
-      batch.modelMeta,
-      input.resolvedMeta,
-    );
+  /**
+   * Model情報はBackend responseのmodelMetaを正とする。
+   * frontend側で個別Model Variation APIによる補完は行わない。
+   */
+  const modelMeta =
+    batch.modelMeta ?? {};
 
   const displayOrderByModelId =
     buildDisplayOrderByModelId(
@@ -239,8 +194,7 @@ export function buildInspectionResultCardData(
 
     const entry =
       aggregation.get(modelId) ?? {
-        modelNumber:
-          modelNumberFromInspection,
+        modelNumber: modelNumberFromInspection,
         passed: 0,
         total: 0,
       };
@@ -278,7 +232,7 @@ export function buildInspectionResultCardData(
     aggregation.entries()
   ) {
     const meta =
-      mergedModelMeta[modelId];
+      modelMeta[modelId];
 
     const displayModelNumber =
       meta?.modelNumber ||
@@ -308,15 +262,11 @@ export function buildInspectionResultCardData(
       size: meta?.size ?? "",
       color: meta?.colorName ?? "",
       rgb: meta?.rgb ?? null,
-
       volume,
       volumeUnit,
       volumeLabel,
-
-      passedQuantity:
-        aggregated.passed,
-      quantity:
-        aggregated.total,
+      passedQuantity: aggregated.passed,
+      quantity: aggregated.total,
     });
   }
 

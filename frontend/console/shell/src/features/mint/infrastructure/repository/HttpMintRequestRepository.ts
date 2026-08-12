@@ -9,10 +9,7 @@ import type {
 
 import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
 import type { MintRequestManagementRowDTO } from "../dto/mintRequestManagementRow";
-import type {
-  ModelVariationForMintDTO,
-  ProductBlueprintPatchDTO,
-} from "../dto/mintRequestLocal.dto";
+import type { ProductBlueprintPatchDTO } from "../dto/mintRequestLocal.dto";
 
 import { fetchBrandsForMintHTTP } from "./http/brands";
 import {
@@ -23,7 +20,6 @@ import {
   fetchMintRequestRowByProductionIdHTTP,
   postMintRequestHTTP,
 } from "./http/mintRequests";
-import { fetchModelVariationByIdForMintHTTP } from "./http/modelVariations";
 import { fetchProductBlueprintIdByProductionIdHTTP } from "./http/productions";
 import { fetchProductBlueprintPatchHTTP } from "./http/productBlueprintPatch";
 import { fetchTokenBlueprintsByBrandHTTP } from "./http/tokenBlueprints";
@@ -38,9 +34,12 @@ import { fetchTokenBlueprintsByBrandHTTP } from "./http/tokenBlueprints";
  * 参照系の取得失敗は既存画面との互換性を維持するため、
  * nullまたは空配列へ変換する。
  *
- * Model Variationの取得、検品完了、Mint申請では、
- * Application層でエラー処理方針を判断できるよう、
+ * 検品完了、Mint申請ではApplication層で
+ * エラー処理方針を判断できるよう、
  * HTTPエラーを握りつぶさず呼び出し元へ伝播する。
+ *
+ * Model Variationの個別取得は行わない。
+ * 検品結果表示に必要なmodelMetaはBackend responseを正とする。
  */
 export class HttpMintRequestRepository implements MintRequestRepository {
   /**
@@ -103,21 +102,6 @@ export class HttpMintRequestRepository implements MintRequestRepository {
     brandId: string,
   ): Promise<TokenBlueprintSummary[]> {
     return fetchTokenBlueprintsByBrandHTTP(brandId).catch(() => []);
-  }
-
-  /**
-   * modelIdに紐づくModel Variationを取得する。
-   *
-   * resolveInspectionModelMeta UseCaseから呼び出される。
-   *
-   * 個別取得失敗を継続可能として扱うかどうかは
-   * Application層で判断するため、
-   * HTTPエラーはここでは握りつぶさない。
-   */
-  fetchModelVariationByIdForMint(
-    modelId: string,
-  ): Promise<ModelVariationForMintDTO | null> {
-    return fetchModelVariationByIdForMintHTTP(modelId);
   }
 
   /**

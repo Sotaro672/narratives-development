@@ -28,29 +28,27 @@ export type InspectionStatus = "inspecting" | "completed";
  * InspectionItem
  * backend/internal/domain/inspection/entity.go の InspectionItem に対応。
  *
- * - inspectionResult / inspectedBy / inspectedAt は null もしくは未設定を許容（Go のポインタに対応）
- * - inspectedAt は ISO8601 日時文字列（例: "2025-01-01T00:00:00Z"）を想定
+ * - inspectionResult / inspectedBy / inspectedAt は null もしくは未設定を許容
+ * - inspectedAt は ISO8601 日時文字列を想定
  */
 export interface InspectionItem {
   productId: string;
   modelId: string;
 
-  // ★追加: useInspectionResultCard.tsx が参照するため
-  // 既存データに無い可能性があるので optional + nullable で受ける
   modelNumber?: string | null;
 
   inspectionResult?: InspectionResult | null;
   inspectedBy?: string | null;
-  inspectedAt?: string | null; // time.Time 相当（ISO8601）
+  inspectedAt?: string | null;
 }
 
 /**
  * InspectionBatch
  * backend/internal/domain/inspection/entity.go の InspectionBatch に対応。
  *
- * - requested は boolean（inspections 側は requested だけを持つ）
+ * - requested は boolean
  * - requestedBy / requestedAt / mintedAt / scheduledBurnDate / tokenBlueprintId は
- *   mints テーブル側が責務を持つため、この型からは削除する
+ *   mints テーブル側が責務を持つ
  */
 export interface InspectionBatch {
   productionId: string;
@@ -59,29 +57,45 @@ export interface InspectionBatch {
   quantity: number;
   totalPassed: number;
 
-  /** ミント申請済みフラグ（mints 側に詳細がある前提） */
+  /** ミント申請済みフラグ */
   requested: boolean;
 
   inspections: InspectionItem[];
 }
 
 /**
- * MintUsecase が返す modelId → モデルメタ情報のマップ要素。
- * backend/internal/application/usecase/mint_usecase.go の MintModelMeta に対応。
+ * modelId → モデル表示情報。
+ *
+ * GET /mint/inspections/{productionId} の modelMeta に対応する。
+ *
+ * apparel:
+ * - modelNumber
+ * - size
+ * - colorName
+ * - rgb
+ *
+ * alcohol:
+ * - modelNumber
+ * - volume
+ * - volumeUnit
  */
 export interface MintModelMeta {
-  size: string;
-  colorName: string;
-  rgb: number;
+  modelNumber?: string;
+  size?: string;
+  colorName?: string;
+  rgb?: number;
+
+  volume?: number;
+  volumeUnit?: "ml" | "L";
 }
 
 /**
- * MintUsecase が返す MintInspectionView に対応するフロント側 DTO。
- * InspectionBatch に加えて:
+ * MintRequest detail の inspection 表示用 DTO。
  *
+ * InspectionBatch に加えて:
  * - productBlueprintId
  * - productName
- * - modelMeta: modelId → { size, colorName, rgb }
+ * - modelMeta
  */
 export interface InspectionBatchDTO extends InspectionBatch {
   productBlueprintId: string;
@@ -93,13 +107,17 @@ export interface InspectionBatchDTO extends InspectionBatch {
  * ユーティリティ
  * =======================================================*/
 
-/** InspectionStatus 妥当性チェック（Go の IsValidInspectionStatus に対応） */
-export function isValidInspectionStatus(s: string): s is InspectionStatus {
+/** InspectionStatus 妥当性チェック */
+export function isValidInspectionStatus(
+  s: string,
+): s is InspectionStatus {
   return s === "inspecting" || s === "completed";
 }
 
-/** InspectionResult 妥当性チェック（Go の IsValidInspectionResult に対応） */
-export function isValidInspectionResult(r: string): r is InspectionResult {
+/** InspectionResult 妥当性チェック */
+export function isValidInspectionResult(
+  r: string,
+): r is InspectionResult {
   return (
     r === "notYet" ||
     r === "passed" ||
@@ -108,62 +126,65 @@ export function isValidInspectionResult(r: string): r is InspectionResult {
   );
 }
 
-/** ISO8601/日付文字列の簡易チェック（空文字は非許容） */
-function isValidDateTimeString(value: string | null | undefined): boolean {
+/** ISO8601/日付文字列の簡易チェック */
+function isValidDateTimeString(
+  value: string | null | undefined,
+): boolean {
   if (value == null) return false;
+
   const v = value.trim();
   if (!v) return false;
+
   const t = Date.parse(v);
   return !Number.isNaN(t);
 }
 
 /**
- * InspectionBatch の簡易バリデーション
+ * InspectionBatch の簡易バリデーション。
  * backend/internal/domain/inspection/entity.go の validate() ロジックと概ね対応。
  *
  * 問題があればエラーメッセージ配列を返す。
  */
-export function validateInspectionBatch(batch: InspectionBatch): string[] {
+export function validateInspectionBatch(
+  batch: InspectionBatch,
+): string[] {
   const errors: string[] = [];
 
-  // productionId
   if (!batch.productionId?.trim()) {
     errors.push("productionId is required");
   }
 
-  // status
   if (!isValidInspectionStatus(batch.status)) {
     errors.push("status must be 'inspecting' or 'completed'");
   }
 
-  // inspections
   if (!batch.inspections || batch.inspections.length === 0) {
     errors.push("inspections must not be empty");
   }
 
-  // quantity / totalPassed
-  if (batch.quantity !== batch.inspections.length || batch.quantity <= 0) {
-    errors.push("quantity must equal inspections.length and be > 0");
+  if (
+    batch.quantity !== batch.inspections.length ||
+    batch.quantity <= 0
+  ) {
+    errors.push(
+      "quantity must equal inspections.length and be > 0",
+    );
   }
 
   if (batch.totalPassed < 0) {
     errors.push("totalPassed must be >= 0");
   }
 
-  // requested
   if (typeof batch.requested !== "boolean") {
     errors.push("requested must be boolean");
   }
 
-  // inspections[i] の整合性チェック（Go の validate() と同じ方針）
   for (const ins of batch.inspections ?? []) {
     if (!ins.productId?.trim()) {
       errors.push("inspection.productId is required");
       continue;
     }
 
-    // InspectionResult が nil の場合は「まだ何も書いていない」扱い
-    // inspectedBy/inspectedAt が入っていてもエラーにしない。
     if (ins.inspectionResult == null) {
       continue;
     }
@@ -175,14 +196,17 @@ export function validateInspectionBatch(batch: InspectionBatch): string[] {
       continue;
     }
 
-    // notYet の場合は互換性のため、by/at が入っていてもエラーにしない
     if (ins.inspectionResult === "notYet") {
       continue;
     }
 
-    // passed / failed / notManufactured のときは by / at 必須
-    const hasBy = !!ins.inspectedBy && ins.inspectedBy.trim() !== "";
-    const hasAt = !!ins.inspectedAt && ins.inspectedAt.trim() !== "";
+    const hasBy =
+      !!ins.inspectedBy &&
+      ins.inspectedBy.trim() !== "";
+
+    const hasAt =
+      !!ins.inspectedAt &&
+      ins.inspectedAt.trim() !== "";
 
     if (!hasBy) {
       errors.push(
@@ -194,7 +218,9 @@ export function validateInspectionBatch(batch: InspectionBatch): string[] {
       errors.push(
         `inspectedAt is required when inspectionResult is '${ins.inspectionResult}' (productId=${ins.productId})`,
       );
-    } else if (!isValidDateTimeString(ins.inspectedAt!)) {
+    } else if (
+      !isValidDateTimeString(ins.inspectedAt!)
+    ) {
       errors.push(
         `inspectedAt must be a valid datetime string (productId=${ins.productId})`,
       );

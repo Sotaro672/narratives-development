@@ -70,6 +70,10 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		0,
 	)
 
+	modelMeta := make(
+		map[string]querydto.MintModelMetaEntry,
+	)
+
 	if hasInsp {
 		inspectionItems = make(
 			[]querydto.InspectionItemDTO,
@@ -96,6 +100,33 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 				inspectionItems,
 				row,
 			)
+
+			if it.ModelID == "" {
+				continue
+			}
+
+			if _, exists := modelMeta[it.ModelID]; exists {
+				continue
+			}
+
+			if s.productionQuery.nameResolver == nil {
+				continue
+			}
+
+			resolved :=
+				s.productionQuery.nameResolver.ResolveModelResolved(
+					ctx,
+					it.ModelID,
+				)
+
+			modelMeta[it.ModelID] =
+				querydto.MintModelMetaEntry{
+					ModelID:     it.ModelID,
+					ModelNumber: resolved.ModelNumber,
+					Size:        resolved.Size,
+					ColorName:   resolved.Color,
+					RGB:         resolved.RGB,
+				}
 		}
 	}
 
@@ -113,7 +144,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 
 	out := &querydto.MintRequestDetailDTO{
 		ProductName: productName,
-		ModelMeta:   nil,
+		ModelMeta:   modelMeta,
 		Inspection:  inspSummary,
 	}
 

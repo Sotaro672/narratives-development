@@ -3,12 +3,28 @@ package dto
 
 // MintModelMetaEntry is a per-model metadata entry for mint request detail page.
 // Keyed by modelId (variationId) on the wire.
+//
+// apparel:
+//   - modelNumber
+//   - size
+//   - colorName
+//   - rgb
+//
+// alcohol:
+//   - modelNumber
+//   - volume
+//   - volumeUnit
 type MintModelMetaEntry struct {
 	ModelID     string `json:"modelId"`
+	Kind        string `json:"kind,omitempty"`
 	ModelNumber string `json:"modelNumber,omitempty"`
-	Size        string `json:"size,omitempty"`
-	ColorName   string `json:"colorName,omitempty"`
-	RGB         *int   `json:"rgb,omitempty"`
+
+	Size      string `json:"size,omitempty"`
+	ColorName string `json:"colorName,omitempty"`
+	RGB       *int   `json:"rgb,omitempty"`
+
+	Volume     *int   `json:"volume,omitempty"`
+	VolumeUnit string `json:"volumeUnit,omitempty"`
 }
 
 // MintTaskProgressDTO is progress information calculated from
@@ -26,7 +42,8 @@ type MintTaskProgressDTO struct {
 // MintRequestDetailDTO is a detail DTO for mint request detail page.
 // Mint information is fetched separately from /mint/requests.
 type MintRequestDetailDTO struct {
-	ProductName string `json:"productName"`
+	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
+	ProductName        string `json:"productName"`
 
 	ModelMeta map[string]MintModelMetaEntry `json:"modelMeta,omitempty"`
 
