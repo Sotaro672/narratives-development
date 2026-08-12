@@ -50,9 +50,7 @@ export function useMintRequestDetail() {
    * route名はrequestIdのままでも、
    * 実体はproductionIdとして扱う。
    */
-  const { requestId } = useParams<{
-    requestId: string;
-  }>();
+  const { requestId } = useParams<{ requestId: string }>();
 
   const productionId = React.useMemo(
     () => String(requestId ?? "").trim(),
@@ -133,6 +131,13 @@ export function useMintRequestDetail() {
     );
   }, [brandOptions, selectedBrandId]);
 
+  /**
+   * 画面全体の詳細情報を再取得する。
+   *
+   * 初回表示、検品完了後、Mint申請直後など、
+   * inspection / mint request / productionをまとめて
+   * 最新化したい場合にのみ使用する。
+   */
   const reloadDetail = React.useCallback(async () => {
     if (!productionId) {
       return;
@@ -146,6 +151,25 @@ export function useMintRequestDetail() {
     setInspectionBatch(detail.inspectionBatch);
     setMintRequestRow(detail.mintRequestRow);
     setProductBlueprintId(detail.productBlueprintId || "");
+  }, [mintRequestRepo, productionId]);
+
+  /**
+   * Mint状態だけを再取得する。
+   *
+   * ミント中の周期処理ではこれだけを使用し、
+   * production / inspectionを再取得しない。
+   */
+  const reloadMintStatus = React.useCallback(async () => {
+    if (!productionId) {
+      return;
+    }
+
+    const row =
+      await mintRequestRepo.fetchMintRequestRowByProductionId(
+        productionId,
+      );
+
+    setMintRequestRow(row);
   }, [mintRequestRepo, productionId]);
 
   React.useEffect(() => {
@@ -246,11 +270,10 @@ export function useMintRequestDetail() {
     }
 
     /**
-     * InspectionBatchDTO.modelMetaは、
-     * modelIdをRecordのキーとして保持している。
+     * Backend responseのmodelMetaをそのまま正として使う。
      *
-     * Backendが返したmodelNumber / size / colorName / rgb /
-     * volume / volumeUnitをそのまま保持し、
+     * modelNumber / size / colorName / rgb /
+     * volume / volumeUnitを落とさず保持し、
      * 値側にもmodelIdを含める。
      */
     const modelMeta = Object.entries(
@@ -425,10 +448,12 @@ export function useMintRequestDetail() {
   const showMintProgress = false;
 
   /**
-   * Mint状態のみを3秒ごとに再取得する。
+   * Mint状態だけを3秒ごとに再取得する。
    *
-   * inspectionBatchが更新されても
-   * Model Variationの個別取得は行わない。
+   * GET /mint/requestsのみを呼び、
+   * GET /productions/{productionId} と
+   * GET /mint/inspections/{productionId} は
+   * 周期的に再取得しない。
    */
   React.useEffect(() => {
     if (!productionId || !isMintProcessing) {
@@ -442,8 +467,8 @@ export function useMintRequestDetail() {
         return;
       }
 
-      void reloadDetail().catch(() => {
-        // 状態再取得失敗では画面全体をエラーにしない。
+      void reloadMintStatus().catch(() => {
+        // Mint状態の再取得失敗では画面全体をエラーにしない。
       });
     }, 3000);
 
@@ -454,7 +479,7 @@ export function useMintRequestDetail() {
   }, [
     productionId,
     isMintProcessing,
-    reloadDetail,
+    reloadMintStatus,
   ]);
 
   const inspectionStatus =
@@ -634,6 +659,10 @@ export function useMintRequestDetail() {
 
           const { queuedResponse } = result;
 
+          /**
+           * Mint申請直後だけは画面全体を一度再取得する。
+           * 以降の周期処理はreloadMintStatusのみを使用する。
+           */
           await reloadDetail();
 
           alert(
