@@ -10,34 +10,23 @@ import {
   type Umi,
 } from "@metaplex-foundation/umi";
 
-
 const LAMPORTS_PER_SOL =
   1_000_000_000n;
-
 
 const DEFAULT_TRANSACTION_FEE_BUFFER_SOL =
   0.001;
 
-
 export type FeePayerTopUpConfig = {
   targetSOL: number;
-
   reserveMinimumSOL: number;
-
   transactionFeeBufferSOL?: number;
 };
 
-
 export type FeePayerTopUpInput = {
   umi: Umi;
-
-  feePayer:
-    KeypairSigner;
-
-  reserve:
-    KeypairSigner;
+  feePayer: KeypairSigner;
+  reserve: KeypairSigner;
 };
-
 
 export type FeePayerTopUpResult = {
   status:
@@ -46,37 +35,26 @@ export type FeePayerTopUpResult = {
     | "reserve_insufficient";
 
   feePayerAddress: string;
-
   reserveAddress: string;
-
   feePayerBalanceBeforeSOL: number;
-
   feePayerBalanceAfterSOL: number;
-
   reserveBalanceBeforeSOL: number;
-
   reserveBalanceAfterSOL: number;
-
   transferredSOL: number;
-
   signature?: Uint8Array;
 };
-
 
 function solToLamports(
   value: number,
 ): bigint {
   if (
-    !Number.isFinite(
-      value,
-    ) ||
+    !Number.isFinite(value) ||
     value < 0
   ) {
     throw new Error(
       "fee_payer_top_up: invalid SOL amount",
     );
   }
-
 
   return BigInt(
     Math.floor(
@@ -88,27 +66,20 @@ function solToLamports(
   );
 }
 
-
 function lamportsToSOL(
   value: bigint,
 ): number {
   return (
-    Number(
-      value,
-    ) /
-    Number(
-      LAMPORTS_PER_SOL,
-    )
+    Number(value) /
+    Number(LAMPORTS_PER_SOL)
   );
 }
-
 
 export class FeePayerTopUpUsecase {
   constructor(
     private readonly config:
       FeePayerTopUpConfig,
   ) {}
-
 
   async execute(
     input: FeePayerTopUpInput,
@@ -121,7 +92,6 @@ export class FeePayerTopUpUsecase {
       );
     }
 
-
     if (
       this.config.reserveMinimumSOL < 0
     ) {
@@ -130,12 +100,10 @@ export class FeePayerTopUpUsecase {
       );
     }
 
-
     const transactionFeeBufferSOL =
       this.config
         .transactionFeeBufferSOL ??
       DEFAULT_TRANSACTION_FEE_BUFFER_SOL;
-
 
     if (
       !Number.isFinite(
@@ -148,18 +116,15 @@ export class FeePayerTopUpUsecase {
       );
     }
 
-
     const feePayerAddress =
       String(
         input.feePayer.publicKey,
       );
 
-
     const reserveAddress =
       String(
         input.reserve.publicKey,
       );
-
 
     if (
       feePayerAddress ===
@@ -170,140 +135,117 @@ export class FeePayerTopUpUsecase {
       );
     }
 
-
     const [
       feePayerBalanceBefore,
       reserveBalanceBefore,
-    ] =
-      await Promise.all([
-        input.umi.rpc.getBalance(
-          input.feePayer.publicKey,
-        ),
+    ] = await Promise.all([
+      input.umi.rpc.getBalance(
+        input.feePayer.publicKey,
+        {
+          commitment: "finalized",
+        },
+      ),
 
-        input.umi.rpc.getBalance(
-          input.reserve.publicKey,
-        ),
-      ]);
-
+      input.umi.rpc.getBalance(
+        input.reserve.publicKey,
+        {
+          commitment: "finalized",
+        },
+      ),
+    ]);
 
     const feePayerBalanceBeforeLamports =
       feePayerBalanceBefore
         .basisPoints;
 
-
     const reserveBalanceBeforeLamports =
       reserveBalanceBefore
         .basisPoints;
-
 
     const targetLamports =
       solToLamports(
         this.config.targetSOL,
       );
 
-
     const reserveMinimumLamports =
       solToLamports(
         this.config.reserveMinimumSOL,
       );
-
 
     const transactionFeeBufferLamports =
       solToLamports(
         transactionFeeBufferSOL,
       );
 
-
     if (
       feePayerBalanceBeforeLamports >=
       targetLamports
     ) {
       return {
-        status:
-          "balance_sufficient",
-
+        status: "balance_sufficient",
         feePayerAddress,
-
         reserveAddress,
-
         feePayerBalanceBeforeSOL:
           lamportsToSOL(
             feePayerBalanceBeforeLamports,
           ),
-
         feePayerBalanceAfterSOL:
           lamportsToSOL(
             feePayerBalanceBeforeLamports,
           ),
-
         reserveBalanceBeforeSOL:
           lamportsToSOL(
             reserveBalanceBeforeLamports,
           ),
-
         reserveBalanceAfterSOL:
           lamportsToSOL(
             reserveBalanceBeforeLamports,
           ),
-
         transferredSOL: 0,
       };
     }
 
-
     const requiredTransferLamports =
       targetLamports -
       feePayerBalanceBeforeLamports;
-
 
     const requiredReserveLamports =
       requiredTransferLamports +
       reserveMinimumLamports +
       transactionFeeBufferLamports;
 
-
     if (
       reserveBalanceBeforeLamports <
       requiredReserveLamports
     ) {
       return {
-        status:
-          "reserve_insufficient",
-
+        status: "reserve_insufficient",
         feePayerAddress,
-
         reserveAddress,
-
         feePayerBalanceBeforeSOL:
           lamportsToSOL(
             feePayerBalanceBeforeLamports,
           ),
-
         feePayerBalanceAfterSOL:
           lamportsToSOL(
             feePayerBalanceBeforeLamports,
           ),
-
         reserveBalanceBeforeSOL:
           lamportsToSOL(
             reserveBalanceBeforeLamports,
           ),
-
         reserveBalanceAfterSOL:
           lamportsToSOL(
             reserveBalanceBeforeLamports,
           ),
-
         transferredSOL: 0,
       };
     }
-
 
     const transferSOL =
       lamportsToSOL(
         requiredTransferLamports,
       );
-
 
     const transactionResult =
       await transferSol(
@@ -313,8 +255,7 @@ export class FeePayerTopUpUsecase {
             input.reserve,
 
           destination:
-            input.feePayer
-              .publicKey,
+            input.feePayer.publicKey,
 
           amount:
             sol(
@@ -327,57 +268,57 @@ export class FeePayerTopUpUsecase {
         )
         .sendAndConfirm(
           input.umi,
+          {
+            confirm: {
+              commitment:
+                "finalized",
+            },
+          },
         );
-
 
     const [
       feePayerBalanceAfter,
       reserveBalanceAfter,
-    ] =
-      await Promise.all([
-        input.umi.rpc.getBalance(
-          input.feePayer.publicKey,
-        ),
+    ] = await Promise.all([
+      input.umi.rpc.getBalance(
+        input.feePayer.publicKey,
+        {
+          commitment: "finalized",
+        },
+      ),
 
-        input.umi.rpc.getBalance(
-          input.reserve.publicKey,
-        ),
-      ]);
-
+      input.umi.rpc.getBalance(
+        input.reserve.publicKey,
+        {
+          commitment: "finalized",
+        },
+      ),
+    ]);
 
     return {
-      status:
-        "topped_up",
-
+      status: "topped_up",
       feePayerAddress,
-
       reserveAddress,
-
       feePayerBalanceBeforeSOL:
         lamportsToSOL(
           feePayerBalanceBeforeLamports,
         ),
-
       feePayerBalanceAfterSOL:
         lamportsToSOL(
           feePayerBalanceAfter
             .basisPoints,
         ),
-
       reserveBalanceBeforeSOL:
         lamportsToSOL(
           reserveBalanceBeforeLamports,
         ),
-
       reserveBalanceAfterSOL:
         lamportsToSOL(
           reserveBalanceAfter
             .basisPoints,
         ),
-
       transferredSOL:
         transferSOL,
-
       signature:
         transactionResult.signature,
     };
