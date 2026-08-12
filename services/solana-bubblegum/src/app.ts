@@ -1,13 +1,10 @@
-//services\solana-bubblegum\src\app.ts
+// services/solana-bubblegum/src/app.ts
+
 import express, {
   type NextFunction,
   type Request,
   type Response,
 } from "express";
-
-import {
-  devnetReserveRefillHandler,
-} from "./routes/devnet-reserve-refill.js";
 
 export const app = express();
 
@@ -27,11 +24,6 @@ app.get(
       service: "solana-bubblegum",
     });
   },
-);
-
-app.post(
-  "/internal/devnet/reserve/refill",
-  devnetReserveRefillHandler,
 );
 
 app.use(

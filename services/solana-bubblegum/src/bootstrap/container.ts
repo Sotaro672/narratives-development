@@ -5,10 +5,6 @@ import {
 } from "../application/core-collection-resolver.js";
 
 import {
-  DevnetReserveRefillUsecase,
-} from "../application/devnet-reserve-refill.js";
-
-import {
   FeePayerTopUpUsecase,
 } from "../application/fee-payer-top-up.js";
 
@@ -29,10 +25,6 @@ import {
 } from "../infrastructure/firestore/core-collection-registry-repository.js";
 
 import {
-  FirestoreFaucetRateLimitRepository,
-} from "../infrastructure/firestore/faucet-rate-limit-repository.js";
-
-import {
   FirestoreMerkleTreeRegistryRepository,
 } from "../infrastructure/firestore/merkle-tree-registry-repository.js";
 
@@ -49,32 +41,14 @@ import {
   type BubblegumRuntime,
 } from "../infrastructure/solana/bubblegum-runtime.js";
 
-import {
-  SolanaRpcClient,
-} from "../infrastructure/solana/solana-rpc-client.js";
-
-
-const solanaRpc =
-  new SolanaRpcClient(
-    env.devnetAirdropRpcURL,
-  );
-
-
-const faucetRateLimit =
-  new FirestoreFaucetRateLimitRepository();
-
-
 const coreCollectionRegistry =
   new FirestoreCoreCollectionRegistryRepository();
-
 
 const merkleTreeRegistry =
   new FirestoreMerkleTreeRegistryRepository();
 
-
 export const mintOperationRegistry =
   new FirestoreMintOperationRegistryRepository();
-
 
 const bubblegumRuntimePromise =
   createBubblegumRuntime({
@@ -85,31 +59,9 @@ const bubblegumRuntimePromise =
       env.googleCloudProject,
   });
 
-
 export async function getBubblegumRuntime(): Promise<BubblegumRuntime> {
   return bubblegumRuntimePromise;
 }
-
-
-export const devnetReserveRefillUsecase =
-  new DevnetReserveRefillUsecase(
-    solanaRpc,
-    faucetRateLimit,
-    {
-      cluster:
-        env.solanaCluster,
-
-      reserveAddress:
-        env.reservePublicKey,
-
-      targetSOL:
-        env.devnetReserveTargetSOL,
-
-      requestSOL:
-        env.devnetAirdropSOL,
-    },
-  );
-
 
 export const feePayerTopUpUsecase =
   new FeePayerTopUpUsecase({
@@ -120,7 +72,6 @@ export const feePayerTopUpUsecase =
       env.reserveMinimumSOL,
   });
 
-
 export const coreCollectionResolver =
   new CoreCollectionResolver(
     coreCollectionRegistry,
@@ -130,7 +81,6 @@ export const coreCollectionResolver =
         env.solanaCluster,
     },
   );
-
 
 export const merkleTreeResolver =
   new MerkleTreeResolver(
@@ -157,7 +107,6 @@ export const merkleTreeResolver =
     },
   );
 
-
 const mintV2UsecasePromise =
   bubblegumRuntimePromise
     .then(
@@ -179,7 +128,6 @@ const mintV2UsecasePromise =
         );
       },
     );
-
 
 export async function getMintV2Usecase(): Promise<MintV2Usecase> {
   return mintV2UsecasePromise;

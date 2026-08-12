@@ -57,28 +57,6 @@ export const env = {
       "SOLANA_RPC_URL",
     ),
 
-  devnetAirdropRpcURL:
-    requiredEnv(
-      "SOLANA_DEVNET_AIRDROP_RPC_URL",
-    ),
-
-  reservePublicKey:
-    requiredEnv(
-      "BUBBLEGUM_RESERVE_PUBLIC_KEY",
-    ),
-
-  devnetReserveTargetSOL:
-    numberEnv(
-      "BUBBLEGUM_DEVNET_RESERVE_TARGET_SOL",
-      100,
-    ),
-
-  devnetAirdropSOL:
-    numberEnv(
-      "BUBBLEGUM_DEVNET_AIRDROP_SOL",
-      5,
-    ),
-
   feePayerTargetSOL:
     numberEnv(
       "BUBBLEGUM_FEE_PAYER_TARGET_SOL",
