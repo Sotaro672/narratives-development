@@ -68,7 +68,6 @@ func decodeStringSlice(v any) []string {
 		out := make([]string, len(vv))
 		copy(out, vv)
 		return out
-
 	case []any:
 		out := make([]string, 0, len(vv))
 		for _, elem := range vv {
@@ -77,7 +76,6 @@ func decodeStringSlice(v any) []string {
 			}
 		}
 		return out
-
 	default:
 		return []string{}
 	}
@@ -127,7 +125,6 @@ func decodeMintFromDoc(doc *firestore.DocumentSnapshot) (mintdom.Mint, error) {
 	}
 
 	data := doc.Data()
-
 	m := mintdom.Mint{
 		ID:                 doc.Ref.ID,
 		BrandID:            asString(data["brandId"]),
@@ -203,8 +200,7 @@ func decodeMintProductTaskFromDoc(
 	t := mintdom.MintProductTask{
 		MintID:    taskMintID,
 		ProductID: productID,
-
-		Status: taskStatusFromRaw(data),
+		Status:    taskStatusFromRaw(data),
 
 		AttemptCount: asInt(data["attemptCount"]),
 
@@ -285,11 +281,9 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 
 	if exists && existingSnap != nil && existingSnap.Exists() {
 		edata := existingSnap.Data()
-
 		existingStatus := mintStatusFromRaw(edata)
 
 		data["status"] = string(existingStatus)
-
 		m.Status = existingStatus
 
 		if createdBy := asString(edata["createdBy"]); createdBy != "" {
@@ -323,7 +317,6 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 		}
 	} else {
 		data["createdAt"] = m.CreatedAt.UTC()
-
 		setOptionalTime(data, "mintedAt", m.MintedAt)
 		setOptionalTime(data, "scheduledBurnDate", m.ScheduledBurnDate)
 
@@ -445,7 +438,6 @@ func (r *MintRepositoryFS) Update(ctx context.Context, m mintdom.Mint) (mintdom.
 		if status.Code(err) == codes.NotFound {
 			return mintdom.Mint{}, mintdom.ErrNotFound
 		}
-
 		return mintdom.Mint{}, err
 	}
 
@@ -472,7 +464,6 @@ func (r *MintRepositoryFS) GetByID(ctx context.Context, id string) (mintdom.Mint
 		if status.Code(err) == codes.NotFound {
 			return mintdom.Mint{}, mintdom.ErrNotFound
 		}
-
 		return mintdom.Mint{}, err
 	}
 
@@ -502,7 +493,6 @@ func (r *MintRepositoryFS) CreateTasks(
 
 	now := time.Now().UTC()
 	tasks := make([]mintdom.MintProductTask, 0, len(productIDs))
-
 	batch := r.Client.Batch()
 	writeCount := 0
 
@@ -578,7 +568,6 @@ func (r *MintRepositoryFS) GetByProductID(
 		if status.Code(err) == codes.NotFound {
 			return mintdom.MintProductTask{}, mintdom.ErrMintProductTaskNotFound
 		}
-
 		return mintdom.MintProductTask{}, err
 	}
 
@@ -685,36 +674,27 @@ func (r *MintRepositoryFS) MarkMinting(
 	docRef := r.taskDoc(mintID, productID)
 	var updated mintdom.MintProductTask
 
-	err := r.Client.RunTransaction(
-		ctx,
-		func(ctx context.Context, tx *firestore.Transaction) error {
-			snap, err := tx.Get(docRef)
-			if err != nil {
-				if status.Code(err) == codes.NotFound {
-					return mintdom.ErrMintProductTaskNotFound
-				}
-
-				return err
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(docRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return mintdom.ErrMintProductTaskNotFound
 			}
+			return err
+		}
 
-			task, err := decodeMintProductTaskFromDoc(mintID, snap)
-			if err != nil {
-				return err
-			}
+		task, err := decodeMintProductTaskFromDoc(mintID, snap)
+		if err != nil {
+			return err
+		}
 
-			if err := task.MarkMinting(time.Now().UTC()); err != nil {
-				return err
-			}
+		if err := task.MarkMinting(time.Now().UTC()); err != nil {
+			return err
+		}
 
-			updated = task
-
-			return tx.Set(
-				docRef,
-				encodeMintProductTask(task),
-				firestore.MergeAll,
-			)
-		},
-	)
+		updated = task
+		return tx.Set(docRef, encodeMintProductTask(task), firestore.MergeAll)
+	})
 	if err != nil {
 		return mintdom.MintProductTask{}, err
 	}
@@ -746,42 +726,33 @@ func (r *MintRepositoryFS) MarkMinted(
 	docRef := r.taskDoc(mintID, productID)
 	var updated mintdom.MintProductTask
 
-	err := r.Client.RunTransaction(
-		ctx,
-		func(ctx context.Context, tx *firestore.Transaction) error {
-			snap, err := tx.Get(docRef)
-			if err != nil {
-				if status.Code(err) == codes.NotFound {
-					return mintdom.ErrMintProductTaskNotFound
-				}
-
-				return err
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(docRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return mintdom.ErrMintProductTaskNotFound
 			}
+			return err
+		}
 
-			task, err := decodeMintProductTaskFromDoc(mintID, snap)
-			if err != nil {
-				return err
-			}
+		task, err := decodeMintProductTaskFromDoc(mintID, snap)
+		if err != nil {
+			return err
+		}
 
-			if err := task.MarkMinted(
-				time.Now().UTC(),
-				assetID,
-				treeAddress,
-				leafIndex,
-				signature,
-			); err != nil {
-				return err
-			}
+		if err := task.MarkMinted(
+			time.Now().UTC(),
+			assetID,
+			treeAddress,
+			leafIndex,
+			signature,
+		); err != nil {
+			return err
+		}
 
-			updated = task
-
-			return tx.Set(
-				docRef,
-				encodeMintProductTask(task),
-				firestore.MergeAll,
-			)
-		},
-	)
+		updated = task
+		return tx.Set(docRef, encodeMintProductTask(task), firestore.MergeAll)
+	})
 	if err != nil {
 		return mintdom.MintProductTask{}, err
 	}
@@ -810,39 +781,27 @@ func (r *MintRepositoryFS) MarkFailedRetryable(
 	docRef := r.taskDoc(mintID, productID)
 	var updated mintdom.MintProductTask
 
-	err := r.Client.RunTransaction(
-		ctx,
-		func(ctx context.Context, tx *firestore.Transaction) error {
-			snap, err := tx.Get(docRef)
-			if err != nil {
-				if status.Code(err) == codes.NotFound {
-					return mintdom.ErrMintProductTaskNotFound
-				}
-
-				return err
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(docRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return mintdom.ErrMintProductTaskNotFound
 			}
+			return err
+		}
 
-			task, err := decodeMintProductTaskFromDoc(mintID, snap)
-			if err != nil {
-				return err
-			}
+		task, err := decodeMintProductTaskFromDoc(mintID, snap)
+		if err != nil {
+			return err
+		}
 
-			if err := task.MarkFailedRetryable(
-				time.Now().UTC(),
-				message,
-			); err != nil {
-				return err
-			}
+		if err := task.MarkFailedRetryable(time.Now().UTC(), message); err != nil {
+			return err
+		}
 
-			updated = task
-
-			return tx.Set(
-				docRef,
-				encodeMintProductTask(task),
-				firestore.MergeAll,
-			)
-		},
-	)
+		updated = task
+		return tx.Set(docRef, encodeMintProductTask(task), firestore.MergeAll)
+	})
 	if err != nil {
 		return mintdom.MintProductTask{}, err
 	}
@@ -871,39 +830,27 @@ func (r *MintRepositoryFS) MarkFailedFatal(
 	docRef := r.taskDoc(mintID, productID)
 	var updated mintdom.MintProductTask
 
-	err := r.Client.RunTransaction(
-		ctx,
-		func(ctx context.Context, tx *firestore.Transaction) error {
-			snap, err := tx.Get(docRef)
-			if err != nil {
-				if status.Code(err) == codes.NotFound {
-					return mintdom.ErrMintProductTaskNotFound
-				}
-
-				return err
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(docRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return mintdom.ErrMintProductTaskNotFound
 			}
+			return err
+		}
 
-			task, err := decodeMintProductTaskFromDoc(mintID, snap)
-			if err != nil {
-				return err
-			}
+		task, err := decodeMintProductTaskFromDoc(mintID, snap)
+		if err != nil {
+			return err
+		}
 
-			if err := task.MarkFailedFatal(
-				time.Now().UTC(),
-				message,
-			); err != nil {
-				return err
-			}
+		if err := task.MarkFailedFatal(time.Now().UTC(), message); err != nil {
+			return err
+		}
 
-			updated = task
-
-			return tx.Set(
-				docRef,
-				encodeMintProductTask(task),
-				firestore.MergeAll,
-			)
-		},
-	)
+		updated = task
+		return tx.Set(docRef, encodeMintProductTask(task), firestore.MergeAll)
+	})
 	if err != nil {
 		return mintdom.MintProductTask{}, err
 	}
@@ -931,36 +878,27 @@ func (r *MintRepositoryFS) ResetRetryableToPending(
 	docRef := r.taskDoc(mintID, productID)
 	var updated mintdom.MintProductTask
 
-	err := r.Client.RunTransaction(
-		ctx,
-		func(ctx context.Context, tx *firestore.Transaction) error {
-			snap, err := tx.Get(docRef)
-			if err != nil {
-				if status.Code(err) == codes.NotFound {
-					return mintdom.ErrMintProductTaskNotFound
-				}
-
-				return err
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(docRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return mintdom.ErrMintProductTaskNotFound
 			}
+			return err
+		}
 
-			task, err := decodeMintProductTaskFromDoc(mintID, snap)
-			if err != nil {
-				return err
-			}
+		task, err := decodeMintProductTaskFromDoc(mintID, snap)
+		if err != nil {
+			return err
+		}
 
-			if err := task.ResetToPending(time.Now().UTC()); err != nil {
-				return err
-			}
+		if err := task.ResetToPending(time.Now().UTC()); err != nil {
+			return err
+		}
 
-			updated = task
-
-			return tx.Set(
-				docRef,
-				encodeMintProductTask(task),
-				firestore.MergeAll,
-			)
-		},
-	)
+		updated = task
+		return tx.Set(docRef, encodeMintProductTask(task), firestore.MergeAll)
+	})
 	if err != nil {
 		return mintdom.MintProductTask{}, err
 	}
@@ -995,12 +933,10 @@ func (r *MintRepositoryFS) LoadForMinting(
 		if status.Code(err) == codes.NotFound {
 			return nil, fmt.Errorf("mint %s not found", mintID)
 		}
-
 		return nil, fmt.Errorf("get mint %s: %w", mintID, err)
 	}
 
 	raw := mintSnap.Data()
-
 	mintStatus := mintStatusFromRaw(raw)
 	if mintStatus == mintdom.MintStatusMinted {
 		return nil, fmt.Errorf("mint %s is already minted", mintID)
@@ -1026,27 +962,14 @@ func (r *MintRepositoryFS) LoadForMinting(
 	tbSnap, err := r.tokenBlueprintsCol().Doc(tbID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return nil, fmt.Errorf(
-				"tokenBlueprint %s not found for mint %s",
-				tbID,
-				mintID,
-			)
+			return nil, fmt.Errorf("tokenBlueprint %s not found for mint %s", tbID, mintID)
 		}
-
-		return nil, fmt.Errorf(
-			"get tokenBlueprint %s: %w",
-			tbID,
-			err,
-		)
+		return nil, fmt.Errorf("get tokenBlueprint %s: %w", tbID, err)
 	}
 
 	var tb tokenBlueprintDoc
 	if err := tbSnap.DataTo(&tb); err != nil {
-		return nil, fmt.Errorf(
-			"decode tokenBlueprint %s: %w",
-			tbID,
-			err,
-		)
+		return nil, fmt.Errorf("decode tokenBlueprint %s: %w", tbID, err)
 	}
 
 	name := tb.Name
@@ -1054,44 +977,25 @@ func (r *MintRepositoryFS) LoadForMinting(
 	metadataURI := tb.MetadataURI
 
 	if name == "" || symbol == "" {
-		return nil, fmt.Errorf(
-			"tokenBlueprint %s has empty name or symbol",
-			tbID,
-		)
+		return nil, fmt.Errorf("tokenBlueprint %s has empty name or symbol", tbID)
 	}
 
 	brandSnap, err := r.brandsCol().Doc(brandID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return nil, fmt.Errorf(
-				"brand %s not found for mint %s",
-				brandID,
-				mintID,
-			)
+			return nil, fmt.Errorf("brand %s not found for mint %s", brandID, mintID)
 		}
-
-		return nil, fmt.Errorf(
-			"get brand %s: %w",
-			brandID,
-			err,
-		)
+		return nil, fmt.Errorf("get brand %s: %w", brandID, err)
 	}
 
 	var b brandDoc
 	if err := brandSnap.DataTo(&b); err != nil {
-		return nil, fmt.Errorf(
-			"decode brand %s: %w",
-			brandID,
-			err,
-		)
+		return nil, fmt.Errorf("decode brand %s: %w", brandID, err)
 	}
 
 	toAddress := b.WalletAddress
 	if toAddress == "" {
-		return nil, fmt.Errorf(
-			"brand %s has empty walletAddress",
-			brandID,
-		)
+		return nil, fmt.Errorf("brand %s has empty walletAddress", brandID)
 	}
 
 	dto := &usecase.MintRequestForUsecase{
@@ -1132,70 +1036,64 @@ func (r *MintRepositoryFS) RecordProductAsMinted(
 	}
 
 	if mt.Result == nil {
-		return fmt.Errorf(
-			"mint result is nil for product %s",
-			productID,
-		)
+		return fmt.Errorf("mint result is nil for product %s", productID)
+	}
+
+	if mt.Result.AssetStandard == "" {
+		return fmt.Errorf("mint result assetStandard is empty for product %s", productID)
+	}
+
+	if mt.Result.Cluster == "" {
+		return fmt.Errorf("mint result cluster is empty for product %s", productID)
+	}
+
+	if mt.Result.AssetID == "" {
+		return fmt.Errorf("mint result assetId is empty for product %s", productID)
+	}
+
+	if mt.Result.TreeAddress == "" {
+		return fmt.Errorf("mint result treeAddress is empty for product %s", productID)
+	}
+
+	if mt.Result.CoreCollectionAddress == "" {
+		return fmt.Errorf("mint result coreCollectionAddress is empty for product %s", productID)
+	}
+
+	if mt.Result.Signature == "" {
+		return fmt.Errorf("mint result signature is empty for product %s", productID)
 	}
 
 	mintSnap, err := r.col().Doc(mintID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return fmt.Errorf(
-				"mint %s not found when RecordProductAsMinted",
-				mintID,
-			)
+			return fmt.Errorf("mint %s not found when RecordProductAsMinted", mintID)
 		}
-
-		return fmt.Errorf(
-			"get mint %s in RecordProductAsMinted: %w",
-			mintID,
-			err,
-		)
+		return fmt.Errorf("get mint %s in RecordProductAsMinted: %w", mintID, err)
 	}
 
 	raw := mintSnap.Data()
 
 	brandID := asString(raw["brandId"])
 	if brandID == "" {
-		return fmt.Errorf(
-			"mint %s has empty brandId in RecordProductAsMinted",
-			mintID,
-		)
+		return fmt.Errorf("mint %s has empty brandId in RecordProductAsMinted", mintID)
 	}
 
 	tbID := asString(raw["tokenBlueprintId"])
 	if tbID == "" {
-		return fmt.Errorf(
-			"mint %s has empty tokenBlueprintId in RecordProductAsMinted",
-			mintID,
-		)
+		return fmt.Errorf("mint %s has empty tokenBlueprintId in RecordProductAsMinted", mintID)
 	}
 
 	brandSnap, err := r.brandsCol().Doc(brandID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return fmt.Errorf(
-				"brand %s not found for mint %s",
-				brandID,
-				mintID,
-			)
+			return fmt.Errorf("brand %s not found for mint %s", brandID, mintID)
 		}
-
-		return fmt.Errorf(
-			"get brand %s in RecordProductAsMinted: %w",
-			brandID,
-			err,
-		)
+		return fmt.Errorf("get brand %s in RecordProductAsMinted: %w", brandID, err)
 	}
 
 	var b brandDoc
 	if err := brandSnap.DataTo(&b); err != nil {
-		return fmt.Errorf(
-			"decode brand %s in RecordProductAsMinted: %w",
-			brandID,
-			err,
-		)
+		return fmt.Errorf("decode brand %s in RecordProductAsMinted: %w", brandID, err)
 	}
 
 	toAddress := b.WalletAddress
@@ -1209,27 +1107,14 @@ func (r *MintRepositoryFS) RecordProductAsMinted(
 	tbSnap, err := r.tokenBlueprintsCol().Doc(tbID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return fmt.Errorf(
-				"tokenBlueprint %s not found for mint %s",
-				tbID,
-				mintID,
-			)
+			return fmt.Errorf("tokenBlueprint %s not found for mint %s", tbID, mintID)
 		}
-
-		return fmt.Errorf(
-			"get tokenBlueprint %s in RecordProductAsMinted: %w",
-			tbID,
-			err,
-		)
+		return fmt.Errorf("get tokenBlueprint %s in RecordProductAsMinted: %w", tbID, err)
 	}
 
 	var tb tokenBlueprintDoc
 	if err := tbSnap.DataTo(&tb); err != nil {
-		return fmt.Errorf(
-			"decode tokenBlueprint %s in RecordProductAsMinted: %w",
-			tbID,
-			err,
-		)
+		return fmt.Errorf("decode tokenBlueprint %s in RecordProductAsMinted: %w", tbID, err)
 	}
 
 	metadataURI := tb.MetadataURI
@@ -1241,24 +1126,21 @@ func (r *MintRepositoryFS) RecordProductAsMinted(
 	}
 
 	data := map[string]any{
-		"brandId":            brandID,
-		"tokenBlueprintId":   tbID,
-		"assetId":            mt.Result.AssetID,
-		"treeAddress":        mt.Result.TreeAddress,
-		"leafIndex":          int64(mt.Result.LeafIndex),
-		"onChainTxSignature": mt.Result.Signature,
-		"mintedAt":           firestore.ServerTimestamp,
-		"toAddress":          toAddress,
-		"metadataUri":        metadataURI,
+		"brandId":               brandID,
+		"tokenBlueprintId":      tbID,
+		"assetStandard":         string(mt.Result.AssetStandard),
+		"cluster":               mt.Result.Cluster,
+		"assetId":               mt.Result.AssetID,
+		"treeAddress":           mt.Result.TreeAddress,
+		"leafIndex":             int64(mt.Result.LeafIndex),
+		"coreCollectionAddress": mt.Result.CoreCollectionAddress,
+		"onChainTxSignature":    mt.Result.Signature,
+		"mintedAt":              firestore.ServerTimestamp,
+		"toAddress":             toAddress,
+		"metadataUri":           metadataURI,
 	}
 
-	if _, err := r.tokensCol().
-		Doc(productID).
-		Set(
-			ctx,
-			data,
-			firestore.MergeAll,
-		); err != nil {
+	if _, err := r.tokensCol().Doc(productID).Set(ctx, data, firestore.MergeAll); err != nil {
 		return fmt.Errorf(
 			"set token productID=%s mintID=%s: %w",
 			productID,

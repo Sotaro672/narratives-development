@@ -3,6 +3,7 @@ package console
 
 import (
 	"context"
+	"errors"
 	"os"
 
 	listcloudtasksadp "narratives/internal/adapters/out/cloudtasks"
@@ -262,14 +263,27 @@ func buildUsecases(
 	)
 
 	// Cloud Tasksへ次のmint処理を投入するenqueuerを注入します。
-	if mintTaskQueue, err :=
+	// mint worker は必須依存のため、初期化失敗を握り潰さず
+	// application startup 自体を失敗させます。
+	mintTaskQueue, err :=
 		cloudtasksadp.NewMintTaskQueueFromEnv(
-			context.Background(),
-		); err == nil && mintTaskQueue != nil {
-		mintUC.SetMintTaskEnqueuer(
-			mintTaskQueue,
+			ctx,
 		)
+	if err != nil {
+		_ = listSaveOperationStorage.Close()
+		_ = announcementAttachmentStorage.Close()
+		return nil, err
 	}
+
+	if mintTaskQueue == nil {
+		_ = listSaveOperationStorage.Close()
+		_ = announcementAttachmentStorage.Close()
+		return nil, errors.New("mint task queue is nil")
+	}
+
+	mintUC.SetMintTaskEnqueuer(
+		mintTaskQueue,
+	)
 
 	baseURL := os.Getenv(
 		"ARWEAVE_BASE_URL",

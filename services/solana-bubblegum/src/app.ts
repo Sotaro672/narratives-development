@@ -32,6 +32,7 @@ type MintRequestBody = {
   productId?: unknown;
   tokenBlueprintId?: unknown;
   brandId?: unknown;
+  toAddress?: unknown;
   name?: unknown;
   symbol?: unknown;
   metadataUri?: unknown;
@@ -52,7 +53,9 @@ class HttpRequestValidationError extends Error {
   }
 }
 
-function readMintRequestBody(value: unknown): MintRequestBody {
+function readMintRequestBody(
+  value: unknown,
+): MintRequestBody {
   if (
     value === null ||
     typeof value !== "object" ||
@@ -126,14 +129,18 @@ app.post(
     next: NextFunction,
   ) => {
     try {
-      const body = readMintRequestBody(req.body);
+      const body = readMintRequestBody(
+        req.body,
+      );
 
       const productId = requiredString(
         "productId",
         body.productId,
       );
 
-      const idempotencyKey = req.get("Idempotency-Key");
+      const idempotencyKey = req.get(
+        "Idempotency-Key",
+      );
 
       if (!idempotencyKey) {
         throw new HttpRequestValidationError(
@@ -159,6 +166,11 @@ app.post(
         body.brandId,
       );
 
+      const toAddress = requiredString(
+        "toAddress",
+        body.toAddress,
+      );
+
       const name = requiredString(
         "name",
         body.name,
@@ -182,33 +194,30 @@ app.post(
         getMintV2Usecase(),
       ]);
 
-      const mintAuthorityAddress = String(
-        runtime.mintAuthority.publicKey,
-      );
-
-      const result = await mintV2Usecase.execute({
-        productId,
-        tokenBlueprintId,
-        brandId,
-        leafOwnerAddress: mintAuthorityAddress,
-        leafDelegateAddress: null,
-        coreCollection: {
-          name,
-          metadataUri,
-        },
-        metadata: {
-          name,
-          symbol,
-          uri: metadataUri,
-          sellerFeeBasisPoints: 0,
-          primarySaleHappened: false,
-          isMutable: false,
-          creators: [],
-        },
-        umi: runtime.umi,
-        feePayer: runtime.feePayer,
-        reserve: runtime.reserve,
-      });
+      const result =
+        await mintV2Usecase.execute({
+          productId,
+          tokenBlueprintId,
+          brandId,
+          leafOwnerAddress: toAddress,
+          leafDelegateAddress: null,
+          coreCollection: {
+            name,
+            metadataUri,
+          },
+          metadata: {
+            name,
+            symbol,
+            uri: metadataUri,
+            sellerFeeBasisPoints: 0,
+            primarySaleHappened: false,
+            isMutable: false,
+            creators: [],
+          },
+          umi: runtime.umi,
+          feePayer: runtime.feePayer,
+          reserve: runtime.reserve,
+        });
 
       res.status(200).json(result);
     } catch (error) {
@@ -235,7 +244,10 @@ app.use(
     res: Response,
     _next: NextFunction,
   ) => {
-    console.error("[http]", error);
+    console.error(
+      "[http]",
+      error,
+    );
 
     if (error instanceof SyntaxError) {
       res.status(400).json({
@@ -244,7 +256,10 @@ app.use(
       return;
     }
 
-    if (error instanceof HttpRequestValidationError) {
+    if (
+      error instanceof
+      HttpRequestValidationError
+    ) {
       res.status(400).json({
         error: "invalid request",
         field: error.field,
@@ -253,7 +268,10 @@ app.use(
       return;
     }
 
-    if (error instanceof MintV2UsecaseValidationError) {
+    if (
+      error instanceof
+      MintV2UsecaseValidationError
+    ) {
       res.status(400).json({
         error: "invalid mint request",
         field: error.field,
@@ -262,15 +280,23 @@ app.use(
       return;
     }
 
-    if (isMintV2TransactionError(error)) {
+    if (
+      isMintV2TransactionError(
+        error,
+      )
+    ) {
       if (
         error.code === "INVALID_INPUT" ||
-        error.code === "INVALID_PUBLIC_KEY" ||
-        error.code === "INVALID_SIGNATURE" ||
-        error.code === "INVALID_TRANSACTION_SIGNATURE"
+        error.code ===
+          "INVALID_PUBLIC_KEY" ||
+        error.code ===
+          "INVALID_SIGNATURE" ||
+        error.code ===
+          "INVALID_TRANSACTION_SIGNATURE"
       ) {
         res.status(400).json({
-          error: "invalid mint transaction request",
+          error:
+            "invalid mint transaction request",
           code: error.code,
           message: error.message,
         });
@@ -279,7 +305,8 @@ app.use(
 
       if (error.kind === "FATAL") {
         res.status(422).json({
-          error: "mint transaction failed fatally",
+          error:
+            "mint transaction failed fatally",
           code: error.code,
           message: error.message,
         });
@@ -287,14 +314,18 @@ app.use(
       }
 
       res.status(503).json({
-        error: "mint transaction failed retryably",
+        error:
+          "mint transaction failed retryably",
         code: error.code,
         message: error.message,
       });
       return;
     }
 
-    if (error instanceof MintOperationPayloadConflictError) {
+    if (
+      error instanceof
+      MintOperationPayloadConflictError
+    ) {
       res.status(409).json({
         error: "idempotency conflict",
         productId: error.productId,
@@ -303,8 +334,10 @@ app.use(
     }
 
     if (
-      error instanceof MintOperationStateConflictError ||
-      error instanceof MintOperationSignedTransactionConflictError
+      error instanceof
+        MintOperationStateConflictError ||
+      error instanceof
+        MintOperationSignedTransactionConflictError
     ) {
       res.status(409).json({
         error: "mint operation conflict",
@@ -313,27 +346,39 @@ app.use(
       return;
     }
 
-    if (error instanceof MintV2UsecaseInvalidStateError) {
+    if (
+      error instanceof
+      MintV2UsecaseInvalidStateError
+    ) {
       res.status(409).json({
-        error: "invalid mint operation state",
+        error:
+          "invalid mint operation state",
         productId: error.productId,
         status: error.status,
       });
       return;
     }
 
-    if (error instanceof MintV2UsecaseStoredFatalError) {
+    if (
+      error instanceof
+      MintV2UsecaseStoredFatalError
+    ) {
       res.status(422).json({
-        error: "mint operation failed fatally",
+        error:
+          "mint operation failed fatally",
         productId: error.productId,
         errorCode: error.errorCode,
       });
       return;
     }
 
-    if (error instanceof MintOperationNotFoundError) {
+    if (
+      error instanceof
+      MintOperationNotFoundError
+    ) {
       res.status(404).json({
-        error: "mint operation not found",
+        error:
+          "mint operation not found",
         productId: error.productId,
       });
       return;

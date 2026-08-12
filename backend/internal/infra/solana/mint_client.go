@@ -157,6 +157,10 @@ func (c *MintClient) PublicKey(
 type bubblegumMintRequest struct {
 	ProductID string `json:"productId"`
 
+	TokenBlueprintID string `json:"tokenBlueprintId"`
+
+	BrandID string `json:"brandId"`
+
 	ToAddress string `json:"toAddress"`
 
 	Name string `json:"name"`
@@ -164,18 +168,22 @@ type bubblegumMintRequest struct {
 	Symbol string `json:"symbol"`
 
 	MetadataURI string `json:"metadataUri"`
-
-	AssetStandard string `json:"assetStandard"`
 }
 
 type bubblegumMintResponse struct {
 	Signature string `json:"signature"`
+
+	AssetStandard string `json:"assetStandard"`
+
+	Cluster string `json:"cluster"`
 
 	AssetID string `json:"assetId"`
 
 	TreeAddress string `json:"treeAddress"`
 
 	LeafIndex uint64 `json:"leafIndex"`
+
+	CoreCollectionAddress string `json:"coreCollectionAddress"`
 
 	Slot uint64 `json:"slot"`
 }
@@ -195,25 +203,32 @@ type bubblegumErrorResponse struct {
 //
 //	{
 //	  "productId": "...",
+//	  "tokenBlueprintId": "...",
+//	  "brandId": "...",
 //	  "toAddress": "...",
 //	  "name": "...",
 //	  "symbol": "...",
-//	  "metadataUri": "...",
-//	  "assetStandard": "BUBBLEGUM_V2"
+//	  "metadataUri": "..."
 //	}
 //
 // Response:
 //
 //	{
 //	  "signature": "...",
+//	  "assetStandard": "bubblegum-v2",
+//	  "cluster": "devnet",
 //	  "assetId": "...",
 //	  "treeAddress": "...",
 //	  "leafIndex": 0,
+//	  "coreCollectionAddress": "...",
 //	  "slot": 0
 //	}
 //
 // IMPORTANT:
 // - productId は internal service 側の idempotency key として使用します。
+// - tokenBlueprintId は MPL Core Collection の解決に使用します。
+// - brandId は mint operation の canonical payload に含めます。
+// - toAddress は cNFT の leaf owner として使用します。
 // - leafIndex=0 は正当な値です。
 // - HTTP transport error 時に Go 側で POST retry はしません。
 // - retry / 重複排除は productId を使って service 側で保証します。
@@ -243,6 +258,18 @@ func (c *MintClient) MintToken(
 	if params.ProductID == "" {
 		return nil, errors.New(
 			"ProductID is empty",
+		)
+	}
+
+	if params.TokenBlueprintID == "" {
+		return nil, errors.New(
+			"TokenBlueprintID is empty",
+		)
+	}
+
+	if params.BrandID == "" {
+		return nil, errors.New(
+			"BrandID is empty",
 		)
 	}
 
@@ -280,6 +307,10 @@ func (c *MintClient) MintToken(
 	requestBody := bubblegumMintRequest{
 		ProductID: params.ProductID,
 
+		TokenBlueprintID: params.TokenBlueprintID,
+
+		BrandID: params.BrandID,
+
 		ToAddress: params.ToAddress,
 
 		Name: params.Name,
@@ -287,10 +318,6 @@ func (c *MintClient) MintToken(
 		Symbol: params.Symbol,
 
 		MetadataURI: params.MetadataURI,
-
-		AssetStandard: string(
-			tokendom.AssetStandardBubblegumV2,
-		),
 	}
 
 	body, err := json.Marshal(requestBody)
@@ -386,6 +413,25 @@ func (c *MintClient) MintToken(
 		)
 	}
 
+	if result.AssetStandard == "" {
+		return nil, errors.New(
+			"bubblegum mint response assetStandard is empty",
+		)
+	}
+
+	assetStandard, err := mapBubblegumAssetStandard(
+		result.AssetStandard,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Cluster == "" {
+		return nil, errors.New(
+			"bubblegum mint response cluster is empty",
+		)
+	}
+
 	if result.AssetID == "" {
 		return nil, errors.New(
 			"bubblegum mint response assetId is empty",
@@ -398,8 +444,18 @@ func (c *MintClient) MintToken(
 		)
 	}
 
+	if result.CoreCollectionAddress == "" {
+		return nil, errors.New(
+			"bubblegum mint response coreCollectionAddress is empty",
+		)
+	}
+
 	return &tokendom.MintResult{
 		Signature: result.Signature,
+
+		AssetStandard: assetStandard,
+
+		Cluster: result.Cluster,
 
 		AssetID: result.AssetID,
 
@@ -407,8 +463,25 @@ func (c *MintClient) MintToken(
 
 		LeafIndex: result.LeafIndex,
 
+		CoreCollectionAddress: result.CoreCollectionAddress,
+
 		Slot: result.Slot,
 	}, nil
+}
+
+func mapBubblegumAssetStandard(
+	value string,
+) (tokendom.AssetStandard, error) {
+	switch value {
+	case "bubblegum-v2":
+		return tokendom.AssetStandardBubblegumV2, nil
+
+	default:
+		return "", fmt.Errorf(
+			"unsupported bubblegum assetStandard: %s",
+			value,
+		)
+	}
 }
 
 func decodeBubblegumServiceError(

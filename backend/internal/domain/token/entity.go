@@ -12,6 +12,7 @@ import (
 // - 1 productId = 1 cNFT とします。
 // - ProductID は Bubblegum mint service 側の idempotency key として使用します。
 // - TokenBlueprintID は mint 対象の MPL Core Collection 解決に使用します。
+// - BrandID は TokenBlueprint ごとの Core Collection 解決・mint operation 記録に使用します。
 // - Amount は常に 1 を指定します。
 type MintParams struct {
 	// cNFT に紐づく productId
@@ -19,6 +20,9 @@ type MintParams struct {
 
 	// cNFT が属する TokenBlueprint の ID
 	TokenBlueprintID string
+
+	// cNFT が属する Brand の ID
+	BrandID string
 
 	// cNFT を受け取るウォレットアドレス (base58)
 	ToAddress string
@@ -82,7 +86,7 @@ type MintResult struct {
 //   - docId = productId
 //   - fields: assetStandard, cluster, assetId, treeAddress, leafIndex,
 //     coreCollectionAddress, brandId, tokenBlueprintId, metadataUri,
-//     mintedAt, txSignature, toAddress
+//     mintedAt, onChainTxSignature, toAddress
 type GetTokenByProductIDResult struct {
 	ProductID        string
 	BrandID          string

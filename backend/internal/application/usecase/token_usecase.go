@@ -22,6 +22,8 @@ type MintProductsInput struct {
 
 	TokenBlueprintID string
 
+	BrandID string
+
 	BlueprintName   string
 	BlueprintSymbol string
 
@@ -58,55 +60,88 @@ func NewTokenUsecase(
 // - productId ごとに Amount=1 で MintToken を呼び出す
 // - ProductID は Bubblegum service 側の idempotency key として使用する
 // - TokenBlueprintID は Bubblegum service 側の MPL Core Collection 解決に使用する
+// - BrandID は Bubblegum service 側の mint operation / Core Collection 情報に使用する
 // - mint request のロード、metadata URI 確保、Firestore 更新、inventory 更新は MintUsecase 側で行う
 func (u *TokenUsecase) MintProducts(
 	ctx context.Context,
 	input MintProductsInput,
 ) ([]MintedTokenForUsecase, error) {
 	if u == nil || u.mintWallet == nil {
-		return nil, fmt.Errorf("token usecase is not properly initialized")
+		return nil, fmt.Errorf(
+			"token usecase is not properly initialized",
+		)
 	}
 
 	to := input.ToAddress
 	if to == "" {
-		return nil, fmt.Errorf("toAddress is empty")
+		return nil, fmt.Errorf(
+			"toAddress is empty",
+		)
 	}
 
 	tokenBlueprintID := input.TokenBlueprintID
 	if tokenBlueprintID == "" {
-		return nil, fmt.Errorf("tokenBlueprintID is empty")
+		return nil, fmt.Errorf(
+			"tokenBlueprintID is empty",
+		)
+	}
+
+	brandID := input.BrandID
+	if brandID == "" {
+		return nil, fmt.Errorf(
+			"brandID is empty",
+		)
 	}
 
 	metadataURI := input.MetadataURI
 	if metadataURI == "" {
-		return nil, fmt.Errorf("metadataURI is empty")
+		return nil, fmt.Errorf(
+			"metadataURI is empty",
+		)
 	}
 
 	name := input.BlueprintName
 	symbol := input.BlueprintSymbol
 	if name == "" || symbol == "" {
-		return nil, fmt.Errorf("blueprint name or symbol is empty")
+		return nil, fmt.Errorf(
+			"blueprint name or symbol is empty",
+		)
 	}
 
-	productIDs := make([]string, 0, len(input.ProductIDs))
+	productIDs := make(
+		[]string,
+		0,
+		len(input.ProductIDs),
+	)
+
 	for _, pid := range input.ProductIDs {
 		if pid == "" {
 			continue
 		}
 
-		productIDs = append(productIDs, pid)
+		productIDs = append(
+			productIDs,
+			pid,
+		)
 	}
 
 	if len(productIDs) == 0 {
-		return nil, fmt.Errorf("no valid productIDs")
+		return nil, fmt.Errorf(
+			"no valid productIDs",
+		)
 	}
 
-	minted := make([]MintedTokenForUsecase, 0, len(productIDs))
+	minted := make(
+		[]MintedTokenForUsecase,
+		0,
+		len(productIDs),
+	)
 
 	for _, pid := range productIDs {
 		params := tokendom.MintParams{
 			ProductID:        pid,
 			TokenBlueprintID: tokenBlueprintID,
+			BrandID:          brandID,
 			ToAddress:        to,
 			Amount:           1,
 			MetadataURI:      metadataURI,
@@ -114,18 +149,32 @@ func (u *TokenUsecase) MintProducts(
 			Symbol:           symbol,
 		}
 
-		res, err := u.mintWallet.MintToken(ctx, params)
+		res, err := u.mintWallet.MintToken(
+			ctx,
+			params,
+		)
 		if err != nil {
-			return nil, fmt.Errorf("mint token on chain for product %s: %w", pid, err)
-		}
-		if res == nil {
-			return nil, fmt.Errorf("mint token on chain for product %s returned nil result", pid)
+			return nil, fmt.Errorf(
+				"mint token on chain for product %s: %w",
+				pid,
+				err,
+			)
 		}
 
-		minted = append(minted, MintedTokenForUsecase{
-			ProductID: pid,
-			Result:    res,
-		})
+		if res == nil {
+			return nil, fmt.Errorf(
+				"mint token on chain for product %s returned nil result",
+				pid,
+			)
+		}
+
+		minted = append(
+			minted,
+			MintedTokenForUsecase{
+				ProductID: pid,
+				Result:    res,
+			},
+		)
 	}
 
 	return minted, nil

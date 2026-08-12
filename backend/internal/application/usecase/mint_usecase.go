@@ -670,6 +670,13 @@ func (u *MintUsecase) ExecuteNextMintTask(
 		)
 	}
 
+	brandID := mintEnt.BrandID
+	if brandID == "" {
+		return nil, errors.New(
+			"brandID is empty on mint",
+		)
+	}
+
 	pbID := u.resolveProductBlueprintIDFromProduction(
 		ctx,
 		mintRequestID,
@@ -818,6 +825,7 @@ func (u *MintUsecase) ExecuteNextMintTask(
 			ToAddress:        toAddress,
 			ProductIDs:       []string{task.ProductID},
 			TokenBlueprintID: reqTBID,
+			BrandID:          brandID,
 			BlueprintName:    name,
 			BlueprintSymbol:  symbol,
 			MetadataURI:      metadataURI,

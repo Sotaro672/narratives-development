@@ -2,71 +2,93 @@ param(
   # Example explicit image:
   # asia-northeast1-docker.pkg.dev/<PROJECT>/<REPO>/<SERVICE>:<TAG>
   [string]$Image,
+
   # Region / Cloud Run service name
-  [string]$Region      = "asia-northeast1",
+  [string]$Region = "asia-northeast1",
   [string]$ServiceName = "narratives-backend",
-  # Artifact Registry repository name (Docker)
-  [string]$RepoName    = "narratives-backend"
+
+  # Artifact Registry repository name
+  [string]$RepoName = "narratives-backend",
+
+  # Mint / internal worker Cloud Tasks queue
+  [string]$CloudTasksQueueID = "mint-product-tasks"
 )
 
 $ErrorActionPreference = "Stop"
 
-function Write-Step($msg) { Write-Host "== $msg ==" -ForegroundColor Cyan }
-function Write-Ok($msg)   { Write-Host "OK: $msg" -ForegroundColor Green }
-function Write-Warn($msg) { Write-Host "!! $msg ==" -ForegroundColor Yellow }
-
-function Normalize-EnvValue([string]$v) {
-  if ($null -eq $v) { return "" }
-
-  $s = $v
-  if ($null -eq $s) { return "" }
-
-  # strip surrounding quotes
-  if (($s.StartsWith('"') -and $s.EndsWith('"')) -or ($s.StartsWith("'") -and $s.EndsWith("'"))) {
-    $s = $s.Substring(1, $s.Length - 2)
-  }
-
-  return $s
+function Write-Step($msg) {
+  Write-Host "== $msg ==" -ForegroundColor Cyan
 }
 
-function Read-EnvFile([string]$path) {
-  $map = @{}
-
-  foreach ($line in Get-Content $path) {
-    if ($null -eq $line) { continue }
-
-    $trim = $line
-    if ($trim -eq "") { continue }
-    if ($trim.StartsWith("#")) { continue }
-
-    $idx = $trim.IndexOf("=")
-    if ($idx -lt 1) { continue }
-
-    $key   = $trim.Substring(0, $idx).Trim()
-    $value = $trim.Substring($idx + 1)
-
-    $map[$key] = (Normalize-EnvValue $value)
-  }
-
-  return $map
+function Write-Ok($msg) {
+  Write-Host "OK: $msg" -ForegroundColor Green
 }
 
-function Exec-GCloudOrThrow {
-  param(
-    [Parameter(Mandatory=$true)][string[]]$Args,
-    [string]$ErrorMessage = "gcloud command failed."
-  )
+function Write-Warn($msg) {
+  Write-Host "!! $msg ==" -ForegroundColor Yellow
+}
 
-  & $GCLOUD @Args
-
-  if ($LASTEXITCODE -ne 0) {
-    throw "$ErrorMessage (exit code: $LASTEXITCODE) Args: gcloud $($Args -join ' ')"
+function Normalize-EnvValue([string]$Value) {
+  if ($null -eq $Value) {
+    return ""
   }
+
+  $Normalized = $Value
+
+  if (
+    ($Normalized.StartsWith('"') -and $Normalized.EndsWith('"')) -or
+    ($Normalized.StartsWith("'") -and $Normalized.EndsWith("'"))
+  ) {
+    $Normalized = $Normalized.Substring(
+      1,
+      $Normalized.Length - 2
+    )
+  }
+
+  return $Normalized
+}
+
+function Read-EnvFile([string]$Path) {
+  $Map = @{}
+
+  foreach ($Line in Get-Content $Path) {
+    if ($null -eq $Line) {
+      continue
+    }
+
+    if ($Line -eq "") {
+      continue
+    }
+
+    if ($Line.StartsWith("#")) {
+      continue
+    }
+
+    $SeparatorIndex = $Line.IndexOf("=")
+
+    if ($SeparatorIndex -lt 1) {
+      continue
+    }
+
+    $Key = $Line.Substring(
+      0,
+      $SeparatorIndex
+    ).Trim()
+
+    $Value = $Line.Substring(
+      $SeparatorIndex + 1
+    )
+
+    $Map[$Key] = Normalize-EnvValue $Value
+  }
+
+  return $Map
 }
 
 function Invoke-CloudBuildOrThrow {
   param(
-    [Parameter(Mandatory=$true)][string]$Image
+    [Parameter(Mandatory=$true)]
+    [string]$Image
   )
 
   Write-Step "Running Cloud Build"
@@ -82,7 +104,8 @@ function Invoke-CloudBuildOrThrow {
     if ($LASTEXITCODE -ne 0) {
       throw "Cloud Build failed. exit code: $LASTEXITCODE"
     }
-  } finally {
+  }
+  finally {
     Pop-Location
   }
 
@@ -90,7 +113,7 @@ function Invoke-CloudBuildOrThrow {
 }
 
 # ------------------------------------------------------------
-# 0) gcloud のプロジェクト/アカウント確認
+# 0) gcloud environment
 # ------------------------------------------------------------
 
 Write-Step "Starting deploy-backend.ps1"
@@ -98,45 +121,45 @@ Write-Step "Starting deploy-backend.ps1"
 $env:CLOUDSDK_CORE_DISABLE_PROMPTS = "1"
 $env:CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK = "1"
 
-$GCLOUD = (Get-Command gcloud.cmd -ErrorAction Stop).Source
+$GCLOUD = (
+  Get-Command gcloud.cmd -ErrorAction Stop
+).Source
 
 Write-Step "Using gcloud.cmd: $GCLOUD"
-Write-Step "Confirming gcloud config (project/account)"
 
-$ConfiguredProject = (& $GCLOUD config get-value project)
-$ConfiguredAccount = (& $GCLOUD config get-value account)
+$ProjectId = (
+  & $GCLOUD config get-value project
+)
 
-if (-not $ConfiguredProject) {
-  throw "gcloud config project is not set. Example: gcloud config set project <YOUR_PROJECT_ID>"
+$ConfiguredAccount = (
+  & $GCLOUD config get-value account
+)
+
+if ([string]::IsNullOrWhiteSpace($ProjectId)) {
+  throw "gcloud config project is not set. Example: gcloud config set project <PROJECT_ID>"
 }
 
-if (-not $ConfiguredAccount) {
+if ([string]::IsNullOrWhiteSpace($ConfiguredAccount)) {
   throw "gcloud active account is not set. Example: gcloud auth login"
 }
 
-Write-Ok "gcloud project: $ConfiguredProject"
+Write-Ok "gcloud project: $ProjectId"
 Write-Ok "gcloud account: $ConfiguredAccount"
 
-Write-Step "Resolving GCP project id"
+$RunServiceAccount =
+  "narratives-backend-sa@$ProjectId.iam.gserviceaccount.com"
 
-$ProjectId = (& $GCLOUD config get-value project)
+$ScriptDir =
+  Split-Path -Parent $MyInvocation.MyCommand.Path
 
-if (-not $ProjectId) {
-  throw "gcloud config project is not set. Example: gcloud config set project <YOUR_PROJECT_ID>"
-}
-
-Write-Step "Using project: $ProjectId"
-
-$RunServiceAccount = "narratives-backend-sa@$ProjectId.iam.gserviceaccount.com"
-
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SourceDir = $ScriptDir
 
 # ------------------------------------------------------------
-# 1) Go build チェック
+# 1) Go build check
 # ------------------------------------------------------------
 
-$MainGo = Join-Path $SourceDir "cmd\api\main.go"
+$MainGo =
+  Join-Path $SourceDir "cmd\api\main.go"
 
 if (-not (Test-Path $MainGo)) {
   throw "Go main file not found: $MainGo"
@@ -154,78 +177,82 @@ try {
   if ($LASTEXITCODE -ne 0) {
     throw "go build ./cmd/api failed. exit code: $LASTEXITCODE"
   }
-} finally {
+}
+finally {
   Pop-Location
 }
 
 Write-Ok "go build succeeded"
 
 # ------------------------------------------------------------
-# 2) Artifact Registry リポジトリ確認
+# 2) Artifact Registry
 # ------------------------------------------------------------
 
-Write-Step "Ensuring Artifact Registry repository: ${RepoName}"
+Write-Step "Ensuring Artifact Registry repository: $RepoName"
 
 & $GCLOUD artifacts repositories describe $RepoName `
   --location=$Region `
   --project=$ProjectId | Out-Null
 
-$repoExists = ($LASTEXITCODE -eq 0)
+$RepositoryExists =
+  $LASTEXITCODE -eq 0
 
-if (-not $repoExists) {
-  Write-Warn "Repository '${RepoName}' not found OR no permission. Trying to create it..."
+if (-not $RepositoryExists) {
+  Write-Warn "Artifact Registry repository '$RepoName' was not found. Creating it."
 
   & $GCLOUD artifacts repositories create $RepoName `
     --repository-format=docker `
     --location=$Region `
-    --description="Backend images for ${ServiceName}" `
+    --description="Backend images for $ServiceName" `
     --project=$ProjectId | Out-Null
 
   if ($LASTEXITCODE -ne 0) {
-    throw "Failed to describe/create Artifact Registry repository '${RepoName}'. Check: (1) gcloud project/account, (2) IAM roles artifactregistry.*. exit code: $LASTEXITCODE"
+    throw "Failed to create Artifact Registry repository '$RepoName'."
   }
 
-  Write-Ok "Repository created: ${RepoName}"
-} else {
-  Write-Ok "Repository exists: ${RepoName}"
+  Write-Ok "Repository created: $RepoName"
+}
+else {
+  Write-Ok "Repository exists: $RepoName"
 }
 
 # ------------------------------------------------------------
-# 3) イメージ名決定
+# 3) Container image
 # ------------------------------------------------------------
 
-$AutoGenerated = $false
-
 if ([string]::IsNullOrWhiteSpace($Image)) {
-  $RegistryHost = "${Region}-docker.pkg.dev"
-  $Tag = Get-Date -Format "yyyyMMdd-HHmmss"
-  $Image = "${RegistryHost}/${ProjectId}/${RepoName}/${ServiceName}:${Tag}"
-  $AutoGenerated = $true
+  $RegistryHost =
+    "$Region-docker.pkg.dev"
 
-  Write-Step "No image specified. Generated image: $Image"
-} else {
+  $Tag =
+    Get-Date -Format "yyyyMMdd-HHmmss"
+
+  $Image =
+    "$RegistryHost/$ProjectId/$RepoName/${ServiceName}:$Tag"
+
+  Write-Step "Generated image: $Image"
+}
+else {
   Write-Step "Using specified image: $Image"
 }
 
 # ------------------------------------------------------------
-# 4) Cloud Build でビルド & Artifact Registry へ push
+# 4) Cloud Build
 # ------------------------------------------------------------
 
 Invoke-CloudBuildOrThrow -Image $Image
 
 # ------------------------------------------------------------
-# 5) Cloud Run に渡す環境変数を組み立てる
-#    - FIREBASE_STORAGE_BUCKET はList保存Sagaの補償削除に使用する
-#    - STRIPE_SECRET_KEY は Secret Manager の stripe-secret-key を使うため env には載せない
+# 5) Read .env
+#
+# .env から読むのは、GCP の project / region / service account
+# から自動生成できない値だけにします。
 # ------------------------------------------------------------
 
-Write-Step "Collecting env vars for Cloud Run"
+Write-Step "Collecting application environment variables"
 
 $AllowedKeys = @(
-  # Project / Firestore
-  "GCP_PROJECT_ID",
-  "FIREBASE_PROJECT_ID",
-  "FIRESTORE_PROJECT_ID",
+  # Firebase Storage
   "FIREBASE_STORAGE_BUCKET",
 
   # Resend
@@ -233,296 +260,239 @@ $AllowedKeys = @(
   "RESEND_CONTACT_ADMIN_TO",
   "CONSOLE_BASE_URL",
 
-  # Solana / Bubblegum V2 internal service
-  # signer / fee payer / reserve wallet / gas top-up are managed by Bubblegum service
+  # Solana / Bubblegum V2
   "SOLANA_BUBBLEGUM_SERVICE_URL",
-  "SOLANA_BUBBLEGUM_SERVICE_AUDIENCE",
   "SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY",
 
   # Arweave / Irys
   "ARWEAVE_BASE_URL",
 
-  # checkout self-callback base URL
+  # Existing Cloud Run URL fallback
   "SELF_BASE_URL",
 
-  # Cloud Tasks / mint worker
-  "CLOUD_TASKS_PROJECT_ID",
-  "CLOUD_TASKS_LOCATION",
-  "CLOUD_TASKS_QUEUE_ID",
-  "INTERNAL_BASE_URL",
-  "CLOUD_TASKS_SERVICE_ACCOUNT",
-  "CLOUD_TASKS_AUDIENCE",
-  "MINT_TASK_DISPATCH_DELAY_SECONDS",
-
-  # Cloud Tasks / List save operation retry worker
-  "LIST_SAVE_OPERATION_QUEUE_PROJECT_ID",
-  "LIST_SAVE_OPERATION_QUEUE_LOCATION",
-  "LIST_SAVE_OPERATION_QUEUE_ID",
-  "LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL",
-  "LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL",
-  "LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE",
-
-  # Stripe webhook only
-  # STRIPE_SECRET_KEY は廃止。Secret Manager の stripe-secret-key を使用する。
+  # Stripe webhook
   "STRIPE_WEBHOOK_SECRET"
 )
 
 $envMap = @{}
 
-$envMap["GOOGLE_CLOUD_PROJECT"] = $ProjectId
-
-$EnvFile = Join-Path $SourceDir ".env"
+$EnvFile =
+  Join-Path $SourceDir ".env"
 
 if (Test-Path $EnvFile) {
   Write-Ok "Found .env: $EnvFile"
 
-  $fileMap = Read-EnvFile $EnvFile
+  $FileMap =
+    Read-EnvFile $EnvFile
 
-  foreach ($k in $AllowedKeys) {
-    if ($fileMap.ContainsKey($k)) {
-      $envMap[$k] = $fileMap[$k]
+  foreach ($Key in $AllowedKeys) {
+    if ($FileMap.ContainsKey($Key)) {
+      $envMap[$Key] = $FileMap[$Key]
     }
   }
-} else {
-  Write-Warn ".env file not found at $EnvFile. Will only set GOOGLE_CLOUD_PROJECT and project-id defaults."
+}
+else {
+  Write-Warn ".env file not found: $EnvFile"
 }
 
-if (-not $envMap.ContainsKey("GCP_PROJECT_ID")) {
-  $envMap["GCP_PROJECT_ID"] = $ProjectId
-}
+# ------------------------------------------------------------
+# 6) Project values
+#
+# Project ID は gcloud config を唯一の source とします。
+# ------------------------------------------------------------
 
-if (-not $envMap.ContainsKey("FIREBASE_PROJECT_ID")) {
-  $envMap["FIREBASE_PROJECT_ID"] = $ProjectId
-}
+$envMap["GOOGLE_CLOUD_PROJECT"] = $ProjectId
+$envMap["GCP_PROJECT_ID"] = $ProjectId
+$envMap["FIREBASE_PROJECT_ID"] = $ProjectId
+$envMap["FIRESTORE_PROJECT_ID"] = $ProjectId
 
-if (-not $envMap.ContainsKey("FIRESTORE_PROJECT_ID")) {
-  $envMap["FIRESTORE_PROJECT_ID"] = $ProjectId
-}
+# ------------------------------------------------------------
+# 7) Required application settings
+# ------------------------------------------------------------
 
 if (
   -not $envMap.ContainsKey("FIREBASE_STORAGE_BUCKET") -or
-  [string]::IsNullOrWhiteSpace($envMap["FIREBASE_STORAGE_BUCKET"])
+  [string]::IsNullOrWhiteSpace(
+    $envMap["FIREBASE_STORAGE_BUCKET"]
+  )
 ) {
-  throw "FIREBASE_STORAGE_BUCKET is required. Set the Firebase Storage bucket name in .env before deploying."
-}
-
-if (-not $envMap.ContainsKey("CLOUD_TASKS_PROJECT_ID")) {
-  $envMap["CLOUD_TASKS_PROJECT_ID"] = $ProjectId
-}
-
-if (-not $envMap.ContainsKey("CLOUD_TASKS_LOCATION")) {
-  $envMap["CLOUD_TASKS_LOCATION"] = $Region
-}
-
-if (
-  -not $envMap.ContainsKey("LIST_SAVE_OPERATION_QUEUE_PROJECT_ID") -or
-  [string]::IsNullOrWhiteSpace($envMap["LIST_SAVE_OPERATION_QUEUE_PROJECT_ID"])
-) {
-  $envMap["LIST_SAVE_OPERATION_QUEUE_PROJECT_ID"] = $ProjectId
-}
-
-if (
-  -not $envMap.ContainsKey("LIST_SAVE_OPERATION_QUEUE_LOCATION") -or
-  [string]::IsNullOrWhiteSpace($envMap["LIST_SAVE_OPERATION_QUEUE_LOCATION"])
-) {
-  $envMap["LIST_SAVE_OPERATION_QUEUE_LOCATION"] = $Region
-}
-
-if (
-  -not $envMap.ContainsKey("INTERNAL_BASE_URL") -or
-  [string]::IsNullOrWhiteSpace($envMap["INTERNAL_BASE_URL"])
-) {
-  if (
-    $envMap.ContainsKey("SELF_BASE_URL") -and
-    -not [string]::IsNullOrWhiteSpace($envMap["SELF_BASE_URL"])
-  ) {
-    $envMap["INTERNAL_BASE_URL"] = $envMap["SELF_BASE_URL"]
-  }
+  throw "FIREBASE_STORAGE_BUCKET is required."
 }
 
 if (
   -not $envMap.ContainsKey("SOLANA_BUBBLEGUM_SERVICE_URL") -or
-  [string]::IsNullOrWhiteSpace($envMap["SOLANA_BUBBLEGUM_SERVICE_URL"])
+  [string]::IsNullOrWhiteSpace(
+    $envMap["SOLANA_BUBBLEGUM_SERVICE_URL"]
+  )
 ) {
-  throw "SOLANA_BUBBLEGUM_SERVICE_URL is required. Set the internal Bubblegum service URL in .env before deploying."
+  throw "SOLANA_BUBBLEGUM_SERVICE_URL is required."
 }
 
 if (
-  -not $envMap.ContainsKey("SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY") -or
-  [string]::IsNullOrWhiteSpace($envMap["SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY"])
+  -not $envMap.ContainsKey(
+    "SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY"
+  ) -or
+  [string]::IsNullOrWhiteSpace(
+    $envMap[
+      "SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY"
+    ]
+  )
 ) {
-  throw "SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY is required. Set the Bubblegum mint authority public key in .env before deploying."
+  throw "SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY is required."
+}
+
+# Bubblegum Cloud Run の ID Token audience は
+# service URL と同一にします。
+$envMap["SOLANA_BUBBLEGUM_SERVICE_AUDIENCE"] =
+  $envMap["SOLANA_BUBBLEGUM_SERVICE_URL"]
+
+# ------------------------------------------------------------
+# 8) Resolve backend Cloud Run URL
+# ------------------------------------------------------------
+
+$ResolvedBackendURL = ""
+
+try {
+  $ExistingServiceURL = (
+    & $GCLOUD run services describe $ServiceName `
+      --region=$Region `
+      --project=$ProjectId `
+      --format="value(status.url)"
+  )
+
+  if (
+    $LASTEXITCODE -eq 0 -and
+    -not [string]::IsNullOrWhiteSpace($ExistingServiceURL)
+  ) {
+    $ResolvedBackendURL =
+      $ExistingServiceURL.TrimEnd("/")
+
+    Write-Ok "Backend URL resolved from Cloud Run: $ResolvedBackendURL"
+  }
+}
+catch {
+  Write-Warn "Could not resolve existing Cloud Run service URL."
 }
 
 if (
-  -not $envMap.ContainsKey("SELF_BASE_URL") -or
-  [string]::IsNullOrWhiteSpace($envMap["SELF_BASE_URL"])
+  [string]::IsNullOrWhiteSpace($ResolvedBackendURL) -and
+  $envMap.ContainsKey("SELF_BASE_URL") -and
+  -not [string]::IsNullOrWhiteSpace(
+    $envMap["SELF_BASE_URL"]
+  )
 ) {
-  try {
-    $selfUrl = (& $GCLOUD run services describe $ServiceName `
-      --region $Region `
-      --project $ProjectId `
-      --format "value(status.url)")
+  $ResolvedBackendURL =
+    $envMap["SELF_BASE_URL"].TrimEnd("/")
 
-    if ($selfUrl) {
-      if ($selfUrl.EndsWith("/")) {
-        $envMap["SELF_BASE_URL"] = $selfUrl.Substring(
-          0,
-          $selfUrl.Length - 1
-        )
-      } else {
-        $envMap["SELF_BASE_URL"] = $selfUrl
-      }
-
-      Write-Ok "SELF_BASE_URL resolved from Cloud Run: $($envMap["SELF_BASE_URL"])"
-    } else {
-      Write-Warn "SELF_BASE_URL could not be resolved because service url is empty. Please set it in .env."
-    }
-  } catch {
-    Write-Warn "Failed to resolve SELF_BASE_URL from Cloud Run. Please set it in .env."
-  }
+  Write-Ok "Backend URL resolved from SELF_BASE_URL: $ResolvedBackendURL"
 }
 
-if (
-  -not $envMap.ContainsKey("INTERNAL_BASE_URL") -or
-  [string]::IsNullOrWhiteSpace($envMap["INTERNAL_BASE_URL"])
-) {
-  if (
-    $envMap.ContainsKey("SELF_BASE_URL") -and
-    -not [string]::IsNullOrWhiteSpace($envMap["SELF_BASE_URL"])
-  ) {
-    $envMap["INTERNAL_BASE_URL"] = $envMap["SELF_BASE_URL"]
-
-    Write-Ok "INTERNAL_BASE_URL resolved from SELF_BASE_URL: $($envMap["INTERNAL_BASE_URL"])"
-  }
+if ([string]::IsNullOrWhiteSpace($ResolvedBackendURL)) {
+  throw "Backend Cloud Run URL could not be resolved. Set SELF_BASE_URL in .env for the first deployment."
 }
 
-if (
-  $envMap.ContainsKey("CLOUD_TASKS_QUEUE_ID") -or
-  $envMap.ContainsKey("CLOUD_TASKS_SERVICE_ACCOUNT")
-) {
-  if (
-    -not $envMap.ContainsKey("CLOUD_TASKS_QUEUE_ID") -or
-    [string]::IsNullOrWhiteSpace($envMap["CLOUD_TASKS_QUEUE_ID"])
-  ) {
-    throw "CLOUD_TASKS_QUEUE_ID is required when Cloud Tasks mint worker is enabled."
-  }
+$envMap["SELF_BASE_URL"] =
+  $ResolvedBackendURL
 
-  if (
-    -not $envMap.ContainsKey("INTERNAL_BASE_URL") -or
-    [string]::IsNullOrWhiteSpace($envMap["INTERNAL_BASE_URL"])
-  ) {
-    throw "INTERNAL_BASE_URL is required when Cloud Tasks mint worker is enabled."
-  }
+$envMap["INTERNAL_BASE_URL"] =
+  $ResolvedBackendURL
 
-  if (
-    -not $envMap.ContainsKey("CLOUD_TASKS_SERVICE_ACCOUNT") -or
-    [string]::IsNullOrWhiteSpace($envMap["CLOUD_TASKS_SERVICE_ACCOUNT"])
-  ) {
-    throw "CLOUD_TASKS_SERVICE_ACCOUNT is required when Cloud Tasks mint worker is enabled."
-  }
+# ------------------------------------------------------------
+# 9) Cloud Tasks
+#
+# project / location / service account / audience は
+# deployment settings から自動生成します。
+# ------------------------------------------------------------
+
+if ([string]::IsNullOrWhiteSpace($CloudTasksQueueID)) {
+  throw "CloudTasksQueueID is empty."
 }
 
-if (
-  -not $envMap.ContainsKey("LIST_SAVE_OPERATION_QUEUE_ID") -or
-  [string]::IsNullOrWhiteSpace($envMap["LIST_SAVE_OPERATION_QUEUE_ID"])
-) {
-  if (
-    $envMap.ContainsKey("CLOUD_TASKS_QUEUE_ID") -and
-    -not [string]::IsNullOrWhiteSpace($envMap["CLOUD_TASKS_QUEUE_ID"])
-  ) {
-    $envMap["LIST_SAVE_OPERATION_QUEUE_ID"] = $envMap["CLOUD_TASKS_QUEUE_ID"]
+$envMap["CLOUD_TASKS_PROJECT_ID"] =
+  $ProjectId
 
-    Write-Ok "LIST_SAVE_OPERATION_QUEUE_ID resolved from CLOUD_TASKS_QUEUE_ID: $($envMap["LIST_SAVE_OPERATION_QUEUE_ID"])"
-  } else {
-    throw "LIST_SAVE_OPERATION_QUEUE_ID is required. Set it in .env or configure CLOUD_TASKS_QUEUE_ID to reuse the mint worker queue."
-  }
-}
+$envMap["CLOUD_TASKS_LOCATION"] =
+  $Region
 
-if (
-  -not $envMap.ContainsKey("LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL") -or
-  [string]::IsNullOrWhiteSpace($envMap["LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL"])
-) {
-  if (
-    $envMap.ContainsKey("INTERNAL_BASE_URL") -and
-    -not [string]::IsNullOrWhiteSpace($envMap["INTERNAL_BASE_URL"])
-  ) {
-    $envMap["LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL"] = $envMap["INTERNAL_BASE_URL"]
+$envMap["CLOUD_TASKS_QUEUE_ID"] =
+  $CloudTasksQueueID
 
-    Write-Ok "LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL resolved from INTERNAL_BASE_URL: $($envMap["LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL"])"
-  } else {
-    throw "LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL is required. Set it in .env or configure INTERNAL_BASE_URL."
-  }
-}
+$envMap["CLOUD_TASKS_SERVICE_ACCOUNT"] =
+  $RunServiceAccount
 
-if (
-  -not $envMap.ContainsKey("LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL") -or
-  [string]::IsNullOrWhiteSpace($envMap["LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"])
-) {
-  if (
-    $envMap.ContainsKey("CLOUD_TASKS_SERVICE_ACCOUNT") -and
-    -not [string]::IsNullOrWhiteSpace($envMap["CLOUD_TASKS_SERVICE_ACCOUNT"])
-  ) {
-    $envMap["LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"] = $envMap["CLOUD_TASKS_SERVICE_ACCOUNT"]
-  } else {
-    $envMap["LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"] = $RunServiceAccount
-  }
+$envMap["CLOUD_TASKS_AUDIENCE"] =
+  $ResolvedBackendURL
 
-  Write-Ok "LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL resolved: $($envMap["LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"])"
-}
+# MINT_TASK_DISPATCH_DELAY_SECONDS は設定しません。
+# runtime の default 0 = 即時実行を使用します。
 
-if (
-  -not $envMap.ContainsKey("LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE") -or
-  [string]::IsNullOrWhiteSpace($envMap["LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE"])
-) {
-  if (
-    $envMap.ContainsKey("CLOUD_TASKS_AUDIENCE") -and
-    -not [string]::IsNullOrWhiteSpace($envMap["CLOUD_TASKS_AUDIENCE"])
-  ) {
-    $envMap["LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE"] = $envMap["CLOUD_TASKS_AUDIENCE"]
-  } else {
-    $envMap["LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE"] = $envMap["LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL"]
-  }
+# ------------------------------------------------------------
+# 10) List Save Operation Retry
+#
+# 現状は共通 Cloud Tasks queue を再利用します。
+# .env に重複設定は持たせません。
+# ------------------------------------------------------------
 
-  Write-Ok "LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE resolved: $($envMap["LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE"])"
-}
+$envMap["LIST_SAVE_OPERATION_QUEUE_PROJECT_ID"] =
+  $ProjectId
+
+$envMap["LIST_SAVE_OPERATION_QUEUE_LOCATION"] =
+  $Region
+
+$envMap["LIST_SAVE_OPERATION_QUEUE_ID"] =
+  $CloudTasksQueueID
+
+$envMap["LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL"] =
+  $ResolvedBackendURL
+
+$envMap[
+  "LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"
+] =
+  $RunServiceAccount
+
+$envMap["LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE"] =
+  $ResolvedBackendURL
+
+# ------------------------------------------------------------
+# 11) Build Cloud Run env argument
+# ------------------------------------------------------------
 
 $envPairs = @()
 
-foreach ($k in $envMap.Keys) {
-  $v = $envMap[$k]
+foreach ($Key in $envMap.Keys) {
+  $Value = $envMap[$Key]
 
-  if ($null -eq $v) {
-    $v = ""
+  if ($null -eq $Value) {
+    $Value = ""
   }
 
-  $envPairs += "$k=$v"
+  $envPairs += "$Key=$Value"
 }
 
-$envArg = [string]::Join(
-  ",",
-  $envPairs
-)
+$envArg =
+  [string]::Join(
+    ",",
+    $envPairs
+  )
 
-$envKeysForLog = [string]::Join(
-  ",",
-  ($envMap.Keys | Sort-Object)
-)
+$envKeysForLog =
+  [string]::Join(
+    ",",
+    ($envMap.Keys | Sort-Object)
+  )
 
 Write-Step "Env vars to update: $envKeysForLog"
 
 # ------------------------------------------------------------
-# 6) Cloud Run へデプロイ
+# 12) Remove obsolete Cloud Run environment variables
 # ------------------------------------------------------------
 
-Write-Step "Deploying to Cloud Run"
-
 $removeEnvVars = @(
-  # 既存の Windows ローカルパス系 env
+  # Local credential paths must never be used on Cloud Run
   "GOOGLE_APPLICATION_CREDENTIALS",
   "FIRESTORE_CREDENTIALS_FILE",
 
-  # 旧 Solana / SPL / Go backend signer / fee payer / reserve wallet env
+  # Old Solana RPC / signer / fee payer / reserve settings
   "SOLANA_RPC_ENDPOINT",
   "SOLANA_RPC_URL",
   "SOLANA_AIRDROP_RPC_URL",
@@ -537,12 +507,25 @@ $removeEnvVars = @(
   "SOLANA_RESERVE_MIN_REMAINING_SOL",
   "SOLANA_RESERVE_TX_FEE_BUFFER_SOL",
 
-  # 旧 Stripe env
-  # Stripe secret は Secret Manager の stripe-secret-key を使用する
+  # Bubblegum service owns these responsibilities
+  "BUBBLEGUM_FEE_PAYER_TARGET_SOL",
+  "BUBBLEGUM_RESERVE_MINIMUM_SOL",
+  "BUBBLEGUM_RESERVE_PUBLIC_KEY",
+
+  # Dispatch delay defaults to zero in runtime
+  "MINT_TASK_DISPATCH_DELAY_SECONDS",
+
+  # Old Stripe settings
   "STRIPE_SECRET_KEY",
   "VITE_STRIPE_PUBLISHABLE_KEY",
   "STRIPE_PUBLIC_KEY"
 )
+
+# ------------------------------------------------------------
+# 13) Deploy Cloud Run
+# ------------------------------------------------------------
+
+Write-Step "Deploying to Cloud Run"
 
 $deployArgs = @(
   "run",
@@ -572,8 +555,6 @@ $deployArgs = @(
   "--min-instances",
   "0",
 
-  # mint専用Cloud Tasks queue側では maxConcurrentDispatches=1 を推奨。
-  # Solana RPC / signer / fee payer / reserve wallet / gas top-up は Bubblegum service 側で管理する。
   "--max-instances",
   "2",
 
@@ -599,5 +580,7 @@ if ($LASTEXITCODE -ne 0) {
   throw "gcloud run deploy failed. exit code: $LASTEXITCODE"
 }
 
-Write-Ok "Cloud Run deployment finished: service '${ServiceName}'"
-Write-Ok "Deployed with image: ${Image}"
+Write-Ok "Cloud Run deployment finished: service '$ServiceName'"
+Write-Ok "Deployed image: $Image"
+Write-Ok "Backend URL: $ResolvedBackendURL"
+Write-Ok "Cloud Tasks queue: $CloudTasksQueueID"
