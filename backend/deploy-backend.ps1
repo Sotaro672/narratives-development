@@ -112,6 +112,91 @@ function Invoke-CloudBuildOrThrow {
   Write-Ok "Image build & push completed by Cloud Build"
 }
 
+function Ensure-CloudTasksQueueRunning {
+  param(
+    [Parameter(Mandatory=$true)]
+    [string]$QueueID,
+
+    [Parameter(Mandatory=$true)]
+    [string]$Location,
+
+    [Parameter(Mandatory=$true)]
+    [string]$ProjectID
+  )
+
+  if ([string]::IsNullOrWhiteSpace($QueueID)) {
+    throw "Cloud Tasks queue ID is empty."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($Location)) {
+    throw "Cloud Tasks location is empty."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($ProjectID)) {
+    throw "Cloud Tasks project ID is empty."
+  }
+
+  Write-Step "Checking Cloud Tasks queue state: $QueueID"
+
+  $QueueState = (
+    & $GCLOUD tasks queues describe $QueueID `
+      --location=$Location `
+      --project=$ProjectID `
+      --format="value(state)"
+  )
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to describe Cloud Tasks queue '$QueueID'."
+  }
+
+  $QueueState = "$QueueState".Trim().ToUpperInvariant()
+
+  if ([string]::IsNullOrWhiteSpace($QueueState)) {
+    throw "Cloud Tasks queue '$QueueID' returned an empty state."
+  }
+
+  Write-Step "Cloud Tasks queue state: $QueueState"
+
+  if ($QueueState -eq "RUNNING") {
+    Write-Ok "Cloud Tasks queue is running: $QueueID"
+    return
+  }
+
+  if ($QueueState -ne "PAUSED") {
+    throw "Cloud Tasks queue '$QueueID' is not runnable. state=$QueueState"
+  }
+
+  Write-Warn "Cloud Tasks queue '$QueueID' is paused. Resuming it."
+
+  & $GCLOUD tasks queues resume $QueueID `
+    --location=$Location `
+    --project=$ProjectID
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to resume Cloud Tasks queue '$QueueID'."
+  }
+
+  $QueueStateAfterResume = (
+    & $GCLOUD tasks queues describe $QueueID `
+      --location=$Location `
+      --project=$ProjectID `
+      --format="value(state)"
+  )
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to verify Cloud Tasks queue '$QueueID' after resume."
+  }
+
+  $QueueStateAfterResume =
+    "$QueueStateAfterResume".Trim().ToUpperInvariant()
+
+  if ($QueueStateAfterResume -ne "RUNNING") {
+    throw "Cloud Tasks queue '$QueueID' did not become RUNNING after resume. state=$QueueStateAfterResume"
+  }
+
+  Write-Ok "Cloud Tasks queue resumed: $QueueID"
+}
+
 # ------------------------------------------------------------
 # 0) gcloud environment
 # ------------------------------------------------------------
@@ -581,6 +666,26 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Ok "Cloud Run deployment finished: service '$ServiceName'"
+
+# ------------------------------------------------------------
+# 14) Ensure Cloud Tasks queue is running
+#
+# Cloud Tasks queue が PAUSED の場合、
+# CreateTask 自体は成功しても worker は実行されません。
+#
+# Cloud Run の新revisionを正常にデプロイした後で queue を再開し、
+# 保留中の mint task を新revisionへ流します。
+# ------------------------------------------------------------
+
+Ensure-CloudTasksQueueRunning `
+  -QueueID $CloudTasksQueueID `
+  -Location $Region `
+  -ProjectID $ProjectId
+
+# ------------------------------------------------------------
+# 15) Deployment summary
+# ------------------------------------------------------------
+
 Write-Ok "Deployed image: $Image"
 Write-Ok "Backend URL: $ResolvedBackendURL"
 Write-Ok "Cloud Tasks queue: $CloudTasksQueueID"

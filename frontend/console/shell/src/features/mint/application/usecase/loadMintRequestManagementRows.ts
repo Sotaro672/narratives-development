@@ -171,8 +171,8 @@ function deriveRowStatus(args: {
   }
 
   /**
-   * 非同期Mint処理の受付後から完了前までを
-   * 一覧上では「ミント中」として扱う。
+   * QUEUED / MINTING / PARTIALLY_MINTEDは、
+   * 一覧上ではすべて「ミント中」として扱う。
    */
   if (
     args.mintStatus === "QUEUED" ||
@@ -219,8 +219,9 @@ function mapDTOToRow(
   /**
    * Backendが返すネストされたMint概要。
    *
-   * mint.statusを優先し、
-   * トップレベルのstatusは互換用として使用する。
+   * mint.statusを最優先し、
+   * トップレベルのmintStatusを次に使用する。
+   * statusは旧形式との互換用として最後に使用する。
    */
   const mintRaw =
     raw.mint &&
@@ -237,6 +238,7 @@ function mapDTOToRow(
   const mintStatus =
     normalizeMintStatus(
       mintRaw?.status ??
+        raw.mintStatus ??
         raw.status,
     );
 

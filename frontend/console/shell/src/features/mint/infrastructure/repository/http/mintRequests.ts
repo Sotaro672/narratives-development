@@ -4,7 +4,10 @@ import { API_BASE } from "../../../../../shared/http/apiBase";
 import { getAuthJsonHeadersOrThrow } from "../../../../../shared/http/authHeaders";
 
 import type { MintDTO } from "../../dto/mint.dto";
-import type { MintTaskProgress } from "../../../application/port/MintRequestRepository";
+import type {
+  MintFundingEstimate,
+  MintTaskProgress,
+} from "../../../application/port/MintRequestRepository";
 import type { MintRequestManagementRowDTO } from "../../dto/mintRequestManagementRow";
 import type { MintStatus } from "../../../../../shared/types/mints";
 
@@ -52,6 +55,18 @@ function buildMintRequestsUrl(
   });
 
   return `${API_BASE}/mint/requests?${query.toString()}`;
+}
+
+function buildMintFundingEstimateUrl(
+  productionId: string,
+  tokenBlueprintId: string,
+): string {
+  const query = new URLSearchParams({
+    productionId,
+    tokenBlueprintId,
+  });
+
+  return `${API_BASE}/mint/funding-estimate?${query.toString()}`;
 }
 
 function isServiceUnavailableStatus(status: number): boolean {
@@ -176,6 +191,323 @@ function normalizeMintQueuedResponse(
     productionId,
     status,
     message,
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function requiredStringValue(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized || null;
+}
+
+function nullableStringValue(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized || null;
+}
+
+function requiredFiniteNumber(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return value;
+}
+
+function requiredBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function normalizeMintFundingEstimate(
+  raw: unknown,
+): MintFundingEstimate | null {
+  const value = asRecord(raw);
+  if (!value) {
+    return null;
+  }
+
+  const reserve = asRecord(value.reserve);
+  const feePayer = asRecord(value.feePayer);
+  const resources = asRecord(value.resources);
+  const estimate = asRecord(value.estimate);
+
+  if (!reserve || !feePayer || !resources || !estimate) {
+    return null;
+  }
+
+  const cluster = requiredStringValue(value.cluster);
+  const mintQuantity = requiredFiniteNumber(value.mintQuantity);
+
+  const reserveAddress = requiredStringValue(reserve.address);
+  const reserveBalanceLamports = requiredStringValue(
+    reserve.balanceLamports,
+  );
+  const reserveBalanceSol = requiredFiniteNumber(reserve.balanceSol);
+  const reserveMinimumLamports = requiredStringValue(
+    reserve.minimumLamports,
+  );
+  const reserveMinimumSol = requiredFiniteNumber(reserve.minimumSol);
+
+  const feePayerAddress = requiredStringValue(feePayer.address);
+  const feePayerBalanceLamports = requiredStringValue(
+    feePayer.balanceLamports,
+  );
+  const feePayerBalanceSol = requiredFiniteNumber(
+    feePayer.balanceSol,
+  );
+  const feePayerTargetLamports = requiredStringValue(
+    feePayer.targetLamports,
+  );
+  const feePayerTargetSol = requiredFiniteNumber(
+    feePayer.targetSol,
+  );
+
+  const sharedMerkleTreeExists = requiredBoolean(
+    resources.sharedMerkleTreeExists,
+  );
+  const coreCollectionExists = requiredBoolean(
+    resources.coreCollectionExists,
+  );
+
+  if (
+    !cluster ||
+    mintQuantity === null ||
+    !Number.isSafeInteger(mintQuantity) ||
+    mintQuantity <= 0 ||
+    !reserveAddress ||
+    !reserveBalanceLamports ||
+    reserveBalanceSol === null ||
+    !reserveMinimumLamports ||
+    reserveMinimumSol === null ||
+    !feePayerAddress ||
+    !feePayerBalanceLamports ||
+    feePayerBalanceSol === null ||
+    !feePayerTargetLamports ||
+    feePayerTargetSol === null ||
+    sharedMerkleTreeExists === null ||
+    coreCollectionExists === null
+  ) {
+    return null;
+  }
+
+  const mintTransactionFeePerItemLamports = requiredStringValue(
+    estimate.mintTransactionFeePerItemLamports,
+  );
+  const mintTransactionFeePerItemSol = requiredFiniteNumber(
+    estimate.mintTransactionFeePerItemSol,
+  );
+  const mintTransactionFeeTotalLamports = requiredStringValue(
+    estimate.mintTransactionFeeTotalLamports,
+  );
+  const mintTransactionFeeTotalSol = requiredFiniteNumber(
+    estimate.mintTransactionFeeTotalSol,
+  );
+
+  const merkleTreeCreationTransactionFeeLamports =
+    requiredStringValue(
+      estimate.merkleTreeCreationTransactionFeeLamports,
+    );
+  const merkleTreeCreationTransactionFeeSol = requiredFiniteNumber(
+    estimate.merkleTreeCreationTransactionFeeSol,
+  );
+  const merkleTreeCreationRentLamports = requiredStringValue(
+    estimate.merkleTreeCreationRentLamports,
+  );
+  const merkleTreeCreationRentSol = requiredFiniteNumber(
+    estimate.merkleTreeCreationRentSol,
+  );
+  const merkleTreeCreationCostLamports = requiredStringValue(
+    estimate.merkleTreeCreationCostLamports,
+  );
+  const merkleTreeCreationCostSol = requiredFiniteNumber(
+    estimate.merkleTreeCreationCostSol,
+  );
+
+  const coreCollectionCreationTransactionFeeLamports =
+    requiredStringValue(
+      estimate.coreCollectionCreationTransactionFeeLamports,
+    );
+  const coreCollectionCreationTransactionFeeSol =
+    requiredFiniteNumber(
+      estimate.coreCollectionCreationTransactionFeeSol,
+    );
+  const coreCollectionCreationRentLamports = requiredStringValue(
+    estimate.coreCollectionCreationRentLamports,
+  );
+  const coreCollectionCreationRentSol = requiredFiniteNumber(
+    estimate.coreCollectionCreationRentSol,
+  );
+  const coreCollectionCreationCostLamports = requiredStringValue(
+    estimate.coreCollectionCreationCostLamports,
+  );
+  const coreCollectionCreationCostSol = requiredFiniteNumber(
+    estimate.coreCollectionCreationCostSol,
+  );
+
+  const provisioningCostLamports = requiredStringValue(
+    estimate.provisioningCostLamports,
+  );
+  const provisioningCostSol = requiredFiniteNumber(
+    estimate.provisioningCostSol,
+  );
+
+  const estimatedNetworkCostLamports = requiredStringValue(
+    estimate.estimatedNetworkCostLamports,
+  );
+  const estimatedNetworkCostSol = requiredFiniteNumber(
+    estimate.estimatedNetworkCostSol,
+  );
+
+  const requiredFeePayerBalanceLamports = requiredStringValue(
+    estimate.requiredFeePayerBalanceLamports,
+  );
+  const requiredFeePayerBalanceSol = requiredFiniteNumber(
+    estimate.requiredFeePayerBalanceSol,
+  );
+
+  const estimatedReserveTopUpLamports = requiredStringValue(
+    estimate.estimatedReserveTopUpLamports,
+  );
+  const estimatedReserveTopUpSol = requiredFiniteNumber(
+    estimate.estimatedReserveTopUpSol,
+  );
+
+  const reserveTransferFeeBufferLamports = requiredStringValue(
+    estimate.reserveTransferFeeBufferLamports,
+  );
+  const reserveTransferFeeBufferSol = requiredFiniteNumber(
+    estimate.reserveTransferFeeBufferSol,
+  );
+
+  const requiredReserveForTopUpLamports = requiredStringValue(
+    estimate.requiredReserveForTopUpLamports,
+  );
+  const requiredReserveForTopUpSol = requiredFiniteNumber(
+    estimate.requiredReserveForTopUpSol,
+  );
+  const sufficient = requiredBoolean(estimate.sufficient);
+
+  if (
+    !mintTransactionFeePerItemLamports ||
+    mintTransactionFeePerItemSol === null ||
+    !mintTransactionFeeTotalLamports ||
+    mintTransactionFeeTotalSol === null ||
+    !merkleTreeCreationTransactionFeeLamports ||
+    merkleTreeCreationTransactionFeeSol === null ||
+    !merkleTreeCreationRentLamports ||
+    merkleTreeCreationRentSol === null ||
+    !merkleTreeCreationCostLamports ||
+    merkleTreeCreationCostSol === null ||
+    !coreCollectionCreationTransactionFeeLamports ||
+    coreCollectionCreationTransactionFeeSol === null ||
+    !coreCollectionCreationRentLamports ||
+    coreCollectionCreationRentSol === null ||
+    !coreCollectionCreationCostLamports ||
+    coreCollectionCreationCostSol === null ||
+    !provisioningCostLamports ||
+    provisioningCostSol === null ||
+    !estimatedNetworkCostLamports ||
+    estimatedNetworkCostSol === null ||
+    !requiredFeePayerBalanceLamports ||
+    requiredFeePayerBalanceSol === null ||
+    !estimatedReserveTopUpLamports ||
+    estimatedReserveTopUpSol === null ||
+    !reserveTransferFeeBufferLamports ||
+    reserveTransferFeeBufferSol === null ||
+    !requiredReserveForTopUpLamports ||
+    requiredReserveForTopUpSol === null ||
+    sufficient === null
+  ) {
+    return null;
+  }
+
+  const sharedMerkleTreeAddress = nullableStringValue(
+    resources.sharedMerkleTreeAddress,
+  );
+  const coreCollectionAddress = nullableStringValue(
+    resources.coreCollectionAddress,
+  );
+
+  if (sharedMerkleTreeExists && !sharedMerkleTreeAddress) {
+    return null;
+  }
+
+  if (coreCollectionExists && !coreCollectionAddress) {
+    return null;
+  }
+
+  return {
+    cluster,
+    mintQuantity,
+    reserve: {
+      address: reserveAddress,
+      balanceLamports: reserveBalanceLamports,
+      balanceSol: reserveBalanceSol,
+      minimumLamports: reserveMinimumLamports,
+      minimumSol: reserveMinimumSol,
+    },
+    feePayer: {
+      address: feePayerAddress,
+      balanceLamports: feePayerBalanceLamports,
+      balanceSol: feePayerBalanceSol,
+      targetLamports: feePayerTargetLamports,
+      targetSol: feePayerTargetSol,
+    },
+    resources: {
+      sharedMerkleTreeExists,
+      sharedMerkleTreeAddress,
+      coreCollectionExists,
+      coreCollectionAddress,
+    },
+    estimate: {
+      mintTransactionFeePerItemLamports,
+      mintTransactionFeePerItemSol,
+      mintTransactionFeeTotalLamports,
+      mintTransactionFeeTotalSol,
+      merkleTreeCreationTransactionFeeLamports,
+      merkleTreeCreationTransactionFeeSol,
+      merkleTreeCreationRentLamports,
+      merkleTreeCreationRentSol,
+      merkleTreeCreationCostLamports,
+      merkleTreeCreationCostSol,
+      coreCollectionCreationTransactionFeeLamports,
+      coreCollectionCreationTransactionFeeSol,
+      coreCollectionCreationRentLamports,
+      coreCollectionCreationRentSol,
+      coreCollectionCreationCostLamports,
+      coreCollectionCreationCostSol,
+      provisioningCostLamports,
+      provisioningCostSol,
+      estimatedNetworkCostLamports,
+      estimatedNetworkCostSol,
+      requiredFeePayerBalanceLamports,
+      requiredFeePayerBalanceSol,
+      estimatedReserveTopUpLamports,
+      estimatedReserveTopUpSol,
+      reserveTransferFeeBufferLamports,
+      reserveTransferFeeBufferSol,
+      requiredReserveForTopUpLamports,
+      requiredReserveForTopUpSol,
+      sufficient,
+    },
   };
 }
 
@@ -441,6 +773,102 @@ export async function fetchMintByProductionIdHTTP(
 }
 
 // ===============================
+// GET: /mint/funding-estimate
+// ===============================
+
+/**
+ * productionIdとtokenBlueprintIdから
+ * Bubblegum V2 Mintに必要なSOL見積を取得する。
+ *
+ * metadataUriはFrontendから渡さない。
+ * mintQuantity、Brand Wallet、TokenBlueprint情報はBackend側で解決する。
+ */
+export async function fetchMintFundingEstimateHTTP(
+  productionId: string,
+  tokenBlueprintId: string,
+): Promise<MintFundingEstimate> {
+  const normalizedProductionId = String(
+    productionId ?? "",
+  ).trim();
+
+  if (!normalizedProductionId) {
+    throw new Error("productionId が空です");
+  }
+
+  const normalizedTokenBlueprintId = String(
+    tokenBlueprintId ?? "",
+  ).trim();
+
+  if (!normalizedTokenBlueprintId) {
+    throw new Error("tokenBlueprintId が空です");
+  }
+
+  const authHeaders = await getAuthJsonHeadersOrThrow();
+  const url = buildMintFundingEstimateUrl(
+    normalizedProductionId,
+    normalizedTokenBlueprintId,
+  );
+
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: authHeaders,
+    });
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
+    throw new Error(
+      `Failed to fetch mint funding estimate (network): ${message}`,
+    );
+  }
+
+  const text = await readTextSafe(response);
+
+  if (!response.ok) {
+    const hint = isServiceUnavailableStatus(response.status)
+      ? " (service unavailable)"
+      : "";
+
+    throw new Error(
+      `Failed to fetch mint funding estimate${hint}: ` +
+        `${response.status} ${response.statusText}` +
+        (text ? ` body=${text.slice(0, 400)}` : ""),
+    );
+  }
+
+  if (!text.trim()) {
+    throw new Error(
+      "Failed to fetch mint funding estimate: response is empty",
+    );
+  }
+
+  let payload: unknown;
+
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    throw new Error(
+      "Failed to fetch mint funding estimate: response is not valid JSON",
+    );
+  }
+
+  const estimate = normalizeMintFundingEstimate(payload);
+
+  if (!estimate) {
+    throw new Error(
+      "Failed to fetch mint funding estimate: response shape is invalid",
+    );
+  }
+
+  return estimate;
+}
+
+// ===============================
 // POST: mint request
 // ===============================
 
@@ -452,11 +880,12 @@ export async function fetchMintByProductionIdHTTP(
  *
  * 正常受付時は202 Acceptedと
  * QUEUEDレスポンスを返す。
+ *
+ * scheduledBurnDateはFrontendから送信しない。
  */
 export async function postMintRequestHTTP(
   productionId: string,
   tokenBlueprintId: string,
-  scheduledBurnDate?: string,
 ): Promise<MintQueuedResponse | null> {
   const normalizedProductionId = String(
     productionId ?? "",
@@ -481,21 +910,9 @@ export async function postMintRequestHTTP(
     `${encodeURIComponent(normalizedProductionId)}` +
     "/request";
 
-  const requestPayload: {
-    tokenBlueprintId: string;
-    scheduledBurnDate?: string;
-  } = {
+  const requestPayload = {
     tokenBlueprintId: normalizedTokenBlueprintId,
   };
-
-  const normalizedScheduledBurnDate = String(
-    scheduledBurnDate ?? "",
-  ).trim();
-
-  if (normalizedScheduledBurnDate) {
-    requestPayload.scheduledBurnDate =
-      normalizedScheduledBurnDate;
-  }
 
   let response: Response;
 

@@ -2,21 +2,21 @@
 package console
 
 import (
+	"context"
 	"log"
 
 	fsrepo "narratives/internal/adapters/out/firestore"
 	companyquery "narratives/internal/application/query/console"
-
 	inspectorquery "narratives/internal/application/query/inspector"
 	"narratives/internal/application/usecase"
-
-	// Shared infra
+	solanainfra "narratives/internal/infra/solana"
 	shared "narratives/internal/platform/di/shared"
 )
 
 type queries struct {
 	companyProductionQueryService *companyquery.CompanyProductionQueryService
 	mintRequestQueryService       *companyquery.MintRequestQueryService
+	mintFundingEstimateQuery      *companyquery.MintFundingEstimateQuery
 
 	brandManagementQuery *companyquery.BrandManagementQuery
 	brandDetailQuery     *companyquery.BrandDetailQuery
@@ -46,7 +46,13 @@ type queries struct {
 	inspectorQuery *inspectorquery.QueryService
 }
 
-func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s *services) *queries {
+func buildQueries(
+	infra *shared.Infra,
+	r *repos,
+	res *resolvers,
+	u *usecases,
+	s *services,
+) *queries {
 	brandManagementQuery := companyquery.NewBrandManagementQuery(
 		r.brandRepo,
 		r.memberRepo,
@@ -115,7 +121,9 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 
 	var mintTaskProgressQuery companyquery.MintTaskProgressQuery
 	if r.mintRepo != nil && r.mintRepo.Client != nil {
-		mintTaskProgressQuery = fsrepo.NewMintTaskProgressQueryFS(r.mintRepo.Client)
+		mintTaskProgressQuery = fsrepo.NewMintTaskProgressQueryFS(
+			r.mintRepo.Client,
+		)
 	}
 
 	mintRequestQueryService := companyquery.NewMintRequestQueryService(
@@ -128,6 +136,97 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		r.memberRepo,
 		mintTaskProgressQuery,
 	)
+
+	var mintFundingEstimateQuery *companyquery.MintFundingEstimateQuery
+	if u != nil && u.solanaMintClient != nil {
+		estimateExecutor := companyquery.MintFundingEstimateExecutor(
+			func(
+				ctx context.Context,
+				params companyquery.MintFundingEstimateParams,
+			) (*companyquery.MintFundingEstimateResult, error) {
+				result, err := u.solanaMintClient.EstimateMintFunding(
+					ctx,
+					solanainfra.MintFundingEstimateParams{
+						TokenBlueprintID: params.TokenBlueprintID,
+						MintQuantity:     params.MintQuantity,
+						ToAddress:        params.ToAddress,
+						Name:             params.Name,
+						Symbol:           params.Symbol,
+					},
+				)
+				if err != nil {
+					return nil, err
+				}
+
+				if result == nil {
+					return nil, nil
+				}
+
+				return &companyquery.MintFundingEstimateResult{
+					Cluster:      result.Cluster,
+					MintQuantity: result.MintQuantity,
+					Reserve: companyquery.MintFundingEstimateReserve{
+						Address:         result.Reserve.Address,
+						BalanceLamports: result.Reserve.BalanceLamports,
+						BalanceSOL:      result.Reserve.BalanceSOL,
+						MinimumLamports: result.Reserve.MinimumLamports,
+						MinimumSOL:      result.Reserve.MinimumSOL,
+					},
+					FeePayer: companyquery.MintFundingEstimateFeePayer{
+						Address:         result.FeePayer.Address,
+						BalanceLamports: result.FeePayer.BalanceLamports,
+						BalanceSOL:      result.FeePayer.BalanceSOL,
+						TargetLamports:  result.FeePayer.TargetLamports,
+						TargetSOL:       result.FeePayer.TargetSOL,
+					},
+					Resources: companyquery.MintFundingEstimateResources{
+						SharedMerkleTreeExists:  result.Resources.SharedMerkleTreeExists,
+						SharedMerkleTreeAddress: result.Resources.SharedMerkleTreeAddress,
+						CoreCollectionExists:    result.Resources.CoreCollectionExists,
+						CoreCollectionAddress:   result.Resources.CoreCollectionAddress,
+					},
+					Estimate: companyquery.MintFundingEstimateCosts{
+						MintTransactionFeePerItemLamports:            result.Estimate.MintTransactionFeePerItemLamports,
+						MintTransactionFeePerItemSOL:                 result.Estimate.MintTransactionFeePerItemSOL,
+						MintTransactionFeeTotalLamports:              result.Estimate.MintTransactionFeeTotalLamports,
+						MintTransactionFeeTotalSOL:                   result.Estimate.MintTransactionFeeTotalSOL,
+						MerkleTreeCreationTransactionFeeLamports:     result.Estimate.MerkleTreeCreationTransactionFeeLamports,
+						MerkleTreeCreationTransactionFeeSOL:          result.Estimate.MerkleTreeCreationTransactionFeeSOL,
+						MerkleTreeCreationRentLamports:               result.Estimate.MerkleTreeCreationRentLamports,
+						MerkleTreeCreationRentSOL:                    result.Estimate.MerkleTreeCreationRentSOL,
+						MerkleTreeCreationCostLamports:               result.Estimate.MerkleTreeCreationCostLamports,
+						MerkleTreeCreationCostSOL:                    result.Estimate.MerkleTreeCreationCostSOL,
+						CoreCollectionCreationTransactionFeeLamports: result.Estimate.CoreCollectionCreationTransactionFeeLamports,
+						CoreCollectionCreationTransactionFeeSOL:      result.Estimate.CoreCollectionCreationTransactionFeeSOL,
+						CoreCollectionCreationRentLamports:           result.Estimate.CoreCollectionCreationRentLamports,
+						CoreCollectionCreationRentSOL:                result.Estimate.CoreCollectionCreationRentSOL,
+						CoreCollectionCreationCostLamports:           result.Estimate.CoreCollectionCreationCostLamports,
+						CoreCollectionCreationCostSOL:                result.Estimate.CoreCollectionCreationCostSOL,
+						ProvisioningCostLamports:                     result.Estimate.ProvisioningCostLamports,
+						ProvisioningCostSOL:                          result.Estimate.ProvisioningCostSOL,
+						EstimatedNetworkCostLamports:                 result.Estimate.EstimatedNetworkCostLamports,
+						EstimatedNetworkCostSOL:                      result.Estimate.EstimatedNetworkCostSOL,
+						RequiredFeePayerBalanceLamports:              result.Estimate.RequiredFeePayerBalanceLamports,
+						RequiredFeePayerBalanceSOL:                   result.Estimate.RequiredFeePayerBalanceSOL,
+						EstimatedReserveTopUpLamports:                result.Estimate.EstimatedReserveTopUpLamports,
+						EstimatedReserveTopUpSOL:                     result.Estimate.EstimatedReserveTopUpSOL,
+						ReserveTransferFeeBufferLamports:             result.Estimate.ReserveTransferFeeBufferLamports,
+						ReserveTransferFeeBufferSOL:                  result.Estimate.ReserveTransferFeeBufferSOL,
+						RequiredReserveForTopUpLamports:              result.Estimate.RequiredReserveForTopUpLamports,
+						RequiredReserveForTopUpSOL:                   result.Estimate.RequiredReserveForTopUpSOL,
+						Sufficient:                                   result.Estimate.Sufficient,
+					},
+				}, nil
+			},
+		)
+
+		mintFundingEstimateQuery = companyquery.NewMintFundingEstimateQuery(
+			r.inspectionRepo,
+			r.tokenBlueprintRepo,
+			r.brandRepo,
+			estimateExecutor,
+		)
+	}
 
 	inventoryManagementQuery := companyquery.NewInventoryManagementQuery(
 		r.inventoryRepo,
@@ -167,29 +266,33 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		res.nameResolver,
 	)
 
-	inspectorQuery := inspectorquery.NewQueryService(inspectorquery.NewQueryServiceParams{
-		InspectionRepo: r.inspectionRepo,
+	inspectorQuery := inspectorquery.NewQueryService(
+		inspectorquery.NewQueryServiceParams{
+			InspectionRepo: r.inspectionRepo,
 
-		ProductRepo:          r.productRepo,
-		ModelRepo:            r.modelRepo,
-		ProductBlueprintRepo: r.productBlueprintRepo,
+			ProductRepo:          r.productRepo,
+			ModelRepo:            r.modelRepo,
+			ProductBlueprintRepo: r.productBlueprintRepo,
 
-		BrandRepo:   r.brandRepo,
-		CompanyRepo: r.companyRepo,
-	})
+			BrandRepo:   r.brandRepo,
+			CompanyRepo: r.companyRepo,
+		},
+	)
 
 	// =========================================================
 	// ListManagementQuery
 	// SINGLE ENTRYPOINT: NewListManagementQuery(params) だけ
 	// - company boundary は InvRows(ListByCurrentCompany) が必須
 	// =========================================================
-	listManagementQuery := companyquery.NewListManagementQuery(companyquery.NewListManagementQueryParams{
-		Lister:       r.listRepoFS,
-		NameResolver: res.nameResolver,
-		PBGetter:     r.productBlueprintRepo,
-		TBGetter:     r.tokenBlueprintRepo,
-		InvRows:      inventoryManagementQuery, // company boundary
-	})
+	listManagementQuery := companyquery.NewListManagementQuery(
+		companyquery.NewListManagementQueryParams{
+			Lister:       r.listRepoFS,
+			NameResolver: res.nameResolver,
+			PBGetter:     r.productBlueprintRepo,
+			TBGetter:     r.tokenBlueprintRepo,
+			InvRows:      inventoryManagementQuery,
+		},
+	)
 
 	// =========================================================
 	// ListDetailQuery
@@ -198,21 +301,23 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 	// - imageUrls を返すには Firestore subcollection reader 注入
 	// - displayOrder は ProductBlueprintGetter.GetByID の ModelRefs から解決する
 	// =========================================================
-	listDetailQuery := companyquery.NewListDetailQuery(companyquery.NewListDetailQueryParams{
-		Getter:       r.listRepoFS,
-		NameResolver: res.nameResolver,
+	listDetailQuery := companyquery.NewListDetailQuery(
+		companyquery.NewListDetailQueryParams{
+			Getter:       r.listRepoFS,
+			NameResolver: res.nameResolver,
 
-		PBGetter: r.productBlueprintRepo,
-		TBGetter: r.tokenBlueprintRepo,
+			PBGetter: r.productBlueprintRepo,
+			TBGetter: r.tokenBlueprintRepo,
 
-		InvGetter: inventoryDetailQuery,
+			InvGetter: inventoryDetailQuery,
 
-		// Firebase Storage 移行後:
-		// - frontend が Firebase Storage へ直接 upload
-		// - backend は Firestore の /lists/{listId}/images/{imageId} record を読む
-		// - ImageURLs は ListImage.URL(Firebase Storage downloadURL) から組み立てる
-		ImgLister: r.listImageRecordRepo,
-	})
+			// Firebase Storage 移行後:
+			// - frontend が Firebase Storage へ直接 upload
+			// - backend は Firestore の /lists/{listId}/images/{imageId} record を読む
+			// - ImageURLs は ListImage.URL(Firebase Storage downloadURL) から組み立てる
+			ImgLister: r.listImageRecordRepo,
+		},
+	)
 
 	log.Printf(
 		"[di.console] list image record repo wired (recordRepo=%t)",
@@ -267,27 +372,30 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 	}
 
 	var orderDetailQuery *companyquery.OrderDetailQuery
-	if u.orderUC != nil {
-		orderDetailQuery = companyquery.NewOrderDetailQuery(companyquery.NewOrderDetailQueryParams{
-			OrderGetter: u.orderUC,
+	if u != nil && u.orderUC != nil {
+		orderDetailQuery = companyquery.NewOrderDetailQuery(
+			companyquery.NewOrderDetailQueryParams{
+				OrderGetter: u.orderUC,
 
-			InvBlueprint: invBlueprint,
-			PBName:       pbName,
-			TBName:       tbName,
+				InvBlueprint: invBlueprint,
+				PBName:       pbName,
+				TBName:       tbName,
 
-			AvatarName: avatarName,
-			UserName:   userName,
+				AvatarName: avatarName,
+				UserName:   userName,
 
-			ModelResolver: modelResolver,
-		})
+				ModelResolver: modelResolver,
+			},
+		)
 	}
 
-	_ = infra // reserved for future wiring; keeps signature stable
-	_ = s     // reserved for future wiring; keeps signature stable
+	_ = infra
+	_ = s
 
 	return &queries{
 		companyProductionQueryService: companyProductionQueryService,
 		mintRequestQueryService:       mintRequestQueryService,
+		mintFundingEstimateQuery:      mintFundingEstimateQuery,
 
 		brandManagementQuery: brandManagementQuery,
 		brandDetailQuery:     brandDetailQuery,

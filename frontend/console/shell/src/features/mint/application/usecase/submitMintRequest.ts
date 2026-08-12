@@ -1,20 +1,20 @@
 // frontend/console/shell/src/features/mintRequest/application/usecase/submitMintRequest.ts
 
+
 import type {
   InspectionBatchDTO,
 } from "../../../../shared/types/inspections";
+
 
 import type {
   MintQueuedResponse,
 } from "../port/MintRequestRepository";
 
-import {
-  asNonEmptyString,
-} from "../../../../shared/util/primitive";
 
 import {
   validateMintRequestSubmit,
 } from "../validator/validateMintRequestSubmit";
+
 
 /**
  * Mint申請処理に必要なRepository契約。
@@ -23,11 +23,11 @@ export interface SubmitMintRequestRepository {
   postMintRequest(
     productionId: string,
     tokenBlueprintId: string,
-    scheduledBurnDate?: string,
   ): Promise<
     MintQueuedResponse | null
   >;
 }
+
 
 export type SubmitMintRequestInput = {
   inspectionBatch:
@@ -35,10 +35,12 @@ export type SubmitMintRequestInput = {
     | null
     | undefined;
 
+
   selectedTokenBlueprintId:
     | string
     | null
     | undefined;
+
 
   /**
    * URLパラメータ由来のproductionId。
@@ -49,11 +51,8 @@ export type SubmitMintRequestInput = {
   productionId?:
     | string
     | null;
-
-  scheduledBurnDate?:
-    | string
-    | null;
 };
+
 
 export type SubmitMintRequestResult =
   | {
@@ -68,6 +67,7 @@ export type SubmitMintRequestResult =
         | "empty-response";
       message: string;
     };
+
 
 /**
  * Mint申請条件を検証し、
@@ -87,20 +87,25 @@ export async function submitMintRequest(
     input.inspectionBatch ??
     null;
 
+
   const validation =
     validateMintRequestSubmit({
       inspectionBatch,
+
 
       isInspectionCompleted:
         inspectionBatch?.status ===
         "completed",
 
+
       selectedTokenBlueprintId:
         input.selectedTokenBlueprintId,
+
 
       productionId:
         input.productionId,
     });
+
 
   if (!validation.ok) {
     return {
@@ -112,22 +117,13 @@ export async function submitMintRequest(
     };
   }
 
-  /**
-   * scheduledBurnDateは入力欄由来のため、
-   * Application境界で一度だけ正規化する。
-   */
-  const scheduledBurnDate =
-    asNonEmptyString(
-      input.scheduledBurnDate,
-    ) ||
-    undefined;
 
   const queuedResponse =
     await repository.postMintRequest(
       validation.productionId,
       validation.tokenBlueprintId,
-      scheduledBurnDate,
     );
+
 
   if (
     !queuedResponse ||
@@ -142,6 +138,7 @@ export async function submitMintRequest(
         "ミント申請の受付結果を取得できませんでした。",
     };
   }
+
 
   return {
     ok: true,

@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import type {
   BrandSummary,
+  MintFundingEstimate,
   MintTaskProgress,
   TokenBlueprintSummary,
 } from "../../application/port/MintRequestRepository";
@@ -108,8 +109,14 @@ export function useMintRequestDetail() {
   const [selectedTokenBlueprintId, setSelectedTokenBlueprintId] =
     React.useState("");
 
-  const [scheduledBurnDate, setScheduledBurnDate] =
-    React.useState("");
+  const [mintFundingEstimate, setMintFundingEstimate] =
+    React.useState<MintFundingEstimate | null>(null);
+
+  const [mintFundingEstimateLoading, setMintFundingEstimateLoading] =
+    React.useState(false);
+
+  const [mintFundingEstimateError, setMintFundingEstimateError] =
+    React.useState<string | null>(null);
 
   const [isSubmittingMintRequest, setIsSubmittingMintRequest] =
     React.useState(false);
@@ -524,15 +531,71 @@ export function useMintRequestDetail() {
     mintRequestedTokenBlueprintId,
     selectedTokenBlueprintId,
     setSelectedTokenBlueprintId,
-
-    /**
-     * 現行GET /mint/requests responseには
-     * scheduledBurnDateが存在しない。
-     */
-    mintScheduledBurnDate: undefined,
-    scheduledBurnDate,
-    setScheduledBurnDate,
   });
+
+  /**
+   * TokenBlueprint選択後にBubblegum V2 Mintの
+   * Reserve / Fee Payer残高とSOL費用見積を取得する。
+   *
+   * metadataUriはFrontendから送信しない。
+   */
+  React.useEffect(() => {
+    if (
+      !showMintControls ||
+      !productionId ||
+      !selectedTokenBlueprintId
+    ) {
+      setMintFundingEstimate(null);
+      setMintFundingEstimateError(null);
+      setMintFundingEstimateLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      setMintFundingEstimate(null);
+      setMintFundingEstimateError(null);
+      setMintFundingEstimateLoading(true);
+
+      try {
+        const estimate =
+          await mintRequestRepo.fetchMintFundingEstimate(
+            productionId,
+            selectedTokenBlueprintId,
+          );
+
+        if (!cancelled) {
+          setMintFundingEstimate(estimate);
+        }
+      } catch (error: unknown) {
+        if (!cancelled) {
+          setMintFundingEstimate(null);
+          setMintFundingEstimateError(
+            getErrorMessage(
+              error,
+              "SOL見積の取得に失敗しました",
+            ),
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setMintFundingEstimateLoading(false);
+        }
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    mintRequestRepo,
+    productionId,
+    selectedTokenBlueprintId,
+    showMintControls,
+  ]);
 
   const tokenBlueprintIdForPatch =
     React.useMemo(() => {
@@ -622,6 +685,28 @@ export function useMintRequestDetail() {
           return;
         }
 
+        if (mintFundingEstimateLoading) {
+          alert(
+            "SOL見積を取得中です。完了後にミント申請を実行してください。",
+          );
+          return;
+        }
+
+        if (!mintFundingEstimate) {
+          alert(
+            mintFundingEstimateError ||
+              "SOL見積を取得できていません。",
+          );
+          return;
+        }
+
+        if (!mintFundingEstimate.estimate.sufficient) {
+          alert(
+            "Reserve WalletのSOL残高が不足しているため、ミント申請を実行できません。",
+          );
+          return;
+        }
+
         setIsSubmittingMintRequest(true);
         setError(null);
 
@@ -632,7 +717,6 @@ export function useMintRequestDetail() {
               inspectionBatch,
               selectedTokenBlueprintId,
               productionId,
-              scheduledBurnDate,
             },
           );
 
@@ -694,10 +778,12 @@ export function useMintRequestDetail() {
         isInspectionCompleted,
         isMinting,
         isMintCompleted,
+        mintFundingEstimate,
+        mintFundingEstimateError,
+        mintFundingEstimateLoading,
         mintRequestRepo,
         productionId,
         reloadDetail,
-        scheduledBurnDate,
         selectedTokenBlueprintId,
         totalMintQuantity,
       ],
@@ -756,12 +842,6 @@ export function useMintRequestDetail() {
     createdByName ||
     "（不明）";
 
-  /**
-   * 現行GET /mint/requests responseに
-   * scheduledBurnDateは含まれていない。
-   */
-  const mintScheduledBurnDateLabel = "（未設定）";
-
   const mintMintedAtLabel =
     safeDateTimeLabelJa(
       mintRequestRow?.mintedAt ?? null,
@@ -815,10 +895,10 @@ export function useMintRequestDetail() {
     tokenBlueprintCardVm,
     mintCreatedAtLabel,
     mintCreatedByLabel,
-    mintScheduledBurnDateLabel,
     mintMintedAtLabel,
     onChainTxSignature,
-    scheduledBurnDate,
-    setScheduledBurnDate,
+    mintFundingEstimate,
+    mintFundingEstimateLoading,
+    mintFundingEstimateError,
   };
 }

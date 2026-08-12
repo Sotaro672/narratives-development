@@ -2,6 +2,7 @@
 
 import type {
   BrandSummary,
+  MintFundingEstimate,
   MintQueuedResponse,
   MintRequestRepository,
   TokenBlueprintSummary,
@@ -17,6 +18,7 @@ import {
   fetchInspectionByProductionIdHTTP,
 } from "./http/inspections";
 import {
+  fetchMintFundingEstimateHTTP,
   fetchMintRequestRowByProductionIdHTTP,
   postMintRequestHTTP,
 } from "./http/mintRequests";
@@ -34,7 +36,7 @@ import { fetchTokenBlueprintsByBrandHTTP } from "./http/tokenBlueprints";
  * 参照系の取得失敗は既存画面との互換性を維持するため、
  * nullまたは空配列へ変換する。
  *
- * 検品完了、Mint申請ではApplication層で
+ * SOL見積、検品完了、Mint申請ではApplication層で
  * エラー処理方針を判断できるよう、
  * HTTPエラーを握りつぶさず呼び出し元へ伝播する。
  *
@@ -105,6 +107,23 @@ export class HttpMintRequestRepository implements MintRequestRepository {
   }
 
   /**
+   * productionIdとtokenBlueprintIdから
+   * Bubblegum V2 Mintに必要なSOL見積を取得する。
+   *
+   * metadataUriはFrontendから送信しない。
+   * 見積取得エラーはPresentation層で表示できるように伝播させる。
+   */
+  fetchMintFundingEstimate(
+    productionId: string,
+    tokenBlueprintId: string,
+  ): Promise<MintFundingEstimate> {
+    return fetchMintFundingEstimateHTTP(
+      productionId,
+      tokenBlueprintId,
+    );
+  }
+
+  /**
    * productionIdに紐づく検品を完了する。
    *
    * completeMintInspection UseCaseから呼び出される。
@@ -122,17 +141,16 @@ export class HttpMintRequestRepository implements MintRequestRepository {
    * Backendは202 AcceptedとQUEUEDレスポンスを返し、
    * Mint処理を非同期で順次実行する。
    *
+   * scheduledBurnDateはFrontendから送信しない。
    * エラーはPresentation層で表示できるように伝播させる。
    */
   postMintRequest(
     productionId: string,
     tokenBlueprintId: string,
-    scheduledBurnDate?: string,
   ): Promise<MintQueuedResponse | null> {
     return postMintRequestHTTP(
       productionId,
       tokenBlueprintId,
-      scheduledBurnDate,
     );
   }
 }

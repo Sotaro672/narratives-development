@@ -1,4 +1,4 @@
-// frontend/console/shell/src/features/mintRequest/application/port/MintRequestRepository.ts
+// frontend/console/shell/src/features/mint/application/port/MintRequestRepository.ts
 
 import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
 import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
@@ -11,21 +11,16 @@ export type BrandSummary = {
 
 export type TokenBlueprintSummary = {
   id: string;
-
-  /**
-   * トークン名。
-   *
-   * MintRequestではtokenNameを正規フィールドとし、
-   * nameは使用しない。
-   */
   tokenName: string;
-
   symbol: string;
 
   brandId?: string;
+  brandName?: string;
+  companyId?: string;
 
   description?: string;
   minted?: boolean;
+  metadataUri?: string;
 
   iconUrl?: string;
 };
@@ -51,6 +46,98 @@ export type MintQueuedResponse = {
   productionId: string;
   status: "QUEUED";
   message: string;
+};
+
+/**
+ * SOL見積時のReserve Wallet情報。
+ */
+export type MintFundingEstimateReserve = {
+  address: string;
+  balanceLamports: string;
+  balanceSol: number;
+  minimumLamports: string;
+  minimumSol: number;
+};
+
+/**
+ * SOL見積時のFee Payer情報。
+ */
+export type MintFundingEstimateFeePayer = {
+  address: string;
+  balanceLamports: string;
+  balanceSol: number;
+  targetLamports: string;
+  targetSol: number;
+};
+
+/**
+ * Mintに利用するSolanaリソースの現在状態。
+ */
+export type MintFundingEstimateResources = {
+  sharedMerkleTreeExists: boolean;
+  sharedMerkleTreeAddress: string | null;
+  coreCollectionExists: boolean;
+  coreCollectionAddress: string | null;
+};
+
+/**
+ * Bubblegum V2 Mintに必要なSOL費用見積。
+ *
+ * metadataUriやGCS上のコンテンツ容量には依存せず、
+ * 初回のMerkle Tree / Core Collection作成費と
+ * mintQuantity件分のMint transaction feeを扱う。
+ */
+export type MintFundingEstimateCosts = {
+  mintTransactionFeePerItemLamports: string;
+  mintTransactionFeePerItemSol: number;
+  mintTransactionFeeTotalLamports: string;
+  mintTransactionFeeTotalSol: number;
+
+  merkleTreeCreationTransactionFeeLamports: string;
+  merkleTreeCreationTransactionFeeSol: number;
+  merkleTreeCreationRentLamports: string;
+  merkleTreeCreationRentSol: number;
+  merkleTreeCreationCostLamports: string;
+  merkleTreeCreationCostSol: number;
+
+  coreCollectionCreationTransactionFeeLamports: string;
+  coreCollectionCreationTransactionFeeSol: number;
+  coreCollectionCreationRentLamports: string;
+  coreCollectionCreationRentSol: number;
+  coreCollectionCreationCostLamports: string;
+  coreCollectionCreationCostSol: number;
+
+  provisioningCostLamports: string;
+  provisioningCostSol: number;
+
+  estimatedNetworkCostLamports: string;
+  estimatedNetworkCostSol: number;
+
+  requiredFeePayerBalanceLamports: string;
+  requiredFeePayerBalanceSol: number;
+
+  estimatedReserveTopUpLamports: string;
+  estimatedReserveTopUpSol: number;
+
+  reserveTransferFeeBufferLamports: string;
+  reserveTransferFeeBufferSol: number;
+
+  requiredReserveForTopUpLamports: string;
+  requiredReserveForTopUpSol: number;
+
+  sufficient: boolean;
+};
+
+/**
+ * GET /mint/funding-estimate のレスポンス。
+ */
+export type MintFundingEstimate = {
+  cluster: string;
+  mintQuantity: number;
+  reserve: MintFundingEstimateReserve;
+  feePayer: MintFundingEstimateFeePayer;
+  resources: MintFundingEstimateResources;
+  estimate: MintFundingEstimateCosts;
 };
 
 export interface MintRequestRepository {
@@ -82,8 +169,7 @@ export interface MintRequestRepository {
   ): Promise<string | null>;
 
   /**
-   * productBlueprintIdに紐づく
-   * プロダクト設計情報を取得する。
+   * productBlueprintIdに紐づくプロダクト設計情報を取得する。
    */
   fetchProductBlueprintPatch(
     productBlueprintId: string,
@@ -95,10 +181,20 @@ export interface MintRequestRepository {
   fetchBrandsForMint(): Promise<BrandSummary[]>;
 
   /**
-   * 指定したブランドに紐づく
-   * トークン設計一覧を取得する。
+   * 指定したブランドに紐づくトークン設計一覧を取得する。
    */
   fetchTokenBlueprintsByBrand(
     brandId: string,
   ): Promise<TokenBlueprintSummary[]>;
+
+  /**
+   * productionIdとtokenBlueprintIdからBubblegum V2 MintのSOL見積を取得する。
+   *
+   * metadataUriはFrontendから渡さない。
+   * mintQuantity、Brand Wallet、TokenBlueprint情報はBackend側で解決する。
+   */
+  fetchMintFundingEstimate(
+    productionId: string,
+    tokenBlueprintId: string,
+  ): Promise<MintFundingEstimate>;
 }

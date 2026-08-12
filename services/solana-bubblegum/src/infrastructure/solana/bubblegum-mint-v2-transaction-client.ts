@@ -5,13 +5,10 @@ import {
 } from "node:buffer";
 
 import {
-  mintV2,
   parseLeafFromMintV2Transaction,
 } from "@metaplex-foundation/mpl-bubblegum";
 
 import {
-  publicKey,
-  type PublicKey,
   type Umi,
 } from "@metaplex-foundation/umi";
 
@@ -26,7 +23,6 @@ import {
   type BroadcastMintV2TransactionResult,
   type BuildAndSignMintV2TransactionInput,
   type BuildAndSignMintV2TransactionResult,
-  type MintV2Creator,
   type MintV2TransactionPort,
   type ParseMintV2ResultInput,
   type ParseMintV2ResultResult,
@@ -34,27 +30,16 @@ import {
   type WaitForMintV2FinalizedResult,
 } from "../../application/ports/mint-v2-transaction-port.js";
 
+import {
+  buildBubblegumMintV2TransactionBuilder,
+} from "./bubblegum-mint-v2-transaction-builder.js";
+
 
 const FINALIZATION_TIMEOUT_MS =
   90_000;
 
 const FINALIZATION_POLL_INTERVAL_MS =
   2_000;
-
-const SELLER_FEE_BASIS_POINTS_MIN =
-  0;
-
-const SELLER_FEE_BASIS_POINTS_MAX =
-  10_000;
-
-const CREATOR_SHARE_MIN =
-  0;
-
-const CREATOR_SHARE_MAX =
-  100;
-
-const CREATOR_SHARE_TOTAL =
-  100;
 
 
 function fatalError(
@@ -110,86 +95,6 @@ function requiredString(
   }
 
   return value;
-}
-
-
-function requiredBoolean(
-  field: string,
-  value: unknown,
-): boolean {
-  if (
-    typeof value !==
-    "boolean"
-  ) {
-    throw fatalError(
-      "INVALID_INPUT",
-      `bubblegum_mint_v2_transaction: ${field} must be boolean`,
-    );
-  }
-
-  return value;
-}
-
-
-function requiredIntegerInRange(
-  field: string,
-  value: unknown,
-  minimum: number,
-  maximum: number,
-): number {
-  if (
-    typeof value !==
-      "number" ||
-    !Number.isInteger(
-      value,
-    ) ||
-    value <
-      minimum ||
-    value >
-      maximum
-  ) {
-    throw fatalError(
-      "INVALID_INPUT",
-      [
-        `bubblegum_mint_v2_transaction: invalid ${field}`,
-        `minimum=${minimum}`,
-        `maximum=${maximum}`,
-      ].join(
-        " ",
-      ),
-    );
-  }
-
-  return value;
-}
-
-
-function parsePublicKey(
-  field: string,
-  value: string,
-): PublicKey {
-  requiredString(
-    field,
-    value,
-  );
-
-  try {
-    return publicKey(
-      value,
-    );
-  } catch (error) {
-    throw fatalError(
-      "INVALID_PUBLIC_KEY",
-      [
-        "bubblegum_mint_v2_transaction: invalid public key",
-        `field=${field}`,
-        `value=${value}`,
-      ].join(
-        " ",
-      ),
-      error,
-    );
-  }
 }
 
 
@@ -369,79 +274,10 @@ export class BubblegumMintV2TransactionClient
     input: BuildAndSignMintV2TransactionInput,
   ): Promise<BuildAndSignMintV2TransactionResult> {
     try {
-      const merkleTree =
-        parsePublicKey(
-          "treeAddress",
-          input.treeAddress,
-        );
-
-      const leafOwner =
-        parsePublicKey(
-          "leafOwnerAddress",
-          input.leafOwnerAddress,
-        );
-
-      const leafDelegate =
-        input.leafDelegateAddress ===
-          null
-          ? null
-          : parsePublicKey(
-              "leafDelegateAddress",
-              input.leafDelegateAddress,
-            );
-
-      const coreCollection =
-        input.coreCollectionAddress ===
-          null
-          ? null
-          : parsePublicKey(
-              "coreCollectionAddress",
-              input.coreCollectionAddress,
-            );
-
-      const metadata =
-        this.buildMetadata(
-          input,
-          coreCollection,
-        );
-
       const builder =
-        mintV2(
+        buildBubblegumMintV2TransactionBuilder(
           this.umi,
-          {
-            merkleTree,
-
-            leafOwner,
-
-            ...(
-              leafDelegate ===
-                null
-                ? {}
-                : {
-                    leafDelegate,
-                  }
-            ),
-
-            payer:
-              this.umi.payer,
-
-            treeCreatorOrDelegate:
-              this.umi.identity,
-
-            ...(
-              coreCollection ===
-                null
-                ? {}
-                : {
-                    coreCollection,
-
-                    collectionAuthority:
-                      this.umi.identity,
-                  }
-            ),
-
-            metadata,
-          },
+          input,
         );
 
       const signedTransaction =
@@ -823,224 +659,5 @@ export class BubblegumMintV2TransactionClient
 
       leafIndex,
     };
-  }
-
-
-  private buildMetadata(
-    input: BuildAndSignMintV2TransactionInput,
-    coreCollection: PublicKey | null,
-  ) {
-    const name =
-      requiredString(
-        "metadata.name",
-        input.metadata.name,
-      );
-
-    if (
-      typeof input.metadata.symbol !==
-      "string"
-    ) {
-      throw fatalError(
-        "INVALID_INPUT",
-        "bubblegum_mint_v2_transaction: metadata.symbol must be string",
-      );
-    }
-
-    const uri =
-      requiredString(
-        "metadata.uri",
-        input.metadata.uri,
-      );
-
-    const sellerFeeBasisPoints =
-      requiredIntegerInRange(
-        "metadata.sellerFeeBasisPoints",
-        input.metadata.sellerFeeBasisPoints,
-        SELLER_FEE_BASIS_POINTS_MIN,
-        SELLER_FEE_BASIS_POINTS_MAX,
-      );
-
-    const primarySaleHappened =
-      requiredBoolean(
-        "metadata.primarySaleHappened",
-        input.metadata.primarySaleHappened,
-      );
-
-    const isMutable =
-      requiredBoolean(
-        "metadata.isMutable",
-        input.metadata.isMutable,
-      );
-
-    const creators =
-      this.buildCreators(
-        input.metadata.creators,
-      );
-
-    return {
-      name,
-
-      symbol:
-        input.metadata.symbol,
-
-      uri,
-
-      sellerFeeBasisPoints,
-
-      primarySaleHappened,
-
-      isMutable,
-
-      collection:
-        coreCollection,
-
-      creators,
-    };
-  }
-
-
-  private buildCreators(
-    creators: MintV2Creator[],
-  ) {
-    if (
-      !Array.isArray(
-        creators,
-      )
-    ) {
-      throw fatalError(
-        "INVALID_CREATORS",
-        "bubblegum_mint_v2_transaction: metadata.creators must be an array",
-      );
-    }
-
-    const seenAddresses =
-      new Set<string>();
-
-    let totalShare =
-      0;
-
-    const result =
-      creators.map(
-        (
-          creator,
-          index,
-        ) => {
-          if (
-            creator ===
-              null ||
-            typeof creator !==
-              "object"
-          ) {
-            throw fatalError(
-              "INVALID_CREATOR",
-              [
-                "bubblegum_mint_v2_transaction: invalid creator",
-                `index=${index}`,
-              ].join(
-                " ",
-              ),
-            );
-          }
-
-          const address =
-            requiredString(
-              `metadata.creators[${index}].address`,
-              creator.address,
-            );
-
-          const publicKeyValue =
-            parsePublicKey(
-              `metadata.creators[${index}].address`,
-              address,
-            );
-
-          if (
-            seenAddresses.has(
-              address,
-            )
-          ) {
-            throw fatalError(
-              "DUPLICATE_CREATOR",
-              [
-                "bubblegum_mint_v2_transaction: duplicate creator address",
-                `address=${address}`,
-              ].join(
-                " ",
-              ),
-            );
-          }
-
-          seenAddresses.add(
-            address,
-          );
-
-          const verified =
-            requiredBoolean(
-              `metadata.creators[${index}].verified`,
-              creator.verified,
-            );
-
-          if (
-            verified &&
-            address !==
-              String(
-                this.umi.identity.publicKey,
-              ) &&
-            address !==
-              String(
-                this.umi.payer.publicKey,
-              )
-          ) {
-            throw fatalError(
-              "UNAVAILABLE_VERIFIED_CREATOR_SIGNER",
-              [
-                "bubblegum_mint_v2_transaction: verified creator signer is unavailable",
-                `address=${address}`,
-              ].join(
-                " ",
-              ),
-            );
-          }
-
-          const share =
-            requiredIntegerInRange(
-              `metadata.creators[${index}].share`,
-              creator.share,
-              CREATOR_SHARE_MIN,
-              CREATOR_SHARE_MAX,
-            );
-
-          totalShare +=
-            share;
-
-          return {
-            address:
-              publicKeyValue,
-
-            verified,
-
-            share,
-          };
-        },
-      );
-
-    if (
-      result.length >
-        0 &&
-      totalShare !==
-        CREATOR_SHARE_TOTAL
-    ) {
-      throw fatalError(
-        "INVALID_CREATOR_SHARE_TOTAL",
-        [
-          "bubblegum_mint_v2_transaction: creator share total must equal 100",
-          `actual=${totalShare}`,
-        ].join(
-          " ",
-        ),
-      );
-    }
-
-    return result;
   }
 }

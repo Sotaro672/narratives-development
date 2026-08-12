@@ -17,6 +17,7 @@ import (
 )
 
 type usecases struct {
+	solanaMintClient              *solanainfra.MintClient
 	tokenUC                       *uc.TokenUsecase
 	accountUC                     *uc.AccountUsecase
 	announcementUC                *uc.AnnouncementUsecase
@@ -258,6 +259,7 @@ func buildUsecases(
 	mintUC.SetMintTaskRepository(
 		r.mintRepo,
 	)
+
 	mintUC.SetMintProductMintRecorder(
 		r.mintRepo,
 	)
@@ -323,6 +325,7 @@ func buildUsecases(
 	mintUC.SetTokenBlueprintMetadataEnsurer(
 		tokenBlueprintUC,
 	)
+
 	mintUC.SetTokenBlueprintMintMarker(
 		tokenBlueprintUC,
 	)
@@ -410,6 +413,7 @@ func buildUsecases(
 	_ = res
 
 	return &usecases{
+		solanaMintClient:              solanaClient,
 		tokenUC:                       tokenUC,
 		accountUC:                     accountUC,
 		announcementUC:                announcementUC,

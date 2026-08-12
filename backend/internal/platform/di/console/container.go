@@ -61,6 +61,7 @@ type Container struct {
 	CartUC                          *uc.CartUsecase
 	CompanyProductionQueryService   *query.CompanyProductionQueryService
 	MintRequestQueryService         *query.MintRequestQueryService
+	MintFundingEstimateQuery        *query.MintFundingEstimateQuery
 	BrandManagementQuery            *query.BrandManagementQuery
 	BrandDetailQuery                *query.BrandDetailQuery
 	ProductBlueprintManagementQuery *query.ProductBlueprintManagementQuery
@@ -229,6 +230,7 @@ func NewContainer(
 		CartUC:                          u.cartUC,
 		CompanyProductionQueryService:   q.companyProductionQueryService,
 		MintRequestQueryService:         q.mintRequestQueryService,
+		MintFundingEstimateQuery:        q.mintFundingEstimateQuery,
 		BrandManagementQuery:            q.brandManagementQuery,
 		BrandDetailQuery:                q.brandDetailQuery,
 		ProductBlueprintManagementQuery: q.productBlueprintManagementQuery,

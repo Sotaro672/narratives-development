@@ -20,16 +20,14 @@ import (
 )
 
 const (
-	envBubblegumServiceURL = "SOLANA_BUBBLEGUM_SERVICE_URL"
-
-	envBubblegumServiceAudience = "SOLANA_BUBBLEGUM_SERVICE_AUDIENCE"
-
+	envBubblegumServiceURL             = "SOLANA_BUBBLEGUM_SERVICE_URL"
+	envBubblegumServiceAudience        = "SOLANA_BUBBLEGUM_SERVICE_AUDIENCE"
 	envBubblegumMintAuthorityPublicKey = "SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY"
 
-	bubblegumMintPath = "/mint"
+	bubblegumMintPath     = "/mint"
+	bubblegumEstimatePath = "/estimate"
 
-	bubblegumRequestTimeout = 45 * time.Second
-
+	bubblegumRequestTimeout             = 45 * time.Second
 	maxBubblegumResponseBodyBytes int64 = 256 * 1024
 )
 
@@ -39,8 +37,7 @@ const (
 // IMPORTANT:
 //   - Go backend では Solana private key を保持しません。
 //   - Go backend から private key を送信しません。
-//   - Bubblegum V2 mint signer / fee payer / tree authority は
-//     solana-bubblegum service 側で解決します。
+//   - Bubblegum V2 mint signer / fee payer / tree authority は solana-bubblegum service 側で解決します。
 //   - 1 productId = 1 cNFT mint とします。
 //   - productId を idempotency key として internal service に渡します。
 type MintClient struct {
@@ -48,7 +45,6 @@ type MintClient struct {
 	serviceURL string
 }
 
-// インターフェース実装チェック。
 var _ tokendom.MintAuthorityWalletPort = (*MintClient)(nil)
 
 // NewMintClient は環境変数から Bubblegum V2 internal service client を生成します.
@@ -59,143 +55,299 @@ var _ tokendom.MintAuthorityWalletPort = (*MintClient)(nil)
 // Optional:
 // - SOLANA_BUBBLEGUM_SERVICE_AUDIENCE
 //
-// SOLANA_BUBBLEGUM_SERVICE_AUDIENCE が設定されている場合は、
-// Google Cloud ID Token を付与する HTTP client を使用します。
-//
-// ローカル開発で認証なしの internal service を使う場合は、
-// SOLANA_BUBBLEGUM_SERVICE_AUDIENCE を設定しません。
-func NewMintClient(
-	ctx context.Context,
-) (*MintClient, error) {
+// SOLANA_BUBBLEGUM_SERVICE_AUDIENCE が設定されている場合は Google Cloud ID Token を付与します。
+func NewMintClient(ctx context.Context) (*MintClient, error) {
 	serviceURL := os.Getenv(envBubblegumServiceURL)
 	if serviceURL == "" {
-		return nil, fmt.Errorf(
-			"%s is empty",
-			envBubblegumServiceURL,
-		)
+		return nil, fmt.Errorf("%s is empty", envBubblegumServiceURL)
 	}
 
 	parsedURL, err := url.Parse(serviceURL)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"parse %s: %w",
-			envBubblegumServiceURL,
-			err,
-		)
+		return nil, fmt.Errorf("parse %s: %w", envBubblegumServiceURL, err)
 	}
-
-	if parsedURL == nil ||
-		parsedURL.Host == "" ||
-		(parsedURL.Scheme != "http" &&
-			parsedURL.Scheme != "https") {
-		return nil, fmt.Errorf(
-			"%s must be an absolute http or https URL",
-			envBubblegumServiceURL,
-		)
+	if parsedURL == nil || parsedURL.Host == "" || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		return nil, fmt.Errorf("%s must be an absolute http or https URL", envBubblegumServiceURL)
 	}
 
 	serviceURL = strings.TrimRight(serviceURL, "/")
-
 	audience := os.Getenv(envBubblegumServiceAudience)
 
 	var httpClient *http.Client
-
 	if audience != "" {
-		authenticatedClient, err := idtoken.NewClient(
-			ctx,
-			audience,
-		)
+		authenticatedClient, err := idtoken.NewClient(ctx, audience)
 		if err != nil {
-			return nil, fmt.Errorf(
-				"create bubblegum authenticated http client: %w",
-				err,
-			)
+			return nil, fmt.Errorf("create bubblegum authenticated http client: %w", err)
 		}
-
 		authenticatedClient.Timeout = bubblegumRequestTimeout
 		httpClient = authenticatedClient
 	} else {
-		httpClient = &http.Client{
-			Timeout: bubblegumRequestTimeout,
-		}
+		httpClient = &http.Client{Timeout: bubblegumRequestTimeout}
 	}
 
-	return &MintClient{
-		httpClient: httpClient,
-		serviceURL: serviceURL,
-	}, nil
+	return &MintClient{httpClient: httpClient, serviceURL: serviceURL}, nil
 }
 
-// PublicKey は Bubblegum V2 mint authority の公開鍵を返します.
-//
-// private key は solana-bubblegum service / Secret Manager 側で管理し、
-// Go backend には保持しません。
-func (c *MintClient) PublicKey(
-	ctx context.Context,
-) (string, error) {
+// PublicKey は Bubblegum V2 mint authority の公開鍵を返します。
+// private key は solana-bubblegum service / Secret Manager 側で管理します。
+func (c *MintClient) PublicKey(ctx context.Context) (string, error) {
 	_ = ctx
-
 	if c == nil {
-		return "", errors.New(
-			"bubblegum mint client is nil",
-		)
+		return "", errors.New("bubblegum mint client is nil")
 	}
 
-	publicKey := os.Getenv(
-		envBubblegumMintAuthorityPublicKey,
-	)
+	publicKey := os.Getenv(envBubblegumMintAuthorityPublicKey)
 	if publicKey == "" {
-		return "", fmt.Errorf(
-			"%s is empty",
-			envBubblegumMintAuthorityPublicKey,
-		)
+		return "", fmt.Errorf("%s is empty", envBubblegumMintAuthorityPublicKey)
 	}
-
 	return publicKey, nil
 }
 
 type bubblegumMintRequest struct {
-	ProductID string `json:"productId"`
-
+	ProductID        string `json:"productId"`
 	TokenBlueprintID string `json:"tokenBlueprintId"`
-
-	BrandID string `json:"brandId"`
-
-	ToAddress string `json:"toAddress"`
-
-	Name string `json:"name"`
-
-	Symbol string `json:"symbol"`
-
-	MetadataURI string `json:"metadataUri"`
+	BrandID          string `json:"brandId"`
+	ToAddress        string `json:"toAddress"`
+	Name             string `json:"name"`
+	Symbol           string `json:"symbol"`
+	MetadataURI      string `json:"metadataUri"`
 }
 
 type bubblegumMintResponse struct {
-	Signature string `json:"signature"`
-
-	AssetStandard string `json:"assetStandard"`
-
-	Cluster string `json:"cluster"`
-
-	AssetID string `json:"assetId"`
-
-	TreeAddress string `json:"treeAddress"`
-
-	LeafIndex uint64 `json:"leafIndex"`
-
+	Signature             string `json:"signature"`
+	AssetStandard         string `json:"assetStandard"`
+	Cluster               string `json:"cluster"`
+	AssetID               string `json:"assetId"`
+	TreeAddress           string `json:"treeAddress"`
+	LeafIndex             uint64 `json:"leafIndex"`
 	CoreCollectionAddress string `json:"coreCollectionAddress"`
+	Slot                  uint64 `json:"slot"`
+}
 
-	Slot uint64 `json:"slot"`
+// MintFundingEstimateParams は solana-bubblegum /estimate に渡す入力です。
+// metadataUri は初回Mint前に未生成でも正常なため、見積入力には含めません。
+type MintFundingEstimateParams struct {
+	TokenBlueprintID string
+	MintQuantity     int
+	ToAddress        string
+	Name             string
+	Symbol           string
+}
+
+type bubblegumMintFundingEstimateRequest struct {
+	TokenBlueprintID string `json:"tokenBlueprintId"`
+	MintQuantity     int    `json:"mintQuantity"`
+	ToAddress        string `json:"toAddress"`
+	Name             string `json:"name"`
+	Symbol           string `json:"symbol"`
+}
+
+type MintFundingEstimateReserve struct {
+	Address         string  `json:"address"`
+	BalanceLamports string  `json:"balanceLamports"`
+	BalanceSOL      float64 `json:"balanceSol"`
+	MinimumLamports string  `json:"minimumLamports"`
+	MinimumSOL      float64 `json:"minimumSol"`
+}
+
+type MintFundingEstimateFeePayer struct {
+	Address         string  `json:"address"`
+	BalanceLamports string  `json:"balanceLamports"`
+	BalanceSOL      float64 `json:"balanceSol"`
+	TargetLamports  string  `json:"targetLamports"`
+	TargetSOL       float64 `json:"targetSol"`
+}
+
+type MintFundingEstimateResources struct {
+	SharedMerkleTreeExists  bool    `json:"sharedMerkleTreeExists"`
+	SharedMerkleTreeAddress *string `json:"sharedMerkleTreeAddress"`
+	CoreCollectionExists    bool    `json:"coreCollectionExists"`
+	CoreCollectionAddress   *string `json:"coreCollectionAddress"`
+}
+
+type MintFundingEstimateCosts struct {
+	MintTransactionFeePerItemLamports string  `json:"mintTransactionFeePerItemLamports"`
+	MintTransactionFeePerItemSOL      float64 `json:"mintTransactionFeePerItemSol"`
+
+	MintTransactionFeeTotalLamports string  `json:"mintTransactionFeeTotalLamports"`
+	MintTransactionFeeTotalSOL      float64 `json:"mintTransactionFeeTotalSol"`
+
+	MerkleTreeCreationTransactionFeeLamports string  `json:"merkleTreeCreationTransactionFeeLamports"`
+	MerkleTreeCreationTransactionFeeSOL      float64 `json:"merkleTreeCreationTransactionFeeSol"`
+	MerkleTreeCreationRentLamports           string  `json:"merkleTreeCreationRentLamports"`
+	MerkleTreeCreationRentSOL                float64 `json:"merkleTreeCreationRentSol"`
+	MerkleTreeCreationCostLamports           string  `json:"merkleTreeCreationCostLamports"`
+	MerkleTreeCreationCostSOL                float64 `json:"merkleTreeCreationCostSol"`
+
+	CoreCollectionCreationTransactionFeeLamports string  `json:"coreCollectionCreationTransactionFeeLamports"`
+	CoreCollectionCreationTransactionFeeSOL      float64 `json:"coreCollectionCreationTransactionFeeSol"`
+	CoreCollectionCreationRentLamports           string  `json:"coreCollectionCreationRentLamports"`
+	CoreCollectionCreationRentSOL                float64 `json:"coreCollectionCreationRentSol"`
+	CoreCollectionCreationCostLamports           string  `json:"coreCollectionCreationCostLamports"`
+	CoreCollectionCreationCostSOL                float64 `json:"coreCollectionCreationCostSol"`
+
+	ProvisioningCostLamports string  `json:"provisioningCostLamports"`
+	ProvisioningCostSOL      float64 `json:"provisioningCostSol"`
+
+	EstimatedNetworkCostLamports string  `json:"estimatedNetworkCostLamports"`
+	EstimatedNetworkCostSOL      float64 `json:"estimatedNetworkCostSol"`
+
+	RequiredFeePayerBalanceLamports string  `json:"requiredFeePayerBalanceLamports"`
+	RequiredFeePayerBalanceSOL      float64 `json:"requiredFeePayerBalanceSol"`
+
+	EstimatedReserveTopUpLamports string  `json:"estimatedReserveTopUpLamports"`
+	EstimatedReserveTopUpSOL      float64 `json:"estimatedReserveTopUpSol"`
+
+	ReserveTransferFeeBufferLamports string  `json:"reserveTransferFeeBufferLamports"`
+	ReserveTransferFeeBufferSOL      float64 `json:"reserveTransferFeeBufferSol"`
+
+	RequiredReserveForTopUpLamports string  `json:"requiredReserveForTopUpLamports"`
+	RequiredReserveForTopUpSOL      float64 `json:"requiredReserveForTopUpSol"`
+
+	Sufficient bool `json:"sufficient"`
+}
+
+type MintFundingEstimateResult struct {
+	Cluster      string `json:"cluster"`
+	MintQuantity int    `json:"mintQuantity"`
+
+	Reserve   MintFundingEstimateReserve   `json:"reserve"`
+	FeePayer  MintFundingEstimateFeePayer  `json:"feePayer"`
+	Resources MintFundingEstimateResources `json:"resources"`
+	Estimate  MintFundingEstimateCosts     `json:"estimate"`
 }
 
 type bubblegumErrorResponse struct {
-	Error string `json:"error"`
-
+	Error   string `json:"error"`
 	Message string `json:"message"`
 }
 
-// MintToken は Bubblegum V2 internal service を経由して
-// productId 1件分の cNFT を mint します.
+// EstimateMintFunding は Bubblegum V2 internal service の /estimate を呼び、
+// Reserve / Fee Payer 残高と Mint に必要な SOL 見積を取得します。
+//
+// IMPORTANT:
+//   - Mintを実行しません。
+//   - ReserveからSOLを送金しません。
+//   - Merkle Tree / Core Collection / cNFTを作成しません。
+//   - metadataUriの生成・取得・uploadを行いません。
+//   - Idempotency-Keyは不要です。
+func (c *MintClient) EstimateMintFunding(ctx context.Context, params MintFundingEstimateParams) (*MintFundingEstimateResult, error) {
+	if c == nil {
+		return nil, errors.New("bubblegum mint client is nil")
+	}
+	if c.httpClient == nil {
+		return nil, errors.New("bubblegum mint http client is nil")
+	}
+	if c.serviceURL == "" {
+		return nil, errors.New("bubblegum mint service URL is empty")
+	}
+	if params.TokenBlueprintID == "" {
+		return nil, errors.New("TokenBlueprintID is empty")
+	}
+	if params.MintQuantity <= 0 {
+		return nil, fmt.Errorf("MintQuantity must be greater than 0: mintQuantity=%d", params.MintQuantity)
+	}
+	if params.ToAddress == "" {
+		return nil, errors.New("ToAddress is empty")
+	}
+	if params.Name == "" {
+		return nil, errors.New("Name is empty")
+	}
+	if params.Symbol == "" {
+		return nil, errors.New("Symbol is empty")
+	}
+
+	requestBody := bubblegumMintFundingEstimateRequest{
+		TokenBlueprintID: params.TokenBlueprintID,
+		MintQuantity:     params.MintQuantity,
+		ToAddress:        params.ToAddress,
+		Name:             params.Name,
+		Symbol:           params.Symbol,
+	}
+
+	body, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("marshal bubblegum mint funding estimate request: %w", err)
+	}
+
+	endpoint := c.serviceURL + bubblegumEstimatePath
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create bubblegum mint funding estimate request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	response, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("call bubblegum mint funding estimate service: %w", err)
+	}
+	defer response.Body.Close()
+
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxBubblegumResponseBodyBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read bubblegum mint funding estimate response: %w", err)
+	}
+	if int64(len(responseBody)) > maxBubblegumResponseBodyBytes {
+		return nil, errors.New("bubblegum mint funding estimate response body is too large")
+	}
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return nil, decodeBubblegumServiceError(response.StatusCode, responseBody)
+	}
+
+	var result MintFundingEstimateResult
+	if err := json.Unmarshal(responseBody, &result); err != nil {
+		return nil, fmt.Errorf("decode bubblegum mint funding estimate response: %w", err)
+	}
+
+	if result.Cluster == "" {
+		return nil, errors.New("bubblegum mint funding estimate response cluster is empty")
+	}
+	if result.MintQuantity <= 0 {
+		return nil, errors.New("bubblegum mint funding estimate response mintQuantity is invalid")
+	}
+	if result.Reserve.Address == "" {
+		return nil, errors.New("bubblegum mint funding estimate response reserve address is empty")
+	}
+	if result.Reserve.BalanceLamports == "" {
+		return nil, errors.New("bubblegum mint funding estimate response reserve balanceLamports is empty")
+	}
+	if result.Reserve.MinimumLamports == "" {
+		return nil, errors.New("bubblegum mint funding estimate response reserve minimumLamports is empty")
+	}
+	if result.FeePayer.Address == "" {
+		return nil, errors.New("bubblegum mint funding estimate response feePayer address is empty")
+	}
+	if result.FeePayer.BalanceLamports == "" {
+		return nil, errors.New("bubblegum mint funding estimate response feePayer balanceLamports is empty")
+	}
+	if result.FeePayer.TargetLamports == "" {
+		return nil, errors.New("bubblegum mint funding estimate response feePayer targetLamports is empty")
+	}
+	if result.Estimate.MintTransactionFeePerItemLamports == "" {
+		return nil, errors.New("bubblegum mint funding estimate response mintTransactionFeePerItemLamports is empty")
+	}
+	if result.Estimate.MintTransactionFeeTotalLamports == "" {
+		return nil, errors.New("bubblegum mint funding estimate response mintTransactionFeeTotalLamports is empty")
+	}
+	if result.Estimate.EstimatedNetworkCostLamports == "" {
+		return nil, errors.New("bubblegum mint funding estimate response estimatedNetworkCostLamports is empty")
+	}
+	if result.Estimate.RequiredFeePayerBalanceLamports == "" {
+		return nil, errors.New("bubblegum mint funding estimate response requiredFeePayerBalanceLamports is empty")
+	}
+	if result.Estimate.EstimatedReserveTopUpLamports == "" {
+		return nil, errors.New("bubblegum mint funding estimate response estimatedReserveTopUpLamports is empty")
+	}
+	if result.Estimate.RequiredReserveForTopUpLamports == "" {
+		return nil, errors.New("bubblegum mint funding estimate response requiredReserveForTopUpLamports is empty")
+	}
+
+	return &result, nil
+}
+
+// MintToken は Bubblegum V2 internal service を経由して productId 1件分の cNFT を mint します.
 //
 // POST {SOLANA_BUBBLEGUM_SERVICE_URL}/mint
 //
@@ -211,319 +363,153 @@ type bubblegumErrorResponse struct {
 //	  "metadataUri": "..."
 //	}
 //
-// Response:
-//
-//	{
-//	  "signature": "...",
-//	  "assetStandard": "bubblegum-v2",
-//	  "cluster": "devnet",
-//	  "assetId": "...",
-//	  "treeAddress": "...",
-//	  "leafIndex": 0,
-//	  "coreCollectionAddress": "...",
-//	  "slot": 0
-//	}
-//
 // IMPORTANT:
+// - 実MintではmetadataUriを必須とします。
 // - productId は internal service 側の idempotency key として使用します。
 // - tokenBlueprintId は MPL Core Collection の解決に使用します。
-// - brandId は mint operation の canonical payload に含めます。
 // - toAddress は cNFT の leaf owner として使用します。
-// - leafIndex=0 は正当な値です。
 // - HTTP transport error 時に Go 側で POST retry はしません。
-// - retry / 重複排除は productId を使って service 側で保証します。
-// - DAS indexing delay を理由に再mintしてはいけません。
-func (c *MintClient) MintToken(
-	ctx context.Context,
-	params tokendom.MintParams,
-) (*tokendom.MintResult, error) {
+func (c *MintClient) MintToken(ctx context.Context, params tokendom.MintParams) (*tokendom.MintResult, error) {
 	if c == nil {
-		return nil, errors.New(
-			"bubblegum mint client is nil",
-		)
+		return nil, errors.New("bubblegum mint client is nil")
 	}
-
 	if c.httpClient == nil {
-		return nil, errors.New(
-			"bubblegum mint http client is nil",
-		)
+		return nil, errors.New("bubblegum mint http client is nil")
 	}
-
 	if c.serviceURL == "" {
-		return nil, errors.New(
-			"bubblegum mint service URL is empty",
-		)
+		return nil, errors.New("bubblegum mint service URL is empty")
 	}
-
 	if params.ProductID == "" {
-		return nil, errors.New(
-			"ProductID is empty",
-		)
+		return nil, errors.New("ProductID is empty")
 	}
-
 	if params.TokenBlueprintID == "" {
-		return nil, errors.New(
-			"TokenBlueprintID is empty",
-		)
+		return nil, errors.New("TokenBlueprintID is empty")
 	}
-
 	if params.BrandID == "" {
-		return nil, errors.New(
-			"BrandID is empty",
-		)
+		return nil, errors.New("BrandID is empty")
 	}
-
 	if params.ToAddress == "" {
-		return nil, errors.New(
-			"ToAddress is empty",
-		)
+		return nil, errors.New("ToAddress is empty")
 	}
-
 	if params.Name == "" {
-		return nil, errors.New(
-			"Name is empty",
-		)
+		return nil, errors.New("Name is empty")
 	}
-
 	if params.Symbol == "" {
-		return nil, errors.New(
-			"Symbol is empty",
-		)
+		return nil, errors.New("Symbol is empty")
 	}
-
 	if params.MetadataURI == "" {
-		return nil, errors.New(
-			"MetadataURI is empty",
-		)
+		return nil, errors.New("MetadataURI is empty")
 	}
-
 	if params.Amount != 0 && params.Amount != 1 {
-		return nil, fmt.Errorf(
-			"Bubblegum V2 mint requires Amount=1: amount=%d",
-			params.Amount,
-		)
+		return nil, fmt.Errorf("Bubblegum V2 mint requires Amount=1: amount=%d", params.Amount)
 	}
 
 	requestBody := bubblegumMintRequest{
-		ProductID: params.ProductID,
-
+		ProductID:        params.ProductID,
 		TokenBlueprintID: params.TokenBlueprintID,
-
-		BrandID: params.BrandID,
-
-		ToAddress: params.ToAddress,
-
-		Name: params.Name,
-
-		Symbol: params.Symbol,
-
-		MetadataURI: params.MetadataURI,
+		BrandID:          params.BrandID,
+		ToAddress:        params.ToAddress,
+		Name:             params.Name,
+		Symbol:           params.Symbol,
+		MetadataURI:      params.MetadataURI,
 	}
 
 	body, err := json.Marshal(requestBody)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"marshal bubblegum mint request: %w",
-			err,
-		)
+		return nil, fmt.Errorf("marshal bubblegum mint request: %w", err)
 	}
 
 	endpoint := c.serviceURL + bubblegumMintPath
-
-	req, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		endpoint,
-		bytes.NewReader(body),
-	)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf(
-			"create bubblegum mint request: %w",
-			err,
-		)
+		return nil, fmt.Errorf("create bubblegum mint request: %w", err)
 	}
 
-	req.Header.Set(
-		"Content-Type",
-		"application/json",
-	)
-
-	req.Header.Set(
-		"Accept",
-		"application/json",
-	)
-
-	req.Header.Set(
-		"Idempotency-Key",
-		params.ProductID,
-	)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Idempotency-Key", params.ProductID)
 
 	response, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"call bubblegum mint service: %w",
-			err,
-		)
+		return nil, fmt.Errorf("call bubblegum mint service: %w", err)
 	}
 	defer response.Body.Close()
 
-	responseBody, err := io.ReadAll(
-		io.LimitReader(
-			response.Body,
-			maxBubblegumResponseBodyBytes+1,
-		),
-	)
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxBubblegumResponseBodyBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf(
-			"read bubblegum mint response: %w",
-			err,
-		)
+		return nil, fmt.Errorf("read bubblegum mint response: %w", err)
 	}
-
-	if int64(len(responseBody)) >
-		maxBubblegumResponseBodyBytes {
-		return nil, errors.New(
-			"bubblegum mint response body is too large",
-		)
+	if int64(len(responseBody)) > maxBubblegumResponseBodyBytes {
+		return nil, errors.New("bubblegum mint response body is too large")
 	}
-
-	if response.StatusCode < http.StatusOK ||
-		response.StatusCode >= http.StatusMultipleChoices {
-		return nil, decodeBubblegumServiceError(
-			response.StatusCode,
-			responseBody,
-		)
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return nil, decodeBubblegumServiceError(response.StatusCode, responseBody)
 	}
 
 	var result bubblegumMintResponse
-
-	if err := json.Unmarshal(
-		responseBody,
-		&result,
-	); err != nil {
-		return nil, fmt.Errorf(
-			"decode bubblegum mint response: %w",
-			err,
-		)
+	if err := json.Unmarshal(responseBody, &result); err != nil {
+		return nil, fmt.Errorf("decode bubblegum mint response: %w", err)
 	}
-
 	if result.Signature == "" {
-		return nil, errors.New(
-			"bubblegum mint response signature is empty",
-		)
+		return nil, errors.New("bubblegum mint response signature is empty")
 	}
-
 	if result.AssetStandard == "" {
-		return nil, errors.New(
-			"bubblegum mint response assetStandard is empty",
-		)
+		return nil, errors.New("bubblegum mint response assetStandard is empty")
 	}
 
-	assetStandard, err := mapBubblegumAssetStandard(
-		result.AssetStandard,
-	)
+	assetStandard, err := mapBubblegumAssetStandard(result.AssetStandard)
 	if err != nil {
 		return nil, err
 	}
 
 	if result.Cluster == "" {
-		return nil, errors.New(
-			"bubblegum mint response cluster is empty",
-		)
+		return nil, errors.New("bubblegum mint response cluster is empty")
 	}
-
 	if result.AssetID == "" {
-		return nil, errors.New(
-			"bubblegum mint response assetId is empty",
-		)
+		return nil, errors.New("bubblegum mint response assetId is empty")
 	}
-
 	if result.TreeAddress == "" {
-		return nil, errors.New(
-			"bubblegum mint response treeAddress is empty",
-		)
+		return nil, errors.New("bubblegum mint response treeAddress is empty")
 	}
-
 	if result.CoreCollectionAddress == "" {
-		return nil, errors.New(
-			"bubblegum mint response coreCollectionAddress is empty",
-		)
+		return nil, errors.New("bubblegum mint response coreCollectionAddress is empty")
 	}
 
 	return &tokendom.MintResult{
-		Signature: result.Signature,
-
-		AssetStandard: assetStandard,
-
-		Cluster: result.Cluster,
-
-		AssetID: result.AssetID,
-
-		TreeAddress: result.TreeAddress,
-
-		LeafIndex: result.LeafIndex,
-
+		Signature:             result.Signature,
+		AssetStandard:         assetStandard,
+		Cluster:               result.Cluster,
+		AssetID:               result.AssetID,
+		TreeAddress:           result.TreeAddress,
+		LeafIndex:             result.LeafIndex,
 		CoreCollectionAddress: result.CoreCollectionAddress,
-
-		Slot: result.Slot,
+		Slot:                  result.Slot,
 	}, nil
 }
 
-func mapBubblegumAssetStandard(
-	value string,
-) (tokendom.AssetStandard, error) {
+func mapBubblegumAssetStandard(value string) (tokendom.AssetStandard, error) {
 	switch value {
 	case "bubblegum-v2":
 		return tokendom.AssetStandardBubblegumV2, nil
-
 	default:
-		return "", fmt.Errorf(
-			"unsupported bubblegum assetStandard: %s",
-			value,
-		)
+		return "", fmt.Errorf("unsupported bubblegum assetStandard: %s", value)
 	}
 }
 
-func decodeBubblegumServiceError(
-	statusCode int,
-	body []byte,
-) error {
+func decodeBubblegumServiceError(statusCode int, body []byte) error {
 	var serviceErr bubblegumErrorResponse
-
 	if len(body) > 0 {
-		if err := json.Unmarshal(
-			body,
-			&serviceErr,
-		); err == nil {
+		if err := json.Unmarshal(body, &serviceErr); err == nil {
 			switch {
-			case serviceErr.Error != "" &&
-				serviceErr.Message != "":
-				return fmt.Errorf(
-					"bubblegum mint service status=%d error=%s message=%s",
-					statusCode,
-					serviceErr.Error,
-					serviceErr.Message,
-				)
-
+			case serviceErr.Error != "" && serviceErr.Message != "":
+				return fmt.Errorf("bubblegum service status=%d error=%s message=%s", statusCode, serviceErr.Error, serviceErr.Message)
 			case serviceErr.Error != "":
-				return fmt.Errorf(
-					"bubblegum mint service status=%d error=%s",
-					statusCode,
-					serviceErr.Error,
-				)
-
+				return fmt.Errorf("bubblegum service status=%d error=%s", statusCode, serviceErr.Error)
 			case serviceErr.Message != "":
-				return fmt.Errorf(
-					"bubblegum mint service status=%d message=%s",
-					statusCode,
-					serviceErr.Message,
-				)
+				return fmt.Errorf("bubblegum service status=%d message=%s", statusCode, serviceErr.Message)
 			}
 		}
 	}
 
-	return fmt.Errorf(
-		"bubblegum mint service returned status=%d",
-		statusCode,
-	)
+	return fmt.Errorf("bubblegum service returned status=%d", statusCode)
 }

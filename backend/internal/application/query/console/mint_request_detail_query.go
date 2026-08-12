@@ -122,10 +122,15 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 			modelMeta[it.ModelID] =
 				querydto.MintModelMetaEntry{
 					ModelID:     it.ModelID,
+					Kind:        resolved.Kind,
 					ModelNumber: resolved.ModelNumber,
-					Size:        resolved.Size,
-					ColorName:   resolved.Color,
-					RGB:         resolved.RGB,
+
+					Size:      resolved.Size,
+					ColorName: resolved.Color,
+					RGB:       resolved.RGB,
+
+					Volume:     resolved.VolumeValue,
+					VolumeUnit: resolved.VolumeUnit,
 				}
 		}
 	}

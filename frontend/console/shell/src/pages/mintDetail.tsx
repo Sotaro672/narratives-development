@@ -30,6 +30,17 @@ import TokenBlueprintCard from "../features/tokenBlueprint/presentation/componen
 
 import "../styles/mintRequest.css";
 
+function formatSol(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+
+  return value.toLocaleString("ja-JP", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 9,
+  });
+}
+
 /**
  * Mint処理中に右カラムへ表示するステータスカード。
  */
@@ -127,12 +138,13 @@ export default function MintRequestDetail() {
     isCompletingInspection,
     handleCompleteInspection,
 
-    scheduledBurnDate,
-    setScheduledBurnDate,
-
     tokenBlueprintCardVm,
 
     mintMintedAtLabel,
+
+    mintFundingEstimate,
+    mintFundingEstimateLoading,
+    mintFundingEstimateError,
   } = useMintRequestDetail();
 
   const mintStatusLabel =
@@ -152,6 +164,12 @@ export default function MintRequestDetail() {
                   ? "作成済み"
                   : mintStatus ||
                     "（未設定）";
+
+  const canSubmitMint =
+    !isMinting &&
+    !mintFundingEstimateLoading &&
+    Boolean(mintFundingEstimate) &&
+    mintFundingEstimate?.estimate.sufficient === true;
 
   return (
     <PageStyle
@@ -261,36 +279,230 @@ export default function MintRequestDetail() {
 
         {showMintButton && (
           <Card className="mint-request-card">
+            <CardHeader>
+              <CardTitle>
+                SOL見積
+              </CardTitle>
+            </CardHeader>
+
             <CardContent className="mint-request-card__body">
-              <div className="space-y-3">
-                <div className="mint-request-card__burn-date space-y-1">
-                  <label className="block text-sm font-medium text-gray-700">
-                    焼却予定日（Scheduled Burn Date）
-                  </label>
+              <div className="space-y-4">
+                {!selectedTokenBlueprintId ? (
+                  <div className="text-sm text-gray-500">
+                    トークン設計を選択すると、ミントに必要なSOLを見積もります。
+                  </div>
+                ) : mintFundingEstimateLoading ? (
+                  <div
+                    className="flex items-center gap-3 text-sm text-gray-600"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <div
+                      className="h-5 w-5 animate-spin rounded-full border-2 border-gray-200 border-t-blue-600"
+                      aria-hidden="true"
+                    />
+                    SOL見積を取得中です…
+                  </div>
+                ) : mintFundingEstimateError ? (
+                  <div className="text-sm text-red-600">
+                    {mintFundingEstimateError}
+                  </div>
+                ) : mintFundingEstimate ? (
+                  <div className="space-y-4">
+                    <div className="grid gap-2 text-sm">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-gray-600">
+                          Reserve Wallet残高
+                        </span>
+                        <strong className="text-gray-900">
+                          {formatSol(
+                            mintFundingEstimate.reserve.balanceSol,
+                          )} SOL
+                        </strong>
+                      </div>
 
-                  <input
-                    type="date"
-                    className="mint-request-card__burn-date-input"
-                    value={scheduledBurnDate}
-                    onChange={(event) =>
-                      setScheduledBurnDate(
-                        event.target.value,
-                      )
-                    }
-                    disabled={isMinting}
-                  />
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-gray-600">
+                          Fee Payer残高
+                        </span>
+                        <strong className="text-gray-900">
+                          {formatSol(
+                            mintFundingEstimate.feePayer.balanceSol,
+                          )} SOL
+                        </strong>
+                      </div>
 
-                  <p className="text-xs text-gray-500">
-                    ※
-                    任意。未入力の場合は焼却予定日なしでミント申請します。
-                  </p>
-                </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-gray-600">
+                          Fee Payer目標残高
+                        </span>
+                        <strong className="text-gray-900">
+                          {formatSol(
+                            mintFundingEstimate.feePayer.targetSol,
+                          )} SOL
+                        </strong>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-gray-600">
+                          ミント数
+                        </span>
+                        <strong className="text-gray-900">
+                          {mintFundingEstimate.mintQuantity}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-gray-200 pt-3">
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">
+                            1件あたりMint手数料
+                          </span>
+                          <strong className="text-gray-900">
+                            {formatSol(
+                              mintFundingEstimate.estimate
+                                .mintTransactionFeePerItemSol,
+                            )} SOL
+                          </strong>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">
+                            Mint手数料合計
+                          </span>
+                          <strong className="text-gray-900">
+                            {formatSol(
+                              mintFundingEstimate.estimate
+                                .mintTransactionFeeTotalSol,
+                            )} SOL
+                          </strong>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">
+                            Shared Merkle Tree作成費
+                          </span>
+                          <strong className="text-gray-900">
+                            {formatSol(
+                              mintFundingEstimate.estimate
+                                .merkleTreeCreationCostSol,
+                            )} SOL
+                          </strong>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">
+                            Core Collection作成費
+                          </span>
+                          <strong className="text-gray-900">
+                            {formatSol(
+                              mintFundingEstimate.estimate
+                                .coreCollectionCreationCostSol,
+                            )} SOL
+                          </strong>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">
+                            Provisioning費用
+                          </span>
+                          <strong className="text-gray-900">
+                            {formatSol(
+                              mintFundingEstimate.estimate
+                                .provisioningCostSol,
+                            )} SOL
+                          </strong>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">
+                            推定Network費用
+                          </span>
+                          <strong className="text-gray-900">
+                            {formatSol(
+                              mintFundingEstimate.estimate
+                                .estimatedNetworkCostSol,
+                            )} SOL
+                          </strong>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">
+                            Reserveからの補充予定
+                          </span>
+                          <strong className="text-gray-900">
+                            {formatSol(
+                              mintFundingEstimate.estimate
+                                .estimatedReserveTopUpSol,
+                            )} SOL
+                          </strong>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">
+                            補充時に必要なReserve残高
+                          </span>
+                          <strong className="text-gray-900">
+                            {formatSol(
+                              mintFundingEstimate.estimate
+                                .requiredReserveForTopUpSol,
+                            )} SOL
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-gray-200 pt-3">
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">
+                            Shared Merkle Tree
+                          </span>
+                          <strong className="text-gray-900">
+                            {mintFundingEstimate.resources
+                              .sharedMerkleTreeExists
+                              ? "作成済み"
+                              : "初回作成"}
+                          </strong>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">
+                            Core Collection
+                          </span>
+                          <strong className="text-gray-900">
+                            {mintFundingEstimate.resources
+                              .coreCollectionExists
+                              ? "作成済み"
+                              : "初回作成"}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      className={
+                        "rounded-md px-3 py-2 text-sm font-medium " +
+                        (
+                          mintFundingEstimate.estimate.sufficient
+                            ? "bg-green-50 text-green-700"
+                            : "bg-red-50 text-red-700"
+                        )
+                      }
+                    >
+                      {mintFundingEstimate.estimate.sufficient
+                        ? "SOL残高はミント実行に必要な条件を満たしています。"
+                        : "Reserve WalletのSOL残高が不足しています。"}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="mint-request-card__actions">
                   <Button
                     type="button"
                     onClick={handleMint}
-                    disabled={isMinting}
+                    disabled={!canSubmitMint}
                     className="mint-request-card__button flex items-center gap-2"
                   >
                     <Coins size={16} />
@@ -476,50 +688,50 @@ export default function MintRequestDetail() {
               {selectedBrandId &&
                 tokenBlueprintOptions.length >
                   0 && (
-                  <div className="pb-select__list">
-                    {tokenBlueprintOptions.map(
-                      (
-                        tokenBlueprint,
-                      ) => (
-                        <button
-                          key={
+                <div className="pb-select__list">
+                  {tokenBlueprintOptions.map(
+                    (
+                      tokenBlueprint,
+                    ) => (
+                      <button
+                        key={
+                          tokenBlueprint.id
+                        }
+                        type="button"
+                        className={
+                          "pb-select__row" +
+                          (
+                            selectedTokenBlueprintId ===
                             tokenBlueprint.id
-                          }
-                          type="button"
-                          className={
-                            "pb-select__row" +
-                            (
-                              selectedTokenBlueprintId ===
-                              tokenBlueprint.id
-                                ? " is-active"
-                                : ""
-                            )
-                          }
-                          onClick={() =>
-                            handleSelectTokenBlueprint(
-                              tokenBlueprint.id,
-                            )
-                          }
-                          disabled={
-                            isMinting
-                          }
-                        >
-                          {
-                            tokenBlueprint.tokenName
-                          }
-                        </button>
-                      ),
-                    )}
-                  </div>
-                )}
+                              ? " is-active"
+                              : ""
+                          )
+                        }
+                        onClick={() =>
+                          handleSelectTokenBlueprint(
+                            tokenBlueprint.id,
+                          )
+                        }
+                        disabled={
+                          isMinting
+                        }
+                      >
+                        {
+                          tokenBlueprint.tokenName
+                        }
+                      </button>
+                    ),
+                  )}
+                </div>
+              )}
 
               {selectedBrandId &&
                 tokenBlueprintOptions.length ===
                   0 && (
-                  <div className="pb-select__empty">
-                    選択中のブランドに紐づくトークン設計がありません。
-                  </div>
-                )}
+                <div className="pb-select__empty">
+                  選択中のブランドに紐づくトークン設計がありません。
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

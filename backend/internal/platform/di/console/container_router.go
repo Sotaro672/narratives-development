@@ -281,6 +281,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		mintH = consoleHandler.NewMintHandler(
 			c.MintUC,
 			c.MintRequestQueryService,
+			c.MintFundingEstimateQuery,
 		)
 
 		internalMintTasksH = internalHandler.NewMintTaskHandler(c.MintUC)

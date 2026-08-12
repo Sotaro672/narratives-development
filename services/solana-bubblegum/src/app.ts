@@ -1,10 +1,6 @@
 // services/solana-bubblegum/src/app.ts
 
-import express, {
-  type NextFunction,
-  type Request,
-  type Response,
-} from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 
 import {
   MintV2UsecaseInvalidStateError,
@@ -19,12 +15,11 @@ import {
   MintOperationStateConflictError,
 } from "./application/ports/mint-operation-registry-port.js";
 
-import {
-  isMintV2TransactionError,
-} from "./application/ports/mint-v2-transaction-port.js";
+import { isMintV2TransactionError } from "./application/ports/mint-v2-transaction-port.js";
 
 import {
   getBubblegumRuntime,
+  getMintFundingEstimateUsecase,
   getMintV2Usecase,
 } from "./bootstrap/container.js";
 
@@ -38,63 +33,71 @@ type MintRequestBody = {
   metadataUri?: unknown;
 };
 
+type MintEstimateRequestBody = {
+  tokenBlueprintId?: unknown;
+  mintQuantity?: unknown;
+  toAddress?: unknown;
+  name?: unknown;
+  symbol?: unknown;
+};
+
 class HttpRequestValidationError extends Error {
   readonly name = "HttpRequestValidationError";
 
-  constructor(
-    readonly field: string,
-    message: string,
-  ) {
-    super([
-      "http: invalid request",
-      `field=${field}`,
-      message,
-    ].join(" "));
+  constructor(readonly field: string, message: string) {
+    super(["http: invalid request", `field=${field}`, message].join(" "));
   }
 }
 
-function readMintRequestBody(
-  value: unknown,
-): MintRequestBody {
-  if (
-    value === null ||
-    typeof value !== "object" ||
-    Array.isArray(value)
-  ) {
-    throw new HttpRequestValidationError(
-      "body",
-      "JSON object is required",
-    );
+class MintEstimateExecutionError extends Error {
+  readonly name = "MintEstimateExecutionError";
+
+  constructor(readonly cause: unknown) {
+    super("mint funding estimate is temporarily unavailable");
+  }
+}
+
+function readMintRequestBody(value: unknown): MintRequestBody {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpRequestValidationError("body", "JSON object is required");
   }
 
   return value as MintRequestBody;
 }
 
-function requiredString(
-  field: string,
-  value: unknown,
-): string {
-  if (
-    typeof value !== "string" ||
-    value.length === 0
-  ) {
-    throw new HttpRequestValidationError(
-      field,
-      "value is required",
-    );
+function readMintEstimateRequestBody(value: unknown): MintEstimateRequestBody {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpRequestValidationError("body", "JSON object is required");
+  }
+
+  return value as MintEstimateRequestBody;
+}
+
+function requiredString(field: string, value: unknown): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new HttpRequestValidationError(field, "value is required");
   }
 
   return value;
 }
 
-function stringValue(
-  field: string,
-  value: unknown,
-): string {
+function stringValue(field: string, value: unknown): string {
   if (typeof value !== "string") {
+    throw new HttpRequestValidationError(field, "value must be string");
+  }
+
+  return value;
+}
+
+function requiredPositiveInteger(field: string, value: unknown): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value <= 0
+  ) {
     throw new HttpRequestValidationError(
       field,
-      "value must be string",
+      "value must be a positive integer",
     );
   }
 
@@ -104,43 +107,71 @@ function stringValue(
 export const app = express();
 
 app.disable("x-powered-by");
+app.use(express.json({ limit: "32kb" }));
 
-app.use(
-  express.json({
-    limit: "32kb",
-  }),
-);
+app.get("/health", (_req: Request, res: Response) => {
+  res.status(200).json({
+    status: "ok",
+    service: "solana-bubblegum",
+  });
+});
 
-app.get(
-  "/health",
-  (_req: Request, res: Response) => {
-    res.status(200).json({
-      status: "ok",
-      service: "solana-bubblegum",
-    });
+app.post(
+  "/estimate",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = readMintEstimateRequestBody(req.body);
+
+      const tokenBlueprintId = requiredString(
+        "tokenBlueprintId",
+        body.tokenBlueprintId,
+      );
+      const mintQuantity = requiredPositiveInteger(
+        "mintQuantity",
+        body.mintQuantity,
+      );
+      const toAddress = requiredString("toAddress", body.toAddress);
+      const name = requiredString("name", body.name);
+      const symbol = stringValue("symbol", body.symbol);
+
+      let result;
+
+      try {
+        const runtime = await getBubblegumRuntime();
+        const mintFundingEstimateUsecase = getMintFundingEstimateUsecase();
+
+        result = await mintFundingEstimateUsecase.execute({
+          tokenBlueprintId,
+          mintQuantity,
+          leafOwnerAddress: toAddress,
+          name,
+          symbol,
+          umi: runtime.umi,
+          feePayer: runtime.feePayer,
+          reserve: runtime.reserve,
+        });
+      } catch (error) {
+        if (isMintV2TransactionError(error)) {
+          throw error;
+        }
+
+        throw new MintEstimateExecutionError(error);
+      }
+
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
   },
 );
 
 app.post(
   "/mint",
-  async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const body = readMintRequestBody(
-        req.body,
-      );
-
-      const productId = requiredString(
-        "productId",
-        body.productId,
-      );
-
-      const idempotencyKey = req.get(
-        "Idempotency-Key",
-      );
+      const body = readMintRequestBody(req.body);
+      const productId = requiredString("productId", body.productId);
+      const idempotencyKey = req.get("Idempotency-Key");
 
       if (!idempotencyKey) {
         throw new HttpRequestValidationError(
@@ -160,64 +191,40 @@ app.post(
         "tokenBlueprintId",
         body.tokenBlueprintId,
       );
+      const brandId = requiredString("brandId", body.brandId);
+      const toAddress = requiredString("toAddress", body.toAddress);
+      const name = requiredString("name", body.name);
+      const symbol = stringValue("symbol", body.symbol);
+      const metadataUri = requiredString("metadataUri", body.metadataUri);
 
-      const brandId = requiredString(
-        "brandId",
-        body.brandId,
-      );
-
-      const toAddress = requiredString(
-        "toAddress",
-        body.toAddress,
-      );
-
-      const name = requiredString(
-        "name",
-        body.name,
-      );
-
-      const symbol = stringValue(
-        "symbol",
-        body.symbol,
-      );
-
-      const metadataUri = requiredString(
-        "metadataUri",
-        body.metadataUri,
-      );
-
-      const [
-        runtime,
-        mintV2Usecase,
-      ] = await Promise.all([
+      const [runtime, mintV2Usecase] = await Promise.all([
         getBubblegumRuntime(),
         getMintV2Usecase(),
       ]);
 
-      const result =
-        await mintV2Usecase.execute({
-          productId,
-          tokenBlueprintId,
-          brandId,
-          leafOwnerAddress: toAddress,
-          leafDelegateAddress: null,
-          coreCollection: {
-            name,
-            metadataUri,
-          },
-          metadata: {
-            name,
-            symbol,
-            uri: metadataUri,
-            sellerFeeBasisPoints: 0,
-            primarySaleHappened: false,
-            isMutable: false,
-            creators: [],
-          },
-          umi: runtime.umi,
-          feePayer: runtime.feePayer,
-          reserve: runtime.reserve,
-        });
+      const result = await mintV2Usecase.execute({
+        productId,
+        tokenBlueprintId,
+        brandId,
+        leafOwnerAddress: toAddress,
+        leafDelegateAddress: null,
+        coreCollection: {
+          name,
+          metadataUri,
+        },
+        metadata: {
+          name,
+          symbol,
+          uri: metadataUri,
+          sellerFeeBasisPoints: 0,
+          primarySaleHappened: false,
+          isMutable: false,
+          creators: [],
+        },
+        umi: runtime.umi,
+        feePayer: runtime.feePayer,
+        reserve: runtime.reserve,
+      });
 
       res.status(200).json(result);
     } catch (error) {
@@ -226,16 +233,11 @@ app.post(
   },
 );
 
-app.use(
-  (
-    _req: Request,
-    res: Response,
-  ) => {
-    res.status(404).json({
-      error: "not found",
-    });
-  },
-);
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({
+    error: "not found",
+  });
+});
 
 app.use(
   (
@@ -244,10 +246,7 @@ app.use(
     res: Response,
     _next: NextFunction,
   ) => {
-    console.error(
-      "[http]",
-      error,
-    );
+    console.error("[http]", error);
 
     if (error instanceof SyntaxError) {
       res.status(400).json({
@@ -256,10 +255,7 @@ app.use(
       return;
     }
 
-    if (
-      error instanceof
-      HttpRequestValidationError
-    ) {
+    if (error instanceof HttpRequestValidationError) {
       res.status(400).json({
         error: "invalid request",
         field: error.field,
@@ -268,10 +264,7 @@ app.use(
       return;
     }
 
-    if (
-      error instanceof
-      MintV2UsecaseValidationError
-    ) {
+    if (error instanceof MintV2UsecaseValidationError) {
       res.status(400).json({
         error: "invalid mint request",
         field: error.field,
@@ -280,23 +273,15 @@ app.use(
       return;
     }
 
-    if (
-      isMintV2TransactionError(
-        error,
-      )
-    ) {
+    if (isMintV2TransactionError(error)) {
       if (
         error.code === "INVALID_INPUT" ||
-        error.code ===
-          "INVALID_PUBLIC_KEY" ||
-        error.code ===
-          "INVALID_SIGNATURE" ||
-        error.code ===
-          "INVALID_TRANSACTION_SIGNATURE"
+        error.code === "INVALID_PUBLIC_KEY" ||
+        error.code === "INVALID_SIGNATURE" ||
+        error.code === "INVALID_TRANSACTION_SIGNATURE"
       ) {
         res.status(400).json({
-          error:
-            "invalid mint transaction request",
+          error: "invalid mint transaction request",
           code: error.code,
           message: error.message,
         });
@@ -305,8 +290,7 @@ app.use(
 
       if (error.kind === "FATAL") {
         res.status(422).json({
-          error:
-            "mint transaction failed fatally",
+          error: "mint transaction failed fatally",
           code: error.code,
           message: error.message,
         });
@@ -314,18 +298,22 @@ app.use(
       }
 
       res.status(503).json({
-        error:
-          "mint transaction failed retryably",
+        error: "mint transaction failed retryably",
         code: error.code,
         message: error.message,
       });
       return;
     }
 
-    if (
-      error instanceof
-      MintOperationPayloadConflictError
-    ) {
+    if (error instanceof MintEstimateExecutionError) {
+      res.status(503).json({
+        error: "mint funding estimate unavailable",
+        message: error.message,
+      });
+      return;
+    }
+
+    if (error instanceof MintOperationPayloadConflictError) {
       res.status(409).json({
         error: "idempotency conflict",
         productId: error.productId,
@@ -334,10 +322,8 @@ app.use(
     }
 
     if (
-      error instanceof
-        MintOperationStateConflictError ||
-      error instanceof
-        MintOperationSignedTransactionConflictError
+      error instanceof MintOperationStateConflictError ||
+      error instanceof MintOperationSignedTransactionConflictError
     ) {
       res.status(409).json({
         error: "mint operation conflict",
@@ -346,39 +332,27 @@ app.use(
       return;
     }
 
-    if (
-      error instanceof
-      MintV2UsecaseInvalidStateError
-    ) {
+    if (error instanceof MintV2UsecaseInvalidStateError) {
       res.status(409).json({
-        error:
-          "invalid mint operation state",
+        error: "invalid mint operation state",
         productId: error.productId,
         status: error.status,
       });
       return;
     }
 
-    if (
-      error instanceof
-      MintV2UsecaseStoredFatalError
-    ) {
+    if (error instanceof MintV2UsecaseStoredFatalError) {
       res.status(422).json({
-        error:
-          "mint operation failed fatally",
+        error: "mint operation failed fatally",
         productId: error.productId,
         errorCode: error.errorCode,
       });
       return;
     }
 
-    if (
-      error instanceof
-      MintOperationNotFoundError
-    ) {
+    if (error instanceof MintOperationNotFoundError) {
       res.status(404).json({
-        error:
-          "mint operation not found",
+        error: "mint operation not found",
         productId: error.productId,
       });
       return;
