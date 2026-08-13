@@ -760,23 +760,9 @@ func NewContainer(
 				)
 		}
 
-		walletTransferUpdate, walletTransferOK :=
-			any(walletRepo).(usecase.AvatarWalletItemTransferUpdater)
-		if !walletTransferOK {
-			return nil,
-				errors.New(
-					"di.mall: wallet repository does not implement AvatarWalletItemTransferUpdater for transfer execution",
-				)
-		}
+		var walletTransferUpdate usecase.AvatarWalletItemTransferUpdater = walletRepo
 
-		walletSync, walletSyncOK :=
-			any(c.WalletUC).(usecase.AvatarWalletSyncer)
-		if !walletSyncOK {
-			return nil,
-				errors.New(
-					"di.mall: wallet usecase does not implement AvatarWalletSyncer for transfer execution",
-				)
-		}
+		var walletSync usecase.AvatarWalletSyncer = c.WalletUC
 
 		var executor usecase.TokenTransferExecutor = solana.NewTokenTransferExecutorSolana(
 			"",

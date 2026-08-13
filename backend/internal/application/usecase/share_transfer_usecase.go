@@ -26,18 +26,18 @@ type AvatarSecretProvider interface {
 // AvatarWalletItemTransferUpdater updates sender / receiver wallet asset caches.
 //
 // NOTE:
-// Method names are kept temporarily for compatibility with existing
-// implementations. The identifier passed to these methods is a Bubblegum V2
-// assetId, not a legacy SPL mint address.
+// Method names follow the current assetId-based wallet repository contract.
+// The identifier passed to these methods is a Bubblegum V2 assetId, not a
+// legacy SPL mint address.
 type AvatarWalletItemTransferUpdater interface {
-	RemoveMintFromAvatarWalletItems(
+	RemoveAssetIDFromAvatarWalletItems(
 		ctx context.Context,
 		avatarID string,
 		assetID string,
 		now time.Time,
 	) error
 
-	AddMintToAvatarWalletItems(
+	AddAssetIDToAvatarWalletItems(
 		ctx context.Context,
 		avatarID string,
 		assetID string,
@@ -47,7 +47,7 @@ type AvatarWalletItemTransferUpdater interface {
 
 // AvatarWalletSyncer fully syncs wallet assets from on-chain after transfer.
 type AvatarWalletSyncer interface {
-	SyncWalletTokens(
+	SyncWalletAssetIDs(
 		ctx context.Context,
 		avatarID string,
 	) (walletdom.Wallet, error)

@@ -585,7 +585,7 @@ func (u *TokenTransferExecutionUsecase) Execute(
 	// -------------------------------------------------------------------------
 
 	if in.RemoveFromSenderWallet {
-		if err := u.walletUpdate.RemoveMintFromAvatarWalletItems(
+		if err := u.walletUpdate.RemoveAssetIDFromAvatarWalletItems(
 			ctx,
 			in.FromAvatarID,
 			in.AssetID,
@@ -613,7 +613,7 @@ func (u *TokenTransferExecutionUsecase) Execute(
 		}
 	}
 
-	if err := u.walletUpdate.AddMintToAvatarWalletItems(
+	if err := u.walletUpdate.AddAssetIDToAvatarWalletItems(
 		ctx,
 		in.ToAvatarID,
 		in.AssetID,
@@ -645,7 +645,7 @@ func (u *TokenTransferExecutionUsecase) Execute(
 	// -------------------------------------------------------------------------
 
 	if in.SyncSenderWallet {
-		if _, err := u.walletSync.SyncWalletTokens(
+		if _, err := u.walletSync.SyncWalletAssetIDs(
 			ctx,
 			in.FromAvatarID,
 		); err != nil {
@@ -674,7 +674,7 @@ func (u *TokenTransferExecutionUsecase) Execute(
 	}
 
 	if in.SyncReceiverWallet {
-		if _, err := u.walletSync.SyncWalletTokens(
+		if _, err := u.walletSync.SyncWalletAssetIDs(
 			ctx,
 			in.ToAvatarID,
 		); err != nil {
