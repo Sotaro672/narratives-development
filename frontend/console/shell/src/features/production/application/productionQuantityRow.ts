@@ -1,4 +1,10 @@
-//frontend\console\shell\src\features\production\application\productionQuantityRow.ts
+// frontend/console/shell/src/features/production/application/productionQuantityRow.ts
+
+export type ProductionQuantityInput = {
+  modelId: string;
+  quantity: number;
+};
+
 export type ProductionQuantityRow = {
   modelId: string;
   kind?: "apparel" | "alcohol";

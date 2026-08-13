@@ -7,7 +7,7 @@ import {
   loadProductionDetail,
   updateProductionDetail,
   type ProductionDetail,
-} from "../../application/detail/index";
+} from "../../application/productionDetailService";
 import type { ProductionQuantityRow } from "../../application/productionQuantityRow";
 import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
 

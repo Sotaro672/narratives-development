@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import type { Brand } from "../../../../shared/types/brand";
 import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
-import { buildProductionPayload } from "../../application/create/ProductionCreateService";
+import { buildProductionPayload } from "../../application/productionCreateService";
 import type { ProductionQuantityRow } from "../../application/productionQuantityRow";
 import {
   loadBrands,

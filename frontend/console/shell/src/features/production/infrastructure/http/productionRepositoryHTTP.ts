@@ -6,7 +6,7 @@ import { getAuthJsonHeadersOrThrow } from "../../../../shared/http/authHeaders";
 import type {
   CreateProductionRequest,
   ProductionRepository,
-} from "../../application/create/ProductionCreateService";
+} from "../../application/productionCreateService";
 
 export class ProductionRepositoryHTTP implements ProductionRepository {
   private readonly baseUrl: string;

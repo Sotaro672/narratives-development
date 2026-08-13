@@ -1,48 +1,31 @@
 // frontend/console/shell/src/features/production/application/productionManagementService.tsx
 
-import { listProductionsHTTP } from "../infrastructure/query/productionQuery";
 import { safeDateTimeLabelJa } from "../../../shared/util/dateJa";
+import {
+  listProductionsHTTP,
+  type ProductionListItemResponse,
+} from "../infrastructure/api/productionManagementApi";
 
 export type SortKey = "printedAt" | "createdAt" | "totalQuantity" | null;
 
-export type ProductionRow = {
-  id: string;
-  productBlueprintId: string;
-  productName: string;
-  assigneeId: string;
-  assigneeName: string;
-  models: Array<{
-    modelId: string;
-    quantity: number;
-  }>;
-  printed: boolean;
-  printedAt: string | null;
-  printedBy: string | null;
-  printedByName: string;
-  createdBy: string | null;
-  createdByName: string;
-  createdAt: string;
-  updatedBy: string | null;
-  updatedByName: string;
-  updatedAt: string | null;
-  totalQuantity: number;
-  brandName: string;
+export type ProductionRow = ProductionListItemResponse & {
   printedAtLabel: string;
   createdAtLabel: string;
 };
 
-export type ProductionRowView = {
-  id: string;
-  productBlueprintId: string;
-  productName: string;
-  assigneeId: string;
-  assigneeName: string;
-  printed: boolean;
-  totalQuantity: number;
-  printedAtLabel: string;
-  createdAtLabel: string;
-  brandName: string;
-};
+export type ProductionRowView = Pick<
+  ProductionRow,
+  | "id"
+  | "productBlueprintId"
+  | "productName"
+  | "assigneeId"
+  | "assigneeName"
+  | "printed"
+  | "totalQuantity"
+  | "printedAtLabel"
+  | "createdAtLabel"
+  | "brandName"
+>;
 
 function toTimestamp(value: string | null): number {
   if (!value) {
@@ -54,46 +37,24 @@ function toTimestamp(value: string | null): number {
 }
 
 /**
- * Production 一覧取得
+ * Production 一覧取得。
  *
- * GET /productions の BFF response を正とする。
- * frontend では backend の値を再検証・補完せず、
- * UI が使用する lowerCamelCase への変換と
- * 表示用日時ラベルの生成だけを行う。
+ * GET /productions の lowerCamelCase BFF response を正とし、
+ * frontend では表示用日時ラベルだけを追加する。
  */
 export async function loadProductionRows(): Promise<ProductionRow[]> {
   const items = await listProductionsHTTP();
 
-  return items.map((item): ProductionRow => ({
-    id: item.ID,
-    productBlueprintId: item.ProductBlueprintID,
-    productName: item.productName ?? "",
-    assigneeId: item.AssigneeID,
-    assigneeName: item.assigneeName ?? "",
-    models: item.Models.map((model) => ({
-      modelId: model.ModelID,
-      quantity: model.Quantity,
-    })),
-    printed: item.Printed,
-    printedAt: item.PrintedAt ?? null,
-    printedBy: item.PrintedBy ?? null,
-    printedByName: item.printedByName ?? "",
-    createdBy: item.CreatedBy ?? null,
-    createdByName: item.createdByName ?? "",
-    createdAt: item.CreatedAt,
-    updatedBy: item.UpdatedBy ?? null,
-    updatedByName: item.updatedByName ?? "",
-    updatedAt: item.UpdatedAt ?? null,
-    totalQuantity: item.totalQuantity,
-    brandName: item.brandName ?? "",
-    printedAtLabel: safeDateTimeLabelJa(item.PrintedAt ?? null, "-"),
-    createdAtLabel: safeDateTimeLabelJa(item.CreatedAt, "-"),
+  return items.map((item) => ({
+    ...item,
+    printedAtLabel: safeDateTimeLabelJa(item.printedAt, "-"),
+    createdAtLabel: safeDateTimeLabelJa(item.createdAt, "-"),
   }));
 }
 
 /**
  * Production 一覧の frontend UI 状態に応じたフィルタ・ソート。
- * データの補完や backend response の正規化は行わない。
+ * Backend response の変換・補完は行わない。
  */
 export function buildRowsView(params: {
   baseRows: ProductionRow[];

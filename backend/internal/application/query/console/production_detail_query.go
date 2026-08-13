@@ -27,17 +27,30 @@ type ProductionQueryRepo interface {
 // Production List DTO
 // ============================================================
 
+type ProductionListModelDTO struct {
+	ModelID  string `json:"modelId"`
+	Quantity int    `json:"quantity"`
+}
+
 type ProductionListItemDTO struct {
-	productiondom.Production
-
-	TotalQuantity int `json:"totalQuantity"`
-
-	ProductName   string `json:"productName,omitempty"`
-	BrandName     string `json:"brandName,omitempty"`
-	AssigneeName  string `json:"assigneeName,omitempty"`
-	CreatedByName string `json:"createdByName,omitempty"`
-	UpdatedByName string `json:"updatedByName,omitempty"`
-	PrintedByName string `json:"printedByName,omitempty"`
+	ID                 string                   `json:"id"`
+	ProductBlueprintID string                   `json:"productBlueprintId"`
+	ProductName        string                   `json:"productName"`
+	BrandName          string                   `json:"brandName"`
+	AssigneeID         string                   `json:"assigneeId"`
+	AssigneeName       string                   `json:"assigneeName"`
+	Models             []ProductionListModelDTO `json:"models"`
+	Printed            bool                     `json:"printed"`
+	PrintedAt          *time.Time               `json:"printedAt"`
+	PrintedBy          *string                  `json:"printedBy"`
+	PrintedByName      string                   `json:"printedByName"`
+	CreatedBy          *string                  `json:"createdBy"`
+	CreatedByName      string                   `json:"createdByName"`
+	CreatedAt          *time.Time               `json:"createdAt"`
+	UpdatedBy          *string                  `json:"updatedBy"`
+	UpdatedByName      string                   `json:"updatedByName"`
+	UpdatedAt          *time.Time               `json:"updatedAt"`
+	TotalQuantity      int                      `json:"totalQuantity"`
 }
 
 // ============================================================
@@ -304,19 +317,16 @@ func (s *CompanyProductionQueryService) GetProductionDetailByID(
 		AssigneeName:             assigneeName,
 		Models:                   models,
 		TotalQuantity:            totalQuantity,
-
-		Printed:       p.Printed,
-		PrintedAt:     p.PrintedAt,
-		PrintedBy:     p.PrintedBy,
-		PrintedByName: printedByName,
-
-		CreatedBy:     p.CreatedBy,
-		CreatedByName: createdByName,
-		CreatedAt:     productionTimePointer(p.CreatedAt),
-
-		UpdatedBy:     p.UpdatedBy,
-		UpdatedByName: updatedByName,
-		UpdatedAt:     productionTimePointer(p.UpdatedAt),
+		Printed:                  p.Printed,
+		PrintedAt:                p.PrintedAt,
+		PrintedBy:                p.PrintedBy,
+		PrintedByName:            printedByName,
+		CreatedBy:                p.CreatedBy,
+		CreatedByName:            createdByName,
+		CreatedAt:                productionTimePointer(p.CreatedAt),
+		UpdatedBy:                p.UpdatedBy,
+		UpdatedByName:            updatedByName,
+		UpdatedAt:                productionTimePointer(p.UpdatedAt),
 	}, nil
 }
 
@@ -416,9 +426,8 @@ func (s *CompanyProductionQueryService) toProductionListItemDTO(
 		printedByName = s.nameResolver.ResolvePrintedByName(ctx, p.PrintedBy)
 	}
 
-	pbID := p.ProductBlueprintID
-	if pbID != "" {
-		if pb, ok := pbByID[pbID]; ok {
+	if p.ProductBlueprintID != "" {
+		if pb, ok := pbByID[p.ProductBlueprintID]; ok {
 			productName = pb.ProductName
 			brandID = pb.BrandID
 		}
@@ -433,22 +442,39 @@ func (s *CompanyProductionQueryService) toProductionListItemDTO(
 		}
 	}
 
+	models := make([]ProductionListModelDTO, 0, len(p.Models))
 	totalQuantity := 0
+
 	for _, model := range p.Models {
+		models = append(models, ProductionListModelDTO{
+			ModelID:  model.ModelID,
+			Quantity: model.Quantity,
+		})
+
 		if model.Quantity > 0 {
 			totalQuantity += model.Quantity
 		}
 	}
 
 	return ProductionListItemDTO{
-		Production:    p,
-		TotalQuantity: totalQuantity,
-		ProductName:   productName,
-		BrandName:     brandName,
-		AssigneeName:  assigneeName,
-		CreatedByName: createdByName,
-		UpdatedByName: updatedByName,
-		PrintedByName: printedByName,
+		ID:                 p.ID,
+		ProductBlueprintID: p.ProductBlueprintID,
+		ProductName:        productName,
+		BrandName:          brandName,
+		AssigneeID:         p.AssigneeID,
+		AssigneeName:       assigneeName,
+		Models:             models,
+		Printed:            p.Printed,
+		PrintedAt:          p.PrintedAt,
+		PrintedBy:          p.PrintedBy,
+		PrintedByName:      printedByName,
+		CreatedBy:          p.CreatedBy,
+		CreatedByName:      createdByName,
+		CreatedAt:          productionTimePointer(p.CreatedAt),
+		UpdatedBy:          p.UpdatedBy,
+		UpdatedByName:      updatedByName,
+		UpdatedAt:          productionTimePointer(p.UpdatedAt),
+		TotalQuantity:      totalQuantity,
 	}
 }
 
