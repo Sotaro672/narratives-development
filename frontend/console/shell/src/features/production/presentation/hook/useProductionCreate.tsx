@@ -9,7 +9,7 @@ import {
   loadBrands,
   loadProductBlueprints,
   loadDetailAndModels,
-  loadAssigneeCandidates,
+  type ProductBlueprintDetailResponse,
 } from "../../infrastructure/api/productionCreateApi";
 
 import { buildModelIndexFromVariations } from "../../application/detail/buildModelVariationIndex";
@@ -19,15 +19,11 @@ import {
   buildBrandOptions,
   filterProductBlueprintsByBrand,
   buildProductRows,
-  buildSelectedForCard,
-  buildAssigneeOptions,
 } from "../create/mappers";
 
 import type { Brand } from "../../../../shared/types/brand";
-import type { Member } from "../../../../shared/types/member";
 import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
 import type { ModelVariationResponse } from "../../../productBlueprint/application/productBlueprintDetailService";
-import type { ProductBlueprintForCard } from "../create/types";
 
 import { buildProductionPayload } from "../../application/create/ProductionCreateService";
 import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
@@ -35,35 +31,37 @@ import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRe
 import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
 import { buildProductionQuantityRowVMs } from "../viewModels/buildProductionQuantityRowVMs";
 
-type ProductBlueprintModelRef = {
-  modelId: string;
-  displayOrder?: number;
-};
+import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 
 export function useProductionCreate() {
   const navigate = useNavigate();
   const { currentMember, user } = useAuthContext();
 
   const creator = currentMember?.displayName?.trim() || "-";
-
-  // createdBy は Firebase Auth UID を保存する。
   const currentMemberUid = user?.uid ?? currentMember?.uid ?? null;
 
   const [allProductBlueprints, setAllProductBlueprints] =
     React.useState<ProductBlueprintManagementRow[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [selectedBrand, setSelectedBrand] = React.useState<string | null>(null);
-  const [selectedDetail, setSelectedDetail] = React.useState<any | null>(null);
+  const [selectedDetail, setSelectedDetail] =
+    React.useState<ProductBlueprintDetailResponse | null>(null);
   const [modelVariations, setModelVariations] =
     React.useState<ModelVariationResponse[]>([]);
-  const [modelIndex, setModelIndex] = React.useState<
-    Record<string, ModelVariationSummary>
-  >({});
+  const [modelIndex, setModelIndex] =
+    React.useState<Record<string, ModelVariationSummary>>({});
   const [quantityRowVMs, setQuantityRowVMs] =
     React.useState<ProductionQuantityRowVM[]>([]);
 
-  const [assignee, setAssignee] = React.useState("未設定");
-  const [assigneeId, setAssigneeId] = React.useState<string | null>(null);
+  const {
+    assigneeId,
+    assigneeName: assignee,
+    assigneeCandidates: assigneeOptions,
+    loadingMembers,
+    handleSelectAssignee,
+  } = useAssigneeSelection({
+    defaultToCurrentMember: false,
+  });
 
   const [createdAt] = React.useState(() =>
     new Date().toLocaleDateString("ja-JP"),
@@ -80,7 +78,7 @@ export function useProductionCreate() {
 
   React.useEffect(() => {
     loadBrands()
-      .then((items: Brand[]) => setBrands(items))
+      .then((items) => setBrands(items))
       .catch(() => setBrands([]));
   }, []);
 
@@ -94,9 +92,7 @@ export function useProductionCreate() {
   // ==========================
   React.useEffect(() => {
     loadProductBlueprints()
-      .then((rows: ProductBlueprintManagementRow[]) =>
-        setAllProductBlueprints(rows),
-      )
+      .then((rows) => setAllProductBlueprints(rows))
       .catch(() => setAllProductBlueprints([]));
   }, []);
 
@@ -110,16 +106,8 @@ export function useProductionCreate() {
     [filteredBlueprints],
   );
 
-  const selectedMgmtRow = React.useMemo(
-    () =>
-      allProductBlueprints.find(
-        (productBlueprint) => productBlueprint.id === selectedId,
-      ) ?? null,
-    [allProductBlueprints, selectedId],
-  );
-
   // ==========================
-  // 詳細＋ModelVariation
+  // 商品設計詳細 + ModelVariation
   // ==========================
   React.useEffect(() => {
     if (!selectedId) {
@@ -141,13 +129,9 @@ export function useProductionCreate() {
           return;
         }
 
-        const safeModels = Array.isArray(models)
-          ? (models as ModelVariationResponse[])
-          : [];
-
         setSelectedDetail(detail);
-        setModelVariations(safeModels);
-        setModelIndex(buildModelIndexFromVariations(safeModels as any));
+        setModelVariations(models);
+        setModelIndex(buildModelIndexFromVariations(models));
       } catch {
         if (cancelled) {
           return;
@@ -168,151 +152,42 @@ export function useProductionCreate() {
   }, [selectedId]);
 
   // ==========================
-  // detail.modelRefs + modelVariations → VM rows
+  // modelRefs + ModelVariation → Quantity rows
   //
-  // Production Create はまだ backend BFF 化前のため、
-  // ModelVariation と modelRefs を使って表示用 rows を生成する。
+  // Production Create BFF 化までは frontend join を使用する。
   // ==========================
   React.useEffect(() => {
-    if (!selectedId) {
+    if (!selectedDetail) {
       setQuantityRowVMs([]);
       return;
     }
 
-    const safeModels: ModelVariationResponse[] = Array.isArray(modelVariations)
-      ? modelVariations
-      : [];
-
-    const refs = Array.isArray(selectedDetail?.modelRefs)
-      ? ((selectedDetail.modelRefs as ProductBlueprintModelRef[]) ?? [])
-      : [];
-
-    const orderByModelId = new Map<string, number>();
-
-    for (const ref of refs) {
-      const modelId = String(ref?.modelId ?? "").trim();
-
-      if (!modelId) {
-        continue;
-      }
-
-      const displayOrderNumber =
-        typeof ref?.displayOrder === "number"
-          ? ref.displayOrder
-          : Number(ref?.displayOrder);
-
-      if (!Number.isFinite(displayOrderNumber)) {
-        continue;
-      }
-
-      orderByModelId.set(modelId, displayOrderNumber);
-    }
-
-    const pseudoModels = safeModels
-      .map((model: any, index: number) => {
-        const modelId = String(model?.id ?? "").trim();
-
-        if (!modelId) {
-          return null;
-        }
-
-        const order = orderByModelId.get(modelId);
-
-        return {
-          ModelID: modelId,
-          Quantity: 0,
-          DisplayOrder:
-            typeof order === "number" && Number.isFinite(order)
-              ? order
-              : index + 1,
-        };
-      })
-      .filter(
-        (
-          model,
-        ): model is {
-          ModelID: string;
-          Quantity: number;
-          DisplayOrder: number;
-        } => model !== null,
-      );
-
-    const viewModels = buildProductionQuantityRowVMs(
-      pseudoModels,
-      modelIndex,
+    const orderByModelId = new Map(
+      (selectedDetail.modelRefs ?? []).map((ref) => [
+        ref.modelId,
+        ref.displayOrder,
+      ]),
     );
 
-    setQuantityRowVMs(viewModels);
-  }, [selectedId, modelVariations, selectedDetail, modelIndex]);
+    const pseudoModels = modelVariations.map((model, index) => ({
+      ModelID: model.id,
+      Quantity: 0,
+      DisplayOrder: orderByModelId.get(model.id) ?? index + 1,
+    }));
 
-  // ==========================
-  // ProductBlueprintCard
-  // ==========================
-  const selectedProductBlueprintForCard: ProductBlueprintForCard =
-    React.useMemo(
-      () => buildSelectedForCard(selectedDetail, selectedMgmtRow),
-      [selectedDetail, selectedMgmtRow],
+    setQuantityRowVMs(
+      buildProductionQuantityRowVMs(
+        pseudoModels,
+        modelIndex,
+      ),
     );
-
-  const hasSelectedProductBlueprint =
-    selectedDetail !== null || selectedMgmtRow !== null;
+  }, [modelVariations, selectedDetail, modelIndex]);
 
   // ==========================
-  // 担当者候補
+  // ProductBlueprint
   // ==========================
-  const [assigneeCandidates, setAssigneeCandidates] =
-    React.useState<Member[]>([]);
-  const [loadingMembers, setLoadingMembers] = React.useState(false);
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    async function loadMembers() {
-      try {
-        setLoadingMembers(true);
-
-        const members: Member[] = await loadAssigneeCandidates();
-
-        if (!cancelled) {
-          setAssigneeCandidates(members);
-        }
-      } catch {
-        if (!cancelled) {
-          setAssigneeCandidates([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingMembers(false);
-        }
-      }
-    }
-
-    void loadMembers();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const assigneeOptions = React.useMemo(
-    () =>
-      buildAssigneeOptions(assigneeCandidates) as Array<{
-        id: string;
-        name: string;
-      }>,
-    [assigneeCandidates],
-  );
-
-  const handleSelectAssignee = React.useCallback(
-    (id: string) => {
-      const selected = assigneeOptions.find((option) => option.id === id);
-      const name = selected?.name ?? "未設定";
-
-      setAssigneeId(id);
-      setAssignee(name);
-    },
-    [assigneeOptions],
-  );
+  const selectedProductBlueprint = selectedDetail;
+  const hasSelectedProductBlueprint = selectedProductBlueprint !== null;
 
   // ==========================
   // 保存
@@ -336,16 +211,15 @@ export function useProductionCreate() {
     const payload = buildProductionPayload({
       productBlueprintId: selectedId,
       assigneeId,
-      rows: quantityRowVMs.map((viewModel) => ({
-        modelId: viewModel.modelId,
-        quantity: viewModel.quantity,
+      rows: quantityRowVMs.map((row) => ({
+        modelId: row.modelId,
+        quantity: row.quantity,
       })),
       currentMemberUid,
     });
 
     try {
       const repository = new ProductionRepositoryHTTP();
-
       await repository.create(payload);
 
       alert("生産計画を作成しました");
@@ -365,7 +239,7 @@ export function useProductionCreate() {
     onBack: handleBack,
     onSave: handleSave,
     hasSelectedProductBlueprint,
-    selectedProductBlueprintForCard,
+    selectedProductBlueprint,
     assignee,
     creator,
     createdAt,
