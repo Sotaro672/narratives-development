@@ -44,6 +44,15 @@ type ProductionListItemDTO struct {
 // Production Detail BFF DTO
 // ============================================================
 
+type ProductionProductBlueprintCategoryDTO struct {
+	ID     string   `json:"id"`
+	Code   string   `json:"code"`
+	NameJa string   `json:"nameJa"`
+	NameEn string   `json:"nameEn"`
+	Kind   string   `json:"kind"`
+	Path   []string `json:"path"`
+}
+
 type ProductionDetailModelDTO struct {
 	ModelID      string `json:"modelId"`
 	Kind         string `json:"kind,omitempty"`
@@ -58,15 +67,16 @@ type ProductionDetailModelDTO struct {
 }
 
 type ProductionDetailDTO struct {
-	ID                 string                     `json:"id"`
-	ProductBlueprintID string                     `json:"productBlueprintId"`
-	ProductName        string                     `json:"productName"`
-	BrandID            string                     `json:"brandId"`
-	BrandName          string                     `json:"brandName"`
-	AssigneeID         string                     `json:"assigneeId"`
-	AssigneeName       string                     `json:"assigneeName"`
-	Models             []ProductionDetailModelDTO `json:"models"`
-	TotalQuantity      int                        `json:"totalQuantity"`
+	ID                       string                                `json:"id"`
+	ProductBlueprintID       string                                `json:"productBlueprintId"`
+	ProductName              string                                `json:"productName"`
+	ProductBlueprintCategory ProductionProductBlueprintCategoryDTO `json:"productBlueprintCategory"`
+	BrandID                  string                                `json:"brandId"`
+	BrandName                string                                `json:"brandName"`
+	AssigneeID               string                                `json:"assigneeId"`
+	AssigneeName             string                                `json:"assigneeName"`
+	Models                   []ProductionDetailModelDTO            `json:"models"`
+	TotalQuantity            int                                   `json:"totalQuantity"`
 
 	Printed       bool       `json:"printed"`
 	PrintedAt     *time.Time `json:"printedAt,omitempty"`
@@ -155,7 +165,6 @@ func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(
 		if _, ok := pbByID[p.ProductBlueprintID]; !ok {
 			continue
 		}
-
 		out = append(out, p)
 	}
 
@@ -177,10 +186,7 @@ func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 	out := make([]ProductionListItemDTO, 0, len(list))
 
 	for _, p := range list {
-		out = append(
-			out,
-			s.toProductionListItemDTO(ctx, p, pbByID, brandNameCache),
-		)
+		out = append(out, s.toProductionListItemDTO(ctx, p, pbByID, brandNameCache))
 	}
 
 	return out, nil
@@ -258,7 +264,6 @@ func (s *CompanyProductionQueryService) GetProductionDetailByID(
 		if ref.ModelID == "" {
 			continue
 		}
-
 		displayOrderByModelID[ref.ModelID] = ref.DisplayOrder
 	}
 
@@ -319,7 +324,6 @@ func (s *CompanyProductionQueryService) GetProductionDetailByID(
 		if right == nil {
 			return true
 		}
-
 		return *left < *right
 	})
 
@@ -327,12 +331,20 @@ func (s *CompanyProductionQueryService) GetProductionDetailByID(
 		ID:                 p.ID,
 		ProductBlueprintID: p.ProductBlueprintID,
 		ProductName:        pb.ProductName,
-		BrandID:            pb.BrandID,
-		BrandName:          brandName,
-		AssigneeID:         p.AssigneeID,
-		AssigneeName:       assigneeName,
-		Models:             models,
-		TotalQuantity:      totalQuantity,
+		ProductBlueprintCategory: ProductionProductBlueprintCategoryDTO{
+			ID:     pb.ProductBlueprintCategory.ID,
+			Code:   pb.ProductBlueprintCategory.Code,
+			NameJa: pb.ProductBlueprintCategory.NameJa,
+			NameEn: pb.ProductBlueprintCategory.NameEn,
+			Kind:   string(pb.ProductBlueprintCategory.Kind),
+			Path:   append([]string(nil), pb.ProductBlueprintCategory.Path...),
+		},
+		BrandID:       pb.BrandID,
+		BrandName:     brandName,
+		AssigneeID:    p.AssigneeID,
+		AssigneeName:  assigneeName,
+		Models:        models,
+		TotalQuantity: totalQuantity,
 
 		Printed:       p.Printed,
 		PrintedAt:     p.PrintedAt,

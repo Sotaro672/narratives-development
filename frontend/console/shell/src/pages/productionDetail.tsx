@@ -30,9 +30,6 @@ export default function ProductionDetail() {
     error,
     quantityRows,
     setQuantityRows,
-    productBlueprint,
-    pbLoading,
-    pbError,
   } = useProductionDetail();
 
   const assigneeDisplay =
@@ -46,7 +43,7 @@ export default function ProductionDetail() {
 
   const isPrinted = production?.printed === true;
   const productBlueprintCategoryCode =
-    productBlueprint?.productBlueprintCategory?.code ?? "";
+    production?.productBlueprintCategory?.code ?? "";
 
   const { onPrint, printing } = usePrintCard({
     productionId: productionId ?? null,
@@ -128,26 +125,12 @@ export default function ProductionDetail() {
 
         {!loading && !error && production && (
           <>
-            {pbLoading && (
-              <div className="p-4 text-gray-500">
-                商品設計を読み込み中…
-              </div>
-            )}
-
-            {!pbLoading && pbError && (
-              <div className="p-4 text-red-500">{pbError}</div>
-            )}
-
-            {!pbLoading && !pbError && productBlueprint && (
-              <ProductBlueprintCard
-                mode="view"
-                productName={productBlueprint.productName}
-                brandName={production.brandName ?? ""}
-                productBlueprintCategory={
-                  productBlueprint.productBlueprintCategory ?? null
-                }
-              />
-            )}
+            <ProductBlueprintCard
+              mode="view"
+              productName={production.productName}
+              brandName={production.brandName}
+              productBlueprintCategory={production.productBlueprintCategory}
+            />
 
             <ProductionQuantityCard
               title="モデル別 生産数一覧"

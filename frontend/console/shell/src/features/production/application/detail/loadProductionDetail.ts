@@ -1,12 +1,14 @@
 // frontend/console/shell/src/features/production/application/detail/loadProductionDetail.ts
 
 import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
+import type { ProductBlueprintCategorySnapshot } from "../../../productBlueprint/domain/productBlueprintCategory";
 import type { ProductionDetail, ProductionQuantityRow } from "./types";
 
 type ProductionDetailResponse = {
   id: string;
   productBlueprintId: string;
   productName: string;
+  productBlueprintCategory: ProductBlueprintCategorySnapshot;
   brandId: string;
   brandName: string;
   assigneeId: string;
@@ -15,8 +17,6 @@ type ProductionDetailResponse = {
   totalQuantity: number;
   printed: boolean;
   printedAt?: string | null;
-  printedBy?: string | null;
-  printedByName?: string;
   createdBy?: string | null;
   createdByName?: string;
   createdAt?: string | null;
@@ -30,8 +30,6 @@ function toDate(value?: string | null): Date | null {
 }
 
 /**
- * Production詳細取得。
- *
  * GET /productions/{id} の Production Detail BFF response を正とする。
  * ProductBlueprint / ModelVariation / Production一覧からの追加補完は行わない。
  */
@@ -45,9 +43,7 @@ export async function loadProductionDetail(
   }
 
   const repository = new ProductionRepositoryHTTP();
-  const response = (await repository.getById(
-    id,
-  )) as unknown as ProductionDetailResponse;
+  const response = (await repository.getById(id)) as unknown as ProductionDetailResponse;
 
   if (!response) {
     return null;
@@ -56,6 +52,8 @@ export async function loadProductionDetail(
   return {
     id: response.id,
     productBlueprintId: response.productBlueprintId,
+    productName: response.productName,
+    productBlueprintCategory: response.productBlueprintCategory,
     brandId: response.brandId,
     brandName: response.brandName,
     assigneeId: response.assigneeId,

@@ -10,15 +10,25 @@ import {
 } from "../../application/detail/index";
 
 import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
-import { getProductBlueprintDetail } from "../../../productBlueprint/application/productBlueprintDetailService";
-
 import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
 
 type Mode = "view" | "edit";
 
-type ProductBlueprintDetailForProduction = Awaited<
-  ReturnType<typeof getProductBlueprintDetail>
->;
+function toQuantityRows(production: ProductionDetail): ProductionQuantityRowVM[] {
+  return production.models.map((row) => ({
+    modelId: row.modelId,
+    kind: row.kind,
+    modelNumber: row.modelNumber,
+    size: row.size,
+    color: row.color,
+    rgb: typeof row.rgb === "number" ? row.rgb : undefined,
+    volumeValue: row.volumeValue,
+    volumeUnit: row.volumeUnit,
+    variationLabel: row.variationLabel,
+    displayOrder: row.displayOrder,
+    quantity: row.quantity,
+  }));
+}
 
 export function useProductionDetail() {
   const navigate = useNavigate();
@@ -29,12 +39,7 @@ export function useProductionDetail() {
   const [loading, setLoading] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [productBlueprint, setProductBlueprint] =
-    React.useState<ProductBlueprintDetailForProduction | null>(null);
-  const [pbLoading, setPbLoading] = React.useState(false);
-  const [pbError, setPbError] = React.useState<string | null>(null);
-  const [quantityRows, setQuantityRows] =
-    React.useState<ProductionQuantityRowVM[]>([]);
+  const [quantityRows, setQuantityRows] = React.useState<ProductionQuantityRowVM[]>([]);
 
   const isViewMode = mode === "view";
   const isEditMode = mode === "edit";
@@ -64,8 +69,6 @@ export function useProductionDetail() {
       try {
         setLoading(true);
         setError(null);
-        setProductBlueprint(null);
-        setPbError(null);
         setQuantityRows([]);
 
         const data = await loadProductionDetail(id);
@@ -75,27 +78,7 @@ export function useProductionDetail() {
         }
 
         setProduction(data);
-
-        if (!data) {
-          setQuantityRows([]);
-          return;
-        }
-
-        setQuantityRows(
-          data.models.map((row) => ({
-            modelId: row.modelId,
-            kind: row.kind,
-            modelNumber: row.modelNumber,
-            size: row.size,
-            color: row.color,
-            rgb: typeof row.rgb === "number" ? row.rgb : undefined,
-            volumeValue: row.volumeValue,
-            volumeUnit: row.volumeUnit,
-            variationLabel: row.variationLabel,
-            displayOrder: row.displayOrder,
-            quantity: row.quantity,
-          })),
-        );
+        setQuantityRows(data ? toQuantityRows(data) : []);
       } catch {
         if (cancelled) {
           return;
@@ -104,7 +87,6 @@ export function useProductionDetail() {
         setError("生産情報の取得に失敗しました");
         setProduction(null);
         setQuantityRows([]);
-        setProductBlueprint(null);
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -118,51 +100,6 @@ export function useProductionDetail() {
       cancelled = true;
     };
   }, [productionId]);
-
-  React.useEffect(() => {
-    const productBlueprintId = production?.productBlueprintId;
-
-    if (!productBlueprintId) {
-      setProductBlueprint(null);
-      setPbError(null);
-      return;
-    }
-
-    const targetProductBlueprintId = productBlueprintId;
-    let cancelled = false;
-
-    async function loadProductBlueprint(id: string) {
-      try {
-        setPbLoading(true);
-        setPbError(null);
-
-        const data = await getProductBlueprintDetail(id);
-
-        if (cancelled) {
-          return;
-        }
-
-        setProductBlueprint(data);
-      } catch {
-        if (cancelled) {
-          return;
-        }
-
-        setPbError("商品設計情報の取得に失敗しました");
-        setProductBlueprint(null);
-      } finally {
-        if (!cancelled) {
-          setPbLoading(false);
-        }
-      }
-    }
-
-    void loadProductBlueprint(targetProductBlueprintId);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [production?.productBlueprintId]);
 
   const onSave = React.useCallback(async () => {
     if (!productionId || !production) {
@@ -183,21 +120,7 @@ export function useProductionDetail() {
 
       if (updated) {
         setProduction(updated);
-        setQuantityRows(
-          updated.models.map((row) => ({
-            modelId: row.modelId,
-            kind: row.kind,
-            modelNumber: row.modelNumber,
-            size: row.size,
-            color: row.color,
-            rgb: typeof row.rgb === "number" ? row.rgb : undefined,
-            volumeValue: row.volumeValue,
-            volumeUnit: row.volumeUnit,
-            variationLabel: row.variationLabel,
-            displayOrder: row.displayOrder,
-            quantity: row.quantity,
-          })),
-        );
+        setQuantityRows(toQuantityRows(updated));
       }
 
       setMode("view");
@@ -248,9 +171,6 @@ export function useProductionDetail() {
     production,
     loading,
     error,
-    productBlueprint,
-    pbLoading,
-    pbError,
     quantityRows,
     setQuantityRows,
   };
