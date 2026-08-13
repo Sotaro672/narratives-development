@@ -1,27 +1,57 @@
 // frontend/console/shell/src/features/production/infrastructure/api/productionCreateApi.ts
 
 import type { Brand } from "../../../../shared/types/brand";
-import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
-import type { ProductBlueprintDetailResponse } from "../../../productBlueprint/infrastructure/api/productBlueprintDetailApi";
-import type { ModelVariationResponse } from "../../../productBlueprint/application/productBlueprintDetailService";
-
+import { API_BASE } from "../../../../shared/http/apiBase";
+import { fetchJSON } from "../../../../shared/http/fetchJSON";
 import { brandRepositoryHTTP } from "../../../brand/infrastructure/http/brandRepositoryHTTP";
-import { fetchProductBlueprintManagementRows } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
+import type {
+  CategoryFieldValues,
+  ProductBlueprintCategorySnapshot,
+} from "../../../productBlueprint/domain/productBlueprintCategory";
 import {
-  getProductBlueprintDetail,
-  listModelVariationsByProductBlueprintId,
-} from "../../../productBlueprint/application/productBlueprintDetailService";
+  fetchProductBlueprintManagementRows,
+  type ProductBlueprintManagementRow,
+} from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
+
+export type ProductionCreateProductBlueprintResponse = {
+  id: string;
+  productName: string;
+  brandId: string;
+  brandName: string;
+  productBlueprintCategoryId: string;
+  productBlueprintCategory: ProductBlueprintCategorySnapshot;
+  categoryFields?: CategoryFieldValues | null;
+  assigneeId?: string;
+};
+
+export type ProductionCreateRowResponse = {
+  modelId: string;
+  kind?: "apparel" | "alcohol" | string;
+  modelNumber: string;
+  size?: string;
+  color?: string;
+  rgb?: number;
+  volumeValue?: number;
+  volumeUnit?: string;
+  displayOrder?: number;
+  quantity: number;
+};
+
+export type ProductionCreateContextResponse = {
+  productBlueprintPatch: ProductionCreateProductBlueprintResponse;
+  rows: ProductionCreateRowResponse[];
+};
 
 export type {
   Brand,
   ProductBlueprintManagementRow,
-  ProductBlueprintDetailResponse,
-  ModelVariationResponse,
+  ProductBlueprintCategorySnapshot,
 };
 
 // ======================================================================
 // ブランドAPI
 // ======================================================================
+
 export async function loadBrands(): Promise<Brand[]> {
   try {
     const result = await brandRepositoryHTTP.list({
@@ -38,6 +68,7 @@ export async function loadBrands(): Promise<Brand[]> {
 // ======================================================================
 // 商品設計一覧API
 // ======================================================================
+
 export async function loadProductBlueprints(): Promise<ProductBlueprintManagementRow[]> {
   try {
     return await fetchProductBlueprintManagementRows();
@@ -47,21 +78,23 @@ export async function loadProductBlueprints(): Promise<ProductBlueprintManagemen
 }
 
 // ======================================================================
-// 商品設計詳細 + ModelVariations API
+// Production Create BFF
 // ======================================================================
-export async function loadDetailAndModels(
-  productBlueprintId: string,
-): Promise<{
-  detail: ProductBlueprintDetailResponse;
-  models: ModelVariationResponse[];
-}> {
-  const [detail, models] = await Promise.all([
-    getProductBlueprintDetail(productBlueprintId),
-    listModelVariationsByProductBlueprintId(productBlueprintId),
-  ]);
 
-  return {
-    detail,
-    models,
-  };
+export async function loadProductionCreateContext(
+  productBlueprintId: string,
+): Promise<ProductionCreateContextResponse> {
+  const normalizedProductBlueprintId = String(productBlueprintId ?? "").trim();
+
+  if (!normalizedProductBlueprintId) {
+    throw new Error("loadProductionCreateContext: productBlueprintId が空です");
+  }
+
+  const url =
+    `${API_BASE}/productions/create-context?productBlueprintId=${encodeURIComponent(normalizedProductBlueprintId)}`;
+
+  return fetchJSON(url, {
+    method: "GET",
+    auth: "required",
+  });
 }

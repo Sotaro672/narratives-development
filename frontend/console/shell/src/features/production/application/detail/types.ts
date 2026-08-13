@@ -31,27 +31,6 @@ export type ProductionDetail = {
   updatedAt: Date | null;
 };
 
-export type ModelVariationSummary = {
-  modelId: string;
-  productBlueprintId?: string;
-
-  kind?: "apparel" | "alcohol" | string;
-  modelNumber: string;
-
-  size?: string;
-  color?: string;
-  rgb?: number | string | null;
-
-  volumeValue?: number;
-  volumeUnit?: string;
-  volume?: {
-    value: number;
-    unit: string;
-  };
-
-  displayOrder?: number;
-};
-
 export type ProductionQuantityRow = ModelQuantity & {
   kind?: "apparel" | "alcohol" | string;
   modelNumber: string;

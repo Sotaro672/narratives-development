@@ -2,12 +2,12 @@
 
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
-import { Card, CardHeader, CardTitle, CardContent } from "../shared/ui/card";
-import { Popover, PopoverTrigger, PopoverContent } from "../shared/ui/popover";
 import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../shared/ui/table";
 import { useProductionCreate } from "../features/production/presentation/hook/useProductionCreate";
 import ProductionQuantityCard from "../features/production/presentation/components/productionQuantityCard";
+import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "../shared/ui/popover";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../shared/ui/table";
 
 import "../styles/production.css";
 
@@ -26,7 +26,7 @@ export default function ProductionCreate() {
     productRows,
     selectedProductId,
     selectProductById,
-    modelVariationsForCard,
+    quantityRows,
     setQuantityRows,
   } = useProductionCreate();
 
@@ -50,7 +50,7 @@ export default function ProductionCreate() {
         {selectedProductBlueprint && (
           <ProductionQuantityCard
             title="モデル別 生産数一覧"
-            rows={modelVariationsForCard}
+            rows={quantityRows}
             productBlueprintCategory={productBlueprintCategoryCode}
             mode="edit"
             onChangeRows={setQuantityRows}
@@ -79,7 +79,6 @@ export default function ProductionCreate() {
                   {selectedBrand || "ブランドを選択してください"}
                 </div>
               </PopoverTrigger>
-
               <PopoverContent>
                 <div className="pb-select__list">
                   {brandOptions.map((brand) => (
@@ -114,7 +113,6 @@ export default function ProductionCreate() {
                   <TableHead>商品名</TableHead>
                 </TableRow>
               </TableHeader>
-
               <TableBody>
                 {productRows.map((product) => (
                   <TableRow

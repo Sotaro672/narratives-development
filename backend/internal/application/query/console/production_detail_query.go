@@ -1,4 +1,4 @@
-// backend/internal/application/query/console/production_query.go
+// backend/internal/application/query/console/production_detail_query.go
 package query
 
 import (
@@ -41,7 +41,7 @@ type ProductionListItemDTO struct {
 }
 
 // ============================================================
-// Production Detail BFF DTO
+// Common BFF DTO
 // ============================================================
 
 type ProductionProductBlueprintCategoryDTO struct {
@@ -65,6 +65,10 @@ type ProductionDetailModelDTO struct {
 	DisplayOrder *int   `json:"displayOrder,omitempty"`
 	Quantity     int    `json:"quantity"`
 }
+
+// ============================================================
+// Production Detail BFF DTO
+// ============================================================
 
 type ProductionDetailDTO struct {
 	ID                       string                                `json:"id"`
@@ -271,46 +275,92 @@ func (s *CompanyProductionQueryService) GetProductionDetailByID(
 	totalQuantity := 0
 
 	for _, model := range p.Models {
-		attr := resolver.ModelResolved{}
-		if s.nameResolver != nil {
-			attr = s.nameResolver.ResolveModelResolved(ctx, model.ModelID)
-		}
-
-		modelNumber := attr.ModelNumber
-		if modelNumber == "" {
-			modelNumber = model.ModelID
-		}
-
 		var displayOrder *int
 		if order, ok := displayOrderByModelID[model.ModelID]; ok {
 			value := order
 			displayOrder = &value
 		}
 
-		row := ProductionDetailModelDTO{
-			ModelID:      model.ModelID,
-			Kind:         attr.Kind,
-			ModelNumber:  modelNumber,
-			DisplayOrder: displayOrder,
-			Quantity:     model.Quantity,
-		}
-
-		if attr.Kind == "alcohol" {
-			row.VolumeValue = attr.VolumeValue
-			row.VolumeUnit = attr.VolumeUnit
-		} else {
-			row.Size = attr.Size
-			row.Color = attr.Color
-			row.RGB = attr.RGB
-		}
-
-		models = append(models, row)
+		models = append(
+			models,
+			s.resolveProductionModelDTO(ctx, model.ModelID, displayOrder, model.Quantity),
+		)
 
 		if model.Quantity > 0 {
 			totalQuantity += model.Quantity
 		}
 	}
 
+	sortProductionModelDTOs(models)
+
+	return ProductionDetailDTO{
+		ID:                       p.ID,
+		ProductBlueprintID:       p.ProductBlueprintID,
+		ProductName:              pb.ProductName,
+		ProductBlueprintCategory: toProductionProductBlueprintCategoryDTO(pb.ProductBlueprintCategory),
+		BrandID:                  pb.BrandID,
+		BrandName:                brandName,
+		AssigneeID:               p.AssigneeID,
+		AssigneeName:             assigneeName,
+		Models:                   models,
+		TotalQuantity:            totalQuantity,
+
+		Printed:       p.Printed,
+		PrintedAt:     p.PrintedAt,
+		PrintedBy:     p.PrintedBy,
+		PrintedByName: printedByName,
+
+		CreatedBy:     p.CreatedBy,
+		CreatedByName: createdByName,
+		CreatedAt:     productionTimePointer(p.CreatedAt),
+
+		UpdatedBy:     p.UpdatedBy,
+		UpdatedByName: updatedByName,
+		UpdatedAt:     productionTimePointer(p.UpdatedAt),
+	}, nil
+}
+
+// ============================================================
+// Production Model Resolver
+// ============================================================
+
+func (s *CompanyProductionQueryService) resolveProductionModelDTO(
+	ctx context.Context,
+	modelID string,
+	displayOrder *int,
+	quantity int,
+) ProductionDetailModelDTO {
+	attr := resolver.ModelResolved{}
+	if s.nameResolver != nil {
+		attr = s.nameResolver.ResolveModelResolved(ctx, modelID)
+	}
+
+	modelNumber := attr.ModelNumber
+	if modelNumber == "" {
+		modelNumber = modelID
+	}
+
+	row := ProductionDetailModelDTO{
+		ModelID:      modelID,
+		Kind:         attr.Kind,
+		ModelNumber:  modelNumber,
+		DisplayOrder: displayOrder,
+		Quantity:     quantity,
+	}
+
+	if attr.Kind == "alcohol" {
+		row.VolumeValue = attr.VolumeValue
+		row.VolumeUnit = attr.VolumeUnit
+	} else {
+		row.Size = attr.Size
+		row.Color = attr.Color
+		row.RGB = attr.RGB
+	}
+
+	return row
+}
+
+func sortProductionModelDTOs(models []ProductionDetailModelDTO) {
 	sort.SliceStable(models, func(i, j int) bool {
 		left := models[i].DisplayOrder
 		right := models[j].DisplayOrder
@@ -326,39 +376,19 @@ func (s *CompanyProductionQueryService) GetProductionDetailByID(
 		}
 		return *left < *right
 	})
+}
 
-	return ProductionDetailDTO{
-		ID:                 p.ID,
-		ProductBlueprintID: p.ProductBlueprintID,
-		ProductName:        pb.ProductName,
-		ProductBlueprintCategory: ProductionProductBlueprintCategoryDTO{
-			ID:     pb.ProductBlueprintCategory.ID,
-			Code:   pb.ProductBlueprintCategory.Code,
-			NameJa: pb.ProductBlueprintCategory.NameJa,
-			NameEn: pb.ProductBlueprintCategory.NameEn,
-			Kind:   string(pb.ProductBlueprintCategory.Kind),
-			Path:   append([]string(nil), pb.ProductBlueprintCategory.Path...),
-		},
-		BrandID:       pb.BrandID,
-		BrandName:     brandName,
-		AssigneeID:    p.AssigneeID,
-		AssigneeName:  assigneeName,
-		Models:        models,
-		TotalQuantity: totalQuantity,
-
-		Printed:       p.Printed,
-		PrintedAt:     p.PrintedAt,
-		PrintedBy:     p.PrintedBy,
-		PrintedByName: printedByName,
-
-		CreatedBy:     p.CreatedBy,
-		CreatedByName: createdByName,
-		CreatedAt:     productionTimePointer(p.CreatedAt),
-
-		UpdatedBy:     p.UpdatedBy,
-		UpdatedByName: updatedByName,
-		UpdatedAt:     productionTimePointer(p.UpdatedAt),
-	}, nil
+func toProductionProductBlueprintCategoryDTO(
+	category productbpdom.ProductBlueprintCategorySnapshot,
+) ProductionProductBlueprintCategoryDTO {
+	return ProductionProductBlueprintCategoryDTO{
+		ID:     category.ID,
+		Code:   category.Code,
+		NameJa: category.NameJa,
+		NameEn: category.NameEn,
+		Kind:   string(category.Kind),
+		Path:   append([]string(nil), category.Path...),
+	}
 }
 
 // ============================================================

@@ -4,34 +4,23 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAuthContext } from "../../../../auth/application/AuthContext";
-
+import type { Brand } from "../../../../shared/types/brand";
+import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
+import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
+import { buildProductionPayload } from "../../application/create/ProductionCreateService";
 import {
   loadBrands,
   loadProductBlueprints,
-  loadDetailAndModels,
-  type ProductBlueprintDetailResponse,
+  loadProductionCreateContext,
+  type ProductionCreateProductBlueprintResponse,
 } from "../../infrastructure/api/productionCreateApi";
-
-import { buildModelIndexFromVariations } from "../../application/detail/buildModelVariationIndex";
-import type { ModelVariationSummary } from "../../application/detail/types";
-
+import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
 import {
   buildBrandOptions,
-  filterProductBlueprintsByBrand,
   buildProductRows,
+  filterProductBlueprintsByBrand,
 } from "../create/mappers";
-
-import type { Brand } from "../../../../shared/types/brand";
-import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
-import type { ModelVariationResponse } from "../../../productBlueprint/application/productBlueprintDetailService";
-
-import { buildProductionPayload } from "../../application/create/ProductionCreateService";
-import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
-
 import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
-import { buildProductionQuantityRowVMs } from "../viewModels/buildProductionQuantityRowVMs";
-
-import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 
 export function useProductionCreate() {
   const navigate = useNavigate();
@@ -42,13 +31,9 @@ export function useProductionCreate() {
     React.useState<ProductBlueprintManagementRow[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [selectedBrand, setSelectedBrand] = React.useState<string | null>(null);
-  const [selectedDetail, setSelectedDetail] =
-    React.useState<ProductBlueprintDetailResponse | null>(null);
-  const [modelVariations, setModelVariations] =
-    React.useState<ModelVariationResponse[]>([]);
-  const [modelIndex, setModelIndex] =
-    React.useState<Record<string, ModelVariationSummary>>({});
-  const [quantityRowVMs, setQuantityRowVMs] =
+  const [selectedProductBlueprint, setSelectedProductBlueprint] =
+    React.useState<ProductionCreateProductBlueprintResponse | null>(null);
+  const [quantityRows, setQuantityRows] =
     React.useState<ProductionQuantityRowVM[]>([]);
   const [brands, setBrands] = React.useState<Brand[]>([]);
 
@@ -67,21 +52,19 @@ export function useProductionCreate() {
   }, [navigate]);
 
   React.useEffect(() => {
-    loadBrands()
-      .then(setBrands)
-      .catch(() => setBrands([]));
+    loadBrands().then(setBrands).catch(() => setBrands([]));
   }, []);
-
-  const brandOptions = React.useMemo(
-    () => buildBrandOptions(brands),
-    [brands],
-  );
 
   React.useEffect(() => {
     loadProductBlueprints()
       .then(setAllProductBlueprints)
       .catch(() => setAllProductBlueprints([]));
   }, []);
+
+  const brandOptions = React.useMemo(
+    () => buildBrandOptions(brands),
+    [brands],
+  );
 
   const filteredBlueprints = React.useMemo(
     () => filterProductBlueprintsByBrand(allProductBlueprints, selectedBrand),
@@ -95,72 +78,40 @@ export function useProductionCreate() {
 
   React.useEffect(() => {
     if (!selectedId) {
-      setSelectedDetail(null);
-      setModelVariations([]);
-      setModelIndex({});
-      setQuantityRowVMs([]);
+      setSelectedProductBlueprint(null);
+      setQuantityRows([]);
       return;
     }
 
     const productBlueprintId = selectedId;
     let cancelled = false;
 
-    async function loadSelectedDetail() {
+    async function loadSelectedProductBlueprint() {
       try {
-        const { detail, models } = await loadDetailAndModels(productBlueprintId);
+        const context = await loadProductionCreateContext(productBlueprintId);
 
         if (cancelled) {
           return;
         }
 
-        setSelectedDetail(detail);
-        setModelVariations(models);
-        setModelIndex(buildModelIndexFromVariations(models));
+        setSelectedProductBlueprint(context.productBlueprintPatch);
+        setQuantityRows(context.rows);
       } catch {
         if (cancelled) {
           return;
         }
 
-        setSelectedDetail(null);
-        setModelVariations([]);
-        setModelIndex({});
-        setQuantityRowVMs([]);
+        setSelectedProductBlueprint(null);
+        setQuantityRows([]);
       }
     }
 
-    void loadSelectedDetail();
+    void loadSelectedProductBlueprint();
 
     return () => {
       cancelled = true;
     };
   }, [selectedId]);
-
-  React.useEffect(() => {
-    if (!selectedDetail) {
-      setQuantityRowVMs([]);
-      return;
-    }
-
-    const orderByModelId = new Map(
-      (selectedDetail.modelRefs ?? []).map((ref) => [
-        ref.modelId,
-        ref.displayOrder,
-      ]),
-    );
-
-    const pseudoModels = modelVariations.map((model, index) => ({
-      ModelID: model.id,
-      Quantity: 0,
-      DisplayOrder: orderByModelId.get(model.id) ?? index + 1,
-    }));
-
-    setQuantityRowVMs(
-      buildProductionQuantityRowVMs(
-        pseudoModels,
-        modelIndex,
-      ),
-    );
-  }, [modelVariations, selectedDetail, modelIndex]);
 
   const handleSave = React.useCallback(async () => {
     if (!selectedId) {
@@ -181,7 +132,7 @@ export function useProductionCreate() {
     const payload = buildProductionPayload({
       productBlueprintId: selectedId,
       assigneeId,
-      rows: quantityRowVMs.map((row) => ({
+      rows: quantityRows.map((row) => ({
         modelId: row.modelId,
         quantity: row.quantity,
       })),
@@ -196,19 +147,12 @@ export function useProductionCreate() {
     } catch {
       alert("生産計画の作成に失敗しました");
     }
-  }, [
-    selectedId,
-    assigneeId,
-    quantityRowVMs,
-    currentMemberUid,
-    navigate,
-  ]);
+  }, [selectedId, assigneeId, quantityRows, currentMemberUid, navigate]);
 
   return {
     onBack: handleBack,
     onSave: handleSave,
-    hasSelectedProductBlueprint: selectedDetail !== null,
-    selectedProductBlueprint: selectedDetail,
+    selectedProductBlueprint,
     assignee,
     assigneeOptions,
     loadingMembers,
@@ -219,8 +163,8 @@ export function useProductionCreate() {
     productRows,
     selectedProductId: selectedId,
     selectProductById: setSelectedId,
-    modelVariationsForCard: quantityRowVMs,
-    setQuantityRows: setQuantityRowVMs,
+    quantityRows,
+    setQuantityRows,
   };
 }
 

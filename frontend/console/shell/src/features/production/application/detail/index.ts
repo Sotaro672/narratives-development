@@ -3,7 +3,6 @@
 export type {
   ProductionDetail,
   ProductionQuantityRow,
-  ModelVariationSummary,
 } from "./types";
 
 export { loadProductionDetail } from "./loadProductionDetail";

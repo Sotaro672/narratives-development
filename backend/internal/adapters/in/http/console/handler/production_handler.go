@@ -41,20 +41,18 @@ type createProductionRequest struct {
 	ProductBlueprintID string                   `json:"productBlueprintId"`
 	AssigneeID         string                   `json:"assigneeId"`
 	Models             []productionModelRequest `json:"models"`
-
-	Printed   *bool      `json:"printed,omitempty"`
-	PrintedAt *time.Time `json:"printedAt,omitempty"`
-	CreatedBy *string    `json:"createdBy,omitempty"`
+	Printed            *bool                    `json:"printed,omitempty"`
+	PrintedAt          *time.Time               `json:"printedAt,omitempty"`
+	CreatedBy          *string                  `json:"createdBy,omitempty"`
 }
 
 type updateProductionRequest struct {
 	AssigneeID string                   `json:"assigneeId"`
 	Models     []productionModelRequest `json:"models"`
-
-	Printed   *bool      `json:"printed,omitempty"`
-	PrintedAt *time.Time `json:"printedAt,omitempty"`
-	PrintedBy *string    `json:"printedBy,omitempty"`
-	UpdatedBy *string    `json:"updatedBy,omitempty"`
+	Printed    *bool                    `json:"printed,omitempty"`
+	PrintedAt  *time.Time               `json:"printedAt,omitempty"`
+	PrintedBy  *string                  `json:"printedBy,omitempty"`
+	UpdatedBy  *string                  `json:"updatedBy,omitempty"`
 }
 
 func (m productionModelRequest) toCommand() usecase.ModelQuantityCommand {
@@ -64,15 +62,11 @@ func (m productionModelRequest) toCommand() usecase.ModelQuantityCommand {
 	}
 }
 
-func productionModelRequestsToCommands(
-	models []productionModelRequest,
-) []usecase.ModelQuantityCommand {
+func productionModelRequestsToCommands(models []productionModelRequest) []usecase.ModelQuantityCommand {
 	out := make([]usecase.ModelQuantityCommand, 0, len(models))
-
-	for _, m := range models {
-		out = append(out, m.toCommand())
+	for _, model := range models {
+		out = append(out, model.toCommand())
 	}
-
 	return out
 }
 
@@ -110,22 +104,22 @@ func (h *ProductionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && r.URL.Path == "/productions":
 		h.listProduction(w, r)
 
+	case r.Method == http.MethodGet && r.URL.Path == "/productions/create-context":
+		h.getProductionCreateContext(w, r)
+
 	case r.Method == http.MethodPost && r.URL.Path == "/productions":
 		h.postProduction(w, r)
 
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/productions/"):
-		id := strings.TrimPrefix(r.URL.Path, "/productions/")
-		id = strings.Trim(id, "/")
+		id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/productions/"), "/")
 		h.getProduction(w, r, id)
 
 	case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/productions/"):
-		id := strings.TrimPrefix(r.URL.Path, "/productions/")
-		id = strings.Trim(id, "/")
+		id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/productions/"), "/")
 		h.updateProduction(w, r, id)
 
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/productions/"):
-		id := strings.TrimPrefix(r.URL.Path, "/productions/")
-		id = strings.Trim(id, "/")
+		id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/productions/"), "/")
 		h.deleteProduction(w, r, id)
 
 	default:
@@ -133,6 +127,10 @@ func (h *ProductionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 	}
 }
+
+// ========================================
+// GET /productions
+// ========================================
 
 func (h *ProductionHandler) listProduction(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -151,6 +149,39 @@ func (h *ProductionHandler) listProduction(w http.ResponseWriter, r *http.Reques
 
 	_ = json.NewEncoder(w).Encode(rows)
 }
+
+// ========================================
+// GET /productions/create-context
+// ========================================
+
+func (h *ProductionHandler) getProductionCreateContext(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.query == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "query service is nil"})
+		return
+	}
+
+	productBlueprintID := r.URL.Query().Get("productBlueprintId")
+	if productBlueprintID == "" || strings.Contains(productBlueprintID, "/") {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid productBlueprintId"})
+		return
+	}
+
+	result, err := h.query.GetProductionCreateContext(ctx, productBlueprintID)
+	if err != nil {
+		writeProductionErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(result)
+}
+
+// ========================================
+// GET /productions/{id}
+// ========================================
 
 func (h *ProductionHandler) getProduction(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
@@ -176,6 +207,10 @@ func (h *ProductionHandler) getProduction(w http.ResponseWriter, r *http.Request
 	_ = json.NewEncoder(w).Encode(detail)
 }
 
+// ========================================
+// POST /productions
+// ========================================
+
 func (h *ProductionHandler) postProduction(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer r.Body.Close()
@@ -193,15 +228,19 @@ func (h *ProductionHandler) postProduction(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	p, err := h.uc.Create(ctx, req.toCommand())
+	created, err := h.uc.Create(ctx, req.toCommand())
 	if err != nil {
 		writeProductionErr(w, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(p)
+	_ = json.NewEncoder(w).Encode(created)
 }
+
+// ========================================
+// PUT /productions/{id}
+// ========================================
 
 func (h *ProductionHandler) updateProduction(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
@@ -226,14 +265,18 @@ func (h *ProductionHandler) updateProduction(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	p, err := h.uc.Update(ctx, req.toCommand(id))
+	updated, err := h.uc.Update(ctx, req.toCommand(id))
 	if err != nil {
 		writeProductionErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(p)
+	_ = json.NewEncoder(w).Encode(updated)
 }
+
+// ========================================
+// DELETE /productions/{id}
+// ========================================
 
 func (h *ProductionHandler) deleteProduction(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
@@ -258,30 +301,29 @@ func (h *ProductionHandler) deleteProduction(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ========================================
+// Error
+// ========================================
+
 func writeProductionErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
-	if errors.Is(err, productiondom.ErrInvalidID) {
+	switch {
+	case errors.Is(err, productiondom.ErrInvalidID),
+		errors.Is(err, productiondom.ErrInvalidProductBlueprintID),
+		errors.Is(err, productiondom.ErrInvalidAssigneeID),
+		errors.Is(err, productiondom.ErrInvalidModels),
+		errors.Is(err, productiondom.ErrInvalidModelID),
+		errors.Is(err, productiondom.ErrInvalidQuantity),
+		errors.Is(err, productiondom.ErrInvalidPrintedAt),
+		errors.Is(err, productiondom.ErrInvalidPrintedBy),
+		errors.Is(err, productiondom.ErrInvalidCreatedAt):
 		code = http.StatusBadRequest
-	} else if errors.Is(err, productiondom.ErrInvalidProductBlueprintID) {
-		code = http.StatusBadRequest
-	} else if errors.Is(err, productiondom.ErrInvalidAssigneeID) {
-		code = http.StatusBadRequest
-	} else if errors.Is(err, productiondom.ErrInvalidModels) {
-		code = http.StatusBadRequest
-	} else if errors.Is(err, productiondom.ErrInvalidModelID) {
-		code = http.StatusBadRequest
-	} else if errors.Is(err, productiondom.ErrInvalidQuantity) {
-		code = http.StatusBadRequest
-	} else if errors.Is(err, productiondom.ErrInvalidPrintedAt) {
-		code = http.StatusBadRequest
-	} else if errors.Is(err, productiondom.ErrInvalidPrintedBy) {
-		code = http.StatusBadRequest
-	} else if errors.Is(err, productiondom.ErrInvalidCreatedAt) {
-		code = http.StatusBadRequest
-	} else if errors.Is(err, productiondom.ErrNotFound) {
+
+	case errors.Is(err, productiondom.ErrNotFound):
 		code = http.StatusNotFound
-	} else if errors.Is(err, productiondom.ErrConflict) {
+
+	case errors.Is(err, productiondom.ErrConflict):
 		code = http.StatusConflict
 	}
 
