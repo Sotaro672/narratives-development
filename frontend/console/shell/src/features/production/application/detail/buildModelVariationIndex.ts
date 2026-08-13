@@ -105,29 +105,3 @@ export function buildModelIndexFromVariations(
 
   return index;
 }
-
-/* ---------------------------------------------------------
- * productBlueprintId → ModelVariation index
- * --------------------------------------------------------- */
-
-export async function loadModelVariationIndexByProductBlueprintId(
-  productBlueprintId: string,
-): Promise<
-  Record<string, ModelVariationSummary>
-> {
-  const id =
-    productBlueprintId.trim();
-
-  if (!id) {
-    return {};
-  }
-
-  const variations =
-    await listModelVariationsByProductBlueprintId(
-      id,
-    );
-
-  return buildModelIndexFromVariations(
-    variations,
-  );
-}

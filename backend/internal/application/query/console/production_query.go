@@ -104,17 +104,6 @@ func NewCompanyProductionQueryService(
 // Production List
 // ============================================================
 
-func (s *CompanyProductionQueryService) ListProductionsByCurrentCompany(
-	ctx context.Context,
-) ([]productiondom.Production, error) {
-	rows, _, err := s.listProductionsByCurrentCompany(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return rows, nil
-}
-
 func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(
 	ctx context.Context,
 ) ([]productiondom.Production, map[string]productbpdom.ProductBlueprint, error) {
@@ -200,18 +189,6 @@ func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 // ============================================================
 // Production Detail
 // ============================================================
-
-func (s *CompanyProductionQueryService) GetProductionByIDForCurrentCompany(
-	ctx context.Context,
-	id string,
-) (productiondom.Production, error) {
-	p, _, err := s.getProductionByIDForCurrentCompany(ctx, id)
-	if err != nil {
-		return productiondom.Production{}, err
-	}
-
-	return p, nil
-}
 
 func (s *CompanyProductionQueryService) getProductionByIDForCurrentCompany(
 	ctx context.Context,
@@ -370,15 +347,6 @@ func (s *CompanyProductionQueryService) GetProductionDetailByID(
 		UpdatedByName: updatedByName,
 		UpdatedAt:     productionTimePointer(p.UpdatedAt),
 	}, nil
-}
-
-// 既存handlerとの互換性を維持する。
-// GET /productions/{id} は今後 ProductionDetailDTO を返す。
-func (s *CompanyProductionQueryService) GetProductionWithAssigneeNameByID(
-	ctx context.Context,
-	id string,
-) (ProductionDetailDTO, error) {
-	return s.GetProductionDetailByID(ctx, id)
 }
 
 // ============================================================

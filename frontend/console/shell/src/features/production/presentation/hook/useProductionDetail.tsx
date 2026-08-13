@@ -3,8 +3,6 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { useAuthContext } from "../../../../auth/application/AuthContext";
-
 import {
   loadProductionDetail,
   updateProductionDetail,
@@ -25,12 +23,18 @@ type ProductBlueprintDetailForProduction = Awaited<
 export function useProductionDetail() {
   const navigate = useNavigate();
   const { productionId } = useParams<{ productionId: string }>();
-  const { currentMember } = useAuthContext();
-
-  const creator = currentMember?.displayName ?? "-";
 
   const [production, setProduction] = React.useState<ProductionDetail | null>(null);
   const [mode, setMode] = React.useState<Mode>("view");
+  const [loading, setLoading] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [productBlueprint, setProductBlueprint] =
+    React.useState<ProductBlueprintDetailForProduction | null>(null);
+  const [pbLoading, setPbLoading] = React.useState(false);
+  const [pbError, setPbError] = React.useState<string | null>(null);
+  const [quantityRows, setQuantityRows] =
+    React.useState<ProductionQuantityRowVM[]>([]);
 
   const isViewMode = mode === "view";
   const isEditMode = mode === "edit";
@@ -48,23 +52,6 @@ export function useProductionDetail() {
     setMode("edit");
   }, [canEdit]);
 
-  const adminMode: "view" | "edit" = mode;
-
-  const [loading, setLoading] = React.useState(false);
-  const [deleting, setDeleting] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  const [productBlueprint, setProductBlueprint] =
-    React.useState<ProductBlueprintDetailForProduction | null>(null);
-
-  const [pbLoading, setPbLoading] = React.useState(false);
-  const [pbError, setPbError] = React.useState<string | null>(null);
-
-  const [quantityRows, setQuantityRows] = React.useState<ProductionQuantityRowVM[]>([]);
-
-  // ======================================================
-  // Production詳細取得
-  // ======================================================
   React.useEffect(() => {
     if (!productionId) {
       return;
@@ -132,9 +119,6 @@ export function useProductionDetail() {
     };
   }, [productionId]);
 
-  // ======================================================
-  // ProductBlueprint詳細取得
-  // ======================================================
   React.useEffect(() => {
     const productBlueprintId = production?.productBlueprintId;
 
@@ -180,9 +164,6 @@ export function useProductionDetail() {
     };
   }, [production?.productBlueprintId]);
 
-  // ======================================================
-  // 保存処理
-  // ======================================================
   const onSave = React.useCallback(async () => {
     if (!productionId || !production) {
       return;
@@ -202,7 +183,6 @@ export function useProductionDetail() {
 
       if (updated) {
         setProduction(updated);
-
         setQuantityRows(
           updated.models.map((row) => ({
             modelId: row.modelId,
@@ -226,9 +206,6 @@ export function useProductionDetail() {
     }
   }, [productionId, production, quantityRows, canEdit]);
 
-  // ======================================================
-  // 削除処理
-  // ======================================================
   const onDelete = React.useCallback(async () => {
     if (!productionId || !production || deleting) {
       return;
@@ -244,7 +221,6 @@ export function useProductionDetail() {
 
       const repository = new ProductionRepositoryHTTP();
       await repository.delete(productionId);
-
       navigate("/production");
     } catch {
       alert("生産情報の削除に失敗しました。");
@@ -253,9 +229,6 @@ export function useProductionDetail() {
     }
   }, [productionId, production, deleting, navigate]);
 
-  // ======================================================
-  // 戻る
-  // ======================================================
   const handleBack = React.useCallback(() => {
     navigate("/production");
   }, [navigate]);
@@ -266,7 +239,7 @@ export function useProductionDetail() {
     switchToView,
     switchToEdit,
     canEdit,
-    adminMode,
+    adminMode: mode,
     onBack: handleBack,
     onSave,
     onDelete,
@@ -280,7 +253,6 @@ export function useProductionDetail() {
     pbError,
     quantityRows,
     setQuantityRows,
-    creator,
   };
 }
 

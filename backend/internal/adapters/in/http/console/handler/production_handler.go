@@ -44,8 +44,7 @@ type createProductionRequest struct {
 
 	Printed   *bool      `json:"printed,omitempty"`
 	PrintedAt *time.Time `json:"printedAt,omitempty"`
-
-	CreatedBy *string `json:"createdBy,omitempty"`
+	CreatedBy *string    `json:"createdBy,omitempty"`
 }
 
 type updateProductionRequest struct {
@@ -55,8 +54,7 @@ type updateProductionRequest struct {
 	Printed   *bool      `json:"printed,omitempty"`
 	PrintedAt *time.Time `json:"printedAt,omitempty"`
 	PrintedBy *string    `json:"printedBy,omitempty"`
-
-	UpdatedBy *string `json:"updatedBy,omitempty"`
+	UpdatedBy *string    `json:"updatedBy,omitempty"`
 }
 
 func (m productionModelRequest) toCommand() usecase.ModelQuantityCommand {
@@ -70,9 +68,11 @@ func productionModelRequestsToCommands(
 	models []productionModelRequest,
 ) []usecase.ModelQuantityCommand {
 	out := make([]usecase.ModelQuantityCommand, 0, len(models))
+
 	for _, m := range models {
 		out = append(out, m.toCommand())
 	}
+
 	return out
 }
 
@@ -167,13 +167,13 @@ func (h *ProductionHandler) getProduction(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	p, err := h.query.GetProductionWithAssigneeNameByID(ctx, id)
+	detail, err := h.query.GetProductionDetailByID(ctx, id)
 	if err != nil {
 		writeProductionErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(p)
+	_ = json.NewEncoder(w).Encode(detail)
 }
 
 func (h *ProductionHandler) postProduction(w http.ResponseWriter, r *http.Request) {

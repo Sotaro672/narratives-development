@@ -1,116 +1,64 @@
-// frontend\console\shell\src\pages\productionCreate.tsx
+// frontend/console/shell/src/pages/productionCreate.tsx
 
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
-
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "../shared/ui/card";
-
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "../shared/ui/popover";
-
+import { Card, CardHeader, CardTitle, CardContent } from "../shared/ui/card";
+import { Popover, PopoverTrigger, PopoverContent } from "../shared/ui/popover";
 import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
-
-// Table UI
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../shared/ui/table";
-
-// named import に戻す（TS1192 対策）
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../shared/ui/table";
 import { useProductionCreate } from "../features/production/presentation/hook/useProductionCreate";
-
-// ProductionQuantityCard（InventoryCard互換デザイン）
 import ProductionQuantityCard from "../features/production/presentation/components/productionQuantityCard";
 
 import "../styles/production.css";
-
-type ProductRow = {
-  id: string;
-  name: string;
-};
 
 export default function ProductionCreate() {
   const {
     onBack,
     onSave,
-
-    hasSelectedProductBlueprint,
-    selectedProductBlueprintForCard,
-
-    // 管理カード用
+    selectedProductBlueprint,
     assignee,
     assigneeOptions,
     loadingMembers,
     onSelectAssignee,
-
-    // ブランド選択用
     selectedBrand,
     brandOptions,
     selectBrand,
-
-    // 商品設計テーブル用
     productRows,
     selectedProductId,
     selectProductById,
-
-    // ProductionQuantityCard 用（VM 正）
     modelVariationsForCard,
     setQuantityRows,
   } = useProductionCreate();
 
   const productBlueprintCategoryCode =
-    selectedProductBlueprintForCard.productBlueprintCategory?.code ?? "";
-
-  // onChangeRows: VM をそのまま受け取り state 更新
-  const handleChangeRows = (rows: typeof modelVariationsForCard) => {
-    setQuantityRows(Array.isArray(rows) ? rows : []);
-  };
+    selectedProductBlueprint?.productBlueprintCategory.code ?? "";
 
   return (
-    <PageStyle
-      layout="grid-2"
-      title="生産計画の作成"
-      onBack={onBack}
-      onSave={onSave}
-    >
-      {/* ========== 左カラム ========== */}
+    <PageStyle layout="grid-2" title="生産計画の作成" onBack={onBack} onSave={onSave}>
       <div className="space-y-4">
-        {/* 商品設計カード */}
-        {hasSelectedProductBlueprint ? (
-          <ProductBlueprintCard mode="view" {...selectedProductBlueprintForCard} />
+        {selectedProductBlueprint ? (
+          <ProductBlueprintCard
+            mode="view"
+            productBlueprintPatch={selectedProductBlueprint}
+          />
         ) : (
           <div className="flex h-full items-center justify-center text-gray-500">
             商品設計を選択してください
           </div>
         )}
 
-        {/* ProductionQuantityCard（編集モード） */}
-        {hasSelectedProductBlueprint && (
+        {selectedProductBlueprint && (
           <ProductionQuantityCard
             title="モデル別 生産数一覧"
             rows={modelVariationsForCard}
             productBlueprintCategory={productBlueprintCategoryCode}
             mode="edit"
-            onChangeRows={handleChangeRows}
+            onChangeRows={setQuantityRows}
           />
         )}
       </div>
 
-      {/* ========== 右カラム ========== */}
       <div className="space-y-4">
-        {/* 管理情報カード */}
         <AdminCard
           mode="edit"
           title="管理情報"
@@ -120,7 +68,6 @@ export default function ProductionCreate() {
           onSelectAssignee={onSelectAssignee}
         />
 
-        {/* ブランド選択 */}
         <Card className="pb-select">
           <CardHeader>
             <CardTitle>ブランド選択</CardTitle>
@@ -135,15 +82,13 @@ export default function ProductionCreate() {
 
               <PopoverContent>
                 <div className="pb-select__list">
-                  {brandOptions.map((b: string) => (
+                  {brandOptions.map((brand) => (
                     <button
-                      key={b}
-                      className={
-                        "pb-select__row" + (selectedBrand === b ? " is-active" : "")
-                      }
-                      onClick={() => selectBrand(b)}
+                      key={brand}
+                      className={`pb-select__row${selectedBrand === brand ? " is-active" : ""}`}
+                      onClick={() => selectBrand(brand)}
                     >
-                      {b}
+                      {brand}
                     </button>
                   ))}
 
@@ -158,7 +103,6 @@ export default function ProductionCreate() {
           </CardContent>
         </Card>
 
-        {/* 商品設計一覧テーブル */}
         <Card>
           <CardHeader>
             <CardTitle>商品設計一覧</CardTitle>
@@ -170,17 +114,17 @@ export default function ProductionCreate() {
                   <TableHead>商品名</TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
-                {productRows.map((p: ProductRow) => (
+                {productRows.map((product) => (
                   <TableRow
-                    key={p.id}
-                    className={
-                      "cursor-pointer hover:bg-blue-50" +
-                      (selectedProductId === p.id ? " bg-blue-100" : "")
-                    }
-                    onClick={() => selectProductById(p.id)}
+                    key={product.id}
+                    className={`cursor-pointer hover:bg-blue-50${
+                      selectedProductId === product.id ? " bg-blue-100" : ""
+                    }`}
+                    onClick={() => selectProductById(product.id)}
                   >
-                    <TableCell>{p.name}</TableCell>
+                    <TableCell>{product.name}</TableCell>
                   </TableRow>
                 ))}
 

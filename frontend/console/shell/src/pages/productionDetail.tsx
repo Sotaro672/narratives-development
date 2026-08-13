@@ -1,53 +1,33 @@
-// frontend\console\shell\src\pages\productionDetail.tsx
+// frontend/console/shell/src/pages/productionDetail.tsx
 
 import React from "react";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
-
 import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
 import ProductionQuantityCard from "../features/production/presentation/components/productionQuantityCard";
-
 import { useProductionDetail } from "../features/production/presentation/hook/useProductionDetail";
-import "../styles/production.css";
-
 import LogCard from "../features/log/presentation/LogCard";
-
-// usePrintCard Hook（print_log + QR 情報取得）
-// modelId を正にした版（QuantityRowBase: modelId）
 import { usePrintCard } from "../features/print/presentation/hook/usePrintCard";
-
-// 分離した印刷カードコンポーネント
 import PrintCard from "../features/print/presentation/component/printCard";
 
-// Presentation 正: ProductionQuantityRowVM（キーは modelId）
-import type { ProductionQuantityRowVM } from "../features/production/presentation/viewModels/productionQuantityRowVM";
+import "../styles/production.css";
 
 export default function ProductionDetail() {
   const {
-    // モード関連
     isViewMode,
     isEditMode,
     switchToView,
     switchToEdit,
-
-    // AdminCard 用モード
     adminMode,
-
-    // printed:true のとき false（編集不可）
     canEdit,
-
-    // 戻る
     onBack,
     onSave,
     onDelete,
     deleting,
-
-    // データ関連
     productionId,
     production,
     loading,
     error,
-    creator,
     quantityRows,
     setQuantityRows,
     productBlueprint,
@@ -65,50 +45,14 @@ export default function ProductionDetail() {
     : "-";
 
   const isPrinted = production?.printed === true;
-
   const productBlueprintCategoryCode =
     productBlueprint?.productBlueprintCategory?.code ?? "";
 
-  // ==========================
-  // usePrintCard: 印刷 + print_log 取得
-  // ==========================
-  const rowsForPrint = React.useMemo(() => {
-    const safe: ProductionQuantityRowVM[] = Array.isArray(quantityRows)
-      ? quantityRows
-      : [];
-
-    return safe.map((row, index) => ({
-      modelId: String(row.modelId ?? "").trim() || String(index),
-      quantity: row.quantity ?? 0,
-
-      // usePrintCard が参照しうる情報（無害に付与）
-      modelNumber: row.modelNumber,
-      size: row.size,
-      color: row.color,
-      rgb: row.rgb ?? null,
-      volumeValue: row.volumeValue,
-      volumeUnit: row.volumeUnit,
-      variationLabel: row.variationLabel,
-      kind: row.kind,
-    }));
-  }, [quantityRows]);
-
   const { onPrint, printing } = usePrintCard({
     productionId: productionId ?? null,
-    hasProduction: !!production,
-    rows: rowsForPrint,
+    hasProduction: Boolean(production),
+    rows: quantityRows,
   });
-
-  // ==========================
-  // ヘッダー操作
-  // ==========================
-  const handleEnterEdit = React.useCallback(() => {
-    switchToEdit();
-  }, [switchToEdit]);
-
-  const handleCancelEdit = React.useCallback(() => {
-    switchToView();
-  }, [switchToView]);
 
   const handleSave = React.useCallback(() => {
     void onSave();
@@ -116,9 +60,7 @@ export default function ProductionDetail() {
 
   const handleDelete = React.useCallback(async () => {
     if (isPrinted) {
-      window.alert(
-        "印刷済みの生産は削除できません。",
-      );
+      window.alert("印刷済みの生産は削除できません。");
       return;
     }
 
@@ -126,21 +68,19 @@ export default function ProductionDetail() {
       "この生産情報を削除します。\nこの操作は取り消せません。",
     );
 
-    if (!ok) return;
+    if (!ok) {
+      return;
+    }
 
     await onDelete();
   }, [isPrinted, onDelete]);
 
-  // ==========================
-  // 印刷ボタン押下時処理
-  // ==========================
   const handlePrint = React.useCallback(async () => {
     if (!productionId) {
       window.alert("productionId が取得できませんでした。");
       return;
     }
 
-    // 印刷済みの場合は「結果表示」想定のため confirm は出さない
     if (isPrinted) {
       await onPrint();
       return;
@@ -150,116 +90,102 @@ export default function ProductionDetail() {
       "印刷後は生産数を更新できません。\n印刷後に追加生産が必要になった場合は生産計画を新規作成してください。",
     );
 
-    if (!ok) return;
+    if (!ok) {
+      return;
+    }
 
     await onPrint();
   }, [productionId, onPrint, isPrinted]);
 
-  // ==========================
-  // 戻る
-  // ==========================
-  const handleBack = React.useCallback(() => {
-    onBack();
-  }, [onBack]);
-
   return (
-    <>
-      <PageStyle
-        layout="grid-2"
-        title="生産詳細"
-        onBack={handleBack}
-        // printed:true の場合は編集ボタン（onEdit）を非表示
-        onEdit={isViewMode && canEdit ? handleEnterEdit : undefined}
-        onDelete={
-          isEditMode &&
-          canEdit &&
-          !deleting
-            ? handleDelete
-            : undefined
-        }
-        onCancel={isEditMode ? handleCancelEdit : undefined}
-        onSave={isEditMode ? handleSave : undefined}
-      >
-        {/* ========== 左カラム ========== */}
-        <div className="space-y-4">
-          {loading && (
-            <div className="flex h-full items-center justify-center text-gray-500">
-              生産情報を読み込み中です…
-            </div>
-          )}
+    <PageStyle
+      layout="grid-2"
+      title="生産詳細"
+      onBack={onBack}
+      onEdit={isViewMode && canEdit ? switchToEdit : undefined}
+      onDelete={isEditMode && canEdit && !deleting ? handleDelete : undefined}
+      onCancel={isEditMode ? switchToView : undefined}
+      onSave={isEditMode ? handleSave : undefined}
+    >
+      <div className="space-y-4">
+        {loading && (
+          <div className="flex h-full items-center justify-center text-gray-500">
+            生産情報を読み込み中です…
+          </div>
+        )}
 
-          {!loading && error && (
-            <div className="flex h-full items-center justify-center text-red-500">
-              {error}
-            </div>
-          )}
+        {!loading && error && (
+          <div className="flex h-full items-center justify-center text-red-500">
+            {error}
+          </div>
+        )}
 
-          {!loading && !error && !production && (
-            <div className="flex h-full items-center justify-center text-gray-500">
-              対象の生産情報が見つかりません。
-            </div>
-          )}
+        {!loading && !error && !production && (
+          <div className="flex h-full items-center justify-center text-gray-500">
+            対象の生産情報が見つかりません。
+          </div>
+        )}
 
-          {!loading && !error && production && (
-            <>
-              {pbLoading && (
-                <div className="p-4 text-gray-500">商品設計を読み込み中…</div>
-              )}
+        {!loading && !error && production && (
+          <>
+            {pbLoading && (
+              <div className="p-4 text-gray-500">
+                商品設計を読み込み中…
+              </div>
+            )}
 
-              {!pbLoading && pbError && (
-                <div className="p-4 text-red-500">{pbError}</div>
-              )}
+            {!pbLoading && pbError && (
+              <div className="p-4 text-red-500">{pbError}</div>
+            )}
 
-              {!pbLoading && !pbError && productBlueprint && (
-                <ProductBlueprintCard
-                  mode="view"
-                  productName={productBlueprint.productName}
-                  brandName={production.brandName ?? ""}
-                  productBlueprintCategory={
-                    productBlueprint.productBlueprintCategory ?? null
-                  }
-                />
-              )}
-
-              <ProductionQuantityCard
-                title="モデル別 生産数一覧"
-                rows={quantityRows}
-                productBlueprintCategory={productBlueprintCategoryCode}
-                mode={isEditMode ? "edit" : "view"}
-                onChangeRows={isEditMode ? setQuantityRows : undefined}
+            {!pbLoading && !pbError && productBlueprint && (
+              <ProductBlueprintCard
+                mode="view"
+                productName={productBlueprint.productName}
+                brandName={production.brandName ?? ""}
+                productBlueprintCategory={
+                  productBlueprint.productBlueprintCategory ?? null
+                }
               />
+            )}
 
-              {isViewMode && (
-                <PrintCard
-                  printing={printing}
-                  onClick={handlePrint}
-                  printed={isPrinted}
-                />
-              )}
-            </>
-          )}
-        </div>
+            <ProductionQuantityCard
+              title="モデル別 生産数一覧"
+              rows={quantityRows}
+              productBlueprintCategory={productBlueprintCategoryCode}
+              mode={isEditMode ? "edit" : "view"}
+              onChangeRows={isEditMode ? setQuantityRows : undefined}
+            />
 
-        {/* ========== 右カラム ========== */}
-        <div className="space-y-4">
-          <AdminCard
-            title="管理情報"
-            assigneeName={assigneeDisplay}
-            assigneeCandidates={[]}
-            loadingMembers={false}
-            createdByName={creator}
-            createdAt={createdAtLabel}
-            mode={adminMode}
-            onSelectAssignee={() => {}}
-          />
+            {isViewMode && (
+              <PrintCard
+                printing={printing}
+                onClick={handlePrint}
+                printed={isPrinted}
+              />
+            )}
+          </>
+        )}
+      </div>
 
-          <LogCard
-            title="更新履歴"
-            logs={[]}
-            emptyText="更新履歴はまだありません。"
-          />
-        </div>
-      </PageStyle>
-    </>
+      <div className="space-y-4">
+        <AdminCard
+          title="管理情報"
+          assigneeName={assigneeDisplay}
+          assigneeCandidates={[]}
+          loadingMembers={false}
+          createdByName={production?.createdByName || "-"}
+          createdAt={createdAtLabel}
+          mode={adminMode}
+          onSelectAssignee={() => {}}
+        />
+
+        <LogCard
+          title="更新履歴"
+          logs={[]}
+          emptyText="更新履歴はまだありません。"
+        />
+      </div>
+    </PageStyle>
   );
 }

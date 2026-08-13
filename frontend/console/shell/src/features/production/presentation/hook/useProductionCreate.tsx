@@ -35,10 +35,8 @@ import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssign
 
 export function useProductionCreate() {
   const navigate = useNavigate();
-  const { currentMember, user } = useAuthContext();
-
-  const creator = currentMember?.displayName?.trim() || "-";
-  const currentMemberUid = user?.uid ?? currentMember?.uid ?? null;
+  const { user } = useAuthContext();
+  const currentMemberUid = user?.uid ?? null;
 
   const [allProductBlueprints, setAllProductBlueprints] =
     React.useState<ProductBlueprintManagementRow[]>([]);
@@ -52,6 +50,7 @@ export function useProductionCreate() {
     React.useState<Record<string, ModelVariationSummary>>({});
   const [quantityRowVMs, setQuantityRowVMs] =
     React.useState<ProductionQuantityRowVM[]>([]);
+  const [brands, setBrands] = React.useState<Brand[]>([]);
 
   const {
     assigneeId,
@@ -63,22 +62,13 @@ export function useProductionCreate() {
     defaultToCurrentMember: false,
   });
 
-  const [createdAt] = React.useState(() =>
-    new Date().toLocaleDateString("ja-JP"),
-  );
-
   const handleBack = React.useCallback(() => {
     navigate("/production");
   }, [navigate]);
 
-  // ==========================
-  // ブランド一覧
-  // ==========================
-  const [brands, setBrands] = React.useState<Brand[]>([]);
-
   React.useEffect(() => {
     loadBrands()
-      .then((items) => setBrands(items))
+      .then(setBrands)
       .catch(() => setBrands([]));
   }, []);
 
@@ -87,12 +77,9 @@ export function useProductionCreate() {
     [brands],
   );
 
-  // ==========================
-  // 商品設計一覧
-  // ==========================
   React.useEffect(() => {
     loadProductBlueprints()
-      .then((rows) => setAllProductBlueprints(rows))
+      .then(setAllProductBlueprints)
       .catch(() => setAllProductBlueprints([]));
   }, []);
 
@@ -106,9 +93,6 @@ export function useProductionCreate() {
     [filteredBlueprints],
   );
 
-  // ==========================
-  // 商品設計詳細 + ModelVariation
-  // ==========================
   React.useEffect(() => {
     if (!selectedId) {
       setSelectedDetail(null);
@@ -151,11 +135,6 @@ export function useProductionCreate() {
     };
   }, [selectedId]);
 
-  // ==========================
-  // modelRefs + ModelVariation → Quantity rows
-  //
-  // Production Create BFF 化までは frontend join を使用する。
-  // ==========================
   React.useEffect(() => {
     if (!selectedDetail) {
       setQuantityRowVMs([]);
@@ -183,15 +162,6 @@ export function useProductionCreate() {
     );
   }, [modelVariations, selectedDetail, modelIndex]);
 
-  // ==========================
-  // ProductBlueprint
-  // ==========================
-  const selectedProductBlueprint = selectedDetail;
-  const hasSelectedProductBlueprint = selectedProductBlueprint !== null;
-
-  // ==========================
-  // 保存
-  // ==========================
   const handleSave = React.useCallback(async () => {
     if (!selectedId) {
       alert("商品設計を選択してください");
@@ -221,7 +191,6 @@ export function useProductionCreate() {
     try {
       const repository = new ProductionRepositoryHTTP();
       await repository.create(payload);
-
       alert("生産計画を作成しました");
       navigate("/production");
     } catch {
@@ -238,11 +207,9 @@ export function useProductionCreate() {
   return {
     onBack: handleBack,
     onSave: handleSave,
-    hasSelectedProductBlueprint,
-    selectedProductBlueprint,
+    hasSelectedProductBlueprint: selectedDetail !== null,
+    selectedProductBlueprint: selectedDetail,
     assignee,
-    creator,
-    createdAt,
     assigneeOptions,
     loadingMembers,
     onSelectAssignee: handleSelectAssignee,
