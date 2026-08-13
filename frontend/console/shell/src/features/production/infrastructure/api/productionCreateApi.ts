@@ -6,14 +6,13 @@ import { fetchJSON } from "../../../../shared/http/fetchJSON";
 import type { ProductionCreateContext } from "../../../../shared/types/production";
 import { brandRepositoryHTTP } from "../../../brand/infrastructure/http/brandRepositoryHTTP";
 import type { ProductBlueprintCategorySnapshot } from "../../../productBlueprint/domain/productBlueprintCategory";
-import {
-  fetchProductBlueprintManagementRows,
-  type ProductBlueprintManagementRow,
-} from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
+import { fetchProductBlueprintManagementRows } from "../../../productBlueprint/application/productBlueprintManagementService";
+import type { ProductBlueprintListRow } from "../../../productBlueprint/infrastructure/repository/productBlueprintRepositoryHTTP";
+
+export type ProductBlueprintManagementRow = ProductBlueprintListRow;
 
 export type {
   Brand,
-  ProductBlueprintManagementRow,
   ProductBlueprintCategorySnapshot,
 };
 
@@ -23,10 +22,7 @@ export type {
 
 export async function loadBrands(): Promise<Brand[]> {
   try {
-    const result = await brandRepositoryHTTP.list({
-      page: 1,
-      perPage: 200,
-    });
+    const result = await brandRepositoryHTTP.list({ page: 1, perPage: 200 });
     return result.items.filter((brand) => brand.isActive);
   } catch {
     return [];
@@ -53,12 +49,14 @@ export async function loadProductionCreateContext(
   productBlueprintId: string,
 ): Promise<ProductionCreateContext> {
   const normalizedProductBlueprintId = String(productBlueprintId ?? "").trim();
+
   if (!normalizedProductBlueprintId) {
     throw new Error("loadProductionCreateContext: productBlueprintId が空です");
   }
 
   const url = `${API_BASE}/productions/create-context?productBlueprintId=${encodeURIComponent(normalizedProductBlueprintId)}`;
-  return fetchJSON(url, {
+
+  return fetchJSON<ProductionCreateContext>(url, {
     method: "GET",
     auth: "required",
   });

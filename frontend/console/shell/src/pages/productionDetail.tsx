@@ -48,7 +48,6 @@ export default function ProductionDetail() {
   const { onPrint, printing } = usePrintCard({
     productionId: productionId ?? null,
     hasProduction: Boolean(production),
-    rows: quantityRows,
   });
 
   const handleSave = React.useCallback(() => {
@@ -65,9 +64,7 @@ export default function ProductionDetail() {
       "この生産情報を削除します。\nこの操作は取り消せません。",
     );
 
-    if (!ok) {
-      return;
-    }
+    if (!ok) return;
 
     await onDelete();
   }, [isPrinted, onDelete]);
@@ -87,9 +84,7 @@ export default function ProductionDetail() {
       "印刷後は生産数を更新できません。\n印刷後に追加生産が必要になった場合は生産計画を新規作成してください。",
     );
 
-    if (!ok) {
-      return;
-    }
+    if (!ok) return;
 
     await onPrint();
   }, [productionId, onPrint, isPrinted]);
