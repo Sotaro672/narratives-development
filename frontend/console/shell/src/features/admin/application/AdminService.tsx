@@ -4,32 +4,49 @@
 import {
   fetchMemberList,
 } from "../../member/application/memberListService";
+
 import type {
   MemberFilter,
 } from "../../member/domain/repository/memberRepository";
+
 import type {
   PageRequest,
 } from "../../../shared/types/common/common";
+
 import {
   DEFAULT_PAGE_REQUEST,
 } from "../../../shared/types/common/common";
+
 import type {
   Member,
 } from "../../../shared/types/member";
 
 export type AssigneeCandidate = {
+  /**
+   * Firebase Authentication UID。
+   *
+   * Backend の assigneeId / NameResolver は
+   * Firebase Auth UID を正とする。
+   */
   id: string;
+
+  /**
+   * Backend で解決済みの Member 表示名。
+   */
   name: string;
 };
 
 /**
  * Member配列をAdminCard用の担当者候補とnameMapへ変換する。
  *
+ * assigneeId は Firebase Auth UID を正とする。
+ *
  * 表示名は次の優先順位で決定する。
  * 1. displayName
  * 2. 姓名
  * 3. email
- * 4. Member ID
+ *
+ * uid が空の Member は担当者候補に含めない。
  */
 export function buildAssigneeCandidates(
   items: Member[],
@@ -37,35 +54,56 @@ export function buildAssigneeCandidates(
   candidates: AssigneeCandidate[];
   nameMap: Record<string, string>;
 } {
-  const candidates: AssigneeCandidate[] = items.map(
-    (member) => {
-      const fullName = [
-        member.lastName,
-        member.firstName,
-      ]
-        .filter(
-          (value) =>
-            value.length > 0,
-        )
-        .join(" ");
+  const candidates =
+    items.flatMap(
+      (
+        member,
+      ): AssigneeCandidate[] => {
+        if (!member.uid) {
+          return [];
+        }
 
-      const name =
-        member.displayName.trim() ||
-        fullName ||
-        member.email ||
-        member.id;
+        const fullName =
+          [
+            member.lastName,
+            member.firstName,
+          ]
+            .filter(
+              (value) =>
+                value.length > 0,
+            )
+            .join(" ");
 
-      return {
-        id: member.id,
-        name,
-      };
-    },
-  );
+        const name =
+          member.displayName ||
+          fullName ||
+          member.email;
 
-  const nameMap: Record<string, string> = {};
+        if (!name) {
+          return [];
+        }
 
-  for (const candidate of candidates) {
-    nameMap[candidate.id] =
+        return [
+          {
+            id:
+              member.uid,
+
+            name,
+          },
+        ];
+      },
+    );
+
+  const nameMap:
+    Record<string, string> = {};
+
+  for (
+    const candidate
+    of candidates
+  ) {
+    nameMap[
+      candidate.id
+    ] =
       candidate.name;
   }
 
@@ -81,18 +119,26 @@ export function buildAssigneeCandidates(
  *
  * companyIdはFrontendから指定せず、
  * Backend側で認証中MemberのcompanyIdにスコープされる。
+ *
+ * candidate.id は Firebase Auth UID。
  */
 export async function fetchAssigneeCandidatesForCurrentCompany(): Promise<{
   candidates: AssigneeCandidate[];
   nameMap: Record<string, string>;
 }> {
-  const page: PageRequest = {
-    ...DEFAULT_PAGE_REQUEST,
-    number: 1,
-    perPage: 200,
-  };
+  const page:
+    PageRequest = {
+      ...DEFAULT_PAGE_REQUEST,
 
-  const filter: MemberFilter = {};
+      number:
+        1,
+
+      perPage:
+        200,
+    };
+
+  const filter:
+    MemberFilter = {};
 
   const result =
     await fetchMemberList(

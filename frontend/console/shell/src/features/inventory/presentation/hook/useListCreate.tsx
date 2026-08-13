@@ -8,10 +8,13 @@ import {
 } from "react-router-dom";
 
 import { usePriceCard } from "../../../list/presentation/hook/usePriceCard";
-import { useAdminCard } from "../../../admin/presentation/hook/useAdminCard";
 import {
-  useAuthContext,
-} from "../../../../auth/application/AuthContext";
+  useAssigneeSelection,
+} from "../../../admin/presentation/hook/useAssigneeSelection";
+
+import type {
+  AssigneeCandidate,
+} from "../../../admin/application/AdminService";
 
 import type { ListStatus } from "../../../../shared/types/list";
 
@@ -32,11 +35,6 @@ import type { ListCreateDTO } from "../../infrastructure/http/listCreateReposito
 
 type ImageInputRef =
   React.RefObject<HTMLInputElement | null>;
-
-type AssigneeCandidate = {
-  id: string;
-  name: string;
-};
 
 export type UseListCreateResult = {
   title: string;
@@ -117,128 +115,6 @@ type UsePriceRowsResult = {
   priceCard:
     ReturnType<typeof usePriceCard>;
 };
-
-function getMemberUid(
-  member: unknown,
-): string {
-  const target =
-    member as any;
-
-  return String(
-    target?.uid ?? "",
-  );
-}
-
-function getMemberDisplayName(
-  member: unknown,
-): string {
-  const target =
-    member as any;
-
-  const fullName =
-    String(
-      target?.fullName ?? "",
-    );
-
-  if (fullName) {
-    return fullName;
-  }
-
-  const nameParts = [
-    target?.lastName,
-    target?.firstName,
-  ]
-    .map((value) =>
-      String(value ?? ""),
-    )
-    .filter(Boolean);
-
-  const joinedName =
-    nameParts.join(" ");
-
-  if (joinedName) {
-    return joinedName;
-  }
-
-  const email =
-    String(
-      target?.email ?? "",
-    );
-
-  if (email) {
-    return email;
-  }
-
-  const uid =
-    getMemberUid(member);
-
-  if (uid) {
-    return uid;
-  }
-
-  return String(
-    target?.id ?? "",
-  );
-}
-
-function buildAssigneeCandidates(
-  rawCandidates: unknown,
-): AssigneeCandidate[] {
-  const rows =
-    Array.isArray(rawCandidates)
-      ? rawCandidates
-      : [];
-
-  return rows
-    .map((rawCandidate) => {
-      const candidate =
-        rawCandidate as any;
-
-      const id =
-        String(
-          candidate?.uid ??
-            candidate?.id ??
-            "",
-        );
-
-      if (!id) {
-        return null;
-      }
-
-      const nameParts = [
-        candidate?.lastName,
-        candidate?.firstName,
-      ]
-        .map((value) =>
-          String(value ?? ""),
-        )
-        .filter(Boolean);
-
-      const joinedName =
-        nameParts.join(" ");
-
-      const name =
-        String(
-          candidate?.name ?? "",
-        ) ||
-        String(
-          candidate?.fullName ?? "",
-        ) ||
-        joinedName ||
-        String(
-          candidate?.email ?? "",
-        ) ||
-        id;
-
-      return {
-        id,
-        name,
-      };
-    })
-    .filter(
-      Boolean,
-    ) as AssigneeCandidate[];
-}
 
 function dedupeFiles(
   previousFiles: File[],
@@ -1010,11 +886,6 @@ export function useListCreate():
     useListCreateParamsAndTitle();
 
   const {
-    currentMember,
-  } =
-    useAuthContext();
-
-  const {
     status,
     setStatus,
   } =
@@ -1058,125 +929,16 @@ export function useListCreate():
     );
 
   const {
-    assigneeCandidates:
-      rawAssigneeCandidates,
-    loadingMembers,
-  } =
-    useAdminCard();
-
-  const assigneeCandidates =
-    React.useMemo(
-      () =>
-        buildAssigneeCandidates(
-          rawAssigneeCandidates,
-        ),
-      [
-        rawAssigneeCandidates,
-      ],
-    );
-
-  const [
     assigneeId,
-    setAssigneeId,
-  ] =
-    React.useState(
-      "",
-    );
-
-  const [
     assigneeName,
-    setAssigneeName,
-  ] =
-    React.useState(
-      "",
-    );
-
-  React.useEffect(
-    () => {
-      if (
-        !currentMember ||
-        assigneeId
-      ) {
-        return;
-      }
-
-      const memberUid =
-        getMemberUid(
-          currentMember,
-        );
-
-      if (
-        !memberUid
-      ) {
-        return;
-      }
-
-      setAssigneeId(
-        memberUid,
-      );
-
-      setAssigneeName(
-        getMemberDisplayName(
-          currentMember,
-        ),
-      );
-    },
-    [
-      currentMember,
-      assigneeId,
-    ],
-  );
-
-  const handleSelectAssignee =
-    React.useCallback(
-      (
-        id: string,
-      ) => {
-        const nextId =
-          String(
-            id ?? "",
-          );
-
-        if (
-          !nextId
-        ) {
-          return;
-        }
-
-        const matched =
-          assigneeCandidates.find(
-            (
-              candidate,
-            ) =>
-              candidate.id ===
-              nextId,
-          );
-
-        const nextName =
-          matched?.name ??
-          (
-            getMemberUid(
-              currentMember,
-            ) === nextId
-              ? getMemberDisplayName(
-                  currentMember,
-                )
-              : nextId
-          );
-
-        setAssigneeId(
-          nextId,
-        );
-
-        setAssigneeName(
-          nextName,
-        );
-      },
-      [
-        assigneeCandidates,
-        currentMember,
-      ],
-    );
+    assigneeCandidates,
+    loadingMembers,
+    handleSelectAssignee,
+  } =
+    useAssigneeSelection({
+      defaultToCurrentMember:
+        true,
+    });
 
   const {
     dto,
@@ -1249,10 +1011,7 @@ export function useListCreate():
     assigneeName,
     assigneeCandidates,
 
-    loadingMembers:
-      Boolean(
-        loadingMembers,
-      ),
+    loadingMembers,
 
     handleSelectAssignee,
 
