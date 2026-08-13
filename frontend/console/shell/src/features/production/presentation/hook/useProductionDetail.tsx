@@ -8,27 +8,10 @@ import {
   updateProductionDetail,
   type ProductionDetail,
 } from "../../application/detail/index";
-
+import type { ProductionQuantityRow } from "../../application/productionQuantityRow";
 import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
-import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
 
 type Mode = "view" | "edit";
-
-function toQuantityRows(production: ProductionDetail): ProductionQuantityRowVM[] {
-  return production.models.map((row) => ({
-    modelId: row.modelId,
-    kind: row.kind,
-    modelNumber: row.modelNumber,
-    size: row.size,
-    color: row.color,
-    rgb: typeof row.rgb === "number" ? row.rgb : undefined,
-    volumeValue: row.volumeValue,
-    volumeUnit: row.volumeUnit,
-    variationLabel: row.variationLabel,
-    displayOrder: row.displayOrder,
-    quantity: row.quantity,
-  }));
-}
 
 export function useProductionDetail() {
   const navigate = useNavigate();
@@ -39,7 +22,7 @@ export function useProductionDetail() {
   const [loading, setLoading] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [quantityRows, setQuantityRows] = React.useState<ProductionQuantityRowVM[]>([]);
+  const [quantityRows, setQuantityRows] = React.useState<ProductionQuantityRow[]>([]);
 
   const isViewMode = mode === "view";
   const isEditMode = mode === "edit";
@@ -50,17 +33,12 @@ export function useProductionDetail() {
   }, []);
 
   const switchToEdit = React.useCallback(() => {
-    if (!canEdit) {
-      return;
-    }
-
+    if (!canEdit) return;
     setMode("edit");
   }, [canEdit]);
 
   React.useEffect(() => {
-    if (!productionId) {
-      return;
-    }
+    if (!productionId) return;
 
     const targetProductionId = productionId;
     let cancelled = false;
@@ -72,25 +50,18 @@ export function useProductionDetail() {
         setQuantityRows([]);
 
         const data = await loadProductionDetail(id);
-
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         setProduction(data);
-        setQuantityRows(data ? toQuantityRows(data) : []);
+        setQuantityRows(data?.models ?? []);
       } catch {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         setError("生産情報の取得に失敗しました");
         setProduction(null);
         setQuantityRows([]);
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -102,9 +73,7 @@ export function useProductionDetail() {
   }, [productionId]);
 
   const onSave = React.useCallback(async () => {
-    if (!productionId || !production) {
-      return;
-    }
+    if (!productionId || !production) return;
 
     if (!canEdit) {
       alert("この生産は編集できません（印刷済みです）。");
@@ -114,13 +83,16 @@ export function useProductionDetail() {
     try {
       const updated = await updateProductionDetail({
         productionId,
-        rows: quantityRows,
-        assigneeId: production.assigneeId ?? null,
+        assigneeId: production.assigneeId,
+        rows: quantityRows.map(({ modelId, quantity }) => ({
+          modelId,
+          quantity,
+        })),
       });
 
       if (updated) {
         setProduction(updated);
-        setQuantityRows(toQuantityRows(updated));
+        setQuantityRows(updated.models);
       }
 
       setMode("view");
@@ -130,18 +102,15 @@ export function useProductionDetail() {
   }, [productionId, production, quantityRows, canEdit]);
 
   const onDelete = React.useCallback(async () => {
-    if (!productionId || !production || deleting) {
-      return;
-    }
+    if (!productionId || !production || deleting) return;
 
-    if (production.printed === true) {
+    if (production.printed) {
       alert("印刷済みの生産は削除できません。");
       return;
     }
 
     try {
       setDeleting(true);
-
       const repository = new ProductionRepositoryHTTP();
       await repository.delete(productionId);
       navigate("/production");

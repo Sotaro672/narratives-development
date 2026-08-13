@@ -1,35 +1,15 @@
 // frontend/console/shell/src/features/production/application/detail/loadProductionDetail.ts
 
-import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
-import type { ProductBlueprintCategorySnapshot } from "../../../productBlueprint/domain/productBlueprintCategory";
-import type { ProductionDetail, ProductionQuantityRow } from "./types";
-
-type ProductionDetailResponse = {
-  id: string;
-  productBlueprintId: string;
-  productName: string;
-  productBlueprintCategory: ProductBlueprintCategorySnapshot;
-  brandId: string;
-  brandName: string;
-  assigneeId: string;
-  assigneeName: string;
-  models: ProductionQuantityRow[];
-  totalQuantity: number;
-  printed: boolean;
-  printedAt?: string | null;
-  createdBy?: string | null;
-  createdByName?: string;
-  createdAt?: string | null;
-  updatedBy?: string | null;
-  updatedByName?: string;
-  updatedAt?: string | null;
-};
+import { fetchProductionDetail } from "../../infrastructure/api/productionDetailApi";
+import type { ProductionDetail } from "./types";
 
 function toDate(value?: string | null): Date | null {
   return value ? new Date(value) : null;
 }
 
 /**
+ * Production詳細取得。
+ *
  * GET /productions/{id} の Production Detail BFF response を正とする。
  * ProductBlueprint / ModelVariation / Production一覧からの追加補完は行わない。
  */
@@ -42,12 +22,7 @@ export async function loadProductionDetail(
     return null;
   }
 
-  const repository = new ProductionRepositoryHTTP();
-  const response = (await repository.getById(id)) as unknown as ProductionDetailResponse;
-
-  if (!response) {
-    return null;
-  }
+  const response = await fetchProductionDetail(id);
 
   return {
     id: response.id,
@@ -62,10 +37,10 @@ export async function loadProductionDetail(
     models: response.models,
     totalQuantity: response.totalQuantity,
     printedAt: toDate(response.printedAt),
-    createdById: response.createdBy ?? null,
+    createdBy: response.createdBy ?? null,
     createdByName: response.createdByName ?? "",
     createdAt: toDate(response.createdAt),
-    updatedById: response.updatedBy ?? null,
+    updatedBy: response.updatedBy ?? null,
     updatedByName: response.updatedByName ?? "",
     updatedAt: toDate(response.updatedAt),
   };

@@ -12,6 +12,7 @@ import {
   fetchProductBlueprintManagementRows,
   type ProductBlueprintManagementRow,
 } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
+import type { ProductionQuantityRow } from "../../application/productionQuantityRow";
 
 export type ProductionCreateProductBlueprintResponse = {
   id: string;
@@ -24,22 +25,9 @@ export type ProductionCreateProductBlueprintResponse = {
   assigneeId?: string;
 };
 
-export type ProductionCreateRowResponse = {
-  modelId: string;
-  kind?: "apparel" | "alcohol" | string;
-  modelNumber: string;
-  size?: string;
-  color?: string;
-  rgb?: number;
-  volumeValue?: number;
-  volumeUnit?: string;
-  displayOrder?: number;
-  quantity: number;
-};
-
 export type ProductionCreateContextResponse = {
   productBlueprintPatch: ProductionCreateProductBlueprintResponse;
-  rows: ProductionCreateRowResponse[];
+  rows: ProductionQuantityRow[];
 };
 
 export type {
@@ -58,7 +46,6 @@ export async function loadBrands(): Promise<Brand[]> {
       page: 1,
       perPage: 200,
     });
-
     return result.items.filter((brand) => brand.isActive);
   } catch {
     return [];
@@ -90,8 +77,9 @@ export async function loadProductionCreateContext(
     throw new Error("loadProductionCreateContext: productBlueprintId が空です");
   }
 
-  const url =
-    `${API_BASE}/productions/create-context?productBlueprintId=${encodeURIComponent(normalizedProductBlueprintId)}`;
+  const url = `${API_BASE}/productions/create-context?productBlueprintId=${encodeURIComponent(
+    normalizedProductBlueprintId,
+  )}`;
 
   return fetchJSON(url, {
     method: "GET",

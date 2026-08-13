@@ -1,4 +1,4 @@
-// frontend/console/product/src/application/printService.tsx
+// frontend/console/shell/src/features/print/application/printService.tsx
 
 import {
   createProductsForPrint as createProductsForPrintApi,
@@ -8,14 +8,11 @@ import {
   type ProductSummaryForPrint,
   type PrintLogForPrint,
 } from "../infrastructure/api/printApi";
-
 import {
   buildQrPdfBlobA4,
   openQrPdfInNewTab,
   type QrPdfItem,
 } from "../utils/qrPdfBuilder";
-
-import { notifyPrintLogCompleted } from "../../production/application/detail/notifyPrintLogCompleted";
 
 export type { PrintRow, ProductSummaryForPrint, PrintLogForPrint };
 
@@ -24,7 +21,6 @@ export async function listPrintLogsByProductionId(
 ): Promise<PrintLogForPrint[]> {
   const id = productionId.trim();
   if (!id) return [];
-
   return listPrintLogsByProductionIdApi(id);
 }
 
@@ -33,7 +29,6 @@ export async function listProductsByProductionId(
 ): Promise<ProductSummaryForPrint[]> {
   const id = productionId.trim();
   if (!id) return [];
-
   return listProductsByProductionIdApi(id);
 }
 
@@ -93,7 +88,6 @@ type SortedPrintTarget = {
   originalIndex: number;
 };
 
-// items と qrPayloads をペアで保持したまま displayOrder 順に並べる
 function getSortedPrintTargets(log: PrintLogForPrint): SortedPrintTarget[] {
   const items = Array.isArray(log.items) ? log.items : [];
   const payloads = Array.isArray(log.qrPayloads) ? log.qrPayloads : [];
@@ -101,12 +95,10 @@ function getSortedPrintTargets(log: PrintLogForPrint): SortedPrintTarget[] {
   const paired: SortedPrintTarget[] = items
     .map((item, index) => {
       const productId = String(item.productId ?? "").trim();
-
       const displayOrderNum = Number(item.displayOrder);
       const displayOrder = Number.isFinite(displayOrderNum)
         ? displayOrderNum
         : Number.MAX_SAFE_INTEGER;
-
       const payload = String(payloads[index] ?? "").trim();
 
       return {
@@ -118,12 +110,10 @@ function getSortedPrintTargets(log: PrintLogForPrint): SortedPrintTarget[] {
     })
     .filter((target) => target.productId !== "" && target.payload !== "");
 
-  // displayOrder のみでソートし、同値なら Firestore 配列順を維持
   paired.sort((a, b) => {
     if (a.displayOrder !== b.displayOrder) {
       return a.displayOrder - b.displayOrder;
     }
-
     return a.originalIndex - b.originalIndex;
   });
 
@@ -134,9 +124,8 @@ async function buildAndOpenQrPdfFromLogs(args: {
   logs: PrintLogForPrint[];
   products?: ProductSummaryForPrint[];
   rows?: PrintRow[];
-}): Promise<number> {
+}): Promise<void> {
   const { logs, products, rows } = args;
-
   const qrItems: QrPdfItem[] = [];
   const productLabelMap = buildProductLabelMap(products, rows);
 
@@ -154,7 +143,7 @@ async function buildAndOpenQrPdfFromLogs(args: {
   }
 
   if (qrItems.length === 0) {
-    return 0;
+    return;
   }
 
   const pdfBlob = await buildQrPdfBlobA4(qrItems, {
@@ -163,13 +152,10 @@ async function buildAndOpenQrPdfFromLogs(args: {
   });
 
   openQrPdfInNewTab(pdfBlob);
-
-  return qrItems.length;
 }
 
 /**
  * 既存 print_log を取得し、存在する場合は GET 結果だけで QR PDF を開く。
- *
  * この関数では作成系 API は呼ばない。
  */
 export async function printExistingLogsForProduction(params: {
@@ -184,7 +170,6 @@ export async function printExistingLogsForProduction(params: {
   }
 
   const safeRows = Array.isArray(rows) ? rows : [];
-
   const logs = await listPrintLogsByProductionIdApi(id);
 
   if (logs.length === 0) {
@@ -193,17 +178,10 @@ export async function printExistingLogsForProduction(params: {
 
   const products = await listProductsByProductionId(id);
 
-  const totalQrCount = await buildAndOpenQrPdfFromLogs({
+  await buildAndOpenQrPdfFromLogs({
     logs,
     products,
     rows: safeRows,
-  });
-
-  await notifyPrintLogCompleted({
-    productionId: id,
-    logCount: logs.length,
-    totalQrCount,
-    reusedExistingLogs: true,
   });
 
   return logs;
@@ -211,7 +189,6 @@ export async function printExistingLogsForProduction(params: {
 
 /**
  * 初回印刷用。
- *
  * products / print_log がまだ無い productionId に対してのみ使う。
  * 既存 print_log の再印刷用途では printExistingLogsForProduction または
  * printOrCreateProductsForPrint を使う。
@@ -237,29 +214,15 @@ export async function createProductsForPrint(params: {
   const logs = await listPrintLogsByProductionIdApi(id);
 
   if (logs.length === 0) {
-    await notifyPrintLogCompleted({
-      productionId: id,
-      logCount: 0,
-      totalQrCount: 0,
-      reusedExistingLogs: false,
-    });
-
-    return logs;
+    return [];
   }
 
   const products = await listProductsByProductionId(id);
 
-  const totalQrCount = await buildAndOpenQrPdfFromLogs({
+  await buildAndOpenQrPdfFromLogs({
     logs,
     products,
     rows: safeRows,
-  });
-
-  await notifyPrintLogCompleted({
-    productionId: id,
-    logCount: logs.length,
-    totalQrCount,
-    reusedExistingLogs: false,
   });
 
   return logs;

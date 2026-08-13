@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"narratives/internal/adapters/in/http/middleware"
 	companyquery "narratives/internal/application/query/console"
 	usecase "narratives/internal/application/usecase"
 	productiondom "narratives/internal/domain/production"
@@ -41,9 +42,6 @@ type createProductionRequest struct {
 	ProductBlueprintID string                   `json:"productBlueprintId"`
 	AssigneeID         string                   `json:"assigneeId"`
 	Models             []productionModelRequest `json:"models"`
-	Printed            *bool                    `json:"printed,omitempty"`
-	PrintedAt          *time.Time               `json:"printedAt,omitempty"`
-	CreatedBy          *string                  `json:"createdBy,omitempty"`
 }
 
 type updateProductionRequest struct {
@@ -70,14 +68,12 @@ func productionModelRequestsToCommands(models []productionModelRequest) []usecas
 	return out
 }
 
-func (req createProductionRequest) toCommand() usecase.CreateProductionCommand {
+func (req createProductionRequest) toCommand(createdBy string) usecase.CreateProductionCommand {
 	return usecase.CreateProductionCommand{
 		ProductBlueprintID: req.ProductBlueprintID,
 		AssigneeID:         req.AssigneeID,
 		Models:             productionModelRequestsToCommands(req.Models),
-		Printed:            req.Printed,
-		PrintedAt:          req.PrintedAt,
-		CreatedBy:          req.CreatedBy,
+		CreatedBy:          &createdBy,
 	}
 }
 
@@ -228,7 +224,14 @@ func (h *ProductionHandler) postProduction(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	created, err := h.uc.Create(ctx, req.toCommand())
+	uid, _, ok := middleware.CurrentUIDAndEmail(r)
+	if !ok || uid == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	created, err := h.uc.Create(ctx, req.toCommand(uid))
 	if err != nil {
 		writeProductionErr(w, err)
 		return

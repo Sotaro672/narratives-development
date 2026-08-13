@@ -3,11 +3,11 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useAuthContext } from "../../../../auth/application/AuthContext";
 import type { Brand } from "../../../../shared/types/brand";
 import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
 import { buildProductionPayload } from "../../application/create/ProductionCreateService";
+import type { ProductionQuantityRow } from "../../application/productionQuantityRow";
 import {
   loadBrands,
   loadProductBlueprints,
@@ -20,21 +20,16 @@ import {
   buildProductRows,
   filterProductBlueprintsByBrand,
 } from "../create/mappers";
-import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
 
 export function useProductionCreate() {
   const navigate = useNavigate();
-  const { user } = useAuthContext();
-  const currentMemberUid = user?.uid ?? null;
 
-  const [allProductBlueprints, setAllProductBlueprints] =
-    React.useState<ProductBlueprintManagementRow[]>([]);
+  const [allProductBlueprints, setAllProductBlueprints] = React.useState<ProductBlueprintManagementRow[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [selectedBrand, setSelectedBrand] = React.useState<string | null>(null);
   const [selectedProductBlueprint, setSelectedProductBlueprint] =
     React.useState<ProductionCreateProductBlueprintResponse | null>(null);
-  const [quantityRows, setQuantityRows] =
-    React.useState<ProductionQuantityRowVM[]>([]);
+  const [quantityRows, setQuantityRows] = React.useState<ProductionQuantityRow[]>([]);
   const [brands, setBrands] = React.useState<Brand[]>([]);
 
   const {
@@ -56,9 +51,7 @@ export function useProductionCreate() {
   }, []);
 
   React.useEffect(() => {
-    loadProductBlueprints()
-      .then(setAllProductBlueprints)
-      .catch(() => setAllProductBlueprints([]));
+    loadProductBlueprints().then(setAllProductBlueprints).catch(() => setAllProductBlueprints([]));
   }, []);
 
   const brandOptions = React.useMemo(
@@ -89,17 +82,12 @@ export function useProductionCreate() {
     async function loadSelectedProductBlueprint() {
       try {
         const context = await loadProductionCreateContext(productBlueprintId);
-
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         setSelectedProductBlueprint(context.productBlueprintPatch);
         setQuantityRows(context.rows);
       } catch {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         setSelectedProductBlueprint(null);
         setQuantityRows([]);
@@ -124,19 +112,13 @@ export function useProductionCreate() {
       return;
     }
 
-    if (!currentMemberUid) {
-      alert("ログインユーザー情報を取得できませんでした");
-      return;
-    }
-
     const payload = buildProductionPayload({
       productBlueprintId: selectedId,
       assigneeId,
-      rows: quantityRows.map((row) => ({
-        modelId: row.modelId,
-        quantity: row.quantity,
+      rows: quantityRows.map(({ modelId, quantity }) => ({
+        modelId,
+        quantity,
       })),
-      currentMemberUid,
     });
 
     try {
@@ -147,7 +129,7 @@ export function useProductionCreate() {
     } catch {
       alert("生産計画の作成に失敗しました");
     }
-  }, [selectedId, assigneeId, quantityRows, currentMemberUid, navigate]);
+  }, [selectedId, assigneeId, quantityRows, navigate]);
 
   return {
     onBack: handleBack,
