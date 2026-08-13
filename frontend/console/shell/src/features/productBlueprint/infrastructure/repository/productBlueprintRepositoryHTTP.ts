@@ -5,57 +5,78 @@ import {
   getAuthHeadersOrThrow,
   getAuthJsonHeadersOrThrow,
 } from "../../../../shared/http/authHeaders";
-
-// application 層の型だけを type import
 import type { CreateProductBlueprintParams } from "../../application/productBlueprintCreateService";
-
 import type { ProductBlueprintDetailResponse } from "../api/productBlueprintDetailApi";
 import type { UpdateProductBlueprintParams } from "../api/productBlueprintUpdateApi";
 
 // -----------------------------------------------------------
-// internal helpers
+// Response types
+// -----------------------------------------------------------
+
+/**
+ * GET /product-blueprints のBFFレスポンス。
+ * backendで名前解決・日時変換済みの値をそのまま使用する。
+ */
+export type ProductBlueprintListRow = {
+  id: string;
+  productName: string;
+  brandName: string;
+  assigneeName: string;
+  printed: boolean;
+  createdByName: string;
+  updatedByName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+// -----------------------------------------------------------
+// Request payload helpers
 // -----------------------------------------------------------
 
 function assertProductBlueprintCategoryPayload(params: {
   productBlueprintCategoryId: string;
-  productBlueprintCategory: unknown;
-}) {
-  const productBlueprintCategoryId = String(
-    params.productBlueprintCategoryId ?? "",
-  ).trim();
-
-  if (!productBlueprintCategoryId) {
+  productBlueprintCategory: { id?: string } | null | undefined;
+}): void {
+  if (!params.productBlueprintCategoryId) {
     throw new Error(
       "productBlueprintRepositoryHTTP: productBlueprintCategoryId が空です",
     );
   }
 
-  if (!params.productBlueprintCategory) {
+  if (!params.productBlueprintCategory?.id) {
     throw new Error(
       "productBlueprintRepositoryHTTP: productBlueprintCategory が空です",
+    );
+  }
+
+  if (
+    params.productBlueprintCategoryId !==
+    params.productBlueprintCategory.id
+  ) {
+    throw new Error(
+      "productBlueprintRepositoryHTTP: productBlueprintCategoryId と productBlueprintCategory.id が一致しません",
     );
   }
 }
 
 function buildProductBlueprintCategoryPayload(params: {
   productBlueprintCategoryId: string;
-  productBlueprintCategory: unknown;
+  productBlueprintCategory: { id?: string } | null | undefined;
   categoryFields?: unknown;
 }) {
   assertProductBlueprintCategoryPayload(params);
 
   return {
-    productBlueprintCategoryId: params.productBlueprintCategoryId.trim(),
     productBlueprintCategory: params.productBlueprintCategory,
     categoryFields: params.categoryFields ?? null,
   };
 }
 
-function buildProductIdTagPayload(type: string | null | undefined): {
-  type: string;
-} {
+function buildProductIdTagPayload(
+  type: string | null | undefined,
+): { type: string } {
   return {
-    type: String(type ?? "").trim(),
+    type: type ?? "",
   };
 }
 
@@ -77,17 +98,9 @@ export async function createProductBlueprintHTTP(
   const payload = {
     productName: params.productName,
     brandId: params.brandId,
-
-    // itemType は廃止。
-    // productBlueprintCategoryId / productBlueprintCategory / categoryFields を正として送る。
     ...categoryPayload,
-
     productIdTag: params.productIdTag,
-    companyId: params.companyId,
-    assigneeId: params.assigneeId ?? null,
-    createdBy: params.createdBy ?? null,
-
-    // printed は backend 側で false を設定する想定なので送らない。
+    assigneeId: params.assigneeId ?? "",
   };
 
   const res = await fetch(`${API_BASE}/product-blueprints`, {
@@ -111,7 +124,7 @@ export async function createProductBlueprintHTTP(
 // -----------------------------------------------------------
 
 export async function listProductBlueprintsHTTP(): Promise<
-  ProductBlueprintDetailResponse[]
+  ProductBlueprintListRow[]
 > {
   const headers = await getAuthHeadersOrThrow();
 
@@ -127,7 +140,7 @@ export async function listProductBlueprintsHTTP(): Promise<
     );
   }
 
-  return (await res.json()) as ProductBlueprintDetailResponse[];
+  return (await res.json()) as ProductBlueprintListRow[];
 }
 
 // -----------------------------------------------------------
@@ -138,13 +151,12 @@ export async function updateProductBlueprintHTTP(
   id: string,
   params: UpdateProductBlueprintParams,
 ): Promise<ProductBlueprintDetailResponse> {
-  const trimmedId = String(id ?? "").trim();
-  if (!trimmedId) {
+  if (!id) {
     throw new Error("updateProductBlueprintHTTP: id が空です");
   }
 
   const headers = await getAuthJsonHeadersOrThrow();
-  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(trimmedId)}`;
+  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(id)}`;
 
   const categoryPayload = buildProductBlueprintCategoryPayload({
     productBlueprintCategoryId: params.productBlueprintCategoryId,
@@ -155,15 +167,9 @@ export async function updateProductBlueprintHTTP(
   const payload = {
     productName: params.productName,
     brandId: params.brandId,
-
-    // itemType は廃止。
-    // productBlueprintCategoryId / productBlueprintCategory / categoryFields を正として送る。
     ...categoryPayload,
-
     productIdTag: buildProductIdTagPayload(params.productIdTagType),
-    companyId: params.companyId,
     assigneeId: params.assigneeId,
-    updatedBy: params.updatedBy ?? null,
   };
 
   const res = await fetch(url, {
@@ -184,26 +190,20 @@ export async function updateProductBlueprintHTTP(
 
 // -----------------------------------------------------------
 // DELETE: 商品設計 物理削除
-//   - backend: DELETE /product-blueprints/{id}
-//   - backend 側で ProductBlueprint / Models / Review Aggregate を削除する。
-//   - 成功時は 204 No Content のため response body は読まない。
 // -----------------------------------------------------------
 
 export async function deleteProductBlueprintHTTP(
   id: string,
 ): Promise<void> {
-  const trimmedId = String(id ?? "").trim();
-
-  if (!trimmedId) {
+  if (!id) {
     throw new Error(
       "deleteProductBlueprintHTTP: id が空です",
     );
   }
 
   const headers = await getAuthHeadersOrThrow();
-
   const res = await fetch(
-    `${API_BASE}/product-blueprints/${encodeURIComponent(trimmedId)}`,
+    `${API_BASE}/product-blueprints/${encodeURIComponent(id)}`,
     {
       method: "DELETE",
       headers,
@@ -220,21 +220,20 @@ export async function deleteProductBlueprintHTTP(
 
 // -----------------------------------------------------------
 // POST: 商品設計 printed フラグ更新（false → true）
-//   - backend: POST /product-blueprints/{id}/mark-printed
 // -----------------------------------------------------------
 
 export async function markProductBlueprintPrintedHTTP(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
-  const trimmed = String(id ?? "").trim();
-  if (!trimmed) {
-    throw new Error("markProductBlueprintPrintedHTTP: id が空です");
+  if (!id) {
+    throw new Error(
+      "markProductBlueprintPrintedHTTP: id が空です",
+    );
   }
 
   const headers = await getAuthHeadersOrThrow();
-
   const res = await fetch(
-    `${API_BASE}/product-blueprints/${encodeURIComponent(trimmed)}/mark-printed`,
+    `${API_BASE}/product-blueprints/${encodeURIComponent(id)}/mark-printed`,
     {
       method: "POST",
       headers,

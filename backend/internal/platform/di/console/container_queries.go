@@ -72,6 +72,7 @@ func buildQueries(
 
 	productBlueprintDetailQuery := companyquery.NewProductBlueprintDetailQuery(
 		r.productBlueprintRepo,
+		r.modelRepo,
 		productBlueprintManagementQuery,
 		usecase.CompanyIDFromContext,
 	)

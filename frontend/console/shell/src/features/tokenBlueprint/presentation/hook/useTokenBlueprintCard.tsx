@@ -1,14 +1,11 @@
 // frontend/console/shell/src/features/tokenBlueprint/presentation/hook/useTokenBlueprintCard.tsx
 
 import * as React from "react";
-
 import type { TokenBlueprint } from "../../../../shared/types/tokenBlueprint";
-
 import type {
   TokenBlueprintCardHandlers,
   TokenBlueprintCardViewModel,
 } from "../components/tokenBlueprintCard";
-
 import { loadBrandsForCompany } from "../../application/tokenBlueprintCreateService";
 
 /**
@@ -23,8 +20,7 @@ import { loadBrandsForCompany } from "../../application/tokenBlueprintCreateServ
  * - minted=trueでもトークンアイコンは編集できる
  * - minted=trueの場合、トークン名・シンボル・ブランドは変更できない
  * - APIスキーマはname・brandNameを正とする
- * - ブランド名は/brandsの一覧レスポンスitems[].nameまたは
- *   TokenBlueprint.brandNameを正とする
+ * - ブランド名は/brandsの一覧レスポンスitems[].nameまたはTokenBlueprint.brandNameを正とする
  * - brandIdからの個別名前解決は行わない
  */
 export function useTokenBlueprintCard(params: {
@@ -33,180 +29,78 @@ export function useTokenBlueprintCard(params: {
   initialIconUrl?: string;
   initialEditMode?: boolean;
 }) {
-  const tokenBlueprint =
-    params.initialTokenBlueprint ?? {};
+  const tokenBlueprint = params.initialTokenBlueprint ?? {};
 
   const pickBrandName = React.useCallback(
-    (
-      source: Partial<TokenBlueprint>,
-    ): string => {
-      return String(
-        source.brandName ?? "",
-      ).trim();
+    (source: Partial<TokenBlueprint>): string => {
+      return String(source.brandName ?? "").trim();
     },
     [],
   );
 
-  const pickString = React.useCallback(
-    (
-      value: unknown,
-    ): string => {
-      return String(
-        value ?? "",
-      ).trim();
-    },
-    [],
+  const pickString = React.useCallback((value: unknown): string => {
+    return String(value ?? "").trim();
+  }, []);
+
+  const [id, setId] = React.useState(pickString(tokenBlueprint.id));
+  const [name, setName] = React.useState(pickString(tokenBlueprint.name));
+  const [symbol, setSymbol] = React.useState(pickString(tokenBlueprint.symbol));
+  const [brandId, setBrandId] = React.useState(pickString(tokenBlueprint.brandId));
+  const [brandName, setBrandName] = React.useState(pickBrandName(tokenBlueprint));
+  const [description, setDescription] = React.useState(
+    pickString(tokenBlueprint.description),
   );
-
-  const [id, setId] =
-    React.useState(
-      pickString(
-        tokenBlueprint.id,
-      ),
-    );
-
-  const [name, setName] =
-    React.useState(
-      pickString(
-        tokenBlueprint.name,
-      ),
-    );
-
-  const [symbol, setSymbol] =
-    React.useState(
-      pickString(
-        tokenBlueprint.symbol,
-      ),
-    );
-
-  const [brandId, setBrandId] =
-    React.useState(
-      pickString(
-        tokenBlueprint.brandId,
-      ),
-    );
-
-  const [brandName, setBrandName] =
-    React.useState(
-      pickBrandName(
-        tokenBlueprint,
-      ),
-    );
-
-  const [
-    description,
-    setDescription,
-  ] = React.useState(
-    pickString(
-      tokenBlueprint.description,
-    ),
+  const [burnAt, setBurnAt] = React.useState(params.initialBurnAt ?? "");
+  const [minted, setMinted] = React.useState<boolean>(
+    tokenBlueprint.minted ?? false,
   );
-
-  const [burnAt, setBurnAt] =
-    React.useState(
-      params.initialBurnAt ?? "",
-    );
-
-  const [minted, setMinted] =
-    React.useState<boolean>(
-      tokenBlueprint.minted ??
-        false,
-    );
-
-  const [
-    remoteIconUrl,
-    setRemoteIconUrl,
-  ] = React.useState(
+  const [remoteIconUrl, setRemoteIconUrl] = React.useState(
     params.initialIconUrl ?? "",
   );
-
-  const [
-    localPreviewUrl,
-    setLocalPreviewUrl,
-  ] = React.useState<string>("");
-
-  const [
-    selectedIconFile,
-    setSelectedIconFile,
-  ] = React.useState<File | null>(
+  const [localPreviewUrl, setLocalPreviewUrl] = React.useState<string>("");
+  const [selectedIconFile, setSelectedIconFile] = React.useState<File | null>(
     null,
   );
-
-  const [
-    isEditMode,
-    setIsEditMode,
-  ] = React.useState(
-    params.initialEditMode ??
-      false,
+  const [isEditMode, setIsEditMode] = React.useState(
+    params.initialEditMode ?? false,
   );
-
-  const [
-    brandOptions,
-    setBrandOptions,
-  ] = React.useState<
+  const [brandOptions, setBrandOptions] = React.useState<
     {
       id: string;
       name: string;
     }[]
   >([]);
 
-  const initialRef =
-    React.useRef<
-      Partial<TokenBlueprint> | null
-    >(tokenBlueprint);
-
-  const descriptionRef =
-    React.useRef<HTMLTextAreaElement | null>(
-      null,
-    );
-
-  const iconInputRef =
-    React.useRef<HTMLInputElement | null>(
-      null,
-    );
-
-  const localPreviewUrlRef =
-    React.useRef<string>("");
-
-  const canEditIcon = Boolean(
-    isEditMode ||
-      minted,
+  const initialRef = React.useRef<Partial<TokenBlueprint> | null>(
+    tokenBlueprint,
   );
+  const descriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const iconInputRef = React.useRef<HTMLInputElement | null>(null);
+  const localPreviewUrlRef = React.useRef<string>("");
 
-  const isIdentityLocked =
-    Boolean(minted);
+  const canEditIcon = Boolean(isEditMode || minted);
+  const isIdentityLocked = Boolean(minted);
 
-  const clearLocalPreview =
-    React.useCallback(() => {
-      const currentUrl =
-        localPreviewUrlRef.current;
+  const clearLocalPreview = React.useCallback(() => {
+    const currentUrl = localPreviewUrlRef.current;
 
-      if (currentUrl) {
-        URL.revokeObjectURL(
-          currentUrl,
-        );
-
-        localPreviewUrlRef.current =
-          "";
-
-        setLocalPreviewUrl("");
-      }
-    }, []);
+    if (currentUrl) {
+      URL.revokeObjectURL(currentUrl);
+      localPreviewUrlRef.current = "";
+      setLocalPreviewUrl("");
+    }
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
 
-    const loadBrands =
-      async () => {
-        const brands =
-          await loadBrandsForCompany();
+    const loadBrands = async () => {
+      const brands = await loadBrandsForCompany();
 
-        if (!cancelled) {
-          setBrandOptions(
-            brands,
-          );
-        }
-      };
+      if (!cancelled) {
+        setBrandOptions(brands);
+      }
+    };
 
     void loadBrands();
 
@@ -216,70 +110,27 @@ export function useTokenBlueprintCard(params: {
   }, []);
 
   React.useEffect(() => {
-    const source =
-      params.initialTokenBlueprint;
+    const source = params.initialTokenBlueprint;
 
     if (!source) {
       return;
     }
 
-    initialRef.current =
-      source;
+    initialRef.current = source;
 
     if (isEditMode) {
       return;
     }
 
-    setId(
-      pickString(
-        source.id,
-      ),
-    );
-
-    setName(
-      pickString(
-        source.name,
-      ),
-    );
-
-    setSymbol(
-      pickString(
-        source.symbol,
-      ),
-    );
-
-    setBrandId(
-      pickString(
-        source.brandId,
-      ),
-    );
-
-    setBrandName(
-      pickBrandName(
-        source,
-      ),
-    );
-
-    setDescription(
-      pickString(
-        source.description,
-      ),
-    );
-
-    setMinted(
-      source.minted ??
-        false,
-    );
-
-    setBurnAt(
-      params.initialBurnAt ??
-        "",
-    );
-
-    setSelectedIconFile(
-      null,
-    );
-
+    setId(pickString(source.id));
+    setName(pickString(source.name));
+    setSymbol(pickString(source.symbol));
+    setBrandId(pickString(source.brandId));
+    setBrandName(pickBrandName(source));
+    setDescription(pickString(source.description));
+    setMinted(source.minted ?? false);
+    setBurnAt(params.initialBurnAt ?? "");
+    setSelectedIconFile(null);
     clearLocalPreview();
   }, [
     params.initialTokenBlueprint,
@@ -295,116 +146,68 @@ export function useTokenBlueprintCard(params: {
       return;
     }
 
-    setRemoteIconUrl(
-      params.initialIconUrl ??
-        "",
-    );
-  }, [
-    params.initialIconUrl,
-    isEditMode,
-  ]);
+    setRemoteIconUrl(params.initialIconUrl ?? "");
+  }, [params.initialIconUrl, isEditMode]);
 
   React.useEffect(() => {
-    const element =
-      descriptionRef.current;
+    const element = descriptionRef.current;
 
     if (!element) {
       return;
     }
 
-    element.style.height =
-      "auto";
-
-    element.style.height =
-      `${element.scrollHeight}px`;
+    element.style.height = "auto";
+    element.style.height = `${element.scrollHeight}px`;
   }, [description]);
 
   React.useEffect(() => {
     return () => {
-      const currentUrl =
-        localPreviewUrlRef.current;
+      const currentUrl = localPreviewUrlRef.current;
 
       if (currentUrl) {
-        URL.revokeObjectURL(
-          currentUrl,
-        );
-
-        localPreviewUrlRef.current =
-          "";
+        URL.revokeObjectURL(currentUrl);
+        localPreviewUrlRef.current = "";
       }
     };
   }, []);
 
-  const requestPickIconFile =
-    React.useCallback(() => {
+  const requestPickIconFile = React.useCallback(() => {
+    if (!canEditIcon) {
+      return;
+    }
+
+    iconInputRef.current?.click();
+  }, [canEditIcon]);
+
+  const onIconInputChange = React.useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
       if (!canEditIcon) {
+        event.target.value = "";
         return;
       }
 
-      iconInputRef.current?.click();
-    }, [canEditIcon]);
+      const file = event.target.files?.[0] ?? null;
+      event.target.value = "";
 
-  const onIconInputChange =
-    React.useCallback(
-      (
-        event:
-          React.ChangeEvent<HTMLInputElement>,
-      ) => {
-        if (!canEditIcon) {
-          event.target.value =
-            "";
+      if (!file) {
+        return;
+      }
 
-          return;
-        }
+      if (!file.type.toLowerCase().startsWith("image/")) {
+        return;
+      }
 
-        const file =
-          event.target.files?.[0] ??
-          null;
+      setSelectedIconFile(file);
+      clearLocalPreview();
 
-        event.target.value =
-          "";
+      const previewUrl = URL.createObjectURL(file);
+      localPreviewUrlRef.current = previewUrl;
+      setLocalPreviewUrl(previewUrl);
+    },
+    [canEditIcon, clearLocalPreview],
+  );
 
-        if (!file) {
-          return;
-        }
-
-        if (
-          !file.type
-            .toLowerCase()
-            .startsWith(
-              "image/",
-            )
-        ) {
-          return;
-        }
-
-        setSelectedIconFile(
-          file,
-        );
-
-        clearLocalPreview();
-
-        const previewUrl =
-          URL.createObjectURL(
-            file,
-          );
-
-        localPreviewUrlRef.current =
-          previewUrl;
-
-        setLocalPreviewUrl(
-          previewUrl,
-        );
-      },
-      [
-        canEditIcon,
-        clearLocalPreview,
-      ],
-    );
-
-  const shownIconUrl =
-    localPreviewUrl ||
-    remoteIconUrl;
+  const shownIconUrl = localPreviewUrl || remoteIconUrl;
 
   const vm: TokenBlueprintCardViewModel = {
     id,
@@ -413,21 +216,15 @@ export function useTokenBlueprintCard(params: {
     brandId,
     brandName,
     description,
-    iconUrl:
-      shownIconUrl,
-
+    iconUrl: shownIconUrl,
     minted,
     isEditMode,
     brandOptions,
-
-    iconFile:
-      selectedIconFile,
+    iconFile: selectedIconFile,
   };
 
   const handlers: TokenBlueprintCardHandlers = {
-    onChangeName: (
-      value: string,
-    ) => {
+    onChangeName: (value: string) => {
       if (isIdentityLocked) {
         return;
       }
@@ -435,16 +232,12 @@ export function useTokenBlueprintCard(params: {
       setName(value);
     },
 
-    onChangeSymbol: (
-      value: string,
-    ) => {
+    onChangeSymbol: (value: string) => {
       if (isIdentityLocked) {
         return;
       }
 
-      setSymbol(
-        value.toUpperCase(),
-      );
+      setSymbol(value.toUpperCase());
     },
 
     onChangeBrand: (
@@ -455,117 +248,49 @@ export function useTokenBlueprintCard(params: {
         return;
       }
 
-      setBrandId(
-        nextBrandId,
-      );
-
-      setBrandName(
-        nextBrandName,
-      );
+      setBrandId(nextBrandId);
+      setBrandName(nextBrandName);
     },
 
-    onChangeDescription: (
-      value: string,
-    ) => {
-      setDescription(
-        value,
-      );
+    onChangeDescription: (value: string) => {
+      setDescription(value);
     },
 
     iconInputRef,
     descriptionRef,
-
-    onRequestPickIconFile:
-      requestPickIconFile,
-
+    onRequestPickIconFile: requestPickIconFile,
     onIconInputChange,
 
     onClearLocalIconFile: () => {
-      setSelectedIconFile(
-        null,
-      );
-
+      setSelectedIconFile(null);
       clearLocalPreview();
     },
 
     onToggleEditMode: () => {
-      setIsEditMode(
-        (current) =>
-          !current,
-      );
+      setIsEditMode((current) => !current);
     },
 
-    setEditMode: (
-      edit: boolean,
-    ) => {
-      setIsEditMode(
-        edit,
-      );
+    setEditMode: (edit: boolean) => {
+      setIsEditMode(edit);
     },
 
     reset: () => {
-      const source =
-        initialRef.current;
+      const source = initialRef.current;
 
       if (!source) {
         return;
       }
 
-      setId(
-        pickString(
-          source.id,
-        ),
-      );
-
-      setName(
-        pickString(
-          source.name,
-        ),
-      );
-
-      setSymbol(
-        pickString(
-          source.symbol,
-        ),
-      );
-
-      setBrandId(
-        pickString(
-          source.brandId,
-        ),
-      );
-
-      setBrandName(
-        pickBrandName(
-          source,
-        ),
-      );
-
-      setDescription(
-        pickString(
-          source.description,
-        ),
-      );
-
-      setMinted(
-        source.minted ??
-          false,
-      );
-
-      setBurnAt(
-        params.initialBurnAt ??
-          "",
-      );
-
-      setRemoteIconUrl(
-        params.initialIconUrl ??
-          "",
-      );
-
-      setSelectedIconFile(
-        null,
-      );
-
+      setId(pickString(source.id));
+      setName(pickString(source.name));
+      setSymbol(pickString(source.symbol));
+      setBrandId(pickString(source.brandId));
+      setBrandName(pickBrandName(source));
+      setDescription(pickString(source.description));
+      setMinted(source.minted ?? false);
+      setBurnAt(params.initialBurnAt ?? "");
+      setRemoteIconUrl(params.initialIconUrl ?? "");
+      setSelectedIconFile(null);
       clearLocalPreview();
     },
   };

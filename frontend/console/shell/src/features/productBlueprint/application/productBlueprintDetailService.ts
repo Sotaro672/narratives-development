@@ -1,46 +1,26 @@
 // frontend/console/shell/src/features/productBlueprint/application/productBlueprintDetailService.ts
 
-import type {
-  ApparelSizeInput,
-} from "../../../shared/types/apparel";
-
+import type { ApparelSizeInput } from "../../../shared/types/apparel";
 import type {
   AlcoholModelNumber,
   VolumeRow,
 } from "../../model/application/modelCreateService";
-
 import {
   deleteProductBlueprintHTTP,
   updateProductBlueprintHTTP,
 } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
-
 import {
   getProductBlueprintDetailApi,
   type ProductBlueprintDetailResponse,
   type UpdateProductBlueprintParams,
 } from "../infrastructure/api/productBlueprintDetailApi";
-
-import {
-  createModelVariations,
-  listModelVariationsByProductBlueprintId,
-  type ModelVariationResponse,
-} from "../../model/infrastructure/repository/modelRepositoryHTTP";
-
+import { createModelVariations } from "../../model/infrastructure/repository/modelRepositoryHTTP";
 import {
   buildModelVariationRequests,
   type ProductBlueprintModelNumberInput,
 } from "./modelVariationRequestBuilder";
 
-export {
-  listModelVariationsByProductBlueprintId,
-};
-
-export type {
-  ModelVariationResponse,
-};
-
-type ProductBlueprintModelNumber =
-  ProductBlueprintModelNumberInput;
+type ProductBlueprintModelNumber = ProductBlueprintModelNumberInput;
 
 /* =========================================================
  * GET: Product Blueprint detail
@@ -49,18 +29,12 @@ type ProductBlueprintModelNumber =
 export async function getProductBlueprintDetail(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
-  const normalizedId =
-    String(id ?? "").trim();
-
+  const normalizedId = String(id ?? "").trim();
   if (!normalizedId) {
-    throw new Error(
-      "getProductBlueprintDetail: id が空です",
-    );
+    throw new Error("getProductBlueprintDetail: id が空です");
   }
 
-  return getProductBlueprintDetailApi(
-    normalizedId,
-  );
+  return getProductBlueprintDetailApi(normalizedId);
 }
 
 /* =========================================================
@@ -70,18 +44,10 @@ export async function getProductBlueprintDetail(
 export async function updateProductBlueprint(
   params: UpdateProductBlueprintParams & {
     sizes?: ApparelSizeInput[];
-
-    modelNumbers?:
-      ProductBlueprintModelNumber[];
-
-    colorRgbMap?:
-      Record<string, string>;
-
-    volumes?:
-      VolumeRow[];
-
-    alcoholModelNumbers?:
-      AlcoholModelNumber[];
+    modelNumbers?: ProductBlueprintModelNumber[];
+    colorRgbMap?: Record<string, string>;
+    volumes?: VolumeRow[];
+    alcoholModelNumbers?: AlcoholModelNumber[];
   },
 ): Promise<ProductBlueprintDetailResponse> {
   const {
@@ -103,137 +69,72 @@ export async function updateProductBlueprint(
     categoryFields,
   } = params;
 
-  const productBlueprintId =
-    String(id ?? "").trim();
-
+  const productBlueprintId = String(id ?? "").trim();
   if (!productBlueprintId) {
-    throw new Error(
-      "updateProductBlueprint: id が空です",
-    );
+    throw new Error("updateProductBlueprint: id が空です");
   }
 
-  if (
-    !productBlueprintCategoryId
-      ?.trim()
-  ) {
-    throw new Error(
-      "updateProductBlueprint: productBlueprintCategoryId が空です",
-    );
+  if (!productBlueprintCategoryId?.trim()) {
+    throw new Error("updateProductBlueprint: productBlueprintCategoryId が空です");
   }
 
-  if (
-    !productBlueprintCategory
-      ?.id
-      ?.trim()
-  ) {
-    throw new Error(
-      "updateProductBlueprint: productBlueprintCategory が空です",
-    );
+  if (!productBlueprintCategory?.id?.trim()) {
+    throw new Error("updateProductBlueprint: productBlueprintCategory が空です");
   }
 
-  const finalModelVariationRequests =
-    buildModelVariationRequests({
-      productBlueprintCategory,
+  const finalModelVariationRequests = buildModelVariationRequests({
+    productBlueprintCategory,
+    colors: colors ?? [],
+    sizes,
+    modelNumbers,
+    colorRgbMap,
+    volumes,
+    alcoholModelNumbers,
+    missingRgbBehavior: "throw",
+  });
 
-      colors:
-        colors ?? [],
-
-      sizes,
-
-      modelNumbers,
-
-      colorRgbMap,
-
-      volumes,
-
-      alcoholModelNumbers,
-
-      /*
-       * 更新処理では、従来どおりRGBを解決できない場合に
-       * エラーとする。
-       */
-      missingRgbBehavior:
-        "throw",
-    });
-
-  const updated =
-    await updateProductBlueprintHTTP(
-      productBlueprintId,
-      {
-        id:
-          productBlueprintId,
-
-        productName,
-
-        brandId,
-
-        productBlueprintCategoryId,
-
-        productBlueprintCategory,
-
-        categoryFields:
-          categoryFields ?? null,
-
-        productIdTagType,
-
-        companyId,
-
-        assigneeId,
-
-        colors:
-          colors ?? [],
-
-        colorRgbMap,
-
-        sizes,
-
-        modelNumbers,
-
-        updatedBy:
-          updatedBy ?? null,
-      } satisfies UpdateProductBlueprintParams,
-    );
+  await updateProductBlueprintHTTP(productBlueprintId, {
+    id: productBlueprintId,
+    productName,
+    brandId,
+    productBlueprintCategoryId,
+    productBlueprintCategory,
+    categoryFields: categoryFields ?? null,
+    productIdTagType,
+    companyId,
+    assigneeId,
+    colors: colors ?? [],
+    colorRgbMap,
+    sizes,
+    modelNumbers,
+    updatedBy: updatedBy ?? null,
+  } satisfies UpdateProductBlueprintParams);
 
   /*
-   * ApparelまたはAlcoholの場合だけ
-   * Model Variationを一括置換する。
-   *
-   * 空配列も送信することで、
-   * Model Variationを0件にする更新にも対応する。
-   *
-   * nullの場合はModel Variationを扱わないカテゴリなので
-   * createModelVariationsを実行しない。
+   * Apparel / Alcohol はModel Variationを一括置換する。
+   * 空配列も送信することで0件への更新に対応する。
+   * nullはModel Variationを扱わないカテゴリ。
    */
-  if (
-    finalModelVariationRequests !==
-    null
-  ) {
+  if (finalModelVariationRequests !== null) {
     await createModelVariations(
       productBlueprintId,
       finalModelVariationRequests,
     );
   }
 
-  return updated;
+  // ProductBlueprint + ModelVariation更新後の完成形はDetail BFFを正とする。
+  return getProductBlueprintDetailApi(productBlueprintId);
 }
 
 /* =========================================================
  * DELETE: Product Blueprint
  * =======================================================*/
 
-export async function deleteProductBlueprint(
-  id: string,
-): Promise<void> {
-  const productBlueprintId =
-    String(id ?? "").trim();
-
+export async function deleteProductBlueprint(id: string): Promise<void> {
+  const productBlueprintId = String(id ?? "").trim();
   if (!productBlueprintId) {
-    throw new Error(
-      "deleteProductBlueprint: id が空です",
-    );
+    throw new Error("deleteProductBlueprint: id が空です");
   }
 
-  await deleteProductBlueprintHTTP(
-    productBlueprintId,
-  );
+  await deleteProductBlueprintHTTP(productBlueprintId);
 }

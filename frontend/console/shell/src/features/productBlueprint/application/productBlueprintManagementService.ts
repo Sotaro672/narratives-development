@@ -1,48 +1,60 @@
-// frontend/console/productBlueprint/src/application/productBlueprintManagementService.ts
+// frontend/console/shell/src/features/productBlueprint/application/productBlueprintManagementService.ts
 
 import {
-  // ★ インフラ層の一覧取得関数
-  fetchProductBlueprintManagementRows as fetchRowsInfra,
-  type ProductBlueprintManagementRow,
-} from "../infrastructure/query/productBlueprintQuery";
+  listProductBlueprintsHTTP,
+  type ProductBlueprintListRow,
+} from "../infrastructure/repository/productBlueprintRepositoryHTTP";
 
-export type UiRow = ProductBlueprintManagementRow;
+export type UiRow = ProductBlueprintListRow;
 
 export type ProductBlueprintSortKey = "createdAt" | "updatedAt" | null;
 export type SortDirection = "asc" | "desc" | null;
 
-// ★ ここから呼び出すと、内部で
-//   （将来的に）ListIDsByCompany → ListNotYetPrinted を要求する HTTP が
-//   叩かれる想定。現状は infra 側の fetchProductBlueprintManagementRows を
-//   そのまま利用する。
+/**
+ * backend BFFのGET /product-blueprintsレスポンスをそのまま返す。
+ * frontend側でresponse mapperによる再構築は行わない。
+ */
 export async function fetchProductBlueprintManagementRows(): Promise<UiRow[]> {
-  return await fetchRowsInfra();
+  return listProductBlueprintsHTTP();
 }
 
-const toTs = (yyyyMd: string) => {
-  if (!yyyyMd) return 0;
-  const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
-  return new Date(y, (m || 1) - 1, d || 1).getTime();
-};
+function toTimestamp(value: string): number {
+  if (!value) {
+    return 0;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
 
 /**
- * printedFilter は UI 表示文字列で受ける（presentation 側と合わせる）
+ * printedFilter は UI 表示文字列で受ける。
  * - "未印刷"
  * - "印刷済み"
  */
-function matchPrintedFilter(rowPrinted: boolean, printedFilter: string[]): boolean {
-  if (printedFilter.length === 0) return true;
+function matchPrintedFilter(
+  rowPrinted: boolean,
+  printedFilter: string[],
+): boolean {
+  if (printedFilter.length === 0) {
+    return true;
+  }
 
   const wantsPrinted = printedFilter.includes("印刷済み");
   const wantsNotPrinted = printedFilter.includes("未印刷");
 
-  // 両方選択されているならフィルタしない（=全件通す）
-  if (wantsPrinted && wantsNotPrinted) return true;
+  if (wantsPrinted && wantsNotPrinted) {
+    return true;
+  }
 
-  if (wantsPrinted) return rowPrinted === true;
-  if (wantsNotPrinted) return rowPrinted === false;
+  if (wantsPrinted) {
+    return rowPrinted;
+  }
 
-  // 想定外値のみの場合は落とす（安全側）
+  if (wantsNotPrinted) {
+    return !rowPrinted;
+  }
+
   return false;
 }
 
@@ -66,22 +78,27 @@ export function filterAndSortProductBlueprintRows(params: {
   let work = allRows;
 
   if (brandFilter.length > 0) {
-    work = work.filter((r) => brandFilter.includes(r.brandName));
+    work = work.filter((row) => brandFilter.includes(row.brandName));
   }
 
   if (assigneeFilter.length > 0) {
-    work = work.filter((r) => assigneeFilter.includes(r.assigneeName));
+    work = work.filter((row) => assigneeFilter.includes(row.assigneeName));
   }
 
   if (printedFilter.length > 0) {
-    work = work.filter((r) => matchPrintedFilter(Boolean((r as any).printed), printedFilter));
+    work = work.filter((row) =>
+      matchPrintedFilter(row.printed, printedFilter),
+    );
   }
 
   if (sortedKey && sortedDir) {
     work = [...work].sort((a, b) => {
-      const av = toTs(a[sortedKey]);
-      const bv = toTs(b[sortedKey]);
-      return sortedDir === "asc" ? av - bv : bv - av;
+      const aTimestamp = toTimestamp(a[sortedKey]);
+      const bTimestamp = toTimestamp(b[sortedKey]);
+
+      return sortedDir === "asc"
+        ? aTimestamp - bTimestamp
+        : bTimestamp - aTimestamp;
     });
   }
 

@@ -1,4 +1,5 @@
 // frontend/console/shell/src/features/productBlueprint/infrastructure/api/productBlueprintDetailApi.ts
+
 import { API_BASE } from "../../../../shared/http/apiBase";
 import { fetchJSON } from "../../../../shared/http/fetchJSON";
 import type {
@@ -8,59 +9,75 @@ import type {
 
 export type { UpdateProductBlueprintParams } from "./productBlueprintUpdateApi";
 
-export type ProductBlueprintModelRef = {
-  modelId: string;
-  displayOrder: number;
+export type ProductBlueprintDetailSizeResponse = {
+  id: string;
+  sizeLabel: string;
+  length?: number;
+  width?: number;
+  chest?: number;
+  shoulder?: number;
+  sleeveLength?: number;
+  waist?: number;
+  hip?: number;
+  rise?: number;
+  inseam?: number;
+  thigh?: number;
+  hemWidth?: number;
 };
 
-export type ProductBlueprintModelVariationResponse = {
-  id?: string;
-  productBlueprintId?: string;
-  kind?: "apparel" | "alcohol" | string;
-  modelNumber?: string;
-  size?: string;
-  color?:
-    | string
-    | {
-        name?: string;
-        rgb?: number | null;
-      };
-  rgb?: number | null;
-  measurements?: Record<string, number | null>;
-  volume?: {
-    value?: number | null;
-    unit?: string | null;
-  } | null;
-  version?: number;
-  createdAt?: string | null;
-  updatedAt?: string | null;
+export type ProductBlueprintDetailApparelModelNumberResponse = {
+  size: string;
+  color: string;
+  code: string;
+};
+
+export type ProductBlueprintDetailVolumeResponse = {
+  value: number;
+  unit: string;
+};
+
+export type ProductBlueprintDetailVolumeRowResponse = {
+  id: string;
+  volumeValue: number;
+  volumeUnit: string;
+};
+
+export type ProductBlueprintDetailAlcoholModelNumberResponse = {
+  kind: "alcohol";
+  volume: ProductBlueprintDetailVolumeResponse;
+  code: string;
+};
+
+export type ProductBlueprintDetailModelStateResponse = {
+  colors: string[];
+  sizes: ProductBlueprintDetailSizeResponse[];
+  modelNumbers: ProductBlueprintDetailApparelModelNumberResponse[];
+  colorRgbMap: Record<string, string>;
+  volumes: ProductBlueprintDetailVolumeRowResponse[];
+  alcoholModelNumbers: ProductBlueprintDetailAlcoholModelNumberResponse[];
 };
 
 export type ProductBlueprintDetailResponse = {
   id: string;
   productName: string;
-  description?: string | null;
-  companyId?: string;
+  description: string;
+  companyId: string;
   brandId: string;
-  brandName?: string | null;
+  brandName: string;
   productBlueprintCategoryId: string;
   productBlueprintCategory: ProductBlueprintCategorySnapshot;
-  categoryFields?: CategoryFieldValues | null;
-  productIdTag?: {
-    type?: string | null;
-  } | null;
-  assigneeId?: string;
-  assigneeName?: string | null;
-  printed?: boolean | null;
-  createdBy?: string | null;
-  createdByName?: string | null;
-  createdAt?: string | null;
-  updatedBy?: string | null;
-  updatedByName?: string | null;
-  updatedAt?: string | null;
-  deletedAt?: string | null;
-  modelRefs?: ProductBlueprintModelRef[];
-  modelVariations?: ProductBlueprintModelVariationResponse[];
+  categoryFields?: CategoryFieldValues;
+  productIdTag?: { type: string };
+  assigneeId: string;
+  assigneeName: string;
+  printed: boolean;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedByName: string;
+  updatedAt: string;
+  modelState: ProductBlueprintDetailModelStateResponse;
 };
 
 export type { ProductBlueprintCategorySnapshot };
@@ -68,14 +85,12 @@ export type { ProductBlueprintCategorySnapshot };
 export async function getProductBlueprintDetailApi(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
-  const normalizedId = String(id ?? "").trim();
-  if (!normalizedId) {
+  if (!id) {
     throw new Error("getProductBlueprintDetailApi: id が空です");
   }
 
-  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(normalizedId)}`;
-  return fetchJSON(url, {
-    method: "GET",
-    auth: "required",
-  });
+  return fetchJSON<ProductBlueprintDetailResponse>(
+    `${API_BASE}/product-blueprints/${encodeURIComponent(id)}`,
+    { method: "GET", auth: "required" },
+  );
 }
