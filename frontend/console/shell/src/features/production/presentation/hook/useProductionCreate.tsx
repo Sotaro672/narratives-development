@@ -4,15 +4,17 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
 import type { Brand } from "../../../../shared/types/brand";
+import type {
+  ProductionCreateProductBlueprint,
+  ProductionQuantityRow,
+} from "../../../../shared/types/production";
 import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
 import { buildProductionPayload } from "../../application/productionCreateService";
-import type { ProductionQuantityRow } from "../../application/productionQuantityRow";
 import {
   loadBrands,
   loadProductBlueprints,
   loadProductionCreateContext,
-  type ProductionCreateProductBlueprintResponse,
 } from "../../infrastructure/api/productionCreateApi";
 import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
 import {
@@ -27,8 +29,7 @@ export function useProductionCreate() {
   const [allProductBlueprints, setAllProductBlueprints] = React.useState<ProductBlueprintManagementRow[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [selectedBrand, setSelectedBrand] = React.useState<string | null>(null);
-  const [selectedProductBlueprint, setSelectedProductBlueprint] =
-    React.useState<ProductionCreateProductBlueprintResponse | null>(null);
+  const [selectedProductBlueprint, setSelectedProductBlueprint] = React.useState<ProductionCreateProductBlueprint | null>(null);
   const [quantityRows, setQuantityRows] = React.useState<ProductionQuantityRow[]>([]);
   const [brands, setBrands] = React.useState<Brand[]>([]);
 
@@ -54,20 +55,14 @@ export function useProductionCreate() {
     loadProductBlueprints().then(setAllProductBlueprints).catch(() => setAllProductBlueprints([]));
   }, []);
 
-  const brandOptions = React.useMemo(
-    () => buildBrandOptions(brands),
-    [brands],
-  );
+  const brandOptions = React.useMemo(() => buildBrandOptions(brands), [brands]);
 
   const filteredBlueprints = React.useMemo(
     () => filterProductBlueprintsByBrand(allProductBlueprints, selectedBrand),
     [allProductBlueprints, selectedBrand],
   );
 
-  const productRows = React.useMemo(
-    () => buildProductRows(filteredBlueprints),
-    [filteredBlueprints],
-  );
+  const productRows = React.useMemo(() => buildProductRows(filteredBlueprints), [filteredBlueprints]);
 
   React.useEffect(() => {
     if (!selectedId) {

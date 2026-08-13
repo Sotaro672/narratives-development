@@ -3,32 +3,13 @@
 import type { Brand } from "../../../../shared/types/brand";
 import { API_BASE } from "../../../../shared/http/apiBase";
 import { fetchJSON } from "../../../../shared/http/fetchJSON";
+import type { ProductionCreateContext } from "../../../../shared/types/production";
 import { brandRepositoryHTTP } from "../../../brand/infrastructure/http/brandRepositoryHTTP";
-import type {
-  CategoryFieldValues,
-  ProductBlueprintCategorySnapshot,
-} from "../../../productBlueprint/domain/productBlueprintCategory";
+import type { ProductBlueprintCategorySnapshot } from "../../../productBlueprint/domain/productBlueprintCategory";
 import {
   fetchProductBlueprintManagementRows,
   type ProductBlueprintManagementRow,
 } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
-import type { ProductionQuantityRow } from "../../application/productionQuantityRow";
-
-export type ProductionCreateProductBlueprintResponse = {
-  id: string;
-  productName: string;
-  brandId: string;
-  brandName: string;
-  productBlueprintCategoryId: string;
-  productBlueprintCategory: ProductBlueprintCategorySnapshot;
-  categoryFields?: CategoryFieldValues | null;
-  assigneeId?: string;
-};
-
-export type ProductionCreateContextResponse = {
-  productBlueprintPatch: ProductionCreateProductBlueprintResponse;
-  rows: ProductionQuantityRow[];
-};
 
 export type {
   Brand,
@@ -70,17 +51,13 @@ export async function loadProductBlueprints(): Promise<ProductBlueprintManagemen
 
 export async function loadProductionCreateContext(
   productBlueprintId: string,
-): Promise<ProductionCreateContextResponse> {
+): Promise<ProductionCreateContext> {
   const normalizedProductBlueprintId = String(productBlueprintId ?? "").trim();
-
   if (!normalizedProductBlueprintId) {
     throw new Error("loadProductionCreateContext: productBlueprintId が空です");
   }
 
-  const url = `${API_BASE}/productions/create-context?productBlueprintId=${encodeURIComponent(
-    normalizedProductBlueprintId,
-  )}`;
-
+  const url = `${API_BASE}/productions/create-context?productBlueprintId=${encodeURIComponent(normalizedProductBlueprintId)}`;
   return fetchJSON(url, {
     method: "GET",
     auth: "required",

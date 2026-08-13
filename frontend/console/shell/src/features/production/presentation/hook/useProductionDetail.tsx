@@ -3,12 +3,14 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import type {
+  ProductionDetail,
+  ProductionQuantityRow,
+} from "../../../../shared/types/production";
 import {
   loadProductionDetail,
   updateProductionDetail,
-  type ProductionDetail,
 } from "../../application/productionDetailService";
-import type { ProductionQuantityRow } from "../../application/productionQuantityRow";
 import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
 
 type Mode = "view" | "edit";
@@ -81,10 +83,9 @@ export function useProductionDetail() {
     }
 
     try {
-      const updated = await updateProductionDetail({
-        productionId,
+      const updated = await updateProductionDetail(productionId, {
         assigneeId: production.assigneeId,
-        rows: quantityRows.map(({ modelId, quantity }) => ({
+        models: quantityRows.map(({ modelId, quantity }) => ({
           modelId,
           quantity,
         })),

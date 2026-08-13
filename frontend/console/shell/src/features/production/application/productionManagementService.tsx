@@ -1,33 +1,15 @@
 // frontend/console/shell/src/features/production/application/productionManagementService.tsx
 
+import type {
+  ProductionListRow,
+  ProductionListRowView,
+  ProductionSortDirection,
+  ProductionSortKey,
+} from "../../../shared/types/production";
 import { safeDateTimeLabelJa } from "../../../shared/util/dateJa";
-import {
-  listProductionsHTTP,
-  type ProductionListItemResponse,
-} from "../infrastructure/api/productionManagementApi";
+import { listProductionsHTTP } from "../infrastructure/api/productionManagementApi";
 
-export type SortKey = "printedAt" | "createdAt" | "totalQuantity" | null;
-
-export type ProductionRow = ProductionListItemResponse & {
-  printedAtLabel: string;
-  createdAtLabel: string;
-};
-
-export type ProductionRowView = Pick<
-  ProductionRow,
-  | "id"
-  | "productBlueprintId"
-  | "productName"
-  | "assigneeId"
-  | "assigneeName"
-  | "printed"
-  | "totalQuantity"
-  | "printedAtLabel"
-  | "createdAtLabel"
-  | "brandName"
->;
-
-function toTimestamp(value: string | null): number {
+function toTimestamp(value?: string | null): number {
   if (!value) {
     return 0;
   }
@@ -42,7 +24,7 @@ function toTimestamp(value: string | null): number {
  * GET /productions の lowerCamelCase BFF response を正とし、
  * frontend では表示用日時ラベルだけを追加する。
  */
-export async function loadProductionRows(): Promise<ProductionRow[]> {
+export async function loadProductionRows(): Promise<ProductionListRow[]> {
   const items = await listProductionsHTTP();
 
   return items.map((item) => ({
@@ -57,13 +39,13 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
  * Backend response の変換・補完は行わない。
  */
 export function buildRowsView(params: {
-  baseRows: ProductionRow[];
+  baseRows: ProductionListRow[];
   blueprintFilter: string[];
   assigneeFilter: string[];
   printedFilter: boolean[];
-  sortKey: SortKey;
-  sortDir: "asc" | "desc" | null;
-}): ProductionRowView[] {
+  sortKey: ProductionSortKey;
+  sortDir: ProductionSortDirection;
+}): ProductionListRowView[] {
   const {
     baseRows,
     blueprintFilter,

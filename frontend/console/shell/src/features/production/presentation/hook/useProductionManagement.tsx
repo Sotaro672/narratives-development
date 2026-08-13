@@ -1,70 +1,68 @@
-// frontend/console/production/src/presentation/hook/useProductionManagement.tsx
+// frontend/console/shell/src/features/production/presentation/hook/useProductionManagement.tsx
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../../layout/List/List";
-
+import type {
+  ProductionListRow,
+  ProductionListRowView,
+  ProductionSortDirection,
+  ProductionSortKey,
+} from "../../../../shared/types/production";
 import {
-  loadProductionRows,
   buildRowsView,
-  type SortKey,
-  type ProductionRow,
-  type ProductionRowView,
+  loadProductionRows,
 } from "../../application/productionManagementService";
 
 function extractBackendJsonErrorMessage(e: unknown): string {
-  // productionManagementService 側の throw が `...（500 ）\n{"error":"..."}` のような形式になることがあるので、JSON 部分を拾う
-  const raw = (e as any)?.message ?? String(e ?? "");
-  const m = raw.match(/\{[\s\S]*\}$/);
-  if (!m) return raw;
+  const raw = e instanceof Error ? e.message : String(e ?? "");
+  const match = raw.match(/\{[\s\S]*\}$/);
+
+  if (!match) return raw;
 
   try {
-    const obj = JSON.parse(m[0]);
-    const msg = typeof obj?.error === "string" ? obj.error : "";
-    return msg || raw;
+    const parsed: unknown = JSON.parse(match[0]);
+
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "error" in parsed &&
+      typeof parsed.error === "string"
+    ) {
+      return parsed.error || raw;
+    }
+
+    return raw;
   } catch {
     return raw;
   }
 }
 
 function isInvalidCompanyIDError(e: unknown): boolean {
-  const msg = extractBackendJsonErrorMessage(e);
-  return msg.includes("invalid companyId") || msg.includes("invalid companyID");
-}
-
-/**
- * printed(boolean) -> 日本語ラベル
- * - true: 印刷済
- * - false: 印刷前
- */
-function formatPrintedJa(printed: boolean): string {
-  return printed ? "印刷済" : "印刷前";
+  const message = extractBackendJsonErrorMessage(e);
+  return (
+    message.includes("invalid companyId") ||
+    message.includes("invalid companyID")
+  );
 }
 
 export function useProductionManagement() {
   const navigate = useNavigate();
 
-  // ===== フィルタ状態 =====
   const [blueprintFilter, setBlueprintFilter] = useState<string[]>([]);
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
   const [printedFilter, setPrintedFilter] = useState<boolean[]>([]);
 
-  // ===== ソート状態 =====
-  const [sortKey, setSortKey] = useState<SortKey>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc" | null>(null);
+  const [sortKey, setSortKey] = useState<ProductionSortKey>(null);
+  const [sortDir, setSortDir] = useState<ProductionSortDirection>(null);
 
-  // ===== ベース行データ（API から取得した値 + totalQuantity） =====
-  const [baseRows, setBaseRows] = useState<ProductionRow[]>([]);
-
-  // ===== ローディング / エラー =====
+  const [baseRows, setBaseRows] = useState<ProductionListRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-
-  // ✅ リフレッシュボタン回転用（List の isResetting に渡す）
   const [isResetting, setIsResetting] = useState(false);
 
   const reload = useCallback(async () => {
@@ -73,10 +71,9 @@ export function useProductionManagement() {
     setLoadError(null);
 
     try {
-      const rows = await loadProductionRows();
-      setBaseRows(rows ?? []);
+      const loadedRows = await loadProductionRows();
+      setBaseRows(loadedRows);
     } catch (e) {
-      // ★ companyId 無しのユーザーが /productions を叩くと backend が 500 で弾く（方針どおり）
       if (isInvalidCompanyIDError(e)) {
         setLoadError(
           "会社情報（companyId）が未設定のため、生産計画一覧を表示できません。先に会社を作成（または招待を受諾）してください。",
@@ -95,7 +92,7 @@ export function useProductionManagement() {
   useEffect(() => {
     let cancelled = false;
 
-    (async () => {
+    void (async () => {
       if (cancelled) return;
       await reload();
     })();
@@ -105,19 +102,14 @@ export function useProductionManagement() {
     };
   }, [reload]);
 
-  // ===== オプション生成 =====
-  // プロダクト名フィルタ: value は productBlueprintId, label は productName（なければ ID）
   const blueprintOptions = useMemo(() => {
     const map = new Map<string, string>();
 
     for (const row of baseRows) {
       const id = row.productBlueprintId;
-      if (!id) continue;
-      if (!map.has(id)) {
-        const name = (row as any).productName ?? "";
-        const label = name || id;
-        map.set(id, label);
-      }
+      if (!id || map.has(id)) continue;
+
+      map.set(id, row.productName || id);
     }
 
     return Array.from(map.entries()).map(([value, label]) => ({
@@ -126,17 +118,14 @@ export function useProductionManagement() {
     }));
   }, [baseRows]);
 
-  // ブランドフィルタ: value / label ともに brandName
   const brandOptions = useMemo(() => {
     const map = new Map<string, string>();
 
     for (const row of baseRows) {
-      const name = ((row as any).brandName ?? "") as string;
-      const trimmed = name.trim();
-      if (!trimmed) continue;
-      if (!map.has(trimmed)) {
-        map.set(trimmed, trimmed);
-      }
+      const name = row.brandName.trim();
+      if (!name || map.has(name)) continue;
+
+      map.set(name, name);
     }
 
     return Array.from(map.entries()).map(([value, label]) => ({
@@ -145,18 +134,14 @@ export function useProductionManagement() {
     }));
   }, [baseRows]);
 
-  // 担当者フィルタ: value は assigneeId, label は assigneeName（なければ ID）
   const assigneeOptions = useMemo(() => {
     const map = new Map<string, string>();
 
     for (const row of baseRows) {
-      const id = (row.assigneeId ?? "").trim();
-      if (!id) continue;
-      if (!map.has(id)) {
-        const name = (row as any).assigneeName ?? "";
-        const label = (name as string).trim() || id;
-        map.set(id, label);
-      }
+      const id = row.assigneeId.trim();
+      if (!id || map.has(id)) continue;
+
+      map.set(id, row.assigneeName.trim() || id);
     }
 
     return Array.from(map.entries()).map(([value, label]) => ({
@@ -165,17 +150,15 @@ export function useProductionManagement() {
     }));
   }, [baseRows]);
 
-  // 印刷状態フィルタ（true/false を固定で提供）
   const printedOptions = useMemo(
     () => [
-      { value: true as any, label: "印刷済" },
-      { value: false as any, label: "印刷前" },
+      { value: "true", label: "印刷済" },
+      { value: "false", label: "印刷前" },
     ],
     [],
   );
 
-  // ===== フィルタ＋ソート適用 → 表示用行に変換 =====
-  const allRowsView: ProductionRowView[] = useMemo(
+  const allRowsView = useMemo<ProductionListRowView[]>(
     () =>
       buildRowsView({
         baseRows,
@@ -185,20 +168,25 @@ export function useProductionManagement() {
         sortKey,
         sortDir,
       }),
-    [baseRows, blueprintFilter, assigneeFilter, printedFilter, sortKey, sortDir],
+    [
+      baseRows,
+      blueprintFilter,
+      assigneeFilter,
+      printedFilter,
+      sortKey,
+      sortDir,
+    ],
   );
 
-  // ブランドフィルタは View 行に対して適用
-  const rows: ProductionRowView[] = useMemo(() => {
+  const rows = useMemo<ProductionListRowView[]>(() => {
     if (brandFilter.length === 0) return allRowsView;
 
-    return allRowsView.filter((r) =>
-      brandFilter.includes((r.brandName ?? "").trim()),
+    return allRowsView.filter((row) =>
+      brandFilter.includes(row.brandName.trim()),
     );
   }, [allRowsView, brandFilter]);
 
-  // ===== ヘッダー =====
-  const headers: React.ReactNode[] = useMemo(
+  const headers = useMemo<React.ReactNode[]>(
     () => [
       <FilterableTableHeader
         key="blueprint"
@@ -225,8 +213,10 @@ export function useProductionManagement() {
         key="printed"
         label="印刷状態"
         options={printedOptions}
-        selected={printedFilter as unknown as string[]}
-        onChange={(values) => setPrintedFilter(values as unknown as boolean[])}
+        selected={printedFilter.map(String)}
+        onChange={(values) =>
+          setPrintedFilter(values.map((value) => value === "true"))
+        }
       />,
       <SortableTableHeader
         key="totalQuantity"
@@ -234,9 +224,9 @@ export function useProductionManagement() {
         sortKey="totalQuantity"
         activeKey={sortKey}
         direction={sortDir}
-        onChange={(key, dir) => {
-          setSortKey(key as SortKey);
-          setSortDir(dir);
+        onChange={(key, direction) => {
+          setSortKey(key as ProductionSortKey);
+          setSortDir(direction);
         }}
       />,
       <SortableTableHeader
@@ -245,9 +235,9 @@ export function useProductionManagement() {
         sortKey="printedAt"
         activeKey={sortKey}
         direction={sortDir}
-        onChange={(key, dir) => {
-          setSortKey(key as SortKey);
-          setSortDir(dir);
+        onChange={(key, direction) => {
+          setSortKey(key as ProductionSortKey);
+          setSortDir(direction);
         }}
       />,
       <SortableTableHeader
@@ -256,9 +246,9 @@ export function useProductionManagement() {
         sortKey="createdAt"
         activeKey={sortKey}
         direction={sortDir}
-        onChange={(key, dir) => {
-          setSortKey(key as SortKey);
-          setSortDir(dir);
+        onChange={(key, direction) => {
+          setSortKey(key as ProductionSortKey);
+          setSortDir(direction);
         }}
       />,
     ],
@@ -276,40 +266,38 @@ export function useProductionManagement() {
     ],
   );
 
-  // ===== ハンドラ =====
-  const handleCreate = () => {
-    // 相対パスで ProductionCreate へ
+  const handleCreate = useCallback(() => {
     navigate("create");
-  };
+  }, [navigate]);
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setBlueprintFilter([]);
     setBrandFilter([]);
     setAssigneeFilter([]);
     setPrintedFilter([]);
     setSortKey(null);
     setSortDir(null);
-
-    // ✅ リフレッシュ（再取得）も行う
     void reload();
-  };
+  }, [reload]);
 
-  const handleRowClick = (id: string) => {
-    // 相対パスで詳細へ
-    navigate(encodeURIComponent(id));
-  };
+  const handleRowClick = useCallback(
+    (id: string) => {
+      navigate(encodeURIComponent(id));
+    },
+    [navigate],
+  );
 
   return {
     headers,
     rows,
-
     loading,
-    isResetting, // ✅ 追加：pages 側で List に渡す
+    isResetting,
     loadError,
     reload,
-
     handleCreate,
     handleReset,
     handleRowClick,
   };
 }
+
+export default useProductionManagement;
