@@ -8,11 +8,6 @@ export type {
 
 export { loadProductionDetail } from "./loadProductionDetail";
 
-export {
-  buildModelIndexFromVariations,
-  loadModelVariationIndexByProductBlueprintId,
-} from "./buildModelVariationIndex";
-
 export { updateProductionDetail } from "./updateProductionDetail";
 
 export { notifyPrintLogCompleted } from "./notifyPrintLogCompleted";

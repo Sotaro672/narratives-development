@@ -1,43 +1,34 @@
-// frontend/console/production/src/application/productionManagementService.tsx
+// frontend/console/shell/src/features/production/application/productionManagementService.tsx
 
-import type { Production } from "../../../shared/types/production";
-
-// ✅ date label util (single source of truth)
+import { listProductionsHTTP } from "../infrastructure/query/productionQuery";
 import { safeDateTimeLabelJa } from "../../../shared/util/dateJa";
 
-// ✅ production list fetcher (was missing)
-import { listProductionsHTTP } from "../infrastructure/query/productionQuery";
-
-/** ソートキー */
 export type SortKey = "printedAt" | "createdAt" | "totalQuantity" | null;
 
-/**
- * 一覧表示用に totalQuantity などを付与した行型（内部用）
- * - Backend DTO (PascalCase) を正とする
- */
-export type ProductionRow = Omit<
-  Production,
-  "assigneeId" | "assigneeName" | "productName" | "brandName"
-> & {
-  totalQuantity: number;
+export type ProductionRow = {
+  id: string;
+  productBlueprintId: string;
   productName: string;
-  brandName: string;
-
-  /** UI では常に string として扱う */
   assigneeId: string;
   assigneeName: string;
-
-  /** printed:boolean */
+  models: Array<{
+    modelId: string;
+    quantity: number;
+  }>;
   printed: boolean;
-
-  /** 表示用ラベル（backend が返す / ない場合は util で作る） */
+  printedAt: string | null;
+  printedBy: string | null;
+  printedByName: string;
+  createdBy: string | null;
+  createdByName: string;
+  createdAt: string;
+  updatedBy: string | null;
+  updatedByName: string;
+  updatedAt: string | null;
+  totalQuantity: number;
+  brandName: string;
   printedAtLabel: string;
   createdAtLabel: string;
-
-  /** timestamps（backend が返す ISO string） */
-  printedAt?: string | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
 };
 
 export type ProductionRowView = {
@@ -53,87 +44,62 @@ export type ProductionRowView = {
   brandName: string;
 };
 
-const toTs = (iso?: string | null): number => {
-  if (!iso) return 0;
-  const t = Date.parse(iso);
-  return Number.isNaN(t) ? 0 : t;
-};
+function toTimestamp(value: string | null): number {
+  if (!value) {
+    return 0;
+  }
 
-/** Production 一覧取得（backend DTO をそのまま利用） */
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+/**
+ * Production 一覧取得
+ *
+ * GET /productions の BFF response を正とする。
+ * frontend では backend の値を再検証・補完せず、
+ * UI が使用する lowerCamelCase への変換と
+ * 表示用日時ラベルの生成だけを行う。
+ */
 export async function loadProductionRows(): Promise<ProductionRow[]> {
   const items = await listProductionsHTTP();
 
-  const rows: ProductionRow[] = (Array.isArray(items) ? items : []).map((raw: any) => {
-    // ✅ backend DTO を正として直接参照
-    const id: string = String(raw.ID ?? "");
-    const productBlueprintId: string = String(raw.ProductBlueprintID ?? "");
-    const assigneeId: string = String(raw.AssigneeID ?? "");
-    const printed: boolean = Boolean(raw.Printed);
-
-    const models = Array.isArray(raw.Models) ? raw.Models : [];
-
-    const totalQuantity: number =
-      typeof raw.totalQuantity === "number" ? raw.totalQuantity : 0;
-
-    const productName: string = String(raw.productName ?? "");
-    const brandName: string = String(raw.brandName ?? "");
-    const assigneeName: string = String(raw.assigneeName ?? "");
-
-    const printedAt: string | null =
-      raw.PrintedAt != null ? String(raw.PrintedAt) : null;
-    const createdAt: string | null =
-      raw.CreatedAt != null ? String(raw.CreatedAt) : null;
-    const updatedAt: string | null =
-      raw.UpdatedAt != null ? String(raw.UpdatedAt) : null;
-
-    // ✅ backend の label を優先しつつ、無い場合は util で生成（表示形式固定）
-    const printedAtLabel: string =
-      typeof raw.printedAtLabel === "string" && raw.printedAtLabel
-        ? raw.printedAtLabel
-        : safeDateTimeLabelJa(printedAt, "-");
-
-    const createdAtLabel: string =
-      typeof raw.createdAtLabel === "string" && raw.createdAtLabel
-        ? raw.createdAtLabel
-        : safeDateTimeLabelJa(createdAt, "-");
-
-    const row: ProductionRow = {
-      ...(raw as Production),
-
-      id,
-      productBlueprintId,
-
-      assigneeId,
-      assigneeName,
-
-      printed,
-
-      models: models as any,
-
-      printedAt,
-      createdAt,
-      updatedAt,
-
-      totalQuantity,
-      productName,
-      brandName,
-
-      printedAtLabel,
-      createdAtLabel,
-    };
-
-    return row;
-  });
-
-  return rows;
+  return items.map((item): ProductionRow => ({
+    id: item.ID,
+    productBlueprintId: item.ProductBlueprintID,
+    productName: item.productName ?? "",
+    assigneeId: item.AssigneeID,
+    assigneeName: item.assigneeName ?? "",
+    models: item.Models.map((model) => ({
+      modelId: model.ModelID,
+      quantity: model.Quantity,
+    })),
+    printed: item.Printed,
+    printedAt: item.PrintedAt ?? null,
+    printedBy: item.PrintedBy ?? null,
+    printedByName: item.printedByName ?? "",
+    createdBy: item.CreatedBy ?? null,
+    createdByName: item.createdByName ?? "",
+    createdAt: item.CreatedAt,
+    updatedBy: item.UpdatedBy ?? null,
+    updatedByName: item.updatedByName ?? "",
+    updatedAt: item.UpdatedAt ?? null,
+    totalQuantity: item.totalQuantity,
+    brandName: item.brandName ?? "",
+    printedAtLabel: safeDateTimeLabelJa(item.PrintedAt ?? null, "-"),
+    createdAtLabel: safeDateTimeLabelJa(item.CreatedAt, "-"),
+  }));
 }
 
-/** rows → viewRows 変換（フィルタ + ソート + 表示用ラベル整形） */
+/**
+ * Production 一覧の frontend UI 状態に応じたフィルタ・ソート。
+ * データの補完や backend response の正規化は行わない。
+ */
 export function buildRowsView(params: {
   baseRows: ProductionRow[];
   blueprintFilter: string[];
   assigneeFilter: string[];
-  printedFilter: boolean[]; // [true] / [false] / [true,false] / []
+  printedFilter: boolean[];
   sortKey: SortKey;
   sortDir: "asc" | "desc" | null;
 }): ProductionRowView[] {
@@ -146,47 +112,62 @@ export function buildRowsView(params: {
     sortDir,
   } = params;
 
-  // ===== フィルタ適用 =====
-  let data = (Array.isArray(baseRows) ? baseRows : []).filter((p) => {
-    if (blueprintFilter.length > 0 && !blueprintFilter.includes(p.productBlueprintId)) {
+  let rows = baseRows.filter((production) => {
+    if (
+      blueprintFilter.length > 0 &&
+      !blueprintFilter.includes(production.productBlueprintId)
+    ) {
       return false;
     }
-    if (assigneeFilter.length > 0 && !assigneeFilter.includes(p.assigneeId)) {
+
+    if (
+      assigneeFilter.length > 0 &&
+      !assigneeFilter.includes(production.assigneeId)
+    ) {
       return false;
     }
-    if (printedFilter.length > 0 && !printedFilter.includes(p.printed)) {
+
+    if (
+      printedFilter.length > 0 &&
+      !printedFilter.includes(production.printed)
+    ) {
       return false;
     }
+
     return true;
   });
 
-  // ===== ソート適用 =====
   if (sortKey && sortDir) {
-    data = [...data].sort((a, b) => {
+    rows = [...rows].sort((a, b) => {
       if (sortKey === "totalQuantity") {
-        const av = a.totalQuantity;
-        const bv = b.totalQuantity;
-        return sortDir === "asc" ? av - bv : bv - av;
+        return sortDir === "asc"
+          ? a.totalQuantity - b.totalQuantity
+          : b.totalQuantity - a.totalQuantity;
       }
-      const av = toTs((a as any)[sortKey] as any);
-      const bv = toTs((b as any)[sortKey] as any);
-      return sortDir === "asc" ? av - bv : bv - av;
+
+      const aTimestamp = toTimestamp(
+        sortKey === "printedAt" ? a.printedAt : a.createdAt,
+      );
+      const bTimestamp = toTimestamp(
+        sortKey === "printedAt" ? b.printedAt : b.createdAt,
+      );
+
+      return sortDir === "asc"
+        ? aTimestamp - bTimestamp
+        : bTimestamp - aTimestamp;
     });
   }
 
-  // ===== 表示用変換 =====
-  const view = data.map<ProductionRowView>((p) => ({
-    id: p.id,
-    productBlueprintId: p.productBlueprintId,
-    productName: p.productName,
-    assigneeId: p.assigneeId,
-    assigneeName: p.assigneeName,
-    printed: p.printed,
-    totalQuantity: p.totalQuantity,
-    printedAtLabel: p.printedAtLabel,
-    createdAtLabel: p.createdAtLabel,
-    brandName: p.brandName,
+  return rows.map((production) => ({
+    id: production.id,
+    productBlueprintId: production.productBlueprintId,
+    productName: production.productName,
+    assigneeId: production.assigneeId,
+    assigneeName: production.assigneeName,
+    printed: production.printed,
+    totalQuantity: production.totalQuantity,
+    printedAtLabel: production.printedAtLabel,
+    createdAtLabel: production.createdAtLabel,
+    brandName: production.brandName,
   }));
-
-  return view;
 }
