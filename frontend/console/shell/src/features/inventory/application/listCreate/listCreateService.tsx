@@ -4,7 +4,6 @@ import type * as React from "react";
 
 import { getListCreateRaw } from "../../infrastructure/api/listCreateApi";
 import type { ListCreateDTO } from "../../infrastructure/http/listCreateRepositoryHTTP.types";
-import { mapListCreateDTO } from "../../infrastructure/http/listCreateRepositoryHTTP.mappers";
 
 import type {
   List,
@@ -561,13 +560,8 @@ export async function loadListCreateDTOFromParams(
       params,
     );
 
-  const raw =
-    await getListCreateRaw(
-      input,
-    );
-
-  return mapListCreateDTO(
-    raw,
+  return await getListCreateRaw(
+    input,
   );
 }
 

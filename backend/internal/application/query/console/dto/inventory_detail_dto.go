@@ -1,15 +1,89 @@
-// backend/internal/application/query/dto/inventory_detail_dto.go
+// backend/internal/application/query/console/dto/inventory_detail_dto.go
 package dto
 
-import (
-	productbpdom "narratives/internal/domain/productBlueprint"
-	tokenbpdom "narratives/internal/domain/tokenBlueprint"
-)
+// InventoryProductBlueprintCategoryDTO は
+// Inventory Detail 画面向けの
+// ProductBlueprintCategory snapshot。
+//
+// HTTP response では lowerCamelCase を正とする。
+type InventoryProductBlueprintCategoryDTO struct {
+	ID     string   `json:"id"`
+	Code   string   `json:"code"`
+	NameJa string   `json:"nameJa"`
+	NameEn string   `json:"nameEn"`
+	Kind   string   `json:"kind"`
+	Path   []string `json:"path"`
+}
 
-// InventoryDetailRowDTO は InventoryDetail 画面向けの在庫行 DTO。
+// InventoryProductIDTagDTO は
+// Inventory Detail 画面向けの ProductIDTag。
+type InventoryProductIDTagDTO struct {
+	Type string `json:"type"`
+}
+
+// InventoryProductBlueprintModelRefDTO は
+// Inventory Detail 画面向けの model reference。
+type InventoryProductBlueprintModelRefDTO struct {
+	ModelID      string `json:"modelId"`
+	DisplayOrder int    `json:"displayOrder"`
+}
+
+// InventoryProductBlueprintPatchDTO は
+// Inventory Detail 画面向けの
+// ProductBlueprint read model。
+//
+// domain の Patch を HTTP response へ直接公開せず、
+// この DTO の lowerCamelCase JSON contract を正とする。
+type InventoryProductBlueprintPatchDTO struct {
+	ProductName string `json:"productName"`
+	Description string `json:"description"`
+
+	BrandID   string `json:"brandId"`
+	BrandName string `json:"brandName"`
+	CompanyID string `json:"companyId"`
+
+	ProductBlueprintCategory InventoryProductBlueprintCategoryDTO `json:"productBlueprintCategory"`
+
+	CategoryFields map[string]any `json:"categoryFields,omitempty"`
+
+	ProductIDTag InventoryProductIDTagDTO `json:"productIdTag"`
+
+	AssigneeID string `json:"assigneeId"`
+
+	ModelRefs []InventoryProductBlueprintModelRefDTO `json:"modelRefs"`
+}
+
+// InventoryTokenBlueprintPatchDTO は
+// Inventory Detail 画面向けの
+// TokenBlueprint read model。
+//
+// TokenBlueprintCard で必要な表示情報を
+// Backend 側で完成させて返す。
+type InventoryTokenBlueprintPatchDTO struct {
+	ID        string `json:"id"`
+	TokenName string `json:"tokenName"`
+	Symbol    string `json:"symbol"`
+
+	BrandID   string `json:"brandId"`
+	BrandName string `json:"brandName"`
+	CompanyID string `json:"companyId"`
+
+	Description string `json:"description"`
+
+	Minted      bool   `json:"minted"`
+	MetadataURI string `json:"metadataUri"`
+
+	IconURL string `json:"iconUrl,omitempty"`
+}
+
+// InventoryDetailRowDTO は
+// Inventory Detail 画面向けの在庫行 DTO。
+//
 // GET /inventory/{inventoryId} の rows として返す。
-// frontend 側で /models/by-blueprint/{productBlueprintId}/variations を追加取得しなくてよいように、
-// productBlueprintCategory.Kind に応じた model 情報をここへ含める。
+//
+// frontend 側では
+// /models/by-blueprint/{productBlueprintId}/variations
+// を追加取得せず、この rows を正とする。
 type InventoryDetailRowDTO struct {
 	ModelID     string `json:"modelId"`
 	Kind        string `json:"kind,omitempty"`
@@ -27,17 +101,20 @@ type InventoryDetailRowDTO struct {
 	VolumeUnit  string `json:"volumeUnit,omitempty"`
 }
 
+// InventoryDetailDTO は
+// GET /inventory/{inventoryId} の
+// Inventory Detail 画面専用 BFF response。
+//
+// frontend 側で別 API の response を merge せず、
+// この DTO を唯一の正とする。
 type InventoryDetailDTO struct {
+	InventoryID string `json:"inventoryId"`
+
 	TokenBlueprintID   string `json:"tokenBlueprintId"`
 	ProductBlueprintID string `json:"productBlueprintId"`
 
-	// ProductBlueprintCard へ渡すための Patch
-	// nil の場合は返さない
-	ProductBlueprintPatch *productbpdom.Patch `json:"productBlueprintPatch,omitempty"`
-
-	// TokenBlueprintCard へ渡すための Patch
-	// nil の場合は返さない
-	TokenBlueprintPatch *tokenbpdom.Patch `json:"tokenBlueprintPatch,omitempty"`
+	ProductBlueprintPatch *InventoryProductBlueprintPatchDTO `json:"productBlueprintPatch,omitempty"`
+	TokenBlueprintPatch   *InventoryTokenBlueprintPatchDTO   `json:"tokenBlueprintPatch,omitempty"`
 
 	Rows       []InventoryDetailRowDTO `json:"rows"`
 	TotalStock int                     `json:"totalStock"`

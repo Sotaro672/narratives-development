@@ -36,15 +36,20 @@ func NewInventoryDetailQuery(
 }
 
 // ============================================================
-// TokenBlueprint: tbId -> Patch-compatible DTO
-// - GetPatchByID は使わず、GetByID で取得した TokenBlueprint から Patch を組み立てる。
-// - BrandName は NameResolver で補完する。
+// TokenBlueprint: tbId -> Inventory Detail DTO
+// - GetByID で取得した TokenBlueprint から
+//   InventoryTokenBlueprintPatchDTO を組み立てる。
+// - BrandName は NameResolver で解決する。
 // ============================================================
 
-func (q *InventoryDetailQuery) GetTokenBlueprintPatchByID(ctx context.Context, tokenBlueprintID string) (*tbdom.Patch, error) {
+func (q *InventoryDetailQuery) GetTokenBlueprintPatchByID(
+	ctx context.Context,
+	tokenBlueprintID string,
+) (*querydto.InventoryTokenBlueprintPatchDTO, error) {
 	if q == nil {
 		return nil, errors.New("inventory detail query is nil")
 	}
+
 	if q.tbRepo == nil {
 		return nil, errors.New("tokenBlueprint repository is not configured")
 	}
@@ -54,31 +59,44 @@ func (q *InventoryDetailQuery) GetTokenBlueprintPatchByID(ctx context.Context, t
 		return nil, errors.New("tokenBlueprintId is required")
 	}
 
-	tb, err := q.tbRepo.GetByID(ctx, tbID)
+	tb, err := q.tbRepo.GetByID(
+		ctx,
+		tbID,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	if tb == nil {
 		return nil, errors.New("tokenBlueprint is nil")
 	}
 
-	patch := tokenBlueprintToPatch(tb)
+	brandName := ""
 
-	if patch.BrandID != "" && patch.BrandName == "" && q.nameResolver != nil {
-		brandName := q.nameResolver.ResolveBrandName(ctx, patch.BrandID)
-		if brandName != "" {
-			patch.BrandName = brandName
-		}
+	if tb.BrandID != "" &&
+		q.nameResolver != nil {
+
+		brandName =
+			q.nameResolver.ResolveBrandName(
+				ctx,
+				tb.BrandID,
+			)
 	}
 
-	return &patch, nil
+	return buildInventoryTokenBlueprintPatchDTO(
+		tb,
+		brandName,
+	), nil
 }
 
 // ============================================================
 // Detail: inventoryId -> DTO
 // ============================================================
 
-func (q *InventoryDetailQuery) GetDetailByID(ctx context.Context, inventoryID string) (*querydto.InventoryDetailDTO, error) {
+func (q *InventoryDetailQuery) GetDetailByID(
+	ctx context.Context,
+	inventoryID string,
+) (*querydto.InventoryDetailDTO, error) {
 	if q == nil || q.invRepo == nil {
 		return nil, errors.New("inventory detail query repositories are not configured")
 	}
@@ -88,7 +106,10 @@ func (q *InventoryDetailQuery) GetDetailByID(ctx context.Context, inventoryID st
 		return nil, errors.New("inventoryId is required")
 	}
 
-	inv, err := q.invRepo.GetByID(ctx, id)
+	inv, err := q.invRepo.GetByID(
+		ctx,
+		id,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -99,6 +120,7 @@ func (q *InventoryDetailQuery) GetDetailByID(ctx context.Context, inventoryID st
 	if pbID == "" {
 		return nil, errors.New("productBlueprintId is empty in inventory")
 	}
+
 	if tbID == "" {
 		return nil, errors.New("tokenBlueprintId is empty in inventory")
 	}
@@ -107,186 +129,336 @@ func (q *InventoryDetailQuery) GetDetailByID(ctx context.Context, inventoryID st
 		return nil, errors.New("productBlueprint repository is not configured")
 	}
 
-	pb, err := q.pbRepo.GetByID(ctx, pbID)
+	pb, err := q.pbRepo.GetByID(
+		ctx,
+		pbID,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	pbPatch := productBlueprintToPatch(pb)
+	productBrandName := ""
 
-	if pbPatch.BrandID != nil &&
-		*pbPatch.BrandID != "" &&
-		(pbPatch.BrandName == nil || *pbPatch.BrandName == "") &&
+	if pb.BrandID != "" &&
 		q.nameResolver != nil {
 
-		brandName := q.nameResolver.ResolveBrandName(ctx, *pbPatch.BrandID)
-		if brandName != "" {
-			pbPatch.BrandName = &brandName
-		}
+		productBrandName =
+			q.nameResolver.ResolveBrandName(
+				ctx,
+				pb.BrandID,
+			)
 	}
 
-	pbPatchPtr := &pbPatch
+	pbPatchPtr :=
+		buildInventoryProductBlueprintPatchDTO(
+			pb,
+			productBrandName,
+		)
 
-	var tbPatchPtr *tbdom.Patch
-	{
-		p, err := q.GetTokenBlueprintPatchByID(ctx, tbID)
-		if err != nil {
-			tbPatchPtr = nil
-		} else {
-			tbPatchPtr = p
-		}
+	tbPatchPtr, err :=
+		q.GetTokenBlueprintPatchByID(
+			ctx,
+			tbID,
+		)
+	if err != nil {
+		return nil, err
 	}
 
-	if pbPatchPtr.ModelRefs == nil || len(*pbPatchPtr.ModelRefs) == 0 {
+	if len(pb.ModelRefs) == 0 {
 		return nil, errors.New("productBlueprint.modelRefs is empty (fallback via inv.Stock is abolished)")
 	}
 
-	refs := append([]pbdom.ModelRef(nil), (*pbPatchPtr.ModelRefs)...)
+	refs := append(
+		[]pbdom.ModelRef(nil),
+		pb.ModelRefs...,
+	)
 
-	sort.Slice(refs, func(i, j int) bool {
-		return refs[i].DisplayOrder < refs[j].DisplayOrder
-	})
+	sort.Slice(
+		refs,
+		func(i, j int) bool {
+			return refs[i].DisplayOrder <
+				refs[j].DisplayOrder
+		},
+	)
 
-	orderedModelIDs := make([]string, 0, len(refs))
-	seen := map[string]struct{}{}
-	for _, r := range refs {
-		mid := r.ModelID
-		if mid == "" {
+	orderedModelIDs := make(
+		[]string,
+		0,
+		len(refs),
+	)
+
+	seen :=
+		map[string]struct{}{}
+
+	for _, ref := range refs {
+		modelID := ref.ModelID
+
+		if modelID == "" {
 			continue
 		}
-		if _, ok := seen[mid]; ok {
+
+		if _, exists := seen[modelID]; exists {
 			continue
 		}
-		seen[mid] = struct{}{}
-		orderedModelIDs = append(orderedModelIDs, mid)
+
+		seen[modelID] =
+			struct{}{}
+
+		orderedModelIDs =
+			append(
+				orderedModelIDs,
+				modelID,
+			)
 	}
 
 	if len(orderedModelIDs) == 0 {
 		return nil, errors.New("productBlueprint.modelRefs has no valid modelId")
 	}
 
-	rows := make([]querydto.InventoryDetailRowDTO, 0, len(orderedModelIDs))
+	rows := make(
+		[]querydto.InventoryDetailRowDTO,
+		0,
+		len(orderedModelIDs),
+	)
+
 	total := 0
 
-	for _, modelID0 := range orderedModelIDs {
-		modelID := modelID0
-		if modelID == "" {
-			continue
-		}
-
-		ms, ok := inv.Stock[modelID]
+	for _, modelID := range orderedModelIDs {
+		ms, ok :=
+			inv.Stock[modelID]
 
 		available := 0
+
 		if ok {
-			available = ms.Accumulation - ms.ReservedCount
+			available =
+				ms.Accumulation -
+					ms.ReservedCount
+
 			if available < 0 {
 				available = 0
 			}
 		}
 
-		attr := resolver.ModelResolved{}
+		attr :=
+			resolver.ModelResolved{}
+
 		if q.nameResolver != nil {
-			attr = q.nameResolver.ResolveModelResolved(ctx, modelID)
+			attr =
+				q.nameResolver.ResolveModelResolved(
+					ctx,
+					modelID,
+				)
 		}
 
-		mn := attr.ModelNumber
-		if mn == "" {
-			mn = modelID
-		}
-		if mn == "" {
-			mn = "-"
+		modelNumber :=
+			attr.ModelNumber
+
+		if modelNumber == "" {
+			modelNumber =
+				modelID
 		}
 
-		row := querydto.InventoryDetailRowDTO{
-			ModelID:     modelID,
-			Kind:        attr.Kind,
-			ModelNumber: mn,
-			Stock:       available,
+		if modelNumber == "" {
+			modelNumber =
+				"-"
 		}
+
+		row :=
+			querydto.InventoryDetailRowDTO{
+				ModelID:     modelID,
+				Kind:        attr.Kind,
+				ModelNumber: modelNumber,
+				Stock:       available,
+			}
 
 		if attr.Kind == "alcohol" {
-			row.VolumeValue = attr.VolumeValue
-			row.VolumeUnit = attr.VolumeUnit
+			row.VolumeValue =
+				attr.VolumeValue
+
+			row.VolumeUnit =
+				attr.VolumeUnit
 		} else {
-			size := attr.Size
-			color := attr.Color
+			size :=
+				attr.Size
+
+			color :=
+				attr.Color
 
 			if size == "" {
-				size = "-"
-			}
-			if color == "" {
-				color = "-"
+				size =
+					"-"
 			}
 
-			row.Size = size
-			row.Color = color
-			row.RGB = attr.RGB
+			if color == "" {
+				color =
+					"-"
+			}
+
+			row.Size =
+				size
+
+			row.Color =
+				color
+
+			row.RGB =
+				attr.RGB
 		}
 
-		rows = append(rows, row)
-		total += available
+		rows =
+			append(
+				rows,
+				row,
+			)
+
+		total +=
+			available
 	}
 
-	updated := inv.UpdatedAt
+	updated :=
+		inv.UpdatedAt
+
 	if updated.IsZero() {
-		updated = inv.CreatedAt
-	}
-	updatedAt := ""
-	if !updated.IsZero() {
-		updatedAt = updated.UTC().Format(time.RFC3339)
+		updated =
+			inv.CreatedAt
 	}
 
-	dto := &querydto.InventoryDetailDTO{
-		TokenBlueprintID:      tbID,
-		ProductBlueprintID:    pbID,
-		ProductBlueprintPatch: pbPatchPtr,
-		TokenBlueprintPatch:   tbPatchPtr,
-		Rows:                  rows,
-		TotalStock:            total,
-		UpdatedAt:             updatedAt,
+	updatedAt := ""
+
+	if !updated.IsZero() {
+		updatedAt =
+			updated.UTC().Format(
+				time.RFC3339,
+			)
 	}
+
+	dto :=
+		&querydto.InventoryDetailDTO{
+			InventoryID: id,
+
+			TokenBlueprintID:   tbID,
+			ProductBlueprintID: pbID,
+
+			ProductBlueprintPatch: pbPatchPtr,
+
+			TokenBlueprintPatch: tbPatchPtr,
+
+			Rows: rows,
+
+			TotalStock: total,
+
+			UpdatedAt: updatedAt,
+		}
 
 	return dto, nil
 }
 
-func productBlueprintToPatch(pb pbdom.ProductBlueprint) pbdom.Patch {
-	productName := pb.ProductName
-	description := pb.Description
-	brandID := pb.BrandID
-	companyID := pb.CompanyID
-	category := pb.ProductBlueprintCategory
-	categoryFields := pb.CategoryFields
-	productIDTag := pb.ProductIdTag
-	assigneeID := pb.AssigneeID
-	modelRefs := append([]pbdom.ModelRef(nil), pb.ModelRefs...)
+// ============================================================
+// ProductBlueprint -> Inventory Detail DTO
+// ============================================================
 
-	return pbdom.Patch{
-		ProductName:              &productName,
-		Description:              &description,
-		BrandID:                  &brandID,
-		CompanyID:                &companyID,
-		ProductBlueprintCategory: &category,
-		CategoryFields:           &categoryFields,
-		ProductIdTag:             &productIDTag,
-		AssigneeID:               &assigneeID,
-		ModelRefs:                &modelRefs,
+func buildInventoryProductBlueprintPatchDTO(
+	productBlueprint pbdom.ProductBlueprint,
+	brandName string,
+) *querydto.InventoryProductBlueprintPatchDTO {
+	modelRefs := make(
+		[]querydto.InventoryProductBlueprintModelRefDTO,
+		0,
+		len(productBlueprint.ModelRefs),
+	)
+
+	for _, modelRef := range productBlueprint.ModelRefs {
+
+		modelRefs =
+			append(
+				modelRefs,
+				querydto.InventoryProductBlueprintModelRefDTO{
+					ModelID: modelRef.ModelID,
+
+					DisplayOrder: modelRef.DisplayOrder,
+				},
+			)
+	}
+
+	category :=
+		productBlueprint.ProductBlueprintCategory
+
+	return &querydto.InventoryProductBlueprintPatchDTO{
+		ProductName: productBlueprint.ProductName,
+
+		Description: productBlueprint.Description,
+
+		BrandID: productBlueprint.BrandID,
+
+		BrandName: brandName,
+
+		CompanyID: productBlueprint.CompanyID,
+
+		ProductBlueprintCategory: querydto.InventoryProductBlueprintCategoryDTO{
+			ID: category.ID,
+
+			Code: category.Code,
+
+			NameJa: category.NameJa,
+
+			NameEn: category.NameEn,
+
+			Kind: string(
+				category.Kind,
+			),
+
+			Path: append(
+				[]string(nil),
+				category.Path...,
+			),
+		},
+
+		CategoryFields: map[string]any(
+			productBlueprint.CategoryFields,
+		),
+
+		ProductIDTag: querydto.InventoryProductIDTagDTO{
+			Type: string(
+				productBlueprint.ProductIdTag.Type,
+			),
+		},
+
+		AssigneeID: productBlueprint.AssigneeID,
+
+		ModelRefs: modelRefs,
 	}
 }
 
-func tokenBlueprintToPatch(tb *tbdom.TokenBlueprint) tbdom.Patch {
-	if tb == nil {
-		return tbdom.Patch{}
+// ============================================================
+// TokenBlueprint -> Inventory Detail DTO
+// ============================================================
+
+func buildInventoryTokenBlueprintPatchDTO(
+	tokenBlueprint *tbdom.TokenBlueprint,
+	brandName string,
+) *querydto.InventoryTokenBlueprintPatchDTO {
+	if tokenBlueprint == nil {
+		return nil
 	}
 
-	return tbdom.Patch{
-		ID:          tb.ID,
-		TokenName:   tb.Name,
-		Symbol:      tb.Symbol,
-		BrandID:     tb.BrandID,
-		CompanyID:   tb.CompanyID,
-		Description: tb.Description,
-		Minted:      tb.Minted,
-		MetadataURI: tb.MetadataURI,
-		IconURL:     tb.IconURL,
+	return &querydto.InventoryTokenBlueprintPatchDTO{
+		ID: tokenBlueprint.ID,
+
+		TokenName: tokenBlueprint.Name,
+
+		Symbol: tokenBlueprint.Symbol,
+
+		BrandID: tokenBlueprint.BrandID,
+
+		BrandName: brandName,
+
+		CompanyID: tokenBlueprint.CompanyID,
+
+		Description: tokenBlueprint.Description,
+
+		Minted: tokenBlueprint.Minted,
+
+		MetadataURI: tokenBlueprint.MetadataURI,
+
+		IconURL: tokenBlueprint.IconURL,
 	}
 }

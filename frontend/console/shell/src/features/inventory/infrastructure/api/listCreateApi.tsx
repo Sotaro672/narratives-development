@@ -1,53 +1,87 @@
-// frontend/console/inventory/src/infrastructure/api/listCreateApi.tsx
+// frontend/console/shell/src/features/inventory/infrastructure/api/listCreateApi.tsx
 
-// ✅ Shared console API base (修正案A)
 import { API_BASE } from "../../../../shared/http/apiBase";
 
-// ✅ Shared auth headers (shell authService を委譲)
 import { getAuthHeadersOrThrow } from "../../../../shared/http/authHeaders";
+
+import type {
+  ListCreateDTO,
+} from "../http/listCreateRepositoryHTTP.types";
 
 // ---------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------
-async function requestJsonOrThrow(path: string): Promise<any> {
-  const headers = await getAuthHeadersOrThrow();
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "GET",
-    headers,
-  });
+async function requestJsonOrThrow<T>(
+  path: string,
+): Promise<T> {
+  const headers =
+    await getAuthHeadersOrThrow();
+
+  const res =
+    await fetch(
+      `${API_BASE}${path}`,
+      {
+        method: "GET",
+        headers,
+      },
+    );
 
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`request failed: ${res.status} ${res.statusText} ${text}`);
+    const text =
+      await res
+        .text()
+        .catch(() => "");
+
+    throw new Error(
+      `request failed: ${res.status} ${res.statusText} ${text}`,
+    );
   }
 
-  return await res.json();
+  return await res.json() as T;
 }
 
-function s(v: unknown): string {
-  return String(v ?? "").trim();
+function s(
+  value: unknown,
+): string {
+  return String(
+    value ?? "",
+  ).trim();
 }
 
 // ---------------------------------------------------------
-// ListCreate API (raw JSON)
+// ListCreate API
 // ---------------------------------------------------------
 
 /**
  * GET
  * - /inventory/list-create/:inventoryId
  *
- * ✅ pbId/tbId ルートは廃止
+ * pbId/tbId ルートは廃止。
+ * Backend BFF の ListCreateDTO をそのまま正とする。
  */
-export async function getListCreateRaw(input: {
-  inventoryId?: string;
-}): Promise<any> {
-  const inventoryId = s(input.inventoryId);
+export async function getListCreateRaw(
+  input: {
+    inventoryId?: string;
+  },
+): Promise<ListCreateDTO> {
+  const inventoryId =
+    s(
+      input.inventoryId,
+    );
 
   if (!inventoryId) {
-    throw new Error("missing inventoryId");
+    throw new Error(
+      "missing inventoryId",
+    );
   }
 
-  const path = `/inventory/list-create/${encodeURIComponent(inventoryId)}`;
-  return await requestJsonOrThrow(path);
+  const path =
+    `/inventory/list-create/${encodeURIComponent(
+      inventoryId,
+    )}`;
+
+  return await requestJsonOrThrow<ListCreateDTO>(
+    path,
+  );
 }

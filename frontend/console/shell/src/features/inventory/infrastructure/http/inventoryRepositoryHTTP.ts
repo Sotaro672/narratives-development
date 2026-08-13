@@ -1,4 +1,4 @@
-// frontend/console/inventory/src/infrastructure/http/inventoryRepositoryHTTP.ts
+// frontend/console/shell/src/features/inventory/infrastructure/http/inventoryRepositoryHTTP.ts
 
 export type {
   InventoryListRowDTO,
@@ -13,7 +13,3 @@ export type {
   ListCreatePriceRowDTO,
   ListCreateDTO,
 } from "./listCreateRepositoryHTTP.types";
-
-export {
-  fetchInventoryDetailDTO,
-} from "./inventoryRepositoryHTTP.fetchers";
