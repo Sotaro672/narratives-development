@@ -6,7 +6,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import type {
   BrandSummary,
   MintFundingEstimate,
-  MintTaskProgress,
   TokenBlueprintSummary,
 } from "../../application/port/MintRequestRepository";
 
@@ -20,7 +19,6 @@ import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
 import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
 import type {
-  MintModelMetaEntryDTO,
   ProductBlueprintPatchDTO,
 } from "../../infrastructure/dto/mintRequestLocal.dto";
 
@@ -68,16 +66,6 @@ export function useMintRequestDetail() {
 
   const [mintRequestRow, setMintRequestRow] =
     React.useState<MintRequestManagementRowDTO | null>(null);
-
-  /**
-   * 現行GET /mint/requests responseには
-   * mintProgressが存在しない。
-   *
-   * mintDetail.tsxとの互換性維持のため、
-   * 現時点では常にnullとして返す。
-   */
-  const [mintProgress] =
-    React.useState<MintTaskProgress | null>(null);
 
   const [productBlueprintId, setProductBlueprintId] =
     React.useState("");
@@ -142,8 +130,8 @@ export function useMintRequestDetail() {
    * 画面全体の詳細情報を再取得する。
    *
    * 初回表示、検品完了後、Mint申請直後など、
-   * inspection / mint request / productionをまとめて
-   * 最新化したい場合にのみ使用する。
+   * inspection / mint requestをまとめて
+   * 最新化したい場合に使用する。
    */
   const reloadDetail = React.useCallback(async () => {
     if (!productionId) {
@@ -157,14 +145,14 @@ export function useMintRequestDetail() {
 
     setInspectionBatch(detail.inspectionBatch);
     setMintRequestRow(detail.mintRequestRow);
-    setProductBlueprintId(detail.productBlueprintId || "");
+    setProductBlueprintId(detail.productBlueprintId);
   }, [mintRequestRepo, productionId]);
 
   /**
    * Mint状態だけを再取得する。
    *
    * ミント中の周期処理ではこれだけを使用し、
-   * production / inspectionを再取得しない。
+   * inspectionを再取得しない。
    */
   const reloadMintStatus = React.useCallback(async () => {
     if (!productionId) {
@@ -202,7 +190,7 @@ export function useMintRequestDetail() {
 
         setInspectionBatch(detail.inspectionBatch);
         setMintRequestRow(detail.mintRequestRow);
-        setProductBlueprintId(detail.productBlueprintId || "");
+        setProductBlueprintId(detail.productBlueprintId);
       } catch (error: unknown) {
         if (!cancelled) {
           setError(
@@ -278,28 +266,10 @@ export function useMintRequestDetail() {
 
     /**
      * Backend responseのmodelMetaをそのまま正として使う。
-     *
-     * modelNumber / size / colorName / rgb /
-     * volume / volumeUnitを落とさず保持し、
-     * 値側にもmodelIdを含める。
+     * frontend側ではmodelMetaを再構築しない。
      */
-    const modelMeta = Object.entries(
-      inspectionBatch.modelMeta ?? {},
-    ).reduce<Record<string, MintModelMetaEntryDTO>>(
-      (result, [modelId, meta]) => {
-        result[modelId] = {
-          ...meta,
-          modelId,
-        };
-
-        return result;
-      },
-      {},
-    );
-
     return {
       ...inspectionBatch,
-      modelMeta,
       productBlueprintPatch: pbPatch ?? null,
     };
   }, [inspectionBatch, pbPatch]);
@@ -312,9 +282,14 @@ export function useMintRequestDetail() {
     batch: batchForInspectionCard,
   });
 
+  /**
+   * BackendのGET /mint/requests responseの
+   * mintQuantityを正とする。
+   *
+   * row未取得時のみ画面初期値として0を使用する。
+   */
   const totalMintQuantity =
-    mintRequestRow?.mintQuantity ??
-    inspectionCardData.totalPassed;
+    mintRequestRow?.mintQuantity ?? 0;
 
   const productBlueprintCardView = React.useMemo(
     () => buildProductBlueprintCardView(pbPatch),
@@ -380,34 +355,23 @@ export function useMintRequestDetail() {
 
   /**
    * GET /mint/requests responseのmintStatusを
-   * Mint状態の正とする。
+   * Mint状態の唯一の正とする。
+   *
+   * frontendではtrim / uppercaseなどの
+   * 再正規化を行わない。
    */
-  const mintStatus = React.useMemo(
-    () =>
-      String(mintRequestRow?.mintStatus ?? "")
-        .trim()
-        .toUpperCase(),
-    [mintRequestRow?.mintStatus],
-  );
+  const mintStatus =
+    mintRequestRow?.mintStatus ?? null;
 
   /**
    * BackendはMintが存在しないProductionについても
    * management rowを返し得るため、
    * rowの存在そのものではhasMintを判定しない。
+   *
+   * mintStatusの有無を正とする。
    */
-  const hasMint = React.useMemo(() => {
-    return Boolean(
-      mintStatus ||
-        mintRequestRow?.tokenBlueprintId ||
-        mintRequestRow?.requestedBy ||
-        mintRequestRow?.mintedAt,
-    );
-  }, [
-    mintStatus,
-    mintRequestRow?.tokenBlueprintId,
-    mintRequestRow?.requestedBy,
-    mintRequestRow?.mintedAt,
-  ]);
+  const hasMint =
+    Boolean(mintStatus);
 
   /**
    * 非同期Mint処理中としてポーリングする状態。
@@ -420,15 +384,19 @@ export function useMintRequestDetail() {
   const isMintCompleted =
     mintStatus === "MINTED";
 
+  /**
+   * Backendが解決済みの表示名をそのまま使用する。
+   * memberIdへのfallbackは行わない。
+   */
   const createdByName =
-    mintRequestRow?.createdByName ||
-    mintRequestRow?.createdBy ||
-    null;
+    mintRequestRow?.createdByName ?? null;
 
+  /**
+   * Backendが解決済みの表示名をそのまま使用する。
+   * memberIdへのfallbackは行わない。
+   */
   const requestedByName =
-    mintRequestRow?.requestedByName ||
-    mintRequestRow?.requestedBy ||
-    null;
+    mintRequestRow?.requestedByName ?? null;
 
   const mintRequestedTokenBlueprintId =
     mintRequestRow?.tokenBlueprintId ?? "";
@@ -449,18 +417,10 @@ export function useMintRequestDetail() {
     isMintProcessing;
 
   /**
-   * 現行GET /mint/requests responseには
-   * mintProgressが含まれないため非表示とする。
-   */
-  const showMintProgress = false;
-
-  /**
    * Mint状態だけを3秒ごとに再取得する。
    *
    * GET /mint/requestsのみを呼び、
-   * GET /productions/{productionId} と
-   * GET /mint/inspections/{productionId} は
-   * 周期的に再取得しない。
+   * inspection情報は周期的に再取得しない。
    */
   React.useEffect(() => {
     if (!productionId || !isMintProcessing) {
@@ -839,7 +799,7 @@ export function useMintRequestDetail() {
   const mintCreatedAtLabel = "（未登録）";
 
   const mintCreatedByLabel =
-    createdByName ||
+    createdByName ??
     "（不明）";
 
   const mintMintedAtLabel =
@@ -876,8 +836,6 @@ export function useMintRequestDetail() {
     showMintButton: showMintControls,
     showBrandSelectorCard: showMintControls,
     showTokenSelectorCard: showMintControls,
-    mintProgress,
-    showMintProgress,
     showCompleteInspectionButton,
     isCompletingInspection,
     handleCompleteInspection,

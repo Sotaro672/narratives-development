@@ -3,10 +3,8 @@
 import { API_BASE } from "../../../../../shared/http/apiBase";
 import { getAuthJsonHeadersOrThrow } from "../../../../../shared/http/authHeaders";
 
-import type { MintDTO } from "../../dto/mint.dto";
 import type {
   MintFundingEstimate,
-  MintTaskProgress,
 } from "../../../application/port/MintRequestRepository";
 import type { MintRequestManagementRowDTO } from "../../dto/mintRequestManagementRow";
 import type { MintStatus } from "../../../../../shared/types/mints";
@@ -50,9 +48,15 @@ function buildMintRequestsUrl(
   view: MintRequestsView,
 ): string {
   const query = new URLSearchParams({
-    productionIds: productionIds.join(","),
     view,
   });
+
+  if (productionIds.length > 0) {
+    query.set(
+      "productionIds",
+      productionIds.join(","),
+    );
+  }
 
   return `${API_BASE}/mint/requests?${query.toString()}`;
 }
@@ -83,35 +87,8 @@ async function readTextSafe(response: Response): Promise<string> {
 
 function getProductionId(
   row: MintRequestManagementRowDTO,
-): string | null {
-  const productionId = String(
-    (row as Record<string, unknown>).productionId ?? "",
-  ).trim();
-
-  return productionId || null;
-}
-
-function toFiniteNumber(value: unknown, fallback = 0): number {
-  const numberValue = Number(value);
-  return Number.isFinite(numberValue) ? numberValue : fallback;
-}
-
-function toNonNegativeInteger(value: unknown): number {
-  return Math.max(0, Math.trunc(toFiniteNumber(value, 0)));
-}
-
-function clampPercentage(value: unknown): number {
-  const percentage = toFiniteNumber(value, 0);
-
-  if (percentage <= 0) {
-    return 0;
-  }
-
-  if (percentage >= 100) {
-    return 100;
-  }
-
-  return Math.trunc(percentage);
+): string {
+  return row.productionId;
 }
 
 function normalizeMintStatus(value: unknown): MintStatus | null {
@@ -130,39 +107,6 @@ function normalizeMintStatus(value: unknown): MintStatus | null {
     default:
       return null;
   }
-}
-
-function normalizeMintProgress(raw: unknown): MintTaskProgress | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return null;
-  }
-
-  const value = raw as Record<string, unknown>;
-
-  const total = toNonNegativeInteger(value.total);
-  const pending = toNonNegativeInteger(value.pending);
-  const minting = toNonNegativeInteger(value.minting);
-  const minted = toNonNegativeInteger(value.minted);
-  const failedRetryable = toNonNegativeInteger(value.failedRetryable);
-  const failedFatal = toNonNegativeInteger(value.failedFatal);
-
-  const calculatedPercentage =
-    total > 0
-      ? Math.trunc((Math.min(minted, total) / total) * 100)
-      : 0;
-
-  return {
-    total,
-    pending,
-    minting,
-    minted,
-    failedRetryable,
-    failedFatal,
-    percentage:
-      value.percentage === undefined
-        ? clampPercentage(calculatedPercentage)
-        : clampPercentage(value.percentage),
-  };
 }
 
 function normalizeMintQueuedResponse(
@@ -194,440 +138,6 @@ function normalizeMintQueuedResponse(
   };
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
-}
-
-function requiredStringValue(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const normalized = value.trim();
-  return normalized || null;
-}
-
-function nullableStringValue(value: unknown): string | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const normalized = value.trim();
-  return normalized || null;
-}
-
-function requiredFiniteNumber(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return null;
-  }
-
-  return value;
-}
-
-function requiredBoolean(value: unknown): boolean | null {
-  return typeof value === "boolean" ? value : null;
-}
-
-function normalizeMintFundingEstimate(
-  raw: unknown,
-): MintFundingEstimate | null {
-  const value = asRecord(raw);
-  if (!value) {
-    return null;
-  }
-
-  const reserve = asRecord(value.reserve);
-  const feePayer = asRecord(value.feePayer);
-  const resources = asRecord(value.resources);
-  const estimate = asRecord(value.estimate);
-
-  if (!reserve || !feePayer || !resources || !estimate) {
-    return null;
-  }
-
-  const cluster = requiredStringValue(value.cluster);
-  const mintQuantity = requiredFiniteNumber(value.mintQuantity);
-
-  const reserveAddress = requiredStringValue(reserve.address);
-  const reserveBalanceLamports = requiredStringValue(
-    reserve.balanceLamports,
-  );
-  const reserveBalanceSol = requiredFiniteNumber(reserve.balanceSol);
-  const reserveMinimumLamports = requiredStringValue(
-    reserve.minimumLamports,
-  );
-  const reserveMinimumSol = requiredFiniteNumber(reserve.minimumSol);
-
-  const feePayerAddress = requiredStringValue(feePayer.address);
-  const feePayerBalanceLamports = requiredStringValue(
-    feePayer.balanceLamports,
-  );
-  const feePayerBalanceSol = requiredFiniteNumber(
-    feePayer.balanceSol,
-  );
-  const feePayerTargetLamports = requiredStringValue(
-    feePayer.targetLamports,
-  );
-  const feePayerTargetSol = requiredFiniteNumber(
-    feePayer.targetSol,
-  );
-
-  const sharedMerkleTreeExists = requiredBoolean(
-    resources.sharedMerkleTreeExists,
-  );
-  const coreCollectionExists = requiredBoolean(
-    resources.coreCollectionExists,
-  );
-
-  if (
-    !cluster ||
-    mintQuantity === null ||
-    !Number.isSafeInteger(mintQuantity) ||
-    mintQuantity <= 0 ||
-    !reserveAddress ||
-    !reserveBalanceLamports ||
-    reserveBalanceSol === null ||
-    !reserveMinimumLamports ||
-    reserveMinimumSol === null ||
-    !feePayerAddress ||
-    !feePayerBalanceLamports ||
-    feePayerBalanceSol === null ||
-    !feePayerTargetLamports ||
-    feePayerTargetSol === null ||
-    sharedMerkleTreeExists === null ||
-    coreCollectionExists === null
-  ) {
-    return null;
-  }
-
-  const mintTransactionFeePerItemLamports = requiredStringValue(
-    estimate.mintTransactionFeePerItemLamports,
-  );
-  const mintTransactionFeePerItemSol = requiredFiniteNumber(
-    estimate.mintTransactionFeePerItemSol,
-  );
-  const mintTransactionFeeTotalLamports = requiredStringValue(
-    estimate.mintTransactionFeeTotalLamports,
-  );
-  const mintTransactionFeeTotalSol = requiredFiniteNumber(
-    estimate.mintTransactionFeeTotalSol,
-  );
-
-  const merkleTreeCreationTransactionFeeLamports =
-    requiredStringValue(
-      estimate.merkleTreeCreationTransactionFeeLamports,
-    );
-  const merkleTreeCreationTransactionFeeSol = requiredFiniteNumber(
-    estimate.merkleTreeCreationTransactionFeeSol,
-  );
-  const merkleTreeCreationRentLamports = requiredStringValue(
-    estimate.merkleTreeCreationRentLamports,
-  );
-  const merkleTreeCreationRentSol = requiredFiniteNumber(
-    estimate.merkleTreeCreationRentSol,
-  );
-  const merkleTreeCreationCostLamports = requiredStringValue(
-    estimate.merkleTreeCreationCostLamports,
-  );
-  const merkleTreeCreationCostSol = requiredFiniteNumber(
-    estimate.merkleTreeCreationCostSol,
-  );
-
-  const coreCollectionCreationTransactionFeeLamports =
-    requiredStringValue(
-      estimate.coreCollectionCreationTransactionFeeLamports,
-    );
-  const coreCollectionCreationTransactionFeeSol =
-    requiredFiniteNumber(
-      estimate.coreCollectionCreationTransactionFeeSol,
-    );
-  const coreCollectionCreationRentLamports = requiredStringValue(
-    estimate.coreCollectionCreationRentLamports,
-  );
-  const coreCollectionCreationRentSol = requiredFiniteNumber(
-    estimate.coreCollectionCreationRentSol,
-  );
-  const coreCollectionCreationCostLamports = requiredStringValue(
-    estimate.coreCollectionCreationCostLamports,
-  );
-  const coreCollectionCreationCostSol = requiredFiniteNumber(
-    estimate.coreCollectionCreationCostSol,
-  );
-
-  const provisioningCostLamports = requiredStringValue(
-    estimate.provisioningCostLamports,
-  );
-  const provisioningCostSol = requiredFiniteNumber(
-    estimate.provisioningCostSol,
-  );
-
-  const estimatedNetworkCostLamports = requiredStringValue(
-    estimate.estimatedNetworkCostLamports,
-  );
-  const estimatedNetworkCostSol = requiredFiniteNumber(
-    estimate.estimatedNetworkCostSol,
-  );
-
-  const requiredFeePayerBalanceLamports = requiredStringValue(
-    estimate.requiredFeePayerBalanceLamports,
-  );
-  const requiredFeePayerBalanceSol = requiredFiniteNumber(
-    estimate.requiredFeePayerBalanceSol,
-  );
-
-  const estimatedReserveTopUpLamports = requiredStringValue(
-    estimate.estimatedReserveTopUpLamports,
-  );
-  const estimatedReserveTopUpSol = requiredFiniteNumber(
-    estimate.estimatedReserveTopUpSol,
-  );
-
-  const reserveTransferFeeBufferLamports = requiredStringValue(
-    estimate.reserveTransferFeeBufferLamports,
-  );
-  const reserveTransferFeeBufferSol = requiredFiniteNumber(
-    estimate.reserveTransferFeeBufferSol,
-  );
-
-  const requiredReserveForTopUpLamports = requiredStringValue(
-    estimate.requiredReserveForTopUpLamports,
-  );
-  const requiredReserveForTopUpSol = requiredFiniteNumber(
-    estimate.requiredReserveForTopUpSol,
-  );
-  const sufficient = requiredBoolean(estimate.sufficient);
-
-  if (
-    !mintTransactionFeePerItemLamports ||
-    mintTransactionFeePerItemSol === null ||
-    !mintTransactionFeeTotalLamports ||
-    mintTransactionFeeTotalSol === null ||
-    !merkleTreeCreationTransactionFeeLamports ||
-    merkleTreeCreationTransactionFeeSol === null ||
-    !merkleTreeCreationRentLamports ||
-    merkleTreeCreationRentSol === null ||
-    !merkleTreeCreationCostLamports ||
-    merkleTreeCreationCostSol === null ||
-    !coreCollectionCreationTransactionFeeLamports ||
-    coreCollectionCreationTransactionFeeSol === null ||
-    !coreCollectionCreationRentLamports ||
-    coreCollectionCreationRentSol === null ||
-    !coreCollectionCreationCostLamports ||
-    coreCollectionCreationCostSol === null ||
-    !provisioningCostLamports ||
-    provisioningCostSol === null ||
-    !estimatedNetworkCostLamports ||
-    estimatedNetworkCostSol === null ||
-    !requiredFeePayerBalanceLamports ||
-    requiredFeePayerBalanceSol === null ||
-    !estimatedReserveTopUpLamports ||
-    estimatedReserveTopUpSol === null ||
-    !reserveTransferFeeBufferLamports ||
-    reserveTransferFeeBufferSol === null ||
-    !requiredReserveForTopUpLamports ||
-    requiredReserveForTopUpSol === null ||
-    sufficient === null
-  ) {
-    return null;
-  }
-
-  const sharedMerkleTreeAddress = nullableStringValue(
-    resources.sharedMerkleTreeAddress,
-  );
-  const coreCollectionAddress = nullableStringValue(
-    resources.coreCollectionAddress,
-  );
-
-  if (sharedMerkleTreeExists && !sharedMerkleTreeAddress) {
-    return null;
-  }
-
-  if (coreCollectionExists && !coreCollectionAddress) {
-    return null;
-  }
-
-  return {
-    cluster,
-    mintQuantity,
-    reserve: {
-      address: reserveAddress,
-      balanceLamports: reserveBalanceLamports,
-      balanceSol: reserveBalanceSol,
-      minimumLamports: reserveMinimumLamports,
-      minimumSol: reserveMinimumSol,
-    },
-    feePayer: {
-      address: feePayerAddress,
-      balanceLamports: feePayerBalanceLamports,
-      balanceSol: feePayerBalanceSol,
-      targetLamports: feePayerTargetLamports,
-      targetSol: feePayerTargetSol,
-    },
-    resources: {
-      sharedMerkleTreeExists,
-      sharedMerkleTreeAddress,
-      coreCollectionExists,
-      coreCollectionAddress,
-    },
-    estimate: {
-      mintTransactionFeePerItemLamports,
-      mintTransactionFeePerItemSol,
-      mintTransactionFeeTotalLamports,
-      mintTransactionFeeTotalSol,
-      merkleTreeCreationTransactionFeeLamports,
-      merkleTreeCreationTransactionFeeSol,
-      merkleTreeCreationRentLamports,
-      merkleTreeCreationRentSol,
-      merkleTreeCreationCostLamports,
-      merkleTreeCreationCostSol,
-      coreCollectionCreationTransactionFeeLamports,
-      coreCollectionCreationTransactionFeeSol,
-      coreCollectionCreationRentLamports,
-      coreCollectionCreationRentSol,
-      coreCollectionCreationCostLamports,
-      coreCollectionCreationCostSol,
-      provisioningCostLamports,
-      provisioningCostSol,
-      estimatedNetworkCostLamports,
-      estimatedNetworkCostSol,
-      requiredFeePayerBalanceLamports,
-      requiredFeePayerBalanceSol,
-      estimatedReserveTopUpLamports,
-      estimatedReserveTopUpSol,
-      reserveTransferFeeBufferLamports,
-      reserveTransferFeeBufferSol,
-      requiredReserveForTopUpLamports,
-      requiredReserveForTopUpSol,
-      sufficient,
-    },
-  };
-}
-
-/**
- * 現行BackendのGET /mint/requests responseを、
- * 既存のMintInfo取得経路と互換性のあるMintDTOへ変換する。
- *
- * Backendの正:
- * - productionId
- * - mintStatus
- * - tokenBlueprintId
- * - createdBy / createdByName
- * - requestedBy / requestedByName
- * - mintedAt
- *
- * frontendではproductionIdをMintのidとして扱う。
- */
-function mergeMintDTOFromRow(
-  row: MintRequestManagementRowDTO,
-): MintDTO | null {
-  const rawRow = row as Record<string, any>;
-
-  const mintRaw =
-    rawRow.mint &&
-    typeof rawRow.mint === "object" &&
-    !Array.isArray(rawRow.mint)
-      ? rawRow.mint
-      : null;
-
-  const status = normalizeMintStatus(
-    rawRow.mintStatus ??
-      mintRaw?.status ??
-      rawRow.status,
-  );
-
-  if (!status) {
-    return null;
-  }
-
-  const productionId = String(
-    rawRow.productionId ?? mintRaw?.id ?? "",
-  ).trim();
-
-  if (!productionId) {
-    return null;
-  }
-
-  const mintProgress =
-    normalizeMintProgress(rawRow.mintProgress) ??
-    normalizeMintProgress(mintRaw?.mintProgress);
-
-  const merged = {
-    ...(mintRaw ?? rawRow),
-
-    id: productionId,
-    status,
-
-    brandId:
-      mintRaw?.brandId ??
-      rawRow.brandId ??
-      "",
-
-    tokenBlueprintId:
-      mintRaw?.tokenBlueprintId ??
-      rawRow.tokenBlueprintId ??
-      "",
-
-    products:
-      mintRaw?.products ??
-      rawRow.products ??
-      [],
-
-    createdAt:
-      mintRaw?.createdAt ??
-      rawRow.createdAt ??
-      "",
-
-    createdBy:
-      mintRaw?.createdBy ??
-      rawRow.createdBy ??
-      "",
-
-    createdByName:
-      mintRaw?.createdByName ??
-      rawRow.createdByName ??
-      null,
-
-    requestedBy:
-      mintRaw?.requestedBy ??
-      rawRow.requestedBy ??
-      null,
-
-    requestedByName:
-      mintRaw?.requestedByName ??
-      rawRow.requestedByName ??
-      null,
-
-    mintedAt:
-      mintRaw?.mintedAt ??
-      rawRow.mintedAt ??
-      null,
-
-    scheduledBurnDate:
-      mintRaw?.scheduledBurnDate ??
-      rawRow.scheduledBurnDate ??
-      null,
-
-    onChainTxSignature:
-      mintRaw?.onChainTxSignature ??
-      rawRow.onChainTxSignature ??
-      mintRaw?.txSignature ??
-      rawRow.txSignature ??
-      null,
-
-    mintProgress,
-  };
-
-  return merged as MintDTO;
-}
-
 // ===============================
 // GET: /mint/requests
 // ===============================
@@ -636,8 +146,10 @@ function mergeMintDTOFromRow(
  * GET /mint/requestsの唯一の取得処理。
  *
  * - productionIdsは空文字と重複を除去する
+ * - productionIdsが空の場合はBackend側で現在companyの全件を取得する
  * - Backend responseは配列を正とする
  * - items / rows / dataなどの旧レスポンス形状は吸収しない
+ * - Backend BFFのfield名と型をそのまま正とする
  * - HTTPエラー、空レスポンス、不正JSON、不正なレスポンス型を区別する
  */
 export async function fetchMintRequestRowsHTTP(
@@ -645,10 +157,6 @@ export async function fetchMintRequestRowsHTTP(
   view: MintRequestsView = "management",
 ): Promise<MintRequestManagementRowDTO[]> {
   const ids = uniqStrings(productionIds);
-
-  if (ids.length === 0) {
-    return [];
-  }
 
   const authHeaders = await getAuthJsonHeadersOrThrow();
   const url = buildMintRequestsUrl(ids, view);
@@ -717,7 +225,7 @@ export async function fetchMintRequestRowsHTTP(
 /**
  * productionIdでGET /mint/requestsのmanagement rowを1件取得する。
  *
- * Mint detail右カラムではこのresponseを正として使用する。
+ * Mint detailではこのresponseを正として使用する。
  */
 export async function fetchMintRequestRowByProductionIdHTTP(
   productionId: string,
@@ -746,33 +254,6 @@ export async function fetchMintRequestRowByProductionIdHTTP(
 }
 
 // ===============================
-// GET: MintDTO
-// ===============================
-
-/**
- * productionIdで1件のMintDTOを取得する。
- *
- * 現行BackendではGET /mint/requestsのmintStatusを正とする。
- * productionIdをMintのidとして扱う。
- *
- * Mint detailをmanagement row直接参照へ移行するまでの
- * 既存Application層との互換用。
- */
-export async function fetchMintByProductionIdHTTP(
-  productionId: string,
-): Promise<MintDTO | null> {
-  const row = await fetchMintRequestRowByProductionIdHTTP(
-    productionId,
-  );
-
-  if (!row) {
-    return null;
-  }
-
-  return mergeMintDTOFromRow(row);
-}
-
-// ===============================
 // GET: /mint/funding-estimate
 // ===============================
 
@@ -782,6 +263,9 @@ export async function fetchMintByProductionIdHTTP(
  *
  * metadataUriはFrontendから渡さない。
  * mintQuantity、Brand Wallet、TokenBlueprint情報はBackend側で解決する。
+ *
+ * Backend BFFのresponseを正とし、
+ * Frontendではfieldの再構築や型変換を行わない。
  */
 export async function fetchMintFundingEstimateHTTP(
   productionId: string,
@@ -857,15 +341,7 @@ export async function fetchMintFundingEstimateHTTP(
     );
   }
 
-  const estimate = normalizeMintFundingEstimate(payload);
-
-  if (!estimate) {
-    throw new Error(
-      "Failed to fetch mint funding estimate: response shape is invalid",
-    );
-  }
-
-  return estimate;
+  return payload as MintFundingEstimate;
 }
 
 // ===============================

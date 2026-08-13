@@ -1,14 +1,5 @@
 // frontend/console/shell/src/features/mintRequest/presentation/viewModel/mintRequestDetailViewModel.ts
 
-import {
-  safeDateLabelJa,
-  safeDateTimeLabelJa,
-} from "../../../../shared/util/dateJa";
-
-import type {
-  MintInfo,
-} from "../../application/mapper/mintInfoMapper";
-
 import type {
   BrandSummary,
   TokenBlueprintSummary,
@@ -53,23 +44,6 @@ export type BuildTokenBlueprintCardVmInput = {
     BrandSummary[];
 };
 
-export type MintLabelsViewModel = {
-  mintCreatedAtLabel:
-    string;
-
-  mintCreatedByLabel:
-    string;
-
-  mintScheduledBurnDateLabel:
-    string;
-
-  mintMintedAtLabel:
-    string;
-
-  onChainTxSignature:
-    string;
-};
-
 export function buildProductBlueprintCardView(
   pbPatch:
     | ProductBlueprintPatchDTO
@@ -89,8 +63,7 @@ export function buildProductBlueprintCardView(
       undefined,
 
     productBlueprintCategory:
-      pbPatch
-        .productBlueprintCategory ??
+      pbPatch.productBlueprintCategory ??
       null,
   };
 }
@@ -108,7 +81,7 @@ export function buildTokenBlueprintCardVm(
   } = input;
 
   const tokenBlueprintId =
-    selectedTokenBlueprint?.id ||
+    selectedTokenBlueprint?.id ??
     tokenBlueprintIdForPatch;
 
   if (!tokenBlueprintId) {
@@ -116,35 +89,29 @@ export function buildTokenBlueprintCardVm(
   }
 
   const tokenName =
-    selectedTokenBlueprint
-      ?.tokenName ||
-    tokenBlueprintId;
+    selectedTokenBlueprint?.tokenName ??
+    "";
 
   const symbol =
-    selectedTokenBlueprint
-      ?.symbol ??
+    selectedTokenBlueprint?.symbol ??
     "";
 
   const brandId =
-    selectedTokenBlueprint
-      ?.brandId ??
+    selectedTokenBlueprint?.brandId ??
+    pbPatch?.brandId ??
     "";
 
   const brandName =
     selectedBrandName ||
-    selectedTokenBlueprint
-      ?.brandName ||
     pbPatch?.brandName ||
     "";
 
   const description =
-    selectedTokenBlueprint
-      ?.description ??
+    selectedTokenBlueprint?.description ??
     "";
 
   const iconUrl =
-    selectedTokenBlueprint
-      ?.iconUrl;
+    selectedTokenBlueprint?.iconUrl;
 
   return {
     id:
@@ -160,8 +127,7 @@ export function buildTokenBlueprintCardVm(
     iconUrl,
 
     minted:
-      selectedTokenBlueprint
-        ?.minted ??
+      selectedTokenBlueprint?.minted ??
       false,
 
     iconFile:
@@ -171,67 +137,5 @@ export function buildTokenBlueprintCardVm(
       false,
 
     brandOptions,
-  };
-}
-
-export function buildMintLabels(
-  input: {
-    mint:
-      | MintInfo
-      | null;
-
-    createdByName:
-      | string
-      | null;
-  },
-): MintLabelsViewModel {
-  const {
-    mint,
-    createdByName,
-  } = input;
-
-  const mintCreatedAtLabel =
-    safeDateTimeLabelJa(
-      mint?.createdAt ?? null,
-      "（未登録）",
-    );
-
-  /**
-   * createdByNameはApplication selector側で、
-   * createdByNameからcreatedByへのfallbackまで
-   * 完了している。
-   *
-   * requestedBy系からのfallbackは行わない。
-   */
-  const mintCreatedByLabel =
-    createdByName ||
-    "（不明）";
-
-  const mintScheduledBurnDateLabel =
-    safeDateLabelJa(
-      mint?.scheduledBurnDate ??
-        null,
-      "（未設定）",
-    );
-
-  const mintMintedAtLabel =
-    safeDateTimeLabelJa(
-      mint?.mintedAt ?? null,
-      "（未完了）",
-    );
-
-  /**
-   * MintInfoへの変換時に正規化済み。
-   */
-  const onChainTxSignature =
-    mint?.onChainTxSignature ??
-    "";
-
-  return {
-    mintCreatedAtLabel,
-    mintCreatedByLabel,
-    mintScheduledBurnDateLabel,
-    mintMintedAtLabel,
-    onChainTxSignature,
   };
 }

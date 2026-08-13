@@ -17,27 +17,79 @@ func (s *MintRequestQueryService) GetProductBlueprintForMint(
 		return nil, ErrMintRequestQueryServiceNotConfigured
 	}
 
-	id := productBlueprintID
-	if id == "" {
+	if productBlueprintID == "" {
 		return nil, errors.New("productBlueprintID is empty")
 	}
 
-	productBlueprint, err := s.pbRepo.GetByID(ctx, id)
+	productBlueprint, err := s.pbRepo.GetByID(
+		ctx,
+		productBlueprintID,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	brandName := s.resolveBrandNameByID(ctx, productBlueprint.BrandID)
+	brandName := s.resolveBrandNameByID(
+		ctx,
+		productBlueprint.BrandID,
+	)
 
-	return buildMintProductBlueprintDTO(productBlueprint, brandName), nil
+	return buildMintProductBlueprintDTO(
+		productBlueprint,
+		brandName,
+	), nil
 }
 
 func buildMintProductBlueprintDTO(
 	productBlueprint pbpdom.ProductBlueprint,
 	brandName string,
 ) *querydto.MintProductBlueprintDTO {
+	modelRefs := make(
+		[]querydto.MintProductBlueprintModelRefDTO,
+		0,
+		len(productBlueprint.ModelRefs),
+	)
+
+	for _, modelRef := range productBlueprint.ModelRefs {
+		modelRefs = append(
+			modelRefs,
+			querydto.MintProductBlueprintModelRefDTO{
+				ModelID:      modelRef.ModelID,
+				DisplayOrder: modelRef.DisplayOrder,
+			},
+		)
+	}
+
 	return &querydto.MintProductBlueprintDTO{
-		ProductBlueprint: productBlueprint,
-		BrandName:        brandName,
+		ProductName: productBlueprint.ProductName,
+		Description: productBlueprint.Description,
+
+		BrandID:   productBlueprint.BrandID,
+		BrandName: brandName,
+		CompanyID: productBlueprint.CompanyID,
+
+		ProductBlueprintCategory: querydto.MintProductBlueprintCategoryDTO{
+			ID:     productBlueprint.ProductBlueprintCategory.ID,
+			Code:   productBlueprint.ProductBlueprintCategory.Code,
+			NameJa: productBlueprint.ProductBlueprintCategory.NameJa,
+			NameEn: productBlueprint.ProductBlueprintCategory.NameEn,
+			Kind: string(
+				productBlueprint.ProductBlueprintCategory.Kind,
+			),
+			Path: productBlueprint.ProductBlueprintCategory.Path,
+		},
+
+		CategoryFields: map[string]any(
+			productBlueprint.CategoryFields,
+		),
+
+		ProductIDTag: querydto.MintProductIDTagDTO{
+			Type: string(
+				productBlueprint.ProductIdTag.Type,
+			),
+		},
+
+		AssigneeID: productBlueprint.AssigneeID,
+		ModelRefs:  modelRefs,
 	}
 }

@@ -8,49 +8,75 @@ import type {
   TokenBlueprintSummary,
 } from "../../application/port/MintRequestRepository";
 
-import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
-import type { MintRequestManagementRowDTO } from "../dto/mintRequestManagementRow";
-import type { ProductBlueprintPatchDTO } from "../dto/mintRequestLocal.dto";
+import type {
+  InspectionBatchDTO,
+} from "../../../../shared/types/inspections";
 
-import { fetchBrandsForMintHTTP } from "./http/brands";
+import type {
+  MintRequestManagementRowDTO,
+} from "../dto/mintRequestManagementRow";
+
+import type {
+  ProductBlueprintPatchDTO,
+} from "../dto/mintRequestLocal.dto";
+
+import {
+  fetchBrandsForMintHTTP,
+} from "./http/brands";
+
 import {
   completeInspectionHTTP,
   fetchInspectionByProductionIdHTTP,
 } from "./http/inspections";
+
 import {
   fetchMintFundingEstimateHTTP,
   fetchMintRequestRowByProductionIdHTTP,
   postMintRequestHTTP,
 } from "./http/mintRequests";
-import { fetchProductBlueprintIdByProductionIdHTTP } from "./http/productions";
-import { fetchProductBlueprintPatchHTTP } from "./http/productBlueprintPatch";
-import { fetchTokenBlueprintsByBrandHTTP } from "./http/tokenBlueprints";
+
+import {
+  fetchProductBlueprintPatchHTTP,
+} from "./http/productBlueprintPatch";
+
+import {
+  fetchTokenBlueprintsByBrandHTTP,
+} from "./http/tokenBlueprints";
 
 /**
  * MintRequestRepositoryのHTTP実装。
  *
- * HTTPレスポンスの正規化は各HTTP関数側で行い、
- * このクラスはInfrastructure層のHTTP処理を
- * Application層のRepository契約へ接続する。
+ * Backend BFF responseを正とし、
+ * Infrastructure層では不要なfallbackや
+ * response fieldの補完を行わない。
  *
- * 参照系の取得失敗は既存画面との互換性を維持するため、
- * nullまたは空配列へ変換する。
+ * HTTPエラーは握りつぶさず、
+ * 呼び出し元へそのまま伝播する。
  *
- * SOL見積、検品完了、Mint申請ではApplication層で
- * エラー処理方針を判断できるよう、
- * HTTPエラーを握りつぶさず呼び出し元へ伝播する。
+ * ProductBlueprint情報は
+ * GET /mint/product_blueprints/{productBlueprintId}、
+ * modelMetaは
+ * GET /mint/inspections/{productionId}
+ * のresponseを正とする。
  *
- * Model Variationの個別取得は行わない。
- * 検品結果表示に必要なmodelMetaはBackend responseを正とする。
+ * productionIdからproductBlueprintIdを取得するための
+ * productions APIへの追加アクセスは行わない。
  */
-export class HttpMintRequestRepository implements MintRequestRepository {
+export class HttpMintRequestRepository
+  implements MintRequestRepository
+{
   /**
-   * productionIdに紐づく検品バッチを取得する。
+   * productionIdに紐づく検品情報を取得する。
+   *
+   * productBlueprintId / productName / modelMetaも
+   * 同じBFF responseから取得する。
    */
   fetchInspectionByProductionId(
     productionId: string,
   ): Promise<InspectionBatchDTO | null> {
-    return fetchInspectionByProductionIdHTTP(productionId).catch(() => null);
+    return fetchInspectionByProductionIdHTTP(
+      productionId,
+    );
   }
 
   /**
@@ -62,48 +88,40 @@ export class HttpMintRequestRepository implements MintRequestRepository {
   fetchMintRequestRowByProductionId(
     productionId: string,
   ): Promise<MintRequestManagementRowDTO | null> {
-    return fetchMintRequestRowByProductionIdHTTP(productionId).catch(
-      () => null,
-    );
-  }
-
-  /**
-   * productionIdに紐づくproductBlueprintIdを取得する。
-   */
-  fetchProductBlueprintIdByProductionId(
-    productionId: string,
-  ): Promise<string | null> {
-    return fetchProductBlueprintIdByProductionIdHTTP(productionId).catch(
-      () => null,
+    return fetchMintRequestRowByProductionIdHTTP(
+      productionId,
     );
   }
 
   /**
    * productBlueprintIdに紐づく
-   * プロダクト設計情報を取得する。
+   * ミント画面用ProductBlueprint情報を取得する。
    */
   fetchProductBlueprintPatch(
     productBlueprintId: string,
   ): Promise<ProductBlueprintPatchDTO | null> {
-    return fetchProductBlueprintPatchHTTP(productBlueprintId).catch(
-      () => null,
+    return fetchProductBlueprintPatchHTTP(
+      productBlueprintId,
     );
   }
 
   /**
-   * ミント申請画面で選択可能なブランドを取得する。
+   * ミント申請画面で選択可能なブランド一覧を取得する。
    */
   fetchBrandsForMint(): Promise<BrandSummary[]> {
-    return fetchBrandsForMintHTTP().catch(() => []);
+    return fetchBrandsForMintHTTP();
   }
 
   /**
-   * 指定ブランドに紐づくトークン設計を取得する。
+   * 指定ブランドに紐づく
+   * Token Blueprint一覧を取得する。
    */
   fetchTokenBlueprintsByBrand(
     brandId: string,
   ): Promise<TokenBlueprintSummary[]> {
-    return fetchTokenBlueprintsByBrandHTTP(brandId).catch(() => []);
+    return fetchTokenBlueprintsByBrandHTTP(
+      brandId,
+    );
   }
 
   /**
@@ -111,7 +129,7 @@ export class HttpMintRequestRepository implements MintRequestRepository {
    * Bubblegum V2 Mintに必要なSOL見積を取得する。
    *
    * metadataUriはFrontendから送信しない。
-   * 見積取得エラーはPresentation層で表示できるように伝播させる。
+   * 見積取得エラーは呼び出し元へ伝播する。
    */
   fetchMintFundingEstimate(
     productionId: string,
@@ -127,22 +145,24 @@ export class HttpMintRequestRepository implements MintRequestRepository {
    * productionIdに紐づく検品を完了する。
    *
    * completeMintInspection UseCaseから呼び出される。
-   * エラーはPresentation層で表示できるように伝播させる。
+   * HTTPエラーは呼び出し元へ伝播する。
    */
   completeInspection(
     productionId: string,
   ): Promise<InspectionBatchDTO | null> {
-    return completeInspectionHTTP(productionId);
+    return completeInspectionHTTP(
+      productionId,
+    );
   }
 
   /**
    * Mint申請をBackendへ送信する。
    *
-   * Backendは202 AcceptedとQUEUEDレスポンスを返し、
+   * Backendは202 AcceptedとQUEUED responseを返し、
    * Mint処理を非同期で順次実行する。
    *
    * scheduledBurnDateはFrontendから送信しない。
-   * エラーはPresentation層で表示できるように伝播させる。
+   * HTTPエラーは呼び出し元へ伝播する。
    */
   postMintRequest(
     productionId: string,

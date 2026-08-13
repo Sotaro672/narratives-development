@@ -1,8 +1,16 @@
 // frontend/console/shell/src/features/mint/application/port/MintRequestRepository.ts
 
-import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
-import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
-import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
+import type {
+  InspectionBatchDTO,
+} from "../../../../shared/types/inspections";
+
+import type {
+  MintRequestManagementRowDTO,
+} from "../../infrastructure/dto/mintRequestManagementRow";
+
+import type {
+  ProductBlueprintPatchDTO,
+} from "../../infrastructure/dto/mintRequestLocal.dto";
 
 export type BrandSummary = {
   id: string;
@@ -15,24 +23,11 @@ export type TokenBlueprintSummary = {
   symbol: string;
 
   brandId?: string;
-  brandName?: string;
-  companyId?: string;
-
   description?: string;
-  minted?: boolean;
-  metadataUri?: string;
+
+  minted: boolean;
 
   iconUrl?: string;
-};
-
-export type MintTaskProgress = {
-  total: number;
-  pending: number;
-  minting: number;
-  minted: number;
-  failedRetryable: number;
-  failedFatal: number;
-  percentage: number;
 };
 
 /**
@@ -76,6 +71,7 @@ export type MintFundingEstimateFeePayer = {
 export type MintFundingEstimateResources = {
   sharedMerkleTreeExists: boolean;
   sharedMerkleTreeAddress: string | null;
+
   coreCollectionExists: boolean;
   coreCollectionAddress: string | null;
 };
@@ -90,20 +86,25 @@ export type MintFundingEstimateResources = {
 export type MintFundingEstimateCosts = {
   mintTransactionFeePerItemLamports: string;
   mintTransactionFeePerItemSol: number;
+
   mintTransactionFeeTotalLamports: string;
   mintTransactionFeeTotalSol: number;
 
   merkleTreeCreationTransactionFeeLamports: string;
   merkleTreeCreationTransactionFeeSol: number;
+
   merkleTreeCreationRentLamports: string;
   merkleTreeCreationRentSol: number;
+
   merkleTreeCreationCostLamports: string;
   merkleTreeCreationCostSol: number;
 
   coreCollectionCreationTransactionFeeLamports: string;
   coreCollectionCreationTransactionFeeSol: number;
+
   coreCollectionCreationRentLamports: string;
   coreCollectionCreationRentSol: number;
+
   coreCollectionCreationCostLamports: string;
   coreCollectionCreationCostSol: number;
 
@@ -134,6 +135,7 @@ export type MintFundingEstimateCosts = {
 export type MintFundingEstimate = {
   cluster: string;
   mintQuantity: number;
+
   reserve: MintFundingEstimateReserve;
   feePayer: MintFundingEstimateFeePayer;
   resources: MintFundingEstimateResources;
@@ -142,10 +144,11 @@ export type MintFundingEstimate = {
 
 export interface MintRequestRepository {
   /**
-   * productionIdに紐づく検品バッチを取得する。
+   * productionIdに紐づく検品情報を取得する。
    *
-   * productions、inspections、mintsのドキュメントIDは
-   * すべて同一であり、フロントエンドではproductionIdを正とする。
+   * GET /mint/inspections/{productionId} を使用し、
+   * productBlueprintId / productName / modelMetaも
+   * 同じBFFレスポンスから取得する。
    */
   fetchInspectionByProductionId(
     productionId: string,
@@ -162,14 +165,11 @@ export interface MintRequestRepository {
   ): Promise<MintRequestManagementRowDTO | null>;
 
   /**
-   * productionIdに紐づくproductBlueprintIdを取得する。
-   */
-  fetchProductBlueprintIdByProductionId(
-    productionId: string,
-  ): Promise<string | null>;
-
-  /**
-   * productBlueprintIdに紐づくプロダクト設計情報を取得する。
+   * productBlueprintIdに紐づく
+   * ミント画面用ProductBlueprint情報を取得する。
+   *
+   * GET /mint/product_blueprints/{productBlueprintId}
+   * のlowerCamelCase DTOを正とする。
    */
   fetchProductBlueprintPatch(
     productBlueprintId: string,
@@ -181,17 +181,20 @@ export interface MintRequestRepository {
   fetchBrandsForMint(): Promise<BrandSummary[]>;
 
   /**
-   * 指定したブランドに紐づくトークン設計一覧を取得する。
+   * 指定したブランドに紐づく
+   * Token Blueprint一覧を取得する。
    */
   fetchTokenBlueprintsByBrand(
     brandId: string,
   ): Promise<TokenBlueprintSummary[]>;
 
   /**
-   * productionIdとtokenBlueprintIdからBubblegum V2 MintのSOL見積を取得する。
+   * productionIdとtokenBlueprintIdから
+   * Bubblegum V2 MintのSOL見積を取得する。
    *
    * metadataUriはFrontendから渡さない。
-   * mintQuantity、Brand Wallet、TokenBlueprint情報はBackend側で解決する。
+   * mintQuantity、Brand Wallet、
+   * TokenBlueprint情報はBackend側で解決する。
    */
   fetchMintFundingEstimate(
     productionId: string,

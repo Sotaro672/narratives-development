@@ -12,19 +12,9 @@ import {
   fetchMintRequestRowsHTTP,
 } from "../../infrastructure/repository/http/mintRequests";
 
-import {
-  fetchProductionIdsForCurrentCompanyHTTP,
-} from "../../infrastructure/repository/http/productions";
-
 import type {
   MintRequestManagementRowDTO,
 } from "../../infrastructure/dto/mintRequestManagementRow";
-
-import {
-  asNonEmptyString,
-  asNumber0,
-  asStringOrNull,
-} from "../../../../shared/util/primitive";
 
 // ============================================================
 // Types
@@ -35,6 +25,10 @@ export type MintRequestRowStatus =
   | "requested"
   | "minting"
   | "minted";
+
+export type MintRequestInspectionStatus =
+  | InspectionStatus
+  | "notYet";
 
 export type ViewRow = {
   /**
@@ -49,7 +43,7 @@ export type ViewRow = {
   productionQuantity: number;
 
   status: MintRequestRowStatus;
-  inspectionStatus: InspectionStatus;
+  inspectionStatus: MintRequestInspectionStatus;
 
   /**
    * mintsドキュメントを作成したmemberId。
@@ -75,12 +69,6 @@ export type ViewRow = {
 
   tokenBlueprintId: string | null;
 
-  /**
-   * 詳細画面で使用する情報。
-   */
-  productBlueprintId: string | null;
-  scheduledBurnDate: string | null;
-
   minted: boolean;
 };
 
@@ -88,312 +76,105 @@ export type ViewRow = {
 // Helpers
 // ============================================================
 
-function normalizeInspectionStatus(
-  value: unknown,
-): InspectionStatus {
-  const status =
-    String(value ?? "").trim();
-
-  if (status === "completed") {
-    return "completed";
-  }
-
-  if (status === "inspecting") {
-    return "inspecting";
-  }
-
-  /**
-   * InspectionStatusの型定義は
-   * "inspecting" | "completed" だが、
-   * 一覧APIでは検品レコードが存在しない場合に
-   * "notYet" が返る。
-   *
-   * 現行画面との互換を維持するため、
-   * ここではInspectionStatusとして扱う。
-   */
-  return "notYet" as InspectionStatus;
-}
-
 /**
- * Backendから返される親Mintの状態を正規化する。
+ * Backendの親Mint状態から
+ * 一覧表示用の状態を算出する。
  *
- * Backendでは大文字のMintStatusを正とする。
- * 不明な値や空文字はnullとして扱う。
+ * BackendのmintStatusを唯一の正とし、
+ * tokenBlueprintId / tokenName / requestedBy /
+ * mintedAtなどによる再判定は行わない。
  */
-function normalizeMintStatus(
-  value: unknown,
-): MintStatus | null {
-  const status =
-    String(value ?? "")
-      .trim()
-      .toUpperCase();
+function deriveRowStatus(
+  mintStatus:
+    | MintStatus
+    | null
+    | undefined,
+): MintRequestRowStatus {
+  switch (mintStatus) {
+    case "MINTED":
+      return "minted";
 
-  switch (status) {
-    case "CREATED":
     case "QUEUED":
     case "MINTING":
     case "PARTIALLY_MINTED":
-    case "MINTED":
+      return "minting";
+
+    case "CREATED":
     case "FAILED_RETRYABLE":
     case "FAILED_FATAL":
-      return status;
+      return "requested";
 
     default:
-      return null;
+      return "planning";
   }
 }
 
 /**
- * Backendの親Mint状態と、一覧DTOの各項目から
- * 一覧表示用の状態を算出する。
+ * Backend BFF DTOを一覧表示用ViewRowへ変換する。
+ *
+ * Backend responseのfield名・型・値を正とし、
+ * 旧response形式のfallbackや値の正規化は行わない。
  */
-function deriveRowStatus(args: {
-  tokenBlueprintId: string | null;
-  tokenName: string | null;
-  requestedBy: string | null;
-  mintedAt: string | null;
-  minted: boolean;
-  mintStatus: MintStatus | null;
-}): MintRequestRowStatus {
-  /**
-   * Mint完了を最優先する。
-   */
-  if (
-    args.mintStatus === "MINTED" ||
-    args.minted ||
-    Boolean(
-      asNonEmptyString(
-        args.mintedAt,
-      ),
-    )
-  ) {
-    return "minted";
-  }
-
-  /**
-   * QUEUED / MINTING / PARTIALLY_MINTEDは、
-   * 一覧上ではすべて「ミント中」として扱う。
-   */
-  if (
-    args.mintStatus === "QUEUED" ||
-    args.mintStatus === "MINTING" ||
-    args.mintStatus ===
-      "PARTIALLY_MINTED"
-  ) {
-    return "minting";
-  }
-
-  /**
-   * CREATEDまたは失敗状態の場合でも、
-   * Mint申請を示す情報が存在すれば
-   * 申請済みとして扱う。
-   */
-  const hasRequestSignal =
-    Boolean(
-      asNonEmptyString(
-        args.tokenBlueprintId,
-      ),
-    ) ||
-    Boolean(
-      asNonEmptyString(
-        args.tokenName,
-      ),
-    ) ||
-    Boolean(
-      asNonEmptyString(
-        args.requestedBy,
-      ),
-    );
-
-  return hasRequestSignal
-    ? "requested"
-    : "planning";
-}
-
 function mapDTOToRow(
   dto: MintRequestManagementRowDTO,
 ): ViewRow {
-  const raw =
-    dto as Record<string, unknown>;
-
-  /**
-   * Backendが返すネストされたMint概要。
-   *
-   * mint.statusを最優先し、
-   * トップレベルのmintStatusを次に使用する。
-   * statusは旧形式との互換用として最後に使用する。
-   */
-  const mintRaw =
-    raw.mint &&
-    typeof raw.mint === "object" &&
-    !Array.isArray(raw.mint)
-      ? (
-          raw.mint as Record<
-            string,
-            unknown
-          >
-        )
-      : null;
-
-  const mintStatus =
-    normalizeMintStatus(
-      mintRaw?.status ??
-        raw.mintStatus ??
-        raw.status,
-    );
-
-  /**
-   * productionIdを正とする。
-   * id / inspectionIdによる旧形式のfallbackは行わない。
-   */
-  const productionId =
-    asNonEmptyString(
-      raw.productionId,
-    );
-
-  if (!productionId) {
+  if (!dto.productionId) {
     throw new Error(
       "MintRequestManagementRowDTO.productionId is required",
     );
   }
 
-  const tokenName =
-    asStringOrNull(
-      raw.tokenName,
-    );
-
-  const productName =
-    asStringOrNull(
-      raw.productName,
-    );
-
-  const mintQuantity =
-    asNumber0(
-      raw.mintQuantity,
-    );
-
-  const productionQuantity =
-    asNumber0(
-      raw.productionQuantity,
-    );
-
-  const inspectionStatus =
-    normalizeInspectionStatus(
-      raw.inspectionStatus,
-    );
-
-  /**
-   * mintsドキュメントを作成したメンバー。
-   *
-   * requestedBy系からのfallbackは行わない。
-   */
-  const createdBy =
-    asStringOrNull(
-      raw.createdBy,
-    );
-
-  /**
-   * createdByNameがない場合は、
-   * 対応するcreatedByのみを表示値として使用する。
-   */
-  const createdByName =
-    asStringOrNull(
-      raw.createdByName,
-    ) ??
-    createdBy;
-
-  /**
-   * Mint申請ボタンを押したメンバー。
-   *
-   * createdBy系からのfallbackは行わない。
-   */
-  const requestedBy =
-    asStringOrNull(
-      raw.requestedBy,
-    );
-
-  /**
-   * requestedByNameがない場合は、
-   * 対応するrequestedByのみを表示値として使用する。
-   */
-  const requestedByName =
-    asStringOrNull(
-      raw.requestedByName,
-    ) ??
-    requestedBy;
-
-  const mintedAt =
-    asStringOrNull(
-      raw.mintedAt,
-    ) ??
-    asStringOrNull(
-      mintRaw?.mintedAt,
-    );
-
-  /**
-   * mintedフラグ、MintStatus、mintedAtの
-   * いずれかでMint完了を判定する。
-   */
-  const minted =
-    raw.minted === true ||
-    mintStatus === "MINTED" ||
-    Boolean(
-      asNonEmptyString(
-        mintedAt,
-      ),
-    );
-
-  const tokenBlueprintId =
-    asStringOrNull(
-      raw.tokenBlueprintId,
-    );
-
-  const productBlueprintId =
-    asStringOrNull(
-      raw.productBlueprintId,
-    );
-
-  const scheduledBurnDate =
-    asStringOrNull(
-      raw.scheduledBurnDate,
-    );
-
-  const status =
-    deriveRowStatus({
-      tokenBlueprintId,
-      tokenName,
-      requestedBy,
-      mintedAt,
-      minted,
-      mintStatus,
-    });
+  const mintStatus =
+    dto.mintStatus as
+      | MintStatus
+      | null
+      | undefined;
 
   return {
-    id: productionId,
+    id:
+      dto.productionId,
 
-    tokenName,
-    productName,
+    tokenName:
+      dto.tokenName ?? null,
 
-    mintQuantity,
-    productionQuantity,
+    productName:
+      dto.productName ?? null,
 
-    status,
-    inspectionStatus,
+    mintQuantity:
+      dto.mintQuantity!,
 
-    createdBy,
-    createdByName,
+    productionQuantity:
+      dto.productionQuantity!,
 
-    requestedBy,
-    requestedByName,
+    status:
+      deriveRowStatus(
+        mintStatus,
+      ),
 
-    mintedAt,
+    inspectionStatus:
+      dto.inspectionStatus as
+        MintRequestInspectionStatus,
 
-    tokenBlueprintId,
+    createdBy:
+      dto.createdBy ?? null,
 
-    productBlueprintId,
-    scheduledBurnDate,
+    createdByName:
+      dto.createdByName ?? null,
 
-    minted,
+    requestedBy:
+      dto.requestedBy ?? null,
+
+    requestedByName:
+      dto.requestedByName ?? null,
+
+    mintedAt:
+      dto.mintedAt ?? null,
+
+    tokenBlueprintId:
+      dto.tokenBlueprintId ?? null,
+
+    minted:
+      mintStatus === "MINTED",
   };
 }
 
@@ -404,24 +185,18 @@ function mapDTOToRow(
 /**
  * 現在の会社に属するミント申請一覧を取得する。
  *
- * 1. /productionsからproductionIdsを取得する
- * 2. 統合済みのfetchMintRequestRowsHTTPを使って
- *    GET /mint/requestsを1回だけ実行する
- * 3. Backend DTOを一覧画面用ViewRowへ変換する
+ * BackendのGET /mint/requests?view=listを
+ * 一覧データの唯一の正とする。
+ *
+ * productionIdsをFrontendで事前取得せず、
+ * Backend側で現在companyのproductionを解決する。
  */
 export async function loadMintRequestManagementRows(): Promise<
   ViewRow[]
 > {
-  const productionIds =
-    await fetchProductionIdsForCurrentCompanyHTTP();
-
-  if (productionIds.length === 0) {
-    return [];
-  }
-
   const rows =
     await fetchMintRequestRowsHTTP(
-      productionIds,
+      [],
       "list",
     );
 
