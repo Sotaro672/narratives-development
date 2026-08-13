@@ -148,9 +148,10 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	}
 
 	out := &querydto.MintRequestDetailDTO{
-		ProductName: productName,
-		ModelMeta:   modelMeta,
-		Inspection:  inspSummary,
+		ProductBlueprintID: prod.ProductBlueprintID,
+		ProductName:        productName,
+		ModelMeta:          modelMeta,
+		Inspection:         inspSummary,
 	}
 
 	return out, nil
