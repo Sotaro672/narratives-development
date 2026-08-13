@@ -54,13 +54,14 @@ type ProductSummaryForPrintDTO struct {
 type PrintedItemForPrintDTO struct {
 	ProductID    string `json:"productId"`
 	DisplayOrder int    `json:"displayOrder"`
+	QRPayload    string `json:"qrPayload"`
+	ModelNumber  string `json:"modelNumber"`
 }
 
 type PrintLogForPrintDTO struct {
 	ID           string                   `json:"id"`
 	ProductionID string                   `json:"productionId"`
 	Items        []PrintedItemForPrintDTO `json:"items"`
-	QrPayloads   []string                 `json:"qrPayloads"`
 }
 
 func (q *PrintQueryService) ListProductsByProductionID(
@@ -69,6 +70,10 @@ func (q *PrintQueryService) ListProductsByProductionID(
 ) ([]ProductSummaryForPrintDTO, error) {
 	if q == nil || q.productRepo == nil {
 		return nil, fmt.Errorf("print product query repo is nil")
+	}
+
+	if q.modelNumberResolver == nil {
+		return nil, fmt.Errorf("model number resolver is nil")
 	}
 
 	pid := strings.Trim(productionID, " \t\r\n/")
@@ -82,21 +87,13 @@ func (q *PrintQueryService) ListProductsByProductionID(
 	}
 
 	out := make([]ProductSummaryForPrintDTO, 0, len(products))
-	for _, p := range products {
-		modelID := strings.Trim(p.ModelID, " \t\r\n/")
-		modelNumber := ""
-
-		if modelID != "" && q.modelNumberResolver != nil {
-			modelNumber = strings.Trim(
-				q.modelNumberResolver.ResolveModelNumber(ctx, modelID),
-				" \t\r\n/",
-			)
-		}
+	for _, product := range products {
+		modelNumber := q.modelNumberResolver.ResolveModelNumber(ctx, product.ModelID)
 
 		out = append(out, ProductSummaryForPrintDTO{
-			ID:           p.ID,
-			ModelID:      p.ModelID,
-			ProductionID: p.ProductionID,
+			ID:           product.ID,
+			ModelID:      product.ModelID,
+			ProductionID: product.ProductionID,
 			ModelNumber:  modelNumber,
 		})
 	}
@@ -111,6 +108,12 @@ func (q *PrintQueryService) ListPrintLogsByProductionID(
 	if q == nil || q.printLogRepo == nil {
 		return nil, fmt.Errorf("print log query repo is nil")
 	}
+	if q.productRepo == nil {
+		return nil, fmt.Errorf("print product query repo is nil")
+	}
+	if q.modelNumberResolver == nil {
+		return nil, fmt.Errorf("model number resolver is nil")
+	}
 
 	pid := strings.Trim(productionID, " \t\r\n/")
 	if pid == "" {
@@ -122,14 +125,27 @@ func (q *PrintQueryService) ListPrintLogsByProductionID(
 		return nil, err
 	}
 
-	dto := buildPrintLogForPrintDTO(log)
+	products, err := q.productRepo.ListByProductionID(ctx, pid)
+	if err != nil {
+		return nil, err
+	}
 
-	return []PrintLogForPrintDTO{dto}, nil
+	modelNumberByProductID := make(map[string]string, len(products))
+	for _, product := range products {
+		modelNumberByProductID[product.ID] =
+			q.modelNumberResolver.ResolveModelNumber(ctx, product.ModelID)
+	}
+
+	return []PrintLogForPrintDTO{
+		buildPrintLogForPrintDTO(log, modelNumberByProductID),
+	}, nil
 }
 
-func buildPrintLogForPrintDTO(log printdom.PrintLog) PrintLogForPrintDTO {
+func buildPrintLogForPrintDTO(
+	log printdom.PrintLog,
+	modelNumberByProductID map[string]string,
+) PrintLogForPrintDTO {
 	items := make([]PrintedItemForPrintDTO, 0, len(log.Items))
-	payloads := make([]string, 0, len(log.Items))
 
 	for _, item := range log.Items {
 		if item.ProductID == "" {
@@ -139,15 +155,14 @@ func buildPrintLogForPrintDTO(log printdom.PrintLog) PrintLogForPrintDTO {
 		items = append(items, PrintedItemForPrintDTO{
 			ProductID:    item.ProductID,
 			DisplayOrder: item.DisplayOrder,
+			QRPayload:    fmt.Sprintf("%s/%s", publicQRBaseURL, item.ProductID),
+			ModelNumber:  modelNumberByProductID[item.ProductID],
 		})
-
-		payloads = append(payloads, fmt.Sprintf("%s/%s", publicQRBaseURL, item.ProductID))
 	}
 
 	return PrintLogForPrintDTO{
 		ID:           log.ID,
 		ProductionID: log.ProductionID,
 		Items:        items,
-		QrPayloads:   payloads,
 	}
 }

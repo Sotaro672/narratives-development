@@ -1,32 +1,20 @@
 // frontend/console/shell/src/features/productBlueprint/application/productBlueprintCreateService.ts
 
-import type {
-  ApparelSizeInput,
-} from "../../../shared/types/apparel";
-
+import type { ApparelSizeInput } from "../../../shared/types/apparel";
 import type {
   AlcoholModelNumber,
   VolumeRow,
 } from "../../model/application/modelCreateService";
-
 import type {
   CategoryFieldValues,
   ProductBlueprintCategorySnapshot,
 } from "../domain/productBlueprintCategory";
-
-import type {
-  ProductBlueprintDetailResponse,
-} from "../infrastructure/api/productBlueprintDetailApi";
-
-import {
-  createProductBlueprintHTTP,
-} from "../infrastructure/repository/productBlueprintRepositoryHTTP";
-
+import type { ProductBlueprintDetailResponse } from "../infrastructure/api/productBlueprintDetailApi";
+import { createProductBlueprintHTTP } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
 import {
   createModelVariations,
   type CreateModelVariationRequest,
 } from "../../model/infrastructure/repository/modelRepositoryHTTP";
-
 import {
   buildModelVariationRequests,
   type ProductBlueprintModelNumberInput,
@@ -36,9 +24,7 @@ import {
 // Product ID Tag
 // ------------------------------------------------------
 
-export type ProductIDTagType =
-  | "qr"
-  | "nfc";
+export type ProductIDTagType = "qr" | "nfc";
 
 export type ProductIDTag = {
   type: ProductIDTagType;
@@ -48,40 +34,22 @@ export type ProductIDTag = {
 // 作成用型
 // ------------------------------------------------------
 
-export type ApparelSizeRow =
-  ApparelSizeInput & {
-    id: string;
-  };
-
-export type CreateProductBlueprintModelNumber =
-  ProductBlueprintModelNumberInput;
-
 export type CreateProductBlueprintParams = {
   productName: string;
   brandId: string;
-
   productBlueprintCategoryId: string;
-
-  productBlueprintCategory:
-    ProductBlueprintCategorySnapshot;
-
+  productBlueprintCategory: ProductBlueprintCategorySnapshot;
   fit?: string | null;
   material?: string | null;
   weight?: number | null;
   qualityAssurance?: string[] | null;
-
   productIdTag: ProductIDTag;
-
   companyId: string;
   assigneeId?: string;
   createdBy?: string;
-
   colors?: string[];
-  sizes?: ApparelSizeRow[];
-
-  modelNumbers?:
-    CreateProductBlueprintModelNumber[];
-
+  sizes?: ApparelSizeInput[];
+  modelNumbers?: ProductBlueprintModelNumberInput[];
   colorRgbMap?: Record<string, string>;
 
   /**
@@ -90,16 +58,9 @@ export type CreateProductBlueprintParams = {
    * model domain側で扱う。
    */
   volumes?: VolumeRow[];
-
-  alcoholModelNumbers?:
-    AlcoholModelNumber[];
-
-  categoryFields?:
-    CategoryFieldValues | null;
+  alcoholModelNumbers?: AlcoholModelNumber[];
+  categoryFields?: CategoryFieldValues | null;
 };
-
-export type ProductBlueprintResponse =
-  ProductBlueprintDetailResponse;
 
 // ------------------------------------------------------
 // Validation helpers
@@ -108,30 +69,20 @@ export type ProductBlueprintResponse =
 function assertProductBlueprintCategory(
   params: CreateProductBlueprintParams,
 ): void {
-  if (
-    !params
-      .productBlueprintCategoryId
-      ?.trim()
-  ) {
+  if (!params.productBlueprintCategoryId?.trim()) {
     throw new Error(
       "createProductBlueprint: productBlueprintCategoryId が空です",
     );
   }
 
-  if (
-    !params
-      .productBlueprintCategory
-      ?.id
-      ?.trim()
-  ) {
+  if (!params.productBlueprintCategory?.id?.trim()) {
     throw new Error(
       "createProductBlueprint: productBlueprintCategory.id が空です",
     );
   }
 
   if (
-    params.productBlueprintCategoryId !==
-    params.productBlueprintCategory.id
+    params.productBlueprintCategoryId !== params.productBlueprintCategory.id
   ) {
     throw new Error(
       "createProductBlueprint: productBlueprintCategoryId と productBlueprintCategory.id が一致しません",
@@ -142,9 +93,7 @@ function assertProductBlueprintCategory(
 function extractProductBlueprintId(
   json: ProductBlueprintDetailResponse,
 ): string {
-  return typeof json.id === "string"
-    ? json.id
-    : "";
+  return typeof json.id === "string" ? json.id : "";
 }
 
 // ------------------------------------------------------
@@ -154,35 +103,21 @@ function extractProductBlueprintId(
 async function createProductBlueprintWithModelRequests(
   params: CreateProductBlueprintParams,
   requests: CreateModelVariationRequest[],
-): Promise<ProductBlueprintResponse> {
-  assertProductBlueprintCategory(
-    params,
-  );
+): Promise<ProductBlueprintDetailResponse> {
+  assertProductBlueprintCategory(params);
 
-  const created =
-    await createProductBlueprintHTTP(
-      params,
-    );
-
-  const productBlueprintId =
-    extractProductBlueprintId(
-      created,
-    );
+  const created = await createProductBlueprintHTTP(params);
+  const productBlueprintId = extractProductBlueprintId(created);
 
   if (!productBlueprintId) {
-    throw new Error(
-      "createProductBlueprint: 作成後の id が空です",
-    );
+    throw new Error("createProductBlueprint: 作成後の id が空です");
   }
 
   if (requests.length === 0) {
     return created;
   }
 
-  await createModelVariations(
-    productBlueprintId,
-    requests,
-  );
+  await createModelVariations(productBlueprintId, requests);
 
   return created;
 }
@@ -193,40 +128,23 @@ async function createProductBlueprintWithModelRequests(
 
 export async function createProductBlueprint(
   params: CreateProductBlueprintParams,
-): Promise<ProductBlueprintResponse> {
+): Promise<ProductBlueprintDetailResponse> {
   const requests =
     buildModelVariationRequests({
-      productBlueprintCategory:
-        params.productBlueprintCategory,
-
-      colors:
-        params.colors ?? [],
-
-      sizes:
-        params.sizes ?? [],
-
-      modelNumbers:
-        params.modelNumbers ?? [],
-
-      colorRgbMap:
-        params.colorRgbMap ?? {},
-
-      volumes:
-        params.volumes ?? [],
-
-      alcoholModelNumbers:
-        params.alcoholModelNumbers ?? [],
+      productBlueprintCategory: params.productBlueprintCategory,
+      colors: params.colors ?? [],
+      sizes: params.sizes ?? [],
+      modelNumbers: params.modelNumbers ?? [],
+      colorRgbMap: params.colorRgbMap ?? {},
+      volumes: params.volumes ?? [],
+      alcoholModelNumbers: params.alcoholModelNumbers ?? [],
 
       /*
        * 新規作成では、従来どおりRGBを解決できない場合に
        * 0を使用する。
        */
-      missingRgbBehavior:
-        "use-zero",
+      missingRgbBehavior: "use-zero",
     }) ?? [];
 
-  return await createProductBlueprintWithModelRequests(
-    params,
-    requests,
-  );
+  return createProductBlueprintWithModelRequests(params, requests);
 }

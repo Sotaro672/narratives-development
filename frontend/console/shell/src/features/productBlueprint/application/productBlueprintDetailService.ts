@@ -20,8 +20,6 @@ import {
   type ProductBlueprintModelNumberInput,
 } from "./modelVariationRequestBuilder";
 
-type ProductBlueprintModelNumber = ProductBlueprintModelNumberInput;
-
 /* =========================================================
  * GET: Product Blueprint detail
  * =======================================================*/
@@ -30,6 +28,7 @@ export async function getProductBlueprintDetail(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
   const normalizedId = String(id ?? "").trim();
+
   if (!normalizedId) {
     throw new Error("getProductBlueprintDetail: id が空です");
   }
@@ -44,7 +43,7 @@ export async function getProductBlueprintDetail(
 export async function updateProductBlueprint(
   params: UpdateProductBlueprintParams & {
     sizes?: ApparelSizeInput[];
-    modelNumbers?: ProductBlueprintModelNumber[];
+    modelNumbers?: ProductBlueprintModelNumberInput[];
     colorRgbMap?: Record<string, string>;
     volumes?: VolumeRow[];
     alcoholModelNumbers?: AlcoholModelNumber[];
@@ -70,16 +69,21 @@ export async function updateProductBlueprint(
   } = params;
 
   const productBlueprintId = String(id ?? "").trim();
+
   if (!productBlueprintId) {
     throw new Error("updateProductBlueprint: id が空です");
   }
 
   if (!productBlueprintCategoryId?.trim()) {
-    throw new Error("updateProductBlueprint: productBlueprintCategoryId が空です");
+    throw new Error(
+      "updateProductBlueprint: productBlueprintCategoryId が空です",
+    );
   }
 
   if (!productBlueprintCategory?.id?.trim()) {
-    throw new Error("updateProductBlueprint: productBlueprintCategory が空です");
+    throw new Error(
+      "updateProductBlueprint: productBlueprintCategory が空です",
+    );
   }
 
   const finalModelVariationRequests = buildModelVariationRequests({
@@ -132,6 +136,7 @@ export async function updateProductBlueprint(
 
 export async function deleteProductBlueprint(id: string): Promise<void> {
   const productBlueprintId = String(id ?? "").trim();
+
   if (!productBlueprintId) {
     throw new Error("deleteProductBlueprint: id が空です");
   }

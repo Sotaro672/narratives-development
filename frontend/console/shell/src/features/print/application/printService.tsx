@@ -3,8 +3,6 @@
 import {
   createProductsForPrint as createProductsForPrintApi,
   listPrintLogsByProductionId as listPrintLogsByProductionIdApi,
-  listProductsByProductionId as listProductsByProductionIdApi,
-  type ProductSummaryForPrint,
   type PrintLogForPrint,
 } from "../infrastructure/api/printApi";
 import {
@@ -13,7 +11,7 @@ import {
   type QrPdfItem,
 } from "../utils/qrPdfBuilder";
 
-export type { ProductSummaryForPrint, PrintLogForPrint };
+export type { PrintLogForPrint };
 
 export async function listPrintLogsByProductionId(
   productionId: string,
@@ -22,38 +20,16 @@ export async function listPrintLogsByProductionId(
   return listPrintLogsByProductionIdApi(productionId);
 }
 
-export async function listProductsByProductionId(
-  productionId: string,
-): Promise<ProductSummaryForPrint[]> {
-  if (!productionId) return [];
-  return listProductsByProductionIdApi(productionId);
-}
-
-function buildProductLabelMap(
-  products: ProductSummaryForPrint[],
-): Map<string, string> {
-  return new Map(
-    products.map((product) => [product.id, product.modelNumber]),
-  );
-}
-
 async function buildAndOpenQrPdfFromLogs(
   logs: PrintLogForPrint[],
-  products: ProductSummaryForPrint[],
 ): Promise<void> {
-  const productLabelMap = buildProductLabelMap(products);
   const qrItems: QrPdfItem[] = [];
 
   for (const log of logs) {
-    for (let index = 0; index < log.items.length; index += 1) {
-      const item = log.items[index];
-      const payload = log.qrPayloads[index];
-
-      if (!payload) continue;
-
+    for (const item of log.items) {
       qrItems.push({
-        payload,
-        label: productLabelMap.get(item.productId) ?? "",
+        payload: item.qrPayload,
+        label: item.modelNumber,
       });
     }
   }
@@ -85,8 +61,7 @@ export async function printExistingLogsForProduction(params: {
 
   if (logs.length === 0) return [];
 
-  const products = await listProductsByProductionIdApi(productionId);
-  await buildAndOpenQrPdfFromLogs(logs, products);
+  await buildAndOpenQrPdfFromLogs(logs);
 
   return logs;
 }
@@ -95,7 +70,8 @@ export async function printExistingLogsForProduction(params: {
  * 初回印刷用。
  *
  * POST /products/print-logs により backend 側で products / print_log /
- * inspections の作成と productions.printed の更新をまとめて実行する。
+ * inspections の作成、productions.printed の更新、
+ * QR PDF に必要な qrPayload / modelNumber の解決まで行う。
  */
 export async function createProductsForPrint(params: {
   productionId: string;
@@ -106,14 +82,11 @@ export async function createProductsForPrint(params: {
     throw new Error("productionId is required");
   }
 
-  const logs = await createProductsForPrintApi({
-    productionId,
-  });
+  const logs = await createProductsForPrintApi({ productionId });
 
   if (logs.length === 0) return [];
 
-  const products = await listProductsByProductionIdApi(productionId);
-  await buildAndOpenQrPdfFromLogs(logs, products);
+  await buildAndOpenQrPdfFromLogs(logs);
 
   return logs;
 }
@@ -122,7 +95,7 @@ export async function createProductsForPrint(params: {
  * 印刷ボタン用の入口。
  *
  * 1. GET /products/print-logs?productionId=... で既存 print_log を確認する
- * 2. 存在する場合は既存データから QR PDF を生成する
+ * 2. 存在する場合は既存 BFF response から QR PDF を生成する
  * 3. 存在しない場合だけ POST /products/print-logs を実行する
  *
  * GET が失敗した場合は POST にフォールバックしない。

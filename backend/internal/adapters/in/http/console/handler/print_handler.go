@@ -74,16 +74,20 @@ func (h *PrintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *PrintHandler) listByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
-	ctx := r.Context()
-
+func (h *PrintHandler) listByProductionID(
+	w http.ResponseWriter,
+	r *http.Request,
+	productionID string,
+) {
 	if h.query == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "print query service is not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "print query service is not configured",
+		})
 		return
 	}
 
-	list, err := h.query.ListProductsByProductionID(ctx, productionID)
+	list, err := h.query.ListProductsByProductionID(r.Context(), productionID)
 	if err != nil {
 		writeProductErr(w, err)
 		return
@@ -97,16 +101,23 @@ func (h *PrintHandler) listByProductionID(w http.ResponseWriter, r *http.Request
 	_ = json.NewEncoder(w).Encode(list)
 }
 
-func (h *PrintHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
-	ctx := r.Context()
-
+func (h *PrintHandler) listPrintLogsByProductionID(
+	w http.ResponseWriter,
+	r *http.Request,
+	productionID string,
+) {
 	if h.query == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "print query service is not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "print query service is not configured",
+		})
 		return
 	}
 
-	logs, err := h.query.ListPrintLogsByProductionID(ctx, productionID)
+	logs, err := h.query.ListPrintLogsByProductionID(
+		r.Context(),
+		productionID,
+	)
 	if err != nil {
 		if errors.Is(err, printdom.ErrNotFound) {
 			w.WriteHeader(http.StatusOK)
@@ -127,11 +138,19 @@ func (h *PrintHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *htt
 }
 
 func (h *PrintHandler) createPrintLog(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	if h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "print usecase is not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "print usecase is not configured",
+		})
+		return
+	}
+
+	if h.query == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "print query service is not configured",
+		})
 		return
 	}
 
@@ -141,32 +160,51 @@ func (h *PrintHandler) createPrintLog(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid json",
+		})
 		return
 	}
 
 	productionID := strings.Trim(req.ProductionID, " \t\r\n/")
 	if productionID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "productionId is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "productionId is required",
+		})
 		return
 	}
 
-	pl, err := h.uc.CreatePrintLogForProduction(ctx, productionID)
+	ctx := r.Context()
+
+	if _, err := h.uc.CreatePrintLogForProduction(ctx, productionID); err != nil {
+		writeProductErr(w, err)
+		return
+	}
+
+	logs, err := h.query.ListPrintLogsByProductionID(ctx, productionID)
 	if err != nil {
 		writeProductErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(pl)
+	if len(logs) == 0 {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "created print log could not be loaded",
+		})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(logs[0])
 }
 
 func (h *PrintHandler) create(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	if h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "print usecase is not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "print usecase is not configured",
+		})
 		return
 	}
 
@@ -179,7 +217,9 @@ func (h *PrintHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid json",
+		})
 		return
 	}
 
@@ -188,13 +228,17 @@ func (h *PrintHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	if req.ModelID == "" || req.ProductionID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "modelId and productionId are required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "modelId and productionId are required",
+		})
 		return
 	}
 
 	if req.PrintedAt.IsZero() {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "printedAt is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "printedAt is required",
+		})
 		return
 	}
 
@@ -209,7 +253,7 @@ func (h *PrintHandler) create(w http.ResponseWriter, r *http.Request) {
 		InspectedBy:      nil,
 	}
 
-	created, err := h.uc.Create(ctx, p)
+	created, err := h.uc.Create(r.Context(), p)
 	if err != nil {
 		writeProductErr(w, err)
 		return
@@ -235,5 +279,7 @@ func writeProductErr(w http.ResponseWriter, err error) {
 	}
 
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error": err.Error(),
+	})
 }
