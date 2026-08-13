@@ -26,7 +26,7 @@ import { usePriceCard } from "../hook/usePriceCard";
 import type {
   PriceCardProps,
   PriceRowVM,
-} from "../../../inventory/application/listCreate/listCreateService";
+} from "../../../inventory/application/listCreateService";
 
 type ProductBlueprintCategoryKind =
   | "apparel"

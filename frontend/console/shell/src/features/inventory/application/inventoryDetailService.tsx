@@ -1,21 +1,17 @@
-// frontend/console/shell/src/features/inventory/application/inventoryDetail/inventoryDetail.mapper.ts
+// frontend/console/shell/src/features/inventory/application/inventoryDetail/inventoryDetailService.tsx
+
+import {
+  getInventoryDetailRaw,
+} from "../infrastructure/inventoryApi";
 
 import type {
   InventoryDetailDTO,
-} from "../../infrastructure/http/inventoryRepositoryHTTP.types";
-
-import type {
   InventoryDetailViewModel,
-} from "./inventoryDetail.types";
+} from "../../../shared/types/inventory";
 
-export function buildInventoryDetailViewModel(args: {
-  inventoryId: string;
-  detail: InventoryDetailDTO;
-}): InventoryDetailViewModel {
-  const {
-    detail,
-  } = args;
-
+function buildInventoryDetailViewModel(
+  detail: InventoryDetailDTO,
+): InventoryDetailViewModel {
   const inventoryId =
     detail.inventoryId;
 
@@ -46,12 +42,6 @@ export function buildInventoryDetailViewModel(args: {
     );
   }
 
-  if (!tokenBlueprintPatch) {
-    throw new Error(
-      "inventory_detail_missing_token_blueprint_patch",
-    );
-  }
-
   const productName =
     productBlueprintPatch.productName;
 
@@ -72,12 +62,6 @@ export function buildInventoryDetailViewModel(args: {
 
   const category =
     productBlueprintPatch.productBlueprintCategory;
-
-  if (!category) {
-    throw new Error(
-      "inventory_detail_missing_product_blueprint_category",
-    );
-  }
 
   return {
     inventoryId,
@@ -115,4 +99,41 @@ export function buildInventoryDetailViewModel(args: {
     rows:
       detail.rows,
   };
+}
+
+export async function loadInventoryDetailViewModel(
+  inventoryId: string,
+): Promise<InventoryDetailViewModel> {
+  const id =
+    inventoryId.trim();
+
+  if (!id) {
+    throw new Error(
+      "inventoryId is empty",
+    );
+  }
+
+  const detail =
+    await getInventoryDetailRaw(
+      id,
+    );
+
+  if (!detail.inventoryId) {
+    throw new Error(
+      "inventory_detail_missing_inventory_id",
+    );
+  }
+
+  if (
+    !detail.productBlueprintId ||
+    !detail.tokenBlueprintId
+  ) {
+    throw new Error(
+      "inventory_detail_missing_product_or_token_blueprint_id",
+    );
+  }
+
+  return buildInventoryDetailViewModel(
+    detail,
+  );
 }

@@ -7,7 +7,7 @@ import {
   SortableTableHeader,
 } from "../../../layout/List/List";
 
-import { getInventoryListRaw } from "../infrastructure/api/inventoryApi";
+import { getInventoryListRaw } from "../infrastructure/inventoryApi";
 
 // ============================================================
 // Types（Inventory Management table ViewModel）

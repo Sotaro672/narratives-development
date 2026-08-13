@@ -9,7 +9,7 @@ import type {
   PriceRow,
   PriceRowVM,
   UsePriceCardResult,
-} from "../../../inventory/application/listCreate/listCreateService";
+} from "../../../inventory/application/listCreateService";
 
 // ----------------------------------------------------------
 // Types

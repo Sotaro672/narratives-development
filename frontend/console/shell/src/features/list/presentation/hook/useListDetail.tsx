@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import type { PriceRow } from "../../../inventory/application/listCreate/listCreateService";
+import type { PriceRow } from "../../../inventory/application/listCreateService";
 
 import { useAuthContext } from "../../../../auth/application/AuthContext";
 

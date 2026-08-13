@@ -2,22 +2,22 @@
 
 import type * as React from "react";
 
-import { getListCreateRaw } from "../../infrastructure/api/listCreateApi";
-import type { ListCreateDTO } from "../../infrastructure/http/listCreateRepositoryHTTP.types";
+import { getListCreateRaw } from "../infrastructure/listCreateApi";
+import type { ListCreateDTO } from "../../../shared/types/inventory";
 
 import type {
   List,
   ListPriceRow,
   ListStatus,
-} from "../../../../shared/types/list";
+} from "../../../shared/types/list";
 
 import {
   createListHTTP,
   saveListImageFromFirebaseStorageHTTP,
   setListPrimaryImageHTTP,
-} from "../../../list/infrastructure/repository";
+} from "../../list/infrastructure/repository";
 
-import { uploadListImageToFirebaseStorage } from "../../../list/infrastructure/firebase/listImageStorage";
+import { uploadListImageToFirebaseStorage } from "../../list/infrastructure/firebase/listImageStorage";
 
 /**
  * List create route params

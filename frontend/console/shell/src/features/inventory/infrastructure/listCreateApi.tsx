@@ -1,12 +1,12 @@
 // frontend/console/shell/src/features/inventory/infrastructure/api/listCreateApi.tsx
 
-import { API_BASE } from "../../../../shared/http/apiBase";
+import { API_BASE } from "../../../shared/http/apiBase";
 
-import { getAuthHeadersOrThrow } from "../../../../shared/http/authHeaders";
+import { getAuthHeadersOrThrow } from "../../../shared/http/authHeaders";
 
 import type {
   ListCreateDTO,
-} from "../http/listCreateRepositoryHTTP.types";
+} from "../../../shared/types/inventory";
 
 // ---------------------------------------------------------
 // Shared helpers

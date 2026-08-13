@@ -18,6 +18,10 @@ import type {
 
 import type { ListStatus } from "../../../../shared/types/list";
 
+import type {
+  ListCreateDTO,
+} from "../../../../shared/types/inventory";
+
 import {
   buildAfterCreatePath,
   buildBackPath,
@@ -29,9 +33,7 @@ import {
   type ListCreateRouteParams,
   type PriceRow,
   type ResolvedListCreateParams,
-} from "../../application/listCreate/listCreateService";
-
-import type { ListCreateDTO } from "../../infrastructure/http/listCreateRepositoryHTTP.types";
+} from "../../application/listCreateService";
 
 type ImageInputRef =
   React.RefObject<HTMLInputElement | null>;
