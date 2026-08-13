@@ -5,32 +5,27 @@
  *
  * - Brand一覧取得
  * - TokenBlueprint作成
- * - iconFileがある場合は、作成後にFirebase Storageへ
- *   frontendから直接アップロードする
- * - Firebase StorageのdownloadURL / objectPath /
- *   fileName / contentType / sizeを
+ * - iconFileがある場合は、作成後にFirebase Storageへfrontendから直接アップロードする
+ * - Firebase StorageのdownloadURL / objectPath / fileName / contentType / sizeを
  *   TokenBlueprintのicon情報としてbackendへ保存する
  *
  * 方針:
  * - ブランド名は/brandsの一覧レスポンスitems[].nameを正とする
  * - brandIdからbrandNameの個別名前解決は行わない
- * - tokenBlueprintIconはGCS signed URLを廃止し、
- *   Firebase Storageへ移行済み
+ * - companyIdはTokenBlueprint作成APIへ送信せず、Firebase Storageの保存先決定にのみ使用する
+ * - createdByはTokenBlueprint作成APIへ送信せず、backendの認証コンテキストを正とする
+ * - tokenBlueprintIconはGCS signed URLを廃止し、Firebase Storageへ移行済み
  * - iconの永続化はiconIdやGCS objectではなく、
  *   Firebase StorageのdownloadURLとobjectPathを保存する
  */
 
 import type { TokenBlueprint } from "../../../shared/types/tokenBlueprint";
-
 import type { CreateTokenBlueprintPayload } from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
-
 import {
   createTokenBlueprint,
   updateTokenBlueprint,
 } from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
-
 import { fetchBrandsForCurrentCompany } from "../../brand/infrastructure/http/brandRepositoryHTTP";
-
 import { uploadTokenBlueprintIconToFirebaseStorage } from "../infrastructure/storage/tokenBlueprintAssetStorage";
 
 // ---------------------------------------------------------
@@ -70,15 +65,16 @@ export async function loadBrandsForCompany(): Promise<
 // TokenBlueprint作成
 // ---------------------------------------------------------
 
-export type CreateTokenBlueprintInput =
-  CreateTokenBlueprintPayload & {
-    /**
-     * UI側で選択されたiconファイル。
-     *
-     * 未選択の場合はnullまたはundefined。
-     */
-    iconFile?: File | null;
-  };
+/**
+ * TokenBlueprint作成時のApplication入力。
+ *
+ * companyIdはbackendへのcreate payloadには含めず、
+ * Firebase Storageの保存先決定にのみ利用する。
+ */
+export type CreateTokenBlueprintInput = CreateTokenBlueprintPayload & {
+  companyId: string;
+  iconFile?: File | null;
+};
 
 function normalizeIconUrlForSend(
   raw: unknown,
@@ -88,11 +84,7 @@ function normalizeIconUrlForSend(
       ? raw.trim()
       : undefined;
 
-  if (!url) {
-    return undefined;
-  }
-
-  if (url.startsWith("blob:")) {
+  if (!url || url.startsWith("blob:")) {
     return undefined;
   }
 
@@ -106,9 +98,7 @@ function normalizeOptionalString(
     return undefined;
   }
 
-  const value =
-    String(raw).trim();
-
+  const value = String(raw).trim();
   return value || undefined;
 }
 
@@ -119,16 +109,13 @@ function normalizeOptionalNumber(
     return undefined;
   }
 
-  const value =
-    Number(raw);
+  const value = Number(raw);
 
   if (!Number.isFinite(value)) {
     return undefined;
   }
 
-  return value >= 0
-    ? value
-    : 0;
+  return value >= 0 ? value : 0;
 }
 
 /**
@@ -136,59 +123,41 @@ function normalizeOptionalNumber(
  *
  * iconFileがない場合:
  * - 通常のcreateだけを行う
- * - iconUrl / iconObjectPathなどがinputにある場合は
- *   その値を送信する
+ * - iconUrl / iconObjectPathなどがinputにある場合はその値を送信する
  *
  * iconFileがある場合:
  * 1. icon情報を含めずTokenBlueprintを作成する
- * 2. 作成後のtokenBlueprintIdを使って
- *    Firebase StorageへiconFileをアップロードする
- * 3. 取得したdownloadURL / objectPath /
- *    fileName / contentType / sizeを
+ * 2. 作成後のtokenBlueprintIdを使ってFirebase StorageへiconFileをアップロードする
+ * 3. 取得したdownloadURL / objectPath / fileName / contentType / sizeを
  *    TokenBlueprintのicon情報として更新する
+ *
+ * companyId:
+ * - create APIへは送信しない
+ * - Firebase Storage uploadにのみ使用する
+ *
+ * createdBy:
+ * - frontendから送信しない
+ * - backend認証コンテキストを正とする
  */
 export async function createTokenBlueprintWithOptionalIcon(
   input: CreateTokenBlueprintInput,
 ): Promise<TokenBlueprint> {
-  const iconFile =
-    input.iconFile ?? null;
+  const iconFile = input.iconFile ?? null;
 
   const payload: CreateTokenBlueprintPayload = {
     name: input.name,
     symbol: input.symbol,
     brandId: input.brandId,
-    companyId: input.companyId,
     description: input.description,
     assigneeId: input.assigneeId,
-    createdBy: input.createdBy,
 
-    iconUrl:
-      normalizeIconUrlForSend(
-        input.iconUrl,
-      ),
+    iconUrl: normalizeIconUrlForSend(input.iconUrl),
+    iconObjectPath: normalizeOptionalString(input.iconObjectPath),
+    iconFileName: normalizeOptionalString(input.iconFileName),
+    iconContentType: normalizeOptionalString(input.iconContentType),
+    iconSize: normalizeOptionalNumber(input.iconSize),
 
-    iconObjectPath:
-      normalizeOptionalString(
-        input.iconObjectPath,
-      ),
-
-    iconFileName:
-      normalizeOptionalString(
-        input.iconFileName,
-      ),
-
-    iconContentType:
-      normalizeOptionalString(
-        input.iconContentType,
-      ),
-
-    iconSize:
-      normalizeOptionalNumber(
-        input.iconSize,
-      ),
-
-    contentFiles:
-      input.contentFiles ?? [],
+    contentFiles: input.contentFiles ?? [],
   };
 
   /*
@@ -206,17 +175,13 @@ export async function createTokenBlueprintWithOptionalIcon(
     delete payload.iconSize;
   }
 
-  const created =
-    await createTokenBlueprint(
-      payload,
-    );
+  const created = await createTokenBlueprint(payload);
 
   if (!iconFile) {
     return created;
   }
 
-  const tokenBlueprintId =
-    created.id;
+  const tokenBlueprintId = created.id;
 
   if (!tokenBlueprintId) {
     throw new Error(
@@ -224,8 +189,7 @@ export async function createTokenBlueprintWithOptionalIcon(
     );
   }
 
-  const companyId =
-    input.companyId;
+  const companyId = input.companyId;
 
   if (!companyId) {
     throw new Error(
@@ -233,30 +197,20 @@ export async function createTokenBlueprintWithOptionalIcon(
     );
   }
 
-  const uploaded =
-    await uploadTokenBlueprintIconToFirebaseStorage({
-      companyId,
-      tokenBlueprintId,
-      file: iconFile,
-    });
+  const uploaded = await uploadTokenBlueprintIconToFirebaseStorage({
+    companyId,
+    tokenBlueprintId,
+    file: iconFile,
+  });
 
   return updateTokenBlueprint(
     tokenBlueprintId,
     {
-      iconUrl:
-        uploaded.downloadUrl,
-
-      iconObjectPath:
-        uploaded.objectPath,
-
-      iconFileName:
-        uploaded.fileName,
-
-      iconContentType:
-        uploaded.contentType,
-
-      iconSize:
-        uploaded.size,
+      iconUrl: uploaded.downloadUrl,
+      iconObjectPath: uploaded.objectPath,
+      iconFileName: uploaded.fileName,
+      iconContentType: uploaded.contentType,
+      iconSize: uploaded.size,
     },
   );
 }

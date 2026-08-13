@@ -4,23 +4,17 @@ import {
   normalizeContentType,
   normalizeTokenBlueprintMimeType,
 } from "../../../shared/types/tokenBlueprint";
-
 import type {
   ContentFile,
   TokenBlueprint,
 } from "../../../shared/types/tokenBlueprint";
-
-import type { ContentFileDTO } from "../infrastructure/dto/tokenBlueprint.dto";
 import type { UpdateTokenBlueprintPayload } from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
-
 import { safeDateLabelJa } from "../../../shared/util/dateJa";
-
 import {
   deleteTokenBlueprint,
   fetchTokenBlueprintById,
   updateTokenBlueprint,
 } from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
-
 import { uploadTokenBlueprintIconToFirebaseStorage } from "../infrastructure/storage/tokenBlueprintAssetStorage";
 
 type UpdateFromCardOptions = {
@@ -35,10 +29,9 @@ type TokenBlueprintCardFields =
     contentFiles?: ContentFileForSend[];
   };
 
-type TokenBlueprintCardVm =
-  TokenBlueprintCardFields & {
-    fields?: TokenBlueprintCardFields;
-  };
+type TokenBlueprintCardVm = TokenBlueprintCardFields & {
+  fields?: TokenBlueprintCardFields;
+};
 
 /**
  * 詳細取得。
@@ -131,52 +124,23 @@ export function buildUpdatePayloadFromCardVm(
   cardVm: TokenBlueprintCardVm,
 ): UpdateTokenBlueprintPayload {
   const fields = getCardFields(cardVm);
-
-  const iconUrlRaw =
-    fields.iconUrl ??
-    blueprint.iconUrl;
-
+  const iconUrlRaw = fields.iconUrl ?? blueprint.iconUrl;
   const iconUrl =
-    typeof iconUrlRaw === "string" &&
-    iconUrlRaw.startsWith("blob:")
+    typeof iconUrlRaw === "string" && iconUrlRaw.startsWith("blob:")
       ? undefined
       : iconUrlRaw;
 
   return {
-    name:
-      fields.name ??
-      blueprint.name,
-
-    symbol:
-      fields.symbol ??
-      blueprint.symbol,
-
-    assigneeId:
-      fields.assigneeId ??
-      blueprint.assigneeId,
-
+    name: fields.name ?? blueprint.name,
+    symbol: fields.symbol ?? blueprint.symbol,
+    assigneeId: fields.assigneeId ?? blueprint.assigneeId,
     iconUrl,
-
-    iconObjectPath:
-      fields.iconObjectPath ??
-      blueprint.iconObjectPath,
-
-    iconFileName:
-      fields.iconFileName ??
-      blueprint.iconFileName,
-
-    iconContentType:
-      fields.iconContentType ??
-      blueprint.iconContentType,
-
-    iconSize:
-      fields.iconSize ??
-      blueprint.iconSize,
-
+    iconObjectPath: fields.iconObjectPath ?? blueprint.iconObjectPath,
+    iconFileName: fields.iconFileName ?? blueprint.iconFileName,
+    iconContentType: fields.iconContentType ?? blueprint.iconContentType,
+    iconSize: fields.iconSize ?? blueprint.iconSize,
     contentFiles: buildContentFilesForSend(
-      fields.contentFiles ??
-      blueprint.contentFiles ??
-      [],
+      fields.contentFiles ?? blueprint.contentFiles ?? [],
     ),
   };
 }
@@ -206,11 +170,10 @@ export async function updateTokenBlueprintFromCard(
     cardVm.fields?.iconFile ??
     null;
 
-  const payload =
-    buildUpdatePayloadFromCardVm(
-      blueprint,
-      cardVm,
-    );
+  const payload = buildUpdatePayloadFromCardVm(
+    blueprint,
+    cardVm,
+  );
 
   if (iconFile) {
     delete payload.iconUrl;
@@ -220,19 +183,16 @@ export async function updateTokenBlueprintFromCard(
     delete payload.iconSize;
   }
 
-  const updated =
-    await updateTokenBlueprint(
-      blueprint.id,
-      payload,
-    );
+  const updated = await updateTokenBlueprint(
+    blueprint.id,
+    payload,
+  );
 
   if (!iconFile) {
     return updated;
   }
 
-  const tokenBlueprintId =
-    updated.id ||
-    blueprint.id;
+  const tokenBlueprintId = updated.id || blueprint.id;
 
   if (!tokenBlueprintId) {
     throw new Error(
@@ -240,9 +200,7 @@ export async function updateTokenBlueprintFromCard(
     );
   }
 
-  const companyId =
-    updated.companyId ||
-    blueprint.companyId;
+  const companyId = updated.companyId || blueprint.companyId;
 
   if (!companyId) {
     throw new Error(
@@ -250,12 +208,11 @@ export async function updateTokenBlueprintFromCard(
     );
   }
 
-  const uploaded =
-    await uploadTokenBlueprintIconToFirebaseStorage({
-      companyId,
-      tokenBlueprintId,
-      file: iconFile,
-    });
+  const uploaded = await uploadTokenBlueprintIconToFirebaseStorage({
+    companyId,
+    tokenBlueprintId,
+    file: iconFile,
+  });
 
   return updateTokenBlueprint(
     tokenBlueprintId,
@@ -270,7 +227,7 @@ export async function updateTokenBlueprintFromCard(
 }
 
 /**
- * contentFilesをbackendへ送信するDTOへ変換する。
+ * contentFilesをbackendへ送信するContentFileへ変換する。
  *
  * 正仕様:
  *
@@ -292,142 +249,87 @@ export async function updateTokenBlueprintFromCard(
  */
 function buildContentFilesForSend(
   input: ContentFileForSend[],
-): ContentFileDTO[] {
+): ContentFile[] {
   return input
-    .map(
-      (
-        content,
-      ): ContentFileDTO | null => {
-        if (
-          typeof content.isPublic !==
-          "boolean"
-        ) {
-          return null;
-        }
+    .map((content): ContentFile | null => {
+      if (typeof content.isPublic !== "boolean") {
+        return null;
+      }
 
-        const nowIso = new Date().toISOString();
-        const id = String(content.id ?? "");
-        const name = String(content.name ?? "");
-        const type = normalizeContentType(content.type);
-        const contentType =
-          normalizeTokenBlueprintMimeType(
-            content.contentType,
-          );
+      const nowIso = new Date().toISOString();
+      const id = String(content.id ?? "");
+      const name = String(content.name ?? "");
+      const type = normalizeContentType(content.type);
+      const contentType = normalizeTokenBlueprintMimeType(
+        content.contentType,
+      );
+      const createdAt = toIsoStringOrNow(
+        content.createdAt ?? nowIso,
+      );
+      const createdBy = String(content.createdBy ?? "");
+      const updatedAt = toIsoStringOrNow(
+        content.updatedAt ?? nowIso,
+      );
+      const updatedBy = String(content.updatedBy ?? "");
+      const url = String(content.url ?? "");
+      const objectPath = String(content.objectPath ?? "");
+      const rawSize = Number(content.size ?? 0);
+      const size =
+        Number.isFinite(rawSize) && rawSize >= 0
+          ? rawSize
+          : 0;
 
-        const createdAt =
-          toIsoStringOrNow(
-            content.createdAt ??
-            nowIso,
-          );
+      if (
+        !id ||
+        !name ||
+        !url ||
+        !objectPath ||
+        !createdAt ||
+        !createdBy ||
+        !updatedAt ||
+        !updatedBy
+      ) {
+        return null;
+      }
 
-        const createdBy =
-          String(
-            content.createdBy ??
-            "",
-          );
-
-        const updatedAt =
-          toIsoStringOrNow(
-            content.updatedAt ??
-            nowIso,
-          );
-
-        const updatedBy =
-          String(
-            content.updatedBy ??
-            "",
-          );
-
-        const url = String(content.url ?? "");
-        const objectPath =
-          String(
-            content.objectPath ??
-            "",
-          );
-
-        const rawSize =
-          Number(
-            content.size ??
-            0,
-          );
-
-        const size =
-          Number.isFinite(rawSize) &&
-          rawSize >= 0
-            ? rawSize
-            : 0;
-
-        if (
-          !id ||
-          !name ||
-          !url ||
-          !objectPath ||
-          !createdAt ||
-          !createdBy ||
-          !updatedAt ||
-          !updatedBy
-        ) {
-          return null;
-        }
-
-        return {
-          id,
-          name,
-          type,
-          contentType,
-          isPublic: content.isPublic,
-          createdAt,
-          createdBy,
-          updatedAt,
-          updatedBy,
-          url,
-          objectPath,
-          size,
-        };
-      },
-    )
-    .filter(
-      (
-        content,
-      ): content is ContentFileDTO => {
-        return content !== null;
-      },
-    );
+      return {
+        id,
+        name,
+        type,
+        contentType,
+        isPublic: content.isPublic,
+        createdAt,
+        createdBy,
+        updatedAt,
+        updatedBy,
+        url,
+        objectPath,
+        size,
+      };
+    })
+    .filter((content): content is ContentFile => content !== null);
 }
 
 function toIsoStringOrNow(
   value: unknown,
 ): string {
   if (value instanceof Date) {
-    if (
-      Number.isNaN(
-        value.getTime(),
-      )
-    ) {
+    if (Number.isNaN(value.getTime())) {
       return new Date().toISOString();
     }
 
     return value.toISOString();
   }
 
-  const raw =
-    String(
-      value ??
-      "",
-    );
+  const raw = String(value ?? "");
 
   if (!raw) {
     return new Date().toISOString();
   }
 
-  const parsed =
-    new Date(raw);
+  const parsed = new Date(raw);
 
-  if (
-    Number.isNaN(
-      parsed.getTime(),
-    )
-  ) {
+  if (Number.isNaN(parsed.getTime())) {
     return new Date().toISOString();
   }
 

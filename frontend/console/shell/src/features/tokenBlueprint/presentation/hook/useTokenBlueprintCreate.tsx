@@ -3,14 +3,8 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
-import {
-  useAuthContext,
-} from "../../../../auth/application/AuthContext";
-
-import type {
-  TokenBlueprint,
-} from "../../../../shared/types/tokenBlueprint";
-
+import { useAuthContext } from "../../../../auth/application/AuthContext";
+import type { TokenBlueprint } from "../../../../shared/types/tokenBlueprint";
 import {
   createTokenBlueprintWithOptionalIcon,
   type CreateTokenBlueprintInput,
@@ -29,250 +23,164 @@ import {
  * tokenBlueprintContentsの管理、プレビュー、アップロード、
  * contentFilesの更新はpages/tokenBlueprintCreate.tsxで行う。
  *
- * 保存するmember系ID:
- * - createdBy: members document ID
- * - updatedBy: members document ID
- * - assigneeId: members document ID
+ * member系ID:
+ * - assigneeIdはfrontendからmembers document IDを送信する
+ * - createdBy / updatedByはbackendの認証コンテキストを正とする
  */
-type SaveInput =
-  Partial<TokenBlueprint> & {
-    iconFile?: File | null;
-  };
+type SaveInput = Partial<TokenBlueprint> & {
+  iconFile?: File | null;
+};
 
 export function useTokenBlueprintCreate() {
-  const navigate =
-    useNavigate();
+  const navigate = useNavigate();
+  const { currentMember } = useAuthContext();
 
-  const {
-    currentMember,
-  } = useAuthContext();
-
-  const companyId =
-    currentMember?.companyId ??
-    "";
+  const companyId = currentMember?.companyId ?? "";
 
   /**
    * Firebase Auth UIDではなく、
-   * Firestore membersのdocument IDを保存する。
+   * Firestore membersのdocument IDを担当者IDとして使用する。
    */
-  const memberId =
-    currentMember?.id ??
-    "";
+  const memberId = currentMember?.id ?? "";
 
-  const [
-    assignee,
-    setAssignee,
-  ] = React.useState<string>(
-    memberId,
-  );
+  const [assignee, setAssignee] = React.useState<string>(memberId);
 
   React.useEffect(() => {
-    if (
-      !assignee &&
-      memberId
-    ) {
-      setAssignee(
-        memberId,
-      );
+    if (!assignee && memberId) {
+      setAssignee(memberId);
     }
+  }, [assignee, memberId]);
+
+  const createdAt = React.useMemo(
+    () => new Date().toISOString(),
+    [],
+  );
+
+  const displayAssigneeName = React.useMemo(() => {
+    const fullName = `${currentMember?.lastName ?? ""} ${
+      currentMember?.firstName ?? ""
+    }`.trim();
+
+    return (
+      currentMember?.displayName?.trim() ||
+      fullName ||
+      currentMember?.email?.trim() ||
+      "未設定"
+    );
   }, [
-    assignee,
-    memberId,
+    currentMember?.displayName,
+    currentMember?.lastName,
+    currentMember?.firstName,
+    currentMember?.email,
   ]);
 
-  const createdAt =
-    React.useMemo(
-      () =>
-        new Date().toISOString(),
-      [],
-    );
+  const onBack = React.useCallback(() => {
+    navigate("/tokenBlueprint", {
+      replace: true,
+    });
+  }, [navigate]);
 
-  const displayAssigneeName =
-    React.useMemo(() => {
-      const fullName =
-        `${currentMember?.lastName ?? ""} ${
-          currentMember?.firstName ?? ""
-        }`.trim();
-
-      return (
-        currentMember?.displayName?.trim() ||
-        fullName ||
-        currentMember?.email?.trim() ||
-        "未設定"
-      );
-    }, [
-      currentMember?.displayName,
-      currentMember?.lastName,
-      currentMember?.firstName,
-      currentMember?.email,
-    ]);
-
-  const onBack =
-    React.useCallback(() => {
-      navigate(
-        "/tokenBlueprint",
-        {
-          replace: true,
-        },
-      );
-    }, [navigate]);
-
-  const onSave =
-    React.useCallback(
-      async (
-        input: SaveInput,
-      ): Promise<TokenBlueprint> => {
-        if (!companyId) {
-          throw new Error(
-            "companyIdが取得できません。ログイン状態を確認してください。",
-          );
-        }
-
-        if (!memberId) {
-          throw new Error(
-            "memberIdが取得できません。ログイン状態を確認してください。",
-          );
-        }
-
-        const iconFile =
-          input.iconFile ??
-          null;
-
-        const effectiveAssigneeId =
-          input.assigneeId?.trim() ||
-          assignee ||
-          memberId;
-
-        const payload:
-          CreateTokenBlueprintInput = {
-            name:
-              input.name?.trim() ??
-              "",
-
-            symbol:
-              input.symbol?.trim() ??
-              "",
-
-            brandId:
-              input.brandId?.trim() ??
-              "",
-
-            description:
-              input.description?.trim() ??
-              "",
-
-            assigneeId:
-              effectiveAssigneeId,
-
-            companyId,
-
-            createdBy:
-              memberId,
-
-            iconUrl:
-              input.iconUrl,
-
-            iconObjectPath:
-              input.iconObjectPath,
-
-            iconFileName:
-              input.iconFileName,
-
-            iconContentType:
-              input.iconContentType,
-
-            iconSize:
-              input.iconSize,
-
-            contentFiles:
-              input.contentFiles ??
-              [],
-
-            iconFile,
-          };
-
-        const created =
-          await createTokenBlueprintWithOptionalIcon(
-            payload,
-          );
-
-        if (!created.id) {
-          throw new Error(
-            "create result is missing tokenBlueprint.id",
-          );
-        }
-
-        setAssignee(
-          effectiveAssigneeId,
+  const onSave = React.useCallback(
+    async (input: SaveInput): Promise<TokenBlueprint> => {
+      if (!companyId) {
+        throw new Error(
+          "companyIdが取得できません。ログイン状態を確認してください。",
         );
+      }
 
-        return created;
-      },
-      [
+      if (!memberId) {
+        throw new Error(
+          "memberIdが取得できません。ログイン状態を確認してください。",
+        );
+      }
+
+      const iconFile = input.iconFile ?? null;
+      const effectiveAssigneeId =
+        input.assigneeId?.trim() ||
+        assignee ||
+        memberId;
+
+      const payload: CreateTokenBlueprintInput = {
+        name: input.name?.trim() ?? "",
+        symbol: input.symbol?.trim() ?? "",
+        brandId: input.brandId?.trim() ?? "",
+        description: input.description?.trim() ?? "",
+        assigneeId: effectiveAssigneeId,
         companyId,
+
+        iconUrl: input.iconUrl,
+        iconObjectPath: input.iconObjectPath,
+        iconFileName: input.iconFileName,
+        iconContentType: input.iconContentType,
+        iconSize: input.iconSize,
+
+        contentFiles: input.contentFiles ?? [],
+        iconFile,
+      };
+
+      const created = await createTokenBlueprintWithOptionalIcon(
+        payload,
+      );
+
+      if (!created.id) {
+        throw new Error(
+          "create result is missing tokenBlueprint.id",
+        );
+      }
+
+      setAssignee(effectiveAssigneeId);
+
+      return created;
+    },
+    [
+      companyId,
+      memberId,
+      assignee,
+    ],
+  );
+
+  const initialTokenBlueprint = React.useMemo<
+    Partial<TokenBlueprint>
+  >(
+    () => ({
+      id: "",
+      name: "",
+      symbol: "",
+      brandId: "",
+      brandName: "",
+      description: "",
+      companyId,
+
+      contentFiles: [],
+
+      assigneeId:
+        assignee ||
         memberId,
-        assignee,
-      ],
-    );
 
-  const initialTokenBlueprint =
-    React.useMemo<
-      Partial<TokenBlueprint>
-    >(
-      () => ({
-        id: "",
-        name: "",
-        symbol: "",
-        brandId: "",
-        brandName: "",
-        description: "",
-        companyId,
+      createdBy: memberId,
+      createdAt,
 
-        contentFiles: [],
+      updatedBy: memberId,
+      updatedAt: createdAt,
 
-        assigneeId:
-          assignee ||
-          memberId,
-
-        createdBy:
-          memberId,
-
-        createdAt,
-
-        updatedBy:
-          memberId,
-
-        updatedAt:
-          createdAt,
-
-        deletedAt:
-          null,
-
-        deletedBy:
-          null,
-      }),
-      [
-        companyId,
-        assignee,
-        memberId,
-        createdAt,
-      ],
-    );
+      deletedAt: null,
+      deletedBy: null,
+    }),
+    [
+      companyId,
+      assignee,
+      memberId,
+      createdAt,
+    ],
+  );
 
   return {
     initialTokenBlueprint,
+    assigneeName: displayAssigneeName,
+    initialEditMode: true,
 
-    assigneeName:
-      displayAssigneeName,
-
-    initialEditMode:
-      true,
-
-    onEditAssignee:
-      () => {},
-
-    onClickAssignee:
-      () => {},
+    onEditAssignee: () => {},
+    onClickAssignee: () => {},
 
     onBack,
     onSave,
