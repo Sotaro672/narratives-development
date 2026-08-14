@@ -1,16 +1,7 @@
 // frontend/amol/src/features/cart/presentation/components/CartItemMeta.tsx
 
-import type {
-  CartDisplayItem,
-} from "../../types/cart";
-
-import {
-  getModelVariation,
-} from "../../utils/cartUtils";
-
-import {
-  formatAlcoholVolume,
-} from "../utils/cartItemDisplay";
+import type { CartDisplayItem } from "../../types/cart";
+import { formatAlcoholVolume } from "../utils/cartItemDisplay";
 
 type CartItemMetaProps = {
   item: CartDisplayItem;
@@ -19,35 +10,11 @@ type CartItemMetaProps = {
 export default function CartItemMeta({
   item,
 }: CartItemMetaProps) {
-  const model =
-    getModelVariation(
-      item.catalog,
-      item.modelId ?? "",
-    );
+  const isAlcohol = item.modelKind === "alcohol";
 
-  const modelKind =
-    item.modelKind ??
-    model?.kind ??
-    "unknown";
-
-  const isAlcohol =
-    modelKind === "alcohol";
-
-  const modelNumber =
-    model?.modelNumber?.trim() ||
-    item.modelNumber?.trim() ||
-    "-";
-
-  const colorName =
-    model?.colorName?.trim() ||
-    item.colorName?.trim() ||
-    item.color?.trim() ||
-    "-";
-
-  const size =
-    model?.size?.trim() ||
-    item.size?.trim() ||
-    "-";
+  const modelNumber = item.modelNumber || "-";
+  const color = item.color || "-";
+  const size = item.size || "-";
 
   return (
     <dl className="cart-page-item__meta">
@@ -55,49 +22,31 @@ export default function CartItemMeta({
         <>
           <div>
             <dt>品番</dt>
-
-            <dd>
-              {modelNumber}
-            </dd>
+            <dd>{modelNumber}</dd>
           </div>
 
           <div>
             <dt>容量</dt>
-
-            <dd>
-              {formatAlcoholVolume(
-                item,
-                model,
-              )}
-            </dd>
+            <dd>{formatAlcoholVolume(item)}</dd>
           </div>
         </>
       ) : (
         <>
           <div>
             <dt>カラー</dt>
-
-            <dd>
-              {colorName}
-            </dd>
+            <dd>{color}</dd>
           </div>
 
           <div>
             <dt>サイズ</dt>
-
-            <dd>
-              {size}
-            </dd>
+            <dd>{size}</dd>
           </div>
         </>
       )}
 
       <div>
         <dt>数量</dt>
-
-        <dd>
-          {item.qty}
-        </dd>
+        <dd>{item.qty}</dd>
       </div>
     </dl>
   );

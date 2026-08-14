@@ -1,7 +1,6 @@
 // frontend/amol/src/features/payment/components/PaymentItemsCard.tsx
 
 import { formatPrice } from "../../../components/utils/price";
-import { getModelPrice, getModelVariation } from "../../cart/utils/cartUtils";
 import type { CartDisplayItem } from "../../shared/types/cart";
 
 type PaymentItemsCardProps = {
@@ -10,23 +9,11 @@ type PaymentItemsCardProps = {
 };
 
 function getItemTitle(item: CartDisplayItem): string {
-  const catalog = item.catalog;
-
-  return (
-    item.productName ||
-    item.title ||
-    catalog?.productBlueprint.productName ||
-    catalog?.list.title ||
-    "商品名未設定"
-  );
+  return item.productName || item.title || "商品名未設定";
 }
 
 function getItemPrice(item: CartDisplayItem): number | null {
-  if (typeof item.price === "number") {
-    return item.price;
-  }
-
-  return getModelPrice(item.catalog, item.modelId ?? "");
+  return item.price ?? null;
 }
 
 function getAlcoholModelLabel(item: CartDisplayItem): string {
@@ -35,7 +22,7 @@ function getAlcoholModelLabel(item: CartDisplayItem): string {
   }
 
   const volumeLabel =
-    typeof item.volumeValue === "number" && item.volumeUnit
+    item.volumeValue !== undefined && item.volumeUnit
       ? `${item.volumeValue}${item.volumeUnit}`
       : "";
 
@@ -43,24 +30,18 @@ function getAlcoholModelLabel(item: CartDisplayItem): string {
 }
 
 function getApparelModelLabel(item: CartDisplayItem): string {
-  const model = getModelVariation(item.catalog, item.modelId ?? "");
-  const colorName = item.colorName ?? model?.colorName ?? "";
-  const size = item.size ?? model?.size ?? "";
-
   return [
-    colorName ? `カラー: ${colorName}` : "",
-    size ? `サイズ: ${size}` : "",
+    item.color ? `カラー: ${item.color}` : "",
+    item.size ? `サイズ: ${item.size}` : "",
   ]
     .filter(Boolean)
     .join(" / ");
 }
 
 function getItemModelLabel(item: CartDisplayItem): string {
-  if (item.modelKind === "alcohol") {
-    return getAlcoholModelLabel(item);
-  }
-
-  return getApparelModelLabel(item);
+  return item.modelKind === "alcohol"
+    ? getAlcoholModelLabel(item)
+    : getApparelModelLabel(item);
 }
 
 export function PaymentItemsCard({
@@ -88,9 +69,7 @@ export function PaymentItemsCard({
                     <p className="payment-page__item-meta">{modelLabel}</p>
                   ) : null}
 
-                  <p className="payment-page__item-meta">
-                    数量: {item.qty}
-                  </p>
+                  <p className="payment-page__item-meta">数量: {item.qty}</p>
                 </div>
 
                 <p className="payment-page__item-price">
@@ -101,9 +80,7 @@ export function PaymentItemsCard({
           })}
         </ul>
       ) : (
-        <p className="payment-page__empty">
-          カート情報がありません。
-        </p>
+        <p className="payment-page__empty">カート情報がありません。</p>
       )}
 
       <div className="payment-page__total">
