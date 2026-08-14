@@ -327,65 +327,22 @@ func buildQueries(
 
 	// =========================================================
 	// OrderDetailQuery
-	// - GET /orders/{id} 用
-	// - handler から detail enrichment を application/query 層へ分離
+	// - GET /orders/{id} が注文詳細画面に必要な値をすべて返す BFF
+	// - repository / resolver の正規 interface を直接 DI する
+	// - listId と listReadableId は別フィールドとして扱う
 	// =========================================================
-	var invBlueprint companyquery.OrderDetailInventoryBlueprintResolver
-	if r.inventoryRepo != nil {
-		if v, ok := any(r.inventoryRepo).(companyquery.OrderDetailInventoryBlueprintResolver); ok {
-			invBlueprint = v
-		}
-	}
-
-	var pbName companyquery.OrderDetailProductBlueprintNameResolver
-	if r.productBlueprintRepo != nil {
-		if v, ok := any(r.productBlueprintRepo).(companyquery.OrderDetailProductBlueprintNameResolver); ok {
-			pbName = v
-		}
-	}
-
-	var tbName companyquery.OrderDetailTokenBlueprintNameResolver
-	if r.tokenBlueprintRepo != nil {
-		if v, ok := any(r.tokenBlueprintRepo).(companyquery.OrderDetailTokenBlueprintNameResolver); ok {
-			tbName = v
-		}
-	}
-
-	var avatarName companyquery.OrderDetailAvatarNameResolver
-	if r.avatarRepo != nil {
-		if v, ok := any(r.avatarRepo).(companyquery.OrderDetailAvatarNameResolver); ok {
-			avatarName = v
-		}
-	}
-
-	var userName companyquery.OrderDetailUserNameResolver
-	if res.nameResolver != nil {
-		if v, ok := any(res.nameResolver).(companyquery.OrderDetailUserNameResolver); ok {
-			userName = v
-		}
-	}
-
-	var modelResolver companyquery.OrderDetailModelResolver
-	if res.nameResolver != nil {
-		if v, ok := any(res.nameResolver).(companyquery.OrderDetailModelResolver); ok {
-			modelResolver = v
-		}
-	}
-
 	var orderDetailQuery *companyquery.OrderDetailQuery
 	if u != nil && u.orderUC != nil {
 		orderDetailQuery = companyquery.NewOrderDetailQuery(
 			companyquery.NewOrderDetailQueryParams{
-				OrderGetter: u.orderUC,
-
-				InvBlueprint: invBlueprint,
-				PBName:       pbName,
-				TBName:       tbName,
-
-				AvatarName: avatarName,
-				UserName:   userName,
-
-				ModelResolver: modelResolver,
+				OrderGetter:   u.orderUC,
+				InvBlueprint:  r.inventoryRepo,
+				PBName:        r.productBlueprintRepo,
+				TBName:        r.tokenBlueprintRepo,
+				AvatarName:    r.avatarRepo,
+				UserName:      res.nameResolver,
+				ModelResolver: res.nameResolver,
+				ListReadable:  r.listRepoFS,
 			},
 		)
 	}

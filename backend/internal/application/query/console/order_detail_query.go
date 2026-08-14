@@ -8,8 +8,10 @@ import (
 	"time"
 
 	resolver "narratives/internal/application/resolver"
+	avatardom "narratives/internal/domain/avatar"
 	orderdom "narratives/internal/domain/order"
 	pbdom "narratives/internal/domain/productBlueprint"
+	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ============================================================
@@ -29,11 +31,11 @@ type OrderDetailProductBlueprintNameResolver interface {
 }
 
 type OrderDetailTokenBlueprintNameResolver interface {
-	GetNameByID(ctx context.Context, id string) (string, error)
+	GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
 }
 
 type OrderDetailAvatarNameResolver interface {
-	GetNameByID(ctx context.Context, id string) (string, error)
+	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 }
 
 type OrderDetailUserNameResolver interface {
@@ -224,11 +226,11 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 	}
 
 	if o.AvatarID != "" {
-		avatarName, err := q.avatarName.GetNameByID(ctx, o.AvatarID)
+		avatar, err := q.avatarName.GetByID(ctx, o.AvatarID)
 		if err != nil {
-			return OrderDetailDTO{}, fmt.Errorf("resolve avatarName avatarId=%q: %w", o.AvatarID, err)
+			return OrderDetailDTO{}, fmt.Errorf("resolve avatar avatarId=%q: %w", o.AvatarID, err)
 		}
-		dto.AvatarName = avatarName
+		dto.AvatarName = avatar.AvatarName
 	}
 
 	productBlueprintCache := make(map[string]pbdom.ProductBlueprint)
@@ -261,13 +263,16 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 			return cached, nil
 		}
 
-		name, err := q.tbName.GetNameByID(ctx, id)
+		tb, err := q.tbName.GetByID(ctx, id)
 		if err != nil {
 			return "", err
 		}
+		if tb == nil {
+			return "", fmt.Errorf("tokenBlueprint is nil: tokenBlueprintId=%q", id)
+		}
 
-		tokenNameCache[id] = name
-		return name, nil
+		tokenNameCache[id] = tb.Name
+		return tb.Name, nil
 	}
 
 	resolveModel := func(modelID string) resolver.ModelResolved {
