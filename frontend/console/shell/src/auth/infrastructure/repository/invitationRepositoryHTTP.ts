@@ -1,24 +1,13 @@
 // frontend/console/shell/src/auth/infrastructure/repository/invitationRepositoryHTTP.ts
 
-import {
-  buildConsoleUrl,
-} from "../../../shared/http/apiBase";
-
-import {
-  fetchJSON,
-  HttpError,
-} from "../../../shared/http/fetchJSON";
+import { buildConsoleUrl } from "../../../shared/http/apiBase";
+import { fetchJSON, HttpError } from "../../../shared/http/fetchJSON";
 
 // ------------------------------
 // 型定義
 // ------------------------------
 
 export type InvitationInfo = {
-  companyName?: string;
-  brandNames?: string[];
-};
-
-export type ValidateResponse = {
   companyName?: string;
   brandNames?: string[];
 };
@@ -37,221 +26,47 @@ type ErrorResponse = {
 };
 
 // ------------------------------
-// Helpers
+// Error handling
 // ------------------------------
 
-function safeTrim(
-  value: unknown,
-): string {
-  return typeof value === "string"
-    ? value.trim()
-    : "";
-}
-
-function normalizeCompleteInvitationPayload(
-  payload: CompleteInvitationBackendPayload,
-): CompleteInvitationBackendPayload {
-  const normalized:
-    CompleteInvitationBackendPayload = {
-      token:
-        safeTrim(
-          payload.token,
-        ),
-      lastName:
-        safeTrim(
-          payload.lastName,
-        ),
-      lastNameKana:
-        safeTrim(
-          payload.lastNameKana,
-        ),
-      firstName:
-        safeTrim(
-          payload.firstName,
-        ),
-      firstNameKana:
-        safeTrim(
-          payload.firstNameKana,
-        ),
-    };
-
-  if (!normalized.token) {
-    throw new Error(
-      "token が指定されていません。",
-    );
-  }
-
-  if (!normalized.lastName) {
-    throw new Error(
-      "lastName が指定されていません。",
-    );
-  }
-
-  if (!normalized.lastNameKana) {
-    throw new Error(
-      "lastNameKana が指定されていません。",
-    );
-  }
-
-  if (!normalized.firstName) {
-    throw new Error(
-      "firstName が指定されていません。",
-    );
-  }
-
-  if (!normalized.firstNameKana) {
-    throw new Error(
-      "firstNameKana が指定されていません。",
-    );
-  }
-
-  return normalized;
-}
-
-function normalizeStringArray(
-  value: unknown,
-): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const normalized =
-    value
-      .map((item) =>
-        safeTrim(
-          item,
-        ),
-      )
-      .filter(
-        (item) =>
-          item.length > 0,
-      );
-
-  return Array.from(
-    new Set(
-      normalized,
-    ),
-  );
-}
-
-function normalizeValidateResponse(
-  data: unknown,
-): ValidateResponse {
-  if (
-    typeof data !== "object" ||
-    data === null
-  ) {
-    return {};
-  }
-
-  const record =
-    data as Record<
-      string,
-      unknown
-    >;
-
-  const companyName =
-    safeTrim(
-      record.companyName,
-    );
-
-  const brandNames =
-    normalizeStringArray(
-      record.brandNames,
-    );
-
-  return {
-    companyName:
-      companyName ||
-      undefined,
-    brandNames:
-      brandNames.length > 0
-        ? brandNames
-        : undefined,
-  };
-}
-
-function validateResponseToInvitationInfo(
-  data: ValidateResponse,
-): InvitationInfo {
-  return {
-    companyName:
-      data.companyName,
-    brandNames:
-      data.brandNames,
-  };
-}
-
-/**
- * Backendのエラーレスポンスから、
- * 画面表示用のメッセージを取得する。
- */
-function parseBackendErrorBody(
-  bodyText: string | undefined,
-): string | null {
+function parseBackendErrorBody(bodyText: string | undefined): string | null {
   if (!bodyText) {
     return null;
   }
 
   try {
-    const parsed =
-      JSON.parse(
-        bodyText,
-      ) as ErrorResponse;
+    const parsed = JSON.parse(bodyText) as ErrorResponse;
 
-    const backendMessage =
-      safeTrim(
-        parsed.error,
-      ) ||
-      safeTrim(
-        parsed.message,
-      );
+    if (typeof parsed.error === "string" && parsed.error) {
+      return parsed.error;
+    }
 
-    return (
-      backendMessage ||
-      null
-    );
+    if (typeof parsed.message === "string" && parsed.message) {
+      return parsed.message;
+    }
+
+    return null;
   } catch {
     return null;
   }
 }
 
-/**
- * fetchJSONから送出されたエラーを、
- * Repository用のメッセージへ変換する。
- */
-function toInvitationRepositoryError(
-  error: unknown,
-  fallback: string,
-): Error {
-  if (
-    error instanceof HttpError
-  ) {
-    const backendMessage =
-      parseBackendErrorBody(
-        error.bodyText,
-      );
+function toInvitationRepositoryError(error: unknown, fallback: string): Error {
+  if (error instanceof HttpError) {
+    const backendMessage = parseBackendErrorBody(error.bodyText);
 
     if (backendMessage) {
-      return new Error(
-        backendMessage,
-      );
+      return new Error(backendMessage);
     }
 
-    return new Error(
-      `${fallback} (status ${error.status})`,
-    );
+    return new Error(`${fallback} (status ${error.status})`);
   }
 
-  if (
-    error instanceof Error
-  ) {
+  if (error instanceof Error) {
     return error;
   }
 
-  return new Error(
-    fallback,
-  );
+  return new Error(fallback);
 }
 
 // ------------------------------
@@ -262,64 +77,30 @@ function toInvitationRepositoryError(
 export async function fetchInvitationInfo(
   token: string,
 ): Promise<InvitationInfo> {
-  const data =
-    await validateInvitation(
-      token,
-    );
-
-  return validateResponseToInvitationInfo(
-    data,
-  );
+  return validateInvitation(token);
 }
 
 // ------------------------------
 // validateInvitation
 // - POST /invitations/validate
 // - 招待受諾前の公開APIのためAuthorizationは付与しない
-// - 会社名とブランド名以外の機微情報は取得しない
+// - Backend BFFレスポンスをそのまま正とする
 // ------------------------------
 
 export async function validateInvitation(
   token: string,
-): Promise<ValidateResponse> {
-  const normalizedToken =
-    safeTrim(
-      token,
-    );
-
-  if (!normalizedToken) {
-    throw new Error(
-      "token が指定されていません。",
-    );
-  }
-
-  const url =
-    buildConsoleUrl(
-      "/invitations/validate",
-    );
+): Promise<InvitationInfo> {
+  const url = buildConsoleUrl("/invitations/validate");
 
   try {
-    const data =
-      await fetchJSON<unknown>(
-        url,
-        {
-          method: "POST",
-          auth: "none",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body:
-            JSON.stringify({
-              token:
-                normalizedToken,
-            }),
-        },
-      );
-
-    return normalizeValidateResponse(
-      data,
-    );
+    return await fetchJSON<InvitationInfo>(url, {
+      method: "POST",
+      auth: "none",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ token }),
+    });
   } catch (error: unknown) {
     throw toInvitationRepositoryError(
       error,
@@ -340,38 +121,18 @@ export async function validateInvitation(
 export async function completeInvitationOnBackend(
   payload: CompleteInvitationBackendPayload,
 ): Promise<void> {
-  const url =
-    buildConsoleUrl(
-      "/invitations/complete",
-    );
-
-  const body =
-    normalizeCompleteInvitationPayload(
-      payload,
-    );
+  const url = buildConsoleUrl("/invitations/complete");
 
   try {
-    await fetchJSON<void>(
-      url,
-      {
-        method: "POST",
-        auth: "required",
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-        body:
-          JSON.stringify(
-            body,
-          ),
-
-        /**
-         * complete APIが204、空body、
-         * またはJSON以外を返す場合も成功として扱う。
-         */
-        allowNonJson: true,
+    await fetchJSON<void>(url, {
+      method: "POST",
+      auth: "required",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify(payload),
+      allowNonJson: true,
+    });
   } catch (error: unknown) {
     throw toInvitationRepositoryError(
       error,
