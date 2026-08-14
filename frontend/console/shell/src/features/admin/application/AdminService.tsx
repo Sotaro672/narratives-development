@@ -1,25 +1,10 @@
 // frontend/console/shell/src/features/admin/application/AdminService.tsx
 // Admin用のアプリケーションサービス
 
-import {
-  fetchMemberList,
-} from "../../member/application/memberListService";
-
-import type {
-  MemberFilter,
-} from "../../member/domain/repository/memberRepository";
-
-import type {
-  PageRequest,
-} from "../../../shared/types/common/common";
-
-import {
-  DEFAULT_PAGE_REQUEST,
-} from "../../../shared/types/common/common";
-
-import type {
-  Member,
-} from "../../../shared/types/member";
+import { fetchMemberList } from "../../member/application/memberListService";
+import type { PageRequest } from "../../../shared/types/common/common";
+import { DEFAULT_PAGE_REQUEST } from "../../../shared/types/common/common";
+import type { Member, MemberFilter } from "../../../shared/types/member";
 
 export type AssigneeCandidate = {
   /**
@@ -41,12 +26,8 @@ export type AssigneeCandidate = {
  *
  * assigneeId は Firebase Auth UID を正とする。
  *
- * 表示名は次の優先順位で決定する。
- * 1. displayName
- * 2. 姓名
- * 3. email
- *
- * uid が空の Member は担当者候補に含めない。
+ * 表示名はBackendで解決済みのdisplayNameを使用する。
+ * uid が空のMemberは担当者候補に含めない。
  */
 export function buildAssigneeCandidates(
   items: Member[],
@@ -54,57 +35,23 @@ export function buildAssigneeCandidates(
   candidates: AssigneeCandidate[];
   nameMap: Record<string, string>;
 } {
-  const candidates =
-    items.flatMap(
-      (
-        member,
-      ): AssigneeCandidate[] => {
-        if (!member.uid) {
-          return [];
-        }
+  const candidates = items.flatMap((member): AssigneeCandidate[] => {
+    if (!member.uid || !member.displayName) {
+      return [];
+    }
 
-        const fullName =
-          [
-            member.lastName,
-            member.firstName,
-          ]
-            .filter(
-              (value) =>
-                value.length > 0,
-            )
-            .join(" ");
-
-        const name =
-          member.displayName ||
-          fullName ||
-          member.email;
-
-        if (!name) {
-          return [];
-        }
-
-        return [
-          {
-            id:
-              member.uid,
-
-            name,
-          },
-        ];
+    return [
+      {
+        id: member.uid,
+        name: member.displayName,
       },
-    );
+    ];
+  });
 
-  const nameMap:
-    Record<string, string> = {};
+  const nameMap: Record<string, string> = {};
 
-  for (
-    const candidate
-    of candidates
-  ) {
-    nameMap[
-      candidate.id
-    ] =
-      candidate.name;
+  for (const candidate of candidates) {
+    nameMap[candidate.id] = candidate.name;
   }
 
   return {
@@ -126,27 +73,15 @@ export async function fetchAssigneeCandidatesForCurrentCompany(): Promise<{
   candidates: AssigneeCandidate[];
   nameMap: Record<string, string>;
 }> {
-  const page:
-    PageRequest = {
-      ...DEFAULT_PAGE_REQUEST,
+  const page: PageRequest = {
+    ...DEFAULT_PAGE_REQUEST,
+    number: 1,
+    perPage: 200,
+  };
 
-      number:
-        1,
+  const filter: MemberFilter = {};
 
-      perPage:
-        200,
-    };
+  const result = await fetchMemberList(page, filter);
 
-  const filter:
-    MemberFilter = {};
-
-  const result =
-    await fetchMemberList(
-      page,
-      filter,
-    );
-
-  return buildAssigneeCandidates(
-    result.items,
-  );
+  return buildAssigneeCandidates(result.items);
 }
