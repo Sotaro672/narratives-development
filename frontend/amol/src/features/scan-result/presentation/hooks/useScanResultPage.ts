@@ -7,7 +7,6 @@ import {
   createScanResultPageViewModel,
   createScanTransferSuccessModalViewModel,
   loadScanReviews,
-  runScanAutoTransfer,
   submitScanReview,
   toScanReviewErrorMessage,
 } from "../../application";
@@ -157,20 +156,17 @@ export function useScanResultPage() {
           operationIdRef.current = globalThis.crypto.randomUUID();
         }
 
-        const result = await runScanAutoTransfer(
-          { transferScanPurchased },
-          {
-            productId: normalizedProductId,
-            operationId: operationIdRef.current,
-            headers,
-          },
-        );
+        const nextTransferResult = await transferScanPurchased({
+          productId: normalizedProductId,
+          operationId: operationIdRef.current,
+          headers,
+        });
 
         if (!mountedRef.current) return;
 
-        setTransferResult(result.transferResult);
+        setTransferResult(nextTransferResult);
 
-        if (result.transferResult.matched) {
+        if (nextTransferResult.matched) {
           setTransferModalError(null);
           setTransferModalOpen(true);
         }
