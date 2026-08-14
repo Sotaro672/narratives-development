@@ -72,7 +72,9 @@ export type UseListDetailResult = {
   updatedAt: string;
 };
 
-function clonePriceRows(rows: PriceRow[]): PriceRow[] {
+function clonePriceRows(
+  rows: readonly PriceRow[],
+): PriceRow[] {
   return rows.map((row) => ({ ...row }));
 }
 
@@ -140,27 +142,51 @@ export function useListDetail(): UseListDetailResult {
   }, [reload]);
 
   const derived = React.useMemo(
-    () => deriveListDetail<PriceRow>(dto),
+    () => (dto ? deriveListDetail(dto) : null),
     [dto],
   );
 
-  const {
-    listingTitle,
-    description,
-    status,
-    productBrandName,
-    productName,
-    tokenBrandName,
-    tokenName,
-    imageUrls: viewImageUrls,
-    priceRows: viewPriceRows,
-    assigneeId,
-    assigneeName,
-    createdByName,
-    createdAt,
-    updatedByName,
-    updatedAt,
-  } = derived;
+  const listingTitle = derived?.title ?? "";
+  const description = derived?.description ?? "";
+  const status = derived?.status ?? "";
+  const productBrandName = derived?.productBrandName ?? "";
+  const productName = derived?.productName ?? "";
+  const tokenBrandName = derived?.tokenBrandName ?? "";
+  const tokenName = derived?.tokenName ?? "";
+  const assigneeId = derived?.assigneeId ?? "";
+  const assigneeName = derived?.assigneeName ?? "";
+  const createdByName = derived?.createdByName ?? "";
+  const createdAt = derived?.createdAtLabel ?? "";
+  const updatedByName = derived?.updatedByName ?? "";
+  const updatedAt = derived?.updatedAtLabel ?? "";
+  const primaryImageId = derived?.primaryImageId;
+
+  const viewImages = React.useMemo(
+    () => derived?.images ?? [],
+    [derived],
+  );
+
+  const viewImageUrls = React.useMemo(
+    () => viewImages.map((image) => image.url),
+    [viewImages],
+  );
+
+  const viewPriceRows = React.useMemo<PriceRow[]>(
+    () => derived?.priceRows ?? [],
+    [derived],
+  );
+
+  const viewPrimaryImageIndex = React.useMemo(() => {
+    if (!primaryImageId) {
+      return 0;
+    }
+
+    const index = viewImages.findIndex(
+      (image) => image.id === primaryImageId,
+    );
+
+    return index >= 0 ? index : 0;
+  }, [primaryImageId, viewImages]);
 
   const [isEdit, setIsEdit] = React.useState(false);
   const [draftListingTitle, setDraftListingTitle] =
@@ -178,11 +204,13 @@ export function useListDetail(): UseListDetailResult {
   const [saveError, setSaveError] = React.useState("");
   const [deleting, setDeleting] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState("");
+  const [mainImageIndex, setMainImageIndex] =
+    React.useState(viewPrimaryImageIndex);
 
   const images = useListImages({
     isEdit,
     saving,
-    initialUrls: viewImageUrls,
+    initialImages: viewImages,
   });
 
   const resetDraftFromView = React.useCallback(() => {
@@ -211,24 +239,42 @@ export function useListDetail(): UseListDetailResult {
     resetDraftFromView();
   }, [isEdit, resetDraftFromView]);
 
+  React.useEffect(() => {
+    if (isEdit) {
+      return;
+    }
+
+    setMainImageIndex(viewPrimaryImageIndex);
+  }, [isEdit, viewPrimaryImageIndex]);
+
   const onEdit = React.useCallback(() => {
     if (deleting) {
       return;
     }
 
     resetDraftFromView();
+    setMainImageIndex(viewPrimaryImageIndex);
     setSaveError("");
     setDeleteError("");
     setIsEdit(true);
-  }, [deleting, resetDraftFromView]);
+  }, [
+    deleting,
+    resetDraftFromView,
+    viewPrimaryImageIndex,
+  ]);
 
   const onCancel = React.useCallback(() => {
     images.releaseDraftBlobUrls();
     resetDraftFromView();
+    setMainImageIndex(viewPrimaryImageIndex);
     setSaveError("");
     setDeleteError("");
     setIsEdit(false);
-  }, [images.releaseDraftBlobUrls, resetDraftFromView]);
+  }, [
+    images.releaseDraftBlobUrls,
+    resetDraftFromView,
+    viewPrimaryImageIndex,
+  ]);
 
   const onDelete = React.useCallback(async () => {
     const id = String(listId ?? "").trim();
@@ -306,7 +352,7 @@ export function useListDetail(): UseListDetailResult {
         return;
       }
 
-      setDraftAssigneeId(String(id ?? "").trim());
+      setDraftAssigneeId(id);
     },
     [isEdit, saving],
   );
@@ -315,8 +361,6 @@ export function useListDetail(): UseListDetailResult {
     () => (isEdit ? images.imageUrls : viewImageUrls),
     [isEdit, images.imageUrls, viewImageUrls],
   );
-
-  const [mainImageIndex, setMainImageIndex] = React.useState(0);
 
   useMainImageIndexGuard({
     imageUrls: effectiveImageUrls,
@@ -347,6 +391,11 @@ export function useListDetail(): UseListDetailResult {
 
       if (!id) {
         setSaveError("invalid_list_id");
+        return;
+      }
+
+      if (!dto) {
+        setSaveError("list_detail_not_loaded");
         return;
       }
 
