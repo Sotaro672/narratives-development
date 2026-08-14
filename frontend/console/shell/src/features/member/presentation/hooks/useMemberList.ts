@@ -1,14 +1,8 @@
 // frontend/console/shell/src/features/member/presentation/hooks/useMemberList.ts
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { Member } from "../../../../shared/types/member";
-import type { MemberFilter } from "../../domain/repository/memberRepository";
+import type { Member, MemberFilter } from "../../../../shared/types/member";
 import type { PageState } from "../../../../shared/types/common/common";
 import {
   DEFAULT_PAGE,
@@ -25,91 +19,52 @@ type FilterOption = {
   label: string;
 };
 
-// ソート方向（SortableTableHeaderに合わせる）
 export type SortDirection = "asc" | "desc";
 
 export function useMemberList(
   initialFilter: MemberFilter = {},
   initialPage?: PageState,
 ) {
-  const [members, setMembers] =
-    useState<Member[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [filter] = useState<MemberFilter>(initialFilter);
 
-  const [filter] =
-    useState<MemberFilter>(initialFilter);
+  const [page, setPage] = useState<PageState>({
+    ...DEFAULT_PAGE,
+    ...(initialPage ?? {}),
+    totalPages: 1,
+  });
 
-  // UIで保持するページ状態
-  const [page, setPage] =
-    useState<PageState>({
-      ...DEFAULT_PAGE,
-      ...(initialPage ?? {}),
-      totalPages: 1,
-    });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
 
-  const [loading, setLoading] =
-    useState(false);
+  const [brandMap, setBrandMap] = useState<Record<string, string>>({});
+  const [selectedBrandIds, setSelectedBrandIds] = useState<string[]>([]);
+  const [selectedPermissionCats, setSelectedPermissionCats] = useState<string[]>([]);
 
-  const [error, setError] =
-    useState<Error | null>(null);
-
-  // リフレッシュボタン回転用
-  const [isResetting, setIsResetting] =
-    useState(false);
-
-  // ブランドID → 名称
-  const [brandMap, setBrandMap] =
-    useState<Record<string, string>>({});
-
-  const [
-    selectedBrandIds,
-    setSelectedBrandIds,
-  ] = useState<string[]>([]);
-
-  const [
-    selectedPermissionCats,
-    setSelectedPermissionCats,
-  ] = useState<string[]>([]);
-
-  // ソート状態
-  const [sortKey, setSortKey] =
-    useState<string | null>(null);
-
-  const [
-    sortDirection,
-    setSortDirection,
-  ] = useState<SortDirection>("desc");
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   // ─────────────────────────────────────────────
   // メンバー一覧ロード
   // ─────────────────────────────────────────────
+
   const load = useCallback(
-    async (
-      targetPage: PageState,
-      targetFilter: MemberFilter,
-    ) => {
+    async (targetPage: PageState, targetFilter: MemberFilter) => {
       setLoading(true);
       setIsResetting(true);
       setError(null);
 
       try {
-        const result = await fetchMemberList(
-          targetPage,
-          targetFilter,
-        );
+        const result = await fetchMemberList(targetPage, targetFilter);
 
-        setMembers(result.items ?? []);
+        setMembers(result.items);
 
         setPage((previousPage) => ({
           ...previousPage,
-          number: targetPage.number,
-          perPage:
-            targetPage.perPage ??
-            previousPage.perPage ??
-            DEFAULT_PAGE_LIMIT,
-          totalPages:
-            result.totalPages ??
-            previousPage.totalPages ??
-            1,
+          number: result.page,
+          perPage: result.perPage ?? DEFAULT_PAGE_LIMIT,
+          totalPages: result.totalPages,
         }));
       } catch (loadError: unknown) {
         const normalizedError =
@@ -117,11 +72,7 @@ export function useMemberList(
             ? loadError
             : new Error(String(loadError));
 
-        console.error(
-          "[useMemberList] load error:",
-          normalizedError,
-        );
-
+        console.error("[useMemberList] load error:", normalizedError);
         setError(normalizedError);
       } finally {
         setLoading(false);
@@ -131,7 +82,6 @@ export function useMemberList(
     [],
   );
 
-  // 初回ロード
   useEffect(() => {
     void load(page, filter);
 
@@ -141,26 +91,22 @@ export function useMemberList(
   // ─────────────────────────────────────────────
   // ブランド一覧ロード
   // ─────────────────────────────────────────────
+
   useEffect(() => {
     let cancelled = false;
 
     async function loadBrands() {
       try {
-        const brands =
-          await fetchBrandsForCurrentMember();
+        const brands = await fetchBrandsForCurrentMember();
 
         if (cancelled) {
           return;
         }
 
-        const nextBrandMap: Record<
-          string,
-          string
-        > = {};
+        const nextBrandMap: Record<string, string> = {};
 
         for (const brand of brands) {
-          nextBrandMap[brand.id] =
-            brand.name;
+          nextBrandMap[brand.id] = brand.name;
         }
 
         setBrandMap(nextBrandMap);
@@ -186,12 +132,10 @@ export function useMemberList(
   // ─────────────────────────────────────────────
   // ページ番号変更
   // ─────────────────────────────────────────────
+
   const setPageNumber = useCallback(
     (pageNumber: number) => {
-      const safePageNumber = Math.max(
-        1,
-        pageNumber,
-      );
+      const safePageNumber = Math.max(1, pageNumber);
 
       const nextPage: PageState = {
         ...page,
@@ -207,28 +151,21 @@ export function useMemberList(
   // ─────────────────────────────────────────────
   // 権限カテゴリ抽出
   // ─────────────────────────────────────────────
+
   const extractPermissionCategories = (
     permissions?: string[],
   ): string[] => {
-    if (
-      !permissions ||
-      permissions.length === 0
-    ) {
+    if (!permissions || permissions.length === 0) {
       return [];
     }
 
     const categories = new Set<string>();
 
     for (const permission of permissions) {
-      const separatorIndex =
-        permission.indexOf(".");
-
+      const separatorIndex = permission.indexOf(".");
       const category =
         separatorIndex > 0
-          ? permission.slice(
-              0,
-              separatorIndex,
-            )
+          ? permission.slice(0, separatorIndex)
           : permission;
 
       if (category) {
@@ -240,101 +177,54 @@ export function useMemberList(
   };
 
   // ─────────────────────────────────────────────
-  // フィルタ候補（ブランド）
+  // フィルタ候補
   // ─────────────────────────────────────────────
-  const brandFilterOptions: FilterOption[] =
-    useMemo(
-      () =>
-        Object.entries(brandMap).map(
-          ([id, name]) => ({
-            value: id,
-            label: name || id,
-          }),
-        ),
-      [brandMap],
-    );
 
-  // ─────────────────────────────────────────────
-  // フィルタ候補（権限カテゴリ）
-  // ─────────────────────────────────────────────
-  const permissionFilterOptions: FilterOption[] =
-    useMemo(() => {
-      const categories = new Set<string>();
+  const brandFilterOptions: FilterOption[] = useMemo(
+    () =>
+      Object.entries(brandMap).map(([id, name]) => ({
+        value: id,
+        label: name || id,
+      })),
+    [brandMap],
+  );
 
-      for (const member of members) {
-        const memberCategories =
-          extractPermissionCategories(
-            member.permissions,
-          );
+  const permissionFilterOptions: FilterOption[] = useMemo(() => {
+    const categories = new Set<string>();
 
-        for (const category of memberCategories) {
-          categories.add(category);
-        }
-      }
-
-      return Array.from(categories).map(
-        (category) => ({
-          value: category,
-          label: category,
-        }),
+    for (const member of members) {
+      const memberCategories = extractPermissionCategories(
+        member.permissions,
       );
-    }, [members]);
+
+      for (const category of memberCategories) {
+        categories.add(category);
+      }
+    }
+
+    return Array.from(categories).map((category) => ({
+      value: category,
+      label: category,
+    }));
+  }, [members]);
 
   // ─────────────────────────────────────────────
   // 日付 → YYYY/MM/DD
+  // Backend BFFのMember型ではISO 8601文字列を正とする。
   // ─────────────────────────────────────────────
-  const formatYmd = (
-    date: unknown,
-  ): string => {
+
+  const formatYmd = (date: string | null): string => {
     if (!date) {
       return "";
     }
 
-    if (
-      typeof date === "object" &&
-      date !== null
-    ) {
-      const dateValue = date as {
-        toDate?: () => Date;
-        seconds?: number;
-      };
-
-      if (
-        typeof dateValue.toDate ===
-        "function"
-      ) {
-        return dateValue
-          .toDate()
-          .toISOString()
-          .slice(0, 10)
-          .replace(/-/g, "/");
-      }
-
-      if (
-        typeof dateValue.seconds ===
-        "number"
-      ) {
-        return new Date(
-          dateValue.seconds * 1000,
-        )
-          .toISOString()
-          .slice(0, 10)
-          .replace(/-/g, "/");
-      }
-    }
-
-    if (typeof date === "string") {
-      return date
-        .slice(0, 10)
-        .replace(/-/g, "/");
-    }
-
-    return "";
+    return date.slice(0, 10).replace(/-/g, "/");
   };
 
   // ─────────────────────────────────────────────
-  // ソート用日付値
+  // ソート
   // ─────────────────────────────────────────────
+
   const getDateValue = useCallback(
     (member: Member): number => {
       const raw =
@@ -346,12 +236,8 @@ export function useMemberList(
         return 0;
       }
 
-      const timestamp =
-        new Date(raw).getTime();
-
-      return Number.isNaN(timestamp)
-        ? 0
-        : timestamp;
+      const timestamp = new Date(raw).getTime();
+      return Number.isNaN(timestamp) ? 0 : timestamp;
     },
     [sortKey],
   );
@@ -359,37 +245,27 @@ export function useMemberList(
   // ─────────────────────────────────────────────
   // フィルタ適用
   // ─────────────────────────────────────────────
+
   const filteredMembers = useMemo(() => {
     return members.filter((member) => {
-      const assignedBrands =
-        member.assignedBrands ?? [];
-
-      const permissionCategories =
-        extractPermissionCategories(
-          member.permissions,
-        );
+      const assignedBrands = member.assignedBrands ?? [];
+      const permissionCategories = extractPermissionCategories(
+        member.permissions,
+      );
 
       const matchesBrandFilter =
         selectedBrandIds.length === 0 ||
         assignedBrands.some((brandId) =>
-          selectedBrandIds.includes(
-            brandId,
-          ),
+          selectedBrandIds.includes(brandId),
         );
 
       const matchesPermissionFilter =
         selectedPermissionCats.length === 0 ||
-        permissionCategories.some(
-          (category) =>
-            selectedPermissionCats.includes(
-              category,
-            ),
+        permissionCategories.some((category) =>
+          selectedPermissionCats.includes(category),
         );
 
-      return (
-        matchesBrandFilter &&
-        matchesPermissionFilter
-      );
+      return matchesBrandFilter && matchesPermissionFilter;
     });
   }, [
     members,
@@ -397,9 +273,6 @@ export function useMemberList(
     selectedPermissionCats,
   ]);
 
-  // ─────────────────────────────────────────────
-  // ソート適用
-  // ─────────────────────────────────────────────
   const sortedMembers = useMemo(() => {
     if (!sortKey) {
       return filteredMembers;
@@ -407,11 +280,8 @@ export function useMemberList(
 
     return [...filteredMembers].sort(
       (firstMember, secondMember) => {
-        const firstValue =
-          getDateValue(firstMember);
-
-        const secondValue =
-          getDateValue(secondMember);
+        const firstValue = getDateValue(firstMember);
+        const secondValue = getDateValue(secondMember);
 
         return sortDirection === "asc"
           ? firstValue - secondValue
@@ -425,15 +295,10 @@ export function useMemberList(
     getDateValue,
   ]);
 
-  // ─────────────────────────────────────────────
-  // ソート変更
-  // ─────────────────────────────────────────────
   const handleSortChange = useCallback(
     (
       key: string,
-      nextDirection:
-        | SortDirection
-        | null,
+      nextDirection: SortDirection | null,
     ) => {
       if (!nextDirection) {
         setSortKey(null);
@@ -450,6 +315,7 @@ export function useMemberList(
   // ─────────────────────────────────────────────
   // リセット
   // ─────────────────────────────────────────────
+
   const handleReset = useCallback(() => {
     setSelectedBrandIds([]);
     setSelectedPermissionCats([]);
@@ -466,29 +332,21 @@ export function useMemberList(
   }, [page, filter, load]);
 
   return {
-    // 一覧
     members: sortedMembers,
-
     loading,
     error,
-
-    // リフレッシュ回転用
     isResetting,
 
-    // バックエンドページング
     page,
     setPage,
     setPageNumber,
 
-    // ソート
     sortKey,
     sortDirection,
     handleSortChange,
 
-    // リセット
     handleReset,
 
-    // フィルタ関連
     brandMap,
     brandFilterOptions,
     permissionFilterOptions,
@@ -500,8 +358,6 @@ export function useMemberList(
     setSelectedPermissionCats,
 
     extractPermissionCategories,
-
-    // 日付フォーマッタ
     formatYmd,
   };
 }

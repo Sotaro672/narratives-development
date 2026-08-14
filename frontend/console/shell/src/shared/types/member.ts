@@ -20,9 +20,7 @@ export type MemberStatus = string;
  * のレスポンスで共通利用する。
  */
 export type Member = {
-  /**
-   * FirestoreのMemberドキュメントID。
-   */
+  /** FirestoreのMemberドキュメントID。 */
   id: string;
 
   /**
@@ -35,47 +33,32 @@ export type Member = {
   lastName: string;
   firstNameKana: string;
   lastNameKana: string;
-
   email: string;
 
-  /**
-   * Permission名の配列。
-   */
+  /** Permission名の配列。 */
   permissions: string[];
 
   /**
    * 割り当てられているBrand IDの配列。
-   *
    * nullは割り当てなしを表す。
    */
   assignedBrands: string[] | null;
 
-  /**
-   * 所属会社ID。
-   */
+  /** 所属会社ID。 */
   companyId: string;
 
   status: MemberStatus;
 
-  /**
-   * BackendからISO 8601形式の文字列として返される。
-   */
+  /** BackendからISO 8601形式の文字列として返される。 */
   createdAt: string;
 
-  /**
-   * 未更新または値が存在しない場合はnull。
-   */
+  /** 未更新または値が存在しない場合はnull。 */
   updatedAt: string | null;
 
-  /**
-   * 更新者ID。
-   * 値が存在しない場合はnull。
-   */
+  /** 更新者ID。値が存在しない場合はnull。 */
   updatedBy: string | null;
 
-  /**
-   * Backendで姓・名から生成される表示名。
-   */
+  /** Backendで姓・名から生成される表示名。 */
   displayName: string;
 };
 
@@ -86,6 +69,28 @@ export type Member = {
  * Memberを唯一の正規型として参照する。
  */
 export type MemberDTO = Member;
+
+/**
+ * Member一覧取得時の検索条件。
+ *
+ * GET /members
+ *
+ * companyIdはFrontendから指定せず、
+ * Backend側で認証中MemberのcompanyIdにスコープする。
+ */
+export type MemberFilter = {
+  /** 名前・フリガナ・メールなどの検索文字列。 */
+  searchQuery?: string;
+
+  /** Firebase Authentication UID。 */
+  uid?: string;
+
+  /** 割り当てられているBrand ID。 */
+  brandIds?: string[];
+
+  /** Memberの状態。 */
+  status?: MemberStatus;
+};
 
 /**
  * Member作成時にFrontendから送信する項目。

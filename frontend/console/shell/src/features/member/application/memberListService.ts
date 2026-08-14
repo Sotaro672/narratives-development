@@ -1,61 +1,36 @@
 // frontend/console/shell/src/features/member/application/memberListService.ts
 
-import type { Member } from "../../../shared/types/member";
-import type { MemberFilter } from "../domain/repository/memberRepository";
-import type {
-  PageRequest,
-  PageResult,
-} from "../../../shared/types/common/common";
-
-// 認証（IDトークン取得用）
-import { auth } from "../../../auth/infrastructure/config/firebaseClient";
-
-// Shared API base
-import { API_BASE } from "../../../shared/http/apiBase";
-
-// Permission 型
-import type {
-  Permission,
-  PermissionCategory,
-} from "../../../shared/types/permission";
-
-// Permission Repository（GET /permissions）
-import { PermissionRepositoryHTTP } from "../../permission/infrastructure/http/permissionRepositoryHTTP";
-
-// Brand
+import type { Member, MemberFilter } from "../../../shared/types/member";
+import type { PageRequest, PageResult } from "../../../shared/types/common/common";
+import type { Permission, PermissionCategory } from "../../../shared/types/permission";
 import type { Brand } from "../../../shared/types/brand";
+
+import { auth } from "../../../auth/infrastructure/config/firebaseClient";
+import { API_BASE } from "../../../shared/http/apiBase";
+import { PermissionRepositoryHTTP } from "../../permission/infrastructure/http/permissionRepositoryHTTP";
 import { BrandRepositoryHTTP } from "../../brand/infrastructure/http/brandRepositoryHTTP";
+import { MemberRepositoryHTTP } from "../infrastructure/memberRepositoryHTTP";
 
-// Member Repository（HTTP 層）
-import { MemberRepositoryHTTP } from "../infrastructure/http/memberRepositoryHTTP";
-
-// Singletons
 const permissionRepo = new PermissionRepositoryHTTP();
 const brandRepo = new BrandRepositoryHTTP();
 const memberRepo = new MemberRepositoryHTTP();
 
 // ─────────────────────────────────────────────
-// Permission 関連サービス
+// Permission
 // ─────────────────────────────────────────────
 
 export async function fetchAllPermissions(): Promise<Permission[]> {
   const pageResult = await permissionRepo.list();
-
   return pageResult.items;
 }
 
 export function groupPermissionsByCategory(
   allPermissions: Permission[],
 ): Record<PermissionCategory, Permission[]> {
-  const map = {} as Record<
-    PermissionCategory,
-    Permission[]
-  >;
+  const map = {} as Record<PermissionCategory, Permission[]>;
 
   for (const permission of allPermissions) {
-    const category = (
-      permission.category || "brand"
-    ) as PermissionCategory;
+    const category = (permission.category || "brand") as PermissionCategory;
 
     if (!map[category]) {
       map[category] = [];
@@ -73,13 +48,11 @@ export function groupPermissionsByCategory(
 
 export async function fetchCurrentMember(): Promise<Member | null> {
   const currentUser = auth.currentUser;
-
   if (!currentUser) {
     return null;
   }
 
   const uid = currentUser.uid.trim();
-
   if (!uid) {
     return null;
   }
@@ -92,16 +65,12 @@ export async function fetchCurrentMember(): Promise<Member | null> {
 }
 
 // ─────────────────────────────────────────────
-// Brand 関連サービス
+// Brand
 // ─────────────────────────────────────────────
 
-export async function fetchBrandsForCurrentMember(): Promise<
-  Brand[]
-> {
+export async function fetchBrandsForCurrentMember(): Promise<Brand[]> {
   const currentMember = await fetchCurrentMember();
-  const companyId = (
-    currentMember?.companyId ?? ""
-  ).trim();
+  const companyId = (currentMember?.companyId ?? "").trim();
 
   if (!companyId) {
     return [];
@@ -110,9 +79,7 @@ export async function fetchBrandsForCurrentMember(): Promise<
   return fetchBrandsByCompany(companyId);
 }
 
-export async function fetchBrandsByCompany(
-  companyId: string | null,
-): Promise<Brand[]> {
+export async function fetchBrandsByCompany(companyId: string | null): Promise<Brand[]> {
   if (!companyId) {
     return [];
   }
@@ -131,25 +98,18 @@ export async function fetchBrandsByCompany(
 }
 
 // ─────────────────────────────────────────────
-// Member 一覧
+// Member
 // ─────────────────────────────────────────────
 
 export async function fetchMemberList(
   page: PageRequest,
   filter: MemberFilter,
 ): Promise<PageResult<Member>> {
-  const currentUser = auth.currentUser;
-
-  if (!currentUser) {
-    throw new Error(
-      "未認証のためメンバー一覧を取得できません。",
-    );
+  if (!auth.currentUser) {
+    throw new Error("未認証のためメンバー一覧を取得できません。");
   }
 
-  return memberRepo.list(
-    page,
-    filter,
-  );
+  return memberRepo.list(page, filter);
 }
 
 export { API_BASE };

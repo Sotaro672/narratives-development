@@ -16,7 +16,7 @@ import {
 
 import type { Member } from "../../../../shared/types/member";
 import type { MemberFilter } from "../../../member/domain/repository/memberRepository";
-import { MemberRepositoryHTTP } from "../../../member/infrastructure/http/memberRepositoryHTTP";
+import { MemberRepositoryHTTP } from "../../../member/infrastructure/memberRepositoryHTTP";
 
 import { validateBrandImage } from "../../application/brandImageValidation";
 import {

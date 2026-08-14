@@ -6,7 +6,7 @@ import type {
   MemberStatus,
 } from "../../../shared/types/member";
 
-import { MemberRepositoryHTTP } from "../infrastructure/http/memberRepositoryHTTP";
+import { MemberRepositoryHTTP } from "../infrastructure/memberRepositoryHTTP";
 
 const memberRepository = new MemberRepositoryHTTP();
 
@@ -17,9 +17,7 @@ const memberRepository = new MemberRepositoryHTTP();
 /**
  * カンマ区切りの文字列を文字列配列へ変換する。
  */
-export const parseCommaSeparated = (
-  value: string,
-): string[] =>
+export const parseCommaSeparated = (value: string): string[] =>
   value
     .split(",")
     .map((item) => item.trim())
@@ -33,14 +31,10 @@ export type CreateMemberParams = Omit<
   CreateMemberInput,
   "assignedBrands" | "status"
 > & {
-  /**
-   * 割り当てるBrand ID。
-   */
+  /** 割り当てるBrand ID。 */
   assignedBrandIds: string[];
 
-  /**
-   * 未指定の場合はactiveを使用する。
-   */
+  /** 未指定の場合はactiveを使用する。 */
   status?: MemberStatus;
 };
 
@@ -50,69 +44,25 @@ export type CreateMemberParams = Omit<
  * Backend:
  * POST /members
  *
- * id・uid・companyId・作成日時などはBackend側で決定する。
+ * id・uid・companyId・作成日時・displayNameなどはBackend側で決定する。
  */
 export async function createMember(
   params: CreateMemberParams,
 ): Promise<Member> {
-  const firstName = params.firstName.trim();
-  const lastName = params.lastName.trim();
-  const firstNameKana =
-    params.firstNameKana.trim();
-  const lastNameKana =
-    params.lastNameKana.trim();
-  const email = params.email.trim();
-
-  const permissions = params.permissions
-    .map((permission) => permission.trim())
-    .filter((permission) => permission.length > 0);
-
-  const assignedBrands =
-    params.assignedBrandIds
+  const input: CreateMemberInput = {
+    firstName: params.firstName.trim(),
+    lastName: params.lastName.trim(),
+    firstNameKana: params.firstNameKana.trim(),
+    lastNameKana: params.lastNameKana.trim(),
+    email: params.email.trim(),
+    permissions: params.permissions
+      .map((permission) => permission.trim())
+      .filter((permission) => permission.length > 0),
+    assignedBrands: params.assignedBrandIds
       .map((brandId) => brandId.trim())
-      .filter((brandId) => brandId.length > 0);
-
-  const status = params.status ?? "active";
-
-  /**
-   * MemberRepositoryHTTP.create()は書き込み可能な項目だけを
-   * POST bodyへ変換する。
-   *
-   * Backendで生成される項目には初期値を設定し、
-   * APIレスポンスとして返されたMemberを最終結果とする。
-   */
-  const member: Member = {
-    id: "",
-    uid: "",
-
-    firstName,
-    lastName,
-    firstNameKana,
-    lastNameKana,
-
-    email,
-
-    permissions,
-
-    assignedBrands:
-      assignedBrands.length > 0
-        ? assignedBrands
-        : null,
-
-    companyId: "",
-    status,
-
-    createdAt: "",
-    updatedAt: null,
-    updatedBy: null,
-
-    displayName: [
-      lastName,
-      firstName,
-    ]
-      .filter((value) => value.length > 0)
-      .join(" "),
+      .filter((brandId) => brandId.length > 0),
+    status: params.status ?? "active",
   };
 
-  return memberRepository.create(member);
+  return memberRepository.create(input);
 }

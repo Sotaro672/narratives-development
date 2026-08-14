@@ -15,7 +15,7 @@ import {
 
 import {
   MemberRepositoryHTTP,
-} from "../infrastructure/http/memberRepositoryHTTP";
+} from "../infrastructure/memberRepositoryHTTP";
 
 const memberRepo =
   new MemberRepositoryHTTP();
