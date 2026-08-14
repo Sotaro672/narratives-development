@@ -5,7 +5,7 @@
 // 責任:
 // - DI 済み依存（ports）を保持する
 // - listID を入力に listDetail.tsx 用の ListDetailDTO を生成する
-// - ListDetailDTO の priceRows / stock / model attributes を生成する
+// - ListDetailDTO の images / priceRows / stock / model attributes を生成する
 // - 取得済み ProductBlueprint.ModelRefs から displayOrder を抽出する
 //
 // Firebase Storage 移行後:
@@ -37,43 +37,32 @@ type InventoryDetailGetter interface {
 	GetDetailByID(ctx context.Context, inventoryID string) (*querydto.InventoryDetailDTO, error)
 }
 
-// ListImage を listID で取得できる port（任意）
-//
-// Firebase Storage 移行後:
-// - domain/list.ListImage を使う
-// - ListImage.URL は Firebase Storage downloadURL
+// ListImage を listID で取得できる port（任意）。
+// Firebase Storage 移行後は domain/list.ListImage を使い、ListImage.URL は Firebase Storage downloadURL とする。
 type ListImageLister interface {
 	ListByListID(ctx context.Context, listID string) ([]listdom.ListImage, error)
 }
 
 // ============================================================
-// ListDetailQuery (listDetail.tsx)
+// ListDetailQuery
 // ============================================================
 
 type ListDetailQuery struct {
 	getter       ListGetter
 	nameResolver *resolver.NameResolver
-
-	pbGetter ProductBlueprintGetter
-	tbGetter TokenBlueprintGetter
-
-	invGetter InventoryDetailGetter
-	imgLister ListImageLister
+	pbGetter     ProductBlueprintGetter
+	tbGetter     TokenBlueprintGetter
+	invGetter    InventoryDetailGetter
+	imgLister    ListImageLister
 }
-
-// ============================================================
-// SINGLE ENTRYPOINT
-// ============================================================
 
 type NewListDetailQueryParams struct {
 	Getter       ListGetter
 	NameResolver *resolver.NameResolver
-
-	PBGetter ProductBlueprintGetter
-	TBGetter TokenBlueprintGetter
-
-	InvGetter InventoryDetailGetter
-	ImgLister ListImageLister
+	PBGetter     ProductBlueprintGetter
+	TBGetter     TokenBlueprintGetter
+	InvGetter    InventoryDetailGetter
+	ImgLister    ListImageLister
 }
 
 func NewListDetailQuery(p NewListDetailQueryParams) *ListDetailQuery {
@@ -91,20 +80,12 @@ func NewListDetailQuery(p NewListDetailQueryParams) *ListDetailQuery {
 // Query
 // ============================================================
 
-func (q *ListDetailQuery) BuildListDetailDTO(
-	ctx context.Context,
-	listID string,
-) (querydto.ListDetailDTO, error) {
+func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string) (querydto.ListDetailDTO, error) {
 	if q == nil || q.getter == nil {
-		return querydto.ListDetailDTO{}, errors.New(
-			"ListDetailQuery.BuildListDetailDTO: getter is nil (wire list repo to ListDetailQuery)",
-		)
+		return querydto.ListDetailDTO{}, errors.New("ListDetailQuery.BuildListDetailDTO: getter is nil (wire list repo to ListDetailQuery)")
 	}
-
 	if listID == "" {
-		return querydto.ListDetailDTO{}, errors.New(
-			"ListDetailQuery.BuildListDetailDTO: listID is empty",
-		)
+		return querydto.ListDetailDTO{}, errors.New("ListDetailQuery.BuildListDetailDTO: listID is empty")
 	}
 
 	it, err := q.getter.GetByID(ctx, listID)
@@ -113,13 +94,11 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 	}
 
 	invID := it.InventoryID
-
 	pbID, tbID, ok := ParseInventoryIDStrict(invID)
 	if !ok {
 		return querydto.ListDetailDTO{}, listdom.ErrListImageNotFound
 	}
 
-	// ---- product blueprint ----
 	productName := ""
 	productBrandID := ""
 	displayOrderByModel := map[string]*int{}
@@ -133,13 +112,12 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 		}
 	}
 
-	// ---- names ----
 	tokenName := ""
 	assigneeName := ""
 	createdByName := ""
 	updatedByName := ""
-
 	updatedByID := ""
+
 	if it.UpdatedBy != nil {
 		updatedByID = *it.UpdatedBy
 	}
@@ -148,19 +126,15 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 		if productName == "" && pbID != "" && q.pbGetter == nil {
 			productName = q.nameResolver.ResolveProductName(ctx, pbID)
 		}
-
 		if tbID != "" {
 			tokenName = q.nameResolver.ResolveTokenName(ctx, tbID)
 		}
-
 		if it.AssigneeID != "" {
 			assigneeName = q.nameResolver.ResolveAssigneeName(ctx, it.AssigneeID)
 		}
-
 		if it.CreatedBy != "" {
 			createdByName = q.nameResolver.ResolveMemberName(ctx, it.CreatedBy)
 		}
-
 		if updatedByID != "" {
 			updatedByName = q.nameResolver.ResolveUpdatedByName(ctx, it.UpdatedBy)
 		}
@@ -169,18 +143,14 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 	if assigneeName == "" && it.AssigneeID != "" {
 		assigneeName = "未設定"
 	}
-
 	if createdByName == "" && it.CreatedBy != "" {
 		createdByName = "未設定"
 	}
-
 	if updatedByName == "" && updatedByID != "" {
 		updatedByName = "未設定"
 	}
 
-	// ---- brand ----
 	tokenBrandID := ""
-
 	if tbID != "" && q.tbGetter != nil {
 		tb, err := q.tbGetter.GetByID(ctx, tbID)
 		if err == nil && tb != nil {
@@ -195,13 +165,11 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 		if productBrandID != "" {
 			productBrandName = q.nameResolver.ResolveBrandName(ctx, productBrandID)
 		}
-
 		if tokenBrandID != "" {
 			tokenBrandName = q.nameResolver.ResolveBrandName(ctx, tokenBrandID)
 		}
 	}
 
-	// ---- timestamps ----
 	createdAt := ""
 	if !it.CreatedAt.IsZero() {
 		createdAt = it.CreatedAt.Format(time.RFC3339)
@@ -212,18 +180,13 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 		updatedAt = it.UpdatedAt.Format(time.RFC3339)
 	}
 
-	// ---- images ----
-	imageURLs := q.buildImageURLs(ctx, it.ID, it.ImageID)
-
-	// ---- price rows ----
-	priceRows := q.buildDetailPriceRows(
-		ctx,
-		it,
-		invID,
-		displayOrderByModel,
-	)
+	images := q.buildImages(ctx, it.ID, it.ImageID)
+	priceRows := q.buildDetailPriceRows(ctx, it, invID, displayOrderByModel)
 
 	return querydto.ListDetailDTO{
+		ID:          it.ID,
+		InventoryID: invID,
+
 		Status:      string(it.Status),
 		Title:       it.Title,
 		Description: it.Description,
@@ -231,19 +194,27 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 		AssigneeID:   it.AssigneeID,
 		AssigneeName: assigneeName,
 
+		CreatedBy:     it.CreatedBy,
 		CreatedByName: createdByName,
 		CreatedAt:     createdAt,
 
+		UpdatedBy:     updatedByID,
 		UpdatedByName: updatedByName,
 		UpdatedAt:     updatedAt,
 
-		ProductBrandName: productBrandName,
-		ProductName:      productName,
+		ProductBlueprintID: pbID,
+		ProductBrandID:     productBrandID,
+		ProductBrandName:   productBrandName,
+		ProductName:        productName,
 
-		TokenBrandName: tokenBrandName,
-		TokenName:      tokenName,
+		TokenBlueprintID: tbID,
+		TokenBrandID:     tokenBrandID,
+		TokenBrandName:   tokenBrandName,
+		TokenName:        tokenName,
 
-		ImageURLs: imageURLs,
+		PrimaryImageID: it.ImageID,
+		Images:         images,
+
 		PriceRows: priceRows,
 	}, nil
 }
@@ -252,23 +223,17 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 // Image helpers
 // ============================================================
 
-// buildImageURLs returns Firebase Storage download URLs for list detail.
-//
-// primaryImageID:
-// - List.ImageID に保存されている primary image record docID
-// - 存在する場合、その画像URLを先頭に並べる
-func (q *ListDetailQuery) buildImageURLs(
-	ctx context.Context,
-	listID string,
-	primaryImageID string,
-) []string {
+// buildImages は list detail BFF 用の画像一覧を返す。
+// List.ImageID が primary image ID のため、該当画像を先頭へ移動する。
+// frontend は id / imageId や images / imageUrls の alias を持たず、このDTOを正とする。
+func (q *ListDetailQuery) buildImages(ctx context.Context, listID string, primaryImageID string) []querydto.ListDetailImageDTO {
 	if q == nil || q.imgLister == nil || listID == "" {
-		return []string{}
+		return []querydto.ListDetailImageDTO{}
 	}
 
 	items, err := q.imgLister.ListByListID(ctx, listID)
 	if err != nil || len(items) == 0 {
-		return []string{}
+		return []querydto.ListDetailImageDTO{}
 	}
 
 	ordered := make([]listdom.ListImage, 0, len(items))
@@ -279,7 +244,6 @@ func (q *ListDetailQuery) buildImageURLs(
 			if img.ID != primaryImageID {
 				continue
 			}
-
 			ordered = append(ordered, img)
 			if img.ID != "" {
 				usedIDs[img.ID] = struct{}{}
@@ -296,29 +260,31 @@ func (q *ListDetailQuery) buildImageURLs(
 		}
 
 		ordered = append(ordered, img)
-
 		if img.ID != "" {
 			usedIDs[img.ID] = struct{}{}
 		}
 	}
 
-	urls := make([]string, 0, len(ordered))
+	out := make([]querydto.ListDetailImageDTO, 0, len(ordered))
 	seenURLs := make(map[string]struct{}, len(ordered))
 
 	for _, img := range ordered {
-		if img.URL == "" {
+		if img.ID == "" || img.URL == "" {
 			continue
 		}
-
 		if _, ok := seenURLs[img.URL]; ok {
 			continue
 		}
 
 		seenURLs[img.URL] = struct{}{}
-		urls = append(urls, img.URL)
+		out = append(out, querydto.ListDetailImageDTO{
+			ID:           img.ID,
+			URL:          img.URL,
+			DisplayOrder: img.DisplayOrder,
+		})
 	}
 
-	return urls
+	return out
 }
 
 // ============================================================
@@ -326,11 +292,9 @@ func (q *ListDetailQuery) buildImageURLs(
 // ============================================================
 
 // buildDetailPriceRows builds ListDetailDTO price rows.
-//
-// 責任:
-// - listdom.List の価格行を抽出し、DTO(ListDetailPriceRowDTO)へ変換する
-// - 在庫情報は InventoryDetailGetter から優先的に取得し、なければ stock=0 とする
-// - displayOrder は取得済み ProductBlueprint.ModelRefs から付与する
+// - listdom.List の価格行を抽出する
+// - 在庫情報は InventoryDetailGetter から取得する
+// - displayOrder は ProductBlueprint.ModelRefs から付与する
 // - model 情報は resolver.ModelResolved を使って解決する
 func (q *ListDetailQuery) buildDetailPriceRows(
 	ctx context.Context,
@@ -382,7 +346,6 @@ func (q *ListDetailQuery) buildDetailPriceRows(
 
 		price := row.Price
 		stock := 0
-
 		if invUsed {
 			stock = stockByModel[modelID]
 		}
@@ -404,23 +367,14 @@ func (q *ListDetailQuery) buildDetailPriceRows(
 			modelResolved = q.nameResolver.ResolveModelResolved(ctx, modelID)
 		}
 
-		applyModelResolvedToListDetailPriceRow(
-			&dtoRow,
-			modelID,
-			modelResolved,
-		)
-
+		applyModelResolvedToListDetailPriceRow(&dtoRow, modelID, modelResolved)
 		out = append(out, dtoRow)
 	}
 
 	return out
 }
 
-func applyModelResolvedToListDetailPriceRow(
-	row *querydto.ListDetailPriceRowDTO,
-	modelID string,
-	model resolver.ModelResolved,
-) {
+func applyModelResolvedToListDetailPriceRow(row *querydto.ListDetailPriceRowDTO, modelID string, model resolver.ModelResolved) {
 	if row == nil {
 		return
 	}
@@ -461,12 +415,8 @@ func applyModelResolvedToListDetailPriceRow(
 // Display order helpers
 // ============================================================
 
-// buildDisplayOrderByModelID extracts displayOrder from an already loaded ProductBlueprint.
-func buildDisplayOrderByModelID(
-	pb pbdom.ProductBlueprint,
-) map[string]*int {
+func buildDisplayOrderByModelID(pb pbdom.ProductBlueprint) map[string]*int {
 	out := map[string]*int{}
-
 	if len(pb.ModelRefs) == 0 {
 		return out
 	}
@@ -478,7 +428,6 @@ func buildDisplayOrderByModelID(
 		if modelID == "" {
 			continue
 		}
-
 		if _, ok := seen[modelID]; ok {
 			continue
 		}

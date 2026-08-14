@@ -1,80 +1,68 @@
 // backend/internal/application/query/console/dto/list_detail_dto.go
 package dto
 
-// ListDetailDTO is a screen DTO for listDetail page.
-//
-// Current requirements (frontend/console/list):
-// - From List: title, description, status, assigneeId, assigneeName, audit names, timestamps
-// - From ProductBlueprint: productName, productBrandName
-// - From TokenBlueprint: tokenName, tokenBrandName
-// - Images: imageUrls
-// - Price: priceRows
+// ListDetailDTO is the BFF response DTO for the Console list detail page.
+// Frontend must treat this response as the source of truth and must not restore missing values with aliases or normalizers.
 type ListDetailDTO struct {
-	// status
-	Status string `json:"status,omitempty"`
+	ID          string `json:"id"`
+	InventoryID string `json:"inventoryId"`
 
-	// listing content
-	Title       string `json:"title,omitempty"`
-	Description string `json:"description,omitempty"`
+	Status      string `json:"status"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
 
-	// assignee
-	AssigneeID   string `json:"assigneeId,omitempty"`
-	AssigneeName string `json:"assigneeName,omitempty"`
+	AssigneeID   string `json:"assigneeId"`
+	AssigneeName string `json:"assigneeName"`
 
-	// audit
-	CreatedByName string `json:"createdByName,omitempty"`
-	CreatedAt     string `json:"createdAt,omitempty"`
+	CreatedBy     string `json:"createdBy"`
+	CreatedByName string `json:"createdByName"`
+	CreatedAt     string `json:"createdAt"`
 
-	// updater
+	UpdatedBy     string `json:"updatedBy,omitempty"`
 	UpdatedByName string `json:"updatedByName,omitempty"`
 	UpdatedAt     string `json:"updatedAt,omitempty"`
 
-	// product
-	ProductBrandName string `json:"productBrandName,omitempty"`
-	ProductName      string `json:"productName,omitempty"`
+	ProductBlueprintID string `json:"productBlueprintId"`
+	ProductBrandID     string `json:"productBrandId"`
+	ProductBrandName   string `json:"productBrandName"`
+	ProductName        string `json:"productName"`
 
-	// token
-	TokenBrandName string `json:"tokenBrandName,omitempty"`
-	TokenName      string `json:"tokenName,omitempty"`
+	TokenBlueprintID string `json:"tokenBlueprintId"`
+	TokenBrandID     string `json:"tokenBrandId"`
+	TokenBrandName   string `json:"tokenBrandName"`
+	TokenName        string `json:"tokenName"`
 
-	// images
-	ImageURLs []string `json:"imageUrls,omitempty"`
+	PrimaryImageID string               `json:"primaryImageId,omitempty"`
+	Images         []ListDetailImageDTO `json:"images"`
 
-	// price
-	PriceRows []ListDetailPriceRowDTO `json:"priceRows,omitempty"`
+	PriceRows []ListDetailPriceRowDTO `json:"priceRows"`
 }
 
-// ListDetailPriceRowDTO is a row DTO for PriceCard in listDetail.
-// productBlueprintCategory / model kind に応じた model 情報を含める。
-// - apparel: modelNumber / size / color / rgb
-// - alcohol: modelNumber / volumeValue / volumeUnit
+// ListDetailImageDTO is the image information required by the list detail page.
+// id is the list image document ID and primaryImageId points to one of these IDs.
+type ListDetailImageDTO struct {
+	ID           string `json:"id"`
+	URL          string `json:"url"`
+	DisplayOrder int    `json:"displayOrder"`
+}
+
+// ListDetailPriceRowDTO is a PriceCard row.
+// Model information is resolved by the backend BFF.
+// apparel: modelNumber / size / color / rgb
+// alcohol: modelNumber / volumeValue / volumeUnit
 type ListDetailPriceRowDTO struct {
-	ModelID string `json:"modelId"`
+	ModelID      string `json:"modelId"`
+	Kind         string `json:"kind"`
+	ModelNumber  string `json:"modelNumber"`
+	DisplayOrder *int   `json:"displayOrder,omitempty"`
+	Stock        int    `json:"stock"`
 
-	// model kind
-	// - apparel
-	// - alcohol
-	Kind string `json:"kind,omitempty"`
-
-	// 型番
-	ModelNumber string `json:"modelNumber,omitempty"`
-
-	// displayOrder from productBlueprintPatch.ModelRefs
-	// - 0 は未設定として nil を許容
-	DisplayOrder *int `json:"displayOrder,omitempty"`
-
-	// In list detail, stock is still shown
-	Stock int `json:"stock"`
-
-	// apparel 系表示用
 	Size  string `json:"size,omitempty"`
 	Color string `json:"color,omitempty"`
 	RGB   *int   `json:"rgb,omitempty"`
 
-	// alcohol 系表示用
 	VolumeValue *int   `json:"volumeValue,omitempty"`
 	VolumeUnit  string `json:"volumeUnit,omitempty"`
 
-	// Price nullable
 	Price *int `json:"price,omitempty"`
 }

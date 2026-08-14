@@ -69,23 +69,19 @@ const LIST_STATUS_PRESENTATION: Record<
 function mapListDTOToVMRow(
   dto: ListManagementRowDTO,
 ): ListManagementRowVM {
-  const status = dto.status ?? "suspended";
-  const statusPresentation =
-    LIST_STATUS_PRESENTATION[status];
-  const createdAtRaw = dto.createdAt ?? "";
+  const statusPresentation = LIST_STATUS_PRESENTATION[dto.status];
 
   return {
     id: dto.id,
-    title: dto.title ?? "",
-    productName: dto.productName ?? "",
-    tokenName: dto.tokenName ?? "",
-    assigneeName: dto.assigneeName || "未設定",
-    status,
-    createdAt: safeDateTimeLabelJa(createdAtRaw, ""),
-    createdAtRaw,
+    title: dto.title,
+    productName: dto.productName,
+    tokenName: dto.tokenName,
+    assigneeName: dto.assigneeName,
+    status: dto.status,
+    createdAt: safeDateTimeLabelJa(dto.createdAt, ""),
+    createdAtRaw: dto.createdAt,
     statusBadgeText: statusPresentation.label,
-    statusBadgeClass:
-      statusPresentation.badgeClassName,
+    statusBadgeClass: statusPresentation.badgeClassName,
   };
 }
 
@@ -153,15 +149,11 @@ export function applyFilters(
   return rows.filter(
     (row) =>
       (filters.productFilter.length === 0 ||
-        filters.productFilter.includes(
-          row.productName,
-        )) &&
+        filters.productFilter.includes(row.productName)) &&
       (filters.tokenFilter.length === 0 ||
         filters.tokenFilter.includes(row.tokenName)) &&
       (filters.managerFilter.length === 0 ||
-        filters.managerFilter.includes(
-          row.assigneeName,
-        )) &&
+        filters.managerFilter.includes(row.assigneeName)) &&
       (filters.statusFilter.length === 0 ||
         filters.statusFilter.includes(row.status)),
   );

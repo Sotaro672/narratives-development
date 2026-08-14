@@ -3,12 +3,17 @@
 import type { ListStatus } from "../../../../shared/types/list";
 import type { ListDetailPriceRowDTO } from "./listPriceRowDto";
 
+export type ListDetailImageDTO = {
+  id: string;
+  url: string;
+  displayOrder: number;
+};
+
 export type ListDetailDTO = {
   id: string;
   inventoryId: string;
 
   status: ListStatus;
-
   title: string;
   description: string;
 
@@ -21,24 +26,20 @@ export type ListDetailDTO = {
 
   updatedBy?: string;
   updatedByName?: string;
-  updatedAt: string;
+  updatedAt?: string;
 
   productBlueprintId: string;
-  tokenBlueprintId: string;
-
   productBrandId: string;
   productBrandName: string;
   productName: string;
 
+  tokenBlueprintId: string;
   tokenBrandId: string;
   tokenBrandName: string;
   tokenName: string;
 
-  imageId?: string;
-  imageUrls: string[];
+  primaryImageId?: string;
+  images: ListDetailImageDTO[];
 
   priceRows: ListDetailPriceRowDTO[];
-
-  totalStock: number;
-  currencyJpy: boolean;
 };

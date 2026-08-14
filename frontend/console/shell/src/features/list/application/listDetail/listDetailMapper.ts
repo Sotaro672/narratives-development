@@ -1,475 +1,122 @@
 // frontend/console/shell/src/features/list/application/listDetail/listDetailMapper.ts
 
-import {
-  isValidListStatus,
-  type ListStatus,
-} from "../../../../shared/types/list";
-
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
-
 import type { ListDetailDTO } from "../../infrastructure/dto/listDetailDto";
 
-type ListDetailPriceRowSource = {
-  modelId?: unknown;
-
-  kind?: unknown;
-  modelNumber?: unknown;
-
-  displayOrder?: unknown;
-  stock?: unknown;
-  price?: unknown;
-
-  size?: unknown;
-  color?: unknown;
-  rgb?: unknown;
-
-  volumeValue?: unknown;
-  volumeUnit?: unknown;
-};
-
-type ListDetailSource = Omit<
-  Partial<ListDetailDTO>,
-  "imageUrls" | "priceRows"
-> & {
-  imageUrls?: readonly unknown[] | null;
-
-  priceRows?:
-    | readonly ListDetailPriceRowSource[]
-    | null;
-};
-
-export type NormalizedListDetailPriceRow = {
-  id: string;
+export type ListDetailPriceRowVM = {
   modelId: string;
-
-  kind: string | null;
-  modelNumber: string | null;
-
-  displayOrder: number | null;
+  kind: string;
+  modelNumber: string;
+  displayOrder?: number | null;
   stock: number;
-
-  /**
-   * 未入力時はプロパティを持たない。
-   * nullは使用しない。
-   */
   price?: number;
-
-  size: string | null;
-  color: string | null;
-  rgb: number | null;
-
-  volumeValue: number | null;
-  volumeUnit: string | null;
+  size?: string;
+  color?: string;
+  rgb?: number | null;
+  volumeValue?: number | null;
+  volumeUnit?: string;
 };
 
-function dedupeUrlsKeepOrder(
-  urls: readonly unknown[],
-): string[] {
-  const seen =
-    new Set<string>();
-
-  const result: string[] = [];
-
-  for (const value of urls) {
-    const url =
-      typeof value === "string"
-        ? value
-        : "";
-
-    if (
-      !url ||
-      seen.has(url)
-    ) {
-      continue;
-    }
-
-    seen.add(url);
-    result.push(url);
-  }
-
-  return result;
+function formatYMDHM(value: string | undefined): string {
+  return value ? safeDateTimeLabelJa(value, "") : "";
 }
 
-function toInt(
-  value: unknown,
-): number {
-  const numberValue =
-    Number(value);
-
-  if (
-    !Number.isFinite(numberValue)
-  ) {
-    return 0;
-  }
-
-  return Math.trunc(
-    numberValue,
-  );
+function buildPriceRows(dto: ListDetailDTO): ListDetailPriceRowVM[] {
+  return dto.priceRows.map((row) => ({
+    modelId: row.modelId,
+    kind: row.kind,
+    modelNumber: row.modelNumber,
+    displayOrder: row.displayOrder,
+    stock: row.stock,
+    ...(row.price == null ? {} : { price: row.price }),
+    ...(row.size === undefined ? {} : { size: row.size }),
+    ...(row.color === undefined ? {} : { color: row.color }),
+    ...(row.rgb === undefined ? {} : { rgb: row.rgb }),
+    ...(row.volumeValue === undefined ? {} : { volumeValue: row.volumeValue }),
+    ...(row.volumeUnit === undefined ? {} : { volumeUnit: row.volumeUnit }),
+  }));
 }
 
-function toNumberOrNull(
-  value: unknown,
-): number | null {
-  if (
-    value === null ||
-    value === undefined
-  ) {
-    return null;
-  }
-
-  const numberValue =
-    Number(value);
-
-  return Number.isFinite(numberValue)
-    ? numberValue
-    : null;
-}
-
-function toOptionalNumber(
-  value: unknown,
-): number | undefined {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
-    return undefined;
-  }
-
-  const numberValue =
-    Number(value);
-
-  return Number.isFinite(numberValue)
-    ? numberValue
-    : undefined;
-}
-
-function toDisplayOrderOrNull(
-  value: unknown,
-): number | null {
-  const numberValue =
-    toNumberOrNull(value);
-
-  if (numberValue === null) {
-    return null;
-  }
-
-  return Math.trunc(
-    numberValue,
-  );
-}
-
-function toStringOrNull(
-  value: unknown,
-): string | null {
-  if (
-    value === null ||
-    value === undefined
-  ) {
-    return null;
-  }
-
-  if (
-    typeof value === "string"
-  ) {
-    return value || null;
-  }
-
-  return String(value) || null;
-}
-
-export function normalizeStatus(
-  value: unknown,
-): ListStatus | "" {
-  return isValidListStatus(value)
-    ? value
-    : "";
-}
-
-export function formatYMDHM(
-  value: unknown,
-): string {
-  if (
-    typeof value !== "string"
-  ) {
-    return "";
-  }
-
-  return safeDateTimeLabelJa(
-    value,
-    "",
-  );
-}
-
-export function normalizeImageUrls(
-  dto:
-    | {
-        imageUrls?:
-          | readonly unknown[]
-          | null;
-      }
-    | null
-    | undefined,
-): string[] {
-  return dedupeUrlsKeepOrder(
-    dto?.imageUrls ?? [],
-  );
-}
-
-export function normalizePriceRows<
-  TRow extends object =
-    NormalizedListDetailPriceRow,
->(
-  dto:
-    | {
-        priceRows?:
-          | readonly ListDetailPriceRowSource[]
-          | null;
-      }
-    | null
-    | undefined,
-): TRow[] {
-  const rows =
-    dto?.priceRows ?? [];
-
-  return rows.map(
-    (
-      row,
-      index,
-    ) => {
-      const modelId =
-        typeof row.modelId === "string"
-          ? row.modelId
-          : "";
-
-      const price =
-        toOptionalNumber(
-          row.price,
-        );
-
-      const normalizedRow:
-        NormalizedListDetailPriceRow = {
-        id:
-          modelId ||
-          String(index),
-
-        modelId,
-
-        kind:
-          toStringOrNull(
-            row.kind,
-          ),
-
-        modelNumber:
-          toStringOrNull(
-            row.modelNumber,
-          ),
-
-        displayOrder:
-          toDisplayOrderOrNull(
-            row.displayOrder,
-          ),
-
-        stock:
-          toInt(
-            row.stock,
-          ),
-
-        size:
-          toStringOrNull(
-            row.size,
-          ),
-
-        color:
-          toStringOrNull(
-            row.color,
-          ),
-
-        rgb:
-          toNumberOrNull(
-            row.rgb,
-          ),
-
-        volumeValue:
-          toNumberOrNull(
-            row.volumeValue,
-          ),
-
-        volumeUnit:
-          toStringOrNull(
-            row.volumeUnit,
-          ),
-
-        ...(
-          price === undefined
-            ? {}
-            : {
-                price,
-              }
-        ),
-      };
-
-      return normalizedRow as unknown as TRow;
-    },
-  );
-}
-
-export function updatePriceRowPrice<
-  TRow extends object,
->(
-  rows:
-    | readonly TRow[]
-    | null
-    | undefined,
+export function updatePriceRowPrice<TRow extends object>(
+  rows: readonly TRow[] | null | undefined,
   index: number,
   price: number | undefined,
 ): TRow[] {
-  const source =
-    rows ?? [];
+  const source = rows ?? [];
 
-  return source.map(
-    (
-      row,
-      rowIndex,
-    ) => {
-      if (
-        rowIndex !== index
-      ) {
-        return row;
-      }
+  return source.map((row, rowIndex) => {
+    if (rowIndex !== index) {
+      return row;
+    }
 
-      if (
-        price === undefined
-      ) {
-        const nextRow = {
-          ...row,
-        } as TRow & {
-          price?: number;
-        };
+    if (price === undefined) {
+      const nextRow = { ...row } as TRow & { price?: number };
+      delete nextRow.price;
+      return nextRow;
+    }
 
-        delete nextRow.price;
-
-        return nextRow;
-      }
-
-      return {
-        ...row,
-        price,
-      } as TRow;
-    },
-  );
+    return { ...row, price } as TRow;
+  });
 }
 
-export function deriveListDetail<
-  TRow extends object =
-    NormalizedListDetailPriceRow,
->(
-  dto:
-    | ListDetailSource
-    | null
-    | undefined,
+export function deriveListDetail<TRow extends object = ListDetailPriceRowVM>(
+  dto: ListDetailDTO | null | undefined,
 ) {
-  const listingTitle =
-    dto?.title ?? "";
+  if (!dto) {
+    return {
+      listingTitle: "",
+      description: "",
+      status: "" as const,
+      productBrandId: "",
+      productBrandName: "",
+      productName: "",
+      tokenBrandId: "",
+      tokenBrandName: "",
+      tokenName: "",
+      images: [],
+      imageUrls: [],
+      primaryImageId: "",
+      priceRows: [] as TRow[],
+      assigneeId: "",
+      assigneeName: "",
+      createdByName: "",
+      createdAt: "",
+      updatedByName: "",
+      updatedAt: "",
+    };
+  }
 
-  const description =
-    dto?.description ?? "";
-
-  const status =
-    normalizeStatus(
-      dto?.status,
-    );
-
-  const productBrandId =
-    dto?.productBrandId ?? "";
-
-  const productBrandName =
-    dto?.productBrandName ?? "";
-
-  const productName =
-    dto?.productName ?? "";
-
-  const tokenBrandId =
-    dto?.tokenBrandId ?? "";
-
-  const tokenBrandName =
-    dto?.tokenBrandName ?? "";
-
-  const tokenName =
-    dto?.tokenName ?? "";
-
-  const assigneeId =
-    dto?.assigneeId ?? "";
-
-  const assigneeName =
-    dto?.assigneeName ||
-    "未設定";
-
-  const createdByName =
-    dto?.createdByName ?? "";
-
-  const createdAt =
-    formatYMDHM(
-      dto?.createdAt,
-    );
-
-  const updatedByName =
-    dto?.updatedByName ?? "";
-
-  const updatedAt =
-    formatYMDHM(
-      dto?.updatedAt,
-    );
-
-  const imageUrls =
-    normalizeImageUrls(dto);
-
-  const priceRows =
-    normalizePriceRows<TRow>(
-      dto,
-    );
+  const images = dto.images;
+  const priceRows = buildPriceRows(dto) as TRow[];
 
   return {
-    listingTitle,
-    description,
-    status,
-
-    productBrandId,
-    productBrandName,
-    productName,
-
-    tokenBrandId,
-    tokenBrandName,
-    tokenName,
-
-    imageUrls,
+    listingTitle: dto.title,
+    description: dto.description,
+    status: dto.status,
+    productBrandId: dto.productBrandId,
+    productBrandName: dto.productBrandName,
+    productName: dto.productName,
+    tokenBrandId: dto.tokenBrandId,
+    tokenBrandName: dto.tokenBrandName,
+    tokenName: dto.tokenName,
+    images,
+    imageUrls: images.map((image) => image.url),
+    primaryImageId: dto.primaryImageId ?? "",
     priceRows,
-
-    assigneeId,
-    assigneeName,
-
-    createdByName,
-    createdAt,
-
-    updatedByName,
-    updatedAt,
+    assigneeId: dto.assigneeId,
+    assigneeName: dto.assigneeName,
+    createdByName: dto.createdByName,
+    createdAt: formatYMDHM(dto.createdAt),
+    updatedByName: dto.updatedByName ?? "",
+    updatedAt: formatYMDHM(dto.updatedAt),
   };
 }
 
-export function computeListDetailPageTitle(
-  args: {
-    listId?: string;
-    listingTitle?: string;
-  },
-): string {
-  const id =
-    args.listId ?? "";
-
-  const title =
-    args.listingTitle ||
-    "出品詳細";
-
-  return id
-    ? `${title}（listId: ${id}）`
-    : title;
+export function computeListDetailPageTitle(args: {
+  listId?: string;
+  listingTitle?: string;
+}): string {
+  const id = args.listId ?? "";
+  const title = args.listingTitle || "出品詳細";
+  return id ? `${title}（listId: ${id}）` : title;
 }

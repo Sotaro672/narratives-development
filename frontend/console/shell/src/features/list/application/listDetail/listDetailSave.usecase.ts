@@ -1,4 +1,5 @@
 // frontend/console/shell/src/features/list/application/listDetail/listDetailSave.usecase.ts
+
 import type {
   ListDetailDTO,
   ListSaveOperationDTO,
@@ -14,12 +15,6 @@ import {
 } from "../../infrastructure/firebase/listImageStorage";
 
 export type SaveListDetailDraftImage = {
-  /**
-   * Existing image id.
-   *
-   * Existing backend DTOs may expose either id or imageId, so this type accepts both.
-   * New local images usually do not have either until they are uploaded.
-   */
   id?: string;
   imageId?: string;
   url: string;
@@ -88,50 +83,20 @@ function normalizeURL(value: unknown): string {
 function resolveDraftImageID(
   image: SaveListDetailDraftImage | undefined,
 ): string {
-  return normalizeImageID(image?.imageId || image?.id);
+  return normalizeImageID(image?.id || image?.imageId);
 }
 
 function normalizeCurrentImages(
   currentDTO: ListDetailDTO | null,
 ): CurrentImageItem[] {
-  const source = currentDTO as any;
-  const images = Array.isArray(source?.images) ? source.images : [];
-
-  if (images.length > 0) {
-    return images
-      .map((image: any, index: number): CurrentImageItem | null => {
-        const imageId = normalizeImageID(image?.imageId || image?.id);
-        const url = normalizeURL(image?.url);
-
-        if (!url) {
-          return null;
-        }
-
-        const rawDisplayOrder = Number(image?.displayOrder);
-
-        return {
-          imageId,
-          url,
-          displayOrder: Number.isInteger(rawDisplayOrder)
-            ? rawDisplayOrder
-            : index,
-        };
-      })
-      .filter(
-        (image: CurrentImageItem | null): image is CurrentImageItem =>
-          Boolean(image),
-      );
+  if (!currentDTO) {
+    return [];
   }
 
-  const primaryImageId = normalizeImageID(source?.imageId);
-  const imageUrls = Array.isArray(source?.imageUrls)
-    ? source.imageUrls.map(normalizeURL).filter(Boolean)
-    : [];
-
-  return imageUrls.map((url: string, index: number) => ({
-    imageId: index === 0 ? primaryImageId : "",
-    url,
-    displayOrder: index,
+  return currentDTO.images.map((image) => ({
+    imageId: image.id,
+    url: image.url,
+    displayOrder: image.displayOrder,
   }));
 }
 
@@ -143,12 +108,12 @@ function collectRemovedImages(args: {
   const keptURLs = new Set<string>();
 
   for (const image of args.draftImages) {
-    if (image?.isNew) {
+    if (image.isNew) {
       continue;
     }
 
     const imageId = resolveDraftImageID(image);
-    const url = normalizeURL(image?.url);
+    const url = normalizeURL(image.url);
 
     if (imageId) {
       keptImageIDs.add(imageId);
@@ -178,9 +143,9 @@ function collectRemovedImages(args: {
 
 function normalizeListStatus(
   inputStatus: ListStatus | undefined,
-  currentStatus: unknown,
+  currentStatus: ListStatus,
 ): "listing" | "suspended" {
-  const status = String(inputStatus ?? currentStatus ?? "").trim();
+  const status = inputStatus ?? currentStatus;
 
   if (status === "listing" || status === "suspended") {
     return status;
@@ -228,9 +193,7 @@ function buildTargetList(args: {
   const assigneeId = String(
     args.assigneeId ?? args.currentDTO.assigneeId ?? "",
   ).trim();
-  const inventoryId = String(
-    args.currentDTO.inventoryId ?? "",
-  ).trim();
+  const inventoryId = String(args.currentDTO.inventoryId ?? "").trim();
   const createdBy = String(
     args.currentDTO.createdBy ?? args.updatedBy,
   ).trim();
@@ -262,7 +225,7 @@ function buildTargetList(args: {
     assigneeId,
     title,
     inventoryId,
-    imageId: normalizeImageID(args.currentDTO.imageId),
+    imageId: normalizeImageID(args.currentDTO.primaryImageId),
     description,
     prices: normalizePriceRows(args.priceRows),
     createdBy,
@@ -563,6 +526,7 @@ export async function saveListDetailChanges(
   });
 
   const deleteImageIds = removedImages.map((image) => image.imageId);
+
   const provisionalUploadedItems = uploadPlans.map((plan) => ({
     draftIndex: plan.draftIndex,
     imageId: plan.imageId,
