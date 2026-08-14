@@ -20,7 +20,6 @@ import {
   transferScanPurchased,
 } from "../../infrastructure/scanResultApi";
 
-import { getAuthorizationHeader } from "../../infrastructure/scanResultHttp";
 import { getOptionalAuthHeaders } from "../../../../lib/authHeaders";
 
 import type {
@@ -144,7 +143,7 @@ export function useScanResultPage() {
       const normalizedProductId = pid.trim();
 
       if (!normalizedProductId) return;
-      if (!getAuthorizationHeader(headers)) return;
+      if (!headers) return;
       if (autoTransferTriggeredRef.current || transferringRef.current) return;
 
       autoTransferTriggeredRef.current = true;
@@ -187,10 +186,10 @@ export function useScanResultPage() {
       if (!normalizedProductId) return;
 
       const headers = await getOptionalAuthHeaders();
-      const hasAuth = Boolean(getAuthorizationHeader(headers));
+      const hasAuth = Boolean(headers);
 
       if (mountedRef.current) setAuthAvailable(hasAuth);
-      if (!hasAuth) return;
+      if (!headers) return;
 
       try {
         await runAutoTransferIfNeeded(normalizedProductId, headers);
@@ -228,7 +227,6 @@ export function useScanResultPage() {
       }
 
       loadingProductIdRef.current = pid;
-
       const nextState = await loadPreviewState(pid);
 
       if (
@@ -323,7 +321,7 @@ export function useScanResultPage() {
     try {
       const headers = await getOptionalAuthHeaders();
 
-      if (!getAuthorizationHeader(headers)) {
+      if (!headers) {
         if (mountedRef.current) {
           setOwnedByWallet(null);
           setOwnedByWalletError(null);
@@ -383,7 +381,7 @@ export function useScanResultPage() {
 
       const headers = await getOptionalAuthHeaders();
 
-      if (!getAuthorizationHeader(headers)) {
+      if (!headers) {
         navigate("/signin");
         return;
       }
@@ -450,7 +448,6 @@ export function useScanResultPage() {
 
         await loadReviews(1);
         setPostReviewError(null);
-
         return true;
       } catch (caughtError) {
         setPostReviewError(
