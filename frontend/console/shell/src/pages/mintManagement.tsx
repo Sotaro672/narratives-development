@@ -29,8 +29,7 @@ export default function MintRequestManagementPage() {
           /**
            * mints.createdByNameのみを使用する。
            */
-          const requesterName =
-            row.createdByName ?? "-";
+          const requesterName = row.createdByName ?? "-";
 
           /**
            * Mint完了時だけ実行日時を表示する。
@@ -54,10 +53,10 @@ export default function MintRequestManagementPage() {
 
           return (
             <tr
-              key={row.id}
+              key={row.productionId}
               onClick={() =>
                 handleRowClick(
-                  row.id,
+                  row.productionId,
                 )
               }
               style={{
@@ -67,7 +66,7 @@ export default function MintRequestManagementPage() {
               onKeyDown={(event) =>
                 handleRowKeyDown(
                   event,
-                  row.id,
+                  row.productionId,
                 )
               }
               aria-label={`ミント申請 ${productName} の詳細へ`}

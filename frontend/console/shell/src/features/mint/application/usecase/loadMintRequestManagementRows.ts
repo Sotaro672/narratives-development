@@ -1,20 +1,10 @@
-// frontend/console/shell/src/features/mintRequest/application/usecase/loadMintRequestManagementRows.ts
+// frontend/console/shell/src/features/mint/application/usecase/loadMintRequestManagementRows.ts
 
-import type {
-  InspectionStatus,
-} from "../../../../shared/types/inspections";
+import type { InspectionStatus } from "../../../../shared/types/inspections";
+import type { MintStatus } from "../../../../shared/types/mints";
 
-import type {
-  MintStatus,
-} from "../../../../shared/types/mints";
-
-import {
-  fetchMintRequestRowsHTTP,
-} from "../../infrastructure/repository/http/mintRequests";
-
-import type {
-  MintRequestManagementRowDTO,
-} from "../../infrastructure/dto/mintRequestManagementRow";
+import { fetchMintRequestRowsHTTP } from "../../infrastructure/repository/http/mintRequests";
+import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
 
 // ============================================================
 // Types
@@ -31,45 +21,20 @@ export type MintRequestInspectionStatus =
   | "notYet";
 
 export type ViewRow = {
-  /**
-   * productionId
-   */
-  id: string;
-
+  productionId: string;
+  tokenBlueprintId: string | null;
   tokenName: string | null;
   productName: string | null;
-
   mintQuantity: number;
   productionQuantity: number;
-
+  mintStatus: MintRequestManagementRowDTO["mintStatus"];
   status: MintRequestRowStatus;
   inspectionStatus: MintRequestInspectionStatus;
-
-  /**
-   * mintsドキュメントを作成したmemberId。
-   */
   createdBy: string | null;
-
-  /**
-   * mintsドキュメントを作成したメンバーの表示名。
-   */
   createdByName: string | null;
-
-  /**
-   * Mint申請ボタンを押したmemberId。
-   */
   requestedBy: string | null;
-
-  /**
-   * Mint申請ボタンを押したメンバーの表示名。
-   */
   requestedByName: string | null;
-
   mintedAt: string | null;
-
-  tokenBlueprintId: string | null;
-
-  minted: boolean;
 };
 
 // ============================================================
@@ -77,18 +42,13 @@ export type ViewRow = {
 // ============================================================
 
 /**
- * Backendの親Mint状態から
- * 一覧表示用の状態を算出する。
+ * Backendの親Mint状態から一覧表示用の状態を算出する。
  *
  * BackendのmintStatusを唯一の正とし、
- * tokenBlueprintId / tokenName / requestedBy /
- * mintedAtなどによる再判定は行わない。
+ * tokenBlueprintId / tokenName / requestedBy / mintedAtなどによる再判定は行わない。
  */
 function deriveRowStatus(
-  mintStatus:
-    | MintStatus
-    | null
-    | undefined,
+  mintStatus: MintStatus | string | null | undefined,
 ): MintRequestRowStatus {
   switch (mintStatus) {
     case "MINTED":
@@ -112,69 +72,27 @@ function deriveRowStatus(
 /**
  * Backend BFF DTOを一覧表示用ViewRowへ変換する。
  *
- * Backend responseのfield名・型・値を正とし、
- * 旧response形式のfallbackや値の正規化は行わない。
+ * productionId / mintStatus / mintQuantity / productionQuantityはBackend responseを正としてそのまま保持する。
+ * UI表示用のstatusのみFrontendで導出する。
  */
 function mapDTOToRow(
   dto: MintRequestManagementRowDTO,
 ): ViewRow {
-  if (!dto.productionId) {
-    throw new Error(
-      "MintRequestManagementRowDTO.productionId is required",
-    );
-  }
-
-  const mintStatus =
-    dto.mintStatus as
-      | MintStatus
-      | null
-      | undefined;
-
   return {
-    id:
-      dto.productionId,
-
-    tokenName:
-      dto.tokenName ?? null,
-
-    productName:
-      dto.productName ?? null,
-
-    mintQuantity:
-      dto.mintQuantity!,
-
-    productionQuantity:
-      dto.productionQuantity!,
-
-    status:
-      deriveRowStatus(
-        mintStatus,
-      ),
-
-    inspectionStatus:
-      dto.inspectionStatus as
-        MintRequestInspectionStatus,
-
-    createdBy:
-      dto.createdBy ?? null,
-
-    createdByName:
-      dto.createdByName ?? null,
-
-    requestedBy:
-      dto.requestedBy ?? null,
-
-    requestedByName:
-      dto.requestedByName ?? null,
-
-    mintedAt:
-      dto.mintedAt ?? null,
-
-    tokenBlueprintId:
-      dto.tokenBlueprintId ?? null,
-
-    minted:
-      mintStatus === "MINTED",
+    productionId: dto.productionId,
+    tokenBlueprintId: dto.tokenBlueprintId ?? null,
+    tokenName: dto.tokenName ?? null,
+    productName: dto.productName ?? null,
+    mintQuantity: dto.mintQuantity,
+    productionQuantity: dto.productionQuantity,
+    mintStatus: dto.mintStatus,
+    status: deriveRowStatus(dto.mintStatus),
+    inspectionStatus: dto.inspectionStatus as MintRequestInspectionStatus,
+    createdBy: dto.createdBy ?? null,
+    createdByName: dto.createdByName ?? null,
+    requestedBy: dto.requestedBy ?? null,
+    requestedByName: dto.requestedByName ?? null,
+    mintedAt: dto.mintedAt ?? null,
   };
 }
 
@@ -185,22 +103,11 @@ function mapDTOToRow(
 /**
  * 現在の会社に属するミント申請一覧を取得する。
  *
- * BackendのGET /mint/requests?view=listを
- * 一覧データの唯一の正とする。
- *
- * productionIdsをFrontendで事前取得せず、
- * Backend側で現在companyのproductionを解決する。
+ * BackendのGET /mint/requestsを一覧データの唯一の正とする。
+ * productionIdsをFrontendで事前取得せず、空配列を渡した場合はBackend側で現在companyのproductionを解決する。
  */
-export async function loadMintRequestManagementRows(): Promise<
-  ViewRow[]
-> {
-  const rows =
-    await fetchMintRequestRowsHTTP(
-      [],
-      "list",
-    );
+export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
+  const rows = await fetchMintRequestRowsHTTP([]);
 
-  return rows.map(
-    mapDTOToRow,
-  );
+  return rows.map(mapDTOToRow);
 }

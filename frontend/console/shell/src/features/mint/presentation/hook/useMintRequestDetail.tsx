@@ -1,4 +1,4 @@
-// frontend/console/shell/src/features/mintRequest/presentation/hook/useMintRequestDetail.tsx
+// frontend/console/shell/src/features/mint/presentation/hook/useMintRequestDetail.tsx
 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -11,16 +11,14 @@ import type {
 
 import { completeMintInspection } from "../../application/usecase/completeMintInspection";
 import { getMintRequestDetail } from "../../application/usecase/getMintRequestDetail";
-import { getMintRequestProductBlueprintPatch } from "../../application/usecase/getMintRequestProductBlueprintPatch";
+import { getMintProductBlueprint } from "../../application/usecase/getMintProductBlueprint";
 import { submitMintRequest } from "../../application/usecase/submitMintRequest";
 
 import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
 import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
-import type {
-  ProductBlueprintPatchDTO,
-} from "../../infrastructure/dto/mintRequestLocal.dto";
+import type { MintProductBlueprintDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
 import { HttpMintRequestRepository } from "../../infrastructure/repository/HttpMintRequestRepository";
 
@@ -46,8 +44,7 @@ export function useMintRequestDetail() {
   const navigate = useNavigate();
 
   /**
-   * route名はrequestIdのままでも、
-   * 実体はproductionIdとして扱う。
+   * route名はrequestIdのままでも、実体はproductionIdとして扱う。
    */
   const { requestId } = useParams<{ requestId: string }>();
 
@@ -76,13 +73,13 @@ export function useMintRequestDetail() {
   const [error, setError] =
     React.useState<string | null>(null);
 
-  const [pbPatch, setPbPatch] =
-    React.useState<ProductBlueprintPatchDTO | null>(null);
+  const [productBlueprint, setProductBlueprint] =
+    React.useState<MintProductBlueprintDTO | null>(null);
 
-  const [pbPatchLoading, setPbPatchLoading] =
+  const [productBlueprintLoading, setProductBlueprintLoading] =
     React.useState(false);
 
-  const [pbPatchError, setPbPatchError] =
+  const [productBlueprintError, setProductBlueprintError] =
     React.useState<string | null>(null);
 
   const [brandOptions, setBrandOptions] =
@@ -128,10 +125,8 @@ export function useMintRequestDetail() {
 
   /**
    * 画面全体の詳細情報を再取得する。
-   *
    * 初回表示、検品完了後、Mint申請直後など、
-   * inspection / mint requestをまとめて
-   * 最新化したい場合に使用する。
+   * inspection / mint requestをまとめて最新化したい場合に使用する。
    */
   const reloadDetail = React.useCallback(async () => {
     if (!productionId) {
@@ -150,9 +145,7 @@ export function useMintRequestDetail() {
 
   /**
    * Mint状態だけを再取得する。
-   *
-   * ミント中の周期処理ではこれだけを使用し、
-   * inspectionを再取得しない。
+   * ミント中の周期処理ではこれだけを使用し、inspectionを再取得しない。
    */
   const reloadMintStatus = React.useCallback(async () => {
     if (!productionId) {
@@ -216,29 +209,29 @@ export function useMintRequestDetail() {
 
   React.useEffect(() => {
     if (!productBlueprintId) {
-      setPbPatch(null);
+      setProductBlueprint(null);
+      setProductBlueprintError(null);
       return;
     }
 
     let cancelled = false;
 
     const run = async () => {
-      setPbPatchLoading(true);
-      setPbPatchError(null);
+      setProductBlueprintLoading(true);
+      setProductBlueprintError(null);
 
       try {
-        const patch =
-          await getMintRequestProductBlueprintPatch(
-            mintRequestRepo,
-            productBlueprintId,
-          );
+        const result = await getMintProductBlueprint(
+          mintRequestRepo,
+          productBlueprintId,
+        );
 
         if (!cancelled) {
-          setPbPatch(patch);
+          setProductBlueprint(result);
         }
       } catch (error: unknown) {
         if (!cancelled) {
-          setPbPatchError(
+          setProductBlueprintError(
             getErrorMessage(
               error,
               "プロダクト基本情報の取得に失敗しました",
@@ -247,7 +240,7 @@ export function useMintRequestDetail() {
         }
       } finally {
         if (!cancelled) {
-          setPbPatchLoading(false);
+          setProductBlueprintLoading(false);
         }
       }
     };
@@ -270,9 +263,9 @@ export function useMintRequestDetail() {
      */
     return {
       ...inspectionBatch,
-      productBlueprintPatch: pbPatch ?? null,
+      productBlueprint,
     };
-  }, [inspectionBatch, pbPatch]);
+  }, [inspectionBatch, productBlueprint]);
 
   /**
    * Model情報はBackend responseのmodelMetaを正とする。
@@ -283,17 +276,15 @@ export function useMintRequestDetail() {
   });
 
   /**
-   * BackendのGET /mint/requests responseの
-   * mintQuantityを正とする。
-   *
+   * BackendのGET /mint/requests responseのmintQuantityを正とする。
    * row未取得時のみ画面初期値として0を使用する。
    */
   const totalMintQuantity =
     mintRequestRow?.mintQuantity ?? 0;
 
   const productBlueprintCardView = React.useMemo(
-    () => buildProductBlueprintCardView(pbPatch),
-    [pbPatch],
+    () => buildProductBlueprintCardView(productBlueprint),
+    [productBlueprint],
   );
 
   const onBack = React.useCallback(() => {
@@ -354,21 +345,15 @@ export function useMintRequestDetail() {
   );
 
   /**
-   * GET /mint/requests responseのmintStatusを
-   * Mint状態の唯一の正とする。
-   *
-   * frontendではtrim / uppercaseなどの
-   * 再正規化を行わない。
+   * GET /mint/requests responseのmintStatusをMint状態の唯一の正とする。
+   * frontendではtrim / uppercaseなどの再正規化を行わない。
    */
   const mintStatus =
     mintRequestRow?.mintStatus ?? null;
 
   /**
-   * BackendはMintが存在しないProductionについても
-   * management rowを返し得るため、
-   * rowの存在そのものではhasMintを判定しない。
-   *
-   * mintStatusの有無を正とする。
+   * BackendはMintが存在しないProductionについてもrowを返し得るため、
+   * rowの存在そのものではhasMintを判定せず、mintStatusの有無を正とする。
    */
   const hasMint =
     Boolean(mintStatus);
@@ -391,10 +376,6 @@ export function useMintRequestDetail() {
   const createdByName =
     mintRequestRow?.createdByName ?? null;
 
-  /**
-   * Backendが解決済みの表示名をそのまま使用する。
-   * memberIdへのfallbackは行わない。
-   */
   const requestedByName =
     mintRequestRow?.requestedByName ?? null;
 
@@ -406,7 +387,7 @@ export function useMintRequestDetail() {
    * ProductBlueprintのbrandIdを使用する。
    */
   const mintRequestedBrandId =
-    pbPatch?.brandId ?? "";
+    productBlueprint?.brandId ?? "";
 
   /**
    * ミント申請の送信中、またはBackend上で
@@ -418,9 +399,7 @@ export function useMintRequestDetail() {
 
   /**
    * Mint状態だけを3秒ごとに再取得する。
-   *
-   * GET /mint/requestsのみを呼び、
-   * inspection情報は周期的に再取得しない。
+   * GET /mint/requestsのみを呼び、inspection情報は周期的に再取得しない。
    */
   React.useEffect(() => {
     if (!productionId || !isMintProcessing) {
@@ -496,7 +475,6 @@ export function useMintRequestDetail() {
   /**
    * TokenBlueprint選択後にBubblegum V2 Mintの
    * Reserve / Fee Payer残高とSOL費用見積を取得する。
-   *
    * metadataUriはFrontendから送信しない。
    */
   React.useEffect(() => {
@@ -557,7 +535,7 @@ export function useMintRequestDetail() {
     showMintControls,
   ]);
 
-  const tokenBlueprintIdForPatch =
+  const displayTokenBlueprintId =
     React.useMemo(() => {
       return (
         selectedTokenBlueprintId ||
@@ -778,23 +756,22 @@ export function useMintRequestDetail() {
       () =>
         buildTokenBlueprintCardVm({
           selectedTokenBlueprint,
-          tokenBlueprintIdForPatch,
+          displayTokenBlueprintId,
           selectedBrandName,
-          pbPatch,
+          productBlueprint,
           brandOptions,
         }),
       [
         selectedTokenBlueprint,
-        tokenBlueprintIdForPatch,
+        displayTokenBlueprintId,
         selectedBrandName,
-        pbPatch,
+        productBlueprint,
         brandOptions,
       ],
     );
 
   /**
-   * 現行GET /mint/requests responseに
-   * createdAtは含まれていない。
+   * 現行GET /mint/requests responseにcreatedAtは含まれていない。
    */
   const mintCreatedAtLabel = "（未登録）";
 
@@ -809,8 +786,7 @@ export function useMintRequestDetail() {
     );
 
   /**
-   * 現行GET /mint/requests responseに
-   * onChainTxSignatureは含まれていない。
+   * 現行GET /mint/requests responseにonChainTxSignatureは含まれていない。
    */
   const onChainTxSignature = "";
 
@@ -821,8 +797,7 @@ export function useMintRequestDetail() {
     inspectionCardData,
 
     /**
-     * 右カラムでGET /mint/requestsの
-     * management rowを直接参照できるよう返す。
+     * 右カラムでGET /mint/requestsのrowを直接参照できるよう返す。
      */
     mintRequestRow,
     mintStatus,
@@ -841,8 +816,8 @@ export function useMintRequestDetail() {
     handleCompleteInspection,
     requestedByName,
     productBlueprintCardView,
-    pbPatchLoading,
-    pbPatchError,
+    productBlueprintLoading,
+    productBlueprintError,
     brandOptions,
     selectedBrandId,
     selectedBrandName,

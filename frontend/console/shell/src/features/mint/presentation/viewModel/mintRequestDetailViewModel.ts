@@ -1,4 +1,4 @@
-// frontend/console/shell/src/features/mintRequest/presentation/viewModel/mintRequestDetailViewModel.ts
+// frontend/console/shell/src/features/mint/presentation/viewModel/mintRequestDetailViewModel.ts
 
 import type {
   BrandSummary,
@@ -6,7 +6,7 @@ import type {
 } from "../../application/port/MintRequestRepository";
 
 import type {
-  ProductBlueprintPatchDTO,
+  MintProductBlueprintDTO,
 } from "../../infrastructure/dto/mintRequestLocal.dto";
 
 import type {
@@ -17,125 +17,86 @@ import type {
   TokenBlueprintCardViewModel,
 } from "../../../tokenBlueprint/presentation/components/tokenBlueprintCard";
 
-export type ProductBlueprintCardViewModel =
-  Pick<
-    ProductBlueprintCardProps,
-    | "productName"
-    | "brandName"
-    | "productBlueprintCategory"
-  >;
+export type ProductBlueprintCardViewModel = Pick<
+  ProductBlueprintCardProps,
+  "productName" | "brandName" | "productBlueprintCategory"
+>;
 
 export type BuildTokenBlueprintCardVmInput = {
-  selectedTokenBlueprint:
-    | TokenBlueprintSummary
-    | null;
-
-  tokenBlueprintIdForPatch:
-    string;
-
-  selectedBrandName:
-    string;
-
-  pbPatch:
-    | ProductBlueprintPatchDTO
-    | null;
-
-  brandOptions:
-    BrandSummary[];
+  selectedTokenBlueprint: TokenBlueprintSummary | null;
+  displayTokenBlueprintId: string;
+  selectedBrandName: string;
+  productBlueprint: MintProductBlueprintDTO | null;
+  brandOptions: BrandSummary[];
 };
 
 export function buildProductBlueprintCardView(
-  pbPatch:
-    | ProductBlueprintPatchDTO
-    | null,
+  productBlueprint: MintProductBlueprintDTO | null,
 ): ProductBlueprintCardViewModel | null {
-  if (!pbPatch) {
+  if (!productBlueprint) {
     return null;
   }
 
   return {
-    productName:
-      pbPatch.productName ??
-      undefined,
-
-    brandName:
-      pbPatch.brandName ??
-      undefined,
-
+    productName: productBlueprint.productName ?? undefined,
+    brandName: productBlueprint.brandName ?? undefined,
     productBlueprintCategory:
-      pbPatch.productBlueprintCategory ??
-      null,
+      productBlueprint.productBlueprintCategory ?? null,
   };
 }
 
 export function buildTokenBlueprintCardVm(
-  input:
-    BuildTokenBlueprintCardVmInput,
+  input: BuildTokenBlueprintCardVmInput,
 ): TokenBlueprintCardViewModel | null {
   const {
     selectedTokenBlueprint,
-    tokenBlueprintIdForPatch,
+    displayTokenBlueprintId,
     selectedBrandName,
-    pbPatch,
+    productBlueprint,
     brandOptions,
   } = input;
 
   const tokenBlueprintId =
     selectedTokenBlueprint?.id ??
-    tokenBlueprintIdForPatch;
+    displayTokenBlueprintId;
 
   if (!tokenBlueprintId) {
     return null;
   }
 
   const tokenName =
-    selectedTokenBlueprint?.tokenName ??
-    "";
+    selectedTokenBlueprint?.tokenName ?? "";
 
   const symbol =
-    selectedTokenBlueprint?.symbol ??
-    "";
+    selectedTokenBlueprint?.symbol ?? "";
 
   const brandId =
     selectedTokenBlueprint?.brandId ??
-    pbPatch?.brandId ??
+    productBlueprint?.brandId ??
     "";
 
   const brandName =
     selectedBrandName ||
-    pbPatch?.brandName ||
+    productBlueprint?.brandName ||
     "";
 
   const description =
-    selectedTokenBlueprint?.description ??
-    "";
+    selectedTokenBlueprint?.description ?? "";
 
   const iconUrl =
     selectedTokenBlueprint?.iconUrl;
 
   return {
-    id:
-      tokenBlueprintId,
-
-    name:
-      tokenName,
-
+    id: tokenBlueprintId,
+    name: tokenName,
     symbol,
     brandId,
     brandName,
     description,
     iconUrl,
-
-    minted:
-      selectedTokenBlueprint?.minted ??
-      false,
-
-    iconFile:
-      null,
-
-    isEditMode:
-      false,
-
+    minted: selectedTokenBlueprint?.minted ?? false,
+    iconFile: null,
+    isEditMode: false,
     brandOptions,
   };
 }

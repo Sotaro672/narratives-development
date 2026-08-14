@@ -5,22 +5,9 @@ import { getAuthJsonHeadersOrThrow } from "../../../../../shared/http/authHeader
 
 import type {
   MintFundingEstimate,
+  MintQueuedResponse,
 } from "../../../application/port/MintRequestRepository";
 import type { MintRequestManagementRowDTO } from "../../dto/mintRequestManagementRow";
-import type { MintStatus } from "../../../../../shared/types/mints";
-
-// ===============================
-// types
-// ===============================
-
-export type MintRequestsView = "management" | "list";
-
-export type MintQueuedResponse = {
-  mintRequestId: string;
-  productionId: string;
-  status: Extract<MintStatus, "QUEUED">;
-  message: string;
-};
 
 // ===============================
 // helpers
@@ -32,6 +19,7 @@ function uniqStrings(values: string[]): string[] {
 
   for (const value of values ?? []) {
     const normalized = String(value ?? "").trim();
+
     if (!normalized || seen.has(normalized)) {
       continue;
     }
@@ -43,22 +31,18 @@ function uniqStrings(values: string[]): string[] {
   return result;
 }
 
-function buildMintRequestsUrl(
-  productionIds: string[],
-  view: MintRequestsView,
-): string {
-  const query = new URLSearchParams({
-    view,
-  });
+function buildMintRequestsUrl(productionIds: string[]): string {
+  const query = new URLSearchParams();
 
   if (productionIds.length > 0) {
-    query.set(
-      "productionIds",
-      productionIds.join(","),
-    );
+    query.set("productionIds", productionIds.join(","));
   }
 
-  return `${API_BASE}/mint/requests?${query.toString()}`;
+  const queryString = query.toString();
+
+  return queryString
+    ? `${API_BASE}/mint/requests?${queryString}`
+    : `${API_BASE}/mint/requests`;
 }
 
 function buildMintFundingEstimateUrl(
@@ -85,59 +69,6 @@ async function readTextSafe(response: Response): Promise<string> {
   }
 }
 
-function getProductionId(
-  row: MintRequestManagementRowDTO,
-): string {
-  return row.productionId;
-}
-
-function normalizeMintStatus(value: unknown): MintStatus | null {
-  const status = String(value ?? "").trim().toUpperCase();
-
-  switch (status) {
-    case "CREATED":
-    case "QUEUED":
-    case "MINTING":
-    case "PARTIALLY_MINTED":
-    case "MINTED":
-    case "FAILED_RETRYABLE":
-    case "FAILED_FATAL":
-      return status;
-
-    default:
-      return null;
-  }
-}
-
-function normalizeMintQueuedResponse(
-  raw: unknown,
-  fallbackProductionId: string,
-): MintQueuedResponse | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return null;
-  }
-
-  const value = raw as Record<string, unknown>;
-
-  const mintRequestId = String(value.mintRequestId ?? "").trim();
-  const productionId = String(
-    value.productionId ?? fallbackProductionId,
-  ).trim();
-  const status = normalizeMintStatus(value.status);
-  const message = String(value.message ?? "");
-
-  if (!mintRequestId || !productionId || status !== "QUEUED") {
-    return null;
-  }
-
-  return {
-    mintRequestId,
-    productionId,
-    status,
-    message,
-  };
-}
-
 // ===============================
 // GET: /mint/requests
 // ===============================
@@ -147,19 +78,16 @@ function normalizeMintQueuedResponse(
  *
  * - productionIdsは空文字と重複を除去する
  * - productionIdsが空の場合はBackend側で現在companyの全件を取得する
- * - Backend responseは配列を正とする
+ * - Backend responseの配列を正とする
  * - items / rows / dataなどの旧レスポンス形状は吸収しない
- * - Backend BFFのfield名と型をそのまま正とする
- * - HTTPエラー、空レスポンス、不正JSON、不正なレスポンス型を区別する
+ * - Backend BFFのfield名と型をそのまま使用する
  */
 export async function fetchMintRequestRowsHTTP(
   productionIds: string[],
-  view: MintRequestsView = "management",
 ): Promise<MintRequestManagementRowDTO[]> {
   const ids = uniqStrings(productionIds);
-
   const authHeaders = await getAuthJsonHeadersOrThrow();
-  const url = buildMintRequestsUrl(ids, view);
+  const url = buildMintRequestsUrl(ids);
 
   let response: Response;
 
@@ -169,10 +97,7 @@ export async function fetchMintRequestRowsHTTP(
       headers: authHeaders,
     });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : String(error);
+    const message = error instanceof Error ? error.message : String(error);
 
     throw new Error(
       `Failed to fetch mint requests (network): ${message}`,
@@ -219,37 +144,31 @@ export async function fetchMintRequestRowsHTTP(
 }
 
 // ===============================
-// GET: management row
+// GET: mint request row
 // ===============================
 
 /**
- * productionIdでGET /mint/requestsのmanagement rowを1件取得する。
+ * productionIdでGET /mint/requestsのrowを1件取得する。
  *
- * Mint detailではこのresponseを正として使用する。
+ * Mint detailではこのBackend responseを正として使用する。
  */
 export async function fetchMintRequestRowByProductionIdHTTP(
   productionId: string,
 ): Promise<MintRequestManagementRowDTO | null> {
-  const normalizedProductionId = String(
-    productionId ?? "",
-  ).trim();
+  const normalizedProductionId = String(productionId ?? "").trim();
 
   if (!normalizedProductionId) {
     throw new Error("productionId が空です");
   }
 
-  const rows = await fetchMintRequestRowsHTTP(
-    [normalizedProductionId],
-    "management",
-  );
+  const rows = await fetchMintRequestRowsHTTP([
+    normalizedProductionId,
+  ]);
 
   return (
     rows.find(
-      (item) =>
-        getProductionId(item) ===
-        normalizedProductionId,
-    ) ??
-    null
+      (row) => row.productionId === normalizedProductionId,
+    ) ?? null
   );
 }
 
@@ -271,9 +190,7 @@ export async function fetchMintFundingEstimateHTTP(
   productionId: string,
   tokenBlueprintId: string,
 ): Promise<MintFundingEstimate> {
-  const normalizedProductionId = String(
-    productionId ?? "",
-  ).trim();
+  const normalizedProductionId = String(productionId ?? "").trim();
 
   if (!normalizedProductionId) {
     throw new Error("productionId が空です");
@@ -301,10 +218,7 @@ export async function fetchMintFundingEstimateHTTP(
       headers: authHeaders,
     });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : String(error);
+    const message = error instanceof Error ? error.message : String(error);
 
     throw new Error(
       `Failed to fetch mint funding estimate (network): ${message}`,
@@ -355,7 +269,7 @@ export async function fetchMintFundingEstimateHTTP(
  * 非同期でミント処理を開始する。
  *
  * 正常受付時は202 Acceptedと
- * QUEUEDレスポンスを返す。
+ * Backend BFFのMintQueuedResponseを返す。
  *
  * scheduledBurnDateはFrontendから送信しない。
  */
@@ -363,9 +277,7 @@ export async function postMintRequestHTTP(
   productionId: string,
   tokenBlueprintId: string,
 ): Promise<MintQueuedResponse | null> {
-  const normalizedProductionId = String(
-    productionId ?? "",
-  ).trim();
+  const normalizedProductionId = String(productionId ?? "").trim();
 
   if (!normalizedProductionId) {
     throw new Error("productionId が空です");
@@ -399,10 +311,7 @@ export async function postMintRequestHTTP(
       body: JSON.stringify(requestPayload),
     });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : String(error);
+    const message = error instanceof Error ? error.message : String(error);
 
     throw new Error(
       `Failed to post mint request (network): ${message}`,
@@ -427,18 +336,15 @@ export async function postMintRequestHTTP(
     return null;
   }
 
-  let responsePayload: unknown;
+  let payload: unknown;
 
   try {
-    responsePayload = JSON.parse(text);
+    payload = JSON.parse(text);
   } catch {
     throw new Error(
       "Failed to post mint request: response is not valid JSON",
     );
   }
 
-  return normalizeMintQueuedResponse(
-    responsePayload,
-    normalizedProductionId,
-  );
+  return payload as MintQueuedResponse;
 }

@@ -2,7 +2,7 @@
 
 export * from "./http/productions";
 export * from "./http/inspections";
-export * from "./http/productBlueprintPatch";
+export * from "./http/mintProductBlueprint";
 export * from "./http/brands";
 export * from "./http/tokenBlueprints";
 export * from "./http/mintRequests";
