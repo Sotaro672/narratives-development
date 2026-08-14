@@ -1,51 +1,45 @@
 // frontend/amol/src/features/shared/types/scanResult.ts
 
-import type {
-  ProductBlueprintCategoryFields,
-} from "./category";
-
-import type {
-  ProductBlueprintReviewPage,
-} from "./review";
+import type { ProductBlueprintCategoryFields } from "./category";
+import type { ProductBlueprintReviewPage } from "./review";
 
 export type MallOwnerInfo = {
-  brandId: string;
-  avatarId: string;
-  brandName: string;
-  avatarName: string;
+  walletAddress?: string;
+  ownerType?: string;
+  brandId?: string;
+  avatarId?: string;
+  brandName?: string;
+  avatarName?: string;
 };
 
 export type MallPreviewTransferInfo = {
-  transferredAt: string | null;
-
-  fromWalletAddress: string;
-  toWalletAddress: string;
-
-  fromAvatarId: string;
-  fromAvatarName: string;
-  fromAvatarIcon: string;
-  fromBrandId: string;
-  fromBrandName: string;
-  fromBrandIcon: string;
-
-  toAvatarId: string;
-  toAvatarName: string;
-  toAvatarIcon: string;
-  toBrandId: string;
-  toBrandName: string;
-  toBrandIcon: string;
+  transferredAt?: string;
+  fromWalletAddress?: string;
+  toWalletAddress?: string;
+  fromAvatarId?: string;
+  fromAvatarName?: string;
+  fromAvatarIcon?: string;
+  fromBrandId?: string;
+  fromBrandName?: string;
+  fromBrandIcon?: string;
+  toAvatarId?: string;
+  toAvatarName?: string;
+  toAvatarIcon?: string;
+  toBrandId?: string;
+  toBrandName?: string;
+  toBrandIcon?: string;
 };
 
 export type MallTokenInfo = {
   productId: string;
-  brandId: string;
-  brandName: string;
-  tokenBlueprintId: string;
-  toAddress: string;
-  metadataUri: string;
-  mintAddress: string;
-  onChainTxSignature: string;
-  mintedAt: string;
+  brandId?: string;
+  brandName?: string;
+  tokenBlueprintId?: string;
+  toAddress?: string;
+  metadataUri?: string;
+  assetId?: string;
+  onChainTxSignature?: string;
+  mintedAt?: string;
 };
 
 export type ProductCategoryKind =
@@ -70,29 +64,19 @@ export type ProductBlueprintPatch = {
   productName?: string;
   description?: string;
   brandId?: string;
+  brandName?: string;
   companyId?: string;
-
-  productBlueprintCategory?:
-    ProductBlueprintCategorySnapshot;
-
-  categoryFields?:
-    ProductBlueprintCategoryFields;
-
+  companyName?: string;
+  productBlueprintCategory?: ProductBlueprintCategorySnapshot;
+  categoryFields?: ProductBlueprintCategoryFields;
   productIdTag?: {
     Type?: string;
-    type?: string;
   };
-
   assigneeId?: string;
-
   modelRefs?: Array<{
     ModelID?: string;
-    modelId?: string;
     DisplayOrder?: number;
-    displayOrder?: number;
   }>;
-
-  [key: string]: unknown;
 };
 
 export type CategoryInputFieldScope =
@@ -123,12 +107,8 @@ export type CategoryInputSchema = {
   categoryCode: string;
   categoryKind: ProductCategoryKind;
   categoryNameJa: string;
-
-  productBlueprintFields:
-    CategoryInputFieldDefinition[];
-
-  modelFields:
-    CategoryInputFieldDefinition[];
+  productBlueprintFields: CategoryInputFieldDefinition[];
+  modelFields: CategoryInputFieldDefinition[];
 };
 
 export type TokenBlueprintPatchVM = {
@@ -144,86 +124,33 @@ export type TokenBlueprintPatchVM = {
 export type MallPreviewResponse = {
   productId: string;
   productBlueprintId: string;
-
   modelId: string;
-
-  /**
-   * apparel / alcoholなどのmodel表示種別。
-   * Backendのmodel resolverが返す値。
-   */
   modelKind?: ProductCategoryKind;
-
   modelNumber: string;
   modelLabel?: string;
-
-  /**
-   * apparel用。
-   */
   size: string;
   color: string;
   rgb: number;
-  measurements:
-    Record<string, number> | null;
-
-  /**
-   * alcohol用。
-   */
-  volumeValue?: number;
+  measurements: Record<string, number> | null;
+  volumeValue?: number | null;
   volumeUnit?: string;
-
-  /**
-   * ProductBlueprintのcategory情報。
-   */
   productBlueprintCategoryCode?: string;
-
-  productBlueprintCategoryKind?:
-    ProductCategoryKind;
-
+  productBlueprintCategoryKind?: ProductCategoryKind;
   productBlueprintCategoryName?: string;
-
-  productBlueprintCategory?:
-    ProductBlueprintCategorySnapshot | null;
-
-  categoryInputSchema?:
-    CategoryInputSchema | null;
-
-  /**
-   * ProductBlueprintの確定済みpatch情報。
-   * Application層のViewModel生成に使用する。
-   */
-  productBlueprintPatch:
-    ProductBlueprintPatch | null;
-
+  productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+  categoryInputSchema?: CategoryInputSchema | null;
+  productBlueprintPatch: ProductBlueprintPatch | null;
   brandName?: string;
   companyName?: string;
-
   token: MallTokenInfo | null;
   owner: MallOwnerInfo | null;
   transfers: MallPreviewTransferInfo[];
-
-  /**
-   * TokenBlueprintの確定済みpatch情報。
-   * Token表示情報の唯一の参照元として使用する。
-   */
-  tokenBlueprintPatch:
-    TokenBlueprintPatchVM | null;
+  tokenBlueprintPatch: TokenBlueprintPatchVM | null;
 };
 
 export type PreviewState = {
   raw: MallPreviewResponse;
-
-  /**
-   * tokenBlueprintPatch.tokenIconから生成した
-   * 画面表示用の安全なURL。
-   */
-  tokenIconUrlEncoded:
-    string | null;
-};
-
-export type MallTransferFlowStep = {
-  no: number;
-  title: string;
-  note: string;
+  tokenIconUrlEncoded: string | null;
 };
 
 export type MallScanTransferResponse = {
@@ -231,72 +158,31 @@ export type MallScanTransferResponse = {
   productId: string;
   matched: boolean;
   txSignature: string;
-  fromWallet: string;
-  toWallet: string;
-  updatedToAddress: boolean;
-  mintAddress: string;
-  flow: MallTransferFlowStep[];
-
-  /**
-   * Backendで解決したTransfer当事者の表示名。
-   * FrontendではWallet Addressではなくこちらを表示する。
-   */
   fromDisplayName: string;
   toDisplayName: string;
-};
-
-export type TokenContentFile = {
-  id: string;
-  name: string;
-  viewUri: string;
-  contentType: string;
-  isPreviewable: boolean;
+  updatedToAddress: boolean;
+  assetId: string;
 };
 
 export type ScanResultPageState = {
   productId: string;
-
-  previewState:
-    PreviewState | null;
-
-  meAvatar:
-    MallOwnerInfo | null;
-
-  transferResult:
-    MallScanTransferResponse | null;
-
-  transferredMintAddress: string;
+  previewState: PreviewState | null;
+  transferResult: MallScanTransferResponse | null;
+  transferredAssetId: string;
   transferTxSignature: string;
   transferMatched: boolean;
-
-  reviews:
-    ProductBlueprintReviewPage | null;
-
-  reviewsError:
-    string | null;
-
+  reviews: ProductBlueprintReviewPage | null;
+  reviewsError: string | null;
   reviewPage: number;
   reviewPerPage: number;
   busyReviews: boolean;
-
-  ownedByWallet:
-    boolean | null;
-
-  ownedByWalletError:
-    string | null;
-
+  ownedByWallet: boolean | null;
+  ownedByWalletError: string | null;
   busyOwnedByWallet: boolean;
-
   postingReview: boolean;
-
-  postReviewError:
-    string | null;
-
+  postReviewError: string | null;
   loading: boolean;
-
-  error:
-    string | null;
-
+  error: string | null;
   authAvailable: boolean;
   busyTransfer: boolean;
 };

@@ -9,118 +9,48 @@ import type {
 export type ScanTransferSuccessModalViewModel = {
   productId: string;
   productName: string;
-  mintAddress: string;
-
-  /**
-   * ContentsPage navigation query params.
-   * useContentsPage reads these from URLSearchParams.
-   */
+  assetId: string;
   metadataUri: string;
   tokenBlueprintId: string;
   tokenName: string;
   tokenIconUrl: string;
   brandId: string;
   brandName: string;
-
-  /**
-   * ContentsPageを開けるかどうかの唯一の判定値。
-   * mintAddressとmetadataUriの両方がある場合のみtrue。
-   */
   canOpenContents: boolean;
-
   fromName: string;
   toName: string;
   walletUpdated: boolean;
 };
 
-function normalize(
-  value: string | null | undefined,
-): string {
-  return value?.trim() ?? "";
-}
-
-export function createScanTransferSuccessModalViewModel(
-  input: {
-    result: MallScanTransferResponse | null;
-    transferredMintAddress: string;
-    token: MallTokenInfo | null;
-    tokenBlueprintPatch: TokenBlueprintPatchVM | null;
-    productName: string;
-  },
-): ScanTransferSuccessModalViewModel | null {
+export function createScanTransferSuccessModalViewModel(input: {
+  result: MallScanTransferResponse | null;
+  token: MallTokenInfo | null;
+  tokenBlueprintPatch: TokenBlueprintPatchVM | null;
+  productName: string;
+}): ScanTransferSuccessModalViewModel | null {
   const result = input.result;
 
-  if (!result || result.matched !== true) {
-    return null;
-  }
-
-  const mintAddress =
-    normalize(result.mintAddress) ||
-    normalize(input.transferredMintAddress);
-
-  if (!mintAddress) {
-    return null;
-  }
-
-  const fromName =
-    normalize(result.fromDisplayName);
-
-  const toName =
-    normalize(result.toDisplayName);
-
-  if (!fromName || !toName) {
+  if (!result || !result.matched) {
     return null;
   }
 
   const token = input.token;
-
-  const tokenBlueprintPatch =
-    input.tokenBlueprintPatch;
-
-  const productName =
-    normalize(input.productName);
-
-  const metadataUri =
-    normalize(token?.metadataUri);
-
-  const tokenBlueprintId =
-    normalize(token?.tokenBlueprintId);
-
-  const tokenName =
-    normalize(
-      tokenBlueprintPatch?.tokenName,
-    );
-
-  const tokenIconUrl =
-    normalize(
-      tokenBlueprintPatch?.tokenIcon,
-    );
-
-  const brandId =
-    normalize(token?.brandId);
-
-  const brandName =
-    normalize(token?.brandName);
-
-  const canOpenContents =
-    Boolean(mintAddress) &&
-    Boolean(metadataUri);
+  const tokenBlueprintPatch = input.tokenBlueprintPatch;
+  const metadataUri = token?.metadataUri ?? "";
 
   return {
-    productId:
-      normalize(result.productId),
-    productName,
-    mintAddress,
+    productId: result.productId,
+    productName: input.productName,
+    assetId: result.assetId,
     metadataUri,
-    tokenBlueprintId,
-    tokenName,
-    tokenIconUrl,
-    brandId,
-    brandName,
-    canOpenContents,
-    fromName,
-    toName,
-    walletUpdated:
-      result.updatedToAddress,
+    tokenBlueprintId: token?.tokenBlueprintId ?? "",
+    tokenName: tokenBlueprintPatch?.tokenName ?? "",
+    tokenIconUrl: tokenBlueprintPatch?.tokenIcon ?? "",
+    brandId: token?.brandId ?? "",
+    brandName: tokenBlueprintPatch?.brandName ?? "",
+    canOpenContents: Boolean(result.assetId && metadataUri),
+    fromName: result.fromDisplayName,
+    toName: result.toDisplayName,
+    walletUpdated: result.updatedToAddress,
   };
 }
