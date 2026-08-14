@@ -1,6 +1,8 @@
 // frontend/console/order/src/application/orderManagementSort.ts
-import { OrderManagementRow } from "./orderManagementMapper";
 
+import type { OrderItemInventoryRowDTO } from "../infrastructure/repository";
+
+export type OrderManagementRow = OrderItemInventoryRowDTO;
 export type SortKey = "createdAt" | null;
 export type SortDir = "asc" | "desc" | null;
 
@@ -18,17 +20,12 @@ export function sortOrderRows(
   }
 
   return [...rows].sort((a, b) => {
-    const aTime = a.createdAt;
-    const bTime = b.createdAt;
+    const aTs = a.createdAt ? Date.parse(a.createdAt) : NaN;
+    const bTs = b.createdAt ? Date.parse(b.createdAt) : NaN;
 
-    const aTs =
-      aTime && !Number.isNaN(Date.parse(aTime)) ? Date.parse(aTime) : null;
-    const bTs =
-      bTime && !Number.isNaN(Date.parse(bTime)) ? Date.parse(bTime) : null;
-
-    if (aTs === null && bTs === null) return 0;
-    if (aTs === null) return direction === "asc" ? 1 : -1;
-    if (bTs === null) return direction === "asc" ? -1 : 1;
+    if (Number.isNaN(aTs) && Number.isNaN(bTs)) return 0;
+    if (Number.isNaN(aTs)) return direction === "asc" ? 1 : -1;
+    if (Number.isNaN(bTs)) return direction === "asc" ? -1 : 1;
 
     return direction === "asc" ? aTs - bTs : bTs - aTs;
   });

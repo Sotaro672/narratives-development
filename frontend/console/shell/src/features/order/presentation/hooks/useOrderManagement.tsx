@@ -1,33 +1,35 @@
-// frontend/console/order/src/presentation/hooks/useOrderManagement.tsx
+// frontend/console/shell/src/features/order/presentation/hooks/useOrderManagement.tsx
+
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   SortableTableHeader,
   FilterableTableHeader,
 } from "../../../../layout/List/List";
-
-import { createOrderRepository } from "../../infrastructure/repository";
 import {
-  mapOrderItemInventoryRowsToOrderManagementRows,
-  OrderManagementRow,
-} from "../../application/orderManagementMapper";
+  createOrderRepository,
+  type OrderItemInventoryRowDTO,
+} from "../../infrastructure/repository";
 import {
   filterOrderRowsByToken,
-  TokenFilterValue,
+  type TokenFilterValue,
 } from "../../application/orderManagementFilter";
 import {
   sortOrderRows,
-  SortDir,
-  SortKey,
+  type SortDir,
+  type SortKey,
 } from "../../application/orderManagementSort";
 
 export function useOrderManagement() {
   const navigate = useNavigate();
-
   const repo = useMemo(() => createOrderRepository(), []);
 
-  // ── filter (Token) ────────────────────────────────────────
   const [tokenFilter, setTokenFilter] = useState<TokenFilterValue[]>([]);
+  const [activeKey, setActiveKey] = useState<SortKey>("createdAt");
+  const [direction, setDirection] = useState<SortDir>("desc");
+  const [rowsRaw, setRowsRaw] = useState<OrderItemInventoryRowDTO[]>([]);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
 
   const tokenOptions = useMemo(
     () => [
@@ -37,29 +39,16 @@ export function useOrderManagement() {
     [],
   );
 
-  // ── sort ─────────────────────────────────────────────────
-  const [activeKey, setActiveKey] = useState<SortKey>("createdAt");
-  const [direction, setDirection] = useState<SortDir>("desc");
-
-  // ── data fetch ────────────────────────────────────────────
-  const [rowsRaw, setRowsRaw] = useState<OrderManagementRow[]>([]);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [isResetting, setIsResetting] = useState(false);
-
   const fetchRows = useCallback(async () => {
     setIsResetting(true);
     setErrorMsg(null);
 
     try {
       const res = await repo.listItemInventoryRows({ page: 1, perPage: 200 });
-      const mapped = mapOrderItemInventoryRowsToOrderManagementRows(
-        res.items ?? [],
-      );
-
-      setRowsRaw(mapped);
-    } catch (e: any) {
+      setRowsRaw(res.items);
+    } catch (e) {
       setRowsRaw([]);
-      setErrorMsg(e?.message ? String(e.message) : "failed_to_fetch_orders");
+      setErrorMsg(e instanceof Error ? e.message : "failed_to_fetch_orders");
     } finally {
       setIsResetting(false);
     }
@@ -69,13 +58,11 @@ export function useOrderManagement() {
     void fetchRows();
   }, [fetchRows]);
 
-  // ── data (filter → sort) ──────────────────────────────────
   const rows = useMemo(() => {
     const filtered = filterOrderRowsByToken(rowsRaw, tokenFilter);
     return sortOrderRows(filtered, activeKey, direction);
   }, [rowsRaw, tokenFilter, activeKey, direction]);
 
-  // ── headers ──────────────────────────────────────────────
   const headers = useMemo<React.ReactNode[]>(
     () => [
       "注文ID",
@@ -99,14 +86,13 @@ export function useOrderManagement() {
         label="トークン"
         options={tokenOptions}
         selected={tokenFilter}
-        onChange={(vals) => setTokenFilter(vals as TokenFilterValue[])}
+        onChange={(values) => setTokenFilter(values as TokenFilterValue[])}
         dialogTitle="トークンで絞り込み"
       />,
     ],
     [activeKey, direction, tokenFilter, tokenOptions],
   );
 
-  // 詳細ページへ遷移
   const goDetail = useCallback(
     (id: string) => {
       navigate(`/order/${encodeURIComponent(id)}`);

@@ -1,24 +1,22 @@
 // frontend/console/order/src/application/orderManagementFilter.ts
-import { OrderManagementRow } from "./orderManagementMapper";
+
+import type { OrderItemInventoryRowDTO } from "../infrastructure/repository";
 
 export type TokenFilterValue = "移譲済" | "未移譲";
 
-export function tokenLabelFromTransferred(
-  transferred: boolean,
-): TokenFilterValue {
+export function tokenLabelFromTransferred(transferred: boolean): TokenFilterValue {
   return transferred ? "移譲済" : "未移譲";
 }
 
 export function filterOrderRowsByToken(
-  rows: OrderManagementRow[],
+  rows: OrderItemInventoryRowDTO[],
   tokenFilter: TokenFilterValue[],
-): OrderManagementRow[] {
+): OrderItemInventoryRowDTO[] {
   if (tokenFilter.length === 0) {
     return rows;
   }
 
-  return rows.filter((row) => {
-    const label = tokenLabelFromTransferred(row.transferred);
-    return tokenFilter.includes(label);
-  });
+  return rows.filter((row) =>
+    tokenFilter.includes(tokenLabelFromTransferred(row.transferred)),
+  );
 }

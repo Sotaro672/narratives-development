@@ -1,18 +1,14 @@
-// frontend/console/order/src/presentation/hooks/useOrderDetail.tsx
+// frontend/console/shell/src/features/order/presentation/hooks/useOrderDetail.tsx
+
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import {
   createOrderRepository,
-  Order,
+  type OrderDetailDTO,
+  type OrderDetailItemDTO,
 } from "../../infrastructure/repository";
 import { safeDateLabelJa } from "../../../../shared/util/dateJa";
-
-import {
-  buildOrderDetailFromAllowedItems,
-  OrderDetailDTO,
-  OrderDetailItemDTO,
-} from "../../application/orderDetailBuilder";
 import {
   calculateOrderQuantity,
   calculateOrderTotalPrice,
@@ -29,25 +25,22 @@ export type UseOrderDetailReturn = {
   order: OrderDetailDTO | null;
   loading: boolean;
   error: string | null;
-
   items: OrderDetailItemDTO[];
   quantity: number;
   totalPrice: number;
   anyTransferred: boolean;
   createdAt: string;
-  shipping: OrderDetailDTO["shippingSnapshot"];
+  shipping: OrderDetailDTO["shippingSnapshot"] | undefined;
   userName: string;
   avatarName: string;
   listIds: string[];
   pageTitle: string;
-
   onBack: () => void;
 };
 
 export function useOrderDetail(): UseOrderDetailReturn {
   const navigate = useNavigate();
   const { orderId } = useParams<{ orderId: string }>();
-
   const repo = React.useMemo(() => createOrderRepository(), []);
 
   const [loading, setLoading] = React.useState(false);
@@ -58,8 +51,8 @@ export function useOrderDetail(): UseOrderDetailReturn {
     let cancelled = false;
 
     const run = async () => {
-      const id = String(orderId ?? "").trim();
-      if (!id) {
+      if (!orderId) {
+        setOrder(null);
         setError("orderId is missing");
         return;
       }
@@ -68,29 +61,19 @@ export function useOrderDetail(): UseOrderDetailReturn {
       setError(null);
 
       try {
-        // 1) /orders/{id} でベース情報（配送先や課金情報など）を取得
-        const base = (await repo.getById(id)) as unknown as Order;
-
-        // 2) /orders/items?id=... で item 行を取得して detail を組み立て
-        const rowsRes = await repo.listItemInventoryRows({
-          id,
-          page: 1,
-          perPage: 500,
-        });
-
-        const detail = buildOrderDetailFromAllowedItems(
-          base,
-          rowsRes.items ?? [],
-        );
-
-        if (cancelled) return;
-        setOrder(detail);
+        const detail = await repo.getById(orderId);
+        if (!cancelled) {
+          setOrder(detail);
+        }
       } catch (e) {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) {
+          setOrder(null);
+          setError(e instanceof Error ? e.message : String(e));
+        }
       } finally {
-        if (cancelled) return;
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
@@ -101,14 +84,13 @@ export function useOrderDetail(): UseOrderDetailReturn {
     };
   }, [orderId, repo]);
 
-  // 戻るは -1 ではなく、注文一覧（本モジュールのルート絶対）へ
   const onBack = React.useCallback(() => {
     navigate("/order");
   }, [navigate]);
 
   const items = React.useMemo<OrderDetailItemDTO[]>(
-    () => order?.items ?? [],
-    [order?.items],
+    () => order ? order.items : [],
+    [order],
   );
 
   const quantity = React.useMemo(
@@ -127,23 +109,22 @@ export function useOrderDetail(): UseOrderDetailReturn {
   );
 
   const createdAt = safeDateLabelJa(order?.createdAt, "-");
-
   const shipping = order?.shippingSnapshot;
+  const userName = order?.userName || "-";
+  const avatarName = order?.avatarName || "-";
 
-  const userName = String(order?.userName ?? "").trim() || "-";
-  const avatarName = String(order?.avatarName ?? "").trim() || "-";
+  const listIds = React.useMemo(
+    () => extractListIds(items),
+    [items],
+  );
 
-  // リストID: 複数itemsがある場合は重複排除してカンマ区切り
-  const listIds = React.useMemo(() => extractListIds(items), [items]);
-
-  const pageTitle = `注文詳細：${order?.id ?? orderId ?? "不明ID"}`;
+  const pageTitle = `注文詳細：${order?.id || orderId || "不明ID"}`;
 
   return {
     orderId,
     order,
     loading,
     error,
-
     items,
     quantity,
     totalPrice,
@@ -154,7 +135,6 @@ export function useOrderDetail(): UseOrderDetailReturn {
     avatarName,
     listIds,
     pageTitle,
-
     onBack,
   };
 }

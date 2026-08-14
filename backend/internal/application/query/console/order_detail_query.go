@@ -3,7 +3,8 @@ package query
 
 import (
 	"context"
-	"strings"
+	"errors"
+	"fmt"
 	"time"
 
 	resolver "narratives/internal/application/resolver"
@@ -20,10 +21,7 @@ type OrderDetailGetter interface {
 }
 
 type OrderDetailInventoryBlueprintResolver interface {
-	ResolveBlueprintIDsByInventoryID(
-		ctx context.Context,
-		inventoryID string,
-	) (productBlueprintID string, tokenBlueprintID string, err error)
+	ResolveBlueprintIDsByInventoryID(ctx context.Context, inventoryID string) (productBlueprintID string, tokenBlueprintID string, err error)
 }
 
 type OrderDetailProductBlueprintNameResolver interface {
@@ -38,8 +36,6 @@ type OrderDetailAvatarNameResolver interface {
 	GetNameByID(ctx context.Context, id string) (string, error)
 }
 
-// OrderDetailUserNameResolver は NameResolver 経由で userName を解決する。
-// 実装側は resolver.NameResolver.ResolveUserName(ctx, userID) を使う。
 type OrderDetailUserNameResolver interface {
 	ResolveUserName(ctx context.Context, userID string) string
 }
@@ -48,54 +44,74 @@ type OrderDetailModelResolver interface {
 	ResolveModelResolved(ctx context.Context, variationID string) resolver.ModelResolved
 }
 
+type OrderDetailListReadableIDResolver interface {
+	GetReadableIDByID(ctx context.Context, id string) (string, error)
+}
+
 // ============================================================
 // DTO
 // ============================================================
 
 type OrderDetailDTO struct {
 	ID       string `json:"id"`
-	UserID   string `json:"userId,omitempty"`
-	AvatarID string `json:"avatarId,omitempty"`
-	CartID   string `json:"cartId,omitempty"`
+	UserID   string `json:"userId"`
+	AvatarID string `json:"avatarId"`
+	CartID   string `json:"cartId"`
 
-	UserName   string `json:"userName,omitempty"`
-	AvatarName string `json:"avatarName,omitempty"`
+	UserName   string `json:"userName"`
+	AvatarName string `json:"avatarName"`
 
 	Paid      bool   `json:"paid"`
-	CreatedAt string `json:"createdAt,omitempty"`
+	CreatedAt string `json:"createdAt"`
 
-	ShippingSnapshot      any                  `json:"shippingSnapshot,omitempty"`
-	PaymentMethodSnapshot any                  `json:"paymentMethodSnapshot,omitempty"`
-	Items                 []OrderDetailItemDTO `json:"items,omitempty"`
+	ShippingSnapshot      orderdom.ShippingSnapshot      `json:"shippingSnapshot"`
+	PaymentMethodSnapshot orderdom.PaymentMethodSnapshot `json:"paymentMethodSnapshot"`
+	Items                 []OrderDetailItemDTO           `json:"items"`
 }
 
 type OrderDetailItemDTO struct {
-	ModelID string `json:"modelId,omitempty"`
+	Type orderdom.OrderItemType `json:"type"`
 
+	ModelID     string `json:"modelId,omitempty"`
 	InventoryID string `json:"inventoryId,omitempty"`
+	ListID      string `json:"listId,omitempty"`
+	ResaleID    string `json:"resaleId,omitempty"`
 
+	ProductID          string `json:"productId,omitempty"`
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
+	BrandID            string `json:"brandId,omitempty"`
 
-	ProductName string `json:"productName,omitempty"`
-	TokenName   string `json:"tokenName,omitempty"`
+	ProductName string `json:"productName"`
+	TokenName   string `json:"tokenName"`
 
-	Size        string               `json:"size,omitempty"`
-	ModelNumber string               `json:"modelNumber,omitempty"`
-	Color       *OrderDetailColorDTO `json:"color,omitempty"`
-	RGB         int                  `json:"rgb"`
+	ListReadableID string `json:"listReadableId,omitempty"`
 
-	ListID string `json:"listId,omitempty"`
-	Qty    int    `json:"qty,omitempty"`
-	Price  int    `json:"price"`
+	CategoryID     string         `json:"categoryId"`
+	CategoryCode   string         `json:"categoryCode"`
+	CategoryNameJa string         `json:"categoryNameJa"`
+	CategoryNameEn string         `json:"categoryNameEn"`
+	CategoryKind   string         `json:"categoryKind"`
+	CategoryPath   []string       `json:"categoryPath"`
+	CategoryFields map[string]any `json:"categoryFields"`
+
+	Kind        string `json:"kind"`
+	ModelNumber string `json:"modelNumber"`
+	Size        string `json:"size"`
+	Color       string `json:"color"`
+	RGB         *int   `json:"rgb,omitempty"`
+
+	VolumeValue *int   `json:"volumeValue,omitempty"`
+	VolumeUnit  string `json:"volumeUnit"`
+
+	Qty   int `json:"qty"`
+	Price int `json:"price"`
+
+	IsCanceled   bool `json:"isCanceled"`
+	IsDispatched bool `json:"isDispatched"`
 
 	Transferred   bool   `json:"transferred"`
 	TransferredAt string `json:"transferredAt,omitempty"`
-}
-
-type OrderDetailColorDTO struct {
-	Name string `json:"name,omitempty"`
-	RGB  int    `json:"rgb"`
 }
 
 // ============================================================
@@ -113,6 +129,7 @@ type OrderDetailQuery struct {
 	userName   OrderDetailUserNameResolver
 
 	modelResolver OrderDetailModelResolver
+	listReadable  OrderDetailListReadableIDResolver
 }
 
 type NewOrderDetailQueryParams struct {
@@ -126,6 +143,7 @@ type NewOrderDetailQueryParams struct {
 	UserName   OrderDetailUserNameResolver
 
 	ModelResolver OrderDetailModelResolver
+	ListReadable  OrderDetailListReadableIDResolver
 }
 
 func NewOrderDetailQuery(p NewOrderDetailQueryParams) *OrderDetailQuery {
@@ -137,15 +155,14 @@ func NewOrderDetailQuery(p NewOrderDetailQueryParams) *OrderDetailQuery {
 		avatarName:    p.AvatarName,
 		userName:      p.UserName,
 		modelResolver: p.ModelResolver,
+		listReadable:  p.ListReadable,
 	}
 }
 
 func (q *OrderDetailQuery) GetByID(ctx context.Context, id string) (OrderDetailDTO, error) {
-	if q == nil || q.orderGetter == nil {
-		return OrderDetailDTO{}, orderdom.ErrInvalidID
+	if err := q.validateConfigured(); err != nil {
+		return OrderDetailDTO{}, err
 	}
-
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return OrderDetailDTO{}, orderdom.ErrInvalidID
 	}
@@ -155,155 +172,216 @@ func (q *OrderDetailQuery) GetByID(ctx context.Context, id string) (OrderDetailD
 		return OrderDetailDTO{}, err
 	}
 
-	return q.toDTO(ctx, o), nil
+	return q.toDTO(ctx, o)
 }
 
-func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) OrderDetailDTO {
-	dto := OrderDetailDTO{
-		ID:       o.ID,
-		UserID:   o.UserID,
-		AvatarID: o.AvatarID,
-		CartID:   o.CartID,
-		Paid:     o.Paid,
+func (q *OrderDetailQuery) validateConfigured() error {
+	if q == nil {
+		return errors.New("OrderDetailQuery: query is nil")
+	}
+	if q.orderGetter == nil {
+		return errors.New("OrderDetailQuery: orderGetter is required")
+	}
+	if q.invBlueprint == nil {
+		return errors.New("OrderDetailQuery: invBlueprint is required")
+	}
+	if q.pbName == nil {
+		return errors.New("OrderDetailQuery: productBlueprint resolver is required")
+	}
+	if q.tbName == nil {
+		return errors.New("OrderDetailQuery: tokenBlueprint resolver is required")
+	}
+	if q.avatarName == nil {
+		return errors.New("OrderDetailQuery: avatarName resolver is required")
+	}
+	if q.userName == nil {
+		return errors.New("OrderDetailQuery: userName resolver is required")
+	}
+	if q.modelResolver == nil {
+		return errors.New("OrderDetailQuery: modelResolver is required")
+	}
+	if q.listReadable == nil {
+		return errors.New("OrderDetailQuery: listReadable resolver is required")
+	}
+	return nil
+}
 
+func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDetailDTO, error) {
+	dto := OrderDetailDTO{
+		ID:                    o.ID,
+		UserID:                o.UserID,
+		AvatarID:              o.AvatarID,
+		CartID:                o.CartID,
+		UserName:              q.userName.ResolveUserName(ctx, o.UserID),
+		Paid:                  o.Paid,
 		ShippingSnapshot:      o.ShippingSnapshot,
 		PaymentMethodSnapshot: o.PaymentMethodSnapshot,
+		Items:                 make([]OrderDetailItemDTO, 0, len(o.Items)),
 	}
 
 	if !o.CreatedAt.IsZero() {
 		dto.CreatedAt = o.CreatedAt.UTC().Format(time.RFC3339)
 	}
 
-	if q.userName != nil && strings.TrimSpace(o.UserID) != "" {
-		dto.UserName = q.userName.ResolveUserName(ctx, o.UserID)
+	if o.AvatarID != "" {
+		avatarName, err := q.avatarName.GetNameByID(ctx, o.AvatarID)
+		if err != nil {
+			return OrderDetailDTO{}, fmt.Errorf("resolve avatarName avatarId=%q: %w", o.AvatarID, err)
+		}
+		dto.AvatarName = avatarName
 	}
 
-	if q.avatarName != nil && strings.TrimSpace(o.AvatarID) != "" {
-		if n, err := q.avatarName.GetNameByID(ctx, o.AvatarID); err == nil {
-			dto.AvatarName = n
-		}
-	}
+	productBlueprintCache := make(map[string]pbdom.ProductBlueprint)
+	tokenNameCache := make(map[string]string)
+	modelCache := make(map[string]resolver.ModelResolved)
+	listReadableCache := make(map[string]string)
 
-	pbNameCache := map[string]string{}
-	tbNameCache := map[string]string{}
-	modelCache := map[string]resolver.ModelResolved{}
-
-	resolveProductName := func(id string) string {
-		id = strings.TrimSpace(id)
-		if id == "" || q.pbName == nil {
-			return ""
+	resolveProductBlueprint := func(id string) (pbdom.ProductBlueprint, error) {
+		if id == "" {
+			return pbdom.ProductBlueprint{}, nil
 		}
-		if v, ok := pbNameCache[id]; ok {
-			return v
+		if cached, ok := productBlueprintCache[id]; ok {
+			return cached, nil
 		}
 
 		pb, err := q.pbName.GetByID(ctx, id)
 		if err != nil {
-			return ""
+			return pbdom.ProductBlueprint{}, err
 		}
 
-		name := pb.ProductName
-		pbNameCache[id] = name
-		return name
+		productBlueprintCache[id] = pb
+		return pb, nil
 	}
 
-	resolveTokenName := func(id string) string {
-		id = strings.TrimSpace(id)
-		if id == "" || q.tbName == nil {
-			return ""
+	resolveTokenName := func(id string) (string, error) {
+		if id == "" {
+			return "", nil
 		}
-		if v, ok := tbNameCache[id]; ok {
-			return v
+		if cached, ok := tokenNameCache[id]; ok {
+			return cached, nil
 		}
 
 		name, err := q.tbName.GetNameByID(ctx, id)
 		if err != nil {
-			return ""
+			return "", err
 		}
 
-		tbNameCache[id] = name
-		return name
+		tokenNameCache[id] = name
+		return name, nil
 	}
 
-	resolveModel := func(variationID string) resolver.ModelResolved {
-		variationID = strings.TrimSpace(variationID)
-		if variationID == "" || q.modelResolver == nil {
+	resolveModel := func(modelID string) resolver.ModelResolved {
+		if modelID == "" {
 			return resolver.ModelResolved{}
 		}
-		if v, ok := modelCache[variationID]; ok {
-			return v
+		if cached, ok := modelCache[modelID]; ok {
+			return cached
 		}
 
-		resolved := q.modelResolver.ResolveModelResolved(ctx, variationID)
-		modelCache[variationID] = resolved
+		resolved := q.modelResolver.ResolveModelResolved(ctx, modelID)
+		modelCache[modelID] = resolved
 		return resolved
 	}
 
-	if len(o.Items) == 0 {
-		dto.Items = []OrderDetailItemDTO{}
-		return dto
+	resolveListReadableID := func(listID string) (string, error) {
+		if listID == "" {
+			return "", nil
+		}
+		if cached, ok := listReadableCache[listID]; ok {
+			return cached, nil
+		}
+
+		readableID, err := q.listReadable.GetReadableIDByID(ctx, listID)
+		if err != nil {
+			return "", err
+		}
+
+		listReadableCache[listID] = readableID
+		return readableID, nil
 	}
 
-	dto.Items = make([]OrderDetailItemDTO, 0, len(o.Items))
-
 	for _, it := range o.Items {
-		invID := strings.TrimSpace(it.InventoryID)
+		pbID := it.ProductBlueprintID
+		tbID := it.TokenBlueprintID
 
-		pbID := ""
-		tbID := ""
-		if q.invBlueprint != nil && invID != "" {
-			pb, tb, err := q.invBlueprint.ResolveBlueprintIDsByInventoryID(ctx, invID)
-			if err == nil {
-				pbID = strings.TrimSpace(pb)
-				tbID = strings.TrimSpace(tb)
+		if it.InventoryID != "" && (pbID == "" || tbID == "") {
+			resolvedPBID, resolvedTBID, err := q.invBlueprint.ResolveBlueprintIDsByInventoryID(ctx, it.InventoryID)
+			if err != nil {
+				return OrderDetailDTO{}, fmt.Errorf("resolve blueprint ids inventoryId=%q: %w", it.InventoryID, err)
+			}
+			if pbID == "" {
+				pbID = resolvedPBID
+			}
+			if tbID == "" {
+				tbID = resolvedTBID
 			}
 		}
 
-		var (
-			size        string
-			modelNumber string
-			colorDTO    *OrderDetailColorDTO
-			rgb         int
-		)
-
-		mr := resolveModel(it.ModelID)
-		if mr.ModelNumber != "" || mr.Size != "" || mr.Color != "" || mr.RGB != nil {
-			size = mr.Size
-			modelNumber = mr.ModelNumber
-
-			if mr.Color != "" || mr.RGB != nil {
-				colorDTO = &OrderDetailColorDTO{
-					Name: mr.Color,
-					RGB:  0,
-				}
-				if mr.RGB != nil {
-					colorDTO.RGB = *mr.RGB
-					rgb = *mr.RGB
-				}
-			} else if mr.RGB != nil {
-				rgb = *mr.RGB
-			}
+		pb, err := resolveProductBlueprint(pbID)
+		if err != nil {
+			return OrderDetailDTO{}, fmt.Errorf("resolve productBlueprint productBlueprintId=%q: %w", pbID, err)
 		}
+
+		tokenName, err := resolveTokenName(tbID)
+		if err != nil {
+			return OrderDetailDTO{}, fmt.Errorf("resolve tokenName tokenBlueprintId=%q: %w", tbID, err)
+		}
+
+		listReadableID, err := resolveListReadableID(it.ListID)
+		if err != nil {
+			return OrderDetailDTO{}, fmt.Errorf("resolve listReadableId listId=%q: %w", it.ListID, err)
+		}
+
+		categoryPath := make([]string, 0, len(pb.ProductBlueprintCategory.Path))
+		categoryPath = append(categoryPath, pb.ProductBlueprintCategory.Path...)
+
+		categoryFields := make(map[string]any, len(pb.CategoryFields))
+		for key, value := range pb.CategoryFields {
+			categoryFields[key] = value
+		}
+
+		model := resolveModel(it.ModelID)
 
 		item := OrderDetailItemDTO{
-			ModelID: it.ModelID,
+			Type: it.Type,
 
-			InventoryID: invID,
+			ModelID:     it.ModelID,
+			InventoryID: it.InventoryID,
+			ListID:      it.ListID,
+			ResaleID:    it.ResaleID,
 
+			ProductID:          it.ProductID,
 			ProductBlueprintID: pbID,
 			TokenBlueprintID:   tbID,
+			BrandID:            it.BrandID,
 
-			ProductName: resolveProductName(pbID),
-			TokenName:   resolveTokenName(tbID),
+			ProductName: pb.ProductName,
+			TokenName:   tokenName,
 
-			Size:        size,
-			ModelNumber: modelNumber,
-			Color:       colorDTO,
-			RGB:         rgb,
+			ListReadableID: listReadableID,
 
-			ListID: it.ListID,
-			Qty:    it.Qty,
-			Price:  it.Price,
+			CategoryID:     pb.ProductBlueprintCategory.ID,
+			CategoryCode:   pb.ProductBlueprintCategory.Code,
+			CategoryNameJa: pb.ProductBlueprintCategory.NameJa,
+			CategoryNameEn: pb.ProductBlueprintCategory.NameEn,
+			CategoryKind:   string(pb.ProductBlueprintCategory.Kind),
+			CategoryPath:   categoryPath,
+			CategoryFields: categoryFields,
+
+			Kind:        model.Kind,
+			ModelNumber: model.ModelNumber,
+			Size:        model.Size,
+			Color:       model.Color,
+			RGB:         model.RGB,
+
+			VolumeValue: model.VolumeValue,
+			VolumeUnit:  model.VolumeUnit,
+
+			Qty:   it.Qty,
+			Price: it.Price,
+
+			IsCanceled:   it.IsCanceled,
+			IsDispatched: it.IsDispatched,
 
 			Transferred: it.Transferred,
 		}
@@ -315,5 +393,5 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) OrderDet
 		dto.Items = append(dto.Items, item)
 	}
 
-	return dto
+	return dto, nil
 }

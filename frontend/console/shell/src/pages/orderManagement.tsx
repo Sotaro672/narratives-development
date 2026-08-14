@@ -7,14 +7,7 @@ import { safeDateLabelJa } from "../shared/util/dateJa";
 import { useOrderManagement } from "../features/order/presentation/hooks/useOrderManagement";
 
 export default function OrderManagementPage() {
-  const {
-    rows,
-    headers,
-    errorMsg,
-    isResetting,
-    goDetail,
-    reset,
-  } = useOrderManagement();
+  const { rows, headers, errorMsg, isResetting, goDetail, reset } = useOrderManagement();
 
   return (
     <div className="p-0">
@@ -28,25 +21,17 @@ export default function OrderManagementPage() {
       >
         {errorMsg ? (
           <tr>
-            <td
-              colSpan={headers.length}
-              style={{ padding: 16 }}
-            >
+            <td colSpan={headers.length} style={{ padding: 16 }}>
               {errorMsg}
             </td>
           </tr>
         ) : (
           rows.map((order) => (
             <tr
-              key={`${order.orderId}__${order.inventoryId}__${order.listId}`}
-              onClick={() => {
-                goDetail(order.orderId);
-              }}
+              key={`${order.orderId}__${order.inventoryId}__${order.listReadableId ?? ""}`}
+              onClick={() => goDetail(order.orderId)}
               onKeyDown={(event) => {
-                if (
-                  event.key !== "Enter" &&
-                  event.key !== " "
-                ) {
+                if (event.key !== "Enter" && event.key !== " ") {
                   return;
                 }
 
@@ -62,27 +47,12 @@ export default function OrderManagementPage() {
                   {order.orderId}
                 </span>
               </td>
-
-              <td>{order.listId || "-"}</td>
-
+              <td>{order.listReadableId || "-"}</td>
               <td>{order.productName || "-"}</td>
-
               <td>{order.tokenName || "-"}</td>
-
               <td>{order.avatarName || "-"}</td>
-
-              <td>
-                {safeDateLabelJa(
-                  order.createdAt,
-                  "-",
-                )}
-              </td>
-
-              <td>
-                {order.transferred
-                  ? "移譲済"
-                  : "未移譲"}
-              </td>
+              <td>{safeDateLabelJa(order.createdAt, "-")}</td>
+              <td>{order.transferred ? "移譲済" : "未移譲"}</td>
             </tr>
           ))
         )}
