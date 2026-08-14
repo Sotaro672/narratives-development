@@ -99,8 +99,12 @@ func buildQueries(
 		r.userRepo,
 	)
 
+	inquiryReplyRepo := fsrepo.NewInquiryReplyRepositoryFS(r.inquiryRepo.Client)
+
 	inquiryDetailQuery := companyquery.NewInquiryDetailQuery(
 		r.inquiryRepo,
+		inquiryReplyRepo,
+		r.inventoryRepo,
 		r.productRepo,
 		r.modelRepo,
 		r.productBlueprintRepo,

@@ -15,6 +15,7 @@ type repos struct {
 	brandRepo                    *fs.BrandRepositoryFS
 	companyRepo                  *fs.CompanyRepositoryFS
 	inquiryRepo                  *fs.InquiryRepositoryFS
+	inquiryReplyRepo             *fs.InquiryReplyRepositoryFS
 	inventoryRepo                *fs.InventoryRepositoryFS
 	listRepoFS                   *fs.ListRepositoryFS
 	listImageRecordRepo          *fs.ListImageRepositoryFS
@@ -47,6 +48,7 @@ type repos struct {
 
 func buildRepos(c *clients) *repos {
 	fsClient := c.fsClient
+
 	// =========================================================
 	// Outbound adapters (repositories)
 	// =========================================================
@@ -58,6 +60,7 @@ func buildRepos(c *clients) *repos {
 	brandRepo := fs.NewBrandRepositoryFS(fsClient)
 	companyRepo := fs.NewCompanyRepositoryFS(fsClient)
 	inquiryRepo := fs.NewInquiryRepositoryFS(fsClient)
+	inquiryReplyRepo := fs.NewInquiryReplyRepositoryFS(fsClient)
 	inventoryRepo := fs.NewInventoryRepositoryFS(fsClient)
 	listRepoFS := fs.NewListRepositoryFS(fsClient)
 	listImageRecordRepo := fs.NewListImageRepositoryFS(fsClient)
@@ -86,6 +89,7 @@ func buildRepos(c *clients) *repos {
 	printLogRepo := fs.NewPrintLogRepositoryFS(fsClient)
 	inspectionRepo := fs.NewInspectionRepositoryFS(fsClient)
 	invitationTokenRepo := fs.NewInvitationTokenRepositoryFS(fsClient)
+
 	return &repos{
 		accountRepo:                  accountRepo,
 		announcementRepo:             announcementRepo,
@@ -95,6 +99,7 @@ func buildRepos(c *clients) *repos {
 		brandRepo:                    brandRepo,
 		companyRepo:                  companyRepo,
 		inquiryRepo:                  inquiryRepo,
+		inquiryReplyRepo:             inquiryReplyRepo,
 		inventoryRepo:                inventoryRepo,
 		listRepoFS:                   listRepoFS,
 		listImageRecordRepo:          listImageRecordRepo,

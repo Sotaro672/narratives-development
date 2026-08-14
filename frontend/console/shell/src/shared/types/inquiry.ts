@@ -1,34 +1,25 @@
 // frontend/console/shell/src/shared/types/inquiry.ts
 
-import type {
-  ItemsResult,
-} from "./common/common";
+import type { ItemsResult } from "./common/common";
+import type { ShippingAddress } from "./shippingAddress";
 
-import type {
-  ShippingAddress,
-} from "./shippingAddress";
-
-export type InquiryStatus = string;
+export type InquiryStatus = "open" | "resolved" | "closed";
 export type InquiryType = string;
-
-export type InquiryReplySenderType =
-  | "avatar"
-  | "member"
-  | string;
+export type InquiryReplySenderType = "avatar" | "member";
 
 export type InquiryImageFile = {
-  inquiryId?: string;
+  inquiryId: string;
   fileName: string;
   fileUrl: string;
-  objectPath?: string | null;
+  objectPath?: string;
   fileSize: number;
   mimeType: string;
-  createdAt?: string;
-  createdBy?: string;
-  updatedAt?: string | null;
-  updatedBy?: string | null;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  deletedAt?: string;
+  deletedBy?: string;
 };
 
 export type InquiryReply = {
@@ -37,15 +28,14 @@ export type InquiryReply = {
   senderType: InquiryReplySenderType;
   senderId: string;
   content: string;
-  isRead?: boolean;
+  isRead: boolean;
   images?: InquiryImageFile[];
-
-  createdAt?: string;
-  createdBy?: string;
-  updatedAt?: string | null;
-  updatedBy?: string | null;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  deletedAt?: string;
+  deletedBy?: string;
 };
 
 export type Inquiry = {
@@ -56,20 +46,17 @@ export type Inquiry = {
   content: string;
   status: InquiryStatus;
   inquiryType: InquiryType;
-  isRead?: boolean;
+  isRead: boolean;
   images?: InquiryImageFile[];
-
-  createdAt?: string;
-  createdBy?: string;
-  updatedAt?: string;
+  createdAt: string;
+  updatedAt: string;
   updatedBy?: string;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
-
-  resolvedAt?: string | null;
-  resolvedBy?: string | null;
-  closedAt?: string | null;
-  closedBy?: string | null;
+  deletedAt?: string;
+  deletedBy?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  closedAt?: string;
+  closedBy?: string;
 };
 
 export type InquiryOrderItemSummary = {
@@ -83,7 +70,7 @@ export type InquiryOrderItemSummary = {
   isCanceled: boolean;
   isDispatched: boolean;
   transferred: boolean;
-  transferredAt?: string | null;
+  transferredAt?: string;
 };
 
 export type InquiryOrderSummary = {
@@ -103,55 +90,47 @@ export type InquiryManagementItem = {
   productName: string;
   brandId: string;
   brandName: string;
-  avatarName: string;
-  userId: string;
   userFullName: string;
-  shippingAddresses: ShippingAddress[];
-  orders: InquiryOrderSummary[];
   companyId: string;
 };
 
 export type InquiryDetail = {
   inquiry: Inquiry;
-  replies?: InquiryReply[];
+  replies: InquiryReply[];
   modelId: string;
   productBlueprintId: string;
   productName: string;
   brandId: string;
   brandName: string;
+  assetId: string;
+  transferredAt?: string;
   avatarName: string;
   userId: string;
   userFullName: string;
   shippingAddresses: ShippingAddress[];
   orders: InquiryOrderSummary[];
   companyId: string;
-
-  mintAddress?: string;
-  transferredAt?: string | null;
 };
 
 export type InquiryAggregate = {
   inquiry: Inquiry;
-  replies?: InquiryReply[];
   images: InquiryImageFile[];
   modelId: string;
   productBlueprintId: string;
   productName: string;
   brandId: string;
   brandName: string;
+  assetId: string;
+  transferredAt?: string;
   avatarName: string;
   userId: string;
   userFullName: string;
   shippingAddresses: ShippingAddress[];
   orders: InquiryOrderSummary[];
   companyId: string;
-
-  mintAddress?: string;
-  transferredAt?: string | null;
 };
 
-export type InquiryPageResult<T> =
-  ItemsResult<T>;
+export type InquiryPageResult<T> = ItemsResult<T>;
 
 export type InquiryUnreadCountResult = {
   count: number;
@@ -159,7 +138,6 @@ export type InquiryUnreadCountResult = {
 
 export type ListInquiriesParams = {
   companyId: string;
-
   searchQuery?: string;
   productId?: string;
   avatarId?: string;
@@ -170,25 +148,14 @@ export type ListInquiriesParams = {
   resolvedBy?: string;
   closedBy?: string;
   imageFileName?: string;
-
   deleted?: boolean;
   resolved?: boolean;
   closed?: boolean;
 };
 
-export type CountUnreadInquiriesParams =
-  ListInquiriesParams;
-
-export type ResolveInquiryParams = {
-  memberId: string;
-};
-
-export type ReopenInquiryParams = {
-  memberId: string;
-};
+export type CountUnreadInquiriesParams = ListInquiriesParams;
 
 export type ReplyInquiryParams = {
-  memberId: string;
   content: string;
-  images?: InquiryImageFile[];
+  images: InquiryImageFile[];
 };

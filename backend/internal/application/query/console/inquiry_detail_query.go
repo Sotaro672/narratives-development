@@ -11,6 +11,7 @@ import (
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	inquirydom "narratives/internal/domain/inquiry"
+	inventorydom "narratives/internal/domain/inventory"
 	modeldom "narratives/internal/domain/model"
 	orderdom "narratives/internal/domain/order"
 	productdom "narratives/internal/domain/product"
@@ -36,9 +37,12 @@ import (
 // 解決した UserID から ShippingAddress.ListByUserID() を使って配送先住所一覧を解決します。
 // Inquiry.AvatarID から Order.ListByAvatarID() を使って注文一覧を取得し、
 // Inquiry.ProductID 由来の modelId と AssetID 由来の transferredAt が一致する Order.Items を持つ注文のみ返します。
-// Order item の tokenBlueprintId / tokenName は InventoryID から tokenBlueprint を解決して補完します。
+// ReplyRepository から replies を取得し、詳細 BFF の完成 DTO に含めます。
+// Order item の tokenBlueprintId / tokenName は InventoryID から正規の inventory repository を通して解決します。
 type InquiryDetailQuery struct {
 	repo                 inquirydom.Repository
+	replyRepo            inquirydom.ReplyRepository
+	inventoryRepo        inventorydom.RepositoryPort
 	productRepo          productdom.Repository
 	modelRepo            modeldom.RepositoryPort
 	productBlueprintRepo productblueprintdom.Repository
@@ -55,6 +59,8 @@ type InquiryDetailQuery struct {
 // NewInquiryDetailQuery は InquiryDetailQuery を初期化します。
 func NewInquiryDetailQuery(
 	repo inquirydom.Repository,
+	replyRepo inquirydom.ReplyRepository,
+	inventoryRepo inventorydom.RepositoryPort,
 	productRepo productdom.Repository,
 	modelRepo modeldom.RepositoryPort,
 	productBlueprintRepo productblueprintdom.Repository,
@@ -68,7 +74,7 @@ func NewInquiryDetailQuery(
 	orderRepo orderdom.Repository,
 ) *InquiryDetailQuery {
 	return &InquiryDetailQuery{
-		repo: repo, productRepo: productRepo, modelRepo: modelRepo,
+		repo: repo, replyRepo: replyRepo, inventoryRepo: inventoryRepo, productRepo: productRepo, modelRepo: modelRepo,
 		productBlueprintRepo: productBlueprintRepo, tokenBlueprintRepo: tokenBlueprintRepo,
 		tokenQueryRepo: tokenQueryRepo, transferQueryRepo: transferQueryRepo,
 		brandRepo: brandRepo, avatarRepo: avatarRepo, userRepo: userRepo,
@@ -76,9 +82,10 @@ func NewInquiryDetailQuery(
 	}
 }
 
-// InquiryDetail は Console 管理画面向けの Inquiry 詳細 read model です.
+// InquiryDetail は Console 管理画面向けの Inquiry 詳細 read model です。
 type InquiryDetail struct {
 	Inquiry            inquirydom.Inquiry                   `json:"inquiry"`
+	Replies            []inquirydom.Reply                   `json:"replies"`
 	ModelID            string                               `json:"modelId"`
 	ProductBlueprintID string                               `json:"productBlueprintId"`
 	ProductName        string                               `json:"productName"`
@@ -158,6 +165,42 @@ func (q *InquiryDetailQuery) GetByID(ctx context.Context, id string) (inquirydom
 
 // GetDetailByID は Inquiry 詳細 read model を返します。
 func (q *InquiryDetailQuery) GetDetailByID(ctx context.Context, id string) (InquiryDetail, error) {
+	detail, err := q.getDetailBaseByID(ctx, id)
+	if err != nil {
+		return InquiryDetail{}, err
+	}
+	replies, err := q.resolveRepliesByInquiryID(ctx, detail.Inquiry.ID)
+	if err != nil {
+		return InquiryDetail{}, err
+	}
+	detail.Replies = replies
+	return detail, nil
+}
+
+// GetDetailByIDForCompany は company boundary 確認込みで Inquiry 詳細 read model を返します。
+// company boundary を確認してから replies を取得し、他 company の reply subcollection を先に読まないようにします。
+func (q *InquiryDetailQuery) GetDetailByIDForCompany(ctx context.Context, id string, companyID string) (InquiryDetail, error) {
+	if companyID == "" {
+		return InquiryDetail{}, fmt.Errorf("inquiry detail query: companyId is empty")
+	}
+
+	detail, err := q.getDetailBaseByID(ctx, id)
+	if err != nil {
+		return InquiryDetail{}, err
+	}
+	if detail.CompanyID != companyID {
+		return InquiryDetail{}, inquirydom.ErrNotFound
+	}
+
+	replies, err := q.resolveRepliesByInquiryID(ctx, detail.Inquiry.ID)
+	if err != nil {
+		return InquiryDetail{}, err
+	}
+	detail.Replies = replies
+	return detail, nil
+}
+
+func (q *InquiryDetailQuery) getDetailBaseByID(ctx context.Context, id string) (InquiryDetail, error) {
 	inq, err := q.GetByID(ctx, id)
 	if err != nil {
 		return InquiryDetail{}, err
@@ -167,50 +210,30 @@ func (q *InquiryDetailQuery) GetDetailByID(ctx context.Context, id string) (Inqu
 	if err != nil {
 		return InquiryDetail{}, err
 	}
-
 	assetID, err := q.resolveAssetIDByProductID(ctx, inq.ProductID)
 	if err != nil {
 		return InquiryDetail{}, err
 	}
-
 	transferredAt, err := q.resolveTransferredAtByAssetID(ctx, assetID)
 	if err != nil {
 		return InquiryDetail{}, err
 	}
-
 	avatarName, userID, userFullName, shippingAddresses, err := q.resolveAvatarUserRefByAvatarID(ctx, inq.AvatarID)
 	if err != nil {
 		return InquiryDetail{}, err
 	}
-
 	orders, err := q.resolveOrdersByAvatarIDModelIDAndTransferredAt(ctx, inq.AvatarID, modelID, transferredAt)
 	if err != nil {
 		return InquiryDetail{}, err
 	}
 
 	return InquiryDetail{
-		Inquiry: inq, ModelID: modelID, ProductBlueprintID: productBlueprintID,
+		Inquiry: inq, Replies: []inquirydom.Reply{}, ModelID: modelID, ProductBlueprintID: productBlueprintID,
 		ProductName: productName, BrandID: brandID, BrandName: brandName,
 		AssetID: assetID, TransferredAt: transferredAt, AvatarName: avatarName,
 		UserID: userID, UserFullName: userFullName, ShippingAddresses: shippingAddresses,
 		Orders: orders, CompanyID: companyID,
 	}, nil
-}
-
-// GetDetailByIDForCompany は company boundary 確認込みで Inquiry 詳細 read model を返します。
-func (q *InquiryDetailQuery) GetDetailByIDForCompany(ctx context.Context, id string, companyID string) (InquiryDetail, error) {
-	if companyID == "" {
-		return InquiryDetail{}, fmt.Errorf("inquiry detail query: companyId is empty")
-	}
-
-	detail, err := q.GetDetailByID(ctx, id)
-	if err != nil {
-		return InquiryDetail{}, err
-	}
-	if detail.CompanyID != companyID {
-		return InquiryDetail{}, inquirydom.ErrNotFound
-	}
-	return detail, nil
 }
 
 // GetImages は Inquiry に紐づく画像一覧を返します。
@@ -234,9 +257,12 @@ func (q *InquiryDetailQuery) GetImages(ctx context.Context, inquiryID string) ([
 
 // GetImagesForCompany は company boundary 確認込みで Inquiry 画像一覧を返します。
 func (q *InquiryDetailQuery) GetImagesForCompany(ctx context.Context, inquiryID string, companyID string) ([]inquirydom.ImageFile, error) {
-	detail, err := q.GetDetailByIDForCompany(ctx, inquiryID, companyID)
+	detail, err := q.getDetailBaseByID(ctx, inquiryID)
 	if err != nil {
 		return nil, err
+	}
+	if detail.CompanyID != companyID {
+		return nil, inquirydom.ErrNotFound
 	}
 	if len(detail.Inquiry.Images) == 0 {
 		return []inquirydom.ImageFile{}, nil
@@ -266,22 +292,18 @@ func (q *InquiryDetailQuery) GetAggregate(ctx context.Context, id string) (Inqui
 	if err != nil {
 		return InquiryAggregate{}, err
 	}
-
 	assetID, err := q.resolveAssetIDByProductID(ctx, inq.ProductID)
 	if err != nil {
 		return InquiryAggregate{}, err
 	}
-
 	transferredAt, err := q.resolveTransferredAtByAssetID(ctx, assetID)
 	if err != nil {
 		return InquiryAggregate{}, err
 	}
-
 	avatarName, userID, userFullName, shippingAddresses, err := q.resolveAvatarUserRefByAvatarID(ctx, inq.AvatarID)
 	if err != nil {
 		return InquiryAggregate{}, err
 	}
-
 	orders, err := q.resolveOrdersByAvatarIDModelIDAndTransferredAt(ctx, inq.AvatarID, modelID, transferredAt)
 	if err != nil {
 		return InquiryAggregate{}, err
@@ -405,7 +427,6 @@ func (q *InquiryDetailQuery) resolveAssetIDByProductID(ctx context.Context, prod
 		}
 		return "", err
 	}
-
 	return strings.Trim(token.AssetID, " \t\r\n"), nil
 }
 
@@ -490,8 +511,28 @@ func (q *InquiryDetailQuery) resolveAvatarUserRefByAvatarID(
 	if shippingAddresses == nil {
 		shippingAddresses = []shippingaddressdom.ShippingAddress{}
 	}
-
 	return avatarName, userID, userFullName, shippingAddresses, nil
+}
+
+func (q *InquiryDetailQuery) resolveRepliesByInquiryID(ctx context.Context, inquiryID string) ([]inquirydom.Reply, error) {
+	if q == nil {
+		return nil, fmt.Errorf("inquiry detail query: query is nil")
+	}
+	if inquiryID == "" {
+		return []inquirydom.Reply{}, nil
+	}
+	if q.replyRepo == nil {
+		return nil, fmt.Errorf("inquiry detail query: reply repository is nil")
+	}
+
+	replies, err := q.replyRepo.ListByInquiryID(ctx, inquiryID)
+	if err != nil {
+		return nil, err
+	}
+	if replies == nil {
+		return []inquirydom.Reply{}, nil
+	}
+	return replies, nil
 }
 
 func (q *InquiryDetailQuery) resolveOrdersByAvatarIDModelIDAndTransferredAt(
@@ -538,7 +579,6 @@ func (q *InquiryDetailQuery) resolveOrdersByAvatarIDModelIDAndTransferredAt(
 			CartID: order.CartID, Paid: order.Paid, Items: items, CreatedAt: order.CreatedAt,
 		})
 	}
-
 	return orders, nil
 }
 
@@ -581,7 +621,6 @@ func (q *InquiryDetailQuery) filterInquiryOrderItemsByModelIDAndTransferredAt(
 			Transferred: item.Transferred, TransferredAt: item.TransferredAt,
 		})
 	}
-
 	return filtered, nil
 }
 
@@ -595,59 +634,30 @@ func (q *InquiryDetailQuery) resolveTokenBlueprintSnapshotByInventoryID(
 	if inventoryID == "" {
 		return "", "", nil
 	}
+	if q.inventoryRepo == nil {
+		return "", "", fmt.Errorf("inquiry detail query: inventory repository is nil")
+	}
+
+	_, tokenBlueprintID, err = q.inventoryRepo.ResolveBlueprintIDsByInventoryID(ctx, inventoryID)
+	if err != nil {
+		if errors.Is(err, inventorydom.ErrNotFound) {
+			return "", "", nil
+		}
+		return "", "", err
+	}
+	if tokenBlueprintID == "" {
+		return "", "", inventorydom.ErrInvalidTokenBlueprintID
+	}
 	if q.tokenBlueprintRepo == nil {
-		return "", "", nil
+		return "", "", fmt.Errorf("inquiry detail query: token blueprint repository is nil")
 	}
 
-	candidates := tokenBlueprintIDCandidatesFromInventoryID(inventoryID)
-	for _, candidate := range candidates {
-		if candidate == "" {
-			continue
-		}
-
-		tb, err := q.tokenBlueprintRepo.GetByID(ctx, candidate)
-		if err != nil {
-			continue
-		}
-		if tb == nil {
-			continue
-		}
-		return tb.ID, tb.Name, nil
+	tb, err := q.tokenBlueprintRepo.GetByID(ctx, tokenBlueprintID)
+	if err != nil {
+		return "", "", err
 	}
-
-	return "", "", nil
-}
-
-func tokenBlueprintIDCandidatesFromInventoryID(inventoryID string) []string {
-	if inventoryID == "" {
-		return []string{}
+	if tb == nil {
+		return "", "", fmt.Errorf("inquiry detail query: token blueprint is nil: tokenBlueprintId=%q", tokenBlueprintID)
 	}
-
-	seen := map[string]struct{}{}
-	out := make([]string, 0, 8)
-
-	add := func(v string) {
-		v = strings.Trim(v, " \t\r\n")
-		if v == "" {
-			return
-		}
-		if _, ok := seen[v]; ok {
-			return
-		}
-		seen[v] = struct{}{}
-		out = append(out, v)
-	}
-
-	add(inventoryID)
-
-	for _, sep := range []string{":", "/", "|", "#", "_"} {
-		parts := strings.Split(inventoryID, sep)
-		if len(parts) <= 1 {
-			continue
-		}
-		add(parts[0])
-		add(parts[len(parts)-1])
-	}
-
-	return out
+	return tb.ID, tb.Name, nil
 }

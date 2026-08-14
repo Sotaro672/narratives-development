@@ -68,9 +68,7 @@ func buildUsecases(
 	if err != nil {
 		return nil, err
 	}
-
 	tokenUC := uc.NewTokenUsecase(solanaClient)
-
 	accountUC := uc.NewAccountUsecase(r.accountRepo)
 
 	announcementAvatarRepo :=
@@ -130,14 +128,9 @@ func buildUsecases(
 		r.companyRepo,
 	)
 
-	inquiryReplyRepo :=
-		fsrepo.NewInquiryReplyRepositoryFS(
-			c.fsClient,
-		)
-
 	inquiryUC := uc.NewInquiryUsecase(
 		r.inquiryRepo,
-		inquiryReplyRepo,
+		r.inquiryReplyRepo,
 		nil,
 		"",
 		"",

@@ -13,12 +13,6 @@ export type InquiryStatusButtonVariant =
   | "danger"
   | "neutral";
 
-function normalizeInquiryStatus(
-  value: InquiryStatusValue,
-): string {
-  return String(value ?? "").trim();
-}
-
 /**
  * 問い合わせステータスの表示名を返す。
  *
@@ -33,15 +27,9 @@ export function getInquiryStatusLabel(
     return "未読";
   }
 
-  const status =
-    normalizeInquiryStatus(statusValue);
-
-  switch (status) {
+  switch (statusValue) {
     case "open":
       return "未対応";
-
-    case "in_progress":
-      return "対応中";
 
     case "resolved":
       return "対応済み";
@@ -50,7 +38,7 @@ export function getInquiryStatusLabel(
       return "クローズ";
 
     default:
-      return status || "-";
+      return "-";
   }
 }
 
@@ -60,10 +48,7 @@ export function getInquiryStatusLabel(
 export function isResolvedStatus(
   statusValue: InquiryStatusValue,
 ): boolean {
-  return (
-    normalizeInquiryStatus(statusValue) ===
-    "resolved"
-  );
+  return statusValue === "resolved";
 }
 
 /**
@@ -72,10 +57,7 @@ export function isResolvedStatus(
 export function isClosedStatus(
   statusValue: InquiryStatusValue,
 ): boolean {
-  return (
-    normalizeInquiryStatus(statusValue) ===
-    "closed"
-  );
+  return statusValue === "closed";
 }
 
 /**
@@ -84,10 +66,7 @@ export function isClosedStatus(
 export function isUnresolvedStatus(
   statusValue: InquiryStatusValue,
 ): boolean {
-  return (
-    normalizeInquiryStatus(statusValue) ===
-    "open"
-  );
+  return statusValue === "open";
 }
 
 /**

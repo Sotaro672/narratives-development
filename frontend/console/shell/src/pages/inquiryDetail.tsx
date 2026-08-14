@@ -55,7 +55,7 @@ type InquiryImageView = {
 };
 
 type InquiryReplyView =
-  NonNullable<InquiryDetailDTO["replies"]>[number];
+  InquiryDetailDTO["replies"][number];
 
 function textOrDash(
   value: string | null | undefined,
@@ -169,30 +169,17 @@ function getShippingAddressStreet2(
   );
 }
 
-function getShippingAddresses(
-  detail: InquiryDetailDTO | null,
-): ShippingAddress[] {
-  return Array.isArray(
-    detail?.shippingAddresses,
-  )
-    ? detail.shippingAddresses
-    : [];
-}
-
 function getOrderItemsLabel(
   order: InquiryOrderSummary,
 ): string {
-  if (
-    !Array.isArray(order.items) ||
-    order.items.length === 0
-  ) {
+  if (order.items.length === 0) {
     return "-";
   }
 
   return order.items
     .map((item: InquiryOrderItemSummary) => {
       const tokenName = textOrDash(item.tokenName);
-      const quantity = Number(item.qty ?? 0);
+      const quantity = item.qty;
 
       return quantity > 0
         ? `${tokenName} × ${quantity}`
@@ -204,10 +191,7 @@ function getOrderItemsLabel(
 function getOrderTransferredAtLabel(
   order: InquiryOrderSummary,
 ): string {
-  if (
-    !Array.isArray(order.items) ||
-    order.items.length === 0
-  ) {
+  if (order.items.length === 0) {
     return "-";
   }
 
@@ -230,57 +214,25 @@ function getOrderTransferredAtLabel(
 }
 
 function normalizeImages(
-  images:
-    | InquiryImageFile[]
-    | null
-    | undefined,
+  images: InquiryImageFile[] | undefined,
 ): InquiryImageView[] {
-  if (!Array.isArray(images)) {
+  if (!images) {
     return [];
   }
 
-  return images
-    .map(
-      (
-        image: InquiryImageFile,
-        index: number,
-      ): InquiryImageView | null => {
-        const fileUrl = normalizeText(
-          image.fileUrl,
-        );
-
-        if (!fileUrl) {
-          return null;
-        }
-
-        const fileName = normalizeText(
-          image.fileName,
-        );
-
-        const mimeType = normalizeText(
-          image.mimeType,
-        );
-
-        const objectPath = normalizeText(
-          image.objectPath,
-        );
-
-        return {
-          id:
-            objectPath ||
-            `${fileUrl}-${index}`,
-          fileName,
-          fileUrl,
-          mimeType,
-        };
-      },
-    )
-    .filter(
-      (
-        image: InquiryImageView | null,
-      ): image is InquiryImageView =>
-        image !== null,
-    );
+  return images.map(
+    (
+      image: InquiryImageFile,
+      index: number,
+    ): InquiryImageView => ({
+      id:
+        image.objectPath ||
+        `${image.fileUrl}-${index}`,
+      fileName: image.fileName,
+      fileUrl: image.fileUrl,
+      mimeType: image.mimeType,
+    }),
+  );
 }
 
 function getInquiryImages(
@@ -312,27 +264,15 @@ function replySenderLabel(
     avatarName: string;
   },
 ): string {
-  const senderType = normalizeText(
-    reply.senderType,
-  );
-
-  const senderId = normalizeText(
-    reply.senderId,
-  );
-
-  if (senderType === "member") {
-    return senderId === params.memberId
+  if (reply.senderType === "member") {
+    return reply.senderId === params.memberId
       ? "自分"
       : "担当者";
   }
 
-  if (senderType === "avatar") {
-    return params.avatarName !== "-"
-      ? params.avatarName
-      : "アバター";
-  }
-
-  return senderType || "送信者";
+  return params.avatarName !== "-"
+    ? params.avatarName
+    : "アバター";
 }
 
 export default function InquiryDetail() {
@@ -435,17 +375,13 @@ export default function InquiryDetail() {
     getInquiryImages(inquiry);
 
   const replies: InquiryReplyView[] =
-    Array.isArray(detail?.replies)
-      ? detail.replies
-      : [];
+    detail?.replies ?? [];
 
   const shippingAddresses =
-    getShippingAddresses(detail);
+    detail?.shippingAddresses ?? [];
 
   const orders: InquiryOrderSummary[] =
-    Array.isArray(detail?.orders)
-      ? detail.orders
-      : [];
+    detail?.orders ?? [];
 
   const pageTitle = (
     <div className="inq-detail__page-title">
@@ -466,7 +402,6 @@ export default function InquiryDetail() {
 
   const statusButtonDisabled =
     !detail ||
-    !memberId ||
     isClosedStatus(inquiry?.status);
 
   const revokeReplyImagePreviewUrl =
@@ -679,17 +614,23 @@ export default function InquiryDetail() {
           return;
         }
 
-        if (!memberId) {
+        if (
+          !trimmedContent &&
+          replyImages.length === 0
+        ) {
           setReplyErrorMessage(
-            "メンバーIDが取得できません。ログインし直してください。",
+            "返信内容または画像を入力してください。",
           );
 
           return;
         }
 
-        if (!trimmedContent) {
+        if (
+          replyImages.length > 0 &&
+          !memberId
+        ) {
           setReplyErrorMessage(
-            "返信内容を入力してください。",
+            "メンバーIDが取得できません。ログインし直してください。",
           );
 
           return;
@@ -701,25 +642,26 @@ export default function InquiryDetail() {
 
         try {
           const uploadedImages =
-            await uploadInquiryReplyImagesToStorage(
-              {
-                inquiryId,
-                memberId,
-                files:
-                  replyImages.map(
-                    (
-                      image:
-                        ReplyUploadImage,
-                    ) =>
-                      image.file,
-                  ),
-              },
-            );
+            replyImages.length > 0
+              ? await uploadInquiryReplyImagesToStorage(
+                  {
+                    inquiryId,
+                    memberId,
+                    files:
+                      replyImages.map(
+                        (
+                          image:
+                            ReplyUploadImage,
+                        ) =>
+                          image.file,
+                      ),
+                  },
+                )
+              : [];
 
           await replyInquiryHTTP(
             inquiryId,
             {
-              memberId,
               content: trimmedContent,
               images: uploadedImages,
             },

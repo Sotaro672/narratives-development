@@ -270,14 +270,6 @@ export function useInquiryDetailPage(): UseInquiryDetailPageResult {
           return;
         }
 
-        if (!memberId) {
-          setErrorMessage(
-            "メンバーIDが取得できません。ログインし直してください。",
-          );
-
-          return;
-        }
-
         setStatusUpdating(true);
         setErrorMessage(null);
 
@@ -288,15 +280,9 @@ export function useInquiryDetailPage(): UseInquiryDetailPageResult {
             )
               ? await reopenInquiryHTTP(
                   inquiryId,
-                  {
-                    memberId,
-                  },
                 )
               : await resolveInquiryHTTP(
                   inquiryId,
-                  {
-                    memberId,
-                  },
                 );
 
           if (!mountedRef.current) {
@@ -333,7 +319,6 @@ export function useInquiryDetailPage(): UseInquiryDetailPageResult {
       [
         detail,
         inquiryId,
-        memberId,
         statusUpdating,
       ],
     );

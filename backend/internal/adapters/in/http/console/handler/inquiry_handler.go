@@ -8,11 +8,9 @@ import (
 	"strings"
 	"time"
 
+	middleware "narratives/internal/adapters/in/http/middleware"
 	consolequery "narratives/internal/application/query/console"
 	usecase "narratives/internal/application/usecase"
-
-	middleware "narratives/internal/adapters/in/http/middleware"
-
 	inquirydom "narratives/internal/domain/inquiry"
 )
 
@@ -58,10 +56,8 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// GET /inquiries/company/{companyId}
 	// GET /inquiries/company/{companyId}/unread-count
 	//
-	// NOTE:
 	// URL 上の companyId は既存 route 互換のため受け取るが、
-	// 実際の company boundary は middleware が context に入れた
-	// ログイン中 member の companyId を使う。
+	// 実際の company boundary は middleware の companyId を正とする。
 	if parts[0] == "company" {
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w)
@@ -85,7 +81,6 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	id := parts[0]
 
-	// サブリソース
 	if len(parts) > 1 {
 		switch parts[1] {
 		case "images":
@@ -132,7 +127,6 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// GET /inquiries/{id}
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w)
 		return
@@ -144,20 +138,19 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // GET /inquiries/company/{companyId}
 //
 // Query:
-//
-//	searchQuery
-//	productId
-//	avatarId
-//	status
-//	inquiryType
-//	updatedBy
-//	deletedBy
-//	resolvedBy
-//	closedBy
-//	imageFileName
-//	deleted=true|false
-//	resolved=true|false
-//	closed=true|false
+//   - searchQuery
+//   - productId
+//   - avatarId
+//   - status
+//   - inquiryType
+//   - updatedBy
+//   - deletedBy
+//   - resolvedBy
+//   - closedBy
+//   - imageFileName
+//   - deleted=true|false
+//   - resolved=true|false
+//   - closed=true|false
 func (h *InquiryHandler) listByCompanyID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -184,22 +177,6 @@ func (h *InquiryHandler) listByCompanyID(w http.ResponseWriter, r *http.Request)
 }
 
 // GET /inquiries/company/{companyId}/unread-count
-//
-// Query:
-//
-//	searchQuery
-//	productId
-//	avatarId
-//	status
-//	inquiryType
-//	updatedBy
-//	deletedBy
-//	resolvedBy
-//	closedBy
-//	imageFileName
-//	deleted=true|false
-//	resolved=true|false
-//	closed=true|false
 func (h *InquiryHandler) countUnreadByCompanyID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -228,9 +205,7 @@ func (h *InquiryHandler) countUnreadByCompanyID(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]int{
-		"count": count,
-	})
+	_ = json.NewEncoder(w).Encode(map[string]int{"count": count})
 }
 
 func inquiryFilterFromRequest(r *http.Request) inquirydom.Filter {
@@ -243,51 +218,40 @@ func inquiryFilterFromRequest(r *http.Request) inquirydom.Filter {
 	if v := q.Get("productId"); v != "" {
 		filter.ProductID = &v
 	}
-
 	if v := q.Get("avatarId"); v != "" {
 		filter.AvatarID = &v
 	}
-
 	if v := q.Get("status"); v != "" {
 		status := inquirydom.InquiryStatus(v)
 		filter.Status = &status
 	}
-
 	if v := q.Get("inquiryType"); v != "" {
 		inquiryType := inquirydom.InquiryType(v)
 		filter.InquiryType = &inquiryType
 	}
-
 	if v := q.Get("updatedBy"); v != "" {
 		filter.UpdatedBy = &v
 	}
-
 	if v := q.Get("deletedBy"); v != "" {
 		filter.DeletedBy = &v
 	}
-
 	if v := q.Get("resolvedBy"); v != "" {
 		filter.ResolvedBy = &v
 	}
-
 	if v := q.Get("closedBy"); v != "" {
 		filter.ClosedBy = &v
 	}
-
 	if v := q.Get("imageFileName"); v != "" {
 		filter.ImageFileName = &v
 	}
-
 	if v := q.Get("deleted"); v != "" {
 		deleted := v == "true"
 		filter.Deleted = &deleted
 	}
-
 	if v := q.Get("resolved"); v != "" {
 		resolved := v == "true"
 		filter.Resolved = &resolved
 	}
-
 	if v := q.Get("closed"); v != "" {
 		closed := v == "true"
 		filter.Closed = &closed
@@ -316,33 +280,24 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	replies, err := h.uc.ListReplies(ctx, id)
-	if err != nil {
-		writeInquiryErr(w, err)
-		return
-	}
-
-	if !detail.Inquiry.IsRead || hasUnreadAvatarReply(replies) {
-		updated, err := h.uc.MarkAsRead(ctx, usecase.MarkInquiryAsReadInput{
+	if !detail.Inquiry.IsRead || hasUnreadAvatarReply(detail.Replies) {
+		if _, err := h.uc.MarkAsRead(ctx, usecase.MarkInquiryAsReadInput{
 			InquiryID:        id,
 			ReaderSenderType: inquirydom.ReplySenderTypeMember,
 			ReaderSenderID:   memberID,
-		})
-		if err != nil {
+		}); err != nil {
 			writeInquiryErr(w, err)
 			return
 		}
 
-		detail.Inquiry = updated
-
-		replies, err = h.uc.ListReplies(ctx, id)
+		detail, err = h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID)
 		if err != nil {
 			writeInquiryErr(w, err)
 			return
 		}
 	}
 
-	writeInquiryDetailWithReplies(w, detail, replies)
+	_ = json.NewEncoder(w).Encode(detail)
 }
 
 func hasUnreadAvatarReply(replies []inquirydom.Reply) bool {
@@ -350,12 +305,10 @@ func hasUnreadAvatarReply(replies []inquirydom.Reply) bool {
 		if reply.IsRead {
 			continue
 		}
-
 		if reply.SenderType == inquirydom.ReplySenderTypeAvatar {
 			return true
 		}
 	}
-
 	return false
 }
 
@@ -364,18 +317,11 @@ func hasUnreadAvatarReply(replies []inquirydom.Reply) bool {
 // Body:
 //
 //	{
-//	  "memberId": "member_document_id",
 //	  "content": "返信本文",
 //	  "images": []
 //	}
 //
-// company member が問い合わせに返信します。
-//
-// Reply は Inquiry.Content へ追記せず、Firestore subcollection:
-//
-//	inquiries/{inquiryId}/replies/{replyId}
-//
-// に保存します。
+// memberId は request body から受け取らず、認証 context の memberId を正とします。
 func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -384,10 +330,14 @@ func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string
 		return
 	}
 
+	memberID, ok := currentMemberID(w, r)
+	if !ok {
+		return
+	}
+
 	var req struct {
-		MemberID string `json:"memberId"`
-		Content  string `json:"content"`
-		Images   []struct {
+		Content string `json:"content"`
+		Images  []struct {
 			FileName   string  `json:"fileName"`
 			FileURL    string  `json:"fileUrl"`
 			ObjectPath string  `json:"objectPath"`
@@ -403,14 +353,7 @@ func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string
 		return
 	}
 
-	memberID := req.MemberID
-	if memberID == "" {
-		writeInquiryErr(w, inquirydom.ErrInvalidReplySenderID)
-		return
-	}
-
-	content := req.Content
-	if content == "" && len(req.Images) == 0 {
+	if req.Content == "" && len(req.Images) == 0 {
 		writeInquiryErr(w, inquirydom.ErrReplyContentOrImageRequired)
 		return
 	}
@@ -434,7 +377,7 @@ func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string
 		return
 	}
 
-	created, err := h.uc.CreateReplyByMember(ctx, id, memberID, content, images)
+	created, err := h.uc.CreateReplyByMember(ctx, id, memberID, req.Content, images)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
@@ -446,14 +389,7 @@ func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string
 
 // POST /inquiries/{id}/resolve
 //
-// Body:
-//
-//	{
-//	  "memberId": "member_document_id"
-//	}
-//
-// company member が問い合わせを「対応済み」にします。
-// ここでは status=resolved にします。
+// memberId は request body から受け取らず、認証 context の memberId を正とします。
 func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -462,23 +398,13 @@ func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id stri
 		return
 	}
 
+	memberID, ok := currentMemberID(w, r)
+	if !ok {
+		return
+	}
+
 	if _, err := h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID); err != nil {
 		writeInquiryErr(w, err)
-		return
-	}
-
-	var req struct {
-		MemberID string `json:"memberId"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
-		return
-	}
-
-	memberID := req.MemberID
-	if memberID == "" {
-		writeInquiryErr(w, inquirydom.ErrInvalidResolvedBy)
 		return
 	}
 
@@ -496,13 +422,7 @@ func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id stri
 
 // POST /inquiries/{id}/reopen
 //
-// Body:
-//
-//	{
-//	  "memberId": "member_document_id"
-//	}
-//
-// company member が問い合わせを open に戻します。
+// memberId は request body から受け取らず、認証 context の memberId を正とします。
 func (h *InquiryHandler) reopen(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -511,23 +431,13 @@ func (h *InquiryHandler) reopen(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
+	memberID, ok := currentMemberID(w, r)
+	if !ok {
+		return
+	}
+
 	if _, err := h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID); err != nil {
 		writeInquiryErr(w, err)
-		return
-	}
-
-	var req struct {
-		MemberID string `json:"memberId"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
-		return
-	}
-
-	memberID := req.MemberID
-	if memberID == "" {
-		writeInquiryErr(w, inquirydom.ErrInvalidUpdatedBy)
 		return
 	}
 
@@ -553,16 +463,21 @@ func (h *InquiryHandler) reopen(w http.ResponseWriter, r *http.Request, id strin
 //	  "objectPath": "inquiry-images/{inquiryId}/{imageId}/sample.png",
 //	  "fileSize": 123,
 //	  "mimeType": "image/png",
-//	  "createdAt": "2026-01-01T00:00:00Z",
-//	  "createdBy": "uid_or_member_id"
+//	  "createdAt": "2026-01-01T00:00:00Z"
 //	}
 //
 // 画像バイナリは frontend から Firebase Storage へ直接保存します。
-// backend は Firebase Storage の downloadURL(fileUrl) と objectPath のみ保存します。
+// backend は Firebase Storage downloadURL と objectPath のみ保存します。
+// createdBy は request body ではなく認証 context の memberId を正とします。
 func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	companyID, ok := currentCompanyID(w, r)
+	if !ok {
+		return
+	}
+
+	memberID, ok := currentMemberID(w, r)
 	if !ok {
 		return
 	}
@@ -574,8 +489,8 @@ func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id str
 		FileSize   int64   `json:"fileSize"`
 		MimeType   string  `json:"mimeType"`
 		CreatedAt  *string `json:"createdAt"`
-		CreatedBy  string  `json:"createdBy"`
 	}
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
@@ -593,11 +508,6 @@ func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id str
 		createdAt = t.UTC()
 	}
 
-	createdBy := req.CreatedBy
-	if createdBy == "" {
-		createdBy = "system"
-	}
-
 	var objectPath *string
 	if req.ObjectPath != "" {
 		v := req.ObjectPath
@@ -612,7 +522,7 @@ func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id str
 		req.FileSize,
 		req.MimeType,
 		createdAt,
-		createdBy,
+		memberID,
 	)
 	if err != nil {
 		writeInquiryErr(w, err)
@@ -626,14 +536,13 @@ func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id str
 	}
 
 	in := detail.Inquiry
-
 	if err := in.AddImage(image); err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
 	now := time.Now().UTC()
-	updatedBy := createdBy
+	updatedBy := memberID
 
 	updated, err := h.uc.Update(ctx, id, inquirydom.InquiryPatch{
 		Images:    &in.Images,
@@ -667,6 +576,11 @@ func (h *InquiryHandler) deleteImage(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
+	memberID, ok := currentMemberID(w, r)
+	if !ok {
+		return
+	}
+
 	fileName := r.URL.Query().Get("fileName")
 	if fileName == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -682,17 +596,18 @@ func (h *InquiryHandler) deleteImage(w http.ResponseWriter, r *http.Request, id 
 
 	in := detail.Inquiry
 
-	removed := in.RemoveImageByFileName(fileName)
-	if !removed {
+	if !in.RemoveImageByFileName(fileName) {
 		writeInquiryErr(w, inquirydom.ErrNotFound)
 		return
 	}
 
 	now := time.Now().UTC()
+	updatedBy := memberID
 
 	updated, err := h.uc.Update(ctx, id, inquirydom.InquiryPatch{
 		Images:    &in.Images,
 		UpdatedAt: &now,
+		UpdatedBy: &updatedBy,
 	})
 	if err != nil {
 		writeInquiryErr(w, err)
@@ -764,7 +679,6 @@ func currentCompanyID(w http.ResponseWriter, r *http.Request) (string, bool) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found"})
 		return "", false
 	}
-
 	return companyID, true
 }
 
@@ -775,36 +689,7 @@ func currentMemberID(w http.ResponseWriter, r *http.Request) (string, bool) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "memberId not found"})
 		return "", false
 	}
-
 	return memberID, true
-}
-
-func writeInquiryDetailWithReplies(
-	w http.ResponseWriter,
-	detail any,
-	replies []inquirydom.Reply,
-) {
-	raw, err := json.Marshal(detail)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to encode inquiry detail"})
-		return
-	}
-
-	var body map[string]any
-	if err := json.Unmarshal(raw, &body); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to encode inquiry detail"})
-		return
-	}
-
-	if replies == nil {
-		replies = []inquirydom.Reply{}
-	}
-
-	body["replies"] = replies
-
-	_ = json.NewEncoder(w).Encode(body)
 }
 
 // エラーハンドリング

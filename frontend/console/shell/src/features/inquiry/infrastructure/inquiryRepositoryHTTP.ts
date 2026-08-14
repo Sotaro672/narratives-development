@@ -19,9 +19,7 @@ import type {
   InquiryReply,
   InquiryUnreadCountResult,
   ListInquiriesParams,
-  ReopenInquiryParams,
   ReplyInquiryParams,
-  ResolveInquiryParams,
 } from "../../../shared/types/inquiry";
 
 type UploadInquiryReplyImageParams = {
@@ -122,7 +120,7 @@ function assertImageFile(file: File): File {
     throw new Error("inquiryRepositoryHTTP: file が空です");
   }
 
-  if (!String(file.type ?? "").startsWith("image/")) {
+  if (!file.type.startsWith("image/")) {
     throw new Error("画像ファイルのみアップロードできます");
   }
 
@@ -148,8 +146,7 @@ async function uploadInquiryReplyImageToStorage(
 
   const imageId = createClientID("reply_image");
   const fileName = sanitizeFileName(file.name);
-  const mimeType = file.type || "application/octet-stream";
-
+  const mimeType = file.type;
   const objectPath = `inquiry-replies/${encodeURIComponent(
     inquiryId,
   )}/${encodeURIComponent(imageId)}/${encodeURIComponent(fileName)}`;
@@ -171,7 +168,7 @@ async function uploadInquiryReplyImageToStorage(
     fileName,
     fileUrl,
     objectPath,
-    fileSize: Number(file.size ?? 0),
+    fileSize: file.size,
     mimeType,
     createdAt: new Date().toISOString(),
     createdBy: memberId,
@@ -183,7 +180,7 @@ export async function uploadInquiryReplyImagesToStorage(
 ): Promise<InquiryImageFile[]> {
   const inquiryId = assertID(params.inquiryId, "inquiryId");
   const memberId = assertID(params.memberId, "memberId");
-  const files = Array.isArray(params.files) ? params.files : [];
+  const files = params.files;
 
   if (files.length === 0) {
     return [];
@@ -210,9 +207,7 @@ export async function listInquiriesHTTP(
 ): Promise<InquiryPageResult<InquiryManagementItem>> {
   const companyId = assertID(params.companyId, "companyId");
   const headers = await getAuthHeadersOrThrow();
-
   const query = buildInquiryListQuery(params);
-
   const url = `${API_BASE}/inquiries/company/${encodeURIComponent(
     companyId,
   )}${query}`;
@@ -243,9 +238,7 @@ export async function countUnreadInquiriesHTTP(
 ): Promise<InquiryUnreadCountResult> {
   const companyId = assertID(params.companyId, "companyId");
   const headers = await getAuthHeadersOrThrow();
-
   const query = buildInquiryListQuery(params);
-
   const url = `${API_BASE}/inquiries/company/${encodeURIComponent(
     companyId,
   )}/unread-count${query}`;
@@ -291,35 +284,24 @@ export async function getInquiryHTTP(id: string): Promise<InquiryDetail> {
     );
   }
 
-  const detail = (await response.json()) as InquiryDetail;
-
-  return {
-    ...detail,
-    replies: Array.isArray(detail.replies) ? detail.replies : [],
-  };
+  return (await response.json()) as InquiryDetail;
 }
 
 // -----------------------------------------------------------
 // POST: Inquiry を resolved にする
 //   backend: POST /inquiries/{id}/resolve
+//   memberId は backend の認証 context を正とする。
 // -----------------------------------------------------------
 
-export async function resolveInquiryHTTP(
-  id: string,
-  params: ResolveInquiryParams,
-): Promise<Inquiry> {
+export async function resolveInquiryHTTP(id: string): Promise<Inquiry> {
   const inquiryId = assertID(id, "id");
-  const memberId = assertID(params.memberId, "memberId");
-  const headers = await getAuthJsonHeadersOrThrow();
+  const headers = await getAuthHeadersOrThrow();
 
   const response = await fetch(
     `${API_BASE}/inquiries/${encodeURIComponent(inquiryId)}/resolve`,
     {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        memberId,
-      }),
     },
   );
 
@@ -337,24 +319,18 @@ export async function resolveInquiryHTTP(
 // -----------------------------------------------------------
 // POST: Inquiry を open に戻す
 //   backend: POST /inquiries/{id}/reopen
+//   memberId は backend の認証 context を正とする。
 // -----------------------------------------------------------
 
-export async function reopenInquiryHTTP(
-  id: string,
-  params: ReopenInquiryParams,
-): Promise<Inquiry> {
+export async function reopenInquiryHTTP(id: string): Promise<Inquiry> {
   const inquiryId = assertID(id, "id");
-  const memberId = assertID(params.memberId, "memberId");
-  const headers = await getAuthJsonHeadersOrThrow();
+  const headers = await getAuthHeadersOrThrow();
 
   const response = await fetch(
     `${API_BASE}/inquiries/${encodeURIComponent(inquiryId)}/reopen`,
     {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        memberId,
-      }),
     },
   );
 
@@ -372,6 +348,8 @@ export async function reopenInquiryHTTP(
 // -----------------------------------------------------------
 // POST: Inquiry 返信
 //   backend: POST /inquiries/{id}/reply
+//   memberId は backend の認証 context を正とする。
+//   content または images のどちらかがあれば送信可能。
 // -----------------------------------------------------------
 
 export async function replyInquiryHTTP(
@@ -379,8 +357,6 @@ export async function replyInquiryHTTP(
   params: ReplyInquiryParams,
 ): Promise<InquiryReply> {
   const inquiryId = assertID(id, "id");
-  const memberId = assertID(params.memberId, "memberId");
-  const content = assertID(params.content, "content");
   const headers = await getAuthJsonHeadersOrThrow();
 
   const response = await fetch(
@@ -389,9 +365,8 @@ export async function replyInquiryHTTP(
       method: "POST",
       headers,
       body: JSON.stringify({
-        memberId,
-        content,
-        images: params.images ?? [],
+        content: params.content,
+        images: params.images,
       }),
     },
   );
