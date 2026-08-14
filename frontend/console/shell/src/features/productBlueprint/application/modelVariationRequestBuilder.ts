@@ -16,7 +16,7 @@ import {
 } from "../../model/application/modelCreateService";
 import type {
   CreateModelVariationRequest,
-} from "../../model/infrastructure/repository/modelRepositoryHTTP";
+} from "../../model/infrastructure/modelRepositoryHTTP";
 import { isAlcoholCategoryCode } from "../domain/alcohol";
 import type {
   ProductBlueprintCategorySnapshot,

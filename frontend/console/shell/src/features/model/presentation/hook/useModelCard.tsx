@@ -1,9 +1,9 @@
-//frontend\console\model\src\presentation\hook\useModelCard.tsx
+// frontend/console/shell/src/features/model/presentation/hook/useModelCard.tsx
+
 import * as React from "react";
 
-// hook 用の型は application 層にまとめる
 import type {
-  ModelNumber,
+  ApparelModelNumber,
   SizeRow,
   UseModelCardParams,
   UseModelCardResult,
@@ -12,47 +12,41 @@ import type {
   SizePatch,
 } from "../../application/modelCreateService";
 
-/** SizeRow は hook モジュールからも参照できるように application 層の型を再エクスポート */
 export type { SizeRow };
 
 /* =========================================================
  * ModelNumber 用 hook ロジック
  * =======================================================*/
 
-/** 内部キー生成（sizeLabel + color 用） */
 const makeKey = (sizeLabel: string, color: string) =>
   `${sizeLabel}__${color}`;
 
-/**
- * ModelNumberCard のロジックをすべてこの hook に集約する
- *
- * - UI ローカル状態（codeMap）を管理
- * - application 層から渡された onChangeModelNumber も同時に呼び出すことで、
- *   「画面ローカル状態」と「アプリケーション状態」を分離したまま同期できる
- */
-export function useModelCard(params: UseModelCardParams): UseModelCardResult {
-  const { sizes, colors, modelNumbers } = params;
-
-  const colorRgbMap: Record<string, string> =
-    (params as any).colorRgbMap ?? {};
-
-  const appOnChangeModelNumber:
-    | ((sizeLabel: string, color: string, nextCode: string) => void)
-    | undefined = (params as any).onChangeModelNumber;
+export function useModelCard(
+  params: UseModelCardParams,
+): UseModelCardResult {
+  const {
+    sizes,
+    colors,
+    modelNumbers,
+    colorRgbMap = {},
+    onChangeModelNumber: appOnChangeModelNumber,
+  } = params;
 
   const [codeMap, setCodeMap] = React.useState<Record<string, string>>({});
 
   React.useEffect(() => {
     const next: Record<string, string> = {};
 
-    sizes.forEach((s) => {
-      colors.forEach((c) => {
+    sizes.forEach((size) => {
+      colors.forEach((color) => {
         const found =
           modelNumbers.find(
-            (m) => m.size === s.sizeLabel && m.color === c,
+            (modelNumber) =>
+              modelNumber.size === size.sizeLabel &&
+              modelNumber.color === color,
           )?.code ?? "";
 
-        next[makeKey(s.sizeLabel, c)] = found;
+        next[makeKey(size.sizeLabel, color)] = found;
       });
     });
 
@@ -60,10 +54,8 @@ export function useModelCard(params: UseModelCardParams): UseModelCardResult {
   }, [sizes, colors, modelNumbers]);
 
   const getCode = React.useCallback<UseModelCardResult["getCode"]>(
-    (sizeLabel, color) => {
-      const key = makeKey(sizeLabel, color);
-      return codeMap[key] ?? "";
-    },
+    (sizeLabel, color) =>
+      codeMap[makeKey(sizeLabel, color)] ?? "",
     [codeMap],
   );
 
@@ -77,28 +69,30 @@ export function useModelCard(params: UseModelCardParams): UseModelCardResult {
           [key]: nextCode,
         }));
 
-        if (appOnChangeModelNumber) {
-          appOnChangeModelNumber(sizeLabel, color, nextCode);
-        }
+        appOnChangeModelNumber?.(
+          sizeLabel,
+          color,
+          nextCode,
+        );
       },
       [appOnChangeModelNumber],
     );
 
-  const flatModelNumbers: ModelNumber[] = React.useMemo(() => {
-    const result: ModelNumber[] = [];
+  const flatModelNumbers = React.useMemo<ApparelModelNumber[]>(() => {
+    const result: ApparelModelNumber[] = [];
 
-    sizes.forEach((s) => {
-      colors.forEach((c) => {
-        const key = makeKey(s.sizeLabel, c);
-        const code = codeMap[key] ?? "";
-        const rgb = colorRgbMap[c];
+    sizes.forEach((size) => {
+      colors.forEach((color) => {
+        const code =
+          codeMap[makeKey(size.sizeLabel, color)] ?? "";
+        const rgb = colorRgbMap[color];
 
         result.push({
-          size: s.sizeLabel,
-          color: c,
+          size: size.sizeLabel,
+          color,
           code,
           ...(rgb ? { rgb } : {}),
-        } as ModelNumber);
+        });
       });
     });
 
@@ -116,48 +110,60 @@ export function useModelCard(params: UseModelCardParams): UseModelCardResult {
  * SizeVariationCard 用 hook ロジック
  * =======================================================*/
 
-/**
- * SizeVariationCard のロジックをこの hook に集約
- */
 export function useSizeVariationCard(
   params: UseSizeVariationCardParams,
 ): UseSizeVariationCardResult {
-  const { sizes, mode = "edit", measurementOptions, onChangeSize } = params;
+  const {
+    sizes,
+    mode = "edit",
+    measurementOptions,
+    onChangeSize,
+  } = params;
 
   const isEdit = mode === "edit";
 
-  const readonlyInputProps: UseSizeVariationCardResult["readonlyInputProps"] =
-    React.useMemo(
+  const readonlyInputProps =
+    React.useMemo<UseSizeVariationCardResult["readonlyInputProps"]>(
       () =>
-        !isEdit
-          ? ({ variant: "readonly" as const, readOnly: true } as const)
-          : ({} as const),
+        isEdit
+          ? {}
+          : {
+              variant: "readonly",
+              readOnly: true,
+            },
       [isEdit],
     );
 
-  const measurementHeaders: UseSizeVariationCardResult["measurementHeaders"] =
-    React.useMemo(() => {
-      if (!measurementOptions || measurementOptions.length === 0) {
-        return [];
-      }
-      return measurementOptions.map((m) => m.label);
-    }, [measurementOptions]);
+  const measurementHeaders =
+    React.useMemo<UseSizeVariationCardResult["measurementHeaders"]>(
+      () =>
+        measurementOptions?.map(
+          (measurement) => measurement.label,
+        ) ?? [],
+      [measurementOptions],
+    );
 
-  const handleChange: UseSizeVariationCardResult["handleChange"] =
-    React.useCallback(
+  const handleChange =
+    React.useCallback<UseSizeVariationCardResult["handleChange"]>(
       (id, key) =>
-        (e: React.ChangeEvent<HTMLInputElement>) => {
+        (event: React.ChangeEvent<HTMLInputElement>) => {
           if (!isEdit || !onChangeSize) return;
 
-          const v = e.target.value;
+          const value = event.target.value;
 
           if (key === "sizeLabel") {
-            onChangeSize(id, { sizeLabel: v });
-          } else {
             onChangeSize(id, {
-              [key]: v === "" ? undefined : Number(v),
-            } as SizePatch);
+              sizeLabel: value,
+            });
+            return;
           }
+
+          onChangeSize(id, {
+            [key]:
+              value === ""
+                ? undefined
+                : Number(value),
+          } as SizePatch);
         },
       [isEdit, onChangeSize],
     );
@@ -170,6 +176,8 @@ export function useSizeVariationCard(
   };
 }
 
-export type { SizePatch } from "../../application/modelCreateService";
+export type {
+  SizePatch,
+} from "../../application/modelCreateService";
 
 export default useModelCard;

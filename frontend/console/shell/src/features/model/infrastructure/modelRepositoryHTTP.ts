@@ -1,20 +1,12 @@
 // frontend/console/shell/src/features/model/infrastructure/repository/modelRepositoryHTTP.ts
 
-import { API_BASE } from "../../../../shared/http/apiBase";
-import { getAuthJsonHeadersOrThrow } from "../../../../shared/http/authHeaders";
-import {
-  parseModelVariationListResponse,
-  type Volume,
-} from "../codec/modelVariationCodec";
+import { API_BASE } from "../../../shared/http/apiBase";
+import { getAuthJsonHeadersOrThrow } from "../../../shared/http/authHeaders";
 
-export type {
-  ModelVariationKind,
-  ModelVariationColor,
-  ApparelModelVariationResponse,
-  AlcoholModelVariationResponse,
-  ModelVariationResponse,
-  Volume,
-} from "../codec/modelVariationCodec";
+export type Volume = {
+  value: number;
+  unit: string;
+};
 
 /* =========================================================
  * Request types
@@ -67,7 +59,7 @@ type ReplaceModelVariationsBody = {
 };
 
 /* =========================================================
- * Generic helpers
+ * Request helpers
  * =======================================================*/
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -99,14 +91,8 @@ function requireNonEmptyString(value: string, fieldName: string): string {
 }
 
 function requireInteger(value: number, fieldName: string): number {
-  if (
-    typeof value !== "number" ||
-    !Number.isFinite(value) ||
-    !Number.isInteger(value)
-  ) {
-    throw new Error(
-      `modelRepositoryHTTP: ${fieldName}は整数である必要があります`,
-    );
+  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
+    throw new Error(`modelRepositoryHTTP: ${fieldName}は整数である必要があります`);
   }
 
   return value;
@@ -116,9 +102,7 @@ function normalizeRGB(value: number): number {
   const rgb = requireInteger(value, "rgb");
 
   if (rgb < 0 || rgb > 0xffffff) {
-    throw new Error(
-      "modelRepositoryHTTP: rgbは0から16777215の範囲である必要があります",
-    );
+    throw new Error("modelRepositoryHTTP: rgbは0から16777215の範囲である必要があります");
   }
 
   return rgb;
@@ -128,17 +112,13 @@ function normalizeVolume(volume: Volume): Volume {
   const value = requireInteger(volume.value, "volume.value");
 
   if (value <= 0) {
-    throw new Error(
-      "modelRepositoryHTTP: volume.valueは1以上である必要があります",
-    );
+    throw new Error("modelRepositoryHTTP: volume.valueは1以上である必要があります");
   }
 
   const unit = requireNonEmptyString(volume.unit, "volume.unit");
 
   if (unit !== "ml" && unit !== "L") {
-    throw new Error(
-      `modelRepositoryHTTP: 未対応のvolume.unitです: ${unit}`,
-    );
+    throw new Error(`modelRepositoryHTTP: 未対応のvolume.unitです: ${unit}`);
   }
 
   return { value, unit };
@@ -153,39 +133,27 @@ function normalizeMeasurements(
 
   for (const [key, rawValue] of Object.entries(value)) {
     if (!key) {
-      throw new Error(
-        "modelRepositoryHTTP: measurementsの項目名が空です",
-      );
+      throw new Error("modelRepositoryHTTP: measurementsの項目名が空です");
     }
 
     if (rawValue === null || rawValue === undefined) continue;
 
-    const measurementValue = requireInteger(
-      rawValue,
-      `measurements.${key}`,
-    );
+    const measurementValue = requireInteger(rawValue, `measurements.${key}`);
 
     if (measurementValue < 0) {
-      throw new Error(
-        `modelRepositoryHTTP: measurements.${key}は0以上である必要があります`,
-      );
+      throw new Error(`modelRepositoryHTTP: measurements.${key}は0以上である必要があります`);
     }
 
     measurements[key] = measurementValue;
   }
 
-  if (Object.keys(measurements).length === 0) return undefined;
-
-  return measurements;
+  return Object.keys(measurements).length > 0 ? measurements : undefined;
 }
 
 function toCreateRequestBody(
   payload: CreateModelVariationRequest,
 ): CreateModelVariationBody {
-  const modelNumber = requireNonEmptyString(
-    payload.modelNumber,
-    "modelNumber",
-  );
+  const modelNumber = requireNonEmptyString(payload.modelNumber, "modelNumber");
 
   if (isAlcoholCreatePayload(payload)) {
     return {
@@ -206,45 +174,7 @@ function toCreateRequestBody(
 }
 
 /* =========================================================
- * Response helpers
- * =======================================================*/
-
-function parseResponseIds(value: unknown): string[] | undefined {
-  if (Array.isArray(value)) {
-    if (
-      value.every(
-        (item) => typeof item === "string" && item.length > 0,
-      )
-    ) {
-      return value;
-    }
-
-    return undefined;
-  }
-
-  if (!isRecord(value)) return undefined;
-
-  if (Array.isArray(value.ids)) {
-    if (
-      value.ids.every(
-        (item) => typeof item === "string" && item.length > 0,
-      )
-    ) {
-      return value.ids;
-    }
-
-    return undefined;
-  }
-
-  if (isRecord(value.data)) {
-    return parseResponseIds(value.data);
-  }
-
-  return undefined;
-}
-
-/* =========================================================
- * HTTP response helpers
+ * HTTP error helpers
  * =======================================================*/
 
 function parseErrorDetail(text: string): string {
@@ -266,16 +196,6 @@ function parseErrorDetail(text: string): string {
   }
 }
 
-function parseJSONResponseText(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error(
-      "modelRepositoryHTTP: Backend responseをJSONとして解析できませんでした",
-    );
-  }
-}
-
 function createHTTPError(
   operation: string,
   response: Response,
@@ -292,15 +212,17 @@ function createHTTPError(
 /* =========================================================
  * PUT /models/{productBlueprintId}/variations
  *
- * 複数variationを単一requestで原子的に置換する。
- * Backendでは既存削除と新規作成を単一transactionで処理する。
- * 成功responseは置換後のModelVariation一覧またはID一覧を必須とする。
+ * ProductBlueprint配下のModel Variationを一括置換する。
+ * Backend側で既存削除と新規作成を単一transactionで処理する。
+ *
+ * 書き込み後の完成形はProductBlueprint Detail BFFを正とするため、
+ * このAPIでは成功レスポンスをFrontendのModelへ再構築しない。
  * =======================================================*/
 
 export async function createModelVariations(
   productBlueprintId: string,
   variations: CreateModelVariationRequest[],
-): Promise<string[]> {
+): Promise<void> {
   const normalizedProductBlueprintId =
     requireProductBlueprintId(productBlueprintId);
 
@@ -313,52 +235,17 @@ export async function createModelVariations(
 
   const response = await fetch(url, {
     method: "PUT",
-    headers: {
-      ...(await getAuthJsonHeadersOrThrow()),
-      Accept: "application/json",
-    },
+    headers: await getAuthJsonHeadersOrThrow(),
     body: JSON.stringify(body),
   });
 
+  if (response.ok) return;
+
   const text = await response.text().catch(() => "");
 
-  if (!response.ok) {
-    throw createHTTPError(
-      "モデルバリエーションの一括置換に失敗しました",
-      response,
-      text,
-    );
-  }
-
-  if (!text) {
-    throw new Error(
-      "modelRepositoryHTTP: 一括置換responseが空です",
-    );
-  }
-
-  const json = parseJSONResponseText(text);
-  const responseIds = parseResponseIds(json);
-
-  if (responseIds) {
-    if (responseIds.length !== variations.length) {
-      throw new Error(
-        "modelRepositoryHTTP: 一括置換responseのID件数がrequest件数と一致しません",
-      );
-    }
-
-    return responseIds;
-  }
-
-  const replaced = parseModelVariationListResponse(
-    json,
-    normalizedProductBlueprintId,
+  throw createHTTPError(
+    "モデルバリエーションの一括置換に失敗しました",
+    response,
+    text,
   );
-
-  if (replaced.length !== variations.length) {
-    throw new Error(
-      "modelRepositoryHTTP: 一括置換responseの件数がrequest件数と一致しません",
-    );
-  }
-
-  return replaced.map((variation) => variation.id);
 }

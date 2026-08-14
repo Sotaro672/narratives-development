@@ -14,7 +14,7 @@ import { createProductBlueprintHTTP } from "../infrastructure/repository/product
 import {
   createModelVariations,
   type CreateModelVariationRequest,
-} from "../../model/infrastructure/repository/modelRepositoryHTTP";
+} from "../../model/infrastructure/modelRepositoryHTTP";
 import {
   buildModelVariationRequests,
   type ProductBlueprintModelNumberInput,

@@ -14,7 +14,7 @@ import {
   type ProductBlueprintDetailResponse,
   type UpdateProductBlueprintParams,
 } from "../infrastructure/api/productBlueprintDetailApi";
-import { createModelVariations } from "../../model/infrastructure/repository/modelRepositoryHTTP";
+import { createModelVariations } from "../../model/infrastructure/modelRepositoryHTTP";
 import {
   buildModelVariationRequests,
   type ProductBlueprintModelNumberInput,
