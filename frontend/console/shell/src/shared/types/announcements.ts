@@ -1,10 +1,5 @@
 // frontend/console/shell/src/shared/types/announcements.ts
 
-import type {
-  PageParams,
-  Sort,
-} from "./common/common";
-
 // ============================================================
 // Announcement
 // ============================================================
@@ -27,33 +22,68 @@ export type AnnouncementAttachmentFile = {
   objectPath: string;
 };
 
+/**
+ * POST /announcements
+ * PUT /announcements/{id}
+ * POST /announcements/{id}/publish
+ *
+ * backend domain Announcement の response。
+ */
 export type Announcement = {
   id: string;
   title: string;
   content: string;
-  targetToken: string;
-  targetAvatars: string[];
+  targetToken?: string;
+  targetAvatars?: string[];
   published: boolean;
-  publishedAt: string | null;
-  attachments: string[];
-  attachmentFiles: AnnouncementAttachmentFile[];
+  publishedAt?: string;
+  attachments?: string[];
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
+};
+
+/**
+ * GET /announcements/{id}
+ *
+ * AnnouncementDetailQuery の response。
+ */
+export type AnnouncementDetail = {
+  id: string;
+  title: string;
+  content: string;
+  targetToken?: string;
+  targetAvatars?: string[];
+  published: boolean;
+  publishedAt?: string;
+  attachments?: string[];
+  attachmentFiles?: AnnouncementAttachmentFile[];
   createdAt: string;
   createdBy: string;
   createdByName: string;
-  updatedAt: string | null;
-  updatedBy: string | null;
-  updatedByName: string | null;
+  updatedAt?: string;
+  updatedBy?: string;
+  updatedByName?: string;
 };
 
 // ============================================================
-// API response
+// Management API response
 // ============================================================
 
-export type AnnouncementListResult = {
-  items: Announcement[];
-  totalCount: number;
-  page: number;
-  perPage: number;
+export type AnnouncementManagementAnnouncement = {
+  id: string;
+  title: string;
+  content: string;
+  targetToken?: string;
+  targetAvatars?: string[];
+  published: boolean;
+  publishedAt?: string;
+  attachments?: string[];
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
 };
 
 export type AnnouncementManagementTokenBlueprint = {
@@ -63,11 +93,8 @@ export type AnnouncementManagementTokenBlueprint = {
 };
 
 export type AnnouncementManagementApiRow = {
-  tokenBlueprint:
-    AnnouncementManagementTokenBlueprint;
-
-  announcements:
-    Announcement[];
+  tokenBlueprint: AnnouncementManagementTokenBlueprint;
+  announcements: AnnouncementManagementAnnouncement[];
 };
 
 export type AnnouncementManagementApiResult = {
@@ -79,17 +106,9 @@ export type AnnouncementManagementApiResult = {
 // API query params
 // ============================================================
 
-export interface ListAnnouncementsParams
-  extends PageParams,
-    Sort {
-  targetToken: string;
-}
-
-export interface ListAnnouncementManagementByCompanyIdParams
-  extends PageParams,
-    Sort {
+export type ListAnnouncementManagementByCompanyIdParams = {
   companyId: string;
-}
+};
 
 // ============================================================
 // API input

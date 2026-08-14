@@ -30,15 +30,12 @@ export type AnnouncementCreateVM = {
   sales: AnnouncementEntity | null;
   title: string;
   minted: boolean;
-
   createdById: string;
   createdByName: string;
   createdAt: string;
-
   updatedById: string;
   updatedByName: string;
   updatedAt: string;
-
   owners: AnnouncementOwnerVM[];
 };
 
@@ -65,59 +62,6 @@ type AnnouncementActionParams = {
 };
 
 // ============================================================
-// Normalization helpers
-// ============================================================
-
-function uniqueStrings(values: unknown): string[] {
-  if (!Array.isArray(values)) {
-    return [];
-  }
-
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const value of values) {
-    const normalized = String(value ?? "").trim();
-
-    if (!normalized || seen.has(normalized)) {
-      continue;
-    }
-
-    seen.add(normalized);
-    result.push(normalized);
-  }
-
-  return result;
-}
-
-function toOwnersFromState(
-  ownersValue: unknown,
-): AnnouncementOwnerVM[] {
-  if (!Array.isArray(ownersValue)) {
-    return [];
-  }
-
-  const avatarIds = ownersValue.map((owner) => {
-    if (!owner || typeof owner !== "object") {
-      return "";
-    }
-
-    const item =
-      owner as AnnouncementCreateLocationOwner;
-
-    return String(
-      item.avatarId ?? "",
-    ).trim();
-  });
-
-  return uniqueStrings(avatarIds).map(
-    (avatarId) => ({
-      avatarId,
-    }),
-  );
-}
-
-// ============================================================
 // Location state
 // ============================================================
 
@@ -125,19 +69,28 @@ export function normalizeAnnouncementCreateLocationState(
   state: unknown,
 ): AnnouncementCreateLocationState {
   if (!state || typeof state !== "object") {
-    return {
-      owners: [],
-    };
+    return { owners: [] };
   }
 
-  const value =
-    state as AnnouncementCreateLocationState;
+  const value = state as AnnouncementCreateLocationState;
 
   return {
-    owners: Array.isArray(value.owners)
-      ? value.owners
-      : [],
+    owners: Array.isArray(value.owners) ? value.owners : [],
   };
+}
+
+function toOwnersFromState(
+  owners: AnnouncementCreateLocationOwner[] | undefined,
+): AnnouncementOwnerVM[] {
+  if (!owners) {
+    return [];
+  }
+
+  const avatarIds = owners
+    .map((owner) => owner.avatarId)
+    .filter((avatarId): avatarId is string => Boolean(avatarId));
+
+  return [...new Set(avatarIds)].map((avatarId) => ({ avatarId }));
 }
 
 // ============================================================
@@ -146,75 +99,25 @@ export function normalizeAnnouncementCreateLocationState(
 
 export function buildAnnouncementCreateVM(
   blueprint: TokenBlueprint | null,
-  tokenBlueprintId: string | undefined,
   locationState: AnnouncementCreateLocationState,
 ): AnnouncementCreateVM {
-  const blueprintValue = blueprint as
-    | (TokenBlueprint & {
-        id?: string;
-        createdBy?: string;
-        createdByName?: string;
-        createdAt?: string | null;
-        updatedBy?: string;
-        updatedByName?: string;
-        updatedAt?: string | null;
-        minted?: boolean;
-      })
-    | null;
-
-  const id = String(
-    blueprintValue?.id ??
-      tokenBlueprintId ??
-      "",
-  ).trim();
-
-  const createdById = String(
-    blueprintValue?.createdBy ?? "",
-  ).trim();
-
-  const updatedById = String(
-    blueprintValue?.updatedBy ?? "",
-  ).trim();
-
-  const createdByName =
-    String(
-      blueprintValue?.createdByName ?? "",
-    ).trim() || createdById;
-
-  const updatedByName =
-    String(
-      blueprintValue?.updatedByName ?? "",
-    ).trim() || updatedById;
+  if (!blueprint) {
+    return createEmptyAnnouncementCreateVM();
+  }
 
   return {
-    sales: id
-      ? {
-          tokenBlueprintId: id,
-        }
-      : null,
-
+    sales: {
+      tokenBlueprintId: blueprint.id,
+    },
     title: "告知",
-    minted: Boolean(
-      blueprintValue?.minted,
-    ),
-
-    createdById,
-    createdByName,
-    createdAt: safeDateTimeLabelJa(
-      blueprintValue?.createdAt,
-      "",
-    ),
-
-    updatedById,
-    updatedByName,
-    updatedAt: safeDateTimeLabelJa(
-      blueprintValue?.updatedAt,
-      "",
-    ),
-
-    owners: toOwnersFromState(
-      locationState.owners,
-    ),
+    minted: blueprint.minted,
+    createdById: blueprint.createdBy ?? "",
+    createdByName: blueprint.createdByName ?? "",
+    createdAt: safeDateTimeLabelJa(blueprint.createdAt, ""),
+    updatedById: blueprint.updatedBy ?? "",
+    updatedByName: blueprint.updatedByName ?? "",
+    updatedAt: safeDateTimeLabelJa(blueprint.updatedAt, ""),
+    owners: toOwnersFromState(locationState.owners),
   };
 }
 
@@ -222,24 +125,14 @@ export async function fetchAnnouncementCreateVM(
   tokenBlueprintId: string | undefined,
   locationState: AnnouncementCreateLocationState,
 ): Promise<AnnouncementCreateVM> {
-  const id = String(
-    tokenBlueprintId ?? "",
-  ).trim();
-
-  if (!id) {
-    return buildAnnouncementCreateVM(
-      null,
-      tokenBlueprintId,
-      locationState,
-    );
+  if (!tokenBlueprintId) {
+    return createEmptyAnnouncementCreateVM();
   }
 
-  const blueprint =
-    await fetchTokenBlueprintDetail(id);
+  const blueprint = await fetchTokenBlueprintDetail(tokenBlueprintId);
 
   return buildAnnouncementCreateVM(
     blueprint,
-    tokenBlueprintId,
     locationState,
   );
 }
@@ -252,31 +145,24 @@ function validateAnnouncementPayload(
   payload: AnnouncementCreateInputPayload,
 ): void {
   if (!payload.title.trim()) {
-    throw new Error(
-      "タイトルを入力してください。",
-    );
+    throw new Error("タイトルを入力してください。");
   }
 
   if (!payload.text.trim()) {
-    throw new Error(
-      "本文を入力してください。",
-    );
+    throw new Error("本文を入力してください。");
   }
 }
 
 function validateTargetAvatarIds(
   targetAvatarIds: string[],
 ): string[] {
-  const normalizedIds =
-    uniqueStrings(targetAvatarIds);
+  const ids = [...new Set(targetAvatarIds.filter(Boolean))];
 
-  if (normalizedIds.length === 0) {
-    throw new Error(
-      "告知先のアバターを選択してください。",
-    );
+  if (ids.length === 0) {
+    throw new Error("告知先のアバターを選択してください。");
   }
 
-  return normalizedIds;
+  return ids;
 }
 
 function validateAnnouncementActionParams(
@@ -286,36 +172,20 @@ function validateAnnouncementActionParams(
   createdBy: string;
   targetAvatarIds: string[];
 } {
-  const tokenBlueprintId =
-    params.sales?.tokenBlueprintId.trim() ??
-    "";
-
-  if (!tokenBlueprintId) {
-    throw new Error(
-      "targetToken is required",
-    );
+  if (!params.sales?.tokenBlueprintId) {
+    throw new Error("targetToken is required");
   }
 
-  const createdBy =
-    params.createdBy.trim();
-
-  if (!createdBy) {
-    throw new Error(
-      "createdBy is required",
-    );
+  if (!params.createdBy) {
+    throw new Error("createdBy is required");
   }
 
-  validateAnnouncementPayload(
-    params.payload,
-  );
+  validateAnnouncementPayload(params.payload);
 
   return {
-    tokenBlueprintId,
-    createdBy,
-    targetAvatarIds:
-      validateTargetAvatarIds(
-        params.targetAvatarIds,
-      ),
+    tokenBlueprintId: params.sales.tokenBlueprintId,
+    createdBy: params.createdBy,
+    targetAvatarIds: validateTargetAvatarIds(params.targetAvatarIds),
   };
 }
 
@@ -330,31 +200,26 @@ async function createDraftAnnouncement(
     tokenBlueprintId,
     createdBy,
     targetAvatarIds,
-  } = validateAnnouncementActionParams(
-    params,
-  );
+  } = validateAnnouncementActionParams(params);
 
-  const announcementId =
-    createAnnouncementClientId();
+  const announcementId = createAnnouncementClientId();
 
-  const attachments =
-    await uploadAnnouncementImages({
-      announcementId,
-      images: params.payload.images,
-    });
+  const attachments = await uploadAnnouncementImages({
+    announcementId,
+    images: params.payload.images,
+  });
 
-  const announcement =
-    await createAnnouncement({
-      id: announcementId,
-      title: params.payload.title.trim(),
-      content: params.payload.text.trim(),
-      targetToken: tokenBlueprintId,
-      targetAvatars: targetAvatarIds,
-      attachments,
-      published: false,
-      publishedAt: null,
-      createdBy,
-    });
+  const announcement = await createAnnouncement({
+    id: announcementId,
+    title: params.payload.title.trim(),
+    content: params.payload.text.trim(),
+    targetToken: tokenBlueprintId,
+    targetAvatars: targetAvatarIds,
+    attachments,
+    published: false,
+    publishedAt: null,
+    createdBy,
+  });
 
   return {
     announcement,
@@ -365,9 +230,7 @@ async function createDraftAnnouncement(
 export async function saveAnnouncement(
   params: AnnouncementActionParams,
 ) {
-  const { announcement } =
-    await createDraftAnnouncement(params);
-
+  const { announcement } = await createDraftAnnouncement(params);
   return announcement;
 }
 
@@ -377,16 +240,11 @@ export async function sendAnnouncement(
   const {
     announcement,
     createdBy,
-  } = await createDraftAnnouncement(
-    params,
-  );
+  } = await createDraftAnnouncement(params);
 
-  return markAnnouncementPublished(
-    announcement.id,
-    {
-      updatedBy: createdBy,
-    },
-  );
+  return markAnnouncementPublished(announcement.id, {
+    updatedBy: createdBy,
+  });
 }
 
 export function createEmptyAnnouncementCreateVM(): AnnouncementCreateVM {
@@ -394,15 +252,12 @@ export function createEmptyAnnouncementCreateVM(): AnnouncementCreateVM {
     sales: null,
     title: "告知",
     minted: false,
-
     createdById: "",
     createdByName: "",
     createdAt: "",
-
     updatedById: "",
     updatedByName: "",
     updatedAt: "",
-
     owners: [],
   };
 }

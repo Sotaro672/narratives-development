@@ -20,7 +20,7 @@ export type SalesRow = {
   tokenName: string;
   brandId: string;
   brandName: string;
-  mintAddresses: string[];
+  assetIds: string[];
   modelIds: string[];
   productBlueprints: SalesProductBlueprint[];
   owners: SalesOwner[];

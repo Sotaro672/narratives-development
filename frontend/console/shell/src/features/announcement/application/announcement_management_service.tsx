@@ -1,11 +1,9 @@
-// frontend\console\shell\src\features\announcement\application\announcement_management_service.tsx
+// frontend/console/shell/src/features/announcement/application/announcement_management_service.tsx
 
-import {
-  listAnnouncementManagementByCompanyId,
-} from "../infrastructure/announcement_repository_http";
+import { listAnnouncementManagementByCompanyId } from "../infrastructure/announcement_repository_http";
 
 import type {
-  Announcement,
+  AnnouncementManagementAnnouncement,
   AnnouncementManagementApiResult,
 } from "../../../shared/types/announcements";
 
@@ -16,7 +14,6 @@ export type AnnouncementManagementRow = {
   published: boolean;
   createdAt: string;
   updatedAt: string | null;
-
   tokenName: string;
   targetAvatarCount: number;
 };
@@ -28,14 +25,10 @@ export type AnnouncementManagementSortKey =
   | "updatedAt"
   | "targetAvatarCount";
 
-export type AnnouncementManagementSortDir =
-  | "asc"
-  | "desc";
+export type AnnouncementManagementSortDir = "asc" | "desc";
 
 export type AnnouncementManagementListParams = {
   companyId: string;
-  page?: number;
-  perPage?: number;
 };
 
 export type AnnouncementManagementListResult = {
@@ -44,101 +37,44 @@ export type AnnouncementManagementListResult = {
 
 export async function fetchAnnouncementManagementRows({
   companyId,
-  page = 1,
-  perPage = 50,
-}: AnnouncementManagementListParams): Promise<
-  AnnouncementManagementListResult
-> {
+}: AnnouncementManagementListParams): Promise<AnnouncementManagementListResult> {
   if (!companyId) {
-    throw new Error(
-      "companyId is required",
-    );
+    throw new Error("companyId is required");
   }
 
-  const result =
-    await listAnnouncementManagementByCompanyId({
-      companyId,
-      page,
-      perPage,
-    });
+  const result = await listAnnouncementManagementByCompanyId({ companyId });
 
   return {
-    rows:
-      enrichAnnouncementManagementRows(
-        result,
-      ),
+    rows: enrichAnnouncementManagementRows(result),
   };
 }
 
 function enrichAnnouncementManagementRows(
   result: AnnouncementManagementApiResult,
 ): AnnouncementManagementRow[] {
-  const sourceRows =
-    Array.isArray(
-      result.rows,
-    )
-      ? result.rows
-      : [];
-
-  return sourceRows.flatMap(
-    (sourceRow) => {
-      const tokenName =
-        String(
-          sourceRow.tokenBlueprint
-            ?.tokenName ?? "",
-        );
-
-      const announcements =
-        Array.isArray(
-          sourceRow.announcements,
-        )
-          ? sourceRow.announcements
-          : [];
-
-      return announcements.map(
-        (announcement) => {
-          return toAnnouncementManagementRow(
-            announcement,
-            tokenName,
-          );
-        },
-      );
-    },
+  return result.rows.flatMap((sourceRow) =>
+    sourceRow.announcements.map((announcement) =>
+      toAnnouncementManagementRow(
+        announcement,
+        sourceRow.tokenBlueprint.tokenName,
+      ),
+    ),
   );
 }
 
 function toAnnouncementManagementRow(
-  announcement: Announcement,
+  announcement: AnnouncementManagementAnnouncement,
   tokenName: string,
 ): AnnouncementManagementRow {
   return {
-    id:
-      announcement.id,
-
-    title:
-      announcement.title,
-
-    targetToken:
-      announcement.targetToken ??
-      null,
-
-    published:
-      announcement.published,
-
-    createdAt:
-      announcement.createdAt,
-
-    updatedAt:
-      announcement.updatedAt,
-
+    id: announcement.id,
+    title: announcement.title,
+    targetToken: announcement.targetToken ?? null,
+    published: announcement.published,
+    createdAt: announcement.createdAt,
+    updatedAt: announcement.updatedAt ?? null,
     tokenName,
-
-    targetAvatarCount:
-      Array.isArray(
-        announcement.targetAvatars,
-      )
-        ? announcement.targetAvatars.length
-        : 0,
+    targetAvatarCount: announcement.targetAvatars?.length ?? 0,
   };
 }
 
@@ -147,67 +83,39 @@ export function sortAnnouncementManagementRows(
   sortKey: AnnouncementManagementSortKey,
   sortDir: AnnouncementManagementSortDir,
 ): AnnouncementManagementRow[] {
-  const next =
-    [...rows];
+  const next = [...rows];
 
-  next.sort(
-    (
-      a,
-      b,
-    ) => {
-      let result: number;
+  next.sort((a, b) => {
+    let result: number;
 
-      switch (sortKey) {
-        case "title":
-          result =
-            compareStrings(
-              a.title,
-              b.title,
-            );
-          break;
+    switch (sortKey) {
+      case "title":
+        result = compareStrings(a.title, b.title);
+        break;
 
-        case "tokenName":
-          result =
-            compareStrings(
-              a.tokenName,
-              b.tokenName,
-            );
-          break;
+      case "tokenName":
+        result = compareStrings(a.tokenName, b.tokenName);
+        break;
 
-        case "createdAt":
-          result =
-            compareDateStrings(
-              a.createdAt,
-              b.createdAt,
-            );
-          break;
+      case "createdAt":
+        result = compareDateStrings(a.createdAt, b.createdAt);
+        break;
 
-        case "updatedAt":
-          result =
-            compareDateStrings(
-              a.updatedAt,
-              b.updatedAt,
-            );
-          break;
+      case "updatedAt":
+        result = compareDateStrings(a.updatedAt, b.updatedAt);
+        break;
 
-        case "targetAvatarCount":
-          result =
-            compareNumbers(
-              a.targetAvatarCount,
-              b.targetAvatarCount,
-            );
-          break;
+      case "targetAvatarCount":
+        result = compareNumbers(a.targetAvatarCount, b.targetAvatarCount);
+        break;
 
-        default:
-          result = 0;
-          break;
-      }
+      default:
+        result = 0;
+        break;
+    }
 
-      return sortDir === "asc"
-        ? result
-        : -result;
-    },
-  );
+    return sortDir === "asc" ? result : -result;
+  });
 
   return next;
 }
@@ -215,51 +123,30 @@ export function sortAnnouncementManagementRows(
 export function normalizeAnnouncementManagementSortKey(
   value: string,
 ): AnnouncementManagementSortKey {
-  if (
-    value === "title"
-  ) {
+  if (value === "title") {
     return "title";
   }
 
-  if (
-    value === "tokenName"
-  ) {
+  if (value === "tokenName") {
     return "tokenName";
   }
 
-  if (
-    value === "updatedAt"
-  ) {
+  if (value === "updatedAt") {
     return "updatedAt";
   }
 
-  if (
-    value === "targetAvatarCount"
-  ) {
+  if (value === "targetAvatarCount") {
     return "targetAvatarCount";
   }
 
   return "createdAt";
 }
 
-function compareStrings(
-  a: string,
-  b: string,
-): number {
-  return String(
-    a ?? "",
-  ).localeCompare(
-    String(
-      b ?? "",
-    ),
-    "ja",
-  );
+function compareStrings(a: string, b: string): number {
+  return a.localeCompare(b, "ja");
 }
 
-function compareNumbers(
-  a: number,
-  b: number,
-): number {
+function compareNumbers(a: number, b: number): number {
   return a - b;
 }
 
@@ -267,36 +154,14 @@ function compareDateStrings(
   a: string | null | undefined,
   b: string | null | undefined,
 ): number {
-  return (
-    toTime(
-      a,
-    ) -
-    toTime(
-      b,
-    )
-  );
+  return toTime(a) - toTime(b);
 }
 
-function toTime(
-  value: string | null | undefined,
-): number {
-  const text =
-    String(
-      value ?? "",
-    ).trim();
-
-  if (!text) {
+function toTime(value: string | null | undefined): number {
+  if (!value) {
     return 0;
   }
 
-  const time =
-    new Date(
-      text,
-    ).getTime();
-
-  return Number.isFinite(
-    time,
-  )
-    ? time
-    : 0;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
 }

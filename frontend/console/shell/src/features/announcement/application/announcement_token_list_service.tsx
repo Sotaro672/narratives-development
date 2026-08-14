@@ -5,11 +5,10 @@ import {
   type SalesRow,
 } from "../infrastructure/sales_repository_http";
 
-export type AnnouncementTokenListRow =
-  SalesRow & {
-    issueCount: number;
-    distributionCount: number;
-  };
+export type AnnouncementTokenListRow = SalesRow & {
+  issueCount: number;
+  distributionCount: number;
+};
 
 export type AnnouncementTokenListSortKey =
   | "tokenName"
@@ -17,9 +16,7 @@ export type AnnouncementTokenListSortKey =
   | "issueCount"
   | "distributionCount";
 
-export type AnnouncementTokenListSortDir =
-  | "asc"
-  | "desc";
+export type AnnouncementTokenListSortDir = "asc" | "desc";
 
 export type AnnouncementTokenListNavigateState = {
   owners: SalesRow["owners"];
@@ -30,11 +27,8 @@ export type AnnouncementTokenListNavigateState = {
  *
  * 対象企業はバックエンドが認証情報から判定する。
  */
-export async function fetchAnnouncementTokenListRows(): Promise<
-  SalesRow[]
-> {
+export async function fetchAnnouncementTokenListRows(): Promise<SalesRow[]> {
   const result = await listSales();
-
   return result.rows;
 }
 
@@ -43,16 +37,8 @@ export function enrichAnnouncementTokenListRows(
 ): AnnouncementTokenListRow[] {
   return rows.map((row) => ({
     ...row,
-    issueCount: Array.isArray(
-      row.mintAddresses,
-    )
-      ? row.mintAddresses.length
-      : 0,
-    distributionCount: Array.isArray(
-      row.owners,
-    )
-      ? row.owners.length
-      : 0,
+    issueCount: row.assetIds.length,
+    distributionCount: row.owners.length,
   }));
 }
 
@@ -68,31 +54,19 @@ export function sortAnnouncementTokenListRows(
 
     switch (sortKey) {
       case "tokenName":
-        result = compareStrings(
-          a.tokenName,
-          b.tokenName,
-        );
+        result = compareStrings(a.tokenName, b.tokenName);
         break;
 
       case "brandName":
-        result = compareStrings(
-          a.brandName,
-          b.brandName,
-        );
+        result = compareStrings(a.brandName, b.brandName);
         break;
 
       case "issueCount":
-        result = compareNumbers(
-          a.issueCount,
-          b.issueCount,
-        );
+        result = compareNumbers(a.issueCount, b.issueCount);
         break;
 
       case "distributionCount":
-        result = compareNumbers(
-          a.distributionCount,
-          b.distributionCount,
-        );
+        result = compareNumbers(a.distributionCount, b.distributionCount);
         break;
 
       default:
@@ -100,9 +74,7 @@ export function sortAnnouncementTokenListRows(
         break;
     }
 
-    return sortDir === "asc"
-      ? result
-      : -result;
+    return sortDir === "asc" ? result : -result;
   });
 
   return next;
@@ -134,19 +106,10 @@ export function buildAnnouncementTokenListNavigateState(
   };
 }
 
-function compareStrings(
-  a: string,
-  b: string,
-): number {
-  return String(a ?? "").localeCompare(
-    String(b ?? ""),
-    "ja",
-  );
+function compareStrings(a: string, b: string): number {
+  return a.localeCompare(b, "ja");
 }
 
-function compareNumbers(
-  a: number,
-  b: number,
-): number {
+function compareNumbers(a: number, b: number): number {
   return a - b;
 }
