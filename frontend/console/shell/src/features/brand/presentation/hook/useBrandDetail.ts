@@ -11,24 +11,20 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 
 import { safeDateLabelJa } from "../../../../shared/util/dateJa";
+import type { Member, MemberFilter } from "../../../../shared/types/member";
+import type { BrandPatch } from "../../../../shared/types/brand";
 
-import type { Member } from "../../../../shared/types/member";
-import type { MemberFilter } from "../../../member/domain/repository/memberRepository";
 import { MemberRepositoryHTTP } from "../../../member/infrastructure/memberRepositoryHTTP";
-
 import { validateBrandImage } from "../../application/brandImageValidation";
 import {
   BRAND_IMAGE_ALLOWED_MIME_TYPES,
   type BrandImageTarget,
 } from "../../config/brandImagePolicy.generated";
-import type { BrandPatch } from "../../../../shared/types/brand";
 import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHTTP";
 import { uploadBrandAssetToFirebaseStorage } from "../../infrastructure/storage/brandAssetStorage";
 
 const memberRepository = new MemberRepositoryHTTP();
-
-const BRAND_IMAGE_ACCEPT =
-  BRAND_IMAGE_ALLOWED_MIME_TYPES.join(",");
+const BRAND_IMAGE_ACCEPT = BRAND_IMAGE_ALLOWED_MIME_TYPES.join(",");
 
 export type BrandManagerCandidate = {
   id: string;
@@ -89,9 +85,7 @@ type BrandResponse = {
   deletedBy?: string | null;
 };
 
-function createEmptyBrand(
-  brandId: string,
-): BrandDetailData {
+function createEmptyBrand(brandId: string): BrandDetailData {
   return {
     id: brandId,
     companyId: "",
@@ -117,24 +111,19 @@ function createEmptyBrand(
   };
 }
 
-function createDraft(
-  brand: BrandDetailData,
-): BrandDraft {
+function createDraft(brand: BrandDetailData): BrandDraft {
   return {
     name: brand.name,
     description: brand.description,
     websiteUrl: brand.websiteUrl ?? "",
     brandIcon: brand.brandIcon ?? "",
-    brandBackgroundImage:
-      brand.brandBackgroundImage ?? "",
+    brandBackgroundImage: brand.brandBackgroundImage ?? "",
     isActive: brand.isActive,
     managerId: brand.managerId,
   };
 }
 
-function formatMemberName(
-  member: Member,
-): string {
+function formatMemberName(member: Member): string {
   const lastName = String(member.lastName ?? "");
   const firstName = String(member.firstName ?? "");
 
@@ -157,88 +146,27 @@ function toBrandDetailData(
   data: BrandResponse,
   fallback: BrandDetailData,
 ): BrandDetailData {
-  const id = String(
-    data.id ?? fallback.id,
-  );
-
-  const companyId = String(
-    data.companyId ?? fallback.companyId,
-  );
-
-  const name = String(
-    data.name ?? fallback.name,
-  );
-
-  const description = String(
-    data.description ?? fallback.description,
-  );
-
-  const websiteUrl = String(
-    data.websiteUrl ??
-      fallback.websiteUrl ??
-      "",
-  );
-
-  const brandIcon = String(
-    data.brandIcon ??
-      fallback.brandIcon ??
-      "",
-  );
-
+  const id = String(data.id ?? fallback.id);
+  const companyId = String(data.companyId ?? fallback.companyId);
+  const name = String(data.name ?? fallback.name);
+  const description = String(data.description ?? fallback.description);
+  const websiteUrl = String(data.websiteUrl ?? fallback.websiteUrl ?? "");
+  const brandIcon = String(data.brandIcon ?? fallback.brandIcon ?? "");
   const brandBackgroundImage = String(
-    data.brandBackgroundImage ??
-      fallback.brandBackgroundImage ??
-      "",
+    data.brandBackgroundImage ?? fallback.brandBackgroundImage ?? "",
   );
-
-  const isActive = Boolean(
-    data.isActive ?? fallback.isActive,
-  );
-
-  const managerId = String(
-    data.managerId ?? fallback.managerId,
-  );
-
+  const isActive = Boolean(data.isActive ?? fallback.isActive);
+  const managerId = String(data.managerId ?? fallback.managerId);
   const memberName = String(
-    data.memberName ??
-      fallback.memberName ??
-      fallback.managerName ??
-      "",
+    data.memberName ?? fallback.memberName ?? fallback.managerName ?? "",
   );
-
-  const walletAddress = String(
-    data.walletAddress ??
-      fallback.walletAddress,
-  );
-
-  const createdAt = String(
-    data.createdAt ?? fallback.createdAt,
-  );
-
-  const createdBy =
-    data.createdBy ??
-    fallback.createdBy ??
-    null;
-
-  const updatedAtRaw =
-    data.updatedAt ??
-    fallback.updatedAtRaw ??
-    null;
-
-  const updatedBy =
-    data.updatedBy ??
-    fallback.updatedBy ??
-    null;
-
-  const deletedAt =
-    data.deletedAt ??
-    fallback.deletedAt ??
-    null;
-
-  const deletedBy =
-    data.deletedBy ??
-    fallback.deletedBy ??
-    null;
+  const walletAddress = String(data.walletAddress ?? fallback.walletAddress);
+  const createdAt = String(data.createdAt ?? fallback.createdAt);
+  const createdBy = data.createdBy ?? fallback.createdBy ?? null;
+  const updatedAtRaw = data.updatedAt ?? fallback.updatedAtRaw ?? null;
+  const updatedBy = data.updatedBy ?? fallback.updatedBy ?? null;
+  const deletedAt = data.deletedAt ?? fallback.deletedAt ?? null;
+  const deletedBy = data.deletedBy ?? fallback.deletedBy ?? null;
 
   return {
     id,
@@ -259,108 +187,52 @@ function toBrandDetailData(
     updatedBy,
     deletedAt,
     deletedBy,
-    status: isActive
-      ? "アクティブ"
-      : "停止",
-    registeredAt: safeDateLabelJa(
-      createdAt,
-      "",
-    ),
-    updatedAt: safeDateLabelJa(
-      updatedAtRaw ?? "",
-      "",
-    ),
+    status: isActive ? "アクティブ" : "停止",
+    registeredAt: safeDateLabelJa(createdAt, ""),
+    updatedAt: safeDateLabelJa(updatedAtRaw ?? "", ""),
   };
 }
 
-function getErrorMessage(
-  error: unknown,
-): string {
-  return error instanceof Error
-    ? error.message
-    : String(error);
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export function useBrandDetail() {
   const navigate = useNavigate();
-
-  const { brandId } =
-    useParams<{ brandId: string }>();
-
+  const { brandId } = useParams<{ brandId: string }>();
   const resolvedBrandId = brandId ?? "";
 
-  const [brand, setBrand] =
-    useState<BrandDetailData>(() =>
-      createEmptyBrand(resolvedBrandId),
-    );
+  const [brand, setBrand] = useState<BrandDetailData>(() =>
+    createEmptyBrand(resolvedBrandId),
+  );
+  const [draft, setDraft] = useState<BrandDraft>(() =>
+    createDraft(createEmptyBrand(resolvedBrandId)),
+  );
 
-  const [draft, setDraft] =
-    useState<BrandDraft>(() =>
-      createDraft(
-        createEmptyBrand(resolvedBrandId),
-      ),
-    );
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
-  const [loading, setLoading] =
-    useState(false);
+  const [managerCandidates, setManagerCandidates] =
+    useState<BrandManagerCandidate[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [memberError, setMemberError] = useState<string | null>(null);
 
-  const [saving, setSaving] =
-    useState(false);
-
-  const [error, setError] =
-    useState<Error | null>(null);
-
-  const [isEditing, setIsEditing] =
-    useState(false);
-
-  const [
-    managerCandidates,
-    setManagerCandidates,
-  ] = useState<BrandManagerCandidate[]>([]);
-
-  const [
-    loadingMembers,
-    setLoadingMembers,
-  ] = useState(false);
-
-  const [memberError, setMemberError] =
+  const [brandIconError, setBrandIconError] = useState<string | null>(null);
+  const [brandBackgroundImageError, setBrandBackgroundImageError] =
     useState<string | null>(null);
 
-  const [
-    brandIconError,
-    setBrandIconError,
-  ] = useState<string | null>(null);
+  const brandIconInputRef = useRef<HTMLInputElement | null>(null);
+  const brandBackgroundInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [
-    brandBackgroundImageError,
-    setBrandBackgroundImageError,
-  ] = useState<string | null>(null);
+  const [brandIconFile, setBrandIconFile] = useState<File | null>(null);
+  const [brandBackgroundFile, setBrandBackgroundFile] =
+    useState<File | null>(null);
 
-  const brandIconInputRef =
-    useRef<HTMLInputElement | null>(null);
-
-  const brandBackgroundInputRef =
-    useRef<HTMLInputElement | null>(null);
-
-  const [
-    brandIconFile,
-    setBrandIconFile,
-  ] = useState<File | null>(null);
-
-  const [
-    brandBackgroundFile,
-    setBrandBackgroundFile,
-  ] = useState<File | null>(null);
-
-  const [
-    brandIconPreviewUrl,
-    setBrandIconPreviewUrl,
-  ] = useState("");
-
-  const [
-    brandBackgroundPreviewUrl,
-    setBrandBackgroundPreviewUrl,
-  ] = useState("");
+  const [brandIconPreviewUrl, setBrandIconPreviewUrl] = useState("");
+  const [brandBackgroundPreviewUrl, setBrandBackgroundPreviewUrl] =
+    useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -374,11 +246,7 @@ export function useBrandDetail() {
         setLoading(true);
         setError(null);
 
-        const response =
-          await brandRepositoryHTTP.getById(
-            resolvedBrandId,
-          );
-
+        const response = await brandRepositoryHTTP.getById(resolvedBrandId);
         const nextBrand = toBrandDetailData(
           response as unknown as BrandResponse,
           createEmptyBrand(resolvedBrandId),
@@ -390,10 +258,8 @@ export function useBrandDetail() {
 
         setBrand(nextBrand);
         setDraft(createDraft(nextBrand));
-
         setBrandIconFile(null);
         setBrandBackgroundFile(null);
-
         setBrandIconError(null);
         setBrandBackgroundImageError(null);
       } catch (error: unknown) {
@@ -432,34 +298,27 @@ export function useBrandDetail() {
         setMemberError(null);
 
         const filter: MemberFilter = {};
-
-        const result =
-          await memberRepository.list(
-            {
-              number: 1,
-              perPage: 200,
-              totalPages: 1,
-            },
-            filter,
-          );
+        const result = await memberRepository.list(
+          {
+            number: 1,
+            perPage: 200,
+          },
+          filter,
+        );
 
         if (cancelled) {
           return;
         }
 
-        const candidates =
-          (result.items ?? []).map(
-            (member) => ({
-              id: member.id,
-              name: formatMemberName(member),
-            }),
-          );
+        const candidates = result.items.map((member) => ({
+          id: member.id,
+          name: formatMemberName(member),
+        }));
 
         setManagerCandidates(candidates);
       } catch (error: unknown) {
         if (!cancelled) {
           setManagerCandidates([]);
-
           setMemberError(
             getErrorMessage(error) ||
               "責任者候補の取得に失敗しました。",
@@ -482,17 +341,12 @@ export function useBrandDetail() {
   useEffect(() => {
     if (!brandIconFile) {
       setBrandIconPreviewUrl(
-        isEditing
-          ? draft.brandIcon
-          : brand.brandIcon ?? "",
+        isEditing ? draft.brandIcon : brand.brandIcon ?? "",
       );
-
       return;
     }
 
-    const objectUrl =
-      URL.createObjectURL(brandIconFile);
-
+    const objectUrl = URL.createObjectURL(brandIconFile);
     setBrandIconPreviewUrl(objectUrl);
 
     return () => {
@@ -512,15 +366,10 @@ export function useBrandDetail() {
           ? draft.brandBackgroundImage
           : brand.brandBackgroundImage ?? "",
       );
-
       return;
     }
 
-    const objectUrl =
-      URL.createObjectURL(
-        brandBackgroundFile,
-      );
-
+    const objectUrl = URL.createObjectURL(brandBackgroundFile);
     setBrandBackgroundPreviewUrl(objectUrl);
 
     return () => {
@@ -533,38 +382,34 @@ export function useBrandDetail() {
     isEditing,
   ]);
 
-  const editingManagerName =
-    useMemo(() => {
-      const selectedCandidate =
-        managerCandidates.find(
-          (candidate) =>
-            candidate.id ===
-            draft.managerId,
-        );
+  const editingManagerName = useMemo(() => {
+    const selectedCandidate = managerCandidates.find(
+      (candidate) => candidate.id === draft.managerId,
+    );
 
-      if (selectedCandidate) {
-        return selectedCandidate.name;
-      }
+    if (selectedCandidate) {
+      return selectedCandidate.name;
+    }
 
-      if (
-        draft.managerId &&
-        draft.managerId === brand.managerId
-      ) {
-        return (
-          brand.managerName ||
-          brand.memberName ||
-          draft.managerId
-        );
-      }
+    if (
+      draft.managerId &&
+      draft.managerId === brand.managerId
+    ) {
+      return (
+        brand.managerName ||
+        brand.memberName ||
+        draft.managerId
+      );
+    }
 
-      return draft.managerId || "未設定";
-    }, [
-      managerCandidates,
-      draft.managerId,
-      brand.managerId,
-      brand.managerName,
-      brand.memberName,
-    ]);
+    return draft.managerId || "未設定";
+  }, [
+    managerCandidates,
+    draft.managerId,
+    brand.managerId,
+    brand.managerName,
+    brand.memberName,
+  ]);
 
   const handleBack = useCallback(() => {
     navigate("/brand");
@@ -572,13 +417,10 @@ export function useBrandDetail() {
 
   const handleEdit = useCallback(() => {
     setDraft(createDraft(brand));
-
     setBrandIconFile(null);
     setBrandBackgroundFile(null);
-
     setBrandIconError(null);
     setBrandBackgroundImageError(null);
-
     setMemberError(null);
     setError(null);
 
@@ -587,233 +429,182 @@ export function useBrandDetail() {
     }
 
     if (brandBackgroundInputRef.current) {
-      brandBackgroundInputRef.current.value =
-        "";
+      brandBackgroundInputRef.current.value = "";
     }
 
     setIsEditing(true);
   }, [brand]);
 
-  const handleCancelEdit =
-    useCallback(() => {
-      setDraft(createDraft(brand));
+  const handleCancelEdit = useCallback(() => {
+    setDraft(createDraft(brand));
+    setBrandIconFile(null);
+    setBrandBackgroundFile(null);
+    setBrandIconError(null);
+    setBrandBackgroundImageError(null);
+    setMemberError(null);
+    setError(null);
 
-      setBrandIconFile(null);
-      setBrandBackgroundFile(null);
+    if (brandIconInputRef.current) {
+      brandIconInputRef.current.value = "";
+    }
 
-      setBrandIconError(null);
-      setBrandBackgroundImageError(null);
+    if (brandBackgroundInputRef.current) {
+      brandBackgroundInputRef.current.value = "";
+    }
 
-      setMemberError(null);
-      setError(null);
+    setIsEditing(false);
+  }, [brand]);
 
-      if (brandIconInputRef.current) {
-        brandIconInputRef.current.value = "";
+  const handleSelectManager = useCallback((managerId: string) => {
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      managerId,
+    }));
+
+    setMemberError(null);
+  }, []);
+
+  const handlePickBrandIcon = useCallback(() => {
+    if (!isEditing || saving) {
+      return;
+    }
+
+    brandIconInputRef.current?.click();
+  }, [isEditing, saving]);
+
+  const handlePickBrandBackground = useCallback(() => {
+    if (!isEditing || saving) {
+      return;
+    }
+
+    brandBackgroundInputRef.current?.click();
+  }, [isEditing, saving]);
+
+  const validateSelectedImage = useCallback(
+    (file: File, target: BrandImageTarget): string | null => {
+      const validation = validateBrandImage(file, target);
+
+      if (!validation.valid) {
+        return validation.message;
       }
 
-      if (brandBackgroundInputRef.current) {
-        brandBackgroundInputRef.current.value =
-          "";
-      }
+      return null;
+    },
+    [],
+  );
 
-      setIsEditing(false);
-    }, [brand]);
+  const handleBrandIconChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.currentTarget.files?.[0] ?? null;
 
-  const handleSelectManager =
-    useCallback((managerId: string) => {
-      setDraft((currentDraft) => ({
-        ...currentDraft,
-        managerId,
-      }));
-
-      setMemberError(null);
-    }, []);
-
-  const handlePickBrandIcon =
-    useCallback(() => {
-      if (!isEditing || saving) {
+      if (!file) {
         return;
       }
 
-      brandIconInputRef.current?.click();
-    }, [isEditing, saving]);
+      const validationError = validateSelectedImage(
+        file,
+        "brandIcon",
+      );
 
-  const handlePickBrandBackground =
-    useCallback(() => {
-      if (!isEditing || saving) {
+      if (validationError) {
+        setBrandIconFile(null);
+        setBrandIconError(validationError);
+        event.currentTarget.value = "";
+        alert(validationError);
         return;
       }
 
-      brandBackgroundInputRef.current?.click();
-    }, [isEditing, saving]);
-
-  const validateSelectedImage =
-    useCallback(
-      (
-        file: File,
-        target: BrandImageTarget,
-      ): string | null => {
-        const validation =
-          validateBrandImage(
-            file,
-            target,
-          );
-
-        if (!validation.valid) {
-          return validation.message;
-        }
-
-        return null;
-      },
-      [],
-    );
-
-  const handleBrandIconChange =
-    useCallback(
-      (
-        event:
-          ChangeEvent<HTMLInputElement>,
-      ) => {
-        const file =
-          event.currentTarget.files?.[0] ??
-          null;
-
-        if (!file) {
-          return;
-        }
-
-        const validationError =
-          validateSelectedImage(
-            file,
-            "brandIcon",
-          );
-
-        if (validationError) {
-          setBrandIconFile(null);
-          setBrandIconError(
-            validationError,
-          );
-
-          event.currentTarget.value = "";
-
-          alert(validationError);
-          return;
-        }
-
-        setBrandIconFile(file);
-        setBrandIconError(null);
-      },
-      [validateSelectedImage],
-    );
-
-  const handleBrandBackgroundChange =
-    useCallback(
-      (
-        event:
-          ChangeEvent<HTMLInputElement>,
-      ) => {
-        const file =
-          event.currentTarget.files?.[0] ??
-          null;
-
-        if (!file) {
-          return;
-        }
-
-        const validationError =
-          validateSelectedImage(
-            file,
-            "brandBackgroundImage",
-          );
-
-        if (validationError) {
-          setBrandBackgroundFile(null);
-
-          setBrandBackgroundImageError(
-            validationError,
-          );
-
-          event.currentTarget.value = "";
-
-          alert(validationError);
-          return;
-        }
-
-        setBrandBackgroundFile(file);
-        setBrandBackgroundImageError(null);
-      },
-      [validateSelectedImage],
-    );
-
-  const handleClearBrandIcon =
-    useCallback(() => {
-      setBrandIconFile(null);
+      setBrandIconFile(file);
       setBrandIconError(null);
+    },
+    [validateSelectedImage],
+  );
 
-      setDraft((currentDraft) => ({
-        ...currentDraft,
-        brandIcon: "",
-      }));
+  const handleBrandBackgroundChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.currentTarget.files?.[0] ?? null;
 
-      if (brandIconInputRef.current) {
-        brandIconInputRef.current.value = "";
+      if (!file) {
+        return;
       }
-    }, []);
 
-  const handleClearBrandBackground =
-    useCallback(() => {
-      setBrandBackgroundFile(null);
+      const validationError = validateSelectedImage(
+        file,
+        "brandBackgroundImage",
+      );
+
+      if (validationError) {
+        setBrandBackgroundFile(null);
+        setBrandBackgroundImageError(validationError);
+        event.currentTarget.value = "";
+        alert(validationError);
+        return;
+      }
+
+      setBrandBackgroundFile(file);
       setBrandBackgroundImageError(null);
+    },
+    [validateSelectedImage],
+  );
 
-      setDraft((currentDraft) => ({
-        ...currentDraft,
-        brandBackgroundImage: "",
-      }));
+  const handleClearBrandIcon = useCallback(() => {
+    setBrandIconFile(null);
+    setBrandIconError(null);
 
-      if (brandBackgroundInputRef.current) {
-        brandBackgroundInputRef.current.value =
-          "";
-      }
-    }, []);
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      brandIcon: "",
+    }));
+
+    if (brandIconInputRef.current) {
+      brandIconInputRef.current.value = "";
+    }
+  }, []);
+
+  const handleClearBrandBackground = useCallback(() => {
+    setBrandBackgroundFile(null);
+    setBrandBackgroundImageError(null);
+
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      brandBackgroundImage: "",
+    }));
+
+    if (brandBackgroundInputRef.current) {
+      brandBackgroundInputRef.current.value = "";
+    }
+  }, []);
 
   const validateSelectedImagesBeforeSave =
     useCallback((): boolean => {
       if (brandIconFile) {
-        const validationError =
-          validateSelectedImage(
-            brandIconFile,
-            "brandIcon",
-          );
+        const validationError = validateSelectedImage(
+          brandIconFile,
+          "brandIcon",
+        );
 
         if (validationError) {
           setBrandIconError(validationError);
           alert(validationError);
-
           return false;
         }
       }
 
       if (brandBackgroundFile) {
-        const validationError =
-          validateSelectedImage(
-            brandBackgroundFile,
-            "brandBackgroundImage",
-          );
+        const validationError = validateSelectedImage(
+          brandBackgroundFile,
+          "brandBackgroundImage",
+        );
 
         if (validationError) {
-          setBrandBackgroundImageError(
-            validationError,
-          );
-
+          setBrandBackgroundImageError(validationError);
           alert(validationError);
-
           return false;
         }
       }
 
       setBrandIconError(null);
       setBrandBackgroundImageError(null);
-
       return true;
     }, [
       brandIconFile,
@@ -821,210 +612,154 @@ export function useBrandDetail() {
       validateSelectedImage,
     ]);
 
-  const uploadBrandAssets =
-    useCallback(
-      async (): Promise<{
-        uploadedBrandIcon: string;
-        uploadedBrandBackgroundImage: string;
-      }> => {
-        if (!resolvedBrandId) {
-          throw new Error(
-            "brandId が取得できません。",
-          );
-        }
+  const uploadBrandAssets = useCallback(async (): Promise<{
+    uploadedBrandIcon: string;
+    uploadedBrandBackgroundImage: string;
+  }> => {
+    if (!resolvedBrandId) {
+      throw new Error("brandId が取得できません。");
+    }
 
-        if (!brand.companyId) {
-          throw new Error(
-            "companyId が取得できません。",
-          );
-        }
+    if (!brand.companyId) {
+      throw new Error("companyId が取得できません。");
+    }
 
-        let uploadedBrandIcon =
-          draft.brandIcon;
+    let uploadedBrandIcon = draft.brandIcon;
+    let uploadedBrandBackgroundImage =
+      draft.brandBackgroundImage;
 
-        let uploadedBrandBackgroundImage =
-          draft.brandBackgroundImage;
+    if (brandIconFile) {
+      const uploaded = await uploadBrandAssetToFirebaseStorage({
+        companyId: brand.companyId,
+        brandId: resolvedBrandId,
+        target: "brandIcon",
+        file: brandIconFile,
+      });
 
-        if (brandIconFile) {
-          const uploaded =
-            await uploadBrandAssetToFirebaseStorage(
-              {
-                companyId:
-                  brand.companyId,
-                brandId:
-                  resolvedBrandId,
-                target: "brandIcon",
-                file: brandIconFile,
-              },
-            );
+      uploadedBrandIcon = uploaded.downloadUrl;
+    }
 
-          uploadedBrandIcon =
-            uploaded.downloadUrl;
-        }
+    if (brandBackgroundFile) {
+      const uploaded = await uploadBrandAssetToFirebaseStorage({
+        companyId: brand.companyId,
+        brandId: resolvedBrandId,
+        target: "brandBackgroundImage",
+        file: brandBackgroundFile,
+      });
 
-        if (brandBackgroundFile) {
-          const uploaded =
-            await uploadBrandAssetToFirebaseStorage(
-              {
-                companyId:
-                  brand.companyId,
-                brandId:
-                  resolvedBrandId,
-                target:
-                  "brandBackgroundImage",
-                file:
-                  brandBackgroundFile,
-              },
-            );
+      uploadedBrandBackgroundImage = uploaded.downloadUrl;
+    }
 
-          uploadedBrandBackgroundImage =
-            uploaded.downloadUrl;
-        }
+    return {
+      uploadedBrandIcon,
+      uploadedBrandBackgroundImage,
+    };
+  }, [
+    resolvedBrandId,
+    brand.companyId,
+    draft.brandIcon,
+    draft.brandBackgroundImage,
+    brandIconFile,
+    brandBackgroundFile,
+  ]);
 
-        return {
-          uploadedBrandIcon,
-          uploadedBrandBackgroundImage,
-        };
-      },
-      [
+  const handleSave = useCallback(async () => {
+    if (!resolvedBrandId || saving) {
+      return;
+    }
+
+    if (!draft.name) {
+      setError(new Error("ブランド名は必須です。"));
+      return;
+    }
+
+    if (!draft.managerId) {
+      setError(new Error("ブランド責任者は必須です。"));
+      return;
+    }
+
+    if (!validateSelectedImagesBeforeSave()) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+
+      const {
+        uploadedBrandIcon,
+        uploadedBrandBackgroundImage,
+      } = await uploadBrandAssets();
+
+      const patch: BrandPatch = {
+        name: draft.name,
+        description: draft.description,
+        websiteUrl: draft.websiteUrl,
+        brandIcon: uploadedBrandIcon,
+        brandBackgroundImage: uploadedBrandBackgroundImage,
+        isActive: draft.isActive,
+        managerId: draft.managerId,
+      };
+
+      const response = await brandRepositoryHTTP.update(
         resolvedBrandId,
-        brand.companyId,
-        draft.brandIcon,
-        draft.brandBackgroundImage,
-        brandIconFile,
-        brandBackgroundFile,
-      ],
-    );
+        patch,
+      );
 
-  const handleSave =
-    useCallback(async () => {
-      if (
-        !resolvedBrandId ||
-        saving
-      ) {
-        return;
+      const fallbackBrand: BrandDetailData = {
+        ...brand,
+        name: draft.name,
+        description: draft.description,
+        websiteUrl: draft.websiteUrl,
+        brandIcon: uploadedBrandIcon,
+        brandBackgroundImage: uploadedBrandBackgroundImage,
+        isActive: draft.isActive,
+        managerId: draft.managerId,
+        memberName: editingManagerName,
+        managerName: editingManagerName,
+      };
+
+      const savedBrand = toBrandDetailData(
+        response as unknown as BrandResponse,
+        fallbackBrand,
+      );
+
+      setBrand(savedBrand);
+      setDraft(createDraft(savedBrand));
+      setBrandIconFile(null);
+      setBrandBackgroundFile(null);
+      setBrandIconError(null);
+      setBrandBackgroundImageError(null);
+
+      if (brandIconInputRef.current) {
+        brandIconInputRef.current.value = "";
       }
 
-      if (!draft.name) {
-        setError(
-          new Error(
-            "ブランド名は必須です。",
-          ),
-        );
-
-        return;
+      if (brandBackgroundInputRef.current) {
+        brandBackgroundInputRef.current.value = "";
       }
 
-      if (!draft.managerId) {
-        setError(
-          new Error(
-            "ブランド責任者は必須です。",
-          ),
-        );
+      setIsEditing(false);
+    } catch (error: unknown) {
+      setError(new Error(getErrorMessage(error)));
+    } finally {
+      setSaving(false);
+    }
+  }, [
+    resolvedBrandId,
+    saving,
+    draft,
+    brand,
+    editingManagerName,
+    uploadBrandAssets,
+    validateSelectedImagesBeforeSave,
+  ]);
 
-        return;
-      }
-
-      if (
-        !validateSelectedImagesBeforeSave()
-      ) {
-        return;
-      }
-
-      try {
-        setSaving(true);
-        setError(null);
-
-        const {
-          uploadedBrandIcon,
-          uploadedBrandBackgroundImage,
-        } = await uploadBrandAssets();
-
-        const patch: BrandPatch = {
-          name: draft.name,
-          description: draft.description,
-          websiteUrl: draft.websiteUrl,
-          brandIcon: uploadedBrandIcon,
-          brandBackgroundImage:
-            uploadedBrandBackgroundImage,
-          isActive: draft.isActive,
-          managerId: draft.managerId,
-        };
-
-        const response =
-          await brandRepositoryHTTP.update(
-            resolvedBrandId,
-            patch,
-          );
-
-        const fallbackBrand:
-          BrandDetailData = {
-          ...brand,
-          name: draft.name,
-          description: draft.description,
-          websiteUrl: draft.websiteUrl,
-          brandIcon: uploadedBrandIcon,
-          brandBackgroundImage:
-            uploadedBrandBackgroundImage,
-          isActive: draft.isActive,
-          managerId: draft.managerId,
-          memberName: editingManagerName,
-          managerName: editingManagerName,
-        };
-
-        const savedBrand =
-          toBrandDetailData(
-            response as unknown as BrandResponse,
-            fallbackBrand,
-          );
-
-        setBrand(savedBrand);
-        setDraft(createDraft(savedBrand));
-
-        setBrandIconFile(null);
-        setBrandBackgroundFile(null);
-
-        setBrandIconError(null);
-        setBrandBackgroundImageError(null);
-
-        if (brandIconInputRef.current) {
-          brandIconInputRef.current.value =
-            "";
-        }
-
-        if (
-          brandBackgroundInputRef.current
-        ) {
-          brandBackgroundInputRef.current.value =
-            "";
-        }
-
-        setIsEditing(false);
-      } catch (error: unknown) {
-        setError(
-          new Error(
-            getErrorMessage(error),
-          ),
-        );
-      } finally {
-        setSaving(false);
-      }
-    }, [
-      resolvedBrandId,
-      saving,
-      draft,
-      brand,
-      editingManagerName,
-      uploadBrandAssets,
-      validateSelectedImagesBeforeSave,
-    ]);
-
-  const statusBadgeClass =
-    useMemo(() => {
-      return brand.status === "アクティブ"
-        ? "inline-flex items-center px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold"
-        : "inline-flex items-center px-2 py-1 rounded-full bg-slate-50 text-slate-500 text-xs font-semibold";
-    }, [brand.status]);
+  const statusBadgeClass = useMemo(() => {
+    return brand.status === "アクティブ"
+      ? "inline-flex items-center px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold"
+      : "inline-flex items-center px-2 py-1 rounded-full bg-slate-50 text-slate-500 text-xs font-semibold";
+  }, [brand.status]);
 
   return {
     brand,
@@ -1052,8 +787,7 @@ export function useBrandDetail() {
     editingManagerName,
     handleSelectManager,
 
-    brandImageAccept:
-      BRAND_IMAGE_ACCEPT,
+    brandImageAccept: BRAND_IMAGE_ACCEPT,
 
     brandIconInputRef,
     brandBackgroundInputRef,
