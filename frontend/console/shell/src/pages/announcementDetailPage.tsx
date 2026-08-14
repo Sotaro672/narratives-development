@@ -7,7 +7,11 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import LogCard from "../features/log/presentation/LogCard";
 import InputCard from "../features/announcement/presentation/components/inputCard";
-import type { SubmitPayload } from "../features/announcement/presentation/components/inputCard";
+
+import type {
+  AnnouncementInputAttachment,
+  AnnouncementInputPayload,
+} from "../features/announcement/application/announcement_input";
 
 import { uploadAnnouncementImages } from "../features/announcement/application/announcement_attachment_service";
 
@@ -24,53 +28,21 @@ import type {
   AnnouncementDetail,
 } from "../shared/types/announcements";
 
-const emptyInputPayload: SubmitPayload = {
+const emptyInputPayload: AnnouncementInputPayload = {
   title: "",
   text: "",
-  images: [],
-  imageUrls: [],
+  attachments: [],
 };
 
-function getAttachmentImageUrls(
+function toInputAttachments(
   files: AnnouncementAttachmentFile[] | undefined,
-): string[] {
-  if (!files) {
-    return [];
-  }
-
-  return files
+): AnnouncementInputAttachment[] {
+  return (files ?? [])
     .filter((file) => !file.mimeType || file.mimeType.startsWith("image/"))
-    .map((file) => file.fileUrl);
-}
-
-function buildRetainedAttachmentInputs(params: {
-  announcement: AnnouncementDetail;
-  imageUrls: string[];
-}): AnnouncementAttachmentInput[] {
-  const retainedUrlSet = new Set(params.imageUrls);
-
-  return (params.announcement.attachmentFiles ?? [])
-    .filter((file) => retainedUrlSet.has(file.fileUrl))
     .map((file) => ({
-      fileName: file.fileName,
-      fileUrl: file.fileUrl,
-      fileSize: file.fileSize,
-      mimeType: file.mimeType,
-      objectPath: file.objectPath,
+      ...file,
+      type: "existing",
     }));
-}
-
-function mergeAttachmentInputs(
-  retainedAttachments: AnnouncementAttachmentInput[],
-  uploadedAttachments: AnnouncementAttachmentInput[],
-): AnnouncementAttachmentInput[] {
-  const attachments = new Map<string, AnnouncementAttachmentInput>();
-
-  for (const attachment of [...retainedAttachments, ...uploadedAttachments]) {
-    attachments.set(attachment.objectPath, attachment);
-  }
-
-  return [...attachments.values()];
 }
 
 export default function AnnouncementDetailPage() {
@@ -78,7 +50,8 @@ export default function AnnouncementDetailPage() {
   const { announcementId } = useParams<{ announcementId: string }>();
 
   const [announcement, setAnnouncement] = useState<AnnouncementDetail | null>(null);
-  const [inputPayload, setInputPayload] = useState<SubmitPayload>(emptyInputPayload);
+  const [inputPayload, setInputPayload] =
+    useState<AnnouncementInputPayload>(emptyInputPayload);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingInput, setIsSavingInput] = useState(false);
@@ -91,14 +64,16 @@ export default function AnnouncementDetailPage() {
     [announcementId],
   );
 
-  const resetFormFromAnnouncement = useCallback((source: AnnouncementDetail) => {
-    setInputPayload({
-      title: source.title,
-      text: source.content,
-      images: [],
-      imageUrls: getAttachmentImageUrls(source.attachmentFiles),
-    });
-  }, []);
+  const resetFormFromAnnouncement = useCallback(
+    (source: AnnouncementDetail) => {
+      setInputPayload({
+        title: source.title,
+        text: source.content,
+        attachments: toInputAttachments(source.attachmentFiles),
+      });
+    },
+    [],
+  );
 
   const load = useCallback(async () => {
     if (!normalizedAnnouncementId) {
@@ -132,6 +107,7 @@ export default function AnnouncementDetailPage() {
 
     const refreshed = await getAnnouncement(id);
     setAnnouncement(refreshed);
+
     return refreshed;
   }, []);
 
@@ -160,8 +136,8 @@ export default function AnnouncementDetailPage() {
 
   const targetAvatarCount = targetAvatarIds.length;
 
-  const initialImageUrls = useMemo(
-    () => getAttachmentImageUrls(announcement?.attachmentFiles),
+  const initialAttachments = useMemo(
+    () => toInputAttachments(announcement?.attachmentFiles),
     [announcement],
   );
 
@@ -216,7 +192,7 @@ export default function AnnouncementDetailPage() {
 
     try {
       await deleteAnnouncement(announcement.id);
-      window.alert("告知を削除しました。");
+      window.alert("告知を削除しました.");
       navigate("/sales");
     } catch (error) {
       console.error(
@@ -241,43 +217,59 @@ export default function AnnouncementDetailPage() {
     navigate,
   ]);
 
-  const handleInputChange = useCallback((payload: SubmitPayload) => {
-    setInputPayload(payload);
-  }, []);
+  const handleInputChange = useCallback(
+    (payload: AnnouncementInputPayload) => {
+      setInputPayload(payload);
+    },
+    [],
+  );
 
-  const buildSubmitPayload = useCallback((): SubmitPayload => {
-    return {
+  const buildSubmitPayload = useCallback(
+    (): AnnouncementInputPayload => ({
       title: inputPayload.title.trim(),
       text: inputPayload.text.trim(),
-      images: inputPayload.images,
-      imageUrls: inputPayload.imageUrls,
-    };
-  }, [inputPayload]);
+      attachments: inputPayload.attachments,
+    }),
+    [inputPayload],
+  );
 
   const getUpdatedBy = useCallback(() => {
     return announcement?.updatedBy ?? announcement?.createdBy ?? "";
   }, [announcement]);
 
   const updateDraftAnnouncement = useCallback(
-    async (payload: SubmitPayload): Promise<void> => {
+    async (payload: AnnouncementInputPayload): Promise<void> => {
       if (!announcement || announcement.published) {
         return;
       }
 
-      const retainedAttachments = buildRetainedAttachmentInputs({
-        announcement,
-        imageUrls: payload.imageUrls,
-      });
+      const existingAttachments: AnnouncementAttachmentInput[] = [];
+      const newFiles: File[] = [];
+
+      for (const attachment of payload.attachments) {
+        if (attachment.type === "new") {
+          newFiles.push(attachment.file);
+          continue;
+        }
+
+        existingAttachments.push({
+          fileName: attachment.fileName,
+          fileUrl: attachment.fileUrl,
+          fileSize: attachment.fileSize,
+          mimeType: attachment.mimeType,
+          objectPath: attachment.objectPath,
+        });
+      }
 
       const uploadedAttachments = await uploadAnnouncementImages({
         announcementId: announcement.id,
-        images: payload.images,
+        images: newFiles,
       });
 
-      const attachments = mergeAttachmentInputs(
-        retainedAttachments,
-        uploadedAttachments,
-      );
+      const attachments = [
+        ...existingAttachments,
+        ...uploadedAttachments,
+      ];
 
       await updateAnnouncement(announcement.id, {
         title: payload.title,
@@ -450,7 +442,7 @@ export default function AnnouncementDetailPage() {
           mode={isEditMode ? "edit" : "view"}
           initialTitle={announcement.title}
           initialText={announcement.content}
-          initialImages={initialImageUrls}
+          initialAttachments={initialAttachments}
           saving={isSavingInput}
           sending={isSendingInput}
           onChange={isEditMode ? handleInputChange : undefined}

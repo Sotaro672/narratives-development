@@ -1,8 +1,8 @@
 // frontend/console/shell/src/features/announcement/application/announcement_create_service.tsx
 
 import type { TokenBlueprint } from "../../../shared/types/tokenBlueprint";
-import { fetchTokenBlueprintDetail } from "../../tokenBlueprint/application/tokenBlueprintDetailService";
 import { safeDateTimeLabelJa } from "../../../shared/util/dateJa";
+import { fetchTokenBlueprintDetail } from "../../tokenBlueprint/application/tokenBlueprintDetailService";
 
 import {
   createAnnouncement,
@@ -13,6 +13,8 @@ import {
   createAnnouncementClientId,
   uploadAnnouncementImages,
 } from "./announcement_attachment_service";
+
+import type { AnnouncementInputPayload } from "./announcement_input";
 
 // ============================================================
 // View model
@@ -39,13 +41,6 @@ export type AnnouncementCreateVM = {
   owners: AnnouncementOwnerVM[];
 };
 
-export type AnnouncementCreateInputPayload = {
-  title: string;
-  text: string;
-  images: File[];
-  imageUrls?: string[];
-};
-
 export type AnnouncementCreateLocationOwner = {
   avatarId?: string;
 };
@@ -56,7 +51,7 @@ export type AnnouncementCreateLocationState = {
 
 type AnnouncementActionParams = {
   sales: AnnouncementEntity | null;
-  payload: AnnouncementCreateInputPayload;
+  payload: AnnouncementInputPayload;
   createdBy: string;
   targetAvatarIds: string[];
 };
@@ -131,10 +126,7 @@ export async function fetchAnnouncementCreateVM(
 
   const blueprint = await fetchTokenBlueprintDetail(tokenBlueprintId);
 
-  return buildAnnouncementCreateVM(
-    blueprint,
-    locationState,
-  );
+  return buildAnnouncementCreateVM(blueprint, locationState);
 }
 
 // ============================================================
@@ -142,7 +134,7 @@ export async function fetchAnnouncementCreateVM(
 // ============================================================
 
 function validateAnnouncementPayload(
-  payload: AnnouncementCreateInputPayload,
+  payload: AnnouncementInputPayload,
 ): void {
   if (!payload.title.trim()) {
     throw new Error("タイトルを入力してください。");
@@ -203,10 +195,17 @@ async function createDraftAnnouncement(
   } = validateAnnouncementActionParams(params);
 
   const announcementId = createAnnouncementClientId();
+  const images: File[] = [];
+
+  for (const attachment of params.payload.attachments) {
+    if (attachment.type === "new") {
+      images.push(attachment.file);
+    }
+  }
 
   const attachments = await uploadAnnouncementImages({
     announcementId,
-    images: params.payload.images,
+    images,
   });
 
   const announcement = await createAnnouncement({

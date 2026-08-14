@@ -1,48 +1,31 @@
 // frontend/console/shell/src/pages/announcementCreatePage.tsx
 
-import {
-  useCallback,
-  useMemo,
-  useState,
-} from "react";
-import {
-  useNavigate,
-} from "react-router-dom";
+import { useCallback, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import LogCard from "../features/log/presentation/LogCard";
 import InputCard from "../features/announcement/presentation/components/inputCard";
 
-import type { SubmitPayload } from "../features/announcement/presentation/components/inputCard";
+import type { AnnouncementInputPayload } from "../features/announcement/application/announcement_input";
 
-import {
-  useAnnouncementCreatePage,
-  type AnnouncementCreateInputPayload,
-} from "../features/announcement/presentation/hook/useAnnouncementCreatePage";
+import { useAnnouncementCreatePage } from "../features/announcement/presentation/hook/useAnnouncementCreatePage";
 
-const initialInputPayload: AnnouncementCreateInputPayload = {
+const initialInputPayload: AnnouncementInputPayload = {
   title: "",
   text: "",
-  images: [],
+  attachments: [],
 };
 
 export default function AnnouncementCreatePage() {
   const navigate = useNavigate();
-
-  const { vm, handlers } =
-    useAnnouncementCreatePage();
+  const { vm, handlers } = useAnnouncementCreatePage();
 
   const [inputPayload, setInputPayload] =
-    useState<AnnouncementCreateInputPayload>(
-      initialInputPayload,
-    );
-
-  const [isSavingInput, setIsSavingInput] =
-    useState(false);
-
-  const [isSendingInput, setIsSendingInput] =
-    useState(false);
+    useState<AnnouncementInputPayload>(initialInputPayload);
+  const [isSavingInput, setIsSavingInput] = useState(false);
+  const [isSendingInput, setIsSendingInput] = useState(false);
 
   const {
     sales,
@@ -60,129 +43,92 @@ export default function AnnouncementCreatePage() {
   } = handlers;
 
   const targetAvatarIds = useMemo(
-    () =>
-      owners.map(
-        (owner) => owner.avatarId,
-      ),
+    () => owners.map((owner) => owner.avatarId),
     [owners],
   );
 
-  const targetAvatarCount =
-    targetAvatarIds.length;
+  const targetAvatarCount = targetAvatarIds.length;
 
   const handleInputChange = useCallback(
-    (payload: SubmitPayload) => {
-      setInputPayload({
-        title: payload.title,
-        text: payload.text,
-        images: payload.images,
-      });
+    (payload: AnnouncementInputPayload) => {
+      setInputPayload(payload);
     },
     [],
   );
 
-  const buildSubmitPayload =
-    useCallback(
-      (): AnnouncementCreateInputPayload => {
-        return {
-          title: inputPayload.title.trim(),
-          text: inputPayload.text.trim(),
-          images: inputPayload.images,
-        };
-      },
-      [inputPayload],
-    );
+  const handleSave = useCallback(async () => {
+    if (isSavingInput || isSendingInput) {
+      return;
+    }
 
-  const handleSave =
-    useCallback(async () => {
-      if (
-        isSavingInput ||
-        isSendingInput
-      ) {
-        return;
-      }
+    setIsSavingInput(true);
 
-      setIsSavingInput(true);
+    try {
+      await onSaveAnnouncement({
+        payload: inputPayload,
+        targetAvatarIds,
+      });
 
-      try {
-        await onSaveAnnouncement({
-          payload:
-            buildSubmitPayload(),
-          targetAvatarIds,
-        });
+      window.alert("告知を保存しました。");
+      navigate("/sales");
+    } catch (error) {
+      console.error(
+        "[AnnouncementCreatePage] save announcement failed",
+        error,
+      );
 
-        window.alert(
-          "告知を保存しました。",
-        );
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "告知の保存に失敗しました。",
+      );
+    } finally {
+      setIsSavingInput(false);
+    }
+  }, [
+    inputPayload,
+    isSavingInput,
+    isSendingInput,
+    navigate,
+    onSaveAnnouncement,
+    targetAvatarIds,
+  ]);
 
-        navigate(
-          "/sales",
-        );
-      } catch (error) {
-        console.error(
-          "[AnnouncementCreatePage] save announcement failed",
-          error,
-        );
+  const handleSend = useCallback(async () => {
+    if (isSavingInput || isSendingInput) {
+      return;
+    }
 
-        window.alert(
-          error instanceof Error
-            ? error.message
-            : "告知の保存に失敗しました。",
-        );
-      } finally {
-        setIsSavingInput(false);
-      }
-    }, [
-      buildSubmitPayload,
-      isSavingInput,
-      isSendingInput,
-      navigate,
-      onSaveAnnouncement,
-      targetAvatarIds,
-    ]);
+    setIsSendingInput(true);
 
-  const handleSend =
-    useCallback(async () => {
-      if (
-        isSavingInput ||
-        isSendingInput
-      ) {
-        return;
-      }
+    try {
+      await onSendAnnouncement({
+        payload: inputPayload,
+        targetAvatarIds,
+      });
 
-      setIsSendingInput(true);
+      window.alert("告知を送信しました。");
+    } catch (error) {
+      console.error(
+        "[AnnouncementCreatePage] send announcement failed",
+        error,
+      );
 
-      try {
-        await onSendAnnouncement({
-          payload:
-            buildSubmitPayload(),
-          targetAvatarIds,
-        });
-
-        window.alert(
-          "告知を送信しました。",
-        );
-      } catch (error) {
-        console.error(
-          "[AnnouncementCreatePage] send announcement failed",
-          error,
-        );
-
-        window.alert(
-          error instanceof Error
-            ? error.message
-            : "告知の送信に失敗しました。",
-        );
-      } finally {
-        setIsSendingInput(false);
-      }
-    }, [
-      buildSubmitPayload,
-      isSavingInput,
-      isSendingInput,
-      onSendAnnouncement,
-      targetAvatarIds,
-    ]);
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "告知の送信に失敗しました。",
+      );
+    } finally {
+      setIsSendingInput(false);
+    }
+  }, [
+    inputPayload,
+    isSavingInput,
+    isSendingInput,
+    onSendAnnouncement,
+    targetAvatarIds,
+  ]);
 
   if (!sales) {
     return (
@@ -221,16 +167,10 @@ export default function AnnouncementCreatePage() {
         <AdminCard
           title="管理情報"
           mode="view"
-          targetAvatarCount={
-            targetAvatarCount
-          }
-          createdByName={
-            createdByName
-          }
+          targetAvatarCount={targetAvatarCount}
+          createdByName={createdByName}
           createdAt={createdAt}
-          updatedByName={
-            updatedByName
-          }
+          updatedByName={updatedByName}
           updatedAt={updatedAt}
         />
 

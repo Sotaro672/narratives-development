@@ -1,6 +1,13 @@
-// frontend\console\sales\presentation\components\inputCard.tsx
+// frontend/console/shell/src/features/announcement/presentation/components/inputCard.tsx
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import type * as React from "react";
+
+import type {
+  AnnouncementInputAttachment,
+  AnnouncementInputPayload,
+} from "../../application/announcement_input";
+
 import { Button } from "../../../../shared/ui/button";
 import DeleteButton from "../../../../shared/ui/delete";
 import {
@@ -10,50 +17,34 @@ import {
   CardTitle,
 } from "../../../../shared/ui/card";
 
-export type SubmitPayload = {
-  title: string;
-  text: string;
-
-  // 新規追加された画像 File。
-  // 既存画像 URL は含めない。
-  images: File[];
-
-  // 既存画像として残っている URL。
-  // detail 編集時に既存 attachment の削除状態を親へ伝えるために使う。
-  imageUrls: string[];
-};
-
 export type InputCardMode = "view" | "edit";
-
-type InitialImage = File | string;
 
 type Props = {
   title?: string;
   mode?: InputCardMode;
   initialTitle?: string;
   initialText?: string;
-  initialImages?: InitialImage[];
+  initialAttachments?: AnnouncementInputAttachment[];
   saving?: boolean;
   sending?: boolean;
-  onChange?: (payload: SubmitPayload) => void;
+  onChange?: (payload: AnnouncementInputPayload) => void;
 };
 
 type PreviewImage = {
   key: string;
-  file: File | null;
   url: string;
   name: string;
   revokeOnCleanup: boolean;
 };
 
-const EMPTY_INITIAL_IMAGES: InitialImage[] = [];
+const EMPTY_INITIAL_ATTACHMENTS: AnnouncementInputAttachment[] = [];
 
 function fileKey(file: File, index: number): string {
   return `${file.name}-${file.size}-${file.lastModified}-${index}`;
 }
 
-function urlKey(url: string, index: number): string {
-  return `${url}-${index}`;
+function getFileIdentity(file: File): string {
+  return `${file.name}-${file.size}-${file.lastModified}`;
 }
 
 function ImageIcon() {
@@ -91,46 +82,8 @@ function PlusIcon() {
   );
 }
 
-function isFile(value: InitialImage): value is File {
-  return value instanceof File;
-}
-
-function getImageIdentity(file: File): string {
-  return `${file.name}-${file.size}-${file.lastModified}`;
-}
-
-function getSubmitImages(values: InitialImage[]): File[] {
-  return values.filter(isFile);
-}
-
-function getSubmitImageUrls(values: InitialImage[]): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const value of values) {
-    if (isFile(value)) {
-      continue;
-    }
-
-    const url = String(value ?? "").trim();
-    if (!url) {
-      continue;
-    }
-
-    if (seen.has(url)) {
-      continue;
-    }
-
-    seen.add(url);
-    result.push(url);
-  }
-
-  return result;
-}
-
 function formatViewText(value: string): string {
-  const text = String(value ?? "").trim();
-  return text || "-";
+  return value.trim() || "-";
 }
 
 export default function InputCard({
@@ -138,14 +91,15 @@ export default function InputCard({
   mode = "edit",
   initialTitle = "",
   initialText = "",
-  initialImages = EMPTY_INITIAL_IMAGES,
+  initialAttachments = EMPTY_INITIAL_ATTACHMENTS,
   saving = false,
   sending = false,
   onChange,
 }: Props) {
   const [inputTitle, setInputTitle] = useState(initialTitle);
   const [text, setText] = useState(initialText);
-  const [images, setImages] = useState<InitialImage[]>(initialImages);
+  const [attachments, setAttachments] =
+    useState<AnnouncementInputAttachment[]>(initialAttachments);
   const [mainImageIndex, setMainImageIndex] = useState(0);
 
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -164,47 +118,37 @@ export default function InputCard({
   }, [initialText]);
 
   useEffect(() => {
-    setImages(initialImages);
+    setAttachments(initialAttachments);
     setMainImageIndex(0);
-  }, [initialImages]);
+  }, [initialAttachments]);
 
   useEffect(() => {
     onChange?.({
       title: inputTitle,
       text,
-      images: getSubmitImages(images),
-      imageUrls: getSubmitImageUrls(images),
+      attachments,
     });
-  }, [inputTitle, text, images, onChange]);
+  }, [inputTitle, text, attachments, onChange]);
 
   const previewImages = useMemo<PreviewImage[]>(() => {
-    return images
-      .map((image, index): PreviewImage | null => {
-        if (isFile(image)) {
-          return {
-            key: fileKey(image, index),
-            file: image,
-            url: URL.createObjectURL(image),
-            name: image.name,
-            revokeOnCleanup: true,
-          };
-        }
-
-        const url = String(image ?? "").trim();
-        if (!url) {
-          return null;
-        }
-
+    return attachments.map((attachment, index) => {
+      if (attachment.type === "new") {
         return {
-          key: urlKey(url, index),
-          file: null,
-          url,
-          name: `image-${index + 1}`,
-          revokeOnCleanup: false,
+          key: fileKey(attachment.file, index),
+          url: URL.createObjectURL(attachment.file),
+          name: attachment.file.name,
+          revokeOnCleanup: true,
         };
-      })
-      .filter((item): item is PreviewImage => item !== null);
-  }, [images]);
+      }
+
+      return {
+        key: attachment.id,
+        url: attachment.fileUrl,
+        name: attachment.fileName,
+        revokeOnCleanup: false,
+      };
+    });
+  }, [attachments]);
 
   useEffect(() => {
     return () => {
@@ -217,15 +161,17 @@ export default function InputCard({
   }, [previewImages]);
 
   useEffect(() => {
-    if (images.length === 0) {
-      if (mainImageIndex !== 0) setMainImageIndex(0);
+    if (attachments.length === 0) {
+      if (mainImageIndex !== 0) {
+        setMainImageIndex(0);
+      }
       return;
     }
 
-    if (mainImageIndex > images.length - 1) {
-      setMainImageIndex(images.length - 1);
+    if (mainImageIndex > attachments.length - 1) {
+      setMainImageIndex(attachments.length - 1);
     }
-  }, [images, mainImageIndex]);
+  }, [attachments, mainImageIndex]);
 
   const hasImages = previewImages.length > 0;
   const mainImage = previewImages[mainImageIndex] ?? null;
@@ -241,26 +187,31 @@ export default function InputCard({
   const addImages = (nextFiles: File[]) => {
     if (!isEditMode || nextFiles.length === 0) return;
 
-    setImages((prev) => {
-      const existingFiles = prev.filter(isFile);
-      const seen = new Set(existingFiles.map((file) => getImageIdentity(file)));
-      const merged = [...prev];
+    setAttachments((previousAttachments) => {
+      const existingFileIdentities = previousAttachments
+        .filter((attachment) => attachment.type === "new")
+        .map((attachment) => getFileIdentity(attachment.file));
 
+      const seen = new Set(existingFileIdentities);
+      const merged = [...previousAttachments];
       let firstAddedIndex = -1;
 
       for (const file of nextFiles) {
         if (!file.type.startsWith("image/")) continue;
 
-        const id = getImageIdentity(file);
-        if (seen.has(id)) continue;
+        const identity = getFileIdentity(file);
+        if (seen.has(identity)) continue;
 
-        seen.add(id);
+        seen.add(identity);
 
         if (firstAddedIndex === -1) {
           firstAddedIndex = merged.length;
         }
 
-        merged.push(file);
+        merged.push({
+          type: "new",
+          file,
+        });
       }
 
       if (firstAddedIndex !== -1) {
@@ -271,13 +222,17 @@ export default function InputCard({
     });
   };
 
-  const handleSelectImages = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSelectImages = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const nextFiles = Array.from(event.target.files ?? []);
     addImages(nextFiles);
     event.target.value = "";
   };
 
-  const handleDropImages = (event: React.DragEvent<HTMLDivElement>) => {
+  const handleDropImages = (
+    event: React.DragEvent<HTMLDivElement>,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
 
@@ -287,7 +242,9 @@ export default function InputCard({
     addImages(nextFiles);
   };
 
-  const handleDragOverImages = (event: React.DragEvent<HTMLDivElement>) => {
+  const handleDragOverImages = (
+    event: React.DragEvent<HTMLDivElement>,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
   };
@@ -295,19 +252,21 @@ export default function InputCard({
   const handleRemoveImageAt = (targetIndex: number) => {
     if (!isEditMode || isBusy) return;
 
-    setImages((prev) => prev.filter((_, index) => index !== targetIndex));
+    setAttachments((previousAttachments) =>
+      previousAttachments.filter((_, index) => index !== targetIndex),
+    );
 
-    setMainImageIndex((prev) => {
-      if (targetIndex < prev) return prev - 1;
-      if (targetIndex === prev) return 0;
-      return prev;
+    setMainImageIndex((previousIndex) => {
+      if (targetIndex < previousIndex) return previousIndex - 1;
+      if (targetIndex === previousIndex) return 0;
+      return previousIndex;
     });
   };
 
   const handleClearImages = () => {
     if (!isEditMode || isBusy) return;
 
-    setImages([]);
+    setAttachments([]);
     setMainImageIndex(0);
   };
 
@@ -451,7 +410,11 @@ export default function InputCard({
                           onClick={() => handleSelectMainImage(index)}
                           role={isEditMode ? "button" : undefined}
                           tabIndex={isEditMode ? 0 : undefined}
-                          title={isEditMode ? "クリックでメインに設定" : undefined}
+                          title={
+                            isEditMode
+                              ? "クリックでメインに設定"
+                              : undefined
+                          }
                         >
                           <div className="aspect-square overflow-hidden rounded-xl bg-slate-100">
                             <img
@@ -489,7 +452,9 @@ export default function InputCard({
                         <div className="mb-1">
                           <PlusIcon />
                         </div>
-                        <div className="text-xs font-medium">画像を追加</div>
+                        <div className="text-xs font-medium">
+                          画像を追加
+                        </div>
                       </div>
                     )}
                   </div>

@@ -1,6 +1,9 @@
-// frontend/console/sales/src/presentation/hook/useAnnouncementCreatePage.tsx
+// frontend/console/shell/src/features/announcement/presentation/hook/useAnnouncementCreatePage.tsx
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+
+import type { AnnouncementInputPayload } from "../../application/announcement_input";
 
 import {
   createEmptyAnnouncementCreateVM,
@@ -8,15 +11,14 @@ import {
   normalizeAnnouncementCreateLocationState,
   saveAnnouncement,
   sendAnnouncement,
-  type AnnouncementCreateInputPayload,
   type AnnouncementCreateVM,
   type AnnouncementOwnerVM,
 } from "../../application/announcement_create_service";
 
-export type { AnnouncementCreateInputPayload, AnnouncementOwnerVM };
+export type { AnnouncementOwnerVM };
 
 export type SubmitAnnouncementParams = {
-  payload: AnnouncementCreateInputPayload;
+  payload: AnnouncementInputPayload;
   targetAvatarIds: string[];
 };
 
@@ -40,9 +42,10 @@ export function useAnnouncementCreatePage(): UseAnnouncementCreatePageResult {
     createEmptyAnnouncementCreateVM(),
   );
 
-  const locationState = useMemo(() => {
-    return normalizeAnnouncementCreateLocationState(location.state);
-  }, [location.state]);
+  const locationState = useMemo(
+    () => normalizeAnnouncementCreateLocationState(location.state),
+    [location.state],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +58,6 @@ export function useAnnouncementCreatePage(): UseAnnouncementCreatePageResult {
         );
 
         if (cancelled) return;
-
         setVm(nextVm);
       } catch {
         if (!cancelled) {
@@ -81,7 +83,12 @@ export function useAnnouncementCreatePage(): UseAnnouncementCreatePageResult {
       vm.createdByName ||
       "system"
     );
-  }, [vm.createdById, vm.createdByName, vm.updatedById, vm.updatedByName]);
+  }, [
+    vm.createdById,
+    vm.createdByName,
+    vm.updatedById,
+    vm.updatedByName,
+  ]);
 
   const handleSaveAnnouncement = useCallback(
     async ({ payload, targetAvatarIds }: SubmitAnnouncementParams) => {
@@ -113,5 +120,8 @@ export function useAnnouncementCreatePage(): UseAnnouncementCreatePageResult {
     onSendAnnouncement: handleSendAnnouncement,
   };
 
-  return { vm, handlers };
+  return {
+    vm,
+    handlers,
+  };
 }
