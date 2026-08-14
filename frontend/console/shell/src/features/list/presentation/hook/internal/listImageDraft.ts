@@ -1,42 +1,33 @@
 // frontend/console/shell/src/features/list/presentation/hook/internal/listImageDraft.ts
 
+export type ListImageSource = {
+  id: string;
+  url: string;
+  displayOrder: number;
+};
+
 export type DraftImage = {
+  id?: string;
   url: string;
   isNew: boolean;
   file?: File;
 };
 
-export function cloneDraftImagesFromUrls(
-  urls: string[],
+export function cloneDraftImagesFromImages(
+  images: readonly ListImageSource[],
 ): DraftImage[] {
-  if (!Array.isArray(urls)) {
-    return [];
-  }
-
-  return urls
-    .map((url) =>
-      String(url ?? "").trim(),
-    )
-    .filter(Boolean)
-    .map((url) => ({
-      url,
-      isNew: false,
-    }));
+  return images.map((image) => ({
+    id: image.id,
+    url: image.url,
+    isNew: false,
+  }));
 }
 
 export function revokeDraftBlobUrls(
-  items: DraftImage[],
+  items: readonly DraftImage[],
 ): void {
-  if (!Array.isArray(items)) {
-    return;
-  }
-
   for (const item of items) {
-    if (
-      !item.isNew ||
-      typeof item.url !== "string" ||
-      !item.url.startsWith("blob:")
-    ) {
+    if (!item.isNew || !item.url.startsWith("blob:")) {
       continue;
     }
 

@@ -16,7 +16,6 @@ import {
 
 export type SaveListDetailDraftImage = {
   id?: string;
-  imageId?: string;
   url: string;
   isNew: boolean;
   file?: File;
@@ -48,9 +47,7 @@ type UploadedDraftImageItem = {
 };
 
 type CurrentImageItem = {
-  imageId: string;
-  url: string;
-  displayOrder: number;
+  id: string;
 };
 
 type NewImageUploadPlan = {
@@ -63,40 +60,14 @@ type NewImageUploadPlan = {
 function isNewDraftImageWithFile(
   image: SaveListDetailDraftImage | undefined,
 ): image is SaveListDetailDraftImage & { file: File } {
-  return Boolean(image?.isNew && image?.file);
+  return Boolean(image?.isNew && image.file);
 }
 
-function normalizeDraftImages(
-  draftImages: SaveListDetailDraftImage[] | null | undefined,
-): SaveListDetailDraftImage[] {
-  return Array.isArray(draftImages) ? draftImages : [];
-}
-
-function normalizeImageID(value: unknown): string {
-  return String(value ?? "").trim();
-}
-
-function normalizeURL(value: unknown): string {
-  return String(value ?? "").trim();
-}
-
-function resolveDraftImageID(
-  image: SaveListDetailDraftImage | undefined,
-): string {
-  return normalizeImageID(image?.id || image?.imageId);
-}
-
-function normalizeCurrentImages(
-  currentDTO: ListDetailDTO | null,
+function getCurrentImages(
+  currentDTO: ListDetailDTO,
 ): CurrentImageItem[] {
-  if (!currentDTO) {
-    return [];
-  }
-
   return currentDTO.images.map((image) => ({
-    imageId: image.id,
-    url: image.url,
-    displayOrder: image.displayOrder,
+    id: image.id,
   }));
 }
 
@@ -104,62 +75,36 @@ function collectRemovedImages(args: {
   currentImages: CurrentImageItem[];
   draftImages: SaveListDetailDraftImage[];
 }): CurrentImageItem[] {
-  const keptImageIDs = new Set<string>();
-  const keptURLs = new Set<string>();
+  const keptImageIds = new Set<string>();
 
   for (const image of args.draftImages) {
     if (image.isNew) {
       continue;
     }
 
-    const imageId = resolveDraftImageID(image);
-    const url = normalizeURL(image.url);
-
-    if (imageId) {
-      keptImageIDs.add(imageId);
+    if (!image.id) {
+      throw new Error("existing_image_id_unavailable");
     }
 
-    if (url) {
-      keptURLs.add(url);
-    }
+    keptImageIds.add(image.id);
   }
 
-  return args.currentImages.filter((current) => {
-    if (!current.imageId) {
-      return false;
-    }
-
-    if (keptImageIDs.has(current.imageId)) {
-      return false;
-    }
-
-    if (current.url && keptURLs.has(current.url)) {
-      return false;
-    }
-
-    return true;
-  });
+  return args.currentImages.filter(
+    (current) => !keptImageIds.has(current.id),
+  );
 }
 
-function normalizeListStatus(
+function resolveListStatus(
   inputStatus: ListStatus | undefined,
   currentStatus: ListStatus,
-): "listing" | "suspended" {
-  const status = inputStatus ?? currentStatus;
-
-  if (status === "listing" || status === "suspended") {
-    return status;
-  }
-
-  throw new Error("invalid_list_status");
+): ListStatus {
+  return inputStatus ?? currentStatus;
 }
 
 function normalizePriceRows(
-  rows: any[] | null | undefined,
+  rows: any[],
 ): ListSaveOperationListPriceRowDTO[] {
-  const source = Array.isArray(rows) ? rows : [];
-
-  return source.map((row, index) => {
+  return rows.map((row, index) => {
     const modelId = String(row?.modelId ?? "").trim();
     const price = Number(row?.price);
 
@@ -188,16 +133,12 @@ function buildTargetList(args: {
   updatedBy: string;
   priceRows: any[];
 }): ListSaveOperationTargetListDTO {
-  const title = String(args.title ?? "");
-  const description = String(args.description ?? "");
-  const assigneeId = String(
-    args.assigneeId ?? args.currentDTO.assigneeId ?? "",
-  ).trim();
-  const inventoryId = String(args.currentDTO.inventoryId ?? "").trim();
-  const createdBy = String(
-    args.currentDTO.createdBy ?? args.updatedBy,
-  ).trim();
-  const createdAt = String(args.currentDTO.createdAt ?? "").trim();
+  const title = args.title;
+  const description = args.description;
+  const assigneeId = args.assigneeId ?? args.currentDTO.assigneeId;
+  const inventoryId = args.currentDTO.inventoryId;
+  const createdBy = args.currentDTO.createdBy;
+  const createdAt = args.currentDTO.createdAt;
 
   if (!title.trim()) {
     throw new Error("invalid_list_title");
@@ -221,15 +162,15 @@ function buildTargetList(args: {
 
   return {
     id: args.listId,
-    status: normalizeListStatus(args.status, args.currentDTO.status),
+    status: resolveListStatus(args.status, args.currentDTO.status),
     assigneeId,
     title,
     inventoryId,
-    imageId: normalizeImageID(args.currentDTO.primaryImageId),
+    imageId: args.currentDTO.primaryImageId,
     description,
     prices: normalizePriceRows(args.priceRows),
     createdBy,
-    createdAt: createdAt || undefined,
+    createdAt,
     updatedBy: args.updatedBy,
     updatedAt: new Date().toISOString(),
   };
@@ -282,8 +223,8 @@ async function uploadNewImages(args: {
       uploadedItems.push({
         draftIndex: plan.draftIndex,
         imageId: uploaded.imageId,
-        url: normalizeURL(uploaded.url),
-        storagePath: String(uploaded.objectPath ?? "").trim(),
+        url: uploaded.url,
+        storagePath: uploaded.objectPath,
         displayOrder: plan.displayOrder,
       });
     }
@@ -325,7 +266,6 @@ async function cleanupUploadedImages(
 function resolvePrimaryImageID(args: {
   draftImages: SaveListDetailDraftImage[];
   mainImageIndex: number;
-  currentImages: CurrentImageItem[];
   uploadedItems: UploadedDraftImageItem[];
 }): string {
   if (args.draftImages.length === 0) {
@@ -340,30 +280,28 @@ function resolvePrimaryImageID(args: {
       : 0;
 
   const selected = args.draftImages[selectedIndex];
-  const uploaded = args.uploadedItems.find(
-    (item) => item.draftIndex === selectedIndex,
-  );
 
-  if (uploaded?.imageId) {
+  if (!selected) {
+    throw new Error("primary_image_unavailable");
+  }
+
+  if (selected.isNew) {
+    const uploaded = args.uploadedItems.find(
+      (item) => item.draftIndex === selectedIndex,
+    );
+
+    if (!uploaded?.imageId) {
+      throw new Error("primary_image_id_unavailable");
+    }
+
     return uploaded.imageId;
   }
 
-  const directImageId = resolveDraftImageID(selected);
-
-  if (directImageId) {
-    return directImageId;
+  if (!selected.id) {
+    throw new Error("primary_image_id_unavailable");
   }
 
-  const selectedURL = normalizeURL(selected?.url);
-  const current = args.currentImages.find(
-    (image) => normalizeURL(image.url) === selectedURL,
-  );
-
-  if (current?.imageId) {
-    return current.imageId;
-  }
-
-  throw new Error("primary_image_id_unavailable");
+  return selected.id;
 }
 
 async function createStableListImageID(args: {
@@ -374,10 +312,10 @@ async function createStableListImageID(args: {
   const source = JSON.stringify({
     listId: args.listId,
     draftIndex: args.draftIndex,
-    name: String(args.file.name ?? ""),
-    size: Number(args.file.size ?? 0),
-    type: String(args.file.type ?? ""),
-    lastModified: Number(args.file.lastModified ?? 0),
+    name: args.file.name,
+    size: args.file.size,
+    type: args.file.type,
+    lastModified: args.file.lastModified,
   });
 
   const digest = await hashText(source);
@@ -395,15 +333,15 @@ async function createIdempotencyKey(args: {
 }): Promise<string> {
   const fingerprint = JSON.stringify({
     listId: args.listId,
-    currentUpdatedAt: String(args.currentDTO.updatedAt ?? ""),
+    currentUpdatedAt: args.currentDTO.updatedAt ?? "",
     targetList: args.targetList,
     newImages: args.plans.map((plan) => ({
       imageId: plan.imageId,
       displayOrder: plan.displayOrder,
-      fileName: String(plan.file.name ?? ""),
-      fileSize: Number(plan.file.size ?? 0),
-      fileType: String(plan.file.type ?? ""),
-      lastModified: Number(plan.file.lastModified ?? 0),
+      fileName: plan.file.name,
+      fileSize: plan.file.size,
+      fileType: plan.file.type,
+      lastModified: plan.file.lastModified,
     })),
     deleteImageIds: [...args.deleteImageIds].sort(),
     primaryImageId: args.primaryImageId,
@@ -490,7 +428,7 @@ function assertCompletedOperation(
 export async function saveListDetailChanges(
   input: SaveListDetailChangesInput,
 ): Promise<SaveListDetailChangesResult> {
-  const listId = String(input.listId ?? "").trim();
+  const listId = input.listId.trim();
 
   if (!listId) {
     throw new Error("invalid_list_id");
@@ -500,9 +438,14 @@ export async function saveListDetailChanges(
     throw new Error("list_detail_not_loaded");
   }
 
-  const updatedBy = String(input.updatedBy ?? "").trim() || "system";
-  const draftImages = normalizeDraftImages(input.draftImages);
-  const currentImages = normalizeCurrentImages(input.currentDTO);
+  const updatedBy = input.updatedBy.trim();
+
+  if (!updatedBy) {
+    throw new Error("invalid_list_updated_by");
+  }
+
+  const draftImages = input.draftImages;
+  const currentImages = getCurrentImages(input.currentDTO);
 
   const targetList = buildTargetList({
     listId,
@@ -525,20 +468,22 @@ export async function saveListDetailChanges(
     draftImages,
   });
 
-  const deleteImageIds = removedImages.map((image) => image.imageId);
+  const deleteImageIds = removedImages.map(
+    (image) => image.id,
+  );
 
-  const provisionalUploadedItems = uploadPlans.map((plan) => ({
-    draftIndex: plan.draftIndex,
-    imageId: plan.imageId,
-    url: "",
-    storagePath: "",
-    displayOrder: plan.displayOrder,
-  }));
+  const provisionalUploadedItems: UploadedDraftImageItem[] =
+    uploadPlans.map((plan) => ({
+      draftIndex: plan.draftIndex,
+      imageId: plan.imageId,
+      url: "",
+      storagePath: "",
+      displayOrder: plan.displayOrder,
+    }));
 
   const primaryImageId = resolvePrimaryImageID({
     draftImages,
     mainImageIndex: input.mainImageIndex,
-    currentImages,
     uploadedItems: provisionalUploadedItems,
   });
 

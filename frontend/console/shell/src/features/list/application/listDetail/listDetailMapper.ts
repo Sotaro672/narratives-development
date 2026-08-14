@@ -2,49 +2,39 @@
 
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import type { ListDetailDTO } from "../../infrastructure/dto/listDetailDto";
+import type { ListDetailPriceRowDTO } from "../../infrastructure/dto/listPriceRowDto";
 
-export type ListDetailPriceRowVM = {
-  modelId: string;
-  kind: string;
-  modelNumber: string;
-  displayOrder?: number | null;
-  stock: number;
+export type ListDetailPriceRowVM = Omit<
+  ListDetailPriceRowDTO,
+  "price"
+> & {
   price?: number;
-  size?: string;
-  color?: string;
-  rgb?: number | null;
-  volumeValue?: number | null;
-  volumeUnit?: string;
 };
 
-function formatYMDHM(value: string | undefined): string {
-  return value ? safeDateTimeLabelJa(value, "") : "";
-}
+export type ListDetailVM = Omit<
+  ListDetailDTO,
+  "priceRows"
+> & {
+  priceRows: ListDetailPriceRowVM[];
+  createdAtLabel: string;
+  updatedAtLabel: string;
+};
 
-function buildPriceRows(dto: ListDetailDTO): ListDetailPriceRowVM[] {
-  return dto.priceRows.map((row) => ({
-    modelId: row.modelId,
-    kind: row.kind,
-    modelNumber: row.modelNumber,
-    displayOrder: row.displayOrder,
-    stock: row.stock,
-    ...(row.price == null ? {} : { price: row.price }),
-    ...(row.size === undefined ? {} : { size: row.size }),
-    ...(row.color === undefined ? {} : { color: row.color }),
-    ...(row.rgb === undefined ? {} : { rgb: row.rgb }),
-    ...(row.volumeValue === undefined ? {} : { volumeValue: row.volumeValue }),
-    ...(row.volumeUnit === undefined ? {} : { volumeUnit: row.volumeUnit }),
+function buildPriceRows(
+  rows: readonly ListDetailPriceRowDTO[],
+): ListDetailPriceRowVM[] {
+  return rows.map(({ price, ...row }) => ({
+    ...row,
+    ...(price == null ? {} : { price }),
   }));
 }
 
 export function updatePriceRowPrice<TRow extends object>(
-  rows: readonly TRow[] | null | undefined,
+  rows: readonly TRow[],
   index: number,
   price: number | undefined,
 ): TRow[] {
-  const source = rows ?? [];
-
-  return source.map((row, rowIndex) => {
+  return rows.map((row, rowIndex) => {
     if (rowIndex !== index) {
       return row;
     }
@@ -59,64 +49,26 @@ export function updatePriceRowPrice<TRow extends object>(
   });
 }
 
-export function deriveListDetail<TRow extends object = ListDetailPriceRowVM>(
-  dto: ListDetailDTO | null | undefined,
-) {
-  if (!dto) {
-    return {
-      listingTitle: "",
-      description: "",
-      status: "" as const,
-      productBrandId: "",
-      productBrandName: "",
-      productName: "",
-      tokenBrandId: "",
-      tokenBrandName: "",
-      tokenName: "",
-      images: [],
-      imageUrls: [],
-      primaryImageId: "",
-      priceRows: [] as TRow[],
-      assigneeId: "",
-      assigneeName: "",
-      createdByName: "",
-      createdAt: "",
-      updatedByName: "",
-      updatedAt: "",
-    };
-  }
-
-  const images = dto.images;
-  const priceRows = buildPriceRows(dto) as TRow[];
-
+export function deriveListDetail(
+  dto: ListDetailDTO,
+): ListDetailVM {
   return {
-    listingTitle: dto.title,
-    description: dto.description,
-    status: dto.status,
-    productBrandId: dto.productBrandId,
-    productBrandName: dto.productBrandName,
-    productName: dto.productName,
-    tokenBrandId: dto.tokenBrandId,
-    tokenBrandName: dto.tokenBrandName,
-    tokenName: dto.tokenName,
-    images,
-    imageUrls: images.map((image) => image.url),
-    primaryImageId: dto.primaryImageId ?? "",
-    priceRows,
-    assigneeId: dto.assigneeId,
-    assigneeName: dto.assigneeName,
-    createdByName: dto.createdByName,
-    createdAt: formatYMDHM(dto.createdAt),
-    updatedByName: dto.updatedByName ?? "",
-    updatedAt: formatYMDHM(dto.updatedAt),
+    ...dto,
+    priceRows: buildPriceRows(dto.priceRows),
+    createdAtLabel: safeDateTimeLabelJa(dto.createdAt, ""),
+    updatedAtLabel: dto.updatedAt
+      ? safeDateTimeLabelJa(dto.updatedAt, "")
+      : "",
   };
 }
 
 export function computeListDetailPageTitle(args: {
   listId?: string;
-  listingTitle?: string;
+  title?: string;
 }): string {
-  const id = args.listId ?? "";
-  const title = args.listingTitle || "出品詳細";
-  return id ? `${title}（listId: ${id}）` : title;
+  const title = args.title || "出品詳細";
+
+  return args.listId
+    ? `${title}（listId: ${args.listId}）`
+    : title;
 }
