@@ -32,18 +32,12 @@ var (
 // - reaction mutation
 // - aggregate count update
 // - low-level avatar / brand display resolution
-// - aggregate detail read model composition
-// - reply-only list read model composition
 type TokenBlueprintReviewConsoleQuery struct {
 	uc *usecase.TokenBlueprintReviewUsecase
 }
 
-func NewTokenBlueprintReviewConsoleQuery(
-	uc *usecase.TokenBlueprintReviewUsecase,
-) *TokenBlueprintReviewConsoleQuery {
-	return &TokenBlueprintReviewConsoleQuery{
-		uc: uc,
-	}
+func NewTokenBlueprintReviewConsoleQuery(uc *usecase.TokenBlueprintReviewUsecase) *TokenBlueprintReviewConsoleQuery {
+	return &TokenBlueprintReviewConsoleQuery{uc: uc}
 }
 
 // ============================================================
@@ -64,15 +58,10 @@ type ConsoleTokenBlueprintReviewBrandActor struct {
 	BrandIcon string `json:"brandIcon"`
 }
 
-func (q *TokenBlueprintReviewConsoleQuery) ResolveBrandActor(
-	ctx context.Context,
-	tokenBlueprintID string,
-) (ConsoleTokenBlueprintReviewBrandActor, error) {
+func (q *TokenBlueprintReviewConsoleQuery) ResolveBrandActor(ctx context.Context, tokenBlueprintID string) (ConsoleTokenBlueprintReviewBrandActor, error) {
 	if err := q.validateConfigured(); err != nil {
 		return ConsoleTokenBlueprintReviewBrandActor{}, err
 	}
-
-	tokenBlueprintID = strings.TrimSpace(tokenBlueprintID)
 	if tokenBlueprintID == "" {
 		return ConsoleTokenBlueprintReviewBrandActor{}, ErrConsoleTokenBlueprintIDRequired
 	}
@@ -82,12 +71,12 @@ func (q *TokenBlueprintReviewConsoleQuery) ResolveBrandActor(
 		return ConsoleTokenBlueprintReviewBrandActor{}, err
 	}
 
-	brandID := strings.TrimSpace(patch.BrandID)
+	brandID := patch.BrandID
 	if brandID == "" {
 		return ConsoleTokenBlueprintReviewBrandActor{}, ErrConsoleBrandIDNotFound
 	}
 
-	brandName := strings.TrimSpace(patch.BrandName)
+	brandName := patch.BrandName
 	brandIcon := ""
 
 	if brandName == "" {
@@ -115,10 +104,16 @@ func (q *TokenBlueprintReviewConsoleQuery) ResolveBrandActor(
 // ============================================================
 
 type ConsoleTokenBlueprintReviewAggregateItem struct {
-	tokenBlueprintReview.TokenBlueprintReviewAggregate
-
-	TokenBlueprintName string `json:"tokenBlueprintName"`
-	BrandName          string `json:"brandName"`
+	TokenBlueprintID     string `json:"tokenBlueprintId"`
+	TokenBlueprintName   string `json:"tokenBlueprintName"`
+	BrandName            string `json:"brandName"`
+	LikeCount            int64  `json:"likeCount"`
+	DislikeCount         int64  `json:"dislikeCount"`
+	TopLevelCommentCount int64  `json:"topLevelCommentCount"`
+	TotalCommentCount    int64  `json:"totalCommentCount"`
+	PinnedCommentID      string `json:"pinnedCommentId"`
+	CreatedAt            string `json:"createdAt"`
+	UpdatedAt            string `json:"updatedAt"`
 }
 
 type ConsoleTokenBlueprintReviewAggregateListReadModel struct {
@@ -126,41 +121,36 @@ type ConsoleTokenBlueprintReviewAggregateListReadModel struct {
 }
 
 type ConsoleTokenBlueprintCommentReadModel struct {
-	CommentID        string `json:"CommentID"`
-	TokenBlueprintID string `json:"TokenBlueprintID"`
-	ParentCommentID  string `json:"ParentCommentID"`
-	RootCommentID    string `json:"RootCommentID"`
-	Depth            int    `json:"Depth"`
-	AuthorID         string `json:"AuthorID"`
-	AuthorType       string `json:"AuthorType"`
+	CommentID        string `json:"commentId"`
+	TokenBlueprintID string `json:"tokenBlueprintId"`
+	ParentCommentID  string `json:"parentCommentId"`
+	RootCommentID    string `json:"rootCommentId"`
+	Depth            int    `json:"depth"`
 
-	AuthorAvatarName string  `json:"AuthorAvatarName"`
-	AuthorAvatarIcon *string `json:"AuthorAvatarIcon"`
+	AuthorID         string  `json:"authorId"`
+	AuthorType       string  `json:"authorType"`
+	AuthorAvatarName string  `json:"authorAvatarName"`
+	AuthorAvatarIcon *string `json:"authorAvatarIcon"`
+	BrandName        string  `json:"brandName"`
+	BrandIcon        *string `json:"brandIcon"`
+	IsOwnerComment   bool    `json:"isOwnerComment"`
 
-	BrandName string  `json:"BrandName"`
-	BrandIcon *string `json:"BrandIcon"`
-
-	IsOwnerComment bool `json:"IsOwnerComment"`
-
-	Body         string `json:"Body"`
-	LikeCount    int64  `json:"LikeCount"`
-	DislikeCount int64  `json:"DislikeCount"`
-	ChildCount   int64  `json:"ChildCount"`
-	Deleted      bool   `json:"Deleted"`
-
-	CreatedAt string `json:"CreatedAt"`
-	UpdatedAt string `json:"UpdatedAt"`
+	Body         string `json:"body"`
+	LikeCount    int64  `json:"likeCount"`
+	DislikeCount int64  `json:"dislikeCount"`
+	ChildCount   int64  `json:"childCount"`
+	Deleted      bool   `json:"deleted"`
+	CreatedAt    string `json:"createdAt"`
+	UpdatedAt    string `json:"updatedAt"`
 }
 
 type ConsoleTokenBlueprintCommentListReadModel struct {
-	Items []ConsoleTokenBlueprintCommentReadModel `json:"items"`
-
-	TokenBlueprintName string `json:"tokenBlueprintName"`
-	BrandName          string `json:"brandName"`
-
-	Page       int `json:"page,omitempty"`
-	PerPage    int `json:"perPage,omitempty"`
-	TotalCount int `json:"totalCount,omitempty"`
+	Items              []ConsoleTokenBlueprintCommentReadModel `json:"items"`
+	TokenBlueprintName string                                  `json:"tokenBlueprintName"`
+	BrandName          string                                  `json:"brandName"`
+	Page               int                                     `json:"page,omitempty"`
+	PerPage            int                                     `json:"perPage,omitempty"`
+	TotalCount         int                                     `json:"totalCount,omitempty"`
 }
 
 // ============================================================
@@ -174,16 +164,14 @@ type ListConsoleTokenBlueprintReviewAggregatesInput struct {
 type ListConsoleTokenBlueprintCommentsInput struct {
 	CompanyID        string
 	TokenBlueprintID string
-
-	SearchQuery     string
-	ParentCommentID *string
-	RootCommentID   string
-	AuthorID        string
-	Deleted         *bool
-	Depth           *int
-
-	Sort common.Sort
-	Page common.Page
+	SearchQuery      string
+	ParentCommentID  *string
+	RootCommentID    string
+	AuthorID         string
+	Deleted          *bool
+	Depth            *int
+	Sort             common.Sort
+	Page             common.Page
 }
 
 // ============================================================
@@ -197,31 +185,34 @@ func (q *TokenBlueprintReviewConsoleQuery) ListAggregatesByCompanyTokenBlueprint
 	if err := q.validateConfigured(); err != nil {
 		return ConsoleTokenBlueprintReviewAggregateListReadModel{}, err
 	}
-
-	companyID := strings.TrimSpace(in.CompanyID)
-	if companyID == "" {
+	if in.CompanyID == "" {
 		return ConsoleTokenBlueprintReviewAggregateListReadModel{}, ErrConsoleCompanyIDRequired
 	}
 
-	aggs, err := q.uc.ListAggregatesByCompanyTokenBlueprints(ctx, companyID)
+	aggregates, err := q.uc.ListAggregatesByCompanyTokenBlueprints(ctx, in.CompanyID)
 	if err != nil {
 		return ConsoleTokenBlueprintReviewAggregateListReadModel{}, err
 	}
 
-	items := make([]ConsoleTokenBlueprintReviewAggregateItem, 0, len(aggs))
-	for _, agg := range aggs {
-		tbName, brandName := q.resolveTokenBlueprintNameBrandName(ctx, agg.TokenBlueprintID)
+	items := make([]ConsoleTokenBlueprintReviewAggregateItem, 0, len(aggregates))
+	for _, aggregate := range aggregates {
+		tokenBlueprintName, brandName := q.resolveTokenBlueprintNameBrandName(ctx, aggregate.TokenBlueprintID)
 
 		items = append(items, ConsoleTokenBlueprintReviewAggregateItem{
-			TokenBlueprintReviewAggregate: agg,
-			TokenBlueprintName:            tbName,
-			BrandName:                     brandName,
+			TokenBlueprintID:     aggregate.TokenBlueprintID,
+			TokenBlueprintName:   tokenBlueprintName,
+			BrandName:            brandName,
+			LikeCount:            aggregate.LikeCount,
+			DislikeCount:         aggregate.DislikeCount,
+			TopLevelCommentCount: aggregate.TopLevelCommentCount,
+			TotalCommentCount:    aggregate.TotalCommentCount,
+			PinnedCommentID:      aggregate.PinnedCommentID,
+			CreatedAt:            formatRFC3339NanoUTC(aggregate.CreatedAt),
+			UpdatedAt:            formatRFC3339NanoUTC(aggregate.UpdatedAt),
 		})
 	}
 
-	return ConsoleTokenBlueprintReviewAggregateListReadModel{
-		Items: items,
-	}, nil
+	return ConsoleTokenBlueprintReviewAggregateListReadModel{Items: items}, nil
 }
 
 // ============================================================
@@ -235,40 +226,33 @@ func (q *TokenBlueprintReviewConsoleQuery) ListCommentsByTokenBlueprintID(
 	if err := q.validateConfigured(); err != nil {
 		return ConsoleTokenBlueprintCommentListReadModel{}, err
 	}
-
-	companyID := strings.TrimSpace(in.CompanyID)
-	if companyID == "" {
+	if in.CompanyID == "" {
 		return ConsoleTokenBlueprintCommentListReadModel{}, ErrConsoleCompanyIDRequired
 	}
-
-	tokenBlueprintID := strings.TrimSpace(in.TokenBlueprintID)
-	if tokenBlueprintID == "" {
+	if in.TokenBlueprintID == "" {
 		return ConsoleTokenBlueprintCommentListReadModel{}, ErrConsoleTokenBlueprintIDRequired
 	}
 
-	sort := normalizeCommentSort(in.Sort, common.SortDesc)
-	page := normalizePage(in.Page, 1, 200)
-
 	res, err := q.uc.ListComments(ctx, usecase.ListCommentsInput{
-		TokenBlueprintID: tokenBlueprintID,
-		SearchQuery:      strings.TrimSpace(in.SearchQuery),
+		TokenBlueprintID: in.TokenBlueprintID,
+		SearchQuery:      in.SearchQuery,
 		ParentCommentID:  in.ParentCommentID,
-		RootCommentID:    strings.TrimSpace(in.RootCommentID),
-		AuthorID:         strings.TrimSpace(in.AuthorID),
+		RootCommentID:    in.RootCommentID,
+		AuthorID:         in.AuthorID,
 		Deleted:          in.Deleted,
 		Depth:            in.Depth,
-		Sort:             sort,
-		Page:             page,
+		Sort:             normalizeCommentSort(in.Sort),
+		Page:             normalizePage(in.Page),
 	})
 	if err != nil {
 		return ConsoleTokenBlueprintCommentListReadModel{}, err
 	}
 
-	tbName, brandName := q.resolveTokenBlueprintNameBrandName(ctx, tokenBlueprintID)
+	tokenBlueprintName, brandName := q.resolveTokenBlueprintNameBrandName(ctx, in.TokenBlueprintID)
 
 	return ConsoleTokenBlueprintCommentListReadModel{
 		Items:              q.toCommentReadModels(res.Items),
-		TokenBlueprintName: tbName,
+		TokenBlueprintName: tokenBlueprintName,
 		BrandName:          brandName,
 		Page:               res.Page,
 		PerPage:            res.PerPage,
@@ -280,44 +264,39 @@ func (q *TokenBlueprintReviewConsoleQuery) ListCommentsByTokenBlueprintID(
 // Mapping
 // ============================================================
 
-func (q *TokenBlueprintReviewConsoleQuery) toCommentReadModels(
-	views []usecase.CommentView,
-) []ConsoleTokenBlueprintCommentReadModel {
+func (q *TokenBlueprintReviewConsoleQuery) toCommentReadModels(views []usecase.CommentView) []ConsoleTokenBlueprintCommentReadModel {
 	out := make([]ConsoleTokenBlueprintCommentReadModel, 0, len(views))
-	for _, v := range views {
-		out = append(out, q.ToCommentReadModel(v))
+	for _, view := range views {
+		out = append(out, q.ToCommentReadModel(view))
 	}
 	return out
 }
 
-func (q *TokenBlueprintReviewConsoleQuery) ToCommentReadModel(
-	view usecase.CommentView,
-) ConsoleTokenBlueprintCommentReadModel {
-	c := view.Comment
+func (q *TokenBlueprintReviewConsoleQuery) ToCommentReadModel(view usecase.CommentView) ConsoleTokenBlueprintCommentReadModel {
+	comment := view.Comment
 
 	return ConsoleTokenBlueprintCommentReadModel{
-		CommentID:        c.CommentID,
-		TokenBlueprintID: c.TokenBlueprintID,
-		ParentCommentID:  c.ParentCommentID,
-		RootCommentID:    c.RootCommentID,
-		Depth:            c.Depth,
-		AuthorID:         c.AuthorID,
-		AuthorType:       string(c.AuthorType),
+		CommentID:        comment.CommentID,
+		TokenBlueprintID: comment.TokenBlueprintID,
+		ParentCommentID:  comment.ParentCommentID,
+		RootCommentID:    comment.RootCommentID,
+		Depth:            comment.Depth,
 
+		AuthorID:         comment.AuthorID,
+		AuthorType:       string(comment.AuthorType),
 		AuthorAvatarName: view.AuthorAvatarName,
 		AuthorAvatarIcon: view.AuthorAvatarIcon,
 		BrandName:        view.BrandName,
 		BrandIcon:        view.BrandIcon,
-		IsOwnerComment:   c.IsOwnerComment,
+		IsOwnerComment:   comment.IsOwnerComment,
 
-		Body:         c.Body,
-		LikeCount:    c.LikeCount,
-		DislikeCount: c.DislikeCount,
-		ChildCount:   c.ChildCount,
-		Deleted:      c.Deleted,
-
-		CreatedAt: formatRFC3339NanoUTC(c.CreatedAt),
-		UpdatedAt: formatRFC3339NanoUTC(c.UpdatedAt),
+		Body:         comment.Body,
+		LikeCount:    comment.LikeCount,
+		DislikeCount: comment.DislikeCount,
+		ChildCount:   comment.ChildCount,
+		Deleted:      comment.Deleted,
+		CreatedAt:    formatRFC3339NanoUTC(comment.CreatedAt),
+		UpdatedAt:    formatRFC3339NanoUTC(comment.UpdatedAt),
 	}
 }
 
@@ -329,7 +308,6 @@ func (q *TokenBlueprintReviewConsoleQuery) resolveTokenBlueprintNameBrandName(
 	ctx context.Context,
 	tokenBlueprintID string,
 ) (tokenBlueprintName string, brandName string) {
-	tokenBlueprintID = strings.TrimSpace(tokenBlueprintID)
 	if tokenBlueprintID == "" || q == nil || q.uc == nil {
 		return "", ""
 	}
@@ -353,16 +331,13 @@ func (q *TokenBlueprintReviewConsoleQuery) validateConfigured() error {
 	return nil
 }
 
-func normalizeCommentSort(sort common.Sort, fallbackOrder common.SortOrder) common.Sort {
-	column := strings.TrimSpace(sort.Column)
+func normalizeCommentSort(sort common.Sort) common.Sort {
+	column := sort.Column
 	if column == "" {
 		column = "createdAt"
 	}
 
-	order := common.SortOrder(strings.ToLower(strings.TrimSpace(string(sort.Order))))
-	if order != common.SortAsc && order != common.SortDesc {
-		order = fallbackOrder
-	}
+	order := common.SortOrder(strings.ToLower(string(sort.Order)))
 	if order != common.SortAsc && order != common.SortDesc {
 		order = common.SortDesc
 	}
@@ -373,19 +348,13 @@ func normalizeCommentSort(sort common.Sort, fallbackOrder common.SortOrder) comm
 	}
 }
 
-func normalizePage(page common.Page, fallbackNumber int, fallbackPerPage int) common.Page {
+func normalizePage(page common.Page) common.Page {
 	number := page.Number
-	if number <= 0 {
-		number = fallbackNumber
-	}
 	if number <= 0 {
 		number = 1
 	}
 
 	perPage := page.PerPage
-	if perPage <= 0 {
-		perPage = fallbackPerPage
-	}
 	if perPage <= 0 {
 		perPage = 200
 	}

@@ -1,4 +1,4 @@
-// frontend/console/tokenBlueprintReview/src/application/tokenBlueprintReviewDetailService.tsx
+// frontend/console/shell/src/features/tokenBlueprintReview/application/tokenBlueprintReviewDetailService.tsx
 
 import type { TokenBlueprint } from "../../../shared/types/tokenBlueprint";
 import type {
@@ -9,7 +9,7 @@ import type {
 
 import {
   listTokenBlueprintCommentsByTokenBlueprintId,
-  listTokenBlueprintReviewAggregatesByCompanyId,
+  listTokenBlueprintReviewAggregates,
   createBrandComment,
   createBrandReply,
   deleteBrandComment,
@@ -19,51 +19,55 @@ import {
 import { fetchTokenBlueprintById } from "../../tokenBlueprint/infrastructure/repository/tokenBlueprintRepositoryHTTP";
 
 /**
- * 詳細取得（リポジトリのラッパー）
- * - review 側では「tokenBlueprintReviewId = tokenBlueprintId（docId同一）」前提で取得する
+ * 詳細取得。
+ * tokenBlueprintReviewId = tokenBlueprintId を前提とする。
  */
 export async function fetchTokenBlueprintReviewDetail(id: string): Promise<TokenBlueprint> {
   if (!id) {
-    throw new Error("id is empty");
+    throw new Error("id is required");
   }
+
   return fetchTokenBlueprintById(id);
 }
 
 /**
- * detail 用 comments 取得
- *
- * NOTE:
- * - 親コメントと reply 表示のため、backend / repository 側では
- *   top-level のみではなく reply を含む comments 全件を返す必要がある。
+ * detail 用 comments 取得。
+ * backend BFF は top-level comment と replies を含む comments 全件を返す。
  */
 export async function fetchTokenBlueprintCommentsForDetail(
   tokenBlueprintId: string,
-): Promise<{ items: Comment[]; tokenBlueprintName?: string; brandName?: string }> {
-  if (!tokenBlueprintId) return { items: [] };
+): Promise<{
+  items: Comment[];
+  tokenBlueprintName: string;
+  brandName: string;
+  page?: number;
+  perPage?: number;
+  totalCount?: number;
+}> {
+  if (!tokenBlueprintId) {
+    throw new Error("tokenBlueprintId is required");
+  }
 
   return listTokenBlueprintCommentsByTokenBlueprintId(tokenBlueprintId);
 }
 
 /**
- * detail 用 aggregate（companyId から一覧取得して該当IDを抽出）
- * backend: GET /token-blueprint-reviews
- *
- * NOTE:
- * - backend は companyId を auth context で見ている前提だが、
- *   既存実装に合わせて companyId を「呼び出しトリガ」として受け取る。
+ * detail 用 aggregate 取得。
+ * backend は companyId を認証 context から解決する。
  */
 export async function fetchTokenBlueprintAggregateForDetail(
-  companyId: string,
   tokenBlueprintId: string,
 ): Promise<TokenBlueprintReviewAggregate | null> {
-  if (!companyId || !tokenBlueprintId) return null;
+  if (!tokenBlueprintId) {
+    throw new Error("tokenBlueprintId is required");
+  }
 
-  const rows = await listTokenBlueprintReviewAggregatesByCompanyId(companyId);
-  return rows.find((r) => r.tokenBlueprintId === tokenBlueprintId) ?? null;
+  const rows = await listTokenBlueprintReviewAggregates();
+  return rows.find((row) => row.tokenBlueprintId === tokenBlueprintId) ?? null;
 }
 
 /**
- * brand 側 top-level comment 作成
+ * brand 側 top-level comment 作成。
  */
 export async function postBrandComment(
   tokenBlueprintId: string,
@@ -77,7 +81,7 @@ export async function postBrandComment(
 }
 
 /**
- * brand 側 reply 作成
+ * brand 側 reply 作成。
  */
 export async function postBrandReply(
   tokenBlueprintId: string,
@@ -91,7 +95,7 @@ export async function postBrandReply(
 }
 
 /**
- * brand 側 comment 削除
+ * brand 側 comment 削除。
  */
 export async function removeBrandComment(
   tokenBlueprintId: string,
@@ -101,7 +105,7 @@ export async function removeBrandComment(
 }
 
 /**
- * brand 側 comment reaction
+ * brand 側 comment reaction。
  */
 export async function reactBrandToComment(
   tokenBlueprintId: string,

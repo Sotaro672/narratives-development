@@ -1,4 +1,4 @@
-// frontend/console/tokenBlueprintReview/presentation/hook/use_tokenBlueprintReviewDetail.tsx
+// frontend/console/shell/src/features/tokenBlueprintReview/presentation/hook/use_tokenBlueprintReviewDetail.tsx
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -28,17 +28,13 @@ type UseTokenBlueprintReviewDetailVM = {
   blueprint: TokenBlueprint | null;
   title: string;
   assigneeName: string;
-
   createdByName: string;
   createdAt: string;
   updatedByName: string;
   updatedAt: string;
-
   tokenContents: ContentFile[];
-
   reviewAggregate: TokenBlueprintReviewAggregate | null;
   comments: Comment[];
-
   loading: boolean;
   submitting: boolean;
 };
@@ -81,40 +77,34 @@ export function useTokenBlueprintReviewDetail(): UseTokenBlueprintReviewDetailRe
   const [reviewAggregate, setReviewAggregate] =
     useState<TokenBlueprintReviewAggregate | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [submitting, setSubmitting] = useState<boolean>(false);
-  const [assignee, setAssignee] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const reload = useCallback(async () => {
-    const id = tokenBlueprintReviewId ?? "";
-    if (!id) return;
+  const reload = useCallback(async (): Promise<void> => {
+    if (!tokenBlueprintReviewId) {
+      return;
+    }
 
     setLoading(true);
 
     try {
-      const tb = await fetchTokenBlueprintReviewDetail(id);
+      const tb = await fetchTokenBlueprintReviewDetail(tokenBlueprintReviewId);
       setBlueprint(tb);
 
-      const assigneeName = tb.assigneeName || tb.assigneeId || "";
-      setAssignee((prev) => prev || assigneeName);
-
-      if (tb.companyId) {
-        try {
-          const agg = await fetchTokenBlueprintAggregateForDetail(
-            tb.companyId,
-            id,
-          );
-          setReviewAggregate(agg);
-        } catch {
-          setReviewAggregate(null);
-        }
-      } else {
+      try {
+        const aggregate = await fetchTokenBlueprintAggregateForDetail(
+          tokenBlueprintReviewId,
+        );
+        setReviewAggregate(aggregate);
+      } catch {
         setReviewAggregate(null);
       }
 
       try {
-        const res = await fetchTokenBlueprintCommentsForDetail(id);
-        setComments(res.items);
+        const result = await fetchTokenBlueprintCommentsForDetail(
+          tokenBlueprintReviewId,
+        );
+        setComments(result.items);
       } catch {
         setComments([]);
       }
@@ -129,22 +119,6 @@ export function useTokenBlueprintReviewDetail(): UseTokenBlueprintReviewDetailRe
     void reload();
   }, [reload]);
 
-  const createdByName = useMemo(() => {
-    return blueprint?.createdByName || blueprint?.createdBy || "";
-  }, [blueprint]);
-
-  const updatedByName = useMemo(() => {
-    return blueprint?.updatedByName || blueprint?.updatedBy || "";
-  }, [blueprint]);
-
-  const createdAt = useMemo(() => {
-    return blueprint?.createdAt || "";
-  }, [blueprint]);
-
-  const updatedAt = useMemo(() => {
-    return blueprint?.updatedAt || "";
-  }, [blueprint]);
-
   const tokenContents = useMemo<ContentFile[]>(() => {
     return toTokenContents(blueprint?.contentFiles ?? []);
   }, [blueprint]);
@@ -157,17 +131,19 @@ export function useTokenBlueprintReviewDetail(): UseTokenBlueprintReviewDetailRe
     async (
       body: string,
       options?: { commentId?: string; parentCommentId?: string },
-    ) => {
-      const id = tokenBlueprintReviewId ?? "";
-      if (!id) {
-        throw new Error("tokenBlueprintReviewId is empty");
+    ): Promise<Comment> => {
+      if (!tokenBlueprintReviewId) {
+        throw new Error("tokenBlueprintReviewId is required");
       }
 
       setSubmitting(true);
 
       try {
-        const created = await postBrandComment(id, body, options);
-        setComments((prev) => [created, ...prev]);
+        const created = await postBrandComment(
+          tokenBlueprintReviewId,
+          body,
+          options,
+        );
         await reload();
         return created;
       } finally {
@@ -182,17 +158,16 @@ export function useTokenBlueprintReviewDetail(): UseTokenBlueprintReviewDetailRe
       parentCommentId: string,
       body: string,
       options?: { commentId?: string },
-    ) => {
-      const id = tokenBlueprintReviewId ?? "";
-      if (!id) {
-        throw new Error("tokenBlueprintReviewId is empty");
+    ): Promise<Comment> => {
+      if (!tokenBlueprintReviewId) {
+        throw new Error("tokenBlueprintReviewId is required");
       }
 
       setSubmitting(true);
 
       try {
         const created = await postBrandReply(
-          id,
+          tokenBlueprintReviewId,
           parentCommentId,
           body,
           options,
@@ -207,16 +182,15 @@ export function useTokenBlueprintReviewDetail(): UseTokenBlueprintReviewDetailRe
   );
 
   const handleDeleteComment = useCallback(
-    async (commentId: string) => {
-      const id = tokenBlueprintReviewId ?? "";
-      if (!id) {
-        throw new Error("tokenBlueprintReviewId is empty");
+    async (commentId: string): Promise<void> => {
+      if (!tokenBlueprintReviewId) {
+        throw new Error("tokenBlueprintReviewId is required");
       }
 
       setSubmitting(true);
 
       try {
-        await removeBrandComment(id, commentId);
+        await removeBrandComment(tokenBlueprintReviewId, commentId);
         await reload();
       } finally {
         setSubmitting(false);
@@ -226,21 +200,29 @@ export function useTokenBlueprintReviewDetail(): UseTokenBlueprintReviewDetailRe
   );
 
   const handleReactToComment = useCallback(
-    async (commentId: string, type: ReactionType) => {
-      const id = tokenBlueprintReviewId ?? "";
-      if (!id) {
-        throw new Error("tokenBlueprintReviewId is empty");
+    async (
+      commentId: string,
+      type: ReactionType,
+    ): Promise<Comment> => {
+      if (!tokenBlueprintReviewId) {
+        throw new Error("tokenBlueprintReviewId is required");
       }
 
       setSubmitting(true);
 
       try {
-        const updated = await reactBrandToComment(id, commentId, type);
-        setComments((prev) =>
-          prev.map((comment) =>
+        const updated = await reactBrandToComment(
+          tokenBlueprintReviewId,
+          commentId,
+          type,
+        );
+
+        setComments((current) =>
+          current.map((comment) =>
             comment.commentId === updated.commentId ? updated : comment,
           ),
         );
+
         return updated;
       } finally {
         setSubmitting(false);
@@ -252,21 +234,14 @@ export function useTokenBlueprintReviewDetail(): UseTokenBlueprintReviewDetailRe
   const vm: UseTokenBlueprintReviewDetailVM = {
     blueprint,
     title: "トークン設計レビュー",
-    assigneeName:
-      assignee ||
-      blueprint?.assigneeName ||
-      blueprint?.assigneeId ||
-      "",
-
-    createdByName,
-    createdAt,
-    updatedByName,
-    updatedAt,
-
+    assigneeName: blueprint?.assigneeName ?? "",
+    createdByName: blueprint?.createdByName ?? "",
+    createdAt: blueprint?.createdAt ?? "",
+    updatedByName: blueprint?.updatedByName ?? "",
+    updatedAt: blueprint?.updatedAt ?? "",
     tokenContents,
     reviewAggregate,
     comments,
-
     loading,
     submitting,
   };

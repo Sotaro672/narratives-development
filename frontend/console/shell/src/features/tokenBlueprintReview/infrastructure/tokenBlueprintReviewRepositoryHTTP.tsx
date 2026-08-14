@@ -1,19 +1,10 @@
-// frontend/console/tokenBlueprintReview/src/infrastructure/tokenBlueprintReviewRepositoryHTTP.tsx
+// frontend/console/shell/src/features/tokenBlueprintReview/infrastructure/tokenBlueprintReviewRepositoryHTTP.tsx
+
 import type {
   TokenBlueprintReviewAggregate,
   Comment,
   ReactionType,
 } from "../../../shared/types/tokenBlueprintReview";
-
-import type {
-  ApiTokenBlueprintReviewAggregate,
-  ApiComment,
-} from "./apiTypes";
-
-import {
-  fromApiTokenBlueprintReviewAggregate,
-  fromApiComment,
-} from "./mappers";
 
 import { API_BASE } from "../../../shared/http/apiBase";
 import { getAuthJsonHeaders } from "../../../shared/http/authHeaders";
@@ -21,64 +12,67 @@ import { getAuthJsonHeaders } from "../../../shared/http/authHeaders";
 /**
  * console(brand) 用 TokenBlueprintReview HTTP repository
  *
- * 役割:
- * - aggregate 一覧取得
- * - comments 一覧取得
- * - brand からの comment / reply / comment reaction
+ * backend BFF の response を正とし、
+ * frontend 側では mapper / normalizer / alias を持たない。
  */
 
 async function apiGetJson<T>(path: string): Promise<T> {
   const headers = await getAuthJsonHeaders();
-
-  const res = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${API_BASE}${path}`, {
     method: "GET",
-    headers: {
-      ...headers,
-      Accept: "application/json",
-    },
+    headers: { ...headers, Accept: "application/json" },
     credentials: "include",
   });
 
-  const text = await res.text().catch(() => "");
-  if (!res.ok) {
-    throw new Error(text || `GET ${path} failed: ${res.status}`);
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(text || `GET ${path} failed: ${response.status}`);
+  }
+  if (!text) {
+    throw new Error(`GET ${path} returned an empty response`);
   }
 
-  if (!text) return {} as T;
-
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new Error(text);
-  }
+  return JSON.parse(text) as T;
 }
 
-async function apiSendJson<T>(method: "POST" | "DELETE", path: string, body?: unknown): Promise<T> {
+async function apiPostJson<T>(path: string, body: unknown): Promise<T> {
   const headers = await getAuthJsonHeaders();
-
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
     headers: {
       ...headers,
       Accept: "application/json",
-      ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
+      "Content-Type": "application/json",
     },
-    body: method === "POST" ? JSON.stringify(body ?? {}) : undefined,
+    body: JSON.stringify(body),
     credentials: "include",
   });
 
-  const text = await res.text().catch(() => "");
-  if (!res.ok) {
-    throw new Error(text || `${method} ${path} failed: ${res.status}`);
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(text || `POST ${path} failed: ${response.status}`);
+  }
+  if (!text) {
+    throw new Error(`POST ${path} returned an empty response`);
   }
 
-  if (!text) return {} as T;
+  return JSON.parse(text) as T;
+}
 
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new Error(text);
+async function apiDelete(path: string): Promise<void> {
+  const headers = await getAuthJsonHeaders();
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "DELETE",
+    headers: { ...headers, Accept: "application/json" },
+    credentials: "include",
+  });
+
+  if (response.ok) {
+    return;
   }
+
+  const text = await response.text();
+  throw new Error(text || `DELETE ${path} failed: ${response.status}`);
 }
 
 // ============================================================
@@ -86,21 +80,20 @@ async function apiSendJson<T>(method: "POST" | "DELETE", path: string, body?: un
 // ============================================================
 
 type ListTokenBlueprintReviewAggregatesResponse = {
-  items: ApiTokenBlueprintReviewAggregate[];
+  items: TokenBlueprintReviewAggregate[];
 };
 
 export type ListTokenBlueprintCommentsResponse = {
-  items: ApiComment[];
-  tokenBlueprintName?: string;
-  brandName?: string;
+  items: Comment[];
+  tokenBlueprintName: string;
+  brandName: string;
+  page?: number;
+  perPage?: number;
+  totalCount?: number;
 };
 
-type CreateBrandCommentResponse = {
-  item: ApiComment;
-};
-
-type ReactToCommentResponse = {
-  item: ApiComment;
+type CommentResponse = {
+  item: Comment;
 };
 
 // ============================================================
@@ -123,21 +116,18 @@ type ReactAsBrandRequest = {
 
 /**
  * backend: GET /token-blueprint-reviews
+ *
+ * companyId は backend の認証 context から解決する。
  */
-export async function listTokenBlueprintReviewAggregatesByCompanyId(
-  _companyId: string,
-): Promise<TokenBlueprintReviewAggregate[]> {
-  const data = await apiGetJson<ListTokenBlueprintReviewAggregatesResponse>(
-    "/token-blueprint-reviews",
-  );
+export async function listTokenBlueprintReviewAggregates(): Promise<
+  TokenBlueprintReviewAggregate[]
+> {
+  const response =
+    await apiGetJson<ListTokenBlueprintReviewAggregatesResponse>(
+      "/token-blueprint-reviews",
+    );
 
-  const rawItems = Array.isArray((data as { items?: unknown[] })?.items)
-    ? ((data as { items?: unknown[] }).items ?? [])
-    : [];
-
-  return (rawItems as ApiTokenBlueprintReviewAggregate[]).map(
-    fromApiTokenBlueprintReviewAggregate,
-  );
+  return response.items;
 }
 
 // ============================================================
@@ -147,39 +137,19 @@ export async function listTokenBlueprintReviewAggregatesByCompanyId(
 /**
  * backend: GET /token-blueprint-reviews/{tokenBlueprintId}/comments
  *
- * IMPORTANT:
- * - この関数は detail 表示用に top-level + replies を含む全 comments を返す前提。
- * - backend が top-level のみ返す実装のままだと reply は画面表示できない。
+ * detail 表示用に top-level comment と replies を含む
+ * comments 全件を取得する。
  */
 export async function listTokenBlueprintCommentsByTokenBlueprintId(
   tokenBlueprintId: string,
-): Promise<{
-  items: Comment[];
-  tokenBlueprintName?: string;
-  brandName?: string;
-}> {
-  const id = String(tokenBlueprintId || "");
-  if (!id) return { items: [] };
+): Promise<ListTokenBlueprintCommentsResponse> {
+  if (!tokenBlueprintId) {
+    throw new Error("tokenBlueprintId is required");
+  }
 
-  const data = await apiGetJson<ListTokenBlueprintCommentsResponse>(
-    `/token-blueprint-reviews/${encodeURIComponent(id)}/comments`,
+  return apiGetJson<ListTokenBlueprintCommentsResponse>(
+    `/token-blueprint-reviews/${encodeURIComponent(tokenBlueprintId)}/comments`,
   );
-
-  const rawItems = Array.isArray((data as { items?: unknown[] })?.items)
-    ? ((data as { items?: unknown[] }).items ?? [])
-    : [];
-
-  return {
-    items: (rawItems as ApiComment[]).map(fromApiComment),
-    tokenBlueprintName:
-      data?.tokenBlueprintName != null && String(data.tokenBlueprintName) !== ""
-        ? String(data.tokenBlueprintName)
-        : undefined,
-    brandName:
-      data?.brandName != null && String(data.brandName) !== ""
-        ? String(data.brandName)
-        : undefined,
-  };
 }
 
 /**
@@ -193,33 +163,27 @@ export async function createBrandComment(
     parentCommentId?: string;
   },
 ): Promise<Comment> {
-  const id = String(tokenBlueprintId || "").trim();
-  const content = String(body || "").trim();
-
-  if (!id) {
+  if (!tokenBlueprintId) {
     throw new Error("tokenBlueprintId is required");
   }
-  if (!content) {
+  if (!body) {
     throw new Error("body is required");
   }
 
-  const req: CreateBrandCommentRequest = {
-    body: content,
+  const request: CreateBrandCommentRequest = {
+    body,
     ...(options?.commentId ? { commentId: options.commentId } : {}),
-    ...(options?.parentCommentId ? { parentCommentId: options.parentCommentId } : {}),
+    ...(options?.parentCommentId
+      ? { parentCommentId: options.parentCommentId }
+      : {}),
   };
 
-  const data = await apiSendJson<CreateBrandCommentResponse>(
-    "POST",
-    `/token-blueprint-reviews/${encodeURIComponent(id)}/comments`,
-    req,
+  const response = await apiPostJson<CommentResponse>(
+    `/token-blueprint-reviews/${encodeURIComponent(tokenBlueprintId)}/comments`,
+    request,
   );
 
-  if (!data?.item) {
-    throw new Error("comment response item is missing");
-  }
-
-  return fromApiComment(data.item);
+  return response.item;
 }
 
 /**
@@ -233,36 +197,27 @@ export async function createBrandReply(
     commentId?: string;
   },
 ): Promise<Comment> {
-  const id = String(tokenBlueprintId || "").trim();
-  const parentId = String(parentCommentId || "").trim();
-  const content = String(body || "").trim();
-
-  if (!id) {
+  if (!tokenBlueprintId) {
     throw new Error("tokenBlueprintId is required");
   }
-  if (!parentId) {
+  if (!parentCommentId) {
     throw new Error("parentCommentId is required");
   }
-  if (!content) {
+  if (!body) {
     throw new Error("body is required");
   }
 
-  const req: CreateBrandCommentRequest = {
-    body: content,
+  const request: CreateBrandCommentRequest = {
+    body,
     ...(options?.commentId ? { commentId: options.commentId } : {}),
   };
 
-  const data = await apiSendJson<CreateBrandCommentResponse>(
-    "POST",
-    `/token-blueprint-reviews/${encodeURIComponent(id)}/comments/${encodeURIComponent(parentId)}/replies`,
-    req,
+  const response = await apiPostJson<CommentResponse>(
+    `/token-blueprint-reviews/${encodeURIComponent(tokenBlueprintId)}/comments/${encodeURIComponent(parentCommentId)}/replies`,
+    request,
   );
 
-  if (!data?.item) {
-    throw new Error("reply response item is missing");
-  }
-
-  return fromApiComment(data.item);
+  return response.item;
 }
 
 /**
@@ -272,19 +227,15 @@ export async function deleteBrandComment(
   tokenBlueprintId: string,
   commentId: string,
 ): Promise<void> {
-  const id = String(tokenBlueprintId || "").trim();
-  const cid = String(commentId || "").trim();
-
-  if (!id) {
+  if (!tokenBlueprintId) {
     throw new Error("tokenBlueprintId is required");
   }
-  if (!cid) {
+  if (!commentId) {
     throw new Error("commentId is required");
   }
 
-  await apiSendJson<void>(
-    "DELETE",
-    `/token-blueprint-reviews/${encodeURIComponent(id)}/comments/${encodeURIComponent(cid)}`,
+  await apiDelete(
+    `/token-blueprint-reviews/${encodeURIComponent(tokenBlueprintId)}/comments/${encodeURIComponent(commentId)}`,
   );
 }
 
@@ -300,25 +251,18 @@ export async function reactToCommentAsBrand(
   commentId: string,
   type: ReactionType,
 ): Promise<Comment> {
-  const id = String(tokenBlueprintId || "").trim();
-  const cid = String(commentId || "").trim();
-
-  if (!id) {
+  if (!tokenBlueprintId) {
     throw new Error("tokenBlueprintId is required");
   }
-  if (!cid) {
+  if (!commentId) {
     throw new Error("commentId is required");
   }
 
-  const data = await apiSendJson<ReactToCommentResponse>(
-    "POST",
-    `/token-blueprint-reviews/${encodeURIComponent(id)}/comments/${encodeURIComponent(cid)}/reactions`,
-    { type } satisfies ReactAsBrandRequest,
+  const request: ReactAsBrandRequest = { type };
+  const response = await apiPostJson<CommentResponse>(
+    `/token-blueprint-reviews/${encodeURIComponent(tokenBlueprintId)}/comments/${encodeURIComponent(commentId)}/reactions`,
+    request,
   );
 
-  if (!data?.item) {
-    throw new Error("comment reaction response item is missing");
-  }
-
-  return fromApiComment(data.item);
+  return response.item;
 }

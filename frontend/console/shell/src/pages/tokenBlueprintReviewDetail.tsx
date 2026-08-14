@@ -42,44 +42,26 @@ export default function TokenBlueprintReviewDetail() {
     reactToComment,
   } = handlers;
 
-  const tokenBlueprintName = String(
-    blueprint?.name ?? "",
-  );
-
-  const likeCount = Number(
-    reviewAggregate?.likeCount ?? 0,
-  );
-
-  const dislikeCount = Number(
-    reviewAggregate?.dislikeCount ?? 0,
-  );
-
-  const reviewCount = Number(
-    reviewAggregate?.topLevelCommentCount ?? 0,
-  );
+  const tokenBlueprintName = blueprint?.name ?? "";
+  const likeCount = reviewAggregate?.likeCount ?? 0;
+  const dislikeCount = reviewAggregate?.dislikeCount ?? 0;
+  const reviewCount = reviewAggregate?.topLevelCommentCount ?? 0;
 
   const reviewList = useMemo<Comment[]>(() => {
-    return comments.filter(
-      (comment) => Number(comment.depth ?? 0) === 0,
-    );
+    return comments.filter((comment) => comment.depth === 0);
   }, [comments]);
 
   const repliesByParentId = useMemo(() => {
     const map = new Map<string, Comment[]>();
 
     for (const comment of comments) {
-      const depth = Number(comment.depth ?? 0);
-      const parentId = String(
-        comment.parentCommentId ?? "",
-      );
-
-      if (depth <= 0 || parentId === "") {
+      if (comment.depth <= 0 || !comment.parentCommentId) {
         continue;
       }
 
-      const current = map.get(parentId) ?? [];
+      const current = map.get(comment.parentCommentId) ?? [];
       current.push(comment);
-      map.set(parentId, current);
+      map.set(comment.parentCommentId, current);
     }
 
     return map;
@@ -102,17 +84,11 @@ export default function TokenBlueprintReviewDetail() {
   return (
     <PageStyle
       layout="grid-2"
-      title={
-        tokenBlueprintName ||
-        "トークンレビュー"
-      }
+      title={tokenBlueprintName || "トークンレビュー"}
       onBack={onBack}
     >
       <div>
-        <TokenContentsCard
-          mode="view"
-          contents={tokenContents}
-        />
+        <TokenContentsCard mode="view" contents={tokenContents} />
 
         <div className="tbrd-reviewcard-wrapper">
           <ReviewAggregateCard
@@ -141,13 +117,9 @@ export default function TokenBlueprintReviewDetail() {
             <Button
               type="button"
               size="sm"
-              disabled={
-                submitting ||
-                commentBody.trim().length === 0
-              }
+              disabled={submitting || commentBody.trim().length === 0}
               onClick={async () => {
                 const body = commentBody.trim();
-
                 await createComment(body);
                 setCommentBody("");
               }}
@@ -168,47 +140,23 @@ export default function TokenBlueprintReviewDetail() {
             </div>
           ) : (
             <div className="tbrd-grid">
-              {reviewList.map(
-                (review, index) => (
-                  <ReviewCard
-                    key={String(
-                      review.commentId ??
-                        `cm_${index}`,
-                    )}
-                    item={review}
-                    repliesByParentId={
-                      repliesByParentId
-                    }
-                    fallbackIndex={index}
-                    submitting={submitting}
-                    onReply={async (
-                      parentCommentId,
-                      body,
-                    ) => {
-                      await createReply(
-                        parentCommentId,
-                        body,
-                      );
-                    }}
-                    onDelete={async (
-                      commentId,
-                    ) => {
-                      await deleteComment(
-                        commentId,
-                      );
-                    }}
-                    onReact={async (
-                      commentId,
-                      type,
-                    ) => {
-                      await reactToComment(
-                        commentId,
-                        type,
-                      );
-                    }}
-                  />
-                ),
-              )}
+              {reviewList.map((review) => (
+                <ReviewCard
+                  key={review.commentId}
+                  item={review}
+                  repliesByParentId={repliesByParentId}
+                  submitting={submitting}
+                  onReply={async (parentCommentId, body) => {
+                    await createReply(parentCommentId, body);
+                  }}
+                  onDelete={async (commentId) => {
+                    await deleteComment(commentId);
+                  }}
+                  onReact={async (commentId, type) => {
+                    await reactToComment(commentId, type);
+                  }}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -219,15 +167,9 @@ export default function TokenBlueprintReviewDetail() {
           title="管理情報"
           assigneeName={assigneeName}
           createdByName={createdByName}
-          createdAt={safeDateTimeLabelJa(
-            createdAt,
-            createdAt || "-",
-          )}
+          createdAt={safeDateTimeLabelJa(createdAt, "-")}
           updatedByName={updatedByName}
-          updatedAt={safeDateTimeLabelJa(
-            updatedAt,
-            updatedAt || "-",
-          )}
+          updatedAt={safeDateTimeLabelJa(updatedAt, "-")}
         />
 
         <LogCard title="更新ログ" />

@@ -12,7 +12,6 @@ import { Button } from "../../../../shared/ui/button";
 type ReviewCardProps = {
   item: Comment;
   repliesByParentId?: Map<string, Comment[]>;
-  fallbackIndex?: number;
   submitting?: boolean;
   onReply?: (
     parentCommentId: string,
@@ -30,55 +29,36 @@ type ReviewCardProps = {
 export default function ReviewCard({
   item,
   repliesByParentId,
-  fallbackIndex = 0,
   submitting = false,
   onReply,
   onDelete,
   onReact,
 }: ReviewCardProps) {
-  const [isReplyFormOpen, setIsReplyFormOpen] =
-    useState(false);
-  const [isRepliesOpen, setIsRepliesOpen] =
-    useState(false);
+  const [isReplyFormOpen, setIsReplyFormOpen] = useState(false);
+  const [isRepliesOpen, setIsRepliesOpen] = useState(false);
   const [replyBody, setReplyBody] = useState("");
-  const [isSubmittingReply, setIsSubmittingReply] =
-    useState(false);
-  const [isSubmittingDelete, setIsSubmittingDelete] =
-    useState(false);
-  const [
-    isSubmittingReaction,
-    setIsSubmittingReaction,
-  ] = useState(false);
+  const [isSubmittingReply, setIsSubmittingReply] = useState(false);
+  const [isSubmittingDelete, setIsSubmittingDelete] = useState(false);
+  const [isSubmittingReaction, setIsSubmittingReaction] = useState(false);
 
-  const commentId = String(
-    item.commentId ?? `cm_${fallbackIndex}`,
-  );
-  const body = String(item.body ?? "");
+  const {
+    commentId,
+    body,
+    authorId,
+    authorType,
+    authorAvatarName,
+    authorAvatarIcon,
+    brandName,
+    brandIcon,
+    likeCount,
+    dislikeCount,
+    childCount,
+    createdAt,
+    deleted,
+    isOwnerComment,
+  } = item;
 
-  const authorId = String(item.authorId ?? "");
-  const authorType = String(item.authorType ?? "");
-  const authorAvatarName = String(
-    item.authorAvatarName ?? "",
-  );
-  const authorAvatarIcon = String(
-    item.authorAvatarIcon ?? "",
-  );
-  const brandName = String(item.brandName ?? "");
-  const brandIcon = String(item.brandIcon ?? "");
-
-  const likeCount = Number(item.likeCount ?? 0);
-  const dislikeCount = Number(item.dislikeCount ?? 0);
-  const childCount = Number(item.childCount ?? 0);
-
-  const createdAt = safeDateTimeLabelJa(
-    item.createdAt ?? null,
-    "-",
-  );
-
-  const deleted = Boolean(item.deleted ?? false);
-  const isOwnerComment = Boolean(
-    item.isOwnerComment ?? false,
-  );
+  const createdAtLabel = safeDateTimeLabelJa(createdAt, "-");
 
   const authorPrimary =
     authorType === "brand"
@@ -96,17 +76,16 @@ export default function ReviewCard({
     isSubmittingDelete ||
     isSubmittingReaction;
 
-  const canInteract =
-    !deleted && commentId !== "";
+  const canInteract = !deleted;
 
   const canDelete =
     canInteract &&
     authorType === "brand" &&
     isOwnerComment &&
-    Boolean(onDelete);
+    onDelete !== undefined;
 
   const replies = useMemo(() => {
-    if (!repliesByParentId || commentId === "") {
+    if (!repliesByParentId) {
       return [];
     }
 
@@ -114,31 +93,11 @@ export default function ReviewCard({
   }, [repliesByParentId, commentId]);
 
   const sortedReplies = useMemo(() => {
-    return [...replies].sort((a, b) => {
-      const leftTimestamp = Date.parse(
-        String(a.createdAt ?? ""),
-      );
-      const rightTimestamp = Date.parse(
-        String(b.createdAt ?? ""),
-      );
-
-      if (
-        Number.isNaN(leftTimestamp) &&
-        Number.isNaN(rightTimestamp)
-      ) {
-        return 0;
-      }
-
-      if (Number.isNaN(leftTimestamp)) {
-        return -1;
-      }
-
-      if (Number.isNaN(rightTimestamp)) {
-        return 1;
-      }
-
-      return leftTimestamp - rightTimestamp;
-    });
+    return [...replies].sort(
+      (a, b) =>
+        Date.parse(a.createdAt) -
+        Date.parse(b.createdAt),
+    );
   }, [replies]);
 
   const toggleReplyForm = () => {
@@ -183,9 +142,7 @@ export default function ReviewCard({
 
     try {
       setIsSubmittingReply(true);
-
       await onReply(commentId, content);
-
       setReplyBody("");
       setIsReplyFormOpen(false);
       setIsRepliesOpen(true);
@@ -247,15 +204,14 @@ export default function ReviewCard({
 
         <span>{authorPrimary}</span>
 
-        {authorType === "brand" &&
-        isOwnerComment ? (
+        {authorType === "brand" && isOwnerComment ? (
           <span className="inline-flex items-center rounded-full border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600">
             投稿者
           </span>
         ) : null}
 
         <span className="tbrd-created-at">
-          {createdAt}
+          {createdAtLabel}
         </span>
       </div>
 
@@ -278,10 +234,7 @@ export default function ReviewCard({
             void handleReaction("like");
           }}
         >
-          👍{" "}
-          {Number.isFinite(likeCount)
-            ? likeCount
-            : 0}
+          👍 {likeCount}
         </Button>
 
         <Button
@@ -294,10 +247,7 @@ export default function ReviewCard({
             void handleReaction("dislike");
           }}
         >
-          👎{" "}
-          {Number.isFinite(dislikeCount)
-            ? dislikeCount
-            : 0}
+          👎 {dislikeCount}
         </Button>
 
         <Button
@@ -313,8 +263,7 @@ export default function ReviewCard({
             : "返信"}
         </Button>
 
-        {childCount > 0 ||
-        sortedReplies.length > 0 ? (
+        {childCount > 0 || sortedReplies.length > 0 ? (
           <Button
             type="button"
             variant="outline"
@@ -324,16 +273,8 @@ export default function ReviewCard({
             onClick={toggleRepliesAccordion}
           >
             {isRepliesOpen
-              ? `返信を隠す (${
-                  Number.isFinite(childCount)
-                    ? childCount
-                    : sortedReplies.length
-                })`
-              : `返信を表示 (${
-                  Number.isFinite(childCount)
-                    ? childCount
-                    : sortedReplies.length
-                })`}
+              ? `返信を隠す (${childCount})`
+              : `返信を表示 (${childCount})`}
           </Button>
         ) : null}
 
@@ -358,21 +299,16 @@ export default function ReviewCard({
       </div>
 
       <div className="tbrd-meta-row">
-        <span>
-          返信数:{" "}
-          {Number.isFinite(childCount)
-            ? childCount
-            : 0}
-        </span>
+        <span>返信数: {childCount}</span>
       </div>
 
       {isReplyFormOpen ? (
         <div className="mt-3 border-t border-slate-200 pt-3">
           <textarea
             value={replyBody}
-            onChange={(event) =>
-              setReplyBody(event.target.value)
-            }
+            onChange={(event) => {
+              setReplyBody(event.target.value);
+            }}
             placeholder="返信を入力してください"
             className="w-full min-h-[96px] rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-400"
             disabled={disabled}
@@ -416,29 +352,21 @@ export default function ReviewCard({
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {sortedReplies.map(
-                (reply, index) => (
-                  <div
-                    key={String(
-                      reply.commentId ??
-                        `${commentId}_reply_${index}`,
-                    )}
-                    className="ml-4 rounded-lg border border-slate-200 bg-slate-50 p-3"
-                  >
-                    <ReviewCard
-                      item={reply}
-                      repliesByParentId={
-                        repliesByParentId
-                      }
-                      fallbackIndex={index}
-                      submitting={submitting}
-                      onReply={onReply}
-                      onDelete={onDelete}
-                      onReact={onReact}
-                    />
-                  </div>
-                ),
-              )}
+              {sortedReplies.map((reply) => (
+                <div
+                  key={reply.commentId}
+                  className="ml-4 rounded-lg border border-slate-200 bg-slate-50 p-3"
+                >
+                  <ReviewCard
+                    item={reply}
+                    repliesByParentId={repliesByParentId}
+                    submitting={submitting}
+                    onReply={onReply}
+                    onDelete={onDelete}
+                    onReact={onReact}
+                  />
+                </div>
+              ))}
             </div>
           )}
         </div>
