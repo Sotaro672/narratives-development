@@ -1,4 +1,5 @@
 // frontend/amol/src/features/avatar/hooks/useAvatarCreatePage.ts
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { signOut as firebaseSignOut } from "firebase/auth";
@@ -8,42 +9,18 @@ import { AvatarCreateService } from "../services/avatarCreateService";
 import type { AvatarFormMode } from "../../shared/types/avatar";
 
 function revokePreviewUrl(url: string | null) {
-  if (url && url.startsWith("blob:")) {
+  if (url?.startsWith("blob:")) {
     URL.revokeObjectURL(url);
   }
-}
-
-function normalizeAvatarIconUrl(value: string | null | undefined): string | null {
-  const url = (value ?? "").trim();
-
-  if (!url) {
-    return null;
-  }
-
-  if (url.startsWith("gs://")) {
-    return null;
-  }
-
-  if (url.endsWith("/.keep") || url.endsWith(".keep")) {
-    return null;
-  }
-
-  if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    return null;
-  }
-
-  return url;
 }
 
 export function useAvatarCreatePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-
   const from = searchParams.get("from");
 
   const [mode, setMode] = useState<AvatarFormMode>("create");
   const [avatarId, setAvatarId] = useState("");
-
   const [avatarName, setAvatarName] = useState("");
   const [profile, setProfile] = useState("");
   const [externalLink, setExternalLink] = useState("");
@@ -60,48 +37,23 @@ export function useAvatarCreatePage() {
   const [successRedirectTo, setSuccessRedirectTo] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const backendUrl = import.meta.env.VITE_API_BASE_URL || "";
-
-  const service = useMemo(() => {
-    return new AvatarCreateService({
-      auth,
-      backendUrl,
-    });
-  }, [backendUrl]);
+  const service = useMemo(() => new AvatarCreateService({ auth }), []);
 
   const loggedIn = auth.currentUser !== null;
-
-  const backTo = useMemo(() => {
-    return service.backTo(from);
-  }, [from, service]);
-
-  const canSave = useMemo(() => {
-    return !loading && !saving && avatarName.trim().length > 0;
-  }, [avatarName, loading, saving]);
-
-  const isSuccessMessage = useMemo(() => {
-    const m = msg.trim();
-    return m.includes("作成しました") || m.includes("保存しました");
-  }, [msg]);
+  const backTo = useMemo(() => service.backTo(from), [from, service]);
+  const canSave = useMemo(() => !loading && !saving && avatarName.length > 0, [avatarName, loading, saving]);
+  const isSuccessMessage = useMemo(
+    () => msg.includes("作成しました") || msg.includes("保存しました"),
+    [msg],
+  );
 
   const pageTitle = mode === "edit" ? "アバター編集" : "アバター作成";
-  const saveButtonLabel = saving
-    ? "保存中..."
-    : mode === "edit"
-      ? "保存する"
-      : "作成する";
+  const saveButtonLabel = saving ? "保存中..." : mode === "edit" ? "保存する" : "作成する";
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadAvatar() {
-      if (!backendUrl) {
-        setMsg("API base が未設定です。");
-        setLoading(false);
-        return;
-      }
-
       if (!auth.currentUser) {
         setLoading(false);
         return;
@@ -112,7 +64,6 @@ export function useAvatarCreatePage() {
 
       try {
         const currentAvatar = await service.fetchMine();
-
         if (cancelled) return;
 
         if (!currentAvatar) {
@@ -129,12 +80,12 @@ export function useAvatarCreatePage() {
         }
 
         setMode("edit");
-        setAvatarId(currentAvatar.avatarId ?? "");
-        setAvatarName(currentAvatar.avatarName ?? "");
+        setAvatarId(currentAvatar.avatarId);
+        setAvatarName(currentAvatar.avatarName);
         setProfile(currentAvatar.profile ?? "");
         setExternalLink(currentAvatar.externalLink ?? "");
         setIconFile(null);
-        setIconPreviewUrl(normalizeAvatarIconUrl(currentAvatar.avatarIcon));
+        setIconPreviewUrl(currentAvatar.avatarIcon ?? null);
         setIconFileName(null);
         setIconMimeType(null);
       } catch (error) {
@@ -154,7 +105,7 @@ export function useAvatarCreatePage() {
     return () => {
       cancelled = true;
     };
-  }, [backendUrl, service]);
+  }, [service]);
 
   useEffect(() => {
     return () => {
@@ -172,7 +123,6 @@ export function useAvatarCreatePage() {
 
   function pickIcon(file: File | null) {
     setMsg("");
-
     revokePreviewUrl(iconPreviewUrl);
 
     const result = service.pickIconWeb(file);
@@ -200,7 +150,6 @@ export function useAvatarCreatePage() {
 
   function clearIcon() {
     revokePreviewUrl(iconPreviewUrl);
-
     setIconFile(null);
     setIconPreviewUrl(null);
     setIconFileName(null);
@@ -220,21 +169,12 @@ export function useAvatarCreatePage() {
       await firebaseSignOut(auth);
       navigate("/", { replace: true });
     } catch (error) {
-      setMsg(
-        error instanceof Error
-          ? error.message
-          : "サインアウトに失敗しました。"
-      );
+      setMsg(error instanceof Error ? error.message : "サインアウトに失敗しました。");
     }
   }
 
   async function save() {
     if (saving) return false;
-
-    if (!backendUrl) {
-      setMsg("API base が未設定です。");
-      return false;
-    }
 
     setSaving(true);
     setMsg("");
@@ -242,9 +182,9 @@ export function useAvatarCreatePage() {
     setSuccessRedirectTo("");
 
     try {
-      let savedAvatarId = "";
+      let savedAvatarId: string;
 
-      if (mode === "edit" && avatarId.trim()) {
+      if (mode === "edit" && avatarId) {
         const result = await service.update({
           avatarId,
           avatarNameRaw: avatarName,
@@ -259,7 +199,7 @@ export function useAvatarCreatePage() {
           return false;
         }
 
-        savedAvatarId = result.avatarId ?? avatarId;
+        savedAvatarId = result.avatarId;
       } else {
         const result = await service.save({
           avatarNameRaw: avatarName,
@@ -274,16 +214,12 @@ export function useAvatarCreatePage() {
           return false;
         }
 
-        savedAvatarId = result.createdAvatarId ?? "";
+        savedAvatarId = result.createdAvatarId;
       }
 
       setCreatedAvatarId(savedAvatarId);
-
-      const redirectTo = backTo.trim() || "/lists";
-
-      setSuccessRedirectTo(redirectTo);
-      navigate(redirectTo, { replace: true });
-
+      setSuccessRedirectTo(backTo);
+      navigate(backTo, { replace: true });
       return true;
     } catch (error) {
       setMsg(error instanceof Error ? error.message : String(error));

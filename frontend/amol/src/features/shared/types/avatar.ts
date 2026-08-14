@@ -10,40 +10,51 @@ export type PickIconResult = {
   error?: string;
 };
 
-export type AvatarCreateResult = {
-  ok: boolean;
-  message: string;
-  nextRoute?: string;
-  createdAvatarId?: string;
-};
+export type AvatarCreateResult =
+  | {
+      ok: true;
+      message: string;
+      nextRoute: string;
+      createdAvatarId: string;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
 
-export type AvatarUpdateResult = {
-  ok: boolean;
-  message: string;
-  avatarId?: string;
-};
+export type AvatarUpdateResult =
+  | {
+      ok: true;
+      message: string;
+      avatarId: string;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
 
 export type AvatarMutationResponse = {
   avatarId: string;
-  userId?: string;
-  avatarName?: string;
+  userId: string;
+  avatarName: string;
   avatarIcon?: string | null;
+  walletAddress?: string | null;
   profile?: string | null;
   externalLink?: string | null;
 };
 
 export type MyAvatarResponse = {
   avatarId: string;
-  userId?: string;
+  userId: string;
   avatarName: string;
+  avatarIcon?: string | null;
+  walletAddress: string;
   profile?: string | null;
   externalLink?: string | null;
-  avatarIcon?: string | null;
 };
 
 export type CreateAvatarPayload = {
-  userId: string;
-  userUid?: string;
+  userUid: string;
   avatarName: string;
   avatarIcon?: string;
   profile?: string;

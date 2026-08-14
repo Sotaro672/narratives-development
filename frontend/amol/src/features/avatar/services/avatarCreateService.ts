@@ -1,4 +1,4 @@
-// frontend/src/features/avatar/services/avatarCreateService.ts
+// frontend/amol/src/features/avatar/services/avatarCreateService.ts
 
 import type { Auth } from "firebase/auth";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
@@ -14,7 +14,6 @@ import type {
 
 type AvatarCreateServiceParams = {
   auth: Auth;
-  backendUrl: string;
 };
 
 type SaveAvatarParams = {
@@ -30,32 +29,21 @@ type UpdateAvatarParams = SaveAvatarParams & {
 
 export class AvatarCreateService {
   private readonly auth: Auth;
-  private readonly backendUrl: string;
 
-  constructor({ auth, backendUrl }: AvatarCreateServiceParams) {
+  constructor({ auth }: AvatarCreateServiceParams) {
     this.auth = auth;
-    this.backendUrl = backendUrl;
-  }
-
-  s(value: string | null | undefined): string {
-    return (value ?? "").trim();
   }
 
   backTo(from: string | null): string {
-    const f = this.s(from);
-    if (f) return f;
-    return "/lists";
+    return from || "/lists";
   }
 
   isValidUrlOrEmpty(value: string): boolean {
-    const v = this.s(value);
-    if (!v) return true;
+    if (!value) return true;
 
     try {
-      const url = new URL(v);
-      return (
-        (url.protocol === "http:" || url.protocol === "https:") && !!url.host
-      );
+      const url = new URL(value);
+      return (url.protocol === "http:" || url.protocol === "https:") && !!url.host;
     } catch {
       return false;
     }
@@ -83,10 +71,9 @@ export class AvatarCreateService {
   }
 
   private ensureMimeType(file: File): string {
-    const mime = this.s(file.type);
-    if (mime) return mime;
+    if (file.type) return file.type;
 
-    const name = this.s(file.name).toLowerCase();
+    const name = file.name.toLowerCase();
 
     if (name.endsWith(".png")) return "image/png";
     if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
@@ -107,36 +94,12 @@ export class AvatarCreateService {
       case "image/gif":
         return mimeType;
       default:
-        throw new Error(
-          "対応していない画像形式です。png, jpg, webp, gif を選択してください。",
-        );
+        throw new Error("対応していない画像形式です。png, jpg, webp, gif を選択してください。");
     }
-  }
-
-  private async getIdToken(): Promise<string> {
-    const user = this.auth.currentUser;
-
-    if (!user) {
-      throw new Error("サインインが必要です。");
-    }
-
-    const token = await user.getIdToken(true);
-
-    if (!token) {
-      throw new Error("認証トークンが取得できませんでした。再ログインしてください。");
-    }
-
-    return token;
   }
 
   private avatarIconStoragePath(avatarId: string): string {
-    const id = this.s(avatarId);
-
-    if (!id) {
-      throw new Error("avatarId が取得できませんでした。");
-    }
-
-    return `avatar-icons/${id}/icon`;
+    return `avatar-icons/${avatarId}/icon`;
   }
 
   private async uploadAvatarIconToFirebaseStorage({
@@ -162,12 +125,7 @@ export class AvatarCreateService {
   }
 
   async fetchMine(): Promise<MyAvatarResponse | null> {
-    const idToken = await this.getIdToken();
-
-    return getMyAvatar({
-      backendUrl: this.backendUrl,
-      idToken,
-    });
+    return getMyAvatar();
   }
 
   async save({
@@ -186,71 +144,47 @@ export class AvatarCreateService {
         };
       }
 
-      const userId = this.s(user.uid);
-
-      if (!userId) {
+      if (!user.uid) {
         return {
           ok: false,
-          message: "userId が取得できませんでした。",
+          message: "userUid が取得できませんでした。",
         };
       }
 
-      const avatarName = this.s(avatarNameRaw);
-
-      if (!avatarName) {
+      if (!avatarNameRaw) {
         return {
           ok: false,
           message: "アバター名を入力してください。",
         };
       }
 
-      const externalLink = this.s(externalLinkRaw);
-
-      if (!this.isValidUrlOrEmpty(externalLink)) {
+      if (!this.isValidUrlOrEmpty(externalLinkRaw)) {
         return {
           ok: false,
           message: "外部リンクは http(s) のURLを入力してください。",
         };
       }
 
-      const profile = this.s(profileRaw);
-      const idToken = await this.getIdToken();
-
       const created = await createAvatar({
-        backendUrl: this.backendUrl,
-        idToken,
         payload: {
-          userId,
-          userUid: userId,
-          avatarName,
-          ...(profile ? { profile } : {}),
-          ...(externalLink ? { externalLink } : {}),
+          userUid: user.uid,
+          avatarName: avatarNameRaw,
+          ...(profileRaw ? { profile: profileRaw } : {}),
+          ...(externalLinkRaw ? { externalLink: externalLinkRaw } : {}),
         },
       });
 
-      const avatarId = this.s(created.avatarId);
-
-      if (!avatarId) {
-        return {
-          ok: false,
-          message: "avatarId が取得できませんでした。",
-        };
-      }
-
       if (iconFile) {
         const avatarIcon = await this.uploadAvatarIconToFirebaseStorage({
-          avatarId,
+          avatarId: created.avatarId,
           iconFile,
         });
 
         await updateAvatar({
-          backendUrl: this.backendUrl,
-          idToken,
-          avatarId,
           payload: {
-            avatarName,
-            ...(profile ? { profile } : {}),
-            ...(externalLink ? { externalLink } : {}),
+            avatarName: created.avatarName,
+            profile: created.profile ?? "",
+            externalLink: created.externalLink ?? "",
             avatarIcon,
           },
         });
@@ -260,7 +194,7 @@ export class AvatarCreateService {
         ok: true,
         message: "アバターを作成しました。",
         nextRoute: "/lists",
-        createdAvatarId: avatarId,
+        createdAvatarId: created.avatarId,
       };
     } catch (error) {
       return {
@@ -278,53 +212,34 @@ export class AvatarCreateService {
     iconFile,
   }: UpdateAvatarParams): Promise<AvatarUpdateResult> {
     try {
-      const id = this.s(avatarId);
-
-      if (!id) {
-        return {
-          ok: false,
-          message: "avatarId が取得できませんでした。",
-        };
-      }
-
-      const avatarName = this.s(avatarNameRaw);
-
-      if (!avatarName) {
+      if (!avatarNameRaw) {
         return {
           ok: false,
           message: "アバター名を入力してください。",
         };
       }
 
-      const externalLink = this.s(externalLinkRaw);
-
-      if (!this.isValidUrlOrEmpty(externalLink)) {
+      if (!this.isValidUrlOrEmpty(externalLinkRaw)) {
         return {
           ok: false,
           message: "外部リンクは http(s) のURLを入力してください。",
         };
       }
 
-      const profile = this.s(profileRaw);
-      const idToken = await this.getIdToken();
-
       let avatarIcon: string | undefined;
 
       if (iconFile) {
         avatarIcon = await this.uploadAvatarIconToFirebaseStorage({
-          avatarId: id,
+          avatarId,
           iconFile,
         });
       }
 
-      await updateAvatar({
-        backendUrl: this.backendUrl,
-        idToken,
-        avatarId: id,
+      const updated = await updateAvatar({
         payload: {
-          avatarName,
-          ...(profile ? { profile } : {}),
-          ...(externalLink ? { externalLink } : {}),
+          avatarName: avatarNameRaw,
+          profile: profileRaw,
+          externalLink: externalLinkRaw,
           ...(avatarIcon ? { avatarIcon } : {}),
         },
       });
@@ -332,7 +247,7 @@ export class AvatarCreateService {
       return {
         ok: true,
         message: "アバターを保存しました。",
-        avatarId: id,
+        avatarId: updated.avatarId,
       };
     } catch (error) {
       return {

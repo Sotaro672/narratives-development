@@ -25,7 +25,7 @@ import (
 // Inquiry.AvatarID から Avatar.GetByID() を使って UserID を解決し、
 // User.GetByID() を使って UserFullName を解決します。
 //
-// 一覧では detail 用の mintAddress / transferredAt / shippingAddresses / orders は解決しません。
+// 一覧では detail 用の assetID / transferredAt / shippingAddresses / orders は解決しません。
 //
 // ListByCompanyID では、ログイン中 member の companyId と一致する inquiry のみを返します。
 type InquiryManagementQuery struct {

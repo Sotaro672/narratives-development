@@ -254,7 +254,7 @@ func buildQueries(
 		res.nameResolver,
 	)
 
-	// salesQuery は mintAddress -> productName 解決を
+	// salesQuery は assetID -> productName 解決を
 	// application/resolver.MintProductBlueprintResolver に委譲する
 	salesQuery := companyquery.NewSalesQuery(
 		r.tokenBlueprintRepo,
