@@ -18,7 +18,10 @@ import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
 import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
-import type { MintProductBlueprintDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
+import type {
+  MintProductBlueprintDTO,
+  MintRequestDetailDTO,
+} from "../../infrastructure/dto/mintRequestLocal.dto";
 
 import { HttpMintRequestRepository } from "../../infrastructure/repository/HttpMintRequestRepository";
 
@@ -31,11 +34,28 @@ import { useInspectionResultCard } from "./useInspectionResultCard";
 import { useMintAutoSelection } from "./useMintRequestDetail.useMintAutoSelection";
 
 function getErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
+  if (error instanceof Error && error.message) return error.message;
   return fallback;
+}
+
+/**
+ * GET /mint/inspections/{productionId} のBFF responseを、
+ * Presentationで使用するInspectionBatchDTOへ変換する。
+ *
+ * model表示情報はdetail.modelMetaをそのまま使用し、
+ * Frontend側でModel Variation APIなどによる補完は行わない。
+ */
+function buildInspectionBatch(
+  detail: MintRequestDetailDTO | null,
+): InspectionBatchDTO | null {
+  if (!detail?.inspection) return null;
+
+  return {
+    ...detail.inspection,
+    productBlueprintId: detail.productBlueprintId ?? "",
+    productName: detail.productName,
+    modelMeta: detail.modelMeta ?? {},
+  };
 }
 
 const MINT_REQUEST_MANAGEMENT_PATH = "/mint";
@@ -47,7 +67,6 @@ export function useMintRequestDetail() {
    * route名はrequestIdのままでも、実体はproductionIdとして扱う。
    */
   const { requestId } = useParams<{ requestId: string }>();
-
   const productionId = React.useMemo(
     () => String(requestId ?? "").trim(),
     [requestId],
@@ -64,14 +83,9 @@ export function useMintRequestDetail() {
   const [mintRequestRow, setMintRequestRow] =
     React.useState<MintRequestManagementRowDTO | null>(null);
 
-  const [productBlueprintId, setProductBlueprintId] =
-    React.useState("");
-
-  const [loading, setLoading] =
-    React.useState(false);
-
-  const [error, setError] =
-    React.useState<string | null>(null);
+  const [productBlueprintId, setProductBlueprintId] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   const [productBlueprint, setProductBlueprint] =
     React.useState<MintProductBlueprintDTO | null>(null);
@@ -85,8 +99,7 @@ export function useMintRequestDetail() {
   const [brandOptions, setBrandOptions] =
     React.useState<BrandSummary[]>([]);
 
-  const [selectedBrandId, setSelectedBrandId] =
-    React.useState("");
+  const [selectedBrandId, setSelectedBrandId] = React.useState("");
 
   const [tokenBlueprintOptions, setTokenBlueprintOptions] =
     React.useState<TokenBlueprintSummary[]>([]);
@@ -112,9 +125,7 @@ export function useMintRequestDetail() {
   const title = "ミント申請詳細";
 
   const selectedBrandName = React.useMemo(() => {
-    if (!selectedBrandId) {
-      return "";
-    }
+    if (!selectedBrandId) return "";
 
     return (
       brandOptions.find(
@@ -124,33 +135,38 @@ export function useMintRequestDetail() {
   }, [brandOptions, selectedBrandId]);
 
   /**
-   * 画面全体の詳細情報を再取得する。
-   * 初回表示、検品完了後、Mint申請直後など、
-   * inspection / mint requestをまとめて最新化したい場合に使用する。
+   * inspection detailとMint status rowをまとめて再取得する。
+   *
+   * inspection detail:
+   * GET /mint/inspections/{productionId}
+   *
+   * Mint status:
+   * GET /mint/requests?productionIds={productionId}
    */
   const reloadDetail = React.useCallback(async () => {
-    if (!productionId) {
-      return;
-    }
+    if (!productionId) return;
 
-    const detail = await getMintRequestDetail(
-      mintRequestRepo,
-      productionId,
-    );
+    const [detail, row] = await Promise.all([
+      getMintRequestDetail(
+        mintRequestRepo,
+        productionId,
+      ),
+      mintRequestRepo.fetchMintRequestRowByProductionId(
+        productionId,
+      ),
+    ]);
 
-    setInspectionBatch(detail.inspectionBatch);
-    setMintRequestRow(detail.mintRequestRow);
-    setProductBlueprintId(detail.productBlueprintId);
+    setInspectionBatch(buildInspectionBatch(detail));
+    setMintRequestRow(row);
+    setProductBlueprintId(detail?.productBlueprintId ?? "");
   }, [mintRequestRepo, productionId]);
 
   /**
    * Mint状態だけを再取得する。
-   * ミント中の周期処理ではこれだけを使用し、inspectionを再取得しない。
+   * ミント中の周期処理ではinspection detailを再取得しない。
    */
   const reloadMintStatus = React.useCallback(async () => {
-    if (!productionId) {
-      return;
-    }
+    if (!productionId) return;
 
     const row =
       await mintRequestRepo.fetchMintRequestRowByProductionId(
@@ -162,6 +178,9 @@ export function useMintRequestDetail() {
 
   React.useEffect(() => {
     if (!productionId) {
+      setInspectionBatch(null);
+      setMintRequestRow(null);
+      setProductBlueprintId("");
       return;
     }
 
@@ -172,18 +191,21 @@ export function useMintRequestDetail() {
       setError(null);
 
       try {
-        const detail = await getMintRequestDetail(
-          mintRequestRepo,
-          productionId,
-        );
+        const [detail, row] = await Promise.all([
+          getMintRequestDetail(
+            mintRequestRepo,
+            productionId,
+          ),
+          mintRequestRepo.fetchMintRequestRowByProductionId(
+            productionId,
+          ),
+        ]);
 
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
-        setInspectionBatch(detail.inspectionBatch);
-        setMintRequestRow(detail.mintRequestRow);
-        setProductBlueprintId(detail.productBlueprintId);
+        setInspectionBatch(buildInspectionBatch(detail));
+        setMintRequestRow(row);
+        setProductBlueprintId(detail?.productBlueprintId ?? "");
       } catch (error: unknown) {
         if (!cancelled) {
           setError(
@@ -194,9 +216,7 @@ export function useMintRequestDetail() {
           );
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     };
 
@@ -226,9 +246,7 @@ export function useMintRequestDetail() {
           productBlueprintId,
         );
 
-        if (!cancelled) {
-          setProductBlueprint(result);
-        }
+        if (!cancelled) setProductBlueprint(result);
       } catch (error: unknown) {
         if (!cancelled) {
           setProductBlueprintError(
@@ -239,9 +257,7 @@ export function useMintRequestDetail() {
           );
         }
       } finally {
-        if (!cancelled) {
-          setProductBlueprintLoading(false);
-        }
+        if (!cancelled) setProductBlueprintLoading(false);
       }
     };
 
@@ -253,13 +269,11 @@ export function useMintRequestDetail() {
   }, [mintRequestRepo, productBlueprintId]);
 
   const batchForInspectionCard = React.useMemo(() => {
-    if (!inspectionBatch) {
-      return undefined;
-    }
+    if (!inspectionBatch) return undefined;
 
     /**
-     * Backend responseのmodelMetaをそのまま正として使う。
-     * frontend側ではmodelMetaを再構築しない。
+     * modelMetaはGET /mint/inspections/{productionId} の
+     * Backend responseをそのまま正として使用する。
      */
     return {
       ...inspectionBatch,
@@ -269,7 +283,7 @@ export function useMintRequestDetail() {
 
   /**
    * Model情報はBackend responseのmodelMetaを正とする。
-   * frontendからGET /models/{modelId}による個別補完は行わない。
+   * FrontendからGET /models/{modelId}による個別補完は行わない。
    */
   const inspectionCardData = useInspectionResultCard({
     batch: batchForInspectionCard,
@@ -299,15 +313,9 @@ export function useMintRequestDetail() {
         const brands =
           await mintRequestRepo.fetchBrandsForMint();
 
-        if (cancelled) {
-          return;
-        }
-
-        setBrandOptions(brands);
+        if (!cancelled) setBrandOptions(brands);
       } catch {
-        if (!cancelled) {
-          setBrandOptions([]);
-        }
+        if (!cancelled) setBrandOptions([]);
       }
     };
 
@@ -346,7 +354,7 @@ export function useMintRequestDetail() {
 
   /**
    * GET /mint/requests responseのmintStatusをMint状態の唯一の正とする。
-   * frontendではtrim / uppercaseなどの再正規化を行わない。
+   * Frontendではtrim / uppercaseなどの再正規化を行わない。
    */
   const mintStatus =
     mintRequestRow?.mintStatus ?? null;
@@ -355,8 +363,7 @@ export function useMintRequestDetail() {
    * BackendはMintが存在しないProductionについてもrowを返し得るため、
    * rowの存在そのものではhasMintを判定せず、mintStatusの有無を正とする。
    */
-  const hasMint =
-    Boolean(mintStatus);
+  const hasMint = Boolean(mintStatus);
 
   /**
    * 非同期Mint処理中としてポーリングする状態。
@@ -402,16 +409,12 @@ export function useMintRequestDetail() {
    * GET /mint/requestsのみを呼び、inspection情報は周期的に再取得しない。
    */
   React.useEffect(() => {
-    if (!productionId || !isMintProcessing) {
-      return;
-    }
+    if (!productionId || !isMintProcessing) return;
 
     let cancelled = false;
 
     const timer = window.setInterval(() => {
-      if (cancelled) {
-        return;
-      }
+      if (cancelled) return;
 
       void reloadMintStatus().catch(() => {
         // Mint状態の再取得失敗では画面全体をエラーにしない。
@@ -434,24 +437,25 @@ export function useMintRequestDetail() {
   const isInspectionCompleted =
     inspectionStatus === "completed";
 
-  const showCompleteInspectionButton =
-    React.useMemo(() => {
-      return Boolean(
+  const showCompleteInspectionButton = React.useMemo(
+    () =>
+      Boolean(
         inspectionBatch &&
           !loading &&
           !error &&
           !isMinting &&
           !isMintCompleted &&
           !isInspectionCompleted,
-      );
-    }, [
+      ),
+    [
       inspectionBatch,
       loading,
       error,
       isMinting,
       isMintCompleted,
       isInspectionCompleted,
-    ]);
+    ],
+  );
 
   /**
    * Mint申請に関する入力UIは、
@@ -503,9 +507,7 @@ export function useMintRequestDetail() {
             selectedTokenBlueprintId,
           );
 
-        if (!cancelled) {
-          setMintFundingEstimate(estimate);
-        }
+        if (!cancelled) setMintFundingEstimate(estimate);
       } catch (error: unknown) {
         if (!cancelled) {
           setMintFundingEstimate(null);
@@ -517,9 +519,7 @@ export function useMintRequestDetail() {
           );
         }
       } finally {
-        if (!cancelled) {
-          setMintFundingEstimateLoading(false);
-        }
+        if (!cancelled) setMintFundingEstimateLoading(false);
       }
     };
 
@@ -535,171 +535,131 @@ export function useMintRequestDetail() {
     showMintControls,
   ]);
 
-  const displayTokenBlueprintId =
-    React.useMemo(() => {
-      return (
-        selectedTokenBlueprintId ||
-        mintRequestedTokenBlueprintId
-      );
-    }, [
+  const displayTokenBlueprintId = React.useMemo(
+    () =>
+      selectedTokenBlueprintId ||
+      mintRequestedTokenBlueprintId,
+    [
       selectedTokenBlueprintId,
       mintRequestedTokenBlueprintId,
-    ]);
+    ],
+  );
 
-  const handleCompleteInspection =
-    React.useCallback(
-      async () => {
-        if (
-          isCompletingInspection ||
-          isMinting ||
-          isMintCompleted
-        ) {
-          return;
-        }
+  const handleCompleteInspection = React.useCallback(
+    async () => {
+      if (
+        isCompletingInspection ||
+        isMinting ||
+        isMintCompleted
+      ) {
+        return;
+      }
 
-        const confirmed = window.confirm(
-          "検品を完了します。未入力の検品結果は合格として確定されます。よろしいですか？",
+      const confirmed = window.confirm(
+        "検品を完了します。未入力の検品結果は合格として確定されます。よろしいですか？",
+      );
+
+      if (!confirmed) return;
+
+      setIsCompletingInspection(true);
+
+      try {
+        const result = await completeMintInspection(
+          mintRequestRepo,
+          {
+            inspectionBatch,
+            productionId,
+          },
         );
 
-        if (!confirmed) {
+        if (!result.ok) {
+          alert(result.message);
           return;
         }
 
-        setIsCompletingInspection(true);
+        if (result.inspectionBatch) {
+          setInspectionBatch(result.inspectionBatch);
+        }
 
-        try {
-          const result = await completeMintInspection(
-            mintRequestRepo,
-            {
-              inspectionBatch,
-              productionId,
-            },
-          );
+        await reloadDetail();
+        alert("検品を完了しました。");
+      } catch (error: unknown) {
+        alert(
+          `検品完了に失敗しました: ${getErrorMessage(
+            error,
+            "不明なエラーが発生しました",
+          )}`,
+        );
+      } finally {
+        setIsCompletingInspection(false);
+      }
+    },
+    [
+      inspectionBatch,
+      isCompletingInspection,
+      isMinting,
+      isMintCompleted,
+      mintRequestRepo,
+      productionId,
+      reloadDetail,
+    ],
+  );
 
-          if (!result.ok) {
+  const handleMint = React.useCallback(
+    async () => {
+      if (
+        !isInspectionCompleted ||
+        isMinting ||
+        isMintCompleted
+      ) {
+        return;
+      }
+
+      if (mintFundingEstimateLoading) {
+        alert(
+          "SOL見積を取得中です。完了後にミント申請を実行してください。",
+        );
+        return;
+      }
+
+      if (!mintFundingEstimate) {
+        alert(
+          mintFundingEstimateError ||
+            "SOL見積を取得できていません。",
+        );
+        return;
+      }
+
+      if (!mintFundingEstimate.estimate.sufficient) {
+        alert(
+          "Reserve WalletのSOL残高が不足しているため、ミント申請を実行できません。",
+        );
+        return;
+      }
+
+      setIsSubmittingMintRequest(true);
+      setError(null);
+
+      try {
+        const result = await submitMintRequest(
+          mintRequestRepo,
+          {
+            inspectionBatch,
+            selectedTokenBlueprintId,
+            productionId,
+          },
+        );
+
+        if (!result.ok) {
+          if (result.reason === "validation") {
             alert(result.message);
             return;
           }
 
-          if (result.inspectionBatch) {
-            setInspectionBatch(
-              result.inspectionBatch,
-            );
-          }
-
-          await reloadDetail();
-
-          alert("検品を完了しました。");
-        } catch (error: unknown) {
-          alert(
-            `検品完了に失敗しました: ${getErrorMessage(
-              error,
-              "不明なエラーが発生しました",
-            )}`,
-          );
-        } finally {
-          setIsCompletingInspection(false);
-        }
-      },
-      [
-        inspectionBatch,
-        isCompletingInspection,
-        isMinting,
-        isMintCompleted,
-        mintRequestRepo,
-        productionId,
-        reloadDetail,
-      ],
-    );
-
-  const handleMint =
-    React.useCallback(
-      async () => {
-        if (
-          !isInspectionCompleted ||
-          isMinting ||
-          isMintCompleted
-        ) {
-          return;
-        }
-
-        if (mintFundingEstimateLoading) {
-          alert(
-            "SOL見積を取得中です。完了後にミント申請を実行してください。",
-          );
-          return;
-        }
-
-        if (!mintFundingEstimate) {
-          alert(
-            mintFundingEstimateError ||
-              "SOL見積を取得できていません。",
-          );
-          return;
-        }
-
-        if (!mintFundingEstimate.estimate.sufficient) {
-          alert(
-            "Reserve WalletのSOL残高が不足しているため、ミント申請を実行できません。",
-          );
-          return;
-        }
-
-        setIsSubmittingMintRequest(true);
-        setError(null);
-
-        try {
-          const result = await submitMintRequest(
-            mintRequestRepo,
-            {
-              inspectionBatch,
-              selectedTokenBlueprintId,
-              productionId,
-            },
-          );
-
-          if (!result.ok) {
-            if (result.reason === "validation") {
-              alert(result.message);
-              return;
-            }
-
-            setError(result.message);
-
-            alert(
-              `ミント申請に失敗しました: ${result.message}`,
-            );
-
-            try {
-              await reloadDetail();
-            } catch {
-              // エラー表示を優先するため、再取得失敗は握りつぶす。
-            }
-
-            return;
-          }
-
-          const { queuedResponse } = result;
-
-          /**
-           * Mint申請直後だけは画面全体を一度再取得する。
-           * 以降の周期処理はreloadMintStatusのみを使用する。
-           */
-          await reloadDetail();
+          setError(result.message);
 
           alert(
-            `ミント申請を受け付けました（生産ID: ${queuedResponse.productionId} / ミント数: ${totalMintQuantity}）。順次ミント処理を実行します。`,
-          );
-        } catch (error: unknown) {
-          const message = getErrorMessage(
-            error,
-            "不明なエラーが発生しました",
-          );
-
-          setError(message);
-
-          alert(
-            `ミント申請に失敗しました: ${message}`,
+            `ミント申請に失敗しました: ${result.message}`,
           );
 
           try {
@@ -707,68 +667,95 @@ export function useMintRequestDetail() {
           } catch {
             // エラー表示を優先するため、再取得失敗は握りつぶす。
           }
-        } finally {
-          setIsSubmittingMintRequest(false);
+
+          return;
         }
-      },
-      [
-        inspectionBatch,
-        isInspectionCompleted,
-        isMinting,
-        isMintCompleted,
-        mintFundingEstimate,
-        mintFundingEstimateError,
-        mintFundingEstimateLoading,
-        mintRequestRepo,
-        productionId,
-        reloadDetail,
-        selectedTokenBlueprintId,
-        totalMintQuantity,
-      ],
-    );
 
-  const handleSelectTokenBlueprint =
-    React.useCallback(
-      (tokenBlueprintId: string) => {
-        setSelectedTokenBlueprintId(
-          tokenBlueprintId,
+        const { queuedResponse } = result;
+
+        /**
+         * Mint申請直後だけは画面全体を一度再取得する。
+         * 以降の周期処理はreloadMintStatusのみを使用する。
+         */
+        await reloadDetail();
+
+        alert(
+          `ミント申請を受け付けました（生産ID: ${queuedResponse.productionId} / ミント数: ${totalMintQuantity}）。順次ミント処理を実行します。`,
         );
-      },
-      [],
-    );
+      } catch (error: unknown) {
+        const message = getErrorMessage(
+          error,
+          "不明なエラーが発生しました",
+        );
 
-  const selectedTokenBlueprint =
-    React.useMemo(
-      () =>
-        tokenBlueprintOptions.find(
-          (tokenBlueprint) =>
-            tokenBlueprint.id ===
-            selectedTokenBlueprintId,
-        ) ?? null,
-      [
-        tokenBlueprintOptions,
-        selectedTokenBlueprintId,
-      ],
-    );
+        setError(message);
 
-  const tokenBlueprintCardVm =
-    React.useMemo(
-      () =>
-        buildTokenBlueprintCardVm({
-          selectedTokenBlueprint,
-          displayTokenBlueprintId,
-          selectedBrandName,
-          productBlueprint,
-          brandOptions,
-        }),
-      [
+        alert(
+          `ミント申請に失敗しました: ${message}`,
+        );
+
+        try {
+          await reloadDetail();
+        } catch {
+          // エラー表示を優先するため、再取得失敗は握りつぶす。
+        }
+      } finally {
+        setIsSubmittingMintRequest(false);
+      }
+    },
+    [
+      inspectionBatch,
+      isInspectionCompleted,
+      isMinting,
+      isMintCompleted,
+      mintFundingEstimate,
+      mintFundingEstimateError,
+      mintFundingEstimateLoading,
+      mintRequestRepo,
+      productionId,
+      reloadDetail,
+      selectedTokenBlueprintId,
+      totalMintQuantity,
+    ],
+  );
+
+  const handleSelectTokenBlueprint = React.useCallback(
+    (tokenBlueprintId: string) => {
+      setSelectedTokenBlueprintId(tokenBlueprintId);
+    },
+    [],
+  );
+
+  const selectedTokenBlueprint = React.useMemo(
+    () =>
+      tokenBlueprintOptions.find(
+        (tokenBlueprint) =>
+          tokenBlueprint.id ===
+          selectedTokenBlueprintId,
+      ) ?? null,
+    [
+      tokenBlueprintOptions,
+      selectedTokenBlueprintId,
+    ],
+  );
+
+  const tokenBlueprintCardVm = React.useMemo(
+    () =>
+      buildTokenBlueprintCardVm({
         selectedTokenBlueprint,
         displayTokenBlueprintId,
         selectedBrandName,
         productBlueprint,
         brandOptions,
-      ],
-    );
+      }),
+    [
+      selectedTokenBlueprint,
+      displayTokenBlueprintId,
+      selectedBrandName,
+      productBlueprint,
+      brandOptions,
+    ],
+  );
 
   /**
    * 現行GET /mint/requests responseにcreatedAtは含まれていない。
@@ -776,8 +763,7 @@ export function useMintRequestDetail() {
   const mintCreatedAtLabel = "（未登録）";
 
   const mintCreatedByLabel =
-    createdByName ??
-    "（不明）";
+    createdByName ?? "（不明）";
 
   const mintMintedAtLabel =
     safeDateTimeLabelJa(
