@@ -2,26 +2,8 @@
 
 import type { CatalogListImage } from "../../shared/types/catalog";
 
-export function createCatalogImages(
-  images: CatalogListImage[] | undefined,
-): CatalogListImage[] {
-  const uniqueImages = new Map<string, CatalogListImage>();
-
-  for (const image of images ?? []) {
-    if (!image.url) {
-      continue;
-    }
-
-    uniqueImages.set(image.id, image);
-  }
-
-  return Array.from(uniqueImages.values()).sort((a, b) => {
-    if (a.displayOrder !== b.displayOrder) {
-      return a.displayOrder - b.displayOrder;
-    }
-
-    return a.id.localeCompare(b.id);
-  });
+export function createCatalogImages(images: CatalogListImage[] | undefined): CatalogListImage[] {
+  return images ?? [];
 }
 
 export function resolveActiveCatalogImage(args: {

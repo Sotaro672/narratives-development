@@ -11,9 +11,8 @@ export async function addCatalogItemToCart(args: {
 }): Promise<void> {
   const { apiBaseUrl, catalog, selectedModel } = args;
   const idToken = await getFirebaseIdToken();
-  const base = apiBaseUrl.replace(/\/+$/, "");
 
-  const response = await fetch(`${base}/mall/me/cart/items`, {
+  const response = await fetch(`${apiBaseUrl}/mall/me/cart/items`, {
     method: "POST",
     headers: {
       Accept: "application/json",

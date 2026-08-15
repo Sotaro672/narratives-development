@@ -23,7 +23,7 @@ import {
   useAuthState,
 } from "../features/shared/hooks/useAuthState";
 
-import "../features/catalog/presentation/styles/catalog-page.css";
+import "../styles/catalog-page.css";
 
 export default function CatalogPage() {
   const navigate = useNavigate();
