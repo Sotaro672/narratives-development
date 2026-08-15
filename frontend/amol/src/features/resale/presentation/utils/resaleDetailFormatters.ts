@@ -1,24 +1,21 @@
 // frontend/amol/src/features/resale/presentation/utils/resaleDetailFormatters.ts
 
-import {
-  textOrEmpty,
-} from "../../../../components/utils/textOrEmpty";
+import { textOrEmpty } from "../../../../components/utils/textOrEmpty";
+
+import type {
+  ResaleStatus,
+} from "../../../shared/types/resale";
 
 import type {
   ResaleListingWithModel,
-  ResaleModelColor,
-  ResaleModelVolume,
 } from "../types/resaleDetailPageTypes";
 
 /**
  * 再販ステータスを表示用の文言へ変換する。
  */
 export function formatResaleStatus(
-  value: unknown,
+  status: ResaleStatus,
 ): string {
-  const status =
-    textOrEmpty(value);
-
   switch (status) {
     case "listing":
       return "出品中";
@@ -28,9 +25,6 @@ export function formatResaleStatus(
 
     case "sold":
       return "売却済み";
-
-    default:
-      return status || "-";
   }
 }
 
@@ -38,11 +32,8 @@ export function formatResaleStatus(
  * モデル種別を表示用の文言へ変換する。
  */
 export function formatResaleModelKind(
-  value: unknown,
+  kind: string | undefined,
 ): string {
-  const kind =
-    textOrEmpty(value);
-
   switch (kind) {
     case "apparel":
       return "アパレル";
@@ -59,38 +50,20 @@ export function formatResaleModelKind(
  * カラー情報を表示用の文言へ変換する。
  */
 export function formatResaleModelColor(
-  color:
-    | ResaleModelColor
-    | null
-    | undefined,
+  color: ResaleListingWithModel["color"],
 ): string {
   if (!color) {
     return "-";
   }
 
-  const name =
-    textOrEmpty(
-      color.name,
-    );
+  const name = textOrEmpty(color.name);
+  const rgb = color.rgb;
 
-  const rgb =
-    Number(
-      color.rgb,
-    );
-
-  const hasRgb =
-    Number.isFinite(
-      rgb,
-    );
-
-  if (
-    !name &&
-    !hasRgb
-  ) {
+  if (!name && rgb === undefined) {
     return "-";
   }
 
-  if (!hasRgb) {
+  if (rgb === undefined) {
     return name || "-";
   }
 
@@ -103,40 +76,23 @@ export function formatResaleModelColor(
  * 容量情報を表示用の文言へ変換する。
  */
 export function formatResaleModelVolume(
-  volume:
-    | ResaleModelVolume
-    | null
-    | undefined,
+  volume: ResaleListingWithModel["volume"],
 ): string {
   if (!volume) {
     return "-";
   }
 
-  const amount =
-    Number(
-      volume.amount ??
-        volume.value ??
-        0,
-    );
-
-  const unit =
-    textOrEmpty(
-      volume.unit,
-    );
+  const amount = volume.amount;
+  const unit = textOrEmpty(volume.unit);
 
   if (
-    !Number.isFinite(
-      amount,
-    ) ||
+    amount === undefined ||
     amount <= 0
   ) {
     return unit || "-";
   }
 
-  const amountLabel =
-    amount.toLocaleString(
-      "ja-JP",
-    );
+  const amountLabel = amount.toLocaleString("ja-JP");
 
   return unit
     ? `${amountLabel}${unit}`
@@ -147,103 +103,35 @@ export function formatResaleModelVolume(
  * 採寸情報を表示用の文言へ変換する。
  */
 export function formatResaleMeasurements(
-  measurements:
-    | Record<string, number>
-    | null
-    | undefined,
+  measurements: ResaleListingWithModel["measurements"],
 ): string {
   if (!measurements) {
     return "-";
   }
 
-  const entries =
-    Object.entries(
-      measurements,
-    )
-      .map(
-        ([
-          key,
-          value,
-        ]) => ({
-          label:
-            textOrEmpty(
-              key,
-            ),
-          value:
-            Number(
-              value,
-            ),
-        }),
-      )
-      .filter(
-        ({
-          label,
-          value,
-        }) =>
-          Boolean(label) &&
-          Number.isFinite(
-            value,
-          ),
-      )
-      .sort(
-        (
-          first,
-          second,
-        ) =>
-          first.label.localeCompare(
-            second.label,
-            "ja",
-          ),
-      );
+  const entries = Object.entries(measurements)
+    .filter(([key]) => Boolean(key))
+    .sort(([first], [second]) =>
+      first.localeCompare(second, "ja"),
+    );
 
-  if (
-    entries.length === 0
-  ) {
+  if (entries.length === 0) {
     return "-";
   }
 
   return entries
     .map(
-      ({
-        label,
-        value,
-      }) =>
+      ([label, value]) =>
         `${label}: ${value.toLocaleString("ja-JP")}`,
     )
     .join(" / ");
 }
 
 /**
- * 再販詳細で表示するトークン画像URLを解決する。
- *
- * 優先順位:
- * 1. tokenIconUrl
- * 2. tokenIcon
- * 3. imageUrl
- * 4. metadata.image
+ * 再販詳細で表示するトークンアイコンURLを返す。
  */
 export function resolveResaleTokenIconUrl(
-  item:
-    | ResaleListingWithModel
-    | null
-    | undefined,
+  item: ResaleListingWithModel | null | undefined,
 ): string {
-  if (!item) {
-    return "";
-  }
-
-  return (
-    textOrEmpty(
-      item.tokenIconUrl,
-    ) ||
-    textOrEmpty(
-      item.tokenIcon,
-    ) ||
-    textOrEmpty(
-      item.imageUrl,
-    ) ||
-    textOrEmpty(
-      item.metadata?.image,
-    )
-  );
+  return item?.tokenIcon ?? "";
 }

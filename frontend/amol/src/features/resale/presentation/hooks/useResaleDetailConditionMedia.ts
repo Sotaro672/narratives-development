@@ -10,7 +10,7 @@ import {
 
 import type {
   ResaleConditionImage,
-} from "../../api/resaleApi";
+} from "../../../shared/types/resaleTypes";
 
 import type {
   ResaleDetailConditionMediaItem,
@@ -35,11 +35,7 @@ function createExistingConditionMediaItem(
     id: image.id,
     type: "image",
     previewUrl: image.url,
-    title:
-      image.fileName ||
-      "商品状態の写真",
-    fileName:
-      image.fileName,
+    title: "商品状態の写真",
     source: "existing",
     image,
   };
@@ -47,13 +43,9 @@ function createExistingConditionMediaItem(
 
 /**
  * 新規追加画像のObject URLだけを解放する。
- *
- * APIから取得した既存画像URLは、
- * Object URLではないため解放しない。
  */
 function revokeNewConditionMediaPreviews(
-  items:
-    readonly ResaleDetailConditionMediaItem[],
+  items: readonly ResaleDetailConditionMediaItem[],
 ): void {
   items.forEach((item) => {
     if (
@@ -63,21 +55,12 @@ function revokeNewConditionMediaPreviews(
       return;
     }
 
-    URL.revokeObjectURL(
-      item.previewUrl,
-    );
+    URL.revokeObjectURL(item.previewUrl);
   });
 }
 
 /**
  * 再販詳細画面の商品状態画像を管理する。
- *
- * 管理対象:
- * - APIから取得した既存画像
- * - 利用者が新規追加した画像
- * - 削除予定の既存画像ID
- * - MediaUploaderのカルーセル位置
- * - 新規画像のObject URL解放
  */
 export function useResaleDetailConditionMedia() {
   const conditionMediaInputRef =
@@ -87,9 +70,7 @@ export function useResaleDetailConditionMedia() {
     useRef<HTMLDivElement>(null);
 
   const conditionMediaItemsRef =
-    useRef<
-      ResaleDetailConditionMediaItem[]
-    >([]);
+    useRef<ResaleDetailConditionMediaItem[]>([]);
 
   const deletedImageIdsRef =
     useRef<string[]>([]);
@@ -97,9 +78,7 @@ export function useResaleDetailConditionMedia() {
   const [
     conditionMediaItems,
     setConditionMediaItems,
-  ] = useState<
-    ResaleDetailConditionMediaItem[]
-  >([]);
+  ] = useState<ResaleDetailConditionMediaItem[]>([]);
 
   const [
     conditionMediaCurrentIndex,
@@ -111,65 +90,39 @@ export function useResaleDetailConditionMedia() {
     setDeletedImageIds,
   ] = useState<string[]>([]);
 
-  /**
-   * stateとrefの商品状態画像一覧を同時に更新する。
-   */
   const replaceConditionMediaItems =
     useCallback(
       (
-        items:
-          ResaleDetailConditionMediaItem[],
+        items: ResaleDetailConditionMediaItem[],
       ) => {
-        conditionMediaItemsRef.current =
-          items;
-
-        setConditionMediaItems(
-          items,
-        );
+        conditionMediaItemsRef.current = items;
+        setConditionMediaItems(items);
       },
       [],
     );
 
-  /**
-   * stateとrefの削除予定画像IDを同時に更新する。
-   */
   const replaceDeletedImageIds =
     useCallback(
       (
-        imageIds:
-          readonly string[],
+        imageIds: readonly string[],
       ) => {
-        const normalizedImageIds =
-          Array.from(
-            new Set(
-              imageIds
-                .map((imageId) =>
-                  imageId.trim(),
-                )
-                .filter(Boolean),
-            ),
-          );
+        const nextImageIds =
+          Array.from(new Set(imageIds));
 
         deletedImageIdsRef.current =
-          normalizedImageIds;
+          nextImageIds;
 
         setDeletedImageIds(
-          normalizedImageIds,
+          nextImageIds,
         );
       },
       [],
     );
 
-  /**
-   * APIから取得した画像一覧を初期状態として設定する。
-   *
-   * 編集キャンセル、再取得、保存完了後の再初期化で使用する。
-   */
   const resetConditionMedia =
     useCallback(
       (
-        images:
-          readonly ResaleConditionImage[],
+        images: readonly ResaleConditionImage[],
       ) => {
         revokeNewConditionMediaPreviews(
           conditionMediaItemsRef.current,
@@ -186,13 +139,8 @@ export function useResaleDetailConditionMedia() {
           nextItems,
         );
 
-        replaceDeletedImageIds(
-          [],
-        );
-
-        setConditionMediaCurrentIndex(
-          0,
-        );
+        replaceDeletedImageIds([]);
+        setConditionMediaCurrentIndex(0);
 
         if (
           conditionMediaInputRef.current
@@ -201,12 +149,10 @@ export function useResaleDetailConditionMedia() {
             "";
         }
 
-        conditionMediaCarouselRef.current?.scrollTo(
-          {
-            left: 0,
-            behavior: "auto",
-          },
-        );
+        conditionMediaCarouselRef.current?.scrollTo({
+          left: 0,
+          behavior: "auto",
+        });
       },
       [
         replaceConditionMediaItems,
@@ -214,15 +160,10 @@ export function useResaleDetailConditionMedia() {
       ],
     );
 
-  /**
-   * ファイル選択時に画像だけを抽出し、
-   * 新規画像として一覧へ追加する。
-   */
   const handleConditionMediaSelected =
     useCallback(
       (
-        event:
-          ChangeEvent<HTMLInputElement>,
+        event: ChangeEvent<HTMLInputElement>,
       ) => {
         const input =
           event.currentTarget;
@@ -230,18 +171,16 @@ export function useResaleDetailConditionMedia() {
         const newItems =
           createResaleConditionMediaItems(
             input.files,
-          ).map<
-            ResaleDetailConditionMediaItem
-          >((item) => ({
-            ...item,
-            source: "new",
-          }));
+          ).map<ResaleDetailConditionMediaItem>(
+            (item) => ({
+              ...item,
+              source: "new",
+            }),
+          );
 
         input.value = "";
 
-        if (
-          newItems.length === 0
-        ) {
+        if (newItems.length === 0) {
           return;
         }
 
@@ -255,25 +194,12 @@ export function useResaleDetailConditionMedia() {
       ],
     );
 
-  /**
-   * 指定された画像を編集対象一覧から除外する。
-   *
-   * 既存画像:
-   * - API削除用の画像IDへ追加する
-   *
-   * 新規画像:
-   * - Object URLを解放する
-   * - API削除対象には追加しない
-   */
   const handleRemoveConditionMedia =
     useCallback(
       (
         id: string,
       ) => {
-        const normalizedId =
-          id.trim();
-
-        if (!normalizedId) {
+        if (!id) {
           return;
         }
 
@@ -283,8 +209,7 @@ export function useResaleDetailConditionMedia() {
         const removingItem =
           currentItems.find(
             (item) =>
-              item.id ===
-              normalizedId,
+              item.id === id,
           );
 
         if (!removingItem) {
@@ -295,21 +220,14 @@ export function useResaleDetailConditionMedia() {
           removingItem.source ===
           "existing"
         ) {
-          const imageId =
-            removingItem.image?.id?.trim() ||
-            removingItem.id.trim();
-
-          if (imageId) {
-            replaceDeletedImageIds([
-              ...deletedImageIdsRef.current,
-              imageId,
-            ]);
-          }
+          replaceDeletedImageIds([
+            ...deletedImageIdsRef.current,
+            removingItem.id,
+          ]);
         }
 
         if (
-          removingItem.source ===
-            "new" &&
+          removingItem.source === "new" &&
           removingItem.previewUrl
         ) {
           URL.revokeObjectURL(
@@ -320,8 +238,7 @@ export function useResaleDetailConditionMedia() {
         const nextItems =
           currentItems.filter(
             (item) =>
-              item.id !==
-              normalizedId,
+              item.id !== id,
           );
 
         replaceConditionMediaItems(
@@ -349,10 +266,6 @@ export function useResaleDetailConditionMedia() {
       ],
     );
 
-  /**
-   * MediaUploaderのスクロール位置から
-   * 現在表示中の画像番号を算出する。
-   */
   const handleConditionMediaCarouselScroll =
     useCallback(() => {
       const carousel =
@@ -363,31 +276,24 @@ export function useResaleDetailConditionMedia() {
       }
 
       const itemCount =
-        conditionMediaItemsRef.current
-          .length;
+        conditionMediaItemsRef.current.length;
 
-      if (
-        itemCount === 0
-      ) {
-        setConditionMediaCurrentIndex(
-          0,
-        );
+      if (itemCount === 0) {
+        setConditionMediaCurrentIndex(0);
         return;
       }
 
       const carouselWidth =
         carousel.clientWidth;
 
-      if (
-        carouselWidth <= 0
-      ) {
+      if (carouselWidth <= 0) {
         return;
       }
 
       const calculatedIndex =
         Math.round(
           carousel.scrollLeft /
-            carouselWidth,
+          carouselWidth,
         );
 
       const nextIndex =
@@ -404,24 +310,16 @@ export function useResaleDetailConditionMedia() {
       );
     }, []);
 
-  /**
-   * 指定された画像番号へカルーセルを移動する。
-   */
   const handleMoveToConditionMediaSlide =
     useCallback(
       (
         index: number,
       ) => {
         const itemCount =
-          conditionMediaItemsRef.current
-            .length;
+          conditionMediaItemsRef.current.length;
 
-        if (
-          itemCount === 0
-        ) {
-          setConditionMediaCurrentIndex(
-            0,
-          );
+        if (itemCount === 0) {
+          setConditionMediaCurrentIndex(0);
           return;
         }
 
@@ -453,9 +351,6 @@ export function useResaleDetailConditionMedia() {
       [],
     );
 
-  /**
-   * 保存対象となる新規画像ファイルだけを返す。
-   */
   const getNewConditionFiles =
     useCallback(
       (): File[] => {
@@ -468,10 +363,8 @@ export function useResaleDetailConditionMedia() {
                 source: "new";
                 file: File;
               } =>
-              item.source ===
-                "new" &&
-              item.file instanceof
-                File,
+              item.source === "new" &&
+              item.file instanceof File,
           )
           .map(
             (item) =>
@@ -481,9 +374,6 @@ export function useResaleDetailConditionMedia() {
       [],
     );
 
-  /**
-   * Hook破棄時に新規画像のObject URLを解放する。
-   */
   useEffect(() => {
     return () => {
       revokeNewConditionMediaPreviews(

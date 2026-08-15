@@ -1,61 +1,53 @@
 // frontend/amol/src/features/resale/types/resaleTypes.ts
 
-import type {
-  PageResultResponse,
-} from "../pageResult";
+import type { PageResult } from "../../shared/pageResult";
 
 import type {
   ResaleEditableStatus,
   ResaleListingBase,
 } from "../../shared/types/resale";
 
-type ResaleCreateRequiredFields =
-  Required<
-    Pick<
-      ResaleListingBase,
-      | "mintAddress"
-      | "tokenBlueprintId"
-      | "productId"
-      | "price"
-      | "condition"
-      | "description"
-    >
-  >;
+type ResaleCreateRequiredFields = Pick<
+  ResaleListingBase,
+  | "assetId"
+  | "tokenBlueprintId"
+  | "productId"
+  | "price"
+  | "condition"
+  | "description"
+>;
 
-type ResaleCreateOptionalFields =
+type ResaleCreateOptionalFields = Pick<
+  ResaleListingBase,
+  | "brandId"
+  | "productBlueprintId"
+>;
+
+type ResaleUpdateFields = Partial<
   Pick<
     ResaleListingBase,
-    | "brandId"
-    | "productBlueprintId"
-  >;
+    | "price"
+    | "condition"
+    | "description"
+  >
+>;
 
-type ResaleUpdateFields =
-  Partial<
-    Pick<
-      ResaleListingBase,
-      | "price"
-      | "condition"
-      | "description"
-    >
-  >;
-
-export type ResaleListing =
-  Partial<ResaleListingBase> & {
-    createdBy?: string;
-    createdAt?: string;
-    updatedBy?: string | null;
-    updatedAt?: string | null;
-  };
+export type ResaleListing = ResaleListingBase & {
+  createdBy: string;
+  createdAt: string;
+  updatedBy?: string | null;
+  updatedAt?: string | null;
+};
 
 export type ResaleConditionImage = {
   id: string;
-  resaleId?: string;
+  resaleId: string;
   url: string;
-  objectPath: string;
-  fileName: string;
-  fileSize: number;
-  mimeType: string;
   displayOrder: number;
+  createdAt: string;
+  createdBy?: string;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
 };
 
 export type CreateResaleListingParams =
@@ -64,11 +56,10 @@ export type CreateResaleListingParams =
     conditionImages: File[];
   };
 
-export type CreateResaleListingRecordParams =
-  Omit<
-    CreateResaleListingParams,
-    "conditionImages"
-  >;
+export type CreateResaleListingRecordParams = Omit<
+  CreateResaleListingParams,
+  "conditionImages"
+>;
 
 export type UpdateResaleListingParams = {
   resaleId: string;
@@ -81,7 +72,7 @@ export type ListMyResaleListingsParams = {
 };
 
 export type ListMyResaleListingsResponse =
-  PageResultResponse<ResaleListing>;
+  PageResult<ResaleListing>;
 
 export type ListResaleListingsByAvatarIdParams = {
   avatarId: string;

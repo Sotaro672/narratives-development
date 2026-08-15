@@ -22,20 +22,46 @@ export type ResaleEditableStatus =
     "sold"
   >;
 
+export type ResaleColor = {
+  name?: string;
+  rgb?: number;
+};
+
+export type ResaleVolume = {
+  amount?: number;
+  unit?: string;
+};
+
 export type ResaleListingBase = {
   id: string;
-  status?: ResaleStatus;
-  mintAddress?: string;
-  tokenBlueprintId?: string;
-  productId?: string;
+  status: ResaleStatus;
+
+  assetId: string;
+  tokenBlueprintId: string;
+  productId: string;
   brandId?: string;
   productBlueprintId?: string;
-  avatarId?: string;
-  price?: number;
-  condition?: ResaleCondition;
-  description?: string;
+  avatarId: string;
+
+  price: number;
+  condition: ResaleCondition;
+  description: string;
+
   imageId?: string;
+
   productName?: string;
   tokenName?: string;
+  tokenIcon?: string;
   brandName?: string;
+  avatarName?: string;
+  avatarIcon?: string;
+  imageUrl?: string;
+
+  modelId?: string;
+  kind?: string;
+  modelNumber?: string;
+  size?: string;
+  color?: ResaleColor;
+  measurements?: Record<string, number>;
+  volume?: ResaleVolume;
 };

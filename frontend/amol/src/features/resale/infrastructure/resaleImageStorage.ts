@@ -10,9 +10,12 @@ import {
   storage,
 } from "../../../lib/firebase";
 
-import type {
-  ResaleConditionImage,
-} from "../../shared/types/resaleTypes";
+export type UploadedResaleConditionImage = {
+  id: string;
+  resaleId: string;
+  url: string;
+  displayOrder: number;
+};
 
 function createUploadImageId(): string {
   if (
@@ -30,13 +33,11 @@ function createUploadImageId(): string {
 function sanitizeStorageFileName(
   fileName: string,
 ): string {
-  const trimmed = fileName.trim();
-
-  if (!trimmed) {
+  if (!fileName) {
     return "image";
   }
 
-  return trimmed.replace(
+  return fileName.replace(
     /[^\w.\-()]/g,
     "_",
   );
@@ -48,14 +49,9 @@ export async function uploadResaleConditionImage(
     file: File;
     displayOrder: number;
   },
-): Promise<ResaleConditionImage> {
-  const imageId =
-    createUploadImageId();
-
-  const safeFileName =
-    sanitizeStorageFileName(
-      params.file.name,
-    );
+): Promise<UploadedResaleConditionImage> {
+  const imageId = createUploadImageId();
+  const safeFileName = sanitizeStorageFileName(params.file.name);
 
   const objectPath =
     `resale-condition-images/${params.resaleId}` +
@@ -66,32 +62,22 @@ export async function uploadResaleConditionImage(
     objectPath,
   );
 
-  const mimeType =
-    params.file.type ||
-    "application/octet-stream";
-
   await uploadBytes(
     storageRef,
     params.file,
     {
-      contentType: mimeType,
+      contentType:
+        params.file.type ||
+        "application/octet-stream",
     },
   );
 
-  const url =
-    await getDownloadURL(
-      storageRef,
-    );
+  const url = await getDownloadURL(storageRef);
 
   return {
     id: imageId,
     resaleId: params.resaleId,
     url,
-    objectPath,
-    fileName: params.file.name,
-    fileSize: params.file.size,
-    mimeType,
-    displayOrder:
-      params.displayOrder,
+    displayOrder: params.displayOrder,
   };
 }

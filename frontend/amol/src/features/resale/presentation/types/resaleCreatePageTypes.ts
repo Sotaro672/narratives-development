@@ -9,7 +9,7 @@ import type {
  * 再販出品画面へ渡されるルート状態。
  */
 export type ResaleCreatePageLocationState = {
-  mintAddress?: string;
+  assetId?: string;
   productId?: string;
   brandId?: string;
   brandName?: string;
@@ -17,17 +17,14 @@ export type ResaleCreatePageLocationState = {
   productBlueprintId?: string;
   tokenBlueprintId?: string;
   tokenName?: string;
-  tokenIconUrl?: string;
+  tokenIcon?: string;
 };
 
 /**
- * location.stateを正規化した出品対象情報。
- *
- * 画面および出品処理では、undefinedを扱わず
- * 空文字列へ正規化して利用する。
+ * 再販出品対象情報。
  */
 export type ResaleCreateTarget = {
-  mintAddress: string;
+  assetId: string;
   productId: string;
   brandId: string;
   brandName: string;
@@ -35,22 +32,14 @@ export type ResaleCreateTarget = {
   productBlueprintId: string;
   tokenBlueprintId: string;
   tokenName: string;
-  tokenIconUrl: string;
+  tokenIcon: string;
 };
 
 /**
  * 再販商品の状態画像。
- *
- * MediaUploaderItemをベースにしつつ、
- * 再販出品では画像のみを扱うためtypeをimageに限定する。
- * Object URLと元ファイルは必須とする。
  */
 export type ResaleConditionMediaItem =
-  Omit<
-    MediaUploaderItem,
-    | "type"
-    | "previewUrl"
-  > & {
+  Omit<MediaUploaderItem, "type" | "previewUrl"> & {
     type: "image";
     previewUrl: string;
     file: File;

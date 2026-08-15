@@ -14,7 +14,6 @@ import {
 
 import { formatDateTime } from "../../../../components/utils/date";
 import { formatYen } from "../../../../components/utils/price";
-import { textOrEmpty } from "../../../../components/utils/textOrEmpty";
 
 import {
   addMyResaleConditionImages,
@@ -26,25 +25,23 @@ import {
   updateResaleListing,
 } from "../../api/resaleApi";
 
-import type {
-  ResaleConditionImage,
-} from "../../api/resaleApi";
-
 import {
   DEFAULT_RESALE_CONDITION,
-  normalizeResaleCondition,
 } from "../../constants/resaleConditions";
 
 import {
   DEFAULT_RESALE_EDITABLE_STATUS,
   isResaleEditableStatus,
-  normalizeResaleEditableStatus,
 } from "../../constants/resaleStatusOptions";
 
 import type {
   ResaleCondition,
   ResaleEditableStatus,
 } from "../../../shared/types/resale";
+
+import type {
+  ResaleConditionImage,
+} from "../../../shared/types/resaleTypes";
 
 import type {
   ResaleDetailEditFormProps,
@@ -61,7 +58,6 @@ import {
   formatResaleModelKind,
   formatResaleModelVolume,
   formatResaleStatus,
-  resolveResaleTokenIconUrl,
 } from "../utils/resaleDetailFormatters";
 
 import {
@@ -83,7 +79,7 @@ export function useResaleDetailPage() {
   const navigate = useNavigate();
   const { resaleId } = useParams<{ resaleId: string }>();
 
-  const normalizedResaleId = textOrEmpty(resaleId);
+  const normalizedResaleId = resaleId?.trim() ?? "";
   const loadRequestIdRef = useRef(0);
 
   const [item, setItem] =
@@ -132,10 +128,8 @@ export function useResaleDetailPage() {
     conditionMediaInputRef,
     conditionMediaCarouselRef,
     deletedImageIds,
-
     resetConditionMedia,
     getNewConditionFiles,
-
     handleConditionMediaSelected,
     handleRemoveConditionMedia,
     handleConditionMediaCarouselScroll,
@@ -152,39 +146,33 @@ export function useResaleDetailPage() {
       nextItem: ResaleListingWithModel | null,
       nextImages: ResaleConditionImage[],
     ) => {
-      const nextPrice = Number(
-        nextItem?.price ?? 0,
-      );
+      const nextPrice = nextItem?.price ?? 0;
 
       setPriceInput(
-        Number.isFinite(nextPrice) && nextPrice > 0
+        nextPrice > 0
           ? String(nextPrice)
           : "",
       );
 
       setConditionInput(
-        normalizeResaleCondition(
-          nextItem?.condition,
-        ),
+        nextItem?.condition ??
+          DEFAULT_RESALE_CONDITION,
       );
 
       setDescriptionInput(
-        textOrEmpty(
-          nextItem?.description,
-        ),
+        nextItem?.description ?? "",
       );
 
       setStatusInput(
-        normalizeResaleEditableStatus(
-          nextItem?.status,
-        ),
+        nextItem &&
+        isResaleEditableStatus(nextItem.status)
+          ? nextItem.status
+          : DEFAULT_RESALE_EDITABLE_STATUS,
       );
 
       resetConditionMedia(nextImages);
     },
-    [
-      resetConditionMedia,
-    ],
+    [resetConditionMedia],
   );
 
   const loadDetail = useCallback(
@@ -211,34 +199,20 @@ export function useResaleDetailPage() {
       setSaveMessage("");
 
       try {
-        const [
-          nextItem,
-          nextImages,
-        ] = await Promise.all([
-          getMyResaleListing(
-            normalizedResaleId,
-          ),
-          listMyResaleConditionImages(
-            normalizedResaleId,
-          ),
-        ]);
+        const [nextItem, nextImages] =
+          await Promise.all([
+            getMyResaleListing(
+              normalizedResaleId,
+            ),
+            listMyResaleConditionImages(
+              normalizedResaleId,
+            ),
+          ]);
 
         if (
           requestId !==
           loadRequestIdRef.current
         ) {
-          return;
-        }
-
-        if (!nextItem) {
-          setItem(null);
-          setImages([]);
-          resetFormFromItem(null, []);
-          setActiveGalleryIndex(0);
-          setIsEditing(false);
-          setErrorMessage(
-            "出品情報が見つかりません。",
-          );
           return;
         }
 
@@ -249,10 +223,12 @@ export function useResaleDetailPage() {
 
         setItem(nextItem);
         setImages(sortedNextImages);
+
         resetFormFromItem(
           nextItem,
           sortedNextImages,
         );
+
         setActiveGalleryIndex(0);
         setIsEditing(false);
       } catch (error) {
@@ -268,6 +244,7 @@ export function useResaleDetailPage() {
         resetFormFromItem(null, []);
         setActiveGalleryIndex(0);
         setIsEditing(false);
+
         setErrorMessage(
           error instanceof Error
             ? error.message
@@ -294,18 +271,14 @@ export function useResaleDetailPage() {
     return () => {
       loadRequestIdRef.current += 1;
     };
-  }, [
-    loadDetail,
-  ]);
+  }, [loadDetail]);
 
   const sortedImages = useMemo(
     () =>
       sortResaleConditionImages(
         images,
       ),
-    [
-      images,
-    ],
+    [images],
   );
 
   const galleryItems = useMemo(
@@ -313,9 +286,7 @@ export function useResaleDetailPage() {
       createResaleGalleryItems(
         sortedImages,
       ),
-    [
-      sortedImages,
-    ],
+    [sortedImages],
   );
 
   useEffect(() => {
@@ -331,46 +302,40 @@ export function useResaleDetailPage() {
         );
       },
     );
-  }, [
-    galleryItems.length,
-  ]);
+  }, [galleryItems.length]);
 
   const productName =
-    textOrEmpty(item?.productName);
+    item?.productName ?? "";
 
   const tokenName =
-    textOrEmpty(item?.tokenName);
+    item?.tokenName ?? "";
 
   const brandName =
-    textOrEmpty(item?.brandName);
+    item?.brandName ?? "";
 
-  const condition =
-    textOrEmpty(item?.condition);
+  const tokenIcon =
+    item?.tokenIcon ?? "";
 
   const description =
-    textOrEmpty(item?.description);
-
-  const status =
-    textOrEmpty(item?.status);
+    item?.description ?? "";
 
   const modelId =
-    textOrEmpty(item?.modelId);
+    item?.modelId ?? "";
 
   const modelKind =
-    textOrEmpty(item?.kind);
+    item?.kind ?? "";
 
   const modelNumber =
-    textOrEmpty(item?.modelNumber);
+    item?.modelNumber ?? "";
 
   const modelSize =
-    textOrEmpty(item?.size);
-
-  const tokenIconUrl =
-    resolveResaleTokenIconUrl(item);
+    item?.size ?? "";
 
   const modelKindLabel =
     modelKind
-      ? formatResaleModelKind(modelKind)
+      ? formatResaleModelKind(
+          modelKind,
+        )
       : "";
 
   const modelColorLabel =
@@ -398,7 +363,7 @@ export function useResaleDetailPage() {
     measurementsLabel !== "-";
 
   const isSold =
-    status === "sold";
+    item?.status === "sold";
 
   const title =
     productName ||
@@ -406,10 +371,11 @@ export function useResaleDetailPage() {
     "出品詳細";
 
   const priceLabel =
-    typeof item?.price === "number" &&
-    Number.isFinite(item.price) &&
-    item.price > 0
-      ? formatYen(item.price, "-")
+    item
+      ? formatYen(
+          item.price,
+          "-",
+        )
       : "-";
 
   const editablePriceLabel =
@@ -428,9 +394,14 @@ export function useResaleDetailPage() {
     );
 
   const statusLabel =
-    formatResaleStatus(
-      status,
-    );
+    item
+      ? formatResaleStatus(
+          item.status,
+        )
+      : "-";
+
+  const conditionLabel =
+    item?.condition ?? "-";
 
   const priceNumber =
     parseResalePriceInput(
@@ -447,12 +418,11 @@ export function useResaleDetailPage() {
     !saving &&
     Boolean(normalizedResaleId) &&
     hasValidPrice &&
-    isResaleEditableStatus(statusInput) &&
     conditionMediaItems.length > 0;
 
   const canEdit =
     !loading &&
-    Boolean(item) &&
+    item !== null &&
     !isEditing &&
     !isSold;
 
@@ -468,9 +438,7 @@ export function useResaleDetailPage() {
             ? galleryItems.length - 1
             : currentIndex - 1,
       );
-    }, [
-      galleryItems.length,
-    ]);
+    }, [galleryItems.length]);
 
   const handleNextGalleryItem =
     useCallback(() => {
@@ -485,9 +453,7 @@ export function useResaleDetailPage() {
             ? 0
             : currentIndex + 1,
       );
-    }, [
-      galleryItems.length,
-    ]);
+    }, [galleryItems.length]);
 
   const handleSelectGalleryItem =
     useCallback(
@@ -501,22 +467,21 @@ export function useResaleDetailPage() {
 
         setActiveGalleryIndex(index);
       },
-      [
-        galleryItems.length,
-      ],
+      [galleryItems.length],
     );
 
   const handlePriceChange =
     useCallback(
       (value: string) => {
         setPriceInput(
-          normalizeResalePriceInput(value),
+          normalizeResalePriceInput(
+            value,
+          ),
         );
+
         clearMessages();
       },
-      [
-        clearMessages,
-      ],
+      [clearMessages],
     );
 
   const handleConditionChange =
@@ -525,20 +490,18 @@ export function useResaleDetailPage() {
         setConditionInput(value);
         clearMessages();
       },
-      [
-        clearMessages,
-      ],
+      [clearMessages],
     );
 
   const handleStatusChange =
     useCallback(
-      (value: ResaleEditableStatus) => {
+      (
+        value: ResaleEditableStatus,
+      ) => {
         setStatusInput(value);
         clearMessages();
       },
-      [
-        clearMessages,
-      ],
+      [clearMessages],
     );
 
   const handleDescriptionChange =
@@ -547,9 +510,7 @@ export function useResaleDetailPage() {
         setDescriptionInput(value);
         clearMessages();
       },
-      [
-        clearMessages,
-      ],
+      [clearMessages],
     );
 
   const handleStartEdit =
@@ -565,6 +526,7 @@ export function useResaleDetailPage() {
         item,
         images,
       );
+
       setIsEditing(true);
       clearMessages();
     }, [
@@ -581,6 +543,7 @@ export function useResaleDetailPage() {
         item,
         images,
       );
+
       setIsEditing(false);
       clearMessages();
     }, [
@@ -626,26 +589,16 @@ export function useResaleDetailPage() {
               ) => {
                 if (
                   mediaItem.source !==
-                  "existing"
+                    "existing" ||
+                  !mediaItem.image
                 ) {
                   return currentMax;
                 }
 
-                const displayOrder =
-                  Number(
-                    mediaItem.image
-                      ?.displayOrder ??
-                      -1,
-                  );
-
-                return Number.isFinite(
-                  displayOrder,
-                )
-                  ? Math.max(
-                      currentMax,
-                      displayOrder,
-                    )
-                  : currentMax;
+                return Math.max(
+                  currentMax,
+                  mediaItem.image.displayOrder,
+                );
               },
               -1,
             ) + 1;
@@ -706,20 +659,17 @@ export function useResaleDetailPage() {
               normalizedResaleId,
             );
 
-          if (!refreshedItem) {
-            throw new Error(
-              "更新後の出品情報を取得できませんでした。",
-            );
-          }
-
           setItem(refreshedItem);
           setImages(nextImages);
+
           resetFormFromItem(
             refreshedItem,
             nextImages,
           );
+
           setActiveGalleryIndex(0);
           setIsEditing(false);
+
           setSaveMessage(
             "出品情報を更新しました。",
           );
@@ -788,7 +738,8 @@ export function useResaleDetailPage() {
             {
               replace: true,
               state: {
-                resaleDeleted: true,
+                resaleDeleted:
+                  true,
                 resaleId:
                   normalizedResaleId,
               },
@@ -816,31 +767,25 @@ export function useResaleDetailPage() {
   const handleBack =
     useCallback(() => {
       navigate(-1);
-    }, [
-      navigate,
-    ]);
+    }, [navigate]);
 
   const handleBackToWallet =
     useCallback(() => {
       navigate("/wallet");
-    }, [
-      navigate,
-    ]);
+    }, [navigate]);
 
   const handleReload =
     useCallback(
       async (): Promise<void> => {
         await loadDetail();
       },
-      [
-        loadDetail,
-      ],
+      [loadDetail],
     );
 
   const listingTarget =
     useMemo<ResaleListingTargetSummary>(
       () => ({
-        tokenIconUrl,
+        tokenIcon,
         tokenName,
         brandName,
         productName,
@@ -848,7 +793,7 @@ export function useResaleDetailPage() {
       [
         brandName,
         productName,
-        tokenIconUrl,
+        tokenIcon,
         tokenName,
       ],
     );
@@ -884,15 +829,12 @@ export function useResaleDetailPage() {
       () => ({
         galleryItems,
         activeGalleryIndex,
-
         priceLabel,
-        conditionLabel:
-          condition || "-",
+        conditionLabel,
         statusLabel,
         createdAtLabel,
         updatedAtLabel,
         description,
-
         onPrevGalleryItem:
           handlePrevGalleryItem,
         onNextGalleryItem:
@@ -902,7 +844,7 @@ export function useResaleDetailPage() {
       }),
       [
         activeGalleryIndex,
-        condition,
+        conditionLabel,
         createdAtLabel,
         description,
         galleryItems,
@@ -927,15 +869,12 @@ export function useResaleDetailPage() {
         description:
           descriptionInput,
         saving,
-
         createdAtLabel,
         updatedAtLabel,
-
         conditionMediaItems,
         conditionMediaCurrentIndex,
         conditionMediaInputRef,
         conditionMediaCarouselRef,
-
         onPriceChange:
           handlePriceChange,
         onConditionChange:
@@ -944,7 +883,6 @@ export function useResaleDetailPage() {
           handleStatusChange,
         onDescriptionChange:
           handleDescriptionChange,
-
         onConditionMediaSelected:
           handleConditionMediaSelected,
         onRemoveConditionMedia:

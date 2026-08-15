@@ -6,28 +6,21 @@ import {
 } from "../../../lib/http";
 
 export type ApiDataResponse<T> = {
-  data?: T;
-  error?: string;
+  data: T;
 };
 
-type ResaleRequestInit =
-  RequestInit & {
-    query?: ApiQueryParams;
-  };
+type ResaleRequestInit = RequestInit & {
+  query?: ApiQueryParams;
+};
 
 /**
- * 既存のRequestInit.bodyを、
- * 共通HTTPクライアントのjsonオプションへ変換します。
- *
- * resale APIではJSON本文のみを扱います。
+ * RequestInit.body の JSON 文字列を、
+ * 共通HTTPクライアントの json オプションへ変換する。
  */
 function parseJsonRequestBody(
   body: BodyInit | null | undefined,
 ): unknown {
-  if (
-    body === undefined ||
-    body === null
-  ) {
+  if (body === undefined || body === null) {
     return undefined;
   }
 
@@ -37,17 +30,12 @@ function parseJsonRequestBody(
     );
   }
 
-  const normalizedBody =
-    body.trim();
-
-  if (!normalizedBody) {
+  if (!body) {
     return undefined;
   }
 
   try {
-    return JSON.parse(
-      normalizedBody,
-    ) as unknown;
+    return JSON.parse(body) as unknown;
   } catch {
     throw new Error(
       "再販APIのリクエスト本文が不正なJSONです。",
@@ -56,95 +44,43 @@ function parseJsonRequestBody(
 }
 
 /**
- * 認証が必要な再販APIを実行します。
- *
- * URL生成、Firebase認証、ヘッダー設定、
- * JSON解析、HTTPエラー処理は共通HTTPクライアントへ委譲します。
+ * 認証が必要な再販APIを実行する。
  */
 export async function fetchResaleWithAuth<T>(
   path: string,
   init?: ResaleRequestInit,
 ): Promise<T> {
-  const {
-    body,
-    query,
-    ...requestInit
-  } = init ?? {};
+  const { body, query, ...requestInit } = init ?? {};
+  const json = parseJsonRequestBody(body);
 
-  const json =
-    parseJsonRequestBody(body);
-
-  return requestJson<T>(
-    path,
-    {
-      ...requestInit,
-
-      auth:
-        "required",
-
-      ...(query !== undefined
-        ? {
-            query,
-          }
-        : {}),
-
-      ...(json !== undefined
-        ? {
-            json,
-          }
-        : {}),
-
-      messages: {
-        requestErrorMessage:
-          "APIリクエストに失敗しました。",
-      },
+  return requestJson<T>(path, {
+    ...requestInit,
+    auth: "required",
+    ...(query !== undefined ? { query } : {}),
+    ...(json !== undefined ? { json } : {}),
+    messages: {
+      requestErrorMessage: "APIリクエストに失敗しました。",
     },
-  );
+  });
 }
 
 /**
- * 認証不要の公開再販APIを実行します。
- *
- * URL生成、ヘッダー設定、JSON解析、
- * HTTPエラー処理は共通HTTPクライアントへ委譲します。
+ * 認証不要の公開再販APIを実行する。
  */
 export async function fetchPublicResale<T>(
   path: string,
   init?: ResaleRequestInit,
 ): Promise<T> {
-  const {
-    body,
-    query,
-    ...requestInit
-  } = init ?? {};
+  const { body, query, ...requestInit } = init ?? {};
+  const json = parseJsonRequestBody(body);
 
-  const json =
-    parseJsonRequestBody(body);
-
-  return requestJson<T>(
-    path,
-    {
-      ...requestInit,
-
-      auth:
-        "none",
-
-      ...(query !== undefined
-        ? {
-            query,
-          }
-        : {}),
-
-      ...(json !== undefined
-        ? {
-            json,
-          }
-        : {}),
-
-      messages: {
-        requestErrorMessage:
-          "APIリクエストに失敗しました。",
-      },
+  return requestJson<T>(path, {
+    ...requestInit,
+    auth: "none",
+    ...(query !== undefined ? { query } : {}),
+    ...(json !== undefined ? { json } : {}),
+    messages: {
+      requestErrorMessage: "APIリクエストに失敗しました。",
     },
-  );
+  });
 }

@@ -21,7 +21,7 @@ import type {
   MarketResaleListing,
 } from "../../../shared/types/marketResale";
 
-import "../../../list/presentation/styles/lists-page.css";
+import "../../../../styles/lists-page.css";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 20;

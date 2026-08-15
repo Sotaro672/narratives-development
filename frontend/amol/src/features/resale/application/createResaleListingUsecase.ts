@@ -20,64 +20,46 @@ import type {
 
 export async function createResaleListing(
   params: CreateResaleListingParams,
-): Promise<ResaleListing | null> {
-  const created =
-    await createResaleListingRecord({
-      mintAddress:
-        params.mintAddress,
-      tokenBlueprintId:
-        params.tokenBlueprintId,
-      productId:
-        params.productId,
-      brandId:
-        params.brandId,
-      productBlueprintId:
-        params.productBlueprintId,
-      price:
-        params.price,
-      condition:
-        params.condition,
-      description:
-        params.description,
-    });
+): Promise<ResaleListing> {
+  const created = await createResaleListingRecord({
+    assetId: params.assetId,
+    tokenBlueprintId: params.tokenBlueprintId,
+    productId: params.productId,
+    brandId: params.brandId,
+    productBlueprintId: params.productBlueprintId,
+    price: params.price,
+    condition: params.condition,
+    description: params.description,
+  });
 
-  const resaleId = created?.id;
+  const resaleId = created.id;
 
-  if (!resaleId) {
+  if (params.conditionImages.length === 0) {
     return created;
   }
 
-  const uploadedImages =
-    await Promise.all(
-      params.conditionImages.map(
-        (file, index) =>
-          uploadResaleConditionImage({
-            resaleId,
-            file,
-            displayOrder: index,
-          }),
-      ),
-    );
-
-  await Promise.all(
-    uploadedImages.map(
-      createResaleConditionImage,
+  const uploadedImages = await Promise.all(
+    params.conditionImages.map((file, index) =>
+      uploadResaleConditionImage({
+        resaleId,
+        file,
+        displayOrder: index,
+      }),
     ),
   );
 
-  const primaryImage =
-    uploadedImages[0];
+  await Promise.all(
+    uploadedImages.map(createResaleConditionImage),
+  );
+
+  const primaryImage = uploadedImages[0];
 
   if (!primaryImage) {
     return created;
   }
 
-  const updated =
-    await updatePrimaryResaleImage({
-      resaleId,
-      imageId:
-        primaryImage.id,
-    });
-
-  return updated ?? created;
+  return updatePrimaryResaleImage({
+    resaleId,
+    imageId: primaryImage.id,
+  });
 }

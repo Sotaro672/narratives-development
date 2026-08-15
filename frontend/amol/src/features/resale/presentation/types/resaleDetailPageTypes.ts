@@ -15,47 +15,16 @@ import type {
 import type {
   ResaleConditionImage,
   ResaleListing,
-} from "../../api/resaleApi";
-
+} from "../../../shared/types/resaleTypes";
 import type {
   ResaleCondition,
   ResaleEditableStatus,
 } from "../../../shared/types/resale";
 
-export type ResaleModelColor = {
-  name?: string;
-  rgb?: number;
-};
-
-export type ResaleModelVolume = {
-  amount?: number;
-  value?: number;
-  unit?: string;
-};
-
-export type ResaleListingWithModel =
-  ResaleListing & {
-    modelId?: string;
-    kind?: string;
-    modelNumber?: string;
-    size?: string;
-    color?: ResaleModelColor | null;
-    measurements?: Record<string, number> | null;
-    volume?: ResaleModelVolume | null;
-
-    imageUrl?: string;
-    tokenIcon?: string;
-    tokenIconUrl?: string;
-    metadata?: {
-      image?: string;
-    } | null;
-  };
+export type ResaleListingWithModel = ResaleListing;
 
 export type ResaleDetailConditionMediaItem =
-  Omit<
-    MediaUploaderItem,
-    "type"
-  > & {
+  Omit<MediaUploaderItem, "type"> & {
     type: "image";
     source: "existing" | "new";
     file?: File;
@@ -63,7 +32,7 @@ export type ResaleDetailConditionMediaItem =
   };
 
 export type ResaleListingTargetSummary = {
-  tokenIconUrl: string;
+  tokenIcon: string;
   tokenName: string;
   brandName: string;
   productName: string;
@@ -82,14 +51,12 @@ export type ResaleDetailModelInfoProps = {
 export type ResaleDetailReadonlyInfoProps = {
   galleryItems: MediaGalleryItem[];
   activeGalleryIndex: number;
-
   priceLabel: string;
   conditionLabel: string;
   statusLabel: string;
   createdAtLabel: string;
   updatedAtLabel: string;
   description: string;
-
   onPrevGalleryItem: () => void;
   onNextGalleryItem: () => void;
   onSelectGalleryItem: (index: number) => void;
@@ -101,35 +68,20 @@ export type ResaleDetailEditFormProps = {
   status: ResaleEditableStatus;
   description: string;
   saving: boolean;
-
   createdAtLabel: string;
   updatedAtLabel: string;
-
-  conditionMediaItems:
-    ResaleDetailConditionMediaItem[];
+  conditionMediaItems: ResaleDetailConditionMediaItem[];
   conditionMediaCurrentIndex: number;
-  conditionMediaInputRef:
-    RefObject<HTMLInputElement>;
-  conditionMediaCarouselRef:
-    RefObject<HTMLDivElement>;
-
+  conditionMediaInputRef: RefObject<HTMLInputElement>;
+  conditionMediaCarouselRef: RefObject<HTMLDivElement>;
   onPriceChange: (value: string) => void;
-  onConditionChange: (
-    value: ResaleCondition,
-  ) => void;
-  onStatusChange: (
-    value: ResaleEditableStatus,
-  ) => void;
+  onConditionChange: (value: ResaleCondition) => void;
+  onStatusChange: (value: ResaleEditableStatus) => void;
   onDescriptionChange: (value: string) => void;
-
-  onConditionMediaSelected: (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => void;
+  onConditionMediaSelected: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemoveConditionMedia: (id: string) => void;
   onConditionMediaCarouselScroll: () => void;
-  onMoveToConditionMediaSlide: (
-    index: number,
-  ) => void;
+  onMoveToConditionMediaSlide: (index: number) => void;
 };
 
 export type ResaleDetailActionFooterProps = {
@@ -159,20 +111,16 @@ export type ResaleDetailFooterProps =
 export type ResaleDetailPageViewModel = {
   title: string;
   footerProps?: ResaleDetailFooterProps;
-
   loading: boolean;
   item: ResaleListingWithModel | null;
   isEditing: boolean;
   isSold: boolean;
-
   errorMessage: string;
   saveMessage: string;
-
   listingTarget: ResaleListingTargetSummary;
   modelInfoProps: ResaleDetailModelInfoProps;
   readonlyInfoProps: ResaleDetailReadonlyInfoProps;
   editFormProps: ResaleDetailEditFormProps;
-
   handleBack: () => void;
   handleReload: () => Promise<void>;
   handleBackToWallet: () => void;
