@@ -13,7 +13,6 @@ import { router } from "./router";
 import "./styles/reset.css";
 import "./styles/variables.css";
 import "./styles/globals.css";
-import "./styles/app.css";
 import "./styles/page-layout.css";
 import "./styles/page-split-layout.css";
 import "./styles/form.css";
