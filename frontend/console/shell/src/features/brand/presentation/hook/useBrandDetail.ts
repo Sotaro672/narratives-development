@@ -13,10 +13,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { safeDateLabelJa } from "../../../../shared/util/dateJa";
 import type { Brand, BrandPatch } from "../../../../shared/types/brand";
 
-import {
-  fetchAssigneeCandidatesForCurrentCompany,
-  type AssigneeCandidate,
-} from "../../../admin/application/AdminService";
+import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import { validateBrandImage } from "../../application/brandImageValidation";
 import {
   BRAND_IMAGE_ALLOWED_MIME_TYPES,
@@ -27,8 +24,6 @@ import { uploadBrandAssetToFirebaseStorage } from "../../infrastructure/storage/
 
 const BRAND_IMAGE_ACCEPT = BRAND_IMAGE_ALLOWED_MIME_TYPES.join(",");
 
-export type BrandManagerCandidate = AssigneeCandidate;
-
 type BrandDraft = {
   name: string;
   description: string;
@@ -36,7 +31,6 @@ type BrandDraft = {
   brandIcon: string;
   brandBackgroundImage: string;
   isActive: boolean;
-  managerId: string;
 };
 
 function createEmptyBrand(brandId: string): Brand {
@@ -69,7 +63,6 @@ function createDraft(brand: Brand): BrandDraft {
     brandIcon: brand.brandIcon ?? "",
     brandBackgroundImage: brand.brandBackgroundImage ?? "",
     isActive: brand.isActive,
-    managerId: brand.managerId ?? "",
   };
 }
 
@@ -85,6 +78,7 @@ export function useBrandDetail() {
   const [brand, setBrand] = useState<Brand>(() =>
     createEmptyBrand(resolvedBrandId),
   );
+
   const [draft, setDraft] = useState<BrandDraft>(() =>
     createDraft(createEmptyBrand(resolvedBrandId)),
   );
@@ -94,10 +88,18 @@ export function useBrandDetail() {
   const [error, setError] = useState<Error | null>(null);
   const [isEditing, setIsEditing] = useState(false);
 
-  const [managerCandidates, setManagerCandidates] =
-    useState<BrandManagerCandidate[]>([]);
-  const [loadingMembers, setLoadingMembers] = useState(false);
-  const [memberError, setMemberError] = useState<string | null>(null);
+  const {
+    assigneeId: managerId,
+    assigneeName: editingManagerName,
+    assigneeCandidates: managerCandidates,
+    loadingMembers,
+    handleSelectAssignee: handleSelectManager,
+    clearAssignee,
+  } = useAssigneeSelection({
+    initialAssigneeId: brand.managerId,
+    initialAssigneeName: brand.memberName,
+    defaultToCurrentMember: false,
+  });
 
   const [brandIconError, setBrandIconError] = useState<string | null>(null);
   const [brandBackgroundImageError, setBrandBackgroundImageError] =
@@ -134,6 +136,9 @@ export function useBrandDetail() {
 
         setBrand(response);
         setDraft(createDraft(response));
+
+        clearAssignee();
+
         setBrandIconFile(null);
         setBrandBackgroundFile(null);
         setBrandIconError(null);
@@ -158,51 +163,10 @@ export function useBrandDetail() {
     return () => {
       cancelled = true;
     };
-  }, [resolvedBrandId]);
-
-  useEffect(() => {
-    if (!isEditing) {
-      setLoadingMembers(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadMembers = async () => {
-      try {
-        setLoadingMembers(true);
-        setMemberError(null);
-
-        const {
-          candidates,
-        } = await fetchAssigneeCandidatesForCurrentCompany();
-
-        if (cancelled) {
-          return;
-        }
-
-        setManagerCandidates(candidates);
-      } catch (error: unknown) {
-        if (!cancelled) {
-          setManagerCandidates([]);
-          setMemberError(
-            getErrorMessage(error) ||
-              "責任者候補の取得に失敗しました。",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingMembers(false);
-        }
-      }
-    };
-
-    void loadMembers();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isEditing]);
+  }, [
+    resolvedBrandId,
+    clearAssignee,
+  ]);
 
   useEffect(() => {
     if (!brandIconFile) {
@@ -250,30 +214,6 @@ export function useBrandDetail() {
     isEditing,
   ]);
 
-  const editingManagerName = useMemo(() => {
-    const selectedCandidate = managerCandidates.find(
-      (candidate) => candidate.id === draft.managerId,
-    );
-
-    if (selectedCandidate) {
-      return selectedCandidate.name;
-    }
-
-    if (
-      draft.managerId &&
-      draft.managerId === brand.managerId
-    ) {
-      return brand.memberName || draft.managerId;
-    }
-
-    return draft.managerId || "未設定";
-  }, [
-    managerCandidates,
-    draft.managerId,
-    brand.managerId,
-    brand.memberName,
-  ]);
-
   const registeredAt = useMemo(
     () => safeDateLabelJa(brand.createdAt, ""),
     [brand.createdAt],
@@ -294,11 +234,11 @@ export function useBrandDetail() {
 
   const handleEdit = useCallback(() => {
     setDraft(createDraft(brand));
+
     setBrandIconFile(null);
     setBrandBackgroundFile(null);
     setBrandIconError(null);
     setBrandBackgroundImageError(null);
-    setMemberError(null);
     setError(null);
 
     if (brandIconInputRef.current) {
@@ -314,11 +254,13 @@ export function useBrandDetail() {
 
   const handleCancelEdit = useCallback(() => {
     setDraft(createDraft(brand));
+
+    clearAssignee();
+
     setBrandIconFile(null);
     setBrandBackgroundFile(null);
     setBrandIconError(null);
     setBrandBackgroundImageError(null);
-    setMemberError(null);
     setError(null);
 
     if (brandIconInputRef.current) {
@@ -330,18 +272,10 @@ export function useBrandDetail() {
     }
 
     setIsEditing(false);
-  }, [brand]);
-
-  const handleSelectManager = useCallback(
-    (managerId: string) => {
-      setDraft((currentDraft) => ({
-        ...currentDraft,
-        managerId,
-      }));
-      setMemberError(null);
-    },
-    [],
-  );
+  }, [
+    brand,
+    clearAssignee,
+  ]);
 
   const handlePickBrandIcon = useCallback(() => {
     if (!isEditing || saving) {
@@ -349,7 +283,10 @@ export function useBrandDetail() {
     }
 
     brandIconInputRef.current?.click();
-  }, [isEditing, saving]);
+  }, [
+    isEditing,
+    saving,
+  ]);
 
   const handlePickBrandBackground = useCallback(() => {
     if (!isEditing || saving) {
@@ -357,7 +294,10 @@ export function useBrandDetail() {
     }
 
     brandBackgroundInputRef.current?.click();
-  }, [isEditing, saving]);
+  }, [
+    isEditing,
+    saving,
+  ]);
 
   const validateSelectedImage = useCallback(
     (
@@ -387,11 +327,10 @@ export function useBrandDetail() {
         return;
       }
 
-      const validationError =
-        validateSelectedImage(
-          file,
-          "brandIcon",
-        );
+      const validationError = validateSelectedImage(
+        file,
+        "brandIcon",
+      );
 
       if (validationError) {
         setBrandIconFile(null);
@@ -416,17 +355,14 @@ export function useBrandDetail() {
         return;
       }
 
-      const validationError =
-        validateSelectedImage(
-          file,
-          "brandBackgroundImage",
-        );
+      const validationError = validateSelectedImage(
+        file,
+        "brandBackgroundImage",
+      );
 
       if (validationError) {
         setBrandBackgroundFile(null);
-        setBrandBackgroundImageError(
-          validationError,
-        );
+        setBrandBackgroundImageError(validationError);
         event.currentTarget.value = "";
         alert(validationError);
         return;
@@ -438,44 +374,41 @@ export function useBrandDetail() {
     [validateSelectedImage],
   );
 
-  const handleClearBrandIcon =
-    useCallback(() => {
-      setBrandIconFile(null);
-      setBrandIconError(null);
+  const handleClearBrandIcon = useCallback(() => {
+    setBrandIconFile(null);
+    setBrandIconError(null);
 
-      setDraft((currentDraft) => ({
-        ...currentDraft,
-        brandIcon: "",
-      }));
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      brandIcon: "",
+    }));
 
-      if (brandIconInputRef.current) {
-        brandIconInputRef.current.value = "";
-      }
-    }, []);
+    if (brandIconInputRef.current) {
+      brandIconInputRef.current.value = "";
+    }
+  }, []);
 
-  const handleClearBrandBackground =
-    useCallback(() => {
-      setBrandBackgroundFile(null);
-      setBrandBackgroundImageError(null);
+  const handleClearBrandBackground = useCallback(() => {
+    setBrandBackgroundFile(null);
+    setBrandBackgroundImageError(null);
 
-      setDraft((currentDraft) => ({
-        ...currentDraft,
-        brandBackgroundImage: "",
-      }));
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      brandBackgroundImage: "",
+    }));
 
-      if (brandBackgroundInputRef.current) {
-        brandBackgroundInputRef.current.value = "";
-      }
-    }, []);
+    if (brandBackgroundInputRef.current) {
+      brandBackgroundInputRef.current.value = "";
+    }
+  }, []);
 
   const validateSelectedImagesBeforeSave =
     useCallback((): boolean => {
       if (brandIconFile) {
-        const validationError =
-          validateSelectedImage(
-            brandIconFile,
-            "brandIcon",
-          );
+        const validationError = validateSelectedImage(
+          brandIconFile,
+          "brandIcon",
+        );
 
         if (validationError) {
           setBrandIconError(validationError);
@@ -485,16 +418,13 @@ export function useBrandDetail() {
       }
 
       if (brandBackgroundFile) {
-        const validationError =
-          validateSelectedImage(
-            brandBackgroundFile,
-            "brandBackgroundImage",
-          );
+        const validationError = validateSelectedImage(
+          brandBackgroundFile,
+          "brandBackgroundImage",
+        );
 
         if (validationError) {
-          setBrandBackgroundImageError(
-            validationError,
-          );
+          setBrandBackgroundImageError(validationError);
           alert(validationError);
           return false;
         }
@@ -502,6 +432,7 @@ export function useBrandDetail() {
 
       setBrandIconError(null);
       setBrandBackgroundImageError(null);
+
       return true;
     }, [
       brandIconFile,
@@ -526,8 +457,7 @@ export function useBrandDetail() {
         );
       }
 
-      let uploadedBrandIcon =
-        draft.brandIcon;
+      let uploadedBrandIcon = draft.brandIcon;
       let uploadedBrandBackgroundImage =
         draft.brandBackgroundImage;
 
@@ -540,8 +470,7 @@ export function useBrandDetail() {
             file: brandIconFile,
           });
 
-        uploadedBrandIcon =
-          uploaded.downloadUrl;
+        uploadedBrandIcon = uploaded.downloadUrl;
       }
 
       if (brandBackgroundFile) {
@@ -586,7 +515,7 @@ export function useBrandDetail() {
       return;
     }
 
-    if (!draft.managerId) {
+    if (!managerId) {
       setError(
         new Error(
           "ブランド責任者は必須です。",
@@ -616,7 +545,7 @@ export function useBrandDetail() {
         brandBackgroundImage:
           uploadedBrandBackgroundImage,
         isActive: draft.isActive,
-        managerId: draft.managerId,
+        managerId,
       };
 
       const savedBrand =
@@ -627,6 +556,9 @@ export function useBrandDetail() {
 
       setBrand(savedBrand);
       setDraft(createDraft(savedBrand));
+
+      clearAssignee();
+
       setBrandIconFile(null);
       setBrandBackgroundFile(null);
       setBrandIconError(null);
@@ -637,8 +569,7 @@ export function useBrandDetail() {
       }
 
       if (brandBackgroundInputRef.current) {
-        brandBackgroundInputRef.current.value =
-          "";
+        brandBackgroundInputRef.current.value = "";
       }
 
       setIsEditing(false);
@@ -655,8 +586,10 @@ export function useBrandDetail() {
     resolvedBrandId,
     saving,
     draft,
+    managerId,
     uploadBrandAssets,
     validateSelectedImagesBeforeSave,
+    clearAssignee,
   ]);
 
   const statusBadgeClass = useMemo(
@@ -690,10 +623,9 @@ export function useBrandDetail() {
     saving,
     error,
 
+    managerId,
     managerCandidates,
     loadingMembers,
-    memberError,
-
     editingManagerName,
     handleSelectManager,
 

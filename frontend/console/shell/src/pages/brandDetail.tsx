@@ -35,10 +35,9 @@ export default function BrandDetail() {
     saving,
     error,
 
+    managerId,
     managerCandidates,
     loadingMembers,
-    memberError,
-
     editingManagerName,
     handleSelectManager,
 
@@ -87,16 +86,36 @@ export default function BrandDetail() {
                   src={brandBackgroundPreviewUrl}
                   alt="ブランド背景画像"
                   className="brand-hero__cover-image"
-                  onClick={canEditImage ? handlePickBrandBackground : undefined}
-                  style={{ cursor: canEditImage ? "pointer" : "default" }}
+                  onClick={
+                    canEditImage
+                      ? handlePickBrandBackground
+                      : undefined
+                  }
+                  style={{
+                    cursor: canEditImage
+                      ? "pointer"
+                      : "default",
+                  }}
                 />
               ) : (
                 <div
-                  className={`brand-hero__cover-empty${canEditImage ? " is-clickable" : ""}`}
-                  onClick={canEditImage ? handlePickBrandBackground : undefined}
-                  style={{ cursor: canEditImage ? "pointer" : "default" }}
+                  className={`brand-hero__cover-empty${
+                    canEditImage ? " is-clickable" : ""
+                  }`}
+                  onClick={
+                    canEditImage
+                      ? handlePickBrandBackground
+                      : undefined
+                  }
+                  style={{
+                    cursor: canEditImage
+                      ? "pointer"
+                      : "default",
+                  }}
                 >
-                  {isEditing ? "背景画像を選択" : "背景画像未設定"}
+                  {isEditing
+                    ? "背景画像を選択"
+                    : "背景画像未設定"}
                 </div>
               )}
 
@@ -125,7 +144,8 @@ export default function BrandDetail() {
                     背景画像をアップロード
                   </button>
 
-                  {(brandBackgroundFile || draft.brandBackgroundImage) && (
+                  {(brandBackgroundFile ||
+                    draft.brandBackgroundImage) && (
                     <button
                       type="button"
                       className="brand-hero__action-btn"
@@ -154,16 +174,38 @@ export default function BrandDetail() {
                       src={brandIconPreviewUrl}
                       alt="ブランドアイコン"
                       className="brand-hero__avatar-image"
-                      onClick={canEditImage ? handlePickBrandIcon : undefined}
-                      style={{ cursor: canEditImage ? "pointer" : "default" }}
+                      onClick={
+                        canEditImage
+                          ? handlePickBrandIcon
+                          : undefined
+                      }
+                      style={{
+                        cursor: canEditImage
+                          ? "pointer"
+                          : "default",
+                      }}
                     />
                   ) : (
                     <div
-                      className={`brand-hero__avatar-empty${canEditImage ? " is-clickable" : ""}`}
-                      onClick={canEditImage ? handlePickBrandIcon : undefined}
-                      style={{ cursor: canEditImage ? "pointer" : "default" }}
+                      className={`brand-hero__avatar-empty${
+                        canEditImage
+                          ? " is-clickable"
+                          : ""
+                      }`}
+                      onClick={
+                        canEditImage
+                          ? handlePickBrandIcon
+                          : undefined
+                      }
+                      style={{
+                        cursor: canEditImage
+                          ? "pointer"
+                          : "default",
+                      }}
                     >
-                      {isEditing ? "アイコンを選択" : "アイコン未設定"}
+                      {isEditing
+                        ? "アイコンを選択"
+                        : "アイコン未設定"}
                     </div>
                   )}
 
@@ -192,7 +234,8 @@ export default function BrandDetail() {
                         アイコンをアップロード
                       </button>
 
-                      {(brandIconFile || draft.brandIcon) && (
+                      {(brandIconFile ||
+                        draft.brandIcon) && (
                         <button
                           type="button"
                           className="brand-hero__action-btn brand-hero__action-btn--plain"
@@ -224,13 +267,16 @@ export default function BrandDetail() {
                 <div className="brand-hero__sub">
                   {isEditing
                     ? editingManagerName
-                    : brand.memberName || "責任者未設定"}
+                    : brand.memberName ||
+                      "責任者未設定"}
                 </div>
 
                 <div className="brand-hero__sub">
                   {isEditing
-                    ? draft.websiteUrl || "Webサイト未設定"
-                    : brand.websiteUrl || "Webサイト未設定"}
+                    ? draft.websiteUrl ||
+                      "Webサイト未設定"
+                    : brand.websiteUrl ||
+                      "Webサイト未設定"}
                 </div>
               </div>
             </div>
@@ -262,10 +308,14 @@ export default function BrandDetail() {
                 </div>
               )}
 
-              <CardLabel htmlFor="brand-name">ブランド名</CardLabel>
+              <CardLabel htmlFor="brand-name">
+                ブランド名
+              </CardLabel>
 
               {!isEditing ? (
-                <div className="brand-view-plain">{brand.name}</div>
+                <div className="brand-view-plain">
+                  {brand.name}
+                </div>
               ) : (
                 <Input
                   id="brand-name"
@@ -282,7 +332,9 @@ export default function BrandDetail() {
                 />
               )}
 
-              <CardLabel htmlFor="brand-description">説明</CardLabel>
+              <CardLabel htmlFor="brand-description">
+                説明
+              </CardLabel>
 
               {!isEditing ? (
                 <div className="brand-detail__desc-box">
@@ -304,7 +356,9 @@ export default function BrandDetail() {
                 />
               )}
 
-              <CardLabel htmlFor="brand-website-url">WebサイトURL</CardLabel>
+              <CardLabel htmlFor="brand-website-url">
+                WebサイトURL
+              </CardLabel>
 
               {!isEditing ? (
                 <div className="brand-view-plain">
@@ -341,11 +395,18 @@ export default function BrandDetail() {
   const right = (
     <div className="space-y-4">
       <ManagerCard
-        managerName={isEditing ? editingManagerName : brand.memberName ?? ""}
-        managerId={isEditing ? draft.managerId : brand.managerId}
+        managerName={
+          isEditing
+            ? editingManagerName
+            : brand.memberName ?? ""
+        }
+        managerId={
+          isEditing
+            ? managerId
+            : brand.managerId
+        }
         managerCandidates={managerCandidates}
         loadingMembers={loadingMembers}
-        memberError={memberError}
         onSelectManager={handleSelectManager}
         registeredAt={registeredAt}
         updatedAt={updatedAt}
@@ -359,10 +420,26 @@ export default function BrandDetail() {
       layout="grid-2"
       title={brand.name || "ブランド詳細"}
       onBack={handleBack}
-      onEdit={!isEditing && !loading ? handleEdit : undefined}
-      onSave={isEditing && !saving ? handleSave : undefined}
-      onCancel={isEditing && !saving ? handleCancelEdit : undefined}
-      className={isEditing ? "brand-detail is-edit" : "brand-detail is-view"}
+      onEdit={
+        !isEditing && !loading
+          ? handleEdit
+          : undefined
+      }
+      onSave={
+        isEditing && !saving
+          ? handleSave
+          : undefined
+      }
+      onCancel={
+        isEditing && !saving
+          ? handleCancelEdit
+          : undefined
+      }
+      className={
+        isEditing
+          ? "brand-detail is-edit"
+          : "brand-detail is-view"
+      }
     >
       {[left, right]}
     </PageStyle>

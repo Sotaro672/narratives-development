@@ -1,54 +1,29 @@
 // frontend/console/shell/src/features/admin/presentation/hook/useAssigneeSelection.ts
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import {
-  useAuthContext,
-} from "../../../../auth/application/AuthContext";
+import { useAuthContext } from "../../../../auth/application/AuthContext";
+import { useAdminCard } from "./useAdminCard";
 
-import {
-  useAdminCard,
-} from "./useAdminCard";
-
-import type {
-  AssigneeCandidate,
-} from "../../application/AdminService";
+import type { AssigneeCandidate } from "../../application/AdminService";
 
 export type UseAssigneeSelectionArgs = {
-  initialAssigneeId?:
-    string | null;
-
-  initialAssigneeName?:
-    string | null;
-
-  defaultToCurrentMember?:
-    boolean;
+  initialAssigneeId?: string | null;
+  initialAssigneeName?: string | null;
+  defaultToCurrentMember?: boolean;
 };
 
 export type UseAssigneeSelectionResult = {
   assigneeId: string;
   assigneeName: string;
-
-  assigneeCandidates:
-    AssigneeCandidate[];
-
+  assigneeCandidates: AssigneeCandidate[];
   loadingMembers: boolean;
-
-  handleSelectAssignee: (
-    id: string,
-  ) => void;
-
+  handleSelectAssignee: (id: string) => void;
   clearAssignee: () => void;
 };
 
 export function useAssigneeSelection(
-  args:
-    UseAssigneeSelectionArgs = {},
+  args: UseAssigneeSelectionArgs = {},
 ): UseAssigneeSelectionResult {
   const {
     initialAssigneeId = null,
@@ -56,170 +31,111 @@ export function useAssigneeSelection(
     defaultToCurrentMember = true,
   } = args;
 
-  const {
-    currentMember,
-  } =
-    useAuthContext();
+  const { currentMember } = useAuthContext();
 
   const {
     assigneeCandidates,
     loadingMembers,
-  } =
-    useAdminCard();
+  } = useAdminCard();
 
-  const [
+  const [assigneeId, setAssigneeId] = useState(
+    initialAssigneeId ?? "",
+  );
+
+  useEffect(() => {
+    if (assigneeId || !initialAssigneeId) {
+      return;
+    }
+
+    setAssigneeId(initialAssigneeId);
+  }, [assigneeId, initialAssigneeId]);
+
+  useEffect(() => {
+    if (
+      assigneeId ||
+      !defaultToCurrentMember ||
+      !currentMember
+    ) {
+      return;
+    }
+
+    if (!currentMember.id) {
+      return;
+    }
+
+    setAssigneeId(currentMember.id);
+  }, [
     assigneeId,
-    setAssigneeId,
-  ] =
-    useState(
-      initialAssigneeId ?? "",
+    currentMember,
+    defaultToCurrentMember,
+  ]);
+
+  const assigneeName = useMemo(() => {
+    if (!assigneeId) {
+      return "未設定";
+    }
+
+    const matched = assigneeCandidates.find(
+      (candidate) => candidate.id === assigneeId,
     );
 
-  useEffect(
-    () => {
-      if (
-        assigneeId ||
-        !initialAssigneeId
-      ) {
+    if (matched) {
+      return matched.name;
+    }
+
+    if (currentMember?.id === assigneeId) {
+      return currentMember.displayName || "未設定";
+    }
+
+    if (
+      initialAssigneeId === assigneeId &&
+      initialAssigneeName
+    ) {
+      return initialAssigneeName;
+    }
+
+    return "未設定";
+  }, [
+    assigneeId,
+    assigneeCandidates,
+    currentMember,
+    initialAssigneeId,
+    initialAssigneeName,
+  ]);
+
+  const handleSelectAssignee = useCallback(
+    (id: string) => {
+      if (!id) {
         return;
       }
 
-      setAssigneeId(
-        initialAssigneeId,
+      const isCandidate = assigneeCandidates.some(
+        (candidate) => candidate.id === id,
       );
+
+      const isCurrentMember = currentMember?.id === id;
+
+      if (!isCandidate && !isCurrentMember) {
+        return;
+      }
+
+      setAssigneeId(id);
     },
     [
-      assigneeId,
-      initialAssigneeId,
-    ],
-  );
-
-  useEffect(
-    () => {
-      if (
-        assigneeId ||
-        !defaultToCurrentMember ||
-        !currentMember
-      ) {
-        return;
-      }
-
-      if (!currentMember.uid) {
-        return;
-      }
-
-      setAssigneeId(
-        currentMember.uid,
-      );
-    },
-    [
-      assigneeId,
+      assigneeCandidates,
       currentMember,
-      defaultToCurrentMember,
     ],
   );
 
-  const assigneeName =
-    useMemo(
-      () => {
-        if (!assigneeId) {
-          return "未設定";
-        }
-
-        const matched =
-          assigneeCandidates.find(
-            (candidate) =>
-              candidate.id ===
-              assigneeId,
-          );
-
-        if (matched) {
-          return matched.name;
-        }
-
-        if (
-          currentMember?.uid ===
-          assigneeId
-        ) {
-          return (
-            currentMember.displayName ||
-            "未設定"
-          );
-        }
-
-        if (
-          initialAssigneeId ===
-            assigneeId &&
-          initialAssigneeName
-        ) {
-          return initialAssigneeName;
-        }
-
-        return "未設定";
-      },
-      [
-        assigneeId,
-        assigneeCandidates,
-        currentMember,
-        initialAssigneeId,
-        initialAssigneeName,
-      ],
-    );
-
-  const handleSelectAssignee =
-    useCallback(
-      (
-        id: string,
-      ) => {
-        if (!id) {
-          return;
-        }
-
-        const isCandidate =
-          assigneeCandidates.some(
-            (candidate) =>
-              candidate.id ===
-              id,
-          );
-
-        const isCurrentMember =
-          currentMember?.uid ===
-          id;
-
-        if (
-          !isCandidate &&
-          !isCurrentMember
-        ) {
-          return;
-        }
-
-        setAssigneeId(
-          id,
-        );
-      },
-      [
-        assigneeCandidates,
-        currentMember,
-      ],
-    );
-
-  const clearAssignee =
-    useCallback(
-      () => {
-        setAssigneeId(
-          "",
-        );
-      },
-      [],
-    );
+  const clearAssignee = useCallback(() => {
+    setAssigneeId("");
+  }, []);
 
   return {
     assigneeId,
     assigneeName,
-
     assigneeCandidates,
     loadingMembers,
-
     handleSelectAssignee,
     clearAssignee,
   };
