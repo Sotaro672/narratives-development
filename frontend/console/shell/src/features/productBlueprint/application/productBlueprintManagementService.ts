@@ -5,8 +5,6 @@ import {
   type ProductBlueprintListRow,
 } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
 
-export type UiRow = ProductBlueprintListRow;
-
 export type ProductBlueprintSortKey = "createdAt" | "updatedAt" | null;
 export type SortDirection = "asc" | "desc" | null;
 
@@ -14,7 +12,7 @@ export type SortDirection = "asc" | "desc" | null;
  * backend BFFのGET /product-blueprintsレスポンスをそのまま返す。
  * frontend側でresponse mapperによる再構築は行わない。
  */
-export async function fetchProductBlueprintManagementRows(): Promise<UiRow[]> {
+export async function fetchProductBlueprintManagementRows(): Promise<ProductBlueprintListRow[]> {
   return listProductBlueprintsHTTP();
 }
 
@@ -32,10 +30,7 @@ function toTimestamp(value: string): number {
  * - "未印刷"
  * - "印刷済み"
  */
-function matchPrintedFilter(
-  rowPrinted: boolean,
-  printedFilter: string[],
-): boolean {
+function matchPrintedFilter(rowPrinted: boolean, printedFilter: string[]): boolean {
   if (printedFilter.length === 0) {
     return true;
   }
@@ -59,13 +54,13 @@ function matchPrintedFilter(
 }
 
 export function filterAndSortProductBlueprintRows(params: {
-  allRows: UiRow[];
+  allRows: ProductBlueprintListRow[];
   brandFilter: string[];
   assigneeFilter: string[];
   printedFilter: string[];
   sortedKey: ProductBlueprintSortKey;
   sortedDir: SortDirection;
-}): UiRow[] {
+}): ProductBlueprintListRow[] {
   const {
     allRows,
     brandFilter,
@@ -86,9 +81,7 @@ export function filterAndSortProductBlueprintRows(params: {
   }
 
   if (printedFilter.length > 0) {
-    work = work.filter((row) =>
-      matchPrintedFilter(row.printed, printedFilter),
-    );
+    work = work.filter((row) => matchPrintedFilter(row.printed, printedFilter));
   }
 
   if (sortedKey && sortedDir) {

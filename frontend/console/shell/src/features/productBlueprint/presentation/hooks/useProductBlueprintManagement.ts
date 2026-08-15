@@ -1,89 +1,73 @@
-// frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintManagement.ts
+// frontend/console/shell/src/features/productBlueprint/presentation/hooks/useProductBlueprintManagement.ts
 
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
   fetchProductBlueprintManagementRows,
   filterAndSortProductBlueprintRows,
-  type UiRow,
   type ProductBlueprintSortKey,
   type SortDirection,
 } from "../../application/productBlueprintManagementService";
-
+import type { ProductBlueprintListRow } from "../../infrastructure/repository/productBlueprintRepositoryHTTP";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
 export interface UseProductBlueprintManagementResult {
-  rows: UiRow[];
+  rows: ProductBlueprintListRow[];
 
-  // フィルタ状態
   brandFilter: string[];
   assigneeFilter: string[];
   printedFilter: string[];
 
-  // フィルタ変更ハンドラ
   handleBrandFilterChange: (values: string[]) => void;
   handleAssigneeFilterChange: (values: string[]) => void;
   handlePrintedFilterChange: (values: string[]) => void;
 
-  // ソート変更ハンドラ
   handleSortChange: (key: string | null, dir: "asc" | "desc" | null) => void;
 
-  // 行クリック & 画面操作
-  handleRowClick: (row: UiRow) => void;
+  handleRowClick: (row: ProductBlueprintListRow) => void;
   handleCreate: () => void;
   handleReset: () => void;
 
-  // リフレッシュボタン回転用
   isResetting: boolean;
 }
 
 /**
- * dateJa.ts を使って安全に整形し、表示は "yyyy/MM/dd HH:mm" に揃える。
- * - dateJa は "yyyy/MM/dd HH:mm:ss" を返すため、UI表示では秒を落とす
- * - parse できない場合は dateJa が生文字返しする（既存互換）
+ * dateJa.tsを使って安全に整形し、表示はyyyy/MM/dd HH:mmに揃える。
  */
-function formatDateTimeYYYYMMDDHHmm(v: string | null | undefined): string {
-  const label = safeDateTimeLabelJa(v, "");
-  if (!label) return "";
+function formatDateTimeYYYYMMDDHHmm(value: string | null | undefined): string {
+  const label = safeDateTimeLabelJa(value, "");
 
-  // "yyyy/MM/dd HH:mm:ss" -> "yyyy/MM/dd HH:mm"
-  const m = label.match(/^(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2})(?::\d{2})?$/);
-  if (m) return m[1];
+  if (!label) {
+    return "";
+  }
 
-  // 想定外フォーマットはそのまま返す（dateJa の方針に合わせる）
-  return label;
+  const matched = label.match(/^(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2})(?::\d{2})?$/);
+  return matched ? matched[1] : label;
 }
 
 /**
- * 商品設計一覧画面のロジック
- * - backend の /product-blueprints を参照
- * - フィルタ・ソート・画面遷移のみ担当
+ * 商品設計一覧画面のロジック。
+ * - BackendのGET /product-blueprintsを正とする
+ * - フィルタ・ソート・表示用日時整形・画面遷移のみ担当する
  */
 export function useProductBlueprintManagement(): UseProductBlueprintManagementResult {
   const navigate = useNavigate();
 
-  // 一覧データ
-  const [allRows, setAllRows] = useState<UiRow[]>([]);
-
-  // フィルタ & ソート状態
+  const [allRows, setAllRows] = useState<ProductBlueprintListRow[]>([]);
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
   const [printedFilter, setPrintedFilter] = useState<string[]>([]);
   const [sortedKey, setSortedKey] = useState<ProductBlueprintSortKey>(null);
   const [sortedDir, setSortedDir] = useState<SortDirection>(null);
+  const [isResetting, setIsResetting] = useState(false);
 
-  // リフレッシュボタン回転用
-  const [isResetting, setIsResetting] = useState<boolean>(false);
-
-  // ---------------------------
-  // 一覧取得処理（初回 & リフレッシュ共通）
-  // ---------------------------
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<void> => {
     setIsResetting(true);
+
     try {
-      const uiRows = await fetchProductBlueprintManagementRows();
-      setAllRows(uiRows);
+      const rows = await fetchProductBlueprintManagementRows();
+      setAllRows(rows);
     } catch {
       setAllRows([]);
     } finally {
@@ -91,17 +75,11 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
     }
   }, []);
 
-  // ---------------------------
-  // 初回ロード: backend から取得
-  // ---------------------------
   useEffect(() => {
     void load();
   }, [load]);
 
-  // ---------------------------
-  // フィルタ・ソート適用
-  // ---------------------------
-  const filteredSortedRows: UiRow[] = useMemo(
+  const filteredSortedRows = useMemo<ProductBlueprintListRow[]>(
     () =>
       filterAndSortProductBlueprintRows({
         allRows,
@@ -114,19 +92,16 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
     [allRows, brandFilter, assigneeFilter, printedFilter, sortedKey, sortedDir],
   );
 
-  // 表示用に createdAt / updatedAt を yyyy/MM/dd HH:mm に整形して返す
-  // - UiRow のキーを上書きするだけ（型を増やさない）
-  const rows: UiRow[] = useMemo(() => {
-    return filteredSortedRows.map((r) => ({
-      ...r,
-      createdAt: formatDateTimeYYYYMMDDHHmm(r.createdAt),
-      updatedAt: formatDateTimeYYYYMMDDHHmm(r.updatedAt),
-    }));
-  }, [filteredSortedRows]);
+  const rows = useMemo<ProductBlueprintListRow[]>(
+    () =>
+      filteredSortedRows.map((row) => ({
+        ...row,
+        createdAt: formatDateTimeYYYYMMDDHHmm(row.createdAt),
+        updatedAt: formatDateTimeYYYYMMDDHHmm(row.updatedAt),
+      })),
+    [filteredSortedRows],
+  );
 
-  // ---------------------------
-  // ハンドラ群
-  // ---------------------------
   const handleBrandFilterChange = useCallback((values: string[]) => {
     setBrandFilter(values);
   }, []);
@@ -141,14 +116,17 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
 
   const handleSortChange = useCallback(
     (key: string | null, dir: "asc" | "desc" | null) => {
-      setSortedKey((key as ProductBlueprintSortKey) ?? null);
-      setSortedDir(dir as SortDirection);
+      const nextKey: ProductBlueprintSortKey =
+        key === "createdAt" || key === "updatedAt" ? key : null;
+
+      setSortedKey(nextKey);
+      setSortedDir(dir);
     },
     [],
   );
 
   const handleRowClick = useCallback(
-    (row: UiRow) => {
+    (row: ProductBlueprintListRow) => {
       navigate(`/productBlueprint/detail/${encodeURIComponent(row.id)}`);
     },
     [navigate],
@@ -159,14 +137,11 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
   }, [navigate]);
 
   const handleReset = useCallback(() => {
-    // フィルタ・ソート状態をリセット
     setBrandFilter([]);
     setAssigneeFilter([]);
     setPrintedFilter([]);
     setSortedKey(null);
     setSortedDir(null);
-
-    // 一覧を再取得（リフレッシュ）
     void load();
   }, [load]);
 

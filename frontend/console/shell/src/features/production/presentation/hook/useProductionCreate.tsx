@@ -9,11 +9,11 @@ import type {
 } from "../../../../shared/types/production";
 import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import { useBrandSelection } from "../../../brand/presentation/hook/useBrandSelection";
+import type { ProductBlueprintListRow } from "../../../productBlueprint/infrastructure/repository/productBlueprintRepositoryHTTP";
 import { buildProductionPayload } from "../../application/productionCreateService";
 import {
   loadProductBlueprints,
   loadProductionCreateContext,
-  type ProductBlueprintManagementRow,
 } from "../../infrastructure/api/productionCreateApi";
 import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
 import {
@@ -24,13 +24,11 @@ import {
 export function useProductionCreate() {
   const navigate = useNavigate();
 
-  const [allProductBlueprints, setAllProductBlueprints] =
-    React.useState<ProductBlueprintManagementRow[]>([]);
+  const [allProductBlueprints, setAllProductBlueprints] = React.useState<ProductBlueprintListRow[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [selectedProductBlueprint, setSelectedProductBlueprint] =
     React.useState<ProductionCreateProductBlueprint | null>(null);
-  const [quantityRows, setQuantityRows] =
-    React.useState<ProductionQuantityRow[]>([]);
+  const [quantityRows, setQuantityRows] = React.useState<ProductionQuantityRow[]>([]);
 
   const {
     assigneeId,
@@ -62,11 +60,7 @@ export function useProductionCreate() {
   }, []);
 
   const filteredBlueprints = React.useMemo(
-    () =>
-      filterProductBlueprintsByBrand(
-        allProductBlueprints,
-        selectedBrandName || null,
-      ),
+    () => filterProductBlueprintsByBrand(allProductBlueprints, selectedBrandName || null),
     [allProductBlueprints, selectedBrandName],
   );
 
@@ -97,8 +91,7 @@ export function useProductionCreate() {
 
     async function loadSelectedProductBlueprint() {
       try {
-        const context =
-          await loadProductionCreateContext(productBlueprintId);
+        const context = await loadProductionCreateContext(productBlueprintId);
 
         if (cancelled) {
           return;
@@ -145,7 +138,6 @@ export function useProductionCreate() {
 
     try {
       const repository = new ProductionRepositoryHTTP();
-
       await repository.create(payload);
 
       alert("生産計画を作成しました");
@@ -153,12 +145,7 @@ export function useProductionCreate() {
     } catch {
       alert("生産計画の作成に失敗しました");
     }
-  }, [
-    selectedId,
-    assigneeId,
-    quantityRows,
-    navigate,
-  ]);
+  }, [selectedId, assigneeId, quantityRows, navigate]);
 
   return {
     onBack: handleBack,

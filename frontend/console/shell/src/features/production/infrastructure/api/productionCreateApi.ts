@@ -9,12 +9,7 @@ import type { ProductBlueprintCategorySnapshot } from "../../../productBlueprint
 import { fetchProductBlueprintManagementRows } from "../../../productBlueprint/application/productBlueprintManagementService";
 import type { ProductBlueprintListRow } from "../../../productBlueprint/infrastructure/repository/productBlueprintRepositoryHTTP";
 
-export type ProductBlueprintManagementRow = ProductBlueprintListRow;
-
-export type {
-  Brand,
-  ProductBlueprintCategorySnapshot,
-};
+export type { Brand, ProductBlueprintCategorySnapshot };
 
 // ======================================================================
 // ブランドAPI
@@ -33,7 +28,7 @@ export async function loadBrands(): Promise<Brand[]> {
 // 商品設計一覧API
 // ======================================================================
 
-export async function loadProductBlueprints(): Promise<ProductBlueprintManagementRow[]> {
+export async function loadProductBlueprints(): Promise<ProductBlueprintListRow[]> {
   try {
     return await fetchProductBlueprintManagementRows();
   } catch {
