@@ -44,15 +44,7 @@ export function useCatalogPage() {
       activeImageIndex,
       isAddingToCart,
     });
-  }, [
-    catalog,
-    reviews,
-    selectedColorKey,
-    selectedSize,
-    selectedModelId,
-    activeImageIndex,
-    isAddingToCart,
-  ]);
+  }, [catalog, reviews, selectedColorKey, selectedSize, selectedModelId, activeImageIndex, isAddingToCart]);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,10 +110,7 @@ export function useCatalogPage() {
       return;
     }
 
-    if (
-      selectedColorKey &&
-      !viewModel.colorOptions.some((option) => option.key === selectedColorKey)
-    ) {
+    if (selectedColorKey && !viewModel.colorOptions.some((option) => option.key === selectedColorKey)) {
       setSelectedColorKey("");
     }
   }, [selectedColorKey, viewModel.colorOptions, viewModel.isAlcoholCatalog]);
@@ -134,9 +123,7 @@ export function useCatalogPage() {
       return;
     }
 
-    if (selectedSize && !viewModel.sizeOptions.includes(selectedSize)) {
-      setSelectedSize("");
-    }
+    if (selectedSize && !viewModel.sizeOptions.includes(selectedSize)) setSelectedSize("");
   }, [selectedSize, viewModel.sizeOptions, viewModel.isAlcoholCatalog]);
 
   useEffect(() => {
@@ -150,22 +137,13 @@ export function useCatalogPage() {
       return;
     }
 
-    if (
-      selectedModelId &&
-      !viewModel.alcoholOptions.some((option) => option.modelId === selectedModelId)
-    ) {
+    if (selectedModelId && !viewModel.alcoholOptions.some((option) => option.modelId === selectedModelId)) {
       setSelectedModelId("");
     }
-  }, [
-    selectedModelId,
-    viewModel.alcoholOptions,
-    viewModel.isAlcoholCatalog,
-  ]);
+  }, [selectedModelId, viewModel.alcoholOptions, viewModel.isAlcoholCatalog]);
 
   useEffect(() => {
-    if (activeImageIndex > viewModel.catalogImages.length - 1) {
-      setActiveImageIndex(0);
-    }
+    if (activeImageIndex > viewModel.catalogImages.length - 1) setActiveImageIndex(0);
   }, [activeImageIndex, viewModel.catalogImages.length]);
 
   function handlePrevImage() {
@@ -195,12 +173,7 @@ export function useCatalogPage() {
   }
 
   function handleImageTouchEnd(event: TouchEvent<HTMLDivElement>) {
-    if (
-      !isMobilePortrait ||
-      viewModel.catalogImages.length <= 1 ||
-      touchStartX === null ||
-      touchStartY === null
-    ) {
+    if (!isMobilePortrait || viewModel.catalogImages.length <= 1 || touchStartX === null || touchStartY === null) {
       setTouchStartX(null);
       setTouchStartY(null);
       return;
@@ -283,10 +256,6 @@ export function useCatalogPage() {
     }
   }
 
-  function handleCartButtonClick() {
-    navigate("/cart");
-  }
-
   return {
     catalog,
     isLoadingCatalog,
@@ -311,6 +280,5 @@ export function useCatalogPage() {
     handleBrandClick,
     handleAvatarClick,
     handleAddToCart,
-    handleCartButtonClick,
   };
 }

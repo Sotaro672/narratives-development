@@ -11,11 +11,6 @@ import type { ProductCategoryKind } from "../../shared/types/category";
 import type { ProductBlueprintReviewPage } from "../../shared/types/review";
 
 import {
-  createCatalogImages,
-  hasMultipleCatalogImages,
-  resolveActiveCatalogImage,
-} from "./catalogImageFactory";
-import {
   createCatalogMeasurementKeys,
   createCatalogMeasurementRows,
   shouldShowCatalogMeasurementTable,
@@ -28,9 +23,9 @@ import {
   hasSelectedCatalogModelStock,
   resolveSelectedCatalogModel,
   resolveSelectedModelPrice,
-  resolveSelectedModelStock,
   type CatalogAlcoholOption,
 } from "./catalogSelectionFactory";
+import { getAvailableStock } from "../utils/model";
 
 export type CatalogPageViewModel = {
   catalogKind: ProductCategoryKind;
@@ -66,17 +61,10 @@ export function createCatalogPageViewModel(args: {
   const catalogKind = args.catalog?.productBlueprint.productBlueprintCategoryKind ?? "unknown";
   const isAlcoholCatalog = catalogKind === "alcohol";
   const models = args.catalog?.modelVariations;
-  const catalogImages = createCatalogImages(args.catalog?.listImages);
+  const catalogImages = args.catalog?.listImages ?? [];
+  const activeImage = catalogImages[args.activeImageIndex];
 
-  const activeImage = resolveActiveCatalogImage({
-    images: catalogImages,
-    activeImageIndex: args.activeImageIndex,
-  });
-
-  const measurementRows = createCatalogMeasurementRows({
-    models,
-    isAlcoholCatalog,
-  });
+  const measurementRows = createCatalogMeasurementRows({ models, isAlcoholCatalog });
   const measurementKeys = createCatalogMeasurementKeys(measurementRows);
 
   const alcoholOptions = isAlcoholCatalog ? createCatalogAlcoholOptions(models) : [];
@@ -101,10 +89,9 @@ export function createCatalogPageViewModel(args: {
     selectedModel,
   });
 
-  const selectedModelStock = resolveSelectedModelStock({
-    inventory: args.catalog?.inventory,
-    selectedModel,
-  });
+  const selectedModelStock = selectedModel
+    ? getAvailableStock(args.catalog?.inventory, selectedModel.id)
+    : undefined;
 
   const hasSelectedModelStock = hasSelectedCatalogModelStock(selectedModelStock);
 
@@ -113,7 +100,7 @@ export function createCatalogPageViewModel(args: {
     isAlcoholCatalog,
     activeImage,
     catalogImages,
-    hasMultipleImages: hasMultipleCatalogImages(catalogImages),
+    hasMultipleImages: catalogImages.length > 1,
     firstPrice: args.catalog?.list.prices[0],
     reviewSummary: args.catalog?.productReviewSummary,
     reviewItems: args.reviews?.items ?? [],

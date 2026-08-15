@@ -23,14 +23,6 @@ export function formatAlcoholModelLabel(model: CatalogModelVariation): string {
   return "-";
 }
 
-export function createAlcoholSelectionKey(model: CatalogModelVariation): string {
-  return model.id;
-}
-
-export function formatAlcoholSizeLabel(model: CatalogModelVariation): string {
-  return model.modelNumber.trim() || formatAlcoholVolumeLabel(model) || "-";
-}
-
 export function formatApparelSizeLabel(model: CatalogModelVariation): string {
   return model.size?.trim() || "-";
 }

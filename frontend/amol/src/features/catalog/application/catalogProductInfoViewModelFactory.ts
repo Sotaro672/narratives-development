@@ -50,11 +50,7 @@ function resolveQualityAssuranceItems(value: unknown): string[] {
       if (!item || typeof item !== "object" || Array.isArray(item)) return "";
 
       const record = item as Record<string, unknown>;
-      return (
-        formatNullableText(record.label) ||
-        formatNullableText(record.title) ||
-        formatNullableText(record.value)
-      );
+      return formatNullableText(record.label) || formatNullableText(record.title) || formatNullableText(record.value);
     })
     .filter((item): item is string => item !== "");
 }
@@ -75,13 +71,6 @@ function appendRow(rows: ProductInfoRowViewModel[], row: ProductInfoRowViewModel
   if (row) rows.push(row);
 }
 
-function getCategoryFieldValue(
-  categoryFields: Record<string, unknown> | null | undefined,
-  key: string,
-): unknown {
-  return categoryFields?.[key];
-}
-
 export function createProductInfoCardViewModel(args: {
   productBlueprint: CatalogProductBlueprint;
   categoryKind?: ProductCategoryKind;
@@ -99,32 +88,23 @@ export function createProductInfoCardViewModel(args: {
   appendRow(rows, createFormattedRow("category", "カテゴリ", resolveCategoryLabel(product)));
 
   if (isAlcohol) {
-    appendRow(rows, createRow("material", "材料", getCategoryFieldValue(categoryFields, "material")));
-    appendRow(rows, createRow("region", "生産地", getCategoryFieldValue(categoryFields, "region")));
-    appendRow(rows, createRow("vintage", "ビンテージ", getCategoryFieldValue(categoryFields, "vintage")));
-    appendRow(
-      rows,
-      createFormattedRow(
-        "alcoholContent",
-        "アルコール度数",
-        formatAlcoholContent(getCategoryFieldValue(categoryFields, "alcoholContent")),
-      ),
-    );
+    appendRow(rows, createRow("material", "材料", categoryFields?.material));
+    appendRow(rows, createRow("region", "生産地", categoryFields?.region));
+    appendRow(rows, createRow("vintage", "ビンテージ", categoryFields?.vintage));
+    appendRow(rows, createFormattedRow("alcoholContent", "アルコール度数", formatAlcoholContent(categoryFields?.alcoholContent)));
   }
 
   if (isApparel) {
-    appendRow(rows, createRow("fit", "フィット", getCategoryFieldValue(categoryFields, "fit")));
-    appendRow(rows, createRow("material", "素材", getCategoryFieldValue(categoryFields, "material")));
-    appendRow(rows, createRow("weight", "重量", getCategoryFieldValue(categoryFields, "weight")));
+    appendRow(rows, createRow("fit", "フィット", categoryFields?.fit));
+    appendRow(rows, createRow("material", "素材", categoryFields?.material));
+    appendRow(rows, createRow("weight", "重量", categoryFields?.weight));
   }
 
   appendRow(rows, createRow("productIdTagType", "商品IDタグ", product.productIdTagType));
 
   return {
     rows,
-    qualityAssuranceItems: resolveQualityAssuranceItems(
-      getCategoryFieldValue(categoryFields, "qualityAssurance"),
-    ),
+    qualityAssuranceItems: resolveQualityAssuranceItems(categoryFields?.qualityAssurance),
   };
 }
 

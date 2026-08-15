@@ -2,16 +2,12 @@
 
 import { toSafeColorRGB } from "../../../components/utils/color";
 import type {
-  CatalogInventory,
   CatalogListPrice,
   CatalogModelVariation,
   ModelColorOption,
 } from "../../shared/types/catalog";
-import { getAvailableStock, getModelColorKey } from "../utils/model";
-import {
-  formatAlcoholModelLabel,
-  formatApparelSizeLabel,
-} from "./catalogModelMapper";
+import { getModelColorKey } from "../utils/model";
+import { formatAlcoholModelLabel, formatApparelSizeLabel } from "./catalogModelMapper";
 
 export type CatalogAlcoholOption = {
   modelId: string;
@@ -21,9 +17,7 @@ export type CatalogAlcoholOption = {
   label: string;
 };
 
-export function createCatalogAlcoholOptions(
-  models: CatalogModelVariation[] | undefined,
-): CatalogAlcoholOption[] {
+export function createCatalogAlcoholOptions(models: CatalogModelVariation[] | undefined): CatalogAlcoholOption[] {
   return (models ?? [])
     .filter((model) => model.kind === "alcohol")
     .map((model) => ({
@@ -35,9 +29,7 @@ export function createCatalogAlcoholOptions(
     }));
 }
 
-export function createCatalogColorOptions(
-  models: CatalogModelVariation[] | undefined,
-): ModelColorOption[] {
+export function createCatalogColorOptions(models: CatalogModelVariation[] | undefined): ModelColorOption[] {
   const options = new Map<string, ModelColorOption>();
 
   for (const model of models ?? []) {
@@ -98,14 +90,7 @@ export function resolveSelectedCatalogModel(args: {
 
   if (args.isAlcoholCatalog) {
     if (!args.selectedModelId) return null;
-
-    return (
-      models.find(
-        (model) =>
-          model.kind === "alcohol" &&
-          model.id === args.selectedModelId,
-      ) ?? null
-    );
+    return models.find((model) => model.kind === "alcohol" && model.id === args.selectedModelId) ?? null;
   }
 
   const matchedModels = resolveSelectedApparelModels({
@@ -125,16 +110,6 @@ export function resolveSelectedModelPrice(args: {
   if (!selectedModel) return undefined;
 
   return args.prices?.find((price) => price.modelId === selectedModel.id);
-}
-
-export function resolveSelectedModelStock(args: {
-  inventory: CatalogInventory | undefined;
-  selectedModel: CatalogModelVariation | null;
-}): number | undefined {
-  const selectedModel = args.selectedModel;
-  if (!selectedModel) return undefined;
-
-  return getAvailableStock(args.inventory, selectedModel.id);
 }
 
 export function hasSelectedCatalogModelStock(selectedModelStock: number | undefined): boolean {
