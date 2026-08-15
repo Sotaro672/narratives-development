@@ -1,4 +1,5 @@
-//frontend\amol\src\features\inquiry\hooks\useInquiryUnreadCounter.tsx
+// frontend/amol/src/features/inquiry/presentation/hooks/useInquiryUnreadCounter.tsx
+
 import { useCallback, useEffect, useState } from "react";
 
 import { getUnreadInquiryCount } from "../../api/inquiryApi";
@@ -26,8 +27,8 @@ export function useInquiryUnreadCounter(
 ): UseInquiryUnreadCounterResult {
   const enabled = params.enabled ?? true;
 
-  const [unreadCount, setUnreadCount] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(enabled);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<Error | null>(null);
 
   const clearUnreadCount = useCallback(() => {
@@ -47,15 +48,10 @@ export function useInquiryUnreadCounter(
 
     try {
       const count = await getUnreadInquiryCount();
-
-      setUnreadCount(
-        typeof count === "number" && Number.isFinite(count)
-          ? Math.max(0, Math.floor(count))
-          : 0,
-      );
+      setUnreadCount(count);
     } catch (caught) {
-      setError(toError(caught));
       setUnreadCount(0);
+      setError(toError(caught));
     } finally {
       setLoading(false);
     }

@@ -20,14 +20,8 @@ type InquiryHandler struct {
 }
 
 // NewInquiryHandler は mall inquiry handler を初期化します。
-func NewInquiryHandler(
-	uc *usecase.InquiryUsecase,
-	query *mallquery.InquiryQuery,
-) http.Handler {
-	return &InquiryHandler{
-		uc:    uc,
-		query: query,
-	}
+func NewInquiryHandler(uc *usecase.InquiryUsecase, query *mallquery.InquiryQuery) http.Handler {
+	return &InquiryHandler{uc: uc, query: query}
 }
 
 // ServeHTTP はHTTPルーティングの入口です。
@@ -46,16 +40,11 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if h == nil || h.uc == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "inquiry usecase is nil",
-		})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "inquiry usecase is nil"})
 		return
 	}
-
 	if h.query == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "inquiry query is nil",
-		})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "inquiry query is nil"})
 		return
 	}
 
@@ -64,11 +53,9 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case http.MethodGet:
 			h.list(w, r)
 			return
-
 		case http.MethodPost:
 			h.create(w, r)
 			return
-
 		default:
 			methodNotAllowed(w)
 			return
@@ -80,7 +67,6 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
-
 		h.countUnread(w, r)
 		return
 	}
@@ -92,25 +78,22 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	rest := strings.TrimPrefix(r.URL.Path, "/mall/me/inquiries/")
 	parts := strings.Split(rest, "/")
-
-	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
+	if len(parts) == 0 || parts[0] == "" {
 		badRequest(w, "invalid inquiry id")
 		return
 	}
 
-	inquiryID := strings.TrimSpace(parts[0])
-
+	inquiryID := parts[0]
 	if len(parts) == 1 {
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w)
 			return
 		}
-
 		h.get(w, r, inquiryID)
 		return
 	}
 
-	if len(parts) != 2 || strings.TrimSpace(parts[1]) == "" {
+	if len(parts) != 2 || parts[1] == "" {
 		notFound(w)
 		return
 	}
@@ -121,40 +104,31 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
-
 		h.listReplies(w, r, inquiryID)
-
 	case "mark-as-read":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
 			return
 		}
-
 		h.markAsRead(w, r, inquiryID)
-
 	case "reply":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
 			return
 		}
-
 		h.reply(w, r, inquiryID)
-
 	case "close":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
 			return
 		}
-
 		h.close(w, r, inquiryID)
-
 	default:
 		notFound(w)
 	}
 }
 
 // createInquiryRequest は mall 画面から問い合わせを起票する request です。
-//
 // productId は /mall/me/preview?productId=... の productId を渡します。
 // avatarId は request body では受け取らず、AvatarContextMiddleware 由来で解決します。
 type createInquiryRequest struct {
@@ -166,7 +140,6 @@ type createInquiryRequest struct {
 }
 
 // createInquiryImageIn は問い合わせ画像メタデータです。
-//
 // 画像バイナリは frontend から Firebase Storage へ直接保存します。
 // backend は Firebase Storage の downloadURL(fileUrl) と objectPath のみ保存します。
 type createInquiryImageIn struct {
@@ -179,9 +152,7 @@ type createInquiryImageIn struct {
 }
 
 // replyInquiryRequest は avatar 側の返信 request です。
-//
-// reply は Inquiry.Content に追記せず、
-// inquiries/{inquiryId}/replies/{replyId} に保存します。
+// reply は Inquiry.Content に追記せず、inquiries/{inquiryId}/replies/{replyId} に保存します。
 type replyInquiryRequest struct {
 	Content string                 `json:"content"`
 	Images  []createInquiryImageIn `json:"images"`
@@ -190,9 +161,9 @@ type replyInquiryRequest struct {
 // GET /mall/me/inquiries
 //
 // avatar 側が自分の起票した問い合わせ一覧を取得します。
+// 一覧画面で必要な latestReply / replyCount / latestActivityAt は InquiryQuery 側で集約します。
 func (h *InquiryHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
 	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
@@ -201,29 +172,18 @@ func (h *InquiryHandler) list(w http.ResponseWriter, r *http.Request) {
 	filter := buildInquiryFilterFromQuery(r)
 	page := buildInquiryPageFromQuery(r)
 
-	result, err := h.query.ListByAvatarID(
-		ctx,
-		avatarID,
-		filter,
-		inquirydom.Sort{},
-		page,
-	)
+	result, err := h.query.ListForAvatar(ctx, avatarID, filter, inquirydom.Sort{}, page)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"items":   result.Items,
-		"page":    page.Number,
-		"perPage": page.PerPage,
-	})
+	writeJSON(w, http.StatusOK, result)
 }
 
 // POST /mall/me/inquiries
 func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
 	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
@@ -234,18 +194,11 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "invalid json")
 		return
 	}
-
-	req.ProductID = strings.TrimSpace(req.ProductID)
-	req.Subject = strings.TrimSpace(req.Subject)
-	req.Content = strings.TrimSpace(req.Content)
-	req.InquiryType = strings.TrimSpace(req.InquiryType)
-
 	if req.InquiryType == "" {
 		req.InquiryType = "product"
 	}
 
 	now := time.Now().UTC()
-
 	inquiry := inquirydom.Inquiry{
 		ID:          "",
 		ProductID:   req.ProductID,
@@ -261,17 +214,11 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(req.Images) > 0 {
-		images, err := buildInquiryImagesForMall(
-			"",
-			avatarID,
-			now,
-			req.Images,
-		)
+		images, err := buildInquiryImagesForMall("", avatarID, now, req.Images)
 		if err != nil {
 			writeInquiryErr(w, err)
 			return
 		}
-
 		inquiry.Images = images
 	}
 
@@ -281,9 +228,7 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]any{
-		"data": created,
-	})
+	writeJSON(w, http.StatusCreated, map[string]any{"data": created})
 }
 
 // GET /mall/me/inquiries/unread-count
@@ -291,44 +236,32 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 // avatar 側が受け取る未読 reply 数を avatarId のみで返します。
 // companyId は使いません。
 // 自分が送信した reply は count 対象外です。
+// response field は unreadCount を唯一の正とします。
 func (h *InquiryHandler) countUnread(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
 	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
 	filter := buildInquiryFilterFromQuery(r)
-
-	count, err := h.uc.CountUnreadByAvatarID(
-		ctx,
-		usecase.CountUnreadByAvatarIDInput{
-			AvatarID: avatarID,
-			Filter:   filter,
-		},
-	)
+	count, err := h.uc.CountUnreadByAvatarID(ctx, usecase.CountUnreadByAvatarIDInput{
+		AvatarID: avatarID,
+		Filter:   filter,
+	})
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"unreadCount": count,
-		"count":       count,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"unreadCount": count})
 }
 
 // GET /mall/me/inquiries/{id}
 //
 // avatar 側が自分の問い合わせ本体を取得します。
-func (h *InquiryHandler) get(
-	w http.ResponseWriter,
-	r *http.Request,
-	id string,
-) {
+func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
-
 	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
@@ -340,86 +273,55 @@ func (h *InquiryHandler) get(
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data": inquiry,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"data": inquiry})
 }
 
 // GET /mall/me/inquiries/{id}/replies
 //
 // avatar 側が問い合わせ配下の reply 一覧を取得します。
-//
-// Expected flow:
-//
-//	ListByAvatarID -> GetByID -> ListByInquiryID
-func (h *InquiryHandler) listReplies(
-	w http.ResponseWriter,
-	r *http.Request,
-	id string,
-) {
+// Expected flow: ListByAvatarID -> GetByID -> ListByInquiryID
+func (h *InquiryHandler) listReplies(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
-
 	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
-	replies, err := h.query.ListRepliesByInquiryIDForAvatar(
-		ctx,
-		id,
-		avatarID,
-	)
+	replies, err := h.query.ListRepliesByInquiryIDForAvatar(ctx, id, avatarID)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"items": replies,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"items": replies})
 }
 
 // POST /mall/me/inquiries/{id}/mark-as-read
 //
-// avatar 側が問い合わせを開いたタイミングなどで、
-// 自分が送信した reply 以外を既読化します。
-func (h *InquiryHandler) markAsRead(
-	w http.ResponseWriter,
-	r *http.Request,
-	id string,
-) {
+// avatar 側が問い合わせを開いたタイミングなどで、自分が送信した reply 以外を既読化します。
+func (h *InquiryHandler) markAsRead(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
-
 	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
-	if _, err := h.query.GetByIDForAvatar(
-		ctx,
-		id,
-		avatarID,
-	); err != nil {
+	if _, err := h.query.GetByIDForAvatar(ctx, id, avatarID); err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	updated, err := h.uc.MarkAsRead(
-		ctx,
-		usecase.MarkInquiryAsReadInput{
-			InquiryID:        id,
-			ReaderSenderType: inquirydom.ReplySenderTypeAvatar,
-			ReaderSenderID:   avatarID,
-		},
-	)
+	updated, err := h.uc.MarkAsRead(ctx, usecase.MarkInquiryAsReadInput{
+		InquiryID:        id,
+		ReaderSenderType: inquirydom.ReplySenderTypeAvatar,
+		ReaderSenderID:   avatarID,
+	})
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data": updated,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"data": updated})
 }
 
 // POST /mall/me/inquiries/{id}/reply
@@ -441,13 +343,8 @@ func (h *InquiryHandler) markAsRead(
 //	}
 //
 // avatar 側が company member からの返信を受けた後、追加返信を入力する endpoint です。
-func (h *InquiryHandler) reply(
-	w http.ResponseWriter,
-	r *http.Request,
-	id string,
-) {
+func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
-
 	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
@@ -458,9 +355,6 @@ func (h *InquiryHandler) reply(
 		badRequest(w, "invalid json")
 		return
 	}
-
-	req.Content = strings.TrimSpace(req.Content)
-
 	if req.Content == "" && len(req.Images) == 0 {
 		badRequest(w, "content or images is required")
 		return
@@ -471,7 +365,6 @@ func (h *InquiryHandler) reply(
 		writeInquiryErr(w, err)
 		return
 	}
-
 	if inquiry.Status == inquirydom.InquiryStatusClosed {
 		writeInquiryErr(w, inquirydom.ErrInquiryAlreadyClosed)
 		return
@@ -479,98 +372,66 @@ func (h *InquiryHandler) reply(
 
 	now := time.Now().UTC()
 	images := []inquirydom.ImageFile{}
-
 	if len(req.Images) > 0 {
-		replyImages, err := buildInquiryImagesForMall(
-			id,
-			avatarID,
-			now,
-			req.Images,
-		)
+		replyImages, err := buildInquiryImagesForMall(id, avatarID, now, req.Images)
 		if err != nil {
 			writeInquiryErr(w, err)
 			return
 		}
-
 		images = replyImages
 	}
 
-	created, err := h.uc.CreateReplyByAvatar(
-		ctx,
-		id,
-		avatarID,
-		req.Content,
-		images,
-	)
+	created, err := h.uc.CreateReplyByAvatar(ctx, id, avatarID, req.Content, images)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data": created,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"data": created})
 }
 
 // POST /mall/me/inquiries/{id}/close
 //
 // avatar 側が案件対応済みを確認した後、チケットを close する endpoint です。
-func (h *InquiryHandler) close(
-	w http.ResponseWriter,
-	r *http.Request,
-	id string,
-) {
+func (h *InquiryHandler) close(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
-
 	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
-	if _, err := h.query.GetByIDForAvatar(
-		ctx,
-		id,
-		avatarID,
-	); err != nil {
+	if _, err := h.query.GetByIDForAvatar(ctx, id, avatarID); err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	updated, err := h.uc.CloseByAvatar(
-		ctx,
-		usecase.CloseInquiryByAvatarInput{
-			InquiryID: id,
-			AvatarID:  avatarID,
-		},
-	)
+	updated, err := h.uc.CloseByAvatar(ctx, usecase.CloseInquiryByAvatarInput{
+		InquiryID: id,
+		AvatarID:  avatarID,
+	})
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data": updated,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"data": updated})
 }
 
 func buildInquiryFilterFromQuery(r *http.Request) inquirydom.Filter {
 	query := r.URL.Query()
 	filter := inquirydom.Filter{}
 
-	if searchQuery := strings.TrimSpace(query.Get("searchQuery")); searchQuery != "" {
+	if searchQuery := query.Get("searchQuery"); searchQuery != "" {
 		filter.SearchQuery = searchQuery
 	}
-
-	if productID := strings.TrimSpace(query.Get("productId")); productID != "" {
+	if productID := query.Get("productId"); productID != "" {
 		filter.ProductID = &productID
 	}
-
-	if statusRaw := strings.TrimSpace(query.Get("status")); statusRaw != "" {
+	if statusRaw := query.Get("status"); statusRaw != "" {
 		status := inquirydom.InquiryStatus(statusRaw)
 		filter.Status = &status
 	}
-
-	if inquiryTypeRaw := strings.TrimSpace(query.Get("inquiryType")); inquiryTypeRaw != "" {
+	if inquiryTypeRaw := query.Get("inquiryType"); inquiryTypeRaw != "" {
 		inquiryType := inquirydom.InquiryType(inquiryTypeRaw)
 		filter.InquiryType = &inquiryType
 	}
@@ -580,7 +441,6 @@ func buildInquiryFilterFromQuery(r *http.Request) inquirydom.Filter {
 
 func buildInquiryPageFromQuery(r *http.Request) inquirydom.Page {
 	query := r.URL.Query()
-
 	pageNumber := parsePositiveIntDefault(query.Get("page"), 1)
 	perPage := parsePositiveIntDefault(query.Get("perPage"), 100)
 
@@ -588,10 +448,7 @@ func buildInquiryPageFromQuery(r *http.Request) inquirydom.Page {
 		perPage = 100
 	}
 
-	return inquirydom.Page{
-		Number:  pageNumber,
-		PerPage: perPage,
-	}
+	return inquirydom.Page{Number: pageNumber, PerPage: perPage}
 }
 
 func buildInquiryImagesForMall(
@@ -604,69 +461,46 @@ func buildInquiryImagesForMall(
 		return []inquirydom.ImageFile{}, nil
 	}
 
-	images := make(
-		[]inquirydom.ImageFile,
-		0,
-		len(rawImages),
-	)
-
+	images := make([]inquirydom.ImageFile, 0, len(rawImages))
 	for _, raw := range rawImages {
 		imgCreatedAt := now
-
-		if raw.CreatedAt != nil &&
-			strings.TrimSpace(*raw.CreatedAt) != "" {
-			parsed, err := time.Parse(
-				time.RFC3339,
-				strings.TrimSpace(*raw.CreatedAt),
-			)
+		if raw.CreatedAt != nil && *raw.CreatedAt != "" {
+			parsed, err := time.Parse(time.RFC3339, *raw.CreatedAt)
 			if err != nil {
 				return nil, inquirydom.ErrInvalidImageCreatedAt
 			}
-
 			imgCreatedAt = parsed.UTC()
 		}
 
 		var objectPath *string
-		if strings.TrimSpace(raw.ObjectPath) != "" {
-			value := strings.TrimSpace(raw.ObjectPath)
+		if raw.ObjectPath != "" {
+			value := raw.ObjectPath
 			objectPath = &value
 		}
 
-		images = append(
-			images,
-			inquirydom.ImageFile{
-				InquiryID:  inquiryID,
-				FileName:   strings.TrimSpace(raw.FileName),
-				FileURL:    strings.TrimSpace(raw.FileURL),
-				ObjectPath: objectPath,
-				FileSize:   raw.FileSize,
-				MimeType:   strings.TrimSpace(raw.MimeType),
-				CreatedAt:  imgCreatedAt,
-				CreatedBy:  avatarID,
-			},
-		)
+		images = append(images, inquirydom.ImageFile{
+			InquiryID:  inquiryID,
+			FileName:   raw.FileName,
+			FileURL:    raw.FileURL,
+			ObjectPath: objectPath,
+			FileSize:   raw.FileSize,
+			MimeType:   raw.MimeType,
+			CreatedAt:  imgCreatedAt,
+			CreatedBy:  avatarID,
+		})
 	}
 
 	return images, nil
 }
 
 // エラーハンドリング
-func writeInquiryErr(
-	w http.ResponseWriter,
-	err error,
-) {
+func writeInquiryErr(w http.ResponseWriter, err error) {
 	message := "internal_error"
 	if err != nil {
 		message = err.Error()
 	}
 
-	writeJSON(
-		w,
-		inquiryHTTPStatus(err),
-		map[string]string{
-			"error": message,
-		},
-	)
+	writeJSON(w, inquiryHTTPStatus(err), map[string]string{"error": message})
 }
 
 func inquiryHTTPStatus(err error) int {
@@ -718,13 +552,10 @@ func inquiryHTTPStatus(err error) int {
 
 	case errors.Is(err, inquirydom.ErrInquiryForbidden):
 		return http.StatusForbidden
-
 	case errors.Is(err, inquirydom.ErrNotFound):
 		return http.StatusNotFound
-
 	case errors.Is(err, inquirydom.ErrConflict):
 		return http.StatusConflict
-
 	default:
 		return http.StatusInternalServerError
 	}

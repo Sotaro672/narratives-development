@@ -5,84 +5,33 @@ import {
   type ApiQueryParams,
 } from "../../../lib/http";
 
-export const INQUIRY_BASE_PATH =
-  "/mall/me/inquiries";
+export const INQUIRY_BASE_PATH = "/mall/me/inquiries";
 
 export type ApiDataResponse<T> = {
-  data?: T;
-  error?: string;
+  data: T;
 };
 
 export type ApiItemsResponse<T> = {
-  items?: T[];
-  page?: number;
-  perPage?: number;
-  total?: number;
-  totalCount?: number;
-  error?: string;
+  items: T[];
+};
+
+export type ApiPagedItemsResponse<T> = {
+  items: T[];
+  page: number;
+  perPage: number;
 };
 
 export type ApiUnreadCountResponse = {
-  count?: number;
-  unreadCount?: number;
-  error?: string;
+  unreadCount: number;
 };
 
-export type InquiryRequestInit =
-  Omit<
-    RequestInit,
-    "body"
-  > & {
-    body?: BodyInit | null;
-    query?: ApiQueryParams;
-  };
+export type InquiryRequestInit = Omit<RequestInit, "body"> & {
+  json?: unknown;
+  query?: ApiQueryParams;
+};
 
-/**
- * 既存のRequestInit.bodyを、
- * 共通HTTPクライアントのjsonオプションへ変換します。
- *
- * inquiry APIではJSON本文のみを扱います。
- */
-function parseJsonRequestBody(
-  body: BodyInit | null | undefined,
-): unknown {
-  if (
-    body === undefined ||
-    body === null
-  ) {
-    return undefined;
-  }
-
-  if (typeof body !== "string") {
-    throw new Error(
-      "問い合わせAPIのリクエスト本文はJSON文字列で指定してください。",
-    );
-  }
-
-  const normalizedBody =
-    body.trim();
-
-  if (!normalizedBody) {
-    return undefined;
-  }
-
-  try {
-    return JSON.parse(
-      normalizedBody,
-    ) as unknown;
-  } catch {
-    throw new Error(
-      "問い合わせAPIのリクエスト本文が不正なJSONです。",
-    );
-  }
-}
-
-export function buildInquiryPath(
-  inquiryId: string,
-): string {
-  return `${INQUIRY_BASE_PATH}/${encodeURIComponent(
-    inquiryId,
-  )}`;
+export function buildInquiryPath(inquiryId: string): string {
+  return `${INQUIRY_BASE_PATH}/${encodeURIComponent(inquiryId)}`;
 }
 
 /**
@@ -90,39 +39,22 @@ export function buildInquiryPath(
  *
  * URL生成、Firebase認証、ヘッダー設定、
  * JSON解析、HTTPエラー処理は共通HTTPクライアントへ委譲します。
+ *
+ * request body は JSON.stringify せず、json としてそのまま渡します。
  */
 export async function fetchInquiryWithAuth<T>(
   path: string,
   init?: InquiryRequestInit,
 ): Promise<T> {
-  const {
-    body,
+  const { json, query, ...requestInit } = init ?? {};
+
+  return requestJson<T>(path, {
+    ...requestInit,
+    auth: "required",
     query,
-    ...requestInit
-  } = init ?? {};
-
-  const json =
-    parseJsonRequestBody(body);
-
-  return requestJson<T>(
-    path,
-    {
-      ...requestInit,
-
-      auth: "required",
-
-      query,
-
-      ...(json !== undefined
-        ? {
-            json,
-          }
-        : {}),
-
-      messages: {
-        requestErrorMessage:
-          "APIリクエストに失敗しました。",
-      },
+    ...(json !== undefined ? { json } : {}),
+    messages: {
+      requestErrorMessage: "APIリクエストに失敗しました。",
     },
-  );
+  });
 }

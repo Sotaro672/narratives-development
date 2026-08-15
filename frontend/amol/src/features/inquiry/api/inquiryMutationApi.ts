@@ -16,77 +16,55 @@ import type {
 
 export async function createInquiry(
   payload: CreateInquiryRequest,
-): Promise<Inquiry | null> {
-  const json =
-    await fetchInquiryWithAuth<
-      ApiDataResponse<Inquiry>
-    >(
-      INQUIRY_BASE_PATH,
-      {
-        method: "POST",
-        body: JSON.stringify(
-          payload,
-        ),
-      },
-    );
+): Promise<Inquiry> {
+  const json = await fetchInquiryWithAuth<ApiDataResponse<Inquiry>>(
+    INQUIRY_BASE_PATH,
+    {
+      method: "POST",
+      json: payload,
+    },
+  );
 
-  return json.data ?? null;
+  return json.data;
 }
 
 export async function markInquiryAsRead(
   inquiryId: string,
-): Promise<Inquiry | null> {
-  const path =
-    `${buildInquiryPath(
-      inquiryId,
-    )}/mark-as-read`;
+): Promise<Inquiry> {
+  const path = `${buildInquiryPath(inquiryId)}/mark-as-read`;
 
-  const json =
-    await fetchInquiryWithAuth<
-      ApiDataResponse<Inquiry>
-    >(path, {
-      method: "POST",
-    });
+  const json = await fetchInquiryWithAuth<ApiDataResponse<Inquiry>>(path, {
+    method: "POST",
+  });
 
-  return json.data ?? null;
+  return json.data;
 }
 
 export async function replyInquiry(
   inquiryId: string,
   payload: ReplyInquiryRequest,
-): Promise<InquiryReply | null> {
-  const path =
-    `${buildInquiryPath(
-      inquiryId,
-    )}/reply`;
+): Promise<InquiryReply> {
+  const path = `${buildInquiryPath(inquiryId)}/reply`;
 
-  const json =
-    await fetchInquiryWithAuth<
-      ApiDataResponse<InquiryReply>
-    >(path, {
+  const json = await fetchInquiryWithAuth<ApiDataResponse<InquiryReply>>(
+    path,
+    {
       method: "POST",
-      body: JSON.stringify(
-        payload,
-      ),
-    });
+      json: payload,
+    },
+  );
 
-  return json.data ?? null;
+  return json.data;
 }
 
 export async function closeInquiry(
   inquiryId: string,
-): Promise<Inquiry | null> {
-  const path =
-    `${buildInquiryPath(
-      inquiryId,
-    )}/close`;
+): Promise<Inquiry> {
+  const path = `${buildInquiryPath(inquiryId)}/close`;
 
-  const json =
-    await fetchInquiryWithAuth<
-      ApiDataResponse<Inquiry>
-    >(path, {
-      method: "POST",
-    });
+  const json = await fetchInquiryWithAuth<ApiDataResponse<Inquiry>>(path, {
+    method: "POST",
+  });
 
-  return json.data ?? null;
+  return json.data;
 }

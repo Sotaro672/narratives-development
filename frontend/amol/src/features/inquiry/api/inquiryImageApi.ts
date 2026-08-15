@@ -1,17 +1,11 @@
 // frontend/amol/src/features/inquiry/api/inquiryImageApi.ts
 
-import {
-  getDownloadURL,
-  ref,
-  uploadBytes,
-} from "firebase/storage";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
-import {
-  storage,
-} from "../../../lib/firebase";
+import { storage } from "../../../lib/firebase";
 
 import type {
-  InquiryImage,
+  InquiryImageUpload,
   UploadInquiryImageParams,
   UploadReplyImageParams,
 } from "../../shared/types/inquiryTypes";
@@ -21,13 +15,8 @@ type UploadInquiryImageFileParams = {
   file: File;
 };
 
-function createUploadImageId(
-  file: File,
-): string {
-  if (
-    typeof crypto !== "undefined" &&
-    "randomUUID" in crypto
-  ) {
+function createUploadImageId(file: File): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
 
@@ -36,57 +25,31 @@ function createUploadImageId(
     .slice(2)}`;
 }
 
-function sanitizeStorageFileName(
-  fileName: string,
-): string {
+function sanitizeStorageFileName(fileName: string): string {
   const trimmed = fileName.trim();
 
   if (!trimmed) {
     return "image";
   }
 
-  return trimmed.replace(
-    /[^\w.\-()]/g,
-    "_",
-  );
+  return trimmed.replace(/[^\w.\-()]/g, "_");
 }
 
 async function uploadInquiryImageFile({
   directoryPath,
   file,
-}: UploadInquiryImageFileParams): Promise<InquiryImage> {
-  const imageId =
-    createUploadImageId(file);
+}: UploadInquiryImageFileParams): Promise<InquiryImageUpload> {
+  const imageId = createUploadImageId(file);
+  const safeFileName = sanitizeStorageFileName(file.name);
+  const objectPath = `${directoryPath}/${imageId}/${safeFileName}`;
+  const storageRef = ref(storage, objectPath);
+  const mimeType = file.type || "application/octet-stream";
 
-  const safeFileName =
-    sanitizeStorageFileName(
-      file.name,
-    );
+  await uploadBytes(storageRef, file, {
+    contentType: mimeType,
+  });
 
-  const objectPath =
-    `${directoryPath}/${imageId}/${safeFileName}`;
-
-  const storageRef = ref(
-    storage,
-    objectPath,
-  );
-
-  const mimeType =
-    file.type ||
-    "application/octet-stream";
-
-  await uploadBytes(
-    storageRef,
-    file,
-    {
-      contentType: mimeType,
-    },
-  );
-
-  const fileUrl =
-    await getDownloadURL(
-      storageRef,
-    );
+  const fileUrl = await getDownloadURL(storageRef);
 
   return {
     fileName: file.name,
@@ -94,27 +57,24 @@ async function uploadInquiryImageFile({
     objectPath,
     fileSize: file.size,
     mimeType,
-    createdAt:
-      new Date().toISOString(),
+    createdAt: new Date().toISOString(),
   };
 }
 
 export async function uploadInquiryImage(
   params: UploadInquiryImageParams,
-): Promise<InquiryImage> {
+): Promise<InquiryImageUpload> {
   return uploadInquiryImageFile({
-    directoryPath:
-      `inquiry-images/${params.productId}`,
+    directoryPath: `inquiry-images/${params.productId}`,
     file: params.file,
   });
 }
 
 export async function uploadReplyImage(
   params: UploadReplyImageParams,
-): Promise<InquiryImage> {
+): Promise<InquiryImageUpload> {
   return uploadInquiryImageFile({
-    directoryPath:
-      `inquiry-replies/${params.inquiryId}`,
+    directoryPath: `inquiry-replies/${params.inquiryId}`,
     file: params.file,
   });
 }

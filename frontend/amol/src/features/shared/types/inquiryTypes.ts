@@ -1,6 +1,14 @@
 // frontend/amol/src/features/shared/types/inquiryTypes.ts
 
-export type InquiryImage = {
+export const INQUIRY_STATUSES = ["open", "resolved", "closed"] as const;
+export type InquiryStatus = (typeof INQUIRY_STATUSES)[number];
+
+export const INQUIRY_REPLY_SENDER_TYPES = ["avatar", "member"] as const;
+export type InquiryReplySenderType = (typeof INQUIRY_REPLY_SENDER_TYPES)[number];
+
+export type InquiryType = string;
+
+export type InquiryImageUpload = {
   fileName: string;
   fileUrl: string;
   objectPath: string;
@@ -9,62 +17,102 @@ export type InquiryImage = {
   createdAt: string;
 };
 
+export type InquiryImage = {
+  inquiryId: string;
+  fileName: string;
+  fileUrl: string;
+  objectPath?: string;
+  fileSize: number;
+  mimeType: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  deletedAt?: string;
+  deletedBy?: string;
+};
+
 export type CreateInquiryRequest = {
   productId: string;
   subject: string;
   content: string;
-  inquiryType: string;
-  images: InquiryImage[];
+  inquiryType: InquiryType;
+  images: InquiryImageUpload[];
 };
 
 export type ReplyInquiryRequest = {
   content: string;
-  images: InquiryImage[];
+  images: InquiryImageUpload[];
 };
 
 export type Inquiry = {
-  id?: string;
-  productId?: string;
-  subject?: string;
-  content?: string;
-  status?: string;
-  isRead?: boolean;
+  id: string;
+  productId: string;
+  avatarId: string;
+  subject: string;
+  content: string;
+  status: InquiryStatus;
+  inquiryType: InquiryType;
+  isRead: boolean;
   images?: InquiryImage[];
-  createdAt?: string;
-  updatedAt?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  closedAt?: string;
+  closedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  updatedBy?: string;
+  deletedAt?: string;
+  deletedBy?: string;
 };
 
 export type InquiryReply = {
-  id?: string;
-  inquiryId?: string;
-  senderType?: string;
-  content?: string;
+  id: string;
+  inquiryId: string;
+  senderType: InquiryReplySenderType;
+  senderId: string;
+  content: string;
+  isRead: boolean;
   images?: InquiryImage[];
-  createdAt?: string;
-  updatedAt?: string | null;
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  deletedAt?: string;
+  deletedBy?: string;
+};
+
+export type InquiryListItem = Inquiry & {
+  latestReply?: InquiryReply;
+  replyCount: number;
+  latestActivityAt: string;
 };
 
 export type ListMeInquiriesParams = {
   page?: number;
   perPage?: number;
   productId?: string;
-  status?: string;
-  inquiryType?: string;
+  status?: InquiryStatus;
+  inquiryType?: InquiryType;
   searchQuery?: string;
   signal?: AbortSignal;
 };
 
 export type ListMeInquiriesResult = {
-  items: Inquiry[];
-  page?: number;
-  perPage?: number;
+  items: InquiryListItem[];
+  page: number;
+  perPage: number;
 };
 
 export type GetUnreadInquiryCountParams = {
   productId?: string;
-  status?: string;
-  inquiryType?: string;
+  status?: InquiryStatus;
+  inquiryType?: InquiryType;
   searchQuery?: string;
+};
+
+export type UnreadInquiryCountResponse = {
+  unreadCount: number;
 };
 
 export type UploadInquiryImageParams = {

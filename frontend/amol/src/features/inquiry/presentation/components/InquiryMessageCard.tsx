@@ -2,9 +2,7 @@
 
 import { formatDateTime } from "../../../../components/utils/date";
 
-import type {
-  Inquiry,
-} from "../../api/inquiryApi";
+import type { Inquiry } from "../../api/inquiryApi";
 
 import InquiryImageGrid from "./InquiryImageGrid";
 
@@ -15,10 +13,7 @@ type InquiryMessageCardProps = {
 export default function InquiryMessageCard({
   inquiry,
 }: InquiryMessageCardProps) {
-  const statusLabel =
-    getInquiryStatusLabel(
-      inquiry.status,
-    );
+  const statusLabel = getInquiryStatusLabel(inquiry.status);
 
   return (
     <article className="chat-detail-page__inquiry">
@@ -28,58 +23,41 @@ export default function InquiryMessageCard({
             あなたの問い合わせ
           </span>
 
-          {inquiry.createdAt ? (
-            <time
-              className="chat-detail-page__date"
-              dateTime={inquiry.createdAt}
-            >
-              {formatDateTime(
-                inquiry.createdAt,
-              )}
-            </time>
-          ) : null}
+          <time
+            className="chat-detail-page__date"
+            dateTime={inquiry.createdAt}
+          >
+            {formatDateTime(inquiry.createdAt)}
+          </time>
         </div>
 
-        {statusLabel ? (
-          <span className="chat-detail-page__status">
-            {statusLabel}
-          </span>
-        ) : null}
+        <span className="chat-detail-page__status">
+          {statusLabel}
+        </span>
       </div>
 
-      {inquiry.subject ? (
-        <h2 className="chat-detail-page__subject">
-          {inquiry.subject}
-        </h2>
-      ) : null}
+      <h2 className="chat-detail-page__subject">
+        {inquiry.subject}
+      </h2>
 
-      {inquiry.content ? (
-        <p className="chat-detail-page__content">
-          {inquiry.content}
-        </p>
-      ) : null}
+      <p className="chat-detail-page__content">
+        {inquiry.content}
+      </p>
 
-      <InquiryImageGrid
-        images={inquiry.images}
-      />
+      <InquiryImageGrid images={inquiry.images} />
     </article>
   );
 }
 
 function getInquiryStatusLabel(
-  status?: string | null,
+  status: Inquiry["status"],
 ): string {
   switch (status) {
     case "open":
       return "未対応";
-
     case "resolved":
       return "解決済み";
-
     case "closed":
       return "クローズ";
-
-    default:
-      return "";
   }
 }

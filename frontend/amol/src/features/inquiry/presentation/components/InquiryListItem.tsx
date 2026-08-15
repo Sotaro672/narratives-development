@@ -1,10 +1,6 @@
 // frontend/amol/src/features/inquiry/presentation/components/InquiryListItem.tsx
 
-import { textOrEmpty } from "../../../../components/utils/textOrEmpty";
-
-import type {
-  InquiryChatListItem,
-} from "../hooks/useInquiryListPage";
+import type { InquiryChatListItem } from "../hooks/useInquiryListPage";
 
 type InquiryListItemProps = {
   item: InquiryChatListItem;
@@ -17,39 +13,13 @@ export default function InquiryListItem({
   navigating,
   onOpen,
 }: InquiryListItemProps) {
-  const isUnread =
-    item.isRead === false;
-
-  const title =
-    getInquiryTitle(item);
-
-  const preview =
-    getInquiryPreview(item);
-
-  const latestActivityAt =
-    getLatestActivityAt(item);
-
-  const dateLabel =
-    formatInquiryDate(
-      latestActivityAt,
-    );
-
-  const subLabel =
-    getInquirySubLabel(item);
-
-  const statusLabel =
-    getInquiryStatusLabel(
-      item.status,
-    );
-
-  const countLabel =
-    getReplyCountLabel(item);
-
-  const avatarIcon =
-    getInquiryAvatarIcon(item);
-
-  const avatarInitial =
-    getInitial(title);
+  const isUnread = !item.isRead;
+  const title = getInquiryTitle(item);
+  const preview = getInquiryPreview(item);
+  const dateLabel = formatInquiryDate(item.latestActivityAt);
+  const statusLabel = getInquiryStatusLabel(item.status);
+  const countLabel = getReplyCountLabel(item);
+  const avatarInitial = getInitial(title);
 
   const handleOpen = () => {
     if (navigating) {
@@ -74,10 +44,7 @@ export default function InquiryListItem({
       onKeyDown={(event) => {
         if (
           navigating ||
-          (
-            event.key !== "Enter" &&
-            event.key !== " "
-          )
+          (event.key !== "Enter" && event.key !== " ")
         ) {
           return;
         }
@@ -90,49 +57,7 @@ export default function InquiryListItem({
         className="chat-list-page__avatar"
         aria-hidden="true"
       >
-        {avatarIcon ? (
-          <img
-            src={avatarIcon}
-            alt=""
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            style={{
-              width: "100%",
-              height: "100%",
-              display: "block",
-              objectFit: "cover",
-              borderRadius: "inherit",
-            }}
-            onError={(event) => {
-              event.currentTarget.style.display =
-                "none";
-
-              const fallback =
-                event.currentTarget
-                  .nextElementSibling;
-
-              if (
-                fallback instanceof
-                HTMLElement
-              ) {
-                fallback.style.display =
-                  "inline";
-              }
-            }}
-          />
-        ) : null}
-
-        <span
-          style={
-            avatarIcon
-              ? {
-                  display: "none",
-                }
-              : undefined
-          }
-        >
-          {avatarInitial}
-        </span>
+        <span>{avatarInitial}</span>
       </div>
 
       <div className="chat-list-page__body">
@@ -142,20 +67,15 @@ export default function InquiryListItem({
               {title}
             </h2>
 
-            {subLabel ? (
-              <span className="chat-list-page__sub-label">
-                {subLabel}
-              </span>
-            ) : null}
+            <span className="chat-list-page__sub-label">
+              {item.productId}
+            </span>
           </div>
 
           {dateLabel ? (
             <time
               className="chat-list-page__date"
-              dateTime={
-                latestActivityAt ??
-                undefined
-              }
+              dateTime={item.latestActivityAt}
             >
               {dateLabel}
             </time>
@@ -174,11 +94,9 @@ export default function InquiryListItem({
               </span>
             ) : null}
 
-            {statusLabel ? (
-              <span className="chat-list-page__status">
-                {statusLabel}
-              </span>
-            ) : null}
+            <span className="chat-list-page__status">
+              {statusLabel}
+            </span>
 
             {isUnread ? (
               <span
@@ -193,273 +111,87 @@ export default function InquiryListItem({
   );
 }
 
-function getInquiryTitle(
-  item: InquiryChatListItem,
-): string {
-  const subject =
-    textOrEmpty(item.subject);
-
-  if (subject) {
-    return subject;
-  }
-
-  const productName =
-    textOrEmpty(
-      item.productName,
-    );
-
-  if (productName) {
-    return productName;
-  }
-
-  const tokenName =
-    textOrEmpty(
-      item.tokenName,
-    );
-
-  if (tokenName) {
-    return tokenName;
-  }
-
-  return "問い合わせ";
+function getInquiryTitle(item: InquiryChatListItem): string {
+  return item.subject || "問い合わせ";
 }
 
-function getInquiryPreview(
-  item: InquiryChatListItem,
-): string {
-  const latestReply =
-    getLatestReply(
-      item.replies,
-    );
+function getInquiryPreview(item: InquiryChatListItem): string {
+  if (item.latestReply) {
+    if (item.latestReply.content) {
+      return item.latestReply.content;
+    }
 
-  const latestReplyContent =
-    textOrEmpty(
-      latestReply?.content,
-    );
-
-  if (latestReplyContent) {
-    return latestReplyContent;
+    if (item.latestReply.images?.length) {
+      return `画像 ${item.latestReply.images.length} 件`;
+    }
   }
 
-  const content =
-    textOrEmpty(item.content);
-
-  if (content) {
-    return content;
+  if (item.content) {
+    return item.content;
   }
 
-  if (
-    Array.isArray(item.images) &&
-    item.images.length > 0
-  ) {
+  if (item.images?.length) {
     return `画像 ${item.images.length} 件`;
   }
 
   return "メッセージはありません";
 }
 
-function getInquirySubLabel(
-  item: InquiryChatListItem,
-): string {
-  return (
-    textOrEmpty(
-      item.brandName,
-    ) ||
-    textOrEmpty(
-      item.avatarName,
-    ) ||
-    textOrEmpty(
-      item.senderName,
-    ) ||
-    textOrEmpty(
-      item.productId,
-    ) ||
-    ""
-  );
-}
-
 function getInquiryStatusLabel(
-  status?: string | null,
+  status: InquiryChatListItem["status"],
 ): string {
   switch (status) {
     case "open":
       return "未対応";
-
     case "resolved":
       return "解決済み";
-
     case "closed":
       return "クローズ";
-
-    default:
-      return "";
   }
 }
 
 function getReplyCountLabel(
   item: InquiryChatListItem,
 ): string {
-  return item.replies.length > 0
-    ? `返信 ${item.replies.length} 件`
+  return item.replyCount > 0
+    ? `返信 ${item.replyCount} 件`
     : "";
 }
 
-function getInquiryAvatarIcon(
-  _item: InquiryChatListItem,
-): string {
-  return "";
+function getInitial(value: string): string {
+  return Array.from(value)[0] ?? "？";
 }
 
-function getInitial(
-  value: string,
-): string {
-  const normalizedValue =
-    textOrEmpty(value);
+function formatInquiryDate(value: string): string {
+  const date = new Date(value);
 
-  if (!normalizedValue) {
-    return "？";
-  }
-
-  return (
-    Array.from(
-      normalizedValue,
-    )[0] ?? "？"
-  );
-}
-
-function getLatestActivityAt(
-  item: InquiryChatListItem,
-): string | null | undefined {
-  const latestReply =
-    getLatestReply(
-      item.replies,
-    );
-
-  return (
-    latestReply?.updatedAt ||
-    latestReply?.createdAt ||
-    item.updatedAt ||
-    item.createdAt
-  );
-}
-
-function getLatestReply(
-  replies: InquiryChatListItem["replies"],
-): InquiryChatListItem["replies"][number] | null {
-  if (
-    !Array.isArray(replies) ||
-    replies.length === 0
-  ) {
-    return null;
-  }
-
-  return (
-    [...replies].sort(
-      (
-        firstReply,
-        secondReply,
-      ) => {
-        const firstTime =
-          getComparableTime(
-            firstReply.updatedAt ??
-              firstReply.createdAt,
-          );
-
-        const secondTime =
-          getComparableTime(
-            secondReply.updatedAt ??
-              secondReply.createdAt,
-          );
-
-        return (
-          secondTime -
-          firstTime
-        );
-      },
-    )[0] ?? null
-  );
-}
-
-function formatInquiryDate(
-  value?: string | null,
-): string {
-  if (!value) {
+  if (Number.isNaN(date.getTime())) {
     return "";
   }
 
-  const date =
-    new Date(value);
-
-  if (
-    Number.isNaN(
-      date.getTime(),
-    )
-  ) {
-    return "";
-  }
-
-  const now =
-    new Date();
-
+  const now = new Date();
   const isToday =
-    date.getFullYear() ===
-      now.getFullYear() &&
-    date.getMonth() ===
-      now.getMonth() &&
-    date.getDate() ===
-      now.getDate();
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
 
   if (isToday) {
-    return new Intl.DateTimeFormat(
-      "ja-JP",
-      {
-        hour: "2-digit",
-        minute: "2-digit",
-      },
-    ).format(date);
+    return new Intl.DateTimeFormat("ja-JP", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
   }
 
-  const isCurrentYear =
-    date.getFullYear() ===
-    now.getFullYear();
-
-  if (isCurrentYear) {
-    return new Intl.DateTimeFormat(
-      "ja-JP",
-      {
-        month: "2-digit",
-        day: "2-digit",
-      },
-    ).format(date);
-  }
-
-  return new Intl.DateTimeFormat(
-    "ja-JP",
-    {
-      year: "numeric",
+  if (date.getFullYear() === now.getFullYear()) {
+    return new Intl.DateTimeFormat("ja-JP", {
       month: "2-digit",
       day: "2-digit",
-    },
-  ).format(date);
-}
-
-function getComparableTime(
-  value?: string | null,
-): number {
-  if (!value) {
-    return 0;
+    }).format(date);
   }
 
-  const date =
-    new Date(value);
-
-  if (
-    Number.isNaN(
-      date.getTime(),
-    )
-  ) {
-    return 0;
-  }
-
-  return date.getTime();
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }

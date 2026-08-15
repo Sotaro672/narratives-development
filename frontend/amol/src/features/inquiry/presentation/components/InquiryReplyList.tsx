@@ -2,9 +2,7 @@
 
 import { formatDateTime } from "../../../../components/utils/date";
 
-import type {
-  InquiryReply,
-} from "../../api/inquiryApi";
+import type { InquiryReply } from "../../api/inquiryApi";
 
 import InquiryImageGrid from "./InquiryImageGrid";
 
@@ -17,16 +15,12 @@ export default function InquiryReplyList({
 }: InquiryReplyListProps) {
   return (
     <>
-      {replies.map((reply, index) => {
-        const isAvatarReply =
-          reply.senderType === "avatar";
+      {replies.map((reply) => {
+        const isAvatarReply = reply.senderType === "avatar";
 
         return (
           <article
-            key={
-              reply.id ||
-              `${reply.inquiryId ?? "inquiry"}-${index}`
-            }
+            key={reply.id}
             className={
               isAvatarReply
                 ? "chat-detail-page__reply chat-detail-page__reply--avatar"
@@ -36,21 +30,15 @@ export default function InquiryReplyList({
             <div className="chat-detail-page__message-head">
               <div>
                 <span className="chat-detail-page__sender">
-                  {isAvatarReply
-                    ? "あなた"
-                    : "テナント"}
+                  {isAvatarReply ? "あなた" : "テナント"}
                 </span>
 
-                {reply.createdAt ? (
-                  <time
-                    className="chat-detail-page__date"
-                    dateTime={reply.createdAt}
-                  >
-                    {formatDateTime(
-                      reply.createdAt,
-                    )}
-                  </time>
-                ) : null}
+                <time
+                  className="chat-detail-page__date"
+                  dateTime={reply.createdAt}
+                >
+                  {formatDateTime(reply.createdAt)}
+                </time>
               </div>
             </div>
 
@@ -60,9 +48,7 @@ export default function InquiryReplyList({
               </p>
             ) : null}
 
-            <InquiryImageGrid
-              images={reply.images}
-            />
+            <InquiryImageGrid images={reply.images} />
           </article>
         );
       })}

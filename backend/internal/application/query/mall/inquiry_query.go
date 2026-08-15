@@ -4,48 +4,45 @@ package mall
 import (
 	"context"
 	"fmt"
-	"strings"
+	"time"
 
 	mallshared "narratives/internal/application/query/mall/shared"
 	inquirydom "narratives/internal/domain/inquiry"
 )
 
+// InquiryListItem は mall の問い合わせ一覧画面向け read model です。
+// Inquiry の基本情報に、一覧表示で必要な reply 集約値を付加します。
+type InquiryListItem struct {
+	inquirydom.Inquiry
+	LatestReply      *inquirydom.Reply `json:"latestReply,omitempty"`
+	ReplyCount       int               `json:"replyCount"`
+	LatestActivityAt time.Time         `json:"latestActivityAt"`
+}
+
+// InquiryListResult は mall の問い合わせ一覧 BFF response 用 read model です。
+type InquiryListResult struct {
+	Items   []InquiryListItem `json:"items"`
+	Page    int               `json:"page"`
+	PerPage int               `json:"perPage"`
+}
+
 // InquiryQuery は mall 側の Inquiry / Reply read model を扱います。
-//
-// usecase は command 専用に寄せるため、mall 画面で必要な read 処理は
-// この query service に集約します。
-//
-// 期待する reply 一覧取得フロー:
-//
-//  1. ListByAvatarID
-//     avatarId に紐づく Inquiry 一覧を取得し、対象 inquiryId が avatar のものか確認する
-//
-//  2. GetByID
-//     対象 Inquiry の現在状態を取得する
-//
-//  3. ListByInquiryID
-//     inquiries/{inquiryId}/replies/{replyId} を取得する
+// usecase は command 専用に寄せ、mall 画面で必要な read 処理はこの query service に集約します。
 type InquiryQuery struct {
 	repo      inquirydom.Repository
 	replyRepo inquirydom.ReplyRepository
 }
 
 // NewInquiryQuery は InquiryQuery を初期化します。
-func NewInquiryQuery(
-	repo inquirydom.Repository,
-	replyRepo inquirydom.ReplyRepository,
-) *InquiryQuery {
+func NewInquiryQuery(repo inquirydom.Repository, replyRepo inquirydom.ReplyRepository) *InquiryQuery {
 	return &InquiryQuery{
 		repo:      repo,
 		replyRepo: replyRepo,
 	}
 }
 
-// ListByAvatarID は avatar に紐づく Inquiry 一覧を取得します。
-//
-// Mall 側のチャット一覧 / 問い合わせ一覧で使います。
+// ListByAvatarID は avatar に紐づく Inquiry domain entity 一覧を取得します。
 // avatarID は request body / query から受け取らず、middleware の AvatarContext から解決した値を渡します。
-//
 // filter.AvatarID は呼び出し元の値を信用せず、必ず引数 avatarID で上書きします。
 func (q *InquiryQuery) ListByAvatarID(
 	ctx context.Context,
@@ -57,37 +54,78 @@ func (q *InquiryQuery) ListByAvatarID(
 	if q == nil || q.repo == nil {
 		return inquirydom.PageResult[inquirydom.Inquiry]{}, fmt.Errorf("mall inquiry query: repository is nil")
 	}
-
-	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		return inquirydom.PageResult[inquirydom.Inquiry]{}, inquirydom.ErrInvalidAvatarID
 	}
 
 	filter.AvatarID = &avatarID
-
-	page.Number, page.PerPage = mallshared.NormalizeIntPage(
-		page.Number,
-		page.PerPage,
-		1,
-		100,
-		0,
-	)
+	page.Number, page.PerPage = mallshared.NormalizeIntPage(page.Number, page.PerPage, 1, 100, 0)
 
 	return q.repo.ListByAvatarID(ctx, avatarID, filter, sort, page)
 }
 
-// GetByID は Inquiry を取得します。
-//
-// command 処理前の現在状態取得など、domain entity が必要な場合に使います。
-func (q *InquiryQuery) GetByID(
+// ListForAvatar は問い合わせ一覧画面用の BFF read model を返します。
+// frontend が inquiry ごとに replies API を呼び出して latest reply / reply count / latest activity を
+// 組み立てる必要がないよう、この query service で集約します。
+func (q *InquiryQuery) ListForAvatar(
 	ctx context.Context,
-	id string,
-) (inquirydom.Inquiry, error) {
+	avatarID string,
+	filter inquirydom.Filter,
+	sort inquirydom.Sort,
+	page inquirydom.Page,
+) (InquiryListResult, error) {
+	if q == nil || q.replyRepo == nil {
+		return InquiryListResult{}, fmt.Errorf("mall inquiry query: reply repository is nil")
+	}
+
+	result, err := q.ListByAvatarID(ctx, avatarID, filter, sort, page)
+	if err != nil {
+		return InquiryListResult{}, err
+	}
+
+	items := make([]InquiryListItem, 0, len(result.Items))
+	for _, inquiry := range result.Items {
+		replies, err := q.ListByInquiryID(ctx, inquiry.ID)
+		if err != nil {
+			return InquiryListResult{}, err
+		}
+
+		latestReply := findLatestInquiryReply(replies)
+		latestActivityAt := inquiry.UpdatedAt
+		if latestActivityAt.IsZero() {
+			latestActivityAt = inquiry.CreatedAt
+		}
+		if latestReply != nil {
+			replyActivityAt := latestReply.CreatedAt
+			if latestReply.UpdatedAt != nil && !latestReply.UpdatedAt.IsZero() {
+				replyActivityAt = *latestReply.UpdatedAt
+			}
+			if replyActivityAt.After(latestActivityAt) {
+				latestActivityAt = replyActivityAt
+			}
+		}
+
+		items = append(items, InquiryListItem{
+			Inquiry:          inquiry,
+			LatestReply:      latestReply,
+			ReplyCount:       len(replies),
+			LatestActivityAt: latestActivityAt,
+		})
+	}
+
+	return InquiryListResult{
+		Items:   items,
+		Page:    page.Number,
+		PerPage: page.PerPage,
+	}, nil
+}
+
+// GetByID は Inquiry を取得します。
+// command 処理前の現在状態取得など、domain entity が必要な場合に使います。
+func (q *InquiryQuery) GetByID(ctx context.Context, id string) (inquirydom.Inquiry, error) {
 	if q == nil || q.repo == nil {
 		return inquirydom.Inquiry{}, fmt.Errorf("mall inquiry query: repository is nil")
 	}
-
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
 	}
@@ -96,7 +134,6 @@ func (q *InquiryQuery) GetByID(
 }
 
 // GetByIDForAvatar は avatar 所有確認込みで Inquiry を取得します。
-//
 // ListByAvatarID で avatar scope を確認した後、GetByID で現在状態を取得します。
 // 取得結果の AvatarID も念のため確認します。
 func (q *InquiryQuery) GetByIDForAvatar(
@@ -104,12 +141,9 @@ func (q *InquiryQuery) GetByIDForAvatar(
 	id string,
 	avatarID string,
 ) (inquirydom.Inquiry, error) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
 	}
-
-	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidAvatarID
 	}
@@ -134,58 +168,49 @@ func (q *InquiryQuery) GetByIDForAvatar(
 
 	found := false
 	for _, item := range result.Items {
-		if strings.TrimSpace(item.ID) == id {
+		if item.ID == id {
 			found = true
 			break
 		}
 	}
-
 	if !found {
 		return inquirydom.Inquiry{}, inquirydom.ErrInquiryForbidden
 	}
 
-	inq, err := q.GetByID(ctx, id)
+	inquiry, err := q.GetByID(ctx, id)
 	if err != nil {
 		return inquirydom.Inquiry{}, err
 	}
-
-	if strings.TrimSpace(inq.AvatarID) != avatarID {
+	if inquiry.AvatarID != avatarID {
 		return inquirydom.Inquiry{}, inquirydom.ErrInquiryForbidden
 	}
 
-	return inq, nil
+	return inquiry, nil
 }
 
 // ListByInquiryID は Inquiry の reply subcollection を取得します。
-//
-// 保存先:
-//
-//	inquiries/{inquiryId}/replies/{replyId}
-func (q *InquiryQuery) ListByInquiryID(
-	ctx context.Context,
-	inquiryID string,
-) ([]inquirydom.Reply, error) {
+// 保存先: inquiries/{inquiryId}/replies/{replyId}
+func (q *InquiryQuery) ListByInquiryID(ctx context.Context, inquiryID string) ([]inquirydom.Reply, error) {
 	if q == nil || q.replyRepo == nil {
 		return nil, fmt.Errorf("mall inquiry query: reply repository is nil")
 	}
-
-	inquiryID = strings.TrimSpace(inquiryID)
 	if inquiryID == "" {
 		return nil, inquirydom.ErrInvalidReplyInquiryID
 	}
 
-	return q.replyRepo.ListByInquiryID(ctx, inquiryID)
+	replies, err := q.replyRepo.ListByInquiryID(ctx, inquiryID)
+	if err != nil {
+		return nil, err
+	}
+	if replies == nil {
+		return []inquirydom.Reply{}, nil
+	}
+
+	return replies, nil
 }
 
 // ListRepliesByInquiryIDForAvatar は avatar 所有確認込みで reply 一覧を取得します。
-//
-// 処理順:
-//
-//  1. ListByAvatarID
-//  2. GetByID
-//  3. ListByInquiryID
-//
-// handler 側で reply 一覧を返す場合は、この method を呼びます。
+// 処理順は ListByAvatarID -> GetByID -> ListByInquiryID です。
 func (q *InquiryQuery) ListRepliesByInquiryIDForAvatar(
 	ctx context.Context,
 	inquiryID string,
@@ -196,4 +221,33 @@ func (q *InquiryQuery) ListRepliesByInquiryIDForAvatar(
 	}
 
 	return q.ListByInquiryID(ctx, inquiryID)
+}
+
+// findLatestInquiryReply は reply 一覧から最終更新日時が最も新しい reply を返します。
+func findLatestInquiryReply(replies []inquirydom.Reply) *inquirydom.Reply {
+	if len(replies) == 0 {
+		return nil
+	}
+
+	latestIndex := 0
+	latestAt := inquiryReplyActivityAt(replies[0])
+
+	for index := 1; index < len(replies); index++ {
+		currentAt := inquiryReplyActivityAt(replies[index])
+		if currentAt.After(latestAt) {
+			latestIndex = index
+			latestAt = currentAt
+		}
+	}
+
+	latest := replies[latestIndex]
+	return &latest
+}
+
+// inquiryReplyActivityAt は reply の一覧表示上の最新日時を返します。
+func inquiryReplyActivityAt(reply inquirydom.Reply) time.Time {
+	if reply.UpdatedAt != nil && !reply.UpdatedAt.IsZero() {
+		return *reply.UpdatedAt
+	}
+	return reply.CreatedAt
 }
