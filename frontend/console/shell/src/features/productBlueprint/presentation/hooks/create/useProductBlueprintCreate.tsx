@@ -8,6 +8,7 @@ import type {
   VolumeRow,
 } from "../../../../model/application/modelCreateService";
 import { useAuthContext } from "../../../../../auth/application/AuthContext";
+import { useAssigneeSelection } from "../../../../admin/presentation/hook/useAssigneeSelection";
 import type {
   ApparelSizeInput,
   Fit,
@@ -71,6 +72,11 @@ export interface UseProductBlueprintCreateResult {
   alcoholModelNumbers: AlcoholModelNumber[];
   assigneeId: string;
   assigneeName: string;
+  assigneeCandidates: {
+    id: string;
+    name: string;
+  }[];
+  loadingMembers: boolean;
   createdBy: string;
   createdAt: string;
   onCreate: () => Promise<void>;
@@ -174,28 +180,6 @@ function getStringArrayCategoryField(
   );
 }
 
-function getMemberDisplayLabel(member: {
-  id: string;
-  email?: string | null;
-  displayName?: string | null;
-}): string {
-  const displayName = String(
-    member.displayName ?? "",
-  ).trim();
-
-  if (displayName) {
-    return displayName;
-  }
-
-  const email = String(member.email ?? "").trim();
-
-  if (email) {
-    return email;
-  }
-
-  return member.id;
-}
-
 export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const navigate = useNavigate();
   const { currentMember, user } = useAuthContext();
@@ -229,25 +213,18 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       category.productBlueprintCategory,
   });
 
-  const [assigneeId, setAssigneeId] =
-    React.useState("");
-
-  const [assigneeName, setAssigneeName] =
-    React.useState("");
+  const {
+    assigneeId,
+    assigneeName,
+    assigneeCandidates,
+    loadingMembers,
+    handleSelectAssignee,
+  } = useAssigneeSelection({
+    defaultToCurrentMember: true,
+  });
 
   const [createdBy] = React.useState("");
   const [createdAt] = React.useState("");
-
-  React.useEffect(() => {
-    if (!currentMember || assigneeId) {
-      return;
-    }
-
-    setAssigneeId(currentMember.id);
-    setAssigneeName(
-      getMemberDisplayLabel(currentMember),
-    );
-  }, [currentMember, assigneeId]);
 
   const sanitizedCategoryFields =
     React.useMemo(
@@ -387,6 +364,13 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         return;
       }
 
+      if (!assigneeId) {
+        alert(
+          "担当者を選択してください。",
+        );
+        return;
+      }
+
       const apiParams = {
         productName,
         brandId: brand.brandId,
@@ -493,23 +477,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const onSelectAssignee =
     React.useCallback(
       (id: string) => {
-        const nextId = id.trim();
-
-        if (!nextId) {
-          return;
-        }
-
-        setAssigneeId(nextId);
-
-        setAssigneeName(
-          currentMember?.id === nextId
-            ? getMemberDisplayLabel(
-                currentMember,
-              )
-            : nextId,
-        );
+        handleSelectAssignee(id);
       },
-      [currentMember],
+      [handleSelectAssignee],
     );
 
   const onEditAssignee =
@@ -561,6 +531,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       variations.alcoholModelNumbers,
     assigneeId,
     assigneeName,
+    assigneeCandidates,
+    loadingMembers,
     createdBy,
     createdAt,
     onCreate,
