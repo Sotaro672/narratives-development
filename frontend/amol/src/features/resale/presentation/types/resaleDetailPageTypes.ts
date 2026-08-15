@@ -8,6 +8,7 @@ import type {
 import type {
   MediaGalleryItem,
 } from "../../../../components/ui/MediaGallery";
+
 import type {
   MediaUploaderItem,
 } from "../../../../components/ui/MediaUploader";
@@ -16,12 +17,11 @@ import type {
   ResaleConditionImage,
   ResaleListing,
 } from "../../../shared/types/resaleTypes";
+
 import type {
   ResaleCondition,
   ResaleEditableStatus,
 } from "../../../shared/types/resale";
-
-export type ResaleListingWithModel = ResaleListing;
 
 export type ResaleDetailConditionMediaItem =
   Omit<MediaUploaderItem, "type"> & {
@@ -112,7 +112,7 @@ export type ResaleDetailPageViewModel = {
   title: string;
   footerProps?: ResaleDetailFooterProps;
   loading: boolean;
-  item: ResaleListingWithModel | null;
+  item: ResaleListing | null;
   isEditing: boolean;
   isSold: boolean;
   errorMessage: string;

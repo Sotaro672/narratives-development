@@ -7,8 +7,8 @@ import type {
 } from "../../../shared/types/resale";
 
 import type {
-  ResaleListingWithModel,
-} from "../types/resaleDetailPageTypes";
+  ResaleListing,
+} from "../../../shared/types/resaleTypes";
 
 /**
  * 再販ステータスを表示用の文言へ変換する。
@@ -50,7 +50,7 @@ export function formatResaleModelKind(
  * カラー情報を表示用の文言へ変換する。
  */
 export function formatResaleModelColor(
-  color: ResaleListingWithModel["color"],
+  color: ResaleListing["color"],
 ): string {
   if (!color) {
     return "-";
@@ -76,7 +76,7 @@ export function formatResaleModelColor(
  * 容量情報を表示用の文言へ変換する。
  */
 export function formatResaleModelVolume(
-  volume: ResaleListingWithModel["volume"],
+  volume: ResaleListing["volume"],
 ): string {
   if (!volume) {
     return "-";
@@ -103,7 +103,7 @@ export function formatResaleModelVolume(
  * 採寸情報を表示用の文言へ変換する。
  */
 export function formatResaleMeasurements(
-  measurements: ResaleListingWithModel["measurements"],
+  measurements: ResaleListing["measurements"],
 ): string {
   if (!measurements) {
     return "-";
@@ -131,7 +131,7 @@ export function formatResaleMeasurements(
  * 再販詳細で表示するトークンアイコンURLを返す。
  */
 export function resolveResaleTokenIconUrl(
-  item: ResaleListingWithModel | null | undefined,
+  item: ResaleListing | null | undefined,
 ): string {
   return item?.tokenIcon ?? "";
 }

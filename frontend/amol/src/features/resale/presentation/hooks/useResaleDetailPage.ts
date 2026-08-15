@@ -7,10 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  useNavigate,
-  useParams,
-} from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { formatDateTime } from "../../../../components/utils/date";
 import { formatYen } from "../../../../components/utils/price";
@@ -41,6 +38,7 @@ import type {
 
 import type {
   ResaleConditionImage,
+  ResaleListing,
 } from "../../../shared/types/resaleTypes";
 
 import type {
@@ -49,7 +47,6 @@ import type {
   ResaleDetailModelInfoProps,
   ResaleDetailReadonlyInfoProps,
   ResaleListingTargetSummary,
-  ResaleListingWithModel,
 } from "../types/resaleDetailPageTypes";
 
 import {
@@ -82,45 +79,22 @@ export function useResaleDetailPage() {
   const normalizedResaleId = resaleId?.trim() ?? "";
   const loadRequestIdRef = useRef(0);
 
-  const [item, setItem] =
-    useState<ResaleListingWithModel | null>(null);
-
-  const [images, setImages] =
-    useState<ResaleConditionImage[]>([]);
-
-  const [activeGalleryIndex, setActiveGalleryIndex] =
-    useState(0);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [saving, setSaving] =
-    useState(false);
-
-  const [isEditing, setIsEditing] =
-    useState(false);
-
-  const [errorMessage, setErrorMessage] =
-    useState("");
-
-  const [saveMessage, setSaveMessage] =
-    useState("");
-
-  const [priceInput, setPriceInput] =
-    useState("");
-
-  const [conditionInput, setConditionInput] =
-    useState<ResaleCondition>(
-      DEFAULT_RESALE_CONDITION,
-    );
-
-  const [descriptionInput, setDescriptionInput] =
-    useState("");
-
-  const [statusInput, setStatusInput] =
-    useState<ResaleEditableStatus>(
-      DEFAULT_RESALE_EDITABLE_STATUS,
-    );
+  const [item, setItem] = useState<ResaleListing | null>(null);
+  const [images, setImages] = useState<ResaleConditionImage[]>([]);
+  const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [priceInput, setPriceInput] = useState("");
+  const [conditionInput, setConditionInput] = useState<ResaleCondition>(
+    DEFAULT_RESALE_CONDITION,
+  );
+  const [descriptionInput, setDescriptionInput] = useState("");
+  const [statusInput, setStatusInput] = useState<ResaleEditableStatus>(
+    DEFAULT_RESALE_EDITABLE_STATUS,
+  );
 
   const {
     conditionMediaItems,
@@ -143,7 +117,7 @@ export function useResaleDetailPage() {
 
   const resetFormFromItem = useCallback(
     (
-      nextItem: ResaleListingWithModel | null,
+      nextItem: ResaleListing | null,
       nextImages: ResaleConditionImage[],
     ) => {
       const nextPrice = nextItem?.price ?? 0;
@@ -177,8 +151,7 @@ export function useResaleDetailPage() {
 
   const loadDetail = useCallback(
     async (): Promise<void> => {
-      const requestId =
-        ++loadRequestIdRef.current;
+      const requestId = ++loadRequestIdRef.current;
 
       if (!normalizedResaleId) {
         setItem(null);
@@ -186,9 +159,7 @@ export function useResaleDetailPage() {
         resetFormFromItem(null, []);
         setActiveGalleryIndex(0);
         setIsEditing(false);
-        setErrorMessage(
-          "出品情報が見つかりません。",
-        );
+        setErrorMessage("出品情報が見つかりません。");
         setSaveMessage("");
         setLoading(false);
         return;
@@ -199,43 +170,25 @@ export function useResaleDetailPage() {
       setSaveMessage("");
 
       try {
-        const [nextItem, nextImages] =
-          await Promise.all([
-            getMyResaleListing(
-              normalizedResaleId,
-            ),
-            listMyResaleConditionImages(
-              normalizedResaleId,
-            ),
-          ]);
+        const [nextItem, nextImages] = await Promise.all([
+          getMyResaleListing(normalizedResaleId),
+          listMyResaleConditionImages(normalizedResaleId),
+        ]);
 
-        if (
-          requestId !==
-          loadRequestIdRef.current
-        ) {
+        if (requestId !== loadRequestIdRef.current) {
           return;
         }
 
         const sortedNextImages =
-          sortResaleConditionImages(
-            nextImages,
-          );
+          sortResaleConditionImages(nextImages);
 
         setItem(nextItem);
         setImages(sortedNextImages);
-
-        resetFormFromItem(
-          nextItem,
-          sortedNextImages,
-        );
-
+        resetFormFromItem(nextItem, sortedNextImages);
         setActiveGalleryIndex(0);
         setIsEditing(false);
       } catch (error) {
-        if (
-          requestId !==
-          loadRequestIdRef.current
-        ) {
+        if (requestId !== loadRequestIdRef.current) {
           return;
         }
 
@@ -244,17 +197,13 @@ export function useResaleDetailPage() {
         resetFormFromItem(null, []);
         setActiveGalleryIndex(0);
         setIsEditing(false);
-
         setErrorMessage(
           error instanceof Error
             ? error.message
             : "出品情報の取得に失敗しました。",
         );
       } finally {
-        if (
-          requestId ===
-          loadRequestIdRef.current
-        ) {
+        if (requestId === loadRequestIdRef.current) {
           setLoading(false);
         }
       }
@@ -274,84 +223,50 @@ export function useResaleDetailPage() {
   }, [loadDetail]);
 
   const sortedImages = useMemo(
-    () =>
-      sortResaleConditionImages(
-        images,
-      ),
+    () => sortResaleConditionImages(images),
     [images],
   );
 
   const galleryItems = useMemo(
-    () =>
-      createResaleGalleryItems(
-        sortedImages,
-      ),
+    () => createResaleGalleryItems(sortedImages),
     [sortedImages],
   );
 
   useEffect(() => {
-    setActiveGalleryIndex(
-      (currentIndex) => {
-        if (galleryItems.length === 0) {
-          return 0;
-        }
+    setActiveGalleryIndex((currentIndex) => {
+      if (galleryItems.length === 0) {
+        return 0;
+      }
 
-        return Math.min(
-          currentIndex,
-          galleryItems.length - 1,
-        );
-      },
-    );
+      return Math.min(
+        currentIndex,
+        galleryItems.length - 1,
+      );
+    });
   }, [galleryItems.length]);
 
-  const productName =
-    item?.productName ?? "";
+  const productName = item?.productName ?? "";
+  const tokenName = item?.tokenName ?? "";
+  const brandName = item?.brandName ?? "";
+  const tokenIcon = item?.tokenIcon ?? "";
+  const description = item?.description ?? "";
+  const modelId = item?.modelId ?? "";
+  const modelKind = item?.kind ?? "";
+  const modelNumber = item?.modelNumber ?? "";
+  const modelSize = item?.size ?? "";
 
-  const tokenName =
-    item?.tokenName ?? "";
-
-  const brandName =
-    item?.brandName ?? "";
-
-  const tokenIcon =
-    item?.tokenIcon ?? "";
-
-  const description =
-    item?.description ?? "";
-
-  const modelId =
-    item?.modelId ?? "";
-
-  const modelKind =
-    item?.kind ?? "";
-
-  const modelNumber =
-    item?.modelNumber ?? "";
-
-  const modelSize =
-    item?.size ?? "";
-
-  const modelKindLabel =
-    modelKind
-      ? formatResaleModelKind(
-          modelKind,
-        )
-      : "";
+  const modelKindLabel = modelKind
+    ? formatResaleModelKind(modelKind)
+    : "";
 
   const modelColorLabel =
-    formatResaleModelColor(
-      item?.color,
-    );
+    formatResaleModelColor(item?.color);
 
   const modelVolumeLabel =
-    formatResaleModelVolume(
-      item?.volume,
-    );
+    formatResaleModelVolume(item?.volume);
 
   const measurementsLabel =
-    formatResaleMeasurements(
-      item?.measurements,
-    );
+    formatResaleMeasurements(item?.measurements);
 
   const hasModelInfo =
     Boolean(modelId) ||
@@ -362,51 +277,35 @@ export function useResaleDetailPage() {
     modelVolumeLabel !== "-" ||
     measurementsLabel !== "-";
 
-  const isSold =
-    item?.status === "sold";
+  const isSold = item?.status === "sold";
 
   const title =
     productName ||
     tokenName ||
     "出品詳細";
 
-  const priceLabel =
-    item
-      ? formatYen(
-          item.price,
-          "-",
-        )
-      : "-";
+  const priceLabel = item
+    ? formatYen(item.price, "-")
+    : "-";
 
   const editablePriceLabel =
-    formatResalePriceInput(
-      priceInput,
-    );
+    formatResalePriceInput(priceInput);
 
   const createdAtLabel =
-    formatDateTime(
-      item?.createdAt,
-    );
+    formatDateTime(item?.createdAt);
 
   const updatedAtLabel =
-    formatDateTime(
-      item?.updatedAt,
-    );
+    formatDateTime(item?.updatedAt);
 
-  const statusLabel =
-    item
-      ? formatResaleStatus(
-          item.status,
-        )
-      : "-";
+  const statusLabel = item
+    ? formatResaleStatus(item.status)
+    : "-";
 
   const conditionLabel =
     item?.condition ?? "-";
 
   const priceNumber =
-    parseResalePriceInput(
-      priceInput,
-    );
+    parseResalePriceInput(priceInput);
 
   const hasValidPrice =
     priceNumber !== null &&
@@ -426,95 +325,110 @@ export function useResaleDetailPage() {
     !isEditing &&
     !isSold;
 
-  const handlePrevGalleryItem =
-    useCallback(() => {
-      if (galleryItems.length <= 1) {
+  const handlePrevGalleryItem = useCallback(() => {
+    if (galleryItems.length <= 1) {
+      return;
+    }
+
+    setActiveGalleryIndex((currentIndex) =>
+      currentIndex <= 0
+        ? galleryItems.length - 1
+        : currentIndex - 1,
+    );
+  }, [galleryItems.length]);
+
+  const handleNextGalleryItem = useCallback(() => {
+    if (galleryItems.length <= 1) {
+      return;
+    }
+
+    setActiveGalleryIndex((currentIndex) =>
+      currentIndex >= galleryItems.length - 1
+        ? 0
+        : currentIndex + 1,
+    );
+  }, [galleryItems.length]);
+
+  const handleSelectGalleryItem = useCallback(
+    (index: number) => {
+      if (
+        index < 0 ||
+        index >= galleryItems.length
+      ) {
         return;
       }
 
-      setActiveGalleryIndex(
-        (currentIndex) =>
-          currentIndex <= 0
-            ? galleryItems.length - 1
-            : currentIndex - 1,
+      setActiveGalleryIndex(index);
+    },
+    [galleryItems.length],
+  );
+
+  const handlePriceChange = useCallback(
+    (value: string) => {
+      setPriceInput(
+        normalizeResalePriceInput(value),
       );
-    }, [galleryItems.length]);
+      clearMessages();
+    },
+    [clearMessages],
+  );
 
-  const handleNextGalleryItem =
-    useCallback(() => {
-      if (galleryItems.length <= 1) {
-        return;
-      }
+  const handleConditionChange = useCallback(
+    (value: ResaleCondition) => {
+      setConditionInput(value);
+      clearMessages();
+    },
+    [clearMessages],
+  );
 
-      setActiveGalleryIndex(
-        (currentIndex) =>
-          currentIndex >=
-          galleryItems.length - 1
-            ? 0
-            : currentIndex + 1,
+  const handleStatusChange = useCallback(
+    (value: ResaleEditableStatus) => {
+      setStatusInput(value);
+      clearMessages();
+    },
+    [clearMessages],
+  );
+
+  const handleDescriptionChange = useCallback(
+    (value: string) => {
+      setDescriptionInput(value);
+      clearMessages();
+    },
+    [clearMessages],
+  );
+
+  const handleStartEdit = useCallback(() => {
+    if (isSold) {
+      setErrorMessage(
+        "売却済みの出品は編集できません。",
       );
-    }, [galleryItems.length]);
+      return;
+    }
 
-  const handleSelectGalleryItem =
-    useCallback(
-      (index: number) => {
-        if (
-          index < 0 ||
-          index >= galleryItems.length
-        ) {
-          return;
-        }
+    resetFormFromItem(item, images);
+    setIsEditing(true);
+    clearMessages();
+  }, [
+    clearMessages,
+    images,
+    isSold,
+    item,
+    resetFormFromItem,
+  ]);
 
-        setActiveGalleryIndex(index);
-      },
-      [galleryItems.length],
-    );
+  const handleCancelEdit = useCallback(() => {
+    resetFormFromItem(item, images);
+    setIsEditing(false);
+    clearMessages();
+  }, [
+    clearMessages,
+    images,
+    item,
+    resetFormFromItem,
+  ]);
 
-  const handlePriceChange =
-    useCallback(
-      (value: string) => {
-        setPriceInput(
-          normalizeResalePriceInput(
-            value,
-          ),
-        );
-
-        clearMessages();
-      },
-      [clearMessages],
-    );
-
-  const handleConditionChange =
-    useCallback(
-      (value: ResaleCondition) => {
-        setConditionInput(value);
-        clearMessages();
-      },
-      [clearMessages],
-    );
-
-  const handleStatusChange =
-    useCallback(
-      (
-        value: ResaleEditableStatus,
-      ) => {
-        setStatusInput(value);
-        clearMessages();
-      },
-      [clearMessages],
-    );
-
-  const handleDescriptionChange =
-    useCallback(
-      (value: string) => {
-        setDescriptionInput(value);
-        clearMessages();
-      },
-      [clearMessages],
-    );
-
-  const handleStartEdit =
-    useCallback(() => {
+  const handleSave = useCallback(
+    async (): Promise<void> => {
       if (isSold) {
         setErrorMessage(
           "売却済みの出品は編集できません。",
@@ -522,265 +436,199 @@ export function useResaleDetailPage() {
         return;
       }
 
-      resetFormFromItem(
-        item,
-        images,
-      );
+      if (
+        !canSave ||
+        priceNumber === null ||
+        priceNumber <= 0
+      ) {
+        setErrorMessage(
+          "販売価格、商品の状態、公開状態、商品状態の写真を入力してください。",
+        );
+        return;
+      }
 
-      setIsEditing(true);
+      setSaving(true);
       clearMessages();
-    }, [
-      clearMessages,
-      images,
-      isSold,
-      item,
-      resetFormFromItem,
-    ]);
 
-  const handleCancelEdit =
-    useCallback(() => {
-      resetFormFromItem(
-        item,
-        images,
-      );
+      try {
+        const newFiles =
+          getNewConditionFiles();
 
-      setIsEditing(false);
-      clearMessages();
-    }, [
-      clearMessages,
-      images,
-      item,
-      resetFormFromItem,
-    ]);
+        const nextDisplayOrder =
+          conditionMediaItems.reduce(
+            (
+              currentMax,
+              mediaItem,
+            ) => {
+              if (
+                mediaItem.source !== "existing" ||
+                !mediaItem.image
+              ) {
+                return currentMax;
+              }
 
-  const handleSave =
-    useCallback(
-      async (): Promise<void> => {
-        if (isSold) {
-          setErrorMessage(
-            "売却済みの出品は編集できません。",
-          );
-          return;
-        }
-
-        if (
-          !canSave ||
-          priceNumber === null ||
-          priceNumber <= 0
-        ) {
-          setErrorMessage(
-            "販売価格、商品の状態、公開状態、商品状態の写真を入力してください。",
-          );
-          return;
-        }
-
-        setSaving(true);
-        clearMessages();
-
-        try {
-          const newFiles =
-            getNewConditionFiles();
-
-          const nextDisplayOrder =
-            conditionMediaItems.reduce(
-              (
+              return Math.max(
                 currentMax,
-                mediaItem,
-              ) => {
-                if (
-                  mediaItem.source !==
-                    "existing" ||
-                  !mediaItem.image
-                ) {
-                  return currentMax;
-                }
+                mediaItem.image.displayOrder,
+              );
+            },
+            -1,
+          ) + 1;
 
-                return Math.max(
-                  currentMax,
-                  mediaItem.image.displayOrder,
-                );
-              },
-              -1,
-            ) + 1;
+        await updateResaleListing({
+          resaleId: normalizedResaleId,
+          price: priceNumber,
+          condition: conditionInput,
+          description: descriptionInput,
+          status: statusInput,
+        });
 
-          await updateResaleListing({
-            resaleId:
-              normalizedResaleId,
-            price:
-              priceNumber,
-            condition:
-              conditionInput,
-            description:
-              descriptionInput,
-            status:
-              statusInput,
+        await Promise.all(
+          deletedImageIds.map((imageId) =>
+            deleteMyResaleConditionImage({
+              resaleId: normalizedResaleId,
+              imageId,
+            }),
+          ),
+        );
+
+        if (newFiles.length > 0) {
+          await addMyResaleConditionImages({
+            resaleId: normalizedResaleId,
+            files: newFiles,
+            startDisplayOrder: nextDisplayOrder,
           });
+        }
 
-          await Promise.all(
-            deletedImageIds.map(
-              (imageId) =>
-                deleteMyResaleConditionImage({
-                  resaleId:
-                    normalizedResaleId,
-                  imageId,
-                }),
+        const nextImages =
+          sortResaleConditionImages(
+            await listMyResaleConditionImages(
+              normalizedResaleId,
             ),
           );
 
-          if (newFiles.length > 0) {
-            await addMyResaleConditionImages({
-              resaleId:
-                normalizedResaleId,
-              files:
-                newFiles,
-              startDisplayOrder:
-                nextDisplayOrder,
-            });
-          }
-
-          const nextImages =
-            sortResaleConditionImages(
-              await listMyResaleConditionImages(
-                normalizedResaleId,
-              ),
-            );
-
-          if (nextImages.length > 0) {
-            await updatePrimaryResaleImage({
-              resaleId:
-                normalizedResaleId,
-              imageId:
-                nextImages[0].id,
-            });
-          }
-
-          const refreshedItem =
-            await getMyResaleListing(
-              normalizedResaleId,
-            );
-
-          setItem(refreshedItem);
-          setImages(nextImages);
-
-          resetFormFromItem(
-            refreshedItem,
-            nextImages,
-          );
-
-          setActiveGalleryIndex(0);
-          setIsEditing(false);
-
-          setSaveMessage(
-            "出品情報を更新しました。",
-          );
-        } catch (error) {
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "出品情報の更新に失敗しました。",
-          );
-        } finally {
-          setSaving(false);
-        }
-      },
-      [
-        canSave,
-        clearMessages,
-        conditionInput,
-        conditionMediaItems,
-        deletedImageIds,
-        descriptionInput,
-        getNewConditionFiles,
-        isSold,
-        normalizedResaleId,
-        priceNumber,
-        resetFormFromItem,
-        statusInput,
-      ],
-    );
-
-  const handleDelete =
-    useCallback(
-      async (): Promise<void> => {
-        if (isSold) {
-          setErrorMessage(
-            "売却済みの出品は削除できません。",
-          );
-          return;
+        if (nextImages.length > 0) {
+          await updatePrimaryResaleImage({
+            resaleId: normalizedResaleId,
+            imageId: nextImages[0].id,
+          });
         }
 
-        if (
-          !normalizedResaleId ||
-          saving
-        ) {
-          return;
-        }
-
-        const confirmed =
-          window.confirm(
-            "この出品を削除します。よろしいですか？",
-          );
-
-        if (!confirmed) {
-          return;
-        }
-
-        setSaving(true);
-        clearMessages();
-
-        try {
-          await deleteResaleListing(
+        const refreshedItem =
+          await getMyResaleListing(
             normalizedResaleId,
           );
 
-          navigate(
-            "/wallet",
-            {
-              replace: true,
-              state: {
-                resaleDeleted:
-                  true,
-                resaleId:
-                  normalizedResaleId,
-              },
-            },
-          );
-        } catch (error) {
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "出品情報の削除に失敗しました。",
-          );
-        } finally {
-          setSaving(false);
-        }
-      },
-      [
-        clearMessages,
-        isSold,
-        navigate,
-        normalizedResaleId,
-        saving,
-      ],
-    );
+        setItem(refreshedItem);
+        setImages(nextImages);
+        resetFormFromItem(
+          refreshedItem,
+          nextImages,
+        );
+        setActiveGalleryIndex(0);
+        setIsEditing(false);
+        setSaveMessage(
+          "出品情報を更新しました。",
+        );
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "出品情報の更新に失敗しました。",
+        );
+      } finally {
+        setSaving(false);
+      }
+    },
+    [
+      canSave,
+      clearMessages,
+      conditionInput,
+      conditionMediaItems,
+      deletedImageIds,
+      descriptionInput,
+      getNewConditionFiles,
+      isSold,
+      normalizedResaleId,
+      priceNumber,
+      resetFormFromItem,
+      statusInput,
+    ],
+  );
 
-  const handleBack =
-    useCallback(() => {
-      navigate(-1);
-    }, [navigate]);
+  const handleDelete = useCallback(
+    async (): Promise<void> => {
+      if (isSold) {
+        setErrorMessage(
+          "売却済みの出品は削除できません。",
+        );
+        return;
+      }
 
-  const handleBackToWallet =
-    useCallback(() => {
-      navigate("/wallet");
-    }, [navigate]);
+      if (
+        !normalizedResaleId ||
+        saving
+      ) {
+        return;
+      }
 
-  const handleReload =
-    useCallback(
-      async (): Promise<void> => {
-        await loadDetail();
-      },
-      [loadDetail],
-    );
+      const confirmed =
+        window.confirm(
+          "この出品を削除します。よろしいですか？",
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      setSaving(true);
+      clearMessages();
+
+      try {
+        await deleteResaleListing(
+          normalizedResaleId,
+        );
+
+        navigate("/wallet", {
+          replace: true,
+          state: {
+            resaleDeleted: true,
+            resaleId: normalizedResaleId,
+          },
+        });
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "出品情報の削除に失敗しました。",
+        );
+      } finally {
+        setSaving(false);
+      }
+    },
+    [
+      clearMessages,
+      isSold,
+      navigate,
+      normalizedResaleId,
+      saving,
+    ],
+  );
+
+  const handleBack = useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
+
+  const handleBackToWallet = useCallback(() => {
+    navigate("/wallet");
+  }, [navigate]);
+
+  const handleReload = useCallback(
+    async (): Promise<void> => {
+      await loadDetail();
+    },
+    [loadDetail],
+  );
 
   const listingTarget =
     useMemo<ResaleListingTargetSummary>(
@@ -802,16 +650,12 @@ export function useResaleDetailPage() {
     useMemo<ResaleDetailModelInfoProps>(
       () => ({
         hasModelInfo,
-        kindLabel:
-          modelKindLabel,
+        kindLabel: modelKindLabel,
         modelNumber,
-        size:
-          modelSize,
-        colorLabel:
-          modelColorLabel,
+        size: modelSize,
+        colorLabel: modelColorLabel,
         measurementsLabel,
-        volumeLabel:
-          modelVolumeLabel,
+        volumeLabel: modelVolumeLabel,
       }),
       [
         hasModelInfo,
@@ -860,14 +704,10 @@ export function useResaleDetailPage() {
   const editFormProps =
     useMemo<ResaleDetailEditFormProps>(
       () => ({
-        priceValue:
-          editablePriceLabel,
-        condition:
-          conditionInput,
-        status:
-          statusInput,
-        description:
-          descriptionInput,
+        priceValue: editablePriceLabel,
+        condition: conditionInput,
+        status: statusInput,
+        description: descriptionInput,
         saving,
         createdAtLabel,
         updatedAtLabel,
@@ -875,8 +715,7 @@ export function useResaleDetailPage() {
         conditionMediaCurrentIndex,
         conditionMediaInputRef,
         conditionMediaCarouselRef,
-        onPriceChange:
-          handlePriceChange,
+        onPriceChange: handlePriceChange,
         onConditionChange:
           handleConditionChange,
         onStatusChange:
@@ -925,22 +764,17 @@ export function useResaleDetailPage() {
           !isSold
         ) {
           return {
-            variant:
-              "tripleAction",
-            leftButtonLabel:
-              "キャンセル",
+            variant: "tripleAction",
+            leftButtonLabel: "キャンセル",
             centerButtonLabel:
               saving
                 ? "保存中..."
                 : "保存する",
-            rightButtonLabel:
-              "削除",
-            leftButtonDisabled:
-              saving,
+            rightButtonLabel: "削除",
+            leftButtonDisabled: saving,
             centerButtonDisabled:
               !canSave,
-            rightButtonDisabled:
-              saving,
+            rightButtonDisabled: saving,
             onLeftButtonClick:
               handleCancelEdit,
             onCenterButtonClick:
@@ -952,12 +786,9 @@ export function useResaleDetailPage() {
 
         if (canEdit) {
           return {
-            variant:
-              "action",
-            buttonLabel:
-              "編集する",
-            disabled:
-              false,
+            variant: "action",
+            buttonLabel: "編集する",
+            disabled: false,
             onButtonClick:
               handleStartEdit,
           };
@@ -981,20 +812,16 @@ export function useResaleDetailPage() {
   return {
     title,
     footerProps,
-
     loading,
     item,
     isEditing,
     isSold,
-
     errorMessage,
     saveMessage,
-
     listingTarget,
     modelInfoProps,
     readonlyInfoProps,
     editFormProps,
-
     handleBack,
     handleReload,
     handleBackToWallet,
