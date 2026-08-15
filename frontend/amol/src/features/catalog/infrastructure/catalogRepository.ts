@@ -1,7 +1,6 @@
 // frontend/amol/src/features/catalog/infrastructure/catalogRepository.ts
 
 import type { CatalogResponse } from "../../shared/types/catalog";
-import { mapCatalogResponse } from "./catalogResponseMapper";
 
 export async function fetchCatalogDetail(args: {
   apiBaseUrl: string;
@@ -9,16 +8,13 @@ export async function fetchCatalogDetail(args: {
 }): Promise<CatalogResponse> {
   const { apiBaseUrl, listId } = args;
 
-  const response = await fetch(
-    `${apiBaseUrl}/mall/catalog/${encodeURIComponent(listId)}`,
-    {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-      credentials: "include",
+  const response = await fetch(`${apiBaseUrl}/mall/catalog/${encodeURIComponent(listId)}`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
     },
-  );
+    credentials: "include",
+  });
 
   const contentType = response.headers.get("content-type") ?? "";
 
@@ -26,11 +22,11 @@ export async function fetchCatalogDetail(args: {
     throw new Error("カタログ詳細APIがJSON以外を返しました。");
   }
 
-  const data = (await response.json()) as Partial<CatalogResponse>;
+  const data = (await response.json()) as CatalogResponse;
 
   if (!response.ok) {
     throw new Error("カタログ詳細の取得に失敗しました。");
   }
 
-  return mapCatalogResponse(data);
+  return data;
 }

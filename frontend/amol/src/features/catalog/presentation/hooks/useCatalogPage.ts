@@ -1,121 +1,38 @@
 // frontend/amol/src/features/catalog/presentation/hooks/useCatalogPage.ts
 
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type TouchEvent,
-} from "react";
-import {
-  useNavigate,
-  useParams,
-} from "react-router-dom";
+import { useEffect, useMemo, useState, type TouchEvent } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 
-import {
-  addSelectedCatalogItemToCart,
-} from "../../application/catalogCartUsecase";
-
-import {
-  loadCatalogPage,
-} from "../../application/catalogPageLoader";
-
-import {
-  createCatalogPageViewModel,
-} from "../../application/catalogPageViewModelFactory";
-
-import {
-  resolveCatalogSwipeDirection,
-} from "../../application/catalogSwipeUsecase";
-
-import {
-  SWIPE_THRESHOLD_PX,
-} from "../../constants";
-
-import {
-  getApiBaseUrl,
-} from "../../../../lib/apiBaseUrl";
-
-import type {
-  CatalogResponse,
-} from "../../../shared/types/catalog";
-
-import type {
-  ProductBlueprintReviewPage,
-} from "../../../shared/types/review";
-
-import {
-  useMobilePortrait,
-} from "../../../../components/hooks/useMobilePortrait";
+import { addSelectedCatalogItemToCart } from "../../application/catalogCartUsecase";
+import { loadCatalogPage } from "../../application/catalogPageLoader";
+import { createCatalogPageViewModel } from "../../application/catalogPageViewModelFactory";
+import { resolveCatalogSwipeDirection } from "../../application/catalogSwipeUsecase";
+import { SWIPE_THRESHOLD_PX } from "../../constants";
+import { getApiBaseUrl } from "../../../../lib/apiBaseUrl";
+import type { CatalogResponse } from "../../../shared/types/catalog";
+import type { ProductBlueprintReviewPage } from "../../../shared/types/review";
+import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
 
 export function useCatalogPage() {
   const navigate = useNavigate();
   const { listId } = useParams();
 
-  const [catalog, setCatalog] =
-    useState<CatalogResponse | null>(null);
+  const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
+  const [reviews, setReviews] = useState<ProductBlueprintReviewPage | null>(null);
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [reviewErrorMessage, setReviewErrorMessage] = useState("");
+  const [cartErrorMessage, setCartErrorMessage] = useState("");
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [selectedColorKey, setSelectedColorKey] = useState("");
+  const [selectedSize, setSelectedSize] = useState("");
+  const [selectedModelId, setSelectedModelId] = useState("");
 
-  const [reviews, setReviews] =
-    useState<ProductBlueprintReviewPage | null>(
-      null,
-    );
-
-  const [
-    isLoadingCatalog,
-    setIsLoadingCatalog,
-  ] = useState(true);
-
-  const [
-    isAddingToCart,
-    setIsAddingToCart,
-  ] = useState(false);
-
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] = useState("");
-
-  const [
-    reviewErrorMessage,
-    setReviewErrorMessage,
-  ] = useState("");
-
-  const [
-    cartErrorMessage,
-    setCartErrorMessage,
-  ] = useState("");
-
-  const [
-    activeImageIndex,
-    setActiveImageIndex,
-  ] = useState(0);
-
-  const [
-    touchStartX,
-    setTouchStartX,
-  ] = useState<number | null>(null);
-
-  const [
-    touchStartY,
-    setTouchStartY,
-  ] = useState<number | null>(null);
-
-  const [
-    selectedColorKey,
-    setSelectedColorKey,
-  ] = useState("");
-
-  const [
-    selectedSize,
-    setSelectedSize,
-  ] = useState("");
-
-  const apiBaseUrl = useMemo(
-    () => getApiBaseUrl(),
-    [],
-  );
-
-  const isMobilePortrait =
-    useMobilePortrait();
+  const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
+  const isMobilePortrait = useMobilePortrait();
 
   const viewModel = useMemo(() => {
     return createCatalogPageViewModel({
@@ -123,6 +40,7 @@ export function useCatalogPage() {
       reviews,
       selectedColorKey,
       selectedSize,
+      selectedModelId,
       activeImageIndex,
       isAddingToCart,
     });
@@ -131,6 +49,7 @@ export function useCatalogPage() {
     reviews,
     selectedColorKey,
     selectedSize,
+    selectedModelId,
     activeImageIndex,
     isAddingToCart,
   ]);
@@ -142,49 +61,34 @@ export function useCatalogPage() {
       if (!listId) {
         setCatalog(null);
         setReviews(null);
-        setErrorMessage(
-          "listIdが見つかりません。",
-        );
+        setErrorMessage("listIdが見つかりません。");
         setReviewErrorMessage("");
         setIsLoadingCatalog(false);
         return;
       }
 
       setIsLoadingCatalog(true);
-
       setErrorMessage("");
       setReviewErrorMessage("");
       setCartErrorMessage("");
-
       setCatalog(null);
       setReviews(null);
-
       setActiveImageIndex(0);
       setSelectedColorKey("");
       setSelectedSize("");
+      setSelectedModelId("");
       setTouchStartX(null);
       setTouchStartY(null);
 
       try {
-        const result =
-          await loadCatalogPage({
-            apiBaseUrl,
-            listId,
-          });
-
-        if (cancelled) {
-          return;
-        }
+        const result = await loadCatalogPage({ apiBaseUrl, listId });
+        if (cancelled) return;
 
         setCatalog(result.catalog);
         setReviews(result.reviews);
-        setReviewErrorMessage(
-          result.reviewErrorMessage,
-        );
+        setReviewErrorMessage(result.reviewErrorMessage);
       } catch (error) {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         setCatalog(null);
         setReviews(null);
@@ -195,9 +99,7 @@ export function useCatalogPage() {
             : "カタログ詳細の取得中にエラーが発生しました。",
         );
       } finally {
-        if (!cancelled) {
-          setIsLoadingCatalog(false);
-        }
+        if (!cancelled) setIsLoadingCatalog(false);
       }
     }
 
@@ -206,124 +108,93 @@ export function useCatalogPage() {
     return () => {
       cancelled = true;
     };
-  }, [
-    apiBaseUrl,
-    listId,
-  ]);
+  }, [apiBaseUrl, listId]);
 
   useEffect(() => {
-    if (
-      viewModel.colorOptions.length === 1 &&
-      !selectedColorKey
-    ) {
-      setSelectedColorKey(
-        viewModel.colorOptions[0].key,
-      );
+    if (viewModel.isAlcoholCatalog) return;
+
+    if (viewModel.colorOptions.length === 1 && !selectedColorKey) {
+      setSelectedColorKey(viewModel.colorOptions[0].key);
       return;
     }
 
     if (
       selectedColorKey &&
-      !viewModel.colorOptions.some(
-        (option) =>
-          option.key === selectedColorKey,
-      )
+      !viewModel.colorOptions.some((option) => option.key === selectedColorKey)
     ) {
       setSelectedColorKey("");
     }
-  }, [
-    selectedColorKey,
-    viewModel.colorOptions,
-  ]);
+  }, [selectedColorKey, viewModel.colorOptions, viewModel.isAlcoholCatalog]);
 
   useEffect(() => {
-    if (
-      viewModel.sizeOptions.length === 1 &&
-      !selectedSize
-    ) {
-      setSelectedSize(
-        viewModel.sizeOptions[0],
-      );
+    if (viewModel.isAlcoholCatalog) return;
+
+    if (viewModel.sizeOptions.length === 1 && !selectedSize) {
+      setSelectedSize(viewModel.sizeOptions[0]);
       return;
     }
 
-    if (
-      selectedSize &&
-      !viewModel.sizeOptions.includes(
-        selectedSize,
-      )
-    ) {
+    if (selectedSize && !viewModel.sizeOptions.includes(selectedSize)) {
       setSelectedSize("");
     }
-  }, [
-    selectedSize,
-    viewModel.sizeOptions,
-  ]);
+  }, [selectedSize, viewModel.sizeOptions, viewModel.isAlcoholCatalog]);
 
   useEffect(() => {
-    if (
-      activeImageIndex >
-      viewModel.catalogImages.length - 1
-    ) {
-      setActiveImageIndex(0);
-    }
-  }, [
-    activeImageIndex,
-    viewModel.catalogImages.length,
-  ]);
-
-  function handlePrevImage() {
-    if (
-      viewModel.catalogImages.length === 0
-    ) {
+    if (!viewModel.isAlcoholCatalog) {
+      if (selectedModelId) setSelectedModelId("");
       return;
     }
 
+    if (viewModel.alcoholOptions.length === 1 && !selectedModelId) {
+      setSelectedModelId(viewModel.alcoholOptions[0].modelId);
+      return;
+    }
+
+    if (
+      selectedModelId &&
+      !viewModel.alcoholOptions.some((option) => option.modelId === selectedModelId)
+    ) {
+      setSelectedModelId("");
+    }
+  }, [
+    selectedModelId,
+    viewModel.alcoholOptions,
+    viewModel.isAlcoholCatalog,
+  ]);
+
+  useEffect(() => {
+    if (activeImageIndex > viewModel.catalogImages.length - 1) {
+      setActiveImageIndex(0);
+    }
+  }, [activeImageIndex, viewModel.catalogImages.length]);
+
+  function handlePrevImage() {
+    if (viewModel.catalogImages.length === 0) return;
+
     setActiveImageIndex((current) =>
-      current === 0
-        ? viewModel.catalogImages.length - 1
-        : current - 1,
+      current === 0 ? viewModel.catalogImages.length - 1 : current - 1,
     );
   }
 
   function handleNextImage() {
-    if (
-      viewModel.catalogImages.length === 0
-    ) {
-      return;
-    }
+    if (viewModel.catalogImages.length === 0) return;
 
     setActiveImageIndex((current) =>
-      current ===
-      viewModel.catalogImages.length - 1
-        ? 0
-        : current + 1,
+      current === viewModel.catalogImages.length - 1 ? 0 : current + 1,
     );
   }
 
-  function handleImageTouchStart(
-    event: TouchEvent<HTMLDivElement>,
-  ) {
-    if (
-      !isMobilePortrait ||
-      viewModel.catalogImages.length <= 1
-    ) {
-      return;
-    }
+  function handleImageTouchStart(event: TouchEvent<HTMLDivElement>) {
+    if (!isMobilePortrait || viewModel.catalogImages.length <= 1) return;
 
     const touch = event.touches[0];
-
-    if (!touch) {
-      return;
-    }
+    if (!touch) return;
 
     setTouchStartX(touch.clientX);
     setTouchStartY(touch.clientY);
   }
 
-  function handleImageTouchEnd(
-    event: TouchEvent<HTMLDivElement>,
-  ) {
+  function handleImageTouchEnd(event: TouchEvent<HTMLDivElement>) {
     if (
       !isMobilePortrait ||
       viewModel.catalogImages.length <= 1 ||
@@ -335,84 +206,56 @@ export function useCatalogPage() {
       return;
     }
 
-    const touch =
-      event.changedTouches[0];
-
+    const touch = event.changedTouches[0];
     setTouchStartX(null);
     setTouchStartY(null);
 
-    if (!touch) {
-      return;
-    }
+    if (!touch) return;
 
-    const direction =
-      resolveCatalogSwipeDirection({
-        startX: touchStartX,
-        startY: touchStartY,
-        endX: touch.clientX,
-        endY: touch.clientY,
-        thresholdPx:
-          SWIPE_THRESHOLD_PX,
-      });
+    const direction = resolveCatalogSwipeDirection({
+      startX: touchStartX,
+      startY: touchStartY,
+      endX: touch.clientX,
+      endY: touch.clientY,
+      thresholdPx: SWIPE_THRESHOLD_PX,
+    });
 
     if (direction === "next") {
       handleNextImage();
       return;
     }
 
-    if (direction === "prev") {
-      handlePrevImage();
-    }
+    if (direction === "prev") handlePrevImage();
   }
 
-  function handleSelectColor(
-    colorKey: string,
-  ) {
+  function handleSelectColor(colorKey: string) {
     setSelectedColorKey(colorKey);
     setSelectedSize("");
     setCartErrorMessage("");
   }
 
-  function handleSelectSize(
-    size: string,
-  ) {
+  function handleSelectSize(size: string) {
     setSelectedSize(size);
     setCartErrorMessage("");
   }
 
-  function handleBrandClick() {
-    const brandId =
-      catalog
-        ?.productBlueprint
-        .brandId
-        ?.trim();
-
-    if (!brandId) {
-      return;
-    }
-
-    navigate(
-      `/brands/${encodeURIComponent(
-        brandId,
-      )}`,
-    );
+  function handleSelectModel(modelId: string) {
+    setSelectedModelId(modelId);
+    setCartErrorMessage("");
   }
 
-  function handleAvatarClick(
-    avatarId: string,
-  ) {
-    const normalizedAvatarId =
-      avatarId.trim();
+  function handleBrandClick() {
+    const brandId = catalog?.productBlueprint.brandId.trim();
+    if (!brandId) return;
 
-    if (!normalizedAvatarId) {
-      return;
-    }
+    navigate(`/brands/${encodeURIComponent(brandId)}`);
+  }
 
-    navigate(
-      `/avatars/${encodeURIComponent(
-        normalizedAvatarId,
-      )}`,
-    );
+  function handleAvatarClick(avatarId: string) {
+    const normalizedAvatarId = avatarId.trim();
+    if (!normalizedAvatarId) return;
+
+    navigate(`/avatars/${encodeURIComponent(normalizedAvatarId)}`);
   }
 
   async function handleAddToCart() {
@@ -423,12 +266,9 @@ export function useCatalogPage() {
       await addSelectedCatalogItemToCart({
         apiBaseUrl,
         catalog,
-        selectedModel:
-          viewModel.selectedModel,
-        hasSelectedModelStock:
-          viewModel.hasSelectedModelStock,
-        isAlcoholCatalog:
-          viewModel.isAlcoholCatalog,
+        selectedModel: viewModel.selectedModel,
+        hasSelectedModelStock: viewModel.hasSelectedModelStock,
+        isAlcoholCatalog: viewModel.isAlcoholCatalog,
       });
 
       navigate("/cart");
@@ -454,14 +294,12 @@ export function useCatalogPage() {
     errorMessage,
     reviewErrorMessage,
     cartErrorMessage,
-
     selectedColorKey,
     selectedSize,
+    selectedModelId,
     activeImageIndex,
     isMobilePortrait,
-
     ...viewModel,
-
     setActiveImageIndex,
     handlePrevImage,
     handleNextImage,
@@ -469,6 +307,7 @@ export function useCatalogPage() {
     handleImageTouchEnd,
     handleSelectColor,
     handleSelectSize,
+    handleSelectModel,
     handleBrandClick,
     handleAvatarClick,
     handleAddToCart,
