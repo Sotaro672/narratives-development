@@ -4,7 +4,7 @@ import ListCard from "./ListCard";
 
 import type {
   MallListCardItem,
-} from "../../types/list";
+} from "../../../shared/types/list";
 
 type ListGridProps = {
   items: MallListCardItem[];

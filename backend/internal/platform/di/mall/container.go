@@ -661,6 +661,7 @@ func NewContainer(
 			mallquery.NewCartQuery(
 				cartRepo,
 				listRepoFS,
+				listImageRecordRepo,
 				inventoryRepo,
 				productBlueprintRepoFS,
 				resaleRepo,

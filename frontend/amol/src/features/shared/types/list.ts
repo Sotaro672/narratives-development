@@ -2,7 +2,7 @@
 
 import type {
   PageResult,
-} from "../../shared/pageResult";
+} from "../pageResult";
 
 /**
  * 商品一覧APIで返される価格情報です。

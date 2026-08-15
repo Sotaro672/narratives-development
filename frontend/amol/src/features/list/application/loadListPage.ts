@@ -10,7 +10,7 @@ import type {
   MallCatalogResponse,
   MallListCardItem,
   MallListItem,
-} from "../types/list";
+} from "../../shared/types/list";
 
 type LoadListPageArgs = {
   page: number;

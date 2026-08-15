@@ -17,7 +17,7 @@ import {
 
 import type {
   MallListCardItem,
-} from "../../types/list";
+} from "../../../shared/types/list";
 
 export function useListsPage() {
   const [

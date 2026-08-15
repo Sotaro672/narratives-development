@@ -6,7 +6,7 @@ import {
 
 import type {
   MallListCardItem,
-} from "../../types/list";
+} from "../../../shared/types/list";
 
 type ListCardProps = {
   item: MallListCardItem;

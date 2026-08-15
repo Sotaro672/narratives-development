@@ -7,7 +7,7 @@ import {
 import type {
   MallCatalogResponse,
   MallListIndexResponse,
-} from "../types/list";
+} from "../../shared/types/list";
 
 type FetchMallListsArgs = {
   page: number;

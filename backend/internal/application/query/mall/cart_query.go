@@ -23,6 +23,10 @@ type ListReader interface {
 	GetByID(ctx context.Context, id string) (ldom.List, error)
 }
 
+type ListImageReader interface {
+	ListByListID(ctx context.Context, listID string) ([]ldom.ListImage, error)
+}
+
 type ResaleReader interface {
 	GetByID(ctx context.Context, id string) (resaledom.Resale, error)
 }
@@ -35,6 +39,7 @@ type CartQuery struct {
 	CartRepo CartReader
 
 	ListRepo             ListReader
+	ListImageRepo        ListImageReader
 	InventoryRepo        invdom.RepositoryPort
 	ProductBlueprintRepo ProductBlueprintReader
 
@@ -59,6 +64,7 @@ func WithCartQueryBrandRepo(repo branddom.Repository) CartQueryOption {
 func NewCartQuery(
 	cartRepo CartReader,
 	listRepo ListReader,
+	listImageRepo ListImageReader,
 	inventoryRepo invdom.RepositoryPort,
 	productBlueprintRepo ProductBlueprintReader,
 	resaleRepo ResaleReader,
@@ -69,6 +75,7 @@ func NewCartQuery(
 	query := &CartQuery{
 		CartRepo:             cartRepo,
 		ListRepo:             listRepo,
+		ListImageRepo:        listImageRepo,
 		InventoryRepo:        inventoryRepo,
 		ProductBlueprintRepo: productBlueprintRepo,
 		ResaleRepo:           resaleRepo,
@@ -118,7 +125,7 @@ func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (malldto
 	resaleIndex := q.fetchResales(ctx, cart)
 	resaleImageIndex := q.fetchResaleImages(ctx, cart)
 	resaleDisplayIndex := q.fetchResaleDisplayMeta(ctx, cart, resaleIndex)
-	productNameIndex := q.fetchProductNames(
+	productDisplayIndex := q.fetchProductDisplayMeta(
 		ctx,
 		cart,
 		inventoryIndex,
@@ -132,7 +139,7 @@ func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (malldto
 		listMetaIndex,
 		inventoryIndex,
 		modelIndex,
-		productNameIndex,
+		productDisplayIndex,
 		resaleIndex,
 		resaleImageIndex,
 		resaleDisplayIndex,
@@ -196,8 +203,14 @@ type invParts struct {
 }
 
 type listMeta struct {
-	Title   string
-	ImageID string
+	Title    string
+	ImageURL string
+}
+
+type productDisplayMeta struct {
+	ProductName string
+	BrandID     string
+	BrandName   string
 }
 
 type resaleMeta struct {
@@ -222,7 +235,7 @@ func toCartDTO(
 	listMetaIndex map[string]listMeta,
 	inventoryIndex map[string]invParts,
 	modelIndex map[string]mallshared.ModelDisplay,
-	productNameIndex map[string]string,
+	productDisplayIndex map[string]productDisplayMeta,
 	resaleIndex map[string]resaleMeta,
 	resaleImageIndex map[string]string,
 	resaleDisplayIndex map[string]resaleDisplayMeta,
@@ -252,7 +265,7 @@ func toCartDTO(
 				listMetaIndex,
 				inventoryIndex,
 				modelIndex,
-				productNameIndex,
+				productDisplayIndex,
 			)
 			if !ok {
 				continue
@@ -266,7 +279,7 @@ func toCartDTO(
 				resaleIndex,
 				resaleImageIndex,
 				resaleDisplayIndex,
-				productNameIndex,
+				productDisplayIndex,
 			)
 			if !ok {
 				continue
@@ -285,7 +298,7 @@ func toListCartItemDTO(
 	listMetaIndex map[string]listMeta,
 	inventoryIndex map[string]invParts,
 	modelIndex map[string]mallshared.ModelDisplay,
-	productNameIndex map[string]string,
+	productDisplayIndex map[string]productDisplayMeta,
 ) (malldto.CartItemDTO, bool) {
 	inventoryID := item.InventoryID
 	listID := item.ListID
@@ -305,7 +318,7 @@ func toListCartItemDTO(
 
 	if metadata, ok := listMetaIndex[listID]; ok {
 		result.Title = metadata.Title
-		result.ListImage = metadata.ImageID
+		result.ImageURL = metadata.ImageURL
 	}
 
 	if prices, ok := priceIndex[listID]; ok {
@@ -324,10 +337,13 @@ func toListCartItemDTO(
 	}
 
 	if productBlueprintID != "" {
-		if name := productNameIndex[productBlueprintID]; name != "" {
-			result.ProductName = name
+		if display, ok := productDisplayIndex[productBlueprintID]; ok {
+			result.ProductName = display.ProductName
+			result.BrandID = display.BrandID
+			result.BrandName = display.BrandName
+
 			if result.Title == "" {
-				result.Title = name
+				result.Title = display.ProductName
 			}
 		}
 	}
@@ -347,7 +363,7 @@ func toResaleCartItemDTO(
 	resaleIndex map[string]resaleMeta,
 	resaleImageIndex map[string]string,
 	resaleDisplayIndex map[string]resaleDisplayMeta,
-	productNameIndex map[string]string,
+	productDisplayIndex map[string]productDisplayMeta,
 ) (malldto.CartItemDTO, bool) {
 	if item.ResaleID == "" || item.ProductID == "" {
 		return malldto.CartItemDTO{}, false
@@ -388,7 +404,12 @@ func toResaleCartItemDTO(
 
 	productName := ""
 	if productBlueprintID != "" {
-		productName = productNameIndex[productBlueprintID]
+		if productDisplay, ok := productDisplayIndex[productBlueprintID]; ok {
+			productName = productDisplay.ProductName
+			if brandName == "" {
+				brandName = productDisplay.BrandName
+			}
+		}
 	}
 
 	return mallshared.ResaleCartItemToDTO(
@@ -468,11 +489,17 @@ func (q *CartQuery) fetchLists(
 		}
 
 		metadata := listMeta{
-			Title:   list.Title,
-			ImageID: list.ImageID,
+			Title: list.Title,
 		}
 
-		if metadata.Title != "" || metadata.ImageID != "" {
+		if q.ListImageRepo != nil {
+			images, imageErr := q.ListImageRepo.ListByListID(ctx, listID)
+			if imageErr == nil {
+				metadata.ImageURL = mallshared.SelectPrimaryListImageURL(list, images)
+			}
+		}
+
+		if metadata.Title != "" || metadata.ImageURL != "" {
 			metadataIndex[listID] = metadata
 		}
 
@@ -774,18 +801,18 @@ func (q *CartQuery) fetchModels(
 	return result
 }
 
-func (q *CartQuery) fetchProductNames(
+func (q *CartQuery) fetchProductDisplayMeta(
 	ctx context.Context,
 	cart *cartdom.Cart,
 	inventoryIndex map[string]invParts,
 	resaleIndex map[string]resaleMeta,
 	resaleDisplayIndex map[string]resaleDisplayMeta,
-) map[string]string {
+) map[string]productDisplayMeta {
 	if q == nil || q.ProductBlueprintRepo == nil || cart == nil || len(cart.Items) == 0 {
 		return nil
 	}
 
-	result := map[string]string{}
+	result := map[string]productDisplayMeta{}
 	seen := map[string]struct{}{}
 
 	for _, item := range cart.Items {
@@ -826,8 +853,20 @@ func (q *CartQuery) fetchProductNames(
 			continue
 		}
 
-		if productBlueprint.ProductName != "" {
-			result[productBlueprintID] = productBlueprint.ProductName
+		display := productDisplayMeta{
+			ProductName: productBlueprint.ProductName,
+			BrandID:     productBlueprint.BrandID,
+		}
+
+		if q.BrandRepo != nil && productBlueprint.BrandID != "" {
+			brand, brandErr := q.BrandRepo.GetByID(ctx, productBlueprint.BrandID)
+			if brandErr == nil {
+				display.BrandName = brand.Name
+			}
+		}
+
+		if display.ProductName != "" || display.BrandID != "" || display.BrandName != "" {
+			result[productBlueprintID] = display
 		}
 	}
 

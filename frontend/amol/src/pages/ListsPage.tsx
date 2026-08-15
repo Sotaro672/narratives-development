@@ -13,7 +13,7 @@ import {
   useListsPage,
 } from "../features/list/presentation/hooks/useListsPage";
 
-import "../features/list/presentation/styles/lists-page.css";
+import "../styles/lists-page.css";
 
 export default function ListsPage() {
   const navigate = useNavigate();
