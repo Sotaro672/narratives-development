@@ -1,32 +1,24 @@
 // frontend/amol/src/features/resale/presentation/components/ResaleCreateForm.tsx
 
-import type {
-  ChangeEvent,
-  RefObject,
-} from "react";
+import type { ChangeEvent, RefObject } from "react";
 
 import Input from "../../../../components/ui/Input";
 import MediaUploader from "../../../../components/ui/MediaUploader";
 import SectionHeader from "../../../../components/ui/SectionHeader";
 import Textbox from "../../../../components/ui/Textbox";
 
-import type {
-  ResaleConditionMediaItem,
-} from "../types/resaleCreatePageTypes";
+import {
+  RESALE_CONDITION_OPTIONS,
+  type ResaleCondition,
+} from "../../../shared/types/resale";
 
-const RESALE_CONDITION_OPTIONS = [
-  "新品・未使用",
-  "未使用に近い",
-  "目立った傷や汚れなし",
-  "やや傷や汚れあり",
-  "傷や汚れあり",
-] as const;
+import type { ResaleConditionMediaItem } from "../types/resaleCreatePageTypes";
 
 const DESCRIPTION_MAX_LENGTH = 1000;
 
 export type ResaleCreateFormProps = {
   formattedPrice: string;
-  condition: string;
+  condition: ResaleCondition;
   description: string;
   conditionMediaItems: ResaleConditionMediaItem[];
   conditionMediaCurrentIndex: number;
@@ -34,11 +26,9 @@ export type ResaleCreateFormProps = {
   conditionMediaCarouselRef: RefObject<HTMLDivElement>;
   disabled?: boolean;
   onPriceChange: (value: string) => void;
-  onConditionChange: (value: string) => void;
+  onConditionChange: (value: ResaleCondition) => void;
   onDescriptionChange: (value: string) => void;
-  onConditionMediaSelected: (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => void;
+  onConditionMediaSelected: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemoveConditionMedia: (id: string) => void;
   onConditionMediaCarouselScroll: () => void;
   onMoveToConditionMediaSlide: (index: number) => void;
@@ -63,10 +53,7 @@ export default function ResaleCreateForm({
 }: ResaleCreateFormProps) {
   return (
     <section className="page-card">
-      <SectionHeader
-        title="販売情報"
-        titleAs="h2"
-      />
+      <SectionHeader title="販売情報" titleAs="h2" />
 
       <div className="page-form">
         <Input
@@ -78,37 +65,24 @@ export default function ResaleCreateForm({
           helperText="半角数字で入力してください。"
           required
           disabled={disabled}
-          onChange={(event) =>
-            onPriceChange(
-              event.currentTarget.value,
-            )
-          }
+          onChange={(event) => onPriceChange(event.currentTarget.value)}
         />
 
         <label className="page-form__field">
-          <span className="page-form__label">
-            商品の状態
-          </span>
+          <span className="page-form__label">商品の状態</span>
 
           <select
             value={condition}
             disabled={disabled}
             onChange={(event) =>
-              onConditionChange(
-                event.currentTarget.value,
-              )
+              onConditionChange(event.currentTarget.value as ResaleCondition)
             }
           >
-            {RESALE_CONDITION_OPTIONS.map(
-              (option) => (
-                <option
-                  key={option}
-                  value={option}
-                >
-                  {option}
-                </option>
-              ),
-            )}
+            {RESALE_CONDITION_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </label>
 
@@ -122,27 +96,13 @@ export default function ResaleCreateForm({
           multiple
           disabled={disabled}
           items={conditionMediaItems}
-          currentIndex={
-            conditionMediaCurrentIndex
-          }
-          inputRef={
-            conditionMediaInputRef
-          }
-          carouselRef={
-            conditionMediaCarouselRef
-          }
-          onFilesSelected={
-            onConditionMediaSelected
-          }
-          onRemoveItem={
-            onRemoveConditionMedia
-          }
-          onCarouselScroll={
-            onConditionMediaCarouselScroll
-          }
-          onMoveToSlide={
-            onMoveToConditionMediaSlide
-          }
+          currentIndex={conditionMediaCurrentIndex}
+          inputRef={conditionMediaInputRef}
+          carouselRef={conditionMediaCarouselRef}
+          onFilesSelected={onConditionMediaSelected}
+          onRemoveItem={onRemoveConditionMedia}
+          onCarouselScroll={onConditionMediaCarouselScroll}
+          onMoveToSlide={onMoveToConditionMediaSlide}
         />
 
         <Textbox
@@ -151,18 +111,10 @@ export default function ResaleCreateForm({
           placeholder="購入時期、着用回数、保管状態などを入力してください。"
           rows={6}
           helperText="購入者が商品の状態を判断しやすい内容を入力してください。"
-          counterText={
-            `${description.length}/${DESCRIPTION_MAX_LENGTH}`
-          }
-          maxLength={
-            DESCRIPTION_MAX_LENGTH
-          }
+          counterText={`${description.length}/${DESCRIPTION_MAX_LENGTH}`}
+          maxLength={DESCRIPTION_MAX_LENGTH}
           disabled={disabled}
-          onChange={(event) =>
-            onDescriptionChange(
-              event.currentTarget.value,
-            )
-          }
+          onChange={(event) => onDescriptionChange(event.currentTarget.value)}
         />
       </div>
     </section>

@@ -23,23 +23,17 @@ import {
 } from "../../api/resaleApi";
 
 import {
-  DEFAULT_RESALE_CONDITION,
-} from "../../constants/resaleConditions";
-
-import {
-  DEFAULT_RESALE_EDITABLE_STATUS,
   isResaleEditableStatus,
 } from "../../constants/resaleStatusOptions";
 
-import type {
-  ResaleCondition,
-  ResaleEditableStatus,
+import {
+  DEFAULT_RESALE_CONDITION,
+  DEFAULT_RESALE_EDITABLE_STATUS,
+  type ResaleCondition,
+  type ResaleConditionImage,
+  type ResaleEditableStatus,
+  type ResaleListing,
 } from "../../../shared/types/resale";
-
-import type {
-  ResaleConditionImage,
-  ResaleListing,
-} from "../../../shared/types/resaleTypes";
 
 import type {
   ResaleDetailEditFormProps,
@@ -197,6 +191,7 @@ export function useResaleDetailPage() {
         resetFormFromItem(null, []);
         setActiveGalleryIndex(0);
         setIsEditing(false);
+
         setErrorMessage(
           error instanceof Error
             ? error.message

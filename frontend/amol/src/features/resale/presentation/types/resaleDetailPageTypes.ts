@@ -16,7 +16,7 @@ import type {
 import type {
   ResaleConditionImage,
   ResaleListing,
-} from "../../../shared/types/resaleTypes";
+} from "../../../shared/types/resale";
 
 import type {
   ResaleCondition,

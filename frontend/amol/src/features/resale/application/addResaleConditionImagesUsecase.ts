@@ -11,7 +11,7 @@ import {
 import type {
   AddResaleConditionImagesParams,
   ResaleConditionImage,
-} from "../../shared/types/resaleTypes";
+} from "../../shared/types/resale";
 
 export async function addMyResaleConditionImages(
   params: AddResaleConditionImagesParams,

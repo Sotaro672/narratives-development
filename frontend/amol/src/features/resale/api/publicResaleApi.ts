@@ -9,7 +9,7 @@ import type {
   ListMyResaleListingsResponse,
   ListResaleListingsByAvatarIdParams,
   ResaleConditionImage,
-} from "../../shared/types/resaleTypes";
+} from "../../shared/types/resale";
 
 export async function listResaleListingsByAvatarId(
   params: ListResaleListingsByAvatarIdParams,

@@ -12,7 +12,7 @@ import type {
   ResaleImageIdentifier,
   ResaleListing,
   UpdateResaleListingParams,
-} from "../../shared/types/resaleTypes";
+} from "../../shared/types/resale";
 
 export async function createResaleListingRecord(
   params: CreateResaleListingRecordParams,

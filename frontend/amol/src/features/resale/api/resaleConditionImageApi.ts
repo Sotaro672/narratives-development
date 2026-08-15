@@ -8,7 +8,7 @@ import {
 import type {
   ResaleConditionImage,
   ResaleImageIdentifier,
-} from "../../shared/types/resaleTypes";
+} from "../../shared/types/resale";
 
 type CreateResaleConditionImageParams = Pick<
   ResaleConditionImage,

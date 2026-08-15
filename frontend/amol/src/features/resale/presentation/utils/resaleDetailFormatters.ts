@@ -8,7 +8,7 @@ import type {
 
 import type {
   ResaleListing,
-} from "../../../shared/types/resaleTypes";
+} from "../../../shared/types/resale";
 
 /**
  * 再販ステータスを表示用の文言へ変換する。

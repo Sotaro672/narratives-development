@@ -10,7 +10,7 @@ import {
 
 import type {
   ResaleConditionImage,
-} from "../../../shared/types/resaleTypes";
+} from "../../../shared/types/resale";
 
 import type {
   ResaleDetailConditionMediaItem,
