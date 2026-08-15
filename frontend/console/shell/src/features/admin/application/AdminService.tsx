@@ -8,10 +8,10 @@ import type { Member, MemberFilter } from "../../../shared/types/member";
 
 export type AssigneeCandidate = {
   /**
-   * Firebase Authentication UID。
+   * Firestore members の document ID。
    *
-   * Backend の assigneeId / NameResolver は
-   * Firebase Auth UID を正とする。
+   * Backend の assigneeId / managerId / NameResolver は
+   * Member document ID を正とする。
    */
   id: string;
 
@@ -22,12 +22,13 @@ export type AssigneeCandidate = {
 };
 
 /**
- * Member配列をAdminCard用の担当者候補とnameMapへ変換する。
+ * Member配列をAdminCardやBrand責任者選択で使用する
+ * 担当者候補とnameMapへ変換する。
  *
- * assigneeId は Firebase Auth UID を正とする。
+ * candidate.id は Firestore members の document ID を正とする。
  *
  * 表示名はBackendで解決済みのdisplayNameを使用する。
- * uid が空のMemberは担当者候補に含めない。
+ * id が空のMemberは担当者候補に含めない。
  */
 export function buildAssigneeCandidates(
   items: Member[],
@@ -35,18 +36,25 @@ export function buildAssigneeCandidates(
   candidates: AssigneeCandidate[];
   nameMap: Record<string, string>;
 } {
-  const candidates = items.flatMap((member): AssigneeCandidate[] => {
-    if (!member.uid || !member.displayName) {
-      return [];
-    }
+  const candidates = items.flatMap(
+    (member): AssigneeCandidate[] => {
+      if (!member.id) {
+        return [];
+      }
 
-    return [
-      {
-        id: member.uid,
-        name: member.displayName,
-      },
-    ];
-  });
+      const name =
+        member.displayName ||
+        member.email ||
+        member.id;
+
+      return [
+        {
+          id: member.id,
+          name,
+        },
+      ];
+    },
+  );
 
   const nameMap: Record<string, string> = {};
 
@@ -62,12 +70,16 @@ export function buildAssigneeCandidates(
 
 /**
  * 現在ログイン中MemberのcompanyIdでスコープされた
- * AdminCard用の担当者候補を取得する。
+ * 担当者候補を取得する。
  *
  * companyIdはFrontendから指定せず、
  * Backend側で認証中MemberのcompanyIdにスコープされる。
  *
- * candidate.id は Firebase Auth UID。
+ * candidate.id は Firestore members の document ID。
+ *
+ * AdminCard の assigneeId や
+ * Brand の managerId など、
+ * Member document ID を保存する項目で共通利用する。
  */
 export async function fetchAssigneeCandidatesForCurrentCompany(): Promise<{
   candidates: AssigneeCandidate[];
@@ -81,7 +93,12 @@ export async function fetchAssigneeCandidatesForCurrentCompany(): Promise<{
 
   const filter: MemberFilter = {};
 
-  const result = await fetchMemberList(page, filter);
+  const result = await fetchMemberList(
+    page,
+    filter,
+  );
 
-  return buildAssigneeCandidates(result.items);
+  return buildAssigneeCandidates(
+    result.items,
+  );
 }

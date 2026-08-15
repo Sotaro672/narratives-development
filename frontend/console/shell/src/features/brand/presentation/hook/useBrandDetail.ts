@@ -11,10 +11,12 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 
 import { safeDateLabelJa } from "../../../../shared/util/dateJa";
-import type { Member, MemberFilter } from "../../../../shared/types/member";
 import type { Brand, BrandPatch } from "../../../../shared/types/brand";
 
-import { MemberRepositoryHTTP } from "../../../member/infrastructure/memberRepositoryHTTP";
+import {
+  fetchAssigneeCandidatesForCurrentCompany,
+  type AssigneeCandidate,
+} from "../../../admin/application/AdminService";
 import { validateBrandImage } from "../../application/brandImageValidation";
 import {
   BRAND_IMAGE_ALLOWED_MIME_TYPES,
@@ -23,13 +25,9 @@ import {
 import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHTTP";
 import { uploadBrandAssetToFirebaseStorage } from "../../infrastructure/storage/brandAssetStorage";
 
-const memberRepository = new MemberRepositoryHTTP();
 const BRAND_IMAGE_ACCEPT = BRAND_IMAGE_ALLOWED_MIME_TYPES.join(",");
 
-export type BrandManagerCandidate = {
-  id: string;
-  name: string;
-};
+export type BrandManagerCandidate = AssigneeCandidate;
 
 type BrandDraft = {
   name: string;
@@ -73,25 +71,6 @@ function createDraft(brand: Brand): BrandDraft {
     isActive: brand.isActive,
     managerId: brand.managerId ?? "",
   };
-}
-
-function formatMemberName(member: Member): string {
-  const lastName = member.lastName ?? "";
-  const firstName = member.firstName ?? "";
-
-  if (lastName && firstName) {
-    return `${lastName} ${firstName}`;
-  }
-
-  if (lastName) {
-    return lastName;
-  }
-
-  if (firstName) {
-    return firstName;
-  }
-
-  return member.email || member.id;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -194,25 +173,15 @@ export function useBrandDetail() {
         setLoadingMembers(true);
         setMemberError(null);
 
-        const filter: MemberFilter = {};
-        const result = await memberRepository.list(
-          {
-            number: 1,
-            perPage: 200,
-          },
-          filter,
-        );
+        const {
+          candidates,
+        } = await fetchAssigneeCandidatesForCurrentCompany();
 
         if (cancelled) {
           return;
         }
 
-        setManagerCandidates(
-          result.items.map((member) => ({
-            id: member.id,
-            name: formatMemberName(member),
-          })),
-        );
+        setManagerCandidates(candidates);
       } catch (error: unknown) {
         if (!cancelled) {
           setManagerCandidates([]);
