@@ -1,7 +1,7 @@
 // frontend/amol/src/features/cart/api/cartApi.ts
 
-import { HttpError, requestJson } from "../../../lib/http";
-import type { CartCatalogSnapshot, CartDTO, CartDisplayItem } from "../../shared/types/cart";
+import { requestJson } from "../../../lib/http";
+import type { CartDTO, CartDisplayItem } from "../../shared/types/cart";
 
 /**
  * 現在のカートを取得します。
@@ -59,26 +59,13 @@ export async function addResaleCartItem(args: {
  * 二次流通商品:
  * DELETE /mall/me/cart/resales
  */
-export async function removeCartItem(args: {
-  item: CartDisplayItem;
-}): Promise<CartDTO> {
+export async function removeCartItem(args: { item: CartDisplayItem }): Promise<CartDTO> {
   const { item } = args;
   const isResale = item.type === "resale";
-
-  const path = isResale
-    ? "/mall/me/cart/resales"
-    : "/mall/me/cart/items";
-
+  const path = isResale ? "/mall/me/cart/resales" : "/mall/me/cart/items";
   const body = isResale
-    ? {
-        resaleId: item.resaleId,
-        productId: item.productId,
-      }
-    : {
-        inventoryId: item.inventoryId,
-        listId: item.listId,
-        modelId: item.modelId,
-      };
+    ? { resaleId: item.resaleId, productId: item.productId }
+    : { inventoryId: item.inventoryId, listId: item.listId, modelId: item.modelId };
 
   return requestJson<CartDTO>(path, {
     method: "DELETE",
@@ -91,48 +78,4 @@ export async function removeCartItem(args: {
       invalidJsonErrorMessage: "カート商品削除APIのJSON形式が不正です。",
     },
   });
-}
-
-/**
- * 通常販売商品のカタログ情報を取得します。
- *
- * GET /mall/catalog/:listId
- *
- * カタログが取得できない場合はnullを返します。
- */
-export async function fetchCatalog(
-  listId: string,
-): Promise<CartCatalogSnapshot | null> {
-  const normalizedListId = listId.trim();
-
-  if (!normalizedListId) {
-    return null;
-  }
-
-  try {
-    return await requestJson<CartCatalogSnapshot>(
-      `/mall/catalog/${encodeURIComponent(normalizedListId)}`,
-      {
-        method: "GET",
-        auth: "required",
-        credentials: "include",
-        messages: {
-          requestErrorMessage: "カート用カタログの取得に失敗しました。",
-          nonJsonErrorMessage: "カート用カタログAPIがJSON以外を返しました。",
-          invalidJsonErrorMessage: "カート用カタログAPIのJSON形式が不正です。",
-        },
-      },
-    );
-  } catch (error) {
-    if (
-      error instanceof HttpError ||
-      (error instanceof Error &&
-        (error.message === "カート用カタログAPIがJSON以外を返しました。" ||
-          error.message === "カート用カタログAPIのJSON形式が不正です。"))
-    ) {
-      return null;
-    }
-
-    throw error;
-  }
 }

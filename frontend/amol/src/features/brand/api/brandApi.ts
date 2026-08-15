@@ -1,7 +1,8 @@
 // frontend/amol/src/features/brand/api/brandApi.ts
 
 import { requestJson } from "../../../lib/http";
-import type { BrandDetail, BrandListItem } from "../../shared/types/brand";
+import type { BrandDetail } from "../../shared/types/brand";
+import type { MallListItem } from "../../shared/types/list";
 
 const BRAND_BASE_PATH = "/mall/brands";
 const LIST_BASE_PATH = "/mall/lists";
@@ -14,12 +15,9 @@ function requireId(value: string, fieldName: string): string {
   return value;
 }
 
-/**
- * ブランド詳細を取得します。
- *
- * GET /mall/brands/:brandId
- */
-export async function fetchBrandById(brandId: string): Promise<BrandDetail> {
+export async function fetchBrandById(
+  brandId: string,
+): Promise<BrandDetail> {
   const id = requireId(brandId, "brandId");
 
   return requestJson<BrandDetail>(
@@ -36,15 +34,12 @@ export async function fetchBrandById(brandId: string): Promise<BrandDetail> {
   );
 }
 
-/**
- * リスト詳細を取得します。
- *
- * GET /mall/lists/:listId
- */
-async function fetchBrandListItemById(listId: string): Promise<BrandListItem> {
+async function fetchBrandListItemById(
+  listId: string,
+): Promise<MallListItem> {
   const id = requireId(listId, "listId");
 
-  return requestJson<BrandListItem>(
+  return requestJson<MallListItem>(
     `${LIST_BASE_PATH}/${encodeURIComponent(id)}`,
     {
       method: "GET",
@@ -59,14 +54,9 @@ async function fetchBrandListItemById(listId: string): Promise<BrandListItem> {
   );
 }
 
-/**
- * ブランドに紐づくリストをまとめて取得します。
- *
- * 一部の取得に失敗しても、正常に取得できたリストは返します。
- */
 export async function fetchBrandListItemsByIds(
   listIds: string[],
-): Promise<BrandListItem[]> {
+): Promise<MallListItem[]> {
   if (listIds.length === 0) {
     return [];
   }
@@ -77,7 +67,7 @@ export async function fetchBrandListItemsByIds(
 
   return results
     .filter(
-      (result): result is PromiseFulfilledResult<BrandListItem> =>
+      (result): result is PromiseFulfilledResult<MallListItem> =>
         result.status === "fulfilled",
     )
     .map((result) => result.value);

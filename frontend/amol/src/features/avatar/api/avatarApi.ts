@@ -3,9 +3,9 @@
 import { HttpError, requestJson } from "../../../lib/http";
 import type {
   AvatarMutationResponse,
+  AvatarPayloadBase,
   CreateAvatarPayload,
   MyAvatarResponse,
-  UpdateAvatarPayload,
 } from "../../shared/types/avatar";
 
 export async function getMyAvatar(): Promise<MyAvatarResponse | null> {
@@ -15,22 +15,13 @@ export async function getMyAvatar(): Promise<MyAvatarResponse | null> {
       auth: "required",
     });
   } catch (error) {
-    if (error instanceof HttpError && error.status === 404) {
-      return null;
-    }
-
+    if (error instanceof HttpError && error.status === 404) return null;
     throw error;
   }
 }
 
-export async function getPublicAvatar({
-  avatarId,
-}: {
-  avatarId: string;
-}): Promise<MyAvatarResponse | null> {
-  if (!avatarId) {
-    throw new Error("avatarIdが指定されていません。");
-  }
+export async function getPublicAvatar({ avatarId }: { avatarId: string }): Promise<MyAvatarResponse | null> {
+  if (!avatarId) throw new Error("avatarIdが指定されていません。");
 
   try {
     return await requestJson<MyAvatarResponse>(
@@ -38,10 +29,7 @@ export async function getPublicAvatar({
       { method: "GET" },
     );
   } catch (error) {
-    if (error instanceof HttpError && error.status === 404) {
-      return null;
-    }
-
+    if (error instanceof HttpError && error.status === 404) return null;
     throw error;
   }
 }
@@ -61,7 +49,7 @@ export async function createAvatar({
 export async function updateAvatar({
   payload,
 }: {
-  payload: UpdateAvatarPayload;
+  payload: AvatarPayloadBase;
 }): Promise<AvatarMutationResponse> {
   return requestJson<AvatarMutationResponse>("/mall/me/avatars", {
     method: "PATCH",

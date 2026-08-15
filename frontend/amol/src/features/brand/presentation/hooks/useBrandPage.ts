@@ -1,34 +1,42 @@
 // frontend/amol/src/features/brand/presentation/hooks/useBrandPage.ts
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
 import { loadBrandPage } from "../../application/loadBrandPage";
-import type { BrandDetail, BrandListItem } from "../../../shared/types/brand";
+
+import type { BrandDetail } from "../../../shared/types/brand";
+import type { MallListItem } from "../../../shared/types/list";
 
 type BrandPageIdleState = {
   status: "idle";
   brand: null;
-  listItems: BrandListItem[];
+  listItems: MallListItem[];
   error: "";
 };
 
 type BrandPageLoadingState = {
   status: "loading";
   brand: null;
-  listItems: BrandListItem[];
+  listItems: MallListItem[];
   error: "";
 };
 
 type BrandPageSuccessState = {
   status: "success";
   brand: BrandDetail;
-  listItems: BrandListItem[];
+  listItems: MallListItem[];
   error: "";
 };
 
 type BrandPageErrorState = {
   status: "error";
   brand: null;
-  listItems: BrandListItem[];
+  listItems: MallListItem[];
   error: string;
 };
 

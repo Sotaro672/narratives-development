@@ -1,12 +1,7 @@
 // frontend/amol/src/features/shared/types/orderTypes.ts
 
-import type {
-  PageResultResponse,
-} from "../pageResult";
-
-import type {
-  ProductCategoryKind,
-} from "./category";
+import type { PageResult } from "../pageResult";
+import type { ProductCategoryKind } from "./category";
 
 export type WalletOrderColor = {
   name?: string;
@@ -14,48 +9,36 @@ export type WalletOrderColor = {
   rgb?: number;
 };
 
-export type WalletOrderMeasurements =
-  Record<string, number>;
+export type WalletOrderMeasurements = Record<string, number>;
 
 export type WalletOrderItemSnapshot = {
   modelId: string;
   inventoryId: string;
   listId: string;
-
   productBlueprintId?: string;
   tokenBlueprintId?: string;
-
   productName?: string;
-
   brandId?: string;
   brandName?: string;
   brandIcon?: string;
-
   kind?: ProductCategoryKind;
   modelNumber?: string;
 
-  /**
-   * apparel 用
-   */
+  /** apparel 用 */
   size?: string;
   color?: WalletOrderColor;
   measurements?: WalletOrderMeasurements;
 
-  /**
-   * alcohol 用
-   */
+  /** alcohol 用 */
   volumeValue?: number;
   volumeUnit?: string;
 
   tokenName?: string;
   tokenIcon?: string;
-
   qty: number;
   price: number;
-
   isCanceled: boolean;
   isDispatched: boolean;
-
   transferred?: boolean;
   transferredAt?: string;
 };
@@ -65,22 +48,13 @@ export type WalletOrder = {
   userId: string;
   avatarId: string;
   cartId: string;
-
   paid?: boolean;
-
   items: WalletOrderItemSnapshot[];
-
   createdAt?: string;
   updatedAt?: string;
 };
 
-export type WalletOrdersPage =
-  Omit<
-    PageResultResponse<WalletOrder>,
-    "items"
-  > & {
-    items: WalletOrder[];
-  };
+export type WalletOrdersPage = PageResult<WalletOrder>;
 
 export type FetchWalletOrdersInput = {
   backendUrl: string;

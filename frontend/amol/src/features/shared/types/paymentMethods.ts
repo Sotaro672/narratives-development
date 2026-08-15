@@ -1,4 +1,5 @@
-//frontend\amol\src\features\payment-method\types.ts
+// frontend/amol/src/features/shared/types/paymentMethods.ts
+
 import type { Stripe } from "@stripe/stripe-js";
 
 export type CardPaymentMethod = {
@@ -12,41 +13,29 @@ export type CardPaymentMethod = {
   expYear: number;
   cardholderName: string;
   isDefault: boolean;
-  createdAt?: string;
-  updatedAt?: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
-export type PaymentMethodListResponse = {
-  data?: CardPaymentMethod[];
-  error?: string;
+type DataResponse<T> = {
+  data: T;
 };
 
-export type PaymentMethodDefaultResponse = {
-  data?: CardPaymentMethod | null;
-  error?: string;
-};
+export type PaymentMethodListResponse = DataResponse<CardPaymentMethod[]>;
+export type PaymentMethodDefaultResponse = DataResponse<CardPaymentMethod>;
 
 export type SetupIntentData = {
-  clientSecret?: string;
-  stripeCustomerId?: string;
+  clientSecret: string;
+  stripeCustomerId: string;
 };
 
-export type SetupIntentResponse = {
-  data?: SetupIntentData;
-  clientSecret?: string;
-  stripeCustomerId?: string;
-  error?: string;
-};
+export type SetupIntentResponse = DataResponse<SetupIntentData>;
 
 export type StripeConfigResponse = {
-  publishableKey?: string;
-  error?: string;
+  publishableKey: string;
 };
 
-export type SavePaymentMethodResponse = {
-  data?: CardPaymentMethod;
-  error?: string;
-};
+export type SavePaymentMethodResponse = DataResponse<CardPaymentMethod>;
 
 export type ConfirmedCardPayload = {
   stripeCustomerId: string;

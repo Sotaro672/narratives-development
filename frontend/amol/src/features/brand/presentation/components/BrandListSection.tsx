@@ -1,12 +1,14 @@
 // frontend/amol/src/features/brand/presentation/components/BrandListSection.tsx
 
 import { Link } from "react-router-dom";
-import type { BrandListItem } from "../../../shared/types/brand";
+
+import type { MallListItem } from "../../../shared/types/list";
+
 import { formatBrandListPrice } from "../utils/formatBrandListPrice";
 
 type BrandListSectionProps = {
   listIds: string[];
-  listItems: BrandListItem[];
+  listItems: MallListItem[];
 };
 
 export default function BrandListSection({
@@ -70,7 +72,9 @@ export default function BrandListSection({
             </div>
 
             <div className="lists-page-card-body">
-              <h2 className="lists-page-card-title">{item.title}</h2>
+              <h2 className="lists-page-card-title">
+                {item.title}
+              </h2>
 
               {item.description ? (
                 <p className="lists-page-card-description">

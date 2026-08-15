@@ -11,27 +11,12 @@ export type PickIconResult = {
 };
 
 export type AvatarCreateResult =
-  | {
-      ok: true;
-      message: string;
-      nextRoute: string;
-      createdAvatarId: string;
-    }
-  | {
-      ok: false;
-      message: string;
-    };
+  | { ok: true; message: string; nextRoute: string; createdAvatarId: string }
+  | { ok: false; message: string };
 
 export type AvatarUpdateResult =
-  | {
-      ok: true;
-      message: string;
-      avatarId: string;
-    }
-  | {
-      ok: false;
-      message: string;
-    };
+  | { ok: true; message: string; avatarId: string }
+  | { ok: false; message: string };
 
 export type AvatarMutationResponse = {
   avatarId: string;
@@ -53,17 +38,13 @@ export type MyAvatarResponse = {
   externalLink?: string | null;
 };
 
-export type CreateAvatarPayload = {
-  userUid: string;
+export type AvatarPayloadBase = {
   avatarName: string;
   avatarIcon?: string;
   profile?: string;
   externalLink?: string;
 };
 
-export type UpdateAvatarPayload = {
-  avatarName: string;
-  profile?: string;
-  externalLink?: string;
-  avatarIcon?: string;
+export type CreateAvatarPayload = AvatarPayloadBase & {
+  userUid: string;
 };

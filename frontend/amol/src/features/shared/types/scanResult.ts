@@ -1,6 +1,9 @@
 // frontend/amol/src/features/shared/types/scanResult.ts
 
-import type { ProductBlueprintCategoryFields } from "./category";
+import type {
+  ProductBlueprintCategoryFields,
+  ProductCategoryKind,
+} from "./category";
 import type { ProductBlueprintReviewPage } from "./review";
 
 export type MallOwnerInfo = {
@@ -41,15 +44,6 @@ export type MallTokenInfo = {
   onChainTxSignature?: string;
   mintedAt?: string;
 };
-
-export type ProductCategoryKind =
-  | "apparel"
-  | "alcohol"
-  | "cosmetics"
-  | "healthcare"
-  | "other"
-  | "unknown"
-  | string;
 
 export type ProductBlueprintCategorySnapshot = {
   ID?: string;

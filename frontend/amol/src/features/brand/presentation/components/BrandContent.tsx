@@ -1,9 +1,7 @@
 // frontend/amol/src/features/brand/presentation/components/BrandContent.tsx
 
-import type {
-  BrandDetail,
-  BrandListItem,
-} from "../../../shared/types/brand";
+import type { BrandDetail } from "../../../shared/types/brand";
+import type { MallListItem } from "../../../shared/types/list";
 
 import BrandBackground from "./BrandBackground";
 import BrandIcon from "./BrandIcon";
@@ -12,41 +10,27 @@ import BrandWebsiteLink from "./BrandWebsiteLink";
 
 type BrandContentProps = {
   brand: BrandDetail;
-  listItems: BrandListItem[];
+  listItems: MallListItem[];
 };
 
 export default function BrandContent({
   brand,
   listItems,
 }: BrandContentProps) {
-  const brandName =
-    brand.brandName.trim();
-
-  const companyName =
-    brand.companyName.trim();
-
-  const description =
-    brand.description.trim();
-
-  const websiteUrl =
-    brand.websiteUrl.trim();
+  const brandName = brand.brandName.trim();
+  const companyName = brand.companyName.trim();
+  const description = brand.description.trim();
+  const websiteUrl = brand.websiteUrl.trim();
 
   return (
     <div className="brand-page">
-      <BrandBackground
-        brand={brand}
-      />
+      <BrandBackground brand={brand} />
 
       <section className="brand-page-profile">
-        <BrandIcon
-          brand={brand}
-        />
+        <BrandIcon brand={brand} />
 
         <div className="brand-page-profile-body">
-          <h1>
-            {brandName ||
-              "名称未設定のブランド"}
-          </h1>
+          <h1>{brandName || "名称未設定のブランド"}</h1>
 
           {companyName ? (
             <p className="brand-page-company">
@@ -55,9 +39,7 @@ export default function BrandContent({
           ) : null}
 
           {websiteUrl ? (
-            <BrandWebsiteLink
-              url={websiteUrl}
-            />
+            <BrandWebsiteLink url={websiteUrl} />
           ) : null}
         </div>
       </section>

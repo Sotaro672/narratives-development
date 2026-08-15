@@ -1,9 +1,11 @@
 // frontend/amol/src/features/brand/presentation/utils/formatBrandListPrice.ts
 
 import { formatPrice } from "../../../../components/utils/price";
-import type { ListPriceRow } from "../../../shared/types/brand";
+import type { ListPriceRow } from "../../../shared/types/list";
 
-export function formatBrandListPrice(prices: ListPriceRow[]): string {
+export function formatBrandListPrice(
+  prices: ListPriceRow[],
+): string {
   if (prices.length === 0) {
     return formatPrice(undefined);
   }

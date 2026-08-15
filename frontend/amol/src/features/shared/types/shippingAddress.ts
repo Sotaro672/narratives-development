@@ -1,28 +1,26 @@
-//frontend\amol\src\features\shared\types\shippingAddress.ts
+// frontend/amol/src/features/shared/types/shippingAddress.ts
+
 export type ShippingAddress = {
-  id?: string;
-  ID?: string;
-  shippingAddressId?: string;
-  userId?: string;
+  id: string;
+  userId: string;
   zipCode: string;
   state: string;
   city: string;
   street: string;
-  street2?: string;
-  country?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  street2: string;
+  country: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type UserProfile = {
-  id?: string;
-  first_name?: string | null;
-  first_name_kana?: string | null;
-  last_name?: string | null;
-  last_name_kana?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-  deletedAt?: string | null;
+  id: string;
+  first_name: string;
+  first_name_kana: string;
+  last_name: string;
+  last_name_kana: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ShippingAddressFormValues = {
@@ -38,7 +36,7 @@ export type ShippingAddressFormValues = {
 };
 
 export type ErrorResponse = {
-  error?: string;
+  error: string;
 };
 
 export type ShippingAddressPageMode = "create" | "edit";

@@ -1,17 +1,7 @@
 // frontend/amol/src/features/shipping-address/api/shippingAddressApi.ts
 
-import {
-  requestJson,
-} from "../../../lib/http";
-
-import type {
-  ShippingAddress,
-  UserProfile,
-} from "../../shared/types/shippingAddress";
-import {
-  isShippingAddress,
-  isUserProfile,
-} from "../utils/zipCode";
+import { requestJson } from "../../../lib/http";
+import type { ShippingAddress, UserProfile } from "../../shared/types/shippingAddress";
 
 type FetchInitialDataInput = {
   backendUrl: string;
@@ -47,104 +37,57 @@ type SaveUserProfileInput = {
 export async function fetchShippingAddressPageInitialData(
   _input: FetchInitialDataInput,
 ): Promise<{
-  userProfile: UserProfile | null;
+  userProfile: UserProfile;
   shippingAddresses: ShippingAddress[];
 }> {
-  const [
-    userResponseBody,
-    shippingAddressResponseBody,
-  ] = await Promise.all([
-    requestJson<unknown>(
-      "/mall/me/users",
-      {
-        method: "GET",
-        auth: "required",
-        fallbackValue: null,
-        messages: {
-          requestErrorMessage:
-            "ユーザー情報の取得に失敗しました。",
-        },
+  const [userProfile, shippingAddresses] = await Promise.all([
+    requestJson<UserProfile>("/mall/me/users", {
+      method: "GET",
+      auth: "required",
+      messages: {
+        requestErrorMessage: "ユーザー情報の取得に失敗しました。",
       },
-    ),
-    requestJson<unknown>(
-      "/mall/me/shipping-addresses",
-      {
-        method: "GET",
-        auth: "required",
-        fallbackValue: null,
-        messages: {
-          requestErrorMessage:
-            "配送先情報の取得に失敗しました。",
-        },
+    }),
+    requestJson<ShippingAddress[]>("/mall/me/shipping-addresses", {
+      method: "GET",
+      auth: "required",
+      messages: {
+        requestErrorMessage: "配送先情報の取得に失敗しました。",
       },
-    ),
+    }),
   ]);
 
-  const shippingAddresses =
-    Array.isArray(shippingAddressResponseBody)
-      ? shippingAddressResponseBody.filter(
-          isShippingAddress,
-        )
-      : [];
-
-  return {
-    userProfile: isUserProfile(userResponseBody)
-      ? userResponseBody
-      : null,
-    shippingAddresses,
-  };
+  return { userProfile, shippingAddresses };
 }
 
 export async function saveUserProfile({
   payload,
-}: SaveUserProfileInput): Promise<UserProfile | null> {
-  const responseBody =
-    await requestJson<unknown>(
-      "/mall/me/users",
-      {
-        method: "PATCH",
-        auth: "required",
-        json: payload,
-        fallbackValue: null,
-        messages: {
-          requestErrorMessage:
-            "ユーザー情報の保存に失敗しました。",
-        },
-      },
-    );
-
-  return isUserProfile(responseBody)
-    ? responseBody
-    : null;
+}: SaveUserProfileInput): Promise<UserProfile> {
+  return requestJson<UserProfile>("/mall/me/users", {
+    method: "PATCH",
+    auth: "required",
+    json: payload,
+    messages: {
+      requestErrorMessage: "ユーザー情報の保存に失敗しました。",
+    },
+  });
 }
 
 export async function saveShippingAddress({
   isEditMode,
   shippingAddressId,
   payload,
-}: SaveShippingAddressInput): Promise<ShippingAddress | null> {
+}: SaveShippingAddressInput): Promise<ShippingAddress> {
   const path = isEditMode
-    ? `/mall/me/shipping-addresses/${shippingAddressId}`
+    ? `/mall/me/shipping-addresses/${encodeURIComponent(shippingAddressId)}`
     : "/mall/me/shipping-addresses";
 
-  const responseBody =
-    await requestJson<unknown>(
-      path,
-      {
-        method: isEditMode
-          ? "PATCH"
-          : "POST",
-        auth: "required",
-        json: payload,
-        fallbackValue: null,
-        messages: {
-          requestErrorMessage:
-            "配送先情報の保存に失敗しました。",
-        },
-      },
-    );
-
-  return isShippingAddress(responseBody)
-    ? responseBody
-    : null;
+  return requestJson<ShippingAddress>(path, {
+    method: isEditMode ? "PATCH" : "POST",
+    auth: "required",
+    json: payload,
+    messages: {
+      requestErrorMessage: "配送先情報の保存に失敗しました。",
+    },
+  });
 }

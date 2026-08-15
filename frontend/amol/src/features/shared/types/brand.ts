@@ -1,23 +1,4 @@
-// frontend/amol/src/features/brand/types/brand.ts
-
-export type ListPriceRow = {
-  currency?: string;
-  amount?: number;
-  price?: number;
-  [key: string]: unknown;
-};
-
-export type BrandListItem = {
-  id: string;
-  title: string;
-  description: string;
-  image: string;
-  prices: ListPriceRow[];
-
-  inventoryId?: string;
-  productBlueprintId?: string;
-  tokenBlueprintId?: string;
-};
+// frontend/amol/src/features/shared/types/brand.ts
 
 export type BrandDetail = {
   brandId: string;
