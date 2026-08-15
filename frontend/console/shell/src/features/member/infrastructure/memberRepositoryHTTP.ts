@@ -8,7 +8,7 @@ import type {
 } from "../../../shared/types/member";
 
 import { buildConsoleUrl } from "../../../shared/http/apiBase";
-import { getAuthHeaders, getAuthJsonHeaders } from "../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../shared/http/authHeaders";
 import { fetchJSON } from "../../../shared/http/fetchJSON";
 import { withQuery } from "../../../shared/http/queryString";
 
@@ -21,6 +21,7 @@ export class MemberRepositoryHTTP {
    */
   async getByUid(uid: string): Promise<Member | null> {
     const uidValue = uid.trim();
+
     if (!uidValue) {
       return null;
     }
@@ -34,9 +35,12 @@ export class MemberRepositoryHTTP {
     }
 
     const contentType = response.headers.get("content-type") ?? "";
+
     if (!contentType.includes("application/json")) {
       const text = await response.text().catch(() => "");
-      throw new Error(`Unexpected content-type: ${contentType}\n${text.slice(0, 200)}`);
+      throw new Error(
+        `Unexpected content-type: ${contentType}\n${text.slice(0, 200)}`,
+      );
     }
 
     if (!response.ok) {
@@ -80,12 +84,15 @@ export class MemberRepositoryHTTP {
    * POST /members
    */
   async create(input: CreateMemberInput): Promise<Member> {
-    const headers = await getAuthJsonHeaders();
+    const authHeaders = await getAuthHeaders();
     const url = buildConsoleUrl("/members");
 
     return fetchJSON<Member>(url, {
       method: "POST",
-      headers,
+      headers: {
+        ...authHeaders,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(input),
     });
   }

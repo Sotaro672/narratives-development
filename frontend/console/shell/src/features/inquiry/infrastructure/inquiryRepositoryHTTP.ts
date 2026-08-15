@@ -4,18 +4,13 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 import { storage } from "../../../auth/infrastructure/config/firebaseClient";
 import { API_BASE } from "../../../shared/http/apiBase";
-import {
-  getAuthHeadersOrThrow,
-  getAuthJsonHeadersOrThrow,
-} from "../../../shared/http/authHeaders";
-
+import { getAuthHeaders } from "../../../shared/http/authHeaders";
+import type { ItemsResult } from "../../../shared/types/common/common";
 import type {
-  CountUnreadInquiriesParams,
   Inquiry,
   InquiryDetail,
   InquiryImageFile,
   InquiryManagementItem,
-  InquiryPageResult,
   InquiryReply,
   InquiryUnreadCountResult,
   ListInquiriesParams,
@@ -83,13 +78,11 @@ function buildInquiryListQuery(params: ListInquiriesParams): string {
   appendStringParam(query, "resolvedBy", params.resolvedBy);
   appendStringParam(query, "closedBy", params.closedBy);
   appendStringParam(query, "imageFileName", params.imageFileName);
-
   appendBooleanParam(query, "deleted", params.deleted);
   appendBooleanParam(query, "resolved", params.resolved);
   appendBooleanParam(query, "closed", params.closed);
 
   const queryString = query.toString();
-
   return queryString ? `?${queryString}` : "";
 }
 
@@ -143,14 +136,12 @@ async function uploadInquiryReplyImageToStorage(
   const inquiryId = assertID(params.inquiryId, "inquiryId");
   const memberId = assertID(params.memberId, "memberId");
   const file = assertImageFile(params.file);
-
   const imageId = createClientID("reply_image");
   const fileName = sanitizeFileName(file.name);
   const mimeType = file.type;
   const objectPath = `inquiry-replies/${encodeURIComponent(
     inquiryId,
   )}/${encodeURIComponent(imageId)}/${encodeURIComponent(fileName)}`;
-
   const storageRef = ref(storage, objectPath);
 
   await uploadBytes(storageRef, file, {
@@ -204,9 +195,9 @@ export async function uploadInquiryReplyImagesToStorage(
 
 export async function listInquiriesHTTP(
   params: ListInquiriesParams,
-): Promise<InquiryPageResult<InquiryManagementItem>> {
+): Promise<ItemsResult<InquiryManagementItem>> {
   const companyId = assertID(params.companyId, "companyId");
-  const headers = await getAuthHeadersOrThrow();
+  const headers = await getAuthHeaders();
   const query = buildInquiryListQuery(params);
   const url = `${API_BASE}/inquiries/company/${encodeURIComponent(
     companyId,
@@ -225,7 +216,7 @@ export async function listInquiriesHTTP(
     );
   }
 
-  return (await response.json()) as InquiryPageResult<InquiryManagementItem>;
+  return (await response.json()) as ItemsResult<InquiryManagementItem>;
 }
 
 // -----------------------------------------------------------
@@ -234,10 +225,10 @@ export async function listInquiriesHTTP(
 // -----------------------------------------------------------
 
 export async function countUnreadInquiriesHTTP(
-  params: CountUnreadInquiriesParams,
+  params: ListInquiriesParams,
 ): Promise<InquiryUnreadCountResult> {
   const companyId = assertID(params.companyId, "companyId");
-  const headers = await getAuthHeadersOrThrow();
+  const headers = await getAuthHeaders();
   const query = buildInquiryListQuery(params);
   const url = `${API_BASE}/inquiries/company/${encodeURIComponent(
     companyId,
@@ -266,7 +257,7 @@ export async function countUnreadInquiriesHTTP(
 
 export async function getInquiryHTTP(id: string): Promise<InquiryDetail> {
   const inquiryId = assertID(id, "id");
-  const headers = await getAuthHeadersOrThrow();
+  const headers = await getAuthHeaders();
 
   const response = await fetch(
     `${API_BASE}/inquiries/${encodeURIComponent(inquiryId)}`,
@@ -295,7 +286,7 @@ export async function getInquiryHTTP(id: string): Promise<InquiryDetail> {
 
 export async function resolveInquiryHTTP(id: string): Promise<Inquiry> {
   const inquiryId = assertID(id, "id");
-  const headers = await getAuthHeadersOrThrow();
+  const headers = await getAuthHeaders();
 
   const response = await fetch(
     `${API_BASE}/inquiries/${encodeURIComponent(inquiryId)}/resolve`,
@@ -324,7 +315,7 @@ export async function resolveInquiryHTTP(id: string): Promise<Inquiry> {
 
 export async function reopenInquiryHTTP(id: string): Promise<Inquiry> {
   const inquiryId = assertID(id, "id");
-  const headers = await getAuthHeadersOrThrow();
+  const headers = await getAuthHeaders();
 
   const response = await fetch(
     `${API_BASE}/inquiries/${encodeURIComponent(inquiryId)}/reopen`,
@@ -357,13 +348,16 @@ export async function replyInquiryHTTP(
   params: ReplyInquiryParams,
 ): Promise<InquiryReply> {
   const inquiryId = assertID(id, "id");
-  const headers = await getAuthJsonHeadersOrThrow();
+  const authHeaders = await getAuthHeaders();
 
   const response = await fetch(
     `${API_BASE}/inquiries/${encodeURIComponent(inquiryId)}/reply`,
     {
       method: "POST",
-      headers,
+      headers: {
+        ...authHeaders,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         content: params.content,
         images: params.images,

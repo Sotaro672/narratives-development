@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/mint/infrastructure/repository/http/mintProductBlueprint.ts
 
 import { API_BASE } from "../../../../../shared/http/apiBase";
-import { getAuthHeadersOrThrow } from "../../../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../../../shared/http/authHeaders";
 import type { MintProductBlueprintDTO } from "../../dto/mintRequestLocal.dto";
 
 /**
@@ -19,7 +19,7 @@ export async function fetchMintProductBlueprintHTTP(
     throw new Error("productBlueprintId が空です");
   }
 
-  const authHeaders = await getAuthHeadersOrThrow();
+  const authHeaders = await getAuthHeaders();
   const url =
     `${API_BASE}/mint/product_blueprints/` +
     encodeURIComponent(normalizedProductBlueprintId);

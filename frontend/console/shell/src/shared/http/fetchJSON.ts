@@ -1,9 +1,6 @@
 // frontend/console/shell/src/shared/http/fetchJSON.ts
 
-import {
-  getAuthHeaders,
-  getAuthHeadersOrThrow,
-} from "./authHeaders";
+import { getAuthHeaders } from "./authHeaders";
 
 /**
  * Shared fetch helpers for module federation remotes.
@@ -35,31 +32,16 @@ export class HttpError extends Error {
   readonly contentType?: string;
   readonly bodyText?: string;
 
-  constructor(
-    init: HttpErrorInit,
-  ) {
-    const message =
-      `${init.method ?? "GET"} ${init.status} ${init.url}`;
-
+  constructor(init: HttpErrorInit) {
+    const message = `${init.method ?? "GET"} ${init.status} ${init.url}`;
     super(message);
 
-    this.url =
-      init.url;
-
-    this.method =
-      init.method;
-
-    this.status =
-      init.status;
-
-    this.statusText =
-      init.statusText;
-
-    this.contentType =
-      init.contentType;
-
-    this.bodyText =
-      init.bodyText;
+    this.url = init.url;
+    this.method = init.method;
+    this.status = init.status;
+    this.statusText = init.statusText;
+    this.contentType = init.contentType;
+    this.bodyText = init.bodyText;
   }
 }
 
@@ -72,52 +54,42 @@ export class HttpError extends Error {
  *
  * optional:
  * - ログイン中であればAuthorizationを設定する
- * - 未認証でもリクエストを続行する
+ * - 未認証またはtoken取得失敗時もリクエストを続行する
  *
  * required:
  * - Authorizationを必須とする
- * - 未認証またはtoken取得失敗時はAuthTokenErrorを送出する
+ * - 未認証またはtoken取得失敗時はErrorを送出する
  */
-export type FetchAuthMode =
-  | "none"
-  | "optional"
-  | "required";
+export type FetchAuthMode = "none" | "optional" | "required";
 
-export type FetchJSONOptions =
-  RequestInit & {
-    /**
-     * リクエストの認証方針。
-     *
-     * デフォルトはnone。
-     * 既存の公開APIや、呼出元が独自にAuthorizationを
-     * 設定している処理への影響を防ぐ。
-     */
-    auth?: FetchAuthMode;
+export type FetchJSONOptions = RequestInit & {
+  /**
+   * リクエストの認証方針。
+   * デフォルトはnone。
+   */
+  auth?: FetchAuthMode;
 
-    /**
-     * 401を受け取った場合にID tokenを強制更新し、
-     * リクエストを1回だけ再送するか。
-     *
-     * authがoptionalまたはrequiredの場合、
-     * デフォルトはtrue。
-     */
-    retryUnauthorized?: boolean;
+  /**
+   * 401を受け取った場合にID tokenを強制更新し、
+   * リクエストを1回だけ再送するか。
+   *
+   * authがoptionalまたはrequiredの場合、
+   * デフォルトはtrue。
+   */
+  retryUnauthorized?: boolean;
 
-    /**
-     * trueの場合、application/json以外のレスポンスを許可する。
-     *
-     * Content-TypeがJSONでない場合は、
-     * response bodyをstringとして返す。
-     */
-    allowNonJson?: boolean;
+  /**
+   * trueの場合、application/json以外のレスポンスを許可する。
+   * Content-TypeがJSONでない場合はresponse bodyをstringとして返す。
+   */
+  allowNonJson?: boolean;
 
-    /**
-     * HttpError.bodyTextへ格納する最大文字数。
-     *
-     * デフォルトは2000文字。
-     */
-    errorBodyLimit?: number;
-  };
+  /**
+   * HttpError.bodyTextへ格納する最大文字数。
+   * デフォルトは2000文字。
+   */
+  errorBodyLimit?: number;
+};
 
 type RequestAuthResult = {
   headers: Headers;
@@ -126,32 +98,20 @@ type RequestAuthResult = {
 
 /**
  * bodyTextを指定された最大文字数に制限する。
- *
- * 正常レスポンスの解析には使用せず、
- * HttpErrorへ格納する文字列だけに適用する。
+ * 正常レスポンスの解析には使用せず、HttpErrorへ格納する文字列だけに適用する。
  */
-function limitText(
-  text: string,
-  limit: number,
-): string {
+function limitText(text: string, limit: number): string {
   if (!text) {
     return "";
   }
 
-  return text.length > limit
-    ? text.slice(
-        0,
-        limit,
-      )
-    : text;
+  return text.length > limit ? text.slice(0, limit) : text;
 }
 
 /**
  * Response bodyを省略せず、安全に文字列として取得する。
  */
-async function readTextSafely(
-  response: Response,
-): Promise<string> {
+async function readTextSafely(response: Response): Promise<string> {
   try {
     return await response.text();
   } catch {
@@ -161,83 +121,62 @@ async function readTextSafely(
 
 /**
  * Content-TypeがJSON形式か判定する。
- *
- * application/jsonだけでなく、
- * application/problem+jsonなども許可する。
+ * application/jsonだけでなくapplication/problem+jsonなども許可する。
  */
-function isJsonContentType(
-  contentType: string,
-): boolean {
-  const normalized =
-    contentType
-      .toLowerCase()
-      .split(";")[0]
-      ?.trim() ?? "";
-
-  return (
-    normalized ===
-      "application/json" ||
-    normalized.endsWith(
-      "+json",
-    )
-  );
+function isJsonContentType(contentType: string): boolean {
+  const normalized = contentType.toLowerCase().split(";")[0]?.trim() ?? "";
+  return normalized === "application/json" || normalized.endsWith("+json");
 }
 
 /**
  * 認証方針に従ってAuthorizationヘッダーを組み立てる。
  *
- * authHeaders.tsが生成したAuthorizationは、
- * 呼出元が指定した古いAuthorizationより優先する。
+ * required:
+ * - getAuthHeadersのエラーをそのまま送出する。
+ *
+ * optional:
+ * - getAuthHeadersのエラーを握りつぶし、未認証で続行する。
  */
 async function buildRequestHeaders(
   baseHeaders: Headers,
   authMode: FetchAuthMode,
   forceRefresh: boolean,
 ): Promise<RequestAuthResult> {
-  const headers =
-    new Headers(
-      baseHeaders,
-    );
+  const headers = new Headers(baseHeaders);
 
   if (authMode === "none") {
     return {
       headers,
-      hasGeneratedAuthorization:
-        false,
+      hasGeneratedAuthorization: false,
     };
   }
 
-  const authHeaders =
-    authMode === "required"
-      ? await getAuthHeadersOrThrow(
-          forceRefresh,
-        )
-      : await getAuthHeaders(
-          forceRefresh,
-        );
+  let authHeaders: Record<string, string>;
 
-  const authorization =
-    authHeaders.Authorization;
+  if (authMode === "required") {
+    authHeaders = await getAuthHeaders(forceRefresh);
+  } else {
+    try {
+      authHeaders = await getAuthHeaders(forceRefresh);
+    } catch {
+      authHeaders = {};
+    }
+  }
+
+  const authorization = authHeaders.Authorization;
 
   if (authorization) {
-    headers.set(
-      "Authorization",
-      authorization,
-    );
+    headers.set("Authorization", authorization);
   }
 
   return {
     headers,
-    hasGeneratedAuthorization:
-      Boolean(
-        authorization,
-      ),
+    hasGeneratedAuthorization: Boolean(authorization),
   };
 }
 
 /**
  * ベースRequestを複製し、認証ヘッダーを設定したRequestを生成する。
- *
  * Requestのbodyを直接再利用せずcloneすることで、
  * 401 retry時に同じリクエストを再送できるようにする。
  */
@@ -249,23 +188,15 @@ async function buildRequest(
   request: Request;
   hasGeneratedAuthorization: boolean;
 }> {
-  const {
-    headers,
-    hasGeneratedAuthorization,
-  } =
-    await buildRequestHeaders(
-      baseRequest.headers,
-      authMode,
-      forceRefresh,
-    );
+  const { headers, hasGeneratedAuthorization } = await buildRequestHeaders(
+    baseRequest.headers,
+    authMode,
+    forceRefresh,
+  );
 
-  const request =
-    new Request(
-      baseRequest.clone(),
-      {
-        headers,
-      },
-    );
+  const request = new Request(baseRequest.clone(), {
+    headers,
+  });
 
   return {
     request,
@@ -281,46 +212,23 @@ async function createHttpError(
   request: Request,
   errorBodyLimit: number,
 ): Promise<HttpError> {
-  const bodyText =
-    await readTextSafely(
-      response,
-    );
+  const bodyText = await readTextSafely(response);
 
   return new HttpError({
-    url:
-      response.url ||
-      request.url,
-
-    method:
-      request.method,
-
-    status:
-      response.status,
-
-    statusText:
-      response.statusText,
-
-    contentType:
-      response.headers.get(
-        "content-type",
-      ) ?? "",
-
-    bodyText:
-      limitText(
-        bodyText,
-        errorBodyLimit,
-      ),
+    url: response.url || request.url,
+    method: request.method,
+    status: response.status,
+    statusText: response.statusText,
+    contentType: response.headers.get("content-type") ?? "",
+    bodyText: limitText(bodyText, errorBodyLimit),
   });
 }
 
 /**
  * 正常レスポンスのbodyを解析する。
  *
- * 正常レスポンスは省略せず全文を読み込み、
- * JSON解析後にTとして返す。
- *
- * errorBodyLimitは、解析失敗などでHttpErrorへ
- * bodyを格納するときだけ適用する。
+ * 正常レスポンスは省略せず全文を読み込み、JSON解析後にTとして返す。
+ * errorBodyLimitは解析失敗などでHttpErrorへbodyを格納するときだけ適用する。
  */
 async function parseSuccessResponse<T>(
   response: Response,
@@ -328,62 +236,30 @@ async function parseSuccessResponse<T>(
   allowNonJson: boolean,
   errorBodyLimit: number,
 ): Promise<T> {
-  if (
-    response.status === 204 ||
-    response.status === 205
-  ) {
+  if (response.status === 204 || response.status === 205) {
     return undefined as T;
   }
 
-  const contentType =
-    response.headers.get(
-      "content-type",
-    ) ?? "";
+  const contentType = response.headers.get("content-type") ?? "";
+  const jsonResponse = isJsonContentType(contentType);
+  const bodyText = await readTextSafely(response);
 
-  const jsonResponse =
-    isJsonContentType(
-      contentType,
-    );
-
-  const bodyText =
-    await readTextSafely(
-      response,
-    );
-
-  if (
-    !jsonResponse &&
-    !allowNonJson
-  ) {
+  if (!jsonResponse && !allowNonJson) {
     throw new HttpError({
-      url:
-        response.url ||
-        request.url,
-
-      method:
-        request.method,
-
-      status:
-        response.status,
-
-      statusText:
-        response.statusText,
-
+      url: response.url || request.url,
+      method: request.method,
+      status: response.status,
+      statusText: response.statusText,
       contentType,
-
-      bodyText:
-        limitText(
-          [
-            `Unexpected content-type: ${contentType || "(empty)"}`,
-            bodyText,
-          ]
-            .filter(
-              Boolean,
-            )
-            .join(
-              "\n",
-            ),
-          errorBodyLimit,
-        ),
+      bodyText: limitText(
+        [
+          `Unexpected content-type: ${contentType || "(empty)"}`,
+          bodyText,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        errorBodyLimit,
+      ),
     });
   }
 
@@ -396,45 +272,20 @@ async function parseSuccessResponse<T>(
   }
 
   try {
-    return JSON.parse(
-      bodyText,
-    ) as T;
-  } catch (
-    error: unknown
-  ) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : String(
-            error,
-          );
+    return JSON.parse(bodyText) as T;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
 
     throw new HttpError({
-      url:
-        response.url ||
-        request.url,
-
-      method:
-        request.method,
-
-      status:
-        response.status,
-
-      statusText:
-        response.statusText,
-
+      url: response.url || request.url,
+      method: request.method,
+      status: response.status,
+      statusText: response.statusText,
       contentType,
-
-      bodyText:
-        limitText(
-          [
-            `Failed to parse JSON: ${message}`,
-            bodyText,
-          ].join(
-            "\n",
-          ),
-          errorBodyLimit,
-        ),
+      bodyText: limitText(
+        [`Failed to parse JSON: ${message}`, bodyText].join("\n"),
+        errorBodyLimit,
+      ),
     });
   }
 }
@@ -468,9 +319,7 @@ async function parseSuccessResponse<T>(
  *     body: JSON.stringify(payload),
  *   })
  */
-export async function fetchJSON<
-  T = unknown,
->(
+export async function fetchJSON<T = unknown>(
   input: RequestInfo | URL,
   options: FetchJSONOptions = {},
 ): Promise<T> {
@@ -483,36 +332,22 @@ export async function fetchJSON<
   } = options;
 
   const shouldRetryUnauthorized =
-    retryUnauthorized ??
-    (
-      authMode !== "none"
-    );
+    retryUnauthorized ?? authMode !== "none";
 
   /**
    * 再送時にbodyを再利用できるよう、
-   * 元のRequestはfetchへ直接渡さず
-   * テンプレートとして保持する。
+   * 元のRequestはfetchへ直接渡さずテンプレートとして保持する。
    */
-  const baseRequest =
-    new Request(
-      input,
-      requestInit,
-    );
+  const baseRequest = new Request(input, requestInit);
 
-  const firstAttempt =
-    await buildRequest(
-      baseRequest,
-      authMode,
-      false,
-    );
+  const firstAttempt = await buildRequest(
+    baseRequest,
+    authMode,
+    false,
+  );
 
-  let request =
-    firstAttempt.request;
-
-  let response =
-    await fetch(
-      request,
-    );
+  let request = firstAttempt.request;
+  let response = await fetch(request);
 
   /**
    * 認証付きリクエストが401になった場合のみ、
@@ -523,30 +358,22 @@ export async function fetchJSON<
     shouldRetryUnauthorized &&
     authMode !== "none"
   ) {
-    const retryAttempt =
-      await buildRequest(
-        baseRequest,
-        authMode,
-        true,
-      );
+    const retryAttempt = await buildRequest(
+      baseRequest,
+      authMode,
+      true,
+    );
 
     /**
      * optional認証でtokenを取得できなかった場合は、
-     * 同じ未認証リクエストを再送しても結果が変わらないため
-     * retryしない。
+     * 同じ未認証リクエストを再送しても結果が変わらないためretryしない。
      */
     if (
       authMode === "required" ||
-      retryAttempt
-        .hasGeneratedAuthorization
+      retryAttempt.hasGeneratedAuthorization
     ) {
-      request =
-        retryAttempt.request;
-
-      response =
-        await fetch(
-          request,
-        );
+      request = retryAttempt.request;
+      response = await fetch(request);
     }
   }
 

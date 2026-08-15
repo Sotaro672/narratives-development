@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/mint/infrastructure/repository/http/inspections.ts
 
 import { API_BASE } from "../../../../../shared/http/apiBase";
-import { getAuthHeadersOrThrow } from "../../../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../../../shared/http/authHeaders";
 
 import type { InspectionBatchDTO } from "../../../../../shared/types/inspections";
 import type { MintRequestDetailDTO } from "../../dto/mintRequestLocal.dto";
@@ -28,8 +28,7 @@ export async function fetchMintRequestDetailHTTP(
     throw new Error("productionId が空です");
   }
 
-  const authHeaders = await getAuthHeadersOrThrow();
-
+  const authHeaders = await getAuthHeaders();
   const url =
     `${API_BASE}/mint/inspections/` +
     encodeURIComponent(normalizedProductionId);
@@ -75,17 +74,15 @@ export async function completeInspectionHTTP(
     throw new Error("productionId が空です");
   }
 
-  const authHeaders = await getAuthHeadersOrThrow();
+  const authHeaders = await getAuthHeaders();
   const url = `${API_BASE}/products/inspections/complete`;
-
-  const headers = {
-    ...authHeaders,
-    "Content-Type": "application/json",
-  };
 
   const response = await fetch(url, {
     method: "PATCH",
-    headers,
+    headers: {
+      ...authHeaders,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({
       productionId: normalizedProductionId,
     }),

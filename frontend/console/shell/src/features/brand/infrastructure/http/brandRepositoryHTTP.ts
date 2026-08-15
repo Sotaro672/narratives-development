@@ -3,10 +3,7 @@
 import type { Brand, BrandPatch } from "../../../../shared/types/brand";
 import type { PageParams, PageResult } from "../../../../shared/types/common/common";
 import { buildConsoleUrl } from "../../../../shared/http/apiBase";
-import {
-  getAuthHeadersOrThrow,
-  getAuthJsonHeadersOrThrow,
-} from "../../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../../shared/http/authHeaders";
 
 /**
  * POST /brands のリクエストボディ。
@@ -37,10 +34,7 @@ export interface CreateBrandInput {
 
 const BASE_URL = buildConsoleUrl("/brands");
 
-async function httpRequest<T>(
-  input: string,
-  init: RequestInit = {},
-): Promise<T> {
+async function httpRequest<T>(input: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(input, init);
 
   if (res.status === 204) {
@@ -65,9 +59,7 @@ async function httpRequest<T>(
   }
 
   try {
-    return text
-      ? (JSON.parse(text) as T)
-      : (undefined as unknown as T);
+    return text ? (JSON.parse(text) as T) : (undefined as unknown as T);
   } catch {
     throw new Error(
       `[BrandRepositoryHTTP] JSON parse error. head: ${text.slice(0, 120)}`,
@@ -80,14 +72,13 @@ async function authed<T>(
   init: RequestInit = {},
   opts?: { json?: boolean },
 ): Promise<T> {
-  const headers = opts?.json
-    ? await getAuthJsonHeadersOrThrow()
-    : await getAuthHeadersOrThrow();
+  const authHeaders = await getAuthHeaders();
 
   return httpRequest<T>(input, {
     ...init,
     headers: {
-      ...headers,
+      ...authHeaders,
+      ...(opts?.json ? { "Content-Type": "application/json" } : {}),
       ...(init.headers ?? {}),
     },
   });
@@ -167,9 +158,7 @@ export class BrandRepositoryHTTP {
 
 export const brandRepositoryHTTP = new BrandRepositoryHTTP();
 
-export async function fetchBrandNameById(
-  brandId: string,
-): Promise<string> {
+export async function fetchBrandNameById(brandId: string): Promise<string> {
   if (!brandId) {
     return "";
   }

@@ -1,6 +1,7 @@
 // frontend/console/sales/infrastructure/sales_repository_http.ts
+
 import { API_BASE } from "../../../shared/http/apiBase";
-import { getAuthJsonHeaders } from "../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../shared/http/authHeaders";
 
 // ============================================================
 // Domain types
@@ -42,7 +43,7 @@ const SALES_ENDPOINT = "/sales";
 // ============================================================
 
 async function apiGetJson<T>(path: string): Promise<T> {
-  const headers = await getAuthJsonHeaders();
+  const headers = await getAuthHeaders();
 
   const res = await fetch(`${API_BASE}${path}`, {
     method: "GET",

@@ -1,19 +1,10 @@
 // frontend/console/shell/src/features/tokenBlueprint/infrastructure/repository/tokenBlueprintRepositoryHTTP.ts
 
 import { auth } from "../../../../auth/infrastructure/config/firebaseClient";
-import type {
-  ContentFile,
-  TokenBlueprint,
-} from "../../../../shared/types/tokenBlueprint";
-import type {
-  PageParams,
-  PageResult,
-} from "../../../../shared/types/common/common";
+import type { ContentFile, TokenBlueprint } from "../../../../shared/types/tokenBlueprint";
+import type { PageParams, PageResult } from "../../../../shared/types/common/common";
 import { buildConsoleUrl } from "../../../../shared/http/apiBase";
-import {
-  getAuthHeadersOrThrow,
-  getAuthJsonHeadersOrThrow,
-} from "../../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../../shared/http/authHeaders";
 import { fetchJSON } from "../../../../shared/http/fetchJSON";
 
 // ---------------------------------------------------------
@@ -30,9 +21,7 @@ function getActorIdOrEmpty(): string {
   }
 }
 
-function withActorHeader(
-  headers: Record<string, string>,
-): Record<string, string> {
+function withActorHeader(headers: Record<string, string>): Record<string, string> {
   const actorId = getActorIdOrEmpty();
 
   if (!actorId) {
@@ -50,32 +39,27 @@ async function requestJson<T>(
   method: JsonRequestMethod,
   body?: unknown,
 ): Promise<T> {
-  const baseHeaders =
-    method === "GET"
-      ? await getAuthHeadersOrThrow()
-      : await getAuthJsonHeadersOrThrow();
+  const authHeaders = await getAuthHeaders();
 
-  const headers = withActorHeader(baseHeaders);
+  const headers = withActorHeader({
+    ...authHeaders,
+    ...(method === "GET" ? {} : { "Content-Type": "application/json" }),
+  });
 
-  return fetchJSON<T>(
-    buildConsoleUrl(path),
-    {
-      method,
-      headers,
-      ...(method === "GET"
-        ? {}
-        : {
-            body: JSON.stringify(body ?? {}),
-          }),
-    },
-  );
+  return fetchJSON<T>(buildConsoleUrl(path), {
+    method,
+    headers,
+    ...(method === "GET"
+      ? {}
+      : {
+          body: JSON.stringify(body ?? {}),
+        }),
+  });
 }
 
-async function requestDelete(
-  path: string,
-): Promise<void> {
-  const baseHeaders = await getAuthHeadersOrThrow();
-  const headers = withActorHeader(baseHeaders);
+async function requestDelete(path: string): Promise<void> {
+  const authHeaders = await getAuthHeaders();
+  const headers = withActorHeader(authHeaders);
   const url = buildConsoleUrl(path);
 
   const response = await fetch(url, {
@@ -139,13 +123,11 @@ export type CreateTokenBlueprintPayload = {
   brandId: string;
   description: string;
   assigneeId: string;
-
   iconUrl?: string | null;
   iconObjectPath?: string | null;
   iconFileName?: string | null;
   iconContentType?: string | null;
   iconSize?: number | null;
-
   contentFiles: ContentFile[];
 };
 
@@ -154,13 +136,11 @@ export type UpdateTokenBlueprintPayload = Partial<{
   symbol: string;
   description: string;
   assigneeId: string;
-
   iconUrl: string | null;
   iconObjectPath: string | null;
   iconFileName: string | null;
   iconContentType: string | null;
   iconSize: number | null;
-
   contentFiles: ContentFile[];
 }>;
 
@@ -186,10 +166,7 @@ export async function fetchTokenBlueprints(
     ? `/token-blueprints?${query}`
     : "/token-blueprints";
 
-  return requestJson<TokenBlueprintPageResult>(
-    path,
-    "GET",
-  );
+  return requestJson<TokenBlueprintPageResult>(path, "GET");
 }
 
 export async function fetchTokenBlueprintById(

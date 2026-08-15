@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/list/infrastructure/http/httpClient.ts
 
 import { API_BASE } from "../../../../shared/http/apiBase";
-import { getAuthJsonHeaders } from "../../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../../shared/http/authHeaders";
 import { fetchJSON, HttpError } from "../../../../shared/http/fetchJSON";
 
 export async function requestJSON<T>(args: {
@@ -11,7 +11,8 @@ export async function requestJSON<T>(args: {
 }): Promise<T> {
   const url = `${API_BASE}${args.path.startsWith("/") ? "" : "/"}${args.path}`;
 
-  let bodyText: string | undefined = undefined;
+  let bodyText: string | undefined;
+
   if (args.body !== undefined) {
     try {
       bodyText = JSON.stringify(args.body);
@@ -20,7 +21,11 @@ export async function requestJSON<T>(args: {
     }
   }
 
-  const headers = await getAuthJsonHeaders();
+  const authHeaders = await getAuthHeaders();
+  const headers: Record<string, string> = {
+    ...authHeaders,
+    ...(bodyText !== undefined ? { "Content-Type": "application/json" } : {}),
+  };
 
   try {
     return await fetchJSON<T>(url, {
@@ -31,6 +36,7 @@ export async function requestJSON<T>(args: {
   } catch (e) {
     if (e instanceof HttpError) {
       let json: any = null;
+
       try {
         json = e.bodyText ? JSON.parse(e.bodyText) : null;
       } catch {

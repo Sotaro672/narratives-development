@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/mintRequest/infrastructure/repository/http/mintRequests.ts
 
 import { API_BASE } from "../../../../../shared/http/apiBase";
-import { getAuthJsonHeadersOrThrow } from "../../../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../../../shared/http/authHeaders";
 
 import type {
   MintFundingEstimate,
@@ -86,7 +86,7 @@ export async function fetchMintRequestRowsHTTP(
   productionIds: string[],
 ): Promise<MintRequestManagementRowDTO[]> {
   const ids = uniqStrings(productionIds);
-  const authHeaders = await getAuthJsonHeadersOrThrow();
+  const authHeaders = await getAuthHeaders();
   const url = buildMintRequestsUrl(ids);
 
   let response: Response;
@@ -204,7 +204,7 @@ export async function fetchMintFundingEstimateHTTP(
     throw new Error("tokenBlueprintId が空です");
   }
 
-  const authHeaders = await getAuthJsonHeadersOrThrow();
+  const authHeaders = await getAuthHeaders();
   const url = buildMintFundingEstimateUrl(
     normalizedProductionId,
     normalizedTokenBlueprintId,
@@ -291,7 +291,7 @@ export async function postMintRequestHTTP(
     throw new Error("tokenBlueprintId が空です");
   }
 
-  const authHeaders = await getAuthJsonHeadersOrThrow();
+  const authHeaders = await getAuthHeaders();
 
   const url =
     `${API_BASE}/mint/inspections/` +
@@ -307,7 +307,10 @@ export async function postMintRequestHTTP(
   try {
     response = await fetch(url, {
       method: "POST",
-      headers: authHeaders,
+      headers: {
+        ...authHeaders,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(requestPayload),
     });
   } catch (error: unknown) {

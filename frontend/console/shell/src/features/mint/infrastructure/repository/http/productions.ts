@@ -1,7 +1,7 @@
 // frontend/console/mintRequest/src/infrastructure/repository/http/productions.ts
 
 import { API_BASE } from "../../../../../shared/http/apiBase";
-import { getAuthHeadersOrThrow } from "../../../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../../../shared/http/authHeaders";
 
 type ProductionListItemResponse = {
   ID: string;
@@ -13,22 +13,12 @@ type ProductionDetailResponse = {
   ProductBlueprintID: string;
 };
 
-function isRecord(
-  value: unknown,
-): value is Record<string, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null
-  );
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
-function isNonEmptyString(
-  value: unknown,
-): value is string {
-  return (
-    typeof value === "string" &&
-    value !== ""
-  );
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value !== "";
 }
 
 function parseProductionListResponse(
@@ -40,40 +30,30 @@ function parseProductionListResponse(
     );
   }
 
-  return json.map(
-    (
-      item,
-      index,
-    ) => {
-      if (!isRecord(item)) {
-        throw new Error(
-          `Invalid productions response: items[${index}] is not an object`,
-        );
-      }
+  return json.map((item, index) => {
+    if (!isRecord(item)) {
+      throw new Error(
+        `Invalid productions response: items[${index}] is not an object`,
+      );
+    }
 
-      if (!isNonEmptyString(item.ID)) {
-        throw new Error(
-          `Invalid productions response: items[${index}].ID is missing`,
-        );
-      }
+    if (!isNonEmptyString(item.ID)) {
+      throw new Error(
+        `Invalid productions response: items[${index}].ID is missing`,
+      );
+    }
 
-      if (
-        !isNonEmptyString(
-          item.ProductBlueprintID,
-        )
-      ) {
-        throw new Error(
-          `Invalid productions response: items[${index}].ProductBlueprintID is missing`,
-        );
-      }
+    if (!isNonEmptyString(item.ProductBlueprintID)) {
+      throw new Error(
+        `Invalid productions response: items[${index}].ProductBlueprintID is missing`,
+      );
+    }
 
-      return {
-        ID: item.ID,
-        ProductBlueprintID:
-          item.ProductBlueprintID,
-      };
-    },
-  );
+    return {
+      ID: item.ID,
+      ProductBlueprintID: item.ProductBlueprintID,
+    };
+  });
 }
 
 function parseProductionDetailResponse(
@@ -91,11 +71,7 @@ function parseProductionDetailResponse(
     );
   }
 
-  if (
-    !isNonEmptyString(
-      json.ProductBlueprintID,
-    )
-  ) {
+  if (!isNonEmptyString(json.ProductBlueprintID)) {
     throw new Error(
       "Invalid production response: ProductBlueprintID is missing",
     );
@@ -103,8 +79,7 @@ function parseProductionDetailResponse(
 
   return {
     ID: json.ID,
-    ProductBlueprintID:
-      json.ProductBlueprintID,
+    ProductBlueprintID: json.ProductBlueprintID,
   };
 }
 
@@ -116,61 +91,34 @@ function parseProductionDetailResponse(
 export async function fetchProductBlueprintIdByProductionIdHTTP(
   productionId: string,
 ): Promise<string | null> {
-  const pid =
-    String(productionId ?? "");
+  const pid = String(productionId ?? "");
 
   if (!pid) {
-    throw new Error(
-      "productionId が空です",
-    );
+    throw new Error("productionId が空です");
   }
 
-  const authHeaders =
-    await getAuthHeadersOrThrow();
+  const authHeaders = await getAuthHeaders();
+  const url = `${API_BASE}/productions/${encodeURIComponent(pid)}`;
 
-  const url =
-    `${API_BASE}/productions/` +
-    encodeURIComponent(pid);
-
-  const response =
-    await fetch(
-      url,
-      {
-        method: "GET",
-        headers: authHeaders,
-      },
-    );
+  const response = await fetch(url, {
+    method: "GET",
+    headers: authHeaders,
+  });
 
   if (!response.ok) {
-    const body =
-      await response
-        .text()
-        .catch(() => "");
+    const body = await response.text().catch(() => "");
 
     throw new Error(
       `Failed to fetch production: ` +
-        `${response.status} ` +
-        `${response.statusText}` +
-        (
-          body
-            ? ` body=${body.slice(0, 400)}`
-            : ""
-        ),
+        `${response.status} ${response.statusText}` +
+        (body ? ` body=${body.slice(0, 400)}` : ""),
     );
   }
 
-  const json =
-    await response.json();
+  const json = await response.json();
+  const production = parseProductionDetailResponse(json);
 
-  const production =
-    parseProductionDetailResponse(
-      json,
-    );
-
-  return (
-    production.ProductBlueprintID ||
-    null
-  );
+  return production.ProductBlueprintID || null;
 }
 
 /**
@@ -182,70 +130,39 @@ export async function fetchProductBlueprintIdByProductionIdHTTP(
 export async function fetchProductionIdsForCurrentCompanyHTTP(): Promise<
   string[]
 > {
-  const authHeaders =
-    await getAuthHeadersOrThrow();
+  const authHeaders = await getAuthHeaders();
+  const url = `${API_BASE}/productions`;
 
-  const url =
-    `${API_BASE}/productions`;
-
-  const response =
-    await fetch(
-      url,
-      {
-        method: "GET",
-        headers: authHeaders,
-      },
-    );
+  const response = await fetch(url, {
+    method: "GET",
+    headers: authHeaders,
+  });
 
   if (!response.ok) {
-    const body =
-      await response
-        .text()
-        .catch(() => "");
+    const body = await response.text().catch(() => "");
 
     throw new Error(
       `Failed to fetch productions: ` +
-        `${response.status} ` +
-        `${response.statusText}` +
-        (
-          body
-            ? ` body=${body.slice(0, 400)}`
-            : ""
-        ),
+        `${response.status} ${response.statusText}` +
+        (body ? ` body=${body.slice(0, 400)}` : ""),
     );
   }
 
-  const json =
-    await response.json();
-
-  const items =
-    parseProductionListResponse(
-      json,
-    );
+  const json = await response.json();
+  const items = parseProductionListResponse(json);
 
   const ids: string[] = [];
-  const seen =
-    new Set<string>();
+  const seen = new Set<string>();
 
   for (const item of items) {
-    const productionId =
-      item.ID;
+    const productionId = item.ID;
 
-    if (
-      seen.has(
-        productionId,
-      )
-    ) {
+    if (seen.has(productionId)) {
       continue;
     }
 
-    seen.add(
-      productionId,
-    );
-
-    ids.push(
-      productionId,
-    );
+    seen.add(productionId);
+    ids.push(productionId);
   }
 
   return ids;

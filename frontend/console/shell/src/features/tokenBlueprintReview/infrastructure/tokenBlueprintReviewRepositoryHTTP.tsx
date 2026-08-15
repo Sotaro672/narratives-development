@@ -7,7 +7,7 @@ import type {
 } from "../../../shared/types/tokenBlueprintReview";
 
 import { API_BASE } from "../../../shared/http/apiBase";
-import { getAuthJsonHeaders } from "../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../shared/http/authHeaders";
 
 /**
  * console(brand) 用 TokenBlueprintReview HTTP repository
@@ -17,17 +17,23 @@ import { getAuthJsonHeaders } from "../../../shared/http/authHeaders";
  */
 
 async function apiGetJson<T>(path: string): Promise<T> {
-  const headers = await getAuthJsonHeaders();
+  const headers = await getAuthHeaders();
+
   const response = await fetch(`${API_BASE}${path}`, {
     method: "GET",
-    headers: { ...headers, Accept: "application/json" },
+    headers: {
+      ...headers,
+      Accept: "application/json",
+    },
     credentials: "include",
   });
 
   const text = await response.text();
+
   if (!response.ok) {
     throw new Error(text || `GET ${path} failed: ${response.status}`);
   }
+
   if (!text) {
     throw new Error(`GET ${path} returned an empty response`);
   }
@@ -36,7 +42,8 @@ async function apiGetJson<T>(path: string): Promise<T> {
 }
 
 async function apiPostJson<T>(path: string, body: unknown): Promise<T> {
-  const headers = await getAuthJsonHeaders();
+  const headers = await getAuthHeaders();
+
   const response = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: {
@@ -49,9 +56,11 @@ async function apiPostJson<T>(path: string, body: unknown): Promise<T> {
   });
 
   const text = await response.text();
+
   if (!response.ok) {
     throw new Error(text || `POST ${path} failed: ${response.status}`);
   }
+
   if (!text) {
     throw new Error(`POST ${path} returned an empty response`);
   }
@@ -60,10 +69,14 @@ async function apiPostJson<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function apiDelete(path: string): Promise<void> {
-  const headers = await getAuthJsonHeaders();
+  const headers = await getAuthHeaders();
+
   const response = await fetch(`${API_BASE}${path}`, {
     method: "DELETE",
-    headers: { ...headers, Accept: "application/json" },
+    headers: {
+      ...headers,
+      Accept: "application/json",
+    },
     credentials: "include",
   });
 
@@ -72,6 +85,7 @@ async function apiDelete(path: string): Promise<void> {
   }
 
   const text = await response.text();
+
   throw new Error(text || `DELETE ${path} failed: ${response.status}`);
 }
 
@@ -166,6 +180,7 @@ export async function createBrandComment(
   if (!tokenBlueprintId) {
     throw new Error("tokenBlueprintId is required");
   }
+
   if (!body) {
     throw new Error("body is required");
   }
@@ -200,9 +215,11 @@ export async function createBrandReply(
   if (!tokenBlueprintId) {
     throw new Error("tokenBlueprintId is required");
   }
+
   if (!parentCommentId) {
     throw new Error("parentCommentId is required");
   }
+
   if (!body) {
     throw new Error("body is required");
   }
@@ -230,6 +247,7 @@ export async function deleteBrandComment(
   if (!tokenBlueprintId) {
     throw new Error("tokenBlueprintId is required");
   }
+
   if (!commentId) {
     throw new Error("commentId is required");
   }
@@ -254,11 +272,13 @@ export async function reactToCommentAsBrand(
   if (!tokenBlueprintId) {
     throw new Error("tokenBlueprintId is required");
   }
+
   if (!commentId) {
     throw new Error("commentId is required");
   }
 
   const request: ReactAsBrandRequest = { type };
+
   const response = await apiPostJson<CommentResponse>(
     `/token-blueprint-reviews/${encodeURIComponent(tokenBlueprintId)}/comments/${encodeURIComponent(commentId)}/reactions`,
     request,

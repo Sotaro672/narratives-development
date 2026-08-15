@@ -1,52 +1,34 @@
 // frontend/console/shell/src/features/inventory/infrastructure/api/listCreateApi.tsx
 
 import { API_BASE } from "../../../shared/http/apiBase";
-
-import { getAuthHeadersOrThrow } from "../../../shared/http/authHeaders";
-
-import type {
-  ListCreateDTO,
-} from "../../../shared/types/inventory";
+import { getAuthHeaders } from "../../../shared/http/authHeaders";
+import type { ListCreateDTO } from "../../../shared/types/inventory";
 
 // ---------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------
 
-async function requestJsonOrThrow<T>(
-  path: string,
-): Promise<T> {
-  const headers =
-    await getAuthHeadersOrThrow();
+async function requestJsonOrThrow<T>(path: string): Promise<T> {
+  const headers = await getAuthHeaders();
 
-  const res =
-    await fetch(
-      `${API_BASE}${path}`,
-      {
-        method: "GET",
-        headers,
-      },
-    );
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "GET",
+    headers,
+  });
 
   if (!res.ok) {
-    const text =
-      await res
-        .text()
-        .catch(() => "");
+    const text = await res.text().catch(() => "");
 
     throw new Error(
       `request failed: ${res.status} ${res.statusText} ${text}`,
     );
   }
 
-  return await res.json() as T;
+  return (await res.json()) as T;
 }
 
-function s(
-  value: unknown,
-): string {
-  return String(
-    value ?? "",
-  ).trim();
+function s(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
 // ---------------------------------------------------------
@@ -65,23 +47,13 @@ export async function getListCreateRaw(
     inventoryId?: string;
   },
 ): Promise<ListCreateDTO> {
-  const inventoryId =
-    s(
-      input.inventoryId,
-    );
+  const inventoryId = s(input.inventoryId);
 
   if (!inventoryId) {
-    throw new Error(
-      "missing inventoryId",
-    );
+    throw new Error("missing inventoryId");
   }
 
-  const path =
-    `/inventory/list-create/${encodeURIComponent(
-      inventoryId,
-    )}`;
+  const path = `/inventory/list-create/${encodeURIComponent(inventoryId)}`;
 
-  return await requestJsonOrThrow<ListCreateDTO>(
-    path,
-  );
+  return requestJsonOrThrow<ListCreateDTO>(path);
 }

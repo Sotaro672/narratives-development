@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/announcement/infrastructure/announcement_repository_http.ts
 
 import { API_BASE } from "../../../shared/http/apiBase";
-import { getAuthJsonHeaders } from "../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../shared/http/authHeaders";
 
 import type {
   Announcement,
@@ -24,7 +24,7 @@ const ANNOUNCEMENTS_ENDPOINT = "/announcements";
 // ============================================================
 
 async function apiGetJson<T>(path: string): Promise<T> {
-  const headers = await getAuthJsonHeaders();
+  const headers = await getAuthHeaders();
 
   const res = await fetch(`${API_BASE}${path}`, {
     method: "GET",
@@ -39,7 +39,7 @@ async function apiGetJson<T>(path: string): Promise<T> {
 }
 
 async function apiPostJson<T>(path: string, body: unknown): Promise<T> {
-  const headers = await getAuthJsonHeaders();
+  const headers = await getAuthHeaders();
 
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
@@ -56,7 +56,7 @@ async function apiPostJson<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function apiPutJson<T>(path: string, body: unknown): Promise<T> {
-  const headers = await getAuthJsonHeaders();
+  const headers = await getAuthHeaders();
 
   const res = await fetch(`${API_BASE}${path}`, {
     method: "PUT",
@@ -73,7 +73,7 @@ async function apiPutJson<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function apiDelete(path: string): Promise<void> {
-  const headers = await getAuthJsonHeaders();
+  const headers = await getAuthHeaders();
 
   const res = await fetch(`${API_BASE}${path}`, {
     method: "DELETE",

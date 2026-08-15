@@ -2,7 +2,7 @@
 
 import type { Production } from "../../../../shared/types/production";
 import { API_BASE } from "../../../../shared/http/apiBase";
-import { getAuthJsonHeadersOrThrow } from "../../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../../shared/http/authHeaders";
 import type {
   CreateProductionRequest,
   ProductionRepository,
@@ -15,17 +15,15 @@ export class ProductionRepositoryHTTP implements ProductionRepository {
     this.baseUrl = baseUrl;
   }
 
-  private async request<T>(
-    path: string,
-    init: RequestInit,
-  ): Promise<T> {
+  private async request<T>(path: string, init: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${path}`;
-    const authHeaders = await getAuthJsonHeadersOrThrow();
+    const authHeaders = await getAuthHeaders();
 
     const response = await fetch(url, {
       ...init,
       headers: {
         ...authHeaders,
+        "Content-Type": "application/json",
         ...(init.headers ?? {}),
       },
     });
@@ -70,9 +68,7 @@ export class ProductionRepositoryHTTP implements ProductionRepository {
   // POST /productions
   // --------------------------------------------------------------------
 
-  async create(
-    payload: CreateProductionRequest,
-  ): Promise<unknown> {
+  async create(payload: CreateProductionRequest): Promise<unknown> {
     return this.request<unknown>("/productions", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -83,9 +79,7 @@ export class ProductionRepositoryHTTP implements ProductionRepository {
   // GET /productions/{id}
   // --------------------------------------------------------------------
 
-  async getById(
-    id: string,
-  ): Promise<Production> {
+  async getById(id: string): Promise<Production> {
     const safeId = encodeURIComponent(id.trim());
 
     return this.request<Production>(`/productions/${safeId}`, {
@@ -97,10 +91,7 @@ export class ProductionRepositoryHTTP implements ProductionRepository {
   // PUT /productions/{id}
   // --------------------------------------------------------------------
 
-  async update(
-    id: string,
-    patch: Partial<Production>,
-  ): Promise<Production> {
+  async update(id: string, patch: Partial<Production>): Promise<Production> {
     const safeId = encodeURIComponent(id.trim());
 
     return this.request<Production>(`/productions/${safeId}`, {
@@ -113,9 +104,7 @@ export class ProductionRepositoryHTTP implements ProductionRepository {
   // DELETE /productions/{id}
   // --------------------------------------------------------------------
 
-  async delete(
-    id: string,
-  ): Promise<void> {
+  async delete(id: string): Promise<void> {
     const safeId = encodeURIComponent(id.trim());
 
     await this.request<void>(`/productions/${safeId}`, {

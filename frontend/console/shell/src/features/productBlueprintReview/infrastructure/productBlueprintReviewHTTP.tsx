@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/productBlueprintReview/infrastructure/productBlueprintReviewHTTP.tsx
 
 import { API_BASE } from "../../../shared/http/apiBase";
-import { getAuthJsonHeadersOrThrow } from "../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../shared/http/authHeaders";
 
 import type {
   ListCompanyReviewAggregatesParams,
@@ -34,7 +34,6 @@ function BuildQuery(Params?: Record<string, unknown>): string {
   }
 
   const Qs = Sp.toString();
-
   return Qs ? `?${Qs}` : "";
 }
 
@@ -43,13 +42,14 @@ function BuildQuery(Params?: Record<string, unknown>): string {
 // ==============================
 
 async function HttpGetJSON<T>(Url: string): Promise<T> {
-  const Headers = await getAuthJsonHeadersOrThrow();
+  const Headers = await getAuthHeaders();
 
   const Res = await fetch(Url, {
     method: "GET",
     headers: {
       ...Headers,
       Accept: "application/json",
+      "Content-Type": "application/json",
     },
     credentials: "include",
   });
@@ -68,7 +68,6 @@ async function HttpGetJSON<T>(Url: string): Promise<T> {
 
   if (!Res.ok) {
     const Msg = Data?.Error || JSON.stringify(Data);
-
     throw new Error(Msg || `HTTP ${Res.status}`);
   }
 
@@ -110,14 +109,11 @@ export class ProductBlueprintReviewHTTP {
   async ListCompanyReviewAggregates(
     Params?: ListCompanyReviewAggregatesParams,
   ): Promise<ListCompanyReviewAggregatesResponse> {
-    const Path =
-      `/product-blueprint-reviews/aggregates${BuildQuery(Params)}`;
-
+    const Path = `/product-blueprint-reviews/aggregates${BuildQuery(Params)}`;
     const Url = `${this.BaseURL}${Path}`;
 
     return await HttpGetJSON<ListCompanyReviewAggregatesResponse>(Url);
   }
 }
 
-export const productBlueprintReviewHTTP =
-  new ProductBlueprintReviewHTTP();
+export const productBlueprintReviewHTTP = new ProductBlueprintReviewHTTP();

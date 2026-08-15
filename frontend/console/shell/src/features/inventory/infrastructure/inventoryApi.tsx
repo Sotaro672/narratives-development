@@ -1,32 +1,22 @@
-// frontend/console/inventory/src/infrastructure/api/inventoryApi.tsx
+// frontend/console/shell/src/features/inventory/infrastructure/inventoryApi.tsx
 
 import { API_BASE } from "../../../shared/http/apiBase";
-import { getAuthHeadersOrThrow } from "../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../shared/http/authHeaders";
 
 // ---------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------
 
-async function requestJsonOrThrow(
-  path: string,
-): Promise<any> {
-  const headers =
-    await getAuthHeadersOrThrow();
+async function requestJsonOrThrow(path: string): Promise<any> {
+  const headers = await getAuthHeaders();
 
-  const res =
-    await fetch(
-      `${API_BASE}${path}`,
-      {
-        method: "GET",
-        headers,
-      },
-    );
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "GET",
+    headers,
+  });
 
   if (!res.ok) {
-    const text =
-      await res
-        .text()
-        .catch(() => "");
+    const text = await res.text().catch(() => "");
 
     throw new Error(
       `request failed: ${res.status} ${res.statusText} ${text}`,
@@ -36,12 +26,8 @@ async function requestJsonOrThrow(
   return res.json();
 }
 
-function s(
-  value: unknown,
-): string {
-  return String(
-    value ?? "",
-  ).trim();
+function s(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
 // ---------------------------------------------------------
@@ -52,9 +38,7 @@ function s(
  * GET /inventory
  */
 export async function getInventoryListRaw(): Promise<any> {
-  return requestJsonOrThrow(
-    "/inventory",
-  );
+  return requestJsonOrThrow("/inventory");
 }
 
 /**
@@ -63,13 +47,10 @@ export async function getInventoryListRaw(): Promise<any> {
 export async function getInventoryDetailRaw(
   inventoryId: string,
 ): Promise<any> {
-  const id =
-    s(inventoryId);
+  const id = s(inventoryId);
 
   if (!id) {
-    throw new Error(
-      "inventoryId is empty",
-    );
+    throw new Error("inventoryId is empty");
   }
 
   return requestJsonOrThrow(

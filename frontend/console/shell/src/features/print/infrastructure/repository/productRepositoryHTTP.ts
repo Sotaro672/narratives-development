@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/print/infrastructure/repository/productRepositoryHTTP.ts
 
 import { API_BASE } from "../../../../shared/http/apiBase";
-import { getAuthJsonHeadersOrThrow } from "../../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../../shared/http/authHeaders";
 
 export type PrintedItemForPrint = {
   productId: string;
@@ -35,14 +35,20 @@ export async function createPrintLogsHTTP(
     throw new Error("productionId is required for print_log creation");
   }
 
+  const authHeaders = await getAuthHeaders();
+
   const res = await fetch(`${API_BASE}/products/print-logs`, {
     method: "POST",
-    headers: await getAuthJsonHeadersOrThrow(),
+    headers: {
+      ...authHeaders,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({ productionId }),
   });
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
+
     throw new Error(
       `PrintLog create failed: ${res.status} ${res.statusText}${
         body ? ` - ${body}` : ""
@@ -62,18 +68,23 @@ export async function createPrintLogsHTTP(
 export async function fetchPrintLogsByProductionId(
   productionId: string,
 ): Promise<PrintLogForPrint[]> {
-  if (!productionId) return [];
+  if (!productionId) {
+    return [];
+  }
+
+  const authHeaders = await getAuthHeaders();
 
   const res = await fetch(
     `${API_BASE}/products/print-logs?productionId=${encodeURIComponent(productionId)}`,
     {
       method: "GET",
-      headers: await getAuthJsonHeadersOrThrow(),
+      headers: authHeaders,
     },
   );
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
+
     throw new Error(
       `List print_logs failed: ${res.status} ${res.statusText}${
         body ? ` - ${body}` : ""

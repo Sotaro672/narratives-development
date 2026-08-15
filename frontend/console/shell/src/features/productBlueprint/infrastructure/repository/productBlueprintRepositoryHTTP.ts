@@ -1,10 +1,7 @@
 // frontend/console/shell/src/features/productBlueprint/infrastructure/repository/productBlueprintRepositoryHTTP.ts
 
 import { API_BASE } from "../../../../shared/http/apiBase";
-import {
-  getAuthHeadersOrThrow,
-  getAuthJsonHeadersOrThrow,
-} from "../../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../../shared/http/authHeaders";
 import type { CreateProductBlueprintParams } from "../../application/productBlueprintCreateService";
 import type { ProductBlueprintDetailResponse } from "../api/productBlueprintDetailApi";
 import type { UpdateProductBlueprintParams } from "../api/productBlueprintUpdateApi";
@@ -38,21 +35,14 @@ function assertProductBlueprintCategoryPayload(params: {
   productBlueprintCategory: { id?: string } | null | undefined;
 }): void {
   if (!params.productBlueprintCategoryId) {
-    throw new Error(
-      "productBlueprintRepositoryHTTP: productBlueprintCategoryId が空です",
-    );
+    throw new Error("productBlueprintRepositoryHTTP: productBlueprintCategoryId が空です");
   }
 
   if (!params.productBlueprintCategory?.id) {
-    throw new Error(
-      "productBlueprintRepositoryHTTP: productBlueprintCategory が空です",
-    );
+    throw new Error("productBlueprintRepositoryHTTP: productBlueprintCategory が空です");
   }
 
-  if (
-    params.productBlueprintCategoryId !==
-    params.productBlueprintCategory.id
-  ) {
+  if (params.productBlueprintCategoryId !== params.productBlueprintCategory.id) {
     throw new Error(
       "productBlueprintRepositoryHTTP: productBlueprintCategoryId と productBlueprintCategory.id が一致しません",
     );
@@ -87,7 +77,7 @@ function buildProductIdTagPayload(
 export async function createProductBlueprintHTTP(
   params: CreateProductBlueprintParams,
 ): Promise<ProductBlueprintDetailResponse> {
-  const headers = await getAuthJsonHeadersOrThrow();
+  const authHeaders = await getAuthHeaders();
 
   const categoryPayload = buildProductBlueprintCategoryPayload({
     productBlueprintCategoryId: params.productBlueprintCategoryId,
@@ -105,12 +95,16 @@ export async function createProductBlueprintHTTP(
 
   const res = await fetch(`${API_BASE}/product-blueprints`, {
     method: "POST",
-    headers,
+    headers: {
+      ...authHeaders,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
+
     throw new Error(
       `商品設計の作成に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
     );
@@ -123,10 +117,8 @@ export async function createProductBlueprintHTTP(
 // GET: 商品設計 一覧
 // -----------------------------------------------------------
 
-export async function listProductBlueprintsHTTP(): Promise<
-  ProductBlueprintListRow[]
-> {
-  const headers = await getAuthHeadersOrThrow();
+export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintListRow[]> {
+  const headers = await getAuthHeaders();
 
   const res = await fetch(`${API_BASE}/product-blueprints`, {
     method: "GET",
@@ -135,6 +127,7 @@ export async function listProductBlueprintsHTTP(): Promise<
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
+
     throw new Error(
       `商品設計一覧の取得に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
     );
@@ -155,7 +148,7 @@ export async function updateProductBlueprintHTTP(
     throw new Error("updateProductBlueprintHTTP: id が空です");
   }
 
-  const headers = await getAuthJsonHeadersOrThrow();
+  const authHeaders = await getAuthHeaders();
   const url = `${API_BASE}/product-blueprints/${encodeURIComponent(id)}`;
 
   const categoryPayload = buildProductBlueprintCategoryPayload({
@@ -174,12 +167,16 @@ export async function updateProductBlueprintHTTP(
 
   const res = await fetch(url, {
     method: "PATCH",
-    headers,
+    headers: {
+      ...authHeaders,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
+
     throw new Error(
       `商品設計の更新に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
     );
@@ -192,16 +189,13 @@ export async function updateProductBlueprintHTTP(
 // DELETE: 商品設計 物理削除
 // -----------------------------------------------------------
 
-export async function deleteProductBlueprintHTTP(
-  id: string,
-): Promise<void> {
+export async function deleteProductBlueprintHTTP(id: string): Promise<void> {
   if (!id) {
-    throw new Error(
-      "deleteProductBlueprintHTTP: id が空です",
-    );
+    throw new Error("deleteProductBlueprintHTTP: id が空です");
   }
 
-  const headers = await getAuthHeadersOrThrow();
+  const headers = await getAuthHeaders();
+
   const res = await fetch(
     `${API_BASE}/product-blueprints/${encodeURIComponent(id)}`,
     {
@@ -212,6 +206,7 @@ export async function deleteProductBlueprintHTTP(
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
+
     throw new Error(
       `商品設計の削除に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
     );
@@ -226,12 +221,11 @@ export async function markProductBlueprintPrintedHTTP(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
   if (!id) {
-    throw new Error(
-      "markProductBlueprintPrintedHTTP: id が空です",
-    );
+    throw new Error("markProductBlueprintPrintedHTTP: id が空です");
   }
 
-  const headers = await getAuthHeadersOrThrow();
+  const headers = await getAuthHeaders();
+
   const res = await fetch(
     `${API_BASE}/product-blueprints/${encodeURIComponent(id)}/mark-printed`,
     {
@@ -242,6 +236,7 @@ export async function markProductBlueprintPrintedHTTP(
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
+
     throw new Error(
       `商品設計のprinted更新に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
     );

@@ -1,6 +1,7 @@
 // frontend/console/shell/src/features/productBlueprint/infrastructure/api/productBlueprintApi.ts
+
 import { API_BASE } from "../../../../shared/http/apiBase";
-import { getAuthHeadersOrThrow } from "../../../../shared/http/authHeaders";
+import { getAuthHeaders } from "../../../../shared/http/authHeaders";
 import type { PageResult } from "../../../../shared/types/common/common";
 import type {
   ProductBlueprintCategory,
@@ -36,6 +37,7 @@ function parseProductBlueprintCategoryItems(
   if (!isRecord(value) || !Array.isArray(value.items)) {
     throw new Error(`${responseName}のレスポンス形式が不正です。`);
   }
+
   return value.items as ProductBlueprintCategory[];
 }
 
@@ -43,7 +45,8 @@ async function getProductBlueprintCategories(
   url: string,
   responseName: string,
 ): Promise<ProductBlueprintCategory[]> {
-  const headers = await getAuthHeadersOrThrow();
+  const headers = await getAuthHeaders();
+
   const response = await fetch(url, {
     method: "GET",
     headers,
@@ -51,6 +54,7 @@ async function getProductBlueprintCategories(
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
+
     throw new Error(
       `${responseName}の取得に失敗しました（${response.status} ${response.statusText}）${
         detail ? `\n${detail}` : ""
@@ -94,13 +98,14 @@ export async function listProductBlueprintCategoriesApi(
     if (value === undefined || value === "") {
       continue;
     }
+
     searchParams.set(key, String(value));
   }
 
   const query = searchParams.toString();
   const url = `${API_BASE}/console/product-blueprint-categories${query ? `?${query}` : ""}`;
-  const items = await getProductBlueprintCategories(url, "商品カテゴリ一覧");
-  return items;
+
+  return getProductBlueprintCategories(url, "商品カテゴリ一覧");
 }
 
 /**
