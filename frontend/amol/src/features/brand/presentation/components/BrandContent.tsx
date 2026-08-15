@@ -3,7 +3,7 @@
 import type {
   BrandDetail,
   BrandListItem,
-} from "../../types/brand";
+} from "../../../shared/types/brand";
 
 import BrandBackground from "./BrandBackground";
 import BrandIcon from "./BrandIcon";

@@ -1,7 +1,7 @@
 // frontend/amol/src/features/brand/application/loadBrandPage.ts
 
 import { fetchBrandById, fetchBrandListItemsByIds } from "../api/brandApi";
-import type { BrandDetail, BrandListItem } from "../types/brand";
+import type { BrandDetail, BrandListItem } from "../../shared/types/brand";
 
 export type LoadBrandPageResult = {
   brand: BrandDetail;

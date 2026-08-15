@@ -1,7 +1,7 @@
 // frontend/amol/src/features/brand/api/brandApi.ts
 
 import { requestJson } from "../../../lib/http";
-import type { BrandDetail, BrandListItem } from "../types/brand";
+import type { BrandDetail, BrandListItem } from "../../shared/types/brand";
 
 const BRAND_BASE_PATH = "/mall/brands";
 const LIST_BASE_PATH = "/mall/lists";

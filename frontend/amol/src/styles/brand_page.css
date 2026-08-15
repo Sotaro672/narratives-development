@@ -1,6 +1,7 @@
 /* frontend/amol/src/styles/brand_page.css */
 
 .brand-page-main {
+  min-height: 100%;
   background: #f7f7f8;
 }
 
@@ -17,14 +18,25 @@
   justify-content: center;
 }
 
+/* --------------------------------
+ * Loading
+ * -------------------------------- */
+
 .brand-page-loading {
   color: #666;
   font-size: 14px;
+  line-height: 1.6;
+  text-align: center;
 }
+
+/* --------------------------------
+ * Error
+ * -------------------------------- */
 
 .brand-page-error-card {
   width: min(100%, 520px);
   padding: 24px;
+  border: 1px solid #eef0f3;
   border-radius: 20px;
   background: #fff;
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
@@ -32,9 +44,10 @@
 
 .brand-page-error-card h1 {
   margin: 0 0 12px;
-  font-size: 20px;
-  line-height: 1.4;
   color: #111827;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 .brand-page-error-card p {
@@ -42,11 +55,13 @@
   color: #6b7280;
   font-size: 14px;
   line-height: 1.7;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
 .brand-page-error-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: center;
   margin-top: 20px;
@@ -54,31 +69,58 @@
 
 .brand-page-error-actions button,
 .brand-page-error-actions a {
+  min-height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 40px;
   padding: 0 16px;
-  border-radius: 999px;
   border: 1px solid #e5e7eb;
+  border-radius: 999px;
   background: #fff;
   color: #111827;
+  font-family: inherit;
   font-size: 14px;
   font-weight: 700;
+  line-height: 1;
   text-decoration: none;
   cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
 }
 
-.brand-page-error-actions button:hover,
+.brand-page-error-actions button:hover:not(:disabled),
 .brand-page-error-actions a:hover {
+  border-color: #d1d5db;
   background: #f3f4f6;
 }
 
+.brand-page-error-actions button:active:not(:disabled),
+.brand-page-error-actions a:active {
+  transform: translateY(1px);
+}
+
+.brand-page-error-actions button:focus-visible,
+.brand-page-error-actions a:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.25);
+  outline-offset: 2px;
+}
+
+.brand-page-error-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* --------------------------------
+ * Hero
+ * -------------------------------- */
+
 .brand-page-hero {
   position: relative;
-  overflow: hidden;
   width: 100%;
   height: 260px;
+  overflow: hidden;
   border-radius: 24px;
   background: #e5e7eb;
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
@@ -87,9 +129,13 @@
 .brand-page-hero-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
   display: block;
+  object-fit: cover;
 }
+
+/* --------------------------------
+ * Brand profile
+ * -------------------------------- */
 
 .brand-page-profile {
   position: relative;
@@ -111,15 +157,17 @@
 
 .brand-page-profile-body {
   min-width: 0;
+  flex: 1;
   padding: 12px 0 4px;
 }
 
 .brand-page-profile-body h1 {
   margin: 0;
   color: #111827;
-  font-size: 28px;
+  font-size: clamp(22px, 4vw, 28px);
+  font-weight: 800;
   line-height: 1.25;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .brand-page-company {
@@ -127,48 +175,67 @@
   color: #4b5563;
   font-size: 14px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .brand-page-link {
+  width: fit-content;
+  min-height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin-top: 12px;
-  min-height: 36px;
   padding: 0 14px;
+  border: 0;
   border-radius: 999px;
   background: #111827;
   color: #fff;
   font-size: 13px;
   font-weight: 700;
+  line-height: 1;
   text-decoration: none;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
 }
 
 .brand-page-link:hover {
   opacity: 0.88;
 }
 
+.brand-page-link:active {
+  transform: translateY(1px);
+}
+
+.brand-page-link:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.25);
+  outline-offset: 2px;
+}
+
+/* --------------------------------
+ * Content sections
+ * -------------------------------- */
+
 .brand-page-section {
   margin-top: 16px;
   padding: 20px;
+  border: 1px solid #eef0f3;
   border-radius: 24px;
   background: #fff;
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
 }
 
-.brand-page-section h2 {
-  margin: 0 0 12px;
+.brand-page-section > h2,
+.brand-page-section-header h2 {
+  margin: 0;
   color: #111827;
   font-size: 18px;
+  font-weight: 800;
   line-height: 1.4;
 }
 
-.brand-page-description {
-  margin: 0;
-  color: #374151;
-  font-size: 14px;
-  line-height: 1.8;
-  white-space: pre-wrap;
+.brand-page-section > h2 {
+  margin-bottom: 12px;
 }
 
 .brand-page-section-header {
@@ -179,10 +246,6 @@
   margin-bottom: 16px;
 }
 
-.brand-page-section-header h2 {
-  margin: 0;
-}
-
 .brand-page-section-header span {
   flex: 0 0 auto;
   color: #6b7280;
@@ -190,8 +253,19 @@
   font-weight: 700;
 }
 
+.brand-page-description {
+  margin: 0;
+  color: #374151;
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .brand-page-empty {
   padding: 20px;
+  border: 1px dashed #d7dce3;
   border-radius: 16px;
   background: #f9fafb;
   color: #6b7280;
@@ -200,55 +274,64 @@
   text-align: center;
 }
 
+/* --------------------------------
+ * Brand list
+ * -------------------------------- */
+
 .brand-page-list-grid {
   margin-top: 0;
 }
 
 .brand-page-list-card {
-  text-decoration: none;
-  color: inherit;
-}
-
-.brand-page-debug {
-  margin-top: 16px;
-  padding: 16px 20px;
-  border-radius: 20px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e8ebef;
+  border-radius: 16px;
   background: #fff;
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
-.brand-page-debug summary {
-  cursor: pointer;
-  color: #6b7280;
-  font-size: 13px;
-  font-weight: 700;
+.brand-page-list-card:hover {
+  border-color: #d5dae1;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.09);
+  transform: translateY(-2px);
 }
 
-.brand-page-debug dl {
-  display: grid;
-  gap: 10px;
-  margin: 14px 0 0;
+.brand-page-list-card:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.25);
+  outline-offset: 3px;
 }
 
-.brand-page-debug dl > div {
-  display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: 12px;
+.brand-page-list-card .lists-page-card-image-wrap {
+  background: #f1f3f5;
 }
 
-.brand-page-debug dt {
-  color: #6b7280;
-  font-size: 12px;
+.brand-page-list-card .lists-page-card-image {
+  transition: transform 200ms ease;
+}
+
+.brand-page-list-card:hover .lists-page-card-image {
+  transform: scale(1.02);
+}
+
+.brand-page-list-card .lists-page-card-title,
+.brand-page-list-card .lists-page-card-description {
+  overflow-wrap: anywhere;
+}
+
+.brand-page-list-card .lists-page-card-price {
+  color: #111827;
   font-weight: 800;
 }
 
-.brand-page-debug dd {
-  margin: 0;
-  color: #111827;
-  font-size: 12px;
-  line-height: 1.6;
-  word-break: break-all;
-}
+/* --------------------------------
+ * Responsive
+ * -------------------------------- */
 
 @media (max-width: 720px) {
   .brand-page {
@@ -262,6 +345,7 @@
 
   .brand-page-profile {
     align-items: center;
+    gap: 14px;
     margin-top: -34px;
     padding: 0 12px 16px;
   }
@@ -281,14 +365,58 @@
     border-radius: 20px;
   }
 
+  .brand-page-error-card {
+    padding: 20px;
+    border-radius: 16px;
+  }
+
+  .brand-page-error-actions {
+    align-items: stretch;
+  }
+
+  .brand-page-error-actions button,
+  .brand-page-error-actions a {
+    flex: 1 1 calc(50% - 6px);
+  }
+}
+
+@media (max-width: 420px) {
+  .brand-page-profile {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .brand-page-profile-body {
+    width: 100%;
+  }
+
+  .brand-page-link {
+    width: 100%;
+  }
+
   .brand-page-section-header {
     align-items: flex-start;
     flex-direction: column;
     gap: 4px;
   }
 
-  .brand-page-debug dl > div {
-    grid-template-columns: 1fr;
-    gap: 4px;
+  .brand-page-error-actions {
+    flex-direction: column;
+  }
+
+  .brand-page-error-actions button,
+  .brand-page-error-actions a {
+    width: 100%;
+    flex-basis: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-page-error-actions button,
+  .brand-page-error-actions a,
+  .brand-page-link,
+  .brand-page-list-card,
+  .brand-page-list-card .lists-page-card-image {
+    transition: none;
   }
 }

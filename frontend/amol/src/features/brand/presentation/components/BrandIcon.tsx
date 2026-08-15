@@ -4,7 +4,7 @@ import MediaIcon from "../../../../components/ui/MediaIcon";
 
 import type {
   BrandDetail,
-} from "../../types/brand";
+} from "../../../shared/types/brand";
 
 import {
   buildBrandInitial,

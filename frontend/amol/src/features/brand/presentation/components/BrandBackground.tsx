@@ -7,7 +7,7 @@ import {
 
 import type {
   BrandDetail,
-} from "../../types/brand";
+} from "../../../shared/types/brand";
 
 type BrandBackgroundProps = {
   brand: BrandDetail;

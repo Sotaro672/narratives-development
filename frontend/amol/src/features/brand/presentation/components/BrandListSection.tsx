@@ -1,7 +1,7 @@
 // frontend/amol/src/features/brand/presentation/components/BrandListSection.tsx
 
 import { Link } from "react-router-dom";
-import type { BrandListItem } from "../../types/brand";
+import type { BrandListItem } from "../../../shared/types/brand";
 import { formatBrandListPrice } from "../utils/formatBrandListPrice";
 
 type BrandListSectionProps = {

@@ -12,7 +12,7 @@ import BrandPageError from "../features/brand/presentation/components/BrandPageE
 import BrandPageLoading from "../features/brand/presentation/components/BrandPageLoading";
 import { useBrandPage } from "../features/brand/presentation/hooks/useBrandPage";
 
-import "../features/brand/presentation/styles/brand-page.css";
+import "../styles/brand_page.css";
 
 type BrandPageRouteParams = {
   brandId?: string;
