@@ -36,15 +36,6 @@ export type ContentType =
   | "pdf"
   | "document";
 
-/**
- * Firebase StorageへuploadするFileにMIME typeが設定されていない場合に
- * 使用する既定値。
- *
- * Backend responseのfallbackには使用しない。
- */
-export const TOKEN_BLUEPRINT_DEFAULT_CONTENT_TYPE =
-  "application/octet-stream";
-
 /* =========================================================
  * ContentFile
  * =======================================================*/
@@ -63,15 +54,6 @@ export interface ContentFile {
   updatedAt: string;
   updatedBy: string;
 }
-
-/**
- * TODO:
- * tokenContentsCard.tsx
- * useTokenBlueprintDetail.tsx
- * tokenBlueprintCreate.tsx
- * をContentFileへ移行後に削除する。
- */
-export type FirebaseStorageTokenContent = ContentFile;
 
 /* =========================================================
  * TokenBlueprint

@@ -3,7 +3,6 @@
 import type {
   CreateMemberInput,
   Member,
-  MemberStatus,
 } from "../../../shared/types/member";
 
 import { MemberRepositoryHTTP } from "../infrastructure/memberRepositoryHTTP";
@@ -35,7 +34,7 @@ export type CreateMemberParams = Omit<
   assignedBrandIds: string[];
 
   /** 未指定の場合はactiveを使用する。 */
-  status?: MemberStatus;
+  status?: string;
 };
 
 /**

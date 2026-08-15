@@ -9,7 +9,6 @@ import {
   CardTitle,
   CardContent,
 } from "../../../../shared/ui/card";
-
 import {
   Table,
   TableHeader,
@@ -18,25 +17,14 @@ import {
   TableRow,
   TableCell,
 } from "../../../../shared/ui/table";
+import type { InventoryDetailRowDTO } from "../../../../shared/types/inventory";
+import { rgbIntToHex } from "../../../../shared/util/color";
 
-import type {
-  InventoryRow,
-} from "../../../../shared/types/inventory";
-
-import {
-  rgbIntToHex,
-} from "../../../../shared/util/color";
-
-type ProductBlueprintCategoryKind =
-  | "apparel"
-  | "alcohol"
-  | "unknown";
+type ProductBlueprintCategoryKind = "apparel" | "alcohol" | "unknown";
 
 type InventoryCardProps = {
   title?: string;
-
-  rows:
-    InventoryRow[];
+  rows: InventoryDetailRowDTO[];
 
   /**
    * ProductBlueprintCategory.code を渡す想定。
@@ -45,401 +33,207 @@ type InventoryCardProps = {
    * - "apparel.tops"
    * - "alcohol.sake"
    */
-  productBlueprintCategory?:
-    string;
-
-  className?:
-    string;
-
-  mode?:
-    "view";
+  productBlueprintCategory?: string;
+  className?: string;
+  mode?: "view";
 };
 
-function resolveProductBlueprintCategoryKind(
-  args: {
-    productBlueprintCategory?:
-      string;
+function resolveProductBlueprintCategoryKind(args: {
+  productBlueprintCategory?: string;
+  rows: InventoryDetailRowDTO[];
+}): ProductBlueprintCategoryKind {
+  const category = String(args.productBlueprintCategory ?? "")
+    .trim()
+    .toLowerCase();
 
-    rows:
-      InventoryRow[];
-  },
-): ProductBlueprintCategoryKind {
-  const category =
-    String(
-      args.productBlueprintCategory ??
-        "",
-    )
-      .trim()
-      .toLowerCase();
-
-  if (
-    category.startsWith(
-      "alcohol",
-    )
-  ) {
+  if (category.startsWith("alcohol")) {
     return "alcohol";
   }
 
-  if (
-    category.startsWith(
-      "apparel",
-    )
-  ) {
+  if (category.startsWith("apparel")) {
     return "apparel";
   }
 
-  const hasAlcoholRow =
-    args.rows.some(
-      (row) =>
-        row.kind ===
-        "alcohol",
-    );
-
-  if (hasAlcoholRow) {
+  if (args.rows.some((row) => row.kind === "alcohol")) {
     return "alcohol";
   }
 
-  const hasApparelRow =
-    args.rows.some(
-      (row) =>
-        row.kind ===
-        "apparel",
-    );
-
-  if (hasApparelRow) {
+  if (args.rows.some((row) => row.kind === "apparel")) {
     return "apparel";
   }
 
   return "unknown";
 }
 
-function getVolumeValueLabel(
-  row:
-    InventoryRow,
-): string {
-  const value =
-    row.volumeValue;
+function getVolumeValueLabel(row: InventoryDetailRowDTO): string {
+  const value = row.volumeValue;
 
-  if (
-    typeof value ===
-      "number" &&
-    Number.isFinite(
-      value,
-    )
-  ) {
-    return String(
-      value,
-    );
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
   }
 
   return "";
 }
 
-function getVolumeUnitLabel(
-  row:
-    InventoryRow,
-): string {
-  return String(
-    row.volumeUnit ??
-      "",
-  ).trim();
+function getVolumeUnitLabel(row: InventoryDetailRowDTO): string {
+  return String(row.volumeUnit ?? "").trim();
 }
 
-const InventoryCard:
-  React.FC<InventoryCardProps> = ({
-    title =
-      "モデル別在庫一覧",
+const InventoryCard: React.FC<InventoryCardProps> = ({
+  title = "モデル別在庫一覧",
+  rows,
+  productBlueprintCategory,
+  className,
+  mode = "view",
+}) => {
+  const categoryKind = React.useMemo(
+    () =>
+      resolveProductBlueprintCategoryKind({
+        productBlueprintCategory,
+        rows,
+      }),
+    [productBlueprintCategory, rows],
+  );
 
-    rows,
+  const isAlcoholCategory = categoryKind === "alcohol";
 
-    productBlueprintCategory,
+  const totalStock = React.useMemo(
+    () => rows.reduce((sum, row) => sum + row.stock, 0),
+    [rows],
+  );
 
-    className,
+  const footerColSpan = 3;
 
-    mode =
-      "view",
-  }) => {
-    const categoryKind =
-      React.useMemo(
-        () =>
-          resolveProductBlueprintCategoryKind({
-            productBlueprintCategory,
-            rows,
-          }),
-        [
-          productBlueprintCategory,
-          rows,
-        ],
-      );
+  return (
+    <Card className={`ivc ${className ?? ""}`}>
+      <CardHeader className="ivc__header">
+        <div className="ivc__header-inner">
+          <Palette className="ivc__icon" size={18} />
 
-    const isAlcoholCategory =
-      categoryKind ===
-      "alcohol";
+          <CardTitle className="ivc__title">
+            {title}
 
-    const totalStock =
-      React.useMemo(
-        () =>
-          rows.reduce(
-            (
-              sum,
-              row,
-            ) =>
-              sum +
-              row.stock,
-            0,
-          ),
-        [
-          rows,
-        ],
-      );
+            {mode !== "view" && (
+              <span className="ml-2 text-xs text-[hsl(var(--muted-foreground))]">
+                （{mode}）
+              </span>
+            )}
+          </CardTitle>
+        </div>
+      </CardHeader>
 
-    const footerColSpan =
-      3;
+      <CardContent className="ivc__body">
+        <div className="ivc__table-wrap">
+          <Table className="ivc__table">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="ivc__th ivc__th--left">
+                  型番
+                </TableHead>
 
-    return (
-      <Card
-        className={`ivc ${className ?? ""}`}
-      >
-        <CardHeader
-          className="ivc__header"
-        >
-          <div
-            className="ivc__header-inner"
-          >
-            <Palette
-              className="ivc__icon"
-              size={18}
-            />
+                {isAlcoholCategory ? (
+                  <>
+                    <TableHead className="ivc__th">
+                      容量
+                    </TableHead>
+                    <TableHead className="ivc__th">
+                      単位
+                    </TableHead>
+                  </>
+                ) : (
+                  <>
+                    <TableHead className="ivc__th">
+                      サイズ
+                    </TableHead>
+                    <TableHead className="ivc__th">
+                      カラー
+                    </TableHead>
+                  </>
+                )}
 
-            <CardTitle
-              className="ivc__title"
-            >
-              {title}
+                <TableHead className="ivc__th ivc__th--right">
+                  在庫数
+                </TableHead>
+              </TableRow>
+            </TableHeader>
 
-              {mode !== "view" && (
-                <span
-                  className="ml-2 text-xs text-[hsl(var(--muted-foreground))]"
-                >
-                  （{mode}）
-                </span>
-              )}
-            </CardTitle>
-          </div>
-        </CardHeader>
+            <TableBody>
+              {rows.map((row) => {
+                const rgbHex = rgbIntToHex(row.rgb) ?? null;
+                const bgColor = rgbHex ?? "#ffffff";
 
-        <CardContent
-          className="ivc__body"
-        >
-          <div
-            className="ivc__table-wrap"
-          >
-            <Table
-              className="ivc__table"
-            >
-              <TableHeader>
-                <TableRow>
-                  <TableHead
-                    className="ivc__th ivc__th--left"
-                  >
-                    型番
-                  </TableHead>
+                return (
+                  <TableRow key={row.modelId} className="ivc__tr">
+                    <TableCell className="ivc__model">
+                      {row.modelNumber}
+                    </TableCell>
 
-                  {isAlcoholCategory
-                    ? (
+                    {isAlcoholCategory ? (
                       <>
-                        <TableHead
-                          className="ivc__th"
-                        >
-                          容量
-                        </TableHead>
-
-                        <TableHead
-                          className="ivc__th"
-                        >
-                          単位
-                        </TableHead>
+                        <TableCell className="ivc__size">
+                          {getVolumeValueLabel(row) || "-"}
+                        </TableCell>
+                        <TableCell className="ivc__size">
+                          {getVolumeUnitLabel(row) || "-"}
+                        </TableCell>
                       </>
-                    )
-                    : (
+                    ) : (
                       <>
-                        <TableHead
-                          className="ivc__th"
-                        >
-                          サイズ
-                        </TableHead>
-
-                        <TableHead
-                          className="ivc__th"
-                        >
-                          カラー
-                        </TableHead>
+                        <TableCell className="ivc__size">
+                          {row.size || "-"}
+                        </TableCell>
+                        <TableCell className="ivc__color-cell">
+                          <span
+                            className="ivc__color-dot"
+                            style={{
+                              backgroundColor: bgColor,
+                              boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
+                            }}
+                            title={rgbHex ?? ""}
+                          />
+                          <span className="ivc__color-label">
+                            {row.color || "-"}
+                          </span>
+                        </TableCell>
                       </>
                     )}
 
-                  <TableHead
-                    className="ivc__th ivc__th--right"
-                  >
-                    在庫数
-                  </TableHead>
+                    <TableCell className="ivc__stock">
+                      <span className="ivc__stock-number">
+                        {row.stock}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+
+              {rows.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="ivc__empty">
+                    表示できる在庫データがありません。
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
+              )}
 
-              <TableBody>
-                {rows.map(
-                  (
-                    row,
-                  ) => {
-                    const rgbHex =
-                      rgbIntToHex(
-                        row.rgb,
-                      ) ??
-                      null;
-
-                    const bgColor =
-                      rgbHex ??
-                      "#ffffff";
-
-                    return (
-                      <TableRow
-                        key={
-                          row.modelId
-                        }
-                        className="ivc__tr"
-                      >
-                        <TableCell
-                          className="ivc__model"
-                        >
-                          {
-                            row.modelNumber
-                          }
-                        </TableCell>
-
-                        {isAlcoholCategory
-                          ? (
-                            <>
-                              <TableCell
-                                className="ivc__size"
-                              >
-                                {
-                                  getVolumeValueLabel(
-                                    row,
-                                  ) ||
-                                  "-"
-                                }
-                              </TableCell>
-
-                              <TableCell
-                                className="ivc__size"
-                              >
-                                {
-                                  getVolumeUnitLabel(
-                                    row,
-                                  ) ||
-                                  "-"
-                                }
-                              </TableCell>
-                            </>
-                          )
-                          : (
-                            <>
-                              <TableCell
-                                className="ivc__size"
-                              >
-                                {
-                                  row.size ||
-                                  "-"
-                                }
-                              </TableCell>
-
-                              <TableCell
-                                className="ivc__color-cell"
-                              >
-                                <span
-                                  className="ivc__color-dot"
-                                  style={{
-                                    backgroundColor:
-                                      bgColor,
-
-                                    boxShadow:
-                                      "0 0 0 1px rgba(0,0,0,0.18)",
-                                  }}
-                                  title={
-                                    rgbHex ??
-                                    ""
-                                  }
-                                />
-
-                                <span
-                                  className="ivc__color-label"
-                                >
-                                  {
-                                    row.color ||
-                                    "-"
-                                  }
-                                </span>
-                              </TableCell>
-                            </>
-                          )}
-
-                        <TableCell
-                          className="ivc__stock"
-                        >
-                          <span
-                            className="ivc__stock-number"
-                          >
-                            {
-                              row.stock
-                            }
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  },
-                )}
-
-                {rows.length ===
-                  0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={4}
-                      className="ivc__empty"
-                    >
-                      表示できる在庫データがありません。
-                    </TableCell>
-                  </TableRow>
-                )}
-
-                {rows.length >
-                  0 && (
-                  <TableRow
-                    className="ivc__total-row"
+              {rows.length > 0 && (
+                <TableRow className="ivc__total-row">
+                  <TableCell
+                    colSpan={footerColSpan}
+                    className="ivc__total-label ivc__th--right"
                   >
-                    <TableCell
-                      colSpan={
-                        footerColSpan
-                      }
-                      className="ivc__total-label ivc__th--right"
-                    >
-                      合計
-                    </TableCell>
-
-                    <TableCell
-                      className="ivc__total-value"
-                    >
-                      <strong>
-                        {
-                          totalStock
-                        }
-                      </strong>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
+                    合計
+                  </TableCell>
+                  <TableCell className="ivc__total-value">
+                    <strong>{totalStock}</strong>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
 export default InventoryCard;

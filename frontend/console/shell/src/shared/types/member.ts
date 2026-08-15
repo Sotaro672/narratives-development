@@ -1,14 +1,6 @@
 // frontend/console/shell/src/shared/types/member.ts
 
 /**
- * Memberの状態。
- *
- * 現時点ではBackendから文字列として返されるため、
- * 特定の値へ限定せずstringとして管理する。
- */
-export type MemberStatus = string;
-
-/**
  * Memberの正規型。
  *
  * GET /members
@@ -47,7 +39,8 @@ export type Member = {
   /** 所属会社ID。 */
   companyId: string;
 
-  status: MemberStatus;
+  /** Backendから返されるMemberの状態。 */
+  status: string;
 
   /** BackendからISO 8601形式の文字列として返される。 */
   createdAt: string;
@@ -61,14 +54,6 @@ export type Member = {
   /** Backendで姓・名から生成される表示名。 */
   displayName: string;
 };
-
-/**
- * APIレスポンスを表す互換名。
- *
- * MemberとMemberDTOで別定義を持たず、
- * Memberを唯一の正規型として参照する。
- */
-export type MemberDTO = Member;
 
 /**
  * Member一覧取得時の検索条件。
@@ -89,7 +74,7 @@ export type MemberFilter = {
   brandIds?: string[];
 
   /** Memberの状態。 */
-  status?: MemberStatus;
+  status?: string;
 };
 
 /**
@@ -106,7 +91,7 @@ export type CreateMemberInput = {
   email: string;
   permissions: string[];
   assignedBrands: string[];
-  status: MemberStatus;
+  status: string;
 };
 
 /**
@@ -123,5 +108,5 @@ export type MemberPatch = {
   email?: string;
   permissions?: string[];
   assignedBrands?: string[];
-  status?: MemberStatus;
+  status?: string;
 };

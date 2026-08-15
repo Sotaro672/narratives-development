@@ -1,15 +1,15 @@
 // frontend/console/shell/src/auth/application/memberService.ts
 /// <reference types="vite/client" />
 
-import type { MemberDTO } from "../../shared/types/member";
+import type { Member } from "../../shared/types/member";
 import {
   fetchCurrentMemberRaw,
   updateCurrentMemberProfileRaw,
 } from "../infrastructure/repository/authRepositoryHTTP";
 
-export async function fetchCurrentMember(): Promise<MemberDTO | null> {
+export async function fetchCurrentMember(): Promise<Member | null> {
   const response = await fetchCurrentMemberRaw();
-  return response as MemberDTO | null;
+  return response as Member | null;
 }
 
 export type UpdateMemberProfileInput = {
@@ -32,7 +32,7 @@ type UpdateMemberProfilePayload = {
 
 export async function updateCurrentMemberProfile(
   input: UpdateMemberProfileInput,
-): Promise<MemberDTO | null> {
+): Promise<Member | null> {
   const payload: UpdateMemberProfilePayload = {
     firstName: input.firstName,
     lastName: input.lastName,
@@ -45,5 +45,5 @@ export async function updateCurrentMemberProfile(
   }
 
   const response = await updateCurrentMemberProfileRaw(input.id, payload);
-  return response as MemberDTO | null;
+  return response as Member | null;
 }

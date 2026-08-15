@@ -3,18 +3,6 @@
 //  and backend/internal/domain/avatar/entity.go)
 
 /**
- * AvatarState
- *
- * backend/internal/domain/avatarState 由来の状態表現。
- * ここでは汎用的な形にしておき、実際の構造は avatarState ドメイン側に委譲します。
- * 必要に応じて拡張してください。
- */
-export interface AvatarState {
-  // 任意の状態フィールドを許容（ドメイン側の実装と同期させる想定）
-  [key: string]: unknown;
-}
-
-/**
  * Avatar
  *
  * - backend/internal/domain/avatar/entity.go
@@ -26,7 +14,6 @@ export interface Avatar {
   userId: string;
   avatarName: string;
   avatarIconId?: string;
-  avatarState: AvatarState;
   walletAddress?: string;
   bio?: string;
   website?: string;
@@ -49,11 +36,9 @@ export interface AvatarListFilter {
   userId?: string;
   nameContains?: string;
   walletAddress?: string;
-
   includeDeleted?: boolean;
   limit?: number;
   offset?: number;
-
   sortBy?: AvatarSortBy;
   desc?: boolean;
 }

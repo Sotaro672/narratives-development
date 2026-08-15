@@ -1,10 +1,8 @@
 // frontend/console/shell/src/shared/types/inquiry.ts
 
-import type { ItemsResult } from "./common/common";
 import type { ShippingAddress } from "./shippingAddress";
 
 export type InquiryStatus = "open" | "resolved" | "closed";
-export type InquiryType = string;
 export type InquiryReplySenderType = "avatar" | "member";
 
 export type InquiryImageFile = {
@@ -45,7 +43,7 @@ export type Inquiry = {
   subject: string;
   content: string;
   status: InquiryStatus;
-  inquiryType: InquiryType;
+  inquiryType: string;
   isRead: boolean;
   images?: InquiryImageFile[];
   createdAt: string;
@@ -112,26 +110,6 @@ export type InquiryDetail = {
   companyId: string;
 };
 
-export type InquiryAggregate = {
-  inquiry: Inquiry;
-  images: InquiryImageFile[];
-  modelId: string;
-  productBlueprintId: string;
-  productName: string;
-  brandId: string;
-  brandName: string;
-  assetId: string;
-  transferredAt?: string;
-  avatarName: string;
-  userId: string;
-  userFullName: string;
-  shippingAddresses: ShippingAddress[];
-  orders: InquiryOrderSummary[];
-  companyId: string;
-};
-
-export type InquiryPageResult<T> = ItemsResult<T>;
-
 export type InquiryUnreadCountResult = {
   count: number;
 };
@@ -142,7 +120,7 @@ export type ListInquiriesParams = {
   productId?: string;
   avatarId?: string;
   status?: InquiryStatus;
-  inquiryType?: InquiryType;
+  inquiryType?: string;
   updatedBy?: string;
   deletedBy?: string;
   resolvedBy?: string;
@@ -152,8 +130,6 @@ export type ListInquiriesParams = {
   resolved?: boolean;
   closed?: boolean;
 };
-
-export type CountUnreadInquiriesParams = ListInquiriesParams;
 
 export type ReplyInquiryParams = {
   content: string;

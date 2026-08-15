@@ -3,162 +3,74 @@
 import * as React from "react";
 
 import type {
+  InventoryDetailRowDTO,
   InventoryDetailViewModel,
-  InventoryRow,
 } from "../../../../shared/types/inventory";
-
-import {
-  loadInventoryDetailViewModel,
-} from "../../application/inventoryDetailService";
+import { loadInventoryDetailViewModel } from "../../application/inventoryDetailService";
 
 export type UseInventoryDetailResult = {
-  vm:
-    InventoryDetailViewModel |
-    null;
-
-  rows:
-    InventoryRow[];
-
-  loading:
-    boolean;
-
-  error:
-    string |
-    null;
+  vm: InventoryDetailViewModel | null;
+  rows: InventoryDetailRowDTO[];
+  loading: boolean;
+  error: string | null;
 };
 
 export function useInventoryDetail(
-  inventoryId:
-    string |
-    undefined,
+  inventoryId: string | undefined,
 ): UseInventoryDetailResult {
-  const [
-    vm,
-    setVm,
-  ] =
-    React.useState<
-      InventoryDetailViewModel |
-      null
-    >(null);
+  const [vm, setVm] = React.useState<InventoryDetailViewModel | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const [
-    loading,
-    setLoading,
-  ] =
-    React.useState(
-      false,
-    );
+  const invId = React.useMemo(() => inventoryId ?? "", [inventoryId]);
 
-  const [
-    error,
-    setError,
-  ] =
-    React.useState<
-      string |
-      null
-    >(null);
+  React.useEffect(() => {
+    if (!invId) {
+      setVm(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
 
-  const invId =
-    React.useMemo(
-      () =>
-        inventoryId ?? "",
-      [
-        inventoryId,
-      ],
-    );
+    let cancelled = false;
 
-  React.useEffect(
-    () => {
-      if (!invId) {
-        setVm(
-          null,
-        );
+    async function load() {
+      try {
+        setLoading(true);
+        setError(null);
 
-        setError(
-          null,
-        );
+        const nextVm = await loadInventoryDetailViewModel(invId);
 
-        setLoading(
-          false,
-        );
+        if (cancelled) {
+          return;
+        }
 
-        return;
-      }
+        setVm(nextVm);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
 
-      let cancelled =
-        false;
-
-      async function load() {
-        try {
-          setLoading(
-            true,
-          );
-
-          setError(
-            null,
-          );
-
-          const nextVm =
-            await loadInventoryDetailViewModel(
-              invId,
-            );
-
-          if (cancelled) {
-            return;
-          }
-
-          setVm(
-            nextVm,
-          );
-        } catch (
-          error
-        ) {
-          if (cancelled) {
-            return;
-          }
-
-          setError(
-            error instanceof Error
-              ? error.message
-              : String(error),
-          );
-
-          setVm(
-            null,
-          );
-        } finally {
-          if (cancelled) {
-            return;
-          }
-
-          setLoading(
-            false,
-          );
+        setError(error instanceof Error ? error.message : String(error));
+        setVm(null);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
         }
       }
+    }
 
-      void load();
+    void load();
 
-      return () => {
-        cancelled =
-          true;
-      };
-    },
-    [
-      invId,
-    ],
+    return () => {
+      cancelled = true;
+    };
+  }, [invId]);
+
+  const rows = React.useMemo<InventoryDetailRowDTO[]>(
+    () => vm?.rows ?? [],
+    [vm],
   );
-
-  const rows =
-    React.useMemo<
-      InventoryRow[]
-    >(
-      () =>
-        vm?.rows ?? [],
-      [
-        vm,
-      ],
-    );
 
   return {
     vm,

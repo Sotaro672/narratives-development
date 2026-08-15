@@ -1,17 +1,14 @@
 // frontend/console/shell/src/auth/application/AuthContext.tsx
 
 import * as React from "react";
-import {
-  onAuthStateChanged,
-  type User,
-} from "firebase/auth";
+import { onAuthStateChanged, type User } from "firebase/auth";
 
 import { auth } from "../infrastructure/config/firebaseClient";
 import { getCompanyNameById } from "./companyService";
 import { fetchCurrentMember } from "./memberService";
 
 import type { Auth } from "../../shared/types/auth";
-import type { MemberDTO } from "../../shared/types/member";
+import type { Member } from "../../shared/types/member";
 
 type AuthContextValue = {
   // Firebase Authentication
@@ -19,7 +16,7 @@ type AuthContextValue = {
   loading: boolean;
 
   // Backend GET /members/me
-  currentMember: MemberDTO | null;
+  currentMember: Member | null;
   loadingMember: boolean;
   memberError: string | null;
 
@@ -62,7 +59,7 @@ function sleep(milliseconds: number): Promise<void> {
 async function fetchCurrentMemberWithRetry(
   retries: number,
   retryDelayMs: number,
-): Promise<MemberDTO | null> {
+): Promise<Member | null> {
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
       const member = await fetchCurrentMember();
@@ -90,9 +87,9 @@ async function fetchCurrentMemberWithRetry(
   return null;
 }
 
-export const AuthProvider: React.FC<{
-  children: React.ReactNode;
-}> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [state, setState] = React.useState<AuthContextValue>(
     initialAuthContextValue,
   );
@@ -132,7 +129,7 @@ export const AuthProvider: React.FC<{
           companyName: null,
         });
 
-        let currentMember: MemberDTO | null = null;
+        let currentMember: Member | null = null;
         let memberError: string | null = null;
 
         try {
@@ -141,8 +138,7 @@ export const AuthProvider: React.FC<{
           if (member?.id && member.companyId) {
             currentMember = member;
           } else {
-            memberError =
-              "ログインユーザーの会社情報を確認できませんでした。";
+            memberError = "ログインユーザーの会社情報を確認できませんでした。";
           }
         } catch (error: unknown) {
           memberError =
@@ -177,9 +173,7 @@ export const AuthProvider: React.FC<{
         }
 
         try {
-          const companyName = await getCompanyNameById(
-            currentMember.companyId,
-          );
+          const companyName = await getCompanyNameById(currentMember.companyId);
 
           if (!active || currentRequest !== requestSequence) {
             return;
@@ -224,9 +218,7 @@ export function useAuthContext(): AuthContextValue {
   const context = React.useContext(AuthContext);
 
   if (!context) {
-    throw new Error(
-      "useAuthContext must be used within AuthProvider",
-    );
+    throw new Error("useAuthContext must be used within AuthProvider");
   }
 
   return context;

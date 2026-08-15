@@ -3,10 +3,9 @@
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 import { auth, storage } from "../../../../auth/infrastructure/config/firebaseClient";
-import {
-  TOKEN_BLUEPRINT_DEFAULT_CONTENT_TYPE,
-  type ContentType,
-} from "../../../../shared/types/tokenBlueprint";
+import type { ContentType } from "../../../../shared/types/tokenBlueprint";
+
+const DEFAULT_CONTENT_TYPE = "application/octet-stream";
 
 export type FirebaseStorageUploadResult = {
   downloadUrl: string;
@@ -35,16 +34,17 @@ function safeFileName(file: File): string {
   return fileName;
 }
 
-function getContentType(file: File): string {
-  return file.type.trim() || TOKEN_BLUEPRINT_DEFAULT_CONTENT_TYPE;
+export function getTokenBlueprintContentType(file: File): string {
+  return file.type.trim() || DEFAULT_CONTENT_TYPE;
 }
 
 export function guessTokenBlueprintContentType(file: File): ContentType {
-  const mime = getContentType(file).toLowerCase();
+  const contentType = getTokenBlueprintContentType(file).toLowerCase();
 
-  if (mime.startsWith("image/")) return "image";
-  if (mime.startsWith("video/")) return "video";
-  if (mime === "application/pdf") return "pdf";
+  if (contentType.startsWith("image/")) return "image";
+  if (contentType.startsWith("video/")) return "video";
+  if (contentType === "application/pdf") return "pdf";
+
   return "document";
 }
 
@@ -53,13 +53,12 @@ function buildTokenBlueprintIconPath(params: {
   tokenBlueprintId: string;
   file: File;
 }): string {
-  const timestamp = Date.now();
   return [
     "token-blueprints",
     params.companyId,
     params.tokenBlueprintId,
     "icon",
-    `${timestamp}_${safeFileName(params.file)}`,
+    `${Date.now()}_${safeFileName(params.file)}`,
   ].join("/");
 }
 
@@ -122,7 +121,7 @@ export async function uploadTokenBlueprintIconToFirebaseStorage(params: {
 
   const objectPath = buildTokenBlueprintIconPath(params);
   const storageRef = ref(storage, objectPath);
-  const contentType = getContentType(params.file);
+  const contentType = getTokenBlueprintContentType(params.file);
 
   await uploadBytes(storageRef, params.file, {
     contentType,
@@ -161,7 +160,7 @@ export async function uploadTokenBlueprintContentToFirebaseStorage(params: {
 
   const objectPath = buildTokenBlueprintContentPath(params);
   const storageRef = ref(storage, objectPath);
-  const contentType = getContentType(params.file);
+  const contentType = getTokenBlueprintContentType(params.file);
   const kind = guessTokenBlueprintContentType(params.file);
 
   await uploadBytes(storageRef, params.file, {

@@ -11,40 +11,18 @@ export type InventoryProductBlueprintCategoryKind =
   | "healthcare"
   | "other";
 
-export type InventoryModelKind =
-  InventoryProductBlueprintCategoryKind;
-
-
 // =========================================================
 // Inventory category fields
 // =========================================================
 
-export type InventoryCategoryFieldPrimitiveValue =
-  | string
-  | number
-  | boolean
-  | null;
-
-export type InventoryCategoryFieldArrayValue =
-  InventoryCategoryFieldPrimitiveValue[];
-
-export type InventoryCategoryFieldObjectValue =
-  Record<
-    string,
-    InventoryCategoryFieldPrimitiveValue
-  >;
-
+export type InventoryCategoryFieldPrimitiveValue = string | number | boolean | null;
+export type InventoryCategoryFieldArrayValue = InventoryCategoryFieldPrimitiveValue[];
+export type InventoryCategoryFieldObjectValue = Record<string, InventoryCategoryFieldPrimitiveValue>;
 export type InventoryCategoryFieldValue =
   | InventoryCategoryFieldPrimitiveValue
   | InventoryCategoryFieldArrayValue
   | InventoryCategoryFieldObjectValue;
-
-export type InventoryCategoryFieldValues =
-  Record<
-    string,
-    InventoryCategoryFieldValue
-  >;
-
+export type InventoryCategoryFieldValues = Record<string, InventoryCategoryFieldValue>;
 
 // =========================================================
 // Inventory Management
@@ -54,23 +32,17 @@ export type InventoryCategoryFieldValues =
 export type InventoryListRowDTO = {
   productBlueprintId: string;
   productName: string;
-
   tokenBlueprintId: string;
   tokenName: string;
-
   availableStock: number;
   reservedCount: number;
 };
-
-export type InventoryManagementRow =
-  InventoryListRowDTO;
 
 export type InventorySortKey =
   | "productName"
   | "tokenName"
   | "availableStock"
   | "reservedCount";
-
 
 // =========================================================
 // Inventory ProductBlueprint read model
@@ -82,12 +54,8 @@ export type InventoryProductBlueprintCategoryDTO = {
   code: string;
   nameJa: string;
   nameEn: string;
-
-  kind:
-    InventoryProductBlueprintCategoryKind;
-
-  path:
-    string[];
+  kind: InventoryProductBlueprintCategoryKind;
+  path: string[];
 };
 
 export type InventoryProductIDTagDTO = {
@@ -102,26 +70,15 @@ export type ProductBlueprintModelRefDTO = {
 export type ProductBlueprintPatchDTO = {
   productName: string;
   description: string;
-
   brandId: string;
   brandName: string;
   companyId: string;
-
-  productBlueprintCategory:
-    InventoryProductBlueprintCategoryDTO;
-
-  categoryFields?:
-    InventoryCategoryFieldValues;
-
-  productIdTag:
-    InventoryProductIDTagDTO;
-
+  productBlueprintCategory: InventoryProductBlueprintCategoryDTO;
+  categoryFields?: InventoryCategoryFieldValues;
+  productIdTag: InventoryProductIDTagDTO;
   assigneeId: string;
-
-  modelRefs:
-    ProductBlueprintModelRefDTO[];
+  modelRefs: ProductBlueprintModelRefDTO[];
 };
-
 
 // =========================================================
 // Inventory TokenBlueprint read model
@@ -130,22 +87,16 @@ export type ProductBlueprintPatchDTO = {
 
 export type TokenBlueprintPatchDTO = {
   id: string;
-
   tokenName: string;
   symbol: string;
-
   brandId: string;
   brandName: string;
   companyId: string;
-
   description: string;
-
   minted: boolean;
   metadataUri: string;
-
   iconUrl?: string;
 };
-
 
 // =========================================================
 // Inventory Detail Row
@@ -154,12 +105,8 @@ export type TokenBlueprintPatchDTO = {
 
 export type InventoryDetailRowDTO = {
   modelId: string;
-
-  kind?:
-    InventoryModelKind;
-
+  kind?: InventoryProductBlueprintCategoryKind;
   modelNumber: string;
-
   stock: number;
 
   // apparel
@@ -172,16 +119,6 @@ export type InventoryDetailRowDTO = {
   volumeUnit?: string;
 };
 
-/**
- * InventoryCard へ渡す在庫行。
- *
- * Backend BFF の rows をそのまま正とするため、
- * InventoryDetailRowDTO と同一型として扱う。
- */
-export type InventoryRow =
-  InventoryDetailRowDTO;
-
-
 // =========================================================
 // Inventory Detail DTO
 // GET /inventory/{inventoryId}
@@ -189,24 +126,14 @@ export type InventoryRow =
 
 export type InventoryDetailDTO = {
   inventoryId: string;
-
   productBlueprintId: string;
   tokenBlueprintId: string;
-
-  productBlueprintPatch:
-    ProductBlueprintPatchDTO;
-
-  tokenBlueprintPatch:
-    TokenBlueprintPatchDTO;
-
-  rows:
-    InventoryDetailRowDTO[];
-
+  productBlueprintPatch: ProductBlueprintPatchDTO;
+  tokenBlueprintPatch: TokenBlueprintPatchDTO;
+  rows: InventoryDetailRowDTO[];
   totalStock: number;
-
   updatedAt?: string;
 };
-
 
 // =========================================================
 // Inventory Detail ViewModel
@@ -214,58 +141,31 @@ export type InventoryDetailDTO = {
 
 export type InventoryDetailViewModel = {
   inventoryId: string;
-
   productBlueprintId: string;
   tokenBlueprintId: string;
-
   productName: string;
   tokenName: string;
-
   headerTitle: string;
-
-  productBlueprintCategoryName:
-    string;
-
-  productBlueprintCategoryCode:
-    string;
-
-  productBlueprintCategoryKind:
-    InventoryProductBlueprintCategoryKind;
-
-  categoryFields?:
-    InventoryCategoryFieldValues;
-
-  productBlueprintPatch:
-    ProductBlueprintPatchDTO;
-
-  tokenBlueprintPatch:
-    TokenBlueprintPatchDTO;
-
+  productBlueprintCategoryName: string;
+  productBlueprintCategoryCode: string;
+  productBlueprintCategoryKind: InventoryProductBlueprintCategoryKind;
+  categoryFields?: InventoryCategoryFieldValues;
+  productBlueprintPatch: ProductBlueprintPatchDTO;
+  tokenBlueprintPatch: TokenBlueprintPatchDTO;
   updatedAt?: string;
-
   totalStock: number;
-
-  rows:
-    InventoryRow[];
+  rows: InventoryDetailRowDTO[];
 };
-
 
 // =========================================================
 // List Create BFF
 // GET /inventory/list-create/{inventoryId}
 // =========================================================
 
-export type ListCreateModelKind =
-  InventoryModelKind;
-
 export type ListCreatePriceRowDTO = {
   modelId: string;
-
-  kind?:
-    ListCreateModelKind;
-
+  kind?: InventoryProductBlueprintCategoryKind;
   displayOrder?: number;
-
   stock: number;
 
   // apparel
@@ -289,10 +189,7 @@ export type ListCreatePriceRowDTO = {
 export type ListCreateDTO = {
   productBrandName: string;
   productName: string;
-
   tokenBrandName: string;
   tokenName: string;
-
-  priceRows:
-    ListCreatePriceRowDTO[];
+  priceRows: ListCreatePriceRowDTO[];
 };

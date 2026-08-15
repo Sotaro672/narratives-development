@@ -7,22 +7,18 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import TokenBlueprintCard from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 import TokenContentsCard from "../features/tokenBlueprint/presentation/components/tokenContentsCard";
-
 import { useAdminCard as useAdminCardHook } from "../features/admin/presentation/hook/useAdminCard";
 import { useTokenBlueprintCard } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCard";
 import { useTokenBlueprintCreate } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCreate";
-
-import {
-  TOKEN_BLUEPRINT_DEFAULT_CONTENT_TYPE,
-  type ContentFile,
-} from "../shared/types/tokenBlueprint";
-
+import type { ContentFile } from "../shared/types/tokenBlueprint";
 import {
   createTokenBlueprintContentId,
   uploadAndAppendTokenBlueprintContents,
 } from "../features/tokenBlueprint/application/tokenBlueprintContentService";
-
-import { guessTokenBlueprintContentType } from "../features/tokenBlueprint/infrastructure/storage/tokenBlueprintAssetStorage";
+import {
+  getTokenBlueprintContentType,
+  guessTokenBlueprintContentType,
+} from "../features/tokenBlueprint/infrastructure/storage/tokenBlueprintAssetStorage";
 
 import "../styles/tokenBlueprint.css";
 
@@ -135,7 +131,7 @@ export default function TokenBlueprintCreate() {
           file,
           previewUrl: URL.createObjectURL(file),
           type: guessTokenBlueprintContentType(file),
-          contentType: file.type || TOKEN_BLUEPRINT_DEFAULT_CONTENT_TYPE,
+          contentType: getTokenBlueprintContentType(file),
         });
       }
 
@@ -231,7 +227,6 @@ export default function TokenBlueprintCreate() {
       navigate(`/tokenBlueprint/${encodeURIComponent(created.id)}`, { replace: true });
     } catch (error) {
       console.error("[TokenBlueprintCreate.page] save failed", error);
-
       window.alert(
         error instanceof Error
           ? error.message
