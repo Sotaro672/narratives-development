@@ -11,8 +11,7 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import { useAuthContext } from "../../../../auth/application/AuthContext";
-import type { Member, MemberFilter } from "../../../../shared/types/member";
-import { MemberRepositoryHTTP } from "../../../member/infrastructure/memberRepositoryHTTP";
+import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 
 import { validateBrandImage } from "../../application/brandImageValidation";
 import {
@@ -25,30 +24,7 @@ import {
 } from "../../infrastructure/http/brandRepositoryHTTP";
 import { uploadBrandAssetToFirebaseStorage } from "../../infrastructure/storage/brandAssetStorage";
 
-const memberRepo = new MemberRepositoryHTTP();
 const BRAND_IMAGE_ACCEPT = BRAND_IMAGE_ALLOWED_MIME_TYPES.join(",");
-
-function formatLastFirst(
-  lastName?: string | null,
-  firstName?: string | null,
-): string {
-  const normalizedLastName = String(lastName ?? "");
-  const normalizedFirstName = String(firstName ?? "");
-
-  if (normalizedLastName && normalizedFirstName) {
-    return `${normalizedLastName} ${normalizedFirstName}`;
-  }
-
-  if (normalizedLastName) {
-    return normalizedLastName;
-  }
-
-  if (normalizedFirstName) {
-    return normalizedFirstName;
-  }
-
-  return "";
-}
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -70,18 +46,22 @@ export function useBrandCreate() {
   const [brandIcon, setBrandIcon] = useState("");
   const [brandBackgroundImage, setBrandBackgroundImage] = useState("");
 
-  const [managerId, setManagerId] = useState<string | null>(null);
+  const {
+    assigneeId: managerId,
+    assigneeName: managerDisplayName,
+    assigneeCandidates: managerCandidates,
+    loadingMembers: loadingManagers,
+    handleSelectAssignee,
+  } = useAssigneeSelection({
+    defaultToCurrentMember: true,
+  });
+
   const [nameError, setNameError] = useState<string | null>(null);
   const [managerIdError, setManagerIdError] = useState<string | null>(null);
   const [brandIconError, setBrandIconError] = useState<string | null>(null);
-  const [
-    brandBackgroundImageError,
-    setBrandBackgroundImageError,
-  ] = useState<string | null>(null);
+  const [brandBackgroundImageError, setBrandBackgroundImageError] =
+    useState<string | null>(null);
 
-  const [managerOptions, setManagerOptions] = useState<Member[]>([]);
-  const [loadingManagers, setLoadingManagers] = useState(false);
-  const [managerError, setManagerError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const brandIconInputRef = useRef<HTMLInputElement | null>(null);
@@ -96,58 +76,6 @@ export function useBrandCreate() {
     useState("");
 
   const isActive = true;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadManagers() {
-      try {
-        setLoadingManagers(true);
-        setManagerError(null);
-
-        const filter: MemberFilter = {};
-
-        const { items } = await memberRepo.list(
-          {
-            number: 1,
-            perPage: 200,
-          },
-          filter,
-        );
-
-        if (cancelled) {
-          return;
-        }
-
-        setManagerOptions(items);
-
-        setManagerId((currentManagerId) => {
-          if (currentManagerId) {
-            return currentManagerId;
-          }
-
-          return items[0]?.id ?? null;
-        });
-      } catch (error: unknown) {
-        if (!cancelled) {
-          setManagerError(
-            getErrorMessage(error) ||
-              "ブランド責任者候補の取得に失敗しました。",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingManagers(false);
-        }
-      }
-    }
-
-    void loadManagers();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (!brandIconFile) {
@@ -175,27 +103,10 @@ export function useBrandCreate() {
     return () => {
       URL.revokeObjectURL(objectUrl);
     };
-  }, [brandBackgroundFile, brandBackgroundImage]);
-
-  const selectedManager = useMemo(
-    () => managerOptions.find((manager) => manager.id === managerId) ?? null,
-    [managerOptions, managerId],
-  );
-
-  const managerDisplayName = useMemo(() => {
-    if (!selectedManager) {
-      return "責任者未設定";
-    }
-
-    return (
-      formatLastFirst(
-        selectedManager.lastName,
-        selectedManager.firstName,
-      ) ||
-      selectedManager.email ||
-      selectedManager.id
-    );
-  }, [selectedManager]);
+  }, [
+    brandBackgroundFile,
+    brandBackgroundImage,
+  ]);
 
   const displayBrandName = useMemo(
     () => name || "ブランド名未入力",
@@ -213,25 +124,57 @@ export function useBrandCreate() {
   );
 
   const hasBrandBackgroundSelection = useMemo(
-    () => Boolean(brandBackgroundFile || brandBackgroundImage),
-    [brandBackgroundFile, brandBackgroundImage],
+    () =>
+      Boolean(
+        brandBackgroundFile ||
+          brandBackgroundImage,
+      ),
+    [
+      brandBackgroundFile,
+      brandBackgroundImage,
+    ],
   );
 
   const handleBack = useCallback(() => {
     navigate("/brand");
   }, [navigate]);
 
+  const handleSelectManager = useCallback(
+    (id: string) => {
+      handleSelectAssignee(id);
+
+      if (id) {
+        setManagerIdError(null);
+      }
+    },
+    [handleSelectAssignee],
+  );
+
   const handlePickBrandIcon = useCallback(() => {
+    if (saving) {
+      return;
+    }
+
     brandIconInputRef.current?.click();
-  }, []);
+  }, [saving]);
 
   const handlePickBrandBackground = useCallback(() => {
+    if (saving) {
+      return;
+    }
+
     brandBackgroundInputRef.current?.click();
-  }, []);
+  }, [saving]);
 
   const validateSelectedImage = useCallback(
-    (file: File, target: BrandImageTarget): string | null => {
-      const validation = validateBrandImage(file, target);
+    (
+      file: File,
+      target: BrandImageTarget,
+    ): string | null => {
+      const validation = validateBrandImage(
+        file,
+        target,
+      );
 
       if (!validation.valid) {
         return validation.message;
@@ -244,7 +187,8 @@ export function useBrandCreate() {
 
   const handleBrandIconChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.currentTarget.files?.[0] ?? null;
+      const file =
+        event.currentTarget.files?.[0] ?? null;
 
       if (!file) {
         setBrandIconFile(null);
@@ -252,7 +196,11 @@ export function useBrandCreate() {
         return;
       }
 
-      const validationError = validateSelectedImage(file, "brandIcon");
+      const validationError =
+        validateSelectedImage(
+          file,
+          "brandIcon",
+        );
 
       if (validationError) {
         setBrandIconFile(null);
@@ -273,7 +221,8 @@ export function useBrandCreate() {
 
   const handleBrandBackgroundChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.currentTarget.files?.[0] ?? null;
+      const file =
+        event.currentTarget.files?.[0] ?? null;
 
       if (!file) {
         setBrandBackgroundFile(null);
@@ -281,15 +230,18 @@ export function useBrandCreate() {
         return;
       }
 
-      const validationError = validateSelectedImage(
-        file,
-        "brandBackgroundImage",
-      );
+      const validationError =
+        validateSelectedImage(
+          file,
+          "brandBackgroundImage",
+        );
 
       if (validationError) {
         setBrandBackgroundFile(null);
         setBrandBackgroundImage("");
-        setBrandBackgroundImageError(validationError);
+        setBrandBackgroundImageError(
+          validationError,
+        );
         event.currentTarget.value = "";
 
         alert(validationError);
@@ -323,41 +275,47 @@ export function useBrandCreate() {
     }
   }, []);
 
-  const validateSelectedImagesBeforeSave = useCallback((): boolean => {
-    if (brandIconFile) {
-      const validationError = validateSelectedImage(
-        brandIconFile,
-        "brandIcon",
-      );
+  const validateSelectedImagesBeforeSave =
+    useCallback((): boolean => {
+      if (brandIconFile) {
+        const validationError =
+          validateSelectedImage(
+            brandIconFile,
+            "brandIcon",
+          );
 
-      if (validationError) {
-        setBrandIconError(validationError);
-        alert(validationError);
-        return false;
+        if (validationError) {
+          setBrandIconError(validationError);
+          alert(validationError);
+          return false;
+        }
       }
-    }
 
-    if (brandBackgroundFile) {
-      const validationError = validateSelectedImage(
-        brandBackgroundFile,
-        "brandBackgroundImage",
-      );
+      if (brandBackgroundFile) {
+        const validationError =
+          validateSelectedImage(
+            brandBackgroundFile,
+            "brandBackgroundImage",
+          );
 
-      if (validationError) {
-        setBrandBackgroundImageError(validationError);
-        alert(validationError);
-        return false;
+        if (validationError) {
+          setBrandBackgroundImageError(
+            validationError,
+          );
+          alert(validationError);
+          return false;
+        }
       }
-    }
 
-    setBrandIconError(null);
-    setBrandBackgroundImageError(null);
-    return true;
-  }, [
-    brandIconFile,
-    brandBackgroundFile,
-    validateSelectedImage,
-  ]);
+      setBrandIconError(null);
+      setBrandBackgroundImageError(null);
+
+      return true;
+    }, [
+      brandIconFile,
+      brandBackgroundFile,
+      validateSelectedImage,
+    ]);
 
   const uploadBrandAssets = useCallback(
     async (
@@ -367,28 +325,33 @@ export function useBrandCreate() {
       uploadedBrandBackgroundImage: string;
     }> => {
       let uploadedBrandIcon = brandIcon;
-      let uploadedBrandBackgroundImage = brandBackgroundImage;
+      let uploadedBrandBackgroundImage =
+        brandBackgroundImage;
 
       if (brandIconFile) {
-        const uploaded = await uploadBrandAssetToFirebaseStorage({
-          companyId,
-          brandId,
-          target: "brandIcon",
-          file: brandIconFile,
-        });
+        const uploaded =
+          await uploadBrandAssetToFirebaseStorage({
+            companyId,
+            brandId,
+            target: "brandIcon",
+            file: brandIconFile,
+          });
 
-        uploadedBrandIcon = uploaded.downloadUrl;
+        uploadedBrandIcon =
+          uploaded.downloadUrl;
       }
 
       if (brandBackgroundFile) {
-        const uploaded = await uploadBrandAssetToFirebaseStorage({
-          companyId,
-          brandId,
-          target: "brandBackgroundImage",
-          file: brandBackgroundFile,
-        });
+        const uploaded =
+          await uploadBrandAssetToFirebaseStorage({
+            companyId,
+            brandId,
+            target: "brandBackgroundImage",
+            file: brandBackgroundFile,
+          });
 
-        uploadedBrandBackgroundImage = uploaded.downloadUrl;
+        uploadedBrandBackgroundImage =
+          uploaded.downloadUrl;
       }
 
       return {
@@ -411,31 +374,41 @@ export function useBrandCreate() {
     }
 
     const normalizedName = String(name ?? "");
-    const normalizedManagerId = String(managerId ?? "");
+    const normalizedManagerId = String(
+      managerId ?? "",
+    );
 
     let hasError = false;
 
     if (!normalizedName) {
-      setNameError("ブランド名は必須です。");
+      setNameError(
+        "ブランド名は必須です。",
+      );
       hasError = true;
     } else {
       setNameError(null);
     }
 
     if (!normalizedManagerId) {
-      setManagerIdError("ブランド責任者は必須です。");
+      setManagerIdError(
+        "ブランド責任者は必須です。",
+      );
       hasError = true;
     } else {
       setManagerIdError(null);
     }
 
     if (hasError) {
-      alert("ブランド名とブランド責任者を入力してください。");
+      alert(
+        "ブランド名とブランド責任者を入力してください。",
+      );
       return;
     }
 
     if (!companyId) {
-      alert("companyId が取得できません。");
+      alert(
+        "companyId が取得できません。",
+      );
       return;
     }
 
@@ -459,29 +432,50 @@ export function useBrandCreate() {
         createdBy: currentMember?.id ?? null,
       };
 
-      const created = await brandRepositoryHTTP.create(createPayload);
-      createdBrandId = String(created.id ?? "");
+      const created =
+        await brandRepositoryHTTP.create(
+          createPayload,
+        );
+
+      createdBrandId = String(
+        created.id ?? "",
+      );
 
       if (!createdBrandId) {
-        throw new Error("brandId が取得できません。");
+        throw new Error(
+          "brandId が取得できません。",
+        );
       }
 
       const {
         uploadedBrandIcon,
         uploadedBrandBackgroundImage,
-      } = await uploadBrandAssets(createdBrandId);
+      } = await uploadBrandAssets(
+        createdBrandId,
+      );
 
-      if (uploadedBrandIcon || uploadedBrandBackgroundImage) {
-        await brandRepositoryHTTP.update(createdBrandId, {
-          brandIcon: uploadedBrandIcon,
-          brandBackgroundImage: uploadedBrandBackgroundImage,
-        });
+      if (
+        uploadedBrandIcon ||
+        uploadedBrandBackgroundImage
+      ) {
+        await brandRepositoryHTTP.update(
+          createdBrandId,
+          {
+            brandIcon: uploadedBrandIcon,
+            brandBackgroundImage:
+              uploadedBrandBackgroundImage,
+          },
+        );
       }
 
-      alert("ブランドを登録しました。");
+      alert(
+        "ブランドを登録しました。",
+      );
+
       navigate("/brand");
     } catch (error: unknown) {
-      const message = getErrorMessage(error);
+      const message =
+        getErrorMessage(error);
 
       if (createdBrandId) {
         alert(
@@ -489,7 +483,9 @@ export function useBrandCreate() {
             `画像のアップロードまたはURL保存に失敗しました: ${message}`,
         );
       } else {
-        alert(`ブランド登録に失敗しました: ${message}`);
+        alert(
+          `ブランド登録に失敗しました: ${message}`,
+        );
       }
     } finally {
       setSaving(false);
@@ -527,21 +523,17 @@ export function useBrandCreate() {
     setBrandBackgroundImage,
 
     managerId,
-    setManagerId,
     managerIdError,
-
-    managerOptions,
-    loadingManagers,
-    managerError,
-
-    formatLastFirst,
-    selectedManager,
     managerDisplayName,
+    managerCandidates,
+    loadingManagers,
+    handleSelectManager,
 
     displayBrandName,
     displayWebsiteUrl,
 
-    brandImageAccept: BRAND_IMAGE_ACCEPT,
+    brandImageAccept:
+      BRAND_IMAGE_ACCEPT,
 
     hasBrandIconSelection,
     hasBrandBackgroundSelection,
