@@ -1,7 +1,7 @@
 // frontend/amol/src/features/cart/api/cartApi.ts
 
 import { HttpError, requestJson } from "../../../lib/http";
-import type { CartCatalogSnapshot, CartDTO, CartDisplayItem } from "../types/cart";
+import type { CartCatalogSnapshot, CartDTO, CartDisplayItem } from "../../shared/types/cart";
 
 /**
  * 現在のカートを取得します。
@@ -41,10 +41,7 @@ export async function addResaleCartItem(args: {
     method: "POST",
     auth: "required",
     credentials: "include",
-    json: {
-      resaleId,
-      productId,
-    },
+    json: { resaleId, productId },
     messages: {
       requestErrorMessage: "カートへの追加に失敗しました。",
       nonJsonErrorMessage: "カート追加APIがJSON以外を返しました。",

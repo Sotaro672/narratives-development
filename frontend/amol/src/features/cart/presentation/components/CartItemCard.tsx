@@ -1,39 +1,23 @@
 // frontend/amol/src/features/cart/presentation/components/CartItemCard.tsx
 
-import {
-  formatPrice,
-} from "../../../../components/utils/price";
-
-import type {
-  CartDisplayItem,
-} from "../../types/cart";
-
-import {
-  getCartItemPrice,
-} from "../../utils/cartUtils";
-
+import { formatPrice } from "../../../../components/utils/price";
+import type { CartDisplayItem } from "../../../shared/types/cart";
 import {
   getCartItemBrandName,
   getCartItemImageUrl,
   getCartItemListTitle,
   getCartItemNavigationPath,
+  getCartItemPrice,
   getCartItemProductName,
-} from "../utils/cartItemDisplay";
-
+} from "../../utils/cartUtils";
 import CartItemMeta from "./CartItemMeta";
 
 type CartItemCardProps = {
   item: CartDisplayItem;
   removing: boolean;
   removalDisabled: boolean;
-
-  onRemove: (
-    item: CartDisplayItem,
-  ) => void | Promise<void>;
-
-  onOpen: (
-    path: string,
-  ) => void;
+  onRemove: (item: CartDisplayItem) => void | Promise<void>;
+  onOpen: (path: string) => void;
 };
 
 export default function CartItemCard({
@@ -43,33 +27,14 @@ export default function CartItemCard({
   onRemove,
   onOpen,
 }: CartItemCardProps) {
-  const brandName =
-    getCartItemBrandName(item);
-
-  const productName =
-    getCartItemProductName(item);
-
-  const listTitle =
-    getCartItemListTitle(item);
-
-  const imageUrl =
-    getCartItemImageUrl(item);
-
-  const navigationPath =
-    getCartItemNavigationPath(
-      item,
-    );
-
-  const canNavigate =
-    navigationPath.length > 0;
-
-  const price =
-    getCartItemPrice(item);
-
-  const lineAmount =
-    price === null
-      ? null
-      : price * item.qty;
+  const brandName = getCartItemBrandName(item);
+  const productName = getCartItemProductName(item);
+  const listTitle = getCartItemListTitle(item);
+  const imageUrl = getCartItemImageUrl(item);
+  const navigationPath = getCartItemNavigationPath(item);
+  const canNavigate = navigationPath.length > 0;
+  const price = getCartItemPrice(item);
+  const lineAmount = price === null ? null : price * item.qty;
 
   function handleOpen() {
     if (!canNavigate) {
@@ -80,10 +45,7 @@ export default function CartItemCard({
   }
 
   function handleRemove() {
-    if (
-      removalDisabled ||
-      removing
-    ) {
+    if (removalDisabled || removing) {
       return;
     }
 
@@ -100,23 +62,16 @@ export default function CartItemCard({
         disabled={removalDisabled}
         onClick={(event) => {
           event.stopPropagation();
-
           handleRemove();
         }}
       >
-        {removing
-          ? "…"
-          : "×"}
+        {removing ? "…" : "×"}
       </button>
 
       <button
         type="button"
         className="cart-page-item__image-button"
-        aria-label={
-          canNavigate
-            ? `${productName}の詳細を見る`
-            : undefined
-        }
+        aria-label={canNavigate ? `${productName}の詳細を見る` : undefined}
         disabled={!canNavigate}
         onClick={handleOpen}
       >
@@ -128,36 +83,21 @@ export default function CartItemCard({
             loading="lazy"
           />
         ) : (
-          <div className="cart-page-item__image-placeholder">
-            No Image
-          </div>
+          <div className="cart-page-item__image-placeholder">No Image</div>
         )}
       </button>
 
       <div className="cart-page-item__body">
-        <p className="cart-page-item__brand">
-          {brandName}
-        </p>
-
-        <h2 className="cart-page-item__title">
-          {productName}
-        </h2>
+        <p className="cart-page-item__brand">{brandName}</p>
+        <h2 className="cart-page-item__title">{productName}</h2>
 
         {listTitle ? (
-          <p className="cart-page-item__list-title">
-            {listTitle}
-          </p>
+          <p className="cart-page-item__list-title">{listTitle}</p>
         ) : null}
 
-        <CartItemMeta
-          item={item}
-        />
+        <CartItemMeta item={item} />
 
-        <p className="cart-page-item__price">
-          {formatPrice(
-            lineAmount,
-          )}
-        </p>
+        <p className="cart-page-item__price">{formatPrice(lineAmount)}</p>
       </div>
     </article>
   );

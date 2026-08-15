@@ -1,32 +1,18 @@
 // frontend/amol/src/features/cart/presentation/hooks/useCartPage.ts
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { removeCartItem } from "../../api/cartApi";
+import { loadCartPage } from "../../application/loadCartPage";
+import type { CartDisplayItem } from "../../../shared/types/cart";
+import { calculateCartTotalAmount } from "../../utils/cartUtils";
 
-import {
-  removeCartItem,
-} from "../../api/cartApi";
+type CartPageStatus = "idle" | "loading" | "success" | "error";
 
-import {
-  loadCartPage,
-} from "../../application/loadCartPage";
-
-import type {
-  CartDisplayItem,
-} from "../../types/cart";
-
-import type {
-  CartPageState,
-} from "../../types/cartPage";
-
-import {
-  calculateCartTotalAmount,
-} from "../../utils/cartUtils";
+type CartPageState = {
+  status: CartPageStatus;
+  items: CartDisplayItem[];
+  error: string;
+};
 
 const initialState: CartPageState = {
   status: "idle",
@@ -34,14 +20,8 @@ const initialState: CartPageState = {
   error: "",
 };
 
-function getErrorMessage(
-  error: unknown,
-  fallbackMessage: string,
-): string {
-  if (
-    error instanceof Error &&
-    error.message.trim()
-  ) {
+function getErrorMessage(error: unknown, fallbackMessage: string): string {
+  if (error instanceof Error && error.message) {
     return error.message;
   }
 
@@ -49,106 +29,64 @@ function getErrorMessage(
 }
 
 export function useCartPage() {
-  const [
-    state,
-    setState,
-  ] = useState<CartPageState>(
-    initialState,
-  );
+  const [state, setState] = useState<CartPageState>(initialState);
+  const [removingItemKey, setRemovingItemKey] = useState("");
+  const mountedRef = useRef(false);
+  const requestIdRef = useRef(0);
+  const removingItemKeyRef = useRef("");
 
-  const [
-    removingItemKey,
-    setRemovingItemKey,
-  ] = useState("");
+  const reload = useCallback(async (): Promise<void> => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
 
-  const mountedRef =
-    useRef(false);
+    if (mountedRef.current) {
+      setState((currentState) => ({
+        status: "loading",
+        items: currentState.items,
+        error: "",
+      }));
+    }
 
-  const requestIdRef =
-    useRef(0);
+    try {
+      const result = await loadCartPage();
 
-  const removingItemKeyRef =
-    useRef("");
-
-  const reload = useCallback(
-    async (): Promise<void> => {
-      const requestId =
-        requestIdRef.current + 1;
-
-      requestIdRef.current =
-        requestId;
-
-      if (mountedRef.current) {
-        setState((currentState) => ({
-          status: "loading",
-          items:
-            currentState.items,
-          error: "",
-        }));
-      }
-
-      try {
-        const result =
-          await loadCartPage();
-
-        if (
-          !mountedRef.current ||
-          requestId !==
-            requestIdRef.current
-        ) {
-          return;
-        }
-
-        setState({
-          status: "success",
-          items: result.items,
-          error: "",
-        });
-      } catch (error) {
-        if (
-          !mountedRef.current ||
-          requestId !==
-            requestIdRef.current
-        ) {
-          return;
-        }
-
-        setState({
-          status: "error",
-          items: [],
-          error:
-            getErrorMessage(
-              error,
-              "カートの取得中にエラーが発生しました。",
-            ),
-        });
-      }
-    },
-    [],
-  );
-
-  const removeItem = useCallback(
-    async (
-      item: CartDisplayItem,
-    ): Promise<void> => {
-      const itemKey =
-        item.itemKey.trim();
-
-      if (
-        !itemKey ||
-        removingItemKeyRef.current
-      ) {
+      if (!mountedRef.current || requestId !== requestIdRef.current) {
         return;
       }
 
-      removingItemKeyRef.current =
-        itemKey;
+      setState({
+        status: "success",
+        items: result.items,
+        error: "",
+      });
+    } catch (error) {
+      if (!mountedRef.current || requestId !== requestIdRef.current) {
+        return;
+      }
+
+      setState({
+        status: "error",
+        items: [],
+        error: getErrorMessage(
+          error,
+          "カートの取得中にエラーが発生しました。",
+        ),
+      });
+    }
+  }, []);
+
+  const removeItem = useCallback(
+    async (item: CartDisplayItem): Promise<void> => {
+      const itemKey = item.itemKey;
+
+      if (!itemKey || removingItemKeyRef.current) {
+        return;
+      }
+
+      removingItemKeyRef.current = itemKey;
 
       if (mountedRef.current) {
-        setRemovingItemKey(
-          itemKey,
-        );
-
+        setRemovingItemKey(itemKey);
         setState((currentState) => ({
           ...currentState,
           error: "",
@@ -156,9 +94,7 @@ export function useCartPage() {
       }
 
       try {
-        await removeCartItem({
-          item,
-        });
+        await removeCartItem({ item });
 
         if (!mountedRef.current) {
           return;
@@ -166,12 +102,9 @@ export function useCartPage() {
 
         setState((currentState) => ({
           status: "success",
-          items:
-            currentState.items.filter(
-              (currentItem) =>
-                currentItem.itemKey !==
-                itemKey,
-            ),
+          items: currentState.items.filter(
+            (currentItem) => currentItem.itemKey !== itemKey,
+          ),
           error: "",
         }));
       } catch (error) {
@@ -181,15 +114,13 @@ export function useCartPage() {
 
         setState((currentState) => ({
           ...currentState,
-          error:
-            getErrorMessage(
-              error,
-              "カート商品の削除中にエラーが発生しました。",
-            ),
+          error: getErrorMessage(
+            error,
+            "カート商品の削除中にエラーが発生しました。",
+          ),
         }));
       } finally {
-        removingItemKeyRef.current =
-          "";
+        removingItemKeyRef.current = "";
 
         if (mountedRef.current) {
           setRemovingItemKey("");
@@ -201,29 +132,21 @@ export function useCartPage() {
 
   useEffect(() => {
     mountedRef.current = true;
-
     void reload();
 
     return () => {
       mountedRef.current = false;
       requestIdRef.current += 1;
-      removingItemKeyRef.current =
-        "";
+      removingItemKeyRef.current = "";
     };
   }, [reload]);
 
-  const totalAmount =
-    useMemo(
-      () =>
-        calculateCartTotalAmount(
-          state.items,
-        ),
-      [state.items],
-    );
+  const totalAmount = useMemo(
+    () => calculateCartTotalAmount(state.items),
+    [state.items],
+  );
 
-  const loading =
-    state.status === "idle" ||
-    state.status === "loading";
+  const loading = state.status === "idle" || state.status === "loading";
 
   const isPurchaseDisabled =
     state.items.length === 0 ||
@@ -233,13 +156,10 @@ export function useCartPage() {
   return {
     items: state.items,
     totalAmount,
-
     loading,
     error: state.error,
-
     removingItemKey,
     isPurchaseDisabled,
-
     removeItem,
     reload,
   };

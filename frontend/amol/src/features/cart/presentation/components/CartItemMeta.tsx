@@ -1,7 +1,7 @@
 // frontend/amol/src/features/cart/presentation/components/CartItemMeta.tsx
 
-import type { CartDisplayItem } from "../../types/cart";
-import { formatAlcoholVolume } from "../utils/cartItemDisplay";
+import type { CartDisplayItem } from "../../../shared/types/cart";
+import { formatAlcoholVolume } from "../../utils/cartUtils";
 
 type CartItemMetaProps = {
   item: CartDisplayItem;
@@ -11,7 +11,6 @@ export default function CartItemMeta({
   item,
 }: CartItemMetaProps) {
   const isAlcohol = item.modelKind === "alcohol";
-
   const modelNumber = item.modelNumber || "-";
   const color = item.color || "-";
   const size = item.size || "-";
