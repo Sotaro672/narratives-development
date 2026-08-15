@@ -21,7 +21,7 @@ export async function fetchMarketResaleConditionImages(
     `${MARKET_RESALES_PATH}/${encodeURIComponent(normalizedResaleId)}/images`,
     {
       method: "GET",
-      auth: "none",
+      auth: "required",
       credentials: "include",
       messages: {
         requestErrorMessage: "マーケット出品画像の取得に失敗しました。",
