@@ -1,15 +1,7 @@
 // frontend/console/shell/src/features/tokenBlueprint/application/tokenBlueprintDetailService.tsx
 
-import {
-  normalizeContentType,
-  normalizeTokenBlueprintMimeType,
-} from "../../../shared/types/tokenBlueprint";
-import type {
-  ContentFile,
-  TokenBlueprint,
-} from "../../../shared/types/tokenBlueprint";
+import type { TokenBlueprint } from "../../../shared/types/tokenBlueprint";
 import type { UpdateTokenBlueprintPayload } from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
-import { safeDateLabelJa } from "../../../shared/util/dateJa";
 import {
   deleteTokenBlueprint,
   fetchTokenBlueprintById,
@@ -17,28 +9,19 @@ import {
 } from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
 import { uploadTokenBlueprintIconToFirebaseStorage } from "../infrastructure/storage/tokenBlueprintAssetStorage";
 
-type UpdateFromCardOptions = {
+type TokenBlueprintCardUpdateInput = {
+  name: string;
+  symbol: string;
+  description: string;
   iconFile?: File | null;
-};
-
-type ContentFileForSend = Partial<ContentFile>;
-
-type TokenBlueprintCardFields =
-  Partial<Omit<TokenBlueprint, "contentFiles">> & {
-    iconFile?: File | null;
-    contentFiles?: ContentFileForSend[];
-  };
-
-type TokenBlueprintCardVm = TokenBlueprintCardFields & {
-  fields?: TokenBlueprintCardFields;
 };
 
 /**
  * 詳細取得。
+ *
+ * Backend BFFのresponseをそのままTokenBlueprintとして扱う。
  */
-export async function fetchTokenBlueprintDetail(
-  id: string,
-): Promise<TokenBlueprint> {
+export async function fetchTokenBlueprintDetail(id: string): Promise<TokenBlueprint> {
   if (!id) {
     throw new Error("id is required");
   }
@@ -50,17 +33,12 @@ export async function fetchTokenBlueprintDetail(
  * TokenBlueprintを物理削除する。
  *
  * backend側で以下を実行する。
- *
  * - minted=trueの場合は削除不可
- * - Firebase Storageの
- *   token-blueprints/{companyId}/{tokenBlueprintId}/
- *   prefix以下を全削除
+ * - Firebase Storageのtoken-blueprints/{companyId}/{tokenBlueprintId}/prefix以下を全削除
  * - tokenBlueprintReviews/{tokenBlueprintId}を物理削除
  * - token_blueprints/{tokenBlueprintId}を物理削除
  */
-export async function deleteTokenBlueprintDetail(
-  id: string,
-): Promise<void> {
+export async function deleteTokenBlueprintDetail(id: string): Promise<void> {
   if (!id) {
     throw new Error("id is required");
   }
@@ -69,275 +47,66 @@ export async function deleteTokenBlueprintDetail(
 }
 
 /**
- * createdAtをyyyy/mm/ddへフォーマットする。
+ * TokenBlueprintCardの現在値から通常更新payloadを組み立てる。
  *
- * APIレスポンスの日時はISO stringを正とする。
- */
-export function formatCreatedAt(
-  raw: string,
-): string {
-  return safeDateLabelJa(raw, "");
-}
-
-/**
- * TokenBlueprintCardのViewModelから
- * UpdateTokenBlueprintPayloadを組み立てる。
+ * Backend BFF / Update API contractを正とし、Frontend側で
+ * normalize・fallback・ContentFile再mapperは行わない。
  *
- * 正仕様:
- *
- * - iconUrlはFirebase Storage downloadURL
- * - iconObjectPathはFirebase Storage objectPath
- * - iconFileName / iconContentType / iconSizeも保存する
- * - contentFiles[].urlはFirebase Storage downloadURL
- * - contentFiles[].objectPathはFirebase Storage objectPath
- * - contentFiles[].isPublicはboolean
- * - contentFiles[].name / sizeも保存する
- *
- * 更新対象:
- *
- * - name
- * - symbol
- * - assigneeId
- * - iconUrl
- * - iconObjectPath
- * - iconFileName
- * - iconContentType
- * - iconSize
- * - contentFiles
- *
- * 更新対象外:
- *
- * - brandId
- * - brandName
- * - companyId
- * - minted
- * - metadataUri
- * - createdAt
- * - createdBy
- * - createdByName
- * - updatedAt
- * - updatedBy
- * - updatedByName
+ * contentFilesは専用のcontent更新処理で扱う。
+ * icon情報は新しいiconFileが選択された場合のみ、
+ * Firebase Storage upload後の確定値を別PUTする。
  */
 export function buildUpdatePayloadFromCardVm(
   blueprint: TokenBlueprint,
-  cardVm: TokenBlueprintCardVm,
+  cardVm: TokenBlueprintCardUpdateInput,
 ): UpdateTokenBlueprintPayload {
-  const fields = getCardFields(cardVm);
-  const iconUrlRaw = fields.iconUrl ?? blueprint.iconUrl;
-  const iconUrl =
-    typeof iconUrlRaw === "string" && iconUrlRaw.startsWith("blob:")
-      ? undefined
-      : iconUrlRaw;
-
   return {
-    name: fields.name ?? blueprint.name,
-    symbol: fields.symbol ?? blueprint.symbol,
-    assigneeId: fields.assigneeId ?? blueprint.assigneeId,
-    iconUrl,
-    iconObjectPath: fields.iconObjectPath ?? blueprint.iconObjectPath,
-    iconFileName: fields.iconFileName ?? blueprint.iconFileName,
-    iconContentType: fields.iconContentType ?? blueprint.iconContentType,
-    iconSize: fields.iconSize ?? blueprint.iconSize,
-    contentFiles: buildContentFilesForSend(
-      fields.contentFiles ?? blueprint.contentFiles ?? [],
-    ),
+    name: cardVm.name,
+    symbol: cardVm.symbol,
+    description: cardVm.description,
+    assigneeId: blueprint.assigneeId,
   };
 }
 
 /**
- * TokenBlueprintCardのViewModelから更新APIを呼び出し、
- * 更新後のTokenBlueprintを返す。
+ * TokenBlueprintCardの現在値からTokenBlueprintを更新する。
  *
- * iconFileがある場合:
+ * iconFileなし:
+ * 1. name / symbol / description / assigneeIdを更新
+ * 2. Backend BFFの更新responseをそのまま返す
  *
- * 1. icon関連項目を除外して通常更新する
- * 2. Firebase StorageへiconFileをアップロードする
- * 3. アップロード結果をicon情報として再更新する
- *
- * iconFileがない場合:
- *
- * - 通常更新のみを行う
+ * iconFileあり:
+ * 1. 通常項目を更新
+ * 2. Firebase StorageへiconFileをupload
+ * 3. upload済みの確定icon情報を更新
+ * 4. Backend BFFの更新responseをそのまま返す
  */
 export async function updateTokenBlueprintFromCard(
   blueprint: TokenBlueprint,
-  cardVm: TokenBlueprintCardVm,
-  options?: UpdateFromCardOptions,
+  cardVm: TokenBlueprintCardUpdateInput,
 ): Promise<TokenBlueprint> {
-  const iconFile =
-    options?.iconFile ??
-    cardVm.iconFile ??
-    cardVm.fields?.iconFile ??
-    null;
-
-  const payload = buildUpdatePayloadFromCardVm(
-    blueprint,
-    cardVm,
-  );
-
-  if (iconFile) {
-    delete payload.iconUrl;
-    delete payload.iconObjectPath;
-    delete payload.iconFileName;
-    delete payload.iconContentType;
-    delete payload.iconSize;
-  }
-
   const updated = await updateTokenBlueprint(
     blueprint.id,
-    payload,
+    buildUpdatePayloadFromCardVm(blueprint, cardVm),
   );
+
+  const iconFile = cardVm.iconFile ?? null;
 
   if (!iconFile) {
     return updated;
   }
 
-  const tokenBlueprintId = updated.id || blueprint.id;
-
-  if (!tokenBlueprintId) {
-    throw new Error(
-      "tokenBlueprint.id is required after update",
-    );
-  }
-
-  const companyId = updated.companyId || blueprint.companyId;
-
-  if (!companyId) {
-    throw new Error(
-      "companyId is required before uploading token blueprint icon",
-    );
-  }
-
   const uploaded = await uploadTokenBlueprintIconToFirebaseStorage({
-    companyId,
-    tokenBlueprintId,
+    companyId: updated.companyId,
+    tokenBlueprintId: updated.id,
     file: iconFile,
   });
 
-  return updateTokenBlueprint(
-    tokenBlueprintId,
-    {
-      iconUrl: uploaded.downloadUrl,
-      iconObjectPath: uploaded.objectPath,
-      iconFileName: uploaded.fileName,
-      iconContentType: uploaded.contentType,
-      iconSize: uploaded.size,
-    },
-  );
-}
-
-/**
- * contentFilesをbackendへ送信するContentFileへ変換する。
- *
- * 正仕様:
- *
- * - id: string
- * - name: string
- * - type: "image" | "video" | "pdf" | "document"
- * - contentType: string
- * - isPublic: boolean
- * - createdAt: ISO string
- * - createdBy: string
- * - updatedAt: ISO string
- * - updatedBy: string
- * - url: Firebase Storage downloadURL
- * - objectPath: Firebase Storage objectPath
- * - size: number
- *
- * isPublicはbooleanを正とするため、
- * 文字列変換や公開状態の正規化は行わない。
- */
-function buildContentFilesForSend(
-  input: ContentFileForSend[],
-): ContentFile[] {
-  return input
-    .map((content): ContentFile | null => {
-      if (typeof content.isPublic !== "boolean") {
-        return null;
-      }
-
-      const nowIso = new Date().toISOString();
-      const id = String(content.id ?? "");
-      const name = String(content.name ?? "");
-      const type = normalizeContentType(content.type);
-      const contentType = normalizeTokenBlueprintMimeType(
-        content.contentType,
-      );
-      const createdAt = toIsoStringOrNow(
-        content.createdAt ?? nowIso,
-      );
-      const createdBy = String(content.createdBy ?? "");
-      const updatedAt = toIsoStringOrNow(
-        content.updatedAt ?? nowIso,
-      );
-      const updatedBy = String(content.updatedBy ?? "");
-      const url = String(content.url ?? "");
-      const objectPath = String(content.objectPath ?? "");
-      const rawSize = Number(content.size ?? 0);
-      const size =
-        Number.isFinite(rawSize) && rawSize >= 0
-          ? rawSize
-          : 0;
-
-      if (
-        !id ||
-        !name ||
-        !url ||
-        !objectPath ||
-        !createdAt ||
-        !createdBy ||
-        !updatedAt ||
-        !updatedBy
-      ) {
-        return null;
-      }
-
-      return {
-        id,
-        name,
-        type,
-        contentType,
-        isPublic: content.isPublic,
-        createdAt,
-        createdBy,
-        updatedAt,
-        updatedBy,
-        url,
-        objectPath,
-        size,
-      };
-    })
-    .filter((content): content is ContentFile => content !== null);
-}
-
-function toIsoStringOrNow(
-  value: unknown,
-): string {
-  if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) {
-      return new Date().toISOString();
-    }
-
-    return value.toISOString();
-  }
-
-  const raw = String(value ?? "");
-
-  if (!raw) {
-    return new Date().toISOString();
-  }
-
-  const parsed = new Date(raw);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return new Date().toISOString();
-  }
-
-  return parsed.toISOString();
-}
-
-function getCardFields(
-  cardVm: TokenBlueprintCardVm,
-): TokenBlueprintCardFields {
-  return cardVm.fields ?? cardVm;
+  return updateTokenBlueprint(updated.id, {
+    iconUrl: uploaded.downloadUrl,
+    iconObjectPath: uploaded.objectPath,
+    iconFileName: uploaded.fileName,
+    iconContentType: uploaded.contentType,
+    iconSize: uploaded.size,
+  });
 }

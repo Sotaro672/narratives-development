@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { safeDateTimeLabelJa } from "../../../../../shared/util/dateJa";
+import { useAssigneeSelection } from "../../../../admin/presentation/hook/useAssigneeSelection";
 import {
   deleteProductBlueprint,
   getProductBlueprintDetail,
@@ -53,7 +54,13 @@ export interface UseProductBlueprintDetailResult {
   volumes: VolumeRow[];
   alcoholModelNumbers: AlcoholModelNumber[];
   getCode: (sizeLabel: string, color: string) => string;
+  assigneeId: string;
   assignee: string;
+  assigneeCandidates: {
+    id: string;
+    name: string;
+  }[];
+  loadingMembers: boolean;
   creator: string;
   createdAt: string;
   updater: string;
@@ -75,6 +82,7 @@ export interface UseProductBlueprintDetailResult {
   onRemoveVolume: (id: string) => void;
   onChangeVolume: (id: string, patch: Partial<Omit<VolumeRow, "id">>) => void;
   onChangeAlcoholModelNumber: (volumeLabel: string, nextCode: string) => void;
+  onSelectAssignee: (id: string) => void;
   onClickAssignee: () => void;
 }
 
@@ -87,15 +95,29 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const [productBlueprintCategory, setProductBlueprintCategory] =
     React.useState<ProductBlueprintCategorySnapshot | null>(null);
   const [categoryFields, setCategoryFields] = React.useState<CategoryFieldValues>({});
-  const [assignee, setAssignee] = React.useState("担当者未設定");
   const [creator, setCreator] = React.useState("作成者未設定");
   const [createdAt, setCreatedAt] = React.useState("");
   const [updater, setUpdater] = React.useState("");
   const [updatedAt, setUpdatedAt] = React.useState("");
   const [printed, setPrinted] = React.useState(false);
   const [brandId, setBrandId] = React.useState("");
-  const [assigneeId, setAssigneeId] = React.useState("");
   const [companyId, setCompanyId] = React.useState("");
+
+  const [initialAssigneeId, setInitialAssigneeId] = React.useState("");
+  const [initialAssigneeName, setInitialAssigneeName] = React.useState("");
+
+  const {
+    assigneeId,
+    assigneeName: assignee,
+    assigneeCandidates,
+    loadingMembers,
+    handleSelectAssignee,
+    clearAssignee,
+  } = useAssigneeSelection({
+    initialAssigneeId,
+    initialAssigneeName,
+    defaultToCurrentMember: false,
+  });
 
   const productBlueprintCategoryId = productBlueprintCategory?.id ?? "";
   const productBlueprintCategoryLabel =
@@ -152,6 +174,10 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   React.useEffect(() => {
     if (!blueprintId) return;
 
+    setInitialAssigneeId("");
+    setInitialAssigneeName("");
+    clearAssignee();
+
     void (async () => {
       try {
         const detail = await getProductBlueprintDetail(blueprintId);
@@ -160,13 +186,14 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setBrandId(detail.brandId);
         setBrand(detail.brandName);
         setPrinted(detail.printed);
-        setAssigneeId(detail.assigneeId);
         setCompanyId(detail.companyId);
         setProductBlueprintCategory(detail.productBlueprintCategory);
         setCategoryFields(detail.categoryFields ?? {});
         setFromUiState(detail.modelState);
 
-        setAssignee(detail.assigneeName);
+        setInitialAssigneeId(detail.assigneeId);
+        setInitialAssigneeName(detail.assigneeName);
+
         setCreator(detail.createdByName);
         setCreatedAt(formatDateTimeYYYYMMDDHHmm(detail.createdAt));
 
@@ -183,7 +210,12 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         resetVariations();
       }
     })();
-  }, [blueprintId, resetVariations, setFromUiState]);
+  }, [
+    blueprintId,
+    clearAssignee,
+    resetVariations,
+    setFromUiState,
+  ]);
 
   const onChangeCategoryField = React.useCallback(
     (key: string, value: CategoryFieldValue) => {
@@ -205,6 +237,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     }
 
     if (!productBlueprintCategory) return;
+
+    if (!assigneeId) {
+      alert("担当者を選択してください。");
+      return;
+    }
 
     void updateProductBlueprint({
       id: blueprintId,
@@ -228,13 +265,15 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setBrandId(detail.brandId);
         setBrand(detail.brandName);
         setPrinted(detail.printed);
-        setAssigneeId(detail.assigneeId);
         setCompanyId(detail.companyId);
         setProductBlueprintCategory(detail.productBlueprintCategory);
         setCategoryFields(detail.categoryFields ?? {});
         setFromUiState(detail.modelState);
 
-        setAssignee(detail.assigneeName);
+        setInitialAssigneeId(detail.assigneeId);
+        setInitialAssigneeName(detail.assigneeName);
+        clearAssignee();
+
         setCreator(detail.createdByName);
         setCreatedAt(formatDateTimeYYYYMMDDHHmm(detail.createdAt));
 
@@ -272,6 +311,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     isApparelCategory,
     isAlcoholCategory,
     setFromUiState,
+    clearAssignee,
   ]);
 
   const onDelete = React.useCallback(() => {
@@ -306,6 +346,13 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     navigate("/productBlueprint");
   }, [navigate]);
 
+  const onSelectAssignee = React.useCallback(
+    (id: string) => {
+      handleSelectAssignee(id);
+    },
+    [handleSelectAssignee],
+  );
+
   const onClickAssignee = React.useCallback(() => {}, []);
 
   return {
@@ -327,7 +374,10 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     volumes,
     alcoholModelNumbers,
     getCode,
+    assigneeId,
     assignee,
+    assigneeCandidates,
+    loadingMembers,
     creator,
     createdAt,
     updater,
@@ -349,6 +399,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     onRemoveVolume,
     onChangeVolume,
     onChangeAlcoholModelNumber,
+    onSelectAssignee,
     onClickAssignee,
   };
 }

@@ -1,27 +1,25 @@
 // frontend/console/shell/src/features/tokenBlueprint/presentation/hook/useTokenBlueprintCard.tsx
 
 import * as React from "react";
+
 import type { TokenBlueprint } from "../../../../shared/types/tokenBlueprint";
+import { useBrandSelection } from "../../../brand/presentation/hook/useBrandSelection";
 import type {
   TokenBlueprintCardHandlers,
   TokenBlueprintCardViewModel,
 } from "../components/tokenBlueprintCard";
-import { loadBrandsForCompany } from "../../application/tokenBlueprintCreateService";
 
 /**
  * TokenBlueprintCard用のロジックフック。
  *
- * - UI状態管理
- * - アイコンファイルの選択
- * - アイコンのローカルプレビュー
+ * ブランド候補取得・ブランド選択はuseBrandSelectionを正とする。
  *
  * 仕様:
+ * - ブランド候補はisActive=trueのみ
  * - mintedはbooleanとして扱う
  * - minted=trueでもトークンアイコンは編集できる
  * - minted=trueの場合、トークン名・シンボル・ブランドは変更できない
  * - APIスキーマはname・brandNameを正とする
- * - ブランド名は/brandsの一覧レスポンスitems[].nameまたはTokenBlueprint.brandNameを正とする
- * - brandIdからの個別名前解決は行わない
  */
 export function useTokenBlueprintCard(params: {
   initialTokenBlueprint?: Partial<TokenBlueprint>;
@@ -45,8 +43,6 @@ export function useTokenBlueprintCard(params: {
   const [id, setId] = React.useState(pickString(tokenBlueprint.id));
   const [name, setName] = React.useState(pickString(tokenBlueprint.name));
   const [symbol, setSymbol] = React.useState(pickString(tokenBlueprint.symbol));
-  const [brandId, setBrandId] = React.useState(pickString(tokenBlueprint.brandId));
-  const [brandName, setBrandName] = React.useState(pickBrandName(tokenBlueprint));
   const [description, setDescription] = React.useState(
     pickString(tokenBlueprint.description),
   );
@@ -57,26 +53,29 @@ export function useTokenBlueprintCard(params: {
   const [remoteIconUrl, setRemoteIconUrl] = React.useState(
     params.initialIconUrl ?? "",
   );
-  const [localPreviewUrl, setLocalPreviewUrl] = React.useState<string>("");
-  const [selectedIconFile, setSelectedIconFile] = React.useState<File | null>(
-    null,
-  );
+  const [localPreviewUrl, setLocalPreviewUrl] = React.useState("");
+  const [selectedIconFile, setSelectedIconFile] =
+    React.useState<File | null>(null);
   const [isEditMode, setIsEditMode] = React.useState(
     params.initialEditMode ?? false,
   );
-  const [brandOptions, setBrandOptions] = React.useState<
-    {
-      id: string;
-      name: string;
-    }[]
-  >([]);
+
+  const {
+    brandId,
+    brandName,
+    brandOptions,
+    selectBrand,
+  } = useBrandSelection({
+    initialBrandId: pickString(tokenBlueprint.brandId),
+    initialBrandName: pickBrandName(tokenBlueprint),
+  });
 
   const initialRef = React.useRef<Partial<TokenBlueprint> | null>(
     tokenBlueprint,
   );
   const descriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
   const iconInputRef = React.useRef<HTMLInputElement | null>(null);
-  const localPreviewUrlRef = React.useRef<string>("");
+  const localPreviewUrlRef = React.useRef("");
 
   const canEditIcon = Boolean(isEditMode || minted);
   const isIdentityLocked = Boolean(minted);
@@ -89,24 +88,6 @@ export function useTokenBlueprintCard(params: {
       localPreviewUrlRef.current = "";
       setLocalPreviewUrl("");
     }
-  }, []);
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    const loadBrands = async () => {
-      const brands = await loadBrandsForCompany();
-
-      if (!cancelled) {
-        setBrandOptions(brands);
-      }
-    };
-
-    void loadBrands();
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   React.useEffect(() => {
@@ -125,8 +106,7 @@ export function useTokenBlueprintCard(params: {
     setId(pickString(source.id));
     setName(pickString(source.name));
     setSymbol(pickString(source.symbol));
-    setBrandId(pickString(source.brandId));
-    setBrandName(pickBrandName(source));
+    selectBrand(pickString(source.brandId));
     setDescription(pickString(source.description));
     setMinted(source.minted ?? false);
     setBurnAt(params.initialBurnAt ?? "");
@@ -136,8 +116,8 @@ export function useTokenBlueprintCard(params: {
     params.initialTokenBlueprint,
     params.initialBurnAt,
     isEditMode,
-    pickBrandName,
     pickString,
+    selectBrand,
     clearLocalPreview,
   ]);
 
@@ -242,14 +222,13 @@ export function useTokenBlueprintCard(params: {
 
     onChangeBrand: (
       nextBrandId: string,
-      nextBrandName: string,
+      _nextBrandName: string,
     ) => {
       if (isIdentityLocked) {
         return;
       }
 
-      setBrandId(nextBrandId);
-      setBrandName(nextBrandName);
+      selectBrand(nextBrandId);
     },
 
     onChangeDescription: (value: string) => {
@@ -284,8 +263,7 @@ export function useTokenBlueprintCard(params: {
       setId(pickString(source.id));
       setName(pickString(source.name));
       setSymbol(pickString(source.symbol));
-      setBrandId(pickString(source.brandId));
-      setBrandName(pickBrandName(source));
+      selectBrand(pickString(source.brandId));
       setDescription(pickString(source.description));
       setMinted(source.minted ?? false);
       setBurnAt(params.initialBurnAt ?? "");

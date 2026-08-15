@@ -1,11 +1,6 @@
 // frontend/console/shell/src/features/production/presentation/create/mappers.ts
 
-import type { Brand } from "../../../../shared/types/brand";
-import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
-
-export function buildBrandOptions(brands: Brand[]): string[] {
-  return brands.map((brand) => brand.name).filter(Boolean);
-}
+import type { ProductBlueprintManagementRow } from "../../infrastructure/api/productionCreateApi";
 
 export function filterProductBlueprintsByBrand(
   rows: ProductBlueprintManagementRow[],

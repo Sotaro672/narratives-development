@@ -5,34 +5,13 @@
 // ============================
 
 export const APPAREL_CATEGORY_OPTIONS = [
-  {
-    value: "apparel.tops",
-    label: "トップス",
-  },
-  {
-    value: "apparel.bottoms",
-    label: "ボトムス",
-  },
-  {
-    value: "apparel.outerwear",
-    label: "アウター",
-  },
-  {
-    value: "apparel.dress",
-    label: "ワンピース",
-  },
-  {
-    value: "apparel.shoes",
-    label: "靴",
-  },
-  {
-    value: "apparel.bag",
-    label: "バッグ",
-  },
-  {
-    value: "apparel.accessory",
-    label: "アクセサリー",
-  },
+  { value: "apparel.tops", label: "トップス" },
+  { value: "apparel.bottoms", label: "ボトムス" },
+  { value: "apparel.outerwear", label: "アウター" },
+  { value: "apparel.dress", label: "ワンピース" },
+  { value: "apparel.shoes", label: "靴" },
+  { value: "apparel.bag", label: "バッグ" },
+  { value: "apparel.accessory", label: "アクセサリー" },
 ] as const;
 
 export type ApparelCategoryCode =
@@ -43,19 +22,40 @@ export type ApparelCategoryOption = {
   label: string;
 };
 
-const APPAREL_CATEGORY_CODE_SET:
-  ReadonlySet<string> = new Set(
-  APPAREL_CATEGORY_OPTIONS.map(
-    (option) => option.value,
-  ),
+const APPAREL_CATEGORY_CODE_SET: ReadonlySet<string> = new Set(
+  APPAREL_CATEGORY_OPTIONS.map((option) => option.value),
 );
 
 export function isApparelCategoryCode(
   value: string,
 ): value is ApparelCategoryCode {
-  return APPAREL_CATEGORY_CODE_SET.has(
-    value,
-  );
+  return APPAREL_CATEGORY_CODE_SET.has(value);
+}
+
+/**
+ * Model Variationを持つApparelカテゴリ。
+ *
+ * bag / accessory はApparelカテゴリではあるが、
+ * 現状Model Variationの生成対象には含めない。
+ */
+export const APPAREL_MODEL_VARIATION_CATEGORY_CODES = [
+  "apparel.tops",
+  "apparel.bottoms",
+  "apparel.dress",
+  "apparel.outerwear",
+  "apparel.shoes",
+] as const satisfies readonly ApparelCategoryCode[];
+
+export type ApparelModelVariationCategoryCode =
+  (typeof APPAREL_MODEL_VARIATION_CATEGORY_CODES)[number];
+
+const APPAREL_MODEL_VARIATION_CATEGORY_CODE_SET: ReadonlySet<string> =
+  new Set(APPAREL_MODEL_VARIATION_CATEGORY_CODES);
+
+export function isApparelModelVariationCategoryCode(
+  value: string,
+): value is ApparelModelVariationCategoryCode {
+  return APPAREL_MODEL_VARIATION_CATEGORY_CODE_SET.has(value);
 }
 
 // ============================
@@ -63,34 +63,20 @@ export function isApparelCategoryCode(
 // ============================
 
 export const FIT_OPTIONS = [
-  {
-    value: "レギュラーフィット",
-    label: "レギュラーフィット",
-  },
-  {
-    value: "スリムフィット",
-    label: "スリムフィット",
-  },
-  {
-    value: "リラックスフィット",
-    label: "リラックスフィット",
-  },
-  {
-    value: "オーバーサイズ",
-    label: "オーバーサイズ",
-  },
+  { value: "レギュラーフィット", label: "レギュラーフィット" },
+  { value: "スリムフィット", label: "スリムフィット" },
+  { value: "リラックスフィット", label: "リラックスフィット" },
+  { value: "オーバーサイズ", label: "オーバーサイズ" },
 ] as const;
 
-export type Fit =
-  (typeof FIT_OPTIONS)[number]["value"];
+export type Fit = (typeof FIT_OPTIONS)[number]["value"];
 
 // ============================
 // Apparel category fields
 // ============================
 
 /**
- * ProductBlueprint.categoryFieldsに保存する
- * apparel固有のfield key。
+ * ProductBlueprint.categoryFieldsに保存するapparel固有のfield key。
  *
  * color / size / measurementsはModelVariation側で扱うため、
  * categoryFieldsには含めない。
@@ -112,11 +98,10 @@ export type ApparelCategoryFields = {
  * apparelカテゴリごとに利用可能な
  * ProductBlueprint.categoryFieldsのkey一覧。
  */
-export const APPAREL_CATEGORY_FIELD_KEYS:
-  Record<
-    ApparelCategoryCode,
-    ApparelCategoryFieldKey[]
-  > = {
+export const APPAREL_CATEGORY_FIELD_KEYS: Record<
+  ApparelCategoryCode,
+  ApparelCategoryFieldKey[]
+> = {
   "apparel.tops": [
     "weight",
     "fit",
@@ -166,19 +151,11 @@ export const APPAREL_CATEGORY_FIELD_KEYS:
 export function getApparelCategoryFieldKeys(
   categoryCode: string,
 ): ApparelCategoryFieldKey[] {
-  if (
-    !isApparelCategoryCode(
-      categoryCode,
-    )
-  ) {
+  if (!isApparelCategoryCode(categoryCode)) {
     return [];
   }
 
-  return (
-    APPAREL_CATEGORY_FIELD_KEYS[
-      categoryCode
-    ] ?? []
-  );
+  return APPAREL_CATEGORY_FIELD_KEYS[categoryCode] ?? [];
 }
 
 // ============================
@@ -206,83 +183,45 @@ export type MeasurementKey =
  *
  * 新規コードではMeasurementKeyを使用する。
  */
-export type ApparelMeasurementKey =
-  MeasurementKey;
+export type ApparelMeasurementKey = MeasurementKey;
 
 export type MeasurementOption = {
   value: MeasurementKey;
   label: string;
 };
 
-export const MEASUREMENT_OPTIONS:
-  MeasurementOption[] = [
+export const MEASUREMENT_OPTIONS: MeasurementOption[] = [
   // トップス
-  {
-    value: "着丈",
-    label: "着丈",
-  },
-  {
-    value: "身幅",
-    label: "身幅",
-  },
-  {
-    value: "胸囲",
-    label: "胸囲",
-  },
-  {
-    value: "肩幅",
-    label: "肩幅",
-  },
-  {
-    value: "袖丈",
-    label: "袖丈",
-  },
+  { value: "着丈", label: "着丈" },
+  { value: "身幅", label: "身幅" },
+  { value: "胸囲", label: "胸囲" },
+  { value: "肩幅", label: "肩幅" },
+  { value: "袖丈", label: "袖丈" },
 
   // ボトムス
-  {
-    value: "ウエスト",
-    label: "ウエスト",
-  },
-  {
-    value: "ヒップ",
-    label: "ヒップ",
-  },
-  {
-    value: "股上",
-    label: "股上",
-  },
-  {
-    value: "股下",
-    label: "股下",
-  },
-  {
-    value: "わたり幅",
-    label: "わたり幅",
-  },
-  {
-    value: "裾幅",
-    label: "裾幅",
-  },
+  { value: "ウエスト", label: "ウエスト" },
+  { value: "ヒップ", label: "ヒップ" },
+  { value: "股上", label: "股上" },
+  { value: "股下", label: "股下" },
+  { value: "わたり幅", label: "わたり幅" },
+  { value: "裾幅", label: "裾幅" },
 ];
 
 /**
  * 既存コードから段階的に移行するためのalias。
  *
- * 配列を複製せず、MEASUREMENT_OPTIONSと
- * 同じ定義を参照する。
+ * 配列を複製せず、MEASUREMENT_OPTIONSと同じ定義を参照する。
  */
-export const APPAREL_MEASUREMENT_OPTIONS =
-  MEASUREMENT_OPTIONS;
+export const APPAREL_MEASUREMENT_OPTIONS = MEASUREMENT_OPTIONS;
 
 // ============================
 // Category measurement mappings
 // ============================
 
-export const APPAREL_CATEGORY_MEASUREMENT_KEYS:
-  Record<
-    ApparelCategoryCode,
-    MeasurementKey[]
-  > = {
+export const APPAREL_CATEGORY_MEASUREMENT_KEYS: Record<
+  ApparelCategoryCode,
+  MeasurementKey[]
+> = {
   "apparel.tops": [
     "着丈",
     "身幅",
@@ -313,59 +252,36 @@ export const APPAREL_CATEGORY_MEASUREMENT_KEYS:
   ],
 
   "apparel.shoes": [],
-
   "apparel.bag": [],
-
   "apparel.accessory": [],
 };
 
-export const APPAREL_CATEGORY_MEASUREMENT_OPTIONS:
-  Record<
-    ApparelCategoryCode,
-    MeasurementOption[]
-  > = Object.fromEntries(
-  APPAREL_CATEGORY_OPTIONS.map(
-    (category) => {
-      const measurementKeys =
-        APPAREL_CATEGORY_MEASUREMENT_KEYS[
-          category.value
-        ];
-
-      const options =
-        MEASUREMENT_OPTIONS.filter(
-          (option) =>
-            measurementKeys.includes(
-              option.value,
-            ),
-        );
-
-      return [
-        category.value,
-        options,
-      ];
-    },
-  ),
-) as Record<
+export const APPAREL_CATEGORY_MEASUREMENT_OPTIONS: Record<
   ApparelCategoryCode,
   MeasurementOption[]
->;
+> = Object.fromEntries(
+  APPAREL_CATEGORY_OPTIONS.map((category) => {
+    const measurementKeys =
+      APPAREL_CATEGORY_MEASUREMENT_KEYS[category.value];
+
+    const options = MEASUREMENT_OPTIONS.filter((option) =>
+      measurementKeys.includes(option.value),
+    );
+
+    return [category.value, options];
+  }),
+) as Record<ApparelCategoryCode, MeasurementOption[]>;
 
 // ============================
 // Measurements
 // ============================
 
 export type ApparelMeasurements = Partial<
-  Record<
-    MeasurementKey,
-    number | null
-  >
+  Record<MeasurementKey, number | null>
 >;
 
 export type ApparelMeasurementInput =
-  | Record<
-      string,
-      number | null | undefined
-    >
+  | Record<string, number | null | undefined>
   | undefined
   | null;
 
@@ -432,11 +348,10 @@ export type ApparelModelNumberRow = {
  *
  * sizeLabelはサイズ名であり採寸値ではないため除外する。
  */
-export type ApparelMeasurementSizeField =
-  Exclude<
-    keyof ApparelSizeInput,
-    "sizeLabel"
-  >;
+export type ApparelMeasurementSizeField = Exclude<
+  keyof ApparelSizeInput,
+  "sizeLabel"
+>;
 
 /**
  * UIで使用する英語field名と、
@@ -445,13 +360,9 @@ export type ApparelMeasurementSizeField =
  * UI → API、API → UIの両方向で
  * この定義を唯一の対応表として使用する。
  */
-export const APPAREL_SIZE_FIELD_TO_MEASUREMENT_KEY:
-  Readonly<
-    Record<
-      ApparelMeasurementSizeField,
-      MeasurementKey
-    >
-  > = {
+export const APPAREL_SIZE_FIELD_TO_MEASUREMENT_KEY: Readonly<
+  Record<ApparelMeasurementSizeField, MeasurementKey>
+> = {
   length: "着丈",
   width: "身幅",
   chest: "胸囲",
@@ -488,6 +399,54 @@ function toMeasurementKeyFromSizeField(
 }
 
 /**
+ * ApparelSizeInputを、そのカテゴリで使用可能な
+ * API・Repository用measurementsへ変換する。
+ *
+ * categoryごとの採寸項目はAPPAREL_CATEGORY_MEASUREMENT_KEYSを正とする。
+ * field名と日本語採寸キーの対応は
+ * APPAREL_SIZE_FIELD_TO_MEASUREMENT_KEYを正とする。
+ *
+ * null / undefined / NaN / Infinityは含めない。
+ */
+export function mapApparelSizeInputToMeasurements(
+  size: ApparelSizeInput,
+  categoryCode: string,
+): ApparelMeasurements {
+  if (!isApparelCategoryCode(categoryCode)) {
+    return {};
+  }
+
+  const allowedMeasurementKeys = new Set<MeasurementKey>(
+    APPAREL_CATEGORY_MEASUREMENT_KEYS[categoryCode],
+  );
+
+  const result: ApparelMeasurements = {};
+
+  const mappings = Object.entries(
+    APPAREL_SIZE_FIELD_TO_MEASUREMENT_KEY,
+  ) as Array<[ApparelMeasurementSizeField, MeasurementKey]>;
+
+  for (const [sizeField, measurementKey] of mappings) {
+    if (!allowedMeasurementKeys.has(measurementKey)) {
+      continue;
+    }
+
+    const value = size[sizeField];
+
+    if (
+      typeof value !== "number" ||
+      !Number.isFinite(value)
+    ) {
+      continue;
+    }
+
+    result[measurementKey] = value;
+  }
+
+  return result;
+}
+
+/**
  * API・Repositoryのmeasurementsを
  * UI用のApparelSizeInputへ変換する。
  *
@@ -497,74 +456,31 @@ function toMeasurementKeyFromSizeField(
  * - sizeLabelは含めない
  */
 export function mapMeasurementsToApparelSizeInput(
-  measurements:
-    ApparelMeasurementInput,
+  measurements: ApparelMeasurementInput,
   categoryCode: string,
-): Partial<
-  Omit<
-    ApparelSizeInput,
-    "sizeLabel"
-  >
-> {
-  const normalizedCategoryCode =
-    String(
-      categoryCode ?? "",
-    )
-      .trim()
-      .toLowerCase();
-
-  if (
-    !isApparelCategoryCode(
-      normalizedCategoryCode,
-    )
-  ) {
+): Partial<Omit<ApparelSizeInput, "sizeLabel">> {
+  if (!isApparelCategoryCode(categoryCode)) {
     return {};
   }
 
-  const allowedMeasurementKeys =
-    new Set<MeasurementKey>(
-      APPAREL_CATEGORY_MEASUREMENT_KEYS[
-        normalizedCategoryCode
-      ],
-    );
+  const allowedMeasurementKeys = new Set<MeasurementKey>(
+    APPAREL_CATEGORY_MEASUREMENT_KEYS[categoryCode],
+  );
 
-  const result:
-    Partial<
-      Record<
-        ApparelMeasurementSizeField,
-        number
-      >
-    > = {};
+  const result: Partial<
+    Record<ApparelMeasurementSizeField, number>
+  > = {};
 
-  const mappings =
-    Object.entries(
-      APPAREL_SIZE_FIELD_TO_MEASUREMENT_KEY,
-    ) as Array<
-      [
-        ApparelMeasurementSizeField,
-        MeasurementKey,
-      ]
-    >;
+  const mappings = Object.entries(
+    APPAREL_SIZE_FIELD_TO_MEASUREMENT_KEY,
+  ) as Array<[ApparelMeasurementSizeField, MeasurementKey]>;
 
-  for (
-    const [
-      sizeField,
-      measurementKey,
-    ]
-    of mappings
-  ) {
-    if (
-      !allowedMeasurementKeys.has(
-        measurementKey,
-      )
-    ) {
+  for (const [sizeField, measurementKey] of mappings) {
+    if (!allowedMeasurementKeys.has(measurementKey)) {
       continue;
     }
 
-    const value =
-      measurements?.[
-        measurementKey
-      ];
+    const value = measurements?.[measurementKey];
 
     if (
       typeof value !== "number" ||
@@ -573,8 +489,7 @@ export function mapMeasurementsToApparelSizeInput(
       continue;
     }
 
-    result[sizeField] =
-      value;
+    result[sizeField] = value;
   }
 
   return result;
@@ -596,15 +511,9 @@ export function mapMeasurementsToApparelSizeInput(
 export function normalizeApparelMeasurements(
   measurements: ApparelMeasurementInput,
 ): Record<string, number> {
-  const normalized:
-    Record<string, number> = {};
+  const normalized: Record<string, number> = {};
 
-  for (
-    const [key, value]
-    of Object.entries(
-      measurements ?? {},
-    )
-  ) {
+  for (const [key, value] of Object.entries(measurements ?? {})) {
     if (
       typeof value !== "number" ||
       !Number.isFinite(value)
@@ -613,12 +522,9 @@ export function normalizeApparelMeasurements(
     }
 
     const measurementKey =
-      toMeasurementKeyFromSizeField(
-        key,
-      ) ?? key;
+      toMeasurementKeyFromSizeField(key) ?? key;
 
-    normalized[measurementKey] =
-      value;
+    normalized[measurementKey] = value;
   }
 
   return normalized;
@@ -634,13 +540,9 @@ export function normalizeApparelMeasurementsForRequest(
   measurements: ApparelMeasurementInput,
 ): Record<string, number> | undefined {
   const normalized =
-    normalizeApparelMeasurements(
-      measurements,
-    );
+    normalizeApparelMeasurements(measurements);
 
-  return Object.keys(
-    normalized,
-  ).length > 0
+  return Object.keys(normalized).length > 0
     ? normalized
     : undefined;
 }

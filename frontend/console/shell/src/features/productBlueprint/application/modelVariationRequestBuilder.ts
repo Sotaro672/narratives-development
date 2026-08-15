@@ -2,9 +2,11 @@
 
 import {
   isApparelCategoryCode,
+  isApparelModelVariationCategoryCode,
+  mapApparelSizeInputToMeasurements,
   normalizeApparelMeasurementsForRequest,
   type ApparelCategoryCode,
-  type ApparelMeasurements,
+  type ApparelModelNumberRow,
   type ApparelSizeInput,
 } from "../../../shared/types/apparel";
 import { hexToRgbInt } from "../../../shared/util/color";
@@ -26,11 +28,10 @@ import type {
  * Public types
  * =======================================================*/
 
-export type ProductBlueprintModelNumberInput = {
-  size: string;
-  color: string;
-  code?: string;
-};
+export type ProductBlueprintModelNumberInput =
+  Omit<ApparelModelNumberRow, "code"> & {
+    code?: string;
+  };
 
 export type MissingRgbBehavior = "use-zero" | "throw";
 
@@ -54,19 +55,6 @@ export type BuildModelVariationRequestsArgs = {
    */
   missingRgbBehavior?: MissingRgbBehavior;
 };
-
-/* =========================================================
- * Constants
- * =======================================================*/
-
-const APPAREL_MODEL_VARIATION_CATEGORY_CODES: ReadonlySet<ApparelCategoryCode> =
-  new Set<ApparelCategoryCode>([
-    "apparel.tops",
-    "apparel.bottoms",
-    "apparel.dress",
-    "apparel.outerwear",
-    "apparel.shoes",
-  ]);
 
 /* =========================================================
  * Common helpers
@@ -93,61 +81,15 @@ function makeApparelVariationKey(
  * Apparel measurement helpers
  * =======================================================*/
 
-function shouldBuildApparelModelVariations(
-  categoryCode: ApparelCategoryCode,
-): boolean {
-  return APPAREL_MODEL_VARIATION_CATEGORY_CODES.has(categoryCode);
-}
-
-function buildApparelMeasurements(
-  categoryCode: ApparelCategoryCode,
-  size: ApparelSizeInput,
-): ApparelMeasurements {
-  switch (categoryCode) {
-    case "apparel.bottoms":
-      return {
-        ウエスト: size.waist ?? null,
-        ヒップ: size.hip ?? null,
-        股上: size.rise ?? null,
-        股下: size.inseam ?? null,
-        わたり幅: size.thigh ?? null,
-        裾幅: size.hemWidth ?? null,
-      };
-
-    case "apparel.dress":
-      return {
-        着丈: size.length ?? null,
-        身幅: size.width ?? null,
-        胸囲: size.chest ?? null,
-        肩幅: size.shoulder ?? null,
-        袖丈: size.sleeveLength ?? null,
-        ウエスト: size.waist ?? null,
-        ヒップ: size.hip ?? null,
-      };
-
-    case "apparel.tops":
-      return {
-        着丈: size.length ?? null,
-        身幅: size.width ?? null,
-        胸囲: size.chest ?? null,
-        肩幅: size.shoulder ?? null,
-        袖丈: size.sleeveLength ?? null,
-      };
-
-    case "apparel.outerwear":
-    case "apparel.shoes":
-    case "apparel.bag":
-    case "apparel.accessory":
-      return {};
-  }
-}
-
 function buildMeasurementsFromSize(
   categoryCode: ApparelCategoryCode,
   size: ApparelSizeInput,
 ): Record<string, number> | undefined {
   return normalizeApparelMeasurementsForRequest(
-    buildApparelMeasurements(categoryCode, size),
+    mapApparelSizeInputToMeasurements(
+      size,
+      categoryCode,
+    ),
   );
 }
 
@@ -155,14 +97,19 @@ function buildMeasurementsFromSize(
  * Apparel input normalization
  * =======================================================*/
 
-function normalizeColors(colors: string[]): string[] {
+function normalizeColors(
+  colors: string[],
+): string[] {
   const normalizedColors: string[] = [];
   const seen = new Set<string>();
 
   for (const rawColor of colors) {
     const color = normalizeUserText(rawColor);
 
-    if (color === "" || seen.has(color)) {
+    if (
+      color === "" ||
+      seen.has(color)
+    ) {
       continue;
     }
 
@@ -176,10 +123,12 @@ function normalizeColors(colors: string[]): string[] {
 function normalizeSizes(
   sizes: ApparelSizeInput[],
 ): ApparelSizeInput[] {
-  const sizeMap = new Map<string, ApparelSizeInput>();
+  const sizeMap =
+    new Map<string, ApparelSizeInput>();
 
   for (const size of sizes) {
-    const sizeLabel = normalizeUserText(size.sizeLabel);
+    const sizeLabel =
+      normalizeUserText(size.sizeLabel);
 
     if (sizeLabel === "") {
       continue;
@@ -201,14 +150,22 @@ function normalizeSizes(
 function buildApparelModelNumberMap(
   modelNumbers: ProductBlueprintModelNumberInput[],
 ): Map<string, string> {
-  const modelNumberMap = new Map<string, string>();
+  const modelNumberMap =
+    new Map<string, string>();
 
   for (const modelNumber of modelNumbers) {
-    const size = normalizeUserText(modelNumber.size);
-    const color = normalizeUserText(modelNumber.color);
-    const code = normalizeUserText(modelNumber.code);
+    const size =
+      normalizeUserText(modelNumber.size);
+    const color =
+      normalizeUserText(modelNumber.color);
+    const code =
+      normalizeUserText(modelNumber.code);
 
-    if (size === "" || color === "" || code === "") {
+    if (
+      size === "" ||
+      color === "" ||
+      code === ""
+    ) {
       continue;
     }
 
@@ -216,7 +173,10 @@ function buildApparelModelNumberMap(
      * 同じsize・colorの組み合わせが複数存在する場合は後勝ち。
      */
     modelNumberMap.set(
-      makeApparelVariationKey(size, color),
+      makeApparelVariationKey(
+        size,
+        color,
+      ),
       code,
     );
   }
@@ -235,14 +195,26 @@ function resolveRgbInt(args: {
     missingRgbBehavior,
   } = args;
 
-  const rgbHex = normalizeUserText(colorRgbMap[colorName]);
-  const rgb = rgbHex === "" ? undefined : hexToRgbInt(rgbHex);
+  const rgbHex =
+    normalizeUserText(
+      colorRgbMap[colorName],
+    );
 
-  if (typeof rgb === "number" && Number.isFinite(rgb)) {
+  const rgb =
+    rgbHex === ""
+      ? undefined
+      : hexToRgbInt(rgbHex);
+
+  if (
+    typeof rgb === "number" &&
+    Number.isFinite(rgb)
+  ) {
     return rgb;
   }
 
-  if (missingRgbBehavior === "use-zero") {
+  if (
+    missingRgbBehavior === "use-zero"
+  ) {
     return 0;
   }
 
@@ -255,14 +227,16 @@ function resolveRgbInt(args: {
  * Apparel request builder
  * =======================================================*/
 
-function buildApparelModelVariationRequests(args: {
-  categoryCode: ApparelCategoryCode;
-  colors: string[];
-  sizes: ApparelSizeInput[];
-  modelNumbers: ProductBlueprintModelNumberInput[];
-  colorRgbMap: Record<string, string>;
-  missingRgbBehavior: MissingRgbBehavior;
-}): CreateModelVariationRequest[] {
+function buildApparelModelVariationRequests(
+  args: {
+    categoryCode: ApparelCategoryCode;
+    colors: string[];
+    sizes: ApparelSizeInput[];
+    modelNumbers: ProductBlueprintModelNumberInput[];
+    colorRgbMap: Record<string, string>;
+    missingRgbBehavior: MissingRgbBehavior;
+  },
+): CreateModelVariationRequest[] {
   const {
     categoryCode,
     colors,
@@ -272,26 +246,50 @@ function buildApparelModelVariationRequests(args: {
     missingRgbBehavior,
   } = args;
 
-  if (!shouldBuildApparelModelVariations(categoryCode)) {
+  if (
+    !isApparelModelVariationCategoryCode(
+      categoryCode,
+    )
+  ) {
     return [];
   }
 
-  const normalizedColors = normalizeColors(colors);
-  const normalizedSizes = normalizeSizes(sizes);
+  const normalizedColors =
+    normalizeColors(colors);
+
+  const normalizedSizes =
+    normalizeSizes(sizes);
+
   const modelNumberMap =
-    buildApparelModelNumberMap(modelNumbers);
-  const requests: CreateModelVariationRequest[] = [];
+    buildApparelModelNumberMap(
+      modelNumbers,
+    );
+
+  const requests:
+    CreateModelVariationRequest[] = [];
 
   /*
    * Model Variationの並び順を
    * 「色登録順 → サイズ登録順」に固定する。
    */
-  for (const color of normalizedColors) {
-    for (const size of normalizedSizes) {
-      const sizeLabel = size.sizeLabel;
-      const modelNumber = modelNumberMap.get(
-        makeApparelVariationKey(sizeLabel, color),
-      );
+  for (
+    const color
+    of normalizedColors
+  ) {
+    for (
+      const size
+      of normalizedSizes
+    ) {
+      const sizeLabel =
+        size.sizeLabel;
+
+      const modelNumber =
+        modelNumberMap.get(
+          makeApparelVariationKey(
+            sizeLabel,
+            color,
+          ),
+        );
 
       if (!modelNumber) {
         continue;
@@ -307,10 +305,11 @@ function buildApparelModelVariationRequests(args: {
           colorRgbMap,
           missingRgbBehavior,
         }),
-        measurements: buildMeasurementsFromSize(
-          categoryCode,
-          size,
-        ),
+        measurements:
+          buildMeasurementsFromSize(
+            categoryCode,
+            size,
+          ),
       });
     }
   }
@@ -322,7 +321,9 @@ function buildApparelModelVariationRequests(args: {
  * Alcohol helpers
  * =======================================================*/
 
-function normalizeVolume(volume: Volume): Volume | null {
+function normalizeVolume(
+  volume: Volume,
+): Volume | null {
   if (
     typeof volume.value !== "number" ||
     !Number.isFinite(volume.value) ||
@@ -331,7 +332,10 @@ function normalizeVolume(volume: Volume): Volume | null {
     return null;
   }
 
-  if (volume.unit !== "ml" && volume.unit !== "L") {
+  if (
+    volume.unit !== "ml" &&
+    volume.unit !== "L"
+  ) {
     return null;
   }
 
@@ -341,31 +345,50 @@ function normalizeVolume(volume: Volume): Volume | null {
   };
 }
 
-function makeVolumeKey(volume: Volume): string {
+function makeVolumeKey(
+  volume: Volume,
+): string {
   return `${volume.value}:${volume.unit}`;
 }
 
 function buildAlcoholModelNumberMap(
   modelNumbers: AlcoholModelNumber[],
 ): Map<string, AlcoholModelNumber> {
-  const modelNumberMap = new Map<string, AlcoholModelNumber>();
+  const modelNumberMap =
+    new Map<string, AlcoholModelNumber>();
 
-  for (const modelNumber of modelNumbers) {
-    const volume = normalizeVolume(modelNumber.volume);
-    const code = normalizeUserText(modelNumber.code);
+  for (
+    const modelNumber
+    of modelNumbers
+  ) {
+    const volume =
+      normalizeVolume(
+        modelNumber.volume,
+      );
 
-    if (!volume || code === "") {
+    const code =
+      normalizeUserText(
+        modelNumber.code,
+      );
+
+    if (
+      !volume ||
+      code === ""
+    ) {
       continue;
     }
 
     /*
      * 同じ容量が複数存在する場合は後勝ち。
      */
-    modelNumberMap.set(makeVolumeKey(volume), {
-      ...modelNumber,
-      volume,
-      code,
-    });
+    modelNumberMap.set(
+      makeVolumeKey(volume),
+      {
+        ...modelNumber,
+        volume,
+        code,
+      },
+    );
   }
 
   return modelNumberMap;
@@ -375,28 +398,43 @@ function buildAlcoholModelNumberMap(
  * Alcohol request builder
  * =======================================================*/
 
-function buildAlcoholModelVariationRequests(args: {
-  volumes: VolumeRow[];
-  alcoholModelNumbers: AlcoholModelNumber[];
-}): CreateModelVariationRequest[] {
+function buildAlcoholModelVariationRequests(
+  args: {
+    volumes: VolumeRow[];
+    alcoholModelNumbers: AlcoholModelNumber[];
+  },
+): CreateModelVariationRequest[] {
   const {
     volumes,
     alcoholModelNumbers,
   } = args;
 
   const modelNumberMap =
-    buildAlcoholModelNumberMap(alcoholModelNumbers);
-  const requests: CreateModelVariationRequest[] = [];
-  const seen = new Set<string>();
+    buildAlcoholModelNumberMap(
+      alcoholModelNumbers,
+    );
 
-  for (const row of volumes) {
-    const volume = normalizeVolume(volumeRowToVolume(row));
+  const requests:
+    CreateModelVariationRequest[] = [];
+
+  const seen =
+    new Set<string>();
+
+  for (
+    const row
+    of volumes
+  ) {
+    const volume =
+      normalizeVolume(
+        volumeRowToVolume(row),
+      );
 
     if (!volume) {
       continue;
     }
 
-    const key = makeVolumeKey(volume);
+    const key =
+      makeVolumeKey(volume);
 
     if (seen.has(key)) {
       continue;
@@ -404,7 +442,8 @@ function buildAlcoholModelVariationRequests(args: {
 
     seen.add(key);
 
-    const modelNumber = modelNumberMap.get(key);
+    const modelNumber =
+      modelNumberMap.get(key);
 
     if (!modelNumber) {
       continue;
@@ -412,7 +451,8 @@ function buildAlcoholModelVariationRequests(args: {
 
     requests.push({
       kind: "alcohol",
-      modelNumber: modelNumber.code,
+      modelNumber:
+        modelNumber.code,
       volume,
     });
   }
@@ -453,9 +493,14 @@ export function buildModelVariationRequests(
     missingRgbBehavior = "throw",
   } = args;
 
-  const categoryCode = productBlueprintCategory.code;
+  const categoryCode =
+    productBlueprintCategory.code;
 
-  if (isApparelCategoryCode(categoryCode)) {
+  if (
+    isApparelCategoryCode(
+      categoryCode,
+    )
+  ) {
     return buildApparelModelVariationRequests({
       categoryCode,
       colors,
@@ -466,7 +511,11 @@ export function buildModelVariationRequests(
     });
   }
 
-  if (isAlcoholCategoryCode(categoryCode)) {
+  if (
+    isAlcoholCategoryCode(
+      categoryCode,
+    )
+  ) {
     return buildAlcoholModelVariationRequests({
       volumes,
       alcoholModelNumbers,

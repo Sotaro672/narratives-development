@@ -1,21 +1,12 @@
-// frontend/console/tokenBlueprint/src/infrastructure/storage/tokenBlueprintAssetStorage.ts
+// frontend/console/shell/src/features/tokenBlueprint/infrastructure/storage/tokenBlueprintAssetStorage.ts
+
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+
+import { auth, storage } from "../../../../auth/infrastructure/config/firebaseClient";
 import {
-  deleteObject,
-  getDownloadURL,
-  ref,
-  uploadBytes,
-} from "firebase/storage";
-
-import {
-  auth,
-  storage,
-} from "../../../../auth/infrastructure/config/firebaseClient";
-
-export type TokenBlueprintAssetTarget =
-  | "tokenBlueprintIcon"
-  | "tokenBlueprintContents";
-
-export type TokenBlueprintContentKind = "image" | "video" | "pdf" | "document";
+  TOKEN_BLUEPRINT_DEFAULT_CONTENT_TYPE,
+  type ContentType,
+} from "../../../../shared/types/tokenBlueprint";
 
 export type FirebaseStorageUploadResult = {
   downloadUrl: string;
@@ -25,45 +16,35 @@ export type FirebaseStorageUploadResult = {
   size: number;
 };
 
-export type FirebaseStorageContentUploadResult =
-  FirebaseStorageUploadResult & {
-    kind: TokenBlueprintContentKind;
-  };
+export type FirebaseStorageContentUploadResult = FirebaseStorageUploadResult & {
+  kind: ContentType;
+};
 
-const DEFAULT_CONTENT_TYPE = "application/octet-stream";
-
-function getFileExtension(file: File): string {
-  const fileName = String(file.name ?? "");
-  const parts = fileName.split(".");
-  const ext = parts.length > 1 ? parts.pop() : "";
-
-  return ext ? `.${ext.toLowerCase()}` : "";
-}
-
-function safeFileName(file: File, fallback: string): string {
-  const raw = String(file.name ?? "").trim();
-  if (!raw) return fallback;
-
-  return raw
+function safeFileName(file: File): string {
+  const fileName = file.name
+    .trim()
     .replace(/[\\/:*?"<>|#%{}[\]^~`]/g, "_")
     .replace(/\s+/g, "_")
     .replace(/^_+/, "")
     .replace(/_+$/, "");
+
+  if (!fileName) {
+    throw new Error("file.name is invalid.");
+  }
+
+  return fileName;
 }
 
 function getContentType(file: File): string {
-  return String(file.type || "").trim() || DEFAULT_CONTENT_TYPE;
+  return file.type.trim() || TOKEN_BLUEPRINT_DEFAULT_CONTENT_TYPE;
 }
 
-export function guessTokenBlueprintContentType(
-  file: File,
-): TokenBlueprintContentKind {
+export function guessTokenBlueprintContentType(file: File): ContentType {
   const mime = getContentType(file).toLowerCase();
 
   if (mime.startsWith("image/")) return "image";
   if (mime.startsWith("video/")) return "video";
   if (mime === "application/pdf") return "pdf";
-
   return "document";
 }
 
@@ -72,17 +53,13 @@ function buildTokenBlueprintIconPath(params: {
   tokenBlueprintId: string;
   file: File;
 }): string {
-  const extension = getFileExtension(params.file);
   const timestamp = Date.now();
-  const fallbackName = `icon_${timestamp}${extension}`;
-  const fileName = safeFileName(params.file, fallbackName);
-
   return [
     "token-blueprints",
     params.companyId,
     params.tokenBlueprintId,
     "icon",
-    `${timestamp}_${fileName}`,
+    `${timestamp}_${safeFileName(params.file)}`,
   ].join("/");
 }
 
@@ -92,17 +69,13 @@ function buildTokenBlueprintContentPath(params: {
   contentId: string;
   file: File;
 }): string {
-  const extension = getFileExtension(params.file);
-  const fallbackName = `${params.contentId}${extension}`;
-  const fileName = safeFileName(params.file, fallbackName);
-
   return [
     "token-blueprints",
     params.companyId,
     params.tokenBlueprintId,
     "contents",
     params.contentId,
-    fileName,
+    safeFileName(params.file),
   ].join("/");
 }
 
@@ -122,20 +95,20 @@ function assertUploadRequiredParams(params: {
   file: File;
   targetLabel: string;
 }): void {
-  if (!params.companyId?.trim()) {
-    throw new Error(
-      `companyId is required before uploading ${params.targetLabel}.`,
-    );
+  if (!params.companyId) {
+    throw new Error(`companyId is required before uploading ${params.targetLabel}.`);
   }
 
-  if (!params.tokenBlueprintId?.trim()) {
-    throw new Error(
-      `tokenBlueprintId is required before uploading ${params.targetLabel}.`,
-    );
+  if (!params.tokenBlueprintId) {
+    throw new Error(`tokenBlueprintId is required before uploading ${params.targetLabel}.`);
   }
 
   if (!params.file) {
     throw new Error(`file is required before uploading ${params.targetLabel}.`);
+  }
+
+  if (!params.file.name) {
+    throw new Error(`file.name is required before uploading ${params.targetLabel}.`);
   }
 }
 
@@ -144,11 +117,7 @@ export async function uploadTokenBlueprintIconToFirebaseStorage(params: {
   tokenBlueprintId: string;
   file: File;
 }): Promise<FirebaseStorageUploadResult> {
-  assertUploadRequiredParams({
-    ...params,
-    targetLabel: "token blueprint icon",
-  });
-
+  assertUploadRequiredParams({ ...params, targetLabel: "token blueprint icon" });
   await assertSignedIn();
 
   const objectPath = buildTokenBlueprintIconPath(params);
@@ -161,7 +130,7 @@ export async function uploadTokenBlueprintIconToFirebaseStorage(params: {
       companyId: params.companyId,
       tokenBlueprintId: params.tokenBlueprintId,
       target: "tokenBlueprintIcon",
-      originalFileName: params.file.name || "",
+      originalFileName: params.file.name,
     },
   });
 
@@ -170,7 +139,7 @@ export async function uploadTokenBlueprintIconToFirebaseStorage(params: {
   return {
     downloadUrl,
     objectPath,
-    fileName: params.file.name || objectPath.split("/").pop() || "icon",
+    fileName: params.file.name,
     contentType,
     size: params.file.size,
   };
@@ -182,15 +151,10 @@ export async function uploadTokenBlueprintContentToFirebaseStorage(params: {
   contentId: string;
   file: File;
 }): Promise<FirebaseStorageContentUploadResult> {
-  assertUploadRequiredParams({
-    ...params,
-    targetLabel: "token blueprint content",
-  });
+  assertUploadRequiredParams({ ...params, targetLabel: "token blueprint content" });
 
-  if (!params.contentId?.trim()) {
-    throw new Error(
-      "contentId is required before uploading token blueprint content.",
-    );
+  if (!params.contentId) {
+    throw new Error("contentId is required before uploading token blueprint content.");
   }
 
   await assertSignedIn();
@@ -208,7 +172,7 @@ export async function uploadTokenBlueprintContentToFirebaseStorage(params: {
       contentId: params.contentId,
       target: "tokenBlueprintContents",
       kind,
-      originalFileName: params.file.name || "",
+      originalFileName: params.file.name,
     },
   });
 
@@ -217,26 +181,9 @@ export async function uploadTokenBlueprintContentToFirebaseStorage(params: {
   return {
     downloadUrl,
     objectPath,
-    fileName:
-      params.file.name || objectPath.split("/").pop() || params.contentId,
+    fileName: params.file.name,
     contentType,
     size: params.file.size,
     kind,
   };
-}
-
-export async function deleteTokenBlueprintAssetFromFirebaseStorage(params: {
-  objectPath: string;
-}): Promise<void> {
-  const objectPath = params.objectPath?.trim();
-
-  if (!objectPath) {
-    throw new Error(
-      "objectPath is required before deleting Firebase Storage asset.",
-    );
-  }
-
-  await assertSignedIn();
-
-  await deleteObject(ref(storage, objectPath));
 }

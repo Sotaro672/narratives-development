@@ -79,7 +79,7 @@ type ContentFile struct {
 	ID          string          `json:"id"`
 	Name        string          `json:"name"`
 	Type        ContentFileType `json:"type"`
-	ContentType string          `json:"contentType,omitempty"`
+	ContentType string          `json:"contentType"`
 	URL         string          `json:"url"`
 	ObjectPath  string          `json:"objectPath"`
 	IsPublic    bool            `json:"isPublic"`
@@ -100,6 +100,9 @@ func (f ContentFile) Validate() error {
 	}
 	if !IsValidContentType(f.Type) {
 		return ErrInvalidContentType
+	}
+	if f.ContentType == "" {
+		return ErrInvalidContentFile
 	}
 	if f.URL == "" {
 		return ErrInvalidContentFile
@@ -489,16 +492,6 @@ func (t *TokenBlueprint) SetMetadataURI(uri string) error {
 		return ErrNilTokenBlueprint
 	}
 	t.MetadataURI = uri
-	return nil
-}
-
-// SetIconURL is kept for compatibility.
-// New code should prefer SetIcon so objectPath is stored together with the downloadURL.
-func (t *TokenBlueprint) SetIconURL(url string) error {
-	if t == nil {
-		return ErrNilTokenBlueprint
-	}
-	t.IconURL = url
 	return nil
 }
 

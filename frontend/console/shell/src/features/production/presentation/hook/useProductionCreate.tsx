@@ -3,22 +3,20 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
-import type { Brand } from "../../../../shared/types/brand";
 import type {
   ProductionCreateProductBlueprint,
   ProductionQuantityRow,
 } from "../../../../shared/types/production";
 import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
-import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
+import { useBrandSelection } from "../../../brand/presentation/hook/useBrandSelection";
 import { buildProductionPayload } from "../../application/productionCreateService";
 import {
-  loadBrands,
   loadProductBlueprints,
   loadProductionCreateContext,
+  type ProductBlueprintManagementRow,
 } from "../../infrastructure/api/productionCreateApi";
 import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
 import {
-  buildBrandOptions,
   buildProductRows,
   filterProductBlueprintsByBrand,
 } from "../create/mappers";
@@ -26,12 +24,13 @@ import {
 export function useProductionCreate() {
   const navigate = useNavigate();
 
-  const [allProductBlueprints, setAllProductBlueprints] = React.useState<ProductBlueprintManagementRow[]>([]);
+  const [allProductBlueprints, setAllProductBlueprints] =
+    React.useState<ProductBlueprintManagementRow[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
-  const [selectedBrand, setSelectedBrand] = React.useState<string | null>(null);
-  const [selectedProductBlueprint, setSelectedProductBlueprint] = React.useState<ProductionCreateProductBlueprint | null>(null);
-  const [quantityRows, setQuantityRows] = React.useState<ProductionQuantityRow[]>([]);
-  const [brands, setBrands] = React.useState<Brand[]>([]);
+  const [selectedProductBlueprint, setSelectedProductBlueprint] =
+    React.useState<ProductionCreateProductBlueprint | null>(null);
+  const [quantityRows, setQuantityRows] =
+    React.useState<ProductionQuantityRow[]>([]);
 
   const {
     assigneeId,
@@ -43,26 +42,48 @@ export function useProductionCreate() {
     defaultToCurrentMember: false,
   });
 
+  const {
+    brandId: selectedBrandId,
+    brandName: selectedBrandName,
+    brandOptions,
+    loadingBrands,
+    brandError,
+    selectBrand,
+  } = useBrandSelection();
+
   const handleBack = React.useCallback(() => {
     navigate("/production");
   }, [navigate]);
 
   React.useEffect(() => {
-    loadBrands().then(setBrands).catch(() => setBrands([]));
+    loadProductBlueprints()
+      .then(setAllProductBlueprints)
+      .catch(() => setAllProductBlueprints([]));
   }, []);
-
-  React.useEffect(() => {
-    loadProductBlueprints().then(setAllProductBlueprints).catch(() => setAllProductBlueprints([]));
-  }, []);
-
-  const brandOptions = React.useMemo(() => buildBrandOptions(brands), [brands]);
 
   const filteredBlueprints = React.useMemo(
-    () => filterProductBlueprintsByBrand(allProductBlueprints, selectedBrand),
-    [allProductBlueprints, selectedBrand],
+    () =>
+      filterProductBlueprintsByBrand(
+        allProductBlueprints,
+        selectedBrandName || null,
+      ),
+    [allProductBlueprints, selectedBrandName],
   );
 
-  const productRows = React.useMemo(() => buildProductRows(filteredBlueprints), [filteredBlueprints]);
+  const productRows = React.useMemo(
+    () => buildProductRows(filteredBlueprints),
+    [filteredBlueprints],
+  );
+
+  const handleSelectBrand = React.useCallback(
+    (brandId: string) => {
+      selectBrand(brandId);
+      setSelectedId(null);
+      setSelectedProductBlueprint(null);
+      setQuantityRows([]);
+    },
+    [selectBrand],
+  );
 
   React.useEffect(() => {
     if (!selectedId) {
@@ -76,13 +97,19 @@ export function useProductionCreate() {
 
     async function loadSelectedProductBlueprint() {
       try {
-        const context = await loadProductionCreateContext(productBlueprintId);
-        if (cancelled) return;
+        const context =
+          await loadProductionCreateContext(productBlueprintId);
+
+        if (cancelled) {
+          return;
+        }
 
         setSelectedProductBlueprint(context.productBlueprintPatch);
         setQuantityRows(context.rows);
       } catch {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
 
         setSelectedProductBlueprint(null);
         setQuantityRows([]);
@@ -118,28 +145,43 @@ export function useProductionCreate() {
 
     try {
       const repository = new ProductionRepositoryHTTP();
+
       await repository.create(payload);
+
       alert("生産計画を作成しました");
       navigate("/production");
     } catch {
       alert("生産計画の作成に失敗しました");
     }
-  }, [selectedId, assigneeId, quantityRows, navigate]);
+  }, [
+    selectedId,
+    assigneeId,
+    quantityRows,
+    navigate,
+  ]);
 
   return {
     onBack: handleBack,
     onSave: handleSave,
+
     selectedProductBlueprint,
+
     assignee,
     assigneeOptions,
     loadingMembers,
     onSelectAssignee: handleSelectAssignee,
-    selectedBrand,
+
+    selectedBrandId,
+    selectedBrandName,
     brandOptions,
-    selectBrand: setSelectedBrand,
+    loadingBrands,
+    brandError,
+    selectBrand: handleSelectBrand,
+
     productRows,
     selectedProductId: selectedId,
     selectProductById: setSelectedId,
+
     quantityRows,
     setQuantityRows,
   };
