@@ -10,7 +10,7 @@ import {
 
 import {
   buildMarketResaleSearchParams,
-} from "../infrastructure/marketResaleQueryBuilder";
+} from "../application/marketResaleQueryBuilder";
 
 import type {
   FetchMarketResalesParams,
