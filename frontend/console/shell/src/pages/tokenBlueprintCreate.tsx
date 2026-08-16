@@ -7,7 +7,6 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import TokenBlueprintCard from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 import TokenContentsCard from "../features/tokenBlueprint/presentation/components/tokenContentsCard";
-import { useAdminCard as useAdminCardHook } from "../features/admin/presentation/hook/useAdminCard";
 import { useTokenBlueprintCard } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCard";
 import { useTokenBlueprintCreate } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCreate";
 import type { ContentFile } from "../shared/types/tokenBlueprint";
@@ -41,7 +40,11 @@ export default function TokenBlueprintCreate() {
 
   const {
     initialTokenBlueprint,
-    assigneeName: initialAssigneeName,
+    assigneeId,
+    assigneeName,
+    assigneeCandidates,
+    loadingMembers,
+    onSelectAssignee,
     onEditAssignee,
     onClickAssignee,
     onBack,
@@ -56,14 +59,6 @@ export default function TokenBlueprintCreate() {
     initialEditMode,
   });
 
-  const {
-    assigneeCandidates,
-    loadingMembers,
-    getDefaultAssigneeName,
-  } = useAdminCardHook();
-
-  const initialAssigneeId = initialTokenBlueprint.assigneeId || null;
-  const [assigneeId, setAssigneeId] = useState<string | null>(initialAssigneeId);
   const [pending, setPending] = useState<PendingContent[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingContents, setIsUploadingContents] = useState(false);
@@ -74,47 +69,9 @@ export default function TokenBlueprintCreate() {
   }, [pending]);
 
   useEffect(() => {
-    if (initialAssigneeId) {
-      setAssigneeId(initialAssigneeId);
-    }
-  }, [initialAssigneeId]);
-
-  useEffect(() => {
     return () => {
       revokePendingPreviews(pendingRef.current);
     };
-  }, []);
-
-  const selectedAssigneeName = useMemo(() => {
-    if (!assigneeId) {
-      return initialAssigneeName || getDefaultAssigneeName();
-    }
-
-    const candidate = assigneeCandidates.find((item) => item.id === assigneeId);
-
-    if (candidate) {
-      return candidate.name;
-    }
-
-    if (assigneeId === initialAssigneeId) {
-      return initialAssigneeName || "未設定";
-    }
-
-    return "未設定";
-  }, [
-    assigneeId,
-    initialAssigneeId,
-    initialAssigneeName,
-    assigneeCandidates,
-    getDefaultAssigneeName,
-  ]);
-
-  const handleSelectAssignee = useCallback((id: string): void => {
-    if (!id) {
-      return;
-    }
-
-    setAssigneeId(id);
   }, []);
 
   const handleTokenContentsFilesSelected = useCallback((files: File[]): void => {
@@ -272,11 +229,11 @@ export default function TokenBlueprintCreate() {
       <AdminCard
         title="管理情報"
         mode="edit"
-        assigneeId={assigneeId ?? undefined}
-        assigneeName={selectedAssigneeName}
+        assigneeId={assigneeId || undefined}
+        assigneeName={assigneeName}
         assigneeCandidates={assigneeCandidates}
         loadingMembers={loadingMembers}
-        onSelectAssignee={handleSelectAssignee}
+        onSelectAssignee={onSelectAssignee}
         onEditAssignee={onEditAssignee}
         onClickAssignee={onClickAssignee}
       />

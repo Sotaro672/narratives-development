@@ -112,7 +112,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     assigneeCandidates,
     loadingMembers,
     handleSelectAssignee,
-    clearAssignee,
   } = useAssigneeSelection({
     initialAssigneeId,
     initialAssigneeName,
@@ -176,7 +175,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
     setInitialAssigneeId("");
     setInitialAssigneeName("");
-    clearAssignee();
 
     void (async () => {
       try {
@@ -199,6 +197,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
         const nextUpdater = detail.updatedByName;
         const nextUpdatedAt = formatDateTimeYYYYMMDDHHmm(detail.updatedAt);
+
         if (nextUpdater && nextUpdatedAt) {
           setUpdater(nextUpdater);
           setUpdatedAt(nextUpdatedAt);
@@ -212,14 +211,16 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     })();
   }, [
     blueprintId,
-    clearAssignee,
     resetVariations,
     setFromUiState,
   ]);
 
   const onChangeCategoryField = React.useCallback(
     (key: string, value: CategoryFieldValue) => {
-      setCategoryFields((previous) => ({ ...previous, [key]: value }));
+      setCategoryFields((previous) => ({
+        ...previous,
+        [key]: value,
+      }));
     },
     [],
   );
@@ -231,12 +232,15 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     }
 
     const errors = validate();
+
     if (errors.length > 0) {
       alert(`入力内容に不備があります。\n\n- ${errors.join("\n- ")}`);
       return;
     }
 
-    if (!productBlueprintCategory) return;
+    if (!productBlueprintCategory) {
+      return;
+    }
 
     if (!assigneeId) {
       alert("担当者を選択してください。");
@@ -272,13 +276,13 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
         setInitialAssigneeId(detail.assigneeId);
         setInitialAssigneeName(detail.assigneeName);
-        clearAssignee();
 
         setCreator(detail.createdByName);
         setCreatedAt(formatDateTimeYYYYMMDDHHmm(detail.createdAt));
 
         const nextUpdater = detail.updatedByName;
         const nextUpdatedAt = formatDateTimeYYYYMMDDHHmm(detail.updatedAt);
+
         if (nextUpdater && nextUpdatedAt) {
           setUpdater(nextUpdater);
           setUpdatedAt(nextUpdatedAt);
@@ -311,7 +315,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     isApparelCategory,
     isAlcoholCategory,
     setFromUiState,
-    clearAssignee,
   ]);
 
   const onDelete = React.useCallback(() => {
@@ -331,6 +334,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         "この操作は取り消せません。\n\n" +
         "削除しますか？",
     );
+
     if (!confirmed) return;
 
     void deleteProductBlueprint(blueprintId)

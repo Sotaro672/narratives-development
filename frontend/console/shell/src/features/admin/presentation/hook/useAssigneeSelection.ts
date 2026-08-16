@@ -1,6 +1,6 @@
 // frontend/console/shell/src/features/admin/presentation/hook/useAssigneeSelection.ts
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuthContext } from "../../../../auth/application/AuthContext";
 import { useAdminCard } from "./useAdminCard";
@@ -20,6 +20,7 @@ export type UseAssigneeSelectionResult = {
   loadingMembers: boolean;
   handleSelectAssignee: (id: string) => void;
   clearAssignee: () => void;
+  resetAssignee: () => void;
 };
 
 export function useAssigneeSelection(
@@ -32,30 +33,35 @@ export function useAssigneeSelection(
   } = args;
 
   const { currentMember } = useAuthContext();
+  const { assigneeCandidates, loadingMembers } = useAdminCard();
 
-  const {
-    assigneeCandidates,
-    loadingMembers,
-  } = useAdminCard();
+  const [assigneeId, setAssigneeId] = useState(initialAssigneeId ?? "");
+  const previousInitialAssigneeIdRef = useRef<string | null>(initialAssigneeId);
 
-  const [assigneeId, setAssigneeId] = useState(
-    initialAssigneeId ?? "",
-  );
-
+  /**
+   * Backend再取得・保存後のresponseなどによってinitialAssigneeIdが変化した場合、
+   * 現在のassigneeIdも最新値へ同期する。
+   *
+   * 同一initialAssigneeIdでの再renderでは同期しないため、
+   * ユーザーが画面上で選択したassigneeIdを不要に上書きしない。
+   */
   useEffect(() => {
-    if (assigneeId || !initialAssigneeId) {
+    const previousInitialAssigneeId = previousInitialAssigneeIdRef.current;
+
+    if (previousInitialAssigneeId === initialAssigneeId) {
       return;
     }
 
-    setAssigneeId(initialAssigneeId);
-  }, [assigneeId, initialAssigneeId]);
+    previousInitialAssigneeIdRef.current = initialAssigneeId;
+    setAssigneeId(initialAssigneeId ?? "");
+  }, [initialAssigneeId]);
 
+  /**
+   * Create画面などinitialAssigneeIdが存在しない場合のみ、
+   * currentMemberを初期担当者として設定する。
+   */
   useEffect(() => {
-    if (
-      assigneeId ||
-      !defaultToCurrentMember ||
-      !currentMember
-    ) {
+    if (assigneeId || !defaultToCurrentMember || !currentMember) {
       return;
     }
 
@@ -64,11 +70,7 @@ export function useAssigneeSelection(
     }
 
     setAssigneeId(currentMember.id);
-  }, [
-    assigneeId,
-    currentMember,
-    defaultToCurrentMember,
-  ]);
+  }, [assigneeId, currentMember, defaultToCurrentMember]);
 
   const assigneeName = useMemo(() => {
     if (!assigneeId) {
@@ -87,10 +89,7 @@ export function useAssigneeSelection(
       return currentMember.displayName || "未設定";
     }
 
-    if (
-      initialAssigneeId === assigneeId &&
-      initialAssigneeName
-    ) {
+    if (initialAssigneeId === assigneeId && initialAssigneeName) {
       return initialAssigneeName;
     }
 
@@ -112,7 +111,6 @@ export function useAssigneeSelection(
       const isCandidate = assigneeCandidates.some(
         (candidate) => candidate.id === id,
       );
-
       const isCurrentMember = currentMember?.id === id;
 
       if (!isCandidate && !isCurrentMember) {
@@ -121,15 +119,26 @@ export function useAssigneeSelection(
 
       setAssigneeId(id);
     },
-    [
-      assigneeCandidates,
-      currentMember,
-    ],
+    [assigneeCandidates, currentMember],
   );
 
   const clearAssignee = useCallback(() => {
     setAssigneeId("");
   }, []);
+
+  const resetAssignee = useCallback(() => {
+    if (initialAssigneeId) {
+      setAssigneeId(initialAssigneeId);
+      return;
+    }
+
+    if (defaultToCurrentMember && currentMember?.id) {
+      setAssigneeId(currentMember.id);
+      return;
+    }
+
+    setAssigneeId("");
+  }, [initialAssigneeId, defaultToCurrentMember, currentMember]);
 
   return {
     assigneeId,
@@ -138,5 +147,6 @@ export function useAssigneeSelection(
     loadingMembers,
     handleSelectAssignee,
     clearAssignee,
+    resetAssignee,
   };
 }

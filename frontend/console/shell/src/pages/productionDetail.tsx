@@ -30,12 +30,14 @@ export default function ProductionDetail() {
     error,
     quantityRows,
     setQuantityRows,
+    assigneeId,
+    assigneeName,
+    assigneeCandidates,
+    loadingMembers,
+    onSelectAssignee,
+    onEditAssignee,
+    onClickAssignee,
   } = useProductionDetail();
-
-  const assigneeDisplay =
-    production?.assigneeName ||
-    production?.assigneeId ||
-    "担当者が設定されていません";
 
   const createdAtLabel = production?.createdAt
     ? new Date(production.createdAt).toLocaleDateString("ja-JP")
@@ -149,13 +151,16 @@ export default function ProductionDetail() {
       <div className="space-y-4">
         <AdminCard
           title="管理情報"
-          assigneeName={assigneeDisplay}
-          assigneeCandidates={[]}
-          loadingMembers={false}
+          assigneeId={assigneeId || undefined}
+          assigneeName={assigneeName}
+          assigneeCandidates={assigneeCandidates}
+          loadingMembers={loadingMembers}
           createdByName={production?.createdByName || "-"}
           createdAt={createdAtLabel}
           mode={adminMode}
-          onSelectAssignee={() => {}}
+          onSelectAssignee={onSelectAssignee}
+          onEditAssignee={onEditAssignee}
+          onClickAssignee={onClickAssignee}
         />
 
         <LogCard

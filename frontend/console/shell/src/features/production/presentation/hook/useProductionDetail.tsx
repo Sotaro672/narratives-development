@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import type {
   ProductionDetail,
   ProductionQuantityRow,
@@ -26,13 +27,32 @@ export function useProductionDetail() {
   const [error, setError] = React.useState<string | null>(null);
   const [quantityRows, setQuantityRows] = React.useState<ProductionQuantityRow[]>([]);
 
+  const {
+    assigneeId,
+    assigneeName,
+    assigneeCandidates,
+    loadingMembers,
+    handleSelectAssignee,
+    resetAssignee,
+  } = useAssigneeSelection({
+    initialAssigneeId: production?.assigneeId ?? null,
+    initialAssigneeName: production?.assigneeName ?? null,
+    defaultToCurrentMember: false,
+  });
+
   const isViewMode = mode === "view";
   const isEditMode = mode === "edit";
   const canEdit = production?.printed !== true;
 
   const switchToView = React.useCallback(() => {
+    resetAssignee();
+
+    if (production) {
+      setQuantityRows(production.models ?? []);
+    }
+
     setMode("view");
-  }, []);
+  }, [production, resetAssignee]);
 
   const switchToEdit = React.useCallback(() => {
     if (!canEdit) return;
@@ -82,9 +102,14 @@ export function useProductionDetail() {
       return;
     }
 
+    if (!assigneeId) {
+      alert("担当者を選択してください。");
+      return;
+    }
+
     try {
       const updated = await updateProductionDetail(productionId, {
-        assigneeId: production.assigneeId,
+        assigneeId,
         models: quantityRows.map(({ modelId, quantity }) => ({
           modelId,
           quantity,
@@ -93,14 +118,20 @@ export function useProductionDetail() {
 
       if (updated) {
         setProduction(updated);
-        setQuantityRows(updated.models);
+        setQuantityRows(updated.models ?? []);
       }
 
       setMode("view");
     } catch {
       alert("更新に失敗しました");
     }
-  }, [productionId, production, quantityRows, canEdit]);
+  }, [
+    productionId,
+    production,
+    quantityRows,
+    canEdit,
+    assigneeId,
+  ]);
 
   const onDelete = React.useCallback(async () => {
     if (!productionId || !production || deleting) return;
@@ -112,8 +143,10 @@ export function useProductionDetail() {
 
     try {
       setDeleting(true);
+
       const repository = new ProductionRepositoryHTTP();
       await repository.delete(productionId);
+
       navigate("/production");
     } catch {
       alert("生産情報の削除に失敗しました。");
@@ -125,6 +158,16 @@ export function useProductionDetail() {
   const handleBack = React.useCallback(() => {
     navigate("/production");
   }, [navigate]);
+
+  const onSelectAssignee = React.useCallback(
+    (id: string) => {
+      handleSelectAssignee(id);
+    },
+    [handleSelectAssignee],
+  );
+
+  const onEditAssignee = React.useCallback(() => {}, []);
+  const onClickAssignee = React.useCallback(() => {}, []);
 
   return {
     isViewMode,
@@ -143,6 +186,14 @@ export function useProductionDetail() {
     error,
     quantityRows,
     setQuantityRows,
+
+    assigneeId,
+    assigneeName,
+    assigneeCandidates,
+    loadingMembers,
+    onSelectAssignee,
+    onEditAssignee,
+    onClickAssignee,
   };
 }
 

@@ -3,8 +3,8 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useAuthContext } from "../../../../auth/application/AuthContext";
 import type { TokenBlueprint } from "../../../../shared/types/tokenBlueprint";
+import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import {
   createTokenBlueprintWithOptionalIcon,
   type CreateTokenBlueprintInput,
@@ -17,7 +17,7 @@ import {
  * - 作成カードの初期値生成
  * - TokenBlueprint本体の新規作成
  * - トークンアイコンの保存
- * - 初期担当者の設定
+ * - 担当者選択
  * - 一覧画面への遷移
  *
  * tokenBlueprintContentsの管理、プレビュー、upload、
@@ -29,19 +29,23 @@ import {
  *
  * member系ID:
  * - assigneeIdはmembers document IDを送信する
+ *
+ * assignee:
+ * - 担当者選択はuseAssigneeSelectionを正とする
+ * - 初期担当者はcurrentMemberのmembers document IDとする
  */
 export function useTokenBlueprintCreate() {
   const navigate = useNavigate();
-  const { currentMember } = useAuthContext();
 
-  /**
-   * Firebase Auth UIDではなくFirestore membersのdocument ID。
-   */
-  const memberId = currentMember?.id ?? "";
-
-  const displayAssigneeName = React.useMemo(() => {
-    return currentMember?.displayName || currentMember?.email || "未設定";
-  }, [currentMember?.displayName, currentMember?.email]);
+  const {
+    assigneeId,
+    assigneeName,
+    assigneeCandidates,
+    loadingMembers,
+    handleSelectAssignee,
+  } = useAssigneeSelection({
+    defaultToCurrentMember: true,
+  });
 
   const onBack = React.useCallback(() => {
     navigate("/tokenBlueprint", { replace: true });
@@ -63,6 +67,8 @@ export function useTokenBlueprintCreate() {
    *
    * Backendで永続化されるTokenBlueprint responseを模倣せず、
    * 作成フォームで必要な値だけを持つ。
+   *
+   * assigneeIdの状態管理自体はuseAssigneeSelectionを正とする。
    */
   const initialTokenBlueprint = React.useMemo(
     () => ({
@@ -72,18 +78,29 @@ export function useTokenBlueprintCreate() {
       brandId: "",
       brandName: "",
       description: "",
-      assigneeId: memberId,
+      assigneeId,
       minted: false,
     }),
-    [memberId],
+    [assigneeId],
   );
+
+  const onEditAssignee = React.useCallback(() => {}, []);
+
+  const onClickAssignee = React.useCallback(() => {}, []);
 
   return {
     initialTokenBlueprint,
-    assigneeName: displayAssigneeName,
+
+    assigneeId,
+    assigneeName,
+    assigneeCandidates,
+    loadingMembers,
+    onSelectAssignee: handleSelectAssignee,
+    onEditAssignee,
+    onClickAssignee,
+
     initialEditMode: true,
-    onEditAssignee: () => {},
-    onClickAssignee: () => {},
+
     onBack,
     onSave,
   };

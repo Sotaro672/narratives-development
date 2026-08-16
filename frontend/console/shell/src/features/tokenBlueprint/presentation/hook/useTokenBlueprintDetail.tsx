@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useAuthContext } from "../../../../auth/application/AuthContext";
+import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import type { ContentFile, TokenBlueprint } from "../../../../shared/types/tokenBlueprint";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
@@ -23,6 +24,11 @@ type UseTokenBlueprintDetailVM = {
   title: string;
   assigneeId: string;
   assigneeName: string;
+  assigneeCandidates: {
+    id: string;
+    name: string;
+  }[];
+  loadingMembers: boolean;
   minted: boolean;
   createdByName: string;
   createdAt: string;
@@ -61,9 +67,20 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
   const [blueprint, setBlueprint] = useState<TokenBlueprint | null>(null);
   const [loading, setLoading] = useState(false);
-  const [assigneeId, setAssigneeId] = useState("");
-  const [assigneeName, setAssigneeName] = useState("");
   const [isUploadingContents, setIsUploadingContents] = useState(false);
+
+  const {
+    assigneeId,
+    assigneeName,
+    assigneeCandidates,
+    loadingMembers,
+    handleSelectAssignee,
+    resetAssignee,
+  } = useAssigneeSelection({
+    initialAssigneeId: blueprint?.assigneeId ?? null,
+    initialAssigneeName: blueprint?.assigneeName ?? null,
+    defaultToCurrentMember: false,
+  });
 
   useEffect(() => {
     const id = tokenBlueprintId;
@@ -85,8 +102,6 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         }
 
         setBlueprint(result);
-        setAssigneeId(result.assigneeId);
-        setAssigneeName(result.assigneeName ?? "");
       } catch {
         if (!cancelled) {
           navigate("/tokenBlueprint", { replace: true });
@@ -133,19 +148,16 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   const handleCancel = useCallback(() => {
     cardHandlers.reset?.();
     cardHandlers.setEditMode?.(false);
-
-    if (!blueprint) {
-      setAssigneeId("");
-      setAssigneeName("");
-      return;
-    }
-
-    setAssigneeId(blueprint.assigneeId);
-    setAssigneeName(blueprint.assigneeName ?? "");
-  }, [cardHandlers, blueprint]);
+    resetAssignee();
+  }, [cardHandlers, resetAssignee]);
 
   const handleSave = useCallback(async (): Promise<void> => {
     if (loading || !blueprint) {
+      return;
+    }
+
+    if (!assigneeId) {
+      window.alert("担当者を選択してください。");
       return;
     }
 
@@ -161,8 +173,6 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
       const updated = await updateTokenBlueprintFromCard(sourceBlueprint, cardVm);
 
       setBlueprint(updated);
-      setAssigneeId(updated.assigneeId);
-      setAssigneeName(updated.assigneeName ?? "");
       cardHandlers.setEditMode?.(false);
 
       window.alert("編集が完了しました。");
@@ -171,7 +181,14 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     } finally {
       setLoading(false);
     }
-  }, [loading, blueprint, assigneeId, assigneeName, cardVm, cardHandlers]);
+  }, [
+    loading,
+    blueprint,
+    assigneeId,
+    assigneeName,
+    cardVm,
+    cardHandlers,
+  ]);
 
   const handleDelete = useCallback(async (): Promise<void> => {
     if (loading || !blueprint || blueprint.minted) {
@@ -187,14 +204,6 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     }
   }, [loading, blueprint, navigate]);
 
-  const handleSelectAssignee = useCallback((id: string) => {
-    if (!id) {
-      return;
-    }
-
-    setAssigneeId(id);
-  }, []);
-
   const handleEditAssignee = useCallback(() => {
     // AdminCard互換イベント。
   }, []);
@@ -203,69 +212,73 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     // AdminCard互換イベント。
   }, []);
 
-  const onTokenContentsFilesSelected = useCallback(async (files: File[]): Promise<void> => {
-    const id = tokenBlueprintId;
+  const onTokenContentsFilesSelected = useCallback(
+    async (files: File[]): Promise<void> => {
+      const id = tokenBlueprintId;
 
-    if (!id || !blueprint || files.length === 0) {
-      return;
-    }
+      if (!id || !blueprint || files.length === 0) {
+        return;
+      }
 
-    if (!blueprint.companyId) {
-      throw new Error("companyId is required");
-    }
+      if (!blueprint.companyId) {
+        throw new Error("companyId is required");
+      }
 
-    if (!memberId) {
-      throw new Error("memberId is required");
-    }
+      if (!memberId) {
+        throw new Error("memberId is required");
+      }
 
-    setIsUploadingContents(true);
+      setIsUploadingContents(true);
 
-    try {
-      const updated = await uploadAndAppendTokenBlueprintContents({
-        companyId: blueprint.companyId,
+      try {
+        const updated = await uploadAndAppendTokenBlueprintContents({
+          companyId: blueprint.companyId,
+          tokenBlueprintId: id,
+          actorId: memberId,
+          files,
+          existingContentFiles: blueprint.contentFiles,
+        });
+
+        setBlueprint(updated);
+      } finally {
+        setIsUploadingContents(false);
+      }
+    },
+    [tokenBlueprintId, blueprint, memberId],
+  );
+
+  const onDeleteTokenContent = useCallback(
+    async (
+      item: ContentFile,
+      _index: number,
+    ): Promise<void> => {
+      const id = tokenBlueprintId;
+
+      if (!id || !blueprint) {
+        return;
+      }
+
+      const nextContentFiles = blueprint.contentFiles.filter(
+        (contentFile) => contentFile.id !== item.id,
+      );
+
+      const updated = await patchTokenBlueprintContentFiles({
         tokenBlueprintId: id,
-        actorId: memberId,
-        files,
-        existingContentFiles: blueprint.contentFiles,
+        contentFiles: nextContentFiles,
       });
 
       setBlueprint(updated);
-      setAssigneeId(updated.assigneeId);
-      setAssigneeName(updated.assigneeName ?? "");
-    } finally {
-      setIsUploadingContents(false);
-    }
-  }, [tokenBlueprintId, blueprint, memberId]);
-
-  const onDeleteTokenContent = useCallback(async (
-    item: ContentFile,
-    _index: number,
-  ): Promise<void> => {
-    const id = tokenBlueprintId;
-
-    if (!id || !blueprint) {
-      return;
-    }
-
-    const nextContentFiles = blueprint.contentFiles.filter(
-      (contentFile) => contentFile.id !== item.id,
-    );
-
-    const updated = await patchTokenBlueprintContentFiles({
-      tokenBlueprintId: id,
-      contentFiles: nextContentFiles,
-    });
-
-    setBlueprint(updated);
-    setAssigneeId(updated.assigneeId);
-    setAssigneeName(updated.assigneeName ?? "");
-  }, [tokenBlueprintId, blueprint]);
+    },
+    [tokenBlueprintId, blueprint],
+  );
 
   const vm: UseTokenBlueprintDetailVM = {
     blueprint,
     title: "トークン設計",
     assigneeId,
     assigneeName,
+    assigneeCandidates,
+    loadingMembers,
     minted,
     createdByName,
     createdAt,

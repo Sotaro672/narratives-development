@@ -94,7 +94,7 @@ export function useBrandDetail() {
     assigneeCandidates: managerCandidates,
     loadingMembers,
     handleSelectAssignee: handleSelectManager,
-    clearAssignee,
+    resetAssignee,
   } = useAssigneeSelection({
     initialAssigneeId: brand.managerId,
     initialAssigneeName: brand.memberName,
@@ -137,8 +137,6 @@ export function useBrandDetail() {
         setBrand(response);
         setDraft(createDraft(response));
 
-        clearAssignee();
-
         setBrandIconFile(null);
         setBrandBackgroundFile(null);
         setBrandIconError(null);
@@ -163,10 +161,7 @@ export function useBrandDetail() {
     return () => {
       cancelled = true;
     };
-  }, [
-    resolvedBrandId,
-    clearAssignee,
-  ]);
+  }, [resolvedBrandId]);
 
   useEffect(() => {
     if (!brandIconFile) {
@@ -254,8 +249,7 @@ export function useBrandDetail() {
 
   const handleCancelEdit = useCallback(() => {
     setDraft(createDraft(brand));
-
-    clearAssignee();
+    resetAssignee();
 
     setBrandIconFile(null);
     setBrandBackgroundFile(null);
@@ -274,7 +268,7 @@ export function useBrandDetail() {
     setIsEditing(false);
   }, [
     brand,
-    clearAssignee,
+    resetAssignee,
   ]);
 
   const handlePickBrandIcon = useCallback(() => {
@@ -557,8 +551,6 @@ export function useBrandDetail() {
       setBrand(savedBrand);
       setDraft(createDraft(savedBrand));
 
-      clearAssignee();
-
       setBrandIconFile(null);
       setBrandBackgroundFile(null);
       setBrandIconError(null);
@@ -589,7 +581,6 @@ export function useBrandDetail() {
     managerId,
     uploadBrandAssets,
     validateSelectedImagesBeforeSave,
-    clearAssignee,
   ]);
 
   const statusBadgeClass = useMemo(
