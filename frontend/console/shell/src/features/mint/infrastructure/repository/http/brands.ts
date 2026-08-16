@@ -4,7 +4,7 @@ import { API_BASE } from "../../../../../shared/http/apiBase";
 import { getAuthHeaders } from "../../../../../shared/http/authHeaders";
 
 import type { ItemsResult } from "../../../../../shared/types/common/common";
-import type { BrandSummary } from "../../../application/port/MintRequestRepository";
+import type { BrandSummary } from "../../dto/MintRequestRepository";
 
 export async function fetchBrandsForMintHTTP(): Promise<BrandSummary[]> {
   const authHeaders = await getAuthHeaders();

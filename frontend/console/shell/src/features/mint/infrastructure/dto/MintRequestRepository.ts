@@ -1,11 +1,5 @@
 // frontend/console/shell/src/features/mint/application/port/MintRequestRepository.ts
 
-import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
-import type {
-  MintProductBlueprintDTO,
-  MintRequestDetailDTO,
-} from "../../infrastructure/dto/mintRequestLocal.dto";
-
 export type BrandSummary = {
   id: string;
   name: string;
@@ -103,7 +97,7 @@ export type MintFundingEstimateCosts = {
 };
 
 /**
- * GET /mint/funding-estimate のレスポンス。
+ * GET /mint/funding-estimate のBackend response。
  */
 export type MintFundingEstimate = {
   cluster: string;
@@ -113,54 +107,3 @@ export type MintFundingEstimate = {
   resources: MintFundingEstimateResources;
   estimate: MintFundingEstimateCosts;
 };
-
-export interface MintRequestRepository {
-  /**
-   * productionIdに紐づくMint詳細情報を取得する。
-   *
-   * GET /mint/inspections/{productionId} のBackend BFF responseをそのまま返す。
-   * productBlueprintId / productName / modelMeta / inspectionをFrontend側で再構築しない。
-   */
-  fetchMintRequestDetail(
-    productionId: string,
-  ): Promise<MintRequestDetailDTO | null>;
-
-  /**
-   * productionIdに紐づくMint管理情報を取得する。
-   * GET /mint/requests?productionIds={productionId} の対象rowを正とする。
-   */
-  fetchMintRequestRowByProductionId(
-    productionId: string,
-  ): Promise<MintRequestManagementRowDTO | null>;
-
-  /**
-   * productBlueprintIdに紐づくミント画面用ProductBlueprint情報を取得する。
-   * GET /mint/product_blueprints/{productBlueprintId} のBackend BFF responseを正とする。
-   */
-  fetchMintProductBlueprint(
-    productBlueprintId: string,
-  ): Promise<MintProductBlueprintDTO | null>;
-
-  /**
-   * ミント申請画面で選択可能なブランド一覧を取得する。
-   */
-  fetchBrandsForMint(): Promise<BrandSummary[]>;
-
-  /**
-   * 指定したブランドに紐づくToken Blueprint一覧を取得する。
-   */
-  fetchTokenBlueprintsByBrand(
-    brandId: string,
-  ): Promise<TokenBlueprintSummary[]>;
-
-  /**
-   * productionIdとtokenBlueprintIdからBubblegum V2 MintのSOL見積を取得する。
-   *
-   * metadataUriはFrontendから渡さない。
-   * mintQuantity、Brand Wallet、TokenBlueprint情報はBackend側で解決する。
-   */
-  fetchMintFundingEstimate(
-    productionId: string,
-    tokenBlueprintId: string,
-  ): Promise<MintFundingEstimate>;
-}

@@ -3,7 +3,7 @@
 import type {
   BrandSummary,
   TokenBlueprintSummary,
-} from "../../application/port/MintRequestRepository";
+} from "../../infrastructure/dto/MintRequestRepository";
 
 import type {
   MintProductBlueprintDTO,

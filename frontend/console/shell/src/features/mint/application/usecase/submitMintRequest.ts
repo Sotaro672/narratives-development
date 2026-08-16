@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/mintRequest/application/usecase/submitMintRequest.ts
 
 import type { InspectionBatch } from "../../../../shared/types/inspections";
-import type { MintQueuedResponse } from "../port/MintRequestRepository";
+import type { MintQueuedResponse } from "../../infrastructure/dto/MintRequestRepository";
 import { validateMintRequestSubmit } from "../validator/validateMintRequestSubmit";
 
 /**

@@ -3,7 +3,7 @@
 import { API_BASE } from "../../../../../shared/http/apiBase";
 import { getAuthHeaders } from "../../../../../shared/http/authHeaders";
 
-import type { TokenBlueprintSummary } from "../../../application/port/MintRequestRepository";
+import type { TokenBlueprintSummary } from "../../dto/MintRequestRepository";
 
 export async function fetchTokenBlueprintsByBrandHTTP(
   brandId: string,

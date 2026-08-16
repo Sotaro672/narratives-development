@@ -6,7 +6,7 @@ import { getAuthHeaders } from "../../../../../shared/http/authHeaders";
 import type {
   MintFundingEstimate,
   MintQueuedResponse,
-} from "../../../application/port/MintRequestRepository";
+} from "../../dto/MintRequestRepository";
 import type { MintRequestManagementRowDTO } from "../../dto/mintRequestManagementRow";
 
 // ===============================

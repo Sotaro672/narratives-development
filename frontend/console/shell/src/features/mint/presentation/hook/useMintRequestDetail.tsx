@@ -1,18 +1,25 @@
 // frontend/console/shell/src/features/mint/presentation/hook/useMintRequestDetail.tsx
+
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { MintFundingEstimate, TokenBlueprintSummary } from "../../application/port/MintRequestRepository";
+import type { MintFundingEstimate, TokenBlueprintSummary } from "../../infrastructure/dto/MintRequestRepository";
+import { buildInspectionResultCardData } from "../../application/mapper/buildInspectionResultCardData";
 import { completeMintInspection } from "../../application/usecase/completeMintInspection";
-import { getMintRequestDetail } from "../../application/usecase/getMintRequestDetail";
-import { getMintProductBlueprint } from "../../application/usecase/getMintProductBlueprint";
 import { submitMintRequest } from "../../application/usecase/submitMintRequest";
+import { rgbIntToHex } from "../../../../shared/util/color";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import { useBrandSelection } from "../../../brand/presentation/hook/useBrandSelection";
 import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
 import type { MintProductBlueprintDTO, MintRequestDetailDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
-import { HttpMintRequestRepository } from "../../infrastructure/repository/HttpMintRequestRepository";
+import { completeInspectionHTTP, fetchMintRequestDetailHTTP } from "../../infrastructure/repository/http/inspections";
+import {
+  fetchMintFundingEstimateHTTP,
+  fetchMintRequestRowByProductionIdHTTP,
+  postMintRequestHTTP,
+} from "../../infrastructure/repository/http/mintRequests";
+import { fetchMintProductBlueprintHTTP } from "../../infrastructure/repository/http/mintProductBlueprint";
+import { fetchTokenBlueprintsByBrandHTTP } from "../../infrastructure/repository/http/tokenBlueprints";
 import { buildProductBlueprintCardView, buildTokenBlueprintCardVm } from "../viewModel/mintRequestDetailViewModel";
-import { useInspectionResultCard } from "./useInspectionResultCard";
 import { useMintAutoSelection } from "./useMintRequestDetail.useMintAutoSelection";
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -26,7 +33,6 @@ export function useMintRequestDetail() {
   const navigate = useNavigate();
   const { requestId } = useParams<{ requestId: string }>();
   const productionId = React.useMemo(() => String(requestId ?? "").trim(), [requestId]);
-  const mintRequestRepo = React.useMemo(() => new HttpMintRequestRepository(), []);
 
   const [mintRequestDetail, setMintRequestDetail] = React.useState<MintRequestDetailDTO | null>(null);
   const [mintRequestRow, setMintRequestRow] = React.useState<MintRequestManagementRowDTO | null>(null);
@@ -62,19 +68,19 @@ export function useMintRequestDetail() {
     if (!productionId) return;
 
     const [detail, row] = await Promise.all([
-      getMintRequestDetail(mintRequestRepo, productionId),
-      mintRequestRepo.fetchMintRequestRowByProductionId(productionId),
+      fetchMintRequestDetailHTTP(productionId),
+      fetchMintRequestRowByProductionIdHTTP(productionId),
     ]);
 
     setMintRequestDetail(detail);
     setMintRequestRow(row);
-  }, [mintRequestRepo, productionId]);
+  }, [productionId]);
 
   const reloadMintStatus = React.useCallback(async () => {
     if (!productionId) return;
-    const row = await mintRequestRepo.fetchMintRequestRowByProductionId(productionId);
+    const row = await fetchMintRequestRowByProductionIdHTTP(productionId);
     setMintRequestRow(row);
-  }, [mintRequestRepo, productionId]);
+  }, [productionId]);
 
   React.useEffect(() => {
     if (!productionId) {
@@ -91,8 +97,8 @@ export function useMintRequestDetail() {
 
       try {
         const [detail, row] = await Promise.all([
-          getMintRequestDetail(mintRequestRepo, productionId),
-          mintRequestRepo.fetchMintRequestRowByProductionId(productionId),
+          fetchMintRequestDetailHTTP(productionId),
+          fetchMintRequestRowByProductionIdHTTP(productionId),
         ]);
 
         if (cancelled) return;
@@ -111,7 +117,7 @@ export function useMintRequestDetail() {
     return () => {
       cancelled = true;
     };
-  }, [mintRequestRepo, productionId]);
+  }, [productionId]);
 
   React.useEffect(() => {
     if (!productBlueprintId) {
@@ -127,7 +133,7 @@ export function useMintRequestDetail() {
       setProductBlueprintError(null);
 
       try {
-        const result = await getMintProductBlueprint(mintRequestRepo, productBlueprintId);
+        const result = await fetchMintProductBlueprintHTTP(productBlueprintId);
         if (!cancelled) setProductBlueprint(result);
       } catch (error: unknown) {
         if (!cancelled) {
@@ -143,7 +149,7 @@ export function useMintRequestDetail() {
     return () => {
       cancelled = true;
     };
-  }, [mintRequestRepo, productBlueprintId]);
+  }, [productBlueprintId]);
 
   const batchForInspectionCard = React.useMemo(() => {
     if (!inspectionBatch) return undefined;
@@ -156,8 +162,16 @@ export function useMintRequestDetail() {
     };
   }, [inspectionBatch, mintRequestDetail, productBlueprint]);
 
-  const inspectionCardData = useInspectionResultCard({ batch: batchForInspectionCard });
+  const inspectionCardData = React.useMemo(
+    () => ({
+      ...buildInspectionResultCardData({ batch: batchForInspectionCard }),
+      rgbIntToHex,
+    }),
+    [batchForInspectionCard],
+  );
+
   const totalMintQuantity = mintRequestRow?.mintQuantity ?? 0;
+
   const productBlueprintCardView = React.useMemo(
     () => buildProductBlueprintCardView(productBlueprint),
     [productBlueprint],
@@ -178,7 +192,7 @@ export function useMintRequestDetail() {
       }
 
       try {
-        const options = await mintRequestRepo.fetchTokenBlueprintsByBrand(brandId);
+        const options = await fetchTokenBlueprintsByBrandHTTP(brandId);
         setTokenBlueprintOptions(options);
         setSelectedTokenBlueprintId("");
       } catch {
@@ -186,13 +200,15 @@ export function useMintRequestDetail() {
         setSelectedTokenBlueprintId("");
       }
     },
-    [selectBrand, mintRequestRepo],
+    [selectBrand],
   );
 
   const mintStatus = mintRequestRow?.mintStatus ?? null;
   const hasMint = Boolean(mintStatus);
   const isMintProcessing =
-    mintStatus === "QUEUED" || mintStatus === "MINTING" || mintStatus === "PARTIALLY_MINTED";
+    mintStatus === "QUEUED" ||
+    mintStatus === "MINTING" ||
+    mintStatus === "PARTIALLY_MINTED";
   const isMintCompleted = mintStatus === "MINTED";
   const createdByName = mintRequestRow?.createdByName ?? null;
   const requestedByName = mintRequestRow?.requestedByName ?? null;
@@ -260,7 +276,7 @@ export function useMintRequestDetail() {
       setMintFundingEstimateLoading(true);
 
       try {
-        const estimate = await mintRequestRepo.fetchMintFundingEstimate(
+        const estimate = await fetchMintFundingEstimateHTTP(
           productionId,
           selectedTokenBlueprintId,
         );
@@ -281,7 +297,7 @@ export function useMintRequestDetail() {
     return () => {
       cancelled = true;
     };
-  }, [mintRequestRepo, productionId, selectedTokenBlueprintId, showMintControls]);
+  }, [productionId, selectedTokenBlueprintId, showMintControls]);
 
   const displayTokenBlueprintId = React.useMemo(
     () => selectedTokenBlueprintId || mintRequestedTokenBlueprintId,
@@ -299,7 +315,10 @@ export function useMintRequestDetail() {
     setIsCompletingInspection(true);
 
     try {
-      const result = await completeMintInspection(mintRequestRepo, { inspectionBatch });
+      const result = await completeMintInspection(
+        { completeInspection: completeInspectionHTTP },
+        { inspectionBatch },
+      );
 
       if (!result.ok) {
         alert(result.message);
@@ -318,7 +337,6 @@ export function useMintRequestDetail() {
     isCompletingInspection,
     isMinting,
     isMintCompleted,
-    mintRequestRepo,
     reloadDetail,
   ]);
 
@@ -344,10 +362,13 @@ export function useMintRequestDetail() {
     setError(null);
 
     try {
-      const result = await submitMintRequest(mintRequestRepo, {
-        inspectionBatch,
-        selectedTokenBlueprintId,
-      });
+      const result = await submitMintRequest(
+        { postMintRequest: postMintRequestHTTP },
+        {
+          inspectionBatch,
+          selectedTokenBlueprintId,
+        },
+      );
 
       if (!result.ok) {
         if (result.reason === "validation") {
@@ -375,7 +396,6 @@ export function useMintRequestDetail() {
     } catch (error: unknown) {
       const message = getErrorMessage(error, "不明なエラーが発生しました");
       setError(message);
-
       alert(`ミント申請に失敗しました: ${message}`);
 
       try {
@@ -392,7 +412,6 @@ export function useMintRequestDetail() {
     mintFundingEstimate,
     mintFundingEstimateError,
     mintFundingEstimateLoading,
-    mintRequestRepo,
     reloadDetail,
     selectedTokenBlueprintId,
     totalMintQuantity,
