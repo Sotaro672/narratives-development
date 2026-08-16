@@ -27,39 +27,6 @@ function formatSol(value: number): string {
 }
 
 /**
- * Mint処理中に右カラムへ表示するステータスカード。
- */
-function MintingStatusCard() {
-  return (
-    <Card className="pb-select" role="status" aria-live="polite" aria-busy="true">
-      <CardHeader>
-        <CardTitle>ミント処理中</CardTitle>
-      </CardHeader>
-
-      <CardContent>
-        <div className="flex flex-col items-center gap-4 py-4 text-center">
-          <div className="flex items-end justify-center gap-2 text-blue-600" aria-hidden="true">
-            <Coins size={28} className="animate-pulse" />
-            <Coins size={40} className="animate-bounce" />
-            <Coins size={28} className="animate-pulse" />
-          </div>
-
-          <div
-            className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600"
-            aria-hidden="true"
-          />
-
-          <div className="space-y-1">
-            <div className="text-sm font-semibold text-gray-900">ミント中...</div>
-            <p className="text-xs text-gray-500">ブロックチェーン上でミント処理を実行しています。</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-/**
  * mints/{mintId}/products の集計結果を表示する進捗カード。
  */
 function MintProgressCard({ progress }: { progress: MintTaskProgressDTO }) {
@@ -384,15 +351,7 @@ export default function MintRequestDetail() {
                 </div>
 
                 <div>
-                  検品状態: <strong>{mintRequestRow.inspectionStatus || "（未設定）"}</strong>
-                </div>
-
-                <div>
                   ミント状態: <strong>{mintStatusLabel}</strong>
-                </div>
-
-                <div>
-                  作成者: {mintRequestRow.createdByName || mintRequestRow.createdBy || "（不明）"}
                 </div>
 
                 <div>
@@ -406,8 +365,6 @@ export default function MintRequestDetail() {
         )}
 
         {hasMint && mintProgress && <MintProgressCard progress={mintProgress} />}
-
-        {isMinting && <MintingStatusCard />}
 
         {showBrandSelectorCard && (
           <Card className="pb-select">
