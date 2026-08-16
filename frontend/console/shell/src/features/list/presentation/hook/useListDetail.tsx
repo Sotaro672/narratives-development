@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import type { PriceRow } from "../../../inventory/application/listCreateService";
 import { useAuthContext } from "../../../../auth/application/AuthContext";
+import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import { useMainImageIndexGuard } from "./internal/useMainImageIndexGuard";
 import { useCancelledRef } from "./internal/useCancelledRef";
 import { useListImages } from "./useListImages";
@@ -65,6 +66,12 @@ export type UseListDetailResult = {
   assigneeId: string;
   assigneeName: string;
   draftAssigneeId: string;
+  draftAssigneeName: string;
+  assigneeCandidates: {
+    id: string;
+    name: string;
+  }[];
+  loadingMembers: boolean;
   onSelectAssignee: (id: string) => void;
   createdByName: string;
   createdAt: string;
@@ -72,9 +79,7 @@ export type UseListDetailResult = {
   updatedAt: string;
 };
 
-function clonePriceRows(
-  rows: readonly PriceRow[],
-): PriceRow[] {
+function clonePriceRows(rows: readonly PriceRow[]): PriceRow[] {
   return rows.map((row) => ({ ...row }));
 }
 
@@ -161,6 +166,19 @@ export function useListDetail(): UseListDetailResult {
   const updatedAt = derived?.updatedAtLabel ?? "";
   const primaryImageId = derived?.primaryImageId;
 
+  const {
+    assigneeId: draftAssigneeId,
+    assigneeName: draftAssigneeName,
+    assigneeCandidates,
+    loadingMembers,
+    handleSelectAssignee,
+    resetAssignee,
+  } = useAssigneeSelection({
+    initialAssigneeId: assigneeId || null,
+    initialAssigneeName: assigneeName || null,
+    defaultToCurrentMember: false,
+  });
+
   const viewImages = React.useMemo(
     () => derived?.images ?? [],
     [derived],
@@ -198,8 +216,6 @@ export function useListDetail(): UseListDetailResult {
   );
   const [draftStatus, setDraftStatus] =
     React.useState<ListStatus>("suspended");
-  const [draftAssigneeId, setDraftAssigneeId] =
-    React.useState(assigneeId);
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState("");
   const [deleting, setDeleting] = React.useState(false);
@@ -222,13 +238,13 @@ export function useListDetail(): UseListDetailResult {
       setDraftStatus(status);
     }
 
-    setDraftAssigneeId(assigneeId);
+    resetAssignee();
   }, [
     listingTitle,
     description,
     viewPriceRows,
     status,
-    assigneeId,
+    resetAssignee,
   ]);
 
   React.useEffect(() => {
@@ -352,9 +368,9 @@ export function useListDetail(): UseListDetailResult {
         return;
       }
 
-      setDraftAssigneeId(id);
+      handleSelectAssignee(id);
     },
-    [isEdit, saving],
+    [isEdit, saving, handleSelectAssignee],
   );
 
   const effectiveImageUrls = React.useMemo(
@@ -400,6 +416,11 @@ export function useListDetail(): UseListDetailResult {
       }
 
       if (deleting) {
+        return;
+      }
+
+      if (!draftAssigneeId) {
+        setSaveError("assignee_required");
         return;
       }
 
@@ -511,6 +532,9 @@ export function useListDetail(): UseListDetailResult {
     assigneeId,
     assigneeName,
     draftAssigneeId,
+    draftAssigneeName,
+    assigneeCandidates,
+    loadingMembers,
     onSelectAssignee,
     createdByName,
     createdAt,

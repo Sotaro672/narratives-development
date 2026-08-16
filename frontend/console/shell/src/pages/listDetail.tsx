@@ -1,4 +1,4 @@
-// frontend\console\shell\src\pages\listDetail.tsx
+// frontend/console/shell/src/pages/listDetail.tsx
 
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
@@ -14,9 +14,7 @@ import { useListDetail } from "../features/list/presentation/hook/useListDetail"
 
 export default function ListDetail() {
   const navigate = useNavigate();
-
   const vm = useListDetail();
-
   const isEdit = vm.isEdit;
 
   const headerTitle = isEdit
@@ -27,29 +25,18 @@ export default function ListDetail() {
     navigate("/list");
   }, [navigate]);
 
-  const effectiveStatus = isEdit
-    ? vm.draftStatus
-    : vm.status;
-
-  const effectivePriceRows = isEdit
-    ? vm.draftPriceRows
-    : vm.priceRows;
+  const effectiveStatus = isEdit ? vm.draftStatus : vm.status;
+  const effectivePriceRows = isEdit ? vm.draftPriceRows : vm.priceRows;
+  const effectiveAssigneeId = isEdit ? vm.draftAssigneeId : vm.assigneeId;
+  const effectiveAssigneeName = isEdit ? vm.draftAssigneeName : vm.assigneeName;
 
   return (
     <PageStyle
       layout="grid-2"
       title={headerTitle}
       onBack={onBackToListManagement}
-      onEdit={
-        !isEdit && !vm.deleting
-          ? vm.onEdit
-          : undefined
-      }
-      onDelete={
-        !isEdit && !vm.deleting
-          ? vm.onDelete
-          : undefined
-      }
+      onEdit={!isEdit && !vm.deleting ? vm.onEdit : undefined}
+      onDelete={!isEdit && !vm.deleting ? vm.onDelete : undefined}
       onCancel={isEdit ? vm.onCancel : undefined}
       onSave={isEdit ? vm.onSave : undefined}
       onCreate={undefined}
@@ -94,27 +81,17 @@ export default function ListDetail() {
         <ListImageCard
           isEdit={isEdit}
           saving={vm.saving}
-          imageUrls={
-            Array.isArray(vm.imageUrls)
-              ? vm.imageUrls
-              : []
-          }
+          imageUrls={Array.isArray(vm.imageUrls) ? vm.imageUrls : []}
           mainImageIndex={vm.mainImageIndex}
           setMainImageIndex={vm.setMainImageIndex}
-          onAddImages={(files) =>
-            vm.onAddImages(files)
-          }
-          onRemoveImageAt={(idx) =>
-            vm.onRemoveImageAt(idx)
-          }
+          onAddImages={(files) => vm.onAddImages(files)}
+          onRemoveImageAt={(idx) => vm.onRemoveImageAt(idx)}
           onClearImages={vm.onClearImages}
         />
 
         <Card>
           <CardContent className="p-4 space-y-2">
-            <div className="text-sm font-medium">
-              タイトル
-            </div>
+            <div className="text-sm font-medium">タイトル</div>
 
             {!isEdit && (
               <div className="text-sm text-slate-800 break-words">
@@ -126,11 +103,7 @@ export default function ListDetail() {
               <Input
                 value={vm.draftListingTitle}
                 placeholder="タイトルを入力"
-                onChange={(e) =>
-                  vm.setDraftListingTitle(
-                    e.target.value,
-                  )
-                }
+                onChange={(e) => vm.setDraftListingTitle(e.target.value)}
                 disabled={vm.saving}
               />
             )}
@@ -139,9 +112,7 @@ export default function ListDetail() {
 
         <Card>
           <CardContent className="p-4 space-y-2">
-            <div className="text-sm font-medium">
-              説明
-            </div>
+            <div className="text-sm font-medium">説明</div>
 
             {!isEdit && (
               <div className="text-sm text-slate-800 whitespace-pre-wrap break-words">
@@ -153,11 +124,7 @@ export default function ListDetail() {
               <textarea
                 value={vm.draftDescription}
                 placeholder="説明を入力"
-                onChange={(e) =>
-                  vm.setDraftDescription(
-                    e.target.value,
-                  )
-                }
+                onChange={(e) => vm.setDraftDescription(e.target.value)}
                 className="w-full min-h-[120px] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
                 disabled={vm.saving}
               />
@@ -170,36 +137,25 @@ export default function ListDetail() {
           rows={effectivePriceRows}
           mode={isEdit ? "edit" : "view"}
           currencySymbol="¥"
-          onChangePrice={
-            isEdit
-              ? vm.onChangePrice
-              : undefined
-          }
+          onChangePrice={isEdit ? vm.onChangePrice : undefined}
         />
 
-        {Array.isArray(effectivePriceRows) &&
-          effectivePriceRows.length === 0 && (
-            <div className="text-xs text-[hsl(var(--muted-foreground))]">
-              価格情報がありません。
-            </div>
-          )}
+        {Array.isArray(effectivePriceRows) && effectivePriceRows.length === 0 && (
+          <div className="text-xs text-[hsl(var(--muted-foreground))]">
+            価格情報がありません。
+          </div>
+        )}
       </div>
 
       <div className="space-y-4">
         <AdminCard
           title="担当者"
           mode={isEdit ? "edit" : "view"}
-          assigneeId={
-            isEdit
-              ? vm.draftAssigneeId
-              : vm.assigneeId
-          }
-          assigneeName={vm.assigneeName}
-          onSelectAssignee={
-            isEdit
-              ? vm.onSelectAssignee
-              : undefined
-          }
+          assigneeId={effectiveAssigneeId || undefined}
+          assigneeName={effectiveAssigneeName}
+          assigneeCandidates={vm.assigneeCandidates}
+          loadingMembers={vm.loadingMembers}
+          onSelectAssignee={isEdit ? vm.onSelectAssignee : undefined}
           createdByName={vm.createdByName}
           createdAt={vm.createdAt}
           updatedByName={vm.updatedByName}
@@ -208,9 +164,7 @@ export default function ListDetail() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm font-medium mb-2">
-              選択商品
-            </div>
+            <div className="text-sm font-medium mb-2">選択商品</div>
 
             <div className="text-sm text-slate-800 break-all">
               {vm.productBrandName || "未選択"}
@@ -224,9 +178,7 @@ export default function ListDetail() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm font-medium mb-2">
-              選択トークン
-            </div>
+            <div className="text-sm font-medium mb-2">選択トークン</div>
 
             <div className="text-sm text-slate-800 break-all">
               {vm.tokenBrandName || "未選択"}
@@ -240,9 +192,7 @@ export default function ListDetail() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm font-medium mb-2">
-              ステータス
-            </div>
+            <div className="text-sm font-medium mb-2">ステータス</div>
 
             {!isEdit && (
               <div className="flex gap-2">
@@ -283,9 +233,7 @@ export default function ListDetail() {
                       ? "opacity-60 cursor-not-allowed"
                       : "cursor-pointer",
                   ].join(" ")}
-                  onClick={() =>
-                    vm.onToggleStatus("listing")
-                  }
+                  onClick={() => vm.onToggleStatus("listing")}
                   disabled={vm.saving}
                 >
                   出品
@@ -302,9 +250,7 @@ export default function ListDetail() {
                       ? "opacity-60 cursor-not-allowed"
                       : "cursor-pointer",
                   ].join(" ")}
-                  onClick={() =>
-                    vm.onToggleStatus("suspended")
-                  }
+                  onClick={() => vm.onToggleStatus("suspended")}
                   disabled={vm.saving}
                 >
                   保留
