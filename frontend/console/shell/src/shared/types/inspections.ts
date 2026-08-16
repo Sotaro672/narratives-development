@@ -2,12 +2,13 @@
 
 /**
  * InspectionResult
- * backend/internal/domain/inspection/entity.go の InspectionResult に対応。
+ *
+ * Backend BFF / inspection domain が返す値をそのまま扱う。
  *
  * - "notYet"          : 未検査
  * - "passed"          : 合格
  * - "failed"          : 不合格
- * - "notManufactured" : 生産されていない（欠品など）
+ * - "notManufactured" : 生産されていない
  */
 export type InspectionResult =
   | "notYet"
@@ -17,22 +18,24 @@ export type InspectionResult =
 
 /**
  * InspectionStatus
- * backend/internal/domain/inspection/entity.go の InspectionStatus に対応。
+ *
+ * Backend BFF / inspection domain が返す値をそのまま扱う。
  *
  * - "inspecting" : 検査中
  * - "completed"  : 検査完了
  */
-export type InspectionStatus = "inspecting" | "completed";
+export type InspectionStatus =
+  | "inspecting"
+  | "completed";
 
 /**
  * InspectionItem
- * backend/internal/domain/inspection/entity.go の InspectionItem に対応。
+ *
+ * GET /mint/inspections/{productionId} の
+ * inspection.inspections に対応する。
  *
  * modelNumberなどのモデル表示情報は保持せず、
- * GET /mint/inspections/{productionId} のmodelMetaを正とする。
- *
- * - inspectionResult / inspectedBy / inspectedAt は null もしくは未設定を許容
- * - inspectedAt は ISO8601 日時文字列を想定
+ * Backend BFF のmodelMetaを正とする。
  */
 export interface InspectionItem {
   productId: string;
@@ -46,10 +49,10 @@ export interface InspectionItem {
  * InspectionBatch
  *
  * GET /mint/inspections/{productionId} の
- * inspection response に対応する。
+ * inspectionフィールドに対応する。
  *
- * Mint申請状態はGET /mint/requestsのmintStatusを正とし、
- * inspection側では保持しない。
+ * Frontend側では再構築・normalization・domain validationを行わず、
+ * Backend BFF responseを正とする。
  */
 export interface InspectionBatch {
   productionId: string;
@@ -60,9 +63,10 @@ export interface InspectionBatch {
 }
 
 /**
- * modelId → モデル表示情報。
+ * modelId -> モデル表示情報。
  *
- * GET /mint/inspections/{productionId} のmodelMetaに対応する。
+ * GET /mint/inspections/{productionId} の
+ * modelMetaに対応する。
  *
  * apparel:
  * - modelNumber
@@ -76,150 +80,12 @@ export interface InspectionBatch {
  * - volumeUnit
  */
 export interface MintModelMeta {
+  modelId?: string;
+  kind?: string;
   modelNumber?: string;
   size?: string;
   colorName?: string;
   rgb?: number;
   volume?: number;
-  volumeUnit?: "ml" | "L";
-}
-
-/**
- * MintRequest detail のinspection表示用DTO。
- *
- * InspectionBatch に加えて:
- * - productBlueprintId
- * - productName
- * - modelMeta
- */
-export interface InspectionBatchDTO extends InspectionBatch {
-  productBlueprintId: string;
-  productName: string;
-  modelMeta: Record<string, MintModelMeta>;
-}
-
-/* =========================================================
- * ユーティリティ
- * ======================================================= */
-
-/** InspectionStatus 妥当性チェック */
-export function isValidInspectionStatus(
-  s: string,
-): s is InspectionStatus {
-  return s === "inspecting" || s === "completed";
-}
-
-/** InspectionResult 妥当性チェック */
-export function isValidInspectionResult(
-  r: string,
-): r is InspectionResult {
-  return (
-    r === "notYet" ||
-    r === "passed" ||
-    r === "failed" ||
-    r === "notManufactured"
-  );
-}
-
-/** ISO8601/日付文字列の簡易チェック */
-function isValidDateTimeString(
-  value: string | null | undefined,
-): boolean {
-  if (value == null) return false;
-
-  const v = value.trim();
-  if (!v) return false;
-
-  const t = Date.parse(v);
-  return !Number.isNaN(t);
-}
-
-/**
- * InspectionBatch の簡易バリデーション。
- * backend/internal/domain/inspection/entity.go の validate() ロジックと概ね対応。
- *
- * 問題があればエラーメッセージ配列を返す。
- */
-export function validateInspectionBatch(
-  batch: InspectionBatch,
-): string[] {
-  const errors: string[] = [];
-
-  if (!batch.productionId?.trim()) {
-    errors.push("productionId is required");
-  }
-
-  if (!isValidInspectionStatus(batch.status)) {
-    errors.push("status must be 'inspecting' or 'completed'");
-  }
-
-  if (!batch.inspections || batch.inspections.length === 0) {
-    errors.push("inspections must not be empty");
-  }
-
-  if (
-    batch.quantity !== batch.inspections.length ||
-    batch.quantity <= 0
-  ) {
-    errors.push(
-      "quantity must equal inspections.length and be > 0",
-    );
-  }
-
-  if (
-    batch.totalPassed < 0 ||
-    batch.totalPassed > batch.quantity
-  ) {
-    errors.push(
-      "totalPassed must be between 0 and quantity",
-    );
-  }
-
-  for (const ins of batch.inspections ?? []) {
-    if (!ins.productId?.trim()) {
-      errors.push("inspection.productId is required");
-      continue;
-    }
-
-    if (ins.inspectionResult == null) {
-      continue;
-    }
-
-    if (!isValidInspectionResult(ins.inspectionResult)) {
-      errors.push(
-        `inspectionResult must be one of 'notYet' | 'passed' | 'failed' | 'notManufactured' (productId=${ins.productId})`,
-      );
-      continue;
-    }
-
-    if (ins.inspectionResult === "notYet") {
-      continue;
-    }
-
-    const hasBy =
-      !!ins.inspectedBy &&
-      ins.inspectedBy.trim() !== "";
-
-    const hasAt =
-      !!ins.inspectedAt &&
-      ins.inspectedAt.trim() !== "";
-
-    if (!hasBy) {
-      errors.push(
-        `inspectedBy is required when inspectionResult is '${ins.inspectionResult}' (productId=${ins.productId})`,
-      );
-    }
-
-    if (!hasAt) {
-      errors.push(
-        `inspectedAt is required when inspectionResult is '${ins.inspectionResult}' (productId=${ins.productId})`,
-      );
-    } else if (!isValidDateTimeString(ins.inspectedAt)) {
-      errors.push(
-        `inspectedAt must be a valid datetime string (productId=${ins.productId})`,
-      );
-    }
-  }
-
-  return errors;
+  volumeUnit?: string;
 }
