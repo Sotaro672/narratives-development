@@ -151,23 +151,17 @@ export function useMintRequestDetail() {
     };
   }, [productBlueprintId]);
 
-  const batchForInspectionCard = React.useMemo(() => {
-    if (!inspectionBatch) return undefined;
-
-    return {
-      ...inspectionBatch,
-      productName: mintRequestDetail?.productName ?? null,
-      modelMeta: mintRequestDetail?.modelMeta ?? null,
-      productBlueprint,
-    };
-  }, [inspectionBatch, mintRequestDetail, productBlueprint]);
-
   const inspectionCardData = React.useMemo(
     () => ({
-      ...buildInspectionResultCardData({ batch: batchForInspectionCard }),
+      ...buildInspectionResultCardData({
+        inspection: inspectionBatch,
+        productName: mintRequestDetail?.productName ?? "",
+        modelMeta: mintRequestDetail?.modelMeta ?? {},
+        productBlueprint,
+      }),
       rgbIntToHex,
     }),
-    [batchForInspectionCard],
+    [inspectionBatch, mintRequestDetail, productBlueprint],
   );
 
   const totalMintQuantity = mintRequestRow?.mintQuantity ?? 0;

@@ -15,28 +15,14 @@ export type InspectionResultRow = {
   quantity: number;
 };
 
-export type InspectionBatchForCard = InspectionBatch & {
-  productName?: string | null;
-
-  /**
-   * modelId -> model meta。
-   * Backend responseのmodelMetaをモデル表示情報の唯一の正として使用する。
-   */
-  modelMeta?: Record<string, MintModelMeta> | null;
-
-  /**
-   * GET /mint/product_blueprints/{productBlueprintId} のBackend BFF response。
-   * modelRefsはdisplayOrderの唯一のソースとし、
-   * productBlueprintCategory.kindで表示を切り替える。
-   */
-  productBlueprint?: Pick<
-    MintProductBlueprintDTO,
-    "modelRefs" | "productBlueprintCategory"
-  > | null;
-};
-
 export type BuildInspectionResultCardDataInput = {
-  batch: InspectionBatchForCard | null | undefined;
+  inspection: InspectionBatch | null | undefined;
+  productName: string;
+  modelMeta: Record<string, MintModelMeta>;
+  productBlueprint:
+    | Pick<MintProductBlueprintDTO, "modelRefs" | "productBlueprintCategory">
+    | null
+    | undefined;
 };
 
 export type InspectionResultCardData = {
@@ -48,55 +34,37 @@ export type InspectionResultCardData = {
   showVolumeColumn: boolean;
 };
 
-function toText(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "string") return value.trim();
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  return "";
-}
-
 /**
- * Backend BFFのProductBlueprint.modelRefsを正としてdisplayOrder対応表を生成する。
+ * Backendが返したvolume / volumeUnitだけを使用して表示文字列を生成する。
+ * volumeUnitのFrontend側補完は行わない。
  */
-function buildDisplayOrderByModelId(
-  modelRefs: MintProductBlueprintDTO["modelRefs"],
-): Record<string, number> {
-  return Object.fromEntries(
-    (modelRefs ?? []).map((ref) => [ref.modelId, ref.displayOrder]),
-  );
-}
-
-function resolveCategoryKind(
-  batch: InspectionBatchForCard | null | undefined,
+function buildVolumeLabel(
+  volume: number | null | undefined,
+  volumeUnit: string | null | undefined,
 ): string {
-  return toText(batch?.productBlueprint?.productBlueprintCategory?.kind);
+  if (volume === null || volume === undefined) return "";
+  return `${volume}${volumeUnit ?? ""}`;
 }
 
 /**
- * Backendが返したvolume / volumeUnitだけを使用する。
- * volumeUnitが無い場合に"ml"などをFrontend側で補完しない。
+ * Backend BFF responseから検品結果カード用ViewModelを生成する。
+ *
+ * Backendを正とする値:
+ * - productName
+ * - modelMeta
+ * - inspection.totalPassed
+ * - inspection.quantity
+ * - productBlueprint.productBlueprintCategory.kind
+ * - productBlueprint.modelRefs.displayOrder
+ *
+ * Frontendではモデル単位のpassed / total集計と表示用volumeLabel生成のみを行う。
  */
-function buildVolumeLabel(params: {
-  volume: string | number | null | undefined;
-  volumeUnit: string | null | undefined;
-  isAlcohol: boolean;
-}): string {
-  const { volume, volumeUnit, isAlcohol } = params;
-  if (!isAlcohol) return "";
-
-  const volumeText = toText(volume);
-  if (!volumeText) return "";
-
-  const unitText = toText(volumeUnit);
-  return unitText ? `${volumeText}${unitText}` : volumeText;
-}
-
 export function buildInspectionResultCardData(
   input: BuildInspectionResultCardDataInput,
 ): InspectionResultCardData {
-  const batch = input.batch ?? null;
+  const inspection = input.inspection;
 
-  if (!batch) {
+  if (!inspection) {
     return {
       title: "モデル別検査結果",
       rows: [],
@@ -107,89 +75,72 @@ export function buildInspectionResultCardData(
     };
   }
 
-  const categoryKind = resolveCategoryKind(batch);
+  const categoryKind = input.productBlueprint?.productBlueprintCategory?.kind ?? "";
   const isAlcohol = categoryKind === "alcohol";
-
-  /**
-   * modelNumber / size / color / rgb / volume / volumeUnitは
-   * Backend responseのmodelMetaだけを正とする。
-   */
-  const modelMeta = batch.modelMeta ?? {};
-  const displayOrderByModelId = buildDisplayOrderByModelId(
-    batch.productBlueprint?.modelRefs,
-  );
-
   const aggregation = new Map<string, { passed: number; total: number }>();
 
-  for (const inspection of batch.inspections) {
-    const modelId = inspection.modelId;
-    if (!modelId) continue;
+  for (const item of inspection.inspections) {
+    if (!item.modelId) continue;
 
-    const entry = aggregation.get(modelId) ?? { passed: 0, total: 0 };
-    entry.total += 1;
+    const aggregated = aggregation.get(item.modelId) ?? { passed: 0, total: 0 };
+    aggregated.total += 1;
 
-    if (inspection.inspectionResult === "passed") {
-      entry.passed += 1;
+    if (item.inspectionResult === "passed") {
+      aggregated.passed += 1;
     }
 
-    aggregation.set(modelId, entry);
+    aggregation.set(item.modelId, aggregated);
   }
 
-  const rowsWithOrder: Array<
-    InspectionResultRow & { __order: number }
-  > = [];
-
-  const fallbackOrder = Number.POSITIVE_INFINITY;
+  const rowsByModelId = new Map<string, InspectionResultRow>();
 
   for (const [modelId, aggregated] of aggregation.entries()) {
-    const meta = modelMeta[modelId];
-    const modelNumber = toText(meta?.modelNumber);
-    const order = displayOrderByModelId[modelId] ?? fallbackOrder;
-    const volume = meta?.volume ?? null;
-    const volumeUnit = meta?.volumeUnit ?? null;
-    const volumeLabel = buildVolumeLabel({
-      volume,
-      volumeUnit,
-      isAlcohol,
-    });
+    const meta = input.modelMeta[modelId];
 
-    rowsWithOrder.push({
-      __order: order,
-      modelNumber,
-      size: meta?.size ?? "",
-      color: meta?.colorName ?? "",
-      rgb: meta?.rgb ?? null,
+    if (!meta) {
+      throw new Error(`modelMeta が存在しません: modelId=${modelId}`);
+    }
+
+    const volume = meta.volume ?? null;
+    const volumeUnit = meta.volumeUnit ?? null;
+
+    rowsByModelId.set(modelId, {
+      modelNumber: meta.modelNumber ?? "",
+      size: meta.size ?? "",
+      color: meta.colorName ?? "",
+      rgb: meta.rgb ?? null,
       volume,
       volumeUnit,
-      volumeLabel,
+      volumeLabel: isAlcohol ? buildVolumeLabel(volume, volumeUnit) : "",
       passedQuantity: aggregated.passed,
       quantity: aggregated.total,
     });
   }
 
-  rowsWithOrder.sort((a, b) => {
-    if (a.__order !== b.__order) return a.__order - b.__order;
-    return a.modelNumber.localeCompare(b.modelNumber);
-  });
+  let rows: InspectionResultRow[];
 
-  const rows = rowsWithOrder.map(({ __order, ...row }) => row);
-  const totalPassed = rows.reduce(
-    (sum, row) => sum + row.passedQuantity,
-    0,
-  );
-  const totalQuantity = rows.reduce(
-    (sum, row) => sum + row.quantity,
-    0,
-  );
-  const productName = toText(batch.productName);
+  if (input.productBlueprint) {
+    const modelRefs = input.productBlueprint.modelRefs;
+
+    if (!modelRefs) {
+      throw new Error("productBlueprint.modelRefs が存在しません");
+    }
+
+    rows = [...modelRefs]
+      .sort((a, b) => a.displayOrder - b.displayOrder)
+      .flatMap((modelRef) => {
+        const row = rowsByModelId.get(modelRef.modelId);
+        return row ? [row] : [];
+      });
+  } else {
+    rows = [...rowsByModelId.values()];
+  }
 
   return {
-    title: productName
-      ? `検査結果：${productName}`
-      : "モデル別検査結果",
+    title: `検査結果：${input.productName}`,
     rows,
-    totalPassed,
-    totalQuantity,
+    totalPassed: inspection.totalPassed,
+    totalQuantity: inspection.quantity,
     categoryKind,
     showVolumeColumn: isAlcohol,
   };
