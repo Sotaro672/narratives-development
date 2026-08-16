@@ -2,7 +2,7 @@
 /// <reference types="vite/client" />
 
 import { brandRepositoryHTTP } from "../infrastructure/http/brandRepositoryHTTP";
-import { safeDateLabelJa } from "../../../shared/util/dateJa";
+import { safeDateTimeLabelJa } from "../../../shared/util/dateJa";
 
 export type BrandRow = {
   id: string;
@@ -18,7 +18,7 @@ export type BrandRow = {
 // - BackendにはpageとperPageのみを送る
 // - Backend側で認証中ユーザーのcompanyIdに絞り込む
 // - BackendのBrandレスポンスを正として使用する
-// - presentation用の日付表示のみ変換する
+// - presentation用の日時表示のみ変換する
 export async function listBrands(): Promise<BrandRow[]> {
   const page = await brandRepositoryHTTP.list({
     page: 1,
@@ -31,7 +31,7 @@ export async function listBrands(): Promise<BrandRow[]> {
     isActive: brand.isActive,
     managerId: brand.managerId ?? null,
     memberName: brand.memberName ?? "",
-    registeredAt: safeDateLabelJa(brand.createdAt, ""),
-    updatedAt: safeDateLabelJa(brand.updatedAt ?? "", ""),
+    registeredAt: safeDateTimeLabelJa(brand.createdAt, ""),
+    updatedAt: safeDateTimeLabelJa(brand.updatedAt ?? "", ""),
   }));
 }

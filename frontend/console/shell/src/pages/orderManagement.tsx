@@ -3,7 +3,7 @@
 import List from "../layout/List/List";
 import "../styles/order.css";
 
-import { safeDateLabelJa } from "../shared/util/dateJa";
+import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 import { useOrderManagement } from "../features/order/presentation/hooks/useOrderManagement";
 
 export default function OrderManagementPage() {
@@ -31,9 +31,7 @@ export default function OrderManagementPage() {
               key={`${order.orderId}__${order.inventoryId}__${order.listReadableId ?? ""}`}
               onClick={() => goDetail(order.orderId)}
               onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") {
-                  return;
-                }
+                if (event.key !== "Enter" && event.key !== " ") return;
 
                 event.preventDefault();
                 goDetail(order.orderId);
@@ -51,7 +49,7 @@ export default function OrderManagementPage() {
               <td>{order.productName || "-"}</td>
               <td>{order.tokenName || "-"}</td>
               <td>{order.avatarName || "-"}</td>
-              <td>{safeDateLabelJa(order.createdAt, "-")}</td>
+              <td>{safeDateTimeLabelJa(order.createdAt, "-")}</td>
               <td>{order.transferred ? "移譲済" : "未移譲"}</td>
             </tr>
           ))

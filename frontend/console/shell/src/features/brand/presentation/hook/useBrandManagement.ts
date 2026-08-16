@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import type { SortOrder } from "../../../../shared/types/common/common";
+import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import type { BrandRow } from "../../application/brandService";
 import { listBrands } from "../../application/brandService";
 
@@ -20,23 +21,38 @@ type ManagerOption = {
 };
 
 const toTs = (value: string): number => {
-  if (!value) {
-    return 0;
-  }
+  const normalized = safeDateTimeLabelJa(value, "");
+  if (!normalized) return 0;
 
-  const [year, month, day] = value
-    .split("/")
-    .map((part) => parseInt(part, 10));
+  const matched = normalized.match(
+    /^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2})$/,
+  );
+
+  if (!matched) return 0;
+
+  const year = Number(matched[1]);
+  const month = Number(matched[2]);
+  const day = Number(matched[3]);
+  const hour = Number(matched[4]);
+  const minute = Number(matched[5]);
 
   if (
     !Number.isFinite(year) ||
     !Number.isFinite(month) ||
-    !Number.isFinite(day)
+    !Number.isFinite(day) ||
+    !Number.isFinite(hour) ||
+    !Number.isFinite(minute)
   ) {
     return 0;
   }
 
-  return new Date(year, month - 1, day).getTime();
+  return new Date(
+    year,
+    month - 1,
+    day,
+    hour,
+    minute,
+  ).getTime();
 };
 
 export function useBrandManagement() {
@@ -98,9 +114,7 @@ export function useBrandManagement() {
     for (const brand of baseRows) {
       const managerId = brand.managerId;
 
-      if (!managerId || seen.has(managerId)) {
-        continue;
-      }
+      if (!managerId || seen.has(managerId)) continue;
 
       seen.add(managerId);
 
@@ -181,21 +195,17 @@ export function useBrandManagement() {
     rows,
     statusOptions,
     managerOptions,
-
     loading,
     error,
     isResetting,
-
     statusFilter,
     managerFilter,
     activeKey,
     direction,
-
     setStatusFilter,
     setManagerFilter,
     setActiveKey,
     setDirection,
-
     statusBadgeClass,
     resetFilters,
   };

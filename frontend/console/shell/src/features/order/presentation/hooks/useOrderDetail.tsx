@@ -8,7 +8,7 @@ import {
   type OrderDetailDTO,
   type OrderDetailItemDTO,
 } from "../../infrastructure/repository";
-import { safeDateLabelJa } from "../../../../shared/util/dateJa";
+import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import {
   calculateOrderQuantity,
   calculateOrderTotalPrice,
@@ -62,6 +62,7 @@ export function useOrderDetail(): UseOrderDetailReturn {
 
       try {
         const detail = await repo.getById(orderId);
+
         if (!cancelled) {
           setOrder(detail);
         }
@@ -89,7 +90,7 @@ export function useOrderDetail(): UseOrderDetailReturn {
   }, [navigate]);
 
   const items = React.useMemo<OrderDetailItemDTO[]>(
-    () => order ? order.items : [],
+    () => (order ? order.items : []),
     [order],
   );
 
@@ -108,7 +109,7 @@ export function useOrderDetail(): UseOrderDetailReturn {
     [items],
   );
 
-  const createdAt = safeDateLabelJa(order?.createdAt, "-");
+  const createdAt = safeDateTimeLabelJa(order?.createdAt, "-");
   const shipping = order?.shippingSnapshot;
   const userName = order?.userName || "-";
   const avatarName = order?.avatarName || "-";
