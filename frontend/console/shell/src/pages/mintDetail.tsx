@@ -364,7 +364,7 @@ export default function MintRequestDetail() {
           </Card>
         )}
 
-        {hasMint && mintProgress && <MintProgressCard progress={mintProgress} />}
+        {hasMint && mintStatus !== "MINTED" && mintProgress && (<MintProgressCard progress={mintProgress} />)}
 
         {showBrandSelectorCard && (
           <Card className="pb-select">
