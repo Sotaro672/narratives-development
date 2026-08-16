@@ -1,12 +1,8 @@
-// frontend\console\shell\src\features\mint\presentation\components\inspectionResultCard.tsx
+// frontend/console/shell/src/features/mint/presentation/components/inspectionResultCard.tsx
+
 import * as React from "react";
 import { Palette } from "lucide-react";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "../../../../shared/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "../../../../shared/ui/card";
 import {
   Table,
   TableHeader,
@@ -15,12 +11,11 @@ import {
   TableRow,
   TableCell,
 } from "../../../../shared/ui/table";
-
-import type { UseInspectionResultCardResult } from "../hook/useInspectionResultCard";
+import { rgbIntToHex } from "../../../../shared/util/color";
+import type { InspectionResultCardData } from "../../application/mapper/buildInspectionResultCardData";
 
 type InspectionResultCardProps = {
-  /** useInspectionResultCard の戻り値をそのまま受け取る想定 */
-  data: UseInspectionResultCardResult;
+  data: InspectionResultCardData;
   className?: string;
 };
 
@@ -34,16 +29,8 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
     totalPassed,
     totalQuantity,
     showVolumeColumn,
-    rgbIntToHex,
   } = data;
 
-  /**
-   * 通常カテゴリ:
-   *   型番 / サイズ / カラー / 合格数 / 生産数 = 5列
-   *
-   * alcohol:
-   *   型番 / 容量 / 合格数 / 生産数 = 4列
-   */
   const emptyColSpan = showVolumeColumn ? 4 : 5;
   const totalLabelColSpan = showVolumeColumn ? 2 : 3;
 
@@ -74,27 +61,21 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
                   </>
                 )}
 
-                {/* 合格数（生産数の左隣） */}
-                <TableHead className="ivc__th ivc__th--right">
-                  合格数
-                </TableHead>
-                <TableHead className="ivc__th ivc__th--right">
-                  生産数
-                </TableHead>
+                <TableHead className="ivc__th ivc__th--right">合格数</TableHead>
+                <TableHead className="ivc__th ivc__th--right">生産数</TableHead>
               </TableRow>
             </TableHeader>
 
             <TableBody>
-              {rows.map((row, idx) => {
+              {rows.map((row, index) => {
                 const rgbHex = rgbIntToHex(row.rgb ?? null);
-                const bgColor = rgbHex ?? "#ffffff";
+                const backgroundColor = rgbHex ?? "#ffffff";
 
                 return (
                   <TableRow
-                    key={`${row.modelNumber}-${idx}`}
+                    key={`${row.modelNumber}-${index}`}
                     className="ivc__tr"
                   >
-                    {/* 型番 */}
                     <TableCell className="ivc__model">
                       {row.modelNumber || "-"}
                     </TableCell>
@@ -105,17 +86,15 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
                       </TableCell>
                     ) : (
                       <>
-                        {/* サイズ */}
                         <TableCell className="ivc__size">
                           {row.size || "-"}
                         </TableCell>
 
-                        {/* カラー */}
                         <TableCell className="ivc__color-cell">
                           <span
                             className="ivc__color-dot"
                             style={{
-                              backgroundColor: bgColor,
+                              backgroundColor,
                               boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
                             }}
                             title={rgbHex ?? ""}
@@ -127,14 +106,12 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
                       </>
                     )}
 
-                    {/* 合格数 */}
                     <TableCell className="ivc__quantity">
                       <span className="ivc__quantity-number">
                         {row.passedQuantity}
                       </span>
                     </TableCell>
 
-                    {/* 生産数 */}
                     <TableCell className="ivc__quantity">
                       <span className="ivc__quantity-number">
                         {row.quantity}
@@ -161,12 +138,10 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
                     合計
                   </TableCell>
 
-                  {/* 合格数合計 */}
                   <TableCell className="ivc__total-value">
                     <strong>{totalPassed}</strong>
                   </TableCell>
 
-                  {/* 生産数合計 */}
                   <TableCell className="ivc__total-value">
                     <strong>{totalQuantity}</strong>
                   </TableCell>

@@ -3,7 +3,7 @@
 import type { InspectionBatch, MintModelMeta } from "../../../../shared/types/inspections";
 import type { MintProductBlueprintDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
-export type InspectionResultRow = {
+type InspectionResultRow = {
   modelNumber: string;
   size: string;
   color: string;

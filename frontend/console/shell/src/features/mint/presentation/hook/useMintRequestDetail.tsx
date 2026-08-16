@@ -2,18 +2,16 @@
 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { MintFundingEstimate, TokenBlueprintSummary } from "../../infrastructure/dto/MintRequestRepository";
+import type { TokenBlueprintSummary } from "../../infrastructure/dto/MintRequestRepository";
 import { buildInspectionResultCardData } from "../../application/mapper/buildInspectionResultCardData";
 import { completeMintInspection } from "../../application/usecase/completeMintInspection";
 import { submitMintRequest } from "../../application/usecase/submitMintRequest";
-import { rgbIntToHex } from "../../../../shared/util/color";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import { useBrandSelection } from "../../../brand/presentation/hook/useBrandSelection";
 import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
 import type { MintProductBlueprintDTO, MintRequestDetailDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 import { completeInspectionHTTP, fetchMintRequestDetailHTTP } from "../../infrastructure/repository/http/inspections";
 import {
-  fetchMintFundingEstimateHTTP,
   fetchMintRequestRowByProductionIdHTTP,
   postMintRequestHTTP,
 } from "../../infrastructure/repository/http/mintRequests";
@@ -21,6 +19,7 @@ import { fetchMintProductBlueprintHTTP } from "../../infrastructure/repository/h
 import { fetchTokenBlueprintsByBrandHTTP } from "../../infrastructure/repository/http/tokenBlueprints";
 import { buildProductBlueprintCardView, buildTokenBlueprintCardVm } from "../viewModel/mintRequestDetailViewModel";
 import { useMintAutoSelection } from "./useMintRequestDetail.useMintAutoSelection";
+import { useMintFundingEstimate } from "./useMintFundingEstimate";
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
@@ -56,9 +55,6 @@ export function useMintRequestDetail() {
 
   const [tokenBlueprintOptions, setTokenBlueprintOptions] = React.useState<TokenBlueprintSummary[]>([]);
   const [selectedTokenBlueprintId, setSelectedTokenBlueprintId] = React.useState("");
-  const [mintFundingEstimate, setMintFundingEstimate] = React.useState<MintFundingEstimate | null>(null);
-  const [mintFundingEstimateLoading, setMintFundingEstimateLoading] = React.useState(false);
-  const [mintFundingEstimateError, setMintFundingEstimateError] = React.useState<string | null>(null);
   const [isSubmittingMintRequest, setIsSubmittingMintRequest] = React.useState(false);
   const [isCompletingInspection, setIsCompletingInspection] = React.useState(false);
 
@@ -137,7 +133,9 @@ export function useMintRequestDetail() {
         if (!cancelled) setProductBlueprint(result);
       } catch (error: unknown) {
         if (!cancelled) {
-          setProductBlueprintError(getErrorMessage(error, "プロダクト基本情報の取得に失敗しました"));
+          setProductBlueprintError(
+            getErrorMessage(error, "プロダクト基本情報の取得に失敗しました"),
+          );
         }
       } finally {
         if (!cancelled) setProductBlueprintLoading(false);
@@ -152,15 +150,13 @@ export function useMintRequestDetail() {
   }, [productBlueprintId]);
 
   const inspectionCardData = React.useMemo(
-    () => ({
-      ...buildInspectionResultCardData({
+    () =>
+      buildInspectionResultCardData({
         inspection: inspectionBatch,
         productName: mintRequestDetail?.productName ?? "",
         modelMeta: mintRequestDetail?.modelMeta ?? {},
         productBlueprint,
       }),
-      rgbIntToHex,
-    }),
     [inspectionBatch, mintRequestDetail, productBlueprint],
   );
 
@@ -254,44 +250,15 @@ export function useMintRequestDetail() {
     setSelectedTokenBlueprintId,
   });
 
-  React.useEffect(() => {
-    if (!showMintControls || !productionId || !selectedTokenBlueprintId) {
-      setMintFundingEstimate(null);
-      setMintFundingEstimateError(null);
-      setMintFundingEstimateLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    const run = async () => {
-      setMintFundingEstimate(null);
-      setMintFundingEstimateError(null);
-      setMintFundingEstimateLoading(true);
-
-      try {
-        const estimate = await fetchMintFundingEstimateHTTP(
-          productionId,
-          selectedTokenBlueprintId,
-        );
-
-        if (!cancelled) setMintFundingEstimate(estimate);
-      } catch (error: unknown) {
-        if (!cancelled) {
-          setMintFundingEstimate(null);
-          setMintFundingEstimateError(getErrorMessage(error, "SOL見積の取得に失敗しました"));
-        }
-      } finally {
-        if (!cancelled) setMintFundingEstimateLoading(false);
-      }
-    };
-
-    void run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [productionId, selectedTokenBlueprintId, showMintControls]);
+  const {
+    estimate: mintFundingEstimate,
+    loading: mintFundingEstimateLoading,
+    error: mintFundingEstimateError,
+  } = useMintFundingEstimate({
+    productionId,
+    tokenBlueprintId: selectedTokenBlueprintId,
+    enabled: showMintControls,
+  });
 
   const displayTokenBlueprintId = React.useMemo(
     () => selectedTokenBlueprintId || mintRequestedTokenBlueprintId,
@@ -322,7 +289,12 @@ export function useMintRequestDetail() {
       await reloadDetail();
       alert("検品を完了しました。");
     } catch (error: unknown) {
-      alert(`検品完了に失敗しました: ${getErrorMessage(error, "不明なエラーが発生しました")}`);
+      alert(
+        `検品完了に失敗しました: ${getErrorMessage(
+          error,
+          "不明なエラーが発生しました",
+        )}`,
+      );
     } finally {
       setIsCompletingInspection(false);
     }
