@@ -74,6 +74,7 @@ export function useMintRequestDetail() {
 
   const reloadMintStatus = React.useCallback(async () => {
     if (!productionId) return;
+
     const row = await fetchMintRequestRowByProductionIdHTTP(productionId);
     setMintRequestRow(row);
   }, [productionId]);
@@ -102,7 +103,9 @@ export function useMintRequestDetail() {
         setMintRequestDetail(detail);
         setMintRequestRow(row);
       } catch (error: unknown) {
-        if (!cancelled) setError(getErrorMessage(error, "検査結果の取得に失敗しました"));
+        if (!cancelled) {
+          setError(getErrorMessage(error, "検査結果の取得に失敗しました"));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -194,11 +197,13 @@ export function useMintRequestDetail() {
   );
 
   const mintStatus = mintRequestRow?.mintStatus ?? null;
+  const mintProgress = mintRequestRow?.mintProgress ?? null;
   const hasMint = Boolean(mintStatus);
   const isMintProcessing =
     mintStatus === "QUEUED" ||
     mintStatus === "MINTING" ||
-    mintStatus === "PARTIALLY_MINTED";
+    mintStatus === "PARTIALLY_MINTED" ||
+    mintStatus === "FAILED_RETRYABLE";
   const isMintCompleted = mintStatus === "MINTED";
   const createdByName = mintRequestRow?.createdByName ?? null;
   const requestedByName = mintRequestRow?.requestedByName ?? null;
@@ -235,7 +240,14 @@ export function useMintRequestDetail() {
           !isMintCompleted &&
           !isInspectionCompleted,
       ),
-    [inspectionBatch, loading, error, isMinting, isMintCompleted, isInspectionCompleted],
+    [
+      inspectionBatch,
+      loading,
+      error,
+      isMinting,
+      isMintCompleted,
+      isInspectionCompleted,
+    ],
   );
 
   const showMintControls = isInspectionCompleted && !isMinting && !isMintCompleted;
@@ -428,6 +440,7 @@ export function useMintRequestDetail() {
     inspectionCardData,
     mintRequestRow,
     mintStatus,
+    mintProgress,
     totalMintQuantity,
     onBack,
     handleMint,

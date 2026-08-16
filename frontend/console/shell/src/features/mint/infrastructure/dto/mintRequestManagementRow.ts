@@ -4,6 +4,21 @@ import type { InspectionStatus } from "../../../../shared/types/inspections";
 import type { MintStatus } from "../../../../shared/types/mints";
 
 /**
+ * mints/{mintId}/products サブコレクションから集計されたMint進捗。
+ *
+ * mintDetailでの進捗表示に使用する。
+ */
+export type MintTaskProgressDTO = {
+  total: number;
+  pending: number;
+  minting: number;
+  minted: number;
+  failedRetryable: number;
+  failedFatal: number;
+  percentage: number;
+};
+
+/**
  * GET /mint/requests が返す一覧・詳細表示用DTO。
  *
  * 前提:
@@ -13,6 +28,7 @@ import type { MintStatus } from "../../../../shared/types/mints";
  * - id / inspectionId / mintIdのaliasは持たない
  * - mintQuantity / productionQuantityはBackendの必須intに対応する
  * - createdByとrequestedByは相互補完しない
+ * - mintProgressはmintDetail用の1件取得時にBackendから返される
  */
 export type MintRequestManagementRowDTO = {
   productionId: string;
@@ -31,6 +47,12 @@ export type MintRequestManagementRowDTO = {
    * Frontend側で別のminted booleanへ変換せず、この値を正とする。
    */
   mintStatus?: MintStatus | string | null;
+
+  /**
+   * mints/{mintId}/products の状態からBackendが集計したMint進捗。
+   * 通常の一覧取得では省略され、mintDetailの1件取得時に返される。
+   */
+  mintProgress?: MintTaskProgressDTO | null;
 
   /**
    * mintsドキュメントを作成したmemberId。

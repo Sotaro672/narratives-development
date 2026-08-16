@@ -13,8 +13,9 @@ type ProductionInspectionMintDTO struct {
 	MintQuantity       int `json:"mintQuantity"`
 	ProductionQuantity int `json:"productionQuantity"`
 
-	InspectionStatus string `json:"inspectionStatus,omitempty"`
-	MintStatus       string `json:"mintStatus,omitempty"`
+	InspectionStatus string               `json:"inspectionStatus,omitempty"`
+	MintStatus       string               `json:"mintStatus,omitempty"`
+	MintProgress     *MintTaskProgressDTO `json:"mintProgress,omitempty"`
 
 	// mintsドキュメントを作成したmemberId。
 	CreatedBy string `json:"createdBy,omitempty"`

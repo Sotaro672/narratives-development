@@ -5,25 +5,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
 
 	querydto "narratives/internal/application/query/console/dto"
+	mintdom "narratives/internal/domain/mint"
 )
 
-// MintTaskProgressQueryFS は、mint task の進捗表示用 read model query です。
-//
-// command 側の MintRepositoryFS とは分け、画面表示用の集計だけを担当します。
+// MintTaskProgressQueryFS は mint task の進捗表示専用 read model query です。
+// command 側の MintRepositoryFS とは分離し、mints/{mintID}/products の集計だけを担当します。
 type MintTaskProgressQueryFS struct {
 	Client *firestore.Client
 }
 
 func NewMintTaskProgressQueryFS(client *firestore.Client) *MintTaskProgressQueryFS {
-	return &MintTaskProgressQueryFS{
-		Client: client,
-	}
+	return &MintTaskProgressQueryFS{Client: client}
 }
 
 func (q *MintTaskProgressQueryFS) mintsCol() *firestore.CollectionRef {
@@ -34,16 +31,19 @@ func (q *MintTaskProgressQueryFS) productsCol(mintID string) *firestore.Collecti
 	return q.mintsCol().Doc(mintID).Collection("products")
 }
 
-// GetMintTaskProgress は mints/{mintID}/products を集計して進捗を返します。
+// GetMintTaskProgress は mints/{mintID}/products を集計して MintDetail 用の進捗を返します。
 //
-// 仕様:
+// 集計:
 // - Total: products サブコレクションの総数
-// - Minted: status == "MINTED" の件数
-// - Percentage: Minted / Total * 100 の整数値
+// - Pending: PENDING
+// - Minting: MINTING
+// - Minted: MINTED
+// - FailedRetryable: FAILED_RETRYABLE
+// - FailedFatal: FAILED_FATAL
+// - Percentage: Minted / Total * 100
 //
-// 補足:
-// - Firestore 側の status は現行実装では "MINTED" などの大文字を想定しています。
-// - 念のため strings.ToUpper で大文字小文字差を吸収します。
+// status は domain/mint.MintProductTaskStatus を正として扱います。
+// status 未設定または未知値は、処理未完了として Pending に含めます。
 func (q *MintTaskProgressQueryFS) GetMintTaskProgress(
 	ctx context.Context,
 	mintID string,
@@ -51,13 +51,11 @@ func (q *MintTaskProgressQueryFS) GetMintTaskProgress(
 	if q == nil || q.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-
-	id := strings.TrimSpace(mintID)
-	if id == "" {
+	if mintID == "" {
 		return nil, errors.New("mintID is empty")
 	}
 
-	iter := q.productsCol(id).Documents(ctx)
+	iter := q.productsCol(mintID).Documents(ctx)
 	defer iter.Stop()
 
 	progress := &querydto.MintTaskProgressDTO{}
@@ -68,7 +66,7 @@ func (q *MintTaskProgressQueryFS) GetMintTaskProgress(
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("list mint product tasks mintID=%s: %w", id, err)
+			return nil, fmt.Errorf("list mint product tasks mintID=%s: %w", mintID, err)
 		}
 		if doc == nil || !doc.Exists() {
 			continue
@@ -77,21 +75,20 @@ func (q *MintTaskProgressQueryFS) GetMintTaskProgress(
 		progress.Total++
 
 		data := doc.Data()
-		statusText := strings.ToUpper(strings.TrimSpace(asString(data["status"])))
+		status := mintdom.MintProductTaskStatus(asString(data["status"]))
 
-		switch statusText {
-		case "MINTED":
-			progress.Minted++
-		case "MINTING":
-			progress.Minting++
-		case "FAILED_RETRYABLE":
-			progress.FailedRetryable++
-		case "FAILED_FATAL":
-			progress.FailedFatal++
-		case "PENDING":
+		switch status {
+		case mintdom.MintProductTaskStatusPending:
 			progress.Pending++
+		case mintdom.MintProductTaskStatusMinting:
+			progress.Minting++
+		case mintdom.MintProductTaskStatusMinted:
+			progress.Minted++
+		case mintdom.MintProductTaskStatusFailedRetryable:
+			progress.FailedRetryable++
+		case mintdom.MintProductTaskStatusFailedFatal:
+			progress.FailedFatal++
 		default:
-			// status 未設定・未知値は pending 相当として扱います。
 			progress.Pending++
 		}
 	}
@@ -105,17 +102,11 @@ func (q *MintTaskProgressQueryFS) GetMintTaskProgress(
 }
 
 func calculateMintProgressPercentage(minted int, total int) int {
-	if total <= 0 {
+	if total <= 0 || minted <= 0 {
 		return 0
 	}
-
-	if minted <= 0 {
-		return 0
-	}
-
 	if minted >= total {
 		return 100
 	}
-
-	return int(float64(minted) / float64(total) * 100)
+	return minted * 100 / total
 }

@@ -4,6 +4,7 @@ package query
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 
@@ -17,9 +18,7 @@ import (
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
-var ErrMintRequestQueryServiceNotConfigured = errors.New(
-	"mintRequest query service is not configured",
-)
+var ErrMintRequestQueryServiceNotConfigured = errors.New("mintRequest query service is not configured")
 
 type MintTaskProgressQuery interface {
 	GetMintTaskProgress(
@@ -71,18 +70,15 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 	}
 
 	filterSet := makeIDSet(input.ProductionIDs)
+	loadMintProgress := len(filterSet) == 1 && s.mintTaskProgressQuery != nil
 
-	prods, err :=
-		s.productionQuery.ListProductionsWithAssigneeName(ctx)
+	prods, err := s.productionQuery.ListProductionsWithAssigneeName(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	ids := make([]string, 0, len(prods))
-	prodByID := make(
-		map[string]ProductionListItemDTO,
-		len(prods),
-	)
+	prodByID := make(map[string]ProductionListItemDTO, len(prods))
 	seen := make(map[string]struct{}, len(prods))
 
 	for _, p := range prods {
@@ -112,20 +108,12 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 		return []querydto.ProductionInspectionMintDTO{}, nil
 	}
 
-	batches, err :=
-		s.listInspectionBatchesByProductionIDs(
-			ctx,
-			ids,
-		)
+	batches, err := s.listInspectionBatchesByProductionIDs(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 
-	inspByPID := make(
-		map[string]inspectiondom.InspectionBatch,
-		len(batches),
-	)
-
+	inspByPID := make(map[string]inspectiondom.InspectionBatch, len(batches))
 	for _, b := range batches {
 		pid := b.ProductionID
 		if pid == "" {
@@ -135,25 +123,16 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 		inspByPID[pid] = b
 	}
 
-	mintsByPID, err :=
-		s.listMintsByProductionIDs(
-			ctx,
-			ids,
-		)
+	mintsByPID, err := s.listMintsByProductionIDs(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 
-	rows := make(
-		[]querydto.ProductionInspectionMintDTO,
-		0,
-		len(ids),
-	)
+	rows := make([]querydto.ProductionInspectionMintDTO, 0, len(ids))
 
 	for _, pid := range ids {
 		p := prodByID[pid]
 		insp, hasInsp := inspByPID[pid]
-
 		m, hasMint := mintsByPID[pid]
 
 		mintQty := 0
@@ -162,7 +141,6 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 
 		if hasInsp {
 			mintQty = insp.TotalPassed
-
 			if insp.Status != "" {
 				inspStatus = string(insp.Status)
 			}
@@ -171,63 +149,59 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 		tokenBlueprintID := ""
 		tokenName := ""
 		mintStatus := ""
-
 		createdBy := ""
 		createdByName := ""
-
 		requestedBy := ""
 		requestedByName := ""
 
 		var mintedAt *time.Time
+		var mintProgress *querydto.MintTaskProgressDTO
 
 		if hasMint {
 			createdBy = m.CreatedBy
 			requestedBy = m.RequestedBy
-
 			mintedAt = m.MintedAt
 			tokenBlueprintID = m.TokenBlueprintID
 			mintStatus = string(m.Status)
 
-			tokenName = s.resolveTokenName(
-				ctx,
-				tokenBlueprintID,
-			)
+			tokenName = s.resolveTokenName(ctx, tokenBlueprintID)
+			createdByName = s.resolveMemberNameByID(ctx, createdBy)
+			requestedByName = s.resolveMemberNameByID(ctx, requestedBy)
 
-			createdByName =
-				s.resolveMemberNameByID(
-					ctx,
-					createdBy,
-				)
+			if loadMintProgress {
+				progress, err := s.mintTaskProgressQuery.GetMintTaskProgress(ctx, m.ID)
+				if err != nil {
+					return nil, fmt.Errorf(
+						"get mint task progress mintID=%s: %w",
+						m.ID,
+						err,
+					)
+				}
 
-			requestedByName =
-				s.resolveMemberNameByID(
-					ctx,
-					requestedBy,
-				)
+				mintProgress = progress
+			}
 		}
 
-		rows = append(
-			rows,
-			querydto.ProductionInspectionMintDTO{
-				ProductionID: pid,
+		rows = append(rows, querydto.ProductionInspectionMintDTO{
+			ProductionID: pid,
 
-				TokenBlueprintID: tokenBlueprintID,
-				TokenName:        tokenName,
-				ProductName:      p.ProductName,
+			TokenBlueprintID: tokenBlueprintID,
+			TokenName:        tokenName,
+			ProductName:      p.ProductName,
 
-				MintQuantity:       mintQty,
-				ProductionQuantity: prodQty,
-				InspectionStatus:   inspStatus,
-				MintStatus:         mintStatus,
+			MintQuantity:       mintQty,
+			ProductionQuantity: prodQty,
+			InspectionStatus:   inspStatus,
+			MintStatus:         mintStatus,
+			MintProgress:       mintProgress,
 
-				CreatedBy:       createdBy,
-				CreatedByName:   createdByName,
-				RequestedBy:     requestedBy,
-				RequestedByName: requestedByName,
+			CreatedBy:       createdBy,
+			CreatedByName:   createdByName,
+			RequestedBy:     requestedBy,
+			RequestedByName: requestedByName,
 
-				MintedAt: mintedAt,
-			},
-		)
+			MintedAt: mintedAt,
+		})
 	}
 
 	return rows, nil
@@ -237,10 +211,7 @@ func (s *MintRequestQueryService) ListInspectionBatchesForMint(
 	ctx context.Context,
 	productionIDs []string,
 ) ([]inspectiondom.InspectionBatch, error) {
-	return s.listInspectionBatchesByProductionIDs(
-		ctx,
-		productionIDs,
-	)
+	return s.listInspectionBatchesByProductionIDs(ctx, productionIDs)
 }
 
 func (s *MintRequestQueryService) ListBrandsForMint(
@@ -273,26 +244,16 @@ func (s *MintRequestQueryService) listMintsByProductionIDs(
 	}
 
 	ids := uniqueNonEmptySortedIDs(productionIDs)
-
 	if len(ids) == 0 {
 		return map[string]mintdom.Mint{}, nil
 	}
 
-	out := make(
-		map[string]mintdom.Mint,
-		len(ids),
-	)
+	out := make(map[string]mintdom.Mint, len(ids))
 
 	for _, id := range ids {
-		m, err := s.mintRepo.GetByID(
-			ctx,
-			id,
-		)
+		m, err := s.mintRepo.GetByID(ctx, id)
 		if err != nil {
-			if errors.Is(
-				err,
-				mintdom.ErrNotFound,
-			) {
+			if errors.Is(err, mintdom.ErrNotFound) {
 				continue
 			}
 
@@ -314,28 +275,16 @@ func (s *MintRequestQueryService) listInspectionBatchesByProductionIDs(
 	}
 
 	ids := uniqueNonEmptySortedIDs(productionIDs)
-
 	if len(ids) == 0 {
 		return []inspectiondom.InspectionBatch{}, nil
 	}
 
-	out := make(
-		[]inspectiondom.InspectionBatch,
-		0,
-		len(ids),
-	)
+	out := make([]inspectiondom.InspectionBatch, 0, len(ids))
 
 	for _, id := range ids {
-		batch, err :=
-			s.inspRepo.GetByProductionID(
-				ctx,
-				id,
-			)
+		batch, err := s.inspRepo.GetByProductionID(ctx, id)
 		if err != nil {
-			if errors.Is(
-				err,
-				inspectiondom.ErrNotFound,
-			) {
+			if errors.Is(err, inspectiondom.ErrNotFound) {
 				continue
 			}
 
@@ -348,23 +297,14 @@ func (s *MintRequestQueryService) listInspectionBatchesByProductionIDs(
 	return out, nil
 }
 
-func uniqueNonEmptySortedIDs(
-	ids []string,
-) []string {
+func uniqueNonEmptySortedIDs(ids []string) []string {
 	out := uniqueNonEmptyIDs(ids)
-
 	sort.Strings(out)
-
 	return out
 }
 
-func makeIDSet(
-	ids []string,
-) map[string]struct{} {
-	out := make(
-		map[string]struct{},
-		len(ids),
-	)
+func makeIDSet(ids []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(ids))
 
 	for _, id := range ids {
 		if id == "" {
@@ -389,10 +329,7 @@ func (s *MintRequestQueryService) resolveTokenName(
 		return tokenBlueprintID
 	}
 
-	tb, err := s.tbRepo.GetByID(
-		ctx,
-		tokenBlueprintID,
-	)
+	tb, err := s.tbRepo.GetByID(ctx, tokenBlueprintID)
 	if err != nil {
 		return tokenBlueprintID
 	}
@@ -420,10 +357,7 @@ func (s *MintRequestQueryService) resolveBrandNameByID(
 		return brandID
 	}
 
-	brand, err := s.brandRepo.GetByID(
-		ctx,
-		brandID,
-	)
+	brand, err := s.brandRepo.GetByID(ctx, brandID)
 	if err != nil {
 		return brandID
 	}
@@ -447,10 +381,7 @@ func (s *MintRequestQueryService) resolveMemberNameByID(
 		return memberID
 	}
 
-	rec, err := s.memberRepo.GetByID(
-		ctx,
-		memberID,
-	)
+	rec, err := s.memberRepo.GetByID(ctx, memberID)
 	if err != nil {
 		return memberID
 	}

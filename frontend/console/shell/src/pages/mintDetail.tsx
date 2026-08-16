@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../shared/ui/popover";
 import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
 import InspectionResultCard from "../features/mint/presentation/components/inspectionResultCard";
 import { useMintRequestDetail } from "../features/mint/presentation/hook/useMintRequestDetail";
+import type { MintTaskProgressDTO } from "../features/mint/infrastructure/dto/mintRequestManagementRow";
 import TokenBlueprintCard from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 
 import "../styles/mintRequest.css";
@@ -43,11 +44,91 @@ function MintingStatusCard() {
             <Coins size={28} className="animate-pulse" />
           </div>
 
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" aria-hidden="true" />
+          <div
+            className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600"
+            aria-hidden="true"
+          />
 
           <div className="space-y-1">
             <div className="text-sm font-semibold text-gray-900">ミント中...</div>
             <p className="text-xs text-gray-500">ブロックチェーン上でミント処理を実行しています。</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * mints/{mintId}/products の集計結果を表示する進捗カード。
+ */
+function MintProgressCard({ progress }: { progress: MintTaskProgressDTO }) {
+  const percentage = Math.min(100, Math.max(0, progress.percentage));
+
+  return (
+    <Card className="pb-select" role="status" aria-live="polite">
+      <CardHeader>
+        <CardTitle>ミント進捗</CardTitle>
+      </CardHeader>
+
+      <CardContent>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span className="text-gray-600">進捗</span>
+              <strong className="text-gray-900">{percentage}%</strong>
+            </div>
+
+            <div
+              className="h-2 w-full overflow-hidden rounded-full bg-gray-200"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={percentage}
+              aria-label="ミント進捗"
+            >
+              <div
+                className="h-full rounded-full bg-blue-600 transition-all duration-300"
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+
+            <div className="text-right text-xs text-gray-500">
+              <strong className="text-gray-900">{progress.minted}</strong> / {progress.total} 完了
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200 pt-3">
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-gray-600">待機中</span>
+                <strong className="text-gray-900">{progress.pending}</strong>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-gray-600">ミント中</span>
+                <strong className="text-gray-900">{progress.minting}</strong>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-gray-600">完了</span>
+                <strong className="text-gray-900">{progress.minted}</strong>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-gray-600">再試行待ち</span>
+                <strong className={progress.failedRetryable > 0 ? "text-amber-600" : "text-gray-900"}>
+                  {progress.failedRetryable}
+                </strong>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-gray-600">失敗</span>
+                <strong className={progress.failedFatal > 0 ? "text-red-600" : "text-gray-900"}>
+                  {progress.failedFatal}
+                </strong>
+              </div>
+            </div>
           </div>
         </div>
       </CardContent>
@@ -63,6 +144,7 @@ export default function MintRequestDetail() {
     inspectionCardData,
     mintRequestRow,
     mintStatus,
+    mintProgress,
     onBack,
     handleMint,
     isMinting,
@@ -193,7 +275,11 @@ export default function MintRequestDetail() {
                     トークン設計を選択すると、ミントに必要なSOLを見積もります。
                   </div>
                 ) : mintFundingEstimateLoading ? (
-                  <div className="flex items-center gap-3 text-sm text-gray-600" role="status" aria-live="polite">
+                  <div
+                    className="flex items-center gap-3 text-sm text-gray-600"
+                    role="status"
+                    aria-live="polite"
+                  >
                     <div
                       className="h-5 w-5 animate-spin rounded-full border-2 border-gray-200 border-t-blue-600"
                       aria-hidden="true"
@@ -318,6 +404,8 @@ export default function MintRequestDetail() {
             </CardContent>
           </Card>
         )}
+
+        {hasMint && mintProgress && <MintProgressCard progress={mintProgress} />}
 
         {isMinting && <MintingStatusCard />}
 
