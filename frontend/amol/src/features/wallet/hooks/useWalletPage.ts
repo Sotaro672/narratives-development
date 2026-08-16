@@ -15,6 +15,10 @@ import type { WalletTabKey } from "../types";
 import type { WalletOrder } from "../../shared/types/orderTypes";
 import type { WalletDTO, WalletTokenItem } from "../../shared/types/tokenTypes";
 
+function getErrorMessage(caught: unknown, defaultMessage: string): string {
+  return caught instanceof Error ? caught.message : defaultMessage;
+}
+
 export function useWalletPage() {
   const navigate = useNavigate();
   const { avatarId: routeAvatarId } = useParams<{ avatarId?: string }>();
@@ -44,6 +48,7 @@ export function useWalletPage() {
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user) {
+        setAuthResolved(false);
         navigate(LANDING_PATH, { replace: true });
         return;
       }
@@ -103,69 +108,75 @@ export function useWalletPage() {
           return;
         }
 
-        try {
-          const backendUrl = getApiBaseUrl();
+        const backendUrl = getApiBaseUrl();
 
-          if (!backendUrl) {
-            throw new Error("VITE_API_BASE_URLが設定されていません。");
-          }
+        if (!backendUrl) {
+          throw new Error("VITE_API_BASE_URLが設定されていません。");
+        }
 
-          const idToken = await getFirebaseIdToken();
+        const tokenPromise = fetchMeWalletTokens();
+        const orderPromise = getFirebaseIdToken().then((idToken) =>
+          fetchWalletOrders({
+            backendUrl,
+            idToken,
+            page: 1,
+            perPage: 20,
+            sort: "createdAt",
+            order: "desc",
+          }),
+        );
 
-          const [tokenResult, orderResult] = await Promise.all([
-            fetchMeWalletTokens(),
-            fetchWalletOrders({
-              backendUrl,
-              idToken,
-              page: 1,
-              perPage: 20,
-              sort: "createdAt",
-              order: "desc",
-            }),
-          ]);
+        const [tokenResult, orderResult] = await Promise.allSettled([
+          tokenPromise,
+          orderPromise,
+        ]);
 
-          if (!isMounted) return;
+        if (!isMounted) return;
 
-          setWallet(tokenResult.wallet);
-          setWalletTokens(tokenResult.tokens);
-          setOrderHistory(orderResult.items);
-        } catch (caught) {
-          if (!isMounted) return;
-
+        if (tokenResult.status === "fulfilled") {
+          setWallet(tokenResult.value.wallet);
+          setWalletTokens(tokenResult.value.tokens);
+          setTokenError("");
+        } else {
           setWallet(null);
           setWalletTokens([]);
+          setTokenError(
+            getErrorMessage(
+              tokenResult.reason,
+              "ウォレット情報の取得に失敗しました。",
+            ),
+          );
+        }
+
+        if (orderResult.status === "fulfilled") {
+          setOrderHistory(orderResult.value.items);
+          setOrderError("");
+        } else {
           setOrderHistory([]);
-
-          const message =
-            caught instanceof Error
-              ? caught.message
-              : "ウォレット情報の取得に失敗しました。";
-
-          setTokenError(message);
-          setOrderError(message);
-        } finally {
-          if (isMounted) {
-            setTokenLoading(false);
-            setOrderLoading(false);
-          }
+          setOrderError(
+            getErrorMessage(
+              orderResult.reason,
+              "注文履歴の取得に失敗しました。",
+            ),
+          );
         }
       } catch (caught) {
         if (!isMounted) return;
 
         setError(
-          caught instanceof Error
-            ? caught.message
-            : "ウォレット情報の取得に失敗しました。",
+          getErrorMessage(
+            caught,
+            "ウォレット情報の取得に失敗しました。",
+          ),
         );
-
         setWallet(null);
         setWalletTokens([]);
         setOrderHistory([]);
-        setTokenLoading(false);
-        setOrderLoading(false);
       } finally {
         if (isMounted) {
           setLoading(false);
+          setTokenLoading(false);
+          setOrderLoading(false);
         }
       }
     };

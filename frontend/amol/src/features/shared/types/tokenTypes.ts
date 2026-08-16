@@ -1,10 +1,12 @@
 // frontend/amol/src/features/wallet/types/tokenTypes.ts
 
+export type WalletStatus = "active" | "inactive";
+
 export type WalletDTO = {
   walletAddress: string;
-  tokens: string[];
-  lastUpdatedAt: string | null;
-  status: string;
+  assetIds: string[];
+  lastUpdatedAt: string;
+  status: WalletStatus;
 };
 
 export type TokenMetadataAttributeDTO = {
@@ -27,16 +29,15 @@ export type TokenMetadataDTO = {
 export type TokenResolveDTO = {
   productId: string;
   brandId: string;
-  metadataUri: string;
-  mintAddress: string;
-  productBlueprintId: string;
   brandName: string;
+  productBlueprintId: string;
   productName: string;
-  tokenBlueprintId: string;
+  metadataUri: string;
+  assetId: string;
 };
 
 export type WalletTokenItem = {
-  mintAddress: string;
+  assetId: string;
   productId: string;
   brandId: string;
   brandName: string;

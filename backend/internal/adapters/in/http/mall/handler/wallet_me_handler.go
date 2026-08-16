@@ -35,6 +35,27 @@ type MallMeWalletHandler struct {
 	allowedProxyHosts map[string]struct{}
 }
 
+type mallMeWalletDTO struct {
+	WalletAddress string                 `json:"walletAddress"`
+	AssetIDs      []string               `json:"assetIds"`
+	LastUpdatedAt time.Time              `json:"lastUpdatedAt"`
+	Status        walletdom.WalletStatus `json:"status"`
+}
+
+type mallMeWalletsResponse struct {
+	Wallets []mallMeWalletDTO `json:"wallets"`
+}
+
+type mallMeWalletTokenResolveResponse struct {
+	ProductID          string `json:"productId"`
+	BrandID            string `json:"brandId"`
+	BrandName          string `json:"brandName"`
+	ProductBlueprintID string `json:"productBlueprintId"`
+	ProductName        string `json:"productName"`
+	MetadataURI        string `json:"metadataUri"`
+	AssetID            string `json:"assetId"`
+}
+
 // NewMallMeWalletHandler wires mall /me wallet endpoints.
 func NewMallMeWalletHandler(walletUC *usecase.WalletUsecase) http.Handler {
 	return &MallMeWalletHandler{
@@ -65,26 +86,37 @@ func (h *MallMeWalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	case r.Method == http.MethodGet && path == "/mall/me/wallets":
 		h.getMeWallets(w, r)
 		return
-
 	case r.Method == http.MethodPost && path == "/mall/me/wallets/sync":
 		h.syncMeWallets(w, r)
 		return
-
 	case r.Method == http.MethodGet && path == "/mall/me/wallets/tokens/resolve":
 		h.resolveMeTokenByAssetID(w, r)
 		return
-
 	case r.Method == http.MethodOptions && path == "/mall/me/wallets/metadata/proxy":
 		h.preflightMeWalletMetadataProxy(w)
 		return
-
 	case r.Method == http.MethodGet && path == "/mall/me/wallets/metadata/proxy":
 		h.meWalletMetadataProxy(w, r)
 		return
-
 	default:
 		notFound(w)
 		return
+	}
+}
+
+func newMallMeWalletsResponse(wallet walletdom.Wallet) mallMeWalletsResponse {
+	assetIDs := make([]string, len(wallet.AssetIDs))
+	copy(assetIDs, wallet.AssetIDs)
+
+	return mallMeWalletsResponse{
+		Wallets: []mallMeWalletDTO{
+			{
+				WalletAddress: wallet.WalletAddress,
+				AssetIDs:      assetIDs,
+				LastUpdatedAt: wallet.LastUpdatedAt,
+				Status:        wallet.Status,
+			},
+		},
 	}
 }
 
@@ -97,18 +129,14 @@ func (h *MallMeWalletHandler) getMeWallets(w http.ResponseWriter, r *http.Reques
 
 	if h == nil || h.walletUC == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "wallet usecase not configured",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet usecase not configured"})
 		return
 	}
 
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "unauthorized",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
 
@@ -118,9 +146,7 @@ func (h *MallMeWalletHandler) getMeWallets(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"wallets": []walletdom.Wallet{wallet},
-	})
+	_ = json.NewEncoder(w).Encode(newMallMeWalletsResponse(wallet))
 }
 
 // POST /mall/me/wallets/sync
@@ -129,18 +155,14 @@ func (h *MallMeWalletHandler) syncMeWallets(w http.ResponseWriter, r *http.Reque
 
 	if h == nil || h.walletUC == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "wallet usecase not configured",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet usecase not configured"})
 		return
 	}
 
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "unauthorized",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
 
@@ -150,9 +172,7 @@ func (h *MallMeWalletHandler) syncMeWallets(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"wallets": []walletdom.Wallet{wallet},
-	})
+	_ = json.NewEncoder(w).Encode(newMallMeWalletsResponse(wallet))
 }
 
 // GET /mall/me/wallets/tokens/resolve?assetId=...
@@ -161,48 +181,38 @@ func (h *MallMeWalletHandler) resolveMeTokenByAssetID(w http.ResponseWriter, r *
 
 	if h == nil || h.walletUC == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "wallet usecase not configured",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet usecase not configured"})
 		return
 	}
 
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "unauthorized",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
 
 	assetID := r.URL.Query().Get("assetId")
 	if assetID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "assetId is required",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "assetId is required"})
 		return
 	}
 
-	result, err := h.walletUC.ResolveOwnedTokenByAssetIDWithBrandName(
-		ctx,
-		avatarID,
-		assetID,
-	)
+	result, err := h.walletUC.ResolveOwnedTokenByAssetIDWithBrandName(ctx, avatarID, assetID)
 	if err != nil {
 		writeMallMeWalletErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"productId":          result.ProductID,
-		"brandId":            result.BrandID,
-		"brandName":          result.BrandName,
-		"productBlueprintId": result.ProductBlueprintID,
-		"productName":        result.ProductName,
-		"metadataUri":        result.MetadataURI,
-		"assetId":            result.AssetID,
+	_ = json.NewEncoder(w).Encode(mallMeWalletTokenResolveResponse{
+		ProductID:          result.ProductID,
+		BrandID:            result.BrandID,
+		BrandName:          result.BrandName,
+		ProductBlueprintID: result.ProductBlueprintID,
+		ProductName:        result.ProductName,
+		MetadataURI:        result.MetadataURI,
+		AssetID:            result.AssetID,
 	})
 }
 
@@ -218,61 +228,47 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 
 	if h == nil || h.walletUC == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "wallet usecase not configured",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet usecase not configured"})
 		return
 	}
 
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "unauthorized",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
 
 	rawURL := r.URL.Query().Get("url")
 	if rawURL == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "url is required",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "url is required"})
 		return
 	}
 
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil || parsedURL == nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "invalid url",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid url"})
 		return
 	}
 
 	if strings.ToLower(parsedURL.Scheme) != "https" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "only https is allowed",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "only https is allowed"})
 		return
 	}
 
 	if parsedURL.Port() != "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "explicit port is not allowed",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "explicit port is not allowed"})
 		return
 	}
 
 	host := strings.ToLower(parsedURL.Hostname())
 	if host == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "invalid url host",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid url host"})
 		return
 	}
 
@@ -283,9 +279,7 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 
 	if !isAllowedMetadataProxyHost(host, allow) {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "host is not allowed",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "host is not allowed"})
 		return
 	}
 
@@ -310,15 +304,12 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 			if len(via) >= 3 {
 				return errors.New("too many redirects")
 			}
-
 			if req == nil || req.URL == nil {
 				return errors.New("invalid redirect url")
 			}
-
 			if strings.ToLower(req.URL.Scheme) != "https" {
 				return errors.New("redirect to non-https is not allowed")
 			}
-
 			if req.URL.Port() != "" {
 				return errors.New("redirect with explicit port is not allowed")
 			}
@@ -327,7 +318,6 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 			if redirectHost == "" {
 				return errors.New("redirect host is empty")
 			}
-
 			if !isAllowedMetadataProxyHost(redirectHost, allow) {
 				return errors.New("redirect host is not allowed")
 			}
@@ -336,17 +326,10 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 		},
 	}
 
-	req, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodGet,
-		parsedURL.String(),
-		nil,
-	)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsedURL.String(), nil)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "failed to create upstream request",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to create upstream request"})
 		return
 	}
 
@@ -355,23 +338,17 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 	response, err := client.Do(req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "upstream fetch failed",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "upstream fetch failed"})
 		return
 	}
 	defer response.Body.Close()
 
 	const maxBytes = 1 << 20
 
-	body, err := io.ReadAll(
-		io.LimitReader(response.Body, maxBytes),
-	)
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxBytes))
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "failed to read upstream",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to read upstream"})
 		return
 	}
 
@@ -401,10 +378,7 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 	_, _ = w.Write(body)
 }
 
-func isAllowedMetadataProxyHost(
-	host string,
-	allow map[string]struct{},
-) bool {
+func isAllowedMetadataProxyHost(host string, allow map[string]struct{}) bool {
 	normalized := strings.ToLower(host)
 	if normalized == "" {
 		return false
@@ -415,8 +389,7 @@ func isAllowedMetadataProxyHost(
 	}
 
 	// Irys gateway may redirect to generated subdomains under datasprite CDN.
-	if normalized == "mainnet-1.datasprite-cdn.com" ||
-		strings.HasSuffix(normalized, ".mainnet-1.datasprite-cdn.com") {
+	if normalized == "mainnet-1.datasprite-cdn.com" || strings.HasSuffix(normalized, ".mainnet-1.datasprite-cdn.com") {
 		return true
 	}
 
@@ -427,10 +400,7 @@ func (h *MallMeWalletHandler) setCORSHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Vary", "Origin")
 	w.Header().Set("Access-Control-Allow-Methods", "GET,OPTIONS")
-	w.Header().Set(
-		"Access-Control-Allow-Headers",
-		"Authorization,Content-Type,Accept",
-	)
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,Accept")
 	w.Header().Set("Access-Control-Max-Age", "600")
 }
 
@@ -440,29 +410,23 @@ func writeMallMeWalletErr(w http.ResponseWriter, err error) {
 		message = err.Error()
 	}
 
-	writeJSON(w, mallMeWalletHTTPStatus(err), map[string]string{
-		"error": message,
-	})
+	writeJSON(w, mallMeWalletHTTPStatus(err), map[string]string{"error": message})
 }
 
 func mallMeWalletHTTPStatus(err error) int {
 	switch {
 	case err == nil:
 		return http.StatusInternalServerError
-
 	case errors.Is(err, walletdom.ErrNotFound),
 		errors.Is(err, tokendom.ErrNotFound):
 		return http.StatusNotFound
-
 	case errors.Is(err, usecase.ErrWalletAssetIDNotOwned):
 		return http.StatusForbidden
-
 	case errors.Is(err, usecase.ErrWalletSyncAvatarIDEmpty),
 		errors.Is(err, usecase.ErrWalletSyncWalletAddressEmpty),
 		errors.Is(err, usecase.ErrAssetIDEmpty),
 		errors.Is(err, tokendom.ErrInvalidAssetID):
 		return http.StatusBadRequest
-
 	case errors.Is(err, usecase.ErrWalletSyncOnchainNotConfigured),
 		errors.Is(err, usecase.ErrWalletUsecaseNotConfigured),
 		errors.Is(err, usecase.ErrWalletTokenQueryNotConfigured),
@@ -470,7 +434,6 @@ func mallMeWalletHTTPStatus(err error) int {
 		errors.Is(err, usecase.ErrWalletModelProductBlueprintNotConfigured),
 		errors.Is(err, usecase.ErrWalletProductBlueprintReaderNotConfigured):
 		return http.StatusServiceUnavailable
-
 	default:
 		return http.StatusInternalServerError
 	}
@@ -483,8 +446,7 @@ func isKeepObjectURI(raw string) bool {
 
 	parsedURL, err := url.Parse(raw)
 	if err != nil || parsedURL == nil {
-		return strings.Contains(raw, "/.keep") ||
-			strings.HasSuffix(raw, ".keep")
+		return strings.Contains(raw, "/.keep") || strings.HasSuffix(raw, ".keep")
 	}
 
 	path := parsedURL.Path
@@ -493,9 +455,7 @@ func isKeepObjectURI(raw string) bool {
 	}
 
 	path = strings.TrimSuffix(path, "/")
-
-	return strings.HasSuffix(path, "/.keep") ||
-		strings.HasSuffix(path, ".keep")
+	return strings.HasSuffix(path, "/.keep") || strings.HasSuffix(path, ".keep")
 }
 
 func filterMetadataJSON(body []byte) ([]byte, bool, error) {
@@ -523,7 +483,6 @@ func filterMetadataJSON(body []byte) ([]byte, bool, error) {
 	}
 
 	filteredFiles := make([]any, 0, len(files))
-
 	for _, item := range files {
 		file, ok := item.(map[string]any)
 		if !ok || file == nil {

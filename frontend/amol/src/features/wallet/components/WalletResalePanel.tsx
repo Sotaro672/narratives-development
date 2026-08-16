@@ -19,74 +19,35 @@ type ResaleImageMap = Record<string, string>;
 
 type WalletResalePanelProps = {
   avatarId?: string;
-  onItemClick?: (
-    resaleId: string,
-    item: ResaleListing,
-  ) => void;
+  onItemClick?: (resaleId: string, item: ResaleListing) => void;
 };
 
-function formatPrice(
-  value: number | undefined,
-): string {
-  const price = Number(value ?? 0);
+const STATUS_LABELS: Record<ResaleListing["status"], string> = {
+  listing: "出品中",
+  suspended: "公開停止",
+  sold: "売却済み",
+};
 
-  if (!Number.isFinite(price) || price <= 0) {
+const STATUS_CLASS_NAMES: Record<ResaleListing["status"], string> = {
+  listing: "wallet-resale-card__media--listing",
+  suspended: "wallet-resale-card__media--suspended",
+  sold: "wallet-resale-card__media--sold",
+};
+
+function formatPrice(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
     return "-";
   }
 
-  return `¥${price.toLocaleString("ja-JP")}`;
+  return `¥${value.toLocaleString("ja-JP")}`;
 }
 
-function normalizeStatus(
-  value: string | undefined | null,
-): string {
-  const status = String(value ?? "").trim();
-
-  if (
-    status === "suspended" ||
-    status === "sold" ||
-    status === "listing"
-  ) {
-    return status;
-  }
-
-  return "listing";
+function formatStatusLabel(status: ResaleListing["status"]): string {
+  return STATUS_LABELS[status];
 }
 
-function formatStatusLabel(
-  value: string | undefined | null,
-): string {
-  const status = normalizeStatus(value);
-
-  switch (status) {
-    case "suspended":
-      return "公開停止";
-
-    case "sold":
-      return "売却済み";
-
-    case "listing":
-    default:
-      return "出品中";
-  }
-}
-
-function getStatusClassName(
-  value: string | undefined | null,
-): string {
-  const status = normalizeStatus(value);
-
-  switch (status) {
-    case "suspended":
-      return "wallet-resale-card__media--suspended";
-
-    case "sold":
-      return "wallet-resale-card__media--sold";
-
-    case "listing":
-    default:
-      return "wallet-resale-card__media--listing";
-  }
+function getStatusClassName(status: ResaleListing["status"]): string {
+  return STATUS_CLASS_NAMES[status];
 }
 
 function getPrimaryImageUrl(
@@ -97,91 +58,46 @@ function getPrimaryImageUrl(
     return "";
   }
 
-  const primaryImageId = String(
-    item.imageId ?? "",
-  ).trim();
+  if (item.imageId) {
+    const primary = images.find((image) => image.id === item.imageId);
 
-  if (primaryImageId) {
-    const primary = images.find(
-      (image) => image.id === primaryImageId,
-    );
-
-    if (primary?.url) {
+    if (primary) {
       return primary.url;
     }
   }
 
-  const sortedImages = [...images].sort(
-    (a, b) => {
-      const aOrder = Number(
-        a.displayOrder ?? 0,
-      );
-      const bOrder = Number(
-        b.displayOrder ?? 0,
-      );
+  const sortedImages = [...images].sort((a, b) => {
+    if (a.displayOrder !== b.displayOrder) {
+      return a.displayOrder - b.displayOrder;
+    }
 
-      if (aOrder !== bOrder) {
-        return aOrder - bOrder;
-      }
+    return a.id.localeCompare(b.id, "ja");
+  });
 
-      return String(a.id || "").localeCompare(
-        String(b.id || ""),
-        "ja",
-      );
-    },
-  );
-
-  return sortedImages[0]?.url || "";
+  return sortedImages[0]?.url ?? "";
 }
 
 export default function WalletResalePanel({
   avatarId,
   onItemClick,
 }: WalletResalePanelProps) {
-  const normalizedAvatarId = String(
-    avatarId ?? "",
-  ).trim();
+  const normalizedAvatarId = avatarId?.trim() ?? "";
+  const isPublicAvatarMode = Boolean(normalizedAvatarId);
 
-  const isPublicAvatarMode = Boolean(
-    normalizedAvatarId,
-  );
-
-  const [items, setItems] =
-    useState<ResaleListing[]>([]);
-
-  const [
-    imageUrlByResaleId,
-    setImageUrlByResaleId,
-  ] = useState<ResaleImageMap>({});
-
-  const [loading, setLoading] =
-    useState<boolean>(true);
-
-  const [error, setError] =
-    useState<string>("");
+  const [items, setItems] = useState<ResaleListing[]>([]);
+  const [imageUrlByResaleId, setImageUrlByResaleId] = useState<ResaleImageMap>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const hasItems = items.length > 0;
 
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => {
-      const aTime = new Date(
-        a.updatedAt || a.createdAt || "",
-      ).getTime();
+      const aTime = new Date(a.updatedAt ?? a.createdAt).getTime();
+      const bTime = new Date(b.updatedAt ?? b.createdAt).getTime();
 
-      const bTime = new Date(
-        b.updatedAt || b.createdAt || "",
-      ).getTime();
-
-      if (
-        Number.isNaN(aTime) &&
-        Number.isNaN(bTime)
-      ) {
-        return String(
-          b.id || "",
-        ).localeCompare(
-          String(a.id || ""),
-          "ja",
-        );
+      if (Number.isNaN(aTime) && Number.isNaN(bTime)) {
+        return b.id.localeCompare(a.id, "ja");
       }
 
       if (Number.isNaN(aTime)) {
@@ -197,38 +113,17 @@ export default function WalletResalePanel({
   }, [items]);
 
   const loadResaleImages = useCallback(
-    async (
-      nextItems: ResaleListing[],
-    ): Promise<ResaleImageMap> => {
+    async (nextItems: ResaleListing[]): Promise<ResaleImageMap> => {
       const entries = await Promise.all(
         nextItems.map(async (item) => {
-          const resaleId = String(
-            item.id ?? "",
-          ).trim();
-
-          if (!resaleId) {
-            return null;
-          }
+          const resaleId = item.id;
 
           try {
             const images = isPublicAvatarMode
-              ? await listPublicResaleConditionImages(
-                  resaleId,
-                )
-              : await listMyResaleConditionImages(
-                  resaleId,
-                );
+              ? await listPublicResaleConditionImages(resaleId)
+              : await listMyResaleConditionImages(resaleId);
 
-            const imageUrl =
-              getPrimaryImageUrl(
-                item,
-                images,
-              );
-
-            return [
-              resaleId,
-              imageUrl,
-            ] as const;
+            return [resaleId, getPrimaryImageUrl(item, images)] as const;
           } catch {
             return [resaleId, ""] as const;
           }
@@ -237,13 +132,7 @@ export default function WalletResalePanel({
 
       const nextMap: ResaleImageMap = {};
 
-      for (const entry of entries) {
-        if (!entry) {
-          continue;
-        }
-
-        const [resaleId, imageUrl] = entry;
-
+      for (const [resaleId, imageUrl] of entries) {
         nextMap[resaleId] = imageUrl;
       }
 
@@ -252,79 +141,59 @@ export default function WalletResalePanel({
     [isPublicAvatarMode],
   );
 
-  const loadResales = useCallback(
-    async () => {
-      setLoading(true);
-      setError("");
+  const loadResales = useCallback(async () => {
+    setLoading(true);
+    setError("");
 
-      try {
-        const result = isPublicAvatarMode
-          ? await listResaleListingsByAvatarId(
-              {
-                avatarId:
-                  normalizedAvatarId,
-                page: 1,
-                perPage: 50,
-              },
-            )
-          : await listMyResaleListings({
-              page: 1,
-              perPage: 50,
-            });
+    try {
+      const result = isPublicAvatarMode
+        ? await listResaleListingsByAvatarId({
+            avatarId: normalizedAvatarId,
+            page: 1,
+            perPage: 50,
+          })
+        : await listMyResaleListings({
+            page: 1,
+            perPage: 50,
+          });
 
-        const nextItems =
-          result.items ?? [];
+      const nextItems = result.items;
+      const nextImageMap = await loadResaleImages(nextItems);
 
-        const nextImageMap =
-          await loadResaleImages(nextItems);
-
-        setItems(nextItems);
-        setImageUrlByResaleId(
-          nextImageMap,
-        );
-      } catch (caught) {
-        setError(
-          caught instanceof Error
-            ? caught.message
-            : "出品一覧の取得に失敗しました。",
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [
-      isPublicAvatarMode,
-      loadResaleImages,
-      normalizedAvatarId,
-    ],
-  );
+      setItems(nextItems);
+      setImageUrlByResaleId(nextImageMap);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "出品一覧の取得に失敗しました。",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    isPublicAvatarMode,
+    loadResaleImages,
+    normalizedAvatarId,
+  ]);
 
   useEffect(() => {
     void loadResales();
   }, [loadResales]);
 
-  const handleItemClick = (
-    item: ResaleListing,
-  ) => {
-    const resaleId = String(
-      item.id ?? "",
-    ).trim();
-
-    if (!resaleId || !onItemClick) {
+  const handleItemClick = (item: ResaleListing) => {
+    if (!onItemClick) {
       return;
     }
 
-    onItemClick(resaleId, item);
+    onItemClick(item.id, item);
   };
 
   const handleItemKeyDown = (
     event: React.KeyboardEvent<HTMLElement>,
     item: ResaleListing,
   ) => {
-    if (
-      event.key !== "Enter" &&
-      event.key !== " "
-    ) {
+    if (event.key !== "Enter" && event.key !== " ") {
       return;
     }
 
@@ -335,9 +204,7 @@ export default function WalletResalePanel({
   if (loading) {
     return (
       <div className="wallet-resale-list">
-        <p className="wallet-page__message">
-          読み込み中です...
-        </p>
+        <p className="wallet-page__message">読み込み中です...</p>
       </div>
     );
   }
@@ -345,18 +212,12 @@ export default function WalletResalePanel({
   if (error) {
     return (
       <div className="wallet-resale-list">
-        <div
-          role="alert"
-          className="wallet-page__message"
-        >
+        <div role="alert" className="wallet-page__message">
           <p>{error}</p>
-
           <button
             type="button"
             className="page-button page-button--secondary"
-            onClick={() =>
-              void loadResales()
-            }
+            onClick={() => void loadResales()}
           >
             再読み込み
           </button>
@@ -378,103 +239,46 @@ export default function WalletResalePanel({
   return (
     <div className="wallet-resale-list">
       {sortedItems.map((item) => {
-        const resaleId = String(
-          item.id ?? "",
-        ).trim();
-
-        const imageUrl = resaleId
-          ? imageUrlByResaleId[
-              resaleId
-            ] || ""
-          : "";
-
-        const productName = textOrEmpty(
-          item.productName,
-        );
-
-        const tokenName = textOrEmpty(
-          item.tokenName,
-        );
-
-        const brandName = textOrEmpty(
-          item.brandName,
-        );
-
-        const statusLabel =
-          formatStatusLabel(item.status);
-
-        const statusClassName =
-          getStatusClassName(item.status);
-
-        const isClickable = Boolean(
-          resaleId && onItemClick,
-        );
+        const resaleId = item.id;
+        const imageUrl = imageUrlByResaleId[resaleId] ?? "";
+        const productName = textOrEmpty(item.productName);
+        const tokenName = textOrEmpty(item.tokenName);
+        const brandName = textOrEmpty(item.brandName);
+        const statusLabel = formatStatusLabel(item.status);
+        const statusClassName = getStatusClassName(item.status);
+        const isClickable = Boolean(onItemClick);
 
         return (
           <article
-            key={
-              resaleId || item.mintAddress
-            }
+            key={resaleId}
             className={
               isClickable
                 ? "wallet-resale-list__item wallet-resale-list__item--clickable"
                 : "wallet-resale-list__item"
             }
-            role={
-              isClickable
-                ? "button"
-                : undefined
-            }
-            tabIndex={
-              isClickable ? 0 : undefined
-            }
+            role={isClickable ? "button" : undefined}
+            tabIndex={isClickable ? 0 : undefined}
             aria-label={
               isClickable
-                ? `${
-                    productName ||
-                    tokenName ||
-                    brandName ||
-                    "出品商品"
-                  }の詳細を開く`
+                ? `${productName || tokenName || brandName || "出品商品"}の詳細を開く`
                 : undefined
             }
-            onClick={
-              isClickable
-                ? () =>
-                    handleItemClick(item)
-                : undefined
-            }
+            onClick={isClickable ? () => handleItemClick(item) : undefined}
             onKeyDown={
               isClickable
-                ? (event) =>
-                    handleItemKeyDown(
-                      event,
-                      item,
-                    )
+                ? (event) => handleItemKeyDown(event, item)
                 : undefined
             }
           >
             <div className="wallet-resale-card">
               <div
-                className={[
-                  "wallet-resale-card__media",
-                  statusClassName,
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                data-status-label={
-                  statusLabel
-                }
+                className={`wallet-resale-card__media ${statusClassName}`}
+                data-status-label={statusLabel}
               >
                 {imageUrl ? (
                   <img
                     src={imageUrl}
-                    alt={
-                      productName ||
-                      tokenName ||
-                      brandName ||
-                      "出品画像"
-                    }
+                    alt={productName || tokenName || brandName || "出品画像"}
                     className="wallet-resale-card__image"
                     loading="lazy"
                   />
@@ -513,11 +317,8 @@ export default function WalletResalePanel({
                   <p className="wallet-resale-card__price">
                     {formatPrice(item.price)}
                   </p>
-
                   <p className="wallet-resale-card__date">
-                    {formatDateTime(
-                      item.createdAt,
-                    )}
+                    {formatDateTime(item.createdAt)}
                   </p>
                 </div>
               </div>

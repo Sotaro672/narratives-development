@@ -25,16 +25,10 @@ type OrderHandler struct {
 }
 
 type OrderHistoryQuery interface {
-	EnrichOrderPage(
-		ctx context.Context,
-		in historydto.EnrichHistoryOrderPageInput,
-	) (historydto.HistoryOrderPage, error)
+	EnrichOrderPage(ctx context.Context, in historydto.EnrichHistoryOrderPageInput) (historydto.HistoryOrderPage, error)
 }
 
-func NewOrderHandler(
-	uc *usecase.OrderUsecase,
-	historyQuery OrderHistoryQuery,
-) http.Handler {
+func NewOrderHandler(uc *usecase.OrderUsecase, historyQuery OrderHistoryQuery) http.Handler {
 	return &OrderHandler{
 		uc:           uc,
 		historyQuery: historyQuery,
@@ -55,16 +49,12 @@ func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && path == "/mall/me/orders":
 		h.post(w, r)
 		return
-
 	case r.Method == http.MethodGet && path == "/mall/me/orders":
 		h.listMe(w, r)
 		return
-
 	default:
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "not_found",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 		return
 	}
 }
@@ -100,8 +90,7 @@ type createOrderRequest struct {
 
 	ShippingSnapshot shippingSnapshotRequest `json:"shippingSnapshot"`
 	PaymentMethodID  string                  `json:"paymentMethodId"`
-
-	Items []orderItemRequest `json:"items"`
+	Items            []orderItemRequest      `json:"items"`
 }
 
 func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
@@ -110,54 +99,40 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "invalid_body",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_body"})
 		return
 	}
 
 	var req createOrderRequest
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "invalid_json",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_json"})
 		return
 	}
 
 	authUID, ok := middleware.CurrentUserUID(r)
 	if !ok || authUID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "unauthorized",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
 
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "unauthorized: missing avatarId",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized: missing avatarId"})
 		return
 	}
 
-	cartID := avatarID
-
 	if req.PaymentMethodID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "paymentMethodId is required",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "paymentMethodId is required"})
 		return
 	}
 
 	if len(req.Items) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "items is required",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "items is required"})
 		return
 	}
 
@@ -170,42 +145,28 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 		Country: req.ShippingSnapshot.Country,
 	}
 
-	if shipping.State == "" ||
-		shipping.City == "" ||
-		shipping.Street == "" ||
-		shipping.Country == "" {
+	if shipping.State == "" || shipping.City == "" || shipping.Street == "" || shipping.Country == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "shippingSnapshot is invalid",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "shippingSnapshot is invalid"})
 		return
 	}
 
-	items := make(
-		[]usecase.CreateOrderItemInput,
-		0,
-		len(req.Items),
-	)
-
+	items := make([]usecase.CreateOrderItemInput, 0, len(req.Items))
 	for _, requestItem := range req.Items {
 		item, ok := orderItemRequestToInput(requestItem)
 		if !ok {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "invalid order item",
-			})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid order item"})
 			return
 		}
-
 		items = append(items, item)
 	}
 
 	in := usecase.CreateOrderInput{
-		ID:       req.ID,
-		UserID:   authUID,
-		AvatarID: avatarID,
-		CartID:   cartID,
-
+		ID:               req.ID,
+		UserID:           authUID,
+		AvatarID:         avatarID,
+		CartID:           avatarID,
 		ShippingSnapshot: shipping,
 		PaymentMethodID:  req.PaymentMethodID,
 		Items:            items,
@@ -221,16 +182,12 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-func orderItemRequestToInput(
-	item orderItemRequest,
-) (usecase.CreateOrderItemInput, bool) {
+func orderItemRequestToInput(item orderItemRequest) (usecase.CreateOrderItemInput, bool) {
 	itemType := orderdom.OrderItemType(item.Type)
 
 	switch itemType {
 	case orderdom.OrderItemTypeList:
-		if item.ListID == "" ||
-			item.ModelID == "" ||
-			item.Qty <= 0 {
+		if item.ListID == "" || item.ModelID == "" || item.Qty <= 0 {
 			return usecase.CreateOrderItemInput{}, false
 		}
 
@@ -267,28 +224,16 @@ func (h *OrderHandler) listMe(w http.ResponseWriter, r *http.Request) {
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "unauthorized: missing avatarId",
-		})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized: missing avatarId"})
 		return
 	}
 
 	page := parseOrderPage(r)
 	sort := parseOrderSort(r)
 
-	out, err := h.uc.ListByAvatarID(
-		ctx,
-		avatarID,
-		sort,
-		page,
-	)
+	out, err := h.uc.ListByAvatarID(ctx, avatarID, sort, page)
 	if err != nil {
 		writeOrderErr(w, err)
-		return
-	}
-
-	if h.historyQuery == nil {
-		_ = json.NewEncoder(w).Encode(out)
 		return
 	}
 
@@ -301,13 +246,9 @@ func (h *OrderHandler) listMe(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(enriched)
 }
 
-func (h *OrderHandler) enrichOrderHistoryPage(
-	ctx context.Context,
-	out any,
-) (historydto.HistoryOrderPage, error) {
+func (h *OrderHandler) enrichOrderHistoryPage(ctx context.Context, out any) (historydto.HistoryOrderPage, error) {
 	if h == nil || h.historyQuery == nil {
-		return historydto.HistoryOrderPage{},
-			errors.New("order handler: history query not configured")
+		return historydto.HistoryOrderPage{}, errors.New("order handler: history query not configured")
 	}
 
 	body, err := json.Marshal(out)
@@ -325,7 +266,6 @@ func (h *OrderHandler) enrichOrderHistoryPage(
 
 func parseOrderPage(r *http.Request) common.Page {
 	q := r.URL.Query()
-
 	page := parsePositiveIntDefault(q.Get("page"), 1)
 	perPage := parsePositiveIntDefault(q.Get("perPage"), 20)
 
@@ -363,41 +303,27 @@ func parseOrderSort(r *http.Request) common.Sort {
 	}
 }
 
-func writeOrderErr(
-	w http.ResponseWriter,
-	err error,
-) {
+func writeOrderErr(w http.ResponseWriter, err error) {
 	message := "internal_error"
 	if err != nil {
 		message = err.Error()
 	}
 
-	writeJSON(
-		w,
-		orderHTTPStatus(err),
-		map[string]string{
-			"error": message,
-		},
-	)
+	writeJSON(w, orderHTTPStatus(err), map[string]string{"error": message})
 }
 
 func orderHTTPStatus(err error) int {
 	switch {
 	case err == nil:
 		return http.StatusInternalServerError
-
 	case errors.Is(err, context.Canceled):
 		return 499
-
 	case errors.Is(err, orderdom.ErrNotFound):
 		return http.StatusNotFound
-
 	case errors.Is(err, orderdom.ErrConflict):
 		return http.StatusConflict
-
 	case isInvalidOrderError(err):
 		return http.StatusBadRequest
-
 	default:
 		return http.StatusInternalServerError
 	}

@@ -1,16 +1,10 @@
 // frontend/amol/src/features/wallet/api/walletTokenApi.ts
 
 import { readJsonResponse } from "../../../lib/apiResponse";
-import {
-  buildApiUrl,
-  getApiBaseUrl,
-} from "../../../lib/apiBaseUrl";
+import { buildApiUrl, getApiBaseUrl } from "../../../lib/apiBaseUrl";
 import { getFirebaseIdToken } from "../../../lib/authToken";
 
-import {
-  fetchMeWalletRaw,
-  resolveWalletTokenRaw,
-} from "../../shared/api";
+import { fetchMeWalletRaw, resolveWalletTokenRaw } from "../../shared/api";
 
 import type {
   TokenMetadataDTO,
@@ -19,15 +13,16 @@ import type {
   WalletTokenItem,
   WalletTokenListResult,
 } from "../../shared/types/tokenTypes";
-import {
-  extractWallet,
-  toTokenMetadataDTO,
-  toTokenResolveDTO,
-} from "../utils/tokenGuards";
+
+import { toTokenMetadataDTO } from "../utils/tokenGuards";
 
 type WalletApiContext = {
   baseUrl: string;
   idToken: string;
+};
+
+type MeWalletsResponse = {
+  wallets: WalletDTO[];
 };
 
 function buildAuthHeaders(idToken: string): HeadersInit {
@@ -41,9 +36,7 @@ async function createWalletApiContext(): Promise<WalletApiContext> {
   const baseUrl = getApiBaseUrl();
 
   if (!baseUrl) {
-    throw new Error(
-      "VITE_API_BASE_URLが設定されていません。",
-    );
+    throw new Error("VITE_API_BASE_URLが設定されていません。");
   }
 
   const idToken = await getFirebaseIdToken();
@@ -54,40 +47,18 @@ async function createWalletApiContext(): Promise<WalletApiContext> {
   };
 }
 
-function createEmptyWalletTokenItem(
-  mintAddress: string,
-): WalletTokenItem {
-  return {
-    mintAddress,
-    productId: "",
-    brandId: "",
-    brandName: "",
-    productName: "",
-    productBlueprintId: "",
-    tokenBlueprintId: "",
-    metadataUri: "",
-    metadata: null,
-  };
-}
-
 function createWalletTokenItem(
-  mintAddress: string,
   resolved: TokenResolveDTO,
   metadata: TokenMetadataDTO | null,
 ): WalletTokenItem {
-  const tokenBlueprintId =
-    resolved.tokenBlueprintId ||
-    metadata?.tokenBlueprintId ||
-    "";
-
   return {
-    mintAddress,
+    assetId: resolved.assetId,
     productId: resolved.productId,
     brandId: resolved.brandId,
     brandName: resolved.brandName,
     productName: resolved.productName,
     productBlueprintId: resolved.productBlueprintId,
-    tokenBlueprintId,
+    tokenBlueprintId: metadata?.tokenBlueprintId ?? "",
     metadataUri: resolved.metadataUri,
     metadata,
   };
@@ -96,57 +67,43 @@ function createWalletTokenItem(
 async function fetchMeWalletWithContext(
   context: WalletApiContext,
 ): Promise<WalletDTO | null> {
-  const result = await fetchMeWalletRaw(
-    buildAuthHeaders(context.idToken),
-  );
+  const result = await fetchMeWalletRaw(buildAuthHeaders(context.idToken));
 
   if (!result.ok) {
     if (result.status === 404) {
       return null;
     }
 
-    throw new Error(
-      "ウォレット情報の取得が許可されていません。",
-    );
+    throw new Error("ウォレット情報の取得が許可されていません。");
   }
 
-  return extractWallet(result.data);
+  const response = result.data as MeWalletsResponse;
+
+  return response.wallets[0] ?? null;
 }
 
-async function resolveTokenByMintAddressWithContext(
+async function resolveTokenByAssetIdWithContext(
   context: WalletApiContext,
-  mintAddress: string,
+  assetId: string,
 ): Promise<TokenResolveDTO | null> {
-  const normalizedMintAddress =
-    mintAddress.trim();
-
-  if (!normalizedMintAddress) {
+  if (!assetId) {
     return null;
   }
 
-  const result =
-    await resolveWalletTokenRaw({
-      mintAddress:
-        normalizedMintAddress,
-      headers:
-        buildAuthHeaders(
-          context.idToken,
-        ),
-    });
+  const result = await resolveWalletTokenRaw({
+    assetId,
+    headers: buildAuthHeaders(context.idToken),
+  });
 
   if (!result.ok) {
     if (result.status === 404) {
       return null;
     }
 
-    throw new Error(
-      "トークン情報の取得が許可されていません。",
-    );
+    throw new Error("トークン情報の取得が許可されていません。");
   }
 
-  return toTokenResolveDTO(
-    result.data,
-  );
+  return result.data as TokenResolveDTO;
 }
 
 async function fetchTokenMetadataWithContext(
@@ -158,95 +115,54 @@ async function fetchTokenMetadataWithContext(
   }
 
   const url = new URL(
-    buildApiUrl(
-      context.baseUrl,
-      "/mall/me/wallets/metadata/proxy",
-    ),
+    buildApiUrl(context.baseUrl, "/mall/me/wallets/metadata/proxy"),
   );
 
-  url.searchParams.set(
-    "url",
-    metadataUri,
-  );
+  url.searchParams.set("url", metadataUri);
 
-  const response = await fetch(
-    url.toString(),
-    {
-      method: "GET",
-      headers:
-        buildAuthHeaders(
-          context.idToken,
-        ),
-    },
-  );
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: buildAuthHeaders(context.idToken),
+  });
 
   if (response.status === 404) {
     return null;
   }
 
-  const body =
-    await readJsonResponse<unknown>(
-      response,
-      {
-        requestErrorMessage:
-          "トークンメタデータの取得に失敗しました。",
-        nonJsonErrorMessage:
-          "トークンメタデータAPIがJSON以外を返しました。",
-        invalidJsonErrorMessage:
-          "トークンメタデータAPIのJSON形式が不正です。",
-      },
-    );
+  const body = await readJsonResponse<unknown>(response, {
+    requestErrorMessage: "トークンメタデータの取得に失敗しました。",
+    nonJsonErrorMessage: "トークンメタデータAPIがJSON以外を返しました。",
+    invalidJsonErrorMessage: "トークンメタデータAPIのJSON形式が不正です。",
+  });
 
-  return toTokenMetadataDTO(
-    body,
-  );
+  return toTokenMetadataDTO(body);
 }
 
-export async function fetchMeWallet(): Promise<
-  WalletDTO | null
-> {
-  const context =
-    await createWalletApiContext();
+export async function fetchMeWallet(): Promise<WalletDTO | null> {
+  const context = await createWalletApiContext();
 
-  return fetchMeWalletWithContext(
-    context,
-  );
+  return fetchMeWalletWithContext(context);
 }
 
-export async function resolveTokenByMintAddress(
-  mintAddress: string,
+export async function resolveTokenByAssetId(
+  assetId: string,
 ): Promise<TokenResolveDTO | null> {
-  const context =
-    await createWalletApiContext();
+  const context = await createWalletApiContext();
 
-  return resolveTokenByMintAddressWithContext(
-    context,
-    mintAddress,
-  );
+  return resolveTokenByAssetIdWithContext(context, assetId);
 }
 
 export async function fetchTokenMetadata(
   metadataUri: string,
 ): Promise<TokenMetadataDTO | null> {
-  const context =
-    await createWalletApiContext();
+  const context = await createWalletApiContext();
 
-  return fetchTokenMetadataWithContext(
-    context,
-    metadataUri,
-  );
+  return fetchTokenMetadataWithContext(context, metadataUri);
 }
 
-export async function fetchMeWalletTokens(): Promise<
-  WalletTokenListResult
-> {
-  const context =
-    await createWalletApiContext();
-
-  const wallet =
-    await fetchMeWalletWithContext(
-      context,
-    );
+export async function fetchMeWalletTokens(): Promise<WalletTokenListResult> {
+  const context = await createWalletApiContext();
+  const wallet = await fetchMeWalletWithContext(context);
 
   if (!wallet) {
     return {
@@ -255,64 +171,20 @@ export async function fetchMeWalletTokens(): Promise<
     };
   }
 
-  const mints = wallet.tokens
-    .map(
-      (token) =>
-        token.trim(),
-    )
-    .filter(Boolean);
+  const tokens: WalletTokenItem[] = [];
 
-  const tokens: WalletTokenItem[] =
-    [];
+  for (const assetId of wallet.assetIds) {
+    const resolved = await resolveTokenByAssetIdWithContext(context, assetId);
 
-  for (const mintAddress of mints) {
-    try {
-      const resolved =
-        await resolveTokenByMintAddressWithContext(
-          context,
-          mintAddress,
-        );
-
-      if (!resolved) {
-        tokens.push(
-          createEmptyWalletTokenItem(
-            mintAddress,
-          ),
-        );
-
-        continue;
-      }
-
-      let metadata:
-        TokenMetadataDTO | null =
-        null;
-
-      if (resolved.metadataUri) {
-        try {
-          metadata =
-            await fetchTokenMetadataWithContext(
-              context,
-              resolved.metadataUri,
-            );
-        } catch {
-          metadata = null;
-        }
-      }
-
-      tokens.push(
-        createWalletTokenItem(
-          mintAddress,
-          resolved,
-          metadata,
-        ),
-      );
-    } catch {
-      tokens.push(
-        createEmptyWalletTokenItem(
-          mintAddress,
-        ),
-      );
+    if (!resolved) {
+      continue;
     }
+
+    const metadata = resolved.metadataUri
+      ? await fetchTokenMetadataWithContext(context, resolved.metadataUri)
+      : null;
+
+    tokens.push(createWalletTokenItem(resolved, metadata));
   }
 
   return {

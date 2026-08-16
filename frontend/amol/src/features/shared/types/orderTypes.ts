@@ -3,6 +3,27 @@
 import type { PageResult } from "../pageResult";
 import type { ProductCategoryKind } from "./category";
 
+export type WalletOrderItemType = "list" | "resale";
+
+export type WalletOrderShippingSnapshot = {
+  zipCode: string;
+  state: string;
+  city: string;
+  street: string;
+  street2: string;
+  country: string;
+};
+
+export type WalletOrderPaymentMethodSnapshot = {
+  customerId: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+  cardholderName: string;
+  isDefault: boolean;
+};
+
 export type WalletOrderColor = {
   name?: string;
   hex?: string;
@@ -12,9 +33,12 @@ export type WalletOrderColor = {
 export type WalletOrderMeasurements = Record<string, number>;
 
 export type WalletOrderItemSnapshot = {
-  modelId: string;
-  inventoryId: string;
-  listId: string;
+  itemType?: WalletOrderItemType;
+  modelId?: string;
+  inventoryId?: string;
+  listId?: string;
+  resaleId?: string;
+  productId?: string;
   productBlueprintId?: string;
   tokenBlueprintId?: string;
   productName?: string;
@@ -35,11 +59,12 @@ export type WalletOrderItemSnapshot = {
 
   tokenName?: string;
   tokenIcon?: string;
+
   qty: number;
   price: number;
   isCanceled: boolean;
   isDispatched: boolean;
-  transferred?: boolean;
+  transferred: boolean;
   transferredAt?: string;
 };
 
@@ -48,7 +73,9 @@ export type WalletOrder = {
   userId: string;
   avatarId: string;
   cartId: string;
-  paid?: boolean;
+  shippingSnapshot: WalletOrderShippingSnapshot;
+  paymentMethodSnapshot: WalletOrderPaymentMethodSnapshot;
+  paid: boolean;
   items: WalletOrderItemSnapshot[];
   createdAt?: string;
   updatedAt?: string;
