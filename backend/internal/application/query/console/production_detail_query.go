@@ -8,7 +8,7 @@ import (
 
 	resolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
-
+	memberdom "narratives/internal/domain/member"
 	productbpdom "narratives/internal/domain/productBlueprint"
 	productiondom "narratives/internal/domain/production"
 )
@@ -21,36 +21,6 @@ type ProductBlueprintQueryRepo interface {
 type ProductionQueryRepo interface {
 	GetByID(ctx context.Context, id string) (*productiondom.Production, error)
 	ListByProductBlueprintID(ctx context.Context, productBlueprintIDs []string) ([]productiondom.Production, error)
-}
-
-// ============================================================
-// Production List DTO
-// ============================================================
-
-type ProductionListModelDTO struct {
-	ModelID  string `json:"modelId"`
-	Quantity int    `json:"quantity"`
-}
-
-type ProductionListItemDTO struct {
-	ID                 string                   `json:"id"`
-	ProductBlueprintID string                   `json:"productBlueprintId"`
-	ProductName        string                   `json:"productName"`
-	BrandName          string                   `json:"brandName"`
-	AssigneeID         string                   `json:"assigneeId"`
-	AssigneeName       string                   `json:"assigneeName"`
-	Models             []ProductionListModelDTO `json:"models"`
-	Printed            bool                     `json:"printed"`
-	PrintedAt          *time.Time               `json:"printedAt"`
-	PrintedBy          *string                  `json:"printedBy"`
-	PrintedByName      string                   `json:"printedByName"`
-	CreatedBy          *string                  `json:"createdBy"`
-	CreatedByName      string                   `json:"createdByName"`
-	CreatedAt          *time.Time               `json:"createdAt"`
-	UpdatedBy          *string                  `json:"updatedBy"`
-	UpdatedByName      string                   `json:"updatedByName"`
-	UpdatedAt          *time.Time               `json:"updatedAt"`
-	TotalQuantity      int                      `json:"totalQuantity"`
 }
 
 // ============================================================
@@ -109,114 +79,31 @@ type ProductionDetailDTO struct {
 	UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
 }
 
+// ============================================================
+// Query Service
+// ============================================================
+
 type CompanyProductionQueryService struct {
 	pbRepo       ProductBlueprintQueryRepo
 	prodRepo     ProductionQueryRepo
+	memberRepo   memberdom.Repository
 	nameResolver *resolver.NameResolver
 }
 
-func NewCompanyProductionQueryService(
-	pbRepo ProductBlueprintQueryRepo,
-	prodRepo ProductionQueryRepo,
-	nameResolver *resolver.NameResolver,
-) *CompanyProductionQueryService {
+func NewCompanyProductionQueryService(pbRepo ProductBlueprintQueryRepo, prodRepo ProductionQueryRepo, memberRepo memberdom.Repository, nameResolver *resolver.NameResolver) *CompanyProductionQueryService {
 	return &CompanyProductionQueryService{
 		pbRepo:       pbRepo,
 		prodRepo:     prodRepo,
+		memberRepo:   memberRepo,
 		nameResolver: nameResolver,
 	}
-}
-
-// ============================================================
-// Production List
-// ============================================================
-
-func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(
-	ctx context.Context,
-) ([]productiondom.Production, map[string]productbpdom.ProductBlueprint, error) {
-	cid := usecase.CompanyIDFromContext(ctx)
-	if cid == "" {
-		return nil, nil, productbpdom.ErrInvalidCompanyID
-	}
-	if s.pbRepo == nil || s.prodRepo == nil {
-		return nil, nil, productbpdom.ErrInternal
-	}
-
-	productBlueprints, err := s.pbRepo.ListByCompanyID(ctx, cid)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(productBlueprints) == 0 {
-		return []productiondom.Production{}, map[string]productbpdom.ProductBlueprint{}, nil
-	}
-
-	pbIDs := make([]string, 0, len(productBlueprints))
-	pbByID := make(map[string]productbpdom.ProductBlueprint, len(productBlueprints))
-
-	for _, pb := range productBlueprints {
-		if pb.ID == "" {
-			continue
-		}
-		if _, ok := pbByID[pb.ID]; ok {
-			continue
-		}
-
-		pbByID[pb.ID] = pb
-		pbIDs = append(pbIDs, pb.ID)
-	}
-
-	if len(pbIDs) == 0 {
-		return []productiondom.Production{}, map[string]productbpdom.ProductBlueprint{}, nil
-	}
-
-	rows, err := s.prodRepo.ListByProductBlueprintID(ctx, pbIDs)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(rows) == 0 {
-		return []productiondom.Production{}, pbByID, nil
-	}
-
-	out := make([]productiondom.Production, 0, len(rows))
-	for _, p := range rows {
-		if _, ok := pbByID[p.ProductBlueprintID]; !ok {
-			continue
-		}
-		out = append(out, p)
-	}
-
-	return out, pbByID, nil
-}
-
-func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
-	ctx context.Context,
-) ([]ProductionListItemDTO, error) {
-	list, pbByID, err := s.listProductionsByCurrentCompany(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(list) == 0 {
-		return []ProductionListItemDTO{}, nil
-	}
-
-	brandNameCache := map[string]string{}
-	out := make([]ProductionListItemDTO, 0, len(list))
-
-	for _, p := range list {
-		out = append(out, s.toProductionListItemDTO(ctx, p, pbByID, brandNameCache))
-	}
-
-	return out, nil
 }
 
 // ============================================================
 // Production Detail
 // ============================================================
 
-func (s *CompanyProductionQueryService) getProductionByIDForCurrentCompany(
-	ctx context.Context,
-	id string,
-) (productiondom.Production, productbpdom.ProductBlueprint, error) {
+func (s *CompanyProductionQueryService) getProductionByIDForCurrentCompany(ctx context.Context, id string) (productiondom.Production, productbpdom.ProductBlueprint, error) {
 	cid := usecase.CompanyIDFromContext(ctx)
 	if cid == "" {
 		return productiondom.Production{}, productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
@@ -250,23 +137,19 @@ func (s *CompanyProductionQueryService) getProductionByIDForCurrentCompany(
 	return *p, pb, nil
 }
 
-func (s *CompanyProductionQueryService) GetProductionDetailByID(
-	ctx context.Context,
-	id string,
-) (ProductionDetailDTO, error) {
+func (s *CompanyProductionQueryService) GetProductionDetailByID(ctx context.Context, id string) (ProductionDetailDTO, error) {
 	p, pb, err := s.getProductionByIDForCurrentCompany(ctx, id)
 	if err != nil {
 		return ProductionDetailDTO{}, err
 	}
 
-	assigneeName := ""
+	assigneeName := s.resolveProductionMemberNameByID(ctx, p.AssigneeID)
 	brandName := ""
 	createdByName := ""
 	updatedByName := ""
 	printedByName := ""
 
 	if s.nameResolver != nil {
-		assigneeName = s.nameResolver.ResolveMemberName(ctx, p.AssigneeID)
 		createdByName = s.nameResolver.ResolveCreatedByName(ctx, p.CreatedBy)
 		updatedByName = s.nameResolver.ResolveUpdatedByName(ctx, p.UpdatedBy)
 		printedByName = s.nameResolver.ResolvePrintedByName(ctx, p.PrintedBy)
@@ -294,11 +177,7 @@ func (s *CompanyProductionQueryService) GetProductionDetailByID(
 			displayOrder = &value
 		}
 
-		models = append(
-			models,
-			s.resolveProductionModelDTO(ctx, model.ModelID, displayOrder, model.Quantity),
-		)
-
+		models = append(models, s.resolveProductionModelDTO(ctx, model.ModelID, displayOrder, model.Quantity))
 		if model.Quantity > 0 {
 			totalQuantity += model.Quantity
 		}
@@ -331,15 +210,35 @@ func (s *CompanyProductionQueryService) GetProductionDetailByID(
 }
 
 // ============================================================
+// Member Resolver
+// ============================================================
+
+func (s *CompanyProductionQueryService) resolveProductionMemberNameByID(ctx context.Context, memberID string) string {
+	if memberID == "" {
+		return ""
+	}
+	if s.memberRepo == nil {
+		return memberID
+	}
+
+	rec, err := s.memberRepo.GetByID(ctx, memberID)
+	if err != nil {
+		return memberID
+	}
+
+	name := memberdom.FormatLastFirst(rec.Member.LastName, rec.Member.FirstName)
+	if name == "" {
+		return memberID
+	}
+
+	return name
+}
+
+// ============================================================
 // Production Model Resolver
 // ============================================================
 
-func (s *CompanyProductionQueryService) resolveProductionModelDTO(
-	ctx context.Context,
-	modelID string,
-	displayOrder *int,
-	quantity int,
-) ProductionDetailModelDTO {
+func (s *CompanyProductionQueryService) resolveProductionModelDTO(ctx context.Context, modelID string, displayOrder *int, quantity int) ProductionDetailModelDTO {
 	attr := resolver.ModelResolved{}
 	if s.nameResolver != nil {
 		attr = s.nameResolver.ResolveModelResolved(ctx, modelID)
@@ -384,13 +283,12 @@ func sortProductionModelDTOs(models []ProductionDetailModelDTO) {
 		if right == nil {
 			return true
 		}
+
 		return *left < *right
 	})
 }
 
-func toProductionProductBlueprintCategoryDTO(
-	category productbpdom.ProductBlueprintCategorySnapshot,
-) ProductionProductBlueprintCategoryDTO {
+func toProductionProductBlueprintCategoryDTO(category productbpdom.ProductBlueprintCategorySnapshot) ProductionProductBlueprintCategoryDTO {
 	return ProductionProductBlueprintCategoryDTO{
 		ID:     category.ID,
 		Code:   category.Code,
@@ -398,83 +296,6 @@ func toProductionProductBlueprintCategoryDTO(
 		NameEn: category.NameEn,
 		Kind:   string(category.Kind),
 		Path:   append([]string(nil), category.Path...),
-	}
-}
-
-// ============================================================
-// Production List DTO Builder
-// ============================================================
-
-func (s *CompanyProductionQueryService) toProductionListItemDTO(
-	ctx context.Context,
-	p productiondom.Production,
-	pbByID map[string]productbpdom.ProductBlueprint,
-	brandNameCache map[string]string,
-) ProductionListItemDTO {
-	assigneeName := ""
-	productName := ""
-	brandID := ""
-	brandName := ""
-	createdByName := ""
-	updatedByName := ""
-	printedByName := ""
-
-	if s.nameResolver != nil {
-		assigneeName = s.nameResolver.ResolveMemberName(ctx, p.AssigneeID)
-		createdByName = s.nameResolver.ResolveCreatedByName(ctx, p.CreatedBy)
-		updatedByName = s.nameResolver.ResolveUpdatedByName(ctx, p.UpdatedBy)
-		printedByName = s.nameResolver.ResolvePrintedByName(ctx, p.PrintedBy)
-	}
-
-	if p.ProductBlueprintID != "" {
-		if pb, ok := pbByID[p.ProductBlueprintID]; ok {
-			productName = pb.ProductName
-			brandID = pb.BrandID
-		}
-	}
-
-	if s.nameResolver != nil && brandID != "" {
-		if cached, ok := brandNameCache[brandID]; ok {
-			brandName = cached
-		} else {
-			brandName = s.nameResolver.ResolveBrandName(ctx, brandID)
-			brandNameCache[brandID] = brandName
-		}
-	}
-
-	models := make([]ProductionListModelDTO, 0, len(p.Models))
-	totalQuantity := 0
-
-	for _, model := range p.Models {
-		models = append(models, ProductionListModelDTO{
-			ModelID:  model.ModelID,
-			Quantity: model.Quantity,
-		})
-
-		if model.Quantity > 0 {
-			totalQuantity += model.Quantity
-		}
-	}
-
-	return ProductionListItemDTO{
-		ID:                 p.ID,
-		ProductBlueprintID: p.ProductBlueprintID,
-		ProductName:        productName,
-		BrandName:          brandName,
-		AssigneeID:         p.AssigneeID,
-		AssigneeName:       assigneeName,
-		Models:             models,
-		Printed:            p.Printed,
-		PrintedAt:          p.PrintedAt,
-		PrintedBy:          p.PrintedBy,
-		PrintedByName:      printedByName,
-		CreatedBy:          p.CreatedBy,
-		CreatedByName:      createdByName,
-		CreatedAt:          productionTimePointer(p.CreatedAt),
-		UpdatedBy:          p.UpdatedBy,
-		UpdatedByName:      updatedByName,
-		UpdatedAt:          productionTimePointer(p.UpdatedAt),
-		TotalQuantity:      totalQuantity,
 	}
 }
 

@@ -121,6 +121,7 @@ func buildQueries(
 	companyProductionQueryService := companyquery.NewCompanyProductionQueryService(
 		r.productBlueprintRepo,
 		r.productionRepo,
+		r.memberRepo,
 		res.nameResolver,
 	)
 
