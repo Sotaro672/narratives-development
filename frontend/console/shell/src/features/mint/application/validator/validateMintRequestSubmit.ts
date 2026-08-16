@@ -1,22 +1,11 @@
 // frontend/console/shell/src/features/mintRequest/application/validator/validateMintRequestSubmit.ts
 
-import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
+import type { InspectionBatch } from "../../../../shared/types/inspections";
 
 export type ValidateMintRequestSubmitInput = {
-  inspectionBatch: InspectionBatchDTO | null | undefined;
+  inspectionBatch: InspectionBatch | null | undefined;
   isInspectionCompleted: boolean;
   selectedTokenBlueprintId: string | null | undefined;
-
-  /**
-   * URL param由来のproductionId。
-   *
-   * route名がrequestIdのままでも、
-   * application層ではproductionIdとして扱う。
-   *
-   * inspectionBatch.productionIdを優先し、
-   * inspectionBatch側が空の場合のみfallbackとして使用する。
-   */
-  productionId?: string | null;
 };
 
 export type ValidateMintRequestSubmitResult =
@@ -33,15 +22,16 @@ export type ValidateMintRequestSubmitResult =
 /**
  * ミント申請を送信できる状態か検証する。
  *
- * Backendはミントを同期実行せず、
- * 202 Accepted / QUEUEDを返して順次処理する。
+ * Backendはミントを同期実行せず、202 Accepted / QUEUEDを返して順次処理する。
  *
- * そのため、このvalidatorでは次の入力条件だけを検証する。
- *
+ * このvalidatorでは次の入力条件だけを検証する。
  * - 検品バッチが取得済みである
  * - 検品が完了している
  * - トークン設計が選択されている
- * - productionIdが特定できる
+ * - inspectionBatch.productionIdが存在する
+ *
+ * productionIdはBackend BFFが返すinspectionBatch.productionIdのみを正とし、
+ * route parameterへのfallbackやFrontend側での再構築は行わない。
  */
 export function validateMintRequestSubmit(
   input: ValidateMintRequestSubmitInput,
@@ -62,9 +52,7 @@ export function validateMintRequestSubmit(
     };
   }
 
-  const tokenBlueprintId = String(
-    input.selectedTokenBlueprintId ?? "",
-  ).trim();
+  const tokenBlueprintId = String(input.selectedTokenBlueprintId ?? "").trim();
 
   if (!tokenBlueprintId) {
     return {
@@ -73,18 +61,7 @@ export function validateMintRequestSubmit(
     };
   }
 
-  const inspectionProductionId = String(
-    inspectionBatch.productionId ?? "",
-  ).trim();
-
-  const routeProductionId = String(
-    input.productionId ?? "",
-  ).trim();
-
-  const productionId =
-    inspectionProductionId || routeProductionId;
-
-  if (!productionId) {
+  if (!inspectionBatch.productionId) {
     return {
       ok: false,
       message: "productionId が特定できません。",
@@ -93,7 +70,7 @@ export function validateMintRequestSubmit(
 
   return {
     ok: true,
-    productionId,
+    productionId: inspectionBatch.productionId,
     tokenBlueprintId,
   };
 }

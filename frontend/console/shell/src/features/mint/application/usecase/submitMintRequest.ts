@@ -17,12 +17,6 @@ export interface SubmitMintRequestRepository {
 export type SubmitMintRequestInput = {
   inspectionBatch: InspectionBatch | null | undefined;
   selectedTokenBlueprintId: string | null | undefined;
-
-  /**
-   * URLパラメータ由来のproductionId。
-   * inspectionBatch.productionIdが存在する場合はvalidator側でそちらを優先する。
-   */
-  productionId?: string | null;
 };
 
 export type SubmitMintRequestResult =
@@ -39,6 +33,8 @@ export type SubmitMintRequestResult =
 /**
  * Mint申請条件を検証し、Backendへ非同期Mint処理を申請する。
  *
+ * productionIdはBackend BFFが返すinspectionBatch.productionIdのみを正とする。
+ *
  * loading state、alert、成功後の再取得はPresentation層の責務とする。
  * Repositoryから発生した通信エラーは握りつぶさず、呼び出し元へthrowする。
  *
@@ -54,7 +50,6 @@ export async function submitMintRequest(
     inspectionBatch,
     isInspectionCompleted: inspectionBatch?.status === "completed",
     selectedTokenBlueprintId: input.selectedTokenBlueprintId,
-    productionId: input.productionId,
   });
 
   if (!validation.ok) {
