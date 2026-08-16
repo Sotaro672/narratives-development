@@ -14,36 +14,17 @@ import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
 export interface UseProductBlueprintManagementResult {
   rows: ProductBlueprintListRow[];
-
   brandFilter: string[];
   assigneeFilter: string[];
   printedFilter: string[];
-
   handleBrandFilterChange: (values: string[]) => void;
   handleAssigneeFilterChange: (values: string[]) => void;
   handlePrintedFilterChange: (values: string[]) => void;
-
   handleSortChange: (key: string | null, dir: "asc" | "desc" | null) => void;
-
   handleRowClick: (row: ProductBlueprintListRow) => void;
   handleCreate: () => void;
   handleReset: () => void;
-
   isResetting: boolean;
-}
-
-/**
- * dateJa.tsを使って安全に整形し、表示はyyyy/MM/dd HH:mmに揃える。
- */
-function formatDateTimeYYYYMMDDHHmm(value: string | null | undefined): string {
-  const label = safeDateTimeLabelJa(value, "");
-
-  if (!label) {
-    return "";
-  }
-
-  const matched = label.match(/^(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2})(?::\d{2})?$/);
-  return matched ? matched[1] : label;
 }
 
 /**
@@ -96,8 +77,8 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
     () =>
       filteredSortedRows.map((row) => ({
         ...row,
-        createdAt: formatDateTimeYYYYMMDDHHmm(row.createdAt),
-        updatedAt: formatDateTimeYYYYMMDDHHmm(row.updatedAt),
+        createdAt: safeDateTimeLabelJa(row.createdAt, ""),
+        updatedAt: safeDateTimeLabelJa(row.updatedAt, ""),
       })),
     [filteredSortedRows],
   );

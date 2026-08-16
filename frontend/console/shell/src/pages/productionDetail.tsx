@@ -34,14 +34,14 @@ export default function ProductionDetail() {
     assigneeName,
     assigneeCandidates,
     loadingMembers,
+    creator,
+    createdAt,
+    updater,
+    updatedAt,
     onSelectAssignee,
     onEditAssignee,
     onClickAssignee,
   } = useProductionDetail();
-
-  const createdAtLabel = production?.createdAt
-    ? new Date(production.createdAt).toLocaleDateString("ja-JP")
-    : "-";
 
   const isPrinted = production?.printed === true;
   const productBlueprintCategoryCode =
@@ -97,7 +97,11 @@ export default function ProductionDetail() {
       title="生産詳細"
       onBack={onBack}
       onEdit={isViewMode && canEdit ? switchToEdit : undefined}
-      onDelete={isEditMode && canEdit && !deleting ? handleDelete : undefined}
+      onDelete={
+        isEditMode && canEdit && !deleting
+          ? handleDelete
+          : undefined
+      }
       onCancel={isEditMode ? switchToView : undefined}
       onSave={isEditMode ? handleSave : undefined}
     >
@@ -126,15 +130,21 @@ export default function ProductionDetail() {
               mode="view"
               productName={production.productName}
               brandName={production.brandName}
-              productBlueprintCategory={production.productBlueprintCategory}
+              productBlueprintCategory={
+                production.productBlueprintCategory
+              }
             />
 
             <ProductionQuantityCard
               title="モデル別 生産数一覧"
               rows={quantityRows}
-              productBlueprintCategory={productBlueprintCategoryCode}
+              productBlueprintCategory={
+                productBlueprintCategoryCode
+              }
               mode={isEditMode ? "edit" : "view"}
-              onChangeRows={isEditMode ? setQuantityRows : undefined}
+              onChangeRows={
+                isEditMode ? setQuantityRows : undefined
+              }
             />
 
             {isViewMode && (
@@ -155,8 +165,10 @@ export default function ProductionDetail() {
           assigneeName={assigneeName}
           assigneeCandidates={assigneeCandidates}
           loadingMembers={loadingMembers}
-          createdByName={production?.createdByName || "-"}
-          createdAt={createdAtLabel}
+          createdByName={creator}
+          createdAt={createdAt}
+          updatedByName={updater}
+          updatedAt={updatedAt}
           mode={adminMode}
           onSelectAssignee={onSelectAssignee}
           onEditAssignee={onEditAssignee}

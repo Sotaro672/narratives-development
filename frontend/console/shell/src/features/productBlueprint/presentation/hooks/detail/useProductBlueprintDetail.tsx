@@ -27,14 +27,6 @@ import { useProductBlueprintVariations } from "../shared/useProductBlueprintVari
 
 type SizeRow = ApparelSizeInput & { id: string };
 
-function formatDateTimeYYYYMMDDHHmm(value: string | null | undefined): string {
-  const label = safeDateTimeLabelJa(value, "");
-  if (!label) return "";
-
-  const matched = label.match(/^(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2})(?::\d{2})?$/);
-  return matched?.[1] ?? label;
-}
-
 export interface UseProductBlueprintDetailResult {
   pageTitle: string;
   productName: string;
@@ -102,7 +94,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const [printed, setPrinted] = React.useState(false);
   const [brandId, setBrandId] = React.useState("");
   const [companyId, setCompanyId] = React.useState("");
-
   const [initialAssigneeId, setInitialAssigneeId] = React.useState("");
   const [initialAssigneeName, setInitialAssigneeName] = React.useState("");
 
@@ -188,15 +179,13 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setProductBlueprintCategory(detail.productBlueprintCategory);
         setCategoryFields(detail.categoryFields ?? {});
         setFromUiState(detail.modelState);
-
         setInitialAssigneeId(detail.assigneeId);
         setInitialAssigneeName(detail.assigneeName);
-
         setCreator(detail.createdByName);
-        setCreatedAt(formatDateTimeYYYYMMDDHHmm(detail.createdAt));
+        setCreatedAt(safeDateTimeLabelJa(detail.createdAt, ""));
 
         const nextUpdater = detail.updatedByName;
-        const nextUpdatedAt = formatDateTimeYYYYMMDDHHmm(detail.updatedAt);
+        const nextUpdatedAt = safeDateTimeLabelJa(detail.updatedAt, "");
 
         if (nextUpdater && nextUpdatedAt) {
           setUpdater(nextUpdater);
@@ -209,11 +198,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         resetVariations();
       }
     })();
-  }, [
-    blueprintId,
-    resetVariations,
-    setFromUiState,
-  ]);
+  }, [blueprintId, resetVariations, setFromUiState]);
 
   const onChangeCategoryField = React.useCallback(
     (key: string, value: CategoryFieldValue) => {
@@ -238,9 +223,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
       return;
     }
 
-    if (!productBlueprintCategory) {
-      return;
-    }
+    if (!productBlueprintCategory) return;
 
     if (!assigneeId) {
       alert("担当者を選択してください。");
@@ -273,15 +256,13 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setProductBlueprintCategory(detail.productBlueprintCategory);
         setCategoryFields(detail.categoryFields ?? {});
         setFromUiState(detail.modelState);
-
         setInitialAssigneeId(detail.assigneeId);
         setInitialAssigneeName(detail.assigneeName);
-
         setCreator(detail.createdByName);
-        setCreatedAt(formatDateTimeYYYYMMDDHHmm(detail.createdAt));
+        setCreatedAt(safeDateTimeLabelJa(detail.createdAt, ""));
 
         const nextUpdater = detail.updatedByName;
-        const nextUpdatedAt = formatDateTimeYYYYMMDDHHmm(detail.updatedAt);
+        const nextUpdatedAt = safeDateTimeLabelJa(detail.updatedAt, "");
 
         if (nextUpdater && nextUpdatedAt) {
           setUpdater(nextUpdater);

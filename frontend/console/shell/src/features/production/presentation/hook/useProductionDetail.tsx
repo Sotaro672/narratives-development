@@ -8,6 +8,7 @@ import type {
   ProductionDetail,
   ProductionQuantityRow,
 } from "../../../../shared/types/production";
+import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import {
   loadProductionDetail,
   updateProductionDetail,
@@ -43,6 +44,24 @@ export function useProductionDetail() {
   const isViewMode = mode === "view";
   const isEditMode = mode === "edit";
   const canEdit = production?.printed !== true;
+
+  const creator = production?.createdByName ?? "";
+  const createdAt = React.useMemo(
+    () => safeDateTimeLabelJa(production?.createdAt, ""),
+    [production?.createdAt],
+  );
+
+  const updater = React.useMemo(() => {
+    const name = production?.updatedByName ?? "";
+    const date = safeDateTimeLabelJa(production?.updatedAt, "");
+    return name && date ? name : "";
+  }, [production?.updatedByName, production?.updatedAt]);
+
+  const updatedAt = React.useMemo(() => {
+    const name = production?.updatedByName ?? "";
+    const date = safeDateTimeLabelJa(production?.updatedAt, "");
+    return name && date ? date : "";
+  }, [production?.updatedByName, production?.updatedAt]);
 
   const switchToView = React.useCallback(() => {
     resetAssignee();
@@ -83,7 +102,9 @@ export function useProductionDetail() {
         setProduction(null);
         setQuantityRows([]);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
@@ -186,11 +207,14 @@ export function useProductionDetail() {
     error,
     quantityRows,
     setQuantityRows,
-
     assigneeId,
     assigneeName,
     assigneeCandidates,
     loadingMembers,
+    creator,
+    createdAt,
+    updater,
+    updatedAt,
     onSelectAssignee,
     onEditAssignee,
     onClickAssignee,
