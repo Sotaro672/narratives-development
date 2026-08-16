@@ -126,6 +126,7 @@ type bubblegumMintResponse struct {
 
 // MintFundingEstimateParams は solana-bubblegum /estimate に渡す入力です。
 // metadataUri は初回Mint前に未生成でも正常なため、見積入力には含めません。
+// mintQuantity はSOL見積計算に必要な内部入力としてsolana-bubblegum serviceへ渡します。
 type MintFundingEstimateParams struct {
 	TokenBlueprintID string
 	MintQuantity     int
@@ -150,14 +151,6 @@ type MintFundingEstimateReserve struct {
 	MinimumSOL      float64 `json:"minimumSol"`
 }
 
-type MintFundingEstimateFeePayer struct {
-	Address         string  `json:"address"`
-	BalanceLamports string  `json:"balanceLamports"`
-	BalanceSOL      float64 `json:"balanceSol"`
-	TargetLamports  string  `json:"targetLamports"`
-	TargetSOL       float64 `json:"targetSol"`
-}
-
 type MintFundingEstimateResources struct {
 	SharedMerkleTreeExists  bool    `json:"sharedMerkleTreeExists"`
 	SharedMerkleTreeAddress *string `json:"sharedMerkleTreeAddress"`
@@ -165,6 +158,19 @@ type MintFundingEstimateResources struct {
 	CoreCollectionAddress   *string `json:"coreCollectionAddress"`
 }
 
+// MintFundingEstimateCosts はConsoleへ返すSOL見積の公開費用です。
+//
+// InitialCreationCost:
+// - Shared Merkle Tree初回作成費
+// - Core Collection初回作成費
+// の合計。
+//
+// TotalRequired:
+// - Mint手数料合計
+// - InitialCreationCost
+// の合計。
+//
+// Fee Payer目標残高、Reserve補充量、Reserve最低残高などのfunding policy内部値は公開しません。
 type MintFundingEstimateCosts struct {
 	MintTransactionFeePerItemLamports string  `json:"mintTransactionFeePerItemLamports"`
 	MintTransactionFeePerItemSOL      float64 `json:"mintTransactionFeePerItemSol"`
@@ -172,47 +178,18 @@ type MintFundingEstimateCosts struct {
 	MintTransactionFeeTotalLamports string  `json:"mintTransactionFeeTotalLamports"`
 	MintTransactionFeeTotalSOL      float64 `json:"mintTransactionFeeTotalSol"`
 
-	MerkleTreeCreationTransactionFeeLamports string  `json:"merkleTreeCreationTransactionFeeLamports"`
-	MerkleTreeCreationTransactionFeeSOL      float64 `json:"merkleTreeCreationTransactionFeeSol"`
-	MerkleTreeCreationRentLamports           string  `json:"merkleTreeCreationRentLamports"`
-	MerkleTreeCreationRentSOL                float64 `json:"merkleTreeCreationRentSol"`
-	MerkleTreeCreationCostLamports           string  `json:"merkleTreeCreationCostLamports"`
-	MerkleTreeCreationCostSOL                float64 `json:"merkleTreeCreationCostSol"`
+	InitialCreationCostLamports string  `json:"initialCreationCostLamports"`
+	InitialCreationCostSOL      float64 `json:"initialCreationCostSol"`
 
-	CoreCollectionCreationTransactionFeeLamports string  `json:"coreCollectionCreationTransactionFeeLamports"`
-	CoreCollectionCreationTransactionFeeSOL      float64 `json:"coreCollectionCreationTransactionFeeSol"`
-	CoreCollectionCreationRentLamports           string  `json:"coreCollectionCreationRentLamports"`
-	CoreCollectionCreationRentSOL                float64 `json:"coreCollectionCreationRentSol"`
-	CoreCollectionCreationCostLamports           string  `json:"coreCollectionCreationCostLamports"`
-	CoreCollectionCreationCostSOL                float64 `json:"coreCollectionCreationCostSol"`
-
-	ProvisioningCostLamports string  `json:"provisioningCostLamports"`
-	ProvisioningCostSOL      float64 `json:"provisioningCostSol"`
-
-	EstimatedNetworkCostLamports string  `json:"estimatedNetworkCostLamports"`
-	EstimatedNetworkCostSOL      float64 `json:"estimatedNetworkCostSol"`
-
-	RequiredFeePayerBalanceLamports string  `json:"requiredFeePayerBalanceLamports"`
-	RequiredFeePayerBalanceSOL      float64 `json:"requiredFeePayerBalanceSol"`
-
-	EstimatedReserveTopUpLamports string  `json:"estimatedReserveTopUpLamports"`
-	EstimatedReserveTopUpSOL      float64 `json:"estimatedReserveTopUpSol"`
-
-	ReserveTransferFeeBufferLamports string  `json:"reserveTransferFeeBufferLamports"`
-	ReserveTransferFeeBufferSOL      float64 `json:"reserveTransferFeeBufferSol"`
-
-	RequiredReserveForTopUpLamports string  `json:"requiredReserveForTopUpLamports"`
-	RequiredReserveForTopUpSOL      float64 `json:"requiredReserveForTopUpSol"`
+	TotalRequiredLamports string  `json:"totalRequiredLamports"`
+	TotalRequiredSOL      float64 `json:"totalRequiredSol"`
 
 	Sufficient bool `json:"sufficient"`
 }
 
 type MintFundingEstimateResult struct {
-	Cluster      string `json:"cluster"`
-	MintQuantity int    `json:"mintQuantity"`
-
+	Cluster   string                       `json:"cluster"`
 	Reserve   MintFundingEstimateReserve   `json:"reserve"`
-	FeePayer  MintFundingEstimateFeePayer  `json:"feePayer"`
 	Resources MintFundingEstimateResources `json:"resources"`
 	Estimate  MintFundingEstimateCosts     `json:"estimate"`
 }
@@ -223,13 +200,15 @@ type bubblegumErrorResponse struct {
 }
 
 // EstimateMintFunding は Bubblegum V2 internal service の /estimate を呼び、
-// Reserve / Fee Payer 残高と Mint に必要な SOL 見積を取得します。
+// Reserve Wallet残高とMintに必要なSOL見積を取得します。
 //
 // IMPORTANT:
 //   - Mintを実行しません。
 //   - ReserveからSOLを送金しません。
 //   - Merkle Tree / Core Collection / cNFTを作成しません。
 //   - metadataUriの生成・取得・uploadを行いません。
+//   - mintQuantityは見積入力には使用しますがresponseには公開しません。
+//   - Fee Payer残高、Fee Payer目標残高、Reserve補充量などのfunding policy内部値はresponseには公開しません。
 //   - Idempotency-Keyは不要です。
 func (c *MintClient) EstimateMintFunding(ctx context.Context, params MintFundingEstimateParams) (*MintFundingEstimateResult, error) {
 	if c == nil {
@@ -304,9 +283,6 @@ func (c *MintClient) EstimateMintFunding(ctx context.Context, params MintFunding
 	if result.Cluster == "" {
 		return nil, errors.New("bubblegum mint funding estimate response cluster is empty")
 	}
-	if result.MintQuantity <= 0 {
-		return nil, errors.New("bubblegum mint funding estimate response mintQuantity is invalid")
-	}
 	if result.Reserve.Address == "" {
 		return nil, errors.New("bubblegum mint funding estimate response reserve address is empty")
 	}
@@ -316,32 +292,17 @@ func (c *MintClient) EstimateMintFunding(ctx context.Context, params MintFunding
 	if result.Reserve.MinimumLamports == "" {
 		return nil, errors.New("bubblegum mint funding estimate response reserve minimumLamports is empty")
 	}
-	if result.FeePayer.Address == "" {
-		return nil, errors.New("bubblegum mint funding estimate response feePayer address is empty")
-	}
-	if result.FeePayer.BalanceLamports == "" {
-		return nil, errors.New("bubblegum mint funding estimate response feePayer balanceLamports is empty")
-	}
-	if result.FeePayer.TargetLamports == "" {
-		return nil, errors.New("bubblegum mint funding estimate response feePayer targetLamports is empty")
-	}
 	if result.Estimate.MintTransactionFeePerItemLamports == "" {
 		return nil, errors.New("bubblegum mint funding estimate response mintTransactionFeePerItemLamports is empty")
 	}
 	if result.Estimate.MintTransactionFeeTotalLamports == "" {
 		return nil, errors.New("bubblegum mint funding estimate response mintTransactionFeeTotalLamports is empty")
 	}
-	if result.Estimate.EstimatedNetworkCostLamports == "" {
-		return nil, errors.New("bubblegum mint funding estimate response estimatedNetworkCostLamports is empty")
+	if result.Estimate.InitialCreationCostLamports == "" {
+		return nil, errors.New("bubblegum mint funding estimate response initialCreationCostLamports is empty")
 	}
-	if result.Estimate.RequiredFeePayerBalanceLamports == "" {
-		return nil, errors.New("bubblegum mint funding estimate response requiredFeePayerBalanceLamports is empty")
-	}
-	if result.Estimate.EstimatedReserveTopUpLamports == "" {
-		return nil, errors.New("bubblegum mint funding estimate response estimatedReserveTopUpLamports is empty")
-	}
-	if result.Estimate.RequiredReserveForTopUpLamports == "" {
-		return nil, errors.New("bubblegum mint funding estimate response requiredReserveForTopUpLamports is empty")
+	if result.Estimate.TotalRequiredLamports == "" {
+		return nil, errors.New("bubblegum mint funding estimate response totalRequiredLamports is empty")
 	}
 
 	return &result, nil

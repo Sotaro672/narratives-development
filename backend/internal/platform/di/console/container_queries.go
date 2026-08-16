@@ -127,9 +127,7 @@ func buildQueries(
 
 	var mintTaskProgressQuery companyquery.MintTaskProgressQuery
 	if r.mintRepo != nil && r.mintRepo.Client != nil {
-		mintTaskProgressQuery = fsrepo.NewMintTaskProgressQueryFS(
-			r.mintRepo.Client,
-		)
+		mintTaskProgressQuery = fsrepo.NewMintTaskProgressQueryFS(r.mintRepo.Client)
 	}
 
 	mintRequestQueryService := companyquery.NewMintRequestQueryService(
@@ -163,27 +161,18 @@ func buildQueries(
 				if err != nil {
 					return nil, err
 				}
-
 				if result == nil {
 					return nil, nil
 				}
 
 				return &companyquery.MintFundingEstimateResult{
-					Cluster:      result.Cluster,
-					MintQuantity: result.MintQuantity,
+					Cluster: result.Cluster,
 					Reserve: companyquery.MintFundingEstimateReserve{
 						Address:         result.Reserve.Address,
 						BalanceLamports: result.Reserve.BalanceLamports,
 						BalanceSOL:      result.Reserve.BalanceSOL,
 						MinimumLamports: result.Reserve.MinimumLamports,
 						MinimumSOL:      result.Reserve.MinimumSOL,
-					},
-					FeePayer: companyquery.MintFundingEstimateFeePayer{
-						Address:         result.FeePayer.Address,
-						BalanceLamports: result.FeePayer.BalanceLamports,
-						BalanceSOL:      result.FeePayer.BalanceSOL,
-						TargetLamports:  result.FeePayer.TargetLamports,
-						TargetSOL:       result.FeePayer.TargetSOL,
 					},
 					Resources: companyquery.MintFundingEstimateResources{
 						SharedMerkleTreeExists:  result.Resources.SharedMerkleTreeExists,
@@ -192,35 +181,15 @@ func buildQueries(
 						CoreCollectionAddress:   result.Resources.CoreCollectionAddress,
 					},
 					Estimate: companyquery.MintFundingEstimateCosts{
-						MintTransactionFeePerItemLamports:            result.Estimate.MintTransactionFeePerItemLamports,
-						MintTransactionFeePerItemSOL:                 result.Estimate.MintTransactionFeePerItemSOL,
-						MintTransactionFeeTotalLamports:              result.Estimate.MintTransactionFeeTotalLamports,
-						MintTransactionFeeTotalSOL:                   result.Estimate.MintTransactionFeeTotalSOL,
-						MerkleTreeCreationTransactionFeeLamports:     result.Estimate.MerkleTreeCreationTransactionFeeLamports,
-						MerkleTreeCreationTransactionFeeSOL:          result.Estimate.MerkleTreeCreationTransactionFeeSOL,
-						MerkleTreeCreationRentLamports:               result.Estimate.MerkleTreeCreationRentLamports,
-						MerkleTreeCreationRentSOL:                    result.Estimate.MerkleTreeCreationRentSOL,
-						MerkleTreeCreationCostLamports:               result.Estimate.MerkleTreeCreationCostLamports,
-						MerkleTreeCreationCostSOL:                    result.Estimate.MerkleTreeCreationCostSOL,
-						CoreCollectionCreationTransactionFeeLamports: result.Estimate.CoreCollectionCreationTransactionFeeLamports,
-						CoreCollectionCreationTransactionFeeSOL:      result.Estimate.CoreCollectionCreationTransactionFeeSOL,
-						CoreCollectionCreationRentLamports:           result.Estimate.CoreCollectionCreationRentLamports,
-						CoreCollectionCreationRentSOL:                result.Estimate.CoreCollectionCreationRentSOL,
-						CoreCollectionCreationCostLamports:           result.Estimate.CoreCollectionCreationCostLamports,
-						CoreCollectionCreationCostSOL:                result.Estimate.CoreCollectionCreationCostSOL,
-						ProvisioningCostLamports:                     result.Estimate.ProvisioningCostLamports,
-						ProvisioningCostSOL:                          result.Estimate.ProvisioningCostSOL,
-						EstimatedNetworkCostLamports:                 result.Estimate.EstimatedNetworkCostLamports,
-						EstimatedNetworkCostSOL:                      result.Estimate.EstimatedNetworkCostSOL,
-						RequiredFeePayerBalanceLamports:              result.Estimate.RequiredFeePayerBalanceLamports,
-						RequiredFeePayerBalanceSOL:                   result.Estimate.RequiredFeePayerBalanceSOL,
-						EstimatedReserveTopUpLamports:                result.Estimate.EstimatedReserveTopUpLamports,
-						EstimatedReserveTopUpSOL:                     result.Estimate.EstimatedReserveTopUpSOL,
-						ReserveTransferFeeBufferLamports:             result.Estimate.ReserveTransferFeeBufferLamports,
-						ReserveTransferFeeBufferSOL:                  result.Estimate.ReserveTransferFeeBufferSOL,
-						RequiredReserveForTopUpLamports:              result.Estimate.RequiredReserveForTopUpLamports,
-						RequiredReserveForTopUpSOL:                   result.Estimate.RequiredReserveForTopUpSOL,
-						Sufficient:                                   result.Estimate.Sufficient,
+						MintTransactionFeePerItemLamports: result.Estimate.MintTransactionFeePerItemLamports,
+						MintTransactionFeePerItemSOL:      result.Estimate.MintTransactionFeePerItemSOL,
+						MintTransactionFeeTotalLamports:   result.Estimate.MintTransactionFeeTotalLamports,
+						MintTransactionFeeTotalSOL:        result.Estimate.MintTransactionFeeTotalSOL,
+						InitialCreationCostLamports:       result.Estimate.InitialCreationCostLamports,
+						InitialCreationCostSOL:            result.Estimate.InitialCreationCostSOL,
+						TotalRequiredLamports:             result.Estimate.TotalRequiredLamports,
+						TotalRequiredSOL:                  result.Estimate.TotalRequiredSOL,
+						Sufficient:                        result.Estimate.Sufficient,
 					},
 				}, nil
 			},
@@ -311,11 +280,9 @@ func buildQueries(
 		companyquery.NewListDetailQueryParams{
 			Getter:       r.listRepoFS,
 			NameResolver: res.nameResolver,
-
-			PBGetter: r.productBlueprintRepo,
-			TBGetter: r.tokenBlueprintRepo,
-
-			InvGetter: inventoryDetailQuery,
+			PBGetter:     r.productBlueprintRepo,
+			TBGetter:     r.tokenBlueprintRepo,
+			InvGetter:    inventoryDetailQuery,
 
 			// Firebase Storage 移行後:
 			// - frontend が Firebase Storage へ直接 upload

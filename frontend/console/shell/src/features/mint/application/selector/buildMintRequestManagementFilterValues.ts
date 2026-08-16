@@ -37,19 +37,10 @@ export function buildMintRequestManagementFilterValues(
   rows:
     readonly MintRequestManagementRow[],
 ): MintRequestManagementFilterValues {
-  const tokenNames =
-    new Set<string>();
-
-  const productNames =
-    new Set<string>();
-
-  const requesterNames =
-    new Set<string>();
-
-  const inspectionStatuses =
-    new Set<
-      MintRequestManagementRow["inspectionStatus"]
-    >();
+  const tokenNames = new Set<string>();
+  const productNames =new Set<string>();
+  const requesterNames = new Set<string>();
+  const inspectionStatuses = new Set<MintRequestManagementRow["inspectionStatus"]>();
 
   for (const row of rows) {
     addTextIfPresent(
@@ -75,24 +66,9 @@ export function buildMintRequestManagementFilterValues(
   }
 
   return {
-    tokenNames:
-      Array.from(
-        tokenNames,
-      ),
-
-    productNames:
-      Array.from(
-        productNames,
-      ),
-
-    requesterNames:
-      Array.from(
-        requesterNames,
-      ),
-
-    inspectionStatuses:
-      Array.from(
-        inspectionStatuses,
-      ),
+    tokenNames:Array.from(tokenNames,),
+    productNames:Array.from(productNames,),
+    requesterNames:Array.from(requesterNames,),
+    inspectionStatuses:Array.from(inspectionStatuses,),
   };
 }

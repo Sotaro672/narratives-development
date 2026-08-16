@@ -38,17 +38,6 @@ export type MintFundingEstimateReserve = {
 };
 
 /**
- * SOL見積時のFee Payer情報。
- */
-export type MintFundingEstimateFeePayer = {
-  address: string;
-  balanceLamports: string;
-  balanceSol: number;
-  targetLamports: string;
-  targetSol: number;
-};
-
-/**
  * Mintに利用するSolanaリソースの現在状態。
  */
 export type MintFundingEstimateResources = {
@@ -62,48 +51,39 @@ export type MintFundingEstimateResources = {
  * Bubblegum V2 Mintに必要なSOL費用見積。
  *
  * metadataUriやGCS上のコンテンツ容量には依存せず、
- * 初回のMerkle Tree / Core Collection作成費とmintQuantity件分のMint transaction feeを扱う。
+ * mint transaction feeとShared Merkle Tree / Core Collectionの初回作成費を扱う。
+ *
+ * initialCreationCost:
+ * - Shared Merkle Tree初回作成費
+ * - Core Collection初回作成費
+ * の合計。
+ *
+ * totalRequired:
+ * - Mint手数料合計
+ * - initialCreationCost
+ * の合計。
  */
 export type MintFundingEstimateCosts = {
   mintTransactionFeePerItemLamports: string;
   mintTransactionFeePerItemSol: number;
   mintTransactionFeeTotalLamports: string;
   mintTransactionFeeTotalSol: number;
-  merkleTreeCreationTransactionFeeLamports: string;
-  merkleTreeCreationTransactionFeeSol: number;
-  merkleTreeCreationRentLamports: string;
-  merkleTreeCreationRentSol: number;
-  merkleTreeCreationCostLamports: string;
-  merkleTreeCreationCostSol: number;
-  coreCollectionCreationTransactionFeeLamports: string;
-  coreCollectionCreationTransactionFeeSol: number;
-  coreCollectionCreationRentLamports: string;
-  coreCollectionCreationRentSol: number;
-  coreCollectionCreationCostLamports: string;
-  coreCollectionCreationCostSol: number;
-  provisioningCostLamports: string;
-  provisioningCostSol: number;
-  estimatedNetworkCostLamports: string;
-  estimatedNetworkCostSol: number;
-  requiredFeePayerBalanceLamports: string;
-  requiredFeePayerBalanceSol: number;
-  estimatedReserveTopUpLamports: string;
-  estimatedReserveTopUpSol: number;
-  reserveTransferFeeBufferLamports: string;
-  reserveTransferFeeBufferSol: number;
-  requiredReserveForTopUpLamports: string;
-  requiredReserveForTopUpSol: number;
+  initialCreationCostLamports: string;
+  initialCreationCostSol: number;
+  totalRequiredLamports: string;
+  totalRequiredSol: number;
   sufficient: boolean;
 };
 
 /**
  * GET /mint/funding-estimate のBackend response。
+ *
+ * mintQuantityやFee Payer情報、Reserve補充予定などの
+ * funding policy内部値はFrontendへ公開しない。
  */
 export type MintFundingEstimate = {
   cluster: string;
-  mintQuantity: number;
   reserve: MintFundingEstimateReserve;
-  feePayer: MintFundingEstimateFeePayer;
   resources: MintFundingEstimateResources;
   estimate: MintFundingEstimateCosts;
 };

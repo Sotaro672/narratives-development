@@ -13,50 +13,25 @@ import (
 )
 
 var (
-	ErrMintFundingEstimateQueryNotConfigured = errors.New(
-		"mint funding estimate query is not configured",
-	)
-
-	ErrMintFundingEstimateInvalidInput = errors.New(
-		"mint funding estimate input is invalid",
-	)
-
-	ErrMintFundingEstimateForbidden = errors.New(
-		"mint funding estimate access is forbidden",
-	)
-
-	ErrMintFundingEstimateNoPassedProducts = errors.New(
-		"no passed products for mint funding estimate",
-	)
-
-	ErrMintFundingEstimateBrandWalletMissing = errors.New(
-		"brand wallet address is empty",
-	)
+	ErrMintFundingEstimateQueryNotConfigured = errors.New("mint funding estimate query is not configured")
+	ErrMintFundingEstimateInvalidInput       = errors.New("mint funding estimate input is invalid")
+	ErrMintFundingEstimateForbidden          = errors.New("mint funding estimate access is forbidden")
+	ErrMintFundingEstimateNoPassedProducts   = errors.New("no passed products for mint funding estimate")
+	ErrMintFundingEstimateBrandWalletMissing = errors.New("brand wallet address is empty")
 )
 
 // GetMintFundingEstimateInput は Console から見積を取得するための入力です。
 //
-// Frontend から Solana 固有値を直接渡させず、
-// productionId と tokenBlueprintId のみを受け取ります。
-//
-// 以下は Backend 側で解決します。
-// - mintQuantity: passed product 数
-// - toAddress: Brand.WalletAddress
-// - name / symbol: TokenBlueprint
-//
-// metadataUri は見積条件に含めません。
-// 初回 Mint 前は metadataUri が未生成でも正常なため、
-// solana-bubblegum 側の estimate 処理で見積専用 URI を使用します。
+// Frontend から Solana 固有値を直接渡させず、productionId と tokenBlueprintId のみを受け取ります。
+// Backend 側では mintQuantity、Brand Wallet、TokenBlueprint情報を解決します。
+// metadataUri は見積条件に含めず、solana-bubblegum 側で見積専用 URI を使用します。
 type GetMintFundingEstimateInput struct {
 	ProductionID     string `json:"productionId"`
 	TokenBlueprintID string `json:"tokenBlueprintId"`
 }
 
-// MintFundingEstimateParams は solana-bubblegum の見積処理へ渡す
-// application/query 層の入力です。
-//
-// metadataUri は実 Mint 用の値であり、SOL 見積には使用しません。
-// infra/solana の型には依存させません。
+// MintFundingEstimateParams は solana-bubblegum の見積処理へ渡す application/query 層の入力です。
+// mintQuantity は見積計算に必要な内部値として使用し、Console API responseには公開しません。
 type MintFundingEstimateParams struct {
 	TokenBlueprintID string
 	MintQuantity     int
@@ -73,14 +48,6 @@ type MintFundingEstimateReserve struct {
 	MinimumSOL      float64 `json:"minimumSol"`
 }
 
-type MintFundingEstimateFeePayer struct {
-	Address         string  `json:"address"`
-	BalanceLamports string  `json:"balanceLamports"`
-	BalanceSOL      float64 `json:"balanceSol"`
-	TargetLamports  string  `json:"targetLamports"`
-	TargetSOL       float64 `json:"targetSol"`
-}
-
 type MintFundingEstimateResources struct {
 	SharedMerkleTreeExists  bool    `json:"sharedMerkleTreeExists"`
 	SharedMerkleTreeAddress *string `json:"sharedMerkleTreeAddress"`
@@ -88,70 +55,38 @@ type MintFundingEstimateResources struct {
 	CoreCollectionAddress   *string `json:"coreCollectionAddress"`
 }
 
+// MintFundingEstimateCosts は Console API に公開する SOL 見積です.
+//
+// InitialCreationCost:
+// Shared Merkle Tree と Core Collection の初回作成費合計。
+//
+// TotalRequired:
+// Mint手数料合計 + InitialCreationCost。
+//
+// Fee Payer残高・目標残高、Reserve補充量などのfunding policy内部値は公開しません。
 type MintFundingEstimateCosts struct {
 	MintTransactionFeePerItemLamports string  `json:"mintTransactionFeePerItemLamports"`
 	MintTransactionFeePerItemSOL      float64 `json:"mintTransactionFeePerItemSol"`
-
-	MintTransactionFeeTotalLamports string  `json:"mintTransactionFeeTotalLamports"`
-	MintTransactionFeeTotalSOL      float64 `json:"mintTransactionFeeTotalSol"`
-
-	MerkleTreeCreationTransactionFeeLamports string  `json:"merkleTreeCreationTransactionFeeLamports"`
-	MerkleTreeCreationTransactionFeeSOL      float64 `json:"merkleTreeCreationTransactionFeeSol"`
-
-	MerkleTreeCreationRentLamports string  `json:"merkleTreeCreationRentLamports"`
-	MerkleTreeCreationRentSOL      float64 `json:"merkleTreeCreationRentSol"`
-
-	MerkleTreeCreationCostLamports string  `json:"merkleTreeCreationCostLamports"`
-	MerkleTreeCreationCostSOL      float64 `json:"merkleTreeCreationCostSol"`
-
-	CoreCollectionCreationTransactionFeeLamports string  `json:"coreCollectionCreationTransactionFeeLamports"`
-	CoreCollectionCreationTransactionFeeSOL      float64 `json:"coreCollectionCreationTransactionFeeSol"`
-
-	CoreCollectionCreationRentLamports string  `json:"coreCollectionCreationRentLamports"`
-	CoreCollectionCreationRentSOL      float64 `json:"coreCollectionCreationRentSol"`
-
-	CoreCollectionCreationCostLamports string  `json:"coreCollectionCreationCostLamports"`
-	CoreCollectionCreationCostSOL      float64 `json:"coreCollectionCreationCostSol"`
-
-	ProvisioningCostLamports string  `json:"provisioningCostLamports"`
-	ProvisioningCostSOL      float64 `json:"provisioningCostSol"`
-
-	EstimatedNetworkCostLamports string  `json:"estimatedNetworkCostLamports"`
-	EstimatedNetworkCostSOL      float64 `json:"estimatedNetworkCostSol"`
-
-	RequiredFeePayerBalanceLamports string  `json:"requiredFeePayerBalanceLamports"`
-	RequiredFeePayerBalanceSOL      float64 `json:"requiredFeePayerBalanceSol"`
-
-	EstimatedReserveTopUpLamports string  `json:"estimatedReserveTopUpLamports"`
-	EstimatedReserveTopUpSOL      float64 `json:"estimatedReserveTopUpSol"`
-
-	ReserveTransferFeeBufferLamports string  `json:"reserveTransferFeeBufferLamports"`
-	ReserveTransferFeeBufferSOL      float64 `json:"reserveTransferFeeBufferSol"`
-
-	RequiredReserveForTopUpLamports string  `json:"requiredReserveForTopUpLamports"`
-	RequiredReserveForTopUpSOL      float64 `json:"requiredReserveForTopUpSol"`
-
-	Sufficient bool `json:"sufficient"`
+	MintTransactionFeeTotalLamports   string  `json:"mintTransactionFeeTotalLamports"`
+	MintTransactionFeeTotalSOL        float64 `json:"mintTransactionFeeTotalSol"`
+	InitialCreationCostLamports       string  `json:"initialCreationCostLamports"`
+	InitialCreationCostSOL            float64 `json:"initialCreationCostSol"`
+	TotalRequiredLamports             string  `json:"totalRequiredLamports"`
+	TotalRequiredSOL                  float64 `json:"totalRequiredSol"`
+	Sufficient                        bool    `json:"sufficient"`
 }
 
 // MintFundingEstimateResult は Console API が返す見積結果です。
-//
-// solana-bubblegum service のレスポンスを Backend application 層の
-// read model として表現します。
+// solana-bubblegum service の公開レスポンスを Backend application 層の read model として表現します。
 type MintFundingEstimateResult struct {
-	Cluster      string `json:"cluster"`
-	MintQuantity int    `json:"mintQuantity"`
-
+	Cluster   string                       `json:"cluster"`
 	Reserve   MintFundingEstimateReserve   `json:"reserve"`
-	FeePayer  MintFundingEstimateFeePayer  `json:"feePayer"`
 	Resources MintFundingEstimateResources `json:"resources"`
 	Estimate  MintFundingEstimateCosts     `json:"estimate"`
 }
 
 // MintFundingEstimateExecutor は SOL 見積の実処理を呼び出す関数です。
-//
-// application/query -> infra/solana の直接依存を避けるため、
-// DI 層で MintClient.EstimateMintFunding をラップして注入します。
+// application/query -> infra/solana の直接依存を避けるため、DI 層で MintClient.EstimateMintFunding をラップして注入します.
 //
 // IMPORTANT:
 // - Mint を実行しない
@@ -185,14 +120,13 @@ func NewMintFundingEstimateQuery(
 	}
 }
 
-// GetMintFundingEstimate は productionId と tokenBlueprintId から
-// Bubblegum V2 Mint に必要な SOL 見積を構築します。
+// GetMintFundingEstimate は productionId と tokenBlueprintId から Bubblegum V2 Mint に必要な SOL 見積を構築します.
 //
 // 処理:
 //  1. current company を取得
 //  2. TokenBlueprint を取得し company 所有を確認
 //  3. Brand を取得し walletAddress を解決
-//  4. passed productId 数を mintQuantity として取得
+//  4. passed productId 数を内部用 mintQuantity として取得
 //  5. read-only の SOL estimate executor を実行
 //
 // metadataUri は見積条件に含めません。
@@ -201,26 +135,15 @@ func (q *MintFundingEstimateQuery) GetMintFundingEstimate(
 	ctx context.Context,
 	input GetMintFundingEstimateInput,
 ) (*MintFundingEstimateResult, error) {
-	if q == nil ||
-		q.passedProductLister == nil ||
-		q.tokenBlueprintRepo == nil ||
-		q.brandRepo == nil ||
-		q.estimate == nil {
+	if q == nil || q.passedProductLister == nil || q.tokenBlueprintRepo == nil || q.brandRepo == nil || q.estimate == nil {
 		return nil, ErrMintFundingEstimateQueryNotConfigured
 	}
 
 	if input.ProductionID == "" {
-		return nil, fmt.Errorf(
-			"%w: productionId is empty",
-			ErrMintFundingEstimateInvalidInput,
-		)
+		return nil, fmt.Errorf("%w: productionId is empty", ErrMintFundingEstimateInvalidInput)
 	}
-
 	if input.TokenBlueprintID == "" {
-		return nil, fmt.Errorf(
-			"%w: tokenBlueprintId is empty",
-			ErrMintFundingEstimateInvalidInput,
-		)
+		return nil, fmt.Errorf("%w: tokenBlueprintId is empty", ErrMintFundingEstimateInvalidInput)
 	}
 
 	companyID := usecase.CompanyIDFromContext(ctx)
@@ -228,97 +151,46 @@ func (q *MintFundingEstimateQuery) GetMintFundingEstimate(
 		return nil, usecase.ErrCompanyIDMissing
 	}
 
-	tokenBlueprint, err := q.tokenBlueprintRepo.GetByID(
-		ctx,
-		input.TokenBlueprintID,
-	)
+	tokenBlueprint, err := q.tokenBlueprintRepo.GetByID(ctx, input.TokenBlueprintID)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"get tokenBlueprint for mint funding estimate: %w",
-			err,
-		)
+		return nil, fmt.Errorf("get tokenBlueprint for mint funding estimate: %w", err)
 	}
-
 	if tokenBlueprint == nil {
-		return nil, fmt.Errorf(
-			"%w: tokenBlueprint not found",
-			tbdom.ErrNotFound,
-		)
+		return nil, fmt.Errorf("%w: tokenBlueprint not found", tbdom.ErrNotFound)
 	}
-
 	if tokenBlueprint.CompanyID != companyID {
-		return nil, fmt.Errorf(
-			"%w: tokenBlueprint company mismatch",
-			ErrMintFundingEstimateForbidden,
-		)
+		return nil, fmt.Errorf("%w: tokenBlueprint company mismatch", ErrMintFundingEstimateForbidden)
 	}
-
 	if tokenBlueprint.BrandID == "" {
-		return nil, fmt.Errorf(
-			"%w: tokenBlueprint brandId is empty",
-			ErrMintFundingEstimateInvalidInput,
-		)
+		return nil, fmt.Errorf("%w: tokenBlueprint brandId is empty", ErrMintFundingEstimateInvalidInput)
 	}
-
 	if tokenBlueprint.Name == "" {
-		return nil, fmt.Errorf(
-			"%w: tokenBlueprint name is empty",
-			ErrMintFundingEstimateInvalidInput,
-		)
+		return nil, fmt.Errorf("%w: tokenBlueprint name is empty", ErrMintFundingEstimateInvalidInput)
 	}
-
 	if tokenBlueprint.Symbol == "" {
-		return nil, fmt.Errorf(
-			"%w: tokenBlueprint symbol is empty",
-			ErrMintFundingEstimateInvalidInput,
-		)
+		return nil, fmt.Errorf("%w: tokenBlueprint symbol is empty", ErrMintFundingEstimateInvalidInput)
 	}
 
-	brand, err := q.brandRepo.GetByID(
-		ctx,
-		tokenBlueprint.BrandID,
-	)
+	brand, err := q.brandRepo.GetByID(ctx, tokenBlueprint.BrandID)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"get brand for mint funding estimate: %w",
-			err,
-		)
+		return nil, fmt.Errorf("get brand for mint funding estimate: %w", err)
 	}
-
 	if brand.ID == "" {
-		return nil, fmt.Errorf(
-			"%w: brand not found",
-			branddom.ErrNotFound,
-		)
+		return nil, fmt.Errorf("%w: brand not found", branddom.ErrNotFound)
 	}
-
 	if brand.CompanyID != companyID {
-		return nil, fmt.Errorf(
-			"%w: brand company mismatch",
-			ErrMintFundingEstimateForbidden,
-		)
+		return nil, fmt.Errorf("%w: brand company mismatch", ErrMintFundingEstimateForbidden)
 	}
-
 	if brand.ID != tokenBlueprint.BrandID {
-		return nil, fmt.Errorf(
-			"%w: tokenBlueprint brand mismatch",
-			ErrMintFundingEstimateInvalidInput,
-		)
+		return nil, fmt.Errorf("%w: tokenBlueprint brand mismatch", ErrMintFundingEstimateInvalidInput)
 	}
-
 	if brand.WalletAddress == "" {
 		return nil, ErrMintFundingEstimateBrandWalletMissing
 	}
 
-	passedProductIDs, err := q.passedProductLister.ListPassedProductIDsByProductionID(
-		ctx,
-		input.ProductionID,
-	)
+	passedProductIDs, err := q.passedProductLister.ListPassedProductIDsByProductionID(ctx, input.ProductionID)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"list passed products for mint funding estimate: %w",
-			err,
-		)
+		return nil, fmt.Errorf("list passed products for mint funding estimate: %w", err)
 	}
 
 	mintQuantity := len(passedProductIDs)
@@ -337,58 +209,46 @@ func (q *MintFundingEstimateQuery) GetMintFundingEstimate(
 		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"estimate Bubblegum mint funding: %w",
-			err,
-		)
+		return nil, fmt.Errorf("estimate Bubblegum mint funding: %w", err)
 	}
-
 	if result == nil {
-		return nil, errors.New(
-			"mint funding estimate returned nil result",
-		)
+		return nil, errors.New("mint funding estimate returned nil result")
 	}
-
 	if result.Cluster == "" {
-		return nil, errors.New(
-			"mint funding estimate cluster is empty",
-		)
-	}
-
-	if result.MintQuantity != mintQuantity {
-		return nil, fmt.Errorf(
-			"mint funding estimate quantity mismatch: expected=%d actual=%d",
-			mintQuantity,
-			result.MintQuantity,
-		)
+		return nil, errors.New("mint funding estimate cluster is empty")
 	}
 
 	if result.Reserve.Address == "" {
-		return nil, errors.New(
-			"mint funding estimate reserve address is empty",
-		)
+		return nil, errors.New("mint funding estimate reserve address is empty")
+	}
+	if result.Reserve.BalanceLamports == "" {
+		return nil, errors.New("mint funding estimate reserve balanceLamports is empty")
+	}
+	if result.Reserve.MinimumLamports == "" {
+		return nil, errors.New("mint funding estimate reserve minimumLamports is empty")
 	}
 
-	if result.FeePayer.Address == "" {
-		return nil, errors.New(
-			"mint funding estimate fee payer address is empty",
-		)
+	if result.Estimate.MintTransactionFeePerItemLamports == "" {
+		return nil, errors.New("mint funding estimate mintTransactionFeePerItemLamports is empty")
+	}
+	if result.Estimate.MintTransactionFeeTotalLamports == "" {
+		return nil, errors.New("mint funding estimate mintTransactionFeeTotalLamports is empty")
+	}
+	if result.Estimate.InitialCreationCostLamports == "" {
+		return nil, errors.New("mint funding estimate initialCreationCostLamports is empty")
+	}
+	if result.Estimate.TotalRequiredLamports == "" {
+		return nil, errors.New("mint funding estimate totalRequiredLamports is empty")
 	}
 
 	if result.Resources.SharedMerkleTreeExists &&
-		(result.Resources.SharedMerkleTreeAddress == nil ||
-			*result.Resources.SharedMerkleTreeAddress == "") {
-		return nil, errors.New(
-			"mint funding estimate shared merkle tree address is empty",
-		)
+		(result.Resources.SharedMerkleTreeAddress == nil || *result.Resources.SharedMerkleTreeAddress == "") {
+		return nil, errors.New("mint funding estimate shared merkle tree address is empty")
 	}
 
 	if result.Resources.CoreCollectionExists &&
-		(result.Resources.CoreCollectionAddress == nil ||
-			*result.Resources.CoreCollectionAddress == "") {
-		return nil, errors.New(
-			"mint funding estimate core collection address is empty",
-		)
+		(result.Resources.CoreCollectionAddress == nil || *result.Resources.CoreCollectionAddress == "") {
+		return nil, errors.New("mint funding estimate core collection address is empty")
 	}
 
 	return result, nil
