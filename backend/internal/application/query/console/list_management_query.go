@@ -8,6 +8,7 @@ import (
 
 	resolver "narratives/internal/application/resolver"
 	listdom "narratives/internal/domain/list"
+	memberdom "narratives/internal/domain/member"
 )
 
 // ============================================================
@@ -55,6 +56,7 @@ type ListRowDTO struct {
 type ListManagementQuery struct {
 	lister       ListManagementLister
 	nameResolver *resolver.NameResolver
+	memberRepo   memberdom.Repository
 
 	pbGetter ProductBlueprintGetter
 	tbGetter TokenBlueprintGetter
@@ -71,12 +73,15 @@ type ListManagementQuery struct {
 // - List 全体 scan は禁止
 // - current company 境界の inventoryID を列挙し、
 //   ListByInventoryID の順で該当 List のみ取得する
+// - assigneeId は Firestore members の document ID を正とする
+// - assigneeName は member.Repository.GetByID で解決する
 // - この ctor のみを公開し、配線を集中させる
 // ============================================================
 
 type NewListManagementQueryParams struct {
 	Lister       ListManagementLister
 	NameResolver *resolver.NameResolver
+	MemberRepo   memberdom.Repository
 
 	PBGetter ProductBlueprintGetter
 	TBGetter TokenBlueprintGetter
@@ -88,6 +93,7 @@ func NewListManagementQuery(p NewListManagementQueryParams) *ListManagementQuery
 	return &ListManagementQuery{
 		lister:       p.Lister,
 		nameResolver: p.NameResolver,
+		memberRepo:   p.MemberRepo,
 		pbGetter:     p.PBGetter,
 		tbGetter:     p.TBGetter,
 		invRows:      p.InvRows,
@@ -204,13 +210,19 @@ func (q *ListManagementQuery) ListRows(
 			}
 
 			assigneeName := ""
-			if assigneeID != "" && q.nameResolver != nil {
+			if assigneeID != "" && q.memberRepo != nil {
 				if cached, ok := memberNameCache[assigneeID]; ok {
 					assigneeName = cached
 				} else {
-					resolved := q.nameResolver.ResolveAssigneeName(ctx, assigneeID)
-					memberNameCache[assigneeID] = resolved
-					assigneeName = resolved
+					rec, err := q.memberRepo.GetByID(ctx, assigneeID)
+					if err == nil {
+						assigneeName = memberdom.FormatLastFirst(
+							rec.Member.LastName,
+							rec.Member.FirstName,
+						)
+					}
+
+					memberNameCache[assigneeID] = assigneeName
 				}
 			}
 			if assigneeName == "" {

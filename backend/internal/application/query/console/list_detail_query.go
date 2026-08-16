@@ -22,6 +22,7 @@ import (
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
 	listdom "narratives/internal/domain/list"
+	memberdom "narratives/internal/domain/member"
 	pbdom "narratives/internal/domain/productBlueprint"
 )
 
@@ -50,6 +51,7 @@ type ListImageLister interface {
 type ListDetailQuery struct {
 	getter       ListGetter
 	nameResolver *resolver.NameResolver
+	memberRepo   memberdom.Repository
 	pbGetter     ProductBlueprintGetter
 	tbGetter     TokenBlueprintGetter
 	invGetter    InventoryDetailGetter
@@ -59,6 +61,7 @@ type ListDetailQuery struct {
 type NewListDetailQueryParams struct {
 	Getter       ListGetter
 	NameResolver *resolver.NameResolver
+	MemberRepo   memberdom.Repository
 	PBGetter     ProductBlueprintGetter
 	TBGetter     TokenBlueprintGetter
 	InvGetter    InventoryDetailGetter
@@ -69,6 +72,7 @@ func NewListDetailQuery(p NewListDetailQueryParams) *ListDetailQuery {
 	return &ListDetailQuery{
 		getter:       p.Getter,
 		nameResolver: p.NameResolver,
+		memberRepo:   p.MemberRepo,
 		pbGetter:     p.PBGetter,
 		tbGetter:     p.TBGetter,
 		invGetter:    p.InvGetter,
@@ -129,14 +133,21 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 		if tbID != "" {
 			tokenName = q.nameResolver.ResolveTokenName(ctx, tbID)
 		}
-		if it.AssigneeID != "" {
-			assigneeName = q.nameResolver.ResolveAssigneeName(ctx, it.AssigneeID)
-		}
 		if it.CreatedBy != "" {
 			createdByName = q.nameResolver.ResolveMemberName(ctx, it.CreatedBy)
 		}
 		if updatedByID != "" {
 			updatedByName = q.nameResolver.ResolveUpdatedByName(ctx, it.UpdatedBy)
+		}
+	}
+
+	if it.AssigneeID != "" && q.memberRepo != nil {
+		rec, err := q.memberRepo.GetByID(ctx, it.AssigneeID)
+		if err == nil {
+			assigneeName = memberdom.FormatLastFirst(
+				rec.Member.LastName,
+				rec.Member.FirstName,
+			)
 		}
 	}
 
@@ -244,6 +255,7 @@ func (q *ListDetailQuery) buildImages(ctx context.Context, listID string, primar
 			if img.ID != primaryImageID {
 				continue
 			}
+
 			ordered = append(ordered, img)
 			if img.ID != "" {
 				usedIDs[img.ID] = struct{}{}

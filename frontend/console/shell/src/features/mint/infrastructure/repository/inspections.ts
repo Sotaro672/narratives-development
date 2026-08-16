@@ -1,10 +1,10 @@
 // frontend/console/shell/src/features/mint/infrastructure/repository/http/inspections.ts
 
-import { API_BASE } from "../../../../../shared/http/apiBase";
-import { getAuthHeaders } from "../../../../../shared/http/authHeaders";
+import { API_BASE } from "../../../../shared/http/apiBase";
+import { getAuthHeaders } from "../../../../shared/http/authHeaders";
 
-import type { InspectionBatch } from "../../../../../shared/types/inspections";
-import type { MintRequestDetailDTO } from "../../dto/mintRequestLocal.dto";
+import type { InspectionBatch } from "../../../../shared/types/inspections";
+import type { MintRequestDetailDTO } from "../dto/mintRequestLocal.dto";
 
 // ===============================
 // detail: /mint/inspections/{productionId}

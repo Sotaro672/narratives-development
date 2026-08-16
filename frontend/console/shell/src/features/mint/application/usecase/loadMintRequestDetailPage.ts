@@ -5,9 +5,9 @@ import type {
   MintProductBlueprintDTO,
   MintRequestDetailDTO,
 } from "../../infrastructure/dto/mintRequestLocal.dto";
-import { fetchMintRequestDetailHTTP } from "../../infrastructure/repository/http/inspections";
-import { fetchMintRequestRowByProductionIdHTTP } from "../../infrastructure/repository/http/mintRequests";
-import { fetchMintProductBlueprintHTTP } from "../../infrastructure/repository/http/mintProductBlueprint";
+import { fetchMintRequestDetailHTTP } from "../../infrastructure/repository/inspections";
+import { fetchMintRequestRowByProductionIdHTTP } from "../../infrastructure/repository/mintRequests";
+import { fetchMintProductBlueprintHTTP } from "../../infrastructure/repository/mintProductBlueprint";
 
 export type LoadMintRequestDetailPageResult = {
   detail: MintRequestDetailDTO | null;

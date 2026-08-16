@@ -10,13 +10,13 @@ import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import { useBrandSelection } from "../../../brand/presentation/hook/useBrandSelection";
 import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
 import type { MintProductBlueprintDTO, MintRequestDetailDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
-import { completeInspectionHTTP, fetchMintRequestDetailHTTP } from "../../infrastructure/repository/http/inspections";
+import { completeInspectionHTTP, fetchMintRequestDetailHTTP } from "../../infrastructure/repository/inspections";
 import {
   fetchMintRequestRowByProductionIdHTTP,
   postMintRequestHTTP,
-} from "../../infrastructure/repository/http/mintRequests";
-import { fetchMintProductBlueprintHTTP } from "../../infrastructure/repository/http/mintProductBlueprint";
-import { fetchTokenBlueprintsByBrandHTTP } from "../../infrastructure/repository/http/tokenBlueprints";
+} from "../../infrastructure/repository/mintRequests";
+import { fetchMintProductBlueprintHTTP } from "../../infrastructure/repository/mintProductBlueprint";
+import { fetchTokenBlueprintsByBrandHTTP } from "../../infrastructure/repository/tokenBlueprints";
 import { buildProductBlueprintCardView, buildTokenBlueprintCardVm } from "../viewModel/mintRequestDetailViewModel";
 import { useMintAutoSelection } from "./useMintRequestDetail.useMintAutoSelection";
 import { useMintFundingEstimate } from "./useMintFundingEstimate";

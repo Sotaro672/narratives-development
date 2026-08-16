@@ -1,13 +1,13 @@
 // frontend/console/shell/src/features/mintRequest/infrastructure/repository/http/mintRequests.ts
 
-import { API_BASE } from "../../../../../shared/http/apiBase";
-import { getAuthHeaders } from "../../../../../shared/http/authHeaders";
+import { API_BASE } from "../../../../shared/http/apiBase";
+import { getAuthHeaders } from "../../../../shared/http/authHeaders";
 
 import type {
   MintFundingEstimate,
   MintQueuedResponse,
-} from "../../dto/MintRequestRepository";
-import type { MintRequestManagementRowDTO } from "../../dto/mintRequestManagementRow";
+} from "../dto/MintRequestRepository";
+import type { MintRequestManagementRowDTO } from "../dto/mintRequestManagementRow";
 
 // ===============================
 // helpers

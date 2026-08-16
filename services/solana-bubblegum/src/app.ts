@@ -16,6 +16,7 @@ import {
 } from "./application/ports/mint-operation-registry-port.js";
 
 import { isMintV2TransactionError } from "./application/ports/mint-v2-transaction-port.js";
+import { env } from "./config/env.js";
 
 import {
   getBubblegumRuntime,
@@ -41,6 +42,30 @@ type MintEstimateRequestBody = {
   symbol?: unknown;
 };
 
+type OwnedAssetsRequestBody = {
+  assetStandard?: unknown;
+  walletAddress?: unknown;
+};
+
+type DasAsset = {
+  id?: unknown;
+  compression?: unknown;
+};
+
+type DasGetAssetsByOwnerResult = {
+  items?: unknown;
+};
+
+type DasJsonRpcError = {
+  code?: unknown;
+  message?: unknown;
+};
+
+type DasJsonRpcResponse = {
+  result?: unknown;
+  error?: unknown;
+};
+
 class HttpRequestValidationError extends Error {
   readonly name = "HttpRequestValidationError";
 
@@ -54,6 +79,14 @@ class MintEstimateExecutionError extends Error {
 
   constructor(readonly cause: unknown) {
     super("mint funding estimate is temporarily unavailable");
+  }
+}
+
+class OwnedAssetsExecutionError extends Error {
+  readonly name = "OwnedAssetsExecutionError";
+
+  constructor(readonly cause: unknown) {
+    super("owned assets lookup is temporarily unavailable");
   }
 }
 
@@ -71,6 +104,14 @@ function readMintEstimateRequestBody(value: unknown): MintEstimateRequestBody {
   }
 
   return value as MintEstimateRequestBody;
+}
+
+function readOwnedAssetsRequestBody(value: unknown): OwnedAssetsRequestBody {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpRequestValidationError("body", "JSON object is required");
+  }
+
+  return value as OwnedAssetsRequestBody;
 }
 
 function requiredString(field: string, value: unknown): string {
@@ -104,6 +145,147 @@ function requiredPositiveInteger(field: string, value: unknown): number {
   return value;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function readDasAsset(value: unknown): DasAsset | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    compression: value.compression,
+  };
+}
+
+function isCompressedDasAsset(asset: DasAsset): boolean {
+  if (!isRecord(asset.compression)) {
+    return false;
+  }
+
+  return asset.compression.compressed === true;
+}
+
+function readDasErrorMessage(value: unknown): string {
+  if (!isRecord(value)) {
+    return "";
+  }
+
+  const error = value as DasJsonRpcError;
+
+  if (typeof error.message === "string" && error.message.length > 0) {
+    return error.message;
+  }
+
+  if (typeof error.code === "number") {
+    return `DAS RPC error code=${error.code}`;
+  }
+
+  return "";
+}
+
+async function fetchOwnedBubblegumAssetIDs(
+  walletAddress: string,
+): Promise<string[]> {
+  const pageSize = 1000;
+  const maxPages = 100;
+  const assetIDs: string[] = [];
+  const seen = new Set<string>();
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const response = await fetch(env.solanaRpcURL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: `owned-assets-${page}`,
+        method: "getAssetsByOwner",
+        params: {
+          ownerAddress: walletAddress,
+          page,
+          limit: pageSize,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `DAS getAssetsByOwner returned HTTP ${response.status}`,
+      );
+    }
+
+    let payload: unknown;
+
+    try {
+      payload = await response.json();
+    } catch (error) {
+      throw new Error(
+        `DAS getAssetsByOwner returned invalid JSON: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    if (!isRecord(payload)) {
+      throw new Error("DAS getAssetsByOwner returned invalid response");
+    }
+
+    const rpcResponse = payload as DasJsonRpcResponse;
+
+    if (rpcResponse.error !== undefined) {
+      const message = readDasErrorMessage(rpcResponse.error);
+
+      throw new Error(
+        message
+          ? `DAS getAssetsByOwner failed: ${message}`
+          : "DAS getAssetsByOwner failed",
+      );
+    }
+
+    if (!isRecord(rpcResponse.result)) {
+      throw new Error("DAS getAssetsByOwner result is missing");
+    }
+
+    const result = rpcResponse.result as DasGetAssetsByOwnerResult;
+
+    if (!Array.isArray(result.items)) {
+      throw new Error("DAS getAssetsByOwner items is missing");
+    }
+
+    for (const value of result.items) {
+      const asset = readDasAsset(value);
+
+      if (!asset || !isCompressedDasAsset(asset)) {
+        continue;
+      }
+
+      if (typeof asset.id !== "string" || asset.id.length === 0) {
+        continue;
+      }
+
+      if (seen.has(asset.id)) {
+        continue;
+      }
+
+      seen.add(asset.id);
+      assetIDs.push(asset.id);
+    }
+
+    if (result.items.length < pageSize) {
+      return assetIDs;
+    }
+  }
+
+  throw new Error(
+    `DAS getAssetsByOwner exceeded pagination limit pages=${maxPages}`,
+  );
+}
+
 export const app = express();
 
 app.disable("x-powered-by");
@@ -117,6 +299,47 @@ app.get("/health", (_req: Request, res: Response) => {
 });
 
 app.post(
+  "/owned-assets",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = readOwnedAssetsRequestBody(req.body);
+
+      const assetStandard = requiredString(
+        "assetStandard",
+        body.assetStandard,
+      );
+
+      const walletAddress = requiredString(
+        "walletAddress",
+        body.walletAddress,
+      );
+
+      if (assetStandard !== "BUBBLEGUM_V2") {
+        throw new HttpRequestValidationError(
+          "assetStandard",
+          "only BUBBLEGUM_V2 is supported",
+        );
+      }
+
+      let assetIds: string[];
+
+      try {
+        assetIds = await fetchOwnedBubblegumAssetIDs(walletAddress);
+      } catch (error) {
+        throw new OwnedAssetsExecutionError(error);
+      }
+
+      res.status(200).json({
+        walletAddress,
+        assetIds,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+app.post(
   "/estimate",
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -126,13 +349,26 @@ app.post(
         "tokenBlueprintId",
         body.tokenBlueprintId,
       );
+
       const mintQuantity = requiredPositiveInteger(
         "mintQuantity",
         body.mintQuantity,
       );
-      const toAddress = requiredString("toAddress", body.toAddress);
-      const name = requiredString("name", body.name);
-      const symbol = stringValue("symbol", body.symbol);
+
+      const toAddress = requiredString(
+        "toAddress",
+        body.toAddress,
+      );
+
+      const name = requiredString(
+        "name",
+        body.name,
+      );
+
+      const symbol = stringValue(
+        "symbol",
+        body.symbol,
+      );
 
       let result;
 
@@ -191,11 +427,31 @@ app.post(
         "tokenBlueprintId",
         body.tokenBlueprintId,
       );
-      const brandId = requiredString("brandId", body.brandId);
-      const toAddress = requiredString("toAddress", body.toAddress);
-      const name = requiredString("name", body.name);
-      const symbol = stringValue("symbol", body.symbol);
-      const metadataUri = requiredString("metadataUri", body.metadataUri);
+
+      const brandId = requiredString(
+        "brandId",
+        body.brandId,
+      );
+
+      const toAddress = requiredString(
+        "toAddress",
+        body.toAddress,
+      );
+
+      const name = requiredString(
+        "name",
+        body.name,
+      );
+
+      const symbol = stringValue(
+        "symbol",
+        body.symbol,
+      );
+
+      const metadataUri = requiredString(
+        "metadataUri",
+        body.metadataUri,
+      );
 
       const [runtime, mintV2Usecase] = await Promise.all([
         getBubblegumRuntime(),
@@ -259,6 +515,14 @@ app.use(
       res.status(400).json({
         error: "invalid request",
         field: error.field,
+        message: error.message,
+      });
+      return;
+    }
+
+    if (error instanceof OwnedAssetsExecutionError) {
+      res.status(503).json({
+        error: "owned assets unavailable",
         message: error.message,
       });
       return;

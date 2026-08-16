@@ -1,8 +1,8 @@
 // frontend/console/shell/src/features/mint/infrastructure/repository/http/mintProductBlueprint.ts
 
-import { API_BASE } from "../../../../../shared/http/apiBase";
-import { getAuthHeaders } from "../../../../../shared/http/authHeaders";
-import type { MintProductBlueprintDTO } from "../../dto/mintRequestLocal.dto";
+import { API_BASE } from "../../../../shared/http/apiBase";
+import { getAuthHeaders } from "../../../../shared/http/authHeaders";
+import type { MintProductBlueprintDTO } from "../dto/mintRequestLocal.dto";
 
 /**
  * GET /mint/product_blueprints/{id}

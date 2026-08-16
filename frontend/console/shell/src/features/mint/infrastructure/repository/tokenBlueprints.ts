@@ -1,9 +1,9 @@
 // frontend/console/shell/src/features/mintRequest/infrastructure/repository/http/tokenBlueprints.ts
 
-import { API_BASE } from "../../../../../shared/http/apiBase";
-import { getAuthHeaders } from "../../../../../shared/http/authHeaders";
+import { API_BASE } from "../../../../shared/http/apiBase";
+import { getAuthHeaders } from "../../../../shared/http/authHeaders";
 
-import type { TokenBlueprintSummary } from "../../dto/MintRequestRepository";
+import type { TokenBlueprintSummary } from "../dto/MintRequestRepository";
 
 export async function fetchTokenBlueprintsByBrandHTTP(
   brandId: string,

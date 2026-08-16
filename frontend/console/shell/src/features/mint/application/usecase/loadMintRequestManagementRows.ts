@@ -3,7 +3,7 @@
 import type { InspectionStatus } from "../../../../shared/types/inspections";
 import type { MintStatus } from "../../../../shared/types/mints";
 
-import { fetchMintRequestRowsHTTP } from "../../infrastructure/repository/http/mintRequests";
+import { fetchMintRequestRowsHTTP } from "../../infrastructure/repository/mintRequests";
 import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
 
 // ============================================================

@@ -1,10 +1,10 @@
 // frontend/console/shell/src/features/mintRequest/infrastructure/repository/http/brands.ts
 
-import { API_BASE } from "../../../../../shared/http/apiBase";
-import { getAuthHeaders } from "../../../../../shared/http/authHeaders";
+import { API_BASE } from "../../../../shared/http/apiBase";
+import { getAuthHeaders } from "../../../../shared/http/authHeaders";
 
-import type { ItemsResult } from "../../../../../shared/types/common/common";
-import type { BrandSummary } from "../../dto/MintRequestRepository";
+import type { ItemsResult } from "../../../../shared/types/common/common";
+import type { BrandSummary } from "../dto/MintRequestRepository";
 
 export async function fetchBrandsForMintHTTP(): Promise<BrandSummary[]> {
   const authHeaders = await getAuthHeaders();

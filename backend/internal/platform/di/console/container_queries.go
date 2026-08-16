@@ -258,11 +258,13 @@ func buildQueries(
 	// ListManagementQuery
 	// SINGLE ENTRYPOINT: NewListManagementQuery(params) だけ
 	// - company boundary は InvRows(ListByCurrentCompany) が必須
+	// - assigneeId は members の document ID として MemberRepo で解決する
 	// =========================================================
 	listManagementQuery := companyquery.NewListManagementQuery(
 		companyquery.NewListManagementQueryParams{
 			Lister:       r.listRepoFS,
 			NameResolver: res.nameResolver,
+			MemberRepo:   r.memberRepo,
 			PBGetter:     r.productBlueprintRepo,
 			TBGetter:     r.tokenBlueprintRepo,
 			InvRows:      inventoryManagementQuery,
@@ -273,6 +275,7 @@ func buildQueries(
 	// ListDetailQuery
 	// SINGLE ENTRYPOINT: NewListDetailQuery(params) だけ
 	// - listID 確定後に GetByID して detail DTO を組み立てる
+	// - assigneeId は members の document ID として MemberRepo で解決する
 	// - imageUrls を返すには Firestore subcollection reader 注入
 	// - displayOrder は ProductBlueprintGetter.GetByID の ModelRefs から解決する
 	// =========================================================
@@ -280,6 +283,7 @@ func buildQueries(
 		companyquery.NewListDetailQueryParams{
 			Getter:       r.listRepoFS,
 			NameResolver: res.nameResolver,
+			MemberRepo:   r.memberRepo,
 			PBGetter:     r.productBlueprintRepo,
 			TBGetter:     r.tokenBlueprintRepo,
 			InvGetter:    inventoryDetailQuery,

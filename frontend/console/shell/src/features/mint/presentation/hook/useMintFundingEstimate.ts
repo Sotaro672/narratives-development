@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import type { MintFundingEstimate } from "../../infrastructure/dto/MintRequestRepository";
-import { fetchMintFundingEstimateHTTP } from "../../infrastructure/repository/http/mintRequests";
+import { fetchMintFundingEstimateHTTP } from "../../infrastructure/repository/mintRequests";
 
 export type UseMintFundingEstimateInput = {
   productionId: string;

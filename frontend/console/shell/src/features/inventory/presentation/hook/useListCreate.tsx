@@ -1,29 +1,15 @@
 // frontend/console/shell/src/features/inventory/presentation/hook/useListCreate.tsx
 
 import * as React from "react";
-import {
-  useNavigate,
-  useParams,
-  type NavigateFunction,
-} from "react-router-dom";
+import { useNavigate, useParams, type NavigateFunction } from "react-router-dom";
 
 import { usePriceCard } from "../../../list/presentation/hook/usePriceCard";
-import {
-  useAssigneeSelection,
-} from "../../../admin/presentation/hook/useAssigneeSelection";
-
-import type {
-  AssigneeCandidate,
-} from "../../../admin/application/AdminService";
-
+import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
+import type { AssigneeCandidate } from "../../../admin/application/AdminService";
 import type { ListStatus } from "../../../../shared/types/list";
-
-import type {
-  ListCreateDTO,
-} from "../../../../shared/types/inventory";
+import type { ListCreateDTO } from "../../../../shared/types/inventory";
 
 import {
-  buildAfterCreatePath,
   buildBackPath,
   canFetchListCreate,
   createListWithImages,
@@ -35,8 +21,7 @@ import {
   type ResolvedListCreateParams,
 } from "../../application/listCreateService";
 
-type ImageInputRef =
-  React.RefObject<HTMLInputElement | null>;
+type ImageInputRef = React.RefObject<HTMLInputElement | null>;
 
 export type UseListCreateResult = {
   title: string;
@@ -53,133 +38,75 @@ export type UseListCreateResult = {
   tokenName: string;
 
   priceRows: PriceRow[];
-  onChangePrice: (
-    index: number,
-    price: number | undefined,
-  ) => void;
-  priceCard:
-    ReturnType<typeof usePriceCard>;
+  onChangePrice: (index: number, price: number | undefined) => void;
+  priceCard: ReturnType<typeof usePriceCard>;
 
   listingTitle: string;
-  setListingTitle:
-    React.Dispatch<
-      React.SetStateAction<string>
-    >;
+  setListingTitle: React.Dispatch<React.SetStateAction<string>>;
   description: string;
-  setDescription:
-    React.Dispatch<
-      React.SetStateAction<string>
-    >;
+  setDescription: React.Dispatch<React.SetStateAction<string>>;
 
   images: File[];
   imagePreviewUrls: string[];
   mainImageIndex: number;
-  setMainImageIndex:
-    React.Dispatch<
-      React.SetStateAction<number>
-    >;
+  setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
   imageInputRef: ImageInputRef;
-  onAddImages: (
-    files: FileList | null,
-  ) => void;
-  onRemoveImageAt: (
-    index: number,
-  ) => void;
+  onAddImages: (files: FileList | null) => void;
+  onRemoveImageAt: (index: number) => void;
   onClearImages: () => void;
 
   assigneeName: string;
-  assigneeCandidates:
-    AssigneeCandidate[];
+  assigneeCandidates: AssigneeCandidate[];
   loadingMembers: boolean;
-  handleSelectAssignee: (
-    id: string,
-  ) => void;
+  handleSelectAssignee: (id: string) => void;
 
   status: ListStatus;
-  setStatus:
-    React.Dispatch<
-      React.SetStateAction<ListStatus>
-    >;
+  setStatus: React.Dispatch<React.SetStateAction<ListStatus>>;
 };
 
 type UsePriceRowsResult = {
   priceRows: PriceRow[];
-  setPriceRows:
-    React.Dispatch<
-      React.SetStateAction<PriceRow[]>
-    >;
-  initializedPriceRowsRef:
-    React.MutableRefObject<boolean>;
-  onChangePrice: (
-    index: number,
-    price: number | undefined,
-  ) => void;
-  priceCard:
-    ReturnType<typeof usePriceCard>;
+  setPriceRows: React.Dispatch<React.SetStateAction<PriceRow[]>>;
+  initializedPriceRowsRef: React.MutableRefObject<boolean>;
+  onChangePrice: (index: number, price: number | undefined) => void;
+  priceCard: ReturnType<typeof usePriceCard>;
 };
 
-function dedupeFiles(
-  previousFiles: File[],
-  addedFiles: File[],
-): File[] {
-  const existingKeys =
-    new Set(
-      previousFiles.map(
-        (file) =>
-          `${file.name}__${file.size}__${file.lastModified}`,
+function dedupeFiles(previousFiles: File[], addedFiles: File[]): File[] {
+  const existingKeys = new Set(
+    previousFiles.map(
+      (file) => `${file.name}__${file.size}__${file.lastModified}`,
+    ),
+  );
+
+  const filteredFiles = addedFiles.filter(
+    (file) =>
+      !existingKeys.has(
+        `${file.name}__${file.size}__${file.lastModified}`,
       ),
-    );
+  );
 
-  const filteredFiles =
-    addedFiles.filter(
-      (file) =>
-        !existingKeys.has(
-          `${file.name}__${file.size}__${file.lastModified}`,
-        ),
-    );
-
-  return [
-    ...previousFiles,
-    ...filteredFiles,
-  ];
+  return [...previousFiles, ...filteredFiles];
 }
 
 function filterImageFiles(
-  files:
-    | FileList
-    | File[]
-    | null
-    | undefined,
+  files: FileList | File[] | null | undefined,
 ): File[] {
-  return Array.from(
-    files ?? [],
-  )
+  return Array.from(files ?? [])
     .filter(Boolean)
-    .filter((file) =>
-      String(
-        file.type || "",
-      ).startsWith(
-        "image/",
-      ),
-    ) as File[];
+    .filter((file) => String(file.type || "").startsWith("image/")) as File[];
 }
 
 function useListCreateParamsAndTitle(): {
-  resolvedParams:
-    ResolvedListCreateParams;
+  resolvedParams: ResolvedListCreateParams;
   title: string;
 } {
-  const params =
-    useParams<ListCreateRouteParams>();
+  const params = useParams<ListCreateRouteParams>();
 
-  const resolvedParams =
-    React.useMemo(
-      () =>
-        resolveListCreateParams(
-          params,
-        ),
-      [params],
-    );
+  const resolvedParams = React.useMemo(
+    () => resolveListCreateParams(params),
+    [params],
+  );
 
   return {
     resolvedParams,
@@ -189,18 +116,9 @@ function useListCreateParamsAndTitle(): {
 
 function useListingStatus(): {
   status: ListStatus;
-  setStatus:
-    React.Dispatch<
-      React.SetStateAction<ListStatus>
-    >;
+  setStatus: React.Dispatch<React.SetStateAction<ListStatus>>;
 } {
-  const [
-    status,
-    setStatus,
-  ] =
-    React.useState<ListStatus>(
-      "listing",
-    );
+  const [status, setStatus] = React.useState<ListStatus>("listing");
 
   return {
     status,
@@ -210,27 +128,12 @@ function useListingStatus(): {
 
 function useListingFields(): {
   listingTitle: string;
-  setListingTitle:
-    React.Dispatch<
-      React.SetStateAction<string>
-    >;
+  setListingTitle: React.Dispatch<React.SetStateAction<string>>;
   description: string;
-  setDescription:
-    React.Dispatch<
-      React.SetStateAction<string>
-    >;
+  setDescription: React.Dispatch<React.SetStateAction<string>>;
 } {
-  const [
-    listingTitle,
-    setListingTitle,
-  ] =
-    React.useState("");
-
-  const [
-    description,
-    setDescription,
-  ] =
-    React.useState("");
+  const [listingTitle, setListingTitle] = React.useState("");
+  const [description, setDescription] = React.useState("");
 
   return {
     listingTitle,
@@ -244,224 +147,94 @@ function useListingImages(): {
   images: File[];
   imagePreviewUrls: string[];
   mainImageIndex: number;
-  setMainImageIndex:
-    React.Dispatch<
-      React.SetStateAction<number>
-    >;
+  setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
   imageInputRef: ImageInputRef;
-  onSelectImages: (
-    files: FileList | null,
-  ) => void;
-  removeImageAt: (
-    index: number,
-  ) => void;
+  onSelectImages: (files: FileList | null) => void;
+  removeImageAt: (index: number) => void;
   clearImages: () => void;
 } {
-  const [
-    images,
-    setImages,
-  ] =
-    React.useState<File[]>(
-      [],
-    );
+  const [images, setImages] = React.useState<File[]>([]);
+  const [mainImageIndex, setMainImageIndex] = React.useState(0);
+  const [imagePreviewUrls, setImagePreviewUrls] = React.useState<string[]>([]);
 
-  const [
-    mainImageIndex,
-    setMainImageIndex,
-  ] =
-    React.useState(0);
+  const imageInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  const [
-    imagePreviewUrls,
-    setImagePreviewUrls,
-  ] =
-    React.useState<string[]>(
-      [],
-    );
+  const appendImages = React.useCallback(
+    (filesLike: FileList | File[] | null) => {
+      const files = filterImageFiles(filesLike);
 
-  const imageInputRef =
-    React.useRef<
-      HTMLInputElement | null
-    >(null);
-
-  const appendImages =
-    React.useCallback(
-      (
-        filesLike:
-          | FileList
-          | File[]
-          | null,
-      ) => {
-        const files =
-          filterImageFiles(
-            filesLike,
-          );
-
-        if (
-          files.length === 0
-        ) {
-          return;
-        }
-
-        setImages(
-          (
-            previousFiles,
-          ) =>
-            dedupeFiles(
-              previousFiles,
-              files,
-            ),
-        );
-      },
-      [],
-    );
-
-  const onSelectImages =
-    React.useCallback(
-      (
-        files:
-          FileList | null,
-      ) => {
-        appendImages(
-          files,
-        );
-      },
-      [
-        appendImages,
-      ],
-    );
-
-  const removeImageAt =
-    React.useCallback(
-      (
-        index: number,
-      ) => {
-        setImages(
-          (
-            previousFiles,
-          ) =>
-            previousFiles.filter(
-              (
-                _,
-                previousIndex,
-              ) =>
-                previousIndex !==
-                index,
-            ),
-        );
-
-        setMainImageIndex(
-          (
-            previousMainIndex,
-          ) => {
-            if (
-              index ===
-              previousMainIndex
-            ) {
-              return 0;
-            }
-
-            if (
-              index <
-              previousMainIndex
-            ) {
-              return Math.max(
-                0,
-                previousMainIndex -
-                  1,
-              );
-            }
-
-            return previousMainIndex;
-          },
-        );
-      },
-      [],
-    );
-
-  const clearImages =
-    React.useCallback(
-      () => {
-        setImages([]);
-        setMainImageIndex(
-          0,
-        );
-      },
-      [],
-    );
-
-  React.useEffect(
-    () => {
-      if (
-        images.length === 0
-      ) {
-        setImagePreviewUrls(
-          [],
-        );
-
+      if (files.length === 0) {
         return;
       }
 
-      const urls =
-        images.map(
-          (file) =>
-            URL.createObjectURL(
-              file,
-            ),
-        );
-
-      setImagePreviewUrls(
-        urls,
+      setImages((previousFiles) =>
+        dedupeFiles(previousFiles, files),
       );
-
-      return () => {
-        urls.forEach(
-          (url) => {
-            URL.revokeObjectURL(
-              url,
-            );
-          },
-        );
-      };
     },
-    [
-      images,
-    ],
+    [],
   );
 
-  React.useEffect(
-    () => {
-      if (
-        images.length === 0
-      ) {
-        if (
-          mainImageIndex !==
-          0
-        ) {
-          setMainImageIndex(
-            0,
-          );
-        }
-
-        return;
-      }
-
-      if (
-        mainImageIndex <
-          0 ||
-        mainImageIndex >=
-          images.length
-      ) {
-        setMainImageIndex(
-          0,
-        );
-      }
+  const onSelectImages = React.useCallback(
+    (files: FileList | null) => {
+      appendImages(files);
     },
-    [
-      images.length,
-      mainImageIndex,
-    ],
+    [appendImages],
   );
+
+  const removeImageAt = React.useCallback((index: number) => {
+    setImages((previousFiles) =>
+      previousFiles.filter((_, previousIndex) => previousIndex !== index),
+    );
+
+    setMainImageIndex((previousMainIndex) => {
+      if (index === previousMainIndex) {
+        return 0;
+      }
+
+      if (index < previousMainIndex) {
+        return Math.max(0, previousMainIndex - 1);
+      }
+
+      return previousMainIndex;
+    });
+  }, []);
+
+  const clearImages = React.useCallback(() => {
+    setImages([]);
+    setMainImageIndex(0);
+  }, []);
+
+  React.useEffect(() => {
+    if (images.length === 0) {
+      setImagePreviewUrls([]);
+      return;
+    }
+
+    const urls = images.map((file) => URL.createObjectURL(file));
+    setImagePreviewUrls(urls);
+
+    return () => {
+      urls.forEach((url) => {
+        URL.revokeObjectURL(url);
+      });
+    };
+  }, [images]);
+
+  React.useEffect(() => {
+    if (images.length === 0) {
+      if (mainImageIndex !== 0) {
+        setMainImageIndex(0);
+      }
+      return;
+    }
+
+    if (
+      mainImageIndex < 0 ||
+      mainImageIndex >= images.length
+    ) {
+      setMainImageIndex(0);
+    }
+  }, [images.length, mainImageIndex]);
 
   return {
     images,
@@ -475,72 +248,39 @@ function useListingImages(): {
   };
 }
 
-function usePriceRows():
-  UsePriceRowsResult {
-  const [
-    priceRows,
-    setPriceRows,
-  ] =
-    React.useState<
-      PriceRow[]
-    >([]);
+function usePriceRows(): UsePriceRowsResult {
+  const [priceRows, setPriceRows] = React.useState<PriceRow[]>([]);
+  const initializedPriceRowsRef = React.useRef(false);
 
-  const initializedPriceRowsRef =
-    React.useRef(
-      false,
-    );
+  const onChangePrice = React.useCallback(
+    (index: number, price: number | undefined) => {
+      setPriceRows((previousRows) => {
+        const currentRow = previousRows[index];
 
-  const onChangePrice =
-    React.useCallback(
-      (
-        index: number,
-        price:
-          number |
-          undefined,
-      ) => {
-        setPriceRows(
-          (
-            previousRows,
-          ) => {
-            const currentRow =
-              previousRows[
-                index
-              ];
+        if (!currentRow) {
+          return previousRows;
+        }
 
-            if (
-              !currentRow
-            ) {
-              return previousRows;
-            }
+        const nextRows = [...previousRows];
 
-            const nextRows = [
-              ...previousRows,
-            ];
+        nextRows[index] = {
+          ...currentRow,
+          price,
+        };
 
-            nextRows[
-              index
-            ] = {
-              ...currentRow,
-              price,
-            };
+        return nextRows;
+      });
+    },
+    [],
+  );
 
-            return nextRows;
-          },
-        );
-      },
-      [],
-    );
-
-  const priceCard =
-    usePriceCard({
-      title: "価格",
-      rows:
-        priceRows,
-      mode: "edit",
-      currencySymbol:
-        "¥",
-      onChangePrice,
-    });
+  const priceCard = usePriceCard({
+    title: "価格",
+    rows: priceRows,
+    mode: "edit",
+    currencySymbol: "¥",
+    onChangePrice,
+  });
 
   return {
     priceRows,
@@ -552,30 +292,16 @@ function usePriceRows():
 }
 
 function useListCreateNavigation(
-  resolvedParams:
-    ResolvedListCreateParams,
+  resolvedParams: ResolvedListCreateParams,
 ): {
-  navigate:
-    NavigateFunction;
+  navigate: NavigateFunction;
   onBack: () => void;
 } {
-  const navigate =
-    useNavigate();
+  const navigate = useNavigate();
 
-  const onBack =
-    React.useCallback(
-      () => {
-        navigate(
-          buildBackPath(
-            resolvedParams,
-          ),
-        );
-      },
-      [
-        navigate,
-        resolvedParams,
-      ],
-    );
+  const onBack = React.useCallback(() => {
+    navigate(buildBackPath(resolvedParams));
+  }, [navigate, resolvedParams]);
 
   return {
     navigate,
@@ -585,21 +311,12 @@ function useListCreateNavigation(
 
 function useListCreateDTO(
   args: {
-    resolvedParams:
-      ResolvedListCreateParams;
-    initializedPriceRowsRef:
-      React.MutableRefObject<boolean>;
-    setPriceRows:
-      React.Dispatch<
-        React.SetStateAction<
-          PriceRow[]
-        >
-      >;
+    resolvedParams: ResolvedListCreateParams;
+    initializedPriceRowsRef: React.MutableRefObject<boolean>;
+    setPriceRows: React.Dispatch<React.SetStateAction<PriceRow[]>>;
   },
 ): {
-  dto:
-    ListCreateDTO |
-    null;
+  dto: ListCreateDTO | null;
   loadingDTO: boolean;
   dtoError: string;
   productBrandName: string;
@@ -613,137 +330,73 @@ function useListCreateDTO(
     setPriceRows,
   } = args;
 
-  const [
-    dto,
-    setDTO,
-  ] =
-    React.useState<
-      ListCreateDTO |
-      null
-    >(null);
+  const [dto, setDTO] = React.useState<ListCreateDTO | null>(null);
+  const [loadingDTO, setLoadingDTO] = React.useState(false);
+  const [dtoError, setDTOError] = React.useState("");
 
-  const [
-    loadingDTO,
-    setLoadingDTO,
-  ] =
-    React.useState(
-      false,
-    );
+  React.useEffect(() => {
+    let cancelled = false;
 
-  const [
-    dtoError,
-    setDTOError,
-  ] =
-    React.useState(
-      "",
-    );
+    const run = async () => {
+      if (!canFetchListCreate(resolvedParams)) {
+        return;
+      }
 
-  React.useEffect(
-    () => {
-      let cancelled =
-        false;
+      setLoadingDTO(true);
+      setDTOError("");
 
-      const run =
-        async () => {
-          if (
-            !canFetchListCreate(
-              resolvedParams,
-            )
-          ) {
-            return;
-          }
+      try {
+        const data = await loadListCreateDTOFromParams(resolvedParams);
 
-          setLoadingDTO(
-            true,
-          );
+        if (cancelled) {
+          return;
+        }
 
-          setDTOError(
-            "",
-          );
+        setDTO(data);
 
-          try {
-            const data =
-              await loadListCreateDTOFromParams(
-                resolvedParams,
-              );
+        if (!initializedPriceRowsRef.current) {
+          setPriceRows(data.priceRows);
+          initializedPriceRowsRef.current = true;
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
 
-            if (
-              cancelled
-            ) {
-              return;
-            }
+        setDTOError(
+          String(
+            error instanceof Error
+              ? error.message
+              : error,
+          ),
+        );
+      } finally {
+        if (!cancelled) {
+          setLoadingDTO(false);
+        }
+      }
+    };
 
-            setDTO(
-              data,
-            );
+    void run();
 
-            if (
-              !initializedPriceRowsRef.current
-            ) {
-              setPriceRows(
-                data.priceRows,
-              );
-
-              initializedPriceRowsRef.current =
-                true;
-            }
-          } catch (
-            error
-          ) {
-            if (
-              cancelled
-            ) {
-              return;
-            }
-
-            setDTOError(
-              String(
-                error instanceof
-                  Error
-                  ? error.message
-                  : error,
-              ),
-            );
-          } finally {
-            if (
-              !cancelled
-            ) {
-              setLoadingDTO(
-                false,
-              );
-            }
-          }
-        };
-
-      void run();
-
-      return () => {
-        cancelled =
-          true;
-      };
-    },
-    [
-      resolvedParams,
-      initializedPriceRowsRef,
-      setPriceRows,
-    ],
-  );
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    resolvedParams,
+    initializedPriceRowsRef,
+    setPriceRows,
+  ]);
 
   const {
     productBrandName,
     productName,
     tokenBrandName,
     tokenName,
-  } =
-    React.useMemo(
-      () =>
-        extractDisplayStrings(
-          dto,
-        ),
-      [
-        dto,
-      ],
-    );
+  } = React.useMemo(
+    () => extractDisplayStrings(dto),
+    [dto],
+  );
 
   return {
     dto,
@@ -758,30 +411,18 @@ function useListCreateDTO(
 
 function useCreateList(
   args: {
-    navigate:
-      NavigateFunction;
-    resolvedParams:
-      ResolvedListCreateParams;
-    status:
-      ListStatus;
-    listingTitle:
-      string;
-    description:
-      string;
-    priceRows:
-      PriceRow[];
-    assigneeId:
-      string |
-      undefined;
-    images:
-      File[];
-    mainImageIndex:
-      number;
+    navigate: NavigateFunction;
+    resolvedParams: ResolvedListCreateParams;
+    status: ListStatus;
+    listingTitle: string;
+    description: string;
+    priceRows: PriceRow[];
+    assigneeId: string | undefined;
+    images: File[];
+    mainImageIndex: number;
   },
 ): {
-  onCreate:
-    () =>
-      Promise<void>;
+  onCreate: () => Promise<void>;
 } {
   const {
     navigate,
@@ -795,111 +436,87 @@ function useCreateList(
     mainImageIndex,
   } = args;
 
-  const onCreate =
-    React.useCallback(
-      async () => {
-        let imageUploadFailedMessage =
-          "";
+  const onCreate = React.useCallback(async () => {
+    let imageUploadFailedMessage = "";
 
-        try {
-          const inventoryId =
-            String(
-              resolvedParams.inventoryId ??
-                "",
-            );
+    try {
+      const inventoryId = String(
+        resolvedParams.inventoryId ?? "",
+      );
 
-          await createListWithImages({
-            params: {
-              ...resolvedParams,
-              inventoryId,
-            },
-
-            listingTitle,
-            description,
-            priceRows,
-            status,
-            assigneeId,
-            images,
-            mainImageIndex,
-
-            onImageUploadFailed:
-              (
-                message,
-              ) => {
-                imageUploadFailedMessage =
-                  message;
-              },
-          });
-
-          if (
-            imageUploadFailedMessage
-          ) {
-            alert(
-              imageUploadFailedMessage,
-            );
-          } else {
-            alert(
-              "作成しました",
-            );
-          }
-
-          navigate(
-            buildAfterCreatePath(
-              resolvedParams,
-            ),
-          );
-        } catch (
-          error
-        ) {
-          alert(
-            String(
-              error instanceof
-                Error
-                ? error.message
-                : error,
-            ),
-          );
-        }
-      },
-      [
-        navigate,
-        resolvedParams,
-        status,
+      const created = await createListWithImages({
+        params: {
+          ...resolvedParams,
+          inventoryId,
+        },
         listingTitle,
         description,
         priceRows,
+        status,
         assigneeId,
         images,
         mainImageIndex,
-      ],
-    );
+        onImageUploadFailed: (message) => {
+          imageUploadFailedMessage = message;
+        },
+      });
+
+      if (!created.id) {
+        throw new Error("created_list_missing_id");
+      }
+
+      if (imageUploadFailedMessage) {
+        alert(imageUploadFailedMessage);
+      } else {
+        alert("作成しました");
+      }
+
+      navigate(
+        `/list/${encodeURIComponent(created.id)}`,
+      );
+    } catch (error) {
+      alert(
+        String(
+          error instanceof Error
+            ? error.message
+            : error,
+        ),
+      );
+    }
+  }, [
+    navigate,
+    resolvedParams,
+    status,
+    listingTitle,
+    description,
+    priceRows,
+    assigneeId,
+    images,
+    mainImageIndex,
+  ]);
 
   return {
     onCreate,
   };
 }
 
-export function useListCreate():
-  UseListCreateResult {
+export function useListCreate(): UseListCreateResult {
   const {
     resolvedParams,
     title,
-  } =
-    useListCreateParamsAndTitle();
+  } = useListCreateParamsAndTitle();
 
   const {
     status,
     setStatus,
-  } =
-    useListingStatus();
+  } = useListingStatus();
 
   const {
     listingTitle,
     setListingTitle,
     description,
     setDescription,
-  } =
-    useListingFields();
+  } = useListingFields();
 
   const {
     images,
@@ -910,8 +527,7 @@ export function useListCreate():
     onSelectImages,
     removeImageAt,
     clearImages,
-  } =
-    useListingImages();
+  } = useListingImages();
 
   const {
     priceRows,
@@ -919,16 +535,12 @@ export function useListCreate():
     initializedPriceRowsRef,
     onChangePrice,
     priceCard,
-  } =
-    usePriceRows();
+  } = usePriceRows();
 
   const {
     navigate,
     onBack,
-  } =
-    useListCreateNavigation(
-      resolvedParams,
-    );
+  } = useListCreateNavigation(resolvedParams);
 
   const {
     assigneeId,
@@ -936,11 +548,9 @@ export function useListCreate():
     assigneeCandidates,
     loadingMembers,
     handleSelectAssignee,
-  } =
-    useAssigneeSelection({
-      defaultToCurrentMember:
-        true,
-    });
+  } = useAssigneeSelection({
+    defaultToCurrentMember: true,
+  });
 
   const {
     dto,
@@ -950,27 +560,25 @@ export function useListCreate():
     productName,
     tokenBrandName,
     tokenName,
-  } =
-    useListCreateDTO({
-      resolvedParams,
-      initializedPriceRowsRef,
-      setPriceRows,
-    });
+  } = useListCreateDTO({
+    resolvedParams,
+    initializedPriceRowsRef,
+    setPriceRows,
+  });
 
   const {
     onCreate,
-  } =
-    useCreateList({
-      navigate,
-      resolvedParams,
-      status,
-      listingTitle,
-      description,
-      priceRows,
-      assigneeId,
-      images,
-      mainImageIndex,
-    });
+  } = useCreateList({
+    navigate,
+    resolvedParams,
+    status,
+    listingTitle,
+    description,
+    priceRows,
+    assigneeId,
+    images,
+    mainImageIndex,
+  });
 
   return {
     title,
@@ -1001,20 +609,13 @@ export function useListCreate():
     setMainImageIndex,
     imageInputRef,
 
-    onAddImages:
-      onSelectImages,
-
-    onRemoveImageAt:
-      removeImageAt,
-
-    onClearImages:
-      clearImages,
+    onAddImages: onSelectImages,
+    onRemoveImageAt: removeImageAt,
+    onClearImages: clearImages,
 
     assigneeName,
     assigneeCandidates,
-
     loadingMembers,
-
     handleSelectAssignee,
 
     status,
