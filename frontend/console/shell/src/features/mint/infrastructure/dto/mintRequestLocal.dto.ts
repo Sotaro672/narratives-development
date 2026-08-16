@@ -1,6 +1,9 @@
 // frontend/console/shell/src/features/mint/infrastructure/dto/mintRequestLocal.dto.ts
 
-import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
+import type {
+  InspectionBatch,
+  MintModelMeta,
+} from "../../../../shared/types/inspections";
 import type { ProductIDTag } from "../../../../shared/types/productBlueprint";
 import type {
   ProductBlueprintCategorySnapshot,
@@ -33,9 +36,7 @@ export type MintProductBlueprintDTO = {
    */
   productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
 
-  /**
-   * カテゴリ別入力値。
-   */
+  /** カテゴリ別入力値。 */
   categoryFields?: CategoryFieldValues | null;
 
   /**
@@ -55,21 +56,17 @@ export type MintProductBlueprintDTO = {
 };
 
 /**
- * GET /mint/inspections/{productionId} が返すinspection部分のDTO。
- * productBlueprintId / productName / modelMetaはresponseのトップレベルを正とする。
- */
-export type MintRequestInspectionDTO = Pick<
-  InspectionBatchDTO,
-  "productionId" | "status" | "quantity" | "totalPassed" | "inspections"
->;
-
-/**
  * GET /mint/inspections/{productionId} のBackend BFF response。
- * Backend responseのfield名・型を正とし、旧形式のfallback用fieldは保持しない。
+ *
+ * Backend responseをそのまま正とする。
+ * productBlueprintId / productName / modelMetaはトップレベル、
+ * inspectionはInspectionBatchとしてそのまま保持する。
+ *
+ * Frontend側ではInspectionBatchDTOなどの独自flat DTOへ再構築しない。
  */
 export type MintRequestDetailDTO = {
   productBlueprintId?: string;
   productName: string;
-  modelMeta?: InspectionBatchDTO["modelMeta"];
-  inspection?: MintRequestInspectionDTO | null;
+  modelMeta?: Record<string, MintModelMeta>;
+  inspection?: InspectionBatch | null;
 };

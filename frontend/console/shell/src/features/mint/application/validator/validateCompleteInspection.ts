@@ -1,15 +1,9 @@
 // frontend/console/mintRequest/src/application/validator/validateCompleteInspection.ts
 
-import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
+import type { InspectionBatch } from "../../../../shared/types/inspections";
 
 export type ValidateCompleteInspectionInput = {
-  inspectionBatch: InspectionBatchDTO | null | undefined;
-
-  /**
-   * URL param 由来の productionId。
-   * route 名が requestId のままでも、application では productionId として扱う。
-   */
-  productionId?: string | null;
+  inspectionBatch: InspectionBatch | null | undefined;
 };
 
 export type ValidateCompleteInspectionResult =
@@ -22,6 +16,15 @@ export type ValidateCompleteInspectionResult =
       message: string;
     };
 
+/**
+ * 検品完了処理に必要な状態を検証する。
+ *
+ * Backend BFFが返すInspectionBatchを正とし、
+ * productionIdはinspectionBatch.productionIdのみを使用する。
+ *
+ * Frontend側ではroute parameterへのfallback、
+ * productionIdの再構築・normalizationを行わない。
+ */
 export function validateCompleteInspection(
   input: ValidateCompleteInspectionInput,
 ): ValidateCompleteInspectionResult {
@@ -34,11 +37,7 @@ export function validateCompleteInspection(
     };
   }
 
-  const productionId = String(
-    (inspectionBatch as any).productionId ?? input.productionId ?? "",
-  ).trim();
-
-  if (!productionId) {
+  if (!inspectionBatch.productionId) {
     return {
       ok: false,
       message: "productionId が特定できません。",
@@ -47,6 +46,6 @@ export function validateCompleteInspection(
 
   return {
     ok: true,
-    productionId,
+    productionId: inspectionBatch.productionId,
   };
 }

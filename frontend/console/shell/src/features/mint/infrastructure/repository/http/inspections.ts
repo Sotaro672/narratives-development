@@ -3,7 +3,7 @@
 import { API_BASE } from "../../../../../shared/http/apiBase";
 import { getAuthHeaders } from "../../../../../shared/http/authHeaders";
 
-import type { InspectionBatchDTO } from "../../../../../shared/types/inspections";
+import type { InspectionBatch } from "../../../../../shared/types/inspections";
 import type { MintRequestDetailDTO } from "../../dto/mintRequestLocal.dto";
 
 // ===============================
@@ -14,24 +14,20 @@ import type { MintRequestDetailDTO } from "../../dto/mintRequestLocal.dto";
  * GET /mint/inspections/{productionId}
  *
  * Backend BFF の MintRequestDetailDTO をそのまま返す。
- * Frontend側では inspection を InspectionBatchDTO へ再構築しない。
+ * Frontend側ではinspectionを独自DTOへ再構築しない。
  *
- * productBlueprintId / productName / modelMeta / inspection は
- * Backend response のトップレベル構造を正とする。
+ * productBlueprintId / productName / modelMeta / inspectionは
+ * Backend responseの構造を正とする。
  */
 export async function fetchMintRequestDetailHTTP(
   productionId: string,
 ): Promise<MintRequestDetailDTO | null> {
-  const normalizedProductionId = String(productionId ?? "").trim();
-
-  if (!normalizedProductionId) {
+  if (!productionId) {
     throw new Error("productionId が空です");
   }
 
   const authHeaders = await getAuthHeaders();
-  const url =
-    `${API_BASE}/mint/inspections/` +
-    encodeURIComponent(normalizedProductionId);
+  const url = `${API_BASE}/mint/inspections/${encodeURIComponent(productionId)}`;
 
   const response = await fetch(url, {
     method: "GET",
@@ -46,8 +42,7 @@ export async function fetchMintRequestDetailHTTP(
     const body = await response.text();
 
     throw new Error(
-      `Failed to fetch mint request detail: ` +
-        `${response.status} ${response.statusText}` +
+      `Failed to fetch mint request detail: ${response.status} ${response.statusText}` +
         (body ? ` body=${body.slice(0, 400)}` : ""),
     );
   }
@@ -63,14 +58,12 @@ export async function fetchMintRequestDetailHTTP(
  * productionIdに紐づく検品を完了する。
  *
  * このAPIはMint detail BFFとは別のCommand APIのため、
- * responseはInspectionBatchDTOをそのまま使用する。
+ * Backendが返すInspectionBatchをそのまま使用する。
  */
 export async function completeInspectionHTTP(
   productionId: string,
-): Promise<InspectionBatchDTO | null> {
-  const normalizedProductionId = String(productionId ?? "").trim();
-
-  if (!normalizedProductionId) {
+): Promise<InspectionBatch | null> {
+  if (!productionId) {
     throw new Error("productionId が空です");
   }
 
@@ -83,20 +76,17 @@ export async function completeInspectionHTTP(
       ...authHeaders,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      productionId: normalizedProductionId,
-    }),
+    body: JSON.stringify({ productionId }),
   });
 
   if (!response.ok) {
     const body = await response.text();
 
     throw new Error(
-      `Failed to complete inspection: ` +
-        `${response.status} ${response.statusText}` +
+      `Failed to complete inspection: ${response.status} ${response.statusText}` +
         (body ? ` body=${body.slice(0, 400)}` : ""),
     );
   }
 
-  return (await response.json()) as InspectionBatchDTO;
+  return (await response.json()) as InspectionBatch;
 }

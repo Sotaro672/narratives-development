@@ -8,7 +8,7 @@ import type {
   TokenBlueprintSummary,
 } from "../../application/port/MintRequestRepository";
 
-import type { InspectionBatchDTO } from "../../../../shared/types/inspections";
+import type { InspectionBatch } from "../../../../shared/types/inspections";
 import type { MintRequestManagementRowDTO } from "../dto/mintRequestManagementRow";
 import type {
   MintProductBlueprintDTO,
@@ -46,9 +46,7 @@ export class HttpMintRequestRepository implements MintRequestRepository {
    * GET /mint/inspections/{productionId} のBackend BFF responseをそのまま返す。
    * productBlueprintId / productName / modelMeta / inspectionをFrontend側で再構築しない。
    */
-  fetchMintRequestDetail(
-    productionId: string,
-  ): Promise<MintRequestDetailDTO | null> {
+  fetchMintRequestDetail(productionId: string): Promise<MintRequestDetailDTO | null> {
     return fetchMintRequestDetailHTTP(productionId);
   }
 
@@ -72,19 +70,13 @@ export class HttpMintRequestRepository implements MintRequestRepository {
     return fetchMintProductBlueprintHTTP(productBlueprintId);
   }
 
-  /**
-   * ミント申請画面で選択可能なブランド一覧を取得する。
-   */
+  /** ミント申請画面で選択可能なブランド一覧を取得する。 */
   fetchBrandsForMint(): Promise<BrandSummary[]> {
     return fetchBrandsForMintHTTP();
   }
 
-  /**
-   * 指定ブランドに紐づくToken Blueprint一覧を取得する。
-   */
-  fetchTokenBlueprintsByBrand(
-    brandId: string,
-  ): Promise<TokenBlueprintSummary[]> {
+  /** 指定ブランドに紐づくToken Blueprint一覧を取得する。 */
+  fetchTokenBlueprintsByBrand(brandId: string): Promise<TokenBlueprintSummary[]> {
     return fetchTokenBlueprintsByBrandHTTP(brandId);
   }
 
@@ -97,20 +89,17 @@ export class HttpMintRequestRepository implements MintRequestRepository {
     productionId: string,
     tokenBlueprintId: string,
   ): Promise<MintFundingEstimate> {
-    return fetchMintFundingEstimateHTTP(
-      productionId,
-      tokenBlueprintId,
-    );
+    return fetchMintFundingEstimateHTTP(productionId, tokenBlueprintId);
   }
 
   /**
    * productionIdに紐づく検品を完了する。
-   * completeMintInspection UseCaseから呼び出される。
-   * HTTPエラーは呼び出し元へ伝播する。
+   *
+   * /products/inspections/complete はMint detail BFFではなくCommand APIのため、
+   * Backendが返すInspectionBatchをそのまま返す。
+   * Frontend独自のInspectionBatchDTOへの再構築は行わない。
    */
-  completeInspection(
-    productionId: string,
-  ): Promise<InspectionBatchDTO | null> {
+  completeInspection(productionId: string): Promise<InspectionBatch | null> {
     return completeInspectionHTTP(productionId);
   }
 
@@ -124,9 +113,6 @@ export class HttpMintRequestRepository implements MintRequestRepository {
     productionId: string,
     tokenBlueprintId: string,
   ): Promise<MintQueuedResponse | null> {
-    return postMintRequestHTTP(
-      productionId,
-      tokenBlueprintId,
-    );
+    return postMintRequestHTTP(productionId, tokenBlueprintId);
   }
 }

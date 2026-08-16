@@ -1,48 +1,27 @@
 // frontend/console/shell/src/features/mintRequest/application/usecase/completeMintInspection.ts
 
-import type {
-  InspectionBatchDTO,
-} from "../../../../shared/types/inspections";
-
-import {
-  validateCompleteInspection,
-} from "../validator/validateCompleteInspection";
+import type { InspectionBatch } from "../../../../shared/types/inspections";
+import { validateCompleteInspection } from "../validator/validateCompleteInspection";
 
 /**
  * 検品完了処理に必要なRepository契約。
+ *
+ * /products/inspections/complete のBackend responseである
+ * InspectionBatchをそのまま扱う。
  */
 export interface CompleteMintInspectionRepository {
-  completeInspection(
-    productionId: string,
-  ): Promise<
-    InspectionBatchDTO | null
-  >;
+  completeInspection(productionId: string): Promise<InspectionBatch | null>;
 }
 
 export type CompleteMintInspectionInput = {
-  inspectionBatch:
-    | InspectionBatchDTO
-    | null
-    | undefined;
-
-  /**
-   * URLパラメータ由来のproductionId。
-   *
-   * inspectionBatch.productionIdが存在する場合は、
-   * validator側でそちらを優先する。
-   */
-  productionId?:
-    | string
-    | null;
+  inspectionBatch: InspectionBatch | null | undefined;
 };
 
 export type CompleteMintInspectionResult =
   | {
       ok: true;
       productionId: string;
-      inspectionBatch:
-        | InspectionBatchDTO
-        | null;
+      inspectionBatch: InspectionBatch | null;
     }
   | {
       ok: false;
@@ -52,41 +31,34 @@ export type CompleteMintInspectionResult =
 /**
  * 検品完了条件の検証とRepository呼び出しを行う。
  *
- * confirm、alert、loading state、画面再取得は
- * Presentation層の責務とする。
+ * productionIdはBackend BFFが返すinspectionBatch.productionIdを正とし、
+ * Frontend側ではroute parameterへのfallbackや再構築を行わない。
  *
- * Repositoryから発生した通信エラーは握りつぶさず、
- * 呼び出し元へthrowする。
+ * confirm、alert、loading state、画面再取得はPresentation層の責務とする。
+ * Repositoryから発生した通信エラーは握りつぶさず、呼び出し元へthrowする。
+ *
+ * Backendが返すInspectionBatchをFrontend独自DTOへ再構築しない。
  */
 export async function completeMintInspection(
   repository: CompleteMintInspectionRepository,
   input: CompleteMintInspectionInput,
 ): Promise<CompleteMintInspectionResult> {
-  const validation =
-    validateCompleteInspection({
-      inspectionBatch:
-        input.inspectionBatch,
-      productionId:
-        input.productionId,
-    });
+  const validation = validateCompleteInspection({
+    inspectionBatch: input.inspectionBatch,
+  });
 
   if (!validation.ok) {
     return {
       ok: false,
-      message:
-        validation.message,
+      message: validation.message,
     };
   }
 
-  const inspectionBatch =
-    await repository.completeInspection(
-      validation.productionId,
-    );
+  const inspectionBatch = await repository.completeInspection(validation.productionId);
 
   return {
     ok: true,
-    productionId:
-      validation.productionId,
+    productionId: validation.productionId,
     inspectionBatch,
   };
 }
