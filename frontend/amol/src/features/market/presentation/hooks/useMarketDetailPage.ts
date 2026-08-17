@@ -11,11 +11,7 @@ import { fetchMarketResaleById } from "../../infrastructure/marketResaleApi";
 import { fetchMarketResaleConditionImages } from "../../infrastructure/marketResaleImageApi";
 
 import type { MarketResaleListing } from "../../../shared/types/marketResale";
-import type {
-  ResaleColor,
-  ResaleConditionImage,
-  ResaleVolume,
-} from "../../../shared/types/resale";
+import type { ResaleColor, ResaleConditionImage, ResaleVolume } from "../../../shared/types/resale";
 import type { ProductBlueprintReviewPage } from "../../../shared/types/review";
 
 const DEFAULT_REVIEW_PAGE = 1;
@@ -78,7 +74,7 @@ export type UseMarketDetailPageResult = {
   handlePrevMedia: () => void;
   handleNextMedia: () => void;
   handleSelectMedia: (index: number) => void;
-  handleAddToCart: () => Promise<void>;
+  handleAddToCart: () => Promise<boolean>;
 };
 
 function formatModelKind(value: string): string {
@@ -162,9 +158,7 @@ function getFileTypeFromUrl(url: string): string {
   return "image/*";
 }
 
-function sortMarketResaleImages(
-  images: ResaleConditionImage[],
-): ResaleConditionImage[] {
+function sortMarketResaleImages(images: ResaleConditionImage[]): ResaleConditionImage[] {
   return [...images].sort((a, b) => {
     if (a.displayOrder !== b.displayOrder) {
       return a.displayOrder - b.displayOrder;
@@ -174,9 +168,7 @@ function sortMarketResaleImages(
   });
 }
 
-function createGalleryItemFromImage(
-  image: ResaleConditionImage,
-): MediaGalleryItem {
+function createGalleryItemFromImage(image: ResaleConditionImage): MediaGalleryItem {
   return {
     id: image.id,
     url: image.url,
@@ -299,9 +291,7 @@ export function useMarketDetailPage({
           setItem(null);
           setImages([]);
           setReviews(null);
-          setError(
-            getErrorMessage(loadError, "出品情報の取得に失敗しました。"),
-          );
+          setError(getErrorMessage(loadError, "出品情報の取得に失敗しました。"));
         }
       } finally {
         if (!cancelled) {
@@ -331,7 +321,6 @@ export function useMarketDetailPage({
   const modelColorName = getModelColorName(item?.color);
   const modelColorCssValue = getModelColorCssValue(item?.color);
   const hasColorInfo = hasModelColor(item?.color);
-
   const modelVolumeLabel = formatModelVolume(item?.volume);
 
   const measurementsLabel = useMemo(
@@ -355,9 +344,7 @@ export function useMarketDetailPage({
   const avatarIcon = textOrEmpty(item?.avatarIcon);
 
   const galleryItems = useMemo<MediaGalleryItem[]>(() => {
-    const imageItems = sortMarketResaleImages(images).map(
-      createGalleryItemFromImage,
-    );
+    const imageItems = sortMarketResaleImages(images).map(createGalleryItemFromImage);
 
     if (imageItems.length > 0) {
       return imageItems;
@@ -415,14 +402,14 @@ export function useMarketDetailPage({
     [galleryItems.length],
   );
 
-  const handleAddToCart = useCallback(async () => {
+  const handleAddToCart = useCallback(async (): Promise<boolean> => {
     const targetResaleId = item?.id?.trim() ?? "";
     const targetProductId = item?.productId?.trim() ?? "";
 
     if (!targetResaleId || !targetProductId) {
       setCartMessage("");
       setCartErrorMessage("出品情報が不足しています。");
-      return;
+      return false;
     }
 
     setAddingToCart(true);
@@ -436,10 +423,12 @@ export function useMarketDetailPage({
       });
 
       setCartMessage("カートに追加しました。");
+      return true;
     } catch (cartError) {
       setCartErrorMessage(
         getErrorMessage(cartError, "カートへの追加に失敗しました。"),
       );
+      return false;
     } finally {
       setAddingToCart(false);
     }
@@ -449,46 +438,35 @@ export function useMarketDetailPage({
     item,
     images,
     reviews,
-
     loading,
     loadingReviews,
     addingToCart,
-
     error,
     reviewsError,
     cartMessage,
     cartErrorMessage,
-
     title,
     priceLabel,
-
     modelId,
     modelKind,
     modelKindLabel,
     modelNumber,
     modelSize,
-
     modelColorName,
     modelColorCssValue,
     hasColorInfo,
-
     modelVolumeLabel,
     measurementsLabel,
     hasModelInfo,
-
     tokenName,
     tokenIcon,
-
     sellerAvatarId,
     avatarName,
     avatarIcon,
-
     galleryItems,
     activeMediaIndex,
     safeActiveMediaIndex,
-
     canAddToCart,
-
     handlePrevMedia,
     handleNextMedia,
     handleSelectMedia,

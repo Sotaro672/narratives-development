@@ -1,8 +1,6 @@
 // frontend/amol/src/features/scan-result/presentation/hooks/useScanResultPage.ts
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-
 import {
   createScanResultPageViewModel,
   createScanTransferSuccessModalViewModel,
@@ -10,7 +8,6 @@ import {
   submitScanReview,
   toScanReviewErrorMessage,
 } from "../../application";
-
 import {
   createProductBlueprintReview,
   fetchReviewsByProductBlueprintId,
@@ -19,15 +16,12 @@ import {
   resolveOwnedWalletTokenByAssetId,
   transferScanPurchased,
 } from "../../infrastructure/scanResultApi";
-
 import { getOptionalAuthHeaders } from "../../../../lib/authHeaders";
-
 import type {
   MallScanTransferResponse,
   PreviewState,
   ScanResultPageState,
 } from "../../../shared/types/scanResult";
-
 import type { ProductBlueprintReviewPage } from "../../../shared/types/review";
 
 function safeDecodeURIComponent(value: string): string {
@@ -36,6 +30,12 @@ function safeDecodeURIComponent(value: string): string {
   } catch {
     return value;
   }
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, ms);
+  });
 }
 
 export function useScanProductIdFromUrl(): string {
@@ -115,10 +115,7 @@ export function useScanResultPage() {
   };
 
   const viewModel = useMemo(() => {
-    return createScanResultPageViewModel({
-      previewState,
-      ownedByWallet,
-    });
+    return createScanResultPageViewModel({ previewState, ownedByWallet });
   }, [ownedByWallet, previewState]);
 
   const transferSuccessModalViewModel = useMemo(() => {
@@ -140,17 +137,75 @@ export function useScanResultPage() {
     setTransferModalError(null);
   }, []);
 
+  const checkOwnedStateByAssetId = useCallback(
+    async (assetId: string, headers: HeadersInit, retryAfterTransfer = false) => {
+      const normalizedAssetId = assetId.trim();
+
+      if (!normalizedAssetId) {
+        if (mountedRef.current) {
+          setOwnedByWallet(null);
+          setOwnedByWalletError(null);
+        }
+        return;
+      }
+
+      setBusyOwnedByWallet(true);
+      setOwnedByWalletError(null);
+
+      const maxAttempts = retryAfterTransfer ? 4 : 1;
+      let lastError: unknown = null;
+
+      try {
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+          try {
+            const owned = await isOwnedByWalletAssetId(normalizedAssetId, headers);
+
+            if (!mountedRef.current) return;
+
+            setOwnedByWallet(owned);
+            setOwnedByWalletError(null);
+            return;
+          } catch (caughtError) {
+            lastError = caughtError;
+
+            if (attempt >= maxAttempts) break;
+
+            await wait(600 * attempt);
+
+            if (!mountedRef.current) return;
+          }
+        }
+
+        if (!mountedRef.current) return;
+
+        setOwnedByWallet(null);
+        setOwnedByWalletError(
+          lastError instanceof Error
+            ? lastError.message
+            : String(lastError),
+        );
+      } finally {
+        if (mountedRef.current) {
+          setBusyOwnedByWallet(false);
+        }
+      }
+    },
+    [],
+  );
+
   const runAutoTransferIfNeeded = useCallback(
-    async (pid: string, headers?: HeadersInit) => {
+    async (
+      pid: string,
+      headers?: HeadersInit,
+    ): Promise<MallScanTransferResponse | null> => {
       const normalizedProductId = pid.trim();
 
-      if (!normalizedProductId) return;
-      if (!headers) return;
-      if (autoTransferTriggeredRef.current || transferringRef.current) return;
+      if (!normalizedProductId) return null;
+      if (!headers) return null;
+      if (autoTransferTriggeredRef.current || transferringRef.current) return null;
 
       autoTransferTriggeredRef.current = true;
       transferringRef.current = true;
-
       setBusyTransfer(true);
       setTransferError(null);
       setTransferModalError(null);
@@ -166,7 +221,7 @@ export function useScanResultPage() {
           headers,
         });
 
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) return nextTransferResult;
 
         setTransferResult(nextTransferResult);
         setTransferError(null);
@@ -175,8 +230,10 @@ export function useScanResultPage() {
         if (nextTransferResult.matched) {
           setTransferModalOpen(true);
         }
+
+        return nextTransferResult;
       } catch (caughtError) {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) return null;
 
         const message =
           caughtError instanceof Error
@@ -187,6 +244,8 @@ export function useScanResultPage() {
         setTransferError(message);
         setTransferModalError(message);
         setTransferModalOpen(false);
+
+        return null;
       } finally {
         transferringRef.current = false;
 
@@ -199,8 +258,10 @@ export function useScanResultPage() {
   );
 
   const loadAuthFlow = useCallback(
-    async (pid: string) => {
+    async (pid: string, assetId: string) => {
       const normalizedProductId = pid.trim();
+      const normalizedAssetId = assetId.trim();
+
       if (!normalizedProductId) return;
 
       const headers = await getOptionalAuthHeaders();
@@ -212,9 +273,29 @@ export function useScanResultPage() {
 
       if (!headers) return;
 
-      await runAutoTransferIfNeeded(normalizedProductId, headers);
+      const nextTransferResult = await runAutoTransferIfNeeded(
+        normalizedProductId,
+        headers,
+      );
+
+      if (!mountedRef.current) return;
+
+      const ownedCheckAssetId =
+        nextTransferResult?.assetId?.trim() || normalizedAssetId;
+
+      if (!ownedCheckAssetId) {
+        setOwnedByWallet(null);
+        setOwnedByWalletError(null);
+        return;
+      }
+
+      void checkOwnedStateByAssetId(
+        ownedCheckAssetId,
+        headers,
+        nextTransferResult?.matched === true,
+      );
     },
-    [runAutoTransferIfNeeded],
+    [checkOwnedStateByAssetId, runAutoTransferIfNeeded],
   );
 
   const load = useCallback(async () => {
@@ -255,7 +336,9 @@ export function useScanResultPage() {
       }
 
       setPreviewState(nextState);
-      await loadAuthFlow(pid);
+
+      const nextAssetId = nextState.raw.token?.assetId ?? "";
+      await loadAuthFlow(pid, nextAssetId);
     } catch (caughtError) {
       if (!mountedRef.current) return;
 
@@ -329,7 +412,9 @@ export function useScanResultPage() {
   );
 
   const loadOwnedState = useCallback(async () => {
-    if (!previewAssetId) {
+    const assetId = previewAssetId.trim();
+
+    if (!assetId) {
       setOwnedByWallet(null);
       setOwnedByWalletError(null);
       return;
@@ -337,45 +422,22 @@ export function useScanResultPage() {
 
     if (busyOwnedByWallet) return;
 
-    setBusyOwnedByWallet(true);
-    setOwnedByWalletError(null);
+    const headers = await getOptionalAuthHeaders();
 
-    try {
-      const headers = await getOptionalAuthHeaders();
-
-      if (!headers) {
-        if (mountedRef.current) {
-          setOwnedByWallet(null);
-          setOwnedByWalletError(null);
-        }
-
-        return;
-      }
-
-      const owned = await isOwnedByWalletAssetId(
-        previewAssetId,
-        headers,
-      );
-
-      if (!mountedRef.current) return;
-
-      setOwnedByWallet(owned);
-      setOwnedByWalletError(null);
-    } catch (caughtError) {
-      if (!mountedRef.current) return;
-
-      setOwnedByWallet(null);
-      setOwnedByWalletError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : String(caughtError),
-      );
-    } finally {
+    if (!headers) {
       if (mountedRef.current) {
-        setBusyOwnedByWallet(false);
+        setOwnedByWallet(null);
+        setOwnedByWalletError(null);
       }
+      return;
     }
-  }, [busyOwnedByWallet, previewAssetId]);
+
+    await checkOwnedStateByAssetId(assetId, headers);
+  }, [
+    busyOwnedByWallet,
+    checkOwnedStateByAssetId,
+    previewAssetId,
+  ]);
 
   const openContentsAfterResolve = useCallback(() => {
     if (!transferSuccessModalViewModel?.canOpenContents) return;
@@ -437,15 +499,24 @@ export function useScanResultPage() {
         });
 
         if (token?.tokenBlueprintId) {
-          searchParams.set("tokenBlueprintId", token.tokenBlueprintId);
+          searchParams.set(
+            "tokenBlueprintId",
+            token.tokenBlueprintId,
+          );
         }
 
         if (tokenBlueprintPatch?.tokenName) {
-          searchParams.set("tokenName", tokenBlueprintPatch.tokenName);
+          searchParams.set(
+            "tokenName",
+            tokenBlueprintPatch.tokenName,
+          );
         }
 
         if (tokenBlueprintPatch?.tokenIcon) {
-          searchParams.set("tokenIconUrl", tokenBlueprintPatch.tokenIcon);
+          searchParams.set(
+            "tokenIconUrl",
+            tokenBlueprintPatch.tokenIcon,
+          );
         }
 
         navigate(`/contents?${searchParams.toString()}`);
@@ -550,14 +621,6 @@ export function useScanResultPage() {
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productBlueprintId]);
-
-  useEffect(() => {
-    if (!previewAssetId) return;
-
-    void loadOwnedState();
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewAssetId]);
 
   return {
     state,
