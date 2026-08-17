@@ -4,9 +4,6 @@ import { textOrEmpty } from "../../../../components/utils/textOrEmpty";
 
 import type {
   ResaleStatus,
-} from "../../../shared/types/resale";
-
-import type {
   ResaleListing,
 } from "../../../shared/types/resale";
 

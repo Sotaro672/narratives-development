@@ -9,39 +9,10 @@ export type ApiDataResponse<T> = {
   data: T;
 };
 
-type ResaleRequestInit = RequestInit & {
+type ResaleRequestInit = Omit<RequestInit, "body"> & {
   query?: ApiQueryParams;
+  json?: unknown;
 };
-
-/**
- * RequestInit.body の JSON 文字列を、
- * 共通HTTPクライアントの json オプションへ変換する。
- */
-function parseJsonRequestBody(
-  body: BodyInit | null | undefined,
-): unknown {
-  if (body === undefined || body === null) {
-    return undefined;
-  }
-
-  if (typeof body !== "string") {
-    throw new Error(
-      "再販APIのリクエスト本文はJSON文字列で指定してください。",
-    );
-  }
-
-  if (!body) {
-    return undefined;
-  }
-
-  try {
-    return JSON.parse(body) as unknown;
-  } catch {
-    throw new Error(
-      "再販APIのリクエスト本文が不正なJSONです。",
-    );
-  }
-}
 
 /**
  * 認証が必要な再販APIを実行する。
@@ -50,8 +21,7 @@ export async function fetchResaleWithAuth<T>(
   path: string,
   init?: ResaleRequestInit,
 ): Promise<T> {
-  const { body, query, ...requestInit } = init ?? {};
-  const json = parseJsonRequestBody(body);
+  const { query, json, ...requestInit } = init ?? {};
 
   return requestJson<T>(path, {
     ...requestInit,
@@ -71,8 +41,7 @@ export async function fetchPublicResale<T>(
   path: string,
   init?: ResaleRequestInit,
 ): Promise<T> {
-  const { body, query, ...requestInit } = init ?? {};
-  const json = parseJsonRequestBody(body);
+  const { query, json, ...requestInit } = init ?? {};
 
   return requestJson<T>(path, {
     ...requestInit,

@@ -13,10 +13,9 @@ import { textOrEmpty } from "../../../../components/utils/textOrEmpty";
 import { createResaleListing } from "../../api/resaleApi";
 import {
   DEFAULT_RESALE_CONDITION,
-  normalizeResaleCondition,
-} from "../../constants/resaleConditions";
+  type ResaleCondition,
+} from "../../../shared/types/resale";
 
-import type { ResaleCondition } from "../../../shared/types/resale";
 import type {
   ResaleCreatePageLocationState,
   ResaleCreateTarget,
@@ -24,11 +23,8 @@ import type {
 
 import { useResaleConditionMedia } from "./useResaleConditionMedia";
 
-const INVALID_FORM_MESSAGE =
-  "販売価格と商品状態の写真を入力してください.";
-
-const CREATE_RESALE_ERROR_MESSAGE =
-  "出品に失敗しました。時間をおいてもう一度お試しください。";
+const INVALID_FORM_MESSAGE = "販売価格と商品状態の写真を入力してください.";
+const CREATE_RESALE_ERROR_MESSAGE = "出品に失敗しました。時間をおいてもう一度お試しください。";
 
 const RESALE_LOCATION_STATE_KEYS = [
   "assetId",
@@ -43,16 +39,10 @@ const RESALE_LOCATION_STATE_KEYS = [
 ] as const satisfies readonly (keyof ResaleCreatePageLocationState)[];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value)
-  );
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseLocationState(
-  value: unknown,
-): ResaleCreatePageLocationState {
+function parseLocationState(value: unknown): ResaleCreatePageLocationState {
   if (!isRecord(value)) {
     return {};
   }
@@ -70,9 +60,7 @@ function parseLocationState(
   return result;
 }
 
-function createResaleTarget(
-  state: ResaleCreatePageLocationState,
-): ResaleCreateTarget {
+function createResaleTarget(state: ResaleCreatePageLocationState): ResaleCreateTarget {
   return {
     assetId: textOrEmpty(state.assetId),
     productId: textOrEmpty(state.productId),
@@ -105,9 +93,7 @@ export function useResaleCreatePage() {
   const location = useLocation();
 
   const [price, setPrice] = useState("");
-  const [condition, setCondition] = useState<ResaleCondition>(
-    DEFAULT_RESALE_CONDITION,
-  );
+  const [condition, setCondition] = useState<ResaleCondition>(DEFAULT_RESALE_CONDITION);
   const [description, setDescription] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -157,8 +143,8 @@ export function useResaleCreatePage() {
     setErrorMessage("");
   }, []);
 
-  const handleConditionChange = useCallback((value: string) => {
-    setCondition(normalizeResaleCondition(value));
+  const handleConditionChange = useCallback((value: ResaleCondition) => {
+    setCondition(value);
     setErrorMessage("");
   }, []);
 
@@ -243,37 +229,28 @@ export function useResaleCreatePage() {
 
   return {
     target,
-
     price,
     formattedPrice,
     condition,
     description,
-
     conditionMediaItems,
     conditionMediaCurrentIndex,
     conditionMediaInputRef,
     conditionMediaCarouselRef,
-
     hasRequiredListingTarget,
     hasConditionMedia,
     canSubmit,
     isSubmitting,
     errorMessage,
-
-    submitButtonLabel: isSubmitting
-      ? "出品中..."
-      : "出品する",
-
+    submitButtonLabel: isSubmitting ? "出品中..." : "出品する",
     handlePriceChange,
     handleConditionChange,
     handleDescriptionChange,
-
     handleConditionMediaSelected,
     handleRemoveConditionMedia,
     handleConditionMediaCarouselScroll,
     handleMoveToConditionMediaSlide,
     clearConditionMedia,
-
     handleBackToWallet,
     handleSubmit,
   };

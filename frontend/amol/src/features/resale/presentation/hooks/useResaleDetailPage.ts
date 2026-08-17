@@ -23,10 +23,6 @@ import {
 } from "../../api/resaleApi";
 
 import {
-  isResaleEditableStatus,
-} from "../../constants/resaleStatusOptions";
-
-import {
   DEFAULT_RESALE_CONDITION,
   DEFAULT_RESALE_EDITABLE_STATUS,
   type ResaleCondition,
@@ -62,9 +58,7 @@ import {
   parseResalePriceInput,
 } from "../utils/resalePriceInput";
 
-import {
-  useResaleDetailConditionMedia,
-} from "./useResaleDetailConditionMedia";
+import { useResaleDetailConditionMedia } from "./useResaleDetailConditionMedia";
 
 export function useResaleDetailPage() {
   const navigate = useNavigate();
@@ -114,30 +108,23 @@ export function useResaleDetailPage() {
       nextItem: ResaleListing | null,
       nextImages: ResaleConditionImage[],
     ) => {
-      const nextPrice = nextItem?.price ?? 0;
+      if (!nextItem) {
+        setPriceInput("");
+        setConditionInput(DEFAULT_RESALE_CONDITION);
+        setDescriptionInput("");
+        setStatusInput(DEFAULT_RESALE_EDITABLE_STATUS);
+        resetConditionMedia(nextImages);
+        return;
+      }
 
-      setPriceInput(
-        nextPrice > 0
-          ? String(nextPrice)
-          : "",
-      );
-
-      setConditionInput(
-        nextItem?.condition ??
-          DEFAULT_RESALE_CONDITION,
-      );
-
-      setDescriptionInput(
-        nextItem?.description ?? "",
-      );
-
+      setPriceInput(String(nextItem.price));
+      setConditionInput(nextItem.condition);
+      setDescriptionInput(nextItem.description);
       setStatusInput(
-        nextItem &&
-        isResaleEditableStatus(nextItem.status)
-          ? nextItem.status
-          : DEFAULT_RESALE_EDITABLE_STATUS,
+        nextItem.status === "sold"
+          ? DEFAULT_RESALE_EDITABLE_STATUS
+          : nextItem.status,
       );
-
       resetConditionMedia(nextImages);
     },
     [resetConditionMedia],
@@ -173,8 +160,7 @@ export function useResaleDetailPage() {
           return;
         }
 
-        const sortedNextImages =
-          sortResaleConditionImages(nextImages);
+        const sortedNextImages = sortResaleConditionImages(nextImages);
 
         setItem(nextItem);
         setImages(sortedNextImages);
@@ -203,10 +189,7 @@ export function useResaleDetailPage() {
         }
       }
     },
-    [
-      normalizedResaleId,
-      resetFormFromItem,
-    ],
+    [normalizedResaleId, resetFormFromItem],
   );
 
   useEffect(() => {
@@ -233,10 +216,7 @@ export function useResaleDetailPage() {
         return 0;
       }
 
-      return Math.min(
-        currentIndex,
-        galleryItems.length - 1,
-      );
+      return Math.min(currentIndex, galleryItems.length - 1);
     });
   }, [galleryItems.length]);
 
@@ -244,7 +224,7 @@ export function useResaleDetailPage() {
   const tokenName = item?.tokenName ?? "";
   const brandName = item?.brandName ?? "";
   const tokenIcon = item?.tokenIcon ?? "";
-  const description = item?.description ?? "";
+  const description = item ? item.description : "";
   const modelId = item?.modelId ?? "";
   const modelKind = item?.kind ?? "";
   const modelNumber = item?.modelNumber ?? "";
@@ -254,14 +234,9 @@ export function useResaleDetailPage() {
     ? formatResaleModelKind(modelKind)
     : "";
 
-  const modelColorLabel =
-    formatResaleModelColor(item?.color);
-
-  const modelVolumeLabel =
-    formatResaleModelVolume(item?.volume);
-
-  const measurementsLabel =
-    formatResaleMeasurements(item?.measurements);
+  const modelColorLabel = formatResaleModelColor(item?.color);
+  const modelVolumeLabel = formatResaleModelVolume(item?.volume);
+  const measurementsLabel = formatResaleMeasurements(item?.measurements);
 
   const hasModelInfo =
     Boolean(modelId) ||
@@ -274,33 +249,26 @@ export function useResaleDetailPage() {
 
   const isSold = item?.status === "sold";
 
-  const title =
-    productName ||
-    tokenName ||
-    "出品詳細";
+  const title = productName || tokenName || "出品詳細";
 
   const priceLabel = item
     ? formatYen(item.price, "-")
     : "-";
 
-  const editablePriceLabel =
-    formatResalePriceInput(priceInput);
+  const editablePriceLabel = formatResalePriceInput(priceInput);
 
-  const createdAtLabel =
-    formatDateTime(item?.createdAt);
-
-  const updatedAtLabel =
-    formatDateTime(item?.updatedAt);
+  const createdAtLabel = formatDateTime(item?.createdAt);
+  const updatedAtLabel = formatDateTime(item?.updatedAt);
 
   const statusLabel = item
     ? formatResaleStatus(item.status)
     : "-";
 
-  const conditionLabel =
-    item?.condition ?? "-";
+  const conditionLabel = item
+    ? item.condition
+    : "-";
 
-  const priceNumber =
-    parseResalePriceInput(priceInput);
+  const priceNumber = parseResalePriceInput(priceInput);
 
   const hasValidPrice =
     priceNumber !== null &&
@@ -360,9 +328,7 @@ export function useResaleDetailPage() {
 
   const handlePriceChange = useCallback(
     (value: string) => {
-      setPriceInput(
-        normalizeResalePriceInput(value),
-      );
+      setPriceInput(normalizeResalePriceInput(value));
       clearMessages();
     },
     [clearMessages],
@@ -394,9 +360,7 @@ export function useResaleDetailPage() {
 
   const handleStartEdit = useCallback(() => {
     if (isSold) {
-      setErrorMessage(
-        "売却済みの出品は編集できません。",
-      );
+      setErrorMessage("売却済みの出品は編集できません。");
       return;
     }
 
@@ -425,9 +389,7 @@ export function useResaleDetailPage() {
   const handleSave = useCallback(
     async (): Promise<void> => {
       if (isSold) {
-        setErrorMessage(
-          "売却済みの出品は編集できません。",
-        );
+        setErrorMessage("売却済みの出品は編集できません。");
         return;
       }
 
@@ -446,8 +408,7 @@ export function useResaleDetailPage() {
       clearMessages();
 
       try {
-        const newFiles =
-          getNewConditionFiles();
+        const newFiles = getNewConditionFiles();
 
         const nextDisplayOrder =
           conditionMediaItems.reduce(
@@ -495,12 +456,9 @@ export function useResaleDetailPage() {
           });
         }
 
-        const nextImages =
-          sortResaleConditionImages(
-            await listMyResaleConditionImages(
-              normalizedResaleId,
-            ),
-          );
+        const nextImages = sortResaleConditionImages(
+          await listMyResaleConditionImages(normalizedResaleId),
+        );
 
         if (nextImages.length > 0) {
           await updatePrimaryResaleImage({
@@ -509,22 +467,16 @@ export function useResaleDetailPage() {
           });
         }
 
-        const refreshedItem =
-          await getMyResaleListing(
-            normalizedResaleId,
-          );
+        const refreshedItem = await getMyResaleListing(
+          normalizedResaleId,
+        );
 
         setItem(refreshedItem);
         setImages(nextImages);
-        resetFormFromItem(
-          refreshedItem,
-          nextImages,
-        );
+        resetFormFromItem(refreshedItem, nextImages);
         setActiveGalleryIndex(0);
         setIsEditing(false);
-        setSaveMessage(
-          "出品情報を更新しました。",
-        );
+        setSaveMessage("出品情報を更新しました。");
       } catch (error) {
         setErrorMessage(
           error instanceof Error
@@ -554,9 +506,7 @@ export function useResaleDetailPage() {
   const handleDelete = useCallback(
     async (): Promise<void> => {
       if (isSold) {
-        setErrorMessage(
-          "売却済みの出品は削除できません。",
-        );
+        setErrorMessage("売却済みの出品は削除できません。");
         return;
       }
 
@@ -567,10 +517,9 @@ export function useResaleDetailPage() {
         return;
       }
 
-      const confirmed =
-        window.confirm(
-          "この出品を削除します。よろしいですか？",
-        );
+      const confirmed = window.confirm(
+        "この出品を削除します。よろしいですか？",
+      );
 
       if (!confirmed) {
         return;
@@ -580,9 +529,7 @@ export function useResaleDetailPage() {
       clearMessages();
 
       try {
-        await deleteResaleListing(
-          normalizedResaleId,
-        );
+        await deleteResaleListing(normalizedResaleId);
 
         navigate("/wallet", {
           replace: true,
@@ -674,12 +621,9 @@ export function useResaleDetailPage() {
         createdAtLabel,
         updatedAtLabel,
         description,
-        onPrevGalleryItem:
-          handlePrevGalleryItem,
-        onNextGalleryItem:
-          handleNextGalleryItem,
-        onSelectGalleryItem:
-          handleSelectGalleryItem,
+        onPrevGalleryItem: handlePrevGalleryItem,
+        onNextGalleryItem: handleNextGalleryItem,
+        onSelectGalleryItem: handleSelectGalleryItem,
       }),
       [
         activeGalleryIndex,
@@ -711,16 +655,11 @@ export function useResaleDetailPage() {
         conditionMediaInputRef,
         conditionMediaCarouselRef,
         onPriceChange: handlePriceChange,
-        onConditionChange:
-          handleConditionChange,
-        onStatusChange:
-          handleStatusChange,
-        onDescriptionChange:
-          handleDescriptionChange,
-        onConditionMediaSelected:
-          handleConditionMediaSelected,
-        onRemoveConditionMedia:
-          handleRemoveConditionMedia,
+        onConditionChange: handleConditionChange,
+        onStatusChange: handleStatusChange,
+        onDescriptionChange: handleDescriptionChange,
+        onConditionMediaSelected: handleConditionMediaSelected,
+        onRemoveConditionMedia: handleRemoveConditionMedia,
         onConditionMediaCarouselScroll:
           handleConditionMediaCarouselScroll,
         onMoveToConditionMediaSlide:
@@ -750,9 +689,7 @@ export function useResaleDetailPage() {
     );
 
   const footerProps =
-    useMemo<
-      ResaleDetailFooterProps | undefined
-    >(
+    useMemo<ResaleDetailFooterProps | undefined>(
       () => {
         if (
           isEditing &&
@@ -761,21 +698,16 @@ export function useResaleDetailPage() {
           return {
             variant: "tripleAction",
             leftButtonLabel: "キャンセル",
-            centerButtonLabel:
-              saving
-                ? "保存中..."
-                : "保存する",
+            centerButtonLabel: saving
+              ? "保存中..."
+              : "保存する",
             rightButtonLabel: "削除",
             leftButtonDisabled: saving,
-            centerButtonDisabled:
-              !canSave,
+            centerButtonDisabled: !canSave,
             rightButtonDisabled: saving,
-            onLeftButtonClick:
-              handleCancelEdit,
-            onCenterButtonClick:
-              handleSave,
-            onRightButtonClick:
-              handleDelete,
+            onLeftButtonClick: handleCancelEdit,
+            onCenterButtonClick: handleSave,
+            onRightButtonClick: handleDelete,
           };
         }
 
@@ -784,8 +716,7 @@ export function useResaleDetailPage() {
             variant: "action",
             buttonLabel: "編集する",
             disabled: false,
-            onButtonClick:
-              handleStartEdit,
+            onButtonClick: handleStartEdit,
           };
         }
 

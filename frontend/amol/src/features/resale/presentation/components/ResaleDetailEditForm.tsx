@@ -1,8 +1,6 @@
 // frontend/amol/src/features/resale/presentation/components/ResaleDetailEditForm.tsx
 
-import type {
-  MouseEventHandler,
-} from "react";
+import type { MouseEventHandler } from "react";
 
 import Dropdown from "../../../../components/ui/Dropdown";
 import Input from "../../../../components/ui/Input";
@@ -11,14 +9,11 @@ import Textbox from "../../../../components/ui/Textbox";
 
 import {
   RESALE_CONDITION_OPTIONS,
-} from "../../constants/resaleConditions";
-import {
   RESALE_STATUS_OPTIONS,
-} from "../../constants/resaleStatusOptions";
+} from "../../../shared/types/resale";
+import { getResaleEditableStatusLabel } from "../../constants/resaleStatusOptions";
 
-import type {
-  ResaleDetailEditFormProps,
-} from "../types/resaleDetailPageTypes";
+import type { ResaleDetailEditFormProps } from "../types/resaleDetailPageTypes";
 
 import ResaleConditionMediaField from "./ResaleConditionMediaField";
 
@@ -46,10 +41,7 @@ function DropdownTrigger({
       onClick={onClick}
     >
       <span>{label}</span>
-
-      <span aria-hidden="true">
-        {isOpen ? "▲" : "▼"}
-      </span>
+      <span aria-hidden="true">{isOpen ? "▲" : "▼"}</span>
     </button>
   );
 }
@@ -60,31 +52,26 @@ export default function ResaleDetailEditForm({
   status,
   description,
   saving,
-
   createdAtLabel,
   updatedAtLabel,
-
   conditionMediaItems,
   conditionMediaCurrentIndex,
   conditionMediaInputRef,
   conditionMediaCarouselRef,
-
   onPriceChange,
   onConditionChange,
   onStatusChange,
   onDescriptionChange,
-
   onConditionMediaSelected,
   onRemoveConditionMedia,
   onConditionMediaCarouselScroll,
   onMoveToConditionMediaSlide,
 }: ResaleDetailEditFormProps) {
+  const statusLabel = getResaleEditableStatusLabel(status);
+
   return (
     <section className="page-card">
-      <SectionHeader
-        title="販売情報"
-        titleAs="h2"
-      />
+      <SectionHeader title="販売情報" titleAs="h2" />
 
       <div className="page-form">
         <Input
@@ -97,26 +84,18 @@ export default function ResaleDetailEditForm({
           required
           disabled={saving}
           onChange={(event) => {
-            onPriceChange(
-              event.currentTarget.value,
-            );
+            onPriceChange(event.currentTarget.value);
           }}
         />
 
         <div className="page-form__field">
-          <span className="page-form__label">
-            商品の状態
-          </span>
-
+          <span className="page-form__label">商品の状態</span>
           <Dropdown
             buttonLabel={condition}
             items={RESALE_CONDITION_OPTIONS}
             selectedValue={condition}
             onSelect={onConditionChange}
-            renderButton={({
-              isOpen,
-              toggle,
-            }) => (
+            renderButton={({ isOpen, toggle }) => (
               <DropdownTrigger
                 label={condition}
                 isOpen={isOpen}
@@ -128,31 +107,15 @@ export default function ResaleDetailEditForm({
         </div>
 
         <div className="page-form__field">
-          <span className="page-form__label">
-            公開状態
-          </span>
-
+          <span className="page-form__label">公開状態</span>
           <Dropdown
-            buttonLabel={
-              RESALE_STATUS_OPTIONS.find(
-                (option) =>
-                  option.value === status,
-              )?.label ?? "出品中"
-            }
+            buttonLabel={statusLabel}
             items={RESALE_STATUS_OPTIONS}
             selectedValue={status}
             onSelect={onStatusChange}
-            renderButton={({
-              isOpen,
-              toggle,
-            }) => (
+            renderButton={({ isOpen, toggle }) => (
               <DropdownTrigger
-                label={
-                  RESALE_STATUS_OPTIONS.find(
-                    (option) =>
-                      option.value === status,
-                  )?.label ?? "出品中"
-                }
+                label={statusLabel}
                 isOpen={isOpen}
                 disabled={saving}
                 onClick={toggle}
@@ -163,29 +126,15 @@ export default function ResaleDetailEditForm({
 
         <ResaleConditionMediaField
           items={conditionMediaItems}
-          currentIndex={
-            conditionMediaCurrentIndex
-          }
-          inputRef={
-            conditionMediaInputRef
-          }
-          carouselRef={
-            conditionMediaCarouselRef
-          }
+          currentIndex={conditionMediaCurrentIndex}
+          inputRef={conditionMediaInputRef}
+          carouselRef={conditionMediaCarouselRef}
           disabled={saving}
           selecting={saving}
-          onFilesSelected={
-            onConditionMediaSelected
-          }
-          onRemoveItem={
-            onRemoveConditionMedia
-          }
-          onCarouselScroll={
-            onConditionMediaCarouselScroll
-          }
-          onMoveToSlide={
-            onMoveToConditionMediaSlide
-          }
+          onFilesSelected={onConditionMediaSelected}
+          onRemoveItem={onRemoveConditionMedia}
+          onCarouselScroll={onConditionMediaCarouselScroll}
+          onMoveToSlide={onMoveToConditionMediaSlide}
         />
 
         <Textbox
@@ -195,14 +144,10 @@ export default function ResaleDetailEditForm({
           rows={6}
           maxLength={DESCRIPTION_MAX_LENGTH}
           helperText="購入者が商品の状態を判断しやすい内容を入力してください。"
-          counterText={
-            `${description.length}/${DESCRIPTION_MAX_LENGTH}`
-          }
+          counterText={`${description.length}/${DESCRIPTION_MAX_LENGTH}`}
           disabled={saving}
           onChange={(event) => {
-            onDescriptionChange(
-              event.currentTarget.value,
-            );
+            onDescriptionChange(event.currentTarget.value);
           }}
         />
       </div>
@@ -212,7 +157,6 @@ export default function ResaleDetailEditForm({
           <dt>出品日時</dt>
           <dd>{createdAtLabel}</dd>
         </div>
-
         <div className="page-definition-list__row">
           <dt>更新日時</dt>
           <dd>{updatedAtLabel}</dd>

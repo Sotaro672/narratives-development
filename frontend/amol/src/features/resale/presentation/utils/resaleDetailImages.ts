@@ -6,7 +6,7 @@ import type {
 
 import type {
   ResaleConditionImage,
-} from "../../../shared/types/resaleTypes";
+} from "../../../shared/types/resale";
 
 /**
  * 商品状態画像を表示順で並べ替える。
