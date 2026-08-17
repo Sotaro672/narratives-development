@@ -40,6 +40,7 @@ func CORS(next http.Handler) http.Handler {
 		"X-Actor-Id",
 		"X-Icon-Content-Type",
 		"X-Icon-File-Name",
+		"Idempotency-Key",
 
 		"X-CSRF-Token",
 	}, ", ")
@@ -55,6 +56,7 @@ func CORS(next http.Handler) http.Handler {
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
+
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -106,7 +108,7 @@ func appendVary(w http.ResponseWriter, value string) {
 	// すでに含まれていれば何もしない
 	parts := strings.Split(cur, ",")
 	for _, p := range parts {
-		if strings.EqualFold(strings.TrimSpace(p), value) {
+		if strings.EqualFold(strings.Trim(p, " \t\r\n"), value) {
 			return
 		}
 	}

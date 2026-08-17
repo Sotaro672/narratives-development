@@ -1,6 +1,6 @@
 // frontend/amol/src/features/scan-result/infrastructure/scanResultApi.ts
 
-import { HttpError, requestJson } from "../../../lib/http";
+import { requestJson } from "../../../lib/http";
 import { getOptionalAuthHeaders } from "../../../lib/authHeaders";
 
 import type {
@@ -191,29 +191,23 @@ export async function isOwnedByWalletAssetId(
   const id = assetId.trim();
 
   if (!id) {
-    return false;
+    throw new Error("assetId is empty");
   }
 
-  try {
-    await requestJson<WalletResolvedTokenResponse>(
-      "/mall/me/wallets/tokens/resolve",
-      {
-        method: "GET",
-        auth: "required",
-        headers,
-        query: { assetId: id },
+  await requestJson<WalletResolvedTokenResponse>(
+    "/mall/me/wallets/tokens/resolve",
+    {
+      method: "GET",
+      auth: "required",
+      headers,
+      query: { assetId: id },
+      messages: {
+        requestErrorMessage: "isOwnedByWalletAssetId failed",
+        nonJsonErrorMessage: "isOwnedByWalletAssetId failed: response is not json",
+        invalidJsonErrorMessage: "isOwnedByWalletAssetId failed: invalid json",
       },
-    );
+    },
+  );
 
-    return true;
-  } catch (error) {
-    if (
-      error instanceof HttpError &&
-      (error.status === 403 || error.status === 404)
-    ) {
-      return false;
-    }
-
-    throw error;
-  }
+  return true;
 }

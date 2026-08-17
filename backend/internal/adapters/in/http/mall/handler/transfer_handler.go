@@ -138,9 +138,13 @@ func (h *TransferHandler) ServeHTTP(
 		r,
 		&body,
 	); err != nil {
-		badRequest(
+		writeJSON(
 			w,
-			"invalid json",
+			http.StatusBadRequest,
+			map[string]any{
+				"error":   "invalid json",
+				"message": err.Error(),
+			},
 		)
 		return
 	}
@@ -164,7 +168,8 @@ func (h *TransferHandler) ServeHTTP(
 			w,
 			http.StatusServiceUnavailable,
 			map[string]any{
-				"error": "avatar_context_missing",
+				"error":   "avatar_context_missing",
+				"message": "AvatarContextMiddleware did not provide avatarId",
 			},
 		)
 		return
@@ -206,6 +211,7 @@ func (h *TransferHandler) ServeHTTP(
 				http.StatusNotFound,
 				map[string]any{
 					"error":     "not found",
+					"message":   err.Error(),
 					"avatarId":  avatarID,
 					"productId": productID,
 				},
@@ -226,6 +232,7 @@ func (h *TransferHandler) ServeHTTP(
 				http.StatusRequestTimeout,
 				map[string]any{
 					"error":     "request canceled",
+					"message":   err.Error(),
 					"avatarId":  avatarID,
 					"productId": productID,
 				},
@@ -238,6 +245,7 @@ func (h *TransferHandler) ServeHTTP(
 			http.StatusInternalServerError,
 			map[string]any{
 				"error":     "transfer failed",
+				"message":   err.Error(),
 				"avatarId":  avatarID,
 				"productId": productID,
 			},

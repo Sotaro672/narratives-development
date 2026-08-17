@@ -46,7 +46,9 @@ export default function ScanResultCard(props: ScanResultCardProps) {
   if (state.loading) {
     return (
       <SectionCard>
-        <TextState variant="loading">プレビューを取得しています...</TextState>
+        <TextState variant="loading">
+          プレビューを取得しています...
+        </TextState>
       </SectionCard>
     );
   }
@@ -55,8 +57,16 @@ export default function ScanResultCard(props: ScanResultCardProps) {
     return (
       <SectionCard>
         <h1>Scan Result</h1>
-        <TextState variant="error">{state.error}</TextState>
-        <Button type="button" onClick={onRefresh}>再読み込み</Button>
+        <TextState variant="error">
+          {state.error}
+        </TextState>
+
+        <Button
+          type="button"
+          onClick={onRefresh}
+        >
+          再読み込み
+        </Button>
       </SectionCard>
     );
   }
@@ -65,7 +75,9 @@ export default function ScanResultCard(props: ScanResultCardProps) {
     return (
       <SectionCard>
         <h1>Scan Result</h1>
-        <TextState>プレビューが空です。</TextState>
+        <TextState>
+          プレビューが空です。
+        </TextState>
       </SectionCard>
     );
   }
@@ -77,6 +89,14 @@ export default function ScanResultCard(props: ScanResultCardProps) {
   return (
     <div className="scan-result-desktop-grid">
       <div className="scan-result-desktop-main">
+        {state.transferError ? (
+          <SectionCard>
+            <TextState variant="error">
+              NFT受取処理に失敗しました: {state.transferError}
+            </TextState>
+          </SectionCard>
+        ) : null}
+
         <ScanResultProductSection
           title={product.title}
           owned={owned}

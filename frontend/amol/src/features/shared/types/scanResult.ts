@@ -179,4 +179,5 @@ export type ScanResultPageState = {
   error: string | null;
   authAvailable: boolean;
   busyTransfer: boolean;
+  transferError: string | null;
 };

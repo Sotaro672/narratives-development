@@ -71,6 +71,7 @@ export function useScanResultPage() {
   const [postReviewError, setPostReviewError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyTransfer, setBusyTransfer] = useState(false);
+  const [transferError, setTransferError] = useState<string | null>(null);
   const [authAvailable, setAuthAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
@@ -110,6 +111,7 @@ export function useScanResultPage() {
     error,
     authAvailable,
     busyTransfer,
+    transferError,
   };
 
   const viewModel = useMemo(() => {
@@ -148,7 +150,10 @@ export function useScanResultPage() {
 
       autoTransferTriggeredRef.current = true;
       transferringRef.current = true;
+
       setBusyTransfer(true);
+      setTransferError(null);
+      setTransferModalError(null);
 
       try {
         if (!operationIdRef.current) {
@@ -164,17 +169,30 @@ export function useScanResultPage() {
         if (!mountedRef.current) return;
 
         setTransferResult(nextTransferResult);
+        setTransferError(null);
+        setTransferModalError(null);
 
         if (nextTransferResult.matched) {
-          setTransferModalError(null);
           setTransferModalOpen(true);
         }
-      } catch {
-        // Auto transfer is best-effort.
-        // Backend owns verification / ownership / purchase checks.
+      } catch (caughtError) {
+        if (!mountedRef.current) return;
+
+        const message =
+          caughtError instanceof Error
+            ? caughtError.message
+            : String(caughtError);
+
+        setTransferResult(null);
+        setTransferError(message);
+        setTransferModalError(message);
+        setTransferModalOpen(false);
       } finally {
         transferringRef.current = false;
-        if (mountedRef.current) setBusyTransfer(false);
+
+        if (mountedRef.current) {
+          setBusyTransfer(false);
+        }
       }
     },
     [],
@@ -188,14 +206,13 @@ export function useScanResultPage() {
       const headers = await getOptionalAuthHeaders();
       const hasAuth = Boolean(headers);
 
-      if (mountedRef.current) setAuthAvailable(hasAuth);
+      if (mountedRef.current) {
+        setAuthAvailable(hasAuth);
+      }
+
       if (!headers) return;
 
-      try {
-        await runAutoTransferIfNeeded(normalizedProductId, headers);
-      } catch {
-        // Auth-scoped scan flow is best-effort.
-      }
+      await runAutoTransferIfNeeded(normalizedProductId, headers);
     },
     [runAutoTransferIfNeeded],
   );
@@ -207,6 +224,7 @@ export function useScanResultPage() {
     setError(null);
     setPreviewState(null);
     setTransferResult(null);
+    setTransferError(null);
     setTransferModalOpen(false);
     setTransferModalError(null);
     setReviews(null);
@@ -247,7 +265,9 @@ export function useScanResultPage() {
           : String(caughtError),
       );
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [loadAuthFlow, productId]);
 
@@ -295,7 +315,9 @@ export function useScanResultPage() {
             : String(caughtError),
         );
       } finally {
-        if (mountedRef.current) setBusyReviews(false);
+        if (mountedRef.current) {
+          setBusyReviews(false);
+        }
       }
     },
     [
@@ -326,6 +348,7 @@ export function useScanResultPage() {
           setOwnedByWallet(null);
           setOwnedByWalletError(null);
         }
+
         return;
       }
 
@@ -348,7 +371,9 @@ export function useScanResultPage() {
           : String(caughtError),
       );
     } finally {
-      if (mountedRef.current) setBusyOwnedByWallet(false);
+      if (mountedRef.current) {
+        setBusyOwnedByWallet(false);
+      }
     }
   }, [busyOwnedByWallet, previewAssetId]);
 
@@ -386,39 +411,53 @@ export function useScanResultPage() {
         return;
       }
 
-      const resolved = await resolveOwnedWalletTokenByAssetId(
-        assetId,
-        headers,
-      );
+      try {
+        setOwnedByWalletError(null);
 
-      if (!resolved.metadataUri) return;
+        const resolved = await resolveOwnedWalletTokenByAssetId(
+          assetId,
+          headers,
+        );
 
-      const token = previewState?.raw.token;
-      const tokenBlueprintPatch = previewState?.raw.tokenBlueprintPatch;
+        if (!resolved.metadataUri) {
+          throw new Error("metadataUri is empty");
+        }
 
-      const searchParams = new URLSearchParams({
-        assetId: resolved.assetId,
-        metadataUri: resolved.metadataUri,
-        productId: resolved.productId,
-        brandId: resolved.brandId,
-        brandName: resolved.brandName,
-        productName: resolved.productName,
-        productBlueprintId: resolved.productBlueprintId,
-      });
+        const token = previewState?.raw.token;
+        const tokenBlueprintPatch = previewState?.raw.tokenBlueprintPatch;
 
-      if (token?.tokenBlueprintId) {
-        searchParams.set("tokenBlueprintId", token.tokenBlueprintId);
+        const searchParams = new URLSearchParams({
+          assetId: resolved.assetId,
+          metadataUri: resolved.metadataUri,
+          productId: resolved.productId,
+          brandId: resolved.brandId,
+          brandName: resolved.brandName,
+          productName: resolved.productName,
+          productBlueprintId: resolved.productBlueprintId,
+        });
+
+        if (token?.tokenBlueprintId) {
+          searchParams.set("tokenBlueprintId", token.tokenBlueprintId);
+        }
+
+        if (tokenBlueprintPatch?.tokenName) {
+          searchParams.set("tokenName", tokenBlueprintPatch.tokenName);
+        }
+
+        if (tokenBlueprintPatch?.tokenIcon) {
+          searchParams.set("tokenIconUrl", tokenBlueprintPatch.tokenIcon);
+        }
+
+        navigate(`/contents?${searchParams.toString()}`);
+      } catch (caughtError) {
+        if (!mountedRef.current) return;
+
+        setOwnedByWalletError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : String(caughtError),
+        );
       }
-
-      if (tokenBlueprintPatch?.tokenName) {
-        searchParams.set("tokenName", tokenBlueprintPatch.tokenName);
-      }
-
-      if (tokenBlueprintPatch?.tokenIcon) {
-        searchParams.set("tokenIconUrl", tokenBlueprintPatch.tokenIcon);
-      }
-
-      navigate(`/contents?${searchParams.toString()}`);
     },
     [navigate, previewState],
   );
@@ -447,6 +486,7 @@ export function useScanResultPage() {
         );
 
         await loadReviews(1);
+
         setPostReviewError(null);
         return true;
       } catch (caughtError) {
@@ -456,7 +496,9 @@ export function useScanResultPage() {
 
         return false;
       } finally {
-        if (mountedRef.current) setPostingReview(false);
+        if (mountedRef.current) {
+          setPostingReview(false);
+        }
       }
     },
     [

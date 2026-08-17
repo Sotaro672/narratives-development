@@ -1,0 +1,13 @@
+﻿.gcloudignore
+.git
+.gitignore
+
+node_modules/
+dist/
+
+.env
+.env.*
+npm-debug.log*
+*.log
+
+deploy-cloud-run.ps1
