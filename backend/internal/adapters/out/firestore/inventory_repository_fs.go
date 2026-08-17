@@ -65,28 +65,20 @@ type inventoryRecord struct {
 	UpdatedAt          time.Time                   `firestore:"updatedAt"`
 }
 
-func fromRecord(docID string, rec inventoryRecord) invdom.Mint {
-	stock := normalizeStockRecord(rec.Stock)
-
-	modelIDs := normalizeModelIDs(rec.ModelIDs)
-	if len(modelIDs) == 0 {
-		modelIDs = modelIDsFromStockRecord(stock)
-	}
-
+func fromRecord(docID string, rec inventoryRecord) (invdom.Mint, error) {
 	out := invdom.Mint{
 		ID:                 docID,
 		TokenBlueprintID:   rec.TokenBlueprintID,
 		ProductBlueprintID: rec.ProductBlueprintID,
-		Stock:              stockDomainFromRecord(stock),
-		ModelIDs:           modelIDs,
+		Stock:              stockDomainFromRecord(rec.Stock),
+		ModelIDs:           append([]string(nil), rec.ModelIDs...),
 		CreatedAt:          rec.CreatedAt,
 		UpdatedAt:          rec.UpdatedAt,
 	}
-
-	if out.CreatedAt.IsZero() {
-		out.CreatedAt = out.UpdatedAt
+	if err := out.Validate(); err != nil {
+		return invdom.Mint{}, err
 	}
-	return out
+	return out, nil
 }
 
 // ResolveBlueprintIDsByInventoryID implements invdom.RepositoryPort.
@@ -108,11 +100,13 @@ func (r *InventoryRepositoryFS) ResolveBlueprintIDsByInventoryID(
 // Read
 // ============================================================
 
-func (r *InventoryRepositoryFS) GetByID(ctx context.Context, id string) (invdom.Mint, error) {
+func (r *InventoryRepositoryFS) GetByID(
+	ctx context.Context,
+	id string,
+) (invdom.Mint, error) {
 	if id == "" {
 		return invdom.Mint{}, invdom.ErrInvalidMintID
 	}
-
 	snap, err := r.col().Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -120,31 +114,31 @@ func (r *InventoryRepositoryFS) GetByID(ctx context.Context, id string) (invdom.
 		}
 		return invdom.Mint{}, err
 	}
-
 	var rec inventoryRecord
 	if err := snap.DataTo(&rec); err != nil {
 		return invdom.Mint{}, err
 	}
-
-	return fromRecord(snap.Ref.ID, rec), nil
+	return fromRecord(snap.Ref.ID, rec)
 }
 
 // ============================================================
 // Queries
 // ============================================================
 
-func (r *InventoryRepositoryFS) ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]invdom.Mint, error) {
+func (r *InventoryRepositoryFS) ListByProductBlueprintID(
+	ctx context.Context,
+	productBlueprintID string,
+) ([]invdom.Mint, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("inventory repo is nil")
 	}
-
 	if productBlueprintID == "" {
 		return nil, invdom.ErrInvalidProductBlueprintID
 	}
-
-	iter := r.col().Where("productBlueprintId", "==", productBlueprintID).Documents(ctx)
+	iter := r.col().
+		Where("productBlueprintId", "==", productBlueprintID).
+		Documents(ctx)
 	defer iter.Stop()
-
 	return readAllInventoryDocs(iter)
 }
 
@@ -172,12 +166,10 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 	if r == nil || r.Client == nil {
 		return 0, errors.New("inventory repo is nil")
 	}
-
 	invID := inventoryID
 	mID := modelID
 	pid := productID
 	oid := orderID
-
 	if invID == "" {
 		return 0, invdom.ErrInvalidMintID
 	}
@@ -194,85 +186,74 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 		now = time.Now().UTC()
 	}
 	now = now.UTC()
-
 	docRef := r.col().Doc(invID)
 
-	err = r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		snap, err := tx.Get(docRef)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				return invdom.ErrNotFound
-			}
-			return err
-		}
-
-		var rec inventoryRecord
-		if err := snap.DataTo(&rec); err != nil {
-			return err
-		}
-
-		stock := rec.Stock
-		if stock == nil {
-			return nil
-		}
-
-		ms, ok := stock[mID]
-		if !ok {
-			return nil
-		}
-
-		removed := 0
-		if len(ms.Products) > 0 {
-			newProducts := make([]string, 0, len(ms.Products))
-			for _, x := range ms.Products {
-				if x == "" {
-					continue
+	err = r.Client.RunTransaction(
+		ctx,
+		func(ctx context.Context, tx *firestore.Transaction) error {
+			snap, err := tx.Get(docRef)
+			if err != nil {
+				if status.Code(err) == codes.NotFound {
+					return invdom.ErrNotFound
 				}
-				if x == pid {
-					removed++
-					continue
-				}
-				newProducts = append(newProducts, x)
+				return err
 			}
-			ms.Products = newProducts
-		}
-
-		if removed == 0 {
-			return nil
-		}
-
-		if ms.ReservedByOrder == nil {
-			ms.ReservedByOrder = map[string]int{}
-		}
-
-		cur := ms.ReservedByOrder[oid]
-		cur -= removed
-		if cur <= 0 {
-			delete(ms.ReservedByOrder, oid)
-		} else {
-			ms.ReservedByOrder[oid] = cur
-		}
-
-		ms = normalizeModelStockRecord(ms)
-		stock[mID] = ms
-
-		stock = normalizeStockRecord(stock)
-		modelIDs := modelIDsFromStockRecord(stock)
-
-		updates := []firestore.Update{
-			{Path: "stock", Value: stock},
-			{Path: "modelIds", Value: modelIDs},
-			{Path: "updatedAt", Value: now},
-		}
-
-		removedCount = removed
-		return tx.Update(docRef, updates)
-	})
-
+			var rec inventoryRecord
+			if err := snap.DataTo(&rec); err != nil {
+				return err
+			}
+			stock := rec.Stock
+			if stock == nil {
+				return nil
+			}
+			ms, ok := stock[mID]
+			if !ok {
+				return nil
+			}
+			removed := 0
+			if len(ms.Products) > 0 {
+				newProducts := make([]string, 0, len(ms.Products))
+				for _, x := range ms.Products {
+					if x == "" {
+						continue
+					}
+					if x == pid {
+						removed++
+						continue
+					}
+					newProducts = append(newProducts, x)
+				}
+				ms.Products = newProducts
+			}
+			if removed == 0 {
+				return nil
+			}
+			if ms.ReservedByOrder == nil {
+				ms.ReservedByOrder = map[string]int{}
+			}
+			cur := ms.ReservedByOrder[oid]
+			cur -= removed
+			if cur <= 0 {
+				delete(ms.ReservedByOrder, oid)
+			} else {
+				ms.ReservedByOrder[oid] = cur
+			}
+			ms = normalizeModelStockRecord(ms)
+			stock[mID] = ms
+			stock = normalizeStockRecord(stock)
+			modelIDs := modelIDsFromStockRecord(stock)
+			updates := []firestore.Update{
+				{Path: "stock", Value: stock},
+				{Path: "modelIds", Value: modelIDs},
+				{Path: "updatedAt", Value: now},
+			}
+			removedCount = removed
+			return tx.Update(docRef, updates)
+		},
+	)
 	if err != nil {
 		return 0, err
 	}
-
 	return removedCount, nil
 }
 
@@ -290,7 +271,6 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 	if r == nil || r.Client == nil {
 		return errors.New("inventory repo is nil")
 	}
-
 	if inventoryID == "" {
 		return invdom.ErrInvalidMintID
 	}
@@ -303,77 +283,71 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 	if qty <= 0 {
 		return errors.New("inventory repo: qty must be > 0")
 	}
-
 	doc := r.col().Doc(inventoryID)
 	now := time.Now().UTC()
 
-	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		snap, err := tx.Get(doc)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				return invdom.ErrNotFound
+	err := r.Client.RunTransaction(
+		ctx,
+		func(ctx context.Context, tx *firestore.Transaction) error {
+			snap, err := tx.Get(doc)
+			if err != nil {
+				if status.Code(err) == codes.NotFound {
+					return invdom.ErrNotFound
+				}
+				return err
 			}
-			return err
-		}
-
-		var rec inventoryRecord
-		if err := snap.DataTo(&rec); err != nil {
-			return err
-		}
-
-		stock := rec.Stock
-		if stock == nil {
-			stock = map[string]modelStockRecord{}
-		}
-
-		ms, ok := stock[modelID]
-		if !ok {
-			return fmt.Errorf("inventory repo: model stock not found modelId=%s", modelID)
-		}
-
-		if ms.ReservedByOrder == nil {
-			ms.ReservedByOrder = map[string]int{}
-		}
-
-		if existing, ok := ms.ReservedByOrder[orderID]; ok && existing == qty {
-			return nil
-		}
-
-		ms.ReservedByOrder[orderID] = qty
-		ms = normalizeModelStockRecord(ms)
-
-		if ms.ReservedCount > ms.Accumulation {
-			return fmt.Errorf(
-				"inventory repo: insufficient stock (modelId=%s accumulation=%d reservedCount=%d orderId=%s qty=%d)",
-				modelID,
-				ms.Accumulation,
-				ms.ReservedCount,
-				orderID,
-				qty,
-			)
-		}
-
-		stock[modelID] = ms
-		stock = normalizeStockRecord(stock)
-
-		modelIDs := normalizeModelIDs(rec.ModelIDs)
-		if !containsString(modelIDs, modelID) {
-			modelIDs = append(modelIDs, modelID)
-			modelIDs = normalizeModelIDs(modelIDs)
-		}
-
-		updates := []firestore.Update{
-			{Path: "stock", Value: stock},
-			{Path: "modelIds", Value: modelIDs},
-			{Path: "updatedAt", Value: now},
-		}
-
-		return tx.Update(doc, updates)
-	})
+			var rec inventoryRecord
+			if err := snap.DataTo(&rec); err != nil {
+				return err
+			}
+			stock := rec.Stock
+			if stock == nil {
+				stock = map[string]modelStockRecord{}
+			}
+			ms, ok := stock[modelID]
+			if !ok {
+				return fmt.Errorf(
+					"inventory repo: model stock not found modelId=%s",
+					modelID,
+				)
+			}
+			if ms.ReservedByOrder == nil {
+				ms.ReservedByOrder = map[string]int{}
+			}
+			if existing, ok := ms.ReservedByOrder[orderID]; ok &&
+				existing == qty {
+				return nil
+			}
+			ms.ReservedByOrder[orderID] = qty
+			ms = normalizeModelStockRecord(ms)
+			if ms.ReservedCount > ms.Accumulation {
+				return fmt.Errorf(
+					"inventory repo: insufficient stock (modelId=%s accumulation=%d reservedCount=%d orderId=%s qty=%d)",
+					modelID,
+					ms.Accumulation,
+					ms.ReservedCount,
+					orderID,
+					qty,
+				)
+			}
+			stock[modelID] = ms
+			stock = normalizeStockRecord(stock)
+			modelIDs := normalizeModelIDs(rec.ModelIDs)
+			if !containsString(modelIDs, modelID) {
+				modelIDs = append(modelIDs, modelID)
+				modelIDs = normalizeModelIDs(modelIDs)
+			}
+			updates := []firestore.Update{
+				{Path: "stock", Value: stock},
+				{Path: "modelIds", Value: modelIDs},
+				{Path: "updatedAt", Value: now},
+			}
+			return tx.Update(doc, updates)
+		},
+	)
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -393,7 +367,6 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 	if r == nil || r.Client == nil {
 		return invdom.Mint{}, errors.New("inventory repo is nil")
 	}
-
 	tbID := tokenBlueprintID
 	pbID := productBlueprintID
 	mID := modelID
@@ -406,88 +379,78 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 	if mID == "" {
 		return invdom.Mint{}, invdom.ErrInvalidModelID
 	}
-
 	ids := normalizeIDs(productIDs)
 	if len(ids) == 0 {
 		return invdom.Mint{}, invdom.ErrInvalidProducts
 	}
-
 	docID := buildInventoryDocIDByProduct(tbID, pbID)
 	doc := r.col().Doc(docID)
 	now := time.Now().UTC()
 
-	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		snap, err := tx.Get(doc)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				ms := modelStockRecord{
-					Products:        ids,
-					ReservedByOrder: map[string]int{},
+	err := r.Client.RunTransaction(
+		ctx,
+		func(ctx context.Context, tx *firestore.Transaction) error {
+			snap, err := tx.Get(doc)
+			if err != nil {
+				if status.Code(err) == codes.NotFound {
+					ms := modelStockRecord{
+						Products:        ids,
+						ReservedByOrder: map[string]int{},
+					}
+					ms = normalizeModelStockRecord(ms)
+					rec := inventoryRecord{
+						TokenBlueprintID:   tbID,
+						ProductBlueprintID: pbID,
+						Stock:              map[string]modelStockRecord{mID: ms},
+						ModelIDs:           []string{mID},
+						CreatedAt:          now,
+						UpdatedAt:          now,
+					}
+					rec.Stock = normalizeStockRecord(rec.Stock)
+					rec.ModelIDs = normalizeModelIDs(rec.ModelIDs)
+					return tx.Set(doc, rec)
 				}
-				ms = normalizeModelStockRecord(ms)
-
-				rec := inventoryRecord{
-					TokenBlueprintID:   tbID,
-					ProductBlueprintID: pbID,
-					Stock:              map[string]modelStockRecord{mID: ms},
-					ModelIDs:           []string{mID},
-					CreatedAt:          now,
-					UpdatedAt:          now,
-				}
-				rec.Stock = normalizeStockRecord(rec.Stock)
-				rec.ModelIDs = normalizeModelIDs(rec.ModelIDs)
-				return tx.Set(doc, rec)
+				return err
 			}
-			return err
-		}
-
-		var rec inventoryRecord
-		if err := snap.DataTo(&rec); err != nil {
-			return err
-		}
-
-		stock := rec.Stock
-		if stock == nil {
-			stock = map[string]modelStockRecord{}
-		}
-
-		ms := stock[mID]
-		if ms.Products == nil {
-			ms.Products = []string{}
-		}
-
-		merged := unionStrings(ms.Products, ids)
-		ms.Products = merged
-
-		ms = normalizeModelStockRecord(ms)
-		stock[mID] = ms
-		stock = normalizeStockRecord(stock)
-
-		modelIDs := normalizeModelIDs(rec.ModelIDs)
-		if !containsString(modelIDs, mID) {
-			modelIDs = append(modelIDs, mID)
-			modelIDs = normalizeModelIDs(modelIDs)
-		}
-
-		updates := []firestore.Update{
-			{Path: "stock", Value: stock},
-			{Path: "modelIds", Value: modelIDs},
-			{Path: "updatedAt", Value: now},
-			{Path: "tokenBlueprintId", Value: tbID},
-			{Path: "productBlueprintId", Value: pbID},
-		}
-
-		return tx.Update(doc, updates)
-	})
+			var rec inventoryRecord
+			if err := snap.DataTo(&rec); err != nil {
+				return err
+			}
+			stock := rec.Stock
+			if stock == nil {
+				stock = map[string]modelStockRecord{}
+			}
+			ms := stock[mID]
+			if ms.Products == nil {
+				ms.Products = []string{}
+			}
+			merged := unionStrings(ms.Products, ids)
+			ms.Products = merged
+			ms = normalizeModelStockRecord(ms)
+			stock[mID] = ms
+			stock = normalizeStockRecord(stock)
+			modelIDs := normalizeModelIDs(rec.ModelIDs)
+			if !containsString(modelIDs, mID) {
+				modelIDs = append(modelIDs, mID)
+				modelIDs = normalizeModelIDs(modelIDs)
+			}
+			updates := []firestore.Update{
+				{Path: "stock", Value: stock},
+				{Path: "modelIds", Value: modelIDs},
+				{Path: "updatedAt", Value: now},
+				{Path: "tokenBlueprintId", Value: tbID},
+				{Path: "productBlueprintId", Value: pbID},
+			}
+			return tx.Update(doc, updates)
+		},
+	)
 	if err != nil {
 		return invdom.Mint{}, err
 	}
-
 	out, err := r.GetByID(ctx, docID)
 	if err != nil {
 		return invdom.Mint{}, err
 	}
-
 	return out, nil
 }
 
@@ -495,9 +458,10 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 // Internal helpers
 // ============================================================
 
-func readAllInventoryDocs(iter *firestore.DocumentIterator) ([]invdom.Mint, error) {
+func readAllInventoryDocs(
+	iter *firestore.DocumentIterator,
+) ([]invdom.Mint, error) {
 	out := make([]invdom.Mint, 0, 16)
-
 	for {
 		snap, err := iter.Next()
 		if err != nil {
@@ -506,14 +470,16 @@ func readAllInventoryDocs(iter *firestore.DocumentIterator) ([]invdom.Mint, erro
 			}
 			return nil, err
 		}
-
 		var rec inventoryRecord
 		if err := snap.DataTo(&rec); err != nil {
 			return nil, err
 		}
-		out = append(out, fromRecord(snap.Ref.ID, rec))
+		item, err := fromRecord(snap.Ref.ID, rec)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, item)
 	}
-
 	return out, nil
 }
 
@@ -557,24 +523,30 @@ func normalizeModelIDs(raw []string) []string {
 	return out
 }
 
-func buildInventoryDocIDByProduct(tokenBlueprintID, productBlueprintID string) string {
+func buildInventoryDocIDByProduct(
+	tokenBlueprintID string,
+	productBlueprintID string,
+) string {
 	sanitize := func(s string) string {
 		s = strings.ReplaceAll(s, "/", "_")
 		return s
 	}
-	return sanitize(productBlueprintID) + "__" + sanitize(tokenBlueprintID)
+	return sanitize(productBlueprintID) +
+		"__" +
+		sanitize(tokenBlueprintID)
 }
 
 // ------------------------------------------------------------
 // record normalizers
 // ------------------------------------------------------------
 
-func normalizeModelStockRecord(ms modelStockRecord) modelStockRecord {
+func normalizeModelStockRecord(
+	ms modelStockRecord,
+) modelStockRecord {
 	ms.Products = normalizeIDs(ms.Products)
 	if len(ms.Products) == 0 {
 		ms.Products = nil
 	}
-
 	ms.Accumulation = len(ms.Products)
 
 	rbo := map[string]int{}
@@ -595,11 +567,12 @@ func normalizeModelStockRecord(ms modelStockRecord) modelStockRecord {
 	}
 	ms.ReservedByOrder = rbo
 	ms.ReservedCount = sum
-
 	return ms
 }
 
-func normalizeStockRecord(raw map[string]modelStockRecord) map[string]modelStockRecord {
+func normalizeStockRecord(
+	raw map[string]modelStockRecord,
+) map[string]modelStockRecord {
 	if raw == nil {
 		return nil
 	}
@@ -609,13 +582,11 @@ func normalizeStockRecord(raw map[string]modelStockRecord) map[string]modelStock
 			continue
 		}
 		nms := normalizeModelStockRecord(ms)
-
 		hasProducts := len(nms.Products) > 0
 		hasReserved := len(nms.ReservedByOrder) > 0
 		if !hasProducts && !hasReserved {
 			continue
 		}
-
 		out[modelID] = nms
 	}
 	if len(out) == 0 {
@@ -624,7 +595,9 @@ func normalizeStockRecord(raw map[string]modelStockRecord) map[string]modelStock
 	return out
 }
 
-func modelIDsFromStockRecord(stock map[string]modelStockRecord) []string {
+func modelIDsFromStockRecord(
+	stock map[string]modelStockRecord,
+) []string {
 	if stock == nil {
 		return nil
 	}
@@ -637,43 +610,36 @@ func modelIDsFromStockRecord(stock map[string]modelStockRecord) []string {
 	return normalizeModelIDs(out)
 }
 
-func stockDomainFromRecord(raw map[string]modelStockRecord) map[string]invdom.ModelStock {
+func stockDomainFromRecord(
+	raw map[string]modelStockRecord,
+) map[string]invdom.ModelStock {
 	if raw == nil {
 		return nil
 	}
-	out := map[string]invdom.ModelStock{}
+	out := make(
+		map[string]invdom.ModelStock,
+		len(raw),
+	)
 	for modelID, msr := range raw {
-		if modelID == "" {
-			continue
+		reservedByOrder := make(
+			map[string]int,
+			len(msr.ReservedByOrder),
+		)
+		for orderID, quantity := range msr.ReservedByOrder {
+			reservedByOrder[orderID] = quantity
 		}
-		msr = normalizeModelStockRecord(msr)
-
-		var ms invdom.ModelStock
-
-		ms.Products = normalizeIDs(msr.Products)
-		ms.Accumulation = msr.Accumulation
-
-		if msr.ReservedByOrder != nil {
-			ms.ReservedByOrder = map[string]int{}
-			for oid, n := range msr.ReservedByOrder {
-				if oid == "" || n <= 0 {
-					continue
-				}
-				ms.ReservedByOrder[oid] = n
-			}
+		if msr.ReservedByOrder == nil {
+			reservedByOrder = nil
 		}
-		ms.ReservedCount = msr.ReservedCount
-
-		hasProducts := len(ms.Products) > 0
-		hasReserved := len(ms.ReservedByOrder) > 0
-		if !hasProducts && !hasReserved {
-			continue
+		out[modelID] = invdom.ModelStock{
+			Products: append(
+				[]string(nil),
+				msr.Products...,
+			),
+			Accumulation:    msr.Accumulation,
+			ReservedByOrder: reservedByOrder,
+			ReservedCount:   msr.ReservedCount,
 		}
-
-		out[modelID] = ms
-	}
-	if len(out) == 0 {
-		return nil
 	}
 	return out
 }

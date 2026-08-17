@@ -198,26 +198,11 @@ func (r *TransferRepositoryFS) GetByOperationID(
 		return r.GetByProductIDAndAttempt(ctx, productID, int(rawAttempt))
 	}
 
-	if status.Code(err) != codes.NotFound {
-		return nil, err
+	if status.Code(err) == codes.NotFound {
+		return nil, transferdom.ErrNotFound
 	}
 
-	// Mapping導入前でもoperationIdを持つTransferは再利用する。
-	iter := r.transfersCol().
-		Where("operationId", "==", operationID).
-		Limit(1).
-		Documents(ctx)
-	defer iter.Stop()
-
-	snap, err := iter.Next()
-	if err != nil {
-		if errors.Is(err, iterator.Done) {
-			return nil, transferdom.ErrNotFound
-		}
-		return nil, err
-	}
-
-	return transferFromSnapshot(snap)
+	return nil, err
 }
 
 func (r *TransferRepositoryFS) ListByProductID(
@@ -334,7 +319,7 @@ func (r *TransferRepositoryFS) CreateAttempt(
 		return nil, err
 	}
 
-	// Mapping導入前を含め、すでに同一operationIdが存在する場合は再利用する。
+	// すでに同一operationIdのmappingが存在する場合は再利用する。
 	existing, err := r.GetByOperationID(ctx, in.OperationID)
 	if err == nil {
 		if existing.ProductID != in.ProductID {
@@ -709,13 +694,6 @@ func transferFromSnapshot(
 			return nil, ErrInvalidTransferData
 		}
 		t.FromBrandID = fromBrandID
-	}
-
-	// 既存share transferはOrderIDから移譲元avatarを復元できる。
-	if t.FromAvatarID == "" {
-		if share, ok := parseShareTransferRef(t.OrderID); ok {
-			t.FromAvatarID = share.FromAvatarID
-		}
 	}
 
 	if value, exists := raw["txSignature"]; exists && value != nil {

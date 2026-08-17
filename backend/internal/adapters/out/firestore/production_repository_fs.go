@@ -4,8 +4,8 @@ package firestore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -57,6 +57,7 @@ func (r *ProductionRepositoryFS) GetByID(ctx context.Context, id string) (*prodd
 	if err != nil {
 		return nil, err
 	}
+
 	return &p, nil
 }
 
@@ -64,10 +65,7 @@ func (r *ProductionRepositoryFS) GetByID(ctx context.Context, id string) (*prodd
 // - ID は CreateProductionInput には含まれないため、常に Firestore の auto ID を採番
 // - Printed が nil の場合は false 扱い
 // - CreatedAt/UpdatedAt は省略時 now(UTC)
-func (r *ProductionRepositoryFS) Create(
-	ctx context.Context,
-	in proddom.CreateProductionInput,
-) (*proddom.Production, error) {
+func (r *ProductionRepositoryFS) Create(ctx context.Context, in proddom.CreateProductionInput) (*proddom.Production, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -99,23 +97,23 @@ func (r *ProductionRepositoryFS) Create(
 		ProductBlueprintID: in.ProductBlueprintID,
 		AssigneeID:         in.AssigneeID,
 		Models:             in.Models,
-
-		Printed:   printed,
-		PrintedAt: printedAt,
-		PrintedBy: nil,
-
-		CreatedBy: in.CreatedBy,
-		CreatedAt: createdAt,
-		UpdatedAt: createdAt,
-		UpdatedBy: nil,
+		Printed:            printed,
+		PrintedAt:          printedAt,
+		PrintedBy:          nil,
+		CreatedBy:          in.CreatedBy,
+		CreatedAt:          createdAt,
+		UpdatedAt:          createdAt,
+		UpdatedBy:          nil,
 	}
 
 	ref := r.col().NewDoc()
 	p.ID = ref.ID
 
-	data := productionToDoc(p)
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
 
-	if _, err := ref.Create(ctx, data); err != nil {
+	if _, err := ref.Create(ctx, productionToDoc(p)); err != nil {
 		if status.Code(err) == codes.AlreadyExists {
 			return nil, proddom.ErrConflict
 		}
@@ -126,10 +124,12 @@ func (r *ProductionRepositoryFS) Create(
 	if err != nil {
 		return nil, err
 	}
+
 	out, err := docToProduction(snap)
 	if err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
@@ -166,6 +166,10 @@ func (r *ProductionRepositoryFS) Update(ctx context.Context, p proddom.Productio
 		p.PrintedBy = nil
 	}
 
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+
 	ref := r.col().Doc(p.ID)
 
 	_, err := ref.Get(ctx)
@@ -176,9 +180,7 @@ func (r *ProductionRepositoryFS) Update(ctx context.Context, p proddom.Productio
 		return nil, err
 	}
 
-	data := productionToDoc(p)
-
-	if _, err := ref.Set(ctx, data, firestore.MergeAll); err != nil {
+	if _, err := ref.Set(ctx, productionToDoc(p), firestore.MergeAll); err != nil {
 		return nil, err
 	}
 
@@ -194,6 +196,7 @@ func (r *ProductionRepositoryFS) Update(ctx context.Context, p proddom.Productio
 	if err != nil {
 		return nil, err
 	}
+
 	return &out, nil
 }
 
@@ -207,6 +210,7 @@ func (r *ProductionRepositoryFS) Delete(ctx context.Context, id string) error {
 	}
 
 	ref := r.col().Doc(id)
+
 	_, err := ref.Get(ctx)
 	if status.Code(err) == codes.NotFound {
 		return proddom.ErrNotFound
@@ -218,56 +222,51 @@ func (r *ProductionRepositoryFS) Delete(ctx context.Context, id string) error {
 	if _, err := ref.Delete(ctx); err != nil {
 		return err
 	}
+
 	return nil
 }
 
-// ListByProductBlueprintID は、指定された productBlueprintId のいずれかを持つ
-// Production をすべて取得します。
-// Firestore の "in" オペレータ制限（最大10要素）に対応するため、IDs をチャンクに分けて問い合わせます。
-func (r *ProductionRepositoryFS) ListByProductBlueprintID(
-	ctx context.Context,
-	productBlueprintIDs []string,
-) ([]proddom.Production, error) {
+// ListByProductBlueprintID は、指定された productBlueprintId のいずれかを持つ Production をすべて取得します。
+// Firestore の "in" オペレータ制限に対応するため、IDs をチャンクに分けて問い合わせます。
+// ID は Firestore の値として完全一致で扱い、大文字小文字の正規化は行いません。
+func (r *ProductionRepositoryFS) ListByProductBlueprintID(ctx context.Context, productBlueprintIDs []string) ([]proddom.Production, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-
 	if len(productBlueprintIDs) == 0 {
 		return []proddom.Production{}, nil
 	}
 
 	seen := make(map[string]struct{}, len(productBlueprintIDs))
 	ids := make([]string, 0, len(productBlueprintIDs))
+
 	for _, id := range productBlueprintIDs {
-		t := id
-		if t == "" {
+		if id == "" {
 			continue
 		}
-		k := strings.ToLower(t)
-		if _, ok := seen[k]; ok {
+		if _, exists := seen[id]; exists {
 			continue
 		}
-		seen[k] = struct{}{}
-		ids = append(ids, t)
+
+		seen[id] = struct{}{}
+		ids = append(ids, id)
 	}
+
 	if len(ids) == 0 {
 		return []proddom.Production{}, nil
 	}
 
 	const maxIn = 10
-	var results []proddom.Production
+	results := make([]proddom.Production, 0)
 
 	for start := 0; start < len(ids); start += maxIn {
 		end := start + maxIn
 		if end > len(ids) {
 			end = len(ids)
 		}
+
 		chunk := ids[start:end]
-
-		q := r.col().
-			Where("productBlueprintId", "in", chunk)
-
-		it := q.Documents(ctx)
+		it := r.col().Where("productBlueprintId", "in", chunk).Documents(ctx)
 
 		for {
 			doc, err := it.Next()
@@ -278,11 +277,13 @@ func (r *ProductionRepositoryFS) ListByProductBlueprintID(
 				it.Stop()
 				return nil, err
 			}
+
 			p, err := docToProduction(doc)
 			if err != nil {
 				it.Stop()
 				return nil, err
 			}
+
 			results = append(results, p)
 		}
 
@@ -293,76 +294,45 @@ func (r *ProductionRepositoryFS) ListByProductBlueprintID(
 }
 
 // GetTotalQuantityByModelID は、productBlueprintIDs 配下の Production.Models を集計し、modelId ごとの totalQuantity を返す。
-// adapter と同等の sanitize/dedup + stable order を ProductionRepositoryFS 側に取り込み、adapter 廃止を可能にする。
-func (r *ProductionRepositoryFS) GetTotalQuantityByModelID(
-	ctx context.Context,
-	productBlueprintIDs []string,
-) ([]proddom.ModelTotalQuantity, error) {
+// modelId は完全一致で扱い、大文字小文字の正規化・不正値の読み飛ばしは行いません。
+func (r *ProductionRepositoryFS) GetTotalQuantityByModelID(ctx context.Context, productBlueprintIDs []string) ([]proddom.ModelTotalQuantity, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
 
-	ids := make([]string, 0, len(productBlueprintIDs))
-	seen := make(map[string]struct{}, len(productBlueprintIDs))
-	for _, id := range productBlueprintIDs {
-		t := id
-		if t == "" {
-			continue
-		}
-		k := strings.ToLower(t)
-		if _, ok := seen[k]; ok {
-			continue
-		}
-		seen[k] = struct{}{}
-		ids = append(ids, t)
-	}
-	if len(ids) == 0 {
-		return []proddom.ModelTotalQuantity{}, nil
-	}
-
-	prods, err := r.ListByProductBlueprintID(ctx, ids)
+	prods, err := r.ListByProductBlueprintID(ctx, productBlueprintIDs)
 	if err != nil {
 		return nil, err
 	}
+	if len(prods) == 0 {
+		return []proddom.ModelTotalQuantity{}, nil
+	}
 
-	totalByKey := make(map[string]int, 64)
-	origByKey := make(map[string]string, 64)
+	totalByModelID := make(map[string]int, 64)
 
 	for _, p := range prods {
 		for _, mq := range p.Models {
-			mid := mq.ModelID
-			if mid == "" || mq.Quantity <= 0 {
-				continue
-			}
-			key := strings.ToLower(mid)
-			if _, ok := origByKey[key]; !ok {
-				origByKey[key] = mid
-			}
-			totalByKey[key] += mq.Quantity
+			totalByModelID[mq.ModelID] += mq.Quantity
 		}
 	}
 
-	out := make([]proddom.ModelTotalQuantity, 0, len(totalByKey))
-	for k, total := range totalByKey {
+	out := make([]proddom.ModelTotalQuantity, 0, len(totalByModelID))
+	for modelID, total := range totalByModelID {
 		out = append(out, proddom.ModelTotalQuantity{
-			ModelID:       origByKey[k],
+			ModelID:       modelID,
 			TotalQuantity: total,
 		})
-		_ = k
 	}
 
 	sort.Slice(out, func(i, j int) bool {
-		return strings.ToLower(out[i].ModelID) < strings.ToLower(out[j].ModelID)
+		return out[i].ModelID < out[j].ModelID
 	})
 
 	return out, nil
 }
 
 // GetProductBlueprintIDByProductionID は productionId → productBlueprintId を返します。
-func (r *ProductionRepositoryFS) GetProductBlueprintIDByProductionID(
-	ctx context.Context,
-	productionID string,
-) (string, error) {
+func (r *ProductionRepositoryFS) GetProductBlueprintIDByProductionID(ctx context.Context, productionID string) (string, error) {
 	p, err := r.GetByID(ctx, productionID)
 	if err != nil {
 		return "", err
@@ -370,6 +340,7 @@ func (r *ProductionRepositoryFS) GetProductBlueprintIDByProductionID(
 	if p == nil {
 		return "", proddom.ErrNotFound
 	}
+
 	return p.ProductBlueprintID, nil
 }
 
@@ -378,51 +349,29 @@ func (r *ProductionRepositoryFS) GetProductBlueprintIDByProductionID(
 // ============================================================
 
 func docToProduction(doc *firestore.DocumentSnapshot) (proddom.Production, error) {
+	if doc == nil || doc.Ref == nil {
+		return proddom.Production{}, errors.New("production document snapshot is nil")
+	}
+
 	var raw struct {
 		ProductBlueprintID string                  `firestore:"productBlueprintId"`
 		AssigneeID         string                  `firestore:"assigneeId"`
 		Models             []proddom.ModelQuantity `firestore:"models"`
-
-		Printed   *bool      `firestore:"printed"`
-		PrintedAt *time.Time `firestore:"printedAt"`
-		PrintedBy *string    `firestore:"printedBy"`
-
-		CreatedBy *string    `firestore:"createdBy"`
-		CreatedAt time.Time  `firestore:"createdAt"`
-		UpdatedBy *string    `firestore:"updatedBy"`
-		UpdatedAt *time.Time `firestore:"updatedAt"`
+		Printed            *bool                   `firestore:"printed"`
+		PrintedAt          *time.Time              `firestore:"printedAt"`
+		PrintedBy          *string                 `firestore:"printedBy"`
+		CreatedBy          *string                 `firestore:"createdBy"`
+		CreatedAt          time.Time               `firestore:"createdAt"`
+		UpdatedBy          *string                 `firestore:"updatedBy"`
+		UpdatedAt          *time.Time              `firestore:"updatedAt"`
 	}
 
 	if err := doc.DataTo(&raw); err != nil {
-		return proddom.Production{}, err
+		return proddom.Production{}, fmt.Errorf("decode production document %q: %w", doc.Ref.ID, err)
 	}
 
-	createdAt := raw.CreatedAt.UTC()
-
-	printed := false
-	if raw.Printed != nil {
-		printed = *raw.Printed
-	}
-
-	printedAt := raw.PrintedAt
-	if printedAt != nil && printedAt.IsZero() {
-		printedAt = nil
-	}
-	if printedAt != nil {
-		t := printedAt.UTC()
-		printedAt = &t
-	}
-
-	printedBy := raw.PrintedBy
-
-	if printed {
-		if printedAt == nil {
-			t := createdAt
-			printedAt = &t
-		}
-	} else {
-		printedAt = nil
-		printedBy = nil
+	if raw.Printed == nil {
+		return proddom.Production{}, fmt.Errorf("invalid production document %q: printed is missing", doc.Ref.ID)
 	}
 
 	out := proddom.Production{
@@ -430,20 +379,20 @@ func docToProduction(doc *firestore.DocumentSnapshot) (proddom.Production, error
 		ProductBlueprintID: raw.ProductBlueprintID,
 		AssigneeID:         raw.AssigneeID,
 		Models:             raw.Models,
-
-		Printed:   printed,
-		PrintedAt: printedAt,
-		PrintedBy: printedBy,
-
-		CreatedBy: raw.CreatedBy,
-		CreatedAt: createdAt,
-		UpdatedBy: raw.UpdatedBy,
+		Printed:            *raw.Printed,
+		PrintedAt:          raw.PrintedAt,
+		PrintedBy:          raw.PrintedBy,
+		CreatedBy:          raw.CreatedBy,
+		CreatedAt:          raw.CreatedAt,
+		UpdatedBy:          raw.UpdatedBy,
 	}
 
-	if raw.UpdatedAt != nil && !raw.UpdatedAt.IsZero() {
-		out.UpdatedAt = raw.UpdatedAt.UTC()
-	} else {
-		out.UpdatedAt = out.CreatedAt
+	if raw.UpdatedAt != nil {
+		out.UpdatedAt = *raw.UpdatedAt
+	}
+
+	if err := out.Validate(); err != nil {
+		return proddom.Production{}, fmt.Errorf("invalid production document %q: %w", doc.Ref.ID, err)
 	}
 
 	return out, nil
@@ -454,10 +403,9 @@ func productionToDoc(p proddom.Production) map[string]any {
 		"productBlueprintId": p.ProductBlueprintID,
 		"assigneeId":         p.AssigneeID,
 		"models":             p.Models,
-
-		"printed":   p.Printed,
-		"createdAt": p.CreatedAt.UTC(),
-		"updatedAt": p.UpdatedAt.UTC(),
+		"printed":            p.Printed,
+		"createdAt":          p.CreatedAt.UTC(),
+		"updatedAt":          p.UpdatedAt.UTC(),
 	}
 
 	if p.CreatedBy != nil {

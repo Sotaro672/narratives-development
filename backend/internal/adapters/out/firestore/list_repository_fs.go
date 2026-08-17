@@ -38,9 +38,7 @@ func (r *ListRepositoryFS) col() *gfs.CollectionRef {
 	return r.Client.Collection("lists")
 }
 
-const (
-	listPricesSub = "prices"
-)
+const listPricesSub = "prices"
 
 var _ ldom.Repository = (*ListRepositoryFS)(nil)
 
@@ -49,10 +47,9 @@ var _ ldom.Repository = (*ListRepositoryFS)(nil)
 // ============================================================
 
 func (r *ListRepositoryFS) GetByID(ctx context.Context, id string) (ldom.List, error) {
-	if r.Client == nil {
+	if r == nil || r.Client == nil {
 		return ldom.List{}, errors.New("firestore client is nil")
 	}
-
 	if id == "" {
 		return ldom.List{}, ldom.ErrNotFound
 	}
@@ -75,15 +72,17 @@ func (r *ListRepositoryFS) GetByID(ctx context.Context, id string) (ldom.List, e
 		return ldom.List{}, err
 	}
 	l.Prices = prices
+	if err := l.ValidateForPersist(); err != nil {
+		return ldom.List{}, err
+	}
 
 	return l, nil
 }
 
 func (r *ListRepositoryFS) GetReadableIDByID(ctx context.Context, id string) (string, error) {
-	if r.Client == nil {
+	if r == nil || r.Client == nil {
 		return "", errors.New("firestore client is nil")
 	}
-
 	if id == "" {
 		return "", ldom.ErrNotFound
 	}
@@ -96,36 +95,25 @@ func (r *ListRepositoryFS) GetReadableIDByID(ctx context.Context, id string) (st
 		return "", err
 	}
 
-	if data := snap.Data(); data != nil {
-		if v, ok := data["readable_id"].(string); ok {
-			return v, nil
-		}
-	}
-
 	l, err := decodeListDoc(snap)
 	if err != nil {
 		return "", err
 	}
-
 	return l.ReadableID, nil
 }
 
 func (r *ListRepositoryFS) ListByInventoryID(ctx context.Context, inventoryID string) ([]ldom.List, error) {
-	if r.Client == nil {
+	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-
 	if inventoryID == "" {
 		return []ldom.List{}, nil
 	}
 
-	it := r.col().
-		Where("inventory_id", "==", inventoryID).
-		Documents(ctx)
+	it := r.col().Where("inventory_id", "==", inventoryID).Documents(ctx)
 	defer it.Stop()
 
 	items := make([]ldom.List, 0, 8)
-
 	for {
 		doc, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -135,7 +123,7 @@ func (r *ListRepositoryFS) ListByInventoryID(ctx context.Context, inventoryID st
 			return nil, err
 		}
 		if doc == nil || doc.Ref == nil || doc.Ref.ID == "" {
-			continue
+			return nil, ldom.ErrInvalidID
 		}
 
 		l, err := decodeListDoc(doc)
@@ -148,40 +136,23 @@ func (r *ListRepositoryFS) ListByInventoryID(ctx context.Context, inventoryID st
 			return nil, err
 		}
 		l.Prices = prices
+		if err := l.ValidateForPersist(); err != nil {
+			return nil, err
+		}
 
 		items = append(items, l)
 	}
 
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].ID < items[j].ID
-	})
-
+	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	return items, nil
 }
 
-func (r *ListRepositoryFS) List(
-	ctx context.Context,
-	_ ldom.Filter,
-	_ ldom.Sort,
-	page ldom.Page,
-) (ldom.PageResult[ldom.List], error) {
-	if r.Client == nil {
+func (r *ListRepositoryFS) List(ctx context.Context, _ ldom.Filter, _ ldom.Sort, page ldom.Page) (ldom.PageResult[ldom.List], error) {
+	if r == nil || r.Client == nil {
 		return ldom.PageResult[ldom.List]{}, errors.New("firestore client is nil")
 	}
 
-	pageNum, perPage, _ := fscommon.NormalizePage(page.Number, page.PerPage, 50, 0)
-	if perPage <= 0 {
-		perPage = 50
-	}
-	if pageNum <= 0 {
-		pageNum = 1
-	}
-
-	offset := (pageNum - 1) * perPage
-	if offset < 0 {
-		offset = 0
-	}
-
+	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 0)
 	q := r.col().Query.
 		OrderBy("updated_at", gfs.Desc).
 		OrderBy("created_at", gfs.Desc).
@@ -193,7 +164,6 @@ func (r *ListRepositoryFS) List(
 	defer it.Stop()
 
 	items := make([]ldom.List, 0, perPage)
-
 	for {
 		doc, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -207,7 +177,6 @@ func (r *ListRepositoryFS) List(
 		if err != nil {
 			return ldom.PageResult[ldom.List]{}, err
 		}
-
 		items = append(items, l)
 	}
 
@@ -216,26 +185,17 @@ func (r *ListRepositoryFS) List(
 		if err != nil {
 			return ldom.PageResult[ldom.List]{}, err
 		}
-
 		items[i].Prices = prices
+		if err := items[i].ValidateForPersist(); err != nil {
+			return ldom.PageResult[ldom.List]{}, err
+		}
 	}
 
-	return ldom.PageResult[ldom.List]{
-		Items:      items,
-		TotalCount: 0,
-		TotalPages: 0,
-		Page:       pageNum,
-		PerPage:    perPage,
-	}, nil
+	return ldom.PageResult[ldom.List]{Items: items, TotalCount: 0, TotalPages: 0, Page: pageNum, PerPage: perPage}, nil
 }
 
-func (r *ListRepositoryFS) ListByCursor(
-	ctx context.Context,
-	_ ldom.Filter,
-	_ ldom.Sort,
-	cpage ldom.CursorPage,
-) (ldom.CursorPageResult[ldom.List], error) {
-	if r.Client == nil {
+func (r *ListRepositoryFS) ListByCursor(ctx context.Context, _ ldom.Filter, _ ldom.Sort, cpage ldom.CursorPage) (ldom.CursorPageResult[ldom.List], error) {
+	if r == nil || r.Client == nil {
 		return ldom.CursorPageResult[ldom.List]{}, errors.New("firestore client is nil")
 	}
 
@@ -245,18 +205,14 @@ func (r *ListRepositoryFS) ListByCursor(
 	}
 
 	q := r.col().OrderBy(gfs.DocumentID, gfs.Asc)
+	if cpage.After != "" {
+		q = q.StartAfter(cpage.After)
+	}
 
-	it := q.Documents(ctx)
+	it := q.Limit(limit + 1).Documents(ctx)
 	defer it.Stop()
 
-	after := cpage.After
-	skipping := after != ""
-
-	var (
-		items []ldom.List
-		last  string
-	)
-
+	items := make([]ldom.List, 0, limit+1)
 	for {
 		doc, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -270,20 +226,14 @@ func (r *ListRepositoryFS) ListByCursor(
 		if err != nil {
 			return ldom.CursorPageResult[ldom.List]{}, err
 		}
-
-		if skipping {
-			if l.ID <= after {
-				continue
-			}
-			skipping = false
-		}
-
 		items = append(items, l)
-		last = l.ID
+	}
 
-		if len(items) >= limit+1 {
-			break
-		}
+	var next *string
+	if len(items) > limit {
+		cursor := items[limit-1].ID
+		items = items[:limit]
+		next = &cursor
 	}
 
 	for i := range items {
@@ -291,21 +241,13 @@ func (r *ListRepositoryFS) ListByCursor(
 		if err != nil {
 			return ldom.CursorPageResult[ldom.List]{}, err
 		}
-
 		items[i].Prices = prices
+		if err := items[i].ValidateForPersist(); err != nil {
+			return ldom.CursorPageResult[ldom.List]{}, err
+		}
 	}
 
-	var next *string
-	if len(items) > limit {
-		items = items[:limit]
-		next = &last
-	}
-
-	return ldom.CursorPageResult[ldom.List]{
-		Items:      items,
-		NextCursor: next,
-		Limit:      limit,
-	}, nil
+	return ldom.CursorPageResult[ldom.List]{Items: items, NextCursor: next, Limit: limit}, nil
 }
 
 // ============================================================
@@ -313,18 +255,18 @@ func (r *ListRepositoryFS) ListByCursor(
 // ============================================================
 
 func (r *ListRepositoryFS) Create(ctx context.Context, l ldom.List) (ldom.List, error) {
-	if r.Client == nil {
+	if r == nil || r.Client == nil {
 		return ldom.List{}, errors.New("firestore client is nil")
 	}
 
 	id := l.ID
-
 	now := time.Now().UTC()
 	if l.CreatedAt.IsZero() {
 		l.CreatedAt = now
 	}
 	if l.UpdatedAt == nil {
-		l.UpdatedAt = &now
+		t := now
+		l.UpdatedAt = &t
 	}
 
 	var ref *gfs.DocumentRef
@@ -337,15 +279,20 @@ func (r *ListRepositoryFS) Create(ctx context.Context, l ldom.List) (ldom.List, 
 		l.ID = id
 	}
 
+	if err := l.ValidateForPersist(); err != nil {
+		return ldom.List{}, err
+	}
+	if err := validateUniqueListPriceModelIDs(l.Prices); err != nil {
+		return ldom.List{}, err
+	}
+
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
-		if ref.ID != "" && l.ID != "" && l.ID == ref.ID {
-			_, err := tx.Get(ref)
-			if err == nil {
-				return ldom.ErrConflict
-			}
-			if status.Code(err) != codes.NotFound {
-				return err
-			}
+		_, err := tx.Get(ref)
+		if err == nil {
+			return ldom.ErrConflict
+		}
+		if status.Code(err) != codes.NotFound {
+			return err
 		}
 
 		if err := tx.Create(ref, encodeListDoc(l)); err != nil {
@@ -367,21 +314,21 @@ func (r *ListRepositoryFS) Create(ctx context.Context, l ldom.List) (ldom.List, 
 	return r.GetByID(ctx, id)
 }
 
-func (r *ListRepositoryFS) Update(
-	ctx context.Context,
-	id string,
-	l ldom.List,
-) (ldom.List, error) {
-	if r.Client == nil {
+func (r *ListRepositoryFS) Update(ctx context.Context, id string, l ldom.List) (ldom.List, error) {
+	if r == nil || r.Client == nil {
 		return ldom.List{}, errors.New("firestore client is nil")
 	}
-
 	if id == "" {
 		return ldom.List{}, ldom.ErrNotFound
 	}
+	if l.ID != "" && l.ID != id {
+		return ldom.List{}, ldom.ErrInvalidID
+	}
+	if err := validateUniqueListPriceModelIDs(l.Prices); err != nil {
+		return ldom.List{}, err
+	}
 
 	ref := r.col().Doc(id)
-
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
 		doc, err := tx.Get(ref)
 		if err != nil {
@@ -396,29 +343,16 @@ func (r *ListRepositoryFS) Update(
 			return err
 		}
 
-		cur.ID = id
 		cur.Status = l.Status
 		cur.AssigneeID = l.AssigneeID
 		cur.Title = l.Title
 		cur.ImageID = l.ImageID
 		cur.ReadableID = l.ReadableID
 		cur.Description = l.Description
-
-		if l.InventoryID != "" {
-			cur.InventoryID = l.InventoryID
-		}
-
-		if cur.CreatedBy == "" && l.CreatedBy != "" {
-			cur.CreatedBy = l.CreatedBy
-		}
-
-		if cur.CreatedAt.IsZero() && !l.CreatedAt.IsZero() {
-			cur.CreatedAt = l.CreatedAt.UTC()
-		}
+		cur.Prices = l.Prices
 
 		clearUpdatedBy := false
 		clearUpdatedAt := false
-
 		if l.UpdatedBy != nil {
 			v := *l.UpdatedBy
 			if v == "" {
@@ -442,8 +376,11 @@ func (r *ListRepositoryFS) Update(
 			cur.UpdatedAt = &t
 		}
 
-		data := encodeListDoc(cur)
+		if err := cur.ValidateForPersist(); err != nil {
+			return err
+		}
 
+		data := encodeListDoc(cur)
 		if clearUpdatedBy {
 			data["updated_by"] = gfs.Delete
 		}
@@ -454,7 +391,6 @@ func (r *ListRepositoryFS) Update(
 		if err := tx.Set(ref, data, gfs.MergeAll); err != nil {
 			return err
 		}
-
 		return r.txReplaceListPrices(ctx, tx, ref, l.Prices)
 	})
 	if err != nil {
@@ -468,16 +404,14 @@ func (r *ListRepositoryFS) Update(
 }
 
 func (r *ListRepositoryFS) Delete(ctx context.Context, id string) error {
-	if r.Client == nil {
+	if r == nil || r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-
 	if id == "" {
 		return ldom.ErrNotFound
 	}
 
 	ref := r.col().Doc(id)
-
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
 		_, err := tx.Get(ref)
 		if err != nil {
@@ -489,7 +423,6 @@ func (r *ListRepositoryFS) Delete(ctx context.Context, id string) error {
 
 		it := ref.Collection(listPricesSub).Documents(ctx)
 		defer it.Stop()
-
 		for {
 			doc, err := it.Next()
 			if errors.Is(err, iterator.Done) {
@@ -498,6 +431,9 @@ func (r *ListRepositoryFS) Delete(ctx context.Context, id string) error {
 			if err != nil {
 				return err
 			}
+			if doc == nil || doc.Ref == nil {
+				return ldom.ErrInvalidPrices
+			}
 			if err := tx.Delete(doc.Ref); err != nil {
 				return err
 			}
@@ -505,7 +441,6 @@ func (r *ListRepositoryFS) Delete(ctx context.Context, id string) error {
 
 		itImages := ref.Collection("images").Documents(ctx)
 		defer itImages.Stop()
-
 		for {
 			doc, err := itImages.Next()
 			if errors.Is(err, iterator.Done) {
@@ -513,6 +448,9 @@ func (r *ListRepositoryFS) Delete(ctx context.Context, id string) error {
 			}
 			if err != nil {
 				return err
+			}
+			if doc == nil || doc.Ref == nil {
+				return ldom.ErrInvalidID
 			}
 			if err := tx.Delete(doc.Ref); err != nil {
 				return err
@@ -536,86 +474,66 @@ func (r *ListRepositoryFS) Delete(ctx context.Context, id string) error {
 // ============================================================
 
 func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
+	if doc == nil || doc.Ref == nil || doc.Ref.ID == "" {
+		return ldom.List{}, ldom.ErrInvalidID
+	}
+
 	var raw struct {
 		Status      string     `firestore:"status"`
 		AssigneeID  string     `firestore:"assignee_id"`
 		Title       string     `firestore:"title"`
 		ImageID     string     `firestore:"image_id"`
 		ReadableID  string     `firestore:"readable_id"`
-		Description *string    `firestore:"description"`
+		Description string     `firestore:"description"`
 		CreatedBy   string     `firestore:"created_by"`
 		CreatedAt   time.Time  `firestore:"created_at"`
 		UpdatedBy   *string    `firestore:"updated_by"`
 		UpdatedAt   *time.Time `firestore:"updated_at"`
-
-		InventoryID string `firestore:"inventory_id"`
+		InventoryID string     `firestore:"inventory_id"`
 	}
-
 	if err := doc.DataTo(&raw); err != nil {
 		return ldom.List{}, err
 	}
 
-	id := doc.Ref.ID
-
-	desc := ""
-	if raw.Description != nil {
-		desc = *raw.Description
-	}
-
-	updatedBy := raw.UpdatedBy
-
-	var updatedAt *time.Time
-	if raw.UpdatedAt != nil && !raw.UpdatedAt.IsZero() {
-		t := raw.UpdatedAt.UTC()
-		updatedAt = &t
-	}
-
-	return ldom.List{
-		ID:          id,
+	l := ldom.List{
+		ID:          doc.Ref.ID,
 		Status:      ldom.ListStatus(raw.Status),
 		AssigneeID:  raw.AssigneeID,
 		Title:       raw.Title,
 		ImageID:     raw.ImageID,
 		InventoryID: raw.InventoryID,
 		ReadableID:  raw.ReadableID,
-
-		Description: desc,
+		Description: raw.Description,
 		Prices:      nil,
-
-		CreatedBy: raw.CreatedBy,
-		CreatedAt: raw.CreatedAt.UTC(),
-		UpdatedBy: updatedBy,
-		UpdatedAt: updatedAt,
-	}, nil
+		CreatedBy:   raw.CreatedBy,
+		CreatedAt:   raw.CreatedAt,
+		UpdatedBy:   raw.UpdatedBy,
+		UpdatedAt:   raw.UpdatedAt,
+	}
+	if err := l.ValidateForPersist(); err != nil {
+		return ldom.List{}, err
+	}
+	return l, nil
 }
 
 func encodeListDoc(l ldom.List) map[string]any {
 	m := map[string]any{
-		"status":      string(l.Status),
-		"assignee_id": l.AssigneeID,
-		"title":       l.Title,
-		"image_id":    l.ImageID,
-		"description": l.Description,
-		"created_by":  l.CreatedBy,
-		"created_at":  l.CreatedAt.UTC(),
+		"status":       string(l.Status),
+		"assignee_id":  l.AssigneeID,
+		"title":        l.Title,
+		"image_id":     l.ImageID,
+		"inventory_id": l.InventoryID,
+		"readable_id":  l.ReadableID,
+		"description":  l.Description,
+		"created_by":   l.CreatedBy,
+		"created_at":   l.CreatedAt.UTC(),
 	}
-
-	if v := l.InventoryID; v != "" {
-		m["inventory_id"] = v
-	}
-	if v := l.ReadableID; v != "" {
-		m["readable_id"] = v
-	}
-
 	if l.UpdatedBy != nil {
-		if v := *l.UpdatedBy; v != "" {
-			m["updated_by"] = v
-		}
+		m["updated_by"] = *l.UpdatedBy
 	}
-	if l.UpdatedAt != nil && !l.UpdatedAt.IsZero() {
+	if l.UpdatedAt != nil {
 		m["updated_at"] = l.UpdatedAt.UTC()
 	}
-
 	return m
 }
 
@@ -625,18 +543,13 @@ func encodeListDoc(l ldom.List) map[string]any {
 
 func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID string) ([]ldom.ListPriceRow, error) {
 	if listID == "" {
-		return nil, nil
+		return nil, ldom.ErrInvalidID
 	}
 
-	it := r.col().
-		Doc(listID).
-		Collection(listPricesSub).
-		OrderBy(gfs.DocumentID, gfs.Asc).
-		Documents(ctx)
+	it := r.col().Doc(listID).Collection(listPricesSub).OrderBy(gfs.DocumentID, gfs.Asc).Documents(ctx)
 	defer it.Stop()
 
 	out := make([]ldom.ListPriceRow, 0, 8)
-
 	for {
 		doc, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -645,50 +558,42 @@ func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID stri
 		if err != nil {
 			return nil, err
 		}
-
-		var raw struct {
-			ModelID string `firestore:"model_id"`
-			Price   int    `firestore:"price"`
+		if doc == nil || doc.Ref == nil || doc.Ref.ID == "" {
+			return nil, ldom.ErrInvalidPriceModelID
 		}
 
+		var raw struct {
+			Price int `firestore:"price"`
+		}
 		if err := doc.DataTo(&raw); err != nil {
 			return nil, err
 		}
 
-		modelID := raw.ModelID
-		if modelID == "" {
-			modelID = doc.Ref.ID
+		row := ldom.ListPriceRow{ModelID: doc.Ref.ID, Price: raw.Price}
+		if err := validateListPriceRow(row); err != nil {
+			return nil, err
 		}
-		if modelID == "" {
-			continue
-		}
-
-		out = append(out, ldom.ListPriceRow{
-			ModelID: modelID,
-			Price:   raw.Price,
-		})
+		out = append(out, row)
 	}
 
 	if len(out) == 0 {
 		return nil, nil
 	}
 
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].ModelID < out[j].ModelID
-	})
-
+	sort.Slice(out, func(i, j int) bool { return out[i].ModelID < out[j].ModelID })
 	return out, nil
 }
 
-func (r *ListRepositoryFS) txReplaceListPrices(
-	ctx context.Context,
-	tx *gfs.Transaction,
-	listRef *gfs.DocumentRef,
-	prices []ldom.ListPriceRow,
-) error {
+func (r *ListRepositoryFS) txReplaceListPrices(ctx context.Context, tx *gfs.Transaction, listRef *gfs.DocumentRef, prices []ldom.ListPriceRow) error {
+	if listRef == nil || listRef.ID == "" {
+		return ldom.ErrInvalidID
+	}
+	if err := validateUniqueListPriceModelIDs(prices); err != nil {
+		return err
+	}
+
 	it := listRef.Collection(listPricesSub).Documents(ctx)
 	defer it.Stop()
-
 	for {
 		doc, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -697,50 +602,43 @@ func (r *ListRepositoryFS) txReplaceListPrices(
 		if err != nil {
 			return err
 		}
+		if doc == nil || doc.Ref == nil {
+			return ldom.ErrInvalidPrices
+		}
 		if err := tx.Delete(doc.Ref); err != nil {
 			return err
 		}
 	}
 
-	if len(prices) == 0 {
-		return nil
-	}
-
-	priceByModelID := make(map[string]ldom.ListPriceRow, len(prices))
-
 	for _, row := range prices {
-		modelID := row.ModelID
-		if modelID == "" {
-			continue
-		}
-
-		priceByModelID[modelID] = ldom.ListPriceRow{
-			ModelID: modelID,
-			Price:   row.Price,
-		}
-	}
-
-	if len(priceByModelID) == 0 {
-		return nil
-	}
-
-	modelIDs := make([]string, 0, len(priceByModelID))
-	for modelID := range priceByModelID {
-		modelIDs = append(modelIDs, modelID)
-	}
-
-	sort.Strings(modelIDs)
-
-	for _, modelID := range modelIDs {
-		p := priceByModelID[modelID]
-		itemRef := listRef.Collection(listPricesSub).Doc(modelID)
-		if err := tx.Set(itemRef, map[string]any{
-			"model_id": modelID,
-			"price":    p.Price,
-		}); err != nil {
+		itemRef := listRef.Collection(listPricesSub).Doc(row.ModelID)
+		if err := tx.Set(itemRef, map[string]any{"price": row.Price}); err != nil {
 			return err
 		}
 	}
+	return nil
+}
 
+func validateUniqueListPriceModelIDs(prices []ldom.ListPriceRow) error {
+	seen := make(map[string]struct{}, len(prices))
+	for _, row := range prices {
+		if err := validateListPriceRow(row); err != nil {
+			return err
+		}
+		if _, exists := seen[row.ModelID]; exists {
+			return ldom.ErrInvalidPrices
+		}
+		seen[row.ModelID] = struct{}{}
+	}
+	return nil
+}
+
+func validateListPriceRow(row ldom.ListPriceRow) error {
+	if row.ModelID == "" {
+		return ldom.ErrInvalidPriceModelID
+	}
+	if row.Price < ldom.MinPrice || row.Price > ldom.MaxPrice {
+		return ldom.ErrInvalidPrice
+	}
 	return nil
 }

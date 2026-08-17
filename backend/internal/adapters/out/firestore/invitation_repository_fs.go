@@ -19,8 +19,7 @@ import (
 
 const invitationTokensCollectionName = "invitationTokens"
 
-// InvitationTokenRepositoryFS is a Firestore-based implementation of
-// invitation.Repository.
+// InvitationTokenRepositoryFS is a Firestore-based implementation of invitation.Repository.
 //
 // Uses the "invitationTokens" collection.
 //
@@ -65,12 +64,8 @@ type invitationTokenDocument struct {
 	UpdatedAt        time.Time  `firestore:"updatedAt"`
 }
 
-func NewInvitationTokenRepositoryFS(
-	client *firestore.Client,
-) *InvitationTokenRepositoryFS {
-	return &InvitationTokenRepositoryFS{
-		Client: client,
-	}
+func NewInvitationTokenRepositoryFS(client *firestore.Client) *InvitationTokenRepositoryFS {
+	return &InvitationTokenRepositoryFS{Client: client}
 }
 
 func (r *InvitationTokenRepositoryFS) col() *firestore.CollectionRef {
@@ -88,111 +83,71 @@ func (r *InvitationTokenRepositoryFS) memberUIDsCol() *firestore.CollectionRef {
 var _ itdom.Repository = (*InvitationTokenRepositoryFS)(nil)
 
 // FindByToken retrieves a usable invitation token document by raw token string.
-// raw tokenはSHA-256でhash化し、Firestoreのdocument IDとして使用します。
+// raw tokenはSHA-256でhash化し、Firestoreのdocument IDとして使用します.
 //
-// deliveredAt未設定、使用済み、失効済み、期限切れのtokenは
-// 利用可能なtokenとして返しません。
-func (r *InvitationTokenRepositoryFS) FindByToken(
-	ctx context.Context,
-	token string,
-) (itdom.InvitationToken, error) {
+// deliveredAt未設定、使用済み、失効済み、期限切れのtokenは利用可能なtokenとして返しません。
+func (r *InvitationTokenRepositoryFS) FindByToken(ctx context.Context, token string) (itdom.InvitationToken, error) {
 	if r == nil || r.Client == nil {
-		return itdom.InvitationToken{}, errors.New(
-			"firestore client is nil",
-		)
+		return itdom.InvitationToken{}, errors.New("firestore client is nil")
 	}
 
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return itdom.InvitationToken{},
-			itdom.ErrInvitationTokenNotFound
+		return itdom.InvitationToken{}, itdom.ErrInvitationTokenNotFound
 	}
 
 	tokenDocumentID := invitationTokenDocumentID(token)
-
 	doc, err := r.col().Doc(tokenDocumentID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return itdom.InvitationToken{},
-				itdom.ErrInvitationTokenNotFound
+			return itdom.InvitationToken{}, itdom.ErrInvitationTokenNotFound
 		}
-
-		return itdom.InvitationToken{}, fmt.Errorf(
-			"get invitation token document %q: %w",
-			tokenDocumentID,
-			err,
-		)
+		return itdom.InvitationToken{}, fmt.Errorf("get invitation token document %q: %w", tokenDocumentID, err)
 	}
 
-	invitationToken, err := readInvitationTokenSnapshot(
-		doc,
-		token,
-	)
+	invitationToken, err := readInvitationTokenSnapshot(doc, token)
 	if err != nil {
 		return itdom.InvitationToken{}, err
 	}
 
-	if err := invitationToken.ValidateUsable(
-		time.Now().UTC(),
-	); err != nil {
+	if err := invitationToken.ValidateUsable(time.Now().UTC()); err != nil {
 		return itdom.InvitationToken{}, err
 	}
 
 	return invitationToken, nil
 }
 
-func (r *InvitationTokenRepositoryFS) ResolveInvitationInfoByToken(
-	ctx context.Context,
-	token string,
-) (itdom.InvitationInfo, error) {
+func (r *InvitationTokenRepositoryFS) ResolveInvitationInfoByToken(ctx context.Context, token string) (itdom.InvitationInfo, error) {
 	if r == nil || r.Client == nil {
-		return itdom.InvitationInfo{}, errors.New(
-			"firestore client is nil",
-		)
+		return itdom.InvitationInfo{}, errors.New("firestore client is nil")
 	}
 
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return itdom.InvitationInfo{},
-			itdom.ErrInvitationTokenNotFound
+		return itdom.InvitationInfo{}, itdom.ErrInvitationTokenNotFound
 	}
 
-	invitationToken, err := r.FindByToken(
-		ctx,
-		token,
-	)
+	invitationToken, err := r.FindByToken(ctx, token)
 	if err != nil {
 		return itdom.InvitationInfo{}, err
 	}
 
-	if err := invitationToken.ValidateUsable(
-		time.Now().UTC(),
-	); err != nil {
+	if err := invitationToken.ValidateUsable(time.Now().UTC()); err != nil {
 		return itdom.InvitationInfo{}, err
 	}
 
 	info, err := invitationToken.InvitationInfo()
 	if err != nil {
-		if errors.Is(
-			err,
-			itdom.ErrInvitationMemberIDRequired,
-		) {
-			return itdom.InvitationInfo{},
-				itdom.ErrInvitationTokenNotFound
+		if errors.Is(err, itdom.ErrInvitationMemberIDRequired) {
+			return itdom.InvitationInfo{}, itdom.ErrInvitationTokenNotFound
 		}
-
-		return itdom.InvitationInfo{}, fmt.Errorf(
-			"resolve invitation info from token: %w",
-			err,
-		)
+		return itdom.InvitationInfo{}, fmt.Errorf("resolve invitation info from token: %w", err)
 	}
 
 	return info, nil
 }
 
-// CompleteInvitationは、次の処理を同一Firestore transaction内で
-// 実行します。
-//
+// CompleteInvitationは、次の処理を同一Firestore transaction内で実行します。
 //   - invitation tokenの利用可能性確認
 //   - token emailとFirebase認証済みemailの照合
 //   - Memberの存在・company境界確認
@@ -202,10 +157,7 @@ func (r *InvitationTokenRepositoryFS) ResolveInvitationInfoByToken(
 //   - invitation tokenのusedAt更新
 //
 // Member更新とtoken消費の一方だけが確定することはありません。
-func (r *InvitationTokenRepositoryFS) CompleteInvitation(
-	ctx context.Context,
-	completion itdom.InvitationCompletion,
-) error {
+func (r *InvitationTokenRepositoryFS) CompleteInvitation(ctx context.Context, completion itdom.InvitationCompletion) error {
 	if r == nil || r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
@@ -215,419 +167,222 @@ func (r *InvitationTokenRepositoryFS) CompleteInvitation(
 		return err
 	}
 
-	tokenDocumentID := invitationTokenDocumentID(
-		normalizedCompletion.Token,
-	)
+	tokenDocumentID := invitationTokenDocumentID(normalizedCompletion.Token)
 	tokenRef := r.col().Doc(tokenDocumentID)
 
-	err = r.Client.RunTransaction(
-		ctx,
-		func(
-			ctx context.Context,
-			tx *firestore.Transaction,
-		) error {
-			tokenDoc, err := tx.Get(tokenRef)
-			if err != nil {
-				if status.Code(err) == codes.NotFound {
-					return itdom.ErrInvitationTokenNotFound
-				}
-
-				return fmt.Errorf(
-					"get invitation token document %q in transaction: %w",
-					tokenDocumentID,
-					err,
-				)
+	err = r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		tokenDoc, err := tx.Get(tokenRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return itdom.ErrInvitationTokenNotFound
 			}
+			return fmt.Errorf("get invitation token document %q in transaction: %w", tokenDocumentID, err)
+		}
 
-			invitationToken, err :=
-				readInvitationTokenSnapshot(
-					tokenDoc,
-					normalizedCompletion.Token,
-				)
-			if err != nil {
-				return err
+		invitationToken, err := readInvitationTokenSnapshot(tokenDoc, normalizedCompletion.Token)
+		if err != nil {
+			return err
+		}
+
+		now := time.Now().UTC()
+		if err := invitationToken.ValidateUsable(now); err != nil {
+			return err
+		}
+
+		info, err := invitationToken.InvitationInfo()
+		if err != nil {
+			if errors.Is(err, itdom.ErrInvitationMemberIDRequired) {
+				return itdom.ErrInvitationMemberNotFound
 			}
+			return fmt.Errorf("resolve invitation info in transaction: %w", err)
+		}
 
-			now := time.Now().UTC()
+		if info.Email != normalizedCompletion.Email {
+			return itdom.ErrInvitationEmailMismatch
+		}
 
-			if err := invitationToken.ValidateUsable(
-				now,
-			); err != nil {
-				return err
+		memberRef := r.membersCol().Doc(info.MemberID)
+		memberDoc, err := tx.Get(memberRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return itdom.ErrInvitationMemberNotFound
 			}
+			return fmt.Errorf("get invited member %q in transaction: %w", info.MemberID, err)
+		}
 
-			info, err := invitationToken.InvitationInfo()
-			if err != nil {
-				if errors.Is(
-					err,
-					itdom.ErrInvitationMemberIDRequired,
-				) {
-					return itdom.ErrInvitationMemberNotFound
-				}
+		member, err := readMemberSnapshot(memberDoc)
+		if err != nil {
+			return fmt.Errorf("decode invited member %q: %w", info.MemberID, err)
+		}
 
-				return fmt.Errorf(
-					"resolve invitation info in transaction: %w",
-					err,
-				)
-			}
+		if strings.TrimSpace(member.CompanyID) != info.CompanyID {
+			return itdom.ErrInvitationCompanyMismatch
+		}
 
-			if info.Email != normalizedCompletion.Email {
-				return itdom.ErrInvitationEmailMismatch
-			}
+		newUID := normalizedCompletion.UID
+		newUIDRef := r.memberUIDsCol().Doc(newUID)
 
-			memberRef := r.membersCol().Doc(
-				info.MemberID,
-			)
+		newUIDMapping, newUIDExists, err := getMemberUIDMappingInTransaction(tx, newUIDRef)
+		if err != nil {
+			return err
+		}
 
-			memberDoc, err := tx.Get(memberRef)
-			if err != nil {
-				if status.Code(err) == codes.NotFound {
-					return itdom.ErrInvitationMemberNotFound
-				}
+		if newUIDExists && newUIDMapping.MemberID != info.MemberID {
+			return itdom.ErrInvitationUIDAlreadyInUse
+		}
 
-				return fmt.Errorf(
-					"get invited member %q in transaction: %w",
-					info.MemberID,
-					err,
-				)
-			}
+		oldUID := strings.TrimSpace(member.UID)
+		var (
+			oldUIDRef    *firestore.DocumentRef
+			deleteOldUID bool
+		)
 
-			member, err := readMemberSnapshot(memberDoc)
-			if err != nil {
-				return fmt.Errorf(
-					"decode invited member %q: %w",
-					info.MemberID,
-					err,
-				)
-			}
+		if oldUID != "" && oldUID != newUID {
+			oldUIDRef = r.memberUIDsCol().Doc(oldUID)
 
-			if strings.TrimSpace(member.CompanyID) !=
-				info.CompanyID {
-				return itdom.ErrInvitationCompanyMismatch
-			}
-
-			newUID := normalizedCompletion.UID
-			newUIDRef := r.memberUIDsCol().Doc(newUID)
-
-			newUIDMapping, newUIDExists, err :=
-				getMemberUIDMappingInTransaction(
-					tx,
-					newUIDRef,
-				)
+			oldUIDMapping, oldUIDExists, err := getMemberUIDMappingInTransaction(tx, oldUIDRef)
 			if err != nil {
 				return err
 			}
 
-			if newUIDExists &&
-				newUIDMapping.MemberID != info.MemberID {
-				return itdom.ErrInvitationUIDAlreadyInUse
+			deleteOldUID = oldUIDExists && oldUIDMapping.MemberID == info.MemberID
+		}
+
+		statusValue := "active"
+		companyID := info.CompanyID
+		email := normalizedCompletion.Email
+		permissions := append([]string(nil), info.Permissions...)
+		assignedBrandIDs := append([]string(nil), info.AssignedBrandIDs...)
+
+		updatedMember, err := applyMemberPatch(
+			member,
+			memdom.MemberPatch{
+				UID:            &normalizedCompletion.UID,
+				LastName:       &normalizedCompletion.LastName,
+				LastNameKana:   &normalizedCompletion.LastNameKana,
+				FirstName:      &normalizedCompletion.FirstName,
+				FirstNameKana:  &normalizedCompletion.FirstNameKana,
+				Email:          &email,
+				CompanyID:      &companyID,
+				Status:         &statusValue,
+				Permissions:    &permissions,
+				AssignedBrands: &assignedBrandIDs,
+			},
+			now,
+		)
+		if err != nil {
+			return fmt.Errorf("apply invited member patch %q: %w", info.MemberID, err)
+		}
+
+		if err := tx.Set(memberRef, updatedMember); err != nil {
+			return fmt.Errorf("update invited member %q in transaction: %w", info.MemberID, err)
+		}
+
+		if deleteOldUID {
+			if err := tx.Delete(oldUIDRef); err != nil {
+				return fmt.Errorf("delete old member UID mapping %q: %w", oldUID, err)
 			}
+		}
 
-			memberIDs, err := findMemberIDsByUIDInTransaction(
-				tx,
-				r.membersCol(),
-				newUID,
-				2,
-			)
-			if err != nil {
-				return err
+		createdAt := now
+		if newUIDExists && !newUIDMapping.CreatedAt.IsZero() {
+			createdAt = newUIDMapping.CreatedAt.UTC()
+		}
+
+		uidMapping := memberUIDDocument{
+			MemberID:  info.MemberID,
+			CreatedAt: createdAt,
+			UpdatedAt: now,
+		}
+
+		if newUIDExists {
+			if err := tx.Set(newUIDRef, uidMapping); err != nil {
+				return fmt.Errorf("update member UID mapping %q: %w", newUID, err)
 			}
-
-			for _, memberID := range memberIDs {
-				if memberID != info.MemberID {
-					return itdom.ErrInvitationUIDAlreadyInUse
-				}
+		} else {
+			if err := tx.Create(newUIDRef, uidMapping); err != nil {
+				return fmt.Errorf("create member UID mapping %q: %w", newUID, err)
 			}
+		}
 
-			oldUID := strings.TrimSpace(member.UID)
+		if err := tx.Update(tokenRef, []firestore.Update{
+			{Path: "usedAt", Value: now},
+			{Path: "updatedAt", Value: now},
+		}); err != nil {
+			return fmt.Errorf("consume invitation token document %q in transaction: %w", tokenDocumentID, err)
+		}
 
-			var (
-				oldUIDRef    *firestore.DocumentRef
-				deleteOldUID bool
-			)
-
-			if oldUID != "" && oldUID != newUID {
-				oldUIDRef = r.memberUIDsCol().Doc(
-					oldUID,
-				)
-
-				oldUIDMapping, oldUIDExists, err :=
-					getMemberUIDMappingInTransaction(
-						tx,
-						oldUIDRef,
-					)
-				if err != nil {
-					return err
-				}
-
-				deleteOldUID = oldUIDExists &&
-					oldUIDMapping.MemberID == info.MemberID
-			}
-
-			statusValue := "active"
-			companyID := info.CompanyID
-			email := normalizedCompletion.Email
-
-			permissions := append(
-				[]string(nil),
-				info.Permissions...,
-			)
-			assignedBrandIDs := append(
-				[]string(nil),
-				info.AssignedBrandIDs...,
-			)
-
-			updatedMember, err := applyMemberPatch(
-				member,
-				memdom.MemberPatch{
-					UID:            &normalizedCompletion.UID,
-					LastName:       &normalizedCompletion.LastName,
-					LastNameKana:   &normalizedCompletion.LastNameKana,
-					FirstName:      &normalizedCompletion.FirstName,
-					FirstNameKana:  &normalizedCompletion.FirstNameKana,
-					Email:          &email,
-					CompanyID:      &companyID,
-					Status:         &statusValue,
-					Permissions:    &permissions,
-					AssignedBrands: &assignedBrandIDs,
-				},
-				now,
-			)
-			if err != nil {
-				return fmt.Errorf(
-					"apply invited member patch %q: %w",
-					info.MemberID,
-					err,
-				)
-			}
-
-			if err := tx.Set(
-				memberRef,
-				updatedMember,
-			); err != nil {
-				return fmt.Errorf(
-					"update invited member %q in transaction: %w",
-					info.MemberID,
-					err,
-				)
-			}
-
-			if deleteOldUID {
-				if err := tx.Delete(
-					oldUIDRef,
-				); err != nil {
-					return fmt.Errorf(
-						"delete old member UID mapping %q: %w",
-						oldUID,
-						err,
-					)
-				}
-			}
-
-			createdAt := now
-			if newUIDExists &&
-				!newUIDMapping.CreatedAt.IsZero() {
-				createdAt =
-					newUIDMapping.CreatedAt.UTC()
-			}
-
-			uidMapping := memberUIDDocument{
-				MemberID:  info.MemberID,
-				CreatedAt: createdAt,
-				UpdatedAt: now,
-			}
-
-			if newUIDExists {
-				if err := tx.Set(
-					newUIDRef,
-					uidMapping,
-				); err != nil {
-					return fmt.Errorf(
-						"update member UID mapping %q: %w",
-						newUID,
-						err,
-					)
-				}
-			} else {
-				if err := tx.Create(
-					newUIDRef,
-					uidMapping,
-				); err != nil {
-					return fmt.Errorf(
-						"create member UID mapping %q: %w",
-						newUID,
-						err,
-					)
-				}
-			}
-
-			if err := tx.Update(
-				tokenRef,
-				[]firestore.Update{
-					{
-						Path:  "usedAt",
-						Value: now,
-					},
-					{
-						Path:  "updatedAt",
-						Value: now,
-					},
-				},
-			); err != nil {
-				return fmt.Errorf(
-					"consume invitation token document %q in transaction: %w",
-					tokenDocumentID,
-					err,
-				)
-			}
-
-			return nil
-		},
-	)
+		return nil
+	})
 	if err != nil {
 		switch {
-		case errors.Is(
-			err,
-			itdom.ErrInvitationTokenNotFound,
-		):
+		case errors.Is(err, itdom.ErrInvitationTokenNotFound):
 			return itdom.ErrInvitationTokenNotFound
-
-		case errors.Is(
-			err,
-			itdom.ErrInvitationTokenExpired,
-		):
+		case errors.Is(err, itdom.ErrInvitationTokenExpired):
 			return itdom.ErrInvitationTokenExpired
-
-		case errors.Is(
-			err,
-			itdom.ErrInvitationTokenUsed,
-		):
+		case errors.Is(err, itdom.ErrInvitationTokenUsed):
 			return itdom.ErrInvitationTokenUsed
-
-		case errors.Is(
-			err,
-			itdom.ErrInvitationTokenRevoked,
-		):
+		case errors.Is(err, itdom.ErrInvitationTokenRevoked):
 			return itdom.ErrInvitationTokenRevoked
-
-		case errors.Is(
-			err,
-			itdom.ErrInvitationTokenNotDelivered,
-		):
+		case errors.Is(err, itdom.ErrInvitationTokenNotDelivered):
 			return itdom.ErrInvitationTokenNotDelivered
-
-		case errors.Is(
-			err,
-			itdom.ErrInvitationMemberNotFound,
-		):
+		case errors.Is(err, itdom.ErrInvitationMemberNotFound):
 			return itdom.ErrInvitationMemberNotFound
-
-		case errors.Is(
-			err,
-			itdom.ErrInvitationCompanyMismatch,
-		):
+		case errors.Is(err, itdom.ErrInvitationCompanyMismatch):
 			return itdom.ErrInvitationCompanyMismatch
-
-		case errors.Is(
-			err,
-			itdom.ErrInvitationEmailMismatch,
-		):
+		case errors.Is(err, itdom.ErrInvitationEmailMismatch):
 			return itdom.ErrInvitationEmailMismatch
-
-		case errors.Is(
-			err,
-			itdom.ErrInvitationUIDAlreadyInUse,
-		),
-			status.Code(err) == codes.AlreadyExists:
+		case errors.Is(err, itdom.ErrInvitationUIDAlreadyInUse), status.Code(err) == codes.AlreadyExists:
 			return itdom.ErrInvitationUIDAlreadyInUse
-
 		default:
-			return fmt.Errorf(
-				"complete invitation transaction: %w",
-				err,
-			)
+			return fmt.Errorf("complete invitation transaction: %w", err)
 		}
 	}
 
 	return nil
 }
 
-func invitationTokenToDocument(
-	invitationToken itdom.InvitationToken,
-	updatedAt time.Time,
-) invitationTokenDocument {
+func invitationTokenToDocument(invitationToken itdom.InvitationToken, updatedAt time.Time) invitationTokenDocument {
 	return invitationTokenDocument{
-		DeliveryID: invitationToken.DeliveryID,
-		MemberID:   invitationToken.MemberID,
-		Email:      invitationToken.Email,
-		CompanyID:  invitationToken.CompanyID,
-		AssignedBrandIDs: append(
-			[]string(nil),
-			invitationToken.AssignedBrandIDs...,
-		),
-		Permissions: append(
-			[]string(nil),
-			invitationToken.Permissions...,
-		),
-		CreatedAt: invitationToken.CreatedAt.UTC(),
-		ExpiresAt: copyInvitationTimePointer(
-			invitationToken.ExpiresAt,
-		),
-		DeliveredAt: copyInvitationTimePointer(
-			invitationToken.DeliveredAt,
-		),
-		UsedAt: copyInvitationTimePointer(
-			invitationToken.UsedAt,
-		),
-		RevokedAt: copyInvitationTimePointer(
-			invitationToken.RevokedAt,
-		),
-		UpdatedAt: updatedAt.UTC(),
+		DeliveryID:       invitationToken.DeliveryID,
+		MemberID:         invitationToken.MemberID,
+		Email:            invitationToken.Email,
+		CompanyID:        invitationToken.CompanyID,
+		AssignedBrandIDs: append([]string(nil), invitationToken.AssignedBrandIDs...),
+		Permissions:      append([]string(nil), invitationToken.Permissions...),
+		CreatedAt:        invitationToken.CreatedAt.UTC(),
+		ExpiresAt:        copyInvitationTimePointer(invitationToken.ExpiresAt),
+		DeliveredAt:      copyInvitationTimePointer(invitationToken.DeliveredAt),
+		UsedAt:           copyInvitationTimePointer(invitationToken.UsedAt),
+		RevokedAt:        copyInvitationTimePointer(invitationToken.RevokedAt),
+		UpdatedAt:        updatedAt.UTC(),
 	}
 }
 
 func invitationTokenDocumentID(token string) string {
 	normalizedToken := strings.TrimSpace(token)
-
-	hash := sha256.Sum256(
-		[]byte(normalizedToken),
-	)
-
+	hash := sha256.Sum256([]byte(normalizedToken))
 	return fmt.Sprintf("%x", hash[:])
 }
 
-func readInvitationTokenSnapshot(
-	doc *firestore.DocumentSnapshot,
-	rawToken string,
-) (itdom.InvitationToken, error) {
+func readInvitationTokenSnapshot(doc *firestore.DocumentSnapshot, rawToken string) (itdom.InvitationToken, error) {
 	if doc == nil || doc.Ref == nil {
-		return itdom.InvitationToken{}, errors.New(
-			"invitation token document snapshot is nil",
-		)
+		return itdom.InvitationToken{}, errors.New("invitation token document snapshot is nil")
 	}
 
 	rawToken = strings.TrimSpace(rawToken)
 	if rawToken == "" {
-		return itdom.InvitationToken{},
-			itdom.ErrInvitationTokenNotFound
+		return itdom.InvitationToken{}, itdom.ErrInvitationTokenNotFound
 	}
 
-	expectedDocumentID :=
-		invitationTokenDocumentID(rawToken)
-
+	expectedDocumentID := invitationTokenDocumentID(rawToken)
 	if doc.Ref.ID != expectedDocumentID {
-		return itdom.InvitationToken{},
-			itdom.ErrInvitationTokenNotFound
+		return itdom.InvitationToken{}, itdom.ErrInvitationTokenNotFound
 	}
 
 	var stored invitationTokenDocument
-
 	if err := doc.DataTo(&stored); err != nil {
-		return itdom.InvitationToken{}, fmt.Errorf(
-			"decode invitation token %q: %w",
-			doc.Ref.ID,
-			err,
-		)
+		return itdom.InvitationToken{}, fmt.Errorf("decode invitation token %q: %w", doc.Ref.ID, err)
 	}
 
 	if stored.CreatedAt.IsZero() {
@@ -644,8 +399,7 @@ func readInvitationTokenSnapshot(
 		)
 	}
 
-	if stored.ExpiresAt == nil ||
-		stored.ExpiresAt.IsZero() {
+	if stored.ExpiresAt == nil || stored.ExpiresAt.IsZero() {
 		return itdom.InvitationToken{}, fmt.Errorf(
 			"invitation token %q has no valid expiresAt timestamp",
 			doc.Ref.ID,
@@ -665,9 +419,7 @@ func readInvitationTokenSnapshot(
 		stored.DeliveryID,
 		info,
 		stored.CreatedAt.UTC(),
-		copyInvitationTimePointer(
-			stored.ExpiresAt,
-		),
+		copyInvitationTimePointer(stored.ExpiresAt),
 	)
 	if err != nil {
 		return itdom.InvitationToken{}, fmt.Errorf(
@@ -677,18 +429,9 @@ func readInvitationTokenSnapshot(
 		)
 	}
 
-	invitationToken.DeliveredAt =
-		copyInvitationTimePointer(
-			stored.DeliveredAt,
-		)
-	invitationToken.UsedAt =
-		copyInvitationTimePointer(
-			stored.UsedAt,
-		)
-	invitationToken.RevokedAt =
-		copyInvitationTimePointer(
-			stored.RevokedAt,
-		)
+	invitationToken.DeliveredAt = copyInvitationTimePointer(stored.DeliveredAt)
+	invitationToken.UsedAt = copyInvitationTimePointer(stored.UsedAt)
+	invitationToken.RevokedAt = copyInvitationTimePointer(stored.RevokedAt)
 
 	updatedAt := stored.UpdatedAt.UTC()
 	invitationToken.UpdatedAt = &updatedAt
@@ -696,14 +439,11 @@ func readInvitationTokenSnapshot(
 	return invitationToken, nil
 }
 
-func copyInvitationTimePointer(
-	value *time.Time,
-) *time.Time {
+func copyInvitationTimePointer(value *time.Time) *time.Time {
 	if value == nil || value.IsZero() {
 		return nil
 	}
 
 	normalized := value.UTC()
-
 	return &normalized
 }

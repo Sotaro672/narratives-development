@@ -1,9 +1,8 @@
+// backend/internal/adapters/out/firestore/helper_repository_fs.go
 package firestore
 
 import (
-	"fmt"
 	"reflect"
-	"strings"
 	"time"
 )
 
@@ -12,12 +11,12 @@ func asString(v any) string {
 		return ""
 	}
 
-	switch t := v.(type) {
-	case string:
-		return t
-	default:
-		return fmt.Sprint(v)
+	value, ok := v.(string)
+	if !ok {
+		return ""
 	}
+
+	return value
 }
 
 func asInt(v any) int {
@@ -25,51 +24,12 @@ func asInt(v any) int {
 		return 0
 	}
 
-	switch t := v.(type) {
-	case int:
-		return t
-	case int8:
-		return int(t)
-	case int16:
-		return int(t)
-	case int32:
-		return int(t)
-	case int64:
-		return int(t)
-	case uint:
-		return int(t)
-	case uint8:
-		return int(t)
-	case uint16:
-		return int(t)
-	case uint32:
-		return int(t)
-	case uint64:
-		return int(t)
-	case float32:
-		return int(t)
-	case float64:
-		return int(t)
-	case string:
-		if t == "" {
-			return 0
-		}
-
-		var n int
-		_, _ = fmt.Sscanf(t, "%d", &n)
-
-		return n
-	default:
-		s := fmt.Sprint(v)
-		if s == "" {
-			return 0
-		}
-
-		var n int
-		_, _ = fmt.Sscanf(s, "%d", &n)
-
-		return n
+	value, ok := v.(int64)
+	if !ok {
+		return 0
 	}
+
+	return int(value)
 }
 
 func asBool(v any) bool {
@@ -77,39 +37,12 @@ func asBool(v any) bool {
 		return false
 	}
 
-	switch t := v.(type) {
-	case bool:
-		return t
-	case string:
-		return strings.EqualFold(t, "true") || t == "1"
-	case int:
-		return t != 0
-	case int8:
-		return t != 0
-	case int16:
-		return t != 0
-	case int32:
-		return t != 0
-	case int64:
-		return t != 0
-	case uint:
-		return t != 0
-	case uint8:
-		return t != 0
-	case uint16:
-		return t != 0
-	case uint32:
-		return t != 0
-	case uint64:
-		return t != 0
-	case float32:
-		return t != 0
-	case float64:
-		return t != 0
-	default:
-		s := fmt.Sprint(v)
-		return strings.EqualFold(s, "true") || s == "1"
+	value, ok := v.(bool)
+	if !ok {
+		return false
 	}
+
+	return value
 }
 
 // asTime returns (time, ok).
@@ -118,12 +51,12 @@ func asTime(v any) (time.Time, bool) {
 		return time.Time{}, false
 	}
 
-	switch t := v.(type) {
-	case time.Time:
-		return t, true
-	default:
+	value, ok := v.(time.Time)
+	if !ok {
 		return time.Time{}, false
 	}
+
+	return value, true
 }
 
 func containsString(xs []string, v string) bool {
@@ -147,7 +80,6 @@ func getStringField(obj any, field string) string {
 		if rv.IsNil() {
 			return ""
 		}
-
 		rv = rv.Elem()
 	}
 
@@ -185,7 +117,6 @@ func optionalStringFromPatch(value *string) *string {
 	}
 
 	v := *value
-
 	return &v
 }
 
@@ -195,7 +126,6 @@ func optionalTimeFromPatch(value *time.Time) *time.Time {
 	}
 
 	utc := value.UTC()
-
 	return &utc
 }
 
@@ -210,7 +140,6 @@ func ptrStringFromMap(m map[string]any, key string) *string {
 
 func timeFromMap(m map[string]any, key string) time.Time {
 	t, _ := asTime(m[key])
-
 	return t.UTC()
 }
 
@@ -221,7 +150,6 @@ func ptrTimeFromMap(m map[string]any, key string) *time.Time {
 	}
 
 	utc := t.UTC()
-
 	return &utc
 }
 

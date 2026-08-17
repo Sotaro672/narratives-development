@@ -36,7 +36,7 @@ func (r *CompanyRepositoryFS) NewID(ctx context.Context) (string, error) {
 		return "", errors.New("company repository: client is nil")
 	}
 
-	doc := r.Client.Collection("companies").NewDoc()
+	doc := r.col().NewDoc()
 	return doc.ID, nil
 }
 
@@ -45,6 +45,9 @@ func (r *CompanyRepositoryFS) NewID(ctx context.Context) (string, error) {
 // ==============================
 
 func (r *CompanyRepositoryFS) GetByID(ctx context.Context, id string) (compdom.Company, error) {
+	if r == nil || r.Client == nil {
+		return compdom.Company{}, errors.New("company repository: client is nil")
+	}
 	if id == "" {
 		return compdom.Company{}, compdom.ErrNotFound
 	}
@@ -65,7 +68,9 @@ func (r *CompanyRepositoryFS) GetByID(ctx context.Context, id string) (compdom.C
 // ==============================
 
 func (r *CompanyRepositoryFS) Create(ctx context.Context, c compdom.Company) (compdom.Company, error) {
-	now := time.Now().UTC()
+	if r == nil || r.Client == nil {
+		return compdom.Company{}, errors.New("company repository: client is nil")
+	}
 
 	var docRef *firestore.DocumentRef
 	if c.ID == "" {
@@ -75,14 +80,23 @@ func (r *CompanyRepositoryFS) Create(ctx context.Context, c compdom.Company) (co
 		docRef = r.col().Doc(c.ID)
 	}
 
-	if c.CreatedAt.IsZero() {
-		c.CreatedAt = now
+	validated, err := compdom.NewCompany(
+		c.ID,
+		c.Name,
+		c.Admin,
+		c.CreatedBy,
+		c.UpdatedBy,
+		c.CreatedAt,
+		c.UpdatedAt,
+		c.IsActive,
+		c.DeletedAt,
+		c.DeletedBy,
+	)
+	if err != nil {
+		return compdom.Company{}, err
 	}
 
-	data := companyToDocData(c)
-
-	_, err := docRef.Create(ctx, data)
-	if err != nil {
+	if _, err := docRef.Create(ctx, companyToDocData(validated)); err != nil {
 		if status.Code(err) == codes.AlreadyExists {
 			return compdom.Company{}, compdom.ErrConflict
 		}
@@ -98,80 +112,132 @@ func (r *CompanyRepositoryFS) Create(ctx context.Context, c compdom.Company) (co
 }
 
 func (r *CompanyRepositoryFS) Update(ctx context.Context, id string, patch compdom.CompanyPatch) (compdom.Company, error) {
+	if r == nil || r.Client == nil {
+		return compdom.Company{}, errors.New("company repository: client is nil")
+	}
 	if id == "" {
 		return compdom.Company{}, compdom.ErrNotFound
 	}
 
 	docRef := r.col().Doc(id)
-	var updates []firestore.Update
+	var result compdom.Company
 
-	if patch.Name != nil {
-		updates = append(updates, firestore.Update{Path: "name", Value: *patch.Name})
-	}
-	if patch.Admin != nil {
-		updates = append(updates, firestore.Update{Path: "admin", Value: *patch.Admin})
-	}
-	if patch.IsActive != nil {
-		updates = append(updates, firestore.Update{Path: "isActive", Value: *patch.IsActive})
-	}
-	if patch.UpdatedAt != nil {
-		if patch.UpdatedAt.IsZero() {
-			updates = append(updates, firestore.Update{Path: "updatedAt", Value: firestore.Delete})
-		} else {
-			updates = append(updates, firestore.Update{Path: "updatedAt", Value: patch.UpdatedAt.UTC()})
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(docRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return compdom.ErrNotFound
+			}
+			return err
 		}
-	}
-	if patch.UpdatedBy != nil {
-		if *patch.UpdatedBy == "" {
-			updates = append(updates, firestore.Update{Path: "updatedBy", Value: firestore.Delete})
-		} else {
-			updates = append(updates, firestore.Update{Path: "updatedBy", Value: *patch.UpdatedBy})
-		}
-	}
-	if patch.DeletedAt != nil {
-		if patch.DeletedAt.IsZero() {
-			updates = append(updates, firestore.Update{Path: "deletedAt", Value: firestore.Delete})
-		} else {
-			updates = append(updates, firestore.Update{Path: "deletedAt", Value: patch.DeletedAt.UTC()})
-		}
-	}
-	if patch.DeletedBy != nil {
-		if *patch.DeletedBy == "" {
-			updates = append(updates, firestore.Update{Path: "deletedBy", Value: firestore.Delete})
-		} else {
-			updates = append(updates, firestore.Update{Path: "deletedBy", Value: *patch.DeletedBy})
-		}
-	}
 
-	if len(updates) == 0 {
-		return r.GetByID(ctx, id)
-	}
+		current, err := docToCompany(snap)
+		if err != nil {
+			return err
+		}
 
-	_, err := docRef.Update(ctx, updates)
+		if patch.Name != nil {
+			current.Name = *patch.Name
+		}
+		if patch.Admin != nil {
+			current.Admin = *patch.Admin
+		}
+		if patch.IsActive != nil {
+			current.IsActive = *patch.IsActive
+		}
+		if patch.UpdatedAt != nil {
+			if patch.UpdatedAt.IsZero() {
+				return compdom.ErrInvalidUpdatedAt
+			}
+			current.UpdatedAt = *patch.UpdatedAt
+		}
+		if patch.UpdatedBy != nil {
+			if *patch.UpdatedBy == "" {
+				return compdom.ErrInvalidUpdatedBy
+			}
+			current.UpdatedBy = *patch.UpdatedBy
+		}
+		if patch.DeletedAt != nil {
+			if patch.DeletedAt.IsZero() {
+				current.DeletedAt = nil
+			} else {
+				t := *patch.DeletedAt
+				current.DeletedAt = &t
+			}
+		}
+		if patch.DeletedBy != nil {
+			if *patch.DeletedBy == "" {
+				current.DeletedBy = nil
+			} else {
+				v := *patch.DeletedBy
+				current.DeletedBy = &v
+			}
+		}
+
+		validated, err := compdom.NewCompany(
+			current.ID,
+			current.Name,
+			current.Admin,
+			current.CreatedBy,
+			current.UpdatedBy,
+			current.CreatedAt,
+			current.UpdatedAt,
+			current.IsActive,
+			current.DeletedAt,
+			current.DeletedBy,
+		)
+		if err != nil {
+			return err
+		}
+
+		if err := tx.Set(docRef, companyToDocData(validated)); err != nil {
+			return err
+		}
+
+		result = validated
+		return nil
+	})
 	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return compdom.Company{}, compdom.ErrNotFound
-		}
 		return compdom.Company{}, err
 	}
 
-	return r.GetByID(ctx, id)
+	return result, nil
 }
 
 func (r *CompanyRepositoryFS) Delete(ctx context.Context, id string) error {
+	if r == nil || r.Client == nil {
+		return errors.New("company repository: client is nil")
+	}
 	if id == "" {
 		return compdom.ErrNotFound
 	}
 
-	_, err := r.col().Doc(id).Delete(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return compdom.ErrNotFound
+	docRef := r.col().Doc(id)
+	return r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		if _, err := tx.Get(docRef); err != nil {
+			if status.Code(err) == codes.NotFound {
+				return compdom.ErrNotFound
+			}
+			return err
 		}
-		return err
-	}
+		return tx.Delete(docRef)
+	})
+}
 
-	return nil
+// ==============================
+// Firestore DTO
+// ==============================
+
+type companyDoc struct {
+	Name      string     `firestore:"name"`
+	Admin     string     `firestore:"admin"`
+	IsActive  *bool      `firestore:"isActive"`
+	CreatedAt time.Time  `firestore:"createdAt"`
+	CreatedBy string     `firestore:"createdBy"`
+	UpdatedAt time.Time  `firestore:"updatedAt"`
+	UpdatedBy string     `firestore:"updatedBy"`
+	DeletedAt *time.Time `firestore:"deletedAt"`
+	DeletedBy *string    `firestore:"deletedBy"`
 }
 
 // ==============================
@@ -180,26 +246,19 @@ func (r *CompanyRepositoryFS) Delete(ctx context.Context, id string) error {
 
 func companyToDocData(c compdom.Company) map[string]any {
 	m := map[string]any{
-		"id":        c.ID,
 		"name":      c.Name,
 		"admin":     c.Admin,
 		"isActive":  c.IsActive,
 		"createdAt": c.CreatedAt.UTC(),
+		"createdBy": c.CreatedBy,
+		"updatedAt": c.UpdatedAt.UTC(),
+		"updatedBy": c.UpdatedBy,
 	}
 
-	if c.CreatedBy != "" {
-		m["createdBy"] = c.CreatedBy
-	}
-	if !c.UpdatedAt.IsZero() {
-		m["updatedAt"] = c.UpdatedAt.UTC()
-	}
-	if c.UpdatedBy != "" {
-		m["updatedBy"] = c.UpdatedBy
-	}
-	if c.DeletedAt != nil && !c.DeletedAt.IsZero() {
+	if c.DeletedAt != nil {
 		m["deletedAt"] = c.DeletedAt.UTC()
 	}
-	if c.DeletedBy != nil && *c.DeletedBy != "" {
+	if c.DeletedBy != nil {
 		m["deletedBy"] = *c.DeletedBy
 	}
 
@@ -207,74 +266,35 @@ func companyToDocData(c compdom.Company) map[string]any {
 }
 
 func docToCompany(doc *firestore.DocumentSnapshot) (compdom.Company, error) {
-	data := doc.Data()
-	if data == nil {
-		return compdom.Company{}, fmt.Errorf("empty company document: %s", doc.Ref.ID)
+	if doc == nil || doc.Ref == nil || doc.Ref.ID == "" {
+		return compdom.Company{}, compdom.ErrInvalidID
 	}
 
-	getStr := func(key string) string {
-		if v, ok := data[key].(string); ok {
-			return v
-		}
-		return ""
+	var raw companyDoc
+	if err := doc.DataTo(&raw); err != nil {
+		return compdom.Company{}, fmt.Errorf("decode company document %q: %w", doc.Ref.ID, err)
+	}
+	if raw.IsActive == nil {
+		return compdom.Company{}, fmt.Errorf("invalid company document %q: isActive is missing", doc.Ref.ID)
 	}
 
-	getBool := func(key string) bool {
-		if v, ok := data[key].(bool); ok {
-			return v
-		}
-		return false
+	company, err := compdom.NewCompany(
+		doc.Ref.ID,
+		raw.Name,
+		raw.Admin,
+		raw.CreatedBy,
+		raw.UpdatedBy,
+		raw.CreatedAt,
+		raw.UpdatedAt,
+		*raw.IsActive,
+		raw.DeletedAt,
+		raw.DeletedBy,
+	)
+	if err != nil {
+		return compdom.Company{}, fmt.Errorf("invalid company document %q: %w", doc.Ref.ID, err)
 	}
 
-	getTimePtr := func(key string) *time.Time {
-		if v, ok := data[key].(time.Time); ok {
-			t := v.UTC()
-			return &t
-		}
-		return nil
-	}
-
-	getTimeVal := func(key string) time.Time {
-		if pt := getTimePtr(key); pt != nil {
-			return *pt
-		}
-		return time.Time{}
-	}
-
-	var c compdom.Company
-
-	c.ID = getStr("id")
-	if c.ID == "" {
-		c.ID = doc.Ref.ID
-	}
-
-	c.Name = getStr("name")
-	c.Admin = getStr("admin")
-	c.IsActive = getBool("isActive")
-
-	if t := getTimeVal("createdAt"); !t.IsZero() {
-		c.CreatedAt = t
-	}
-
-	c.CreatedBy = getStr("createdBy")
-
-	if pt := getTimePtr("updatedAt"); pt != nil {
-		c.UpdatedAt = *pt
-	}
-
-	if s := getStr("updatedBy"); s != "" {
-		c.UpdatedBy = s
-	}
-
-	if pt := getTimePtr("deletedAt"); pt != nil {
-		c.DeletedAt = pt
-	}
-
-	if s := getStr("deletedBy"); s != "" {
-		c.DeletedBy = &s
-	}
-
-	return c, nil
+	return company, nil
 }
 
 // ==============================
