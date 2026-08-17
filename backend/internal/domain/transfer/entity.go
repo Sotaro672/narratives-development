@@ -10,7 +10,7 @@ import (
 責任と機能:
 - Bubblegum V2 cNFT transferの実行結果を永続化するためのドメインエンティティ。
 - カスタマーサポート、監査、再実行のために、成功・失敗、エラー種別、
-  tx署名、対象assetIdを保持する。
+  tx署名、対象assetId、移譲元識別子を保持する。
 - FirestoreのdocIdは"<productId>__<attempt>"を想定し、
   Transfer自体にはIDフィールドを持たせない。
 - 同一productIdに対する複数試行を扱うため、Attemptを保持する。
@@ -23,6 +23,10 @@ import (
   ResolveTransferredAtByAssetIDResultとして返す。
 - cNFTの識別子はassetIdを正とする。
 - OperationIDはTransfer作成後に変更しない。
+- AvatarIDは移譲先avatarIdを表す。
+- ブランドからavatarへの移譲ではFromBrandIDを保持する。
+- resale等のavatar間移譲ではFromAvatarIDを保持する。
+- FromAvatarID / FromBrandIDは既存Transferとの互換性のため必須にはしない。
 */
 
 type Status string
@@ -84,7 +88,15 @@ type Transfer struct {
 	ProductID   string `json:"productId"`
 	OperationID string `json:"operationId"`
 	OrderID     string `json:"orderId"`
-	AvatarID    string `json:"avatarId"`
+
+	// AvatarID is the destination avatar.
+	AvatarID string `json:"avatarId"`
+
+	// Sender identifiers.
+	// Brand -> avatar transfer uses FromBrandID.
+	// Avatar -> avatar transfer such as resale uses FromAvatarID.
+	FromAvatarID string `json:"fromAvatarId,omitempty"`
+	FromBrandID  string `json:"fromBrandId,omitempty"`
 
 	// Bubblegum V2 cNFT information
 	AssetID string `json:"assetId"`
@@ -120,8 +132,9 @@ type ResolveTransferredAtByAssetIDResult struct {
 // TransferPatch represents a partial Transfer update.
 // A nil field means no change.
 //
-// OperationID is intentionally excluded because the idempotency key must not
-// change after the Transfer attempt has been created.
+// OperationID and sender identifiers are intentionally excluded because
+// the idempotency key and logical sender must not change after the
+// Transfer attempt has been created.
 type TransferPatch struct {
 	Status          *Status
 	ErrorType       *ErrorType
@@ -138,6 +151,8 @@ func NewPending(
 	operationID string,
 	orderID string,
 	avatarID string,
+	fromAvatarID string,
+	fromBrandID string,
 	toWalletAddress string,
 	assetID string,
 	createdAt time.Time,
@@ -148,6 +163,8 @@ func NewPending(
 		OperationID:     operationID,
 		OrderID:         orderID,
 		AvatarID:        avatarID,
+		FromAvatarID:    fromAvatarID,
+		FromBrandID:     fromBrandID,
 		AssetID:         assetID,
 		ToWalletAddress: toWalletAddress,
 		TxSignature:     nil,
@@ -183,10 +200,7 @@ func (t *Transfer) MarkSucceeded(txSignature string) error {
 }
 
 // MarkFailed marks the Transfer as failed.
-func (t *Transfer) MarkFailed(
-	errorType ErrorType,
-	message string,
-) error {
+func (t *Transfer) MarkFailed(errorType ErrorType, message string) error {
 	if t == nil {
 		return nil
 	}
@@ -211,9 +225,7 @@ func (t *Transfer) MarkFailed(
 //
 // ApplyPatch does not silently ignore invalid non-nil values. Validation is
 // performed after all specified fields have been applied.
-func (t *Transfer) ApplyPatch(
-	patch TransferPatch,
-) error {
+func (t *Transfer) ApplyPatch(patch TransferPatch) error {
 	if t == nil {
 		return nil
 	}

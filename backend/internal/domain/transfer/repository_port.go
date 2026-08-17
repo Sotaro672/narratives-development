@@ -14,7 +14,7 @@ import (
   - productIdとAttemptを指定して個別取得できる
   - productId単位で全試行履歴を取得できる
   - assetIdから成功したtransferの実行日時を取得できる
-  - operationId単位で同一の論理transferを識別できる
+  - operationId単位で同一の論理transferを識別・取得できる
   - 次のAttempt採番とpending Transfer作成を原子的に実行できる
   - 同一operationIdの再実行では新しいAttemptを作成せず既存Transferを返す
 - Firestore実装ではdocId="<productId>__<attempt>"のフラット保存を想定するが、
@@ -29,6 +29,8 @@ import (
 - Firestoreでは正規フィールド名"assetId"と"transferredAt"だけを使用する。
 - OperationIDは1回の論理transferを識別するidempotency keyとして扱う。
 - 同一OperationIDに対して複数のTransfer attemptを作成しない。
+- ブランドからavatarへの移譲ではFromBrandIDを保持する。
+- resale等のavatar間移譲ではFromAvatarIDを保持する。
 */
 
 // CreateAttemptInput represents the data required before an Attempt number is
@@ -45,12 +47,19 @@ type CreateAttemptInput struct {
 	OperationID     string
 	OrderID         string
 	AvatarID        string
+	FromAvatarID    string
+	FromBrandID     string
 	ToWalletAddress string
 	AssetID         string
 	CreatedAt       time.Time
 }
 
 // Validate validates the input before repository processing.
+//
+// FromAvatarID / FromBrandID are intentionally not required here so that
+// existing Transfer records and callers can remain backward compatible.
+// New transfer flows should populate exactly the sender identifier applicable
+// to the transfer source.
 func (in CreateAttemptInput) Validate() error {
 	if in.ProductID == "" {
 		return ErrInvalidProductID
@@ -79,9 +88,7 @@ func (in CreateAttemptInput) Validate() error {
 
 // NewTransfer creates a validated pending Transfer after the repository has
 // allocated an Attempt number.
-func (in CreateAttemptInput) NewTransfer(
-	attempt int,
-) (Transfer, error) {
+func (in CreateAttemptInput) NewTransfer(attempt int) (Transfer, error) {
 	if err := in.Validate(); err != nil {
 		return Transfer{}, err
 	}
@@ -92,6 +99,8 @@ func (in CreateAttemptInput) NewTransfer(
 		in.OperationID,
 		in.OrderID,
 		in.AvatarID,
+		in.FromAvatarID,
+		in.FromBrandID,
 		in.ToWalletAddress,
 		in.AssetID,
 		in.CreatedAt,
@@ -118,6 +127,16 @@ type RepositoryPort interface {
 		ctx context.Context,
 		productID string,
 		attempt int,
+	) (*Transfer, error)
+
+	// GetByOperationID returns the Transfer associated with the stable
+	// idempotency key for one logical transfer.
+	//
+	// The same OperationID must resolve to the same Transfer attempt.
+	// It returns ErrNotFound when no Transfer exists for the OperationID.
+	GetByOperationID(
+		ctx context.Context,
+		operationID string,
 	) (*Transfer, error)
 
 	// ListByProductID returns all Transfer attempts for productId in ascending
@@ -166,7 +185,7 @@ type RepositoryPort interface {
 	//
 	// The Transfer must be valid before it is written.
 	// Save must not allocate or change Attempt.
-	// Save must not change OperationID.
+	// Save must not change OperationID or sender identifiers.
 	Save(
 		ctx context.Context,
 		t Transfer,
@@ -177,7 +196,8 @@ type RepositoryPort interface {
 	// entity.
 	//
 	// A nil field in TransferPatch means no change.
-	// OperationID is immutable and cannot be changed through Patch.
+	// OperationID and sender identifiers are immutable and cannot be changed
+	// through Patch.
 	Patch(
 		ctx context.Context,
 		productID string,

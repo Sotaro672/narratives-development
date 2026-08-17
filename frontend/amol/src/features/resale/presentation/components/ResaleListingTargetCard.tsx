@@ -6,7 +6,7 @@ import SectionHeader from "../../../../components/ui/SectionHeader";
 export type ResaleListingTargetCardTarget = {
   brandName: string;
   productName: string;
-  tokenIconUrl: string;
+  tokenIcon: string;
   tokenName: string;
 };
 
@@ -20,7 +20,7 @@ export default function ResaleListingTargetCard({
   const {
     brandName,
     productName,
-    tokenIconUrl,
+    tokenIcon,
     tokenName,
   } = target;
 
@@ -33,7 +33,7 @@ export default function ResaleListingTargetCard({
 
       <div className="resale-token-summary">
         <MediaIcon
-          src={tokenIconUrl}
+          src={tokenIcon}
           alt={
             tokenName
               ? `${tokenName}のトークンアイコン`

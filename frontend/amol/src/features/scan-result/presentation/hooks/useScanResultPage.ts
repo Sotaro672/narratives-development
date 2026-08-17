@@ -1,4 +1,5 @@
 // frontend/amol/src/features/scan-result/presentation/hooks/useScanResultPage.ts
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -17,12 +18,17 @@ import {
   transferScanPurchased,
 } from "../../infrastructure/scanResultApi";
 import { getOptionalAuthHeaders } from "../../../../lib/authHeaders";
+import { HttpError } from "../../../../lib/http/httpError";
 import type {
   MallScanTransferResponse,
   PreviewState,
   ScanResultPageState,
 } from "../../../shared/types/scanResult";
 import type { ProductBlueprintReviewPage } from "../../../shared/types/review";
+
+const TRANSFER_OPERATION_STORAGE_PREFIX = "scan-transfer-operation:";
+const OWNERSHIP_RETRY_ATTEMPTS = 6;
+const TRANSFER_PREVIEW_RECOVERY_ATTEMPTS = 6;
 
 function safeDecodeURIComponent(value: string): string {
   try {
@@ -36,6 +42,88 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => {
     globalThis.setTimeout(resolve, ms);
   });
+}
+
+function getTransferOperationStorageKey(productId: string): string {
+  return `${TRANSFER_OPERATION_STORAGE_PREFIX}${productId}`;
+}
+
+function readStoredTransferOperationId(productId: string): string {
+  if (!productId) return "";
+  try {
+    return globalThis.sessionStorage.getItem(getTransferOperationStorageKey(productId))?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function getOrCreateTransferOperationId(productId: string): string {
+  const storedOperationId = readStoredTransferOperationId(productId);
+  if (storedOperationId) {
+    return storedOperationId;
+  }
+
+  const operationId = globalThis.crypto.randomUUID();
+  try {
+    globalThis.sessionStorage.setItem(getTransferOperationStorageKey(productId), operationId);
+  } catch {
+    // sessionStorage が利用できない場合も、現在の画面内では同じ operationId を利用する。
+  }
+
+  return operationId;
+}
+
+function clearStoredTransferOperationId(productId: string, operationId: string): void {
+  if (!productId || !operationId) return;
+  try {
+    const storageKey = getTransferOperationStorageKey(productId);
+    if (globalThis.sessionStorage.getItem(storageKey) === operationId) {
+      globalThis.sessionStorage.removeItem(storageKey);
+    }
+  } catch {
+    // sessionStorage が利用できない場合は何もしない。
+  }
+}
+
+function isRetryableTransferError(error: unknown): boolean {
+  if (error instanceof HttpError) {
+    return error.status === 408 || error.status >= 500;
+  }
+
+  return error instanceof TypeError;
+}
+
+function createRecoveredTransferResult(
+  previewState: PreviewState,
+  assetId: string,
+): MallScanTransferResponse | null {
+  const transfers = previewState.raw.transfers;
+  const latestTransfer = transfers.length > 0 ? transfers[transfers.length - 1] : undefined;
+  const fromDisplayName =
+    latestTransfer?.fromAvatarName?.trim() ||
+    latestTransfer?.fromBrandName?.trim() ||
+    "";
+  const toDisplayName =
+    latestTransfer?.toAvatarName?.trim() ||
+    latestTransfer?.toBrandName?.trim() ||
+    previewState.raw.owner?.avatarName?.trim() ||
+    previewState.raw.owner?.brandName?.trim() ||
+    "";
+
+  if (!fromDisplayName || !toDisplayName) {
+    return null;
+  }
+
+  return {
+    avatarId: previewState.raw.owner?.avatarId ?? "",
+    productId: previewState.raw.productId,
+    matched: true,
+    txSignature: "",
+    fromDisplayName,
+    toDisplayName,
+    updatedToAddress: true,
+    assetId,
+  };
 }
 
 export function useScanProductIdFromUrl(): string {
@@ -138,7 +226,11 @@ export function useScanResultPage() {
   }, []);
 
   const checkOwnedStateByAssetId = useCallback(
-    async (assetId: string, headers: HeadersInit, retryAfterTransfer = false) => {
+    async (
+      assetId: string,
+      headers: HeadersInit,
+      retryAfterTransfer = false,
+    ): Promise<boolean | null> => {
       const normalizedAssetId = assetId.trim();
 
       if (!normalizedAssetId) {
@@ -146,13 +238,14 @@ export function useScanResultPage() {
           setOwnedByWallet(null);
           setOwnedByWalletError(null);
         }
-        return;
+
+        return null;
       }
 
       setBusyOwnedByWallet(true);
       setOwnedByWalletError(null);
 
-      const maxAttempts = retryAfterTransfer ? 4 : 1;
+      const maxAttempts = retryAfterTransfer ? OWNERSHIP_RETRY_ATTEMPTS : 1;
       let lastError: unknown = null;
 
       try {
@@ -160,23 +253,39 @@ export function useScanResultPage() {
           try {
             const owned = await isOwnedByWalletAssetId(normalizedAssetId, headers);
 
-            if (!mountedRef.current) return;
+            if (!mountedRef.current) {
+              return null;
+            }
 
-            setOwnedByWallet(owned);
-            setOwnedByWalletError(null);
-            return;
+            if (owned) {
+              setOwnedByWallet(true);
+              setOwnedByWalletError(null);
+              return true;
+            }
+
+            if (!retryAfterTransfer || attempt >= maxAttempts) {
+              setOwnedByWallet(false);
+              setOwnedByWalletError(null);
+              return false;
+            }
           } catch (caughtError) {
             lastError = caughtError;
 
-            if (attempt >= maxAttempts) break;
+            if (attempt >= maxAttempts) {
+              break;
+            }
+          }
 
-            await wait(600 * attempt);
+          await wait(700 * attempt);
 
-            if (!mountedRef.current) return;
+          if (!mountedRef.current) {
+            return null;
           }
         }
 
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) {
+          return null;
+        }
 
         setOwnedByWallet(null);
         setOwnedByWalletError(
@@ -184,6 +293,8 @@ export function useScanResultPage() {
             ? lastError.message
             : String(lastError),
         );
+
+        return null;
       } finally {
         if (mountedRef.current) {
           setBusyOwnedByWallet(false);
@@ -193,16 +304,87 @@ export function useScanResultPage() {
     [],
   );
 
+  const recoverTransferAfterOwnershipConfirmed = useCallback(
+    async (
+      pid: string,
+      assetId: string,
+    ): Promise<MallScanTransferResponse | null> => {
+      const normalizedProductId = pid.trim();
+      const normalizedAssetId = assetId.trim();
+
+      if (!normalizedProductId || !normalizedAssetId) {
+        return null;
+      }
+
+      for (
+        let attempt = 1;
+        attempt <= TRANSFER_PREVIEW_RECOVERY_ATTEMPTS;
+        attempt += 1
+      ) {
+        try {
+          const refreshedPreviewState = await loadPreviewState(normalizedProductId);
+
+          if (!mountedRef.current) {
+            return null;
+          }
+
+          setPreviewState(refreshedPreviewState);
+
+          const recoveredResult = createRecoveredTransferResult(
+            refreshedPreviewState,
+            normalizedAssetId,
+          );
+
+          if (recoveredResult) {
+            setTransferResult(recoveredResult);
+            setTransferError(null);
+            setTransferModalError(null);
+            setTransferModalOpen(true);
+            setOwnedByWallet(true);
+            setOwnedByWalletError(null);
+
+            clearStoredTransferOperationId(
+              normalizedProductId,
+              operationIdRef.current,
+            );
+            operationIdRef.current = "";
+
+            return recoveredResult;
+          }
+        } catch {
+          // transfer 自体は完了している可能性があるため、preview BFF の反映を待って再試行する。
+        }
+
+        if (attempt < TRANSFER_PREVIEW_RECOVERY_ATTEMPTS) {
+          await wait(700 * attempt);
+
+          if (!mountedRef.current) {
+            return null;
+          }
+        }
+      }
+
+      return null;
+    },
+    [],
+  );
+
   const runAutoTransferIfNeeded = useCallback(
     async (
       pid: string,
+      assetId: string,
       headers?: HeadersInit,
     ): Promise<MallScanTransferResponse | null> => {
       const normalizedProductId = pid.trim();
+      const normalizedAssetId = assetId.trim();
 
-      if (!normalizedProductId) return null;
-      if (!headers) return null;
-      if (autoTransferTriggeredRef.current || transferringRef.current) return null;
+      if (!normalizedProductId || !headers) {
+        return null;
+      }
+
+      if (autoTransferTriggeredRef.current || transferringRef.current) {
+        return null;
+      }
 
       autoTransferTriggeredRef.current = true;
       transferringRef.current = true;
@@ -211,9 +393,9 @@ export function useScanResultPage() {
       setTransferModalError(null);
 
       try {
-        if (!operationIdRef.current) {
-          operationIdRef.current = globalThis.crypto.randomUUID();
-        }
+        operationIdRef.current =
+          operationIdRef.current ||
+          getOrCreateTransferOperationId(normalizedProductId);
 
         const nextTransferResult = await transferScanPurchased({
           productId: normalizedProductId,
@@ -221,11 +403,19 @@ export function useScanResultPage() {
           headers,
         });
 
-        if (!mountedRef.current) return nextTransferResult;
+        if (!mountedRef.current) {
+          return nextTransferResult;
+        }
 
         setTransferResult(nextTransferResult);
         setTransferError(null);
         setTransferModalError(null);
+
+        clearStoredTransferOperationId(
+          normalizedProductId,
+          operationIdRef.current,
+        );
+        operationIdRef.current = "";
 
         if (nextTransferResult.matched) {
           setTransferModalOpen(true);
@@ -233,7 +423,33 @@ export function useScanResultPage() {
 
         return nextTransferResult;
       } catch (caughtError) {
-        if (!mountedRef.current) return null;
+        if (!mountedRef.current) {
+          return null;
+        }
+
+        if (isRetryableTransferError(caughtError) && normalizedAssetId) {
+          const owned = await checkOwnedStateByAssetId(
+            normalizedAssetId,
+            headers,
+            true,
+          );
+
+          if (!mountedRef.current) {
+            return null;
+          }
+
+          if (owned === true) {
+            const recoveredResult =
+              await recoverTransferAfterOwnershipConfirmed(
+                normalizedProductId,
+                normalizedAssetId,
+              );
+
+            if (recoveredResult) {
+              return recoveredResult;
+            }
+          }
+        }
 
         const message =
           caughtError instanceof Error
@@ -254,15 +470,23 @@ export function useScanResultPage() {
         }
       }
     },
-    [],
+    [
+      checkOwnedStateByAssetId,
+      recoverTransferAfterOwnershipConfirmed,
+    ],
   );
 
   const loadAuthFlow = useCallback(
-    async (pid: string, assetId: string) => {
+    async (
+      pid: string,
+      assetId: string,
+    ) => {
       const normalizedProductId = pid.trim();
       const normalizedAssetId = assetId.trim();
 
-      if (!normalizedProductId) return;
+      if (!normalizedProductId) {
+        return;
+      }
 
       const headers = await getOptionalAuthHeaders();
       const hasAuth = Boolean(headers);
@@ -271,17 +495,50 @@ export function useScanResultPage() {
         setAuthAvailable(hasAuth);
       }
 
-      if (!headers) return;
+      if (!headers) {
+        return;
+      }
+
+      if (normalizedAssetId) {
+        const hasPendingTransferOperation = Boolean(
+          operationIdRef.current,
+        );
+
+        const alreadyOwned = await checkOwnedStateByAssetId(
+          normalizedAssetId,
+          headers,
+          hasPendingTransferOperation,
+        );
+
+        if (!mountedRef.current) {
+          return;
+        }
+
+        if (alreadyOwned === true) {
+          if (hasPendingTransferOperation) {
+            await recoverTransferAfterOwnershipConfirmed(
+              normalizedProductId,
+              normalizedAssetId,
+            );
+          }
+
+          return;
+        }
+      }
 
       const nextTransferResult = await runAutoTransferIfNeeded(
         normalizedProductId,
+        normalizedAssetId,
         headers,
       );
 
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) {
+        return;
+      }
 
       const ownedCheckAssetId =
-        nextTransferResult?.assetId?.trim() || normalizedAssetId;
+        nextTransferResult?.assetId?.trim() ||
+        normalizedAssetId;
 
       if (!ownedCheckAssetId) {
         setOwnedByWallet(null);
@@ -289,13 +546,19 @@ export function useScanResultPage() {
         return;
       }
 
-      void checkOwnedStateByAssetId(
-        ownedCheckAssetId,
-        headers,
-        nextTransferResult?.matched === true,
-      );
+      if (nextTransferResult?.matched === true) {
+        void checkOwnedStateByAssetId(
+          ownedCheckAssetId,
+          headers,
+          true,
+        );
+      }
     },
-    [checkOwnedStateByAssetId, runAutoTransferIfNeeded],
+    [
+      checkOwnedStateByAssetId,
+      recoverTransferAfterOwnershipConfirmed,
+      runAutoTransferIfNeeded,
+    ],
   );
 
   const load = useCallback(async () => {
@@ -318,7 +581,10 @@ export function useScanResultPage() {
 
     autoTransferTriggeredRef.current = false;
     transferringRef.current = false;
-    operationIdRef.current = globalThis.crypto.randomUUID();
+    operationIdRef.current =
+      pid
+        ? readStoredTransferOperationId(pid)
+        : "";
 
     try {
       if (!pid) {
@@ -340,7 +606,9 @@ export function useScanResultPage() {
       const nextAssetId = nextState.raw.token?.assetId ?? "";
       await loadAuthFlow(pid, nextAssetId);
     } catch (caughtError) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) {
+        return;
+      }
 
       setError(
         caughtError instanceof Error
@@ -364,7 +632,9 @@ export function useScanResultPage() {
         return;
       }
 
-      if (busyReviews) return;
+      if (busyReviews) {
+        return;
+      }
 
       setBusyReviews(true);
       setReviewsError(null);
@@ -383,13 +653,17 @@ export function useScanResultPage() {
           },
         );
 
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) {
+          return;
+        }
 
         setReviews(response);
         setReviewsError(null);
         setReviewPage(nextPage);
       } catch (caughtError) {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) {
+          return;
+        }
 
         setReviews(null);
         setReviewsError(
@@ -420,7 +694,9 @@ export function useScanResultPage() {
       return;
     }
 
-    if (busyOwnedByWallet) return;
+    if (busyOwnedByWallet) {
+      return;
+    }
 
     const headers = await getOptionalAuthHeaders();
 
@@ -429,6 +705,7 @@ export function useScanResultPage() {
         setOwnedByWallet(null);
         setOwnedByWalletError(null);
       }
+
       return;
     }
 
@@ -440,7 +717,9 @@ export function useScanResultPage() {
   ]);
 
   const openContentsAfterResolve = useCallback(() => {
-    if (!transferSuccessModalViewModel?.canOpenContents) return;
+    if (!transferSuccessModalViewModel?.canOpenContents) {
+      return;
+    }
 
     const searchParams = new URLSearchParams({
       assetId: transferSuccessModalViewModel.assetId,
@@ -464,7 +743,9 @@ export function useScanResultPage() {
 
   const openTokenContentsByAssetId = useCallback(
     async (assetId: string) => {
-      if (!assetId) return;
+      if (!assetId) {
+        return;
+      }
 
       const headers = await getOptionalAuthHeaders();
 
@@ -521,7 +802,9 @@ export function useScanResultPage() {
 
         navigate(`/contents?${searchParams.toString()}`);
       } catch (caughtError) {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) {
+          return;
+        }
 
         setOwnedByWalletError(
           caughtError instanceof Error
@@ -537,7 +820,9 @@ export function useScanResultPage() {
     async (body: string, rating: number) => {
       const pbId = productBlueprintId.trim();
 
-      if (postingReview) return false;
+      if (postingReview) {
+        return false;
+      }
 
       setPostingReview(true);
       setPostReviewError(null);
@@ -580,8 +865,9 @@ export function useScanResultPage() {
   );
 
   const nextReviewsPage = useCallback(async () => {
-    if (busyReviews) return;
-    if (reviews?.hasNext !== true) return;
+    if (busyReviews || reviews?.hasNext !== true) {
+      return;
+    }
 
     await loadReviews(reviewPage + 1);
   }, [
@@ -592,8 +878,9 @@ export function useScanResultPage() {
   ]);
 
   const prevReviewsPage = useCallback(async () => {
-    if (busyReviews) return;
-    if (reviewPage <= 1) return;
+    if (busyReviews || reviewPage <= 1) {
+      return;
+    }
 
     await loadReviews(reviewPage - 1);
   }, [
@@ -615,7 +902,9 @@ export function useScanResultPage() {
   }, [productId]);
 
   useEffect(() => {
-    if (!productBlueprintId) return;
+    if (!productBlueprintId) {
+      return;
+    }
 
     void loadReviews(1);
 

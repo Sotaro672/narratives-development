@@ -73,10 +73,6 @@ export default function ScanTransferSuccessModal({
           </p>
         ) : viewModel ? (
           <div className="scan-transfer-modal__body">
-            <p className="scan-transfer-modal__message">
-              トークンの移譲が完了しました。
-            </p>
-
             <dl className="scan-transfer-modal__list">
               <div>
                 <dt>商品名</dt>
@@ -113,13 +109,6 @@ export default function ScanTransferSuccessModal({
                   )}
                 </dd>
               </div>
-
-              {viewModel.walletUpdated ? (
-                <div>
-                  <dt>Wallet 更新</dt>
-                  <dd>完了</dd>
-                </div>
-              ) : null}
             </dl>
 
             {canOpenContents ? (
