@@ -1,183 +1,104 @@
 // frontend/amol/src/pages/ScanResultPage.tsx
 
-import {
-  useCallback,
-  useState,
-} from "react";
-import {
-  useNavigate,
-} from "react-router-dom";
+import { useCallback, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
-import {
-  useMobilePortrait,
-} from "../components/hooks/useMobilePortrait";
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 
 import ScanResultCard from "../features/scan-result/presentation/components/ScanResultCard";
 import ScanTransferSuccessModal from "../features/scan-result/presentation/components/ScanTransferSuccessModal";
-import {
-  useScanResultPage,
-} from "../features/scan-result/presentation/hooks/useScanResultPage";
+import { useScanResultPage } from "../features/scan-result/presentation/hooks/useScanResultPage";
 
 import "../styles/scan-result-page.css";
 
 export default function ScanResultPage() {
-  const navigate =
-    useNavigate();
+  const navigate = useNavigate();
+  const isMobilePortrait = useMobilePortrait();
 
-  const isMobilePortrait =
-    useMobilePortrait();
-
-  const [
-    reviewBody,
-    setReviewBody,
-  ] = useState("");
-
-  const [
-    reviewRating,
-    setReviewRating,
-  ] = useState(5);
+  const [reviewBody, setReviewBody] = useState("");
+  const [reviewRating, setReviewRating] = useState(5);
 
   const {
     state,
     viewModel,
-
     hasMultipleTransfers,
-
     load,
     submitReview,
     nextReviewsPage,
     prevReviewsPage,
-
     openContentsAfterResolve,
-    openTokenContentsByMintAddress,
-
+    openTokenContentsByAssetId,
     transferModalOpen,
     transferModalError,
     closeTransferModal,
-
     transferSuccessModalViewModel,
   } = useScanResultPage();
 
-  const handleSubmitReview =
-    useCallback(async () => {
-      const ok =
-        await submitReview(
-          reviewBody,
-          reviewRating,
-        );
+  const handleSubmitReview = useCallback(async () => {
+    const ok = await submitReview(reviewBody, reviewRating);
 
-      if (ok) {
-        setReviewBody("");
-        setReviewRating(5);
-      }
-    }, [
-      reviewBody,
-      reviewRating,
-      submitReview,
-    ]);
+    if (ok) {
+      setReviewBody("");
+      setReviewRating(5);
+    }
+  }, [reviewBody, reviewRating, submitReview]);
 
-  const handleOpenInquiryPage =
-    useCallback(() => {
-      const productId =
-        state.productId.trim();
+  const handleOpenInquiryPage = useCallback(() => {
+    const productId = state.productId.trim();
 
-      if (!productId) {
-        return;
-      }
+    if (!productId) {
+      return;
+    }
 
-      navigate(
-        `/inquiries/new?productId=${encodeURIComponent(
-          productId,
-        )}`,
-      );
-    }, [
-      navigate,
-      state.productId,
-    ]);
+    navigate(`/inquiries/new?productId=${encodeURIComponent(productId)}`);
+  }, [navigate, state.productId]);
 
-  const isLoggedIn =
-    state.authAvailable === true;
+  const isLoggedIn = state.authAvailable === true;
 
   const canPostReview =
     state.ownedByWallet === true &&
     !state.loading &&
     !state.postingReview &&
-    Boolean(
-      reviewBody.trim(),
-    );
+    Boolean(reviewBody.trim());
 
   const canOpenInquiryPage =
     isLoggedIn &&
-    Boolean(
-      state.productId.trim(),
-    ) &&
+    Boolean(state.productId.trim()) &&
     !hasMultipleTransfers;
 
   return (
     <Layout
       title="AMOL"
-      mode={
-        isLoggedIn
-          ? "mypage"
-          : "landing"
-      }
+      mode={isLoggedIn ? "mypage" : "landing"}
       showHeader
-      showBackButton={
-        isLoggedIn &&
-        isMobilePortrait
-      }
+      showBackButton={isLoggedIn && isMobilePortrait}
       showFooter={isLoggedIn}
       backTo="/wallet"
       hideHamburgerMenu={false}
-      hideSettingsButton={
-        !isLoggedIn
-      }
+      hideSettingsButton={!isLoggedIn}
       mainClassName="scan-result-page"
-      secondaryActionButtonLabel={
-        canOpenInquiryPage
-          ? "問い合わせ"
-          : undefined
-      }
-      onSecondaryActionButtonClick={
-        canOpenInquiryPage
-          ? handleOpenInquiryPage
-          : undefined
-      }
-      secondaryActionButtonDisabled={
-        !canOpenInquiryPage
-      }
+      secondaryActionButtonLabel={canOpenInquiryPage ? "問い合わせ" : undefined}
+      onSecondaryActionButtonClick={canOpenInquiryPage ? handleOpenInquiryPage : undefined}
+      secondaryActionButtonDisabled={!canOpenInquiryPage}
       footerProps={
         isLoggedIn &&
         isMobilePortrait &&
         state.ownedByWallet === true
           ? {
-              variant:
-                "reviewAction",
-              value:
-                reviewBody,
-              rating:
-                reviewRating,
-              placeholder:
-                "口コミを入力",
-              buttonLabel:
-                state.postingReview
-                  ? "投稿中"
-                  : "投稿",
-              disabled:
-                !canPostReview,
-              posting:
-                state.postingReview,
-              onChange:
-                setReviewBody,
-              onRatingChange:
-                setReviewRating,
-              onSubmit:
-                handleSubmitReview,
+              variant: "reviewAction",
+              value: reviewBody,
+              rating: reviewRating,
+              placeholder: "口コミを入力",
+              buttonLabel: state.postingReview ? "投稿中" : "投稿",
+              disabled: !canPostReview,
+              posting: state.postingReview,
+              onChange: setReviewBody,
+              onRatingChange: setReviewRating,
+              onSubmit: handleSubmitReview,
             }
           : {
-              variant:
-                "default",
+              variant: "default",
             }
       }
     >
@@ -185,54 +106,24 @@ export default function ScanResultPage() {
         state={state}
         viewModel={viewModel}
         onRefresh={load}
-        onPrevReviewsPage={
-          prevReviewsPage
-        }
-        onNextReviewsPage={
-          nextReviewsPage
-        }
-        onOpenTokenContents={
-          openTokenContentsByMintAddress
-        }
-        reviewBody={
-          reviewBody
-        }
-        reviewRating={
-          reviewRating
-        }
-        onReviewBodyChange={
-          setReviewBody
-        }
-        onReviewRatingChange={
-          setReviewRating
-        }
-        onSubmitReviewForm={
-          handleSubmitReview
-        }
-        hideReviewForm={
-          isMobilePortrait
-        }
+        onPrevReviewsPage={prevReviewsPage}
+        onNextReviewsPage={nextReviewsPage}
+        onOpenTokenContents={openTokenContentsByAssetId}
+        reviewBody={reviewBody}
+        reviewRating={reviewRating}
+        onReviewBodyChange={setReviewBody}
+        onReviewRatingChange={setReviewRating}
+        onSubmitReviewForm={handleSubmitReview}
+        hideReviewForm={isMobilePortrait}
       />
 
       <ScanTransferSuccessModal
-        open={
-          transferModalOpen
-        }
-        loading={
-          state.busyTransfer
-        }
-        error={
-          transferModalError
-        }
-        viewModel={
-          transferSuccessModalViewModel
-        }
-        onClose={
-          closeTransferModal
-        }
-        onOpenContents={
-          openContentsAfterResolve
-        }
+        open={transferModalOpen}
+        loading={state.busyTransfer}
+        error={transferModalError}
+        viewModel={transferSuccessModalViewModel}
+        onClose={closeTransferModal}
+        onOpenContents={openContentsAfterResolve}
       />
     </Layout>
   );

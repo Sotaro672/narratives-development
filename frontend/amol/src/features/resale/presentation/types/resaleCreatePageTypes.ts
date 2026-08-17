@@ -17,12 +17,9 @@ export type ResaleCreatePageLocationState = {
   productBlueprintId?: string;
   tokenBlueprintId?: string;
   tokenName?: string;
-  tokenIcon?: string;
+  tokenIconUrl?: string;
 };
 
-/**
- * 再販出品対象情報。
- */
 export type ResaleCreateTarget = {
   assetId: string;
   productId: string;
@@ -32,7 +29,7 @@ export type ResaleCreateTarget = {
   productBlueprintId: string;
   tokenBlueprintId: string;
   tokenName: string;
-  tokenIcon: string;
+  tokenIconUrl: string;
 };
 
 /**

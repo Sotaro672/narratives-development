@@ -42,7 +42,7 @@ export default function WalletPage() {
   const handleOpenContents = (token: WalletTokenItem) => {
     const params = new URLSearchParams();
 
-    params.set("mintAddress", token.mintAddress);
+    params.set("assetId", token.assetId);
 
     if (token.productId) {
       params.set("productId", token.productId);
@@ -108,9 +108,7 @@ export default function WalletPage() {
 
   const renderTokenList = () => (
     <div className="wallet-page-token-list">
-      {tokenLoading ? (
-        <p className="wallet-page__message">読み込み中です...</p>
-      ) : null}
+      {tokenLoading ? <p className="wallet-page__message">読み込み中です...</p> : null}
 
       {!tokenLoading && tokenError ? (
         <div role="alert" className="wallet-page__message">
@@ -118,16 +116,11 @@ export default function WalletPage() {
         </div>
       ) : null}
 
-      {!tokenLoading && !tokenError && !hasTokens ? (
-        <WalletTokenEmpty />
-      ) : null}
+      {!tokenLoading && !tokenError && !hasTokens ? <WalletTokenEmpty /> : null}
 
       {!tokenLoading && !tokenError && hasTokens
         ? walletTokens.map((token) => (
-            <div
-              key={token.mintAddress}
-              className="wallet-page-token-list__item"
-            >
+            <div key={token.assetId} className="wallet-page-token-list__item">
               <WalletTokenContentsCard
                 tokenIconUrl={token.metadata?.image || null}
                 tokenName={token.metadata?.name || ""}
@@ -151,15 +144,11 @@ export default function WalletPage() {
               profile={profile}
               isOwnAvatar
             />
-
             <WalletProfileActions />
           </aside>
 
           <div className="wallet-page-layout__main">
-            <WalletTabs
-              activeTab={activeTab}
-              onChange={setActiveTab}
-            />
+            <WalletTabs activeTab={activeTab} onChange={setActiveTab} />
 
             {activeTab === "history" ? (
               <WalletHistoryPanel
@@ -174,9 +163,7 @@ export default function WalletPage() {
             {activeTab === "tokens" ? renderTokenList() : null}
 
             {activeTab === "resales" ? (
-              <WalletResalePanel
-                onItemClick={handleOpenResaleDetail}
-              />
+              <WalletResalePanel onItemClick={handleOpenResaleDetail} />
             ) : null}
           </div>
         </div>
