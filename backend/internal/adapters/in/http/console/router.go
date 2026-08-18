@@ -16,28 +16,29 @@ type RouterDeps struct {
 	BootstrapMw *middleware.BootstrapAuthMiddleware
 
 	// Handlers（生成はDI側）
-	AuthBootstrap       http.Handler
-	Accounts            http.Handler
-	Announcements       http.Handler
-	Permissions         http.Handler
-	Brands              http.Handler
-	Companies           http.Handler
-	Inquiries           http.Handler
-	Inventories         http.Handler
-	Lists               http.Handler
-	ListSaveOperations  http.Handler
-	ProductsPrint       http.Handler
-	ProductBP           http.Handler
-	ProductBPCategories http.Handler
-	TokenBP             http.Handler
-	Messages            http.Handler
-	Orders              http.Handler
-	Wallets             http.Handler
-	Members             http.Handler
-	Productions         http.Handler
-	Models              http.Handler
-	Inspector           http.Handler
-	Mint                http.Handler
+	AuthBootstrap            http.Handler
+	Accounts                 http.Handler
+	Announcements            http.Handler
+	Permissions              http.Handler
+	Brands                   http.Handler
+	Companies                http.Handler
+	CompanyShippingAddresses http.Handler
+	Inquiries                http.Handler
+	Inventories              http.Handler
+	Lists                    http.Handler
+	ListSaveOperations       http.Handler
+	ProductsPrint            http.Handler
+	ProductBP                http.Handler
+	ProductBPCategories      http.Handler
+	TokenBP                  http.Handler
+	Messages                 http.Handler
+	Orders                   http.Handler
+	Wallets                  http.Handler
+	Members                  http.Handler
+	Productions              http.Handler
+	Models                   http.Handler
+	Inspector                http.Handler
+	Mint                     http.Handler
 
 	// Internal handlers
 	//
@@ -135,6 +136,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 		h := withAuth(deps.Brands)
 		mux.Handle("/brands", h)
 		mux.Handle("/brands/", h)
+	}
+
+	if deps.CompanyShippingAddresses != nil {
+		h := withAuth(deps.CompanyShippingAddresses)
+		mux.Handle("/companies/me/shipping-addresses", h)
+		mux.Handle("/companies/me/shipping-addresses/", h)
 	}
 
 	if deps.Companies != nil {

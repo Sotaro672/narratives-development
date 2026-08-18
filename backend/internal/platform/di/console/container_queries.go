@@ -14,6 +14,7 @@ import (
 )
 
 type queries struct {
+	companyQuery                  *companyquery.CompanyQuery
 	companyProductionQueryService *companyquery.CompanyProductionQueryService
 	mintRequestQueryService       *companyquery.MintRequestQueryService
 	mintFundingEstimateQuery      *companyquery.MintFundingEstimateQuery
@@ -53,6 +54,11 @@ func buildQueries(
 	u *usecases,
 	s *services,
 ) *queries {
+	companyQuery := companyquery.NewCompanyQuery(
+		r.companyRepo,
+		r.memberRepo,
+	)
+
 	brandManagementQuery := companyquery.NewBrandManagementQuery(
 		r.brandRepo,
 		r.memberRepo,
@@ -327,6 +333,7 @@ func buildQueries(
 	_ = s
 
 	return &queries{
+		companyQuery:                  companyQuery,
 		companyProductionQueryService: companyProductionQueryService,
 		mintRequestQueryService:       mintRequestQueryService,
 		mintFundingEstimateQuery:      mintFundingEstimateQuery,

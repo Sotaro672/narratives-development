@@ -15,60 +15,129 @@ type CompanyHandler struct {
 	uc *usecase.CompanyUsecase
 }
 
-func NewCompanyHandler(uc *usecase.CompanyUsecase) http.Handler {
-	return &CompanyHandler{uc: uc}
+func NewCompanyHandler(
+	uc *usecase.CompanyUsecase,
+) http.Handler {
+	return &CompanyHandler{
+		uc: uc,
+	}
 }
 
-func (h *CompanyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+func (h *CompanyHandler) ServeHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	w.Header().Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	path := strings.TrimSuffix(
+		r.URL.Path,
+		"/",
+	)
 
 	switch {
-	// POST /companies
-	case r.Method == http.MethodPost && strings.Trim(r.URL.Path, "/") == "companies":
+	case r.Method == http.MethodPost &&
+		path == "/companies":
 		h.create(w, r)
 
-	// GET /companies/{id}
-	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/companies/"):
-		id := strings.TrimPrefix(r.URL.Path, "/companies/")
+	case r.Method == http.MethodGet &&
+		strings.HasPrefix(path, "/companies/"):
+		id := strings.TrimPrefix(
+			path,
+			"/companies/",
+		)
+
+		if id == "" || strings.Contains(id, "/") {
+			writeNotFound(w)
+			return
+		}
+
 		h.get(w, r, id)
 
-	// PATCH /companies/{id}
-	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/companies/"):
-		id := strings.TrimPrefix(r.URL.Path, "/companies/")
+	case r.Method == http.MethodPatch &&
+		strings.HasPrefix(path, "/companies/"):
+		id := strings.TrimPrefix(
+			path,
+			"/companies/",
+		)
+
+		if id == "" || strings.Contains(id, "/") {
+			writeNotFound(w)
+			return
+		}
+
 		h.update(w, r, id)
 
-	// DELETE /companies/{id}
-	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/companies/"):
-		id := strings.TrimPrefix(r.URL.Path, "/companies/")
+	case r.Method == http.MethodDelete &&
+		strings.HasPrefix(path, "/companies/"):
+		id := strings.TrimPrefix(
+			path,
+			"/companies/",
+		)
+
+		if id == "" || strings.Contains(id, "/") {
+			writeNotFound(w)
+			return
+		}
+
 		h.delete(w, r, id)
 
 	default:
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		writeNotFound(w)
 	}
 }
 
-// ---- GET /companies/{id} ----
+func (h *CompanyHandler) requireUsecase(
+	w http.ResponseWriter,
+) bool {
+	if h != nil && h.uc != nil {
+		return true
+	}
 
-func (h *CompanyHandler) get(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
+	writeError(
+		w,
+		http.StatusServiceUnavailable,
+		"company_usecase_not_initialized",
+	)
 
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+	return false
+}
+
+func (h *CompanyHandler) get(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
+	if !h.requireUsecase(w) {
 		return
 	}
 
-	company, err := h.uc.GetByID(ctx, id)
+	if id == "" {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"invalid id",
+		)
+		return
+	}
+
+	company, err := h.uc.GetByID(
+		r.Context(),
+		id,
+	)
 	if err != nil {
 		writeCompanyErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(company)
+	writeJSON(
+		w,
+		http.StatusOK,
+		company,
+	)
 }
-
-// ---- POST /companies ----
 
 type createCompanyRequest struct {
 	Name      string  `json:"name"`
@@ -77,122 +146,194 @@ type createCompanyRequest struct {
 	CreatedBy *string `json:"createdBy,omitempty"`
 }
 
-func (h *CompanyHandler) create(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	var req createCompanyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+func (h *CompanyHandler) create(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	if !h.requireUsecase(w) {
 		return
 	}
 
-	name := req.Name
-	admin := req.Admin
-	if name == "" || admin == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "name and admin are required"})
+	var request createCompanyRequest
+	if err := decodeStrictJSON(
+		r,
+		&request,
+	); err != nil {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"invalid json",
+		)
+		return
+	}
+
+	if request.Name == "" ||
+		request.Admin == "" {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"name and admin are required",
+		)
 		return
 	}
 
 	isActive := true
-	if req.IsActive != nil {
-		isActive = *req.IsActive
+	if request.IsActive != nil {
+		isActive = *request.IsActive
 	}
 
-	c := companydom.Company{
-		Name:      name,
-		Admin:     admin,
+	now := time.Now().UTC()
+
+	company := companydom.Company{
+		Name:      request.Name,
+		Admin:     request.Admin,
 		IsActive:  isActive,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
-	if req.CreatedBy != nil {
-		c.CreatedBy = *req.CreatedBy
+	if request.CreatedBy != nil {
+		company.CreatedBy = *request.CreatedBy
+		company.UpdatedBy = *request.CreatedBy
 	}
 
-	created, err := h.uc.Create(ctx, c)
+	created, err := h.uc.Create(
+		r.Context(),
+		company,
+	)
 	if err != nil {
 		writeCompanyErr(w, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(created)
+	writeJSON(
+		w,
+		http.StatusCreated,
+		created,
+	)
 }
-
-// ---- PATCH /companies/{id} ----
 
 type updateCompanyRequest struct {
-	Name      *string `json:"name,omitempty"`
-	Admin     *string `json:"admin,omitempty"`
-	IsActive  *bool   `json:"isActive,omitempty"`
-	UpdatedBy *string `json:"updatedBy,omitempty"`
+	Name     *string `json:"name,omitempty"`
+	Admin    *string `json:"admin,omitempty"`
+	IsActive *bool   `json:"isActive,omitempty"`
 }
 
-func (h *CompanyHandler) update(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
+func (h *CompanyHandler) update(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
+	if !h.requireUsecase(w) {
+		return
+	}
 
 	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"invalid id",
+		)
 		return
 	}
 
-	var req updateCompanyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+	var request updateCompanyRequest
+	if err := decodeStrictJSON(
+		r,
+		&request,
+	); err != nil {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"invalid json",
+		)
 		return
 	}
+
+	updatedBy := usecase.MemberIDFromContext(
+		r.Context(),
+	)
 
 	patch := companydom.CompanyPatch{
-		Name:      req.Name,
-		Admin:     req.Admin,
-		IsActive:  req.IsActive,
-		UpdatedBy: req.UpdatedBy,
+		Name:     request.Name,
+		Admin:    request.Admin,
+		IsActive: request.IsActive,
 	}
 
-	updated, err := h.uc.Update(ctx, id, patch)
+	if updatedBy != "" {
+		patch.UpdatedBy = &updatedBy
+	}
+
+	updated, err := h.uc.Update(
+		r.Context(),
+		id,
+		patch,
+	)
 	if err != nil {
 		writeCompanyErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(updated)
+	writeJSON(
+		w,
+		http.StatusOK,
+		updated,
+	)
 }
 
-// ---- DELETE /companies/{id} ----
-
-func (h *CompanyHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+func (h *CompanyHandler) delete(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
+	if !h.requireUsecase(w) {
 		return
 	}
 
-	if err := h.uc.Delete(ctx, id); err != nil {
+	if id == "" {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"invalid id",
+		)
+		return
+	}
+
+	if err := h.uc.Delete(
+		r.Context(),
+		id,
+	); err != nil {
 		writeCompanyErr(w, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(
+		http.StatusNoContent,
+	)
 }
 
-// ---- 共通エラーハンドリング ----
-
-func writeCompanyErr(w http.ResponseWriter, err error) {
-	code := http.StatusInternalServerError
+func writeCompanyErr(
+	w http.ResponseWriter,
+	err error,
+) {
+	statusCode := http.StatusInternalServerError
 
 	switch err {
+	case companydom.ErrInvalidID:
+		statusCode = http.StatusBadRequest
+
 	case companydom.ErrNotFound:
-		code = http.StatusNotFound
+		statusCode = http.StatusNotFound
+
 	case companydom.ErrConflict:
-		code = http.StatusConflict
+		statusCode = http.StatusConflict
 	}
 
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	_ = json.NewEncoder
+
+	writeError(
+		w,
+		statusCode,
+		err.Error(),
+	)
 }

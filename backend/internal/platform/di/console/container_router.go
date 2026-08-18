@@ -35,6 +35,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		permissionsH                        http.Handler
 		brandsH                             http.Handler
 		companiesH                          http.Handler
+		companyShippingAddressesH           http.Handler
 		inquiriesH                          http.Handler
 		inventoriesH                        http.Handler
 		listsH                              http.Handler
@@ -95,7 +96,15 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.CompanyUC != nil {
-		companiesH = consoleHandler.NewCompanyHandler(c.CompanyUC)
+		companiesH = consoleHandler.NewCompanyHandler(
+			c.CompanyUC,
+		)
+	}
+
+	if c.ShippingAddressUC != nil {
+		companyShippingAddressesH = consoleHandler.NewCompanyShippingAddressHandler(
+			c.ShippingAddressUC,
+		)
 	}
 
 	if c.InquiryUC != nil &&
@@ -323,6 +332,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		Permissions:                        permissionsH,
 		Brands:                             brandsH,
 		Companies:                          companiesH,
+		CompanyShippingAddresses:           companyShippingAddressesH,
 		Inquiries:                          inquiriesH,
 		Inventories:                        inventoriesH,
 		Lists:                              listsH,
