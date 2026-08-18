@@ -1,17 +1,30 @@
-// backend\internal\application\query\console\company_query.go
 package query
 
 import (
 	"context"
 	"fmt"
+	"time"
 
 	companydom "narratives/internal/domain/company"
 	memberdom "narratives/internal/domain/member"
 )
 
-type CompanyMemberNames struct {
-	CreatedByName string `json:"createdByName"`
-	UpdatedByName string `json:"updatedByName"`
+type CompanyDetail struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Admin    string `json:"admin"`
+	IsActive bool   `json:"isActive"`
+
+	CreatedAt     time.Time `json:"createdAt"`
+	CreatedBy     string    `json:"createdBy"`
+	CreatedByName string    `json:"createdByName"`
+
+	UpdatedAt     time.Time `json:"updatedAt"`
+	UpdatedBy     string    `json:"updatedBy"`
+	UpdatedByName string    `json:"updatedByName"`
+
+	DeletedAt *time.Time `json:"deletedAt,omitempty"`
+	DeletedBy *string    `json:"deletedBy,omitempty"`
 }
 
 type CompanyQuery struct {
@@ -32,38 +45,80 @@ func NewCompanyQuery(
 func (q *CompanyQuery) GetByID(
 	ctx context.Context,
 	id string,
-) (companydom.Company, CompanyMemberNames, error) {
+) (CompanyDetail, error) {
 	if q == nil || q.companyRepo == nil {
-		return companydom.Company{}, CompanyMemberNames{}, fmt.Errorf("company query/repo is nil")
+		return CompanyDetail{}, fmt.Errorf("company query/repo is nil")
 	}
 
 	if id == "" {
-		return companydom.Company{}, CompanyMemberNames{}, companydom.ErrInvalidID
+		return CompanyDetail{}, companydom.ErrInvalidID
 	}
 
-	company, err := q.companyRepo.GetByID(ctx, id)
+	company, err := q.companyRepo.GetByID(
+		ctx,
+		id,
+	)
 	if err != nil {
-		return companydom.Company{}, CompanyMemberNames{}, err
+		return CompanyDetail{}, err
 	}
 
-	return company, q.ResolveMemberNames(ctx, company), nil
+	return CompanyDetail{
+		ID:       company.ID,
+		Name:     company.Name,
+		Admin:    company.Admin,
+		IsActive: company.IsActive,
+
+		CreatedAt: company.CreatedAt,
+		CreatedBy: company.CreatedBy,
+		CreatedByName: q.resolveMemberName(
+			ctx,
+			company.CreatedBy,
+		),
+
+		UpdatedAt: company.UpdatedAt,
+		UpdatedBy: company.UpdatedBy,
+		UpdatedByName: q.resolveMemberName(
+			ctx,
+			company.UpdatedBy,
+		),
+
+		DeletedAt: company.DeletedAt,
+		DeletedBy: company.DeletedBy,
+	}, nil
 }
 
-func (q *CompanyQuery) ResolveMemberNames(
+func (q *CompanyQuery) resolveMemberName(
 	ctx context.Context,
-	company companydom.Company,
-) CompanyMemberNames {
-	memberNameByID := resolveMemberNamesByID(
-		ctx,
-		q.memberRepo,
-		[]string{
-			company.CreatedBy,
-			company.UpdatedBy,
-		},
-	)
-
-	return CompanyMemberNames{
-		CreatedByName: memberNameByID[company.CreatedBy],
-		UpdatedByName: memberNameByID[company.UpdatedBy],
+	memberUID string,
+) string {
+	if q == nil ||
+		q.memberRepo == nil ||
+		memberUID == "" {
+		return ""
 	}
+
+	rec, err := q.memberRepo.GetByUID(
+		ctx,
+		memberUID,
+	)
+	if err == nil {
+		return memberdom.FormatLastFirst(
+			rec.Member.LastName,
+			rec.Member.FirstName,
+		)
+	}
+
+	// 既存データに member document ID が残っている場合の互換用。
+	rec, err = q.memberRepo.GetByID(
+		ctx,
+		memberUID,
+	)
+	if err != nil {
+		return ""
+	}
+
+	return memberdom.FormatLastFirst(
+		rec.Member.LastName,
+		rec.Member.FirstName,
+	)
 }

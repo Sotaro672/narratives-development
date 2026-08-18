@@ -95,9 +95,11 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		)
 	}
 
-	if c.CompanyUC != nil {
+	if c.CompanyUC != nil &&
+		c.CompanyQuery != nil {
 		companiesH = consoleHandler.NewCompanyHandler(
 			c.CompanyUC,
+			c.CompanyQuery,
 		)
 	}
 

@@ -7,19 +7,24 @@ import (
 	"strings"
 	"time"
 
+	"narratives/internal/adapters/in/http/middleware"
+	query "narratives/internal/application/query/console"
 	usecase "narratives/internal/application/usecase"
 	companydom "narratives/internal/domain/company"
 )
 
 type CompanyHandler struct {
 	uc *usecase.CompanyUsecase
+	q  *query.CompanyQuery
 }
 
 func NewCompanyHandler(
 	uc *usecase.CompanyUsecase,
+	q *query.CompanyQuery,
 ) http.Handler {
 	return &CompanyHandler{
 		uc: uc,
+		q:  q,
 	}
 }
 
@@ -105,12 +110,28 @@ func (h *CompanyHandler) requireUsecase(
 	return false
 }
 
+func (h *CompanyHandler) requireQuery(
+	w http.ResponseWriter,
+) bool {
+	if h != nil && h.q != nil {
+		return true
+	}
+
+	writeError(
+		w,
+		http.StatusServiceUnavailable,
+		"company_query_not_initialized",
+	)
+
+	return false
+}
+
 func (h *CompanyHandler) get(
 	w http.ResponseWriter,
 	r *http.Request,
 	id string,
 ) {
-	if !h.requireUsecase(w) {
+	if !h.requireQuery(w) {
 		return
 	}
 
@@ -123,7 +144,7 @@ func (h *CompanyHandler) get(
 		return
 	}
 
-	company, err := h.uc.GetByID(
+	company, err := h.q.GetByID(
 		r.Context(),
 		id,
 	)
@@ -151,6 +172,10 @@ func (h *CompanyHandler) create(
 	r *http.Request,
 ) {
 	if !h.requireUsecase(w) {
+		return
+	}
+
+	if !h.requireQuery(w) {
 		return
 	}
 
@@ -206,10 +231,19 @@ func (h *CompanyHandler) create(
 		return
 	}
 
+	createdDetail, err := h.q.GetByID(
+		r.Context(),
+		created.ID,
+	)
+	if err != nil {
+		writeCompanyErr(w, err)
+		return
+	}
+
 	writeJSON(
 		w,
 		http.StatusCreated,
-		created,
+		createdDetail,
 	)
 }
 
@@ -225,6 +259,10 @@ func (h *CompanyHandler) update(
 	id string,
 ) {
 	if !h.requireUsecase(w) {
+		return
+	}
+
+	if !h.requireQuery(w) {
 		return
 	}
 
@@ -250,24 +288,40 @@ func (h *CompanyHandler) update(
 		return
 	}
 
-	updatedBy := usecase.MemberIDFromContext(
-		r.Context(),
-	)
+	updatedBy, _, ok :=
+		middleware.CurrentUIDAndEmail(
+			r,
+		)
+
+	if !ok {
+		writeError(
+			w,
+			http.StatusUnauthorized,
+			"current_user_uid_not_resolved",
+		)
+		return
+	}
 
 	patch := companydom.CompanyPatch{
-		Name:     request.Name,
-		Admin:    request.Admin,
-		IsActive: request.IsActive,
+		Name:      request.Name,
+		Admin:     request.Admin,
+		IsActive:  request.IsActive,
+		UpdatedBy: &updatedBy,
 	}
 
-	if updatedBy != "" {
-		patch.UpdatedBy = &updatedBy
-	}
-
-	updated, err := h.uc.Update(
+	_, err := h.uc.Update(
 		r.Context(),
 		id,
 		patch,
+	)
+	if err != nil {
+		writeCompanyErr(w, err)
+		return
+	}
+
+	updated, err := h.q.GetByID(
+		r.Context(),
+		id,
 	)
 	if err != nil {
 		writeCompanyErr(w, err)

@@ -37,6 +37,12 @@ import {
   updateCompanyShippingAddress,
 } from "../../application/companyDetailService";
 
+type CompanyDetailState =
+  Company & {
+    createdByName?: string | null;
+    updatedByName?: string | null;
+  };
+
 export type CompanyShippingAddressFormValue = {
   zipCode: string;
   state: string;
@@ -82,7 +88,7 @@ export function useCompanyDetail() {
   const [
     company,
     setCompany,
-  ] = useState<Company | null>(
+  ] = useState<CompanyDetailState | null>(
     null,
   );
 
@@ -251,60 +257,12 @@ export function useCompanyDetail() {
   );
 
   const createdByName =
-    useMemo(
-      () => {
-        const createdBy =
-          company?.createdBy ?? "";
-
-        if (!createdBy) {
-          return null;
-        }
-
-        const matched =
-          adminCandidates.find(
-            (candidate) =>
-              candidate.id ===
-              createdBy,
-          );
-
-        return (
-          matched?.name ??
-          createdBy
-        );
-      },
-      [
-        company?.createdBy,
-        adminCandidates,
-      ],
-    );
+    company?.createdByName ??
+    null;
 
   const updatedByName =
-    useMemo(
-      () => {
-        const updatedBy =
-          company?.updatedBy ?? "";
-
-        if (!updatedBy) {
-          return null;
-        }
-
-        const matched =
-          adminCandidates.find(
-            (candidate) =>
-              candidate.id ===
-              updatedBy,
-          );
-
-        return (
-          matched?.name ??
-          updatedBy
-        );
-      },
-      [
-        company?.updatedBy,
-        adminCandidates,
-      ],
-    );
+    company?.updatedByName ??
+    null;
 
   const createdAt =
     useMemo(

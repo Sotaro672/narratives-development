@@ -16,7 +16,15 @@ export type ShippingAddressFormValue = {
   city: string;
   street: string;
   street2: string;
-  country: string;
+  country: "JP";
+};
+
+type ShippingAddressEditableFormValue = {
+  zipCode: string;
+  state: string;
+  city: string;
+  street: string;
+  street2: string;
 };
 
 export type ShippingAddressFormModalProps = {
@@ -29,18 +37,17 @@ export type ShippingAddressFormModalProps = {
   ) => void | Promise<void>;
 };
 
-const emptyFormValue: ShippingAddressFormValue = {
+const emptyFormValue: ShippingAddressEditableFormValue = {
   zipCode: "",
   state: "",
   city: "",
   street: "",
   street2: "",
-  country: "JP",
 };
 
 function createFormValue(
   address?: ShippingAddress | null,
-): ShippingAddressFormValue {
+): ShippingAddressEditableFormValue {
   if (!address) {
     return {
       ...emptyFormValue,
@@ -53,7 +60,6 @@ function createFormValue(
     city: address.city,
     street: address.street,
     street2: address.street2,
-    country: address.country || "JP",
   };
 }
 
@@ -67,7 +73,7 @@ export const ShippingAddressFormModal: React.FC<
   onSave,
 }) => {
   const [form, setForm] =
-    React.useState<ShippingAddressFormValue>(() =>
+    React.useState<ShippingAddressEditableFormValue>(() =>
       createFormValue(address),
     );
 
@@ -126,7 +132,7 @@ export const ShippingAddressFormModal: React.FC<
 
   const updateField = React.useCallback(
     (
-      field: keyof ShippingAddressFormValue,
+      field: keyof ShippingAddressEditableFormValue,
       value: string,
     ) => {
       setForm((current) => ({
@@ -200,13 +206,6 @@ export const ShippingAddressFormModal: React.FC<
           return;
         }
 
-        if (!form.country) {
-          setError(
-            "国コードを入力してください。",
-          );
-          return;
-        }
-
         setError(null);
 
         await onSave({
@@ -215,7 +214,7 @@ export const ShippingAddressFormModal: React.FC<
           city: form.city,
           street: form.street,
           street2: form.street2,
-          country: form.country,
+          country: "JP",
         });
       },
       [
@@ -371,27 +370,6 @@ export const ShippingAddressFormModal: React.FC<
                 updateField(
                   "street2",
                   event.target.value,
-                )
-              }
-              disabled={saving}
-            />
-
-            <CardLabel htmlFor="shipping-address-country">
-              国コード
-            </CardLabel>
-
-            <CardInput
-              id="shipping-address-country"
-              name="country"
-              type="text"
-              autoComplete="country"
-              placeholder="JP"
-              maxLength={2}
-              value={form.country}
-              onChange={(event) =>
-                updateField(
-                  "country",
-                  event.target.value.toUpperCase(),
                 )
               }
               disabled={saving}
