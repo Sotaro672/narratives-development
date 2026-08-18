@@ -76,6 +76,26 @@ type InventoryTokenBlueprintPatchDTO struct {
 	IconURL string `json:"iconUrl,omitempty"`
 }
 
+// InventoryShippingAddressDTO は
+// Inventory Detail 画面向けの
+// 在庫保管場所 read model。
+//
+// shippingAddress domain entity を
+// frontend へ直接公開せず、
+// Inventory Detail 画面で必要な住所情報だけを返す。
+//
+// country は JP 固定のため、
+// Inventory Detail 画面では返さない。
+type InventoryShippingAddressDTO struct {
+	ID string `json:"id"`
+
+	ZipCode string `json:"zipCode"`
+	State   string `json:"state"`
+	City    string `json:"city"`
+	Street  string `json:"street"`
+	Street2 string `json:"street2"`
+}
+
 // InventoryDetailRowDTO は
 // Inventory Detail 画面向けの在庫行 DTO。
 //
@@ -115,6 +135,12 @@ type InventoryDetailDTO struct {
 
 	ProductBlueprintPatch *InventoryProductBlueprintPatchDTO `json:"productBlueprintPatch,omitempty"`
 	TokenBlueprintPatch   *InventoryTokenBlueprintPatchDTO   `json:"tokenBlueprintPatch,omitempty"`
+
+	ShippingAddressID string `json:"shippingAddressId,omitempty"`
+
+	ShippingAddress *InventoryShippingAddressDTO `json:"shippingAddress,omitempty"`
+
+	ShippingAddressOptions []InventoryShippingAddressDTO `json:"shippingAddressOptions"`
 
 	Rows       []InventoryDetailRowDTO `json:"rows"`
 	TotalStock int                     `json:"totalStock"`

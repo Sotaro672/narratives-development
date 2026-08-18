@@ -32,6 +32,28 @@ type RepositoryPort interface {
 		inventoryID string,
 	) (productBlueprintID string, tokenBlueprintID string, err error)
 
+	// ------------------------------------------------------------
+	// ShippingAddress assignment
+	// ------------------------------------------------------------
+	//
+	// SetShippingAddressID sets the shippingAddress document ID
+	// used as the inventory storage location.
+	//
+	// Contract:
+	// - inventoryID must identify an existing inventory.
+	// - shippingAddressID must not be empty.
+	// - This operation updates only shippingAddressId and updatedAt.
+	// - ShippingAddress existence and company ownership validation
+	//   are responsibilities of the application/usecase layer.
+	// - If the inventory does not exist: return ErrNotFound.
+	// - If inventoryID is empty/invalid: return ErrInvalidMintID.
+	SetShippingAddressID(
+		ctx context.Context,
+		inventoryID string,
+		shippingAddressID string,
+		now time.Time,
+	) error
+
 	// atomic upsert (for mint -> inventory reflection)
 	// - docId = productBlueprintId__tokenBlueprintId
 	// - Stock[modelId].Products に productId を追記（UNION / add-only）

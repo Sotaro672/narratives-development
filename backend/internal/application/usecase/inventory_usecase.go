@@ -8,22 +8,37 @@ import (
 	"time"
 
 	invdom "narratives/internal/domain/inventory"
+	pbdom "narratives/internal/domain/productBlueprint"
+	shadom "narratives/internal/domain/shippingAddress"
 )
 
 type ProductModelResolver interface {
 	GetModelIDByProductID(ctx context.Context, productID string) (string, error)
 }
 
+type InventoryProductBlueprintCompanyReader interface {
+	GetByID(
+		ctx context.Context,
+		id string,
+	) (pbdom.ProductBlueprint, error)
+}
+
 type InventoryUsecase struct {
 	repo invdom.RepositoryPort
 
 	productModelResolver ProductModelResolver
+
+	shippingAddressRepo  shadom.RepositoryPort
+	productBlueprintRepo InventoryProductBlueprintCompanyReader
 }
 
 func NewInventoryUsecase(repo invdom.RepositoryPort) *InventoryUsecase {
 	return &InventoryUsecase{
 		repo:                 repo,
 		productModelResolver: nil,
+
+		shippingAddressRepo:  nil,
+		productBlueprintRepo: nil,
 	}
 }
 
@@ -36,6 +51,111 @@ func (uc *InventoryUsecase) WithProductModelResolver(
 
 	uc.productModelResolver = resolver
 	return uc
+}
+
+func (uc *InventoryUsecase) WithShippingAddressAssignment(
+	shippingAddressRepo shadom.RepositoryPort,
+	productBlueprintRepo InventoryProductBlueprintCompanyReader,
+) *InventoryUsecase {
+	if uc == nil {
+		return uc
+	}
+
+	uc.shippingAddressRepo =
+		shippingAddressRepo
+
+	uc.productBlueprintRepo =
+		productBlueprintRepo
+
+	return uc
+}
+
+// ============================================================
+// ShippingAddress assignment
+// ============================================================
+//
+// - inventoryId から対象 inventory を取得する
+// - inventory.productBlueprintId から companyId を検証する
+// - shippingAddressId が現在 company に所属することを検証する
+// - inventory.shippingAddressId のみを更新する
+func (uc *InventoryUsecase) SetShippingAddress(
+	ctx context.Context,
+	inventoryID string,
+	companyID string,
+	shippingAddressID string,
+) error {
+	if uc == nil ||
+		uc.repo == nil {
+		return errors.New("inventory usecase/repo is nil")
+	}
+
+	if uc.shippingAddressRepo == nil {
+		return errors.New("inventory shipping address repository is nil")
+	}
+
+	if uc.productBlueprintRepo == nil {
+		return errors.New("inventory product blueprint repository is nil")
+	}
+
+	invID := inventoryID
+	companyIDValue := companyID
+	shippingAddressIDValue := shippingAddressID
+
+	if invID == "" {
+		return invdom.ErrInvalidMintID
+	}
+
+	if companyIDValue == "" {
+		return errors.New("inventory shipping address: companyId is required")
+	}
+
+	if shippingAddressIDValue == "" {
+		return errors.New("inventory shipping address: shippingAddressId is required")
+	}
+
+	inventory, err :=
+		uc.repo.GetByID(
+			ctx,
+			invID,
+		)
+	if err != nil {
+		return err
+	}
+
+	if inventory.ProductBlueprintID == "" {
+		return invdom.ErrInvalidProductBlueprintID
+	}
+
+	productBlueprint, err :=
+		uc.productBlueprintRepo.GetByID(
+			ctx,
+			inventory.ProductBlueprintID,
+		)
+	if err != nil {
+		return err
+	}
+
+	if productBlueprint.CompanyID !=
+		companyIDValue {
+		return invdom.ErrNotFound
+	}
+
+	_, err =
+		uc.shippingAddressRepo.GetByCompany(
+			ctx,
+			shippingAddressIDValue,
+			companyIDValue,
+		)
+	if err != nil {
+		return err
+	}
+
+	return uc.repo.SetShippingAddressID(
+		ctx,
+		invID,
+		shippingAddressIDValue,
+		time.Now().UTC(),
+	)
 }
 
 // ============================================================

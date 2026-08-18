@@ -36,6 +36,7 @@ func (r *InventoryRepositoryFS) col() *firestore.CollectionRef {
 //
 // inventories/{docId}
 // - docId = productBlueprintId__tokenBlueprintId
+// - shippingAddressId = inventory の在庫保管場所となる shippingAddress document ID
 //
 // stock: {
 //   "{modelId}": {
@@ -59,6 +60,7 @@ type modelStockRecord struct {
 type inventoryRecord struct {
 	TokenBlueprintID   string                      `firestore:"tokenBlueprintId"`
 	ProductBlueprintID string                      `firestore:"productBlueprintId"`
+	ShippingAddressID  string                      `firestore:"shippingAddressId,omitempty"`
 	Stock              map[string]modelStockRecord `firestore:"stock"`
 	ModelIDs           []string                    `firestore:"modelIds"`
 	CreatedAt          time.Time                   `firestore:"createdAt"`
@@ -70,6 +72,7 @@ func fromRecord(docID string, rec inventoryRecord) (invdom.Mint, error) {
 		ID:                 docID,
 		TokenBlueprintID:   rec.TokenBlueprintID,
 		ProductBlueprintID: rec.ProductBlueprintID,
+		ShippingAddressID:  rec.ShippingAddressID,
 		Stock:              stockDomainFromRecord(rec.Stock),
 		ModelIDs:           append([]string(nil), rec.ModelIDs...),
 		CreatedAt:          rec.CreatedAt,
@@ -140,6 +143,62 @@ func (r *InventoryRepositoryFS) ListByProductBlueprintID(
 		Documents(ctx)
 	defer iter.Stop()
 	return readAllInventoryDocs(iter)
+}
+
+// ============================================================
+// ShippingAddress assignment
+// - inventory.shippingAddressId のみを更新する
+// - stock / modelIds / blueprint IDs は変更しない
+// - shippingAddress の存在確認・company 所有権確認は Usecase 側で行う
+// ============================================================
+
+func (r *InventoryRepositoryFS) SetShippingAddressID(
+	ctx context.Context,
+	inventoryID string,
+	shippingAddressID string,
+	now time.Time,
+) error {
+	if r == nil || r.Client == nil {
+		return errors.New("inventory repo is nil")
+	}
+
+	if inventoryID == "" {
+		return invdom.ErrInvalidMintID
+	}
+
+	if shippingAddressID == "" {
+		return errors.New("inventory repo: shippingAddressID is empty")
+	}
+
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+
+	now = now.UTC()
+
+	doc := r.col().Doc(inventoryID)
+
+	_, err := doc.Update(
+		ctx,
+		[]firestore.Update{
+			{
+				Path:  "shippingAddressId",
+				Value: shippingAddressID,
+			},
+			{
+				Path:  "updatedAt",
+				Value: now,
+			},
+		},
+	)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return invdom.ErrNotFound
+		}
+		return err
+	}
+
+	return nil
 }
 
 // ============================================================
@@ -355,6 +414,7 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 // Upsert
 // - Stock[modelId].Products に productId を追記（UNION）
 // - ReservedByOrder / ReservedCount は保持
+// - 既存 shippingAddressId は変更しない
 // ============================================================
 
 func (r *InventoryRepositoryFS) UpsertByModelAndToken(
@@ -401,6 +461,7 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 					rec := inventoryRecord{
 						TokenBlueprintID:   tbID,
 						ProductBlueprintID: pbID,
+						ShippingAddressID:  "",
 						Stock:              map[string]modelStockRecord{mID: ms},
 						ModelIDs:           []string{mID},
 						CreatedAt:          now,
@@ -616,21 +677,26 @@ func stockDomainFromRecord(
 	if raw == nil {
 		return nil
 	}
+
 	out := make(
 		map[string]invdom.ModelStock,
 		len(raw),
 	)
+
 	for modelID, msr := range raw {
 		reservedByOrder := make(
 			map[string]int,
 			len(msr.ReservedByOrder),
 		)
+
 		for orderID, quantity := range msr.ReservedByOrder {
 			reservedByOrder[orderID] = quantity
 		}
+
 		if msr.ReservedByOrder == nil {
 			reservedByOrder = nil
 		}
+
 		out[modelID] = invdom.ModelStock{
 			Products: append(
 				[]string(nil),
@@ -641,6 +707,7 @@ func stockDomainFromRecord(
 			ReservedCount:   msr.ReservedCount,
 		}
 	}
+
 	return out
 }
 

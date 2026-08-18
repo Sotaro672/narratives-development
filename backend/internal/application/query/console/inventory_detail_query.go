@@ -10,28 +10,42 @@ import (
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
 
+	invdom "narratives/internal/domain/inventory"
 	pbdom "narratives/internal/domain/productBlueprint"
+	shadom "narratives/internal/domain/shippingAddress"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 type InventoryDetailQuery struct {
-	invRepo      inventoryReader
-	pbRepo       inventoryProductBlueprintReader
-	tbRepo       inventoryTokenBlueprintReader
-	nameResolver *resolver.NameResolver
+	invRepo             inventoryReader
+	pbRepo              inventoryProductBlueprintReader
+	tbRepo              inventoryTokenBlueprintReader
+	shippingAddressRepo shadom.RepositoryPort
+	nameResolver        *resolver.NameResolver
+
+	companyIDFromContext func(
+		context.Context,
+	) string
 }
 
 func NewInventoryDetailQuery(
 	invRepo inventoryReader,
 	pbRepo inventoryProductBlueprintReader,
 	tbRepo inventoryTokenBlueprintReader,
+	shippingAddressRepo shadom.RepositoryPort,
 	nameResolver *resolver.NameResolver,
+	companyIDFromContext func(
+		context.Context,
+	) string,
 ) *InventoryDetailQuery {
 	return &InventoryDetailQuery{
-		invRepo:      invRepo,
-		pbRepo:       pbRepo,
-		tbRepo:       tbRepo,
-		nameResolver: nameResolver,
+		invRepo:             invRepo,
+		pbRepo:              pbRepo,
+		tbRepo:              tbRepo,
+		shippingAddressRepo: shippingAddressRepo,
+		nameResolver:        nameResolver,
+
+		companyIDFromContext: companyIDFromContext,
 	}
 }
 
@@ -137,6 +151,27 @@ func (q *InventoryDetailQuery) GetDetailByID(
 		return nil, err
 	}
 
+	if q.companyIDFromContext == nil {
+		return nil, errors.New("companyId context resolver is not configured")
+	}
+
+	companyID :=
+		q.companyIDFromContext(
+			ctx,
+		)
+
+	if companyID == "" {
+		return nil, errors.New("companyId is required")
+	}
+
+	if pb.CompanyID == "" {
+		return nil, errors.New("productBlueprint.companyId is empty")
+	}
+
+	if pb.CompanyID != companyID {
+		return nil, invdom.ErrNotFound
+	}
+
 	productBrandName := ""
 
 	if pb.BrandID != "" &&
@@ -162,6 +197,57 @@ func (q *InventoryDetailQuery) GetDetailByID(
 		)
 	if err != nil {
 		return nil, err
+	}
+
+	if q.shippingAddressRepo == nil {
+		return nil, errors.New("shippingAddress repository is not configured")
+	}
+
+	shippingAddresses, err :=
+		q.shippingAddressRepo.ListByCompanyID(
+			ctx,
+			companyID,
+		)
+	if err != nil {
+		return nil, err
+	}
+
+	if shippingAddresses == nil {
+		shippingAddresses =
+			[]shadom.ShippingAddress{}
+	}
+
+	shippingAddressOptions := make(
+		[]querydto.InventoryShippingAddressDTO,
+		0,
+		len(shippingAddresses),
+	)
+
+	var shippingAddressPtr *querydto.InventoryShippingAddressDTO
+
+	for _, shippingAddress := range shippingAddresses {
+
+		option :=
+			buildInventoryShippingAddressDTO(
+				shippingAddress,
+			)
+
+		shippingAddressOptions =
+			append(
+				shippingAddressOptions,
+				option,
+			)
+
+		if inv.ShippingAddressID != "" &&
+			shippingAddress.ID ==
+				inv.ShippingAddressID {
+
+			selected :=
+				option
+
+			shippingAddressPtr =
+				&selected
+		}
 	}
 
 	if len(pb.ModelRefs) == 0 {
@@ -342,6 +428,12 @@ func (q *InventoryDetailQuery) GetDetailByID(
 
 			TokenBlueprintPatch: tbPatchPtr,
 
+			ShippingAddressID: inv.ShippingAddressID,
+
+			ShippingAddress: shippingAddressPtr,
+
+			ShippingAddressOptions: shippingAddressOptions,
+
 			Rows: rows,
 
 			TotalStock: total,
@@ -425,6 +517,28 @@ func buildInventoryProductBlueprintPatchDTO(
 		AssigneeID: productBlueprint.AssigneeID,
 
 		ModelRefs: modelRefs,
+	}
+}
+
+// ============================================================
+// ShippingAddress -> Inventory Detail DTO
+// ============================================================
+
+func buildInventoryShippingAddressDTO(
+	shippingAddress shadom.ShippingAddress,
+) querydto.InventoryShippingAddressDTO {
+	return querydto.InventoryShippingAddressDTO{
+		ID: shippingAddress.ID,
+
+		ZipCode: shippingAddress.ZipCode,
+
+		State: shippingAddress.State,
+
+		City: shippingAddress.City,
+
+		Street: shippingAddress.Street,
+
+		Street2: shippingAddress.Street2,
 	}
 }
 

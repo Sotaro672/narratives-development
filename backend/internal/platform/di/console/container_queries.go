@@ -219,7 +219,9 @@ func buildQueries(
 		r.inventoryRepo,
 		r.productBlueprintRepo,
 		r.tokenBlueprintRepo,
+		r.shippingAddressRepo,
 		res.nameResolver,
+		usecase.CompanyIDFromContext,
 	)
 
 	// modelRepo(variations) を廃止したため、WithInventory のみを使用

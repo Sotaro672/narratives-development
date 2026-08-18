@@ -35,11 +35,13 @@ type ModelStock struct {
 // Mint は inventories の 1 ドキュメント（= inventory）を表します。
 // 期待値：
 // - docId: productBlueprintId__tokenBlueprintId（※ docId 自体の sanitize は永続化層の責務）
+// - shippingAddressId: inventory の在庫保管場所となる shippingAddress document ID
 // - stock: modelId ごとに products + accumulation + reserved を並列保持
 type Mint struct {
 	ID                 string
 	TokenBlueprintID   string
 	ProductBlueprintID string
+	ShippingAddressID  string
 
 	// modelId -> { products, accumulation, reservedByOrder, reservedCount }
 	Stock map[string]ModelStock
@@ -81,6 +83,10 @@ func (m Mint) Validate() error {
 	if m.ProductBlueprintID == "" {
 		return ErrInvalidProductBlueprintID
 	}
+
+	// ShippingAddressID は inventory 作成時点では未設定を許容する。
+	// 選択された shippingAddress の存在確認・company 所有権確認は
+	// application/usecase 層で行う。
 
 	// Stock が空はユースケース次第で許容されるので、ここでは必須にしない
 	if m.Stock == nil {
