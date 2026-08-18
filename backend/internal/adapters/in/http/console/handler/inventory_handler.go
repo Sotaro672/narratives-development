@@ -8,10 +8,15 @@ import (
 	"strings"
 
 	invquery "narratives/internal/application/query/console"
+	usecase "narratives/internal/application/usecase"
 	invdom "narratives/internal/domain/inventory"
+	shadom "narratives/internal/domain/shippingAddress"
 )
 
 type InventoryHandler struct {
+	// Command/Usecase for inventory mutation
+	UC *usecase.InventoryUsecase
+
 	// Read-model(Query) for management list (view-only)
 	// only: currentMember.companyId -> productBlueprintIds -> inventories(docId)
 	MQ *invquery.InventoryManagementQuery
@@ -24,10 +29,12 @@ type InventoryHandler struct {
 }
 
 func NewInventoryHandler(
+	uc *usecase.InventoryUsecase,
 	mq *invquery.InventoryManagementQuery,
 	dq *invquery.InventoryDetailQuery,
 ) *InventoryHandler {
 	return &InventoryHandler{
+		UC: uc,
 		MQ: mq,
 		DQ: dq,
 		LQ: nil,
@@ -36,15 +43,21 @@ func NewInventoryHandler(
 
 // ListCreateQuery も注入できるコンストラクタ
 func NewInventoryHandlerWithListCreateQuery(
+	uc *usecase.InventoryUsecase,
 	mq *invquery.InventoryManagementQuery,
 	dq *invquery.InventoryDetailQuery,
 	lq *invquery.ListCreateQuery,
 ) *InventoryHandler {
 	return &InventoryHandler{
+		UC: uc,
 		MQ: mq,
 		DQ: dq,
 		LQ: lq,
 	}
+}
+
+type updateInventoryShippingAddressRequest struct {
+	ShippingAddressID string `json:"shippingAddressId"`
 }
 
 func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -72,6 +85,29 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case http.MethodGet:
 			h.ListByCurrentCompanyQuery(w, r)
 			return
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+	}
+
+	// ============================================================
+	// Command endpoint
+	// PATCH /inventory/{inventoryId}/shipping-address
+	// ============================================================
+
+	if strings.HasPrefix(path, "/inventory/") &&
+		strings.HasSuffix(path, "/shipping-address") {
+
+		switch r.Method {
+		case http.MethodPatch:
+			h.UpdateShippingAddressByPath(
+				w,
+				r,
+				path,
+			)
+			return
+
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -173,6 +209,172 @@ func isInventoryProbablyBadRequest(err error) bool {
 	return strings.Contains(msg, "required") ||
 		strings.Contains(msg, "missing") ||
 		strings.Contains(msg, "invalid")
+}
+
+// ============================================================
+// ShippingAddress assignment endpoint
+// - PATCH /inventory/{inventoryId}/shipping-address
+// - current company に属する shippingAddress のみ設定可能
+// - 保存成功後は更新済み InventoryDetailDTO を返す
+// ============================================================
+
+func (h *InventoryHandler) UpdateShippingAddressByPath(
+	w http.ResponseWriter,
+	r *http.Request,
+	path string,
+) {
+	if h == nil || h.UC == nil {
+		writeInventoryError(w, http.StatusNotImplemented, "inventory usecase is not configured")
+		return
+	}
+
+	if h.DQ == nil {
+		writeInventoryError(w, http.StatusNotImplemented, "inventory detail query is not configured")
+		return
+	}
+
+	rest := strings.TrimPrefix(
+		path,
+		"/inventory/",
+	)
+
+	rest = strings.TrimSuffix(
+		rest,
+		"/shipping-address",
+	)
+
+	inventoryID := strings.Trim(
+		rest,
+		"/",
+	)
+
+	if inventoryID == "" ||
+		inventoryID == "ids" ||
+		strings.Contains(inventoryID, "/") {
+
+		writeInventoryError(
+			w,
+			http.StatusBadRequest,
+			"invalid inventory id",
+		)
+		return
+	}
+
+	var req updateInventoryShippingAddressRequest
+
+	if err := json.NewDecoder(
+		r.Body,
+	).Decode(
+		&req,
+	); err != nil {
+
+		writeInventoryError(
+			w,
+			http.StatusBadRequest,
+			"invalid request body",
+		)
+		return
+	}
+
+	if req.ShippingAddressID == "" {
+		writeInventoryError(
+			w,
+			http.StatusBadRequest,
+			"shippingAddressId is required",
+		)
+		return
+	}
+
+	ctx := r.Context()
+
+	companyID :=
+		usecase.CompanyIDFromContext(
+			ctx,
+		)
+
+	if companyID == "" {
+		writeInventoryError(
+			w,
+			http.StatusBadRequest,
+			"companyId is required",
+		)
+		return
+	}
+
+	err := h.UC.SetShippingAddress(
+		ctx,
+		inventoryID,
+		companyID,
+		req.ShippingAddressID,
+	)
+	if err != nil {
+		if errors.Is(
+			err,
+			invdom.ErrNotFound,
+		) ||
+			errors.Is(
+				err,
+				shadom.ErrNotFound,
+			) {
+
+			writeInventoryError(
+				w,
+				http.StatusNotFound,
+				err.Error(),
+			)
+			return
+		}
+
+		if isInventoryProbablyBadRequest(
+			err,
+		) {
+			writeInventoryError(
+				w,
+				http.StatusBadRequest,
+				err.Error(),
+			)
+			return
+		}
+
+		writeInventoryError(
+			w,
+			http.StatusInternalServerError,
+			err.Error(),
+		)
+		return
+	}
+
+	dto, err :=
+		h.DQ.GetDetailByID(
+			ctx,
+			inventoryID,
+		)
+	if err != nil {
+		if errors.Is(
+			err,
+			invdom.ErrNotFound,
+		) {
+			writeInventoryError(
+				w,
+				http.StatusNotFound,
+				err.Error(),
+			)
+			return
+		}
+
+		writeInventoryError(
+			w,
+			http.StatusInternalServerError,
+			err.Error(),
+		)
+		return
+	}
+
+	writeInventoryJSON(
+		w,
+		http.StatusOK,
+		dto,
+	)
 }
 
 // ============================================================

@@ -99,6 +99,20 @@ export type TokenBlueprintPatchDTO = {
 };
 
 // =========================================================
+// Inventory ShippingAddress read model
+// GET /inventory/{inventoryId}
+// =========================================================
+
+export type InventoryShippingAddressDTO = {
+  id: string;
+  zipCode: string;
+  state: string;
+  city: string;
+  street: string;
+  street2: string;
+};
+
+// =========================================================
 // Inventory Detail Row
 // GET /inventory/{inventoryId}
 // =========================================================
@@ -130,6 +144,9 @@ export type InventoryDetailDTO = {
   tokenBlueprintId: string;
   productBlueprintPatch: ProductBlueprintPatchDTO;
   tokenBlueprintPatch: TokenBlueprintPatchDTO;
+  shippingAddressId?: string;
+  shippingAddress?: InventoryShippingAddressDTO | null;
+  shippingAddressOptions: InventoryShippingAddressDTO[];
   rows: InventoryDetailRowDTO[];
   totalStock: number;
   updatedAt?: string;
@@ -152,6 +169,9 @@ export type InventoryDetailViewModel = {
   categoryFields?: InventoryCategoryFieldValues;
   productBlueprintPatch: ProductBlueprintPatchDTO;
   tokenBlueprintPatch: TokenBlueprintPatchDTO;
+  shippingAddressId: string;
+  shippingAddress: InventoryShippingAddressDTO | null;
+  shippingAddressOptions: InventoryShippingAddressDTO[];
   updatedAt?: string;
   totalStock: number;
   rows: InventoryDetailRowDTO[];

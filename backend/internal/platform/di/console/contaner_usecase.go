@@ -142,6 +142,11 @@ func buildUsecases(
 		r.inventoryRepo,
 	)
 
+	inventoryUC.WithShippingAddressAssignment(
+		r.shippingAddressRepo,
+		r.productBlueprintRepo,
+	)
+
 	if r.productRepo != nil {
 		if resolver, ok := any(r.productRepo).(uc.ProductModelResolver); ok {
 			inventoryUC.WithProductModelResolver(

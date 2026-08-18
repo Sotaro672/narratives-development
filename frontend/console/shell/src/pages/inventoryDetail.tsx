@@ -11,6 +11,8 @@ import ProductBlueprintCard, {
 
 import InventoryCard from "../features/inventory/presentation/components/inventoryCard";
 
+import InventoryShippingAddressCard from "../features/inventory/presentation/components/InventoryShippingAddressCard";
+
 import TokenBlueprintCard, {
   type TokenBlueprintCardViewModel,
 } from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
@@ -53,6 +55,14 @@ export default function InventoryDetail() {
     loading,
     error,
     vm,
+
+    selectedShippingAddressId,
+    shippingAddressOptions,
+    shippingAddressSaving,
+    shippingAddressError,
+
+    handleSelectShippingAddress,
+    handleSaveShippingAddress,
   } = useInventoryDetail(inventoryId);
 
   const title = vm?.headerTitle
@@ -134,7 +144,8 @@ export default function InventoryDetail() {
       layout="grid-2"
       title={title}
       onBack={onBack}
-      onSave={undefined}
+      onSave={handleSaveShippingAddress}
+      isSaving={shippingAddressSaving}
       onList={onList}
     >
       {/* 左カラム */}
@@ -170,8 +181,31 @@ export default function InventoryDetail() {
         <InventoryCard rows={rows} />
       </div>
 
-      {/* 右カラム：grid-2維持用 */}
-      <div />
+      {/* 右カラム */}
+      <div className="space-y-4">
+        <InventoryShippingAddressCard
+          shippingAddressId={
+            selectedShippingAddressId
+          }
+          shippingAddressOptions={
+            shippingAddressOptions
+          }
+          loading={loading}
+          saving={
+            shippingAddressSaving
+          }
+          onSelectShippingAddress={
+            handleSelectShippingAddress
+          }
+        />
+
+        {shippingAddressError ? (
+          <div className="text-sm text-red-600">
+            保存に失敗しました:{" "}
+            {shippingAddressError}
+          </div>
+        ) : null}
+      </div>
     </PageStyle>
   );
 }

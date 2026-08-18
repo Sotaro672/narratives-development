@@ -2,6 +2,7 @@
 
 import {
   getInventoryDetailRaw,
+  updateInventoryShippingAddressRaw,
 } from "../infrastructure/inventoryApi";
 
 import type {
@@ -90,6 +91,15 @@ function buildInventoryDetailViewModel(
     productBlueprintPatch,
     tokenBlueprintPatch,
 
+    shippingAddressId:
+      detail.shippingAddressId ?? "",
+
+    shippingAddress:
+      detail.shippingAddress ?? null,
+
+    shippingAddressOptions:
+      detail.shippingAddressOptions ?? [],
+
     updatedAt:
       detail.updatedAt,
 
@@ -105,7 +115,7 @@ export async function loadInventoryDetailViewModel(
   inventoryId: string,
 ): Promise<InventoryDetailViewModel> {
   const id =
-    inventoryId.trim();
+    inventoryId;
 
   if (!id) {
     throw new Error(
@@ -116,6 +126,54 @@ export async function loadInventoryDetailViewModel(
   const detail =
     await getInventoryDetailRaw(
       id,
+    );
+
+  if (!detail.inventoryId) {
+    throw new Error(
+      "inventory_detail_missing_inventory_id",
+    );
+  }
+
+  if (
+    !detail.productBlueprintId ||
+    !detail.tokenBlueprintId
+  ) {
+    throw new Error(
+      "inventory_detail_missing_product_or_token_blueprint_id",
+    );
+  }
+
+  return buildInventoryDetailViewModel(
+    detail,
+  );
+}
+
+export async function saveInventoryShippingAddress(
+  inventoryId: string,
+  shippingAddressId: string,
+): Promise<InventoryDetailViewModel> {
+  const id =
+    inventoryId;
+
+  const addressId =
+    shippingAddressId;
+
+  if (!id) {
+    throw new Error(
+      "inventoryId is empty",
+    );
+  }
+
+  if (!addressId) {
+    throw new Error(
+      "shippingAddressId is empty",
+    );
+  }
+
+  const detail =
+    await updateInventoryShippingAddressRaw(
+      id,
+      addressId,
     );
 
   if (!detail.inventoryId) {
