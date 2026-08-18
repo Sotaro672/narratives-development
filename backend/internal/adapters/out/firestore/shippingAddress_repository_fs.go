@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -20,32 +19,30 @@ const shippingAddressCollection = "shippingAddresses"
 // RepositoryPortの実装漏れをcompile時に検出します。
 var _ shipaddrdom.RepositoryPort = (*ShippingAddressRepositoryFS)(nil)
 
-// ShippingAddressRepositoryFSはFirestoreを使用した
-// ShippingAddress Repository実装です.
+// ShippingAddressRepositoryFSはFirestoreを使用したShippingAddress Repository実装です。
 type ShippingAddressRepositoryFS struct {
 	Client *firestore.Client
 }
 
-// shippingAddressDocumentはFirestore documentの保存schemaです.
+// shippingAddressDocumentはFirestore documentの保存schemaです。
 //
 // document IDはこの構造体には保存しません。
 // document IDはShippingAddress.IDとしてDocumentSnapshotから復元します。
 type shippingAddressDocument struct {
-	UserID  string `firestore:"userId"`
-	ZipCode string `firestore:"zipCode"`
-	State   string `firestore:"state"`
-	City    string `firestore:"city"`
-	Street  string `firestore:"street"`
-	Street2 string `firestore:"street2"`
-	Country string `firestore:"country"`
+	UserID    string `firestore:"userId"`
+	CompanyID string `firestore:"companyId"`
+	ZipCode   string `firestore:"zipCode"`
+	State     string `firestore:"state"`
+	City      string `firestore:"city"`
+	Street    string `firestore:"street"`
+	Street2   string `firestore:"street2"`
+	Country   string `firestore:"country"`
 
 	CreatedAt time.Time `firestore:"createdAt"`
 	UpdatedAt time.Time `firestore:"updatedAt"`
 }
 
-func NewShippingAddressRepositoryFS(
-	client *firestore.Client,
-) *ShippingAddressRepositoryFS {
+func NewShippingAddressRepositoryFS(client *firestore.Client) *ShippingAddressRepositoryFS {
 	return &ShippingAddressRepositoryFS{
 		Client: client,
 	}
@@ -63,10 +60,7 @@ func (r *ShippingAddressRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection(shippingAddressCollection)
 }
 
-func validateShippingAddressRepositoryID(
-	id string,
-) (string, error) {
-	id = strings.TrimSpace(id)
+func validateShippingAddressRepositoryID(id string) (string, error) {
 	if id == "" {
 		return "", shipaddrdom.ErrInvalidID
 	}
@@ -78,10 +72,7 @@ func validateShippingAddressRepositoryID(
 	return id, nil
 }
 
-func validateShippingAddressRepositoryUserID(
-	userID string,
-) (string, error) {
-	userID = strings.TrimSpace(userID)
+func validateShippingAddressRepositoryUserID(userID string) (string, error) {
 	if userID == "" {
 		return "", shipaddrdom.ErrInvalidUserID
 	}
@@ -91,6 +82,18 @@ func validateShippingAddressRepositoryUserID(
 	}
 
 	return userID, nil
+}
+
+func validateShippingAddressRepositoryCompanyID(companyID string) (string, error) {
+	if companyID == "" {
+		return "", shipaddrdom.ErrInvalidCompanyID
+	}
+
+	if len([]rune(companyID)) > shipaddrdom.MaxCompanyIDLength {
+		return "", shipaddrdom.ErrInvalidCompanyID
+	}
+
+	return companyID, nil
 }
 
 func shippingAddressNotFound(err error) bool {
@@ -103,8 +106,8 @@ func shippingAddressNotFound(err error) bool {
 
 // GetByIDはdocument IDだけでShippingAddressを取得します。
 //
-// このメソッドは所有者を確認しません。
-// Mallの/me配下ではGetByUserを使用します。
+// このメソッドはUserID、CompanyIDによる所有権を確認しません。
+// Mallの/me配下ではGetByUser、ConsoleではGetByCompanyを使用します。
 func (r *ShippingAddressRepositoryFS) GetByID(
 	ctx context.Context,
 	id string,
@@ -136,8 +139,7 @@ func (r *ShippingAddressRepositoryFS) GetByID(
 
 // GetByUserはdocument IDと所有者UIDの両方を確認して取得します。
 //
-// 対象が存在しない場合と、対象が指定ユーザーの所有物でない場合は、
-// いずれもErrNotFoundを返します。
+// 対象が存在しない場合と、対象が指定ユーザーの所有物でない場合は、いずれもErrNotFoundを返します。
 func (r *ShippingAddressRepositoryFS) GetByUser(
 	ctx context.Context,
 	id string,
@@ -152,8 +154,7 @@ func (r *ShippingAddressRepositoryFS) GetByUser(
 		return nil, err
 	}
 
-	validUserID, err :=
-		validateShippingAddressRepositoryUserID(userID)
+	validUserID, err := validateShippingAddressRepositoryUserID(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -178,9 +179,52 @@ func (r *ShippingAddressRepositoryFS) GetByUser(
 	return &entity, nil
 }
 
+// GetByCompanyはdocument IDとCompanyIDの両方を確認して取得します。
+//
+// 対象が存在しない場合と、対象が指定companyに所属しない場合は、いずれもErrNotFoundを返します。
+func (r *ShippingAddressRepositoryFS) GetByCompany(
+	ctx context.Context,
+	id string,
+	companyID string,
+) (*shipaddrdom.ShippingAddress, error) {
+	if err := r.ensureClient(); err != nil {
+		return nil, err
+	}
+
+	validID, err := validateShippingAddressRepositoryID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	validCompanyID, err := validateShippingAddressRepositoryCompanyID(companyID)
+	if err != nil {
+		return nil, err
+	}
+
+	snapshot, err := r.col().Doc(validID).Get(ctx)
+	if shippingAddressNotFound(err) {
+		return nil, shipaddrdom.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	entity, err := docToShippingAddress(snapshot)
+	if err != nil {
+		return nil, err
+	}
+
+	if entity.CompanyID != validCompanyID {
+		return nil, shipaddrdom.ErrNotFound
+	}
+
+	return &entity, nil
+}
+
 // Existsはdocument IDに対応するdocumentが存在するか返します。
 //
 // 空IDまたは不正なUUIDはfalseとErrInvalidIDを返します。
+// UserID、CompanyIDによる所有権は確認しません。
 func (r *ShippingAddressRepositoryFS) Exists(
 	ctx context.Context,
 	id string,
@@ -205,8 +249,7 @@ func (r *ShippingAddressRepositoryFS) Exists(
 	return true, nil
 }
 
-// ListByUserIDは指定ユーザーが所有する配送先住所を、
-// updatedAtの降順で返します。
+// ListByUserIDは指定ユーザーが所有する配送先住所をupdatedAtの降順で返します。
 //
 // 対象が0件の場合は空sliceを返します。
 func (r *ShippingAddressRepositoryFS) ListByUserID(
@@ -217,8 +260,7 @@ func (r *ShippingAddressRepositoryFS) ListByUserID(
 		return nil, err
 	}
 
-	validUserID, err :=
-		validateShippingAddressRepositoryUserID(userID)
+	validUserID, err := validateShippingAddressRepositoryUserID(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -232,11 +274,7 @@ func (r *ShippingAddressRepositoryFS) ListByUserID(
 		return nil, err
 	}
 
-	result := make(
-		[]shipaddrdom.ShippingAddress,
-		0,
-		len(snapshots),
-	)
+	result := make([]shipaddrdom.ShippingAddress, 0, len(snapshots))
 
 	for _, snapshot := range snapshots {
 		entity, err := docToShippingAddress(snapshot)
@@ -244,9 +282,52 @@ func (r *ShippingAddressRepositoryFS) ListByUserID(
 			return nil, err
 		}
 
-		// Query条件と復元結果が一致することを確認します。
 		if entity.UserID != validUserID {
 			return nil, shipaddrdom.ErrInvalidUserID
+		}
+
+		result = append(result, entity)
+	}
+
+	return result, nil
+}
+
+// ListByCompanyIDは指定companyに所属する配送先住所をupdatedAtの降順で返します。
+//
+// 1つのcompanyは複数のShippingAddressを保持できます。
+// 対象が0件の場合は空sliceを返します。
+func (r *ShippingAddressRepositoryFS) ListByCompanyID(
+	ctx context.Context,
+	companyID string,
+) ([]shipaddrdom.ShippingAddress, error) {
+	if err := r.ensureClient(); err != nil {
+		return nil, err
+	}
+
+	validCompanyID, err := validateShippingAddressRepositoryCompanyID(companyID)
+	if err != nil {
+		return nil, err
+	}
+
+	query := r.col().
+		Where("companyId", "==", validCompanyID).
+		OrderBy("updatedAt", firestore.Desc)
+
+	snapshots, err := query.Documents(ctx).GetAll()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]shipaddrdom.ShippingAddress, 0, len(snapshots))
+
+	for _, snapshot := range snapshots {
+		entity, err := docToShippingAddress(snapshot)
+		if err != nil {
+			return nil, err
+		}
+
+		if entity.CompanyID != validCompanyID {
+			return nil, shipaddrdom.ErrInvalidCompanyID
 		}
 
 		result = append(result, entity)
@@ -262,6 +343,7 @@ func (r *ShippingAddressRepositoryFS) ListByUserID(
 // Createは新しいshippingAddresses/{id}を作成します。
 //
 // 保存前にDomain constructorを使用してEntityを再検証します。
+// UserID、CompanyIDを含むDomain規則を満たす必要があります。
 // 同一IDが存在する場合はErrConflictを返し、上書きしません。
 func (r *ShippingAddressRepositoryFS) Create(
 	ctx context.Context,
@@ -271,16 +353,15 @@ func (r *ShippingAddressRepositoryFS) Create(
 		return nil, err
 	}
 
-	validID, err :=
-		validateShippingAddressRepositoryID(value.ID)
+	validID, err := validateShippingAddressRepositoryID(value.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Repositoryへ直接渡されたEntityもDomain規則で再検証します。
 	validated, err := shipaddrdom.New(
 		validID,
 		value.UserID,
+		value.CompanyID,
 		value.ZipCode,
 		value.State,
 		value.City,
@@ -313,14 +394,12 @@ func (r *ShippingAddressRepositoryFS) Create(
 // Updateは既存のshippingAddresses/{id}を更新します。
 //
 // Firestore transaction内で次の処理を行います。
+// 1. 対象documentを取得する
+// 2. 既存のUserID、CompanyID、CreatedAtを保持する
+// 3. 更新後EntityをDomain constructorで検証する
+// 4. transaction.Updateで変更可能fieldだけを更新する
 //
-//  1. 対象documentを取得する
-//  2. 既存のUserIDとCreatedAtを保持する
-//  3. 更新後EntityをDomain constructorで検証する
-//  4. transaction.Updateで変更可能fieldだけを更新する
-//
-// Setは使用しないため、対象が途中で削除された場合でも
-// documentを再作成しません。
+// Setは使用しないため、対象が途中で削除された場合でもdocumentを再作成しません。
 func (r *ShippingAddressRepositoryFS) Update(
 	ctx context.Context,
 	value shipaddrdom.ShippingAddress,
@@ -329,14 +408,12 @@ func (r *ShippingAddressRepositoryFS) Update(
 		return nil, err
 	}
 
-	validID, err :=
-		validateShippingAddressRepositoryID(value.ID)
+	validID, err := validateShippingAddressRepositoryID(value.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	ref := r.col().Doc(validID)
-
 	var updated shipaddrdom.ShippingAddress
 
 	err = r.Client.RunTransaction(
@@ -358,20 +435,22 @@ func (r *ShippingAddressRepositoryFS) Update(
 				return err
 			}
 
-			// UserIDは更新不可です。
-			if strings.TrimSpace(value.UserID) != current.UserID {
+			if value.UserID != current.UserID {
 				return shipaddrdom.ErrInvalidUserID
 			}
 
-			// CreatedAtは更新不可です。
+			if value.CompanyID != current.CompanyID {
+				return shipaddrdom.ErrInvalidCompanyID
+			}
+
 			if !value.CreatedAt.Equal(current.CreatedAt) {
 				return shipaddrdom.ErrInvalidCreatedAt
 			}
 
-			// ID、UserIDおよびCreatedAtは既存値を使用します。
 			next, err := shipaddrdom.New(
 				current.ID,
 				current.UserID,
+				current.CompanyID,
 				value.ZipCode,
 				value.State,
 				value.City,
@@ -425,7 +504,6 @@ func (r *ShippingAddressRepositoryFS) Update(
 			}
 
 			updated = next
-
 			return nil
 		},
 	)
@@ -441,8 +519,9 @@ func (r *ShippingAddressRepositoryFS) Update(
 
 // Deleteはdocument IDでShippingAddressを削除します。
 //
-// transaction内で存在確認と削除を行い、対象が存在しない場合は
-// ErrNotFoundを返します。
+// このメソッド自体はUserID、CompanyIDによる所有権を確認しません。
+// MallではGetByUser、ConsoleではGetByCompanyによる確認後に呼び出します。
+// transaction内で存在確認と削除を行い、対象が存在しない場合はErrNotFoundを返します。
 func (r *ShippingAddressRepositoryFS) Delete(
 	ctx context.Context,
 	id string,
@@ -496,14 +575,13 @@ func (r *ShippingAddressRepositoryFS) Delete(
 
 // docToShippingAddressはFirestore documentをDomain Entityへ変換します.
 //
-// DataToでFirestore fieldの型を検証した後、Domain constructorを使用して
-// Entity全体の不変条件を検証します。
+// DataToでFirestore fieldの型を検証した後、Domain constructorを使用してEntity全体の不変条件を検証します。
+// companyIdは必須であり、存在しない旧documentはDomain validation errorになります。
 func docToShippingAddress(
 	document *firestore.DocumentSnapshot,
 ) (shipaddrdom.ShippingAddress, error) {
 	if document == nil || document.Ref == nil {
-		return shipaddrdom.ShippingAddress{},
-			shipaddrdom.ErrNotFound
+		return shipaddrdom.ShippingAddress{}, shipaddrdom.ErrNotFound
 	}
 
 	var data shippingAddressDocument
@@ -514,6 +592,7 @@ func docToShippingAddress(
 	entity, err := shipaddrdom.New(
 		document.Ref.ID,
 		data.UserID,
+		data.CompanyID,
 		data.ZipCode,
 		data.State,
 		data.City,
@@ -539,6 +618,7 @@ func shippingAddressToDocData(
 ) shippingAddressDocument {
 	return shippingAddressDocument{
 		UserID:    value.UserID,
+		CompanyID: value.CompanyID,
 		ZipCode:   value.ZipCode,
 		State:     value.State,
 		City:      value.City,

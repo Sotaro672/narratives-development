@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -38,23 +37,19 @@ func (r *TokenBlueprintRepositoryFS) col() *firestore.CollectionRef {
 // RepositoryPort impl
 // ========================================
 
-func (r *TokenBlueprintRepositoryFS) GetByID(
-	ctx context.Context,
-	id string,
-) (*tbdom.TokenBlueprint, error) {
-	if r.Client == nil {
+func (r *TokenBlueprintRepositoryFS) GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error) {
+	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-
 	if id == "" {
 		return nil, tbdom.ErrInvalidID
 	}
 
 	snap, err := r.col().Doc(id).Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return nil, tbdom.ErrNotFound
-	}
 	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, tbdom.ErrNotFound
+		}
 		return nil, err
 	}
 
@@ -62,43 +57,26 @@ func (r *TokenBlueprintRepositoryFS) GetByID(
 	if err != nil {
 		return nil, err
 	}
-
 	return &tb, nil
 }
 
-func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
-	ctx context.Context,
-	companyID string,
-	page domcommon.Page,
-) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
-	if r.Client == nil {
+func (r *TokenBlueprintRepositoryFS) ListByCompanyID(ctx context.Context, companyID string, page domcommon.Page) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
+	if r == nil || r.Client == nil {
 		return domcommon.PageResult[tbdom.TokenBlueprint]{}, errors.New("firestore client is nil")
 	}
 
 	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
-
 	if companyID == "" {
 		return domcommon.PageResult[tbdom.TokenBlueprint]{
-			Items:      []tbdom.TokenBlueprint{},
-			TotalCount: 0,
-			TotalPages: 0,
-			Page:       pageNum,
-			PerPage:    perPage,
+			Items: []tbdom.TokenBlueprint{}, TotalCount: 0, TotalPages: 0, Page: pageNum, PerPage: perPage,
 		}, nil
 	}
 
-	q := r.col().
-		Where("companyId", "==", companyID).
-		OrderBy("createdAt", firestore.Desc).
-		OrderBy(firestore.DocumentID, firestore.Desc).
-		Offset(offset).
-		Limit(perPage)
-
+	q := r.col().Where("companyId", "==", companyID).OrderBy("createdAt", firestore.Desc).OrderBy(firestore.DocumentID, firestore.Desc).Offset(offset).Limit(perPage)
 	it := q.Documents(ctx)
 	defer it.Stop()
 
 	items := make([]tbdom.TokenBlueprint, 0, perPage)
-
 	for {
 		doc, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -112,52 +90,31 @@ func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
 		if err != nil {
 			return domcommon.PageResult[tbdom.TokenBlueprint]{}, err
 		}
-
 		items = append(items, tb)
 	}
 
 	return domcommon.PageResult[tbdom.TokenBlueprint]{
-		Items:      items,
-		TotalCount: 0,
-		TotalPages: 0,
-		Page:       pageNum,
-		PerPage:    perPage,
+		Items: items, TotalCount: 0, TotalPages: 0, Page: pageNum, PerPage: perPage,
 	}, nil
 }
 
-func (r *TokenBlueprintRepositoryFS) ListByBrandID(
-	ctx context.Context,
-	brandID string,
-	page domcommon.Page,
-) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
-	if r.Client == nil {
+func (r *TokenBlueprintRepositoryFS) ListByBrandID(ctx context.Context, brandID string, page domcommon.Page) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
+	if r == nil || r.Client == nil {
 		return domcommon.PageResult[tbdom.TokenBlueprint]{}, errors.New("firestore client is nil")
 	}
 
 	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
-
 	if brandID == "" {
 		return domcommon.PageResult[tbdom.TokenBlueprint]{
-			Items:      []tbdom.TokenBlueprint{},
-			TotalCount: 0,
-			TotalPages: 0,
-			Page:       pageNum,
-			PerPage:    perPage,
+			Items: []tbdom.TokenBlueprint{}, TotalCount: 0, TotalPages: 0, Page: pageNum, PerPage: perPage,
 		}, nil
 	}
 
-	q := r.col().
-		Where("brandId", "==", brandID).
-		OrderBy("createdAt", firestore.Desc).
-		OrderBy(firestore.DocumentID, firestore.Desc).
-		Offset(offset).
-		Limit(perPage)
-
+	q := r.col().Where("brandId", "==", brandID).OrderBy("createdAt", firestore.Desc).OrderBy(firestore.DocumentID, firestore.Desc).Offset(offset).Limit(perPage)
 	it := q.Documents(ctx)
 	defer it.Stop()
 
 	items := make([]tbdom.TokenBlueprint, 0, perPage)
-
 	for {
 		doc, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -171,36 +128,29 @@ func (r *TokenBlueprintRepositoryFS) ListByBrandID(
 		if err != nil {
 			return domcommon.PageResult[tbdom.TokenBlueprint]{}, err
 		}
-
 		items = append(items, tb)
 	}
 
 	return domcommon.PageResult[tbdom.TokenBlueprint]{
-		Items:      items,
-		TotalCount: 0,
-		TotalPages: 0,
-		Page:       pageNum,
-		PerPage:    perPage,
+		Items: items, TotalCount: 0, TotalPages: 0, Page: pageNum, PerPage: perPage,
 	}, nil
 }
 
-func (r *TokenBlueprintRepositoryFS) Create(
-	ctx context.Context,
-	in tbdom.CreateTokenBlueprintInput,
-) (*tbdom.TokenBlueprint, error) {
-	if r.Client == nil {
+func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.CreateTokenBlueprintInput) (*tbdom.TokenBlueprint, error) {
+	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-
 	if in.CreatedBy == "" {
 		return nil, tbdom.ErrInvalidCreatedBy
 	}
 	if in.UpdatedBy == "" {
 		return nil, tbdom.ErrInvalidUpdatedBy
 	}
+	if err := tbdom.ValidateContentFiles(in.ContentFiles); err != nil {
+		return nil, err
+	}
 
 	now := time.Now().UTC()
-
 	createdAt := now
 	if in.CreatedAt != nil {
 		if in.CreatedAt.IsZero() {
@@ -217,11 +167,31 @@ func (r *TokenBlueprintRepositoryFS) Create(
 		updatedAt = in.UpdatedAt.UTC()
 	}
 
-	if err := tbdom.ValidateContentFiles(in.ContentFiles); err != nil {
+	docRef := r.col().NewDoc()
+	candidate := tbdom.TokenBlueprint{
+		ID:              docRef.ID,
+		Name:            in.Name,
+		Symbol:          in.Symbol,
+		BrandID:         in.BrandID,
+		CompanyID:       in.CompanyID,
+		Description:     in.Description,
+		IconURL:         in.IconURL,
+		IconObjectPath:  in.IconObjectPath,
+		IconFileName:    in.IconFileName,
+		IconContentType: in.IconContentType,
+		IconSize:        in.IconSize,
+		ContentFiles:    in.ContentFiles,
+		AssigneeID:      in.AssigneeID,
+		Minted:          false,
+		CreatedAt:       createdAt,
+		CreatedBy:       in.CreatedBy,
+		UpdatedAt:       updatedAt,
+		UpdatedBy:       in.UpdatedBy,
+		MetadataURI:     in.MetadataURI,
+	}
+	if err := validatePersistedTokenBlueprint(candidate); err != nil {
 		return nil, err
 	}
-
-	docRef := r.col().NewDoc()
 
 	data := map[string]any{
 		"name":            in.Name,
@@ -260,138 +230,122 @@ func (r *TokenBlueprintRepositoryFS) Create(
 	if err != nil {
 		return nil, err
 	}
-
 	return &tb, nil
 }
 
-func (r *TokenBlueprintRepositoryFS) Update(
-	ctx context.Context,
-	id string,
-	in tbdom.UpdateTokenBlueprintInput,
-) (*tbdom.TokenBlueprint, error) {
-	if r.Client == nil {
+func (r *TokenBlueprintRepositoryFS) Update(ctx context.Context, id string, in tbdom.UpdateTokenBlueprintInput) (*tbdom.TokenBlueprint, error) {
+	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-
 	if id == "" {
 		return nil, tbdom.ErrInvalidID
 	}
-
 	if in.UpdatedAt == nil || in.UpdatedAt.IsZero() {
 		return nil, tbdom.ErrInvalidUpdatedAt
 	}
-
 	if in.UpdatedBy == nil || *in.UpdatedBy == "" {
 		return nil, tbdom.ErrInvalidUpdatedBy
 	}
 
 	ref := r.col().Doc(id)
-
-	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
-		return nil, tbdom.ErrNotFound
-	} else if err != nil {
+	snap, err := ref.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, tbdom.ErrNotFound
+		}
 		return nil, err
 	}
 
-	var updates []firestore.Update
-
-	setStr := func(field string, p *string) {
-		if p != nil {
-			updates = append(updates, firestore.Update{
-				Path:  field,
-				Value: *p,
-			})
-		}
+	current, err := docToTokenBlueprint(snap)
+	if err != nil {
+		return nil, err
 	}
 
-	setInt64 := func(field string, p *int64) {
-		if p != nil {
-			updates = append(updates, firestore.Update{
-				Path:  field,
-				Value: *p,
-			})
-		}
+	candidate := current
+	if in.Name != nil {
+		candidate.Name = *in.Name
 	}
-
-	setStr("name", in.Name)
-	setStr("symbol", in.Symbol)
-	setStr("iconUrl", in.IconURL)
-	setStr("iconObjectPath", in.IconObjectPath)
-	setStr("iconFileName", in.IconFileName)
-	setStr("iconContentType", in.IconContentType)
-	setInt64("iconSize", in.IconSize)
-
+	if in.Symbol != nil {
+		candidate.Symbol = *in.Symbol
+	}
 	if in.BrandID != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "brandId",
-			Value: *in.BrandID,
-		})
+		candidate.BrandID = *in.BrandID
 	}
-
 	if in.Description != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "description",
-			Value: *in.Description,
-		})
+		candidate.Description = *in.Description
 	}
-
+	if in.IconURL != nil {
+		candidate.IconURL = *in.IconURL
+	}
+	if in.IconObjectPath != nil {
+		candidate.IconObjectPath = *in.IconObjectPath
+	}
+	if in.IconFileName != nil {
+		candidate.IconFileName = *in.IconFileName
+	}
+	if in.IconContentType != nil {
+		candidate.IconContentType = *in.IconContentType
+	}
+	if in.IconSize != nil {
+		candidate.IconSize = *in.IconSize
+	}
+	if in.ContentFiles != nil {
+		candidate.ContentFiles = *in.ContentFiles
+	}
 	if in.AssigneeID != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "assigneeId",
-			Value: *in.AssigneeID,
-		})
+		candidate.AssigneeID = *in.AssigneeID
+	}
+	if in.Minted != nil {
+		candidate.Minted = *in.Minted
+	}
+	if in.MetadataURI != nil {
+		candidate.MetadataURI = *in.MetadataURI
 	}
 
-	if in.MetadataURI != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "metadataUri",
-			Value: *in.MetadataURI,
-		})
+	candidate.UpdatedAt = *in.UpdatedAt
+	candidate.UpdatedBy = *in.UpdatedBy
+	if err := validatePersistedTokenBlueprint(candidate); err != nil {
+		return nil, err
 	}
+
+	updates := make([]firestore.Update, 0, 16)
+	setString := func(field string, value *string) {
+		if value != nil {
+			updates = append(updates, firestore.Update{Path: field, Value: *value})
+		}
+	}
+	setInt64 := func(field string, value *int64) {
+		if value != nil {
+			updates = append(updates, firestore.Update{Path: field, Value: *value})
+		}
+	}
+
+	setString("name", in.Name)
+	setString("symbol", in.Symbol)
+	setString("brandId", in.BrandID)
+	setString("description", in.Description)
+	setString("iconUrl", in.IconURL)
+	setString("iconObjectPath", in.IconObjectPath)
+	setString("iconFileName", in.IconFileName)
+	setString("iconContentType", in.IconContentType)
+	setInt64("iconSize", in.IconSize)
+	setString("assigneeId", in.AssigneeID)
+	setString("metadataUri", in.MetadataURI)
 
 	if in.Minted != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "minted",
-			Value: *in.Minted,
-		})
+		updates = append(updates, firestore.Update{Path: "minted", Value: *in.Minted})
 	}
-
 	if in.ContentFiles != nil {
 		if err := tbdom.ValidateContentFiles(*in.ContentFiles); err != nil {
 			return nil, err
 		}
-
-		updates = append(updates, firestore.Update{
-			Path:  "contentFiles",
-			Value: toFSContentFiles(*in.ContentFiles),
-		})
+		updates = append(updates, firestore.Update{Path: "contentFiles", Value: toFSContentFiles(*in.ContentFiles)})
 	}
 
-	updates = append(updates, firestore.Update{
-		Path:  "updatedAt",
-		Value: in.UpdatedAt.UTC(),
-	})
-	updates = append(updates, firestore.Update{
-		Path:  "updatedBy",
-		Value: *in.UpdatedBy,
-	})
-
-	if len(updates) == 0 {
-		snap, err := ref.Get(ctx)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				return nil, tbdom.ErrNotFound
-			}
-			return nil, err
-		}
-
-		tb, err := docToTokenBlueprint(snap)
-		if err != nil {
-			return nil, err
-		}
-
-		return &tb, nil
-	}
+	updates = append(updates,
+		firestore.Update{Path: "updatedAt", Value: in.UpdatedAt.UTC()},
+		firestore.Update{Path: "updatedBy", Value: *in.UpdatedBy},
+	)
 
 	if _, err := ref.Update(ctx, updates); err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -400,7 +354,7 @@ func (r *TokenBlueprintRepositoryFS) Update(
 		return nil, err
 	}
 
-	snap, err := ref.Get(ctx)
+	snap, err = ref.Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return nil, tbdom.ErrNotFound
@@ -412,52 +366,38 @@ func (r *TokenBlueprintRepositoryFS) Update(
 	if err != nil {
 		return nil, err
 	}
-
 	return &tb, nil
 }
 
-func (r *TokenBlueprintRepositoryFS) Delete(
-	ctx context.Context,
-	id string,
-) error {
-	if r.Client == nil {
+func (r *TokenBlueprintRepositoryFS) Delete(ctx context.Context, id string) error {
+	if r == nil || r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-
 	if id == "" {
 		return tbdom.ErrInvalidID
 	}
 
 	ref := r.col().Doc(id)
-
-	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
-		return tbdom.ErrNotFound
-	} else if err != nil {
+	if _, err := ref.Get(ctx); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return tbdom.ErrNotFound
+		}
 		return err
 	}
 
-	if _, err := ref.Delete(ctx); err != nil {
-		return err
-	}
-
-	return nil
+	_, err := ref.Delete(ctx)
+	return err
 }
 
-func (r *TokenBlueprintRepositoryFS) IsSymbolUnique(
-	ctx context.Context,
-	symbol string,
-	excludeID string,
-) (bool, error) {
-	if r.Client == nil {
+func (r *TokenBlueprintRepositoryFS) IsSymbolUnique(ctx context.Context, symbol string, excludeID string) (bool, error) {
+	if r == nil || r.Client == nil {
 		return false, errors.New("firestore client is nil")
 	}
-
 	if symbol == "" {
 		return false, tbdom.ErrInvalidSymbol
 	}
 
-	q := r.col().Where("symbol", "==", symbol)
-	it := q.Documents(ctx)
+	it := r.col().Where("symbol", "==", symbol).Documents(ctx)
 	defer it.Stop()
 
 	for {
@@ -477,21 +417,15 @@ func (r *TokenBlueprintRepositoryFS) IsSymbolUnique(
 	return true, nil
 }
 
-func (r *TokenBlueprintRepositoryFS) IsNameUnique(
-	ctx context.Context,
-	name string,
-	excludeID string,
-) (bool, error) {
-	if r.Client == nil {
+func (r *TokenBlueprintRepositoryFS) IsNameUnique(ctx context.Context, name string, excludeID string) (bool, error) {
+	if r == nil || r.Client == nil {
 		return false, errors.New("firestore client is nil")
 	}
-
 	if name == "" {
 		return false, tbdom.ErrInvalidName
 	}
 
-	q := r.col().Where("name", "==", name)
-	it := q.Documents(ctx)
+	it := r.col().Where("name", "==", name).Documents(ctx)
 	defer it.Stop()
 
 	for {
@@ -512,87 +446,98 @@ func (r *TokenBlueprintRepositoryFS) IsNameUnique(
 }
 
 // ========================================
-// Helpers
+// Firestore DTO / mapping
 // ========================================
 
-func docToTokenBlueprint(
-	doc *firestore.DocumentSnapshot,
-) (tbdom.TokenBlueprint, error) {
-	var raw struct {
-		Name            string           `firestore:"name"`
-		Symbol          string           `firestore:"symbol"`
-		BrandID         string           `firestore:"brandId"`
-		CompanyID       string           `firestore:"companyId"`
-		Description     string           `firestore:"description"`
-		IconURL         string           `firestore:"iconUrl"`
-		IconObjectPath  string           `firestore:"iconObjectPath"`
-		IconFileName    string           `firestore:"iconFileName"`
-		IconContentType string           `firestore:"iconContentType"`
-		IconSize        int64            `firestore:"iconSize"`
-		ContentFiles    []map[string]any `firestore:"contentFiles"`
-		AssigneeID      string           `firestore:"assigneeId"`
-		Minted          bool             `firestore:"minted"`
-		CreatedAt       time.Time        `firestore:"createdAt"`
-		CreatedBy       string           `firestore:"createdBy"`
-		UpdatedAt       time.Time        `firestore:"updatedAt"`
-		UpdatedBy       string           `firestore:"updatedBy"`
-		MetadataURI     string           `firestore:"metadataUri"`
+type tokenBlueprintRepositoryDoc struct {
+	Name            string                                   `firestore:"name"`
+	Symbol          string                                   `firestore:"symbol"`
+	BrandID         string                                   `firestore:"brandId"`
+	CompanyID       string                                   `firestore:"companyId"`
+	Description     string                                   `firestore:"description"`
+	IconURL         string                                   `firestore:"iconUrl"`
+	IconObjectPath  string                                   `firestore:"iconObjectPath"`
+	IconFileName    string                                   `firestore:"iconFileName"`
+	IconContentType string                                   `firestore:"iconContentType"`
+	IconSize        *int64                                   `firestore:"iconSize"`
+	ContentFiles    []tokenBlueprintRepositoryContentFileDoc `firestore:"contentFiles"`
+	AssigneeID      string                                   `firestore:"assigneeId"`
+	Minted          *bool                                    `firestore:"minted"`
+	CreatedAt       time.Time                                `firestore:"createdAt"`
+	CreatedBy       string                                   `firestore:"createdBy"`
+	UpdatedAt       time.Time                                `firestore:"updatedAt"`
+	UpdatedBy       string                                   `firestore:"updatedBy"`
+	MetadataURI     string                                   `firestore:"metadataUri"`
+}
+
+type tokenBlueprintRepositoryContentFileDoc struct {
+	ID          string    `firestore:"id"`
+	Name        string    `firestore:"name"`
+	Type        string    `firestore:"type"`
+	ContentType string    `firestore:"contentType"`
+	URL         string    `firestore:"url"`
+	ObjectPath  string    `firestore:"objectPath"`
+	IsPublic    *bool     `firestore:"isPublic"`
+	Size        *int64    `firestore:"size"`
+	CreatedAt   time.Time `firestore:"createdAt"`
+	CreatedBy   string    `firestore:"createdBy"`
+	UpdatedAt   time.Time `firestore:"updatedAt"`
+	UpdatedBy   string    `firestore:"updatedBy"`
+}
+
+func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint, error) {
+	if doc == nil || doc.Ref == nil || doc.Ref.ID == "" {
+		return tbdom.TokenBlueprint{}, tbdom.ErrInvalidID
 	}
 
+	var raw tokenBlueprintRepositoryDoc
 	if err := doc.DataTo(&raw); err != nil {
-		return tbdom.TokenBlueprint{}, err
+		return tbdom.TokenBlueprint{}, fmt.Errorf("decode token_blueprints document %q: %w", doc.Ref.ID, err)
 	}
-
-	if raw.CreatedAt.IsZero() {
-		return tbdom.TokenBlueprint{}, tbdom.ErrInvalidCreatedAt
+	if raw.IconSize == nil {
+		return tbdom.TokenBlueprint{}, fmt.Errorf("invalid token_blueprints document %q: iconSize is missing", doc.Ref.ID)
 	}
-	if raw.CreatedBy == "" {
-		return tbdom.TokenBlueprint{}, tbdom.ErrInvalidCreatedBy
-	}
-	if raw.UpdatedAt.IsZero() {
-		return tbdom.TokenBlueprint{}, tbdom.ErrInvalidUpdatedAt
-	}
-	if raw.UpdatedBy == "" {
-		return tbdom.TokenBlueprint{}, tbdom.ErrInvalidUpdatedBy
+	if raw.Minted == nil {
+		return tbdom.TokenBlueprint{}, fmt.Errorf("invalid token_blueprints document %q: minted is missing", doc.Ref.ID)
 	}
 
 	files, err := fromFSContentFiles(raw.ContentFiles)
 	if err != nil {
-		return tbdom.TokenBlueprint{}, err
+		return tbdom.TokenBlueprint{}, fmt.Errorf("invalid token_blueprints document %q: %w", doc.Ref.ID, err)
 	}
 
 	tb := tbdom.TokenBlueprint{
-		ID:          doc.Ref.ID,
-		Name:        raw.Name,
-		Symbol:      raw.Symbol,
-		BrandID:     raw.BrandID,
-		CompanyID:   raw.CompanyID,
-		Description: raw.Description,
-
+		ID:              doc.Ref.ID,
+		Name:            raw.Name,
+		Symbol:          raw.Symbol,
+		BrandID:         raw.BrandID,
+		CompanyID:       raw.CompanyID,
+		Description:     raw.Description,
 		IconURL:         raw.IconURL,
 		IconObjectPath:  raw.IconObjectPath,
 		IconFileName:    raw.IconFileName,
 		IconContentType: raw.IconContentType,
-		IconSize:        raw.IconSize,
-
-		ContentFiles: files,
-		AssigneeID:   raw.AssigneeID,
-		Minted:       raw.Minted,
-		CreatedAt:    raw.CreatedAt.UTC(),
-		CreatedBy:    raw.CreatedBy,
-		UpdatedAt:    raw.UpdatedAt.UTC(),
-		UpdatedBy:    raw.UpdatedBy,
-		MetadataURI:  raw.MetadataURI,
+		IconSize:        *raw.IconSize,
+		ContentFiles:    files,
+		AssigneeID:      raw.AssigneeID,
+		Minted:          *raw.Minted,
+		CreatedAt:       raw.CreatedAt,
+		CreatedBy:       raw.CreatedBy,
+		UpdatedAt:       raw.UpdatedAt,
+		UpdatedBy:       raw.UpdatedBy,
+		MetadataURI:     raw.MetadataURI,
 	}
 
+	if err := validatePersistedTokenBlueprint(tb); err != nil {
+		return tbdom.TokenBlueprint{}, fmt.Errorf("invalid token_blueprints document %q: %w", doc.Ref.ID, err)
+	}
 	return tb, nil
 }
 
 func toFSContentFiles(xs []tbdom.ContentFile) []map[string]any {
 	out := make([]map[string]any, 0, len(xs))
-
 	for _, f := range xs {
-		m := map[string]any{
+		out = append(out, map[string]any{
 			"id":          f.ID,
 			"name":        f.Name,
 			"type":        string(f.Type),
@@ -605,160 +550,84 @@ func toFSContentFiles(xs []tbdom.ContentFile) []map[string]any {
 			"createdBy":   f.CreatedBy,
 			"updatedAt":   f.UpdatedAt,
 			"updatedBy":   f.UpdatedBy,
-		}
-
-		out = append(out, m)
+		})
 	}
-
 	return out
 }
 
-func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
+func fromFSContentFiles(xs []tokenBlueprintRepositoryContentFileDoc) ([]tbdom.ContentFile, error) {
 	out := make([]tbdom.ContentFile, 0, len(xs))
-
-	for i, m := range xs {
-		var f tbdom.ContentFile
-
-		v, ok := m["id"].(string)
-		if !ok || v == "" {
-			return nil, fmt.Errorf("%w: contentFiles[%d].id", tbdom.ErrInvalidContentFile, i)
+	for i, raw := range xs {
+		if raw.IsPublic == nil {
+			return nil, fmt.Errorf("%w: contentFiles[%d].isPublic is missing", tbdom.ErrInvalidContentFile, i)
 		}
-		f.ID = v
-
-		v, ok = m["name"].(string)
-		if !ok || v == "" {
-			return nil, fmt.Errorf("%w: contentFiles[%d].name", tbdom.ErrInvalidContentFile, i)
-		}
-		f.Name = v
-
-		tv, ok := m["type"].(string)
-		if !ok || tv == "" {
-			return nil, fmt.Errorf("%w: contentFiles[%d].type", tbdom.ErrInvalidContentType, i)
-		}
-		f.Type = tbdom.ContentFileType(tv)
-
-		if v, ok := m["contentType"].(string); ok {
-			f.ContentType = v
+		if raw.Size == nil {
+			return nil, fmt.Errorf("%w: contentFiles[%d].size is missing", tbdom.ErrInvalidContentFile, i)
 		}
 
-		v, ok = m["url"].(string)
-		if !ok || v == "" {
-			return nil, fmt.Errorf("%w: contentFiles[%d].url", tbdom.ErrInvalidContentFile, i)
-		}
-		f.URL = v
-
-		v, ok = m["objectPath"].(string)
-		if !ok || v == "" {
-			return nil, fmt.Errorf("%w: contentFiles[%d].objectPath", tbdom.ErrInvalidContentFile, i)
-		}
-		f.ObjectPath = v
-
-		isPublic, ok := m["isPublic"].(bool)
-		if !ok {
-			return nil, fmt.Errorf("%w: contentFiles[%d].isPublic", tbdom.ErrInvalidContentFile, i)
-		}
-		f.IsPublic = isPublic
-
-		size, err := int64FromAny(m["size"])
-		if err != nil {
-			return nil, fmt.Errorf("%w: contentFiles[%d].size: %v", tbdom.ErrInvalidContentFile, i, err)
-		}
-		f.Size = size
-
-		if v, ok := m["createdBy"].(string); ok {
-			f.CreatedBy = v
-		}
-
-		if v, ok := m["updatedBy"].(string); ok {
-			f.UpdatedBy = v
-		}
-
-		if v, ok := m["createdAt"].(time.Time); ok {
-			f.CreatedAt = v.UTC()
-		}
-
-		if v, ok := m["updatedAt"].(time.Time); ok {
-			f.UpdatedAt = v.UTC()
-		}
-
-		out = append(out, f)
+		out = append(out, tbdom.ContentFile{
+			ID:          raw.ID,
+			Name:        raw.Name,
+			Type:        tbdom.ContentFileType(raw.Type),
+			ContentType: raw.ContentType,
+			URL:         raw.URL,
+			ObjectPath:  raw.ObjectPath,
+			IsPublic:    *raw.IsPublic,
+			Size:        *raw.Size,
+			CreatedAt:   raw.CreatedAt,
+			CreatedBy:   raw.CreatedBy,
+			UpdatedAt:   raw.UpdatedAt,
+			UpdatedBy:   raw.UpdatedBy,
+		})
 	}
 
 	if err := tbdom.ValidateContentFiles(out); err != nil {
 		return nil, err
 	}
-
 	return out, nil
 }
 
-func int64FromAny(v any) (int64, error) {
-	switch x := v.(type) {
-	case nil:
-		return 0, nil
-	case int:
-		if x < 0 {
-			return 0, fmt.Errorf("negative size")
-		}
-		return int64(x), nil
-	case int8:
-		if x < 0 {
-			return 0, fmt.Errorf("negative size")
-		}
-		return int64(x), nil
-	case int16:
-		if x < 0 {
-			return 0, fmt.Errorf("negative size")
-		}
-		return int64(x), nil
-	case int32:
-		if x < 0 {
-			return 0, fmt.Errorf("negative size")
-		}
-		return int64(x), nil
-	case int64:
-		if x < 0 {
-			return 0, fmt.Errorf("negative size")
-		}
-		return x, nil
-	case uint:
-		if uint64(x) > math.MaxInt64 {
-			return 0, fmt.Errorf("size overflows int64")
-		}
-		return int64(x), nil
-	case uint8:
-		return int64(x), nil
-	case uint16:
-		return int64(x), nil
-	case uint32:
-		return int64(x), nil
-	case uint64:
-		if x > math.MaxInt64 {
-			return 0, fmt.Errorf("size overflows int64")
-		}
-		return int64(x), nil
-	case float32:
-		if x < 0 {
-			return 0, fmt.Errorf("negative size")
-		}
-		if math.Trunc(float64(x)) != float64(x) {
-			return 0, fmt.Errorf("size must be integer")
-		}
-		if float64(x) > math.MaxInt64 {
-			return 0, fmt.Errorf("size overflows int64")
-		}
-		return int64(x), nil
-	case float64:
-		if x < 0 {
-			return 0, fmt.Errorf("negative size")
-		}
-		if math.Trunc(x) != x {
-			return 0, fmt.Errorf("size must be integer")
-		}
-		if x > math.MaxInt64 {
-			return 0, fmt.Errorf("size overflows int64")
-		}
-		return int64(x), nil
-	default:
-		return 0, fmt.Errorf("unsupported size type %T", v)
+func validatePersistedTokenBlueprint(tb tbdom.TokenBlueprint) error {
+	if _, err := tbdom.New(
+		tb.ID,
+		tb.Name,
+		tb.Symbol,
+		tb.BrandID,
+		tb.CompanyID,
+		tb.Description,
+		tb.ContentFiles,
+		tb.AssigneeID,
+		tb.CreatedAt,
+		tb.CreatedBy,
+		tb.UpdatedAt,
+	); err != nil {
+		return err
 	}
+	if tb.UpdatedBy == "" {
+		return tbdom.ErrInvalidUpdatedBy
+	}
+	if tb.IconSize < 0 {
+		return tbdom.ErrInvalidIconSize
+	}
+
+	hasAnyIconField := tb.IconURL != "" || tb.IconObjectPath != "" || tb.IconFileName != "" || tb.IconContentType != "" || tb.IconSize != 0
+	if hasAnyIconField {
+		if tb.IconURL == "" {
+			return tbdom.ErrInvalidIconURL
+		}
+		if tb.IconObjectPath == "" {
+			return tbdom.ErrInvalidIconObjectPath
+		}
+		if tb.IconFileName == "" {
+			return tbdom.ErrInvalidIconFileName
+		}
+	}
+
+	return nil
 }
+
+// ========================================
+// compile-time interface check
+// ========================================
+
+var _ tbdom.RepositoryPort = (*TokenBlueprintRepositoryFS)(nil)

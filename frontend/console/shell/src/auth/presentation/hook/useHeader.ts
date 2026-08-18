@@ -1,6 +1,7 @@
 // frontend/console/shell/src/auth/presentation/hook/useHeader.ts
 
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { useAuthContext } from "../../application/AuthContext";
 import { useAuthActions } from "../../application/useAuthActions";
@@ -11,17 +12,14 @@ type UseHeaderParams = {
 };
 
 export function useHeader(_params: UseHeaderParams = {}) {
+  const navigate = useNavigate();
   const [openAdmin, setOpenAdmin] = useState(false);
-
   const panelContainerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   const { signOut } = useAuthActions();
   const { companyName, currentMember } = useAuthContext();
 
-  // ─────────────────────────────────────────────
-  // 外側クリックで閉じる
-  // ─────────────────────────────────────────────
   useEffect(() => {
     const handleDocumentMouseDown = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -44,9 +42,6 @@ export function useHeader(_params: UseHeaderParams = {}) {
     };
   }, []);
 
-  // ─────────────────────────────────────────────
-  // Escキーで閉じる
-  // ─────────────────────────────────────────────
   useEffect(() => {
     const handleDocumentKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -61,9 +56,11 @@ export function useHeader(_params: UseHeaderParams = {}) {
     };
   }, []);
 
-  // ─────────────────────────────────────────────
-  // ログアウト
-  // ─────────────────────────────────────────────
+  const handleOpenCompanyDetail = () => {
+    setOpenAdmin(false);
+    navigate("/company");
+  };
+
   const handleLogout = async () => {
     try {
       await signOut();
@@ -77,7 +74,6 @@ export function useHeader(_params: UseHeaderParams = {}) {
     setOpenAdmin((current) => !current);
   };
 
-  // Backendレスポンスを表示値の正とする
   const brandMain = companyName ?? "Company Name";
   const fullName = currentMember?.displayName ?? "ゲスト";
   const displayEmail = currentMember?.email ?? "";
@@ -89,6 +85,7 @@ export function useHeader(_params: UseHeaderParams = {}) {
     brandMain,
     fullName,
     displayEmail,
+    handleOpenCompanyDetail,
     handleToggleAdmin,
     handleLogout,
   };

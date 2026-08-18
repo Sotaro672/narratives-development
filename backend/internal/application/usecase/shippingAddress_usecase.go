@@ -4,7 +4,6 @@ package usecase
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,8 +17,8 @@ type ShippingAddressRepo = shipaddrdom.RepositoryPort
 
 // CreateShippingAddressInputは配送先住所の新規作成入力です。
 //
-// ID、UserID、CreatedAtおよびUpdatedAtは受け取りません。
-// IDはUsecaseがUUIDを採番し、UserIDは認証UIDから設定し、
+// ID、UserID、CompanyID、CreatedAtおよびUpdatedAtは受け取りません。
+// IDはUsecaseがUUIDを採番し、UserIDとCompanyIDは認証済みcontextから解決した値を呼び出し側から受け取り、
 // 時刻はUsecaseのserver clockから設定します。
 type CreateShippingAddressInput struct {
 	ZipCode string
@@ -35,6 +34,7 @@ type CreateShippingAddressInput struct {
 // nilは変更なしを表します。
 // Street2は任意項目であるため、空文字を指定すると明示的に消去できます。
 // Countryへ空文字を指定した場合は、Domain規則によりJPへ正規化されます。
+// UserID、CompanyIDはこの入力から変更しません。
 type UpdateShippingAddressInput struct {
 	ZipCode *string
 	State   *string
@@ -55,12 +55,9 @@ type ShippingAddressUsecase struct {
 
 // NewShippingAddressUsecaseはShippingAddressUsecaseを生成します。
 //
-// repoがnilの場合でもconstructor自体は失敗させず、各メソッドの
-// ensureRepoでエラーにします。HTTP HandlerではUsecase自体がnilの場合に
-// 503を返すguardを追加します。
-func NewShippingAddressUsecase(
-	repo ShippingAddressRepo,
-) *ShippingAddressUsecase {
+// repoがnilの場合でもconstructor自体は失敗させず、各メソッドのensureRepoでエラーにします。
+// HTTP HandlerではUsecase自体がnilの場合に503を返すguardを追加します。
+func NewShippingAddressUsecase(repo ShippingAddressRepo) *ShippingAddressUsecase {
 	return &ShippingAddressUsecase{
 		repo:     repo,
 		newDocID: uuid.NewString,
@@ -91,7 +88,6 @@ func (u *ShippingAddressUsecase) ensureRepo() error {
 }
 
 func validateShippingAddressID(id string) (string, error) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return "", shipaddrdom.ErrInvalidID
 	}
@@ -104,7 +100,6 @@ func validateShippingAddressID(id string) (string, error) {
 }
 
 func validateShippingAddressUID(uid string) (string, error) {
-	uid = strings.TrimSpace(uid)
 	if uid == "" {
 		return "", shipaddrdom.ErrInvalidUserID
 	}
@@ -116,14 +111,26 @@ func validateShippingAddressUID(uid string) (string, error) {
 	return uid, nil
 }
 
+func validateShippingAddressCompanyID(companyID string) (string, error) {
+	if companyID == "" {
+		return "", shipaddrdom.ErrInvalidCompanyID
+	}
+
+	if len([]rune(companyID)) > shipaddrdom.MaxCompanyIDLength {
+		return "", shipaddrdom.ErrInvalidCompanyID
+	}
+
+	return companyID, nil
+}
+
 // --------------------
 // Queries
 // --------------------
 
 // GetByIDはdocument IDだけでShippingAddressを取得します。
 //
-// このメソッドは所有者を確認しません。
-// Mallの/me配下の単件取得ではGetByUserを使用してください。
+// このメソッドはUserID、CompanyIDによる所有権を確認しません。
+// Mallの/me配下ではGetByUser、ConsoleではGetByCompanyを使用してください。
 func (u *ShippingAddressUsecase) GetByID(
 	ctx context.Context,
 	id string,
@@ -142,9 +149,7 @@ func (u *ShippingAddressUsecase) GetByID(
 
 // GetByUserはdocument IDと認証UIDの両方を条件として取得します。
 //
-// 対象が存在しない場合と、対象が指定ユーザーの所有物でない場合は、
-// いずれもErrNotFoundを返します。
-//
+// 対象が存在しない場合と、対象が指定ユーザーの所有物でない場合は、いずれもErrNotFoundを返します。
 // Mallの/me配下の単件取得では、このメソッドを使用します。
 func (u *ShippingAddressUsecase) GetByUser(
 	ctx context.Context,
@@ -168,10 +173,35 @@ func (u *ShippingAddressUsecase) GetByUser(
 	return u.repo.GetByUser(ctx, validID, validUID)
 }
 
+// GetByCompanyはdocument IDとCompanyIDの両方を条件として取得します。
+//
+// 対象が存在しない場合と、対象が指定companyに所属しない場合は、いずれもErrNotFoundを返します。
+// Consoleなどcompany単位の単件取得では、このメソッドを使用します。
+func (u *ShippingAddressUsecase) GetByCompany(
+	ctx context.Context,
+	id string,
+	companyID string,
+) (*shipaddrdom.ShippingAddress, error) {
+	if err := u.ensureRepo(); err != nil {
+		return nil, err
+	}
+
+	validID, err := validateShippingAddressID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	validCompanyID, err := validateShippingAddressCompanyID(companyID)
+	if err != nil {
+		return nil, err
+	}
+
+	return u.repo.GetByCompany(ctx, validID, validCompanyID)
+}
+
 // Existsはdocument IDに対応するShippingAddressが存在するか返します。
 //
-// このメソッドは所有者を確認しないため、存在確認結果を
-// 外部向けAPIへ直接公開してはいけません。
+// このメソッドはUserID、CompanyIDによる所有権を確認しないため、存在確認結果を外部向けAPIへ直接公開してはいけません。
 func (u *ShippingAddressUsecase) Exists(
 	ctx context.Context,
 	id string,
@@ -205,6 +235,23 @@ func (u *ShippingAddressUsecase) ListByUserID(
 	return u.repo.ListByUserID(ctx, validUID)
 }
 
+// ListByCompanyIDは指定companyに所属する配送先住所一覧を返します。
+func (u *ShippingAddressUsecase) ListByCompanyID(
+	ctx context.Context,
+	companyID string,
+) ([]shipaddrdom.ShippingAddress, error) {
+	if err := u.ensureRepo(); err != nil {
+		return nil, err
+	}
+
+	validCompanyID, err := validateShippingAddressCompanyID(companyID)
+	if err != nil {
+		return nil, err
+	}
+
+	return u.repo.ListByCompanyID(ctx, validCompanyID)
+}
+
 // --------------------
 // Commands
 // --------------------
@@ -212,12 +259,13 @@ func (u *ShippingAddressUsecase) ListByUserID(
 // Createは新しい配送先住所を作成します。
 //
 // IDはUsecaseがUUIDを採番します。
-// UserIDは認証UIDから設定します。
+// UserIDは認証UID、CompanyIDは認証済みmemberが所属するcompany IDを呼び出し側から受け取ります。
 // CreatedAtおよびUpdatedAtはserver clockから設定します。
 // Countryの既定値はDomain constructorが決定します。
 func (u *ShippingAddressUsecase) Create(
 	ctx context.Context,
 	uid string,
+	companyID string,
 	in CreateShippingAddressInput,
 ) (*shipaddrdom.ShippingAddress, error) {
 	if err := u.ensureRepo(); err != nil {
@@ -225,6 +273,11 @@ func (u *ShippingAddressUsecase) Create(
 	}
 
 	validUID, err := validateShippingAddressUID(uid)
+	if err != nil {
+		return nil, err
+	}
+
+	validCompanyID, err := validateShippingAddressCompanyID(companyID)
 	if err != nil {
 		return nil, err
 	}
@@ -239,6 +292,7 @@ func (u *ShippingAddressUsecase) Create(
 	entity, err := shipaddrdom.NewWithNow(
 		documentID,
 		validUID,
+		validCompanyID,
 		in.ZipCode,
 		in.State,
 		in.City,
@@ -256,13 +310,9 @@ func (u *ShippingAddressUsecase) Create(
 
 // Updateは指定ユーザーが所有する配送先住所を部分更新します。
 //
-// Handlerは既存Entityを取得・mergeせず、UpdateShippingAddressInputを
-// そのままこのメソッドへ渡します。
-//
-// Usecaseが所有者確認付き取得、入力merge、Domain更新、永続化を
-// 一度だけ実行します。
-//
-// ID、UserIDおよびCreatedAtは既存値を保持します。
+// Handlerは既存Entityを取得・mergeせず、UpdateShippingAddressInputをそのままこのメソッドへ渡します。
+// Usecaseが所有者確認付き取得、入力merge、Domain更新、永続化を一度だけ実行します。
+// ID、UserID、CompanyIDおよびCreatedAtは既存値を保持します。
 // UpdatedAtはserver clockで更新します。
 func (u *ShippingAddressUsecase) Update(
 	ctx context.Context,
@@ -284,11 +334,89 @@ func (u *ShippingAddressUsecase) Update(
 		return nil, err
 	}
 
-	current, err := u.repo.GetByUser(
-		ctx,
-		validID,
-		validUID,
-	)
+	current, err := u.repo.GetByUser(ctx, validID, validUID)
+	if err != nil {
+		return nil, err
+	}
+
+	if current == nil {
+		return nil, shipaddrdom.ErrNotFound
+	}
+
+	zipCode := current.ZipCode
+	state := current.State
+	city := current.City
+	street := current.Street
+	street2 := current.Street2
+	country := current.Country
+
+	if in.ZipCode != nil {
+		zipCode = *in.ZipCode
+	}
+
+	if in.State != nil {
+		state = *in.State
+	}
+
+	if in.City != nil {
+		city = *in.City
+	}
+
+	if in.Street != nil {
+		street = *in.Street
+	}
+
+	if in.Street2 != nil {
+		street2 = *in.Street2
+	}
+
+	if in.Country != nil {
+		country = *in.Country
+	}
+
+	now := u.now().UTC()
+
+	if err := current.UpdateFromForm(
+		zipCode,
+		state,
+		city,
+		street,
+		street2,
+		country,
+		now,
+	); err != nil {
+		return nil, err
+	}
+
+	return u.repo.Update(ctx, *current)
+}
+
+// UpdateByCompanyは指定companyに所属する配送先住所を部分更新します。
+//
+// Consoleなどcompany単位の管理処理で使用します。
+// ID、UserID、CompanyIDおよびCreatedAtは既存値を保持します。
+// UpdatedAtはserver clockで更新します。
+func (u *ShippingAddressUsecase) UpdateByCompany(
+	ctx context.Context,
+	id string,
+	companyID string,
+	in UpdateShippingAddressInput,
+) (*shipaddrdom.ShippingAddress, error) {
+	if err := u.ensureRepo(); err != nil {
+		return nil, err
+	}
+
+	validID, err := validateShippingAddressID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	validCompanyID, err := validateShippingAddressCompanyID(companyID)
+	if err != nil {
+		return nil, err
+	}
+
+	current, err := u.repo.GetByCompany(ctx, validID, validCompanyID)
 	if err != nil {
 		return nil, err
 	}
@@ -347,8 +475,8 @@ func (u *ShippingAddressUsecase) Update(
 
 // Deleteはdocument IDだけで配送先住所を削除します。
 //
-// このメソッドは所有者を確認しません。
-// Mallの/me配下ではDeleteByUserを使用してください。
+// このメソッドはUserID、CompanyIDによる所有権を確認しません。
+// Mallの/me配下ではDeleteByUser、ConsoleではDeleteByCompanyを使用してください。
 func (u *ShippingAddressUsecase) Delete(
 	ctx context.Context,
 	id string,
@@ -367,8 +495,7 @@ func (u *ShippingAddressUsecase) Delete(
 
 // DeleteByUserは所有者を確認して配送先住所を削除します。
 //
-// 対象が存在しない場合と、対象が指定ユーザーの所有物でない場合は、
-// いずれもErrNotFoundを返します。
+// 対象が存在しない場合と、対象が指定ユーザーの所有物でない場合は、いずれもErrNotFoundを返します。
 func (u *ShippingAddressUsecase) DeleteByUser(
 	ctx context.Context,
 	id string,
@@ -388,11 +515,42 @@ func (u *ShippingAddressUsecase) DeleteByUser(
 		return err
 	}
 
-	current, err := u.repo.GetByUser(
-		ctx,
-		validID,
-		validUID,
-	)
+	current, err := u.repo.GetByUser(ctx, validID, validUID)
+	if err != nil {
+		return err
+	}
+
+	if current == nil {
+		return shipaddrdom.ErrNotFound
+	}
+
+	return u.repo.Delete(ctx, validID)
+}
+
+// DeleteByCompanyはcompany所属を確認して配送先住所を削除します。
+//
+// 対象が存在しない場合と、対象が指定companyに所属しない場合は、いずれもErrNotFoundを返します。
+// Consoleなどcompany単位の管理処理で使用します。
+func (u *ShippingAddressUsecase) DeleteByCompany(
+	ctx context.Context,
+	id string,
+	companyID string,
+) error {
+	if err := u.ensureRepo(); err != nil {
+		return err
+	}
+
+	validID, err := validateShippingAddressID(id)
+	if err != nil {
+		return err
+	}
+
+	validCompanyID, err := validateShippingAddressCompanyID(companyID)
+	if err != nil {
+		return err
+	}
+
+	current, err := u.repo.GetByCompany(ctx, validID, validCompanyID)
 	if err != nil {
 		return err
 	}

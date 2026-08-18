@@ -14,24 +14,24 @@ import (
 //
 //   - document ID = ShippingAddress.ID
 //   - ShippingAddress.IDはUUID
-//   - ShippingAddress.UserIDは所有者の認証UID
-//   - ShippingAddress.IDとShippingAddress.UserIDは異なる値
-//   - 1ユーザーは複数の配送先住所を所有可能
+//   - ShippingAddress.UserIDは登録・所有する認証ユーザーのUID
+//   - ShippingAddress.CompanyIDは所属するcompanyのdocument ID
+//   - ShippingAddress.ID、UserID、CompanyIDはそれぞれ異なる識別子
+//   - 1ユーザーは複数のShippingAddressを所有可能
+//   - 1companyは複数のShippingAddressを所有可能
 //
 // Ownership:
 //
-// Mallの/me配下など、ユーザー本人のデータを操作する処理では、
-// GetByIDではなくGetByUserを使用します。
+// Mallの/me配下など、ユーザー本人のデータを操作する処理ではGetByUserを使用します。
+// Consoleなどcompany単位でデータを操作する処理ではGetByCompanyを使用します。
 //
-// Repository実装は、対象が存在しない場合と、対象が指定ユーザーの
-// 所有物でない場合の両方でErrNotFoundを返します。
-// これにより、他ユーザーのデータの存在を外部へ公開しません。
+// Repository実装は、対象が存在しない場合と、指定されたuserまたはcompanyに所属しない場合の両方でErrNotFoundを返します。
+// これにより、他ユーザー・他companyのShippingAddressの存在を外部へ公開しません。
 type RepositoryPort interface {
 	// GetByIDはdocument IDだけでShippingAddressを取得します。
 	//
-	// このメソッドは所有者を検証しません。
-	// 管理処理や、所有者検証が不要であることが明確な内部処理に限定して
-	// 使用してください。
+	// このメソッドはUserID、CompanyIDによる所有権を検証しません。
+	// 所有権検証が不要であることが明確な内部処理に限定して使用してください。
 	//
 	// idが空、またはUUIDとして不正な場合はErrInvalidIDを返します。
 	// 対象が存在しない場合はErrNotFoundを返します。
@@ -57,12 +57,28 @@ type RepositoryPort interface {
 		userID string,
 	) (*ShippingAddress, error)
 
+	// GetByCompanyはdocument IDとCompanyIDの両方を条件として取得します。
+	//
+	// 次のいずれかに該当する場合はErrNotFoundを返します。
+	//
+	//   - 対象documentが存在しない
+	//   - 対象documentのCompanyIDがcompanyIDと一致しない
+	//
+	// idが空、またはUUIDとして不正な場合はErrInvalidIDを返します。
+	// companyIDが空の場合はErrInvalidCompanyIDを返します。
+	//
+	// Consoleなどcompany単位でShippingAddressを取得、更新、削除する場合は、このメソッドを使用します。
+	GetByCompany(
+		ctx context.Context,
+		id string,
+		companyID string,
+	) (*ShippingAddress, error)
+
 	// Existsはdocument IDに対応するShippingAddressが存在するか返します。
 	//
-	// idが空、またはUUIDとして不正な場合は、falseとErrInvalidIDを返します。
+	// idが空、またはUUIDとして不正な場合はfalseとErrInvalidIDを返します。
 	//
-	// このメソッドは所有者を検証しないため、外部向けAPIで存在確認結果を
-	// そのまま公開してはいけません。
+	// このメソッドはUserID、CompanyIDによる所有権を検証しないため、外部向けAPIで存在確認結果をそのまま公開してはいけません。
 	Exists(
 		ctx context.Context,
 		id string,
@@ -71,7 +87,7 @@ type RepositoryPort interface {
 	// ListByUserIDは指定ユーザーが所有するShippingAddress一覧を返します。
 	//
 	// userIDが空の場合はErrInvalidUserIDを返します。
-	// 対象が0件の場合は、ErrNotFoundではなく空のsliceを返します。
+	// 対象が0件の場合はErrNotFoundではなく空のsliceを返します。
 	//
 	// 並び順はupdatedAtの降順とします。
 	ListByUserID(
@@ -79,13 +95,23 @@ type RepositoryPort interface {
 		userID string,
 	) ([]ShippingAddress, error)
 
+	// ListByCompanyIDは指定companyに所属するShippingAddress一覧を返します。
+	//
+	// companyIDが空の場合はErrInvalidCompanyIDを返します。
+	// 対象が0件の場合はErrNotFoundではなく空のsliceを返します。
+	//
+	// 並び順はupdatedAtの降順とします。
+	ListByCompanyID(
+		ctx context.Context,
+		companyID string,
+	) ([]ShippingAddress, error)
+
 	// Createは新しいShippingAddress documentを作成します。
 	//
-	// 呼び出し時点で、ShippingAddressはDomain規則を満たし、
-	// IDがUUIDとして採番済みでなければなりません。
+	// 呼び出し時点でShippingAddressはDomain規則を満たし、IDがUUIDとして採番済みでなければなりません。
+	// UserIDおよびCompanyIDも必須です。
 	//
-	// Repository実装もDomain constructorを使用してEntityを再検証し、
-	// 不正なEntityを永続化してはいけません。
+	// Repository実装もDomain constructorを使用してEntityを再検証し、不正なEntityを永続化してはいけません。
 	//
 	// 同じIDのdocumentが既に存在する場合はErrConflictを返します。
 	// Createは既存documentを上書きしてはいけません。
@@ -99,14 +125,14 @@ type RepositoryPort interface {
 	// Updateはupsertではありません。
 	// 対象が存在しない場合はErrNotFoundを返します。
 	//
-	// Repository実装はFirestore transaction、document update、
-	// update-time preconditionなどを使用し、存在確認後に対象が削除された場合でも
-	// documentを再作成してはいけません。
+	// Repository実装はFirestore transaction、document update、update-time preconditionなどを使用し、
+	// 存在確認後に対象が削除された場合でもdocumentを再作成してはいけません。
 	//
 	// 次の値は変更してはいけません。
 	//
 	//   - ID
 	//   - UserID
+	//   - CompanyID
 	//   - CreatedAt
 	//
 	// Repository実装は永続化前にDomain constructorを使用してEntityを検証します。
@@ -117,8 +143,9 @@ type RepositoryPort interface {
 
 	// Deleteはdocument IDでShippingAddressを削除します。
 	//
-	// このメソッドは所有者を検証しません。
-	// Mallの/me配下では、事前にGetByUserを使用して所有者を確認します。
+	// このメソッドはUserID、CompanyIDによる所有権を検証しません。
+	// Mallの/me配下では事前にGetByUserを使用して所有者を確認します。
+	// Consoleでは事前にGetByCompanyを使用してcompany所属を確認します。
 	//
 	// 対象が存在しない場合はErrNotFoundを返します。
 	// idが空、またはUUIDとして不正な場合はErrInvalidIDを返します。

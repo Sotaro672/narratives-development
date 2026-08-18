@@ -13,17 +13,20 @@ import (
 // ShippingAddressは配送先住所を表すドメインエンティティです。
 //
 // IDは配送先住所documentのUUIDです。
-// UserIDは配送先住所を所有する認証ユーザーのUIDです。
-// IDとUserIDは異なる値です。
+// UserIDは配送先住所を登録・所有する認証ユーザーのUIDです。
+// CompanyIDは配送先住所が所属するcompanyのdocument IDです。
+// 1つのCompanyは複数のShippingAddressを保持できます。
+// ID、UserID、CompanyIDはそれぞれ異なる識別子です。
 type ShippingAddress struct {
-	ID      string `json:"id"`
-	UserID  string `json:"userId"`
-	ZipCode string `json:"zipCode"`
-	State   string `json:"state"`
-	City    string `json:"city"`
-	Street  string `json:"street"`
-	Street2 string `json:"street2"`
-	Country string `json:"country"`
+	ID        string `json:"id"`
+	UserID    string `json:"userId"`
+	CompanyID string `json:"companyId"`
+	ZipCode   string `json:"zipCode"`
+	State     string `json:"state"`
+	City      string `json:"city"`
+	Street    string `json:"street"`
+	Street2   string `json:"street2"`
+	Country   string `json:"country"`
 
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -33,6 +36,7 @@ type ShippingAddress struct {
 var (
 	ErrInvalidID        = errors.New("shippingAddress: invalid id")
 	ErrInvalidUserID    = errors.New("shippingAddress: invalid userId")
+	ErrInvalidCompanyID = errors.New("shippingAddress: invalid companyId")
 	ErrInvalidStreet    = errors.New("shippingAddress: invalid street")
 	ErrInvalidCity      = errors.New("shippingAddress: invalid city")
 	ErrInvalidState     = errors.New("shippingAddress: invalid state")
@@ -46,11 +50,12 @@ var (
 const (
 	DefaultCountry = "JP"
 
-	MaxUserIDLength  = 128
-	MaxZipCodeLength = 32
-	MaxStateLength   = 100
-	MaxCityLength    = 100
-	MaxStreetLength  = 200
+	MaxUserIDLength    = 128
+	MaxCompanyIDLength = 128
+	MaxZipCodeLength   = 32
+	MaxStateLength     = 100
+	MaxCityLength      = 100
+	MaxStreetLength    = 200
 )
 
 // 日本の郵便番号は、1234567または123-4567を許可します。
@@ -64,20 +69,11 @@ var countryCodePattern = regexp.MustCompile(`^[A-Z]{2}$`)
 // countryが未指定の場合はJPを使用します。
 // 既存クライアントとの互換性のため「日本」もJPへ変換します。
 func (a ShippingAddress) normalizeFields() ShippingAddress {
-	a.ID = strings.TrimSpace(a.ID)
-	a.UserID = strings.TrimSpace(a.UserID)
-	a.ZipCode = strings.TrimSpace(a.ZipCode)
-	a.State = strings.TrimSpace(a.State)
-	a.City = strings.TrimSpace(a.City)
-	a.Street = strings.TrimSpace(a.Street)
-	a.Street2 = strings.TrimSpace(a.Street2)
-
-	country := strings.TrimSpace(a.Country)
-	switch country {
+	switch a.Country {
 	case "", "日本":
 		a.Country = DefaultCountry
 	default:
-		a.Country = strings.ToUpper(country)
+		a.Country = strings.ToUpper(a.Country)
 	}
 
 	a.CreatedAt = a.CreatedAt.UTC()
@@ -86,11 +82,7 @@ func (a ShippingAddress) normalizeFields() ShippingAddress {
 	return a
 }
 
-func validateRequiredText(
-	value string,
-	maxLength int,
-	invalidError error,
-) error {
+func validateRequiredText(value string, maxLength int, invalidError error) error {
 	if value == "" {
 		return invalidError
 	}
@@ -103,11 +95,11 @@ func validateRequiredText(
 }
 
 func validateUserID(userID string) error {
-	return validateRequiredText(
-		userID,
-		MaxUserIDLength,
-		ErrInvalidUserID,
-	)
+	return validateRequiredText(userID, MaxUserIDLength, ErrInvalidUserID)
+}
+
+func validateCompanyID(companyID string) error {
+	return validateRequiredText(companyID, MaxCompanyIDLength, ErrInvalidCompanyID)
 }
 
 func validateZipCode(zipCode string, country string) error {
@@ -119,8 +111,7 @@ func validateZipCode(zipCode string, country string) error {
 		return ErrInvalidZipCode
 	}
 
-	if country == DefaultCountry &&
-		!japaneseZipCodePattern.MatchString(zipCode) {
+	if country == DefaultCountry && !japaneseZipCodePattern.MatchString(zipCode) {
 		return ErrInvalidZipCode
 	}
 
@@ -144,33 +135,20 @@ func (a ShippingAddress) validateAddressFields() error {
 		return err
 	}
 
-	if err := validateRequiredText(
-		a.State,
-		MaxStateLength,
-		ErrInvalidState,
-	); err != nil {
+	if err := validateRequiredText(a.State, MaxStateLength, ErrInvalidState); err != nil {
 		return err
 	}
 
-	if err := validateRequiredText(
-		a.City,
-		MaxCityLength,
-		ErrInvalidCity,
-	); err != nil {
+	if err := validateRequiredText(a.City, MaxCityLength, ErrInvalidCity); err != nil {
 		return err
 	}
 
-	if err := validateRequiredText(
-		a.Street,
-		MaxStreetLength,
-		ErrInvalidStreet,
-	); err != nil {
+	if err := validateRequiredText(a.Street, MaxStreetLength, ErrInvalidStreet); err != nil {
 		return err
 	}
 
 	// Street2は任意項目なので、空文字を許可します。
 	// ErrInvalidStreet2は定義しません。
-
 	return nil
 }
 
@@ -192,6 +170,10 @@ func (a ShippingAddress) validateTimestamps() error {
 
 func (a ShippingAddress) validateCommon() error {
 	if err := validateUserID(a.UserID); err != nil {
+		return err
+	}
+
+	if err := validateCompanyID(a.CompanyID); err != nil {
 		return err
 	}
 
@@ -230,7 +212,7 @@ func (a ShippingAddress) validateForCreate() error {
 
 // UpdateFromFormは、フォームから受け取った住所情報を更新します。
 //
-// ID、UserIDおよびCreatedAtは変更しません。
+// ID、UserID、CompanyIDおよびCreatedAtは変更しません。
 // Countryが空の場合はDomain規則に従ってJPへ正規化します。
 // Street2は任意項目です。
 func (a *ShippingAddress) UpdateFromForm(
@@ -249,6 +231,7 @@ func (a *ShippingAddress) UpdateFromForm(
 	next := ShippingAddress{
 		ID:        a.ID,
 		UserID:    a.UserID,
+		CompanyID: a.CompanyID,
 		ZipCode:   zipCode,
 		State:     state,
 		City:      city,
@@ -264,7 +247,6 @@ func (a *ShippingAddress) UpdateFromForm(
 	}
 
 	*a = next
-
 	return nil
 }
 
@@ -280,7 +262,6 @@ func (a *ShippingAddress) touch(now time.Time) error {
 	}
 
 	a.UpdatedAt = now
-
 	return nil
 }
 
@@ -288,6 +269,7 @@ func (a *ShippingAddress) touch(now time.Time) error {
 func New(
 	id string,
 	userID string,
+	companyID string,
 	zipCode string,
 	state string,
 	city string,
@@ -300,6 +282,7 @@ func New(
 	a := ShippingAddress{
 		ID:        id,
 		UserID:    userID,
+		CompanyID: companyID,
 		ZipCode:   zipCode,
 		State:     state,
 		City:      city,
@@ -322,6 +305,7 @@ func New(
 func NewWithNow(
 	id string,
 	userID string,
+	companyID string,
 	zipCode string,
 	state string,
 	city string,
@@ -335,6 +319,7 @@ func NewWithNow(
 	return New(
 		id,
 		userID,
+		companyID,
 		zipCode,
 		state,
 		city,
@@ -352,6 +337,7 @@ func NewWithNow(
 // NewまたはNewWithNowを使用してIDを含む完全なEntityを確定します。
 func NewForCreateWithNow(
 	userID string,
+	companyID string,
 	zipCode string,
 	state string,
 	city string,
@@ -364,6 +350,7 @@ func NewForCreateWithNow(
 
 	a := ShippingAddress{
 		UserID:    userID,
+		CompanyID: companyID,
 		ZipCode:   zipCode,
 		State:     state,
 		City:      city,

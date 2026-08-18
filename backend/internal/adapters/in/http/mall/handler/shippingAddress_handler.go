@@ -34,8 +34,8 @@ func NewShippingAddressHandler(
 
 // shippingAddressCreateRequestは配送先住所の作成requestです。
 //
-// ID、UserID、CreatedAtおよびUpdatedAtは受け取りません。
-// IDと時刻はUsecaseが生成し、UserIDは認証contextから取得します。
+// ID、UserID、CompanyID、CreatedAtおよびUpdatedAtは受け取りません。
+// IDと時刻はUsecaseが生成し、UserIDとCompanyIDは認証contextから取得します。
 type shippingAddressCreateRequest struct {
 	ZipCode string  `json:"zipCode"`
 	State   string  `json:"state"`
@@ -49,6 +49,7 @@ type shippingAddressCreateRequest struct {
 //
 // nilは変更なしを表します。
 // Street2へ空文字を指定すると明示的に消去します。
+// UserIDとCompanyIDはrequestから変更できません。
 type shippingAddressUpdateRequest struct {
 	ZipCode *string `json:"zipCode,omitempty"`
 	State   *string `json:"state,omitempty"`
@@ -136,12 +137,32 @@ func (h *ShippingAddressHandler) requireUID(
 	r *http.Request,
 ) (string, bool) {
 	uid, ok := middleware.CurrentUserUID(r)
-	if ok && strings.TrimSpace(uid) != "" {
+	if ok && uid != "" {
 		return uid, true
 	}
 
 	writeJSON(w, http.StatusUnauthorized, map[string]string{
 		"error": "unauthorized",
+	})
+
+	return "", false
+}
+
+// requireCompanyIDは認証middlewareがcontextへ設定したCompanyIDを取得します。
+//
+// header、queryおよびrequest bodyからCompanyIDを受け取りません。
+// AuthMiddlewareでFirebase UIDからmemberを解決し、所属companyIdをcontextへ設定することを前提とします。
+func (h *ShippingAddressHandler) requireCompanyID(
+	w http.ResponseWriter,
+	r *http.Request,
+) (string, bool) {
+	companyID, ok := middleware.CompanyID(r)
+	if ok && companyID != "" {
+		return companyID, true
+	}
+
+	writeJSON(w, http.StatusForbidden, map[string]string{
+		"error": "company_id_not_resolved",
 	})
 
 	return "", false
@@ -267,6 +288,11 @@ func (h *ShippingAddressHandler) post(
 		return
 	}
 
+	companyID, ok := h.requireCompanyID(w, r)
+	if !ok {
+		return
+	}
+
 	if !h.requireUsecase(w) {
 		return
 	}
@@ -288,8 +314,8 @@ func (h *ShippingAddressHandler) post(
 	}
 
 	// HandlerはDTO変換だけを行います。
-	// Domain生成、Countryの既定値、UUID採番および時刻設定は
-	// UsecaseとDomainへ委譲します。
+	// UserIDとCompanyIDは認証contextから取得します。
+	// Domain生成、Countryの既定値、UUID採番および時刻設定はUsecaseとDomainへ委譲します。
 	input := usecase.CreateShippingAddressInput{
 		ZipCode: request.ZipCode,
 		State:   request.State,
@@ -302,6 +328,7 @@ func (h *ShippingAddressHandler) post(
 	created, err := h.uc.Create(
 		r.Context(),
 		uid,
+		companyID,
 		input,
 	)
 	if err != nil {
@@ -337,8 +364,8 @@ func (h *ShippingAddressHandler) patch(
 	}
 
 	// Handlerでは既存Entityの取得、mergeおよびDomain更新を行いません。
-	// 所有者確認付き取得、merge、Domain検証および永続化は
-	// Usecaseが一度だけ実行します。
+	// 所有者確認付き取得、merge、Domain検証および永続化はUsecaseが一度だけ実行します。
+	// CompanyIDは既存Entityの値を維持し、requestから変更できません。
 	input := usecase.UpdateShippingAddressInput{
 		ZipCode: request.ZipCode,
 		State:   request.State,
@@ -399,6 +426,7 @@ func (h *ShippingAddressHandler) del(
 func isInvalidShippingAddressError(err error) bool {
 	return errors.Is(err, shadom.ErrInvalidID) ||
 		errors.Is(err, shadom.ErrInvalidUserID) ||
+		errors.Is(err, shadom.ErrInvalidCompanyID) ||
 		errors.Is(err, shadom.ErrInvalidZipCode) ||
 		errors.Is(err, shadom.ErrInvalidState) ||
 		errors.Is(err, shadom.ErrInvalidCity) ||

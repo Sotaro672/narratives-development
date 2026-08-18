@@ -35,6 +35,7 @@ import {
   BrandManagement,
   BrandCreate,
   BrandDetail,
+  CompanyDetail,
   PermissionList,
   PermissionDetail,
   AccountManagement,
@@ -54,6 +55,10 @@ export const routes: RouteObject[] = [
   {
     path: "/invitation",
     element: <InvitationPage />,
+  },
+  {
+    path: "/company",
+    element: <CompanyDetail />,
   },
   {
     path: "/inquiry",
