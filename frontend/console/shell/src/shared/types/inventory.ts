@@ -49,15 +49,6 @@ export type InventorySortKey =
 // GET /inventory/{inventoryId}
 // =========================================================
 
-export type InventoryProductBlueprintCategoryDTO = {
-  id: string;
-  code: string;
-  nameJa: string;
-  nameEn: string;
-  kind: InventoryProductBlueprintCategoryKind;
-  path: string[];
-};
-
 export type InventoryProductIDTagDTO = {
   type: string;
 };
@@ -73,7 +64,7 @@ export type ProductBlueprintPatchDTO = {
   brandId: string;
   brandName: string;
   companyId: string;
-  productBlueprintCategory: InventoryProductBlueprintCategoryDTO;
+  productBlueprintCategoryPath: string[];
   categoryFields?: InventoryCategoryFieldValues;
   productIdTag: InventoryProductIDTagDTO;
   assigneeId: string;
@@ -163,9 +154,6 @@ export type InventoryDetailViewModel = {
   productName: string;
   tokenName: string;
   headerTitle: string;
-  productBlueprintCategoryName: string;
-  productBlueprintCategoryCode: string;
-  productBlueprintCategoryKind: InventoryProductBlueprintCategoryKind;
   categoryFields?: InventoryCategoryFieldValues;
   productBlueprintPatch: ProductBlueprintPatchDTO;
   tokenBlueprintPatch: TokenBlueprintPatchDTO;
@@ -199,9 +187,7 @@ export type ListCreatePriceRowDTO = {
 
   /**
    * 出品作成画面で入力された価格。
-   *
-   * Backend response で未設定の場合は
-   * property 自体が存在しない。
+   * Backend response で未設定の場合は property 自体が存在しない。
    */
   price?: number;
 };
