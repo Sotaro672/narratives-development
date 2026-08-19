@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import type { ShippingAddress } from "../../../../shared/types/shippingAddress";
-import type { ShippingAddressFormValue } from "../components/ShippingAddressFormModal";
+import type {
+  ShippingAddress,
+  ShippingAddressFormValue,
+} from "../../../../shared/types/shippingAddress";
 
 import {
   createCompanyShippingAddress,
@@ -68,7 +70,10 @@ export function useStockLocation() {
         return;
       }
 
-      const target = shippingAddresses.find((address) => address.id === shippingAddressId);
+      const target = shippingAddresses.find(
+        (address) => address.id === shippingAddressId,
+      );
+
       if (!target) {
         setError("編集対象の在庫保管場所が見つかりません。");
         return;
@@ -96,7 +101,13 @@ export function useStockLocation() {
         return;
       }
 
-      if (!value.name || !value.zipCode || !value.state || !value.city || !value.street) {
+      if (
+        !value.name ||
+        !value.zipCode ||
+        !value.state ||
+        !value.city ||
+        !value.street
+      ) {
         setError("保管場所名、郵便番号、都道府県、市区町村、住所は必須です。");
         return;
       }
@@ -138,7 +149,10 @@ export function useStockLocation() {
         return;
       }
 
-      const target = shippingAddresses.find((address) => address.id === shippingAddressId);
+      const target = shippingAddresses.find(
+        (address) => address.id === shippingAddressId,
+      );
+
       if (!target) {
         setError("削除対象の在庫保管場所が見つかりません。");
         return;
@@ -147,6 +161,7 @@ export function useStockLocation() {
       const confirmed = window.confirm(
         `「${target.name}」を削除しますか？`,
       );
+
       if (!confirmed) {
         return;
       }

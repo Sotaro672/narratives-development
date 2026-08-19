@@ -3,9 +3,8 @@
 import { Plus } from "lucide-react";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
-
 import CompanyShippingAddressCard from "../features/company/presentation/components/CompanyShippingAddressCard";
-import ShippingAddressFormModal from "../features/company/presentation/components/ShippingAddressFormModal";
+import { ShippingAddressFormModal } from "../features/company/presentation/components/ShippingAddressFormModal";
 import { useStockLocation } from "../features/company/presentation/hook/useStockLocation";
 
 export default function StockLocation() {
@@ -13,11 +12,9 @@ export default function StockLocation() {
     shippingAddresses,
     shippingAddressFormOpen,
     editingShippingAddress,
-
     loading,
     saving,
     error,
-
     handleBack,
     handleOpenCreateShippingAddress,
     handleOpenEditShippingAddress,
@@ -28,11 +25,7 @@ export default function StockLocation() {
 
   return (
     <>
-      <PageStyle
-        layout="single"
-        title="在庫保管場所"
-        onBack={handleBack}
-      >
+      <PageStyle layout="single" title="在庫保管場所" onBack={handleBack}>
         <div className="max-w-3xl space-y-4">
           <div className="flex items-center justify-between gap-4">
             <p className="text-sm text-slate-500">
@@ -45,10 +38,7 @@ export default function StockLocation() {
               onClick={handleOpenCreateShippingAddress}
               disabled={loading || saving}
             >
-              <Plus
-                size={16}
-                aria-hidden
-              />
+              <Plus size={16} aria-hidden />
               住所を追加
             </button>
           </div>
@@ -69,10 +59,7 @@ export default function StockLocation() {
                 onClick={handleOpenCreateShippingAddress}
                 disabled={saving}
               >
-                <Plus
-                  size={16}
-                  aria-hidden
-                />
+                <Plus size={16} aria-hidden />
                 最初の住所を登録
               </button>
             </div>
@@ -83,26 +70,18 @@ export default function StockLocation() {
                   key={address.id}
                   address={address}
                   disabled={saving}
-                  onEdit={() =>
-                    handleOpenEditShippingAddress(
-                      address.id,
-                    )
-                  }
-                  onDelete={() =>
-                    handleDeleteShippingAddress(
-                      address.id,
-                    )
-                  }
+                  onEdit={() => handleOpenEditShippingAddress(address.id)}
+                  onDelete={() => handleDeleteShippingAddress(address.id)}
                 />
               ))}
             </div>
           )}
 
-          {error && (
+          {error ? (
             <p className="text-sm text-red-500">
               {error}
             </p>
-          )}
+          ) : null}
         </div>
       </PageStyle>
 

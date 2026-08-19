@@ -22,6 +22,22 @@ export interface ShippingAddress {
 }
 
 /**
+ * 配送先住所・在庫保管場所のフォーム入力値。
+ *
+ * id、userId、companyIdはBackend側または既存entityから解決するため、
+ * Frontendのフォームからは送信しない。
+ */
+export type ShippingAddressFormValue = {
+  name: string;
+  zipCode: string;
+  state: string;
+  city: string;
+  street: string;
+  street2: string;
+  country: "JP";
+};
+
+/**
  * 配送先住所が必要なフィールドを保持しているか検証する。
  *
  * street2は任意項目のため、空文字を許可する。
