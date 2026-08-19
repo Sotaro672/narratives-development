@@ -1,3 +1,4 @@
+// backend\internal\domain\list\entity.go
 package list
 
 import (
