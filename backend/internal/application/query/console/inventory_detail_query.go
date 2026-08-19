@@ -9,7 +9,6 @@ import (
 
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
-
 	invdom "narratives/internal/domain/inventory"
 	pbdom "narratives/internal/domain/productBlueprint"
 	shadom "narratives/internal/domain/shippingAddress"
@@ -57,43 +56,27 @@ func (q *InventoryDetailQuery) GetTokenBlueprintPatchByID(
 	if q == nil {
 		return nil, errors.New("inventory detail query is nil")
 	}
-
 	if q.tbRepo == nil {
 		return nil, errors.New("tokenBlueprint repository is not configured")
 	}
-
 	if tokenBlueprintID == "" {
 		return nil, errors.New("tokenBlueprintId is required")
 	}
 
-	tb, err := q.tbRepo.GetByID(
-		ctx,
-		tokenBlueprintID,
-	)
+	tb, err := q.tbRepo.GetByID(ctx, tokenBlueprintID)
 	if err != nil {
 		return nil, err
 	}
-
 	if tb == nil {
 		return nil, errors.New("tokenBlueprint is nil")
 	}
 
 	brandName := ""
-
-	if tb.BrandID != "" &&
-		q.nameResolver != nil {
-
-		brandName =
-			q.nameResolver.ResolveBrandName(
-				ctx,
-				tb.BrandID,
-			)
+	if tb.BrandID != "" && q.nameResolver != nil {
+		brandName = q.nameResolver.ResolveBrandName(ctx, tb.BrandID)
 	}
 
-	return buildInventoryTokenBlueprintPatchDTO(
-		tb,
-		brandName,
-	), nil
+	return buildInventoryTokenBlueprintPatchDTO(tb, brandName), nil
 }
 
 // ============================================================
@@ -107,15 +90,11 @@ func (q *InventoryDetailQuery) GetDetailByID(
 	if q == nil || q.invRepo == nil {
 		return nil, errors.New("inventory detail query repositories are not configured")
 	}
-
 	if inventoryID == "" {
 		return nil, errors.New("inventoryId is required")
 	}
 
-	inv, err := q.invRepo.GetByID(
-		ctx,
-		inventoryID,
-	)
+	inv, err := q.invRepo.GetByID(ctx, inventoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -126,19 +105,14 @@ func (q *InventoryDetailQuery) GetDetailByID(
 	if pbID == "" {
 		return nil, errors.New("productBlueprintId is empty in inventory")
 	}
-
 	if tbID == "" {
 		return nil, errors.New("tokenBlueprintId is empty in inventory")
 	}
-
 	if q.pbRepo == nil {
 		return nil, errors.New("productBlueprint repository is not configured")
 	}
 
-	pb, err := q.pbRepo.GetByID(
-		ctx,
-		pbID,
-	)
+	pb, err := q.pbRepo.GetByID(ctx, pbID)
 	if err != nil {
 		return nil, err
 	}
@@ -147,46 +121,25 @@ func (q *InventoryDetailQuery) GetDetailByID(
 		return nil, errors.New("companyId context resolver is not configured")
 	}
 
-	companyID :=
-		q.companyIDFromContext(
-			ctx,
-		)
-
+	companyID := q.companyIDFromContext(ctx)
 	if companyID == "" {
 		return nil, errors.New("companyId is required")
 	}
-
 	if pb.CompanyID == "" {
 		return nil, errors.New("productBlueprint.companyId is empty")
 	}
-
 	if pb.CompanyID != companyID {
 		return nil, invdom.ErrNotFound
 	}
 
 	productBrandName := ""
-
-	if pb.BrandID != "" &&
-		q.nameResolver != nil {
-
-		productBrandName =
-			q.nameResolver.ResolveBrandName(
-				ctx,
-				pb.BrandID,
-			)
+	if pb.BrandID != "" && q.nameResolver != nil {
+		productBrandName = q.nameResolver.ResolveBrandName(ctx, pb.BrandID)
 	}
 
-	pbPatchPtr :=
-		buildInventoryProductBlueprintPatchDTO(
-			pb,
-			productBrandName,
-		)
+	pbPatchPtr := buildInventoryProductBlueprintPatchDTO(pb, productBrandName)
 
-	tbPatchPtr, err :=
-		q.GetTokenBlueprintPatchByID(
-			ctx,
-			tbID,
-		)
+	tbPatchPtr, err := q.GetTokenBlueprintPatchByID(ctx, tbID)
 	if err != nil {
 		return nil, err
 	}
@@ -195,18 +148,12 @@ func (q *InventoryDetailQuery) GetDetailByID(
 		return nil, errors.New("shippingAddress repository is not configured")
 	}
 
-	shippingAddresses, err :=
-		q.shippingAddressRepo.ListByCompanyID(
-			ctx,
-			companyID,
-		)
+	shippingAddresses, err := q.shippingAddressRepo.ListByCompanyID(ctx, companyID)
 	if err != nil {
 		return nil, err
 	}
-
 	if shippingAddresses == nil {
-		shippingAddresses =
-			[]shadom.ShippingAddress{}
+		shippingAddresses = []shadom.ShippingAddress{}
 	}
 
 	shippingAddressOptions := make(
@@ -218,27 +165,12 @@ func (q *InventoryDetailQuery) GetDetailByID(
 	var shippingAddressPtr *querydto.InventoryShippingAddressDTO
 
 	for _, shippingAddress := range shippingAddresses {
+		option := buildInventoryShippingAddressDTO(shippingAddress)
+		shippingAddressOptions = append(shippingAddressOptions, option)
 
-		option :=
-			buildInventoryShippingAddressDTO(
-				shippingAddress,
-			)
-
-		shippingAddressOptions =
-			append(
-				shippingAddressOptions,
-				option,
-			)
-
-		if inv.ShippingAddressID != "" &&
-			shippingAddress.ID ==
-				inv.ShippingAddressID {
-
-			selected :=
-				option
-
-			shippingAddressPtr =
-				&selected
+		if inv.ShippingAddressID != "" && shippingAddress.ID == inv.ShippingAddressID {
+			selected := option
+			shippingAddressPtr = &selected
 		}
 	}
 
@@ -246,164 +178,96 @@ func (q *InventoryDetailQuery) GetDetailByID(
 		return nil, errors.New("productBlueprint.modelRefs is empty (fallback via inv.Stock is abolished)")
 	}
 
-	refs := append(
-		[]pbdom.ModelRef(nil),
-		pb.ModelRefs...,
-	)
+	refs := append([]pbdom.ModelRef(nil), pb.ModelRefs...)
+	sort.Slice(refs, func(i, j int) bool {
+		return refs[i].DisplayOrder < refs[j].DisplayOrder
+	})
 
-	sort.Slice(
-		refs,
-		func(i, j int) bool {
-			return refs[i].DisplayOrder <
-				refs[j].DisplayOrder
-		},
-	)
-
-	orderedModelIDs := make(
-		[]string,
-		0,
-		len(refs),
-	)
-
-	seen :=
-		map[string]struct{}{}
+	orderedModelIDs := make([]string, 0, len(refs))
+	seen := map[string]struct{}{}
 
 	for _, ref := range refs {
 		modelID := ref.ModelID
-
 		if modelID == "" {
 			continue
 		}
-
 		if _, exists := seen[modelID]; exists {
 			continue
 		}
 
-		seen[modelID] =
-			struct{}{}
-
-		orderedModelIDs =
-			append(
-				orderedModelIDs,
-				modelID,
-			)
+		seen[modelID] = struct{}{}
+		orderedModelIDs = append(orderedModelIDs, modelID)
 	}
 
 	if len(orderedModelIDs) == 0 {
 		return nil, errors.New("productBlueprint.modelRefs has no valid modelId")
 	}
 
-	rows := make(
-		[]querydto.InventoryDetailRowDTO,
-		0,
-		len(orderedModelIDs),
-	)
-
+	rows := make([]querydto.InventoryDetailRowDTO, 0, len(orderedModelIDs))
 	total := 0
 
 	for _, modelID := range orderedModelIDs {
-		modelStock, ok :=
-			inv.Stock[modelID]
-
+		modelStock, ok := inv.Stock[modelID]
 		available := 0
 
 		if ok {
-			available =
-				modelStock.Accumulation -
-					modelStock.ReservedCount
-
+			available = modelStock.Accumulation - modelStock.ReservedCount
 			if available < 0 {
 				available = 0
 			}
 		}
 
-		attr :=
-			resolver.ModelResolved{}
-
+		attr := resolver.ModelResolved{}
 		if q.nameResolver != nil {
-			attr =
-				q.nameResolver.ResolveModelResolved(
-					ctx,
-					modelID,
-				)
+			attr = q.nameResolver.ResolveModelResolved(ctx, modelID)
 		}
 
-		modelNumber :=
-			attr.ModelNumber
-
+		modelNumber := attr.ModelNumber
 		if modelNumber == "" {
-			modelNumber =
-				modelID
+			modelNumber = modelID
 		}
-
 		if modelNumber == "" {
-			modelNumber =
-				"-"
+			modelNumber = "-"
 		}
 
-		row :=
-			querydto.InventoryDetailRowDTO{
-				ModelID:     modelID,
-				Kind:        attr.Kind,
-				ModelNumber: modelNumber,
-				Stock:       available,
-			}
+		row := querydto.InventoryDetailRowDTO{
+			ModelID:     modelID,
+			Kind:        attr.Kind,
+			ModelNumber: modelNumber,
+			Stock:       available,
+		}
 
 		if attr.Kind == "alcohol" {
-			row.VolumeValue =
-				attr.VolumeValue
-
-			row.VolumeUnit =
-				attr.VolumeUnit
+			row.VolumeValue = attr.VolumeValue
+			row.VolumeUnit = attr.VolumeUnit
 		} else {
-			size :=
-				attr.Size
-
-			color :=
-				attr.Color
+			size := attr.Size
+			color := attr.Color
 
 			if size == "" {
-				size =
-					"-"
+				size = "-"
+			}
+			if color == "" {
+				color = "-"
 			}
 
-			if color == "" {
-				color =
-					"-"
-			}
-			row.Size =
-				size
-			row.Color =
-				color
-			row.RGB =
-				attr.RGB
+			row.Size = size
+			row.Color = color
+			row.RGB = attr.RGB
 		}
 
-		rows =
-			append(
-				rows,
-				row,
-			)
-
-		total +=
-			available
+		rows = append(rows, row)
+		total += available
 	}
 
-	updated :=
-		inv.UpdatedAt
-
+	updated := inv.UpdatedAt
 	if updated.IsZero() {
-		updated =
-			inv.CreatedAt
+		updated = inv.CreatedAt
 	}
 
 	updatedAt := ""
-
 	if !updated.IsZero() {
-		updatedAt =
-			updated.UTC().Format(
-				time.RFC3339,
-			)
+		updatedAt = updated.UTC().Format(time.RFC3339)
 	}
 
 	return &querydto.InventoryDetailDTO{
@@ -436,16 +300,13 @@ func buildInventoryProductBlueprintPatchDTO(
 	)
 
 	for _, modelRef := range productBlueprint.ModelRefs {
-
-		modelRefs =
-			append(
-				modelRefs,
-				querydto.InventoryProductBlueprintModelRefDTO{
-					ModelID: modelRef.ModelID,
-
-					DisplayOrder: modelRef.DisplayOrder,
-				},
-			)
+		modelRefs = append(
+			modelRefs,
+			querydto.InventoryProductBlueprintModelRefDTO{
+				ModelID:      modelRef.ModelID,
+				DisplayOrder: modelRef.DisplayOrder,
+			},
+		)
 	}
 
 	return &querydto.InventoryProductBlueprintPatchDTO{
@@ -458,13 +319,9 @@ func buildInventoryProductBlueprintPatchDTO(
 			[]string(nil),
 			productBlueprint.ProductBlueprintCategoryPath...,
 		),
-		CategoryFields: map[string]any(
-			productBlueprint.CategoryFields,
-		),
+		CategoryFields: map[string]any(productBlueprint.CategoryFields),
 		ProductIDTag: querydto.InventoryProductIDTagDTO{
-			Type: string(
-				productBlueprint.ProductIdTag.Type,
-			),
+			Type: string(productBlueprint.ProductIdTag.Type),
 		},
 		AssigneeID: productBlueprint.AssigneeID,
 		ModelRefs:  modelRefs,
@@ -480,6 +337,7 @@ func buildInventoryShippingAddressDTO(
 ) querydto.InventoryShippingAddressDTO {
 	return querydto.InventoryShippingAddressDTO{
 		ID:      shippingAddress.ID,
+		Name:    shippingAddress.Name,
 		ZipCode: shippingAddress.ZipCode,
 		State:   shippingAddress.State,
 		City:    shippingAddress.City,

@@ -4,7 +4,6 @@ import * as React from "react";
 import { Pencil, Trash2 } from "lucide-react";
 
 import type { ShippingAddress } from "../../../../shared/types/shippingAddress";
-
 import {
   Card,
   CardButton,
@@ -32,9 +31,7 @@ export const CompanyShippingAddressCard: React.FC<
     address.state,
     address.city,
     address.street,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  ].filter(Boolean).join(" ");
 
   const showCountry =
     address.country &&
@@ -44,7 +41,7 @@ export const CompanyShippingAddressCard: React.FC<
     <Card>
       <CardHeader className="justify-between">
         <CardTitle>
-          登録住所
+          {address.name}
         </CardTitle>
 
         <div className="flex items-center gap-2">

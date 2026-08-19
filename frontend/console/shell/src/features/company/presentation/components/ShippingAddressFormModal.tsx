@@ -3,23 +3,15 @@
 import * as React from "react";
 import { X } from "lucide-react";
 
-import type { ShippingAddress } from "../../../../shared/types/shippingAddress";
+import type {
+  ShippingAddress,
+  ShippingAddressFormValue,
+} from "../../../../shared/types/shippingAddress";
 
-import {
-  CardInput,
-  CardLabel,
-} from "../../../../shared/ui/card";
-
-export type ShippingAddressFormValue = {
-  zipCode: string;
-  state: string;
-  city: string;
-  street: string;
-  street2: string;
-  country: "JP";
-};
+import { CardInput, CardLabel } from "../../../../shared/ui/card";
 
 type ShippingAddressEditableFormValue = {
+  name: string;
   zipCode: string;
   state: string;
   city: string;
@@ -32,12 +24,11 @@ export type ShippingAddressFormModalProps = {
   address?: ShippingAddress | null;
   saving?: boolean;
   onClose: () => void;
-  onSave: (
-    value: ShippingAddressFormValue,
-  ) => void | Promise<void>;
+  onSave: (value: ShippingAddressFormValue) => void | Promise<void>;
 };
 
 const emptyFormValue: ShippingAddressEditableFormValue = {
+  name: "",
   zipCode: "",
   state: "",
   city: "",
@@ -49,12 +40,11 @@ function createFormValue(
   address?: ShippingAddress | null,
 ): ShippingAddressEditableFormValue {
   if (!address) {
-    return {
-      ...emptyFormValue,
-    };
+    return { ...emptyFormValue };
   }
 
   return {
+    name: address.name,
     zipCode: address.zipCode,
     state: address.state,
     city: address.city,
@@ -72,13 +62,10 @@ export const ShippingAddressFormModal: React.FC<
   onClose,
   onSave,
 }) => {
-  const [form, setForm] =
-    React.useState<ShippingAddressEditableFormValue>(() =>
-      createFormValue(address),
-    );
-
-  const [error, setError] =
-    React.useState<string | null>(null);
+  const [form, setForm] = React.useState<ShippingAddressEditableFormValue>(() =>
+    createFormValue(address),
+  );
+  const [error, setError] = React.useState<string | null>(null);
 
   const isEdit = Boolean(address?.id);
 
@@ -87,142 +74,99 @@ export const ShippingAddressFormModal: React.FC<
       return;
     }
 
-    setForm(
-      createFormValue(address),
-    );
-
+    setForm(createFormValue(address));
     setError(null);
-  }, [
-    open,
-    address,
-  ]);
+  }, [open, address]);
 
   React.useEffect(() => {
     if (!open) {
       return;
     }
 
-    const handleKeyDown = (
-      event: KeyboardEvent,
-    ) => {
-      if (
-        event.key === "Escape" &&
-        !saving
-      ) {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !saving) {
         onClose();
       }
     };
 
-    document.addEventListener(
-      "keydown",
-      handleKeyDown,
-    );
+    document.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      document.removeEventListener(
-        "keydown",
-        handleKeyDown,
-      );
+      document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [
-    open,
-    saving,
-    onClose,
-  ]);
+  }, [open, saving, onClose]);
 
   const updateField = React.useCallback(
-    (
-      field: keyof ShippingAddressEditableFormValue,
-      value: string,
-    ) => {
+    (field: keyof ShippingAddressEditableFormValue, value: string) => {
       setForm((current) => ({
         ...current,
         [field]: value,
       }));
-
       setError(null);
     },
     [],
   );
 
-  const handleBackdropMouseDown =
-    React.useCallback(
-      (
-        event: React.MouseEvent<HTMLDivElement>,
-      ) => {
-        if (saving) {
-          return;
-        }
+  const handleBackdropMouseDown = React.useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (saving) {
+        return;
+      }
 
-        if (
-          event.target ===
-          event.currentTarget
-        ) {
-          onClose();
-        }
-      },
-      [
-        saving,
-        onClose,
-      ],
-    );
+      if (event.target === event.currentTarget) {
+        onClose();
+      }
+    },
+    [saving, onClose],
+  );
 
-  const handleSubmit =
-    React.useCallback(
-      async (
-        event: React.FormEvent<HTMLFormElement>,
-      ) => {
-        event.preventDefault();
+  const handleSubmit = React.useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
 
-        if (saving) {
-          return;
-        }
+      if (saving) {
+        return;
+      }
 
-        if (!form.zipCode) {
-          setError(
-            "郵便番号を入力してください。",
-          );
-          return;
-        }
+      if (!form.name) {
+        setError("保管場所名を入力してください。");
+        return;
+      }
 
-        if (!form.state) {
-          setError(
-            "都道府県を入力してください。",
-          );
-          return;
-        }
+      if (!form.zipCode) {
+        setError("郵便番号を入力してください。");
+        return;
+      }
 
-        if (!form.city) {
-          setError(
-            "市区町村を入力してください。",
-          );
-          return;
-        }
+      if (!form.state) {
+        setError("都道府県を入力してください。");
+        return;
+      }
 
-        if (!form.street) {
-          setError(
-            "住所を入力してください。",
-          );
-          return;
-        }
+      if (!form.city) {
+        setError("市区町村を入力してください。");
+        return;
+      }
 
-        setError(null);
+      if (!form.street) {
+        setError("住所を入力してください。");
+        return;
+      }
 
-        await onSave({
-          zipCode: form.zipCode,
-          state: form.state,
-          city: form.city,
-          street: form.street,
-          street2: form.street2,
-          country: "JP",
-        });
-      },
-      [
-        form,
-        saving,
-        onSave,
-      ],
-    );
+      setError(null);
+
+      await onSave({
+        name: form.name,
+        zipCode: form.zipCode,
+        state: form.state,
+        city: form.city,
+        street: form.street,
+        street2: form.street2,
+        country: "JP",
+      });
+    },
+    [form, saving, onSave],
+  );
 
   if (!open) {
     return null;
@@ -245,9 +189,7 @@ export const ShippingAddressFormModal: React.FC<
             id="shipping-address-form-title"
             className="text-sm font-semibold text-[hsl(var(--foreground))]"
           >
-            {isEdit
-              ? "在庫保管場所を編集"
-              : "在庫保管場所を追加"}
+            {isEdit ? "在庫保管場所を編集" : "在庫保管場所を追加"}
           </h2>
 
           <button
@@ -257,17 +199,26 @@ export const ShippingAddressFormModal: React.FC<
             disabled={saving}
             aria-label="閉じる"
           >
-            <X
-              size={18}
-              aria-hidden
-            />
+            <X size={18} aria-hidden />
           </button>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-        >
+        <form onSubmit={handleSubmit}>
           <div className="px-5 py-5">
+            <CardLabel htmlFor="shipping-address-name">
+              保管場所名
+            </CardLabel>
+
+            <CardInput
+              id="shipping-address-name"
+              name="name"
+              type="text"
+              placeholder="本社倉庫"
+              value={form.name}
+              onChange={(event) => updateField("name", event.target.value)}
+              disabled={saving}
+            />
+
             <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
               <div>
                 <CardLabel htmlFor="shipping-address-zip-code">
@@ -283,10 +234,7 @@ export const ShippingAddressFormModal: React.FC<
                   placeholder="100-0001"
                   value={form.zipCode}
                   onChange={(event) =>
-                    updateField(
-                      "zipCode",
-                      event.target.value,
-                    )
+                    updateField("zipCode", event.target.value)
                   }
                   disabled={saving}
                 />
@@ -305,10 +253,7 @@ export const ShippingAddressFormModal: React.FC<
                   placeholder="東京都"
                   value={form.state}
                   onChange={(event) =>
-                    updateField(
-                      "state",
-                      event.target.value,
-                    )
+                    updateField("state", event.target.value)
                   }
                   disabled={saving}
                 />
@@ -326,12 +271,7 @@ export const ShippingAddressFormModal: React.FC<
               autoComplete="address-level2"
               placeholder="千代田区"
               value={form.city}
-              onChange={(event) =>
-                updateField(
-                  "city",
-                  event.target.value,
-                )
-              }
+              onChange={(event) => updateField("city", event.target.value)}
               disabled={saving}
             />
 
@@ -346,12 +286,7 @@ export const ShippingAddressFormModal: React.FC<
               autoComplete="address-line1"
               placeholder="千代田1-1"
               value={form.street}
-              onChange={(event) =>
-                updateField(
-                  "street",
-                  event.target.value,
-                )
-              }
+              onChange={(event) => updateField("street", event.target.value)}
               disabled={saving}
             />
 
@@ -366,12 +301,7 @@ export const ShippingAddressFormModal: React.FC<
               autoComplete="address-line2"
               placeholder="AMOLビル 3F"
               value={form.street2}
-              onChange={(event) =>
-                updateField(
-                  "street2",
-                  event.target.value,
-                )
-              }
+              onChange={(event) => updateField("street2", event.target.value)}
               disabled={saving}
             />
 

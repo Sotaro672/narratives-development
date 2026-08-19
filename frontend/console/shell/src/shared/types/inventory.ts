@@ -96,6 +96,7 @@ export type TokenBlueprintPatchDTO = {
 
 export type InventoryShippingAddressDTO = {
   id: string;
+  name: string;
   zipCode: string;
   state: string;
   city: string;

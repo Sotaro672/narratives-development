@@ -17,15 +17,10 @@ export type InventoryShippingAddressCardProps = {
 
 /**
  * Inventory Detail 画面の在庫保管場所選択カード。
- *
  * AdminCard の担当者選択 UI と同じく、select では ID を value として扱い、
- * 表示上は利用者向けの名称を表示する。
- *
- * shippingAddress は GET /inventory/{inventoryId} の
- * shippingAddressOptions を唯一の正とする。
- *
- * 在庫保管場所が未登録の場合は新規登録ボタンを表示し、
- * stockLocation 画面への遷移を親componentへ委譲する。
+ * 表示上は shippingAddress.name を表示する。
+ * shippingAddress は GET /inventory/{inventoryId} の shippingAddressOptions を唯一の正とする。
+ * 在庫保管場所が未登録の場合は新規登録ボタンを表示し、stockLocation 画面への遷移を親componentへ委譲する。
  */
 export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCardProps> = ({
   shippingAddressId,
@@ -79,7 +74,7 @@ export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCard
 
             {shippingAddressOptions.map((address) => (
               <option key={address.id} value={address.id}>
-                {buildShippingAddressLabel(address)}
+                {address.name}
               </option>
             ))}
           </select>
@@ -104,13 +99,5 @@ export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCard
     </Card>
   );
 };
-
-function buildShippingAddressLabel(address: InventoryShippingAddressDTO): string {
-  const zipCode = address.zipCode ? `〒${address.zipCode}` : "";
-  const addressLine = [address.state, address.city, address.street].filter(Boolean).join("");
-  const street2 = address.street2 || "";
-
-  return [zipCode, addressLine, street2].filter(Boolean).join(" ");
-}
 
 export default InventoryShippingAddressCard;

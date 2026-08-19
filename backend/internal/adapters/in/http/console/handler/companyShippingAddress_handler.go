@@ -17,15 +17,12 @@ type CompanyShippingAddressHandler struct {
 	uc *usecase.ShippingAddressUsecase
 }
 
-func NewCompanyShippingAddressHandler(
-	uc *usecase.ShippingAddressUsecase,
-) http.Handler {
-	return &CompanyShippingAddressHandler{
-		uc: uc,
-	}
+func NewCompanyShippingAddressHandler(uc *usecase.ShippingAddressUsecase) http.Handler {
+	return &CompanyShippingAddressHandler{uc: uc}
 }
 
 type companyShippingAddressCreateRequest struct {
+	Name    string  `json:"name"`
 	ZipCode string  `json:"zipCode"`
 	State   string  `json:"state"`
 	City    string  `json:"city"`
@@ -35,6 +32,7 @@ type companyShippingAddressCreateRequest struct {
 }
 
 type companyShippingAddressUpdateRequest struct {
+	Name    *string `json:"name,omitempty"`
 	ZipCode *string `json:"zipCode,omitempty"`
 	State   *string `json:"state,omitempty"`
 	City    *string `json:"city,omitempty"`
@@ -43,52 +41,31 @@ type companyShippingAddressUpdateRequest struct {
 	Country *string `json:"country,omitempty"`
 }
 
-func (h *CompanyShippingAddressHandler) ServeHTTP(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *CompanyShippingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r == nil {
-		writeError(
-			w,
-			http.StatusBadRequest,
-			"invalid_request",
-		)
+		writeError(w, http.StatusBadRequest, "invalid_request")
 		return
 	}
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
 	switch {
-	case r.Method == http.MethodGet &&
-		path == companyShippingAddressBasePath:
+	case r.Method == http.MethodGet && path == companyShippingAddressBasePath:
 		h.list(w, r)
 
-	case r.Method == http.MethodGet &&
-		strings.HasPrefix(path, companyShippingAddressBasePath+"/"):
-		id := strings.TrimPrefix(
-			path,
-			companyShippingAddressBasePath+"/",
-		)
+	case r.Method == http.MethodGet && strings.HasPrefix(path, companyShippingAddressBasePath+"/"):
+		id := strings.TrimPrefix(path, companyShippingAddressBasePath+"/")
 		h.get(w, r, id)
 
-	case r.Method == http.MethodPost &&
-		path == companyShippingAddressBasePath:
+	case r.Method == http.MethodPost && path == companyShippingAddressBasePath:
 		h.create(w, r)
 
-	case r.Method == http.MethodPatch &&
-		strings.HasPrefix(path, companyShippingAddressBasePath+"/"):
-		id := strings.TrimPrefix(
-			path,
-			companyShippingAddressBasePath+"/",
-		)
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, companyShippingAddressBasePath+"/"):
+		id := strings.TrimPrefix(path, companyShippingAddressBasePath+"/")
 		h.update(w, r, id)
 
-	case r.Method == http.MethodDelete &&
-		strings.HasPrefix(path, companyShippingAddressBasePath+"/"):
-		id := strings.TrimPrefix(
-			path,
-			companyShippingAddressBasePath+"/",
-		)
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, companyShippingAddressBasePath+"/"):
+		id := strings.TrimPrefix(path, companyShippingAddressBasePath+"/")
 		h.delete(w, r, id)
 
 	default:
@@ -96,62 +73,36 @@ func (h *CompanyShippingAddressHandler) ServeHTTP(
 	}
 }
 
-func (h *CompanyShippingAddressHandler) requireUsecase(
-	w http.ResponseWriter,
-) bool {
+func (h *CompanyShippingAddressHandler) requireUsecase(w http.ResponseWriter) bool {
 	if h != nil && h.uc != nil {
 		return true
 	}
 
-	writeError(
-		w,
-		http.StatusServiceUnavailable,
-		"shipping_address_usecase_not_initialized",
-	)
-
+	writeError(w, http.StatusServiceUnavailable, "shipping_address_usecase_not_initialized")
 	return false
 }
 
-func (h *CompanyShippingAddressHandler) requireCompanyID(
-	w http.ResponseWriter,
-	r *http.Request,
-) (string, bool) {
+func (h *CompanyShippingAddressHandler) requireCompanyID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	companyID, ok := middleware.CompanyID(r)
 	if ok && companyID != "" {
 		return companyID, true
 	}
 
-	writeError(
-		w,
-		http.StatusForbidden,
-		"company_id_not_resolved",
-	)
-
+	writeError(w, http.StatusForbidden, "company_id_not_resolved")
 	return "", false
 }
 
-func (h *CompanyShippingAddressHandler) requireUID(
-	w http.ResponseWriter,
-	r *http.Request,
-) (string, bool) {
+func (h *CompanyShippingAddressHandler) requireUID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	uid, ok := middleware.CurrentUserUID(r)
 	if ok && uid != "" {
 		return uid, true
 	}
 
-	writeError(
-		w,
-		http.StatusUnauthorized,
-		"unauthorized",
-	)
-
+	writeError(w, http.StatusUnauthorized, "unauthorized")
 	return "", false
 }
 
-func (h *CompanyShippingAddressHandler) list(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *CompanyShippingAddressHandler) list(w http.ResponseWriter, r *http.Request) {
 	if !h.requireUsecase(w) {
 		return
 	}
@@ -161,10 +112,7 @@ func (h *CompanyShippingAddressHandler) list(
 		return
 	}
 
-	addresses, err := h.uc.ListByCompanyID(
-		r.Context(),
-		companyID,
-	)
+	addresses, err := h.uc.ListByCompanyID(r.Context(), companyID)
 	if err != nil {
 		writeCompanyShippingAddressErr(w, err)
 		return
@@ -174,28 +122,16 @@ func (h *CompanyShippingAddressHandler) list(
 		addresses = []shadom.ShippingAddress{}
 	}
 
-	writeJSON(
-		w,
-		http.StatusOK,
-		addresses,
-	)
+	writeJSON(w, http.StatusOK, addresses)
 }
 
-func (h *CompanyShippingAddressHandler) get(
-	w http.ResponseWriter,
-	r *http.Request,
-	id string,
-) {
+func (h *CompanyShippingAddressHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	if !h.requireUsecase(w) {
 		return
 	}
 
 	if id == "" || strings.Contains(id, "/") {
-		writeError(
-			w,
-			http.StatusBadRequest,
-			"invalid_shipping_address_id",
-		)
+		writeError(w, http.StatusBadRequest, "invalid_shipping_address_id")
 		return
 	}
 
@@ -204,27 +140,16 @@ func (h *CompanyShippingAddressHandler) get(
 		return
 	}
 
-	address, err := h.uc.GetByCompany(
-		r.Context(),
-		id,
-		companyID,
-	)
+	address, err := h.uc.GetByCompany(r.Context(), id, companyID)
 	if err != nil {
 		writeCompanyShippingAddressErr(w, err)
 		return
 	}
 
-	writeJSON(
-		w,
-		http.StatusOK,
-		address,
-	)
+	writeJSON(w, http.StatusOK, address)
 }
 
-func (h *CompanyShippingAddressHandler) create(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *CompanyShippingAddressHandler) create(w http.ResponseWriter, r *http.Request) {
 	if !h.requireUsecase(w) {
 		return
 	}
@@ -239,19 +164,11 @@ func (h *CompanyShippingAddressHandler) create(
 		return
 	}
 
-	r.Body = http.MaxBytesReader(
-		w,
-		r.Body,
-		1<<20,
-	)
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 
 	var request companyShippingAddressCreateRequest
 	if err := decodeStrictJSON(r, &request); err != nil {
-		writeError(
-			w,
-			http.StatusBadRequest,
-			"invalid_json",
-		)
+		writeError(w, http.StatusBadRequest, "invalid_json")
 		return
 	}
 
@@ -270,6 +187,7 @@ func (h *CompanyShippingAddressHandler) create(
 		uid,
 		companyID,
 		usecase.CreateShippingAddressInput{
+			Name:    request.Name,
 			ZipCode: request.ZipCode,
 			State:   request.State,
 			City:    request.City,
@@ -283,28 +201,16 @@ func (h *CompanyShippingAddressHandler) create(
 		return
 	}
 
-	writeJSON(
-		w,
-		http.StatusCreated,
-		created,
-	)
+	writeJSON(w, http.StatusCreated, created)
 }
 
-func (h *CompanyShippingAddressHandler) update(
-	w http.ResponseWriter,
-	r *http.Request,
-	id string,
-) {
+func (h *CompanyShippingAddressHandler) update(w http.ResponseWriter, r *http.Request, id string) {
 	if !h.requireUsecase(w) {
 		return
 	}
 
 	if id == "" || strings.Contains(id, "/") {
-		writeError(
-			w,
-			http.StatusBadRequest,
-			"invalid_shipping_address_id",
-		)
+		writeError(w, http.StatusBadRequest, "invalid_shipping_address_id")
 		return
 	}
 
@@ -313,19 +219,11 @@ func (h *CompanyShippingAddressHandler) update(
 		return
 	}
 
-	r.Body = http.MaxBytesReader(
-		w,
-		r.Body,
-		1<<20,
-	)
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 
 	var request companyShippingAddressUpdateRequest
 	if err := decodeStrictJSON(r, &request); err != nil {
-		writeError(
-			w,
-			http.StatusBadRequest,
-			"invalid_json",
-		)
+		writeError(w, http.StatusBadRequest, "invalid_json")
 		return
 	}
 
@@ -334,6 +232,7 @@ func (h *CompanyShippingAddressHandler) update(
 		id,
 		companyID,
 		usecase.UpdateShippingAddressInput{
+			Name:    request.Name,
 			ZipCode: request.ZipCode,
 			State:   request.State,
 			City:    request.City,
@@ -347,28 +246,16 @@ func (h *CompanyShippingAddressHandler) update(
 		return
 	}
 
-	writeJSON(
-		w,
-		http.StatusOK,
-		updated,
-	)
+	writeJSON(w, http.StatusOK, updated)
 }
 
-func (h *CompanyShippingAddressHandler) delete(
-	w http.ResponseWriter,
-	r *http.Request,
-	id string,
-) {
+func (h *CompanyShippingAddressHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
 	if !h.requireUsecase(w) {
 		return
 	}
 
 	if id == "" || strings.Contains(id, "/") {
-		writeError(
-			w,
-			http.StatusBadRequest,
-			"invalid_shipping_address_id",
-		)
+		writeError(w, http.StatusBadRequest, "invalid_shipping_address_id")
 		return
 	}
 
@@ -377,11 +264,7 @@ func (h *CompanyShippingAddressHandler) delete(
 		return
 	}
 
-	if err := h.uc.DeleteByCompany(
-		r.Context(),
-		id,
-		companyID,
-	); err != nil {
+	if err := h.uc.DeleteByCompany(r.Context(), id, companyID); err != nil {
 		writeCompanyShippingAddressErr(w, err)
 		return
 	}
@@ -389,16 +272,14 @@ func (h *CompanyShippingAddressHandler) delete(
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func writeCompanyShippingAddressErr(
-	w http.ResponseWriter,
-	err error,
-) {
+func writeCompanyShippingAddressErr(w http.ResponseWriter, err error) {
 	statusCode := http.StatusInternalServerError
 
 	switch {
 	case errors.Is(err, shadom.ErrInvalidID),
 		errors.Is(err, shadom.ErrInvalidUserID),
 		errors.Is(err, shadom.ErrInvalidCompanyID),
+		errors.Is(err, shadom.ErrInvalidName),
 		errors.Is(err, shadom.ErrInvalidZipCode),
 		errors.Is(err, shadom.ErrInvalidState),
 		errors.Is(err, shadom.ErrInvalidCity),
@@ -415,9 +296,5 @@ func writeCompanyShippingAddressErr(
 		statusCode = http.StatusConflict
 	}
 
-	writeError(
-		w,
-		statusCode,
-		err.Error(),
-	)
+	writeError(w, statusCode, err.Error())
 }

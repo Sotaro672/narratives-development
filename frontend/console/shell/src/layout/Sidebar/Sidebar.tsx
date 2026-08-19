@@ -193,6 +193,10 @@ export default function Sidebar({ isOpen }: SidebarProps) {
         label: "保管場所",
         path: "/stockLocation",
       },
+      {
+        label: "料金設計",
+        path: "/transportationFee",
+      },
     ],
     [],
   );
@@ -285,7 +289,10 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       return;
     }
 
-    if (path.startsWith("/stockLocation")) {
+    if (
+      path.startsWith("/stockLocation") ||
+      path.startsWith("/transportationFee")
+    ) {
       setOpenKey("shipping");
       return;
     }

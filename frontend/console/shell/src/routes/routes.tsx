@@ -37,6 +37,7 @@ import {
   BrandDetail,
   CompanyDetail,
   StockLocationPage,
+  TransportationFeePage,
   PermissionList,
   PermissionDetail,
   AccountManagement,
@@ -64,6 +65,10 @@ export const routes: RouteObject[] = [
   {
     path: "/stockLocation",
     element: <StockLocationPage />,
+  },
+  {
+    path: "/transportationFee",
+    element: <TransportationFeePage />,
   },
   {
     path: "/inquiry",
