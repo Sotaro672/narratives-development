@@ -4,46 +4,22 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
-
-import ProductBlueprintCard, {
-  type ProductBlueprintPatchInput,
-} from "../features/productBlueprint/presentation/cards/productBlueprintForm";
-
+import ProductBlueprintCard, { type ProductBlueprintPatchInput } from "../features/productBlueprint/presentation/cards/productBlueprintForm";
 import InventoryCard from "../features/inventory/presentation/components/inventoryCard";
 import InventoryShippingAddressCard from "../features/inventory/presentation/components/InventoryShippingAddressCard";
 import InventoryListCard from "../features/inventory/presentation/components/InventoryListCard";
-
-import TokenBlueprintCard, {
-  type TokenBlueprintCardViewModel,
-} from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
-
+import TokenBlueprintCard, { type TokenBlueprintCardViewModel } from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 import { useInventoryDetail } from "../features/inventory/presentation/hook/useInventoryDetail";
 
 export default function InventoryDetail() {
   const navigate = useNavigate();
-
-  /**
-   * URLではinventoryIdのみを受け取る。
-   */
-  const { inventoryId: inventoryIdParam } = useParams<{
-    inventoryId?: string;
-  }>();
-
+  const { inventoryId: inventoryIdParam } = useParams<{ inventoryId?: string }>();
   const inventoryId = inventoryIdParam ?? "";
 
-  /**
-   * inventoryIdが存在しない場合は、
-   * 在庫一覧画面へ戻す。
-   */
   React.useEffect(() => {
-    if (!inventoryId) {
-      navigate("/inventory", { replace: true });
-    }
+    if (!inventoryId) navigate("/inventory", { replace: true });
   }, [inventoryId, navigate]);
 
-  /**
-   * 戻るボタンでは在庫一覧画面へ遷移する。
-   */
   const onBack = React.useCallback(() => {
     navigate("/inventory");
   }, [navigate]);
@@ -66,16 +42,14 @@ export default function InventoryDetail() {
 
   const title = vm?.headerTitle ? `在庫詳細：${vm.headerTitle}` : "在庫詳細";
 
-  /**
-   * 出品作成画面へ遷移する。
-   */
   const onList = React.useCallback(() => {
-    if (!inventoryId) {
-      return;
-    }
-
+    if (!inventoryId) return;
     navigate(`/inventory/list/create/${encodeURIComponent(inventoryId)}`);
   }, [inventoryId, navigate]);
+
+  const onCreateShippingAddress = React.useCallback(() => {
+    navigate("/stockLocation");
+  }, [navigate]);
 
   /**
    * 在庫保管場所は選択しただけでは決定済みとしない。
@@ -86,18 +60,9 @@ export default function InventoryDetail() {
     Boolean(vm?.shippingAddressId) &&
     vm?.shippingAddressId === selectedShippingAddressId;
 
-  /**
-   * ProductBlueprintPatchDTOは
-   * ProductBlueprintPatchInputと互換性があるため、
-   * 個別の型変換や型アサーションは行わない。
-   */
-  const productBlueprintPatchForCard:
-    | ProductBlueprintPatchInput
-    | undefined = vm?.productBlueprintPatch;
+  const productBlueprintPatchForCard: ProductBlueprintPatchInput | undefined =
+    vm?.productBlueprintPatch;
 
-  /**
-   * TokenBlueprintCardを参照専用で表示する。
-   */
   const tokenBlueprintId = vm?.tokenBlueprintId ?? "";
   const tokenBlueprintPatch = vm?.tokenBlueprintPatch;
 
@@ -163,6 +128,7 @@ export default function InventoryDetail() {
           loading={loading}
           saving={shippingAddressSaving}
           onSelectShippingAddress={handleSelectShippingAddress}
+          onCreateShippingAddress={onCreateShippingAddress}
         />
 
         {shippingAddressError ? (

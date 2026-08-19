@@ -26,7 +26,9 @@ type ShippingAddressInventoryCleaner interface {
 // ID、UserID、CompanyID、CreatedAtおよびUpdatedAtは受け取りません。
 // IDはUsecaseがUUIDを採番し、UserIDとCompanyIDは認証済みcontextから解決した値を呼び出し側から受け取り、
 // 時刻はUsecaseのserver clockから設定します。
+// Nameは必須です。
 type CreateShippingAddressInput struct {
+	Name    string
 	ZipCode string
 	State   string
 	City    string
@@ -38,10 +40,12 @@ type CreateShippingAddressInput struct {
 // UpdateShippingAddressInputは配送先住所の部分更新入力です。
 //
 // nilは変更なしを表します。
+// Nameは必須のDomain fieldですが、PATCHではnilを変更なしとして扱います。
 // Street2は任意項目であるため、空文字を指定すると明示的に消去できます。
 // Countryへ空文字を指定した場合は、Domain規則によりJPへ正規化されます。
 // UserID、CompanyIDはこの入力から変更しません。
 type UpdateShippingAddressInput struct {
+	Name    *string
 	ZipCode *string
 	State   *string
 	City    *string
@@ -246,6 +250,7 @@ func (u *ShippingAddressUsecase) ListByCompanyID(ctx context.Context, companyID 
 //
 // IDはUsecaseがUUIDを採番します。
 // UserIDは認証UID、CompanyIDは認証済みmemberが所属するcompany IDを呼び出し側から受け取ります。
+// Nameは必須です。
 // CreatedAtおよびUpdatedAtはserver clockから設定します。
 // Countryの既定値はDomain constructorが決定します。
 func (u *ShippingAddressUsecase) Create(
@@ -279,6 +284,7 @@ func (u *ShippingAddressUsecase) Create(
 		documentID,
 		validUID,
 		validCompanyID,
+		in.Name,
 		in.ZipCode,
 		in.State,
 		in.City,
@@ -328,6 +334,7 @@ func (u *ShippingAddressUsecase) Update(
 		return nil, shipaddrdom.ErrNotFound
 	}
 
+	name := current.Name
 	zipCode := current.ZipCode
 	state := current.State
 	city := current.City
@@ -335,6 +342,9 @@ func (u *ShippingAddressUsecase) Update(
 	street2 := current.Street2
 	country := current.Country
 
+	if in.Name != nil {
+		name = *in.Name
+	}
 	if in.ZipCode != nil {
 		zipCode = *in.ZipCode
 	}
@@ -357,6 +367,7 @@ func (u *ShippingAddressUsecase) Update(
 	now := u.now().UTC()
 
 	if err := current.UpdateFromForm(
+		name,
 		zipCode,
 		state,
 		city,
@@ -404,6 +415,7 @@ func (u *ShippingAddressUsecase) UpdateByCompany(
 		return nil, shipaddrdom.ErrNotFound
 	}
 
+	name := current.Name
 	zipCode := current.ZipCode
 	state := current.State
 	city := current.City
@@ -411,6 +423,9 @@ func (u *ShippingAddressUsecase) UpdateByCompany(
 	street2 := current.Street2
 	country := current.Country
 
+	if in.Name != nil {
+		name = *in.Name
+	}
 	if in.ZipCode != nil {
 		zipCode = *in.ZipCode
 	}
@@ -433,6 +448,7 @@ func (u *ShippingAddressUsecase) UpdateByCompany(
 	now := u.now().UTC()
 
 	if err := current.UpdateFromForm(
+		name,
 		zipCode,
 		state,
 		city,

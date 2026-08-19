@@ -2,7 +2,6 @@
 
 import type { Company } from "../../../shared/types/company";
 import type { ShippingAddress } from "../../../shared/types/shippingAddress";
-
 import { buildConsoleUrl } from "../../../shared/http/apiBase";
 import { fetchJSON } from "../../../shared/http/fetchJSON";
 
@@ -12,6 +11,7 @@ export type UpdateCompanyDetailInput = {
 };
 
 export type CompanyShippingAddressInput = {
+  name: string;
   zipCode: string;
   state: string;
   city: string;
@@ -24,7 +24,6 @@ function requireCompanyID(companyId: string): string {
   if (!companyId) {
     throw new Error("companyId is required");
   }
-
   return companyId;
 }
 
@@ -32,7 +31,6 @@ function requireShippingAddressID(shippingAddressId: string): string {
   if (!shippingAddressId) {
     throw new Error("shippingAddressId is required");
   }
-
   return shippingAddressId;
 }
 
@@ -42,13 +40,9 @@ function requireShippingAddressID(shippingAddressId: string): string {
  * 現在ログイン中memberのcompanyIdを呼び出し側から受け取り、
  * Company詳細を取得する。
  */
-export async function fetchCompanyDetail(
-  companyId: string,
-): Promise<Company> {
+export async function fetchCompanyDetail(companyId: string): Promise<Company> {
   const id = requireCompanyID(companyId);
-  const url = buildConsoleUrl(
-    `/companies/${encodeURIComponent(id)}`,
-  );
+  const url = buildConsoleUrl(`/companies/${encodeURIComponent(id)}`);
 
   return fetchJSON<Company>(url, {
     method: "GET",
@@ -67,9 +61,7 @@ export async function updateCompanyDetail(
   input: UpdateCompanyDetailInput,
 ): Promise<Company> {
   const id = requireCompanyID(companyId);
-  const url = buildConsoleUrl(
-    `/companies/${encodeURIComponent(id)}`,
-  );
+  const url = buildConsoleUrl(`/companies/${encodeURIComponent(id)}`);
 
   return fetchJSON<Company>(url, {
     method: "PATCH",
@@ -90,12 +82,8 @@ export async function updateCompanyDetail(
  * 認証中memberのcompanyIdはBackend middlewareで解決する。
  * FrontendからcompanyIdはquery/bodyへ送信しない。
  */
-export async function listCompanyShippingAddresses(): Promise<
-  ShippingAddress[]
-> {
-  const url = buildConsoleUrl(
-    "/companies/me/shipping-addresses",
-  );
+export async function listCompanyShippingAddresses(): Promise<ShippingAddress[]> {
+  const url = buildConsoleUrl("/companies/me/shipping-addresses");
 
   const response = await fetchJSON<ShippingAddress[]>(url, {
     method: "GET",
@@ -109,14 +97,12 @@ export async function listCompanyShippingAddresses(): Promise<
  * POST /companies/me/shipping-addresses
  *
  * UserIDとCompanyIDはBackend側で認証contextから設定する。
- * Frontendは住所入力値だけを送信する。
+ * Frontendは在庫保管場所名と住所入力値だけを送信する。
  */
 export async function createCompanyShippingAddress(
   input: CompanyShippingAddressInput,
 ): Promise<ShippingAddress> {
-  const url = buildConsoleUrl(
-    "/companies/me/shipping-addresses",
-  );
+  const url = buildConsoleUrl("/companies/me/shipping-addresses");
 
   return fetchJSON<ShippingAddress>(url, {
     method: "POST",
@@ -125,6 +111,7 @@ export async function createCompanyShippingAddress(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
+      name: input.name,
       zipCode: input.zipCode,
       state: input.state,
       city: input.city,
@@ -144,10 +131,7 @@ export async function updateCompanyShippingAddress(
   shippingAddressId: string,
   input: CompanyShippingAddressInput,
 ): Promise<ShippingAddress> {
-  const id = requireShippingAddressID(
-    shippingAddressId,
-  );
-
+  const id = requireShippingAddressID(shippingAddressId);
   const url = buildConsoleUrl(
     `/companies/me/shipping-addresses/${encodeURIComponent(id)}`,
   );
@@ -159,6 +143,7 @@ export async function updateCompanyShippingAddress(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
+      name: input.name,
       zipCode: input.zipCode,
       state: input.state,
       city: input.city,
@@ -178,10 +163,7 @@ export async function updateCompanyShippingAddress(
 export async function deleteCompanyShippingAddress(
   shippingAddressId: string,
 ): Promise<void> {
-  const id = requireShippingAddressID(
-    shippingAddressId,
-  );
-
+  const id = requireShippingAddressID(shippingAddressId);
   const url = buildConsoleUrl(
     `/companies/me/shipping-addresses/${encodeURIComponent(id)}`,
   );
