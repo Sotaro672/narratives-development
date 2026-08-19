@@ -117,6 +117,7 @@ func (r *InventoryRepositoryFS) GetByID(
 		}
 		return invdom.Mint{}, err
 	}
+
 	var rec inventoryRecord
 	if err := snap.DataTo(&rec); err != nil {
 		return invdom.Mint{}, err
@@ -138,10 +139,12 @@ func (r *InventoryRepositoryFS) ListByProductBlueprintID(
 	if productBlueprintID == "" {
 		return nil, invdom.ErrInvalidProductBlueprintID
 	}
+
 	iter := r.col().
 		Where("productBlueprintId", "==", productBlueprintID).
 		Documents(ctx)
 	defer iter.Stop()
+
 	return readAllInventoryDocs(iter)
 }
 
@@ -161,21 +164,17 @@ func (r *InventoryRepositoryFS) SetShippingAddressID(
 	if r == nil || r.Client == nil {
 		return errors.New("inventory repo is nil")
 	}
-
 	if inventoryID == "" {
 		return invdom.ErrInvalidMintID
 	}
-
 	if shippingAddressID == "" {
 		return errors.New("inventory repo: shippingAddressID is empty")
 	}
-
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
 
 	now = now.UTC()
-
 	doc := r.col().Doc(inventoryID)
 
 	_, err := doc.Update(
@@ -199,6 +198,78 @@ func (r *InventoryRepositoryFS) SetShippingAddressID(
 	}
 
 	return nil
+}
+
+func (r *InventoryRepositoryFS) ClearShippingAddressIDByShippingAddressID(
+	ctx context.Context,
+	shippingAddressID string,
+	now time.Time,
+) error {
+	if r == nil || r.Client == nil {
+		return errors.New("inventory repo is nil")
+	}
+	if shippingAddressID == "" {
+		return errors.New("inventory repo: shippingAddressID is empty")
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+
+	now = now.UTC()
+
+	iter := r.col().
+		Where("shippingAddressId", "==", shippingAddressID).
+		Documents(ctx)
+	defer iter.Stop()
+
+	const maxBatchWrites = 500
+	batch := r.Client.Batch()
+	writeCount := 0
+
+	commit := func() error {
+		if writeCount == 0 {
+			return nil
+		}
+		if _, err := batch.Commit(ctx); err != nil {
+			return err
+		}
+		batch = r.Client.Batch()
+		writeCount = 0
+		return nil
+	}
+
+	for {
+		snap, err := iter.Next()
+		if err != nil {
+			if errors.Is(err, iterator.Done) {
+				break
+			}
+			return err
+		}
+
+		batch.Update(
+			snap.Ref,
+			[]firestore.Update{
+				{
+					Path:  "shippingAddressId",
+					Value: firestore.Delete,
+				},
+				{
+					Path:  "updatedAt",
+					Value: now,
+				},
+			},
+		)
+
+		writeCount++
+		if writeCount >= maxBatchWrites {
+			if err := commit(); err != nil {
+				return err
+			}
+		}
+	}
+
+	return commit()
 }
 
 // ============================================================
@@ -225,10 +296,12 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 	if r == nil || r.Client == nil {
 		return 0, errors.New("inventory repo is nil")
 	}
+
 	invID := inventoryID
 	mID := modelID
 	pid := productID
 	oid := orderID
+
 	if invID == "" {
 		return 0, invdom.ErrInvalidMintID
 	}
@@ -244,6 +317,7 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
+
 	now = now.UTC()
 	docRef := r.col().Doc(invID)
 
@@ -257,18 +331,22 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 				}
 				return err
 			}
+
 			var rec inventoryRecord
 			if err := snap.DataTo(&rec); err != nil {
 				return err
 			}
+
 			stock := rec.Stock
 			if stock == nil {
 				return nil
 			}
+
 			ms, ok := stock[mID]
 			if !ok {
 				return nil
 			}
+
 			removed := 0
 			if len(ms.Products) > 0 {
 				newProducts := make([]string, 0, len(ms.Products))
@@ -284,12 +362,15 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 				}
 				ms.Products = newProducts
 			}
+
 			if removed == 0 {
 				return nil
 			}
+
 			if ms.ReservedByOrder == nil {
 				ms.ReservedByOrder = map[string]int{}
 			}
+
 			cur := ms.ReservedByOrder[oid]
 			cur -= removed
 			if cur <= 0 {
@@ -297,15 +378,18 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 			} else {
 				ms.ReservedByOrder[oid] = cur
 			}
+
 			ms = normalizeModelStockRecord(ms)
 			stock[mID] = ms
 			stock = normalizeStockRecord(stock)
 			modelIDs := modelIDsFromStockRecord(stock)
+
 			updates := []firestore.Update{
 				{Path: "stock", Value: stock},
 				{Path: "modelIds", Value: modelIDs},
 				{Path: "updatedAt", Value: now},
 			}
+
 			removedCount = removed
 			return tx.Update(docRef, updates)
 		},
@@ -313,6 +397,7 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 	if err != nil {
 		return 0, err
 	}
+
 	return removedCount, nil
 }
 
@@ -342,6 +427,7 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 	if qty <= 0 {
 		return errors.New("inventory repo: qty must be > 0")
 	}
+
 	doc := r.col().Doc(inventoryID)
 	now := time.Now().UTC()
 
@@ -355,14 +441,17 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 				}
 				return err
 			}
+
 			var rec inventoryRecord
 			if err := snap.DataTo(&rec); err != nil {
 				return err
 			}
+
 			stock := rec.Stock
 			if stock == nil {
 				stock = map[string]modelStockRecord{}
 			}
+
 			ms, ok := stock[modelID]
 			if !ok {
 				return fmt.Errorf(
@@ -370,15 +459,19 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 					modelID,
 				)
 			}
+
 			if ms.ReservedByOrder == nil {
 				ms.ReservedByOrder = map[string]int{}
 			}
+
 			if existing, ok := ms.ReservedByOrder[orderID]; ok &&
 				existing == qty {
 				return nil
 			}
+
 			ms.ReservedByOrder[orderID] = qty
 			ms = normalizeModelStockRecord(ms)
+
 			if ms.ReservedCount > ms.Accumulation {
 				return fmt.Errorf(
 					"inventory repo: insufficient stock (modelId=%s accumulation=%d reservedCount=%d orderId=%s qty=%d)",
@@ -389,24 +482,29 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 					qty,
 				)
 			}
+
 			stock[modelID] = ms
 			stock = normalizeStockRecord(stock)
+
 			modelIDs := normalizeModelIDs(rec.ModelIDs)
 			if !containsString(modelIDs, modelID) {
 				modelIDs = append(modelIDs, modelID)
 				modelIDs = normalizeModelIDs(modelIDs)
 			}
+
 			updates := []firestore.Update{
 				{Path: "stock", Value: stock},
 				{Path: "modelIds", Value: modelIDs},
 				{Path: "updatedAt", Value: now},
 			}
+
 			return tx.Update(doc, updates)
 		},
 	)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -427,9 +525,11 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 	if r == nil || r.Client == nil {
 		return invdom.Mint{}, errors.New("inventory repo is nil")
 	}
+
 	tbID := tokenBlueprintID
 	pbID := productBlueprintID
 	mID := modelID
+
 	if tbID == "" {
 		return invdom.Mint{}, invdom.ErrInvalidTokenBlueprintID
 	}
@@ -439,10 +539,12 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 	if mID == "" {
 		return invdom.Mint{}, invdom.ErrInvalidModelID
 	}
+
 	ids := normalizeIDs(productIDs)
 	if len(ids) == 0 {
 		return invdom.Mint{}, invdom.ErrInvalidProducts
 	}
+
 	docID := buildInventoryDocIDByProduct(tbID, pbID)
 	doc := r.col().Doc(docID)
 	now := time.Now().UTC()
@@ -458,6 +560,7 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 						ReservedByOrder: map[string]int{},
 					}
 					ms = normalizeModelStockRecord(ms)
+
 					rec := inventoryRecord{
 						TokenBlueprintID:   tbID,
 						ProductBlueprintID: pbID,
@@ -467,34 +570,41 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 						CreatedAt:          now,
 						UpdatedAt:          now,
 					}
+
 					rec.Stock = normalizeStockRecord(rec.Stock)
 					rec.ModelIDs = normalizeModelIDs(rec.ModelIDs)
 					return tx.Set(doc, rec)
 				}
 				return err
 			}
+
 			var rec inventoryRecord
 			if err := snap.DataTo(&rec); err != nil {
 				return err
 			}
+
 			stock := rec.Stock
 			if stock == nil {
 				stock = map[string]modelStockRecord{}
 			}
+
 			ms := stock[mID]
 			if ms.Products == nil {
 				ms.Products = []string{}
 			}
+
 			merged := unionStrings(ms.Products, ids)
 			ms.Products = merged
 			ms = normalizeModelStockRecord(ms)
 			stock[mID] = ms
 			stock = normalizeStockRecord(stock)
+
 			modelIDs := normalizeModelIDs(rec.ModelIDs)
 			if !containsString(modelIDs, mID) {
 				modelIDs = append(modelIDs, mID)
 				modelIDs = normalizeModelIDs(modelIDs)
 			}
+
 			updates := []firestore.Update{
 				{Path: "stock", Value: stock},
 				{Path: "modelIds", Value: modelIDs},
@@ -502,16 +612,19 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 				{Path: "tokenBlueprintId", Value: tbID},
 				{Path: "productBlueprintId", Value: pbID},
 			}
+
 			return tx.Update(doc, updates)
 		},
 	)
 	if err != nil {
 		return invdom.Mint{}, err
 	}
+
 	out, err := r.GetByID(ctx, docID)
 	if err != nil {
 		return invdom.Mint{}, err
 	}
+
 	return out, nil
 }
 
@@ -523,6 +636,7 @@ func readAllInventoryDocs(
 	iter *firestore.DocumentIterator,
 ) ([]invdom.Mint, error) {
 	out := make([]invdom.Mint, 0, 16)
+
 	for {
 		snap, err := iter.Next()
 		if err != nil {
@@ -531,22 +645,27 @@ func readAllInventoryDocs(
 			}
 			return nil, err
 		}
+
 		var rec inventoryRecord
 		if err := snap.DataTo(&rec); err != nil {
 			return nil, err
 		}
+
 		item, err := fromRecord(snap.Ref.ID, rec)
 		if err != nil {
 			return nil, err
 		}
+
 		out = append(out, item)
 	}
+
 	return out, nil
 }
 
 func normalizeIDs(raw []string) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(raw))
+
 	for _, s := range raw {
 		if s == "" {
 			continue
@@ -557,6 +676,7 @@ func normalizeIDs(raw []string) []string {
 		seen[s] = struct{}{}
 		out = append(out, s)
 	}
+
 	sort.Strings(out)
 	return out
 }
@@ -565,8 +685,10 @@ func normalizeModelIDs(raw []string) []string {
 	if len(raw) == 0 {
 		return nil
 	}
+
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(raw))
+
 	for _, s := range raw {
 		if s == "" {
 			continue
@@ -577,10 +699,13 @@ func normalizeModelIDs(raw []string) []string {
 		seen[s] = struct{}{}
 		out = append(out, s)
 	}
+
 	sort.Strings(out)
+
 	if len(out) == 0 {
 		return nil
 	}
+
 	return out
 }
 
@@ -592,6 +717,7 @@ func buildInventoryDocIDByProduct(
 		s = strings.ReplaceAll(s, "/", "_")
 		return s
 	}
+
 	return sanitize(productBlueprintID) +
 		"__" +
 		sanitize(tokenBlueprintID)
@@ -605,13 +731,16 @@ func normalizeModelStockRecord(
 	ms modelStockRecord,
 ) modelStockRecord {
 	ms.Products = normalizeIDs(ms.Products)
+
 	if len(ms.Products) == 0 {
 		ms.Products = nil
 	}
+
 	ms.Accumulation = len(ms.Products)
 
 	rbo := map[string]int{}
 	var sum int
+
 	for oid, n := range ms.ReservedByOrder {
 		if oid == "" {
 			continue
@@ -619,15 +748,19 @@ func normalizeModelStockRecord(
 		if n <= 0 {
 			continue
 		}
+
 		rbo[oid] = n
 		sum += n
 	}
+
 	if len(rbo) == 0 {
 		rbo = nil
 		sum = 0
 	}
+
 	ms.ReservedByOrder = rbo
 	ms.ReservedCount = sum
+
 	return ms
 }
 
@@ -637,22 +770,29 @@ func normalizeStockRecord(
 	if raw == nil {
 		return nil
 	}
+
 	out := map[string]modelStockRecord{}
+
 	for modelID, ms := range raw {
 		if modelID == "" {
 			continue
 		}
+
 		nms := normalizeModelStockRecord(ms)
 		hasProducts := len(nms.Products) > 0
 		hasReserved := len(nms.ReservedByOrder) > 0
+
 		if !hasProducts && !hasReserved {
 			continue
 		}
+
 		out[modelID] = nms
 	}
+
 	if len(out) == 0 {
 		return nil
 	}
+
 	return out
 }
 
@@ -662,12 +802,15 @@ func modelIDsFromStockRecord(
 	if stock == nil {
 		return nil
 	}
+
 	out := make([]string, 0, len(stock))
+
 	for k := range stock {
 		if k != "" {
 			out = append(out, k)
 		}
 	}
+
 	return normalizeModelIDs(out)
 }
 
@@ -713,22 +856,27 @@ func stockDomainFromRecord(
 
 func unionStrings(a []string, b []string) []string {
 	set := map[string]struct{}{}
+
 	for _, s := range a {
 		if s == "" {
 			continue
 		}
 		set[s] = struct{}{}
 	}
+
 	for _, s := range b {
 		if s == "" {
 			continue
 		}
 		set[s] = struct{}{}
 	}
+
 	out := make([]string, 0, len(set))
+
 	for k := range set {
 		out = append(out, k)
 	}
+
 	sort.Strings(out)
 	return out
 }

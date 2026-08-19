@@ -54,6 +54,24 @@ type RepositoryPort interface {
 		now time.Time,
 	) error
 
+	// ClearShippingAddressIDByShippingAddressID clears the storage location
+	// from every inventory that currently references shippingAddressID.
+	//
+	// Contract:
+	// - shippingAddressID must not be empty.
+	// - Only inventories whose shippingAddressId equals shippingAddressID are updated.
+	// - shippingAddressId is removed/unset and updatedAt is updated.
+	// - Inventory documents themselves must not be deleted.
+	// - Inventories that reference another shippingAddressID must not be changed.
+	// - If no inventory references shippingAddressID, return nil.
+	// - The persistence implementation should perform the updates safely for
+	//   all matching inventory documents.
+	ClearShippingAddressIDByShippingAddressID(
+		ctx context.Context,
+		shippingAddressID string,
+		now time.Time,
+	) error
+
 	// atomic upsert (for mint -> inventory reflection)
 	// - docId = productBlueprintId__tokenBlueprintId
 	// - Stock[modelId].Products に productId を追記（UNION / add-only）

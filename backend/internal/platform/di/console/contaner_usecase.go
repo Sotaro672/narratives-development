@@ -68,23 +68,14 @@ func buildUsecases(
 	if err != nil {
 		return nil, err
 	}
+
 	tokenUC := uc.NewTokenUsecase(solanaClient)
 	accountUC := uc.NewAccountUsecase(r.accountRepo)
 
-	announcementAvatarRepo :=
-		fsrepo.NewAnnouncementAvatarRepositoryFS(
-			c.fsClient,
-		)
+	announcementAvatarRepo := fsrepo.NewAnnouncementAvatarRepositoryFS(c.fsClient)
+	announcementAttachmentRepo := fsrepo.NewAnnouncementAttachmentRepositoryFS(c.fsClient)
 
-	announcementAttachmentRepo :=
-		fsrepo.NewAnnouncementAttachmentRepositoryFS(
-			c.fsClient,
-		)
-
-	announcementAttachmentStorage, err :=
-		firebaseadp.NewAnnouncementAttachmentStorageFromEnv(
-			ctx,
-		)
+	announcementAttachmentStorage, err := firebaseadp.NewAnnouncementAttachmentStorageFromEnv(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -93,17 +84,10 @@ func buildUsecases(
 		r.announcementRepo,
 		announcementAvatarRepo,
 		announcementAttachmentRepo,
-	).WithAttachmentStorage(
-		announcementAttachmentStorage,
-	)
+	).WithAttachmentStorage(announcementAttachmentStorage)
 
-	brandWalletSvc := solanainfra.NewBrandWalletService(
-		c.firestoreProjectID,
-	)
-
-	avatarWalletSvc := solanainfra.NewAvatarWalletService(
-		c.firestoreProjectID,
-	)
+	brandWalletSvc := solanainfra.NewBrandWalletService(c.firestoreProjectID)
+	avatarWalletSvc := solanainfra.NewAvatarWalletService(c.firestoreProjectID)
 
 	avatarUC := uc.NewAvatarUsecase(
 		r.avatarRepo,
@@ -124,9 +108,7 @@ func buildUsecases(
 		uc.WithBrandWalletService(brandWalletSvc),
 	)
 
-	companyUC := uc.NewCompanyUsecase(
-		r.companyRepo,
-	)
+	companyUC := uc.NewCompanyUsecase(r.companyRepo)
 
 	inquiryUC := uc.NewInquiryUsecase(
 		r.inquiryRepo,
@@ -138,9 +120,7 @@ func buildUsecases(
 		nil,
 	)
 
-	inventoryUC := uc.NewInventoryUsecase(
-		r.inventoryRepo,
-	)
+	inventoryUC := uc.NewInventoryUsecase(r.inventoryRepo)
 
 	inventoryUC.WithShippingAddressAssignment(
 		r.shippingAddressRepo,
@@ -149,9 +129,7 @@ func buildUsecases(
 
 	if r.productRepo != nil {
 		if resolver, ok := any(r.productRepo).(uc.ProductModelResolver); ok {
-			inventoryUC.WithProductModelResolver(
-				resolver,
-			)
+			inventoryUC.WithProductModelResolver(resolver)
 		}
 	}
 
@@ -161,10 +139,7 @@ func buildUsecases(
 		},
 	)
 
-	listSaveOperationStorage, err :=
-		firebaseadp.NewListSaveOperationStorageFromEnv(
-			ctx,
-		)
+	listSaveOperationStorage, err := firebaseadp.NewListSaveOperationStorageFromEnv(ctx)
 	if err != nil {
 		_ = announcementAttachmentStorage.Close()
 		return nil, err
@@ -176,10 +151,7 @@ func buildUsecases(
 		listSaveOperationStorage,
 	)
 
-	listSaveOperationRetryQueue, err :=
-		listcloudtasksadp.NewListSaveOperationQueueFromEnv(
-			ctx,
-		)
+	listSaveOperationRetryQueue, err := listcloudtasksadp.NewListSaveOperationQueueFromEnv(ctx)
 	if err != nil {
 		_ = listSaveOperationStorage.Close()
 		_ = announcementAttachmentStorage.Close()
@@ -209,9 +181,7 @@ func buildUsecases(
 		r.paymentMethodRepo,
 	)
 
-	permissionUC := uc.NewPermissionUsecase(
-		r.permissionRepo,
-	)
+	permissionUC := uc.NewPermissionUsecase(r.permissionRepo)
 
 	printUC := uc.NewPrintUsecase(
 		r.productionRepo,
@@ -221,19 +191,16 @@ func buildUsecases(
 		r.productBlueprintRepo,
 	)
 
-	productionUC := uc.NewProductionUsecase(
-		r.productionRepo,
-	)
+	productionUC := uc.NewProductionUsecase(r.productionRepo)
 
 	productBlueprintUC := uc.NewProductBlueprintUsecase(
 		r.productBlueprintRepo,
 		r.productBlueprintReviewRepo,
 	)
 
-	productBlueprintCategoryUC :=
-		uc.NewProductBlueprintCategoryUsecase(
-			r.productBlueprintCategoryRepo,
-		)
+	productBlueprintCategoryUC := uc.NewProductBlueprintCategoryUsecase(
+		r.productBlueprintCategoryRepo,
+	)
 
 	inspectionUC := uc.NewInspectionUsecase(
 		r.inspectionRepo,
@@ -248,27 +215,17 @@ func buildUsecases(
 		tokenUC,
 	)
 
-	mintUC.SetInventoryUsecase(
-		inventoryUC,
-	)
+	mintUC.SetInventoryUsecase(inventoryUC)
 
 	// 1件ずつmintするためのtask repositoryと
 	// token保存recorderを注入します。
-	mintUC.SetMintTaskRepository(
-		r.mintRepo,
-	)
-
-	mintUC.SetMintProductMintRecorder(
-		r.mintRepo,
-	)
+	mintUC.SetMintTaskRepository(r.mintRepo)
+	mintUC.SetMintProductMintRecorder(r.mintRepo)
 
 	// Cloud Tasksへ次のmint処理を投入するenqueuerを注入します。
 	// mint worker は必須依存のため、初期化失敗を握り潰さず
 	// application startup 自体を失敗させます。
-	mintTaskQueue, err :=
-		cloudtasksadp.NewMintTaskQueueFromEnv(
-			ctx,
-		)
+	mintTaskQueue, err := cloudtasksadp.NewMintTaskQueueFromEnv(ctx)
 	if err != nil {
 		_ = listSaveOperationStorage.Close()
 		_ = announcementAttachmentStorage.Close()
@@ -281,32 +238,15 @@ func buildUsecases(
 		return nil, errors.New("mint task queue is nil")
 	}
 
-	mintUC.SetMintTaskEnqueuer(
-		mintTaskQueue,
-	)
+	mintUC.SetMintTaskEnqueuer(mintTaskQueue)
 
-	baseURL := os.Getenv(
-		"ARWEAVE_BASE_URL",
-	)
+	baseURL := os.Getenv("ARWEAVE_BASE_URL")
+	apiKey := os.Getenv("IRYS_SERVICE_API_KEY")
+	uploader := arweave.NewHTTPUploader(baseURL, apiKey)
 
-	apiKey := os.Getenv(
-		"IRYS_SERVICE_API_KEY",
-	)
+	tbReviewRepo := fsrepo.NewTokenBlueprintReviewRepositoryFS(c.fsClient)
 
-	uploader := arweave.NewHTTPUploader(
-		baseURL,
-		apiKey,
-	)
-
-	tbReviewRepo :=
-		fsrepo.NewTokenBlueprintReviewRepositoryFS(
-			c.fsClient,
-		)
-
-	tokenBlueprintAssetStorage, err :=
-		firebaseadp.NewTokenBlueprintAssetStorageFromEnv(
-			ctx,
-		)
+	tokenBlueprintAssetStorage, err := firebaseadp.NewTokenBlueprintAssetStorageFromEnv(ctx)
 	if err != nil {
 		_ = listSaveOperationStorage.Close()
 		_ = announcementAttachmentStorage.Close()
@@ -320,38 +260,29 @@ func buildUsecases(
 		uploader,
 	)
 
-	mintUC.SetTokenBlueprintMetadataEnsurer(
-		tokenBlueprintUC,
+	mintUC.SetTokenBlueprintMetadataEnsurer(tokenBlueprintUC)
+	mintUC.SetTokenBlueprintMintMarker(tokenBlueprintUC)
+
+	shippingAddressUC := uc.NewShippingAddressUsecase(
+		r.shippingAddressRepo,
+	).WithInventoryCleaner(
+		r.inventoryRepo,
 	)
 
-	mintUC.SetTokenBlueprintMintMarker(
-		tokenBlueprintUC,
+	tokenBlueprintReviewUC := uc.NewTokenBlueprintReviewUsecase(
+		tbReviewRepo,
+		r.avatarRepo,
+		r.tokenBlueprintRepo,
+		r.brandRepo,
 	)
-
-	shippingAddressUC :=
-		uc.NewShippingAddressUsecase(
-			r.shippingAddressRepo,
-		)
-
-	tokenBlueprintReviewUC :=
-		uc.NewTokenBlueprintReviewUsecase(
-			tbReviewRepo,
-			r.avatarRepo,
-			r.tokenBlueprintRepo,
-			r.brandRepo,
-		)
 
 	userUC := uc.NewUserUsecase(
 		r.userRepo,
 		nil,
 	)
 
-	onchainReader :=
-		solanainfra.NewOnchainWalletReaderDevnet()
-
-	tokenQuery := fsrepo.NewTokenReaderFS(
-		c.fsClient,
-	)
+	onchainReader := solanainfra.NewOnchainWalletReaderDevnet()
+	tokenQuery := fsrepo.NewTokenReaderFS(c.fsClient)
 
 	walletUC := uc.NewWalletUsecase(
 		r.walletRepo,
@@ -363,14 +294,9 @@ func buildUsecases(
 		r.productBlueprintRepo,
 	)
 
-	cartUC := uc.NewCartUsecase(
-		r.cartRepo,
-	)
+	cartUC := uc.NewCartUsecase(r.cartRepo)
 
-	invitationDeliveryQueue, err :=
-		listcloudtasksadp.NewInvitationDeliveryQueueFromEnv(
-			ctx,
-		)
+	invitationDeliveryQueue, err := listcloudtasksadp.NewInvitationDeliveryQueueFromEnv(ctx)
 	if err != nil {
 		_ = tokenBlueprintAssetStorage.Close()
 		_ = listSaveOperationStorage.Close()
@@ -378,18 +304,16 @@ func buildUsecases(
 		return nil, err
 	}
 
-	invitationMailer :=
-		mailadp.NewInvitationMailerWithResend(
-			r.companyRepo,
-			r.brandRepo,
-		)
+	invitationMailer := mailadp.NewInvitationMailerWithResend(
+		r.companyRepo,
+		r.brandRepo,
+	)
 
-	invitationDeliveryUC :=
-		uc.NewInvitationDeliveryUsecase(
-			r.invitationTokenRepo,
-			invitationMailer,
-			invitationDeliveryQueue,
-		)
+	invitationDeliveryUC := uc.NewInvitationDeliveryUsecase(
+		r.invitationTokenRepo,
+		invitationMailer,
+		invitationDeliveryQueue,
+	)
 
 	invitationUC := uc.NewInvitationUsecase(
 		r.invitationTokenRepo,
@@ -398,9 +322,7 @@ func buildUsecases(
 		invitationDeliveryQueue,
 	)
 
-	memberUC := uc.NewMemberUsecase(
-		r.memberRepo,
-	)
+	memberUC := uc.NewMemberUsecase(r.memberRepo)
 
 	authBootstrapSvc := &uc.BootstrapService{
 		Members:   r.memberRepo,
