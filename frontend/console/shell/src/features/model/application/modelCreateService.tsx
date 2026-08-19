@@ -11,6 +11,7 @@ import type {
  *
  * ProductBlueprintは容量を保持しない。
  * Alcohol商品の容量はModel variationのVolumeだけを正とする。
+ * 配送用の梱包情報はModel variationごとのShippingPackageを正とする。
  */
 
 /* =========================================================
@@ -20,6 +21,17 @@ import type {
 export type Volume = {
   value: number;
   unit: string;
+};
+
+/**
+ * 配送用の梱包後情報。
+ * weightGramsは重量(g)、widthMmは横(mm)、lengthMmは縦(mm)、heightMmは高さ(mm)を表す。
+ */
+export type ShippingPackage = {
+  weightGrams: number;
+  widthMm: number;
+  lengthMm: number;
+  heightMm: number;
 };
 
 export type ModelVariationMode = "edit" | "view";
@@ -56,7 +68,7 @@ export type VolumeRow = {
 
 /**
  * Apparel用model number。
- * sizeとcolorの組み合わせごとにmodel numberを持つ。
+ * sizeとcolorの組み合わせごとにmodel numberと配送用梱包情報を持つ。
  */
 export type ApparelModelNumber = {
   kind?: "apparel";
@@ -64,16 +76,18 @@ export type ApparelModelNumber = {
   color: string;
   code: string;
   rgb?: string | number;
+  shippingPackage: ShippingPackage;
 };
 
 /**
  * Alcohol用model number。
- * 容量はvolumeだけを正とする。
+ * 容量はvolumeだけを正とし、model numberごとに配送用梱包情報を持つ。
  */
 export type AlcoholModelNumber = {
   kind: "alcohol";
   volume: Volume;
   code: string;
+  shippingPackage: ShippingPackage;
 };
 
 export type SizeLike = {
@@ -146,9 +160,7 @@ export type UseSizeVariationCardResult = {
 /**
  * 入力行をModel variation保存用のVolumeへ変換する。
  */
-export function volumeRowToVolume(
-  row: VolumeRow,
-): Volume {
+export function volumeRowToVolume(row: VolumeRow): Volume {
   return {
     value: row.volumeValue,
     unit: row.volumeUnit || "ml",

@@ -15,9 +15,8 @@ const (
 )
 
 // NewModelVariationは、category-specificなModel variationの新規作成入力。
-//
 // Product-level metadataはProductBlueprint側を正とする。
-// Alcohol Model variationは容量だけを保持する。
+// ShippingPackageはcategoryに依存しないModel variation共通の配送用梱包情報。
 type NewModelVariation struct {
 	Kind ModelVariationKind
 
@@ -25,40 +24,33 @@ type NewModelVariation struct {
 	Alcohol *NewAlcoholModelVariation
 }
 
-func NewModelVariationFromApparel(
-	variation NewApparelModelVariation,
-) NewModelVariation {
+func NewModelVariationFromApparel(variation NewApparelModelVariation) NewModelVariation {
 	return NewModelVariation{
 		Kind:    ModelVariationKindApparel,
 		Apparel: &variation,
 	}
 }
 
-func NewModelVariationFromAlcohol(
-	variation NewAlcoholModelVariation,
-) NewModelVariation {
+func NewModelVariationFromAlcohol(variation NewAlcoholModelVariation) NewModelVariation {
 	return NewModelVariation{
 		Kind:    ModelVariationKindAlcohol,
 		Alcohol: &variation,
 	}
 }
 
-// ProductBlueprintIDは、category-specificな入力から
-// ProductBlueprint IDを取得する。
+// ProductBlueprintIDは、category-specificな入力からProductBlueprint IDを取得する。
 func (variation NewModelVariation) ProductBlueprintID() string {
 	switch variation.Kind {
 	case ModelVariationKindApparel:
 		if variation.Apparel == nil {
 			return ""
 		}
-
 		return variation.Apparel.ProductBlueprintID
 
 	case ModelVariationKindAlcohol:
 		if variation.Alcohol == nil {
 			return ""
 		}
-
 		return variation.Alcohol.ProductBlueprintID
 
 	default:
@@ -99,6 +91,10 @@ func (variation NewModelVariation) Validate() error {
 			return err
 		}
 
+		if err := variation.Apparel.ShippingPackage.Validate(); err != nil {
+			return err
+		}
+
 		return nil
 
 	case ModelVariationKindAlcohol:
@@ -119,7 +115,15 @@ func (variation NewModelVariation) Validate() error {
 			return ErrInvalidModelNumber
 		}
 
-		return variation.Alcohol.Volume.Validate()
+		if err := variation.Alcohol.Volume.Validate(); err != nil {
+			return err
+		}
+
+		if err := variation.Alcohol.ShippingPackage.Validate(); err != nil {
+			return err
+		}
+
+		return nil
 
 	default:
 		return ErrInvalidKind
@@ -127,25 +131,27 @@ func (variation NewModelVariation) Validate() error {
 }
 
 // ModelVariationUpdateは、Model variationの部分更新入力。
-//
-// MeasurementsまたはVolumeがnilの場合は、その項目の更新を行わない。
+// Measurements、Volume、ShippingPackageがnilの場合は、その項目の更新を行わない。
 // category schemaに基づくMeasurementsの必須判定はUsecase側で行う。
 type ModelVariationUpdate struct {
-	Size         *string
-	Color        *Color
-	ModelNumber  *string
-	Measurements Measurements
-	Volume       *Volume
+	Size            *string
+	Color           *Color
+	ModelNumber     *string
+	Measurements    Measurements
+	Volume          *Volume
+	ShippingPackage *ShippingPackage
 }
 
-// Validateは、既存Model variationのkindに対して
-// 更新内容が有効であることを検証する。
-func (update ModelVariationUpdate) Validate(
-	kind ModelVariationKind,
-) error {
-	if update.ModelNumber != nil &&
-		*update.ModelNumber == "" {
+// Validateは、既存Model variationのkindに対して更新内容が有効であることを検証する。
+func (update ModelVariationUpdate) Validate(kind ModelVariationKind) error {
+	if update.ModelNumber != nil && *update.ModelNumber == "" {
 		return ErrInvalidModelNumber
+	}
+
+	if update.ShippingPackage != nil {
+		if err := update.ShippingPackage.Validate(); err != nil {
+			return err
+		}
 	}
 
 	switch kind {
@@ -155,8 +161,7 @@ func (update ModelVariationUpdate) Validate(
 			return ErrInvalid
 		}
 
-		if update.Size != nil &&
-			*update.Size == "" {
+		if update.Size != nil && *update.Size == "" {
 			return ErrInvalidSize
 		}
 
@@ -174,14 +179,14 @@ func (update ModelVariationUpdate) Validate(
 
 	case ModelVariationKindAlcohol:
 		// AlcoholにApparel専用項目を設定することを許可しない。
-		if update.Size != nil ||
-			update.Color != nil ||
-			update.Measurements != nil {
+		if update.Size != nil || update.Color != nil || update.Measurements != nil {
 			return ErrInvalid
 		}
 
 		if update.Volume != nil {
-			return update.Volume.Validate()
+			if err := update.Volume.Validate(); err != nil {
+				return err
+			}
 		}
 
 		return nil
@@ -192,41 +197,21 @@ func (update ModelVariationUpdate) Validate(
 }
 
 // RepositoryPortは、Model variationの永続化境界を表す。
-//
-// Model variationはProductBlueprintに従属するため、
-// ProductBlueprintを横断する汎用Listは公開しない。
+// Model variationはProductBlueprintに従属するため、ProductBlueprintを横断する汎用Listは公開しない。
 type RepositoryPort interface {
-	ListByProductBlueprintID(
-		ctx context.Context,
-		productBlueprintID string,
-	) ([]ModelVariation, error)
+	ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]ModelVariation, error)
 
-	GetByID(
-		ctx context.Context,
-		variationID string,
-	) (ModelVariation, error)
+	GetByID(ctx context.Context, variationID string) (ModelVariation, error)
 
-	Create(
-		ctx context.Context,
-		variation NewModelVariation,
-	) (ModelVariation, error)
+	Create(ctx context.Context, variation NewModelVariation) (ModelVariation, error)
 
-	Update(
-		ctx context.Context,
-		variationID string,
-		updates ModelVariationUpdate,
-	) (ModelVariation, error)
+	Update(ctx context.Context, variationID string, updates ModelVariationUpdate) (ModelVariation, error)
 
-	Delete(
-		ctx context.Context,
-		variationID string,
-	) error
+	Delete(ctx context.Context, variationID string) error
 
-	// ReplaceByProductBlueprintIDは、指定したProductBlueprintに属する
-	// 既存variationの削除と新規variationの作成を、単一の原子的処理として行う。
-	//
-	// 永続化基盤のtransaction上限を超える場合は、
-	// 書込み開始前にErrAtomicReplaceLimitExceededを返す。
+	// ReplaceByProductBlueprintIDは、指定したProductBlueprintに属する既存variationの削除と
+	// 新規variationの作成を、単一の原子的処理として行う。
+	// 永続化基盤のtransaction上限を超える場合は、書込み開始前にErrAtomicReplaceLimitExceededを返す。
 	ReplaceByProductBlueprintID(
 		ctx context.Context,
 		productBlueprintID string,
@@ -236,23 +221,13 @@ type RepositoryPort interface {
 
 // Repository共通エラー。
 var (
-	ErrNotFound = errors.New(
-		"model: not found",
-	)
+	ErrNotFound = errors.New("model: not found")
 
-	ErrConflict = errors.New(
-		"model: conflict",
-	)
+	ErrConflict = errors.New("model: conflict")
 
-	ErrInvalid = errors.New(
-		"model: invalid",
-	)
+	ErrInvalid = errors.New("model: invalid")
 
-	ErrInvalidKind = errors.New(
-		"model: invalid kind",
-	)
+	ErrInvalidKind = errors.New("model: invalid kind")
 
-	ErrAtomicReplaceLimitExceeded = errors.New(
-		"model: atomic replace write limit exceeded",
-	)
+	ErrAtomicReplaceLimitExceeded = errors.New("model: atomic replace write limit exceeded")
 )

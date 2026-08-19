@@ -8,6 +8,13 @@ export type Volume = {
   unit: string;
 };
 
+export type ShippingPackage = {
+  weightGrams: number;
+  widthMm: number;
+  lengthMm: number;
+  heightMm: number;
+};
+
 /* =========================================================
  * Request types
  * =======================================================*/
@@ -19,12 +26,14 @@ export type CreateApparelModelVariationRequest = {
   color: string;
   rgb: number;
   measurements?: Record<string, number | null | undefined>;
+  shippingPackage: ShippingPackage;
 };
 
 export type CreateAlcoholModelVariationRequest = {
   kind: "alcohol";
   modelNumber: string;
   volume: Volume;
+  shippingPackage: ShippingPackage;
 };
 
 export type CreateModelVariationRequest =
@@ -42,12 +51,14 @@ type CreateApparelModelVariationBody = {
   color: string;
   rgb: number;
   measurements?: Record<string, number>;
+  shippingPackage: ShippingPackage;
 };
 
 type CreateAlcoholModelVariationBody = {
   kind: "alcohol";
   modelNumber: string;
   volume: Volume;
+  shippingPackage: ShippingPackage;
 };
 
 type CreateModelVariationBody =
@@ -91,49 +102,69 @@ function requireNonEmptyString(value: string, fieldName: string): string {
 }
 
 function requireInteger(value: number, fieldName: string): number {
-  if (
-    typeof value !== "number" ||
-    !Number.isFinite(value) ||
-    !Number.isInteger(value)
-  ) {
-    throw new Error(
-      `modelRepositoryHTTP: ${fieldName}は整数である必要があります`,
-    );
+  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
+    throw new Error(`modelRepositoryHTTP: ${fieldName}は整数である必要があります`);
   }
 
   return value;
+}
+
+function requirePositiveInteger(value: number, fieldName: string): number {
+  const normalizedValue = requireInteger(value, fieldName);
+
+  if (normalizedValue <= 0) {
+    throw new Error(`modelRepositoryHTTP: ${fieldName}は1以上である必要があります`);
+  }
+
+  return normalizedValue;
 }
 
 function normalizeRGB(value: number): number {
   const rgb = requireInteger(value, "rgb");
 
   if (rgb < 0 || rgb > 0xffffff) {
-    throw new Error(
-      "modelRepositoryHTTP: rgbは0から16777215の範囲である必要があります",
-    );
+    throw new Error("modelRepositoryHTTP: rgbは0から16777215の範囲である必要があります");
   }
 
   return rgb;
 }
 
 function normalizeVolume(volume: Volume): Volume {
-  const value = requireInteger(volume.value, "volume.value");
-
-  if (value <= 0) {
-    throw new Error(
-      "modelRepositoryHTTP: volume.valueは1以上である必要があります",
-    );
-  }
-
+  const value = requirePositiveInteger(volume.value, "volume.value");
   const unit = requireNonEmptyString(volume.unit, "volume.unit");
 
   if (unit !== "ml" && unit !== "L") {
-    throw new Error(
-      `modelRepositoryHTTP: 未対応のvolume.unitです: ${unit}`,
-    );
+    throw new Error(`modelRepositoryHTTP: 未対応のvolume.unitです: ${unit}`);
   }
 
   return { value, unit };
+}
+
+function normalizeShippingPackage(
+  shippingPackage: ShippingPackage,
+): ShippingPackage {
+  if (!shippingPackage || typeof shippingPackage !== "object") {
+    throw new Error("modelRepositoryHTTP: shippingPackageが必要です");
+  }
+
+  return {
+    weightGrams: requirePositiveInteger(
+      shippingPackage.weightGrams,
+      "shippingPackage.weightGrams",
+    ),
+    widthMm: requirePositiveInteger(
+      shippingPackage.widthMm,
+      "shippingPackage.widthMm",
+    ),
+    lengthMm: requirePositiveInteger(
+      shippingPackage.lengthMm,
+      "shippingPackage.lengthMm",
+    ),
+    heightMm: requirePositiveInteger(
+      shippingPackage.heightMm,
+      "shippingPackage.heightMm",
+    ),
+  };
 }
 
 function normalizeMeasurements(
@@ -147,47 +178,37 @@ function normalizeMeasurements(
 
   for (const [key, rawValue] of Object.entries(value)) {
     if (!key) {
-      throw new Error(
-        "modelRepositoryHTTP: measurementsの項目名が空です",
-      );
+      throw new Error("modelRepositoryHTTP: measurementsの項目名が空です");
     }
 
     if (rawValue === null || rawValue === undefined) {
       continue;
     }
 
-    const measurementValue = requireInteger(
-      rawValue,
-      `measurements.${key}`,
-    );
+    const measurementValue = requireInteger(rawValue, `measurements.${key}`);
 
     if (measurementValue < 0) {
-      throw new Error(
-        `modelRepositoryHTTP: measurements.${key}は0以上である必要があります`,
-      );
+      throw new Error(`modelRepositoryHTTP: measurements.${key}は0以上である必要があります`);
     }
 
     measurements[key] = measurementValue;
   }
 
-  return Object.keys(measurements).length > 0
-    ? measurements
-    : undefined;
+  return Object.keys(measurements).length > 0 ? measurements : undefined;
 }
 
 function toCreateRequestBody(
   payload: CreateModelVariationRequest,
 ): CreateModelVariationBody {
-  const modelNumber = requireNonEmptyString(
-    payload.modelNumber,
-    "modelNumber",
-  );
+  const modelNumber = requireNonEmptyString(payload.modelNumber, "modelNumber");
+  const shippingPackage = normalizeShippingPackage(payload.shippingPackage);
 
   if (isAlcoholCreatePayload(payload)) {
     return {
       kind: "alcohol",
       modelNumber,
       volume: normalizeVolume(payload.volume),
+      shippingPackage,
     };
   }
 
@@ -198,6 +219,7 @@ function toCreateRequestBody(
     color: requireNonEmptyString(payload.color, "color"),
     rgb: normalizeRGB(payload.rgb),
     measurements: normalizeMeasurements(payload.measurements),
+    shippingPackage,
   };
 }
 
@@ -260,12 +282,8 @@ export async function createModelVariations(
   productBlueprintId: string,
   variations: CreateModelVariationRequest[],
 ): Promise<void> {
-  const normalizedProductBlueprintId =
-    requireProductBlueprintId(productBlueprintId);
-
-  const url =
-    `${API_BASE}/models/` +
-    `${encodeURIComponent(normalizedProductBlueprintId)}/variations`;
+  const normalizedProductBlueprintId = requireProductBlueprintId(productBlueprintId);
+  const url = `${API_BASE}/models/${encodeURIComponent(normalizedProductBlueprintId)}/variations`;
 
   const body: ReplaceModelVariationsBody = {
     variations: variations.map(toCreateRequestBody),

@@ -38,11 +38,20 @@ type ProductBlueprintDetailSizeRow struct {
 	HemWidth     *int
 }
 
+// ProductBlueprintDetailShippingPackage is the packaged shipping state for a model variation.
+type ProductBlueprintDetailShippingPackage struct {
+	WeightGrams int
+	WidthMM     int
+	LengthMM    int
+	HeightMM    int
+}
+
 // ProductBlueprintDetailApparelModelNumber is the apparel model-number state consumed directly by the detail screen.
 type ProductBlueprintDetailApparelModelNumber struct {
-	Size  string
-	Color string
-	Code  string
+	Size            string
+	Color           string
+	Code            string
+	ShippingPackage ProductBlueprintDetailShippingPackage
 }
 
 // ProductBlueprintDetailVolume is the common alcohol volume state.
@@ -60,9 +69,10 @@ type ProductBlueprintDetailVolumeRow struct {
 
 // ProductBlueprintDetailAlcoholModelNumber is the alcohol model-number state consumed directly by the detail screen.
 type ProductBlueprintDetailAlcoholModelNumber struct {
-	Kind   string
-	Volume ProductBlueprintDetailVolume
-	Code   string
+	Kind            string
+	Volume          ProductBlueprintDetailVolume
+	Code            string
+	ShippingPackage ProductBlueprintDetailShippingPackage
 }
 
 // ProductBlueprintDetailModelState is the screen-complete model state.
@@ -155,16 +165,9 @@ func (q *ProductBlueprintDetailQuery) GetByID(
 	}
 
 	orderedVariations := orderModelVariationsByModelRefs(modelVariations, pb.ModelRefs)
+	categoryCode := strings.Join(pb.ProductBlueprintCategoryPath, ".")
 
-	categoryCode := strings.Join(
-		pb.ProductBlueprintCategoryPath,
-		".",
-	)
-
-	modelState, err := buildProductBlueprintDetailModelState(
-		orderedVariations,
-		categoryCode,
-	)
+	modelState, err := buildProductBlueprintDetailModelState(orderedVariations, categoryCode)
 	if err != nil {
 		return ProductBlueprintDetailResolved{}, err
 	}
@@ -216,7 +219,6 @@ func buildProductBlueprintDetailModelState(
 			if typed == nil {
 				continue
 			}
-
 			appendApparelVariationToModelState(
 				&state,
 				*typed,
@@ -234,7 +236,6 @@ func buildProductBlueprintDetailModelState(
 			if typed == nil {
 				continue
 			}
-
 			appendAlcoholVariationToModelState(&state, *typed, volumeSeen)
 
 		default:
@@ -303,9 +304,10 @@ func appendApparelVariationToModelState(
 	state.ModelNumbers = append(
 		state.ModelNumbers,
 		ProductBlueprintDetailApparelModelNumber{
-			Size:  variation.Size,
-			Color: variation.Color.Name,
-			Code:  variation.ModelNumber,
+			Size:            variation.Size,
+			Color:           variation.Color.Name,
+			Code:            variation.ModelNumber,
+			ShippingPackage: buildProductBlueprintDetailShippingPackage(variation.ShippingPackage),
 		},
 	)
 }
@@ -336,11 +338,23 @@ func appendAlcoholVariationToModelState(
 	state.AlcoholModelNumbers = append(
 		state.AlcoholModelNumbers,
 		ProductBlueprintDetailAlcoholModelNumber{
-			Kind:   string(modeldom.ModelVariationKindAlcohol),
-			Volume: volume,
-			Code:   variation.ModelNumber,
+			Kind:            string(modeldom.ModelVariationKindAlcohol),
+			Volume:          volume,
+			Code:            variation.ModelNumber,
+			ShippingPackage: buildProductBlueprintDetailShippingPackage(variation.ShippingPackage),
 		},
 	)
+}
+
+func buildProductBlueprintDetailShippingPackage(
+	shippingPackage modeldom.ShippingPackage,
+) ProductBlueprintDetailShippingPackage {
+	return ProductBlueprintDetailShippingPackage{
+		WeightGrams: shippingPackage.WeightGrams,
+		WidthMM:     shippingPackage.WidthMM,
+		LengthMM:    shippingPackage.LengthMM,
+		HeightMM:    shippingPackage.HeightMM,
+	}
 }
 
 func buildProductBlueprintDetailSizeRow(
@@ -383,10 +397,7 @@ func buildProductBlueprintDetailSizeRow(
 	return row
 }
 
-func measurementPointer(
-	measurements modeldom.Measurements,
-	key string,
-) *int {
+func measurementPointer(measurements modeldom.Measurements, key string) *int {
 	if measurements == nil {
 		return nil
 	}

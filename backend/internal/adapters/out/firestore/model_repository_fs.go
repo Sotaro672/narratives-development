@@ -125,7 +125,7 @@ func (r *ModelRepositoryFS) Update(ctx context.Context, variationID string, upda
 		return nil, err
 	}
 
-	firestoreUpdates := make([]firestore.Update, 0, 6)
+	firestoreUpdates := make([]firestore.Update, 0, 7)
 
 	if updates.Size != nil {
 		firestoreUpdates = append(firestoreUpdates, firestore.Update{Path: "size", Value: *updates.Size})
@@ -155,6 +155,18 @@ func (r *ModelRepositoryFS) Update(ctx context.Context, variationID string, upda
 			Value: map[string]any{
 				"value": updates.Volume.Value,
 				"unit":  updates.Volume.Unit,
+			},
+		})
+	}
+
+	if updates.ShippingPackage != nil {
+		firestoreUpdates = append(firestoreUpdates, firestore.Update{
+			Path: "shippingPackage",
+			Value: map[string]any{
+				"weightGrams": updates.ShippingPackage.WeightGrams,
+				"widthMm":     updates.ShippingPackage.WidthMM,
+				"lengthMm":    updates.ShippingPackage.LengthMM,
+				"heightMm":    updates.ShippingPackage.HeightMM,
 			},
 		})
 	}
@@ -191,11 +203,8 @@ func (r *ModelRepositoryFS) Delete(ctx context.Context, variationID string) erro
 	return nil
 }
 
-// ReplaceByProductBlueprintIDは、指定されたProductBlueprintに属する
-// 既存variationの削除と新規variationの作成を単一transactionで実行する。
-//
-// transaction上限を超える場合は、書込みを開始せず
-// ErrAtomicReplaceLimitExceededを返す。
+// ReplaceByProductBlueprintIDは、指定されたProductBlueprintに属する既存variationの削除と新規variationの作成を単一transactionで実行する。
+// transaction上限を超える場合は、書込みを開始せずErrAtomicReplaceLimitExceededを返す。
 func (r *ModelRepositoryFS) ReplaceByProductBlueprintID(ctx context.Context, productBlueprintID string, variations []modeldom.NewModelVariation) ([]modeldom.ModelVariation, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -341,6 +350,7 @@ func newModelVariationToDomain(id string, input modeldom.NewModelVariation, now 
 			ProductBlueprintID: input.Alcohol.ProductBlueprintID,
 			ModelNumber:        input.Alcohol.ModelNumber,
 			Volume:             input.Alcohol.Volume,
+			ShippingPackage:    input.Alcohol.ShippingPackage,
 			CreatedAt:          now,
 			UpdatedAt:          now,
 		}
@@ -359,9 +369,10 @@ func newModelVariationToDomain(id string, input modeldom.NewModelVariation, now 
 				Name: input.Apparel.Color.Name,
 				RGB:  input.Apparel.Color.RGB,
 			},
-			Measurements: input.Apparel.Measurements.Clone(),
-			CreatedAt:    now,
-			UpdatedAt:    now,
+			Measurements:    input.Apparel.Measurements.Clone(),
+			ShippingPackage: input.Apparel.ShippingPackage,
+			CreatedAt:       now,
+			UpdatedAt:       now,
 		}
 		if err := modelVariation.Validate(); err != nil {
 			return nil, err
@@ -418,6 +429,11 @@ func docToModelVariation(document *firestore.DocumentSnapshot) (modeldom.ModelVa
 		return nil, err
 	}
 
+	shippingPackage, err := modelShippingPackage(data, "shippingPackage")
+	if err != nil {
+		return nil, err
+	}
+
 	switch kind {
 	case string(modeldom.ModelVariationKindAlcohol):
 		volume, err := modelVolume(data, "volume")
@@ -430,6 +446,7 @@ func docToModelVariation(document *firestore.DocumentSnapshot) (modeldom.ModelVa
 			ProductBlueprintID: productBlueprintID,
 			ModelNumber:        modelNumber,
 			Volume:             volume,
+			ShippingPackage:    shippingPackage,
 			CreatedAt:          createdAt,
 			CreatedBy:          createdBy,
 			UpdatedAt:          updatedAt,
@@ -464,6 +481,7 @@ func docToModelVariation(document *firestore.DocumentSnapshot) (modeldom.ModelVa
 			Size:               size,
 			Color:              color,
 			Measurements:       measurements,
+			ShippingPackage:    shippingPackage,
 			CreatedAt:          createdAt,
 			CreatedBy:          createdBy,
 			UpdatedAt:          updatedAt,
@@ -508,6 +526,7 @@ func apparelModelVariationToDoc(variation modeldom.ApparelModelVariation) map[st
 			"name": variation.Color.Name,
 			"rgb":  variation.Color.RGB,
 		},
+		"shippingPackage": shippingPackageToMap(variation.ShippingPackage),
 	}
 
 	if variation.Measurements != nil {
@@ -538,6 +557,7 @@ func alcoholModelVariationToDoc(variation modeldom.AlcoholModelVariation) map[st
 			"value": variation.Volume.Value,
 			"unit":  variation.Volume.Unit,
 		},
+		"shippingPackage": shippingPackageToMap(variation.ShippingPackage),
 	}
 
 	if !variation.CreatedAt.IsZero() {
@@ -554,6 +574,15 @@ func alcoholModelVariationToDoc(variation modeldom.AlcoholModelVariation) map[st
 	}
 
 	return document
+}
+
+func shippingPackageToMap(shippingPackage modeldom.ShippingPackage) map[string]any {
+	return map[string]any{
+		"weightGrams": shippingPackage.WeightGrams,
+		"widthMm":     shippingPackage.WidthMM,
+		"lengthMm":    shippingPackage.LengthMM,
+		"heightMm":    shippingPackage.HeightMM,
+	}
 }
 
 // ------------------------------------------------------------
@@ -636,6 +665,45 @@ func modelVolume(data map[string]any, key string) (modeldom.Volume, error) {
 	}
 
 	return volume, nil
+}
+
+func modelShippingPackage(data map[string]any, key string) (modeldom.ShippingPackage, error) {
+	raw, ok := data[key].(map[string]any)
+	if !ok || raw == nil {
+		return modeldom.ShippingPackage{}, modeldom.ErrInvalidShippingPackage
+	}
+
+	weightGrams, ok := strictFirestoreInt(raw["weightGrams"])
+	if !ok {
+		return modeldom.ShippingPackage{}, modeldom.ErrInvalidShippingPackage
+	}
+
+	widthMM, ok := strictFirestoreInt(raw["widthMm"])
+	if !ok {
+		return modeldom.ShippingPackage{}, modeldom.ErrInvalidShippingPackage
+	}
+
+	lengthMM, ok := strictFirestoreInt(raw["lengthMm"])
+	if !ok {
+		return modeldom.ShippingPackage{}, modeldom.ErrInvalidShippingPackage
+	}
+
+	heightMM, ok := strictFirestoreInt(raw["heightMm"])
+	if !ok {
+		return modeldom.ShippingPackage{}, modeldom.ErrInvalidShippingPackage
+	}
+
+	shippingPackage := modeldom.ShippingPackage{
+		WeightGrams: weightGrams,
+		WidthMM:     widthMM,
+		LengthMM:    lengthMM,
+		HeightMM:    heightMM,
+	}
+	if err := shippingPackage.Validate(); err != nil {
+		return modeldom.ShippingPackage{}, err
+	}
+
+	return shippingPackage, nil
 }
 
 func modelMeasurements(data map[string]any, key string) (modeldom.Measurements, error) {

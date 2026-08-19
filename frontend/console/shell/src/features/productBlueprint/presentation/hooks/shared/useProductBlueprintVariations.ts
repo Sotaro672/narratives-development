@@ -4,6 +4,7 @@ import * as React from "react";
 import type {
   AlcoholModelNumber,
   ApparelModelNumber,
+  ShippingPackage,
   SizePatch,
   SizeRow,
   VolumeRow,
@@ -54,10 +55,19 @@ export type UseProductBlueprintVariationsResult = ProductBlueprintVariationsStat
   onRemoveSize: (id: string) => void;
   onChangeSize: (id: string, patch: SizePatch) => void;
   onChangeModelNumber: (sizeLabel: string, color: string, nextCode: string) => void;
+  onChangeApparelShippingPackage: (
+    size: string,
+    color: string,
+    patch: Partial<ShippingPackage>,
+  ) => void;
   onAddVolume: () => void;
   onRemoveVolume: (id: string) => void;
   onChangeVolume: (id: string, patch: VolumePatch) => void;
   onChangeAlcoholModelNumber: (volumeLabel: string, nextCode: string) => void;
+  onChangeAlcoholShippingPackage: (
+    volumeLabel: string,
+    patch: Partial<ShippingPackage>,
+  ) => void;
 };
 
 type ApparelMeasurementCategoryCode =
@@ -141,6 +151,26 @@ function normalizeNonNegativeNumber(value: unknown): number {
   }
 
   return value < 0 ? 0 : value;
+}
+
+function createEmptyShippingPackage(): ShippingPackage {
+  return {
+    weightGrams: 0,
+    widthMm: 0,
+    lengthMm: 0,
+    heightMm: 0,
+  };
+}
+
+function normalizeShippingPackage(
+  value: ShippingPackage | null | undefined,
+): ShippingPackage {
+  return {
+    weightGrams: normalizeNonNegativeNumber(value?.weightGrams),
+    widthMm: normalizeNonNegativeNumber(value?.widthMm),
+    lengthMm: normalizeNonNegativeNumber(value?.lengthMm),
+    heightMm: normalizeNonNegativeNumber(value?.heightMm),
+  };
 }
 
 function normalizeVolumeUnit(value: unknown): string {
@@ -254,6 +284,9 @@ function normalizeVariationsState(
               size: normalizeString(modelNumber.size),
               color: normalizeString(modelNumber.color),
               code: normalizeString(modelNumber.code),
+              shippingPackage: normalizeShippingPackage(
+                modelNumber.shippingPackage,
+              ),
             }),
           )
           .filter(
@@ -306,6 +339,9 @@ function normalizeVariationsState(
               unit: normalizeVolumeUnit(modelNumber.volume.unit),
             },
             code: normalizeString(modelNumber.code),
+            shippingPackage: normalizeShippingPackage(
+              modelNumber.shippingPackage,
+            ),
           }),
         )
         .filter((modelNumber) =>
@@ -594,11 +630,17 @@ export function useProductBlueprintVariations(
           };
         }
 
+        const current = index === -1 ? undefined : previous.modelNumbers[index];
+
         const next: ApparelModelNumber = {
+          ...(current ?? {}),
           kind: "apparel",
           size: normalizedSize,
           color: normalizedColor,
           code: normalizedCode,
+          shippingPackage: current
+            ? normalizeShippingPackage(current.shippingPackage)
+            : createEmptyShippingPackage(),
         };
 
         if (index === -1) {
@@ -618,6 +660,38 @@ export function useProductBlueprintVariations(
       });
     },
     [isApparelCategory],
+  );
+
+  const onChangeApparelShippingPackage = React.useCallback(
+    (
+      size: string,
+      color: string,
+      patch: Partial<ShippingPackage>,
+    ) => {
+      const normalizedSize = normalizeString(size);
+      const normalizedColor = normalizeString(color);
+
+      if (!normalizedSize || !normalizedColor) {
+        return;
+      }
+
+      setState((previous) => ({
+        ...previous,
+        modelNumbers: previous.modelNumbers.map((modelNumber) =>
+          modelNumber.size === normalizedSize &&
+          modelNumber.color === normalizedColor
+            ? {
+                ...modelNumber,
+                shippingPackage: normalizeShippingPackage({
+                  ...modelNumber.shippingPackage,
+                  ...patch,
+                }),
+              }
+            : modelNumber,
+        ),
+      }));
+    },
+    [],
   );
 
   const onAddVolume = React.useCallback(() => {
@@ -746,13 +820,20 @@ export function useProductBlueprintVariations(
           };
         }
 
+        const current =
+          index === -1 ? undefined : previous.alcoholModelNumbers[index];
+
         const next: AlcoholModelNumber = {
+          ...(current ?? {}),
           kind: "alcohol",
           volume: {
             value: volume.volumeValue,
             unit: volume.volumeUnit,
           },
           code: normalizedCode,
+          shippingPackage: current
+            ? normalizeShippingPackage(current.shippingPackage)
+            : createEmptyShippingPackage(),
         };
 
         if (index === -1) {
@@ -775,6 +856,35 @@ export function useProductBlueprintVariations(
       });
     },
     [isAlcoholCategory],
+  );
+
+  const onChangeAlcoholShippingPackage = React.useCallback(
+    (
+      volumeLabel: string,
+      patch: Partial<ShippingPackage>,
+    ) => {
+      const normalizedLabel = normalizeString(volumeLabel);
+
+      if (!normalizedLabel) {
+        return;
+      }
+
+      setState((previous) => ({
+        ...previous,
+        alcoholModelNumbers: previous.alcoholModelNumbers.map((modelNumber) =>
+          toAlcoholModelNumberVolumeLabel(modelNumber) === normalizedLabel
+            ? {
+                ...modelNumber,
+                shippingPackage: normalizeShippingPackage({
+                  ...modelNumber.shippingPackage,
+                  ...patch,
+                }),
+              }
+            : modelNumber,
+        ),
+      }));
+    },
+    [],
   );
 
   return {
@@ -800,9 +910,11 @@ export function useProductBlueprintVariations(
     onRemoveSize,
     onChangeSize,
     onChangeModelNumber,
+    onChangeApparelShippingPackage,
     onAddVolume,
     onRemoveVolume,
     onChangeVolume,
     onChangeAlcoholModelNumber,
+    onChangeAlcoholShippingPackage,
   };
 }

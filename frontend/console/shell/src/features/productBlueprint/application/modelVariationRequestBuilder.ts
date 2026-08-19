@@ -13,6 +13,7 @@ import { hexToRgbInt } from "../../../shared/util/color";
 import {
   volumeRowToVolume,
   type AlcoholModelNumber,
+  type ShippingPackage,
   type Volume,
   type VolumeRow,
 } from "../../model/application/modelCreateService";
@@ -32,6 +33,7 @@ import {
 export type ProductBlueprintModelNumberInput =
   Omit<ApparelModelNumberRow, "code"> & {
     code?: string;
+    shippingPackage: ShippingPackage;
   };
 
 export type MissingRgbBehavior = "use-zero" | "throw";
@@ -78,6 +80,54 @@ function makeApparelVariationKey(
   return JSON.stringify([size, color]);
 }
 
+function requirePositiveInteger(
+  value: number,
+  fieldName: string,
+): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    !Number.isInteger(value) ||
+    value <= 0
+  ) {
+    throw new Error(
+      `modelVariationRequestBuilder: ${fieldName}は1以上の整数である必要があります`,
+    );
+  }
+
+  return value;
+}
+
+function normalizeShippingPackage(
+  shippingPackage: ShippingPackage | null | undefined,
+  context: string,
+): ShippingPackage {
+  if (!shippingPackage) {
+    throw new Error(
+      `modelVariationRequestBuilder: shippingPackageが設定されていません（${context}）`,
+    );
+  }
+
+  return {
+    weightGrams: requirePositiveInteger(
+      shippingPackage.weightGrams,
+      `${context}.shippingPackage.weightGrams`,
+    ),
+    widthMm: requirePositiveInteger(
+      shippingPackage.widthMm,
+      `${context}.shippingPackage.widthMm`,
+    ),
+    lengthMm: requirePositiveInteger(
+      shippingPackage.lengthMm,
+      `${context}.shippingPackage.lengthMm`,
+    ),
+    heightMm: requirePositiveInteger(
+      shippingPackage.heightMm,
+      `${context}.shippingPackage.heightMm`,
+    ),
+  };
+}
+
 /* =========================================================
  * Apparel measurement helpers
  * =======================================================*/
@@ -107,10 +157,7 @@ function normalizeColors(
   for (const rawColor of colors) {
     const color = normalizeUserText(rawColor);
 
-    if (
-      color === "" ||
-      seen.has(color)
-    ) {
+    if (color === "" || seen.has(color)) {
       continue;
     }
 
@@ -124,12 +171,10 @@ function normalizeColors(
 function normalizeSizes(
   sizes: ApparelSizeInput[],
 ): ApparelSizeInput[] {
-  const sizeMap =
-    new Map<string, ApparelSizeInput>();
+  const sizeMap = new Map<string, ApparelSizeInput>();
 
   for (const size of sizes) {
-    const sizeLabel =
-      normalizeUserText(size.sizeLabel);
+    const sizeLabel = normalizeUserText(size.sizeLabel);
 
     if (sizeLabel === "") {
       continue;
@@ -148,19 +193,21 @@ function normalizeSizes(
   return Array.from(sizeMap.values());
 }
 
+type ApparelModelNumberRequestState = {
+  code: string;
+  shippingPackage: ShippingPackage;
+};
+
 function buildApparelModelNumberMap(
   modelNumbers: ProductBlueprintModelNumberInput[],
-): Map<string, string> {
+): Map<string, ApparelModelNumberRequestState> {
   const modelNumberMap =
-    new Map<string, string>();
+    new Map<string, ApparelModelNumberRequestState>();
 
   for (const modelNumber of modelNumbers) {
-    const size =
-      normalizeUserText(modelNumber.size);
-    const color =
-      normalizeUserText(modelNumber.color);
-    const code =
-      normalizeUserText(modelNumber.code);
+    const size = normalizeUserText(modelNumber.size);
+    const color = normalizeUserText(modelNumber.color);
+    const code = normalizeUserText(modelNumber.code);
 
     if (
       size === "" ||
@@ -170,6 +217,11 @@ function buildApparelModelNumberMap(
       continue;
     }
 
+    const shippingPackage = normalizeShippingPackage(
+      modelNumber.shippingPackage,
+      `apparel(size="${size}", color="${color}", modelNumber="${code}")`,
+    );
+
     /*
      * 同じsize・colorの組み合わせが複数存在する場合は後勝ち。
      */
@@ -178,7 +230,10 @@ function buildApparelModelNumberMap(
         size,
         color,
       ),
-      code,
+      {
+        code,
+        shippingPackage,
+      },
     );
   }
 
@@ -298,7 +353,7 @@ function buildApparelModelVariationRequests(
 
       requests.push({
         kind: "apparel",
-        modelNumber,
+        modelNumber: modelNumber.code,
         size: sizeLabel,
         color,
         rgb: resolveRgbInt({
@@ -311,6 +366,7 @@ function buildApparelModelVariationRequests(
             categoryCode,
             size,
           ),
+        shippingPackage: modelNumber.shippingPackage,
       });
     }
   }
@@ -379,6 +435,11 @@ function buildAlcoholModelNumberMap(
       continue;
     }
 
+    const shippingPackage = normalizeShippingPackage(
+      modelNumber.shippingPackage,
+      `alcohol(volume="${volume.value}${volume.unit}", modelNumber="${code}")`,
+    );
+
     /*
      * 同じ容量が複数存在する場合は後勝ち。
      */
@@ -388,6 +449,7 @@ function buildAlcoholModelNumberMap(
         ...modelNumber,
         volume,
         code,
+        shippingPackage,
       },
     );
   }
@@ -452,9 +514,9 @@ function buildAlcoholModelVariationRequests(
 
     requests.push({
       kind: "alcohol",
-      modelNumber:
-        modelNumber.code,
+      modelNumber: modelNumber.code,
       volume,
+      shippingPackage: modelNumber.shippingPackage,
     });
   }
 
