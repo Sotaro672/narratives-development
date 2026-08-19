@@ -2,15 +2,17 @@
 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Tag } from "lucide-react";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
+import { Button } from "../shared/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
 
 import ProductBlueprintCard, {
   type ProductBlueprintPatchInput,
 } from "../features/productBlueprint/presentation/cards/productBlueprintForm";
 
 import InventoryCard from "../features/inventory/presentation/components/inventoryCard";
-
 import InventoryShippingAddressCard from "../features/inventory/presentation/components/InventoryShippingAddressCard";
 
 import TokenBlueprintCard, {
@@ -18,6 +20,31 @@ import TokenBlueprintCard, {
 } from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 
 import { useInventoryDetail } from "../features/inventory/presentation/hook/useInventoryDetail";
+
+type InventoryListCardProps = {
+  onList: () => void;
+};
+
+const InventoryListCard: React.FC<InventoryListCardProps> = ({ onList }) => {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>出品</CardTitle>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        <p className="text-sm text-slate-500">
+          この在庫をマーケットへ出品します。
+        </p>
+
+        <Button type="button" className="w-full" onClick={onList}>
+          <Tag size={16} className="mr-2" />
+          出品する
+        </Button>
+      </CardContent>
+    </Card>
+  );
+};
 
 export default function InventoryDetail() {
   const navigate = useNavigate();
@@ -37,9 +64,7 @@ export default function InventoryDetail() {
    */
   React.useEffect(() => {
     if (!inventoryId) {
-      navigate("/inventory", {
-        replace: true,
-      });
+      navigate("/inventory", { replace: true });
     }
   }, [inventoryId, navigate]);
 
@@ -55,19 +80,15 @@ export default function InventoryDetail() {
     loading,
     error,
     vm,
-
     selectedShippingAddressId,
     shippingAddressOptions,
     shippingAddressSaving,
     shippingAddressError,
-
     handleSelectShippingAddress,
     handleSaveShippingAddress,
   } = useInventoryDetail(inventoryId);
 
-  const title = vm?.headerTitle
-    ? `在庫詳細：${vm.headerTitle}`
-    : "在庫詳細";
+  const title = vm?.headerTitle ? `在庫詳細：${vm.headerTitle}` : "在庫詳細";
 
   /**
    * 出品作成画面へ遷移する。
@@ -77,10 +98,17 @@ export default function InventoryDetail() {
       return;
     }
 
-    navigate(
-      `/inventory/list/create/${encodeURIComponent(inventoryId)}`,
-    );
+    navigate(`/inventory/list/create/${encodeURIComponent(inventoryId)}`);
   }, [inventoryId, navigate]);
+
+  /**
+   * 在庫保管場所は選択しただけでは決定済みとしない。
+   * Backendへ保存済みのshippingAddressIdと現在選択中のIDが一致している場合のみ、
+   * 出品可能な状態として扱う。
+   */
+  const hasConfirmedShippingAddress =
+    Boolean(vm?.shippingAddressId) &&
+    vm?.shippingAddressId === selectedShippingAddressId;
 
   /**
    * ProductBlueprintPatchDTOは
@@ -97,47 +125,28 @@ export default function InventoryDetail() {
   const tokenBlueprintId = vm?.tokenBlueprintId ?? "";
   const tokenBlueprintPatch = vm?.tokenBlueprintPatch;
 
-  const tokenCardVM =
-    React.useMemo<TokenBlueprintCardViewModel>(() => {
-      const tokenName =
-        tokenBlueprintPatch?.tokenName ?? "";
+  const tokenCardVM = React.useMemo<TokenBlueprintCardViewModel>(() => {
+    const tokenName = tokenBlueprintPatch?.tokenName ?? "";
 
-      return {
-        id: tokenBlueprintId,
+    return {
+      id: tokenBlueprintId,
+      name: tokenName || tokenBlueprintId || "-",
+      symbol: tokenBlueprintPatch?.symbol ?? "",
+      brandId: tokenBlueprintPatch?.brandId ?? "",
+      brandName: tokenBlueprintPatch?.brandName ?? "",
+      description: tokenBlueprintPatch?.description ?? "",
+      iconUrl: tokenBlueprintPatch?.iconUrl ?? undefined,
 
-        name:
-          tokenName ||
-          tokenBlueprintId ||
-          "-",
-
-        symbol:
-          tokenBlueprintPatch?.symbol ?? "",
-
-        brandId:
-          tokenBlueprintPatch?.brandId ?? "",
-
-        brandName:
-          tokenBlueprintPatch?.brandName ?? "",
-
-        description:
-          tokenBlueprintPatch?.description ?? "",
-
-        iconUrl:
-          tokenBlueprintPatch?.iconUrl ?? undefined,
-
-        /**
-         * この画面は参照専用であり、
-         * 編集モードへ移行しない。
-         */
-        minted: false,
-        iconFile: null,
-        isEditMode: false,
-        brandOptions: [],
-      };
-    }, [
-      tokenBlueprintId,
-      tokenBlueprintPatch,
-    ]);
+      /**
+       * この画面は参照専用であり、
+       * 編集モードへ移行しない。
+       */
+      minted: false,
+      iconFile: null,
+      isEditMode: false,
+      brandOptions: [],
+    };
+  }, [tokenBlueprintId, tokenBlueprintPatch]);
 
   return (
     <PageStyle
@@ -146,22 +155,17 @@ export default function InventoryDetail() {
       onBack={onBack}
       onSave={handleSaveShippingAddress}
       isSaving={shippingAddressSaving}
-      onList={onList}
     >
       {/* 左カラム */}
       <div>
         <ProductBlueprintCard
           mode="view"
-          productBlueprintPatch={
-            productBlueprintPatchForCard
-          }
+          productBlueprintPatch={productBlueprintPatchForCard}
         />
 
         {tokenBlueprintId ? (
           <div className="mt-3">
-            <TokenBlueprintCard
-              vm={tokenCardVM}
-            />
+            <TokenBlueprintCard vm={tokenCardVM} />
           </div>
         ) : null}
 
@@ -173,8 +177,7 @@ export default function InventoryDetail() {
 
         {error ? (
           <div className="mt-2 text-sm text-red-600">
-            読み込みに失敗しました:{" "}
-            {error}
+            読み込みに失敗しました: {error}
           </div>
         ) : null}
 
@@ -184,26 +187,21 @@ export default function InventoryDetail() {
       {/* 右カラム */}
       <div className="space-y-4">
         <InventoryShippingAddressCard
-          shippingAddressId={
-            selectedShippingAddressId
-          }
-          shippingAddressOptions={
-            shippingAddressOptions
-          }
+          shippingAddressId={selectedShippingAddressId}
+          shippingAddressOptions={shippingAddressOptions}
           loading={loading}
-          saving={
-            shippingAddressSaving
-          }
-          onSelectShippingAddress={
-            handleSelectShippingAddress
-          }
+          saving={shippingAddressSaving}
+          onSelectShippingAddress={handleSelectShippingAddress}
         />
 
         {shippingAddressError ? (
           <div className="text-sm text-red-600">
-            保存に失敗しました:{" "}
-            {shippingAddressError}
+            保存に失敗しました: {shippingAddressError}
           </div>
+        ) : null}
+
+        {hasConfirmedShippingAddress ? (
+          <InventoryListCard onList={onList} />
         ) : null}
       </div>
     </PageStyle>
