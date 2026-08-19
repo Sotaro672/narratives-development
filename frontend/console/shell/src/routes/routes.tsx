@@ -36,6 +36,7 @@ import {
   BrandCreate,
   BrandDetail,
   CompanyDetail,
+  StockLocationPage,
   PermissionList,
   PermissionDetail,
   AccountManagement,
@@ -59,6 +60,10 @@ export const routes: RouteObject[] = [
   {
     path: "/company",
     element: <CompanyDetail />,
+  },
+  {
+    path: "/stockLocation",
+    element: <StockLocationPage />,
   },
   {
     path: "/inquiry",

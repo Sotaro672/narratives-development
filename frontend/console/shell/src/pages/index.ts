@@ -46,6 +46,7 @@ export { default as BrandCreate } from "./brandCreate";
 export { default as BrandDetail } from "./brandDetail";
 
 export { default as CompanyDetail } from "./companyDetail";
+export { default as StockLocationPage } from "./stockLocation";
 
 export { default as PermissionList } from "./permissionList";
 export { default as PermissionDetail } from "./permissionDetail";
