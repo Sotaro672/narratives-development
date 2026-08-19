@@ -1,20 +1,6 @@
 // backend/internal/application/query/console/dto/inventory_detail_dto.go
 package dto
 
-// InventoryProductBlueprintCategoryDTO は
-// Inventory Detail 画面向けの
-// ProductBlueprintCategory snapshot。
-//
-// HTTP response では lowerCamelCase を正とする。
-type InventoryProductBlueprintCategoryDTO struct {
-	ID     string   `json:"id"`
-	Code   string   `json:"code"`
-	NameJa string   `json:"nameJa"`
-	NameEn string   `json:"nameEn"`
-	Kind   string   `json:"kind"`
-	Path   []string `json:"path"`
-}
-
 // InventoryProductIDTagDTO は
 // Inventory Detail 画面向けの ProductIDTag。
 type InventoryProductIDTagDTO struct {
@@ -42,7 +28,7 @@ type InventoryProductBlueprintPatchDTO struct {
 	BrandName string `json:"brandName"`
 	CompanyID string `json:"companyId"`
 
-	ProductBlueprintCategory InventoryProductBlueprintCategoryDTO `json:"productBlueprintCategory"`
+	ProductBlueprintCategoryPath []string `json:"productBlueprintCategoryPath"`
 
 	CategoryFields map[string]any `json:"categoryFields,omitempty"`
 

@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/productBlueprint/presentation/hooks/shared/useProductBlueprintCategoryOptions.ts
 
 import * as React from "react";
-import { listProductBlueprintCategoryPaths } from "../../../application/productBlueprintCategoryService";
+import { listProductBlueprintCategoryTreeApi } from "../../../infrastructure/api/productBlueprintApi";
 import type { ProductBlueprintCategoryPath } from "../../../domain/productBlueprintCategory";
 
 export type UseProductBlueprintCategoryOptionsResult = {
@@ -14,8 +14,7 @@ export function useProductBlueprintCategoryOptions(): UseProductBlueprintCategor
   const [productBlueprintCategoryOptions, setProductBlueprintCategoryOptions] =
     React.useState<ProductBlueprintCategoryPath[]>([]);
   const [productBlueprintCategoryLoading, setProductBlueprintCategoryLoading] = React.useState(false);
-  const [productBlueprintCategoryError, setProductBlueprintCategoryError] =
-    React.useState<Error | null>(null);
+  const [productBlueprintCategoryError, setProductBlueprintCategoryError] = React.useState<Error | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -25,7 +24,7 @@ export function useProductBlueprintCategoryOptions(): UseProductBlueprintCategor
         setProductBlueprintCategoryLoading(true);
         setProductBlueprintCategoryError(null);
 
-        const options = await listProductBlueprintCategoryPaths();
+        const options = await listProductBlueprintCategoryTreeApi();
 
         if (!cancelled) {
           setProductBlueprintCategoryOptions(options);

@@ -5,11 +5,11 @@ import { API_BASE } from "../../../../shared/http/apiBase";
 import { fetchJSON } from "../../../../shared/http/fetchJSON";
 import type { ProductionCreateContext } from "../../../../shared/types/production";
 import { brandRepositoryHTTP } from "../../../brand/infrastructure/http/brandRepositoryHTTP";
-import type { ProductBlueprintCategorySnapshot } from "../../../productBlueprint/domain/productBlueprintCategory";
+import type { ProductBlueprintCategoryPath } from "../../../productBlueprint/domain/productBlueprintCategory";
 import { fetchProductBlueprintManagementRows } from "../../../productBlueprint/application/productBlueprintManagementService";
 import type { ProductBlueprintListRow } from "../../../productBlueprint/infrastructure/repository/productBlueprintRepositoryHTTP";
 
-export type { Brand, ProductBlueprintCategorySnapshot };
+export type { Brand, ProductBlueprintCategoryPath };
 
 // ======================================================================
 // ブランドAPI

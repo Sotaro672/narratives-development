@@ -57,11 +57,8 @@ type PreviewModelInfo struct {
 	ModelID   string `json:"modelId"`
 
 	// category
-	ProductBlueprintCategoryCode string                                  `json:"productBlueprintCategoryCode,omitempty"`
-	ProductBlueprintCategoryKind commondom.ProductCategoryKind           `json:"productBlueprintCategoryKind,omitempty"`
-	ProductBlueprintCategoryName string                                  `json:"productBlueprintCategoryName,omitempty"`
-	ProductBlueprintCategory     *pbdom.ProductBlueprintCategorySnapshot `json:"productBlueprintCategory,omitempty"`
-	CategoryInputSchema          *pbcatdom.CategoryInputSchema           `json:"categoryInputSchema,omitempty"`
+	ProductBlueprintCategoryPath []string                      `json:"productBlueprintCategoryPath,omitempty"`
+	CategoryInputSchema          *pbcatdom.CategoryInputSchema `json:"categoryInputSchema,omitempty"`
 
 	// model common
 	ModelKind   commondom.ProductCategoryKind `json:"modelKind,omitempty"`

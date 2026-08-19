@@ -20,7 +20,7 @@ export type BuildInspectionResultCardDataInput = {
   productName: string;
   modelMeta: Record<string, MintModelMeta>;
   productBlueprint:
-    | Pick<MintProductBlueprintDTO, "modelRefs" | "productBlueprintCategory">
+    | Pick<MintProductBlueprintDTO, "modelRefs" | "productBlueprintCategoryPath">
     | null
     | undefined;
 };
@@ -54,10 +54,11 @@ function buildVolumeLabel(
  * - modelMeta
  * - inspection.totalPassed
  * - inspection.quantity
- * - productBlueprint.productBlueprintCategory.kind
+ * - productBlueprint.productBlueprintCategoryPath
  * - productBlueprint.modelRefs.displayOrder
  *
- * Frontendではモデル単位のpassed / total集計と表示用volumeLabel生成のみを行う。
+ * Frontendではカテゴリrootの導出、モデル単位のpassed / total集計、
+ * 表示用volumeLabel生成のみを行う。
  */
 export function buildInspectionResultCardData(
   input: BuildInspectionResultCardDataInput,
@@ -75,7 +76,7 @@ export function buildInspectionResultCardData(
     };
   }
 
-  const categoryKind = input.productBlueprint?.productBlueprintCategory?.kind ?? "";
+  const categoryKind = input.productBlueprint?.productBlueprintCategoryPath?.[0] ?? "";
   const isAlcohol = categoryKind === "alcohol";
   const aggregation = new Map<string, { passed: number; total: number }>();
 

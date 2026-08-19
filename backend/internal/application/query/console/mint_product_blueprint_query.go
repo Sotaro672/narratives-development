@@ -68,16 +68,10 @@ func buildMintProductBlueprintDTO(
 		BrandName: brandName,
 		CompanyID: productBlueprint.CompanyID,
 
-		ProductBlueprintCategory: querydto.MintProductBlueprintCategoryDTO{
-			ID:     productBlueprint.ProductBlueprintCategory.ID,
-			Code:   productBlueprint.ProductBlueprintCategory.Code,
-			NameJa: productBlueprint.ProductBlueprintCategory.NameJa,
-			NameEn: productBlueprint.ProductBlueprintCategory.NameEn,
-			Kind: string(
-				productBlueprint.ProductBlueprintCategory.Kind,
-			),
-			Path: productBlueprint.ProductBlueprintCategory.Path,
-		},
+		ProductBlueprintCategoryPath: append(
+			[]string(nil),
+			productBlueprint.ProductBlueprintCategoryPath...,
+		),
 
 		CategoryFields: map[string]any(
 			productBlueprint.CategoryFields,

@@ -39,10 +39,7 @@ export type CatalogInventory = {
   productBlueprintId: string;
   tokenBlueprintId: string;
   modelIds: string[];
-  stock: Record<
-    string,
-    CatalogInventoryStockItem
-  >;
+  stock: Record<string, CatalogInventoryStockItem>;
 };
 
 export type CatalogProductBlueprintModelRef = {
@@ -57,27 +54,9 @@ export type CatalogProductBlueprint = {
   companyId: string;
   brandName: string;
   companyName: string;
-
   printed: boolean;
   productIdTagType: string;
-
-  productBlueprintCategoryId?:
-    string | null;
-
-  productBlueprintCategoryCode?:
-    string | null;
-
-  productBlueprintCategoryKind?:
-    ProductCategoryKind | null;
-
-  productBlueprintCategoryNameEn?:
-    string | null;
-
-  productBlueprintCategoryNameJa?:
-    string | null;
-
-  productBlueprintCategoryPath?:
-    string[] | null;
+  productBlueprintCategoryPath?: string[] | null;
 
   /**
    * category ごとの productBlueprint 入力値。
@@ -89,11 +68,8 @@ export type CatalogProductBlueprint = {
    * category ごとに項目が変わるため、
    * 固定 field ではなく map として扱う。
    */
-  categoryFields?:
-    ProductBlueprintCategoryFields | null;
-
-  modelRefs:
-    CatalogProductBlueprintModelRef[];
+  categoryFields?: ProductBlueprintCategoryFields | null;
+  modelRefs: CatalogProductBlueprintModelRef[];
 };
 
 export type CatalogTokenBlueprint = {
@@ -115,21 +91,18 @@ export type CatalogModelVariation = {
    * model variation kind.
    *
    * - apparel:
-   *   size / colorName / colorRGB /
-   *   measurements を使う
+   *   size / colorName / colorRGB / measurements を使う
    * - alcohol:
    *   volumeValue / volumeUnit を使う
    */
   kind?: ProductCategoryKind | null;
-
   modelNumber: string;
 
   // apparel
   size?: string | null;
   colorName?: string | null;
   colorRGB?: number | null;
-  measurements?:
-    Record<string, number>;
+  measurements?: Record<string, number>;
 
   // alcohol
   volumeValue?: number | null;
@@ -154,21 +127,16 @@ export type CatalogResponse = {
   list: CatalogList;
   listImages: CatalogListImage[];
   inventory: CatalogInventory;
-  productBlueprint:
-    CatalogProductBlueprint;
-  tokenBlueprint:
-    CatalogTokenBlueprint;
-  modelVariations:
-    CatalogModelVariation[];
-  productReviewSummary:
-    CatalogProductReviewSummary;
+  productBlueprint: CatalogProductBlueprint;
+  tokenBlueprint: CatalogTokenBlueprint;
+  modelVariations: CatalogModelVariation[];
+  productReviewSummary: CatalogProductReviewSummary;
 };
 
 export type MeasurementTableRow = {
   id: string;
   size: string;
-  measurements:
-    Record<string, number>;
+  measurements: Record<string, number>;
 };
 
 export type ModelColorOption = {

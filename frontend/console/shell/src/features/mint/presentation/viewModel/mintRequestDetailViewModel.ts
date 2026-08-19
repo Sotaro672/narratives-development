@@ -19,7 +19,7 @@ import type {
 
 export type ProductBlueprintCardViewModel = Pick<
   ProductBlueprintCardProps,
-  "productName" | "brandName" | "productBlueprintCategory"
+  "productName" | "brandName" | "productBlueprintCategoryPath"
 >;
 
 export type BuildTokenBlueprintCardVmInput = {
@@ -40,8 +40,8 @@ export function buildProductBlueprintCardView(
   return {
     productName: productBlueprint.productName ?? undefined,
     brandName: productBlueprint.brandName ?? undefined,
-    productBlueprintCategory:
-      productBlueprint.productBlueprintCategory ?? null,
+    productBlueprintCategoryPath:
+      productBlueprint.productBlueprintCategoryPath ?? null,
   };
 }
 

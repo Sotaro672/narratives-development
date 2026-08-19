@@ -2,7 +2,7 @@
 
 import type {
   CategoryFieldValues,
-  ProductBlueprintCategorySnapshot,
+  ProductBlueprintCategoryPath,
 } from "../../features/productBlueprint/domain/productBlueprintCategory";
 
 // ======================================================================
@@ -68,8 +68,7 @@ export type ProductionCreateProductBlueprint = {
   productName: string;
   brandId: string;
   brandName: string;
-  productBlueprintCategoryId: string;
-  productBlueprintCategory: ProductBlueprintCategorySnapshot;
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath;
   categoryFields?: CategoryFieldValues | null;
   assigneeId?: string;
 };
@@ -95,7 +94,7 @@ export type UpdateProductionRequest = Pick<
 export type ProductionDetail = Production &
   ProductionResolvedNames & {
     productName: string;
-    productBlueprintCategory: ProductBlueprintCategorySnapshot;
+    productBlueprintCategoryPath: ProductBlueprintCategoryPath;
     brandId: string;
     brandName: string;
     totalQuantity: number;

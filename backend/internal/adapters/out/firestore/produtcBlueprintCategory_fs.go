@@ -366,12 +366,12 @@ func productBlueprintCategoryFromSnapshot(
 		return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidPath
 	}
 
-	return categorydom.Reconstruct(
-		append(
+	return categorydom.ProductBlueprintCategory{
+		Path: append(
 			[]string(nil),
 			doc.ProductBlueprintCategoryPath...,
 		),
-	)
+	}, nil
 }
 
 // ------------------------------------------------------------

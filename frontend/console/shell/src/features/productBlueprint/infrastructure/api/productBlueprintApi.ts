@@ -3,50 +3,60 @@
 import { API_BASE } from "../../../../shared/http/apiBase";
 import { getAuthHeaders } from "../../../../shared/http/authHeaders";
 import type { PageResult } from "../../../../shared/types/common/common";
-import type {
-  ProductBlueprintCategory,
-  ProductBlueprintCategoryKind,
-} from "../../domain/productBlueprintCategory";
+import type { ProductBlueprintCategoryPath } from "../../domain/productBlueprintCategory";
 
 export type ListProductBlueprintCategoriesParams = {
-  kind?: ProductBlueprintCategoryKind;
-  code?: string;
-  parentId?: string;
-  rootOnly?: boolean;
-  search?: string;
+  paths?: ProductBlueprintCategoryPath[];
   page?: number;
   perPage?: number;
-  sort?: string;
+  sort?: "productBlueprintCategoryPath";
   order?: "asc" | "desc";
 };
 
-export type ProductBlueprintCategoryTreeResponse = {
-  items: ProductBlueprintCategory[];
+type ProductBlueprintCategoryApiItem = {
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath;
 };
 
-type ProductBlueprintCategoryListResponse = PageResult<ProductBlueprintCategory>;
+export type ProductBlueprintCategoryTreeResponse = {
+  items: ProductBlueprintCategoryApiItem[];
+};
+
+type ProductBlueprintCategoryListResponse = PageResult<ProductBlueprintCategoryApiItem>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseProductBlueprintCategoryItems(
+function isProductBlueprintCategoryPath(value: unknown): value is ProductBlueprintCategoryPath {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((segment) => typeof segment === "string" && segment !== "")
+  );
+}
+
+function parseProductBlueprintCategoryPaths(
   value: unknown,
   responseName: string,
-): ProductBlueprintCategory[] {
+): ProductBlueprintCategoryPath[] {
   if (!isRecord(value) || !Array.isArray(value.items)) {
     throw new Error(`${responseName}のレスポンス形式が不正です。`);
   }
 
-  return value.items as ProductBlueprintCategory[];
+  return value.items.map((item) => {
+    if (!isRecord(item) || !isProductBlueprintCategoryPath(item.productBlueprintCategoryPath)) {
+      throw new Error(`${responseName}の商品カテゴリパスが不正です。`);
+    }
+
+    return [...item.productBlueprintCategoryPath];
+  });
 }
 
-async function getProductBlueprintCategories(
+async function getProductBlueprintCategoryPaths(
   url: string,
   responseName: string,
-): Promise<ProductBlueprintCategory[]> {
+): Promise<ProductBlueprintCategoryPath[]> {
   const headers = await getAuthHeaders();
-
   const response = await fetch(url, {
     method: "GET",
     headers,
@@ -54,7 +64,6 @@ async function getProductBlueprintCategories(
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-
     throw new Error(
       `${responseName}の取得に失敗しました（${response.status} ${response.statusText}）${
         detail ? `\n${detail}` : ""
@@ -63,7 +72,7 @@ async function getProductBlueprintCategories(
   }
 
   const json: unknown = await response.json();
-  return parseProductBlueprintCategoryItems(json, responseName);
+  return parseProductBlueprintCategoryPaths(json, responseName);
 }
 
 /**
@@ -71,64 +80,61 @@ async function getProductBlueprintCategories(
  *
  * backend response:
  * {
- * items: ProductBlueprintCategory[],
- * totalCount: number,
- * totalPages: number,
- * page: number,
- * perPage: number
+ *   items: [
+ *     {
+ *       productBlueprintCategoryPath: string[]
+ *     }
+ *   ],
+ *   totalCount: number,
+ *   totalPages: number,
+ *   page: number,
+ *   perPage: number
  * }
  */
 export async function listProductBlueprintCategoriesApi(
   params?: ListProductBlueprintCategoriesParams,
-): Promise<ProductBlueprintCategory[]> {
+): Promise<ProductBlueprintCategoryPath[]> {
   const searchParams = new URLSearchParams();
-  const queryParams: Array<[string, string | number | boolean | undefined]> = [
-    ["kind", params?.kind],
-    ["code", params?.code],
-    ["parentId", params?.parentId],
-    ["rootOnly", params?.rootOnly],
-    ["search", params?.search],
-    ["page", params?.page ?? 1],
-    ["perPage", params?.perPage ?? 100],
-    ["sort", params?.sort ?? "displayOrder"],
-    ["order", params?.order ?? "asc"],
-  ];
 
-  for (const [key, value] of queryParams) {
-    if (value === undefined || value === "") {
-      continue;
-    }
-
-    searchParams.set(key, String(value));
+  if (params?.paths && params.paths.length > 0) {
+    searchParams.set(
+      "paths",
+      params.paths.map((path) => path.join("/")).join(","),
+    );
   }
+
+  searchParams.set("page", String(params?.page ?? 1));
+  searchParams.set("perPage", String(params?.perPage ?? 100));
+  searchParams.set("sort", params?.sort ?? "productBlueprintCategoryPath");
+  searchParams.set("order", params?.order ?? "asc");
 
   const query = searchParams.toString();
   const url = `${API_BASE}/console/product-blueprint-categories${query ? `?${query}` : ""}`;
 
-  return getProductBlueprintCategories(url, "商品カテゴリ一覧");
+  return getProductBlueprintCategoryPaths(url, "商品カテゴリ一覧");
 }
 
 /**
  * GET /console/product-blueprint-categories/tree
  *
- * 商品カテゴリ選択UI向けに、
- * 親カテゴリと詳細カテゴリを含む一覧を
- * backendのdisplayOrder順で取得する。
- *
  * backend response:
  * {
- * items: ProductBlueprintCategory[]
+ *   items: [
+ *     {
+ *       productBlueprintCategoryPath: string[]
+ *     }
+ *   ]
  * }
  */
-export async function listProductBlueprintCategoryTreeApi(): Promise<ProductBlueprintCategory[]> {
+export async function listProductBlueprintCategoryTreeApi(): Promise<ProductBlueprintCategoryPath[]> {
   const url = `${API_BASE}/console/product-blueprint-categories/tree`;
-  const items = await getProductBlueprintCategories(url, "商品カテゴリツリー");
+  const paths = await getProductBlueprintCategoryPaths(url, "商品カテゴリツリー");
 
-  if (items.length === 0) {
+  if (paths.length === 0) {
     throw new Error("商品カテゴリマスタが登録されていません。");
   }
 
-  return items;
+  return paths;
 }
 
 // Response contracts used for compile-time consistency.

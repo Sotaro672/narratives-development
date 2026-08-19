@@ -1,9 +1,6 @@
 // frontend/amol/src/features/shared/types/scanResult.ts
 
-import type {
-  ProductBlueprintCategoryFields,
-  ProductCategoryKind,
-} from "./category";
+import type { ProductBlueprintCategoryFields, ProductCategoryKind } from "./category";
 import type { ProductBlueprintReviewPage } from "./review";
 
 export type MallOwnerInfo = {
@@ -45,15 +42,6 @@ export type MallTokenInfo = {
   mintedAt?: string;
 };
 
-export type ProductBlueprintCategorySnapshot = {
-  ID?: string;
-  Code?: string;
-  NameJa?: string;
-  NameEn?: string;
-  Kind?: ProductCategoryKind;
-  Path?: string[];
-};
-
 export type ProductBlueprintPatch = {
   productName?: string;
   description?: string;
@@ -61,7 +49,7 @@ export type ProductBlueprintPatch = {
   brandName?: string;
   companyId?: string;
   companyName?: string;
-  productBlueprintCategory?: ProductBlueprintCategorySnapshot;
+  productBlueprintCategoryPath?: string[];
   categoryFields?: ProductBlueprintCategoryFields;
   productIdTag?: {
     Type?: string;
@@ -73,10 +61,7 @@ export type ProductBlueprintPatch = {
   }>;
 };
 
-export type CategoryInputFieldScope =
-  | "productBlueprint"
-  | "model"
-  | string;
+export type CategoryInputFieldScope = "productBlueprint" | "model" | string;
 
 export type CategoryInputFieldType =
   | "text"
@@ -128,10 +113,7 @@ export type MallPreviewResponse = {
   measurements: Record<string, number> | null;
   volumeValue?: number | null;
   volumeUnit?: string;
-  productBlueprintCategoryCode?: string;
-  productBlueprintCategoryKind?: ProductCategoryKind;
-  productBlueprintCategoryName?: string;
-  productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+  productBlueprintCategoryPath?: string[];
   categoryInputSchema?: CategoryInputSchema | null;
   productBlueprintPatch: ProductBlueprintPatch | null;
   brandName?: string;

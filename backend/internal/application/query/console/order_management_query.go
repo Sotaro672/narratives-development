@@ -19,7 +19,7 @@ package query
 // ✅ 重要:
 //   - productName/category/categoryFields は best-effort。
 //     productBlueprintResolver が DI されていれば productBlueprintId->ProductBlueprint を1回だけ取得し、
-//     productName と category snapshot/categoryFields を埋める。
+//     productName と productBlueprintCategoryPath/categoryFields を埋める。
 //     なければ空で返す（500にしない）。
 //   - tokenName は best-effort。
 //     tbName が DI されていれば埋める、されていなければ空で返す（500にしない）。
@@ -34,7 +34,6 @@ package query
 import (
 	"context"
 	"errors"
-	"log"
 	"strconv"
 	"time"
 
@@ -75,7 +74,7 @@ type InventoryBlueprintResolver interface {
 	ResolveBlueprintIDsByInventoryID(ctx context.Context, inventoryID string) (productBlueprintID string, tokenBlueprintID string, err error)
 }
 
-// ProductBlueprintResolver resolves productName/category snapshot/categoryFields from productBlueprintId.
+// ProductBlueprintResolver resolves productName/productBlueprintCategoryPath/categoryFields from productBlueprintId.
 type ProductBlueprintResolver interface {
 	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
@@ -127,13 +126,8 @@ type OrderItemInventoryRowDTO struct {
 
 	ListReadableID string `json:"listReadableId,omitempty"`
 
-	CategoryID     string         `json:"categoryId,omitempty"`
-	CategoryCode   string         `json:"categoryCode,omitempty"`
-	CategoryNameJa string         `json:"categoryNameJa,omitempty"`
-	CategoryNameEn string         `json:"categoryNameEn,omitempty"`
-	CategoryKind   string         `json:"categoryKind,omitempty"`
-	CategoryPath   []string       `json:"categoryPath,omitempty"`
-	CategoryFields map[string]any `json:"categoryFields,omitempty"`
+	ProductBlueprintCategoryPath []string       `json:"productBlueprintCategoryPath,omitempty"`
+	CategoryFields               map[string]any `json:"categoryFields,omitempty"`
 
 	ModelID string `json:"modelId,omitempty"`
 
@@ -210,11 +204,8 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		return common.PageResult[OrderItemInventoryRowDTO]{}, errors.New("OrderManagementQuery.ListItemInventoryRows: wiring is incomplete (lister/invRows/invBlueprint required)")
 	}
 
-	log.Printf("[OrderManagementQuery] DEBUG listReadable resolver type=%T", q.listReadable)
-
 	allowedSet, err := AllowedInventoryIDSetFromContext(ctx, q.invRows)
 	if err != nil {
-		log.Printf("[OrderManagementQuery] ERROR company boundary (inventory_query) failed: %v", err)
 		return common.PageResult[OrderItemInventoryRowDTO]{}, err
 	}
 	if len(allowedSet) == 0 {
@@ -356,7 +347,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 
 	for {
 		if srcPage > maxScanPages {
-			log.Printf("[OrderManagementQuery] WARN scan page limit reached (max=%d). results may be truncated.", maxScanPages)
 			break
 		}
 
@@ -368,7 +358,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			common.Page{Number: srcPage, PerPage: page.PerPage},
 		)
 		if e != nil {
-			log.Printf("[OrderManagementQuery] ERROR lister.ListByInventoryIDs failed (scan page=%d): %v", srcPage, e)
 			return common.PageResult[OrderItemInventoryRowDTO]{}, e
 		}
 		if pr.Items == nil {
@@ -391,7 +380,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			if avatarID != "" {
 				n, e0 := resolveAvatarName(avatarID)
 				if e0 != nil {
-					log.Printf("[OrderManagementQuery] ERROR Avatar.GetByID failed avatarId=%q err=%v", avatarID, e0)
 					return common.PageResult[OrderItemInventoryRowDTO]{}, e0
 				}
 				avatarName = n
@@ -405,37 +393,27 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 
 				pbID, tbID, e2 := resolveBlueprint(invID)
 				if e2 != nil {
-					log.Printf("[OrderManagementQuery] ERROR ResolveBlueprintIDsByInventoryID failed inventoryId=%q err=%v", invID, e2)
 					return common.PageResult[OrderItemInventoryRowDTO]{}, e2
 				}
 
 				productName := ""
 
-				categoryID := ""
-				categoryCode := ""
-				categoryNameJa := ""
-				categoryNameEn := ""
-				categoryKind := ""
-				var categoryPath []string
+				var productBlueprintCategoryPath []string
 				var categoryFields map[string]any
 
 				if pbID != "" {
 					pb, ePB := resolveProductBlueprint(pbID)
 					if ePB != nil {
-						log.Printf("[OrderManagementQuery] ERROR ProductBlueprint.GetByID failed productBlueprintId=%q err=%v", pbID, ePB)
 						return common.PageResult[OrderItemInventoryRowDTO]{}, ePB
 					}
 
 					productName = pb.ProductName
 
-					categoryID = pb.ProductBlueprintCategory.ID
-					categoryCode = pb.ProductBlueprintCategory.Code
-					categoryNameJa = pb.ProductBlueprintCategory.NameJa
-					categoryNameEn = pb.ProductBlueprintCategory.NameEn
-					categoryKind = string(pb.ProductBlueprintCategory.Kind)
-
-					if len(pb.ProductBlueprintCategory.Path) > 0 {
-						categoryPath = append([]string(nil), pb.ProductBlueprintCategory.Path...)
+					if len(pb.ProductBlueprintCategoryPath) > 0 {
+						productBlueprintCategoryPath = append(
+							[]string(nil),
+							pb.ProductBlueprintCategoryPath...,
+						)
 					}
 
 					if len(pb.CategoryFields) > 0 {
@@ -453,7 +431,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 				if tbID != "" {
 					n, e4 := resolveTokenName(tbID)
 					if e4 != nil {
-						log.Printf("[OrderManagementQuery] ERROR TokenBlueprint.GetByID failed tokenBlueprintId=%q err=%v", tbID, e4)
 						return common.PageResult[OrderItemInventoryRowDTO]{}, e4
 					}
 					tokenName = n
@@ -462,9 +439,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 				listReadableID := ""
 				if it.ListID != "" {
 					n, e5 := resolveListReadableID(it.ListID)
-					if e5 != nil {
-						log.Printf("[OrderManagementQuery] WARN GetReadableIDByID failed listId=%q err=%v", it.ListID, e5)
-					} else {
+					if e5 == nil {
 						listReadableID = n
 					}
 				}
@@ -523,13 +498,8 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 
 					ListReadableID: listReadableID,
 
-					CategoryID:     categoryID,
-					CategoryCode:   categoryCode,
-					CategoryNameJa: categoryNameJa,
-					CategoryNameEn: categoryNameEn,
-					CategoryKind:   categoryKind,
-					CategoryPath:   categoryPath,
-					CategoryFields: categoryFields,
+					ProductBlueprintCategoryPath: productBlueprintCategoryPath,
+					CategoryFields:               categoryFields,
 
 					ModelID: it.ModelID,
 

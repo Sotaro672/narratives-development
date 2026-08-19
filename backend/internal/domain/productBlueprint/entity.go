@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"narratives/internal/domain/common"
 	"sort"
 	"time"
 )
@@ -160,43 +159,21 @@ func (tag ProductIDTag) validate() error {
 	return nil
 }
 
-// ProductBlueprintCategorySnapshotは、ProductBlueprint側へ
-// denormalize保存するカテゴリ表示用情報です。
-//
-// 正のカテゴリ定義はproductBlueprintCategory domainと
-// productBlueprintCategories collection側で管理します。
-type ProductBlueprintCategorySnapshot struct {
-	ID     string
-	Code   string
-	NameJa string
-	NameEn string
-	Kind   common.ProductCategoryKind
-	Path   []string
-}
+// validateProductBlueprintCategoryPathは、
+// ProductBlueprintが直接保持するカテゴリPathを検証します。
+func validateProductBlueprintCategoryPath(
+	productBlueprintCategoryPath []string,
+) error {
+	if len(productBlueprintCategoryPath) == 0 {
+		return ErrInvalidCategoryPath
+	}
 
-func (snapshot ProductBlueprintCategorySnapshot) Validate() error {
-	return snapshot.validate()
-}
-func (snapshot ProductBlueprintCategorySnapshot) validate() error {
-	if snapshot.ID == "" {
-		return ErrInvalidCategoryID
-	}
-	if snapshot.Code == "" {
-		return ErrInvalidCategoryCode
-	}
-	if snapshot.NameJa == "" {
-		return ErrInvalidCategoryNameJa
-	}
-	if !common.IsValidProductCategoryKind(
-		snapshot.Kind,
-	) {
-		return ErrInvalidCategoryKind
-	}
-	for _, pathElement := range snapshot.Path {
-		if pathElement == "" {
-			return ErrInvalidCategoryCode
+	for _, segment := range productBlueprintCategoryPath {
+		if segment == "" {
+			return ErrInvalidCategoryPath
 		}
 	}
+
 	return nil
 }
 
@@ -228,9 +205,9 @@ type CategoryFields map[string]any
 //
 // ProductBlueprint domain内へカテゴリごとのfield定義を複製せず、
 // application/usecase側から正規schemaに基づくvalidatorを渡します。
-type CategoryFieldsValidator func(category ProductBlueprintCategorySnapshot, fields CategoryFields) error
+type CategoryFieldsValidator func(productBlueprintCategoryPath []string, fields CategoryFields) error
 
-func validateCategoryFields(category ProductBlueprintCategorySnapshot, fields CategoryFields, validator CategoryFieldsValidator) error {
+func validateCategoryFields(productBlueprintCategoryPath []string, fields CategoryFields, validator CategoryFieldsValidator) error {
 	if err := validateCategoryFieldsStructure(
 		fields,
 	); err != nil {
@@ -240,7 +217,10 @@ func validateCategoryFields(category ProductBlueprintCategorySnapshot, fields Ca
 		return ErrCategoryFieldsValidatorNotConfigured
 	}
 	if err := validator(
-		category,
+		append(
+			[]string(nil),
+			productBlueprintCategoryPath...,
+		),
 		cloneCategoryFields(fields),
 	); err != nil {
 		return WrapInvalid(
@@ -513,10 +493,10 @@ type ProductBlueprint struct {
 	ID          string
 	ProductName string
 	// Descriptionは空文字を許容します。
-	Description              string
-	CompanyID                string
-	BrandID                  string
-	ProductBlueprintCategory ProductBlueprintCategorySnapshot
+	Description                  string
+	CompanyID                    string
+	BrandID                      string
+	ProductBlueprintCategoryPath []string
 	// CategoryFieldsはカテゴリ固有のProductBlueprint入力値です。
 	//
 	// color、size、measurements、alcohol volumeなどの
@@ -563,17 +543,8 @@ var (
 	ErrInvalidCompanyID = errors.New(
 		"productBlueprint: invalid companyId",
 	)
-	ErrInvalidCategoryID = errors.New(
-		"productBlueprint: invalid productBlueprintCategory.id",
-	)
-	ErrInvalidCategoryCode = errors.New(
-		"productBlueprint: invalid productBlueprintCategory.code",
-	)
-	ErrInvalidCategoryNameJa = errors.New(
-		"productBlueprint: invalid productBlueprintCategory.nameJa",
-	)
-	ErrInvalidCategoryKind = errors.New(
-		"productBlueprint: invalid productBlueprintCategory.kind",
+	ErrInvalidCategoryPath = errors.New(
+		"productBlueprint: invalid productBlueprintCategoryPath",
 	)
 	ErrInvalidCategoryFields = errors.New(
 		"productBlueprint: invalid categoryFields",
@@ -586,13 +557,16 @@ var (
 // ======================================
 // Constructor
 // ======================================
-func New(id string, productName string, description string, brandID string, category ProductBlueprintCategorySnapshot, categoryFields CategoryFields, productIDTag ProductIDTag, assigneeID string, createdBy *string, createdAt time.Time, companyID string, categoryFieldsValidator CategoryFieldsValidator) (ProductBlueprint, error) {
+func New(id string, productName string, description string, brandID string, productBlueprintCategoryPath []string, categoryFields CategoryFields, productIDTag ProductIDTag, assigneeID string, createdBy *string, createdAt time.Time, companyID string, categoryFieldsValidator CategoryFieldsValidator) (ProductBlueprint, error) {
 	productBlueprint := ProductBlueprint{
-		ID:                       id,
-		ProductName:              productName,
-		Description:              description,
-		BrandID:                  brandID,
-		ProductBlueprintCategory: category,
+		ID:          id,
+		ProductName: productName,
+		Description: description,
+		BrandID:     brandID,
+		ProductBlueprintCategoryPath: append(
+			[]string(nil),
+			productBlueprintCategoryPath...,
+		),
 		CategoryFields: cloneCategoryFields(
 			categoryFields,
 		),
@@ -610,7 +584,7 @@ func New(id string, productName string, description string, brandID string, cate
 		return ProductBlueprint{}, err
 	}
 	if err := validateCategoryFields(
-		productBlueprint.ProductBlueprintCategory,
+		productBlueprint.ProductBlueprintCategoryPath,
 		productBlueprint.CategoryFields,
 		categoryFieldsValidator,
 	); err != nil {
@@ -650,7 +624,7 @@ func (productBlueprint *ProductBlueprint) MarkPrinted(now time.Time, updatedBy *
 		return err
 	}
 	if err := validateCategoryFields(
-		productBlueprint.ProductBlueprintCategory,
+		productBlueprint.ProductBlueprintCategoryPath,
 		productBlueprint.CategoryFields,
 		categoryFieldsValidator,
 	); err != nil {
@@ -724,24 +698,29 @@ func (productBlueprint *ProductBlueprint) UpdateBrand(brandID string, now time.T
 //
 // カテゴリとCategoryFieldsを同時に変更する場合は、
 // UpdateCategoryAndFieldsを使用します。
-func (productBlueprint *ProductBlueprint) UpdateCategory(category ProductBlueprintCategorySnapshot, categoryFieldsValidator CategoryFieldsValidator, now time.Time, updatedBy *string) error {
+func (productBlueprint *ProductBlueprint) UpdateCategory(productBlueprintCategoryPath []string, categoryFieldsValidator CategoryFieldsValidator, now time.Time, updatedBy *string) error {
 	if productBlueprint == nil {
 		return ErrInvalid
 	}
 	if !productBlueprint.canModify() {
 		return ErrForbidden
 	}
-	if err := category.validate(); err != nil {
+	if err := validateProductBlueprintCategoryPath(
+		productBlueprintCategoryPath,
+	); err != nil {
 		return err
 	}
 	if err := validateCategoryFields(
-		category,
+		productBlueprintCategoryPath,
 		productBlueprint.CategoryFields,
 		categoryFieldsValidator,
 	); err != nil {
 		return err
 	}
-	productBlueprint.ProductBlueprintCategory = category
+	productBlueprint.ProductBlueprintCategoryPath = append(
+		[]string(nil),
+		productBlueprintCategoryPath...,
+	)
 	productBlueprint.touch(
 		now,
 		updatedBy,
@@ -759,7 +738,7 @@ func (productBlueprint *ProductBlueprint) UpdateCategoryFields(fields CategoryFi
 		return ErrForbidden
 	}
 	if err := validateCategoryFields(
-		productBlueprint.ProductBlueprintCategory,
+		productBlueprint.ProductBlueprintCategoryPath,
 		fields,
 		categoryFieldsValidator,
 	); err != nil {
@@ -778,24 +757,29 @@ func (productBlueprint *ProductBlueprint) UpdateCategoryFields(fields CategoryFi
 //
 // 新しいカテゴリの正規schemaに対して新しいCategoryFieldsを検証し、
 // 検証に成功した場合だけ両方を更新します。
-func (productBlueprint *ProductBlueprint) UpdateCategoryAndFields(category ProductBlueprintCategorySnapshot, fields CategoryFields, categoryFieldsValidator CategoryFieldsValidator, now time.Time, updatedBy *string) error {
+func (productBlueprint *ProductBlueprint) UpdateCategoryAndFields(productBlueprintCategoryPath []string, fields CategoryFields, categoryFieldsValidator CategoryFieldsValidator, now time.Time, updatedBy *string) error {
 	if productBlueprint == nil {
 		return ErrInvalid
 	}
 	if !productBlueprint.canModify() {
 		return ErrForbidden
 	}
-	if err := category.validate(); err != nil {
+	if err := validateProductBlueprintCategoryPath(
+		productBlueprintCategoryPath,
+	); err != nil {
 		return err
 	}
 	if err := validateCategoryFields(
-		category,
+		productBlueprintCategoryPath,
 		fields,
 		categoryFieldsValidator,
 	); err != nil {
 		return err
 	}
-	productBlueprint.ProductBlueprintCategory = category
+	productBlueprint.ProductBlueprintCategoryPath = append(
+		[]string(nil),
+		productBlueprintCategoryPath...,
+	)
 	productBlueprint.CategoryFields = cloneCategoryFields(fields)
 	productBlueprint.touch(
 		now,
@@ -908,7 +892,7 @@ func (productBlueprint ProductBlueprint) ValidateCategoryFields(categoryFieldsVa
 		return err
 	}
 	return validateCategoryFields(
-		productBlueprint.ProductBlueprintCategory,
+		productBlueprint.ProductBlueprintCategoryPath,
 		productBlueprint.CategoryFields,
 		categoryFieldsValidator,
 	)
@@ -924,7 +908,9 @@ func (productBlueprint ProductBlueprint) validate() error {
 	if productBlueprint.BrandID == "" {
 		return ErrInvalidBrand
 	}
-	if err := productBlueprint.ProductBlueprintCategory.validate(); err != nil {
+	if err := validateProductBlueprintCategoryPath(
+		productBlueprint.ProductBlueprintCategoryPath,
+	); err != nil {
 		return err
 	}
 	if productBlueprint.CompanyID == "" {

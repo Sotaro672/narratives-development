@@ -23,10 +23,7 @@ import (
 // InspectionRepository は inspector 画面表示 query が必要とする
 // inspection 永続化ポートです。
 type InspectionRepository interface {
-	GetByProductionID(
-		ctx context.Context,
-		productionID string,
-	) (inspectiondom.InspectionBatch, error)
+	GetByProductionID(ctx context.Context, productionID string) (inspectiondom.InspectionBatch, error)
 }
 
 // ProductRepository は inspector 商品詳細 query が必要とする
@@ -176,7 +173,6 @@ func (q *QueryService) GetInspectorProductDetail(
 		kind = "apparel"
 		modelNumber = model.ModelNumber
 		modelLabel = model.ModelNumber
-
 		size = model.Size
 		colorDTO = ProductColorDTO{
 			RGB:  model.Color.RGB,
@@ -189,7 +185,6 @@ func (q *QueryService) GetInspectorProductDetail(
 		kind = "alcohol"
 		modelNumber = model.ModelNumber
 		modelLabel = model.ModelNumber
-
 		volumeValue = model.Volume.Value
 		volumeUnit = model.Volume.Unit
 
@@ -239,8 +234,6 @@ func (q *QueryService) GetInspectorProductDetail(
 		return modelRefsDTO[i].ModelID < modelRefsDTO[j].ModelID
 	})
 
-	category := bp.ProductBlueprintCategory
-
 	// 7) ProductBlueprintDTO を構築
 	pbDTO := ProductBlueprintDTO{
 		ID:          bp.ID,
@@ -250,14 +243,10 @@ func (q *QueryService) GetInspectorProductDetail(
 		CompanyID:   bp.CompanyID,
 		CompanyName: companyName,
 
-		ProductBlueprintCategory: ProductBlueprintCategoryDTO{
-			ID:     string(category.ID),
-			Code:   string(category.Code),
-			NameJa: category.NameJa,
-			NameEn: category.NameEn,
-			Kind:   string(category.Kind),
-			Path:   append([]string(nil), category.Path...),
-		},
+		ProductBlueprintCategoryPath: append(
+			[]string(nil),
+			bp.ProductBlueprintCategoryPath...,
+		),
 
 		// apparel / alcohol どちらも categoryFields を正として返す。
 		// apparel: fit / material / weight / qualityAssurance など
@@ -265,8 +254,7 @@ func (q *QueryService) GetInspectorProductDetail(
 		CategoryFields: bp.CategoryFields,
 
 		ProductIdTagType: string(bp.ProductIdTag.Type),
-
-		ModelRefs: modelRefsDTO,
+		ModelRefs:        modelRefsDTO,
 	}
 
 	// 8) InspectionResult は domain の型を string にして詰める
@@ -380,17 +368,6 @@ type ModelRefDTO struct {
 	DisplayOrder int    `json:"displayOrder"`
 }
 
-// ProductBlueprintCategoryDTO は productBlueprint 側に denormalize 保存された
-// productBlueprintCategory の表示用 snapshot を返す DTO。
-type ProductBlueprintCategoryDTO struct {
-	ID     string   `json:"id"`
-	Code   string   `json:"code"`
-	NameJa string   `json:"nameJa"`
-	NameEn string   `json:"nameEn"`
-	Kind   string   `json:"kind"`
-	Path   []string `json:"path"`
-}
-
 type ProductBlueprintDTO struct {
 	ID string `json:"id"`
 
@@ -402,7 +379,7 @@ type ProductBlueprintDTO struct {
 	CompanyID   string `json:"companyId"`
 	CompanyName string `json:"companyName"`
 
-	ProductBlueprintCategory ProductBlueprintCategoryDTO `json:"productBlueprintCategory"`
+	ProductBlueprintCategoryPath []string `json:"productBlueprintCategoryPath"`
 
 	// categoryFields を正として返す。
 	// apparel / alcohol の category 固有値はここに集約する。

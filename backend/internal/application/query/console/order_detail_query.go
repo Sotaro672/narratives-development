@@ -89,13 +89,8 @@ type OrderDetailItemDTO struct {
 
 	ListReadableID string `json:"listReadableId,omitempty"`
 
-	CategoryID     string         `json:"categoryId"`
-	CategoryCode   string         `json:"categoryCode"`
-	CategoryNameJa string         `json:"categoryNameJa"`
-	CategoryNameEn string         `json:"categoryNameEn"`
-	CategoryKind   string         `json:"categoryKind"`
-	CategoryPath   []string       `json:"categoryPath"`
-	CategoryFields map[string]any `json:"categoryFields"`
+	ProductBlueprintCategoryPath []string       `json:"productBlueprintCategoryPath"`
+	CategoryFields               map[string]any `json:"categoryFields"`
 
 	Kind        string `json:"kind"`
 	ModelNumber string `json:"modelNumber"`
@@ -337,8 +332,15 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 			return OrderDetailDTO{}, fmt.Errorf("resolve listReadableId listId=%q: %w", it.ListID, err)
 		}
 
-		categoryPath := make([]string, 0, len(pb.ProductBlueprintCategory.Path))
-		categoryPath = append(categoryPath, pb.ProductBlueprintCategory.Path...)
+		productBlueprintCategoryPath := make(
+			[]string,
+			0,
+			len(pb.ProductBlueprintCategoryPath),
+		)
+		productBlueprintCategoryPath = append(
+			productBlueprintCategoryPath,
+			pb.ProductBlueprintCategoryPath...,
+		)
 
 		categoryFields := make(map[string]any, len(pb.CategoryFields))
 		for key, value := range pb.CategoryFields {
@@ -365,13 +367,8 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 
 			ListReadableID: listReadableID,
 
-			CategoryID:     pb.ProductBlueprintCategory.ID,
-			CategoryCode:   pb.ProductBlueprintCategory.Code,
-			CategoryNameJa: pb.ProductBlueprintCategory.NameJa,
-			CategoryNameEn: pb.ProductBlueprintCategory.NameEn,
-			CategoryKind:   string(pb.ProductBlueprintCategory.Kind),
-			CategoryPath:   categoryPath,
-			CategoryFields: categoryFields,
+			ProductBlueprintCategoryPath: productBlueprintCategoryPath,
+			CategoryFields:               categoryFields,
 
 			Kind:        model.Kind,
 			ModelNumber: model.ModelNumber,

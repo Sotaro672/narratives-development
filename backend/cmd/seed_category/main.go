@@ -73,135 +73,178 @@ func buildCategories() []CategorySeed {
 		// ------------------------------------------------------------
 		// apparel
 		// ------------------------------------------------------------
-		category(
-			"apparel",
-		),
-		category(
-			"apparel",
-			"tops",
-		),
-		category(
-			"apparel",
-			"bottoms",
-		),
-		category(
-			"apparel",
-			"outerwear",
-		),
-		category(
-			"apparel",
-			"dress",
-		),
-		category(
-			"apparel",
-			"shoes",
-		),
-		category(
-			"apparel",
-			"bag",
-		),
-		category(
-			"apparel",
-			"accessory",
-		),
+		{
+			ProductBlueprintCategoryPath: []string{
+				"apparel",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"apparel",
+				"tops",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"apparel",
+				"bottoms",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"apparel",
+				"outerwear",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"apparel",
+				"dress",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"apparel",
+				"shoes",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"apparel",
+				"bag",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"apparel",
+				"accessory",
+			},
+		},
 
 		// ------------------------------------------------------------
 		// alcohol
 		// ------------------------------------------------------------
-		category(
-			"alcohol",
-		),
-		category(
-			"alcohol",
-			"sake",
-		),
-		category(
-			"alcohol",
-			"wine",
-		),
-		category(
-			"alcohol",
-			"beer",
-		),
-		category(
-			"alcohol",
-			"whisky",
-		),
-		category(
-			"alcohol",
-			"shochu",
-		),
-		category(
-			"alcohol",
-			"spirits",
-		),
+		{
+			ProductBlueprintCategoryPath: []string{
+				"alcohol",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"alcohol",
+				"sake",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"alcohol",
+				"wine",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"alcohol",
+				"beer",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"alcohol",
+				"whisky",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"alcohol",
+				"shochu",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"alcohol",
+				"spirits",
+			},
+		},
 
 		// ------------------------------------------------------------
 		// cosmetics
 		// ------------------------------------------------------------
-		category(
-			"cosmetics",
-		),
-		category(
-			"cosmetics",
-			"skincare",
-		),
-		category(
-			"cosmetics",
-			"makeup",
-		),
-		category(
-			"cosmetics",
-			"fragrance",
-		),
-		category(
-			"cosmetics",
-			"haircare",
-		),
-		category(
-			"cosmetics",
-			"bodycare",
-		),
+		{
+			ProductBlueprintCategoryPath: []string{
+				"cosmetics",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"cosmetics",
+				"skincare",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"cosmetics",
+				"makeup",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"cosmetics",
+				"fragrance",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"cosmetics",
+				"haircare",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"cosmetics",
+				"bodycare",
+			},
+		},
 
 		// ------------------------------------------------------------
 		// healthcare
 		// ------------------------------------------------------------
-		category(
-			"healthcare",
-		),
-		category(
-			"healthcare",
-			"supplement",
-		),
-		category(
-			"healthcare",
-			"wellness",
-		),
-		category(
-			"healthcare",
-			"medical_device",
-		),
+		{
+			ProductBlueprintCategoryPath: []string{
+				"healthcare",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"healthcare",
+				"supplement",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"healthcare",
+				"wellness",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"healthcare",
+				"medical_device",
+			},
+		},
 
 		// ------------------------------------------------------------
 		// other
 		// ------------------------------------------------------------
-		category(
-			"other",
-		),
-		category(
-			"other",
-			"general",
-		),
-	}
-}
-
-func category(
-	productBlueprintCategoryPath ...string,
-) CategorySeed {
-	return CategorySeed{
-		ProductBlueprintCategoryPath: append(
-			[]string(nil),
-			productBlueprintCategoryPath...,
-		),
+		{
+			ProductBlueprintCategoryPath: []string{
+				"other",
+			},
+		},
+		{
+			ProductBlueprintCategoryPath: []string{
+				"other",
+				"general",
+			},
+		},
 	}
 }

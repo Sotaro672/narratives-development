@@ -20,9 +20,11 @@ type CreateInput struct {
 	BrandID   string `json:"brandId"`
 	CompanyID string `json:"companyId"`
 
-	// productBlueprintCategoriesの正データから
-	// Usecaseで生成して渡すdenormalized snapshot。
-	ProductBlueprintCategory ProductBlueprintCategorySnapshot `json:"productBlueprintCategory"`
+	// ProductBlueprintに保存するカテゴリPath。
+	//
+	// productBlueprintCategories collectionの
+	// productBlueprintCategoryPathを正とする。
+	ProductBlueprintCategoryPath []string `json:"productBlueprintCategoryPath"`
 
 	// CategoryFieldsはカテゴリ別のProductBlueprint入力値を保持する。
 	//
@@ -80,9 +82,11 @@ type Patch struct {
 	// ProductBlueprint Repositoryでは永続化しない。
 	CompanyName *string `json:"companyName,omitempty"`
 
-	// productBlueprintCategoriesの正データから
-	// Usecaseで生成して渡すdenormalized snapshot。
-	ProductBlueprintCategory *ProductBlueprintCategorySnapshot `json:"productBlueprintCategory,omitempty"`
+	// ProductBlueprintに保存するカテゴリPath。
+	//
+	// nilの場合は更新しない。
+	// 空配列または空segmentを含むPathはdomain validationで拒否する。
+	ProductBlueprintCategoryPath *[]string `json:"productBlueprintCategoryPath,omitempty"`
 
 	// CategoryFieldsはカテゴリ別のProductBlueprint入力値を保持する。
 	//
@@ -134,12 +138,8 @@ type Filter struct {
 	AssigneeIDs []string
 
 	// カテゴリ検索ではProductBlueprintに保存した
-	// denormalized fieldを検索対象にする。
-	ProductBlueprintCategoryIDs []string
-
-	ProductBlueprintCategoryCodes []string
-
-	ProductBlueprintCategoryKinds []string
+	// productBlueprintCategoryPathを検索対象にする。
+	ProductBlueprintCategoryPaths [][]string
 
 	TagTypes []ProductIDTagType
 }

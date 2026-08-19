@@ -17,15 +17,12 @@ import (
 )
 
 type InventoryDetailQuery struct {
-	invRepo             inventoryReader
-	pbRepo              inventoryProductBlueprintReader
-	tbRepo              inventoryTokenBlueprintReader
-	shippingAddressRepo shadom.RepositoryPort
-	nameResolver        *resolver.NameResolver
-
-	companyIDFromContext func(
-		context.Context,
-	) string
+	invRepo              inventoryReader
+	pbRepo               inventoryProductBlueprintReader
+	tbRepo               inventoryTokenBlueprintReader
+	shippingAddressRepo  shadom.RepositoryPort
+	nameResolver         *resolver.NameResolver
+	companyIDFromContext func(context.Context) string
 }
 
 func NewInventoryDetailQuery(
@@ -34,17 +31,14 @@ func NewInventoryDetailQuery(
 	tbRepo inventoryTokenBlueprintReader,
 	shippingAddressRepo shadom.RepositoryPort,
 	nameResolver *resolver.NameResolver,
-	companyIDFromContext func(
-		context.Context,
-	) string,
+	companyIDFromContext func(context.Context) string,
 ) *InventoryDetailQuery {
 	return &InventoryDetailQuery{
-		invRepo:             invRepo,
-		pbRepo:              pbRepo,
-		tbRepo:              tbRepo,
-		shippingAddressRepo: shippingAddressRepo,
-		nameResolver:        nameResolver,
-
+		invRepo:              invRepo,
+		pbRepo:               pbRepo,
+		tbRepo:               tbRepo,
+		shippingAddressRepo:  shippingAddressRepo,
+		nameResolver:         nameResolver,
 		companyIDFromContext: companyIDFromContext,
 	}
 }
@@ -68,14 +62,13 @@ func (q *InventoryDetailQuery) GetTokenBlueprintPatchByID(
 		return nil, errors.New("tokenBlueprint repository is not configured")
 	}
 
-	tbID := tokenBlueprintID
-	if tbID == "" {
+	if tokenBlueprintID == "" {
 		return nil, errors.New("tokenBlueprintId is required")
 	}
 
 	tb, err := q.tbRepo.GetByID(
 		ctx,
-		tbID,
+		tokenBlueprintID,
 	)
 	if err != nil {
 		return nil, err
@@ -115,14 +108,13 @@ func (q *InventoryDetailQuery) GetDetailByID(
 		return nil, errors.New("inventory detail query repositories are not configured")
 	}
 
-	id := inventoryID
-	if id == "" {
+	if inventoryID == "" {
 		return nil, errors.New("inventoryId is required")
 	}
 
 	inv, err := q.invRepo.GetByID(
 		ctx,
-		id,
+		inventoryID,
 	)
 	if err != nil {
 		return nil, err
@@ -310,15 +302,15 @@ func (q *InventoryDetailQuery) GetDetailByID(
 	total := 0
 
 	for _, modelID := range orderedModelIDs {
-		ms, ok :=
+		modelStock, ok :=
 			inv.Stock[modelID]
 
 		available := 0
 
 		if ok {
 			available =
-				ms.Accumulation -
-					ms.ReservedCount
+				modelStock.Accumulation -
+					modelStock.ReservedCount
 
 			if available < 0 {
 				available = 0
@@ -379,13 +371,10 @@ func (q *InventoryDetailQuery) GetDetailByID(
 				color =
 					"-"
 			}
-
 			row.Size =
 				size
-
 			row.Color =
 				color
-
 			row.RGB =
 				attr.RGB
 		}
@@ -417,31 +406,19 @@ func (q *InventoryDetailQuery) GetDetailByID(
 			)
 	}
 
-	dto :=
-		&querydto.InventoryDetailDTO{
-			InventoryID: id,
-
-			TokenBlueprintID:   tbID,
-			ProductBlueprintID: pbID,
-
-			ProductBlueprintPatch: pbPatchPtr,
-
-			TokenBlueprintPatch: tbPatchPtr,
-
-			ShippingAddressID: inv.ShippingAddressID,
-
-			ShippingAddress: shippingAddressPtr,
-
-			ShippingAddressOptions: shippingAddressOptions,
-
-			Rows: rows,
-
-			TotalStock: total,
-
-			UpdatedAt: updatedAt,
-		}
-
-	return dto, nil
+	return &querydto.InventoryDetailDTO{
+		InventoryID:            inventoryID,
+		TokenBlueprintID:       tbID,
+		ProductBlueprintID:     pbID,
+		ProductBlueprintPatch:  pbPatchPtr,
+		TokenBlueprintPatch:    tbPatchPtr,
+		ShippingAddressID:      inv.ShippingAddressID,
+		ShippingAddress:        shippingAddressPtr,
+		ShippingAddressOptions: shippingAddressOptions,
+		Rows:                   rows,
+		TotalStock:             total,
+		UpdatedAt:              updatedAt,
+	}, nil
 }
 
 // ============================================================
@@ -471,52 +448,26 @@ func buildInventoryProductBlueprintPatchDTO(
 			)
 	}
 
-	category :=
-		productBlueprint.ProductBlueprintCategory
-
 	return &querydto.InventoryProductBlueprintPatchDTO{
 		ProductName: productBlueprint.ProductName,
-
 		Description: productBlueprint.Description,
-
-		BrandID: productBlueprint.BrandID,
-
-		BrandName: brandName,
-
-		CompanyID: productBlueprint.CompanyID,
-
-		ProductBlueprintCategory: querydto.InventoryProductBlueprintCategoryDTO{
-			ID: category.ID,
-
-			Code: category.Code,
-
-			NameJa: category.NameJa,
-
-			NameEn: category.NameEn,
-
-			Kind: string(
-				category.Kind,
-			),
-
-			Path: append(
-				[]string(nil),
-				category.Path...,
-			),
-		},
-
+		BrandID:     productBlueprint.BrandID,
+		BrandName:   brandName,
+		CompanyID:   productBlueprint.CompanyID,
+		ProductBlueprintCategoryPath: append(
+			[]string(nil),
+			productBlueprint.ProductBlueprintCategoryPath...,
+		),
 		CategoryFields: map[string]any(
 			productBlueprint.CategoryFields,
 		),
-
 		ProductIDTag: querydto.InventoryProductIDTagDTO{
 			Type: string(
 				productBlueprint.ProductIdTag.Type,
 			),
 		},
-
 		AssigneeID: productBlueprint.AssigneeID,
-
-		ModelRefs: modelRefs,
+		ModelRefs:  modelRefs,
 	}
 }
 
@@ -528,16 +479,11 @@ func buildInventoryShippingAddressDTO(
 	shippingAddress shadom.ShippingAddress,
 ) querydto.InventoryShippingAddressDTO {
 	return querydto.InventoryShippingAddressDTO{
-		ID: shippingAddress.ID,
-
+		ID:      shippingAddress.ID,
 		ZipCode: shippingAddress.ZipCode,
-
-		State: shippingAddress.State,
-
-		City: shippingAddress.City,
-
-		Street: shippingAddress.Street,
-
+		State:   shippingAddress.State,
+		City:    shippingAddress.City,
+		Street:  shippingAddress.Street,
 		Street2: shippingAddress.Street2,
 	}
 }
@@ -555,24 +501,15 @@ func buildInventoryTokenBlueprintPatchDTO(
 	}
 
 	return &querydto.InventoryTokenBlueprintPatchDTO{
-		ID: tokenBlueprint.ID,
-
-		TokenName: tokenBlueprint.Name,
-
-		Symbol: tokenBlueprint.Symbol,
-
-		BrandID: tokenBlueprint.BrandID,
-
-		BrandName: brandName,
-
-		CompanyID: tokenBlueprint.CompanyID,
-
+		ID:          tokenBlueprint.ID,
+		TokenName:   tokenBlueprint.Name,
+		Symbol:      tokenBlueprint.Symbol,
+		BrandID:     tokenBlueprint.BrandID,
+		BrandName:   brandName,
+		CompanyID:   tokenBlueprint.CompanyID,
 		Description: tokenBlueprint.Description,
-
-		Minted: tokenBlueprint.Minted,
-
+		Minted:      tokenBlueprint.Minted,
 		MetadataURI: tokenBlueprint.MetadataURI,
-
-		IconURL: tokenBlueprint.IconURL,
+		IconURL:     tokenBlueprint.IconURL,
 	}
 }

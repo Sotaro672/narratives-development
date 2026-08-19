@@ -65,7 +65,7 @@ func (r *ProductBlueprintRepositoryFS) Create(ctx context.Context, in pbdom.Crea
 		in.ProductName,
 		in.Description,
 		in.BrandID,
-		in.ProductBlueprintCategory,
+		in.ProductBlueprintCategoryPath,
 		in.CategoryFields,
 		in.ProductIdTag,
 		in.AssigneeID,
@@ -346,12 +346,12 @@ func (r *ProductBlueprintRepositoryFS) Update(ctx context.Context, id string, pa
 		}
 
 		switch {
-		case patch.ProductBlueprintCategory != nil && patch.CategoryFields != nil:
-			if err := productBlueprint.UpdateCategoryAndFields(*patch.ProductBlueprintCategory, *patch.CategoryFields, validateProductBlueprintCategoryFields, now, patch.UpdatedBy); err != nil {
+		case patch.ProductBlueprintCategoryPath != nil && patch.CategoryFields != nil:
+			if err := productBlueprint.UpdateCategoryAndFields(*patch.ProductBlueprintCategoryPath, *patch.CategoryFields, validateProductBlueprintCategoryFields, now, patch.UpdatedBy); err != nil {
 				return err
 			}
-		case patch.ProductBlueprintCategory != nil:
-			if err := productBlueprint.UpdateCategory(*patch.ProductBlueprintCategory, validateProductBlueprintCategoryFields, now, patch.UpdatedBy); err != nil {
+		case patch.ProductBlueprintCategoryPath != nil:
+			if err := productBlueprint.UpdateCategory(*patch.ProductBlueprintCategoryPath, validateProductBlueprintCategoryFields, now, patch.UpdatedBy); err != nil {
 				return err
 			}
 		case patch.CategoryFields != nil:
@@ -585,32 +585,27 @@ func docToProductBlueprint(document *firestore.DocumentSnapshot) (pbdom.ProductB
 		return pbdom.ProductBlueprint{}, pbdom.WrapInvalid(nil, "updatedAt is missing")
 	}
 
-	category, err := productBlueprintCategorySnapshotFromDoc(stored)
-	if err != nil {
-		return pbdom.ProductBlueprint{}, err
-	}
-
 	modelRefs, err := productBlueprintModelRefsFromDoc(stored.ModelRefs)
 	if err != nil {
 		return pbdom.ProductBlueprint{}, err
 	}
 
 	productBlueprint := pbdom.ProductBlueprint{
-		ID:                       document.Ref.ID,
-		ProductName:              stored.ProductName,
-		Description:              stored.Description,
-		BrandID:                  stored.BrandID,
-		CompanyID:                stored.CompanyID,
-		ProductBlueprintCategory: category,
-		CategoryFields:           pbdom.CategoryFields(stored.CategoryFields),
-		ProductIdTag:             pbdom.ProductIDTag{Type: pbdom.ProductIDTagType(stored.ProductIDTagType)},
-		AssigneeID:               stored.AssigneeID,
-		ModelRefs:                modelRefs,
-		Printed:                  *stored.Printed,
-		CreatedBy:                stored.CreatedBy,
-		CreatedAt:                stored.CreatedAt,
-		UpdatedBy:                stored.UpdatedBy,
-		UpdatedAt:                stored.UpdatedAt,
+		ID:                           document.Ref.ID,
+		ProductName:                  stored.ProductName,
+		Description:                  stored.Description,
+		BrandID:                      stored.BrandID,
+		CompanyID:                    stored.CompanyID,
+		ProductBlueprintCategoryPath: append([]string(nil), stored.ProductBlueprintCategoryPath...),
+		CategoryFields:               pbdom.CategoryFields(stored.CategoryFields),
+		ProductIdTag:                 pbdom.ProductIDTag{Type: pbdom.ProductIDTagType(stored.ProductIDTagType)},
+		AssigneeID:                   stored.AssigneeID,
+		ModelRefs:                    modelRefs,
+		Printed:                      *stored.Printed,
+		CreatedBy:                    stored.CreatedBy,
+		CreatedAt:                    stored.CreatedAt,
+		UpdatedBy:                    stored.UpdatedBy,
+		UpdatedAt:                    stored.UpdatedAt,
 	}
 
 	if err := productBlueprint.Validate(); err != nil {
@@ -621,16 +616,6 @@ func docToProductBlueprint(document *firestore.DocumentSnapshot) (pbdom.ProductB
 	}
 
 	return productBlueprint, nil
-}
-
-func productBlueprintCategorySnapshotFromDoc(stored productBlueprintDoc) (pbdom.ProductBlueprintCategorySnapshot, error) {
-	category := pbdom.ProductBlueprintCategorySnapshot{
-		Path: append([]string(nil), stored.ProductBlueprintCategoryPath...),
-	}
-	if err := category.Validate(); err != nil {
-		return pbdom.ProductBlueprintCategorySnapshot{}, err
-	}
-	return category, nil
 }
 
 func productBlueprintModelRefsFromDoc(stored []productBlueprintModelRefDoc) ([]pbdom.ModelRef, error) {
@@ -657,14 +642,13 @@ func productBlueprintToDoc(productBlueprint pbdom.ProductBlueprint) (map[string]
 		return nil, err
 	}
 
-	category := productBlueprint.ProductBlueprintCategory
 	document := map[string]any{
 		"productName": productBlueprint.ProductName,
 		"description": productBlueprint.Description,
 		"brandId":     productBlueprint.BrandID,
 		"companyId":   productBlueprint.CompanyID,
 
-		"productBlueprintCategoryPath": append([]string(nil), category.Path...),
+		"productBlueprintCategoryPath": append([]string(nil), productBlueprint.ProductBlueprintCategoryPath...),
 
 		"assigneeId": productBlueprint.AssigneeID,
 		"createdAt":  productBlueprint.CreatedAt.UTC(),
@@ -720,23 +704,23 @@ func modelRefsToDoc(modelRefs []pbdom.ModelRef) []map[string]any {
 	return documents
 }
 
-func validateProductBlueprintCategoryFields(category pbdom.ProductBlueprintCategorySnapshot, fields pbdom.CategoryFields) error {
-	if len(category.Path) == 0 {
+func validateProductBlueprintCategoryFields(productBlueprintCategoryPath []string, fields pbdom.CategoryFields) error {
+	if len(productBlueprintCategoryPath) == 0 {
 		return pbdom.WrapInvalid(pbdom.ErrInvalidCategoryFields, "productBlueprintCategoryPath is empty")
 	}
 
-	for _, segment := range category.Path {
+	for _, segment := range productBlueprintCategoryPath {
 		if segment == "" {
 			return pbdom.WrapInvalid(pbdom.ErrInvalidCategoryFields, "productBlueprintCategoryPath contains an empty segment")
 		}
 	}
 
-	categoryPath := strings.Join(category.Path, ".")
+	categoryPath := strings.Join(productBlueprintCategoryPath, ".")
 	schema, ok := categorydom.GetCategoryInputSchema(categoryPath)
 	if !ok {
 		return pbdom.WrapInvalid(pbdom.ErrInvalidCategoryFields, "category input schema is not registered")
 	}
-	if schema.CategoryKind != category.Path[0] {
+	if schema.CategoryKind != productBlueprintCategoryPath[0] {
 		return pbdom.WrapInvalid(pbdom.ErrInvalidCategoryFields, "category input schema kind mismatch")
 	}
 

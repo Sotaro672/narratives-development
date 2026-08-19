@@ -3,19 +3,11 @@
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
+import { toProductBlueprintCategoryPathKey } from "../features/productBlueprint/domain/productBlueprintCategory";
 import { useProductionCreate } from "../features/production/presentation/hook/useProductionCreate";
 import ProductionQuantityCard from "../features/production/presentation/components/productionQuantityCard";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../shared/ui/card";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../shared/ui/popover";
+import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "../shared/ui/popover";
 import {
   Table,
   TableBody,
@@ -31,31 +23,30 @@ export default function ProductionCreate() {
   const {
     onBack,
     onSave,
-
     selectedProductBlueprint,
-
     assignee,
     assigneeOptions,
     loadingMembers,
     onSelectAssignee,
-
     selectedBrandId,
     selectedBrandName,
     brandOptions,
     loadingBrands,
     brandError,
     selectBrand,
-
     productRows,
     selectedProductId,
     selectProductById,
-
     quantityRows,
     setQuantityRows,
   } = useProductionCreate();
 
   const productBlueprintCategoryCode =
-    selectedProductBlueprint?.productBlueprintCategory.code ?? "";
+    selectedProductBlueprint?.productBlueprintCategoryPath
+      ? toProductBlueprintCategoryPathKey(
+          selectedProductBlueprint.productBlueprintCategoryPath,
+        )
+      : "";
 
   return (
     <PageStyle
@@ -68,9 +59,7 @@ export default function ProductionCreate() {
         {selectedProductBlueprint ? (
           <ProductBlueprintCard
             mode="view"
-            productBlueprintPatch={
-              selectedProductBlueprint
-            }
+            productBlueprintPatch={selectedProductBlueprint}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-gray-500">
@@ -82,9 +71,7 @@ export default function ProductionCreate() {
           <ProductionQuantityCard
             title="モデル別 生産数一覧"
             rows={quantityRows}
-            productBlueprintCategory={
-              productBlueprintCategoryCode
-            }
+            productBlueprintCategory={productBlueprintCategoryCode}
             mode="edit"
             onChangeRows={setQuantityRows}
           />
@@ -96,28 +83,21 @@ export default function ProductionCreate() {
           mode="edit"
           title="管理情報"
           assigneeName={assignee}
-          assigneeCandidates={
-            assigneeOptions
-          }
+          assigneeCandidates={assigneeOptions}
           loadingMembers={loadingMembers}
-          onSelectAssignee={
-            onSelectAssignee
-          }
+          onSelectAssignee={onSelectAssignee}
         />
 
         <Card className="pb-select">
           <CardHeader>
-            <CardTitle>
-              ブランド選択
-            </CardTitle>
+            <CardTitle>ブランド選択</CardTitle>
           </CardHeader>
 
           <CardContent>
             <Popover>
               <PopoverTrigger>
                 <div className="pb-select__trigger">
-                  {selectedBrandName ||
-                    "ブランドを選択してください"}
+                  {selectedBrandName || "ブランドを選択してください"}
                 </div>
               </PopoverTrigger>
 
@@ -128,15 +108,9 @@ export default function ProductionCreate() {
                       key={brand.id}
                       type="button"
                       className={`pb-select__row${
-                        selectedBrandId === brand.id
-                          ? " is-active"
-                          : ""
+                        selectedBrandId === brand.id ? " is-active" : ""
                       }`}
-                      onClick={() =>
-                        selectBrand(
-                          brand.id,
-                        )
-                      }
+                      onClick={() => selectBrand(brand.id)}
                     >
                       {brand.name}
                     </button>
@@ -148,12 +122,11 @@ export default function ProductionCreate() {
                     </div>
                   )}
 
-                  {!loadingBrands &&
-                    brandOptions.length === 0 && (
-                      <div className="pb-select__empty">
-                        ブランドが登録されていません。
-                      </div>
-                    )}
+                  {!loadingBrands && brandOptions.length === 0 && (
+                    <div className="pb-select__empty">
+                      ブランドが登録されていません。
+                    </div>
+                  )}
 
                   {brandError && (
                     <div className="pb-select__empty text-red-500">
@@ -168,18 +141,14 @@ export default function ProductionCreate() {
 
         <Card>
           <CardHeader>
-            <CardTitle>
-              商品設計一覧
-            </CardTitle>
+            <CardTitle>商品設計一覧</CardTitle>
           </CardHeader>
 
           <CardContent>
             <Table className="border rounded">
               <TableHeader>
                 <TableRow>
-                  <TableHead>
-                    商品名
-                  </TableHead>
+                  <TableHead>商品名</TableHead>
                 </TableRow>
               </TableHeader>
 
@@ -188,19 +157,11 @@ export default function ProductionCreate() {
                   <TableRow
                     key={product.id}
                     className={`cursor-pointer hover:bg-blue-50${
-                      selectedProductId === product.id
-                        ? " bg-blue-100"
-                        : ""
+                      selectedProductId === product.id ? " bg-blue-100" : ""
                     }`}
-                    onClick={() =>
-                      selectProductById(
-                        product.id,
-                      )
-                    }
+                    onClick={() => selectProductById(product.id)}
                   >
-                    <TableCell>
-                      {product.name}
-                    </TableCell>
+                    <TableCell>{product.name}</TableCell>
                   </TableRow>
                 ))}
 

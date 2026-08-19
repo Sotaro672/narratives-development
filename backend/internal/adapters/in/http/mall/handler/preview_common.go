@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
 
 	dto "narratives/internal/application/query/mall/dto"
 	sharedquery "narratives/internal/application/query/shared"
@@ -69,7 +68,7 @@ func resolvePreviewModelInfoFromRequest(
 		return nil, false
 	}
 
-	productID := strings.TrimSpace(r.URL.Query().Get("productId"))
+	productID := r.URL.Query().Get("productId")
 	if productID == "" {
 		writePreviewError(
 			w,
@@ -95,7 +94,6 @@ func resolvePreviewModelInfoFromRequest(
 				productID,
 				extraResponseFields,
 			)
-
 		case errors.Is(err, context.Canceled),
 			errors.Is(err, context.DeadlineExceeded):
 			writePreviewError(
@@ -105,7 +103,6 @@ func resolvePreviewModelInfoFromRequest(
 				productID,
 				extraResponseFields,
 			)
-
 		default:
 			writePreviewError(
 				w,
@@ -172,7 +169,7 @@ func buildPreviewData(
 
 	// owner resolve（best-effort）
 	if info.Owner == nil && ownerQ != nil && info.Token != nil {
-		addr := strings.TrimSpace(info.Token.ToAddress)
+		addr := info.Token.ToAddress
 		if addr != "" {
 			resolvedOwner, err := ownerQ.Resolve(ctx, addr)
 			if err == nil {
@@ -203,13 +200,13 @@ func buildPreviewData(
 		"volumeUnit":  info.VolumeUnit,
 
 		// category / productBlueprint
-		"productBlueprintId":           info.ProductBlueprintID,
-		"productBlueprintCategoryCode": info.ProductBlueprintCategoryCode,
-		"productBlueprintCategoryKind": info.ProductBlueprintCategoryKind,
-		"productBlueprintCategoryName": info.ProductBlueprintCategoryName,
-		"productBlueprintCategory":     info.ProductBlueprintCategory,
-		"productBlueprintPatch":        info.ProductBlueprintPatch,
-		"categoryInputSchema":          info.CategoryInputSchema,
+		"productBlueprintId": info.ProductBlueprintID,
+		"productBlueprintCategoryPath": append(
+			[]string(nil),
+			info.ProductBlueprintCategoryPath...,
+		),
+		"productBlueprintPatch": info.ProductBlueprintPatch,
+		"categoryInputSchema":   info.CategoryInputSchema,
 
 		// display
 		"brandName":   info.BrandName,
@@ -240,7 +237,7 @@ func resolveTokenBlueprintPatch(
 		return nil
 	}
 
-	tbID := strings.TrimSpace(info.Token.TokenBlueprintID)
+	tbID := info.Token.TokenBlueprintID
 	if tbID == "" {
 		return nil
 	}
@@ -262,12 +259,12 @@ func buildTokenBlueprintPatchDTO(
 		return nil
 	}
 
-	brandName := strings.TrimSpace(patch.BrandName)
+	brandName := patch.BrandName
 	companyName := ""
 
 	if nameR != nil {
-		brandID := strings.TrimSpace(patch.BrandID)
-		companyID := strings.TrimSpace(patch.CompanyID)
+		brandID := patch.BrandID
+		companyID := patch.CompanyID
 
 		if brandName == "" && brandID != "" {
 			brandName = nameR.ResolveBrandName(ctx, brandID)
@@ -292,6 +289,6 @@ func buildTokenBlueprintPatchDTO(
 		BrandName:   brandName,
 		CompanyName: companyName,
 		Description: patch.Description,
-		TokenIcon:   strings.TrimSpace(patch.IconURL),
+		TokenIcon:   patch.IconURL,
 	}
 }

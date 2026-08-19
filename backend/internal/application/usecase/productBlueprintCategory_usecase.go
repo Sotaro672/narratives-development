@@ -8,53 +8,14 @@ import (
 	categorydom "narratives/internal/domain/productBlueprintCategory"
 )
 
-// ProductBlueprintCategoryReadRepository は、
-// seed 済み productBlueprintCategories collection を読み取るための repository port です。
-//
-// NOTE:
-// - productBlueprintCategories は backend/cmd/seed_category で投入する
-// - Console API から category master の作成・更新・削除は行わない
-// - category の識別子は productBlueprintCategoryPath のみとする
-// - category ごとの入力項目定義は Firestore ではなく domain/input_schema.go 側で管理する
-type ProductBlueprintCategoryReadRepository interface {
-	GetByPath(
-		ctx context.Context,
-		path []string,
-	) (categorydom.ProductBlueprintCategory, error)
-
-	List(
-		ctx context.Context,
-		filter categorydom.Filter,
-		sort common.Sort,
-		page common.Page,
-	) (common.PageResult[categorydom.ProductBlueprintCategory], error)
-
-	// ListTree はフロントのカテゴリ選択 UI 向け。
-	// productBlueprintCategoryPath の階層順で返す想定。
-	ListTree(
-		ctx context.Context,
-	) ([]categorydom.ProductBlueprintCategory, error)
-
-	ListCursor(
-		ctx context.Context,
-		filter categorydom.Filter,
-		page common.CursorPage,
-	) (common.CursorPageResult[categorydom.ProductBlueprintCategory], error)
-
-	ExistsByPath(
-		ctx context.Context,
-		path []string,
-	) (bool, error)
-}
-
 // ProductBlueprintCategoryUsecase は、
 // 商品設計カテゴリマスタを読み取り専用で扱う application service です。
 type ProductBlueprintCategoryUsecase struct {
-	repo ProductBlueprintCategoryReadRepository
+	repo categorydom.ReadOnlyRepositoryPort
 }
 
 func NewProductBlueprintCategoryUsecase(
-	repo ProductBlueprintCategoryReadRepository,
+	repo categorydom.ReadOnlyRepositoryPort,
 ) *ProductBlueprintCategoryUsecase {
 	return &ProductBlueprintCategoryUsecase{
 		repo: repo,

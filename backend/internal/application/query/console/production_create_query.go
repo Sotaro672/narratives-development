@@ -16,14 +16,13 @@ import (
 // ============================================================
 
 type ProductionCreateProductBlueprintDTO struct {
-	ID                         string                                `json:"id"`
-	ProductName                string                                `json:"productName"`
-	BrandID                    string                                `json:"brandId"`
-	BrandName                  string                                `json:"brandName"`
-	ProductBlueprintCategoryID string                                `json:"productBlueprintCategoryId"`
-	ProductBlueprintCategory   ProductionProductBlueprintCategoryDTO `json:"productBlueprintCategory"`
-	CategoryFields             map[string]any                        `json:"categoryFields,omitempty"`
-	AssigneeID                 string                                `json:"assigneeId,omitempty"`
+	ID                           string         `json:"id"`
+	ProductName                  string         `json:"productName"`
+	BrandID                      string         `json:"brandId"`
+	BrandName                    string         `json:"brandName"`
+	ProductBlueprintCategoryPath []string       `json:"productBlueprintCategoryPath"`
+	CategoryFields               map[string]any `json:"categoryFields,omitempty"`
+	AssigneeID                   string         `json:"assigneeId,omitempty"`
 }
 
 type ProductionCreateContextDTO struct {
@@ -89,21 +88,13 @@ func (s *CompanyProductionQueryService) GetProductionCreateContext(
 
 	return ProductionCreateContextDTO{
 		ProductBlueprintPatch: ProductionCreateProductBlueprintDTO{
-			ID:                         pb.ID,
-			ProductName:                pb.ProductName,
-			BrandID:                    pb.BrandID,
-			BrandName:                  brandName,
-			ProductBlueprintCategoryID: pb.ProductBlueprintCategory.ID,
-			ProductBlueprintCategory: ProductionProductBlueprintCategoryDTO{
-				ID:     pb.ProductBlueprintCategory.ID,
-				Code:   pb.ProductBlueprintCategory.Code,
-				NameJa: pb.ProductBlueprintCategory.NameJa,
-				NameEn: pb.ProductBlueprintCategory.NameEn,
-				Kind:   string(pb.ProductBlueprintCategory.Kind),
-				Path:   append([]string(nil), pb.ProductBlueprintCategory.Path...),
-			},
-			CategoryFields: cloneProductionCreateCategoryFields(pb.CategoryFields),
-			AssigneeID:     pb.AssigneeID,
+			ID:                           pb.ID,
+			ProductName:                  pb.ProductName,
+			BrandID:                      pb.BrandID,
+			BrandName:                    brandName,
+			ProductBlueprintCategoryPath: append([]string(nil), pb.ProductBlueprintCategoryPath...),
+			CategoryFields:               cloneProductionCreateCategoryFields(pb.CategoryFields),
+			AssigneeID:                   pb.AssigneeID,
 		},
 		Rows: rows,
 	}, nil

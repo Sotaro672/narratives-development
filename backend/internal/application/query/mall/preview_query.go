@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	dto "narratives/internal/application/query/mall/dto"
 	sharedquery "narratives/internal/application/query/shared"
@@ -287,16 +288,26 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		return nil, err
 	}
 
-	category := pb.ProductBlueprintCategory
+	productBlueprintCategoryPath := append(
+		[]string(nil),
+		pb.ProductBlueprintCategoryPath...,
+	)
+
+	categoryKind := commondom.ProductCategoryKind("")
+	if len(productBlueprintCategoryPath) > 0 {
+		categoryKind = commondom.ProductCategoryKind(
+			productBlueprintCategoryPath[0],
+		)
+	}
 
 	out := &dto.PreviewModelInfo{
 		ProductID: id,
 		ModelID:   modelID,
 
-		ProductBlueprintCategoryCode: category.Code,
-		ProductBlueprintCategoryKind: category.Kind,
-		ProductBlueprintCategoryName: category.NameJa,
-		ProductBlueprintCategory:     &category,
+		ProductBlueprintCategoryPath: append(
+			[]string(nil),
+			productBlueprintCategoryPath...,
+		),
 
 		ProductBlueprintID: pbID,
 		ProductBlueprint:   &pb,
@@ -308,11 +319,15 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	pbPatch := productBlueprintPatchForPreview(pb)
 	out.ProductBlueprintPatch = &pbPatch
 
-	if schema, ok := pbcatdom.GetCategoryInputSchema(category.Code); ok {
+	categoryCode := strings.Join(
+		productBlueprintCategoryPath,
+		".",
+	)
+	if schema, ok := pbcatdom.GetCategoryInputSchema(categoryCode); ok {
 		out.CategoryInputSchema = &schema
 	}
 
-	if err := q.fillResolvedModelInfo(ctx, out, modelID, category.Kind); err != nil {
+	if err := q.fillResolvedModelInfo(ctx, out, modelID, categoryKind); err != nil {
 		return nil, err
 	}
 
@@ -703,16 +718,21 @@ func purchasedPairFromResaleItem(
 func productBlueprintPatchForPreview(
 	pb pbdom.ProductBlueprint,
 ) pbdom.Patch {
+	productBlueprintCategoryPath := append(
+		[]string(nil),
+		pb.ProductBlueprintCategoryPath...,
+	)
+
 	return pbdom.Patch{
-		ProductName:              stringPtrOrNil(pb.ProductName),
-		Description:              stringPtrOrNil(pb.Description),
-		BrandID:                  stringPtrOrNil(pb.BrandID),
-		CompanyID:                stringPtrOrNil(pb.CompanyID),
-		ProductBlueprintCategory: &pb.ProductBlueprintCategory,
-		CategoryFields:           &pb.CategoryFields,
-		ProductIdTag:             &pb.ProductIdTag,
-		AssigneeID:               stringPtrOrNil(pb.AssigneeID),
-		ModelRefs:                &pb.ModelRefs,
+		ProductName:                  stringPtrOrNil(pb.ProductName),
+		Description:                  stringPtrOrNil(pb.Description),
+		BrandID:                      stringPtrOrNil(pb.BrandID),
+		CompanyID:                    stringPtrOrNil(pb.CompanyID),
+		ProductBlueprintCategoryPath: &productBlueprintCategoryPath,
+		CategoryFields:               &pb.CategoryFields,
+		ProductIdTag:                 &pb.ProductIdTag,
+		AssigneeID:                   stringPtrOrNil(pb.AssigneeID),
+		ModelRefs:                    &pb.ModelRefs,
 	}
 }
 

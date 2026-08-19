@@ -141,9 +141,12 @@ func (
 
 		BrandID: value.BrandID,
 
-		// productBlueprintCategoriesの正データから生成済みの
-		// denormalized snapshot。
-		ProductBlueprintCategory: value.ProductBlueprintCategory,
+		// productBlueprintCategoriesの正データを基準とする
+		// productBlueprintCategoryPath。
+		ProductBlueprintCategoryPath: append(
+			[]string(nil),
+			value.ProductBlueprintCategoryPath...,
+		),
 
 		// カテゴリ依存項目はProductBlueprint直下ではなく
 		// CategoryFieldsへ集約する。
@@ -308,7 +311,10 @@ func (
 	productName := value.ProductName
 	description := value.Description
 	brandID := value.BrandID
-	category := value.ProductBlueprintCategory
+	productBlueprintCategoryPath := append(
+		[]string(nil),
+		value.ProductBlueprintCategoryPath...,
+	)
 	productIDTag := value.ProductIdTag
 	assigneeID := value.AssigneeID
 
@@ -339,9 +345,9 @@ func (
 
 		BrandID: &brandID,
 
-		// productBlueprintCategoriesの正データから生成済みの
-		// denormalized snapshot。
-		ProductBlueprintCategory: &category,
+		// productBlueprintCategoriesの正データを基準とする
+		// productBlueprintCategoryPath。
+		ProductBlueprintCategoryPath: &productBlueprintCategoryPath,
 
 		CategoryFields: categoryFieldsPointer,
 

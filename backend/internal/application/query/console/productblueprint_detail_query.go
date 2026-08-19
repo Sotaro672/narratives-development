@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	modeldom "narratives/internal/domain/model"
 	productbpdom "narratives/internal/domain/productBlueprint"
@@ -155,9 +156,14 @@ func (q *ProductBlueprintDetailQuery) GetByID(
 
 	orderedVariations := orderModelVariationsByModelRefs(modelVariations, pb.ModelRefs)
 
+	categoryCode := strings.Join(
+		pb.ProductBlueprintCategoryPath,
+		".",
+	)
+
 	modelState, err := buildProductBlueprintDetailModelState(
 		orderedVariations,
-		pb.ProductBlueprintCategory.Code,
+		categoryCode,
 	)
 	if err != nil {
 		return ProductBlueprintDetailResolved{}, err

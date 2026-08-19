@@ -33,12 +33,7 @@ function formatAlcoholContent(value: unknown): string {
 }
 
 function resolveCategoryLabel(productBlueprint: CatalogProductBlueprint): string {
-  return (
-    productBlueprint.productBlueprintCategoryNameJa?.trim() ||
-    productBlueprint.productBlueprintCategoryNameEn?.trim() ||
-    productBlueprint.productBlueprintCategoryCode?.trim() ||
-    ""
-  );
+  return productBlueprint.productBlueprintCategoryPath?.join(".") ?? "";
 }
 
 function resolveQualityAssuranceItems(value: unknown): string[] {
@@ -50,24 +45,39 @@ function resolveQualityAssuranceItems(value: unknown): string[] {
       if (!item || typeof item !== "object" || Array.isArray(item)) return "";
 
       const record = item as Record<string, unknown>;
-      return formatNullableText(record.label) || formatNullableText(record.title) || formatNullableText(record.value);
+      return (
+        formatNullableText(record.label) ||
+        formatNullableText(record.title) ||
+        formatNullableText(record.value)
+      );
     })
     .filter((item): item is string => item !== "");
 }
 
-function createRow(key: string, label: string, value: unknown): ProductInfoRowViewModel | null {
+function createRow(
+  key: string,
+  label: string,
+  value: unknown,
+): ProductInfoRowViewModel | null {
   const text = formatNullableText(value);
   if (!text) return null;
 
   return { key, label, value: text };
 }
 
-function createFormattedRow(key: string, label: string, value: string): ProductInfoRowViewModel | null {
+function createFormattedRow(
+  key: string,
+  label: string,
+  value: string,
+): ProductInfoRowViewModel | null {
   if (!value) return null;
   return { key, label, value };
 }
 
-function appendRow(rows: ProductInfoRowViewModel[], row: ProductInfoRowViewModel | null): void {
+function appendRow(
+  rows: ProductInfoRowViewModel[],
+  row: ProductInfoRowViewModel | null,
+): void {
   if (row) rows.push(row);
 }
 
@@ -76,7 +86,8 @@ export function createProductInfoCardViewModel(args: {
   categoryKind?: ProductCategoryKind;
 }): ProductInfoCardViewModel {
   const product = args.productBlueprint;
-  const categoryKind = args.categoryKind ?? product.productBlueprintCategoryKind ?? "unknown";
+  const categoryKind =
+    args.categoryKind ?? product.productBlueprintCategoryPath?.[0] ?? "unknown";
   const isAlcohol = categoryKind === "alcohol";
   const isApparel = categoryKind === "apparel" || categoryKind === "unknown";
   const rows: ProductInfoRowViewModel[] = [];
@@ -85,13 +96,23 @@ export function createProductInfoCardViewModel(args: {
   appendRow(rows, createRow("productName", "商品名", product.productName));
   appendRow(rows, createRow("brandName", "ブランド", product.brandName));
   appendRow(rows, createRow("companyName", "会社名", product.companyName));
-  appendRow(rows, createFormattedRow("category", "カテゴリ", resolveCategoryLabel(product)));
+  appendRow(
+    rows,
+    createFormattedRow("category", "カテゴリ", resolveCategoryLabel(product)),
+  );
 
   if (isAlcohol) {
     appendRow(rows, createRow("material", "材料", categoryFields?.material));
     appendRow(rows, createRow("region", "生産地", categoryFields?.region));
     appendRow(rows, createRow("vintage", "ビンテージ", categoryFields?.vintage));
-    appendRow(rows, createFormattedRow("alcoholContent", "アルコール度数", formatAlcoholContent(categoryFields?.alcoholContent)));
+    appendRow(
+      rows,
+      createFormattedRow(
+        "alcoholContent",
+        "アルコール度数",
+        formatAlcoholContent(categoryFields?.alcoholContent),
+      ),
+    );
   }
 
   if (isApparel) {
@@ -100,11 +121,16 @@ export function createProductInfoCardViewModel(args: {
     appendRow(rows, createRow("weight", "重量", categoryFields?.weight));
   }
 
-  appendRow(rows, createRow("productIdTagType", "商品IDタグ", product.productIdTagType));
+  appendRow(
+    rows,
+    createRow("productIdTagType", "商品IDタグ", product.productIdTagType),
+  );
 
   return {
     rows,
-    qualityAssuranceItems: resolveQualityAssuranceItems(categoryFields?.qualityAssurance),
+    qualityAssuranceItems: resolveQualityAssuranceItems(
+      categoryFields?.qualityAssurance,
+    ),
   };
 }
 

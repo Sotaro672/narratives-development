@@ -105,34 +105,6 @@ type ProductBlueprintCategory struct {
 	Path []string
 }
 
-type Snapshot struct {
-	Path []string `json:"path"`
-}
-
-// ======================================
-// Constructors
-// ======================================
-
-func Reconstruct(
-	path []string,
-) (ProductBlueprintCategory, error) {
-	return ProductBlueprintCategory{
-		Path: append(
-			[]string(nil),
-			path...,
-		),
-	}, nil
-}
-
-func (c ProductBlueprintCategory) ToSnapshot() Snapshot {
-	return Snapshot{
-		Path: append(
-			[]string(nil),
-			c.Path...,
-		),
-	}
-}
-
 // ======================================
 // Validation errors
 // ======================================

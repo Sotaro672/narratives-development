@@ -1,13 +1,11 @@
 // frontend/amol/src/features/scan-result/application/scanPageViewModelFactory.ts
 
 import { rgbToCssColor } from "../../../components/utils/color";
-
 import type {
   MallOwnerInfo,
   PreviewState,
   ProductBlueprintPatch,
 } from "../../shared/types/scanResult";
-
 import {
   createScanAlcoholInfo,
   type ScanAlcoholInfo,
@@ -76,7 +74,6 @@ function createProductBlueprintRows(
   if (!patch) return [];
 
   const categoryFields = patch.categoryFields ?? {};
-
   const rows: ScanDisplayRowViewModel[] = [
     {
       label: "種別",
@@ -107,12 +104,9 @@ function createQualityAssuranceTabs(
   patch: ProductBlueprintPatch | null,
 ): string[] {
   const rawValue = patch?.categoryFields?.qualityAssurance;
-
   if (!Array.isArray(rawValue)) return [];
 
-  return rawValue
-    .map(toDisplayText)
-    .filter(Boolean);
+  return rawValue.map(toDisplayText).filter(Boolean);
 }
 
 function createMeasurementEntries(
@@ -158,7 +152,6 @@ export function createScanResultPageViewModel(
   input: CreateScanResultPageViewModelInput,
 ): ScanResultPageViewModel | null {
   const previewState = input.previewState;
-
   if (!previewState) return null;
 
   const preview = previewState.raw;
@@ -172,12 +165,14 @@ export function createScanResultPageViewModel(
   const brandName = preview.brandName ?? "";
   const size = preview.size;
   const color = preview.color;
+  const productBlueprintCategoryKind =
+    preview.productBlueprintCategoryPath?.[0] ?? "";
 
   const alcoholInfo = createScanAlcoholInfo({
     categoryFields: patch?.categoryFields,
     volumeValue: preview.volumeValue,
     volumeUnit: preview.volumeUnit,
-    productBlueprintCategoryKind: preview.productBlueprintCategoryKind,
+    productBlueprintCategoryKind,
   });
 
   return {

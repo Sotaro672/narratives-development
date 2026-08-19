@@ -45,12 +45,6 @@ func NewProductBlueprintCategoryHandler(uc ProductBlueprintCategoryUsecase) *Han
 	return &Handler{uc: uc}
 }
 
-// NewHandler is kept for backward compatibility.
-// Prefer NewProductBlueprintCategoryHandler in new DI wiring.
-func NewHandler(uc ProductBlueprintCategoryUsecase) *Handler {
-	return NewProductBlueprintCategoryHandler(uc)
-}
-
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 

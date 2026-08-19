@@ -6,8 +6,8 @@ import type {
 } from "../../../../shared/types/inspections";
 import type { ProductIDTag } from "../../../../shared/types/productBlueprint";
 import type {
-  ProductBlueprintCategorySnapshot,
   CategoryFieldValues,
+  ProductBlueprintCategoryPath,
 } from "../../../productBlueprint/domain/productBlueprintCategory";
 
 /**
@@ -31,10 +31,10 @@ export type MintProductBlueprintDTO = {
   companyId?: string | null;
 
   /**
-   * ProductBlueprint側にdenormalize保存されるカテゴリsnapshotを正とする。
-   * itemTypeは使用せず、カテゴリ判定にはproductBlueprintCategoryを使用する。
+   * ProductBlueprintのカテゴリはpathのみを正とする。
+   * itemTypeは使用せず、カテゴリ判定にはproductBlueprintCategoryPathを使用する。
    */
-  productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+  productBlueprintCategoryPath?: ProductBlueprintCategoryPath | null;
 
   /** カテゴリ別入力値。 */
   categoryFields?: CategoryFieldValues | null;

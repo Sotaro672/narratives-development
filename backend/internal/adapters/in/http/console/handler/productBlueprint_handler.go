@@ -231,12 +231,6 @@ func normalizeTagType(value string) pbdom.ProductIDTagType {
 	}
 }
 
-func toCategorySnapshot(input []string) pbdom.ProductBlueprintCategorySnapshot {
-	return pbdom.ProductBlueprintCategorySnapshot{
-		Path: append([]string(nil), input...),
-	}
-}
-
 func normalizeCategoryFields(input map[string]any) pbdom.CategoryFields {
 	if input == nil {
 		return nil
@@ -287,11 +281,14 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		// CompanyIDはProductBlueprintUsecaseが認証Contextから設定します。
 		CompanyID: "",
 
-		ProductBlueprintCategory: toCategorySnapshot(input.ProductBlueprintCategoryPath),
-		CategoryFields:           normalizeCategoryFields(input.CategoryFields),
-		AssigneeID:               input.AssigneeId,
-		CreatedBy:                memberIDPointerFromContext(ctx),
-		Printed:                  false,
+		ProductBlueprintCategoryPath: append(
+			[]string(nil),
+			input.ProductBlueprintCategoryPath...,
+		),
+		CategoryFields: normalizeCategoryFields(input.CategoryFields),
+		AssigneeID:     input.AssigneeId,
+		CreatedBy:      memberIDPointerFromContext(ctx),
+		Printed:        false,
 		ProductIdTag: pbdom.ProductIDTag{
 			Type: normalizeTagType(input.ProductIdTag.Type),
 		},
@@ -355,10 +352,13 @@ func (h *ProductBlueprintHandler) update(w http.ResponseWriter, r *http.Request,
 		// CompanyIDは通常更新では変更しません。
 		CompanyID: "",
 
-		ProductBlueprintCategory: toCategorySnapshot(input.ProductBlueprintCategoryPath),
-		CategoryFields:           categoryFields,
-		AssigneeID:               input.AssigneeId,
-		UpdatedBy:                memberIDPointerFromContext(ctx),
+		ProductBlueprintCategoryPath: append(
+			[]string(nil),
+			input.ProductBlueprintCategoryPath...,
+		),
+		CategoryFields: categoryFields,
+		AssigneeID:     input.AssigneeId,
+		UpdatedBy:      memberIDPointerFromContext(ctx),
 		ProductIdTag: pbdom.ProductIDTag{
 			Type: normalizeTagType(input.ProductIdTag.Type),
 		},
@@ -598,7 +598,7 @@ func (h *ProductBlueprintHandler) toDetailOutput(
 		BrandName:   resolved.Names.BrandName,
 		ProductBlueprintCategoryPath: append(
 			[]string(nil),
-			productBlueprint.ProductBlueprintCategory.Path...,
+			productBlueprint.ProductBlueprintCategoryPath...,
 		),
 		CategoryFields: map[string]any(productBlueprint.CategoryFields),
 		ProductIdTag:   productIDTag,
