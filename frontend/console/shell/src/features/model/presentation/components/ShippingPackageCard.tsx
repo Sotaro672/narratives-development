@@ -3,21 +3,9 @@
 import * as React from "react";
 import { Package } from "lucide-react";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../../../shared/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui";
 import { Input } from "../../../../shared/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../../../../shared/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../../shared/ui/table";
 
 import type {
   AlcoholModelNumber,
@@ -33,30 +21,19 @@ type CommonShippingPackageCardProps = {
   mode?: ModelVariationMode;
 };
 
-type ApparelShippingPackageCardProps =
-  CommonShippingPackageCardProps & {
-    kind: "apparel";
-    modelNumbers: ApparelModelNumber[];
-    onChangeShippingPackage?: (
-      size: string,
-      color: string,
-      patch: ShippingPackagePatch,
-    ) => void;
-  };
+type ApparelShippingPackageCardProps = CommonShippingPackageCardProps & {
+  kind: "apparel";
+  modelNumbers: ApparelModelNumber[];
+  onChangeShippingPackage?: (size: string, patch: ShippingPackagePatch) => void;
+};
 
-type AlcoholShippingPackageCardProps =
-  CommonShippingPackageCardProps & {
-    kind: "alcohol";
-    modelNumbers: AlcoholModelNumber[];
-    onChangeShippingPackage?: (
-      volumeLabel: string,
-      patch: ShippingPackagePatch,
-    ) => void;
-  };
+type AlcoholShippingPackageCardProps = CommonShippingPackageCardProps & {
+  kind: "alcohol";
+  modelNumbers: AlcoholModelNumber[];
+  onChangeShippingPackage?: (volumeLabel: string, patch: ShippingPackagePatch) => void;
+};
 
-export type ShippingPackageCardProps =
-  | ApparelShippingPackageCardProps
-  | AlcoholShippingPackageCardProps;
+export type ShippingPackageCardProps = ApparelShippingPackageCardProps | AlcoholShippingPackageCardProps;
 
 type ShippingPackageField = keyof ShippingPackage;
 
@@ -95,9 +72,7 @@ function normalizeNumber(value: unknown): number {
   return value < 0 ? 0 : Math.floor(value);
 }
 
-function normalizeShippingPackage(
-  value: ShippingPackage | null | undefined,
-): ShippingPackage {
+function normalizeShippingPackage(value: ShippingPackage | null | undefined): ShippingPackage {
   return {
     weightGrams: normalizeNumber(value?.weightGrams),
     widthMm: normalizeNumber(value?.widthMm),
@@ -120,9 +95,7 @@ function parseInputNumber(value: string): number {
   return parsed < 0 ? 0 : Math.floor(parsed);
 }
 
-function toAlcoholVolumeLabel(
-  modelNumber: AlcoholModelNumber,
-): string {
+function toAlcoholVolumeLabel(modelNumber: AlcoholModelNumber): string {
   const value = normalizeNumber(modelNumber.volume.value);
   const unit = String(modelNumber.volume.unit ?? "").trim() || "ml";
 
@@ -155,9 +128,7 @@ function ShippingPackageInput({
       step={1}
       inputMode="numeric"
       value={value || ""}
-      onChange={(event) =>
-        onChange(parseInputNumber(event.target.value))
-      }
+      onChange={(event) => onChange(parseInputNumber(event.target.value))}
       aria-label={label}
       placeholder="0"
     />
@@ -171,22 +142,31 @@ function ApparelShippingPackageRows({
 }: {
   modelNumbers: ApparelModelNumber[];
   mode: ModelVariationMode;
-  onChangeShippingPackage?: (
-    size: string,
-    color: string,
-    patch: ShippingPackagePatch,
-  ) => void;
+  onChangeShippingPackage?: (size: string, patch: ShippingPackagePatch) => void;
 }) {
   const isEdit = mode === "edit";
 
-  if (modelNumbers.length === 0) {
+  const sizeRows = React.useMemo(() => {
+    const rows = new Map<string, ApparelModelNumber>();
+
+    for (const modelNumber of modelNumbers) {
+      const size = String(modelNumber.size ?? "").trim();
+
+      if (!size || rows.has(size)) {
+        continue;
+      }
+
+      rows.set(size, modelNumber);
+    }
+
+    return Array.from(rows.entries());
+  }, [modelNumbers]);
+
+  if (sizeRows.length === 0) {
     return (
       <TableRow>
-        <TableCell
-          colSpan={7}
-          className="mnc__empty"
-        >
-          登録されているモデルナンバーはありません。
+        <TableCell colSpan={5} className="mnc__empty">
+          登録されているサイズはありません。
         </TableCell>
       </TableRow>
     );
@@ -194,45 +174,23 @@ function ApparelShippingPackageRows({
 
   return (
     <>
-      {modelNumbers.map((modelNumber, index) => {
-        const shippingPackage =
-          normalizeShippingPackage(modelNumber.shippingPackage);
-
-        const rowKey = [
-          modelNumber.size,
-          modelNumber.color,
-          modelNumber.code,
-          index,
-        ].join(":");
+      {sizeRows.map(([size, modelNumber]) => {
+        const shippingPackage = normalizeShippingPackage(modelNumber.shippingPackage);
 
         return (
-          <TableRow key={rowKey}>
-            <TableCell className="mnc__size">
-              {modelNumber.code || "-"}
-            </TableCell>
-
-            <TableCell>
-              {modelNumber.size || "-"}
-            </TableCell>
-
-            <TableCell>
-              {modelNumber.color || "-"}
-            </TableCell>
+          <TableRow key={size}>
+            <TableCell className="mnc__size">{size}</TableCell>
 
             {SHIPPING_PACKAGE_FIELDS.map((field) => (
               <TableCell key={field.key}>
                 <ShippingPackageInput
                   value={shippingPackage[field.key]}
-                  label={`${modelNumber.code || "モデル"} ${field.ariaLabel}`}
+                  label={`${size} ${field.ariaLabel}`}
                   disabled={!isEdit}
                   onChange={(value) =>
-                    onChangeShippingPackage?.(
-                      modelNumber.size,
-                      modelNumber.color,
-                      {
-                        [field.key]: value,
-                      },
-                    )
+                    onChangeShippingPackage?.(size, {
+                      [field.key]: value,
+                    })
                   }
                 />
               </TableCell>
@@ -251,21 +209,15 @@ function AlcoholShippingPackageRows({
 }: {
   modelNumbers: AlcoholModelNumber[];
   mode: ModelVariationMode;
-  onChangeShippingPackage?: (
-    volumeLabel: string,
-    patch: ShippingPackagePatch,
-  ) => void;
+  onChangeShippingPackage?: (volumeLabel: string, patch: ShippingPackagePatch) => void;
 }) {
   const isEdit = mode === "edit";
 
   if (modelNumbers.length === 0) {
     return (
       <TableRow>
-        <TableCell
-          colSpan={6}
-          className="mnc__empty"
-        >
-          登録されているモデルナンバーはありません。
+        <TableCell colSpan={5} className="mnc__empty">
+          登録されている容量はありません。
         </TableCell>
       </TableRow>
     );
@@ -274,45 +226,28 @@ function AlcoholShippingPackageRows({
   return (
     <>
       {modelNumbers.map((modelNumber, index) => {
-        const volumeLabel =
-          toAlcoholVolumeLabel(modelNumber);
-
-        const shippingPackage =
-          normalizeShippingPackage(modelNumber.shippingPackage);
-
-        const rowKey = [
-          volumeLabel,
-          modelNumber.code,
-          index,
-        ].join(":");
+        const volumeLabel = toAlcoholVolumeLabel(modelNumber);
+        const shippingPackage = normalizeShippingPackage(modelNumber.shippingPackage);
+        const rowKey = [volumeLabel, index].join(":");
 
         return (
           <TableRow key={rowKey}>
-            <TableCell className="mnc__size">
-              {modelNumber.code || "-"}
-            </TableCell>
-
-            <TableCell>
-              {volumeLabel || "-"}
-            </TableCell>
+            <TableCell className="mnc__size">{volumeLabel || "-"}</TableCell>
 
             {SHIPPING_PACKAGE_FIELDS.map((field) => (
               <TableCell key={field.key}>
                 <ShippingPackageInput
                   value={shippingPackage[field.key]}
-                  label={`${modelNumber.code || "モデル"} ${field.ariaLabel}`}
+                  label={`${volumeLabel || "容量"} ${field.ariaLabel}`}
                   disabled={!isEdit}
                   onChange={(value) => {
                     if (!volumeLabel) {
                       return;
                     }
 
-                    onChangeShippingPackage?.(
-                      volumeLabel,
-                      {
-                        [field.key]: value,
-                      },
-                    );
+                    onChangeShippingPackage?.(volumeLabel, {
+                      [field.key]: value,
+                    });
                   }}
                 />
               </TableCell>
@@ -324,28 +259,17 @@ function AlcoholShippingPackageRows({
   );
 }
 
-const ShippingPackageCard: React.FC<
-  ShippingPackageCardProps
-> = (props) => {
-  const {
-    className,
-    mode = "edit",
-  } = props;
-
+const ShippingPackageCard: React.FC<ShippingPackageCardProps> = (props) => {
+  const { className, mode = "edit" } = props;
   const isApparel = props.kind === "apparel";
 
   return (
-    <Card
-      className={`spc ${mode === "view" ? "view-mode" : ""} ${
-        className ?? ""
-      }`}
-    >
+    <Card className={`spc ${mode === "view" ? "view-mode" : ""} ${className ?? ""}`}>
       <CardHeader className="box__header">
         <Package size={16} />
 
         <CardTitle className="box__title">
           配送用梱包情報
-
           {mode === "view" && (
             <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
               （閲覧）
@@ -358,23 +282,10 @@ const ShippingPackageCard: React.FC<
         <Table className="mnc__table">
           <TableHeader>
             <TableRow>
-              <TableHead>
-                モデルナンバー
-              </TableHead>
-
-              {isApparel ? (
-                <>
-                  <TableHead>サイズ</TableHead>
-                  <TableHead>カラー</TableHead>
-                </>
-              ) : (
-                <TableHead>容量</TableHead>
-              )}
+              <TableHead>{isApparel ? "サイズ" : "容量"}</TableHead>
 
               {SHIPPING_PACKAGE_FIELDS.map((field) => (
-                <TableHead key={field.key}>
-                  {field.label}
-                </TableHead>
+                <TableHead key={field.key}>{field.label}</TableHead>
               ))}
             </TableRow>
           </TableHeader>
@@ -384,17 +295,13 @@ const ShippingPackageCard: React.FC<
               <ApparelShippingPackageRows
                 modelNumbers={props.modelNumbers}
                 mode={mode}
-                onChangeShippingPackage={
-                  props.onChangeShippingPackage
-                }
+                onChangeShippingPackage={props.onChangeShippingPackage}
               />
             ) : (
               <AlcoholShippingPackageRows
                 modelNumbers={props.modelNumbers}
                 mode={mode}
-                onChangeShippingPackage={
-                  props.onChangeShippingPackage
-                }
+                onChangeShippingPackage={props.onChangeShippingPackage}
               />
             )}
           </TableBody>

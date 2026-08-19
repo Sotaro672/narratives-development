@@ -43,9 +43,7 @@ export type UseProductBlueprintVariationsResult = ProductBlueprintVariationsStat
   measurementOptions: MeasurementOption[];
   colorInput: string;
   getCode: (sizeLabel: string, color: string) => string;
-  setFromUiState: (
-    next: Partial<ProductBlueprintVariationsState> | null | undefined,
-  ) => void;
+  setFromUiState: (next: Partial<ProductBlueprintVariationsState> | null | undefined) => void;
   resetVariations: () => void;
   onChangeColorInput: (value: string) => void;
   onAddColor: () => void;
@@ -55,11 +53,7 @@ export type UseProductBlueprintVariationsResult = ProductBlueprintVariationsStat
   onRemoveSize: (id: string) => void;
   onChangeSize: (id: string, patch: SizePatch) => void;
   onChangeModelNumber: (sizeLabel: string, color: string, nextCode: string) => void;
-  onChangeApparelShippingPackage: (
-    size: string,
-    color: string,
-    patch: Partial<ShippingPackage>,
-  ) => void;
+  onChangeApparelShippingPackage: (size: string, patch: Partial<ShippingPackage>) => void;
   onAddVolume: () => void;
   onRemoveVolume: (id: string) => void;
   onChangeVolume: (id: string, patch: VolumePatch) => void;
@@ -70,8 +64,7 @@ export type UseProductBlueprintVariationsResult = ProductBlueprintVariationsStat
   ) => void;
 };
 
-type ApparelMeasurementCategoryCode =
-  keyof typeof APPAREL_CATEGORY_MEASUREMENT_OPTIONS;
+type ApparelMeasurementCategoryCode = keyof typeof APPAREL_CATEGORY_MEASUREMENT_OPTIONS;
 
 const SIZE_NUMBER_KEYS: Array<keyof SizePatch> = [
   "length",
@@ -87,13 +80,8 @@ const SIZE_NUMBER_KEYS: Array<keyof SizePatch> = [
   "hemWidth",
 ];
 
-function isApparelMeasurementCategoryCode(
-  value: string,
-): value is ApparelMeasurementCategoryCode {
-  return Object.prototype.hasOwnProperty.call(
-    APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
-    value,
-  );
+function isApparelMeasurementCategoryCode(value: string): value is ApparelMeasurementCategoryCode {
+  return Object.prototype.hasOwnProperty.call(APPAREL_CATEGORY_MEASUREMENT_OPTIONS, value);
 }
 
 function createId(prefix: string): string {
@@ -190,9 +178,7 @@ function toVolumeLabel(
   return `${value}${unit}`;
 }
 
-function toAlcoholModelNumberVolumeLabel(
-  modelNumber: AlcoholModelNumber,
-): string {
+function toAlcoholModelNumberVolumeLabel(modelNumber: AlcoholModelNumber): string {
   return toVolumeLabel({
     volumeValue: modelNumber.volume.value,
     volumeUnit: modelNumber.volume.unit,
@@ -222,9 +208,7 @@ function normalizeColors(values: unknown): string[] {
 }
 
 function normalizeSizePatch(patch: SizePatch): SizePatch {
-  const next: SizePatch = {
-    ...patch,
-  };
+  const next: SizePatch = { ...patch };
 
   for (const key of SIZE_NUMBER_KEYS) {
     const value = next[key];
@@ -242,9 +226,7 @@ function normalizeSizePatch(patch: SizePatch): SizePatch {
 }
 
 function normalizeVolumePatch(patch: VolumePatch): VolumePatch {
-  const next: VolumePatch = {
-    ...patch,
-  };
+  const next: VolumePatch = { ...patch };
 
   if (next.volumeValue !== undefined) {
     next.volumeValue = normalizeNonNegativeNumber(next.volumeValue);
@@ -264,37 +246,30 @@ function normalizeVariationsState(
   const validColors = new Set(colors);
 
   const sizes = Array.isArray(input?.sizes)
-    ? input.sizes.map((size) => ({
-        ...size,
-      }))
+    ? input.sizes.map((size) => ({ ...size }))
     : [];
 
   const validSizeLabels = new Set(
-    sizes
-      .map((size) => normalizeString(size.sizeLabel))
-      .filter(Boolean),
+    sizes.map((size) => normalizeString(size.sizeLabel)).filter(Boolean),
   );
 
-  const modelNumbers: ApparelModelNumber[] =
-    Array.isArray(input?.modelNumbers)
-      ? input.modelNumbers
-          .map(
-            (modelNumber): ApparelModelNumber => ({
-              ...modelNumber,
-              size: normalizeString(modelNumber.size),
-              color: normalizeString(modelNumber.color),
-              code: normalizeString(modelNumber.code),
-              shippingPackage: normalizeShippingPackage(
-                modelNumber.shippingPackage,
-              ),
-            }),
-          )
-          .filter(
-            (modelNumber) =>
-              validSizeLabels.has(modelNumber.size) &&
-              validColors.has(modelNumber.color),
-          )
-      : [];
+  const modelNumbers: ApparelModelNumber[] = Array.isArray(input?.modelNumbers)
+    ? input.modelNumbers
+        .map(
+          (modelNumber): ApparelModelNumber => ({
+            ...modelNumber,
+            size: normalizeString(modelNumber.size),
+            color: normalizeString(modelNumber.color),
+            code: normalizeString(modelNumber.code),
+            shippingPackage: normalizeShippingPackage(modelNumber.shippingPackage),
+          }),
+        )
+        .filter(
+          (modelNumber) =>
+            validSizeLabels.has(modelNumber.size) &&
+            validColors.has(modelNumber.color),
+        )
+    : [];
 
   const colorRgbMap: Record<string, string> = {};
 
@@ -303,11 +278,7 @@ function normalizeVariationsState(
       const normalizedColor = normalizeString(color);
       const normalizedValue = normalizeString(value);
 
-      if (
-        !normalizedColor ||
-        !normalizedValue ||
-        !validColors.has(normalizedColor)
-      ) {
+      if (!normalizedColor || !normalizedValue || !validColors.has(normalizedColor)) {
         continue;
       }
 
@@ -325,9 +296,7 @@ function normalizeVariationsState(
       }))
     : [];
 
-  const validVolumeLabels = new Set(
-    volumes.map(toVolumeLabel).filter(Boolean),
-  );
+  const validVolumeLabels = new Set(volumes.map(toVolumeLabel).filter(Boolean));
 
   const alcoholModelNumbers = Array.isArray(input?.alcoholModelNumbers)
     ? input.alcoholModelNumbers
@@ -339,15 +308,11 @@ function normalizeVariationsState(
               unit: normalizeVolumeUnit(modelNumber.volume.unit),
             },
             code: normalizeString(modelNumber.code),
-            shippingPackage: normalizeShippingPackage(
-              modelNumber.shippingPackage,
-            ),
+            shippingPackage: normalizeShippingPackage(modelNumber.shippingPackage),
           }),
         )
         .filter((modelNumber) =>
-          validVolumeLabels.has(
-            toAlcoholModelNumberVolumeLabel(modelNumber),
-          ),
+          validVolumeLabels.has(toAlcoholModelNumberVolumeLabel(modelNumber)),
         )
     : [];
 
@@ -377,9 +342,7 @@ export function useProductBlueprintVariations(
   const categoryCode = React.useMemo(
     () =>
       params.productBlueprintCategoryPath
-        ? toProductBlueprintCategoryPathKey(
-            params.productBlueprintCategoryPath,
-          )
+        ? toProductBlueprintCategoryPathKey(params.productBlueprintCategoryPath)
         : "",
     [params.productBlueprintCategoryPath],
   );
@@ -419,9 +382,7 @@ export function useProductBlueprintVariations(
   );
 
   const setFromUiState = React.useCallback(
-    (
-      next: Partial<ProductBlueprintVariationsState> | null | undefined,
-    ) => {
+    (next: Partial<ProductBlueprintVariationsState> | null | undefined) => {
       setState(normalizeVariationsState(next));
       setColorInput("");
     },
@@ -466,10 +427,7 @@ export function useProductBlueprintVariations(
     }
 
     setState((previous) => {
-      const nextRgbMap = {
-        ...previous.colorRgbMap,
-      };
-
+      const nextRgbMap = { ...previous.colorRgbMap };
       delete nextRgbMap[color];
 
       return {
@@ -493,9 +451,7 @@ export function useProductBlueprintVariations(
       }
 
       setState((previous) => {
-        const nextRgbMap = {
-          ...previous.colorRgbMap,
-        };
+        const nextRgbMap = { ...previous.colorRgbMap };
 
         if (!rawValue) {
           delete nextRgbMap[color];
@@ -624,13 +580,19 @@ export function useProductBlueprintVariations(
           return {
             ...previous,
             modelNumbers: previous.modelNumbers.filter(
-              (_modelNumber, modelNumberIndex) =>
-                modelNumberIndex !== index,
+              (_modelNumber, modelNumberIndex) => modelNumberIndex !== index,
             ),
           };
         }
 
-        const current = index === -1 ? undefined : previous.modelNumbers[index];
+        const current =
+          index === -1 ? undefined : previous.modelNumbers[index];
+
+        const existingShippingPackage = previous.modelNumbers.find(
+          (modelNumber) =>
+            modelNumber.size === normalizedSize &&
+            normalizeString(modelNumber.code) !== "",
+        )?.shippingPackage;
 
         const next: ApparelModelNumber = {
           ...(current ?? {}),
@@ -640,7 +602,9 @@ export function useProductBlueprintVariations(
           code: normalizedCode,
           shippingPackage: current
             ? normalizeShippingPackage(current.shippingPackage)
-            : createEmptyShippingPackage(),
+            : existingShippingPackage
+              ? normalizeShippingPackage(existingShippingPackage)
+              : createEmptyShippingPackage(),
         };
 
         if (index === -1) {
@@ -663,23 +627,17 @@ export function useProductBlueprintVariations(
   );
 
   const onChangeApparelShippingPackage = React.useCallback(
-    (
-      size: string,
-      color: string,
-      patch: Partial<ShippingPackage>,
-    ) => {
+    (size: string, patch: Partial<ShippingPackage>) => {
       const normalizedSize = normalizeString(size);
-      const normalizedColor = normalizeString(color);
 
-      if (!normalizedSize || !normalizedColor) {
+      if (!normalizedSize) {
         return;
       }
 
       setState((previous) => ({
         ...previous,
         modelNumbers: previous.modelNumbers.map((modelNumber) =>
-          modelNumber.size === normalizedSize &&
-          modelNumber.color === normalizedColor
+          modelNumber.size === normalizedSize
             ? {
                 ...modelNumber,
                 shippingPackage: normalizeShippingPackage({
@@ -728,9 +686,7 @@ export function useProductBlueprintVariations(
       const safePatch = normalizeVolumePatch(patch);
 
       setState((previous) => {
-        const previousRow = previous.volumes.find(
-          (volume) => volume.id === id,
-        );
+        const previousRow = previous.volumes.find((volume) => volume.id === id);
 
         if (!previousRow) {
           return previous;

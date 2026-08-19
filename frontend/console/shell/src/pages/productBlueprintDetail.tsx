@@ -9,13 +9,12 @@ import CategoryFieldsCard from "../features/productBlueprint/presentation/cards/
 import ColorVariationCard from "../features/model/presentation/components/ColorVariationCard";
 import SizeVariationCard from "../features/model/presentation/components/SizeVariationCard";
 import ModelNumberCard from "../features/model/presentation/components/ModelNumberCard";
+import ShippingPackageCard from "../features/model/presentation/components/ShippingPackageCard";
 import VolumeCard from "../features/model/presentation/components/VolumeCard";
 import AlcoholModelNumberCard from "../features/model/presentation/components/AlcoholModelNumberCard";
 import LogCard from "../features/log/presentation/LogCard";
 import { useProductBlueprintDetail } from "../features/productBlueprint/presentation/hooks/detail/useProductBlueprintDetail";
-import {
-  toProductBlueprintCategoryPathKey,
-} from "../features/productBlueprint/domain/productBlueprintCategory";
+import { toProductBlueprintCategoryPathKey } from "../features/productBlueprint/domain/productBlueprintCategory";
 import {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
   isApparelCategoryCode,
@@ -47,12 +46,10 @@ export default function ProductBlueprintDetail() {
     pageTitle,
     productName,
     brand,
-
     productBlueprintCategoryPath,
     productBlueprintCategoryLabel,
     isApparelCategory,
     isAlcoholCategory,
-
     categoryFields,
     onChangeCategoryField,
 
@@ -60,6 +57,7 @@ export default function ProductBlueprintDetail() {
     colors,
     colorInput,
     sizes,
+    modelNumbers,
     colorRgbMap,
 
     // alcohol variations
@@ -84,26 +82,24 @@ export default function ProductBlueprintDetail() {
     onRemoveSize,
     onChangeSize,
     onChangeModelNumber,
+    onChangeApparelShippingPackage,
     onAddVolume,
     onRemoveVolume,
     onChangeVolume,
     onChangeAlcoholModelNumber,
+    onChangeAlcoholShippingPackage,
     onClickAssignee,
     getCode,
   } = useProductBlueprintDetail();
 
-  const hasProductBlueprintCategory =
-    Boolean(
-      productBlueprintCategoryPath &&
+  const hasProductBlueprintCategory = Boolean(
+    productBlueprintCategoryPath &&
       productBlueprintCategoryPath.length > 0,
-    );
+  );
 
-  const categoryCode =
-    productBlueprintCategoryPath
-      ? toProductBlueprintCategoryPathKey(
-          productBlueprintCategoryPath,
-        )
-      : "";
+  const categoryCode = productBlueprintCategoryPath
+    ? toProductBlueprintCategoryPathKey(productBlueprintCategoryPath)
+    : "";
 
   const measurementOptions = isApparelCategoryCode(categoryCode)
     ? APPAREL_CATEGORY_MEASUREMENT_OPTIONS[categoryCode]
@@ -187,9 +183,7 @@ export default function ProductBlueprintDetail() {
             productBlueprintCategoryPath={productBlueprintCategoryPath}
             categoryFields={categoryFields}
             mode={editMode ? "edit" : "view"}
-            onChangeCategoryField={
-              editMode ? onChangeCategoryField : undefined
-            }
+            onChangeCategoryField={editMode ? onChangeCategoryField : undefined}
           />
         )}
 
@@ -226,8 +220,15 @@ export default function ProductBlueprintDetail() {
               sizes={sizes}
               colors={colors}
               getCode={getCode}
-              onChangeModelNumber={
-                editMode ? onChangeModelNumber : undefined
+              onChangeModelNumber={editMode ? onChangeModelNumber : undefined}
+            />
+
+            <ShippingPackageCard
+              kind="apparel"
+              mode={editMode ? "edit" : "view"}
+              modelNumbers={modelNumbers}
+              onChangeShippingPackage={
+                editMode ? onChangeApparelShippingPackage : undefined
               }
             />
           </>
@@ -251,6 +252,15 @@ export default function ProductBlueprintDetail() {
                 editMode
                   ? onChangeAlcoholModelNumber
                   : noopAlcoholModelNumber
+              }
+            />
+
+            <ShippingPackageCard
+              kind="alcohol"
+              mode={editMode ? "edit" : "view"}
+              modelNumbers={alcoholModelNumbers}
+              onChangeShippingPackage={
+                editMode ? onChangeAlcoholShippingPackage : undefined
               }
             />
           </>

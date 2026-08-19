@@ -1,4 +1,5 @@
 // frontend/console/shell/src/features/productBlueprint/presentation/hooks/create/useProductBlueprintCreate.tsx
+
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import type {
@@ -85,27 +86,15 @@ export interface UseProductBlueprintCreateResult {
   onChangeMaterial: (value: string) => void;
   onChangeWeight: (value: number) => void;
   onChangeQualityAssurance: (value: string[]) => void;
-  onChangeCategoryField: (
-    key: string,
-    value: CategoryFieldValue,
-  ) => void;
+  onChangeCategoryField: (key: string, value: CategoryFieldValue) => void;
   onChangeColorInput: (value: string) => void;
   onAddColor: () => void;
   onRemoveColor: (name: string) => void;
-  onChangeColorRgb: (
-    name: string,
-    rgbHex: string,
-  ) => void;
+  onChangeColorRgb: (name: string, rgbHex: string) => void;
   onAddSize: () => void;
   onRemoveSize: (id: string) => void;
-  onChangeSize: (
-    id: string,
-    patch: Partial<Omit<SizeRow, "id">>,
-  ) => void;
-  getCode: (
-    sizeLabel: string,
-    color: string,
-  ) => string;
+  onChangeSize: (id: string, patch: Partial<Omit<SizeRow, "id">>) => void;
+  getCode: (sizeLabel: string, color: string) => string;
   onChangeModelNumber: (
     sizeLabel: string,
     color: string,
@@ -113,7 +102,6 @@ export interface UseProductBlueprintCreateResult {
   ) => void;
   onChangeApparelShippingPackage: (
     size: string,
-    color: string,
     patch: Partial<ShippingPackage>,
   ) => void;
   onAddVolume: () => void;
@@ -255,10 +243,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
   const onChangeFit = React.useCallback(
     (value: Fit) => {
-      categoryFields.onChangeCategoryField(
-        "fit",
-        value,
-      );
+      categoryFields.onChangeCategoryField("fit", value);
     },
     [categoryFields.onChangeCategoryField],
   );
@@ -289,9 +274,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     (value: string[]) => {
       categoryFields.onChangeCategoryField(
         "washTags",
-        value.filter(
-          (item) => item.trim() !== "",
-        ),
+        value.filter((item) => item.trim() !== ""),
       );
     },
     [categoryFields.onChangeCategoryField],
@@ -316,25 +299,24 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       variations.alcoholModelNumbers,
   });
 
-  const onChangeProductBlueprintCategoryPath =
-    React.useCallback(
-      (
-        nextProductBlueprintCategoryPath:
-          ProductBlueprintCategoryPath | null,
-      ) => {
-        category.onChangeProductBlueprintCategoryPath(
-          nextProductBlueprintCategoryPath,
-        );
+  const onChangeProductBlueprintCategoryPath = React.useCallback(
+    (
+      nextProductBlueprintCategoryPath:
+        ProductBlueprintCategoryPath | null,
+    ) => {
+      category.onChangeProductBlueprintCategoryPath(
+        nextProductBlueprintCategoryPath,
+      );
 
-        categoryFields.resetCategoryFields();
-        variations.resetVariations();
-      },
-      [
-        category.onChangeProductBlueprintCategoryPath,
-        categoryFields.resetCategoryFields,
-        variations.resetVariations,
-      ],
-    );
+      categoryFields.resetCategoryFields();
+      variations.resetVariations();
+    },
+    [
+      category.onChangeProductBlueprintCategoryPath,
+      categoryFields.resetCategoryFields,
+      variations.resetVariations,
+    ],
+  );
 
   const onCreate = React.useCallback(
     async () => {
@@ -401,20 +383,13 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       };
 
       try {
-        const created = await createProductBlueprint(
-          apiParams,
-        );
-
-        const createdId = String(
-          (created as any)?.id ?? "",
-        );
+        const created = await createProductBlueprint(apiParams);
+        const createdId = String((created as any)?.id ?? "");
 
         alert("商品設計の作成が完了しました。");
 
         if (createdId) {
-          navigate(
-            `/productBlueprint/detail/${createdId}`,
-          );
+          navigate(`/productBlueprint/detail/${createdId}`);
           return;
         }
 
@@ -465,11 +440,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     [handleSelectAssignee],
   );
 
-  const onEditAssignee =
-    React.useCallback(() => {}, []);
-
-  const onClickAssignee =
-    React.useCallback(() => {}, []);
+  const onEditAssignee = React.useCallback(() => {}, []);
+  const onClickAssignee = React.useCallback(() => {}, []);
 
   return {
     title: "商品設計を作成",

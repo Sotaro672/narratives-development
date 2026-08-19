@@ -149,10 +149,18 @@ type ProductBlueprintDetailSizeOutput struct {
 	HemWidth     *int   `json:"hemWidth,omitempty"`
 }
 
+type ProductBlueprintDetailShippingPackageOutput struct {
+	WeightGrams int `json:"weightGrams"`
+	WidthMM     int `json:"widthMm"`
+	LengthMM    int `json:"lengthMm"`
+	HeightMM    int `json:"heightMm"`
+}
+
 type ProductBlueprintDetailApparelModelNumberOutput struct {
-	Size  string `json:"size"`
-	Color string `json:"color"`
-	Code  string `json:"code"`
+	Size            string                                      `json:"size"`
+	Color           string                                      `json:"color"`
+	Code            string                                      `json:"code"`
+	ShippingPackage ProductBlueprintDetailShippingPackageOutput `json:"shippingPackage"`
 }
 
 type ProductBlueprintDetailVolumeOutput struct {
@@ -167,9 +175,10 @@ type ProductBlueprintDetailVolumeRowOutput struct {
 }
 
 type ProductBlueprintDetailAlcoholModelNumberOutput struct {
-	Kind   string                             `json:"kind"`
-	Volume ProductBlueprintDetailVolumeOutput `json:"volume"`
-	Code   string                             `json:"code"`
+	Kind            string                                      `json:"kind"`
+	Volume          ProductBlueprintDetailVolumeOutput          `json:"volume"`
+	Code            string                                      `json:"code"`
+	ShippingPackage ProductBlueprintDetailShippingPackageOutput `json:"shippingPackage"`
 }
 
 type ProductBlueprintDetailModelStateOutput struct {
@@ -281,14 +290,11 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		// CompanyIDはProductBlueprintUsecaseが認証Contextから設定します。
 		CompanyID: "",
 
-		ProductBlueprintCategoryPath: append(
-			[]string(nil),
-			input.ProductBlueprintCategoryPath...,
-		),
-		CategoryFields: normalizeCategoryFields(input.CategoryFields),
-		AssigneeID:     input.AssigneeId,
-		CreatedBy:      memberIDPointerFromContext(ctx),
-		Printed:        false,
+		ProductBlueprintCategoryPath: append([]string(nil), input.ProductBlueprintCategoryPath...),
+		CategoryFields:               normalizeCategoryFields(input.CategoryFields),
+		AssigneeID:                   input.AssigneeId,
+		CreatedBy:                    memberIDPointerFromContext(ctx),
+		Printed:                      false,
 		ProductIdTag: pbdom.ProductIDTag{
 			Type: normalizeTagType(input.ProductIdTag.Type),
 		},
@@ -352,13 +358,10 @@ func (h *ProductBlueprintHandler) update(w http.ResponseWriter, r *http.Request,
 		// CompanyIDは通常更新では変更しません。
 		CompanyID: "",
 
-		ProductBlueprintCategoryPath: append(
-			[]string(nil),
-			input.ProductBlueprintCategoryPath...,
-		),
-		CategoryFields: categoryFields,
-		AssigneeID:     input.AssigneeId,
-		UpdatedBy:      memberIDPointerFromContext(ctx),
+		ProductBlueprintCategoryPath: append([]string(nil), input.ProductBlueprintCategoryPath...),
+		CategoryFields:               categoryFields,
+		AssigneeID:                   input.AssigneeId,
+		UpdatedBy:                    memberIDPointerFromContext(ctx),
 		ProductIdTag: pbdom.ProductIDTag{
 			Type: normalizeTagType(input.ProductIdTag.Type),
 		},
@@ -483,6 +486,17 @@ func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 // DTO assembler
 // ---------------------------------------------------
 
+func toProductBlueprintDetailShippingPackageOutput(
+	shippingPackage pbquery.ProductBlueprintDetailShippingPackage,
+) ProductBlueprintDetailShippingPackageOutput {
+	return ProductBlueprintDetailShippingPackageOutput{
+		WeightGrams: shippingPackage.WeightGrams,
+		WidthMM:     shippingPackage.WidthMM,
+		LengthMM:    shippingPackage.LengthMM,
+		HeightMM:    shippingPackage.HeightMM,
+	}
+}
+
 func toProductBlueprintDetailModelStateOutput(
 	state pbquery.ProductBlueprintDetailModelState,
 ) ProductBlueprintDetailModelStateOutput {
@@ -508,9 +522,10 @@ func toProductBlueprintDetailModelStateOutput(
 	modelNumbers := make([]ProductBlueprintDetailApparelModelNumberOutput, 0, len(state.ModelNumbers))
 	for _, modelNumber := range state.ModelNumbers {
 		modelNumbers = append(modelNumbers, ProductBlueprintDetailApparelModelNumberOutput{
-			Size:  modelNumber.Size,
-			Color: modelNumber.Color,
-			Code:  modelNumber.Code,
+			Size:            modelNumber.Size,
+			Color:           modelNumber.Color,
+			Code:            modelNumber.Code,
+			ShippingPackage: toProductBlueprintDetailShippingPackageOutput(modelNumber.ShippingPackage),
 		})
 	}
 
@@ -531,7 +546,8 @@ func toProductBlueprintDetailModelStateOutput(
 				Value: modelNumber.Volume.Value,
 				Unit:  modelNumber.Volume.Unit,
 			},
-			Code: modelNumber.Code,
+			Code:            modelNumber.Code,
+			ShippingPackage: toProductBlueprintDetailShippingPackageOutput(modelNumber.ShippingPackage),
 		})
 	}
 

@@ -11,25 +11,18 @@ import {
 } from "../../../application/productBlueprintDetailService";
 import {
   APPAREL_CATEGORY_OPTIONS,
-  type ApparelModelNumberRow as ModelNumberRow,
   type ApparelSizeInput,
 } from "../../../../../shared/types/apparel";
 import type {
   AlcoholModelNumber,
+  ApparelModelNumber,
+  ShippingPackage,
   VolumeRow,
 } from "../../../../model/application/modelCreateService";
-import {
-  ALCOHOL_CATEGORY_OPTIONS,
-} from "../../../domain/alcohol";
-import {
-  COSMETICS_CATEGORY_OPTIONS,
-} from "../../../domain/cosmetics";
-import {
-  HEALTHCARE_CATEGORY_OPTIONS,
-} from "../../../domain/healthcare";
-import {
-  OTHER_CATEGORY_OPTIONS,
-} from "../../../domain/other";
+import { ALCOHOL_CATEGORY_OPTIONS } from "../../../domain/alcohol";
+import { COSMETICS_CATEGORY_OPTIONS } from "../../../domain/cosmetics";
+import { HEALTHCARE_CATEGORY_OPTIONS } from "../../../domain/healthcare";
+import { OTHER_CATEGORY_OPTIONS } from "../../../domain/other";
 import {
   toProductBlueprintCategoryPathKey,
   type CategoryFieldValue,
@@ -41,44 +34,28 @@ import { useProductBlueprintVariations } from "../shared/useProductBlueprintVari
 
 type SizeRow = ApparelSizeInput & { id: string };
 
-const CATEGORY_LABEL_BY_PATH_KEY: Readonly<
-  Record<string, string>
-> = Object.fromEntries(
+const CATEGORY_LABEL_BY_PATH_KEY: Readonly<Record<string, string>> = Object.fromEntries(
   [
     ...APPAREL_CATEGORY_OPTIONS,
     ...ALCOHOL_CATEGORY_OPTIONS,
     ...COSMETICS_CATEGORY_OPTIONS,
     ...HEALTHCARE_CATEGORY_OPTIONS,
     ...OTHER_CATEGORY_OPTIONS,
-  ].map(
-    (option) => [
-      option.value,
-      option.label,
-    ],
-  ),
+  ].map((option) => [option.value, option.label]),
 );
 
 function getProductBlueprintCategoryLabel(
-  productBlueprintCategoryPath:
-    ProductBlueprintCategoryPath | null,
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath | null,
 ): string {
-  if (
-    !productBlueprintCategoryPath ||
-    productBlueprintCategoryPath.length === 0
-  ) {
+  if (!productBlueprintCategoryPath || productBlueprintCategoryPath.length === 0) {
     return "";
   }
 
-  const pathKey =
-    toProductBlueprintCategoryPathKey(
-      productBlueprintCategoryPath,
-    );
+  const pathKey = toProductBlueprintCategoryPathKey(productBlueprintCategoryPath);
 
   return (
     CATEGORY_LABEL_BY_PATH_KEY[pathKey] ??
-    productBlueprintCategoryPath[
-      productBlueprintCategoryPath.length - 1
-    ] ??
+    productBlueprintCategoryPath[productBlueprintCategoryPath.length - 1] ??
     ""
   );
 }
@@ -96,7 +73,7 @@ export interface UseProductBlueprintDetailResult {
   colors: string[];
   colorInput: string;
   sizes: SizeRow[];
-  modelNumbers: ModelNumberRow[];
+  modelNumbers: ApparelModelNumber[];
   colorRgbMap: Record<string, string>;
   volumes: VolumeRow[];
   alcoholModelNumbers: AlcoholModelNumber[];
@@ -125,10 +102,18 @@ export interface UseProductBlueprintDetailResult {
   onAddSize: () => void;
   onChangeSize: (id: string, patch: Partial<Omit<SizeRow, "id">>) => void;
   onChangeModelNumber: (sizeLabel: string, color: string, nextCode: string) => void;
+  onChangeApparelShippingPackage: (
+    size: string,
+    patch: Partial<ShippingPackage>,
+  ) => void;
   onAddVolume: () => void;
   onRemoveVolume: (id: string) => void;
   onChangeVolume: (id: string, patch: Partial<Omit<VolumeRow, "id">>) => void;
   onChangeAlcoholModelNumber: (volumeLabel: string, nextCode: string) => void;
+  onChangeAlcoholShippingPackage: (
+    volumeLabel: string,
+    patch: Partial<ShippingPackage>,
+  ) => void;
   onSelectAssignee: (id: string) => void;
   onClickAssignee: () => void;
 }
@@ -139,10 +124,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
   const [productName, setProductName] = React.useState("");
   const [brand, setBrand] = React.useState("");
-  const [
-    productBlueprintCategoryPath,
-    setProductBlueprintCategoryPath,
-  ] =
+  const [productBlueprintCategoryPath, setProductBlueprintCategoryPath] =
     React.useState<ProductBlueprintCategoryPath | null>(null);
   const [categoryFields, setCategoryFields] = React.useState<CategoryFieldValues>({});
   const [creator, setCreator] = React.useState("作成者未設定");
@@ -167,14 +149,10 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     defaultToCurrentMember: false,
   });
 
-  const productBlueprintCategoryLabel =
-    React.useMemo(
-      () =>
-        getProductBlueprintCategoryLabel(
-          productBlueprintCategoryPath,
-        ),
-      [productBlueprintCategoryPath],
-    );
+  const productBlueprintCategoryLabel = React.useMemo(
+    () => getProductBlueprintCategoryLabel(productBlueprintCategoryPath),
+    [productBlueprintCategoryPath],
+  );
 
   const pageTitle = productName || blueprintId || "";
 
@@ -199,10 +177,12 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     onAddSize,
     onChangeSize,
     onChangeModelNumber,
+    onChangeApparelShippingPackage,
     onAddVolume,
     onRemoveVolume,
     onChangeVolume,
     onChangeAlcoholModelNumber,
+    onChangeAlcoholShippingPackage,
   } = useProductBlueprintVariations({
     productBlueprintCategoryPath,
   });
@@ -237,11 +217,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setBrand(detail.brandName);
         setPrinted(detail.printed);
         setCompanyId(detail.companyId);
-        setProductBlueprintCategoryPath(
-          [
-            ...detail.productBlueprintCategoryPath,
-          ],
-        );
+        setProductBlueprintCategoryPath([...detail.productBlueprintCategoryPath]);
         setCategoryFields(detail.categoryFields ?? {});
         setFromUiState(detail.modelState);
         setInitialAssigneeId(detail.assigneeId);
@@ -289,10 +265,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
       return;
     }
 
-    if (
-      !productBlueprintCategoryPath ||
-      productBlueprintCategoryPath.length === 0
-    ) {
+    if (!productBlueprintCategoryPath || productBlueprintCategoryPath.length === 0) {
       return;
     }
 
@@ -304,9 +277,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     void updateProductBlueprint({
       id: blueprintId,
       productName,
-      productBlueprintCategoryPath: [
-        ...productBlueprintCategoryPath,
-      ],
+      productBlueprintCategoryPath: [...productBlueprintCategoryPath],
       productIdTagType: "qr",
       sizes: isApparelCategory ? sizes : [],
       modelNumbers: isApparelCategory ? modelNumbers : [],
@@ -325,11 +296,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setBrand(detail.brandName);
         setPrinted(detail.printed);
         setCompanyId(detail.companyId);
-        setProductBlueprintCategoryPath(
-          [
-            ...detail.productBlueprintCategoryPath,
-          ],
-        );
+        setProductBlueprintCategoryPath([...detail.productBlueprintCategoryPath]);
         setCategoryFields(detail.categoryFields ?? {});
         setFromUiState(detail.modelState);
         setInitialAssigneeId(detail.assigneeId);
@@ -454,10 +421,12 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     onAddSize,
     onChangeSize,
     onChangeModelNumber,
+    onChangeApparelShippingPackage,
     onAddVolume,
     onRemoveVolume,
     onChangeVolume,
     onChangeAlcoholModelNumber,
+    onChangeAlcoholShippingPackage,
     onSelectAssignee,
     onClickAssignee,
   };

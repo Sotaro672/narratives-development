@@ -25,10 +25,18 @@ export type ProductBlueprintDetailSizeResponse = {
   hemWidth?: number;
 };
 
+export type ProductBlueprintDetailShippingPackageResponse = {
+  weightGrams: number;
+  widthMm: number;
+  lengthMm: number;
+  heightMm: number;
+};
+
 export type ProductBlueprintDetailApparelModelNumberResponse = {
   size: string;
   color: string;
   code: string;
+  shippingPackage: ProductBlueprintDetailShippingPackageResponse;
 };
 
 export type ProductBlueprintDetailVolumeResponse = {
@@ -46,6 +54,7 @@ export type ProductBlueprintDetailAlcoholModelNumberResponse = {
   kind: "alcohol";
   volume: ProductBlueprintDetailVolumeResponse;
   code: string;
+  shippingPackage: ProductBlueprintDetailShippingPackageResponse;
 };
 
 export type ProductBlueprintDetailModelStateResponse = {
@@ -81,9 +90,7 @@ export type ProductBlueprintDetailResponse = {
 
 export type { ProductBlueprintCategoryPath };
 
-export async function getProductBlueprintDetailApi(
-  id: string,
-): Promise<ProductBlueprintDetailResponse> {
+export async function getProductBlueprintDetailApi(id: string): Promise<ProductBlueprintDetailResponse> {
   if (!id) {
     throw new Error("getProductBlueprintDetailApi: id が空です");
   }
