@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	usecase "narratives/internal/application/usecase"
 	"narratives/internal/domain/common"
@@ -21,7 +20,10 @@ import (
 // ------------------------------------------------------------
 
 type ProductBlueprintCategoryUsecase interface {
-	GetByID(ctx context.Context, id string) (categorydom.ProductBlueprintCategory, error)
+	GetByPath(
+		ctx context.Context,
+		path []string,
+	) (categorydom.ProductBlueprintCategory, error)
 
 	List(
 		ctx context.Context,
@@ -79,9 +81,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.listTree(w, r)
 
 	case strings.HasPrefix(path, "/console/product-blueprint-categories/"):
-		id := strings.TrimPrefix(path, "/console/product-blueprint-categories/")
-		if id == "" || strings.Contains(id, "/") {
-			notFound(w)
+		rawPath := strings.TrimPrefix(
+			path,
+			"/console/product-blueprint-categories/",
+		)
+
+		categoryPath, err := parseCategoryPath(rawPath)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": err.Error(),
+			})
 			return
 		}
 
@@ -90,7 +99,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		h.getByID(w, r, id)
+		h.getByPath(w, r, categoryPath)
 
 	default:
 		notFound(w)
@@ -102,31 +111,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ------------------------------------------------------------
 
 type ProductBlueprintCategoryResponse struct {
-	ID string `json:"id"`
-
-	Code   string `json:"code"`
-	NameJa string `json:"nameJa"`
-	NameEn string `json:"nameEn"`
-
-	ParentID *string  `json:"parentId"`
-	Path     []string `json:"path"`
-
-	Kind         string `json:"kind"`
-	DisplayOrder int    `json:"displayOrder"`
-
-	Attributes CategoryAttributesResponse `json:"attributes"`
-
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
-}
-
-type CategoryAttributesResponse struct {
-	RequiresExpirationDate bool `json:"requiresExpirationDate"`
-	RequiresLotNumber      bool `json:"requiresLotNumber"`
-	RequiresIngredients    bool `json:"requiresIngredients"`
-	RequiresAlcoholNotice  bool `json:"requiresAlcoholNotice"`
-	RequiresCosmeticNotice bool `json:"requiresCosmeticNotice"`
-	RequiresStorageMethod  bool `json:"requiresStorageMethod"`
+	ProductBlueprintCategoryPath []string `json:"productBlueprintCategoryPath"`
 }
 
 type ProductBlueprintCategoryListResponse struct {
@@ -145,14 +130,25 @@ type ProductBlueprintCategoryTreeResponse struct {
 // Endpoints
 // ------------------------------------------------------------
 
-func (h *Handler) getByID(w http.ResponseWriter, r *http.Request, id string) {
-	category, err := h.uc.GetByID(r.Context(), id)
+func (h *Handler) getByPath(
+	w http.ResponseWriter,
+	r *http.Request,
+	path []string,
+) {
+	category, err := h.uc.GetByPath(
+		r.Context(),
+		path,
+	)
 	if err != nil {
 		writeProductBlueprintCategoryErr(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toProductBlueprintCategoryResponse(category))
+	writeJSON(
+		w,
+		http.StatusOK,
+		toProductBlueprintCategoryResponse(category),
+	)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -205,12 +201,9 @@ func (h *Handler) listTree(w http.ResponseWriter, r *http.Request) {
 func buildListProductBlueprintCategoriesQuery(
 	values url.Values,
 ) (usecase.ListProductBlueprintCategoriesQuery, error) {
-	ids, err := parseCategoryIDs(values.Get("ids"))
-	if err != nil {
-		return usecase.ListProductBlueprintCategoriesQuery{}, err
-	}
-
-	rootOnly, err := parseOptionalBool("rootOnly", values.Get("rootOnly"))
+	paths, err := parseCategoryPaths(
+		values.Get("paths"),
+	)
 	if err != nil {
 		return usecase.ListProductBlueprintCategoriesQuery{}, err
 	}
@@ -235,63 +228,14 @@ func buildListProductBlueprintCategoriesQuery(
 			errors.New("perPage must be less than or equal to 500")
 	}
 
-	createdFrom, err := parseOptionalTime("createdFrom", values.Get("createdFrom"))
-	if err != nil {
-		return usecase.ListProductBlueprintCategoriesQuery{}, err
-	}
-
-	createdTo, err := parseOptionalTime("createdTo", values.Get("createdTo"))
-	if err != nil {
-		return usecase.ListProductBlueprintCategoriesQuery{}, err
-	}
-
-	updatedFrom, err := parseOptionalTime("updatedFrom", values.Get("updatedFrom"))
-	if err != nil {
-		return usecase.ListProductBlueprintCategoriesQuery{}, err
-	}
-
-	updatedTo, err := parseOptionalTime("updatedTo", values.Get("updatedTo"))
-	if err != nil {
-		return usecase.ListProductBlueprintCategoriesQuery{}, err
-	}
-
-	if createdFrom != nil && createdTo != nil && createdFrom.After(*createdTo) {
-		return usecase.ListProductBlueprintCategoriesQuery{},
-			errors.New("createdFrom must not be after createdTo")
-	}
-
-	if updatedFrom != nil && updatedTo != nil && updatedFrom.After(*updatedTo) {
-		return usecase.ListProductBlueprintCategoriesQuery{},
-			errors.New("updatedFrom must not be after updatedTo")
-	}
-
-	query := usecase.ListProductBlueprintCategoriesQuery{
+	return usecase.ListProductBlueprintCategoriesQuery{
 		SearchQuery: values.Get("search"),
-		IDs:         ids,
-		RootOnly:    rootOnly,
-		CreatedFrom: createdFrom,
-		CreatedTo:   createdTo,
-		UpdatedFrom: updatedFrom,
-		UpdatedTo:   updatedTo,
+		Paths:       paths,
 		SortColumn:  values.Get("sort"),
 		SortOrder:   sortOrder,
 		Page:        page,
 		PerPage:     perPage,
-	}
-
-	if value := values.Get("code"); value != "" {
-		query.Code = &value
-	}
-
-	if value := values.Get("kind"); value != "" {
-		query.Kind = &value
-	}
-
-	if value := values.Get("parentId"); value != "" {
-		query.ParentID = &value
-	}
-
-	return query, nil
+	}, nil
 }
 
 // ------------------------------------------------------------
@@ -304,7 +248,10 @@ func toProductBlueprintCategoryResponses(
 	responses := make([]ProductBlueprintCategoryResponse, 0, len(categories))
 
 	for _, category := range categories {
-		responses = append(responses, toProductBlueprintCategoryResponse(category))
+		responses = append(
+			responses,
+			toProductBlueprintCategoryResponse(category),
+		)
 	}
 
 	return responses
@@ -313,31 +260,11 @@ func toProductBlueprintCategoryResponses(
 func toProductBlueprintCategoryResponse(
 	category categorydom.ProductBlueprintCategory,
 ) ProductBlueprintCategoryResponse {
-	var parentID *string
-	if category.ParentID != nil {
-		value := string(*category.ParentID)
-		parentID = &value
-	}
-
 	return ProductBlueprintCategoryResponse{
-		ID:           string(category.ID),
-		Code:         string(category.Code),
-		NameJa:       category.NameJa,
-		NameEn:       category.NameEn,
-		ParentID:     parentID,
-		Path:         append([]string(nil), category.Path...),
-		Kind:         string(category.Kind),
-		DisplayOrder: category.DisplayOrder,
-		Attributes: CategoryAttributesResponse{
-			RequiresExpirationDate: category.Attributes.RequiresExpirationDate,
-			RequiresLotNumber:      category.Attributes.RequiresLotNumber,
-			RequiresIngredients:    category.Attributes.RequiresIngredients,
-			RequiresAlcoholNotice:  category.Attributes.RequiresAlcoholNotice,
-			RequiresCosmeticNotice: category.Attributes.RequiresCosmeticNotice,
-			RequiresStorageMethod:  category.Attributes.RequiresStorageMethod,
-		},
-		CreatedAt: formatTime(category.CreatedAt),
-		UpdatedAt: formatTime(category.UpdatedAt),
+		ProductBlueprintCategoryPath: append(
+			[]string(nil),
+			category.Path...,
+		),
 	}
 }
 
@@ -379,14 +306,7 @@ func isCategoryValidationErr(err error) bool {
 		return false
 	}
 
-	return errors.Is(err, categorydom.ErrInvalidID) ||
-		errors.Is(err, categorydom.ErrInvalidCode) ||
-		errors.Is(err, categorydom.ErrInvalidNameJa) ||
-		errors.Is(err, categorydom.ErrInvalidKind) ||
-		errors.Is(err, categorydom.ErrInvalidPath) ||
-		errors.Is(err, categorydom.ErrInvalidDisplayOrder) ||
-		errors.Is(err, categorydom.ErrInvalidCreatedAt) ||
-		errors.Is(err, categorydom.ErrInvalidUpdatedAt) ||
+	return errors.Is(err, categorydom.ErrInvalidPath) ||
 		errors.Is(err, categorydom.ErrRepositoryInvalidInput)
 }
 
@@ -400,42 +320,104 @@ func notFound(w http.ResponseWriter) {
 // Query helpers
 // ------------------------------------------------------------
 
-func parseCategoryIDs(value string) ([]string, error) {
+func parseCategoryPath(value string) ([]string, error) {
+	if value == "" {
+		return nil, errors.New(
+			"productBlueprintCategoryPath must not be empty",
+		)
+	}
+
+	parts := strings.Split(
+		value,
+		"/",
+	)
+
+	path := make([]string, 0, len(parts))
+
+	for _, segment := range parts {
+		if segment == "" {
+			return nil, errors.New(
+				"productBlueprintCategoryPath must not contain an empty segment",
+			)
+		}
+
+		path = append(
+			path,
+			segment,
+		)
+	}
+
+	return path, nil
+}
+
+func parseCategoryPaths(value string) ([][]string, error) {
 	if value == "" {
 		return nil, nil
 	}
 
-	parts := strings.Split(value, ",")
-	ids := make([]string, 0, len(parts))
-	seen := make(map[string]struct{}, len(parts))
+	values := strings.Split(
+		value,
+		",",
+	)
 
-	for _, id := range parts {
-		if id == "" {
-			return nil, errors.New("ids must not contain an empty value")
+	paths := make([][]string, 0, len(values))
+
+	for _, rawPath := range values {
+		path, err := parseCategoryPath(rawPath)
+		if err != nil {
+			return nil, err
 		}
 
-		if _, exists := seen[id]; exists {
-			return nil, fmt.Errorf("ids contains a duplicate value: %s", id)
+		if containsCategoryPath(
+			paths,
+			path,
+		) {
+			return nil, fmt.Errorf(
+				"paths contains a duplicate value: %s",
+				rawPath,
+			)
 		}
 
-		seen[id] = struct{}{}
-		ids = append(ids, id)
+		paths = append(
+			paths,
+			path,
+		)
 	}
 
-	return ids, nil
+	return paths, nil
 }
 
-func parseOptionalBool(name string, value string) (bool, error) {
-	switch value {
-	case "":
-		return false, nil
-	case "true":
-		return true, nil
-	case "false":
-		return false, nil
-	default:
-		return false, fmt.Errorf("%s must be true or false", name)
+func containsCategoryPath(
+	paths [][]string,
+	path []string,
+) bool {
+	for _, candidate := range paths {
+		if equalCategoryPath(
+			candidate,
+			path,
+		) {
+			return true
+		}
 	}
+
+	return false
+}
+
+func equalCategoryPath(
+	a []string,
+	b []string,
+) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
 }
 
 func parseOptionalSortOrder(value string) (common.SortOrder, error) {
@@ -466,26 +448,4 @@ func parseStrictPositiveInt(name string, value string, defaultValue int) (int, e
 	}
 
 	return parsed, nil
-}
-
-func parseOptionalTime(name string, value string) (*time.Time, error) {
-	if value == "" {
-		return nil, nil
-	}
-
-	parsed, err := time.Parse(time.RFC3339, value)
-	if err != nil {
-		return nil, fmt.Errorf("%s must be RFC3339: %w", name, err)
-	}
-
-	utc := parsed.UTC()
-	return &utc, nil
-}
-
-func formatTime(value time.Time) string {
-	if value.IsZero() {
-		return ""
-	}
-
-	return value.UTC().Format(time.RFC3339)
 }

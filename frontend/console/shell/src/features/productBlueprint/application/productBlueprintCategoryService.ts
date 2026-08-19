@@ -4,17 +4,16 @@ import {
   listProductBlueprintCategoryTreeApi,
 } from "../infrastructure/api/productBlueprintApi";
 
-import {
-  toProductBlueprintCategorySnapshot,
-  type ProductBlueprintCategorySnapshot,
+import type {
+  ProductBlueprintCategoryPath,
 } from "../domain/productBlueprintCategory";
 
 /**
  * 商品カテゴリツリーを取得し、
- * ProductBlueprintで利用するcategory snapshotの配列へ変換する。
+ * ProductBlueprintで利用するproductBlueprintCategoryPathの配列へ変換する。
  */
-export async function listProductBlueprintCategorySnapshots():
-  Promise<ProductBlueprintCategorySnapshot[]> {
+export async function listProductBlueprintCategoryPaths():
+  Promise<ProductBlueprintCategoryPath[]> {
   const categories =
     await listProductBlueprintCategoryTreeApi();
 
@@ -27,6 +26,8 @@ export async function listProductBlueprintCategorySnapshots():
   }
 
   return categories.map(
-    toProductBlueprintCategorySnapshot,
+    (category) => [
+      ...category.productBlueprintCategoryPath,
+    ],
   );
 }

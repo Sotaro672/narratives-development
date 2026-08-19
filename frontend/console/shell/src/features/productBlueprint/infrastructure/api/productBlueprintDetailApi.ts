@@ -4,7 +4,7 @@ import { API_BASE } from "../../../../shared/http/apiBase";
 import { fetchJSON } from "../../../../shared/http/fetchJSON";
 import type {
   CategoryFieldValues,
-  ProductBlueprintCategorySnapshot,
+  ProductBlueprintCategoryPath,
 } from "../../domain/productBlueprintCategory";
 
 export type { UpdateProductBlueprintParams } from "./productBlueprintUpdateApi";
@@ -64,8 +64,7 @@ export type ProductBlueprintDetailResponse = {
   companyId: string;
   brandId: string;
   brandName: string;
-  productBlueprintCategoryId: string;
-  productBlueprintCategory: ProductBlueprintCategorySnapshot;
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath;
   categoryFields?: CategoryFieldValues;
   productIdTag?: { type: string };
   assigneeId: string;
@@ -80,7 +79,7 @@ export type ProductBlueprintDetailResponse = {
   modelState: ProductBlueprintDetailModelStateResponse;
 };
 
-export type { ProductBlueprintCategorySnapshot };
+export type { ProductBlueprintCategoryPath };
 
 export async function getProductBlueprintDetailApi(
   id: string,

@@ -1,52 +1,159 @@
 // frontend/console/shell/src/features/productBlueprint/presentation/hooks/create/useProductBlueprintCreateCategory.ts
+
 import * as React from "react";
-import type { ProductBlueprintCategorySnapshot } from "../../../domain/productBlueprintCategory";
+
+import {
+  APPAREL_CATEGORY_OPTIONS,
+} from "../../../../../shared/types/apparel";
+
+import {
+  ALCOHOL_CATEGORY_OPTIONS,
+} from "../../../domain/alcohol";
+
+import {
+  COSMETICS_CATEGORY_OPTIONS,
+} from "../../../domain/cosmetics";
+
+import {
+  HEALTHCARE_CATEGORY_OPTIONS,
+} from "../../../domain/healthcare";
+
+import {
+  OTHER_CATEGORY_OPTIONS,
+} from "../../../domain/other";
+
+import {
+  toProductBlueprintCategoryPathKey,
+  type ProductBlueprintCategoryPath,
+} from "../../../domain/productBlueprintCategory";
+
 import { useProductBlueprintCategoryOptions } from "../shared/useProductBlueprintCategoryOptions";
 
-function getCategoryLabel(category: ProductBlueprintCategorySnapshot | null): string {
-  if (!category) {
+const CATEGORY_LABEL_BY_PATH_KEY: Readonly<
+  Record<string, string>
+> = Object.fromEntries(
+  [
+    ...APPAREL_CATEGORY_OPTIONS,
+    ...ALCOHOL_CATEGORY_OPTIONS,
+    ...COSMETICS_CATEGORY_OPTIONS,
+    ...HEALTHCARE_CATEGORY_OPTIONS,
+    ...OTHER_CATEGORY_OPTIONS,
+  ].map(
+    (option) => [
+      option.value,
+      option.label,
+    ],
+  ),
+);
+
+function getCategoryLabel(
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath | null,
+): string {
+
+  if (
+    !productBlueprintCategoryPath ||
+    productBlueprintCategoryPath.length === 0
+  ) {
+
     return "";
+
   }
-  return category.nameJa || category.nameEn || category.code || category.id || "";
+
+  const pathKey =
+    toProductBlueprintCategoryPathKey(
+      productBlueprintCategoryPath,
+    );
+
+  return (
+    CATEGORY_LABEL_BY_PATH_KEY[pathKey] ??
+    productBlueprintCategoryPath[
+      productBlueprintCategoryPath.length - 1
+    ] ??
+    ""
+  );
+
 }
 
 export type UseProductBlueprintCreateCategoryResult = {
-  productBlueprintCategoryId: string;
-  productBlueprintCategory: ProductBlueprintCategorySnapshot | null;
+
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath | null;
+
   productBlueprintCategoryLabel: string;
-  productBlueprintCategoryOptions: ProductBlueprintCategorySnapshot[];
+
+  productBlueprintCategoryOptions: ProductBlueprintCategoryPath[];
+
   productBlueprintCategoryLoading: boolean;
+
   productBlueprintCategoryError: Error | null;
-  onChangeProductBlueprintCategory: (category: ProductBlueprintCategorySnapshot | null) => void;
+
+  onChangeProductBlueprintCategoryPath: (
+    productBlueprintCategoryPath: ProductBlueprintCategoryPath | null,
+  ) => void;
+
 };
 
 export function useProductBlueprintCreateCategory(): UseProductBlueprintCreateCategoryResult {
-  const [productBlueprintCategory, setProductBlueprintCategory] =
-    React.useState<ProductBlueprintCategorySnapshot | null>(null);
+
+  const [
+    productBlueprintCategoryPath,
+    setProductBlueprintCategoryPath,
+  ] =
+    React.useState<ProductBlueprintCategoryPath | null>(null);
 
   const {
+
     productBlueprintCategoryOptions,
+
     productBlueprintCategoryLoading,
+
     productBlueprintCategoryError,
+
   } = useProductBlueprintCategoryOptions();
 
-  const productBlueprintCategoryId = React.useMemo(
-    () => productBlueprintCategory?.id ?? "",
-    [productBlueprintCategory],
+  const productBlueprintCategoryLabel = React.useMemo(
+
+    () =>
+      getCategoryLabel(
+        productBlueprintCategoryPath,
+      ),
+
+    [productBlueprintCategoryPath],
+
   );
 
-  const productBlueprintCategoryLabel = React.useMemo(
-    () => getCategoryLabel(productBlueprintCategory),
-    [productBlueprintCategory],
-  );
+  const onChangeProductBlueprintCategoryPath =
+    React.useCallback(
+      (
+        nextProductBlueprintCategoryPath:
+          ProductBlueprintCategoryPath | null,
+      ) => {
+
+        setProductBlueprintCategoryPath(
+          nextProductBlueprintCategoryPath
+            ? [
+                ...nextProductBlueprintCategoryPath,
+              ]
+            : null,
+        );
+
+      },
+      [],
+    );
 
   return {
-    productBlueprintCategoryId,
-    productBlueprintCategory,
+
+    productBlueprintCategoryPath,
+
     productBlueprintCategoryLabel,
+
     productBlueprintCategoryOptions,
+
     productBlueprintCategoryLoading,
+
     productBlueprintCategoryError,
-    onChangeProductBlueprintCategory: setProductBlueprintCategory,
+
+    onChangeProductBlueprintCategoryPath,
+
   };
+
 }

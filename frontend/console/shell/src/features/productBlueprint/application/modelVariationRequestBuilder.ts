@@ -20,8 +20,9 @@ import type {
   CreateModelVariationRequest,
 } from "../../model/infrastructure/modelRepositoryHTTP";
 import { isAlcoholCategoryCode } from "../domain/alcohol";
-import type {
-  ProductBlueprintCategorySnapshot,
+import {
+  toProductBlueprintCategoryPathKey,
+  type ProductBlueprintCategoryPath,
 } from "../domain/productBlueprintCategory";
 
 /* =========================================================
@@ -36,7 +37,7 @@ export type ProductBlueprintModelNumberInput =
 export type MissingRgbBehavior = "use-zero" | "throw";
 
 export type BuildModelVariationRequestsArgs = {
-  productBlueprintCategory: ProductBlueprintCategorySnapshot;
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath;
   colors?: string[];
   sizes?: ApparelSizeInput[];
   modelNumbers?: ProductBlueprintModelNumberInput[];
@@ -62,7 +63,7 @@ export type BuildModelVariationRequestsArgs = {
 
 /**
  * 色、サイズ、型番など、ユーザーが入力できる値だけを正規化する。
- * seedから取得するcategory codeには使用しない。
+ * productBlueprintCategoryPathから生成するpath keyには使用しない。
  */
 function normalizeUserText(
   value: string | null | undefined,
@@ -473,8 +474,10 @@ function buildAlcoholModelVariationRequests(
  * - Alcohol: CreateModelVariationRequest[]
  * - Model Variationを扱わないカテゴリ: null
  *
- * カテゴリコードはseed由来の値をそのまま使用し、
- * frontend側でtrimやkindからの推測は行わない。
+ * productBlueprintCategoryPathを正とし、
+ * frontend内部でregistry参照用のpath keyへ変換する。
+ *
+ * kindからカテゴリを推測しない。
  *
  * ApparelのうちModel Variation対象外のカテゴリでは
  * 空配列を返す。
@@ -483,7 +486,7 @@ export function buildModelVariationRequests(
   args: BuildModelVariationRequestsArgs,
 ): CreateModelVariationRequest[] | null {
   const {
-    productBlueprintCategory,
+    productBlueprintCategoryPath,
     colors = [],
     sizes = [],
     modelNumbers = [],
@@ -493,16 +496,18 @@ export function buildModelVariationRequests(
     missingRgbBehavior = "throw",
   } = args;
 
-  const categoryCode =
-    productBlueprintCategory.code;
+  const categoryPathKey =
+    toProductBlueprintCategoryPathKey(
+      productBlueprintCategoryPath,
+    );
 
   if (
     isApparelCategoryCode(
-      categoryCode,
+      categoryPathKey,
     )
   ) {
     return buildApparelModelVariationRequests({
-      categoryCode,
+      categoryCode: categoryPathKey,
       colors,
       sizes,
       modelNumbers,
@@ -513,7 +518,7 @@ export function buildModelVariationRequests(
 
   if (
     isAlcoholCategoryCode(
-      categoryCode,
+      categoryPathKey,
     )
   ) {
     return buildAlcoholModelVariationRequests({

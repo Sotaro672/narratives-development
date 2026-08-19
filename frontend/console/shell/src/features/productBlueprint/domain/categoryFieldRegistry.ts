@@ -30,6 +30,11 @@ import {
   type OtherCategoryFieldKey,
 } from "./other";
 
+import {
+  toProductBlueprintCategoryPathKey,
+  type ProductBlueprintCategoryPath,
+} from "./productBlueprintCategory";
+
 /**
  * ProductBlueprint.categoryFieldsに保存するカテゴリ別入力値。
  *
@@ -65,59 +70,64 @@ export type ProductBlueprintCategoryFieldKey =
   | OtherCategoryFieldKey;
 
 /**
- * カテゴリコードに対応する
+ * productBlueprintCategoryPathに対応する
  * ProductBlueprint.categoryFieldsのkey一覧を返す。
  */
 export function getProductBlueprintCategoryFieldKeys(
-  categoryCode: string,
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath,
 ): ProductBlueprintCategoryFieldKey[] {
+  const pathKey =
+    toProductBlueprintCategoryPathKey(
+      productBlueprintCategoryPath,
+    );
+
   if (
     isAlcoholCategoryCode(
-      categoryCode,
+      pathKey,
     )
   ) {
     return getAlcoholCategoryFieldKeys(
-      categoryCode,
+      pathKey,
     );
   }
 
   if (
     isApparelCategoryCode(
-      categoryCode,
+      pathKey,
     )
   ) {
     return getApparelCategoryFieldKeys(
-      categoryCode,
+      pathKey,
     );
   }
 
   if (
     isCosmeticsCategoryCode(
-      categoryCode,
+      pathKey,
     )
   ) {
     return getCosmeticsCategoryFieldKeys(
-      categoryCode,
+      pathKey,
     );
   }
 
   if (
     isHealthcareCategoryCode(
-      categoryCode,
+      pathKey,
     )
   ) {
     return getHealthcareCategoryFieldKeys(
-      categoryCode,
+      pathKey,
     );
   }
 
   if (
     isOtherCategoryCode(
-      categoryCode,
+      pathKey,
     )
   ) {
     return getOtherCategoryFieldKeys(
-      categoryCode,
+      pathKey,
     );
   }
 

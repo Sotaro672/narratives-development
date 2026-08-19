@@ -24,6 +24,7 @@ import {
 import type {
   CategoryFieldValue,
   CategoryFieldValues,
+  ProductBlueprintCategoryPath,
 } from "../../../domain/productBlueprintCategory";
 import {
   getCategoryCardVisibility,
@@ -35,7 +36,7 @@ import {
 import WashTagField from "./WashTagField";
 
 type CategoryFieldsCardProps = {
-  categoryCode: string;
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath;
   categoryFields?: CategoryFieldValues | null;
   mode?: "edit" | "view";
   onChangeCategoryField?: (
@@ -150,7 +151,7 @@ function NumericInputNote({
 }
 
 const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
-  categoryCode,
+  productBlueprintCategoryPath,
   categoryFields,
   mode = "edit",
   onChangeCategoryField,
@@ -158,8 +159,11 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
   const isEdit = mode === "edit";
 
   const visibility = React.useMemo(
-    () => getCategoryCardVisibility(categoryCode),
-    [categoryCode],
+    () =>
+      getCategoryCardVisibility(
+        productBlueprintCategoryPath,
+      ),
+    [productBlueprintCategoryPath],
   );
 
   /*

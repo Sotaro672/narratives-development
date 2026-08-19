@@ -3,13 +3,12 @@ package firestore
 
 import (
 	"context"
+	"encoding/json"
+	"sort"
 	"strings"
-	"time"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"narratives/internal/domain/common"
 	categorydom "narratives/internal/domain/productBlueprintCategory"
@@ -25,56 +24,75 @@ func NewProductBlueprintCategoryRepositoryFS(client *firestore.Client) *ProductB
 	return &ProductBlueprintCategoryRepositoryFS{client: client}
 }
 
+var _ categorydom.ReadOnlyRepositoryPort = (*ProductBlueprintCategoryRepositoryFS)(nil)
+
 // ------------------------------------------------------------
 // Firestore DTO
 // ------------------------------------------------------------
 
 type productBlueprintCategoryDoc struct {
-	Code         string                                `firestore:"code"`
-	NameJa       string                                `firestore:"nameJa"`
-	NameEn       string                                `firestore:"nameEn"`
-	ParentID     *string                               `firestore:"parentId"`
-	Path         []string                              `firestore:"path"`
-	Kind         string                                `firestore:"kind"`
-	DisplayOrder int                                   `firestore:"displayOrder"`
-	Attributes   productBlueprintCategoryAttributesDoc `firestore:"attributes"`
-	CreatedAt    time.Time                             `firestore:"createdAt"`
-	UpdatedAt    time.Time                             `firestore:"updatedAt"`
-}
-
-type productBlueprintCategoryAttributesDoc struct {
-	RequiresExpirationDate bool `firestore:"requiresExpirationDate"`
-	RequiresLotNumber      bool `firestore:"requiresLotNumber"`
-	RequiresIngredients    bool `firestore:"requiresIngredients"`
-	RequiresAlcoholNotice  bool `firestore:"requiresAlcoholNotice"`
-	RequiresCosmeticNotice bool `firestore:"requiresCosmeticNotice"`
-	RequiresStorageMethod  bool `firestore:"requiresStorageMethod"`
+	ProductBlueprintCategoryPath []string `firestore:"productBlueprintCategoryPath"`
 }
 
 // ------------------------------------------------------------
 // Read methods
 // ------------------------------------------------------------
 
-func (r *ProductBlueprintCategoryRepositoryFS) GetByID(ctx context.Context, id string) (categorydom.ProductBlueprintCategory, error) {
+func (r *ProductBlueprintCategoryRepositoryFS) GetByPath(
+	ctx context.Context,
+	path []string,
+) (categorydom.ProductBlueprintCategory, error) {
 	if r == nil || r.client == nil {
 		return categorydom.ProductBlueprintCategory{}, categorydom.ErrRepositoryInvalidInput
 	}
-	if id == "" {
-		return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidID
+
+	if !isValidProductBlueprintCategoryPath(path) {
+		return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidPath
 	}
 
-	snap, err := r.client.Collection(productBlueprintCategoryCollection).Doc(id).Get(ctx)
+	iter := r.client.Collection(productBlueprintCategoryCollection).
+		Where(
+			"productBlueprintCategoryPath",
+			"==",
+			append(
+				[]string(nil),
+				path...,
+			),
+		).
+		Limit(2).
+		Documents(ctx)
+	defer iter.Stop()
+
+	snap, err := iter.Next()
+	if err == iterator.Done {
+		return categorydom.ProductBlueprintCategory{}, categorydom.ErrNotFound
+	}
 	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return categorydom.ProductBlueprintCategory{}, categorydom.ErrNotFound
-		}
 		return categorydom.ProductBlueprintCategory{}, err
 	}
 
-	return productBlueprintCategoryFromSnapshot(snap)
+	category, err := productBlueprintCategoryFromSnapshot(snap)
+	if err != nil {
+		return categorydom.ProductBlueprintCategory{}, err
+	}
+
+	duplicate, err := iter.Next()
+	if err == nil && duplicate != nil {
+		return categorydom.ProductBlueprintCategory{}, categorydom.ErrConflict
+	}
+	if err != nil && err != iterator.Done {
+		return categorydom.ProductBlueprintCategory{}, err
+	}
+
+	return category, nil
 }
 
-func (r *ProductBlueprintCategoryRepositoryFS) List(ctx context.Context, filter categorydom.Filter, sort common.Sort, page common.Page) (common.PageResult[categorydom.ProductBlueprintCategory], error) {
+func (r *ProductBlueprintCategoryRepositoryFS) List(
+	ctx context.Context,
+	filter categorydom.Filter,
+	sortSpec common.Sort,
+	page common.Page,
+) (common.PageResult[categorydom.ProductBlueprintCategory], error) {
 	if r == nil || r.client == nil {
 		return common.PageResult[categorydom.ProductBlueprintCategory]{}, categorydom.ErrRepositoryInvalidInput
 	}
@@ -92,59 +110,53 @@ func (r *ProductBlueprintCategoryRepositoryFS) List(ctx context.Context, filter 
 		perPage = 500
 	}
 
-	sortColumn := sort.Column
+	sortColumn := sortSpec.Column
 	if sortColumn == "" {
-		sortColumn = categorydom.SortColumnDisplayOrder
+		sortColumn = categorydom.SortColumnPath
 	}
 	if !categorydom.IsAllowedSortColumn(sortColumn) {
 		return common.PageResult[categorydom.ProductBlueprintCategory]{}, categorydom.ErrRepositoryInvalidInput
 	}
 
-	sortField, err := productBlueprintCategoryFirestoreSortField(sortColumn)
-	if err != nil {
-		return common.PageResult[categorydom.ProductBlueprintCategory]{}, err
-	}
-
-	sortOrder := sort.Order
+	sortOrder := sortSpec.Order
 	if sortOrder == "" {
 		sortOrder = common.SortAsc
 	}
 
-	var direction firestore.Direction
 	switch sortOrder {
 	case common.SortAsc:
-		direction = firestore.Asc
 	case common.SortDesc:
-		direction = firestore.Desc
 	default:
 		return common.PageResult[categorydom.ProductBlueprintCategory]{}, categorydom.ErrRepositoryInvalidInput
 	}
 
-	iter := r.client.Collection(productBlueprintCategoryCollection).OrderBy(sortField, direction).Documents(ctx)
-	defer iter.Stop()
+	all, err := r.listAll(ctx)
+	if err != nil {
+		return common.PageResult[categorydom.ProductBlueprintCategory]{}, err
+	}
 
-	all := make([]categorydom.ProductBlueprintCategory, 0)
-	for {
-		snap, err := iter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return common.PageResult[categorydom.ProductBlueprintCategory]{}, err
-		}
+	filtered := make([]categorydom.ProductBlueprintCategory, 0, len(all))
 
-		category, err := productBlueprintCategoryFromSnapshot(snap)
-		if err != nil {
-			return common.PageResult[categorydom.ProductBlueprintCategory]{}, err
-		}
-		if !matchesProductBlueprintCategoryFilter(category, filter) {
+	for _, category := range all {
+		if !matchesProductBlueprintCategoryFilter(
+			category,
+			filter,
+		) {
 			continue
 		}
 
-		all = append(all, category)
+		filtered = append(
+			filtered,
+			category,
+		)
 	}
 
-	totalCount := len(all)
+	sortProductBlueprintCategories(
+		filtered,
+		sortOrder,
+	)
+
+	totalCount := len(filtered)
 	totalPages := 0
 	if totalCount > 0 {
 		totalPages = (totalCount + perPage - 1) / perPage
@@ -161,7 +173,7 @@ func (r *ProductBlueprintCategoryRepositoryFS) List(ctx context.Context, filter 
 	}
 
 	return common.PageResult[categorydom.ProductBlueprintCategory]{
-		Items:      all[start:end],
+		Items:      filtered[start:end],
 		TotalCount: totalCount,
 		TotalPages: totalPages,
 		Page:       pageNumber,
@@ -169,39 +181,31 @@ func (r *ProductBlueprintCategoryRepositoryFS) List(ctx context.Context, filter 
 	}, nil
 }
 
-func (r *ProductBlueprintCategoryRepositoryFS) ListTree(ctx context.Context) ([]categorydom.ProductBlueprintCategory, error) {
+func (r *ProductBlueprintCategoryRepositoryFS) ListTree(
+	ctx context.Context,
+) ([]categorydom.ProductBlueprintCategory, error) {
 	if r == nil || r.client == nil {
 		return nil, categorydom.ErrRepositoryInvalidInput
 	}
 
-	iter := r.client.Collection(productBlueprintCategoryCollection).
-		OrderBy("displayOrder", firestore.Asc).
-		OrderBy(firestore.DocumentID, firestore.Asc).
-		Documents(ctx)
-	defer iter.Stop()
-
-	items := make([]categorydom.ProductBlueprintCategory, 0)
-	for {
-		snap, err := iter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		category, err := productBlueprintCategoryFromSnapshot(snap)
-		if err != nil {
-			return nil, err
-		}
-
-		items = append(items, category)
+	items, err := r.listAll(ctx)
+	if err != nil {
+		return nil, err
 	}
+
+	sortProductBlueprintCategories(
+		items,
+		common.SortAsc,
+	)
 
 	return items, nil
 }
 
-func (r *ProductBlueprintCategoryRepositoryFS) ListCursor(ctx context.Context, filter categorydom.Filter, page common.CursorPage) (common.CursorPageResult[categorydom.ProductBlueprintCategory], error) {
+func (r *ProductBlueprintCategoryRepositoryFS) ListCursor(
+	ctx context.Context,
+	filter categorydom.Filter,
+	page common.CursorPage,
+) (common.CursorPageResult[categorydom.ProductBlueprintCategory], error) {
 	if r == nil || r.client == nil {
 		return common.CursorPageResult[categorydom.ProductBlueprintCategory]{}, categorydom.ErrRepositoryInvalidInput
 	}
@@ -214,57 +218,86 @@ func (r *ProductBlueprintCategoryRepositoryFS) ListCursor(ctx context.Context, f
 		limit = 500
 	}
 
-	collection := r.client.Collection(productBlueprintCategoryCollection)
-	query := collection.OrderBy("displayOrder", firestore.Asc).OrderBy(firestore.DocumentID, firestore.Asc)
-
-	if page.After != "" {
-		cursorSnap, err := collection.Doc(page.After).Get(ctx)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				return common.CursorPageResult[categorydom.ProductBlueprintCategory]{}, categorydom.ErrRepositoryInvalidInput
-			}
-			return common.CursorPageResult[categorydom.ProductBlueprintCategory]{}, err
-		}
-
-		cursorCategory, err := productBlueprintCategoryFromSnapshot(cursorSnap)
-		if err != nil {
-			return common.CursorPageResult[categorydom.ProductBlueprintCategory]{}, err
-		}
-
-		query = query.StartAfter(cursorCategory.DisplayOrder, cursorSnap.Ref.ID)
+	all, err := r.listAll(ctx)
+	if err != nil {
+		return common.CursorPageResult[categorydom.ProductBlueprintCategory]{}, err
 	}
 
-	iter := query.Documents(ctx)
-	defer iter.Stop()
+	filtered := make([]categorydom.ProductBlueprintCategory, 0, len(all))
 
-	items := make([]categorydom.ProductBlueprintCategory, 0, limit+1)
-	for {
-		snap, err := iter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return common.CursorPageResult[categorydom.ProductBlueprintCategory]{}, err
-		}
-
-		category, err := productBlueprintCategoryFromSnapshot(snap)
-		if err != nil {
-			return common.CursorPageResult[categorydom.ProductBlueprintCategory]{}, err
-		}
-		if !matchesProductBlueprintCategoryFilter(category, filter) {
+	for _, category := range all {
+		if !matchesProductBlueprintCategoryFilter(
+			category,
+			filter,
+		) {
 			continue
 		}
 
-		items = append(items, category)
-		if len(items) >= limit+1 {
+		filtered = append(
+			filtered,
+			category,
+		)
+	}
+
+	sortProductBlueprintCategories(
+		filtered,
+		common.SortAsc,
+	)
+
+	start := 0
+
+	if page.After != "" {
+		afterPath, err := decodeProductBlueprintCategoryCursor(
+			page.After,
+		)
+		if err != nil {
+			return common.CursorPageResult[categorydom.ProductBlueprintCategory]{}, categorydom.ErrRepositoryInvalidInput
+		}
+
+		found := false
+
+		for i, category := range filtered {
+			if !equalProductBlueprintCategoryPath(
+				category.Path,
+				afterPath,
+			) {
+				continue
+			}
+
+			start = i + 1
+			found = true
 			break
+		}
+
+		if !found {
+			return common.CursorPageResult[categorydom.ProductBlueprintCategory]{}, categorydom.ErrRepositoryInvalidInput
 		}
 	}
 
+	if start > len(filtered) {
+		start = len(filtered)
+	}
+
+	end := start + limit
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+
+	items := append(
+		[]categorydom.ProductBlueprintCategory(nil),
+		filtered[start:end]...,
+	)
+
 	var next *string
-	if len(items) > limit {
-		cursor := string(items[limit-1].ID)
-		items = items[:limit]
+
+	if end < len(filtered) && len(items) > 0 {
+		cursor, err := encodeProductBlueprintCategoryCursor(
+			items[len(items)-1].Path,
+		)
+		if err != nil {
+			return common.CursorPageResult[categorydom.ProductBlueprintCategory]{}, err
+		}
+
 		next = &cursor
 	}
 
@@ -275,19 +308,36 @@ func (r *ProductBlueprintCategoryRepositoryFS) ListCursor(ctx context.Context, f
 	}, nil
 }
 
-func (r *ProductBlueprintCategoryRepositoryFS) ExistsByID(ctx context.Context, id string) (bool, error) {
+func (r *ProductBlueprintCategoryRepositoryFS) ExistsByPath(
+	ctx context.Context,
+	path []string,
+) (bool, error) {
 	if r == nil || r.client == nil {
 		return false, categorydom.ErrRepositoryInvalidInput
 	}
-	if id == "" {
-		return false, categorydom.ErrInvalidID
+
+	if !isValidProductBlueprintCategoryPath(path) {
+		return false, categorydom.ErrInvalidPath
 	}
 
-	_, err := r.client.Collection(productBlueprintCategoryCollection).Doc(id).Get(ctx)
+	iter := r.client.Collection(productBlueprintCategoryCollection).
+		Where(
+			"productBlueprintCategoryPath",
+			"==",
+			append(
+				[]string(nil),
+				path...,
+			),
+		).
+		Limit(1).
+		Documents(ctx)
+	defer iter.Stop()
+
+	_, err := iter.Next()
+	if err == iterator.Done {
+		return false, nil
+	}
 	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return false, nil
-		}
 		return false, err
 	}
 
@@ -298,12 +348,11 @@ func (r *ProductBlueprintCategoryRepositoryFS) ExistsByID(ctx context.Context, i
 // Mapping
 // ------------------------------------------------------------
 
-func productBlueprintCategoryFromSnapshot(snap *firestore.DocumentSnapshot) (categorydom.ProductBlueprintCategory, error) {
-	if snap == nil || snap.Ref == nil {
+func productBlueprintCategoryFromSnapshot(
+	snap *firestore.DocumentSnapshot,
+) (categorydom.ProductBlueprintCategory, error) {
+	if snap == nil {
 		return categorydom.ProductBlueprintCategory{}, categorydom.ErrNotFound
-	}
-	if snap.Ref.ID == "" {
-		return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidID
 	}
 
 	var doc productBlueprintCategoryDoc
@@ -311,31 +360,17 @@ func productBlueprintCategoryFromSnapshot(snap *firestore.DocumentSnapshot) (cat
 		return categorydom.ProductBlueprintCategory{}, err
 	}
 
-	var parentID *categorydom.CategoryID
-	if doc.ParentID != nil {
-		v := categorydom.CategoryID(*doc.ParentID)
-		parentID = &v
+	if !isValidProductBlueprintCategoryPath(
+		doc.ProductBlueprintCategoryPath,
+	) {
+		return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidPath
 	}
 
 	return categorydom.Reconstruct(
-		categorydom.CategoryID(snap.Ref.ID),
-		categorydom.CategoryCode(doc.Code),
-		doc.NameJa,
-		doc.NameEn,
-		parentID,
-		append([]string(nil), doc.Path...),
-		categorydom.CategoryKind(doc.Kind),
-		doc.DisplayOrder,
-		categorydom.CategoryAttributes{
-			RequiresExpirationDate: doc.Attributes.RequiresExpirationDate,
-			RequiresLotNumber:      doc.Attributes.RequiresLotNumber,
-			RequiresIngredients:    doc.Attributes.RequiresIngredients,
-			RequiresAlcoholNotice:  doc.Attributes.RequiresAlcoholNotice,
-			RequiresCosmeticNotice: doc.Attributes.RequiresCosmeticNotice,
-			RequiresStorageMethod:  doc.Attributes.RequiresStorageMethod,
-		},
-		doc.CreatedAt,
-		doc.UpdatedAt,
+		append(
+			[]string(nil),
+			doc.ProductBlueprintCategoryPath...,
+		),
 	)
 }
 
@@ -343,82 +378,222 @@ func productBlueprintCategoryFromSnapshot(snap *firestore.DocumentSnapshot) (cat
 // Filtering
 // ------------------------------------------------------------
 
-func matchesProductBlueprintCategoryFilter(category categorydom.ProductBlueprintCategory, filter categorydom.Filter) bool {
-	if len(filter.IDs) > 0 && !containsCategoryID(filter.IDs, category.ID) {
-		return false
-	}
-	if filter.Code != nil && category.Code != *filter.Code {
-		return false
-	}
-	if filter.Kind != nil && category.Kind != *filter.Kind {
-		return false
-	}
-	if filter.ParentID != nil && (category.ParentID == nil || *category.ParentID != *filter.ParentID) {
-		return false
-	}
-	if filter.RootOnly && category.ParentID != nil {
+func matchesProductBlueprintCategoryFilter(
+	category categorydom.ProductBlueprintCategory,
+	filter categorydom.Filter,
+) bool {
+	if len(filter.Paths) > 0 &&
+		!containsProductBlueprintCategoryPath(
+			filter.Paths,
+			category.Path,
+		) {
 		return false
 	}
 
-	searchQuery := strings.ToLower(filter.SearchQuery)
+	searchQuery := strings.ToLower(
+		filter.SearchQuery,
+	)
 	if searchQuery != "" {
-		haystack := strings.ToLower(strings.Join([]string{
-			string(category.ID),
-			string(category.Code),
-			category.NameJa,
-			category.NameEn,
-			string(category.Kind),
-			strings.Join(category.Path, " "),
-		}, " "))
-		if !strings.Contains(haystack, searchQuery) {
+		haystack := strings.ToLower(
+			strings.Join(
+				category.Path,
+				" ",
+			),
+		)
+
+		if !strings.Contains(
+			haystack,
+			searchQuery,
+		) {
 			return false
 		}
-	}
-
-	if filter.Created.From != nil && category.CreatedAt.Before(filter.Created.From.UTC()) {
-		return false
-	}
-	if filter.Created.To != nil && category.CreatedAt.After(filter.Created.To.UTC()) {
-		return false
-	}
-	if filter.Updated.From != nil && category.UpdatedAt.Before(filter.Updated.From.UTC()) {
-		return false
-	}
-	if filter.Updated.To != nil && category.UpdatedAt.After(filter.Updated.To.UTC()) {
-		return false
 	}
 
 	return true
 }
 
-func containsCategoryID(ids []categorydom.CategoryID, id categorydom.CategoryID) bool {
-	for _, v := range ids {
-		if v == id {
+func containsProductBlueprintCategoryPath(
+	paths [][]string,
+	path []string,
+) bool {
+	for _, candidate := range paths {
+		if equalProductBlueprintCategoryPath(
+			candidate,
+			path,
+		) {
 			return true
 		}
 	}
+
 	return false
 }
 
-func productBlueprintCategoryFirestoreSortField(column string) (string, error) {
-	switch column {
-	case "id":
-		return firestore.DocumentID, nil
-	case "code":
-		return "code", nil
-	case "nameJa":
-		return "nameJa", nil
-	case "nameEn":
-		return "nameEn", nil
-	case "kind":
-		return "kind", nil
-	case "displayOrder":
-		return "displayOrder", nil
-	case "createdAt":
-		return "createdAt", nil
-	case "updatedAt":
-		return "updatedAt", nil
-	default:
-		return "", categorydom.ErrRepositoryInvalidInput
+func equalProductBlueprintCategoryPath(
+	a []string,
+	b []string,
+) bool {
+	if len(a) != len(b) {
+		return false
 	}
+
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// ------------------------------------------------------------
+// Sorting
+// ------------------------------------------------------------
+
+func sortProductBlueprintCategories(
+	items []categorydom.ProductBlueprintCategory,
+	order common.SortOrder,
+) {
+	sort.SliceStable(
+		items,
+		func(i int, j int) bool {
+			comparison := compareProductBlueprintCategoryPath(
+				items[i].Path,
+				items[j].Path,
+			)
+
+			if order == common.SortDesc {
+				return comparison > 0
+			}
+
+			return comparison < 0
+		},
+	)
+}
+
+func compareProductBlueprintCategoryPath(
+	a []string,
+	b []string,
+) int {
+	length := len(a)
+	if len(b) < length {
+		length = len(b)
+	}
+
+	for i := 0; i < length; i++ {
+		if a[i] < b[i] {
+			return -1
+		}
+		if a[i] > b[i] {
+			return 1
+		}
+	}
+
+	if len(a) < len(b) {
+		return -1
+	}
+	if len(a) > len(b) {
+		return 1
+	}
+
+	return 0
+}
+
+// ------------------------------------------------------------
+// Cursor
+// ------------------------------------------------------------
+
+func encodeProductBlueprintCategoryCursor(
+	path []string,
+) (string, error) {
+	if !isValidProductBlueprintCategoryPath(path) {
+		return "", categorydom.ErrInvalidPath
+	}
+
+	value, err := json.Marshal(
+		path,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	return string(value), nil
+}
+
+func decodeProductBlueprintCategoryCursor(
+	cursor string,
+) ([]string, error) {
+	if cursor == "" {
+		return nil, categorydom.ErrRepositoryInvalidInput
+	}
+
+	var path []string
+	if err := json.Unmarshal(
+		[]byte(cursor),
+		&path,
+	); err != nil {
+		return nil, categorydom.ErrRepositoryInvalidInput
+	}
+
+	if !isValidProductBlueprintCategoryPath(path) {
+		return nil, categorydom.ErrRepositoryInvalidInput
+	}
+
+	return append(
+		[]string(nil),
+		path...,
+	), nil
+}
+
+// ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
+
+func (r *ProductBlueprintCategoryRepositoryFS) listAll(
+	ctx context.Context,
+) ([]categorydom.ProductBlueprintCategory, error) {
+	iter := r.client.Collection(productBlueprintCategoryCollection).
+		Documents(ctx)
+	defer iter.Stop()
+
+	items := make([]categorydom.ProductBlueprintCategory, 0)
+
+	for {
+		snap, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		category, err := productBlueprintCategoryFromSnapshot(
+			snap,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		items = append(
+			items,
+			category,
+		)
+	}
+
+	return items, nil
+}
+
+func isValidProductBlueprintCategoryPath(
+	path []string,
+) bool {
+	if len(path) == 0 {
+		return false
+	}
+
+	for _, segment := range path {
+		if segment == "" {
+			return false
+		}
+	}
+
+	return true
 }

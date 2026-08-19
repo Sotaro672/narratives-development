@@ -1,7 +1,9 @@
 // frontend/console/shell/src/features/productBlueprint/domain/productBlueprintCategory.ts
 
 /**
- * backend/internal/domain/common.ProductCategoryKind に対応。
+ * category input schema の categoryKind に使用する値。
+ *
+ * ProductBlueprintCategory master の永続化項目ではない。
  */
 export type ProductBlueprintCategoryKind =
   | "apparel"
@@ -11,51 +13,22 @@ export type ProductBlueprintCategoryKind =
   | "other";
 
 /**
- * productBlueprintCategory の属性フラグ。
- * backend/internal/domain/productBlueprintCategory.CategoryAttributes に対応。
+ * ProductBlueprintCategory の path。
+ *
+ * 例:
+ * ["apparel", "tops"]
+ * ["alcohol", "sake"]
  */
-export interface ProductBlueprintCategoryAttributes {
-  requiresExpirationDate: boolean;
-  requiresLotNumber: boolean;
-  requiresIngredients: boolean;
-  requiresAlcoholNotice: boolean;
-  requiresCosmeticNotice: boolean;
-  requiresStorageMethod: boolean;
-}
+export type ProductBlueprintCategoryPath =
+  string[];
 
 /**
  * Firestore の productBlueprintCategories に保存されるカテゴリマスタ。
+ *
+ * category master の正は productBlueprintCategoryPath のみとする。
  */
 export interface ProductBlueprintCategory {
-  id: string;
-  code: string;
-  nameJa: string;
-  nameEn: string;
-  parentId?: string | null;
-  path: string[];
-  kind: ProductBlueprintCategoryKind;
-  displayOrder: number;
-  attributes: ProductBlueprintCategoryAttributes;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-}
-
-/**
- * ProductBlueprint 側に denormalize 保存されるカテゴリ snapshot。
- *
- * NOTE:
- * - parentId は category 選択 UI の親子階層判定で使う。
- * - displayOrder は category 選択 UI の並び順制御で使う。
- */
-export interface ProductBlueprintCategorySnapshot {
-  id: string;
-  code: string;
-  nameJa: string;
-  nameEn: string;
-  parentId?: string | null;
-  kind: ProductBlueprintCategoryKind;
-  path: string[];
-  displayOrder?: number;
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath;
 }
 
 /**
@@ -91,6 +64,10 @@ export interface CategoryInputFieldDefinition {
 
 /**
  * backend/internal/domain/productBlueprintCategory.CategoryInputSchema に対応。
+ *
+ * categoryCode / categoryKind / categoryNameJa は
+ * category master の永続化項目ではなく、
+ * frontend の入力 schema を構築するための metadata として扱う。
  */
 export interface CategoryInputSchema {
   categoryCode: string;
@@ -186,6 +163,9 @@ export function isValidWashTags(
 
 /**
  * ProductBlueprintCategoryKindとして有効な値か判定する。
+ *
+ * category master の validation ではなく、
+ * category input schema metadata の validation に使用する。
  */
 export function isValidProductBlueprintCategoryKind(
   value: string | null | undefined,
@@ -200,19 +180,34 @@ export function isValidProductBlueprintCategoryKind(
 }
 
 /**
- * カテゴリマスタをProductBlueprintへ保存するsnapshotへ変換する。
+ * productBlueprintCategoryPath を
+ * category schema registry 用の key に変換する。
+ *
+ * 例:
+ * ["apparel", "tops"]
+ * ↓
+ * "apparel.tops"
  */
-export function toProductBlueprintCategorySnapshot(
-  category: ProductBlueprintCategory,
-): ProductBlueprintCategorySnapshot {
-  return {
-    id: category.id,
-    code: category.code,
-    nameJa: category.nameJa,
-    nameEn: category.nameEn,
-    parentId: category.parentId ?? null,
-    kind: category.kind,
-    path: [...category.path],
-    displayOrder: category.displayOrder,
-  };
+export function toProductBlueprintCategoryPathKey(
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath,
+): string {
+  return productBlueprintCategoryPath.join(".");
+}
+
+/**
+ * productBlueprintCategoryPath の root を返す。
+ *
+ * 例:
+ * ["alcohol", "sake"]
+ * ↓
+ * "alcohol"
+ */
+export function getProductBlueprintCategoryRoot(
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath,
+): string | null {
+  if (productBlueprintCategoryPath.length === 0) {
+    return null;
+  }
+
+  return productBlueprintCategoryPath[0] ?? null;
 }

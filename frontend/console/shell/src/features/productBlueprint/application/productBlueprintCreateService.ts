@@ -7,7 +7,7 @@ import type {
 } from "../../model/application/modelCreateService";
 import type {
   CategoryFieldValues,
-  ProductBlueprintCategorySnapshot,
+  ProductBlueprintCategoryPath,
 } from "../domain/productBlueprintCategory";
 import type { ProductBlueprintDetailResponse } from "../infrastructure/api/productBlueprintDetailApi";
 import { createProductBlueprintHTTP } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
@@ -37,8 +37,7 @@ export type ProductIDTag = {
 export type CreateProductBlueprintParams = {
   productName: string;
   brandId: string;
-  productBlueprintCategoryId: string;
-  productBlueprintCategory: ProductBlueprintCategorySnapshot;
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath;
   fit?: string | null;
   material?: string | null;
   weight?: number | null;
@@ -66,26 +65,27 @@ export type CreateProductBlueprintParams = {
 // Validation helpers
 // ------------------------------------------------------
 
-function assertProductBlueprintCategory(
+function assertProductBlueprintCategoryPath(
   params: CreateProductBlueprintParams,
 ): void {
-  if (!params.productBlueprintCategoryId?.trim()) {
+  if (
+    !Array.isArray(
+      params.productBlueprintCategoryPath,
+    ) ||
+    params.productBlueprintCategoryPath.length === 0
+  ) {
     throw new Error(
-      "createProductBlueprint: productBlueprintCategoryId が空です",
-    );
-  }
-
-  if (!params.productBlueprintCategory?.id?.trim()) {
-    throw new Error(
-      "createProductBlueprint: productBlueprintCategory.id が空です",
+      "createProductBlueprint: productBlueprintCategoryPath が空です",
     );
   }
 
   if (
-    params.productBlueprintCategoryId !== params.productBlueprintCategory.id
+    params.productBlueprintCategoryPath.some(
+      (segment) => segment === "",
+    )
   ) {
     throw new Error(
-      "createProductBlueprint: productBlueprintCategoryId と productBlueprintCategory.id が一致しません",
+      "createProductBlueprint: productBlueprintCategoryPath に空の要素があります",
     );
   }
 }
@@ -104,7 +104,7 @@ async function createProductBlueprintWithModelRequests(
   params: CreateProductBlueprintParams,
   requests: CreateModelVariationRequest[],
 ): Promise<ProductBlueprintDetailResponse> {
-  assertProductBlueprintCategory(params);
+  assertProductBlueprintCategoryPath(params);
 
   const created = await createProductBlueprintHTTP(params);
   const productBlueprintId = extractProductBlueprintId(created);
@@ -131,7 +131,8 @@ export async function createProductBlueprint(
 ): Promise<ProductBlueprintDetailResponse> {
   const requests =
     buildModelVariationRequests({
-      productBlueprintCategory: params.productBlueprintCategory,
+      productBlueprintCategoryPath:
+        params.productBlueprintCategoryPath,
       colors: params.colors ?? [],
       sizes: params.sizes ?? [],
       modelNumbers: params.modelNumbers ?? [],

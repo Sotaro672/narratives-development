@@ -3,6 +3,9 @@
 import { API_BASE } from "../../../../shared/http/apiBase";
 import { getAuthHeaders } from "../../../../shared/http/authHeaders";
 import type { CreateProductBlueprintParams } from "../../application/productBlueprintCreateService";
+import type {
+  ProductBlueprintCategoryPath,
+} from "../../domain/productBlueprintCategory";
 import type { ProductBlueprintDetailResponse } from "../api/productBlueprintDetailApi";
 import type { UpdateProductBlueprintParams } from "../api/productBlueprintUpdateApi";
 
@@ -30,34 +33,43 @@ export type ProductBlueprintListRow = {
 // Request payload helpers
 // -----------------------------------------------------------
 
-function assertProductBlueprintCategoryPayload(params: {
-  productBlueprintCategoryId: string;
-  productBlueprintCategory: { id?: string } | null | undefined;
-}): void {
-  if (!params.productBlueprintCategoryId) {
-    throw new Error("productBlueprintRepositoryHTTP: productBlueprintCategoryId が空です");
-  }
-
-  if (!params.productBlueprintCategory?.id) {
-    throw new Error("productBlueprintRepositoryHTTP: productBlueprintCategory が空です");
-  }
-
-  if (params.productBlueprintCategoryId !== params.productBlueprintCategory.id) {
+function assertProductBlueprintCategoryPath(
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath,
+): void {
+  if (
+    !Array.isArray(
+      productBlueprintCategoryPath,
+    ) ||
+    productBlueprintCategoryPath.length === 0
+  ) {
     throw new Error(
-      "productBlueprintRepositoryHTTP: productBlueprintCategoryId と productBlueprintCategory.id が一致しません",
+      "productBlueprintRepositoryHTTP: productBlueprintCategoryPath が空です",
+    );
+  }
+
+  if (
+    productBlueprintCategoryPath.some(
+      (segment) => segment === "",
+    )
+  ) {
+    throw new Error(
+      "productBlueprintRepositoryHTTP: productBlueprintCategoryPath に空の要素があります",
     );
   }
 }
 
 function buildProductBlueprintCategoryPayload(params: {
-  productBlueprintCategoryId: string;
-  productBlueprintCategory: { id?: string } | null | undefined;
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath;
   categoryFields?: unknown;
 }) {
-  assertProductBlueprintCategoryPayload(params);
+  assertProductBlueprintCategoryPath(
+    params.productBlueprintCategoryPath,
+  );
 
   return {
-    productBlueprintCategory: params.productBlueprintCategory,
+    productBlueprintCategoryPath: [
+      ...params.productBlueprintCategoryPath,
+    ],
     categoryFields: params.categoryFields ?? null,
   };
 }
@@ -80,8 +92,8 @@ export async function createProductBlueprintHTTP(
   const authHeaders = await getAuthHeaders();
 
   const categoryPayload = buildProductBlueprintCategoryPayload({
-    productBlueprintCategoryId: params.productBlueprintCategoryId,
-    productBlueprintCategory: params.productBlueprintCategory,
+    productBlueprintCategoryPath:
+      params.productBlueprintCategoryPath,
     categoryFields: params.categoryFields,
   });
 
@@ -152,8 +164,8 @@ export async function updateProductBlueprintHTTP(
   const url = `${API_BASE}/product-blueprints/${encodeURIComponent(id)}`;
 
   const categoryPayload = buildProductBlueprintCategoryPayload({
-    productBlueprintCategoryId: params.productBlueprintCategoryId,
-    productBlueprintCategory: params.productBlueprintCategory,
+    productBlueprintCategoryPath:
+      params.productBlueprintCategoryPath,
     categoryFields: params.categoryFields,
   });
 

@@ -1,4 +1,4 @@
-// frontend\console\productBlueprint\src\presentation\cards\classification\ProductBlueprintClassificationCard.tsx
+// frontend\console\shell\src\features\productBlueprint\presentation\cards\classification\ProductBlueprintClassificationCard.tsx
 
 import * as React from "react";
 import { Tags } from "lucide-react";
@@ -9,8 +9,6 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../../shared/ui";
-
-import type { ProductBlueprintCategorySnapshot } from "../../../domain/productBlueprintCategory";
 
 import ProductBlueprintBrandField, {
   type BrandOption,
@@ -28,13 +26,12 @@ type ProductBlueprintClassificationCardProps = {
   brandError?: Error | null;
   onChangeBrandId?: (id: string) => void;
 
-  productBlueprintCategoryId: string;
-  productBlueprintCategory: ProductBlueprintCategorySnapshot | null;
+  productBlueprintCategoryPath: ProductBlueprintCategoryOption | null;
   productBlueprintCategoryOptions?: ProductBlueprintCategoryOption[];
   productBlueprintCategoryLoading?: boolean;
   productBlueprintCategoryError?: Error | null;
-  onChangeProductBlueprintCategory?: (
-    category: ProductBlueprintCategorySnapshot | null,
+  onChangeProductBlueprintCategoryPath?: (
+    productBlueprintCategoryPath: ProductBlueprintCategoryOption | null,
   ) => void;
 
   mode?: "edit" | "view";
@@ -50,12 +47,11 @@ const ProductBlueprintClassificationCard: React.FC<
   brandError,
   onChangeBrandId,
 
-  productBlueprintCategoryId,
-  productBlueprintCategory,
+  productBlueprintCategoryPath,
   productBlueprintCategoryOptions,
   productBlueprintCategoryLoading,
   productBlueprintCategoryError,
-  onChangeProductBlueprintCategory,
+  onChangeProductBlueprintCategoryPath,
 
   mode = "edit",
 }) => {
@@ -78,13 +74,14 @@ const ProductBlueprintClassificationCard: React.FC<
         />
 
         <ProductBlueprintCategoryField
-          categoryId={productBlueprintCategoryId}
-          category={productBlueprintCategory}
-          categoryOptions={productBlueprintCategoryOptions}
-          categoryLoading={productBlueprintCategoryLoading}
-          categoryError={productBlueprintCategoryError}
+          productBlueprintCategoryPath={productBlueprintCategoryPath}
+          productBlueprintCategoryOptions={productBlueprintCategoryOptions}
+          productBlueprintCategoryLoading={productBlueprintCategoryLoading}
+          productBlueprintCategoryError={productBlueprintCategoryError}
           mode={mode}
-          onChangeCategory={onChangeProductBlueprintCategory}
+          onChangeProductBlueprintCategoryPath={
+            onChangeProductBlueprintCategoryPath
+          }
         />
       </CardContent>
     </Card>

@@ -1,5 +1,10 @@
 // frontend/console/shell/src/features/productBlueprint/domain/categoryCardVisibility.ts
 
+import {
+  toProductBlueprintCategoryPathKey,
+  type ProductBlueprintCategoryPath,
+} from "./productBlueprintCategory";
+
 export type CategoryCardVisibility = Readonly<{
   showVintage: boolean;
   showRegion: boolean;
@@ -66,7 +71,7 @@ const COSMETICS_VISIBILITY: CategoryCardVisibility = {
   showWashTags: false,
 };
 
-const CATEGORY_CARD_VISIBILITY_BY_CODE: Readonly<
+const CATEGORY_CARD_VISIBILITY_BY_PATH_KEY: Readonly<
   Record<string, CategoryCardVisibility>
 > = {
   "alcohol.beer": ALCOHOL_VISIBILITY,
@@ -100,10 +105,15 @@ const NUMBER_CATEGORY_FIELDS = new Set([
 ]);
 
 export function getCategoryCardVisibility(
-  categoryCode: string,
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath,
 ): CategoryCardVisibility {
+  const pathKey =
+    toProductBlueprintCategoryPathKey(
+      productBlueprintCategoryPath,
+    );
+
   return (
-    CATEGORY_CARD_VISIBILITY_BY_CODE[categoryCode] ??
+    CATEGORY_CARD_VISIBILITY_BY_PATH_KEY[pathKey] ??
     EMPTY_VISIBILITY
   );
 }

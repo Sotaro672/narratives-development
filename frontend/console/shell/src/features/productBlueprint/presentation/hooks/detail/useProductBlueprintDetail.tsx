@@ -9,30 +9,85 @@ import {
   getProductBlueprintDetail,
   updateProductBlueprint,
 } from "../../../application/productBlueprintDetailService";
-import type {
-  ApparelModelNumberRow as ModelNumberRow,
-  ApparelSizeInput,
+import {
+  APPAREL_CATEGORY_OPTIONS,
+  type ApparelModelNumberRow as ModelNumberRow,
+  type ApparelSizeInput,
 } from "../../../../../shared/types/apparel";
 import type {
   AlcoholModelNumber,
   VolumeRow,
 } from "../../../../model/application/modelCreateService";
-import type {
-  CategoryFieldValue,
-  CategoryFieldValues,
-  ProductBlueprintCategorySnapshot,
+import {
+  ALCOHOL_CATEGORY_OPTIONS,
+} from "../../../domain/alcohol";
+import {
+  COSMETICS_CATEGORY_OPTIONS,
+} from "../../../domain/cosmetics";
+import {
+  HEALTHCARE_CATEGORY_OPTIONS,
+} from "../../../domain/healthcare";
+import {
+  OTHER_CATEGORY_OPTIONS,
+} from "../../../domain/other";
+import {
+  toProductBlueprintCategoryPathKey,
+  type CategoryFieldValue,
+  type CategoryFieldValues,
+  type ProductBlueprintCategoryPath,
 } from "../../../domain/productBlueprintCategory";
 import { useProductBlueprintValidation } from "../shared/useProductBlueprintValidation";
 import { useProductBlueprintVariations } from "../shared/useProductBlueprintVariations";
 
 type SizeRow = ApparelSizeInput & { id: string };
 
+const CATEGORY_LABEL_BY_PATH_KEY: Readonly<
+  Record<string, string>
+> = Object.fromEntries(
+  [
+    ...APPAREL_CATEGORY_OPTIONS,
+    ...ALCOHOL_CATEGORY_OPTIONS,
+    ...COSMETICS_CATEGORY_OPTIONS,
+    ...HEALTHCARE_CATEGORY_OPTIONS,
+    ...OTHER_CATEGORY_OPTIONS,
+  ].map(
+    (option) => [
+      option.value,
+      option.label,
+    ],
+  ),
+);
+
+function getProductBlueprintCategoryLabel(
+  productBlueprintCategoryPath:
+    ProductBlueprintCategoryPath | null,
+): string {
+  if (
+    !productBlueprintCategoryPath ||
+    productBlueprintCategoryPath.length === 0
+  ) {
+    return "";
+  }
+
+  const pathKey =
+    toProductBlueprintCategoryPathKey(
+      productBlueprintCategoryPath,
+    );
+
+  return (
+    CATEGORY_LABEL_BY_PATH_KEY[pathKey] ??
+    productBlueprintCategoryPath[
+      productBlueprintCategoryPath.length - 1
+    ] ??
+    ""
+  );
+}
+
 export interface UseProductBlueprintDetailResult {
   pageTitle: string;
   productName: string;
   brand: string;
-  productBlueprintCategoryId: string;
-  productBlueprintCategory: ProductBlueprintCategorySnapshot | null;
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath | null;
   productBlueprintCategoryLabel: string;
   isApparelCategory: boolean;
   isAlcoholCategory: boolean;
@@ -84,8 +139,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
   const [productName, setProductName] = React.useState("");
   const [brand, setBrand] = React.useState("");
-  const [productBlueprintCategory, setProductBlueprintCategory] =
-    React.useState<ProductBlueprintCategorySnapshot | null>(null);
+  const [
+    productBlueprintCategoryPath,
+    setProductBlueprintCategoryPath,
+  ] =
+    React.useState<ProductBlueprintCategoryPath | null>(null);
   const [categoryFields, setCategoryFields] = React.useState<CategoryFieldValues>({});
   const [creator, setCreator] = React.useState("作成者未設定");
   const [createdAt, setCreatedAt] = React.useState("");
@@ -109,13 +167,15 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     defaultToCurrentMember: false,
   });
 
-  const productBlueprintCategoryId = productBlueprintCategory?.id ?? "";
   const productBlueprintCategoryLabel =
-    productBlueprintCategory?.nameJa ||
-    productBlueprintCategory?.nameEn ||
-    productBlueprintCategory?.code ||
-    productBlueprintCategory?.id ||
-    "";
+    React.useMemo(
+      () =>
+        getProductBlueprintCategoryLabel(
+          productBlueprintCategoryPath,
+        ),
+      [productBlueprintCategoryPath],
+    );
+
   const pageTitle = productName || blueprintId || "";
 
   const {
@@ -143,14 +203,15 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     onRemoveVolume,
     onChangeVolume,
     onChangeAlcoholModelNumber,
-  } = useProductBlueprintVariations({ productBlueprintCategory });
+  } = useProductBlueprintVariations({
+    productBlueprintCategoryPath,
+  });
 
   const validate = useProductBlueprintValidation({
     companyId,
     productName,
     brandId,
-    productBlueprintCategoryId,
-    productBlueprintCategory,
+    productBlueprintCategoryPath,
     categoryFields,
     isApparelCategory,
     isAlcoholCategory,
@@ -176,7 +237,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setBrand(detail.brandName);
         setPrinted(detail.printed);
         setCompanyId(detail.companyId);
-        setProductBlueprintCategory(detail.productBlueprintCategory);
+        setProductBlueprintCategoryPath(
+          [
+            ...detail.productBlueprintCategoryPath,
+          ],
+        );
         setCategoryFields(detail.categoryFields ?? {});
         setFromUiState(detail.modelState);
         setInitialAssigneeId(detail.assigneeId);
@@ -195,6 +260,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           setUpdatedAt("");
         }
       } catch {
+        setProductBlueprintCategoryPath(null);
         resetVariations();
       }
     })();
@@ -223,7 +289,12 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
       return;
     }
 
-    if (!productBlueprintCategory) return;
+    if (
+      !productBlueprintCategoryPath ||
+      productBlueprintCategoryPath.length === 0
+    ) {
+      return;
+    }
 
     if (!assigneeId) {
       alert("担当者を選択してください。");
@@ -233,8 +304,9 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     void updateProductBlueprint({
       id: blueprintId,
       productName,
-      productBlueprintCategoryId,
-      productBlueprintCategory,
+      productBlueprintCategoryPath: [
+        ...productBlueprintCategoryPath,
+      ],
       productIdTagType: "qr",
       sizes: isApparelCategory ? sizes : [],
       modelNumbers: isApparelCategory ? modelNumbers : [],
@@ -253,7 +325,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setBrand(detail.brandName);
         setPrinted(detail.printed);
         setCompanyId(detail.companyId);
-        setProductBlueprintCategory(detail.productBlueprintCategory);
+        setProductBlueprintCategoryPath(
+          [
+            ...detail.productBlueprintCategoryPath,
+          ],
+        );
         setCategoryFields(detail.categoryFields ?? {});
         setFromUiState(detail.modelState);
         setInitialAssigneeId(detail.assigneeId);
@@ -281,8 +357,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     blueprintId,
     validate,
     productName,
-    productBlueprintCategoryId,
-    productBlueprintCategory,
+    productBlueprintCategoryPath,
     categoryFields,
     sizes,
     modelNumbers,
@@ -344,8 +419,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     pageTitle,
     productName,
     brand,
-    productBlueprintCategoryId,
-    productBlueprintCategory,
+    productBlueprintCategoryPath,
     productBlueprintCategoryLabel,
     isApparelCategory,
     isAlcoholCategory,

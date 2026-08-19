@@ -12,6 +12,9 @@ import ModelNumberCard from "../features/model/presentation/components/ModelNumb
 import VolumeCard from "../features/model/presentation/components/VolumeCard";
 import AlcoholModelNumberCard from "../features/model/presentation/components/AlcoholModelNumberCard";
 import { useProductBlueprintCreate } from "../features/productBlueprint/presentation/hooks/create/useProductBlueprintCreate";
+import {
+  toProductBlueprintCategoryPathKey,
+} from "../features/productBlueprint/domain/productBlueprintCategory";
 
 function shouldShowApparelVariationCards(categoryCode: string): boolean {
   return (
@@ -46,8 +49,7 @@ export default function ProductBlueprintCreate() {
 
     // 商品設計フィールド
     productName,
-    productBlueprintCategoryId,
-    productBlueprintCategory,
+    productBlueprintCategoryPath,
     productBlueprintCategoryLabel,
     productBlueprintCategoryOptions,
     productBlueprintCategoryLoading,
@@ -70,7 +72,7 @@ export default function ProductBlueprintCreate() {
     alcoholModelNumbers,
 
     onChangeProductName,
-    onChangeProductBlueprintCategory,
+    onChangeProductBlueprintCategoryPath,
     onChangeCategoryField,
     onChangeColorInput,
     onAddColor,
@@ -106,7 +108,18 @@ export default function ProductBlueprintCreate() {
     onBack,
   } = useProductBlueprintCreate();
 
-  const categoryCode = String(productBlueprintCategory?.code ?? "").trim();
+  const hasProductBlueprintCategory =
+    Boolean(
+      productBlueprintCategoryPath &&
+      productBlueprintCategoryPath.length > 0,
+    );
+
+  const categoryCode =
+    productBlueprintCategoryPath
+      ? toProductBlueprintCategoryPathKey(
+          productBlueprintCategoryPath,
+        )
+      : "";
 
   const showApparelVariationCards = React.useMemo(
     () => isApparelCategory && shouldShowApparelVariationCards(categoryCode),
@@ -119,7 +132,7 @@ export default function ProductBlueprintCreate() {
   );
 
   const showCategoryOnlyMessage =
-    Boolean(productBlueprintCategory) &&
+    hasProductBlueprintCategory &&
     !showApparelVariationCards &&
     !showAlcoholVariationCards;
 
@@ -140,24 +153,25 @@ export default function ProductBlueprintCreate() {
           brandLoading={brandLoading}
           brandError={brandError}
           onChangeBrandId={onChangeBrandId}
-          productBlueprintCategoryId={productBlueprintCategoryId}
-          productBlueprintCategory={productBlueprintCategory}
+          productBlueprintCategoryPath={productBlueprintCategoryPath}
           productBlueprintCategoryOptions={productBlueprintCategoryOptions}
           productBlueprintCategoryLoading={productBlueprintCategoryLoading}
           productBlueprintCategoryError={productBlueprintCategoryError}
-          onChangeProductBlueprintCategory={onChangeProductBlueprintCategory}
+          onChangeProductBlueprintCategoryPath={
+            onChangeProductBlueprintCategoryPath
+          }
           onChangeProductName={onChangeProductName}
         />
 
-        {!productBlueprintCategory && (
+        {!hasProductBlueprintCategory && (
           <p className="mt-2 text-xs text-slate-500">
             商品カテゴリを選択すると、カテゴリに応じた入力欄が表示されます。
           </p>
         )}
 
-        {productBlueprintCategory && (
+        {productBlueprintCategoryPath && (
           <CategoryFieldsCard
-            categoryCode={categoryCode}
+            productBlueprintCategoryPath={productBlueprintCategoryPath}
             categoryFields={categoryFields}
             mode="edit"
             onChangeCategoryField={onChangeCategoryField}

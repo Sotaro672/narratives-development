@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -544,25 +545,20 @@ func (r *ProductBlueprintRepositoryFS) listModelSnapshotsInTransaction(transacti
 }
 
 type productBlueprintDoc struct {
-	ProductName                    string                        `firestore:"productName"`
-	Description                    string                        `firestore:"description"`
-	BrandID                        string                        `firestore:"brandId"`
-	CompanyID                      string                        `firestore:"companyId"`
-	ProductBlueprintCategoryID     string                        `firestore:"productBlueprintCategoryId"`
-	ProductBlueprintCategoryCode   string                        `firestore:"productBlueprintCategoryCode"`
-	ProductBlueprintCategoryNameJa string                        `firestore:"productBlueprintCategoryNameJa"`
-	ProductBlueprintCategoryNameEn string                        `firestore:"productBlueprintCategoryNameEn"`
-	ProductBlueprintCategoryKind   string                        `firestore:"productBlueprintCategoryKind"`
-	ProductBlueprintCategoryPath   []string                      `firestore:"productBlueprintCategoryPath"`
-	CategoryFields                 map[string]any                `firestore:"categoryFields"`
-	ProductIDTagType               string                        `firestore:"productIdTagType"`
-	AssigneeID                     string                        `firestore:"assigneeId"`
-	ModelRefs                      []productBlueprintModelRefDoc `firestore:"modelRefs"`
-	Printed                        *bool                         `firestore:"printed"`
-	CreatedBy                      *string                       `firestore:"createdBy"`
-	CreatedAt                      time.Time                     `firestore:"createdAt"`
-	UpdatedBy                      *string                       `firestore:"updatedBy"`
-	UpdatedAt                      time.Time                     `firestore:"updatedAt"`
+	ProductName                  string                        `firestore:"productName"`
+	Description                  string                        `firestore:"description"`
+	BrandID                      string                        `firestore:"brandId"`
+	CompanyID                    string                        `firestore:"companyId"`
+	ProductBlueprintCategoryPath []string                      `firestore:"productBlueprintCategoryPath"`
+	CategoryFields               map[string]any                `firestore:"categoryFields"`
+	ProductIDTagType             string                        `firestore:"productIdTagType"`
+	AssigneeID                   string                        `firestore:"assigneeId"`
+	ModelRefs                    []productBlueprintModelRefDoc `firestore:"modelRefs"`
+	Printed                      *bool                         `firestore:"printed"`
+	CreatedBy                    *string                       `firestore:"createdBy"`
+	CreatedAt                    time.Time                     `firestore:"createdAt"`
+	UpdatedBy                    *string                       `firestore:"updatedBy"`
+	UpdatedAt                    time.Time                     `firestore:"updatedAt"`
 }
 
 type productBlueprintModelRefDoc struct {
@@ -629,12 +625,7 @@ func docToProductBlueprint(document *firestore.DocumentSnapshot) (pbdom.ProductB
 
 func productBlueprintCategorySnapshotFromDoc(stored productBlueprintDoc) (pbdom.ProductBlueprintCategorySnapshot, error) {
 	category := pbdom.ProductBlueprintCategorySnapshot{
-		ID:     stored.ProductBlueprintCategoryID,
-		Code:   stored.ProductBlueprintCategoryCode,
-		NameJa: stored.ProductBlueprintCategoryNameJa,
-		NameEn: stored.ProductBlueprintCategoryNameEn,
-		Kind:   categorydom.CategoryKind(stored.ProductBlueprintCategoryKind),
-		Path:   append([]string(nil), stored.ProductBlueprintCategoryPath...),
+		Path: append([]string(nil), stored.ProductBlueprintCategoryPath...),
 	}
 	if err := category.Validate(); err != nil {
 		return pbdom.ProductBlueprintCategorySnapshot{}, err
@@ -673,12 +664,7 @@ func productBlueprintToDoc(productBlueprint pbdom.ProductBlueprint) (map[string]
 		"brandId":     productBlueprint.BrandID,
 		"companyId":   productBlueprint.CompanyID,
 
-		"productBlueprintCategoryId":     category.ID,
-		"productBlueprintCategoryCode":   category.Code,
-		"productBlueprintCategoryNameJa": category.NameJa,
-		"productBlueprintCategoryNameEn": category.NameEn,
-		"productBlueprintCategoryKind":   string(category.Kind),
-		"productBlueprintCategoryPath":   append([]string(nil), category.Path...),
+		"productBlueprintCategoryPath": append([]string(nil), category.Path...),
 
 		"assigneeId": productBlueprint.AssigneeID,
 		"createdAt":  productBlueprint.CreatedAt.UTC(),
@@ -735,11 +721,22 @@ func modelRefsToDoc(modelRefs []pbdom.ModelRef) []map[string]any {
 }
 
 func validateProductBlueprintCategoryFields(category pbdom.ProductBlueprintCategorySnapshot, fields pbdom.CategoryFields) error {
-	schema, ok := categorydom.GetCategoryInputSchema(category.Code)
+	if len(category.Path) == 0 {
+		return pbdom.WrapInvalid(pbdom.ErrInvalidCategoryFields, "productBlueprintCategoryPath is empty")
+	}
+
+	for _, segment := range category.Path {
+		if segment == "" {
+			return pbdom.WrapInvalid(pbdom.ErrInvalidCategoryFields, "productBlueprintCategoryPath contains an empty segment")
+		}
+	}
+
+	categoryPath := strings.Join(category.Path, ".")
+	schema, ok := categorydom.GetCategoryInputSchema(categoryPath)
 	if !ok {
 		return pbdom.WrapInvalid(pbdom.ErrInvalidCategoryFields, "category input schema is not registered")
 	}
-	if schema.CategoryKind != string(category.Kind) {
+	if schema.CategoryKind != category.Path[0] {
 		return pbdom.WrapInvalid(pbdom.ErrInvalidCategoryFields, "category input schema kind mismatch")
 	}
 
@@ -758,7 +755,7 @@ func validateProductBlueprintCategoryFields(category pbdom.ProductBlueprintCateg
 		if _, exists := definitions[key]; !exists {
 			return pbdom.WrapInvalid(
 				pbdom.ErrInvalidCategoryFields,
-				fmt.Sprintf("categoryFields.%s is not allowed for category %s", key, category.Code),
+				fmt.Sprintf("categoryFields.%s is not allowed for category %s", key, categoryPath),
 			)
 		}
 	}

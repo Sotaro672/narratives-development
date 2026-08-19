@@ -18,21 +18,13 @@ import (
 // 読み取り専用のカテゴリマスタとして扱う。
 // Console API からカテゴリを作成・更新・削除しない。
 //
+// category の識別子は productBlueprintCategoryPath のみとする。
 // category ごとの入力項目定義は input_schema.go の静的 schema registry 側で管理し、
 // repository / Firestore の永続化対象にはしない。
 type Filter struct {
 	common.FilterCommon
 
-	IDs []CategoryID
-
-	Code *CategoryCode
-	Kind *CategoryKind
-
-	ParentID *CategoryID
-
-	// ParentID が nil のトップ階層だけを取得したい場合に true。
-	// ParentID と RootOnly が両方指定された場合は repository 実装側で ErrRepositoryInvalidInput を返す想定。
-	RootOnly bool
+	Paths [][]string
 }
 
 // ======================================
@@ -40,20 +32,12 @@ type Filter struct {
 // ======================================
 
 const (
-	SortColumnDisplayOrder = "displayOrder"
-	SortColumnNameJa       = "nameJa"
-	SortColumnKind         = "kind"
-	SortColumnCreatedAt    = "createdAt"
-	SortColumnUpdatedAt    = "updatedAt"
+	SortColumnPath = "productBlueprintCategoryPath"
 )
 
 func IsAllowedSortColumn(column string) bool {
 	switch column {
-	case SortColumnDisplayOrder,
-		SortColumnNameJa,
-		SortColumnKind,
-		SortColumnCreatedAt,
-		SortColumnUpdatedAt:
+	case SortColumnPath:
 		return true
 	default:
 		return false
@@ -70,10 +54,15 @@ func IsAllowedSortColumn(column string) bool {
 // productBlueprintCategories collection は seed_category で投入する。
 // Console API では読み取りのみ行い、Create / Update / Delete は提供しない。
 //
+// ProductBlueprintCategory の識別子は productBlueprintCategoryPath のみとする。
+//
 // カテゴリごとの入力項目定義は repository から取得せず、
 // domain の input_schema.go に定義する GetCategoryInputSchema / HasModelFields 等を利用する。
 type ReadOnlyRepositoryPort interface {
-	GetByID(ctx context.Context, id string) (ProductBlueprintCategory, error)
+	GetByPath(
+		ctx context.Context,
+		path []string,
+	) (ProductBlueprintCategory, error)
 
 	List(
 		ctx context.Context,
@@ -83,7 +72,7 @@ type ReadOnlyRepositoryPort interface {
 	) (common.PageResult[ProductBlueprintCategory], error)
 
 	// ListTree はフロントのカテゴリ選択 UI 向け。
-	// displayOrder 昇順で返す想定。
+	// productBlueprintCategoryPath の階層順で返す想定。
 	ListTree(ctx context.Context) ([]ProductBlueprintCategory, error)
 
 	ListCursor(
@@ -92,7 +81,10 @@ type ReadOnlyRepositoryPort interface {
 		page common.CursorPage,
 	) (common.CursorPageResult[ProductBlueprintCategory], error)
 
-	ExistsByID(ctx context.Context, id string) (bool, error)
+	ExistsByPath(
+		ctx context.Context,
+		path []string,
+	) (bool, error)
 }
 
 // RepositoryPort は後方互換用 alias。

@@ -1,12 +1,8 @@
-// backend/internal/domain/productBlueprintCategory/entity.go
 package productBlueprintCategory
 
 import (
 	"errors"
 	"fmt"
-	"time"
-
-	"narratives/internal/domain/common"
 )
 
 // ======================================
@@ -102,74 +98,14 @@ func WrapNotFound(err error, msg string) error {
 }
 
 // ======================================
-// Value types
-// ======================================
-
-type CategoryID string
-type CategoryCode string
-type CategoryKind = common.ProductCategoryKind
-
-const (
-	CategoryKindApparel = common.ProductCategoryKindApparel
-
-	CategoryKindFood = common.ProductCategoryKindFood
-
-	CategoryKindAlcohol = common.ProductCategoryKindAlcohol
-
-	CategoryKindCosmetics = common.ProductCategoryKindCosmetics
-
-	CategoryKindGoods = common.ProductCategoryKindGoods
-
-	CategoryKindHealthcare = common.ProductCategoryKindHealthcare
-
-	CategoryKindOther = common.ProductCategoryKindOther
-)
-
-// ======================================
 // Entity
 // ======================================
 
 type ProductBlueprintCategory struct {
-	ID CategoryID
-
-	Code CategoryCode
-
-	NameJa string
-	NameEn string
-
-	ParentID *CategoryID
-
 	Path []string
-
-	Kind CategoryKind
-
-	DisplayOrder int
-
-	Attributes CategoryAttributes
-
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
-type CategoryAttributes struct {
-	RequiresExpirationDate bool
-	RequiresLotNumber      bool
-	RequiresIngredients    bool
-	RequiresAlcoholNotice  bool
-	RequiresCosmeticNotice bool
-	RequiresStorageMethod  bool
 }
 
 type Snapshot struct {
-	ID CategoryID `json:"id"`
-
-	Code CategoryCode `json:"code"`
-
-	NameJa string `json:"nameJa"`
-	NameEn string `json:"nameEn"`
-
-	Kind CategoryKind `json:"kind"`
-
 	Path []string `json:"path"`
 }
 
@@ -177,62 +113,19 @@ type Snapshot struct {
 // Constructors
 // ======================================
 
-// Reconstruct は永続化層から復元するときに使う。
-// テーブル定義中心の entity として扱うため、ここでは validate は行わない。
 func Reconstruct(
-	id CategoryID,
-	code CategoryCode,
-	nameJa string,
-	nameEn string,
-	parentID *CategoryID,
 	path []string,
-	kind CategoryKind,
-	displayOrder int,
-	attributes CategoryAttributes,
-	createdAt time.Time,
-	updatedAt time.Time,
 ) (ProductBlueprintCategory, error) {
-	category := ProductBlueprintCategory{
-		ID: id,
-
-		Code: code,
-
-		NameJa: nameJa,
-		NameEn: nameEn,
-
-		ParentID: parentID,
-
+	return ProductBlueprintCategory{
 		Path: append(
 			[]string(nil),
 			path...,
 		),
-
-		Kind: kind,
-
-		DisplayOrder: displayOrder,
-
-		Attributes: attributes,
-
-		CreatedAt: createdAt.UTC(),
-		UpdatedAt: updatedAt.UTC(),
-	}
-
-	return category, nil
+	}, nil
 }
 
-// ToSnapshot は productBlueprint へ denormalize 保存するための
-// 表示用スナップショットを返す。
 func (c ProductBlueprintCategory) ToSnapshot() Snapshot {
 	return Snapshot{
-		ID: c.ID,
-
-		Code: c.Code,
-
-		NameJa: c.NameJa,
-		NameEn: c.NameEn,
-
-		Kind: c.Kind,
-
 		Path: append(
 			[]string(nil),
 			c.Path...,
@@ -245,43 +138,7 @@ func (c ProductBlueprintCategory) ToSnapshot() Snapshot {
 // ======================================
 
 var (
-	ErrInvalidID = errors.New(
-		"productBlueprintCategory: invalid id",
-	)
-
-	ErrInvalidCode = errors.New(
-		"productBlueprintCategory: invalid code",
-	)
-
-	ErrInvalidNameJa = errors.New(
-		"productBlueprintCategory: invalid nameJa",
-	)
-
-	ErrInvalidKind = errors.New(
-		"productBlueprintCategory: invalid kind",
-	)
-
 	ErrInvalidPath = errors.New(
 		"productBlueprintCategory: invalid path",
 	)
-
-	ErrInvalidDisplayOrder = errors.New(
-		"productBlueprintCategory: invalid displayOrder",
-	)
-
-	ErrInvalidCreatedAt = errors.New(
-		"productBlueprintCategory: invalid createdAt",
-	)
-
-	ErrInvalidUpdatedAt = errors.New(
-		"productBlueprintCategory: invalid updatedAt",
-	)
 )
-
-func IsValidCategoryKind(
-	v CategoryKind,
-) bool {
-	return common.IsValidProductCategoryKind(
-		v,
-	)
-}

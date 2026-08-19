@@ -5,7 +5,7 @@ import type { ApparelSizeInput } from "../../../../../shared/types/apparel";
 import {
   isValidWashTags,
   type CategoryFieldValues,
-  type ProductBlueprintCategorySnapshot,
+  type ProductBlueprintCategoryPath,
 } from "../../../domain/productBlueprintCategory";
 
 type ApparelSizeRow = ApparelSizeInput & {
@@ -22,8 +22,7 @@ export type UseProductBlueprintValidationParams = {
   companyId: string;
   productName: string;
   brandId: string;
-  productBlueprintCategoryId: string;
-  productBlueprintCategory: ProductBlueprintCategorySnapshot | null;
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath | null;
   categoryFields: CategoryFieldValues;
   isApparelCategory: boolean;
   isAlcoholCategory: boolean;
@@ -36,6 +35,18 @@ export type UseProductBlueprintValidationParams = {
 
 function normalizeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
+}
+
+function isValidProductBlueprintCategoryPath(
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath | null,
+): boolean {
+  return (
+    Array.isArray(productBlueprintCategoryPath) &&
+    productBlueprintCategoryPath.length > 0 &&
+    productBlueprintCategoryPath.every(
+      (segment) => segment !== "",
+    )
+  );
 }
 
 function toVolumeLabel(volume: Pick<VolumeRow, "volumeValue" | "volumeUnit">): string {
@@ -85,8 +96,9 @@ export function useProductBlueprintValidation(
       errors.push("ブランドを選択してください。");
     }
     if (
-      !normalizeString(params.productBlueprintCategoryId) ||
-      !params.productBlueprintCategory
+      !isValidProductBlueprintCategoryPath(
+        params.productBlueprintCategoryPath,
+      )
     ) {
       errors.push("商品カテゴリを選択してください。");
     }

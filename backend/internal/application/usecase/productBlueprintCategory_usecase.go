@@ -3,7 +3,6 @@ package usecase
 
 import (
 	"context"
-	"time"
 
 	"narratives/internal/domain/common"
 	categorydom "narratives/internal/domain/productBlueprintCategory"
@@ -15,11 +14,12 @@ import (
 // NOTE:
 // - productBlueprintCategories は backend/cmd/seed_category で投入する
 // - Console API から category master の作成・更新・削除は行わない
+// - category の識別子は productBlueprintCategoryPath のみとする
 // - category ごとの入力項目定義は Firestore ではなく domain/input_schema.go 側で管理する
 type ProductBlueprintCategoryReadRepository interface {
-	GetByID(
+	GetByPath(
 		ctx context.Context,
-		id string,
+		path []string,
 	) (categorydom.ProductBlueprintCategory, error)
 
 	List(
@@ -30,7 +30,7 @@ type ProductBlueprintCategoryReadRepository interface {
 	) (common.PageResult[categorydom.ProductBlueprintCategory], error)
 
 	// ListTree はフロントのカテゴリ選択 UI 向け。
-	// displayOrder 昇順で返す想定。
+	// productBlueprintCategoryPath の階層順で返す想定。
 	ListTree(
 		ctx context.Context,
 	) ([]categorydom.ProductBlueprintCategory, error)
@@ -41,9 +41,9 @@ type ProductBlueprintCategoryReadRepository interface {
 		page common.CursorPage,
 	) (common.CursorPageResult[categorydom.ProductBlueprintCategory], error)
 
-	ExistsByID(
+	ExistsByPath(
 		ctx context.Context,
-		id string,
+		path []string,
 	) (bool, error)
 }
 
@@ -68,18 +68,7 @@ func NewProductBlueprintCategoryUsecase(
 type ListProductBlueprintCategoriesQuery struct {
 	SearchQuery string
 
-	IDs []string
-
-	Code *string
-	Kind *string
-
-	ParentID *string
-	RootOnly bool
-
-	CreatedFrom *time.Time
-	CreatedTo   *time.Time
-	UpdatedFrom *time.Time
-	UpdatedTo   *time.Time
+	Paths [][]string
 
 	SortColumn string
 	SortOrder  common.SortOrder
@@ -92,19 +81,25 @@ type ListProductBlueprintCategoriesQuery struct {
 // Read methods
 // ------------------------------------------------------------
 
-func (u *ProductBlueprintCategoryUsecase) GetByID(
+func (u *ProductBlueprintCategoryUsecase) GetByPath(
 	ctx context.Context,
-	id string,
+	path []string,
 ) (categorydom.ProductBlueprintCategory, error) {
 	if u == nil || u.repo == nil {
 		return categorydom.ProductBlueprintCategory{}, categorydom.ErrRepositoryInvalidInput
 	}
 
-	if id == "" {
-		return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidID
+	if !isValidProductBlueprintCategoryPath(path) {
+		return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidPath
 	}
 
-	return u.repo.GetByID(ctx, id)
+	return u.repo.GetByPath(
+		ctx,
+		append(
+			[]string(nil),
+			path...,
+		),
+	)
 }
 
 func (u *ProductBlueprintCategoryUsecase) List(
@@ -126,7 +121,7 @@ func (u *ProductBlueprintCategoryUsecase) List(
 	}
 
 	if sortSpec.Column == "" {
-		sortSpec.Column = categorydom.SortColumnDisplayOrder
+		sortSpec.Column = categorydom.SortColumnPath
 	}
 
 	if sortSpec.Order == "" {
@@ -150,11 +145,16 @@ func (u *ProductBlueprintCategoryUsecase) List(
 		page.PerPage = 20
 	}
 
-	return u.repo.List(ctx, filter, sortSpec, page)
+	return u.repo.List(
+		ctx,
+		filter,
+		sortSpec,
+		page,
+	)
 }
 
 // ListTree はフロントのカテゴリ選択 UI 向けに、
-// displayOrder 昇順のカテゴリ一覧を返します。
+// productBlueprintCategoryPath の階層順のカテゴリ一覧を返します。
 func (u *ProductBlueprintCategoryUsecase) ListTree(
 	ctx context.Context,
 ) ([]categorydom.ProductBlueprintCategory, error) {
@@ -179,40 +179,32 @@ func (u *ProductBlueprintCategoryUsecase) ListCursor(
 		return common.CursorPageResult[categorydom.ProductBlueprintCategory]{}, err
 	}
 
-	return u.repo.ListCursor(ctx, filter, page)
+	return u.repo.ListCursor(
+		ctx,
+		filter,
+		page,
+	)
 }
 
-func (u *ProductBlueprintCategoryUsecase) ExistsByID(
+func (u *ProductBlueprintCategoryUsecase) ExistsByPath(
 	ctx context.Context,
-	id string,
+	path []string,
 ) (bool, error) {
 	if u == nil || u.repo == nil {
 		return false, categorydom.ErrRepositoryInvalidInput
 	}
 
-	if id == "" {
-		return false, categorydom.ErrInvalidID
+	if !isValidProductBlueprintCategoryPath(path) {
+		return false, categorydom.ErrInvalidPath
 	}
 
-	return u.repo.ExistsByID(ctx, id)
-}
-
-// BuildProductBlueprintCategorySnapshot は productBlueprint 作成/更新時に使う
-// denormalized snapshot を作るための helper です。
-func (u *ProductBlueprintCategoryUsecase) BuildProductBlueprintCategorySnapshot(
-	ctx context.Context,
-	categoryID string,
-) (categorydom.Snapshot, error) {
-	if categoryID == "" {
-		return categorydom.Snapshot{}, categorydom.ErrInvalidID
-	}
-
-	category, err := u.GetByID(ctx, categoryID)
-	if err != nil {
-		return categorydom.Snapshot{}, err
-	}
-
-	return category.ToSnapshot(), nil
+	return u.repo.ExistsByPath(
+		ctx,
+		append(
+			[]string(nil),
+			path...,
+		),
+	)
 }
 
 // ------------------------------------------------------------
@@ -222,56 +214,42 @@ func (u *ProductBlueprintCategoryUsecase) BuildProductBlueprintCategorySnapshot(
 func buildProductBlueprintCategoryFilter(
 	q ListProductBlueprintCategoriesQuery,
 ) (categorydom.Filter, error) {
-	ids := make([]categorydom.CategoryID, 0, len(q.IDs))
-	for _, raw := range q.IDs {
-		if raw == "" {
-			continue
+	paths := make([][]string, 0, len(q.Paths))
+
+	for _, path := range q.Paths {
+		if !isValidProductBlueprintCategoryPath(path) {
+			return categorydom.Filter{}, categorydom.ErrInvalidPath
 		}
 
-		ids = append(ids, categorydom.CategoryID(raw))
-	}
-
-	var code *categorydom.CategoryCode
-	if q.Code != nil && *q.Code != "" {
-		v := categorydom.CategoryCode(*q.Code)
-		code = &v
-	}
-
-	var kind *categorydom.CategoryKind
-	if q.Kind != nil && *q.Kind != "" {
-		v := categorydom.CategoryKind(*q.Kind)
-		if !categorydom.IsValidCategoryKind(v) {
-			return categorydom.Filter{}, categorydom.ErrInvalidKind
-		}
-		kind = &v
-	}
-
-	var parentID *categorydom.CategoryID
-	if q.ParentID != nil && *q.ParentID != "" {
-		v := categorydom.CategoryID(*q.ParentID)
-		parentID = &v
-	}
-
-	if parentID != nil && q.RootOnly {
-		return categorydom.Filter{}, categorydom.ErrRepositoryInvalidInput
+		paths = append(
+			paths,
+			append(
+				[]string(nil),
+				path...,
+			),
+		)
 	}
 
 	return categorydom.Filter{
 		FilterCommon: common.FilterCommon{
 			SearchQuery: q.SearchQuery,
-			Created: common.TimeRange{
-				From: q.CreatedFrom,
-				To:   q.CreatedTo,
-			},
-			Updated: common.TimeRange{
-				From: q.UpdatedFrom,
-				To:   q.UpdatedTo,
-			},
 		},
-		IDs:      ids,
-		Code:     code,
-		Kind:     kind,
-		ParentID: parentID,
-		RootOnly: q.RootOnly,
+		Paths: paths,
 	}, nil
+}
+
+func isValidProductBlueprintCategoryPath(
+	path []string,
+) bool {
+	if len(path) == 0 {
+		return false
+	}
+
+	for _, segment := range path {
+		if segment == "" {
+			return false
+		}
+	}
+
+	return true
 }

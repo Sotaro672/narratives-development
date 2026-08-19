@@ -10,170 +10,394 @@ import {
   PopoverTrigger,
 } from "../../../../../shared/ui/popover";
 
-import type {
-  ProductBlueprintCategorySnapshot,
+import {
+  APPAREL_CATEGORY_OPTIONS,
+} from "../../../../../shared/types/apparel";
+
+import {
+  ALCOHOL_CATEGORY_OPTIONS,
+} from "../../../domain/alcohol";
+import {
+  COSMETICS_CATEGORY_OPTIONS,
+} from "../../../domain/cosmetics";
+import {
+  HEALTHCARE_CATEGORY_OPTIONS,
+} from "../../../domain/healthcare";
+import {
+  OTHER_CATEGORY_OPTIONS,
+} from "../../../domain/other";
+import {
+  toProductBlueprintCategoryPathKey,
+  type ProductBlueprintCategoryPath,
 } from "../../../domain/productBlueprintCategory";
 
 export type ProductBlueprintCategoryOption =
-  ProductBlueprintCategorySnapshot;
+  ProductBlueprintCategoryPath;
 
 type ProductBlueprintCategoryFieldProps = {
-  categoryId: string;
-  category: ProductBlueprintCategorySnapshot | null;
-  categoryOptions?: ProductBlueprintCategoryOption[];
-  categoryLoading?: boolean;
-  categoryError?: Error | null;
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath | null;
+  productBlueprintCategoryOptions?: ProductBlueprintCategoryOption[];
+  productBlueprintCategoryLoading?: boolean;
+  productBlueprintCategoryError?: Error | null;
   mode?: "edit" | "view";
-  onChangeCategory?: (
-    category: ProductBlueprintCategorySnapshot | null,
+  onChangeProductBlueprintCategoryPath?: (
+    productBlueprintCategoryPath: ProductBlueprintCategoryPath | null,
   ) => void;
 };
 
 const EMPTY_CATEGORY_OPTIONS: ProductBlueprintCategoryOption[] = [];
 
-export function resolveProductBlueprintCategoryLabel(
-  category: ProductBlueprintCategorySnapshot | null | undefined,
-): string {
-  return category?.nameJa ?? "";
+const ROOT_CATEGORY_LABELS: Readonly<
+  Record<string, string>
+> = {
+  apparel: "衣類",
+  alcohol: "酒類",
+  cosmetics: "化粧品",
+  healthcare: "ヘルスケア",
+  other: "その他",
+};
+
+const CATEGORY_LABEL_BY_PATH_KEY: Readonly<
+  Record<string, string>
+> = Object.fromEntries(
+  [
+    ...APPAREL_CATEGORY_OPTIONS,
+    ...ALCOHOL_CATEGORY_OPTIONS,
+    ...COSMETICS_CATEGORY_OPTIONS,
+    ...HEALTHCARE_CATEGORY_OPTIONS,
+    ...OTHER_CATEGORY_OPTIONS,
+  ].map(
+    (option) => [
+      option.value,
+      option.label,
+    ],
+  ),
+);
+
+function isSameCategoryPath(
+  left: ProductBlueprintCategoryPath | null | undefined,
+  right: ProductBlueprintCategoryPath | null | undefined,
+): boolean {
+  if (!left || !right) {
+    return left === right;
+  }
+
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every(
+    (segment, index) =>
+      segment === right[index],
+  );
 }
 
-function resolveProductBlueprintParentCategoryLabel(
-  category: ProductBlueprintCategorySnapshot | null | undefined,
-): string {
-  const rootCode = category?.path?.[0] ?? category?.kind ?? "";
-
-  if (rootCode === "apparel") {
-    return "衣類";
-  }
-
-  if (rootCode === "alcohol") {
-    return "酒類";
-  }
-
-  if (rootCode === "cosmetics") {
-    return "化粧品";
-  }
-
-  if (rootCode === "healthcare") {
-    return "ヘルスケア";
-  }
-
-  if (rootCode === "other") {
-    return "その他";
-  }
-
-  return "";
-}
-
-function findCategoryById(
+function findCategoryByPath(
   options: ProductBlueprintCategoryOption[],
-  id: string,
+  path: ProductBlueprintCategoryPath | null | undefined,
 ): ProductBlueprintCategoryOption | null {
-  if (id === "") {
+  if (
+    !path ||
+    path.length === 0
+  ) {
     return null;
   }
 
-  return options.find((option) => option.id === id) ?? null;
+  return (
+    options.find(
+      (option) =>
+        isSameCategoryPath(
+          option,
+          path,
+        ),
+    ) ?? null
+  );
+}
+
+function buildParentCategoryOptions(
+  options: ProductBlueprintCategoryOption[],
+): ProductBlueprintCategoryOption[] {
+  const parentCategories:
+    ProductBlueprintCategoryOption[] = [];
+
+  const seen =
+    new Set<string>();
+
+  for (const option of options) {
+    const root =
+      option[0];
+
+    if (
+      !root ||
+      seen.has(root)
+    ) {
+      continue;
+    }
+
+    seen.add(root);
+
+    parentCategories.push(
+      [root],
+    );
+  }
+
+  return parentCategories;
+}
+
+function buildChildCategoryOptions(
+  options: ProductBlueprintCategoryOption[],
+  root: string,
+): ProductBlueprintCategoryOption[] {
+  if (root === "") {
+    return [];
+  }
+
+  const childCategories:
+    ProductBlueprintCategoryOption[] = [];
+
+  const seen =
+    new Set<string>();
+
+  for (const option of options) {
+    if (
+      option.length <= 1 ||
+      option[0] !== root
+    ) {
+      continue;
+    }
+
+    const pathKey =
+      toProductBlueprintCategoryPathKey(
+        option,
+      );
+
+    if (seen.has(pathKey)) {
+      continue;
+    }
+
+    seen.add(pathKey);
+
+    childCategories.push(
+      [...option],
+    );
+  }
+
+  return childCategories;
+}
+
+export function resolveProductBlueprintCategoryLabel(
+  productBlueprintCategoryPath:
+    ProductBlueprintCategoryPath | null | undefined,
+): string {
+  if (
+    !productBlueprintCategoryPath ||
+    productBlueprintCategoryPath.length === 0
+  ) {
+    return "";
+  }
+
+  if (
+    productBlueprintCategoryPath.length === 1
+  ) {
+    const root =
+      productBlueprintCategoryPath[0] ?? "";
+
+    return (
+      ROOT_CATEGORY_LABELS[root] ??
+      root
+    );
+  }
+
+  const pathKey =
+    toProductBlueprintCategoryPathKey(
+      productBlueprintCategoryPath,
+    );
+
+  return (
+    CATEGORY_LABEL_BY_PATH_KEY[pathKey] ??
+    productBlueprintCategoryPath[
+      productBlueprintCategoryPath.length - 1
+    ] ??
+    ""
+  );
+}
+
+function resolveProductBlueprintParentCategoryLabel(
+  productBlueprintCategoryPath:
+    ProductBlueprintCategoryPath | null | undefined,
+): string {
+  const root =
+    productBlueprintCategoryPath?.[0] ?? "";
+
+  if (root === "") {
+    return "";
+  }
+
+  return (
+    ROOT_CATEGORY_LABELS[root] ??
+    root
+  );
 }
 
 const ProductBlueprintCategoryField: React.FC<
   ProductBlueprintCategoryFieldProps
 > = ({
-  categoryId,
-  category,
-  categoryOptions,
-  categoryLoading = false,
-  categoryError = null,
+  productBlueprintCategoryPath,
+  productBlueprintCategoryOptions,
+  productBlueprintCategoryLoading = false,
+  productBlueprintCategoryError = null,
   mode = "edit",
-  onChangeCategory,
+  onChangeProductBlueprintCategoryPath,
 }) => {
   const isEdit = mode === "edit";
-  const canEditCategory = isEdit && Boolean(onChangeCategory);
-  const options = categoryOptions ?? EMPTY_CATEGORY_OPTIONS;
+  const canEditCategory =
+    isEdit &&
+    Boolean(
+      onChangeProductBlueprintCategoryPath,
+    );
+
+  const options =
+    productBlueprintCategoryOptions ??
+    EMPTY_CATEGORY_OPTIONS;
 
   const parentCategories = React.useMemo(
-    () => options.filter((option) => option.parentId === null),
+    () =>
+      buildParentCategoryOptions(
+        options,
+      ),
     [options],
   );
 
   const selectedCategory = React.useMemo(() => {
-    if (categoryId !== "") {
-      const categoryOption = findCategoryById(options, categoryId);
-
-      if (categoryOption) {
-        return categoryOption;
-      }
-    }
-
-    return category;
-  }, [category, categoryId, options]);
-
-  const selectedParentIdFromCategory =
-    selectedCategory?.parentId ?? "";
-
-  const [selectedParentId, setSelectedParentId] = React.useState(
-    selectedParentIdFromCategory,
-  );
-
-  React.useEffect(() => {
-    setSelectedParentId(selectedParentIdFromCategory);
-  }, [selectedParentIdFromCategory]);
-
-  const selectedParent = React.useMemo(
-    () => findCategoryById(parentCategories, selectedParentId),
-    [parentCategories, selectedParentId],
-  );
-
-  const childCategories = React.useMemo(() => {
-    if (selectedParentId === "") {
-      return [];
-    }
-
-    return options.filter(
-      (option) => option.parentId === selectedParentId,
-    );
-  }, [options, selectedParentId]);
-
-  const selectedChild = React.useMemo(() => {
     if (
-      !selectedCategory ||
-      selectedCategory.parentId !== selectedParentId
+      !productBlueprintCategoryPath ||
+      productBlueprintCategoryPath.length === 0
     ) {
       return null;
     }
 
-    return selectedCategory;
-  }, [selectedCategory, selectedParentId]);
+    return (
+      findCategoryByPath(
+        options,
+        productBlueprintCategoryPath,
+      ) ?? [
+        ...productBlueprintCategoryPath,
+      ]
+    );
+  }, [
+    options,
+    productBlueprintCategoryPath,
+  ]);
+
+  const selectedParentRootFromCategory =
+    selectedCategory?.[0] ?? "";
+
+  const [
+    selectedParentRoot,
+    setSelectedParentRoot,
+  ] = React.useState(
+    selectedParentRootFromCategory,
+  );
+
+  React.useEffect(() => {
+    setSelectedParentRoot(
+      selectedParentRootFromCategory,
+    );
+  }, [selectedParentRootFromCategory]);
+
+  const selectedParent = React.useMemo(
+    () =>
+      selectedParentRoot === ""
+        ? null
+        : [selectedParentRoot],
+    [selectedParentRoot],
+  );
+
+  const childCategories = React.useMemo(
+    () =>
+      buildChildCategoryOptions(
+        options,
+        selectedParentRoot,
+      ),
+    [
+      options,
+      selectedParentRoot,
+    ],
+  );
+
+  const selectedChild = React.useMemo(() => {
+    if (
+      !selectedCategory ||
+      selectedCategory.length <= 1 ||
+      selectedCategory[0] !== selectedParentRoot
+    ) {
+      return null;
+    }
+
+    return (
+      findCategoryByPath(
+        childCategories,
+        selectedCategory,
+      ) ?? selectedCategory
+    );
+  }, [
+    childCategories,
+    selectedCategory,
+    selectedParentRoot,
+  ]);
 
   const displayParentLabel = canEditCategory
-    ? resolveProductBlueprintCategoryLabel(selectedParent)
-    : resolveProductBlueprintParentCategoryLabel(selectedCategory);
+    ? resolveProductBlueprintCategoryLabel(
+        selectedParent,
+      )
+    : resolveProductBlueprintParentCategoryLabel(
+        selectedCategory,
+      );
 
   const displayChildLabel = canEditCategory
-    ? resolveProductBlueprintCategoryLabel(selectedChild)
-    : resolveProductBlueprintCategoryLabel(selectedCategory);
+    ? resolveProductBlueprintCategoryLabel(
+        selectedChild,
+      )
+    : (
+        selectedCategory &&
+        selectedCategory.length > 1
+      )
+      ? resolveProductBlueprintCategoryLabel(
+          selectedCategory,
+        )
+      : "";
 
   const handleSelectParent = React.useCallback(
     (parent: ProductBlueprintCategoryOption) => {
-      const nextParentId = parent.id;
+      const nextParentRoot =
+        parent[0] ?? "";
 
-      setSelectedParentId(nextParentId);
+      setSelectedParentRoot(
+        nextParentRoot,
+      );
 
       if (
         selectedCategory &&
-        selectedCategory.parentId !== nextParentId
+        selectedCategory[0] !== nextParentRoot
       ) {
-        onChangeCategory?.(null);
+        onChangeProductBlueprintCategoryPath?.(
+          null,
+        );
       }
     },
-    [onChangeCategory, selectedCategory],
+    [
+      onChangeProductBlueprintCategoryPath,
+      selectedCategory,
+    ],
   );
 
   const handleSelectChild = React.useCallback(
     (child: ProductBlueprintCategoryOption) => {
-      onChangeCategory?.(child);
+      onChangeProductBlueprintCategoryPath?.(
+        [...child],
+      );
     },
-    [onChangeCategory],
+    [onChangeProductBlueprintCategoryPath],
   );
 
   return (
@@ -191,7 +415,7 @@ const ProductBlueprintCategoryField: React.FC<
                   className="w-full justify-between pbc-select-trigger"
                   aria-label="商品カテゴリを選択"
                   disabled={
-                    categoryLoading ||
+                    productBlueprintCategoryLoading ||
                     parentCategories.length === 0
                   }
                 >
@@ -202,12 +426,16 @@ const ProductBlueprintCategoryField: React.FC<
               <PopoverContent align="start" className="w-64 p-1">
                 <div className="max-h-64 space-y-1 overflow-y-auto">
                   {parentCategories.map((parent) => {
+                    const parentRoot =
+                      parent[0] ?? "";
+
                     const isSelected =
-                      selectedParentId === parent.id;
+                      selectedParentRoot ===
+                      parentRoot;
 
                     return (
                       <button
-                        key={parent.id}
+                        key={parentRoot}
                         type="button"
                         className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-blue-50 ${
                           isSelected
@@ -243,7 +471,7 @@ const ProductBlueprintCategoryField: React.FC<
           <div className="label">詳細カテゴリ</div>
 
           {canEditCategory ? (
-            selectedParentId !== "" ? (
+            selectedParentRoot !== "" ? (
               <Popover>
                 <PopoverTrigger>
                   <Button
@@ -252,7 +480,7 @@ const ProductBlueprintCategoryField: React.FC<
                     className="w-full justify-between pbc-select-trigger"
                     aria-label="詳細カテゴリを選択"
                     disabled={
-                      categoryLoading ||
+                      productBlueprintCategoryLoading ||
                       childCategories.length === 0
                     }
                   >
@@ -263,12 +491,20 @@ const ProductBlueprintCategoryField: React.FC<
                 <PopoverContent align="start" className="w-64 p-1">
                   <div className="max-h-64 space-y-1 overflow-y-auto">
                     {childCategories.map((child) => {
+                      const childPathKey =
+                        toProductBlueprintCategoryPathKey(
+                          child,
+                        );
+
                       const isSelected =
-                        selectedChild?.id === child.id;
+                        isSameCategoryPath(
+                          selectedChild,
+                          child,
+                        );
 
                       return (
                         <button
-                          key={child.id}
+                          key={childPathKey}
                           type="button"
                           className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-blue-50 ${
                             isSelected
@@ -309,13 +545,13 @@ const ProductBlueprintCategoryField: React.FC<
         </div>
       </div>
 
-      {canEditCategory && categoryLoading && (
+      {canEditCategory && productBlueprintCategoryLoading && (
         <p className="text-xs text-slate-400">
           商品カテゴリを取得中…
         </p>
       )}
 
-      {canEditCategory && categoryError && (
+      {canEditCategory && productBlueprintCategoryError && (
         <p className="text-xs text-red-500">
           商品カテゴリ一覧の取得に失敗しました。
         </p>

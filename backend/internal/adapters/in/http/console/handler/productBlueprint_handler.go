@@ -11,7 +11,6 @@ import (
 	pbquery "narratives/internal/application/query/console"
 	pbuc "narratives/internal/application/usecase"
 	pbdom "narratives/internal/domain/productBlueprint"
-	categorydom "narratives/internal/domain/productBlueprintCategory"
 )
 
 // ProductBlueprintHandlerはProductBlueprint用のHTTP Handlerです。
@@ -79,7 +78,7 @@ type CreateProductBlueprintInput struct {
 	// ProductBlueprintUsecase側で設定します。
 	CompanyId string `json:"companyId"`
 
-	ProductBlueprintCategory categorydom.Snapshot `json:"productBlueprintCategory"`
+	ProductBlueprintCategoryPath []string `json:"productBlueprintCategoryPath"`
 
 	// CategoryFieldsはカテゴリ別のProductBlueprint入力値を受け取ります。
 	// Alcoholの容量はここへ保存せず、Model variationのVolumeだけを正とします。
@@ -104,7 +103,7 @@ type UpdateProductBlueprintInput struct {
 	// ProductBlueprintUsecase側で認証Contextとの境界を確認します。
 	CompanyId string `json:"companyId"`
 
-	ProductBlueprintCategory categorydom.Snapshot `json:"productBlueprintCategory"`
+	ProductBlueprintCategoryPath []string `json:"productBlueprintCategoryPath"`
 
 	// nilは「更新しない」、空mapは「空へ更新する」を表します。
 	CategoryFields *map[string]any `json:"categoryFields,omitempty"`
@@ -191,8 +190,7 @@ type ProductBlueprintDetailOutput struct {
 	BrandId   string `json:"brandId"`
 	BrandName string `json:"brandName"`
 
-	ProductBlueprintCategoryId string               `json:"productBlueprintCategoryId"`
-	ProductBlueprintCategory   categorydom.Snapshot `json:"productBlueprintCategory"`
+	ProductBlueprintCategoryPath []string `json:"productBlueprintCategoryPath"`
 
 	// CategoryFieldsはカテゴリ別のProductBlueprint入力値です。
 	// Alcoholの容量はCategoryFieldsへ保存せず、
@@ -233,25 +231,9 @@ func normalizeTagType(value string) pbdom.ProductIDTagType {
 	}
 }
 
-func toCategorySnapshot(input categorydom.Snapshot) pbdom.ProductBlueprintCategorySnapshot {
+func toCategorySnapshot(input []string) pbdom.ProductBlueprintCategorySnapshot {
 	return pbdom.ProductBlueprintCategorySnapshot{
-		ID:     string(input.ID),
-		Code:   string(input.Code),
-		NameJa: input.NameJa,
-		NameEn: input.NameEn,
-		Kind:   input.Kind,
-		Path:   append([]string(nil), input.Path...),
-	}
-}
-
-func toCategoryOutput(input pbdom.ProductBlueprintCategorySnapshot) categorydom.Snapshot {
-	return categorydom.Snapshot{
-		ID:     categorydom.CategoryID(input.ID),
-		Code:   categorydom.CategoryCode(input.Code),
-		NameJa: input.NameJa,
-		NameEn: input.NameEn,
-		Kind:   categorydom.CategoryKind(input.Kind),
-		Path:   append([]string(nil), input.Path...),
+		Path: append([]string(nil), input...),
 	}
 }
 
@@ -305,7 +287,7 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		// CompanyIDはProductBlueprintUsecaseが認証Contextから設定します。
 		CompanyID: "",
 
-		ProductBlueprintCategory: toCategorySnapshot(input.ProductBlueprintCategory),
+		ProductBlueprintCategory: toCategorySnapshot(input.ProductBlueprintCategoryPath),
 		CategoryFields:           normalizeCategoryFields(input.CategoryFields),
 		AssigneeID:               input.AssigneeId,
 		CreatedBy:                memberIDPointerFromContext(ctx),
@@ -373,7 +355,7 @@ func (h *ProductBlueprintHandler) update(w http.ResponseWriter, r *http.Request,
 		// CompanyIDは通常更新では変更しません。
 		CompanyID: "",
 
-		ProductBlueprintCategory: toCategorySnapshot(input.ProductBlueprintCategory),
+		ProductBlueprintCategory: toCategorySnapshot(input.ProductBlueprintCategoryPath),
 		CategoryFields:           categoryFields,
 		AssigneeID:               input.AssigneeId,
 		UpdatedBy:                memberIDPointerFromContext(ctx),
@@ -607,29 +589,29 @@ func (h *ProductBlueprintHandler) toDetailOutput(
 		}
 	}
 
-	category := toCategoryOutput(productBlueprint.ProductBlueprintCategory)
-
 	return ProductBlueprintDetailOutput{
-		ID:                         productBlueprint.ID,
-		ProductName:                productBlueprint.ProductName,
-		Description:                productBlueprint.Description,
-		CompanyId:                  productBlueprint.CompanyID,
-		BrandId:                    productBlueprint.BrandID,
-		BrandName:                  resolved.Names.BrandName,
-		ProductBlueprintCategoryId: productBlueprint.ProductBlueprintCategory.ID,
-		ProductBlueprintCategory:   category,
-		CategoryFields:             map[string]any(productBlueprint.CategoryFields),
-		ProductIdTag:               productIDTag,
-		AssigneeId:                 productBlueprint.AssigneeID,
-		AssigneeName:               resolved.Names.AssigneeName,
-		Printed:                    productBlueprint.Printed,
-		CreatedBy:                  createdBy,
-		CreatedByName:              resolved.Names.CreatedByName,
-		CreatedAt:                  createdAt,
-		UpdatedBy:                  updatedBy,
-		UpdatedByName:              resolved.Names.UpdatedByName,
-		UpdatedAt:                  updatedAt,
-		ModelState:                 toProductBlueprintDetailModelStateOutput(row.ModelState),
+		ID:          productBlueprint.ID,
+		ProductName: productBlueprint.ProductName,
+		Description: productBlueprint.Description,
+		CompanyId:   productBlueprint.CompanyID,
+		BrandId:     productBlueprint.BrandID,
+		BrandName:   resolved.Names.BrandName,
+		ProductBlueprintCategoryPath: append(
+			[]string(nil),
+			productBlueprint.ProductBlueprintCategory.Path...,
+		),
+		CategoryFields: map[string]any(productBlueprint.CategoryFields),
+		ProductIdTag:   productIDTag,
+		AssigneeId:     productBlueprint.AssigneeID,
+		AssigneeName:   resolved.Names.AssigneeName,
+		Printed:        productBlueprint.Printed,
+		CreatedBy:      createdBy,
+		CreatedByName:  resolved.Names.CreatedByName,
+		CreatedAt:      createdAt,
+		UpdatedBy:      updatedBy,
+		UpdatedByName:  resolved.Names.UpdatedByName,
+		UpdatedAt:      updatedAt,
+		ModelState:     toProductBlueprintDetailModelStateOutput(row.ModelState),
 	}, nil
 }
 

@@ -12,7 +12,7 @@ import {
 
 import type {
   CategoryFieldValues,
-  ProductBlueprintCategorySnapshot,
+  ProductBlueprintCategoryPath,
 } from "../../../domain/productBlueprintCategory";
 
 import ProductBlueprintBrandField, {
@@ -30,8 +30,7 @@ export type ProductBlueprintPatchInput = {
   brandId?: string | null;
   brandName?: string | null;
 
-  productBlueprintCategoryId?: string | null;
-  productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+  productBlueprintCategoryPath?: ProductBlueprintCategoryPath | null;
 
   fit?: string | null;
   material?: string | null;
@@ -54,13 +53,12 @@ export type ProductBlueprintCardProps = {
   brandError?: Error | null;
   onChangeBrandId?: (id: string) => void;
 
-  productBlueprintCategoryId?: string;
-  productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+  productBlueprintCategoryPath?: ProductBlueprintCategoryPath | null;
   productBlueprintCategoryOptions?: ProductBlueprintCategoryOption[];
   productBlueprintCategoryLoading?: boolean;
   productBlueprintCategoryError?: Error | null;
-  onChangeProductBlueprintCategory?: (
-    category: ProductBlueprintCategorySnapshot | null,
+  onChangeProductBlueprintCategoryPath?: (
+    productBlueprintCategoryPath: ProductBlueprintCategoryPath | null,
   ) => void;
 
   onChangeProductName?: (value: string) => void;
@@ -69,27 +67,29 @@ export type ProductBlueprintCardProps = {
 };
 
 function resolveCardTitle(
-  category: ProductBlueprintCategorySnapshot | null | undefined,
+  productBlueprintCategoryPath:
+    ProductBlueprintCategoryPath | null | undefined,
 ): string {
-  const kind = category?.kind ?? "";
+  const root =
+    productBlueprintCategoryPath?.[0] ?? "";
 
-  if (kind === "apparel") {
+  if (root === "apparel") {
     return "基本情報（衣類）";
   }
 
-  if (kind === "alcohol") {
+  if (root === "alcohol") {
     return "基本情報（酒類）";
   }
 
-  if (kind === "cosmetics") {
+  if (root === "cosmetics") {
     return "基本情報（化粧品）";
   }
 
-  if (kind === "healthcare") {
+  if (root === "healthcare") {
     return "基本情報（ヘルスケア）";
   }
 
-  if (kind === "other") {
+  if (root === "other") {
     return "基本情報（その他）";
   }
 
@@ -108,12 +108,11 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   brandError,
   onChangeBrandId,
 
-  productBlueprintCategoryId,
-  productBlueprintCategory,
+  productBlueprintCategoryPath,
   productBlueprintCategoryOptions,
   productBlueprintCategoryLoading,
   productBlueprintCategoryError,
-  onChangeProductBlueprintCategory,
+  onChangeProductBlueprintCategoryPath,
 
   onChangeProductName,
 
@@ -136,18 +135,13 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
     productBlueprintPatch?.brandName ??
     "";
 
-  const mergedProductBlueprintCategoryId =
-    productBlueprintCategoryId ??
-    productBlueprintPatch?.productBlueprintCategoryId ??
-    "";
-
-  const mergedProductBlueprintCategory =
-    productBlueprintCategory ??
-    productBlueprintPatch?.productBlueprintCategory ??
+  const mergedProductBlueprintCategoryPath =
+    productBlueprintCategoryPath ??
+    productBlueprintPatch?.productBlueprintCategoryPath ??
     null;
 
   const cardTitle = resolveCardTitle(
-    mergedProductBlueprintCategory,
+    mergedProductBlueprintCategoryPath,
   );
 
   return (
@@ -192,25 +186,22 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
         />
 
         <ProductBlueprintCategoryField
-          categoryId={
-            mergedProductBlueprintCategoryId
+          productBlueprintCategoryPath={
+            mergedProductBlueprintCategoryPath
           }
-          category={
-            mergedProductBlueprintCategory
-          }
-          categoryOptions={
+          productBlueprintCategoryOptions={
             productBlueprintCategoryOptions
           }
-          categoryLoading={
+          productBlueprintCategoryLoading={
             productBlueprintCategoryLoading
           }
-          categoryError={
+          productBlueprintCategoryError={
             productBlueprintCategoryError
           }
           mode={mode}
-          onChangeCategory={
+          onChangeProductBlueprintCategoryPath={
             isEdit
-              ? onChangeProductBlueprintCategory
+              ? onChangeProductBlueprintCategoryPath
               : undefined
           }
         />

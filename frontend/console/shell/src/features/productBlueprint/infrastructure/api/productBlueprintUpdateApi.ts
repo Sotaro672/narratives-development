@@ -1,4 +1,5 @@
 // frontend/console/shell/src/features/productBlueprint/infrastructure/api/productBlueprintUpdateApi.ts
+
 import type {
   ApparelModelNumberRow,
   ApparelSizeInput,
@@ -6,7 +7,7 @@ import type {
 } from "../../../../shared/types/apparel";
 import type {
   CategoryFieldValues,
-  ProductBlueprintCategorySnapshot,
+  ProductBlueprintCategoryPath,
 } from "../../domain/productBlueprintCategory";
 
 // ------------------------------------------------------
@@ -17,8 +18,7 @@ export type UpdateProductBlueprintParams = {
   id: string;
   productName: string;
   brandId: string;
-  productBlueprintCategoryId: string;
-  productBlueprintCategory: ProductBlueprintCategorySnapshot;
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath;
   categoryFields?: CategoryFieldValues | null;
 
   /**

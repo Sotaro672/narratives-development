@@ -17,7 +17,7 @@ import type {
 import type {
   CategoryFieldValue,
   CategoryFieldValues,
-  ProductBlueprintCategorySnapshot,
+  ProductBlueprintCategoryPath,
 } from "../../../domain/productBlueprintCategory";
 import { createProductBlueprint } from "../../../application/productBlueprintCreateService";
 import {
@@ -49,10 +49,9 @@ export interface UseProductBlueprintCreateResult {
   brandError: Error | null;
   onChangeBrandId: (id: string) => void;
   productName: string;
-  productBlueprintCategoryId: string;
-  productBlueprintCategory: ProductBlueprintCategorySnapshot | null;
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath | null;
   productBlueprintCategoryLabel: string;
-  productBlueprintCategoryOptions: ProductBlueprintCategorySnapshot[];
+  productBlueprintCategoryOptions: ProductBlueprintCategoryPath[];
   productBlueprintCategoryLoading: boolean;
   productBlueprintCategoryError: Error | null;
   isApparelCategory: boolean;
@@ -82,8 +81,8 @@ export interface UseProductBlueprintCreateResult {
   onCreate: () => Promise<void>;
   onBack: () => void;
   onChangeProductName: (value: string) => void;
-  onChangeProductBlueprintCategory: (
-    category: ProductBlueprintCategorySnapshot | null,
+  onChangeProductBlueprintCategoryPath: (
+    productBlueprintCategoryPath: ProductBlueprintCategoryPath | null,
   ) => void;
   onChangeFit: (value: Fit) => void;
   onChangeMaterial: (value: string) => void;
@@ -128,17 +127,21 @@ export interface UseProductBlueprintCreateResult {
   onSelectAssignee: (id: string) => void;
   onEditAssignee: () => void;
   onClickAssignee: () => void;
-}
+};
 
 function removeModelOwnedCategoryFields(
-  category: ProductBlueprintCategorySnapshot | null,
+  productBlueprintCategoryPath:
+    ProductBlueprintCategoryPath | null,
   fields: CategoryFieldValues,
 ): CategoryFieldValues {
   const next: CategoryFieldValues = {
     ...fields,
   };
 
-  if (category?.kind === "alcohol") {
+  const root =
+    productBlueprintCategoryPath?.[0] ?? "";
+
+  if (root === "alcohol") {
     delete next.volume;
   }
 
@@ -209,8 +212,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     useProductBlueprintCreateCategoryFields();
 
   const variations = useProductBlueprintVariations({
-    productBlueprintCategory:
-      category.productBlueprintCategory,
+    productBlueprintCategoryPath:
+      category.productBlueprintCategoryPath,
   });
 
   const {
@@ -230,11 +233,11 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     React.useMemo(
       () =>
         removeModelOwnedCategoryFields(
-          category.productBlueprintCategory,
+          category.productBlueprintCategoryPath,
           categoryFields.categoryFields,
         ),
       [
-        category.productBlueprintCategory,
+        category.productBlueprintCategoryPath,
         categoryFields.categoryFields,
       ],
     );
@@ -310,10 +313,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       companyId: effectiveCompanyId,
       productName,
       brandId: brand.brandId,
-      productBlueprintCategoryId:
-        category.productBlueprintCategoryId,
-      productBlueprintCategory:
-        category.productBlueprintCategory,
+      productBlueprintCategoryPath:
+        category.productBlueprintCategoryPath,
       categoryFields: sanitizedCategoryFields,
       isApparelCategory:
         variations.isApparelCategory,
@@ -327,21 +328,21 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         variations.alcoholModelNumbers,
     });
 
-  const onChangeProductBlueprintCategory =
+  const onChangeProductBlueprintCategoryPath =
     React.useCallback(
       (
-        nextCategory:
-          ProductBlueprintCategorySnapshot | null,
+        nextProductBlueprintCategoryPath:
+          ProductBlueprintCategoryPath | null,
       ) => {
-        category.onChangeProductBlueprintCategory(
-          nextCategory,
+        category.onChangeProductBlueprintCategoryPath(
+          nextProductBlueprintCategoryPath,
         );
 
         categoryFields.resetCategoryFields();
         variations.resetVariations();
       },
       [
-        category.onChangeProductBlueprintCategory,
+        category.onChangeProductBlueprintCategoryPath,
         categoryFields.resetCategoryFields,
         variations.resetVariations,
       ],
@@ -360,7 +361,13 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         return;
       }
 
-      if (!category.productBlueprintCategory) {
+      const productBlueprintCategoryPath =
+        category.productBlueprintCategoryPath;
+
+      if (
+        !productBlueprintCategoryPath ||
+        productBlueprintCategoryPath.length === 0
+      ) {
         return;
       }
 
@@ -374,10 +381,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       const apiParams = {
         productName,
         brandId: brand.brandId,
-        productBlueprintCategoryId:
-          category.productBlueprintCategory.id,
-        productBlueprintCategory:
-          category.productBlueprintCategory,
+        productBlueprintCategoryPath:
+          [...productBlueprintCategoryPath],
         fit,
         material,
         weight,
@@ -448,7 +453,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     [
       validate,
       effectiveCompanyId,
-      category.productBlueprintCategory,
+      category.productBlueprintCategoryPath,
       productName,
       brand.brandId,
       fit,
@@ -497,10 +502,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     brandError: brand.brandError,
     onChangeBrandId: brand.onChangeBrandId,
     productName,
-    productBlueprintCategoryId:
-      category.productBlueprintCategoryId,
-    productBlueprintCategory:
-      category.productBlueprintCategory,
+    productBlueprintCategoryPath:
+      category.productBlueprintCategoryPath,
     productBlueprintCategoryLabel:
       category.productBlueprintCategoryLabel,
     productBlueprintCategoryOptions:
@@ -538,7 +541,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     onCreate,
     onBack,
     onChangeProductName: setProductName,
-    onChangeProductBlueprintCategory,
+    onChangeProductBlueprintCategoryPath,
     onChangeFit,
     onChangeMaterial,
     onChangeWeight,

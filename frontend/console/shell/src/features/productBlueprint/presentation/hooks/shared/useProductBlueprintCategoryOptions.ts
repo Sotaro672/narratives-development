@@ -1,17 +1,18 @@
 // frontend/console/shell/src/features/productBlueprint/presentation/hooks/shared/useProductBlueprintCategoryOptions.ts
+
 import * as React from "react";
-import { listProductBlueprintCategorySnapshots } from "../../../application/productBlueprintCategoryService";
-import type { ProductBlueprintCategorySnapshot } from "../../../domain/productBlueprintCategory";
+import { listProductBlueprintCategoryPaths } from "../../../application/productBlueprintCategoryService";
+import type { ProductBlueprintCategoryPath } from "../../../domain/productBlueprintCategory";
 
 export type UseProductBlueprintCategoryOptionsResult = {
-  productBlueprintCategoryOptions: ProductBlueprintCategorySnapshot[];
+  productBlueprintCategoryOptions: ProductBlueprintCategoryPath[];
   productBlueprintCategoryLoading: boolean;
   productBlueprintCategoryError: Error | null;
 };
 
 export function useProductBlueprintCategoryOptions(): UseProductBlueprintCategoryOptionsResult {
   const [productBlueprintCategoryOptions, setProductBlueprintCategoryOptions] =
-    React.useState<ProductBlueprintCategorySnapshot[]>([]);
+    React.useState<ProductBlueprintCategoryPath[]>([]);
   const [productBlueprintCategoryLoading, setProductBlueprintCategoryLoading] = React.useState(false);
   const [productBlueprintCategoryError, setProductBlueprintCategoryError] =
     React.useState<Error | null>(null);
@@ -24,7 +25,7 @@ export function useProductBlueprintCategoryOptions(): UseProductBlueprintCategor
         setProductBlueprintCategoryLoading(true);
         setProductBlueprintCategoryError(null);
 
-        const options = await listProductBlueprintCategorySnapshots();
+        const options = await listProductBlueprintCategoryPaths();
 
         if (!cancelled) {
           setProductBlueprintCategoryOptions(options);

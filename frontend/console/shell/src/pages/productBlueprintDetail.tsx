@@ -14,6 +14,9 @@ import AlcoholModelNumberCard from "../features/model/presentation/components/Al
 import LogCard from "../features/log/presentation/LogCard";
 import { useProductBlueprintDetail } from "../features/productBlueprint/presentation/hooks/detail/useProductBlueprintDetail";
 import {
+  toProductBlueprintCategoryPathKey,
+} from "../features/productBlueprint/domain/productBlueprintCategory";
+import {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
   isApparelCategoryCode,
 } from "../shared/types/apparel";
@@ -45,7 +48,7 @@ export default function ProductBlueprintDetail() {
     productName,
     brand,
 
-    productBlueprintCategory,
+    productBlueprintCategoryPath,
     productBlueprintCategoryLabel,
     isApparelCategory,
     isAlcoholCategory,
@@ -89,7 +92,18 @@ export default function ProductBlueprintDetail() {
     getCode,
   } = useProductBlueprintDetail();
 
-  const categoryCode = String(productBlueprintCategory?.code ?? "").trim();
+  const hasProductBlueprintCategory =
+    Boolean(
+      productBlueprintCategoryPath &&
+      productBlueprintCategoryPath.length > 0,
+    );
+
+  const categoryCode =
+    productBlueprintCategoryPath
+      ? toProductBlueprintCategoryPathKey(
+          productBlueprintCategoryPath,
+        )
+      : "";
 
   const measurementOptions = isApparelCategoryCode(categoryCode)
     ? APPAREL_CATEGORY_MEASUREMENT_OPTIONS[categoryCode]
@@ -106,7 +120,7 @@ export default function ProductBlueprintDetail() {
   );
 
   const showCategoryOnlyMessage =
-    Boolean(productBlueprintCategory) &&
+    hasProductBlueprintCategory &&
     !showApparelVariationCards &&
     !showAlcoholVariationCards;
 
@@ -158,19 +172,19 @@ export default function ProductBlueprintDetail() {
           mode={editMode ? "edit" : "view"}
           productName={productName}
           brandName={brand}
-          productBlueprintCategory={productBlueprintCategory}
+          productBlueprintCategoryPath={productBlueprintCategoryPath}
           onChangeProductName={editMode ? onChangeProductName : undefined}
         />
 
-        {!productBlueprintCategory && (
+        {!hasProductBlueprintCategory && (
           <p className="mt-2 text-xs text-slate-500">
             商品カテゴリが未設定です。
           </p>
         )}
 
-        {productBlueprintCategory && (
+        {productBlueprintCategoryPath && (
           <CategoryFieldsCard
-            categoryCode={categoryCode}
+            productBlueprintCategoryPath={productBlueprintCategoryPath}
             categoryFields={categoryFields}
             mode={editMode ? "edit" : "view"}
             onChangeCategoryField={

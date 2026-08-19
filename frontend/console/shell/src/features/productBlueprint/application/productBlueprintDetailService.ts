@@ -63,8 +63,7 @@ export async function updateProductBlueprint(
     modelNumbers = [],
     volumes = [],
     alcoholModelNumbers = [],
-    productBlueprintCategoryId,
-    productBlueprintCategory,
+    productBlueprintCategoryPath,
     categoryFields,
   } = params;
 
@@ -74,20 +73,29 @@ export async function updateProductBlueprint(
     throw new Error("updateProductBlueprint: id が空です");
   }
 
-  if (!productBlueprintCategoryId?.trim()) {
+  if (
+    !Array.isArray(
+      productBlueprintCategoryPath,
+    ) ||
+    productBlueprintCategoryPath.length === 0
+  ) {
     throw new Error(
-      "updateProductBlueprint: productBlueprintCategoryId が空です",
+      "updateProductBlueprint: productBlueprintCategoryPath が空です",
     );
   }
 
-  if (!productBlueprintCategory?.id?.trim()) {
+  if (
+    productBlueprintCategoryPath.some(
+      (segment) => segment === "",
+    )
+  ) {
     throw new Error(
-      "updateProductBlueprint: productBlueprintCategory が空です",
+      "updateProductBlueprint: productBlueprintCategoryPath に空の要素があります",
     );
   }
 
   const finalModelVariationRequests = buildModelVariationRequests({
-    productBlueprintCategory,
+    productBlueprintCategoryPath,
     colors: colors ?? [],
     sizes,
     modelNumbers,
@@ -101,8 +109,7 @@ export async function updateProductBlueprint(
     id: productBlueprintId,
     productName,
     brandId,
-    productBlueprintCategoryId,
-    productBlueprintCategory,
+    productBlueprintCategoryPath,
     categoryFields: categoryFields ?? null,
     productIdTagType,
     companyId,

@@ -14,7 +14,10 @@ import {
   type MeasurementOption,
 } from "../../../../../shared/types/apparel";
 import { isAlcoholCategoryCode } from "../../../domain/alcohol";
-import type { ProductBlueprintCategorySnapshot } from "../../../domain/productBlueprintCategory";
+import {
+  toProductBlueprintCategoryPathKey,
+  type ProductBlueprintCategoryPath,
+} from "../../../domain/productBlueprintCategory";
 
 type VolumePatch = Partial<Omit<VolumeRow, "id">>;
 
@@ -28,7 +31,7 @@ export type ProductBlueprintVariationsState = {
 };
 
 export type UseProductBlueprintVariationsParams = {
-  productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+  productBlueprintCategoryPath?: ProductBlueprintCategoryPath | null;
   initialState?: Partial<ProductBlueprintVariationsState> | null;
 };
 
@@ -336,8 +339,13 @@ export function useProductBlueprintVariations(
   const [colorInput, setColorInput] = React.useState("");
 
   const categoryCode = React.useMemo(
-    () => normalizeString(params.productBlueprintCategory?.code),
-    [params.productBlueprintCategory?.code],
+    () =>
+      params.productBlueprintCategoryPath
+        ? toProductBlueprintCategoryPathKey(
+            params.productBlueprintCategoryPath,
+          )
+        : "",
+    [params.productBlueprintCategoryPath],
   );
 
   const isApparelCategory = React.useMemo(
