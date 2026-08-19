@@ -2,11 +2,8 @@
 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Tag } from "lucide-react";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
-import { Button } from "../shared/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
 
 import ProductBlueprintCard, {
   type ProductBlueprintPatchInput,
@@ -14,37 +11,13 @@ import ProductBlueprintCard, {
 
 import InventoryCard from "../features/inventory/presentation/components/inventoryCard";
 import InventoryShippingAddressCard from "../features/inventory/presentation/components/InventoryShippingAddressCard";
+import InventoryListCard from "../features/inventory/presentation/components/InventoryListCard";
 
 import TokenBlueprintCard, {
   type TokenBlueprintCardViewModel,
 } from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 
 import { useInventoryDetail } from "../features/inventory/presentation/hook/useInventoryDetail";
-
-type InventoryListCardProps = {
-  onList: () => void;
-};
-
-const InventoryListCard: React.FC<InventoryListCardProps> = ({ onList }) => {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>出品</CardTitle>
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        <p className="text-sm text-slate-500">
-          この在庫をマーケットへ出品します。
-        </p>
-
-        <Button type="button" className="w-full" onClick={onList}>
-          <Tag size={16} className="mr-2" />
-          出品する
-        </Button>
-      </CardContent>
-    </Card>
-  );
-};
 
 export default function InventoryDetail() {
   const navigate = useNavigate();
@@ -84,6 +57,9 @@ export default function InventoryDetail() {
     shippingAddressOptions,
     shippingAddressSaving,
     shippingAddressError,
+    listItems,
+    listLoading,
+    listError,
     handleSelectShippingAddress,
     handleSaveShippingAddress,
   } = useInventoryDetail(inventoryId);
@@ -136,11 +112,6 @@ export default function InventoryDetail() {
       brandName: tokenBlueprintPatch?.brandName ?? "",
       description: tokenBlueprintPatch?.description ?? "",
       iconUrl: tokenBlueprintPatch?.iconUrl ?? undefined,
-
-      /**
-       * この画面は参照専用であり、
-       * 編集モードへ移行しない。
-       */
       minted: false,
       iconFile: null,
       isEditMode: false,
@@ -201,7 +172,12 @@ export default function InventoryDetail() {
         ) : null}
 
         {hasConfirmedShippingAddress ? (
-          <InventoryListCard onList={onList} />
+          <InventoryListCard
+            items={listItems}
+            loading={listLoading}
+            error={listError}
+            onList={onList}
+          />
         ) : null}
       </div>
     </PageStyle>

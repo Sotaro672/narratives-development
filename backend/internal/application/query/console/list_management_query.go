@@ -25,6 +25,7 @@ type ListManagementLister interface {
 
 type ListRowDTO struct {
 	ID          string `json:"id"`
+	ReadableID  string `json:"readableId"`
 	InventoryID string `json:"inventoryId"`
 
 	Title string `json:"title"`
@@ -73,6 +74,7 @@ type ListManagementQuery struct {
 // - List 全体 scan は禁止
 // - current company 境界の inventoryID を列挙し、
 //   ListByInventoryID の順で該当 List のみ取得する
+// - filter.InventoryIDs が指定された場合も current company 境界内だけに限定する
 // - assigneeId は Firestore members の document ID を正とする
 // - assigneeName は member.Repository.GetByID で解決する
 // - この ctor のみを公開し、配線を集中させる
@@ -111,10 +113,8 @@ func (q *ListManagementQuery) ListRows(
 	page listdom.Page,
 ) (listdom.PageResult[ListRowDTO], error) {
 	page = NormalizePage(page)
-	_ = filter // filter はフロントエンド側で適用する
-	_ = sort   // 現状は company boundary first の取得順を維持する
+	_ = sort // 現状は company boundary first の取得順を維持する
 
-	// company boundary を使わない単純 list は禁止
 	if q == nil || q.lister == nil || q.invRows == nil {
 		return listdom.PageResult[ListRowDTO]{}, errors.New("ListManagementQuery.ListRows: wiring is incomplete (lister/invRows required)")
 	}
@@ -125,13 +125,33 @@ func (q *ListManagementQuery) ListRows(
 	}
 
 	if len(allowedInventoryIDs) == 0 {
-		return listdom.PageResult[ListRowDTO]{
-			Items:      []ListRowDTO{},
-			Page:       page.Number,
-			PerPage:    page.PerPage,
-			TotalCount: 0,
-			TotalPages: 0,
-		}, nil
+		return emptyListManagementPage(page), nil
+	}
+
+	targetInventoryIDs := allowedInventoryIDs
+
+	// inventoryId が指定された場合は、current company が保持する inventoryId の中から
+	// 指定されたものだけを取得対象にする。
+	if len(filter.InventoryIDs) > 0 {
+		requestedInventoryIDs := make(map[string]struct{}, len(filter.InventoryIDs))
+		for _, inventoryID := range filter.InventoryIDs {
+			if inventoryID == "" {
+				continue
+			}
+			requestedInventoryIDs[inventoryID] = struct{}{}
+		}
+
+		targetInventoryIDs = make([]string, 0, len(requestedInventoryIDs))
+		for _, inventoryID := range allowedInventoryIDs {
+			if _, ok := requestedInventoryIDs[inventoryID]; !ok {
+				continue
+			}
+			targetInventoryIDs = append(targetInventoryIDs, inventoryID)
+		}
+	}
+
+	if len(targetInventoryIDs) == 0 {
+		return emptyListManagementPage(page), nil
 	}
 
 	tokenNameCache := map[string]string{}
@@ -144,7 +164,7 @@ func (q *ListManagementQuery) ListRows(
 	allowedAll := make([]ListRowDTO, 0, page.PerPage)
 	seenListID := map[string]struct{}{}
 
-	for _, inventoryID := range allowedInventoryIDs {
+	for _, inventoryID := range targetInventoryIDs {
 		if inventoryID == "" {
 			continue
 		}
@@ -167,10 +187,14 @@ func (q *ListManagementQuery) ListRows(
 			id := it.ID
 			invID := it.InventoryID
 
-			// Safety:
-			// ListByInventoryID で取った後も、List 実体の InventoryID が
+			// ListByInventoryID 後も List 実体の InventoryID が
 			// current company 境界内か必ず再確認する。
 			if !InventoryAllowed(allowedSet, invID) {
+				continue
+			}
+
+			// filter.InventoryIDs 指定時は List 実体側も一致を再確認する。
+			if len(filter.InventoryIDs) > 0 && invID != inventoryID {
 				continue
 			}
 
@@ -221,7 +245,6 @@ func (q *ListManagementQuery) ListRows(
 							rec.Member.FirstName,
 						)
 					}
-
 					memberNameCache[assigneeID] = assigneeName
 				}
 			}
@@ -288,6 +311,7 @@ func (q *ListManagementQuery) ListRows(
 
 			allowedAll = append(allowedAll, ListRowDTO{
 				ID:          NonEmpty(id, "(missing id)"),
+				ReadableID:  it.ReadableID,
 				InventoryID: invID,
 				Title:       title,
 
@@ -305,8 +329,7 @@ func (q *ListManagementQuery) ListRows(
 				AssigneeID:   assigneeID,
 				AssigneeName: assigneeName,
 
-				Status: string(it.Status),
-
+				Status:    string(it.Status),
 				CreatedAt: createdAt,
 			})
 		}
@@ -339,4 +362,14 @@ func (q *ListManagementQuery) ListRows(
 		TotalCount: totalCount,
 		TotalPages: tp,
 	}, nil
+}
+
+func emptyListManagementPage(page listdom.Page) listdom.PageResult[ListRowDTO] {
+	return listdom.PageResult[ListRowDTO]{
+		Items:      []ListRowDTO{},
+		Page:       page.Number,
+		PerPage:    page.PerPage,
+		TotalCount: 0,
+		TotalPages: 0,
+	}
 }
