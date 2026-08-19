@@ -179,7 +179,7 @@ export default function MintRequestDetail() {
             mode="view"
             productName={productBlueprintCardView.productName}
             brandName={productBlueprintCardView.brandName}
-            productBlueprintCategory={productBlueprintCardView.productBlueprintCategory ?? null}
+            productBlueprintCategoryPath={productBlueprintCardView.productBlueprintCategoryPath ?? null}
           />
         ) : (
           <Card className="mint-request-card">
@@ -364,7 +364,9 @@ export default function MintRequestDetail() {
           </Card>
         )}
 
-        {hasMint && mintStatus !== "MINTED" && mintProgress && (<MintProgressCard progress={mintProgress} />)}
+        {hasMint && mintStatus !== "MINTED" && mintProgress && (
+          <MintProgressCard progress={mintProgress} />
+        )}
 
         {showBrandSelectorCard && (
           <Card className="pb-select">
@@ -409,7 +411,9 @@ export default function MintRequestDetail() {
             </CardHeader>
 
             <CardContent>
-              {!selectedBrandId && <div className="pb-select__empty">先にブランドを選択してください。</div>}
+              {!selectedBrandId && (
+                <div className="pb-select__empty">先にブランドを選択してください。</div>
+              )}
 
               {selectedBrandId && tokenBlueprintOptions.length > 0 && (
                 <div className="pb-select__list">
