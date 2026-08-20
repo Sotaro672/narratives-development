@@ -4,9 +4,12 @@ import { buildConsoleUrl } from "../../../shared/http/apiBase";
 import { fetchJSON } from "../../../shared/http/fetchJSON";
 import {
   isPrefectureCode,
+  isTransportationRegion,
+  type IslandCode,
   type PrefectureCode,
   type TransportationFeeSetting,
   type TransportationFeeSettingInput,
+  type TransportationIslandDefinition,
   type TransportationIslandRate,
   type TransportationMaster,
   type TransportationPrefectureRate,
@@ -37,12 +40,20 @@ type TransportationFeeSettingApiResponse = {
 };
 
 type TransportationRegionGroupApiResponse = {
-  region: TransportationRegion;
+  region: string;
   prefectureCodes: string[] | null;
+  islandCodes: string[] | null;
+};
+
+type TransportationIslandDefinitionApiResponse = {
+  islandCode: string;
+  prefectureCode: string;
+  displayName: string;
 };
 
 type TransportationMasterApiResponse = {
   regions: TransportationRegionGroupApiResponse[] | null;
+  islands: TransportationIslandDefinitionApiResponse[] | null;
 };
 
 function toPrefectureCode(value: string): PrefectureCode {
@@ -53,55 +64,67 @@ function toPrefectureCode(value: string): PrefectureCode {
   return value;
 }
 
-function toTransportationPrefectureRate(
-  value: TransportationPrefectureRateApiResponse,
-): TransportationPrefectureRate {
+function toTransportationRegion(value: string): TransportationRegion {
+  if (!isTransportationRegion(value)) {
+    throw new Error(`invalid_transportation_region:${value}`);
+  }
+
+  return value;
+}
+
+function toIslandCode(value: string): IslandCode {
+  if (!value) {
+    throw new Error("invalid_island_code");
+  }
+
+  return value;
+}
+
+function toTransportationPrefectureRate(value: TransportationPrefectureRateApiResponse): TransportationPrefectureRate {
   return {
     prefectureCode: toPrefectureCode(value.prefectureCode),
     amount: value.amount,
   };
 }
 
-function toTransportationIslandRate(
-  value: TransportationIslandRateApiResponse,
-): TransportationIslandRate {
+function toTransportationIslandRate(value: TransportationIslandRateApiResponse): TransportationIslandRate {
   return {
-    islandCode: value.islandCode,
+    islandCode: toIslandCode(value.islandCode),
     prefectureCode: toPrefectureCode(value.prefectureCode),
     amount: value.amount,
   };
 }
 
-function toTransportationRegionGroup(
-  value: TransportationRegionGroupApiResponse,
-): TransportationRegionGroup {
+function toTransportationRegionGroup(value: TransportationRegionGroupApiResponse): TransportationRegionGroup {
   return {
-    region: value.region,
+    region: toTransportationRegion(value.region),
     prefectureCodes: (value.prefectureCodes ?? []).map(toPrefectureCode),
+    islandCodes: (value.islandCodes ?? []).map(toIslandCode),
   };
 }
 
-function toTransportationFeeSetting(
-  value: TransportationFeeSettingApiResponse,
-): TransportationFeeSetting {
+function toTransportationIslandDefinition(value: TransportationIslandDefinitionApiResponse): TransportationIslandDefinition {
+  return {
+    islandCode: toIslandCode(value.islandCode),
+    prefectureCode: toPrefectureCode(value.prefectureCode),
+    displayName: value.displayName,
+  };
+}
+
+function toTransportationFeeSetting(value: TransportationFeeSettingApiResponse): TransportationFeeSetting {
   return {
     companyId: value.companyId,
-    prefectureRates: (value.prefectureRates ?? []).map(
-      toTransportationPrefectureRate,
-    ),
-    islandRates: (value.islandRates ?? []).map(
-      toTransportationIslandRate,
-    ),
+    prefectureRates: (value.prefectureRates ?? []).map(toTransportationPrefectureRate),
+    islandRates: (value.islandRates ?? []).map(toTransportationIslandRate),
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
   };
 }
 
-function toTransportationMaster(
-  value: TransportationMasterApiResponse,
-): TransportationMaster {
+function toTransportationMaster(value: TransportationMasterApiResponse): TransportationMaster {
   return {
     regions: (value.regions ?? []).map(toTransportationRegionGroup),
+    islands: (value.islands ?? []).map(toTransportationIslandDefinition),
   };
 }
 

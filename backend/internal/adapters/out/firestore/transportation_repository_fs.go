@@ -44,7 +44,6 @@ type transportationIslandRateDocument struct {
 }
 
 // transportationDocumentはtransportations/{companyId}のFirestore保存schemaです。
-//
 // CompanyIDはdocument IDを正本とするためfieldとして保存しません。
 type transportationDocument struct {
 	PrefectureRates []transportationPrefectureRateDocument `firestore:"prefectureRates"`
@@ -84,13 +83,9 @@ func transportationNotFound(err error) bool {
 // --------------------
 
 // GetByCompanyIDは指定companyの配送料金設定を取得します。
-//
 // Firestore document ID = CompanyIDです。
 // 対象documentが存在しない場合はErrNotFoundを返します。
-func (r *TransportationRepositoryFS) GetByCompanyID(
-	ctx context.Context,
-	companyID string,
-) (*transportationdom.TransportationFeeSetting, error) {
+func (r *TransportationRepositoryFS) GetByCompanyID(ctx context.Context, companyID string) (*transportationdom.TransportationFeeSetting, error) {
 	if err := r.ensureClient(); err != nil {
 		return nil, err
 	}
@@ -117,13 +112,9 @@ func (r *TransportationRepositoryFS) GetByCompanyID(
 }
 
 // ExistsByCompanyIDは指定companyの配送料金設定documentが存在するか返します。
-//
 // companyIDが不正な場合はfalseとErrInvalidCompanyIDを返します。
 // documentが存在しない場合はfalse, nilを返します。
-func (r *TransportationRepositoryFS) ExistsByCompanyID(
-	ctx context.Context,
-	companyID string,
-) (bool, error) {
+func (r *TransportationRepositoryFS) ExistsByCompanyID(ctx context.Context, companyID string) (bool, error) {
 	if err := r.ensureClient(); err != nil {
 		return false, err
 	}
@@ -149,16 +140,10 @@ func (r *TransportationRepositoryFS) ExistsByCompanyID(
 // --------------------
 
 // Createは新しいtransportations/{companyId}を作成します。
-//
 // Createは既存documentを上書きしません。
 // 同じCompanyIDのdocumentが存在する場合はErrConflictを返します。
-//
-// 保存前にDomain constructorを使用してEntityを再構築し、
-// 47都道府県の完全性、重複、料金、島嶼部override、timestampを検証します。
-func (r *TransportationRepositoryFS) Create(
-	ctx context.Context,
-	value transportationdom.TransportationFeeSetting,
-) (*transportationdom.TransportationFeeSetting, error) {
+// 保存前にDomain constructorを使用してEntityを再構築し、47都道府県の完全性、重複、料金、島嶼部override、timestampを検証します。
+func (r *TransportationRepositoryFS) Create(ctx context.Context, value transportationdom.TransportationFeeSetting) (*transportationdom.TransportationFeeSetting, error) {
 	if err := r.ensureClient(); err != nil {
 		return nil, err
 	}
@@ -168,13 +153,7 @@ func (r *TransportationRepositoryFS) Create(
 		return nil, err
 	}
 
-	validated, err := transportationdom.New(
-		validCompanyID,
-		value.PrefectureRates,
-		value.IslandRates,
-		value.CreatedAt,
-		value.UpdatedAt,
-	)
+	validated, err := transportationdom.New(validCompanyID, value.PrefectureRates, value.IslandRates, value.CreatedAt, value.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -193,17 +172,12 @@ func (r *TransportationRepositoryFS) Create(
 }
 
 // Updateは既存のtransportations/{companyId}を更新します。
-//
 // Updateはupsertではありません。
 // transaction内で対象documentを取得した後、tx.Updateを使用します。
 // documentが存在しない場合はErrNotFoundを返します。
-//
 // CompanyIDおよびCreatedAtは変更できません。
 // PrefectureRates、IslandRates、UpdatedAtのみ更新します。
-func (r *TransportationRepositoryFS) Update(
-	ctx context.Context,
-	value transportationdom.TransportationFeeSetting,
-) (*transportationdom.TransportationFeeSetting, error) {
+func (r *TransportationRepositoryFS) Update(ctx context.Context, value transportationdom.TransportationFeeSetting) (*transportationdom.TransportationFeeSetting, error) {
 	if err := r.ensureClient(); err != nil {
 		return nil, err
 	}
@@ -237,19 +211,12 @@ func (r *TransportationRepositoryFS) Update(
 			return transportationdom.ErrInvalidCreatedAt
 		}
 
-		next, err := transportationdom.New(
-			current.CompanyID,
-			value.PrefectureRates,
-			value.IslandRates,
-			current.CreatedAt,
-			value.UpdatedAt,
-		)
+		next, err := transportationdom.New(current.CompanyID, value.PrefectureRates, value.IslandRates, current.CreatedAt, value.UpdatedAt)
 		if err != nil {
 			return err
 		}
 
 		doc := transportationToDocData(next)
-
 		updates := []firestore.Update{
 			{Path: "prefectureRates", Value: doc.PrefectureRates},
 			{Path: "islandRates", Value: doc.IslandRates},
@@ -280,14 +247,8 @@ func (r *TransportationRepositoryFS) Update(
 // Mapper
 // --------------------
 
-func transportationToDocData(
-	value transportationdom.TransportationFeeSetting,
-) transportationDocument {
-	prefectureRates := make(
-		[]transportationPrefectureRateDocument,
-		len(value.PrefectureRates),
-	)
-
+func transportationToDocData(value transportationdom.TransportationFeeSetting) transportationDocument {
+	prefectureRates := make([]transportationPrefectureRateDocument, len(value.PrefectureRates))
 	for i, rate := range value.PrefectureRates {
 		prefectureRates[i] = transportationPrefectureRateDocument{
 			PrefectureCode: string(rate.PrefectureCode),
@@ -295,14 +256,10 @@ func transportationToDocData(
 		}
 	}
 
-	islandRates := make(
-		[]transportationIslandRateDocument,
-		len(value.IslandRates),
-	)
-
+	islandRates := make([]transportationIslandRateDocument, len(value.IslandRates))
 	for i, rate := range value.IslandRates {
 		islandRates[i] = transportationIslandRateDocument{
-			IslandCode:     rate.IslandCode,
+			IslandCode:     string(rate.IslandCode),
 			PrefectureCode: string(rate.PrefectureCode),
 			Amount:         rate.Amount,
 		}
@@ -316,9 +273,7 @@ func transportationToDocData(
 	}
 }
 
-func docToTransportation(
-	snapshot *firestore.DocumentSnapshot,
-) (transportationdom.TransportationFeeSetting, error) {
+func docToTransportation(snapshot *firestore.DocumentSnapshot) (transportationdom.TransportationFeeSetting, error) {
 	if snapshot == nil || snapshot.Ref == nil {
 		return transportationdom.TransportationFeeSetting{}, transportationdom.ErrInvalidCompanyID
 	}
@@ -333,11 +288,7 @@ func docToTransportation(
 		return transportationdom.TransportationFeeSetting{}, err
 	}
 
-	prefectureRates := make(
-		[]transportationdom.PrefectureRate,
-		len(doc.PrefectureRates),
-	)
-
+	prefectureRates := make([]transportationdom.PrefectureRate, len(doc.PrefectureRates))
 	for i, rate := range doc.PrefectureRates {
 		prefectureCode, err := transportationdom.ParsePrefectureCode(rate.PrefectureCode)
 		if err != nil {
@@ -350,19 +301,20 @@ func docToTransportation(
 		}
 	}
 
-	islandRates := make(
-		[]transportationdom.IslandRate,
-		len(doc.IslandRates),
-	)
-
+	islandRates := make([]transportationdom.IslandRate, len(doc.IslandRates))
 	for i, rate := range doc.IslandRates {
+		islandCode, err := transportationdom.ParseIslandCode(rate.IslandCode)
+		if err != nil {
+			return transportationdom.TransportationFeeSetting{}, err
+		}
+
 		prefectureCode, err := transportationdom.ParsePrefectureCode(rate.PrefectureCode)
 		if err != nil {
 			return transportationdom.TransportationFeeSetting{}, err
 		}
 
 		islandRates[i] = transportationdom.IslandRate{
-			IslandCode:     rate.IslandCode,
+			IslandCode:     islandCode,
 			PrefectureCode: prefectureCode,
 			Amount:         rate.Amount,
 		}

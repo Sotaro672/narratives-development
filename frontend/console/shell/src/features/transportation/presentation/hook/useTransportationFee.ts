@@ -4,7 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { HttpError } from "../../../../shared/http/fetchJSON";
-import type { PrefectureCode, TransportationRegion } from "../../../../shared/types/transporation";
+import type {
+  IslandCode,
+  PrefectureCode,
+  TransportationRegion,
+} from "../../../../shared/types/transporation";
 
 import {
   createTransportation,
@@ -17,6 +21,7 @@ import {
 } from "../../application/transportationService";
 
 export type TransportationAmountInput = string | number;
+export type TransportationIslandAmountInput = string | number | null;
 
 export type UseTransportationFeeResult = {
   vm: {
@@ -36,10 +41,7 @@ export type UseTransportationFeeResult = {
     onSave: () => Promise<void>;
     onChangePrefectureAmount: (prefectureCode: PrefectureCode, amount: TransportationAmountInput) => void;
     onChangeRegionAmount: (region: TransportationRegion, amount: TransportationAmountInput) => void;
-    onAddIslandRate: (rate: TransportationIslandRateVM) => void;
-    onUpdateIslandRate: (index: number, patch: Partial<TransportationIslandRateVM>) => void;
-    onRemoveIslandRate: (index: number) => void;
-    onChangeIslandRateAmount: (index: number, amount: TransportationAmountInput) => void;
+    onChangeIslandRateAmount: (islandCode: IslandCode, amount: TransportationIslandAmountInput) => void;
   };
 };
 
@@ -54,6 +56,19 @@ function toAmount(value: TransportationAmountInput): number {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function toIslandAmount(value: TransportationIslandAmountInput): number | null {
+  if (value === null || value === "") {
+    return null;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function cloneTransportationVM(value: TransportationVM): TransportationVM {
@@ -230,92 +245,19 @@ export function useTransportationFee(): UseTransportationFeeResult {
     [],
   );
 
-  const onAddIslandRate = useCallback(
-    (rate: TransportationIslandRateVM) => {
-      setTransportation((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          islandRates: [...current.islandRates, { ...rate }],
-        };
-      });
-
-      setError(null);
-      setSuccessMessage(null);
-    },
-    [],
-  );
-
-  const onUpdateIslandRate = useCallback(
-    (index: number, patch: Partial<TransportationIslandRateVM>) => {
-      setTransportation((current) => {
-        if (!current) {
-          return current;
-        }
-
-        if (index < 0 || index >= current.islandRates.length) {
-          return current;
-        }
-
-        return {
-          ...current,
-          islandRates: current.islandRates.map((rate, rateIndex) =>
-            rateIndex === index
-              ? { ...rate, ...patch }
-              : rate,
-          ),
-        };
-      });
-
-      setError(null);
-      setSuccessMessage(null);
-    },
-    [],
-  );
-
-  const onRemoveIslandRate = useCallback(
-    (index: number) => {
-      setTransportation((current) => {
-        if (!current) {
-          return current;
-        }
-
-        if (index < 0 || index >= current.islandRates.length) {
-          return current;
-        }
-
-        return {
-          ...current,
-          islandRates: current.islandRates.filter((_, rateIndex) => rateIndex !== index),
-        };
-      });
-
-      setError(null);
-      setSuccessMessage(null);
-    },
-    [],
-  );
-
   const onChangeIslandRateAmount = useCallback(
-    (index: number, amountInput: TransportationAmountInput) => {
-      const amount = toAmount(amountInput);
+    (islandCode: IslandCode, amountInput: TransportationIslandAmountInput) => {
+      const amount = toIslandAmount(amountInput);
 
       setTransportation((current) => {
         if (!current) {
           return current;
         }
 
-        if (index < 0 || index >= current.islandRates.length) {
-          return current;
-        }
-
         return {
           ...current,
-          islandRates: current.islandRates.map((rate, rateIndex) =>
-            rateIndex === index
+          islandRates: current.islandRates.map((rate) =>
+            rate.islandCode === islandCode
               ? { ...rate, amount }
               : rate,
           ),
@@ -382,9 +324,6 @@ export function useTransportationFee(): UseTransportationFeeResult {
       onSave,
       onChangePrefectureAmount,
       onChangeRegionAmount,
-      onAddIslandRate,
-      onUpdateIslandRate,
-      onRemoveIslandRate,
       onChangeIslandRateAmount,
     },
   };

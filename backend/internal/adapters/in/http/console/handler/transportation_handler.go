@@ -42,11 +42,19 @@ type transportationWriteRequest struct {
 
 type transportationMasterResponse struct {
 	Regions []transportationRegionResponse `json:"regions"`
+	Islands []transportationIslandResponse `json:"islands"`
 }
 
 type transportationRegionResponse struct {
 	Region          transportationdom.Region           `json:"region"`
 	PrefectureCodes []transportationdom.PrefectureCode `json:"prefectureCodes"`
+	IslandCodes     []transportationdom.IslandCode     `json:"islandCodes"`
+}
+
+type transportationIslandResponse struct {
+	IslandCode     transportationdom.IslandCode     `json:"islandCode"`
+	PrefectureCode transportationdom.PrefectureCode `json:"prefectureCode"`
+	DisplayName    string                           `json:"displayName"`
 }
 
 func (h *TransportationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -90,21 +98,34 @@ func (h *TransportationHandler) requireCompanyID(w http.ResponseWriter, r *http.
 	return "", false
 }
 
-// masterは地方ごとにwrapされた47都道府県コードを返します。
-// この情報は固定Domain masterであり、Firestoreから取得しません。
+// masterは地方ごとの都道府県コードと島嶼部のIslandCode一覧を返します。
+// 都道府県・島嶼部情報は固定Domain masterであり、Firestoreから取得しません。
 func (h *TransportationHandler) master(w http.ResponseWriter, _ *http.Request) {
-	groups := transportationdom.PrefectureGroups()
+	groups := transportationdom.RegionGroups()
 	regions := make([]transportationRegionResponse, len(groups))
 
 	for i, group := range groups {
 		regions[i] = transportationRegionResponse{
 			Region:          group.Region,
 			PrefectureCodes: group.PrefectureCodes,
+			IslandCodes:     group.IslandCodes,
+		}
+	}
+
+	definitions := transportationdom.IslandDefinitions()
+	islands := make([]transportationIslandResponse, len(definitions))
+
+	for i, definition := range definitions {
+		islands[i] = transportationIslandResponse{
+			IslandCode:     definition.IslandCode,
+			PrefectureCode: definition.PrefectureCode,
+			DisplayName:    definition.DisplayName,
 		}
 	}
 
 	writeJSON(w, http.StatusOK, transportationMasterResponse{
 		Regions: regions,
+		Islands: islands,
 	})
 }
 
@@ -207,10 +228,7 @@ func (h *TransportationHandler) update(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, updated)
 }
 
-func decodeTransportationWriteRequest(
-	w http.ResponseWriter,
-	r *http.Request,
-) (transportationWriteRequest, bool) {
+func decodeTransportationWriteRequest(w http.ResponseWriter, r *http.Request) (transportationWriteRequest, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 
 	var request transportationWriteRequest
@@ -222,13 +240,8 @@ func decodeTransportationWriteRequest(
 	return request, true
 }
 
-func transportationRequestToDomain(
-	request transportationWriteRequest,
-) ([]transportationdom.PrefectureRate, []transportationdom.IslandRate, error) {
-	prefectureRates := make(
-		[]transportationdom.PrefectureRate,
-		len(request.PrefectureRates),
-	)
+func transportationRequestToDomain(request transportationWriteRequest) ([]transportationdom.PrefectureRate, []transportationdom.IslandRate, error) {
+	prefectureRates := make([]transportationdom.PrefectureRate, len(request.PrefectureRates))
 
 	for i, rate := range request.PrefectureRates {
 		prefectureCode, err := transportationdom.ParsePrefectureCode(rate.PrefectureCode)
@@ -242,19 +255,30 @@ func transportationRequestToDomain(
 		}
 	}
 
-	islandRates := make(
-		[]transportationdom.IslandRate,
-		len(request.IslandRates),
-	)
+	islandRates := make([]transportationdom.IslandRate, len(request.IslandRates))
 
 	for i, rate := range request.IslandRates {
+		islandCode, err := transportationdom.ParseIslandCode(rate.IslandCode)
+		if err != nil {
+			return nil, nil, err
+		}
+
 		prefectureCode, err := transportationdom.ParsePrefectureCode(rate.PrefectureCode)
 		if err != nil {
 			return nil, nil, err
 		}
 
+		definition, err := transportationdom.IslandDefinitionByCode(islandCode)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if definition.PrefectureCode != prefectureCode {
+			return nil, nil, transportationdom.ErrIslandPrefectureMismatch
+		}
+
 		islandRates[i] = transportationdom.IslandRate{
-			IslandCode:     rate.IslandCode,
+			IslandCode:     islandCode,
 			PrefectureCode: prefectureCode,
 			Amount:         rate.Amount,
 		}
@@ -273,6 +297,7 @@ func writeTransportationErr(w http.ResponseWriter, err error) {
 		errors.Is(err, transportationdom.ErrDuplicatePrefectureRate),
 		errors.Is(err, transportationdom.ErrIncompletePrefectureRates),
 		errors.Is(err, transportationdom.ErrInvalidIslandCode),
+		errors.Is(err, transportationdom.ErrIslandPrefectureMismatch),
 		errors.Is(err, transportationdom.ErrDuplicateIslandRate),
 		errors.Is(err, transportationdom.ErrInvalidRateAmount),
 		errors.Is(err, transportationdom.ErrInvalidCreatedAt),

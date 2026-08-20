@@ -8,7 +8,9 @@ export type TransportationRegion =
   | "kinki"
   | "chugoku"
   | "shikoku"
-  | "kyushu_okinawa";
+  | "kyushu"
+  | "okinawa"
+  | "islands";
 
 export type PrefectureCode =
   | "01"
@@ -59,6 +61,8 @@ export type PrefectureCode =
   | "46"
   | "47";
 
+export type IslandCode = string;
+
 export const REGION_NAME_BY_CODE: Record<TransportationRegion, string> = {
   hokkaido: "北海道",
   tohoku: "東北",
@@ -67,7 +71,9 @@ export const REGION_NAME_BY_CODE: Record<TransportationRegion, string> = {
   kinki: "近畿",
   chugoku: "中国",
   shikoku: "四国",
-  kyushu_okinawa: "九州・沖縄",
+  kyushu: "九州",
+  okinawa: "沖縄",
+  islands: "島嶼部",
 };
 
 export const PREFECTURE_NAME_BY_CODE: Record<PrefectureCode, string> = {
@@ -126,7 +132,7 @@ export type TransportationPrefectureRate = {
 };
 
 export type TransportationIslandRate = {
-  islandCode: string;
+  islandCode: IslandCode;
   prefectureCode: PrefectureCode;
   amount: number;
 };
@@ -139,13 +145,21 @@ export type TransportationFeeSetting = {
   updatedAt: string;
 };
 
+export type TransportationIslandDefinition = {
+  islandCode: IslandCode;
+  prefectureCode: PrefectureCode;
+  displayName: string;
+};
+
 export type TransportationRegionGroup = {
   region: TransportationRegion;
   prefectureCodes: PrefectureCode[];
+  islandCodes: IslandCode[];
 };
 
 export type TransportationMaster = {
   regions: TransportationRegionGroup[];
+  islands: TransportationIslandDefinition[];
 };
 
 export type TransportationFeeSettingInput = {
@@ -157,15 +171,14 @@ export function getPrefectureName(code: PrefectureCode): string {
   return PREFECTURE_NAME_BY_CODE[code];
 }
 
-export function getTransportationRegionName(
-  region: TransportationRegion,
-): string {
+export function getTransportationRegionName(region: TransportationRegion): string {
   return REGION_NAME_BY_CODE[region];
 }
 
 export function isPrefectureCode(value: string): value is PrefectureCode {
-  return Object.prototype.hasOwnProperty.call(
-    PREFECTURE_NAME_BY_CODE,
-    value,
-  );
+  return Object.prototype.hasOwnProperty.call(PREFECTURE_NAME_BY_CODE, value);
+}
+
+export function isTransportationRegion(value: string): value is TransportationRegion {
+  return Object.prototype.hasOwnProperty.call(REGION_NAME_BY_CODE, value);
 }

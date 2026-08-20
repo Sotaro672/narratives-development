@@ -10,6 +10,7 @@ import {
 import {
   PREFECTURE_NAME_BY_CODE,
   REGION_NAME_BY_CODE,
+  type IslandCode,
   type PrefectureCode,
   type TransportationFeeSetting,
   type TransportationFeeSettingInput,
@@ -35,10 +36,11 @@ export type TransportationRegionVM = {
 };
 
 export type TransportationIslandRateVM = {
-  islandCode: string;
+  islandCode: IslandCode;
+  islandName: string;
   prefectureCode: PrefectureCode;
   prefectureName: string;
-  amount: number;
+  amount: number | null;
 };
 
 export type TransportationVM = {
@@ -55,24 +57,34 @@ export type TransportationSaveInput = {
 };
 
 // ============================================================
-// Prefecture master
+// Master
 // ============================================================
 
-const PREFECTURE_CODES = Object.keys(
-  PREFECTURE_NAME_BY_CODE,
-) as PrefectureCode[];
+const PREFECTURE_CODES = Object.keys(PREFECTURE_NAME_BY_CODE) as PrefectureCode[];
 
 // ============================================================
 // View model builder
 // ============================================================
 
-function buildPrefectureRateMap(
-  setting: TransportationFeeSetting,
-): Map<PrefectureCode, number> {
+function buildPrefectureRateMap(setting: TransportationFeeSetting): Map<PrefectureCode, number> {
   const result = new Map<PrefectureCode, number>();
 
   for (const rate of setting.prefectureRates) {
     result.set(rate.prefectureCode, rate.amount);
+  }
+
+  return result;
+}
+
+function buildIslandRateMap(setting: TransportationFeeSetting): Map<IslandCode, TransportationIslandRate> {
+  const result = new Map<IslandCode, TransportationIslandRate>();
+
+  for (const rate of setting.islandRates) {
+    if (result.has(rate.islandCode)) {
+      throw new Error(`transportation_duplicate_island_rate:${rate.islandCode}`);
+    }
+
+    result.set(rate.islandCode, rate);
   }
 
   return result;
@@ -84,36 +96,48 @@ function buildRegionVMs(
 ): TransportationRegionVM[] {
   const rateMap = buildPrefectureRateMap(setting);
 
-  return master.regions.map((group) => ({
-    region: group.region,
-    regionName: REGION_NAME_BY_CODE[group.region],
-    prefectures: group.prefectureCodes.map((prefectureCode) => {
-      const amount = rateMap.get(prefectureCode);
+  return master.regions
+    .filter((group) => group.region !== "islands")
+    .map((group) => ({
+      region: group.region,
+      regionName: REGION_NAME_BY_CODE[group.region],
+      prefectures: group.prefectureCodes.map((prefectureCode) => {
+        const amount = rateMap.get(prefectureCode);
 
-      if (amount === undefined) {
-        throw new Error(
-          `transportation_prefecture_rate_not_found:${prefectureCode}`,
-        );
-      }
+        if (amount === undefined) {
+          throw new Error(`transportation_prefecture_rate_not_found:${prefectureCode}`);
+        }
 
-      return {
-        prefectureCode,
-        prefectureName: PREFECTURE_NAME_BY_CODE[prefectureCode],
-        amount,
-      };
-    }),
-  }));
+        return {
+          prefectureCode,
+          prefectureName: PREFECTURE_NAME_BY_CODE[prefectureCode],
+          amount,
+        };
+      }),
+    }));
 }
 
 function buildIslandRateVMs(
-  islandRates: TransportationIslandRate[],
+  master: TransportationMaster,
+  setting: TransportationFeeSetting,
 ): TransportationIslandRateVM[] {
-  return islandRates.map((rate) => ({
-    islandCode: rate.islandCode,
-    prefectureCode: rate.prefectureCode,
-    prefectureName: PREFECTURE_NAME_BY_CODE[rate.prefectureCode],
-    amount: rate.amount,
-  }));
+  const rateMap = buildIslandRateMap(setting);
+
+  return master.islands.map((definition) => {
+    const savedRate = rateMap.get(definition.islandCode);
+
+    if (savedRate && savedRate.prefectureCode !== definition.prefectureCode) {
+      throw new Error(`transportation_island_prefecture_mismatch:${definition.islandCode}`);
+    }
+
+    return {
+      islandCode: definition.islandCode,
+      islandName: definition.displayName,
+      prefectureCode: definition.prefectureCode,
+      prefectureName: PREFECTURE_NAME_BY_CODE[definition.prefectureCode],
+      amount: savedRate ? savedRate.amount : null,
+    };
+  });
 }
 
 export function buildTransportationVM(
@@ -123,7 +147,7 @@ export function buildTransportationVM(
   return {
     companyId: setting.companyId,
     regions: buildRegionVMs(master, setting),
-    islandRates: buildIslandRateVMs(setting.islandRates),
+    islandRates: buildIslandRateVMs(master, setting),
     createdAt: setting.createdAt,
     updatedAt: setting.updatedAt,
   };
@@ -133,21 +157,27 @@ export function buildTransportationVM(
 // Empty view model
 // ============================================================
 
-export function buildEmptyTransportationVM(
-  master: TransportationMaster,
-): TransportationVM {
+export function buildEmptyTransportationVM(master: TransportationMaster): TransportationVM {
   return {
     companyId: "",
-    regions: master.regions.map((group) => ({
-      region: group.region,
-      regionName: REGION_NAME_BY_CODE[group.region],
-      prefectures: group.prefectureCodes.map((prefectureCode) => ({
-        prefectureCode,
-        prefectureName: PREFECTURE_NAME_BY_CODE[prefectureCode],
-        amount: 0,
+    regions: master.regions
+      .filter((group) => group.region !== "islands")
+      .map((group) => ({
+        region: group.region,
+        regionName: REGION_NAME_BY_CODE[group.region],
+        prefectures: group.prefectureCodes.map((prefectureCode) => ({
+          prefectureCode,
+          prefectureName: PREFECTURE_NAME_BY_CODE[prefectureCode],
+          amount: 0,
+        })),
       })),
+    islandRates: master.islands.map((definition) => ({
+      islandCode: definition.islandCode,
+      islandName: definition.displayName,
+      prefectureCode: definition.prefectureCode,
+      prefectureName: PREFECTURE_NAME_BY_CODE[definition.prefectureCode],
+      amount: null,
     })),
-    islandRates: [],
     createdAt: "",
     updatedAt: "",
   };
@@ -163,19 +193,19 @@ function validateAmount(amount: number): void {
   }
 }
 
-function validateRegions(
-  regions: TransportationRegionVM[],
-): void {
+function validateRegions(regions: TransportationRegionVM[]): void {
   const seen = new Set<PrefectureCode>();
 
   for (const region of regions) {
+    if (region.region === "islands") {
+      continue;
+    }
+
     for (const prefecture of region.prefectures) {
       validateAmount(prefecture.amount);
 
       if (seen.has(prefecture.prefectureCode)) {
-        throw new Error(
-          `都道府県が重複しています: ${prefecture.prefectureName}`,
-        );
+        throw new Error(`都道府県が重複しています: ${prefecture.prefectureName}`);
       }
 
       seen.add(prefecture.prefectureCode);
@@ -188,41 +218,32 @@ function validateRegions(
 
   for (const prefectureCode of PREFECTURE_CODES) {
     if (!seen.has(prefectureCode)) {
-      throw new Error(
-        `${PREFECTURE_NAME_BY_CODE[prefectureCode]}の送料が設定されていません。`,
-      );
+      throw new Error(`${PREFECTURE_NAME_BY_CODE[prefectureCode]}の送料が設定されていません。`);
     }
   }
 }
 
-function validateIslandRates(
-  islandRates: TransportationIslandRateVM[],
-): void {
-  const seen = new Set<string>();
+function validateIslandRates(islandRates: TransportationIslandRateVM[]): void {
+  const seen = new Set<IslandCode>();
 
   for (const islandRate of islandRates) {
     if (!islandRate.islandCode) {
       throw new Error("離島コードが設定されていません。");
     }
 
-    validateAmount(islandRate.amount);
-
-    const key =
-      `${islandRate.prefectureCode}:${islandRate.islandCode}`;
-
-    if (seen.has(key)) {
-      throw new Error(
-        `離島送料が重複しています: ${islandRate.islandCode}`,
-      );
+    if (seen.has(islandRate.islandCode)) {
+      throw new Error(`離島送料が重複しています: ${islandRate.islandName}`);
     }
 
-    seen.add(key);
+    seen.add(islandRate.islandCode);
+
+    if (islandRate.amount !== null) {
+      validateAmount(islandRate.amount);
+    }
   }
 }
 
-function validateSaveInput(
-  input: TransportationSaveInput,
-): void {
+function validateSaveInput(input: TransportationSaveInput): void {
   validateRegions(input.regions);
   validateIslandRates(input.islandRates);
 }
@@ -237,30 +258,25 @@ function toTransportationFeeSettingInput(
   validateSaveInput(input);
 
   return {
-    prefectureRates: input.regions.flatMap((region) =>
-      region.prefectures.map((prefecture) => ({
-        prefectureCode: prefecture.prefectureCode,
-        amount: prefecture.amount,
-      })),
-    ),
-    islandRates: input.islandRates.map((islandRate) => ({
-      islandCode: islandRate.islandCode,
-      prefectureCode: islandRate.prefectureCode,
-      amount: islandRate.amount,
-    })),
-  };
-}
-
-function toMasterFromRegions(
-  regions: TransportationRegionVM[],
-): TransportationMaster {
-  return {
-    regions: regions.map((region) => ({
-      region: region.region,
-      prefectureCodes: region.prefectures.map(
-        (prefecture) => prefecture.prefectureCode,
+    prefectureRates: input.regions
+      .filter((region) => region.region !== "islands")
+      .flatMap((region) =>
+        region.prefectures.map((prefecture) => ({
+          prefectureCode: prefecture.prefectureCode,
+          amount: prefecture.amount,
+        })),
       ),
-    })),
+    islandRates: input.islandRates.flatMap((islandRate) => {
+      if (islandRate.amount === null) {
+        return [];
+      }
+
+      return [{
+        islandCode: islandRate.islandCode,
+        prefectureCode: islandRate.prefectureCode,
+        amount: islandRate.amount,
+      }];
+    }),
   };
 }
 
@@ -279,7 +295,6 @@ export async function fetchTransportationVM(): Promise<TransportationVM> {
 
 export async function fetchEmptyTransportationVM(): Promise<TransportationVM> {
   const master = await getTransportationMasterHTTP();
-
   return buildEmptyTransportationVM(master);
 }
 
@@ -291,22 +306,24 @@ export async function createTransportation(
   input: TransportationSaveInput,
 ): Promise<TransportationVM> {
   const payload = toTransportationFeeSettingInput(input);
-  const setting = await createTransportationFeeSettingHTTP(payload);
 
-  return buildTransportationVM(
-    toMasterFromRegions(input.regions),
-    setting,
-  );
+  const [master, setting] = await Promise.all([
+    getTransportationMasterHTTP(),
+    createTransportationFeeSettingHTTP(payload),
+  ]);
+
+  return buildTransportationVM(master, setting);
 }
 
 export async function updateTransportation(
   input: TransportationSaveInput,
 ): Promise<TransportationVM> {
   const payload = toTransportationFeeSettingInput(input);
-  const setting = await updateTransportationFeeSettingHTTP(payload);
 
-  return buildTransportationVM(
-    toMasterFromRegions(input.regions),
-    setting,
-  );
+  const [master, setting] = await Promise.all([
+    getTransportationMasterHTTP(),
+    updateTransportationFeeSettingHTTP(payload),
+  ]);
+
+  return buildTransportationVM(master, setting);
 }

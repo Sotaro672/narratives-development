@@ -1,6 +1,8 @@
 // frontend/console/shell/src/pages/transportationFee.tsx
 
 import FeeEditCard from "../features/transportation/presentation/component/feeEditCard";
+import IslandFeeEditCard from "../features/transportation/presentation/component/islandFeeEditCard";
+import SinglePrefectureFeeCard from "../features/transportation/presentation/component/singlePrefectureFeeCard";
 import { useTransportationFee } from "../features/transportation/presentation/hook/useTransportationFee";
 import PageStyle from "../layout/PageStyle/PageStyle";
 
@@ -61,19 +63,38 @@ export default function TransportationFee() {
           </div>
         ) : vm.transportation ? (
           <div className="space-y-6">
-            {vm.regions.map((region) => (
-              <FeeEditCard
-                key={region.region}
-                region={region}
-                disabled={disabled}
-                onChangeRegionAmount={handlers.onChangeRegionAmount}
-                onChangePrefectureAmount={handlers.onChangePrefectureAmount}
-              />
-            ))}
+            {vm.regions.map((region) => {
+              if (region.region === "hokkaido" || region.region === "okinawa") {
+                return (
+                  <SinglePrefectureFeeCard
+                    key={region.region}
+                    region={region}
+                    disabled={disabled}
+                    onChangePrefectureAmount={handlers.onChangePrefectureAmount}
+                  />
+                );
+              }
 
-            {vm.regions.length === 0 && (
+              return (
+                <FeeEditCard
+                  key={region.region}
+                  region={region}
+                  disabled={disabled}
+                  onChangeRegionAmount={handlers.onChangeRegionAmount}
+                  onChangePrefectureAmount={handlers.onChangePrefectureAmount}
+                />
+              );
+            })}
+
+            <IslandFeeEditCard
+              islands={vm.islandRates}
+              disabled={disabled}
+              onChangeAmount={handlers.onChangeIslandRateAmount}
+            />
+
+            {vm.regions.length === 0 && vm.islandRates.length === 0 && (
               <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500">
-                都道府県データを取得できませんでした。
+                配送料金データを取得できませんでした。
               </div>
             )}
           </div>

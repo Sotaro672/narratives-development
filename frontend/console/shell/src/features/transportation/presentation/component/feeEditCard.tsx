@@ -95,9 +95,9 @@ const FeeEditCard: React.FC<FeeEditCardProps> = ({
           onClick={handleToggle}
           aria-expanded={isOpen}
           aria-controls={contentId}
+          aria-label={`${region.regionName}の都道府県一覧を${isOpen ? "閉じる" : "開く"}`}
           className="flex w-fit items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
         >
-          <span>都道府県別に設定</span>
           <span className="text-xs font-normal text-slate-400">
             {region.prefectures.length}都道府県
           </span>
