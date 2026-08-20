@@ -44,6 +44,7 @@ type usecases struct {
 	inspectionUC                  *uc.InspectionUsecase
 	mintUC                        *uc.MintUsecase
 	shippingAddressUC             *uc.ShippingAddressUsecase
+	transportationUC              *uc.TransportationUsecase
 	tokenBlueprintUC              *uc.TokenBlueprintUsecase
 	tokenBlueprintAssetStorage    *firebaseadp.TokenBlueprintAssetStorage
 	tokenBlueprintReviewUC        *uc.TokenBlueprintReviewUsecase
@@ -269,6 +270,9 @@ func buildUsecases(
 		r.inventoryRepo,
 	)
 
+	transportationRepo := fsrepo.NewTransportationRepositoryFS(c.fsClient)
+	transportationUC := uc.NewTransportationUsecase(transportationRepo)
+
 	tokenBlueprintReviewUC := uc.NewTokenBlueprintReviewUsecase(
 		tbReviewRepo,
 		r.avatarRepo,
@@ -360,6 +364,7 @@ func buildUsecases(
 		inspectionUC:                  inspectionUC,
 		mintUC:                        mintUC,
 		shippingAddressUC:             shippingAddressUC,
+		transportationUC:              transportationUC,
 		tokenBlueprintUC:              tokenBlueprintUC,
 		tokenBlueprintAssetStorage:    tokenBlueprintAssetStorage,
 		tokenBlueprintReviewUC:        tokenBlueprintReviewUC,

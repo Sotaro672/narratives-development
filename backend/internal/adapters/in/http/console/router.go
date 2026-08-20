@@ -27,6 +27,7 @@ type RouterDeps struct {
 	Inventories              http.Handler
 	Lists                    http.Handler
 	ListSaveOperations       http.Handler
+	Transportation           http.Handler
 	ProductsPrint            http.Handler
 	ProductBP                http.Handler
 	ProductBPCategories      http.Handler
@@ -81,7 +82,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if deps.AuthMw == nil {
 			return h
 		}
-
 		return deps.AuthMw.Handler(h)
 	}
 
@@ -90,7 +90,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if deps.BootstrapMw == nil {
 			return h
 		}
-
 		return deps.BootstrapMw.Handler(h)
 	}
 
@@ -99,10 +98,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	if deps.AuthBootstrap != nil {
-		mux.Handle(
-			"/auth/bootstrap",
-			withBootstrap(deps.AuthBootstrap),
-		)
+		mux.Handle("/auth/bootstrap", withBootstrap(deps.AuthBootstrap))
 	}
 
 	if deps.Invitation != nil {
@@ -176,6 +172,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/lists/", h)
 	}
 
+	if deps.Transportation != nil {
+		h := withAuth(deps.Transportation)
+		mux.Handle("/transportation", h)
+		mux.Handle("/transportation/", h)
+	}
+
 	if deps.ProductsPrint != nil {
 		h := withAuth(deps.ProductsPrint)
 		mux.Handle("/products", h)
@@ -231,23 +233,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	if deps.Members != nil {
-		mux.Handle(
-			"/members",
-			withAuth(deps.Members),
-		)
+		mux.Handle("/members", withAuth(deps.Members))
 
 		// /members/me は初回ログイン直後にも呼ばれるため、
 		// 通常AuthMiddlewareではなくBootstrapAuthMiddlewareを通す。
 		// member未作成時はhandler側で404を返す。
-		mux.Handle(
-			"/members/me",
-			withBootstrap(deps.Members),
-		)
-
-		mux.Handle(
-			"/members/",
-			withAuth(deps.Members),
-		)
+		mux.Handle("/members/me", withBootstrap(deps.Members))
+		mux.Handle("/members/", withAuth(deps.Members))
 	}
 
 	if deps.Productions != nil {
@@ -286,25 +278,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	if deps.InternalInvitationDeliveryProcess != nil {
-		h := withPublic(
-			deps.InternalInvitationDeliveryProcess,
-		)
-
-		mux.Handle(
-			"/internal/invitations/deliveries/process",
-			h,
-		)
+		h := withPublic(deps.InternalInvitationDeliveryProcess)
+		mux.Handle("/internal/invitations/deliveries/process", h)
 	}
 
 	if deps.InternalInvitationDeliveryDispatch != nil {
-		h := withPublic(
-			deps.InternalInvitationDeliveryDispatch,
-		)
-
-		mux.Handle(
-			"/internal/invitations/deliveries/dispatch-due",
-			h,
-		)
+		h := withPublic(deps.InternalInvitationDeliveryDispatch)
+		mux.Handle("/internal/invitations/deliveries/dispatch-due", h)
 	}
 
 	if deps.OwnerResolve != nil {

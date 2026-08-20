@@ -1,26 +1,87 @@
 // frontend/console/shell/src/pages/transportationFee.tsx
 
-import { useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-
+import FeeEditCard from "../features/transportation/presentation/component/feeEditCard";
+import { useTransportationFee } from "../features/transportation/presentation/hook/useTransportationFee";
 import PageStyle from "../layout/PageStyle/PageStyle";
 
 export default function TransportationFee() {
-  const navigate = useNavigate();
-
-  const handleBack = useCallback(() => {
-    navigate(-1);
-  }, [navigate]);
+  const { vm, handlers } = useTransportationFee();
+  const disabled = vm.loading || vm.saving;
 
   return (
-    <PageStyle layout="single" title="料金設定" onBack={handleBack}>
-      <div className="max-w-3xl">
-        <div className="rounded-lg border border-slate-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-slate-900">配送料金設定</h2>
-          <p className="mt-2 text-sm text-slate-500">
-            配送に関する料金設定を管理します。
-          </p>
-        </div>
+    <PageStyle
+      layout="single"
+      title="料金設定"
+      onBack={handlers.onBack}
+      actions={
+        <>
+          <button
+            type="button"
+            disabled={disabled || !vm.isDirty}
+            onClick={handlers.onReset}
+            className="page-header__btn page-header__btn--ghost"
+          >
+            リセット
+          </button>
+
+          <button
+            type="button"
+            disabled={disabled || !vm.transportation || !vm.isDirty}
+            onClick={() => void handlers.onSave()}
+            className="page-header__btn"
+            aria-busy={vm.saving}
+          >
+            {vm.saving ? "保存中" : vm.exists ? "更新" : "登録"}
+          </button>
+        </>
+      }
+    >
+      <div className="mx-auto w-full max-w-5xl">
+        {vm.error && (
+          <div
+            role="alert"
+            className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          >
+            {vm.error}
+          </div>
+        )}
+
+        {vm.successMessage && (
+          <div
+            role="status"
+            className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+          >
+            {vm.successMessage}
+          </div>
+        )}
+
+        {vm.loading ? (
+          <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500">
+            配送料金設定を読み込んでいます...
+          </div>
+        ) : vm.transportation ? (
+          <div className="space-y-6">
+            {vm.regions.map((region) => (
+              <FeeEditCard
+                key={region.region}
+                region={region}
+                disabled={disabled}
+                onChangeRegionAmount={handlers.onChangeRegionAmount}
+                onChangePrefectureAmount={handlers.onChangePrefectureAmount}
+              />
+            ))}
+
+            {vm.regions.length === 0 && (
+              <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500">
+                都道府県データを取得できませんでした。
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500">
+            配送料金設定を表示できませんでした。
+          </div>
+        )}
       </div>
     </PageStyle>
   );

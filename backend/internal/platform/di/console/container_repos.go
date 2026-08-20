@@ -36,6 +36,7 @@ type repos struct {
 	productBlueprintReviewRepo   *fs.ProductBlueprintReviewRepositoryFS
 	productionRepo               *fs.ProductionRepositoryFS
 	shippingAddressRepo          *fs.ShippingAddressRepositoryFS
+	transportationRepo           *fs.TransportationRepositoryFS
 	tokenBlueprintRepo           *fs.TokenBlueprintRepositoryFS
 	tokenBlueprintReviewRepo     *fs.TokenBlueprintReviewRepositoryFS
 	userRepo                     *fs.UserRepositoryFS
@@ -81,6 +82,7 @@ func buildRepos(c *clients) *repos {
 	productBlueprintReviewRepo := fs.NewProductBlueprintReviewRepositoryFS(fsClient)
 	productionRepo := fs.NewProductionRepositoryFS(fsClient)
 	shippingAddressRepo := fs.NewShippingAddressRepositoryFS(fsClient)
+	transportationRepo := fs.NewTransportationRepositoryFS(fsClient)
 	tokenBlueprintRepo := fs.NewTokenBlueprintRepositoryFS(fsClient)
 	tokenBlueprintReviewRepo := fs.NewTokenBlueprintReviewRepositoryFS(fsClient)
 	userRepo := fs.NewUserRepositoryFS(fsClient)
@@ -120,6 +122,7 @@ func buildRepos(c *clients) *repos {
 		productBlueprintReviewRepo:   productBlueprintReviewRepo,
 		productionRepo:               productionRepo,
 		shippingAddressRepo:          shippingAddressRepo,
+		transportationRepo:           transportationRepo,
 		tokenBlueprintRepo:           tokenBlueprintRepo,
 		tokenBlueprintReviewRepo:     tokenBlueprintReviewRepo,
 		userRepo:                     userRepo,
