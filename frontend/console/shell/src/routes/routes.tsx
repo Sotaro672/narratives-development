@@ -36,7 +36,9 @@ import {
   BrandCreate,
   BrandDetail,
   CompanyDetail,
-  StockLocationPage,
+  LocationManagement,
+  LocationCreate,
+  LocationDetail,
   TransportationFeeManagement,
   TransportationFeeCreate,
   TransportationFeeDetail,
@@ -55,7 +57,14 @@ export const routes: RouteObject[] = [
   { path: "/auth", element: <AuthPage /> },
   { path: "/invitation", element: <InvitationPage /> },
   { path: "/company", element: <CompanyDetail /> },
-  { path: "/stockLocation", element: <StockLocationPage /> },
+  {
+    path: "/stockLocation",
+    children: [
+      { path: "", element: <LocationManagement /> },
+      { path: "create", element: <LocationCreate /> },
+      { path: ":locationId", element: <LocationDetail /> },
+    ],
+  },
   {
     path: "/transportationFee",
     children: [

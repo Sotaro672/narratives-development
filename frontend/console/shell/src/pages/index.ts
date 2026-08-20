@@ -1,5 +1,4 @@
 // frontend/console/shell/src/pages/index.ts
-
 export { default as AuthPage } from "./AuthPage";
 export { default as InvitationPage } from "./InvitationPage";
 export { default as InquiryManagement } from "./inquiryManagement";
@@ -33,7 +32,9 @@ export { default as BrandManagement } from "./brandManagement";
 export { default as BrandCreate } from "./brandCreate";
 export { default as BrandDetail } from "./brandDetail";
 export { default as CompanyDetail } from "./companyDetail";
-export { default as StockLocationPage } from "./locationManagement";
+export { default as LocationManagement } from "./locationManagement";
+export { default as LocationCreate } from "./locationCreate";
+export { default as LocationDetail } from "./locationDetail";
 export { default as TransportationFeeManagement } from "./transportationFeeManagement";
 export { default as TransportationFeeCreate } from "./transportationFeeCreate";
 export { default as TransportationFeeDetail } from "./transportationFeeDetail";
