@@ -82,7 +82,7 @@ const FeeEditCard: React.FC<FeeEditCardProps> = ({
                 step={1}
                 disabled={disabled}
                 value={regionAmountValue}
-                placeholder="個別設定"
+                placeholder="未設定"
                 className="h-9 w-32 text-right"
                 onChange={handleRegionAmountChange}
               />
@@ -124,7 +124,6 @@ const FeeEditCard: React.FC<FeeEditCardProps> = ({
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <span className="font-medium text-slate-900">{prefecture.prefectureName}</span>
-                        <span className="text-xs text-slate-400">{prefecture.prefectureCode}</span>
                       </div>
                     </TableCell>
 

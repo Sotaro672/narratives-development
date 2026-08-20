@@ -84,7 +84,7 @@ const IslandFeeEditCard: React.FC<IslandFeeEditCardProps> = ({
                 step={1}
                 disabled={disabled || islands.length === 0}
                 value={bulkAmountValue}
-                placeholder="個別設定"
+                placeholder="未設定"
                 className="h-9 w-32 text-right"
                 onChange={handleBulkAmountChange}
               />
@@ -127,14 +127,12 @@ const IslandFeeEditCard: React.FC<IslandFeeEditCardProps> = ({
                     <TableCell>
                       <div className="flex flex-col gap-1">
                         <span className="font-medium text-slate-900">{island.islandName}</span>
-                        <span className="text-xs text-slate-400">{island.islandCode}</span>
                       </div>
                     </TableCell>
 
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-slate-700">{island.prefectureName}</span>
-                        <span className="text-xs text-slate-400">{island.prefectureCode}</span>
                       </div>
                     </TableCell>
 
