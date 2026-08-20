@@ -12,9 +12,11 @@ type PrefectureCode string
 type IslandCode string
 
 const (
-	PrefectureCount          = 47
-	MaxCompanyIDLength       = 128
-	MinRateAmount      int64 = 0
+	PrefectureCount                 = 47
+	MaxTransportationIDLength       = 128
+	MaxCompanyIDLength              = 128
+	MaxNameLength                   = 100
+	MinRateAmount             int64 = 0
 
 	RegionHokkaido Region = "hokkaido"
 	RegionTohoku   Region = "tohoku"
@@ -77,7 +79,9 @@ const (
 )
 
 var (
+	ErrInvalidID                 = errors.New("transportation: invalid id")
 	ErrInvalidCompanyID          = errors.New("transportation: invalid companyId")
+	ErrInvalidName               = errors.New("transportation: invalid name")
 	ErrInvalidRegion             = errors.New("transportation: invalid region")
 	ErrInvalidPrefectureCode     = errors.New("transportation: invalid prefectureCode")
 	ErrDuplicatePrefectureRate   = errors.New("transportation: duplicate prefectureRate")
@@ -175,9 +179,9 @@ var regions = []Region{
 	RegionTohoku,
 	RegionKanto,
 	RegionChubu,
+	RegionShikoku,
 	RegionKinki,
 	RegionChugoku,
-	RegionShikoku,
 	RegionKyushu,
 	RegionOkinawa,
 	RegionIslands,
@@ -221,7 +225,9 @@ type IslandRate struct {
 }
 
 type TransportationFeeSetting struct {
+	ID              string           `json:"id"`
 	CompanyID       string           `json:"companyId"`
+	Name            string           `json:"name"`
 	PrefectureRates []PrefectureRate `json:"prefectureRates"`
 	IslandRates     []IslandRate     `json:"islandRates"`
 	CreatedAt       time.Time        `json:"createdAt"`
@@ -320,14 +326,18 @@ func IsValidPrefectureCode(code PrefectureCode) bool {
 }
 
 func New(
+	id string,
 	companyID string,
+	name string,
 	prefectureRates []PrefectureRate,
 	islandRates []IslandRate,
 	createdAt time.Time,
 	updatedAt time.Time,
 ) (TransportationFeeSetting, error) {
 	setting := TransportationFeeSetting{
+		ID:              id,
 		CompanyID:       companyID,
+		Name:            name,
 		PrefectureRates: clonePrefectureRates(prefectureRates),
 		IslandRates:     cloneIslandRates(islandRates),
 		CreatedAt:       createdAt.UTC(),
@@ -344,7 +354,9 @@ func New(
 }
 
 func NewWithNow(
+	id string,
 	companyID string,
+	name string,
 	prefectureRates []PrefectureRate,
 	islandRates []IslandRate,
 	now time.Time,
@@ -352,7 +364,9 @@ func NewWithNow(
 	now = now.UTC()
 
 	return New(
+		id,
 		companyID,
+		name,
 		prefectureRates,
 		islandRates,
 		now,
@@ -360,17 +374,20 @@ func NewWithNow(
 	)
 }
 
-func (s *TransportationFeeSetting) UpdateRates(
+func (s *TransportationFeeSetting) Update(
+	name string,
 	prefectureRates []PrefectureRate,
 	islandRates []IslandRate,
 	now time.Time,
 ) error {
 	if s == nil {
-		return ErrInvalidCompanyID
+		return ErrInvalidID
 	}
 
 	next := TransportationFeeSetting{
+		ID:              s.ID,
 		CompanyID:       s.CompanyID,
+		Name:            name,
 		PrefectureRates: clonePrefectureRates(prefectureRates),
 		IslandRates:     cloneIslandRates(islandRates),
 		CreatedAt:       s.CreatedAt,
@@ -427,7 +444,15 @@ func (s TransportationFeeSetting) ResolveFee(
 }
 
 func (s TransportationFeeSetting) Validate() error {
+	if err := validateTransportationID(s.ID); err != nil {
+		return err
+	}
+
 	if err := validateCompanyID(s.CompanyID); err != nil {
+		return err
+	}
+
+	if err := validateName(s.Name); err != nil {
 		return err
 	}
 
@@ -442,9 +467,25 @@ func (s TransportationFeeSetting) Validate() error {
 	return validateTimestamps(s.CreatedAt, s.UpdatedAt)
 }
 
+func validateTransportationID(id string) error {
+	if id == "" || len([]rune(id)) > MaxTransportationIDLength {
+		return ErrInvalidID
+	}
+
+	return nil
+}
+
 func validateCompanyID(companyID string) error {
 	if companyID == "" || len([]rune(companyID)) > MaxCompanyIDLength {
 		return ErrInvalidCompanyID
+	}
+
+	return nil
+}
+
+func validateName(name string) error {
+	if name == "" || len([]rune(name)) > MaxNameLength {
+		return ErrInvalidName
 	}
 
 	return nil

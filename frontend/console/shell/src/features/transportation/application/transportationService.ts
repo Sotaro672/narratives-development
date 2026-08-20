@@ -4,6 +4,7 @@ import {
   createTransportationFeeSettingHTTP,
   getTransportationFeeSettingHTTP,
   getTransportationMasterHTTP,
+  listTransportationFeeSettingsHTTP,
   updateTransportationFeeSettingHTTP,
 } from "../infrastracture/transportationApi";
 
@@ -44,7 +45,9 @@ export type TransportationIslandRateVM = {
 };
 
 export type TransportationVM = {
+  id: string;
   companyId: string;
+  name: string;
   regions: TransportationRegionVM[];
   islandRates: TransportationIslandRateVM[];
   createdAt: string;
@@ -52,8 +55,17 @@ export type TransportationVM = {
 };
 
 export type TransportationSaveInput = {
+  name: string;
   regions: TransportationRegionVM[];
   islandRates: TransportationIslandRateVM[];
+};
+
+export type TransportationListItemVM = {
+  id: string;
+  companyId: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 // ============================================================
@@ -136,9 +148,21 @@ function buildIslandRateVMs(master: TransportationMaster, setting: Transportatio
 
 export function buildTransportationVM(master: TransportationMaster, setting: TransportationFeeSetting): TransportationVM {
   return {
+    id: setting.id,
     companyId: setting.companyId,
+    name: setting.name,
     regions: buildRegionVMs(master, setting),
     islandRates: buildIslandRateVMs(master, setting),
+    createdAt: setting.createdAt,
+    updatedAt: setting.updatedAt,
+  };
+}
+
+function buildTransportationListItemVM(setting: TransportationFeeSetting): TransportationListItemVM {
+  return {
+    id: setting.id,
+    companyId: setting.companyId,
+    name: setting.name,
     createdAt: setting.createdAt,
     updatedAt: setting.updatedAt,
   };
@@ -150,7 +174,9 @@ export function buildTransportationVM(master: TransportationMaster, setting: Tra
 
 export function buildEmptyTransportationVM(master: TransportationMaster): TransportationVM {
   return {
+    id: "",
     companyId: "",
+    name: "",
     regions: master.regions
       .filter((group) => group.region !== "islands")
       .map((group) => ({
@@ -177,6 +203,16 @@ export function buildEmptyTransportationVM(master: TransportationMaster): Transp
 // ============================================================
 // Validation
 // ============================================================
+
+function validateName(name: string): void {
+  if (name === "") {
+    throw new Error("料金設定名を入力してください。");
+  }
+
+  if (Array.from(name).length > 100) {
+    throw new Error("料金設定名は100文字以内で入力してください。");
+  }
+}
 
 function validateAmount(amount: number): void {
   if (!Number.isSafeInteger(amount) || amount < 0) {
@@ -244,6 +280,7 @@ function validateIslandRates(islandRates: TransportationIslandRateVM[]): void {
 }
 
 function validateSaveInput(input: TransportationSaveInput): void {
+  validateName(input.name);
   validateRegions(input.regions);
   validateIslandRates(input.islandRates);
 }
@@ -256,6 +293,7 @@ function toTransportationFeeSettingInput(input: TransportationSaveInput): Transp
   validateSaveInput(input);
 
   return {
+    name: input.name,
     prefectureRates: input.regions
       .filter((region) => region.region !== "islands")
       .flatMap((region) =>
@@ -282,10 +320,15 @@ function toTransportationFeeSettingInput(input: TransportationSaveInput): Transp
 // Query
 // ============================================================
 
-export async function fetchTransportationVM(): Promise<TransportationVM> {
+export async function listTransportationVMs(): Promise<TransportationListItemVM[]> {
+  const settings = await listTransportationFeeSettingsHTTP();
+  return settings.map(buildTransportationListItemVM);
+}
+
+export async function fetchTransportationVM(transportationId: string): Promise<TransportationVM> {
   const [master, setting] = await Promise.all([
     getTransportationMasterHTTP(),
-    getTransportationFeeSettingHTTP(),
+    getTransportationFeeSettingHTTP(transportationId),
   ]);
 
   return buildTransportationVM(master, setting);
@@ -311,12 +354,15 @@ export async function createTransportation(input: TransportationSaveInput): Prom
   return buildTransportationVM(master, setting);
 }
 
-export async function updateTransportation(input: TransportationSaveInput): Promise<TransportationVM> {
+export async function updateTransportation(
+  transportationId: string,
+  input: TransportationSaveInput,
+): Promise<TransportationVM> {
   const payload = toTransportationFeeSettingInput(input);
 
   const [master, setting] = await Promise.all([
     getTransportationMasterHTTP(),
-    updateTransportationFeeSettingHTTP(payload),
+    updateTransportationFeeSettingHTTP(transportationId, payload),
   ]);
 
   return buildTransportationVM(master, setting);

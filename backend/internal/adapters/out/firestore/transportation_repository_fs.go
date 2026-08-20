@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -22,10 +23,16 @@ var _ transportationdom.RepositoryPort = (*TransportationRepositoryFS)(nil)
 //
 // Firestore schema:
 //
-//	transportations/{companyId}
+//	transportations/{transportationId}
+//	  companyId
+//	  name
+//	  prefectureRates
+//	  islandRates
+//	  createdAt
+//	  updatedAt
 //
-// document IDはTransportationFeeSetting.CompanyIDと同一です。
-// companyIdはdocument fieldとして重複保存せず、DocumentSnapshot.Ref.IDから復元します。
+// document IDはTransportationFeeSetting.IDと同一です。
+// CompanyIDは1 companyが複数TransportationFeeSettingを所有できるようdocument fieldとして保存します。
 type TransportationRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -43,9 +50,11 @@ type transportationIslandRateDocument struct {
 	Amount         int64  `firestore:"amount"`
 }
 
-// transportationDocumentはtransportations/{companyId}のFirestore保存schemaです。
-// CompanyIDはdocument IDを正本とするためfieldとして保存しません。
+// transportationDocumentはtransportations/{transportationId}のFirestore保存schemaです。
+// IDはdocument IDを正本とし、CompanyIDとNameはdocument fieldとして保存します。
 type transportationDocument struct {
+	CompanyID       string                                 `firestore:"companyId"`
+	Name            string                                 `firestore:"name"`
 	PrefectureRates []transportationPrefectureRateDocument `firestore:"prefectureRates"`
 	IslandRates     []transportationIslandRateDocument     `firestore:"islandRates"`
 	CreatedAt       time.Time                              `firestore:"createdAt"`
@@ -67,6 +76,13 @@ func (r *TransportationRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection(transportationCollection)
 }
 
+func validateTransportationRepositoryID(id string) (string, error) {
+	if id == "" || len([]rune(id)) > transportationdom.MaxTransportationIDLength {
+		return "", transportationdom.ErrInvalidID
+	}
+	return id, nil
+}
+
 func validateTransportationRepositoryCompanyID(companyID string) (string, error) {
 	if companyID == "" || len([]rune(companyID)) > transportationdom.MaxCompanyIDLength {
 		return "", transportationdom.ErrInvalidCompanyID
@@ -82,20 +98,19 @@ func transportationNotFound(err error) bool {
 // Read
 // --------------------
 
-// GetByCompanyIDは指定companyの配送料金設定を取得します。
-// Firestore document ID = CompanyIDです。
+// GetByIDはTransportationFeeSetting.IDをdocument IDとして1件取得します。
 // 対象documentが存在しない場合はErrNotFoundを返します。
-func (r *TransportationRepositoryFS) GetByCompanyID(ctx context.Context, companyID string) (*transportationdom.TransportationFeeSetting, error) {
+func (r *TransportationRepositoryFS) GetByID(ctx context.Context, id string) (*transportationdom.TransportationFeeSetting, error) {
 	if err := r.ensureClient(); err != nil {
 		return nil, err
 	}
 
-	validCompanyID, err := validateTransportationRepositoryCompanyID(companyID)
+	validID, err := validateTransportationRepositoryID(id)
 	if err != nil {
 		return nil, err
 	}
 
-	snapshot, err := r.col().Doc(validCompanyID).Get(ctx)
+	snapshot, err := r.col().Doc(validID).Get(ctx)
 	if transportationNotFound(err) {
 		return nil, transportationdom.ErrNotFound
 	}
@@ -111,40 +126,65 @@ func (r *TransportationRepositoryFS) GetByCompanyID(ctx context.Context, company
 	return &entity, nil
 }
 
-// ExistsByCompanyIDは指定companyの配送料金設定documentが存在するか返します。
-// companyIDが不正な場合はfalseとErrInvalidCompanyIDを返します。
-// documentが存在しない場合はfalse, nilを返します。
-func (r *TransportationRepositoryFS) ExistsByCompanyID(ctx context.Context, companyID string) (bool, error) {
+// ListByCompanyIDは指定companyが所有するすべての配送料金設定を取得します。
+// companyId fieldによるqueryを行います。
+// 対象が0件の場合は空sliceを返します。
+func (r *TransportationRepositoryFS) ListByCompanyID(ctx context.Context, companyID string) ([]transportationdom.TransportationFeeSetting, error) {
 	if err := r.ensureClient(); err != nil {
-		return false, err
+		return nil, err
 	}
 
 	validCompanyID, err := validateTransportationRepositoryCompanyID(companyID)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	_, err = r.col().Doc(validCompanyID).Get(ctx)
-	if transportationNotFound(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
+	iter := r.col().Where("companyId", "==", validCompanyID).Documents(ctx)
+	defer iter.Stop()
+
+	result := make([]transportationdom.TransportationFeeSetting, 0)
+
+	for {
+		snapshot, err := iter.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		entity, err := docToTransportation(snapshot)
+		if err != nil {
+			return nil, err
+		}
+
+		if entity.CompanyID != validCompanyID {
+			return nil, transportationdom.ErrInvalidCompanyID
+		}
+
+		result = append(result, entity)
 	}
 
-	return true, nil
+	return result, nil
 }
 
 // --------------------
 // Write
 // --------------------
 
-// Createは新しいtransportations/{companyId}を作成します。
+// Createは新しいtransportations/{transportationId}を作成します。
 // Createは既存documentを上書きしません。
-// 同じCompanyIDのdocumentが存在する場合はErrConflictを返します。
-// 保存前にDomain constructorを使用してEntityを再構築し、47都道府県の完全性、重複、料金、島嶼部override、timestampを検証します。
+// 同じTransportationFeeSetting.IDのdocumentが存在する場合はErrConflictを返します。
+// 同一CompanyIDを持つ複数documentの作成は許可します。
+// 保存前にDomain constructorを使用してEntity全体を再構築し、ID、CompanyID、Name、
+// 47都道府県の完全性、重複、料金、島嶼部override、timestampを検証します。
 func (r *TransportationRepositoryFS) Create(ctx context.Context, value transportationdom.TransportationFeeSetting) (*transportationdom.TransportationFeeSetting, error) {
 	if err := r.ensureClient(); err != nil {
+		return nil, err
+	}
+
+	validID, err := validateTransportationRepositoryID(value.ID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -153,12 +193,20 @@ func (r *TransportationRepositoryFS) Create(ctx context.Context, value transport
 		return nil, err
 	}
 
-	validated, err := transportationdom.New(validCompanyID, value.PrefectureRates, value.IslandRates, value.CreatedAt, value.UpdatedAt)
+	validated, err := transportationdom.New(
+		validID,
+		validCompanyID,
+		value.Name,
+		value.PrefectureRates,
+		value.IslandRates,
+		value.CreatedAt,
+		value.UpdatedAt,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	ref := r.col().Doc(validated.CompanyID)
+	ref := r.col().Doc(validated.ID)
 
 	_, err = ref.Create(ctx, transportationToDocData(validated))
 	if status.Code(err) == codes.AlreadyExists {
@@ -171,14 +219,19 @@ func (r *TransportationRepositoryFS) Create(ctx context.Context, value transport
 	return &validated, nil
 }
 
-// Updateは既存のtransportations/{companyId}を更新します。
+// Updateは既存のtransportations/{transportationId}を更新します。
 // Updateはupsertではありません。
 // transaction内で対象documentを取得した後、tx.Updateを使用します。
 // documentが存在しない場合はErrNotFoundを返します。
-// CompanyIDおよびCreatedAtは変更できません。
-// PrefectureRates、IslandRates、UpdatedAtのみ更新します。
+// ID、CompanyID、CreatedAtは変更できません。
+// Name、PrefectureRates、IslandRates、UpdatedAtのみ更新します。
 func (r *TransportationRepositoryFS) Update(ctx context.Context, value transportationdom.TransportationFeeSetting) (*transportationdom.TransportationFeeSetting, error) {
 	if err := r.ensureClient(); err != nil {
+		return nil, err
+	}
+
+	validID, err := validateTransportationRepositoryID(value.ID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -187,7 +240,7 @@ func (r *TransportationRepositoryFS) Update(ctx context.Context, value transport
 		return nil, err
 	}
 
-	ref := r.col().Doc(validCompanyID)
+	ref := r.col().Doc(validID)
 	var updated transportationdom.TransportationFeeSetting
 
 	err = r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
@@ -204,20 +257,32 @@ func (r *TransportationRepositoryFS) Update(ctx context.Context, value transport
 			return err
 		}
 
-		if value.CompanyID != current.CompanyID {
+		if value.ID != current.ID {
+			return transportationdom.ErrInvalidID
+		}
+		if validCompanyID != current.CompanyID {
 			return transportationdom.ErrInvalidCompanyID
 		}
 		if !value.CreatedAt.Equal(current.CreatedAt) {
 			return transportationdom.ErrInvalidCreatedAt
 		}
 
-		next, err := transportationdom.New(current.CompanyID, value.PrefectureRates, value.IslandRates, current.CreatedAt, value.UpdatedAt)
+		next, err := transportationdom.New(
+			current.ID,
+			current.CompanyID,
+			value.Name,
+			value.PrefectureRates,
+			value.IslandRates,
+			current.CreatedAt,
+			value.UpdatedAt,
+		)
 		if err != nil {
 			return err
 		}
 
 		doc := transportationToDocData(next)
 		updates := []firestore.Update{
+			{Path: "name", Value: doc.Name},
 			{Path: "prefectureRates", Value: doc.PrefectureRates},
 			{Path: "islandRates", Value: doc.IslandRates},
 			{Path: "updatedAt", Value: doc.UpdatedAt},
@@ -266,6 +331,8 @@ func transportationToDocData(value transportationdom.TransportationFeeSetting) t
 	}
 
 	return transportationDocument{
+		CompanyID:       value.CompanyID,
+		Name:            value.Name,
 		PrefectureRates: prefectureRates,
 		IslandRates:     islandRates,
 		CreatedAt:       value.CreatedAt.UTC(),
@@ -275,16 +342,21 @@ func transportationToDocData(value transportationdom.TransportationFeeSetting) t
 
 func docToTransportation(snapshot *firestore.DocumentSnapshot) (transportationdom.TransportationFeeSetting, error) {
 	if snapshot == nil || snapshot.Ref == nil {
-		return transportationdom.TransportationFeeSetting{}, transportationdom.ErrInvalidCompanyID
+		return transportationdom.TransportationFeeSetting{}, transportationdom.ErrInvalidID
 	}
 
-	companyID, err := validateTransportationRepositoryCompanyID(snapshot.Ref.ID)
+	id, err := validateTransportationRepositoryID(snapshot.Ref.ID)
 	if err != nil {
 		return transportationdom.TransportationFeeSetting{}, err
 	}
 
 	var doc transportationDocument
 	if err := snapshot.DataTo(&doc); err != nil {
+		return transportationdom.TransportationFeeSetting{}, err
+	}
+
+	companyID, err := validateTransportationRepositoryCompanyID(doc.CompanyID)
+	if err != nil {
 		return transportationdom.TransportationFeeSetting{}, err
 	}
 
@@ -321,7 +393,9 @@ func docToTransportation(snapshot *firestore.DocumentSnapshot) (transportationdo
 	}
 
 	return transportationdom.New(
+		id,
 		companyID,
+		doc.Name,
 		prefectureRates,
 		islandRates,
 		doc.CreatedAt,

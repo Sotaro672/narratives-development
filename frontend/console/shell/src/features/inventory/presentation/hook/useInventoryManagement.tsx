@@ -1,4 +1,5 @@
 // frontend/console/inventory/src/presentation/hook/useInventoryManagement.tsx
+
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -46,7 +47,6 @@ export type UseInventoryManagementResult = {
     setSortDir: (d: SortDirection) => void;
     handleRowClick: (row: InventoryRow) => void;
     handleReset: () => void;
-    handleStockLocation: () => void;
   };
   isResetting: boolean;
 };
@@ -65,7 +65,7 @@ function mapToRows(items: InventoryManagementRow[]): InventoryRow[] {
 }
 
 function normalizeId(v: unknown): string {
-  return String(v ?? "").trim();
+  return String(v ?? "");
 }
 
 /** 在庫管理ページ用 ロジックフック */
@@ -153,10 +153,6 @@ export function useInventoryManagement(): UseInventoryManagementResult {
     [navigate],
   );
 
-  const handleStockLocation = useCallback(() => {
-    navigate("/stockLocation");
-  }, [navigate]);
-
   const handleReset = useCallback(() => {
     setProductFilter([]);
     setTokenFilter([]);
@@ -184,7 +180,6 @@ export function useInventoryManagement(): UseInventoryManagementResult {
       setSortDir,
       handleRowClick,
       handleReset,
-      handleStockLocation,
     },
     isResetting,
   };

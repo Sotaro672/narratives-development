@@ -6,6 +6,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
+
 	transportationdom "narratives/internal/domain/transportation"
 )
 
@@ -14,33 +16,40 @@ import (
 type TransportationRepo = transportationdom.RepositoryPort
 
 // CreateTransportationFeeSettingInputは配送料金設定の新規作成入力です。
-// CompanyID、CreatedAt、UpdatedAtはUsecase側で設定します。
+// ID、CompanyID、CreatedAt、UpdatedAtはUsecase側で設定します。
+// Nameは必須です。
 // PrefectureRatesは47都道府県すべて必須です。
 // IslandRatesは任意で、設定された場合は都道府県料金より優先されます。
 type CreateTransportationFeeSettingInput struct {
+	Name            string
 	PrefectureRates []transportationdom.PrefectureRate
 	IslandRates     []transportationdom.IslandRate
 }
 
 // UpdateTransportationFeeSettingInputは配送料金設定の更新入力です。
-// PrefectureRatesは部分更新ではなく47都道府県すべてを受け取ります。
-// IslandRatesも現在の完全な設定を受け取り、既存設定を置き換えます。
+// ID、CompanyID、CreatedAtは変更しません。
+// Name、PrefectureRates、IslandRatesを完全な現在値として受け取ります。
 type UpdateTransportationFeeSettingInput struct {
+	Name            string
 	PrefectureRates []transportationdom.PrefectureRate
 	IslandRates     []transportationdom.IslandRate
 }
 
-// TransportationUsecaseはcompany単位の配送料金設定を制御します。
-// 1 companyにつきTransportationFeeSettingは最大1件です。
+// TransportationUsecaseはcompanyに紐づく配送料金設定を制御します。
+// 1 companyは複数のTransportationFeeSettingを保持できます。
 type TransportationUsecase struct {
 	repo TransportationRepo
-	now  func() time.Time
+
+	// テスト時に差し替え可能な依存です。
+	newDocID func() string
+	now      func() time.Time
 }
 
 // NewTransportationUsecaseはTransportationUsecaseを生成します。
 func NewTransportationUsecase(repo TransportationRepo) *TransportationUsecase {
 	return &TransportationUsecase{
-		repo: repo,
+		repo:     repo,
+		newDocID: uuid.NewString,
 		now: func() time.Time {
 			return time.Now().UTC()
 		},
@@ -53,6 +62,9 @@ func (u *TransportationUsecase) ensureRepo() error {
 	}
 	if u.repo == nil {
 		return errors.New("transportation repo not configured")
+	}
+	if u.newDocID == nil {
+		return errors.New("transportation id generator not configured")
 	}
 	if u.now == nil {
 		return errors.New("transportation now not configured")
@@ -67,11 +79,48 @@ func validateTransportationCompanyID(companyID string) (string, error) {
 	return companyID, nil
 }
 
-// GetByCompanyIDは指定companyの配送料金設定を取得します。
-// 設定が存在しない場合はtransportation.ErrNotFoundを返します。
-func (u *TransportationUsecase) GetByCompanyID(
+func validateTransportationID(id string) (string, error) {
+	if id == "" || len([]rune(id)) > transportationdom.MaxTransportationIDLength {
+		return "", transportationdom.ErrInvalidID
+	}
+	return id, nil
+}
+
+// ListByCompanyIDは認証済みcompanyが所有する配送料金設定一覧を取得します。
+// 設定が0件の場合は空sliceを返します。
+func (u *TransportationUsecase) ListByCompanyID(
 	ctx context.Context,
 	companyID string,
+) ([]transportationdom.TransportationFeeSetting, error) {
+	if err := u.ensureRepo(); err != nil {
+		return nil, err
+	}
+
+	validCompanyID, err := validateTransportationCompanyID(companyID)
+	if err != nil {
+		return nil, err
+	}
+
+	settings, err := u.repo.ListByCompanyID(ctx, validCompanyID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, setting := range settings {
+		if setting.CompanyID != validCompanyID {
+			return nil, errors.New("transportation repository returned setting owned by another company")
+		}
+	}
+
+	return settings, nil
+}
+
+// GetByIDは指定Transportation IDの配送料金設定を取得します。
+// 対象が存在しない場合、または別companyが所有する場合はErrNotFoundを返します。
+func (u *TransportationUsecase) GetByID(
+	ctx context.Context,
+	companyID string,
+	transportationID string,
 ) (*transportationdom.TransportationFeeSetting, error) {
 	if err := u.ensureRepo(); err != nil {
 		return nil, err
@@ -82,30 +131,28 @@ func (u *TransportationUsecase) GetByCompanyID(
 		return nil, err
 	}
 
-	return u.repo.GetByCompanyID(ctx, validCompanyID)
-}
-
-// ExistsByCompanyIDは指定companyに配送料金設定が存在するか返します。
-func (u *TransportationUsecase) ExistsByCompanyID(
-	ctx context.Context,
-	companyID string,
-) (bool, error) {
-	if err := u.ensureRepo(); err != nil {
-		return false, err
-	}
-
-	validCompanyID, err := validateTransportationCompanyID(companyID)
+	validTransportationID, err := validateTransportationID(transportationID)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	return u.repo.ExistsByCompanyID(ctx, validCompanyID)
+	setting, err := u.repo.GetByID(ctx, validTransportationID)
+	if err != nil {
+		return nil, err
+	}
+	if setting == nil {
+		return nil, transportationdom.ErrNotFound
+	}
+	if setting.CompanyID != validCompanyID {
+		return nil, transportationdom.ErrNotFound
+	}
+
+	return setting, nil
 }
 
-// Createはcompanyの配送料金設定を新規作成します。
-// PrefectureRatesは47都道府県すべて必須です。
-// IslandRatesは任意です。
-// 同一CompanyIDの設定が既に存在する場合はRepositoryからErrConflictが返されます。
+// Createはcompanyに新しい配送料金設定を作成します。
+// Transportation IDはUsecaseがUUIDで採番します。
+// 同一companyに複数のTransportationFeeSettingを作成できます。
 func (u *TransportationUsecase) Create(
 	ctx context.Context,
 	companyID string,
@@ -120,10 +167,18 @@ func (u *TransportationUsecase) Create(
 		return nil, err
 	}
 
+	transportationID := u.newDocID()
+	validTransportationID, err := validateTransportationID(transportationID)
+	if err != nil {
+		return nil, err
+	}
+
 	now := u.now().UTC()
 
 	setting, err := transportationdom.NewWithNow(
+		validTransportationID,
 		validCompanyID,
+		in.Name,
 		in.PrefectureRates,
 		in.IslandRates,
 		now,
@@ -135,25 +190,21 @@ func (u *TransportationUsecase) Create(
 	return u.repo.Create(ctx, setting)
 }
 
-// Updateは既存の配送料金設定を更新します。
+// Updateは指定Transportation IDの既存配送料金設定を更新します。
 // Updateはupsertではありません。
-// 対象が存在しない場合はErrNotFoundを返します。
-// CompanyIDとCreatedAtは既存値を維持し、UpdatedAtのみserver clockで更新します。
+// ID、CompanyID、CreatedAtは既存値を維持し、Name、料金設定、UpdatedAtを更新します。
+// 別companyが所有するTransportation IDを指定した場合はErrNotFoundを返します。
 func (u *TransportationUsecase) Update(
 	ctx context.Context,
 	companyID string,
+	transportationID string,
 	in UpdateTransportationFeeSettingInput,
 ) (*transportationdom.TransportationFeeSetting, error) {
 	if err := u.ensureRepo(); err != nil {
 		return nil, err
 	}
 
-	validCompanyID, err := validateTransportationCompanyID(companyID)
-	if err != nil {
-		return nil, err
-	}
-
-	current, err := u.repo.GetByCompanyID(ctx, validCompanyID)
+	current, err := u.GetByID(ctx, companyID, transportationID)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +214,8 @@ func (u *TransportationUsecase) Update(
 
 	now := u.now().UTC()
 
-	if err := current.UpdateRates(
+	if err := current.Update(
+		in.Name,
 		in.PrefectureRates,
 		in.IslandRates,
 		now,
@@ -174,22 +226,19 @@ func (u *TransportationUsecase) Update(
 	return u.repo.Update(ctx, *current)
 }
 
-// ResolveFeeは配送先に適用する送料を解決します。
+// ResolveFeeは指定Transportation IDの料金設定から配送先に適用する送料を解決します。
 // islandCodeに一致するIslandRateが存在する場合はIslandRateを優先し、
 // 存在しない場合はPrefectureRateへfallbackします。
 // islandCodeが空の場合はPrefectureRateを使用します。
+// 別companyが所有するTransportation IDを指定した場合はErrNotFoundを返します。
 func (u *TransportationUsecase) ResolveFee(
 	ctx context.Context,
 	companyID string,
+	transportationID string,
 	prefectureCode string,
 	islandCode string,
 ) (int64, error) {
 	if err := u.ensureRepo(); err != nil {
-		return 0, err
-	}
-
-	validCompanyID, err := validateTransportationCompanyID(companyID)
-	if err != nil {
 		return 0, err
 	}
 
@@ -198,7 +247,7 @@ func (u *TransportationUsecase) ResolveFee(
 		return 0, err
 	}
 
-	setting, err := u.repo.GetByCompanyID(ctx, validCompanyID)
+	setting, err := u.GetByID(ctx, companyID, transportationID)
 	if err != nil {
 		return 0, err
 	}

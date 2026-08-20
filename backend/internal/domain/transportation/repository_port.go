@@ -9,48 +9,54 @@ import (
 // RepositoryPort defines the persistence contract for TransportationFeeSetting.
 //
 // Identity:
-//   - one company has at most one TransportationFeeSetting;
-//   - TransportationFeeSetting.CompanyID is the aggregate identity;
-//   - the Firestore document ID must be the same value as CompanyID;
-//   - CompanyID is immutable after creation.
-//
-// This repository intentionally does not embed the common generic CRUD/List
-// repository contracts because this aggregate is company-scoped configuration:
-// it has no independent ID, does not require list operations, and should not
-// expose deletion as a normal domain operation.
+//   - one company may own multiple TransportationFeeSettings;
+//   - TransportationFeeSetting.ID is the aggregate identity;
+//   - the Firestore document ID must be the same value as TransportationFeeSetting.ID;
+//   - CompanyID identifies the owning company and is immutable after creation;
+//   - ID is immutable after creation.
 //
 // Persistence rules:
-//   - Create must never overwrite an existing document;
+//   - Create must never overwrite an existing document with the same ID;
 //   - Update must never create a missing document;
 //   - repository implementations must call setting.Validate() before writing;
 //   - the complete aggregate is persisted atomically because all 47
-//     PrefectureRates are required and IslandRates are overrides belonging to
-//     the same configuration aggregate.
+//     PrefectureRates are required and IslandRates belong to the same
+//     TransportationFeeSetting aggregate;
+//   - ListByCompanyID returns only settings owned by the specified company.
+//
+// Ownership authorization is handled by the application layer.
+// Repository methods expose persistence operations and ownership data through
+// TransportationFeeSetting.CompanyID.
 type RepositoryPort interface {
-	// GetByCompanyID returns the shipping fee setting for one company.
+	// GetByID returns one TransportationFeeSetting by its aggregate ID.
 	//
-	// If companyID is invalid, ErrInvalidCompanyID is returned.
-	// If no setting exists for the company, ErrNotFound is returned.
-	GetByCompanyID(
+	// If id is invalid, ErrInvalidID is returned.
+	// If no setting exists with the specified ID, ErrNotFound is returned.
+	GetByID(
 		ctx context.Context,
-		companyID string,
+		id string,
 	) (*TransportationFeeSetting, error)
 
-	// ExistsByCompanyID reports whether a shipping fee setting exists for the company.
+	// ListByCompanyID returns all TransportationFeeSettings owned by one company.
 	//
-	// If companyID is invalid, false and ErrInvalidCompanyID are returned.
-	ExistsByCompanyID(
+	// If companyID is invalid, ErrInvalidCompanyID is returned.
+	// If the company has no settings, an empty slice is returned.
+	ListByCompanyID(
 		ctx context.Context,
 		companyID string,
-	) (bool, error)
+	) ([]TransportationFeeSetting, error)
 
 	// Create persists a new TransportationFeeSetting.
 	//
-	// setting.CompanyID is used as the document ID.
+	// setting.ID is used as the Firestore document ID.
+	// setting.CompanyID is persisted as the owner company field.
 	// The setting must satisfy all domain invariants before persistence,
-	// including the requirement that all 47 PrefectureRates are present.
+	// including ID, CompanyID, Name, all 47 PrefectureRates, IslandRates,
+	// and timestamps.
 	//
-	// If a setting already exists for the same CompanyID, ErrConflict is returned.
+	// If a document already exists with the same setting.ID,
+	// ErrConflict is returned.
+	// Multiple settings with the same CompanyID are allowed.
 	// Create must not overwrite an existing document.
 	Create(
 		ctx context.Context,
@@ -59,12 +65,16 @@ type RepositoryPort interface {
 
 	// Update replaces an existing TransportationFeeSetting atomically.
 	//
-	// Update is not an upsert. If the setting does not exist, ErrNotFound is returned.
-	// CompanyID and CreatedAt must remain unchanged from the persisted aggregate.
+	// Update is not an upsert. If the setting does not exist,
+	// ErrNotFound is returned.
+	// ID, CompanyID, and CreatedAt must remain unchanged from the
+	// persisted aggregate.
+	// Name, PrefectureRates, IslandRates, and UpdatedAt may be updated.
 	// UpdatedAt must not be earlier than CreatedAt.
 	//
-	// The repository implementation must persist PrefectureRates and IslandRates
-	// as one aggregate so that readers never observe a partial rate configuration.
+	// The repository implementation must persist Name, PrefectureRates,
+	// IslandRates, and UpdatedAt as one aggregate so that readers never
+	// observe a partial transportation configuration.
 	Update(
 		ctx context.Context,
 		setting TransportationFeeSetting,

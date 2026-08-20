@@ -138,7 +138,9 @@ export type TransportationIslandRate = {
 };
 
 export type TransportationFeeSetting = {
+  id: string;
   companyId: string;
+  name: string;
   prefectureRates: TransportationPrefectureRate[];
   islandRates: TransportationIslandRate[];
   createdAt: string;
@@ -163,6 +165,7 @@ export type TransportationMaster = {
 };
 
 export type TransportationFeeSettingInput = {
+  name: string;
   prefectureRates: TransportationPrefectureRate[];
   islandRates: TransportationIslandRate[];
 };

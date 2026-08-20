@@ -37,7 +37,7 @@ import {
   BrandDetail,
   CompanyDetail,
   StockLocationPage,
-  TransportationFeePage,
+  TransportationFeeManagement,
   PermissionList,
   PermissionDetail,
   AccountManagement,
@@ -68,7 +68,7 @@ export const routes: RouteObject[] = [
   },
   {
     path: "/transportationFee",
-    element: <TransportationFeePage />,
+    element: <TransportationFeeManagement />,
   },
   {
     path: "/inquiry",

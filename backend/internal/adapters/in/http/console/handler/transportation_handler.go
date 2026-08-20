@@ -36,6 +36,7 @@ type transportationIslandRateRequest struct {
 }
 
 type transportationWriteRequest struct {
+	Name            string                                `json:"name"`
 	PrefectureRates []transportationPrefectureRateRequest `json:"prefectureRates"`
 	IslandRates     []transportationIslandRateRequest     `json:"islandRates"`
 }
@@ -64,19 +65,36 @@ func (h *TransportationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
+	transportationID, hasTransportationID := transportationIDFromPath(path)
 
 	switch {
 	case r.Method == http.MethodGet && path == transportationMasterPath:
 		h.master(w, r)
 	case r.Method == http.MethodGet && path == transportationBasePath:
-		h.get(w, r)
+		h.list(w, r)
 	case r.Method == http.MethodPost && path == transportationBasePath:
 		h.create(w, r)
-	case r.Method == http.MethodPut && path == transportationBasePath:
-		h.update(w, r)
+	case r.Method == http.MethodGet && hasTransportationID:
+		h.get(w, r, transportationID)
+	case r.Method == http.MethodPut && hasTransportationID:
+		h.update(w, r, transportationID)
 	default:
 		writeNotFound(w)
 	}
+}
+
+func transportationIDFromPath(path string) (string, bool) {
+	prefix := transportationBasePath + "/"
+	if !strings.HasPrefix(path, prefix) {
+		return "", false
+	}
+
+	id := strings.TrimPrefix(path, prefix)
+	if id == "" || strings.Contains(id, "/") {
+		return "", false
+	}
+
+	return id, true
 }
 
 func (h *TransportationHandler) requireUsecase(w http.ResponseWriter) bool {
@@ -129,8 +147,9 @@ func (h *TransportationHandler) master(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-// getは認証済みcompanyの配送料金設定を取得します。
-func (h *TransportationHandler) get(w http.ResponseWriter, r *http.Request) {
+// listは認証済みcompanyが所有する配送料金設定一覧を返します。
+// companyに設定が存在しない場合は空配列を返します。
+func (h *TransportationHandler) list(w http.ResponseWriter, r *http.Request) {
 	if !h.requireUsecase(w) {
 		return
 	}
@@ -140,7 +159,32 @@ func (h *TransportationHandler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setting, err := h.uc.GetByCompanyID(r.Context(), companyID)
+	settings, err := h.uc.ListByCompanyID(r.Context(), companyID)
+	if err != nil {
+		writeTransportationErr(w, err)
+		return
+	}
+
+	if settings == nil {
+		settings = []transportationdom.TransportationFeeSetting{}
+	}
+
+	writeJSON(w, http.StatusOK, settings)
+}
+
+// getは認証済みcompanyが所有する指定Transportation IDの配送料金設定を返します。
+// 対象が存在しない、または別companyが所有する場合は404を返します。
+func (h *TransportationHandler) get(w http.ResponseWriter, r *http.Request, transportationID string) {
+	if !h.requireUsecase(w) {
+		return
+	}
+
+	companyID, ok := h.requireCompanyID(w, r)
+	if !ok {
+		return
+	}
+
+	setting, err := h.uc.GetByID(r.Context(), companyID, transportationID)
 	if err != nil {
 		writeTransportationErr(w, err)
 		return
@@ -149,8 +193,9 @@ func (h *TransportationHandler) get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, setting)
 }
 
-// createは認証済みcompanyの配送料金設定を初回作成します。
-// 同一companyに既存設定がある場合は409 Conflictを返します。
+// createは認証済みcompanyに新しい配送料金設定を作成します。
+// 同一companyに複数のTransportationFeeSettingを作成できます。
+// Transportation IDはUsecase側で採番します。
 func (h *TransportationHandler) create(w http.ResponseWriter, r *http.Request) {
 	if !h.requireUsecase(w) {
 		return
@@ -176,6 +221,7 @@ func (h *TransportationHandler) create(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 		companyID,
 		usecase.CreateTransportationFeeSettingInput{
+			Name:            request.Name,
 			PrefectureRates: prefectureRates,
 			IslandRates:     islandRates,
 		},
@@ -188,10 +234,11 @@ func (h *TransportationHandler) create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, created)
 }
 
-// updateは認証済みcompanyの既存配送料金設定を完全置換します。
-// PrefectureRatesは47都道府県すべて送信する必要があります。
+// updateは認証済みcompanyが所有する指定Transportation IDの配送料金設定を完全置換します。
+// Name、PrefectureRates、IslandRatesを更新します。
+// ID、CompanyID、CreatedAtは変更しません。
 // Updateはupsertではなく、設定が存在しない場合は404を返します。
-func (h *TransportationHandler) update(w http.ResponseWriter, r *http.Request) {
+func (h *TransportationHandler) update(w http.ResponseWriter, r *http.Request, transportationID string) {
 	if !h.requireUsecase(w) {
 		return
 	}
@@ -215,7 +262,9 @@ func (h *TransportationHandler) update(w http.ResponseWriter, r *http.Request) {
 	updated, err := h.uc.Update(
 		r.Context(),
 		companyID,
+		transportationID,
 		usecase.UpdateTransportationFeeSettingInput{
+			Name:            request.Name,
 			PrefectureRates: prefectureRates,
 			IslandRates:     islandRates,
 		},
@@ -291,7 +340,9 @@ func writeTransportationErr(w http.ResponseWriter, err error) {
 	statusCode := http.StatusInternalServerError
 
 	switch {
-	case errors.Is(err, transportationdom.ErrInvalidCompanyID),
+	case errors.Is(err, transportationdom.ErrInvalidID),
+		errors.Is(err, transportationdom.ErrInvalidCompanyID),
+		errors.Is(err, transportationdom.ErrInvalidName),
 		errors.Is(err, transportationdom.ErrInvalidRegion),
 		errors.Is(err, transportationdom.ErrInvalidPrefectureCode),
 		errors.Is(err, transportationdom.ErrDuplicatePrefectureRate),

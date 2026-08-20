@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { HttpError } from "../../../../shared/http/fetchJSON";
 import type { IslandCode, PrefectureCode, TransportationRegion } from "../../../../shared/types/transporation";
 
 import {
@@ -36,6 +35,7 @@ export type UseTransportationFeeResult = {
     onReset: () => void;
     onSave: () => Promise<void>;
     onDismissError: () => void;
+    onChangeName: (name: string) => void;
     onChangePrefectureAmount: (prefectureCode: PrefectureCode, amount: TransportationAmountInput) => void;
     onChangeRegionAmount: (region: TransportationRegion, amount: TransportationAmountInput) => void;
     onChangeIslandRateAmount: (islandCode: IslandCode, amount: TransportationIslandAmountInput) => void;
@@ -85,9 +85,11 @@ function transportationEquals(left: TransportationVM | null, right: Transportati
   }
 
   return JSON.stringify({
+    name: left.name,
     regions: left.regions,
     islandRates: left.islandRates,
   }) === JSON.stringify({
+    name: right.name,
     regions: right.regions,
     islandRates: right.islandRates,
   });
@@ -101,7 +103,7 @@ function errorMessage(error: unknown): string {
   return "配送料金設定の処理に失敗しました。";
 }
 
-export function useTransportationFee(): UseTransportationFeeResult {
+export function useTransportationFee(transportationId?: string): UseTransportationFeeResult {
   const navigate = useNavigate();
 
   const [transportation, setTransportation] = useState<TransportationVM | null>(null);
@@ -118,31 +120,23 @@ export function useTransportationFee(): UseTransportationFeeResult {
     setSuccessMessage(null);
 
     try {
-      const loaded = await fetchTransportationVM();
-      const next = cloneTransportationVM(loaded);
+      if (transportationId) {
+        const loaded = await fetchTransportationVM(transportationId);
+        const next = cloneTransportationVM(loaded);
+
+        setTransportation(next);
+        setOriginalTransportation(cloneTransportationVM(next));
+        setExists(true);
+        return;
+      }
+
+      const empty = await fetchEmptyTransportationVM();
+      const next = cloneTransportationVM(empty);
 
       setTransportation(next);
       setOriginalTransportation(cloneTransportationVM(next));
-      setExists(true);
+      setExists(false);
     } catch (loadError: unknown) {
-      if (loadError instanceof HttpError && loadError.status === 404) {
-        try {
-          const empty = await fetchEmptyTransportationVM();
-          const next = cloneTransportationVM(empty);
-
-          setTransportation(next);
-          setOriginalTransportation(cloneTransportationVM(next));
-          setExists(false);
-          return;
-        } catch (emptyError: unknown) {
-          setTransportation(null);
-          setOriginalTransportation(null);
-          setExists(false);
-          setError(errorMessage(emptyError));
-          return;
-        }
-      }
-
       setTransportation(null);
       setOriginalTransportation(null);
       setExists(false);
@@ -150,7 +144,7 @@ export function useTransportationFee(): UseTransportationFeeResult {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [transportationId]);
 
   useEffect(() => {
     void reload();
@@ -181,6 +175,22 @@ export function useTransportationFee(): UseTransportationFeeResult {
     setError(null);
     setSuccessMessage(null);
   }, [originalTransportation]);
+
+  const onChangeName = useCallback((name: string) => {
+    setTransportation((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        name,
+      };
+    });
+
+    setError(null);
+    setSuccessMessage(null);
+  }, []);
 
   const onChangePrefectureAmount = useCallback(
     (prefectureCode: PrefectureCode, amountInput: TransportationAmountInput) => {
@@ -275,13 +285,24 @@ export function useTransportationFee(): UseTransportationFeeResult {
 
     try {
       const input = {
+        name: transportation.name,
         regions: transportation.regions,
         islandRates: transportation.islandRates,
       };
 
-      const saved = exists
-        ? await updateTransportation(input)
-        : await createTransportation(input);
+      let saved: TransportationVM;
+
+      if (exists) {
+        const targetTransportationId = transportation.id || transportationId;
+
+        if (!targetTransportationId) {
+          throw new Error("配送料金設定IDを取得できませんでした。");
+        }
+
+        saved = await updateTransportation(targetTransportationId, input);
+      } else {
+        saved = await createTransportation(input);
+      }
 
       const next = cloneTransportationVM(saved);
 
@@ -294,7 +315,7 @@ export function useTransportationFee(): UseTransportationFeeResult {
     } finally {
       setSaving(false);
     }
-  }, [transportation, saving, exists]);
+  }, [transportation, saving, exists, transportationId]);
 
   return {
     vm: {
@@ -313,6 +334,7 @@ export function useTransportationFee(): UseTransportationFeeResult {
       onReset,
       onSave,
       onDismissError,
+      onChangeName,
       onChangePrefectureAmount,
       onChangeRegionAmount,
       onChangeIslandRateAmount,

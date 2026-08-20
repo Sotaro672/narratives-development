@@ -1,4 +1,5 @@
-// frontend\console\shell\src\pages\inventoryManagement.tsx
+// frontend/console/shell/src/pages/inventoryManagement.tsx
+
 import List from "../layout/List/List";
 import "../styles/inventory.css";
 
@@ -18,7 +19,6 @@ export default function InventoryManagementPage() {
       setSortDir,
       handleRowClick,
       handleReset,
-      handleStockLocation,
     },
     isResetting,
   } = useInventoryManagement();
@@ -37,9 +37,7 @@ export default function InventoryManagementPage() {
           setSortKey,
           setSortDir,
         })}
-        showCreateButton
-        createLabel="保管場所登録"
-        onCreate={handleStockLocation}
+        showCreateButton={false}
         showResetButton
         isResetting={isResetting}
         onReset={handleReset}
