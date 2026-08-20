@@ -29,12 +29,6 @@ export default function LocationCreate() {
     >
       <div className="mx-auto w-full max-w-3xl">
         <Card>
-          <CardHeader>
-            <CardTitle>
-              保管場所情報
-            </CardTitle>
-          </CardHeader>
-
           <CardContent>
             <div className="space-y-5">
               <div>
@@ -192,19 +186,6 @@ export default function LocationCreate() {
                   disabled={disabled}
                 />
               </div>
-
-              <div>
-                <CardLabel>
-                  国
-                </CardLabel>
-
-                <CardInput
-                  value="日本"
-                  disabled
-                  readOnly
-                />
-              </div>
-
               {vm.error && (
                 <div
                   role="alert"
