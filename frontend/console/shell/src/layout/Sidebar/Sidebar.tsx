@@ -8,7 +8,6 @@ import {
   Coins,
   Store,
   ShoppingCart,
-  Truck,
   MessagesSquare,
   Building2,
   Wallet,
@@ -38,7 +37,6 @@ type SubItem = {
 type OpenKey =
   | "products"
   | "tokens"
-  | "shipping"
   | "reviews"
   | "org"
   | "finance"
@@ -48,10 +46,7 @@ const CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER = "current";
 const INQUIRY_READ_STATE_CHANGED_EVENT = "inquiry:read-state-changed";
 
 function toSafeCount(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return null;
-  }
-
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
   const count = Math.trunc(value);
   return count > 0 ? count : null;
 }
@@ -59,7 +54,6 @@ function toSafeCount(value: unknown): number | null {
 export default function Sidebar({ isOpen }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
-
   const [inquiryUnreadCount, setInquiryUnreadCount] = useState<number | null>(null);
   const [openKey, setOpenKey] = useState<OpenKey>(null);
 
@@ -68,7 +62,6 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       const result = await countUnreadInquiriesHTTP({
         companyId: CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER,
       });
-
       setInquiryUnreadCount(toSafeCount(result.count));
     } catch {
       setInquiryUnreadCount(null);
@@ -122,12 +115,6 @@ export default function Sidebar({ isOpen }: SidebarProps) {
         label: "注文",
         path: "/order",
         icon: ShoppingCart,
-      },
-      {
-        label: "配送",
-        path: "/stockLocation",
-        icon: Truck,
-        hasSubmenu: true,
       },
       {
         label: "レビュー",
@@ -187,20 +174,6 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     [],
   );
 
-  const shippingSubItems: SubItem[] = useMemo(
-    () => [
-      {
-        label: "保管場所",
-        path: "/stockLocation",
-      },
-      {
-        label: "料金設計",
-        path: "/transportationFee",
-      },
-    ],
-    [],
-  );
-
   const reviewSubItems: SubItem[] = useMemo(
     () => [
       {
@@ -249,9 +222,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
 
   useEffect(() => {
     if (location.pathname === "/" || location.pathname === "") {
-      navigate("/inquiry", {
-        replace: true,
-      });
+      navigate("/inquiry", { replace: true });
     }
   }, [location.pathname, navigate]);
 
@@ -290,14 +261,6 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     }
 
     if (
-      path.startsWith("/stockLocation") ||
-      path.startsWith("/transportationFee")
-    ) {
-      setOpenKey("shipping");
-      return;
-    }
-
-    if (
       path.startsWith("/company") ||
       path.startsWith("/member") ||
       path.startsWith("/brand") ||
@@ -320,9 +283,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   }, [location.pathname]);
 
   const toggleExclusive = (key: Exclude<OpenKey, null>) => {
-    setOpenKey((current) => {
-      return current === key ? null : key;
-    });
+    setOpenKey((current) => current === key ? null : key);
   };
 
   const navigateAndCloseAll = (path: string) => {
@@ -330,9 +291,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     navigate(path);
   };
 
-  if (!isOpen) {
-    return null;
-  }
+  if (!isOpen) return null;
 
   return (
     <aside
@@ -349,7 +308,6 @@ export default function Sidebar({ isOpen }: SidebarProps) {
 
           const isProductsOpen = openKey === "products";
           const isTokensOpen = openKey === "tokens";
-          const isShippingOpen = openKey === "shipping";
           const isReviewsOpen = openKey === "reviews";
           const isOrgOpen = openKey === "org";
           const isFinanceOpen = openKey === "finance";
@@ -370,14 +328,11 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                   aria-controls="submenu-products"
                 >
                   <Icon className="icon-left" aria-hidden />
-
                   <span className="label">{label}</span>
-
                   <span className="right">
                     {typeof badgeCount === "number" && badgeCount > 0 ? (
                       <span className="badge">{badgeCount}</span>
                     ) : null}
-
                     <ChevronRight className="chevron" aria-hidden />
                   </span>
                 </button>
@@ -422,14 +377,11 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                   aria-controls="submenu-tokens"
                 >
                   <Icon className="icon-left" aria-hidden />
-
                   <span className="label">{label}</span>
-
                   <span className="right">
                     {typeof badgeCount === "number" && badgeCount > 0 ? (
                       <span className="badge">{badgeCount}</span>
                     ) : null}
-
                     <ChevronRight className="chevron" aria-hidden />
                   </span>
                 </button>
@@ -437,58 +389,6 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                 {isGroupOpen ? (
                   <div id="submenu-tokens" className="submenu-container">
                     {tokenSubItems.map((subItem) => {
-                      const activeSub =
-                        location.pathname === subItem.path ||
-                        location.pathname.startsWith(`${subItem.path}/`);
-
-                      return (
-                        <button
-                          key={subItem.path}
-                          type="button"
-                          onClick={() => navigate(subItem.path)}
-                          className={`submenu-item ${activeSub ? "active" : ""}`}
-                        >
-                          <span className="submenu-label">{subItem.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            );
-          }
-
-          if (label === "配送") {
-            const isGroupOpen = isShippingOpen;
-
-            return (
-              <div
-                key={path}
-                className={`group-block ${isGroupOpen ? "group-open" : ""}`}
-              >
-                <button
-                  type="button"
-                  onClick={() => toggleExclusive("shipping")}
-                  className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
-                  aria-expanded={isGroupOpen}
-                  aria-controls="submenu-shipping"
-                >
-                  <Icon className="icon-left" aria-hidden />
-
-                  <span className="label">{label}</span>
-
-                  <span className="right">
-                    {typeof badgeCount === "number" && badgeCount > 0 ? (
-                      <span className="badge">{badgeCount}</span>
-                    ) : null}
-
-                    <ChevronRight className="chevron" aria-hidden />
-                  </span>
-                </button>
-
-                {isGroupOpen ? (
-                  <div id="submenu-shipping" className="submenu-container">
-                    {shippingSubItems.map((subItem) => {
                       const activeSub =
                         location.pathname === subItem.path ||
                         location.pathname.startsWith(`${subItem.path}/`);
@@ -526,14 +426,11 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                   aria-controls="submenu-reviews"
                 >
                   <Icon className="icon-left" aria-hidden />
-
                   <span className="label">{label}</span>
-
                   <span className="right">
                     {typeof badgeCount === "number" && badgeCount > 0 ? (
                       <span className="badge">{badgeCount}</span>
                     ) : null}
-
                     <ChevronRight className="chevron" aria-hidden />
                   </span>
                 </button>
@@ -578,14 +475,11 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                   aria-controls="submenu-org"
                 >
                   <Icon className="icon-left" aria-hidden />
-
                   <span className="label">{label}</span>
-
                   <span className="right">
                     {typeof badgeCount === "number" && badgeCount > 0 ? (
                       <span className="badge">{badgeCount}</span>
                     ) : null}
-
                     <ChevronRight className="chevron" aria-hidden />
                   </span>
                 </button>
@@ -630,14 +524,11 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                   aria-controls="submenu-finance"
                 >
                   <Icon className="icon-left" aria-hidden />
-
                   <span className="label">{label}</span>
-
                   <span className="right">
                     {typeof badgeCount === "number" && badgeCount > 0 ? (
                       <span className="badge">{badgeCount}</span>
                     ) : null}
-
                     <ChevronRight className="chevron" aria-hidden />
                   </span>
                 </button>
@@ -675,17 +566,12 @@ export default function Sidebar({ isOpen }: SidebarProps) {
               aria-current={isActiveTop ? "page" : undefined}
             >
               <Icon className="icon-left" aria-hidden />
-
               <span className="label">{label}</span>
-
               <span className="right">
                 {typeof badgeCount === "number" && badgeCount > 0 ? (
                   <span className="badge">{badgeCount}</span>
                 ) : null}
-
-                {hasSubmenu ? (
-                  <ChevronRight className="chevron" aria-hidden />
-                ) : null}
+                {hasSubmenu ? <ChevronRight className="chevron" aria-hidden /> : null}
               </span>
             </button>
           );

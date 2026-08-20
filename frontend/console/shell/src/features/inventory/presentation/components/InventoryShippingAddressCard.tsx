@@ -20,7 +20,7 @@ export type InventoryShippingAddressCardProps = {
  * AdminCard の担当者選択 UI と同じく、select では ID を value として扱い、
  * 表示上は shippingAddress.name を表示する。
  * shippingAddress は GET /inventory/{inventoryId} の shippingAddressOptions を唯一の正とする。
- * 在庫保管場所が未登録の場合は新規登録ボタンを表示し、stockLocation 画面への遷移を親componentへ委譲する。
+ * ヘッダーの新規登録ボタンから stockLocation 画面への遷移を親componentへ委譲する。
  */
 export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCardProps> = ({
   shippingAddressId,
@@ -37,10 +37,8 @@ export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCard
   const handleChange = React.useCallback(
     (event: React.ChangeEvent<HTMLSelectElement>) => {
       if (disabled) return;
-
       const nextId = event.target.value;
       if (!nextId) return;
-
       onSelectShippingAddress(nextId);
     },
     [disabled, onSelectShippingAddress],
@@ -48,8 +46,17 @@ export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCard
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>在庫保管場所</CardTitle>
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={onCreateShippingAddress}
+          disabled={disabled}
+        >
+          <Plus size={16} aria-hidden />
+          新規登録
+        </button>
       </CardHeader>
 
       <CardContent className="space-y-4">
@@ -80,19 +87,7 @@ export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCard
           </select>
 
           {!loading && !hasShippingAddressOptions && (
-            <div className="mt-3">
-              <p className="text-xs text-slate-400">在庫保管場所が登録されていません。</p>
-
-              <button
-                type="button"
-                className="mt-3 inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={onCreateShippingAddress}
-                disabled={saving}
-              >
-                <Plus size={16} aria-hidden />
-                新規登録
-              </button>
-            </div>
+            <p className="mt-3 text-xs text-slate-400">在庫保管場所が登録されていません。</p>
           )}
         </div>
       </CardContent>

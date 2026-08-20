@@ -18,8 +18,9 @@ export default function InventoryManagementPage() {
       setSortDir,
       handleRowClick,
       handleReset,
+      handleStockLocation,
     },
-    isResetting, // ✅ 追加（hook 側で返す必要あり）
+    isResetting,
   } = useInventoryManagement();
 
   return (
@@ -36,10 +37,12 @@ export default function InventoryManagementPage() {
           setSortKey,
           setSortDir,
         })}
-        showCreateButton={false}
+        showCreateButton
+        createLabel="保管場所登録"
+        onCreate={handleStockLocation}
         showResetButton
-        isResetting={isResetting} // ✅ 追加：これで矢印が回転する
-        onReset={handleReset} // ✅ handleReset 内で再フェッチ（リフレッシュ）する想定
+        isResetting={isResetting}
+        onReset={handleReset}
       >
         {rows.map((row) => (
           <tr

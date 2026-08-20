@@ -5,16 +5,19 @@ import "../styles/list.css";
 import { useListManagement } from "../features/list/presentation/hook/useListManagement";
 
 export default function ListManagementPage() {
-  const { vm, handlers, isResetting } = useListManagement(); // ✅ 追加（hook 側で返す必要あり）
+  const { vm, handlers, isResetting } = useListManagement();
 
   return (
     <div className="p-0">
       <List
         title={vm.title}
         headerCells={vm.headers}
+        showCreateButton
+        createLabel="配送料金"
+        onCreate={handlers.onTransportationFee}
         showResetButton
-        isResetting={isResetting} // ✅ 追加：これで矢印が回転する
-        onReset={handlers.onReset} // ✅ onReset 内で再フェッチ（リフレッシュ）する想定
+        isResetting={isResetting}
+        onReset={handlers.onReset}
       >
         {vm.rows.map((l) => (
           <tr

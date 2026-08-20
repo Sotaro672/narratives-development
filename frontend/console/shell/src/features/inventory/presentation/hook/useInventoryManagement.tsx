@@ -18,12 +18,9 @@ export type SortDirection = "asc" | "desc" | null;
 export type InventoryRow = {
   id: string; // 一覧の主キー（UI用）
   productBlueprintId: string;
-
   productName: string;
-
   tokenBlueprintId: string; // ★追加: 集計キー
   tokenName: string;
-
   availableStock: number;
   reservedCount: number; // ✅ 注文数
 };
@@ -48,8 +45,8 @@ export type UseInventoryManagementResult = {
     setSortDir: (d: SortDirection) => void;
     handleRowClick: (row: InventoryRow) => void;
     handleReset: () => void;
+    handleStockLocation: () => void;
   };
-
   // ✅ リフレッシュボタン回転用（List の isResetting に渡す）
   isResetting: boolean;
 };
@@ -59,12 +56,9 @@ function mapToRows(items: InventoryManagementRow[]): InventoryRow[] {
     // ★ productBlueprintId + tokenBlueprintId で一意になる想定（念のため i も付与）
     id: `${x.productBlueprintId}__${x.tokenBlueprintId}__${i}`,
     productBlueprintId: x.productBlueprintId,
-
     productName: x.productName,
-
     tokenBlueprintId: x.tokenBlueprintId,
     tokenName: x.tokenName,
-
     availableStock: x.availableStock,
     reservedCount: x.reservedCount,
   }));
@@ -119,17 +113,14 @@ export function useInventoryManagement(): UseInventoryManagementResult {
     let data = inventoryRows.filter((r) => {
       const productOk =
         productFilter.length === 0 || productFilter.includes(r.productName);
-
       const tokenOk =
         tokenFilter.length === 0 || tokenFilter.includes(r.tokenName);
-
       return productOk && tokenOk;
     });
 
     if (sortKey && sortDir) {
       data = [...data].sort((a, b) => {
         const dir = sortDir === "asc" ? 1 : -1;
-
         const as = (v: any) => String(v ?? "");
         const an = (v: any) => Number(v ?? 0);
 
@@ -141,7 +132,6 @@ export function useInventoryManagement(): UseInventoryManagementResult {
           return dir * (an(a.availableStock) - an(b.availableStock));
         if (sortKey === "reservedCount")
           return dir * (an(a.reservedCount) - an(b.reservedCount));
-
         return 0;
       });
     }
@@ -192,6 +182,10 @@ export function useInventoryManagement(): UseInventoryManagementResult {
     [navigate],
   );
 
+  const handleStockLocation = useCallback(() => {
+    navigate("/stockLocation");
+  }, [navigate]);
+
   const handleReset = useCallback(() => {
     setProductFilter([]);
     setTokenFilter([]);
@@ -221,6 +215,7 @@ export function useInventoryManagement(): UseInventoryManagementResult {
       setSortDir,
       handleRowClick,
       handleReset,
+      handleStockLocation,
     },
     isResetting,
   };

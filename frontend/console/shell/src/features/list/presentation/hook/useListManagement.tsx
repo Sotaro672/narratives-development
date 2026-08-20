@@ -25,8 +25,8 @@ export type UseListManagementResult = {
     onReset: () => void;
     onRowClick: (id: string) => void;
     onRowKeyDown: (e: React.KeyboardEvent, id: string) => void;
+    onTransportationFee: () => void;
   };
-
   // リフレッシュボタン回転用
   isResetting: boolean;
 };
@@ -64,53 +64,24 @@ export function useListManagement(): UseListManagementResult {
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
 
   const filters: Filters = useMemo(
-    () => ({
-      productFilter,
-      tokenFilter,
-      managerFilter,
-      statusFilter,
-    }),
-    [
-      productFilter,
-      tokenFilter,
-      managerFilter,
-      statusFilter,
-    ],
+    () => ({ productFilter, tokenFilter, managerFilter, statusFilter }),
+    [productFilter, tokenFilter, managerFilter, statusFilter],
   );
 
   const [activeKey, setActiveKey] = useState<SortKey>(null);
   const [direction, setDirection] = useState<"asc" | "desc" | null>(null);
 
-  const onChangeSort = useCallback(
-    (
-      key: SortKey,
-      dir: "asc" | "desc" | null,
-    ) => {
-      setActiveKey(key);
-      setDirection(dir);
-    },
-    [],
-  );
+  const onChangeSort = useCallback((key: SortKey, dir: "asc" | "desc" | null) => {
+    setActiveKey(key);
+    setDirection(dir);
+  }, []);
 
-  const options = useMemo(
-    () => buildFilterOptions(vmRowsSource),
-    [vmRowsSource],
-  );
+  const options = useMemo(() => buildFilterOptions(vmRowsSource), [vmRowsSource]);
 
   const rows = useMemo(() => {
     const filtered = applyFilters(vmRowsSource, filters);
-
-    return applySort(
-      filtered,
-      activeKey,
-      direction,
-    );
-  }, [
-    vmRowsSource,
-    filters,
-    activeKey,
-    direction,
-  ]);
+    return applySort(filtered, activeKey, direction);
+  }, [vmRowsSource, filters, activeKey, direction]);
 
   const headers: React.ReactNode[] = useMemo(
     () =>
@@ -129,13 +100,7 @@ export function useListManagement(): UseListManagementResult {
           onChange: onChangeSort,
         },
       }),
-    [
-      options,
-      filters,
-      activeKey,
-      direction,
-      onChangeSort,
-    ],
+    [options, filters, activeKey, direction, onChangeSort],
   );
 
   const onRowClick = useCallback(
@@ -155,6 +120,10 @@ export function useListManagement(): UseListManagementResult {
     [navigate],
   );
 
+  const onTransportationFee = useCallback(() => {
+    navigate("/transportationFee");
+  }, [navigate]);
+
   const onReset = useCallback(() => {
     setProductFilter([]);
     setTokenFilter([]);
@@ -162,7 +131,6 @@ export function useListManagement(): UseListManagementResult {
     setStatusFilter([]);
     setActiveKey(null);
     setDirection(null);
-
     void reload();
   }, [reload]);
 
@@ -178,6 +146,7 @@ export function useListManagement(): UseListManagementResult {
       onReset,
       onRowClick,
       onRowKeyDown,
+      onTransportationFee,
     },
     isResetting,
   };
