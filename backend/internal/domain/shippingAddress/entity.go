@@ -16,6 +16,8 @@ import (
 // UserIDは配送先住所を登録・所有する認証ユーザーのUIDです。
 // CompanyIDは配送先住所が所属するcompanyのdocument IDです。
 // Nameは配送先住所・在庫保管場所を識別する名称です。
+// CreatedBy / UpdatedByはConsoleから登録・更新された場合のみmember document IDを保持します。
+// User側から登録された配送先住所ではCreatedBy / UpdatedByは空文字です。
 // 1つのCompanyは複数のShippingAddressを保持できます。
 // ID、UserID、CompanyIDはそれぞれ異なる識別子です。
 type ShippingAddress struct {
@@ -31,7 +33,9 @@ type ShippingAddress struct {
 	Country   string `json:"country"`
 
 	CreatedAt time.Time `json:"createdAt"`
+	CreatedBy string    `json:"createdBy,omitempty"`
 	UpdatedAt time.Time `json:"updatedAt"`
+	UpdatedBy string    `json:"updatedBy,omitempty"`
 }
 
 // Errors
@@ -46,7 +50,9 @@ var (
 	ErrInvalidZipCode   = errors.New("shippingAddress: invalid zipCode")
 	ErrInvalidCountry   = errors.New("shippingAddress: invalid country")
 	ErrInvalidCreatedAt = errors.New("shippingAddress: invalid createdAt")
+	ErrInvalidCreatedBy = errors.New("shippingAddress: invalid createdBy")
 	ErrInvalidUpdatedAt = errors.New("shippingAddress: invalid updatedAt")
+	ErrInvalidUpdatedBy = errors.New("shippingAddress: invalid updatedBy")
 )
 
 // Domain policy
@@ -55,6 +61,7 @@ const (
 
 	MaxUserIDLength    = 128
 	MaxCompanyIDLength = 128
+	MaxMemberIDLength  = 128
 	MaxNameLength      = 100
 	MaxZipCodeLength   = 32
 	MaxStateLength     = 100
@@ -90,6 +97,16 @@ func validateRequiredText(value string, maxLength int, invalidError error) error
 		return invalidError
 	}
 	if len([]rune(value)) > maxLength {
+		return invalidError
+	}
+	return nil
+}
+
+func validateOptionalMemberID(value string, invalidError error) error {
+	if value == "" {
+		return nil
+	}
+	if len([]rune(value)) > MaxMemberIDLength {
 		return invalidError
 	}
 	return nil
@@ -147,8 +164,16 @@ func (a ShippingAddress) validateAddressFields() error {
 		return err
 	}
 
-	// Street2は任意項目なので、空文字を許可します。
-	// ErrInvalidStreet2は定義しません。
+	return nil
+}
+
+func (a ShippingAddress) validateAuditFields() error {
+	if err := validateOptionalMemberID(a.CreatedBy, ErrInvalidCreatedBy); err != nil {
+		return err
+	}
+	if err := validateOptionalMemberID(a.UpdatedBy, ErrInvalidUpdatedBy); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -173,6 +198,9 @@ func (a ShippingAddress) validateCommon() error {
 		return err
 	}
 	if err := a.validateAddressFields(); err != nil {
+		return err
+	}
+	if err := a.validateAuditFields(); err != nil {
 		return err
 	}
 	return a.validateTimestamps()
@@ -201,11 +229,10 @@ func (a ShippingAddress) validateForCreate() error {
 	return a.validateCommon()
 }
 
-// UpdateFromFormは、フォームから受け取った住所情報を更新します。
+// UpdateFromFormは、User側のフォームから受け取った住所情報を更新します。
 //
-// ID、UserID、CompanyIDおよびCreatedAtは変更しません。
-// Nameは必須であり、空文字は許可しません。
-// Countryが空の場合はDomain規則に従ってJPへ正規化します。
+// ID、UserID、CompanyID、CreatedAt、CreatedBy、UpdatedByは変更しません。
+// UpdatedAtのみ更新します。
 // Street2は任意項目です。
 func (a *ShippingAddress) UpdateFromForm(
 	name string,
@@ -233,7 +260,62 @@ func (a *ShippingAddress) UpdateFromForm(
 		Street2:   street2,
 		Country:   country,
 		CreatedAt: a.CreatedAt,
+		CreatedBy: a.CreatedBy,
 		UpdatedAt: now,
+		UpdatedBy: a.UpdatedBy,
+	}.normalizeFields()
+
+	if err := next.validate(); err != nil {
+		return err
+	}
+
+	*a = next
+	return nil
+}
+
+// UpdateFromCompanyFormは、Consoleから受け取った在庫保管場所情報を更新します。
+//
+// ID、UserID、CompanyID、CreatedAt、CreatedByは変更しません。
+// UpdatedByには更新を実行したmember document IDを設定します。
+// UpdatedAtはserver時刻へ更新します。
+func (a *ShippingAddress) UpdateFromCompanyForm(
+	name string,
+	zipCode string,
+	state string,
+	city string,
+	street string,
+	street2 string,
+	country string,
+	updatedBy string,
+	now time.Time,
+) error {
+	if a == nil {
+		return ErrInvalidID
+	}
+
+	if err := validateRequiredText(
+		updatedBy,
+		MaxMemberIDLength,
+		ErrInvalidUpdatedBy,
+	); err != nil {
+		return err
+	}
+
+	next := ShippingAddress{
+		ID:        a.ID,
+		UserID:    a.UserID,
+		CompanyID: a.CompanyID,
+		Name:      name,
+		ZipCode:   zipCode,
+		State:     state,
+		City:      city,
+		Street:    street,
+		Street2:   street2,
+		Country:   country,
+		CreatedAt: a.CreatedAt,
+		CreatedBy: a.CreatedBy,
+		UpdatedAt: now,
+		UpdatedBy: updatedBy,
 	}.normalizeFields()
 
 	if err := next.validate(); err != nil {
@@ -259,8 +341,47 @@ func (a *ShippingAddress) touch(now time.Time) error {
 	return nil
 }
 
-// Newは、ID採番済みのShippingAddressを生成します。
-// Nameは必須です。
+func newShippingAddress(
+	id string,
+	userID string,
+	companyID string,
+	name string,
+	zipCode string,
+	state string,
+	city string,
+	street string,
+	street2 string,
+	country string,
+	createdAt time.Time,
+	createdBy string,
+	updatedAt time.Time,
+	updatedBy string,
+) (ShippingAddress, error) {
+	a := ShippingAddress{
+		ID:        id,
+		UserID:    userID,
+		CompanyID: companyID,
+		Name:      name,
+		ZipCode:   zipCode,
+		State:     state,
+		City:      city,
+		Street:    street,
+		Street2:   street2,
+		Country:   country,
+		CreatedAt: createdAt,
+		CreatedBy: createdBy,
+		UpdatedAt: updatedAt,
+		UpdatedBy: updatedBy,
+	}.normalizeFields()
+
+	if err := a.validate(); err != nil {
+		return ShippingAddress{}, err
+	}
+
+	return a, nil
+}
+
+// Newは、User側など監査member IDを持たないShippingAddressを生成します。
 func New(
 	id string,
 	userID string,
@@ -275,31 +396,60 @@ func New(
 	createdAt time.Time,
 	updatedAt time.Time,
 ) (ShippingAddress, error) {
-	a := ShippingAddress{
-		ID:        id,
-		UserID:    userID,
-		CompanyID: companyID,
-		Name:      name,
-		ZipCode:   zipCode,
-		State:     state,
-		City:      city,
-		Street:    street,
-		Street2:   street2,
-		Country:   country,
-		CreatedAt: createdAt,
-		UpdatedAt: updatedAt,
-	}.normalizeFields()
-
-	if err := a.validate(); err != nil {
-		return ShippingAddress{}, err
-	}
-
-	return a, nil
+	return newShippingAddress(
+		id,
+		userID,
+		companyID,
+		name,
+		zipCode,
+		state,
+		city,
+		street,
+		street2,
+		country,
+		createdAt,
+		"",
+		updatedAt,
+		"",
+	)
 }
 
-// NewWithNowは、CreatedAtとUpdatedAtに同じserver時刻を設定して、
-// ID採番済みのShippingAddressを生成します。
-// Nameは必須です。
+// NewWithAuditは、Console用の監査member IDを含むShippingAddressを生成します。
+func NewWithAudit(
+	id string,
+	userID string,
+	companyID string,
+	name string,
+	zipCode string,
+	state string,
+	city string,
+	street string,
+	street2 string,
+	country string,
+	createdAt time.Time,
+	createdBy string,
+	updatedAt time.Time,
+	updatedBy string,
+) (ShippingAddress, error) {
+	return newShippingAddress(
+		id,
+		userID,
+		companyID,
+		name,
+		zipCode,
+		state,
+		city,
+		street,
+		street2,
+		country,
+		createdAt,
+		createdBy,
+		updatedAt,
+		updatedBy,
+	)
+}
+
+// NewWithNowは、User側など監査member IDを持たないShippingAddressを生成します。
 func NewWithNow(
 	id string,
 	userID string,
@@ -331,11 +481,56 @@ func NewWithNow(
 	)
 }
 
+// NewWithNowAndAuditは、Consoleから作成する在庫保管場所を生成します。
+//
+// CreatedByとUpdatedByには同じmember document IDを設定します。
+func NewWithNowAndAudit(
+	id string,
+	userID string,
+	companyID string,
+	name string,
+	zipCode string,
+	state string,
+	city string,
+	street string,
+	street2 string,
+	country string,
+	createdBy string,
+	now time.Time,
+) (ShippingAddress, error) {
+	now = now.UTC()
+
+	if err := validateRequiredText(
+		createdBy,
+		MaxMemberIDLength,
+		ErrInvalidCreatedBy,
+	); err != nil {
+		return ShippingAddress{}, err
+	}
+
+	return NewWithAudit(
+		id,
+		userID,
+		companyID,
+		name,
+		zipCode,
+		state,
+		city,
+		street,
+		street2,
+		country,
+		now,
+		createdBy,
+		now,
+		createdBy,
+	)
+}
+
 // NewForCreateWithNowは、ID採番前のShippingAddressを生成します.
 //
 // IDは空文字で生成し、UsecaseがUUIDを採番した後、
 // NewまたはNewWithNowを使用してIDを含む完全なEntityを確定します。
-// Nameは必須です。
+// User側の作成用途なのでCreatedBy / UpdatedByは設定しません。
 func NewForCreateWithNow(
 	userID string,
 	companyID string,

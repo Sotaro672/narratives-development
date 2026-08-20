@@ -26,15 +26,18 @@ type ShippingAddressInventoryCleaner interface {
 // ID、UserID、CompanyID、CreatedAtおよびUpdatedAtは受け取りません。
 // IDはUsecaseがUUIDを採番し、UserIDとCompanyIDは認証済みcontextから解決した値を呼び出し側から受け取り、
 // 時刻はUsecaseのserver clockから設定します。
+// CreatedByはConsoleから作成する場合のみmember document IDを受け取ります。
+// User側から作成する場合は空文字です。
 // Nameは必須です。
 type CreateShippingAddressInput struct {
-	Name    string
-	ZipCode string
-	State   string
-	City    string
-	Street  string
-	Street2 string
-	Country string
+	Name      string
+	ZipCode   string
+	State     string
+	City      string
+	Street    string
+	Street2   string
+	Country   string
+	CreatedBy string
 }
 
 // UpdateShippingAddressInputは配送先住所の部分更新入力です。
@@ -43,15 +46,18 @@ type CreateShippingAddressInput struct {
 // Nameは必須のDomain fieldですが、PATCHではnilを変更なしとして扱います。
 // Street2は任意項目であるため、空文字を指定すると明示的に消去できます。
 // Countryへ空文字を指定した場合は、Domain規則によりJPへ正規化されます。
+// UpdatedByはConsoleから更新する場合のみmember document IDを受け取ります。
+// User側から更新する場合は空文字です。
 // UserID、CompanyIDはこの入力から変更しません。
 type UpdateShippingAddressInput struct {
-	Name    *string
-	ZipCode *string
-	State   *string
-	City    *string
-	Street  *string
-	Street2 *string
-	Country *string
+	Name      *string
+	ZipCode   *string
+	State     *string
+	City      *string
+	Street    *string
+	Street2   *string
+	Country   *string
+	UpdatedBy string
 }
 
 // ShippingAddressUsecaseは配送先住所に関する処理を制御します。
@@ -252,6 +258,8 @@ func (u *ShippingAddressUsecase) ListByCompanyID(ctx context.Context, companyID 
 // UserIDは認証UID、CompanyIDは認証済みmemberが所属するcompany IDを呼び出し側から受け取ります。
 // Nameは必須です。
 // CreatedAtおよびUpdatedAtはserver clockから設定します。
+// CreatedByが指定された場合はConsole作成としてCreatedBy / UpdatedByへ同じmember document IDを設定します。
+// CreatedByが空文字の場合はUser側作成として監査member IDを設定しません。
 // Countryの既定値はDomain constructorが決定します。
 func (u *ShippingAddressUsecase) Create(
 	ctx context.Context,
@@ -280,19 +288,38 @@ func (u *ShippingAddressUsecase) Create(
 
 	now := u.now().UTC()
 
-	entity, err := shipaddrdom.NewWithNow(
-		documentID,
-		validUID,
-		validCompanyID,
-		in.Name,
-		in.ZipCode,
-		in.State,
-		in.City,
-		in.Street,
-		in.Street2,
-		in.Country,
-		now,
-	)
+	var entity shipaddrdom.ShippingAddress
+
+	if in.CreatedBy != "" {
+		entity, err = shipaddrdom.NewWithNowAndAudit(
+			documentID,
+			validUID,
+			validCompanyID,
+			in.Name,
+			in.ZipCode,
+			in.State,
+			in.City,
+			in.Street,
+			in.Street2,
+			in.Country,
+			in.CreatedBy,
+			now,
+		)
+	} else {
+		entity, err = shipaddrdom.NewWithNow(
+			documentID,
+			validUID,
+			validCompanyID,
+			in.Name,
+			in.ZipCode,
+			in.State,
+			in.City,
+			in.Street,
+			in.Street2,
+			in.Country,
+			now,
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -385,8 +412,9 @@ func (u *ShippingAddressUsecase) Update(
 // UpdateByCompanyは指定companyに所属する配送先住所を部分更新します。
 //
 // Consoleなどcompany単位の管理処理で使用します。
-// ID、UserID、CompanyIDおよびCreatedAtは既存値を保持します。
+// ID、UserID、CompanyID、CreatedAtおよびCreatedByは既存値を保持します。
 // UpdatedAtはserver clockで更新します。
+// UpdatedByには更新を実行したmember document IDを設定します。
 func (u *ShippingAddressUsecase) UpdateByCompany(
 	ctx context.Context,
 	id string,
@@ -413,6 +441,10 @@ func (u *ShippingAddressUsecase) UpdateByCompany(
 	}
 	if current == nil {
 		return nil, shipaddrdom.ErrNotFound
+	}
+
+	if in.UpdatedBy == "" {
+		return nil, shipaddrdom.ErrInvalidUpdatedBy
 	}
 
 	name := current.Name
@@ -447,7 +479,7 @@ func (u *ShippingAddressUsecase) UpdateByCompany(
 
 	now := u.now().UTC()
 
-	if err := current.UpdateFromForm(
+	if err := current.UpdateFromCompanyForm(
 		name,
 		zipCode,
 		state,
@@ -455,6 +487,7 @@ func (u *ShippingAddressUsecase) UpdateByCompany(
 		street,
 		street2,
 		country,
+		in.UpdatedBy,
 		now,
 	); err != nil {
 		return nil, err

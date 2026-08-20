@@ -29,6 +29,8 @@ type ShippingAddressRepositoryFS struct {
 // document IDはこの構造体には保存しません。
 // document IDはShippingAddress.IDとしてDocumentSnapshotから復元します。
 // nameは必須フィールドです。
+// createdBy / updatedByはConsoleから登録・更新された場合のみmember document IDを保存します。
+// User側のshippingAddressでは空文字を保存せず、field自体を省略します。
 type shippingAddressDocument struct {
 	UserID    string    `firestore:"userId"`
 	CompanyID string    `firestore:"companyId"`
@@ -40,7 +42,9 @@ type shippingAddressDocument struct {
 	Street2   string    `firestore:"street2"`
 	Country   string    `firestore:"country"`
 	CreatedAt time.Time `firestore:"createdAt"`
+	CreatedBy string    `firestore:"createdBy,omitempty"`
 	UpdatedAt time.Time `firestore:"updatedAt"`
+	UpdatedBy string    `firestore:"updatedBy,omitempty"`
 }
 
 func NewShippingAddressRepositoryFS(client *firestore.Client) *ShippingAddressRepositoryFS {
@@ -321,6 +325,7 @@ func (r *ShippingAddressRepositoryFS) ListByCompanyID(
 //
 // 保存前にDomain constructorを使用してEntityを再検証します。
 // Name、UserID、CompanyIDを含むDomain規則を満たす必要があります。
+// createdBy / updatedByは空文字を許可し、Console経由の場合のみmember document IDを保持します。
 // 同一IDが存在する場合はErrConflictを返し、上書きしません。
 func (r *ShippingAddressRepositoryFS) Create(
 	ctx context.Context,
@@ -335,7 +340,7 @@ func (r *ShippingAddressRepositoryFS) Create(
 		return nil, err
 	}
 
-	validated, err := shipaddrdom.New(
+	validated, err := shipaddrdom.NewWithAudit(
 		validID,
 		value.UserID,
 		value.CompanyID,
@@ -347,7 +352,9 @@ func (r *ShippingAddressRepositoryFS) Create(
 		value.Street2,
 		value.Country,
 		value.CreatedAt,
+		value.CreatedBy,
 		value.UpdatedAt,
+		value.UpdatedBy,
 	)
 	if err != nil {
 		return nil, err
@@ -369,7 +376,7 @@ func (r *ShippingAddressRepositoryFS) Create(
 //
 // Firestore transaction内で次の処理を行います。
 // 1. 対象documentを取得する
-// 2. 既存のUserID、CompanyID、CreatedAtを保持する
+// 2. 既存のUserID、CompanyID、CreatedAt、CreatedByを保持する
 // 3. 更新後EntityをDomain constructorで検証する
 // 4. transaction.Updateで変更可能fieldだけを更新する
 //
@@ -413,8 +420,11 @@ func (r *ShippingAddressRepositoryFS) Update(
 		if !value.CreatedAt.Equal(current.CreatedAt) {
 			return shipaddrdom.ErrInvalidCreatedAt
 		}
+		if value.CreatedBy != current.CreatedBy {
+			return shipaddrdom.ErrInvalidCreatedBy
+		}
 
-		next, err := shipaddrdom.New(
+		next, err := shipaddrdom.NewWithAudit(
 			current.ID,
 			current.UserID,
 			current.CompanyID,
@@ -426,7 +436,9 @@ func (r *ShippingAddressRepositoryFS) Update(
 			value.Street2,
 			value.Country,
 			current.CreatedAt,
+			current.CreatedBy,
 			value.UpdatedAt,
+			value.UpdatedBy,
 		)
 		if err != nil {
 			return err
@@ -441,6 +453,16 @@ func (r *ShippingAddressRepositoryFS) Update(
 			{Path: "street2", Value: next.Street2},
 			{Path: "country", Value: next.Country},
 			{Path: "updatedAt", Value: next.UpdatedAt},
+		}
+
+		if next.UpdatedBy != "" {
+			updates = append(
+				updates,
+				firestore.Update{
+					Path:  "updatedBy",
+					Value: next.UpdatedBy,
+				},
+			)
 		}
 
 		if err := tx.Update(ref, updates); err != nil {
@@ -510,6 +532,7 @@ func (r *ShippingAddressRepositoryFS) Delete(ctx context.Context, id string) err
 // docToShippingAddressはFirestore documentをDomain Entityへ変換します.
 //
 // DataToでFirestore fieldの型を検証した後、Domain constructorを使用してEntity全体の不変条件を検証します。
+// createdBy / updatedByが存在しない既存のUser側documentは空文字として復元します。
 // name、companyIdは必須であり、存在しないdocumentはDomain validation errorになります。
 func docToShippingAddress(document *firestore.DocumentSnapshot) (shipaddrdom.ShippingAddress, error) {
 	if document == nil || document.Ref == nil {
@@ -521,7 +544,7 @@ func docToShippingAddress(document *firestore.DocumentSnapshot) (shipaddrdom.Shi
 		return shipaddrdom.ShippingAddress{}, err
 	}
 
-	entity, err := shipaddrdom.New(
+	entity, err := shipaddrdom.NewWithAudit(
 		document.Ref.ID,
 		data.UserID,
 		data.CompanyID,
@@ -533,7 +556,9 @@ func docToShippingAddress(document *firestore.DocumentSnapshot) (shipaddrdom.Shi
 		data.Street2,
 		data.Country,
 		data.CreatedAt,
+		data.CreatedBy,
 		data.UpdatedAt,
+		data.UpdatedBy,
 	)
 	if err != nil {
 		return shipaddrdom.ShippingAddress{}, err
@@ -546,6 +571,7 @@ func docToShippingAddress(document *firestore.DocumentSnapshot) (shipaddrdom.Shi
 //
 // 呼び出し前にDomain constructorによる検証が完了していることを前提とします。
 // IDはdocument IDとして使用するためfieldには保存しません。
+// createdBy / updatedByは空文字の場合omitemptyによってFirestore fieldを作成しません。
 func shippingAddressToDocData(value shipaddrdom.ShippingAddress) shippingAddressDocument {
 	return shippingAddressDocument{
 		UserID:    value.UserID,
@@ -558,6 +584,8 @@ func shippingAddressToDocData(value shipaddrdom.ShippingAddress) shippingAddress
 		Street2:   value.Street2,
 		Country:   value.Country,
 		CreatedAt: value.CreatedAt.UTC(),
+		CreatedBy: value.CreatedBy,
 		UpdatedAt: value.UpdatedAt.UTC(),
+		UpdatedBy: value.UpdatedBy,
 	}
 }

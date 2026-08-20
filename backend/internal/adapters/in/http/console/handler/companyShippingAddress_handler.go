@@ -102,6 +102,21 @@ func (h *CompanyShippingAddressHandler) requireUID(w http.ResponseWriter, r *htt
 	return "", false
 }
 
+func (h *CompanyShippingAddressHandler) requireMemberID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	if r == nil {
+		writeError(w, http.StatusForbidden, "member_id_not_resolved")
+		return "", false
+	}
+
+	memberID := usecase.MemberIDFromContext(r.Context())
+	if memberID != "" {
+		return memberID, true
+	}
+
+	writeError(w, http.StatusForbidden, "member_id_not_resolved")
+	return "", false
+}
+
 func (h *CompanyShippingAddressHandler) list(w http.ResponseWriter, r *http.Request) {
 	if !h.requireUsecase(w) {
 		return
@@ -164,6 +179,11 @@ func (h *CompanyShippingAddressHandler) create(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	memberID, ok := h.requireMemberID(w, r)
+	if !ok {
+		return
+	}
+
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 
 	var request companyShippingAddressCreateRequest
@@ -187,13 +207,14 @@ func (h *CompanyShippingAddressHandler) create(w http.ResponseWriter, r *http.Re
 		uid,
 		companyID,
 		usecase.CreateShippingAddressInput{
-			Name:    request.Name,
-			ZipCode: request.ZipCode,
-			State:   request.State,
-			City:    request.City,
-			Street:  request.Street,
-			Street2: street2,
-			Country: country,
+			Name:      request.Name,
+			ZipCode:   request.ZipCode,
+			State:     request.State,
+			City:      request.City,
+			Street:    request.Street,
+			Street2:   street2,
+			Country:   country,
+			CreatedBy: memberID,
 		},
 	)
 	if err != nil {
@@ -219,6 +240,11 @@ func (h *CompanyShippingAddressHandler) update(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	memberID, ok := h.requireMemberID(w, r)
+	if !ok {
+		return
+	}
+
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 
 	var request companyShippingAddressUpdateRequest
@@ -232,13 +258,14 @@ func (h *CompanyShippingAddressHandler) update(w http.ResponseWriter, r *http.Re
 		id,
 		companyID,
 		usecase.UpdateShippingAddressInput{
-			Name:    request.Name,
-			ZipCode: request.ZipCode,
-			State:   request.State,
-			City:    request.City,
-			Street:  request.Street,
-			Street2: request.Street2,
-			Country: request.Country,
+			Name:      request.Name,
+			ZipCode:   request.ZipCode,
+			State:     request.State,
+			City:      request.City,
+			Street:    request.Street,
+			Street2:   request.Street2,
+			Country:   request.Country,
+			UpdatedBy: memberID,
 		},
 	)
 	if err != nil {
@@ -286,7 +313,9 @@ func writeCompanyShippingAddressErr(w http.ResponseWriter, err error) {
 		errors.Is(err, shadom.ErrInvalidStreet),
 		errors.Is(err, shadom.ErrInvalidCountry),
 		errors.Is(err, shadom.ErrInvalidCreatedAt),
-		errors.Is(err, shadom.ErrInvalidUpdatedAt):
+		errors.Is(err, shadom.ErrInvalidCreatedBy),
+		errors.Is(err, shadom.ErrInvalidUpdatedAt),
+		errors.Is(err, shadom.ErrInvalidUpdatedBy):
 		statusCode = http.StatusBadRequest
 
 	case errors.Is(err, shadom.ErrNotFound):

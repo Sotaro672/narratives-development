@@ -24,6 +24,7 @@ type LocationFieldErrors = {
   street: string | null;
 };
 
+
 export type UseLocationDetailResult = {
   vm: {
     location: ShippingAddress | null;
@@ -60,6 +61,7 @@ export type UseLocationDetailResult = {
   };
 };
 
+
 const emptyFieldErrors: LocationFieldErrors = {
   name: null,
   zipCode: null,
@@ -68,6 +70,7 @@ const emptyFieldErrors: LocationFieldErrors = {
   street: null,
 };
 
+
 function cloneLocation(
   location: ShippingAddress,
 ): ShippingAddress {
@@ -75,6 +78,7 @@ function cloneLocation(
     ...location,
   };
 }
+
 
 function locationEquals(
   left: ShippingAddress | null,
@@ -98,6 +102,7 @@ function locationEquals(
   );
 }
 
+
 function getErrorMessage(
   error: unknown,
 ): string {
@@ -110,6 +115,7 @@ function getErrorMessage(
 
   return "在庫保管場所の処理に失敗しました。";
 }
+
 
 function validateLocation(
   location: ShippingAddress,
@@ -154,6 +160,7 @@ function validateLocation(
   return errors;
 }
 
+
 function hasFieldError(
   errors: LocationFieldErrors,
 ): boolean {
@@ -161,6 +168,7 @@ function hasFieldError(
     (value) => value !== null,
   );
 }
+
 
 export function useLocationDetail(
   locationId?: string,
@@ -209,6 +217,7 @@ export function useLocationDetail(
   ] = useState<string | null>(
     null,
   );
+
 
   const reload = useCallback(
     async (): Promise<void> => {
@@ -262,11 +271,13 @@ export function useLocationDetail(
     ],
   );
 
+
   useEffect(() => {
     void reload();
   }, [
     reload,
   ]);
+
 
   const exists =
     location !== null;
@@ -283,6 +294,7 @@ export function useLocationDetail(
     ],
   );
 
+
   const clearFieldError =
     useCallback(
       (
@@ -298,6 +310,7 @@ export function useLocationDetail(
       },
       [],
     );
+
 
   const onChangeName =
     useCallback(
@@ -328,6 +341,7 @@ export function useLocationDetail(
       ],
     );
 
+
   const onChangeZipCode =
     useCallback(
       (
@@ -356,6 +370,7 @@ export function useLocationDetail(
         clearFieldError,
       ],
     );
+
 
   const onChangeState =
     useCallback(
@@ -386,6 +401,7 @@ export function useLocationDetail(
       ],
     );
 
+
   const onChangeCity =
     useCallback(
       (
@@ -414,6 +430,7 @@ export function useLocationDetail(
         clearFieldError,
       ],
     );
+
 
   const onChangeStreet =
     useCallback(
@@ -444,6 +461,7 @@ export function useLocationDetail(
       ],
     );
 
+
   const onChangeStreet2 =
     useCallback(
       (
@@ -467,12 +485,14 @@ export function useLocationDetail(
       [],
     );
 
+
   const onBack =
     useCallback(() => {
       navigate(-1);
     }, [
       navigate,
     ]);
+
 
   const onReset =
     useCallback(() => {
@@ -494,6 +514,7 @@ export function useLocationDetail(
     }, [
       originalLocation,
     ]);
+
 
   const onSave =
     useCallback(
@@ -605,6 +626,7 @@ export function useLocationDetail(
       ],
     );
 
+
   const onDelete =
     useCallback(
       async (): Promise<void> => {
@@ -672,6 +694,7 @@ export function useLocationDetail(
       ],
     );
 
+
   return {
     vm: {
       location,
@@ -713,5 +736,6 @@ export function useLocationDetail(
     },
   };
 }
+
 
 export default useLocationDetail;
