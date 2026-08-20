@@ -1,49 +1,24 @@
 // frontend/console/shell/src/features/transportation/presentation/component/feeEditCard.tsx
 
 import * as React from "react";
-import { MapPin } from "lucide-react";
+import { ChevronDown, MapPin } from "lucide-react";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../../../shared/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
 import { Input } from "../../../../shared/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../../../../shared/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../../shared/ui/table";
 
-import type {
-  TransportationRegionVM,
-} from "../../application/transportationService";
-import type {
-  PrefectureCode,
-  TransportationRegion,
-} from "../../../../shared/types/transporation";
+import type { TransportationRegionVM } from "../../application/transportationService";
+import type { PrefectureCode, TransportationRegion } from "../../../../shared/types/transporation";
 
 export type FeeEditCardProps = {
   region: TransportationRegionVM;
   disabled?: boolean;
   className?: string;
-  onChangePrefectureAmount: (
-    prefectureCode: PrefectureCode,
-    amount: string | number,
-  ) => void;
-  onChangeRegionAmount: (
-    region: TransportationRegion,
-    amount: string | number,
-  ) => void;
+  onChangePrefectureAmount: (prefectureCode: PrefectureCode, amount: string | number) => void;
+  onChangeRegionAmount: (region: TransportationRegion, amount: string | number) => void;
 };
 
-function getRegionAmountValue(
-  region: TransportationRegionVM,
-): string {
+function getRegionAmountValue(region: TransportationRegionVM): string {
   if (region.prefectures.length === 0) {
     return "";
   }
@@ -54,10 +29,7 @@ function getRegionAmountValue(
     return "";
   }
 
-  const allSame = region.prefectures.every(
-    (prefecture) => prefecture.amount === firstAmount,
-  );
-
+  const allSame = region.prefectures.every((prefecture) => prefecture.amount === firstAmount);
   return allSame ? String(firstAmount) : "";
 }
 
@@ -68,22 +40,19 @@ const FeeEditCard: React.FC<FeeEditCardProps> = ({
   onChangePrefectureAmount,
   onChangeRegionAmount,
 }) => {
-  const regionAmountValue = React.useMemo(
-    () => getRegionAmountValue(region),
-    [region],
-  );
+  const [isOpen, setIsOpen] = React.useState(false);
+  const regionAmountValue = React.useMemo(() => getRegionAmountValue(region), [region]);
+  const contentId = `transportation-region-content-${region.region}`;
+
+  const handleToggle = React.useCallback(() => {
+    setIsOpen((current) => !current);
+  }, []);
 
   const handleRegionAmountChange = React.useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      onChangeRegionAmount(
-        region.region,
-        event.target.value,
-      );
+      onChangeRegionAmount(region.region, event.target.value);
     },
-    [
-      onChangeRegionAmount,
-      region.region,
-    ],
+    [onChangeRegionAmount, region.region],
   );
 
   return (
@@ -92,9 +61,7 @@ const FeeEditCard: React.FC<FeeEditCardProps> = ({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <MapPin size={18} />
-            <CardTitle className="text-base">
-              {region.regionName}
-            </CardTitle>
+            <CardTitle className="text-base">{region.regionName}</CardTitle>
           </div>
 
           <div className="flex items-center gap-2">
@@ -106,10 +73,7 @@ const FeeEditCard: React.FC<FeeEditCardProps> = ({
             </label>
 
             <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-500">
-                ¥
-              </span>
-
+              <span className="text-sm text-slate-500">¥</span>
               <Input
                 id={`transportation-region-${region.region}`}
                 type="number"
@@ -126,82 +90,79 @@ const FeeEditCard: React.FC<FeeEditCardProps> = ({
           </div>
         </div>
 
-        <p className="text-xs text-slate-500">
-          地方一括に金額を入力すると、この地方に含まれるすべての都道府県へ同じ送料を設定します。
-        </p>
+        <button
+          type="button"
+          onClick={handleToggle}
+          aria-expanded={isOpen}
+          aria-controls={contentId}
+          className="flex w-fit items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
+        >
+          <span>都道府県別に設定</span>
+          <span className="text-xs font-normal text-slate-400">
+            {region.prefectures.length}都道府県
+          </span>
+          <ChevronDown
+            size={16}
+            aria-hidden="true"
+            className={`text-slate-500 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+          />
+        </button>
       </CardHeader>
 
-      <CardContent>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>
-                  都道府県
-                </TableHead>
-
-                <TableHead className="w-48 text-right">
-                  送料
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-
-            <TableBody>
-              {region.prefectures.map((prefecture) => (
-                <TableRow key={prefecture.prefectureCode}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <span className="font-medium text-slate-900">
-                        {prefecture.prefectureName}
-                      </span>
-
-                      <span className="text-xs text-slate-400">
-                        {prefecture.prefectureCode}
-                      </span>
-                    </div>
-                  </TableCell>
-
-                  <TableCell>
-                    <div className="flex items-center justify-end gap-2">
-                      <span className="text-sm text-slate-500">
-                        ¥
-                      </span>
-
-                      <Input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        step={1}
-                        disabled={disabled}
-                        value={prefecture.amount}
-                        className="h-9 w-32 text-right"
-                        aria-label={`${prefecture.prefectureName}の送料`}
-                        onChange={(event) => {
-                          onChangePrefectureAmount(
-                            prefecture.prefectureCode,
-                            event.target.value,
-                          );
-                        }}
-                      />
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-
-              {region.prefectures.length === 0 && (
+      {isOpen && (
+        <CardContent id={contentId}>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell
-                    colSpan={2}
-                    className="py-8 text-center text-sm text-slate-500"
-                  >
-                    都道府県データがありません。
-                  </TableCell>
+                  <TableHead>都道府県</TableHead>
+                  <TableHead className="w-48 text-right">送料</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
+              </TableHeader>
+
+              <TableBody>
+                {region.prefectures.map((prefecture) => (
+                  <TableRow key={prefecture.prefectureCode}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <span className="font-medium text-slate-900">{prefecture.prefectureName}</span>
+                        <span className="text-xs text-slate-400">{prefecture.prefectureCode}</span>
+                      </div>
+                    </TableCell>
+
+                    <TableCell>
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-sm text-slate-500">¥</span>
+                        <Input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          step={1}
+                          disabled={disabled}
+                          value={prefecture.amount}
+                          className="h-9 w-32 text-right"
+                          aria-label={`${prefecture.prefectureName}の送料`}
+                          onChange={(event) => {
+                            onChangePrefectureAmount(prefecture.prefectureCode, event.target.value);
+                          }}
+                        />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+
+                {region.prefectures.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={2} className="py-8 text-center text-sm text-slate-500">
+                      都道府県データがありません。
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      )}
     </Card>
   );
 };
