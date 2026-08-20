@@ -224,13 +224,13 @@ export const AdminCard: React.FC<AdminCardProps> = ({
 
             {updatedByName && (
               <div>
-                最終更新者: {updatedByName}
+                更新者: {updatedByName}
               </div>
             )}
 
             {updatedAt && (
               <div>
-                最終更新日: {updatedAt}
+                更新日: {updatedAt}
               </div>
             )}
           </div>
