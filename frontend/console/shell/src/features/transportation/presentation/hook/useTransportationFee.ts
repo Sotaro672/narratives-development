@@ -35,6 +35,7 @@ export type UseTransportationFeeResult = {
     onBack: () => void;
     onReset: () => void;
     onSave: () => Promise<void>;
+    onDismissError: () => void;
     onChangePrefectureAmount: (prefectureCode: PrefectureCode, amount: TransportationAmountInput) => void;
     onChangeRegionAmount: (region: TransportationRegion, amount: TransportationAmountInput) => void;
     onChangeIslandRateAmount: (islandCode: IslandCode, amount: TransportationIslandAmountInput) => void;
@@ -166,6 +167,10 @@ export function useTransportationFee(): UseTransportationFeeResult {
   const onBack = useCallback(() => {
     navigate(-1);
   }, [navigate]);
+
+  const onDismissError = useCallback(() => {
+    setError(null);
+  }, []);
 
   const onReset = useCallback(() => {
     if (!originalTransportation) {
@@ -307,6 +312,7 @@ export function useTransportationFee(): UseTransportationFeeResult {
       onBack,
       onReset,
       onSave,
+      onDismissError,
       onChangePrefectureAmount,
       onChangeRegionAmount,
       onChangeIslandRateAmount,

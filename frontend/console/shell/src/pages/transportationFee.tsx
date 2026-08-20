@@ -17,18 +17,13 @@ export default function TransportationFee() {
       onBack={handlers.onBack}
       actions={
         <>
-          <button
-            type="button"
-            disabled={disabled || !vm.isDirty}
-            onClick={handlers.onReset}
-            className="page-header__btn page-header__btn--ghost"
-          >
+          <button type="button" disabled={disabled || !vm.isDirty} onClick={handlers.onReset} className="page-header__btn page-header__btn--ghost">
             リセット
           </button>
 
           <button
             type="button"
-            disabled={disabled || !vm.transportation || !vm.isDirty}
+            disabled={disabled || !vm.transportation || (vm.exists && !vm.isDirty)}
             onClick={() => void handlers.onSave()}
             className="page-header__btn"
             aria-busy={vm.saving}
@@ -40,19 +35,13 @@ export default function TransportationFee() {
     >
       <div className="mx-auto w-full max-w-5xl">
         {vm.error && (
-          <div
-            role="alert"
-            className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-          >
+          <div role="alert" className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {vm.error}
           </div>
         )}
 
         {vm.successMessage && (
-          <div
-            role="status"
-            className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
-          >
+          <div role="status" className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
             {vm.successMessage}
           </div>
         )}
@@ -86,11 +75,7 @@ export default function TransportationFee() {
               );
             })}
 
-            <IslandFeeEditCard
-              islands={vm.islandRates}
-              disabled={disabled}
-              onChangeAmount={handlers.onChangeIslandRateAmount}
-            />
+            <IslandFeeEditCard islands={vm.islandRates} disabled={disabled} onChangeAmount={handlers.onChangeIslandRateAmount} />
 
             {vm.regions.length === 0 && vm.islandRates.length === 0 && (
               <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500">
