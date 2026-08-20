@@ -13,14 +13,16 @@ import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
  
 import { 
   listCompanyShippingAddresses, 
-} from "../../application/companyDetailService"; 
+} from "../../application/locationManagementService"; 
  
 export type LocationManagementRow = { 
   id: string; 
   name: string; 
   zipCode: string; 
   address: string; 
+  createdBy: string; 
   createdAt: string; 
+  updatedBy: string; 
   updatedAt: string; 
 }; 
  
@@ -59,10 +61,12 @@ function toManagementRow(
     name: address.name, 
     zipCode: address.zipCode, 
     address: buildAddress(address), 
+    createdBy: address.createdBy || "", 
     createdAt: safeDateTimeLabelJa( 
       address.createdAt, 
       "", 
     ), 
+    updatedBy: address.updatedBy || "", 
     updatedAt: safeDateTimeLabelJa( 
       address.updatedAt, 
       "", 

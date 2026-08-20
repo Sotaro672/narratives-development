@@ -1,14 +1,11 @@
 // frontend/console/shell/src/features/company/presentation/hook/useLocationCreate.tsx
 
-import {
-  useCallback,
-  useState,
-} from "react";
+import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
   createCompanyShippingAddress,
-} from "../../application/companyDetailService";
+} from "../../application/locationCreateService";
 
 type LocationCreateFieldErrors = {
   name: string | null;
@@ -47,29 +44,12 @@ export type UseLocationCreateResult = {
   };
 
   handlers: {
-    onChangeName: (
-      value: string,
-    ) => void;
-
-    onChangeZipCode: (
-      value: string,
-    ) => void;
-
-    onChangeState: (
-      value: string,
-    ) => void;
-
-    onChangeCity: (
-      value: string,
-    ) => void;
-
-    onChangeStreet: (
-      value: string,
-    ) => void;
-
-    onChangeStreet2: (
-      value: string,
-    ) => void;
+    onChangeName: (value: string) => void;
+    onChangeZipCode: (value: string) => void;
+    onChangeState: (value: string) => void;
+    onChangeCity: (value: string) => void;
+    onChangeStreet: (value: string) => void;
+    onChangeStreet2: (value: string) => void;
 
     onBack: () => void;
     onSave: () => Promise<void>;
@@ -93,13 +73,8 @@ const emptyFieldErrors: LocationCreateFieldErrors = {
   street: null,
 };
 
-function getErrorMessage(
-  error: unknown,
-): string {
-  if (
-    error instanceof Error &&
-    error.message
-  ) {
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
     return error.message;
   }
 
@@ -114,55 +89,34 @@ function validateForm(
   };
 
   if (!form.name) {
-    errors.name =
-      "保管場所名を入力してください。";
-  } else if (
-    form.name.length > 100
-  ) {
-    errors.name =
-      "保管場所名は100文字以内で入力してください。";
+    errors.name = "保管場所名を入力してください。";
+  } else if (form.name.length > 100) {
+    errors.name = "保管場所名は100文字以内で入力してください。";
   }
 
   if (!form.zipCode) {
-    errors.zipCode =
-      "郵便番号を入力してください。";
-  } else if (
-    !/^[0-9]{3}-?[0-9]{4}$/.test(
-      form.zipCode,
-    )
-  ) {
+    errors.zipCode = "郵便番号を入力してください。";
+  } else if (!/^[0-9]{3}-?[0-9]{4}$/.test(form.zipCode)) {
     errors.zipCode =
       "郵便番号は123-4567または1234567の形式で入力してください。";
   }
 
   if (!form.state) {
-    errors.state =
-      "都道府県を入力してください。";
-  } else if (
-    form.state.length > 100
-  ) {
-    errors.state =
-      "都道府県は100文字以内で入力してください。";
+    errors.state = "都道府県を入力してください。";
+  } else if (form.state.length > 100) {
+    errors.state = "都道府県は100文字以内で入力してください。";
   }
 
   if (!form.city) {
-    errors.city =
-      "市区町村を入力してください。";
-  } else if (
-    form.city.length > 100
-  ) {
-    errors.city =
-      "市区町村は100文字以内で入力してください。";
+    errors.city = "市区町村を入力してください。";
+  } else if (form.city.length > 100) {
+    errors.city = "市区町村は100文字以内で入力してください。";
   }
 
   if (!form.street) {
-    errors.street =
-      "住所を入力してください。";
-  } else if (
-    form.street.length > 200
-  ) {
-    errors.street =
-      "住所は200文字以内で入力してください。";
+    errors.street = "住所を入力してください。";
+  } else if (form.street.length > 200) {
+    errors.street = "住所は200文字以内で入力してください。";
   }
 
   return errors;
@@ -171,306 +125,178 @@ function validateForm(
 function hasFieldError(
   errors: LocationCreateFieldErrors,
 ): boolean {
-  return Object.values(
-    errors,
-  ).some(
-    (value) =>
-      value !== null,
+  return Object.values(errors).some(
+    (value) => value !== null,
   );
 }
 
 export function useLocationCreate(): UseLocationCreateResult {
   const navigate = useNavigate();
 
-  const [
-    form,
-    setForm,
-  ] = useState<LocationCreateForm>({
+  const [form, setForm] = useState<LocationCreateForm>({
     ...emptyForm,
   });
 
-  const [
-    fieldErrors,
-    setFieldErrors,
-  ] = useState<LocationCreateFieldErrors>({
-    ...emptyFieldErrors,
-  });
+  const [fieldErrors, setFieldErrors] =
+    useState<LocationCreateFieldErrors>({
+      ...emptyFieldErrors,
+    });
 
-  const [
-    saving,
-    setSaving,
-  ] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [
-    error,
-    setError,
-  ] = useState<string | null>(
-    null,
+  const clearFieldError = useCallback(
+    (field: keyof LocationCreateFieldErrors) => {
+      setFieldErrors((current) => ({
+        ...current,
+        [field]: null,
+      }));
+    },
+    [],
   );
 
-  const clearFieldError =
-    useCallback(
-      (
-        field:
-          keyof LocationCreateFieldErrors,
-      ) => {
-        setFieldErrors(
-          (current) => ({
-            ...current,
-            [field]: null,
-          }),
-        );
-      },
-      [],
-    );
+  const onChangeName = useCallback(
+    (value: string) => {
+      setForm((current) => ({
+        ...current,
+        name: value,
+      }));
 
-  const onChangeName =
-    useCallback(
-      (
-        value: string,
-      ) => {
-        setForm(
-          (current) => ({
-            ...current,
-            name: value,
-          }),
-        );
+      clearFieldError("name");
+      setError(null);
+    },
+    [clearFieldError],
+  );
 
-        clearFieldError(
-          "name",
-        );
+  const onChangeZipCode = useCallback(
+    (value: string) => {
+      setForm((current) => ({
+        ...current,
+        zipCode: value,
+      }));
 
-        setError(null);
-      },
-      [
-        clearFieldError,
-      ],
-    );
+      clearFieldError("zipCode");
+      setError(null);
+    },
+    [clearFieldError],
+  );
 
-  const onChangeZipCode =
-    useCallback(
-      (
-        value: string,
-      ) => {
-        setForm(
-          (current) => ({
-            ...current,
-            zipCode: value,
-          }),
-        );
+  const onChangeState = useCallback(
+    (value: string) => {
+      setForm((current) => ({
+        ...current,
+        state: value,
+      }));
 
-        clearFieldError(
-          "zipCode",
-        );
+      clearFieldError("state");
+      setError(null);
+    },
+    [clearFieldError],
+  );
 
-        setError(null);
-      },
-      [
-        clearFieldError,
-      ],
-    );
+  const onChangeCity = useCallback(
+    (value: string) => {
+      setForm((current) => ({
+        ...current,
+        city: value,
+      }));
 
-  const onChangeState =
-    useCallback(
-      (
-        value: string,
-      ) => {
-        setForm(
-          (current) => ({
-            ...current,
-            state: value,
-          }),
-        );
+      clearFieldError("city");
+      setError(null);
+    },
+    [clearFieldError],
+  );
 
-        clearFieldError(
-          "state",
-        );
+  const onChangeStreet = useCallback(
+    (value: string) => {
+      setForm((current) => ({
+        ...current,
+        street: value,
+      }));
 
-        setError(null);
-      },
-      [
-        clearFieldError,
-      ],
-    );
+      clearFieldError("street");
+      setError(null);
+    },
+    [clearFieldError],
+  );
 
-  const onChangeCity =
-    useCallback(
-      (
-        value: string,
-      ) => {
-        setForm(
-          (current) => ({
-            ...current,
-            city: value,
-          }),
-        );
+  const onChangeStreet2 = useCallback((value: string) => {
+    setForm((current) => ({
+      ...current,
+      street2: value,
+    }));
 
-        clearFieldError(
-          "city",
-        );
+    setError(null);
+  }, []);
 
-        setError(null);
-      },
-      [
-        clearFieldError,
-      ],
-    );
+  const onBack = useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
 
-  const onChangeStreet =
-    useCallback(
-      (
-        value: string,
-      ) => {
-        setForm(
-          (current) => ({
-            ...current,
-            street: value,
-          }),
-        );
+  const onSave = useCallback(
+    async (): Promise<void> => {
+      if (saving) {
+        return;
+      }
 
-        clearFieldError(
-          "street",
-        );
+      const nextFieldErrors = validateForm(form);
 
-        setError(null);
-      },
-      [
-        clearFieldError,
-      ],
-    );
+      setFieldErrors(nextFieldErrors);
 
-  const onChangeStreet2 =
-    useCallback(
-      (
-        value: string,
-      ) => {
-        setForm(
-          (current) => ({
-            ...current,
-            street2: value,
-          }),
-        );
+      if (hasFieldError(nextFieldErrors)) {
+        setError("入力内容を確認してください。");
+        return;
+      }
 
-        setError(null);
-      },
-      [],
-    );
+      setSaving(true);
+      setError(null);
 
-  const onBack =
-    useCallback(() => {
-      navigate(-1);
-    }, [
-      navigate,
-    ]);
+      try {
+        const created = await createCompanyShippingAddress({
+          name: form.name,
+          zipCode: form.zipCode,
+          state: form.state,
+          city: form.city,
+          street: form.street,
+          street2: form.street2,
+          country: "JP",
+        });
 
-  const onSave =
-    useCallback(
-      async (): Promise<void> => {
-        if (saving) {
-          return;
+        if (!created.id) {
+          throw new Error(
+            "在庫保管場所IDを取得できませんでした。",
+          );
         }
 
-        const nextFieldErrors =
-          validateForm(
-            form,
-          );
-
-        setFieldErrors(
-          nextFieldErrors,
+        navigate(
+          `/stockLocation/${encodeURIComponent(created.id)}`,
+          {
+            replace: true,
+          },
         );
-
-        if (
-          hasFieldError(
-            nextFieldErrors,
-          )
-        ) {
-          setError(
-            "入力内容を確認してください。",
-          );
-
-          return;
-        }
-
-        setSaving(true);
-        setError(null);
-
-        try {
-          const created =
-            await createCompanyShippingAddress({
-              name:
-                form.name,
-              zipCode:
-                form.zipCode,
-              state:
-                form.state,
-              city:
-                form.city,
-              street:
-                form.street,
-              street2:
-                form.street2,
-              country:
-                "JP",
-            });
-
-          if (!created.id) {
-            throw new Error(
-              "在庫保管場所IDを取得できませんでした。",
-            );
-          }
-
-          navigate(
-            `/stockLocation/${encodeURIComponent(
-              created.id,
-            )}`,
-            {
-              replace: true,
-            },
-          );
-        } catch (
-          saveError: unknown
-        ) {
-          setError(
-            getErrorMessage(
-              saveError,
-            ),
-          );
-        } finally {
-          setSaving(false);
-        }
-      },
-      [
-        form,
-        saving,
-        navigate,
-      ],
-    );
+      } catch (saveError: unknown) {
+        setError(getErrorMessage(saveError));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [form, saving, navigate],
+  );
 
   return {
     vm: {
-      name:
-        form.name,
-      zipCode:
-        form.zipCode,
-      state:
-        form.state,
-      city:
-        form.city,
-      street:
-        form.street,
-      street2:
-        form.street2,
+      name: form.name,
+      zipCode: form.zipCode,
+      state: form.state,
+      city: form.city,
+      street: form.street,
+      street2: form.street2,
 
-      nameError:
-        fieldErrors.name,
-      zipCodeError:
-        fieldErrors.zipCode,
-      stateError:
-        fieldErrors.state,
-      cityError:
-        fieldErrors.city,
-      streetError:
-        fieldErrors.street,
+      nameError: fieldErrors.name,
+      zipCodeError: fieldErrors.zipCode,
+      stateError: fieldErrors.state,
+      cityError: fieldErrors.city,
+      streetError: fieldErrors.street,
 
       saving,
       error,

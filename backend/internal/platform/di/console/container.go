@@ -70,6 +70,8 @@ type Container struct {
 	ProductBlueprintDetailQuery     *query.ProductBlueprintDetailQuery
 	TokenBlueprintManagementQuery   *query.TokenBlueprintManagementQuery
 	TokenBlueprintDetailQuery       *query.TokenBlueprintDetailQuery
+	LocationManagementQuery         *query.LocationManagementQuery
+	LocationDetailQuery             *query.LocationDetailQuery
 	TransportationManagementQuery   *query.TransportationManagementQuery
 	TransportationDetailQuery       *query.TransportationDetailQuery
 	InquiryManagementQuery          *query.InquiryManagementQuery
@@ -243,6 +245,8 @@ func NewContainer(
 		ProductBlueprintDetailQuery:     q.productBlueprintDetailQuery,
 		TokenBlueprintManagementQuery:   q.tokenBlueprintManagementQuery,
 		TokenBlueprintDetailQuery:       q.tokenBlueprintDetailQuery,
+		LocationManagementQuery:         q.locationManagementQuery,
+		LocationDetailQuery:             q.locationDetailQuery,
 		TransportationManagementQuery:   q.transportationManagementQuery,
 		TransportationDetailQuery:       q.transportationDetailQuery,
 		InquiryManagementQuery:          q.inquiryManagementQuery,

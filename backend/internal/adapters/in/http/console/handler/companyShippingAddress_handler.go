@@ -5,8 +5,10 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"narratives/internal/adapters/in/http/middleware"
+	query "narratives/internal/application/query/console"
 	usecase "narratives/internal/application/usecase"
 	shadom "narratives/internal/domain/shippingAddress"
 )
@@ -14,11 +16,21 @@ import (
 const companyShippingAddressBasePath = "/companies/me/shipping-addresses"
 
 type CompanyShippingAddressHandler struct {
-	uc *usecase.ShippingAddressUsecase
+	uc              *usecase.ShippingAddressUsecase
+	managementQuery *query.LocationManagementQuery
+	detailQuery     *query.LocationDetailQuery
 }
 
-func NewCompanyShippingAddressHandler(uc *usecase.ShippingAddressUsecase) http.Handler {
-	return &CompanyShippingAddressHandler{uc: uc}
+func NewCompanyShippingAddressHandler(
+	uc *usecase.ShippingAddressUsecase,
+	managementQuery *query.LocationManagementQuery,
+	detailQuery *query.LocationDetailQuery,
+) http.Handler {
+	return &CompanyShippingAddressHandler{
+		uc:              uc,
+		managementQuery: managementQuery,
+		detailQuery:     detailQuery,
+	}
 }
 
 type companyShippingAddressCreateRequest struct {
@@ -39,6 +51,44 @@ type companyShippingAddressUpdateRequest struct {
 	Street  *string `json:"street,omitempty"`
 	Street2 *string `json:"street2,omitempty"`
 	Country *string `json:"country,omitempty"`
+}
+
+type companyShippingAddressManagementResponse struct {
+	ID            string    `json:"id"`
+	UserID        string    `json:"userId"`
+	CompanyID     string    `json:"companyId"`
+	Name          string    `json:"name"`
+	ZipCode       string    `json:"zipCode"`
+	State         string    `json:"state"`
+	City          string    `json:"city"`
+	Street        string    `json:"street"`
+	Street2       string    `json:"street2"`
+	Country       string    `json:"country"`
+	CreatedAt     time.Time `json:"createdAt"`
+	CreatedBy     string    `json:"createdBy"`
+	CreatedByName string    `json:"createdByName"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+	UpdatedBy     string    `json:"updatedBy"`
+	UpdatedByName string    `json:"updatedByName"`
+}
+
+type companyShippingAddressDetailResponse struct {
+	ID            string    `json:"id"`
+	UserID        string    `json:"userId"`
+	CompanyID     string    `json:"companyId"`
+	Name          string    `json:"name"`
+	ZipCode       string    `json:"zipCode"`
+	State         string    `json:"state"`
+	City          string    `json:"city"`
+	Street        string    `json:"street"`
+	Street2       string    `json:"street2"`
+	Country       string    `json:"country"`
+	CreatedAt     time.Time `json:"createdAt"`
+	CreatedBy     string    `json:"createdBy"`
+	CreatedByName string    `json:"createdByName"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+	UpdatedBy     string    `json:"updatedBy"`
+	UpdatedByName string    `json:"updatedByName"`
 }
 
 func (h *CompanyShippingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +132,24 @@ func (h *CompanyShippingAddressHandler) requireUsecase(w http.ResponseWriter) bo
 	return false
 }
 
+func (h *CompanyShippingAddressHandler) requireManagementQuery(w http.ResponseWriter) bool {
+	if h != nil && h.managementQuery != nil {
+		return true
+	}
+
+	writeError(w, http.StatusServiceUnavailable, "location_management_query_not_initialized")
+	return false
+}
+
+func (h *CompanyShippingAddressHandler) requireDetailQuery(w http.ResponseWriter) bool {
+	if h != nil && h.detailQuery != nil {
+		return true
+	}
+
+	writeError(w, http.StatusServiceUnavailable, "location_detail_query_not_initialized")
+	return false
+}
+
 func (h *CompanyShippingAddressHandler) requireCompanyID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	companyID, ok := middleware.CompanyID(r)
 	if ok && companyID != "" {
@@ -118,7 +186,7 @@ func (h *CompanyShippingAddressHandler) requireMemberID(w http.ResponseWriter, r
 }
 
 func (h *CompanyShippingAddressHandler) list(w http.ResponseWriter, r *http.Request) {
-	if !h.requireUsecase(w) {
+	if !h.requireManagementQuery(w) {
 		return
 	}
 
@@ -127,21 +195,52 @@ func (h *CompanyShippingAddressHandler) list(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	addresses, err := h.uc.ListByCompanyID(r.Context(), companyID)
+	items, err := h.managementQuery.ListByCompanyID(
+		r.Context(),
+		companyID,
+	)
 	if err != nil {
 		writeCompanyShippingAddressErr(w, err)
 		return
 	}
 
-	if addresses == nil {
-		addresses = []shadom.ShippingAddress{}
+	response := make(
+		[]companyShippingAddressManagementResponse,
+		0,
+		len(items),
+	)
+
+	for _, item := range items {
+		location := item.Location
+
+		response = append(
+			response,
+			companyShippingAddressManagementResponse{
+				ID:            location.ID,
+				UserID:        location.UserID,
+				CompanyID:     location.CompanyID,
+				Name:          location.Name,
+				ZipCode:       location.ZipCode,
+				State:         location.State,
+				City:          location.City,
+				Street:        location.Street,
+				Street2:       location.Street2,
+				Country:       location.Country,
+				CreatedAt:     location.CreatedAt,
+				CreatedBy:     location.CreatedBy,
+				CreatedByName: item.MemberNames.CreatedBy,
+				UpdatedAt:     location.UpdatedAt,
+				UpdatedBy:     location.UpdatedBy,
+				UpdatedByName: item.MemberNames.UpdatedBy,
+			},
+		)
 	}
 
-	writeJSON(w, http.StatusOK, addresses)
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (h *CompanyShippingAddressHandler) get(w http.ResponseWriter, r *http.Request, id string) {
-	if !h.requireUsecase(w) {
+	if !h.requireDetailQuery(w) {
 		return
 	}
 
@@ -155,13 +254,40 @@ func (h *CompanyShippingAddressHandler) get(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	address, err := h.uc.GetByCompany(r.Context(), id, companyID)
+	result, err := h.detailQuery.GetByID(
+		r.Context(),
+		companyID,
+		id,
+	)
 	if err != nil {
 		writeCompanyShippingAddressErr(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, address)
+	location := result.Location
+
+	writeJSON(
+		w,
+		http.StatusOK,
+		companyShippingAddressDetailResponse{
+			ID:            location.ID,
+			UserID:        location.UserID,
+			CompanyID:     location.CompanyID,
+			Name:          location.Name,
+			ZipCode:       location.ZipCode,
+			State:         location.State,
+			City:          location.City,
+			Street:        location.Street,
+			Street2:       location.Street2,
+			Country:       location.Country,
+			CreatedAt:     location.CreatedAt,
+			CreatedBy:     location.CreatedBy,
+			CreatedByName: result.CreatedBy,
+			UpdatedAt:     location.UpdatedAt,
+			UpdatedBy:     location.UpdatedBy,
+			UpdatedByName: result.UpdatedBy,
+		},
+	)
 }
 
 func (h *CompanyShippingAddressHandler) create(w http.ResponseWriter, r *http.Request) {
