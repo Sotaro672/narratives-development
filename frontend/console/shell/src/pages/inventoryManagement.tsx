@@ -64,6 +64,9 @@ export default function InventoryManagementPage() {
             {/* トークン名 */}
             <td>{row.tokenName || "-"}</td>
 
+            {/* 保管場所 */}
+            <td>{row.shippingAddressName || "-"}</td>
+
             {/* 在庫数 */}
             <td>
               <span className="inv__total-pill">{row.availableStock}</span>

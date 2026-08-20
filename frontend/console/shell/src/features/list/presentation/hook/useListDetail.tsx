@@ -115,15 +115,10 @@ export function useListDetail(): UseListDetailResult {
     try {
       const data = await loadListDetailDTO({ listId: id });
 
-      if (cancelledRef.current) {
-        return;
-      }
-
+      if (cancelledRef.current) return;
       setDTO(data);
     } catch (caughtError) {
-      if (cancelledRef.current) {
-        return;
-      }
+      if (cancelledRef.current) return;
 
       setError(
         String(
@@ -134,10 +129,7 @@ export function useListDetail(): UseListDetailResult {
       );
       setDTO(null);
     } finally {
-      if (cancelledRef.current) {
-        return;
-      }
-
+      if (cancelledRef.current) return;
       setLoading(false);
     }
   }, [listId, cancelledRef]);
@@ -195,9 +187,7 @@ export function useListDetail(): UseListDetailResult {
   );
 
   const viewPrimaryImageIndex = React.useMemo(() => {
-    if (!primaryImageId) {
-      return 0;
-    }
+    if (!primaryImageId) return 0;
 
     const index = viewImages.findIndex(
       (image) => image.id === primaryImageId,
@@ -207,21 +197,17 @@ export function useListDetail(): UseListDetailResult {
   }, [primaryImageId, viewImages]);
 
   const [isEdit, setIsEdit] = React.useState(false);
-  const [draftListingTitle, setDraftListingTitle] =
-    React.useState(listingTitle);
-  const [draftDescription, setDraftDescription] =
-    React.useState(description);
+  const [draftListingTitle, setDraftListingTitle] = React.useState(listingTitle);
+  const [draftDescription, setDraftDescription] = React.useState(description);
   const [draftPriceRows, setDraftPriceRows] = React.useState<PriceRow[]>(
     clonePriceRows(viewPriceRows),
   );
-  const [draftStatus, setDraftStatus] =
-    React.useState<ListStatus>("suspended");
+  const [draftStatus, setDraftStatus] = React.useState<ListStatus>("suspended");
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState("");
   const [deleting, setDeleting] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState("");
-  const [mainImageIndex, setMainImageIndex] =
-    React.useState(viewPrimaryImageIndex);
+  const [mainImageIndex, setMainImageIndex] = React.useState(viewPrimaryImageIndex);
 
   const images = useListImages({
     isEdit,
@@ -248,25 +234,17 @@ export function useListDetail(): UseListDetailResult {
   ]);
 
   React.useEffect(() => {
-    if (isEdit) {
-      return;
-    }
-
+    if (isEdit) return;
     resetDraftFromView();
   }, [isEdit, resetDraftFromView]);
 
   React.useEffect(() => {
-    if (isEdit) {
-      return;
-    }
-
+    if (isEdit) return;
     setMainImageIndex(viewPrimaryImageIndex);
   }, [isEdit, viewPrimaryImageIndex]);
 
   const onEdit = React.useCallback(() => {
-    if (deleting) {
-      return;
-    }
+    if (deleting) return;
 
     resetDraftFromView();
     setMainImageIndex(viewPrimaryImageIndex);
@@ -280,6 +258,8 @@ export function useListDetail(): UseListDetailResult {
   ]);
 
   const onCancel = React.useCallback(() => {
+    if (saving || deleting) return;
+
     images.releaseDraftBlobUrls();
     resetDraftFromView();
     setMainImageIndex(viewPrimaryImageIndex);
@@ -287,6 +267,8 @@ export function useListDetail(): UseListDetailResult {
     setDeleteError("");
     setIsEdit(false);
   }, [
+    saving,
+    deleting,
     images.releaseDraftBlobUrls,
     resetDraftFromView,
     viewPrimaryImageIndex,
@@ -300,17 +282,13 @@ export function useListDetail(): UseListDetailResult {
       return;
     }
 
-    if (isEdit || saving || deleting) {
-      return;
-    }
+    if (saving || deleting) return;
 
     const confirmed = window.confirm(
       "この出品を削除しますか？削除後は元に戻せません。",
     );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     setDeleting(true);
     setDeleteError("");
@@ -318,15 +296,12 @@ export function useListDetail(): UseListDetailResult {
     try {
       await deleteListDetail(id);
 
-      if (cancelledRef.current) {
-        return;
-      }
+      if (cancelledRef.current) return;
 
+      images.releaseDraftBlobUrls();
       navigate("/list", { replace: true });
     } catch (caughtError) {
-      if (cancelledRef.current) {
-        return;
-      }
+      if (cancelledRef.current) return;
 
       setDeleteError(
         String(
@@ -336,41 +311,32 @@ export function useListDetail(): UseListDetailResult {
         ),
       );
     } finally {
-      if (cancelledRef.current) {
-        return;
-      }
-
+      if (cancelledRef.current) return;
       setDeleting(false);
     }
   }, [
     listId,
-    isEdit,
     saving,
     deleting,
     cancelledRef,
+    images.releaseDraftBlobUrls,
     navigate,
   ]);
 
   const onToggleStatus = React.useCallback(
     (next: ListStatus) => {
-      if (!isEdit || saving) {
-        return;
-      }
-
+      if (!isEdit || saving || deleting) return;
       setDraftStatus(next);
     },
-    [isEdit, saving],
+    [isEdit, saving, deleting],
   );
 
   const onSelectAssignee = React.useCallback(
     (id: string) => {
-      if (!isEdit || saving) {
-        return;
-      }
-
+      if (!isEdit || saving || deleting) return;
       handleSelectAssignee(id);
     },
-    [isEdit, saving, handleSelectAssignee],
+    [isEdit, saving, deleting, handleSelectAssignee],
   );
 
   const effectiveImageUrls = React.useMemo(
@@ -390,15 +356,13 @@ export function useListDetail(): UseListDetailResult {
       price: number | undefined,
       _row: PriceRow,
     ) => {
-      if (!isEdit) {
-        return;
-      }
+      if (!isEdit || saving || deleting) return;
 
       setDraftPriceRows((previousRows) =>
         updatePriceRowPrice(previousRows, index, price),
       );
     },
-    [isEdit],
+    [isEdit, saving, deleting],
   );
 
   const onSave = React.useCallback(
@@ -415,9 +379,7 @@ export function useListDetail(): UseListDetailResult {
         return;
       }
 
-      if (deleting) {
-        return;
-      }
+      if (deleting) return;
 
       if (!draftAssigneeId) {
         setSaveError("assignee_required");
@@ -451,17 +413,13 @@ export function useListDetail(): UseListDetailResult {
           mainImageIndex,
         });
 
-        if (cancelledRef.current) {
-          return;
-        }
+        if (cancelledRef.current) return;
 
         images.releaseDraftBlobUrls();
         setDTO(result.dto);
         setIsEdit(false);
       } catch (caughtError) {
-        if (cancelledRef.current) {
-          return;
-        }
+        if (cancelledRef.current) return;
 
         setSaveError(
           String(
@@ -471,10 +429,7 @@ export function useListDetail(): UseListDetailResult {
           ),
         );
       } finally {
-        if (cancelledRef.current) {
-          return;
-        }
-
+        if (cancelledRef.current) return;
         setSaving(false);
       }
     },

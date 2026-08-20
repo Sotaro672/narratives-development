@@ -10,6 +10,8 @@ import { Input } from "../shared/ui/input";
 import PriceCard from "../features/list/presentation/components/priceCard";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import ListImageCard from "../features/list/presentation/components/listImageCard";
+import ListStatusHeaderActions from "../features/list/presentation/components/ListStatusHeaderActions";
+import ListTargetProductCard from "../features/list/presentation/components/ListTargetProductCard";
 import { useListDetail } from "../features/list/presentation/hook/useListDetail";
 
 export default function ListDetail() {
@@ -25,20 +27,33 @@ export default function ListDetail() {
     navigate("/list");
   }, [navigate]);
 
-  const effectiveStatus = isEdit ? vm.draftStatus : vm.status;
   const effectivePriceRows = isEdit ? vm.draftPriceRows : vm.priceRows;
   const effectiveAssigneeId = isEdit ? vm.draftAssigneeId : vm.assigneeId;
   const effectiveAssigneeName = isEdit ? vm.draftAssigneeName : vm.assigneeName;
+  const effectiveStatus =
+    isEdit
+      ? vm.draftStatus
+      : vm.status === "listing"
+        ? "listing"
+        : "suspended";
 
   return (
     <PageStyle
       layout="grid-2"
       title={headerTitle}
       onBack={onBackToListManagement}
+      leadingActions={
+        <ListStatusHeaderActions
+          status={effectiveStatus}
+          onChange={isEdit ? vm.onToggleStatus : undefined}
+          disabled={!isEdit || vm.saving || vm.deleting}
+        />
+      }
       onEdit={!isEdit && !vm.deleting ? vm.onEdit : undefined}
-      onDelete={!isEdit && !vm.deleting ? vm.onDelete : undefined}
-      onCancel={isEdit ? vm.onCancel : undefined}
-      onSave={isEdit ? vm.onSave : undefined}
+      onDelete={isEdit && !vm.saving && !vm.deleting ? vm.onDelete : undefined}
+      onCancel={isEdit && !vm.deleting ? vm.onCancel : undefined}
+      onSave={isEdit && !vm.deleting ? vm.onSave : undefined}
+      isSaving={vm.saving}
       onCreate={undefined}
     >
       <div className="space-y-4">
@@ -54,13 +69,13 @@ export default function ListDetail() {
           </div>
         )}
 
-        {!isEdit && vm.deleteError && (
+        {isEdit && vm.deleteError && (
           <div className="text-sm text-red-600">
             削除に失敗しました: {vm.deleteError}
           </div>
         )}
 
-        {!isEdit && vm.deleting && (
+        {isEdit && vm.deleting && (
           <div className="text-xs text-[hsl(var(--muted-foreground))]">
             削除中...
           </div>
@@ -104,7 +119,7 @@ export default function ListDetail() {
                 value={vm.draftListingTitle}
                 placeholder="タイトルを入力"
                 onChange={(e) => vm.setDraftListingTitle(e.target.value)}
-                disabled={vm.saving}
+                disabled={vm.saving || vm.deleting}
               />
             )}
           </CardContent>
@@ -126,7 +141,7 @@ export default function ListDetail() {
                 placeholder="説明を入力"
                 onChange={(e) => vm.setDraftDescription(e.target.value)}
                 className="w-full min-h-[120px] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
-                disabled={vm.saving}
+                disabled={vm.saving || vm.deleting}
               />
             )}
           </CardContent>
@@ -162,103 +177,10 @@ export default function ListDetail() {
           updatedAt={vm.updatedAt}
         />
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm font-medium mb-2">選択商品</div>
-
-            <div className="text-sm text-slate-800 break-all">
-              {vm.productBrandName || "未選択"}
-            </div>
-
-            <div className="text-sm text-slate-800 break-all">
-              {vm.productName || "未選択"}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm font-medium mb-2">選択トークン</div>
-
-            <div className="text-sm text-slate-800 break-all">
-              {vm.tokenBrandName || "未選択"}
-            </div>
-
-            <div className="text-sm text-slate-800 break-all">
-              {vm.tokenName || "未選択"}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm font-medium mb-2">ステータス</div>
-
-            {!isEdit && (
-              <div className="flex gap-2">
-                <div
-                  className={[
-                    "flex-1 h-9 rounded-md border text-sm flex items-center justify-center",
-                    effectiveStatus === "listing"
-                      ? "bg-slate-900 text-white border-slate-900"
-                      : "bg-white text-slate-700 border-slate-200",
-                  ].join(" ")}
-                >
-                  出品
-                </div>
-
-                <div
-                  className={[
-                    "flex-1 h-9 rounded-md border text-sm flex items-center justify-center",
-                    effectiveStatus === "suspended"
-                      ? "bg-slate-900 text-white border-slate-900"
-                      : "bg-white text-slate-700 border-slate-200",
-                  ].join(" ")}
-                >
-                  保留
-                </div>
-              </div>
-            )}
-
-            {isEdit && (
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className={[
-                    "flex-1 h-9 rounded-md border text-sm flex items-center justify-center transition",
-                    vm.draftStatus === "listing"
-                      ? "bg-slate-900 text-white border-slate-900"
-                      : "bg-white text-slate-700 border-slate-200",
-                    vm.saving
-                      ? "opacity-60 cursor-not-allowed"
-                      : "cursor-pointer",
-                  ].join(" ")}
-                  onClick={() => vm.onToggleStatus("listing")}
-                  disabled={vm.saving}
-                >
-                  出品
-                </button>
-
-                <button
-                  type="button"
-                  className={[
-                    "flex-1 h-9 rounded-md border text-sm flex items-center justify-center transition",
-                    vm.draftStatus === "suspended"
-                      ? "bg-slate-900 text-white border-slate-900"
-                      : "bg-white text-slate-700 border-slate-200",
-                    vm.saving
-                      ? "opacity-60 cursor-not-allowed"
-                      : "cursor-pointer",
-                  ].join(" ")}
-                  onClick={() => vm.onToggleStatus("suspended")}
-                  disabled={vm.saving}
-                >
-                  保留
-                </button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <ListTargetProductCard
+          productName={vm.productName}
+          tokenName={vm.tokenName}
+        />
       </div>
     </PageStyle>
   );

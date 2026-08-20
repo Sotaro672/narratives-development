@@ -27,11 +27,7 @@ function SpinnerArrow({ size = 16 }: { size?: number }) {
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
-      style={{
-        marginRight: 4,
-        display: "inline-block",
-        verticalAlign: "middle",
-      }}
+      style={{ marginRight: 4, display: "inline-block", verticalAlign: "middle" }}
     >
       <g>
         <animateTransform
@@ -67,7 +63,6 @@ interface PageStyleProps {
   children: ReactNode | [ReactNode, ReactNode];
   layout?: "grid-2" | "single";
   className?: string;
-
   onBack?: () => void | Promise<void>;
   onSave?: () => void | Promise<void>;
   isSaving?: boolean;
@@ -78,30 +73,23 @@ interface PageStyleProps {
   onCreate?: () => void | Promise<void>;
   onRefresh?: () => void | Promise<void>;
   isRefreshing?: boolean;
-
   onEdit?: () => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
-
   onCancel?: () => void | Promise<void>;
-
   onClose?: () => void | Promise<void>;
   isClosing?: boolean;
-
   onPurge?: () => void | Promise<void>;
-
   onList?: () => void | Promise<void>;
-
   title?: ReactNode;
   badge?: ReactNode;
+  leadingActions?: ReactNode;
   actions?: ReactNode;
-
   statusButtonLabel?: string;
   statusButtonBusyLabel?: string;
   statusButtonVariant?: HeaderStatusButtonVariant;
   onStatusButtonClick?: () => void | Promise<void>;
   isStatusButtonLoading?: boolean;
   statusButtonDisabled?: boolean;
-
   stickyAside?: boolean;
 }
 
@@ -128,6 +116,7 @@ export default function PageStyle({
   onList,
   title,
   badge,
+  leadingActions,
   actions,
   statusButtonLabel,
   statusButtonBusyLabel,
@@ -148,20 +137,17 @@ export default function PageStyle({
   const [isListing, setIsListing] = React.useState(false);
   const [internalIsRefreshing, setInternalIsRefreshing] = React.useState(false);
   const [internalIsClosing, setInternalIsClosing] = React.useState(false);
-  const [internalIsStatusButtonLoading, setInternalIsStatusButtonLoading] =
-    React.useState(false);
+  const [internalIsStatusButtonLoading, setInternalIsStatusButtonLoading] = React.useState(false);
 
   const isSaving = controlledIsSaving ?? internalIsSaving;
   const isSending = controlledIsSending ?? internalIsSending;
   const isReplying = controlledIsReplying ?? internalIsReplying;
   const isRefreshing = controlledIsRefreshing ?? internalIsRefreshing;
   const isClosing = controlledIsClosing ?? internalIsClosing;
-  const isStatusButtonLoading =
-    controlledIsStatusButtonLoading ?? internalIsStatusButtonLoading;
+  const isStatusButtonLoading = controlledIsStatusButtonLoading ?? internalIsStatusButtonLoading;
 
   const handleCreate = React.useCallback(async () => {
     if (!onCreate || isCreating) return;
-
     try {
       setIsCreating(true);
       await onCreate();
@@ -172,7 +158,6 @@ export default function PageStyle({
 
   const handleSave = React.useCallback(async () => {
     if (!onSave || isSaving) return;
-
     try {
       setInternalIsSaving(true);
       await onSave();
@@ -183,7 +168,6 @@ export default function PageStyle({
 
   const handleSend = React.useCallback(async () => {
     if (!onSend || isSending) return;
-
     try {
       setInternalIsSending(true);
       await onSend();
@@ -194,7 +178,6 @@ export default function PageStyle({
 
   const handleReply = React.useCallback(async () => {
     if (!onReply || isReplying) return;
-
     try {
       setInternalIsReplying(true);
       await onReply();
@@ -205,7 +188,6 @@ export default function PageStyle({
 
   const handleList = React.useCallback(async () => {
     if (!onList || isListing) return;
-
     try {
       setIsListing(true);
       await onList();
@@ -216,7 +198,6 @@ export default function PageStyle({
 
   const handleRefresh = React.useCallback(async () => {
     if (!onRefresh || isRefreshing) return;
-
     try {
       setInternalIsRefreshing(true);
       await onRefresh();
@@ -227,7 +208,6 @@ export default function PageStyle({
 
   const handleClose = React.useCallback(async () => {
     if (!onClose || isClosing) return;
-
     try {
       setInternalIsClosing(true);
       await onClose();
@@ -237,14 +217,7 @@ export default function PageStyle({
   }, [onClose, isClosing]);
 
   const handleStatusButtonClick = React.useCallback(async () => {
-    if (
-      !onStatusButtonClick ||
-      isStatusButtonLoading ||
-      statusButtonDisabled
-    ) {
-      return;
-    }
-
+    if (!onStatusButtonClick || isStatusButtonLoading || statusButtonDisabled) return;
     try {
       setInternalIsStatusButtonLoading(true);
       await onStatusButtonClick();
@@ -331,12 +304,10 @@ export default function PageStyle({
               </button>
             )}
 
+            {leadingActions}
+
             {onEdit && (
-              <button
-                type="button"
-                className="page-header__btn"
-                onClick={onEdit}
-              >
+              <button type="button" className="page-header__btn" onClick={onEdit}>
                 <Pencil size={16} style={{ marginRight: 4 }} />
                 編集
               </button>
@@ -473,11 +444,9 @@ export default function PageStyle({
     return (
       <div className={rootClass}>
         {header}
-
         <div className="page-container">
           <div className="content-grid">
             <div>{left}</div>
-
             <div className={stickyAside ? "sticky-aside" : undefined}>
               {right}
             </div>

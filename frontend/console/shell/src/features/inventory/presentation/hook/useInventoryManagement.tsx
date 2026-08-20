@@ -12,17 +12,18 @@ import {
 export type SortDirection = "asc" | "desc" | null;
 
 /**
- * ✅ InventoryRow は inventory_query.go の結果を元にした一覧用の行。
- * 列順: [プロダクト名, トークン名, 在庫数, 注文数]
+ * InventoryRow は inventory_query.go の結果を元にした一覧用の行。
+ * 列順: [プロダクト名, トークン名, 保管場所, 在庫数, 注文数]
  */
 export type InventoryRow = {
-  id: string; // 一覧の主キー（UI用）
+  id: string;
   productBlueprintId: string;
   productName: string;
-  tokenBlueprintId: string; // ★追加: 集計キー
+  tokenBlueprintId: string;
   tokenName: string;
+  shippingAddressName: string;
   availableStock: number;
-  reservedCount: number; // ✅ 注文数
+  reservedCount: number;
 };
 
 /** フックの返却型 */
@@ -47,18 +48,17 @@ export type UseInventoryManagementResult = {
     handleReset: () => void;
     handleStockLocation: () => void;
   };
-  // ✅ リフレッシュボタン回転用（List の isResetting に渡す）
   isResetting: boolean;
 };
 
 function mapToRows(items: InventoryManagementRow[]): InventoryRow[] {
   return items.map((x, i) => ({
-    // ★ productBlueprintId + tokenBlueprintId で一意になる想定（念のため i も付与）
     id: `${x.productBlueprintId}__${x.tokenBlueprintId}__${i}`,
     productBlueprintId: x.productBlueprintId,
     productName: x.productName,
     tokenBlueprintId: x.tokenBlueprintId,
     tokenName: x.tokenName,
+    shippingAddressName: x.shippingAddressName,
     availableStock: x.availableStock,
     reservedCount: x.reservedCount,
   }));
@@ -72,25 +72,16 @@ function normalizeId(v: unknown): string {
 export function useInventoryManagement(): UseInventoryManagementResult {
   const navigate = useNavigate();
 
-  // ===== rows (raw) =====
   const [inventoryRows, setInventoryRows] = useState<InventoryRow[]>([]);
-
-  // ===== filters =====
   const [productFilter, setProductFilter] = useState<string[]>([]);
   const [tokenFilter, setTokenFilter] = useState<string[]>([]);
-
-  // ===== sort =====
   const [sortKey, setSortKey] = useState<InventorySortKey>("productName");
   const [sortDir, setSortDir] = useState<SortDirection>("asc");
-
-  // ✅ リフレッシュボタン回転用
   const [isResetting, setIsResetting] = useState(false);
 
-  /* ---------------------------------------------------------
-   * ✅ inventory_query.go の結果をロード（初回 & リフレッシュ共通化）
-   * --------------------------------------------------------- */
   const reload = useCallback(async () => {
     setIsResetting(true);
+
     try {
       const vmRows = await loadInventoryRowsFromBackend();
       const mapped = mapToRows(vmRows);
@@ -106,15 +97,10 @@ export function useInventoryManagement(): UseInventoryManagementResult {
     void reload();
   }, [reload]);
 
-  /* ---------------------------------------------------------
-   * フィルタ → ソート
-   * --------------------------------------------------------- */
   const filteredSortedRows = useMemo(() => {
     let data = inventoryRows.filter((r) => {
-      const productOk =
-        productFilter.length === 0 || productFilter.includes(r.productName);
-      const tokenOk =
-        tokenFilter.length === 0 || tokenFilter.includes(r.tokenName);
+      const productOk = productFilter.length === 0 || productFilter.includes(r.productName);
+      const tokenOk = tokenFilter.length === 0 || tokenFilter.includes(r.tokenName);
       return productOk && tokenOk;
     });
 
@@ -124,14 +110,10 @@ export function useInventoryManagement(): UseInventoryManagementResult {
         const as = (v: any) => String(v ?? "");
         const an = (v: any) => Number(v ?? 0);
 
-        if (sortKey === "productName")
-          return dir * as(a.productName).localeCompare(as(b.productName));
-        if (sortKey === "tokenName")
-          return dir * as(a.tokenName).localeCompare(as(b.tokenName));
-        if (sortKey === "availableStock")
-          return dir * (an(a.availableStock) - an(b.availableStock));
-        if (sortKey === "reservedCount")
-          return dir * (an(a.reservedCount) - an(b.reservedCount));
+        if (sortKey === "productName") return dir * as(a.productName).localeCompare(as(b.productName));
+        if (sortKey === "tokenName") return dir * as(a.tokenName).localeCompare(as(b.tokenName));
+        if (sortKey === "availableStock") return dir * (an(a.availableStock) - an(b.availableStock));
+        if (sortKey === "reservedCount") return dir * (an(a.reservedCount) - an(b.reservedCount));
         return 0;
       });
     }
@@ -139,21 +121,16 @@ export function useInventoryManagement(): UseInventoryManagementResult {
     return data;
   }, [inventoryRows, productFilter, tokenFilter, sortKey, sortDir]);
 
-  /* ---------------------------------------------------------
-   * options（フィルタ選択肢）
-   * ※ product/token は Service helper を利用
-   * --------------------------------------------------------- */
   const options = useMemo(() => {
-    const asServiceRows: InventoryManagementRow[] = filteredSortedRows.map(
-      (r) => ({
-        productBlueprintId: r.productBlueprintId,
-        productName: r.productName,
-        tokenBlueprintId: r.tokenBlueprintId,
-        tokenName: r.tokenName,
-        availableStock: r.availableStock,
-        reservedCount: r.reservedCount, // ✅ 必須
-      }),
-    );
+    const asServiceRows: InventoryManagementRow[] = filteredSortedRows.map((r) => ({
+      productBlueprintId: r.productBlueprintId,
+      productName: r.productName,
+      tokenBlueprintId: r.tokenBlueprintId,
+      tokenName: r.tokenName,
+      shippingAddressName: r.shippingAddressName,
+      availableStock: r.availableStock,
+      reservedCount: r.reservedCount,
+    }));
 
     const base = buildInventoryFilterOptionsFromRows(asServiceRows);
 
@@ -163,18 +140,12 @@ export function useInventoryManagement(): UseInventoryManagementResult {
     };
   }, [filteredSortedRows]);
 
-  /* ---------------------------------------------------------
-   * UI handlers
-   * --------------------------------------------------------- */
   const handleRowClick = useCallback(
     (row: InventoryRow) => {
-      // ✅ 方針: 詳細は inventoryId（Firestore docId = pbId__tbId）で遷移する
       const pbId = normalizeId(row.productBlueprintId);
       const tbId = normalizeId(row.tokenBlueprintId);
 
-      if (!pbId || !tbId || tbId === "-") {
-        return;
-      }
+      if (!pbId || !tbId || tbId === "-") return;
 
       const inventoryId = `${pbId}__${tbId}`;
       navigate(`/inventory/detail/${encodeURIComponent(inventoryId)}`);
@@ -191,8 +162,6 @@ export function useInventoryManagement(): UseInventoryManagementResult {
     setTokenFilter([]);
     setSortKey("productName");
     setSortDir("asc");
-
-    // ✅ リフレッシュ（再取得）
     void reload();
   }, [reload]);
 

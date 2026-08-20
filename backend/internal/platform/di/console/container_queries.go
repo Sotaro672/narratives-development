@@ -212,6 +212,7 @@ func buildQueries(
 	inventoryManagementQuery := companyquery.NewInventoryManagementQuery(
 		r.inventoryRepo,
 		r.productBlueprintRepo,
+		r.shippingAddressRepo,
 		res.nameResolver,
 	)
 

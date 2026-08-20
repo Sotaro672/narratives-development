@@ -9,23 +9,27 @@ import (
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
+	shadom "narratives/internal/domain/shippingAddress"
 )
 
 type InventoryManagementQuery struct {
-	invRepo      inventoryReader
-	pbRepo       inventoryProductBlueprintReader
-	nameResolver *resolver.NameResolver
+	invRepo             inventoryReader
+	pbRepo              inventoryProductBlueprintReader
+	shippingAddressRepo shadom.RepositoryPort
+	nameResolver        *resolver.NameResolver
 }
 
 func NewInventoryManagementQuery(
 	invRepo inventoryReader,
 	pbRepo inventoryProductBlueprintReader,
+	shippingAddressRepo shadom.RepositoryPort,
 	nameResolver *resolver.NameResolver,
 ) *InventoryManagementQuery {
 	return &InventoryManagementQuery{
-		invRepo:      invRepo,
-		pbRepo:       pbRepo,
-		nameResolver: nameResolver,
+		invRepo:             invRepo,
+		pbRepo:              pbRepo,
+		shippingAddressRepo: shippingAddressRepo,
+		nameResolver:        nameResolver,
 	}
 }
 
@@ -34,7 +38,7 @@ func NewInventoryManagementQuery(
 // ============================================================
 
 func (q *InventoryManagementQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.InventoryManagementRowDTO, error) {
-	if q == nil || q.invRepo == nil || q.pbRepo == nil {
+	if q == nil || q.invRepo == nil || q.pbRepo == nil || q.shippingAddressRepo == nil {
 		return nil, errors.New("inventory management query repositories are not configured")
 	}
 
@@ -51,18 +55,31 @@ func (q *InventoryManagementQuery) ListByCurrentCompany(ctx context.Context) ([]
 		return []querydto.InventoryManagementRowDTO{}, nil
 	}
 
+	shippingAddresses, err := q.shippingAddressRepo.ListByCompanyID(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+
+	shippingAddressNameCache := make(map[string]string, len(shippingAddresses))
+	for _, shippingAddress := range shippingAddresses {
+		if shippingAddress.ID == "" {
+			continue
+		}
+		shippingAddressNameCache[shippingAddress.ID] = shippingAddress.Name
+	}
+
 	type key struct {
 		pbID string
 		tbID string
 	}
 
 	type agg struct {
-		available int
-		reserved  int
+		shippingAddressName string
+		available           int
+		reserved            int
 	}
 
 	group := map[key]agg{}
-
 	productNameCache := map[string]string{}
 	tokenNameCache := map[string]string{}
 
@@ -110,13 +127,13 @@ func (q *InventoryManagementQuery) ListByCurrentCompany(ctx context.Context) ([]
 				tbID: tbID,
 			}
 
+			a := group[k]
+			if a.shippingAddressName == "" && inv.ShippingAddressID != "" {
+				a.shippingAddressName = shippingAddressNameCache[inv.ShippingAddressID]
+			}
+
 			if len(inv.Stock) == 0 {
-				if _, ok := group[k]; !ok {
-					group[k] = agg{
-						available: 0,
-						reserved:  0,
-					}
-				}
+				group[k] = a
 				continue
 			}
 
@@ -131,23 +148,24 @@ func (q *InventoryManagementQuery) ListByCurrentCompany(ctx context.Context) ([]
 					available = 0
 				}
 
-				a := group[k]
 				a.available += available
 				a.reserved += reserved
-				group[k] = a
 			}
+
+			group[k] = a
 		}
 	}
 
 	rows := make([]querydto.InventoryManagementRowDTO, 0, len(group))
 	for k, a := range group {
 		rows = append(rows, querydto.InventoryManagementRowDTO{
-			ProductBlueprintID: k.pbID,
-			ProductName:        productNameCache[k.pbID],
-			TokenBlueprintID:   k.tbID,
-			TokenName:          tokenNameCache[k.tbID],
-			AvailableStock:     a.available,
-			ReservedCount:      a.reserved,
+			ProductBlueprintID:  k.pbID,
+			ProductName:         productNameCache[k.pbID],
+			TokenBlueprintID:    k.tbID,
+			TokenName:           tokenNameCache[k.tbID],
+			ShippingAddressName: a.shippingAddressName,
+			AvailableStock:      a.available,
+			ReservedCount:       a.reserved,
 		})
 	}
 

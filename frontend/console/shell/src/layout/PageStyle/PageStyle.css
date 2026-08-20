@@ -175,3 +175,15 @@
 .page-header__btn--danger:hover {
   background: #ffe5e5;
 }
+
+.page-header__btn--active {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+.page-header__btn--active:hover {
+  background: #1e293b;
+  color: #ffffff;
+  border-color: #1e293b;
+}
