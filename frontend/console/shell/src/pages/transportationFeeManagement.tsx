@@ -1,181 +1,59 @@
 // frontend/console/shell/src/pages/transportationFeeManagement.tsx
 
-import { CircleAlert, X } from "lucide-react";
-
-import FeeEditCard from "../features/transportation/presentation/component/feeEditCard";
-import IslandFeeEditCard from "../features/transportation/presentation/component/islandFeeEditCard";
-import SinglePrefectureFeeCard from "../features/transportation/presentation/component/singlePrefectureFeeCard";
-import { useTransportationFee } from "../features/transportation/presentation/hook/useTransportationFee";
-import PageStyle from "../layout/PageStyle/PageStyle";
+import List from "../layout/List/List";
+import { useTransportationFeeManagement } from "../features/transportation/presentation/hook/useTransportationFeeManagement";
 
 export default function TransportationFeeManagement() {
-  const { vm, handlers } = useTransportationFee();
-  const disabled = vm.loading || vm.saving;
+  const {
+    rows,
+    handlers: {
+      handleCreate,
+      handleRowClick,
+      handleReset,
+    },
+    isResetting,
+  } = useTransportationFeeManagement();
+
+  const headers = [
+    "料金設定名",
+    "作成者",
+    "作成日",
+    "更新者",
+    "最終更新日",
+  ];
 
   return (
-    <>
-      <PageStyle
-        layout="single"
-        title="配送料金"
-        onBack={handlers.onBack}
-        actions={
-          <>
-            <button
-              type="button"
-              disabled={disabled || !vm.isDirty}
-              onClick={handlers.onReset}
-              className="page-header__btn page-header__btn--ghost"
-            >
-              リセット
-            </button>
-
-            <button
-              type="button"
-              disabled={
-                disabled ||
-                !vm.transportation ||
-                (vm.exists && !vm.isDirty)
-              }
-              onClick={() => void handlers.onSave()}
-              className="page-header__btn"
-              aria-busy={vm.saving}
-            >
-              {vm.saving ? "保存中" : vm.exists ? "更新" : "登録"}
-            </button>
-          </>
-        }
-      >
-        <div className="mx-auto w-full max-w-5xl">
-          {vm.successMessage && (
-            <div
-              role="status"
-              className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
-            >
-              {vm.successMessage}
-            </div>
-          )}
-
-          {vm.loading ? (
-            <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500">
-              配送料金設定を読み込んでいます...
-            </div>
-          ) : vm.transportation ? (
-            <div className="space-y-6">
-              {vm.regions.map((region) => {
-                if (
-                  region.region === "hokkaido" ||
-                  region.region === "okinawa"
-                ) {
-                  return (
-                    <SinglePrefectureFeeCard
-                      key={region.region}
-                      region={region}
-                      disabled={disabled}
-                      onChangePrefectureAmount={
-                        handlers.onChangePrefectureAmount
-                      }
-                    />
-                  );
-                }
-
-                return (
-                  <FeeEditCard
-                    key={region.region}
-                    region={region}
-                    disabled={disabled}
-                    onChangeRegionAmount={handlers.onChangeRegionAmount}
-                    onChangePrefectureAmount={
-                      handlers.onChangePrefectureAmount
-                    }
-                  />
-                );
-              })}
-
-              <IslandFeeEditCard
-                islands={vm.islandRates}
-                disabled={disabled}
-                onChangeAmount={handlers.onChangeIslandRateAmount}
-              />
-
-              {vm.regions.length === 0 &&
-                vm.islandRates.length === 0 && (
-                  <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500">
-                    配送料金データを取得できませんでした。
-                  </div>
-                )}
-            </div>
-          ) : (
-            <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500">
-              配送料金設定を表示できませんでした。
-            </div>
-          )}
-        </div>
-      </PageStyle>
-
-      {vm.error && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4 py-6"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              handlers.onDismissError();
+    <List
+      title="配送料金"
+      headerCells={headers}
+      showCreateButton
+      createLabel="配送料金を作成"
+      onCreate={handleCreate}
+      showResetButton
+      isResetting={isResetting}
+      onReset={handleReset}
+    >
+      {rows.map((row) => (
+        <tr
+          key={row.id}
+          className="cursor-pointer hover:bg-[rgba(0,0,0,0.03)] transition"
+          role="button"
+          tabIndex={0}
+          onClick={() => handleRowClick(row)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              handleRowClick(row);
             }
           }}
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="transportation-error-title"
-            aria-describedby="transportation-error-description"
-            className="w-full max-w-md overflow-hidden rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl"
-          >
-            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] px-5 py-4">
-              <div className="flex items-center gap-2">
-                <CircleAlert
-                  size={20}
-                  className="shrink-0 text-red-500"
-                  aria-hidden="true"
-                />
-
-                <h2
-                  id="transportation-error-title"
-                  className="text-sm font-semibold text-[hsl(var(--foreground))]"
-                >
-                  入力内容を確認してください
-                </h2>
-              </div>
-
-              <button
-                type="button"
-                onClick={handlers.onDismissError}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[hsl(var(--muted-foreground))] transition hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]"
-                aria-label="閉じる"
-              >
-                <X size={18} aria-hidden="true" />
-              </button>
-            </div>
-
-            <div className="px-5 py-6">
-              <p
-                id="transportation-error-description"
-                className="text-sm leading-6 text-[hsl(var(--foreground))]"
-              >
-                {vm.error}
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end border-t border-[hsl(var(--border))] px-5 py-4">
-              <button
-                type="button"
-                onClick={handlers.onDismissError}
-                className="inline-flex h-9 items-center justify-center rounded-[10px] bg-[hsl(var(--primary))] px-5 text-sm font-medium text-[hsl(var(--primary-foreground))] transition hover:opacity-90"
-              >
-                閉じる
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+          <td>{row.name || "-"}</td>
+          <td>{row.createdByName || "-"}</td>
+          <td>{row.createdAt || "-"}</td>
+          <td>{row.updatedByName || "-"}</td>
+          <td>{row.updatedAt || "-"}</td>
+        </tr>
+      ))}
+    </List>
   );
 }

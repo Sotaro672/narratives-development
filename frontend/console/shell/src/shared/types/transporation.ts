@@ -144,7 +144,11 @@ export type TransportationFeeSetting = {
   prefectureRates: TransportationPrefectureRate[];
   islandRates: TransportationIslandRate[];
   createdAt: string;
+  createdBy: string;
+  createdByName?: string;
   updatedAt: string;
+  updatedBy: string;
+  updatedByName?: string;
 };
 
 export type TransportationIslandDefinition = {

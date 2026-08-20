@@ -35,6 +35,8 @@ export { default as BrandDetail } from "./brandDetail";
 export { default as CompanyDetail } from "./companyDetail";
 export { default as StockLocationPage } from "./stockLocation";
 export { default as TransportationFeeManagement } from "./transportationFeeManagement";
+export { default as TransportationFeeCreate } from "./transportationFeeCreate";
+export { default as TransportationFeeDetail } from "./transportationFeeDetail";
 export { default as PermissionList } from "./permissionList";
 export { default as PermissionDetail } from "./permissionDetail";
 export { default as AccountManagement } from "./accountManagement";

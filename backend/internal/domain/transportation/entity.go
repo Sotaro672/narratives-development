@@ -91,7 +91,9 @@ var (
 	ErrDuplicateIslandRate       = errors.New("transportation: duplicate islandRate")
 	ErrInvalidRateAmount         = errors.New("transportation: invalid rate amount")
 	ErrInvalidCreatedAt          = errors.New("transportation: invalid createdAt")
+	ErrInvalidCreatedBy          = errors.New("transportation: invalid createdBy")
 	ErrInvalidUpdatedAt          = errors.New("transportation: invalid updatedAt")
+	ErrInvalidUpdatedBy          = errors.New("transportation: invalid updatedBy")
 	ErrPrefectureRateNotFound    = errors.New("transportation: prefectureRate not found")
 )
 
@@ -231,7 +233,9 @@ type TransportationFeeSetting struct {
 	PrefectureRates []PrefectureRate `json:"prefectureRates"`
 	IslandRates     []IslandRate     `json:"islandRates"`
 	CreatedAt       time.Time        `json:"createdAt"`
+	CreatedBy       string           `json:"createdBy"`
 	UpdatedAt       time.Time        `json:"updatedAt"`
+	UpdatedBy       string           `json:"updatedBy"`
 }
 
 func Regions() []Region {
@@ -253,7 +257,6 @@ func PrefectureGroups() []PrefectureGroup {
 
 func RegionGroups() []RegionGroup {
 	groups := make([]RegionGroup, 0, len(prefectureGroups)+1)
-
 	for _, group := range prefectureGroups {
 		groups = append(groups, RegionGroup{
 			Region:          group.Region,
@@ -332,7 +335,9 @@ func New(
 	prefectureRates []PrefectureRate,
 	islandRates []IslandRate,
 	createdAt time.Time,
+	createdBy string,
 	updatedAt time.Time,
+	updatedBy string,
 ) (TransportationFeeSetting, error) {
 	setting := TransportationFeeSetting{
 		ID:              id,
@@ -341,7 +346,9 @@ func New(
 		PrefectureRates: clonePrefectureRates(prefectureRates),
 		IslandRates:     cloneIslandRates(islandRates),
 		CreatedAt:       createdAt.UTC(),
+		CreatedBy:       createdBy,
 		UpdatedAt:       updatedAt.UTC(),
+		UpdatedBy:       updatedBy,
 	}
 
 	setting.normalizeRateOrder()
@@ -359,6 +366,7 @@ func NewWithNow(
 	name string,
 	prefectureRates []PrefectureRate,
 	islandRates []IslandRate,
+	createdBy string,
 	now time.Time,
 ) (TransportationFeeSetting, error) {
 	now = now.UTC()
@@ -370,7 +378,9 @@ func NewWithNow(
 		prefectureRates,
 		islandRates,
 		now,
+		createdBy,
 		now,
+		createdBy,
 	)
 }
 
@@ -378,6 +388,7 @@ func (s *TransportationFeeSetting) Update(
 	name string,
 	prefectureRates []PrefectureRate,
 	islandRates []IslandRate,
+	updatedBy string,
 	now time.Time,
 ) error {
 	if s == nil {
@@ -391,7 +402,9 @@ func (s *TransportationFeeSetting) Update(
 		PrefectureRates: clonePrefectureRates(prefectureRates),
 		IslandRates:     cloneIslandRates(islandRates),
 		CreatedAt:       s.CreatedAt,
+		CreatedBy:       s.CreatedBy,
 		UpdatedAt:       now.UTC(),
+		UpdatedBy:       updatedBy,
 	}
 
 	next.normalizeRateOrder()
@@ -462,6 +475,14 @@ func (s TransportationFeeSetting) Validate() error {
 
 	if err := validateIslandRates(s.IslandRates); err != nil {
 		return err
+	}
+
+	if s.CreatedBy == "" {
+		return ErrInvalidCreatedBy
+	}
+
+	if s.UpdatedBy == "" {
+		return ErrInvalidUpdatedBy
 	}
 
 	return validateTimestamps(s.CreatedAt, s.UpdatedAt)

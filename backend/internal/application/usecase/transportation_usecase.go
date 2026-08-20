@@ -17,6 +17,8 @@ type TransportationRepo = transportationdom.RepositoryPort
 
 // CreateTransportationFeeSettingInputは配送料金設定の新規作成入力です。
 // ID、CompanyID、CreatedAt、UpdatedAtはUsecase側で設定します。
+// CreatedByは認証済みmemberのFirestore document IDです。
+// 作成時はCreatedByとUpdatedByに同じmember IDを設定します。
 // Nameは必須です。
 // PrefectureRatesは47都道府県すべて必須です。
 // IslandRatesは任意で、設定された場合は都道府県料金より優先されます。
@@ -24,15 +26,18 @@ type CreateTransportationFeeSettingInput struct {
 	Name            string
 	PrefectureRates []transportationdom.PrefectureRate
 	IslandRates     []transportationdom.IslandRate
+	CreatedBy       string
 }
 
 // UpdateTransportationFeeSettingInputは配送料金設定の更新入力です。
-// ID、CompanyID、CreatedAtは変更しません。
+// ID、CompanyID、CreatedAt、CreatedByは変更しません。
 // Name、PrefectureRates、IslandRatesを完全な現在値として受け取ります。
+// UpdatedByは認証済みmemberのFirestore document IDです。
 type UpdateTransportationFeeSettingInput struct {
 	Name            string
 	PrefectureRates []transportationdom.PrefectureRate
 	IslandRates     []transportationdom.IslandRate
+	UpdatedBy       string
 }
 
 // TransportationUsecaseはcompanyに紐づく配送料金設定を制御します。
@@ -152,6 +157,8 @@ func (u *TransportationUsecase) GetByID(
 
 // Createはcompanyに新しい配送料金設定を作成します。
 // Transportation IDはUsecaseがUUIDで採番します。
+// CreatedByには認証済みmemberのFirestore document IDを使用します。
+// 作成時はCreatedByとUpdatedByに同じmember IDを設定します。
 // 同一companyに複数のTransportationFeeSettingを作成できます。
 func (u *TransportationUsecase) Create(
 	ctx context.Context,
@@ -165,6 +172,10 @@ func (u *TransportationUsecase) Create(
 	validCompanyID, err := validateTransportationCompanyID(companyID)
 	if err != nil {
 		return nil, err
+	}
+
+	if in.CreatedBy == "" {
+		return nil, transportationdom.ErrInvalidCreatedBy
 	}
 
 	transportationID := u.newDocID()
@@ -181,6 +192,7 @@ func (u *TransportationUsecase) Create(
 		in.Name,
 		in.PrefectureRates,
 		in.IslandRates,
+		in.CreatedBy,
 		now,
 	)
 	if err != nil {
@@ -192,7 +204,9 @@ func (u *TransportationUsecase) Create(
 
 // Updateは指定Transportation IDの既存配送料金設定を更新します。
 // Updateはupsertではありません。
-// ID、CompanyID、CreatedAtは既存値を維持し、Name、料金設定、UpdatedAtを更新します。
+// ID、CompanyID、CreatedAt、CreatedByは既存値を維持します。
+// Name、料金設定、UpdatedAt、UpdatedByを更新します。
+// UpdatedByには認証済みmemberのFirestore document IDを使用します。
 // 別companyが所有するTransportation IDを指定した場合はErrNotFoundを返します。
 func (u *TransportationUsecase) Update(
 	ctx context.Context,
@@ -202,6 +216,10 @@ func (u *TransportationUsecase) Update(
 ) (*transportationdom.TransportationFeeSetting, error) {
 	if err := u.ensureRepo(); err != nil {
 		return nil, err
+	}
+
+	if in.UpdatedBy == "" {
+		return nil, transportationdom.ErrInvalidUpdatedBy
 	}
 
 	current, err := u.GetByID(ctx, companyID, transportationID)
@@ -218,6 +236,7 @@ func (u *TransportationUsecase) Update(
 		in.Name,
 		in.PrefectureRates,
 		in.IslandRates,
+		in.UpdatedBy,
 		now,
 	); err != nil {
 		return nil, err

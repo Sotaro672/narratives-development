@@ -1,4 +1,4 @@
-// frontend/console/admin/src/presentation/components/AdminCard.tsx
+// frontend/console/shell/src/features/admin/presentation/components/AdminCard.tsx
 
 import * as React from "react";
 
@@ -27,6 +27,8 @@ export type AdminCardProps = {
    */
   targetAvatarCount?: number;
 
+  showAssignee?: boolean;
+
   assigneeName?: string;
   assigneeId?: string;
 
@@ -49,6 +51,7 @@ export type AdminCardProps = {
 export const AdminCard: React.FC<AdminCardProps> = ({
   title = "管理情報",
   targetAvatarCount,
+  showAssignee = true,
   assigneeName,
   assigneeId,
   assigneeCandidates,
@@ -150,7 +153,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
               {targetAvatarCount}件
             </div>
           </div>
-        ) : (
+        ) : showAssignee ? (
           <div className="admin-card__section">
             <div className="admin-card__label mb-1 text-xs text-slate-500">
               担当者
@@ -197,7 +200,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
               </>
             )}
           </div>
-        )}
+        ) : null}
 
         {(createdByName ||
           createdAt ||

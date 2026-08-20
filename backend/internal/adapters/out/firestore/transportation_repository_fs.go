@@ -29,7 +29,9 @@ var _ transportationdom.RepositoryPort = (*TransportationRepositoryFS)(nil)
 //	  prefectureRates
 //	  islandRates
 //	  createdAt
+//	  createdBy
 //	  updatedAt
+//	  updatedBy
 //
 // document IDはTransportationFeeSetting.IDと同一です。
 // CompanyIDは1 companyが複数TransportationFeeSettingを所有できるようdocument fieldとして保存します。
@@ -58,7 +60,9 @@ type transportationDocument struct {
 	PrefectureRates []transportationPrefectureRateDocument `firestore:"prefectureRates"`
 	IslandRates     []transportationIslandRateDocument     `firestore:"islandRates"`
 	CreatedAt       time.Time                              `firestore:"createdAt"`
+	CreatedBy       string                                 `firestore:"createdBy"`
 	UpdatedAt       time.Time                              `firestore:"updatedAt"`
+	UpdatedBy       string                                 `firestore:"updatedBy"`
 }
 
 func NewTransportationRepositoryFS(client *firestore.Client) *TransportationRepositoryFS {
@@ -177,7 +181,7 @@ func (r *TransportationRepositoryFS) ListByCompanyID(ctx context.Context, compan
 // 同じTransportationFeeSetting.IDのdocumentが存在する場合はErrConflictを返します。
 // 同一CompanyIDを持つ複数documentの作成は許可します。
 // 保存前にDomain constructorを使用してEntity全体を再構築し、ID、CompanyID、Name、
-// 47都道府県の完全性、重複、料金、島嶼部override、timestampを検証します。
+// 47都道府県の完全性、重複、料金、島嶼部override、監査情報、timestampを検証します。
 func (r *TransportationRepositoryFS) Create(ctx context.Context, value transportationdom.TransportationFeeSetting) (*transportationdom.TransportationFeeSetting, error) {
 	if err := r.ensureClient(); err != nil {
 		return nil, err
@@ -200,7 +204,9 @@ func (r *TransportationRepositoryFS) Create(ctx context.Context, value transport
 		value.PrefectureRates,
 		value.IslandRates,
 		value.CreatedAt,
+		value.CreatedBy,
 		value.UpdatedAt,
+		value.UpdatedBy,
 	)
 	if err != nil {
 		return nil, err
@@ -223,8 +229,8 @@ func (r *TransportationRepositoryFS) Create(ctx context.Context, value transport
 // Updateはupsertではありません。
 // transaction内で対象documentを取得した後、tx.Updateを使用します。
 // documentが存在しない場合はErrNotFoundを返します。
-// ID、CompanyID、CreatedAtは変更できません。
-// Name、PrefectureRates、IslandRates、UpdatedAtのみ更新します。
+// ID、CompanyID、CreatedAt、CreatedByは変更できません。
+// Name、PrefectureRates、IslandRates、UpdatedAt、UpdatedByのみ更新します。
 func (r *TransportationRepositoryFS) Update(ctx context.Context, value transportationdom.TransportationFeeSetting) (*transportationdom.TransportationFeeSetting, error) {
 	if err := r.ensureClient(); err != nil {
 		return nil, err
@@ -266,6 +272,9 @@ func (r *TransportationRepositoryFS) Update(ctx context.Context, value transport
 		if !value.CreatedAt.Equal(current.CreatedAt) {
 			return transportationdom.ErrInvalidCreatedAt
 		}
+		if value.CreatedBy != current.CreatedBy {
+			return transportationdom.ErrInvalidCreatedBy
+		}
 
 		next, err := transportationdom.New(
 			current.ID,
@@ -274,7 +283,9 @@ func (r *TransportationRepositoryFS) Update(ctx context.Context, value transport
 			value.PrefectureRates,
 			value.IslandRates,
 			current.CreatedAt,
+			current.CreatedBy,
 			value.UpdatedAt,
+			value.UpdatedBy,
 		)
 		if err != nil {
 			return err
@@ -286,6 +297,7 @@ func (r *TransportationRepositoryFS) Update(ctx context.Context, value transport
 			{Path: "prefectureRates", Value: doc.PrefectureRates},
 			{Path: "islandRates", Value: doc.IslandRates},
 			{Path: "updatedAt", Value: doc.UpdatedAt},
+			{Path: "updatedBy", Value: doc.UpdatedBy},
 		}
 
 		if err := tx.Update(ref, updates); err != nil {
@@ -336,7 +348,9 @@ func transportationToDocData(value transportationdom.TransportationFeeSetting) t
 		PrefectureRates: prefectureRates,
 		IslandRates:     islandRates,
 		CreatedAt:       value.CreatedAt.UTC(),
+		CreatedBy:       value.CreatedBy,
 		UpdatedAt:       value.UpdatedAt.UTC(),
+		UpdatedBy:       value.UpdatedBy,
 	}
 }
 
@@ -399,6 +413,8 @@ func docToTransportation(snapshot *firestore.DocumentSnapshot) (transportationdo
 		prefectureRates,
 		islandRates,
 		doc.CreatedAt,
+		doc.CreatedBy,
 		doc.UpdatedAt,
+		doc.UpdatedBy,
 	)
 }

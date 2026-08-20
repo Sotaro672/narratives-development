@@ -5,8 +5,10 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"narratives/internal/adapters/in/http/middleware"
+	query "narratives/internal/application/query/console"
 	usecase "narratives/internal/application/usecase"
 	transportationdom "narratives/internal/domain/transportation"
 )
@@ -17,11 +19,18 @@ const (
 )
 
 type TransportationHandler struct {
-	uc *usecase.TransportationUsecase
+	uc              *usecase.TransportationUsecase
+	managementQuery *query.TransportationManagementQuery
 }
 
-func NewTransportationHandler(uc *usecase.TransportationUsecase) http.Handler {
-	return &TransportationHandler{uc: uc}
+func NewTransportationHandler(
+	uc *usecase.TransportationUsecase,
+	managementQuery *query.TransportationManagementQuery,
+) http.Handler {
+	return &TransportationHandler{
+		uc:              uc,
+		managementQuery: managementQuery,
+	}
 }
 
 type transportationPrefectureRateRequest struct {
@@ -56,6 +65,18 @@ type transportationIslandResponse struct {
 	IslandCode     transportationdom.IslandCode     `json:"islandCode"`
 	PrefectureCode transportationdom.PrefectureCode `json:"prefectureCode"`
 	DisplayName    string                           `json:"displayName"`
+}
+
+type transportationManagementResponse struct {
+	ID            string    `json:"id"`
+	CompanyID     string    `json:"companyId"`
+	Name          string    `json:"name"`
+	CreatedAt     time.Time `json:"createdAt"`
+	CreatedBy     string    `json:"createdBy"`
+	CreatedByName string    `json:"createdByName"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+	UpdatedBy     string    `json:"updatedBy"`
+	UpdatedByName string    `json:"updatedByName"`
 }
 
 func (h *TransportationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -106,6 +127,15 @@ func (h *TransportationHandler) requireUsecase(w http.ResponseWriter) bool {
 	return false
 }
 
+func (h *TransportationHandler) requireManagementQuery(w http.ResponseWriter) bool {
+	if h != nil && h.managementQuery != nil {
+		return true
+	}
+
+	writeError(w, http.StatusServiceUnavailable, "transportation_management_query_not_initialized")
+	return false
+}
+
 func (h *TransportationHandler) requireCompanyID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	companyID, ok := middleware.CompanyID(r)
 	if ok && companyID != "" {
@@ -113,6 +143,21 @@ func (h *TransportationHandler) requireCompanyID(w http.ResponseWriter, r *http.
 	}
 
 	writeError(w, http.StatusForbidden, "company_id_not_resolved")
+	return "", false
+}
+
+func (h *TransportationHandler) requireMemberID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	if r == nil {
+		writeError(w, http.StatusForbidden, "member_id_not_resolved")
+		return "", false
+	}
+
+	memberID := usecase.MemberIDFromContext(r.Context())
+	if memberID != "" {
+		return memberID, true
+	}
+
+	writeError(w, http.StatusForbidden, "member_id_not_resolved")
 	return "", false
 }
 
@@ -147,10 +192,12 @@ func (h *TransportationHandler) master(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-// listは認証済みcompanyが所有する配送料金設定一覧を返します。
+// listは認証済みcompanyが所有する配送料金設定一覧をManagementQuery経由で返します。
+// createdBy / updatedByはmember document IDを保持し、
+// createdByName / updatedByNameはManagementQueryでmember名へ解決します。
 // companyに設定が存在しない場合は空配列を返します。
 func (h *TransportationHandler) list(w http.ResponseWriter, r *http.Request) {
-	if !h.requireUsecase(w) {
+	if !h.requireManagementQuery(w) {
 		return
 	}
 
@@ -159,17 +206,30 @@ func (h *TransportationHandler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	settings, err := h.uc.ListByCompanyID(r.Context(), companyID)
+	items, err := h.managementQuery.ListByCompanyID(r.Context(), companyID)
 	if err != nil {
 		writeTransportationErr(w, err)
 		return
 	}
 
-	if settings == nil {
-		settings = []transportationdom.TransportationFeeSetting{}
+	response := make([]transportationManagementResponse, 0, len(items))
+	for _, item := range items {
+		setting := item.Transportation
+
+		response = append(response, transportationManagementResponse{
+			ID:            setting.ID,
+			CompanyID:     setting.CompanyID,
+			Name:          setting.Name,
+			CreatedAt:     setting.CreatedAt,
+			CreatedBy:     setting.CreatedBy,
+			CreatedByName: item.MemberNames.CreatedByName,
+			UpdatedAt:     setting.UpdatedAt,
+			UpdatedBy:     setting.UpdatedBy,
+			UpdatedByName: item.MemberNames.UpdatedByName,
+		})
 	}
 
-	writeJSON(w, http.StatusOK, settings)
+	writeJSON(w, http.StatusOK, response)
 }
 
 // getは認証済みcompanyが所有する指定Transportation IDの配送料金設定を返します。
@@ -194,6 +254,8 @@ func (h *TransportationHandler) get(w http.ResponseWriter, r *http.Request, tran
 }
 
 // createは認証済みcompanyに新しい配送料金設定を作成します。
+// CreatedByには認証Middlewareがcontextへ格納したmember document IDを使用します。
+// 作成時のUpdatedByもUsecase/Domain側で同じmember IDになります。
 // 同一companyに複数のTransportationFeeSettingを作成できます。
 // Transportation IDはUsecase側で採番します。
 func (h *TransportationHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -202,6 +264,11 @@ func (h *TransportationHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	companyID, ok := h.requireCompanyID(w, r)
+	if !ok {
+		return
+	}
+
+	memberID, ok := h.requireMemberID(w, r)
 	if !ok {
 		return
 	}
@@ -224,6 +291,7 @@ func (h *TransportationHandler) create(w http.ResponseWriter, r *http.Request) {
 			Name:            request.Name,
 			PrefectureRates: prefectureRates,
 			IslandRates:     islandRates,
+			CreatedBy:       memberID,
 		},
 	)
 	if err != nil {
@@ -236,7 +304,8 @@ func (h *TransportationHandler) create(w http.ResponseWriter, r *http.Request) {
 
 // updateは認証済みcompanyが所有する指定Transportation IDの配送料金設定を完全置換します。
 // Name、PrefectureRates、IslandRatesを更新します。
-// ID、CompanyID、CreatedAtは変更しません。
+// ID、CompanyID、CreatedAt、CreatedByは変更しません。
+// UpdatedByには認証Middlewareがcontextへ格納したmember document IDを使用します。
 // Updateはupsertではなく、設定が存在しない場合は404を返します。
 func (h *TransportationHandler) update(w http.ResponseWriter, r *http.Request, transportationID string) {
 	if !h.requireUsecase(w) {
@@ -244,6 +313,11 @@ func (h *TransportationHandler) update(w http.ResponseWriter, r *http.Request, t
 	}
 
 	companyID, ok := h.requireCompanyID(w, r)
+	if !ok {
+		return
+	}
+
+	memberID, ok := h.requireMemberID(w, r)
 	if !ok {
 		return
 	}
@@ -267,6 +341,7 @@ func (h *TransportationHandler) update(w http.ResponseWriter, r *http.Request, t
 			Name:            request.Name,
 			PrefectureRates: prefectureRates,
 			IslandRates:     islandRates,
+			UpdatedBy:       memberID,
 		},
 	)
 	if err != nil {
@@ -352,7 +427,9 @@ func writeTransportationErr(w http.ResponseWriter, err error) {
 		errors.Is(err, transportationdom.ErrDuplicateIslandRate),
 		errors.Is(err, transportationdom.ErrInvalidRateAmount),
 		errors.Is(err, transportationdom.ErrInvalidCreatedAt),
+		errors.Is(err, transportationdom.ErrInvalidCreatedBy),
 		errors.Is(err, transportationdom.ErrInvalidUpdatedAt),
+		errors.Is(err, transportationdom.ErrInvalidUpdatedBy),
 		errors.Is(err, transportationdom.ErrPrefectureRateNotFound):
 		statusCode = http.StatusBadRequest
 

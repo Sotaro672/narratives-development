@@ -38,6 +38,8 @@ import {
   CompanyDetail,
   StockLocationPage,
   TransportationFeeManagement,
+  TransportationFeeCreate,
+  TransportationFeeDetail,
   PermissionList,
   PermissionDetail,
   AccountManagement,
@@ -54,7 +56,14 @@ export const routes: RouteObject[] = [
   { path: "/invitation", element: <InvitationPage /> },
   { path: "/company", element: <CompanyDetail /> },
   { path: "/stockLocation", element: <StockLocationPage /> },
-  { path: "/transportationFee", element: <TransportationFeeManagement /> },
+  {
+    path: "/transportationFee",
+    children: [
+      { path: "", element: <TransportationFeeManagement /> },
+      { path: "create", element: <TransportationFeeCreate /> },
+      { path: ":transportationId", element: <TransportationFeeDetail /> },
+    ],
+  },
   {
     path: "/inquiry",
     children: [

@@ -51,7 +51,11 @@ export type TransportationVM = {
   regions: TransportationRegionVM[];
   islandRates: TransportationIslandRateVM[];
   createdAt: string;
+  createdBy: string;
+  createdByName?: string;
   updatedAt: string;
+  updatedBy: string;
+  updatedByName?: string;
 };
 
 export type TransportationSaveInput = {
@@ -65,7 +69,11 @@ export type TransportationListItemVM = {
   companyId: string;
   name: string;
   createdAt: string;
+  createdBy: string;
+  createdByName?: string;
   updatedAt: string;
+  updatedBy: string;
+  updatedByName?: string;
 };
 
 // ============================================================
@@ -154,7 +162,11 @@ export function buildTransportationVM(master: TransportationMaster, setting: Tra
     regions: buildRegionVMs(master, setting),
     islandRates: buildIslandRateVMs(master, setting),
     createdAt: setting.createdAt,
+    createdBy: setting.createdBy,
+    createdByName: setting.createdByName,
     updatedAt: setting.updatedAt,
+    updatedBy: setting.updatedBy,
+    updatedByName: setting.updatedByName,
   };
 }
 
@@ -164,7 +176,11 @@ function buildTransportationListItemVM(setting: TransportationFeeSetting): Trans
     companyId: setting.companyId,
     name: setting.name,
     createdAt: setting.createdAt,
+    createdBy: setting.createdBy,
+    createdByName: setting.createdByName,
     updatedAt: setting.updatedAt,
+    updatedBy: setting.updatedBy,
+    updatedByName: setting.updatedByName,
   };
 }
 
@@ -196,7 +212,11 @@ export function buildEmptyTransportationVM(master: TransportationMaster): Transp
       amount: null,
     })),
     createdAt: "",
+    createdBy: "",
+    createdByName: undefined,
     updatedAt: "",
+    updatedBy: "",
+    updatedByName: undefined,
   };
 }
 

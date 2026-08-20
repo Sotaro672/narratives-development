@@ -38,7 +38,11 @@ type TransportationFeeSettingApiResponse = {
   prefectureRates: TransportationPrefectureRateApiResponse[] | null;
   islandRates: TransportationIslandRateApiResponse[] | null;
   createdAt: string;
+  createdBy: string;
+  createdByName?: string;
   updatedAt: string;
+  updatedBy: string;
+  updatedByName?: string;
 };
 
 type TransportationRegionGroupApiResponse = {
@@ -120,6 +124,12 @@ function toTransportationFeeSetting(value: TransportationFeeSettingApiResponse):
   if (!value.name) {
     throw new Error("invalid_transportation_name");
   }
+  if (!value.createdBy) {
+    throw new Error("invalid_transportation_created_by");
+  }
+  if (!value.updatedBy) {
+    throw new Error("invalid_transportation_updated_by");
+  }
 
   return {
     id: value.id,
@@ -128,7 +138,11 @@ function toTransportationFeeSetting(value: TransportationFeeSettingApiResponse):
     prefectureRates: (value.prefectureRates ?? []).map(toTransportationPrefectureRate),
     islandRates: (value.islandRates ?? []).map(toTransportationIslandRate),
     createdAt: value.createdAt,
+    createdBy: value.createdBy,
+    createdByName: value.createdByName,
     updatedAt: value.updatedAt,
+    updatedBy: value.updatedBy,
+    updatedByName: value.updatedByName,
   };
 }
 
@@ -158,7 +172,9 @@ export async function listTransportationFeeSettingsHTTP(): Promise<Transportatio
   return (response ?? []).map(toTransportationFeeSetting);
 }
 
-export async function getTransportationFeeSettingHTTP(transportationId: string): Promise<TransportationFeeSetting> {
+export async function getTransportationFeeSettingHTTP(
+  transportationId: string,
+): Promise<TransportationFeeSetting> {
   const response = await fetchJSON<TransportationFeeSettingApiResponse>(
     buildConsoleUrl(transportationDetailPath(transportationId)),
     {
@@ -182,7 +198,9 @@ export async function getTransportationMasterHTTP(): Promise<TransportationMaste
   return toTransportationMaster(response);
 }
 
-export async function createTransportationFeeSettingHTTP(input: TransportationFeeSettingInput): Promise<TransportationFeeSetting> {
+export async function createTransportationFeeSettingHTTP(
+  input: TransportationFeeSettingInput,
+): Promise<TransportationFeeSetting> {
   const response = await fetchJSON<TransportationFeeSettingApiResponse>(
     buildConsoleUrl(transportationPath),
     {
