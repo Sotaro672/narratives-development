@@ -12,9 +12,6 @@ export default function ListManagementPage() {
       <List
         title={vm.title}
         headerCells={vm.headers}
-        showCreateButton
-        createLabel="配送料金"
-        onCreate={handlers.onTransportationFee}
         showResetButton
         isResetting={isResetting}
         onReset={handlers.onReset}

@@ -1,4 +1,4 @@
-// frontend/console/shell/src/features/transportation/presentation/hook/useTransportationFeeCreate.ts
+// frontend/console/shell/src/features/transportation/presentation/hook/useTransportationFeeDetail.ts
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -10,23 +10,25 @@ import type {
 } from "../../../../shared/types/transporation";
 
 import {
-  createTransportation,
-  fetchEmptyTransportationVM,
+  deleteTransportation,
+  fetchTransportationVM,
+  updateTransportation,
   type TransportationIslandRateVM,
   type TransportationRegionVM,
   type TransportationVM,
 } from "../../application/transportationService";
 
-export type TransportationAmountInput = string | number | null;
-export type TransportationIslandAmountInput = string | number | null;
+export type TransportationDetailAmountInput = string | number | null;
+export type TransportationDetailIslandAmountInput = string | number | null;
 
-export type UseTransportationFeeCreateResult = {
+export type UseTransportationFeeDetailResult = {
   vm: {
     transportation: TransportationVM | null;
     regions: TransportationRegionVM[];
     islandRates: TransportationIslandRateVM[];
     loading: boolean;
     saving: boolean;
+    deleting: boolean;
     exists: boolean;
     isDirty: boolean;
     error: string | null;
@@ -36,25 +38,26 @@ export type UseTransportationFeeCreateResult = {
     onBack: () => void;
     onReset: () => void;
     onSave: () => Promise<void>;
+    onDelete: () => Promise<void>;
     onDismissError: () => void;
     onChangeName: (name: string) => void;
     onChangePrefectureAmount: (
       prefectureCode: PrefectureCode,
-      amount: TransportationAmountInput,
+      amount: TransportationDetailAmountInput,
     ) => void;
     onChangeRegionAmount: (
       region: TransportationRegion,
-      amount: TransportationAmountInput,
+      amount: TransportationDetailAmountInput,
     ) => void;
     onChangeIslandRateAmount: (
       islandCode: IslandCode,
-      amount: TransportationIslandAmountInput,
+      amount: TransportationDetailIslandAmountInput,
     ) => void;
   };
 };
 
 function toAmount(
-  value: TransportationAmountInput,
+  value: TransportationDetailAmountInput,
 ): number | null {
   if (value === null || value === "") {
     return null;
@@ -74,7 +77,7 @@ function toAmount(
 }
 
 function toIslandAmount(
-  value: TransportationIslandAmountInput,
+  value: TransportationDetailIslandAmountInput,
 ): number | null {
   if (value === null || value === "") {
     return null;
@@ -149,7 +152,9 @@ function errorMessage(
   return "配送料金設定の処理に失敗しました。";
 }
 
-export function useTransportationFeeCreate(): UseTransportationFeeCreateResult {
+export function useTransportationFeeDetail(
+  transportationId?: string,
+): UseTransportationFeeDetailResult {
   const navigate = useNavigate();
 
   const [
@@ -177,6 +182,11 @@ export function useTransportationFeeCreate(): UseTransportationFeeCreateResult {
   ] = useState(false);
 
   const [
+    deleting,
+    setDeleting,
+  ] = useState(false);
+
+  const [
     error,
     setError,
   ] = useState<string | null>(
@@ -190,45 +200,54 @@ export function useTransportationFeeCreate(): UseTransportationFeeCreateResult {
     null,
   );
 
-  const reload =
-    useCallback(
-      async () => {
-        setLoading(true);
-        setError(null);
-        setSuccessMessage(null);
+  const reload = useCallback(
+    async () => {
+      setLoading(true);
+      setError(null);
+      setSuccessMessage(null);
 
-        try {
-          const empty =
-            await fetchEmptyTransportationVM();
-
-          const next =
-            cloneTransportationVM(
-              empty,
-            );
-
-          setTransportation(next);
-
-          setOriginalTransportation(
-            cloneTransportationVM(
-              next,
-            ),
+      try {
+        if (!transportationId) {
+          throw new Error(
+            "配送料金設定IDを取得できませんでした。",
           );
-        } catch (
-          loadError: unknown
-        ) {
-          setTransportation(null);
-          setOriginalTransportation(null);
-          setError(
-            errorMessage(
-              loadError,
-            ),
-          );
-        } finally {
-          setLoading(false);
         }
-      },
-      [],
-    );
+
+        const loaded =
+          await fetchTransportationVM(
+            transportationId,
+          );
+
+        const next =
+          cloneTransportationVM(
+            loaded,
+          );
+
+        setTransportation(next);
+
+        setOriginalTransportation(
+          cloneTransportationVM(
+            next,
+          ),
+        );
+      } catch (
+        loadError: unknown
+      ) {
+        setTransportation(null);
+        setOriginalTransportation(null);
+        setError(
+          errorMessage(
+            loadError,
+          ),
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      transportationId,
+    ],
+  );
 
   useEffect(() => {
     void reload();
@@ -241,6 +260,9 @@ export function useTransportationFeeCreate(): UseTransportationFeeCreateResult {
 
   const islandRates =
     transportation?.islandRates ?? [];
+
+  const exists =
+    transportation !== null;
 
   const isDirty = useMemo(
     () =>
@@ -314,7 +336,7 @@ export function useTransportationFeeCreate(): UseTransportationFeeCreateResult {
     useCallback(
       (
         prefectureCode: PrefectureCode,
-        amountInput: TransportationAmountInput,
+        amountInput: TransportationDetailAmountInput,
       ) => {
         const amount =
           toAmount(
@@ -362,7 +384,7 @@ export function useTransportationFeeCreate(): UseTransportationFeeCreateResult {
     useCallback(
       (
         targetRegion: TransportationRegion,
-        amountInput: TransportationAmountInput,
+        amountInput: TransportationDetailAmountInput,
       ) => {
         const amount =
           toAmount(
@@ -415,7 +437,7 @@ export function useTransportationFeeCreate(): UseTransportationFeeCreateResult {
     useCallback(
       (
         islandCode: IslandCode,
-        amountInput: TransportationIslandAmountInput,
+        amountInput: TransportationDetailIslandAmountInput,
       ) => {
         const amount =
           toIslandAmount(
@@ -456,8 +478,22 @@ export function useTransportationFeeCreate(): UseTransportationFeeCreateResult {
       async () => {
         if (
           !transportation ||
-          saving
+          saving ||
+          deleting
         ) {
+          return;
+        }
+
+        const targetTransportationId =
+          transportation.id ||
+          transportationId;
+
+        if (
+          !targetTransportationId
+        ) {
+          setError(
+            "配送料金設定IDを取得できませんでした。",
+          );
           return;
         }
 
@@ -467,14 +503,17 @@ export function useTransportationFeeCreate(): UseTransportationFeeCreateResult {
 
         try {
           const saved =
-            await createTransportation({
-              name:
-                transportation.name,
-              regions:
-                transportation.regions,
-              islandRates:
-                transportation.islandRates,
-            });
+            await updateTransportation(
+              targetTransportationId,
+              {
+                name:
+                  transportation.name,
+                regions:
+                  transportation.regions,
+                islandRates:
+                  transportation.islandRates,
+              },
+            );
 
           const next =
             cloneTransportationVM(
@@ -490,22 +529,7 @@ export function useTransportationFeeCreate(): UseTransportationFeeCreateResult {
           );
 
           setSuccessMessage(
-            "配送料金設定を登録しました。",
-          );
-
-          if (!next.id) {
-            throw new Error(
-              "配送料金設定IDを取得できませんでした。",
-            );
-          }
-
-          navigate(
-            `/transportationFee/${encodeURIComponent(
-              next.id,
-            )}`,
-            {
-              replace: true,
-            },
+            "配送料金設定を更新しました。",
           );
         } catch (
           saveError: unknown
@@ -522,6 +546,67 @@ export function useTransportationFeeCreate(): UseTransportationFeeCreateResult {
       [
         transportation,
         saving,
+        deleting,
+        transportationId,
+      ],
+    );
+
+  const onDelete =
+    useCallback(
+      async () => {
+        if (
+          !transportation ||
+          deleting ||
+          saving
+        ) {
+          return;
+        }
+
+        const targetTransportationId =
+          transportation.id ||
+          transportationId;
+
+        if (
+          !targetTransportationId
+        ) {
+          setError(
+            "配送料金設定IDを取得できませんでした。",
+          );
+          return;
+        }
+
+        setDeleting(true);
+        setError(null);
+        setSuccessMessage(null);
+
+        try {
+          await deleteTransportation(
+            targetTransportationId,
+          );
+
+          navigate(
+            "/transportationFee",
+            {
+              replace: true,
+            },
+          );
+        } catch (
+          deleteError: unknown
+        ) {
+          setError(
+            errorMessage(
+              deleteError,
+            ),
+          );
+        } finally {
+          setDeleting(false);
+        }
+      },
+      [
+        transportation,
+        deleting,
+        saving,
+        transportationId,
         navigate,
       ],
     );
@@ -533,7 +618,8 @@ export function useTransportationFeeCreate(): UseTransportationFeeCreateResult {
       islandRates,
       loading,
       saving,
-      exists: false,
+      deleting,
+      exists,
       isDirty,
       error,
       successMessage,
@@ -542,6 +628,7 @@ export function useTransportationFeeCreate(): UseTransportationFeeCreateResult {
       onBack,
       onReset,
       onSave,
+      onDelete,
       onDismissError,
       onChangeName,
       onChangePrefectureAmount,

@@ -25,7 +25,6 @@ export type UseListManagementResult = {
     onReset: () => void;
     onRowClick: (id: string) => void;
     onRowKeyDown: (e: React.KeyboardEvent, id: string) => void;
-    onTransportationFee: () => void;
   };
   // リフレッシュボタン回転用
   isResetting: boolean;
@@ -120,10 +119,6 @@ export function useListManagement(): UseListManagementResult {
     [navigate],
   );
 
-  const onTransportationFee = useCallback(() => {
-    navigate("/transportationFee");
-  }, [navigate]);
-
   const onReset = useCallback(() => {
     setProductFilter([]);
     setTokenFilter([]);
@@ -146,7 +141,6 @@ export function useListManagement(): UseListManagementResult {
       onReset,
       onRowClick,
       onRowKeyDown,
-      onTransportationFee,
     },
     isResetting,
   };

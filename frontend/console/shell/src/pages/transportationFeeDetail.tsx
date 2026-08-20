@@ -9,7 +9,7 @@ import FeeEditCard from "../features/transportation/presentation/component/feeEd
 import IslandFeeEditCard from "../features/transportation/presentation/component/islandFeeEditCard";
 import PlanNameCard from "../features/transportation/presentation/component/planNameCard";
 import SinglePrefectureFeeCard from "../features/transportation/presentation/component/singlePrefectureFeeCard";
-import { useTransportationFee } from "../features/transportation/presentation/hook/useTransportationFeeCreate";
+import { useTransportationFeeDetail } from "../features/transportation/presentation/hook/useTransportationFeeDetail";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 
@@ -21,7 +21,7 @@ export default function TransportationFeeDetail() {
   const {
     vm,
     handlers,
-  } = useTransportationFee(transportationId);
+  } = useTransportationFeeDetail(transportationId);
 
   const [isEditing, setIsEditing] = useState(false);
 
@@ -55,11 +55,14 @@ export default function TransportationFeeDetail() {
     setIsEditing(false);
   }, [handlers]);
 
-  const handleDelete = useCallback(() => {
-    window.alert(
-      "配送料金設定の削除処理はまだ実装されていません。",
-    );
-  }, []);
+  const handleDelete = useCallback(async () => {
+    await handlers.onDelete();
+  }, [handlers]);
+
+  const disabled =
+    !isEditing ||
+    vm.saving ||
+    vm.deleting;
 
   const left = (
     <div className="space-y-6">
@@ -71,7 +74,7 @@ export default function TransportationFeeDetail() {
         <>
           <PlanNameCard
             name={transportation.name}
-            disabled={!isEditing}
+            disabled={disabled}
             onChangeName={handlers.onChangeName}
           />
 
@@ -84,7 +87,7 @@ export default function TransportationFeeDetail() {
                 <SinglePrefectureFeeCard
                   key={region.region}
                   region={region}
-                  disabled={!isEditing}
+                  disabled={disabled}
                   onChangePrefectureAmount={
                     handlers.onChangePrefectureAmount
                   }
@@ -96,7 +99,7 @@ export default function TransportationFeeDetail() {
               <FeeEditCard
                 key={region.region}
                 region={region}
-                disabled={!isEditing}
+                disabled={disabled}
                 onChangeRegionAmount={
                   handlers.onChangeRegionAmount
                 }
@@ -109,7 +112,7 @@ export default function TransportationFeeDetail() {
 
           <IslandFeeEditCard
             islands={vm.islandRates}
-            disabled={!isEditing}
+            disabled={disabled}
             onChangeAmount={
               handlers.onChangeIslandRateAmount
             }

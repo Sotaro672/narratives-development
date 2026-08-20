@@ -1,18 +1,16 @@
 // frontend\console\shell\src\pages\transportationFeeCreate.tsx
 
 import { CircleAlert, X } from "lucide-react";
-import { useParams } from "react-router-dom";
 
 import FeeEditCard from "../features/transportation/presentation/component/feeEditCard";
 import IslandFeeEditCard from "../features/transportation/presentation/component/islandFeeEditCard";
 import PlanNameCard from "../features/transportation/presentation/component/planNameCard";
 import SinglePrefectureFeeCard from "../features/transportation/presentation/component/singlePrefectureFeeCard";
-import { useTransportationFee } from "../features/transportation/presentation/hook/useTransportationFeeCreate";
+import { useTransportationFeeCreate } from "../features/transportation/presentation/hook/useTransportationFeeCreate";
 import PageStyle from "../layout/PageStyle/PageStyle";
 
 export default function TransportationFee() {
-  const { transportationId } = useParams<{ transportationId?: string }>();
-  const { vm, handlers } = useTransportationFee(transportationId);
+  const { vm, handlers } = useTransportationFeeCreate();
   const disabled = vm.loading || vm.saving;
 
   return (
@@ -29,12 +27,12 @@ export default function TransportationFee() {
 
             <button
               type="button"
-              disabled={disabled || !vm.transportation || (vm.exists && !vm.isDirty)}
+              disabled={disabled || !vm.transportation}
               onClick={() => void handlers.onSave()}
               className="page-header__btn"
               aria-busy={vm.saving}
             >
-              {vm.saving ? "保存中" : vm.exists ? "更新" : "登録"}
+              {vm.saving ? "保存中" : "登録"}
             </button>
           </>
         }
