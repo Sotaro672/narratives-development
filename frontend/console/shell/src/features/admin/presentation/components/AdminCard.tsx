@@ -1,4 +1,5 @@
 // frontend/console/admin/src/presentation/components/AdminCard.tsx
+
 import * as React from "react";
 
 import {
@@ -47,25 +48,18 @@ export type AdminCardProps = {
 
 export const AdminCard: React.FC<AdminCardProps> = ({
   title = "管理情報",
-
   targetAvatarCount,
-
   assigneeName,
   assigneeId,
-
   assigneeCandidates,
   loadingMembers,
-
   onSelectAssignee,
-
   createdByName,
   createdAt,
   updatedByName,
   updatedAt,
-
   onEditAssignee,
   onClickAssignee,
-
   mode = "view",
 }) => {
   const isEdit = mode === "edit";
@@ -210,27 +204,35 @@ export const AdminCard: React.FC<AdminCardProps> = ({
           updatedByName ||
           updatedAt) && (
           <div className="admin-card__section space-y-1 text-xs text-slate-500">
-            {createdByName && (
-              <div>
-                作成者: {createdByName}
+            {(createdByName || createdAt) && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                {createdByName && (
+                  <span>
+                    作成者: {createdByName}
+                  </span>
+                )}
+
+                {createdAt && (
+                  <span>
+                    作成日: {createdAt}
+                  </span>
+                )}
               </div>
             )}
 
-            {createdAt && (
-              <div>
-                作成日: {createdAt}
-              </div>
-            )}
+            {(updatedByName || updatedAt) && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                {updatedByName && (
+                  <span>
+                    更新者: {updatedByName}
+                  </span>
+                )}
 
-            {updatedByName && (
-              <div>
-                更新者: {updatedByName}
-              </div>
-            )}
-
-            {updatedAt && (
-              <div>
-                更新日: {updatedAt}
+                {updatedAt && (
+                  <span>
+                    更新日: {updatedAt}
+                  </span>
+                )}
               </div>
             )}
           </div>
