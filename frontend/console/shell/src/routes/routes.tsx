@@ -50,260 +50,126 @@ import {
 } from "../pages";
 
 export const routes: RouteObject[] = [
-  {
-    path: "/auth",
-    element: <AuthPage />,
-  },
-  {
-    path: "/invitation",
-    element: <InvitationPage />,
-  },
-  {
-    path: "/company",
-    element: <CompanyDetail />,
-  },
-  {
-    path: "/stockLocation",
-    element: <StockLocationPage />,
-  },
-  {
-    path: "/transportationFee",
-    element: <TransportationFeeManagement />,
-  },
+  { path: "/auth", element: <AuthPage /> },
+  { path: "/invitation", element: <InvitationPage /> },
+  { path: "/company", element: <CompanyDetail /> },
+  { path: "/stockLocation", element: <StockLocationPage /> },
+  { path: "/transportationFee", element: <TransportationFeeManagement /> },
   {
     path: "/inquiry",
     children: [
-      {
-        path: "",
-        element: <InquiryManagement />,
-      },
-      {
-        path: ":inquiryId",
-        element: <InquiryDetail />,
-      },
+      { path: "", element: <InquiryManagement /> },
+      { path: ":inquiryId", element: <InquiryDetail /> },
     ],
   },
   {
     path: "/productBlueprint",
     children: [
-      {
-        path: "",
-        element: <ProductBlueprintManagement />,
-      },
-      {
-        path: "detail/:blueprintId",
-        element: <ProductBlueprintDetail />,
-      },
-      {
-        path: "create",
-        element: <ProductBlueprintCreate />,
-      },
+      { path: "", element: <ProductBlueprintManagement /> },
+      { path: "detail/:blueprintId", element: <ProductBlueprintDetail /> },
+      { path: "create", element: <ProductBlueprintCreate /> },
     ],
   },
   {
     path: "/production",
     children: [
-      {
-        path: "",
-        element: <ProductionManagement />,
-      },
-      {
-        path: ":productionId",
-        element: <ProductionDetail />,
-      },
-      {
-        path: "create",
-        element: <ProductionCreate />,
-      },
+      { path: "", element: <ProductionManagement /> },
+      { path: ":productionId", element: <ProductionDetail /> },
+      { path: "create", element: <ProductionCreate /> },
     ],
   },
   {
     path: "/inventory",
     children: [
-      {
-        path: "",
-        element: <InventoryManagementPage />,
-      },
-      {
-        path: "detail/:inventoryId",
-        element: <InventoryDetailPage />,
-      },
-      {
-        path: "list/create/:inventoryId",
-        element: <InventoryListCreatePage />,
-      },
+      { path: "", element: <InventoryManagementPage /> },
+      { path: "detail/:inventoryId", element: <InventoryDetailPage /> },
+      { path: "list/create/:inventoryId", element: <InventoryListCreatePage /> },
     ],
   },
   {
     path: "/tokenBlueprint",
     children: [
-      {
-        path: "",
-        element: <TokenBlueprintManagement />,
-      },
-      {
-        path: ":tokenBlueprintId",
-        element: <TokenBlueprintDetail />,
-      },
-      {
-        path: "create",
-        element: <TokenBlueprintCreate />,
-      },
+      { path: "", element: <TokenBlueprintManagement /> },
+      { path: ":tokenBlueprintId", element: <TokenBlueprintDetail /> },
+      { path: "create", element: <TokenBlueprintCreate /> },
     ],
   },
   {
     path: "/mint",
     children: [
-      {
-        path: "",
-        element: <MintManagement />,
-      },
-      {
-        path: ":requestId",
-        element: <MintDetail />,
-      },
+      { path: "", element: <MintManagement /> },
+      { path: ":requestId", element: <MintDetail /> },
     ],
   },
   {
     path: "/productBlueprintReview",
     children: [
-      {
-        path: "",
-        element: <ProductBlueprintReviewManagement />,
-      },
-      {
-        path: ":productBlueprintReviewId",
-        element: <ProductBlueprintReviewDetail />,
-      },
+      { path: "", element: <ProductBlueprintReviewManagement /> },
+      { path: ":productBlueprintReviewId", element: <ProductBlueprintReviewDetail /> },
     ],
   },
   {
     path: "/tokenBlueprintReview",
     children: [
-      {
-        path: "",
-        element: <TokenBlueprintReviewManagement />,
-      },
-      {
-        path: ":tokenBlueprintReviewId",
-        element: <TokenBlueprintReviewDetail />,
-      },
+      { path: "", element: <TokenBlueprintReviewManagement /> },
+      { path: ":tokenBlueprintReviewId", element: <TokenBlueprintReviewDetail /> },
     ],
   },
   {
     path: "/list",
     children: [
-      {
-        path: "",
-        element: <ListManagement />,
-      },
-      {
-        path: ":listId",
-        element: <ListDetail />,
-      },
+      { path: "", element: <ListManagement /> },
+      { path: ":listId", element: <ListDetail /> },
     ],
   },
   {
     path: "/order",
     children: [
-      {
-        path: "",
-        element: <OrderManagement />,
-      },
-      {
-        path: ":orderId",
-        element: <OrderDetail />,
-      },
+      { path: "", element: <OrderManagement /> },
+      { path: ":orderId", element: <OrderDetail /> },
     ],
   },
   {
     path: "/member",
     children: [
-      {
-        path: "",
-        element: <MemberManagement />,
-      },
-      {
-        path: ":memberUid",
-        element: <MemberDetail />,
-      },
-      {
-        path: "create",
-        element: <MemberCreate />,
-      },
+      { path: "", element: <MemberManagement /> },
+      { path: ":memberUid", element: <MemberDetail /> },
+      { path: "create", element: <MemberCreate /> },
     ],
   },
   {
     path: "/brand",
     children: [
-      {
-        path: "",
-        element: <BrandManagement />,
-      },
-      {
-        path: "create",
-        element: <BrandCreate />,
-      },
-      {
-        path: ":brandId",
-        element: <BrandDetail />,
-      },
+      { path: "", element: <BrandManagement /> },
+      { path: "create", element: <BrandCreate /> },
+      { path: ":brandId", element: <BrandDetail /> },
     ],
   },
   {
     path: "/permission",
     children: [
-      {
-        path: "",
-        element: <PermissionList />,
-      },
-      {
-        path: ":permissionId",
-        element: <PermissionDetail />,
-      },
+      { path: "", element: <PermissionList /> },
+      { path: ":permissionId", element: <PermissionDetail /> },
     ],
   },
   {
     path: "/account",
-    children: [
-      {
-        path: "",
-        element: <AccountManagement />,
-      },
-    ],
+    children: [{ path: "", element: <AccountManagement /> }],
   },
   {
     path: "/transaction",
     children: [
-      {
-        path: "",
-        element: <TransactionsList />,
-      },
-      {
-        path: ":transactionId",
-        element: <TransactionDetail />,
-      },
+      { path: "", element: <TransactionsList /> },
+      { path: ":transactionId", element: <TransactionDetail /> },
     ],
   },
   {
     path: "/sales",
     children: [
-      {
-        path: "",
-        element: <AnnouncementManagementPage />,
-      },
-      {
-        path: "create",
-        element: <AnnouncementTokenListPage />,
-      },
-      {
-        path: ":tokenBlueprintId/create",
-        element: <AnnouncementCreatePage />,
-      },
-      {
-        path: "announcements/:announcementId",
-        element: <AnnouncementDetailPage />,
-      },
+      { path: "", element: <AnnouncementManagementPage /> },
+      { path: "create", element: <AnnouncementTokenListPage /> },
+      { path: ":tokenBlueprintId/create", element: <AnnouncementCreatePage /> },
+      { path: "announcements/:announcementId", element: <AnnouncementDetailPage /> },
     ],
   },
 ];
