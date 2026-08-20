@@ -33,7 +33,7 @@ export { default as BrandManagement } from "./brandManagement";
 export { default as BrandCreate } from "./brandCreate";
 export { default as BrandDetail } from "./brandDetail";
 export { default as CompanyDetail } from "./companyDetail";
-export { default as StockLocationPage } from "./stockLocation";
+export { default as StockLocationPage } from "./locationManagement";
 export { default as TransportationFeeManagement } from "./transportationFeeManagement";
 export { default as TransportationFeeCreate } from "./transportationFeeCreate";
 export { default as TransportationFeeDetail } from "./transportationFeeDetail";
