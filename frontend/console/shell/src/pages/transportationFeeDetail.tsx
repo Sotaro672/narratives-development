@@ -1,5 +1,6 @@
 // frontend/console/shell/src/pages/transportationFeeDetail.tsx
 
+import { useCallback, useState } from "react";
 import { CircleAlert, X } from "lucide-react";
 import { useParams } from "react-router-dom";
 
@@ -8,7 +9,7 @@ import FeeEditCard from "../features/transportation/presentation/component/feeEd
 import IslandFeeEditCard from "../features/transportation/presentation/component/islandFeeEditCard";
 import PlanNameCard from "../features/transportation/presentation/component/planNameCard";
 import SinglePrefectureFeeCard from "../features/transportation/presentation/component/singlePrefectureFeeCard";
-import { useTransportationFee } from "../features/transportation/presentation/hook/useTransportationFee";
+import { useTransportationFee } from "../features/transportation/presentation/hook/useTransportationFeeCreate";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 
@@ -21,6 +22,8 @@ export default function TransportationFeeDetail() {
     vm,
     handlers,
   } = useTransportationFee(transportationId);
+
+  const [isEditing, setIsEditing] = useState(false);
 
   const transportation = vm.transportation;
 
@@ -38,6 +41,26 @@ export default function TransportationFeeDetail() {
       )
     : "";
 
+  const handleEdit = useCallback(() => {
+    setIsEditing(true);
+  }, []);
+
+  const handleCancel = useCallback(() => {
+    handlers.onReset();
+    setIsEditing(false);
+  }, [handlers]);
+
+  const handleSave = useCallback(async () => {
+    await handlers.onSave();
+    setIsEditing(false);
+  }, [handlers]);
+
+  const handleDelete = useCallback(() => {
+    window.alert(
+      "配送料金設定の削除処理はまだ実装されていません。",
+    );
+  }, []);
+
   const left = (
     <div className="space-y-6">
       {vm.loading ? (
@@ -48,7 +71,7 @@ export default function TransportationFeeDetail() {
         <>
           <PlanNameCard
             name={transportation.name}
-            disabled
+            disabled={!isEditing}
             onChangeName={handlers.onChangeName}
           />
 
@@ -61,7 +84,7 @@ export default function TransportationFeeDetail() {
                 <SinglePrefectureFeeCard
                   key={region.region}
                   region={region}
-                  disabled
+                  disabled={!isEditing}
                   onChangePrefectureAmount={
                     handlers.onChangePrefectureAmount
                   }
@@ -73,7 +96,7 @@ export default function TransportationFeeDetail() {
               <FeeEditCard
                 key={region.region}
                 region={region}
-                disabled
+                disabled={!isEditing}
                 onChangeRegionAmount={
                   handlers.onChangeRegionAmount
                 }
@@ -86,7 +109,7 @@ export default function TransportationFeeDetail() {
 
           <IslandFeeEditCard
             islands={vm.islandRates}
-            disabled
+            disabled={!isEditing}
             onChangeAmount={
               handlers.onChangeIslandRateAmount
             }
@@ -119,15 +142,11 @@ export default function TransportationFeeDetail() {
           mode="view"
           showAssignee={false}
           createdByName={
-            transportation.createdByName ||
-            transportation.createdBy ||
-            null
+            transportation.createdByName || null
           }
           createdAt={createdAt || null}
           updatedByName={
-            transportation.updatedByName ||
-            transportation.updatedBy ||
-            null
+            transportation.updatedByName || null
           }
           updatedAt={updatedAt || null}
         />
@@ -141,6 +160,27 @@ export default function TransportationFeeDetail() {
         layout="grid-2"
         title="配送料金詳細"
         onBack={handlers.onBack}
+        onEdit={
+          !isEditing
+            ? handleEdit
+            : undefined
+        }
+        onDelete={
+          isEditing
+            ? handleDelete
+            : undefined
+        }
+        onCancel={
+          isEditing
+            ? handleCancel
+            : undefined
+        }
+        onSave={
+          isEditing
+            ? handleSave
+            : undefined
+        }
+        isSaving={vm.saving}
       >
         {[left, right]}
       </PageStyle>

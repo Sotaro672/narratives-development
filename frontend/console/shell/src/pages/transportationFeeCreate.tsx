@@ -7,7 +7,7 @@ import FeeEditCard from "../features/transportation/presentation/component/feeEd
 import IslandFeeEditCard from "../features/transportation/presentation/component/islandFeeEditCard";
 import PlanNameCard from "../features/transportation/presentation/component/planNameCard";
 import SinglePrefectureFeeCard from "../features/transportation/presentation/component/singlePrefectureFeeCard";
-import { useTransportationFee } from "../features/transportation/presentation/hook/useTransportationFee";
+import { useTransportationFee } from "../features/transportation/presentation/hook/useTransportationFeeCreate";
 import PageStyle from "../layout/PageStyle/PageStyle";
 
 export default function TransportationFee() {

@@ -242,3 +242,15 @@ export async function updateTransportationFeeSettingHTTP(
 
   return toTransportationFeeSetting(response);
 }
+
+export async function deleteTransportationFeeSettingHTTP(
+  transportationId: string,
+): Promise<void> {
+  await fetchJSON<void>(
+    buildConsoleUrl(transportationDetailPath(transportationId)),
+    {
+      method: "DELETE",
+      auth: "required",
+    },
+  );
+}

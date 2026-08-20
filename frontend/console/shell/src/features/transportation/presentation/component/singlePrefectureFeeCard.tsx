@@ -3,7 +3,7 @@
 import * as React from "react";
 import { MapPin } from "lucide-react";
 
-import { Card, CardContent } from "../../../../shared/ui/card";
+import { Card, CardContent, CardTitle } from "../../../../shared/ui/card";
 import { Input } from "../../../../shared/ui/input";
 
 import type { TransportationRegionVM } from "../../application/transportationService";
@@ -30,9 +30,8 @@ const SinglePrefectureFeeCard: React.FC<SinglePrefectureFeeCardProps> = ({
         {prefecture ? (
           <div className="flex flex-wrap items-center gap-3 sm:flex-nowrap">
             <MapPin size={18} className="shrink-0" />
-            <span className="whitespace-nowrap text-base font-semibold text-slate-900">{region.regionName}</span>
+            <CardTitle className="whitespace-nowrap text-base">{region.regionName}</CardTitle>
             <span className="whitespace-nowrap font-medium text-slate-900">{prefecture.prefectureName}</span>
-            <span className="whitespace-nowrap text-xs text-slate-400">{prefecture.prefectureCode}</span>
             <div className="flex items-center gap-2">
               <span className="text-sm text-slate-500">¥</span>
               <Input

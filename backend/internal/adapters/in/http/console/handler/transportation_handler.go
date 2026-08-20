@@ -21,15 +21,18 @@ const (
 type TransportationHandler struct {
 	uc              *usecase.TransportationUsecase
 	managementQuery *query.TransportationManagementQuery
+	detailQuery     *query.TransportationDetailQuery
 }
 
 func NewTransportationHandler(
 	uc *usecase.TransportationUsecase,
 	managementQuery *query.TransportationManagementQuery,
+	detailQuery *query.TransportationDetailQuery,
 ) http.Handler {
 	return &TransportationHandler{
 		uc:              uc,
 		managementQuery: managementQuery,
+		detailQuery:     detailQuery,
 	}
 }
 
@@ -79,6 +82,20 @@ type transportationManagementResponse struct {
 	UpdatedByName string    `json:"updatedByName"`
 }
 
+type transportationDetailResponse struct {
+	ID              string                             `json:"id"`
+	CompanyID       string                             `json:"companyId"`
+	Name            string                             `json:"name"`
+	PrefectureRates []transportationdom.PrefectureRate `json:"prefectureRates"`
+	IslandRates     []transportationdom.IslandRate     `json:"islandRates"`
+	CreatedAt       time.Time                          `json:"createdAt"`
+	CreatedBy       string                             `json:"createdBy"`
+	CreatedByName   string                             `json:"createdByName"`
+	UpdatedAt       time.Time                          `json:"updatedAt"`
+	UpdatedBy       string                             `json:"updatedBy"`
+	UpdatedByName   string                             `json:"updatedByName"`
+}
+
 func (h *TransportationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r == nil {
 		writeError(w, http.StatusBadRequest, "invalid_request")
@@ -99,6 +116,8 @@ func (h *TransportationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		h.get(w, r, transportationID)
 	case r.Method == http.MethodPut && hasTransportationID:
 		h.update(w, r, transportationID)
+	case r.Method == http.MethodDelete && hasTransportationID:
+		h.delete(w, r, transportationID)
 	default:
 		writeNotFound(w)
 	}
@@ -133,6 +152,15 @@ func (h *TransportationHandler) requireManagementQuery(w http.ResponseWriter) bo
 	}
 
 	writeError(w, http.StatusServiceUnavailable, "transportation_management_query_not_initialized")
+	return false
+}
+
+func (h *TransportationHandler) requireDetailQuery(w http.ResponseWriter) bool {
+	if h != nil && h.detailQuery != nil {
+		return true
+	}
+
+	writeError(w, http.StatusServiceUnavailable, "transportation_detail_query_not_initialized")
 	return false
 }
 
@@ -232,10 +260,12 @@ func (h *TransportationHandler) list(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
-// getは認証済みcompanyが所有する指定Transportation IDの配送料金設定を返します。
+// getは認証済みcompanyが所有する指定Transportation IDの配送料金設定をDetailQuery経由で返します。
+// createdBy / updatedByはmember document IDを保持し、
+// createdByName / updatedByNameはDetailQueryでmember名へ解決します。
 // 対象が存在しない、または別companyが所有する場合は404を返します。
 func (h *TransportationHandler) get(w http.ResponseWriter, r *http.Request, transportationID string) {
-	if !h.requireUsecase(w) {
+	if !h.requireDetailQuery(w) {
 		return
 	}
 
@@ -244,13 +274,31 @@ func (h *TransportationHandler) get(w http.ResponseWriter, r *http.Request, tran
 		return
 	}
 
-	setting, err := h.uc.GetByID(r.Context(), companyID, transportationID)
+	result, err := h.detailQuery.GetByID(
+		r.Context(),
+		companyID,
+		transportationID,
+	)
 	if err != nil {
 		writeTransportationErr(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, setting)
+	setting := result.Transportation
+
+	writeJSON(w, http.StatusOK, transportationDetailResponse{
+		ID:              setting.ID,
+		CompanyID:       setting.CompanyID,
+		Name:            setting.Name,
+		PrefectureRates: setting.PrefectureRates,
+		IslandRates:     setting.IslandRates,
+		CreatedAt:       setting.CreatedAt,
+		CreatedBy:       setting.CreatedBy,
+		CreatedByName:   result.CreatedByName,
+		UpdatedAt:       setting.UpdatedAt,
+		UpdatedBy:       setting.UpdatedBy,
+		UpdatedByName:   result.UpdatedByName,
+	})
 }
 
 // createは認証済みcompanyに新しい配送料金設定を作成します。
@@ -350,6 +398,31 @@ func (h *TransportationHandler) update(w http.ResponseWriter, r *http.Request, t
 	}
 
 	writeJSON(w, http.StatusOK, updated)
+}
+
+// deleteは認証済みcompanyが所有する指定Transportation IDの配送料金設定を削除します。
+// 対象が存在しない、または別companyが所有する場合は404を返します。
+// 削除成功時は204 No Contentを返します。
+func (h *TransportationHandler) delete(w http.ResponseWriter, r *http.Request, transportationID string) {
+	if !h.requireUsecase(w) {
+		return
+	}
+
+	companyID, ok := h.requireCompanyID(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.uc.Delete(
+		r.Context(),
+		companyID,
+		transportationID,
+	); err != nil {
+		writeTransportationErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func decodeTransportationWriteRequest(w http.ResponseWriter, r *http.Request) (transportationWriteRequest, bool) {

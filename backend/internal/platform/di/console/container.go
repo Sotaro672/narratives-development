@@ -71,6 +71,7 @@ type Container struct {
 	TokenBlueprintManagementQuery   *query.TokenBlueprintManagementQuery
 	TokenBlueprintDetailQuery       *query.TokenBlueprintDetailQuery
 	TransportationManagementQuery   *query.TransportationManagementQuery
+	TransportationDetailQuery       *query.TransportationDetailQuery
 	InquiryManagementQuery          *query.InquiryManagementQuery
 	InquiryDetailQuery              *query.InquiryDetailQuery
 	InventoryManagementQuery        *query.InventoryManagementQuery
@@ -195,11 +196,6 @@ func NewContainer(
 		repos.memberRepo,
 	)
 
-	transportationManagementQuery := query.NewTransportationManagementQuery(
-		repos.transportationRepo,
-		repos.memberRepo,
-	)
-
 	return &Container{
 		Infra:                           clients.infra,
 		MemberRepo:                      repos.memberRepo,
@@ -247,7 +243,8 @@ func NewContainer(
 		ProductBlueprintDetailQuery:     q.productBlueprintDetailQuery,
 		TokenBlueprintManagementQuery:   q.tokenBlueprintManagementQuery,
 		TokenBlueprintDetailQuery:       q.tokenBlueprintDetailQuery,
-		TransportationManagementQuery:   transportationManagementQuery,
+		TransportationManagementQuery:   q.transportationManagementQuery,
+		TransportationDetailQuery:       q.transportationDetailQuery,
 		InquiryManagementQuery:          q.inquiryManagementQuery,
 		InquiryDetailQuery:              q.inquiryDetailQuery,
 		InventoryManagementQuery:        q.inventoryManagementQuery,

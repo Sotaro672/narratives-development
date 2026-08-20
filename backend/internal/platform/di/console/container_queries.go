@@ -29,6 +29,7 @@ type queries struct {
 	tokenBlueprintDetailQuery     *companyquery.TokenBlueprintDetailQuery
 
 	transportationManagementQuery *companyquery.TransportationManagementQuery
+	transportationDetailQuery     *companyquery.TransportationDetailQuery
 
 	inquiryManagementQuery *companyquery.InquiryManagementQuery
 	inquiryDetailQuery     *companyquery.InquiryDetailQuery
@@ -98,6 +99,11 @@ func buildQueries(
 	)
 
 	transportationManagementQuery := companyquery.NewTransportationManagementQuery(
+		r.transportationRepo,
+		r.memberRepo,
+	)
+
+	transportationDetailQuery := companyquery.NewTransportationDetailQuery(
 		r.transportationRepo,
 		r.memberRepo,
 	)
@@ -358,6 +364,7 @@ func buildQueries(
 		tokenBlueprintDetailQuery:     tokenBlueprintDetailQuery,
 
 		transportationManagementQuery: transportationManagementQuery,
+		transportationDetailQuery:     transportationDetailQuery,
 
 		inquiryManagementQuery: inquiryManagementQuery,
 		inquiryDetailQuery:     inquiryDetailQuery,

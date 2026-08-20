@@ -320,6 +320,48 @@ func (r *TransportationRepositoryFS) Update(ctx context.Context, value transport
 	return &updated, nil
 }
 
+// Deleteは既存のtransportations/{transportationId}を削除します。
+// Deleteは対象documentが存在しない場合ErrNotFoundを返します。
+func (r *TransportationRepositoryFS) Delete(ctx context.Context, id string) error {
+	if err := r.ensureClient(); err != nil {
+		return err
+	}
+
+	validID, err := validateTransportationRepositoryID(id)
+	if err != nil {
+		return err
+	}
+
+	ref := r.col().Doc(validID)
+
+	err = r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		_, err := tx.Get(ref)
+		if transportationNotFound(err) {
+			return transportationdom.ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+
+		if err := tx.Delete(ref); err != nil {
+			if transportationNotFound(err) {
+				return transportationdom.ErrNotFound
+			}
+			return err
+		}
+
+		return nil
+	})
+	if transportationNotFound(err) {
+		return transportationdom.ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // --------------------
 // Mapper
 // --------------------

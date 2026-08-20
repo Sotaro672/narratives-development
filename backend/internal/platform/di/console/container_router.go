@@ -87,10 +87,11 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		companyShippingAddressesH = consoleHandler.NewCompanyShippingAddressHandler(c.ShippingAddressUC)
 	}
 
-	if c.TransportationUC != nil && c.TransportationManagementQuery != nil {
+	if c.TransportationUC != nil && c.TransportationManagementQuery != nil && c.TransportationDetailQuery != nil {
 		transportationH = consoleHandler.NewTransportationHandler(
 			c.TransportationUC,
 			c.TransportationManagementQuery,
+			c.TransportationDetailQuery,
 		)
 	}
 

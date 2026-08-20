@@ -245,6 +245,37 @@ func (u *TransportationUsecase) Update(
 	return u.repo.Update(ctx, *current)
 }
 
+// Deleteは指定Transportation IDの配送料金設定を削除します。
+// Deleteは対象の所有companyを確認してから削除します。
+// 対象が存在しない場合、または別companyが所有する場合はErrNotFoundを返します。
+func (u *TransportationUsecase) Delete(
+	ctx context.Context,
+	companyID string,
+	transportationID string,
+) error {
+	if err := u.ensureRepo(); err != nil {
+		return err
+	}
+
+	current, err := u.GetByID(
+		ctx,
+		companyID,
+		transportationID,
+	)
+	if err != nil {
+		return err
+	}
+	if current == nil {
+		return transportationdom.ErrNotFound
+	}
+
+	if err := u.repo.Delete(ctx, current.ID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // ResolveFeeは指定Transportation IDの料金設定から配送先に適用する送料を解決します。
 // islandCodeに一致するIslandRateが存在する場合はIslandRateを優先し、
 // 存在しない場合はPrefectureRateへfallbackします。

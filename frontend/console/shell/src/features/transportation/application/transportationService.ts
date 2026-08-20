@@ -2,6 +2,7 @@
 
 import {
   createTransportationFeeSettingHTTP,
+  deleteTransportationFeeSettingHTTP,
   getTransportationFeeSettingHTTP,
   getTransportationMasterHTTP,
   listTransportationFeeSettingsHTTP,
@@ -386,4 +387,10 @@ export async function updateTransportation(
   ]);
 
   return buildTransportationVM(master, setting);
+}
+
+export async function deleteTransportation(
+  transportationId: string,
+): Promise<void> {
+  await deleteTransportationFeeSettingHTTP(transportationId);
 }
