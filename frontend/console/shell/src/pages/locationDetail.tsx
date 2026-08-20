@@ -7,10 +7,7 @@ import AdminCard from "../features/admin/presentation/components/AdminCard";
 import LocationFormFields from "../features/company/presentation/components/LocationFormFields";
 import { useLocationDetail } from "../features/company/presentation/hook/useLocationDetail";
 import PageStyle from "../layout/PageStyle/PageStyle";
-import {
-  Card,
-  CardContent,
-} from "../shared/ui/card";
+import { Card, CardContent } from "../shared/ui/card";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 
 export default function LocationDetail() {
@@ -18,13 +15,8 @@ export default function LocationDetail() {
     locationId: string;
   }>();
 
-  const {
-    vm,
-    handlers,
-  } = useLocationDetail(locationId);
-
+  const { vm, handlers } = useLocationDetail(locationId);
   const [isEditing, setIsEditing] = useState(false);
-
   const location = vm.location;
 
   const handleEdit = useCallback(() => {
@@ -48,23 +40,14 @@ export default function LocationDetail() {
     await handlers.onDelete();
   }, [handlers]);
 
-  const disabled =
-    !isEditing ||
-    vm.saving ||
-    vm.deleting;
+  const disabled = !isEditing || vm.saving || vm.deleting;
 
   const createdAt = location
-    ? safeDateTimeLabelJa(
-        location.createdAt,
-        "",
-      )
+    ? safeDateTimeLabelJa(location.createdAt, "")
     : "";
 
   const updatedAt = location
-    ? safeDateTimeLabelJa(
-        location.updatedAt,
-        "",
-      )
+    ? safeDateTimeLabelJa(location.updatedAt, "")
     : "";
 
   const left = (
@@ -102,9 +85,7 @@ export default function LocationDetail() {
               role="alert"
               className="rounded-lg border border-red-200 bg-red-50 px-4 py-3"
             >
-              <p className="text-sm text-red-600">
-                {vm.error}
-              </p>
+              <p className="text-sm text-red-600">{vm.error}</p>
             </div>
           )}
 
@@ -132,9 +113,9 @@ export default function LocationDetail() {
         <AdminCard
           title="管理情報"
           showAssignee={false}
-          createdByName={location.createdBy}
+          createdByName={location.createdByName}
           createdAt={createdAt}
-          updatedByName={location.updatedBy}
+          updatedByName={location.updatedByName}
           updatedAt={updatedAt}
           mode="view"
         />
@@ -147,26 +128,10 @@ export default function LocationDetail() {
       layout="grid-2"
       title="在庫保管場所詳細"
       onBack={handlers.onBack}
-      onEdit={
-        !isEditing && location
-          ? handleEdit
-          : undefined
-      }
-      onDelete={
-        isEditing
-          ? handleDelete
-          : undefined
-      }
-      onCancel={
-        isEditing
-          ? handleCancel
-          : undefined
-      }
-      onSave={
-        isEditing
-          ? handleSave
-          : undefined
-      }
+      onEdit={!isEditing && location ? handleEdit : undefined}
+      onDelete={isEditing ? handleDelete : undefined}
+      onCancel={isEditing ? handleCancel : undefined}
+      onSave={isEditing ? handleSave : undefined}
       isSaving={vm.saving}
     >
       {[left, right]}

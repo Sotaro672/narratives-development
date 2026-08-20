@@ -50,9 +50,9 @@ export default function LocationManagement() {
         >  
           <td>{row.name || "-"}</td>  
           <td>{row.address || "-"}</td>  
-          <td>{row.createdBy || "-"}</td>  
+          <td>{row.createdByName || "-"}</td>  
           <td>{row.createdAt || "-"}</td>  
-          <td>{row.updatedBy || "-"}</td>  
+          <td>{row.updatedByName || "-"}</td>  
           <td>{row.updatedAt || "-"}</td>  
         </tr>  
       ))}  

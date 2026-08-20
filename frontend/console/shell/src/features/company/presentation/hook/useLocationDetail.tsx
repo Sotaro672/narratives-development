@@ -1,15 +1,9 @@
 // frontend/console/shell/src/features/company/presentation/hook/useLocationDetail.tsx
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import type { ShippingAddress } from "../../../../shared/types/shippingAddress";
-
+import type { CompanyShippingAddressReadModel } from "../../../../shared/types/shippingAddress";
 import {
   deleteCompanyShippingAddress,
   fetchCompanyShippingAddress,
@@ -26,24 +20,19 @@ type LocationFieldErrors = {
 
 export type UseLocationDetailResult = {
   vm: {
-    location: ShippingAddress | null;
-
+    location: CompanyShippingAddressReadModel | null;
     loading: boolean;
     saving: boolean;
     deleting: boolean;
-
     exists: boolean;
     isDirty: boolean;
-
     nameError: string | null;
     zipCodeError: string | null;
     stateError: string | null;
     cityError: string | null;
     streetError: string | null;
-
     error: string | null;
   };
-
   handlers: {
     onChangeName: (value: string) => void;
     onChangeZipCode: (value: string) => void;
@@ -51,10 +40,8 @@ export type UseLocationDetailResult = {
     onChangeCity: (value: string) => void;
     onChangeStreet: (value: string) => void;
     onChangeStreet2: (value: string) => void;
-
     onBack: () => void;
     onReset: () => void;
-
     onSave: () => Promise<boolean>;
     onDelete: () => Promise<void>;
   };
@@ -69,20 +56,16 @@ const emptyFieldErrors: LocationFieldErrors = {
 };
 
 function cloneLocation(
-  location: ShippingAddress,
-): ShippingAddress {
-  return {
-    ...location,
-  };
+  location: CompanyShippingAddressReadModel,
+): CompanyShippingAddressReadModel {
+  return { ...location };
 }
 
 function locationEquals(
-  left: ShippingAddress | null,
-  right: ShippingAddress | null,
+  left: CompanyShippingAddressReadModel | null,
+  right: CompanyShippingAddressReadModel | null,
 ): boolean {
-  if (left === null || right === null) {
-    return left === right;
-  }
+  if (left === null || right === null) return left === right;
 
   return (
     left.name === right.name &&
@@ -95,26 +78,17 @@ function locationEquals(
   );
 }
 
-function getErrorMessage(
-  error: unknown,
-): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
   return "在庫保管場所の処理に失敗しました。";
 }
 
 function validateLocation(
-  location: ShippingAddress,
+  location: CompanyShippingAddressReadModel,
 ): LocationFieldErrors {
-  const errors: LocationFieldErrors = {
-    ...emptyFieldErrors,
-  };
+  const errors: LocationFieldErrors = { ...emptyFieldErrors };
 
-  if (!location.name) {
-    errors.name = "保管場所名を入力してください。";
-  }
+  if (!location.name) errors.name = "保管場所名を入力してください。";
 
   if (!location.zipCode) {
     errors.zipCode = "郵便番号を入力してください。";
@@ -122,31 +96,18 @@ function validateLocation(
     location.country === "JP" &&
     !/^[0-9]{3}-?[0-9]{4}$/.test(location.zipCode)
   ) {
-    errors.zipCode =
-      "郵便番号は123-4567または1234567の形式で入力してください。";
+    errors.zipCode = "郵便番号は123-4567または1234567の形式で入力してください。";
   }
 
-  if (!location.state) {
-    errors.state = "都道府県を入力してください。";
-  }
-
-  if (!location.city) {
-    errors.city = "市区町村を入力してください。";
-  }
-
-  if (!location.street) {
-    errors.street = "住所を入力してください。";
-  }
+  if (!location.state) errors.state = "都道府県を入力してください。";
+  if (!location.city) errors.city = "市区町村を入力してください。";
+  if (!location.street) errors.street = "住所を入力してください。";
 
   return errors;
 }
 
-function hasFieldError(
-  errors: LocationFieldErrors,
-): boolean {
-  return Object.values(errors).some(
-    (value) => value !== null,
-  );
+function hasFieldError(errors: LocationFieldErrors): boolean {
+  return Object.values(errors).some((value) => value !== null);
 }
 
 export function useLocationDetail(
@@ -155,60 +116,39 @@ export function useLocationDetail(
   const navigate = useNavigate();
 
   const [location, setLocation] =
-    useState<ShippingAddress | null>(null);
-
+    useState<CompanyShippingAddressReadModel | null>(null);
   const [originalLocation, setOriginalLocation] =
-    useState<ShippingAddress | null>(null);
-
+    useState<CompanyShippingAddressReadModel | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-
   const [fieldErrors, setFieldErrors] =
-    useState<LocationFieldErrors>({
-      ...emptyFieldErrors,
-    });
+    useState<LocationFieldErrors>({ ...emptyFieldErrors });
+  const [error, setError] = useState<string | null>(null);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const reload = useCallback(async (): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    setFieldErrors({ ...emptyFieldErrors });
 
-  const reload = useCallback(
-    async (): Promise<void> => {
-      setLoading(true);
-      setError(null);
-      setFieldErrors({
-        ...emptyFieldErrors,
-      });
-
-      try {
-        if (!locationId) {
-          throw new Error(
-            "在庫保管場所IDを取得できませんでした。",
-          );
-        }
-
-        const loaded =
-          await fetchCompanyShippingAddress(locationId);
-
-        const next = cloneLocation(loaded);
-
-        setLocation(next);
-        setOriginalLocation(
-          cloneLocation(next),
-        );
-      } catch (loadError: unknown) {
-        setLocation(null);
-        setOriginalLocation(null);
-
-        setError(
-          getErrorMessage(loadError),
-        );
-      } finally {
-        setLoading(false);
+    try {
+      if (!locationId) {
+        throw new Error("在庫保管場所IDを取得できませんでした。");
       }
-    },
-    [locationId],
-  );
+
+      const loaded = await fetchCompanyShippingAddress(locationId);
+      const next = cloneLocation(loaded);
+
+      setLocation(next);
+      setOriginalLocation(cloneLocation(next));
+    } catch (loadError: unknown) {
+      setLocation(null);
+      setOriginalLocation(null);
+      setError(getErrorMessage(loadError));
+    } finally {
+      setLoading(false);
+    }
+  }, [locationId]);
 
   useEffect(() => {
     void reload();
@@ -217,21 +157,12 @@ export function useLocationDetail(
   const exists = location !== null;
 
   const isDirty = useMemo(
-    () =>
-      !locationEquals(
-        location,
-        originalLocation,
-      ),
-    [
-      location,
-      originalLocation,
-    ],
+    () => !locationEquals(location, originalLocation),
+    [location, originalLocation],
   );
 
   const clearFieldError = useCallback(
-    (
-      field: keyof LocationFieldErrors,
-    ) => {
+    (field: keyof LocationFieldErrors) => {
       setFieldErrors((current) => ({
         ...current,
         [field]: null,
@@ -242,16 +173,14 @@ export function useLocationDetail(
 
   const onChangeName = useCallback(
     (value: string) => {
-      setLocation((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          name: value,
-        };
-      });
+      setLocation((current) =>
+        current
+          ? {
+              ...current,
+              name: value,
+            }
+          : current,
+      );
 
       clearFieldError("name");
       setError(null);
@@ -261,16 +190,14 @@ export function useLocationDetail(
 
   const onChangeZipCode = useCallback(
     (value: string) => {
-      setLocation((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          zipCode: value,
-        };
-      });
+      setLocation((current) =>
+        current
+          ? {
+              ...current,
+              zipCode: value,
+            }
+          : current,
+      );
 
       clearFieldError("zipCode");
       setError(null);
@@ -280,16 +207,14 @@ export function useLocationDetail(
 
   const onChangeState = useCallback(
     (value: string) => {
-      setLocation((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          state: value,
-        };
-      });
+      setLocation((current) =>
+        current
+          ? {
+              ...current,
+              state: value,
+            }
+          : current,
+      );
 
       clearFieldError("state");
       setError(null);
@@ -299,16 +224,14 @@ export function useLocationDetail(
 
   const onChangeCity = useCallback(
     (value: string) => {
-      setLocation((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          city: value,
-        };
-      });
+      setLocation((current) =>
+        current
+          ? {
+              ...current,
+              city: value,
+            }
+          : current,
+      );
 
       clearFieldError("city");
       setError(null);
@@ -318,16 +241,14 @@ export function useLocationDetail(
 
   const onChangeStreet = useCallback(
     (value: string) => {
-      setLocation((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          street: value,
-        };
-      });
+      setLocation((current) =>
+        current
+          ? {
+              ...current,
+              street: value,
+            }
+          : current,
+      );
 
       clearFieldError("street");
       setError(null);
@@ -335,208 +256,128 @@ export function useLocationDetail(
     [clearFieldError],
   );
 
-  const onChangeStreet2 = useCallback(
-    (value: string) => {
-      setLocation((current) => {
-        if (!current) {
-          return current;
-        }
+  const onChangeStreet2 = useCallback((value: string) => {
+    setLocation((current) =>
+      current
+        ? {
+            ...current,
+            street2: value,
+          }
+        : current,
+    );
 
-        return {
-          ...current,
-          street2: value,
-        };
-      });
-
-      setError(null);
-    },
-    [],
-  );
+    setError(null);
+  }, []);
 
   const onBack = useCallback(() => {
     navigate(-1);
   }, [navigate]);
 
   const onReset = useCallback(() => {
-    if (!originalLocation) {
-      return;
-    }
+    if (!originalLocation) return;
 
-    setLocation(
-      cloneLocation(originalLocation),
-    );
-
-    setFieldErrors({
-      ...emptyFieldErrors,
-    });
-
+    setLocation(cloneLocation(originalLocation));
+    setFieldErrors({ ...emptyFieldErrors });
     setError(null);
   }, [originalLocation]);
 
-  const onSave = useCallback(
-    async (): Promise<boolean> => {
-      if (
-        !location ||
-        saving ||
-        deleting
-      ) {
-        return false;
-      }
+  const onSave = useCallback(async (): Promise<boolean> => {
+    if (!location || saving || deleting) return false;
 
-      const targetLocationId =
-        location.id || locationId;
+    const targetLocationId = location.id || locationId;
 
-      if (!targetLocationId) {
-        setError(
-          "在庫保管場所IDを取得できませんでした。",
-        );
+    if (!targetLocationId) {
+      setError("在庫保管場所IDを取得できませんでした。");
+      return false;
+    }
 
-        return false;
-      }
+    const nextFieldErrors = validateLocation(location);
+    setFieldErrors(nextFieldErrors);
 
-      const nextFieldErrors =
-        validateLocation(location);
+    if (hasFieldError(nextFieldErrors)) {
+      setError("入力内容を確認してください。");
+      return false;
+    }
 
-      setFieldErrors(nextFieldErrors);
+    setSaving(true);
+    setError(null);
 
-      if (hasFieldError(nextFieldErrors)) {
-        setError(
-          "入力内容を確認してください。",
-        );
+    try {
+      const saved = await updateCompanyShippingAddress(
+        targetLocationId,
+        {
+          name: location.name,
+          zipCode: location.zipCode,
+          state: location.state,
+          city: location.city,
+          street: location.street,
+          street2: location.street2,
+          country: location.country || "JP",
+        },
+      );
 
-        return false;
-      }
+      const next = cloneLocation(saved);
 
-      setSaving(true);
-      setError(null);
+      setLocation(next);
+      setOriginalLocation(cloneLocation(next));
+      setFieldErrors({ ...emptyFieldErrors });
 
-      try {
-        const saved =
-          await updateCompanyShippingAddress(
-            targetLocationId,
-            {
-              name: location.name,
-              zipCode: location.zipCode,
-              state: location.state,
-              city: location.city,
-              street: location.street,
-              street2: location.street2,
-              country: location.country || "JP",
-            },
-          );
+      return true;
+    } catch (saveError: unknown) {
+      setError(getErrorMessage(saveError));
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [location, locationId, saving, deleting]);
 
-        const next =
-          cloneLocation(saved);
+  const onDelete = useCallback(async (): Promise<void> => {
+    if (!location || saving || deleting) return;
 
-        setLocation(next);
-        setOriginalLocation(
-          cloneLocation(next),
-        );
+    const targetLocationId = location.id || locationId;
 
-        setFieldErrors({
-          ...emptyFieldErrors,
-        });
+    if (!targetLocationId) {
+      setError("在庫保管場所IDを取得できませんでした。");
+      return;
+    }
 
-        return true;
-      } catch (saveError: unknown) {
-        setError(
-          getErrorMessage(saveError),
-        );
+    const confirmed = window.confirm(
+      `「${location.name}」を削除しますか？`,
+    );
 
-        return false;
-      } finally {
-        setSaving(false);
-      }
-    },
-    [
-      location,
-      locationId,
-      saving,
-      deleting,
-    ],
-  );
+    if (!confirmed) return;
 
-  const onDelete = useCallback(
-    async (): Promise<void> => {
-      if (
-        !location ||
-        saving ||
-        deleting
-      ) {
-        return;
-      }
+    setDeleting(true);
+    setError(null);
 
-      const targetLocationId =
-        location.id || locationId;
+    try {
+      await deleteCompanyShippingAddress(targetLocationId);
 
-      if (!targetLocationId) {
-        setError(
-          "在庫保管場所IDを取得できませんでした。",
-        );
-
-        return;
-      }
-
-      const confirmed =
-        window.confirm(
-          `「${location.name}」を削除しますか？`,
-        );
-
-      if (!confirmed) {
-        return;
-      }
-
-      setDeleting(true);
-      setError(null);
-
-      try {
-        await deleteCompanyShippingAddress(
-          targetLocationId,
-        );
-
-        navigate(
-          "/stockLocation",
-          {
-            replace: true,
-          },
-        );
-      } catch (deleteError: unknown) {
-        setError(
-          getErrorMessage(deleteError),
-        );
-      } finally {
-        setDeleting(false);
-      }
-    },
-    [
-      location,
-      locationId,
-      saving,
-      deleting,
-      navigate,
-    ],
-  );
+      navigate("/stockLocation", {
+        replace: true,
+      });
+    } catch (deleteError: unknown) {
+      setError(getErrorMessage(deleteError));
+    } finally {
+      setDeleting(false);
+    }
+  }, [location, locationId, saving, deleting, navigate]);
 
   return {
     vm: {
       location,
-
       loading,
       saving,
       deleting,
-
       exists,
       isDirty,
-
       nameError: fieldErrors.name,
       zipCodeError: fieldErrors.zipCode,
       stateError: fieldErrors.state,
       cityError: fieldErrors.city,
       streetError: fieldErrors.street,
-
       error,
     },
-
     handlers: {
       onChangeName,
       onChangeZipCode,
@@ -544,10 +385,8 @@ export function useLocationDetail(
       onChangeCity,
       onChangeStreet,
       onChangeStreet2,
-
       onBack,
       onReset,
-
       onSave,
       onDelete,
     },

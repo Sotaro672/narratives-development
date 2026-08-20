@@ -1,6 +1,9 @@
 // frontend/console/shell/src/features/company/application/locationManagementService.ts
 
-import type { ShippingAddress } from "../../../shared/types/shippingAddress";
+import type {
+  CompanyShippingAddressReadModel,
+  ShippingAddress,
+} from "../../../shared/types/shippingAddress";
 import { buildConsoleUrl } from "../../../shared/http/apiBase";
 import { fetchJSON } from "../../../shared/http/fetchJSON";
 
@@ -30,10 +33,12 @@ function requireShippingAddressID(shippingAddressId: string): string {
  * createdBy / updatedByはmember document ID、
  * createdByName / updatedByNameはBackend Queryで解決した表示名を受け取る。
  */
-export async function listCompanyShippingAddresses(): Promise<ShippingAddress[]> {
+export async function listCompanyShippingAddresses(): Promise<
+  CompanyShippingAddressReadModel[]
+> {
   const url = buildConsoleUrl("/companies/me/shipping-addresses");
 
-  const response = await fetchJSON<ShippingAddress[]>(url, {
+  const response = await fetchJSON<CompanyShippingAddressReadModel[]>(url, {
     method: "GET",
     auth: "required",
   });
@@ -51,13 +56,13 @@ export async function listCompanyShippingAddresses(): Promise<ShippingAddress[]>
  */
 export async function fetchCompanyShippingAddress(
   shippingAddressId: string,
-): Promise<ShippingAddress> {
+): Promise<CompanyShippingAddressReadModel> {
   const id = requireShippingAddressID(shippingAddressId);
   const url = buildConsoleUrl(
     `/companies/me/shipping-addresses/${encodeURIComponent(id)}`,
   );
 
-  return fetchJSON<ShippingAddress>(url, {
+  return fetchJSON<CompanyShippingAddressReadModel>(url, {
     method: "GET",
     auth: "required",
   });
@@ -69,17 +74,20 @@ export async function fetchCompanyShippingAddress(
  * BackendではGetByCompanyによって現在のcompanyに属する在庫保管場所か確認してから更新する。
  * UpdatedByはBackend側で認証contextのmember document IDから設定する。
  * FrontendからcreatedBy / updatedByは送信しない。
+ *
+ * PATCH responseはShippingAddress entityのため、
+ * 更新後にGETを実行してcreatedByName / updatedByNameを含むReadModelを取得する。
  */
 export async function updateCompanyShippingAddress(
   shippingAddressId: string,
   input: LocationUpdateInput,
-): Promise<ShippingAddress> {
+): Promise<CompanyShippingAddressReadModel> {
   const id = requireShippingAddressID(shippingAddressId);
   const url = buildConsoleUrl(
     `/companies/me/shipping-addresses/${encodeURIComponent(id)}`,
   );
 
-  return fetchJSON<ShippingAddress>(url, {
+  await fetchJSON<ShippingAddress>(url, {
     method: "PATCH",
     auth: "required",
     headers: {
@@ -95,6 +103,8 @@ export async function updateCompanyShippingAddress(
       country: input.country,
     }),
   });
+
+  return fetchCompanyShippingAddress(id);
 }
 
 /**
