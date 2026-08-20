@@ -26,7 +26,7 @@ import {
 export type TransportationPrefectureRateVM = {
   prefectureCode: PrefectureCode;
   prefectureName: string;
-  amount: number;
+  amount: number | null;
 };
 
 export type TransportationRegionVM = {
@@ -90,10 +90,7 @@ function buildIslandRateMap(setting: TransportationFeeSetting): Map<IslandCode, 
   return result;
 }
 
-function buildRegionVMs(
-  master: TransportationMaster,
-  setting: TransportationFeeSetting,
-): TransportationRegionVM[] {
+function buildRegionVMs(master: TransportationMaster, setting: TransportationFeeSetting): TransportationRegionVM[] {
   const rateMap = buildPrefectureRateMap(setting);
 
   return master.regions
@@ -117,10 +114,7 @@ function buildRegionVMs(
     }));
 }
 
-function buildIslandRateVMs(
-  master: TransportationMaster,
-  setting: TransportationFeeSetting,
-): TransportationIslandRateVM[] {
+function buildIslandRateVMs(master: TransportationMaster, setting: TransportationFeeSetting): TransportationIslandRateVM[] {
   const rateMap = buildIslandRateMap(setting);
 
   return master.islands.map((definition) => {
@@ -140,10 +134,7 @@ function buildIslandRateVMs(
   });
 }
 
-export function buildTransportationVM(
-  master: TransportationMaster,
-  setting: TransportationFeeSetting,
-): TransportationVM {
+export function buildTransportationVM(master: TransportationMaster, setting: TransportationFeeSetting): TransportationVM {
   return {
     companyId: setting.companyId,
     regions: buildRegionVMs(master, setting),
@@ -168,7 +159,7 @@ export function buildEmptyTransportationVM(master: TransportationMaster): Transp
         prefectures: group.prefectureCodes.map((prefectureCode) => ({
           prefectureCode,
           prefectureName: PREFECTURE_NAME_BY_CODE[prefectureCode],
-          amount: 0,
+          amount: null,
         })),
       })),
     islandRates: master.islands.map((definition) => ({
@@ -193,6 +184,15 @@ function validateAmount(amount: number): void {
   }
 }
 
+function requirePrefectureAmount(prefecture: TransportationPrefectureRateVM): number {
+  if (prefecture.amount === null) {
+    throw new Error(`${prefecture.prefectureName}の送料を入力してください。`);
+  }
+
+  validateAmount(prefecture.amount);
+  return prefecture.amount;
+}
+
 function validateRegions(regions: TransportationRegionVM[]): void {
   const seen = new Set<PrefectureCode>();
 
@@ -202,7 +202,7 @@ function validateRegions(regions: TransportationRegionVM[]): void {
     }
 
     for (const prefecture of region.prefectures) {
-      validateAmount(prefecture.amount);
+      requirePrefectureAmount(prefecture);
 
       if (seen.has(prefecture.prefectureCode)) {
         throw new Error(`都道府県が重複しています: ${prefecture.prefectureName}`);
@@ -252,9 +252,7 @@ function validateSaveInput(input: TransportationSaveInput): void {
 // Request mapper
 // ============================================================
 
-function toTransportationFeeSettingInput(
-  input: TransportationSaveInput,
-): TransportationFeeSettingInput {
+function toTransportationFeeSettingInput(input: TransportationSaveInput): TransportationFeeSettingInput {
   validateSaveInput(input);
 
   return {
@@ -263,7 +261,7 @@ function toTransportationFeeSettingInput(
       .flatMap((region) =>
         region.prefectures.map((prefecture) => ({
           prefectureCode: prefecture.prefectureCode,
-          amount: prefecture.amount,
+          amount: requirePrefectureAmount(prefecture),
         })),
       ),
     islandRates: input.islandRates.flatMap((islandRate) => {
@@ -302,9 +300,7 @@ export async function fetchEmptyTransportationVM(): Promise<TransportationVM> {
 // Command
 // ============================================================
 
-export async function createTransportation(
-  input: TransportationSaveInput,
-): Promise<TransportationVM> {
+export async function createTransportation(input: TransportationSaveInput): Promise<TransportationVM> {
   const payload = toTransportationFeeSettingInput(input);
 
   const [master, setting] = await Promise.all([
@@ -315,9 +311,7 @@ export async function createTransportation(
   return buildTransportationVM(master, setting);
 }
 
-export async function updateTransportation(
-  input: TransportationSaveInput,
-): Promise<TransportationVM> {
+export async function updateTransportation(input: TransportationSaveInput): Promise<TransportationVM> {
   const payload = toTransportationFeeSettingInput(input);
 
   const [master, setting] = await Promise.all([

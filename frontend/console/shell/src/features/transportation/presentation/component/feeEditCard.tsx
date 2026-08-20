@@ -14,8 +14,8 @@ export type FeeEditCardProps = {
   region: TransportationRegionVM;
   disabled?: boolean;
   className?: string;
-  onChangePrefectureAmount: (prefectureCode: PrefectureCode, amount: string | number) => void;
-  onChangeRegionAmount: (region: TransportationRegion, amount: string | number) => void;
+  onChangePrefectureAmount: (prefectureCode: PrefectureCode, amount: string | number | null) => void;
+  onChangeRegionAmount: (region: TransportationRegion, amount: string | number | null) => void;
 };
 
 function getRegionAmountValue(region: TransportationRegionVM): string {
@@ -25,7 +25,7 @@ function getRegionAmountValue(region: TransportationRegionVM): string {
 
   const firstAmount = region.prefectures[0]?.amount;
 
-  if (firstAmount === undefined) {
+  if (firstAmount === undefined || firstAmount === null) {
     return "";
   }
 
@@ -98,9 +98,7 @@ const FeeEditCard: React.FC<FeeEditCardProps> = ({
           aria-label={`${region.regionName}の都道府県一覧を${isOpen ? "閉じる" : "開く"}`}
           className="flex w-fit items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
         >
-          <span className="text-xs font-normal text-slate-400">
-            {region.prefectures.length}都道府県
-          </span>
+          <span className="text-xs font-normal text-slate-400">{region.prefectures.length}都道府県</span>
           <ChevronDown
             size={16}
             aria-hidden="true"
@@ -139,7 +137,8 @@ const FeeEditCard: React.FC<FeeEditCardProps> = ({
                           min={0}
                           step={1}
                           disabled={disabled}
-                          value={prefecture.amount}
+                          value={prefecture.amount ?? ""}
+                          placeholder="未設定"
                           className="h-9 w-32 text-right"
                           aria-label={`${prefecture.prefectureName}の送料`}
                           onChange={(event) => {

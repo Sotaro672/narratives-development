@@ -4,11 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { HttpError } from "../../../../shared/http/fetchJSON";
-import type {
-  IslandCode,
-  PrefectureCode,
-  TransportationRegion,
-} from "../../../../shared/types/transporation";
+import type { IslandCode, PrefectureCode, TransportationRegion } from "../../../../shared/types/transporation";
 
 import {
   createTransportation,
@@ -20,7 +16,7 @@ import {
   type TransportationVM,
 } from "../../application/transportationService";
 
-export type TransportationAmountInput = string | number;
+export type TransportationAmountInput = string | number | null;
 export type TransportationIslandAmountInput = string | number | null;
 
 export type UseTransportationFeeResult = {
@@ -45,17 +41,17 @@ export type UseTransportationFeeResult = {
   };
 };
 
-function toAmount(value: TransportationAmountInput): number {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
+function toAmount(value: TransportationAmountInput): number | null {
+  if (value === null || value === "") {
+    return null;
   }
 
-  if (value === "") {
-    return 0;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
   }
 
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function toIslandAmount(value: TransportationIslandAmountInput): number | null {
@@ -82,10 +78,7 @@ function cloneTransportationVM(value: TransportationVM): TransportationVM {
   };
 }
 
-function transportationEquals(
-  left: TransportationVM | null,
-  right: TransportationVM | null,
-): boolean {
+function transportationEquals(left: TransportationVM | null, right: TransportationVM | null): boolean {
   if (left === null || right === null) {
     return left === right;
   }
@@ -198,9 +191,7 @@ export function useTransportationFee(): UseTransportationFeeResult {
           regions: current.regions.map((region) => ({
             ...region,
             prefectures: region.prefectures.map((prefecture) =>
-              prefecture.prefectureCode === prefectureCode
-                ? { ...prefecture, amount }
-                : prefecture,
+              prefecture.prefectureCode === prefectureCode ? { ...prefecture, amount } : prefecture,
             ),
           })),
         };
@@ -257,9 +248,7 @@ export function useTransportationFee(): UseTransportationFeeResult {
         return {
           ...current,
           islandRates: current.islandRates.map((rate) =>
-            rate.islandCode === islandCode
-              ? { ...rate, amount }
-              : rate,
+            rate.islandCode === islandCode ? { ...rate, amount } : rate,
           ),
         };
       });
@@ -294,11 +283,7 @@ export function useTransportationFee(): UseTransportationFeeResult {
       setTransportation(next);
       setOriginalTransportation(cloneTransportationVM(next));
       setExists(true);
-      setSuccessMessage(
-        exists
-          ? "配送料金設定を更新しました。"
-          : "配送料金設定を登録しました。",
-      );
+      setSuccessMessage(exists ? "配送料金設定を更新しました。" : "配送料金設定を登録しました。");
     } catch (saveError: unknown) {
       setError(errorMessage(saveError));
     } finally {

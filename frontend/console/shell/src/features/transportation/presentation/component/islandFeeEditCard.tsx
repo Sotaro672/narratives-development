@@ -17,6 +17,21 @@ export type IslandFeeEditCardProps = {
   onChangeAmount: (islandCode: IslandCode, amount: string | number | null) => void;
 };
 
+function getBulkAmountValue(islands: TransportationIslandRateVM[]): string {
+  if (islands.length === 0) {
+    return "";
+  }
+
+  const firstAmount = islands[0]?.amount;
+
+  if (firstAmount === undefined || firstAmount === null) {
+    return "";
+  }
+
+  const allSame = islands.every((island) => island.amount === firstAmount);
+  return allSame ? String(firstAmount) : "";
+}
+
 const IslandFeeEditCard: React.FC<IslandFeeEditCardProps> = ({
   islands,
   disabled = false,
@@ -24,18 +39,57 @@ const IslandFeeEditCard: React.FC<IslandFeeEditCardProps> = ({
   onChangeAmount,
 }) => {
   const [isOpen, setIsOpen] = React.useState(false);
+  const bulkAmountValue = React.useMemo(() => getBulkAmountValue(islands), [islands]);
   const contentId = "transportation-islands-content";
 
   const handleToggle = React.useCallback(() => {
     setIsOpen((current) => !current);
   }, []);
 
+  const handleBulkAmountChange = React.useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value;
+
+      for (const island of islands) {
+        onChangeAmount(island.islandCode, value);
+      }
+    },
+    [islands, onChangeAmount],
+  );
+
   return (
     <Card className={className}>
       <CardHeader>
-        <div className="flex items-center gap-2">
-          <MapPin size={18} />
-          <CardTitle className="text-base">島嶼部</CardTitle>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <MapPin size={18} />
+            <CardTitle className="text-base">島嶼部</CardTitle>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="transportation-islands-bulk"
+              className="whitespace-nowrap text-sm font-medium text-slate-700"
+            >
+              島嶼部一括
+            </label>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-500">¥</span>
+              <Input
+                id="transportation-islands-bulk"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                disabled={disabled || islands.length === 0}
+                value={bulkAmountValue}
+                placeholder="個別設定"
+                className="h-9 w-32 text-right"
+                onChange={handleBulkAmountChange}
+              />
+            </div>
+          </div>
         </div>
 
         <button

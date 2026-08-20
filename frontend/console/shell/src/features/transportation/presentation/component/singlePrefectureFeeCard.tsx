@@ -3,7 +3,7 @@
 import * as React from "react";
 import { MapPin } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
+import { Card, CardContent } from "../../../../shared/ui/card";
 import { Input } from "../../../../shared/ui/input";
 
 import type { TransportationRegionVM } from "../../application/transportationService";
@@ -13,7 +13,7 @@ export type SinglePrefectureFeeCardProps = {
   region: TransportationRegionVM;
   disabled?: boolean;
   className?: string;
-  onChangePrefectureAmount: (prefectureCode: PrefectureCode, amount: string | number) => void;
+  onChangePrefectureAmount: (prefectureCode: PrefectureCode, amount: string | number | null) => void;
 };
 
 const SinglePrefectureFeeCard: React.FC<SinglePrefectureFeeCardProps> = ({
@@ -26,21 +26,13 @@ const SinglePrefectureFeeCard: React.FC<SinglePrefectureFeeCardProps> = ({
 
   return (
     <Card className={className}>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <MapPin size={18} />
-          <CardTitle className="text-base">{region.regionName}</CardTitle>
-        </div>
-      </CardHeader>
-
-      <CardContent>
+      <CardContent className="pt-6">
         {prefecture ? (
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span className="font-medium text-slate-900">{prefecture.prefectureName}</span>
-              <span className="text-xs text-slate-400">{prefecture.prefectureCode}</span>
-            </div>
-
+          <div className="flex flex-wrap items-center gap-3 sm:flex-nowrap">
+            <MapPin size={18} className="shrink-0" />
+            <span className="whitespace-nowrap text-base font-semibold text-slate-900">{region.regionName}</span>
+            <span className="whitespace-nowrap font-medium text-slate-900">{prefecture.prefectureName}</span>
+            <span className="whitespace-nowrap text-xs text-slate-400">{prefecture.prefectureCode}</span>
             <div className="flex items-center gap-2">
               <span className="text-sm text-slate-500">¥</span>
               <Input
@@ -49,7 +41,8 @@ const SinglePrefectureFeeCard: React.FC<SinglePrefectureFeeCardProps> = ({
                 min={0}
                 step={1}
                 disabled={disabled}
-                value={prefecture.amount}
+                value={prefecture.amount ?? ""}
+                placeholder="未設定"
                 className="h-9 w-32 text-right"
                 aria-label={`${prefecture.prefectureName}の送料`}
                 onChange={(event) => {
@@ -59,7 +52,7 @@ const SinglePrefectureFeeCard: React.FC<SinglePrefectureFeeCardProps> = ({
             </div>
           </div>
         ) : (
-          <div className="py-6 text-center text-sm text-slate-500">
+          <div className="py-2 text-left text-sm text-slate-500">
             都道府県データがありません。
           </div>
         )}
