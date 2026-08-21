@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	malldto "narratives/internal/application/query/mall/dto"
 	mallshared "narratives/internal/application/query/mall/shared"
 	branddom "narratives/internal/domain/brand"
@@ -42,7 +43,7 @@ type CartQuery struct {
 	ListRepo             ListReader
 	ListImageRepo        ListImageReader
 	InventoryRepo        invdom.RepositoryPort
-	ProductBlueprintRepo ProductBlueprintReader
+	ProductBlueprintRepo applicationport.ProductBlueprintGetter
 
 	ResaleRepo      ResaleReader
 	ResaleImageRepo ResaleImageReader
@@ -67,7 +68,7 @@ func NewCartQuery(
 	listRepo ListReader,
 	listImageRepo ListImageReader,
 	inventoryRepo invdom.RepositoryPort,
-	productBlueprintRepo ProductBlueprintReader,
+	productBlueprintRepo applicationport.ProductBlueprintGetter,
 	resaleRepo ResaleReader,
 	resaleImageRepo ResaleImageReader,
 	displayResolver mallshared.MallDisplayResolver,

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"strings"
 
+	applicationport "narratives/internal/application/port"
 	dto "narratives/internal/application/query/mall/dto"
+	mallshared "narratives/internal/application/query/mall/shared"
 	sharedquery "narratives/internal/application/query/shared"
 	appresolver "narratives/internal/application/resolver"
 	appusecase "narratives/internal/application/usecase"
@@ -15,7 +17,6 @@ import (
 	branddom "narratives/internal/domain/brand"
 	commondom "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
-	productdom "narratives/internal/domain/product"
 	pbdom "narratives/internal/domain/productBlueprint"
 	pbcatdom "narratives/internal/domain/productBlueprintCategory"
 	tbdom "narratives/internal/domain/tokenBlueprint"
@@ -48,32 +49,19 @@ var (
 // Ports (dependency interfaces)
 // ------------------------------------------------------------
 
-// ProductReader is a minimal read port for preview usecases.
-// We only need: productId -> product -> modelId.
-type ProductReader interface {
-	GetByID(ctx context.Context, productID string) (productdom.Product, error)
-}
-
-// ProductBlueprintReader is a minimal read port for ProductBlueprint.
-// We need: modelId -> productBlueprintId -> productBlueprint(+patch if needed).
+// ProductBlueprintReader is the preview-specific ProductBlueprint read port.
+// GetByID is shared through applicationport.ProductBlueprintGetter.
+// Preview additionally needs modelId -> productBlueprintId resolution.
 type ProductBlueprintReader interface {
-	GetIDByModelID(ctx context.Context, modelID string) (string, []pbdom.ModelRef, error)
+	applicationport.ProductBlueprintGetter
 
-	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
+	GetIDByModelID(ctx context.Context, modelID string) (string, []pbdom.ModelRef, error)
 }
 
 // TokenReader is a minimal read port for Token information by productId.
 // 想定: tokens/{productId} を読む（存在しない=未mint は nil を返してOK）
 type TokenReader interface {
 	GetByProductID(ctx context.Context, productID string) (*dto.TokenInfo, error)
-}
-
-// BrandReader resolves brandId -> Brand.
-//
-// brand.RepositoryPort / brand.Repository の GetByID(ctx, id string) に合わせる。
-// preview で必要な brandName / brandIcon は GetByID の結果から組み立てる。
-type BrandReader interface {
-	GetByID(ctx context.Context, id string) (branddom.Brand, error)
 }
 
 // AvatarNameIconReader resolves avatarId -> Avatar.
@@ -155,7 +143,7 @@ type OrderPurchasedResult struct {
 // It also owns scan verification dependencies so NewPreviewQuery is the
 // single construction entry point for preview + order scan verification.
 type PreviewQuery struct {
-	ProductRepo          ProductReader
+	ProductRepo          mallshared.ProductReader
 	ProductBlueprintRepo ProductBlueprintReader
 
 	// order scan verify / purchased-side resolver
@@ -168,13 +156,13 @@ type PreviewQuery struct {
 	TokenRepo TokenReader
 
 	// tokenBlueprint を読む
-	TokenBlueprintRepo tbdom.RepositoryPort
+	TokenBlueprintRepo applicationport.TokenBlueprintGetter
 
 	// tokens.toAddress -> owner を解決
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 
 	// display-only name resolvers
-	BrandRepo          BrandReader
+	BrandRepo          mallshared.BrandReader
 	AvatarNameIconRepo AvatarNameIconReader
 
 	// assetId -> transfers を解決
@@ -188,14 +176,14 @@ type PreviewQuery struct {
 // NewPreviewQuery constructs PreviewQuery.
 // This is the only entry point for wiring preview and scan verification dependencies.
 func NewPreviewQuery(
-	productRepo ProductReader,
+	productRepo mallshared.ProductReader,
 	pbRepo ProductBlueprintReader,
 	orderTransferItemRepo OrderTransferItemReader,
 	nameResolver *appresolver.NameResolver,
 	tokenRepo TokenReader,
-	tokenBlueprintRepo tbdom.RepositoryPort,
+	tokenBlueprintRepo applicationport.TokenBlueprintGetter,
 	ownerResolveQ *sharedquery.OwnerResolveQuery,
-	brandRepo BrandReader,
+	brandRepo mallshared.BrandReader,
 	avatarNameIconRepo AvatarNameIconReader,
 	transferRepo TransferReader,
 ) *PreviewQuery {
