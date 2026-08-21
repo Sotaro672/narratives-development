@@ -3,16 +3,25 @@ package console
 
 import (
 	memdom "narratives/internal/domain/member"
+	transportationdom "narratives/internal/domain/transportation"
 )
 
 type services struct {
-	memberSvc *memdom.Service
+	memberSvc         *memdom.Service
+	transportationSvc *transportationdom.Service
 }
 
 func buildDomainServices(r *repos) *services {
-	memberSvc := memdom.NewService(r.memberRepo)
+	memberSvc := memdom.NewService(
+		r.memberRepo,
+	)
+
+	transportationSvc := transportationdom.NewService(
+		r.transportationRepo,
+	)
 
 	return &services{
-		memberSvc: memberSvc,
+		memberSvc:         memberSvc,
+		transportationSvc: transportationSvc,
 	}
 }

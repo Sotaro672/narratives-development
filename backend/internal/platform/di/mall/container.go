@@ -29,6 +29,7 @@ import (
 	resaledom "narratives/internal/domain/resale"
 	tokenblueprintreview "narratives/internal/domain/tokenBlueprint_review"
 	transferdom "narratives/internal/domain/transfer"
+	transportationdom "narratives/internal/domain/transportation"
 
 	solana "narratives/internal/infra/solana"
 
@@ -93,6 +94,7 @@ type Container struct {
 	SetupUC           *usecase.SetupUsecase
 	ListUC            *usecase.ListUsecase
 	ShippingAddressUC *usecase.ShippingAddressUsecase
+	ShippingQuoteUC   *usecase.ShippingQuoteUsecase
 	PaymentMethodUC   *usecase.PaymentMethodUsecase
 	UserUC            *usecase.UserUsecase
 	WalletUC          *usecase.WalletUsecase
@@ -476,6 +478,20 @@ func NewContainer(
 	transportationRepo :=
 		outfs.NewTransportationRepositoryFS(
 			fsClient,
+		)
+
+	transportationSvc :=
+		transportationdom.NewService(
+			transportationRepo,
+		)
+
+	c.ShippingQuoteUC =
+		usecase.NewShippingQuoteUsecase(
+			listRepoFS,
+			inventoryRepo,
+			modelRepoFS,
+			shippingAddressRepo,
+			transportationSvc,
 		)
 
 	c.ListUC =

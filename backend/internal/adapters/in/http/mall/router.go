@@ -33,6 +33,7 @@ type Deps struct {
 
 	User            http.Handler
 	ShippingAddress http.Handler
+	ShippingQuote   http.Handler
 	PaymentMethod   http.Handler
 
 	// /mall/avatars (POST create) + /mall/avatars/{id} (GET/PATCH/DELETE)
@@ -633,6 +634,24 @@ func Register(
 		"/mall/me/announcement/",
 		deps.Announcement,
 		"Announcement(me)",
+		auth,
+		avatar,
+	)
+
+	// shipping quote (me)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/shipping-quotes",
+		deps.ShippingQuote,
+		"ShippingQuote(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/shipping-quotes/",
+		deps.ShippingQuote,
+		"ShippingQuote(me)",
 		auth,
 		avatar,
 	)
