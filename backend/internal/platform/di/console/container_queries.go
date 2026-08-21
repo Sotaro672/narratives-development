@@ -354,6 +354,7 @@ func buildQueries(
 				TBName:        r.tokenBlueprintRepo,
 				AvatarName:    r.avatarRepo,
 				UserName:      res.nameResolver,
+				UserEmail:     r.userRepo,
 				ModelResolver: res.nameResolver,
 				ListReadable:  r.listRepoFS,
 			},

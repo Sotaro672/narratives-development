@@ -94,12 +94,23 @@ function Invoke-CloudBuildOrThrow {
   Write-Step "Running Cloud Build"
   Write-Step "Cloud Build image: $Image"
 
+  $CloudBuildIgnoreFile =
+    Join-Path $SourceDir ".gcloudignore"
+
+  if (-not (Test-Path $CloudBuildIgnoreFile)) {
+    throw ".gcloudignore not found: $CloudBuildIgnoreFile"
+  }
+
+  Write-Step "Cloud Build ignore file: $CloudBuildIgnoreFile"
+
   Push-Location $SourceDir
 
   try {
     & $GCLOUD builds submit `
+      "." `
       --tag "$Image" `
-      --project "$ProjectId"
+      --project "$ProjectId" `
+      --ignore-file="$CloudBuildIgnoreFile"
 
     if ($LASTEXITCODE -ne 0) {
       throw "Cloud Build failed. exit code: $LASTEXITCODE"

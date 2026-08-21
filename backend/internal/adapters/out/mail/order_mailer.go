@@ -367,13 +367,50 @@ func buildOrderConfirmationMailBody(
 
 	totalQty := 0
 	productSubtotal := 0
+	taxableAmount8 := 0
+	taxableAmount10 :=
+		ord.ShippingQuoteSnapshot.Amount
+
 	for _, it := range ord.Items {
+		lineAmount :=
+			it.Price *
+				it.Qty
+
 		totalQty += it.Qty
-		productSubtotal += it.Price * it.Qty
+		productSubtotal += lineAmount
+
+		switch it.ConsumptionTaxRate {
+		case orderdom.ConsumptionTaxRateReduced:
+			taxableAmount8 +=
+				lineAmount
+
+		case orderdom.ConsumptionTaxRateStandard:
+			taxableAmount10 +=
+				lineAmount
+		}
 	}
 
-	shippingAmount := ord.ShippingQuoteSnapshot.Amount
-	totalAmount := productSubtotal + shippingAmount
+	shippingAmount :=
+		ord.ShippingQuoteSnapshot.Amount
+
+	taxAmount8 :=
+		taxableAmount8 *
+			orderdom.ConsumptionTaxRateReduced /
+			100
+
+	taxAmount10 :=
+		taxableAmount10 *
+			orderdom.ConsumptionTaxRateStandard /
+			100
+
+	taxAmount :=
+		taxAmount8 +
+			taxAmount10
+
+	totalAmount :=
+		productSubtotal +
+			shippingAmount +
+			taxAmount
 
 	b.WriteString("ご注文ありがとうございます。\n")
 	b.WriteString("ご注文が確定しました。\n\n")
@@ -381,9 +418,10 @@ func buildOrderConfirmationMailBody(
 	b.WriteString("ご注文内容\n")
 	b.WriteString(fmt.Sprintf("注文ID: %s\n", ord.ID))
 	b.WriteString(fmt.Sprintf("商品点数: %d点\n", totalQty))
-	b.WriteString(fmt.Sprintf("商品小計: %d円\n", productSubtotal))
-	b.WriteString(fmt.Sprintf("配送料: %d円\n", shippingAmount))
-	b.WriteString(fmt.Sprintf("合計金額: %d円\n", totalAmount))
+	b.WriteString(fmt.Sprintf("商品小計（税抜）: %d円\n", productSubtotal))
+	b.WriteString(fmt.Sprintf("配送料（税抜）: %d円\n", shippingAmount))
+	b.WriteString(fmt.Sprintf("消費税: %d円\n", taxAmount))
+	b.WriteString(fmt.Sprintf("合計金額（税込）: %d円\n", totalAmount))
 	b.WriteString("\n")
 
 	writeShippingSnapshot(&b, ord)
@@ -513,8 +551,9 @@ func writeOrderItemForCustomerMail(
 	}
 
 	b.WriteString(fmt.Sprintf("数量: %d点\n", it.Qty))
-	b.WriteString(fmt.Sprintf("単価: %d円\n", it.Price))
-	b.WriteString(fmt.Sprintf("小計: %d円\n", it.Price*it.Qty))
+	b.WriteString(fmt.Sprintf("単価（税抜）: %d円\n", it.Price))
+	b.WriteString(fmt.Sprintf("消費税率: %d%%\n", it.ConsumptionTaxRate))
+	b.WriteString(fmt.Sprintf("小計（税抜）: %d円\n", it.Price*it.Qty))
 	b.WriteString("\n")
 }
 

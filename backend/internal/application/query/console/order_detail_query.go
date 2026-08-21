@@ -42,6 +42,10 @@ type OrderDetailUserNameResolver interface {
 	ResolveUserName(ctx context.Context, userID string) string
 }
 
+type OrderDetailUserEmailResolver interface {
+	GetEmailByID(ctx context.Context, userID string) (string, error)
+}
+
 type OrderDetailModelResolver interface {
 	ResolveModelResolved(ctx context.Context, variationID string) resolver.ModelResolved
 }
@@ -61,14 +65,17 @@ type OrderDetailDTO struct {
 	CartID   string `json:"cartId"`
 
 	UserName   string `json:"userName"`
+	Email      string `json:"email"`
 	AvatarName string `json:"avatarName"`
 
 	Paid      bool   `json:"paid"`
 	CreatedAt string `json:"createdAt"`
 
-	ShippingSnapshot      orderdom.ShippingSnapshot      `json:"shippingSnapshot"`
-	PaymentMethodSnapshot orderdom.PaymentMethodSnapshot `json:"paymentMethodSnapshot"`
-	Items                 []OrderDetailItemDTO           `json:"items"`
+	ShippingAmount int `json:"shippingAmount"`
+	ConsumptionTax int `json:"consumptionTax"`
+
+	ShippingSnapshot orderdom.ShippingSnapshot `json:"shippingSnapshot"`
+	Items            []OrderDetailItemDTO      `json:"items"`
 }
 
 type OrderDetailItemDTO struct {
@@ -124,6 +131,7 @@ type OrderDetailQuery struct {
 
 	avatarName OrderDetailAvatarNameResolver
 	userName   OrderDetailUserNameResolver
+	userEmail  OrderDetailUserEmailResolver
 
 	modelResolver OrderDetailModelResolver
 	listReadable  OrderDetailListReadableIDResolver
@@ -138,6 +146,7 @@ type NewOrderDetailQueryParams struct {
 
 	AvatarName OrderDetailAvatarNameResolver
 	UserName   OrderDetailUserNameResolver
+	UserEmail  OrderDetailUserEmailResolver
 
 	ModelResolver OrderDetailModelResolver
 	ListReadable  OrderDetailListReadableIDResolver
@@ -151,6 +160,7 @@ func NewOrderDetailQuery(p NewOrderDetailQueryParams) *OrderDetailQuery {
 		tbName:        p.TBName,
 		avatarName:    p.AvatarName,
 		userName:      p.UserName,
+		userEmail:     p.UserEmail,
 		modelResolver: p.ModelResolver,
 		listReadable:  p.ListReadable,
 	}
@@ -194,6 +204,9 @@ func (q *OrderDetailQuery) validateConfigured() error {
 	if q.userName == nil {
 		return errors.New("OrderDetailQuery: userName resolver is required")
 	}
+	if q.userEmail == nil {
+		return errors.New("OrderDetailQuery: userEmail resolver is required")
+	}
 	if q.modelResolver == nil {
 		return errors.New("OrderDetailQuery: modelResolver is required")
 	}
@@ -204,16 +217,33 @@ func (q *OrderDetailQuery) validateConfigured() error {
 }
 
 func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDetailDTO, error) {
+	email, err := q.userEmail.GetEmailByID(ctx, o.UserID)
+	if err != nil {
+		return OrderDetailDTO{}, fmt.Errorf(
+			"resolve user email userId=%q: %w",
+			o.UserID,
+			err,
+		)
+	}
+
+	consumptionTax, err :=
+		calculateOrderDetailConsumptionTax(o)
+	if err != nil {
+		return OrderDetailDTO{}, err
+	}
+
 	dto := OrderDetailDTO{
-		ID:                    o.ID,
-		UserID:                o.UserID,
-		AvatarID:              o.AvatarID,
-		CartID:                o.CartID,
-		UserName:              q.userName.ResolveUserName(ctx, o.UserID),
-		Paid:                  o.Paid,
-		ShippingSnapshot:      o.ShippingSnapshot,
-		PaymentMethodSnapshot: o.PaymentMethodSnapshot,
-		Items:                 make([]OrderDetailItemDTO, 0, len(o.Items)),
+		ID:               o.ID,
+		UserID:           o.UserID,
+		AvatarID:         o.AvatarID,
+		CartID:           o.CartID,
+		UserName:         q.userName.ResolveUserName(ctx, o.UserID),
+		Email:            email,
+		Paid:             o.Paid,
+		ShippingAmount:   o.ShippingQuoteSnapshot.Amount,
+		ConsumptionTax:   consumptionTax,
+		ShippingSnapshot: o.ShippingSnapshot,
+		Items:            make([]OrderDetailItemDTO, 0, len(o.Items)),
 	}
 
 	if !o.CreatedAt.IsZero() {
@@ -396,4 +426,106 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 	}
 
 	return dto, nil
+}
+
+func calculateOrderDetailConsumptionTax(
+	o orderdom.Order,
+) (int, error) {
+	maxInt := int(^uint(0) >> 1)
+
+	shippingAmount :=
+		o.ShippingQuoteSnapshot.Amount
+
+	if shippingAmount < 0 {
+		return 0, errors.New(
+			"OrderDetailQuery: shipping amount is invalid",
+		)
+	}
+
+	taxableAmount8 := 0
+
+	taxableAmount10 :=
+		shippingAmount
+
+	for _, item := range o.Items {
+		if item.Price < 0 || item.Qty <= 0 {
+			return 0, errors.New(
+				"OrderDetailQuery: order item amount is invalid",
+			)
+		}
+
+		if item.Price > maxInt/item.Qty {
+			return 0, errors.New(
+				"OrderDetailQuery: order item amount overflows int",
+			)
+		}
+
+		lineAmount :=
+			item.Price *
+				item.Qty
+
+		switch item.ConsumptionTaxRate {
+		case orderdom.ConsumptionTaxRateReduced:
+			if taxableAmount8 >
+				maxInt-lineAmount {
+				return 0, errors.New(
+					"OrderDetailQuery: reduced taxable amount overflows int",
+				)
+			}
+
+			taxableAmount8 +=
+				lineAmount
+
+		case orderdom.ConsumptionTaxRateStandard:
+			if taxableAmount10 >
+				maxInt-lineAmount {
+				return 0, errors.New(
+					"OrderDetailQuery: standard taxable amount overflows int",
+				)
+			}
+
+			taxableAmount10 +=
+				lineAmount
+
+		default:
+			return 0, errors.New(
+				"OrderDetailQuery: consumption tax rate is invalid",
+			)
+		}
+	}
+
+	if taxableAmount8 >
+		maxInt/orderdom.ConsumptionTaxRateReduced {
+		return 0, errors.New(
+			"OrderDetailQuery: reduced consumption tax overflows int",
+		)
+	}
+
+	if taxableAmount10 >
+		maxInt/orderdom.ConsumptionTaxRateStandard {
+		return 0, errors.New(
+			"OrderDetailQuery: standard consumption tax overflows int",
+		)
+	}
+
+	taxAmount8 :=
+		taxableAmount8 *
+			orderdom.ConsumptionTaxRateReduced /
+			100
+
+	taxAmount10 :=
+		taxableAmount10 *
+			orderdom.ConsumptionTaxRateStandard /
+			100
+
+	if taxAmount8 >
+		maxInt-taxAmount10 {
+		return 0, errors.New(
+			"OrderDetailQuery: consumption tax overflows int",
+		)
+	}
+
+	return taxAmount8 +
+			taxAmount10,
+		nil
 }

@@ -25,6 +25,7 @@ Thumbs.db
 /temp/
 /.cache/
 **/*.log
+*.exe
 
 # ----------------------------
 # Test outputs
@@ -36,7 +37,9 @@ Thumbs.db
 # ----------------------------
 # Node / Frontend artifacts
 # ----------------------------
-/node_modules/
+node_modules/
+cmd/irys-uploader/node_modules/
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -49,6 +52,7 @@ yarn-error.log*
 .terraform/
 .env
 .env.*
+!.env.example
 **/*credentials*
 **/*key*.json
 

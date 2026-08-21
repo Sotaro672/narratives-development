@@ -34,6 +34,10 @@ type CartItemDTO struct {
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 	BrandID            string `json:"brandId,omitempty"`
 
+	ProductBlueprintCategoryPath []string `json:"productBlueprintCategoryPath,omitempty"`
+
+	ConsumptionTaxRate int `json:"consumptionTaxRate,omitempty"`
+
 	// list / resale display fields
 	Title     string `json:"title,omitempty"`
 	ListImage string `json:"listImage,omitempty"` // List.ImageID or resolved image URL

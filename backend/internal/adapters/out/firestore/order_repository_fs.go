@@ -403,6 +403,10 @@ type itemDoc struct {
 	TokenBlueprintID   string `firestore:"tokenBlueprintId,omitempty"`
 	BrandID            string `firestore:"brandId,omitempty"`
 
+	ProductBlueprintCategoryPath []string `firestore:"productBlueprintCategoryPath"`
+
+	ConsumptionTaxRate int `firestore:"consumptionTaxRate"`
+
 	Qty   int `firestore:"qty"`
 	Price int `firestore:"price"`
 
@@ -494,6 +498,13 @@ func docToOrder(
 				ProductBlueprintID: item.ProductBlueprintID,
 				TokenBlueprintID:   item.TokenBlueprintID,
 				BrandID:            item.BrandID,
+
+				ProductBlueprintCategoryPath: append(
+					[]string(nil),
+					item.ProductBlueprintCategoryPath...,
+				),
+
+				ConsumptionTaxRate: item.ConsumptionTaxRate,
 
 				Qty:   item.Qty,
 				Price: item.Price,
@@ -638,7 +649,15 @@ func orderItemToDocMap(
 	item orderdom.OrderItemSnapshot,
 ) map[string]any {
 	doc := map[string]any{
-		"type":         string(item.Type),
+		"type": string(item.Type),
+
+		"productBlueprintCategoryPath": append(
+			[]string(nil),
+			item.ProductBlueprintCategoryPath...,
+		),
+
+		"consumptionTaxRate": item.ConsumptionTaxRate,
+
 		"qty":          item.Qty,
 		"price":        item.Price,
 		"isCanceled":   item.IsCanceled,
@@ -949,6 +968,33 @@ func validateOrderItemDocumentShape(
 		return ErrInvalidOrderDocumentData
 	}
 
+	productBlueprintCategoryPath, ok :=
+		requiredOrderStringSlice(
+			raw,
+			"productBlueprintCategoryPath",
+		)
+	if !ok ||
+		len(productBlueprintCategoryPath) == 0 {
+		return ErrInvalidOrderDocumentData
+	}
+
+	consumptionTaxRate, ok :=
+		requiredOrderInt(
+			raw,
+			"consumptionTaxRate",
+		)
+	if !ok {
+		return ErrInvalidOrderDocumentData
+	}
+
+	switch consumptionTaxRate {
+	case orderdom.ConsumptionTaxRateReduced,
+		orderdom.ConsumptionTaxRateStandard:
+
+	default:
+		return ErrInvalidOrderDocumentData
+	}
+
 	if _, ok := requiredOrderInt(raw, "qty"); !ok {
 		return ErrInvalidOrderDocumentData
 	}
@@ -1020,6 +1066,67 @@ func requiredOrderString(
 
 	result, ok := value.(string)
 	return result, ok && result != ""
+}
+
+func requiredOrderStringSlice(
+	raw map[string]any,
+	field string,
+) ([]string, bool) {
+	value, exists := raw[field]
+	if !exists || value == nil {
+		return nil, false
+	}
+
+	switch values := value.(type) {
+	case []string:
+		if len(values) == 0 {
+			return nil, false
+		}
+
+		result :=
+			append(
+				[]string(nil),
+				values...,
+			)
+
+		for _, item := range result {
+			if item == "" {
+				return nil, false
+			}
+		}
+
+		return result, true
+
+	case []any:
+		if len(values) == 0 {
+			return nil, false
+		}
+
+		result :=
+			make(
+				[]string,
+				0,
+				len(values),
+			)
+
+		for _, value := range values {
+			item, ok := value.(string)
+			if !ok || item == "" {
+				return nil, false
+			}
+
+			result =
+				append(
+					result,
+					item,
+				)
+		}
+
+		return result, true
+
+	default:
+		return nil, false
+	}
 }
 
 func requiredOrderBool(

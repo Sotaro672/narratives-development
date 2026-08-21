@@ -510,6 +510,10 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 //
 //	product subtotal
 //	+ shipping quote snapshot amount
+//	+ consumption tax
+//
+// Consumption tax is calculated once per tax rate.
+// Shipping is included in the standard-rate taxable amount.
 //
 // The client-requested amount is never used to construct this total.
 func calculatePaymentOrderAmount(
@@ -532,7 +536,18 @@ func calculatePaymentOrderAmount(
 	}
 
 	maxInt := int(^uint(0) >> 1)
-	total := 0
+
+	shippingAmount :=
+		order.ShippingQuoteSnapshot.Amount
+
+	if shippingAmount < 0 {
+		return 0, ErrPaymentFlowOrderAmountInvalid
+	}
+
+	taxableAmount8 := 0
+
+	taxableAmount10 :=
+		shippingAmount
 
 	for _, item := range order.Items {
 		if item.Price < 0 || item.Qty <= 0 {
@@ -543,28 +558,80 @@ func calculatePaymentOrderAmount(
 			return 0, ErrPaymentFlowOrderAmountInvalid
 		}
 
-		lineAmount := item.Price * item.Qty
-		if total > maxInt-lineAmount {
+		lineAmount :=
+			item.Price *
+				item.Qty
+
+		switch item.ConsumptionTaxRate {
+		case orderdom.ConsumptionTaxRateReduced:
+			if taxableAmount8 >
+				maxInt-lineAmount {
+				return 0, ErrPaymentFlowOrderAmountInvalid
+			}
+
+			taxableAmount8 +=
+				lineAmount
+
+		case orderdom.ConsumptionTaxRateStandard:
+			if taxableAmount10 >
+				maxInt-lineAmount {
+				return 0, ErrPaymentFlowOrderAmountInvalid
+			}
+
+			taxableAmount10 +=
+				lineAmount
+
+		default:
 			return 0, ErrPaymentFlowOrderAmountInvalid
 		}
-
-		total += lineAmount
 	}
 
-	shippingAmount :=
-		order.ShippingQuoteSnapshot.Amount
-
-	if shippingAmount < 0 {
+	if taxableAmount8 >
+		maxInt/orderdom.ConsumptionTaxRateReduced {
 		return 0, ErrPaymentFlowOrderAmountInvalid
 	}
 
-	if total >
-		maxInt-shippingAmount {
+	if taxableAmount10 >
+		maxInt/orderdom.ConsumptionTaxRateStandard {
 		return 0, ErrPaymentFlowOrderAmountInvalid
 	}
 
-	total +=
-		shippingAmount
+	taxAmount8 :=
+		taxableAmount8 *
+			orderdom.ConsumptionTaxRateReduced /
+			100
+
+	taxAmount10 :=
+		taxableAmount10 *
+			orderdom.ConsumptionTaxRateStandard /
+			100
+
+	if taxAmount8 >
+		maxInt-taxAmount10 {
+		return 0, ErrPaymentFlowOrderAmountInvalid
+	}
+
+	taxAmount :=
+		taxAmount8 +
+			taxAmount10
+
+	if taxableAmount8 >
+		maxInt-taxableAmount10 {
+		return 0, ErrPaymentFlowOrderAmountInvalid
+	}
+
+	subtotalWithShipping :=
+		taxableAmount8 +
+			taxableAmount10
+
+	if subtotalWithShipping >
+		maxInt-taxAmount {
+		return 0, ErrPaymentFlowOrderAmountInvalid
+	}
+
+	total :=
+		subtotalWithShipping +
+			taxAmount
 
 	if total <= 0 {
 		return 0, ErrPaymentFlowOrderAmountInvalid

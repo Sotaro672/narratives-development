@@ -12,6 +12,7 @@ import (
 	cartdom "narratives/internal/domain/cart"
 	invdom "narratives/internal/domain/inventory"
 	ldom "narratives/internal/domain/list"
+	productblueprintcategorydom "narratives/internal/domain/productBlueprintCategory"
 	resaledom "narratives/internal/domain/resale"
 )
 
@@ -211,6 +212,9 @@ type productDisplayMeta struct {
 	ProductName string
 	BrandID     string
 	BrandName   string
+
+	ProductBlueprintCategoryPath []string
+	ConsumptionTaxRate           int
 }
 
 type resaleMeta struct {
@@ -342,6 +346,15 @@ func toListCartItemDTO(
 			result.BrandID = display.BrandID
 			result.BrandName = display.BrandName
 
+			result.ProductBlueprintCategoryPath =
+				append(
+					[]string(nil),
+					display.ProductBlueprintCategoryPath...,
+				)
+
+			result.ConsumptionTaxRate =
+				display.ConsumptionTaxRate
+
 			if result.Title == "" {
 				result.Title = display.ProductName
 			}
@@ -412,18 +425,38 @@ func toResaleCartItemDTO(
 		}
 	}
 
-	return mallshared.ResaleCartItemToDTO(
-		mallshared.ResaleCartItemDisplayInput{
-			Item:               item,
-			Meta:               metadata,
-			ImageURL:           imageURL,
-			BrandName:          brandName,
-			ModelID:            modelID,
-			Model:              model,
-			ProductBlueprintID: displayProductBlueprintID,
-			ProductName:        productName,
-		},
-	)
+	result, ok :=
+		mallshared.ResaleCartItemToDTO(
+			mallshared.ResaleCartItemDisplayInput{
+				Item:               item,
+				Meta:               metadata,
+				ImageURL:           imageURL,
+				BrandName:          brandName,
+				ModelID:            modelID,
+				Model:              model,
+				ProductBlueprintID: displayProductBlueprintID,
+				ProductName:        productName,
+			},
+		)
+	if !ok {
+		return malldto.CartItemDTO{}, false
+	}
+
+	if productBlueprintID != "" {
+		if display, exists :=
+			productDisplayIndex[productBlueprintID]; exists {
+			result.ProductBlueprintCategoryPath =
+				append(
+					[]string(nil),
+					display.ProductBlueprintCategoryPath...,
+				)
+
+			result.ConsumptionTaxRate =
+				display.ConsumptionTaxRate
+		}
+	}
+
+	return result, true
 }
 
 func cartModelDisplayFromModelDisplay(model mallshared.ModelDisplay) mallshared.CartModelDisplay {
@@ -853,9 +886,29 @@ func (q *CartQuery) fetchProductDisplayMeta(
 			continue
 		}
 
+		productBlueprintCategoryPath :=
+			append(
+				[]string(nil),
+				productBlueprint.
+					ProductBlueprintCategoryPath...,
+			)
+
+		consumptionTaxRate, err :=
+			productblueprintcategorydom.
+				GetConsumptionTaxRate(
+					productBlueprintCategoryPath,
+				)
+		if err != nil {
+			continue
+		}
+
 		display := productDisplayMeta{
 			ProductName: productBlueprint.ProductName,
 			BrandID:     productBlueprint.BrandID,
+
+			ProductBlueprintCategoryPath: productBlueprintCategoryPath,
+
+			ConsumptionTaxRate: int(consumptionTaxRate),
 		}
 
 		if q.BrandRepo != nil && productBlueprint.BrandID != "" {
@@ -865,9 +918,7 @@ func (q *CartQuery) fetchProductDisplayMeta(
 			}
 		}
 
-		if display.ProductName != "" || display.BrandID != "" || display.BrandName != "" {
-			result[productBlueprintID] = display
-		}
+		result[productBlueprintID] = display
 	}
 
 	if len(result) == 0 {
