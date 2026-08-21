@@ -14,7 +14,9 @@ import "../styles/payment-page.css";
 
 export default function PaymentPage() {
   const navigate = useNavigate();
-  const { listId } = useParams<{ listId: string }>();
+  const { listId } = useParams<{
+    listId: string;
+  }>();
   const isMobilePortrait = useMobilePortrait();
 
   const {
@@ -34,6 +36,8 @@ export default function PaymentPage() {
     selectedPaymentMethodId,
     setSelectedPaymentMethodId,
     shippingAddressLabel,
+    shippingAmount,
+    subtotalAmount,
     userFullName,
   } = usePaymentPage({
     listId,
@@ -107,6 +111,8 @@ export default function PaymentPage() {
               <PaymentItemsCard
                 amount={amount}
                 cartItems={cartItems}
+                shippingAmount={shippingAmount}
+                subtotalAmount={subtotalAmount}
               />
             </div>
 

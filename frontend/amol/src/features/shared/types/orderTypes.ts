@@ -14,6 +14,27 @@ export type WalletOrderShippingSnapshot = {
   country: string;
 };
 
+export type WalletOrderShippingQuoteItemSnapshot = {
+  listId: string;
+  inventoryId: string;
+  modelId: string;
+  originShippingAddressId: string;
+  destinationShippingAddressId: string;
+  carrier: string;
+  transportationId: string;
+  size: number;
+  qty: number;
+  unitAmount: number;
+  amount: number;
+  currency: string;
+};
+
+export type WalletOrderShippingQuoteSnapshot = {
+  items: WalletOrderShippingQuoteItemSnapshot[];
+  amount: number;
+  currency: string;
+};
+
 export type WalletOrderPaymentMethodSnapshot = {
   customerId: string;
   brand: string;
@@ -74,6 +95,7 @@ export type WalletOrder = {
   avatarId: string;
   cartId: string;
   shippingSnapshot: WalletOrderShippingSnapshot;
+  shippingQuoteSnapshot: WalletOrderShippingQuoteSnapshot;
   paymentMethodSnapshot: WalletOrderPaymentMethodSnapshot;
   paid: boolean;
   items: WalletOrderItemSnapshot[];

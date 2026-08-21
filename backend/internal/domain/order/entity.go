@@ -19,6 +19,36 @@ type ShippingSnapshot struct {
 	Country string `json:"country"`
 }
 
+type ShippingQuoteItemSnapshot struct {
+	ListID      string `json:"listId"`
+	InventoryID string `json:"inventoryId"`
+	ModelID     string `json:"modelId"`
+
+	OriginShippingAddressID      string `json:"originShippingAddressId"`
+	DestinationShippingAddressID string `json:"destinationShippingAddressId"`
+
+	Carrier string `json:"carrier"`
+
+	TransportationID string `json:"transportationId,omitempty"`
+
+	Size int `json:"size"`
+
+	Qty int `json:"qty"`
+
+	UnitAmount int `json:"unitAmount"`
+	Amount     int `json:"amount"`
+
+	Currency string `json:"currency"`
+}
+
+type ShippingQuoteSnapshot struct {
+	Items []ShippingQuoteItemSnapshot `json:"items"`
+
+	Amount int `json:"amount"`
+
+	Currency string `json:"currency"`
+}
+
 type PaymentMethodSnapshot struct {
 	CustomerID     string `json:"customerId"`
 	Brand          string `json:"brand"`
@@ -89,7 +119,10 @@ type Order struct {
 	AvatarID string `json:"avatarId"`
 	CartID   string `json:"cartId"`
 
-	ShippingSnapshot      ShippingSnapshot      `json:"shippingSnapshot"`
+	ShippingSnapshot ShippingSnapshot `json:"shippingSnapshot"`
+
+	ShippingQuoteSnapshot ShippingQuoteSnapshot `json:"shippingQuoteSnapshot"`
+
 	PaymentMethodSnapshot PaymentMethodSnapshot `json:"paymentMethodSnapshot"`
 
 	// Paid is maintained at the Order aggregate level.
@@ -104,14 +137,20 @@ type Order struct {
 // ========================================
 
 var (
-	ErrInvalidID               = errors.New("order: invalid id")
-	ErrInvalidUserID           = errors.New("order: invalid userId")
-	ErrInvalidAvatarID         = errors.New("order: invalid avatarId")
-	ErrInvalidCartID           = errors.New("order: invalid cartId")
-	ErrInvalidShippingSnapshot = errors.New("order: invalid shippingSnapshot")
-	ErrInvalidPaymentMethod    = errors.New("order: invalid paymentMethodSnapshot")
-	ErrInvalidItems            = errors.New("order: invalid items")
-	ErrInvalidCreatedAt        = errors.New("order: invalid createdAt")
+	ErrInvalidID                = errors.New("order: invalid id")
+	ErrInvalidUserID            = errors.New("order: invalid userId")
+	ErrInvalidAvatarID          = errors.New("order: invalid avatarId")
+	ErrInvalidCartID            = errors.New("order: invalid cartId")
+	ErrInvalidShippingSnapshot  = errors.New("order: invalid shippingSnapshot")
+	ErrInvalidShippingQuote     = errors.New("order: invalid shippingQuoteSnapshot")
+	ErrInvalidShippingQuoteItem = errors.New(
+		"order: invalid shippingQuoteItemSnapshot",
+	)
+	ErrInvalidPaymentMethod = errors.New(
+		"order: invalid paymentMethodSnapshot",
+	)
+	ErrInvalidItems     = errors.New("order: invalid items")
+	ErrInvalidCreatedAt = errors.New("order: invalid createdAt")
 
 	ErrInvalidItemSnapshot = errors.New("order: invalid item snapshot")
 )
@@ -119,6 +158,10 @@ var (
 // ========================================
 // Policy
 // ========================================
+
+const (
+	ShippingQuoteCurrencyJPY = "JPY"
+)
 
 var (
 	MinItemsRequired = 1
@@ -134,6 +177,7 @@ func New(
 	avatarID string,
 	cartID string,
 	shippingSnapshot ShippingSnapshot,
+	shippingQuoteSnapshot ShippingQuoteSnapshot,
 	paymentMethodSnapshot PaymentMethodSnapshot,
 	items []OrderItemSnapshot,
 	createdAt time.Time,
@@ -144,6 +188,7 @@ func New(
 		AvatarID:              avatarID,
 		CartID:                cartID,
 		ShippingSnapshot:      shippingSnapshot,
+		ShippingQuoteSnapshot: shippingQuoteSnapshot,
 		PaymentMethodSnapshot: paymentMethodSnapshot,
 		Paid:                  false,
 		Items:                 items,
@@ -181,6 +226,26 @@ func (o *Order) UpdateShippingSnapshot(
 	return nil
 }
 
+func (o *Order) UpdateShippingQuoteSnapshot(
+	s ShippingQuoteSnapshot,
+) error {
+	if err := validateShippingQuoteSnapshot(s); err != nil {
+		return err
+	}
+
+	o.ShippingQuoteSnapshot =
+		ShippingQuoteSnapshot{
+			Items: append(
+				[]ShippingQuoteItemSnapshot(nil),
+				s.Items...,
+			),
+			Amount:   s.Amount,
+			Currency: s.Currency,
+		}
+
+	return nil
+}
+
 func (o *Order) UpdatePaymentMethodSnapshot(
 	p PaymentMethodSnapshot,
 ) error {
@@ -212,6 +277,7 @@ func (o *Order) UpdateItemCanceled(
 	if o == nil {
 		return ErrInvalidItems
 	}
+
 	if index < 0 || index >= len(o.Items) {
 		return ErrInvalidItems
 	}
@@ -227,6 +293,7 @@ func (o *Order) UpdateItemDispatched(
 	if o == nil {
 		return ErrInvalidItems
 	}
+
 	if index < 0 || index >= len(o.Items) {
 		return ErrInvalidItems
 	}
@@ -245,6 +312,7 @@ func (o *Order) UpdateItemTransferred(
 	if o == nil {
 		return ErrInvalidItems
 	}
+
 	if index < 0 || index >= len(o.Items) {
 		return ErrInvalidItems
 	}
@@ -278,28 +346,42 @@ func (o Order) Validate() error {
 	if o.ID == "" {
 		return ErrInvalidID
 	}
+
 	if o.UserID == "" {
 		return ErrInvalidUserID
 	}
+
 	if o.AvatarID == "" {
 		return ErrInvalidAvatarID
 	}
+
 	if o.CartID == "" {
 		return ErrInvalidCartID
 	}
+
 	if err := validateShippingSnapshot(
 		o.ShippingSnapshot,
 	); err != nil {
 		return err
 	}
+
+	if err :=
+		validateShippingQuoteSnapshot(
+			o.ShippingQuoteSnapshot,
+		); err != nil {
+		return err
+	}
+
 	if err := validatePaymentMethodSnapshot(
 		o.PaymentMethodSnapshot,
 	); err != nil {
 		return err
 	}
+
 	if err := validateItems(o.Items); err != nil {
 		return err
 	}
+
 	if o.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
@@ -313,17 +395,158 @@ func validateShippingSnapshot(
 	if s.State == "" {
 		return ErrInvalidShippingSnapshot
 	}
+
 	if s.City == "" {
 		return ErrInvalidShippingSnapshot
 	}
+
 	if s.Street == "" {
 		return ErrInvalidShippingSnapshot
 	}
+
 	if s.Country == "" {
 		return ErrInvalidShippingSnapshot
 	}
 
 	return nil
+}
+
+func validateShippingQuoteSnapshot(
+	s ShippingQuoteSnapshot,
+) error {
+	if len(s.Items) == 0 {
+		return ErrInvalidShippingQuote
+	}
+
+	if s.Amount < 0 {
+		return ErrInvalidShippingQuote
+	}
+
+	if s.Currency !=
+		ShippingQuoteCurrencyJPY {
+		return ErrInvalidShippingQuote
+	}
+
+	maxInt :=
+		int(^uint(0) >> 1)
+
+	total := 0
+
+	for _, item := range s.Items {
+		if err :=
+			validateShippingQuoteItemSnapshot(
+				item,
+			); err != nil {
+			return err
+		}
+
+		if total >
+			maxInt-item.Amount {
+			return ErrInvalidShippingQuote
+		}
+
+		total +=
+			item.Amount
+	}
+
+	if total != s.Amount {
+		return ErrInvalidShippingQuote
+	}
+
+	return nil
+}
+
+func validateShippingQuoteItemSnapshot(
+	item ShippingQuoteItemSnapshot,
+) error {
+	if item.ListID == "" {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.InventoryID == "" {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.ModelID == "" {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.OriginShippingAddressID == "" {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.DestinationShippingAddressID == "" {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if !isValidShippingQuoteCarrier(
+		item.Carrier,
+	) {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.Carrier == "custom" {
+		if item.TransportationID == "" {
+			return ErrInvalidShippingQuoteItem
+		}
+
+		if item.Size != 0 {
+			return ErrInvalidShippingQuoteItem
+		}
+	} else {
+		if item.Size <= 0 {
+			return ErrInvalidShippingQuoteItem
+		}
+	}
+
+	if item.Qty <= 0 {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.UnitAmount < 0 {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.Amount < 0 {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.Currency !=
+		ShippingQuoteCurrencyJPY {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	maxInt :=
+		int(^uint(0) >> 1)
+
+	if item.UnitAmount > 0 &&
+		item.Qty >
+			maxInt/item.UnitAmount {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.UnitAmount*
+		item.Qty !=
+		item.Amount {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	return nil
+}
+
+func isValidShippingQuoteCarrier(
+	carrier string,
+) bool {
+	switch carrier {
+	case "yamato",
+		"sagawa",
+		"post",
+		"custom":
+		return true
+
+	default:
+		return false
+	}
 }
 
 func validatePaymentMethodSnapshot(
@@ -332,18 +555,23 @@ func validatePaymentMethodSnapshot(
 	if p.CustomerID == "" {
 		return ErrInvalidPaymentMethod
 	}
+
 	if p.Brand == "" {
 		return ErrInvalidPaymentMethod
 	}
+
 	if p.Last4 == "" {
 		return ErrInvalidPaymentMethod
 	}
+
 	if p.ExpMonth < 1 || p.ExpMonth > 12 {
 		return ErrInvalidPaymentMethod
 	}
+
 	if p.ExpYear < 2000 || p.ExpYear > 9999 {
 		return ErrInvalidPaymentMethod
 	}
+
 	if p.CardholderName == "" {
 		return ErrInvalidPaymentMethod
 	}
@@ -386,15 +614,19 @@ func validateListItemSnapshot(
 	if item.ModelID == "" {
 		return ErrInvalidItemSnapshot
 	}
+
 	if item.InventoryID == "" {
 		return ErrInvalidItemSnapshot
 	}
+
 	if item.ListID == "" {
 		return ErrInvalidItemSnapshot
 	}
+
 	if item.ProductBlueprintID == "" {
 		return ErrInvalidItemSnapshot
 	}
+
 	if item.TokenBlueprintID == "" {
 		return ErrInvalidItemSnapshot
 	}
@@ -409,6 +641,7 @@ func validateListItemSnapshot(
 	if item.Qty <= 0 {
 		return ErrInvalidItemSnapshot
 	}
+
 	if item.Price < 0 {
 		return ErrInvalidItemSnapshot
 	}
@@ -422,15 +655,19 @@ func validateResaleItemSnapshot(
 	if item.ResaleID == "" {
 		return ErrInvalidItemSnapshot
 	}
+
 	if item.ProductID == "" {
 		return ErrInvalidItemSnapshot
 	}
+
 	if item.ProductBlueprintID == "" {
 		return ErrInvalidItemSnapshot
 	}
+
 	if item.TokenBlueprintID == "" {
 		return ErrInvalidItemSnapshot
 	}
+
 	if item.BrandID == "" {
 		return ErrInvalidItemSnapshot
 	}
@@ -445,6 +682,7 @@ func validateResaleItemSnapshot(
 	if item.Qty != 1 {
 		return ErrInvalidItemSnapshot
 	}
+
 	if item.Price < 0 {
 		return ErrInvalidItemSnapshot
 	}

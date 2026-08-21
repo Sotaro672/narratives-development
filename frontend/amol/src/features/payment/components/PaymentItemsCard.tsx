@@ -6,6 +6,8 @@ import type { CartDisplayItem } from "../../shared/types/cart";
 type PaymentItemsCardProps = {
   amount: number;
   cartItems: CartDisplayItem[];
+  shippingAmount: number;
+  subtotalAmount: number;
 };
 
 function getItemTitle(item: CartDisplayItem): string {
@@ -47,6 +49,8 @@ function getItemModelLabel(item: CartDisplayItem): string {
 export function PaymentItemsCard({
   amount,
   cartItems,
+  shippingAmount,
+  subtotalAmount,
 }: PaymentItemsCardProps) {
   return (
     <section className="payment-page__card">
@@ -82,6 +86,16 @@ export function PaymentItemsCard({
       ) : (
         <p className="payment-page__empty">カート情報がありません。</p>
       )}
+
+      <div className="payment-page__total">
+        <span>商品小計</span>
+        <strong>{formatPrice(subtotalAmount)}</strong>
+      </div>
+
+      <div className="payment-page__total">
+        <span>送料</span>
+        <strong>{formatPrice(shippingAmount)}</strong>
+      </div>
 
       <div className="payment-page__total">
         <span>合計</span>

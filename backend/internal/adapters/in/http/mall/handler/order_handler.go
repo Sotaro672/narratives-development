@@ -13,7 +13,12 @@ import (
 	historydto "narratives/internal/application/query/mall/dto"
 	usecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
+	inventorydom "narratives/internal/domain/inventory"
+	listdom "narratives/internal/domain/list"
+	modeldom "narratives/internal/domain/model"
 	orderdom "narratives/internal/domain/order"
+	shippingaddressdom "narratives/internal/domain/shippingAddress"
+	transportationdom "narratives/internal/domain/transportation"
 )
 
 // OrderHandler handles:
@@ -59,15 +64,6 @@ func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type shippingSnapshotRequest struct {
-	ZipCode string `json:"zipCode"`
-	State   string `json:"state"`
-	City    string `json:"city"`
-	Street  string `json:"street"`
-	Street2 string `json:"street2"`
-	Country string `json:"country"`
-}
-
 type orderItemRequest struct {
 	Type string `json:"type"`
 
@@ -88,9 +84,9 @@ type orderItemRequest struct {
 type createOrderRequest struct {
 	ID string `json:"id"`
 
-	ShippingSnapshot shippingSnapshotRequest `json:"shippingSnapshot"`
-	PaymentMethodID  string                  `json:"paymentMethodId"`
-	Items            []orderItemRequest      `json:"items"`
+	ShippingAddressID string             `json:"shippingAddressId"`
+	PaymentMethodID   string             `json:"paymentMethodId"`
+	Items             []orderItemRequest `json:"items"`
 }
 
 func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
@@ -124,6 +120,12 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.ShippingAddressID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "shippingAddressId is required"})
+		return
+	}
+
 	if req.PaymentMethodID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "paymentMethodId is required"})
@@ -133,21 +135,6 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	if len(req.Items) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "items is required"})
-		return
-	}
-
-	shipping := orderdom.ShippingSnapshot{
-		ZipCode: req.ShippingSnapshot.ZipCode,
-		State:   req.ShippingSnapshot.State,
-		City:    req.ShippingSnapshot.City,
-		Street:  req.ShippingSnapshot.Street,
-		Street2: req.ShippingSnapshot.Street2,
-		Country: req.ShippingSnapshot.Country,
-	}
-
-	if shipping.State == "" || shipping.City == "" || shipping.Street == "" || shipping.Country == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "shippingSnapshot is invalid"})
 		return
 	}
 
@@ -163,13 +150,13 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in := usecase.CreateOrderInput{
-		ID:               req.ID,
-		UserID:           authUID,
-		AvatarID:         avatarID,
-		CartID:           avatarID,
-		ShippingSnapshot: shipping,
-		PaymentMethodID:  req.PaymentMethodID,
-		Items:            items,
+		ID:                req.ID,
+		UserID:            authUID,
+		AvatarID:          avatarID,
+		CartID:            avatarID,
+		ShippingAddressID: req.ShippingAddressID,
+		PaymentMethodID:   req.PaymentMethodID,
+		Items:             items,
 	}
 
 	out, err := h.uc.Create(ctx, in)
@@ -316,14 +303,33 @@ func orderHTTPStatus(err error) int {
 	switch {
 	case err == nil:
 		return http.StatusInternalServerError
+
 	case errors.Is(err, context.Canceled):
 		return 499
-	case errors.Is(err, orderdom.ErrNotFound):
+
+	case errors.Is(err, orderdom.ErrNotFound),
+		errors.Is(err, inventorydom.ErrNotFound),
+		errors.Is(err, listdom.ErrNotFound),
+		errors.Is(err, modeldom.ErrNotFound),
+		errors.Is(err, shippingaddressdom.ErrNotFound),
+		errors.Is(err, transportationdom.ErrNotFound):
 		return http.StatusNotFound
-	case errors.Is(err, orderdom.ErrConflict):
+
+	case errors.Is(err, orderdom.ErrConflict),
+		errors.Is(err, shippingaddressdom.ErrConflict):
 		return http.StatusConflict
-	case isInvalidOrderError(err):
+
+	case isInvalidOrderError(err),
+		isInvalidShippingAddressError(err),
+		isInvalidShippingQuoteError(err):
 		return http.StatusBadRequest
+
+	case isUnprocessableShippingQuoteError(err):
+		return http.StatusUnprocessableEntity
+
+	case isUnavailableShippingQuoteError(err):
+		return http.StatusServiceUnavailable
+
 	default:
 		return http.StatusInternalServerError
 	}
@@ -335,8 +341,45 @@ func isInvalidOrderError(err error) bool {
 		errors.Is(err, orderdom.ErrInvalidAvatarID) ||
 		errors.Is(err, orderdom.ErrInvalidCartID) ||
 		errors.Is(err, orderdom.ErrInvalidShippingSnapshot) ||
+		errors.Is(err, orderdom.ErrInvalidShippingQuote) ||
+		errors.Is(err, orderdom.ErrInvalidShippingQuoteItem) ||
 		errors.Is(err, orderdom.ErrInvalidPaymentMethod) ||
 		errors.Is(err, orderdom.ErrInvalidItems) ||
 		errors.Is(err, orderdom.ErrInvalidItemSnapshot) ||
 		errors.Is(err, orderdom.ErrInvalidCreatedAt)
+}
+
+func isInvalidShippingQuoteError(err error) bool {
+	return strings.HasPrefix(
+		err.Error(),
+		"usecase: invalid request",
+	) ||
+		errors.Is(err, listdom.ErrInvalidTransportationOption) ||
+		errors.Is(err, modeldom.ErrInvalidShippingPackage) ||
+		errors.Is(err, transportationdom.ErrInvalidCarrier) ||
+		errors.Is(err, transportationdom.ErrInvalidPackage) ||
+		errors.Is(err, transportationdom.ErrInvalidAddress) ||
+		errors.Is(err, transportationdom.ErrUnsupportedCountry) ||
+		errors.Is(err, transportationdom.ErrInvalidPrefectureCode) ||
+		errors.Is(err, transportationdom.ErrInvalidRateAmount)
+}
+
+func isUnprocessableShippingQuoteError(err error) bool {
+	return errors.Is(err, transportationdom.ErrYamatoPackageTooLarge) ||
+		errors.Is(err, transportationdom.ErrSagawaPackageTooLarge) ||
+		errors.Is(err, transportationdom.ErrPostPackageTooLarge) ||
+		errors.Is(err, transportationdom.ErrPostPackageTooHeavy) ||
+		errors.Is(err, transportationdom.ErrSagawaIslandSurchargeRequired) ||
+		errors.Is(err, transportationdom.ErrYamatoRateNotFound) ||
+		errors.Is(err, transportationdom.ErrSagawaRateNotFound) ||
+		errors.Is(err, transportationdom.ErrPostRateNotFound)
+}
+
+func isUnavailableShippingQuoteError(err error) bool {
+	return errors.Is(err, transportationdom.ErrCarrierRateNotConfigured) ||
+		errors.Is(err, transportationdom.ErrServiceUnavailable) ||
+		strings.HasPrefix(
+			err.Error(),
+			"usecase: operation not supported",
+		)
 }

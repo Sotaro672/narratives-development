@@ -177,12 +177,22 @@ func buildUsecases(
 		r.productBlueprintRepo,
 	)
 
+	shippingQuoteUC := uc.NewShippingQuoteUsecase(
+		r.listRepoFS,
+		r.inventoryRepo,
+		r.modelRepo,
+		r.shippingAddressRepo,
+		s.transportationSvc,
+	)
+
 	orderUC := uc.NewOrderUsecase(
 		r.orderRepo,
 		r.listRepoFS,
 		r.inventoryRepo,
 		r.resaleRepo,
 		r.paymentMethodRepo,
+		r.shippingAddressRepo,
+		shippingQuoteUC,
 	)
 
 	permissionUC := uc.NewPermissionUsecase(r.permissionRepo)
@@ -335,7 +345,6 @@ func buildUsecases(
 		Companies: r.companyRepo,
 	}
 
-	_ = s
 	_ = res
 
 	return &usecases{

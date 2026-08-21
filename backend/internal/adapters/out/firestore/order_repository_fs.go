@@ -336,6 +336,7 @@ type orderDoc struct {
 	Items    []itemDoc `firestore:"items"`
 
 	ShippingSnapshot      shippingSnapshotDoc      `firestore:"shippingSnapshot"`
+	ShippingQuoteSnapshot shippingQuoteSnapshotDoc `firestore:"shippingQuoteSnapshot"`
 	PaymentMethodSnapshot paymentMethodSnapshotDoc `firestore:"paymentMethodSnapshot"`
 
 	CreatedAt time.Time `firestore:"createdAt"`
@@ -348,6 +349,34 @@ type shippingSnapshotDoc struct {
 	Street  string `firestore:"street"`
 	Street2 string `firestore:"street2"`
 	Country string `firestore:"country"`
+}
+
+type shippingQuoteSnapshotDoc struct {
+	Items    []shippingQuoteItemSnapshotDoc `firestore:"items"`
+	Amount   int                            `firestore:"amount"`
+	Currency string                         `firestore:"currency"`
+}
+
+type shippingQuoteItemSnapshotDoc struct {
+	ListID      string `firestore:"listId"`
+	InventoryID string `firestore:"inventoryId"`
+	ModelID     string `firestore:"modelId"`
+
+	OriginShippingAddressID      string `firestore:"originShippingAddressId"`
+	DestinationShippingAddressID string `firestore:"destinationShippingAddressId"`
+
+	Carrier string `firestore:"carrier"`
+
+	TransportationID string `firestore:"transportationId,omitempty"`
+
+	Size int `firestore:"size"`
+
+	Qty int `firestore:"qty"`
+
+	UnitAmount int `firestore:"unitAmount"`
+	Amount     int `firestore:"amount"`
+
+	Currency string `firestore:"currency"`
 }
 
 type paymentMethodSnapshotDoc struct {
@@ -410,6 +439,39 @@ func docToOrder(
 		len(doc.Items),
 	)
 
+	shippingQuoteItems := make(
+		[]orderdom.ShippingQuoteItemSnapshot,
+		0,
+		len(doc.ShippingQuoteSnapshot.Items),
+	)
+
+	for _, item := range doc.ShippingQuoteSnapshot.Items {
+		shippingQuoteItems = append(
+			shippingQuoteItems,
+			orderdom.ShippingQuoteItemSnapshot{
+				ListID:      item.ListID,
+				InventoryID: item.InventoryID,
+				ModelID:     item.ModelID,
+
+				OriginShippingAddressID:      item.OriginShippingAddressID,
+				DestinationShippingAddressID: item.DestinationShippingAddressID,
+
+				Carrier: item.Carrier,
+
+				TransportationID: item.TransportationID,
+
+				Size: item.Size,
+
+				Qty: item.Qty,
+
+				UnitAmount: item.UnitAmount,
+				Amount:     item.Amount,
+
+				Currency: item.Currency,
+			},
+		)
+	}
+
 	for _, item := range doc.Items {
 		var transferredAt *time.Time
 		if item.TransferredAt != nil {
@@ -460,6 +522,12 @@ func docToOrder(
 			Country: doc.ShippingSnapshot.Country,
 		},
 
+		ShippingQuoteSnapshot: orderdom.ShippingQuoteSnapshot{
+			Items:    shippingQuoteItems,
+			Amount:   doc.ShippingQuoteSnapshot.Amount,
+			Currency: doc.ShippingQuoteSnapshot.Currency,
+		},
+
 		PaymentMethodSnapshot: orderdom.PaymentMethodSnapshot{
 			CustomerID:     doc.PaymentMethodSnapshot.CustomerID,
 			Brand:          doc.PaymentMethodSnapshot.Brand,
@@ -492,6 +560,19 @@ func orderToDoc(o orderdom.Order) map[string]any {
 		items = append(items, orderItemToDocMap(item))
 	}
 
+	shippingQuoteItems := make(
+		[]map[string]any,
+		0,
+		len(o.ShippingQuoteSnapshot.Items),
+	)
+
+	for _, item := range o.ShippingQuoteSnapshot.Items {
+		shippingQuoteItems = append(
+			shippingQuoteItems,
+			shippingQuoteItemToDocMap(item),
+		)
+	}
+
 	return map[string]any{
 		"userId":   o.UserID,
 		"avatarId": o.AvatarID,
@@ -504,6 +585,12 @@ func orderToDoc(o orderdom.Order) map[string]any {
 			"street":  o.ShippingSnapshot.Street,
 			"street2": o.ShippingSnapshot.Street2,
 			"country": o.ShippingSnapshot.Country,
+		},
+
+		"shippingQuoteSnapshot": map[string]any{
+			"items":    shippingQuoteItems,
+			"amount":   o.ShippingQuoteSnapshot.Amount,
+			"currency": o.ShippingQuoteSnapshot.Currency,
 		},
 
 		"paymentMethodSnapshot": map[string]any{
@@ -520,6 +607,31 @@ func orderToDoc(o orderdom.Order) map[string]any {
 		"items":     items,
 		"createdAt": o.CreatedAt.UTC(),
 	}
+}
+
+func shippingQuoteItemToDocMap(
+	item orderdom.ShippingQuoteItemSnapshot,
+) map[string]any {
+	doc := map[string]any{
+		"listId":                       item.ListID,
+		"inventoryId":                  item.InventoryID,
+		"modelId":                      item.ModelID,
+		"originShippingAddressId":      item.OriginShippingAddressID,
+		"destinationShippingAddressId": item.DestinationShippingAddressID,
+		"carrier":                      item.Carrier,
+		"size":                         item.Size,
+		"qty":                          item.Qty,
+		"unitAmount":                   item.UnitAmount,
+		"amount":                       item.Amount,
+		"currency":                     item.Currency,
+	}
+
+	if item.TransportationID != "" {
+		doc["transportationId"] =
+			item.TransportationID
+	}
+
+	return doc
 }
 
 func orderItemToDocMap(
@@ -665,6 +777,19 @@ func validateOrderDocumentShape(
 		return ErrInvalidOrderDocumentData
 	}
 
+	rawShippingQuote, ok :=
+		raw["shippingQuoteSnapshot"].(map[string]any)
+	if !ok || rawShippingQuote == nil {
+		return ErrInvalidOrderDocumentData
+	}
+
+	if err :=
+		validateShippingQuoteDocumentShape(
+			rawShippingQuote,
+		); err != nil {
+		return err
+	}
+
 	rawItems, ok := raw["items"].([]any)
 	if !ok || len(rawItems) == 0 {
 		return ErrInvalidOrderDocumentData
@@ -682,6 +807,138 @@ func validateOrderDocumentShape(
 	}
 
 	return nil
+}
+
+func validateShippingQuoteDocumentShape(
+	raw map[string]any,
+) error {
+	rawItems, ok := raw["items"].([]any)
+	if !ok || len(rawItems) == 0 {
+		return ErrInvalidOrderDocumentData
+	}
+
+	amount, ok := requiredOrderInt(raw, "amount")
+	if !ok || amount < 0 {
+		return ErrInvalidOrderDocumentData
+	}
+
+	currency, ok := requiredOrderString(raw, "currency")
+	if !ok ||
+		currency != orderdom.ShippingQuoteCurrencyJPY {
+		return ErrInvalidOrderDocumentData
+	}
+
+	maxInt := int(^uint(0) >> 1)
+	total := 0
+
+	for _, rawItem := range rawItems {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			return ErrInvalidOrderDocumentData
+		}
+
+		itemAmount, err :=
+			validateShippingQuoteItemDocumentShape(
+				item,
+			)
+		if err != nil {
+			return err
+		}
+
+		if total > maxInt-itemAmount {
+			return ErrInvalidOrderDocumentData
+		}
+
+		total += itemAmount
+	}
+
+	if total != amount {
+		return ErrInvalidOrderDocumentData
+	}
+
+	return nil
+}
+
+func validateShippingQuoteItemDocumentShape(
+	raw map[string]any,
+) (int, error) {
+	for _, field := range []string{
+		"listId",
+		"inventoryId",
+		"modelId",
+		"originShippingAddressId",
+		"destinationShippingAddressId",
+		"carrier",
+		"currency",
+	} {
+		if _, ok := requiredOrderString(raw, field); !ok {
+			return 0, ErrInvalidOrderDocumentData
+		}
+	}
+
+	carrier, _ := requiredOrderString(raw, "carrier")
+	currency, _ := requiredOrderString(raw, "currency")
+
+	if currency != orderdom.ShippingQuoteCurrencyJPY {
+		return 0, ErrInvalidOrderDocumentData
+	}
+
+	size, ok := requiredOrderInt(raw, "size")
+	if !ok {
+		return 0, ErrInvalidOrderDocumentData
+	}
+
+	qty, ok := requiredOrderInt(raw, "qty")
+	if !ok || qty <= 0 {
+		return 0, ErrInvalidOrderDocumentData
+	}
+
+	unitAmount, ok := requiredOrderInt(raw, "unitAmount")
+	if !ok || unitAmount < 0 {
+		return 0, ErrInvalidOrderDocumentData
+	}
+
+	amount, ok := requiredOrderInt(raw, "amount")
+	if !ok || amount < 0 {
+		return 0, ErrInvalidOrderDocumentData
+	}
+
+	switch carrier {
+	case "yamato",
+		"sagawa",
+		"post":
+		if size <= 0 {
+			return 0, ErrInvalidOrderDocumentData
+		}
+
+	case "custom":
+		if size != 0 {
+			return 0, ErrInvalidOrderDocumentData
+		}
+
+		if _, ok :=
+			requiredOrderString(
+				raw,
+				"transportationId",
+			); !ok {
+			return 0, ErrInvalidOrderDocumentData
+		}
+
+	default:
+		return 0, ErrInvalidOrderDocumentData
+	}
+
+	maxInt := int(^uint(0) >> 1)
+	if unitAmount > 0 &&
+		qty > maxInt/unitAmount {
+		return 0, ErrInvalidOrderDocumentData
+	}
+
+	if unitAmount*qty != amount {
+		return 0, ErrInvalidOrderDocumentData
+	}
+
+	return amount, nil
 }
 
 func validateOrderItemDocumentShape(

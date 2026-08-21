@@ -77,6 +77,7 @@ type HistoryOrder struct {
 	CartID   string `json:"cartId"`
 
 	ShippingSnapshot      orderdom.ShippingSnapshot      `json:"shippingSnapshot"`
+	ShippingQuoteSnapshot orderdom.ShippingQuoteSnapshot `json:"shippingQuoteSnapshot"`
 	PaymentMethodSnapshot orderdom.PaymentMethodSnapshot `json:"paymentMethodSnapshot"`
 
 	Paid  bool               `json:"paid"`

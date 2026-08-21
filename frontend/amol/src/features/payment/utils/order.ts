@@ -2,9 +2,7 @@
 
 import type { CartDisplayItem } from "../../shared/types/cart";
 import type {
-  CanonicalShippingAddress,
   CreateOrderItemRequest,
-  OrderShippingSnapshot,
 } from "../../shared/types/payment";
 import type { CardPaymentMethod } from "../../shared/types/paymentMethods";
 
@@ -17,19 +15,6 @@ export function selectPrimaryPaymentMethod(
   }
 
   return methods.find((method) => method.isDefault) ?? methods[0] ?? null;
-}
-
-export function buildShippingSnapshot(
-  address: CanonicalShippingAddress,
-): OrderShippingSnapshot {
-  return {
-    zipCode: address.zipCode,
-    state: address.state,
-    city: address.city,
-    street: address.street,
-    street2: address.street2,
-    country: "JP",
-  };
 }
 
 export function buildOrderItems(

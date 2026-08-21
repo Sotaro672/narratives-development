@@ -505,10 +505,29 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 
 // calculatePaymentOrderAmount calculates the authoritative payment amount
 // from the server-side Order snapshot.
+//
+// The authoritative amount is:
+//
+//	product subtotal
+//	+ shipping quote snapshot amount
+//
+// The client-requested amount is never used to construct this total.
 func calculatePaymentOrderAmount(
 	order orderdom.Order,
 ) (int, error) {
 	if len(order.Items) == 0 {
+		return 0, ErrPaymentFlowOrderAmountInvalid
+	}
+
+	if len(
+		order.ShippingQuoteSnapshot.Items,
+	) == 0 {
+		return 0, ErrPaymentFlowOrderAmountInvalid
+	}
+
+	if strings.TrimSpace(
+		order.ShippingQuoteSnapshot.Currency,
+	) != orderdom.ShippingQuoteCurrencyJPY {
 		return 0, ErrPaymentFlowOrderAmountInvalid
 	}
 
@@ -531,6 +550,21 @@ func calculatePaymentOrderAmount(
 
 		total += lineAmount
 	}
+
+	shippingAmount :=
+		order.ShippingQuoteSnapshot.Amount
+
+	if shippingAmount < 0 {
+		return 0, ErrPaymentFlowOrderAmountInvalid
+	}
+
+	if total >
+		maxInt-shippingAmount {
+		return 0, ErrPaymentFlowOrderAmountInvalid
+	}
+
+	total +=
+		shippingAmount
 
 	if total <= 0 {
 		return 0, ErrPaymentFlowOrderAmountInvalid

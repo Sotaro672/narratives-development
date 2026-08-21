@@ -13,6 +13,7 @@ import (
 	orderdom "narratives/internal/domain/order"
 	paymentmethoddom "narratives/internal/domain/paymentMethod"
 	resaledom "narratives/internal/domain/resale"
+	shippingaddressdom "narratives/internal/domain/shippingAddress"
 )
 
 // OrderUsecase orchestrates order operations.
@@ -21,12 +22,14 @@ import (
 // - Invoice の作成は /mall/me/invoices の責務
 // - Payment の作成は /mall/me/payments の責務
 type OrderUsecase struct {
-	repo              orderdom.Repository
-	listRepo          listdom.Repository
-	inventoryRepo     inventorydom.RepositoryPort
-	resaleRepo        resaledom.Repository
-	paymentMethodRepo paymentmethoddom.RepositoryPort
-	now               func() time.Time
+	repo                orderdom.Repository
+	listRepo            listdom.Repository
+	inventoryRepo       inventorydom.RepositoryPort
+	resaleRepo          resaledom.Repository
+	paymentMethodRepo   paymentmethoddom.RepositoryPort
+	shippingAddressRepo shippingaddressdom.RepositoryPort
+	shippingQuoteUC     *ShippingQuoteUsecase
+	now                 func() time.Time
 }
 
 func NewOrderUsecase(
@@ -35,14 +38,18 @@ func NewOrderUsecase(
 	inventoryRepo inventorydom.RepositoryPort,
 	resaleRepo resaledom.Repository,
 	paymentMethodRepo paymentmethoddom.RepositoryPort,
+	shippingAddressRepo shippingaddressdom.RepositoryPort,
+	shippingQuoteUC *ShippingQuoteUsecase,
 ) *OrderUsecase {
 	return &OrderUsecase{
-		repo:              repo,
-		listRepo:          listRepo,
-		inventoryRepo:     inventoryRepo,
-		resaleRepo:        resaleRepo,
-		paymentMethodRepo: paymentMethodRepo,
-		now:               time.Now,
+		repo:                repo,
+		listRepo:            listRepo,
+		inventoryRepo:       inventoryRepo,
+		resaleRepo:          resaleRepo,
+		paymentMethodRepo:   paymentMethodRepo,
+		shippingAddressRepo: shippingAddressRepo,
+		shippingQuoteUC:     shippingQuoteUC,
+		now:                 time.Now,
 	}
 }
 
@@ -110,9 +117,9 @@ type CreateOrderInput struct {
 	AvatarID string
 	CartID   string
 
-	ShippingSnapshot orderdom.ShippingSnapshot
-	PaymentMethodID  string
-	Items            []CreateOrderItemInput
+	ShippingAddressID string
+	PaymentMethodID   string
+	Items             []CreateOrderItemInput
 
 	CreatedAt *time.Time
 }
@@ -133,13 +140,19 @@ func (u *OrderUsecase) Create(
 		id = u.newOrderID(now)
 	}
 
-	shipping := orderdom.ShippingSnapshot{
-		ZipCode: in.ShippingSnapshot.ZipCode,
-		State:   in.ShippingSnapshot.State,
-		City:    in.ShippingSnapshot.City,
-		Street:  in.ShippingSnapshot.Street,
-		Street2: in.ShippingSnapshot.Street2,
-		Country: in.ShippingSnapshot.Country,
+	shippingAddressID :=
+		strings.TrimSpace(
+			in.ShippingAddressID,
+		)
+
+	shipping, err :=
+		u.resolveShippingSnapshot(
+			ctx,
+			in.UserID,
+			shippingAddressID,
+		)
+	if err != nil {
+		return orderdom.Order{}, err
 	}
 
 	paymentMethod, err := u.resolvePaymentMethodSnapshot(
@@ -151,7 +164,21 @@ func (u *OrderUsecase) Create(
 		return orderdom.Order{}, err
 	}
 
-	items, err := u.resolveOrderItems(ctx, in.Items)
+	items, err := u.resolveOrderItems(
+		ctx,
+		in.Items,
+	)
+	if err != nil {
+		return orderdom.Order{}, err
+	}
+
+	shippingQuote, err :=
+		u.resolveShippingQuoteSnapshot(
+			ctx,
+			in.UserID,
+			shippingAddressID,
+			in.Items,
+		)
 	if err != nil {
 		return orderdom.Order{}, err
 	}
@@ -162,6 +189,7 @@ func (u *OrderUsecase) Create(
 		in.AvatarID,
 		in.CartID,
 		shipping,
+		shippingQuote,
 		paymentMethod,
 		items,
 		createdAt,
@@ -189,8 +217,8 @@ type UpdateOrderInput struct {
 	AvatarID *string
 	CartID   *string
 
-	ShippingSnapshot *orderdom.ShippingSnapshot
-	PaymentMethodID  *string
+	ShippingAddressID *string
+	PaymentMethodID   *string
 
 	ReplaceItems *[]CreateOrderItemInput
 }
@@ -216,17 +244,45 @@ func (u *OrderUsecase) Update(
 		order.CartID = *in.CartID
 	}
 
-	if in.ShippingSnapshot != nil {
-		shipping := orderdom.ShippingSnapshot{
-			ZipCode: in.ShippingSnapshot.ZipCode,
-			State:   in.ShippingSnapshot.State,
-			City:    in.ShippingSnapshot.City,
-			Street:  in.ShippingSnapshot.Street,
-			Street2: in.ShippingSnapshot.Street2,
-			Country: in.ShippingSnapshot.Country,
+	shippingAddressID, err :=
+		resolveOrderDestinationShippingAddressID(
+			order.ShippingQuoteSnapshot,
+		)
+	if err != nil {
+		return orderdom.Order{}, err
+	}
+
+	if in.ShippingAddressID != nil {
+		shippingAddressID =
+			strings.TrimSpace(
+				*in.ShippingAddressID,
+			)
+
+		if shippingAddressID == "" {
+			return orderdom.Order{},
+				orderdom.ErrInvalidShippingSnapshot
+		}
+	}
+
+	shouldRefreshShipping :=
+		in.ShippingAddressID != nil ||
+			in.UserID != nil
+
+	if shouldRefreshShipping {
+		shipping, err :=
+			u.resolveShippingSnapshot(
+				ctx,
+				order.UserID,
+				shippingAddressID,
+			)
+		if err != nil {
+			return orderdom.Order{}, err
 		}
 
-		if err := order.UpdateShippingSnapshot(shipping); err != nil {
+		if err :=
+			order.UpdateShippingSnapshot(
+				shipping,
+			); err != nil {
 			return orderdom.Order{}, err
 		}
 	}
@@ -248,6 +304,8 @@ func (u *OrderUsecase) Update(
 		}
 	}
 
+	var shippingQuoteItems []CreateOrderItemInput
+
 	if in.ReplaceItems != nil {
 		items, err := u.resolveOrderItems(
 			ctx,
@@ -260,6 +318,47 @@ func (u *OrderUsecase) Update(
 		if err := order.ReplaceItems(items); err != nil {
 			return orderdom.Order{}, err
 		}
+
+		shippingQuoteItems =
+			append(
+				[]CreateOrderItemInput(nil),
+				(*in.ReplaceItems)...,
+			)
+	}
+
+	shouldRefreshShippingQuote :=
+		in.ReplaceItems != nil ||
+			in.ShippingAddressID != nil ||
+			in.UserID != nil
+
+	if shouldRefreshShippingQuote {
+		if shippingQuoteItems == nil {
+			shippingQuoteItems, err =
+				createOrderItemInputsFromSnapshots(
+					order.Items,
+				)
+			if err != nil {
+				return orderdom.Order{}, err
+			}
+		}
+
+		shippingQuote, err :=
+			u.resolveShippingQuoteSnapshot(
+				ctx,
+				order.UserID,
+				shippingAddressID,
+				shippingQuoteItems,
+			)
+		if err != nil {
+			return orderdom.Order{}, err
+		}
+
+		if err :=
+			order.UpdateShippingQuoteSnapshot(
+				shippingQuote,
+			); err != nil {
+			return orderdom.Order{}, err
+		}
 	}
 
 	checked, err := orderdom.New(
@@ -268,6 +367,7 @@ func (u *OrderUsecase) Update(
 		order.AvatarID,
 		order.CartID,
 		order.ShippingSnapshot,
+		order.ShippingQuoteSnapshot,
 		order.PaymentMethodSnapshot,
 		order.Items,
 		order.CreatedAt,
@@ -278,13 +378,307 @@ func (u *OrderUsecase) Update(
 
 	checked.Paid = order.Paid
 
-	if in.ReplaceItems == nil {
-		checked.Items = order.Items
-	}
-
 	// Repository.Update must persist the Order and replace its canonical
 	// orderTransferItems projection in the same Firestore transaction.
 	return u.repo.Update(ctx, checked, nil)
+}
+
+// =======================
+// Shipping snapshot
+// =======================
+
+func (u *OrderUsecase) resolveShippingSnapshot(
+	ctx context.Context,
+	userID string,
+	shippingAddressID string,
+) (orderdom.ShippingSnapshot, error) {
+	if u == nil ||
+		u.shippingAddressRepo == nil {
+		return orderdom.ShippingSnapshot{},
+			orderdom.ErrInvalidShippingSnapshot
+	}
+
+	userID =
+		strings.TrimSpace(
+			userID,
+		)
+
+	shippingAddressID =
+		strings.TrimSpace(
+			shippingAddressID,
+		)
+
+	if userID == "" ||
+		shippingAddressID == "" {
+		return orderdom.ShippingSnapshot{},
+			orderdom.ErrInvalidShippingSnapshot
+	}
+
+	address, err :=
+		u.shippingAddressRepo.GetByUser(
+			ctx,
+			shippingAddressID,
+			userID,
+		)
+	if err != nil {
+		return orderdom.ShippingSnapshot{}, err
+	}
+
+	if address == nil {
+		return orderdom.ShippingSnapshot{},
+			shippingaddressdom.ErrNotFound
+	}
+
+	if address.ID !=
+		shippingAddressID {
+		return orderdom.ShippingSnapshot{},
+			shippingaddressdom.ErrNotFound
+	}
+
+	if address.UserID !=
+		userID {
+		return orderdom.ShippingSnapshot{},
+			shippingaddressdom.ErrNotFound
+	}
+
+	return orderdom.ShippingSnapshot{
+		ZipCode: address.ZipCode,
+		State:   address.State,
+		City:    address.City,
+		Street:  address.Street,
+		Street2: address.Street2,
+		Country: address.Country,
+	}, nil
+}
+
+// =======================
+// Shipping quote snapshot
+// =======================
+
+func (u *OrderUsecase) resolveShippingQuoteSnapshot(
+	ctx context.Context,
+	userID string,
+	shippingAddressID string,
+	input []CreateOrderItemInput,
+) (orderdom.ShippingQuoteSnapshot, error) {
+	if u == nil ||
+		u.shippingQuoteUC == nil {
+		return orderdom.ShippingQuoteSnapshot{},
+			orderdom.ErrInvalidShippingQuote
+	}
+
+	userID =
+		strings.TrimSpace(
+			userID,
+		)
+
+	shippingAddressID =
+		strings.TrimSpace(
+			shippingAddressID,
+		)
+
+	if userID == "" ||
+		shippingAddressID == "" ||
+		len(input) == 0 {
+		return orderdom.ShippingQuoteSnapshot{},
+			orderdom.ErrInvalidShippingQuote
+	}
+
+	quoteItems := make(
+		[]orderdom.ShippingQuoteItemSnapshot,
+		0,
+		len(input),
+	)
+
+	maxInt :=
+		int(^uint(0) >> 1)
+
+	total := 0
+
+	for _, item := range input {
+		if item.Type !=
+			orderdom.OrderItemTypeList {
+			return orderdom.ShippingQuoteSnapshot{},
+				orderdom.ErrInvalidShippingQuote
+		}
+
+		if item.ListID == "" ||
+			item.ModelID == "" ||
+			item.Qty <= 0 {
+			return orderdom.ShippingQuoteSnapshot{},
+				orderdom.ErrInvalidShippingQuoteItem
+		}
+
+		quote, err :=
+			u.shippingQuoteUC.Quote(
+				ctx,
+				ShippingQuoteInput{
+					UserID: userID,
+
+					ListID: item.ListID,
+
+					ModelID: item.ModelID,
+
+					DestinationShippingAddressID: shippingAddressID,
+				},
+			)
+		if err != nil {
+			return orderdom.ShippingQuoteSnapshot{},
+				err
+		}
+
+		if quote.Amount < 0 ||
+			quote.Amount >
+				int64(maxInt) {
+			return orderdom.ShippingQuoteSnapshot{},
+				orderdom.ErrInvalidShippingQuoteItem
+		}
+
+		unitAmount :=
+			int(
+				quote.Amount,
+			)
+
+		if unitAmount > 0 &&
+			item.Qty >
+				maxInt/unitAmount {
+			return orderdom.ShippingQuoteSnapshot{},
+				orderdom.ErrInvalidShippingQuoteItem
+		}
+
+		lineAmount :=
+			unitAmount *
+				item.Qty
+
+		if total >
+			maxInt-lineAmount {
+			return orderdom.ShippingQuoteSnapshot{},
+				orderdom.ErrInvalidShippingQuote
+		}
+
+		total +=
+			lineAmount
+
+		quoteItems =
+			append(
+				quoteItems,
+				orderdom.ShippingQuoteItemSnapshot{
+					ListID: quote.ListID,
+
+					InventoryID: quote.InventoryID,
+
+					ModelID: quote.ModelID,
+
+					OriginShippingAddressID: quote.OriginShippingAddressID,
+
+					DestinationShippingAddressID: quote.DestinationShippingAddressID,
+
+					Carrier: string(
+						quote.TransportationOption,
+					),
+
+					TransportationID: quote.TransportationID,
+
+					Size: quote.Size,
+
+					Qty: item.Qty,
+
+					UnitAmount: unitAmount,
+
+					Amount: lineAmount,
+
+					Currency: quote.Currency,
+				},
+			)
+	}
+
+	return orderdom.ShippingQuoteSnapshot{
+		Items: quoteItems,
+
+		Amount: total,
+
+		Currency: orderdom.ShippingQuoteCurrencyJPY,
+	}, nil
+}
+
+func resolveOrderDestinationShippingAddressID(
+	snapshot orderdom.ShippingQuoteSnapshot,
+) (string, error) {
+	if len(snapshot.Items) == 0 {
+		return "",
+			orderdom.ErrInvalidShippingQuote
+	}
+
+	destinationShippingAddressID :=
+		strings.TrimSpace(
+			snapshot.Items[0].
+				DestinationShippingAddressID,
+		)
+
+	if destinationShippingAddressID == "" {
+		return "",
+			orderdom.ErrInvalidShippingQuote
+	}
+
+	for _, item := range snapshot.Items {
+		if strings.TrimSpace(
+			item.DestinationShippingAddressID,
+		) != destinationShippingAddressID {
+			return "",
+				orderdom.ErrInvalidShippingQuote
+		}
+	}
+
+	return destinationShippingAddressID,
+		nil
+}
+
+func createOrderItemInputsFromSnapshots(
+	items []orderdom.OrderItemSnapshot,
+) ([]CreateOrderItemInput, error) {
+	if len(items) == 0 {
+		return nil,
+			orderdom.ErrInvalidItems
+	}
+
+	result := make(
+		[]CreateOrderItemInput,
+		0,
+		len(items),
+	)
+
+	for _, item := range items {
+		switch item.Type {
+		case orderdom.OrderItemTypeList:
+			result =
+				append(
+					result,
+					CreateOrderItemInput{
+						Type: orderdom.OrderItemTypeList,
+
+						ListID: item.ListID,
+
+						ModelID: item.ModelID,
+
+						Qty: item.Qty,
+
+						IsCanceled: item.IsCanceled,
+
+						IsDispatched: item.IsDispatched,
+					},
+				)
+
+		case orderdom.OrderItemTypeResale:
+			return nil,
+				orderdom.ErrInvalidShippingQuote
+
+		default:
+			return nil,
+				orderdom.ErrInvalidItemSnapshot
+		}
+	}
+
+	return result, nil
 }
 
 // =======================

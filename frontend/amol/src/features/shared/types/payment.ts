@@ -1,7 +1,9 @@
 // frontend/amol/src/features/shared/types/payment.ts
 
 import type {
+
   ShippingAddress,
+
 } from "./shippingAddress";
 
 export type PaymentContext = {
@@ -23,16 +25,49 @@ export type CreatedPayment = {
   createdAt?: string;
 };
 
+export type OrderShippingSnapshot = {
+  zipCode: string;
+  state: string;
+  city: string;
+  street: string;
+  street2: string;
+  country: string;
+};
+
+export type ShippingQuoteItemSnapshot = {
+  listId: string;
+  inventoryId: string;
+  modelId: string;
+  originShippingAddressId: string;
+  destinationShippingAddressId: string;
+  carrier: string;
+  transportationId?: string;
+  size: number;
+  qty: number;
+  unitAmount: number;
+  amount: number;
+  currency: string;
+};
+
+export type ShippingQuoteSnapshot = {
+  items:ShippingQuoteItemSnapshot[];
+  amount: number;
+  currency: string;
+};
+
 export type CreatedOrder = {
   id?: string;
   userId?: string;
   avatarId?: string;
   cartId?: string;
+  shippingSnapshot?:OrderShippingSnapshot;
+  shippingQuoteSnapshot?:ShippingQuoteSnapshot;
   paid?: boolean;
   createdAt?: string;
 };
 
 export type CanonicalShippingAddress =
+
   ShippingAddress & {
     zipCode: string;
     state: string;
@@ -40,15 +75,6 @@ export type CanonicalShippingAddress =
     street: string;
     street2: string;
   };
-
-export type OrderShippingSnapshot = {
-  zipCode: string;
-  state: string;
-  city: string;
-  street: string;
-  street2: string;
-  country: "JP";
-};
 
 export type ListCreateOrderItemRequest = {
   type: "list";
@@ -73,11 +99,9 @@ export type CreateOrderItemRequest =
 
 export type CreateOrderRequest = {
   id: string;
-  shippingSnapshot:
-    OrderShippingSnapshot;
+  shippingAddressId: string;
   paymentMethodId: string;
-  items:
-    CreateOrderItemRequest[];
+  items:CreateOrderItemRequest[];
 };
 
 export type CreatePaymentRequest = {

@@ -583,6 +583,8 @@ func NewContainer(
 			inventoryRepo,
 			resaleRepo,
 			paymentMethodRepo,
+			shippingAddressRepo,
+			c.ShippingQuoteUC,
 		)
 
 	c.InquiryUC =
