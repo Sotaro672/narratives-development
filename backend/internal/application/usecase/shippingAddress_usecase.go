@@ -24,11 +24,12 @@ type ShippingAddressInventoryCleaner interface {
 // CreateShippingAddressInputは配送先住所の新規作成入力です。
 //
 // ID、UserID、CompanyID、CreatedAtおよびUpdatedAtは受け取りません。
-// IDはUsecaseがUUIDを採番し、UserIDとCompanyIDは認証済みcontextから解決した値を呼び出し側から受け取り、
+// IDはUsecaseがUUIDを採番し、UserIDは認証済みcontextから呼び出し側が渡します。
+// CompanyIDはCreateの引数で受け取り、Console作成時のみ必須です。
 // 時刻はUsecaseのserver clockから設定します。
 // CreatedByはConsoleから作成する場合のみmember document IDを受け取ります。
 // User側から作成する場合は空文字です。
-// Nameは必須です。
+// NameはConsoleの在庫保管場所では必須、MallのUser配送先住所では任意です。
 type CreateShippingAddressInput struct {
 	Name      string
 	ZipCode   string
@@ -43,7 +44,8 @@ type CreateShippingAddressInput struct {
 // UpdateShippingAddressInputは配送先住所の部分更新入力です。
 //
 // nilは変更なしを表します。
-// Nameは必須のDomain fieldですが、PATCHではnilを変更なしとして扱います。
+// NameはConsoleの在庫保管場所では必須、MallのUser配送先住所では任意です。
+// PATCHではnilを変更なしとして扱います。
 // Street2は任意項目であるため、空文字を指定すると明示的に消去できます。
 // Countryへ空文字を指定した場合は、Domain規則によりJPへ正規化されます。
 // UpdatedByはConsoleから更新する場合のみmember document IDを受け取ります。
@@ -255,11 +257,13 @@ func (u *ShippingAddressUsecase) ListByCompanyID(ctx context.Context, companyID 
 // Createは新しい配送先住所を作成します。
 //
 // IDはUsecaseがUUIDを採番します。
-// UserIDは認証UID、CompanyIDは認証済みmemberが所属するcompany IDを呼び出し側から受け取ります。
-// Nameは必須です。
+// UserIDは認証UIDを呼び出し側から受け取ります。
+// CompanyIDはConsole作成時のみ必須です。
+// MallのUser配送先住所ではCompanyIDを空文字として保存します。
+// NameはConsole作成時のみ必須です。
 // CreatedAtおよびUpdatedAtはserver clockから設定します。
 // CreatedByが指定された場合はConsole作成としてCreatedBy / UpdatedByへ同じmember document IDを設定します。
-// CreatedByが空文字の場合はUser側作成として監査member IDを設定しません。
+// CreatedByが空文字の場合はMallのUser側作成として監査member IDを設定しません。
 // Countryの既定値はDomain constructorが決定します。
 func (u *ShippingAddressUsecase) Create(
 	ctx context.Context,
@@ -276,11 +280,6 @@ func (u *ShippingAddressUsecase) Create(
 		return nil, err
 	}
 
-	validCompanyID, err := validateShippingAddressCompanyID(companyID)
-	if err != nil {
-		return nil, err
-	}
-
 	documentID := u.newDocID()
 	if _, err := validateShippingAddressID(documentID); err != nil {
 		return nil, err
@@ -291,6 +290,11 @@ func (u *ShippingAddressUsecase) Create(
 	var entity shipaddrdom.ShippingAddress
 
 	if in.CreatedBy != "" {
+		validCompanyID, err := validateShippingAddressCompanyID(companyID)
+		if err != nil {
+			return nil, err
+		}
+
 		entity, err = shipaddrdom.NewWithNowAndAudit(
 			documentID,
 			validUID,
@@ -309,7 +313,7 @@ func (u *ShippingAddressUsecase) Create(
 		entity, err = shipaddrdom.NewWithNow(
 			documentID,
 			validUID,
-			validCompanyID,
+			"",
 			in.Name,
 			in.ZipCode,
 			in.State,

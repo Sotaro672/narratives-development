@@ -4,7 +4,6 @@ package mail
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	branddom "narratives/internal/domain/brand"
@@ -361,18 +360,24 @@ func buildOrderConfirmationMailBody(
 	var b strings.Builder
 
 	totalQty := 0
-	totalPrice := 0
+	productSubtotal := 0
 	for _, it := range ord.Items {
 		totalQty += it.Qty
-		totalPrice += it.Price * it.Qty
+		productSubtotal += it.Price * it.Qty
 	}
+
+	shippingAmount := ord.ShippingQuoteSnapshot.Amount
+	totalAmount := productSubtotal + shippingAmount
 
 	b.WriteString("ご注文ありがとうございます。\n")
 	b.WriteString("ご注文が確定しました。\n\n")
 
 	b.WriteString("ご注文内容\n")
+	b.WriteString(fmt.Sprintf("決済ID: %s\n", ord.ID))
 	b.WriteString(fmt.Sprintf("商品点数: %d点\n", totalQty))
-	b.WriteString(fmt.Sprintf("合計金額: %d円\n", totalPrice))
+	b.WriteString(fmt.Sprintf("商品小計: %d円\n", productSubtotal))
+	b.WriteString(fmt.Sprintf("配送料: %d円\n", shippingAmount))
+	b.WriteString(fmt.Sprintf("合計金額: %d円\n", totalAmount))
 	b.WriteString("\n")
 
 	writeShippingSnapshot(&b, ord)
@@ -641,10 +646,6 @@ func writeApparelModelVariationForCustomerMail(
 	if model.Color.Name != "" {
 		b.WriteString(fmt.Sprintf("カラー: %s\n", model.Color.Name))
 	}
-	if model.Color.RGB >= 0 {
-		b.WriteString(fmt.Sprintf("カラーRGB: %d\n", model.Color.RGB))
-	}
-	writeMeasurementsForCustomerMail(b, model.Measurements)
 }
 
 func writeAlcoholModelVariationForCustomerMail(
@@ -668,66 +669,5 @@ func writeAlcoholModelVariationForCustomerMail(
 			b.WriteString(model.Volume.Unit)
 		}
 		b.WriteString("\n")
-	}
-}
-
-func writeMeasurementsForCustomerMail(
-	b *strings.Builder,
-	measurements modeldom.Measurements,
-) {
-	if b == nil || len(measurements) == 0 {
-		return
-	}
-
-	keys := make([]string, 0, len(measurements))
-	for key := range measurements {
-		if key == "" {
-			continue
-		}
-		keys = append(keys, key)
-	}
-
-	if len(keys) == 0 {
-		return
-	}
-
-	sort.Strings(keys)
-
-	b.WriteString("採寸:\n")
-	for _, key := range keys {
-		b.WriteString(fmt.Sprintf("  %s: %v\n", measurementLabel(key), measurements[key]))
-	}
-}
-
-func measurementLabel(key string) string {
-	switch key {
-	case "height":
-		return "高さ"
-	case "width":
-		return "幅"
-	case "depth":
-		return "奥行き"
-	case "length":
-		return "長さ"
-	case "shoulderWidth":
-		return "肩幅"
-	case "bodyWidth":
-		return "身幅"
-	case "sleeveLength":
-		return "袖丈"
-	case "bodyLength":
-		return "着丈"
-	case "waist":
-		return "ウエスト"
-	case "hip":
-		return "ヒップ"
-	case "rise":
-		return "股上"
-	case "inseam":
-		return "股下"
-	case "hemWidth":
-		return "裾幅"
-	default:
-		return key
 	}
 }

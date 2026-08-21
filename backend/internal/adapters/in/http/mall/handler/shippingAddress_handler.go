@@ -35,7 +35,8 @@ func NewShippingAddressHandler(
 // shippingAddressCreateRequestは配送先住所の作成requestです。
 //
 // ID、UserID、CompanyID、CreatedAtおよびUpdatedAtは受け取りません。
-// IDと時刻はUsecaseが生成し、UserIDとCompanyIDは認証contextから取得します。
+// IDと時刻はUsecaseが生成し、UserIDは認証contextから取得します。
+// MallのUser配送先住所ではCompanyIDを設定しません。
 type shippingAddressCreateRequest struct {
 	ZipCode string  `json:"zipCode"`
 	State   string  `json:"state"`
@@ -148,29 +149,9 @@ func (h *ShippingAddressHandler) requireUID(
 	return "", false
 }
 
-// requireCompanyIDは認証middlewareがcontextへ設定したCompanyIDを取得します。
-//
-// header、queryおよびrequest bodyからCompanyIDを受け取りません。
-// AuthMiddlewareでFirebase UIDからmemberを解決し、所属companyIdをcontextへ設定することを前提とします。
-func (h *ShippingAddressHandler) requireCompanyID(
-	w http.ResponseWriter,
-	r *http.Request,
-) (string, bool) {
-	companyID, ok := middleware.CompanyID(r)
-	if ok && companyID != "" {
-		return companyID, true
-	}
-
-	writeJSON(w, http.StatusForbidden, map[string]string{
-		"error": "company_id_not_resolved",
-	})
-
-	return "", false
-}
-
 // decodeShippingAddressJSONはrequest bodyを厳格にdecodeします。
 //
-//   - 最大サイズは1 MiB
+//   - 最大サイズは1MiB
 //   - 未定義fieldを拒否
 //   - JSON値が複数存在するbodyを拒否
 //   - 空bodyを拒否
@@ -288,11 +269,6 @@ func (h *ShippingAddressHandler) post(
 		return
 	}
 
-	companyID, ok := h.requireCompanyID(w, r)
-	if !ok {
-		return
-	}
-
 	if !h.requireUsecase(w) {
 		return
 	}
@@ -314,7 +290,8 @@ func (h *ShippingAddressHandler) post(
 	}
 
 	// HandlerはDTO変換だけを行います。
-	// UserIDとCompanyIDは認証contextから取得します。
+	// UserIDは認証contextから取得します。
+	// MallのUser配送先住所にはCompanyIDを設定しません。
 	// Domain生成、Countryの既定値、UUID採番および時刻設定はUsecaseとDomainへ委譲します。
 	input := usecase.CreateShippingAddressInput{
 		ZipCode: request.ZipCode,
@@ -328,7 +305,7 @@ func (h *ShippingAddressHandler) post(
 	created, err := h.uc.Create(
 		r.Context(),
 		uid,
-		companyID,
+		"",
 		input,
 	)
 	if err != nil {

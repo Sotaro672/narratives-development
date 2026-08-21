@@ -14,8 +14,9 @@ import (
 //
 // IDは配送先住所documentのUUIDです。
 // UserIDは配送先住所を登録・所有する認証ユーザーのUIDです。
-// CompanyIDは配送先住所が所属するcompanyのdocument IDです。
-// Nameは配送先住所・在庫保管場所を識別する名称です。
+// CompanyIDはConsoleの在庫保管場所が所属するcompanyのdocument IDです。
+// MallのUser配送先住所ではCompanyIDを空文字で保持できます。
+// NameはConsoleの在庫保管場所では必須、MallのUser配送先住所では任意です。
 // CreatedBy / UpdatedByはConsoleから登録・更新された場合のみmember document IDを保持します。
 // User側から登録された配送先住所ではCreatedBy / UpdatedByは空文字です。
 // 1つのCompanyは複数のShippingAddressを保持できます。
@@ -124,6 +125,16 @@ func validateName(name string) error {
 	return validateRequiredText(name, MaxNameLength, ErrInvalidName)
 }
 
+func validateOptionalName(name string) error {
+	if name == "" {
+		return nil
+	}
+	if len([]rune(name)) > MaxNameLength {
+		return ErrInvalidName
+	}
+	return nil
+}
+
 func validateZipCode(zipCode string, country string) error {
 	if zipCode == "" {
 		return ErrInvalidZipCode
@@ -144,10 +155,18 @@ func validateCountry(country string) error {
 	return nil
 }
 
-func (a ShippingAddress) validateAddressFields() error {
-	if err := validateName(a.Name); err != nil {
+func (a ShippingAddress) validateScopeFields() error {
+	if a.CompanyID == "" {
+		return validateOptionalName(a.Name)
+	}
+
+	if err := validateCompanyID(a.CompanyID); err != nil {
 		return err
 	}
+	return validateName(a.Name)
+}
+
+func (a ShippingAddress) validateAddressFields() error {
 	if err := validateCountry(a.Country); err != nil {
 		return err
 	}
@@ -194,7 +213,7 @@ func (a ShippingAddress) validateCommon() error {
 	if err := validateUserID(a.UserID); err != nil {
 		return err
 	}
-	if err := validateCompanyID(a.CompanyID); err != nil {
+	if err := a.validateScopeFields(); err != nil {
 		return err
 	}
 	if err := a.validateAddressFields(); err != nil {
@@ -232,6 +251,7 @@ func (a ShippingAddress) validateForCreate() error {
 // UpdateFromFormは、User側のフォームから受け取った住所情報を更新します。
 //
 // ID、UserID、CompanyID、CreatedAt、CreatedBy、UpdatedByは変更しません。
+// MallのUser配送先住所ではCompanyIDとNameが空文字でも許可します。
 // UpdatedAtのみ更新します。
 // Street2は任意項目です。
 func (a *ShippingAddress) UpdateFromForm(
@@ -291,6 +311,13 @@ func (a *ShippingAddress) UpdateFromCompanyForm(
 ) error {
 	if a == nil {
 		return ErrInvalidID
+	}
+
+	if err := validateCompanyID(a.CompanyID); err != nil {
+		return err
+	}
+	if err := validateName(name); err != nil {
+		return err
 	}
 
 	if err := validateRequiredText(
@@ -382,6 +409,7 @@ func newShippingAddress(
 }
 
 // Newは、User側など監査member IDを持たないShippingAddressを生成します。
+// MallのUser配送先住所ではcompanyIDとnameを空文字で指定できます。
 func New(
 	id string,
 	userID string,
@@ -414,7 +442,9 @@ func New(
 	)
 }
 
-// NewWithAuditは、Console用の監査member IDを含むShippingAddressを生成します。
+// NewWithAuditは、Firestoreからの復元を含め、監査member IDを保持できるShippingAddressを生成します。
+// Mallの既存User配送先住所を復元できるよう、companyIDとnameが空文字の場合も許可します。
+// Consoleの新規作成ではNewWithNowAndAuditを使用し、companyIDとnameを必須検証します。
 func NewWithAudit(
 	id string,
 	userID string,
@@ -450,6 +480,7 @@ func NewWithAudit(
 }
 
 // NewWithNowは、User側など監査member IDを持たないShippingAddressを生成します。
+// MallのUser配送先住所ではcompanyIDとnameを空文字で指定できます。
 func NewWithNow(
 	id string,
 	userID string,
@@ -500,6 +531,13 @@ func NewWithNowAndAudit(
 ) (ShippingAddress, error) {
 	now = now.UTC()
 
+	if err := validateCompanyID(companyID); err != nil {
+		return ShippingAddress{}, err
+	}
+	if err := validateName(name); err != nil {
+		return ShippingAddress{}, err
+	}
+
 	if err := validateRequiredText(
 		createdBy,
 		MaxMemberIDLength,
@@ -531,6 +569,7 @@ func NewWithNowAndAudit(
 // IDは空文字で生成し、UsecaseがUUIDを採番した後、
 // NewまたはNewWithNowを使用してIDを含む完全なEntityを確定します。
 // User側の作成用途なのでCreatedBy / UpdatedByは設定しません。
+// MallのUser配送先住所ではcompanyIDとnameを空文字で指定できます。
 func NewForCreateWithNow(
 	userID string,
 	companyID string,
