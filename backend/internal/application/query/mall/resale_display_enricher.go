@@ -4,6 +4,7 @@ package mall
 import (
 	"context"
 
+	applicationport "narratives/internal/application/port"
 	mallshared "narratives/internal/application/query/mall/shared"
 	avatardom "narratives/internal/domain/avatar"
 	resaledom "narratives/internal/domain/resale"
@@ -26,7 +27,7 @@ import (
 type resaleDisplayEnricher struct {
 	displayResolver mallshared.MallDisplayResolver
 
-	imageRepo  resaledom.ImageRepository
+	imageRepo  applicationport.ResaleImageLister
 	avatarRepo avatardom.Repository
 
 	includeAvatar bool
@@ -40,7 +41,7 @@ type resaleDisplayEnricher struct {
 type resaleDisplayEnricherConfig struct {
 	displayResolver mallshared.MallDisplayResolver
 
-	imageRepo  resaledom.ImageRepository
+	imageRepo  applicationport.ResaleImageLister
 	avatarRepo avatardom.Repository
 
 	includeAvatar bool

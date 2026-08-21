@@ -6,18 +6,19 @@ import (
 	"errors"
 	"strings"
 
+	applicationport "narratives/internal/application/port"
 	mallshared "narratives/internal/application/query/mall/shared"
 	ldom "narratives/internal/domain/list"
 )
 
 type ListQuery struct {
 	listRepo  ldom.Repository
-	imageRepo ldom.ImageRepository
+	imageRepo applicationport.ListImageLister
 }
 
 func NewListQuery(
 	listRepo ldom.Repository,
-	imageRepo ldom.ImageRepository,
+	imageRepo applicationport.ListImageLister,
 ) *ListQuery {
 	return &ListQuery{
 		listRepo:  listRepo,

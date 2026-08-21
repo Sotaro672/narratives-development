@@ -6,11 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	branddom "narratives/internal/domain/brand"
+	applicationport "narratives/internal/application/port"
 	modeldom "narratives/internal/domain/model"
-	productdom "narratives/internal/domain/product"
-	productblueprintdom "narratives/internal/domain/productBlueprint"
-	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
 
 var (
@@ -18,34 +15,6 @@ var (
 	ErrMallDisplayProductIDRequired     = errors.New("mall display resolver: productID is required")
 	ErrMallDisplayModelIDRequired       = errors.New("mall display resolver: modelID is required")
 )
-
-// ProductReader resolves productId -> product.
-//
-// productdom.Repository satisfies this interface.
-type ProductReader interface {
-	GetByID(ctx context.Context, productID string) (productdom.Product, error)
-}
-
-// ProductBlueprintReader resolves productBlueprintId -> ProductBlueprint.
-//
-// productblueprintdom.Repository satisfies this interface.
-type ProductBlueprintReader interface {
-	GetByID(ctx context.Context, id string) (productblueprintdom.ProductBlueprint, error)
-}
-
-// TokenBlueprintReader resolves tokenBlueprintId -> TokenBlueprint.
-//
-// tokenblueprintdom.RepositoryPort satisfies this interface.
-type TokenBlueprintReader interface {
-	GetByID(ctx context.Context, id string) (*tokenblueprintdom.TokenBlueprint, error)
-}
-
-// BrandReader resolves brandId -> Brand.
-//
-// branddom.Repository satisfies this interface.
-type BrandReader interface {
-	GetByID(ctx context.Context, id string) (branddom.Brand, error)
-}
 
 // ModelReader resolves modelId -> ModelVariation.
 //
@@ -86,19 +55,19 @@ type MallDisplayResolver interface {
 }
 
 type DisplayResolver struct {
-	productRepo          ProductReader
+	productRepo          applicationport.ProductGetter
 	modelRepo            ModelReader
-	productBlueprintRepo ProductBlueprintReader
-	tokenBlueprintRepo   TokenBlueprintReader
-	brandRepo            BrandReader
+	productBlueprintRepo applicationport.ProductBlueprintGetter
+	tokenBlueprintRepo   applicationport.TokenBlueprintGetter
+	brandRepo            applicationport.BrandGetter
 }
 
 func NewDisplayResolver(
-	productRepo ProductReader,
+	productRepo applicationport.ProductGetter,
 	modelRepo ModelReader,
-	productBlueprintRepo ProductBlueprintReader,
-	tokenBlueprintRepo TokenBlueprintReader,
-	brandRepo BrandReader,
+	productBlueprintRepo applicationport.ProductBlueprintGetter,
+	tokenBlueprintRepo applicationport.TokenBlueprintGetter,
+	brandRepo applicationport.BrandGetter,
 ) *DisplayResolver {
 	return &DisplayResolver{
 		productRepo:          productRepo,
@@ -348,6 +317,7 @@ func applyAlcoholModelVariationToDisplay(
 	if value > 0 {
 		out.VolumeValue = &value
 	}
+
 	out.VolumeUnit = modelVariation.Volume.Unit
 
 	return out

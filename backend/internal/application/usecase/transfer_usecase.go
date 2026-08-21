@@ -7,10 +7,9 @@ import (
 	"fmt"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	avatardom "narratives/internal/domain/avatar"
-	branddom "narratives/internal/domain/brand"
 	orderdom "narratives/internal/domain/order"
-	resaledom "narratives/internal/domain/resale"
 )
 
 // ============================================================
@@ -142,25 +141,11 @@ type AvatarWalletResolver interface {
 	) (string, error)
 }
 
-type BrandDisplayResolver interface {
-	GetByID(
-		ctx context.Context,
-		id string,
-	) (branddom.Brand, error)
-}
-
 type AvatarDisplayResolver interface {
 	GetByID(
 		ctx context.Context,
 		id string,
 	) (avatardom.Avatar, error)
-}
-
-type ResaleReaderForTransfer interface {
-	GetByID(
-		ctx context.Context,
-		id string,
-	) (resaledom.Resale, error)
 }
 
 type TokenTransferExecutor interface {
@@ -211,10 +196,10 @@ type TransferUsecase struct {
 	brandWallet  BrandWalletResolver
 	avatarWallet AvatarWalletResolver
 
-	brandDisplay  BrandDisplayResolver
+	brandDisplay  applicationport.BrandGetter
 	avatarDisplay AvatarDisplayResolver
 
-	resaleRepo ResaleReaderForTransfer
+	resaleRepo applicationport.ResaleGetter
 
 	executionUC *TokenTransferExecutionUsecase
 	inventoryUC *InventoryUsecase
@@ -228,7 +213,7 @@ func NewTransferUsecase(
 	tokenRepo TokenResolver,
 	brandWallet BrandWalletResolver,
 	avatarWallet AvatarWalletResolver,
-	brandDisplay BrandDisplayResolver,
+	brandDisplay applicationport.BrandGetter,
 	avatarDisplay AvatarDisplayResolver,
 	executionUC *TokenTransferExecutionUsecase,
 	inventoryUC *InventoryUsecase,
@@ -252,7 +237,7 @@ func NewTransferUsecase(
 }
 
 func (u *TransferUsecase) WithResaleTransferDependencies(
-	resaleRepo ResaleReaderForTransfer,
+	resaleRepo applicationport.ResaleGetter,
 ) *TransferUsecase {
 	if u != nil {
 		u.resaleRepo = resaleRepo

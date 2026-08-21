@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	avatar "narratives/internal/domain/avatar"
-	brand "narratives/internal/domain/brand"
 	common "narratives/internal/domain/common"
 	tokenBlueprint "narratives/internal/domain/tokenBlueprint"
 	tokenBlueprint_review "narratives/internal/domain/tokenBlueprint_review"
@@ -34,7 +34,7 @@ type TokenBlueprintReviewUsecase struct {
 	repos              tokenBlueprint_review.RepositoryPort
 	avatarRepos        avatar.Repository
 	tokenBlueprintRepo tokenBlueprint.RepositoryPort
-	brandRepo          brand.Repository
+	brandRepo          applicationport.BrandGetter
 
 	now func() time.Time
 }
@@ -59,7 +59,7 @@ func NewTokenBlueprintReviewUsecase(
 	repos tokenBlueprint_review.RepositoryPort,
 	avatarRepos avatar.Repository,
 	tokenBlueprintRepo tokenBlueprint.RepositoryPort,
-	brandRepo brand.Repository,
+	brandRepo applicationport.BrandGetter,
 ) *TokenBlueprintReviewUsecase {
 	return &TokenBlueprintReviewUsecase{
 		repos:              repos,

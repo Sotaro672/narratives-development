@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 
+	applicationport "narratives/internal/application/port"
 	dto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
 
@@ -28,20 +29,6 @@ type InventoryRepository interface {
 	) (invdom.Mint, error)
 }
 
-type ProductBlueprintRepository interface {
-	GetByID(
-		ctx context.Context,
-		id string,
-	) (pbdom.ProductBlueprint, error)
-}
-
-type TokenBlueprintPatchRepository interface {
-	GetByID(
-		ctx context.Context,
-		id string,
-	) (*tbdom.TokenBlueprint, error)
-}
-
 // ProductBlueprintReview repository (read-only minimal for catalog)
 //
 // CatalogQueryではsummaryのみ利用するため、最小契約にする。
@@ -56,32 +43,17 @@ type ProductBlueprintReviewRepository interface {
 	)
 }
 
-// ListImage repository (read-only minimal for catalog)
-//
-// Firebase Storage移行後:
-//   - domain/listImageは削除済み
-//   - ListImageはdomain/list.ListImageを使う
-//   - ListImage.URLはFirebase Storage downloadURL
-//   - backendはGCS bucket / public URLを組み立てない
-type ListImageRepository interface {
-	// listId配下の画像一覧を取得する。
-	ListByListID(
-		ctx context.Context,
-		listID string,
-	) ([]ldom.ListImage, error)
-}
-
 // ============================================================
 // Query
 // ============================================================
 type CatalogQuery struct {
 	ListRepo                   ldom.Repository
 	InventoryRepo              InventoryRepository
-	ProductRepo                ProductBlueprintRepository
-	TokenRepo                  TokenBlueprintPatchRepository
+	ProductRepo                applicationport.ProductBlueprintGetter
+	TokenRepo                  applicationport.TokenBlueprintGetter
 	ModelRepo                  modeldom.RepositoryPort
 	ProductBlueprintReviewRepo ProductBlueprintReviewRepository
-	ListImageRepo              ListImageRepository
+	ListImageRepo              applicationport.ListImageLister
 	NameResolver               *appresolver.NameResolver
 }
 
@@ -93,10 +65,10 @@ type CatalogQuery struct {
 func NewCatalogQuery(
 	listRepo ldom.Repository,
 	inventoryRepo InventoryRepository,
-	productRepo ProductBlueprintRepository,
+	productRepo applicationport.ProductBlueprintGetter,
 	modelRepo modeldom.RepositoryPort,
-	listImageRepo ListImageRepository,
-	tokenRepo TokenBlueprintPatchRepository,
+	listImageRepo applicationport.ListImageLister,
+	tokenRepo applicationport.TokenBlueprintGetter,
 	productBlueprintReviewRepo ProductBlueprintReviewRepository,
 	nameResolver *appresolver.NameResolver,
 ) *CatalogQuery {

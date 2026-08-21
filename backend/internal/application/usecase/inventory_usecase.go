@@ -7,20 +7,13 @@ import (
 	"sort"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	invdom "narratives/internal/domain/inventory"
-	pbdom "narratives/internal/domain/productBlueprint"
 	shadom "narratives/internal/domain/shippingAddress"
 )
 
 type ProductModelResolver interface {
 	GetModelIDByProductID(ctx context.Context, productID string) (string, error)
-}
-
-type InventoryProductBlueprintCompanyReader interface {
-	GetByID(
-		ctx context.Context,
-		id string,
-	) (pbdom.ProductBlueprint, error)
 }
 
 type InventoryUsecase struct {
@@ -29,7 +22,7 @@ type InventoryUsecase struct {
 	productModelResolver ProductModelResolver
 
 	shippingAddressRepo  shadom.RepositoryPort
-	productBlueprintRepo InventoryProductBlueprintCompanyReader
+	productBlueprintRepo applicationport.ProductBlueprintGetter
 }
 
 func NewInventoryUsecase(repo invdom.RepositoryPort) *InventoryUsecase {
@@ -55,7 +48,7 @@ func (uc *InventoryUsecase) WithProductModelResolver(
 
 func (uc *InventoryUsecase) WithShippingAddressAssignment(
 	shippingAddressRepo shadom.RepositoryPort,
-	productBlueprintRepo InventoryProductBlueprintCompanyReader,
+	productBlueprintRepo applicationport.ProductBlueprintGetter,
 ) *InventoryUsecase {
 	if uc == nil {
 		return uc

@@ -49,6 +49,7 @@ export type UseListDetailResult = {
   onDelete: () => Promise<void>;
   onSave: (payload?: ListDetailSavePayload) => Promise<void>;
 
+  readableId: string;
   listingTitle: string;
   description: string;
   draftListingTitle: string;
@@ -222,6 +223,7 @@ export function useListDetail(): UseListDetailResult {
     [dto],
   );
 
+  const readableId = derived?.readableId ?? "";
   const listingTitle = derived?.title ?? "";
   const description = derived?.description ?? "";
   const status = derived?.status ?? "";
@@ -835,6 +837,7 @@ export function useListDetail(): UseListDetailResult {
     onDelete,
     onSave,
 
+    readableId,
     listingTitle,
     description,
     draftListingTitle,

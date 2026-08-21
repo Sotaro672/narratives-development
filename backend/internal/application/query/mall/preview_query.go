@@ -9,7 +9,6 @@ import (
 
 	applicationport "narratives/internal/application/port"
 	dto "narratives/internal/application/query/mall/dto"
-	mallshared "narratives/internal/application/query/mall/shared"
 	sharedquery "narratives/internal/application/query/shared"
 	appresolver "narratives/internal/application/resolver"
 	appusecase "narratives/internal/application/usecase"
@@ -143,7 +142,7 @@ type OrderPurchasedResult struct {
 // It also owns scan verification dependencies so NewPreviewQuery is the
 // single construction entry point for preview + order scan verification.
 type PreviewQuery struct {
-	ProductRepo          mallshared.ProductReader
+	ProductRepo          applicationport.ProductGetter
 	ProductBlueprintRepo ProductBlueprintReader
 
 	// order scan verify / purchased-side resolver
@@ -162,7 +161,7 @@ type PreviewQuery struct {
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 
 	// display-only name resolvers
-	BrandRepo          mallshared.BrandReader
+	BrandRepo          applicationport.BrandGetter
 	AvatarNameIconRepo AvatarNameIconReader
 
 	// assetId -> transfers を解決
@@ -176,14 +175,14 @@ type PreviewQuery struct {
 // NewPreviewQuery constructs PreviewQuery.
 // This is the only entry point for wiring preview and scan verification dependencies.
 func NewPreviewQuery(
-	productRepo mallshared.ProductReader,
+	productRepo applicationport.ProductGetter,
 	pbRepo ProductBlueprintReader,
 	orderTransferItemRepo OrderTransferItemReader,
 	nameResolver *appresolver.NameResolver,
 	tokenRepo TokenReader,
 	tokenBlueprintRepo applicationport.TokenBlueprintGetter,
 	ownerResolveQ *sharedquery.OwnerResolveQuery,
-	brandRepo mallshared.BrandReader,
+	brandRepo applicationport.BrandGetter,
 	avatarNameIconRepo AvatarNameIconReader,
 	transferRepo TransferReader,
 ) *PreviewQuery {
@@ -729,6 +728,7 @@ func stringPtrOrNil(value string) *string {
 	if v == "" {
 		return nil
 	}
+
 	return &v
 }
 

@@ -7,22 +7,16 @@ import (
 	"math"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	avatardom "narratives/internal/domain/avatar"
-	branddom "narratives/internal/domain/brand"
 	domcommon "narratives/internal/domain/common"
 	memberdom "narratives/internal/domain/member"
-	pbdomain "narratives/internal/domain/productBlueprint"
 	pbr "narratives/internal/domain/productBlueprintReview"
 )
 
 // Avatar 取得
 type AvatarGetter interface {
 	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
-}
-
-// Brand 取得
-type BrandGetter interface {
-	GetByID(ctx context.Context, brandID string) (branddom.Brand, error)
 }
 
 // handler/画面へ渡す DTO（Review + AvatarName/Icon を同梱）
@@ -60,10 +54,10 @@ type ProductBlueprintReviewUsecase struct {
 	ReviewRepo pbr.Repository
 
 	// aggregates 用
-	ProductBlueprintRepo pbdomain.Repository
+	ProductBlueprintRepo applicationport.ProductBlueprintReader
 
 	// name resolvers (best-effort)
-	BrandGetter BrandGetter
+	BrandGetter applicationport.BrandGetter
 
 	// assigneeId は member の Firestore docId として保存されている前提。
 	// そのため AssigneeName 解決では GetByUID ではなく GetByID を使う。
@@ -81,8 +75,8 @@ type ProductBlueprintReviewUsecase struct {
 
 func NewProductBlueprintReviewUsecase(
 	reviewRepo pbr.Repository,
-	productBlueprintRepo pbdomain.Repository,
-	brandGetter BrandGetter,
+	productBlueprintRepo applicationport.ProductBlueprintReader,
+	brandGetter applicationport.BrandGetter,
 	memberRepo memberdom.Repository,
 	ownedProductResolver OwnedProductResolver,
 	avatarRepo AvatarGetter,

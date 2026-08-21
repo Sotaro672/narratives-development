@@ -9,53 +9,30 @@ import (
 	applicationport "narratives/internal/application/port"
 	malldto "narratives/internal/application/query/mall/dto"
 	mallshared "narratives/internal/application/query/mall/shared"
-	branddom "narratives/internal/domain/brand"
 	cartdom "narratives/internal/domain/cart"
 	invdom "narratives/internal/domain/inventory"
-	ldom "narratives/internal/domain/list"
 	productblueprintcategorydom "narratives/internal/domain/productBlueprintCategory"
-	resaledom "narratives/internal/domain/resale"
 )
 
-type CartReader interface {
-	GetByAvatarID(ctx context.Context, avatarID string) (*cartdom.Cart, error)
-}
-
-type ListReader interface {
-	GetByID(ctx context.Context, id string) (ldom.List, error)
-}
-
-type ListImageReader interface {
-	ListByListID(ctx context.Context, listID string) ([]ldom.ListImage, error)
-}
-
-type ResaleReader interface {
-	GetByID(ctx context.Context, id string) (resaledom.Resale, error)
-}
-
-type ResaleImageReader interface {
-	ListByResaleID(ctx context.Context, resaleID string) ([]resaledom.ResaleImage, error)
-}
-
 type CartQuery struct {
-	CartRepo CartReader
+	CartRepo applicationport.CartGetter
 
-	ListRepo             ListReader
-	ListImageRepo        ListImageReader
+	ListRepo             applicationport.ListGetter
+	ListImageRepo        applicationport.ListImageLister
 	InventoryRepo        invdom.RepositoryPort
 	ProductBlueprintRepo applicationport.ProductBlueprintGetter
 
-	ResaleRepo      ResaleReader
-	ResaleImageRepo ResaleImageReader
+	ResaleRepo      applicationport.ResaleGetter
+	ResaleImageRepo applicationport.ResaleImageLister
 
-	BrandRepo branddom.Repository
+	BrandRepo applicationport.BrandGetter
 
 	DisplayResolver mallshared.MallDisplayResolver
 }
 
 type CartQueryOption func(*CartQuery)
 
-func WithCartQueryBrandRepo(repo branddom.Repository) CartQueryOption {
+func WithCartQueryBrandRepo(repo applicationport.BrandGetter) CartQueryOption {
 	return func(query *CartQuery) {
 		if query != nil {
 			query.BrandRepo = repo
@@ -64,13 +41,13 @@ func WithCartQueryBrandRepo(repo branddom.Repository) CartQueryOption {
 }
 
 func NewCartQuery(
-	cartRepo CartReader,
-	listRepo ListReader,
-	listImageRepo ListImageReader,
+	cartRepo applicationport.CartGetter,
+	listRepo applicationport.ListGetter,
+	listImageRepo applicationport.ListImageLister,
 	inventoryRepo invdom.RepositoryPort,
 	productBlueprintRepo applicationport.ProductBlueprintGetter,
-	resaleRepo ResaleReader,
-	resaleImageRepo ResaleImageReader,
+	resaleRepo applicationport.ResaleGetter,
+	resaleImageRepo applicationport.ResaleImageLister,
 	displayResolver mallshared.MallDisplayResolver,
 	opts ...CartQueryOption,
 ) *CartQuery {

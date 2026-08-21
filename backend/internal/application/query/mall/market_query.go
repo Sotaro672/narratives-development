@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 
+	applicationport "narratives/internal/application/port"
 	mallshared "narratives/internal/application/query/mall/shared"
 	avatardom "narratives/internal/domain/avatar"
 	resaledom "narratives/internal/domain/resale"
@@ -28,14 +29,14 @@ type MarketResaleRepository interface {
 // - Images are visible only when the parent resale is listing and not owned by the viewer.
 type MarketQuery struct {
 	resaleRepo      MarketResaleRepository
-	imageRepo       resaledom.ImageRepository
+	imageRepo       applicationport.ResaleImageLister
 	displayResolver mallshared.MallDisplayResolver
 	avatarRepo      avatardom.Repository
 }
 
 func NewMarketQuery(
 	resaleRepo MarketResaleRepository,
-	imageRepo resaledom.ImageRepository,
+	imageRepo applicationport.ResaleImageLister,
 	displayResolver mallshared.MallDisplayResolver,
 	avatarRepo ...avatardom.Repository,
 ) *MarketQuery {

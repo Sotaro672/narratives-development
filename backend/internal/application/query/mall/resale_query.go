@@ -5,19 +5,20 @@ import (
 	"context"
 	"errors"
 
+	applicationport "narratives/internal/application/port"
 	mallshared "narratives/internal/application/query/mall/shared"
 	resaledom "narratives/internal/domain/resale"
 )
 
 type ResaleQuery struct {
 	resaleRepo      resaledom.Repository
-	imageRepo       resaledom.ImageRepository
+	imageRepo       applicationport.ResaleImageLister
 	displayResolver mallshared.MallDisplayResolver
 }
 
 func NewResaleQuery(
 	resaleRepo resaledom.Repository,
-	imageRepo resaledom.ImageRepository,
+	imageRepo applicationport.ResaleImageLister,
 	displayResolver mallshared.MallDisplayResolver,
 ) *ResaleQuery {
 	return &ResaleQuery{

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 
+	applicationport "narratives/internal/application/port"
 	dto "narratives/internal/application/query/mall/dto"
 	mallshared "narratives/internal/application/query/mall/shared"
 	appresolver "narratives/internal/application/resolver"
@@ -29,7 +30,7 @@ type OrderQuery struct {
 
 	// optional: cart repository
 	// - if nil, GetOrderContextByUID skips cart item resolution
-	CartRepo cart.Repository
+	CartRepo applicationport.CartGetter
 
 	// optional: shipping address repository
 	// - if nil, GetOrderContextByUID skips shipping snapshot resolution
@@ -43,15 +44,15 @@ type OrderQuery struct {
 
 	// optional: product blueprint repository
 	// - resale/list item の productName 解決に使う
-	ProductBlueprintRepo ProductBlueprintReader
+	ProductBlueprintRepo applicationport.ProductBlueprintGetter
 
 	// optional: resale repository
 	// - resale item の price/productBlueprintId/tokenBlueprintId/brandId を解決する
-	ResaleRepo ResaleReader
+	ResaleRepo applicationport.ResaleGetter
 
 	// optional: resale image repository
 	// - resale item の imageUrl/listImage を解決する
-	ResaleImageRepo ResaleImageReader
+	ResaleImageRepo applicationport.ResaleImageLister
 
 	// optional: name resolver
 	// - if nil, FullName will be empty
@@ -60,12 +61,12 @@ type OrderQuery struct {
 
 func NewOrderQuery(
 	avatarRepo avatardom.Repository,
-	cartRepo cart.Repository,
+	cartRepo applicationport.CartGetter,
 	shippingAddressRepo shippingaddress.RepositoryPort,
 	paymentMethodRepo paymentmethod.RepositoryPort,
-	productBlueprintRepo ProductBlueprintReader,
-	resaleRepo ResaleReader,
-	resaleImageRepo ResaleImageReader,
+	productBlueprintRepo applicationport.ProductBlueprintGetter,
+	resaleRepo applicationport.ResaleGetter,
+	resaleImageRepo applicationport.ResaleImageLister,
 	nameResolver *appresolver.NameResolver,
 ) *OrderQuery {
 	return &OrderQuery{

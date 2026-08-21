@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	branddom "narratives/internal/domain/brand"
 	productdom "narratives/internal/domain/product"
 	productbpdom "narratives/internal/domain/productBlueprint"
@@ -22,19 +23,6 @@ type TokenQuery interface {
 	ResolveTokenByAssetID(ctx context.Context, assetID string) (tokendom.ResolveTokenByAssetIDResult, error)
 }
 
-// BrandResolver (brandId -> Brand)
-//
-// brand.RepositoryPort / brand.Repository の GetByID(ctx, id string) に合わせる。
-// brand.Service / GetNameByID は使わず、repository の GetByID から Brand.Name を解決する。
-type BrandResolver interface {
-	GetByID(ctx context.Context, id string) (branddom.Brand, error)
-}
-
-// ProductReader (productId -> product(modelId取得))
-type ProductReader interface {
-	GetByID(ctx context.Context, productID string) (productdom.Product, error)
-}
-
 // ModelProductBlueprintIDResolver (modelId -> productBlueprintId + modelRefs)
 //
 // repository port の GetIDByModelID に合わせる。
@@ -42,11 +30,6 @@ type ProductReader interface {
 // - displayOrder / modelRefs が必要な caller は第2戻り値を使う
 type ModelProductBlueprintIDResolver interface {
 	GetIDByModelID(ctx context.Context, modelID string) (string, []productbpdom.ModelRef, error)
-}
-
-// ProductBlueprintReader (productBlueprintId -> productBlueprint(productName取得))
-type ProductBlueprintReader interface {
-	GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
 }
 
 // WalletUsecase は Wallet 同期ユースケースです。
@@ -60,12 +43,12 @@ type WalletUsecase struct {
 	tokenQuery    TokenQuery
 
 	// brandId -> Brand.Name（UI期待値）
-	brandResolver BrandResolver
+	brandResolver applicationport.BrandGetter
 
 	// productName 逆引き（UI期待値）
-	productReader           ProductReader
+	productReader           applicationport.ProductGetter
 	modelProductBlueprintID ModelProductBlueprintIDResolver
-	productBlueprintReader  ProductBlueprintReader
+	productBlueprintReader  applicationport.ProductBlueprintGetter
 }
 
 // NewWalletUsecase is the only wiring entrypoint.
@@ -74,10 +57,10 @@ func NewWalletUsecase(
 	walletRepo walletdom.Repository,
 	onchainReader walletdom.OnchainReader,
 	tokenQuery TokenQuery,
-	brandResolver BrandResolver,
-	productReader ProductReader,
+	brandResolver applicationport.BrandGetter,
+	productReader applicationport.ProductGetter,
 	modelProductBlueprintID ModelProductBlueprintIDResolver,
-	productBlueprintReader ProductBlueprintReader,
+	productBlueprintReader applicationport.ProductBlueprintGetter,
 ) *WalletUsecase {
 	return &WalletUsecase{
 		walletRepo:              walletRepo,

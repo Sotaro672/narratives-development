@@ -5,6 +5,7 @@ package dto
 // Frontend must treat this response as the source of truth and must not restore missing values with aliases or normalizers.
 type ListDetailDTO struct {
 	ID          string `json:"id"`
+	ReadableID  string `json:"readableId"`
 	InventoryID string `json:"inventoryId"`
 
 	Status      string `json:"status"`

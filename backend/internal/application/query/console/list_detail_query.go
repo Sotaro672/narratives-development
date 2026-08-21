@@ -205,6 +205,7 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 
 	return querydto.ListDetailDTO{
 		ID:          it.ID,
+		ReadableID:  it.ReadableID,
 		InventoryID: invID,
 
 		Status:      string(it.Status),
