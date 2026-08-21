@@ -14,6 +14,7 @@ import {
 import PriceCard from "../features/list/presentation/components/priceCard";
 import ListImageCard from "../features/list/presentation/components/listImageCard";
 import ListStatusHeaderActions from "../features/list/presentation/components/ListStatusHeaderActions";
+import TransportOptionCard from "../features/list/presentation/components/transportOptionCard";
 
 import {
   useListCreate,
@@ -23,6 +24,7 @@ export default function InventoryListCreate() {
   const {
     onBack,
     onCreate,
+    dto,
     loadingDTO,
     dtoError,
     productBrandName,
@@ -47,6 +49,10 @@ export default function InventoryListCreate() {
     handleSelectAssignee,
     status,
     setStatus,
+    transportationOption,
+    transportationId,
+    onSelectTransportationOption,
+    setTransportationId,
   } = useListCreate();
 
   const missingModelIdCount = React.useMemo(
@@ -89,6 +95,7 @@ export default function InventoryListCreate() {
       );
 
       if (!matched) return;
+
       handleSelectAssignee(matched.id);
     },
     [assigneeCandidates, handleSelectAssignee],
@@ -122,10 +129,17 @@ export default function InventoryListCreate() {
 
         <Card>
           <CardContent className="p-4 space-y-2">
-            <div className="text-sm font-medium">タイトル</div>
+            <div className="text-sm font-medium">
+              タイトル
+            </div>
+
             <input
               value={listingTitle}
-              onChange={(event) => setListingTitle(event.target.value)}
+              onChange={(event) =>
+                setListingTitle(
+                  event.target.value,
+                )
+              }
               placeholder="例: Narratives シャツ1（赤 / S・M）"
               className="w-full h-10 px-3 rounded-md border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-slate-200"
             />
@@ -134,10 +148,17 @@ export default function InventoryListCreate() {
 
         <Card>
           <CardContent className="p-4 space-y-2">
-            <div className="text-sm font-medium">説明</div>
+            <div className="text-sm font-medium">
+              説明
+            </div>
+
             <textarea
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) =>
+                setDescription(
+                  event.target.value,
+                )
+              }
               placeholder="商品の状態、サイズ感、注意事項などを入力してください。"
               rows={5}
               className="w-full px-3 py-2 rounded-md border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-slate-200"
@@ -182,7 +203,9 @@ export default function InventoryListCreate() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm font-medium mb-2">担当者</div>
+            <div className="text-sm font-medium mb-2">
+              担当者
+            </div>
 
             {loadingMembers ? (
               <div className="text-xs text-slate-400">
@@ -205,10 +228,14 @@ export default function InventoryListCreate() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm font-medium mb-2">選択商品</div>
+            <div className="text-sm font-medium mb-2">
+              選択商品
+            </div>
+
             <div className="text-sm text-slate-800 break-all">
               {productBrandName || "未選択"}
             </div>
+
             <div className="text-sm text-slate-800 break-all">
               {productName || "未選択"}
             </div>
@@ -217,15 +244,41 @@ export default function InventoryListCreate() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm font-medium mb-2">選択トークン</div>
+            <div className="text-sm font-medium mb-2">
+              選択トークン
+            </div>
+
             <div className="text-sm text-slate-800 break-all">
               {tokenBrandName || "未選択"}
             </div>
+
             <div className="text-sm text-slate-800 break-all">
               {tokenName || "未選択"}
             </div>
           </CardContent>
         </Card>
+
+        <TransportOptionCard
+          options={
+            dto?.transportationOptions ??
+            []
+          }
+          transportationOption={
+            transportationOption
+          }
+          transportationId={
+            transportationId
+          }
+          onSelectTransportationOption={
+            onSelectTransportationOption
+          }
+          setTransportationId={
+            setTransportationId
+          }
+          loading={
+            loadingDTO
+          }
+        />
       </div>
     </PageStyle>
   );

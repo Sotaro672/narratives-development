@@ -1,5 +1,9 @@
 // frontend/console/shell/src/shared/types/inventory.ts
 
+import type {
+  TransportationOption,
+} from "./list";
+
 // =========================================================
 // Inventory common
 // =========================================================
@@ -16,13 +20,20 @@ export type InventoryProductBlueprintCategoryKind =
 // =========================================================
 
 export type InventoryCategoryFieldPrimitiveValue = string | number | boolean | null;
-export type InventoryCategoryFieldArrayValue = InventoryCategoryFieldPrimitiveValue[];
-export type InventoryCategoryFieldObjectValue = Record<string, InventoryCategoryFieldPrimitiveValue>;
+
+export type InventoryCategoryFieldArrayValue =
+  InventoryCategoryFieldPrimitiveValue[];
+
+export type InventoryCategoryFieldObjectValue =
+  Record<string, InventoryCategoryFieldPrimitiveValue>;
+
 export type InventoryCategoryFieldValue =
   | InventoryCategoryFieldPrimitiveValue
   | InventoryCategoryFieldArrayValue
   | InventoryCategoryFieldObjectValue;
-export type InventoryCategoryFieldValues = Record<string, InventoryCategoryFieldValue>;
+
+export type InventoryCategoryFieldValues =
+  Record<string, InventoryCategoryFieldValue>;
 
 // =========================================================
 // Inventory Management
@@ -193,10 +204,43 @@ export type ListCreatePriceRowDTO = {
   price?: number;
 };
 
+export type ListCreateTransportationOptionDTO = {
+  /**
+   * 配送方法。
+   *
+   * - yamato
+   * - sagawa
+   * - post
+   * - custom
+   */
+  transportationOption: TransportationOption;
+
+  /**
+   * custom の場合のみ TransportationFeeSetting.ID を保持する。
+   * yamato / sagawa / post の場合は未設定。
+   */
+  transportationId?: string;
+
+  /**
+   * UI表示名。
+   *
+   * 例:
+   * - ヤマト運輸
+   * - 佐川急便
+   * - 日本郵便
+   * - 自社で登録した料金設定名
+   */
+  name: string;
+};
+
 export type ListCreateDTO = {
   productBrandName: string;
   productName: string;
   tokenBrandName: string;
   tokenName: string;
+
+  transportationOptions:
+    ListCreateTransportationOptionDTO[];
+
   priceRows: ListCreatePriceRowDTO[];
 };

@@ -473,10 +473,16 @@ func NewContainer(
 			nil,
 		)
 
+	transportationRepo :=
+		outfs.NewTransportationRepositoryFS(
+			fsClient,
+		)
+
 	c.ListUC =
 		usecase.NewListUsecase(
 			listRepoFS,
 			listImageRecordRepo,
+			transportationRepo,
 			nil,
 		)
 

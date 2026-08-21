@@ -26,6 +26,25 @@ func IsValidStatus(s ListStatus) bool {
 	}
 }
 
+// TransportationOption is the transportation fee source used by a list.
+type TransportationOption string
+
+const (
+	TransportationOptionYamato TransportationOption = "yamato"
+	TransportationOptionSagawa TransportationOption = "sagawa"
+	TransportationOptionPost   TransportationOption = "post"
+	TransportationOptionCustom TransportationOption = "custom"
+)
+
+func IsValidTransportationOption(option TransportationOption) bool {
+	switch option {
+	case TransportationOptionYamato, TransportationOptionSagawa, TransportationOptionPost, TransportationOptionCustom:
+		return true
+	default:
+		return false
+	}
+}
+
 // Errors
 var (
 	// List errors
@@ -40,6 +59,10 @@ var (
 	ErrInvalidPrices       = errors.New("list: invalid prices")
 	ErrInvalidPrice        = errors.New("list: invalid price")
 	ErrInvalidPriceModelID = errors.New("list: invalid modelId in prices")
+
+	ErrInvalidTransportationOption = errors.New("list: invalid transportationOption")
+	ErrTransportationIDRequired    = errors.New("list: transportationId is required for custom transportation")
+	ErrTransportationIDNotAllowed  = errors.New("list: transportationId is only allowed for custom transportation")
 
 	ErrInvalidCreatedBy = errors.New("list: invalid createdBy")
 	ErrInvalidCreatedAt = errors.New("list: invalid createdAt")
@@ -109,6 +132,12 @@ type List struct {
 	// 1 inventory can have multiple lists.
 	InventoryID string `json:"inventoryId,omitempty"`
 
+	// TransportationOption selects the transportation fee source.
+	// TransportationID is the primary key of transportation.TransportationFeeSetting
+	// and is required only when TransportationOption is custom.
+	TransportationOption TransportationOption `json:"transportationOption,omitempty"`
+	TransportationID     string               `json:"transportationId,omitempty"`
+
 	// Primary image record id.
 	// This is not a URL.
 	ImageID string `json:"imageId,omitempty"`
@@ -137,6 +166,8 @@ func NewForCreate(
 	assigneeID string,
 	title string,
 	inventoryID string,
+	transportationOption TransportationOption,
+	transportationID string,
 	description string,
 	prices []ListPriceRow,
 	createdBy string,
@@ -146,17 +177,19 @@ func NewForCreate(
 	}
 
 	l := List{
-		ID:          "",
-		ReadableID:  "",
-		Status:      status,
-		AssigneeID:  assigneeID,
-		Title:       title,
-		InventoryID: inventoryID,
-		ImageID:     "",
-		Description: description,
-		Prices:      prices,
-		CreatedBy:   createdBy,
-		CreatedAt:   time.Time{},
+		ID:                   "",
+		ReadableID:           "",
+		Status:               status,
+		AssigneeID:           assigneeID,
+		Title:                title,
+		InventoryID:          inventoryID,
+		TransportationOption: transportationOption,
+		TransportationID:     transportationID,
+		ImageID:              "",
+		Description:          description,
+		Prices:               prices,
+		CreatedBy:            createdBy,
+		CreatedAt:            time.Time{},
 	}
 
 	if err := l.ValidateForCreate(); err != nil {
@@ -205,6 +238,21 @@ func (l *List) UpdateInventoryID(inventoryID string, now time.Time) error {
 	}
 
 	l.InventoryID = inventoryID
+	l.touch(now)
+	return nil
+}
+
+func (l *List) UpdateTransportation(
+	option TransportationOption,
+	transportationID string,
+	now time.Time,
+) error {
+	if err := validateTransportation(option, transportationID); err != nil {
+		return err
+	}
+
+	l.TransportationOption = option
+	l.TransportationID = transportationID
 	l.touch(now)
 	return nil
 }
@@ -324,6 +372,10 @@ func (l List) ValidateForCreate() error {
 		return ErrInvalidInventoryID
 	}
 
+	if err := validateTransportation(l.TransportationOption, l.TransportationID); err != nil {
+		return err
+	}
+
 	if l.Description == "" || len(l.Description) > MaxDescriptionLength {
 		return ErrInvalidDescription
 	}
@@ -375,6 +427,10 @@ func (l List) ValidateForPersist() error {
 
 	if l.InventoryID == "" {
 		return ErrInvalidInventoryID
+	}
+
+	if err := validateTransportation(l.TransportationOption, l.TransportationID); err != nil {
+		return err
 	}
 
 	if l.Description == "" || len(l.Description) > MaxDescriptionLength {
@@ -533,6 +589,26 @@ func (l *List) touch(now time.Time) {
 
 	t := now.UTC()
 	l.UpdatedAt = &t
+}
+
+func validateTransportation(option TransportationOption, transportationID string) error {
+	if !IsValidTransportationOption(option) {
+		return ErrInvalidTransportationOption
+	}
+
+	if option == TransportationOptionCustom {
+		if transportationID == "" {
+			return ErrTransportationIDRequired
+		}
+
+		return nil
+	}
+
+	if transportationID != "" {
+		return ErrTransportationIDNotAllowed
+	}
+
+	return nil
 }
 
 func validatePriceRows(rows []ListPriceRow) error {

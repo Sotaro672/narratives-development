@@ -6,6 +6,7 @@
 // - DI 済み依存（ports）を保持する
 // - listID を入力に listDetail.tsx 用の ListDetailDTO を生成する
 // - ListDetailDTO の images / priceRows / stock / model attributes を生成する
+// - ListDetailDTO の transportationOption / transportationId を生成する
 // - 取得済み ProductBlueprint.ModelRefs から displayOrder を抽出する
 //
 // Firebase Storage 移行後:
@@ -204,6 +205,9 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 
 		AssigneeID:   it.AssigneeID,
 		AssigneeName: assigneeName,
+
+		TransportationOption: string(it.TransportationOption),
+		TransportationID:     it.TransportationID,
 
 		CreatedBy:     it.CreatedBy,
 		CreatedByName: createdByName,

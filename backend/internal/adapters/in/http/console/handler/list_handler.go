@@ -51,6 +51,22 @@ func requireCurrentFirebaseUID(
 	return uid, true
 }
 
+func requireCurrentCompanyID(
+	w http.ResponseWriter,
+	r *http.Request,
+) (string, bool) {
+	companyID, ok := middleware.CompanyID(r)
+	if !ok || companyID == "" {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{"error": "company_id_not_resolved"},
+		)
+		return "", false
+	}
+
+	return companyID, true
+}
+
 func (h *ListHandler) ServeHTTP(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -190,6 +206,11 @@ func (h *ListHandler) create(
 		return
 	}
 
+	companyID, ok := requireCurrentCompanyID(w, r)
+	if !ok {
+		return
+	}
+
 	body, err := io.ReadAll(
 		io.LimitReader(r.Body, 1<<20),
 	)
@@ -202,7 +223,6 @@ func (h *ListHandler) create(
 	}
 
 	var item listdom.List
-
 	if err := json.Unmarshal(body, &item); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(
@@ -250,13 +270,16 @@ func (h *ListHandler) create(
 	}
 
 	now := time.Now().UTC()
-
 	item.CreatedBy = uid
 	item.CreatedAt = now
 	item.UpdatedAt = &now
 	item.UpdatedBy = nil
 
-	created, err := h.uc.Create(ctx, item)
+	created, err := h.uc.Create(
+		ctx,
+		companyID,
+		item,
+	)
 	if err != nil {
 		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
@@ -296,6 +319,11 @@ func (h *ListHandler) update(
 		return
 	}
 
+	companyID, ok := requireCurrentCompanyID(w, r)
+	if !ok {
+		return
+	}
+
 	body, err := io.ReadAll(
 		io.LimitReader(r.Body, 1<<20),
 	)
@@ -308,7 +336,6 @@ func (h *ListHandler) update(
 	}
 
 	var item listdom.List
-
 	if err := json.Unmarshal(body, &item); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(
@@ -328,11 +355,14 @@ func (h *ListHandler) update(
 	}
 
 	now := time.Now().UTC()
-
 	item.UpdatedBy = &uid
 	item.UpdatedAt = &now
 
-	updated, err := h.uc.Update(ctx, item)
+	updated, err := h.uc.Update(
+		ctx,
+		companyID,
+		item,
+	)
 	if err != nil {
 		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
@@ -378,7 +408,6 @@ func (h *ListHandler) delete(
 	}
 
 	id = strings.TrimSpace(id)
-
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(
@@ -427,7 +456,6 @@ func (h *ListHandler) listIndex(
 	}
 
 	qp := r.URL.Query()
-
 	var filter listdom.Filter
 
 	if value := qp.Get("q"); value != "" {
@@ -503,7 +531,6 @@ func (h *ListHandler) listIndex(
 	}
 
 	sortOptions := listdom.Sort{}
-
 	pageNumber := parseIntDefault(
 		qp.Get("page"),
 		1,
@@ -740,7 +767,6 @@ func (h *ListHandler) createImageFromFirebaseStorage(
 	}
 
 	now := time.Now().UTC()
-
 	image, err := h.uc.CreateImage(
 		ctx,
 		listdom.ListImage{
@@ -817,7 +843,6 @@ func (h *ListHandler) setPrimaryImage(
 	}
 
 	now := time.Now().UTC()
-
 	item, err := h.uc.SetPrimaryImage(
 		ctx,
 		listID,

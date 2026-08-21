@@ -11,6 +11,7 @@ import (
 	"time"
 
 	listdom "narratives/internal/domain/list"
+	transportationdom "narratives/internal/domain/transportation"
 )
 
 type ListAssetStorage interface {
@@ -18,20 +19,23 @@ type ListAssetStorage interface {
 }
 
 type ListUsecase struct {
-	listRepo  listdom.Repository
-	imageRepo listdom.ImageRepository
-	storage   ListAssetStorage
+	listRepo           listdom.Repository
+	imageRepo          listdom.ImageRepository
+	transportationRepo transportationdom.RepositoryPort
+	storage            ListAssetStorage
 }
 
 func NewListUsecase(
 	listRepo listdom.Repository,
 	imageRepo listdom.ImageRepository,
+	transportationRepo transportationdom.RepositoryPort,
 	storage ListAssetStorage,
 ) *ListUsecase {
 	return &ListUsecase{
-		listRepo:  listRepo,
-		imageRepo: imageRepo,
-		storage:   storage,
+		listRepo:           listRepo,
+		imageRepo:          imageRepo,
+		transportationRepo: transportationRepo,
+		storage:            storage,
 	}
 }
 
@@ -42,7 +46,6 @@ func generateReadableID(listID string, createdAt time.Time) string {
 	}
 
 	date := t.UTC().Format("20060102")
-
 	base := listID
 	if base == "" {
 		base = fmt.Sprintf("noid-%d", time.Now().UTC().UnixNano())
@@ -57,12 +60,68 @@ func generateReadableID(listID string, createdAt time.Time) string {
 	return fmt.Sprintf("L-%s-%s", date, hex6)
 }
 
+func (uc *ListUsecase) validateListTransportationSelection(
+	ctx context.Context,
+	companyID string,
+	item listdom.List,
+) error {
+	if !listdom.IsValidTransportationOption(item.TransportationOption) {
+		return listdom.ErrInvalidTransportationOption
+	}
+
+	if item.TransportationOption != listdom.TransportationOptionCustom {
+		if item.TransportationID != "" {
+			return listdom.ErrTransportationIDNotAllowed
+		}
+		return nil
+	}
+
+	if item.TransportationID == "" {
+		return listdom.ErrTransportationIDRequired
+	}
+
+	if uc == nil || uc.transportationRepo == nil {
+		return ErrNotSupported("List.TransportationRepo")
+	}
+
+	if companyID == "" || len([]rune(companyID)) > transportationdom.MaxCompanyIDLength {
+		return transportationdom.ErrInvalidCompanyID
+	}
+
+	if len([]rune(item.TransportationID)) > transportationdom.MaxTransportationIDLength {
+		return transportationdom.ErrInvalidID
+	}
+
+	setting, err := uc.transportationRepo.GetByID(ctx, item.TransportationID)
+	if err != nil {
+		if errors.Is(err, transportationdom.ErrNotFound) {
+			return transportationdom.ErrNotFound
+		}
+		return err
+	}
+
+	if setting == nil || setting.ID != item.TransportationID {
+		return transportationdom.ErrNotFound
+	}
+
+	if setting.CompanyID != companyID {
+		return transportationdom.ErrNotFound
+	}
+
+	return nil
+}
+
 func (uc *ListUsecase) Create(
 	ctx context.Context,
+	companyID string,
 	item listdom.List,
 ) (listdom.List, error) {
 	if uc == nil || uc.listRepo == nil {
 		return listdom.List{}, ErrNotSupported("List.Create")
+	}
+
+	if err := uc.validateListTransportationSelection(ctx, companyID, item); err != nil {
+		return listdom.List{}, err
 	}
 
 	created, err := uc.listRepo.Create(ctx, item)
@@ -88,6 +147,7 @@ func (uc *ListUsecase) Create(
 
 func (uc *ListUsecase) Update(
 	ctx context.Context,
+	companyID string,
 	item listdom.List,
 ) (listdom.List, error) {
 	if uc == nil || uc.listRepo == nil {
@@ -99,8 +159,11 @@ func (uc *ListUsecase) Update(
 		return listdom.List{}, listdom.ErrInvalidID
 	}
 
-	item.ID = id
+	if err := uc.validateListTransportationSelection(ctx, companyID, item); err != nil {
+		return listdom.List{}, err
+	}
 
+	item.ID = id
 	return uc.listRepo.Update(ctx, id, item)
 }
 
@@ -208,10 +271,8 @@ func (uc *ListUsecase) DeleteImage(
 		l, err := uc.listRepo.GetByID(ctx, listID)
 		if err == nil && l.ImageID == imageID {
 			now := time.Now().UTC()
-
 			l.ImageID = ""
 			l.UpdatedAt = &now
-
 			_, _ = uc.listRepo.Update(ctx, listID, l)
 		}
 	}
@@ -297,7 +358,6 @@ func (uc *ListUsecase) SetPrimaryImage(
 	}
 
 	updatedAt := now.UTC()
-
 	l.ImageID = iid
 	l.UpdatedAt = &updatedAt
 

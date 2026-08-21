@@ -191,7 +191,13 @@ func (r *ListRepositoryFS) List(ctx context.Context, _ ldom.Filter, _ ldom.Sort,
 		}
 	}
 
-	return ldom.PageResult[ldom.List]{Items: items, TotalCount: 0, TotalPages: 0, Page: pageNum, PerPage: perPage}, nil
+	return ldom.PageResult[ldom.List]{
+		Items:      items,
+		TotalCount: 0,
+		TotalPages: 0,
+		Page:       pageNum,
+		PerPage:    perPage,
+	}, nil
 }
 
 func (r *ListRepositoryFS) ListByCursor(ctx context.Context, _ ldom.Filter, _ ldom.Sort, cpage ldom.CursorPage) (ldom.CursorPageResult[ldom.List], error) {
@@ -247,7 +253,11 @@ func (r *ListRepositoryFS) ListByCursor(ctx context.Context, _ ldom.Filter, _ ld
 		}
 	}
 
-	return ldom.CursorPageResult[ldom.List]{Items: items, NextCursor: next, Limit: limit}, nil
+	return ldom.CursorPageResult[ldom.List]{
+		Items:      items,
+		NextCursor: next,
+		Limit:      limit,
+	}, nil
 }
 
 // ============================================================
@@ -349,6 +359,8 @@ func (r *ListRepositoryFS) Update(ctx context.Context, id string, l ldom.List) (
 		cur.ImageID = l.ImageID
 		cur.ReadableID = l.ReadableID
 		cur.Description = l.Description
+		cur.TransportationOption = l.TransportationOption
+		cur.TransportationID = l.TransportationID
 		cur.Prices = l.Prices
 
 		clearUpdatedBy := false
@@ -381,6 +393,9 @@ func (r *ListRepositoryFS) Update(ctx context.Context, id string, l ldom.List) (
 		}
 
 		data := encodeListDoc(cur)
+		if cur.TransportationID == "" {
+			data["transportation_id"] = gfs.Delete
+		}
 		if clearUpdatedBy {
 			data["updated_by"] = gfs.Delete
 		}
@@ -479,36 +494,40 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 	}
 
 	var raw struct {
-		Status      string     `firestore:"status"`
-		AssigneeID  string     `firestore:"assignee_id"`
-		Title       string     `firestore:"title"`
-		ImageID     string     `firestore:"image_id"`
-		ReadableID  string     `firestore:"readable_id"`
-		Description string     `firestore:"description"`
-		CreatedBy   string     `firestore:"created_by"`
-		CreatedAt   time.Time  `firestore:"created_at"`
-		UpdatedBy   *string    `firestore:"updated_by"`
-		UpdatedAt   *time.Time `firestore:"updated_at"`
-		InventoryID string     `firestore:"inventory_id"`
+		Status               string     `firestore:"status"`
+		AssigneeID           string     `firestore:"assignee_id"`
+		Title                string     `firestore:"title"`
+		ImageID              string     `firestore:"image_id"`
+		ReadableID           string     `firestore:"readable_id"`
+		Description          string     `firestore:"description"`
+		TransportationOption string     `firestore:"transportation_option"`
+		TransportationID     string     `firestore:"transportation_id"`
+		CreatedBy            string     `firestore:"created_by"`
+		CreatedAt            time.Time  `firestore:"created_at"`
+		UpdatedBy            *string    `firestore:"updated_by"`
+		UpdatedAt            *time.Time `firestore:"updated_at"`
+		InventoryID          string     `firestore:"inventory_id"`
 	}
 	if err := doc.DataTo(&raw); err != nil {
 		return ldom.List{}, err
 	}
 
 	l := ldom.List{
-		ID:          doc.Ref.ID,
-		Status:      ldom.ListStatus(raw.Status),
-		AssigneeID:  raw.AssigneeID,
-		Title:       raw.Title,
-		ImageID:     raw.ImageID,
-		InventoryID: raw.InventoryID,
-		ReadableID:  raw.ReadableID,
-		Description: raw.Description,
-		Prices:      nil,
-		CreatedBy:   raw.CreatedBy,
-		CreatedAt:   raw.CreatedAt,
-		UpdatedBy:   raw.UpdatedBy,
-		UpdatedAt:   raw.UpdatedAt,
+		ID:                   doc.Ref.ID,
+		Status:               ldom.ListStatus(raw.Status),
+		AssigneeID:           raw.AssigneeID,
+		Title:                raw.Title,
+		ImageID:              raw.ImageID,
+		InventoryID:          raw.InventoryID,
+		ReadableID:           raw.ReadableID,
+		Description:          raw.Description,
+		TransportationOption: ldom.TransportationOption(raw.TransportationOption),
+		TransportationID:     raw.TransportationID,
+		Prices:               nil,
+		CreatedBy:            raw.CreatedBy,
+		CreatedAt:            raw.CreatedAt,
+		UpdatedBy:            raw.UpdatedBy,
+		UpdatedAt:            raw.UpdatedAt,
 	}
 	if err := l.ValidateForPersist(); err != nil {
 		return ldom.List{}, err
@@ -518,15 +537,19 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 
 func encodeListDoc(l ldom.List) map[string]any {
 	m := map[string]any{
-		"status":       string(l.Status),
-		"assignee_id":  l.AssigneeID,
-		"title":        l.Title,
-		"image_id":     l.ImageID,
-		"inventory_id": l.InventoryID,
-		"readable_id":  l.ReadableID,
-		"description":  l.Description,
-		"created_by":   l.CreatedBy,
-		"created_at":   l.CreatedAt.UTC(),
+		"status":                string(l.Status),
+		"assignee_id":           l.AssigneeID,
+		"title":                 l.Title,
+		"image_id":              l.ImageID,
+		"inventory_id":          l.InventoryID,
+		"readable_id":           l.ReadableID,
+		"description":           l.Description,
+		"transportation_option": string(l.TransportationOption),
+		"created_by":            l.CreatedBy,
+		"created_at":            l.CreatedAt.UTC(),
+	}
+	if l.TransportationID != "" {
+		m["transportation_id"] = l.TransportationID
 	}
 	if l.UpdatedBy != nil {
 		m["updated_by"] = *l.UpdatedBy
@@ -569,7 +592,10 @@ func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID stri
 			return nil, err
 		}
 
-		row := ldom.ListPriceRow{ModelID: doc.Ref.ID, Price: raw.Price}
+		row := ldom.ListPriceRow{
+			ModelID: doc.Ref.ID,
+			Price:   raw.Price,
+		}
 		if err := validateListPriceRow(row); err != nil {
 			return nil, err
 		}
@@ -584,7 +610,12 @@ func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID stri
 	return out, nil
 }
 
-func (r *ListRepositoryFS) txReplaceListPrices(ctx context.Context, tx *gfs.Transaction, listRef *gfs.DocumentRef, prices []ldom.ListPriceRow) error {
+func (r *ListRepositoryFS) txReplaceListPrices(
+	ctx context.Context,
+	tx *gfs.Transaction,
+	listRef *gfs.DocumentRef,
+	prices []ldom.ListPriceRow,
+) error {
 	if listRef == nil || listRef.ID == "" {
 		return ldom.ErrInvalidID
 	}
@@ -612,7 +643,9 @@ func (r *ListRepositoryFS) txReplaceListPrices(ctx context.Context, tx *gfs.Tran
 
 	for _, row := range prices {
 		itemRef := listRef.Collection(listPricesSub).Doc(row.ModelID)
-		if err := tx.Set(itemRef, map[string]any{"price": row.Price}); err != nil {
+		if err := tx.Set(itemRef, map[string]any{
+			"price": row.Price,
+		}); err != nil {
 			return err
 		}
 	}

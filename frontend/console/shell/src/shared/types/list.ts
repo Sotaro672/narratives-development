@@ -28,6 +28,39 @@ export function isValidListStatus(
 }
 
 /**
+ * Listの配送方法。
+ *
+ * backend/internal/domain/list/entity.go:
+ * - yamato
+ * - sagawa
+ * - post
+ * - custom
+ */
+export const TRANSPORTATION_OPTIONS = [
+  "yamato",
+  "sagawa",
+  "post",
+  "custom",
+] as const;
+
+export type TransportationOption =
+  (typeof TRANSPORTATION_OPTIONS)[number];
+
+/**
+ * TransportationOptionの実行時判定。
+ */
+export function isValidTransportationOption(
+  value: unknown,
+): value is TransportationOption {
+  return (
+    value === "yamato" ||
+    value === "sagawa" ||
+    value === "post" ||
+    value === "custom"
+  );
+}
+
+/**
  * リスト価格行。
  *
  * backend:
@@ -51,6 +84,13 @@ export type ListPriceRow = {
  * - プライマリー画像のListImage ID
  * - 空文字の場合はプライマリー画像未設定
  *
+ * transportationOption:
+ * - yamato / sagawa / post / custom
+ *
+ * transportationId:
+ * - custom の場合のみ TransportationFeeSetting.ID を保持
+ * - yamato / sagawa / post の場合は未設定
+ *
  * createdAt / updatedAt:
  * - ISO 8601形式の文字列
  */
@@ -66,6 +106,9 @@ export type List = {
   imageId: string;
   description: string;
   prices: ListPriceRow[];
+
+  transportationOption: TransportationOption;
+  transportationId?: string;
 
   createdBy: string;
   createdAt: string;

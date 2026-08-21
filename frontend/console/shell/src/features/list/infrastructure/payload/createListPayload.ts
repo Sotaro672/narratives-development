@@ -6,6 +6,7 @@ export function buildCreateListPayloadArray(
   input: CreateListInput,
 ): Record<string, unknown> {
   const inventoryId = input.inventoryId ?? "";
+
   const id = input.id || inventoryId;
 
   if (!id) {
@@ -16,13 +17,38 @@ export function buildCreateListPayloadArray(
     throw new Error("missing_title");
   }
 
+  if (!input.transportationOption) {
+    throw new Error("missing_transportation_option");
+  }
+
+  if (
+    input.transportationOption === "custom" &&
+    !input.transportationId
+  ) {
+    throw new Error("missing_transportation_id");
+  }
+
   return {
     id,
+
     inventoryId,
+
     title: input.title,
+
     description: input.description,
+
     status: input.status,
+
     assigneeId: input.assigneeId || undefined,
+
+    transportationOption:
+      input.transportationOption,
+
+    transportationId:
+      input.transportationOption === "custom"
+        ? input.transportationId
+        : undefined,
+
     prices: input.priceRows,
   };
 }

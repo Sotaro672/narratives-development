@@ -14,6 +14,18 @@ type ListDetailDTO struct {
 	AssigneeID   string `json:"assigneeId"`
 	AssigneeName string `json:"assigneeName"`
 
+	// TransportationOption:
+	// - yamato
+	// - sagawa
+	// - post
+	// - custom
+	//
+	// TransportationID:
+	// - custom の場合のみ TransportationFeeSetting.ID を保持する。
+	// - yamato / sagawa / post の場合は空文字とする。
+	TransportationOption string `json:"transportationOption"`
+	TransportationID     string `json:"transportationId,omitempty"`
+
 	CreatedBy     string `json:"createdBy"`
 	CreatedByName string `json:"createdByName"`
 	CreatedAt     string `json:"createdAt"`

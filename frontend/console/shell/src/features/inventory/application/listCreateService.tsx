@@ -9,6 +9,7 @@ import type {
   List,
   ListPriceRow,
   ListStatus,
+  TransportationOption,
 } from "../../../shared/types/list";
 
 import {
@@ -34,9 +35,7 @@ export type ResolvedListCreateParams = {
   raw: ListCreateRouteParams;
 };
 
-export type PriceCardMode =
-  | "view"
-  | "edit";
+export type PriceCardMode = "view" | "edit";
 
 export type PriceRowKind =
   | "apparel"
@@ -113,7 +112,6 @@ export type PriceCardProps = {
   title?: string;
   rows: PriceRow[];
   className?: string;
-
   mode?: PriceCardMode;
 
   /**
@@ -176,10 +174,8 @@ export type PriceRowVM = {
   volumeUnit?: string | null;
 
   stock: number;
-
   bgColor: string;
   rgbTitle: string;
-
   priceInputValue: string;
   priceDisplayText: string;
 
@@ -193,17 +189,14 @@ export type UsePriceCardResult = {
   mode: PriceCardMode;
   isEdit: boolean;
   showModeBadge: boolean;
-
   currencySymbol: string;
-
   rowsVM: PriceRowVM[];
   isEmpty: boolean;
 };
 
-type CompletedPriceRow =
-  PriceRow & {
-    price: number;
-  };
+type CompletedPriceRow = PriceRow & {
+  price: number;
+};
 
 export type CreateListInput = {
   inventoryId: string;
@@ -211,17 +204,16 @@ export type CreateListInput = {
   description: string;
   status: ListStatus;
   assigneeId?: string;
+  transportationOption: TransportationOption;
+  transportationId?: string;
   priceRows: ListPriceRow[];
 };
 
-export const IMAGE_REQUIRED_MESSAGE =
-  "画像が必須です。";
-
-export const PRICE_REQUIRED_MESSAGE =
-  "価格が未入力の商品があります。";
-
-export const LIST_IMAGE_UPLOAD_FAILED_MESSAGE =
-  "画像アップロードに失敗しました。後から追加できます。";
+export const IMAGE_REQUIRED_MESSAGE = "画像が必須です。";
+export const PRICE_REQUIRED_MESSAGE = "価格が未入力の商品があります。";
+export const TRANSPORTATION_REQUIRED_MESSAGE = "配送方法を選択してください。";
+export const CUSTOM_TRANSPORTATION_REQUIRED_MESSAGE = "自社配送を選択した場合は配送料金設定を選択してください。";
+export const LIST_IMAGE_UPLOAD_FAILED_MESSAGE = "画像アップロードに失敗しました。後から追加できます。";
 
 /**
  * - UIルートはinventoryId（= inventoryKey: "pb__tb"）のみを正とする
@@ -240,9 +232,7 @@ export function resolveListCreateParams(
 export function canFetchListCreate(
   params: ResolvedListCreateParams,
 ): boolean {
-  return Boolean(
-    params.inventoryId,
-  );
+  return Boolean(params.inventoryId);
 }
 
 export function buildListCreateFetchInput(
@@ -268,18 +258,14 @@ export function buildInventoryDetailPath(
     return "/inventory";
   }
 
-  return `/inventory/detail/${encodeURIComponent(
-    inventoryId,
-  )}`;
+  return `/inventory/detail/${encodeURIComponent(inventoryId)}`;
 }
 
 export function buildBackPath(
   params: ResolvedListCreateParams,
 ): string {
   if (params.inventoryId) {
-    return buildInventoryDetailPath(
-      params.inventoryId,
-    );
+    return buildInventoryDetailPath(params.inventoryId);
   }
 
   return "/inventory";
@@ -289,9 +275,7 @@ export function buildAfterCreatePath(
   params: ResolvedListCreateParams,
 ): string {
   if (params.inventoryId) {
-    return buildInventoryDetailPath(
-      params.inventoryId,
-    );
+    return buildInventoryDetailPath(params.inventoryId);
   }
 
   return "/inventory";
@@ -306,17 +290,10 @@ export function extractDisplayStrings(
   tokenName: string;
 } {
   return {
-    productBrandName:
-      dto?.productBrandName ?? "",
-
-    productName:
-      dto?.productName ?? "",
-
-    tokenBrandName:
-      dto?.tokenBrandName ?? "",
-
-    tokenName:
-      dto?.tokenName ?? "",
+    productBrandName: dto?.productBrandName ?? "",
+    productName: dto?.productName ?? "",
+    tokenBrandName: dto?.tokenBrandName ?? "",
+    tokenName: dto?.tokenName ?? "",
   };
 }
 
@@ -333,9 +310,7 @@ function assertCompletedPriceRows(
     });
 
   if (hasMissingPrice) {
-    throw new Error(
-      PRICE_REQUIRED_MESSAGE,
-    );
+    throw new Error(PRICE_REQUIRED_MESSAGE);
   }
 }
 
@@ -347,34 +322,27 @@ export function buildCreateListInput(
     priceRows: CompletedPriceRow[];
     status: ListStatus;
     assigneeId?: string;
+    transportationOption: TransportationOption;
+    transportationId?: string;
   },
 ): CreateListInput {
   return {
-    inventoryId:
-      args.params.inventoryId,
-
-    title:
-      args.listingTitle,
-
-    description:
-      args.description,
-
-    status:
-      args.status,
-
-    assigneeId:
-      args.assigneeId,
-
-    priceRows:
-      args.priceRows.map(
-        (row): ListPriceRow => ({
-          modelId:
-            row.modelId,
-
-          price:
-            row.price,
-        }),
-      ),
+    inventoryId: args.params.inventoryId,
+    title: args.listingTitle,
+    description: args.description,
+    status: args.status,
+    assigneeId: args.assigneeId,
+    transportationOption: args.transportationOption,
+    transportationId:
+      args.transportationOption === "custom"
+        ? args.transportationId
+        : undefined,
+    priceRows: args.priceRows.map(
+      (row): ListPriceRow => ({
+        modelId: row.modelId,
+        price: row.price,
+      }),
+    ),
   };
 }
 
@@ -382,15 +350,22 @@ export function validateCreateListInput(
   input: CreateListInput,
 ): void {
   if (!input.title) {
-    throw new Error(
-      "タイトルを入力してください。",
-    );
+    throw new Error("タイトルを入力してください。");
+  }
+
+  if (!input.transportationOption) {
+    throw new Error(TRANSPORTATION_REQUIRED_MESSAGE);
+  }
+
+  if (
+    input.transportationOption === "custom" &&
+    !input.transportationId
+  ) {
+    throw new Error(CUSTOM_TRANSPORTATION_REQUIRED_MESSAGE);
   }
 
   if (input.priceRows.length === 0) {
-    throw new Error(
-      PRICE_REQUIRED_MESSAGE,
-    );
+    throw new Error(PRICE_REQUIRED_MESSAGE);
   }
 
   const missingModelId =
@@ -399,9 +374,7 @@ export function validateCreateListInput(
     });
 
   if (missingModelId) {
-    throw new Error(
-      "価格行に modelId が含まれていません。",
-    );
+    throw new Error("価格行に modelId が含まれていません。");
   }
 
   const missingPrice =
@@ -413,9 +386,7 @@ export function validateCreateListInput(
     });
 
   if (missingPrice) {
-    throw new Error(
-      PRICE_REQUIRED_MESSAGE,
-    );
+    throw new Error(PRICE_REQUIRED_MESSAGE);
   }
 }
 
@@ -447,26 +418,19 @@ export async function uploadListImagesPolicyB(
   primaryImageId?: string;
 }> {
   const listId =
-    String(
-      args.listId ?? "",
-    ).trim();
+    String(args.listId ?? "").trim();
 
   if (!listId) {
-    throw new Error(
-      "invalid_list_id",
-    );
+    throw new Error("invalid_list_id");
   }
 
   if (args.files.length === 0) {
-    throw new Error(
-      IMAGE_REQUIRED_MESSAGE,
-    );
+    throw new Error(IMAGE_REQUIRED_MESSAGE);
   }
 
   const mainImageIndex =
     args.mainImageIndex >= 0 &&
-    args.mainImageIndex <
-      args.files.length
+    args.mainImageIndex < args.files.length
       ? args.mainImageIndex
       : 0;
 
@@ -480,8 +444,7 @@ export async function uploadListImagesPolicyB(
     index < args.files.length;
     index += 1
   ) {
-    const file =
-      args.files[index];
+    const file = args.files[index];
 
     if (!file) {
       continue;
@@ -495,23 +458,14 @@ export async function uploadListImagesPolicyB(
 
     await saveListImageFromFirebaseStorageHTTP({
       listId,
-
-      id:
-        uploaded.imageId,
-
-      url:
-        uploaded.url,
-
-      displayOrder:
-        index,
+      id: uploaded.imageId,
+      url: uploaded.url,
+      displayOrder: index,
     });
 
     registered.push({
-      imageId:
-        uploaded.imageId,
-
-      displayOrder:
-        index,
+      imageId: uploaded.imageId,
+      displayOrder: index,
     });
   }
 
@@ -526,17 +480,13 @@ export async function uploadListImagesPolicyB(
   if (primary?.imageId) {
     await setListPrimaryImageHTTP({
       listId,
-
-      imageId:
-        primary.imageId,
+      imageId: primary.imageId,
     });
   }
 
   return {
     registered,
-
-    primaryImageId:
-      primary?.imageId,
+    primaryImageId: primary?.imageId,
   };
 }
 
@@ -556,13 +506,9 @@ export async function loadListCreateDTOFromParams(
   params: ResolvedListCreateParams,
 ): Promise<ListCreateDTO> {
   const input =
-    buildListCreateFetchInput(
-      params,
-    );
+    buildListCreateFetchInput(params);
 
-  return await getListCreateRaw(
-    input,
-  );
+  return await getListCreateRaw(input);
 }
 
 /**
@@ -586,6 +532,8 @@ export async function createListWithImages(
     priceRows: PriceRow[];
     status: ListStatus;
     assigneeId?: string;
+    transportationOption: TransportationOption;
+    transportationId?: string;
 
     images: File[];
     mainImageIndex: number;
@@ -597,69 +545,54 @@ export async function createListWithImages(
   },
 ): Promise<List> {
   if (!args.listingTitle) {
-    throw new Error(
-      "タイトルを入力してください。",
-    );
+    throw new Error("タイトルを入力してください。");
+  }
+
+  if (!args.transportationOption) {
+    throw new Error(TRANSPORTATION_REQUIRED_MESSAGE);
+  }
+
+  if (
+    args.transportationOption === "custom" &&
+    !args.transportationId
+  ) {
+    throw new Error(CUSTOM_TRANSPORTATION_REQUIRED_MESSAGE);
   }
 
   if (args.images.length === 0) {
-    throw new Error(
-      IMAGE_REQUIRED_MESSAGE,
-    );
+    throw new Error(IMAGE_REQUIRED_MESSAGE);
   }
 
-  assertCompletedPriceRows(
-    args.priceRows,
-  );
+  assertCompletedPriceRows(args.priceRows);
 
   const input =
     buildCreateListInput({
-      params:
-        args.params,
-
-      listingTitle:
-        args.listingTitle,
-
-      description:
-        args.description,
-
-      priceRows:
-        args.priceRows,
-
-      status:
-        args.status,
-
-      assigneeId:
-        args.assigneeId,
+      params: args.params,
+      listingTitle: args.listingTitle,
+      description: args.description,
+      priceRows: args.priceRows,
+      status: args.status,
+      assigneeId: args.assigneeId,
+      transportationOption: args.transportationOption,
+      transportationId: args.transportationId,
     });
 
-  validateCreateListInput(
-    input,
-  );
+  validateCreateListInput(input);
 
   const created =
-    await createListHTTP(
-      input,
-    );
+    await createListHTTP(input);
 
-  const listId =
-    created.id;
+  const listId = created.id;
 
   if (!listId) {
-    throw new Error(
-      "created_list_missing_id",
-    );
+    throw new Error("created_list_missing_id");
   }
 
   try {
     await uploadListImagesPolicyB({
       listId,
-
-      files:
-        args.images,
-
-      mainImageIndex:
-        args.mainImageIndex,
+      files: args.images,
+      mainImageIndex: args.mainImageIndex,
     });
   } catch (error) {
     args.onImageUploadFailed?.(

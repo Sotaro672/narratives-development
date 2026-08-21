@@ -146,9 +146,12 @@ func buildUsecases(
 		return nil, err
 	}
 
+	transportationRepo := fsrepo.NewTransportationRepositoryFS(c.fsClient)
+
 	listUC := uc.NewListUsecase(
 		r.listRepoFS,
 		r.listImageRecordRepo,
+		transportationRepo,
 		listSaveOperationStorage,
 	)
 
@@ -270,7 +273,6 @@ func buildUsecases(
 		r.inventoryRepo,
 	)
 
-	transportationRepo := fsrepo.NewTransportationRepositoryFS(c.fsClient)
 	transportationUC := uc.NewTransportationUsecase(transportationRepo)
 
 	tokenBlueprintReviewUC := uc.NewTokenBlueprintReviewUsecase(

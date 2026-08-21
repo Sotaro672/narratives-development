@@ -8,6 +8,8 @@ import (
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
 	invdom "narratives/internal/domain/inventory"
+	listdom "narratives/internal/domain/list"
+	transportationdom "narratives/internal/domain/transportation"
 )
 
 // ============================================================
@@ -24,6 +26,7 @@ import (
 // - PriceRows には productBlueprintCategory / model kind に応じた model 情報を含める。
 //   - apparel: size / color / rgb
 //   - alcohol: volumeValue / volumeUnit
+// - TransportationOptions は固定配送会社 + current company の custom 配送料金設定を返す。
 // ============================================================
 
 type ListCreateQuery struct {
@@ -31,9 +34,12 @@ type ListCreateQuery struct {
 	// ※ GetByInventoryID を使うなら必須
 	invRepo inventoryReader // defined in inventory_query.go
 
-	pbRepo       inventoryProductBlueprintReader // defined in inventory_query.go
-	tbRepo       inventoryTokenBlueprintReader   // defined in inventory_query.go
-	nameResolver *resolver.NameResolver
+	pbRepo inventoryProductBlueprintReader // defined in inventory_query.go
+	tbRepo inventoryTokenBlueprintReader   // defined in inventory_query.go
+
+	transportationRepo   transportationdom.RepositoryPort
+	nameResolver         *resolver.NameResolver
+	companyIDFromContext func(context.Context) string
 }
 
 // GetByInventoryID を使うなら invRepo が必要になる
@@ -41,13 +47,17 @@ func NewListCreateQueryWithInventory(
 	invRepo inventoryReader,
 	pbRepo inventoryProductBlueprintReader,
 	tbRepo inventoryTokenBlueprintReader,
+	transportationRepo transportationdom.RepositoryPort,
 	nameResolver *resolver.NameResolver,
+	companyIDFromContext func(context.Context) string,
 ) *ListCreateQuery {
 	return &ListCreateQuery{
-		invRepo:      invRepo,
-		pbRepo:       pbRepo,
-		tbRepo:       tbRepo,
-		nameResolver: nameResolver,
+		invRepo:              invRepo,
+		pbRepo:               pbRepo,
+		tbRepo:               tbRepo,
+		transportationRepo:   transportationRepo,
+		nameResolver:         nameResolver,
+		companyIDFromContext: companyIDFromContext,
 	}
 }
 
@@ -55,19 +65,34 @@ func NewListCreateQueryWithInventory(
 // inventoryId -> ListCreateDTO
 // - inventoryId を split しない
 // - pbId/tbId は inventory テーブルから拾うのみ
+// - companyId は認証済み context から取得する
 // ============================================================
 
-func (q *ListCreateQuery) GetByInventoryID(ctx context.Context, inventoryID string) (*querydto.ListCreateDTO, error) {
+func (q *ListCreateQuery) GetByInventoryID(
+	ctx context.Context,
+	inventoryID string,
+) (*querydto.ListCreateDTO, error) {
 	if q == nil {
 		return nil, errors.New("list create query is nil")
 	}
 	if q.invRepo == nil {
 		return nil, errors.New("list create query: invRepo is not configured (GetByInventoryID requires inventory repository)")
 	}
+	if q.transportationRepo == nil {
+		return nil, errors.New("list create query: transportationRepo is not configured")
+	}
+	if q.companyIDFromContext == nil {
+		return nil, errors.New("list create query: companyIDFromContext is not configured")
+	}
 
 	id := inventoryID
 	if id == "" {
 		return nil, errors.New("inventoryId is required")
+	}
+
+	companyID := q.companyIDFromContext(ctx)
+	if companyID == "" {
+		return nil, errors.New("companyId is required")
 	}
 
 	// inventory テーブルから pbId/tbId を拾う（split禁止）
@@ -82,7 +107,12 @@ func (q *ListCreateQuery) GetByInventoryID(ctx context.Context, inventoryID stri
 		return nil, errors.New("productBlueprintId/tokenBlueprintId is empty in inventory")
 	}
 
-	return q.buildByIDs(ctx, pbID, tbID)
+	return q.buildByIDs(
+		ctx,
+		pbID,
+		tbID,
+		companyID,
+	)
 }
 
 // ============================================================
@@ -93,6 +123,7 @@ func (q *ListCreateQuery) buildByIDs(
 	ctx context.Context,
 	productBlueprintID string,
 	tokenBlueprintID string,
+	companyID string,
 ) (*querydto.ListCreateDTO, error) {
 	if q == nil {
 		return nil, errors.New("list create query is nil")
@@ -102,6 +133,9 @@ func (q *ListCreateQuery) buildByIDs(
 	tbID := tokenBlueprintID
 	if pbID == "" || tbID == "" {
 		return nil, errors.New("productBlueprintId and tokenBlueprintId are required")
+	}
+	if companyID == "" {
+		return nil, errors.New("companyId is required")
 	}
 
 	// ------------------------------------------------------------
@@ -154,7 +188,25 @@ func (q *ListCreateQuery) buildByIDs(
 	// PriceRows（並べ替えしない）
 	// ------------------------------------------------------------
 	modelRefs := q.listModelRefs(ctx, pbID)
-	priceRows := q.buildPriceRowsByIDs(ctx, pbID, tbID, modelRefs)
+	priceRows := q.buildPriceRowsByIDs(
+		ctx,
+		pbID,
+		tbID,
+		modelRefs,
+	)
+
+	// ------------------------------------------------------------
+	// TransportationOptions
+	// - fixed: yamato / sagawa / post
+	// - custom: current company の TransportationFeeSetting
+	// ------------------------------------------------------------
+	transportationOptions, err := q.buildTransportationOptions(
+		ctx,
+		companyID,
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	dto := &querydto.ListCreateDTO{
 		ProductBrandName: productBrandName,
@@ -164,9 +216,78 @@ func (q *ListCreateQuery) buildByIDs(
 		TokenName:      tokenName,
 
 		PriceRows: priceRows,
+
+		TransportationOptions: transportationOptions,
 	}
 
 	return dto, nil
+}
+
+// ============================================================
+// internal: build TransportationOptions
+// - yamato / sagawa / post は固定選択肢
+// - custom は current company が所有する TransportationFeeSetting
+// - custom の transportationId は TransportationFeeSetting.ID
+// - repository から別 company の setting が返った場合はエラー
+// - custom の並べ替えは行わず repository の取得順を維持する
+// ============================================================
+
+func (q *ListCreateQuery) buildTransportationOptions(
+	ctx context.Context,
+	companyID string,
+) ([]querydto.ListCreateTransportationOptionDTO, error) {
+	if q == nil {
+		return nil, errors.New("list create query is nil")
+	}
+	if q.transportationRepo == nil {
+		return nil, errors.New("list create query: transportationRepo is not configured")
+	}
+	if companyID == "" {
+		return nil, errors.New("companyId is required")
+	}
+
+	settings, err := q.transportationRepo.ListByCompanyID(
+		ctx,
+		companyID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	options := []querydto.ListCreateTransportationOptionDTO{
+		{
+			TransportationOption: string(listdom.TransportationOptionYamato),
+			Name:                 "ヤマト運輸",
+		},
+		{
+			TransportationOption: string(listdom.TransportationOptionSagawa),
+			Name:                 "佐川急便",
+		},
+		{
+			TransportationOption: string(listdom.TransportationOptionPost),
+			Name:                 "日本郵便",
+		},
+	}
+
+	for _, setting := range settings {
+		if setting.CompanyID != companyID {
+			return nil, errors.New("transportation repository returned setting owned by another company")
+		}
+		if setting.ID == "" {
+			return nil, errors.New("transportation repository returned setting with empty id")
+		}
+
+		options = append(
+			options,
+			querydto.ListCreateTransportationOptionDTO{
+				TransportationOption: string(listdom.TransportationOptionCustom),
+				TransportationID:     setting.ID,
+				Name:                 setting.Name,
+			},
+		)
+	}
+
+	return options, nil
 }
 
 // ============================================================
@@ -275,12 +396,16 @@ func toDisplayOrderPtr(v int) *int {
 	if v == 0 {
 		return nil
 	}
+
 	x := v
 	return &x
 }
 
 // 母集団: productBlueprint.ModelRefs（順序は productBlueprint のまま）
-func (q *ListCreateQuery) listModelRefs(ctx context.Context, productBlueprintID string) []querydto.ListCreateModelRefDTO {
+func (q *ListCreateQuery) listModelRefs(
+	ctx context.Context,
+	productBlueprintID string,
+) []querydto.ListCreateModelRefDTO {
 	if q == nil || q.pbRepo == nil {
 		return nil
 	}
@@ -300,7 +425,11 @@ func (q *ListCreateQuery) listModelRefs(ctx context.Context, productBlueprintID 
 
 	refs := pb.ModelRefs
 	seen := map[string]struct{}{}
-	out := make([]querydto.ListCreateModelRefDTO, 0, len(refs))
+	out := make(
+		[]querydto.ListCreateModelRefDTO,
+		0,
+		len(refs),
+	)
 
 	// 並べ替えしない：入力順のまま
 	for _, r := range refs {
@@ -311,12 +440,16 @@ func (q *ListCreateQuery) listModelRefs(ctx context.Context, productBlueprintID 
 		if _, ok := seen[mid]; ok {
 			continue
 		}
+
 		seen[mid] = struct{}{}
 
-		out = append(out, querydto.ListCreateModelRefDTO{
-			ModelID:      mid,
-			DisplayOrder: toDisplayOrderPtr(r.DisplayOrder),
-		})
+		out = append(
+			out,
+			querydto.ListCreateModelRefDTO{
+				ModelID:      mid,
+				DisplayOrder: toDisplayOrderPtr(r.DisplayOrder),
+			},
+		)
 	}
 
 	return out

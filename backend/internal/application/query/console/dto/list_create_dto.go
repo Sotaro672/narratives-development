@@ -1,4 +1,4 @@
-// backend/internal/application/query/dto/list_create_dto.go
+// backend/internal/application/query/console/dto/list_create_dto.go
 package dto
 
 // ListCreateDTO is a minimal DTO for listCreate screen.
@@ -6,6 +6,7 @@ package dto
 // - From ProductBlueprint: brandName, productName
 // - From TokenBlueprint: tokenName, brandName
 // - PriceCard: priceRows
+// - Transportation: yamato, sagawa, post, custom
 type ListCreateDTO struct {
 	// From ProductBlueprint
 	ProductBrandName string `json:"productBrandName"`
@@ -17,6 +18,27 @@ type ListCreateDTO struct {
 
 	// PriceCard 用
 	PriceRows []ListCreatePriceRowDTO `json:"priceRows,omitempty"`
+
+	// 配送方法・配送料金設定
+	TransportationOptions []ListCreateTransportationOptionDTO `json:"transportationOptions,omitempty"`
+}
+
+// ListCreateTransportationOptionDTO is a transportation option for listCreate screen.
+//
+// TransportationOption:
+// - yamato
+// - sagawa
+// - post
+// - custom
+//
+// TransportationID:
+// - custom の場合のみ設定する。
+// - backend/internal/domain/transportation.TransportationFeeSetting.ID を保持する。
+// - yamato / sagawa / post の場合は空文字とする。
+type ListCreateTransportationOptionDTO struct {
+	TransportationOption string `json:"transportationOption"`
+	TransportationID     string `json:"transportationId,omitempty"`
+	Name                 string `json:"name"`
 }
 
 // ListCreateModelRefDTO is a lightweight ModelRef for query internal use.
