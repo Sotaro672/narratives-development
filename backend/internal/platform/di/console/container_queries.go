@@ -5,6 +5,7 @@ import (
 	"context"
 	"log"
 
+	outfirebase "narratives/internal/adapters/out/firebase"
 	fsrepo "narratives/internal/adapters/out/firestore"
 	companyquery "narratives/internal/application/query/console"
 	inspectorquery "narratives/internal/application/query/inspector"
@@ -344,6 +345,11 @@ func buildQueries(
 	// - repository / resolver の正規 interface を直接 DI する
 	// - listId と listReadableId は別フィールドとして扱う
 	// =========================================================
+	authUserReader :=
+		outfirebase.NewAuthUserReader(
+			infra.FirebaseAuth,
+		)
+
 	var orderDetailQuery *companyquery.OrderDetailQuery
 	if u != nil && u.orderUC != nil {
 		orderDetailQuery = companyquery.NewOrderDetailQuery(
@@ -354,14 +360,13 @@ func buildQueries(
 				TBName:        r.tokenBlueprintRepo,
 				AvatarName:    r.avatarRepo,
 				UserName:      res.nameResolver,
-				UserEmail:     r.userRepo,
+				AuthUser:      authUserReader,
 				ModelResolver: res.nameResolver,
 				ListReadable:  r.listRepoFS,
 			},
 		)
 	}
 
-	_ = infra
 	_ = s
 
 	return &queries{

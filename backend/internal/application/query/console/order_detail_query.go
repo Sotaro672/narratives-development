@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	resolver "narratives/internal/application/resolver"
 	avatardom "narratives/internal/domain/avatar"
 	orderdom "narratives/internal/domain/order"
@@ -40,10 +41,6 @@ type OrderDetailAvatarNameResolver interface {
 
 type OrderDetailUserNameResolver interface {
 	ResolveUserName(ctx context.Context, userID string) string
-}
-
-type OrderDetailUserEmailResolver interface {
-	GetEmailByID(ctx context.Context, userID string) (string, error)
 }
 
 type OrderDetailModelResolver interface {
@@ -131,7 +128,7 @@ type OrderDetailQuery struct {
 
 	avatarName OrderDetailAvatarNameResolver
 	userName   OrderDetailUserNameResolver
-	userEmail  OrderDetailUserEmailResolver
+	authUser   applicationport.AuthUserReader
 
 	modelResolver OrderDetailModelResolver
 	listReadable  OrderDetailListReadableIDResolver
@@ -146,7 +143,7 @@ type NewOrderDetailQueryParams struct {
 
 	AvatarName OrderDetailAvatarNameResolver
 	UserName   OrderDetailUserNameResolver
-	UserEmail  OrderDetailUserEmailResolver
+	AuthUser   applicationport.AuthUserReader
 
 	ModelResolver OrderDetailModelResolver
 	ListReadable  OrderDetailListReadableIDResolver
@@ -160,7 +157,7 @@ func NewOrderDetailQuery(p NewOrderDetailQueryParams) *OrderDetailQuery {
 		tbName:        p.TBName,
 		avatarName:    p.AvatarName,
 		userName:      p.UserName,
-		userEmail:     p.UserEmail,
+		authUser:      p.AuthUser,
 		modelResolver: p.ModelResolver,
 		listReadable:  p.ListReadable,
 	}
@@ -204,8 +201,8 @@ func (q *OrderDetailQuery) validateConfigured() error {
 	if q.userName == nil {
 		return errors.New("OrderDetailQuery: userName resolver is required")
 	}
-	if q.userEmail == nil {
-		return errors.New("OrderDetailQuery: userEmail resolver is required")
+	if q.authUser == nil {
+		return errors.New("OrderDetailQuery: authUser reader is required")
 	}
 	if q.modelResolver == nil {
 		return errors.New("OrderDetailQuery: modelResolver is required")
@@ -217,7 +214,7 @@ func (q *OrderDetailQuery) validateConfigured() error {
 }
 
 func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDetailDTO, error) {
-	email, err := q.userEmail.GetEmailByID(ctx, o.UserID)
+	email, err := q.authUser.GetEmailByUID(ctx, o.UserID)
 	if err != nil {
 		return OrderDetailDTO{}, fmt.Errorf(
 			"resolve user email userId=%q: %w",
