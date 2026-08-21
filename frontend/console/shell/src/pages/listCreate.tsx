@@ -229,21 +229,11 @@ export default function InventoryListCreate() {
             dto?.transportationOptions ?? 
             [] 
           } 
-          transportationOption={ 
-            transportationOption 
-          } 
-          transportationId={ 
-            transportationId 
-          } 
-          onSelectTransportationOption={ 
-            onSelectTransportationOption 
-          } 
-          setTransportationId={ 
-            setTransportationId 
-          } 
-          loading={ 
-            loadingDTO 
-          } 
+          transportationOption={transportationOption} 
+          transportationId={transportationId} 
+          onSelectTransportationOption={onSelectTransportationOption} 
+          setTransportationId={setTransportationId}
+          loading={loadingDTO}
         /> 
       </div> 
     </PageStyle> 
