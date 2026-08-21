@@ -8,6 +8,7 @@ type PaymentItemsCardProps = {
   cartItems: CartDisplayItem[];
   shippingAmount: number;
   subtotalAmount: number;
+  taxAmount: number;
 };
 
 function getItemTitle(item: CartDisplayItem): string {
@@ -51,6 +52,7 @@ export function PaymentItemsCard({
   cartItems,
   shippingAmount,
   subtotalAmount,
+  taxAmount,
 }: PaymentItemsCardProps) {
   return (
     <section className="payment-page__card">
@@ -88,17 +90,22 @@ export function PaymentItemsCard({
       )}
 
       <div className="payment-page__total">
-        <span>商品小計</span>
+        <span>商品小計（税抜）</span>
         <strong>{formatPrice(subtotalAmount)}</strong>
       </div>
 
       <div className="payment-page__total">
-        <span>送料</span>
+        <span>送料（税抜）</span>
         <strong>{formatPrice(shippingAmount)}</strong>
       </div>
 
       <div className="payment-page__total">
-        <span>合計</span>
+        <span>消費税</span>
+        <strong>{formatPrice(taxAmount)}</strong>
+      </div>
+
+      <div className="payment-page__total">
+        <span>支払額（税込）</span>
         <strong>{formatPrice(amount)}</strong>
       </div>
     </section>

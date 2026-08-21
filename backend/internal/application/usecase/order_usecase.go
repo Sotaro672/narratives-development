@@ -12,6 +12,8 @@ import (
 	listdom "narratives/internal/domain/list"
 	orderdom "narratives/internal/domain/order"
 	paymentmethoddom "narratives/internal/domain/paymentMethod"
+	productblueprintdom "narratives/internal/domain/productBlueprint"
+	productblueprintcategorydom "narratives/internal/domain/productBlueprintCategory"
 	resaledom "narratives/internal/domain/resale"
 	shippingaddressdom "narratives/internal/domain/shippingAddress"
 )
@@ -22,34 +24,37 @@ import (
 // - Invoice の作成は /mall/me/invoices の責務
 // - Payment の作成は /mall/me/payments の責務
 type OrderUsecase struct {
-	repo                orderdom.Repository
-	listRepo            listdom.Repository
-	inventoryRepo       inventorydom.RepositoryPort
-	resaleRepo          resaledom.Repository
-	paymentMethodRepo   paymentmethoddom.RepositoryPort
-	shippingAddressRepo shippingaddressdom.RepositoryPort
-	shippingQuoteUC     *ShippingQuoteUsecase
-	now                 func() time.Time
+	repo                 orderdom.Repository
+	listRepo             listdom.Repository
+	inventoryRepo        inventorydom.RepositoryPort
+	productBlueprintRepo productblueprintdom.Repository
+	resaleRepo           resaledom.Repository
+	paymentMethodRepo    paymentmethoddom.RepositoryPort
+	shippingAddressRepo  shippingaddressdom.RepositoryPort
+	shippingQuoteUC      *ShippingQuoteUsecase
+	now                  func() time.Time
 }
 
 func NewOrderUsecase(
 	repo orderdom.Repository,
 	listRepo listdom.Repository,
 	inventoryRepo inventorydom.RepositoryPort,
+	productBlueprintRepo productblueprintdom.Repository,
 	resaleRepo resaledom.Repository,
 	paymentMethodRepo paymentmethoddom.RepositoryPort,
 	shippingAddressRepo shippingaddressdom.RepositoryPort,
 	shippingQuoteUC *ShippingQuoteUsecase,
 ) *OrderUsecase {
 	return &OrderUsecase{
-		repo:                repo,
-		listRepo:            listRepo,
-		inventoryRepo:       inventoryRepo,
-		resaleRepo:          resaleRepo,
-		paymentMethodRepo:   paymentMethodRepo,
-		shippingAddressRepo: shippingAddressRepo,
-		shippingQuoteUC:     shippingQuoteUC,
-		now:                 time.Now,
+		repo:                 repo,
+		listRepo:             listRepo,
+		inventoryRepo:        inventoryRepo,
+		productBlueprintRepo: productBlueprintRepo,
+		resaleRepo:           resaleRepo,
+		paymentMethodRepo:    paymentMethodRepo,
+		shippingAddressRepo:  shippingAddressRepo,
+		shippingQuoteUC:      shippingQuoteUC,
+		now:                  time.Now,
 	}
 }
 
@@ -760,6 +765,73 @@ func (u *OrderUsecase) resolveOrderItems(
 	return items, nil
 }
 
+func (u *OrderUsecase) resolveProductBlueprintTaxSnapshot(
+	ctx context.Context,
+	productBlueprintID string,
+) (
+	[]string,
+	int,
+	error,
+) {
+	if u == nil ||
+		u.productBlueprintRepo == nil {
+		return nil,
+			0,
+			orderdom.ErrInvalidItemSnapshot
+	}
+
+	productBlueprintID =
+		strings.TrimSpace(
+			productBlueprintID,
+		)
+
+	if productBlueprintID == "" {
+		return nil,
+			0,
+			orderdom.ErrInvalidItemSnapshot
+	}
+
+	productBlueprint, err :=
+		u.productBlueprintRepo.GetByID(
+			ctx,
+			productBlueprintID,
+		)
+	if err != nil {
+		return nil,
+			0,
+			err
+	}
+
+	if productBlueprint.ID !=
+		productBlueprintID {
+		return nil,
+			0,
+			orderdom.ErrInvalidItemSnapshot
+	}
+
+	categoryPath :=
+		append(
+			[]string(nil),
+			productBlueprint.
+				ProductBlueprintCategoryPath...,
+		)
+
+	taxRate, err :=
+		productblueprintcategorydom.
+			GetConsumptionTaxRate(
+				categoryPath,
+			)
+	if err != nil {
+		return nil,
+			0,
+			err
+	}
+
+	return categoryPath,
+		int(taxRate),
+		nil
+}
+
 func (u *OrderUsecase) resolveListOrderItem(
 	ctx context.Context,
 	item CreateOrderItemInput,
@@ -798,6 +870,18 @@ func (u *OrderUsecase) resolveListOrderItem(
 			orderdom.ErrInvalidItemSnapshot
 	}
 
+	productBlueprintCategoryPath,
+		consumptionTaxRate,
+		err :=
+		u.resolveProductBlueprintTaxSnapshot(
+			ctx,
+			inventory.ProductBlueprintID,
+		)
+	if err != nil {
+		return orderdom.OrderItemSnapshot{},
+			err
+	}
+
 	stock, ok := inventory.Stock[item.ModelID]
 	if !ok {
 		return orderdom.OrderItemSnapshot{},
@@ -825,12 +909,17 @@ func (u *OrderUsecase) resolveListOrderItem(
 		ListID:             list.ID,
 		ProductBlueprintID: inventory.ProductBlueprintID,
 		TokenBlueprintID:   inventory.TokenBlueprintID,
-		Qty:                item.Qty,
-		Price:              price,
-		IsCanceled:         false,
-		IsDispatched:       false,
-		Transferred:        false,
-		TransferredAt:      nil,
+
+		ProductBlueprintCategoryPath: productBlueprintCategoryPath,
+
+		ConsumptionTaxRate: consumptionTaxRate,
+
+		Qty:           item.Qty,
+		Price:         price,
+		IsCanceled:    false,
+		IsDispatched:  false,
+		Transferred:   false,
+		TransferredAt: nil,
 	}, nil
 }
 
@@ -869,6 +958,18 @@ func (u *OrderUsecase) resolveResaleOrderItem(
 			orderdom.ErrInvalidItemSnapshot
 	}
 
+	productBlueprintCategoryPath,
+		consumptionTaxRate,
+		err :=
+		u.resolveProductBlueprintTaxSnapshot(
+			ctx,
+			resale.ProductBlueprintID,
+		)
+	if err != nil {
+		return orderdom.OrderItemSnapshot{},
+			err
+	}
+
 	return orderdom.OrderItemSnapshot{
 		Type:               orderdom.OrderItemTypeResale,
 		ResaleID:           resale.ID,
@@ -876,12 +977,17 @@ func (u *OrderUsecase) resolveResaleOrderItem(
 		ProductBlueprintID: resale.ProductBlueprintID,
 		TokenBlueprintID:   resale.TokenBlueprintID,
 		BrandID:            resale.BrandID,
-		Qty:                1,
-		Price:              resale.Price,
-		IsCanceled:         false,
-		IsDispatched:       false,
-		Transferred:        false,
-		TransferredAt:      nil,
+
+		ProductBlueprintCategoryPath: productBlueprintCategoryPath,
+
+		ConsumptionTaxRate: consumptionTaxRate,
+
+		Qty:           1,
+		Price:         resale.Price,
+		IsCanceled:    false,
+		IsDispatched:  false,
+		Transferred:   false,
+		TransferredAt: nil,
 	}, nil
 }
 

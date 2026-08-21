@@ -77,9 +77,11 @@ func (m *OrderMailer) SendOrderConfirmation(ctx context.Context, from, to string
 	if from == "" {
 		return fmt.Errorf("from address is empty")
 	}
+
 	if to == "" {
 		return fmt.Errorf("to address is empty")
 	}
+
 	if ord.ID == "" {
 		return fmt.Errorf("order id is empty")
 	}
@@ -133,6 +135,7 @@ func (m *OrderMailer) loadOrderModels(
 		if _, ok := seen[modelID]; ok {
 			continue
 		}
+
 		seen[modelID] = struct{}{}
 
 		model, err := m.modelRepo.GetByID(ctx, modelID)
@@ -169,6 +172,7 @@ func (m *OrderMailer) loadOrderInventories(
 		if _, ok := seen[inventoryID]; ok {
 			continue
 		}
+
 		seen[inventoryID] = struct{}{}
 
 		inv, err := m.inventoryRepo.GetByID(ctx, inventoryID)
@@ -205,6 +209,7 @@ func (m *OrderMailer) loadOrderProductBlueprints(
 		if _, ok := seen[productBlueprintID]; ok {
 			continue
 		}
+
 		seen[productBlueprintID] = struct{}{}
 
 		pb, err := m.productBlueprintRepo.GetByID(ctx, productBlueprintID)
@@ -241,6 +246,7 @@ func (m *OrderMailer) loadOrderTokenBlueprints(
 		if _, ok := seen[tokenBlueprintID]; ok {
 			continue
 		}
+
 		seen[tokenBlueprintID] = struct{}{}
 
 		tb, err := m.tokenBlueprintRepo.GetByID(ctx, tokenBlueprintID)
@@ -373,7 +379,7 @@ func buildOrderConfirmationMailBody(
 	b.WriteString("ご注文が確定しました。\n\n")
 
 	b.WriteString("ご注文内容\n")
-	b.WriteString(fmt.Sprintf("決済ID: %s\n", ord.ID))
+	b.WriteString(fmt.Sprintf("注文ID: %s\n", ord.ID))
 	b.WriteString(fmt.Sprintf("商品点数: %d点\n", totalQty))
 	b.WriteString(fmt.Sprintf("商品小計: %d円\n", productSubtotal))
 	b.WriteString(fmt.Sprintf("配送料: %d円\n", shippingAmount))

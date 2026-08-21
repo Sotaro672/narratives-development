@@ -189,6 +189,7 @@ func buildUsecases(
 		r.orderRepo,
 		r.listRepoFS,
 		r.inventoryRepo,
+		r.productBlueprintRepo,
 		r.resaleRepo,
 		r.paymentMethodRepo,
 		r.shippingAddressRepo,

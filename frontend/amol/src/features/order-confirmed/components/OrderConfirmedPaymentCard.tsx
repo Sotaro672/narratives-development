@@ -7,13 +7,13 @@ import {
 type OrderConfirmedPaymentCardProps = {
   statusLabel: string;
   amount: number;
-  paymentId: string;
+  orderId: string;
 };
 
 export function OrderConfirmedPaymentCard({
   statusLabel,
   amount,
-  paymentId,
+  orderId,
 }: OrderConfirmedPaymentCardProps) {
   return (
     <section className="order-confirmed-page__card">
@@ -29,15 +29,13 @@ export function OrderConfirmedPaymentCard({
 
         <div className="order-confirmed-page__detail-row">
           <dt>金額</dt>
-          <dd>
-            {formatPrice(amount)}
-          </dd>
+          <dd>{formatPrice(amount)}</dd>
         </div>
 
-        {paymentId ? (
+        {orderId ? (
           <div className="order-confirmed-page__detail-row">
-            <dt>決済ID</dt>
-            <dd>{paymentId}</dd>
+            <dt>注文ID</dt>
+            <dd>{orderId}</dd>
           </div>
         ) : null}
       </dl>

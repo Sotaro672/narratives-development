@@ -2,6 +2,7 @@
 
 export type CartModelKind = "apparel" | "alcohol" | "unknown";
 export type CartItemType = "list" | "resale";
+export type ConsumptionTaxRate = 8 | 10;
 
 /**
  * GET /mall/me/cart の各カート項目。
@@ -25,6 +26,9 @@ export type CartItemDTO = {
   productBlueprintId?: string;
   tokenBlueprintId?: string;
   brandId?: string;
+
+  productBlueprintCategoryPath?: string[];
+  consumptionTaxRate?: ConsumptionTaxRate;
 
   // 商品数量。resaleでは常に1。
   qty: number;

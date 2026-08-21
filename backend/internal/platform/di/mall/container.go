@@ -581,6 +581,7 @@ func NewContainer(
 			orderRepo,
 			listRepoFS,
 			inventoryRepo,
+			productBlueprintRepoFS,
 			resaleRepo,
 			paymentMethodRepo,
 			shippingAddressRepo,

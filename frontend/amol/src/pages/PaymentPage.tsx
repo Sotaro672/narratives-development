@@ -17,6 +17,7 @@ export default function PaymentPage() {
   const { listId } = useParams<{
     listId: string;
   }>();
+
   const isMobilePortrait = useMobilePortrait();
 
   const {
@@ -38,6 +39,7 @@ export default function PaymentPage() {
     shippingAddressLabel,
     shippingAmount,
     subtotalAmount,
+    taxAmount,
     userFullName,
   } = usePaymentPage({
     listId,
@@ -113,6 +115,7 @@ export default function PaymentPage() {
                 cartItems={cartItems}
                 shippingAmount={shippingAmount}
                 subtotalAmount={subtotalAmount}
+                taxAmount={taxAmount}
               />
             </div>
 

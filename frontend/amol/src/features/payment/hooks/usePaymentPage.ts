@@ -74,6 +74,11 @@ type ShippingQuoteResponse = {
   currency: string;
 };
 
+type PaymentAmountSummary = {
+  taxAmount: number;
+  totalAmount: number;
+};
+
 function buildShippingQuoteItems(
   cartItems: CartDisplayItem[],
 ): ShippingQuoteItemRequest[] {
@@ -169,16 +174,20 @@ async function fetchShippingQuote(
 }
 
 function calculatePaymentAmount(
+  cartItems: CartDisplayItem[],
   subtotalAmount: number,
   shippingAmount: number,
-): number {
+): PaymentAmountSummary {
   if (
     !Number.isSafeInteger(
       subtotalAmount,
     ) ||
     subtotalAmount < 0
   ) {
-    return 0;
+    return {
+      taxAmount: 0,
+      totalAmount: 0,
+    };
   }
 
   if (
@@ -187,21 +196,209 @@ function calculatePaymentAmount(
     ) ||
     shippingAmount < 0
   ) {
-    return 0;
+    return {
+      taxAmount: 0,
+      totalAmount: 0,
+    };
   }
 
-  const amount =
-    subtotalAmount +
+  let taxableAmount8 = 0;
+
+  let taxableAmount10 =
     shippingAmount;
 
-  if (
-    !Number.isSafeInteger(amount) ||
-    amount <= 0
-  ) {
-    return 0;
+  let calculatedSubtotalAmount = 0;
+
+  for (const item of cartItems) {
+    const price =
+      item.price;
+
+    if (
+      price === undefined ||
+      !Number.isSafeInteger(price) ||
+      price < 0
+    ) {
+      return {
+        taxAmount: 0,
+        totalAmount: 0,
+      };
+    }
+
+    if (
+      !Number.isSafeInteger(
+        item.qty,
+      ) ||
+      item.qty <= 0
+    ) {
+      return {
+        taxAmount: 0,
+        totalAmount: 0,
+      };
+    }
+
+    const lineAmount =
+      price *
+      item.qty;
+
+    if (
+      !Number.isSafeInteger(
+        lineAmount,
+      )
+    ) {
+      return {
+        taxAmount: 0,
+        totalAmount: 0,
+      };
+    }
+
+    const nextSubtotalAmount =
+      calculatedSubtotalAmount +
+      lineAmount;
+
+    if (
+      !Number.isSafeInteger(
+        nextSubtotalAmount,
+      )
+    ) {
+      return {
+        taxAmount: 0,
+        totalAmount: 0,
+      };
+    }
+
+    calculatedSubtotalAmount =
+      nextSubtotalAmount;
+
+    switch (
+      item.consumptionTaxRate
+    ) {
+      case 8: {
+        const nextTaxableAmount8 =
+          taxableAmount8 +
+          lineAmount;
+
+        if (
+          !Number.isSafeInteger(
+            nextTaxableAmount8,
+          )
+        ) {
+          return {
+            taxAmount: 0,
+            totalAmount: 0,
+          };
+        }
+
+        taxableAmount8 =
+          nextTaxableAmount8;
+
+        break;
+      }
+
+      case 10: {
+        const nextTaxableAmount10 =
+          taxableAmount10 +
+          lineAmount;
+
+        if (
+          !Number.isSafeInteger(
+            nextTaxableAmount10,
+          )
+        ) {
+          return {
+            taxAmount: 0,
+            totalAmount: 0,
+          };
+        }
+
+        taxableAmount10 =
+          nextTaxableAmount10;
+
+        break;
+      }
+
+      default:
+        return {
+          taxAmount: 0,
+          totalAmount: 0,
+        };
+    }
   }
 
-  return amount;
+  if (
+    calculatedSubtotalAmount !==
+    subtotalAmount
+  ) {
+    return {
+      taxAmount: 0,
+      totalAmount: 0,
+    };
+  }
+
+  if (
+    taxableAmount8 >
+      Number.MAX_SAFE_INTEGER /
+        8 ||
+    taxableAmount10 >
+      Number.MAX_SAFE_INTEGER /
+        10
+  ) {
+    return {
+      taxAmount: 0,
+      totalAmount: 0,
+    };
+  }
+
+  const taxAmount8 =
+    Math.floor(
+      taxableAmount8 *
+        8 /
+        100,
+    );
+
+  const taxAmount10 =
+    Math.floor(
+      taxableAmount10 *
+        10 /
+        100,
+    );
+
+  const taxAmount =
+    taxAmount8 +
+    taxAmount10;
+
+  if (
+    !Number.isSafeInteger(
+      taxAmount,
+    ) ||
+    taxAmount < 0
+  ) {
+    return {
+      taxAmount: 0,
+      totalAmount: 0,
+    };
+  }
+
+  const totalAmount =
+    subtotalAmount +
+    shippingAmount +
+    taxAmount;
+
+  if (
+    !Number.isSafeInteger(
+      totalAmount,
+    ) ||
+    totalAmount <= 0
+  ) {
+    return {
+      taxAmount: 0,
+      totalAmount: 0,
+    };
+  }
+
+  return {
+    taxAmount,
+    totalAmount,
+  };
 }
 
 export function usePaymentPage({
@@ -256,17 +453,25 @@ export function usePaymentPage({
     [cartItems],
   );
 
-  const amount = useMemo(
+  const paymentAmount = useMemo(
     () =>
       calculatePaymentAmount(
+        cartItems,
         subtotalAmount,
         shippingAmount,
       ),
     [
+      cartItems,
       subtotalAmount,
       shippingAmount,
     ],
   );
+
+  const taxAmount =
+    paymentAmount.taxAmount;
+
+  const amount =
+    paymentAmount.totalAmount;
 
   const selectedPaymentMethod = useMemo(() => {
     if (!selectedPaymentMethodId) {
@@ -363,6 +568,20 @@ export function usePaymentPage({
         selectedMethod?.id ??
           "",
       );
+
+      for (
+        const item of
+        cartPageResult.items
+      ) {
+        if (
+          item.consumptionTaxRate !== 8 &&
+          item.consumptionTaxRate !== 10
+        ) {
+          throw new Error(
+            "商品の消費税率を取得できませんでした。",
+          );
+        }
+      }
 
       setCartItems(
         cartPageResult.items,
@@ -534,11 +753,15 @@ export function usePaymentPage({
         return;
       }
 
-      const resolvedAmount =
+      const resolvedPaymentAmount =
         calculatePaymentAmount(
+          cartItems,
           subtotalAmount,
           resolvedShippingAmount,
         );
+
+      const resolvedAmount =
+        resolvedPaymentAmount.totalAmount;
 
       if (resolvedAmount <= 0) {
         showErrorModal(
@@ -586,6 +809,8 @@ export function usePaymentPage({
       navigate("/order-confirmed", {
         replace: true,
         state: {
+          orderId:
+            resolvedOrderId,
           payment,
           cartItems,
           shippingAddress:
@@ -631,6 +856,7 @@ export function usePaymentPage({
     shippingAddressLabel,
     shippingAmount,
     subtotalAmount,
+    taxAmount,
     userFullName,
   };
 }

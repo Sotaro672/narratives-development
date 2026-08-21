@@ -39,8 +39,8 @@ export function useOrderConfirmedPage(): OrderConfirmedViewModel & {
   const shippingAddress =
     state.shippingAddress ?? null;
 
-  const paymentId =
-    payment?.paymentId ?? "";
+  const orderId =
+    state.orderId ?? "";
 
   const amount =
     payment?.amount ?? 0;
@@ -81,7 +81,7 @@ export function useOrderConfirmedPage(): OrderConfirmedViewModel & {
   };
 
   return {
-    paymentId,
+    orderId,
     amount,
     statusLabel,
     items,

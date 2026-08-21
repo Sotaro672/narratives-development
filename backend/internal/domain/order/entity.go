@@ -73,12 +73,14 @@ const (
 //   - type: "list"
 //   - modelId, inventoryId, listId
 //   - productBlueprintId, tokenBlueprintId
+//   - productBlueprintCategoryPath, consumptionTaxRate
 //   - qty, price
 //
 // Resale item:
 //   - type: "resale"
 //   - resaleId, productId
 //   - productBlueprintId, tokenBlueprintId, brandId
+//   - productBlueprintCategoryPath, consumptionTaxRate
 //   - qty=1, price
 //
 // Transfer, cancellation, and dispatch state is maintained per item.
@@ -98,6 +100,10 @@ type OrderItemSnapshot struct {
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 	BrandID            string `json:"brandId,omitempty"`
+
+	ProductBlueprintCategoryPath []string `json:"productBlueprintCategoryPath"`
+
+	ConsumptionTaxRate int `json:"consumptionTaxRate"`
 
 	Qty   int `json:"qty"`
 	Price int `json:"price"`
@@ -161,6 +167,9 @@ var (
 
 const (
 	ShippingQuoteCurrencyJPY = "JPY"
+
+	ConsumptionTaxRateReduced  = 8
+	ConsumptionTaxRateStandard = 10
 )
 
 var (
@@ -596,12 +605,44 @@ func validateItems(items []OrderItemSnapshot) error {
 func validateItemSnapshot(
 	item OrderItemSnapshot,
 ) error {
+	if err :=
+		validateProductBlueprintCategorySnapshot(
+			item,
+		); err != nil {
+		return err
+	}
+
 	switch item.Type {
 	case OrderItemTypeList:
 		return validateListItemSnapshot(item)
 
 	case OrderItemTypeResale:
 		return validateResaleItemSnapshot(item)
+
+	default:
+		return ErrInvalidItemSnapshot
+	}
+}
+
+func validateProductBlueprintCategorySnapshot(
+	item OrderItemSnapshot,
+) error {
+	if len(
+		item.ProductBlueprintCategoryPath,
+	) == 0 {
+		return ErrInvalidItemSnapshot
+	}
+
+	for _, segment := range item.ProductBlueprintCategoryPath {
+		if segment == "" {
+			return ErrInvalidItemSnapshot
+		}
+	}
+
+	switch item.ConsumptionTaxRate {
+	case ConsumptionTaxRateReduced,
+		ConsumptionTaxRateStandard:
+		return nil
 
 	default:
 		return ErrInvalidItemSnapshot
