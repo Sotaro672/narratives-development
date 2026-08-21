@@ -20,6 +20,7 @@ import (
 	"errors"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
 	listdom "narratives/internal/domain/list"
@@ -53,8 +54,8 @@ type ListDetailQuery struct {
 	getter       ListGetter
 	nameResolver *resolver.NameResolver
 	memberRepo   memberdom.Repository
-	pbGetter     ProductBlueprintGetter
-	tbGetter     TokenBlueprintGetter
+	pbGetter     applicationport.ProductBlueprintGetter
+	tbGetter     applicationport.TokenBlueprintGetter
 	invGetter    InventoryDetailGetter
 	imgLister    ListImageLister
 }
@@ -63,8 +64,8 @@ type NewListDetailQueryParams struct {
 	Getter       ListGetter
 	NameResolver *resolver.NameResolver
 	MemberRepo   memberdom.Repository
-	PBGetter     ProductBlueprintGetter
-	TBGetter     TokenBlueprintGetter
+	PBGetter     applicationport.ProductBlueprintGetter
+	TBGetter     applicationport.TokenBlueprintGetter
 	InvGetter    InventoryDetailGetter
 	ImgLister    ListImageLister
 }
@@ -89,6 +90,7 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 	if q == nil || q.getter == nil {
 		return querydto.ListDetailDTO{}, errors.New("ListDetailQuery.BuildListDetailDTO: getter is nil (wire list repo to ListDetailQuery)")
 	}
+
 	if listID == "" {
 		return querydto.ListDetailDTO{}, errors.New("ListDetailQuery.BuildListDetailDTO: listID is empty")
 	}
@@ -131,12 +133,15 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 		if productName == "" && pbID != "" && q.pbGetter == nil {
 			productName = q.nameResolver.ResolveProductName(ctx, pbID)
 		}
+
 		if tbID != "" {
 			tokenName = q.nameResolver.ResolveTokenName(ctx, tbID)
 		}
+
 		if it.CreatedBy != "" {
 			createdByName = q.nameResolver.ResolveMemberName(ctx, it.CreatedBy)
 		}
+
 		if updatedByID != "" {
 			updatedByName = q.nameResolver.ResolveUpdatedByName(ctx, it.UpdatedBy)
 		}
@@ -155,9 +160,11 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 	if assigneeName == "" && it.AssigneeID != "" {
 		assigneeName = "未設定"
 	}
+
 	if createdByName == "" && it.CreatedBy != "" {
 		createdByName = "未設定"
 	}
+
 	if updatedByName == "" && updatedByID != "" {
 		updatedByName = "未設定"
 	}
@@ -177,6 +184,7 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 		if productBrandID != "" {
 			productBrandName = q.nameResolver.ResolveBrandName(ctx, productBrandID)
 		}
+
 		if tokenBrandID != "" {
 			tokenBrandName = q.nameResolver.ResolveBrandName(ctx, tokenBrandID)
 		}
@@ -288,6 +296,7 @@ func (q *ListDetailQuery) buildImages(ctx context.Context, listID string, primar
 		if img.ID == "" || img.URL == "" {
 			continue
 		}
+
 		if _, ok := seenURLs[img.URL]; ok {
 			continue
 		}
@@ -399,6 +408,7 @@ func applyModelResolvedToListDetailPriceRow(row *querydto.ListDetailPriceRowDTO,
 	if modelNumber == "" {
 		modelNumber = modelID
 	}
+
 	if modelNumber == "" {
 		modelNumber = "-"
 	}
@@ -418,6 +428,7 @@ func applyModelResolvedToListDetailPriceRow(row *querydto.ListDetailPriceRowDTO,
 	if size == "" {
 		size = "-"
 	}
+
 	if color == "" {
 		color = "-"
 	}
@@ -444,6 +455,7 @@ func buildDisplayOrderByModelID(pb pbdom.ProductBlueprint) map[string]*int {
 		if modelID == "" {
 			continue
 		}
+
 		if _, ok := seen[modelID]; ok {
 			continue
 		}

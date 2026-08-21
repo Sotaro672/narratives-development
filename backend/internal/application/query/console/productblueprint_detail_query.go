@@ -7,14 +7,10 @@ import (
 	"sort"
 	"strings"
 
+	applicationport "narratives/internal/application/port"
 	modeldom "narratives/internal/domain/model"
 	productbpdom "narratives/internal/domain/productBlueprint"
 )
-
-// ProductBlueprintDetailRepo defines the read port needed by the product blueprint detail screen.
-type ProductBlueprintDetailRepo interface {
-	GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
-}
 
 // ProductBlueprintDetailModelRepo defines the model variation read port needed by the product blueprint detail screen.
 type ProductBlueprintDetailModelRepo interface {
@@ -93,17 +89,17 @@ type ProductBlueprintDetailResolved struct {
 }
 
 type ProductBlueprintDetailQuery struct {
-	repo                 ProductBlueprintDetailRepo
+	repo                 applicationport.ProductBlueprintGetter
 	modelRepo            ProductBlueprintDetailModelRepo
 	managementQuery      *ProductBlueprintManagementQuery
-	companyIDFromContext ProductBlueprintCompanyIDFromContext
+	companyIDFromContext applicationport.CompanyIDResolver
 }
 
 func NewProductBlueprintDetailQuery(
-	repo ProductBlueprintDetailRepo,
+	repo applicationport.ProductBlueprintGetter,
 	modelRepo ProductBlueprintDetailModelRepo,
 	managementQuery *ProductBlueprintManagementQuery,
-	companyIDFromContext ProductBlueprintCompanyIDFromContext,
+	companyIDFromContext applicationport.CompanyIDResolver,
 ) *ProductBlueprintDetailQuery {
 	return &ProductBlueprintDetailQuery{
 		repo:                 repo,
@@ -219,6 +215,7 @@ func buildProductBlueprintDetailModelState(
 			if typed == nil {
 				continue
 			}
+
 			appendApparelVariationToModelState(
 				&state,
 				*typed,
@@ -236,6 +233,7 @@ func buildProductBlueprintDetailModelState(
 			if typed == nil {
 				continue
 			}
+
 			appendAlcoholVariationToModelState(&state, *typed, volumeSeen)
 
 		default:
@@ -297,6 +295,7 @@ func appendApparelVariationToModelState(
 			if _, exists := merged[key]; exists {
 				continue
 			}
+
 			merged[key] = value
 		}
 	}

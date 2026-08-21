@@ -37,14 +37,13 @@ import (
 	"strconv"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
-	avatardom "narratives/internal/domain/avatar"
 	common "narratives/internal/domain/common"
 	invdom "narratives/internal/domain/inventory"
 	orderdom "narratives/internal/domain/order"
 	pbdom "narratives/internal/domain/productBlueprint"
-	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ============================================================
@@ -67,36 +66,6 @@ type OrderLister interface {
 
 type InventoryRowsLister interface {
 	ListByCurrentCompany(ctx context.Context) ([]querydto.InventoryManagementRowDTO, error)
-}
-
-// InventoryBlueprintResolver resolves productBlueprintId/tokenBlueprintId from inventoryId.
-type InventoryBlueprintResolver interface {
-	ResolveBlueprintIDsByInventoryID(ctx context.Context, inventoryID string) (productBlueprintID string, tokenBlueprintID string, err error)
-}
-
-// ProductBlueprintResolver resolves productName/productBlueprintCategoryPath/categoryFields from productBlueprintId.
-type ProductBlueprintResolver interface {
-	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
-}
-
-// TokenBlueprintNameResolver resolves tokenName from tokenBlueprintId.
-type TokenBlueprintNameResolver interface {
-	GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
-}
-
-// ListReadableIDResolver resolves listId to readableId.
-type ListReadableIDResolver interface {
-	GetReadableIDByID(ctx context.Context, id string) (string, error)
-}
-
-// AvatarNameResolver resolves avatar from avatarId.
-type AvatarNameResolver interface {
-	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
-}
-
-// ModelResolver resolves modelId(variationID) to display fields.
-type ModelResolver interface {
-	ResolveModelResolved(ctx context.Context, variationID string) resolver.ModelResolved
 }
 
 // ============================================================
@@ -156,10 +125,10 @@ type OrderManagementQuery struct {
 	invRows      InventoryRowsLister        // REQUIRED
 	invBlueprint InventoryBlueprintResolver // REQUIRED
 
-	productBlueprint   ProductBlueprintResolver
-	tbName             TokenBlueprintNameResolver
-	listReadable       ListReadableIDResolver
-	avatarNameResolver AvatarNameResolver
+	productBlueprint   applicationport.ProductBlueprintGetter
+	tbName             applicationport.TokenBlueprintGetter
+	listReadable       ListReadableIDReader
+	avatarNameResolver AvatarGetter
 	modelResolver      ModelResolver
 }
 
@@ -168,10 +137,10 @@ type NewOrderManagementQueryParams struct {
 	InvRows      InventoryRowsLister        // REQUIRED
 	InvBlueprint InventoryBlueprintResolver // REQUIRED
 
-	ProductBlueprint ProductBlueprintResolver
-	TBName           TokenBlueprintNameResolver
-	ListReadable     ListReadableIDResolver
-	AvatarName       AvatarNameResolver
+	ProductBlueprint applicationport.ProductBlueprintGetter
+	TBName           applicationport.TokenBlueprintGetter
+	ListReadable     ListReadableIDReader
+	AvatarName       AvatarGetter
 	ModelResolver    ModelResolver
 }
 

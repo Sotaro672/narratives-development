@@ -6,8 +6,6 @@ import (
 	"errors"
 	"os"
 
-	firebaseauth "firebase.google.com/go/v4/auth"
-
 	mallquery "narratives/internal/application/query/mall"
 	mallshared "narratives/internal/application/query/mall/shared"
 	sharedquery "narratives/internal/application/query/shared"
@@ -39,53 +37,6 @@ import (
 const (
 	StripeWebhookPath = "/mall/webhooks/stripe"
 )
-
-type firebaseAuthEmailGetter struct {
-	client *firebaseauth.Client
-}
-
-func newFirebaseAuthEmailGetter(
-	client *firebaseauth.Client,
-) usecase.AuthUserEmailGetter {
-	if client == nil {
-		return nil
-	}
-
-	return &firebaseAuthEmailGetter{
-		client: client,
-	}
-}
-
-func (g *firebaseAuthEmailGetter) GetEmailByUID(
-	ctx context.Context,
-	uid string,
-) (string, error) {
-	if g == nil || g.client == nil {
-		return "",
-			errors.New(
-				"firebase auth email getter is not configured",
-			)
-	}
-
-	if uid == "" {
-		return "",
-			errors.New("firebase auth uid is empty")
-	}
-
-	userRecord, err := g.client.GetUser(ctx, uid)
-	if err != nil {
-		return "", err
-	}
-
-	if userRecord == nil {
-		return "",
-			errors.New(
-				"firebase auth user record is nil",
-			)
-	}
-
-	return userRecord.Email, nil
-}
 
 type Container struct {
 	Infra *shared.Infra
@@ -182,8 +133,8 @@ func NewContainer(
 		Infra: infra,
 	}
 
-	authUserEmailGetter :=
-		newFirebaseAuthEmailGetter(
+	authUserReader :=
+		outfirebase.NewAuthUserReader(
 			infra.FirebaseAuth,
 		)
 
@@ -570,7 +521,7 @@ func NewContainer(
 				InventoryRepo: inventoryRepo,
 				ResaleRepo:    resaleRepo,
 
-				AuthUserGetter: authUserEmailGetter,
+				AuthUserGetter: authUserReader,
 				MailSender:     c.OrderMailer,
 				MailFrom:       c.OrderMailFrom,
 			},
@@ -596,7 +547,7 @@ func NewContainer(
 			c.OrderMailFrom,
 			c.InquiryMailTo,
 			avatarRepo,
-			authUserEmailGetter,
+			authUserReader,
 		)
 
 	{

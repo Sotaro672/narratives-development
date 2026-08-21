@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	applicationport "narratives/internal/application/port"
 	usecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 	mintdom "narratives/internal/domain/mint"
@@ -100,23 +101,26 @@ type MintFundingEstimateExecutor func(
 ) (*MintFundingEstimateResult, error)
 
 type MintFundingEstimateQuery struct {
-	passedProductLister mintdom.PassedProductLister
-	tokenBlueprintRepo  tbdom.RepositoryPort
-	brandRepo           branddom.Repository
-	estimate            MintFundingEstimateExecutor
+	passedProductLister  mintdom.PassedProductLister
+	tokenBlueprintRepo   applicationport.TokenBlueprintGetter
+	brandRepo            branddom.Repository
+	estimate             MintFundingEstimateExecutor
+	companyIDFromContext applicationport.CompanyIDResolver
 }
 
 func NewMintFundingEstimateQuery(
 	passedProductLister mintdom.PassedProductLister,
-	tokenBlueprintRepo tbdom.RepositoryPort,
+	tokenBlueprintRepo applicationport.TokenBlueprintGetter,
 	brandRepo branddom.Repository,
 	estimate MintFundingEstimateExecutor,
+	companyIDFromContext applicationport.CompanyIDResolver,
 ) *MintFundingEstimateQuery {
 	return &MintFundingEstimateQuery{
-		passedProductLister: passedProductLister,
-		tokenBlueprintRepo:  tokenBlueprintRepo,
-		brandRepo:           brandRepo,
-		estimate:            estimate,
+		passedProductLister:  passedProductLister,
+		tokenBlueprintRepo:   tokenBlueprintRepo,
+		brandRepo:            brandRepo,
+		estimate:             estimate,
+		companyIDFromContext: companyIDFromContext,
 	}
 }
 
@@ -135,18 +139,19 @@ func (q *MintFundingEstimateQuery) GetMintFundingEstimate(
 	ctx context.Context,
 	input GetMintFundingEstimateInput,
 ) (*MintFundingEstimateResult, error) {
-	if q == nil || q.passedProductLister == nil || q.tokenBlueprintRepo == nil || q.brandRepo == nil || q.estimate == nil {
+	if q == nil || q.passedProductLister == nil || q.tokenBlueprintRepo == nil || q.brandRepo == nil || q.estimate == nil || q.companyIDFromContext == nil {
 		return nil, ErrMintFundingEstimateQueryNotConfigured
 	}
 
 	if input.ProductionID == "" {
 		return nil, fmt.Errorf("%w: productionId is empty", ErrMintFundingEstimateInvalidInput)
 	}
+
 	if input.TokenBlueprintID == "" {
 		return nil, fmt.Errorf("%w: tokenBlueprintId is empty", ErrMintFundingEstimateInvalidInput)
 	}
 
-	companyID := usecase.CompanyIDFromContext(ctx)
+	companyID := q.companyIDFromContext(ctx)
 	if companyID == "" {
 		return nil, usecase.ErrCompanyIDMissing
 	}
@@ -155,18 +160,23 @@ func (q *MintFundingEstimateQuery) GetMintFundingEstimate(
 	if err != nil {
 		return nil, fmt.Errorf("get tokenBlueprint for mint funding estimate: %w", err)
 	}
+
 	if tokenBlueprint == nil {
 		return nil, fmt.Errorf("%w: tokenBlueprint not found", tbdom.ErrNotFound)
 	}
+
 	if tokenBlueprint.CompanyID != companyID {
 		return nil, fmt.Errorf("%w: tokenBlueprint company mismatch", ErrMintFundingEstimateForbidden)
 	}
+
 	if tokenBlueprint.BrandID == "" {
 		return nil, fmt.Errorf("%w: tokenBlueprint brandId is empty", ErrMintFundingEstimateInvalidInput)
 	}
+
 	if tokenBlueprint.Name == "" {
 		return nil, fmt.Errorf("%w: tokenBlueprint name is empty", ErrMintFundingEstimateInvalidInput)
 	}
+
 	if tokenBlueprint.Symbol == "" {
 		return nil, fmt.Errorf("%w: tokenBlueprint symbol is empty", ErrMintFundingEstimateInvalidInput)
 	}
@@ -175,15 +185,19 @@ func (q *MintFundingEstimateQuery) GetMintFundingEstimate(
 	if err != nil {
 		return nil, fmt.Errorf("get brand for mint funding estimate: %w", err)
 	}
+
 	if brand.ID == "" {
 		return nil, fmt.Errorf("%w: brand not found", branddom.ErrNotFound)
 	}
+
 	if brand.CompanyID != companyID {
 		return nil, fmt.Errorf("%w: brand company mismatch", ErrMintFundingEstimateForbidden)
 	}
+
 	if brand.ID != tokenBlueprint.BrandID {
 		return nil, fmt.Errorf("%w: tokenBlueprint brand mismatch", ErrMintFundingEstimateInvalidInput)
 	}
+
 	if brand.WalletAddress == "" {
 		return nil, ErrMintFundingEstimateBrandWalletMissing
 	}
@@ -211,9 +225,11 @@ func (q *MintFundingEstimateQuery) GetMintFundingEstimate(
 	if err != nil {
 		return nil, fmt.Errorf("estimate Bubblegum mint funding: %w", err)
 	}
+
 	if result == nil {
 		return nil, errors.New("mint funding estimate returned nil result")
 	}
+
 	if result.Cluster == "" {
 		return nil, errors.New("mint funding estimate cluster is empty")
 	}
@@ -221,9 +237,11 @@ func (q *MintFundingEstimateQuery) GetMintFundingEstimate(
 	if result.Reserve.Address == "" {
 		return nil, errors.New("mint funding estimate reserve address is empty")
 	}
+
 	if result.Reserve.BalanceLamports == "" {
 		return nil, errors.New("mint funding estimate reserve balanceLamports is empty")
 	}
+
 	if result.Reserve.MinimumLamports == "" {
 		return nil, errors.New("mint funding estimate reserve minimumLamports is empty")
 	}
@@ -231,12 +249,15 @@ func (q *MintFundingEstimateQuery) GetMintFundingEstimate(
 	if result.Estimate.MintTransactionFeePerItemLamports == "" {
 		return nil, errors.New("mint funding estimate mintTransactionFeePerItemLamports is empty")
 	}
+
 	if result.Estimate.MintTransactionFeeTotalLamports == "" {
 		return nil, errors.New("mint funding estimate mintTransactionFeeTotalLamports is empty")
 	}
+
 	if result.Estimate.InitialCreationCostLamports == "" {
 		return nil, errors.New("mint funding estimate initialCreationCostLamports is empty")
 	}
+
 	if result.Estimate.TotalRequiredLamports == "" {
 		return nil, errors.New("mint funding estimate totalRequiredLamports is empty")
 	}

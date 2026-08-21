@@ -5,35 +5,24 @@ import (
 	"context"
 	"errors"
 
+	applicationport "narratives/internal/application/port"
 	resolver "narratives/internal/application/resolver"
 	memberdom "narratives/internal/domain/member"
 	productbpdom "narratives/internal/domain/productBlueprint"
 )
 
-// ProductBlueprintManagementRepo defines the read port needed by the management list screen.
-type ProductBlueprintManagementRepo interface {
-	ListByCompanyID(ctx context.Context, companyID string) ([]productbpdom.ProductBlueprint, error)
-}
-
-// ProductBlueprintCompanyIDFromContext resolves companyId from request context.
-//
-// NOTE:
-// query package should not import usecase package just to call CompanyIDFromContext.
-// Pass usecase.CompanyIDFromContext from DI if you want to reuse the existing function.
-type ProductBlueprintCompanyIDFromContext func(ctx context.Context) string
-
 type ProductBlueprintManagementQuery struct {
-	repo                 ProductBlueprintManagementRepo
+	repo                 applicationport.ProductBlueprintCompanyLister
 	memberRepo           memberdom.Repository
 	nameResolver         *resolver.NameResolver
-	companyIDFromContext ProductBlueprintCompanyIDFromContext
+	companyIDFromContext applicationport.CompanyIDResolver
 }
 
 func NewProductBlueprintManagementQuery(
-	repo ProductBlueprintManagementRepo,
+	repo applicationport.ProductBlueprintCompanyLister,
 	memberRepo memberdom.Repository,
 	nameResolver *resolver.NameResolver,
-	companyIDFromContext ProductBlueprintCompanyIDFromContext,
+	companyIDFromContext applicationport.CompanyIDResolver,
 ) *ProductBlueprintManagementQuery {
 	return &ProductBlueprintManagementQuery{
 		repo:                 repo,

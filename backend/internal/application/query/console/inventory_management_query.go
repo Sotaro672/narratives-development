@@ -6,30 +6,33 @@ import (
 	"errors"
 	"sort"
 
+	applicationport "narratives/internal/application/port"
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
-	usecase "narratives/internal/application/usecase"
 	shadom "narratives/internal/domain/shippingAddress"
 )
 
 type InventoryManagementQuery struct {
-	invRepo             inventoryReader
-	pbRepo              inventoryProductBlueprintReader
-	shippingAddressRepo shadom.RepositoryPort
-	nameResolver        *resolver.NameResolver
+	invRepo              inventoryReader
+	pbRepo               applicationport.ProductBlueprintCompanyLister
+	shippingAddressRepo  shadom.RepositoryPort
+	nameResolver         *resolver.NameResolver
+	companyIDFromContext applicationport.CompanyIDResolver
 }
 
 func NewInventoryManagementQuery(
 	invRepo inventoryReader,
-	pbRepo inventoryProductBlueprintReader,
+	pbRepo applicationport.ProductBlueprintCompanyLister,
 	shippingAddressRepo shadom.RepositoryPort,
 	nameResolver *resolver.NameResolver,
+	companyIDFromContext applicationport.CompanyIDResolver,
 ) *InventoryManagementQuery {
 	return &InventoryManagementQuery{
-		invRepo:             invRepo,
-		pbRepo:              pbRepo,
-		shippingAddressRepo: shippingAddressRepo,
-		nameResolver:        nameResolver,
+		invRepo:              invRepo,
+		pbRepo:               pbRepo,
+		shippingAddressRepo:  shippingAddressRepo,
+		nameResolver:         nameResolver,
+		companyIDFromContext: companyIDFromContext,
 	}
 }
 
@@ -42,7 +45,11 @@ func (q *InventoryManagementQuery) ListByCurrentCompany(ctx context.Context) ([]
 		return nil, errors.New("inventory management query repositories are not configured")
 	}
 
-	companyID := usecase.CompanyIDFromContext(ctx)
+	if q.companyIDFromContext == nil {
+		return nil, errors.New("companyId context resolver is not configured")
+	}
+
+	companyID := q.companyIDFromContext(ctx)
 	if companyID == "" {
 		return nil, errors.New("companyId is missing in context")
 	}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	resolver "narratives/internal/application/resolver"
 	listdom "narratives/internal/domain/list"
 	memberdom "narratives/internal/domain/member"
@@ -59,8 +60,8 @@ type ListManagementQuery struct {
 	nameResolver *resolver.NameResolver
 	memberRepo   memberdom.Repository
 
-	pbGetter ProductBlueprintGetter
-	tbGetter TokenBlueprintGetter
+	pbGetter applicationport.ProductBlueprintGetter
+	tbGetter applicationport.TokenBlueprintGetter
 
 	// company boundary source
 	invRows InventoryRowsLister
@@ -85,8 +86,8 @@ type NewListManagementQueryParams struct {
 	NameResolver *resolver.NameResolver
 	MemberRepo   memberdom.Repository
 
-	PBGetter ProductBlueprintGetter
-	TBGetter TokenBlueprintGetter
+	PBGetter applicationport.ProductBlueprintGetter
+	TBGetter applicationport.TokenBlueprintGetter
 
 	InvRows InventoryRowsLister // REQUIRED
 }
@@ -138,6 +139,7 @@ func (q *ListManagementQuery) ListRows(
 			if inventoryID == "" {
 				continue
 			}
+
 			requestedInventoryIDs[inventoryID] = struct{}{}
 		}
 
@@ -146,6 +148,7 @@ func (q *ListManagementQuery) ListRows(
 			if _, ok := requestedInventoryIDs[inventoryID]; !ok {
 				continue
 			}
+
 			targetInventoryIDs = append(targetInventoryIDs, inventoryID)
 		}
 	}
@@ -182,6 +185,7 @@ func (q *ListManagementQuery) ListRows(
 			if _, ok := seenListID[it.ID]; ok {
 				continue
 			}
+
 			seenListID[it.ID] = struct{}{}
 
 			id := it.ID
@@ -245,9 +249,11 @@ func (q *ListManagementQuery) ListRows(
 							rec.Member.FirstName,
 						)
 					}
+
 					memberNameCache[assigneeID] = assigneeName
 				}
 			}
+
 			if assigneeName == "" {
 				assigneeName = "未設定"
 			}
@@ -263,6 +269,7 @@ func (q *ListManagementQuery) ListRows(
 					if err == nil {
 						productBrandID = pb.BrandID
 					}
+
 					brandIDCachePB[pbID] = productBrandID
 				}
 			}
@@ -275,6 +282,7 @@ func (q *ListManagementQuery) ListRows(
 					if err == nil && tb != nil {
 						tokenBrandID = tb.BrandID
 					}
+
 					brandIDCacheTB[tbID] = tokenBrandID
 				}
 			}

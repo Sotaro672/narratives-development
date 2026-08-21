@@ -9,10 +9,8 @@ import (
 
 	applicationport "narratives/internal/application/port"
 	resolver "narratives/internal/application/resolver"
-	avatardom "narratives/internal/domain/avatar"
 	orderdom "narratives/internal/domain/order"
 	pbdom "narratives/internal/domain/productBlueprint"
-	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ============================================================
@@ -23,32 +21,8 @@ type OrderDetailGetter interface {
 	GetByID(ctx context.Context, id string) (orderdom.Order, error)
 }
 
-type OrderDetailInventoryBlueprintResolver interface {
-	ResolveBlueprintIDsByInventoryID(ctx context.Context, inventoryID string) (productBlueprintID string, tokenBlueprintID string, err error)
-}
-
-type OrderDetailProductBlueprintNameResolver interface {
-	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
-}
-
-type OrderDetailTokenBlueprintNameResolver interface {
-	GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
-}
-
-type OrderDetailAvatarNameResolver interface {
-	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
-}
-
 type OrderDetailUserNameResolver interface {
 	ResolveUserName(ctx context.Context, userID string) string
-}
-
-type OrderDetailModelResolver interface {
-	ResolveModelResolved(ctx context.Context, variationID string) resolver.ModelResolved
-}
-
-type OrderDetailListReadableIDResolver interface {
-	GetReadableIDByID(ctx context.Context, id string) (string, error)
 }
 
 // ============================================================
@@ -122,31 +96,31 @@ type OrderDetailItemDTO struct {
 type OrderDetailQuery struct {
 	orderGetter OrderDetailGetter
 
-	invBlueprint OrderDetailInventoryBlueprintResolver
-	pbName       OrderDetailProductBlueprintNameResolver
-	tbName       OrderDetailTokenBlueprintNameResolver
+	invBlueprint InventoryBlueprintResolver
+	pbName       applicationport.ProductBlueprintGetter
+	tbName       applicationport.TokenBlueprintGetter
 
-	avatarName OrderDetailAvatarNameResolver
+	avatarName AvatarGetter
 	userName   OrderDetailUserNameResolver
 	authUser   applicationport.AuthUserReader
 
-	modelResolver OrderDetailModelResolver
-	listReadable  OrderDetailListReadableIDResolver
+	modelResolver ModelResolver
+	listReadable  ListReadableIDReader
 }
 
 type NewOrderDetailQueryParams struct {
 	OrderGetter OrderDetailGetter
 
-	InvBlueprint OrderDetailInventoryBlueprintResolver
-	PBName       OrderDetailProductBlueprintNameResolver
-	TBName       OrderDetailTokenBlueprintNameResolver
+	InvBlueprint InventoryBlueprintResolver
+	PBName       applicationport.ProductBlueprintGetter
+	TBName       applicationport.TokenBlueprintGetter
 
-	AvatarName OrderDetailAvatarNameResolver
+	AvatarName AvatarGetter
 	UserName   OrderDetailUserNameResolver
 	AuthUser   applicationport.AuthUserReader
 
-	ModelResolver OrderDetailModelResolver
-	ListReadable  OrderDetailListReadableIDResolver
+	ModelResolver ModelResolver
+	ListReadable  ListReadableIDReader
 }
 
 func NewOrderDetailQuery(p NewOrderDetailQueryParams) *OrderDetailQuery {

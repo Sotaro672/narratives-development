@@ -156,6 +156,7 @@ func buildQueries(
 		r.productionRepo,
 		r.memberRepo,
 		res.nameResolver,
+		usecase.CompanyIDFromContext,
 	)
 
 	var mintTaskProgressQuery companyquery.MintTaskProgressQuery
@@ -172,6 +173,7 @@ func buildQueries(
 		r.brandRepo,
 		r.memberRepo,
 		mintTaskProgressQuery,
+		usecase.CompanyIDFromContext,
 	)
 
 	var mintFundingEstimateQuery *companyquery.MintFundingEstimateQuery
@@ -194,6 +196,7 @@ func buildQueries(
 				if err != nil {
 					return nil, err
 				}
+
 				if result == nil {
 					return nil, nil
 				}
@@ -233,6 +236,7 @@ func buildQueries(
 			r.tokenBlueprintRepo,
 			r.brandRepo,
 			estimateExecutor,
+			usecase.CompanyIDFromContext,
 		)
 	}
 
@@ -241,6 +245,7 @@ func buildQueries(
 		r.productBlueprintRepo,
 		r.shippingAddressRepo,
 		res.nameResolver,
+		usecase.CompanyIDFromContext,
 	)
 
 	inventoryDetailQuery := companyquery.NewInventoryDetailQuery(

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	querydto "narratives/internal/application/query/console/dto"
 	usecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
@@ -37,6 +38,7 @@ type MintRequestQueryService struct {
 	brandRepo             branddom.Repository
 	memberRepo            memberdom.Repository
 	mintTaskProgressQuery MintTaskProgressQuery
+	companyIDFromContext  applicationport.CompanyIDResolver
 }
 
 func NewMintRequestQueryService(
@@ -48,6 +50,7 @@ func NewMintRequestQueryService(
 	brandRepo branddom.Repository,
 	memberRepo memberdom.Repository,
 	mintTaskProgressQuery MintTaskProgressQuery,
+	companyIDFromContext applicationport.CompanyIDResolver,
 ) *MintRequestQueryService {
 	return &MintRequestQueryService{
 		productionQuery:       productionQuery,
@@ -58,6 +61,7 @@ func NewMintRequestQueryService(
 		brandRepo:             brandRepo,
 		memberRepo:            memberRepo,
 		mintTaskProgressQuery: mintTaskProgressQuery,
+		companyIDFromContext:  companyIDFromContext,
 	}
 }
 
@@ -219,11 +223,11 @@ func (s *MintRequestQueryService) ListBrandsForMint(
 ) (branddom.PageResult[branddom.Brand], error) {
 	var empty branddom.PageResult[branddom.Brand]
 
-	if s == nil || s.brandRepo == nil {
+	if s == nil || s.brandRepo == nil || s.companyIDFromContext == nil {
 		return empty, ErrMintRequestQueryServiceNotConfigured
 	}
 
-	companyID := usecase.CompanyIDFromContext(ctx)
+	companyID := s.companyIDFromContext(ctx)
 	if companyID == "" {
 		return empty, usecase.ErrCompanyIDMissing
 	}

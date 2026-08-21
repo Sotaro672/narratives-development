@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
 	invdom "narratives/internal/domain/inventory"
@@ -17,20 +18,20 @@ import (
 
 type InventoryDetailQuery struct {
 	invRepo              inventoryReader
-	pbRepo               inventoryProductBlueprintReader
-	tbRepo               inventoryTokenBlueprintReader
+	pbRepo               applicationport.ProductBlueprintGetter
+	tbRepo               applicationport.TokenBlueprintGetter
 	shippingAddressRepo  shadom.RepositoryPort
 	nameResolver         *resolver.NameResolver
-	companyIDFromContext func(context.Context) string
+	companyIDFromContext applicationport.CompanyIDResolver
 }
 
 func NewInventoryDetailQuery(
 	invRepo inventoryReader,
-	pbRepo inventoryProductBlueprintReader,
-	tbRepo inventoryTokenBlueprintReader,
+	pbRepo applicationport.ProductBlueprintGetter,
+	tbRepo applicationport.TokenBlueprintGetter,
 	shippingAddressRepo shadom.RepositoryPort,
 	nameResolver *resolver.NameResolver,
-	companyIDFromContext func(context.Context) string,
+	companyIDFromContext applicationport.CompanyIDResolver,
 ) *InventoryDetailQuery {
 	return &InventoryDetailQuery{
 		invRepo:              invRepo,
@@ -56,9 +57,11 @@ func (q *InventoryDetailQuery) GetTokenBlueprintPatchByID(
 	if q == nil {
 		return nil, errors.New("inventory detail query is nil")
 	}
+
 	if q.tbRepo == nil {
 		return nil, errors.New("tokenBlueprint repository is not configured")
 	}
+
 	if tokenBlueprintID == "" {
 		return nil, errors.New("tokenBlueprintId is required")
 	}
@@ -67,6 +70,7 @@ func (q *InventoryDetailQuery) GetTokenBlueprintPatchByID(
 	if err != nil {
 		return nil, err
 	}
+
 	if tb == nil {
 		return nil, errors.New("tokenBlueprint is nil")
 	}
@@ -90,6 +94,7 @@ func (q *InventoryDetailQuery) GetDetailByID(
 	if q == nil || q.invRepo == nil {
 		return nil, errors.New("inventory detail query repositories are not configured")
 	}
+
 	if inventoryID == "" {
 		return nil, errors.New("inventoryId is required")
 	}
@@ -105,9 +110,11 @@ func (q *InventoryDetailQuery) GetDetailByID(
 	if pbID == "" {
 		return nil, errors.New("productBlueprintId is empty in inventory")
 	}
+
 	if tbID == "" {
 		return nil, errors.New("tokenBlueprintId is empty in inventory")
 	}
+
 	if q.pbRepo == nil {
 		return nil, errors.New("productBlueprint repository is not configured")
 	}
@@ -125,9 +132,11 @@ func (q *InventoryDetailQuery) GetDetailByID(
 	if companyID == "" {
 		return nil, errors.New("companyId is required")
 	}
+
 	if pb.CompanyID == "" {
 		return nil, errors.New("productBlueprint.companyId is empty")
 	}
+
 	if pb.CompanyID != companyID {
 		return nil, invdom.ErrNotFound
 	}
@@ -152,6 +161,7 @@ func (q *InventoryDetailQuery) GetDetailByID(
 	if err != nil {
 		return nil, err
 	}
+
 	if shippingAddresses == nil {
 		shippingAddresses = []shadom.ShippingAddress{}
 	}
@@ -191,6 +201,7 @@ func (q *InventoryDetailQuery) GetDetailByID(
 		if modelID == "" {
 			continue
 		}
+
 		if _, exists := seen[modelID]; exists {
 			continue
 		}
@@ -226,6 +237,7 @@ func (q *InventoryDetailQuery) GetDetailByID(
 		if modelNumber == "" {
 			modelNumber = modelID
 		}
+
 		if modelNumber == "" {
 			modelNumber = "-"
 		}
@@ -247,6 +259,7 @@ func (q *InventoryDetailQuery) GetDetailByID(
 			if size == "" {
 				size = "-"
 			}
+
 			if color == "" {
 				color = "-"
 			}

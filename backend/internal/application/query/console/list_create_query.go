@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 
+	applicationport "narratives/internal/application/port"
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
 	invdom "narratives/internal/domain/inventory"
@@ -32,24 +33,24 @@ import (
 type ListCreateQuery struct {
 	// inventory から stock / pb/tb を引くため
 	// ※ GetByInventoryID を使うなら必須
-	invRepo inventoryReader // defined in inventory_query.go
+	invRepo inventoryReader
 
-	pbRepo inventoryProductBlueprintReader // defined in inventory_query.go
-	tbRepo inventoryTokenBlueprintReader   // defined in inventory_query.go
+	pbRepo applicationport.ProductBlueprintGetter
+	tbRepo applicationport.TokenBlueprintGetter
 
 	transportationRepo   transportationdom.RepositoryPort
 	nameResolver         *resolver.NameResolver
-	companyIDFromContext func(context.Context) string
+	companyIDFromContext applicationport.CompanyIDResolver
 }
 
 // GetByInventoryID を使うなら invRepo が必要になる
 func NewListCreateQueryWithInventory(
 	invRepo inventoryReader,
-	pbRepo inventoryProductBlueprintReader,
-	tbRepo inventoryTokenBlueprintReader,
+	pbRepo applicationport.ProductBlueprintGetter,
+	tbRepo applicationport.TokenBlueprintGetter,
 	transportationRepo transportationdom.RepositoryPort,
 	nameResolver *resolver.NameResolver,
-	companyIDFromContext func(context.Context) string,
+	companyIDFromContext applicationport.CompanyIDResolver,
 ) *ListCreateQuery {
 	return &ListCreateQuery{
 		invRepo:              invRepo,
@@ -75,12 +76,15 @@ func (q *ListCreateQuery) GetByInventoryID(
 	if q == nil {
 		return nil, errors.New("list create query is nil")
 	}
+
 	if q.invRepo == nil {
 		return nil, errors.New("list create query: invRepo is not configured (GetByInventoryID requires inventory repository)")
 	}
+
 	if q.transportationRepo == nil {
 		return nil, errors.New("list create query: transportationRepo is not configured")
 	}
+
 	if q.companyIDFromContext == nil {
 		return nil, errors.New("list create query: companyIDFromContext is not configured")
 	}
@@ -134,6 +138,7 @@ func (q *ListCreateQuery) buildByIDs(
 	if pbID == "" || tbID == "" {
 		return nil, errors.New("productBlueprintId and tokenBlueprintId are required")
 	}
+
 	if companyID == "" {
 		return nil, errors.New("companyId is required")
 	}
@@ -239,9 +244,11 @@ func (q *ListCreateQuery) buildTransportationOptions(
 	if q == nil {
 		return nil, errors.New("list create query is nil")
 	}
+
 	if q.transportationRepo == nil {
 		return nil, errors.New("list create query: transportationRepo is not configured")
 	}
+
 	if companyID == "" {
 		return nil, errors.New("companyId is required")
 	}
@@ -273,6 +280,7 @@ func (q *ListCreateQuery) buildTransportationOptions(
 		if setting.CompanyID != companyID {
 			return nil, errors.New("transportation repository returned setting owned by another company")
 		}
+
 		if setting.ID == "" {
 			return nil, errors.New("transportation repository returned setting with empty id")
 		}
@@ -316,6 +324,7 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 	if pbID == "" || tbID == "" {
 		return nil
 	}
+
 	if len(modelRefs) == 0 {
 		return nil
 	}
@@ -377,6 +386,7 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 			if sz == "" {
 				sz = "-"
 			}
+
 			if cl == "" {
 				cl = "-"
 			}
@@ -419,6 +429,7 @@ func (q *ListCreateQuery) listModelRefs(
 	if err != nil {
 		return nil
 	}
+
 	if len(pb.ModelRefs) == 0 {
 		return nil
 	}
@@ -437,6 +448,7 @@ func (q *ListCreateQuery) listModelRefs(
 		if mid == "" {
 			continue
 		}
+
 		if _, ok := seen[mid]; ok {
 			continue
 		}

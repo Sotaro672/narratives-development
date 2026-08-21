@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	avatardom "narratives/internal/domain/avatar"
 	inquirydom "narratives/internal/domain/inquiry"
 )
@@ -53,7 +54,7 @@ type InquiryUsecase struct {
 	mailTo string
 
 	avatarEmailResolver AvatarEmailResolver
-	authUserGetter      AuthUserEmailGetter
+	authUserGetter      applicationport.AuthUserReader
 
 	now func() time.Time
 }
@@ -72,7 +73,7 @@ func NewInquiryUsecase(
 	mailFrom string,
 	mailTo string,
 	avatarEmailResolver AvatarEmailResolver,
-	authUserGetter AuthUserEmailGetter,
+	authUserGetter applicationport.AuthUserReader,
 ) *InquiryUsecase {
 	return &InquiryUsecase{
 		repo:                repo,
@@ -143,6 +144,7 @@ func (uc *InquiryUsecase) CreateReply(
 	if uc == nil || uc.repo == nil {
 		return inquirydom.Reply{}, fmt.Errorf("inquiry usecase: repository is nil")
 	}
+
 	if uc.replyRepo == nil {
 		return inquirydom.Reply{}, fmt.Errorf("inquiry usecase: reply repository is nil")
 	}
@@ -153,6 +155,7 @@ func (uc *InquiryUsecase) CreateReply(
 	if inquiryID == "" {
 		return inquirydom.Reply{}, inquirydom.ErrInvalidReplyInquiryID
 	}
+
 	if senderID == "" {
 		return inquirydom.Reply{}, inquirydom.ErrInvalidReplySenderID
 	}
@@ -249,6 +252,7 @@ func (uc *InquiryUsecase) ListReplies(
 	if uc == nil || uc.replyRepo == nil {
 		return nil, fmt.Errorf("inquiry usecase: reply repository is nil")
 	}
+
 	if inquiryID == "" {
 		return nil, inquirydom.ErrInvalidReplyInquiryID
 	}
@@ -316,6 +320,7 @@ func (uc *InquiryUsecase) CountUnreadByCompanyIDForMember(
 	if companyID == "" {
 		return 0, inquirydom.ErrNotFound
 	}
+
 	if memberID == "" {
 		return 0, inquirydom.ErrInvalidReplySenderID
 	}
@@ -386,6 +391,7 @@ func (uc *InquiryUsecase) CountUnreadByCompanyIDForAvatar(
 	if companyID == "" {
 		return 0, inquirydom.ErrNotFound
 	}
+
 	if avatarID == "" {
 		return 0, inquirydom.ErrInvalidAvatarID
 	}
@@ -476,6 +482,7 @@ func (uc *InquiryUsecase) CountUnreadByCompanyID(
 	if uc == nil || uc.repo == nil {
 		return 0, fmt.Errorf("inquiry usecase: repository is nil")
 	}
+
 	if companyID == "" {
 		return 0, inquirydom.ErrNotFound
 	}
@@ -490,6 +497,7 @@ func (uc *InquiryUsecase) countUnreadRepliesForMember(
 	if uc == nil || uc.replyRepo == nil {
 		return 0, nil
 	}
+
 	if inquiryID == "" {
 		return 0, inquirydom.ErrInvalidReplyInquiryID
 	}
@@ -525,12 +533,15 @@ func (uc *InquiryUsecase) countUnreadRepliesExcludingSender(
 	if uc == nil || uc.replyRepo == nil {
 		return 0, nil
 	}
+
 	if inquiryID == "" {
 		return 0, inquirydom.ErrInvalidReplyInquiryID
 	}
+
 	if excludedSenderType == "" {
 		return 0, inquirydom.ErrInvalidReplySenderType
 	}
+
 	if excludedSenderID == "" {
 		return 0, inquirydom.ErrInvalidReplySenderID
 	}
@@ -580,6 +591,7 @@ func (uc *InquiryUsecase) ResolveByMember(
 	if inquiryID == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
 	}
+
 	if memberID == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidResolvedBy
 	}
@@ -624,6 +636,7 @@ func (uc *InquiryUsecase) ReopenByMember(
 	if inquiryID == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
 	}
+
 	if memberID == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidUpdatedBy
 	}
@@ -672,6 +685,7 @@ func (uc *InquiryUsecase) CloseByAvatar(
 	if inquiryID == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
 	}
+
 	if avatarID == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidAvatarID
 	}
@@ -695,7 +709,7 @@ func (uc *InquiryUsecase) CloseByAvatar(
 	})
 }
 
-// MarkInquiryAsReadInput は Inquiry を既読にする入力です.
+// MarkInquiryAsReadInput は Inquiry を既読にする入力です。
 //
 // ReaderSenderType / ReaderSenderID は reply の既読化で自分の reply を除外するために使います。
 //
@@ -732,9 +746,11 @@ func (uc *InquiryUsecase) MarkAsRead(
 	if inquiryID == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
 	}
+
 	if readerSenderType == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidReplySenderType
 	}
+
 	if readerSenderID == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidReplySenderID
 	}

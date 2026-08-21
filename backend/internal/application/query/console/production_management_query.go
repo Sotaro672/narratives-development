@@ -5,7 +5,6 @@ import (
 	"context"
 	"time"
 
-	usecase "narratives/internal/application/usecase"
 	productbpdom "narratives/internal/domain/productBlueprint"
 	productiondom "narratives/internal/domain/production"
 )
@@ -45,10 +44,15 @@ type ProductionListItemDTO struct {
 // ============================================================
 
 func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(ctx context.Context) ([]productiondom.Production, map[string]productbpdom.ProductBlueprint, error) {
-	cid := usecase.CompanyIDFromContext(ctx)
+	if s == nil || s.companyIDFromContext == nil {
+		return nil, nil, productbpdom.ErrInvalidCompanyID
+	}
+
+	cid := s.companyIDFromContext(ctx)
 	if cid == "" {
 		return nil, nil, productbpdom.ErrInvalidCompanyID
 	}
+
 	if s.pbRepo == nil || s.prodRepo == nil {
 		return nil, nil, productbpdom.ErrInternal
 	}
@@ -57,6 +61,7 @@ func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(ctx cont
 	if err != nil {
 		return nil, nil, err
 	}
+
 	if len(productBlueprints) == 0 {
 		return []productiondom.Production{}, map[string]productbpdom.ProductBlueprint{}, nil
 	}
@@ -68,6 +73,7 @@ func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(ctx cont
 		if pb.ID == "" {
 			continue
 		}
+
 		if _, exists := pbByID[pb.ID]; exists {
 			continue
 		}
@@ -84,6 +90,7 @@ func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(ctx cont
 	if err != nil {
 		return nil, nil, err
 	}
+
 	if len(rows) == 0 {
 		return []productiondom.Production{}, pbByID, nil
 	}
@@ -93,6 +100,7 @@ func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(ctx cont
 		if _, exists := pbByID[production.ProductBlueprintID]; !exists {
 			continue
 		}
+
 		out = append(out, production)
 	}
 
@@ -104,6 +112,7 @@ func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(ctx cont
 	if err != nil {
 		return nil, err
 	}
+
 	if len(list) == 0 {
 		return []ProductionListItemDTO{}, nil
 	}

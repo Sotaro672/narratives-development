@@ -5,8 +5,6 @@ import (
 	"context"
 	"sort"
 
-	usecase "narratives/internal/application/usecase"
-
 	productbpdom "narratives/internal/domain/productBlueprint"
 	productiondom "narratives/internal/domain/production"
 )
@@ -46,7 +44,11 @@ func (s *CompanyProductionQueryService) GetProductionCreateContext(
 		return ProductionCreateContextDTO{}, productiondom.ErrInvalidProductBlueprintID
 	}
 
-	companyID := usecase.CompanyIDFromContext(ctx)
+	if s == nil || s.companyIDFromContext == nil {
+		return ProductionCreateContextDTO{}, productbpdom.ErrInvalidCompanyID
+	}
+
+	companyID := s.companyIDFromContext(ctx)
 	if companyID == "" {
 		return ProductionCreateContextDTO{}, productbpdom.ErrInvalidCompanyID
 	}

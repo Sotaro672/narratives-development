@@ -6,17 +6,12 @@ import (
 	"sort"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	resolver "narratives/internal/application/resolver"
-	usecase "narratives/internal/application/usecase"
 	memberdom "narratives/internal/domain/member"
 	productbpdom "narratives/internal/domain/productBlueprint"
 	productiondom "narratives/internal/domain/production"
 )
-
-type ProductBlueprintQueryRepo interface {
-	ListByCompanyID(ctx context.Context, companyID string) ([]productbpdom.ProductBlueprint, error)
-	GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
-}
 
 type ProductionQueryRepo interface {
 	GetByID(ctx context.Context, id string) (*productiondom.Production, error)
@@ -75,23 +70,26 @@ type ProductionDetailDTO struct {
 // ============================================================
 
 type CompanyProductionQueryService struct {
-	pbRepo       ProductBlueprintQueryRepo
-	prodRepo     ProductionQueryRepo
-	memberRepo   memberdom.Repository
-	nameResolver *resolver.NameResolver
+	pbRepo               applicationport.ProductBlueprintReader
+	prodRepo             ProductionQueryRepo
+	memberRepo           memberdom.Repository
+	nameResolver         *resolver.NameResolver
+	companyIDFromContext applicationport.CompanyIDResolver
 }
 
 func NewCompanyProductionQueryService(
-	pbRepo ProductBlueprintQueryRepo,
+	pbRepo applicationport.ProductBlueprintReader,
 	prodRepo ProductionQueryRepo,
 	memberRepo memberdom.Repository,
 	nameResolver *resolver.NameResolver,
+	companyIDFromContext applicationport.CompanyIDResolver,
 ) *CompanyProductionQueryService {
 	return &CompanyProductionQueryService{
-		pbRepo:       pbRepo,
-		prodRepo:     prodRepo,
-		memberRepo:   memberRepo,
-		nameResolver: nameResolver,
+		pbRepo:               pbRepo,
+		prodRepo:             prodRepo,
+		memberRepo:           memberRepo,
+		nameResolver:         nameResolver,
+		companyIDFromContext: companyIDFromContext,
 	}
 }
 
@@ -103,7 +101,11 @@ func (s *CompanyProductionQueryService) getProductionByIDForCurrentCompany(
 	ctx context.Context,
 	id string,
 ) (productiondom.Production, productbpdom.ProductBlueprint, error) {
-	cid := usecase.CompanyIDFromContext(ctx)
+	if s == nil || s.companyIDFromContext == nil {
+		return productiondom.Production{}, productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
+	}
+
+	cid := s.companyIDFromContext(ctx)
 	if cid == "" {
 		return productiondom.Production{}, productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
 	}

@@ -38,6 +38,7 @@ import (
 	"strings"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	cartdom "narratives/internal/domain/cart"
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
@@ -152,18 +153,6 @@ type ResaleRepoForPayment interface {
 	) (resaledom.Resale, error)
 }
 
-// AuthUserEmailGetter is the minimal port for reading email from Firebase
-// Authentication.
-//
-// The Firestore users collection does not own email.
-// PaymentUsecase uses this port only for sending order confirmation mail.
-type AuthUserEmailGetter interface {
-	GetEmailByUID(
-		ctx context.Context,
-		uid string,
-	) (string, error)
-}
-
 // MailSenderForPayment is the minimal port for sending order confirmation
 // mail.
 type MailSenderForPayment interface {
@@ -214,7 +203,7 @@ type PaymentUsecase struct {
 
 	// authUserGetter gets the email associated with a UID from Firebase
 	// Authentication. Email is not stored in the Firestore users collection.
-	authUserGetter AuthUserEmailGetter
+	authUserGetter applicationport.AuthUserReader
 	mailSender     MailSenderForPayment
 	mailFrom       string
 
@@ -233,7 +222,7 @@ type NewPaymentUsecaseInput struct {
 	OrderRepo     OrderRepoForPayment
 	ResaleRepo    ResaleRepoForPayment
 
-	AuthUserGetter AuthUserEmailGetter
+	AuthUserGetter applicationport.AuthUserReader
 	MailSender     MailSenderForPayment
 	MailFrom       string
 
