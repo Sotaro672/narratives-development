@@ -4,7 +4,6 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import type { PriceRow } from "../../../inventory/application/listCreateService";
-import { listTransportationVMs } from "../../../transportation/application/transportationService";
 import { useAuthContext } from "../../../../auth/application/AuthContext";
 import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import { useMainImageIndexGuard } from "./internal/useMainImageIndexGuard";
@@ -14,11 +13,7 @@ import { saveListDetailChanges } from "../../application/listDetail/listDetailSa
 import { updatePriceRowPrice } from "../../application/listDetail/listDetailMapper";
 import { buildListDetailSaveInput } from "../../application/listDetail/buildListDetailSaveInput";
 import type { ListDetailSavePayload } from "../../application/listDetail/listDetailSavePayload";
-import {
-  isValidTransportationOption,
-  type ListStatus,
-  type TransportationOption,
-} from "../../../../shared/types/list";
+import type { ListStatus } from "../../../../shared/types/list";
 import {
   deleteListDetail,
   deriveListDetail,
@@ -29,12 +24,6 @@ import {
 } from "../../application/listDetailService";
 
 export type { DraftImage } from "./useListImages";
-
-export type ListTransportationOption = {
-  transportationOption: TransportationOption;
-  transportationId?: string;
-  name: string;
-};
 
 export type UseListDetailResult = {
   loading: boolean;
@@ -60,14 +49,6 @@ export type UseListDetailResult = {
   status: ListStatus | "";
   draftStatus: ListStatus;
   onToggleStatus: (next: ListStatus) => void;
-
-  transportationOption: TransportationOption | "";
-  transportationId: string;
-  draftTransportationOption: TransportationOption | "";
-  draftTransportationId: string;
-  transportationOptions: ListTransportationOption[];
-  onSelectTransportationOption: (value: string) => void;
-  setDraftTransportationId: React.Dispatch<React.SetStateAction<string>>;
 
   productBrandName: string;
   productName: string;
@@ -106,21 +87,6 @@ export type UseListDetailResult = {
   updatedAt: string;
 };
 
-const BUILT_IN_TRANSPORTATION_OPTIONS: ListTransportationOption[] = [
-  {
-    transportationOption: "yamato",
-    name: "ヤマト運輸",
-  },
-  {
-    transportationOption: "sagawa",
-    name: "佐川急便",
-  },
-  {
-    transportationOption: "post",
-    name: "日本郵便",
-  },
-];
-
 function clonePriceRows(rows: readonly PriceRow[]): PriceRow[] {
   return rows.map((row) => ({ ...row }));
 }
@@ -141,11 +107,6 @@ export function useListDetail(): UseListDetailResult {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
   const cancelledRef = useCancelledRef();
-
-  const [
-    customTransportationOptions,
-    setCustomTransportationOptions,
-  ] = React.useState<ListTransportationOption[]>([]);
 
   const reload = React.useCallback(async () => {
     const id = String(listId ?? "").trim();
@@ -188,36 +149,6 @@ export function useListDetail(): UseListDetailResult {
     void reload();
   }, [reload]);
 
-  React.useEffect(() => {
-    const run = async () => {
-      try {
-        const settings =
-          await listTransportationVMs();
-
-        if (cancelledRef.current) return;
-
-        setCustomTransportationOptions(
-          settings.map((setting) => ({
-            transportationOption:
-              "custom" as const,
-
-            transportationId:
-              setting.id,
-
-            name:
-              setting.name,
-          })),
-        );
-      } catch {
-        if (cancelledRef.current) return;
-
-        setCustomTransportationOptions([]);
-      }
-    };
-
-    void run();
-  }, [cancelledRef]);
-
   const derived = React.useMemo(
     () => (dto ? deriveListDetail(dto) : null),
     [dto],
@@ -238,62 +169,6 @@ export function useListDetail(): UseListDetailResult {
   const updatedByName = derived?.updatedByName ?? "";
   const updatedAt = derived?.updatedAtLabel ?? "";
   const primaryImageId = derived?.primaryImageId;
-
-  const transportationOption =
-    dto &&
-    isValidTransportationOption(
-      dto.transportationOption,
-    )
-      ? dto.transportationOption
-      : "";
-
-  const transportationId =
-    transportationOption === "custom"
-      ? String(
-          dto?.transportationId ?? "",
-        )
-      : "";
-
-  const transportationOptions =
-    React.useMemo<ListTransportationOption[]>(() => {
-      const options = [
-        ...BUILT_IN_TRANSPORTATION_OPTIONS,
-        ...customTransportationOptions,
-      ];
-
-      if (
-        transportationOption !== "custom" ||
-        !transportationId
-      ) {
-        return options;
-      }
-
-      const hasCurrentCustomSetting =
-        options.some(
-          (option) =>
-            option.transportationOption ===
-              "custom" &&
-            option.transportationId ===
-              transportationId,
-        );
-
-      if (hasCurrentCustomSetting) {
-        return options;
-      }
-
-      return [
-        ...options,
-        {
-          transportationOption: "custom",
-          transportationId,
-          name: "自社配送料金",
-        },
-      ];
-    }, [
-      customTransportationOptions,
-      transportationOption,
-      transportationId,
-    ]);
 
   const {
     assigneeId: draftAssigneeId,
@@ -359,18 +234,6 @@ export function useListDetail(): UseListDetailResult {
     "suspended",
   );
 
-  const [
-    draftTransportationOption,
-    setDraftTransportationOption,
-  ] = React.useState<
-    TransportationOption | ""
-  >("");
-
-  const [
-    draftTransportationId,
-    setDraftTransportationId,
-  ] = React.useState("");
-
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState("");
   const [deleting, setDeleting] = React.useState(false);
@@ -400,24 +263,12 @@ export function useListDetail(): UseListDetailResult {
       setDraftStatus(status);
     }
 
-    setDraftTransportationOption(
-      transportationOption,
-    );
-
-    setDraftTransportationId(
-      transportationOption === "custom"
-        ? transportationId
-        : "",
-    );
-
     resetAssignee();
   }, [
     listingTitle,
     description,
     viewPriceRows,
     status,
-    transportationOption,
-    transportationId,
     resetAssignee,
   ]);
 
@@ -576,48 +427,6 @@ export function useListDetail(): UseListDetailResult {
     ],
   );
 
-  const onSelectTransportationOption =
-    React.useCallback(
-      (value: string) => {
-        if (
-          !isEdit ||
-          saving ||
-          deleting
-        ) {
-          return;
-        }
-
-        if (!value) {
-          setDraftTransportationOption("");
-          setDraftTransportationId("");
-          return;
-        }
-
-        if (
-          !isValidTransportationOption(
-            value,
-          )
-        ) {
-          setDraftTransportationOption("");
-          setDraftTransportationId("");
-          return;
-        }
-
-        setDraftTransportationOption(
-          value,
-        );
-
-        if (value !== "custom") {
-          setDraftTransportationId("");
-        }
-      },
-      [
-        isEdit,
-        saving,
-        deleting,
-      ],
-    );
-
   const effectiveImageUrls = React.useMemo(
     () =>
       isEdit
@@ -696,26 +505,6 @@ export function useListDetail(): UseListDetailResult {
       if (!draftAssigneeId) {
         setSaveError(
           "assignee_required",
-        );
-
-        return;
-      }
-
-      if (!draftTransportationOption) {
-        setSaveError(
-          "transportation_option_required",
-        );
-
-        return;
-      }
-
-      if (
-        draftTransportationOption ===
-          "custom" &&
-        !draftTransportationId
-      ) {
-        setSaveError(
-          "transportation_id_required",
         );
 
         return;
@@ -813,8 +602,6 @@ export function useListDetail(): UseListDetailResult {
       draftListingTitle,
       draftDescription,
       draftAssigneeId,
-      draftTransportationOption,
-      draftTransportationId,
       draftPriceRows,
       images.draftImages,
       images.releaseDraftBlobUrls,
@@ -848,14 +635,6 @@ export function useListDetail(): UseListDetailResult {
     status,
     draftStatus,
     onToggleStatus,
-
-    transportationOption,
-    transportationId,
-    draftTransportationOption,
-    draftTransportationId,
-    transportationOptions,
-    onSelectTransportationOption,
-    setDraftTransportationId,
 
     productBrandName,
     productName,

@@ -3,7 +3,6 @@
 import type {
   ListPriceRow,
   ListStatus,
-  TransportationOption,
 } from "../../../../shared/types/list";
 
 export type CreateListInput = {
@@ -14,6 +13,4 @@ export type CreateListInput = {
   priceRows?: ListPriceRow[];
   status?: ListStatus;
   assigneeId?: string;
-  transportationOption: TransportationOption;
-  transportationId?: string;
 };

@@ -72,6 +72,32 @@ type RepositoryPort interface {
 		now time.Time,
 	) error
 
+	// ------------------------------------------------------------
+	// Transportation assignment
+	// ------------------------------------------------------------
+	//
+	// SetTransportation sets the transportation configuration
+	// used when shipping products from the inventory.
+	//
+	// Contract:
+	// - inventoryID must identify an existing inventory.
+	// - transportationOption must be a valid TransportationOption.
+	// - transportationID is required only when transportationOption is custom.
+	// - transportationID must be empty for yamato / sagawa / post.
+	// - This operation updates only transportationOption,
+	//   transportationId and updatedAt.
+	// - TransportationFeeSetting existence and company ownership validation
+	//   are responsibilities of the application/usecase layer.
+	// - If the inventory does not exist: return ErrNotFound.
+	// - If inventoryID is empty/invalid: return ErrInvalidMintID.
+	SetTransportation(
+		ctx context.Context,
+		inventoryID string,
+		transportationOption TransportationOption,
+		transportationID string,
+		now time.Time,
+	) error
+
 	// atomic upsert (for mint -> inventory reflection)
 	// - docId = productBlueprintId__tokenBlueprintId
 	// - Stock[modelId].Products に productId を追記（UNION / add-only）

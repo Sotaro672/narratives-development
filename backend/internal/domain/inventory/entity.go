@@ -7,6 +7,15 @@ import (
 	"time"
 )
 
+type TransportationOption string
+
+const (
+	TransportationOptionYamato TransportationOption = "yamato"
+	TransportationOptionSagawa TransportationOption = "sagawa"
+	TransportationOptionPost   TransportationOption = "post"
+	TransportationOptionCustom TransportationOption = "custom"
+)
+
 var (
 	ErrNotFound                  = errors.New("inventory not found")
 	ErrInvalidMintID             = errors.New("invalid inventory id")
@@ -14,6 +23,10 @@ var (
 	ErrInvalidProductBlueprintID = errors.New("invalid productBlueprintID")
 	ErrInvalidModelID            = errors.New("invalid modelID")
 	ErrInvalidProducts           = errors.New("invalid products")
+
+	ErrInvalidTransportationOption = errors.New("inventory: invalid transportationOption")
+	ErrTransportationIDRequired    = errors.New("inventory: transportationId is required for custom transportation")
+	ErrTransportationIDNotAllowed  = errors.New("inventory: transportationId is only allowed for custom transportation")
 )
 
 // ModelStock は modelId ごとの在庫を表します。
@@ -36,12 +49,17 @@ type ModelStock struct {
 // 期待値：
 // - docId: productBlueprintId__tokenBlueprintId（※ docId 自体の sanitize は永続化層の責務）
 // - shippingAddressId: inventory の在庫保管場所となる shippingAddress document ID
+// - transportationOption: inventory から発送する際の配送方法
+// - transportationId: custom 配送の場合に使用する TransportationFeeSetting document ID
 // - stock: modelId ごとに products + accumulation + reserved を並列保持
 type Mint struct {
 	ID                 string
 	TokenBlueprintID   string
 	ProductBlueprintID string
 	ShippingAddressID  string
+
+	TransportationOption TransportationOption
+	TransportationID     string
 
 	// modelId -> { products, accumulation, reservedByOrder, reservedCount }
 	Stock map[string]ModelStock
@@ -75,6 +93,20 @@ func BuildMintID(productBlueprintID, tokenBlueprintID string) string {
 	return productBlueprintID + "__" + tokenBlueprintID
 }
 
+func IsValidTransportationOption(
+	option TransportationOption,
+) bool {
+	switch option {
+	case TransportationOptionYamato,
+		TransportationOptionSagawa,
+		TransportationOptionPost,
+		TransportationOptionCustom:
+		return true
+	default:
+		return false
+	}
+}
+
 // Validate は Mint の必須項目と整合性を検証します。
 func (m Mint) Validate() error {
 	if m.TokenBlueprintID == "" {
@@ -87,6 +119,18 @@ func (m Mint) Validate() error {
 	// ShippingAddressID は inventory 作成時点では未設定を許容する。
 	// 選択された shippingAddress の存在確認・company 所有権確認は
 	// application/usecase 層で行う。
+
+	// TransportationOption / TransportationID は inventory 作成時点では
+	// 両方未設定を許容する。
+	// 設定された場合の整合性のみ domain で検証し、
+	// custom TransportationFeeSetting の存在確認・company 所有権確認は
+	// application/usecase 層で行う。
+	if err := validateTransportation(
+		m.TransportationOption,
+		m.TransportationID,
+	); err != nil {
+		return err
+	}
 
 	// Stock が空はユースケース次第で許容されるので、ここでは必須にしない
 	if m.Stock == nil {
@@ -150,6 +194,35 @@ func (ms ModelStock) Validate() error {
 // ------------------------------
 // internal helpers (domain-level)
 // ------------------------------
+
+func validateTransportation(
+	option TransportationOption,
+	transportationID string,
+) error {
+	if option == "" {
+		if transportationID != "" {
+			return ErrTransportationIDNotAllowed
+		}
+		return nil
+	}
+
+	if !IsValidTransportationOption(option) {
+		return ErrInvalidTransportationOption
+	}
+
+	if option == TransportationOptionCustom {
+		if transportationID == "" {
+			return ErrTransportationIDRequired
+		}
+		return nil
+	}
+
+	if transportationID != "" {
+		return ErrTransportationIDNotAllowed
+	}
+
+	return nil
+}
 
 func validateSortedUniqueNonEmptyStrings(xs []string) error {
 	if len(xs) == 0 {

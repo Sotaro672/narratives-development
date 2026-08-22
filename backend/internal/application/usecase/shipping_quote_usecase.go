@@ -33,7 +33,7 @@ type ShippingQuoteResult struct {
 	OriginShippingAddressID      string
 	DestinationShippingAddressID string
 
-	TransportationOption listdom.TransportationOption
+	TransportationOption inventorydom.TransportationOption
 	TransportationID     string
 
 	Size     int
@@ -157,13 +157,6 @@ func (uc *ShippingQuoteUsecase) Quote(
 			)
 	}
 
-	if !listdom.IsValidTransportationOption(
-		listItem.TransportationOption,
-	) {
-		return ShippingQuoteResult{},
-			listdom.ErrInvalidTransportationOption
-	}
-
 	inventoryItem, err :=
 		uc.inventoryRepo.GetByID(
 			ctx,
@@ -171,6 +164,13 @@ func (uc *ShippingQuoteUsecase) Quote(
 		)
 	if err != nil {
 		return ShippingQuoteResult{}, err
+	}
+
+	if !inventorydom.IsValidTransportationOption(
+		inventoryItem.TransportationOption,
+	) {
+		return ShippingQuoteResult{},
+			inventorydom.ErrInvalidTransportationOption
 	}
 
 	if inventoryItem.ShippingAddressID == "" {
@@ -260,7 +260,7 @@ func (uc *ShippingQuoteUsecase) Quote(
 			ctx,
 			transportationdom.CalculateInput{
 				Carrier: transportationdom.Carrier(
-					listItem.TransportationOption,
+					inventoryItem.TransportationOption,
 				),
 
 				Package: transportationdom.Package{
@@ -286,7 +286,7 @@ func (uc *ShippingQuoteUsecase) Quote(
 
 				CompanyID: originAddress.CompanyID,
 
-				TransportationID: listItem.TransportationID,
+				TransportationID: inventoryItem.TransportationID,
 			},
 		)
 	if err != nil {
@@ -300,8 +300,8 @@ func (uc *ShippingQuoteUsecase) Quote(
 		OriginShippingAddressID:      originAddress.ID,
 		DestinationShippingAddressID: destinationAddress.ID,
 
-		TransportationOption: listItem.TransportationOption,
-		TransportationID:     listItem.TransportationID,
+		TransportationOption: inventoryItem.TransportationOption,
+		TransportationID:     inventoryItem.TransportationID,
 
 		Size:     quote.Size,
 		Amount:   quote.Amount,

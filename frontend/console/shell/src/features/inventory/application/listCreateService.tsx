@@ -9,7 +9,6 @@ import type {
   List,
   ListPriceRow,
   ListStatus,
-  TransportationOption,
 } from "../../../shared/types/list";
 
 import {
@@ -204,15 +203,11 @@ export type CreateListInput = {
   description: string;
   status: ListStatus;
   assigneeId?: string;
-  transportationOption: TransportationOption;
-  transportationId?: string;
   priceRows: ListPriceRow[];
 };
 
 export const IMAGE_REQUIRED_MESSAGE = "画像が必須です。";
 export const PRICE_REQUIRED_MESSAGE = "価格が未入力の商品があります。";
-export const TRANSPORTATION_REQUIRED_MESSAGE = "配送方法を選択してください。";
-export const CUSTOM_TRANSPORTATION_REQUIRED_MESSAGE = "自社配送を選択した場合は配送料金設定を選択してください。";
 export const LIST_IMAGE_UPLOAD_FAILED_MESSAGE = "画像アップロードに失敗しました。後から追加できます。";
 
 /**
@@ -322,8 +317,6 @@ export function buildCreateListInput(
     priceRows: CompletedPriceRow[];
     status: ListStatus;
     assigneeId?: string;
-    transportationOption: TransportationOption;
-    transportationId?: string;
   },
 ): CreateListInput {
   return {
@@ -332,11 +325,6 @@ export function buildCreateListInput(
     description: args.description,
     status: args.status,
     assigneeId: args.assigneeId,
-    transportationOption: args.transportationOption,
-    transportationId:
-      args.transportationOption === "custom"
-        ? args.transportationId
-        : undefined,
     priceRows: args.priceRows.map(
       (row): ListPriceRow => ({
         modelId: row.modelId,
@@ -351,17 +339,6 @@ export function validateCreateListInput(
 ): void {
   if (!input.title) {
     throw new Error("タイトルを入力してください。");
-  }
-
-  if (!input.transportationOption) {
-    throw new Error(TRANSPORTATION_REQUIRED_MESSAGE);
-  }
-
-  if (
-    input.transportationOption === "custom" &&
-    !input.transportationId
-  ) {
-    throw new Error(CUSTOM_TRANSPORTATION_REQUIRED_MESSAGE);
   }
 
   if (input.priceRows.length === 0) {
@@ -532,8 +509,6 @@ export async function createListWithImages(
     priceRows: PriceRow[];
     status: ListStatus;
     assigneeId?: string;
-    transportationOption: TransportationOption;
-    transportationId?: string;
 
     images: File[];
     mainImageIndex: number;
@@ -546,17 +521,6 @@ export async function createListWithImages(
 ): Promise<List> {
   if (!args.listingTitle) {
     throw new Error("タイトルを入力してください。");
-  }
-
-  if (!args.transportationOption) {
-    throw new Error(TRANSPORTATION_REQUIRED_MESSAGE);
-  }
-
-  if (
-    args.transportationOption === "custom" &&
-    !args.transportationId
-  ) {
-    throw new Error(CUSTOM_TRANSPORTATION_REQUIRED_MESSAGE);
   }
 
   if (args.images.length === 0) {
@@ -573,8 +537,6 @@ export async function createListWithImages(
       priceRows: args.priceRows,
       status: args.status,
       assigneeId: args.assigneeId,
-      transportationOption: args.transportationOption,
-      transportationId: args.transportationId,
     });
 
   validateCreateListInput(input);

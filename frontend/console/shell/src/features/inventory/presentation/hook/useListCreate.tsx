@@ -6,10 +6,8 @@ import { useNavigate, useParams, type NavigateFunction } from "react-router-dom"
 import { usePriceCard } from "../../../list/presentation/hook/usePriceCard";
 import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import type { AssigneeCandidate } from "../../../admin/application/AdminService";
-import {
-  isValidTransportationOption,
-  type ListStatus,
-  type TransportationOption,
+import type {
+  ListStatus,
 } from "../../../../shared/types/list";
 import type { ListCreateDTO } from "../../../../shared/types/inventory";
 
@@ -66,11 +64,6 @@ export type UseListCreateResult = {
 
   status: ListStatus;
   setStatus: React.Dispatch<React.SetStateAction<ListStatus>>;
-
-  transportationOption: TransportationOption | "";
-  transportationId: string;
-  onSelectTransportationOption: (value: string) => void;
-  setTransportationId: React.Dispatch<React.SetStateAction<string>>;
 };
 
 type UsePriceRowsResult = {
@@ -132,53 +125,6 @@ function useListingStatus(): {
   return {
     status,
     setStatus,
-  };
-}
-
-function useTransportationSelection(): {
-  transportationOption: TransportationOption | "";
-  transportationId: string;
-  onSelectTransportationOption: (value: string) => void;
-  setTransportationId: React.Dispatch<React.SetStateAction<string>>;
-} {
-  const [
-    transportationOption,
-    setTransportationOption,
-  ] = React.useState<TransportationOption | "">("");
-
-  const [
-    transportationId,
-    setTransportationId,
-  ] = React.useState("");
-
-  const onSelectTransportationOption = React.useCallback(
-    (value: string) => {
-      if (!value) {
-        setTransportationOption("");
-        setTransportationId("");
-        return;
-      }
-
-      if (!isValidTransportationOption(value)) {
-        setTransportationOption("");
-        setTransportationId("");
-        return;
-      }
-
-      setTransportationOption(value);
-
-      if (value !== "custom") {
-        setTransportationId("");
-      }
-    },
-    [],
-  );
-
-  return {
-    transportationOption,
-    transportationId,
-    onSelectTransportationOption,
-    setTransportationId,
   };
 }
 
@@ -474,8 +420,6 @@ function useCreateList(
     description: string;
     priceRows: PriceRow[];
     assigneeId: string | undefined;
-    transportationOption: TransportationOption | "";
-    transportationId: string;
     images: File[];
     mainImageIndex: number;
   },
@@ -490,8 +434,6 @@ function useCreateList(
     description,
     priceRows,
     assigneeId,
-    transportationOption,
-    transportationId,
     images,
     mainImageIndex,
   } = args;
@@ -504,10 +446,6 @@ function useCreateList(
         resolvedParams.inventoryId ?? "",
       );
 
-      if (!transportationOption) {
-        throw new Error("配送方法を選択してください。");
-      }
-
       const created = await createListWithImages({
         params: {
           ...resolvedParams,
@@ -518,11 +456,6 @@ function useCreateList(
         priceRows,
         status,
         assigneeId,
-        transportationOption,
-        transportationId:
-          transportationOption === "custom"
-            ? transportationId
-            : undefined,
         images,
         mainImageIndex,
         onImageUploadFailed: (message) => {
@@ -560,8 +493,6 @@ function useCreateList(
     description,
     priceRows,
     assigneeId,
-    transportationOption,
-    transportationId,
     images,
     mainImageIndex,
   ]);
@@ -581,13 +512,6 @@ export function useListCreate(): UseListCreateResult {
     status,
     setStatus,
   } = useListingStatus();
-
-  const {
-    transportationOption,
-    transportationId,
-    onSelectTransportationOption,
-    setTransportationId,
-  } = useTransportationSelection();
 
   const {
     listingTitle,
@@ -654,8 +578,6 @@ export function useListCreate(): UseListCreateResult {
     description,
     priceRows,
     assigneeId,
-    transportationOption,
-    transportationId,
     images,
     mainImageIndex,
   });
@@ -700,10 +622,5 @@ export function useListCreate(): UseListCreateResult {
 
     status,
     setStatus,
-
-    transportationOption,
-    transportationId,
-    onSelectTransportationOption,
-    setTransportationId,
   };
 }

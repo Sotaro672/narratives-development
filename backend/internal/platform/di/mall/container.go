@@ -449,7 +449,6 @@ func NewContainer(
 		usecase.NewListUsecase(
 			listRepoFS,
 			listImageRecordRepo,
-			transportationRepo,
 			nil,
 		)
 

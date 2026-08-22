@@ -11,6 +11,7 @@ import (
 	usecase "narratives/internal/application/usecase"
 	invdom "narratives/internal/domain/inventory"
 	shadom "narratives/internal/domain/shippingAddress"
+	transportationdom "narratives/internal/domain/transportation"
 )
 
 type InventoryHandler struct {
@@ -60,6 +61,11 @@ type updateInventoryShippingAddressRequest struct {
 	ShippingAddressID string `json:"shippingAddressId"`
 }
 
+type updateInventoryTransportationRequest struct {
+	TransportationOption invdom.TransportationOption `json:"transportationOption"`
+	TransportationID     string                      `json:"transportationId"`
+}
+
 func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
@@ -102,6 +108,29 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPatch:
 			h.UpdateShippingAddressByPath(
+				w,
+				r,
+				path,
+			)
+			return
+
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+	}
+
+	// ============================================================
+	// Command endpoint
+	// PATCH /inventory/{inventoryId}/transportation
+	// ============================================================
+
+	if strings.HasPrefix(path, "/inventory/") &&
+		strings.HasSuffix(path, "/transportation") {
+
+		switch r.Method {
+		case http.MethodPatch:
+			h.UpdateTransportationByPath(
 				w,
 				r,
 				path,
@@ -320,6 +349,226 @@ func (h *InventoryHandler) UpdateShippingAddressByPath(
 			writeInventoryError(
 				w,
 				http.StatusNotFound,
+				err.Error(),
+			)
+			return
+		}
+
+		if isInventoryProbablyBadRequest(
+			err,
+		) {
+			writeInventoryError(
+				w,
+				http.StatusBadRequest,
+				err.Error(),
+			)
+			return
+		}
+
+		writeInventoryError(
+			w,
+			http.StatusInternalServerError,
+			err.Error(),
+		)
+		return
+	}
+
+	dto, err :=
+		h.DQ.GetDetailByID(
+			ctx,
+			inventoryID,
+		)
+	if err != nil {
+		if errors.Is(
+			err,
+			invdom.ErrNotFound,
+		) {
+			writeInventoryError(
+				w,
+				http.StatusNotFound,
+				err.Error(),
+			)
+			return
+		}
+
+		writeInventoryError(
+			w,
+			http.StatusInternalServerError,
+			err.Error(),
+		)
+		return
+	}
+
+	writeInventoryJSON(
+		w,
+		http.StatusOK,
+		dto,
+	)
+}
+
+// ============================================================
+// Transportation assignment endpoint
+// - PATCH /inventory/{inventoryId}/transportation
+// - yamato / sagawa / post は transportationId を持たない
+// - custom は current company に属する transportationId のみ設定可能
+// - 保存成功後は更新済み InventoryDetailDTO を返す
+// ============================================================
+
+func (h *InventoryHandler) UpdateTransportationByPath(
+	w http.ResponseWriter,
+	r *http.Request,
+	path string,
+) {
+	if h == nil || h.UC == nil {
+		writeInventoryError(w, http.StatusNotImplemented, "inventory usecase is not configured")
+		return
+	}
+
+	if h.DQ == nil {
+		writeInventoryError(w, http.StatusNotImplemented, "inventory detail query is not configured")
+		return
+	}
+
+	rest := strings.TrimPrefix(
+		path,
+		"/inventory/",
+	)
+
+	rest = strings.TrimSuffix(
+		rest,
+		"/transportation",
+	)
+
+	inventoryID := strings.Trim(
+		rest,
+		"/",
+	)
+
+	if inventoryID == "" ||
+		inventoryID == "ids" ||
+		strings.Contains(inventoryID, "/") {
+
+		writeInventoryError(
+			w,
+			http.StatusBadRequest,
+			"invalid inventory id",
+		)
+		return
+	}
+
+	var req updateInventoryTransportationRequest
+
+	if err := json.NewDecoder(
+		r.Body,
+	).Decode(
+		&req,
+	); err != nil {
+
+		writeInventoryError(
+			w,
+			http.StatusBadRequest,
+			"invalid request body",
+		)
+		return
+	}
+
+	if req.TransportationOption == "" {
+		writeInventoryError(
+			w,
+			http.StatusBadRequest,
+			"transportationOption is required",
+		)
+		return
+	}
+
+	if !invdom.IsValidTransportationOption(
+		req.TransportationOption,
+	) {
+		writeInventoryError(
+			w,
+			http.StatusBadRequest,
+			invdom.ErrInvalidTransportationOption.Error(),
+		)
+		return
+	}
+
+	if req.TransportationOption ==
+		invdom.TransportationOptionCustom {
+
+		if req.TransportationID == "" {
+			writeInventoryError(
+				w,
+				http.StatusBadRequest,
+				invdom.ErrTransportationIDRequired.Error(),
+			)
+			return
+		}
+	} else if req.TransportationID != "" {
+		writeInventoryError(
+			w,
+			http.StatusBadRequest,
+			invdom.ErrTransportationIDNotAllowed.Error(),
+		)
+		return
+	}
+
+	ctx := r.Context()
+
+	companyID :=
+		usecase.CompanyIDFromContext(
+			ctx,
+		)
+
+	if companyID == "" {
+		writeInventoryError(
+			w,
+			http.StatusBadRequest,
+			"companyId is required",
+		)
+		return
+	}
+
+	err := h.UC.SetTransportation(
+		ctx,
+		inventoryID,
+		companyID,
+		req.TransportationOption,
+		req.TransportationID,
+	)
+	if err != nil {
+		if errors.Is(
+			err,
+			invdom.ErrNotFound,
+		) ||
+			errors.Is(
+				err,
+				transportationdom.ErrNotFound,
+			) {
+
+			writeInventoryError(
+				w,
+				http.StatusNotFound,
+				err.Error(),
+			)
+			return
+		}
+
+		if errors.Is(
+			err,
+			invdom.ErrInvalidTransportationOption,
+		) ||
+			errors.Is(
+				err,
+				invdom.ErrTransportationIDRequired,
+			) ||
+			errors.Is(
+				err,
+				invdom.ErrTransportationIDNotAllowed,
+			) {
+
+			writeInventoryError(
+				w,
+				http.StatusBadRequest,
 				err.Error(),
 			)
 			return

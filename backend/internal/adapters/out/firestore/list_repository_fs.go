@@ -357,10 +357,9 @@ func (r *ListRepositoryFS) Update(ctx context.Context, id string, l ldom.List) (
 		cur.AssigneeID = l.AssigneeID
 		cur.Title = l.Title
 		cur.ImageID = l.ImageID
+		cur.InventoryID = l.InventoryID
 		cur.ReadableID = l.ReadableID
 		cur.Description = l.Description
-		cur.TransportationOption = l.TransportationOption
-		cur.TransportationID = l.TransportationID
 		cur.Prices = l.Prices
 
 		clearUpdatedBy := false
@@ -393,9 +392,12 @@ func (r *ListRepositoryFS) Update(ctx context.Context, id string, l ldom.List) (
 		}
 
 		data := encodeListDoc(cur)
-		if cur.TransportationID == "" {
-			data["transportation_id"] = gfs.Delete
-		}
+
+		// Transportation configuration has been fully migrated to inventory.
+		// Remove legacy list-level transportation fields from Firestore.
+		data["transportation_option"] = gfs.Delete
+		data["transportation_id"] = gfs.Delete
+
 		if clearUpdatedBy {
 			data["updated_by"] = gfs.Delete
 		}
@@ -494,40 +496,37 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 	}
 
 	var raw struct {
-		Status               string     `firestore:"status"`
-		AssigneeID           string     `firestore:"assignee_id"`
-		Title                string     `firestore:"title"`
-		ImageID              string     `firestore:"image_id"`
-		ReadableID           string     `firestore:"readable_id"`
-		Description          string     `firestore:"description"`
-		TransportationOption string     `firestore:"transportation_option"`
-		TransportationID     string     `firestore:"transportation_id"`
-		CreatedBy            string     `firestore:"created_by"`
-		CreatedAt            time.Time  `firestore:"created_at"`
-		UpdatedBy            *string    `firestore:"updated_by"`
-		UpdatedAt            *time.Time `firestore:"updated_at"`
-		InventoryID          string     `firestore:"inventory_id"`
+		Status      string `firestore:"status"`
+		AssigneeID  string `firestore:"assignee_id"`
+		Title       string `firestore:"title"`
+		ImageID     string `firestore:"image_id"`
+		ReadableID  string `firestore:"readable_id"`
+		Description string `firestore:"description"`
+
+		CreatedBy   string     `firestore:"created_by"`
+		CreatedAt   time.Time  `firestore:"created_at"`
+		UpdatedBy   *string    `firestore:"updated_by"`
+		UpdatedAt   *time.Time `firestore:"updated_at"`
+		InventoryID string     `firestore:"inventory_id"`
 	}
 	if err := doc.DataTo(&raw); err != nil {
 		return ldom.List{}, err
 	}
 
 	l := ldom.List{
-		ID:                   doc.Ref.ID,
-		Status:               ldom.ListStatus(raw.Status),
-		AssigneeID:           raw.AssigneeID,
-		Title:                raw.Title,
-		ImageID:              raw.ImageID,
-		InventoryID:          raw.InventoryID,
-		ReadableID:           raw.ReadableID,
-		Description:          raw.Description,
-		TransportationOption: ldom.TransportationOption(raw.TransportationOption),
-		TransportationID:     raw.TransportationID,
-		Prices:               nil,
-		CreatedBy:            raw.CreatedBy,
-		CreatedAt:            raw.CreatedAt,
-		UpdatedBy:            raw.UpdatedBy,
-		UpdatedAt:            raw.UpdatedAt,
+		ID:          doc.Ref.ID,
+		Status:      ldom.ListStatus(raw.Status),
+		AssigneeID:  raw.AssigneeID,
+		Title:       raw.Title,
+		ImageID:     raw.ImageID,
+		InventoryID: raw.InventoryID,
+		ReadableID:  raw.ReadableID,
+		Description: raw.Description,
+		Prices:      nil,
+		CreatedBy:   raw.CreatedBy,
+		CreatedAt:   raw.CreatedAt,
+		UpdatedBy:   raw.UpdatedBy,
+		UpdatedAt:   raw.UpdatedAt,
 	}
 	if err := l.ValidateForPersist(); err != nil {
 		return ldom.List{}, err
@@ -537,19 +536,15 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 
 func encodeListDoc(l ldom.List) map[string]any {
 	m := map[string]any{
-		"status":                string(l.Status),
-		"assignee_id":           l.AssigneeID,
-		"title":                 l.Title,
-		"image_id":              l.ImageID,
-		"inventory_id":          l.InventoryID,
-		"readable_id":           l.ReadableID,
-		"description":           l.Description,
-		"transportation_option": string(l.TransportationOption),
-		"created_by":            l.CreatedBy,
-		"created_at":            l.CreatedAt.UTC(),
-	}
-	if l.TransportationID != "" {
-		m["transportation_id"] = l.TransportationID
+		"status":       string(l.Status),
+		"assignee_id":  l.AssigneeID,
+		"title":        l.Title,
+		"image_id":     l.ImageID,
+		"inventory_id": l.InventoryID,
+		"readable_id":  l.ReadableID,
+		"description":  l.Description,
+		"created_by":   l.CreatedBy,
+		"created_at":   l.CreatedAt.UTC(),
 	}
 	if l.UpdatedBy != nil {
 		m["updated_by"] = *l.UpdatedBy

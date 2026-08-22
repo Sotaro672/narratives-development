@@ -10,6 +10,7 @@ import (
 
 	"narratives/internal/adapters/in/http/middleware"
 	usecase "narratives/internal/application/usecase"
+	inventorydom "narratives/internal/domain/inventory"
 	listdom "narratives/internal/domain/list"
 	modeldom "narratives/internal/domain/model"
 	shippingaddressdom "narratives/internal/domain/shippingAddress"
@@ -418,6 +419,10 @@ func writeShippingQuoteErr(
 	),
 		errors.Is(
 			err,
+			inventorydom.ErrNotFound,
+		),
+		errors.Is(
+			err,
 			shippingaddressdom.ErrNotFound,
 		),
 		errors.Is(
@@ -436,8 +441,16 @@ func writeShippingQuoteErr(
 
 	case errors.Is(
 		err,
-		listdom.ErrInvalidTransportationOption,
+		inventorydom.ErrInvalidTransportationOption,
 	),
+		errors.Is(
+			err,
+			inventorydom.ErrTransportationIDRequired,
+		),
+		errors.Is(
+			err,
+			inventorydom.ErrTransportationIDNotAllowed,
+		),
 		errors.Is(
 			err,
 			modeldom.ErrInvalidShippingPackage,

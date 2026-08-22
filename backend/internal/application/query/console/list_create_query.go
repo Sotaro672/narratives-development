@@ -9,8 +9,6 @@ import (
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
 	invdom "narratives/internal/domain/inventory"
-	listdom "narratives/internal/domain/list"
-	transportationdom "narratives/internal/domain/transportation"
 )
 
 // ============================================================
@@ -24,10 +22,10 @@ import (
 // - displayOrder は「取得して返すのみ」。
 // - 並べ替え（displayOrder 昇順 / size,color 等）は一切しない。
 // - inventoryId の build/split は廃止（inventoryId は inventory テーブルから拾う）
+// - current company が所有する inventory のみ返す。
 // - PriceRows には productBlueprintCategory / model kind に応じた model 情報を含める。
 //   - apparel: size / color / rgb
 //   - alcohol: volumeValue / volumeUnit
-// - TransportationOptions は固定配送会社 + current company の custom 配送料金設定を返す。
 // ============================================================
 
 type ListCreateQuery struct {
@@ -38,7 +36,6 @@ type ListCreateQuery struct {
 	pbRepo applicationport.ProductBlueprintGetter
 	tbRepo applicationport.TokenBlueprintGetter
 
-	transportationRepo   transportationdom.RepositoryPort
 	nameResolver         *resolver.NameResolver
 	companyIDFromContext applicationport.CompanyIDResolver
 }
@@ -48,7 +45,6 @@ func NewListCreateQueryWithInventory(
 	invRepo inventoryReader,
 	pbRepo applicationport.ProductBlueprintGetter,
 	tbRepo applicationport.TokenBlueprintGetter,
-	transportationRepo transportationdom.RepositoryPort,
 	nameResolver *resolver.NameResolver,
 	companyIDFromContext applicationport.CompanyIDResolver,
 ) *ListCreateQuery {
@@ -56,7 +52,6 @@ func NewListCreateQueryWithInventory(
 		invRepo:              invRepo,
 		pbRepo:               pbRepo,
 		tbRepo:               tbRepo,
-		transportationRepo:   transportationRepo,
 		nameResolver:         nameResolver,
 		companyIDFromContext: companyIDFromContext,
 	}
@@ -81,12 +76,12 @@ func (q *ListCreateQuery) GetByInventoryID(
 		return nil, errors.New("list create query: invRepo is not configured (GetByInventoryID requires inventory repository)")
 	}
 
-	if q.transportationRepo == nil {
-		return nil, errors.New("list create query: transportationRepo is not configured")
-	}
-
 	if q.companyIDFromContext == nil {
 		return nil, errors.New("list create query: companyIDFromContext is not configured")
+	}
+
+	if q.pbRepo == nil {
+		return nil, errors.New("list create query: pbRepo is not configured")
 	}
 
 	id := inventoryID
@@ -109,6 +104,18 @@ func (q *ListCreateQuery) GetByInventoryID(
 	tbID := inv.TokenBlueprintID
 	if pbID == "" || tbID == "" {
 		return nil, errors.New("productBlueprintId/tokenBlueprintId is empty in inventory")
+	}
+
+	productBlueprint, err := q.pbRepo.GetByID(
+		ctx,
+		pbID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if productBlueprint.CompanyID != companyID {
+		return nil, invdom.ErrNotFound
 	}
 
 	return q.buildByIDs(
@@ -200,19 +207,6 @@ func (q *ListCreateQuery) buildByIDs(
 		modelRefs,
 	)
 
-	// ------------------------------------------------------------
-	// TransportationOptions
-	// - fixed: yamato / sagawa / post
-	// - custom: current company の TransportationFeeSetting
-	// ------------------------------------------------------------
-	transportationOptions, err := q.buildTransportationOptions(
-		ctx,
-		companyID,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	dto := &querydto.ListCreateDTO{
 		ProductBrandName: productBrandName,
 		ProductName:      productName,
@@ -221,81 +215,9 @@ func (q *ListCreateQuery) buildByIDs(
 		TokenName:      tokenName,
 
 		PriceRows: priceRows,
-
-		TransportationOptions: transportationOptions,
 	}
 
 	return dto, nil
-}
-
-// ============================================================
-// internal: build TransportationOptions
-// - yamato / sagawa / post は固定選択肢
-// - custom は current company が所有する TransportationFeeSetting
-// - custom の transportationId は TransportationFeeSetting.ID
-// - repository から別 company の setting が返った場合はエラー
-// - custom の並べ替えは行わず repository の取得順を維持する
-// ============================================================
-
-func (q *ListCreateQuery) buildTransportationOptions(
-	ctx context.Context,
-	companyID string,
-) ([]querydto.ListCreateTransportationOptionDTO, error) {
-	if q == nil {
-		return nil, errors.New("list create query is nil")
-	}
-
-	if q.transportationRepo == nil {
-		return nil, errors.New("list create query: transportationRepo is not configured")
-	}
-
-	if companyID == "" {
-		return nil, errors.New("companyId is required")
-	}
-
-	settings, err := q.transportationRepo.ListByCompanyID(
-		ctx,
-		companyID,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	options := []querydto.ListCreateTransportationOptionDTO{
-		{
-			TransportationOption: string(listdom.TransportationOptionYamato),
-			Name:                 "ヤマト運輸",
-		},
-		{
-			TransportationOption: string(listdom.TransportationOptionSagawa),
-			Name:                 "佐川急便",
-		},
-		{
-			TransportationOption: string(listdom.TransportationOptionPost),
-			Name:                 "日本郵便",
-		},
-	}
-
-	for _, setting := range settings {
-		if setting.CompanyID != companyID {
-			return nil, errors.New("transportation repository returned setting owned by another company")
-		}
-
-		if setting.ID == "" {
-			return nil, errors.New("transportation repository returned setting with empty id")
-		}
-
-		options = append(
-			options,
-			querydto.ListCreateTransportationOptionDTO{
-				TransportationOption: string(listdom.TransportationOptionCustom),
-				TransportationID:     setting.ID,
-				Name:                 setting.Name,
-			},
-		)
-	}
-
-	return options, nil
 }
 
 // ============================================================

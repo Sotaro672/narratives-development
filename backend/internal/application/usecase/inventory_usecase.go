@@ -10,6 +10,7 @@ import (
 	applicationport "narratives/internal/application/port"
 	invdom "narratives/internal/domain/inventory"
 	shadom "narratives/internal/domain/shippingAddress"
+	transportationdom "narratives/internal/domain/transportation"
 )
 
 type ProductModelResolver interface {
@@ -22,6 +23,7 @@ type InventoryUsecase struct {
 	productModelResolver ProductModelResolver
 
 	shippingAddressRepo  shadom.RepositoryPort
+	transportationRepo   transportationdom.RepositoryPort
 	productBlueprintRepo applicationport.ProductBlueprintGetter
 }
 
@@ -31,6 +33,7 @@ func NewInventoryUsecase(repo invdom.RepositoryPort) *InventoryUsecase {
 		productModelResolver: nil,
 
 		shippingAddressRepo:  nil,
+		transportationRepo:   nil,
 		productBlueprintRepo: nil,
 	}
 }
@@ -56,6 +59,23 @@ func (uc *InventoryUsecase) WithShippingAddressAssignment(
 
 	uc.shippingAddressRepo =
 		shippingAddressRepo
+
+	uc.productBlueprintRepo =
+		productBlueprintRepo
+
+	return uc
+}
+
+func (uc *InventoryUsecase) WithTransportationAssignment(
+	transportationRepo transportationdom.RepositoryPort,
+	productBlueprintRepo applicationport.ProductBlueprintGetter,
+) *InventoryUsecase {
+	if uc == nil {
+		return uc
+	}
+
+	uc.transportationRepo =
+		transportationRepo
 
 	uc.productBlueprintRepo =
 		productBlueprintRepo
@@ -147,6 +167,138 @@ func (uc *InventoryUsecase) SetShippingAddress(
 		ctx,
 		invID,
 		shippingAddressIDValue,
+		time.Now().UTC(),
+	)
+}
+
+// ============================================================
+// Transportation assignment
+// ============================================================
+//
+// - inventoryId から対象 inventory を取得する
+// - inventory.productBlueprintId から companyId を検証する
+// - transportationOption の整合性を検証する
+// - custom の場合のみ transportationId の存在・company 所有権を検証する
+// - inventory.transportationOption / transportationId のみを更新する
+func (uc *InventoryUsecase) SetTransportation(
+	ctx context.Context,
+	inventoryID string,
+	companyID string,
+	transportationOption invdom.TransportationOption,
+	transportationID string,
+) error {
+	if uc == nil ||
+		uc.repo == nil {
+		return errors.New("inventory usecase/repo is nil")
+	}
+
+	if uc.productBlueprintRepo == nil {
+		return errors.New("inventory product blueprint repository is nil")
+	}
+
+	invID := inventoryID
+	companyIDValue := companyID
+	option := transportationOption
+	transportationIDValue := transportationID
+
+	if invID == "" {
+		return invdom.ErrInvalidMintID
+	}
+
+	if companyIDValue == "" {
+		return errors.New("inventory transportation: companyId is required")
+	}
+
+	if !invdom.IsValidTransportationOption(
+		option,
+	) {
+		return invdom.ErrInvalidTransportationOption
+	}
+
+	if option ==
+		invdom.TransportationOptionCustom {
+		if transportationIDValue == "" {
+			return invdom.ErrTransportationIDRequired
+		}
+	} else if transportationIDValue != "" {
+		return invdom.ErrTransportationIDNotAllowed
+	}
+
+	inventory, err :=
+		uc.repo.GetByID(
+			ctx,
+			invID,
+		)
+	if err != nil {
+		return err
+	}
+
+	if inventory.ProductBlueprintID == "" {
+		return invdom.ErrInvalidProductBlueprintID
+	}
+
+	productBlueprint, err :=
+		uc.productBlueprintRepo.GetByID(
+			ctx,
+			inventory.ProductBlueprintID,
+		)
+	if err != nil {
+		return err
+	}
+
+	if productBlueprint.CompanyID !=
+		companyIDValue {
+		return invdom.ErrNotFound
+	}
+
+	if option ==
+		invdom.TransportationOptionCustom {
+		if uc.transportationRepo == nil {
+			return errors.New("inventory transportation repository is nil")
+		}
+
+		if len([]rune(companyIDValue)) >
+			transportationdom.MaxCompanyIDLength {
+			return transportationdom.ErrInvalidCompanyID
+		}
+
+		if len([]rune(transportationIDValue)) >
+			transportationdom.MaxTransportationIDLength {
+			return transportationdom.ErrInvalidID
+		}
+
+		setting, err :=
+			uc.transportationRepo.GetByID(
+				ctx,
+				transportationIDValue,
+			)
+		if err != nil {
+			if errors.Is(
+				err,
+				transportationdom.ErrNotFound,
+			) {
+				return transportationdom.ErrNotFound
+			}
+
+			return err
+		}
+
+		if setting == nil ||
+			setting.ID != transportationIDValue {
+			return transportationdom.ErrNotFound
+		}
+
+		if setting.CompanyID !=
+			companyIDValue {
+			return transportationdom.ErrNotFound
+		}
+	}
+
+	return uc.repo.SetTransportation(
+		ctx,
+		invID,
+		option,
+		transportationIDValue,
 		time.Now().UTC(),
 	)
 }

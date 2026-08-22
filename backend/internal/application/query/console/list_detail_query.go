@@ -6,7 +6,7 @@
 // - DI 済み依存（ports）を保持する
 // - listID を入力に listDetail.tsx 用の ListDetailDTO を生成する
 // - ListDetailDTO の images / priceRows / stock / model attributes を生成する
-// - ListDetailDTO の transportationOption / transportationId を生成する
+// - inventoryId は分解せず InventoryDetailGetter から blueprint IDs / stock を取得する
 // - 取得済み ProductBlueprint.ModelRefs から displayOrder を抽出する
 //
 // Firebase Storage 移行後:
@@ -91,6 +91,10 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 		return querydto.ListDetailDTO{}, errors.New("ListDetailQuery.BuildListDetailDTO: getter is nil (wire list repo to ListDetailQuery)")
 	}
 
+	if q.invGetter == nil {
+		return querydto.ListDetailDTO{}, errors.New("ListDetailQuery.BuildListDetailDTO: inventory detail getter is nil")
+	}
+
 	if listID == "" {
 		return querydto.ListDetailDTO{}, errors.New("ListDetailQuery.BuildListDetailDTO: listID is empty")
 	}
@@ -101,9 +105,27 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 	}
 
 	invID := it.InventoryID
-	pbID, tbID, ok := ParseInventoryIDStrict(invID)
-	if !ok {
-		return querydto.ListDetailDTO{}, listdom.ErrListImageNotFound
+	if invID == "" {
+		return querydto.ListDetailDTO{}, listdom.ErrInvalidInventoryID
+	}
+
+	invDTO, err := q.invGetter.GetDetailByID(
+		ctx,
+		invID,
+	)
+	if err != nil {
+		return querydto.ListDetailDTO{}, err
+	}
+
+	if invDTO == nil {
+		return querydto.ListDetailDTO{}, errors.New("ListDetailQuery.BuildListDetailDTO: inventory detail is nil")
+	}
+
+	pbID := invDTO.ProductBlueprintID
+	tbID := invDTO.TokenBlueprintID
+
+	if pbID == "" || tbID == "" {
+		return querydto.ListDetailDTO{}, errors.New("ListDetailQuery.BuildListDetailDTO: inventory blueprint IDs are empty")
 	}
 
 	productName := ""
@@ -201,7 +223,12 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 	}
 
 	images := q.buildImages(ctx, it.ID, it.ImageID)
-	priceRows := q.buildDetailPriceRows(ctx, it, invID, displayOrderByModel)
+	priceRows := q.buildDetailPriceRows(
+		ctx,
+		it,
+		invDTO,
+		displayOrderByModel,
+	)
 
 	return querydto.ListDetailDTO{
 		ID:          it.ID,
@@ -214,9 +241,6 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 
 		AssigneeID:   it.AssigneeID,
 		AssigneeName: assigneeName,
-
-		TransportationOption: string(it.TransportationOption),
-		TransportationID:     it.TransportationID,
 
 		CreatedBy:     it.CreatedBy,
 		CreatedByName: createdByName,
@@ -319,13 +343,13 @@ func (q *ListDetailQuery) buildImages(ctx context.Context, listID string, primar
 
 // buildDetailPriceRows builds ListDetailDTO price rows.
 // - listdom.List の価格行を抽出する
-// - 在庫情報は InventoryDetailGetter から取得する
+// - 在庫情報は取得済み InventoryDetailDTO を使用する
 // - displayOrder は ProductBlueprint.ModelRefs から付与する
 // - model 情報は resolver.ModelResolved を使って解決する
 func (q *ListDetailQuery) buildDetailPriceRows(
 	ctx context.Context,
 	it listdom.List,
-	inventoryID string,
+	invDTO *querydto.InventoryDetailDTO,
 	displayOrderByModel map[string]*int,
 ) []querydto.ListDetailPriceRowDTO {
 	rows := it.Prices
@@ -337,27 +361,24 @@ func (q *ListDetailQuery) buildDetailPriceRows(
 	attrByModel := map[string]resolver.ModelResolved{}
 	invUsed := false
 
-	if inventoryID != "" && q != nil && q.invGetter != nil {
-		invDTO, err := q.invGetter.GetDetailByID(ctx, inventoryID)
-		if err == nil && invDTO != nil {
-			invUsed = true
+	if invDTO != nil {
+		invUsed = true
 
-			for _, row := range invDTO.Rows {
-				modelID := row.ModelID
-				if modelID == "" {
-					continue
-				}
+		for _, row := range invDTO.Rows {
+			modelID := row.ModelID
+			if modelID == "" {
+				continue
+			}
 
-				stockByModel[modelID] = row.Stock
-				attrByModel[modelID] = resolver.ModelResolved{
-					Kind:        row.Kind,
-					ModelNumber: row.ModelNumber,
-					Size:        row.Size,
-					Color:       row.Color,
-					RGB:         row.RGB,
-					VolumeValue: row.VolumeValue,
-					VolumeUnit:  row.VolumeUnit,
-				}
+			stockByModel[modelID] = row.Stock
+			attrByModel[modelID] = resolver.ModelResolved{
+				Kind:        row.Kind,
+				ModelNumber: row.ModelNumber,
+				Size:        row.Size,
+				Color:       row.Color,
+				RGB:         row.RGB,
+				VolumeValue: row.VolumeValue,
+				VolumeUnit:  row.VolumeUnit,
 			}
 		}
 	}

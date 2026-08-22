@@ -1,9 +1,8 @@
 // frontend/console/shell/src/features/list/infrastructure/dto/listDetailDto.ts
-import type {
-  ListStatus,
-  TransportationOption,
-} from "../../../../shared/types/list";
+
+import type { ListStatus } from "../../../../shared/types/list";
 import type { ListDetailPriceRowDTO } from "./listPriceRowDto";
+
 export type ListDetailImageDTO = {
   id: string;
   url: string;
@@ -19,8 +18,6 @@ export type ListDetailDTO = {
   description: string;
   assigneeId: string;
   assigneeName: string;
-  transportationOption: TransportationOption;
-  transportationId?: string;
   createdBy: string;
   createdByName: string;
   createdAt: string;

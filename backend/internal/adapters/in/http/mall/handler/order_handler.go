@@ -146,6 +146,7 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid order item"})
 			return
 		}
+
 		items = append(items, item)
 	}
 
@@ -354,7 +355,9 @@ func isInvalidShippingQuoteError(err error) bool {
 		err.Error(),
 		"usecase: invalid request",
 	) ||
-		errors.Is(err, listdom.ErrInvalidTransportationOption) ||
+		errors.Is(err, inventorydom.ErrInvalidTransportationOption) ||
+		errors.Is(err, inventorydom.ErrTransportationIDRequired) ||
+		errors.Is(err, inventorydom.ErrTransportationIDNotAllowed) ||
 		errors.Is(err, modeldom.ErrInvalidShippingPackage) ||
 		errors.Is(err, transportationdom.ErrInvalidCarrier) ||
 		errors.Is(err, transportationdom.ErrInvalidPackage) ||

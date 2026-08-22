@@ -37,6 +37,8 @@ func (r *InventoryRepositoryFS) col() *firestore.CollectionRef {
 // inventories/{docId}
 // - docId = productBlueprintId__tokenBlueprintId
 // - shippingAddressId = inventory の在庫保管場所となる shippingAddress document ID
+// - transportationOption = inventory から発送する際の配送方法
+// - transportationId = custom 配送の場合に使用する TransportationFeeSetting document ID
 //
 // stock: {
 //   "{modelId}": {
@@ -58,25 +60,29 @@ type modelStockRecord struct {
 }
 
 type inventoryRecord struct {
-	TokenBlueprintID   string                      `firestore:"tokenBlueprintId"`
-	ProductBlueprintID string                      `firestore:"productBlueprintId"`
-	ShippingAddressID  string                      `firestore:"shippingAddressId,omitempty"`
-	Stock              map[string]modelStockRecord `firestore:"stock"`
-	ModelIDs           []string                    `firestore:"modelIds"`
-	CreatedAt          time.Time                   `firestore:"createdAt"`
-	UpdatedAt          time.Time                   `firestore:"updatedAt"`
+	TokenBlueprintID     string                      `firestore:"tokenBlueprintId"`
+	ProductBlueprintID   string                      `firestore:"productBlueprintId"`
+	ShippingAddressID    string                      `firestore:"shippingAddressId,omitempty"`
+	TransportationOption string                      `firestore:"transportationOption,omitempty"`
+	TransportationID     string                      `firestore:"transportationId,omitempty"`
+	Stock                map[string]modelStockRecord `firestore:"stock"`
+	ModelIDs             []string                    `firestore:"modelIds"`
+	CreatedAt            time.Time                   `firestore:"createdAt"`
+	UpdatedAt            time.Time                   `firestore:"updatedAt"`
 }
 
 func fromRecord(docID string, rec inventoryRecord) (invdom.Mint, error) {
 	out := invdom.Mint{
-		ID:                 docID,
-		TokenBlueprintID:   rec.TokenBlueprintID,
-		ProductBlueprintID: rec.ProductBlueprintID,
-		ShippingAddressID:  rec.ShippingAddressID,
-		Stock:              stockDomainFromRecord(rec.Stock),
-		ModelIDs:           append([]string(nil), rec.ModelIDs...),
-		CreatedAt:          rec.CreatedAt,
-		UpdatedAt:          rec.UpdatedAt,
+		ID:                   docID,
+		TokenBlueprintID:     rec.TokenBlueprintID,
+		ProductBlueprintID:   rec.ProductBlueprintID,
+		ShippingAddressID:    rec.ShippingAddressID,
+		TransportationOption: invdom.TransportationOption(rec.TransportationOption),
+		TransportationID:     rec.TransportationID,
+		Stock:                stockDomainFromRecord(rec.Stock),
+		ModelIDs:             append([]string(nil), rec.ModelIDs...),
+		CreatedAt:            rec.CreatedAt,
+		UpdatedAt:            rec.UpdatedAt,
 	}
 	if err := out.Validate(); err != nil {
 		return invdom.Mint{}, err
@@ -270,6 +276,86 @@ func (r *InventoryRepositoryFS) ClearShippingAddressIDByShippingAddressID(
 	}
 
 	return commit()
+}
+
+// ============================================================
+// Transportation assignment
+// - inventory.transportationOption / transportationId のみを更新する
+// - stock / modelIds / blueprint IDs / shippingAddressId は変更しない
+// - custom TransportationFeeSetting の存在確認・company 所有権確認は Usecase 側で行う
+// ============================================================
+
+func (r *InventoryRepositoryFS) SetTransportation(
+	ctx context.Context,
+	inventoryID string,
+	transportationOption invdom.TransportationOption,
+	transportationID string,
+	now time.Time,
+) error {
+	if r == nil || r.Client == nil {
+		return errors.New("inventory repo is nil")
+	}
+	if inventoryID == "" {
+		return invdom.ErrInvalidMintID
+	}
+	if !invdom.IsValidTransportationOption(transportationOption) {
+		return invdom.ErrInvalidTransportationOption
+	}
+	if transportationOption == invdom.TransportationOptionCustom {
+		if transportationID == "" {
+			return invdom.ErrTransportationIDRequired
+		}
+	} else if transportationID != "" {
+		return invdom.ErrTransportationIDNotAllowed
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+
+	now = now.UTC()
+	doc := r.col().Doc(inventoryID)
+
+	updates := []firestore.Update{
+		{
+			Path:  "transportationOption",
+			Value: string(transportationOption),
+		},
+		{
+			Path:  "updatedAt",
+			Value: now,
+		},
+	}
+
+	if transportationOption == invdom.TransportationOptionCustom {
+		updates = append(
+			updates,
+			firestore.Update{
+				Path:  "transportationId",
+				Value: transportationID,
+			},
+		)
+	} else {
+		updates = append(
+			updates,
+			firestore.Update{
+				Path:  "transportationId",
+				Value: firestore.Delete,
+			},
+		)
+	}
+
+	_, err := doc.Update(
+		ctx,
+		updates,
+	)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return invdom.ErrNotFound
+		}
+		return err
+	}
+
+	return nil
 }
 
 // ============================================================
@@ -513,6 +599,7 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 // - Stock[modelId].Products に productId を追記（UNION）
 // - ReservedByOrder / ReservedCount は保持
 // - 既存 shippingAddressId は変更しない
+// - 既存 transportationOption / transportationId は変更しない
 // ============================================================
 
 func (r *InventoryRepositoryFS) UpsertByModelAndToken(
@@ -562,13 +649,15 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 					ms = normalizeModelStockRecord(ms)
 
 					rec := inventoryRecord{
-						TokenBlueprintID:   tbID,
-						ProductBlueprintID: pbID,
-						ShippingAddressID:  "",
-						Stock:              map[string]modelStockRecord{mID: ms},
-						ModelIDs:           []string{mID},
-						CreatedAt:          now,
-						UpdatedAt:          now,
+						TokenBlueprintID:     tbID,
+						ProductBlueprintID:   pbID,
+						ShippingAddressID:    "",
+						TransportationOption: "",
+						TransportationID:     "",
+						Stock:                map[string]modelStockRecord{mID: ms},
+						ModelIDs:             []string{mID},
+						CreatedAt:            now,
+						UpdatedAt:            now,
 					}
 
 					rec.Stock = normalizeStockRecord(rec.Stock)

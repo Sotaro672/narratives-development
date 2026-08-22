@@ -148,10 +148,14 @@ func buildUsecases(
 
 	transportationRepo := fsrepo.NewTransportationRepositoryFS(c.fsClient)
 
+	inventoryUC.WithTransportationAssignment(
+		transportationRepo,
+		r.productBlueprintRepo,
+	)
+
 	listUC := uc.NewListUsecase(
 		r.listRepoFS,
 		r.listImageRecordRepo,
-		transportationRepo,
 		listSaveOperationStorage,
 	)
 

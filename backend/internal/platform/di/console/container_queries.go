@@ -262,7 +262,6 @@ func buildQueries(
 		r.inventoryRepo,
 		r.productBlueprintRepo,
 		r.tokenBlueprintRepo,
-		r.transportationRepo,
 		res.nameResolver,
 		usecase.CompanyIDFromContext,
 	)
