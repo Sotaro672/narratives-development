@@ -145,6 +145,17 @@ export default function OrderDetail() {
 
                   <tr>
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      リストID
+                    </th>
+                    <td className="py-2 text-left">
+                      {listIds.length > 0
+                        ? listIds.join(", ")
+                        : "-"}
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                       アイテム数
                     </th>
                     <td className="py-2 text-left">
@@ -514,45 +525,6 @@ export default function OrderDetail() {
                   </th>
                   <td className="py-2 text-left">
                     {email}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-left">
-            出品情報
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent>
-          {loading ? (
-            <div className="text-sm text-muted-foreground text-left">
-              読み込み中...
-            </div>
-          ) : error ? (
-            <div className="text-sm text-red-600 whitespace-pre-wrap text-left">
-              {error}
-            </div>
-          ) : !order ? (
-            <div className="text-sm text-muted-foreground text-left">
-              -
-            </div>
-          ) : (
-            <table className="w-full text-sm text-left">
-              <tbody>
-                <tr>
-                  <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                    リストID
-                  </th>
-                  <td className="py-2 text-left">
-                    {listIds.length > 0
-                      ? listIds.join(", ")
-                      : "-"}
                   </td>
                 </tr>
               </tbody>
