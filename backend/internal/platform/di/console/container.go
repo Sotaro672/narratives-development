@@ -180,7 +180,7 @@ func NewContainer(
 				InvBlueprint:     invBlueprint,
 				ProductBlueprint: repos.productBlueprintRepo,
 				TBName:           repos.tokenBlueprintRepo,
-				AvatarName:       repos.avatarRepo,
+				UserName:         res.nameResolver,
 				ListReadable:     repos.listRepoFS,
 				ModelResolver:    res.nameResolver,
 			},

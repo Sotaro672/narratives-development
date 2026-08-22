@@ -35,9 +35,8 @@ type OrderDetailDTO struct {
 	AvatarID string `json:"avatarId"`
 	CartID   string `json:"cartId"`
 
-	UserName   string `json:"userName"`
-	Email      string `json:"email"`
-	AvatarName string `json:"avatarName"`
+	UserName string `json:"userName"`
+	Email    string `json:"email"`
 
 	Paid      bool   `json:"paid"`
 	CreatedAt string `json:"createdAt"`
@@ -100,9 +99,8 @@ type OrderDetailQuery struct {
 	pbName       applicationport.ProductBlueprintGetter
 	tbName       applicationport.TokenBlueprintGetter
 
-	avatarName AvatarGetter
-	userName   OrderDetailUserNameResolver
-	authUser   applicationport.AuthUserReader
+	userName OrderDetailUserNameResolver
+	authUser applicationport.AuthUserReader
 
 	modelResolver ModelResolver
 	listReadable  ListReadableIDReader
@@ -115,9 +113,8 @@ type NewOrderDetailQueryParams struct {
 	PBName       applicationport.ProductBlueprintGetter
 	TBName       applicationport.TokenBlueprintGetter
 
-	AvatarName AvatarGetter
-	UserName   OrderDetailUserNameResolver
-	AuthUser   applicationport.AuthUserReader
+	UserName OrderDetailUserNameResolver
+	AuthUser applicationport.AuthUserReader
 
 	ModelResolver ModelResolver
 	ListReadable  ListReadableIDReader
@@ -129,7 +126,6 @@ func NewOrderDetailQuery(p NewOrderDetailQueryParams) *OrderDetailQuery {
 		invBlueprint:  p.InvBlueprint,
 		pbName:        p.PBName,
 		tbName:        p.TBName,
-		avatarName:    p.AvatarName,
 		userName:      p.UserName,
 		authUser:      p.AuthUser,
 		modelResolver: p.ModelResolver,
@@ -141,6 +137,7 @@ func (q *OrderDetailQuery) GetByID(ctx context.Context, id string) (OrderDetailD
 	if err := q.validateConfigured(); err != nil {
 		return OrderDetailDTO{}, err
 	}
+
 	if id == "" {
 		return OrderDetailDTO{}, orderdom.ErrInvalidID
 	}
@@ -157,33 +154,39 @@ func (q *OrderDetailQuery) validateConfigured() error {
 	if q == nil {
 		return errors.New("OrderDetailQuery: query is nil")
 	}
+
 	if q.orderGetter == nil {
 		return errors.New("OrderDetailQuery: orderGetter is required")
 	}
+
 	if q.invBlueprint == nil {
 		return errors.New("OrderDetailQuery: invBlueprint is required")
 	}
+
 	if q.pbName == nil {
 		return errors.New("OrderDetailQuery: productBlueprint resolver is required")
 	}
+
 	if q.tbName == nil {
 		return errors.New("OrderDetailQuery: tokenBlueprint resolver is required")
 	}
-	if q.avatarName == nil {
-		return errors.New("OrderDetailQuery: avatarName resolver is required")
-	}
+
 	if q.userName == nil {
 		return errors.New("OrderDetailQuery: userName resolver is required")
 	}
+
 	if q.authUser == nil {
 		return errors.New("OrderDetailQuery: authUser reader is required")
 	}
+
 	if q.modelResolver == nil {
 		return errors.New("OrderDetailQuery: modelResolver is required")
 	}
+
 	if q.listReadable == nil {
 		return errors.New("OrderDetailQuery: listReadable resolver is required")
 	}
+
 	return nil
 }
 
@@ -221,14 +224,6 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 		dto.CreatedAt = o.CreatedAt.UTC().Format(time.RFC3339)
 	}
 
-	if o.AvatarID != "" {
-		avatar, err := q.avatarName.GetByID(ctx, o.AvatarID)
-		if err != nil {
-			return OrderDetailDTO{}, fmt.Errorf("resolve avatar avatarId=%q: %w", o.AvatarID, err)
-		}
-		dto.AvatarName = avatar.AvatarName
-	}
-
 	productBlueprintCache := make(map[string]pbdom.ProductBlueprint)
 	tokenNameCache := make(map[string]string)
 	modelCache := make(map[string]resolver.ModelResolved)
@@ -238,6 +233,7 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 		if id == "" {
 			return pbdom.ProductBlueprint{}, nil
 		}
+
 		if cached, ok := productBlueprintCache[id]; ok {
 			return cached, nil
 		}
@@ -255,6 +251,7 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 		if id == "" {
 			return "", nil
 		}
+
 		if cached, ok := tokenNameCache[id]; ok {
 			return cached, nil
 		}
@@ -263,6 +260,7 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 		if err != nil {
 			return "", err
 		}
+
 		if tb == nil {
 			return "", fmt.Errorf("tokenBlueprint is nil: tokenBlueprintId=%q", id)
 		}
@@ -275,6 +273,7 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 		if modelID == "" {
 			return resolver.ModelResolved{}
 		}
+
 		if cached, ok := modelCache[modelID]; ok {
 			return cached
 		}
@@ -288,6 +287,7 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 		if listID == "" {
 			return "", nil
 		}
+
 		if cached, ok := listReadableCache[listID]; ok {
 			return cached, nil
 		}
@@ -310,9 +310,11 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 			if err != nil {
 				return OrderDetailDTO{}, fmt.Errorf("resolve blueprint ids inventoryId=%q: %w", it.InventoryID, err)
 			}
+
 			if pbID == "" {
 				pbID = resolvedPBID
 			}
+
 			if tbID == "" {
 				tbID = resolvedTBID
 			}

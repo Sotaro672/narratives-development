@@ -86,7 +86,6 @@ export default function OrderDetail() {
     shipping,
     userName,
     email,
-    avatarName,
     listIds,
     pageTitle,
     onBack,
@@ -515,15 +514,6 @@ export default function OrderDetail() {
                   </th>
                   <td className="py-2 text-left">
                     {email}
-                  </td>
-                </tr>
-
-                <tr>
-                  <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                    アバター名
-                  </th>
-                  <td className="py-2 text-left">
-                    {avatarName}
                   </td>
                 </tr>
               </tbody>

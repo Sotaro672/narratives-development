@@ -363,7 +363,6 @@ func buildQueries(
 				InvBlueprint:  r.inventoryRepo,
 				PBName:        r.productBlueprintRepo,
 				TBName:        r.tokenBlueprintRepo,
-				AvatarName:    r.avatarRepo,
 				UserName:      res.nameResolver,
 				AuthUser:      authUserReader,
 				ModelResolver: res.nameResolver,

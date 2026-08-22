@@ -25,8 +25,8 @@ package query
 //     tbName が DI されていれば埋める、されていなければ空で返す（500にしない）。
 //   - listReadableId も best-effort。
 //     listReadable が DI されていれば listId->readableId を引いて埋める。なければ空で返す（500にしない）。
-//   - avatarName も best-effort。
-//     avatarNameResolver が DI されていれば avatarId->avatar を引いて avatarName を埋める。
+//   - userName も best-effort。
+//     userNameResolver が DI されていれば userId->user を引いて userName を埋める。
 //     なければ空で返す（500にしない）。
 //   - model fields も best-effort。
 //     modelResolver が DI されていれば modelId(variationID)->apparel/alcohol 表示情報を埋める。なければ空で返す（500にしない）。
@@ -68,6 +68,10 @@ type InventoryRowsLister interface {
 	ListByCurrentCompany(ctx context.Context) ([]querydto.InventoryManagementRowDTO, error)
 }
 
+type OrderManagementUserNameResolver interface {
+	ResolveUserName(ctx context.Context, userID string) string
+}
+
 // ============================================================
 // DTO
 // ============================================================
@@ -80,7 +84,7 @@ type OrderItemInventoryRowDTO struct {
 	AvatarID string `json:"avatarId,omitempty"`
 	CartID   string `json:"cartId,omitempty"`
 
-	AvatarName string `json:"avatarName,omitempty"`
+	UserName string `json:"userName,omitempty"`
 
 	Paid      bool   `json:"paid"`
 	CreatedAt string `json:"createdAt,omitempty"` // RFC3339(UTC)
@@ -128,11 +132,11 @@ type OrderManagementQuery struct {
 	invRows      InventoryRowsLister        // REQUIRED
 	invBlueprint InventoryBlueprintResolver // REQUIRED
 
-	productBlueprint   applicationport.ProductBlueprintGetter
-	tbName             applicationport.TokenBlueprintGetter
-	listReadable       ListReadableIDReader
-	avatarNameResolver AvatarGetter
-	modelResolver      ModelResolver
+	productBlueprint applicationport.ProductBlueprintGetter
+	tbName           applicationport.TokenBlueprintGetter
+	listReadable     ListReadableIDReader
+	userNameResolver OrderManagementUserNameResolver
+	modelResolver    ModelResolver
 }
 
 type NewOrderManagementQueryParams struct {
@@ -143,20 +147,20 @@ type NewOrderManagementQueryParams struct {
 	ProductBlueprint applicationport.ProductBlueprintGetter
 	TBName           applicationport.TokenBlueprintGetter
 	ListReadable     ListReadableIDReader
-	AvatarName       AvatarGetter
+	UserName         OrderManagementUserNameResolver
 	ModelResolver    ModelResolver
 }
 
 func NewOrderManagementQuery(p NewOrderManagementQueryParams) *OrderManagementQuery {
 	return &OrderManagementQuery{
-		lister:             p.Lister,
-		invRows:            p.InvRows,
-		invBlueprint:       p.InvBlueprint,
-		productBlueprint:   p.ProductBlueprint,
-		tbName:             p.TBName,
-		listReadable:       p.ListReadable,
-		avatarNameResolver: p.AvatarName,
-		modelResolver:      p.ModelResolver,
+		lister:           p.Lister,
+		invRows:          p.InvRows,
+		invBlueprint:     p.InvBlueprint,
+		productBlueprint: p.ProductBlueprint,
+		tbName:           p.TBName,
+		listReadable:     p.ListReadable,
+		userNameResolver: p.UserName,
+		modelResolver:    p.ModelResolver,
 	}
 }
 
@@ -201,7 +205,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 	productBlueprintCache := map[string]pbdom.ProductBlueprint{}
 	tbNameCache := map[string]string{}
 	listReadableCache := map[string]string{}
-	avatarNameCache := map[string]string{}
+	userNameCache := map[string]string{}
 	modelCache := map[string]resolver.ModelResolved{}
 
 	resolveBlueprint := func(invID string) (string, string, error) {
@@ -281,23 +285,22 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		return readable, nil
 	}
 
-	resolveAvatarName := func(avatarID string) (string, error) {
-		if q.avatarNameResolver == nil || avatarID == "" {
-			return "", nil
+	resolveUserName := func(userID string) string {
+		if q.userNameResolver == nil || userID == "" {
+			return ""
 		}
 
-		if v, ok := avatarNameCache[avatarID]; ok {
-			return v, nil
+		if v, ok := userNameCache[userID]; ok {
+			return v
 		}
 
-		avatar, e := q.avatarNameResolver.GetByID(ctx, avatarID)
-		if e != nil {
-			return "", e
-		}
+		name := q.userNameResolver.ResolveUserName(
+			ctx,
+			userID,
+		)
 
-		name := avatar.AvatarName
-		avatarNameCache[avatarID] = name
-		return name, nil
+		userNameCache[userID] = name
+		return name
 	}
 
 	resolveModel := func(modelID string) resolver.ModelResolved {
@@ -348,14 +351,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			avatarID := ord.AvatarID
 			cartID := ord.CartID
 
-			avatarName := ""
-			if avatarID != "" {
-				n, e0 := resolveAvatarName(avatarID)
-				if e0 != nil {
-					return common.PageResult[OrderItemInventoryRowDTO]{}, e0
-				}
-				avatarName = n
-			}
+			userName := resolveUserName(userID)
 
 			for _, it := range ord.Items {
 				invID := it.InventoryID
@@ -457,7 +453,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					AvatarID: avatarID,
 					CartID:   cartID,
 
-					AvatarName: avatarName,
+					UserName: userName,
 
 					Paid:      ord.Paid,
 					CreatedAt: createdAt,

@@ -67,7 +67,6 @@ export type OrderDetailDTO = {
   cartId: string;
   userName: string;
   email: string;
-  avatarName: string;
   paid: boolean;
   createdAt: string;
   shippingAmount: number;
@@ -86,7 +85,7 @@ export type OrderItemInventoryRowDTO = {
   userId?: string;
   avatarId?: string;
   cartId?: string;
-  avatarName?: string;
+  userName?: string;
   paid: boolean;
   createdAt?: string;
   inventoryId: string;
