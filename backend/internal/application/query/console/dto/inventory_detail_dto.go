@@ -1,6 +1,10 @@
 // backend/internal/application/query/console/dto/inventory_detail_dto.go
 package dto
 
+import (
+	invdom "narratives/internal/domain/inventory"
+)
+
 // InventoryProductIDTagDTO は Inventory Detail 画面向けの ProductIDTag。
 type InventoryProductIDTagDTO struct {
 	Type string `json:"type"`
@@ -60,6 +64,15 @@ type InventoryShippingAddressDTO struct {
 	Street2 string `json:"street2"`
 }
 
+// InventoryTransportationOptionDTO は Inventory Detail 画面向けの配送方法候補 read model。
+// yamato / sagawa / post は transportationId を持たず、
+// custom の場合のみ TransportationFeeSetting.ID を transportationId として返す。
+type InventoryTransportationOptionDTO struct {
+	TransportationOption invdom.TransportationOption `json:"transportationOption"`
+	TransportationID     string                      `json:"transportationId,omitempty"`
+	Name                 string                      `json:"name"`
+}
+
 // InventoryDetailRowDTO は Inventory Detail 画面向けの在庫行 DTO。
 // GET /inventory/{inventoryId} の rows として返す。
 // frontend 側では /models/by-blueprint/{productBlueprintId}/variations を追加取得せず、この rows を正とする。
@@ -94,6 +107,11 @@ type InventoryDetailDTO struct {
 	ShippingAddress   *InventoryShippingAddressDTO `json:"shippingAddress,omitempty"`
 
 	ShippingAddressOptions []InventoryShippingAddressDTO `json:"shippingAddressOptions"`
+
+	TransportationOption invdom.TransportationOption `json:"transportationOption,omitempty"`
+	TransportationID     string                      `json:"transportationId,omitempty"`
+
+	TransportationOptions []InventoryTransportationOptionDTO `json:"transportationOptions"`
 
 	Rows       []InventoryDetailRowDTO `json:"rows"`
 	TotalStock int                     `json:"totalStock"`

@@ -15,6 +15,7 @@ import (
 
 // OrderHandler handles:
 //   - GET /orders/items
+//   - GET /orders/undispatched-count
 //   - GET /orders/{id}
 type OrderHandler struct {
 	q       *orderq.OrderManagementQuery
@@ -37,6 +38,10 @@ func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/orders/items":
 		h.listItemRows(w, r)
+		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/orders/undispatched-count":
+		h.countUndispatchedOrders(w, r)
 		return
 
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/orders/"):
@@ -102,6 +107,25 @@ func (h *OrderHandler) listItemRows(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = json.NewEncoder(w).Encode(pr)
+}
+
+func (h *OrderHandler) countUndispatchedOrders(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h == nil || h.q == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "order_management_query_not_wired"})
+		return
+	}
+
+	count, err := h.q.CountUndispatchedOrders(ctx)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]int{"count": count})
 }
 
 // ============================================================

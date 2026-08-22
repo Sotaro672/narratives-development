@@ -253,6 +253,7 @@ func buildQueries(
 		r.productBlueprintRepo,
 		r.tokenBlueprintRepo,
 		r.shippingAddressRepo,
+		r.transportationRepo,
 		res.nameResolver,
 		usecase.CompanyIDFromContext,
 	)

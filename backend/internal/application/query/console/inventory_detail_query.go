@@ -14,6 +14,7 @@ import (
 	pbdom "narratives/internal/domain/productBlueprint"
 	shadom "narratives/internal/domain/shippingAddress"
 	tbdom "narratives/internal/domain/tokenBlueprint"
+	transportationdom "narratives/internal/domain/transportation"
 )
 
 type InventoryDetailQuery struct {
@@ -21,6 +22,7 @@ type InventoryDetailQuery struct {
 	pbRepo               applicationport.ProductBlueprintGetter
 	tbRepo               applicationport.TokenBlueprintGetter
 	shippingAddressRepo  shadom.RepositoryPort
+	transportationRepo   transportationdom.RepositoryPort
 	nameResolver         *resolver.NameResolver
 	companyIDFromContext applicationport.CompanyIDResolver
 }
@@ -30,6 +32,7 @@ func NewInventoryDetailQuery(
 	pbRepo applicationport.ProductBlueprintGetter,
 	tbRepo applicationport.TokenBlueprintGetter,
 	shippingAddressRepo shadom.RepositoryPort,
+	transportationRepo transportationdom.RepositoryPort,
 	nameResolver *resolver.NameResolver,
 	companyIDFromContext applicationport.CompanyIDResolver,
 ) *InventoryDetailQuery {
@@ -38,6 +41,7 @@ func NewInventoryDetailQuery(
 		pbRepo:               pbRepo,
 		tbRepo:               tbRepo,
 		shippingAddressRepo:  shippingAddressRepo,
+		transportationRepo:   transportationRepo,
 		nameResolver:         nameResolver,
 		companyIDFromContext: companyIDFromContext,
 	}
@@ -184,6 +188,71 @@ func (q *InventoryDetailQuery) GetDetailByID(
 		}
 	}
 
+	if q.transportationRepo == nil {
+		return nil, errors.New("transportation repository is not configured")
+	}
+
+	transportationSettings, err :=
+		q.transportationRepo.ListByCompanyID(
+			ctx,
+			companyID,
+		)
+	if err != nil {
+		return nil, err
+	}
+
+	if transportationSettings == nil {
+		transportationSettings =
+			[]transportationdom.TransportationFeeSetting{}
+	}
+
+	sort.Slice(
+		transportationSettings,
+		func(i, j int) bool {
+			if transportationSettings[i].Name ==
+				transportationSettings[j].Name {
+
+				return transportationSettings[i].ID <
+					transportationSettings[j].ID
+			}
+
+			return transportationSettings[i].Name <
+				transportationSettings[j].Name
+		},
+	)
+
+	transportationOptions := []querydto.InventoryTransportationOptionDTO{
+		{
+			TransportationOption: invdom.TransportationOptionYamato,
+			Name:                 "ヤマト運輸",
+		},
+		{
+			TransportationOption: invdom.TransportationOptionSagawa,
+			Name:                 "佐川急便",
+		},
+		{
+			TransportationOption: invdom.TransportationOptionPost,
+			Name:                 "日本郵便",
+		},
+	}
+
+	for _, setting := range transportationSettings {
+		if setting.CompanyID != companyID {
+			return nil, errors.New(
+				"transportation repository returned setting owned by another company",
+			)
+		}
+
+		transportationOptions = append(
+			transportationOptions,
+			querydto.InventoryTransportationOptionDTO{
+				TransportationOption: invdom.TransportationOptionCustom,
+				TransportationID:     setting.ID,
+				Name:                 setting.Name,
+			},
+		)
+	}
+
 	if len(pb.ModelRefs) == 0 {
 		return nil, errors.New("productBlueprint.modelRefs is empty (fallback via inv.Stock is abolished)")
 	}
@@ -292,6 +361,9 @@ func (q *InventoryDetailQuery) GetDetailByID(
 		ShippingAddressID:      inv.ShippingAddressID,
 		ShippingAddress:        shippingAddressPtr,
 		ShippingAddressOptions: shippingAddressOptions,
+		TransportationOption:   inv.TransportationOption,
+		TransportationID:       inv.TransportationID,
+		TransportationOptions:  transportationOptions,
 		Rows:                   rows,
 		TotalStock:             total,
 		UpdatedAt:              updatedAt,

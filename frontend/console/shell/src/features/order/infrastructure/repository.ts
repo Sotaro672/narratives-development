@@ -27,21 +27,17 @@ export type OrderItemType = "list" | "resale";
 
 export type OrderDetailItemDTO = {
   type: OrderItemType;
-
   modelId?: string;
   inventoryId?: string;
   listId?: string;
   resaleId?: string;
-
   productId?: string;
   productBlueprintId?: string;
   tokenBlueprintId?: string;
   brandId?: string;
-
   productName: string;
   tokenName: string;
   listReadableId?: string;
-
   categoryId: string;
   categoryCode: string;
   categoryNameJa: string;
@@ -49,19 +45,15 @@ export type OrderDetailItemDTO = {
   categoryKind: string;
   categoryPath: string[];
   categoryFields: Record<string, unknown>;
-
   kind: string;
   modelNumber: string;
   size: string;
   color: string;
   rgb?: number;
-
   volumeValue?: number;
   volumeUnit: string;
-
   qty: number;
   price: number;
-
   isCanceled: boolean;
   isDispatched: boolean;
   transferred: boolean;
@@ -73,13 +65,13 @@ export type OrderDetailDTO = {
   userId: string;
   avatarId: string;
   cartId: string;
-
   userName: string;
+  email: string;
   avatarName: string;
-
   paid: boolean;
   createdAt: string;
-
+  shippingAmount: number;
+  consumptionTax: number;
   shippingSnapshot: ShippingSnapshot;
   paymentMethodSnapshot: PaymentMethodSnapshot;
   items: OrderDetailItemDTO[];
@@ -91,24 +83,18 @@ export type OrderDetailDTO = {
  */
 export type OrderItemInventoryRowDTO = {
   orderId: string;
-
   userId?: string;
   avatarId?: string;
   cartId?: string;
   avatarName?: string;
-
   paid: boolean;
   createdAt?: string;
-
   inventoryId: string;
-
   productBlueprintId?: string;
   tokenBlueprintId?: string;
-
   productName?: string;
   tokenName?: string;
   listReadableId?: string;
-
   categoryId?: string;
   categoryCode?: string;
   categoryNameJa?: string;
@@ -116,23 +102,24 @@ export type OrderItemInventoryRowDTO = {
   categoryKind?: string;
   categoryPath?: string[];
   categoryFields?: Record<string, unknown>;
-
   modelId?: string;
-
   kind?: string;
   modelNumber?: string;
   size?: string;
   color?: string;
   rgb?: string;
-
   volumeValue?: number;
   volumeUnit?: string;
-
   qty?: number;
   price?: number;
-
+  isCanceled: boolean;
+  isDispatched: boolean;
   transferred: boolean;
   transferredAt?: string;
+};
+
+export type OrderUndispatchedCountResult = {
+  count: number;
 };
 
 export type OrderListParams = PageParams & {
@@ -150,14 +137,10 @@ function buildQuery(
   const searchParams = new URLSearchParams();
 
   for (const [key, value] of Object.entries(params)) {
-    if (value === undefined) {
-      continue;
-    }
+    if (value === undefined) continue;
 
     const stringValue = String(value);
-    if (!stringValue) {
-      continue;
-    }
+    if (!stringValue) continue;
 
     searchParams.set(key, stringValue);
   }
@@ -215,6 +198,7 @@ async function requestJSON<T>(url: string, init?: RequestInit): Promise<T> {
   }
 
   const contentType = response.headers.get("content-type") ?? "";
+
   if (!contentType.includes("application/json")) {
     const text = await response.text().catch(() => "");
 
@@ -233,6 +217,7 @@ export interface OrderRepository {
   listItemInventoryRows(
     params?: OrderListParams,
   ): Promise<PageResult<OrderItemInventoryRowDTO>>;
+  countUndispatched(): Promise<OrderUndispatchedCountResult>;
 }
 
 export function createOrderRepository(): OrderRepository {
@@ -271,6 +256,13 @@ export function createOrderRepository(): OrderRepository {
 
       return requestJSON<PageResult<OrderItemInventoryRowDTO>>(
         buildUrl(`/orders/items${query}`),
+        { method: "GET" },
+      );
+    },
+
+    async countUndispatched(): Promise<OrderUndispatchedCountResult> {
+      return requestJSON<OrderUndispatchedCountResult>(
+        buildUrl("/orders/undispatched-count"),
         { method: "GET" },
       );
     },

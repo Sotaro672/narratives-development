@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { countUnreadInquiriesHTTP } from "../../features/inquiry/infrastructure/inquiryRepositoryHTTP";
+import { createOrderRepository } from "../../features/order/infrastructure/repository";
 import "./Sidebar.css";
 
 interface SidebarProps {
@@ -39,6 +40,7 @@ type OpenKey = "products" | "tokens" | "shipping" | "reviews" | "org" | "finance
 
 const CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER = "current";
 const INQUIRY_READ_STATE_CHANGED_EVENT = "inquiry:read-state-changed";
+const ORDER_DISPATCH_STATE_CHANGED_EVENT = "order:dispatch-state-changed";
 
 function toSafeCount(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
@@ -49,7 +51,9 @@ function toSafeCount(value: unknown): number | null {
 export default function Sidebar({ isOpen }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const orderRepository = useMemo(() => createOrderRepository(), []);
   const [inquiryUnreadCount, setInquiryUnreadCount] = useState<number | null>(null);
+  const [orderUndispatchedCount, setOrderUndispatchedCount] = useState<number | null>(null);
   const [openKey, setOpenKey] = useState<OpenKey>(null);
 
   const loadInquiryUnreadCount = useCallback(async () => {
@@ -61,9 +65,22 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     }
   }, []);
 
+  const loadOrderUndispatchedCount = useCallback(async () => {
+    try {
+      const result = await orderRepository.countUndispatched();
+      setOrderUndispatchedCount(toSafeCount(result.count));
+    } catch {
+      setOrderUndispatchedCount(null);
+    }
+  }, [orderRepository]);
+
   useEffect(() => {
     void loadInquiryUnreadCount();
   }, [loadInquiryUnreadCount]);
+
+  useEffect(() => {
+    void loadOrderUndispatchedCount();
+  }, [loadOrderUndispatchedCount]);
 
   useEffect(() => {
     const refresh = () => void loadInquiryUnreadCount();
@@ -77,19 +94,31 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     };
   }, [loadInquiryUnreadCount]);
 
+  useEffect(() => {
+    const refresh = () => void loadOrderUndispatchedCount();
+
+    window.addEventListener("focus", refresh);
+    window.addEventListener(ORDER_DISPATCH_STATE_CHANGED_EVENT, refresh);
+
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener(ORDER_DISPATCH_STATE_CHANGED_EVENT, refresh);
+    };
+  }, [loadOrderUndispatchedCount]);
+
   const menuItems: MenuItem[] = useMemo(
     () => [
       { label: "問い合わせ", path: "/inquiry", icon: MessageSquare, badgeCount: inquiryUnreadCount },
       { label: "商品", path: "/product", icon: Box, hasSubmenu: true },
       { label: "トークン", path: "/token", icon: Coins, hasSubmenu: true },
       { label: "出品", path: "/list", icon: Store },
-      { label: "注文", path: "/order", icon: ShoppingCart },
+      { label: "注文", path: "/order", icon: ShoppingCart, badgeCount: orderUndispatchedCount },
       { label: "配送", path: "/shipping", icon: Truck, hasSubmenu: true },
       { label: "レビュー", path: "/review", icon: MessagesSquare, hasSubmenu: true },
       { label: "組織", path: "/company", icon: Building2, hasSubmenu: true },
       { label: "財務", path: "/finance", icon: Wallet, hasSubmenu: true },
     ],
-    [inquiryUnreadCount],
+    [inquiryUnreadCount, orderUndispatchedCount],
   );
 
   const productSubItems: SubItem[] = useMemo(

@@ -78,11 +78,14 @@ export default function OrderDetail() {
     error,
     items,
     quantity,
+    subtotal,
+    shippingAmount,
+    consumptionTax,
     totalPrice,
-    anyTransferred,
     createdAt,
     shipping,
     userName,
+    email,
     avatarName,
     listIds,
     pageTitle,
@@ -143,23 +146,6 @@ export default function OrderDetail() {
 
                   <tr>
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                      トークン
-                    </th>
-                    <td className="py-2 text-left">
-                      {anyTransferred ? (
-                        <span className="order-badge is-transferred">
-                          移譲済
-                        </span>
-                      ) : (
-                        <span className="order-badge is-paid">
-                          未移譲
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-
-                  <tr>
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                       アイテム数
                     </th>
                     <td className="py-2 text-left">
@@ -173,6 +159,33 @@ export default function OrderDetail() {
                     </th>
                     <td className="py-2 text-left">
                       {quantity} 点
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      商品小計
+                    </th>
+                    <td className="py-2 text-left">
+                      {formatJPY(subtotal)}
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      配送料
+                    </th>
+                    <td className="py-2 text-left">
+                      {formatJPY(shippingAmount)}
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      消費税
+                    </th>
+                    <td className="py-2 text-left">
+                      {formatJPY(consumptionTax)}
                     </td>
                   </tr>
 
@@ -199,23 +212,19 @@ export default function OrderDetail() {
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                       郵便番号
                     </th>
-                    <td className="py-2 text-left">
+                    <td className="py-2 pr-6 text-left">
                       {shipping?.zipCode ?? "-"}
                     </td>
-                  </tr>
 
-                  <tr>
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                       都道府県
                     </th>
-                    <td className="py-2 text-left">
+                    <td className="py-2 pr-6 text-left">
                       {shipping?.state ?? "-"}
                     </td>
-                  </tr>
 
-                  <tr>
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                      市区町村
+                      市町村
                     </th>
                     <td className="py-2 text-left">
                       {shipping?.city ?? "-"}
@@ -226,7 +235,10 @@ export default function OrderDetail() {
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                       住所1
                     </th>
-                    <td className="py-2 text-left">
+                    <td
+                      className="py-2 text-left"
+                      colSpan={5}
+                    >
                       {shipping?.street ?? "-"}
                     </td>
                   </tr>
@@ -235,7 +247,10 @@ export default function OrderDetail() {
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                       住所2
                     </th>
-                    <td className="py-2 text-left">
+                    <td
+                      className="py-2 text-left"
+                      colSpan={5}
+                    >
                       {shipping?.street2 ?? "-"}
                     </td>
                   </tr>
@@ -259,9 +274,6 @@ export default function OrderDetail() {
                       item.transferredAt,
                       "-",
                     );
-                    const tokenLabel = item.transferred
-                      ? "移譲済"
-                      : "未移譲";
                     const alcohol = isAlcoholItem(item);
                     const vintage = getCategoryFieldValue(
                       item,
@@ -442,23 +454,6 @@ export default function OrderDetail() {
 
                               <tr>
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                                  トークン
-                                </th>
-                                <td className="py-2 text-left">
-                                  {item.transferred ? (
-                                    <span className="order-badge is-transferred">
-                                      {tokenLabel}
-                                    </span>
-                                  ) : (
-                                    <span className="order-badge is-paid">
-                                      {tokenLabel}
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-
-                              <tr>
-                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                                   移譲日
                                 </th>
                                 <td className="py-2 text-left">
@@ -511,6 +506,15 @@ export default function OrderDetail() {
                   </th>
                   <td className="py-2 text-left">
                     {userName}
+                  </td>
+                </tr>
+
+                <tr>
+                  <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    メールアドレス
+                  </th>
+                  <td className="py-2 text-left">
+                    {email}
                   </td>
                 </tr>
 

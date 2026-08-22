@@ -112,6 +112,9 @@ type OrderItemInventoryRowDTO struct {
 	Qty   int `json:"qty,omitempty"`
 	Price int `json:"price,omitempty"`
 
+	IsCanceled   bool `json:"isCanceled"`
+	IsDispatched bool `json:"isDispatched"`
+
 	Transferred   bool   `json:"transferred"`
 	TransferredAt string `json:"transferredAt,omitempty"` // RFC3339(UTC)
 }
@@ -484,6 +487,9 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					Qty:   it.Qty,
 					Price: it.Price,
 
+					IsCanceled:   it.IsCanceled,
+					IsDispatched: it.IsDispatched,
+
 					Transferred:   it.Transferred,
 					TransferredAt: transferredAt,
 				})
@@ -530,4 +536,93 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		TotalCount: totalCount,
 		TotalPages: tp,
 	}, nil
+}
+
+func (q *OrderManagementQuery) CountUndispatchedOrders(
+	ctx context.Context,
+) (int, error) {
+	if q == nil || q.lister == nil || q.invRows == nil {
+		return 0, errors.New("OrderManagementQuery.CountUndispatchedOrders: wiring is incomplete (lister/invRows required)")
+	}
+
+	allowedSet, err := AllowedInventoryIDSetFromContext(ctx, q.invRows)
+	if err != nil {
+		return 0, err
+	}
+	if len(allowedSet) == 0 {
+		return 0, nil
+	}
+
+	orderIDs := make(map[string]struct{})
+
+	const (
+		maxScanPages = 500
+		perPage      = 200
+	)
+
+	srcPage := 1
+
+	for {
+		if srcPage > maxScanPages {
+			break
+		}
+
+		pr, err := q.lister.ListByInventoryIDs(
+			ctx,
+			allowedSet,
+			orderdom.Filter{},
+			common.Sort{},
+			common.Page{
+				Number:  srcPage,
+				PerPage: perPage,
+			},
+		)
+		if err != nil {
+			return 0, err
+		}
+		if pr.Items == nil {
+			pr.Items = []orderdom.Order{}
+		}
+
+		for _, ord := range pr.Items {
+			if ord.ID == "" {
+				continue
+			}
+
+			for _, item := range ord.Items {
+				if !InventoryAllowed(
+					allowedSet,
+					item.InventoryID,
+				) {
+					continue
+				}
+
+				if item.IsCanceled {
+					continue
+				}
+
+				if item.IsDispatched {
+					continue
+				}
+
+				orderIDs[ord.ID] = struct{}{}
+				break
+			}
+		}
+
+		if len(pr.Items) == 0 {
+			break
+		}
+		if pr.TotalPages > 0 {
+			if srcPage >= pr.TotalPages {
+				break
+			}
+		} else if len(pr.Items) < perPage {
+			break
+		}
+
+		srcPage++
+	}
+
+	return len(orderIDs), nil
 }
