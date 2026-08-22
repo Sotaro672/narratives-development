@@ -205,37 +205,6 @@
   line-height: 1.2;
 }
 
-.wallet-page-history__measurements {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
-  gap: 6px;
-  margin: 0;
-}
-
-.wallet-page-history__measurement {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px;
-  border-radius: 10px;
-  background: var(--color-surface, #ffffff);
-}
-
-.wallet-page-history__measurement-label {
-  color: var(--color-text-muted, #6b7280);
-  font-size: 0.72rem;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.wallet-page-history__measurement-value {
-  margin: 0;
-  color: var(--color-text, #111827);
-  font-size: 0.85rem;
-  font-weight: 800;
-  line-height: 1.2;
-}
-
 @media (max-width: 640px) {
   .wallet-page-history__item {
     padding: 12px;
@@ -268,9 +237,5 @@
   .wallet-page-history__product-name,
   .wallet-page-history__product-subtitle {
     white-space: normal;
-  }
-
-  .wallet-page-history__measurements {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

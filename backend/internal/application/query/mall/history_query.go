@@ -11,7 +11,6 @@ import (
 
 var (
 	ErrHistoryQueryNotConfigured = errors.New("mall history query: not configured")
-	ErrHistoryModelIDEmpty       = errors.New("mall history query: modelID is empty")
 	ErrHistoryInventoryIDEmpty   = errors.New("mall history query: inventoryID is empty")
 )
 
@@ -58,7 +57,6 @@ func NewHistoryQuery(
 //  2. productBlueprintId -> productName / brandId
 //  3. tokenBlueprintId -> tokenName / tokenIcon / brandId
 //  4. brandId -> brandName / brandIcon
-//  5. modelId -> size / color / modelNumber / volume
 //
 // resale item:
 //  1. item.productBlueprintId / item.tokenBlueprintId / item.brandId を利用
@@ -87,14 +85,12 @@ func (q *HistoryQuery) EnrichOrderPage(
 	productBlueprintCache := make(map[string]mallshared.ProductBlueprintDisplay)
 	tokenBlueprintCache := make(map[string]mallshared.TokenBlueprintDisplay)
 	brandCache := make(map[string]mallshared.BrandDisplay)
-	modelCache := make(map[string]historydto.HistoryResolvedModel)
 
 	for orderIndex := range out.Items {
 		for itemIndex := range out.Items[orderIndex].Items {
 			item := &out.Items[orderIndex].Items[itemIndex]
 
 			inventoryID := item.InventoryID
-			modelID := item.ModelID
 
 			blueprintIDs := historyBlueprintIDs{
 				ProductBlueprintID: item.ProductBlueprintID,
@@ -180,79 +176,6 @@ func (q *HistoryQuery) EnrichOrderPage(
 					item.BrandName = brandInfo.BrandName
 				}
 				if item.BrandIcon == "" && brandInfo.BrandIcon != "" {
-					item.BrandIcon = brandInfo.BrandIcon
-				}
-			}
-
-			if modelID == "" {
-				continue
-			}
-
-			resolved, ok := modelCache[modelID]
-			if !ok {
-				nextResolved, err := q.resolveHistoryModelByID(
-					ctx,
-					historydto.HistoryResolveModelInput{
-						ItemType: item.ItemType,
-
-						ModelID:     modelID,
-						InventoryID: inventoryID,
-						ListID:      item.ListID,
-
-						ResaleID: item.ResaleID,
-
-						ProductID:          item.ProductID,
-						ProductBlueprintID: blueprintIDs.ProductBlueprintID,
-						TokenBlueprintID:   blueprintIDs.TokenBlueprintID,
-						BrandID:            item.BrandID,
-					},
-				)
-				if err != nil {
-					continue
-				}
-
-				resolved = nextResolved
-				modelCache[modelID] = nextResolved
-			}
-
-			applyResolvedModelToItem(item, resolved)
-
-			if blueprintIDs.ProductBlueprintID != "" {
-				pbInfo := productBlueprintCache[blueprintIDs.ProductBlueprintID]
-
-				if item.ProductName == "" {
-					item.ProductName = pbInfo.ProductName
-				}
-				if item.BrandID == "" {
-					item.BrandID = pbInfo.BrandID
-				}
-			}
-
-			if blueprintIDs.TokenBlueprintID != "" {
-				tbInfo := tokenBlueprintCache[blueprintIDs.TokenBlueprintID]
-
-				if item.TokenName == "" {
-					item.TokenName = tbInfo.TokenName
-				}
-				if item.TokenIcon == "" {
-					item.TokenIcon = tbInfo.TokenIcon
-				}
-				if item.BrandID == "" {
-					item.BrandID = tbInfo.BrandID
-				}
-			}
-
-			if item.BrandID != "" {
-				brandInfo, ok := brandCache[item.BrandID]
-				if !ok {
-					brandInfo = q.resolveBrandInfo(ctx, item.BrandID)
-					brandCache[item.BrandID] = brandInfo
-				}
-
-				if item.BrandName == "" {
-					item.BrandName = brandInfo.BrandName
-				}
-				if item.BrandIcon == "" {
 					item.BrandIcon = brandInfo.BrandIcon
 				}
 			}
@@ -352,192 +275,6 @@ func (q *HistoryQuery) ResolveBrandInfo(
 	return info.BrandName, info.BrandIcon, nil
 }
 
-func (q *HistoryQuery) ResolveModel(
-	ctx context.Context,
-	in historydto.HistoryResolveModelInput,
-) (historydto.HistoryResolvedModel, error) {
-	if q == nil || q.displayResolver == nil {
-		return historydto.HistoryResolvedModel{}, ErrHistoryQueryNotConfigured
-	}
-
-	nextInput := historydto.HistoryResolveModelInput{
-		ItemType: in.ItemType,
-
-		ModelID:     in.ModelID,
-		InventoryID: in.InventoryID,
-		ListID:      in.ListID,
-
-		ResaleID: in.ResaleID,
-
-		ProductID:          in.ProductID,
-		ProductBlueprintID: in.ProductBlueprintID,
-		TokenBlueprintID:   in.TokenBlueprintID,
-		BrandID:            in.BrandID,
-	}
-
-	if nextInput.ModelID == "" {
-		return historydto.HistoryResolvedModel{}, ErrHistoryModelIDEmpty
-	}
-
-	if nextInput.InventoryID != "" &&
-		(nextInput.ProductBlueprintID == "" || nextInput.TokenBlueprintID == "") &&
-		q.inventoryBlueprintResolver != nil {
-		productBlueprintID, tokenBlueprintID, err :=
-			q.inventoryBlueprintResolver.ResolveBlueprintIDsByInventoryID(
-				ctx,
-				nextInput.InventoryID,
-			)
-		if err == nil {
-			if nextInput.ProductBlueprintID == "" {
-				nextInput.ProductBlueprintID = productBlueprintID
-			}
-			if nextInput.TokenBlueprintID == "" {
-				nextInput.TokenBlueprintID = tokenBlueprintID
-			}
-		}
-	}
-
-	resolved, err := q.resolveHistoryModelByID(ctx, nextInput)
-	if err != nil {
-		return historydto.HistoryResolvedModel{}, err
-	}
-
-	if resolved.ItemType == "" {
-		resolved.ItemType = nextInput.ItemType
-	}
-	if resolved.ListID == "" {
-		resolved.ListID = nextInput.ListID
-	}
-	if resolved.ResaleID == "" {
-		resolved.ResaleID = nextInput.ResaleID
-	}
-	if resolved.ProductID == "" {
-		resolved.ProductID = nextInput.ProductID
-	}
-	if resolved.ProductBlueprintID == "" {
-		resolved.ProductBlueprintID = nextInput.ProductBlueprintID
-	}
-	if resolved.TokenBlueprintID == "" {
-		resolved.TokenBlueprintID = nextInput.TokenBlueprintID
-	}
-	if resolved.BrandID == "" {
-		resolved.BrandID = nextInput.BrandID
-	}
-
-	if resolved.ProductBlueprintID != "" {
-		pbInfo := q.resolveProductBlueprintInfo(
-			ctx,
-			resolved.ProductBlueprintID,
-		)
-
-		if resolved.ProductName == "" {
-			resolved.ProductName = pbInfo.ProductName
-		}
-		if resolved.BrandID == "" {
-			resolved.BrandID = pbInfo.BrandID
-		}
-	}
-
-	if resolved.TokenBlueprintID != "" {
-		tbInfo := q.resolveTokenBlueprintInfo(
-			ctx,
-			resolved.TokenBlueprintID,
-		)
-
-		if resolved.TokenName == "" {
-			resolved.TokenName = tbInfo.TokenName
-		}
-		if resolved.TokenIcon == "" {
-			resolved.TokenIcon = tbInfo.TokenIcon
-		}
-		if resolved.BrandID == "" {
-			resolved.BrandID = tbInfo.BrandID
-		}
-	}
-
-	if resolved.BrandID != "" {
-		brandInfo := q.resolveBrandInfo(ctx, resolved.BrandID)
-
-		if resolved.BrandName == "" {
-			resolved.BrandName = brandInfo.BrandName
-		}
-		if resolved.BrandIcon == "" {
-			resolved.BrandIcon = brandInfo.BrandIcon
-		}
-	}
-
-	return resolved, nil
-}
-
-func (q *HistoryQuery) resolveHistoryModelByID(
-	ctx context.Context,
-	in historydto.HistoryResolveModelInput,
-) (historydto.HistoryResolvedModel, error) {
-	if q == nil || q.displayResolver == nil {
-		return historydto.HistoryResolvedModel{}, ErrHistoryQueryNotConfigured
-	}
-
-	if in.ModelID == "" {
-		return historydto.HistoryResolvedModel{}, ErrHistoryModelIDEmpty
-	}
-
-	model, err := q.displayResolver.ResolveModelByModelID(
-		ctx,
-		in.ModelID,
-	)
-	if err != nil {
-		return historydto.HistoryResolvedModel{}, err
-	}
-
-	return historyResolvedModelFromDisplayResolver(in, model), nil
-}
-
-func historyResolvedModelFromDisplayResolver(
-	in historydto.HistoryResolveModelInput,
-	model mallshared.ModelDisplay,
-) historydto.HistoryResolvedModel {
-	out := historydto.HistoryResolvedModel{
-		ItemType: in.ItemType,
-
-		ModelID:     in.ModelID,
-		InventoryID: in.InventoryID,
-		ListID:      in.ListID,
-
-		ResaleID: in.ResaleID,
-
-		ProductID:          in.ProductID,
-		ProductBlueprintID: in.ProductBlueprintID,
-		TokenBlueprintID:   in.TokenBlueprintID,
-		BrandID:            in.BrandID,
-
-		Kind:         model.Kind,
-		ModelNumber:  model.ModelNumber,
-		Size:         model.Size,
-		Measurements: cloneMeasurements(model.Measurements),
-		VolumeValue:  model.VolumeValue,
-		VolumeUnit:   model.VolumeUnit,
-	}
-
-	if model.ModelID != "" {
-		out.ModelID = model.ModelID
-	}
-
-	if out.ProductBlueprintID == "" && model.ProductBlueprintID != "" {
-		out.ProductBlueprintID = model.ProductBlueprintID
-	}
-
-	if model.ColorName != "" || model.ColorRGB != 0 {
-		rgb := model.ColorRGB
-
-		out.Color = &historydto.HistoryColor{
-			Name: model.ColorName,
-			RGB:  &rgb,
-		}
-	}
-
-	return out
-}
-
 func (q *HistoryQuery) resolveProductBlueprintInfo(
 	ctx context.Context,
 	productBlueprintID string,
@@ -628,101 +365,6 @@ func cloneHistoryOrders(
 	}
 
 	return out
-}
-
-func applyResolvedModelToItem(
-	item *historydto.HistoryOrderItem,
-	resolved historydto.HistoryResolvedModel,
-) {
-	if item == nil {
-		return
-	}
-
-	if resolved.ItemType != "" {
-		item.ItemType = resolved.ItemType
-	}
-
-	if resolved.ModelID != "" {
-		item.ModelID = resolved.ModelID
-	}
-
-	if resolved.InventoryID != "" {
-		item.InventoryID = resolved.InventoryID
-	}
-
-	if resolved.ListID != "" {
-		item.ListID = resolved.ListID
-	}
-
-	if resolved.ResaleID != "" {
-		item.ResaleID = resolved.ResaleID
-	}
-
-	if resolved.ProductID != "" {
-		item.ProductID = resolved.ProductID
-	}
-
-	if resolved.ProductBlueprintID != "" {
-		item.ProductBlueprintID = resolved.ProductBlueprintID
-	}
-
-	if resolved.TokenBlueprintID != "" {
-		item.TokenBlueprintID = resolved.TokenBlueprintID
-	}
-
-	if resolved.ProductName != "" {
-		item.ProductName = resolved.ProductName
-	}
-
-	if resolved.BrandID != "" {
-		item.BrandID = resolved.BrandID
-	}
-
-	if resolved.Kind != "" {
-		item.Kind = resolved.Kind
-	}
-
-	if resolved.ModelNumber != "" {
-		item.ModelNumber = resolved.ModelNumber
-	}
-
-	if resolved.Size != "" {
-		item.Size = resolved.Size
-	}
-
-	if resolved.Color != nil {
-		item.Color = resolved.Color
-	}
-
-	if len(resolved.Measurements) > 0 {
-		item.Measurements = cloneMeasurements(
-			resolved.Measurements,
-		)
-	}
-
-	if resolved.VolumeValue != nil {
-		item.VolumeValue = resolved.VolumeValue
-	}
-
-	if resolved.VolumeUnit != "" {
-		item.VolumeUnit = resolved.VolumeUnit
-	}
-
-	if resolved.TokenName != "" {
-		item.TokenName = resolved.TokenName
-	}
-
-	if resolved.TokenIcon != "" {
-		item.TokenIcon = resolved.TokenIcon
-	}
-
-	if resolved.BrandName != "" {
-		item.BrandName = resolved.BrandName
-	}
-
-	if resolved.BrandIcon != "" {
-		item.BrandIcon = resolved.BrandIcon
-	}
 }
 
 func mergeHistoryBlueprintIDs(
