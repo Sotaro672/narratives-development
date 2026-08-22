@@ -11,6 +11,7 @@ import (
 	fsrepo "narratives/internal/adapters/out/firestore"
 	cloudtasksadp "narratives/internal/adapters/out/firestore/cloudtasks"
 	mailadp "narratives/internal/adapters/out/mail"
+	stripeadapter "narratives/internal/adapters/out/stripe"
 	uc "narratives/internal/application/usecase"
 	"narratives/internal/infra/arweave"
 	solanainfra "narratives/internal/infra/solana"
@@ -75,6 +76,45 @@ func buildUsecases(
 
 	tokenUC := uc.NewTokenUsecase(solanaClient)
 	accountUC := uc.NewAccountUsecase(r.accountRepo)
+
+	if c == nil ||
+		c.infra == nil {
+		return nil, errors.New(
+			"di.console: shared infra is nil",
+		)
+	}
+
+	if c.infra.PaymentMethodGateway == nil {
+		var customerStore stripeadapter.PaymentMethodCustomerStore
+
+		if value, ok :=
+			any(r.paymentMethodRepo).(stripeadapter.PaymentMethodCustomerStore); ok {
+			customerStore = value
+		} else if value, ok :=
+			any(r.userRepo).(stripeadapter.PaymentMethodCustomerStore); ok {
+			customerStore = value
+		}
+
+		if customerStore == nil {
+			return nil, errors.New(
+				"di.console: PaymentMethodCustomerStore is not implemented by current repositories",
+			)
+		}
+
+		if err :=
+			c.infra.RegisterPaymentMethodGatewayFromSecret(
+				ctx,
+				customerStore,
+			); err != nil {
+			return nil, err
+		}
+
+		if c.infra.PaymentMethodGateway == nil {
+			return nil, errors.New(
+				"di.console: stripe payment method gateway is nil after registration",
+			)
+		}
+	}
 
 	announcementAvatarRepo := fsrepo.NewAnnouncementAvatarRepositoryFS(c.fsClient)
 	announcementAttachmentRepo := fsrepo.NewAnnouncementAttachmentRepositoryFS(c.fsClient)
@@ -205,17 +245,49 @@ func buildUsecases(
 		shippingQuoteUC,
 	)
 
-	var paymentFlowUC *uc.PaymentFlowUsecase
+	if paymentUC == nil {
+		_ = listSaveOperationRetryQueue.Close()
+		_ = listSaveOperationStorage.Close()
+		_ = announcementAttachmentStorage.Close()
 
-	if c != nil &&
-		c.infra != nil &&
-		c.infra.PaymentMethodGateway != nil &&
-		paymentUC != nil &&
-		r.orderRepo != nil {
-		paymentFlowUC = uc.NewPaymentFlowUsecase(
-			paymentUC,
-			r.orderRepo,
-			c.infra.PaymentMethodGateway,
+		return nil, errors.New(
+			"di.console: payment usecase is nil",
+		)
+	}
+
+	if r.orderRepo == nil {
+		_ = listSaveOperationRetryQueue.Close()
+		_ = listSaveOperationStorage.Close()
+		_ = announcementAttachmentStorage.Close()
+
+		return nil, errors.New(
+			"di.console: order repository is nil",
+		)
+	}
+
+	if c.infra.PaymentMethodGateway == nil {
+		_ = listSaveOperationRetryQueue.Close()
+		_ = listSaveOperationStorage.Close()
+		_ = announcementAttachmentStorage.Close()
+
+		return nil, errors.New(
+			"di.console: payment method gateway is nil",
+		)
+	}
+
+	paymentFlowUC := uc.NewPaymentFlowUsecase(
+		paymentUC,
+		r.orderRepo,
+		c.infra.PaymentMethodGateway,
+	)
+
+	if paymentFlowUC == nil {
+		_ = listSaveOperationRetryQueue.Close()
+		_ = listSaveOperationStorage.Close()
+		_ = announcementAttachmentStorage.Close()
+
+		return nil, errors.New(
+			"di.console: payment flow usecase is nil",
 		)
 	}
 

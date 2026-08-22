@@ -12,6 +12,7 @@ import {
   rgbIntToHex,
 } from "../shared/util/color";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
+import { getOrderStatusLabel } from "../shared/types/order";
 import {
   formatJPY,
   useOrderDetail,
@@ -131,18 +132,20 @@ export default function OrderDetail() {
                 <tbody>
                   <tr>
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                      支払
+                      発送状況
                     </th>
                     <td className="py-2 text-left">
-                      {order.paid ? (
-                        <span className="order-badge is-paid">
-                          支払済
-                        </span>
-                      ) : (
-                        <span className="order-badge is-cancelled">
-                          未払い
-                        </span>
-                      )}
+                      <span
+                        className={
+                          order.paid
+                            ? "order-badge is-paid"
+                            : "order-badge is-cancelled"
+                        }
+                      >
+                        {getOrderStatusLabel(
+                          order.paid,
+                        )}
+                      </span>
                     </td>
                   </tr>
 
@@ -564,7 +567,11 @@ export default function OrderDetail() {
       title={pageTitle}
       onBack={onBack}
       statusButtonLabel={
-        canDispatch ? "発送" : "発送済"
+        canDispatch
+          ? "発送"
+          : getOrderStatusLabel(
+              order?.paid ?? true,
+            )
       }
       statusButtonBusyLabel="発送中..."
       onStatusButtonClick={onDispatch}

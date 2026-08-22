@@ -229,6 +229,50 @@ func handleSafeAuthAvatar(
 	)
 }
 
+// paymentReadOnlyHandler limits the buyer-facing payment endpoint to reads.
+//
+// Payment creation is performed only from the Console dispatch flow.
+// Mall clients must never be able to create or confirm a Stripe payment.
+func paymentReadOnlyHandler(
+	h http.Handler,
+) http.Handler {
+	if h == nil {
+		return nil
+	}
+
+	return http.HandlerFunc(
+		func(
+			w http.ResponseWriter,
+			r *http.Request,
+		) {
+			if r.Method == http.MethodGet ||
+				r.Method == http.MethodOptions {
+				h.ServeHTTP(w, r)
+				return
+			}
+
+			w.Header().Set(
+				"Content-Type",
+				"application/json",
+			)
+			w.Header().Set(
+				"Allow",
+				"GET, OPTIONS",
+			)
+
+			w.WriteHeader(
+				http.StatusMethodNotAllowed,
+			)
+
+			_, _ = w.Write(
+				[]byte(
+					`{"error":"payment_creation_disabled"}`,
+				),
+			)
+		},
+	)
+}
+
 // Register registers buyer-facing routes onto mux (mall only).
 //
 // auth:
@@ -656,20 +700,25 @@ func Register(
 		avatar,
 	)
 
-	// payment (me)
+	// payment context (me) - GET only
+	paymentHandler :=
+		paymentReadOnlyHandler(
+			deps.Payment,
+		)
+
 	handleSafeAuthAvatar(
 		mux,
 		"/mall/me/payments",
-		deps.Payment,
-		"Payment(me)",
+		paymentHandler,
+		"Payment(me.readOnly)",
 		auth,
 		avatar,
 	)
 	handleSafeAuthAvatar(
 		mux,
 		"/mall/me/payments/",
-		deps.Payment,
-		"Payment(me)",
+		paymentHandler,
+		"Payment(me.readOnly)",
 		auth,
 		avatar,
 	)
@@ -715,7 +764,7 @@ func Register(
 		mux,
 		"/mall/me/inquiries",
 		deps.Inquiry,
-		"Inquiry(me)",
+		"Resale(me)",
 		auth,
 		avatar,
 	)
