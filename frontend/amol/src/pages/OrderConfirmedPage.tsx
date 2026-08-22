@@ -1,5 +1,7 @@
 // frontend/amol/src/pages/OrderConfirmedPage.tsx
 
+import { useNavigate } from "react-router-dom";
+
 import Layout from "../components/layout/Layout";
 import {
   OrderConfirmedActions,
@@ -23,15 +25,31 @@ import {
 import "../styles/order-confirmed-page.css";
 
 export default function OrderConfirmedPage() {
+  const navigate = useNavigate();
+
   const {
     amount,
     orderId,
     statusLabel,
     items,
     shippingAddressLines,
-    handleGoToWallet,
     handleGoToLists,
   } = useOrderConfirmedPage();
+
+  const handleGoToOrderDetail = () => {
+    const normalizedOrderId =
+      orderId.trim();
+
+    if (!normalizedOrderId) {
+      return;
+    }
+
+    navigate(
+      `/orders/${encodeURIComponent(
+        normalizedOrderId,
+      )}`,
+    );
+  };
 
   return (
     <Layout
@@ -63,7 +81,9 @@ export default function OrderConfirmedPage() {
           />
 
           <OrderConfirmedActions
-            onGoToWallet={handleGoToWallet}
+            onGoToOrderDetail={
+              handleGoToOrderDetail
+            }
             onGoToLists={handleGoToLists}
           />
         </div>

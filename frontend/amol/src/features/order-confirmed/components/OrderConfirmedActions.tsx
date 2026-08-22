@@ -1,11 +1,12 @@
-//frontend\amol\src\features\order-confirmed\components\OrderConfirmedActions.tsx
+// frontend/amol/src/features/order-confirmed/components/OrderConfirmedActions.tsx
+
 type OrderConfirmedActionsProps = {
-  onGoToWallet: () => void;
+  onGoToOrderDetail: () => void;
   onGoToLists: () => void;
 };
 
 export function OrderConfirmedActions({
-  onGoToWallet,
+  onGoToOrderDetail,
   onGoToLists,
 }: OrderConfirmedActionsProps) {
   return (
@@ -13,9 +14,9 @@ export function OrderConfirmedActions({
       <button
         type="button"
         className="order-confirmed-page__primary-button"
-        onClick={onGoToWallet}
+        onClick={onGoToOrderDetail}
       >
-        ウォレットへ
+        注文詳細へ
       </button>
 
       <button
