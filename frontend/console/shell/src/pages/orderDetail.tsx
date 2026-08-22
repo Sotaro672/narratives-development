@@ -132,25 +132,6 @@ export default function OrderDetail() {
                 <tbody>
                   <tr>
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                      発送状況
-                    </th>
-                    <td className="py-2 text-left">
-                      <span
-                        className={
-                          order.paid
-                            ? "order-badge is-paid"
-                            : "order-badge is-cancelled"
-                        }
-                      >
-                        {getOrderStatusLabel(
-                          order.paid,
-                        )}
-                      </span>
-                    </td>
-                  </tr>
-
-                  <tr>
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                       注文日
                     </th>
                     <td className="py-2 text-left">{createdAt}</td>
