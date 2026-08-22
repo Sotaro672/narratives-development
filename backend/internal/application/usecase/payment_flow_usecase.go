@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
 )
@@ -24,6 +25,16 @@ type OrderReaderForPaymentFlow interface {
 	GetByID(
 		ctx context.Context,
 		id string,
+	) (orderdom.Order, error)
+}
+
+// OrderWriterForPaymentFlow is required when a successful payment must be
+// synchronously reflected to Order.Paid before dispatch can continue.
+type OrderWriterForPaymentFlow interface {
+	Update(
+		ctx context.Context,
+		order orderdom.Order,
+		opts *common.SaveOptions,
 	) (orderdom.Order, error)
 }
 
@@ -49,6 +60,8 @@ type CreateAndConfirmPaymentIntentInput struct {
 	Description           string
 
 	PaymentMethodID string
+
+	OffSession bool
 }
 
 type CreateAndConfirmPaymentIntentResult struct {
@@ -64,12 +77,19 @@ type CreateAndConfirmPaymentIntentResult struct {
 
 // PaymentFlowUsecase orchestrates:
 //
-//  1. Verify the authenticated user and order ownership.
+//  1. Verify the authoritative Order.
 //  2. Verify unpaid state and amount using the server-side Order.
-//  3. Create and confirm the Stripe PaymentIntent.
-//  4. Verify that Stripe returned a non-empty PaymentIntent ID.
-//  5. Create the payment record with that PaymentIntent ID.
-//  6. Let PaymentUsecase run post-paid processing when status is succeeded.
+//  3. Verify the payment method against the Order snapshot.
+//  4. Create and confirm the Stripe PaymentIntent.
+//  5. Verify that Stripe returned a non-empty PaymentIntent ID.
+//  6. Create the payment record with that PaymentIntent ID.
+//  7. Let PaymentUsecase run post-paid processing when status is succeeded.
+//
+// Dispatch payment additionally:
+//   - resolves all payment information from the Order snapshot
+//   - uses an off-session Stripe payment
+//   - reuses an existing succeeded payment without charging again
+//   - requires Order.Paid=true before dispatch may continue
 //
 // Responsibility separation:
 //   - /mall/me/orders   : OrderHandler   -> OrderUsecase
@@ -104,6 +124,9 @@ var (
 	)
 	ErrPaymentFlowOrderReaderMissing = errors.New(
 		"payment_flow: order reader is not configured",
+	)
+	ErrPaymentFlowOrderWriterMissing = errors.New(
+		"payment_flow: order writer is not configured",
 	)
 
 	// ErrPaymentFlowOrderNotFound is the application-layer identity used when
@@ -142,6 +165,9 @@ var (
 	ErrPaymentFlowOrderAmountMismatch = errors.New(
 		"payment_flow: invalid amount: order total mismatch",
 	)
+	ErrPaymentFlowPaymentMethodMismatch = errors.New(
+		"payment_flow: payment method does not match order snapshot",
+	)
 
 	ErrPaymentFlowStripeGatewayMissing = errors.New(
 		"payment_flow: stripe payment intent gateway is not configured",
@@ -161,6 +187,28 @@ var (
 	ErrPaymentFlowStripePaymentIntentCanceled = errors.New(
 		"payment_flow: stripe payment intent canceled",
 	)
+
+	ErrPaymentFlowDispatchRequiresAction = errors.New(
+		"payment_flow: dispatch payment requires customer action",
+	)
+	ErrPaymentFlowDispatchProcessing = errors.New(
+		"payment_flow: dispatch payment is processing",
+	)
+	ErrPaymentFlowDispatchPending = errors.New(
+		"payment_flow: dispatch payment is pending",
+	)
+	ErrPaymentFlowDispatchNotSucceeded = errors.New(
+		"payment_flow: dispatch payment did not succeed",
+	)
+	ErrPaymentFlowDispatchPaymentMismatch = errors.New(
+		"payment_flow: existing payment does not match order",
+	)
+	ErrPaymentFlowDispatchPaidStateInvalid = errors.New(
+		"payment_flow: order is paid but succeeded payment is missing",
+	)
+	ErrPaymentFlowDispatchOrderPaidUpdateFailed = errors.New(
+		"payment_flow: failed to persist paid order state",
+	)
 )
 
 // CreatePaymentAndStartInput is the application-level input for starting a
@@ -173,6 +221,9 @@ var (
 // Amount is the client-requested amount. PaymentFlowUsecase compares it with
 // the total calculated from the server-side Order and uses the server-side
 // total for payment processing.
+//
+// OffSession must only be set by a trusted server-side flow such as dispatch.
+// Normal Mall payment requests must leave it false.
 type CreatePaymentAndStartInput struct {
 	UserID string
 
@@ -184,6 +235,8 @@ type CreatePaymentAndStartInput struct {
 	StripePaymentMethodID string
 
 	Amount *int
+
+	OffSession bool
 }
 
 // CreatePaymentAndStartResult is the response-friendly result.
@@ -211,10 +264,11 @@ type CreatePaymentAndStartResult struct {
 //  1. Validate the authenticated user.
 //  2. Read and validate the server-side Order.
 //  3. Compare the requested amount with the authoritative order total.
-//  4. Create and confirm a Stripe PaymentIntent.
-//  5. Require a non-empty Stripe PaymentIntent ID.
-//  6. Create the payment record with the latest Stripe status.
-//  7. Return ClientSecret when additional authentication is required.
+//  4. Verify the requested payment method against the Order snapshot.
+//  5. Create and confirm a Stripe PaymentIntent.
+//  6. Require a non-empty Stripe PaymentIntent ID.
+//  7. Create the payment record with the latest Stripe status.
+//  8. Return ClientSecret when additional authentication is required.
 //
 // No payment document is created before Stripe returns a PaymentIntent ID.
 func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
@@ -297,6 +351,33 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 		return nil, ErrPaymentFlowOrderAlreadyPaid
 	}
 
+	orderPaymentMethodID :=
+		strings.TrimSpace(
+			order.PaymentMethodSnapshot.PaymentMethodID,
+		)
+
+	orderStripeCustomerID :=
+		strings.TrimSpace(
+			order.PaymentMethodSnapshot.CustomerID,
+		)
+
+	orderStripePaymentMethodID :=
+		strings.TrimSpace(
+			order.PaymentMethodSnapshot.StripePaymentMethodID,
+		)
+
+	if orderPaymentMethodID == "" ||
+		orderStripeCustomerID == "" ||
+		orderStripePaymentMethodID == "" {
+		return nil, ErrPaymentFlowPaymentMethodMismatch
+	}
+
+	if paymentMethodID != orderPaymentMethodID ||
+		stripeCustomerID != orderStripeCustomerID ||
+		stripePaymentMethodID != orderStripePaymentMethodID {
+		return nil, ErrPaymentFlowPaymentMethodMismatch
+	}
+
 	orderAmount, err := calculatePaymentOrderAmount(order)
 	if err != nil {
 		return nil, err
@@ -310,8 +391,15 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 	// server-side Order, never the unverified client value.
 	amount := orderAmount
 
+	idempotencyKeyPrefix := "payment"
+	if in.OffSession {
+		idempotencyKeyPrefix =
+			"dispatch-payment"
+	}
+
 	idempotencyKey := fmt.Sprintf(
-		"payment:%s:%s:%d",
+		"%s:%s:%s:%d",
+		idempotencyKeyPrefix,
 		paymentID,
 		paymentMethodID,
 		amount,
@@ -331,6 +419,7 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 					paymentID,
 				),
 				PaymentMethodID: paymentMethodID,
+				OffSession:      in.OffSession,
 			},
 		)
 
@@ -501,6 +590,312 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 	}
 
 	return result, resultErr
+}
+
+// EnsureOrderPaidForDispatch ensures that the Order has a succeeded Payment
+// before shipment state is changed.
+//
+// All payment information is resolved from the persisted Order snapshot.
+// Console callers must provide only orderID.
+//
+// The operation is idempotent:
+//   - if a succeeded Payment already exists, Stripe is not called again
+//   - if Order.Paid was not persisted after a succeeded Payment, it is repaired
+//   - a non-succeeded existing Payment blocks another charge
+func (u *PaymentFlowUsecase) EnsureOrderPaidForDispatch(
+	ctx context.Context,
+	orderID string,
+) error {
+	if u == nil || u.paymentUC == nil {
+		return ErrPaymentFlowPaymentUsecaseMissing
+	}
+
+	if u.orderReader == nil {
+		return ErrPaymentFlowOrderReaderMissing
+	}
+
+	if u.paymentIntentGateway == nil {
+		return ErrPaymentFlowStripeGatewayMissing
+	}
+
+	orderID =
+		strings.TrimSpace(
+			orderID,
+		)
+
+	if orderID == "" {
+		return ErrPaymentFlowPaymentIDEmpty
+	}
+
+	order, err :=
+		u.orderReader.GetByID(
+			ctx,
+			orderID,
+		)
+	if err != nil {
+		return fmt.Errorf(
+			"payment_flow: get order %q for dispatch: %w",
+			orderID,
+			err,
+		)
+	}
+
+	if strings.TrimSpace(order.ID) != orderID {
+		return ErrPaymentFlowOrderIDMismatch
+	}
+
+	orderAmount, err :=
+		calculatePaymentOrderAmount(
+			order,
+		)
+	if err != nil {
+		return err
+	}
+
+	paymentMethodID :=
+		strings.TrimSpace(
+			order.PaymentMethodSnapshot.PaymentMethodID,
+		)
+
+	stripeCustomerID :=
+		strings.TrimSpace(
+			order.PaymentMethodSnapshot.CustomerID,
+		)
+
+	stripePaymentMethodID :=
+		strings.TrimSpace(
+			order.PaymentMethodSnapshot.StripePaymentMethodID,
+		)
+
+	if paymentMethodID == "" {
+		return ErrPaymentFlowPaymentMethodEmpty
+	}
+
+	if stripeCustomerID == "" {
+		return ErrPaymentFlowStripeCustomerIDEmpty
+	}
+
+	if stripePaymentMethodID == "" {
+		return ErrPaymentFlowStripePaymentMethodIDEmpty
+	}
+
+	existingPayment, err :=
+		u.paymentUC.GetByPaymentID(
+			ctx,
+			orderID,
+		)
+
+	if err == nil && existingPayment != nil {
+		if err :=
+			validateDispatchPaymentMatchesOrder(
+				existingPayment,
+				order,
+				orderAmount,
+			); err != nil {
+			return err
+		}
+
+		if existingPayment.Status !=
+			paymentdom.StatusSucceeded {
+			return dispatchPaymentStatusError(
+				existingPayment.Status,
+			)
+		}
+
+		return u.ensureOrderPaidState(
+			ctx,
+			orderID,
+		)
+	}
+
+	if err != nil &&
+		!errors.Is(
+			err,
+			paymentdom.ErrNotFound,
+		) {
+		return fmt.Errorf(
+			"payment_flow: get payment %q for dispatch: %w",
+			orderID,
+			err,
+		)
+	}
+
+	if order.Paid {
+		return ErrPaymentFlowDispatchPaidStateInvalid
+	}
+
+	result, paymentErr :=
+		u.CreatePaymentAndStartWithResult(
+			ctx,
+			CreatePaymentAndStartInput{
+				UserID: order.UserID,
+
+				PaymentID: orderID,
+
+				PaymentMethodID: paymentMethodID,
+
+				StripeCustomerID:      stripeCustomerID,
+				StripePaymentMethodID: stripePaymentMethodID,
+
+				Amount: &orderAmount,
+
+				OffSession: true,
+			},
+		)
+
+	if result == nil {
+		if paymentErr != nil {
+			return paymentErr
+		}
+
+		return ErrPaymentFlowDispatchNotSucceeded
+	}
+
+	if result.Status !=
+		paymentdom.StatusSucceeded {
+		statusErr :=
+			dispatchPaymentStatusError(
+				result.Status,
+			)
+
+		if paymentErr != nil {
+			return fmt.Errorf(
+				"%w: %v",
+				statusErr,
+				paymentErr,
+			)
+		}
+
+		return statusErr
+	}
+
+	if paymentErr != nil {
+		return paymentErr
+	}
+
+	return u.ensureOrderPaidState(
+		ctx,
+		orderID,
+	)
+}
+
+func validateDispatchPaymentMatchesOrder(
+	payment *paymentdom.Payment,
+	order orderdom.Order,
+	orderAmount int,
+) error {
+	if payment == nil {
+		return ErrPaymentFlowDispatchPaymentMismatch
+	}
+
+	if strings.TrimSpace(payment.PaymentID) !=
+		strings.TrimSpace(order.ID) {
+		return ErrPaymentFlowDispatchPaymentMismatch
+	}
+
+	if payment.Amount != orderAmount {
+		return ErrPaymentFlowDispatchPaymentMismatch
+	}
+
+	if strings.TrimSpace(payment.PaymentMethodID) !=
+		strings.TrimSpace(
+			order.PaymentMethodSnapshot.PaymentMethodID,
+		) {
+		return ErrPaymentFlowDispatchPaymentMismatch
+	}
+
+	if strings.TrimSpace(payment.StripeCustomerID) !=
+		strings.TrimSpace(
+			order.PaymentMethodSnapshot.CustomerID,
+		) {
+		return ErrPaymentFlowDispatchPaymentMismatch
+	}
+
+	if strings.TrimSpace(payment.StripePaymentMethodID) !=
+		strings.TrimSpace(
+			order.PaymentMethodSnapshot.StripePaymentMethodID,
+		) {
+		return ErrPaymentFlowDispatchPaymentMismatch
+	}
+
+	return nil
+}
+
+func dispatchPaymentStatusError(
+	status paymentdom.PaymentStatus,
+) error {
+	switch status {
+	case paymentdom.StatusRequiresAction:
+		return ErrPaymentFlowDispatchRequiresAction
+
+	case paymentdom.StatusProcessing:
+		return ErrPaymentFlowDispatchProcessing
+
+	case paymentdom.StatusPending:
+		return ErrPaymentFlowDispatchPending
+
+	case paymentdom.StatusFailed:
+		return ErrPaymentFlowStripePaymentIntentFailed
+
+	case paymentdom.StatusCanceled:
+		return ErrPaymentFlowStripePaymentIntentCanceled
+
+	case paymentdom.StatusSucceeded:
+		return nil
+
+	default:
+		return ErrPaymentFlowDispatchNotSucceeded
+	}
+}
+
+func (u *PaymentFlowUsecase) ensureOrderPaidState(
+	ctx context.Context,
+	orderID string,
+) error {
+	order, err :=
+		u.orderReader.GetByID(
+			ctx,
+			orderID,
+		)
+	if err != nil {
+		return fmt.Errorf(
+			"payment_flow: reload order %q after payment: %w",
+			orderID,
+			err,
+		)
+	}
+
+	if order.Paid {
+		return nil
+	}
+
+	orderWriter, ok :=
+		u.orderReader.(OrderWriterForPaymentFlow)
+	if !ok || orderWriter == nil {
+		return ErrPaymentFlowOrderWriterMissing
+	}
+
+	order.UpdatePaid(true)
+
+	updated, err :=
+		orderWriter.Update(
+			ctx,
+			order,
+			nil,
+		)
+	if err != nil {
+		return fmt.Errorf(
+			"%w: %v",
+			ErrPaymentFlowDispatchOrderPaidUpdateFailed,
+			err,
+		)
+	}
+
+	if !updated.Paid {
+		return ErrPaymentFlowDispatchOrderPaidUpdateFailed
+	}
+
+	return nil
 }
 
 // calculatePaymentOrderAmount calculates the authoritative payment amount

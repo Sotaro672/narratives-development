@@ -187,9 +187,14 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		productBPReviewH = consoleHandler.NewProductBlueprintReviewHandler(pbReviewUC)
 	}
 
-	if c.OrderManagementQuery != nil || c.OrderDetailQuery != nil {
+	if c.OrderUC != nil &&
+		c.PaymentFlowUC != nil &&
+		c.OrderManagementQuery != nil &&
+		c.OrderDetailQuery != nil &&
+		c.OrderDispatchNotificationUC != nil {
 		ordersH = consoleHandler.NewOrderHandler(
 			c.OrderUC,
+			c.PaymentFlowUC,
 			c.OrderManagementQuery,
 			c.OrderDetailQuery,
 			c.OrderDispatchNotificationUC,

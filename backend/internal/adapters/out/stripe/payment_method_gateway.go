@@ -136,8 +136,9 @@ func (g *PaymentMethodGateway) CreateSetupIntent(
 
 // CreateAndConfirmPaymentIntent creates and confirms a Stripe PaymentIntent.
 //
-// 支払ボタン押下後の実決済で使う。
-// frontend は secret key を持たず、backend が Stripe secret key でこの API を呼ぶ。
+// Mallからの通常決済ではoff_session=false、
+// Consoleの発送時決済ではoff_session=trueとして実行する。
+// frontend / Console はsecret keyを持たず、backendがStripe secret keyでAPIを呼ぶ。
 func (g *PaymentMethodGateway) CreateAndConfirmPaymentIntent(
 	ctx context.Context,
 	in usecase.CreateAndConfirmPaymentIntentInput,
@@ -172,10 +173,11 @@ func (g *PaymentMethodGateway) CreateAndConfirmPaymentIntent(
 	form.Set("confirm", "true")
 	form.Add("payment_method_types[]", "card")
 
-	// saved card 決済だが、3D Secure テストなどで requires_action を返せるよう
-	// off_session=false とする。
-	// 完全なオフセッション決済にする場合は true に変更する。
-	form.Set("off_session", "false")
+	if in.OffSession {
+		form.Set("off_session", "true")
+	} else {
+		form.Set("off_session", "false")
+	}
 
 	if desc := strings.TrimSpace(in.Description); desc != "" {
 		form.Set("description", desc)
@@ -186,19 +188,21 @@ func (g *PaymentMethodGateway) CreateAndConfirmPaymentIntent(
 	}
 
 	var out stripePaymentIntentResponse
-	if err := g.postFormWithIdempotencyKey(
+	requestErr := g.postFormWithIdempotencyKey(
 		ctx,
 		"/payment_intents",
 		form,
 		strings.TrimSpace(in.IdempotencyKey),
 		&out,
-	); err != nil {
-		return nil, err
-	}
+	)
 
 	status := strings.TrimSpace(out.Status)
 	clientSecret := strings.TrimSpace(out.ClientSecret)
 	paymentIntentID := strings.TrimSpace(out.ID)
+
+	if requestErr != nil && paymentIntentID == "" {
+		return nil, requestErr
+	}
 
 	result := &usecase.CreateAndConfirmPaymentIntentResult{
 		StripePaymentIntentID: paymentIntentID,
@@ -211,6 +215,14 @@ func (g *PaymentMethodGateway) CreateAndConfirmPaymentIntent(
 		result.ErrorType = strings.TrimSpace(out.LastPaymentError.Type)
 		result.ErrorCode = strings.TrimSpace(out.LastPaymentError.Code)
 		result.ErrorMessage = strings.TrimSpace(out.LastPaymentError.Message)
+	}
+
+	if requestErr != nil {
+		if result.ErrorMessage == "" {
+			result.ErrorMessage = requestErr.Error()
+		}
+
+		return result, requestErr
 	}
 
 	return result, nil
@@ -291,8 +303,34 @@ func (g *PaymentMethodGateway) postFormWithIdempotencyKey(
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		var serr stripeErrorResponse
-		if json.Unmarshal(body, &serr) == nil && serr.Error.Message != "" {
-			return fmt.Errorf("stripe http %d: %s", res.StatusCode, serr.Error.Message)
+
+		if json.Unmarshal(body, &serr) == nil {
+			if target, ok := dst.(*stripePaymentIntentResponse); ok &&
+				target != nil {
+				if serr.Error.PaymentIntent != nil {
+					*target = *serr.Error.PaymentIntent
+				}
+
+				if target.LastPaymentError == nil &&
+					(strings.TrimSpace(serr.Error.Type) != "" ||
+						strings.TrimSpace(serr.Error.Code) != "" ||
+						strings.TrimSpace(serr.Error.Message) != "") {
+					target.LastPaymentError =
+						&stripePaymentError{
+							Type:    strings.TrimSpace(serr.Error.Type),
+							Code:    strings.TrimSpace(serr.Error.Code),
+							Message: strings.TrimSpace(serr.Error.Message),
+						}
+				}
+			}
+
+			if serr.Error.Message != "" {
+				return fmt.Errorf(
+					"stripe http %d: %s",
+					res.StatusCode,
+					serr.Error.Message,
+				)
+			}
 		}
 
 		return fmt.Errorf("stripe http %d: %s", res.StatusCode, string(body))
@@ -318,16 +356,18 @@ type stripeSetupIntentResponse struct {
 	ClientSecret string `json:"client_secret"`
 }
 
+type stripePaymentError struct {
+	Type    string `json:"type"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
 type stripePaymentIntentResponse struct {
 	ID           string `json:"id"`
 	ClientSecret string `json:"client_secret"`
 	Status       string `json:"status"`
 
-	LastPaymentError *struct {
-		Type    string `json:"type"`
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"last_payment_error"`
+	LastPaymentError *stripePaymentError `json:"last_payment_error"`
 }
 
 type stripePaymentMethodResponse struct {
@@ -346,5 +386,7 @@ type stripeErrorResponse struct {
 		Type    string `json:"type"`
 		Code    string `json:"code"`
 		Message string `json:"message"`
+
+		PaymentIntent *stripePaymentIntentResponse `json:"payment_intent"`
 	} `json:"error"`
 }

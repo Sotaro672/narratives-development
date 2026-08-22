@@ -38,6 +38,7 @@ type usecases struct {
 	orderDispatchNotificationUC    uc.OrderDispatchNotificationUsecasePort
 	orderDispatchNotificationQueue *listcloudtasksadp.OrderDispatchNotificationQueue
 	paymentUC                      *uc.PaymentUsecase
+	paymentFlowUC                  *uc.PaymentFlowUsecase
 	permissionUC                   *uc.PermissionUsecase
 	printUC                        *uc.PrintUsecase
 	productionUC                   *uc.ProductionUsecase
@@ -139,6 +140,8 @@ func buildUsecases(
 	paymentUC := uc.NewPaymentUsecase(
 		uc.NewPaymentUsecaseInput{
 			PaymentRepo: r.paymentRepo,
+			OrderRepo:   r.orderRepo,
+			ResaleRepo:  r.resaleRepo,
 		},
 	)
 
@@ -201,6 +204,20 @@ func buildUsecases(
 		r.shippingAddressRepo,
 		shippingQuoteUC,
 	)
+
+	var paymentFlowUC *uc.PaymentFlowUsecase
+
+	if c != nil &&
+		c.infra != nil &&
+		c.infra.PaymentMethodGateway != nil &&
+		paymentUC != nil &&
+		r.orderRepo != nil {
+		paymentFlowUC = uc.NewPaymentFlowUsecase(
+			paymentUC,
+			r.orderRepo,
+			c.infra.PaymentMethodGateway,
+		)
+	}
 
 	permissionUC := uc.NewPermissionUsecase(r.permissionRepo)
 
@@ -400,6 +417,7 @@ func buildUsecases(
 		orderDispatchNotificationUC:    orderDispatchNotificationUC,
 		orderDispatchNotificationQueue: orderDispatchNotificationQueue,
 		paymentUC:                      paymentUC,
+		paymentFlowUC:                  paymentFlowUC,
 		permissionUC:                   permissionUC,
 		printUC:                        printUC,
 		productionUC:                   productionUC,

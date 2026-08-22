@@ -380,13 +380,15 @@ type shippingQuoteItemSnapshotDoc struct {
 }
 
 type paymentMethodSnapshotDoc struct {
-	CustomerID     string `firestore:"customerId"`
-	Brand          string `firestore:"brand"`
-	Last4          string `firestore:"last4"`
-	ExpMonth       int    `firestore:"expMonth"`
-	ExpYear        int    `firestore:"expYear"`
-	CardholderName string `firestore:"cardholderName"`
-	IsDefault      bool   `firestore:"isDefault"`
+	PaymentMethodID       string `firestore:"paymentMethodId"`
+	CustomerID            string `firestore:"customerId"`
+	StripePaymentMethodID string `firestore:"stripePaymentMethodId"`
+	Brand                 string `firestore:"brand"`
+	Last4                 string `firestore:"last4"`
+	ExpMonth              int    `firestore:"expMonth"`
+	ExpYear               int    `firestore:"expYear"`
+	CardholderName        string `firestore:"cardholderName"`
+	IsDefault             bool   `firestore:"isDefault"`
 }
 
 type itemDoc struct {
@@ -540,13 +542,15 @@ func docToOrder(
 		},
 
 		PaymentMethodSnapshot: orderdom.PaymentMethodSnapshot{
-			CustomerID:     doc.PaymentMethodSnapshot.CustomerID,
-			Brand:          doc.PaymentMethodSnapshot.Brand,
-			Last4:          doc.PaymentMethodSnapshot.Last4,
-			ExpMonth:       doc.PaymentMethodSnapshot.ExpMonth,
-			ExpYear:        doc.PaymentMethodSnapshot.ExpYear,
-			CardholderName: doc.PaymentMethodSnapshot.CardholderName,
-			IsDefault:      doc.PaymentMethodSnapshot.IsDefault,
+			PaymentMethodID:       doc.PaymentMethodSnapshot.PaymentMethodID,
+			CustomerID:            doc.PaymentMethodSnapshot.CustomerID,
+			StripePaymentMethodID: doc.PaymentMethodSnapshot.StripePaymentMethodID,
+			Brand:                 doc.PaymentMethodSnapshot.Brand,
+			Last4:                 doc.PaymentMethodSnapshot.Last4,
+			ExpMonth:              doc.PaymentMethodSnapshot.ExpMonth,
+			ExpYear:               doc.PaymentMethodSnapshot.ExpYear,
+			CardholderName:        doc.PaymentMethodSnapshot.CardholderName,
+			IsDefault:             doc.PaymentMethodSnapshot.IsDefault,
 		},
 
 		Paid:      doc.Paid,
@@ -605,13 +609,15 @@ func orderToDoc(o orderdom.Order) map[string]any {
 		},
 
 		"paymentMethodSnapshot": map[string]any{
-			"customerId":     o.PaymentMethodSnapshot.CustomerID,
-			"brand":          o.PaymentMethodSnapshot.Brand,
-			"last4":          o.PaymentMethodSnapshot.Last4,
-			"expMonth":       o.PaymentMethodSnapshot.ExpMonth,
-			"expYear":        o.PaymentMethodSnapshot.ExpYear,
-			"cardholderName": o.PaymentMethodSnapshot.CardholderName,
-			"isDefault":      o.PaymentMethodSnapshot.IsDefault,
+			"paymentMethodId":       o.PaymentMethodSnapshot.PaymentMethodID,
+			"customerId":            o.PaymentMethodSnapshot.CustomerID,
+			"stripePaymentMethodId": o.PaymentMethodSnapshot.StripePaymentMethodID,
+			"brand":                 o.PaymentMethodSnapshot.Brand,
+			"last4":                 o.PaymentMethodSnapshot.Last4,
+			"expMonth":              o.PaymentMethodSnapshot.ExpMonth,
+			"expYear":               o.PaymentMethodSnapshot.ExpYear,
+			"cardholderName":        o.PaymentMethodSnapshot.CardholderName,
+			"isDefault":             o.PaymentMethodSnapshot.IsDefault,
 		},
 
 		"paid":      o.Paid,
@@ -796,6 +802,19 @@ func validateOrderDocumentShape(
 		return ErrInvalidOrderDocumentData
 	}
 
+	rawPaymentMethod, ok :=
+		raw["paymentMethodSnapshot"].(map[string]any)
+	if !ok || rawPaymentMethod == nil {
+		return ErrInvalidOrderDocumentData
+	}
+
+	if err :=
+		validatePaymentMethodDocumentShape(
+			rawPaymentMethod,
+		); err != nil {
+		return err
+	}
+
 	rawShippingQuote, ok :=
 		raw["shippingQuoteSnapshot"].(map[string]any)
 	if !ok || rawShippingQuote == nil {
@@ -823,6 +842,55 @@ func validateOrderDocumentShape(
 		if err := validateOrderItemDocumentShape(item); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func validatePaymentMethodDocumentShape(
+	raw map[string]any,
+) error {
+	for _, field := range []string{
+		"paymentMethodId",
+		"customerId",
+		"stripePaymentMethodId",
+		"brand",
+		"last4",
+		"cardholderName",
+	} {
+		if _, ok := requiredOrderString(raw, field); !ok {
+			return ErrInvalidOrderDocumentData
+		}
+	}
+
+	expMonth, ok :=
+		requiredOrderInt(
+			raw,
+			"expMonth",
+		)
+	if !ok ||
+		expMonth < 1 ||
+		expMonth > 12 {
+		return ErrInvalidOrderDocumentData
+	}
+
+	expYear, ok :=
+		requiredOrderInt(
+			raw,
+			"expYear",
+		)
+	if !ok ||
+		expYear < 2000 ||
+		expYear > 9999 {
+		return ErrInvalidOrderDocumentData
+	}
+
+	if _, ok :=
+		requiredOrderBool(
+			raw,
+			"isDefault",
+		); !ok {
+		return ErrInvalidOrderDocumentData
 	}
 
 	return nil

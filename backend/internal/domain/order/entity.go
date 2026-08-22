@@ -50,13 +50,15 @@ type ShippingQuoteSnapshot struct {
 }
 
 type PaymentMethodSnapshot struct {
-	CustomerID     string `json:"customerId"`
-	Brand          string `json:"brand"`
-	Last4          string `json:"last4"`
-	ExpMonth       int    `json:"expMonth"`
-	ExpYear        int    `json:"expYear"`
-	CardholderName string `json:"cardholderName"`
-	IsDefault      bool   `json:"isDefault"`
+	PaymentMethodID       string `json:"paymentMethodId"`
+	CustomerID            string `json:"customerId"`
+	StripePaymentMethodID string `json:"stripePaymentMethodId"`
+	Brand                 string `json:"brand"`
+	Last4                 string `json:"last4"`
+	ExpMonth              int    `json:"expMonth"`
+	ExpYear               int    `json:"expYear"`
+	CardholderName        string `json:"cardholderName"`
+	IsDefault             bool   `json:"isDefault"`
 }
 
 // OrderItemType identifies what kind of item is stored in Order.Items.
@@ -561,7 +563,15 @@ func isValidShippingQuoteCarrier(
 func validatePaymentMethodSnapshot(
 	p PaymentMethodSnapshot,
 ) error {
+	if p.PaymentMethodID == "" {
+		return ErrInvalidPaymentMethod
+	}
+
 	if p.CustomerID == "" {
+		return ErrInvalidPaymentMethod
+	}
+
+	if p.StripePaymentMethodID == "" {
 		return ErrInvalidPaymentMethod
 	}
 

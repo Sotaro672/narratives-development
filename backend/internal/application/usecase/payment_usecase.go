@@ -26,9 +26,13 @@ Stripe状態同期:
 支払い成功後の処理:
 0) order.Paid=true更新
 1) resale status=sold更新（best-effort）
-2) 注文確認メール送信（best-effort）
-3) inventory reserve更新（best-effort）
-4) cart delete（best-effort）
+
+注文受付時に行うべき処理:
+- inventory reserve
+- cart delete
+- 注文受付メール送信
+
+これらは発送時決済では遅すぎるため、PaymentUsecaseでは実行しない。
 */
 
 import (
@@ -104,8 +108,10 @@ type ApplyStripePaymentEventResult struct {
 	PostPaidRequired bool
 }
 
-// InventoryRepoForPayment is the minimal port for inventory reserve after
-// payment.
+// InventoryRepoForPayment is retained as a wiring-compatible port while
+// inventory reservation is moved to the order-placement flow.
+//
+// PaymentUsecase does not reserve inventory after payment.
 type InventoryRepoForPayment interface {
 	// ReserveByOrder sets:
 	// - stock[modelId].reservedByOrder[orderId] = qty
@@ -153,8 +159,10 @@ type ResaleRepoForPayment interface {
 	) (resaledom.Resale, error)
 }
 
-// MailSenderForPayment is the minimal port for sending order confirmation
-// mail.
+// MailSenderForPayment is retained as a wiring-compatible port while
+// order-acceptance mail is moved to the order-placement flow.
+//
+// PaymentUsecase does not send order confirmation mail after payment.
 type MailSenderForPayment interface {
 	SendOrderConfirmation(
 		ctx context.Context,
@@ -508,49 +516,9 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(
 		)
 	}
 
-	// 2) send order confirmation email
-	if order != nil &&
-		u.authUserGetter != nil &&
-		u.mailSender != nil &&
-		u.mailFrom != "" {
-		_ = u.sendOrderConfirmationMail(
-			ctx,
-			*order,
-		)
-	}
-
-	// 3) inventory reserve
-	if u.inventoryRepo != nil && order != nil {
-		rawItems := extractOrderItems(*order)
-		aggregatedItems := aggregateReserveItems(rawItems)
-
-		for _, item := range aggregatedItems {
-			if item.InventoryID == "" ||
-				item.ModelID == "" ||
-				item.Qty <= 0 {
-				continue
-			}
-
-			_ = u.inventoryRepo.ReserveByOrder(
-				ctx,
-				item.InventoryID,
-				item.ModelID,
-				rootID,
-				item.Qty,
-			)
-		}
-	}
-
-	// 4) cart delete
-	if u.cartRepo != nil && order != nil {
-		cartID := strings.TrimSpace(order.CartID)
-		if cartID != "" {
-			_ = u.cartRepo.DeleteByAvatarID(
-				ctx,
-				cartID,
-			)
-		}
-	}
+	// Inventory reservation, cart deletion, and order-acceptance mail are
+	// intentionally not executed here. With payment deferred until dispatch,
+	// those operations must belong to the order-placement flow.
 }
 
 // ============================================================
@@ -692,178 +660,4 @@ func extractResaleIDsFromOrder(
 	sort.Strings(resaleIDs)
 
 	return resaleIDs
-}
-
-// ============================================================
-// Mail
-// ============================================================
-
-func (u *PaymentUsecase) sendOrderConfirmationMail(
-	ctx context.Context,
-	order orderdom.Order,
-) error {
-	if u == nil ||
-		u.authUserGetter == nil ||
-		u.mailSender == nil ||
-		u.mailFrom == "" {
-		return nil
-	}
-
-	if strings.TrimSpace(order.ID) == "" ||
-		strings.TrimSpace(order.UserID) == "" {
-		return nil
-	}
-
-	to, err := u.authUserGetter.GetEmailByUID(
-		ctx,
-		order.UserID,
-	)
-	if err != nil {
-		return err
-	}
-
-	to = strings.TrimSpace(to)
-	if to == "" {
-		return nil
-	}
-
-	return u.mailSender.SendOrderConfirmation(
-		ctx,
-		u.mailFrom,
-		to,
-		order,
-	)
-}
-
-// ============================================================
-// Inventory reserve helpers
-// ============================================================
-
-type reserveItem struct {
-	InventoryID string
-	ModelID     string
-	Qty         int
-}
-
-// extractOrderItems extracts valid order items for inventory reserve.
-//
-// Invalid items are skipped:
-// - InventoryID empty
-// - ModelID empty
-// - Qty <= 0
-func extractOrderItems(
-	order orderdom.Order,
-) []reserveItem {
-	if len(order.Items) == 0 {
-		return nil
-	}
-
-	items := make(
-		[]reserveItem,
-		0,
-		len(order.Items),
-	)
-
-	for _, item := range order.Items {
-		inventoryID := strings.TrimSpace(
-			item.InventoryID,
-		)
-		modelID := strings.TrimSpace(item.ModelID)
-
-		if inventoryID == "" ||
-			modelID == "" ||
-			item.Qty <= 0 {
-			continue
-		}
-
-		items = append(items, reserveItem{
-			InventoryID: inventoryID,
-			ModelID:     modelID,
-			Qty:         item.Qty,
-		})
-	}
-
-	if len(items) == 0 {
-		return nil
-	}
-
-	return items
-}
-
-// aggregateReserveItems aggregates reserve quantity by
-// inventoryId + modelId.
-//
-// Output order is stable:
-// 1. InventoryID ascending
-// 2. ModelID ascending
-func aggregateReserveItems(
-	items []reserveItem,
-) []reserveItem {
-	if len(items) == 0 {
-		return nil
-	}
-
-	type key struct {
-		InventoryID string
-		ModelID     string
-	}
-
-	quantities := map[key]int{}
-
-	for _, item := range items {
-		inventoryID := strings.TrimSpace(
-			item.InventoryID,
-		)
-		modelID := strings.TrimSpace(item.ModelID)
-
-		if inventoryID == "" ||
-			modelID == "" ||
-			item.Qty <= 0 {
-			continue
-		}
-
-		itemKey := key{
-			InventoryID: inventoryID,
-			ModelID:     modelID,
-		}
-
-		quantities[itemKey] += item.Qty
-	}
-
-	aggregated := make(
-		[]reserveItem,
-		0,
-		len(quantities),
-	)
-
-	for itemKey, quantity := range quantities {
-		if quantity <= 0 {
-			continue
-		}
-
-		aggregated = append(
-			aggregated,
-			reserveItem{
-				InventoryID: itemKey.InventoryID,
-				ModelID:     itemKey.ModelID,
-				Qty:         quantity,
-			},
-		)
-	}
-
-	sort.Slice(
-		aggregated,
-		func(i, j int) bool {
-			if aggregated[i].InventoryID ==
-				aggregated[j].InventoryID {
-				return aggregated[i].ModelID <
-					aggregated[j].ModelID
-			}
-
-			return aggregated[i].InventoryID <
-				aggregated[j].InventoryID
-		},
-	)
-
-	return aggregated
 }

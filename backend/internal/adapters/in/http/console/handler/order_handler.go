@@ -21,6 +21,7 @@ import (
 //   - GET /orders/{id}
 type OrderHandler struct {
 	uc                     *usecase.OrderUsecase
+	paymentFlowUC          *usecase.PaymentFlowUsecase
 	q                      *orderq.OrderManagementQuery
 	detailQ                *orderq.OrderDetailQuery
 	dispatchNotificationUC usecase.OrderDispatchNotificationUsecasePort
@@ -28,12 +29,14 @@ type OrderHandler struct {
 
 func NewOrderHandler(
 	uc *usecase.OrderUsecase,
+	paymentFlowUC *usecase.PaymentFlowUsecase,
 	q *orderq.OrderManagementQuery,
 	detailQ *orderq.OrderDetailQuery,
 	dispatchNotificationUC usecase.OrderDispatchNotificationUsecasePort,
 ) http.Handler {
 	return &OrderHandler{
 		uc:                     uc,
+		paymentFlowUC:          paymentFlowUC,
 		q:                      q,
 		detailQ:                detailQ,
 		dispatchNotificationUC: dispatchNotificationUC,
@@ -114,6 +117,7 @@ func (h *OrderHandler) dispatch(w http.ResponseWriter, r *http.Request, id strin
 
 	if h == nil ||
 		h.uc == nil ||
+		h.paymentFlowUC == nil ||
 		h.q == nil ||
 		h.detailQ == nil ||
 		h.dispatchNotificationUC == nil {
@@ -128,18 +132,44 @@ func (h *OrderHandler) dispatch(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
-	result, err := h.uc.DispatchItems(
+	dispatchInput := usecase.DispatchOrderItemsInput{
+		ID:                  id,
+		AllowedInventoryIDs: allowedInventoryIDs,
+	}
+
+	// 決済前に、このConsole企業が発送できる対象商品を持つことを確認する。
+	// この時点ではOrderの発送状態を変更しない。
+	_, err = h.uc.PrepareDispatchItems(
 		ctx,
-		usecase.DispatchOrderItemsInput{
-			ID:                  id,
-			AllowedInventoryIDs: allowedInventoryIDs,
-		},
+		dispatchInput,
 	)
 	if err != nil {
 		writeOrderErr(w, err)
 		return
 	}
 
+	// Orderに保存されたPaymentMethodSnapshotを使って発送時決済を行う。
+	// 決済が成功し、order.Paid=trueが永続化されるまで発送状態へ進めない。
+	err = h.paymentFlowUC.EnsureOrderPaidForDispatch(
+		ctx,
+		id,
+	)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	result, err := h.uc.DispatchItems(
+		ctx,
+		dispatchInput,
+	)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	// DispatchItemsが既に発送済みを返した場合も必ずEnsureDeliveryを呼ぶ。
+	// 発送状態保存後、通知outbox作成前に処理が停止したケースを再実行で修復する。
 	_, err = h.dispatchNotificationUC.EnsureDelivery(
 		ctx,
 		result.Order,
@@ -270,13 +300,26 @@ func writeOrderErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
 	switch {
-	case errors.Is(err, orderdom.ErrInvalidID):
+	case errors.Is(err, orderdom.ErrInvalidID),
+		errors.Is(err, usecase.ErrPaymentFlowPaymentIDEmpty),
+		errors.Is(err, usecase.ErrPaymentFlowAmountInvalid):
 		code = http.StatusBadRequest
 
-	case errors.Is(err, orderdom.ErrNotFound):
+	case errors.Is(err, orderdom.ErrNotFound),
+		errors.Is(err, usecase.ErrPaymentFlowOrderNotFound):
 		code = http.StatusNotFound
 
-	case errors.Is(err, orderdom.ErrConflict):
+	case errors.Is(err, orderdom.ErrConflict),
+		errors.Is(err, usecase.ErrPaymentFlowOrderAlreadyPaid),
+		errors.Is(err, usecase.ErrPaymentFlowPaymentMethodMismatch),
+		errors.Is(err, usecase.ErrPaymentFlowDispatchRequiresAction),
+		errors.Is(err, usecase.ErrPaymentFlowDispatchProcessing),
+		errors.Is(err, usecase.ErrPaymentFlowDispatchPending),
+		errors.Is(err, usecase.ErrPaymentFlowDispatchNotSucceeded),
+		errors.Is(err, usecase.ErrPaymentFlowDispatchPaymentMismatch),
+		errors.Is(err, usecase.ErrPaymentFlowDispatchPaidStateInvalid),
+		errors.Is(err, usecase.ErrPaymentFlowStripePaymentIntentFailed),
+		errors.Is(err, usecase.ErrPaymentFlowStripePaymentIntentCanceled):
 		code = http.StatusConflict
 	}
 
