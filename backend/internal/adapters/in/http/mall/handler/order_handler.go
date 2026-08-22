@@ -24,6 +24,7 @@ import (
 // OrderHandler handles:
 //   - POST /mall/me/orders
 //   - GET  /mall/me/orders
+//   - GET  /mall/me/orders/{orderId}
 type OrderHandler struct {
 	uc           *usecase.OrderUsecase
 	historyQuery OrderHistoryQuery
@@ -56,6 +57,10 @@ func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case r.Method == http.MethodGet && path == "/mall/me/orders":
 		h.listMe(w, r)
+		return
+	case r.Method == http.MethodGet &&
+		strings.HasPrefix(path, "/mall/me/orders/"):
+		h.getMe(w, r, path)
 		return
 	default:
 		w.WriteHeader(http.StatusNotFound)
@@ -206,6 +211,54 @@ func orderItemRequestToInput(item orderItemRequest) (usecase.CreateOrderItemInpu
 	}
 }
 
+func (h *OrderHandler) getMe(
+	w http.ResponseWriter,
+	r *http.Request,
+	path string,
+) {
+	ctx := r.Context()
+
+	avatarID, ok := middleware.CurrentAvatarID(r)
+	if !ok || avatarID == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized: missing avatarId"})
+		return
+	}
+
+	orderID := strings.TrimSpace(
+		strings.TrimPrefix(
+			path,
+			"/mall/me/orders/",
+		),
+	)
+
+	if orderID == "" || strings.Contains(orderID, "/") {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
+	}
+
+	out, err := h.uc.GetByID(ctx, orderID)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	if out.AvatarID != avatarID {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
+	}
+
+	enriched, err := h.enrichOrderHistory(ctx, out)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(enriched)
+}
+
 func (h *OrderHandler) listMe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -232,6 +285,46 @@ func (h *OrderHandler) listMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = json.NewEncoder(w).Encode(enriched)
+}
+
+func (h *OrderHandler) enrichOrderHistory(
+	ctx context.Context,
+	out any,
+) (historydto.HistoryOrder, error) {
+	if h == nil || h.historyQuery == nil {
+		return historydto.HistoryOrder{}, errors.New("order handler: history query not configured")
+	}
+
+	body, err := json.Marshal(out)
+	if err != nil {
+		return historydto.HistoryOrder{}, err
+	}
+
+	var order historydto.HistoryOrder
+	if err := json.Unmarshal(body, &order); err != nil {
+		return historydto.HistoryOrder{}, err
+	}
+
+	in := historydto.EnrichHistoryOrderPageInput{
+		Items: []historydto.HistoryOrder{
+			order,
+		},
+		TotalCount: 1,
+		TotalPages: 1,
+		Page:       1,
+		PerPage:    1,
+	}
+
+	enriched, err := h.historyQuery.EnrichOrderPage(ctx, in)
+	if err != nil {
+		return historydto.HistoryOrder{}, err
+	}
+
+	if len(enriched.Items) == 0 {
+		return historydto.HistoryOrder{}, orderdom.ErrNotFound
+	}
+
+	return enriched.Items[0], nil
 }
 
 func (h *OrderHandler) enrichOrderHistoryPage(ctx context.Context, out any) (historydto.HistoryOrderPage, error) {

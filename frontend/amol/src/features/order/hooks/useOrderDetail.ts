@@ -1,0 +1,153 @@
+// frontend/amol/src/features/order/hooks/useOrderDetail.ts
+
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useParams } from "react-router-dom";
+
+import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
+import { getFirebaseIdToken } from "../../../lib/authToken";
+
+import { fetchOrderDetail } from "../api/orderDetailApi";
+
+import type {
+  WalletOrder,
+} from "../../shared/types/orderTypes";
+
+function getErrorMessage(
+  caught: unknown,
+  defaultMessage: string,
+): string {
+  return caught instanceof Error
+    ? caught.message
+    : defaultMessage;
+}
+
+export function useOrderDetail() {
+  const {
+    orderId: routeOrderId,
+  } = useParams<{
+    orderId: string;
+  }>();
+
+  const orderId =
+    routeOrderId?.trim() || "";
+
+  const [order, setOrder] =
+    useState<WalletOrder | null>(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
+
+  const requestIdRef =
+    useRef(0);
+
+  const loadOrder = useCallback(
+    async () => {
+      const requestId =
+        ++requestIdRef.current;
+
+      setLoading(true);
+      setError("");
+
+      if (!orderId) {
+        setOrder(null);
+        setError(
+          "注文IDが指定されていません。",
+        );
+        setLoading(false);
+
+        return;
+      }
+
+      try {
+        const backendUrl =
+          getApiBaseUrl();
+
+        if (!backendUrl) {
+          throw new Error(
+            "VITE_API_BASE_URLが設定されていません。",
+          );
+        }
+
+        const idToken =
+          await getFirebaseIdToken();
+
+        const nextOrder =
+          await fetchOrderDetail({
+            backendUrl,
+            idToken,
+            orderId,
+          });
+
+        if (
+          requestIdRef.current !==
+          requestId
+        ) {
+          return;
+        }
+
+        setOrder(nextOrder);
+        setError("");
+      } catch (caught) {
+        if (
+          requestIdRef.current !==
+          requestId
+        ) {
+          return;
+        }
+
+        setOrder(null);
+        setError(
+          getErrorMessage(
+            caught,
+            "注文情報の取得に失敗しました。",
+          ),
+        );
+      } finally {
+        if (
+          requestIdRef.current ===
+          requestId
+        ) {
+          setLoading(false);
+        }
+      }
+    },
+    [
+      orderId,
+    ],
+  );
+
+  useEffect(() => {
+    void loadOrder();
+
+    return () => {
+      requestIdRef.current += 1;
+    };
+  }, [
+    loadOrder,
+  ]);
+
+  const reload = useCallback(
+    async () => {
+      await loadOrder();
+    },
+    [
+      loadOrder,
+    ],
+  );
+
+  return {
+    orderId,
+    order,
+    loading,
+    error,
+    reload,
+  };
+}
