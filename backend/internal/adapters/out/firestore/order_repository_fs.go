@@ -329,11 +329,14 @@ func (r *OrderRepositoryFS) Update(
 }
 
 type orderDoc struct {
-	UserID   string    `firestore:"userId"`
-	AvatarID string    `firestore:"avatarId"`
-	CartID   string    `firestore:"cartId"`
-	Paid     bool      `firestore:"paid"`
-	Items    []itemDoc `firestore:"items"`
+	UserID   string `firestore:"userId"`
+	AvatarID string `firestore:"avatarId"`
+	CartID   string `firestore:"cartId"`
+
+	Paid        bool `firestore:"paid"`
+	IsCancelled bool `firestore:"isCancelled"`
+
+	Items []itemDoc `firestore:"items"`
 
 	ShippingSnapshot      shippingSnapshotDoc      `firestore:"shippingSnapshot"`
 	ShippingQuoteSnapshot shippingQuoteSnapshotDoc `firestore:"shippingQuoteSnapshot"`
@@ -553,9 +556,10 @@ func docToOrder(
 			IsDefault:             doc.PaymentMethodSnapshot.IsDefault,
 		},
 
-		Paid:      doc.Paid,
-		Items:     items,
-		CreatedAt: doc.CreatedAt.UTC(),
+		Paid:        doc.Paid,
+		IsCancelled: doc.IsCancelled,
+		Items:       items,
+		CreatedAt:   doc.CreatedAt.UTC(),
 	}
 
 	if err := order.Validate(); err != nil {
@@ -620,9 +624,10 @@ func orderToDoc(o orderdom.Order) map[string]any {
 			"isDefault":             o.PaymentMethodSnapshot.IsDefault,
 		},
 
-		"paid":      o.Paid,
-		"items":     items,
-		"createdAt": o.CreatedAt.UTC(),
+		"paid":        o.Paid,
+		"isCancelled": o.IsCancelled,
+		"items":       items,
+		"createdAt":   o.CreatedAt.UTC(),
 	}
 }
 
@@ -741,6 +746,7 @@ func orderTransferItemDocuments(
 			"itemType":    string(item.Type),
 			"itemIndex":   itemIndex,
 			"paid":        o.Paid,
+			"isCancelled": o.IsCancelled,
 			"transferred": item.Transferred,
 			"createdAt":   o.CreatedAt.UTC(),
 		}
@@ -794,6 +800,13 @@ func validateOrderDocumentShape(
 		return ErrInvalidOrderDocumentData
 	}
 	if _, ok := requiredOrderBool(raw, "paid"); !ok {
+		return ErrInvalidOrderDocumentData
+	}
+	if _, ok :=
+		requiredOrderBool(
+			raw,
+			"isCancelled",
+		); !ok {
 		return ErrInvalidOrderDocumentData
 	}
 

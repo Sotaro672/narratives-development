@@ -136,6 +136,9 @@ type Order struct {
 	// Paid is maintained at the Order aggregate level.
 	Paid bool `json:"paid"`
 
+	// IsCancelled is maintained at the Order aggregate level.
+	IsCancelled bool `json:"isCancelled"`
+
 	Items     []OrderItemSnapshot `json:"items"`
 	CreatedAt time.Time           `json:"createdAt"`
 }
@@ -202,6 +205,7 @@ func New(
 		ShippingQuoteSnapshot: shippingQuoteSnapshot,
 		PaymentMethodSnapshot: paymentMethodSnapshot,
 		Paid:                  false,
+		IsCancelled:           false,
 		Items:                 items,
 		CreatedAt:             createdAt.UTC(),
 	}
@@ -281,6 +285,25 @@ func (o *Order) UpdatePaid(paid bool) {
 	o.Paid = paid
 }
 
+func (o *Order) Cancel() error {
+	if o == nil {
+		return ErrInvalidID
+	}
+
+	if o.IsCancelled {
+		return nil
+	}
+
+	for _, item := range o.Items {
+		if item.IsDispatched {
+			return ErrConflict
+		}
+	}
+
+	o.IsCancelled = true
+	return nil
+}
+
 func (o *Order) UpdateItemCanceled(
 	index int,
 	isCanceled bool,
@@ -309,6 +332,10 @@ func (o *Order) UpdateItemDispatched(
 		return ErrInvalidItems
 	}
 
+	if isDispatched && o.IsCancelled {
+		return ErrConflict
+	}
+
 	o.Items[index].IsDispatched = isDispatched
 	return nil
 }
@@ -329,6 +356,10 @@ func (o *Order) UpdateItemTransferred(
 	}
 
 	if transferred {
+		if o.IsCancelled {
+			return ErrConflict
+		}
+
 		if at.IsZero() {
 			return ErrInvalidItemSnapshot
 		}

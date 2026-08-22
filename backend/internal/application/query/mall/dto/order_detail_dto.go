@@ -11,8 +11,9 @@ type OrderDetail struct {
 
 	ShippingQuoteSnapshot orderdom.ShippingQuoteSnapshot `json:"shippingQuoteSnapshot"`
 
-	Paid  bool              `json:"paid"`
-	Items []OrderDetailItem `json:"items"`
+	Paid        bool              `json:"paid"`
+	IsCancelled bool              `json:"isCancelled"`
+	Items       []OrderDetailItem `json:"items"`
 
 	CreatedAt string `json:"createdAt,omitempty"`
 	UpdatedAt string `json:"updatedAt,omitempty"`

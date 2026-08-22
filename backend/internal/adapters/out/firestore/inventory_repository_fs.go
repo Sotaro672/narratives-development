@@ -359,6 +359,126 @@ func (r *InventoryRepositoryFS) SetTransportation(
 }
 
 // ============================================================
+// 注文キャンセル時の予約解放
+// - order item の inventoryId / modelId を使って対象 inventory を直接更新する
+// - reservedByOrder[orderId] を削除する
+// - products は変更しない
+// - accumulation/reservedCount を正規化
+//
+// Contract:
+// - transaction-safe
+// - idempotent（予約が無ければ何もしない）
+// - orderID から inventories 全件 scan しない
+// ============================================================
+
+func (r *InventoryRepositoryFS) ReleaseReservationByOrder(
+	ctx context.Context,
+	inventoryID string,
+	modelID string,
+	orderID string,
+	now time.Time,
+) error {
+	if r == nil || r.Client == nil {
+		return errors.New("inventory repo is nil")
+	}
+
+	if inventoryID == "" {
+		return invdom.ErrInvalidMintID
+	}
+	if modelID == "" {
+		return invdom.ErrInvalidModelID
+	}
+	if orderID == "" {
+		return errors.New("inventory repo: orderID is empty")
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+
+	now = now.UTC()
+	docRef := r.col().Doc(inventoryID)
+
+	err := r.Client.RunTransaction(
+		ctx,
+		func(
+			ctx context.Context,
+			tx *firestore.Transaction,
+		) error {
+			snap, err := tx.Get(docRef)
+			if err != nil {
+				if status.Code(err) == codes.NotFound {
+					return invdom.ErrNotFound
+				}
+				return err
+			}
+
+			var rec inventoryRecord
+			if err := snap.DataTo(&rec); err != nil {
+				return err
+			}
+
+			stock := rec.Stock
+			if stock == nil {
+				return nil
+			}
+
+			ms, ok := stock[modelID]
+			if !ok {
+				return nil
+			}
+
+			if ms.ReservedByOrder == nil {
+				return nil
+			}
+
+			if _, ok :=
+				ms.ReservedByOrder[orderID]; !ok {
+				return nil
+			}
+
+			delete(
+				ms.ReservedByOrder,
+				orderID,
+			)
+
+			ms = normalizeModelStockRecord(ms)
+			stock[modelID] = ms
+			stock = normalizeStockRecord(stock)
+
+			modelIDs :=
+				modelIDsFromStockRecord(
+					stock,
+				)
+
+			updates := []firestore.Update{
+				{
+					Path:  "stock",
+					Value: stock,
+				},
+				{
+					Path:  "modelIds",
+					Value: modelIDs,
+				},
+				{
+					Path:  "updatedAt",
+					Value: now,
+				},
+			}
+
+			return tx.Update(
+				docRef,
+				updates,
+			)
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ============================================================
 // Transfer後の予約解放
 // - order item の inventoryId / modelId を使って対象 inventory を直接更新する
 // - stock[modelId].products から productId を削除

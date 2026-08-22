@@ -422,10 +422,107 @@ func (u *OrderUsecase) Update(
 	}
 
 	checked.Paid = order.Paid
+	checked.IsCancelled =
+		order.IsCancelled
 
 	// Repository.Update must persist the Order and replace its canonical
 	// orderTransferItems projection in the same Firestore transaction.
 	return u.repo.Update(ctx, checked, nil)
+}
+
+type CancelOrderInput struct {
+	ID       string
+	AvatarID string
+}
+
+func (u *OrderUsecase) Cancel(
+	ctx context.Context,
+	in CancelOrderInput,
+) (orderdom.Order, error) {
+	orderID :=
+		strings.TrimSpace(
+			in.ID,
+		)
+
+	if orderID == "" {
+		return orderdom.Order{},
+			orderdom.ErrInvalidID
+	}
+
+	avatarID :=
+		strings.TrimSpace(
+			in.AvatarID,
+		)
+
+	if avatarID == "" {
+		return orderdom.Order{},
+			orderdom.ErrInvalidAvatarID
+	}
+
+	order, err :=
+		u.repo.GetByID(
+			ctx,
+			orderID,
+		)
+	if err != nil {
+		return orderdom.Order{}, err
+	}
+
+	if order.AvatarID !=
+		avatarID {
+		return orderdom.Order{},
+			orderdom.ErrNotFound
+	}
+
+	for _, item := range order.Items {
+		if item.IsDispatched {
+			return orderdom.Order{},
+				orderdom.ErrConflict
+		}
+	}
+
+	if !order.IsCancelled {
+		if err :=
+			order.Cancel(); err != nil {
+			return orderdom.Order{}, err
+		}
+
+		updated, err :=
+			u.repo.Update(
+				ctx,
+				order,
+				nil,
+			)
+		if err != nil {
+			return orderdom.Order{}, err
+		}
+
+		order = updated
+	}
+
+	now :=
+		u.now().UTC()
+
+	for _, item := range order.Items {
+		if item.Type !=
+			orderdom.OrderItemTypeList {
+			continue
+		}
+
+		if err :=
+			u.inventoryRepo.
+				ReleaseReservationByOrder(
+					ctx,
+					item.InventoryID,
+					item.ModelID,
+					order.ID,
+					now,
+				); err != nil {
+			return orderdom.Order{}, err
+		}
+	}
+
+	return order, nil
 }
 
 type DispatchOrderItemsInput struct {
@@ -457,6 +554,11 @@ func (u *OrderUsecase) PrepareDispatchItems(
 		)
 	if err != nil {
 		return DispatchOrderItemsResult{}, err
+	}
+
+	if order.IsCancelled {
+		return DispatchOrderItemsResult{},
+			orderdom.ErrConflict
 	}
 
 	targetItems := make(
@@ -511,6 +613,11 @@ func (u *OrderUsecase) DispatchItems(
 		)
 	if err != nil {
 		return DispatchOrderItemsResult{}, err
+	}
+
+	if order.IsCancelled {
+		return DispatchOrderItemsResult{},
+			orderdom.ErrConflict
 	}
 
 	if !order.Paid {

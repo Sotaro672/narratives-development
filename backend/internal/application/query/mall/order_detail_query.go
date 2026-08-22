@@ -55,6 +55,8 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 
 		Paid: in.Paid,
 
+		IsCancelled: in.IsCancelled,
+
 		Items: make(
 			[]orderdetaildto.OrderDetailItem,
 			0,

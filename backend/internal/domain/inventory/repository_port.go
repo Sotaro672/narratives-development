@@ -106,7 +106,7 @@ type RepositoryPort interface {
 	//
 	// NOTE:
 	// - reserved 系の更新は、競合を避けるためトランザクションで行う専用操作
-	//   （例: ReserveByOrder / ReleaseReservationAfterTransfer）に寄せること。
+	//   （例: ReserveByOrder / ReleaseReservationByOrder / ReleaseReservationAfterTransfer）に寄せること。
 	UpsertByModelAndToken(
 		ctx context.Context,
 		tokenBlueprintID string,
@@ -127,6 +127,42 @@ type RepositoryPort interface {
 		modelID string,
 		orderID string,
 		qty int,
+	) error
+
+	// ------------------------------------------------------------
+	// Order cancellation reservation release
+	// ------------------------------------------------------------
+
+	// ReleaseReservationByOrder atomically releases the reservation for orderID
+	// without removing any product from physical inventory.
+	//
+	// Inventory update goal:
+	// - Use inventoryID and modelID from the canceled order item.
+	// - Delete Stock[modelID].ReservedByOrder[orderID].
+	// - Do not modify Stock[modelID].Products.
+	// - Do not modify physical inventory quantity.
+	// - Normalize:
+	//   - Stock[modelID].Accumulation = len(Products)
+	//   - Stock[modelID].ReservedCount = SUM(ReservedByOrder)
+	//
+	// Contract:
+	// - Must be transactional.
+	// - Must be idempotent:
+	//   - If ReservedByOrder[orderID] does not exist, do nothing and return nil.
+	// - Must not remove product IDs from Products.
+	// - Must not scan inventories by orderID.
+	//
+	// Params:
+	// - inventoryID: inventory document ID from order item
+	// - modelID:     model ID from order item
+	// - orderID:     canceled order ID whose reservation should be removed
+	// - now:         timestamp for audit/updatedAt
+	ReleaseReservationByOrder(
+		ctx context.Context,
+		inventoryID string,
+		modelID string,
+		orderID string,
+		now time.Time,
 	) error
 
 	// ------------------------------------------------------------

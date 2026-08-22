@@ -22,9 +22,10 @@ import (
 )
 
 // OrderHandler handles:
-//   - POST /mall/me/orders
-//   - GET  /mall/me/orders
-//   - GET  /mall/me/orders/{orderId}
+//   - POST  /mall/me/orders
+//   - GET   /mall/me/orders
+//   - GET   /mall/me/orders/{orderId}
+//   - PATCH /mall/me/orders/{orderId}/cancel
 type OrderHandler struct {
 	uc               *usecase.OrderUsecase
 	historyQuery     OrderHistoryQuery
@@ -70,6 +71,11 @@ func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case r.Method == http.MethodGet && path == "/mall/me/orders":
 		h.listMe(w, r)
+		return
+	case r.Method == http.MethodPatch &&
+		strings.HasPrefix(path, "/mall/me/orders/") &&
+		strings.HasSuffix(path, "/cancel"):
+		h.cancelMe(w, r, path)
 		return
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(path, "/mall/me/orders/"):
@@ -277,6 +283,75 @@ func (h *OrderHandler) getMe(
 		ctx,
 		out,
 	)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(detail)
+}
+
+func (h *OrderHandler) cancelMe(
+	w http.ResponseWriter,
+	r *http.Request,
+	path string,
+) {
+	ctx := r.Context()
+
+	avatarID, ok := middleware.CurrentAvatarID(r)
+	if !ok || avatarID == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized: missing avatarId"})
+		return
+	}
+
+	orderPath := strings.TrimSuffix(
+		path,
+		"/cancel",
+	)
+
+	orderID := strings.TrimSpace(
+		strings.TrimPrefix(
+			orderPath,
+			"/mall/me/orders/",
+		),
+	)
+
+	if orderID == "" ||
+		strings.Contains(orderID, "/") {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
+	}
+
+	out, err :=
+		h.uc.Cancel(
+			ctx,
+			usecase.CancelOrderInput{
+				ID:       orderID,
+				AvatarID: avatarID,
+			},
+		)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	if h == nil || h.orderDetailQuery == nil {
+		writeOrderErr(
+			w,
+			errors.New(
+				"order handler: order detail query not configured",
+			),
+		)
+		return
+	}
+
+	detail, err :=
+		h.orderDetailQuery.EnrichOrderDetail(
+			ctx,
+			out,
+		)
 	if err != nil {
 		writeOrderErr(w, err)
 		return
