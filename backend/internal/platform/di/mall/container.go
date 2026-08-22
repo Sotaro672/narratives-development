@@ -92,6 +92,7 @@ type Container struct {
 	MarketQ       *mallquery.MarketQuery
 	OrderQ        *mallquery.OrderQuery
 	HistoryQ      *mallquery.HistoryQuery
+	OrderDetailQ  *mallquery.OrderDetailQuery
 
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 }
@@ -693,6 +694,12 @@ func NewContainer(
 
 		c.HistoryQ =
 			mallquery.NewHistoryQuery(
+				inventoryRepo,
+				mallDisplayResolver,
+			)
+
+		c.OrderDetailQ =
+			mallquery.NewOrderDetailQuery(
 				inventoryRepo,
 				mallDisplayResolver,
 			)

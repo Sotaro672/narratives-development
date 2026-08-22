@@ -9,22 +9,34 @@ import { formatDateTime } from "../components/utils/date";
 
 import { useOrderDetail } from "../features/order/hooks/useOrderDetail";
 import type {
-  WalletOrder,
-  WalletOrderItemSnapshot,
-} from "../features/shared/types/orderTypes";
+  OrderDetail as OrderDetailType,
+  OrderDetailItem,
+} from "../features/shared/types/orderDetailTypes";
 import { formatAmount } from "../features/wallet/utils/format";
 
 import "../styles/page-layout.css";
 import "../styles/order-detail-page.css";
 
-function getOrderSubtotal(order: WalletOrder): number {
-  return order.items.reduce((sum, item) => {
-    return sum + item.price * item.qty;
-  }, 0);
+function getOrderSubtotal(
+  order: OrderDetailType,
+): number {
+  return order.items.reduce(
+    (sum, item) => {
+      return (
+        sum +
+        item.price * item.qty
+      );
+    },
+    0,
+  );
 }
 
-function getOrderShippingAmount(order: WalletOrder): number {
-  const amount = order.shippingQuoteSnapshot?.amount;
+function getOrderShippingAmount(
+  order: OrderDetailType,
+): number {
+  const amount =
+    order.shippingQuoteSnapshot
+      ?.amount;
 
   if (!Number.isFinite(amount)) {
     return 0;
@@ -33,29 +45,35 @@ function getOrderShippingAmount(order: WalletOrder): number {
   return amount;
 }
 
-function getOrderTotal(order: WalletOrder): number {
+function getOrderTotal(
+  order: OrderDetailType,
+): number {
   return (
     getOrderSubtotal(order) +
     getOrderShippingAmount(order)
   );
 }
 
-function getOrderStatusLabel(order: WalletOrder): string {
+function getOrderStatusLabel(
+  order: OrderDetailType,
+): string {
   if (order.items.length === 0) {
     return "商品なし";
   }
 
-  const allCanceled = order.items.every(
-    (item) => item.isCanceled,
-  );
+  const allCanceled =
+    order.items.every(
+      (item) => item.isCanceled,
+    );
 
   if (allCanceled) {
     return "キャンセル済み";
   }
 
-  const allTransferred = order.items.every(
-    (item) => item.transferred,
-  );
+  const allTransferred =
+    order.items.every(
+      (item) => item.transferred,
+    );
 
   if (allTransferred) {
     return order.paid
@@ -63,9 +81,10 @@ function getOrderStatusLabel(order: WalletOrder): string {
       : "未決済";
   }
 
-  const partiallyTransferred = order.items.some(
-    (item) => item.transferred,
-  );
+  const partiallyTransferred =
+    order.items.some(
+      (item) => item.transferred,
+    );
 
   if (partiallyTransferred) {
     return order.paid
@@ -73,17 +92,19 @@ function getOrderStatusLabel(order: WalletOrder): string {
       : "未決済";
   }
 
-  const allDispatched = order.items.every(
-    (item) => item.isDispatched,
-  );
+  const allDispatched =
+    order.items.every(
+      (item) => item.isDispatched,
+    );
 
   if (allDispatched) {
     return "発送済み";
   }
 
-  const partiallyDispatched = order.items.some(
-    (item) => item.isDispatched,
-  );
+  const partiallyDispatched =
+    order.items.some(
+      (item) => item.isDispatched,
+    );
 
   if (partiallyDispatched) {
     return "一部発送済み";
@@ -95,7 +116,7 @@ function getOrderStatusLabel(order: WalletOrder): string {
 }
 
 function getProductTitle(
-  item: WalletOrderItemSnapshot,
+  item: OrderDetailItem,
 ): string {
   return (
     item.productName ||
@@ -107,7 +128,8 @@ function getProductTitle(
 function getFallbackInitial(
   value?: string,
 ): string {
-  const trimmed = value?.trim() || "";
+  const trimmed =
+    value?.trim() || "";
 
   if (!trimmed) {
     return "?";
@@ -118,76 +140,155 @@ function getFallbackInitial(
     .toUpperCase();
 }
 
-function getShippingAddressLines(
-  order: WalletOrder,
-): string[] {
-  const shipping = order.shippingSnapshot;
+function getModelMetaItems(
+  item: OrderDetailItem,
+): Array<{
+  label: string;
+  value: string;
+}> {
+  const metaItems: Array<{
+    label: string;
+    value: string;
+  }> = [];
 
-  if (!shipping) {
-    return [];
+  if (item.modelNumber) {
+    metaItems.push({
+      label: "モデル番号",
+      value: item.modelNumber,
+    });
   }
 
-  return [
-    shipping.zipCode
-      ? `〒${shipping.zipCode}`
-      : "",
-    [
-      shipping.state,
-      shipping.city,
-      shipping.street,
-    ]
-      .filter(Boolean)
-      .join(""),
-    shipping.street2 || "",
-    shipping.country &&
-    shipping.country !== "JP"
-      ? shipping.country
-      : "",
-  ].filter(Boolean);
-}
-
-function getPaymentMethodLabel(
-  order: WalletOrder,
-): string {
-  const paymentMethod =
-    order.paymentMethodSnapshot;
-
-  if (!paymentMethod) {
-    return "-";
+  if (item.size) {
+    metaItems.push({
+      label: "サイズ",
+      value: item.size,
+    });
   }
 
-  const brand =
-    paymentMethod.brand?.trim().toUpperCase() ||
-    "CARD";
-
-  const last4 =
-    paymentMethod.last4?.trim() || "";
-
-  if (!last4) {
-    return brand;
+  if (item.color?.name) {
+    metaItems.push({
+      label: "カラー",
+      value: item.color.name,
+    });
   }
-
-  return `${brand} •••• ${last4}`;
-}
-
-function getPaymentExpiryLabel(
-  order: WalletOrder,
-): string {
-  const paymentMethod =
-    order.paymentMethodSnapshot;
 
   if (
-    !paymentMethod ||
-    !paymentMethod.expMonth ||
-    !paymentMethod.expYear
+    item.volumeValue !==
+      undefined &&
+    item.volumeValue !== null
   ) {
-    return "-";
+    const volumeUnit =
+      item.volumeUnit || "";
+
+    metaItems.push({
+      label: "容量",
+      value:
+        `${item.volumeValue}${volumeUnit}`,
+    });
   }
 
-  return `${String(paymentMethod.expMonth).padStart(
-    2,
-    "0",
-  )}/${paymentMethod.expYear}`;
+  return metaItems;
+}
+
+function getMeasurementLabel(
+  key: string,
+): string {
+  switch (key) {
+    case "length":
+      return "着丈";
+
+    case "shoulder":
+      return "肩幅";
+
+    case "chest":
+      return "身幅";
+
+    case "sleeve":
+      return "袖丈";
+
+    case "waist":
+      return "ウエスト";
+
+    case "rise":
+      return "股上";
+
+    case "inseam":
+      return "股下";
+
+    case "hem":
+      return "裾幅";
+
+    default:
+      return key;
+  }
+}
+
+function renderModelMeta(
+  item: OrderDetailItem,
+) {
+  const metaItems =
+    getModelMetaItems(item);
+
+  const measurements =
+    item.measurements &&
+    typeof item.measurements ===
+      "object"
+      ? Object.entries(
+          item.measurements,
+        ).filter(
+          ([, value]) =>
+            Number.isFinite(value),
+        )
+      : [];
+
+  if (
+    metaItems.length === 0 &&
+    measurements.length === 0
+  ) {
+    return null;
+  }
+
+  return (
+    <div className="order-detail-page__model-meta">
+      <dl className="order-detail-page__item-meta">
+        {metaItems.map(
+          (meta) => (
+            <div
+              key={meta.label}
+              className="order-detail-page__item-meta-row"
+            >
+              <dt>
+                {meta.label}
+              </dt>
+
+              <dd>
+                {meta.value}
+              </dd>
+            </div>
+          ),
+        )}
+
+        {measurements.map(
+          ([key, value]) => (
+            <div
+              key={key}
+              className="order-detail-page__item-meta-row"
+            >
+              <dt>
+                {getMeasurementLabel(
+                  key,
+                )}
+              </dt>
+
+              <dd>
+                {value} mm
+              </dd>
+            </div>
+          ),
+        )}
+      </dl>
+    </div>
+  );
 }
 
 export default function OrderDetail() {
@@ -207,14 +308,17 @@ export default function OrderDetail() {
   const handleOpenBrand = (
     brandId?: string,
   ) => {
-    const id = brandId?.trim() || "";
+    const id =
+      brandId?.trim() || "";
 
     if (!id) {
       return;
     }
 
     navigate(
-      `/brands/${encodeURIComponent(id)}`,
+      `/brands/${encodeURIComponent(
+        id,
+      )}`,
     );
   };
 
@@ -232,7 +336,9 @@ export default function OrderDetail() {
       title="注文詳細"
       titleClickable={false}
       showBackButton
-      onBackButtonClick={handleBack}
+      onBackButtonClick={
+        handleBack
+      }
       mode="mypage"
       showFooter
     >
@@ -263,35 +369,34 @@ export default function OrderDetail() {
               <button
                 type="button"
                 className="page-button page-button--secondary"
-                onClick={() => void reload()}
+                onClick={() =>
+                  void reload()
+                }
               >
                 再読み込み
-              </button>
-
-              <button
-                type="button"
-                className="page-button page-button--primary"
-                onClick={handleBack}
-              >
-                ウォレットへ戻る
               </button>
             </div>
           </div>
         ) : null}
 
-        {showDetail && order ? (
+        {showDetail &&
+        order ? (
           <div className="page-stack">
             <div className="page-card order-detail-page__summary-card">
               <div className="order-detail-page__summary-header">
                 <div>
                   <p className="order-detail-page__date">
-                    {formatDateTime(
-                      order.createdAt,
-                    )}
+                    注文日時:{" "}
+                    {order.createdAt
+                      ? formatDateTime(
+                          order.createdAt,
+                        )
+                      : "-"}
                   </p>
 
                   <h1 className="order-detail-page__order-id">
-                    注文ID: {order.id}
+                    注文ID:{" "}
+                    {order.id}
                   </h1>
                 </div>
 
@@ -311,7 +416,10 @@ export default function OrderDetail() {
 
               <ul className="order-detail-page__items">
                 {order.items.map(
-                  (item, index) => {
+                  (
+                    item,
+                    index,
+                  ) => {
                     const productTitle =
                       getProductTitle(
                         item,
@@ -326,7 +434,9 @@ export default function OrderDetail() {
 
                     return (
                       <li
-                        key={itemKey}
+                        key={
+                          itemKey
+                        }
                         className="order-detail-page__item"
                       >
                         <div className="order-detail-page__item-image">
@@ -409,16 +519,29 @@ export default function OrderDetail() {
                             </span>
                           </button>
 
+                          {renderModelMeta(
+                            item,
+                          )}
+
                           <dl className="order-detail-page__item-meta">
                             <div className="order-detail-page__item-meta-row">
-                              <dt>数量</dt>
+                              <dt>
+                                数量
+                              </dt>
+
                               <dd>
-                                {item.qty}点
+                                {
+                                  item.qty
+                                }
+                                点
                               </dd>
                             </div>
 
                             <div className="order-detail-page__item-meta-row">
-                              <dt>小計</dt>
+                              <dt>
+                                小計
+                              </dt>
+
                               <dd>
                                 {formatAmount(
                                   item.price *
@@ -428,7 +551,10 @@ export default function OrderDetail() {
                             </div>
 
                             <div className="order-detail-page__item-meta-row">
-                              <dt>発送状況</dt>
+                              <dt>
+                                発送状況
+                              </dt>
+
                               <dd>
                                 {item.isCanceled
                                   ? "キャンセル済み"
@@ -445,6 +571,7 @@ export default function OrderDetail() {
                                 <dt>
                                   受取日時
                                 </dt>
+
                                 <dd>
                                   {formatDateTime(
                                     item.transferredAt,
@@ -469,7 +596,10 @@ export default function OrderDetail() {
 
               <dl className="order-detail-page__detail-list">
                 <div className="order-detail-page__detail-row">
-                  <dt>商品小計</dt>
+                  <dt>
+                    商品小計
+                  </dt>
+
                   <dd>
                     {formatAmount(
                       getOrderSubtotal(
@@ -480,7 +610,10 @@ export default function OrderDetail() {
                 </div>
 
                 <div className="order-detail-page__detail-row">
-                  <dt>配送料</dt>
+                  <dt>
+                    配送料
+                  </dt>
+
                   <dd>
                     {formatAmount(
                       getOrderShippingAmount(
@@ -491,16 +624,24 @@ export default function OrderDetail() {
                 </div>
 
                 <div className="order-detail-page__detail-row order-detail-page__detail-row--total">
-                  <dt>合計</dt>
+                  <dt>
+                    合計
+                  </dt>
+
                   <dd>
                     {formatAmount(
-                      getOrderTotal(order),
+                      getOrderTotal(
+                        order,
+                      ),
                     )}
                   </dd>
                 </div>
 
                 <div className="order-detail-page__detail-row">
-                  <dt>決済状況</dt>
+                  <dt>
+                    決済状況
+                  </dt>
+
                   <dd>
                     {order.paid
                       ? "決済済み"
@@ -508,89 +649,6 @@ export default function OrderDetail() {
                   </dd>
                 </div>
               </dl>
-            </div>
-
-            <div className="page-card">
-              <SectionHeader
-                title="配送先"
-                titleAs="h2"
-              />
-
-              <div className="order-detail-page__address">
-                {getShippingAddressLines(
-                  order,
-                ).length > 0 ? (
-                  getShippingAddressLines(
-                    order,
-                  ).map(
-                    (line, index) => (
-                      <p
-                        key={`${line}-${index}`}
-                        className="order-detail-page__address-line"
-                      >
-                        {line}
-                      </p>
-                    ),
-                  )
-                ) : (
-                  <p className="page-card__text">
-                    配送先情報がありません。
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="page-card">
-              <SectionHeader
-                title="支払方法"
-                titleAs="h2"
-              />
-
-              <dl className="order-detail-page__detail-list">
-                <div className="order-detail-page__detail-row">
-                  <dt>カード</dt>
-                  <dd>
-                    {getPaymentMethodLabel(
-                      order,
-                    )}
-                  </dd>
-                </div>
-
-                <div className="order-detail-page__detail-row">
-                  <dt>有効期限</dt>
-                  <dd>
-                    {getPaymentExpiryLabel(
-                      order,
-                    )}
-                  </dd>
-                </div>
-
-                {order.paymentMethodSnapshot
-                  ?.cardholderName ? (
-                  <div className="order-detail-page__detail-row">
-                    <dt>
-                      カード名義
-                    </dt>
-                    <dd>
-                      {
-                        order
-                          .paymentMethodSnapshot
-                          .cardholderName
-                      }
-                    </dd>
-                  </div>
-                ) : null}
-              </dl>
-            </div>
-
-            <div className="page-actions">
-              <button
-                type="button"
-                className="page-button page-button--secondary"
-                onClick={handleBack}
-              >
-                ウォレットへ戻る
-              </button>
             </div>
           </div>
         ) : null}

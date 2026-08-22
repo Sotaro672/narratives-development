@@ -3,20 +3,15 @@
 import { readJsonResponse } from "../../../lib/apiResponse";
 
 import type {
-  WalletOrder,
-} from "../../shared/types/orderTypes";
-
-export type FetchOrderDetailInput = {
-  backendUrl: string;
-  idToken: string;
-  orderId: string;
-};
+  FetchOrderDetailInput,
+  OrderDetail,
+} from "../../shared/types/orderDetailTypes";
 
 export async function fetchOrderDetail({
   backendUrl,
   idToken,
   orderId,
-}: FetchOrderDetailInput): Promise<WalletOrder> {
+}: FetchOrderDetailInput): Promise<OrderDetail> {
   const normalizedOrderId =
     orderId.trim();
 
@@ -39,7 +34,7 @@ export async function fetchOrderDetail({
     },
   );
 
-  return readJsonResponse<WalletOrder>(
+  return readJsonResponse<OrderDetail>(
     response,
     {
       requestErrorMessage:

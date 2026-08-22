@@ -304,6 +304,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		orderH = mallhandler.NewOrderHandler(
 			cont.OrderUC,
 			cont.HistoryQ,
+			cont.OrderDetailQ,
 		)
 	}
 

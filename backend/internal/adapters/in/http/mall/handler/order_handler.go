@@ -26,18 +26,31 @@ import (
 //   - GET  /mall/me/orders
 //   - GET  /mall/me/orders/{orderId}
 type OrderHandler struct {
-	uc           *usecase.OrderUsecase
-	historyQuery OrderHistoryQuery
+	uc               *usecase.OrderUsecase
+	historyQuery     OrderHistoryQuery
+	orderDetailQuery OrderDetailQuery
 }
 
 type OrderHistoryQuery interface {
 	EnrichOrderPage(ctx context.Context, in historydto.EnrichHistoryOrderPageInput) (historydto.HistoryOrderPage, error)
 }
 
-func NewOrderHandler(uc *usecase.OrderUsecase, historyQuery OrderHistoryQuery) http.Handler {
+type OrderDetailQuery interface {
+	EnrichOrderDetail(
+		ctx context.Context,
+		in orderdom.Order,
+	) (historydto.OrderDetail, error)
+}
+
+func NewOrderHandler(
+	uc *usecase.OrderUsecase,
+	historyQuery OrderHistoryQuery,
+	orderDetailQuery OrderDetailQuery,
+) http.Handler {
 	return &OrderHandler{
-		uc:           uc,
-		historyQuery: historyQuery,
+		uc:               uc,
+		historyQuery:     historyQuery,
+		orderDetailQuery: orderDetailQuery,
 	}
 }
 
@@ -250,13 +263,26 @@ func (h *OrderHandler) getMe(
 		return
 	}
 
-	enriched, err := h.enrichOrderHistory(ctx, out)
+	if h == nil || h.orderDetailQuery == nil {
+		writeOrderErr(
+			w,
+			errors.New(
+				"order handler: order detail query not configured",
+			),
+		)
+		return
+	}
+
+	detail, err := h.orderDetailQuery.EnrichOrderDetail(
+		ctx,
+		out,
+	)
 	if err != nil {
 		writeOrderErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(enriched)
+	_ = json.NewEncoder(w).Encode(detail)
 }
 
 func (h *OrderHandler) listMe(w http.ResponseWriter, r *http.Request) {
@@ -285,46 +311,6 @@ func (h *OrderHandler) listMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = json.NewEncoder(w).Encode(enriched)
-}
-
-func (h *OrderHandler) enrichOrderHistory(
-	ctx context.Context,
-	out any,
-) (historydto.HistoryOrder, error) {
-	if h == nil || h.historyQuery == nil {
-		return historydto.HistoryOrder{}, errors.New("order handler: history query not configured")
-	}
-
-	body, err := json.Marshal(out)
-	if err != nil {
-		return historydto.HistoryOrder{}, err
-	}
-
-	var order historydto.HistoryOrder
-	if err := json.Unmarshal(body, &order); err != nil {
-		return historydto.HistoryOrder{}, err
-	}
-
-	in := historydto.EnrichHistoryOrderPageInput{
-		Items: []historydto.HistoryOrder{
-			order,
-		},
-		TotalCount: 1,
-		TotalPages: 1,
-		Page:       1,
-		PerPage:    1,
-	}
-
-	enriched, err := h.historyQuery.EnrichOrderPage(ctx, in)
-	if err != nil {
-		return historydto.HistoryOrder{}, err
-	}
-
-	if len(enriched.Items) == 0 {
-		return historydto.HistoryOrder{}, orderdom.ErrNotFound
-	}
-
-	return enriched.Items[0], nil
 }
 
 func (h *OrderHandler) enrichOrderHistoryPage(ctx context.Context, out any) (historydto.HistoryOrderPage, error) {

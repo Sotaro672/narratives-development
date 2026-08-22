@@ -14,8 +14,8 @@ import { getFirebaseIdToken } from "../../../lib/authToken";
 import { fetchOrderDetail } from "../api/orderDetailApi";
 
 import type {
-  WalletOrder,
-} from "../../shared/types/orderTypes";
+  OrderDetail,
+} from "../../shared/types/orderDetailTypes";
 
 function getErrorMessage(
   caught: unknown,
@@ -37,7 +37,7 @@ export function useOrderDetail() {
     routeOrderId?.trim() || "";
 
   const [order, setOrder] =
-    useState<WalletOrder | null>(null);
+    useState<OrderDetail | null>(null);
 
   const [loading, setLoading] =
     useState(true);
