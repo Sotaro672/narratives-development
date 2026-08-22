@@ -89,6 +89,7 @@ export default function OrderDetail() {
     listIds,
     pageTitle,
     onBack,
+    goListDetail,
   } = useOrderDetail();
 
   const left = (
@@ -148,9 +149,22 @@ export default function OrderDetail() {
                       リストID
                     </th>
                     <td className="py-2 text-left">
-                      {listIds.length > 0
-                        ? listIds.join(", ")
-                        : "-"}
+                      {listIds.length > 0 ? (
+                        <div className="flex flex-wrap gap-x-2 gap-y-1">
+                          {listIds.map((listId) => (
+                            <button
+                              key={listId}
+                              type="button"
+                              className="text-blue-600 hover:underline"
+                              onClick={() => goListDetail(listId)}
+                            >
+                              {listId}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        "-"
+                      )}
                     </td>
                   </tr>
 
