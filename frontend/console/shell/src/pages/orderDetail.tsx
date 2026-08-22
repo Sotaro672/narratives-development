@@ -108,13 +108,6 @@ export default function OrderDetail() {
             発送処理に失敗しました: {dispatchError}
           </div>
         ) : null}
-
-        {!loading && !error && order && canDispatch ? (
-          <div className="mb-4 text-sm text-muted-foreground text-left">
-            発送すると、購入者へ発送通知メールが送信されます。
-          </div>
-        ) : null}
-
         {loading ? (
           <div className="text-sm text-muted-foreground text-left">
             読み込み中...

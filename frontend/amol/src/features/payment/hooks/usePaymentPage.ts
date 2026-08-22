@@ -19,17 +19,12 @@ import type { CardPaymentMethod } from "../../shared/types/paymentMethods";
 import type { UserProfile } from "../../shared/types/shippingAddress";
 import {
   createOrder,
-  createPayment,
   fetchPaymentMethods,
 } from "../api/paymentApi";
 import {
   getShippingAddressLabel,
   getUserFullName,
 } from "../utils/format";
-import {
-  isPaymentRequiresAction,
-  isPaymentSucceeded,
-} from "../utils/guards";
 import {
   buildOrderItems,
   selectPrimaryPaymentMethod,
@@ -493,8 +488,8 @@ export function usePaymentPage({
         : "/lists";
 
   const paymentButtonLabel = isPaying
-    ? "決済中..."
-    : `${formatPrice(amount)}を支払う`;
+    ? "購入処理中..."
+    : `${formatPrice(amount)}で購入する`;
 
   const isPaymentDisabled =
     isPaying ||
@@ -607,7 +602,7 @@ export function usePaymentPage({
       const message =
         error instanceof Error
           ? error.message
-          : "決済情報の取得に失敗しました。";
+          : "購入情報の取得に失敗しました。";
 
       showErrorModal(message);
       setPaymentMethods([]);
@@ -652,20 +647,6 @@ export function usePaymentPage({
       return;
     }
 
-    if (!selectedPaymentMethod.stripeCustomerId) {
-      showErrorModal(
-        "Stripe customer ID を取得できませんでした。",
-      );
-      return;
-    }
-
-    if (!selectedPaymentMethod.stripePaymentMethodId) {
-      showErrorModal(
-        "Stripe payment method ID を取得できませんでした。",
-      );
-      return;
-    }
-
     if (!primaryShippingAddress) {
       showErrorModal(
         "配送先情報を登録してください。",
@@ -682,7 +663,7 @@ export function usePaymentPage({
 
     if (amount <= 0) {
       showErrorModal(
-        "決済金額が不正です。",
+        "購入金額が不正です。",
       );
       return;
     }
@@ -765,7 +746,7 @@ export function usePaymentPage({
 
       if (resolvedAmount <= 0) {
         showErrorModal(
-          "注文の決済金額が不正です。",
+          "注文金額が不正です。",
         );
         return;
       }
@@ -774,44 +755,13 @@ export function usePaymentPage({
         resolvedShippingAmount,
       );
 
-      const payment =
-        await createPayment({
-          paymentId:
-            resolvedOrderId,
-
-          paymentMethodId:
-            selectedPaymentMethod.id,
-
-          stripeCustomerId:
-            selectedPaymentMethod.stripeCustomerId,
-
-          stripePaymentMethodId:
-            selectedPaymentMethod.stripePaymentMethodId,
-
-          amount:
-            resolvedAmount,
-        });
-
-      if (isPaymentRequiresAction(payment)) {
-        showErrorModal(
-          "追加認証が必要な決済です。現在の画面では3Dセキュア認証に未対応です。",
-        );
-        return;
-      }
-
-      if (!isPaymentSucceeded(payment)) {
-        showErrorModal(
-          `決済が完了しませんでした。status=${payment.status ?? "UNKNOWN"}`,
-        );
-        return;
-      }
-
       navigate("/order-confirmed", {
         replace: true,
         state: {
           orderId:
             resolvedOrderId,
-          payment,
+          amount:
+            resolvedAmount,
           cartItems,
           shippingAddress:
             primaryShippingAddress,
@@ -821,7 +771,7 @@ export function usePaymentPage({
       const message =
         error instanceof Error
           ? error.message
-          : "注文または決済処理に失敗しました。";
+          : "注文処理に失敗しました。";
 
       showErrorModal(message);
     } finally {

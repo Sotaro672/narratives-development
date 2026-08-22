@@ -1,12 +1,11 @@
 // frontend/amol/src/features/shared/types/orderConfirmed.ts
 
 import type { CartDisplayItem } from "./cart";
-import type { CreatedPayment } from "./payment";
 import type { ShippingAddress } from "./shippingAddress";
 
 export type OrderConfirmedLocationState = {
   orderId?: string;
-  payment?: CreatedPayment;
+  amount?: number;
   cartItems?: CartDisplayItem[];
   shippingAddress?: ShippingAddress | null;
 };
