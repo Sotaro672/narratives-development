@@ -86,7 +86,7 @@ export default function OrderDetail() {
     shipping,
     userName,
     email,
-    listIds,
+    lists,
     pageTitle,
     onBack,
     goListDetail,
@@ -149,16 +149,16 @@ export default function OrderDetail() {
                       リストID
                     </th>
                     <td className="py-2 text-left">
-                      {listIds.length > 0 ? (
+                      {lists.length > 0 ? (
                         <div className="flex flex-wrap gap-x-2 gap-y-1">
-                          {listIds.map((listId) => (
+                          {lists.map((list) => (
                             <button
-                              key={listId}
+                              key={list.id}
                               type="button"
                               className="text-blue-600 hover:underline"
-                              onClick={() => goListDetail(listId)}
+                              onClick={() => goListDetail(list.id)}
                             >
-                              {listId}
+                              {list.readableId}
                             </button>
                           ))}
                         </div>
