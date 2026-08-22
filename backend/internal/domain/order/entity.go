@@ -110,7 +110,7 @@ type OrderItemSnapshot struct {
 	Qty   int `json:"qty"`
 	Price int `json:"price"`
 
-	IsCanceled   bool `json:"isCanceled"`
+	IsCancelled  bool `json:"isCancelled"`
 	IsDispatched bool `json:"isDispatched"`
 
 	Transferred   bool       `json:"transferred"`
@@ -135,9 +135,6 @@ type Order struct {
 
 	// Paid is maintained at the Order aggregate level.
 	Paid bool `json:"paid"`
-
-	// IsCancelled is maintained at the Order aggregate level.
-	IsCancelled bool `json:"isCancelled"`
 
 	Items     []OrderItemSnapshot `json:"items"`
 	CreatedAt time.Time           `json:"createdAt"`
@@ -205,7 +202,6 @@ func New(
 		ShippingQuoteSnapshot: shippingQuoteSnapshot,
 		PaymentMethodSnapshot: paymentMethodSnapshot,
 		Paid:                  false,
-		IsCancelled:           false,
 		Items:                 items,
 		CreatedAt:             createdAt.UTC(),
 	}
@@ -285,28 +281,8 @@ func (o *Order) UpdatePaid(paid bool) {
 	o.Paid = paid
 }
 
-func (o *Order) Cancel() error {
-	if o == nil {
-		return ErrInvalidID
-	}
-
-	if o.IsCancelled {
-		return nil
-	}
-
-	for _, item := range o.Items {
-		if item.IsDispatched {
-			return ErrConflict
-		}
-	}
-
-	o.IsCancelled = true
-	return nil
-}
-
-func (o *Order) UpdateItemCanceled(
+func (o *Order) CancelItem(
 	index int,
-	isCanceled bool,
 ) error {
 	if o == nil {
 		return ErrInvalidItems
@@ -316,7 +292,18 @@ func (o *Order) UpdateItemCanceled(
 		return ErrInvalidItems
 	}
 
-	o.Items[index].IsCanceled = isCanceled
+	item := &o.Items[index]
+
+	if item.IsCancelled {
+		return nil
+	}
+
+	if item.IsDispatched ||
+		item.Transferred {
+		return ErrConflict
+	}
+
+	item.IsCancelled = true
 	return nil
 }
 
@@ -332,7 +319,8 @@ func (o *Order) UpdateItemDispatched(
 		return ErrInvalidItems
 	}
 
-	if isDispatched && o.IsCancelled {
+	if isDispatched &&
+		o.Items[index].IsCancelled {
 		return ErrConflict
 	}
 
@@ -356,7 +344,7 @@ func (o *Order) UpdateItemTransferred(
 	}
 
 	if transferred {
-		if o.IsCancelled {
+		if o.Items[index].IsCancelled {
 			return ErrConflict
 		}
 
@@ -775,6 +763,14 @@ func validateResaleItemSnapshot(
 func validateItemTransferState(
 	item OrderItemSnapshot,
 ) error {
+	if item.IsCancelled {
+		if item.IsDispatched ||
+			item.Transferred ||
+			item.TransferredAt != nil {
+			return ErrInvalidItemSnapshot
+		}
+	}
+
 	if item.Transferred {
 		if item.TransferredAt == nil ||
 			item.TransferredAt.IsZero() {

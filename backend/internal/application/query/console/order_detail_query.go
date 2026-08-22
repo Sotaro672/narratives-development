@@ -81,7 +81,7 @@ type OrderDetailItemDTO struct {
 	Qty   int `json:"qty"`
 	Price int `json:"price"`
 
-	IsCanceled   bool `json:"isCanceled"`
+	IsCancelled  bool `json:"isCancelled"`
 	IsDispatched bool `json:"isDispatched"`
 
 	Transferred   bool   `json:"transferred"`
@@ -385,7 +385,7 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 			Qty:   it.Qty,
 			Price: it.Price,
 
-			IsCanceled:   it.IsCanceled,
+			IsCancelled:  it.IsCancelled,
 			IsDispatched: it.IsDispatched,
 
 			Transferred: it.Transferred,

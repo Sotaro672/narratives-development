@@ -127,7 +127,7 @@ type CreateOrderItemInput struct {
 
 	// Reserved for future order creation behavior.
 	// The current creation policy always persists false.
-	IsCanceled   bool
+	IsCancelled  bool
 	IsDispatched bool
 }
 
@@ -422,22 +422,21 @@ func (u *OrderUsecase) Update(
 	}
 
 	checked.Paid = order.Paid
-	checked.IsCancelled =
-		order.IsCancelled
 
 	// Repository.Update must persist the Order and replace its canonical
 	// orderTransferItems projection in the same Firestore transaction.
 	return u.repo.Update(ctx, checked, nil)
 }
 
-type CancelOrderInput struct {
-	ID       string
-	AvatarID string
+type CancelOrderItemInput struct {
+	ID        string
+	AvatarID  string
+	ItemIndex int
 }
 
-func (u *OrderUsecase) Cancel(
+func (u *OrderUsecase) CancelItem(
 	ctx context.Context,
-	in CancelOrderInput,
+	in CancelOrderItemInput,
 ) (orderdom.Order, error) {
 	orderID :=
 		strings.TrimSpace(
@@ -459,6 +458,11 @@ func (u *OrderUsecase) Cancel(
 			orderdom.ErrInvalidAvatarID
 	}
 
+	if in.ItemIndex < 0 {
+		return orderdom.Order{},
+			orderdom.ErrInvalidItems
+	}
+
 	order, err :=
 		u.repo.GetByID(
 			ctx,
@@ -474,16 +478,26 @@ func (u *OrderUsecase) Cancel(
 			orderdom.ErrNotFound
 	}
 
-	for _, item := range order.Items {
-		if item.IsDispatched {
+	if in.ItemIndex >=
+		len(order.Items) {
+		return orderdom.Order{},
+			orderdom.ErrNotFound
+	}
+
+	targetItem :=
+		order.Items[in.ItemIndex]
+
+	if !targetItem.IsCancelled {
+		if targetItem.IsDispatched ||
+			targetItem.Transferred {
 			return orderdom.Order{},
 				orderdom.ErrConflict
 		}
-	}
 
-	if !order.IsCancelled {
 		if err :=
-			order.Cancel(); err != nil {
+			order.CancelItem(
+				in.ItemIndex,
+			); err != nil {
 			return orderdom.Order{}, err
 		}
 
@@ -498,23 +512,21 @@ func (u *OrderUsecase) Cancel(
 		}
 
 		order = updated
+		targetItem =
+			order.Items[in.ItemIndex]
 	}
 
-	now :=
-		u.now().UTC()
-
-	for _, item := range order.Items {
-		if item.Type !=
-			orderdom.OrderItemTypeList {
-			continue
-		}
+	if targetItem.Type ==
+		orderdom.OrderItemTypeList {
+		now :=
+			u.now().UTC()
 
 		if err :=
 			u.inventoryRepo.
 				ReleaseReservationByOrder(
 					ctx,
-					item.InventoryID,
-					item.ModelID,
+					targetItem.InventoryID,
+					targetItem.ModelID,
 					order.ID,
 					now,
 				); err != nil {
@@ -556,11 +568,6 @@ func (u *OrderUsecase) PrepareDispatchItems(
 		return DispatchOrderItemsResult{}, err
 	}
 
-	if order.IsCancelled {
-		return DispatchOrderItemsResult{},
-			orderdom.ErrConflict
-	}
-
 	targetItems := make(
 		[]orderdom.OrderItemSnapshot,
 		0,
@@ -573,7 +580,7 @@ func (u *OrderUsecase) PrepareDispatchItems(
 			continue
 		}
 
-		if item.IsCanceled {
+		if item.IsCancelled {
 			continue
 		}
 
@@ -615,11 +622,6 @@ func (u *OrderUsecase) DispatchItems(
 		return DispatchOrderItemsResult{}, err
 	}
 
-	if order.IsCancelled {
-		return DispatchOrderItemsResult{},
-			orderdom.ErrConflict
-	}
-
 	if !order.Paid {
 		return DispatchOrderItemsResult{},
 			orderdom.ErrConflict
@@ -640,7 +642,7 @@ func (u *OrderUsecase) DispatchItems(
 			continue
 		}
 
-		if item.IsCanceled {
+		if item.IsCancelled {
 			continue
 		}
 
@@ -969,7 +971,7 @@ func createOrderItemInputsFromSnapshots(
 
 						Qty: item.Qty,
 
-						IsCanceled: item.IsCanceled,
+						IsCancelled: item.IsCancelled,
 
 						IsDispatched: item.IsDispatched,
 					},
@@ -1220,7 +1222,7 @@ func (u *OrderUsecase) resolveListOrderItem(
 
 		Qty:           item.Qty,
 		Price:         price,
-		IsCanceled:    false,
+		IsCancelled:   false,
 		IsDispatched:  false,
 		Transferred:   false,
 		TransferredAt: nil,
@@ -1288,7 +1290,7 @@ func (u *OrderUsecase) resolveResaleOrderItem(
 
 		Qty:           1,
 		Price:         resale.Price,
-		IsCanceled:    false,
+		IsCancelled:   false,
 		IsDispatched:  false,
 		Transferred:   false,
 		TransferredAt: nil,

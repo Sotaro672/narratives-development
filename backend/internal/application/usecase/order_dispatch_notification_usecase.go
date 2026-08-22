@@ -180,7 +180,7 @@ func (u *OrderDispatchNotificationUsecase) EnsureDelivery(
 	)
 
 	for _, targetItem := range targetItems {
-		if targetItem.IsCanceled {
+		if targetItem.IsCancelled {
 			return orderdom.DispatchNotificationDelivery{},
 				fmt.Errorf(
 					"%w: canceled target item",

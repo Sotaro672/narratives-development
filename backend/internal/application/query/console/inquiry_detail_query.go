@@ -146,7 +146,7 @@ type InquiryOrderItemSummary struct {
 	ListID           string     `json:"listId"`
 	Qty              int        `json:"qty"`
 	Price            int        `json:"price"`
-	IsCanceled       bool       `json:"isCanceled"`
+	IsCancelled      bool       `json:"isCancelled"`
 	IsDispatched     bool       `json:"isDispatched"`
 	Transferred      bool       `json:"transferred"`
 	TransferredAt    *time.Time `json:"transferredAt,omitempty"`
@@ -617,7 +617,7 @@ func (q *InquiryDetailQuery) filterInquiryOrderItemsByModelIDAndTransferredAt(
 			ModelID: item.ModelID, InventoryID: item.InventoryID,
 			TokenBlueprintID: tokenBlueprintID, TokenName: tokenName,
 			ListID: item.ListID, Qty: item.Qty, Price: item.Price,
-			IsCanceled: item.IsCanceled, IsDispatched: item.IsDispatched,
+			IsCancelled: item.IsCancelled, IsDispatched: item.IsDispatched,
 			Transferred: item.Transferred, TransferredAt: item.TransferredAt,
 		})
 	}

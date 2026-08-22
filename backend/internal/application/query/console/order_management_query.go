@@ -116,7 +116,7 @@ type OrderItemInventoryRowDTO struct {
 	Qty   int `json:"qty,omitempty"`
 	Price int `json:"price,omitempty"`
 
-	IsCanceled   bool `json:"isCanceled"`
+	IsCancelled  bool `json:"isCancelled"`
 	IsDispatched bool `json:"isDispatched"`
 
 	Transferred   bool   `json:"transferred"`
@@ -498,7 +498,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					Qty:   it.Qty,
 					Price: it.Price,
 
-					IsCanceled:   it.IsCanceled,
+					IsCancelled:  it.IsCancelled,
 					IsDispatched: it.IsDispatched,
 
 					Transferred:   it.Transferred,
@@ -608,7 +608,7 @@ func (q *OrderManagementQuery) CountUndispatchedOrders(
 					continue
 				}
 
-				if item.IsCanceled {
+				if item.IsCancelled {
 					continue
 				}
 

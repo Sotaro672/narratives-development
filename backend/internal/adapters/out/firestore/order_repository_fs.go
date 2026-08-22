@@ -286,6 +286,7 @@ func (r *OrderRepositoryFS) Update(
 				if itemIndex >= len(o.Items) ||
 					o.AvatarID != projection.AvatarID ||
 					!o.Paid ||
+					o.Items[itemIndex].IsCancelled ||
 					o.Items[itemIndex].Transferred ||
 					!orderItemMatchesProjection(
 						o.Items[itemIndex],
@@ -333,8 +334,7 @@ type orderDoc struct {
 	AvatarID string `firestore:"avatarId"`
 	CartID   string `firestore:"cartId"`
 
-	Paid        bool `firestore:"paid"`
-	IsCancelled bool `firestore:"isCancelled"`
+	Paid bool `firestore:"paid"`
 
 	Items []itemDoc `firestore:"items"`
 
@@ -415,7 +415,7 @@ type itemDoc struct {
 	Qty   int `firestore:"qty"`
 	Price int `firestore:"price"`
 
-	IsCanceled   bool `firestore:"isCanceled"`
+	IsCancelled  bool `firestore:"isCancelled"`
 	IsDispatched bool `firestore:"isDispatched"`
 
 	Transferred   bool       `firestore:"transferred"`
@@ -514,7 +514,7 @@ func docToOrder(
 				Qty:   item.Qty,
 				Price: item.Price,
 
-				IsCanceled:   item.IsCanceled,
+				IsCancelled:  item.IsCancelled,
 				IsDispatched: item.IsDispatched,
 
 				Transferred:   item.Transferred,
@@ -556,10 +556,9 @@ func docToOrder(
 			IsDefault:             doc.PaymentMethodSnapshot.IsDefault,
 		},
 
-		Paid:        doc.Paid,
-		IsCancelled: doc.IsCancelled,
-		Items:       items,
-		CreatedAt:   doc.CreatedAt.UTC(),
+		Paid:      doc.Paid,
+		Items:     items,
+		CreatedAt: doc.CreatedAt.UTC(),
 	}
 
 	if err := order.Validate(); err != nil {
@@ -624,10 +623,9 @@ func orderToDoc(o orderdom.Order) map[string]any {
 			"isDefault":             o.PaymentMethodSnapshot.IsDefault,
 		},
 
-		"paid":        o.Paid,
-		"isCancelled": o.IsCancelled,
-		"items":       items,
-		"createdAt":   o.CreatedAt.UTC(),
+		"paid":      o.Paid,
+		"items":     items,
+		"createdAt": o.CreatedAt.UTC(),
 	}
 }
 
@@ -671,7 +669,7 @@ func orderItemToDocMap(
 
 		"qty":          item.Qty,
 		"price":        item.Price,
-		"isCanceled":   item.IsCanceled,
+		"isCancelled":  item.IsCancelled,
 		"isDispatched": item.IsDispatched,
 		"transferred":  item.Transferred,
 	}
@@ -746,7 +744,7 @@ func orderTransferItemDocuments(
 			"itemType":    string(item.Type),
 			"itemIndex":   itemIndex,
 			"paid":        o.Paid,
-			"isCancelled": o.IsCancelled,
+			"isCancelled": item.IsCancelled,
 			"transferred": item.Transferred,
 			"createdAt":   o.CreatedAt.UTC(),
 		}
@@ -802,14 +800,6 @@ func validateOrderDocumentShape(
 	if _, ok := requiredOrderBool(raw, "paid"); !ok {
 		return ErrInvalidOrderDocumentData
 	}
-	if _, ok :=
-		requiredOrderBool(
-			raw,
-			"isCancelled",
-		); !ok {
-		return ErrInvalidOrderDocumentData
-	}
-
 	createdAt, ok := requiredOrderTime(raw, "createdAt")
 	if !ok || createdAt.IsZero() {
 		return ErrInvalidOrderDocumentData
@@ -1082,7 +1072,7 @@ func validateOrderItemDocumentShape(
 	if _, ok := requiredOrderInt(raw, "price"); !ok {
 		return ErrInvalidOrderDocumentData
 	}
-	if _, ok := requiredOrderBool(raw, "isCanceled"); !ok {
+	if _, ok := requiredOrderBool(raw, "isCancelled"); !ok {
 		return ErrInvalidOrderDocumentData
 	}
 	if _, ok := requiredOrderBool(raw, "isDispatched"); !ok {

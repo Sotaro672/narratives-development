@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"narratives/internal/adapters/in/http/middleware"
@@ -25,7 +26,7 @@ import (
 //   - POST  /mall/me/orders
 //   - GET   /mall/me/orders
 //   - GET   /mall/me/orders/{orderId}
-//   - PATCH /mall/me/orders/{orderId}/cancel
+//   - PATCH /mall/me/orders/{orderId}/items/{itemIndex}/cancel
 type OrderHandler struct {
 	uc               *usecase.OrderUsecase
 	historyQuery     OrderHistoryQuery
@@ -101,7 +102,7 @@ type orderItemRequest struct {
 	Qty int `json:"qty"`
 
 	// Reserved for future order creation behavior.
-	IsCanceled   bool `json:"isCanceled"`
+	IsCancelled  bool `json:"isCancelled"`
 	IsDispatched bool `json:"isDispatched"`
 }
 
@@ -208,7 +209,7 @@ func orderItemRequestToInput(item orderItemRequest) (usecase.CreateOrderItemInpu
 			ListID:       item.ListID,
 			ModelID:      item.ModelID,
 			Qty:          item.Qty,
-			IsCanceled:   item.IsCanceled,
+			IsCancelled:  item.IsCancelled,
 			IsDispatched: item.IsDispatched,
 		}, true
 
@@ -221,7 +222,7 @@ func orderItemRequestToInput(item orderItemRequest) (usecase.CreateOrderItemInpu
 			Type:         orderdom.OrderItemTypeResale,
 			ResaleID:     item.ResaleID,
 			Qty:          1,
-			IsCanceled:   item.IsCanceled,
+			IsCancelled:  item.IsCancelled,
 			IsDispatched: item.IsDispatched,
 		}, true
 
@@ -305,31 +306,52 @@ func (h *OrderHandler) cancelMe(
 		return
 	}
 
-	orderPath := strings.TrimSuffix(
-		path,
-		"/cancel",
-	)
-
-	orderID := strings.TrimSpace(
+	itemPath := strings.TrimSpace(
 		strings.TrimPrefix(
-			orderPath,
+			path,
 			"/mall/me/orders/",
 		),
 	)
 
-	if orderID == "" ||
-		strings.Contains(orderID, "/") {
+	parts :=
+		strings.Split(
+			itemPath,
+			"/",
+		)
+
+	if len(parts) != 4 ||
+		parts[0] == "" ||
+		parts[1] != "items" ||
+		parts[2] == "" ||
+		parts[3] != "cancel" {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
+	}
+
+	orderID :=
+		strings.TrimSpace(
+			parts[0],
+		)
+
+	itemIndex, err :=
+		strconv.Atoi(
+			parts[2],
+		)
+	if err != nil ||
+		itemIndex < 0 {
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 		return
 	}
 
 	out, err :=
-		h.uc.Cancel(
+		h.uc.CancelItem(
 			ctx,
-			usecase.CancelOrderInput{
-				ID:       orderID,
-				AvatarID: avatarID,
+			usecase.CancelOrderItemInput{
+				ID:        orderID,
+				AvatarID:  avatarID,
+				ItemIndex: itemIndex,
 			},
 		)
 	if err != nil {
