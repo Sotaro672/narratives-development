@@ -188,10 +188,8 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.OrderUC != nil &&
-		c.PaymentFlowUC != nil &&
 		c.OrderManagementQuery != nil &&
-		c.OrderDetailQuery != nil &&
-		c.OrderDispatchNotificationUC != nil {
+		c.OrderDetailQuery != nil {
 		ordersH = consoleHandler.NewOrderHandler(
 			c.OrderUC,
 			c.PaymentFlowUC,
