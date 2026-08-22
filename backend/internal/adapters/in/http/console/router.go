@@ -59,13 +59,23 @@ type RouterDeps struct {
 	// endpoint:
 	//   POST /internal/invitations/deliveries/dispatch-due
 	//
+	// Cloud Tasksから呼ばれる発送通知メール送信worker用です。
+	// endpoint:
+	//   POST /internal/order-dispatch-notifications/process
+	//
+	// Cloud Scheduler等から呼ばれる発送通知delivery投入用です。
+	// endpoint:
+	//   POST /internal/order-dispatch-notifications/dispatch-due
+	//
 	// 注意:
 	// - 通常のConsole Firebase Authではなく、Cloud Tasks OIDC / Cloud Run Invoker
 	//   または各internal handlerの認証処理で保護します。
-	InternalMintTasks                  http.Handler
-	InternalListSaveOperationTasks     http.Handler
-	InternalInvitationDeliveryProcess  http.Handler
-	InternalInvitationDeliveryDispatch http.Handler
+	InternalMintTasks                         http.Handler
+	InternalListSaveOperationTasks            http.Handler
+	InternalInvitationDeliveryProcess         http.Handler
+	InternalInvitationDeliveryDispatch        http.Handler
+	InternalOrderDispatchNotificationProcess  http.Handler
+	InternalOrderDispatchNotificationDispatch http.Handler
 
 	OwnerResolve    http.Handler
 	Invitation      http.Handler
@@ -285,6 +295,16 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if deps.InternalInvitationDeliveryDispatch != nil {
 		h := withPublic(deps.InternalInvitationDeliveryDispatch)
 		mux.Handle("/internal/invitations/deliveries/dispatch-due", h)
+	}
+
+	if deps.InternalOrderDispatchNotificationProcess != nil {
+		h := withPublic(deps.InternalOrderDispatchNotificationProcess)
+		mux.Handle("/internal/order-dispatch-notifications/process", h)
+	}
+
+	if deps.InternalOrderDispatchNotificationDispatch != nil {
+		h := withPublic(deps.InternalOrderDispatchNotificationDispatch)
+		mux.Handle("/internal/order-dispatch-notifications/dispatch-due", h)
 	}
 
 	if deps.OwnerResolve != nil {

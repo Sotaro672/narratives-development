@@ -2,7 +2,6 @@
 package mail
 
 import (
-	"log"
 	"os"
 	"strings"
 
@@ -26,40 +25,34 @@ func NewInvitationMailerWithResend(
 	companyRepo companydom.Repository,
 	brandResolver BrandNameResolver,
 ) *InvitationMailer {
-	apiKey := strings.TrimSpace(
-		os.Getenv(envResendAPIKey),
-	)
-	fromAddress := strings.TrimSpace(
-		os.Getenv(envResendFrom),
-	)
-
-	if apiKey == "" {
-		log.Printf(
-			"[mail] WARN: RESEND_API_KEY is empty. InvitationMailer will fail to send mail.",
-		)
-	}
-
-	if fromAddress == "" {
-		log.Printf(
-			"[mail] WARN: RESEND_FROM is empty. InvitationMailer will fail to send mail.",
-		)
-	}
+	apiKey := strings.TrimSpace(os.Getenv(envResendAPIKey))
+	fromAddress := strings.TrimSpace(os.Getenv(envResendFrom))
 
 	client := NewResendClient(apiKey)
 
-	mailer := NewInvitationMailer(
+	return NewInvitationMailer(
 		client,
 		fromAddress,
 		companyRepo,
 		brandResolver,
 	)
+}
 
-	log.Printf(
-		"[mail] InvitationMailerWithResend initialized. from=%s",
+// NewOrderDispatchNotificationMailerWithResendは、
+// Resendを使ったOrderDispatchNotificationMailerを生成します。
+//
+// - RESEND_API_KEY: ResendのAPIキー
+// - RESEND_FROM  : 送信元メールアドレス
+func NewOrderDispatchNotificationMailerWithResend() *OrderDispatchNotificationMailer {
+	apiKey := strings.TrimSpace(os.Getenv(envResendAPIKey))
+	fromAddress := strings.TrimSpace(os.Getenv(envResendFrom))
+
+	client := NewResendClient(apiKey)
+
+	return NewOrderDispatchNotificationMailer(
+		client,
 		fromAddress,
 	)
-
-	return mailer
 }
 
 // NewAuthMailerWithResendは、Resendを使ったAuthMailerを生成します。
@@ -70,36 +63,13 @@ func NewInvitationMailerWithResend(
 // Firebase Authの標準メール送信ではなく、Backend側で生成した認証リンクを
 // Resend経由で送信するために使用します。
 func NewAuthMailerWithResend() *AuthMailer {
-	apiKey := strings.TrimSpace(
-		os.Getenv(envResendAPIKey),
-	)
-	fromAddress := strings.TrimSpace(
-		os.Getenv(envResendFrom),
-	)
-
-	if apiKey == "" {
-		log.Printf(
-			"[mail] WARN: RESEND_API_KEY is empty. AuthMailer will fail to send mail.",
-		)
-	}
-
-	if fromAddress == "" {
-		log.Printf(
-			"[mail] WARN: RESEND_FROM is empty. AuthMailer will fail to send mail.",
-		)
-	}
+	apiKey := strings.TrimSpace(os.Getenv(envResendAPIKey))
+	fromAddress := strings.TrimSpace(os.Getenv(envResendFrom))
 
 	client := NewResendClient(apiKey)
 
-	mailer := NewAuthMailer(
+	return NewAuthMailer(
 		client,
 		fromAddress,
 	)
-
-	log.Printf(
-		"[mail] AuthMailerWithResend initialized. from=%s",
-		fromAddress,
-	)
-
-	return mailer
 }

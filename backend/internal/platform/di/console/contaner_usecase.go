@@ -17,45 +17,47 @@ import (
 )
 
 type usecases struct {
-	solanaMintClient              *solanainfra.MintClient
-	tokenUC                       *uc.TokenUsecase
-	accountUC                     *uc.AccountUsecase
-	announcementUC                *uc.AnnouncementUsecase
-	announcementAttachmentStorage *firebaseadp.AnnouncementAttachmentStorage
-	avatarUC                      *uc.AvatarUsecase
-	paymentMethodUC               *uc.PaymentMethodUsecase
-	brandUC                       *uc.BrandUsecase
-	companyUC                     *uc.CompanyUsecase
-	inquiryUC                     *uc.InquiryUsecase
-	inventoryUC                   *uc.InventoryUsecase
-	listUC                        *uc.ListUsecase
-	listSaveOperationUC           *uc.ListSaveOperationUsecase
-	listSaveOperationStorage      *firebaseadp.ListSaveOperationStorage
-	listSaveOperationRetryQueue   *listcloudtasksadp.ListSaveOperationQueue
-	memberUC                      *uc.MemberUsecase
-	modelUC                       *uc.ModelUsecase
-	orderUC                       *uc.OrderUsecase
-	paymentUC                     *uc.PaymentUsecase
-	permissionUC                  *uc.PermissionUsecase
-	printUC                       *uc.PrintUsecase
-	productionUC                  *uc.ProductionUsecase
-	productBlueprintUC            *uc.ProductBlueprintUsecase
-	productBlueprintCategoryUC    *uc.ProductBlueprintCategoryUsecase
-	inspectionUC                  *uc.InspectionUsecase
-	mintUC                        *uc.MintUsecase
-	shippingAddressUC             *uc.ShippingAddressUsecase
-	transportationUC              *uc.TransportationUsecase
-	tokenBlueprintUC              *uc.TokenBlueprintUsecase
-	tokenBlueprintAssetStorage    *firebaseadp.TokenBlueprintAssetStorage
-	tokenBlueprintReviewUC        *uc.TokenBlueprintReviewUsecase
-	productBlueprintReviewUC      *uc.ProductBlueprintReviewUsecase
-	userUC                        *uc.UserUsecase
-	walletUC                      *uc.WalletUsecase
-	cartUC                        *uc.CartUsecase
-	invitationUC                  uc.InvitationUsecasePort
-	invitationDeliveryUC          uc.InvitationDeliveryUsecasePort
-	invitationDeliveryQueue       *listcloudtasksadp.InvitationDeliveryQueue
-	authBootstrapSvc              *uc.BootstrapService
+	solanaMintClient               *solanainfra.MintClient
+	tokenUC                        *uc.TokenUsecase
+	accountUC                      *uc.AccountUsecase
+	announcementUC                 *uc.AnnouncementUsecase
+	announcementAttachmentStorage  *firebaseadp.AnnouncementAttachmentStorage
+	avatarUC                       *uc.AvatarUsecase
+	paymentMethodUC                *uc.PaymentMethodUsecase
+	brandUC                        *uc.BrandUsecase
+	companyUC                      *uc.CompanyUsecase
+	inquiryUC                      *uc.InquiryUsecase
+	inventoryUC                    *uc.InventoryUsecase
+	listUC                         *uc.ListUsecase
+	listSaveOperationUC            *uc.ListSaveOperationUsecase
+	listSaveOperationStorage       *firebaseadp.ListSaveOperationStorage
+	listSaveOperationRetryQueue    *listcloudtasksadp.ListSaveOperationQueue
+	memberUC                       *uc.MemberUsecase
+	modelUC                        *uc.ModelUsecase
+	orderUC                        *uc.OrderUsecase
+	orderDispatchNotificationUC    uc.OrderDispatchNotificationUsecasePort
+	orderDispatchNotificationQueue *listcloudtasksadp.OrderDispatchNotificationQueue
+	paymentUC                      *uc.PaymentUsecase
+	permissionUC                   *uc.PermissionUsecase
+	printUC                        *uc.PrintUsecase
+	productionUC                   *uc.ProductionUsecase
+	productBlueprintUC             *uc.ProductBlueprintUsecase
+	productBlueprintCategoryUC     *uc.ProductBlueprintCategoryUsecase
+	inspectionUC                   *uc.InspectionUsecase
+	mintUC                         *uc.MintUsecase
+	shippingAddressUC              *uc.ShippingAddressUsecase
+	transportationUC               *uc.TransportationUsecase
+	tokenBlueprintUC               *uc.TokenBlueprintUsecase
+	tokenBlueprintAssetStorage     *firebaseadp.TokenBlueprintAssetStorage
+	tokenBlueprintReviewUC         *uc.TokenBlueprintReviewUsecase
+	productBlueprintReviewUC       *uc.ProductBlueprintReviewUsecase
+	userUC                         *uc.UserUsecase
+	walletUC                       *uc.WalletUsecase
+	cartUC                         *uc.CartUsecase
+	invitationUC                   uc.InvitationUsecasePort
+	invitationDeliveryUC           uc.InvitationDeliveryUsecasePort
+	invitationDeliveryQueue        *listcloudtasksadp.InvitationDeliveryQueue
+	authBootstrapSvc               *uc.BootstrapService
 }
 
 func buildUsecases(
@@ -343,6 +345,30 @@ func buildUsecases(
 		invitationDeliveryQueue,
 	)
 
+	orderDispatchNotificationQueue, err := listcloudtasksadp.NewOrderDispatchNotificationQueueFromEnv(ctx)
+	if err != nil {
+		_ = invitationDeliveryQueue.Close()
+		_ = tokenBlueprintAssetStorage.Close()
+		_ = listSaveOperationStorage.Close()
+		_ = announcementAttachmentStorage.Close()
+		return nil, err
+	}
+
+	authUserReader := firebaseadp.NewAuthUserReader(
+		c.infra.FirebaseAuth,
+	)
+
+	orderDispatchNotificationMailer := mailadp.NewOrderDispatchNotificationMailerWithResend()
+
+	orderDispatchNotificationUC := uc.NewOrderDispatchNotificationUsecase(
+		r.orderDispatchNotificationRepo,
+		authUserReader,
+		uc.CompanyIDFromContext,
+		r.productBlueprintRepo,
+		orderDispatchNotificationMailer,
+		orderDispatchNotificationQueue,
+	)
+
 	memberUC := uc.NewMemberUsecase(r.memberRepo)
 
 	authBootstrapSvc := &uc.BootstrapService{
@@ -353,37 +379,39 @@ func buildUsecases(
 	_ = res
 
 	return &usecases{
-		solanaMintClient:              solanaClient,
-		tokenUC:                       tokenUC,
-		accountUC:                     accountUC,
-		announcementUC:                announcementUC,
-		announcementAttachmentStorage: announcementAttachmentStorage,
-		avatarUC:                      avatarUC,
-		paymentMethodUC:               paymentMethodUC,
-		brandUC:                       brandUC,
-		companyUC:                     companyUC,
-		inquiryUC:                     inquiryUC,
-		inventoryUC:                   inventoryUC,
-		listUC:                        listUC,
-		listSaveOperationUC:           listSaveOperationUC,
-		listSaveOperationStorage:      listSaveOperationStorage,
-		listSaveOperationRetryQueue:   listSaveOperationRetryQueue,
-		memberUC:                      memberUC,
-		modelUC:                       modelUC,
-		orderUC:                       orderUC,
-		paymentUC:                     paymentUC,
-		permissionUC:                  permissionUC,
-		printUC:                       printUC,
-		productionUC:                  productionUC,
-		productBlueprintUC:            productBlueprintUC,
-		productBlueprintCategoryUC:    productBlueprintCategoryUC,
-		inspectionUC:                  inspectionUC,
-		mintUC:                        mintUC,
-		shippingAddressUC:             shippingAddressUC,
-		transportationUC:              transportationUC,
-		tokenBlueprintUC:              tokenBlueprintUC,
-		tokenBlueprintAssetStorage:    tokenBlueprintAssetStorage,
-		tokenBlueprintReviewUC:        tokenBlueprintReviewUC,
+		solanaMintClient:               solanaClient,
+		tokenUC:                        tokenUC,
+		accountUC:                      accountUC,
+		announcementUC:                 announcementUC,
+		announcementAttachmentStorage:  announcementAttachmentStorage,
+		avatarUC:                       avatarUC,
+		paymentMethodUC:                paymentMethodUC,
+		brandUC:                        brandUC,
+		companyUC:                      companyUC,
+		inquiryUC:                      inquiryUC,
+		inventoryUC:                    inventoryUC,
+		listUC:                         listUC,
+		listSaveOperationUC:            listSaveOperationUC,
+		listSaveOperationStorage:       listSaveOperationStorage,
+		listSaveOperationRetryQueue:    listSaveOperationRetryQueue,
+		memberUC:                       memberUC,
+		modelUC:                        modelUC,
+		orderUC:                        orderUC,
+		orderDispatchNotificationUC:    orderDispatchNotificationUC,
+		orderDispatchNotificationQueue: orderDispatchNotificationQueue,
+		paymentUC:                      paymentUC,
+		permissionUC:                   permissionUC,
+		printUC:                        printUC,
+		productionUC:                   productionUC,
+		productBlueprintUC:             productBlueprintUC,
+		productBlueprintCategoryUC:     productBlueprintCategoryUC,
+		inspectionUC:                   inspectionUC,
+		mintUC:                         mintUC,
+		shippingAddressUC:              shippingAddressUC,
+		transportationUC:               transportationUC,
+		tokenBlueprintUC:               tokenBlueprintUC,
+		tokenBlueprintAssetStorage:     tokenBlueprintAssetStorage,
+		tokenBlueprintReviewUC:         tokenBlueprintReviewUC,
 
 		productBlueprintReviewUC: func() *uc.ProductBlueprintReviewUsecase {
 			if r.productBlueprintReviewRepo == nil ||

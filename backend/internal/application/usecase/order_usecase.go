@@ -394,12 +394,19 @@ type DispatchOrderItemsInput struct {
 	AllowedInventoryIDs map[string]struct{}
 }
 
+type DispatchOrderItemsResult struct {
+	Order orderdom.Order
+
+	TargetItems []orderdom.OrderItemSnapshot
+	Changed     bool
+}
+
 func (u *OrderUsecase) DispatchItems(
 	ctx context.Context,
 	in DispatchOrderItemsInput,
-) (orderdom.Order, error) {
+) (DispatchOrderItemsResult, error) {
 	if in.ID == "" {
-		return orderdom.Order{},
+		return DispatchOrderItemsResult{},
 			orderdom.ErrInvalidID
 	}
 
@@ -409,10 +416,14 @@ func (u *OrderUsecase) DispatchItems(
 			in.ID,
 		)
 	if err != nil {
-		return orderdom.Order{}, err
+		return DispatchOrderItemsResult{}, err
 	}
 
-	matched := false
+	targetItems := make(
+		[]orderdom.OrderItemSnapshot,
+		0,
+		len(order.Items),
+	)
 	changed := false
 
 	for index := range order.Items {
@@ -423,38 +434,54 @@ func (u *OrderUsecase) DispatchItems(
 			continue
 		}
 
-		matched = true
-
-		if item.IsCanceled ||
-			item.IsDispatched {
+		if item.IsCanceled {
 			continue
 		}
 
-		if err :=
-			order.UpdateItemDispatched(
-				index,
-				true,
-			); err != nil {
-			return orderdom.Order{}, err
+		if !item.IsDispatched {
+			if err :=
+				order.UpdateItemDispatched(
+					index,
+					true,
+				); err != nil {
+				return DispatchOrderItemsResult{}, err
+			}
+
+			changed = true
 		}
 
-		changed = true
+		targetItems =
+			append(
+				targetItems,
+				order.Items[index],
+			)
 	}
 
-	if !matched {
-		return orderdom.Order{},
+	if len(targetItems) == 0 {
+		return DispatchOrderItemsResult{},
 			orderdom.ErrNotFound
 	}
 
-	if !changed {
-		return order, nil
+	if changed {
+		updated, err :=
+			u.repo.Update(
+				ctx,
+				order,
+				nil,
+			)
+		if err != nil {
+			return DispatchOrderItemsResult{}, err
+		}
+
+		order = updated
 	}
 
-	return u.repo.Update(
-		ctx,
-		order,
-		nil,
-	)
+	return DispatchOrderItemsResult{
+		Order: order,
+
+		TargetItems: targetItems,
+		Changed:     changed,
+	}, nil
 }
 
 // =======================

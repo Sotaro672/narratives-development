@@ -20,20 +20,23 @@ import (
 //   - PATCH /orders/{id}/dispatch
 //   - GET /orders/{id}
 type OrderHandler struct {
-	uc      *usecase.OrderUsecase
-	q       *orderq.OrderManagementQuery
-	detailQ *orderq.OrderDetailQuery
+	uc                     *usecase.OrderUsecase
+	q                      *orderq.OrderManagementQuery
+	detailQ                *orderq.OrderDetailQuery
+	dispatchNotificationUC usecase.OrderDispatchNotificationUsecasePort
 }
 
 func NewOrderHandler(
 	uc *usecase.OrderUsecase,
 	q *orderq.OrderManagementQuery,
 	detailQ *orderq.OrderDetailQuery,
+	dispatchNotificationUC usecase.OrderDispatchNotificationUsecasePort,
 ) http.Handler {
 	return &OrderHandler{
-		uc:      uc,
-		q:       q,
-		detailQ: detailQ,
+		uc:                     uc,
+		q:                      q,
+		detailQ:                detailQ,
+		dispatchNotificationUC: dispatchNotificationUC,
 	}
 }
 
@@ -112,7 +115,8 @@ func (h *OrderHandler) dispatch(w http.ResponseWriter, r *http.Request, id strin
 	if h == nil ||
 		h.uc == nil ||
 		h.q == nil ||
-		h.detailQ == nil {
+		h.detailQ == nil ||
+		h.dispatchNotificationUC == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "order_dispatch_not_wired"})
 		return
@@ -124,12 +128,22 @@ func (h *OrderHandler) dispatch(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
-	_, err = h.uc.DispatchItems(
+	result, err := h.uc.DispatchItems(
 		ctx,
 		usecase.DispatchOrderItemsInput{
 			ID:                  id,
 			AllowedInventoryIDs: allowedInventoryIDs,
 		},
+	)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	_, err = h.dispatchNotificationUC.EnsureDelivery(
+		ctx,
+		result.Order,
+		result.TargetItems,
 	)
 	if err != nil {
 		writeOrderErr(w, err)

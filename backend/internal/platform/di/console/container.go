@@ -48,6 +48,7 @@ type Container struct {
 	MemberUC                        *uc.MemberUsecase
 	ModelUC                         *uc.ModelUsecase
 	OrderUC                         *uc.OrderUsecase
+	OrderDispatchNotificationUC     uc.OrderDispatchNotificationUsecasePort
 	PaymentUC                       *uc.PaymentUsecase
 	PermissionUC                    *uc.PermissionUsecase
 	PrintUC                         *uc.PrintUsecase
@@ -100,6 +101,7 @@ type Container struct {
 	tokenBlueprintAssetStorage      *firebaseadp.TokenBlueprintAssetStorage
 	listSaveOperationRetryQueue     *listcloudtasksadp.ListSaveOperationQueue
 	invitationDeliveryQueue         *listcloudtasksadp.InvitationDeliveryQueue
+	orderDispatchNotificationQueue  *listcloudtasksadp.OrderDispatchNotificationQueue
 }
 
 func NewContainer(
@@ -135,6 +137,11 @@ func NewContainer(
 	)
 
 	if clients == nil || clients.infra == nil {
+		var orderDispatchNotificationQueueErr error
+		if u != nil && u.orderDispatchNotificationQueue != nil {
+			orderDispatchNotificationQueueErr = u.orderDispatchNotificationQueue.Close()
+		}
+
 		var invitationQueueErr error
 		if u != nil && u.invitationDeliveryQueue != nil {
 			invitationQueueErr = u.invitationDeliveryQueue.Close()
@@ -157,6 +164,7 @@ func NewContainer(
 
 		return nil, errors.Join(
 			errors.New("clients/infra is nil"),
+			orderDispatchNotificationQueueErr,
 			invitationQueueErr,
 			listQueueErr,
 			tokenBlueprintStorageErr,
@@ -223,6 +231,7 @@ func NewContainer(
 		MemberUC:                        u.memberUC,
 		ModelUC:                         u.modelUC,
 		OrderUC:                         u.orderUC,
+		OrderDispatchNotificationUC:     u.orderDispatchNotificationUC,
 		PaymentUC:                       u.paymentUC,
 		PermissionUC:                    u.permissionUC,
 		PrintUC:                         u.printUC,
@@ -275,12 +284,18 @@ func NewContainer(
 		tokenBlueprintAssetStorage:      u.tokenBlueprintAssetStorage,
 		listSaveOperationRetryQueue:     u.listSaveOperationRetryQueue,
 		invitationDeliveryQueue:         u.invitationDeliveryQueue,
+		orderDispatchNotificationQueue:  u.orderDispatchNotificationQueue,
 	}, nil
 }
 
 func (c *Container) Close() error {
 	if c == nil {
 		return nil
+	}
+
+	var orderDispatchNotificationQueueErr error
+	if c.orderDispatchNotificationQueue != nil {
+		orderDispatchNotificationQueueErr = c.orderDispatchNotificationQueue.Close()
 	}
 
 	var invitationQueueErr error
@@ -309,6 +324,7 @@ func (c *Container) Close() error {
 	}
 
 	return errors.Join(
+		orderDispatchNotificationQueueErr,
 		invitationQueueErr,
 		listQueueErr,
 		tokenBlueprintStorageErr,
