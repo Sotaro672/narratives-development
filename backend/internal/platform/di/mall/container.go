@@ -536,7 +536,10 @@ func NewContainer(
 			paymentMethodRepo,
 			shippingAddressRepo,
 			c.ShippingQuoteUC,
-		)
+		).
+			WithCartRepository(
+				cartRepo,
+			)
 
 	c.InquiryUC =
 		usecase.NewInquiryUsecase(

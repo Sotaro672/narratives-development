@@ -4,9 +4,11 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
+	cartdom "narratives/internal/domain/cart"
 	common "narratives/internal/domain/common"
 	inventorydom "narratives/internal/domain/inventory"
 	listdom "narratives/internal/domain/list"
@@ -25,6 +27,7 @@ import (
 // - Payment の作成は /mall/me/payments の責務
 type OrderUsecase struct {
 	repo                 orderdom.Repository
+	cartRepo             cartdom.Repository
 	listRepo             listdom.Repository
 	inventoryRepo        inventorydom.RepositoryPort
 	productBlueprintRepo productblueprintdom.Repository
@@ -56,6 +59,18 @@ func NewOrderUsecase(
 		shippingQuoteUC:      shippingQuoteUC,
 		now:                  time.Now,
 	}
+}
+
+func (u *OrderUsecase) WithCartRepository(
+	cartRepo cartdom.Repository,
+) *OrderUsecase {
+	if u == nil {
+		return u
+	}
+
+	u.cartRepo = cartRepo
+
+	return u
 }
 
 // =======================
@@ -210,6 +225,31 @@ func (u *OrderUsecase) Create(
 	created, err := u.repo.Create(ctx, order)
 	if err != nil {
 		return orderdom.Order{}, err
+	}
+
+	// 注文作成が確定した時点で、注文元のcartを削除する。
+	//
+	// Orderは既に永続化済みのため、cart削除失敗を購入APIの失敗として
+	// 返すと、クライアント再試行による重複注文を誘発する可能性がある。
+	// そのためcart削除はbest-effortとし、失敗はログへ残す。
+	if u.cartRepo != nil {
+		cartID := strings.TrimSpace(
+			created.CartID,
+		)
+
+		if cartID != "" {
+			if err := u.cartRepo.DeleteByAvatarID(
+				ctx,
+				cartID,
+			); err != nil {
+				log.Printf(
+					"order usecase: clear cart after order failed orderId=%q cartId=%q err=%v",
+					created.ID,
+					cartID,
+					err,
+				)
+			}
+		}
 	}
 
 	return created, nil
