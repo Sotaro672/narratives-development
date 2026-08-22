@@ -213,6 +213,7 @@ async function requestJSON<T>(url: string, init?: RequestInit): Promise<T> {
 
 export interface OrderRepository {
   getById(id: string): Promise<OrderDetailDTO>;
+  dispatch(id: string): Promise<OrderDetailDTO>;
   listItemInventoryRows(
     params?: OrderListParams,
   ): Promise<PageResult<OrderItemInventoryRowDTO>>;
@@ -236,6 +237,17 @@ export function createOrderRepository(): OrderRepository {
       return requestJSON<OrderDetailDTO>(
         buildUrl(`/orders/${encodeURIComponent(id)}`),
         { method: "GET" },
+      );
+    },
+
+    async dispatch(id: string): Promise<OrderDetailDTO> {
+      if (!id) {
+        throw new Error("id is required");
+      }
+
+      return requestJSON<OrderDetailDTO>(
+        buildUrl(`/orders/${encodeURIComponent(id)}/dispatch`),
+        { method: "PATCH" },
       );
     },
 

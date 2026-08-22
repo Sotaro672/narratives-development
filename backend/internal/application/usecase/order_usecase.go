@@ -388,6 +388,75 @@ func (u *OrderUsecase) Update(
 	return u.repo.Update(ctx, checked, nil)
 }
 
+type DispatchOrderItemsInput struct {
+	ID string
+
+	AllowedInventoryIDs map[string]struct{}
+}
+
+func (u *OrderUsecase) DispatchItems(
+	ctx context.Context,
+	in DispatchOrderItemsInput,
+) (orderdom.Order, error) {
+	if in.ID == "" {
+		return orderdom.Order{},
+			orderdom.ErrInvalidID
+	}
+
+	order, err :=
+		u.repo.GetByID(
+			ctx,
+			in.ID,
+		)
+	if err != nil {
+		return orderdom.Order{}, err
+	}
+
+	matched := false
+	changed := false
+
+	for index := range order.Items {
+		item := order.Items[index]
+
+		if _, ok :=
+			in.AllowedInventoryIDs[item.InventoryID]; !ok {
+			continue
+		}
+
+		matched = true
+
+		if item.IsCanceled ||
+			item.IsDispatched {
+			continue
+		}
+
+		if err :=
+			order.UpdateItemDispatched(
+				index,
+				true,
+			); err != nil {
+			return orderdom.Order{}, err
+		}
+
+		changed = true
+	}
+
+	if !matched {
+		return orderdom.Order{},
+			orderdom.ErrNotFound
+	}
+
+	if !changed {
+		return order, nil
+	}
+
+	return u.repo.Update(
+		ctx,
+		order,
+		nil,
+	)
+}
+
 // =======================
 // Shipping snapshot
 // =======================

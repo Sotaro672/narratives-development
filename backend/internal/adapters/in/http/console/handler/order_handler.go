@@ -9,6 +9,7 @@ import (
 	"time"
 
 	orderq "narratives/internal/application/query/console"
+	usecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
 )
@@ -16,17 +17,21 @@ import (
 // OrderHandler handles:
 //   - GET /orders/items
 //   - GET /orders/undispatched-count
+//   - PATCH /orders/{id}/dispatch
 //   - GET /orders/{id}
 type OrderHandler struct {
+	uc      *usecase.OrderUsecase
 	q       *orderq.OrderManagementQuery
 	detailQ *orderq.OrderDetailQuery
 }
 
 func NewOrderHandler(
+	uc *usecase.OrderUsecase,
 	q *orderq.OrderManagementQuery,
 	detailQ *orderq.OrderDetailQuery,
 ) http.Handler {
 	return &OrderHandler{
+		uc:      uc,
 		q:       q,
 		detailQ: detailQ,
 	}
@@ -42,6 +47,19 @@ func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case r.Method == http.MethodGet && r.URL.Path == "/orders/undispatched-count":
 		h.countUndispatchedOrders(w, r)
+		return
+
+	case r.Method == http.MethodPatch &&
+		strings.HasPrefix(r.URL.Path, "/orders/") &&
+		strings.HasSuffix(r.URL.Path, "/dispatch"):
+		id := strings.TrimSuffix(
+			strings.TrimPrefix(
+				r.URL.Path,
+				"/orders/",
+			),
+			"/dispatch",
+		)
+		h.dispatch(w, r, id)
 		return
 
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/orders/"):
@@ -69,6 +87,52 @@ func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	if h == nil || h.detailQ == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "order_detail_query_not_wired"})
+		return
+	}
+
+	dto, err := h.detailQ.GetByID(ctx, id)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(dto)
+}
+
+func (h *OrderHandler) dispatch(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	id = strings.Trim(id, " \t\r\n/")
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	if h == nil ||
+		h.uc == nil ||
+		h.q == nil ||
+		h.detailQ == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "order_dispatch_not_wired"})
+		return
+	}
+
+	allowedInventoryIDs, err := h.q.AllowedInventoryIDSet(ctx)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	_, err = h.uc.DispatchItems(
+		ctx,
+		usecase.DispatchOrderItemsInput{
+			ID:                  id,
+			AllowedInventoryIDs: allowedInventoryIDs,
+		},
+	)
+	if err != nil {
+		writeOrderErr(w, err)
 		return
 	}
 
@@ -194,6 +258,12 @@ func writeOrderErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, orderdom.ErrInvalidID):
 		code = http.StatusBadRequest
+
+	case errors.Is(err, orderdom.ErrNotFound):
+		code = http.StatusNotFound
+
+	case errors.Is(err, orderdom.ErrConflict):
+		code = http.StatusConflict
 	}
 
 	w.WriteHeader(code)

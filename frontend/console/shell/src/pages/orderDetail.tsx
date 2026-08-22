@@ -76,6 +76,9 @@ export default function OrderDetail() {
     order,
     loading,
     error,
+    dispatching,
+    dispatchError,
+    canDispatch,
     items,
     quantity,
     subtotal,
@@ -90,6 +93,7 @@ export default function OrderDetail() {
     pageTitle,
     onBack,
     goListDetail,
+    onDispatch,
   } = useOrderDetail();
 
   const left = (
@@ -99,6 +103,12 @@ export default function OrderDetail() {
       </CardHeader>
 
       <CardContent>
+        {dispatchError ? (
+          <div className="mb-4 text-sm text-red-600 whitespace-pre-wrap text-left">
+            発送処理に失敗しました: {dispatchError}
+          </div>
+        ) : null}
+
         {loading ? (
           <div className="text-sm text-muted-foreground text-left">
             読み込み中...
@@ -554,6 +564,17 @@ export default function OrderDetail() {
       layout="grid-2"
       title={pageTitle}
       onBack={onBack}
+      statusButtonLabel={
+        canDispatch ? "発送" : "発送済"
+      }
+      statusButtonBusyLabel="発送中..."
+      onStatusButtonClick={onDispatch}
+      isStatusButtonLoading={dispatching}
+      statusButtonDisabled={
+        loading ||
+        dispatching ||
+        !canDispatch
+      }
     >
       {[left, right]}
     </PageStyle>

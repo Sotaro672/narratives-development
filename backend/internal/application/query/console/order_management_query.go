@@ -168,6 +168,21 @@ func NewOrderManagementQuery(p NewOrderManagementQueryParams) *OrderManagementQu
 // Public APIs
 // ============================================================
 
+func (q *OrderManagementQuery) AllowedInventoryIDSet(
+	ctx context.Context,
+) (map[string]struct{}, error) {
+	if q == nil || q.invRows == nil {
+		return nil, errors.New(
+			"OrderManagementQuery.AllowedInventoryIDSet: invRows is required",
+		)
+	}
+
+	return AllowedInventoryIDSetFromContext(
+		ctx,
+		q.invRows,
+	)
+}
+
 func (q *OrderManagementQuery) ListItemInventoryRows(
 	ctx context.Context,
 	filter orderdom.Filter,

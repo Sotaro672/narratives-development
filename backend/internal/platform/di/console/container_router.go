@@ -186,7 +186,11 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.OrderManagementQuery != nil || c.OrderDetailQuery != nil {
-		ordersH = consoleHandler.NewOrderHandler(c.OrderManagementQuery, c.OrderDetailQuery)
+		ordersH = consoleHandler.NewOrderHandler(
+			c.OrderUC,
+			c.OrderManagementQuery,
+			c.OrderDetailQuery,
+		)
 	}
 
 	if c.WalletUC != nil {
