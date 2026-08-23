@@ -26,10 +26,7 @@ function getOrderSubtotal(order: OrderDetailType): number {
 function getOrderShippingAmount(order: OrderDetailType): number {
   const amount = order.shippingQuoteSnapshot?.amount;
 
-  if (
-    typeof amount !== "number" ||
-    !Number.isFinite(amount)
-  ) {
+  if (typeof amount !== "number" || !Number.isFinite(amount)) {
     return 0;
   }
 
@@ -45,60 +42,46 @@ function getOrderStatusLabel(order: OrderDetailType): string {
     return "商品なし";
   }
 
-  const activeItems =
-    order.items.filter((item) => !item.isCancelled);
+  const activeItems = order.items.filter((item) => !item.isCancelled);
 
   if (activeItems.length === 0) {
     return "キャンセル済み";
   }
 
-  const hasCancelledItem =
-    activeItems.length !== order.items.length;
+  const hasCancelledItem = activeItems.length !== order.items.length;
 
   if (hasCancelledItem) {
     return "一部キャンセル済み";
   }
 
-  const allTransferred =
-    activeItems.every((item) => item.transferred);
+  const allTransferred = activeItems.every((item) => item.transferred);
 
   if (allTransferred) {
-    return order.paid
-      ? "受け取り済み"
-      : "未決済";
+    return order.paid ? "受け取り済み" : "未決済";
   }
 
-  const partiallyTransferred =
-    activeItems.some((item) => item.transferred);
+  const partiallyTransferred = activeItems.some((item) => item.transferred);
 
   if (partiallyTransferred) {
-    return order.paid
-      ? "一部受け取り済み"
-      : "未決済";
+    return order.paid ? "一部受け取り済み" : "未決済";
   }
 
-  const allDispatched =
-    activeItems.every((item) => item.isDispatched);
+  const allDispatched = activeItems.every((item) => item.isDispatched);
 
   if (allDispatched) {
     return "発送済み";
   }
 
-  const partiallyDispatched =
-    activeItems.some((item) => item.isDispatched);
+  const partiallyDispatched = activeItems.some((item) => item.isDispatched);
 
   if (partiallyDispatched) {
     return "一部発送済み";
   }
 
-  return order.paid
-    ? "決済済み"
-    : "未決済";
+  return order.paid ? "決済済み" : "未決済";
 }
 
-function getItemStatusLabel(
-  item: OrderDetailItem,
-): string {
+function getItemStatusLabel(item: OrderDetailItem): string {
   if (item.isCancelled) {
     return "キャンセル済み";
   }
@@ -114,27 +97,18 @@ function getItemStatusLabel(
   return "未発送";
 }
 
-function getProductTitle(
-  item: OrderDetailItem,
-): string {
-  return item.productName ||
-    item.tokenName ||
-    "商品";
+function getProductTitle(item: OrderDetailItem): string {
+  return item.productName || item.tokenName || "商品";
 }
 
-function getFallbackInitial(
-  value?: string,
-): string {
-  const trimmed =
-    value?.trim() || "";
+function getFallbackInitial(value?: string): string {
+  const trimmed = value?.trim() || "";
 
   if (!trimmed) {
     return "?";
   }
 
-  return trimmed
-    .slice(0, 1)
-    .toUpperCase();
+  return trimmed.slice(0, 1).toUpperCase();
 }
 
 function getModelMetaItems(
@@ -169,26 +143,19 @@ function getModelMetaItems(
     });
   }
 
-  if (
-    item.volumeValue !== undefined &&
-    item.volumeValue !== null
-  ) {
-    const volumeUnit =
-      item.volumeUnit || "";
+  if (item.volumeValue !== undefined && item.volumeValue !== null) {
+    const volumeUnit = item.volumeUnit || "";
 
     metaItems.push({
       label: "容量",
-      value:
-        `${item.volumeValue}${volumeUnit}`,
+      value: `${item.volumeValue}${volumeUnit}`,
     });
   }
 
   return metaItems;
 }
 
-function getMeasurementLabel(
-  key: string,
-): string {
+function getMeasurementLabel(key: string): string {
   switch (key) {
     case "length":
       return "着丈";
@@ -219,26 +186,17 @@ function getMeasurementLabel(
   }
 }
 
-function renderModelMeta(
-  item: OrderDetailItem,
-) {
-  const metaItems =
-    getModelMetaItems(item);
+function renderModelMeta(item: OrderDetailItem) {
+  const metaItems = getModelMetaItems(item);
 
   const measurements =
-    item.measurements &&
-    typeof item.measurements === "object"
-      ? Object.entries(
-          item.measurements,
-        ).filter(([, value]) =>
+    item.measurements && typeof item.measurements === "object"
+      ? Object.entries(item.measurements).filter(([, value]) =>
           Number.isFinite(value),
         )
       : [];
 
-  if (
-    metaItems.length === 0 &&
-    measurements.length === 0
-  ) {
+  if (metaItems.length === 0 && measurements.length === 0) {
     return null;
   }
 
@@ -260,9 +218,7 @@ function renderModelMeta(
             key={key}
             className="order-detail-page__item-meta-row"
           >
-            <dt>
-              {getMeasurementLabel(key)}
-            </dt>
+            <dt>{getMeasurementLabel(key)}</dt>
             <dd>{value} mm</dd>
           </div>
         ))}
@@ -272,8 +228,7 @@ function renderModelMeta(
 }
 
 export default function OrderDetail() {
-  const navigate =
-    useNavigate();
+  const navigate = useNavigate();
 
   const {
     order,
@@ -288,19 +243,14 @@ export default function OrderDetail() {
     navigate("/wallet");
   };
 
-  const handleOpenBrand = (
-    brandId?: string,
-  ) => {
-    const id =
-      brandId?.trim() || "";
+  const handleOpenBrand = (brandId?: string) => {
+    const id = brandId?.trim() || "";
 
     if (!id) {
       return;
     }
 
-    navigate(
-      `/brands/${encodeURIComponent(id)}`,
-    );
+    navigate(`/brands/${encodeURIComponent(id)}`);
   };
 
   const showError =
@@ -348,9 +298,7 @@ export default function OrderDetail() {
               <button
                 type="button"
                 className="page-button page-button--secondary"
-                onClick={() =>
-                  void reload()
-                }
+                onClick={() => void reload()}
               >
                 再読み込み
               </button>
@@ -366,9 +314,7 @@ export default function OrderDetail() {
                   <p className="order-detail-page__date">
                     注文日時:{" "}
                     {order.createdAt
-                      ? formatDateTime(
-                          order.createdAt,
-                        )
+                      ? formatDateTime(order.createdAt)
                       : "-"}
                   </p>
 
@@ -378,9 +324,7 @@ export default function OrderDetail() {
                 </div>
 
                 <span className="order-detail-page__status">
-                  {getOrderStatusLabel(
-                    order,
-                  )}
+                  {getOrderStatusLabel(order)}
                 </span>
               </div>
 
@@ -401,181 +345,147 @@ export default function OrderDetail() {
               />
 
               <ul className="order-detail-page__items">
-                {order.items.map(
-                  (item, index) => {
-                    const productTitle =
-                      getProductTitle(item);
+                {order.items.map((item, index) => {
+                  const productTitle = getProductTitle(item);
+                  const brandName =
+                    item.brandName ||
+                    "ブランド未設定";
+                  const itemKey =
+                    `${order.id}-${item.inventoryId}-${item.modelId}-${index}`;
+                  const isCancelling =
+                    cancellingItemIndex === index;
 
-                    const brandName =
-                      item.brandName ||
-                      "ブランド未設定";
+                  const cancelDisabled =
+                    item.isCancelled ||
+                    item.isDispatched ||
+                    item.transferred ||
+                    isCancelling;
 
-                    const itemKey =
-                      `${order.id}-${item.inventoryId}-${item.modelId}-${index}`;
+                  return (
+                    <li
+                      key={itemKey}
+                      className="order-detail-page__item"
+                    >
+                      <div className="order-detail-page__item-image">
+                        {item.tokenIcon ? (
+                          <img
+                            src={item.tokenIcon}
+                            alt={
+                              item.tokenName ||
+                              productTitle
+                            }
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span className="order-detail-page__item-image-fallback">
+                            {getFallbackInitial(
+                              item.tokenName ||
+                                productTitle,
+                            )}
+                          </span>
+                        )}
+                      </div>
 
-                    const isCancelling =
-                      cancellingItemIndex ===
-                      index;
-
-                    const cancelDisabled =
-                      item.isCancelled ||
-                      item.isDispatched ||
-                      item.transferred ||
-                      isCancelling;
-
-                    return (
-                      <li
-                        key={itemKey}
-                        className="order-detail-page__item"
-                      >
-                        <div className="order-detail-page__item-image">
-                          {item.tokenIcon ? (
-                            <img
-                              src={item.tokenIcon}
-                              alt={
-                                item.tokenName ||
-                                productTitle
-                              }
-                              loading="lazy"
-                            />
-                          ) : (
-                            <span className="order-detail-page__item-image-fallback">
-                              {getFallbackInitial(
-                                item.tokenName ||
-                                  productTitle,
-                              )}
+                      <div className="order-detail-page__item-body">
+                        <div className="order-detail-page__item-heading">
+                          <div className="order-detail-page__item-title-area">
+                            <span className="order-detail-page__item-title">
+                              {productTitle}
                             </span>
-                          )}
-                        </div>
 
-                        <div className="order-detail-page__item-body">
-                          <div className="order-detail-page__item-heading">
-                            <div className="order-detail-page__item-title-area">
-                              <span className="order-detail-page__item-title">
-                                {productTitle}
+                            {item.tokenName ? (
+                              <span className="order-detail-page__item-token-name">
+                                {item.tokenName}
                               </span>
-
-                              {item.tokenName ? (
-                                <span className="order-detail-page__item-token-name">
-                                  {
-                                    item.tokenName
-                                  }
-                                </span>
-                              ) : null}
-                            </div>
-
-                            <span className="order-detail-page__item-price">
-                              {formatAmount(
-                                item.price,
-                              )}
-                            </span>
+                            ) : null}
                           </div>
 
+                          <span className="order-detail-page__item-price">
+                            {formatAmount(item.price)}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="order-detail-page__brand"
+                          disabled={!item.brandId}
+                          onClick={() =>
+                            handleOpenBrand(item.brandId)
+                          }
+                        >
+                          <MediaIcon
+                            src={item.brandIcon}
+                            alt={brandName}
+                            fallback={getFallbackInitial(
+                              brandName,
+                            )}
+                            size="xs"
+                            shape="circle"
+                          />
+
+                          <span>{brandName}</span>
+                        </button>
+
+                        {renderModelMeta(item)}
+
+                        <dl className="order-detail-page__item-meta">
+                          <div className="order-detail-page__item-meta-row">
+                            <dt>数量</dt>
+                            <dd>{item.qty}点</dd>
+                          </div>
+
+                          <div className="order-detail-page__item-meta-row">
+                            <dt>小計</dt>
+                            <dd>
+                              {formatAmount(
+                                item.price * item.qty,
+                              )}
+                            </dd>
+                          </div>
+
+                          <div className="order-detail-page__item-meta-row">
+                            <dt>発送状況</dt>
+                            <dd>
+                              {getItemStatusLabel(item)}
+                            </dd>
+                          </div>
+
+                          {item.transferredAt ? (
+                            <div className="order-detail-page__item-meta-row">
+                              <dt>受取日時</dt>
+                              <dd>
+                                {formatDateTime(
+                                  item.transferredAt,
+                                )}
+                              </dd>
+                            </div>
+                          ) : null}
+                        </dl>
+
+                        <div className="page-actions order-detail-page__cancel-actions">
                           <button
                             type="button"
-                            className="order-detail-page__brand"
-                            disabled={
-                              !item.brandId
-                            }
+                            className="order-detail-page__cancel-button"
+                            disabled={cancelDisabled}
                             onClick={() =>
-                              handleOpenBrand(
-                                item.brandId,
-                              )
+                              void cancelItem(index)
                             }
                           >
-                            <MediaIcon
-                              src={
-                                item.brandIcon
-                              }
-                              alt={brandName}
-                              fallback={getFallbackInitial(
-                                brandName,
-                              )}
-                              size="xs"
-                              shape="circle"
-                            />
-
-                            <span>
-                              {brandName}
-                            </span>
+                            {item.isCancelled
+                              ? "キャンセル済み"
+                              : isCancelling
+                                ? "キャンセル中..."
+                                : item.transferred
+                                  ? "受け取り済み"
+                                  : item.isDispatched
+                                    ? "発送済み"
+                                    : "商品をキャンセル"}
                           </button>
-
-                          {renderModelMeta(
-                            item,
-                          )}
-
-                          <dl className="order-detail-page__item-meta">
-                            <div className="order-detail-page__item-meta-row">
-                              <dt>数量</dt>
-                              <dd>
-                                {item.qty}点
-                              </dd>
-                            </div>
-
-                            <div className="order-detail-page__item-meta-row">
-                              <dt>小計</dt>
-                              <dd>
-                                {formatAmount(
-                                  item.price *
-                                    item.qty,
-                                )}
-                              </dd>
-                            </div>
-
-                            <div className="order-detail-page__item-meta-row">
-                              <dt>
-                                発送状況
-                              </dt>
-                              <dd>
-                                {getItemStatusLabel(
-                                  item,
-                                )}
-                              </dd>
-                            </div>
-
-                            {item.transferredAt ? (
-                              <div className="order-detail-page__item-meta-row">
-                                <dt>
-                                  受取日時
-                                </dt>
-                                <dd>
-                                  {formatDateTime(
-                                    item.transferredAt,
-                                  )}
-                                </dd>
-                              </div>
-                            ) : null}
-                          </dl>
-
-                          <div className="page-actions">
-                            <button
-                              type="button"
-                              className="page-button page-button--secondary"
-                              disabled={
-                                cancelDisabled
-                              }
-                              onClick={() =>
-                                void cancelItem(
-                                  index,
-                                )
-                              }
-                            >
-                              {item.isCancelled
-                                ? "キャンセル済み"
-                                : isCancelling
-                                  ? "キャンセル中..."
-                                  : item.transferred
-                                    ? "受け取り済み"
-                                    : item.isDispatched
-                                      ? "発送済み"
-                                      : "商品をキャンセル"}
-                            </button>
-                          </div>
                         </div>
-                      </li>
-                    );
-                  },
-                )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
 
@@ -590,9 +500,7 @@ export default function OrderDetail() {
                   <dt>商品小計</dt>
                   <dd>
                     {formatAmount(
-                      getOrderSubtotal(
-                        order,
-                      ),
+                      getOrderSubtotal(order),
                     )}
                   </dd>
                 </div>
@@ -601,9 +509,7 @@ export default function OrderDetail() {
                   <dt>配送料</dt>
                   <dd>
                     {formatAmount(
-                      getOrderShippingAmount(
-                        order,
-                      ),
+                      getOrderShippingAmount(order),
                     )}
                   </dd>
                 </div>
@@ -612,9 +518,7 @@ export default function OrderDetail() {
                   <dt>合計</dt>
                   <dd>
                     {formatAmount(
-                      getOrderTotal(
-                        order,
-                      ),
+                      getOrderTotal(order),
                     )}
                   </dd>
                 </div>

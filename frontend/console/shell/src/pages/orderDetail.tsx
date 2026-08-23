@@ -1,22 +1,10 @@
 // frontend/console/shell/src/pages/orderDetail.tsx
-
 import PageStyle from "../layout/PageStyle/PageStyle";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../shared/ui/card";
-import {
-  coerceRgbInt,
-  rgbIntToHex,
-} from "../shared/util/color";
+import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
+import { coerceRgbInt, rgbIntToHex } from "../shared/util/color";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 import { getOrderStatusLabel } from "../shared/types/order";
-import {
-  formatJPY,
-  useOrderDetail,
-} from "../features/order/presentation/hooks/useOrderDetail";
+import { formatJPY, useOrderDetail } from "../features/order/presentation/hooks/useOrderDetail";
 import type { OrderDetailItemDTO } from "../features/order/presentation/hooks/useOrderDetail";
 
 function isAlcoholItem(item: OrderDetailItemDTO): boolean {
@@ -27,10 +15,7 @@ function isAlcoholItem(item: OrderDetailItemDTO): boolean {
   );
 }
 
-function getCategoryFieldValue(
-  item: OrderDetailItemDTO,
-  key: string,
-): unknown {
+function getCategoryFieldValue(item: OrderDetailItemDTO, key: string): unknown {
   return item.categoryFields?.[key];
 }
 
@@ -40,10 +25,7 @@ function hasDisplayValue(value: unknown): boolean {
   return true;
 }
 
-function formatDisplayValue(
-  value: unknown,
-  unit?: string,
-): string {
+function formatDisplayValue(value: unknown, unit?: string): string {
   if (!hasDisplayValue(value)) return "-";
 
   if (Array.isArray(value)) {
@@ -51,7 +33,6 @@ function formatDisplayValue(
       .map((item) => String(item ?? "").trim())
       .filter(Boolean)
       .join(", ");
-
     return joined || "-";
   }
 
@@ -65,11 +46,8 @@ function formatDisplayValue(
 
 function formatVolume(item: OrderDetailItemDTO): string {
   if (item.volumeValue === undefined) return "-";
-
   const unit = item.volumeUnit?.trim();
-  return unit
-    ? `${item.volumeValue}${unit}`
-    : String(item.volumeValue);
+  return unit ? `${item.volumeValue}${unit}` : String(item.volumeValue);
 }
 
 export default function OrderDetail() {
@@ -97,18 +75,20 @@ export default function OrderDetail() {
     onDispatch,
   } = useOrderDetail();
 
+  const isCancelled = items.length > 0 && items.every((item) => item.isCancelled);
+
   const left = (
     <Card className="mt-4">
       <CardHeader>
         <CardTitle>注文情報</CardTitle>
       </CardHeader>
-
       <CardContent>
         {dispatchError ? (
           <div className="mb-4 text-sm text-red-600 whitespace-pre-wrap text-left">
             発送処理に失敗しました: {dispatchError}
           </div>
         ) : null}
+
         {loading ? (
           <div className="text-sm text-muted-foreground text-left">
             読み込み中...
@@ -252,10 +232,7 @@ export default function OrderDetail() {
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                       住所1
                     </th>
-                    <td
-                      className="py-2 text-left"
-                      colSpan={5}
-                    >
+                    <td className="py-2 text-left" colSpan={5}>
                       {shipping?.street ?? "-"}
                     </td>
                   </tr>
@@ -264,10 +241,7 @@ export default function OrderDetail() {
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                       住所2
                     </th>
-                    <td
-                      className="py-2 text-left"
-                      colSpan={5}
-                    >
+                    <td className="py-2 text-left" colSpan={5}>
                       {shipping?.street2 ?? "-"}
                     </td>
                   </tr>
@@ -287,27 +261,12 @@ export default function OrderDetail() {
               ) : (
                 <div className="space-y-4">
                   {items.map((item, index) => {
-                    const transferredAt = safeDateTimeLabelJa(
-                      item.transferredAt,
-                      "-",
-                    );
+                    const transferredAt = safeDateTimeLabelJa(item.transferredAt, "-");
                     const alcohol = isAlcoholItem(item);
-                    const vintage = getCategoryFieldValue(
-                      item,
-                      "vintage",
-                    );
-                    const region = getCategoryFieldValue(
-                      item,
-                      "region",
-                    );
-                    const material = getCategoryFieldValue(
-                      item,
-                      "material",
-                    );
-                    const alcoholContent = getCategoryFieldValue(
-                      item,
-                      "alcoholContent",
-                    );
+                    const vintage = getCategoryFieldValue(item, "vintage");
+                    const region = getCategoryFieldValue(item, "region");
+                    const material = getCategoryFieldValue(item, "material");
+                    const alcoholContent = getCategoryFieldValue(item, "alcoholContent");
 
                     return (
                       <Card key={index}>
@@ -363,10 +322,7 @@ export default function OrderDetail() {
                                       アルコール度数
                                     </th>
                                     <td className="py-2 text-left">
-                                      {formatDisplayValue(
-                                        alcoholContent,
-                                        "%",
-                                      )}
+                                      {formatDisplayValue(alcoholContent, "%")}
                                     </td>
                                   </tr>
                                 </>
@@ -387,13 +343,9 @@ export default function OrderDetail() {
                                     </th>
                                     <td className="py-2 text-left">
                                       {(() => {
-                                        const name =
-                                          item.color?.trim() ?? "";
-                                        const rgbInt = coerceRgbInt(
-                                          item.rgb,
-                                        );
-                                        const hex =
-                                          rgbIntToHex(rgbInt);
+                                        const name = item.color?.trim() ?? "";
+                                        const rgbInt = coerceRgbInt(item.rgb);
+                                        const hex = rgbIntToHex(rgbInt);
 
                                         if (!name && !hex) {
                                           return "-";
@@ -404,18 +356,13 @@ export default function OrderDetail() {
                                             {hex ? (
                                               <span
                                                 className="inline-block h-4 w-4 rounded border"
-                                                style={{
-                                                  backgroundColor:
-                                                    hex,
-                                                }}
+                                                style={{ backgroundColor: hex }}
                                                 aria-label={`color ${hex}`}
                                                 title={hex}
                                               />
                                             ) : null}
 
-                                            <span>
-                                              {name || "-"}
-                                            </span>
+                                            <span>{name || "-"}</span>
                                           </div>
                                         );
                                       })()}
@@ -548,20 +495,16 @@ export default function OrderDetail() {
       title={pageTitle}
       onBack={onBack}
       statusButtonLabel={
-        canDispatch
-          ? "発送"
-          : getOrderStatusLabel(
-              order?.paid ?? true,
-            )
+        isCancelled
+          ? undefined
+          : canDispatch
+            ? "発送"
+            : getOrderStatusLabel(order?.paid ?? true)
       }
       statusButtonBusyLabel="発送中..."
-      onStatusButtonClick={onDispatch}
+      onStatusButtonClick={isCancelled ? undefined : onDispatch}
       isStatusButtonLoading={dispatching}
-      statusButtonDisabled={
-        loading ||
-        dispatching ||
-        !canDispatch
-      }
+      statusButtonDisabled={loading || dispatching || !canDispatch}
     >
       {[left, right]}
     </PageStyle>

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	cartdom "narratives/internal/domain/cart"
 	common "narratives/internal/domain/common"
 	inventorydom "narratives/internal/domain/inventory"
@@ -19,6 +20,15 @@ import (
 	resaledom "narratives/internal/domain/resale"
 	shippingaddressdom "narratives/internal/domain/shippingAddress"
 )
+
+type OrderCancellationMailerPort interface {
+	SendOrderCancellationReceipt(
+		ctx context.Context,
+		toEmail string,
+		orderID string,
+		itemIndex int,
+	) error
+}
 
 // OrderUsecase orchestrates order operations.
 //
@@ -35,7 +45,11 @@ type OrderUsecase struct {
 	paymentMethodRepo    paymentmethoddom.RepositoryPort
 	shippingAddressRepo  shippingaddressdom.RepositoryPort
 	shippingQuoteUC      *ShippingQuoteUsecase
-	now                  func() time.Time
+
+	authUserReader     applicationport.AuthUserReader
+	cancellationMailer OrderCancellationMailerPort
+
+	now func() time.Time
 }
 
 func NewOrderUsecase(
@@ -61,15 +75,25 @@ func NewOrderUsecase(
 	}
 }
 
-func (u *OrderUsecase) WithCartRepository(
-	cartRepo cartdom.Repository,
-) *OrderUsecase {
+func (u *OrderUsecase) WithCartRepository(cartRepo cartdom.Repository) *OrderUsecase {
 	if u == nil {
 		return u
 	}
 
 	u.cartRepo = cartRepo
+	return u
+}
 
+func (u *OrderUsecase) WithCancellationNotification(
+	authUserReader applicationport.AuthUserReader,
+	mailer OrderCancellationMailerPort,
+) *OrderUsecase {
+	if u == nil {
+		return u
+	}
+
+	u.authUserReader = authUserReader
+	u.cancellationMailer = mailer
 	return u
 }
 
@@ -160,17 +184,13 @@ func (u *OrderUsecase) Create(
 		id = u.newOrderID(now)
 	}
 
-	shippingAddressID :=
-		strings.TrimSpace(
-			in.ShippingAddressID,
-		)
+	shippingAddressID := strings.TrimSpace(in.ShippingAddressID)
 
-	shipping, err :=
-		u.resolveShippingSnapshot(
-			ctx,
-			in.UserID,
-			shippingAddressID,
-		)
+	shipping, err := u.resolveShippingSnapshot(
+		ctx,
+		in.UserID,
+		shippingAddressID,
+	)
 	if err != nil {
 		return orderdom.Order{}, err
 	}
@@ -192,13 +212,12 @@ func (u *OrderUsecase) Create(
 		return orderdom.Order{}, err
 	}
 
-	shippingQuote, err :=
-		u.resolveShippingQuoteSnapshot(
-			ctx,
-			in.UserID,
-			shippingAddressID,
-			in.Items,
-		)
+	shippingQuote, err := u.resolveShippingQuoteSnapshot(
+		ctx,
+		in.UserID,
+		shippingAddressID,
+		in.Items,
+	)
 	if err != nil {
 		return orderdom.Order{}, err
 	}
@@ -233,9 +252,7 @@ func (u *OrderUsecase) Create(
 	// 返すと、クライアント再試行による重複注文を誘発する可能性がある。
 	// そのためcart削除はbest-effortとし、失敗はログへ残す。
 	if u.cartRepo != nil {
-		cartID := strings.TrimSpace(
-			created.CartID,
-		)
+		cartID := strings.TrimSpace(created.CartID)
 
 		if cartID != "" {
 			if err := u.cartRepo.DeleteByAvatarID(
@@ -289,19 +306,15 @@ func (u *OrderUsecase) Update(
 		order.CartID = *in.CartID
 	}
 
-	shippingAddressID, err :=
-		resolveOrderDestinationShippingAddressID(
-			order.ShippingQuoteSnapshot,
-		)
+	shippingAddressID, err := resolveOrderDestinationShippingAddressID(
+		order.ShippingQuoteSnapshot,
+	)
 	if err != nil {
 		return orderdom.Order{}, err
 	}
 
 	if in.ShippingAddressID != nil {
-		shippingAddressID =
-			strings.TrimSpace(
-				*in.ShippingAddressID,
-			)
+		shippingAddressID = strings.TrimSpace(*in.ShippingAddressID)
 
 		if shippingAddressID == "" {
 			return orderdom.Order{},
@@ -314,20 +327,16 @@ func (u *OrderUsecase) Update(
 			in.UserID != nil
 
 	if shouldRefreshShipping {
-		shipping, err :=
-			u.resolveShippingSnapshot(
-				ctx,
-				order.UserID,
-				shippingAddressID,
-			)
+		shipping, err := u.resolveShippingSnapshot(
+			ctx,
+			order.UserID,
+			shippingAddressID,
+		)
 		if err != nil {
 			return orderdom.Order{}, err
 		}
 
-		if err :=
-			order.UpdateShippingSnapshot(
-				shipping,
-			); err != nil {
+		if err := order.UpdateShippingSnapshot(shipping); err != nil {
 			return orderdom.Order{}, err
 		}
 	}
@@ -364,11 +373,10 @@ func (u *OrderUsecase) Update(
 			return orderdom.Order{}, err
 		}
 
-		shippingQuoteItems =
-			append(
-				[]CreateOrderItemInput(nil),
-				(*in.ReplaceItems)...,
-			)
+		shippingQuoteItems = append(
+			[]CreateOrderItemInput(nil),
+			(*in.ReplaceItems)...,
+		)
 	}
 
 	shouldRefreshShippingQuote :=
@@ -387,21 +395,19 @@ func (u *OrderUsecase) Update(
 			}
 		}
 
-		shippingQuote, err :=
-			u.resolveShippingQuoteSnapshot(
-				ctx,
-				order.UserID,
-				shippingAddressID,
-				shippingQuoteItems,
-			)
+		shippingQuote, err := u.resolveShippingQuoteSnapshot(
+			ctx,
+			order.UserID,
+			shippingAddressID,
+			shippingQuoteItems,
+		)
 		if err != nil {
 			return orderdom.Order{}, err
 		}
 
-		if err :=
-			order.UpdateShippingQuoteSnapshot(
-				shippingQuote,
-			); err != nil {
+		if err := order.UpdateShippingQuoteSnapshot(
+			shippingQuote,
+		); err != nil {
 			return orderdom.Order{}, err
 		}
 	}
@@ -466,8 +472,9 @@ func (u *OrderUsecase) CancelItem(
 	}
 
 	targetItem := order.Items[in.ItemIndex]
+	cancelledNow := !targetItem.IsCancelled
 
-	if !targetItem.IsCancelled {
+	if cancelledNow {
 		if targetItem.IsDispatched || targetItem.Transferred {
 			return orderdom.Order{}, orderdom.ErrConflict
 		}
@@ -483,6 +490,12 @@ func (u *OrderUsecase) CancelItem(
 
 		order = updated
 		targetItem = order.Items[in.ItemIndex]
+
+		u.sendCancellationReceiptBestEffort(
+			ctx,
+			order,
+			in.ItemIndex,
+		)
 	}
 
 	if targetItem.Type == orderdom.OrderItemTypeList {
@@ -533,6 +546,56 @@ func (u *OrderUsecase) CancelItem(
 	return order, nil
 }
 
+func (u *OrderUsecase) sendCancellationReceiptBestEffort(
+	ctx context.Context,
+	order orderdom.Order,
+	itemIndex int,
+) {
+	if u == nil ||
+		u.authUserReader == nil ||
+		u.cancellationMailer == nil {
+		return
+	}
+
+	toEmail, err := u.authUserReader.GetEmailByUID(
+		ctx,
+		order.UserID,
+	)
+	if err != nil {
+		log.Printf(
+			"order cancellation mail: resolve email failed orderId=%q userId=%q err=%v",
+			order.ID,
+			order.UserID,
+			err,
+		)
+		return
+	}
+
+	toEmail = strings.TrimSpace(toEmail)
+	if toEmail == "" {
+		log.Printf(
+			"order cancellation mail: resolved email is empty orderId=%q userId=%q",
+			order.ID,
+			order.UserID,
+		)
+		return
+	}
+
+	if err := u.cancellationMailer.SendOrderCancellationReceipt(
+		ctx,
+		toEmail,
+		order.ID,
+		itemIndex,
+	); err != nil {
+		log.Printf(
+			"order cancellation mail: send failed orderId=%q itemIndex=%d err=%v",
+			order.ID,
+			itemIndex,
+			err,
+		)
+	}
+}
+
 type DispatchOrderItemsInput struct {
 	ID string
 
@@ -555,11 +618,10 @@ func (u *OrderUsecase) PrepareDispatchItems(
 			orderdom.ErrInvalidID
 	}
 
-	order, err :=
-		u.repo.GetByID(
-			ctx,
-			in.ID,
-		)
+	order, err := u.repo.GetByID(
+		ctx,
+		in.ID,
+	)
 	if err != nil {
 		return DispatchOrderItemsResult{}, err
 	}
@@ -580,11 +642,10 @@ func (u *OrderUsecase) PrepareDispatchItems(
 			continue
 		}
 
-		targetItems =
-			append(
-				targetItems,
-				item,
-			)
+		targetItems = append(
+			targetItems,
+			item,
+		)
 	}
 
 	if len(targetItems) == 0 {
@@ -593,8 +654,7 @@ func (u *OrderUsecase) PrepareDispatchItems(
 	}
 
 	return DispatchOrderItemsResult{
-		Order: order,
-
+		Order:       order,
 		TargetItems: targetItems,
 		Changed:     false,
 	}, nil
@@ -609,11 +669,10 @@ func (u *OrderUsecase) DispatchItems(
 			orderdom.ErrInvalidID
 	}
 
-	order, err :=
-		u.repo.GetByID(
-			ctx,
-			in.ID,
-		)
+	order, err := u.repo.GetByID(
+		ctx,
+		in.ID,
+	)
 	if err != nil {
 		return DispatchOrderItemsResult{}, err
 	}
@@ -643,22 +702,20 @@ func (u *OrderUsecase) DispatchItems(
 		}
 
 		if !item.IsDispatched {
-			if err :=
-				order.UpdateItemDispatched(
-					index,
-					true,
-				); err != nil {
+			if err := order.UpdateItemDispatched(
+				index,
+				true,
+			); err != nil {
 				return DispatchOrderItemsResult{}, err
 			}
 
 			changed = true
 		}
 
-		targetItems =
-			append(
-				targetItems,
-				order.Items[index],
-			)
+		targetItems = append(
+			targetItems,
+			order.Items[index],
+		)
 	}
 
 	if len(targetItems) == 0 {
@@ -667,12 +724,11 @@ func (u *OrderUsecase) DispatchItems(
 	}
 
 	if changed {
-		updated, err :=
-			u.repo.Update(
-				ctx,
-				order,
-				nil,
-			)
+		updated, err := u.repo.Update(
+			ctx,
+			order,
+			nil,
+		)
 		if err != nil {
 			return DispatchOrderItemsResult{}, err
 		}
@@ -681,8 +737,7 @@ func (u *OrderUsecase) DispatchItems(
 	}
 
 	return DispatchOrderItemsResult{
-		Order: order,
-
+		Order:       order,
 		TargetItems: targetItems,
 		Changed:     changed,
 	}, nil
@@ -703,15 +758,8 @@ func (u *OrderUsecase) resolveShippingSnapshot(
 			orderdom.ErrInvalidShippingSnapshot
 	}
 
-	userID =
-		strings.TrimSpace(
-			userID,
-		)
-
-	shippingAddressID =
-		strings.TrimSpace(
-			shippingAddressID,
-		)
+	userID = strings.TrimSpace(userID)
+	shippingAddressID = strings.TrimSpace(shippingAddressID)
 
 	if userID == "" ||
 		shippingAddressID == "" {
@@ -719,12 +767,11 @@ func (u *OrderUsecase) resolveShippingSnapshot(
 			orderdom.ErrInvalidShippingSnapshot
 	}
 
-	address, err :=
-		u.shippingAddressRepo.GetByUser(
-			ctx,
-			shippingAddressID,
-			userID,
-		)
+	address, err := u.shippingAddressRepo.GetByUser(
+		ctx,
+		shippingAddressID,
+		userID,
+	)
 	if err != nil {
 		return orderdom.ShippingSnapshot{}, err
 	}
@@ -734,14 +781,12 @@ func (u *OrderUsecase) resolveShippingSnapshot(
 			shippingaddressdom.ErrNotFound
 	}
 
-	if address.ID !=
-		shippingAddressID {
+	if address.ID != shippingAddressID {
 		return orderdom.ShippingSnapshot{},
 			shippingaddressdom.ErrNotFound
 	}
 
-	if address.UserID !=
-		userID {
+	if address.UserID != userID {
 		return orderdom.ShippingSnapshot{},
 			shippingaddressdom.ErrNotFound
 	}
@@ -772,15 +817,8 @@ func (u *OrderUsecase) resolveShippingQuoteSnapshot(
 			orderdom.ErrInvalidShippingQuote
 	}
 
-	userID =
-		strings.TrimSpace(
-			userID,
-		)
-
-	shippingAddressID =
-		strings.TrimSpace(
-			shippingAddressID,
-		)
+	userID = strings.TrimSpace(userID)
+	shippingAddressID = strings.TrimSpace(shippingAddressID)
 
 	if userID == "" ||
 		shippingAddressID == "" ||
@@ -795,14 +833,11 @@ func (u *OrderUsecase) resolveShippingQuoteSnapshot(
 		len(input),
 	)
 
-	maxInt :=
-		int(^uint(0) >> 1)
-
+	maxInt := int(^uint(0) >> 1)
 	total := 0
 
 	for _, item := range input {
-		if item.Type !=
-			orderdom.OrderItemTypeList {
+		if item.Type != orderdom.OrderItemTypeList {
 			return orderdom.ShippingQuoteSnapshot{},
 				orderdom.ErrInvalidShippingQuote
 		}
@@ -814,94 +849,64 @@ func (u *OrderUsecase) resolveShippingQuoteSnapshot(
 				orderdom.ErrInvalidShippingQuoteItem
 		}
 
-		quote, err :=
-			u.shippingQuoteUC.Quote(
-				ctx,
-				ShippingQuoteInput{
-					UserID: userID,
-
-					ListID: item.ListID,
-
-					ModelID: item.ModelID,
-
-					DestinationShippingAddressID: shippingAddressID,
-				},
-			)
+		quote, err := u.shippingQuoteUC.Quote(
+			ctx,
+			ShippingQuoteInput{
+				UserID:                       userID,
+				ListID:                       item.ListID,
+				ModelID:                      item.ModelID,
+				DestinationShippingAddressID: shippingAddressID,
+			},
+		)
 		if err != nil {
-			return orderdom.ShippingQuoteSnapshot{},
-				err
+			return orderdom.ShippingQuoteSnapshot{}, err
 		}
 
 		if quote.Amount < 0 ||
-			quote.Amount >
-				int64(maxInt) {
+			quote.Amount > int64(maxInt) {
 			return orderdom.ShippingQuoteSnapshot{},
 				orderdom.ErrInvalidShippingQuoteItem
 		}
 
-		unitAmount :=
-			int(
-				quote.Amount,
-			)
+		unitAmount := int(quote.Amount)
 
 		if unitAmount > 0 &&
-			item.Qty >
-				maxInt/unitAmount {
+			item.Qty > maxInt/unitAmount {
 			return orderdom.ShippingQuoteSnapshot{},
 				orderdom.ErrInvalidShippingQuoteItem
 		}
 
-		lineAmount :=
-			unitAmount *
-				item.Qty
+		lineAmount := unitAmount * item.Qty
 
-		if total >
-			maxInt-lineAmount {
+		if total > maxInt-lineAmount {
 			return orderdom.ShippingQuoteSnapshot{},
 				orderdom.ErrInvalidShippingQuote
 		}
 
-		total +=
-			lineAmount
+		total += lineAmount
 
-		quoteItems =
-			append(
-				quoteItems,
-				orderdom.ShippingQuoteItemSnapshot{
-					ListID: quote.ListID,
-
-					InventoryID: quote.InventoryID,
-
-					ModelID: quote.ModelID,
-
-					OriginShippingAddressID: quote.OriginShippingAddressID,
-
-					DestinationShippingAddressID: quote.DestinationShippingAddressID,
-
-					Carrier: string(
-						quote.TransportationOption,
-					),
-
-					TransportationID: quote.TransportationID,
-
-					Size: quote.Size,
-
-					Qty: item.Qty,
-
-					UnitAmount: unitAmount,
-
-					Amount: lineAmount,
-
-					Currency: quote.Currency,
-				},
-			)
+		quoteItems = append(
+			quoteItems,
+			orderdom.ShippingQuoteItemSnapshot{
+				ListID:                       quote.ListID,
+				InventoryID:                  quote.InventoryID,
+				ModelID:                      quote.ModelID,
+				OriginShippingAddressID:      quote.OriginShippingAddressID,
+				DestinationShippingAddressID: quote.DestinationShippingAddressID,
+				Carrier:                      string(quote.TransportationOption),
+				TransportationID:             quote.TransportationID,
+				Size:                         quote.Size,
+				Qty:                          item.Qty,
+				UnitAmount:                   unitAmount,
+				Amount:                       lineAmount,
+				Currency:                     quote.Currency,
+			},
+		)
 	}
 
 	return orderdom.ShippingQuoteSnapshot{
-		Items: quoteItems,
-
-		Amount: total,
-
+		Items:    quoteItems,
+		Amount:   total,
 		Currency: orderdom.ShippingQuoteCurrencyJPY,
 	}, nil
 }
@@ -914,11 +919,9 @@ func resolveOrderDestinationShippingAddressID(
 			orderdom.ErrInvalidShippingQuote
 	}
 
-	destinationShippingAddressID :=
-		strings.TrimSpace(
-			snapshot.Items[0].
-				DestinationShippingAddressID,
-		)
+	destinationShippingAddressID := strings.TrimSpace(
+		snapshot.Items[0].DestinationShippingAddressID,
+	)
 
 	if destinationShippingAddressID == "" {
 		return "",
@@ -934,8 +937,7 @@ func resolveOrderDestinationShippingAddressID(
 		}
 	}
 
-	return destinationShippingAddressID,
-		nil
+	return destinationShippingAddressID, nil
 }
 
 func createOrderItemInputsFromSnapshots(
@@ -955,23 +957,17 @@ func createOrderItemInputsFromSnapshots(
 	for _, item := range items {
 		switch item.Type {
 		case orderdom.OrderItemTypeList:
-			result =
-				append(
-					result,
-					CreateOrderItemInput{
-						Type: orderdom.OrderItemTypeList,
-
-						ListID: item.ListID,
-
-						ModelID: item.ModelID,
-
-						Qty: item.Qty,
-
-						IsCancelled: item.IsCancelled,
-
-						IsDispatched: item.IsDispatched,
-					},
-				)
+			result = append(
+				result,
+				CreateOrderItemInput{
+					Type:         orderdom.OrderItemTypeList,
+					ListID:       item.ListID,
+					ModelID:      item.ModelID,
+					Qty:          item.Qty,
+					IsCancelled:  item.IsCancelled,
+					IsDispatched: item.IsDispatched,
+				},
+			)
 
 		case orderdom.OrderItemTypeResale:
 			return nil,
@@ -1003,7 +999,8 @@ func (u *OrderUsecase) resolvePaymentMethodSnapshot(
 		return orderdom.PaymentMethodSnapshot{}, err
 	}
 
-	if paymentMethod == nil || paymentMethod.UserID != userID {
+	if paymentMethod == nil ||
+		paymentMethod.UserID != userID {
 		return orderdom.PaymentMethodSnapshot{},
 			orderdom.ErrInvalidPaymentMethod
 	}
@@ -1082,10 +1079,9 @@ func (u *OrderUsecase) resolveProductBlueprintTaxSnapshot(
 			orderdom.ErrInvalidItemSnapshot
 	}
 
-	productBlueprintID =
-		strings.TrimSpace(
-			productBlueprintID,
-		)
+	productBlueprintID = strings.TrimSpace(
+		productBlueprintID,
+	)
 
 	if productBlueprintID == "" {
 		return nil,
@@ -1093,36 +1089,31 @@ func (u *OrderUsecase) resolveProductBlueprintTaxSnapshot(
 			orderdom.ErrInvalidItemSnapshot
 	}
 
-	productBlueprint, err :=
-		u.productBlueprintRepo.GetByID(
-			ctx,
-			productBlueprintID,
-		)
+	productBlueprint, err := u.productBlueprintRepo.GetByID(
+		ctx,
+		productBlueprintID,
+	)
 	if err != nil {
 		return nil,
 			0,
 			err
 	}
 
-	if productBlueprint.ID !=
-		productBlueprintID {
+	if productBlueprint.ID != productBlueprintID {
 		return nil,
 			0,
 			orderdom.ErrInvalidItemSnapshot
 	}
 
-	categoryPath :=
-		append(
-			[]string(nil),
-			productBlueprint.
-				ProductBlueprintCategoryPath...,
-		)
+	categoryPath := append(
+		[]string(nil),
+		productBlueprint.ProductBlueprintCategoryPath...,
+	)
 
 	taxRate, err :=
-		productblueprintcategorydom.
-			GetConsumptionTaxRate(
-				categoryPath,
-			)
+		productblueprintcategorydom.GetConsumptionTaxRate(
+			categoryPath,
+		)
 	if err != nil {
 		return nil,
 			0,
@@ -1180,8 +1171,7 @@ func (u *OrderUsecase) resolveListOrderItem(
 			inventory.ProductBlueprintID,
 		)
 	if err != nil {
-		return orderdom.OrderItemSnapshot{},
-			err
+		return orderdom.OrderItemSnapshot{}, err
 	}
 
 	stock, ok := inventory.Stock[item.ModelID]
@@ -1213,8 +1203,7 @@ func (u *OrderUsecase) resolveListOrderItem(
 		TokenBlueprintID:   inventory.TokenBlueprintID,
 
 		ProductBlueprintCategoryPath: productBlueprintCategoryPath,
-
-		ConsumptionTaxRate: consumptionTaxRate,
+		ConsumptionTaxRate:           consumptionTaxRate,
 
 		Qty:           item.Qty,
 		Price:         price,
@@ -1268,8 +1257,7 @@ func (u *OrderUsecase) resolveResaleOrderItem(
 			resale.ProductBlueprintID,
 		)
 	if err != nil {
-		return orderdom.OrderItemSnapshot{},
-			err
+		return orderdom.OrderItemSnapshot{}, err
 	}
 
 	return orderdom.OrderItemSnapshot{
@@ -1281,8 +1269,7 @@ func (u *OrderUsecase) resolveResaleOrderItem(
 		BrandID:            resale.BrandID,
 
 		ProductBlueprintCategoryPath: productBlueprintCategoryPath,
-
-		ConsumptionTaxRate: consumptionTaxRate,
+		ConsumptionTaxRate:           consumptionTaxRate,
 
 		Qty:           1,
 		Price:         resale.Price,
