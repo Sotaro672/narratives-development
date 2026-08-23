@@ -1,8 +1,6 @@
 // frontend/amol/src/features/order/types/orderDetailTypes.ts
 
-import type {
-  WalletOrderShippingQuoteSnapshot,
-} from "../../shared/types/orderTypes";
+import type { WalletOrderShippingQuoteSnapshot } from "../../shared/types/orderTypes";
 
 export type OrderDetailItemType = "list" | "resale";
 
@@ -37,6 +35,8 @@ export type OrderDetailItem = {
   price: number;
   isCancelled: boolean;
   isDispatched: boolean;
+  isReturnRequested: boolean;
+  returnRequestedAt?: string;
   transferred: boolean;
   transferredAt?: string;
 };

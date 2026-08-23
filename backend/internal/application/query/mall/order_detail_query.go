@@ -92,10 +92,18 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 			Qty:   sourceItem.Qty,
 			Price: sourceItem.Price,
 
-			IsCancelled:  sourceItem.IsCancelled,
-			IsDispatched: sourceItem.IsDispatched,
+			IsCancelled:       sourceItem.IsCancelled,
+			IsDispatched:      sourceItem.IsDispatched,
+			IsReturnRequested: sourceItem.IsReturnRequested,
 
 			Transferred: sourceItem.Transferred,
+		}
+
+		if sourceItem.ReturnRequestedAt != nil &&
+			!sourceItem.ReturnRequestedAt.IsZero() {
+			item.ReturnRequestedAt = sourceItem.ReturnRequestedAt.
+				UTC().
+				Format(time.RFC3339Nano)
 		}
 
 		if sourceItem.TransferredAt != nil &&

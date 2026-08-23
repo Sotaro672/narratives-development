@@ -27,6 +27,7 @@ import (
 //   - GET   /mall/me/orders
 //   - GET   /mall/me/orders/{orderId}
 //   - PATCH /mall/me/orders/{orderId}/items/{itemIndex}/cancel
+//   - PATCH /mall/me/orders/{orderId}/items/{itemIndex}/return
 type OrderHandler struct {
 	uc               *usecase.OrderUsecase
 	historyQuery     OrderHistoryQuery
@@ -70,18 +71,28 @@ func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && path == "/mall/me/orders":
 		h.post(w, r)
 		return
+
 	case r.Method == http.MethodGet && path == "/mall/me/orders":
 		h.listMe(w, r)
 		return
+
 	case r.Method == http.MethodPatch &&
 		strings.HasPrefix(path, "/mall/me/orders/") &&
 		strings.HasSuffix(path, "/cancel"):
 		h.cancelMe(w, r, path)
 		return
+
+	case r.Method == http.MethodPatch &&
+		strings.HasPrefix(path, "/mall/me/orders/") &&
+		strings.HasSuffix(path, "/return"):
+		h.returnMe(w, r, path)
+		return
+
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(path, "/mall/me/orders/"):
 		h.getMe(w, r, path)
 		return
+
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
@@ -349,6 +360,96 @@ func (h *OrderHandler) cancelMe(
 		h.uc.CancelItem(
 			ctx,
 			usecase.CancelOrderItemInput{
+				ID:        orderID,
+				AvatarID:  avatarID,
+				ItemIndex: itemIndex,
+			},
+		)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	if h == nil || h.orderDetailQuery == nil {
+		writeOrderErr(
+			w,
+			errors.New(
+				"order handler: order detail query not configured",
+			),
+		)
+		return
+	}
+
+	detail, err :=
+		h.orderDetailQuery.EnrichOrderDetail(
+			ctx,
+			out,
+		)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(detail)
+}
+
+func (h *OrderHandler) returnMe(
+	w http.ResponseWriter,
+	r *http.Request,
+	path string,
+) {
+	ctx := r.Context()
+
+	avatarID, ok := middleware.CurrentAvatarID(r)
+	if !ok || avatarID == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized: missing avatarId"})
+		return
+	}
+
+	itemPath := strings.TrimSpace(
+		strings.TrimPrefix(
+			path,
+			"/mall/me/orders/",
+		),
+	)
+
+	parts :=
+		strings.Split(
+			itemPath,
+			"/",
+		)
+
+	if len(parts) != 4 ||
+		parts[0] == "" ||
+		parts[1] != "items" ||
+		parts[2] == "" ||
+		parts[3] != "return" {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
+	}
+
+	orderID :=
+		strings.TrimSpace(
+			parts[0],
+		)
+
+	itemIndex, err :=
+		strconv.Atoi(
+			parts[2],
+		)
+	if err != nil ||
+		itemIndex < 0 {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
+	}
+
+	out, err :=
+		h.uc.ReturnItem(
+			ctx,
+			usecase.ReturnOrderItemInput{
 				ID:        orderID,
 				AvatarID:  avatarID,
 				ItemIndex: itemIndex,

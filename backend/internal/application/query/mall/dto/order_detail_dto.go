@@ -59,6 +59,9 @@ type OrderDetailItem struct {
 	IsCancelled  bool `json:"isCancelled"`
 	IsDispatched bool `json:"isDispatched"`
 
+	IsReturnRequested bool   `json:"isReturnRequested"`
+	ReturnRequestedAt string `json:"returnRequestedAt,omitempty"`
+
 	Transferred   bool   `json:"transferred"`
 	TransferredAt string `json:"transferredAt,omitempty"`
 }

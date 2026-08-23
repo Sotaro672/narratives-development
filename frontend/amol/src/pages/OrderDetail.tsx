@@ -54,6 +54,22 @@ function getOrderStatusLabel(order: OrderDetailType): string {
     return "一部キャンセル済み";
   }
 
+  const allReturnRequested = activeItems.every(
+    (item) => item.isReturnRequested,
+  );
+
+  if (allReturnRequested) {
+    return "返品申請済み";
+  }
+
+  const partiallyReturnRequested = activeItems.some(
+    (item) => item.isReturnRequested,
+  );
+
+  if (partiallyReturnRequested) {
+    return "一部返品申請済み";
+  }
+
   const allTransferred = activeItems.every((item) => item.transferred);
 
   if (allTransferred) {
@@ -84,6 +100,10 @@ function getOrderStatusLabel(order: OrderDetailType): string {
 function getItemStatusLabel(item: OrderDetailItem): string {
   if (item.isCancelled) {
     return "キャンセル済み";
+  }
+
+  if (item.isReturnRequested) {
+    return "返品申請済み";
   }
 
   if (item.transferred) {
@@ -234,9 +254,11 @@ export default function OrderDetail() {
     order,
     loading,
     cancellingItemIndex,
+    returningItemIndex,
     error,
     reload,
     cancelItem,
+    returnItem,
   } = useOrderDetail();
 
   const handleBack = () => {
@@ -354,12 +376,21 @@ export default function OrderDetail() {
                     `${order.id}-${item.inventoryId}-${item.modelId}-${index}`;
                   const isCancelling =
                     cancellingItemIndex === index;
+                  const isReturning =
+                    returningItemIndex === index;
 
                   const cancelDisabled =
                     item.isCancelled ||
                     item.isDispatched ||
                     item.transferred ||
-                    isCancelling;
+                    isCancelling ||
+                    returningItemIndex !== null;
+
+                  const showReturnButton =
+                    item.isDispatched &&
+                    !item.transferred &&
+                    !item.isCancelled &&
+                    !item.isReturnRequested;
 
                   return (
                     <li
@@ -450,6 +481,17 @@ export default function OrderDetail() {
                             </dd>
                           </div>
 
+                          {item.returnRequestedAt ? (
+                            <div className="order-detail-page__item-meta-row">
+                              <dt>返品申請日時</dt>
+                              <dd>
+                                {formatDateTime(
+                                  item.returnRequestedAt,
+                                )}
+                              </dd>
+                            </div>
+                          ) : null}
+
                           {item.transferredAt ? (
                             <div className="order-detail-page__item-meta-row">
                               <dt>受取日時</dt>
@@ -463,24 +505,48 @@ export default function OrderDetail() {
                         </dl>
 
                         <div className="page-actions order-detail-page__cancel-actions">
-                          <button
-                            type="button"
-                            className="order-detail-page__cancel-button"
-                            disabled={cancelDisabled}
-                            onClick={() =>
-                              void cancelItem(index)
-                            }
-                          >
-                            {item.isCancelled
-                              ? "キャンセル済み"
-                              : isCancelling
-                                ? "キャンセル中..."
-                                : item.transferred
-                                  ? "受け取り済み"
-                                  : item.isDispatched
-                                    ? "発送済み"
+                          {item.isReturnRequested ? (
+                            <button
+                              type="button"
+                              className="order-detail-page__cancel-button order-detail-page__return-button"
+                              disabled
+                            >
+                              返品申請済み
+                            </button>
+                          ) : showReturnButton ? (
+                            <button
+                              type="button"
+                              className="order-detail-page__cancel-button order-detail-page__return-button"
+                              disabled={
+                                isReturning ||
+                                cancellingItemIndex !== null
+                              }
+                              onClick={() =>
+                                void returnItem(index)
+                              }
+                            >
+                              {isReturning
+                                ? "返品申請中..."
+                                : "返品"}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="order-detail-page__cancel-button"
+                              disabled={cancelDisabled}
+                              onClick={() =>
+                                void cancelItem(index)
+                              }
+                            >
+                              {item.isCancelled
+                                ? "キャンセル済み"
+                                : isCancelling
+                                  ? "キャンセル中..."
+                                  : item.transferred
+                                    ? "受け取り済み"
                                     : "商品をキャンセル"}
-                          </button>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </li>

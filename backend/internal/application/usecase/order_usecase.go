@@ -546,6 +546,70 @@ func (u *OrderUsecase) CancelItem(
 	return order, nil
 }
 
+type ReturnOrderItemInput struct {
+	ID        string
+	AvatarID  string
+	ItemIndex int
+}
+
+func (u *OrderUsecase) ReturnItem(
+	ctx context.Context,
+	in ReturnOrderItemInput,
+) (orderdom.Order, error) {
+	orderID := strings.TrimSpace(in.ID)
+	if orderID == "" {
+		return orderdom.Order{}, orderdom.ErrInvalidID
+	}
+
+	avatarID := strings.TrimSpace(in.AvatarID)
+	if avatarID == "" {
+		return orderdom.Order{}, orderdom.ErrInvalidAvatarID
+	}
+
+	if in.ItemIndex < 0 {
+		return orderdom.Order{}, orderdom.ErrInvalidItems
+	}
+
+	order, err := u.repo.GetByID(ctx, orderID)
+	if err != nil {
+		return orderdom.Order{}, err
+	}
+
+	if order.AvatarID != avatarID {
+		return orderdom.Order{}, orderdom.ErrNotFound
+	}
+
+	if in.ItemIndex >= len(order.Items) {
+		return orderdom.Order{}, orderdom.ErrNotFound
+	}
+
+	targetItem := order.Items[in.ItemIndex]
+
+	if targetItem.IsCancelled ||
+		!targetItem.IsDispatched ||
+		targetItem.Transferred {
+		return orderdom.Order{}, orderdom.ErrConflict
+	}
+
+	if targetItem.IsReturnRequested {
+		return order, nil
+	}
+
+	if err := order.RequestItemReturn(
+		in.ItemIndex,
+		u.now().UTC(),
+	); err != nil {
+		return orderdom.Order{}, err
+	}
+
+	updated, err := u.repo.Update(ctx, order, nil)
+	if err != nil {
+		return orderdom.Order{}, err
+	}
+
+	return updated, nil
+}
+
 func (u *OrderUsecase) sendCancellationReceiptBestEffort(
 	ctx context.Context,
 	order orderdom.Order,
@@ -638,7 +702,7 @@ func (u *OrderUsecase) PrepareDispatchItems(
 			continue
 		}
 
-		if item.IsCancelled {
+		if item.IsCancelled || item.IsReturnRequested {
 			continue
 		}
 
@@ -697,7 +761,7 @@ func (u *OrderUsecase) DispatchItems(
 			continue
 		}
 
-		if item.IsCancelled {
+		if item.IsCancelled || item.IsReturnRequested {
 			continue
 		}
 

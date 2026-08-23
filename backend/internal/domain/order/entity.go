@@ -85,7 +85,7 @@ const (
 //   - productBlueprintCategoryPath, consumptionTaxRate
 //   - qty=1, price
 //
-// Transfer, cancellation, and dispatch state is maintained per item.
+// Transfer, cancellation, dispatch, and return state is maintained per item.
 type OrderItemSnapshot struct {
 	Type OrderItemType `json:"type"`
 
@@ -112,6 +112,9 @@ type OrderItemSnapshot struct {
 
 	IsCancelled  bool `json:"isCancelled"`
 	IsDispatched bool `json:"isDispatched"`
+
+	IsReturnRequested bool       `json:"isReturnRequested"`
+	ReturnRequestedAt *time.Time `json:"returnRequestedAt,omitempty"`
 
 	Transferred   bool       `json:"transferred"`
 	TransferredAt *time.Time `json:"transferredAt,omitempty"`
@@ -307,6 +310,42 @@ func (o *Order) CancelItem(
 	return nil
 }
 
+func (o *Order) RequestItemReturn(
+	index int,
+	at time.Time,
+) error {
+	if o == nil {
+		return ErrInvalidItems
+	}
+
+	if index < 0 || index >= len(o.Items) {
+		return ErrInvalidItems
+	}
+
+	item := &o.Items[index]
+
+	if item.IsReturnRequested {
+		return nil
+	}
+
+	if item.IsCancelled ||
+		!item.IsDispatched ||
+		item.Transferred {
+		return ErrConflict
+	}
+
+	if at.IsZero() {
+		return ErrInvalidItemSnapshot
+	}
+
+	returnRequestedAt := at.UTC()
+
+	item.IsReturnRequested = true
+	item.ReturnRequestedAt = &returnRequestedAt
+
+	return nil
+}
+
 func (o *Order) UpdateItemDispatched(
 	index int,
 	isDispatched bool,
@@ -321,6 +360,11 @@ func (o *Order) UpdateItemDispatched(
 
 	if isDispatched &&
 		o.Items[index].IsCancelled {
+		return ErrConflict
+	}
+
+	if !isDispatched &&
+		o.Items[index].IsReturnRequested {
 		return ErrConflict
 	}
 
@@ -344,7 +388,8 @@ func (o *Order) UpdateItemTransferred(
 	}
 
 	if transferred {
-		if o.Items[index].IsCancelled {
+		if o.Items[index].IsCancelled ||
+			o.Items[index].IsReturnRequested {
 			return ErrConflict
 		}
 
@@ -765,14 +810,31 @@ func validateItemTransferState(
 ) error {
 	if item.IsCancelled {
 		if item.IsDispatched ||
+			item.IsReturnRequested ||
+			item.ReturnRequestedAt != nil ||
 			item.Transferred ||
 			item.TransferredAt != nil {
 			return ErrInvalidItemSnapshot
 		}
 	}
 
+	if item.IsReturnRequested {
+		if item.IsCancelled ||
+			!item.IsDispatched ||
+			item.Transferred ||
+			item.TransferredAt != nil ||
+			item.ReturnRequestedAt == nil ||
+			item.ReturnRequestedAt.IsZero() {
+			return ErrInvalidItemSnapshot
+		}
+	} else if item.ReturnRequestedAt != nil {
+		return ErrInvalidItemSnapshot
+	}
+
 	if item.Transferred {
-		if item.TransferredAt == nil ||
+		if item.IsReturnRequested ||
+			item.ReturnRequestedAt != nil ||
+			item.TransferredAt == nil ||
 			item.TransferredAt.IsZero() {
 			return ErrInvalidItemSnapshot
 		}
