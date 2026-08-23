@@ -54,7 +54,7 @@ export type OrderDetailItemDTO = {
   volumeUnit: string;
   qty: number;
   price: number;
-  isCanceled: boolean;
+  isCancelled: boolean;
   isDispatched: boolean;
   transferred: boolean;
   transferredAt?: string;
@@ -111,7 +111,7 @@ export type OrderItemInventoryRowDTO = {
   volumeUnit?: string;
   qty?: number;
   price?: number;
-  isCanceled: boolean;
+  isCancelled: boolean;
   isDispatched: boolean;
   transferred: boolean;
   transferredAt?: string;
@@ -145,6 +145,7 @@ function buildQuery(
   }
 
   const query = searchParams.toString();
+
   return query ? `?${query}` : "";
 }
 
@@ -168,13 +169,19 @@ async function readErrorMessage(response: Response): Promise<string> {
     }
 
     const text = await response.text();
-    return text ? text.slice(0, 200) : `${response.status} ${response.statusText}`;
+
+    return text
+      ? text.slice(0, 200)
+      : `${response.status} ${response.statusText}`;
   } catch {
     return `${response.status} ${response.statusText}`;
   }
 }
 
-async function requestJSON<T>(url: string, init?: RequestInit): Promise<T> {
+async function requestJSON<T>(
+  url: string,
+  init?: RequestInit,
+): Promise<T> {
   const authHeaders = await getAuthHeaders();
   const headers = new Headers(init?.headers);
 
@@ -190,10 +197,15 @@ async function requestJSON<T>(url: string, init?: RequestInit): Promise<T> {
     }
   }
 
-  const response = await fetch(url, { ...init, headers });
+  const response = await fetch(url, {
+    ...init,
+    headers,
+  });
 
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
+    throw new Error(
+      await readErrorMessage(response),
+    );
   }
 
   const contentType = response.headers.get("content-type") ?? "";
@@ -225,6 +237,7 @@ export function createOrderRepository(): OrderRepository {
 
   const buildUrl = (path: string): string => {
     const normalizedPath = path.replace(/^\/+/g, "");
+
     return `${resolvedBaseUrl}/${normalizedPath}`;
   };
 

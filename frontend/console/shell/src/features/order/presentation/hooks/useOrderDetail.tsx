@@ -119,7 +119,7 @@ export function useOrderDetail(): UseOrderDetailReturn {
     () =>
       items.some(
         (item) =>
-          !item.isCanceled &&
+          !item.isCancelled &&
           !item.isDispatched,
       ),
     [items],

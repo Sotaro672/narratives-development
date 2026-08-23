@@ -41,7 +41,7 @@ type Filter struct {
 	TokenBlueprintID   string
 	BrandID            string
 
-	IsCanceled   *bool
+	IsCancelled  *bool
 	IsDispatched *bool
 	Transferred  *bool
 
@@ -77,6 +77,7 @@ type UpdateOptions = common.SaveOptions
 // Source condition:
 // - avatarId matches the requested avatar
 // - paid == true
+// - isCancelled == false
 // - transferred == false
 //
 // Identity is always orderId + itemIndex. String-derived item keys are not

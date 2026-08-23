@@ -43,6 +43,9 @@ var (
 	ErrOrderNotPaid = errors.New(
 		"order_transfer_item_repo_fs: order is not paid",
 	)
+	ErrTransferItemCancelled = errors.New(
+		"order_transfer_item_repo_fs: item is cancelled",
+	)
 	ErrTransferItemTransferred = errors.New(
 		"order_transfer_item_repo_fs: item already transferred",
 	)
@@ -138,6 +141,7 @@ func (r *OrderRepoForTransferFS) FindEligibleTransferItem(
 	resaleQuery := r.transferItemsCol().
 		Where("avatarId", "==", in.AvatarID).
 		Where("paid", "==", true).
+		Where("isCancelled", "==", false).
 		Where("transferred", "==", false).
 		Where(
 			"itemType",
@@ -172,6 +176,7 @@ func (r *OrderRepoForTransferFS) FindEligibleTransferItem(
 	listQuery := r.transferItemsCol().
 		Where("avatarId", "==", in.AvatarID).
 		Where("paid", "==", true).
+		Where("isCancelled", "==", false).
 		Where("transferred", "==", false).
 		Where(
 			"itemType",
@@ -215,7 +220,9 @@ func (r *OrderRepoForTransferFS) findOneEligibleTransferItem(
 	if err != nil {
 		return usecase.TransferTargetItem{}, err
 	}
-	if projection.Transferred || !projection.Paid {
+	if projection.IsCancelled ||
+		projection.Transferred ||
+		!projection.Paid {
 		return usecase.TransferTargetItem{},
 			ErrInvalidOrderTransferItemData
 	}
@@ -238,6 +245,7 @@ func (r *OrderRepoForTransferFS) ListEligibleTransferItemsByAvatarID(
 	iter := r.transferItemsCol().
 		Where("avatarId", "==", avatarID).
 		Where("paid", "==", true).
+		Where("isCancelled", "==", false).
 		Where("transferred", "==", false).
 		OrderBy("createdAt", firestore.Asc).
 		OrderBy("itemIndex", firestore.Asc).
@@ -265,6 +273,7 @@ func (r *OrderRepoForTransferFS) ListEligibleTransferItemsByAvatarID(
 		}
 		if projection.AvatarID != avatarID ||
 			!projection.Paid ||
+			projection.IsCancelled ||
 			projection.Transferred {
 			return nil,
 				ErrInvalidOrderTransferItemData
@@ -336,6 +345,9 @@ func (r *OrderRepoForTransferFS) LockTransferItem(
 			}
 			if !projection.Paid {
 				return ErrOrderNotPaid
+			}
+			if projection.IsCancelled {
+				return ErrTransferItemCancelled
 			}
 			if projection.Transferred {
 				return ErrTransferItemTransferred
@@ -498,6 +510,9 @@ func (r *OrderRepoForTransferFS) MarkTransferredItem(
 			if !projection.Paid {
 				return ErrOrderNotPaid
 			}
+			if projection.IsCancelled {
+				return ErrTransferItemCancelled
+			}
 			if projection.Transferred {
 				return ErrTransferItemTransferred
 			}
@@ -511,6 +526,9 @@ func (r *OrderRepoForTransferFS) MarkTransferredItem(
 			}
 			if itemIndex >= len(order.Items) {
 				return ErrTransferItemProjectionMismatch
+			}
+			if order.Items[itemIndex].IsCancelled {
+				return ErrTransferItemCancelled
 			}
 			if !orderItemMatchesProjection(
 				order.Items[itemIndex],
@@ -573,6 +591,7 @@ type orderTransferItemProjection struct {
 	ItemIndex int
 
 	Paid          bool
+	IsCancelled   bool
 	Transferred   bool
 	TransferredAt *time.Time
 	CreatedAt     time.Time
@@ -653,6 +672,15 @@ func orderTransferItemFromSnapshot(
 			ErrInvalidOrderTransferItemData
 	}
 
+	isCancelled, ok := requiredOrderTransferItemBool(
+		raw,
+		"isCancelled",
+	)
+	if !ok {
+		return orderTransferItemProjection{},
+			ErrInvalidOrderTransferItemData
+	}
+
 	transferred, ok := requiredOrderTransferItemBool(
 		raw,
 		"transferred",
@@ -686,6 +714,7 @@ func orderTransferItemFromSnapshot(
 		),
 		ItemIndex:   itemIndex,
 		Paid:        paid,
+		IsCancelled: isCancelled,
 		Transferred: transferred,
 		CreatedAt:   createdAt.UTC(),
 
@@ -739,6 +768,12 @@ func orderTransferItemFromSnapshot(
 	if transferredAtExists {
 		projection.TransferredAt =
 			&transferredAt
+	}
+
+	if projection.IsCancelled &&
+		projection.Transferred {
+		return orderTransferItemProjection{},
+			ErrInvalidOrderTransferItemData
 	}
 
 	lockedAt, lockedAtExists, err :=

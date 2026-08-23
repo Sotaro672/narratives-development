@@ -438,99 +438,95 @@ func (u *OrderUsecase) CancelItem(
 	ctx context.Context,
 	in CancelOrderItemInput,
 ) (orderdom.Order, error) {
-	orderID :=
-		strings.TrimSpace(
-			in.ID,
-		)
-
+	orderID := strings.TrimSpace(in.ID)
 	if orderID == "" {
-		return orderdom.Order{},
-			orderdom.ErrInvalidID
+		return orderdom.Order{}, orderdom.ErrInvalidID
 	}
 
-	avatarID :=
-		strings.TrimSpace(
-			in.AvatarID,
-		)
-
+	avatarID := strings.TrimSpace(in.AvatarID)
 	if avatarID == "" {
-		return orderdom.Order{},
-			orderdom.ErrInvalidAvatarID
+		return orderdom.Order{}, orderdom.ErrInvalidAvatarID
 	}
 
 	if in.ItemIndex < 0 {
-		return orderdom.Order{},
-			orderdom.ErrInvalidItems
+		return orderdom.Order{}, orderdom.ErrInvalidItems
 	}
 
-	order, err :=
-		u.repo.GetByID(
-			ctx,
-			orderID,
-		)
+	order, err := u.repo.GetByID(ctx, orderID)
 	if err != nil {
 		return orderdom.Order{}, err
 	}
 
-	if order.AvatarID !=
-		avatarID {
-		return orderdom.Order{},
-			orderdom.ErrNotFound
+	if order.AvatarID != avatarID {
+		return orderdom.Order{}, orderdom.ErrNotFound
 	}
 
-	if in.ItemIndex >=
-		len(order.Items) {
-		return orderdom.Order{},
-			orderdom.ErrNotFound
+	if in.ItemIndex >= len(order.Items) {
+		return orderdom.Order{}, orderdom.ErrNotFound
 	}
 
-	targetItem :=
-		order.Items[in.ItemIndex]
+	targetItem := order.Items[in.ItemIndex]
 
 	if !targetItem.IsCancelled {
-		if targetItem.IsDispatched ||
-			targetItem.Transferred {
-			return orderdom.Order{},
-				orderdom.ErrConflict
+		if targetItem.IsDispatched || targetItem.Transferred {
+			return orderdom.Order{}, orderdom.ErrConflict
 		}
 
-		if err :=
-			order.CancelItem(
-				in.ItemIndex,
-			); err != nil {
+		if err := order.CancelItem(in.ItemIndex); err != nil {
 			return orderdom.Order{}, err
 		}
 
-		updated, err :=
-			u.repo.Update(
-				ctx,
-				order,
-				nil,
-			)
+		updated, err := u.repo.Update(ctx, order, nil)
 		if err != nil {
 			return orderdom.Order{}, err
 		}
 
 		order = updated
-		targetItem =
-			order.Items[in.ItemIndex]
+		targetItem = order.Items[in.ItemIndex]
 	}
 
-	if targetItem.Type ==
-		orderdom.OrderItemTypeList {
-		now :=
-			u.now().UTC()
+	if targetItem.Type == orderdom.OrderItemTypeList {
+		remainingQty := 0
 
-		if err :=
-			u.inventoryRepo.
-				ReleaseReservationByOrder(
-					ctx,
-					targetItem.InventoryID,
-					targetItem.ModelID,
-					order.ID,
-					now,
-				); err != nil {
-			return orderdom.Order{}, err
+		for _, item := range order.Items {
+			if item.Type != orderdom.OrderItemTypeList {
+				continue
+			}
+
+			if item.InventoryID != targetItem.InventoryID ||
+				item.ModelID != targetItem.ModelID {
+				continue
+			}
+
+			if item.IsCancelled || item.Transferred {
+				continue
+			}
+
+			remainingQty += item.Qty
+		}
+
+		if remainingQty > 0 {
+			if err := u.inventoryRepo.ReserveByOrder(
+				ctx,
+				targetItem.InventoryID,
+				targetItem.ModelID,
+				order.ID,
+				remainingQty,
+			); err != nil {
+				return orderdom.Order{}, err
+			}
+		} else {
+			now := u.now().UTC()
+
+			if err := u.inventoryRepo.ReleaseReservationByOrder(
+				ctx,
+				targetItem.InventoryID,
+				targetItem.ModelID,
+				order.ID,
+				now,
+			); err != nil {
+				return orderdom.Order{}, err
+			}
 		}
 	}
 

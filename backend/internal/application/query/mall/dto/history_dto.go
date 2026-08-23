@@ -53,7 +53,7 @@ type HistoryOrderItem struct {
 	Qty   int `json:"qty"`
 	Price int `json:"price"`
 
-	IsCanceled   bool `json:"isCanceled"`
+	IsCancelled  bool `json:"isCancelled"`
 	IsDispatched bool `json:"isDispatched"`
 
 	Transferred   bool   `json:"transferred"`

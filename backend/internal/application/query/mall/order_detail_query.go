@@ -63,34 +63,15 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 	}
 
 	if !in.CreatedAt.IsZero() {
-		out.CreatedAt = in.CreatedAt.
-			UTC().
-			Format(time.RFC3339Nano)
+		out.CreatedAt = in.CreatedAt.UTC().Format(time.RFC3339Nano)
 	}
 
-	blueprintCache := make(
-		map[string]historyBlueprintIDs,
-	)
-
-	productBlueprintCache := make(
-		map[string]mallshared.ProductBlueprintDisplay,
-	)
-
-	tokenBlueprintCache := make(
-		map[string]mallshared.TokenBlueprintDisplay,
-	)
-
-	brandCache := make(
-		map[string]mallshared.BrandDisplay,
-	)
-
-	modelByIDCache := make(
-		map[string]mallshared.ModelDisplay,
-	)
-
-	modelByProductIDCache := make(
-		map[string]mallshared.ModelDisplay,
-	)
+	blueprintCache := make(map[string]historyBlueprintIDs)
+	productBlueprintCache := make(map[string]mallshared.ProductBlueprintDisplay)
+	tokenBlueprintCache := make(map[string]mallshared.TokenBlueprintDisplay)
+	brandCache := make(map[string]mallshared.BrandDisplay)
+	modelByIDCache := make(map[string]mallshared.ModelDisplay)
+	modelByProductIDCache := make(map[string]mallshared.ModelDisplay)
 
 	for _, sourceItem := range in.Items {
 		item := orderdetaildto.OrderDetailItem{
@@ -111,7 +92,7 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 			Qty:   sourceItem.Qty,
 			Price: sourceItem.Price,
 
-			IsCanceled:   sourceItem.IsCancelled,
+			IsCancelled:  sourceItem.IsCancelled,
 			IsDispatched: sourceItem.IsDispatched,
 
 			Transferred: sourceItem.Transferred,
@@ -134,11 +115,10 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 				blueprintCache[sourceItem.InventoryID]
 
 			if ok {
-				blueprintIDs =
-					mergeHistoryBlueprintIDs(
-						blueprintIDs,
-						cachedBlueprintIDs,
-					)
+				blueprintIDs = mergeHistoryBlueprintIDs(
+					blueprintIDs,
+					cachedBlueprintIDs,
+				)
 			} else {
 				productBlueprintID,
 					tokenBlueprintID,
@@ -150,34 +130,30 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 						)
 
 				if err == nil {
-					resolvedBlueprintIDs :=
-						historyBlueprintIDs{
-							ProductBlueprintID: productBlueprintID,
-							TokenBlueprintID:   tokenBlueprintID,
-						}
+					resolvedBlueprintIDs := historyBlueprintIDs{
+						ProductBlueprintID: productBlueprintID,
+						TokenBlueprintID:   tokenBlueprintID,
+					}
 
 					blueprintCache[sourceItem.InventoryID] =
 						resolvedBlueprintIDs
 
-					blueprintIDs =
-						mergeHistoryBlueprintIDs(
-							blueprintIDs,
-							resolvedBlueprintIDs,
-						)
+					blueprintIDs = mergeHistoryBlueprintIDs(
+						blueprintIDs,
+						resolvedBlueprintIDs,
+					)
 				}
 			}
 		}
 
-		modelInfo :=
-			mallshared.ModelDisplay{}
+		modelInfo := mallshared.ModelDisplay{}
 
 		if sourceItem.ModelID != "" {
 			cachedModel, ok :=
 				modelByIDCache[sourceItem.ModelID]
 
 			if ok {
-				modelInfo =
-					cachedModel
+				modelInfo = cachedModel
 			} else {
 				resolvedModel, err :=
 					q.displayResolver.
@@ -187,9 +163,7 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 						)
 
 				if err == nil {
-					modelInfo =
-						resolvedModel
-
+					modelInfo = resolvedModel
 					modelByIDCache[sourceItem.ModelID] =
 						resolvedModel
 				}
@@ -199,8 +173,7 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 				modelByProductIDCache[sourceItem.ProductID]
 
 			if ok {
-				modelInfo =
-					cachedModel
+				modelInfo = cachedModel
 			} else {
 				resolvedModel, err :=
 					q.displayResolver.
@@ -210,9 +183,7 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 						)
 
 				if err == nil {
-					modelInfo =
-						resolvedModel
-
+					modelInfo = resolvedModel
 					modelByProductIDCache[sourceItem.ProductID] =
 						resolvedModel
 				}
@@ -221,8 +192,7 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 
 		if item.ModelID == "" &&
 			modelInfo.ModelID != "" {
-			item.ModelID =
-				modelInfo.ModelID
+			item.ModelID = modelInfo.ModelID
 		}
 
 		if blueprintIDs.ProductBlueprintID == "" &&
@@ -254,9 +224,7 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 						)
 
 				if err == nil {
-					productBlueprintInfo =
-						resolvedInfo
-
+					productBlueprintInfo = resolvedInfo
 					productBlueprintCache[blueprintIDs.ProductBlueprintID] =
 						resolvedInfo
 				}
@@ -287,9 +255,7 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 						)
 
 				if err == nil {
-					tokenBlueprintInfo =
-						resolvedInfo
-
+					tokenBlueprintInfo = resolvedInfo
 					tokenBlueprintCache[blueprintIDs.TokenBlueprintID] =
 						resolvedInfo
 				}
@@ -325,9 +291,7 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 						)
 
 				if err == nil {
-					brandInfo =
-						resolvedInfo
-
+					brandInfo = resolvedInfo
 					brandCache[item.BrandID] =
 						resolvedInfo
 				}
@@ -367,8 +331,7 @@ func applyModelDisplayToOrderDetailItem(
 	}
 
 	if model.ModelID != "" {
-		item.ModelID =
-			model.ModelID
+		item.ModelID = model.ModelID
 	}
 
 	if item.ProductBlueprintID == "" &&
@@ -377,22 +340,16 @@ func applyModelDisplayToOrderDetailItem(
 			model.ProductBlueprintID
 	}
 
-	item.Kind =
-		model.Kind
-
-	item.ModelNumber =
-		model.ModelNumber
-
-	item.Size =
-		model.Size
+	item.Kind = model.Kind
+	item.ModelNumber = model.ModelNumber
+	item.Size = model.Size
 
 	if model.ColorName != "" ||
 		model.ColorRGB != 0 {
-		item.Color =
-			&orderdetaildto.OrderDetailColor{
-				Name: model.ColorName,
-				RGB:  model.ColorRGB,
-			}
+		item.Color = &orderdetaildto.OrderDetailColor{
+			Name: model.ColorName,
+			RGB:  model.ColorRGB,
+		}
 	}
 
 	item.Measurements =
@@ -405,8 +362,7 @@ func applyModelDisplayToOrderDetailItem(
 			model.VolumeValue,
 		)
 
-	item.VolumeUnit =
-		model.VolumeUnit
+	item.VolumeUnit = model.VolumeUnit
 }
 
 func cloneOrderDetailMeasurements(
@@ -422,8 +378,7 @@ func cloneOrderDetailMeasurements(
 	)
 
 	for key, value := range in {
-		out[key] =
-			value
+		out[key] = value
 	}
 
 	return out
@@ -436,8 +391,7 @@ func cloneOrderDetailIntPointer(
 		return nil
 	}
 
-	value :=
-		*in
+	value := *in
 
 	return &value
 }
@@ -445,11 +399,10 @@ func cloneOrderDetailIntPointer(
 func cloneOrderDetailShippingQuote(
 	in orderdom.ShippingQuoteSnapshot,
 ) orderdom.ShippingQuoteSnapshot {
-	out :=
-		orderdom.ShippingQuoteSnapshot{
-			Amount:   in.Amount,
-			Currency: in.Currency,
-		}
+	out := orderdom.ShippingQuoteSnapshot{
+		Amount:   in.Amount,
+		Currency: in.Currency,
+	}
 
 	if len(in.Items) == 0 {
 		out.Items =

@@ -3,6 +3,7 @@
 import type { ShippingAddress } from "./shippingAddress";
 
 export type InquiryStatus = "open" | "resolved" | "closed";
+
 export type InquiryReplySenderType = "avatar" | "member";
 
 export type InquiryImageFile = {
@@ -65,7 +66,7 @@ export type InquiryOrderItemSummary = {
   listId: string;
   qty: number;
   price: number;
-  isCanceled: boolean;
+  isCancelled: boolean;
   isDispatched: boolean;
   transferred: boolean;
   transferredAt?: string;

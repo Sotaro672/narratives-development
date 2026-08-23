@@ -1,9 +1,7 @@
 // frontend/amol/src/features/shared/types/payment.ts
 
 import type {
-
   ShippingAddress,
-
 } from "./shippingAddress";
 
 export type PaymentContext = {
@@ -50,7 +48,7 @@ export type ShippingQuoteItemSnapshot = {
 };
 
 export type ShippingQuoteSnapshot = {
-  items:ShippingQuoteItemSnapshot[];
+  items: ShippingQuoteItemSnapshot[];
   amount: number;
   currency: string;
 };
@@ -60,14 +58,13 @@ export type CreatedOrder = {
   userId?: string;
   avatarId?: string;
   cartId?: string;
-  shippingSnapshot?:OrderShippingSnapshot;
-  shippingQuoteSnapshot?:ShippingQuoteSnapshot;
+  shippingSnapshot?: OrderShippingSnapshot;
+  shippingQuoteSnapshot?: ShippingQuoteSnapshot;
   paid?: boolean;
   createdAt?: string;
 };
 
 export type CanonicalShippingAddress =
-
   ShippingAddress & {
     zipCode: string;
     state: string;
@@ -81,7 +78,7 @@ export type ListCreateOrderItemRequest = {
   listId: string;
   modelId: string;
   qty: number;
-  isCanceled: false;
+  isCancelled: false;
   isDispatched: false;
 };
 
@@ -89,7 +86,7 @@ export type ResaleCreateOrderItemRequest = {
   type: "resale";
   resaleId: string;
   qty: 1;
-  isCanceled: false;
+  isCancelled: false;
   isDispatched: false;
 };
 
@@ -101,7 +98,7 @@ export type CreateOrderRequest = {
   id: string;
   shippingAddressId: string;
   paymentMethodId: string;
-  items:CreateOrderItemRequest[];
+  items: CreateOrderItemRequest[];
 };
 
 export type CreatePaymentRequest = {

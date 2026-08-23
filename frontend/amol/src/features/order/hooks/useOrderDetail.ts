@@ -1,217 +1,233 @@
-// frontend/amol/src/features/order/hooks/useOrderDetail.ts 
- 
-import { 
-  useCallback, 
-  useEffect, 
-  useRef, 
-  useState, 
-} from "react"; 
-import { useParams } from "react-router-dom"; 
- 
-import { getApiBaseUrl } from "../../../lib/apiBaseUrl"; 
-import { getFirebaseIdToken } from "../../../lib/authToken"; 
- 
-import { 
-  cancelOrder as cancelOrderApi, 
-  fetchOrderDetail, 
-} from "../api/orderDetailApi"; 
- 
-import type { 
-  OrderDetail, 
-} from "../../shared/types/orderDetailTypes"; 
- 
-function getErrorMessage( 
-  caught: unknown, 
-  defaultMessage: string, 
-): string { 
-  return caught instanceof Error 
-    ? caught.message 
-    : defaultMessage; 
-} 
- 
-export function useOrderDetail() { 
-  const { 
-    orderId: routeOrderId, 
-  } = useParams<{ 
-    orderId: string; 
-  }>(); 
- 
-  const orderId = 
-    routeOrderId?.trim() || ""; 
- 
-  const [order, setOrder] = 
-    useState<OrderDetail | null>(null); 
- 
-  const [loading, setLoading] = 
-    useState(true); 
- 
-  const [cancelling, setCancelling] = 
-    useState(false); 
- 
-  const [error, setError] = 
-    useState(""); 
- 
-  const requestIdRef = 
-    useRef(0); 
- 
-  const loadOrder = useCallback( 
-    async () => { 
-      const requestId = 
-        ++requestIdRef.current; 
- 
-      setLoading(true); 
-      setError(""); 
- 
-      if (!orderId) { 
-        setOrder(null); 
-        setError( 
-          "注文IDが指定されていません。", 
-        ); 
-        setLoading(false); 
- 
-        return; 
-      } 
- 
-      try { 
-        const backendUrl = 
-          getApiBaseUrl(); 
- 
-        if (!backendUrl) { 
-          throw new Error( 
-            "VITE_API_BASE_URLが設定されていません。", 
-          ); 
-        } 
- 
-        const idToken = 
-          await getFirebaseIdToken(); 
- 
-        const nextOrder = 
-          await fetchOrderDetail({ 
-            backendUrl, 
-            idToken, 
-            orderId, 
-          }); 
- 
-        if ( 
-          requestIdRef.current !== 
-          requestId 
-        ) { 
-          return; 
-        } 
- 
-        setOrder(nextOrder); 
-        setError(""); 
-      } catch (caught) { 
-        if ( 
-          requestIdRef.current !== 
-          requestId 
-        ) { 
-          return; 
-        } 
- 
-        setOrder(null); 
-        setError( 
-          getErrorMessage( 
-            caught, 
-            "注文情報の取得に失敗しました。", 
-          ), 
-        ); 
-      } finally { 
-        if ( 
-          requestIdRef.current === 
-          requestId 
-        ) { 
-          setLoading(false); 
-        } 
-      } 
-    }, 
-    [ 
-      orderId, 
-    ], 
-  ); 
- 
-  useEffect(() => { 
-    void loadOrder(); 
- 
-    return () => { 
-      requestIdRef.current += 1; 
-    }; 
-  }, [ 
-    loadOrder, 
-  ]); 
- 
-  const reload = useCallback( 
-    async () => { 
-      await loadOrder(); 
-    }, 
-    [ 
-      loadOrder, 
-    ], 
-  ); 
- 
-  const cancelOrder = useCallback( 
-    async () => { 
-      if (!orderId) { 
-        setError( 
-          "注文IDが指定されていません。", 
-        ); 
- 
-        return; 
-      } 
- 
-      if (cancelling) { 
-        return; 
-      } 
- 
-      setCancelling(true); 
-      setError(""); 
- 
-      try { 
-        const backendUrl = 
-          getApiBaseUrl(); 
- 
-        if (!backendUrl) { 
-          throw new Error( 
-            "VITE_API_BASE_URLが設定されていません。", 
-          ); 
-        } 
- 
-        const idToken = 
-          await getFirebaseIdToken(); 
- 
-        const nextOrder = 
-          await cancelOrderApi({ 
-            backendUrl, 
-            idToken, 
-            orderId, 
-          }); 
- 
-        setOrder(nextOrder); 
-        setError(""); 
-      } catch (caught) { 
-        setError( 
-          getErrorMessage( 
-            caught, 
-            "注文のキャンセルに失敗しました。", 
-          ), 
-        ); 
-      } finally { 
-        setCancelling(false); 
-      } 
-    }, 
-    [ 
-      cancelling, 
-      orderId, 
-    ], 
-  ); 
- 
-  return { 
-    orderId, 
-    order, 
-    loading, 
-    cancelling, 
-    error, 
-    reload, 
-    cancelOrder, 
-  }; 
-} 
+// frontend/amol/src/features/order/hooks/useOrderDetail.ts
+
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useParams } from "react-router-dom";
+
+import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
+import { getFirebaseIdToken } from "../../../lib/authToken";
+
+import {
+  cancelOrderItem,
+  fetchOrderDetail,
+} from "../api/orderDetailApi";
+
+import type {
+  OrderDetail,
+} from "../../shared/types/orderDetailTypes";
+
+function getErrorMessage(
+  caught: unknown,
+  defaultMessage: string,
+): string {
+  return caught instanceof Error
+    ? caught.message
+    : defaultMessage;
+}
+
+export function useOrderDetail() {
+  const {
+    orderId: routeOrderId,
+  } = useParams<{
+    orderId: string;
+  }>();
+
+  const orderId =
+    routeOrderId?.trim() || "";
+
+  const [order, setOrder] =
+    useState<OrderDetail | null>(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [
+    cancellingItemIndex,
+    setCancellingItemIndex,
+  ] = useState<number | null>(null);
+
+  const [error, setError] =
+    useState("");
+
+  const requestIdRef =
+    useRef(0);
+
+  const loadOrder = useCallback(
+    async () => {
+      const requestId =
+        ++requestIdRef.current;
+
+      setLoading(true);
+      setError("");
+
+      if (!orderId) {
+        setOrder(null);
+        setError(
+          "注文IDが指定されていません。",
+        );
+        setLoading(false);
+
+        return;
+      }
+
+      try {
+        const backendUrl =
+          getApiBaseUrl();
+
+        if (!backendUrl) {
+          throw new Error(
+            "VITE_API_BASE_URLが設定されていません。",
+          );
+        }
+
+        const idToken =
+          await getFirebaseIdToken();
+
+        const nextOrder =
+          await fetchOrderDetail({
+            backendUrl,
+            idToken,
+            orderId,
+          });
+
+        if (
+          requestIdRef.current !==
+          requestId
+        ) {
+          return;
+        }
+
+        setOrder(nextOrder);
+        setError("");
+      } catch (caught) {
+        if (
+          requestIdRef.current !==
+          requestId
+        ) {
+          return;
+        }
+
+        setOrder(null);
+        setError(
+          getErrorMessage(
+            caught,
+            "注文情報の取得に失敗しました。",
+          ),
+        );
+      } finally {
+        if (
+          requestIdRef.current ===
+          requestId
+        ) {
+          setLoading(false);
+        }
+      }
+    },
+    [
+      orderId,
+    ],
+  );
+
+  useEffect(() => {
+    void loadOrder();
+
+    return () => {
+      requestIdRef.current += 1;
+    };
+  }, [
+    loadOrder,
+  ]);
+
+  const reload = useCallback(
+    async () => {
+      await loadOrder();
+    },
+    [
+      loadOrder,
+    ],
+  );
+
+  const cancelItem = useCallback(
+    async (
+      itemIndex: number,
+    ) => {
+      if (!orderId) {
+        setError(
+          "注文IDが指定されていません。",
+        );
+
+        return;
+      }
+
+      if (
+        !Number.isInteger(itemIndex) ||
+        itemIndex < 0
+      ) {
+        setError(
+          "注文商品のインデックスが不正です。",
+        );
+
+        return;
+      }
+
+      if (cancellingItemIndex !== null) {
+        return;
+      }
+
+      setCancellingItemIndex(itemIndex);
+      setError("");
+
+      try {
+        const backendUrl =
+          getApiBaseUrl();
+
+        if (!backendUrl) {
+          throw new Error(
+            "VITE_API_BASE_URLが設定されていません。",
+          );
+        }
+
+        const idToken =
+          await getFirebaseIdToken();
+
+        const nextOrder =
+          await cancelOrderItem({
+            backendUrl,
+            idToken,
+            orderId,
+            itemIndex,
+          });
+
+        setOrder(nextOrder);
+        setError("");
+      } catch (caught) {
+        setError(
+          getErrorMessage(
+            caught,
+            "商品のキャンセルに失敗しました。",
+          ),
+        );
+      } finally {
+        setCancellingItemIndex(null);
+      }
+    },
+    [
+      cancellingItemIndex,
+      orderId,
+    ],
+  );
+
+  return {
+    orderId,
+    order,
+    loading,
+    cancellingItemIndex,
+    error,
+    reload,
+    cancelItem,
+  };
+}
