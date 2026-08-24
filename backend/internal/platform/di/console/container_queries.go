@@ -260,14 +260,13 @@ func buildQueries(
 	)
 
 	var transactionManagementQuery *companyquery.TransactionManagementQuery
-	if r.orderConsoleLister != nil &&
-		inventoryManagementQuery != nil &&
-		r.paymentRepo != nil {
+	if r.settlementRepo != nil &&
+		r.orderRepo != nil {
 		transactionManagementQuery = companyquery.NewTransactionManagementQuery(
 			companyquery.NewTransactionManagementQueryParams{
-				Lister:        r.orderConsoleLister,
-				InvRows:       inventoryManagementQuery,
-				PaymentReader: r.paymentRepo,
+				SettlementReader:  r.settlementRepo,
+				OrderReader:       r.orderRepo,
+				CompanyIDResolver: usecase.CompanyIDFromContext,
 			},
 		)
 	}

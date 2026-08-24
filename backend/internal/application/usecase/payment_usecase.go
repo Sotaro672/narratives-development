@@ -14,6 +14,8 @@ package usecase
 - payment recordsは削除しない
 - Stripe PaymentIntentはpayment record作成前に作成する
 - StripePaymentIntentIDはpendingを含む全statusで必須
+- TransferGroupはpendingを含む全statusで必須
+- StripeChargeIDはStripe Charge作成前は空を許容する
 
 Stripe状態同期:
 - Stripe由来のstatus更新はApplyStripeEventを使用する。
@@ -296,7 +298,10 @@ func (u *PaymentUsecase) GetByPaymentID(
 
 // Create creates a Payment.
 //
-// StripePaymentIntentID is required for every status, including pending.
+// StripePaymentIntentID and TransferGroup are required for every status,
+// including pending.
+//
+// StripeChargeID may be empty until Stripe has created a Charge.
 //
 // A Payment created as succeeded runs post-paid processing once from this
 // creation path. Later succeeded webhook events must not run the processing
@@ -323,12 +328,27 @@ func (u *PaymentUsecase) Create(
 		return nil, paymentdom.ErrInvalidStripePaymentIntent
 	}
 
+	if strings.TrimSpace(
+		payment.TransferGroup,
+	) == "" {
+		return nil, paymentdom.ErrInvalidTransferGroup
+	}
+
+	if payment.StripeChargeID != "" &&
+		strings.TrimSpace(
+			payment.StripeChargeID,
+		) == "" {
+		return nil, paymentdom.ErrInvalidStripeChargeID
+	}
+
 	in := paymentdom.CreatePaymentInput{
 		PaymentID:             payment.PaymentID,
 		PaymentMethodID:       payment.PaymentMethodID,
 		StripeCustomerID:      payment.StripeCustomerID,
 		StripePaymentMethodID: payment.StripePaymentMethodID,
 		StripePaymentIntentID: payment.StripePaymentIntentID,
+		StripeChargeID:        payment.StripeChargeID,
+		TransferGroup:         payment.TransferGroup,
 		Amount:                payment.Amount,
 		Status:                payment.Status,
 		ErrorType:             payment.ErrorType,
@@ -375,6 +395,16 @@ func (u *PaymentUsecase) Update(
 	if patch.StripePaymentIntentID != nil &&
 		strings.TrimSpace(*patch.StripePaymentIntentID) == "" {
 		return nil, paymentdom.ErrInvalidStripePaymentIntent
+	}
+
+	if patch.StripeChargeID != nil &&
+		strings.TrimSpace(*patch.StripeChargeID) == "" {
+		return nil, paymentdom.ErrInvalidStripeChargeID
+	}
+
+	if patch.TransferGroup != nil &&
+		strings.TrimSpace(*patch.TransferGroup) == "" {
+		return nil, paymentdom.ErrInvalidTransferGroup
 	}
 
 	return u.repo.UpdateByPaymentID(

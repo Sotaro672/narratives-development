@@ -9,6 +9,8 @@ import (
 	"time"
 
 	applicationport "narratives/internal/application/port"
+	accountdom "narratives/internal/domain/account"
+	branddom "narratives/internal/domain/brand"
 	cartdom "narratives/internal/domain/cart"
 	common "narratives/internal/domain/common"
 	inventorydom "narratives/internal/domain/inventory"
@@ -41,6 +43,8 @@ type OrderUsecase struct {
 	listRepo             listdom.Repository
 	inventoryRepo        inventorydom.RepositoryPort
 	productBlueprintRepo productblueprintdom.Repository
+	brandRepo            branddom.Repository
+	accountRepo          accountdom.Repository
 	resaleRepo           resaledom.Repository
 	paymentMethodRepo    paymentmethoddom.RepositoryPort
 	shippingAddressRepo  shippingaddressdom.RepositoryPort
@@ -81,6 +85,19 @@ func (u *OrderUsecase) WithCartRepository(cartRepo cartdom.Repository) *OrderUse
 	}
 
 	u.cartRepo = cartRepo
+	return u
+}
+
+func (u *OrderUsecase) WithSellerRepositories(
+	brandRepo branddom.Repository,
+	accountRepo accountdom.Repository,
+) *OrderUsecase {
+	if u == nil {
+		return u
+	}
+
+	u.brandRepo = brandRepo
+	u.accountRepo = accountRepo
 	return u
 }
 
@@ -136,7 +153,8 @@ func (u *OrderUsecase) ListByAvatarID(
 // select when creating an order.
 //
 // Price, InventoryID, ProductID, ProductBlueprintID,
-// TokenBlueprintID and BrandID are resolved from server-side repositories.
+// TokenBlueprintID, BrandID, and seller settlement destination are resolved
+// from server-side repositories.
 type CreateOrderItemInput struct {
 	Type orderdom.OrderItemType
 
@@ -1189,6 +1207,73 @@ func (u *OrderUsecase) resolveProductBlueprintTaxSnapshot(
 		nil
 }
 
+func (u *OrderUsecase) resolveSellerSnapshotByProductBlueprintID(
+	ctx context.Context,
+	productBlueprintID string,
+) (orderdom.SellerSnapshot, error) {
+	if u == nil ||
+		u.productBlueprintRepo == nil ||
+		u.brandRepo == nil ||
+		u.accountRepo == nil {
+		return orderdom.SellerSnapshot{},
+			orderdom.ErrInvalidSellerSnapshot
+	}
+
+	productBlueprint, err := u.productBlueprintRepo.GetByID(
+		ctx,
+		productBlueprintID,
+	)
+	if err != nil {
+		return orderdom.SellerSnapshot{}, err
+	}
+
+	if productBlueprint.ID != productBlueprintID ||
+		productBlueprint.BrandID == "" ||
+		productBlueprint.CompanyID == "" {
+		return orderdom.SellerSnapshot{},
+			orderdom.ErrInvalidSellerSnapshot
+	}
+
+	brand, err := u.brandRepo.GetByID(
+		ctx,
+		productBlueprint.BrandID,
+	)
+	if err != nil {
+		return orderdom.SellerSnapshot{}, err
+	}
+
+	if brand.ID != productBlueprint.BrandID ||
+		brand.CompanyID != productBlueprint.CompanyID ||
+		brand.AccountID == "" ||
+		!brand.IsActive {
+		return orderdom.SellerSnapshot{},
+			orderdom.ErrInvalidSellerSnapshot
+	}
+
+	account, err := u.accountRepo.GetByID(
+		ctx,
+		brand.AccountID,
+	)
+	if err != nil {
+		return orderdom.SellerSnapshot{}, err
+	}
+
+	if account.ID != brand.AccountID ||
+		account.CompanyID != brand.CompanyID ||
+		account.Status != accountdom.StatusActive ||
+		account.StripeAccountID == "" {
+		return orderdom.SellerSnapshot{},
+			orderdom.ErrInvalidSellerSnapshot
+	}
+
+	return orderdom.SellerSnapshot{
+		BrandID:         brand.ID,
+		CompanyID:       brand.CompanyID,
+		AccountID:       account.ID,
+		StripeAccountID: account.StripeAccountID,
+	}, nil
+}
+
 func (u *OrderUsecase) resolveListOrderItem(
 	ctx context.Context,
 	item CreateOrderItemInput,
@@ -1238,6 +1323,15 @@ func (u *OrderUsecase) resolveListOrderItem(
 		return orderdom.OrderItemSnapshot{}, err
 	}
 
+	sellerSnapshot, err :=
+		u.resolveSellerSnapshotByProductBlueprintID(
+			ctx,
+			inventory.ProductBlueprintID,
+		)
+	if err != nil {
+		return orderdom.OrderItemSnapshot{}, err
+	}
+
 	stock, ok := inventory.Stock[item.ModelID]
 	if !ok {
 		return orderdom.OrderItemSnapshot{},
@@ -1265,6 +1359,8 @@ func (u *OrderUsecase) resolveListOrderItem(
 		ListID:             list.ID,
 		ProductBlueprintID: inventory.ProductBlueprintID,
 		TokenBlueprintID:   inventory.TokenBlueprintID,
+
+		SellerSnapshot: sellerSnapshot,
 
 		ProductBlueprintCategoryPath: productBlueprintCategoryPath,
 		ConsumptionTaxRate:           consumptionTaxRate,
@@ -1313,35 +1409,12 @@ func (u *OrderUsecase) resolveResaleOrderItem(
 			orderdom.ErrInvalidItemSnapshot
 	}
 
-	productBlueprintCategoryPath,
-		consumptionTaxRate,
-		err :=
-		u.resolveProductBlueprintTaxSnapshot(
-			ctx,
-			resale.ProductBlueprintID,
-		)
-	if err != nil {
-		return orderdom.OrderItemSnapshot{}, err
-	}
-
-	return orderdom.OrderItemSnapshot{
-		Type:               orderdom.OrderItemTypeResale,
-		ResaleID:           resale.ID,
-		ProductID:          resale.ProductID,
-		ProductBlueprintID: resale.ProductBlueprintID,
-		TokenBlueprintID:   resale.TokenBlueprintID,
-		BrandID:            resale.BrandID,
-
-		ProductBlueprintCategoryPath: productBlueprintCategoryPath,
-		ConsumptionTaxRate:           consumptionTaxRate,
-
-		Qty:           1,
-		Price:         resale.Price,
-		IsCancelled:   false,
-		IsDispatched:  false,
-		Transferred:   false,
-		TransferredAt: nil,
-	}, nil
+	// A resale BrandID identifies the product brand, not the resale seller.
+	// Company Brand.Account must therefore never be used as the payout
+	// destination for a consumer resale. A separate resale seller payout
+	// destination must be implemented before resale checkout is enabled.
+	return orderdom.OrderItemSnapshot{},
+		orderdom.ErrInvalidSellerSnapshot
 }
 
 // =======================

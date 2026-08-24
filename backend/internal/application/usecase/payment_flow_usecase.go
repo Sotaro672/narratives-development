@@ -58,6 +58,7 @@ type CreateAndConfirmPaymentIntentInput struct {
 	Currency              string
 	IdempotencyKey        string
 	Description           string
+	TransferGroup         string
 
 	PaymentMethodID string
 
@@ -66,6 +67,7 @@ type CreateAndConfirmPaymentIntentInput struct {
 
 type CreateAndConfirmPaymentIntentResult struct {
 	StripePaymentIntentID string
+	StripeChargeID        string
 	Status                string
 	ClientSecret          string
 	RequiresAction        bool
@@ -80,9 +82,9 @@ type CreateAndConfirmPaymentIntentResult struct {
 //  1. Verify the authoritative Order.
 //  2. Verify unpaid state and amount using the server-side Order.
 //  3. Verify the payment method against the Order snapshot.
-//  4. Create and confirm the Stripe PaymentIntent.
+//  4. Create and confirm the Stripe PaymentIntent with a transfer group.
 //  5. Verify that Stripe returned a non-empty PaymentIntent ID.
-//  6. Create the payment record with that PaymentIntent ID.
+//  6. Create the payment record with the PaymentIntent, Charge, and transfer group.
 //  7. Let PaymentUsecase run post-paid processing when status is succeeded.
 //
 // Dispatch payment additionally:
@@ -251,6 +253,8 @@ type CreatePaymentAndStartResult struct {
 	Status paymentdom.PaymentStatus
 
 	StripePaymentIntentID string
+	StripeChargeID        string
+	TransferGroup         string
 	ClientSecret          string
 	RequiresAction        bool
 
@@ -265,9 +269,9 @@ type CreatePaymentAndStartResult struct {
 //  2. Read and validate the server-side Order.
 //  3. Compare the requested amount with the authoritative order total.
 //  4. Verify the requested payment method against the Order snapshot.
-//  5. Create and confirm the Stripe PaymentIntent.
+//  5. Create and confirm the Stripe PaymentIntent with a transfer group.
 //  6. Require a non-empty Stripe PaymentIntent ID.
-//  7. Create the payment record with the latest Stripe status.
+//  7. Create the payment record with the Charge ID and transfer group.
 //  8. Return ClientSecret when additional authentication is required.
 //
 // No payment document is created before Stripe returns a PaymentIntent ID.
@@ -405,6 +409,11 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 		amount,
 	)
 
+	transferGroup := fmt.Sprintf(
+		"order:%s",
+		paymentID,
+	)
+
 	pi, stripeErr :=
 		u.paymentIntentGateway.CreateAndConfirmPaymentIntent(
 			ctx,
@@ -418,6 +427,7 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 					"AMOL payment paymentId=%s",
 					paymentID,
 				),
+				TransferGroup:   transferGroup,
 				PaymentMethodID: paymentMethodID,
 				OffSession:      in.OffSession,
 			},
@@ -453,6 +463,8 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 
 		return nil, ErrPaymentFlowStripePaymentIntentIDEmpty
 	}
+
+	stripeChargeID := pi.StripeChargeID
 
 	status := paymentdom.StatusPending
 	requiresAction := pi.RequiresAction
@@ -546,6 +558,8 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 		stripeCustomerID,
 		stripePaymentMethodID,
 		stripePaymentIntentID,
+		stripeChargeID,
+		transferGroup,
 		amount,
 		status,
 		errorType,
@@ -583,6 +597,8 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 		PaymentID:             created.PaymentID,
 		Status:                created.Status,
 		StripePaymentIntentID: created.StripePaymentIntentID,
+		StripeChargeID:        created.StripeChargeID,
+		TransferGroup:         created.TransferGroup,
 		ClientSecret:          pi.ClientSecret,
 		RequiresAction:        requiresAction,
 		ErrorType:             created.ErrorType,
@@ -803,6 +819,15 @@ func validateDispatchPaymentMatchesOrder(
 
 	if payment.StripePaymentMethodID !=
 		order.PaymentMethodSnapshot.StripePaymentMethodID {
+		return ErrPaymentFlowDispatchPaymentMismatch
+	}
+
+	transferGroup := fmt.Sprintf(
+		"order:%s",
+		order.ID,
+	)
+
+	if payment.TransferGroup != transferGroup {
 		return ErrPaymentFlowDispatchPaymentMismatch
 	}
 

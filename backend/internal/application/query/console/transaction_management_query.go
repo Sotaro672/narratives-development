@@ -4,48 +4,83 @@ package query
 import (
 	"context"
 	"errors"
+	"sort"
+	"strings"
 	"time"
 
 	querydto "narratives/internal/application/query/console/dto"
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
+	settlementdom "narratives/internal/domain/settlement"
 )
 
 // ============================================================
 // Ports
 // ============================================================
 
-// TransactionPaymentReader reads the Payment associated with an Order.
+// TransactionSettlementReader reads seller-side Settlement records.
 //
-// PaymentID must be the same value as Order.ID.
-type TransactionPaymentReader interface {
-	GetByPaymentID(ctx context.Context, paymentID string) (*paymentdom.Payment, error)
+// TransactionManagementQuery uses Settlement as the source of truth for:
+//
+// - current Company boundary
+// - Company-attributable gross amount
+// - Stripe PaymentIntent relationship
+//
+// One Payment may have multiple Settlement records because one Company may use
+// multiple payout Accounts.
+type TransactionSettlementReader interface {
+	ListByCompanyID(
+		ctx context.Context,
+		companyID string,
+	) ([]settlementdom.Settlement, error)
+
+	ListByPaymentID(
+		ctx context.Context,
+		paymentID string,
+	) ([]settlementdom.Settlement, error)
 }
+
+// TransactionOrderReader reads the source Order only for display metadata and
+// existing Order filter compatibility.
+//
+// Company boundary and transaction amount must never be derived from Order
+// inventory ownership here. Settlement is authoritative for those values.
+type TransactionOrderReader interface {
+	GetByID(
+		ctx context.Context,
+		orderID string,
+	) (orderdom.Order, error)
+}
+
+// TransactionCompanyIDResolver resolves the authenticated Console Company.
+type TransactionCompanyIDResolver func(
+	ctx context.Context,
+) string
 
 // ============================================================
 // Query
 // ============================================================
 
 type TransactionManagementQuery struct {
-	lister        OrderLister
-	invRows       InventoryRowsLister
-	paymentReader TransactionPaymentReader
+	settlementReader  TransactionSettlementReader
+	orderReader       TransactionOrderReader
+	companyIDResolver TransactionCompanyIDResolver
 }
 
 type NewTransactionManagementQueryParams struct {
-	Lister        OrderLister
-	InvRows       InventoryRowsLister
-	PaymentReader TransactionPaymentReader
+	SettlementReader  TransactionSettlementReader
+	OrderReader       TransactionOrderReader
+	CompanyIDResolver TransactionCompanyIDResolver
 }
 
 func NewTransactionManagementQuery(
 	p NewTransactionManagementQueryParams,
 ) *TransactionManagementQuery {
 	return &TransactionManagementQuery{
-		lister:        p.Lister,
-		invRows:       p.InvRows,
-		paymentReader: p.PaymentReader,
+		settlementReader:  p.SettlementReader,
+		orderReader:       p.OrderReader,
+		companyIDResolver: p.CompanyIDResolver,
 	}
 }
 
@@ -53,9 +88,23 @@ func NewTransactionManagementQuery(
 // Internal read model
 // ============================================================
 
-type transactionOrderCandidate struct {
-	Order               orderdom.Order
-	OrderAmount         int
+type transactionSettlementGroupKey struct {
+	OrderID   string
+	PaymentID string
+}
+
+type transactionSettlementCandidate struct {
+	Order orderdom.Order
+
+	OrderID   string
+	PaymentID string
+
+	StripePaymentIntentID string
+
+	GrossAmount int
+
+	SettlementCreatedAt time.Time
+
 	IsMultiCompanyOrder bool
 }
 
@@ -66,113 +115,157 @@ type transactionOrderCandidate struct {
 func (q *TransactionManagementQuery) List(
 	ctx context.Context,
 	filter orderdom.Filter,
-	sort common.Sort,
+	sortSpec common.Sort,
 	page common.Page,
 ) (common.PageResult[querydto.TransactionManagementRowDTO], error) {
 	page = NormalizeCommonPage(page)
 
 	if q == nil ||
-		q.lister == nil ||
-		q.invRows == nil ||
-		q.paymentReader == nil {
+		q.settlementReader == nil ||
+		q.orderReader == nil ||
+		q.companyIDResolver == nil {
 		return common.PageResult[querydto.TransactionManagementRowDTO]{},
 			errors.New(
-				"TransactionManagementQuery.List: wiring is incomplete (lister/invRows/paymentReader required)",
+				"TransactionManagementQuery.List: wiring is incomplete (settlementReader/orderReader/companyIDResolver required)",
 			)
 	}
 
-	allowedSet, err := AllowedInventoryIDSetFromContext(
-		ctx,
-		q.invRows,
+	companyID := strings.TrimSpace(
+		q.companyIDResolver(ctx),
+	)
+	if companyID == "" {
+		return common.PageResult[querydto.TransactionManagementRowDTO]{},
+			settlementdom.ErrInvalidCompanyID
+	}
+
+	// Settlement exists only after a succeeded Payment.
+	// Therefore a paid=false query cannot contain any Settlement transaction.
+	if filter.Paid != nil && !*filter.Paid {
+		return emptyTransactionManagementPage(page), nil
+	}
+
+	normalizedSort, err := normalizeTransactionManagementSort(
+		sortSpec,
 	)
 	if err != nil {
 		return common.PageResult[querydto.TransactionManagementRowDTO]{}, err
 	}
 
-	if len(allowedSet) == 0 {
+	settlements, err := q.settlementReader.ListByCompanyID(
+		ctx,
+		companyID,
+	)
+	if err != nil {
+		return common.PageResult[querydto.TransactionManagementRowDTO]{}, err
+	}
+
+	if settlements == nil {
+		settlements = []settlementdom.Settlement{}
+	}
+
+	groups, err := buildTransactionSettlementGroups(
+		settlements,
+		companyID,
+	)
+	if err != nil {
+		return common.PageResult[querydto.TransactionManagementRowDTO]{}, err
+	}
+
+	if len(groups) == 0 {
 		return emptyTransactionManagementPage(page), nil
 	}
 
-	candidates := make([]transactionOrderCandidate, 0, page.PerPage)
-
-	const (
-		maxScanPages  = 500
-		sourcePerPage = 200
+	orderCache := make(
+		map[string]orderdom.Order,
+		len(groups),
 	)
 
-	srcPage := 1
+	multiCompanyCache := make(
+		map[string]bool,
+		len(groups),
+	)
 
-	for {
-		if srcPage > maxScanPages {
-			break
-		}
+	candidates := make(
+		[]transactionSettlementCandidate,
+		0,
+		len(groups),
+	)
 
-		result, err := q.lister.ListByInventoryIDs(
-			ctx,
-			allowedSet,
+	for _, group := range groups {
+		if !transactionSettlementMatchesCreatedFilter(
+			group.SettlementCreatedAt,
 			filter,
-			sort,
-			common.Page{
-				Number:  srcPage,
-				PerPage: sourcePerPage,
-			},
-		)
-		if err != nil {
-			return common.PageResult[querydto.TransactionManagementRowDTO]{}, err
+		) {
+			continue
 		}
 
-		if result.Items == nil {
-			result.Items = []orderdom.Order{}
+		order, exists := orderCache[group.OrderID]
+		if !exists {
+			order, err = q.orderReader.GetByID(
+				ctx,
+				group.OrderID,
+			)
+			if err != nil {
+				return common.PageResult[querydto.TransactionManagementRowDTO]{}, err
+			}
+
+			orderCache[group.OrderID] = order
 		}
 
-		for _, order := range result.Items {
-			companyOrder, belongsToCompany, isMultiCompanyOrder, err :=
-				buildCurrentCompanyOrder(
-					order,
-					allowedSet,
+		if !transactionOrderMatchesFilter(
+			order,
+			filter,
+		) {
+			continue
+		}
+
+		isMultiCompanyOrder, exists :=
+			multiCompanyCache[group.PaymentID]
+
+		if !exists {
+			isMultiCompanyOrder, err =
+				q.isMultiCompanyPayment(
+					ctx,
+					group.PaymentID,
+					companyID,
 				)
 			if err != nil {
 				return common.PageResult[querydto.TransactionManagementRowDTO]{}, err
 			}
 
-			if !belongsToCompany {
-				continue
-			}
-
-			orderAmount, err := orderdom.CalculatePaymentAmount(
-				companyOrder,
-			)
-			if err != nil {
-				return common.PageResult[querydto.TransactionManagementRowDTO]{}, err
-			}
-
-			candidates = append(
-				candidates,
-				transactionOrderCandidate{
-					Order:               order,
-					OrderAmount:         orderAmount,
-					IsMultiCompanyOrder: isMultiCompanyOrder,
-				},
-			)
+			multiCompanyCache[group.PaymentID] =
+				isMultiCompanyOrder
 		}
 
-		if len(result.Items) == 0 {
-			break
-		}
+		candidates = append(
+			candidates,
+			transactionSettlementCandidate{
+				Order: order,
 
-		if result.TotalPages > 0 {
-			if srcPage >= result.TotalPages {
-				break
-			}
-		} else if len(result.Items) < sourcePerPage {
-			break
-		}
+				OrderID:   group.OrderID,
+				PaymentID: group.PaymentID,
 
-		srcPage++
+				StripePaymentIntentID: group.StripePaymentIntentID,
+
+				GrossAmount: group.GrossAmount,
+
+				SettlementCreatedAt: group.SettlementCreatedAt,
+
+				IsMultiCompanyOrder: isMultiCompanyOrder,
+			},
+		)
 	}
 
+	sortTransactionSettlementCandidates(
+		candidates,
+		normalizedSort,
+	)
+
 	totalCount := len(candidates)
-	totalPages := TotalPages(totalCount, page.PerPage)
+	totalPages := TotalPages(
+		totalCount,
+		page.PerPage,
+	)
 
 	start := (page.Number - 1) * page.PerPage
 	if start < 0 {
@@ -203,15 +296,12 @@ func (q *TransactionManagementQuery) List(
 	)
 
 	for _, candidate := range pageCandidates {
-		row, err := q.buildRow(
-			ctx,
-			candidate,
+		rows = append(
+			rows,
+			buildTransactionSettlementRow(
+				candidate,
+			),
 		)
-		if err != nil {
-			return common.PageResult[querydto.TransactionManagementRowDTO]{}, err
-		}
-
-		rows = append(rows, row)
 	}
 
 	return common.PageResult[querydto.TransactionManagementRowDTO]{
@@ -224,185 +314,486 @@ func (q *TransactionManagementQuery) List(
 }
 
 // ============================================================
-// Row builder
+// Settlement grouping
 // ============================================================
 
-func (q *TransactionManagementQuery) buildRow(
-	ctx context.Context,
-	candidate transactionOrderCandidate,
-) (querydto.TransactionManagementRowDTO, error) {
-	order := candidate.Order
-
-	orderCreatedAt := formatTransactionTime(
-		order.CreatedAt,
-	)
-
-	row := querydto.TransactionManagementRowDTO{
-		OrderID:             order.ID,
-		CreatedAt:           orderCreatedAt,
-		OrderCreatedAt:      orderCreatedAt,
-		Paid:                order.Paid,
-		OrderAmount:         candidate.OrderAmount,
-		PaymentStatus:       querydto.TransactionPaymentStatusUnpaid,
-		IsMultiCompanyOrder: candidate.IsMultiCompanyOrder,
-	}
-
-	payment, err := q.paymentReader.GetByPaymentID(
-		ctx,
-		order.ID,
-	)
-	if err != nil {
-		if errors.Is(
-			err,
-			paymentdom.ErrNotFound,
-		) {
-			return row, nil
-		}
-
-		return querydto.TransactionManagementRowDTO{}, err
-	}
-
-	if payment == nil {
-		return row, nil
-	}
-
-	row.PaymentID = payment.PaymentID
-	row.PaymentStatus = string(payment.Status)
-	row.StripePaymentIntentID = payment.StripePaymentIntentID
-	row.PaymentCreatedAt = formatTransactionTime(
-		payment.CreatedAt,
-	)
-
-	if row.PaymentCreatedAt != "" {
-		row.CreatedAt = row.PaymentCreatedAt
-	}
-
-	// Payment.Amount represents the complete customer charge.
-	//
-	// It can be exposed directly only when every Order item belongs to the
-	// current Company. For a multi-company Order, the Company-specific
-	// payment amount must come from the future Stripe Connect allocation.
-	if !candidate.IsMultiCompanyOrder {
-		paymentAmount := payment.Amount
-		row.PaymentAmount = &paymentAmount
-
-		amountMatched := payment.Amount == candidate.OrderAmount
-		row.AmountMatched = &amountMatched
-	}
-
-	return row, nil
-}
-
-// ============================================================
-// Current Company Order projection
-// ============================================================
-
-// buildCurrentCompanyOrder creates an Order snapshot containing only the
-// current Company's inventory-bound items.
+// buildTransactionSettlementGroups groups Account-level Settlements into one
+// Company-level transaction row.
 //
-// The returned Order is used only for CalculatePaymentAmount.
-// It is never persisted.
+// Example:
 //
-// belongsToCompany:
-//   - true when at least one Order item belongs to the current Company.
+// Payment P1
 //
-// isMultiCompanyOrder:
-//   - true when the source Order contains an item or shipping quote item
-//     outside the current Company's inventory boundary.
-func buildCurrentCompanyOrder(
-	order orderdom.Order,
-	allowedSet map[string]struct{},
-) (
-	companyOrder orderdom.Order,
-	belongsToCompany bool,
-	isMultiCompanyOrder bool,
-	err error,
-) {
-	if len(allowedSet) == 0 {
-		return orderdom.Order{}, false, false, nil
-	}
-
-	companyItems := make(
-		[]orderdom.OrderItemSnapshot,
-		0,
-		len(order.Items),
+//	Company A
+//	  Account A1 -> Settlement 1 Gross=5,000
+//	  Account A2 -> Settlement 2 Gross=3,000
+//
+// TransactionManagement:
+//
+//	Company A / Payment P1 / Gross=8,000
+//
+// Therefore Console does not accidentally display duplicate Order rows merely
+// because one Company has multiple payout Accounts.
+func buildTransactionSettlementGroups(
+	settlements []settlementdom.Settlement,
+	companyID string,
+) ([]transactionSettlementCandidate, error) {
+	groupMap := make(
+		map[transactionSettlementGroupKey]*transactionSettlementCandidate,
 	)
 
-	hasForeignItem := false
-
-	for _, item := range order.Items {
-		if InventoryAllowed(
-			allowedSet,
-			item.InventoryID,
-		) {
-			companyItems = append(companyItems, item)
-			continue
-		}
-
-		hasForeignItem = true
-	}
-
-	if len(companyItems) == 0 {
-		return orderdom.Order{}, false, false, nil
-	}
-
-	companyShippingItems := make(
-		[]orderdom.ShippingQuoteItemSnapshot,
-		0,
-		len(order.ShippingQuoteSnapshot.Items),
-	)
-
-	companyShippingAmount := 0
-	hasForeignShippingItem := false
 	maxInt := int(^uint(0) >> 1)
 
-	for _, item := range order.ShippingQuoteSnapshot.Items {
-		if !InventoryAllowed(
-			allowedSet,
-			item.InventoryID,
-		) {
-			hasForeignShippingItem = true
+	for _, settlement := range settlements {
+		if settlement.CompanyID != companyID {
+			return nil,
+				errors.New(
+					"TransactionManagementQuery.List: settlement company boundary mismatch",
+				)
+		}
+
+		if settlement.OrderID == "" ||
+			settlement.PaymentID == "" {
+			return nil,
+				errors.New(
+					"TransactionManagementQuery.List: settlement order/payment id is empty",
+				)
+		}
+
+		if settlement.GrossAmount <= 0 {
+			return nil,
+				errors.New(
+					"TransactionManagementQuery.List: settlement gross amount is invalid",
+				)
+		}
+
+		if settlement.CreatedAt.IsZero() {
+			return nil,
+				errors.New(
+					"TransactionManagementQuery.List: settlement createdAt is invalid",
+				)
+		}
+
+		key := transactionSettlementGroupKey{
+			OrderID:   settlement.OrderID,
+			PaymentID: settlement.PaymentID,
+		}
+
+		group, exists := groupMap[key]
+		if !exists {
+			groupMap[key] =
+				&transactionSettlementCandidate{
+					OrderID:   settlement.OrderID,
+					PaymentID: settlement.PaymentID,
+
+					StripePaymentIntentID: settlement.StripePaymentIntentID,
+
+					GrossAmount: settlement.GrossAmount,
+
+					SettlementCreatedAt: settlement.CreatedAt.UTC(),
+				}
+
 			continue
 		}
 
-		if item.Amount < 0 {
-			return orderdom.Order{},
-				false,
-				false,
-				orderdom.ErrInvalidPaymentAmount
+		if group.StripePaymentIntentID !=
+			settlement.StripePaymentIntentID {
+			return nil,
+				errors.New(
+					"TransactionManagementQuery.List: settlement Stripe PaymentIntent mismatch",
+				)
 		}
 
-		if companyShippingAmount > maxInt-item.Amount {
-			return orderdom.Order{},
-				false,
-				false,
-				orderdom.ErrInvalidPaymentAmount
+		if group.GrossAmount >
+			maxInt-settlement.GrossAmount {
+			return nil,
+				errors.New(
+					"TransactionManagementQuery.List: settlement gross amount overflow",
+				)
 		}
 
-		companyShippingAmount += item.Amount
-		companyShippingItems = append(
-			companyShippingItems,
-			item,
+		group.GrossAmount +=
+			settlement.GrossAmount
+
+		if settlement.CreatedAt.Before(
+			group.SettlementCreatedAt,
+		) {
+			group.SettlementCreatedAt =
+				settlement.CreatedAt.UTC()
+		}
+	}
+
+	result := make(
+		[]transactionSettlementCandidate,
+		0,
+		len(groupMap),
+	)
+
+	for _, group := range groupMap {
+		result = append(
+			result,
+			*group,
 		)
 	}
 
-	if len(companyShippingItems) == 0 {
-		return orderdom.Order{},
-			false,
-			false,
-			orderdom.ErrInvalidPaymentAmount
+	return result, nil
+}
+
+// ============================================================
+// Multi-company detection
+// ============================================================
+
+// isMultiCompanyPayment determines multi-company state from Settlements.
+//
+// This intentionally does not inspect inventory ownership.
+//
+// If one Payment has Settlements belonging to more than one Company, the
+// customer paid for sellers from multiple Companies in the same checkout.
+func (q *TransactionManagementQuery) isMultiCompanyPayment(
+	ctx context.Context,
+	paymentID string,
+	currentCompanyID string,
+) (bool, error) {
+	settlements, err :=
+		q.settlementReader.ListByPaymentID(
+			ctx,
+			paymentID,
+		)
+	if err != nil {
+		return false, err
 	}
 
-	companyOrder = order
-	companyOrder.Items = companyItems
-	companyOrder.ShippingQuoteSnapshot.Items = companyShippingItems
-	companyOrder.ShippingQuoteSnapshot.Amount = companyShippingAmount
+	for _, settlement := range settlements {
+		if settlement.CompanyID != "" &&
+			settlement.CompanyID != currentCompanyID {
+			return true, nil
+		}
+	}
 
-	isMultiCompanyOrder =
-		hasForeignItem ||
-			hasForeignShippingItem
+	return false, nil
+}
 
-	return companyOrder, true, isMultiCompanyOrder, nil
+// ============================================================
+// Row builder
+// ============================================================
+
+func buildTransactionSettlementRow(
+	candidate transactionSettlementCandidate,
+) querydto.TransactionManagementRowDTO {
+	settlementCreatedAt :=
+		formatTransactionTime(
+			candidate.SettlementCreatedAt,
+		)
+
+	orderCreatedAt :=
+		formatTransactionTime(
+			candidate.Order.CreatedAt,
+		)
+
+	companyGrossAmount :=
+		candidate.GrossAmount
+
+	// AmountMatched now means that the amount displayed as the current
+	// Company's transaction amount is backed directly by persisted
+	// Settlement.GrossAmount rather than reconstructed from Order snapshots.
+	amountMatched := true
+
+	return querydto.TransactionManagementRowDTO{
+		OrderID: candidate.OrderID,
+
+		PaymentID: candidate.PaymentID,
+
+		CreatedAt: settlementCreatedAt,
+
+		OrderCreatedAt: orderCreatedAt,
+
+		Paid: true,
+
+		// Existing DTO field names are retained for frontend compatibility.
+		//
+		// Both values now represent the amount attributable to the current
+		// Company according to persisted Settlement records.
+		OrderAmount: companyGrossAmount,
+
+		PaymentAmount: &companyGrossAmount,
+
+		// Settlement is created only for a succeeded Payment.
+		PaymentStatus: string(paymentdom.StatusSucceeded),
+
+		StripePaymentIntentID: candidate.StripePaymentIntentID,
+
+		IsMultiCompanyOrder: candidate.IsMultiCompanyOrder,
+
+		AmountMatched: &amountMatched,
+	}
+}
+
+// ============================================================
+// Filter
+// ============================================================
+
+// transactionSettlementMatchesCreatedFilter applies the existing transaction
+// createdAt filter to Settlement.CreatedAt.
+//
+// TransactionManagement is now Settlement-based, therefore the primary
+// transaction timestamp is the Settlement creation time rather than the Order
+// creation time.
+func transactionSettlementMatchesCreatedFilter(
+	createdAt time.Time,
+	filter orderdom.Filter,
+) bool {
+	if filter.CreatedFrom != nil &&
+		createdAt.Before(
+			filter.CreatedFrom.UTC(),
+		) {
+		return false
+	}
+
+	if filter.CreatedTo != nil &&
+		createdAt.After(
+			filter.CreatedTo.UTC(),
+		) {
+		return false
+	}
+
+	return true
+}
+
+// transactionOrderMatchesFilter preserves the existing Order-specific filter
+// behavior.
+//
+// Order is used only for filtering/display metadata. It is not used to
+// calculate transaction amount or Company ownership.
+func transactionOrderMatchesFilter(
+	order orderdom.Order,
+	filter orderdom.Filter,
+) bool {
+	if filter.ID != "" &&
+		order.ID != filter.ID {
+		return false
+	}
+
+	if filter.UserID != "" &&
+		order.UserID != filter.UserID {
+		return false
+	}
+
+	if filter.AvatarID != "" &&
+		order.AvatarID != filter.AvatarID {
+		return false
+	}
+
+	if filter.CartID != "" &&
+		order.CartID != filter.CartID {
+		return false
+	}
+
+	if filter.Paid != nil &&
+		!*filter.Paid {
+		return false
+	}
+
+	if filter.ShippingSnapshot != nil &&
+		!transactionShippingSnapshotEqual(
+			order.ShippingSnapshot,
+			*filter.ShippingSnapshot,
+		) {
+		return false
+	}
+
+	if !transactionHasItemFilter(filter) {
+		return true
+	}
+
+	for _, item := range order.Items {
+		if transactionOrderItemMatchesFilter(
+			item,
+			filter,
+		) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func transactionHasItemFilter(
+	filter orderdom.Filter,
+) bool {
+	return filter.ModelID != "" ||
+		filter.InventoryID != "" ||
+		filter.ListID != "" ||
+		filter.ItemType != "" ||
+		filter.ResaleID != "" ||
+		filter.ProductID != "" ||
+		filter.ProductBlueprintID != "" ||
+		filter.TokenBlueprintID != "" ||
+		filter.BrandID != "" ||
+		filter.IsCancelled != nil ||
+		filter.IsDispatched != nil ||
+		filter.Transferred != nil
+}
+
+func transactionOrderItemMatchesFilter(
+	item orderdom.OrderItemSnapshot,
+	filter orderdom.Filter,
+) bool {
+	if filter.ModelID != "" &&
+		item.ModelID != filter.ModelID {
+		return false
+	}
+
+	if filter.InventoryID != "" &&
+		item.InventoryID != filter.InventoryID {
+		return false
+	}
+
+	if filter.ListID != "" &&
+		item.ListID != filter.ListID {
+		return false
+	}
+
+	if filter.ItemType != "" &&
+		item.Type != filter.ItemType {
+		return false
+	}
+
+	if filter.ResaleID != "" &&
+		item.ResaleID != filter.ResaleID {
+		return false
+	}
+
+	if filter.ProductID != "" &&
+		item.ProductID != filter.ProductID {
+		return false
+	}
+
+	if filter.ProductBlueprintID != "" &&
+		item.ProductBlueprintID !=
+			filter.ProductBlueprintID {
+		return false
+	}
+
+	if filter.TokenBlueprintID != "" &&
+		item.TokenBlueprintID !=
+			filter.TokenBlueprintID {
+		return false
+	}
+
+	if filter.BrandID != "" &&
+		item.BrandID != filter.BrandID {
+		return false
+	}
+
+	if filter.IsCancelled != nil &&
+		item.IsCancelled !=
+			*filter.IsCancelled {
+		return false
+	}
+
+	if filter.IsDispatched != nil &&
+		item.IsDispatched !=
+			*filter.IsDispatched {
+		return false
+	}
+
+	if filter.Transferred != nil &&
+		item.Transferred !=
+			*filter.Transferred {
+		return false
+	}
+
+	return true
+}
+
+func transactionShippingSnapshotEqual(
+	left orderdom.ShippingSnapshot,
+	right orderdom.ShippingSnapshot,
+) bool {
+	return left.ZipCode == right.ZipCode &&
+		left.State == right.State &&
+		left.City == right.City &&
+		left.Street == right.Street &&
+		left.Street2 == right.Street2 &&
+		left.Country == right.Country
+}
+
+// ============================================================
+// Sort
+// ============================================================
+
+func normalizeTransactionManagementSort(
+	sortSpec common.Sort,
+) (common.Sort, error) {
+	if sortSpec.Column == "" {
+		sortSpec.Column =
+			orderdom.SortByCreatedAt
+	}
+
+	if sortSpec.Column !=
+		orderdom.SortByCreatedAt {
+		return common.Sort{},
+			errors.New(
+				"TransactionManagementQuery.List: unsupported sort column",
+			)
+	}
+
+	if sortSpec.Order == "" {
+		sortSpec.Order =
+			common.SortDesc
+	}
+
+	if sortSpec.Order != common.SortAsc &&
+		sortSpec.Order != common.SortDesc {
+		return common.Sort{},
+			errors.New(
+				"TransactionManagementQuery.List: invalid sort order",
+			)
+	}
+
+	return sortSpec, nil
+}
+
+func sortTransactionSettlementCandidates(
+	candidates []transactionSettlementCandidate,
+	sortSpec common.Sort,
+) {
+	sort.SliceStable(
+		candidates,
+		func(i, j int) bool {
+			left :=
+				candidates[i].
+					SettlementCreatedAt
+
+			right :=
+				candidates[j].
+					SettlementCreatedAt
+
+			if left.Equal(right) {
+				if candidates[i].PaymentID ==
+					candidates[j].PaymentID {
+					return candidates[i].OrderID <
+						candidates[j].OrderID
+				}
+
+				if sortSpec.Order ==
+					common.SortAsc {
+					return candidates[i].PaymentID <
+						candidates[j].PaymentID
+				}
+
+				return candidates[i].PaymentID >
+					candidates[j].PaymentID
+			}
+
+			if sortSpec.Order ==
+				common.SortAsc {
+				return left.Before(right)
+			}
+
+			return left.After(right)
+		},
+	)
 }
 
 // ============================================================

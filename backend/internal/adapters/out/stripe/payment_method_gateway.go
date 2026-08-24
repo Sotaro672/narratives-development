@@ -139,6 +139,10 @@ func (g *PaymentMethodGateway) CreateSetupIntent(
 // Mallからの通常決済ではoff_session=false、
 // Consoleの発送時決済ではoff_session=trueとして実行する。
 // frontend / Console はsecret keyを持たず、backendがStripe secret keyでAPIを呼ぶ。
+//
+// Separate Charges and Transfers方式を使用するため、
+// PaymentIntentにはOrder単位のtransfer_groupを付与する。
+// 後続のStripe Transferも同じtransfer_groupを使用する。
 func (g *PaymentMethodGateway) CreateAndConfirmPaymentIntent(
 	ctx context.Context,
 	in usecase.CreateAndConfirmPaymentIntentInput,
@@ -151,6 +155,7 @@ func (g *PaymentMethodGateway) CreateAndConfirmPaymentIntent(
 	stripePaymentMethodID := strings.TrimSpace(in.StripePaymentMethodID)
 	currency := strings.TrimSpace(strings.ToLower(in.Currency))
 	paymentMethodID := strings.TrimSpace(in.PaymentMethodID)
+	transferGroup := strings.TrimSpace(in.TransferGroup)
 
 	if stripeCustomerID == "" {
 		return nil, pm.ErrInvalidStripeCustomerID
@@ -160,6 +165,9 @@ func (g *PaymentMethodGateway) CreateAndConfirmPaymentIntent(
 	}
 	if in.Amount <= 0 {
 		return nil, errors.New("stripe payment intent amount is invalid")
+	}
+	if transferGroup == "" {
+		return nil, errors.New("stripe payment intent transfer_group is empty")
 	}
 	if currency == "" {
 		currency = "jpy"
@@ -171,6 +179,7 @@ func (g *PaymentMethodGateway) CreateAndConfirmPaymentIntent(
 	form.Set("customer", stripeCustomerID)
 	form.Set("payment_method", stripePaymentMethodID)
 	form.Set("confirm", "true")
+	form.Set("transfer_group", transferGroup)
 	form.Add("payment_method_types[]", "card")
 
 	if in.OffSession {
@@ -187,6 +196,8 @@ func (g *PaymentMethodGateway) CreateAndConfirmPaymentIntent(
 		form.Set("metadata[paymentMethodId]", paymentMethodID)
 	}
 
+	form.Set("metadata[transferGroup]", transferGroup)
+
 	var out stripePaymentIntentResponse
 	requestErr := g.postFormWithIdempotencyKey(
 		ctx,
@@ -199,6 +210,7 @@ func (g *PaymentMethodGateway) CreateAndConfirmPaymentIntent(
 	status := strings.TrimSpace(out.Status)
 	clientSecret := strings.TrimSpace(out.ClientSecret)
 	paymentIntentID := strings.TrimSpace(out.ID)
+	stripeChargeID := strings.TrimSpace(out.LatestCharge)
 
 	if requestErr != nil && paymentIntentID == "" {
 		return nil, requestErr
@@ -206,6 +218,7 @@ func (g *PaymentMethodGateway) CreateAndConfirmPaymentIntent(
 
 	result := &usecase.CreateAndConfirmPaymentIntentResult{
 		StripePaymentIntentID: paymentIntentID,
+		StripeChargeID:        stripeChargeID,
 		Status:                status,
 		ClientSecret:          clientSecret,
 		RequiresAction:        status == "requires_action" || status == "requires_source_action",
@@ -366,6 +379,7 @@ type stripePaymentIntentResponse struct {
 	ID           string `json:"id"`
 	ClientSecret string `json:"client_secret"`
 	Status       string `json:"status"`
+	LatestCharge string `json:"latest_charge"`
 
 	LastPaymentError *stripePaymentError `json:"last_payment_error"`
 }

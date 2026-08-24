@@ -3,6 +3,7 @@ package order
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -61,6 +62,19 @@ type PaymentMethodSnapshot struct {
 	IsDefault             bool   `json:"isDefault"`
 }
 
+// SellerSnapshot fixes the seller and Stripe Connect destination at the
+// time the Order is created.
+//
+// It is intentionally stored inside each Order item so later Brand or Account
+// changes cannot silently change the settlement destination of an existing
+// Order.
+type SellerSnapshot struct {
+	BrandID         string `json:"brandId"`
+	CompanyID       string `json:"companyId"`
+	AccountID       string `json:"accountId"`
+	StripeAccountID string `json:"stripeAccountId"`
+}
+
 // OrderItemType identifies what kind of item is stored in Order.Items.
 type OrderItemType string
 
@@ -75,6 +89,7 @@ const (
 //   - type: "list"
 //   - modelId, inventoryId, listId
 //   - productBlueprintId, tokenBlueprintId
+//   - sellerSnapshot
 //   - productBlueprintCategoryPath, consumptionTaxRate
 //   - qty, price
 //
@@ -82,10 +97,12 @@ const (
 //   - type: "resale"
 //   - resaleId, productId
 //   - productBlueprintId, tokenBlueprintId, brandId
+//   - sellerSnapshot
 //   - productBlueprintCategoryPath, consumptionTaxRate
 //   - qty=1, price
 //
-// Transfer, cancellation, dispatch, and return state is maintained per item.
+// Token transfer, cancellation, dispatch, and return state is maintained per item.
+// Stripe Connect settlement state is maintained separately from this snapshot.
 type OrderItemSnapshot struct {
 	Type OrderItemType `json:"type"`
 
@@ -102,6 +119,8 @@ type OrderItemSnapshot struct {
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 	BrandID            string `json:"brandId,omitempty"`
+
+	SellerSnapshot SellerSnapshot `json:"sellerSnapshot"`
 
 	ProductBlueprintCategoryPath []string `json:"productBlueprintCategoryPath"`
 
@@ -163,7 +182,8 @@ var (
 	ErrInvalidItems     = errors.New("order: invalid items")
 	ErrInvalidCreatedAt = errors.New("order: invalid createdAt")
 
-	ErrInvalidItemSnapshot = errors.New("order: invalid item snapshot")
+	ErrInvalidItemSnapshot   = errors.New("order: invalid item snapshot")
+	ErrInvalidSellerSnapshot = errors.New("order: invalid sellerSnapshot")
 )
 
 // ========================================
@@ -679,6 +699,12 @@ func validateItems(items []OrderItemSnapshot) error {
 func validateItemSnapshot(
 	item OrderItemSnapshot,
 ) error {
+	if err := validateSellerSnapshot(
+		item.SellerSnapshot,
+	); err != nil {
+		return err
+	}
+
 	if err :=
 		validateProductBlueprintCategorySnapshot(
 			item,
@@ -696,6 +722,32 @@ func validateItemSnapshot(
 	default:
 		return ErrInvalidItemSnapshot
 	}
+}
+
+func validateSellerSnapshot(
+	seller SellerSnapshot,
+) error {
+	if seller.BrandID == "" {
+		return ErrInvalidSellerSnapshot
+	}
+
+	if seller.CompanyID == "" {
+		return ErrInvalidSellerSnapshot
+	}
+
+	if seller.AccountID == "" {
+		return ErrInvalidSellerSnapshot
+	}
+
+	if seller.StripeAccountID == "" ||
+		!strings.HasPrefix(
+			seller.StripeAccountID,
+			"acct_",
+		) {
+		return ErrInvalidSellerSnapshot
+	}
+
+	return nil
 }
 
 func validateProductBlueprintCategorySnapshot(
@@ -784,6 +836,11 @@ func validateResaleItemSnapshot(
 	}
 
 	if item.BrandID == "" {
+		return ErrInvalidItemSnapshot
+	}
+
+	if item.BrandID !=
+		item.SellerSnapshot.BrandID {
 		return ErrInvalidItemSnapshot
 	}
 

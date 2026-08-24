@@ -264,6 +264,9 @@ func buildUsecases(
 		r.paymentMethodRepo,
 		r.shippingAddressRepo,
 		shippingQuoteUC,
+	).WithSellerRepositories(
+		r.brandRepo,
+		r.accountRepo,
 	)
 
 	if paymentUC == nil {

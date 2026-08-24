@@ -38,6 +38,8 @@ var (
 // - paymentId must be the same value as order.ID
 // - paymentId is not stored as a document field
 // - stripePaymentIntentId is required for every status
+// - transferGroup is required for every status
+// - stripeChargeId is optional until Stripe has created a Charge
 // - postPaidTriggeredAt is an internal exactly-once claim marker
 //
 // Stripe event rules:
@@ -125,6 +127,12 @@ func (r *PaymentRepositoryFS) Create(
 	in.StripePaymentIntentID = strings.TrimSpace(
 		in.StripePaymentIntentID,
 	)
+	in.StripeChargeID = strings.TrimSpace(
+		in.StripeChargeID,
+	)
+	in.TransferGroup = strings.TrimSpace(
+		in.TransferGroup,
+	)
 
 	if in.PaymentID == "" {
 		return nil, paymentdom.ErrInvalidPaymentID
@@ -139,6 +147,8 @@ func (r *PaymentRepositoryFS) Create(
 		in.StripeCustomerID,
 		in.StripePaymentMethodID,
 		in.StripePaymentIntentID,
+		in.StripeChargeID,
+		in.TransferGroup,
 		in.Amount,
 		in.Status,
 		normalizePaymentOptionalString(in.ErrorType),
@@ -215,7 +225,7 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(
 	updates := make(
 		[]firestore.Update,
 		0,
-		8,
+		10,
 	)
 
 	if patch.PaymentMethodID != nil {
@@ -285,6 +295,42 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(
 			updates,
 			firestore.Update{
 				Path:  "stripePaymentIntentId",
+				Value: value,
+			},
+		)
+	}
+
+	if patch.StripeChargeID != nil {
+		value := strings.TrimSpace(
+			*patch.StripeChargeID,
+		)
+		if value == "" {
+			return nil,
+				paymentdom.ErrInvalidStripeChargeID
+		}
+
+		updates = append(
+			updates,
+			firestore.Update{
+				Path:  "stripeChargeId",
+				Value: value,
+			},
+		)
+	}
+
+	if patch.TransferGroup != nil {
+		value := strings.TrimSpace(
+			*patch.TransferGroup,
+		)
+		if value == "" {
+			return nil,
+				paymentdom.ErrInvalidTransferGroup
+		}
+
+		updates = append(
+			updates,
+			firestore.Update{
+				Path:  "transferGroup",
 				Value: value,
 			},
 		)
@@ -532,6 +578,8 @@ func (r *PaymentRepositoryFS) ApplyStripePaymentEvent(
 						next.StripeCustomerID,
 						next.StripePaymentMethodID,
 						next.StripePaymentIntentID,
+						next.StripeChargeID,
+						next.TransferGroup,
 						next.Amount,
 						next.Status,
 						next.ErrorType,
@@ -766,6 +814,11 @@ func paymentToCreateData(
 		"stripeCustomerId":      payment.StripeCustomerID,
 		"stripePaymentIntentId": payment.StripePaymentIntentID,
 		"stripePaymentMethodId": payment.StripePaymentMethodID,
+		"transferGroup":         payment.TransferGroup,
+	}
+
+	if payment.StripeChargeID != "" {
+		data["stripeChargeId"] = payment.StripeChargeID
 	}
 
 	if payment.ErrorType != nil {
@@ -839,6 +892,23 @@ func docToPayment(
 		return paymentdom.Payment{}, err
 	}
 
+	stripeChargeID := ""
+	if value := paymentOptionalString(
+		data,
+		"stripeChargeId",
+	); value != nil {
+		stripeChargeID = *value
+	}
+
+	transferGroup, err :=
+		paymentRequiredString(
+			data,
+			"transferGroup",
+		)
+	if err != nil {
+		return paymentdom.Payment{}, err
+	}
+
 	amount, err := paymentRequiredInt(
 		data,
 		"amount",
@@ -884,6 +954,8 @@ func docToPayment(
 		stripeCustomerID,
 		stripePaymentMethodID,
 		stripePaymentIntentID,
+		stripeChargeID,
+		transferGroup,
 		amount,
 		paymentdom.PaymentStatus(statusText),
 		errorType,

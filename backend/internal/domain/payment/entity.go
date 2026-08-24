@@ -33,7 +33,6 @@ func IsValidStatus(s PaymentStatus) bool {
 	if s == "" {
 		return false
 	}
-
 	_, ok := AllowedStatuses[s]
 	return ok
 }
@@ -51,12 +50,18 @@ func IsValidStatus(s PaymentStatus) bool {
 //	createdAt
 //	paymentMethodId
 //	status
+//	stripeChargeId
 //	stripeCustomerId
 //	stripePaymentIntentId
 //	stripePaymentMethodId
+//	transferGroup
 //
-// stripePaymentIntentId is required for every payment status,
+// stripePaymentIntentId and transferGroup are required for every payment status,
 // including pending.
+//
+// stripeChargeId is optional until Stripe has created a Charge.
+// When available, it identifies the source transaction used by the later
+// Stripe Connect settlement transfer.
 type Payment struct {
 	// PaymentID is the Firestore payment document ID.
 	// It must be the same value as order.ID.
@@ -67,6 +72,9 @@ type Payment struct {
 	StripeCustomerID      string
 	StripePaymentMethodID string
 	StripePaymentIntentID string
+	StripeChargeID        string
+
+	TransferGroup string
 
 	Amount int
 	Status PaymentStatus
@@ -85,6 +93,8 @@ var (
 	ErrInvalidStripeCustomerID    = errors.New("payment: invalid stripeCustomerId")
 	ErrInvalidStripePaymentMethod = errors.New("payment: invalid stripePaymentMethodId")
 	ErrInvalidStripePaymentIntent = errors.New("payment: invalid stripePaymentIntentId")
+	ErrInvalidStripeChargeID      = errors.New("payment: invalid stripeChargeId")
+	ErrInvalidTransferGroup       = errors.New("payment: invalid transferGroup")
 	ErrInvalidAmount              = errors.New("payment: invalid amount")
 	ErrInvalidStatus              = errors.New("payment: invalid status")
 	ErrInvalidErrorType           = errors.New("payment: invalid errorType")
@@ -106,14 +116,18 @@ var (
 // paymentID must be the same value as order.ID.
 // The value is used as the Firestore payment document ID.
 //
-// stripePaymentIntentID is required for every status, including pending.
-// A Stripe PaymentIntent must be created before this constructor is called.
+// stripePaymentIntentID and transferGroup are required for every status,
+// including pending.
+//
+// stripeChargeID may be empty until Stripe has created a Charge.
 func New(
 	paymentID string,
 	paymentMethodID string,
 	stripeCustomerID string,
 	stripePaymentMethodID string,
 	stripePaymentIntentID string,
+	stripeChargeID string,
+	transferGroup string,
 	amount int,
 	status PaymentStatus,
 	errorType *string,
@@ -132,6 +146,8 @@ func New(
 		StripeCustomerID:      stripeCustomerID,
 		StripePaymentMethodID: stripePaymentMethodID,
 		StripePaymentIntentID: stripePaymentIntentID,
+		StripeChargeID:        stripeChargeID,
+		TransferGroup:         transferGroup,
 		Amount:                amount,
 		Status:                st,
 		ErrorType:             errorType,
@@ -143,20 +159,22 @@ func New(
 	if err := p.validate(); err != nil {
 		return Payment{}, err
 	}
-
 	return p, nil
 }
 
 // NewWithNow creates a Payment with the provided current time.
 //
 // paymentID must be the same value as order.ID.
-// stripePaymentIntentID is required for every status, including pending.
+// stripePaymentIntentID and transferGroup are required for every status.
+// stripeChargeID may be empty until Stripe has created a Charge.
 func NewWithNow(
 	paymentID string,
 	paymentMethodID string,
 	stripeCustomerID string,
 	stripePaymentMethodID string,
 	stripePaymentIntentID string,
+	stripeChargeID string,
+	transferGroup string,
 	amount int,
 	status PaymentStatus,
 	errorType *string,
@@ -170,6 +188,8 @@ func NewWithNow(
 		stripeCustomerID,
 		stripePaymentMethodID,
 		stripePaymentIntentID,
+		stripeChargeID,
+		transferGroup,
 		amount,
 		status,
 		errorType,
@@ -185,7 +205,6 @@ func (p *Payment) SetPaymentID(paymentID string) error {
 	if paymentID == "" {
 		return ErrInvalidPaymentID
 	}
-
 	p.PaymentID = paymentID
 	return nil
 }
@@ -194,7 +213,6 @@ func (p *Payment) SetStatus(next PaymentStatus) error {
 	if !IsValidStatus(next) {
 		return ErrInvalidStatus
 	}
-
 	p.Status = next
 	return nil
 }
@@ -203,7 +221,6 @@ func (p *Payment) SetPaymentMethodID(paymentMethodID string) error {
 	if paymentMethodID == "" {
 		return ErrInvalidPaymentMethodID
 	}
-
 	p.PaymentMethodID = paymentMethodID
 	return nil
 }
@@ -212,39 +229,51 @@ func (p *Payment) SetStripeCustomerID(stripeCustomerID string) error {
 	if stripeCustomerID == "" {
 		return ErrInvalidStripeCustomerID
 	}
-
 	p.StripeCustomerID = stripeCustomerID
 	return nil
 }
 
-func (p *Payment) SetStripePaymentMethodID(
-	stripePaymentMethodID string,
-) error {
+func (p *Payment) SetStripePaymentMethodID(stripePaymentMethodID string) error {
 	if stripePaymentMethodID == "" {
 		return ErrInvalidStripePaymentMethod
 	}
-
 	p.StripePaymentMethodID = stripePaymentMethodID
 	return nil
 }
 
-func (p *Payment) SetStripePaymentIntentID(
-	stripePaymentIntentID string,
-) error {
+func (p *Payment) SetStripePaymentIntentID(stripePaymentIntentID string) error {
 	if stripePaymentIntentID == "" {
 		return ErrInvalidStripePaymentIntent
 	}
-
 	p.StripePaymentIntentID = stripePaymentIntentID
 	return nil
 }
 
+// SetStripeChargeID sets the Stripe Charge used as the source transaction
+// for later Stripe Connect settlement transfers.
+//
+// An empty Charge ID is not accepted by this setter.
+// The Payment field itself may remain empty until Stripe has created a Charge.
+func (p *Payment) SetStripeChargeID(stripeChargeID string) error {
+	if stripeChargeID == "" {
+		return ErrInvalidStripeChargeID
+	}
+	p.StripeChargeID = stripeChargeID
+	return nil
+}
+
+func (p *Payment) SetTransferGroup(transferGroup string) error {
+	if transferGroup == "" {
+		return ErrInvalidTransferGroup
+	}
+	p.TransferGroup = transferGroup
+	return nil
+}
+
 func (p *Payment) SetAmount(amount int) error {
-	if amount < MinAmount ||
-		(MaxAmount > 0 && amount > MaxAmount) {
+	if amount < MinAmount || (MaxAmount > 0 && amount > MaxAmount) {
 		return ErrInvalidAmount
 	}
-
 	p.Amount = amount
 	return nil
 }
@@ -253,7 +282,6 @@ func (p *Payment) SetErrorType(errType *string) error {
 	if errType != nil && *errType == "" {
 		return ErrInvalidErrorType
 	}
-
 	p.ErrorType = errType
 	return nil
 }
@@ -262,7 +290,6 @@ func (p *Payment) SetErrorCode(errCode *string) error {
 	if errCode != nil && *errCode == "" {
 		return ErrInvalidErrorCode
 	}
-
 	p.ErrorCode = errCode
 	return nil
 }
@@ -271,7 +298,6 @@ func (p *Payment) SetErrorMsg(errMsg *string) error {
 	if errMsg != nil && *errMsg == "" {
 		return ErrInvalidErrorMsg
 	}
-
 	p.ErrorMsg = errMsg
 	return nil
 }
@@ -282,15 +308,12 @@ func (p Payment) validate() error {
 	if p.PaymentID == "" {
 		return ErrInvalidPaymentID
 	}
-
 	if p.PaymentMethodID == "" {
 		return ErrInvalidPaymentMethodID
 	}
-
 	if p.StripeCustomerID == "" {
 		return ErrInvalidStripeCustomerID
 	}
-
 	if p.StripePaymentMethodID == "" {
 		return ErrInvalidStripePaymentMethod
 	}
@@ -303,30 +326,36 @@ func (p Payment) validate() error {
 		return ErrInvalidStripePaymentIntent
 	}
 
-	if p.Amount < MinAmount ||
-		(MaxAmount > 0 && p.Amount > MaxAmount) {
-		return ErrInvalidAmount
+	// StripeChargeID is intentionally optional here.
+	// A Charge may not exist yet while the PaymentIntent is pending,
+	// processing, or requires additional customer action.
+	//
+	// Once Stripe reports a Charge, SetStripeChargeID must be used to
+	// persist the non-empty Charge ID.
+
+	// transferGroup associates the platform PaymentIntent with the later
+	// Stripe Connect Transfers created for this Order.
+	if p.TransferGroup == "" {
+		return ErrInvalidTransferGroup
 	}
 
+	if p.Amount < MinAmount || (MaxAmount > 0 && p.Amount > MaxAmount) {
+		return ErrInvalidAmount
+	}
 	if !IsValidStatus(p.Status) {
 		return ErrInvalidStatus
 	}
-
 	if p.ErrorType != nil && *p.ErrorType == "" {
 		return ErrInvalidErrorType
 	}
-
 	if p.ErrorCode != nil && *p.ErrorCode == "" {
 		return ErrInvalidErrorCode
 	}
-
 	if p.ErrorMsg != nil && *p.ErrorMsg == "" {
 		return ErrInvalidErrorMsg
 	}
-
 	if p.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
-
 	return nil
 }
