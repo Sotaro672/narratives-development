@@ -11,7 +11,6 @@ import (
 	querydto "narratives/internal/application/query/console/dto"
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
-	paymentdom "narratives/internal/domain/payment"
 	settlementdom "narratives/internal/domain/settlement"
 )
 
@@ -24,8 +23,8 @@ import (
 // TransactionManagementQuery uses Settlement as the source of truth for:
 //
 // - current Company boundary
-// - Company-attributable gross amount
-// - Stripe PaymentIntent relationship
+// - Account-level Stripe Connect Transfer history
+// - Transfer Reversal history
 //
 // One Payment may have multiple Settlement records because one Company may use
 // multiple payout Accounts.
@@ -41,11 +40,11 @@ type TransactionSettlementReader interface {
 	) ([]settlementdom.Settlement, error)
 }
 
-// TransactionOrderReader reads the source Order only for display metadata and
-// existing Order filter compatibility.
+// TransactionOrderReader reads the source Order only when an existing
+// Order-specific transaction filter is supplied.
 //
-// Company boundary and transaction amount must never be derived from Order
-// inventory ownership here. Settlement is authoritative for those values.
+// Company boundary and transaction amount must never be derived from Order.
+// Settlement is authoritative for those values.
 type TransactionOrderReader interface {
 	GetByID(
 		ctx context.Context,
@@ -88,24 +87,31 @@ func NewTransactionManagementQuery(
 // Internal read model
 // ============================================================
 
-type transactionSettlementGroupKey struct {
-	OrderID   string
-	PaymentID string
-}
-
 type transactionSettlementCandidate struct {
-	Order orderdom.Order
+	ID string
+
+	SettlementID string
 
 	OrderID   string
 	PaymentID string
 
-	StripePaymentIntentID string
+	AccountID string
 
-	GrossAmount int
+	Type string
 
-	SettlementCreatedAt time.Time
+	Amount int
 
-	IsMultiCompanyOrder bool
+	Currency string
+
+	Description string
+
+	Status string
+
+	StripeTransferID string
+
+	StripeTransferReversalID string
+
+	Timestamp time.Time
 }
 
 // ============================================================
@@ -138,8 +144,8 @@ func (q *TransactionManagementQuery) List(
 			settlementdom.ErrInvalidCompanyID
 	}
 
-	// Settlement exists only after a succeeded Payment.
-	// Therefore a paid=false query cannot contain any Settlement transaction.
+	// Settlement transaction history represents actual Stripe Connect balance
+	// movements only. A paid=false query therefore cannot contain any rows.
 	if filter.Paid != nil && !*filter.Paid {
 		return emptyTransactionManagementPage(page), nil
 	}
@@ -163,97 +169,73 @@ func (q *TransactionManagementQuery) List(
 		settlements = []settlementdom.Settlement{}
 	}
 
-	groups, err := buildTransactionSettlementGroups(
-		settlements,
-		companyID,
-	)
-	if err != nil {
-		return common.PageResult[querydto.TransactionManagementRowDTO]{}, err
-	}
-
-	if len(groups) == 0 {
-		return emptyTransactionManagementPage(page), nil
-	}
-
 	orderCache := make(
 		map[string]orderdom.Order,
-		len(groups),
-	)
-
-	multiCompanyCache := make(
-		map[string]bool,
-		len(groups),
 	)
 
 	candidates := make(
 		[]transactionSettlementCandidate,
 		0,
-		len(groups),
+		len(settlements),
 	)
 
-	for _, group := range groups {
-		if !transactionSettlementMatchesCreatedFilter(
-			group.SettlementCreatedAt,
-			filter,
-		) {
-			continue
-		}
-
-		order, exists := orderCache[group.OrderID]
-		if !exists {
-			order, err = q.orderReader.GetByID(
-				ctx,
-				group.OrderID,
-			)
-			if err != nil {
-				return common.PageResult[querydto.TransactionManagementRowDTO]{}, err
-			}
-
-			orderCache[group.OrderID] = order
-		}
-
-		if !transactionOrderMatchesFilter(
-			order,
-			filter,
-		) {
-			continue
-		}
-
-		isMultiCompanyOrder, exists :=
-			multiCompanyCache[group.PaymentID]
-
-		if !exists {
-			isMultiCompanyOrder, err =
-				q.isMultiCompanyPayment(
-					ctx,
-					group.PaymentID,
-					companyID,
+	for _, settlement := range settlements {
+		if settlement.CompanyID != companyID {
+			return common.PageResult[querydto.TransactionManagementRowDTO]{},
+				errors.New(
+					"TransactionManagementQuery.List: settlement company boundary mismatch",
 				)
-			if err != nil {
-				return common.PageResult[querydto.TransactionManagementRowDTO]{}, err
-			}
-
-			multiCompanyCache[group.PaymentID] =
-				isMultiCompanyOrder
 		}
 
-		candidates = append(
-			candidates,
-			transactionSettlementCandidate{
-				Order: order,
+		if transactionRequiresOrderFilter(
+			filter,
+		) {
+			order, exists :=
+				orderCache[settlement.OrderID]
 
-				OrderID:   group.OrderID,
-				PaymentID: group.PaymentID,
+			if !exists {
+				order, err =
+					q.orderReader.GetByID(
+						ctx,
+						settlement.OrderID,
+					)
+				if err != nil {
+					return common.PageResult[querydto.TransactionManagementRowDTO]{}, err
+				}
 
-				StripePaymentIntentID: group.StripePaymentIntentID,
+				orderCache[settlement.OrderID] =
+					order
+			}
 
-				GrossAmount: group.GrossAmount,
+			if !transactionOrderMatchesFilter(
+				order,
+				filter,
+			) {
+				continue
+			}
+		}
 
-				SettlementCreatedAt: group.SettlementCreatedAt,
+		events, err :=
+			buildTransactionSettlementEvents(
+				settlement,
+			)
+		if err != nil {
+			return common.PageResult[querydto.TransactionManagementRowDTO]{}, err
+		}
 
-				IsMultiCompanyOrder: isMultiCompanyOrder,
-			},
-		)
+		for _, event := range events {
+			if !transactionTimestampMatchesCreatedFilter(
+				event.Timestamp,
+				filter,
+			) {
+				continue
+			}
+
+			candidates = append(
+				candidates,
+				event,
+			)
+		}
 	}
 
 	sortTransactionSettlementCandidates(
@@ -314,163 +296,197 @@ func (q *TransactionManagementQuery) List(
 }
 
 // ============================================================
-// Settlement grouping
+// Settlement events
 // ============================================================
 
-// buildTransactionSettlementGroups groups Account-level Settlements into one
-// Company-level transaction row.
+// buildTransactionSettlementEvents converts one Account-level Settlement into
+// actual Company cash-movement events.
 //
-// Example:
+// transferred:
 //
-// Payment P1
+//	AMOL Stripe Platform -> Company Stripe Connected Account
+//	receive / TransferAmount / TransferredAt
 //
-//	Company A
-//	  Account A1 -> Settlement 1 Gross=5,000
-//	  Account A2 -> Settlement 2 Gross=3,000
+// reversed:
 //
-// TransactionManagement:
+//  1. original receive event
+//  2. Company Stripe Connected Account -> AMOL Stripe Platform
+//     send / TransferAmount / ReversedAt
 //
-//	Company A / Payment P1 / Gross=8,000
-//
-// Therefore Console does not accidentally display duplicate Order rows merely
-// because one Company has multiple payout Accounts.
-func buildTransactionSettlementGroups(
-	settlements []settlementdom.Settlement,
-	companyID string,
+// pending / ready / transferring / failed / canceled Settlements are not
+// transaction history because no completed Stripe balance movement exists.
+func buildTransactionSettlementEvents(
+	settlement settlementdom.Settlement,
 ) ([]transactionSettlementCandidate, error) {
-	groupMap := make(
-		map[transactionSettlementGroupKey]*transactionSettlementCandidate,
+	switch settlement.Status {
+	case settlementdom.StatusTransferred,
+		settlementdom.StatusReversed:
+
+	default:
+		return []transactionSettlementCandidate{}, nil
+	}
+
+	if strings.TrimSpace(
+		settlement.ID,
+	) == "" {
+		return nil,
+			errors.New(
+				"TransactionManagementQuery.List: settlement id is empty",
+			)
+	}
+
+	if strings.TrimSpace(
+		settlement.OrderID,
+	) == "" ||
+		strings.TrimSpace(
+			settlement.PaymentID,
+		) == "" {
+		return nil,
+			errors.New(
+				"TransactionManagementQuery.List: settlement order/payment id is empty",
+			)
+	}
+
+	if strings.TrimSpace(
+		settlement.AccountID,
+	) == "" {
+		return nil,
+			errors.New(
+				"TransactionManagementQuery.List: settlement account id is empty",
+			)
+	}
+
+	if settlement.TransferAmount <= 0 {
+		return nil,
+			errors.New(
+				"TransactionManagementQuery.List: settlement transfer amount is invalid",
+			)
+	}
+
+	currency := strings.ToUpper(
+		strings.TrimSpace(
+			settlement.Currency,
+		),
+	)
+	if currency == "" {
+		return nil,
+			errors.New(
+				"TransactionManagementQuery.List: settlement currency is empty",
+			)
+	}
+
+	stripeTransferID := strings.TrimSpace(
+		settlement.StripeTransferID,
+	)
+	if stripeTransferID == "" {
+		return nil,
+			errors.New(
+				"TransactionManagementQuery.List: settlement Stripe Transfer id is empty",
+			)
+	}
+
+	if settlement.TransferredAt == nil ||
+		settlement.TransferredAt.IsZero() {
+		return nil,
+			errors.New(
+				"TransactionManagementQuery.List: settlement transferredAt is invalid",
+			)
+	}
+
+	receive := transactionSettlementCandidate{
+		ID: settlement.ID +
+			"_receive",
+
+		SettlementID: settlement.ID,
+
+		OrderID:   settlement.OrderID,
+		PaymentID: settlement.PaymentID,
+
+		AccountID: settlement.AccountID,
+
+		Type: querydto.TransactionTypeReceive,
+
+		Amount: settlement.TransferAmount,
+
+		Currency: currency,
+
+		Description: "売上精算",
+
+		Status: string(
+			settlementdom.StatusTransferred,
+		),
+
+		StripeTransferID: stripeTransferID,
+
+		StripeTransferReversalID: "",
+
+		Timestamp: settlement.TransferredAt.UTC(),
+	}
+
+	events := []transactionSettlementCandidate{
+		receive,
+	}
+
+	if settlement.Status !=
+		settlementdom.StatusReversed {
+		return events, nil
+	}
+
+	stripeTransferReversalID :=
+		strings.TrimSpace(
+			settlement.StripeTransferReversalID,
+		)
+	if stripeTransferReversalID == "" {
+		return nil,
+			errors.New(
+				"TransactionManagementQuery.List: settlement Stripe Transfer Reversal id is empty",
+			)
+	}
+
+	if settlement.ReversedAt == nil ||
+		settlement.ReversedAt.IsZero() {
+		return nil,
+			errors.New(
+				"TransactionManagementQuery.List: settlement reversedAt is invalid",
+			)
+	}
+
+	send := transactionSettlementCandidate{
+		ID: settlement.ID +
+			"_send",
+
+		SettlementID: settlement.ID,
+
+		OrderID:   settlement.OrderID,
+		PaymentID: settlement.PaymentID,
+
+		AccountID: settlement.AccountID,
+
+		Type: querydto.TransactionTypeSend,
+
+		Amount: settlement.TransferAmount,
+
+		Currency: currency,
+
+		Description: "売上精算取消",
+
+		Status: string(
+			settlementdom.StatusReversed,
+		),
+
+		StripeTransferID: stripeTransferID,
+
+		StripeTransferReversalID: stripeTransferReversalID,
+
+		Timestamp: settlement.ReversedAt.UTC(),
+	}
+
+	events = append(
+		events,
+		send,
 	)
 
-	maxInt := int(^uint(0) >> 1)
-
-	for _, settlement := range settlements {
-		if settlement.CompanyID != companyID {
-			return nil,
-				errors.New(
-					"TransactionManagementQuery.List: settlement company boundary mismatch",
-				)
-		}
-
-		if settlement.OrderID == "" ||
-			settlement.PaymentID == "" {
-			return nil,
-				errors.New(
-					"TransactionManagementQuery.List: settlement order/payment id is empty",
-				)
-		}
-
-		if settlement.GrossAmount <= 0 {
-			return nil,
-				errors.New(
-					"TransactionManagementQuery.List: settlement gross amount is invalid",
-				)
-		}
-
-		if settlement.CreatedAt.IsZero() {
-			return nil,
-				errors.New(
-					"TransactionManagementQuery.List: settlement createdAt is invalid",
-				)
-		}
-
-		key := transactionSettlementGroupKey{
-			OrderID:   settlement.OrderID,
-			PaymentID: settlement.PaymentID,
-		}
-
-		group, exists := groupMap[key]
-		if !exists {
-			groupMap[key] =
-				&transactionSettlementCandidate{
-					OrderID:   settlement.OrderID,
-					PaymentID: settlement.PaymentID,
-
-					StripePaymentIntentID: settlement.StripePaymentIntentID,
-
-					GrossAmount: settlement.GrossAmount,
-
-					SettlementCreatedAt: settlement.CreatedAt.UTC(),
-				}
-
-			continue
-		}
-
-		if group.StripePaymentIntentID !=
-			settlement.StripePaymentIntentID {
-			return nil,
-				errors.New(
-					"TransactionManagementQuery.List: settlement Stripe PaymentIntent mismatch",
-				)
-		}
-
-		if group.GrossAmount >
-			maxInt-settlement.GrossAmount {
-			return nil,
-				errors.New(
-					"TransactionManagementQuery.List: settlement gross amount overflow",
-				)
-		}
-
-		group.GrossAmount +=
-			settlement.GrossAmount
-
-		if settlement.CreatedAt.Before(
-			group.SettlementCreatedAt,
-		) {
-			group.SettlementCreatedAt =
-				settlement.CreatedAt.UTC()
-		}
-	}
-
-	result := make(
-		[]transactionSettlementCandidate,
-		0,
-		len(groupMap),
-	)
-
-	for _, group := range groupMap {
-		result = append(
-			result,
-			*group,
-		)
-	}
-
-	return result, nil
-}
-
-// ============================================================
-// Multi-company detection
-// ============================================================
-
-// isMultiCompanyPayment determines multi-company state from Settlements.
-//
-// This intentionally does not inspect inventory ownership.
-//
-// If one Payment has Settlements belonging to more than one Company, the
-// customer paid for sellers from multiple Companies in the same checkout.
-func (q *TransactionManagementQuery) isMultiCompanyPayment(
-	ctx context.Context,
-	paymentID string,
-	currentCompanyID string,
-) (bool, error) {
-	settlements, err :=
-		q.settlementReader.ListByPaymentID(
-			ctx,
-			paymentID,
-		)
-	if err != nil {
-		return false, err
-	}
-
-	for _, settlement := range settlements {
-		if settlement.CompanyID != "" &&
-			settlement.CompanyID != currentCompanyID {
-			return true, nil
-		}
-	}
-
-	return false, nil
+	return events, nil
 }
 
 // ============================================================
@@ -480,51 +496,34 @@ func (q *TransactionManagementQuery) isMultiCompanyPayment(
 func buildTransactionSettlementRow(
 	candidate transactionSettlementCandidate,
 ) querydto.TransactionManagementRowDTO {
-	settlementCreatedAt :=
-		formatTransactionTime(
-			candidate.SettlementCreatedAt,
-		)
-
-	orderCreatedAt :=
-		formatTransactionTime(
-			candidate.Order.CreatedAt,
-		)
-
-	companyGrossAmount :=
-		candidate.GrossAmount
-
-	// AmountMatched now means that the amount displayed as the current
-	// Company's transaction amount is backed directly by persisted
-	// Settlement.GrossAmount rather than reconstructed from Order snapshots.
-	amountMatched := true
-
 	return querydto.TransactionManagementRowDTO{
+		ID: candidate.ID,
+
+		SettlementID: candidate.SettlementID,
+
 		OrderID: candidate.OrderID,
 
 		PaymentID: candidate.PaymentID,
 
-		CreatedAt: settlementCreatedAt,
+		AccountID: candidate.AccountID,
 
-		OrderCreatedAt: orderCreatedAt,
+		Type: candidate.Type,
 
-		Paid: true,
+		Amount: candidate.Amount,
 
-		// Existing DTO field names are retained for frontend compatibility.
-		//
-		// Both values now represent the amount attributable to the current
-		// Company according to persisted Settlement records.
-		OrderAmount: companyGrossAmount,
+		Currency: candidate.Currency,
 
-		PaymentAmount: &companyGrossAmount,
+		Description: candidate.Description,
 
-		// Settlement is created only for a succeeded Payment.
-		PaymentStatus: string(paymentdom.StatusSucceeded),
+		Status: candidate.Status,
 
-		StripePaymentIntentID: candidate.StripePaymentIntentID,
+		StripeTransferID: candidate.StripeTransferID,
 
-		IsMultiCompanyOrder: candidate.IsMultiCompanyOrder,
+		StripeTransferReversalID: candidate.StripeTransferReversalID,
 
-		AmountMatched: &amountMatched,
+		Timestamp: formatTransactionTime(
+			candidate.Timestamp,
+		),
 	}
 }
 
@@ -532,25 +531,24 @@ func buildTransactionSettlementRow(
 // Filter
 // ============================================================
 
-// transactionSettlementMatchesCreatedFilter applies the existing transaction
-// createdAt filter to Settlement.CreatedAt.
+// transactionTimestampMatchesCreatedFilter applies the existing transaction
+// createdAt filter to the actual transaction event timestamp.
 //
-// TransactionManagement is now Settlement-based, therefore the primary
-// transaction timestamp is the Settlement creation time rather than the Order
-// creation time.
-func transactionSettlementMatchesCreatedFilter(
-	createdAt time.Time,
+// receive uses Settlement.TransferredAt.
+// send uses Settlement.ReversedAt.
+func transactionTimestampMatchesCreatedFilter(
+	timestamp time.Time,
 	filter orderdom.Filter,
 ) bool {
 	if filter.CreatedFrom != nil &&
-		createdAt.Before(
+		timestamp.Before(
 			filter.CreatedFrom.UTC(),
 		) {
 		return false
 	}
 
 	if filter.CreatedTo != nil &&
-		createdAt.After(
+		timestamp.After(
 			filter.CreatedTo.UTC(),
 		) {
 		return false
@@ -559,11 +557,28 @@ func transactionSettlementMatchesCreatedFilter(
 	return true
 }
 
+// transactionRequiresOrderFilter reports whether the existing /transactions
+// query contains a filter that requires loading the source Order.
+//
+// paid and createdAt are handled directly from Settlement transaction events.
+func transactionRequiresOrderFilter(
+	filter orderdom.Filter,
+) bool {
+	return filter.ID != "" ||
+		filter.UserID != "" ||
+		filter.AvatarID != "" ||
+		filter.CartID != "" ||
+		filter.ShippingSnapshot != nil ||
+		transactionHasItemFilter(
+			filter,
+		)
+}
+
 // transactionOrderMatchesFilter preserves the existing Order-specific filter
 // behavior.
 //
-// Order is used only for filtering/display metadata. It is not used to
-// calculate transaction amount or Company ownership.
+// Order is used only for filtering. It is not used to calculate transaction
+// amount, direction, Account ownership, or Company ownership.
 func transactionOrderMatchesFilter(
 	order orderdom.Order,
 	filter orderdom.Filter,
@@ -763,27 +778,21 @@ func sortTransactionSettlementCandidates(
 		func(i, j int) bool {
 			left :=
 				candidates[i].
-					SettlementCreatedAt
+					Timestamp
 
 			right :=
 				candidates[j].
-					SettlementCreatedAt
+					Timestamp
 
 			if left.Equal(right) {
-				if candidates[i].PaymentID ==
-					candidates[j].PaymentID {
-					return candidates[i].OrderID <
-						candidates[j].OrderID
-				}
-
 				if sortSpec.Order ==
 					common.SortAsc {
-					return candidates[i].PaymentID <
-						candidates[j].PaymentID
+					return candidates[i].ID <
+						candidates[j].ID
 				}
 
-				return candidates[i].PaymentID >
-					candidates[j].PaymentID
+				return candidates[i].ID >
+					candidates[j].ID
 			}
 
 			if sortSpec.Order ==

@@ -1,35 +1,71 @@
-//frontend\console\shell\src\pages\transactionList.tsx
-
-import React from "react";
-import List from "../layout/List/List";
-import "../styles/transaction.css";
-
-export default function TransactionListPage() {
-  const headers: React.ReactNode[] = [
-    "日時",
-    "ブランド",
-    "種別",
-    "説明",
-    "金額",
-    "取引先",
-  ];
-
-  return (
-    <div className="p-0">
-      <List
-        title="取引履歴"
-        headerCells={headers}
-        showCreateButton={false}
-        showResetButton={false}
-      >
-        <tr>
-          <td colSpan={6}>
-            <div className="transaction-empty">
-              試作品では取引履歴機能は未実装です。
-            </div>
-          </td>
-        </tr>
-      </List>
-    </div>
-  );
-}
+//frontend\console\shell\src\pages\transactionList.tsx 
+ 
+import React from "react"; 
+import List from "../layout/List/List"; 
+import { useTransactionList } from "../features/transaction/presentation/hook/useTransactionList"; 
+import "../styles/transaction.css"; 
+ 
+export default function TransactionListPage() { 
+  const { 
+    transactions, 
+    loading, 
+    error, 
+  } = useTransactionList(); 
+ 
+  if (loading) { 
+    return ( 
+      <div className="p-4"> 
+        読み込み中... 
+      </div> 
+    ); 
+  } 
+ 
+  if (error) { 
+    return ( 
+      <div className="p-4 text-red-500"> 
+        データ取得エラー: {error.message} 
+      </div> 
+    ); 
+  } 
+ 
+  const headers: React.ReactNode[] = [ 
+    "日時", 
+    "口座", 
+    "種別", 
+    "説明", 
+    "金額", 
+    "ステータス", 
+  ]; 
+ 
+  return ( 
+    <div className="p-0"> 
+      <List 
+        title="取引履歴" 
+        headerCells={headers} 
+        showCreateButton={false} 
+        showResetButton={false} 
+      > 
+        {transactions.length === 0 ? ( 
+          <tr> 
+            <td colSpan={6}> 
+              <div className="transaction-empty"> 
+                取引履歴はありません。 
+              </div> 
+            </td> 
+          </tr> 
+        ) : ( 
+          transactions.map((transaction) => ( 
+            <tr key={transaction.id}> 
+              <td>{transaction.timestampLabel}</td> 
+              <td>{transaction.accountLabel}</td> 
+              <td>{transaction.typeLabel}</td> 
+              <td>{transaction.description}</td> 
+              <td>{transaction.amountLabel}</td> 
+              <td>{transaction.statusLabel}</td> 
+            </tr> 
+          )) 
+        )} 
+      </List> 
+    </div> 
+  ); 
+} 

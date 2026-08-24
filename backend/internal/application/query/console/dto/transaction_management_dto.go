@@ -6,7 +6,8 @@ package dto
 // ============================================================
 
 const (
-	TransactionPaymentStatusUnpaid = "unpaid"
+	TransactionTypeReceive = "receive"
+	TransactionTypeSend    = "send"
 )
 
 // ============================================================
@@ -15,28 +16,32 @@ const (
 
 // TransactionManagementRowDTO is a Console transaction list row.
 //
-// OrderAmount:
-//   - Amount attributable to the current Company.
-//   - Product items and shipping quote items are restricted by the
-//     current Company inventory boundary.
+// Transaction is derived from Settlement records that belong to the
+// authenticated Company.
 //
-// PaymentAmount:
-//   - Available only when the Order belongs entirely to the current Company.
-//   - For a multi-company Order, the Payment represents the full customer
-//     charge and must not be exposed as the current Company's revenue.
-//   - Multi-company payment allocation will be supplied by Stripe Connect
-//     Transfer processing in a later implementation.
+// Type:
+//   - receive: Stripe Connect Transfer to the Company's Account.
+//   - send: Stripe Connect Transfer Reversal from the Company's Account.
+//
+// Amount:
+//   - Always represented as a positive integer.
+//   - Direction is represented by Type instead of the amount sign.
+//
+// Timestamp:
+//   - receive uses Settlement.TransferredAt.
+//   - send uses Settlement.ReversedAt.
 type TransactionManagementRowDTO struct {
-	OrderID               string `json:"orderId"`
-	PaymentID             string `json:"paymentId,omitempty"`
-	CreatedAt             string `json:"createdAt,omitempty"`
-	OrderCreatedAt        string `json:"orderCreatedAt,omitempty"`
-	PaymentCreatedAt      string `json:"paymentCreatedAt,omitempty"`
-	Paid                  bool   `json:"paid"`
-	OrderAmount           int    `json:"orderAmount"`
-	PaymentAmount         *int   `json:"paymentAmount,omitempty"`
-	PaymentStatus         string `json:"paymentStatus"`
-	StripePaymentIntentID string `json:"stripePaymentIntentId,omitempty"`
-	IsMultiCompanyOrder   bool   `json:"isMultiCompanyOrder"`
-	AmountMatched         *bool  `json:"amountMatched,omitempty"`
+	ID                       string `json:"id"`
+	SettlementID             string `json:"settlementId"`
+	OrderID                  string `json:"orderId"`
+	PaymentID                string `json:"paymentId"`
+	AccountID                string `json:"accountId"`
+	Type                     string `json:"type"`
+	Amount                   int    `json:"amount"`
+	Currency                 string `json:"currency"`
+	Description              string `json:"description"`
+	Status                   string `json:"status"`
+	StripeTransferID         string `json:"stripeTransferId,omitempty"`
+	StripeTransferReversalID string `json:"stripeTransferReversalId,omitempty"`
+	Timestamp                string `json:"timestamp"`
 }

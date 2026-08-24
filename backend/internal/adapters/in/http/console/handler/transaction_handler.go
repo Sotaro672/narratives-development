@@ -12,6 +12,9 @@ import (
 // TransactionHandler handles:
 //
 //	GET /transactions
+//
+// authenticated Company に属する Settlement を基に、
+// Stripe Connect の入出金履歴を返す。
 type TransactionHandler struct {
 	q *transactionq.TransactionManagementQuery
 }
@@ -101,6 +104,10 @@ func (h *TransactionHandler) list(
 		)
 		return
 	}
+
+	w.WriteHeader(
+		http.StatusOK,
+	)
 
 	_ = json.NewEncoder(w).Encode(
 		result,
