@@ -89,6 +89,7 @@ type Container struct {
 	ListDetailQuery                 *query.ListDetailQuery
 	OrderManagementQuery            *query.OrderManagementQuery
 	OrderDetailQuery                *query.OrderDetailQuery
+	TransactionManagementQuery      *query.TransactionManagementQuery
 	InspectorQuery                  *inspectorquery.QueryService
 	InventoryBlueprintResolver      query.InventoryBlueprintResolver
 	OwnerResolveQ                   *sharedquery.OwnerResolveQuery
@@ -273,6 +274,7 @@ func NewContainer(
 		ListDetailQuery:                 q.listDetailQuery,
 		OrderManagementQuery:            orderMgmtQ,
 		OrderDetailQuery:                q.orderDetailQuery,
+		TransactionManagementQuery:      q.transactionManagementQuery,
 		InspectorQuery:                  q.inspectorQuery,
 		InventoryBlueprintResolver:      invBlueprint,
 		OwnerResolveQ:                   res.ownerResolveQuery,

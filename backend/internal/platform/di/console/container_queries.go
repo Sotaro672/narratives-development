@@ -49,7 +49,8 @@ type queries struct {
 	listManagementQuery *companyquery.ListManagementQuery
 	listDetailQuery     *companyquery.ListDetailQuery
 
-	orderDetailQuery *companyquery.OrderDetailQuery
+	orderDetailQuery           *companyquery.OrderDetailQuery
+	transactionManagementQuery *companyquery.TransactionManagementQuery
 
 	inspectorQuery *inspectorquery.QueryService
 }
@@ -258,6 +259,19 @@ func buildQueries(
 		usecase.CompanyIDFromContext,
 	)
 
+	var transactionManagementQuery *companyquery.TransactionManagementQuery
+	if r.orderConsoleLister != nil &&
+		inventoryManagementQuery != nil &&
+		r.paymentRepo != nil {
+		transactionManagementQuery = companyquery.NewTransactionManagementQuery(
+			companyquery.NewTransactionManagementQueryParams{
+				Lister:        r.orderConsoleLister,
+				InvRows:       inventoryManagementQuery,
+				PaymentReader: r.paymentRepo,
+			},
+		)
+	}
+
 	// modelRepo(variations) を廃止したため、WithInventory のみを使用
 	listCreateQuery := companyquery.NewListCreateQueryWithInventory(
 		r.inventoryRepo,
@@ -408,7 +422,8 @@ func buildQueries(
 		listManagementQuery: listManagementQuery,
 		listDetailQuery:     listDetailQuery,
 
-		orderDetailQuery: orderDetailQuery,
+		orderDetailQuery:           orderDetailQuery,
+		transactionManagementQuery: transactionManagementQuery,
 
 		inspectorQuery: inspectorQuery,
 	}

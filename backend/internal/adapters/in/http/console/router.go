@@ -34,6 +34,7 @@ type RouterDeps struct {
 	TokenBP                  http.Handler
 	Messages                 http.Handler
 	Orders                   http.Handler
+	Transactions             http.Handler
 	Wallets                  http.Handler
 	Members                  http.Handler
 	Productions              http.Handler
@@ -234,6 +235,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 		h := withAuth(deps.Orders)
 		mux.Handle("/orders", h)
 		mux.Handle("/orders/", h)
+	}
+
+	if deps.Transactions != nil {
+		h := withAuth(deps.Transactions)
+		mux.Handle("/transactions", h)
+		mux.Handle("/transactions/", h)
 	}
 
 	if deps.Wallets != nil {

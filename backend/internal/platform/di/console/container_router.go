@@ -46,6 +46,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		productBPReviewH                           http.Handler
 		messagesH                                  http.Handler
 		ordersH                                    http.Handler
+		transactionsH                              http.Handler
 		walletsH                                   http.Handler
 		membersH                                   http.Handler
 		productionsH                               http.Handler
@@ -199,6 +200,12 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		)
 	}
 
+	if c.TransactionManagementQuery != nil {
+		transactionsH = consoleHandler.NewTransactionHandler(
+			c.TransactionManagementQuery,
+		)
+	}
+
 	if c.WalletUC != nil {
 		walletsH = consoleHandler.NewWalletHandler(c.WalletUC)
 	}
@@ -308,6 +315,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		TokenBP:                                  tokenBPH,
 		Messages:                                 messagesH,
 		Orders:                                   ordersH,
+		Transactions:                             transactionsH,
 		Wallets:                                  walletsH,
 		Members:                                  membersH,
 		Productions:                              productionsH,
