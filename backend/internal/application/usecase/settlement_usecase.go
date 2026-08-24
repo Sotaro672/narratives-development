@@ -113,13 +113,14 @@ type StripeSettlementErrorMetadata interface {
 //
 // ClaimForTransfer must atomically:
 //  1. Read the Settlement.
-//  2. Accept only ready or failed_retryable.
-//  3. Change status to transferring.
-//  4. Persist UpdatedAt.
-//  5. Return Claimed=true.
+//  2. Accept ready or failed_retryable.
+//  3. Accept transferring only when UpdatedAt is not after staleBefore.
+//  4. Change/keep status as transferring.
+//  5. Persist UpdatedAt as now.
+//  6. Return Claimed=true.
 //
-// If another worker already claimed or completed the Settlement,
-// Claimed must be false.
+// If another worker still owns a non-stale transferring claim or the
+// Settlement is already completed/terminal, Claimed must be false.
 type SettlementTransferRepository interface {
 	settlementdom.Repository
 
@@ -127,6 +128,7 @@ type SettlementTransferRepository interface {
 		ctx context.Context,
 		settlementID string,
 		now time.Time,
+		staleBefore time.Time,
 	) (ClaimSettlementTransferResult, error)
 
 	CompleteTransfer(
@@ -217,12 +219,18 @@ var (
 // Usecase
 // ============================================================
 
+const (
+	defaultSettlementTransferLease = 15 * time.Minute
+)
+
 type SettlementUsecase struct {
 	repo SettlementTransferRepository
 
 	calculator SettlementCalculator
 
 	stripeTransferGateway StripeSettlementTransferGateway
+
+	transferLease time.Duration
 
 	now func() time.Time
 }
@@ -233,6 +241,8 @@ type NewSettlementUsecaseInput struct {
 	Calculator SettlementCalculator
 
 	StripeTransferGateway StripeSettlementTransferGateway
+
+	TransferLease time.Duration
 
 	Now func() time.Time
 }
@@ -245,10 +255,17 @@ func NewSettlementUsecase(
 		now = time.Now
 	}
 
+	transferLease := in.TransferLease
+	if transferLease <= 0 {
+		transferLease =
+			defaultSettlementTransferLease
+	}
+
 	return &SettlementUsecase{
 		repo:                  in.Repository,
 		calculator:            in.Calculator,
 		stripeTransferGateway: in.StripeTransferGateway,
+		transferLease:         transferLease,
 		now:                   now,
 	}
 }
@@ -585,10 +602,22 @@ func (u *SettlementUsecase) TransferByID(
 
 	now := u.now().UTC()
 
+	transferLease := u.transferLease
+	if transferLease <= 0 {
+		transferLease =
+			defaultSettlementTransferLease
+	}
+
+	staleBefore :=
+		now.Add(
+			-transferLease,
+		)
+
 	claim, err := u.repo.ClaimForTransfer(
 		ctx,
 		settlementID,
 		now,
+		staleBefore,
 	)
 	if err != nil {
 		return settlementdom.Settlement{}, err

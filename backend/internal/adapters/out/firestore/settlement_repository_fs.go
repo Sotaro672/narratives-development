@@ -76,7 +76,6 @@ func (r *SettlementRepositoryFS) GetByID(
 			errors.New("settlement: firestore client is nil")
 	}
 
-	settlementID = strings.TrimSpace(settlementID)
 	if settlementID == "" {
 		return settlementdom.Settlement{},
 			settlementdom.ErrInvalidID
@@ -104,7 +103,6 @@ func (r *SettlementRepositoryFS) ListByPaymentID(
 			errors.New("settlement: firestore client is nil")
 	}
 
-	paymentID = strings.TrimSpace(paymentID)
 	if paymentID == "" {
 		return nil,
 			settlementdom.ErrInvalidPaymentID
@@ -126,7 +124,6 @@ func (r *SettlementRepositoryFS) ListByOrderID(
 			errors.New("settlement: firestore client is nil")
 	}
 
-	orderID = strings.TrimSpace(orderID)
 	if orderID == "" {
 		return nil,
 			settlementdom.ErrInvalidOrderID
@@ -148,7 +145,6 @@ func (r *SettlementRepositoryFS) ListByCompanyID(
 			errors.New("settlement: firestore client is nil")
 	}
 
-	companyID = strings.TrimSpace(companyID)
 	if companyID == "" {
 		return nil,
 			settlementdom.ErrInvalidCompanyID
@@ -170,7 +166,6 @@ func (r *SettlementRepositoryFS) ListByAccountID(
 			errors.New("settlement: firestore client is nil")
 	}
 
-	accountID = strings.TrimSpace(accountID)
 	if accountID == "" {
 		return nil,
 			settlementdom.ErrInvalidAccountID
@@ -249,35 +244,8 @@ func (r *SettlementRepositoryFS) Create(
 			errors.New("settlement: firestore client is nil")
 	}
 
-	in.SettlementID = strings.TrimSpace(
-		in.SettlementID,
-	)
-	in.OrderID = strings.TrimSpace(
-		in.OrderID,
-	)
-	in.PaymentID = strings.TrimSpace(
-		in.PaymentID,
-	)
-	in.CompanyID = strings.TrimSpace(
-		in.CompanyID,
-	)
-	in.AccountID = strings.TrimSpace(
-		in.AccountID,
-	)
-	in.StripeAccountID = strings.TrimSpace(
-		in.StripeAccountID,
-	)
-	in.StripePaymentIntentID = strings.TrimSpace(
-		in.StripePaymentIntentID,
-	)
-	in.StripeChargeID = strings.TrimSpace(
-		in.StripeChargeID,
-	)
-	in.TransferGroup = strings.TrimSpace(
-		in.TransferGroup,
-	)
 	in.Currency = strings.ToUpper(
-		strings.TrimSpace(in.Currency),
+		in.Currency,
 	)
 
 	if in.SettlementID == "" {
@@ -352,7 +320,6 @@ func (r *SettlementRepositoryFS) UpdateByID(
 			errors.New("settlement: firestore client is nil")
 	}
 
-	settlementID = strings.TrimSpace(settlementID)
 	if settlementID == "" {
 		return settlementdom.Settlement{},
 			settlementdom.ErrInvalidID
@@ -427,39 +394,55 @@ func (r *SettlementRepositoryFS) UpdateByID(
 
 // ClaimForTransfer atomically claims one Settlement for Stripe Transfer.
 //
-// Only:
+// The following states can be claimed:
 //
 //	ready
 //	failed_retryable
 //
-// can become:
+// A transferring Settlement can also be reclaimed when its UpdatedAt is not
+// after staleBefore. This recovers a worker crash after:
 //
-//	transferring
+//	ready -> transferring
 //
-// If another worker already claimed or completed the Settlement,
-// Claimed=false is returned and Stripe must not be called by this invocation.
+// but before the Stripe result was persisted.
+//
+// Stripe Transfer uses a deterministic idempotency key, so reclaiming a stale
+// transfer does not intentionally create a second transfer.
+//
+// If another worker still owns a non-stale transferring claim, or the
+// Settlement is already completed/terminal, Claimed=false is returned and
+// Stripe must not be called by this invocation.
 func (r *SettlementRepositoryFS) ClaimForTransfer(
 	ctx context.Context,
 	settlementID string,
 	now time.Time,
+	staleBefore time.Time,
 ) (usecase.ClaimSettlementTransferResult, error) {
 	if r == nil || r.Client == nil {
 		return usecase.ClaimSettlementTransferResult{},
 			errors.New("settlement: firestore client is nil")
 	}
 
-	settlementID = strings.TrimSpace(settlementID)
 	if settlementID == "" {
 		return usecase.ClaimSettlementTransferResult{},
 			settlementdom.ErrInvalidID
 	}
 
-	if now.IsZero() {
+	if now.IsZero() ||
+		staleBefore.IsZero() {
 		return usecase.ClaimSettlementTransferResult{},
 			settlementdom.ErrInvalidUpdatedAt
 	}
 
 	now = now.UTC()
+	staleBefore = staleBefore.UTC()
+
+	if !staleBefore.Before(
+		now,
+	) {
+		return usecase.ClaimSettlementTransferResult{},
+			settlementdom.ErrInvalidUpdatedAt
+	}
 
 	documentReference := r.col().Doc(
 		settlementID,
@@ -491,9 +474,35 @@ func (r *SettlementRepositoryFS) ClaimForTransfer(
 				return err
 			}
 
+			next := current
+
 			switch current.Status {
 			case settlementdom.StatusReady,
 				settlementdom.StatusFailedRetryable:
+				if err := next.StartTransfer(
+					now,
+				); err != nil {
+					return err
+				}
+
+			case settlementdom.StatusTransferring:
+				if current.UpdatedAt.After(
+					staleBefore,
+				) {
+					result =
+						usecase.ClaimSettlementTransferResult{
+							Settlement: current,
+							Claimed:    false,
+						}
+
+					return nil
+				}
+
+				if err := next.ReclaimTransfer(
+					now,
+				); err != nil {
+					return err
+				}
 
 			default:
 				result =
@@ -503,14 +512,6 @@ func (r *SettlementRepositoryFS) ClaimForTransfer(
 					}
 
 				return nil
-			}
-
-			next := current
-
-			if err := next.StartTransfer(
-				now,
-			); err != nil {
-				return err
 			}
 
 			if err := transaction.Set(
@@ -553,13 +554,6 @@ func (r *SettlementRepositoryFS) CompleteTransfer(
 		return settlementdom.Settlement{},
 			errors.New("settlement: firestore client is nil")
 	}
-
-	settlementID = strings.TrimSpace(
-		settlementID,
-	)
-	stripeTransferID = strings.TrimSpace(
-		stripeTransferID,
-	)
 
 	if settlementID == "" {
 		return settlementdom.Settlement{},
@@ -677,10 +671,6 @@ func (r *SettlementRepositoryFS) FailTransfer(
 		return settlementdom.Settlement{},
 			errors.New("settlement: firestore client is nil")
 	}
-
-	settlementID = strings.TrimSpace(
-		settlementID,
-	)
 
 	if settlementID == "" {
 		return settlementdom.Settlement{},
@@ -899,9 +889,8 @@ func applySettlementPatch(
 				settlementdom.ErrInvalidStripeTransferID
 		}
 
-		stripeTransferID := strings.TrimSpace(
-			*patch.StripeTransferID,
-		)
+		stripeTransferID :=
+			*patch.StripeTransferID
 
 		if current.Status ==
 			settlementdom.StatusTransferred {
@@ -977,9 +966,8 @@ func applySettlementPatch(
 					ErrInvalidStripeTransferReversalID
 		}
 
-		reversalID := strings.TrimSpace(
-			*patch.StripeTransferReversalID,
-		)
+		reversalID :=
+			*patch.StripeTransferReversalID
 
 		if current.Status ==
 			settlementdom.StatusReversed {
@@ -1012,9 +1000,8 @@ func applySettlementPatch(
 	if patch.StripeTransferID != nil &&
 		nextStatus !=
 			settlementdom.StatusTransferred {
-		value := strings.TrimSpace(
-			*patch.StripeTransferID,
-		)
+		value :=
+			*patch.StripeTransferID
 
 		if value != next.StripeTransferID {
 			return settlementdom.Settlement{},
@@ -1026,9 +1013,8 @@ func applySettlementPatch(
 	if patch.StripeTransferReversalID != nil &&
 		nextStatus !=
 			settlementdom.StatusReversed {
-		value := strings.TrimSpace(
-			*patch.StripeTransferReversalID,
-		)
+		value :=
+			*patch.StripeTransferReversalID
 
 		if value !=
 			next.StripeTransferReversalID {
@@ -1386,7 +1372,6 @@ func settlementRequiredString(
 		)
 	}
 
-	text = strings.TrimSpace(text)
 	if text == "" {
 		return "", fmt.Errorf(
 			"settlement: invalid %s",
@@ -1411,7 +1396,6 @@ func settlementOptionalString(
 		return nil
 	}
 
-	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil
 	}
@@ -1443,14 +1427,11 @@ func normalizeSettlementOptionalString(
 		return nil
 	}
 
-	normalized :=
-		strings.TrimSpace(*value)
-
-	if normalized == "" {
+	if *value == "" {
 		return nil
 	}
 
-	return &normalized
+	return value
 }
 
 func optionalStringEqual(

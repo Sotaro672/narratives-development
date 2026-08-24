@@ -123,9 +123,7 @@ func NewSettlementTaskHandler(
 		),
 
 		serviceAccountEmail: strings.ToLower(
-			strings.TrimSpace(
-				serviceAccountEmail,
-			),
+			serviceAccountEmail,
 		),
 	}
 }
@@ -216,11 +214,6 @@ func (h *SettlementTaskHandler) Process(
 
 		return
 	}
-
-	request.SettlementID =
-		strings.TrimSpace(
-			request.SettlementID,
-		)
 
 	if request.SettlementID == "" ||
 		strings.Contains(
@@ -379,15 +372,11 @@ func (h *SettlementTaskHandler) authorizeInternalRequest(
 	}
 
 	audience :=
-		strings.TrimSpace(
-			h.audience,
-		)
+		h.audience
 
 	serviceAccountEmail :=
 		strings.ToLower(
-			strings.TrimSpace(
-				h.serviceAccountEmail,
-			),
+			h.serviceAccountEmail,
 		)
 
 	if audience == "" ||
@@ -420,9 +409,7 @@ func (h *SettlementTaskHandler) authorizeInternalRequest(
 
 	tokenEmail =
 		strings.ToLower(
-			strings.TrimSpace(
-				tokenEmail,
-			),
+			tokenEmail,
 		)
 
 	if tokenEmail == "" ||
@@ -437,10 +424,8 @@ func (h *SettlementTaskHandler) authorizeInternalRequest(
 		return errSettlementTaskForbidden
 	}
 
-	if strings.TrimSpace(
-		r.Header.Get(
-			"X-CloudTasks-TaskName",
-		),
+	if r.Header.Get(
+		"X-CloudTasks-TaskName",
 	) == "" {
 		return errSettlementTaskForbidden
 	}
@@ -487,9 +472,7 @@ func settlementTaskBearerToken(
 ) (string, bool) {
 	parts :=
 		strings.Fields(
-			strings.TrimSpace(
-				authorizationHeader,
-			),
+			authorizationHeader,
 		)
 
 	if len(parts) != 2 {
@@ -504,9 +487,7 @@ func settlementTaskBearerToken(
 	}
 
 	token :=
-		strings.TrimSpace(
-			parts[1],
-		)
+		parts[1]
 
 	if token == "" {
 		return "", false
@@ -525,9 +506,7 @@ func settlementTaskEmailVerified(
 
 	case string:
 		return strings.EqualFold(
-			strings.TrimSpace(
-				verified,
-			),
+			verified,
 			"true",
 		)
 
@@ -652,20 +631,13 @@ func firstNonEmptySettlementTaskEnvironmentValue(
 	keys ...string,
 ) string {
 	for _, key := range keys {
-		key =
-			strings.TrimSpace(
-				key,
-			)
-
 		if key == "" {
 			continue
 		}
 
 		value :=
-			strings.TrimSpace(
-				os.Getenv(
-					key,
-				),
+			os.Getenv(
+				key,
 			)
 
 		if value != "" {

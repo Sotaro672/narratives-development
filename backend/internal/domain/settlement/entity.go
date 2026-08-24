@@ -359,6 +359,40 @@ func (s *Settlement) StartTransfer(
 	return s.Validate()
 }
 
+// ReclaimTransfer refreshes the claim timestamp for a stale transferring
+// Settlement.
+//
+// The lease-expiration decision belongs to the repository/application layer.
+// This method only permits an already-transferring Settlement to be claimed
+// again after that layer has determined that the previous claim is stale.
+func (s *Settlement) ReclaimTransfer(
+	now time.Time,
+) error {
+	if s == nil ||
+		s.Status != StatusTransferring {
+		return ErrInvalidStatusTransition
+	}
+
+	if now.IsZero() {
+		return ErrInvalidUpdatedAt
+	}
+
+	now = now.UTC()
+
+	if !now.After(
+		s.UpdatedAt,
+	) {
+		return ErrInvalidUpdatedAt
+	}
+
+	s.ErrorType = nil
+	s.ErrorCode = nil
+	s.ErrorMsg = nil
+	s.UpdatedAt = now
+
+	return s.Validate()
+}
+
 // MarkTransferred records a successfully created Stripe Connect Transfer.
 func (s *Settlement) MarkTransferred(
 	stripeTransferID string,
