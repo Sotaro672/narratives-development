@@ -8,18 +8,20 @@ import (
 	"time"
 
 	accdom "narratives/internal/domain/account"
-	branddom "narratives/internal/domain/brand"
 )
 
 // AccountUsecase provides application-level operations for Account.
 type AccountUsecase struct {
 	repo           AccountRepo
-	brandRepo      AccountBrandRepo
 	accountGateway StripeAccountGateway
 }
 
 // AccountRepo is the minimal repository contract needed by this use case.
 type AccountRepo interface {
+	NewID(
+		ctx context.Context,
+	) (string, error)
+
 	ListByCompanyID(
 		ctx context.Context,
 		companyID string,
@@ -28,11 +30,6 @@ type AccountRepo interface {
 	GetByID(
 		ctx context.Context,
 		id string,
-	) (accdom.Account, error)
-
-	GetByBrandID(
-		ctx context.Context,
-		brandID string,
 	) (accdom.Account, error)
 
 	Create(
@@ -45,15 +42,6 @@ type AccountRepo interface {
 		id string,
 		patch accdom.AccountPatch,
 	) (accdom.Account, error)
-}
-
-// AccountBrandRepo is the minimal Brand repository contract
-// required for Stripe account connection.
-type AccountBrandRepo interface {
-	GetByID(
-		ctx context.Context,
-		id string,
-	) (branddom.Brand, error)
 }
 
 // StripeAccountGateway defines the Stripe Connect operations
@@ -81,8 +69,8 @@ type StripeAccountGateway interface {
 // CreateStripeAccountInput represents information required
 // to create a Stripe Connected Account.
 type CreateStripeAccountInput struct {
+	AccountID      string
 	CompanyID      string
-	BrandID        string
 	DisplayName    string
 	ContactEmail   string
 	Country        string
@@ -105,11 +93,13 @@ type StripeAccountResult struct {
 
 // CreateStripeAccountLinkInput represents information required
 // to create a Stripe hosted onboarding link.
+//
+// Account Link は single-use であり、都度新しく発行するため
+// stable な Idempotency-Key は保持しません。
 type CreateStripeAccountLinkInput struct {
 	StripeAccountID string
 	ReturnURL       string
 	RefreshURL      string
-	IdempotencyKey  string
 }
 
 // StripeAccountLinkResult represents a Stripe hosted onboarding link.
@@ -119,19 +109,24 @@ type StripeAccountLinkResult struct {
 	ExpiresAt time.Time
 }
 
-// ConnectBrandAccountInput contains the information required
-// to create or continue Stripe onboarding for a Brand.
-type ConnectBrandAccountInput struct {
-	BrandID      string
+// ConnectAccountInput contains the information required
+// to create or continue Stripe onboarding for an Account.
+//
+// AccountID が空の場合は新規 Account を作成します。
+// AccountID が指定されている場合は既存 Account の
+// Stripe onboarding を継続します。
+type ConnectAccountInput struct {
+	AccountID    string
+	DisplayName  string
 	ContactEmail string
 	Country      string
 	ReturnURL    string
 	RefreshURL   string
 }
 
-// ConnectBrandAccountResult represents a connected account
+// ConnectAccountResult represents an Account
 // and its Stripe hosted onboarding URL.
-type ConnectBrandAccountResult struct {
+type ConnectAccountResult struct {
 	Account       accdom.Account
 	OnboardingURL string
 	ExpiresAt     time.Time
@@ -140,12 +135,10 @@ type ConnectBrandAccountResult struct {
 // NewAccountUsecase creates an AccountUsecase.
 func NewAccountUsecase(
 	repo AccountRepo,
-	brandRepo AccountBrandRepo,
 	accountGateway StripeAccountGateway,
 ) *AccountUsecase {
 	return &AccountUsecase{
 		repo:           repo,
-		brandRepo:      brandRepo,
 		accountGateway: accountGateway,
 	}
 }
@@ -205,92 +198,42 @@ func (u *AccountUsecase) GetByID(
 	return a, nil
 }
 
-// GetByBrandID returns the account connected to a Brand.
-// 1 Brand = 1 Account を前提とする。
-func (u *AccountUsecase) GetByBrandID(
-	ctx context.Context,
-	brandID string,
-) (accdom.Account, error) {
-	if u == nil || u.repo == nil {
-		return accdom.Account{}, errors.New("account: repository is nil")
-	}
-
-	brandID = strings.TrimSpace(
-		brandID,
-	)
-	if brandID == "" {
-		return accdom.Account{}, accdom.ErrInvalidBrandID
-	}
-
-	companyID := CompanyIDFromContext(ctx)
-	if companyID == "" {
-		return accdom.Account{}, accdom.ErrInvalidCompanyID
-	}
-
-	a, err := u.repo.GetByBrandID(
-		ctx,
-		brandID,
-	)
-	if err != nil {
-		return accdom.Account{}, err
-	}
-
-	if a.CompanyID != companyID {
-		return accdom.Account{}, accdom.ErrNotFound
-	}
-
-	return a, nil
-}
-
-// ConnectBrandAccount creates a Stripe Connected Account when one does not
-// exist for the Brand and returns a Stripe hosted onboarding URL.
+// ConnectAccount creates a Stripe Connected Account when AccountID is empty,
+// or continues onboarding for an existing Account when AccountID is specified.
 //
-// 既に Brand に Account が存在する場合は新しい Stripe Account を作らず、
-// 既存 StripeAccountID に対して新しい onboarding link を発行します。
-func (u *AccountUsecase) ConnectBrandAccount(
+// Account は Brand より先に作成できます。
+// Brand との関連付けは Brand.AccountID 側で管理します。
+func (u *AccountUsecase) ConnectAccount(
 	ctx context.Context,
-	in ConnectBrandAccountInput,
-) (ConnectBrandAccountResult, error) {
+	in ConnectAccountInput,
+) (ConnectAccountResult, error) {
 	if u == nil || u.repo == nil {
-		return ConnectBrandAccountResult{},
+		return ConnectAccountResult{},
 			errors.New("account: repository is nil")
 	}
 
-	if u.brandRepo == nil {
-		return ConnectBrandAccountResult{},
-			errors.New("account: brand repository is nil")
-	}
-
 	if u.accountGateway == nil {
-		return ConnectBrandAccountResult{},
+		return ConnectAccountResult{},
 			errors.New("account: stripe account gateway is nil")
 	}
 
 	companyID := CompanyIDFromContext(ctx)
 	if companyID == "" {
-		return ConnectBrandAccountResult{},
+		return ConnectAccountResult{},
 			accdom.ErrInvalidCompanyID
 	}
 
 	memberID := MemberIDFromContext(ctx)
 	if memberID == "" {
-		return ConnectBrandAccountResult{},
+		return ConnectAccountResult{},
 			accdom.ErrInvalidMemberID
-	}
-
-	brandID := strings.TrimSpace(
-		in.BrandID,
-	)
-	if brandID == "" {
-		return ConnectBrandAccountResult{},
-			accdom.ErrInvalidBrandID
 	}
 
 	returnURL := strings.TrimSpace(
 		in.ReturnURL,
 	)
 	if returnURL == "" {
-		return ConnectBrandAccountResult{},
+		return ConnectAccountResult{},
 			errors.New("account: returnUrl is empty")
 	}
 
@@ -298,52 +241,63 @@ func (u *AccountUsecase) ConnectBrandAccount(
 		in.RefreshURL,
 	)
 	if refreshURL == "" {
-		return ConnectBrandAccountResult{},
+		return ConnectAccountResult{},
 			errors.New("account: refreshUrl is empty")
 	}
 
-	brand, err := u.brandRepo.GetByID(
-		ctx,
-		brandID,
+	accountID := strings.TrimSpace(
+		in.AccountID,
 	)
-	if err != nil {
-		if errors.Is(
-			err,
-			branddom.ErrNotFound,
-		) {
-			return ConnectBrandAccountResult{},
-				accdom.ErrNotFound
+
+	var (
+		a   accdom.Account
+		err error
+	)
+
+	if accountID != "" {
+		a, err = u.repo.GetByID(
+			ctx,
+			accountID,
+		)
+		if err != nil {
+			return ConnectAccountResult{},
+				err
 		}
 
-		return ConnectBrandAccountResult{},
-			err
-	}
-
-	if brand.CompanyID != companyID {
-		return ConnectBrandAccountResult{},
-			accdom.ErrNotFound
-	}
-
-	a, err := u.repo.GetByBrandID(
-		ctx,
-		brandID,
-	)
-	switch {
-	case err == nil:
 		if a.CompanyID != companyID {
-			return ConnectBrandAccountResult{},
+			return ConnectAccountResult{},
 				accdom.ErrNotFound
 		}
 
-	case errors.Is(
-		err,
-		accdom.ErrNotFound,
-	):
+		if a.Status == accdom.StatusDeleted {
+			return ConnectAccountResult{},
+				accdom.ErrNotFound
+		}
+	} else {
+		accountID, err = u.repo.NewID(
+			ctx,
+		)
+		if err != nil {
+			return ConnectAccountResult{},
+				err
+		}
+
+		accountID = strings.TrimSpace(
+			accountID,
+		)
+		if accountID == "" {
+			return ConnectAccountResult{},
+				accdom.ErrInvalidID
+		}
+
 		a, err = u.createStripeAccount(
 			ctx,
+			accountID,
 			companyID,
 			memberID,
-			brand,
+			strings.TrimSpace(
+				in.DisplayName,
+			),
 			strings.TrimSpace(
 				in.ContactEmail,
 			),
@@ -352,34 +306,29 @@ func (u *AccountUsecase) ConnectBrandAccount(
 			),
 		)
 		if err != nil {
-			return ConnectBrandAccountResult{},
+			return ConnectAccountResult{},
 				err
 		}
-
-	default:
-		return ConnectBrandAccountResult{},
-			err
 	}
 
-	if strings.TrimSpace(
+	stripeAccountID := strings.TrimSpace(
 		a.StripeAccountID,
-	) == "" {
-		return ConnectBrandAccountResult{},
+	)
+	if stripeAccountID == "" {
+		return ConnectAccountResult{},
 			accdom.ErrInvalidStripeAccountID
 	}
 
 	link, err := u.accountGateway.CreateOnboardingLink(
 		ctx,
 		CreateStripeAccountLinkInput{
-			StripeAccountID: a.StripeAccountID,
+			StripeAccountID: stripeAccountID,
 			ReturnURL:       returnURL,
 			RefreshURL:      refreshURL,
-			IdempotencyKey: "stripe-connect-account-link:" +
-				a.ID,
 		},
 	)
 	if err != nil {
-		return ConnectBrandAccountResult{},
+		return ConnectAccountResult{},
 			err
 	}
 
@@ -387,13 +336,13 @@ func (u *AccountUsecase) ConnectBrandAccount(
 		strings.TrimSpace(
 			link.URL,
 		) == "" {
-		return ConnectBrandAccountResult{},
+		return ConnectAccountResult{},
 			errors.New(
 				"account: stripe onboarding link is empty",
 			)
 	}
 
-	return ConnectBrandAccountResult{
+	return ConnectAccountResult{
 		Account: a,
 		OnboardingURL: strings.TrimSpace(
 			link.URL,
@@ -406,16 +355,11 @@ func (u *AccountUsecase) ConnectBrandAccount(
 // and reflects transfer capability status into Account.Status.
 func (u *AccountUsecase) SyncStripeStatus(
 	ctx context.Context,
-	brandID string,
+	accountID string,
 ) (accdom.Account, error) {
 	if u == nil || u.repo == nil {
 		return accdom.Account{},
 			errors.New("account: repository is nil")
-	}
-
-	if u.brandRepo == nil {
-		return accdom.Account{},
-			errors.New("account: brand repository is nil")
 	}
 
 	if u.accountGateway == nil {
@@ -429,39 +373,17 @@ func (u *AccountUsecase) SyncStripeStatus(
 			accdom.ErrInvalidCompanyID
 	}
 
-	brandID = strings.TrimSpace(
-		brandID,
+	accountID = strings.TrimSpace(
+		accountID,
 	)
-	if brandID == "" {
+	if accountID == "" {
 		return accdom.Account{},
-			accdom.ErrInvalidBrandID
+			accdom.ErrInvalidID
 	}
 
-	brand, err := u.brandRepo.GetByID(
+	a, err := u.repo.GetByID(
 		ctx,
-		brandID,
-	)
-	if err != nil {
-		if errors.Is(
-			err,
-			branddom.ErrNotFound,
-		) {
-			return accdom.Account{},
-				accdom.ErrNotFound
-		}
-
-		return accdom.Account{},
-			err
-	}
-
-	if brand.CompanyID != companyID {
-		return accdom.Account{},
-			accdom.ErrNotFound
-	}
-
-	a, err := u.repo.GetByBrandID(
-		ctx,
-		brandID,
+		accountID,
 	)
 	if err != nil {
 		return accdom.Account{},
@@ -469,6 +391,11 @@ func (u *AccountUsecase) SyncStripeStatus(
 	}
 
 	if a.CompanyID != companyID {
+		return accdom.Account{},
+			accdom.ErrNotFound
+	}
+
+	if a.Status == accdom.StatusDeleted {
 		return accdom.Account{},
 			accdom.ErrNotFound
 	}
@@ -537,41 +464,39 @@ func (u *AccountUsecase) Create(
 		return accdom.Account{}, accdom.ErrInvalidCompanyID
 	}
 
-	if a.BrandID == "" {
-		return accdom.Account{}, accdom.ErrInvalidBrandID
-	}
-
-	if a.StripeAccountID == "" {
-		return accdom.Account{}, accdom.ErrInvalidStripeAccountID
-	}
-
-	if a.CompanyID != "" &&
-		a.CompanyID != companyID {
-		return accdom.Account{}, accdom.ErrInvalidCompanyID
-	}
-
-	if u.brandRepo != nil {
-		brand, err := u.brandRepo.GetByID(
+	if strings.TrimSpace(
+		a.ID,
+	) == "" {
+		accountID, err := u.repo.NewID(
 			ctx,
-			a.BrandID,
 		)
 		if err != nil {
-			if errors.Is(
-				err,
-				branddom.ErrNotFound,
-			) {
-				return accdom.Account{},
-					accdom.ErrNotFound
-			}
-
 			return accdom.Account{},
 				err
 		}
 
-		if brand.CompanyID != companyID {
+		accountID = strings.TrimSpace(
+			accountID,
+		)
+		if accountID == "" {
 			return accdom.Account{},
-				accdom.ErrNotFound
+				accdom.ErrInvalidID
 		}
+
+		a.ID = accountID
+	}
+
+	if strings.TrimSpace(
+		a.StripeAccountID,
+	) == "" {
+		return accdom.Account{},
+			accdom.ErrInvalidStripeAccountID
+	}
+
+	if a.CompanyID != "" &&
+		a.CompanyID != companyID {
+		return accdom.Account{},
+			accdom.ErrInvalidCompanyID
 	}
 
 	a.CompanyID = companyID
@@ -618,47 +543,8 @@ func (u *AccountUsecase) Update(
 
 	if patch.CompanyID != nil &&
 		*patch.CompanyID != companyID {
-		return accdom.Account{}, accdom.ErrInvalidCompanyID
-	}
-
-	if patch.BrandID != nil &&
-		*patch.BrandID != current.BrandID {
-		if u.brandRepo == nil {
-			return accdom.Account{},
-				errors.New(
-					"account: brand repository is nil",
-				)
-		}
-
-		brandID := strings.TrimSpace(
-			*patch.BrandID,
-		)
-		if brandID == "" {
-			return accdom.Account{},
-				accdom.ErrInvalidBrandID
-		}
-
-		brand, err := u.brandRepo.GetByID(
-			ctx,
-			brandID,
-		)
-		if err != nil {
-			if errors.Is(
-				err,
-				branddom.ErrNotFound,
-			) {
-				return accdom.Account{},
-					accdom.ErrNotFound
-			}
-
-			return accdom.Account{},
-				err
-		}
-
-		if brand.CompanyID != companyID {
-			return accdom.Account{},
-				accdom.ErrNotFound
-		}
+		return accdom.Account{},
+			accdom.ErrInvalidCompanyID
 	}
 
 	// Account を別 Company へ移動することは許可しない。
@@ -674,7 +560,8 @@ func (u *AccountUsecase) Update(
 	}
 
 	if updated.CompanyID != companyID {
-		return accdom.Account{}, accdom.ErrNotFound
+		return accdom.Account{},
+			accdom.ErrNotFound
 	}
 
 	return updated, nil
@@ -686,9 +573,10 @@ func (u *AccountUsecase) Update(
 
 func (u *AccountUsecase) createStripeAccount(
 	ctx context.Context,
+	accountID string,
 	companyID string,
 	memberID string,
-	brand branddom.Brand,
+	displayName string,
 	contactEmail string,
 	country string,
 ) (accdom.Account, error) {
@@ -699,16 +587,47 @@ func (u *AccountUsecase) createStripeAccount(
 			)
 	}
 
+	accountID = strings.TrimSpace(
+		accountID,
+	)
+	if accountID == "" {
+		return accdom.Account{},
+			accdom.ErrInvalidID
+	}
+
+	companyID = strings.TrimSpace(
+		companyID,
+	)
+	if companyID == "" {
+		return accdom.Account{},
+			accdom.ErrInvalidCompanyID
+	}
+
+	memberID = strings.TrimSpace(
+		memberID,
+	)
+	if memberID == "" {
+		return accdom.Account{},
+			accdom.ErrInvalidMemberID
+	}
+
+	displayName = strings.TrimSpace(
+		displayName,
+	)
+	if displayName == "" {
+		displayName = "AMOL"
+	}
+
 	stripeAccount, err := u.accountGateway.CreateAccount(
 		ctx,
 		CreateStripeAccountInput{
+			AccountID:    accountID,
 			CompanyID:    companyID,
-			BrandID:      brand.ID,
-			DisplayName:  brand.Name,
+			DisplayName:  displayName,
 			ContactEmail: contactEmail,
 			Country:      country,
 			IdempotencyKey: "stripe-connect-account:" +
-				brand.ID,
+				accountID,
 		},
 	)
 	if err != nil {
@@ -738,16 +657,9 @@ func (u *AccountUsecase) createStripeAccount(
 		stripeAccount.Closed,
 	)
 
-	// BrandID から決定的に AccountID を生成することで、
-	// 同一 Brand に対する並行作成でも同じ Firestore DocID を使用します。
-	accountID :=
-		accdom.AccountIDPrefix +
-			brand.ID
-
 	a, err := accdom.NewWithNow(
 		accountID,
 		companyID,
-		brand.ID,
 		stripeAccountID,
 		memberID,
 		"",
@@ -776,17 +688,18 @@ func (u *AccountUsecase) createStripeAccount(
 		return created, nil
 	}
 
-	// Stripe CreateAccount は BrandID ベースの Idempotency-Key を使用するため、
-	// 並行リクエストで Firestore Create が競合しても、
-	// 既存 Account を再取得して利用できます。
+	// Stripe CreateAccount は AccountID ベースの
+	// stable Idempotency-Key を使用するため、
+	// Firestore Create が競合した場合は同じ AccountID の
+	//既存 Account を再取得して利用できます。
 	if errors.Is(
 		err,
 		accdom.ErrConflict,
 	) {
 		existing, getErr :=
-			u.repo.GetByBrandID(
+			u.repo.GetByID(
 				ctx,
-				brand.ID,
+				accountID,
 			)
 		if getErr != nil {
 			return accdom.Account{},

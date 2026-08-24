@@ -132,7 +132,6 @@ func buildUsecases(
 
 	accountUC := uc.NewAccountUsecase(
 		r.accountRepo,
-		r.brandRepo,
 		c.infra.AccountGateway,
 	)
 
@@ -169,6 +168,7 @@ func buildUsecases(
 	brandUC := uc.NewBrandUsecase(
 		r.brandRepo,
 		r.memberRepo,
+		r.accountRepo,
 		uc.WithBrandWalletService(brandWalletSvc),
 	)
 

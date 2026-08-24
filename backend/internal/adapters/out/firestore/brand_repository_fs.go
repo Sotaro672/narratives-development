@@ -196,6 +196,12 @@ func (r *BrandRepositoryFS) Update(
 			Value: *patch.CompanyID,
 		})
 	}
+	if patch.AccountID != nil {
+		updates = append(updates, firestore.Update{
+			Path:  "accountId",
+			Value: *patch.AccountID,
+		})
+	}
 	if patch.Name != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "name",
@@ -269,6 +275,7 @@ func (r *BrandRepositoryFS) Update(
 			Value: optionalStringValue(patch.UpdatedBy),
 		})
 	}
+
 	if len(updates) == 0 {
 		snap, err := ref.Get(ctx)
 		if err != nil {
@@ -336,6 +343,7 @@ func (r *BrandRepositoryFS) docToDomain(
 ) (branddom.Brand, error) {
 	var raw struct {
 		CompanyID            string     `firestore:"companyId"`
+		AccountID            string     `firestore:"accountId"`
 		Name                 string     `firestore:"name"`
 		Description          string     `firestore:"description"`
 		WebsiteURL           string     `firestore:"websiteUrl"`
@@ -359,6 +367,7 @@ func (r *BrandRepositoryFS) docToDomain(
 	b := branddom.Brand{
 		ID:                   doc.Ref.ID,
 		CompanyID:            raw.CompanyID,
+		AccountID:            raw.AccountID,
 		Name:                 raw.Name,
 		Description:          raw.Description,
 		URL:                  raw.WebsiteURL,
@@ -385,6 +394,7 @@ func (r *BrandRepositoryFS) domainToDocData(
 ) map[string]any {
 	data := map[string]any{
 		"companyId":            b.CompanyID,
+		"accountId":            b.AccountID,
 		"name":                 b.Name,
 		"description":          b.Description,
 		"websiteUrl":           b.URL,
@@ -407,6 +417,7 @@ func (r *BrandRepositoryFS) domainToDocData(
 	if b.UpdatedBy != nil && *b.UpdatedBy != "" {
 		data["updatedBy"] = *b.UpdatedBy
 	}
+
 	return data
 }
 

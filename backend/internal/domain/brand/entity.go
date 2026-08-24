@@ -10,6 +10,7 @@ import (
 type Brand struct {
 	ID                   string     `json:"id"`
 	CompanyID            string     `json:"companyId"`
+	AccountID            string     `json:"accountId"`
 	Name                 string     `json:"name"`
 	Description          string     `json:"description"`
 	URL                  string     `json:"websiteUrl,omitempty"`
@@ -28,6 +29,7 @@ type Brand struct {
 var (
 	ErrInvalidID        = errors.New("brand: invalid id")
 	ErrInvalidCompanyID = errors.New("brand: invalid companyId")
+	ErrInvalidAccountID = errors.New("brand: invalid accountId")
 	ErrInvalidName      = errors.New("brand: invalid name")
 	ErrInvalidURL       = errors.New("brand: invalid url")
 	ErrInvalidCreatedAt = errors.New("brand: invalid createdAt")
@@ -36,7 +38,7 @@ var (
 
 // New constructs a Brand aligned to TS Brand.
 func New(
-	id, companyID, name, description, walletAddress string,
+	id, companyID, accountID, name, description, walletAddress string,
 	websiteURL, brandIcon, brandBackgroundImage string,
 	isActive bool,
 	managerID, createdBy *string,
@@ -47,6 +49,7 @@ func New(
 	b := Brand{
 		ID:                   id,
 		CompanyID:            companyID,
+		AccountID:            accountID,
 		Name:                 name,
 		Description:          description,
 		URL:                  websiteURL,
@@ -70,12 +73,13 @@ func New(
 
 // NewMinimal constructs with only required fields.
 func NewMinimal(
-	id, companyID, name, description, walletAddress string,
+	id, companyID, accountID, name, description, walletAddress string,
 	createdAt time.Time,
 ) (Brand, error) {
 	return New(
 		id,
 		companyID,
+		accountID,
 		name,
 		description,
 		walletAddress,
@@ -95,6 +99,12 @@ func (b Brand) validate() error {
 
 	if b.CompanyID == "" {
 		return ErrInvalidCompanyID
+	}
+
+	// Brand は必ず Company 配下の Account を参照します。
+	// 1つの Account を複数 Brand が共有することは許容します。
+	if b.AccountID == "" {
+		return ErrInvalidAccountID
 	}
 
 	if b.Name == "" {
@@ -150,6 +160,7 @@ func isValidURL(s string) bool {
 // Patch struct
 type BrandPatch struct {
 	CompanyID            *string
+	AccountID            *string
 	Name                 *string
 	Description          *string
 	URL                  *string
@@ -165,6 +176,10 @@ type BrandPatch struct {
 
 // Validate validates values included in a partial Brand update.
 func (p BrandPatch) Validate() error {
+	if p.AccountID != nil && *p.AccountID == "" {
+		return ErrInvalidAccountID
+	}
+
 	if p.URL != nil &&
 		*p.URL != "" &&
 		!isValidURL(*p.URL) {

@@ -3,17 +3,20 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	accountdom "narratives/internal/domain/account"
 	branddom "narratives/internal/domain/brand"
 	memberdom "narratives/internal/domain/member"
 )
 
 type BrandUsecase struct {
-	brandRepo  branddom.Repository
-	memberRepo memberdom.Repository
-	walletSvc  branddom.SolanaBrandWalletService
-	now        func() time.Time
+	brandRepo   branddom.Repository
+	memberRepo  memberdom.Repository
+	accountRepo accountdom.Repository
+	walletSvc   branddom.SolanaBrandWalletService
+	now         func() time.Time
 }
 
 type BrandUsecaseOption func(*BrandUsecase)
@@ -37,13 +40,15 @@ func WithNow(now func() time.Time) BrandUsecaseOption {
 func NewBrandUsecase(
 	brandRepo branddom.Repository,
 	memberRepo memberdom.Repository,
+	accountRepo accountdom.Repository,
 	opts ...BrandUsecaseOption,
 ) *BrandUsecase {
 	u := &BrandUsecase{
-		brandRepo:  brandRepo,
-		memberRepo: memberRepo,
-		walletSvc:  nil,
-		now:        time.Now,
+		brandRepo:   brandRepo,
+		memberRepo:  memberRepo,
+		accountRepo: accountRepo,
+		walletSvc:   nil,
+		now:         time.Now,
 	}
 
 	for _, opt := range opts {
@@ -61,6 +66,44 @@ func (u *BrandUsecase) Create(
 ) (branddom.Brand, error) {
 	if cid := CompanyIDFromContext(ctx); cid != "" {
 		b.CompanyID = cid
+	}
+
+	if b.AccountID == "" {
+		return branddom.Brand{},
+			branddom.ErrInvalidAccountID
+	}
+
+	if u.accountRepo == nil {
+		return branddom.Brand{},
+			errors.New(
+				"brand: account repository is nil",
+			)
+	}
+
+	account, err := u.accountRepo.GetByID(
+		ctx,
+		b.AccountID,
+	)
+	if err != nil {
+		if errors.Is(
+			err,
+			accountdom.ErrNotFound,
+		) {
+			return branddom.Brand{},
+				branddom.ErrInvalidAccountID
+		}
+
+		return branddom.Brand{}, err
+	}
+
+	if account.CompanyID != b.CompanyID {
+		return branddom.Brand{},
+			branddom.ErrInvalidAccountID
+	}
+
+	if account.Status == accountdom.StatusDeleted {
+		return branddom.Brand{},
+			branddom.ErrInvalidAccountID
 	}
 
 	b.IsActive = true
@@ -189,8 +232,60 @@ func (u *BrandUsecase) Update(
 		return branddom.Brand{}, err
 	}
 
-	if cid := CompanyIDFromContext(ctx); cid != "" {
-		patch.CompanyID = &cid
+	companyID := CompanyIDFromContext(ctx)
+
+	if companyID != "" {
+		patch.CompanyID = &companyID
+	}
+
+	if patch.AccountID != nil {
+		if u.accountRepo == nil {
+			return branddom.Brand{},
+				errors.New(
+					"brand: account repository is nil",
+				)
+		}
+
+		account, err := u.accountRepo.GetByID(
+			ctx,
+			*patch.AccountID,
+		)
+		if err != nil {
+			if errors.Is(
+				err,
+				accountdom.ErrNotFound,
+			) {
+				return branddom.Brand{},
+					branddom.ErrInvalidAccountID
+			}
+
+			return branddom.Brand{}, err
+		}
+
+		targetCompanyID := companyID
+
+		if targetCompanyID == "" {
+			current, err := u.brandRepo.GetByID(
+				ctx,
+				id,
+			)
+			if err != nil {
+				return branddom.Brand{}, err
+			}
+
+			targetCompanyID =
+				current.CompanyID
+		}
+
+		if account.CompanyID != targetCompanyID {
+			return branddom.Brand{},
+				branddom.ErrInvalidAccountID
+		}
+
+		if account.Status == accountdom.StatusDeleted {
+			return branddom.Brand{},
+				branddom.ErrInvalidAccountID
+		}
 	}
 
 	if patch.UpdatedAt == nil {

@@ -18,6 +18,7 @@ import (
 type Filter struct {
 	common.FilterCommon
 	CompanyID *string
+	AccountID *string
 }
 
 // 共通型エイリアス（インフラ非依存）
@@ -29,7 +30,7 @@ var (
 	ErrNotFound = errors.New("brand: not found")
 	ErrConflict = errors.New("brand: conflict")
 
-	// ErrInvalidID は entity.go 側で定義済みのものを利用する
+	// ErrInvalidID / ErrInvalidAccountID は entity.go 側で定義済みのものを利用する
 )
 
 // ========================================
@@ -54,6 +55,7 @@ type BrandProfile struct {
 	BrandIcon            string `json:"brandIcon"`
 	BrandBackgroundImage string `json:"brandBackgroundImage"`
 	CompanyID            string `json:"companyId"`
+	AccountID            string `json:"accountId"`
 }
 
 // ========================================
@@ -61,6 +63,9 @@ type BrandProfile struct {
 // ========================================
 
 // Repository defines the data access interface for the brand domain.
+//
+// Brand は必ず AccountID を保持します。
+// 同一 AccountID を複数 Brand が参照することを許容します。
 type Repository interface {
 	ListByCompanyID(
 		ctx context.Context,

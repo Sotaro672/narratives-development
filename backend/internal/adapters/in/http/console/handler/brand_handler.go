@@ -86,6 +86,7 @@ func (h *BrandHandler) ServeHTTP(
 type brandDTO struct {
 	ID                   string     `json:"id"`
 	CompanyID            string     `json:"companyId"`
+	AccountID            string     `json:"accountId"`
 	Name                 string     `json:"name"`
 	Description          string     `json:"description"`
 	URL                  string     `json:"websiteUrl,omitempty"`
@@ -110,6 +111,7 @@ func toBrandDTO(
 	return brandDTO{
 		ID:                   b.ID,
 		CompanyID:            b.CompanyID,
+		AccountID:            b.AccountID,
 		Name:                 b.Name,
 		Description:          b.Description,
 		URL:                  b.URL,
@@ -171,6 +173,7 @@ func (h *BrandHandler) create(
 
 	var in struct {
 		CompanyID            string  `json:"companyId"`
+		AccountID            string  `json:"accountId"`
 		Name                 string  `json:"name"`
 		Description          string  `json:"description"`
 		WebsiteURL           string  `json:"websiteUrl"`
@@ -212,6 +215,22 @@ func (h *BrandHandler) create(
 		}
 
 		companyID = value
+	}
+
+	accountID, err := shared.StrictRequired(
+		in.AccountID,
+		"accountId",
+	)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "accountId is required",
+			},
+		)
+
+		return
 	}
 
 	name, err := shared.StrictRequired(
@@ -352,6 +371,7 @@ func (h *BrandHandler) create(
 	b, err := branddom.New(
 		"",
 		companyID,
+		accountID,
 		name,
 		description,
 		"",
@@ -417,6 +437,7 @@ func (h *BrandHandler) update(
 	}
 
 	var in struct {
+		AccountID            *string `json:"accountId"`
 		Name                 *string `json:"name"`
 		Description          *string `json:"description"`
 		WebsiteURL           *string `json:"websiteUrl"`
@@ -436,6 +457,26 @@ func (h *BrandHandler) update(
 		)
 
 		return
+	}
+
+	if in.AccountID != nil {
+		value, err := shared.StrictRequired(
+			*in.AccountID,
+			"accountId",
+		)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "invalid accountId",
+				},
+			)
+
+			return
+		}
+
+		in.AccountID = &value
 	}
 
 	if in.Name != nil {
@@ -569,6 +610,7 @@ func (h *BrandHandler) update(
 	}
 
 	patch := branddom.BrandPatch{
+		AccountID:            in.AccountID,
 		ManagerID:            in.ManagerID,
 		Name:                 in.Name,
 		Description:          in.Description,
@@ -740,7 +782,12 @@ func writeBrandErr(
 
 	switch err {
 	case branddom.ErrInvalidID,
-		branddom.ErrInvalidURL:
+		branddom.ErrInvalidCompanyID,
+		branddom.ErrInvalidAccountID,
+		branddom.ErrInvalidName,
+		branddom.ErrInvalidURL,
+		branddom.ErrInvalidCreatedAt,
+		branddom.ErrInvalidUpdatedAt:
 		code = http.StatusBadRequest
 
 	case branddom.ErrNotFound:

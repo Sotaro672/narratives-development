@@ -52,20 +52,9 @@ func (h *AccountHandler) ServeHTTP(
 		path == "/accounts":
 		h.create(w, r)
 
-	case r.Method == http.MethodGet &&
-		strings.HasPrefix(
-			path,
-			"/accounts/brand/",
-		):
-		brandID := strings.TrimPrefix(
-			path,
-			"/accounts/brand/",
-		)
-		h.getByBrandID(
-			w,
-			r,
-			brandID,
-		)
+	case r.Method == http.MethodPost &&
+		path == "/accounts/connect":
+		h.connect(w, r)
 
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(
@@ -76,6 +65,7 @@ func (h *AccountHandler) ServeHTTP(
 			path,
 			"/accounts/",
 		)
+
 		h.get(
 			w,
 			r,
@@ -91,16 +81,23 @@ func (h *AccountHandler) ServeHTTP(
 			path,
 			"/accounts/",
 		)
+
 		h.update(
 			w,
 			r,
 			id,
 		)
 
+	case r.Method == http.MethodOptions:
+		w.WriteHeader(
+			http.StatusNoContent,
+		)
+
 	default:
 		w.WriteHeader(
 			http.StatusNotFound,
 		)
+
 		_ = json.NewEncoder(w).Encode(
 			map[string]string{
 				"error": "not_found",
@@ -114,7 +111,6 @@ func (h *AccountHandler) ServeHTTP(
 // ========================================
 
 type createAccountRequest struct {
-	BrandID         string                   `json:"brandId"`
 	StripeAccountID string                   `json:"stripeAccountId"`
 	MemberID        string                   `json:"memberId"`
 	BankName        string                   `json:"bankName"`
@@ -126,7 +122,6 @@ type createAccountRequest struct {
 }
 
 type updateAccountRequest struct {
-	BrandID         *string                   `json:"brandId"`
 	StripeAccountID *string                   `json:"stripeAccountId"`
 	MemberID        *string                   `json:"memberId"`
 	BankName        *string                   `json:"bankName"`
@@ -135,6 +130,21 @@ type updateAccountRequest struct {
 	AccountType     *accountdom.AccountType   `json:"accountType"`
 	Currency        *string                   `json:"currency"`
 	Status          *accountdom.AccountStatus `json:"status"`
+}
+
+type connectAccountRequest struct {
+	AccountID    string `json:"accountId"`
+	DisplayName  string `json:"displayName"`
+	ContactEmail string `json:"contactEmail"`
+	Country      string `json:"country"`
+	ReturnURL    string `json:"returnUrl"`
+	RefreshURL   string `json:"refreshUrl"`
+}
+
+type connectAccountResponse struct {
+	Account       accountdom.Account `json:"account"`
+	OnboardingURL string             `json:"onboardingUrl"`
+	ExpiresAt     time.Time          `json:"expiresAt"`
 }
 
 // ========================================
@@ -173,6 +183,7 @@ func (h *AccountHandler) list(
 	w.WriteHeader(
 		http.StatusOK,
 	)
+
 	_ = json.NewEncoder(w).Encode(
 		map[string]any{
 			"items": accounts,
@@ -227,60 +238,7 @@ func (h *AccountHandler) get(
 	w.WriteHeader(
 		http.StatusOK,
 	)
-	_ = json.NewEncoder(w).Encode(
-		account,
-	)
-}
 
-// ========================================
-// GET /accounts/brand/{brandId}
-// ========================================
-
-func (h *AccountHandler) getByBrandID(
-	w http.ResponseWriter,
-	r *http.Request,
-	brandID string,
-) {
-	if h.uc == nil {
-		writeAccountErr(
-			w,
-			errors.New(
-				"account: usecase is nil",
-			),
-		)
-		return
-	}
-
-	brandID = strings.TrimSpace(
-		brandID,
-	)
-	if brandID == "" ||
-		strings.Contains(
-			brandID,
-			"/",
-		) {
-		writeAccountErr(
-			w,
-			accountdom.ErrInvalidBrandID,
-		)
-		return
-	}
-
-	account, err := h.uc.GetByBrandID(
-		r.Context(),
-		brandID,
-	)
-	if err != nil {
-		writeAccountErr(
-			w,
-			err,
-		)
-		return
-	}
-
-	w.WriteHeader(
-		http.StatusOK,
-	)
 	_ = json.NewEncoder(w).Encode(
 		account,
 	)
@@ -305,9 +263,11 @@ func (h *AccountHandler) create(
 	}
 
 	var req createAccountRequest
+
 	decoder := json.NewDecoder(
 		r.Body,
 	)
+
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(
@@ -332,20 +292,10 @@ func (h *AccountHandler) create(
 		return
 	}
 
-	req.BrandID = strings.TrimSpace(
-		req.BrandID,
-	)
-	if req.BrandID == "" {
-		writeAccountErr(
-			w,
-			accountdom.ErrInvalidBrandID,
-		)
-		return
-	}
-
 	req.StripeAccountID = strings.TrimSpace(
 		req.StripeAccountID,
 	)
+
 	if req.StripeAccountID == "" ||
 		!strings.HasPrefix(
 			req.StripeAccountID,
@@ -361,11 +311,13 @@ func (h *AccountHandler) create(
 	req.MemberID = strings.TrimSpace(
 		req.MemberID,
 	)
+
 	if req.MemberID == "" {
 		req.MemberID = uc.MemberIDFromContext(
 			r.Context(),
 		)
 	}
+
 	if req.MemberID == "" {
 		writeAccountErr(
 			w,
@@ -393,7 +345,6 @@ func (h *AccountHandler) create(
 	account, err := accountdom.NewWithNow(
 		accountID,
 		companyID,
-		req.BrandID,
 		req.StripeAccountID,
 		req.MemberID,
 		req.BankName,
@@ -415,6 +366,7 @@ func (h *AccountHandler) create(
 	memberID := uc.MemberIDFromContext(
 		r.Context(),
 	)
+
 	if memberID != "" {
 		account.CreatedBy =
 			&memberID
@@ -437,8 +389,149 @@ func (h *AccountHandler) create(
 	w.WriteHeader(
 		http.StatusCreated,
 	)
+
 	_ = json.NewEncoder(w).Encode(
 		created,
+	)
+}
+
+// ========================================
+// POST /accounts/connect
+// ========================================
+
+func (h *AccountHandler) connect(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	if h.uc == nil {
+		writeAccountErr(
+			w,
+			errors.New(
+				"account: usecase is nil",
+			),
+		)
+		return
+	}
+
+	var req connectAccountRequest
+
+	decoder := json.NewDecoder(
+		r.Body,
+	)
+
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(
+		&req,
+	); err != nil {
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"invalid_request",
+		)
+		return
+	}
+
+	req.AccountID = strings.TrimSpace(
+		req.AccountID,
+	)
+
+	req.DisplayName = strings.TrimSpace(
+		req.DisplayName,
+	)
+
+	req.ContactEmail = strings.TrimSpace(
+		req.ContactEmail,
+	)
+
+	req.Country = strings.ToUpper(
+		strings.TrimSpace(
+			req.Country,
+		),
+	)
+
+	req.ReturnURL = strings.TrimSpace(
+		req.ReturnURL,
+	)
+
+	req.RefreshURL = strings.TrimSpace(
+		req.RefreshURL,
+	)
+
+	if req.AccountID != "" &&
+		strings.Contains(
+			req.AccountID,
+			"/",
+		) {
+		writeAccountErr(
+			w,
+			accountdom.ErrInvalidID,
+		)
+		return
+	}
+
+	if req.ContactEmail == "" {
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"contactEmail is required",
+		)
+		return
+	}
+
+	if req.Country == "" {
+		req.Country = "JP"
+	}
+
+	if req.ReturnURL == "" {
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"returnUrl is required",
+		)
+		return
+	}
+
+	if req.RefreshURL == "" {
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"refreshUrl is required",
+		)
+		return
+	}
+
+	result, err := h.uc.ConnectAccount(
+		r.Context(),
+		uc.ConnectAccountInput{
+			AccountID:    req.AccountID,
+			DisplayName:  req.DisplayName,
+			ContactEmail: req.ContactEmail,
+			Country:      req.Country,
+			ReturnURL:    req.ReturnURL,
+			RefreshURL:   req.RefreshURL,
+		},
+	)
+	if err != nil {
+		writeAccountErr(
+			w,
+			err,
+		)
+		return
+	}
+
+	w.WriteHeader(
+		http.StatusOK,
+	)
+
+	_ = json.NewEncoder(w).Encode(
+		connectAccountResponse{
+			Account: result.Account,
+			OnboardingURL: strings.TrimSpace(
+				result.OnboardingURL,
+			),
+			ExpiresAt: result.ExpiresAt,
+		},
 	)
 }
 
@@ -475,9 +568,11 @@ func (h *AccountHandler) update(
 	}
 
 	var req updateAccountRequest
+
 	decoder := json.NewDecoder(
 		r.Body,
 	)
+
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(
@@ -491,25 +586,11 @@ func (h *AccountHandler) update(
 		return
 	}
 
-	if req.BrandID != nil {
-		value := strings.TrimSpace(
-			*req.BrandID,
-		)
-		if value == "" {
-			writeAccountErr(
-				w,
-				accountdom.ErrInvalidBrandID,
-			)
-			return
-		}
-
-		req.BrandID = &value
-	}
-
 	if req.StripeAccountID != nil {
 		value := strings.TrimSpace(
 			*req.StripeAccountID,
 		)
+
 		if value == "" ||
 			!strings.HasPrefix(
 				value,
@@ -529,6 +610,7 @@ func (h *AccountHandler) update(
 		value := strings.TrimSpace(
 			*req.MemberID,
 		)
+
 		if value == "" {
 			writeAccountErr(
 				w,
@@ -538,6 +620,42 @@ func (h *AccountHandler) update(
 		}
 
 		req.MemberID = &value
+	}
+
+	if req.BankName != nil {
+		value := strings.TrimSpace(
+			*req.BankName,
+		)
+
+		if accountdom.MaxBankNameLength > 0 &&
+			len([]rune(value)) >
+				accountdom.MaxBankNameLength {
+			writeAccountErr(
+				w,
+				accountdom.ErrInvalidBankName,
+			)
+			return
+		}
+
+		req.BankName = &value
+	}
+
+	if req.BranchName != nil {
+		value := strings.TrimSpace(
+			*req.BranchName,
+		)
+
+		if accountdom.MaxBranchNameLength > 0 &&
+			len([]rune(value)) >
+				accountdom.MaxBranchNameLength {
+			writeAccountErr(
+				w,
+				accountdom.ErrInvalidBranchName,
+			)
+			return
+		}
+
+		req.BranchName = &value
 	}
 
 	if req.AccountNumber != nil &&
@@ -568,6 +686,7 @@ func (h *AccountHandler) update(
 		value := strings.TrimSpace(
 			*req.Currency,
 		)
+
 		if value == "" {
 			writeAccountErr(
 				w,
@@ -591,7 +710,6 @@ func (h *AccountHandler) update(
 	}
 
 	patch := accountdom.AccountPatch{
-		BrandID:         req.BrandID,
 		StripeAccountID: req.StripeAccountID,
 		MemberID:        req.MemberID,
 		BankName:        req.BankName,
@@ -605,6 +723,7 @@ func (h *AccountHandler) update(
 	memberID := uc.MemberIDFromContext(
 		r.Context(),
 	)
+
 	if memberID != "" {
 		patch.UpdatedBy =
 			&memberID
@@ -626,6 +745,7 @@ func (h *AccountHandler) update(
 	w.WriteHeader(
 		http.StatusOK,
 	)
+
 	_ = json.NewEncoder(w).Encode(
 		updated,
 	)
@@ -651,12 +771,6 @@ func writeAccountErr(
 	case errors.Is(
 		err,
 		accountdom.ErrInvalidCompanyID,
-	):
-		code = http.StatusBadRequest
-
-	case errors.Is(
-		err,
-		accountdom.ErrInvalidBrandID,
 	):
 		code = http.StatusBadRequest
 
@@ -748,6 +862,7 @@ func writeJSONError(
 	w.WriteHeader(
 		code,
 	)
+
 	_ = json.NewEncoder(w).Encode(
 		map[string]string{
 			"error": message,

@@ -11,7 +11,6 @@ import (
 var (
 	ErrInvalidID              = errors.New("account: invalid id")
 	ErrInvalidCompanyID       = errors.New("account: invalid companyId")
-	ErrInvalidBrandID         = errors.New("account: invalid brandId")
 	ErrInvalidStripeAccountID = errors.New("account: invalid stripeAccountId")
 	ErrInvalidMemberID        = errors.New("account: invalid memberId")
 	ErrInvalidBankName        = errors.New("account: invalid bankName")
@@ -63,17 +62,16 @@ func IsValidAccountType(t AccountType) bool {
 
 // Entity (mirror TS BankAccount)
 //
-// Account は Company 配下の Brand に紐づく Stripe Connect 受取口座を表します。
+// Account は Company 配下の Stripe Connect 受取口座を表します。
 //
 // - 1 Company は複数 Account を持てる
-// - 1 Brand は最大 1 Account を持つ
+// - Account は Brand 作成前でも登録できる
+// - 1 Account を複数 Brand から共有できる
+// - Brand 側が AccountID を保持して Account を参照する
 // - StripeAccountID は Stripe Connected Account の acct_xxx
-//
-// 1 Brand = 1 Account の一意制約は Repository 層で保証します。
 type Account struct {
 	ID              string        `json:"id" firestore:"-"`
 	CompanyID       string        `json:"companyId" firestore:"companyId"`
-	BrandID         string        `json:"brandId" firestore:"brandId"`
 	StripeAccountID string        `json:"stripeAccountId" firestore:"stripeAccountId"`
 	MemberID        string        `json:"memberId" firestore:"memberId"`
 	BankName        string        `json:"bankName" firestore:"bankName"`
@@ -95,7 +93,6 @@ var (
 	AccountIDPrefix          = "account_"
 	DefaultCurrency          = "円"
 	MaxCompanyIDLength       = 100
-	MaxBrandIDLength         = 100
 	MaxStripeAccountIDLength = 255
 	MaxBankNameLength        = 50
 	MaxBranchNameLength      = 50
@@ -111,7 +108,7 @@ var (
 // Constructors
 
 func New(
-	id, companyID, brandID, stripeAccountID string,
+	id, companyID, stripeAccountID string,
 	memberID, bankName, branchName string,
 	accountNumber int,
 	accountType AccountType,
@@ -122,7 +119,6 @@ func New(
 	a := Account{
 		ID:              id,
 		CompanyID:       companyID,
-		BrandID:         brandID,
 		StripeAccountID: stripeAccountID,
 		MemberID:        memberID,
 		BankName:        bankName,
@@ -141,7 +137,7 @@ func New(
 }
 
 func NewWithNow(
-	id, companyID, brandID, stripeAccountID string,
+	id, companyID, stripeAccountID string,
 	memberID, bankName, branchName string,
 	accountNumber int,
 	accountType AccountType,
@@ -152,7 +148,6 @@ func NewWithNow(
 	return New(
 		id,
 		companyID,
-		brandID,
 		stripeAccountID,
 		memberID,
 		bankName,
@@ -255,11 +250,6 @@ func (a Account) validate() error {
 		(MaxCompanyIDLength > 0 &&
 			len([]rune(a.CompanyID)) > MaxCompanyIDLength) {
 		return ErrInvalidCompanyID
-	}
-	if a.BrandID == "" ||
-		(MaxBrandIDLength > 0 &&
-			len([]rune(a.BrandID)) > MaxBrandIDLength) {
-		return ErrInvalidBrandID
 	}
 
 	stripeAccountID := strings.TrimSpace(a.StripeAccountID)

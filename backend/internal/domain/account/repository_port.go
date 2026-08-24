@@ -10,7 +10,6 @@ import (
 // Patch (partial update). Nil fields are not updated.
 type AccountPatch struct {
 	CompanyID       *string
-	BrandID         *string
 	StripeAccountID *string
 	MemberID        *string
 	BankName        *string
@@ -32,12 +31,14 @@ var (
 
 // Repository port (contract)
 type Repository interface {
+	// ID
+	NewID(ctx context.Context) (string, error)
+
 	// Listing
 	ListByCompanyID(ctx context.Context, companyID string) ([]Account, error)
 
 	// Read
 	GetByID(ctx context.Context, id string) (Account, error)
-	GetByBrandID(ctx context.Context, brandID string) (Account, error)
 
 	// Write
 	Create(ctx context.Context, a Account) (Account, error)

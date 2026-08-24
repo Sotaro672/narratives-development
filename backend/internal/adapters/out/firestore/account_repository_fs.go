@@ -3,6 +3,7 @@ package firestore
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -27,6 +28,26 @@ func NewAccountRepositoryFS(client *firestore.Client) *AccountRepositoryFS {
 }
 
 // ========================================
+// NewID
+// ========================================
+// 新しい Account ID を発行します。
+// Firestore の自動IDに AccountIDPrefix を付与します。
+func (r *AccountRepositoryFS) NewID(
+	ctx context.Context,
+) (string, error) {
+	if r == nil || r.Client == nil {
+		return "", errors.New("account: repository is nil")
+	}
+
+	ref := r.Client.Collection("accounts").NewDoc()
+	if ref == nil || ref.ID == "" {
+		return "", accdom.ErrInvalidID
+	}
+
+	return accdom.AccountIDPrefix + ref.ID, nil
+}
+
+// ========================================
 // ListByCompanyID
 // ========================================
 // 指定 CompanyID に紐づくアカウント一覧を取得。
@@ -34,6 +55,13 @@ func (r *AccountRepositoryFS) ListByCompanyID(
 	ctx context.Context,
 	companyID string,
 ) ([]accdom.Account, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("account: repository is nil")
+	}
+	if companyID == "" {
+		return nil, accdom.ErrInvalidCompanyID
+	}
+
 	iter := r.Client.Collection("accounts").
 		Where("companyId", "==", companyID).
 		Documents(ctx)
@@ -55,11 +83,7 @@ func (r *AccountRepositoryFS) ListByCompanyID(
 			return nil, err
 		}
 
-		// FirestoreのDocIDをIDに反映
-		if a.ID == "" {
-			a.ID = doc.Ref.ID
-		}
-
+		a.ID = doc.Ref.ID
 		accounts = append(accounts, a)
 	}
 
@@ -74,6 +98,13 @@ func (r *AccountRepositoryFS) GetByID(
 	ctx context.Context,
 	id string,
 ) (accdom.Account, error) {
+	if r == nil || r.Client == nil {
+		return accdom.Account{}, errors.New("account: repository is nil")
+	}
+	if id == "" {
+		return accdom.Account{}, accdom.ErrInvalidID
+	}
+
 	doc, err := r.Client.Collection("accounts").Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -87,56 +118,7 @@ func (r *AccountRepositoryFS) GetByID(
 		return accdom.Account{}, err
 	}
 
-	// FirestoreのDocIDをIDに反映
-	if a.ID == "" {
-		a.ID = doc.Ref.ID
-	}
-
-	return a, nil
-}
-
-// ========================================
-// GetByBrandID
-// ========================================
-// 指定 BrandID に紐づくアカウントを取得。
-// 1 Brand = 1 Account を前提とする。
-func (r *AccountRepositoryFS) GetByBrandID(
-	ctx context.Context,
-	brandID string,
-) (accdom.Account, error) {
-	iter := r.Client.Collection("accounts").
-		Where("brandId", "==", brandID).
-		Limit(2).
-		Documents(ctx)
-	defer iter.Stop()
-
-	doc, err := iter.Next()
-	if err == iterator.Done {
-		return accdom.Account{}, accdom.ErrNotFound
-	}
-	if err != nil {
-		return accdom.Account{}, err
-	}
-
-	var a accdom.Account
-	if err := doc.DataTo(&a); err != nil {
-		return accdom.Account{}, err
-	}
-
-	// FirestoreのDocIDをIDに反映
-	if a.ID == "" {
-		a.ID = doc.Ref.ID
-	}
-
-	// 2件目が存在する場合は
-	// 1 Brand = 1 Account の制約に違反している。
-	_, err = iter.Next()
-	if err == nil {
-		return accdom.Account{}, accdom.ErrConflict
-	}
-	if err != iterator.Done {
-		return accdom.Account{}, err
-	}
+	a.ID = doc.Ref.ID
 
 	return a, nil
 }
@@ -145,32 +127,33 @@ func (r *AccountRepositoryFS) GetByBrandID(
 // Create
 // ========================================
 // 新しいアカウントを作成。
-// IDが空ならFirestoreの自動IDを採用。
-// 同一 BrandID に既存Accountが存在する場合は ErrConflict。
+// Account は Brand とは独立して作成でき、
+// Brand 側が AccountID を参照します。
 func (r *AccountRepositoryFS) Create(
 	ctx context.Context,
 	a accdom.Account,
 ) (accdom.Account, error) {
-	// 1 Brand = 1 Account を保証する。
-	if a.BrandID != "" {
-		existing, err := r.GetByBrandID(ctx, a.BrandID)
-		if err == nil && existing.ID != "" {
-			return accdom.Account{}, accdom.ErrConflict
-		}
-		if err != nil && err != accdom.ErrNotFound {
+	if r == nil || r.Client == nil {
+		return accdom.Account{}, errors.New("account: repository is nil")
+	}
+
+	if a.ID == "" {
+		id, err := r.NewID(ctx)
+		if err != nil {
 			return accdom.Account{}, err
 		}
+		a.ID = id
 	}
 
 	ref := r.Client.Collection("accounts").Doc(a.ID)
-	if a.ID == "" {
-		ref = r.Client.Collection("accounts").NewDoc()
-		a.ID = ref.ID
-	}
 
 	now := time.Now().UTC()
-	a.CreatedAt = now
-	a.UpdatedAt = now
+	if a.CreatedAt.IsZero() {
+		a.CreatedAt = now
+	}
+	if a.UpdatedAt.IsZero() {
+		a.UpdatedAt = a.CreatedAt
+	}
 
 	_, err := ref.Create(ctx, a)
 	if err != nil {
@@ -192,6 +175,13 @@ func (r *AccountRepositoryFS) Update(
 	id string,
 	patch accdom.AccountPatch,
 ) (accdom.Account, error) {
+	if r == nil || r.Client == nil {
+		return accdom.Account{}, errors.New("account: repository is nil")
+	}
+	if id == "" {
+		return accdom.Account{}, accdom.ErrInvalidID
+	}
+
 	ref := r.Client.Collection("accounts").Doc(id)
 
 	current, err := r.GetByID(ctx, id)
@@ -199,158 +189,90 @@ func (r *AccountRepositoryFS) Update(
 		return accdom.Account{}, err
 	}
 
-	// BrandIDを変更する場合、
-	// 変更先Brandに別Accountが存在しないことを確認する。
-	if patch.BrandID != nil &&
-		*patch.BrandID != "" &&
-		*patch.BrandID != current.BrandID {
-		existing, err := r.GetByBrandID(
-			ctx,
-			*patch.BrandID,
-		)
-		if err == nil &&
-			existing.ID != "" &&
-			existing.ID != id {
-			return accdom.Account{}, accdom.ErrConflict
-		}
-		if err != nil && err != accdom.ErrNotFound {
-			return accdom.Account{}, err
-		}
-	}
-
 	updates := []firestore.Update{}
 	now := time.Now().UTC()
 
 	if patch.CompanyID != nil {
-		updates = append(
-			updates,
-			firestore.Update{
-				Path:  "companyId",
-				Value: *patch.CompanyID,
-			},
-		)
-	}
-	if patch.BrandID != nil {
-		updates = append(
-			updates,
-			firestore.Update{
-				Path:  "brandId",
-				Value: *patch.BrandID,
-			},
-		)
+		updates = append(updates, firestore.Update{
+			Path:  "companyId",
+			Value: *patch.CompanyID,
+		})
 	}
 	if patch.StripeAccountID != nil {
-		updates = append(
-			updates,
-			firestore.Update{
-				Path:  "stripeAccountId",
-				Value: *patch.StripeAccountID,
-			},
-		)
+		updates = append(updates, firestore.Update{
+			Path:  "stripeAccountId",
+			Value: *patch.StripeAccountID,
+		})
 	}
 	if patch.MemberID != nil {
-		updates = append(
-			updates,
-			firestore.Update{
-				Path:  "memberId",
-				Value: *patch.MemberID,
-			},
-		)
+		updates = append(updates, firestore.Update{
+			Path:  "memberId",
+			Value: *patch.MemberID,
+		})
 	}
 	if patch.BankName != nil {
-		updates = append(
-			updates,
-			firestore.Update{
-				Path:  "bankName",
-				Value: *patch.BankName,
-			},
-		)
+		updates = append(updates, firestore.Update{
+			Path:  "bankName",
+			Value: *patch.BankName,
+		})
 	}
 	if patch.BranchName != nil {
-		updates = append(
-			updates,
-			firestore.Update{
-				Path:  "branchName",
-				Value: *patch.BranchName,
-			},
-		)
+		updates = append(updates, firestore.Update{
+			Path:  "branchName",
+			Value: *patch.BranchName,
+		})
 	}
 	if patch.AccountNumber != nil {
-		updates = append(
-			updates,
-			firestore.Update{
-				Path:  "accountNumber",
-				Value: *patch.AccountNumber,
-			},
-		)
+		updates = append(updates, firestore.Update{
+			Path:  "accountNumber",
+			Value: *patch.AccountNumber,
+		})
 	}
 	if patch.AccountType != nil {
-		updates = append(
-			updates,
-			firestore.Update{
-				Path:  "accountType",
-				Value: *patch.AccountType,
-			},
-		)
+		updates = append(updates, firestore.Update{
+			Path:  "accountType",
+			Value: *patch.AccountType,
+		})
 	}
 	if patch.Currency != nil {
-		updates = append(
-			updates,
-			firestore.Update{
-				Path:  "currency",
-				Value: *patch.Currency,
-			},
-		)
+		updates = append(updates, firestore.Update{
+			Path:  "currency",
+			Value: *patch.Currency,
+		})
 	}
 	if patch.Status != nil {
-		updates = append(
-			updates,
-			firestore.Update{
-				Path:  "status",
-				Value: *patch.Status,
-			},
-		)
+		updates = append(updates, firestore.Update{
+			Path:  "status",
+			Value: *patch.Status,
+		})
 	}
 	if patch.UpdatedBy != nil {
-		updates = append(
-			updates,
-			firestore.Update{
-				Path:  "updatedBy",
-				Value: *patch.UpdatedBy,
-			},
-		)
+		updates = append(updates, firestore.Update{
+			Path:  "updatedBy",
+			Value: *patch.UpdatedBy,
+		})
 	}
 	if patch.DeletedAt != nil {
-		updates = append(
-			updates,
-			firestore.Update{
-				Path:  "deletedAt",
-				Value: *patch.DeletedAt,
-			},
-		)
+		updates = append(updates, firestore.Update{
+			Path:  "deletedAt",
+			Value: *patch.DeletedAt,
+		})
 	}
 	if patch.DeletedBy != nil {
-		updates = append(
-			updates,
-			firestore.Update{
-				Path:  "deletedBy",
-				Value: *patch.DeletedBy,
-			},
-		)
+		updates = append(updates, firestore.Update{
+			Path:  "deletedBy",
+			Value: *patch.DeletedBy,
+		})
 	}
 
 	if len(updates) == 0 {
 		return current, nil
 	}
 
-	// 常に updatedAt を更新
-	updates = append(
-		updates,
-		firestore.Update{
-			Path:  "updatedAt",
-			Value: now,
-		},
-	)
+	updates = append(updates, firestore.Update{
+		Path:  "updatedAt",
+		Value: now,
+	})
 
 	_, err = ref.Update(ctx, updates)
 	if err != nil {

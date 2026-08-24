@@ -35,7 +35,7 @@ const (
 // - Connected Account 取得
 // - Onboarding Account Link 作成
 //
-// Firestoreへの保存や Company / Brand の所有権検証は
+// Firestoreへの保存や Company の所有権検証は
 // application/usecase 側の責務とします。
 type AccountGateway struct {
 	secretKey  string
@@ -74,33 +74,37 @@ func (g *AccountGateway) CreateAccount(
 		return nil, err
 	}
 
+	accountID := strings.TrimSpace(
+		in.AccountID,
+	)
+
 	companyID := strings.TrimSpace(
 		in.CompanyID,
 	)
-	brandID := strings.TrimSpace(
-		in.BrandID,
-	)
+
 	displayName := strings.TrimSpace(
 		in.DisplayName,
 	)
+
 	contactEmail := strings.TrimSpace(
 		in.ContactEmail,
 	)
+
 	country := strings.ToUpper(
 		strings.TrimSpace(
 			in.Country,
 		),
 	)
 
-	if companyID == "" {
+	if accountID == "" {
 		return nil, errors.New(
-			"stripe account: companyId is empty",
+			"stripe account: accountId is empty",
 		)
 	}
 
-	if brandID == "" {
+	if companyID == "" {
 		return nil, errors.New(
-			"stripe account: brandId is empty",
+			"stripe account: companyId is empty",
 		)
 	}
 
@@ -144,8 +148,8 @@ func (g *AccountGateway) CreateAccount(
 			"requirements",
 		},
 		Metadata: map[string]string{
+			"accountId": accountID,
 			"companyId": companyID,
-			"brandId":   brandID,
 		},
 	}
 
@@ -198,14 +202,17 @@ func (g *AccountGateway) GetAccount(
 	}
 
 	query := url.Values{}
+
 	query.Add(
 		"include[0]",
 		"configuration.recipient",
 	)
+
 	query.Add(
 		"include[1]",
 		"identity",
 	)
+
 	query.Add(
 		"include[2]",
 		"requirements",
@@ -237,6 +244,8 @@ func (g *AccountGateway) GetAccount(
 // ========================================
 
 // CreateOnboardingLink creates a single-use Stripe hosted onboarding URL.
+//
+// Account Link は single-use のため、stable な Idempotency-Key は付与しません。
 func (g *AccountGateway) CreateOnboardingLink(
 	ctx context.Context,
 	in usecase.CreateStripeAccountLinkInput,
@@ -248,9 +257,11 @@ func (g *AccountGateway) CreateOnboardingLink(
 	stripeAccountID := strings.TrimSpace(
 		in.StripeAccountID,
 	)
+
 	returnURL := strings.TrimSpace(
 		in.ReturnURL,
 	)
+
 	refreshURL := strings.TrimSpace(
 		in.RefreshURL,
 	)
@@ -303,9 +314,7 @@ func (g *AccountGateway) CreateOnboardingLink(
 		"/account_links",
 		nil,
 		reqBody,
-		strings.TrimSpace(
-			in.IdempotencyKey,
-		),
+		"",
 		&out,
 	); err != nil {
 		return nil, err
@@ -464,6 +473,7 @@ func accountResultFromResponse(
 	}
 
 	closed := false
+
 	if out.Closed != nil {
 		closed = *out.Closed
 	}
@@ -591,10 +601,12 @@ func (g *AccountGateway) doJSON(
 			g.secretKey,
 		),
 	)
+
 	req.Header.Set(
 		"Stripe-Version",
 		stripeAccountsAPIVersion,
 	)
+
 	req.Header.Set(
 		"Accept",
 		"application/json",
