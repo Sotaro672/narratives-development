@@ -31,8 +31,8 @@ export default function AccountConnectPage() {
       onBack={handleBack}
       onConnect={handleConnect}
       isConnecting={submitting}
-      connectLabel="Stripeと接続する"
-      connectBusyLabel="Stripeへ接続中..."
+      connectLabel="口座登録"
+      connectBusyLabel="口座登録中..."
       connectDisabled={!canConnect}
     >
       <div className="account-connect-page">
@@ -130,23 +130,6 @@ export default function AccountConnectPage() {
                     maxLength={8}
                     required
                   />
-                </div>
-
-                <div className="account-connect-summary">
-                  <div>
-                    銀行名：
-                    {bankName || "未入力"}
-                  </div>
-
-                  <div>
-                    支店名：
-                    {branchName || "未入力"}
-                  </div>
-
-                  <div>
-                    口座番号：
-                    {accountNumber || "未入力"}
-                  </div>
                 </div>
               </div>
             </CardContent>
