@@ -41,14 +41,13 @@ export default function AccountConnectPage() {
             <CardContent>
               <div className="account-connect-content">
                 <p className="account-connect-description">
-                  売上受取口座としてStripeを接続します。
-                  接続した口座は、ブランド登録・編集時に売上受取口座として選択できます。
+                  入力内容を審査させていただきます。審査には時間がかかる場合があります。
                 </p>
 
                 {completed && (
                   <div className="account-connect-completed">
-                    Stripeの口座登録画面から戻りました。
-                    接続状態はStripe側の審査・入力状況によって反映まで時間がかかる場合があります。
+                    登録申請を受理しました。
+                    審査内容の返答には時間がかかる場合があります。
                   </div>
                 )}
 
