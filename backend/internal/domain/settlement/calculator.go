@@ -34,9 +34,6 @@ var (
 	ErrCalculatorUnsupportedOrderItem = errors.New(
 		"settlement: unsupported order item",
 	)
-	ErrCalculatorCancelledOrderItem = errors.New(
-		"settlement: cancelled order item cannot be settled",
-	)
 	ErrCalculatorInvalidSellerSnapshot = errors.New(
 		"settlement: invalid seller snapshot",
 	)
@@ -407,8 +404,7 @@ func buildMerchandiseAllocations(
 
 	for _, item := range order.Items {
 		if item.IsCancelled {
-			return nil, nil,
-				ErrCalculatorCancelledOrderItem
+			continue
 		}
 
 		if item.Type != orderdom.OrderItemTypeList {

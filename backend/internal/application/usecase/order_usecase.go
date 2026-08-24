@@ -493,12 +493,49 @@ func (u *OrderUsecase) CancelItem(
 	cancelledNow := !targetItem.IsCancelled
 
 	if cancelledNow {
-		if targetItem.IsDispatched || targetItem.Transferred {
+		if order.Paid ||
+			targetItem.IsDispatched ||
+			targetItem.Transferred {
 			return orderdom.Order{}, orderdom.ErrConflict
+		}
+
+		shippingAddressID, err :=
+			resolveOrderDestinationShippingAddressID(
+				order.ShippingQuoteSnapshot,
+			)
+		if err != nil {
+			return orderdom.Order{}, err
 		}
 
 		if err := order.CancelItem(in.ItemIndex); err != nil {
 			return orderdom.Order{}, err
+		}
+
+		shippingQuoteItems, err :=
+			createOrderItemInputsFromSnapshots(
+				order.Items,
+			)
+		if err != nil {
+			return orderdom.Order{}, err
+		}
+
+		if len(shippingQuoteItems) > 0 {
+			shippingQuote, err :=
+				u.resolveShippingQuoteSnapshot(
+					ctx,
+					order.UserID,
+					shippingAddressID,
+					shippingQuoteItems,
+				)
+			if err != nil {
+				return orderdom.Order{}, err
+			}
+
+			if err := order.UpdateShippingQuoteSnapshot(
+				shippingQuote,
+			); err != nil {
+				return orderdom.Order{}, err
+			}
 		}
 
 		updated, err := u.repo.Update(ctx, order, nil)
@@ -1037,6 +1074,10 @@ func createOrderItemInputsFromSnapshots(
 	)
 
 	for _, item := range items {
+		if item.IsCancelled {
+			continue
+		}
+
 		switch item.Type {
 		case orderdom.OrderItemTypeList:
 			result = append(

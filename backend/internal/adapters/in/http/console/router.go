@@ -72,6 +72,10 @@ type RouterDeps struct {
 	// endpoint:
 	//   POST /internal/settlements/process
 	//
+	// Cloud Scheduler等から呼ばれるSettlement再投入用です。
+	// endpoint:
+	//   POST /internal/settlements/dispatch-due
+	//
 	// 注意:
 	// - 通常のConsole Firebase Authではなく、Cloud Tasks OIDC / Cloud Run Invoker
 	//   または各internal handlerの認証処理で保護します。
@@ -82,6 +86,7 @@ type RouterDeps struct {
 	InternalOrderDispatchNotificationProcess  http.Handler
 	InternalOrderDispatchNotificationDispatch http.Handler
 	InternalSettlementProcess                 http.Handler
+	InternalSettlementDispatch                http.Handler
 
 	OwnerResolve    http.Handler
 	Invitation      http.Handler
@@ -322,6 +327,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if deps.InternalSettlementProcess != nil {
 		h := withPublic(deps.InternalSettlementProcess)
 		mux.Handle("/internal/settlements/process", h)
+	}
+
+	if deps.InternalSettlementDispatch != nil {
+		h := withPublic(deps.InternalSettlementDispatch)
+		mux.Handle("/internal/settlements/dispatch-due", h)
 	}
 
 	if deps.OwnerResolve != nil {

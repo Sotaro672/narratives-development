@@ -47,7 +47,7 @@ var (
 // ============================================================
 
 // SettlementTaskUsecase is the minimal application contract required by the
-// Cloud Tasks settlement worker.
+// Cloud Tasks settlement worker and reconciliation endpoint.
 //
 // *usecase.SettlementUsecase satisfies this interface.
 type SettlementTaskUsecase interface {
@@ -55,6 +55,12 @@ type SettlementTaskUsecase interface {
 		ctx context.Context,
 		settlementID string,
 	) (settlementdom.Settlement, error)
+
+	DispatchDue(
+		ctx context.Context,
+		queue uc.SettlementTransferQueue,
+		limit int,
+	) (int, error)
 }
 
 // ============================================================
@@ -67,13 +73,26 @@ type SettlementTaskUsecase interface {
 //
 //	POST /internal/settlements/process
 //
-// Body:
+// Cloud Scheduler:
+//
+//	POST /internal/settlements/dispatch-due
+//
+// Process body:
 //
 //	{
 //	  "settlementId": "..."
 //	}
 //
-// The request never contains:
+// DispatchDue body:
+//
+//	{
+//	  "limit": 50
+//	}
+//
+// An empty DispatchDue body is also valid and uses the application default
+// limit.
+//
+// The process request never contains:
 //
 // - transfer amount
 // - Stripe destination Account
@@ -85,6 +104,8 @@ type SettlementTaskUsecase interface {
 type SettlementTaskHandler struct {
 	settlementUC SettlementTaskUsecase
 
+	settlementQueue uc.SettlementTransferQueue
+
 	audience string
 
 	serviceAccountEmail string
@@ -94,13 +115,24 @@ type processSettlementTaskRequest struct {
 	SettlementID string `json:"settlementId"`
 }
 
+type dispatchDueSettlementTaskRequest struct {
+	Limit int `json:"limit"`
+}
+
+type dispatchDueSettlementTaskResponse struct {
+	Enqueued int `json:"enqueued"`
+
+	Error string `json:"error,omitempty"`
+}
+
 type settlementTaskErrorResponse struct {
 	Error string `json:"error"`
 }
 
-// NewSettlementTaskHandler creates the internal Cloud Tasks handler.
+// NewSettlementTaskHandler creates the internal Settlement handler.
 func NewSettlementTaskHandler(
 	settlementUC SettlementTaskUsecase,
+	settlementQueue uc.SettlementTransferQueue,
 ) *SettlementTaskHandler {
 	audience :=
 		firstNonEmptySettlementTaskEnvironmentValue(
@@ -117,6 +149,8 @@ func NewSettlementTaskHandler(
 	return &SettlementTaskHandler{
 		settlementUC: settlementUC,
 
+		settlementQueue: settlementQueue,
+
 		audience: strings.TrimRight(
 			audience,
 			"/",
@@ -132,10 +166,32 @@ func (h *SettlementTaskHandler) ServeHTTP(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	h.Process(
-		w,
-		r,
-	)
+	path :=
+		strings.TrimRight(
+			r.URL.Path,
+			"/",
+		)
+
+	switch path {
+	case "/internal/settlements/process":
+		h.Process(
+			w,
+			r,
+		)
+
+	case "/internal/settlements/dispatch-due":
+		h.DispatchDue(
+			w,
+			r,
+		)
+
+	default:
+		writeSettlementTaskError(
+			w,
+			http.StatusNotFound,
+			"not_found",
+		)
+	}
 }
 
 // ============================================================
@@ -189,6 +245,7 @@ func (h *SettlementTaskHandler) Process(
 	if err :=
 		h.authorizeInternalRequest(
 			r,
+			true,
 		); err != nil {
 		h.writeAuthorizationError(
 			w,
@@ -251,6 +308,127 @@ func (h *SettlementTaskHandler) Process(
 		w,
 		settlement,
 		err,
+	)
+}
+
+// ============================================================
+// Dispatch Due
+// ============================================================
+
+// DispatchDue reconciles seller-side Settlements that may have lost their
+// original Cloud Task.
+//
+// The endpoint is intended for periodic execution by Cloud Scheduler.
+//
+// It enqueues:
+//
+// - ready
+// - failed_retryable
+// - stale transferring
+//
+// Settlements through SettlementUsecase.DispatchDue.
+//
+// Unlike Process, this endpoint does not require X-CloudTasks-TaskName because
+// the caller is expected to be Cloud Scheduler rather than Cloud Tasks.
+//
+// OIDC audience and service-account validation are still required.
+func (h *SettlementTaskHandler) DispatchDue(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	if r.Method != http.MethodPost {
+		w.Header().Set(
+			"Allow",
+			http.MethodPost,
+		)
+
+		writeSettlementTaskError(
+			w,
+			http.StatusMethodNotAllowed,
+			"method_not_allowed",
+		)
+
+		return
+	}
+
+	if h == nil ||
+		h.settlementUC == nil {
+		writeSettlementTaskError(
+			w,
+			http.StatusServiceUnavailable,
+			"settlement_usecase_unavailable",
+		)
+
+		return
+	}
+
+	if h.settlementQueue == nil {
+		writeSettlementTaskError(
+			w,
+			http.StatusServiceUnavailable,
+			"settlement_queue_unavailable",
+		)
+
+		return
+	}
+
+	if err :=
+		h.authorizeInternalRequest(
+			r,
+			false,
+		); err != nil {
+		h.writeAuthorizationError(
+			w,
+			err,
+		)
+
+		return
+	}
+
+	var request dispatchDueSettlementTaskRequest
+
+	if err :=
+		decodeOptionalSettlementTaskJSON(
+			w,
+			r,
+			&request,
+		); err != nil {
+		writeSettlementTaskError(
+			w,
+			http.StatusBadRequest,
+			"invalid_json_body",
+		)
+
+		return
+	}
+
+	enqueuedCount, err :=
+		h.settlementUC.DispatchDue(
+			r.Context(),
+			h.settlementQueue,
+			request.Limit,
+		)
+
+	if err != nil {
+		writeSettlementTaskJSON(
+			w,
+			http.StatusInternalServerError,
+			dispatchDueSettlementTaskResponse{
+				Enqueued: enqueuedCount,
+
+				Error: "settlement_dispatch_due_failed",
+			},
+		)
+
+		return
+	}
+
+	writeSettlementTaskJSON(
+		w,
+		http.StatusOK,
+		dispatchDueSettlementTaskResponse{
+			Enqueued: enqueuedCount,
+		},
 	)
 }
 
@@ -360,12 +538,13 @@ func (h *SettlementTaskHandler) writeProcessingResult(
 //  2. token audience
 //  3. service account email
 //  4. email_verified
-//  5. X-CloudTasks-TaskName
+//  5. X-CloudTasks-TaskName when requireCloudTaskHeader=true
 //
 // INTERNAL_BASE_URL or CLOUD_TASKS_AUDIENCE must match the audience configured
-// by SettlementQueue.
+// by SettlementQueue and the Cloud Scheduler OIDC request.
 func (h *SettlementTaskHandler) authorizeInternalRequest(
 	r *http.Request,
+	requireCloudTaskHeader bool,
 ) error {
 	if h == nil {
 		return errSettlementTaskAuthNotConfigured
@@ -424,9 +603,10 @@ func (h *SettlementTaskHandler) authorizeInternalRequest(
 		return errSettlementTaskForbidden
 	}
 
-	if r.Header.Get(
-		"X-CloudTasks-TaskName",
-	) == "" {
+	if requireCloudTaskHeader &&
+		r.Header.Get(
+			"X-CloudTasks-TaskName",
+		) == "" {
 		return errSettlementTaskForbidden
 	}
 
@@ -545,6 +725,47 @@ func decodeRequiredSettlementTaskJSON(
 		decoder.Decode(
 			destination,
 		); err != nil {
+		return err
+	}
+
+	return ensureSingleSettlementTaskJSONValue(
+		decoder,
+	)
+}
+
+func decodeOptionalSettlementTaskJSON(
+	w http.ResponseWriter,
+	r *http.Request,
+	destination any,
+) error {
+	if r.Body == nil {
+		return nil
+	}
+
+	r.Body = http.MaxBytesReader(
+		w,
+		r.Body,
+		maxSettlementTaskRequestBodyBytes,
+	)
+
+	decoder :=
+		json.NewDecoder(
+			r.Body,
+		)
+
+	decoder.DisallowUnknownFields()
+
+	if err :=
+		decoder.Decode(
+			destination,
+		); err != nil {
+		if errors.Is(
+			err,
+			io.EOF,
+		) {
+			return nil
+		}
+
 		return err
 	}
 

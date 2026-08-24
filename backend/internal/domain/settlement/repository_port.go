@@ -4,6 +4,7 @@ package settlement
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // CreateSettlementInput represents the persistence input used when a new
@@ -63,6 +64,27 @@ type UpdateSettlementInput struct {
 	ErrorMsg  *string
 }
 
+// ListTransferCandidatesInput represents the recovery boundary used by
+// Settlement reconciliation.
+//
+// The repository must return only Settlements that may need another transfer
+// task:
+//
+// - ready
+// - failed_retryable
+// - transferring whose UpdatedAt is equal to or before StaleBefore
+//
+// A non-stale transferring Settlement must not be returned because another
+// worker may still own its transfer lease.
+//
+// Limit is the maximum total number of Settlements returned by one scan.
+// The application layer must provide a positive value.
+type ListTransferCandidatesInput struct {
+	StaleBefore time.Time
+
+	Limit int
+}
+
 // Repository is the persistence contract for seller-side Stripe Connect
 // settlements.
 //
@@ -109,6 +131,27 @@ type Repository interface {
 	ListByAccountID(
 		ctx context.Context,
 		accountID string,
+	) ([]Settlement, error)
+
+	// ListTransferCandidates returns Settlements that may require a transfer
+	// Cloud Task to be present or retried.
+	//
+	// Implementations must include:
+	//
+	// - ready
+	// - failed_retryable
+	// - transferring with UpdatedAt <= StaleBefore
+	//
+	// Implementations must exclude non-stale transferring Settlements and all
+	// terminal states.
+	//
+	// The result must be deterministic and contain no duplicate Settlement ID.
+	//
+	// Implementations should order older UpdatedAt values first and use ID as
+	// the tie breaker before applying Limit.
+	ListTransferCandidates(
+		ctx context.Context,
+		in ListTransferCandidatesInput,
 	) ([]Settlement, error)
 
 	// Create creates a new Settlement.

@@ -60,6 +60,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		internalOrderDispatchNotificationProcessH  http.Handler
 		internalOrderDispatchNotificationDispatchH http.Handler
 		internalSettlementProcessH                 http.Handler
+		internalSettlementDispatchH                http.Handler
 		ownerResolveH                              http.Handler
 	)
 
@@ -286,9 +287,20 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.SettlementUC != nil {
-		internalSettlementProcessH =
+		settlementTaskHandler :=
 			internalHandler.NewSettlementTaskHandler(
 				c.SettlementUC,
+				c.settlementQueue,
+			)
+
+		internalSettlementProcessH =
+			http.HandlerFunc(
+				settlementTaskHandler.Process,
+			)
+
+		internalSettlementDispatchH =
+			http.HandlerFunc(
+				settlementTaskHandler.DispatchDue,
 			)
 	}
 
@@ -340,6 +352,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		InternalOrderDispatchNotificationProcess: internalOrderDispatchNotificationProcessH,
 		InternalOrderDispatchNotificationDispatch: internalOrderDispatchNotificationDispatchH,
 		InternalSettlementProcess:                 internalSettlementProcessH,
+		InternalSettlementDispatch:                internalSettlementDispatchH,
 		OwnerResolve:                              ownerResolveH,
 		Invitation:                                invitationH,
 		Sales:                                     salesH,

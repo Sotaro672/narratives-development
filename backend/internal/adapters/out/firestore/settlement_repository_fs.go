@@ -178,6 +178,117 @@ func (r *SettlementRepositoryFS) ListByAccountID(
 	)
 }
 
+// ListTransferCandidates returns Settlements that may require a transfer
+// Cloud Task to be present or retried.
+//
+// Candidates:
+//
+//	ready
+//	failed_retryable
+//	transferring with UpdatedAt <= StaleBefore
+//
+// Firestore queries only by status here to avoid requiring an additional
+// composite index. Stale filtering, deterministic ordering, deduplication,
+// and Limit are applied in application memory.
+func (r *SettlementRepositoryFS) ListTransferCandidates(
+	ctx context.Context,
+	in settlementdom.ListTransferCandidatesInput,
+) ([]settlementdom.Settlement, error) {
+	if r == nil || r.Client == nil {
+		return nil,
+			errors.New("settlement: firestore client is nil")
+	}
+
+	if in.StaleBefore.IsZero() {
+		return nil,
+			settlementdom.ErrInvalidUpdatedAt
+	}
+
+	if in.Limit <= 0 {
+		return nil,
+			errors.New(
+				"settlement: invalid transfer candidate limit",
+			)
+	}
+
+	staleBefore :=
+		in.StaleBefore.UTC()
+
+	statuses := []settlementdom.SettlementStatus{
+		settlementdom.StatusReady,
+		settlementdom.StatusFailedRetryable,
+		settlementdom.StatusTransferring,
+	}
+
+	result := make(
+		[]settlementdom.Settlement,
+		0,
+	)
+
+	seen := make(
+		map[string]struct{},
+	)
+
+	for _, candidateStatus := range statuses {
+		settlements, err :=
+			r.listByField(
+				ctx,
+				"status",
+				string(candidateStatus),
+			)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, settlement := range settlements {
+			if settlement.Status ==
+				settlementdom.StatusTransferring &&
+				settlement.UpdatedAt.After(
+					staleBefore,
+				) {
+				continue
+			}
+
+			if _, exists :=
+				seen[settlement.ID]; exists {
+				continue
+			}
+
+			seen[settlement.ID] =
+				struct{}{}
+
+			result = append(
+				result,
+				settlement,
+			)
+		}
+	}
+
+	sort.Slice(
+		result,
+		func(i, j int) bool {
+			if result[i].UpdatedAt.Equal(
+				result[j].UpdatedAt,
+			) {
+				return result[i].ID <
+					result[j].ID
+			}
+
+			return result[i].UpdatedAt.Before(
+				result[j].UpdatedAt,
+			)
+		},
+	)
+
+	if len(result) >
+		in.Limit {
+		result =
+			result[:in.Limit]
+	}
+
+	return result, nil
+}
+
 func (r *SettlementRepositoryFS) listByField(
 	ctx context.Context,
 	field string,

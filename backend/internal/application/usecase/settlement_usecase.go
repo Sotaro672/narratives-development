@@ -101,6 +101,22 @@ type StripeSettlementErrorMetadata interface {
 }
 
 // ============================================================
+// Transfer Queue Port
+// ============================================================
+
+// SettlementTransferQueue is the minimal outbound contract used by settlement
+// reconciliation.
+//
+// The queue payload must contain only SettlementID. Financial values must be
+// loaded again from the authoritative Settlement document by the worker.
+type SettlementTransferQueue interface {
+	EnqueueSettlementTransfer(
+		ctx context.Context,
+		settlementID string,
+	) error
+}
+
+// ============================================================
 // Repository Port
 // ============================================================
 
@@ -168,6 +184,9 @@ var (
 	ErrSettlementStripeTransferGatewayMissing = errors.New(
 		"settlement: Stripe transfer gateway is not configured",
 	)
+	ErrSettlementTransferQueueMissing = errors.New(
+		"settlement: transfer queue is not configured",
+	)
 	ErrSettlementOrderIDInvalid = errors.New(
 		"settlement: invalid order id",
 	)
@@ -221,6 +240,9 @@ var (
 
 const (
 	defaultSettlementTransferLease = 15 * time.Minute
+
+	defaultSettlementTransferDispatchLimit = 50
+	maxSettlementTransferDispatchLimit     = 200
 )
 
 type SettlementUsecase struct {
@@ -282,7 +304,6 @@ func (u *SettlementUsecase) GetByID(
 		return settlementdom.Settlement{}, ErrSettlementRepositoryMissing
 	}
 
-	settlementID = strings.TrimSpace(settlementID)
 	if settlementID == "" {
 		return settlementdom.Settlement{}, settlementdom.ErrInvalidID
 	}
@@ -301,7 +322,6 @@ func (u *SettlementUsecase) ListByPaymentID(
 		return nil, ErrSettlementRepositoryMissing
 	}
 
-	paymentID = strings.TrimSpace(paymentID)
 	if paymentID == "" {
 		return nil, settlementdom.ErrInvalidPaymentID
 	}
@@ -320,7 +340,6 @@ func (u *SettlementUsecase) ListByOrderID(
 		return nil, ErrSettlementRepositoryMissing
 	}
 
-	orderID = strings.TrimSpace(orderID)
 	if orderID == "" {
 		return nil, settlementdom.ErrInvalidOrderID
 	}
@@ -339,7 +358,6 @@ func (u *SettlementUsecase) ListByCompanyID(
 		return nil, ErrSettlementRepositoryMissing
 	}
 
-	companyID = strings.TrimSpace(companyID)
 	if companyID == "" {
 		return nil, settlementdom.ErrInvalidCompanyID
 	}
@@ -358,7 +376,6 @@ func (u *SettlementUsecase) ListByAccountID(
 		return nil, ErrSettlementRepositoryMissing
 	}
 
-	accountID = strings.TrimSpace(accountID)
 	if accountID == "" {
 		return nil, settlementdom.ErrInvalidAccountID
 	}
@@ -528,6 +545,141 @@ func (u *SettlementUsecase) EnsureForSucceededPayment(
 }
 
 // ============================================================
+// Settlement reconciliation
+// ============================================================
+
+// DispatchDue enqueues Settlement transfer candidates that may have lost their
+// original Cloud Task or require recovery.
+//
+// Candidates are selected by the repository:
+//
+// - ready
+// - failed_retryable
+// - stale transferring
+//
+// A stale transferring Settlement is safe to enqueue again because
+// TransferByID uses both an atomic Firestore claim and a deterministic Stripe
+// Idempotency-Key.
+//
+// Individual enqueue failures do not stop the remaining candidates. The first
+// error is returned after all candidates have been attempted.
+func (u *SettlementUsecase) DispatchDue(
+	ctx context.Context,
+	queue SettlementTransferQueue,
+	limit int,
+) (int, error) {
+	if u == nil || u.repo == nil {
+		return 0,
+			ErrSettlementRepositoryMissing
+	}
+
+	if queue == nil {
+		return 0,
+			ErrSettlementTransferQueueMissing
+	}
+
+	limit =
+		normalizeSettlementTransferDispatchLimit(
+			limit,
+		)
+
+	now := u.now().UTC()
+
+	transferLease := u.transferLease
+	if transferLease <= 0 {
+		transferLease =
+			defaultSettlementTransferLease
+	}
+
+	staleBefore :=
+		now.Add(
+			-transferLease,
+		)
+
+	candidates, err :=
+		u.repo.ListTransferCandidates(
+			ctx,
+			settlementdom.ListTransferCandidatesInput{
+				StaleBefore: staleBefore,
+				Limit:       limit,
+			},
+		)
+	if err != nil {
+		return 0,
+			fmt.Errorf(
+				"settlement: list transfer candidates: %w",
+				err,
+			)
+	}
+
+	enqueuedCount := 0
+	var firstErr error
+
+	for _, candidate := range candidates {
+		if candidate.ID == "" {
+			if firstErr == nil {
+				firstErr =
+					settlementdom.ErrInvalidID
+			}
+
+			continue
+		}
+
+		switch candidate.Status {
+		case settlementdom.StatusReady,
+			settlementdom.StatusFailedRetryable:
+
+		case settlementdom.StatusTransferring:
+			if candidate.UpdatedAt.After(
+				staleBefore,
+			) {
+				continue
+			}
+
+		default:
+			continue
+		}
+
+		if err :=
+			queue.EnqueueSettlementTransfer(
+				ctx,
+				candidate.ID,
+			); err != nil {
+			if firstErr == nil {
+				firstErr =
+					fmt.Errorf(
+						"settlement: enqueue transfer candidate %q: %w",
+						candidate.ID,
+						err,
+					)
+			}
+
+			continue
+		}
+
+		enqueuedCount++
+	}
+
+	return enqueuedCount,
+		firstErr
+}
+
+func normalizeSettlementTransferDispatchLimit(
+	limit int,
+) int {
+	if limit <= 0 {
+		return defaultSettlementTransferDispatchLimit
+	}
+
+	if limit >
+		maxSettlementTransferDispatchLimit {
+		return maxSettlementTransferDispatchLimit
+	}
+
+	return limit
+}
+
+// ============================================================
 // Stripe Transfer
 // ============================================================
 
@@ -540,9 +692,6 @@ func (u *SettlementUsecase) TransferByPaymentAndAccount(
 	paymentID string,
 	accountID string,
 ) (settlementdom.Settlement, error) {
-	paymentID = strings.TrimSpace(paymentID)
-	accountID = strings.TrimSpace(accountID)
-
 	if paymentID == "" {
 		return settlementdom.Settlement{},
 			settlementdom.ErrInvalidPaymentID
@@ -594,7 +743,6 @@ func (u *SettlementUsecase) TransferByID(
 			ErrSettlementStripeTransferGatewayMissing
 	}
 
-	settlementID = strings.TrimSpace(settlementID)
 	if settlementID == "" {
 		return settlementdom.Settlement{},
 			settlementdom.ErrInvalidID
@@ -720,9 +868,8 @@ func (u *SettlementUsecase) TransferByID(
 		)
 	}
 
-	stripeTransferID := strings.TrimSpace(
-		stripeResult.StripeTransferID,
-	)
+	stripeTransferID :=
+		stripeResult.StripeTransferID
 	if stripeTransferID == "" {
 		return u.failClaimedSettlement(
 			ctx,

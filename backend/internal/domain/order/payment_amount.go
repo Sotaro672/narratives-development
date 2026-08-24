@@ -3,7 +3,6 @@ package order
 
 import (
 	"errors"
-	"strings"
 )
 
 // -------------------------------------------------------
@@ -35,6 +34,12 @@ var (
 //	標準税率対象商品: 10%
 //	配送料: 10%
 //
+// キャンセル済み商品:
+//
+//	IsCancelled == true の商品は支払対象から除外します。
+//
+// 全商品がキャンセル済みの場合は決済できません。
+//
 // 金額の source of truth は Order であり、
 // frontend から渡された金額は使用しません。
 func CalculatePaymentAmount(
@@ -50,9 +55,8 @@ func CalculatePaymentAmount(
 		return 0, ErrInvalidPaymentAmount
 	}
 
-	if strings.TrimSpace(
-		order.ShippingQuoteSnapshot.Currency,
-	) != ShippingQuoteCurrencyJPY {
+	if order.ShippingQuoteSnapshot.Currency !=
+		ShippingQuoteCurrencyJPY {
 		return 0, ErrInvalidPaymentAmount
 	}
 
@@ -71,7 +75,15 @@ func CalculatePaymentAmount(
 	taxableAmount10 :=
 		shippingAmount
 
+	activeItemCount := 0
+
 	for _, item := range order.Items {
+		if item.IsCancelled {
+			continue
+		}
+
+		activeItemCount++
+
 		if item.Price < 0 ||
 			item.Qty <= 0 {
 			return 0, ErrInvalidPaymentAmount
@@ -108,6 +120,10 @@ func CalculatePaymentAmount(
 		default:
 			return 0, ErrInvalidPaymentAmount
 		}
+	}
+
+	if activeItemCount == 0 {
+		return 0, ErrInvalidPaymentAmount
 	}
 
 	if taxableAmount8 >
