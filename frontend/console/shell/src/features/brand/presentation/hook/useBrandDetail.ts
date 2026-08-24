@@ -10,6 +10,8 @@ import {
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { buildConsoleUrl } from "../../../../shared/http/apiBase";
+import { fetchJSON } from "../../../../shared/http/fetchJSON";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import type { Brand, BrandPatch } from "../../../../shared/types/brand";
 
@@ -23,6 +25,36 @@ import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHT
 import { uploadBrandAssetToFirebaseStorage } from "../../infrastructure/storage/brandAssetStorage";
 
 const BRAND_IMAGE_ACCEPT = BRAND_IMAGE_ALLOWED_MIME_TYPES.join(",");
+const ACCOUNT_LIST_URL = buildConsoleUrl("/accounts");
+
+type AccountStatus =
+  | "active"
+  | "inactive"
+  | "suspended"
+  | "deleted";
+
+type AccountListItem = {
+  id: string;
+  companyId: string;
+  stripeAccountId: string;
+  memberId: string;
+  bankName: string;
+  branchName: string;
+  accountNumber: number;
+  accountType: string;
+  currency: string;
+  status: AccountStatus;
+};
+
+type AccountListResponse = {
+  items: AccountListItem[];
+};
+
+export type BrandAccountCandidate = {
+  id: string;
+  label: string;
+  status: AccountStatus;
+};
 
 type BrandDraft = {
   name: string;
@@ -37,6 +69,7 @@ function createEmptyBrand(brandId: string): Brand {
   return {
     id: brandId,
     companyId: "",
+    accountId: "",
     name: "",
     description: "",
     websiteUrl: "",
@@ -70,6 +103,55 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function buildAccountLabel(
+  account: AccountListItem,
+): string {
+  const bankName = String(
+    account.bankName ?? "",
+  ).trim();
+
+  const branchName = String(
+    account.branchName ?? "",
+  ).trim();
+
+  const accountNumber = Number(
+    account.accountNumber ?? 0,
+  );
+
+  const stripeAccountId = String(
+    account.stripeAccountId ?? "",
+  ).trim();
+
+  const bankLabel = [
+    bankName,
+    branchName,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const numberLabel =
+    accountNumber > 0
+      ? String(accountNumber)
+      : "";
+
+  if (
+    bankLabel &&
+    numberLabel
+  ) {
+    return `${bankLabel} ${numberLabel}`;
+  }
+
+  if (bankLabel) {
+    return bankLabel;
+  }
+
+  if (stripeAccountId) {
+    return stripeAccountId;
+  }
+
+  return account.id;
+}
+
 export function useBrandDetail() {
   const navigate = useNavigate();
   const { brandId } = useParams<{ brandId: string }>();
@@ -87,6 +169,24 @@ export function useBrandDetail() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+
+  const [accountId, setAccountId] =
+    useState("");
+
+  const [
+    accountCandidates,
+    setAccountCandidates,
+  ] = useState<BrandAccountCandidate[]>([]);
+
+  const [
+    loadingAccounts,
+    setLoadingAccounts,
+  ] = useState(false);
+
+  const [
+    accountError,
+    setAccountError,
+  ] = useState<string | null>(null);
 
   const {
     assigneeId: managerId,
@@ -132,6 +232,11 @@ export function useBrandDetail() {
 
         setBrand(response);
         setDraft(createDraft(response));
+        setAccountId(
+          String(
+            response.accountId ?? "",
+          ),
+        );
         setBrandIconFile(null);
         setBrandBackgroundFile(null);
         setBrandIconError(null);
@@ -157,6 +262,75 @@ export function useBrandDetail() {
       cancelled = true;
     };
   }, [resolvedBrandId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAccounts = async () => {
+      try {
+        setLoadingAccounts(true);
+        setAccountError(null);
+
+        const response =
+          await fetchJSON<AccountListResponse>(
+            ACCOUNT_LIST_URL,
+            {
+              method: "GET",
+              auth: "required",
+            },
+          );
+
+        if (cancelled) return;
+
+        const accounts =
+          Array.isArray(response?.items)
+            ? response.items
+            : [];
+
+        const candidates =
+          accounts
+            .filter(
+              (account) =>
+                account.status !==
+                "deleted",
+            )
+            .map(
+              (
+                account,
+              ): BrandAccountCandidate => ({
+                id: account.id,
+                label:
+                  buildAccountLabel(
+                    account,
+                  ),
+                status:
+                  account.status,
+              }),
+            );
+
+        setAccountCandidates(
+          candidates,
+        );
+      } catch (error: unknown) {
+        if (cancelled) return;
+
+        setAccountCandidates([]);
+        setAccountError(
+          getErrorMessage(error),
+        );
+      } finally {
+        if (!cancelled) {
+          setLoadingAccounts(false);
+        }
+      }
+    };
+
+    void loadAccounts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!brandIconFile) {
@@ -222,12 +396,35 @@ export function useBrandDetail() {
     navigate("/brand");
   }, [navigate]);
 
+  const handleOpenAccountConnect =
+    useCallback(() => {
+      navigate("/account/connect");
+    }, [navigate]);
+
+  const handleSelectAccount =
+    useCallback(
+      (id: string) => {
+        setAccountId(id);
+
+        if (id) {
+          setAccountError(null);
+        }
+      },
+      [],
+    );
+
   const handleEdit = useCallback(() => {
     setDraft(createDraft(brand));
+    setAccountId(
+      String(
+        brand.accountId ?? "",
+      ),
+    );
     setBrandIconFile(null);
     setBrandBackgroundFile(null);
     setBrandIconError(null);
     setBrandBackgroundImageError(null);
+    setAccountError(null);
     setError(null);
 
     if (brandIconInputRef.current) {
@@ -243,11 +440,17 @@ export function useBrandDetail() {
 
   const handleCancelEdit = useCallback(() => {
     setDraft(createDraft(brand));
+    setAccountId(
+      String(
+        brand.accountId ?? "",
+      ),
+    );
     resetAssignee();
     setBrandIconFile(null);
     setBrandBackgroundFile(null);
     setBrandIconError(null);
     setBrandBackgroundImageError(null);
+    setAccountError(null);
     setError(null);
 
     if (brandIconInputRef.current) {
@@ -487,11 +690,24 @@ export function useBrandDetail() {
       return;
     }
 
+    if (!accountId) {
+      setAccountError(
+        "売上受取口座は必須です。",
+      );
+      setError(
+        new Error(
+          "売上受取口座は必須です。",
+        ),
+      );
+      return;
+    }
+
     if (!validateSelectedImagesBeforeSave()) return;
 
     try {
       setSaving(true);
       setError(null);
+      setAccountError(null);
 
       const {
         uploadedBrandIcon,
@@ -499,6 +715,7 @@ export function useBrandDetail() {
       } = await uploadBrandAssets();
 
       const patch: BrandPatch = {
+        accountId,
         name: draft.name,
         description: draft.description,
         websiteUrl: draft.websiteUrl,
@@ -517,10 +734,16 @@ export function useBrandDetail() {
 
       setBrand(savedBrand);
       setDraft(createDraft(savedBrand));
+      setAccountId(
+        String(
+          savedBrand.accountId ?? "",
+        ),
+      );
       setBrandIconFile(null);
       setBrandBackgroundFile(null);
       setBrandIconError(null);
       setBrandBackgroundImageError(null);
+      setAccountError(null);
 
       if (brandIconInputRef.current) {
         brandIconInputRef.current.value = "";
@@ -545,6 +768,7 @@ export function useBrandDetail() {
     saving,
     draft,
     managerId,
+    accountId,
     uploadBrandAssets,
     validateSelectedImagesBeforeSave,
   ]);
@@ -574,11 +798,20 @@ export function useBrandDetail() {
     loading,
     saving,
     error,
+
     managerId,
     managerCandidates,
     loadingMembers,
     editingManagerName,
     handleSelectManager,
+
+    accountId,
+    accountCandidates,
+    loadingAccounts,
+    accountError,
+    handleSelectAccount,
+    handleOpenAccountConnect,
+
     brandImageAccept: BRAND_IMAGE_ACCEPT,
     brandIconInputRef,
     brandBackgroundInputRef,

@@ -6,6 +6,7 @@ import { safeDateTimeLabelJa } from "../../../shared/util/dateJa";
 
 export type BrandRow = {
   id: string;
+  accountId: string;
   name: string;
   isActive: boolean;
   managerId: string | null;
@@ -18,6 +19,8 @@ export type BrandRow = {
 // - BackendにはpageとperPageのみを送る
 // - Backend側で認証中ユーザーのcompanyIdに絞り込む
 // - BackendのBrandレスポンスを正として使用する
+// - 接続中のAccount IDを保持する
+// - managerId / memberName はブランド責任者表示に使用する
 // - presentation用の日時表示のみ変換する
 export async function listBrands(): Promise<BrandRow[]> {
   const page = await brandRepositoryHTTP.list({
@@ -27,6 +30,7 @@ export async function listBrands(): Promise<BrandRow[]> {
 
   return page.items.map((brand) => ({
     id: brand.id,
+    accountId: brand.accountId,
     name: brand.name,
     isActive: brand.isActive,
     managerId: brand.managerId ?? null,

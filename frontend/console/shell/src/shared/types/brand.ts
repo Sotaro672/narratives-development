@@ -10,11 +10,17 @@
  *
  * - 日付は ISO 8601 文字列として扱う
  * - status は持たず isActive を使用する
+ * - Brand は必ず Company 配下の Account に接続する
+ * - 1つの Account を複数 Brand が共有できる
+ * - managerId はブランド責任者として任命されたMember ID
  * - memberName は一覧・詳細表示用の派生値
  */
 export interface Brand {
   id: string;
   companyId: string;
+
+  /** Brand が接続している受取Account ID */
+  accountId: string;
 
   name: string;
   description: string;
@@ -31,7 +37,7 @@ export interface Brand {
   /** ブランドの有効状態 */
   isActive: boolean;
 
-  /** ブランド責任者のMember ID */
+  /** ブランド責任者として任命されたMember ID */
   managerId?: string | null;
 
   /** ブランド責任者の表示名。APIレスポンス表示用 */
@@ -59,9 +65,12 @@ export interface Brand {
  *
  * - undefined: リクエストへ含めず、現在値を変更しない
  * - null: API側で許可されている項目のみクリア値として扱う
+ * - accountId を指定することで接続Accountを変更できる
+ * - managerId を指定することでブランド責任者を変更できる
  * - memberName は表示用の派生値なので更新対象に含めない
  */
 export interface BrandPatch {
+  accountId?: string;
   name?: string | null;
   description?: string | null;
   websiteUrl?: string | null;

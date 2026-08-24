@@ -15,6 +15,7 @@ import { Input } from "../shared/ui/input";
 
 import { useBrandDetail } from "../features/brand/presentation/hook/useBrandDetail";
 import { ManagerCard } from "../features/brand/presentation/components/ManagerCard";
+import { AccountSelectCard } from "../features/brand/presentation/components/accountSelectCard";
 
 export default function BrandDetail() {
   const {
@@ -40,6 +41,13 @@ export default function BrandDetail() {
     loadingMembers,
     editingManagerName,
     handleSelectManager,
+
+    accountId,
+    accountCandidates,
+    loadingAccounts,
+    accountError,
+    handleSelectAccount,
+    handleOpenAccountConnect,
 
     brandImageAccept,
 
@@ -410,6 +418,20 @@ export default function BrandDetail() {
         onSelectManager={handleSelectManager}
         registeredAt={registeredAt}
         updatedAt={updatedAt}
+        mode={isEditing ? "edit" : "view"}
+      />
+
+      <AccountSelectCard
+        accountId={
+          isEditing
+            ? accountId
+            : brand.accountId
+        }
+        accountCandidates={accountCandidates}
+        loadingAccounts={loadingAccounts}
+        accountError={accountError}
+        onSelectAccount={handleSelectAccount}
+        onOpenAccountConnect={handleOpenAccountConnect}
         mode={isEditing ? "edit" : "view"}
       />
     </div>

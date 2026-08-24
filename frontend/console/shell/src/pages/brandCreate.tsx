@@ -14,10 +14,19 @@ import {
 } from "../shared/ui/card";
 
 import { AdminCard } from "../features/admin/presentation/components/AdminCard";
+import { AccountSelectCard } from "../features/brand/presentation/components/accountSelectCard";
 import { useBrandCreate } from "../features/brand/presentation/hook/useBrandCreate";
 
 export default function BrandCreate() {
   const {
+    accountId,
+    accountIdError,
+    accountCandidates,
+    loadingAccounts,
+    accountLoadError,
+    handleSelectAccount,
+    handleOpenAccountConnect,
+
     name,
     setName,
     nameError,
@@ -344,6 +353,27 @@ export default function BrandCreate() {
           {managerIdError}
         </p>
       )}
+
+      <AccountSelectCard
+        accountId={accountId}
+        accountCandidates={
+          accountCandidates
+        }
+        loadingAccounts={
+          loadingAccounts
+        }
+        accountError={
+          accountLoadError ||
+          accountIdError
+        }
+        onSelectAccount={
+          handleSelectAccount
+        }
+        onOpenAccountConnect={
+          handleOpenAccountConnect
+        }
+        mode="edit"
+      />
     </div>
   );
 

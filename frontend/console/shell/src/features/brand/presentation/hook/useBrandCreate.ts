@@ -12,6 +12,8 @@ import { useNavigate } from "react-router-dom";
 
 import { useAuthContext } from "../../../../auth/application/AuthContext";
 import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
+import { buildConsoleUrl } from "../../../../shared/http/apiBase";
+import { fetchJSON } from "../../../../shared/http/fetchJSON";
 
 import { validateBrandImage } from "../../application/brandImageValidation";
 import {
@@ -25,9 +27,56 @@ import {
 import { uploadBrandAssetToFirebaseStorage } from "../../infrastructure/storage/brandAssetStorage";
 
 const BRAND_IMAGE_ACCEPT = BRAND_IMAGE_ALLOWED_MIME_TYPES.join(",");
+const ACCOUNT_LIST_URL = buildConsoleUrl("/accounts");
+
+type AccountStatus = "active" | "inactive" | "suspended" | "deleted";
+
+type AccountListItem = {
+  id: string;
+  companyId: string;
+  stripeAccountId: string;
+  bankName: string;
+  branchName: string;
+  accountNumber: number;
+  accountType: string;
+  currency: string;
+  status: AccountStatus;
+};
+
+type AccountListResponse = {
+  items: AccountListItem[];
+};
+
+export type BrandAccountCandidate = {
+  id: string;
+  label: string;
+  status: AccountStatus;
+};
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function buildAccountLabel(account: AccountListItem): string {
+  const bankName = String(account.bankName ?? "").trim();
+  const branchName = String(account.branchName ?? "").trim();
+  const accountNumber = Number(account.accountNumber ?? 0);
+  const bankLabel = [bankName, branchName].filter(Boolean).join(" ");
+  const numberLabel = accountNumber > 0 ? String(accountNumber) : "";
+
+  if (bankLabel && numberLabel) {
+    return `${bankLabel} ${numberLabel}`;
+  }
+
+  if (bankLabel) {
+    return bankLabel;
+  }
+
+  if (numberLabel) {
+    return numberLabel;
+  }
+
+  return account.id;
 }
 
 export function useBrandCreate() {
@@ -38,6 +87,12 @@ export function useBrandCreate() {
     () => String(currentMember?.companyId ?? ""),
     [currentMember?.companyId],
   );
+
+  const [accountId, setAccountId] = useState("");
+  const [accountCandidates, setAccountCandidates] = useState<BrandAccountCandidate[]>([]);
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [accountIdError, setAccountIdError] = useState<string | null>(null);
+  const [accountLoadError, setAccountLoadError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -68,14 +123,71 @@ export function useBrandCreate() {
   const brandBackgroundInputRef = useRef<HTMLInputElement | null>(null);
 
   const [brandIconFile, setBrandIconFile] = useState<File | null>(null);
-  const [brandBackgroundFile, setBrandBackgroundFile] =
-    useState<File | null>(null);
+  const [brandBackgroundFile, setBrandBackgroundFile] = useState<File | null>(null);
 
   const [brandIconPreviewUrl, setBrandIconPreviewUrl] = useState("");
-  const [brandBackgroundPreviewUrl, setBrandBackgroundPreviewUrl] =
-    useState("");
+  const [brandBackgroundPreviewUrl, setBrandBackgroundPreviewUrl] = useState("");
 
   const isActive = true;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAccounts = async () => {
+      try {
+        setLoadingAccounts(true);
+        setAccountLoadError(null);
+
+        const response = await fetchJSON<AccountListResponse>(
+          ACCOUNT_LIST_URL,
+          {
+            method: "GET",
+            auth: "required",
+          },
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        const accounts = Array.isArray(response?.items)
+          ? response.items
+          : [];
+
+        const candidates = accounts
+          .filter((account) => account.status !== "deleted")
+          .map((account) => ({
+            id: account.id,
+            label: buildAccountLabel(account),
+            status: account.status,
+          }));
+
+        setAccountCandidates(candidates);
+
+        if (candidates.length === 1) {
+          setAccountId(candidates[0].id);
+        }
+      } catch (error: unknown) {
+        if (cancelled) {
+          return;
+        }
+
+        setAccountCandidates([]);
+        setAccountId("");
+        setAccountLoadError(getErrorMessage(error));
+      } finally {
+        if (!cancelled) {
+          setLoadingAccounts(false);
+        }
+      }
+    };
+
+    void loadAccounts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!brandIconFile) {
@@ -103,10 +215,7 @@ export function useBrandCreate() {
     return () => {
       URL.revokeObjectURL(objectUrl);
     };
-  }, [
-    brandBackgroundFile,
-    brandBackgroundImage,
-  ]);
+  }, [brandBackgroundFile, brandBackgroundImage]);
 
   const displayBrandName = useMemo(
     () => name || "ブランド名未入力",
@@ -124,20 +233,25 @@ export function useBrandCreate() {
   );
 
   const hasBrandBackgroundSelection = useMemo(
-    () =>
-      Boolean(
-        brandBackgroundFile ||
-          brandBackgroundImage,
-      ),
-    [
-      brandBackgroundFile,
-      brandBackgroundImage,
-    ],
+    () => Boolean(brandBackgroundFile || brandBackgroundImage),
+    [brandBackgroundFile, brandBackgroundImage],
   );
 
   const handleBack = useCallback(() => {
     navigate("/brand");
   }, [navigate]);
+
+  const handleOpenAccountConnect = useCallback(() => {
+    navigate("/account/connect");
+  }, [navigate]);
+
+  const handleSelectAccount = useCallback((id: string) => {
+    setAccountId(id);
+
+    if (id) {
+      setAccountIdError(null);
+    }
+  }, []);
 
   const handleSelectManager = useCallback(
     (id: string) => {
@@ -187,8 +301,7 @@ export function useBrandCreate() {
 
   const handleBrandIconChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
-      const file =
-        event.currentTarget.files?.[0] ?? null;
+      const file = event.currentTarget.files?.[0] ?? null;
 
       if (!file) {
         setBrandIconFile(null);
@@ -196,11 +309,10 @@ export function useBrandCreate() {
         return;
       }
 
-      const validationError =
-        validateSelectedImage(
-          file,
-          "brandIcon",
-        );
+      const validationError = validateSelectedImage(
+        file,
+        "brandIcon",
+      );
 
       if (validationError) {
         setBrandIconFile(null);
@@ -221,8 +333,7 @@ export function useBrandCreate() {
 
   const handleBrandBackgroundChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
-      const file =
-        event.currentTarget.files?.[0] ?? null;
+      const file = event.currentTarget.files?.[0] ?? null;
 
       if (!file) {
         setBrandBackgroundFile(null);
@@ -230,18 +341,15 @@ export function useBrandCreate() {
         return;
       }
 
-      const validationError =
-        validateSelectedImage(
-          file,
-          "brandBackgroundImage",
-        );
+      const validationError = validateSelectedImage(
+        file,
+        "brandBackgroundImage",
+      );
 
       if (validationError) {
         setBrandBackgroundFile(null);
         setBrandBackgroundImage("");
-        setBrandBackgroundImageError(
-          validationError,
-        );
+        setBrandBackgroundImageError(validationError);
         event.currentTarget.value = "";
 
         alert(validationError);
@@ -275,47 +383,42 @@ export function useBrandCreate() {
     }
   }, []);
 
-  const validateSelectedImagesBeforeSave =
-    useCallback((): boolean => {
-      if (brandIconFile) {
-        const validationError =
-          validateSelectedImage(
-            brandIconFile,
-            "brandIcon",
-          );
+  const validateSelectedImagesBeforeSave = useCallback((): boolean => {
+    if (brandIconFile) {
+      const validationError = validateSelectedImage(
+        brandIconFile,
+        "brandIcon",
+      );
 
-        if (validationError) {
-          setBrandIconError(validationError);
-          alert(validationError);
-          return false;
-        }
+      if (validationError) {
+        setBrandIconError(validationError);
+        alert(validationError);
+        return false;
       }
+    }
 
-      if (brandBackgroundFile) {
-        const validationError =
-          validateSelectedImage(
-            brandBackgroundFile,
-            "brandBackgroundImage",
-          );
+    if (brandBackgroundFile) {
+      const validationError = validateSelectedImage(
+        brandBackgroundFile,
+        "brandBackgroundImage",
+      );
 
-        if (validationError) {
-          setBrandBackgroundImageError(
-            validationError,
-          );
-          alert(validationError);
-          return false;
-        }
+      if (validationError) {
+        setBrandBackgroundImageError(validationError);
+        alert(validationError);
+        return false;
       }
+    }
 
-      setBrandIconError(null);
-      setBrandBackgroundImageError(null);
+    setBrandIconError(null);
+    setBrandBackgroundImageError(null);
 
-      return true;
-    }, [
-      brandIconFile,
-      brandBackgroundFile,
-      validateSelectedImage,
-    ]);
+    return true;
+  }, [
+    brandIconFile,
+    brandBackgroundFile,
+    validateSelectedImage,
+  ]);
 
   const uploadBrandAssets = useCallback(
     async (
@@ -325,33 +428,28 @@ export function useBrandCreate() {
       uploadedBrandBackgroundImage: string;
     }> => {
       let uploadedBrandIcon = brandIcon;
-      let uploadedBrandBackgroundImage =
-        brandBackgroundImage;
+      let uploadedBrandBackgroundImage = brandBackgroundImage;
 
       if (brandIconFile) {
-        const uploaded =
-          await uploadBrandAssetToFirebaseStorage({
-            companyId,
-            brandId,
-            target: "brandIcon",
-            file: brandIconFile,
-          });
+        const uploaded = await uploadBrandAssetToFirebaseStorage({
+          companyId,
+          brandId,
+          target: "brandIcon",
+          file: brandIconFile,
+        });
 
-        uploadedBrandIcon =
-          uploaded.downloadUrl;
+        uploadedBrandIcon = uploaded.downloadUrl;
       }
 
       if (brandBackgroundFile) {
-        const uploaded =
-          await uploadBrandAssetToFirebaseStorage({
-            companyId,
-            brandId,
-            target: "brandBackgroundImage",
-            file: brandBackgroundFile,
-          });
+        const uploaded = await uploadBrandAssetToFirebaseStorage({
+          companyId,
+          brandId,
+          target: "brandBackgroundImage",
+          file: brandBackgroundFile,
+        });
 
-        uploadedBrandBackgroundImage =
-          uploaded.downloadUrl;
+        uploadedBrandBackgroundImage = uploaded.downloadUrl;
       }
 
       return {
@@ -373,26 +471,28 @@ export function useBrandCreate() {
       return;
     }
 
+    const normalizedAccountId = String(accountId ?? "").trim();
     const normalizedName = String(name ?? "");
-    const normalizedManagerId = String(
-      managerId ?? "",
-    );
+    const normalizedManagerId = String(managerId ?? "");
 
     let hasError = false;
 
+    if (!normalizedAccountId) {
+      setAccountIdError("受取口座は必須です。");
+      hasError = true;
+    } else {
+      setAccountIdError(null);
+    }
+
     if (!normalizedName) {
-      setNameError(
-        "ブランド名は必須です。",
-      );
+      setNameError("ブランド名は必須です。");
       hasError = true;
     } else {
       setNameError(null);
     }
 
     if (!normalizedManagerId) {
-      setManagerIdError(
-        "ブランド責任者は必須です。",
-      );
+      setManagerIdError("ブランド責任者は必須です。");
       hasError = true;
     } else {
       setManagerIdError(null);
@@ -400,15 +500,13 @@ export function useBrandCreate() {
 
     if (hasError) {
       alert(
-        "ブランド名とブランド責任者を入力してください。",
+        "受取口座、ブランド名、ブランド責任者を入力してください。",
       );
       return;
     }
 
     if (!companyId) {
-      alert(
-        "companyId が取得できません。",
-      );
+      alert("companyId が取得できません。");
       return;
     }
 
@@ -423,6 +521,7 @@ export function useBrandCreate() {
 
       const createPayload: CreateBrandInput = {
         companyId,
+        accountId: normalizedAccountId,
         name: normalizedName,
         description,
         websiteUrl,
@@ -432,14 +531,11 @@ export function useBrandCreate() {
         createdBy: currentMember?.id ?? null,
       };
 
-      const created =
-        await brandRepositoryHTTP.create(
-          createPayload,
-        );
-
-      createdBrandId = String(
-        created.id ?? "",
+      const created = await brandRepositoryHTTP.create(
+        createPayload,
       );
+
+      createdBrandId = String(created.id ?? "");
 
       if (!createdBrandId) {
         throw new Error(
@@ -468,14 +564,11 @@ export function useBrandCreate() {
         );
       }
 
-      alert(
-        "ブランドを登録しました。",
-      );
+      alert("ブランドを登録しました.");
 
       navigate("/brand");
     } catch (error: unknown) {
-      const message =
-        getErrorMessage(error);
+      const message = getErrorMessage(error);
 
       if (createdBrandId) {
         alert(
@@ -492,6 +585,7 @@ export function useBrandCreate() {
     }
   }, [
     saving,
+    accountId,
     name,
     managerId,
     companyId,
@@ -505,6 +599,14 @@ export function useBrandCreate() {
 
   return {
     companyId,
+
+    accountId,
+    accountIdError,
+    accountCandidates,
+    loadingAccounts,
+    accountLoadError,
+    handleSelectAccount,
+    handleOpenAccountConnect,
 
     name,
     setName,

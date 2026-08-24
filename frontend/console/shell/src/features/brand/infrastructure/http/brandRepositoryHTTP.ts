@@ -8,6 +8,9 @@ import { getAuthHeaders } from "../../../../shared/http/authHeaders";
 /**
  * POST /brands のリクエストボディ。
  *
+ * Brand は必ず Company 配下の Account に接続して作成するため、
+ * accountId は必須。
+ *
  * 新規BrandはBackend側で必ず isActive=true として作成するため、
  * isActiveは作成リクエストへ含めない。
  *
@@ -23,6 +26,7 @@ import { getAuthHeaders } from "../../../../shared/http/authHeaders";
  */
 export interface CreateBrandInput {
   companyId: string;
+  accountId: string;
   name: string;
   description: string;
   websiteUrl?: string;
@@ -30,6 +34,16 @@ export interface CreateBrandInput {
   brandBackgroundImage?: string;
   managerId?: string | null;
   createdBy?: string | null;
+}
+
+/**
+ * Brand に接続する Account を変更するための入力。
+ *
+ * 1つの Account を複数 Brand が共有することを許容する。
+ * Account の Company 所有権検証はBackend側で行う。
+ */
+export interface UpdateBrandAccountInput {
+  accountId: string;
 }
 
 const BASE_URL = buildConsoleUrl("/brands");
@@ -96,11 +110,20 @@ export class BrandRepositoryHTTP {
   }
 
   async create(input: CreateBrandInput): Promise<Brand> {
+    const accountId = input.accountId.trim();
+
+    if (!accountId) {
+      throw new Error("[BrandRepositoryHTTP] accountId is required.");
+    }
+
     return authed<Brand>(
       this.baseUrl,
       {
         method: "POST",
-        body: JSON.stringify(input),
+        body: JSON.stringify({
+          ...input,
+          accountId,
+        }),
       },
       { json: true },
     );
@@ -122,6 +145,40 @@ export class BrandRepositoryHTTP {
       {
         method: "PATCH",
         body: JSON.stringify(patch),
+      },
+      { json: true },
+    );
+  }
+
+  /**
+   * Brand に接続している Account を変更します。
+   *
+   * Backend側で以下を検証します。
+   * - Account が存在すること
+   * - Brand と Account が同一 Company に属すること
+   * - Account が deleted ではないこと
+   *
+   * 同一 Account を複数 Brand が参照することは許容します。
+   */
+  async updateAccount(
+    id: string,
+    input: UpdateBrandAccountInput,
+  ): Promise<Brand> {
+    const accountId = input.accountId.trim();
+
+    if (!accountId) {
+      throw new Error("[BrandRepositoryHTTP] accountId is required.");
+    }
+
+    const url = `${this.baseUrl}/${encodeURIComponent(id)}`;
+
+    return authed<Brand>(
+      url,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          accountId,
+        }),
       },
       { json: true },
     );
