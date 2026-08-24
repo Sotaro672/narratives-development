@@ -59,6 +59,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		internalInvitationDeliveryDispatchH        http.Handler
 		internalOrderDispatchNotificationProcessH  http.Handler
 		internalOrderDispatchNotificationDispatchH http.Handler
+		internalSettlementProcessH                 http.Handler
 		ownerResolveH                              http.Handler
 	)
 
@@ -194,6 +195,9 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		ordersH = consoleHandler.NewOrderHandler(
 			c.OrderUC,
 			c.PaymentFlowUC,
+			c.PaymentUC,
+			c.SettlementUC,
+			c.settlementQueue,
 			c.OrderManagementQuery,
 			c.OrderDetailQuery,
 			c.OrderDispatchNotificationUC,
@@ -281,6 +285,13 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		)
 	}
 
+	if c.SettlementUC != nil {
+		internalSettlementProcessH =
+			internalHandler.NewSettlementTaskHandler(
+				c.SettlementUC,
+			)
+	}
+
 	if c.OwnerResolveQ != nil {
 		ownerResolveH = consoleHandler.NewOwnerResolveHandler(c.OwnerResolveQ)
 	}
@@ -328,10 +339,11 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		InternalInvitationDeliveryDispatch:       internalInvitationDeliveryDispatchH,
 		InternalOrderDispatchNotificationProcess: internalOrderDispatchNotificationProcessH,
 		InternalOrderDispatchNotificationDispatch: internalOrderDispatchNotificationDispatchH,
-		OwnerResolve:    ownerResolveH,
-		Invitation:      invitationH,
-		Sales:           salesH,
-		TokenBPReview:   tokenBPReviewH,
-		ProductBPReview: productBPReviewH,
+		InternalSettlementProcess:                 internalSettlementProcessH,
+		OwnerResolve:                              ownerResolveH,
+		Invitation:                                invitationH,
+		Sales:                                     salesH,
+		TokenBPReview:                             tokenBPReviewH,
+		ProductBPReview:                           productBPReviewH,
 	}
 }

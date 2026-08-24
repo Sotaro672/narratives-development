@@ -105,6 +105,7 @@ type Container struct {
 	listSaveOperationRetryQueue     *listcloudtasksadp.ListSaveOperationQueue
 	invitationDeliveryQueue         *listcloudtasksadp.InvitationDeliveryQueue
 	orderDispatchNotificationQueue  *listcloudtasksadp.OrderDispatchNotificationQueue
+	settlementQueue                 *listcloudtasksadp.SettlementQueue
 }
 
 func NewContainer(
@@ -131,6 +132,46 @@ func NewContainer(
 		return nil, err
 	}
 
+	settlementQueue, err :=
+		listcloudtasksadp.NewSettlementQueueFromEnv(
+			ctx,
+		)
+	if err != nil {
+		var orderDispatchNotificationQueueErr error
+		if u != nil && u.orderDispatchNotificationQueue != nil {
+			orderDispatchNotificationQueueErr = u.orderDispatchNotificationQueue.Close()
+		}
+
+		var invitationQueueErr error
+		if u != nil && u.invitationDeliveryQueue != nil {
+			invitationQueueErr = u.invitationDeliveryQueue.Close()
+		}
+
+		var listQueueErr error
+		if u != nil && u.listSaveOperationRetryQueue != nil {
+			listQueueErr = u.listSaveOperationRetryQueue.Close()
+		}
+
+		var tokenBlueprintStorageErr error
+		if u != nil && u.tokenBlueprintAssetStorage != nil {
+			tokenBlueprintStorageErr = u.tokenBlueprintAssetStorage.Close()
+		}
+
+		var storageErr error
+		if u != nil && u.listSaveOperationStorage != nil {
+			storageErr = u.listSaveOperationStorage.Close()
+		}
+
+		return nil, errors.Join(
+			err,
+			orderDispatchNotificationQueueErr,
+			invitationQueueErr,
+			listQueueErr,
+			tokenBlueprintStorageErr,
+			storageErr,
+		)
+	}
+
 	q := buildQueries(
 		clients.infra,
 		repos,
@@ -140,6 +181,11 @@ func NewContainer(
 	)
 
 	if clients == nil || clients.infra == nil {
+		var settlementQueueErr error
+		if settlementQueue != nil {
+			settlementQueueErr = settlementQueue.Close()
+		}
+
 		var orderDispatchNotificationQueueErr error
 		if u != nil && u.orderDispatchNotificationQueue != nil {
 			orderDispatchNotificationQueueErr = u.orderDispatchNotificationQueue.Close()
@@ -167,6 +213,7 @@ func NewContainer(
 
 		return nil, errors.Join(
 			errors.New("clients/infra is nil"),
+			settlementQueueErr,
 			orderDispatchNotificationQueueErr,
 			invitationQueueErr,
 			listQueueErr,
@@ -291,12 +338,18 @@ func NewContainer(
 		listSaveOperationRetryQueue:     u.listSaveOperationRetryQueue,
 		invitationDeliveryQueue:         u.invitationDeliveryQueue,
 		orderDispatchNotificationQueue:  u.orderDispatchNotificationQueue,
+		settlementQueue:                 settlementQueue,
 	}, nil
 }
 
 func (c *Container) Close() error {
 	if c == nil {
 		return nil
+	}
+
+	var settlementQueueErr error
+	if c.settlementQueue != nil {
+		settlementQueueErr = c.settlementQueue.Close()
 	}
 
 	var orderDispatchNotificationQueueErr error
@@ -330,6 +383,7 @@ func (c *Container) Close() error {
 	}
 
 	return errors.Join(
+		settlementQueueErr,
 		orderDispatchNotificationQueueErr,
 		invitationQueueErr,
 		listQueueErr,

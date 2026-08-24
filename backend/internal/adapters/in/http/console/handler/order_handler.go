@@ -2,9 +2,11 @@
 package consoleHandler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -12,7 +14,24 @@ import (
 	usecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
+	paymentdom "narratives/internal/domain/payment"
+	settlementdom "narratives/internal/domain/settlement"
 )
+
+// SettlementTransferEnqueuer is the minimal outbound contract required by
+// OrderHandler after a seller's Order items have been dispatched.
+//
+// The concrete implementation is SettlementQueue.
+//
+// The queue payload must contain only SettlementID. Amount, Stripe Account,
+// Charge ID, and TransferGroup are loaded from the authoritative Settlement
+// document by the internal worker.
+type SettlementTransferEnqueuer interface {
+	EnqueueSettlementTransfer(
+		ctx context.Context,
+		settlementID string,
+	) error
+}
 
 // OrderHandler handles:
 //   - GET /orders/items
@@ -22,6 +41,9 @@ import (
 type OrderHandler struct {
 	uc                     *usecase.OrderUsecase
 	paymentFlowUC          *usecase.PaymentFlowUsecase
+	paymentUC              *usecase.PaymentUsecase
+	settlementUC           *usecase.SettlementUsecase
+	settlementQueue        SettlementTransferEnqueuer
 	q                      *orderq.OrderManagementQuery
 	detailQ                *orderq.OrderDetailQuery
 	dispatchNotificationUC usecase.OrderDispatchNotificationUsecasePort
@@ -30,6 +52,9 @@ type OrderHandler struct {
 func NewOrderHandler(
 	uc *usecase.OrderUsecase,
 	paymentFlowUC *usecase.PaymentFlowUsecase,
+	paymentUC *usecase.PaymentUsecase,
+	settlementUC *usecase.SettlementUsecase,
+	settlementQueue SettlementTransferEnqueuer,
 	q *orderq.OrderManagementQuery,
 	detailQ *orderq.OrderDetailQuery,
 	dispatchNotificationUC usecase.OrderDispatchNotificationUsecasePort,
@@ -37,6 +62,9 @@ func NewOrderHandler(
 	return &OrderHandler{
 		uc:                     uc,
 		paymentFlowUC:          paymentFlowUC,
+		paymentUC:              paymentUC,
+		settlementUC:           settlementUC,
+		settlementQueue:        settlementQueue,
 		q:                      q,
 		detailQ:                detailQ,
 		dispatchNotificationUC: dispatchNotificationUC,
@@ -118,6 +146,9 @@ func (h *OrderHandler) dispatch(w http.ResponseWriter, r *http.Request, id strin
 	if h == nil ||
 		h.uc == nil ||
 		h.paymentFlowUC == nil ||
+		h.paymentUC == nil ||
+		h.settlementUC == nil ||
+		h.settlementQueue == nil ||
 		h.q == nil ||
 		h.detailQ == nil ||
 		h.dispatchNotificationUC == nil {
@@ -159,9 +190,70 @@ func (h *OrderHandler) dispatch(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
+	// 発送時off-session決済は、Stripe webhookより先にsucceededが確定する
+	// 場合がある。そのためWebhookによるSettlement READY作成を前提にせず、
+	// ここでも現在のsucceeded Paymentを取得してSettlementを冪等に保証する。
+	payment, err := h.paymentUC.GetByPaymentID(
+		ctx,
+		id,
+	)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	if payment == nil ||
+		payment.PaymentID != id ||
+		payment.Status != paymentdom.StatusSucceeded {
+		writeOrderErr(
+			w,
+			usecase.ErrPaymentFlowDispatchNotSucceeded,
+		)
+		return
+	}
+
+	// EnsureOrderPaidForDispatch後の最新Orderを再取得する。
+	// SellerSnapshotとPaymentをsource of truthとしてSettlement READYを作成する。
+	paidOrder, err := h.uc.GetByID(
+		ctx,
+		id,
+	)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	settlements, err := h.settlementUC.EnsureForSucceededPayment(
+		ctx,
+		paidOrder,
+		*payment,
+	)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
 	result, err := h.uc.DispatchItems(
 		ctx,
 		dispatchInput,
+	)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	// このConsole企業が実際に発送したTargetItemsからAccountIDを抽出し、
+	// そのAccountに対応するSettlementだけをCloud Tasksへ投入する。
+	//
+	// Order全体のSettlementを投入してはいけない。
+	// Company Aの発送でCompany BのSettlementを送金しないため、
+	// SellerSnapshot.CompanyIDとAccountIDの両方を照合する。
+	err = enqueueDispatchedSettlementTransfers(
+		ctx,
+		payment.PaymentID,
+		result.TargetItems,
+		settlements,
+		h.settlementQueue,
 	)
 	if err != nil {
 		writeOrderErr(w, err)
@@ -187,6 +279,144 @@ func (h *OrderHandler) dispatch(w http.ResponseWriter, r *http.Request, id strin
 	}
 
 	_ = json.NewEncoder(w).Encode(dto)
+}
+
+func enqueueDispatchedSettlementTransfers(
+	ctx context.Context,
+	paymentID string,
+	targetItems []orderdom.OrderItemSnapshot,
+	settlements []settlementdom.Settlement,
+	queue SettlementTransferEnqueuer,
+) error {
+	if paymentID == "" {
+		return paymentdom.ErrInvalidPaymentID
+	}
+
+	if queue == nil {
+		return errors.New(
+			"order dispatch: settlement queue is not configured",
+		)
+	}
+
+	if len(targetItems) == 0 {
+		return orderdom.ErrNotFound
+	}
+
+	// AccountID -> CompanyID
+	//
+	// 同一Accountに複数Brandが紐づく場合でも1回だけenqueueする。
+	targetAccounts := make(
+		map[string]string,
+	)
+
+	for _, item := range targetItems {
+		if item.IsCancelled ||
+			item.IsReturnRequested ||
+			!item.IsDispatched {
+			return orderdom.ErrConflict
+		}
+
+		accountID :=
+			item.SellerSnapshot.AccountID
+
+		companyID :=
+			item.SellerSnapshot.CompanyID
+
+		if accountID == "" ||
+			companyID == "" {
+			return orderdom.ErrInvalidSellerSnapshot
+		}
+
+		if existingCompanyID, exists :=
+			targetAccounts[accountID]; exists &&
+			existingCompanyID != companyID {
+			return orderdom.ErrInvalidSellerSnapshot
+		}
+
+		targetAccounts[accountID] =
+			companyID
+	}
+
+	if len(targetAccounts) == 0 {
+		return orderdom.ErrNotFound
+	}
+
+	settlementByAccount := make(
+		map[string]settlementdom.Settlement,
+		len(targetAccounts),
+	)
+
+	for _, settlement := range settlements {
+		if settlement.PaymentID != paymentID {
+			return errors.New(
+				"order dispatch: settlement payment mismatch",
+			)
+		}
+
+		accountID :=
+			settlement.AccountID
+
+		expectedCompanyID, target :=
+			targetAccounts[accountID]
+		if !target {
+			continue
+		}
+
+		if settlement.CompanyID != expectedCompanyID {
+			return errors.New(
+				"order dispatch: settlement company mismatch",
+			)
+		}
+
+		if _, exists :=
+			settlementByAccount[accountID]; exists {
+			return usecase.ErrSettlementDuplicateAccount
+		}
+
+		settlementByAccount[accountID] =
+			settlement
+	}
+
+	accountIDs := make(
+		[]string,
+		0,
+		len(targetAccounts),
+	)
+
+	for accountID := range targetAccounts {
+		accountIDs = append(
+			accountIDs,
+			accountID,
+		)
+	}
+
+	sort.Strings(accountIDs)
+
+	for _, accountID := range accountIDs {
+		settlement, ok :=
+			settlementByAccount[accountID]
+		if !ok {
+			return errors.New(
+				"order dispatch: settlement for dispatched account not found",
+			)
+		}
+
+		settlementID :=
+			settlement.ID
+
+		if settlementID == "" {
+			return settlementdom.ErrInvalidID
+		}
+
+		if err := queue.EnqueueSettlementTransfer(
+			ctx,
+			settlementID,
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (h *OrderHandler) listItemRows(w http.ResponseWriter, r *http.Request) {
@@ -247,36 +477,36 @@ func parseOrderListParams(r *http.Request) (orderdom.Filter, common.Page, error)
 	perPage := parseIntDefault(q.Get("perPage"), 20)
 
 	f := orderdom.Filter{
-		ID: strings.TrimSpace(q.Get("id")),
+		ID: q.Get("id"),
 	}
 
-	if v := strings.TrimSpace(q.Get("userId")); v != "" {
+	if v := q.Get("userId"); v != "" {
 		f.UserID = v
 	}
-	if v := strings.TrimSpace(q.Get("avatarId")); v != "" {
+	if v := q.Get("avatarId"); v != "" {
 		f.AvatarID = v
 	}
-	if v := strings.TrimSpace(q.Get("cartId")); v != "" {
+	if v := q.Get("cartId"); v != "" {
 		f.CartID = v
 	}
-	if v := strings.TrimSpace(q.Get("modelId")); v != "" {
+	if v := q.Get("modelId"); v != "" {
 		f.ModelID = v
 	}
-	if v := strings.TrimSpace(q.Get("inventoryId")); v != "" {
+	if v := q.Get("inventoryId"); v != "" {
 		f.InventoryID = v
 	}
-	if v := strings.TrimSpace(q.Get("listId")); v != "" {
+	if v := q.Get("listId"); v != "" {
 		f.ListID = v
 	}
 
-	if v := strings.TrimSpace(q.Get("createdFrom")); v != "" {
+	if v := q.Get("createdFrom"); v != "" {
 		t, err := time.Parse(time.RFC3339, v)
 		if err != nil {
 			return orderdom.Filter{}, common.Page{}, errors.New("invalid createdFrom (expected RFC3339)")
 		}
 		f.CreatedFrom = &t
 	}
-	if v := strings.TrimSpace(q.Get("createdTo")); v != "" {
+	if v := q.Get("createdTo"); v != "" {
 		t, err := time.Parse(time.RFC3339, v)
 		if err != nil {
 			return orderdom.Filter{}, common.Page{}, errors.New("invalid createdTo (expected RFC3339)")
