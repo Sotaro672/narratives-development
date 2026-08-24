@@ -8,8 +8,12 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { auth } from "../../../../auth/infrastructure/config/firebaseClient";
+import { useAuthContext } from "../../../../auth/application/AuthContext";
 import { accountRepositoryHTTP } from "../../infrastructure/http/accountRepositoryHTTP";
+
+const DEFAULT_BANK_NAME = "テスト銀行";
+const DEFAULT_BRANCH_NAME = "テスト支店";
+const DEFAULT_ACCOUNT_NUMBER = "1234567";
 
 function getErrorMessage(error: unknown): string {
   if (
@@ -24,13 +28,33 @@ function getErrorMessage(error: unknown): string {
 
 export function useAccountConnect() {
   const navigate = useNavigate();
+  const { currentMember } = useAuthContext();
 
   const [
-    contactEmail,
-    setContactEmail,
+    bankName,
+    setBankName,
   ] = useState(
-    auth.currentUser?.email ?? "",
+    DEFAULT_BANK_NAME,
   );
+
+  const [
+    branchName,
+    setBranchName,
+  ] = useState(
+    DEFAULT_BRANCH_NAME,
+  );
+
+  const [
+    accountNumber,
+    setAccountNumber,
+  ] = useState(
+    DEFAULT_ACCOUNT_NUMBER,
+  );
+
+  const [
+    createdAccountId,
+    setCreatedAccountId,
+  ] = useState("");
 
   const [
     submitting,
@@ -61,28 +85,56 @@ export function useAccountConnect() {
   const canConnect = useMemo(
     () =>
       !submitting &&
-      Boolean(
-        contactEmail.trim(),
-      ),
+      Boolean(bankName.trim()) &&
+      Boolean(branchName.trim()) &&
+      Boolean(accountNumber.trim()),
     [
       submitting,
-      contactEmail,
+      bankName,
+      branchName,
+      accountNumber,
     ],
   );
 
-  const handleContactEmailChange =
+  const handleBankNameChange =
     useCallback(
       (value: string) => {
-        setContactEmail(value);
+        setBankName(value);
+        setError(null);
+      },
+      [],
+    );
+
+  const handleBranchNameChange =
+    useCallback(
+      (value: string) => {
+        setBranchName(value);
+        setError(null);
+      },
+      [],
+    );
+
+  const handleAccountNumberChange =
+    useCallback(
+      (value: string) => {
+        const digits =
+          value.replace(
+            /[^0-9]/g,
+            "",
+          );
+
+        setAccountNumber(
+          digits.slice(0, 8),
+        );
 
         setError(null);
       },
       [],
     );
 
-  const handleAccountManagement =
+  const handleBack =
     useCallback(() => {
-      navigate("/account");
+      navigate(-1);
     }, [navigate]);
 
   const handleConnect =
@@ -91,12 +143,48 @@ export function useAccountConnect() {
         return;
       }
 
-      const normalizedEmail =
-        contactEmail.trim();
+      const memberEmail =
+        String(
+          currentMember?.email ?? "",
+        ).trim();
 
-      if (!normalizedEmail) {
+      const normalizedBankName =
+        bankName.trim();
+
+      const normalizedBranchName =
+        branchName.trim();
+
+      const normalizedAccountNumber =
+        accountNumber.trim();
+
+      if (!memberEmail) {
         setError(
-          "Stripe口座に使用するメールアドレスを入力してください。",
+          "Memberのメールアドレスを取得できません。",
+        );
+        return;
+      }
+
+      if (!normalizedBankName) {
+        setError(
+          "銀行名を入力してください。",
+        );
+        return;
+      }
+
+      if (!normalizedBranchName) {
+        setError(
+          "支店名を入力してください。",
+        );
+        return;
+      }
+
+      if (
+        !/^\d{1,8}$/.test(
+          normalizedAccountNumber,
+        )
+      ) {
+        setError(
+          "口座番号は8桁以内の数字で入力してください。",
         );
         return;
       }
@@ -110,8 +198,11 @@ export function useAccountConnect() {
 
         const response =
           await accountRepositoryHTTP.connect({
+            accountId:
+              createdAccountId ||
+              undefined,
             contactEmail:
-              normalizedEmail,
+              memberEmail,
             country:
               "JP",
             returnUrl:
@@ -120,8 +211,35 @@ export function useAccountConnect() {
               `${origin}/account/connect`,
           });
 
+        const accountId =
+          response.account?.id ?? "";
+
+        if (!accountId) {
+          throw new Error(
+            "Account IDを取得できませんでした。",
+          );
+        }
+
+        setCreatedAccountId(
+          accountId,
+        );
+
+        await accountRepositoryHTTP.update(
+          accountId,
+          {
+            bankName:
+              normalizedBankName,
+            branchName:
+              normalizedBranchName,
+            accountNumber:
+              Number(
+                normalizedAccountNumber,
+              ),
+          },
+        );
+
         const onboardingUrl =
-          response?.onboardingUrl?.trim();
+          response.onboardingUrl?.trim();
 
         if (!onboardingUrl) {
           throw new Error(
@@ -144,19 +262,29 @@ export function useAccountConnect() {
         setSubmitting(false);
       }
     }, [
-      contactEmail,
+      currentMember?.email,
+      bankName,
+      branchName,
+      accountNumber,
+      createdAccountId,
       submitting,
     ]);
 
   return {
-    contactEmail,
+    bankName,
+    branchName,
+    accountNumber,
+
     submitting,
     error,
     completed,
     canConnect,
 
-    handleContactEmailChange,
+    handleBankNameChange,
+    handleBranchNameChange,
+    handleAccountNumberChange,
+
+    handleBack,
     handleConnect,
-    handleAccountManagement,
   };
 }

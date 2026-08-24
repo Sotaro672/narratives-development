@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Send,
   MessageSquareReply,
+  Link2,
 } from "lucide-react";
 import "./PageStyle.css";
 
@@ -71,6 +72,11 @@ interface PageStyleProps {
   onReply?: () => void | Promise<void>;
   isReplying?: boolean;
   onCreate?: () => void | Promise<void>;
+  onConnect?: () => void | Promise<void>;
+  isConnecting?: boolean;
+  connectLabel?: string;
+  connectBusyLabel?: string;
+  connectDisabled?: boolean;
   onRefresh?: () => void | Promise<void>;
   isRefreshing?: boolean;
   onEdit?: () => void | Promise<void>;
@@ -105,6 +111,11 @@ export default function PageStyle({
   onReply,
   isReplying: controlledIsReplying,
   onCreate,
+  onConnect,
+  isConnecting: controlledIsConnecting,
+  connectLabel = "接続",
+  connectBusyLabel = "接続中",
+  connectDisabled,
   onRefresh,
   isRefreshing: controlledIsRefreshing,
   onEdit,
@@ -134,6 +145,7 @@ export default function PageStyle({
   const [internalIsSaving, setInternalIsSaving] = React.useState(false);
   const [internalIsSending, setInternalIsSending] = React.useState(false);
   const [internalIsReplying, setInternalIsReplying] = React.useState(false);
+  const [internalIsConnecting, setInternalIsConnecting] = React.useState(false);
   const [isListing, setIsListing] = React.useState(false);
   const [internalIsRefreshing, setInternalIsRefreshing] = React.useState(false);
   const [internalIsClosing, setInternalIsClosing] = React.useState(false);
@@ -142,6 +154,7 @@ export default function PageStyle({
   const isSaving = controlledIsSaving ?? internalIsSaving;
   const isSending = controlledIsSending ?? internalIsSending;
   const isReplying = controlledIsReplying ?? internalIsReplying;
+  const isConnecting = controlledIsConnecting ?? internalIsConnecting;
   const isRefreshing = controlledIsRefreshing ?? internalIsRefreshing;
   const isClosing = controlledIsClosing ?? internalIsClosing;
   const isStatusButtonLoading = controlledIsStatusButtonLoading ?? internalIsStatusButtonLoading;
@@ -185,6 +198,20 @@ export default function PageStyle({
       setInternalIsReplying(false);
     }
   }, [onReply, isReplying]);
+
+  const handleConnect = React.useCallback(async () => {
+    if (!onConnect || isConnecting || connectDisabled) return;
+    try {
+      setInternalIsConnecting(true);
+      await onConnect();
+    } finally {
+      setInternalIsConnecting(false);
+    }
+  }, [
+    onConnect,
+    isConnecting,
+    connectDisabled,
+  ]);
 
   const handleList = React.useCallback(async () => {
     if (!onList || isListing) return;
@@ -394,6 +421,28 @@ export default function PageStyle({
                   <Plus size={16} style={{ marginRight: 4 }} />
                 )}
                 {isCreating ? "作成中" : "作成"}
+              </button>
+            )}
+
+            {onConnect && (
+              <button
+                type="button"
+                className="page-header__btn"
+                onClick={() => void handleConnect()}
+                disabled={
+                  isConnecting ||
+                  Boolean(connectDisabled)
+                }
+                aria-busy={isConnecting}
+              >
+                {isConnecting ? (
+                  <SpinnerArrow size={16} />
+                ) : (
+                  <Link2 size={16} style={{ marginRight: 4 }} />
+                )}
+                {isConnecting
+                  ? connectBusyLabel
+                  : connectLabel}
               </button>
             )}
 
