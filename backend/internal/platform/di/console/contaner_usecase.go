@@ -4,7 +4,9 @@ package console
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	listcloudtasksadp "narratives/internal/adapters/out/cloudtasks"
@@ -14,8 +16,17 @@ import (
 	mailadp "narratives/internal/adapters/out/mail"
 	stripeadapter "narratives/internal/adapters/out/stripe"
 	uc "narratives/internal/application/usecase"
+	settlementdom "narratives/internal/domain/settlement"
 	"narratives/internal/infra/arweave"
 	solanainfra "narratives/internal/infra/solana"
+)
+
+const (
+	settlementStripeSecretID = "stripe-secret-key"
+
+	settlementPlatformFeeRateEnv = "SETTLEMENT_PLATFORM_FEE_RATE"
+
+	settlementPlatformFeeBaseEnv = "SETTLEMENT_PLATFORM_FEE_BASE"
 )
 
 type usecases struct {
@@ -41,6 +52,7 @@ type usecases struct {
 	orderDispatchNotificationQueue *listcloudtasksadp.OrderDispatchNotificationQueue
 	paymentUC                      *uc.PaymentUsecase
 	paymentFlowUC                  *uc.PaymentFlowUsecase
+	settlementUC                   *uc.SettlementUsecase
 	permissionUC                   *uc.PermissionUsecase
 	printUC                        *uc.PrintUsecase
 	productionUC                   *uc.ProductionUsecase
@@ -61,6 +73,136 @@ type usecases struct {
 	invitationDeliveryUC           uc.InvitationDeliveryUsecasePort
 	invitationDeliveryQueue        *listcloudtasksadp.InvitationDeliveryQueue
 	authBootstrapSvc               *uc.BootstrapService
+}
+
+func buildSettlementUsecase(
+	ctx context.Context,
+	c *clients,
+	r *repos,
+) (*uc.SettlementUsecase, error) {
+	if c == nil ||
+		c.infra == nil {
+		return nil, errors.New(
+			"di.console: shared infra is nil",
+		)
+	}
+
+	if r == nil ||
+		r.settlementRepo == nil {
+		return nil, errors.New(
+			"di.console: settlement repository is nil",
+		)
+	}
+
+	stripeSecretKey, err :=
+		c.infra.AccessSecretVersion(
+			ctx,
+			settlementStripeSecretID,
+		)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"di.console: load Stripe settlement secret: %w",
+			err,
+		)
+	}
+
+	stripeSecretKey = strings.TrimSpace(
+		stripeSecretKey,
+	)
+	if stripeSecretKey == "" ||
+		!strings.HasPrefix(
+			stripeSecretKey,
+			"sk_",
+		) {
+		return nil, errors.New(
+			"di.console: Stripe settlement secret is invalid",
+		)
+	}
+
+	platformFeeRateText := strings.TrimSpace(
+		os.Getenv(
+			settlementPlatformFeeRateEnv,
+		),
+	)
+	if platformFeeRateText == "" {
+		return nil, fmt.Errorf(
+			"di.console: %s is empty",
+			settlementPlatformFeeRateEnv,
+		)
+	}
+
+	platformFeeRate, err := strconv.Atoi(
+		platformFeeRateText,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"di.console: invalid %s: %w",
+			settlementPlatformFeeRateEnv,
+			err,
+		)
+	}
+
+	platformFeeBaseText := strings.TrimSpace(
+		os.Getenv(
+			settlementPlatformFeeBaseEnv,
+		),
+	)
+	if platformFeeBaseText == "" {
+		return nil, fmt.Errorf(
+			"di.console: %s is empty",
+			settlementPlatformFeeBaseEnv,
+		)
+	}
+
+	platformFeeCalculator, err :=
+		settlementdom.NewPercentagePlatformFeeCalculator(
+			platformFeeRate,
+			settlementdom.PlatformFeeBase(
+				platformFeeBaseText,
+			),
+		)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"di.console: build settlement platform fee calculator: %w",
+			err,
+		)
+	}
+
+	calculator := settlementdom.NewCalculator(
+		platformFeeCalculator,
+	)
+	if calculator == nil {
+		return nil, errors.New(
+			"di.console: settlement calculator is nil",
+		)
+	}
+
+	stripeTransferGateway :=
+		stripeadapter.NewTransferGateway(
+			stripeSecretKey,
+		)
+	if stripeTransferGateway == nil {
+		return nil, errors.New(
+			"di.console: Stripe settlement transfer gateway is nil",
+		)
+	}
+
+	settlementUC := uc.NewSettlementUsecase(
+		uc.NewSettlementUsecaseInput{
+			Repository: r.settlementRepo,
+
+			Calculator: calculator,
+
+			StripeTransferGateway: stripeTransferGateway,
+		},
+	)
+	if settlementUC == nil {
+		return nil, errors.New(
+			"di.console: settlement usecase is nil",
+		)
+	}
+
+	return settlementUC, nil
 }
 
 func buildUsecases(
@@ -205,6 +347,16 @@ func buildUsecases(
 			ResaleRepo:  r.resaleRepo,
 		},
 	)
+
+	settlementUC, err := buildSettlementUsecase(
+		ctx,
+		c,
+		r,
+	)
+	if err != nil {
+		_ = announcementAttachmentStorage.Close()
+		return nil, err
+	}
 
 	listSaveOperationStorage, err := firebaseadp.NewListSaveOperationStorageFromEnv(ctx)
 	if err != nil {
@@ -525,6 +677,7 @@ func buildUsecases(
 		orderDispatchNotificationQueue: orderDispatchNotificationQueue,
 		paymentUC:                      paymentUC,
 		paymentFlowUC:                  paymentFlowUC,
+		settlementUC:                   settlementUC,
 		permissionUC:                   permissionUC,
 		printUC:                        printUC,
 		productionUC:                   productionUC,

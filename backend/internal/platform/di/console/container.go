@@ -51,6 +51,7 @@ type Container struct {
 	OrderDispatchNotificationUC     uc.OrderDispatchNotificationUsecasePort
 	PaymentUC                       *uc.PaymentUsecase
 	PaymentFlowUC                   *uc.PaymentFlowUsecase
+	SettlementUC                    *uc.SettlementUsecase
 	PermissionUC                    *uc.PermissionUsecase
 	PrintUC                         *uc.PrintUsecase
 	ProductionUC                    *uc.ProductionUsecase
@@ -236,6 +237,7 @@ func NewContainer(
 		OrderDispatchNotificationUC:     u.orderDispatchNotificationUC,
 		PaymentUC:                       u.paymentUC,
 		PaymentFlowUC:                   u.paymentFlowUC,
+		SettlementUC:                    u.settlementUC,
 		PermissionUC:                    u.permissionUC,
 		PrintUC:                         u.printUC,
 		ProductionUC:                    u.productionUC,

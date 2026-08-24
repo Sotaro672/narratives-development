@@ -451,6 +451,8 @@ func Register(mux *http.ServeMux, cont *Container) {
 		stripeWH :=
 			mallwebhook.NewStripeWebhookHandler(
 				cont.PaymentUC,
+				cont.OrderUC,
+				cont.SettlementUC,
 				secret,
 			)
 

@@ -85,6 +85,7 @@ type ApplyStripePaymentEventInput struct {
 	PaymentID string
 
 	StripePaymentIntentID string
+	StripeChargeID        string
 
 	Status paymentdom.PaymentStatus
 
@@ -437,6 +438,9 @@ func (u *PaymentUsecase) ApplyStripeEvent(
 	in.PaymentID = strings.TrimSpace(in.PaymentID)
 	in.StripePaymentIntentID = strings.TrimSpace(
 		in.StripePaymentIntentID,
+	)
+	in.StripeChargeID = strings.TrimSpace(
+		in.StripeChargeID,
 	)
 
 	if in.EventID == "" {

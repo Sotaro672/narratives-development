@@ -394,6 +394,13 @@ type paymentMethodSnapshotDoc struct {
 	IsDefault             bool   `firestore:"isDefault"`
 }
 
+type sellerSnapshotDoc struct {
+	BrandID         string `firestore:"brandId"`
+	CompanyID       string `firestore:"companyId"`
+	AccountID       string `firestore:"accountId"`
+	StripeAccountID string `firestore:"stripeAccountId"`
+}
+
 type itemDoc struct {
 	Type string `firestore:"type"`
 
@@ -408,6 +415,8 @@ type itemDoc struct {
 	TokenBlueprintID   string `firestore:"tokenBlueprintId,omitempty"`
 	BrandID            string `firestore:"brandId,omitempty"`
 
+	SellerSnapshot sellerSnapshotDoc `firestore:"sellerSnapshot"`
+
 	ProductBlueprintCategoryPath []string `firestore:"productBlueprintCategoryPath"`
 
 	ConsumptionTaxRate int `firestore:"consumptionTaxRate"`
@@ -417,6 +426,9 @@ type itemDoc struct {
 
 	IsCancelled  bool `firestore:"isCancelled"`
 	IsDispatched bool `firestore:"isDispatched"`
+
+	IsReturnRequested bool       `firestore:"isReturnRequested"`
+	ReturnRequestedAt *time.Time `firestore:"returnRequestedAt,omitempty"`
 
 	Transferred   bool       `firestore:"transferred"`
 	TransferredAt *time.Time `firestore:"transferredAt,omitempty"`
@@ -482,6 +494,12 @@ func docToOrder(
 	}
 
 	for _, item := range doc.Items {
+		var returnRequestedAt *time.Time
+		if item.ReturnRequestedAt != nil {
+			value := item.ReturnRequestedAt.UTC()
+			returnRequestedAt = &value
+		}
+
 		var transferredAt *time.Time
 		if item.TransferredAt != nil {
 			value := item.TransferredAt.UTC()
@@ -504,6 +522,13 @@ func docToOrder(
 				TokenBlueprintID:   item.TokenBlueprintID,
 				BrandID:            item.BrandID,
 
+				SellerSnapshot: orderdom.SellerSnapshot{
+					BrandID:         item.SellerSnapshot.BrandID,
+					CompanyID:       item.SellerSnapshot.CompanyID,
+					AccountID:       item.SellerSnapshot.AccountID,
+					StripeAccountID: item.SellerSnapshot.StripeAccountID,
+				},
+
 				ProductBlueprintCategoryPath: append(
 					[]string(nil),
 					item.ProductBlueprintCategoryPath...,
@@ -516,6 +541,9 @@ func docToOrder(
 
 				IsCancelled:  item.IsCancelled,
 				IsDispatched: item.IsDispatched,
+
+				IsReturnRequested: item.IsReturnRequested,
+				ReturnRequestedAt: returnRequestedAt,
 
 				Transferred:   item.Transferred,
 				TransferredAt: transferredAt,
@@ -660,6 +688,13 @@ func orderItemToDocMap(
 	doc := map[string]any{
 		"type": string(item.Type),
 
+		"sellerSnapshot": map[string]any{
+			"brandId":         item.SellerSnapshot.BrandID,
+			"companyId":       item.SellerSnapshot.CompanyID,
+			"accountId":       item.SellerSnapshot.AccountID,
+			"stripeAccountId": item.SellerSnapshot.StripeAccountID,
+		},
+
 		"productBlueprintCategoryPath": append(
 			[]string(nil),
 			item.ProductBlueprintCategoryPath...,
@@ -667,11 +702,12 @@ func orderItemToDocMap(
 
 		"consumptionTaxRate": item.ConsumptionTaxRate,
 
-		"qty":          item.Qty,
-		"price":        item.Price,
-		"isCancelled":  item.IsCancelled,
-		"isDispatched": item.IsDispatched,
-		"transferred":  item.Transferred,
+		"qty":               item.Qty,
+		"price":             item.Price,
+		"isCancelled":       item.IsCancelled,
+		"isDispatched":      item.IsDispatched,
+		"isReturnRequested": item.IsReturnRequested,
+		"transferred":       item.Transferred,
 	}
 
 	switch item.Type {
@@ -692,6 +728,11 @@ func orderItemToDocMap(
 		doc["tokenBlueprintId"] =
 			item.TokenBlueprintID
 		doc["brandId"] = item.BrandID
+	}
+
+	if item.IsReturnRequested && item.ReturnRequestedAt != nil {
+		doc["returnRequestedAt"] =
+			item.ReturnRequestedAt.UTC()
 	}
 
 	if item.Transferred && item.TransferredAt != nil {
@@ -1031,12 +1072,54 @@ func validateShippingQuoteItemDocumentShape(
 	return amount, nil
 }
 
+func validateSellerSnapshotDocumentShape(
+	raw map[string]any,
+) error {
+	for _, field := range []string{
+		"brandId",
+		"companyId",
+		"accountId",
+	} {
+		if _, ok := requiredOrderString(raw, field); !ok {
+			return ErrInvalidOrderDocumentData
+		}
+	}
+
+	stripeAccountID, ok :=
+		requiredOrderString(
+			raw,
+			"stripeAccountId",
+		)
+	if !ok ||
+		!strings.HasPrefix(
+			stripeAccountID,
+			"acct_",
+		) {
+		return ErrInvalidOrderDocumentData
+	}
+
+	return nil
+}
+
 func validateOrderItemDocumentShape(
 	raw map[string]any,
 ) error {
 	itemType, ok := requiredOrderString(raw, "type")
 	if !ok {
 		return ErrInvalidOrderDocumentData
+	}
+
+	rawSellerSnapshot, ok :=
+		raw["sellerSnapshot"].(map[string]any)
+	if !ok || rawSellerSnapshot == nil {
+		return ErrInvalidOrderDocumentData
+	}
+
+	if err :=
+		validateSellerSnapshotDocumentShape(
+			rawSellerSnapshot,
+		); err != nil {
+		return err
 	}
 
 	productBlueprintCategoryPath, ok :=
@@ -1076,6 +1159,19 @@ func validateOrderItemDocumentShape(
 		return ErrInvalidOrderDocumentData
 	}
 	if _, ok := requiredOrderBool(raw, "isDispatched"); !ok {
+		return ErrInvalidOrderDocumentData
+	}
+
+	isReturnRequested, ok :=
+		requiredOrderBool(raw, "isReturnRequested")
+	if !ok {
+		return ErrInvalidOrderDocumentData
+	}
+
+	_, returnRequestedAtExists, err :=
+		optionalOrderTime(raw, "returnRequestedAt")
+	if err != nil ||
+		isReturnRequested != returnRequestedAtExists {
 		return ErrInvalidOrderDocumentData
 	}
 

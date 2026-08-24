@@ -418,9 +418,10 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(
 //  1. Deduplicates the Stripe event.
 //  2. Reads and validates the current Payment.
 //  3. Verifies the Stripe PaymentIntent ID.
-//  4. Applies a valid status transition.
-//  5. Acquires the post-paid marker if this is the first succeeded state.
-//  6. Records the Stripe event as processed.
+//  4. Persists the latest Stripe Charge ID when available.
+//  5. Applies a valid status transition.
+//  6. Acquires the post-paid marker if this is the first succeeded state.
+//  7. Records the Stripe event as processed.
 func (r *PaymentRepositoryFS) ApplyStripePaymentEvent(
 	ctx context.Context,
 	in usecase.ApplyStripePaymentEventInput,
@@ -435,6 +436,9 @@ func (r *PaymentRepositoryFS) ApplyStripePaymentEvent(
 	in.PaymentID = strings.TrimSpace(in.PaymentID)
 	in.StripePaymentIntentID = strings.TrimSpace(
 		in.StripePaymentIntentID,
+	)
+	in.StripeChargeID = strings.TrimSpace(
+		in.StripeChargeID,
 	)
 
 	if in.EventID == "" {
@@ -550,10 +554,20 @@ func (r *PaymentRepositoryFS) ApplyStripePaymentEvent(
 
 			next := current
 			statusChanged := false
+			stripeChargeChanged := false
 
 			if transitionAllowed {
 				statusChanged =
 					current.Status != in.Status
+
+				if in.StripeChargeID != "" {
+					stripeChargeChanged =
+						current.StripeChargeID !=
+							in.StripeChargeID
+
+					next.StripeChargeID =
+						in.StripeChargeID
+				}
 
 				next.Status = in.Status
 
@@ -613,7 +627,7 @@ func (r *PaymentRepositoryFS) ApplyStripePaymentEvent(
 			updates := make(
 				[]firestore.Update,
 				0,
-				6,
+				7,
 			)
 
 			if transitionAllowed {
@@ -647,6 +661,16 @@ func (r *PaymentRepositoryFS) ApplyStripePaymentEvent(
 						"errorMsg",
 						next.ErrorMsg,
 					)
+
+				if stripeChargeChanged {
+					updates = append(
+						updates,
+						firestore.Update{
+							Path:  "stripeChargeId",
+							Value: next.StripeChargeID,
+						},
+					)
+				}
 			}
 
 			if postPaidRequired {
@@ -679,6 +703,11 @@ func (r *PaymentRepositoryFS) ApplyStripePaymentEvent(
 				"postPaidRequired":      postPaidRequired,
 				"occurredAt":            in.OccurredAt,
 				"processedAt":           processedAt,
+			}
+
+			if in.StripeChargeID != "" {
+				eventData["stripeChargeId"] =
+					in.StripeChargeID
 			}
 
 			if in.ErrorType != nil {

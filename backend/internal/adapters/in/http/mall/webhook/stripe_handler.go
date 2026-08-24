@@ -21,7 +21,9 @@ import (
 const stripeWebhookMaxBodyBytes int64 = 1 << 20 // 1 MiB
 
 type StripeWebhookHandler struct {
-	paymentUC *usecase.PaymentUsecase
+	paymentUC    *usecase.PaymentUsecase
+	orderUC      *usecase.OrderUsecase
+	settlementUC *usecase.SettlementUsecase
 
 	// Stripe webhook signing secret (whsec_...).
 	signingSecret string
@@ -35,10 +37,15 @@ type StripeWebhookHandler struct {
 
 func NewStripeWebhookHandler(
 	paymentUC *usecase.PaymentUsecase,
+	orderUC *usecase.OrderUsecase,
+	settlementUC *usecase.SettlementUsecase,
 	signingSecret string,
 ) http.Handler {
 	return &StripeWebhookHandler{
-		paymentUC:     paymentUC,
+		paymentUC:    paymentUC,
+		orderUC:      orderUC,
+		settlementUC: settlementUC,
+
 		signingSecret: signingSecret,
 		tolerance:     5 * time.Minute,
 		now:           time.Now,
@@ -197,15 +204,18 @@ func (h *StripeWebhookHandler) ServeHTTP(
 	//
 	// - event ID deduplication
 	// - PaymentIntent ID verification
+	// - Stripe Charge ID persistence
 	// - status transition validation
 	// - status update
 	// - first-succeeded post-paid marker acquisition
 	//
-	// A duplicate event is a successful no-op.
-	if _, err := h.paymentUC.ApplyStripeEvent(
+	// A duplicate event is a successful no-op. The returned Payment always
+	// represents the current persisted state.
+	payment, err := h.paymentUC.ApplyStripeEvent(
 		r.Context(),
 		input,
-	); err != nil {
+	)
+	if err != nil {
 		// Return 500 so Stripe retries the event.
 		//
 		// This is also important when Stripe sends the webhook after creating
@@ -218,6 +228,73 @@ func (h *StripeWebhookHandler) ServeHTTP(
 			},
 		)
 		return
+	}
+
+	// A succeeded Payment must always have Account-level Settlement records.
+	//
+	// This is intentionally executed even when ApplyStripeEvent processed a
+	// duplicate succeeded event. EnsureForSucceededPayment is idempotent because
+	// each Settlement ID is deterministic:
+	//
+	//	paymentId + "_" + accountId
+	//
+	// If Order loading or Settlement creation fails, return 500 so Stripe
+	// retries the webhook. Settlement creation is financial state and must not
+	// be handled as a best-effort side effect.
+	if payment != nil &&
+		payment.Status == paymentdom.StatusSucceeded {
+
+		if h.orderUC == nil {
+			writeStripeWebhookJSON(
+				w,
+				http.StatusInternalServerError,
+				map[string]string{
+					"error": "order_usecase_not_initialized",
+				},
+			)
+			return
+		}
+
+		if h.settlementUC == nil {
+			writeStripeWebhookJSON(
+				w,
+				http.StatusInternalServerError,
+				map[string]string{
+					"error": "settlement_usecase_not_initialized",
+				},
+			)
+			return
+		}
+
+		order, err := h.orderUC.GetByID(
+			r.Context(),
+			payment.PaymentID,
+		)
+		if err != nil {
+			writeStripeWebhookJSON(
+				w,
+				http.StatusInternalServerError,
+				map[string]string{
+					"error": "internal_error",
+				},
+			)
+			return
+		}
+
+		if _, err := h.settlementUC.EnsureForSucceededPayment(
+			r.Context(),
+			order,
+			*payment,
+		); err != nil {
+			writeStripeWebhookJSON(
+				w,
+				http.StatusInternalServerError,
+				map[string]string{
+					"error": "internal_error",
+				},
+			)
+			return
+		}
 	}
 
 	writeStripeWebhookJSON(
@@ -438,6 +515,8 @@ type stripePaymentIntent struct {
 
 	Metadata map[string]string `json:"metadata"`
 
+	LatestCharge string `json:"latest_charge"`
+
 	LastPaymentError *stripePaymentError `json:"last_payment_error"`
 
 	CancellationReason string `json:"cancellation_reason"`
@@ -540,6 +619,10 @@ func extractStripePaymentEventInput(
 		PaymentID: paymentID,
 
 		StripePaymentIntentID: stripePaymentIntentID,
+
+		StripeChargeID: strings.TrimSpace(
+			paymentIntent.LatestCharge,
+		),
 
 		Status: paymentStatus,
 

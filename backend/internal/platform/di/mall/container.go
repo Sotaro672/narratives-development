@@ -4,7 +4,10 @@ package mall
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	mallquery "narratives/internal/application/query/mall"
 	mallshared "narratives/internal/application/query/mall/shared"
@@ -25,6 +28,7 @@ import (
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	resaledom "narratives/internal/domain/resale"
+	settlementdom "narratives/internal/domain/settlement"
 	tokenblueprintreview "narratives/internal/domain/tokenBlueprint_review"
 	transferdom "narratives/internal/domain/transfer"
 	transportationdom "narratives/internal/domain/transportation"
@@ -36,6 +40,12 @@ import (
 
 const (
 	StripeWebhookPath = "/mall/webhooks/stripe"
+
+	settlementStripeSecretID = "stripe-secret-key"
+
+	settlementPlatformFeeRateEnv = "SETTLEMENT_PLATFORM_FEE_RATE"
+
+	settlementPlatformFeeBaseEnv = "SETTLEMENT_PLATFORM_FEE_BASE"
 )
 
 type Container struct {
@@ -51,6 +61,7 @@ type Container struct {
 	WalletUC          *usecase.WalletUsecase
 	CartUC            *usecase.CartUsecase
 	PaymentUC         *usecase.PaymentUsecase
+	SettlementUC      *usecase.SettlementUsecase
 	OrderUC           *usecase.OrderUsecase
 	InquiryUC         *usecase.InquiryUsecase
 	AnnouncementUC    *usecase.AnnouncementUsecase
@@ -168,9 +179,11 @@ func NewContainer(
 	brandRepo := outfs.NewBrandRepositoryFS(fsClient)
 	c.BrandRepo = brandRepo
 
+	accountRepo := outfs.NewAccountRepositoryFS(fsClient)
 	companyRepo := outfs.NewCompanyRepositoryFS(fsClient)
 	cartRepo := outfs.NewCartRepositoryFS(fsClient)
 	paymentRepo := outfs.NewPaymentRepositoryFS(fsClient)
+	settlementRepo := outfs.NewSettlementRepositoryFS(fsClient)
 	orderRepo := outfs.NewOrderRepositoryFS(fsClient)
 
 	// The projection repository is shared by PreviewQuery and TransferUsecase.
@@ -358,6 +371,116 @@ func NewContainer(
 		},
 	)
 
+	{
+		stripeSecretKey, err :=
+			infra.AccessSecretVersion(
+				ctx,
+				settlementStripeSecretID,
+			)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"di.mall: load Stripe settlement secret: %w",
+				err,
+			)
+		}
+
+		stripeSecretKey = strings.TrimSpace(
+			stripeSecretKey,
+		)
+		if stripeSecretKey == "" ||
+			!strings.HasPrefix(
+				stripeSecretKey,
+				"sk_",
+			) {
+			return nil, errors.New(
+				"di.mall: Stripe settlement secret is invalid",
+			)
+		}
+
+		platformFeeRateText := strings.TrimSpace(
+			os.Getenv(
+				settlementPlatformFeeRateEnv,
+			),
+		)
+		if platformFeeRateText == "" {
+			return nil, fmt.Errorf(
+				"di.mall: %s is empty",
+				settlementPlatformFeeRateEnv,
+			)
+		}
+
+		platformFeeRate, err := strconv.Atoi(
+			platformFeeRateText,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"di.mall: invalid %s: %w",
+				settlementPlatformFeeRateEnv,
+				err,
+			)
+		}
+
+		platformFeeBaseText := strings.TrimSpace(
+			os.Getenv(
+				settlementPlatformFeeBaseEnv,
+			),
+		)
+		if platformFeeBaseText == "" {
+			return nil, fmt.Errorf(
+				"di.mall: %s is empty",
+				settlementPlatformFeeBaseEnv,
+			)
+		}
+
+		platformFeeCalculator, err :=
+			settlementdom.NewPercentagePlatformFeeCalculator(
+				platformFeeRate,
+				settlementdom.PlatformFeeBase(
+					platformFeeBaseText,
+				),
+			)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"di.mall: build settlement platform fee calculator: %w",
+				err,
+			)
+		}
+
+		calculator := settlementdom.NewCalculator(
+			platformFeeCalculator,
+		)
+		if calculator == nil {
+			return nil, errors.New(
+				"di.mall: settlement calculator is nil",
+			)
+		}
+
+		stripeTransferGateway :=
+			stripeadapter.NewTransferGateway(
+				stripeSecretKey,
+			)
+		if stripeTransferGateway == nil {
+			return nil, errors.New(
+				"di.mall: Stripe settlement transfer gateway is nil",
+			)
+		}
+
+		c.SettlementUC = usecase.NewSettlementUsecase(
+			usecase.NewSettlementUsecaseInput{
+				Repository: settlementRepo,
+
+				Calculator: calculator,
+
+				StripeTransferGateway: stripeTransferGateway,
+			},
+		)
+		if c.SettlementUC == nil {
+			return nil, errors.New(
+				"di.mall: settlement usecase is nil",
+			)
+		}
+	}
+
 	c.OrderUC = usecase.NewOrderUsecase(
 		orderRepo,
 		listRepoFS,
@@ -369,6 +492,10 @@ func NewContainer(
 		c.ShippingQuoteUC,
 	).
 		WithCartRepository(cartRepo).
+		WithSellerRepositories(
+			brandRepo,
+			accountRepo,
+		).
 		WithCancellationNotification(
 			authUserReader,
 			orderCancellationMailer,

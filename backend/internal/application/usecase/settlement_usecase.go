@@ -35,23 +35,7 @@ type SettlementCalculator interface {
 		ctx context.Context,
 		order orderdom.Order,
 		payment paymentdom.Payment,
-	) ([]SettlementAllocation, error)
-}
-
-// SettlementAllocation is one seller Account's share of a Payment.
-//
-// Amount invariant:
-//
-//	GrossAmount = PlatformFeeAmount + TransferAmount
-type SettlementAllocation struct {
-	CompanyID string
-	AccountID string
-
-	StripeAccountID string
-
-	GrossAmount       int
-	PlatformFeeAmount int
-	TransferAmount    int
+	) ([]settlementdom.Allocation, error)
 }
 
 // ============================================================
@@ -868,7 +852,7 @@ func validateSettlementOrderItems(
 
 func validateSettlementAllocations(
 	payment paymentdom.Payment,
-	allocations []SettlementAllocation,
+	allocations []settlementdom.Allocation,
 ) error {
 	if len(allocations) == 0 {
 		return ErrSettlementAllocationEmpty
