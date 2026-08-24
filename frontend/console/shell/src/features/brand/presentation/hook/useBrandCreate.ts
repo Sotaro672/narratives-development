@@ -11,9 +11,9 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import { useAuthContext } from "../../../../auth/application/AuthContext";
+import type { Account } from "../../../../shared/types/account";
 import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
-import { buildConsoleUrl } from "../../../../shared/http/apiBase";
-import { fetchJSON } from "../../../../shared/http/fetchJSON";
+import { accountRepositoryHTTP } from "../../../account/infrastructure/http/accountRepositoryHTTP";
 
 import { validateBrandImage } from "../../application/brandImageValidation";
 import {
@@ -27,37 +27,18 @@ import {
 import { uploadBrandAssetToFirebaseStorage } from "../../infrastructure/storage/brandAssetStorage";
 
 const BRAND_IMAGE_ACCEPT = BRAND_IMAGE_ALLOWED_MIME_TYPES.join(",");
-const ACCOUNT_LIST_URL = buildConsoleUrl("/accounts");
-
-type AccountStatus = "active" | "inactive" | "suspended" | "deleted";
-
-type AccountListItem = {
-  id: string;
-  companyId: string;
-  stripeAccountId: string;
-  bankName: string;
-  branchName: string;
-  accountNumber: number;
-  accountType: string;
-  currency: string;
-  status: AccountStatus;
-};
-
-type AccountListResponse = {
-  items: AccountListItem[];
-};
 
 export type BrandAccountCandidate = {
   id: string;
   label: string;
-  status: AccountStatus;
+  status: Account["status"];
 };
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function buildAccountLabel(account: AccountListItem): string {
+function buildAccountLabel(account: Account): string {
   const bankName = String(account.bankName ?? "").trim();
   const branchName = String(account.branchName ?? "").trim();
   const accountNumber = Number(account.accountNumber ?? 0);
@@ -138,21 +119,11 @@ export function useBrandCreate() {
         setLoadingAccounts(true);
         setAccountLoadError(null);
 
-        const response = await fetchJSON<AccountListResponse>(
-          ACCOUNT_LIST_URL,
-          {
-            method: "GET",
-            auth: "required",
-          },
-        );
+        const accounts = await accountRepositoryHTTP.list();
 
         if (cancelled) {
           return;
         }
-
-        const accounts = Array.isArray(response?.items)
-          ? response.items
-          : [];
 
         const candidates = accounts
           .filter((account) => account.status !== "deleted")

@@ -10,11 +10,11 @@ import {
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { buildConsoleUrl } from "../../../../shared/http/apiBase";
-import { fetchJSON } from "../../../../shared/http/fetchJSON";
+import type { Account } from "../../../../shared/types/account";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import type { Brand, BrandPatch } from "../../../../shared/types/brand";
 
+import { accountRepositoryHTTP } from "../../../account/infrastructure/http/accountRepositoryHTTP";
 import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import { validateBrandImage } from "../../application/brandImageValidation";
 import {
@@ -25,35 +25,11 @@ import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHT
 import { uploadBrandAssetToFirebaseStorage } from "../../infrastructure/storage/brandAssetStorage";
 
 const BRAND_IMAGE_ACCEPT = BRAND_IMAGE_ALLOWED_MIME_TYPES.join(",");
-const ACCOUNT_LIST_URL = buildConsoleUrl("/accounts");
-
-type AccountStatus =
-  | "active"
-  | "inactive"
-  | "suspended"
-  | "deleted";
-
-type AccountListItem = {
-  id: string;
-  companyId: string;
-  stripeAccountId: string;
-  memberId: string;
-  bankName: string;
-  branchName: string;
-  accountNumber: number;
-  accountType: string;
-  currency: string;
-  status: AccountStatus;
-};
-
-type AccountListResponse = {
-  items: AccountListItem[];
-};
 
 export type BrandAccountCandidate = {
   id: string;
   label: string;
-  status: AccountStatus;
+  status: Account["status"];
 };
 
 type BrandDraft = {
@@ -104,7 +80,7 @@ function getErrorMessage(error: unknown): string {
 }
 
 function buildAccountLabel(
-  account: AccountListItem,
+  account: Account,
 ): string {
   const bankName = String(
     account.bankName ?? "",
@@ -271,21 +247,10 @@ export function useBrandDetail() {
         setLoadingAccounts(true);
         setAccountError(null);
 
-        const response =
-          await fetchJSON<AccountListResponse>(
-            ACCOUNT_LIST_URL,
-            {
-              method: "GET",
-              auth: "required",
-            },
-          );
+        const accounts =
+          await accountRepositoryHTTP.list();
 
         if (cancelled) return;
-
-        const accounts =
-          Array.isArray(response?.items)
-            ? response.items
-            : [];
 
         const candidates =
           accounts
