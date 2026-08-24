@@ -1,58 +1,77 @@
-// frontend\console\shell\src\pages\accountManagement.tsx
-
-import * as React from "react";
-import List from "../layout/List/List";
-import { Filter } from "lucide-react";
-import "../styles/account.css";
-
-// Lucide型エラー対策
-const IconFilter = Filter as unknown as React.ComponentType<
-  React.SVGProps<SVGSVGElement>
->;
-
-export default function AccountManagementPage() {
-  const headers: React.ReactNode[] = [
-    "口座ID",
-    "会員ID",
-    <>
-      <span className="inline-flex items-center gap-2">
-        銀行名
-        <button className="lp-th-filter" aria-label="銀行名を絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
-    "支店名",
-    "口座番号",
-    "種別",
-    "通貨",
-    <>
-      <span className="inline-flex items-center gap-2">
-        ステータス
-        <button className="lp-th-filter" aria-label="ステータスを絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
-    "登録日",
-  ];
-
-  return (
-    <div className="p-0">
-      <List
-        title="口座管理"
-        headerCells={headers}
-        showCreateButton={false}
-        showResetButton={false}
-      >
-        <tr>
-          <td colSpan={9}>
-            <div className="account-empty">
-              試作品では口座管理機能は未実装です。
-            </div>
-          </td>
-        </tr>
-      </List>
-    </div>
-  );
+// frontend\console\shell\src\pages\accountManagement.tsx   
+   
+import { useNavigate } from "react-router-dom";   
+import List from "../layout/List/List";   
+import { useAccountManagement } from "../features/account/presentation/hook/useAccountManagement";   
+import "../styles/account.css";   
+   
+export default function AccountManagementPage() {   
+  const navigate = useNavigate();   
+   
+  const {   
+    accounts,   
+    loading,   
+    error,   
+  } = useAccountManagement();   
+   
+  if (loading) {   
+    return (   
+      <div className="p-4">   
+        読み込み中...   
+      </div>   
+    );   
+  }   
+   
+  if (error) {   
+    return (   
+      <div className="p-4 text-red-500">   
+        データ取得エラー: {error.message}   
+      </div>   
+    );   
+  }   
+   
+  const headers = [   
+    "銀行名",   
+    "支店名",   
+    "口座番号",   
+    "種別",   
+    "ステータス",   
+    "登録日",   
+    "更新日",   
+  ];   
+   
+  return (   
+    <div className="p-0">   
+      <List   
+        title="口座管理"   
+        headerCells={headers}   
+        showCreateButton   
+        createLabel="口座追加"   
+        showResetButton={false}   
+        onCreate={() => navigate("/account/create")}   
+      >   
+        {accounts.length === 0 ? (   
+          <tr>   
+            <td colSpan={7}>   
+              <div className="account-empty">   
+                登録されている口座はありません。   
+              </div>   
+            </td>   
+          </tr>   
+        ) : (   
+          accounts.map((account) => (   
+            <tr key={account.id}>   
+              <td>{account.bankName}</td>   
+              <td>{account.branchName}</td>   
+              <td>{account.accountNumberLabel}</td>   
+              <td>{account.accountTypeLabel}</td>   
+              <td>{account.statusLabel}</td>   
+              <td>{account.registeredAt}</td>   
+              <td>{account.updatedAt}</td>   
+            </tr>   
+          ))   
+        )}   
+      </List>   
+    </div>   
+  );   
 }
