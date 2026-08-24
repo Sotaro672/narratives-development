@@ -75,7 +75,6 @@ func buildUsecases(
 	}
 
 	tokenUC := uc.NewTokenUsecase(solanaClient)
-	accountUC := uc.NewAccountUsecase(r.accountRepo)
 
 	if c == nil ||
 		c.infra == nil {
@@ -115,6 +114,27 @@ func buildUsecases(
 			)
 		}
 	}
+
+	if c.infra.AccountGateway == nil {
+		if err :=
+			c.infra.RegisterAccountGatewayFromSecret(
+				ctx,
+			); err != nil {
+			return nil, err
+		}
+
+		if c.infra.AccountGateway == nil {
+			return nil, errors.New(
+				"di.console: stripe account gateway is nil after registration",
+			)
+		}
+	}
+
+	accountUC := uc.NewAccountUsecase(
+		r.accountRepo,
+		r.brandRepo,
+		c.infra.AccountGateway,
+	)
 
 	announcementAvatarRepo := fsrepo.NewAnnouncementAvatarRepositoryFS(c.fsClient)
 	announcementAttachmentRepo := fsrepo.NewAnnouncementAttachmentRepositoryFS(c.fsClient)

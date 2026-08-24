@@ -44,6 +44,7 @@ type Infra struct {
 
 	// Adapters / gateways
 	PaymentMethodGateway *stripeadapter.PaymentMethodGateway
+	AccountGateway       *stripeadapter.AccountGateway
 
 	// Runtime settings
 	SelfBaseURL              string
@@ -390,6 +391,81 @@ func (i *Infra) RegisterPaymentMethodGatewayFromSecret(
 	if err := i.RegisterPaymentMethodGateway(
 		stripeSecretKey,
 		customerStore,
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RegisterAccountGateway registers Stripe account gateway into shared infra.
+func (i *Infra) RegisterAccountGateway(
+	stripeSecretKey string,
+) error {
+	if i == nil {
+		return errors.New(
+			"shared.infra: infra is nil",
+		)
+	}
+
+	stripeSecretKey = strings.Trim(
+		stripeSecretKey,
+		" \t\r\n",
+	)
+	if stripeSecretKey == "" {
+		return errors.New(
+			"shared.infra: stripe secret key is empty",
+		)
+	}
+
+	if !strings.HasPrefix(
+		stripeSecretKey,
+		"sk_",
+	) {
+		return errors.New(
+			"shared.infra: stripe secret key is invalid",
+		)
+	}
+
+	i.AccountGateway =
+		stripeadapter.NewAccountGateway(
+			stripeSecretKey,
+		)
+
+	if i.AccountGateway == nil {
+		return errors.New(
+			"shared.infra: account gateway is nil after registration",
+		)
+	}
+
+	return nil
+}
+
+// RegisterAccountGatewayFromSecret reads stripe-secret-key from Secret Manager
+// and registers the Stripe account gateway.
+func (i *Infra) RegisterAccountGatewayFromSecret(
+	ctx context.Context,
+) error {
+	if i == nil {
+		return errors.New(
+			"shared.infra: infra is nil",
+		)
+	}
+
+	stripeSecretKey, err := i.AccessSecretVersion(
+		ctx,
+		stripeSecretKeySecretID,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"shared.infra: failed to access %s: %w",
+			stripeSecretKeySecretID,
+			err,
+		)
+	}
+
+	if err := i.RegisterAccountGateway(
+		stripeSecretKey,
 	); err != nil {
 		return err
 	}

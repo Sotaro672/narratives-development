@@ -45,6 +45,7 @@ import {
   PermissionList,
   PermissionDetail,
   AccountManagement,
+  AccountConnect,
   TransactionsList,
   TransactionDetail,
   AnnouncementManagementPage,
@@ -172,7 +173,10 @@ export const routes: RouteObject[] = [
   },
   {
     path: "/account",
-    children: [{ path: "", element: <AccountManagement /> }],
+    children: [
+      { path: "", element: <AccountManagement /> },
+      { path: "connect", element: <AccountConnect /> },
+    ],
   },
   {
     path: "/transaction",
