@@ -59,7 +59,7 @@ export { default as PermissionList } from "./permissionList";
 export { default as PermissionDetail } from "./permissionDetail";
 
 export { default as AccountManagement } from "./accountManagement";
-export { default as AccountConnect } from "./accountConnect";
+export { default as AccountConnect } from "./accountCreate";
 
 export { default as TransactionsList } from "./transactionList";
 export { default as TransactionDetail } from "./transactionDetail";
