@@ -179,7 +179,7 @@ var (
 		"payment_flow: stripePaymentMethodId is empty",
 	)
 	ErrPaymentFlowStripePaymentIntentIDEmpty = errors.New(
-		"payment_flow: stripePaymentIntentId is empty",
+		"payment_flow: stripe payment intent ID is empty",
 	)
 	ErrPaymentFlowStripePaymentIntentFailed = errors.New(
 		"payment_flow: stripe payment intent failed",
@@ -265,7 +265,7 @@ type CreatePaymentAndStartResult struct {
 //  2. Read and validate the server-side Order.
 //  3. Compare the requested amount with the authoritative order total.
 //  4. Verify the requested payment method against the Order snapshot.
-//  5. Create and confirm a Stripe PaymentIntent.
+//  5. Create and confirm the Stripe PaymentIntent.
 //  6. Require a non-empty Stripe PaymentIntent ID.
 //  7. Create the payment record with the latest Stripe status.
 //  8. Return ClientSecret when additional authentication is required.
@@ -287,13 +287,12 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 		return nil, ErrPaymentFlowStripeGatewayMissing
 	}
 
-	userID := strings.TrimSpace(in.UserID)
-	paymentID := strings.TrimSpace(in.PaymentID)
-	paymentMethodID := strings.TrimSpace(in.PaymentMethodID)
-	stripeCustomerID := strings.TrimSpace(in.StripeCustomerID)
-	stripePaymentMethodID := strings.TrimSpace(
-		in.StripePaymentMethodID,
-	)
+	userID := in.UserID
+	paymentID := in.PaymentID
+	paymentMethodID := in.PaymentMethodID
+	stripeCustomerID := in.StripeCustomerID
+	stripePaymentMethodID :=
+		in.StripePaymentMethodID
 
 	if userID == "" {
 		return nil, ErrPaymentFlowUserIDEmpty
@@ -339,11 +338,11 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 		)
 	}
 
-	if strings.TrimSpace(order.ID) != paymentID {
+	if order.ID != paymentID {
 		return nil, ErrPaymentFlowOrderIDMismatch
 	}
 
-	if strings.TrimSpace(order.UserID) != userID {
+	if order.UserID != userID {
 		return nil, ErrPaymentFlowOrderOwnerMismatch
 	}
 
@@ -352,19 +351,13 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 	}
 
 	orderPaymentMethodID :=
-		strings.TrimSpace(
-			order.PaymentMethodSnapshot.PaymentMethodID,
-		)
+		order.PaymentMethodSnapshot.PaymentMethodID
 
 	orderStripeCustomerID :=
-		strings.TrimSpace(
-			order.PaymentMethodSnapshot.CustomerID,
-		)
+		order.PaymentMethodSnapshot.CustomerID
 
 	orderStripePaymentMethodID :=
-		strings.TrimSpace(
-			order.PaymentMethodSnapshot.StripePaymentMethodID,
-		)
+		order.PaymentMethodSnapshot.StripePaymentMethodID
 
 	if orderPaymentMethodID == "" ||
 		orderStripeCustomerID == "" ||
@@ -378,9 +371,16 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 		return nil, ErrPaymentFlowPaymentMethodMismatch
 	}
 
-	orderAmount, err := calculatePaymentOrderAmount(order)
+	orderAmount, err :=
+		orderdom.CalculatePaymentAmount(
+			order,
+		)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(
+			"%w: %v",
+			ErrPaymentFlowOrderAmountInvalid,
+			err,
+		)
 	}
 
 	if requestedAmount != orderAmount {
@@ -439,9 +439,9 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 		)
 	}
 
-	stripePaymentIntentID := strings.TrimSpace(
-		pi.StripePaymentIntentID,
-	)
+	stripePaymentIntentID :=
+		pi.StripePaymentIntentID
+
 	if stripePaymentIntentID == "" {
 		if stripeErr != nil {
 			return nil, fmt.Errorf(
@@ -462,15 +462,15 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 	var errorMessage *string
 	var resultErr error
 
-	if value := strings.TrimSpace(pi.ErrorType); value != "" {
+	if value := pi.ErrorType; value != "" {
 		errorType = &value
 	}
 
-	if value := strings.TrimSpace(pi.ErrorCode); value != "" {
+	if value := pi.ErrorCode; value != "" {
 		errorCode = &value
 	}
 
-	if value := strings.TrimSpace(pi.ErrorMessage); value != "" {
+	if value := pi.ErrorMessage; value != "" {
 		errorMessage = &value
 	}
 
@@ -488,9 +488,10 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 			stripeErr,
 		)
 	} else {
-		stripeStatus := strings.ToLower(
-			strings.TrimSpace(pi.Status),
-		)
+		stripeStatus :=
+			strings.ToLower(
+				pi.Status,
+			)
 
 		switch stripeStatus {
 		case "succeeded":
@@ -618,11 +619,6 @@ func (u *PaymentFlowUsecase) EnsureOrderPaidForDispatch(
 		return ErrPaymentFlowStripeGatewayMissing
 	}
 
-	orderID =
-		strings.TrimSpace(
-			orderID,
-		)
-
 	if orderID == "" {
 		return ErrPaymentFlowPaymentIDEmpty
 	}
@@ -640,32 +636,30 @@ func (u *PaymentFlowUsecase) EnsureOrderPaidForDispatch(
 		)
 	}
 
-	if strings.TrimSpace(order.ID) != orderID {
+	if order.ID != orderID {
 		return ErrPaymentFlowOrderIDMismatch
 	}
 
 	orderAmount, err :=
-		calculatePaymentOrderAmount(
+		orderdom.CalculatePaymentAmount(
 			order,
 		)
 	if err != nil {
-		return err
+		return fmt.Errorf(
+			"%w: %v",
+			ErrPaymentFlowOrderAmountInvalid,
+			err,
+		)
 	}
 
 	paymentMethodID :=
-		strings.TrimSpace(
-			order.PaymentMethodSnapshot.PaymentMethodID,
-		)
+		order.PaymentMethodSnapshot.PaymentMethodID
 
 	stripeCustomerID :=
-		strings.TrimSpace(
-			order.PaymentMethodSnapshot.CustomerID,
-		)
+		order.PaymentMethodSnapshot.CustomerID
 
 	stripePaymentMethodID :=
-		strings.TrimSpace(
-			order.PaymentMethodSnapshot.StripePaymentMethodID,
-		)
+		order.PaymentMethodSnapshot.StripePaymentMethodID
 
 	if paymentMethodID == "" {
 		return ErrPaymentFlowPaymentMethodEmpty
@@ -788,8 +782,8 @@ func validateDispatchPaymentMatchesOrder(
 		return ErrPaymentFlowDispatchPaymentMismatch
 	}
 
-	if strings.TrimSpace(payment.PaymentID) !=
-		strings.TrimSpace(order.ID) {
+	if payment.PaymentID !=
+		order.ID {
 		return ErrPaymentFlowDispatchPaymentMismatch
 	}
 
@@ -797,24 +791,18 @@ func validateDispatchPaymentMatchesOrder(
 		return ErrPaymentFlowDispatchPaymentMismatch
 	}
 
-	if strings.TrimSpace(payment.PaymentMethodID) !=
-		strings.TrimSpace(
-			order.PaymentMethodSnapshot.PaymentMethodID,
-		) {
+	if payment.PaymentMethodID !=
+		order.PaymentMethodSnapshot.PaymentMethodID {
 		return ErrPaymentFlowDispatchPaymentMismatch
 	}
 
-	if strings.TrimSpace(payment.StripeCustomerID) !=
-		strings.TrimSpace(
-			order.PaymentMethodSnapshot.CustomerID,
-		) {
+	if payment.StripeCustomerID !=
+		order.PaymentMethodSnapshot.CustomerID {
 		return ErrPaymentFlowDispatchPaymentMismatch
 	}
 
-	if strings.TrimSpace(payment.StripePaymentMethodID) !=
-		strings.TrimSpace(
-			order.PaymentMethodSnapshot.StripePaymentMethodID,
-		) {
+	if payment.StripePaymentMethodID !=
+		order.PaymentMethodSnapshot.StripePaymentMethodID {
 		return ErrPaymentFlowDispatchPaymentMismatch
 	}
 
@@ -896,141 +884,4 @@ func (u *PaymentFlowUsecase) ensureOrderPaidState(
 	}
 
 	return nil
-}
-
-// calculatePaymentOrderAmount calculates the authoritative payment amount
-// from the server-side Order snapshot.
-//
-// The authoritative amount is:
-//
-//	product subtotal
-//	+ shipping quote snapshot amount
-//	+ consumption tax
-//
-// Consumption tax is calculated once per tax rate.
-// Shipping is included in the standard-rate taxable amount.
-//
-// The client-requested amount is never used to construct this total.
-func calculatePaymentOrderAmount(
-	order orderdom.Order,
-) (int, error) {
-	if len(order.Items) == 0 {
-		return 0, ErrPaymentFlowOrderAmountInvalid
-	}
-
-	if len(
-		order.ShippingQuoteSnapshot.Items,
-	) == 0 {
-		return 0, ErrPaymentFlowOrderAmountInvalid
-	}
-
-	if strings.TrimSpace(
-		order.ShippingQuoteSnapshot.Currency,
-	) != orderdom.ShippingQuoteCurrencyJPY {
-		return 0, ErrPaymentFlowOrderAmountInvalid
-	}
-
-	maxInt := int(^uint(0) >> 1)
-
-	shippingAmount :=
-		order.ShippingQuoteSnapshot.Amount
-
-	if shippingAmount < 0 {
-		return 0, ErrPaymentFlowOrderAmountInvalid
-	}
-
-	taxableAmount8 := 0
-
-	taxableAmount10 :=
-		shippingAmount
-
-	for _, item := range order.Items {
-		if item.Price < 0 || item.Qty <= 0 {
-			return 0, ErrPaymentFlowOrderAmountInvalid
-		}
-
-		if item.Price > maxInt/item.Qty {
-			return 0, ErrPaymentFlowOrderAmountInvalid
-		}
-
-		lineAmount :=
-			item.Price *
-				item.Qty
-
-		switch item.ConsumptionTaxRate {
-		case orderdom.ConsumptionTaxRateReduced:
-			if taxableAmount8 >
-				maxInt-lineAmount {
-				return 0, ErrPaymentFlowOrderAmountInvalid
-			}
-
-			taxableAmount8 +=
-				lineAmount
-
-		case orderdom.ConsumptionTaxRateStandard:
-			if taxableAmount10 >
-				maxInt-lineAmount {
-				return 0, ErrPaymentFlowOrderAmountInvalid
-			}
-
-			taxableAmount10 +=
-				lineAmount
-
-		default:
-			return 0, ErrPaymentFlowOrderAmountInvalid
-		}
-	}
-
-	if taxableAmount8 >
-		maxInt/orderdom.ConsumptionTaxRateReduced {
-		return 0, ErrPaymentFlowOrderAmountInvalid
-	}
-
-	if taxableAmount10 >
-		maxInt/orderdom.ConsumptionTaxRateStandard {
-		return 0, ErrPaymentFlowOrderAmountInvalid
-	}
-
-	taxAmount8 :=
-		taxableAmount8 *
-			orderdom.ConsumptionTaxRateReduced /
-			100
-
-	taxAmount10 :=
-		taxableAmount10 *
-			orderdom.ConsumptionTaxRateStandard /
-			100
-
-	if taxAmount8 >
-		maxInt-taxAmount10 {
-		return 0, ErrPaymentFlowOrderAmountInvalid
-	}
-
-	taxAmount :=
-		taxAmount8 +
-			taxAmount10
-
-	if taxableAmount8 >
-		maxInt-taxableAmount10 {
-		return 0, ErrPaymentFlowOrderAmountInvalid
-	}
-
-	subtotalWithShipping :=
-		taxableAmount8 +
-			taxableAmount10
-
-	if subtotalWithShipping >
-		maxInt-taxAmount {
-		return 0, ErrPaymentFlowOrderAmountInvalid
-	}
-
-	total :=
-		subtotalWithShipping +
-			taxAmount
-
-	if total <= 0 {
-		return 0, ErrPaymentFlowOrderAmountInvalid
-	}
-
-	return total, nil
 }
