@@ -1,6 +1,6 @@
 // frontend/console/shell/src/pages/accountConnect.tsx
 
-import { useAccountConnect } from "../features/account/presentation/hook/useAccountConnect";
+import { useAccountConnect } from "../features/account/presentation/hook/useAccountCreate";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../shared/ui/card";
 
