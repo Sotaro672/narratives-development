@@ -232,10 +232,11 @@ func IsValidStatus(
 // stripePaymentIntentID and stripeChargeID must already be known.
 // StripeTransferID is intentionally empty at creation.
 //
-// status may be:
+// status must be pending.
 //
-// - pending
-// - ready
+// Payment success creates a pending Settlement. Ready is intentionally not
+// accepted at creation time because ready means that the seller Account has
+// completed dispatch and payout may be executed.
 //
 // An empty status defaults to pending.
 func New(
@@ -287,8 +288,7 @@ func New(
 		ReversedAt:               nil,
 	}
 
-	if status != StatusPending &&
-		status != StatusReady {
+	if status != StatusPending {
 		return Settlement{},
 			ErrInvalidStatus
 	}
@@ -300,8 +300,11 @@ func New(
 	return s, nil
 }
 
-// MarkReady marks the Settlement as ready to be sent to the Stripe Transfer
-// worker.
+// MarkReady marks a dispatched seller Settlement as ready to be sent to the
+// Stripe Transfer worker.
+//
+// Only pending may become ready. A failed_retryable Settlement has already
+// passed the dispatch boundary and retries directly through StartTransfer.
 func (s *Settlement) MarkReady(
 	now time.Time,
 ) error {
@@ -310,8 +313,7 @@ func (s *Settlement) MarkReady(
 	}
 
 	switch s.Status {
-	case StatusPending,
-		StatusFailedRetryable:
+	case StatusPending:
 
 	default:
 		return ErrInvalidStatusTransition

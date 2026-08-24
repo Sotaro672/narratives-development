@@ -33,16 +33,31 @@ type SettlementTransferEnqueuer interface {
 	) error
 }
 
+// SettlementReadinessMarker is the minimal application contract required by
+// OrderHandler after dispatch has been persisted.
+//
+// Payment success creates Settlement as pending. Only a seller Account whose
+// active Order items have been dispatched may move to ready.
+type SettlementReadinessMarker interface {
+	MarkReadyByPaymentAndAccount(
+		ctx context.Context,
+		paymentID string,
+		accountID string,
+	) (settlementdom.Settlement, error)
+}
+
 // OrderHandler handles:
 //   - GET /orders/items
 //   - GET /orders/undispatched-count
 //   - PATCH /orders/{id}/dispatch
+//   - PATCH /orders/{id}/refund
 //   - GET /orders/{id}
 type OrderHandler struct {
 	uc                     *usecase.OrderUsecase
 	paymentFlowUC          *usecase.PaymentFlowUsecase
 	paymentUC              *usecase.PaymentUsecase
 	settlementUC           *usecase.SettlementUsecase
+	refundUC               *usecase.RefundUsecase
 	settlementQueue        SettlementTransferEnqueuer
 	q                      *orderq.OrderManagementQuery
 	detailQ                *orderq.OrderDetailQuery
@@ -54,6 +69,7 @@ func NewOrderHandler(
 	paymentFlowUC *usecase.PaymentFlowUsecase,
 	paymentUC *usecase.PaymentUsecase,
 	settlementUC *usecase.SettlementUsecase,
+	refundUC *usecase.RefundUsecase,
 	settlementQueue SettlementTransferEnqueuer,
 	q *orderq.OrderManagementQuery,
 	detailQ *orderq.OrderDetailQuery,
@@ -64,6 +80,7 @@ func NewOrderHandler(
 		paymentFlowUC:          paymentFlowUC,
 		paymentUC:              paymentUC,
 		settlementUC:           settlementUC,
+		refundUC:               refundUC,
 		settlementQueue:        settlementQueue,
 		q:                      q,
 		detailQ:                detailQ,
@@ -94,6 +111,19 @@ func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"/dispatch",
 		)
 		h.dispatch(w, r, id)
+		return
+
+	case r.Method == http.MethodPatch &&
+		strings.HasPrefix(r.URL.Path, "/orders/") &&
+		strings.HasSuffix(r.URL.Path, "/refund"):
+		id := strings.TrimSuffix(
+			strings.TrimPrefix(
+				r.URL.Path,
+				"/orders/",
+			),
+			"/refund",
+		)
+		h.refund(w, r, id)
 		return
 
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/orders/"):
@@ -191,7 +221,7 @@ func (h *OrderHandler) dispatch(w http.ResponseWriter, r *http.Request, id strin
 	}
 
 	// 発送時off-session決済は、Stripe webhookより先にsucceededが確定する
-	// 場合がある。そのためWebhookによるSettlement READY作成を前提にせず、
+	// 場合がある。そのためWebhookによるSettlement PENDING作成を前提にせず、
 	// ここでも現在のsucceeded Paymentを取得してSettlementを冪等に保証する。
 	payment, err := h.paymentUC.GetByPaymentID(
 		ctx,
@@ -213,7 +243,7 @@ func (h *OrderHandler) dispatch(w http.ResponseWriter, r *http.Request, id strin
 	}
 
 	// EnsureOrderPaidForDispatch後の最新Orderを再取得する。
-	// SellerSnapshotとPaymentをsource of truthとしてSettlement READYを作成する。
+	// SellerSnapshotとPaymentをsource of truthとしてSettlement PENDINGを作成する。
 	paidOrder, err := h.uc.GetByID(
 		ctx,
 		id,
@@ -223,7 +253,7 @@ func (h *OrderHandler) dispatch(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
-	settlements, err := h.settlementUC.EnsureForSucceededPayment(
+	_, err = h.settlementUC.EnsureForSucceededPayment(
 		ctx,
 		paidOrder,
 		*payment,
@@ -242,17 +272,20 @@ func (h *OrderHandler) dispatch(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
-	// このConsole企業が実際に発送したTargetItemsからAccountIDを抽出し、
-	// そのAccountに対応するSettlementだけをCloud Tasksへ投入する。
+	// このConsole企業が実際に発送したTargetItemsからAccountIDを抽出する。
 	//
-	// Order全体のSettlementを投入してはいけない。
+	// Accountに属する有効なOrder itemがすべて発送済みであることを確認した後、
+	// そのAccountのSettlementだけをPENDING -> READYへ進めてCloud Tasksへ投入する。
+	//
+	// Order全体のSettlementをREADYにしてはいけない。
 	// Company Aの発送でCompany BのSettlementを送金しないため、
 	// SellerSnapshot.CompanyIDとAccountIDの両方を照合する。
 	err = enqueueDispatchedSettlementTransfers(
 		ctx,
 		payment.PaymentID,
+		result.Order.Items,
 		result.TargetItems,
-		settlements,
+		h.settlementUC,
 		h.settlementQueue,
 	)
 	if err != nil {
@@ -281,15 +314,158 @@ func (h *OrderHandler) dispatch(w http.ResponseWriter, r *http.Request, id strin
 	_ = json.NewEncoder(w).Encode(dto)
 }
 
+func (h *OrderHandler) refund(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	id = strings.Trim(id, " \t\r\n/")
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	if h == nil ||
+		h.uc == nil ||
+		h.paymentUC == nil ||
+		h.refundUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "order_refund_not_wired"})
+		return
+	}
+
+	order, err := h.uc.GetByID(
+		ctx,
+		id,
+	)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	if order.ID != id {
+		writeOrderErr(
+			w,
+			orderdom.ErrNotFound,
+		)
+		return
+	}
+
+	if !order.Paid {
+		writeOrderErr(
+			w,
+			orderdom.ErrConflict,
+		)
+		return
+	}
+
+	// 現在のRefundUsecaseはPayment単位の全額返金のみを扱う。
+	//
+	// MallのReturnItemは商品単位の返品申請なので、1商品だけの申請を
+	// Payment全額返金へ直接変換してはいけない。
+	//
+	// キャンセル済み商品を除くすべての商品が返品申請済みの場合だけ、
+	// ConsoleからPayment全額返金を実行できる。
+	if err := validateWholeOrderRefundRequested(
+		order.Items,
+	); err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	result, refundErr :=
+		h.refundUC.RefundByPaymentID(
+			ctx,
+			usecase.RefundByPaymentIDInput{
+				PaymentID: id,
+			},
+		)
+
+	// Stripe purchaser refundが成功してStripeRefundIDが得られた時点で、
+	// PaymentIntentのStatus=succeededは維持したままRefund stateを保存する。
+	//
+	// Transfer Reversalで後続エラーが発生した場合でも、購入者側Refund自体の
+	// 成功事実は失われないようにする。
+	if result != nil &&
+		result.StripeRefundID != "" {
+		_, stateErr :=
+			h.paymentUC.UpdateRefundState(
+				ctx,
+				usecase.UpdatePaymentRefundStateInput{
+					PaymentID: id,
+
+					StripeRefundID: result.StripeRefundID,
+					RefundStatus:   paymentdom.RefundStatusSucceeded,
+					RefundedAmount: result.Amount,
+					RefundedAt: func() *time.Time {
+						now := time.Now().UTC()
+						return &now
+					}(),
+				},
+			)
+		if stateErr != nil {
+			writeOrderErr(w, stateErr)
+			return
+		}
+	}
+
+	if refundErr != nil {
+		writeOrderErr(w, refundErr)
+		return
+	}
+
+	if result == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "refund_result_empty"})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(result)
+}
+
+func validateWholeOrderRefundRequested(
+	items []orderdom.OrderItemSnapshot,
+) error {
+	if len(items) == 0 {
+		return orderdom.ErrNotFound
+	}
+
+	activeCount := 0
+
+	for _, item := range items {
+		if item.IsCancelled {
+			continue
+		}
+
+		activeCount++
+
+		if !item.IsReturnRequested {
+			return orderdom.ErrConflict
+		}
+	}
+
+	if activeCount == 0 {
+		return orderdom.ErrConflict
+	}
+
+	return nil
+}
+
 func enqueueDispatchedSettlementTransfers(
 	ctx context.Context,
 	paymentID string,
+	orderItems []orderdom.OrderItemSnapshot,
 	targetItems []orderdom.OrderItemSnapshot,
-	settlements []settlementdom.Settlement,
+	settlementReadiness SettlementReadinessMarker,
 	queue SettlementTransferEnqueuer,
 ) error {
 	if paymentID == "" {
 		return paymentdom.ErrInvalidPaymentID
+	}
+
+	if settlementReadiness == nil {
+		return errors.New(
+			"order dispatch: settlement readiness is not configured",
+		)
 	}
 
 	if queue == nil {
@@ -298,13 +474,14 @@ func enqueueDispatchedSettlementTransfers(
 		)
 	}
 
-	if len(targetItems) == 0 {
+	if len(orderItems) == 0 ||
+		len(targetItems) == 0 {
 		return orderdom.ErrNotFound
 	}
 
 	// AccountID -> CompanyID
 	//
-	// 同一Accountに複数Brandが紐づく場合でも1回だけenqueueする。
+	// 同一Accountに複数Brandが紐づく場合でも1回だけREADY化・enqueueする。
 	targetAccounts := make(
 		map[string]string,
 	)
@@ -341,42 +518,6 @@ func enqueueDispatchedSettlementTransfers(
 		return orderdom.ErrNotFound
 	}
 
-	settlementByAccount := make(
-		map[string]settlementdom.Settlement,
-		len(targetAccounts),
-	)
-
-	for _, settlement := range settlements {
-		if settlement.PaymentID != paymentID {
-			return errors.New(
-				"order dispatch: settlement payment mismatch",
-			)
-		}
-
-		accountID :=
-			settlement.AccountID
-
-		expectedCompanyID, target :=
-			targetAccounts[accountID]
-		if !target {
-			continue
-		}
-
-		if settlement.CompanyID != expectedCompanyID {
-			return errors.New(
-				"order dispatch: settlement company mismatch",
-			)
-		}
-
-		if _, exists :=
-			settlementByAccount[accountID]; exists {
-			return usecase.ErrSettlementDuplicateAccount
-		}
-
-		settlementByAccount[accountID] =
-			settlement
-	}
-
 	accountIDs := make(
 		[]string,
 		0,
@@ -393,30 +534,110 @@ func enqueueDispatchedSettlementTransfers(
 	sort.Strings(accountIDs)
 
 	for _, accountID := range accountIDs {
-		settlement, ok :=
-			settlementByAccount[accountID]
-		if !ok {
+		companyID :=
+			targetAccounts[accountID]
+
+		allDispatched, err :=
+			areSettlementAccountItemsDispatched(
+				orderItems,
+				companyID,
+				accountID,
+			)
+		if err != nil {
+			return err
+		}
+
+		if !allDispatched {
+			continue
+		}
+
+		settlement, err :=
+			settlementReadiness.MarkReadyByPaymentAndAccount(
+				ctx,
+				paymentID,
+				accountID,
+			)
+		if err != nil {
+			return err
+		}
+
+		if settlement.ID == "" {
+			return settlementdom.ErrInvalidID
+		}
+
+		if settlement.PaymentID != paymentID ||
+			settlement.AccountID != accountID ||
+			settlement.CompanyID != companyID {
 			return errors.New(
-				"order dispatch: settlement for dispatched account not found",
+				"order dispatch: settlement identity mismatch",
 			)
 		}
 
-		settlementID :=
-			settlement.ID
+		switch settlement.Status {
+		case settlementdom.StatusReady,
+			settlementdom.StatusFailedRetryable,
+			settlementdom.StatusTransferring:
 
-		if settlementID == "" {
-			return settlementdom.ErrInvalidID
+		case settlementdom.StatusTransferred,
+			settlementdom.StatusFailed:
+			continue
+
+		default:
+			return settlementdom.ErrInvalidStatusTransition
 		}
 
 		if err := queue.EnqueueSettlementTransfer(
 			ctx,
-			settlementID,
+			settlement.ID,
 		); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func areSettlementAccountItemsDispatched(
+	orderItems []orderdom.OrderItemSnapshot,
+	companyID string,
+	accountID string,
+) (bool, error) {
+	if companyID == "" ||
+		accountID == "" {
+		return false,
+			orderdom.ErrInvalidSellerSnapshot
+	}
+
+	matched := false
+
+	for _, item := range orderItems {
+		if item.IsCancelled {
+			continue
+		}
+
+		if item.SellerSnapshot.AccountID != accountID {
+			continue
+		}
+
+		if item.SellerSnapshot.CompanyID != companyID {
+			return false,
+				orderdom.ErrInvalidSellerSnapshot
+		}
+
+		matched = true
+
+		if item.IsReturnRequested ||
+			!item.IsDispatched {
+			return false, nil
+		}
+	}
+
+	if !matched {
+		return false,
+			orderdom.ErrNotFound
+	}
+
+	return true, nil
 }
 
 func (h *OrderHandler) listItemRows(w http.ResponseWriter, r *http.Request) {
@@ -531,15 +752,32 @@ func writeOrderErr(w http.ResponseWriter, err error) {
 
 	switch {
 	case errors.Is(err, orderdom.ErrInvalidID),
+		errors.Is(err, paymentdom.ErrInvalidPaymentID),
+		errors.Is(err, paymentdom.ErrInvalidRefundStatus),
+		errors.Is(err, paymentdom.ErrInvalidStripeRefundID),
+		errors.Is(err, paymentdom.ErrInvalidRefundedAmount),
+		errors.Is(err, paymentdom.ErrInvalidRefundedAt),
 		errors.Is(err, usecase.ErrPaymentFlowPaymentIDEmpty),
 		errors.Is(err, usecase.ErrPaymentFlowAmountInvalid):
 		code = http.StatusBadRequest
 
 	case errors.Is(err, orderdom.ErrNotFound),
+		errors.Is(err, paymentdom.ErrNotFound),
 		errors.Is(err, usecase.ErrPaymentFlowOrderNotFound):
 		code = http.StatusNotFound
 
 	case errors.Is(err, orderdom.ErrConflict),
+		errors.Is(err, paymentdom.ErrConflict),
+		errors.Is(err, paymentdom.ErrRefundRequiresSucceeded),
+		errors.Is(err, paymentdom.ErrInvalidRefundState),
+		errors.Is(err, settlementdom.ErrInvalidStatusTransition),
+		errors.Is(err, usecase.ErrRefundPaymentNotSucceeded),
+		errors.Is(err, usecase.ErrRefundSettlementAmountMismatch),
+		errors.Is(err, usecase.ErrRefundSettlementPaymentMismatch),
+		errors.Is(err, usecase.ErrRefundSettlementDuplicate),
+		errors.Is(err, usecase.ErrRefundSettlementTransferring),
+		errors.Is(err, usecase.ErrRefundSettlementFailed),
+		errors.Is(err, usecase.ErrRefundSettlementStatusUnsupported),
 		errors.Is(err, usecase.ErrPaymentFlowOrderAlreadyPaid),
 		errors.Is(err, usecase.ErrPaymentFlowPaymentMethodMismatch),
 		errors.Is(err, usecase.ErrPaymentFlowDispatchRequiresAction),

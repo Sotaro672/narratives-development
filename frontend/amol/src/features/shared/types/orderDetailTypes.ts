@@ -4,6 +4,14 @@ import type { WalletOrderShippingQuoteSnapshot } from "../../shared/types/orderT
 
 export type OrderDetailItemType = "list" | "resale";
 
+export type OrderRefundStatus =
+  | "none"
+  | "pending"
+  | "requires_action"
+  | "succeeded"
+  | "failed"
+  | "canceled";
+
 export type OrderDetailColor = {
   name?: string;
   rgb?: number;
@@ -48,6 +56,9 @@ export type OrderDetail = {
   cartId: string;
   shippingQuoteSnapshot: WalletOrderShippingQuoteSnapshot;
   paid: boolean;
+  refundStatus: OrderRefundStatus;
+  refundedAmount: number;
+  refundedAt?: string;
   items: OrderDetailItem[];
   createdAt?: string;
   updatedAt?: string;

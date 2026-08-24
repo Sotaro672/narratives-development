@@ -53,6 +53,7 @@ type usecases struct {
 	paymentUC                      *uc.PaymentUsecase
 	paymentFlowUC                  *uc.PaymentFlowUsecase
 	settlementUC                   *uc.SettlementUsecase
+	refundUC                       *uc.RefundUsecase
 	permissionUC                   *uc.PermissionUsecase
 	printUC                        *uc.PrintUsecase
 	productionUC                   *uc.ProductionUsecase
@@ -205,6 +206,97 @@ func buildSettlementUsecase(
 	return settlementUC, nil
 }
 
+func buildRefundUsecase(
+	ctx context.Context,
+	c *clients,
+	r *repos,
+	paymentUC *uc.PaymentUsecase,
+) (*uc.RefundUsecase, error) {
+	if c == nil ||
+		c.infra == nil {
+		return nil, errors.New(
+			"di.console: shared infra is nil",
+		)
+	}
+
+	if r == nil ||
+		r.settlementRepo == nil {
+		return nil, errors.New(
+			"di.console: settlement repository is nil",
+		)
+	}
+
+	if paymentUC == nil {
+		return nil, errors.New(
+			"di.console: payment usecase is nil",
+		)
+	}
+
+	stripeSecretKey, err :=
+		c.infra.AccessSecretVersion(
+			ctx,
+			settlementStripeSecretID,
+		)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"di.console: load Stripe refund secret: %w",
+			err,
+		)
+	}
+
+	stripeSecretKey = strings.TrimSpace(
+		stripeSecretKey,
+	)
+	if stripeSecretKey == "" ||
+		!strings.HasPrefix(
+			stripeSecretKey,
+			"sk_",
+		) {
+		return nil, errors.New(
+			"di.console: Stripe refund secret is invalid",
+		)
+	}
+
+	stripeRefundGateway :=
+		stripeadapter.NewRefundGateway(
+			stripeSecretKey,
+		)
+	if stripeRefundGateway == nil {
+		return nil, errors.New(
+			"di.console: Stripe refund gateway is nil",
+		)
+	}
+
+	stripeTransferReversalGateway :=
+		stripeadapter.NewTransferReversalGateway(
+			stripeSecretKey,
+		)
+	if stripeTransferReversalGateway == nil {
+		return nil, errors.New(
+			"di.console: Stripe transfer reversal gateway is nil",
+		)
+	}
+
+	refundUC := uc.NewRefundUsecase(
+		uc.NewRefundUsecaseInput{
+			PaymentReader: paymentUC,
+
+			SettlementRepository: r.settlementRepo,
+
+			StripeRefundGateway: stripeRefundGateway,
+
+			StripeTransferReversalGateway: stripeTransferReversalGateway,
+		},
+	)
+	if refundUC == nil {
+		return nil, errors.New(
+			"di.console: refund usecase is nil",
+		)
+	}
+
+	return refundUC, nil
+}
+
 func buildUsecases(
 	ctx context.Context,
 	c *clients,
@@ -352,6 +444,17 @@ func buildUsecases(
 		ctx,
 		c,
 		r,
+	)
+	if err != nil {
+		_ = announcementAttachmentStorage.Close()
+		return nil, err
+	}
+
+	refundUC, err := buildRefundUsecase(
+		ctx,
+		c,
+		r,
+		paymentUC,
 	)
 	if err != nil {
 		_ = announcementAttachmentStorage.Close()
@@ -678,6 +781,7 @@ func buildUsecases(
 		paymentUC:                      paymentUC,
 		paymentFlowUC:                  paymentFlowUC,
 		settlementUC:                   settlementUC,
+		refundUC:                       refundUC,
 		permissionUC:                   permissionUC,
 		printUC:                        printUC,
 		productionUC:                   productionUC,

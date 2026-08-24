@@ -37,6 +37,8 @@ type OrderCancellationMailerPort interface {
 // - /mall/me/orders は Order の取得・作成を担当する
 // - Invoice の作成は /mall/me/invoices の責務
 // - Payment の作成は /mall/me/payments の責務
+// - ReturnItem は返品申請のみを記録し、返金実行は担当しない
+// - Stripe Refund / Transfer Reversal は RefundUsecase の責務
 type OrderUsecase struct {
 	repo                 orderdom.Repository
 	cartRepo             cartdom.Repository
@@ -601,12 +603,32 @@ func (u *OrderUsecase) CancelItem(
 	return order, nil
 }
 
+// ReturnOrderItemInput identifies one Order item for which the purchaser
+// requests a return.
+//
+// This input represents a return request only. It is not a refund instruction.
 type ReturnOrderItemInput struct {
 	ID        string
 	AvatarID  string
 	ItemIndex int
 }
 
+// ReturnItem records a purchaser return request.
+//
+// This method intentionally does not execute:
+//
+// - Stripe Refund
+// - Stripe Transfer Reversal
+// - Payment refund-state mutation
+// - Settlement cancellation or reversal
+//
+// Those financial operations belong to RefundUsecase and must be started from
+// a separate return-approval flow.
+//
+// The current RefundUsecase supports full Payment refunds only, while this
+// method records an item-level request. A caller must therefore not translate
+// one ReturnItem call directly into RefundByPaymentID without first confirming
+// that the approved refund policy covers the complete Payment.
 func (u *OrderUsecase) ReturnItem(
 	ctx context.Context,
 	in ReturnOrderItemInput,

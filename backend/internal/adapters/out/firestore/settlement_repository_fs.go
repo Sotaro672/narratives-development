@@ -346,6 +346,13 @@ func (r *SettlementRepositoryFS) listByField(
 	return result, nil
 }
 
+// Create persists a new pending Settlement.
+//
+// Payment success only creates the financial allocation. It must not make the
+// Settlement ready for payout.
+//
+// ready is reached exclusively through UpdateByID -> MarkReady after the
+// corresponding seller Account's Order items have been dispatched.
 func (r *SettlementRepositoryFS) Create(
 	ctx context.Context,
 	in settlementdom.CreateSettlementInput,
@@ -362,6 +369,17 @@ func (r *SettlementRepositoryFS) Create(
 	if in.SettlementID == "" {
 		return settlementdom.Settlement{},
 			settlementdom.ErrInvalidID
+	}
+
+	if in.Status == "" {
+		in.Status =
+			settlementdom.StatusPending
+	}
+
+	if in.Status !=
+		settlementdom.StatusPending {
+		return settlementdom.Settlement{},
+			settlementdom.ErrInvalidStatus
 	}
 
 	now := time.Now().UTC()
@@ -976,6 +994,10 @@ func applySettlementPatch(
 		return current, false, nil
 
 	case settlementdom.StatusReady:
+		// ready is the explicit dispatch boundary.
+		//
+		// MarkReady only accepts pending -> ready, so payment success alone
+		// cannot make a Settlement eligible for Stripe Transfer.
 		if err := next.MarkReady(
 			now,
 		); err != nil {

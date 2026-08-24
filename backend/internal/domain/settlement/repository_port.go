@@ -16,6 +16,15 @@ import (
 //
 // so that one Payment cannot create duplicate Settlement records for the same
 // seller Account.
+//
+// A newly created Settlement must be pending.
+//
+// Payment success only creates the seller-side financial allocation.
+// ready represents the dispatch boundary and must only be reached later through
+// a validated pending -> ready state transition.
+//
+// Status may be empty so a repository implementation can normalize it to
+// pending. Any non-empty status other than pending must be rejected.
 type CreateSettlementInput struct {
 	SettlementID string
 
@@ -52,6 +61,13 @@ type CreateSettlementInput struct {
 //
 // Status changes should be performed together with the fields required by the
 // target Settlement state.
+//
+// In particular, pending -> ready is the explicit seller dispatch boundary.
+// Payment success alone must not transition a Settlement to ready.
+//
+// failed_retryable does not need to transition back to ready. A retryable
+// Settlement has already crossed the dispatch boundary and may be claimed
+// directly for another transfer attempt.
 type UpdateSettlementInput struct {
 	StripeTransferID *string
 
@@ -73,6 +89,9 @@ type UpdateSettlementInput struct {
 // - ready
 // - failed_retryable
 // - transferring whose UpdatedAt is equal to or before StaleBefore
+//
+// pending must never be returned because pending means the seller Account has
+// not yet crossed the dispatch boundary.
 //
 // A non-stale transferring Settlement must not be returned because another
 // worker may still own its transfer lease.
@@ -142,8 +161,17 @@ type Repository interface {
 	// - failed_retryable
 	// - transferring with UpdatedAt <= StaleBefore
 	//
-	// Implementations must exclude non-stale transferring Settlements and all
-	// terminal states.
+	// Implementations must exclude:
+	//
+	// - pending
+	// - non-stale transferring
+	// - transferred
+	// - failed
+	// - canceled
+	// - reversed
+	//
+	// pending is excluded because it represents a Settlement whose seller
+	// Account has not yet completed the dispatch boundary.
 	//
 	// The result must be deterministic and contain no duplicate Settlement ID.
 	//
@@ -154,10 +182,19 @@ type Repository interface {
 		in ListTransferCandidatesInput,
 	) ([]Settlement, error)
 
-	// Create creates a new Settlement.
+	// Create creates a new pending Settlement.
 	//
 	// Implementations must reject an existing SettlementID instead of
 	// overwriting it so deterministic Settlement IDs provide idempotency.
+	//
+	// Implementations must persist the new Settlement as pending.
+	//
+	// An empty input Status may be normalized to pending. Any non-empty Status
+	// other than pending must be rejected.
+	//
+	// ready must never be accepted during creation because ready means that the
+	// corresponding seller Account has completed dispatch and is eligible for
+	// Stripe Transfer.
 	//
 	// Implementations must reconstruct or validate the complete Settlement
 	// entity before persisting it.
@@ -167,6 +204,15 @@ type Repository interface {
 	) (Settlement, error)
 
 	// UpdateByID partially updates an existing Settlement.
+	//
+	// Implementations must read the current Settlement and execute validated
+	// domain state transitions before persisting the resulting entity.
+	//
+	// In particular:
+	//
+	// - pending -> ready is the seller dispatch boundary
+	// - ready -> transferring begins Stripe Transfer processing
+	// - failed_retryable -> transferring retries a previously eligible transfer
 	//
 	// Implementations must validate the complete resulting Settlement before
 	// persisting the update.

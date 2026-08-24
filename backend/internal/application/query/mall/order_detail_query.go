@@ -9,6 +9,7 @@ import (
 	orderdetaildto "narratives/internal/application/query/mall/dto"
 	mallshared "narratives/internal/application/query/mall/shared"
 	orderdom "narratives/internal/domain/order"
+	paymentdom "narratives/internal/domain/payment"
 )
 
 var (
@@ -17,18 +18,28 @@ var (
 	)
 )
 
+type OrderDetailPaymentReader interface {
+	GetByPaymentID(
+		ctx context.Context,
+		paymentID string,
+	) (*paymentdom.Payment, error)
+}
+
 type OrderDetailQuery struct {
 	inventoryBlueprintResolver HistoryInventoryBlueprintResolver
 	displayResolver            mallshared.MallDisplayResolver
+	paymentReader              OrderDetailPaymentReader
 }
 
 func NewOrderDetailQuery(
 	inventoryBlueprintResolver HistoryInventoryBlueprintResolver,
 	displayResolver mallshared.MallDisplayResolver,
+	paymentReader OrderDetailPaymentReader,
 ) *OrderDetailQuery {
 	return &OrderDetailQuery{
 		inventoryBlueprintResolver: inventoryBlueprintResolver,
 		displayResolver:            displayResolver,
+		paymentReader:              paymentReader,
 	}
 }
 
@@ -55,6 +66,10 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 
 		Paid: in.Paid,
 
+		RefundStatus: string(
+			paymentdom.RefundStatusNone,
+		),
+
 		Items: make(
 			[]orderdetaildto.OrderDetailItem,
 			0,
@@ -64,6 +79,61 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 
 	if !in.CreatedAt.IsZero() {
 		out.CreatedAt = in.CreatedAt.UTC().Format(time.RFC3339Nano)
+	}
+
+	// An unpaid Order may legitimately have no Payment document yet.
+	//
+	// Once Order.Paid is true, Payment becomes authoritative for Refund state.
+	// Refund lifecycle is intentionally independent from PaymentIntent status:
+	// a successfully refunded Payment still has Payment.Status=succeeded.
+	if in.Paid {
+		if q.paymentReader == nil {
+			return orderdetaildto.OrderDetail{},
+				ErrOrderDetailQueryNotConfigured
+		}
+
+		payment, err := q.paymentReader.GetByPaymentID(
+			ctx,
+			in.ID,
+		)
+		if err != nil {
+			return orderdetaildto.OrderDetail{}, err
+		}
+
+		if payment == nil ||
+			payment.PaymentID != in.ID {
+			return orderdetaildto.OrderDetail{},
+				paymentdom.ErrNotFound
+		}
+
+		refundStatus := payment.RefundStatus
+		if refundStatus == "" {
+			// Legacy Payment documents created before Refund fields existed are
+			// interpreted as not refunded.
+			refundStatus =
+				paymentdom.RefundStatusNone
+		}
+
+		if !paymentdom.IsValidRefundStatus(
+			refundStatus,
+		) {
+			return orderdetaildto.OrderDetail{},
+				paymentdom.ErrInvalidRefundStatus
+		}
+
+		out.RefundStatus =
+			string(refundStatus)
+
+		out.RefundedAmount =
+			payment.RefundedAmount
+
+		if payment.RefundedAt != nil &&
+			!payment.RefundedAt.IsZero() {
+			out.RefundedAt =
+				payment.RefundedAt.
+					UTC().
+					Format(time.RFC3339Nano)
+		}
 	}
 
 	blueprintCache := make(map[string]historyBlueprintIDs)

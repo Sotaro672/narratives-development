@@ -633,6 +633,7 @@ func NewContainer(
 		c.OrderDetailQ = mallquery.NewOrderDetailQuery(
 			inventoryRepo,
 			mallDisplayResolver,
+			c.PaymentUC,
 		)
 	}
 

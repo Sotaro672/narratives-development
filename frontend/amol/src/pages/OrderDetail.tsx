@@ -38,6 +38,27 @@ function getOrderTotal(order: OrderDetailType): number {
 }
 
 function getOrderStatusLabel(order: OrderDetailType): string {
+  switch (order.refundStatus) {
+    case "pending":
+      return "返金処理中";
+
+    case "requires_action":
+      return "返金対応待ち";
+
+    case "succeeded":
+      return "返金済み";
+
+    case "failed":
+      return "返金失敗";
+
+    case "canceled":
+      return "返金キャンセル";
+
+    case "none":
+    default:
+      break;
+  }
+
   if (order.items.length === 0) {
     return "商品なし";
   }
@@ -95,6 +116,29 @@ function getOrderStatusLabel(order: OrderDetailType): string {
   }
 
   return order.paid ? "決済済み" : "未決済";
+}
+
+function getRefundStatusLabel(order: OrderDetailType): string {
+  switch (order.refundStatus) {
+    case "pending":
+      return "返金処理中";
+
+    case "requires_action":
+      return "返金対応待ち";
+
+    case "succeeded":
+      return "返金済み";
+
+    case "failed":
+      return "返金失敗";
+
+    case "canceled":
+      return "返金キャンセル";
+
+    case "none":
+    default:
+      return "未返金";
+  }
 }
 
 function getItemStatusLabel(item: OrderDetailItem): string {
@@ -597,6 +641,35 @@ export default function OrderDetail() {
                       : "未決済"}
                   </dd>
                 </div>
+
+                <div className="order-detail-page__detail-row">
+                  <dt>返金状況</dt>
+                  <dd>
+                    {getRefundStatusLabel(order)}
+                  </dd>
+                </div>
+
+                {order.refundedAmount > 0 ? (
+                  <div className="order-detail-page__detail-row">
+                    <dt>返金額</dt>
+                    <dd>
+                      {formatAmount(
+                        order.refundedAmount,
+                      )}
+                    </dd>
+                  </div>
+                ) : null}
+
+                {order.refundedAt ? (
+                  <div className="order-detail-page__detail-row">
+                    <dt>返金日時</dt>
+                    <dd>
+                      {formatDateTime(
+                        order.refundedAt,
+                      )}
+                    </dd>
+                  </div>
+                ) : null}
               </dl>
             </div>
           </div>

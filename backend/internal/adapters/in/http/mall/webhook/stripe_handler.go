@@ -2,6 +2,7 @@
 package mallHandler
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -173,6 +174,46 @@ func (h *StripeWebhookHandler) ServeHTTP(
 		return
 	}
 
+	refundInput, refundSupported, err :=
+		extractStripeRefundEventInput(event)
+	if err != nil {
+		writeStripeWebhookJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid_stripe_refund_event",
+			},
+		)
+		return
+	}
+
+	if refundSupported {
+		if err := h.applyStripeRefundEvent(
+			r.Context(),
+			refundInput,
+		); err != nil {
+			// Refund state is financial state. Return 500 so Stripe retries
+			// transient persistence failures instead of acknowledging them.
+			writeStripeWebhookJSON(
+				w,
+				http.StatusInternalServerError,
+				map[string]string{
+					"error": "internal_error",
+				},
+			)
+			return
+		}
+
+		writeStripeWebhookJSON(
+			w,
+			http.StatusOK,
+			map[string]string{
+				"status": "ok",
+			},
+		)
+		return
+	}
+
 	input, supported, err :=
 		extractStripePaymentEventInput(event)
 	if err != nil {
@@ -186,7 +227,7 @@ func (h *StripeWebhookHandler) ServeHTTP(
 		return
 	}
 
-	// Unsupported event types and PaymentIntents that do not belong to this
+	// Unsupported event types and Stripe objects that do not belong to this
 	// application are acknowledged so Stripe does not retry them.
 	if !supported {
 		writeStripeWebhookJSON(
@@ -304,6 +345,145 @@ func (h *StripeWebhookHandler) ServeHTTP(
 			"status": "ok",
 		},
 	)
+}
+
+// stripeRefundEventInput is the application-side representation of a verified
+// Stripe Refund webhook.
+//
+// Refund lifecycle is intentionally separate from PaymentIntent lifecycle.
+type stripeRefundEventInput struct {
+	PaymentID string
+
+	StripeRefundID        string
+	StripeChargeID        string
+	StripePaymentIntentID string
+
+	Status paymentdom.RefundStatus
+	Amount int
+
+	OccurredAt time.Time
+}
+
+// applyStripeRefundEvent validates that the Refund belongs to the authoritative
+// Payment and then persists the refund state through PaymentUsecase.
+//
+// The current AMOL refund flow supports one full Refund per Payment.
+//
+// Stripe Refund webhooks must never change Payment.Status. The original
+// PaymentIntent remains succeeded after a refund.
+func (h *StripeWebhookHandler) applyStripeRefundEvent(
+	ctx context.Context,
+	in stripeRefundEventInput,
+) error {
+	if h == nil ||
+		h.paymentUC == nil {
+		return errors.New(
+			"stripe webhook: payment usecase is not initialized",
+		)
+	}
+
+	current, err := h.paymentUC.GetByPaymentID(
+		ctx,
+		in.PaymentID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if current == nil ||
+		current.PaymentID != in.PaymentID {
+		return paymentdom.ErrNotFound
+	}
+
+	if current.Status != paymentdom.StatusSucceeded {
+		return paymentdom.ErrRefundRequiresSucceeded
+	}
+
+	if current.StripeChargeID == "" ||
+		current.StripeChargeID !=
+			in.StripeChargeID {
+		return paymentdom.ErrInvalidStripeChargeID
+	}
+
+	if current.StripePaymentIntentID == "" ||
+		current.StripePaymentIntentID !=
+			in.StripePaymentIntentID {
+		return paymentdom.ErrInvalidStripePaymentIntent
+	}
+
+	if in.Amount <= 0 ||
+		in.Amount != current.Amount {
+		// Partial refunds are intentionally rejected by the current Payment
+		// model. Item-level partial refunds require a separate Refund aggregate.
+		return paymentdom.ErrInvalidRefundedAmount
+	}
+
+	if current.RefundStatus != "" &&
+		current.RefundStatus !=
+			paymentdom.RefundStatusNone {
+
+		if current.StripeRefundID == "" {
+			return paymentdom.ErrInvalidRefundState
+		}
+
+		if current.StripeRefundID !=
+			in.StripeRefundID {
+			// The current Payment model stores one full Refund only.
+			// A second Refund object must not silently overwrite the first.
+			return paymentdom.ErrConflict
+		}
+
+		if current.RefundStatus == in.Status {
+			// Duplicate webhook or an equivalent later snapshot.
+			return nil
+		}
+
+		if isTerminalRefundStatus(
+			current.RefundStatus,
+		) {
+			// Stripe webhook delivery order is not guaranteed. Do not allow an
+			// older non-terminal snapshot to regress a terminal Refund state.
+			return nil
+		}
+	}
+
+	refundedAmount := 0
+	var refundedAt *time.Time
+
+	if in.Status ==
+		paymentdom.RefundStatusSucceeded {
+		refundedAmount = in.Amount
+
+		value := in.OccurredAt.UTC()
+		refundedAt = &value
+	}
+
+	_, err = h.paymentUC.UpdateRefundState(
+		ctx,
+		usecase.UpdatePaymentRefundStateInput{
+			PaymentID: in.PaymentID,
+
+			StripeRefundID: in.StripeRefundID,
+			RefundStatus:   in.Status,
+			RefundedAmount: refundedAmount,
+			RefundedAt:     refundedAt,
+		},
+	)
+	return err
+}
+
+func isTerminalRefundStatus(
+	status paymentdom.RefundStatus,
+) bool {
+	switch status {
+	case paymentdom.RefundStatusSucceeded,
+		paymentdom.RefundStatusFailed,
+		paymentdom.RefundStatusCanceled:
+		return true
+
+	default:
+		return false
+	}
 }
 
 func writeStripeWebhookJSON(
@@ -508,24 +688,249 @@ type stripeEventData struct {
 	Object json.RawMessage `json:"object"`
 }
 
+type stripeRefund struct {
+	ID            string            `json:"id"`
+	Object        string            `json:"object"`
+	Amount        int               `json:"amount"`
+	Charge        string            `json:"charge"`
+	Created       int64             `json:"created"`
+	Status        string            `json:"status"`
+	PaymentIntent string            `json:"payment_intent"`
+	Metadata      map[string]string `json:"metadata"`
+}
+
 type stripePaymentIntent struct {
-	ID      string `json:"id"`
-	Status  string `json:"status"`
-	Created int64  `json:"created"`
-
-	Metadata map[string]string `json:"metadata"`
-
-	LatestCharge string `json:"latest_charge"`
-
-	LastPaymentError *stripePaymentError `json:"last_payment_error"`
-
-	CancellationReason string `json:"cancellation_reason"`
+	ID                 string              `json:"id"`
+	Status             string              `json:"status"`
+	Created            int64               `json:"created"`
+	Metadata           map[string]string   `json:"metadata"`
+	LatestCharge       string              `json:"latest_charge"`
+	LastPaymentError   *stripePaymentError `json:"last_payment_error"`
+	CancellationReason string              `json:"cancellation_reason"`
 }
 
 type stripePaymentError struct {
 	Type    string `json:"type"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// extractStripeRefundEventInput converts a supported, verified Stripe Refund
+// event into the application-level refund input.
+//
+// Supported events:
+//
+// - refund.created
+// - refund.failed
+// - refund.updated
+//
+// Refund events without this application's paymentId/orderId metadata are
+// acknowledged as unsupported because Payment cannot be resolved safely.
+func extractStripeRefundEventInput(
+	event stripeEvent,
+) (
+	input stripeRefundEventInput,
+	supported bool,
+	err error,
+) {
+	eventType := strings.TrimSpace(
+		event.Type,
+	)
+
+	switch eventType {
+	case "refund.created",
+		"refund.failed",
+		"refund.updated":
+
+	default:
+		return stripeRefundEventInput{},
+			false,
+			nil
+	}
+
+	eventID := strings.TrimSpace(
+		event.ID,
+	)
+	if eventID == "" {
+		return stripeRefundEventInput{},
+			false,
+			errors.New(
+				"Stripe event id is empty",
+			)
+	}
+
+	var refund stripeRefund
+	if err := json.Unmarshal(
+		event.Data.Object,
+		&refund,
+	); err != nil {
+		return stripeRefundEventInput{},
+			false,
+			fmt.Errorf(
+				"decode Stripe Refund: %w",
+				err,
+			)
+	}
+
+	if strings.TrimSpace(
+		refund.Object,
+	) != "refund" {
+		return stripeRefundEventInput{},
+			false,
+			errors.New(
+				"Stripe refund object type is invalid",
+			)
+	}
+
+	stripeRefundID := strings.TrimSpace(
+		refund.ID,
+	)
+	if stripeRefundID == "" ||
+		!strings.HasPrefix(
+			stripeRefundID,
+			"re_",
+		) {
+		return stripeRefundEventInput{},
+			false,
+			errors.New(
+				"Stripe refund id is invalid",
+			)
+	}
+
+	paymentID := firstNonEmpty(
+		refund.Metadata["paymentId"],
+		refund.Metadata["orderId"],
+	)
+	if paymentID == "" {
+		// A Refund created outside the AMOL flow might not contain AMOL
+		// metadata. It cannot be mapped safely with the current repository
+		// contract, so acknowledge it as unrelated instead of guessing.
+		return stripeRefundEventInput{},
+			false,
+			nil
+	}
+
+	stripeChargeID := strings.TrimSpace(
+		refund.Charge,
+	)
+	if stripeChargeID == "" ||
+		!strings.HasPrefix(
+			stripeChargeID,
+			"ch_",
+		) {
+		return stripeRefundEventInput{},
+			false,
+			errors.New(
+				"Stripe refund charge id is invalid",
+			)
+	}
+
+	stripePaymentIntentID := strings.TrimSpace(
+		refund.PaymentIntent,
+	)
+	if stripePaymentIntentID == "" ||
+		!strings.HasPrefix(
+			stripePaymentIntentID,
+			"pi_",
+		) {
+		return stripeRefundEventInput{},
+			false,
+			errors.New(
+				"Stripe refund payment intent id is invalid",
+			)
+	}
+
+	if refund.Amount <= 0 {
+		return stripeRefundEventInput{},
+			false,
+			errors.New(
+				"Stripe refund amount is invalid",
+			)
+	}
+
+	refundStatus, ok :=
+		refundStatusFromStripe(
+			refund.Status,
+		)
+	if !ok {
+		return stripeRefundEventInput{},
+			false,
+			errors.New(
+				"Stripe refund status is invalid",
+			)
+	}
+
+	if eventType == "refund.failed" &&
+		refundStatus != paymentdom.RefundStatusFailed {
+		return stripeRefundEventInput{},
+			false,
+			errors.New(
+				"Stripe refund.failed status mismatch",
+			)
+	}
+
+	occurredUnix := event.Created
+	if occurredUnix <= 0 {
+		occurredUnix = refund.Created
+	}
+	if occurredUnix <= 0 {
+		return stripeRefundEventInput{},
+			false,
+			errors.New(
+				"Stripe refund event created timestamp is invalid",
+			)
+	}
+
+	return stripeRefundEventInput{
+		PaymentID: paymentID,
+
+		StripeRefundID:        stripeRefundID,
+		StripeChargeID:        stripeChargeID,
+		StripePaymentIntentID: stripePaymentIntentID,
+
+		Status: refundStatus,
+		Amount: refund.Amount,
+
+		OccurredAt: time.Unix(
+			occurredUnix,
+			0,
+		).UTC(),
+	}, true, nil
+}
+
+func refundStatusFromStripe(
+	status string,
+) (
+	paymentdom.RefundStatus,
+	bool,
+) {
+	switch strings.TrimSpace(
+		status,
+	) {
+	case "pending":
+		return paymentdom.RefundStatusPending,
+			true
+
+	case "requires_action":
+		return paymentdom.RefundStatusRequiresAction,
+			true
+
+	case "succeeded":
+		return paymentdom.RefundStatusSucceeded,
+			true
+
+	case "failed":
+		return paymentdom.RefundStatusFailed,
+			true
+
+	case "canceled":
+		return paymentdom.RefundStatusCanceled,
+			true
+
+	default:
+		return "",
+			false
+	}
 }
 
 // extractStripePaymentEventInput converts a supported, verified Stripe event
@@ -614,12 +1019,9 @@ func extractStripePaymentEventInput(
 		)
 
 	return usecase.ApplyStripePaymentEventInput{
-		EventID: eventID,
-
-		PaymentID: paymentID,
-
+		EventID:               eventID,
+		PaymentID:             paymentID,
 		StripePaymentIntentID: stripePaymentIntentID,
-
 		StripeChargeID: strings.TrimSpace(
 			paymentIntent.LatestCharge,
 		),

@@ -28,6 +28,12 @@ import (
 //   - GET   /mall/me/orders/{orderId}
 //   - PATCH /mall/me/orders/{orderId}/items/{itemIndex}/cancel
 //   - PATCH /mall/me/orders/{orderId}/items/{itemIndex}/return
+//
+// The Mall return endpoint records a purchaser return request only.
+// It must not execute Stripe Refund, Stripe Transfer Reversal, Payment refund
+// state mutation, or Settlement cancellation/reversal.
+//
+// Financial refund execution belongs to the Console-side approval flow.
 type OrderHandler struct {
 	uc               *usecase.OrderUsecase
 	historyQuery     OrderHistoryQuery
@@ -446,6 +452,13 @@ func (h *OrderHandler) returnMe(
 		return
 	}
 
+	// Mallから行うのは返品申請の記録だけとする。
+	//
+	// ReturnItemはOrder itemのIsReturnRequestedを更新する責務だけを持ち、
+	// Stripe Refund / Transfer Reversalは実行しない。
+	//
+	// 現在のRefundUsecaseはPayment単位の全額返金のみを扱うため、
+	// item単位の返品申請をここから直接RefundByPaymentIDへ接続してはいけない。
 	out, err :=
 		h.uc.ReturnItem(
 			ctx,

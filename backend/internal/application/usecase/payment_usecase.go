@@ -5,6 +5,7 @@ package usecase
 責務:
 - Paymentの取得・作成・部分更新を提供する。
 - Stripe webhook eventによるPayment status同期を提供する。
+- Refund stateの専用更新経路を提供する。
 - succeededへの初回遷移時だけ支払い後処理を実行する。
 
 前提:
@@ -16,6 +17,8 @@ package usecase
 - StripePaymentIntentIDはpendingを含む全statusで必須
 - TransferGroupはpendingを含む全statusで必須
 - StripeChargeIDはStripe Charge作成前は空を許容する
+- PaymentStatusとRefundStatusは独立して管理する
+- Refund成功後もPaymentStatusはsucceededを維持する
 
 Stripe状態同期:
 - Stripe由来のstatus更新はApplyStripeEventを使用する。
@@ -24,6 +27,12 @@ Stripe状態同期:
   Firestore Transaction内で原子的に処理する。
 - PostPaidRequiredはPaymentが初めてsucceededへ遷移した
   1回だけtrueになる。
+
+Refund状態更新:
+- 一般的なUpdateからRefund stateを変更してはならない。
+- Refund stateはUpdateRefundStateを使用する。
+- StripeRefundID / RefundStatus / RefundedAmount / RefundedAtは
+  1つの論理状態としてまとめて更新する。
 
 支払い成功後の処理:
 0) order.Paid=true更新
@@ -195,6 +204,9 @@ var (
 	ErrPaymentStripeEventResultEmpty = errors.New(
 		"payment: stripe event application result is empty",
 	)
+	ErrPaymentRefundUpdateRequiresRefundState = errors.New(
+		"payment: refund update requires refund state application",
+	)
 )
 
 // ============================================================
@@ -342,6 +354,15 @@ func (u *PaymentUsecase) Create(
 		return nil, paymentdom.ErrInvalidStripeChargeID
 	}
 
+	if payment.StripeRefundID != "" ||
+		payment.RefundedAmount != 0 ||
+		payment.RefundedAt != nil ||
+		(payment.RefundStatus != "" &&
+			payment.RefundStatus !=
+				paymentdom.RefundStatusNone) {
+		return nil, paymentdom.ErrInvalidRefundState
+	}
+
 	in := paymentdom.CreatePaymentInput{
 		PaymentID:             payment.PaymentID,
 		PaymentMethodID:       payment.PaymentMethodID,
@@ -375,6 +396,10 @@ func (u *PaymentUsecase) Create(
 // Stripe status must not be changed through this method. Stripe-originated
 // status changes must use ApplyStripeEvent so that event deduplication,
 // transition validation, and post-paid marker acquisition happen atomically.
+//
+// Refund state must also not be changed through this method.
+// StripeRefundID, RefundStatus, RefundedAmount, and RefundedAt must be changed
+// together through UpdateRefundState.
 func (u *PaymentUsecase) Update(
 	ctx context.Context,
 	paymentID string,
@@ -391,6 +416,13 @@ func (u *PaymentUsecase) Update(
 
 	if patch.Status != nil {
 		return nil, ErrPaymentStatusUpdateRequiresStripeEvent
+	}
+
+	if patch.StripeRefundID != nil ||
+		patch.RefundStatus != nil ||
+		patch.RefundedAmount != nil ||
+		patch.RefundedAt != nil {
+		return nil, ErrPaymentRefundUpdateRequiresRefundState
 	}
 
 	if patch.StripePaymentIntentID != nil &&
@@ -413,6 +445,115 @@ func (u *PaymentUsecase) Update(
 		paymentID,
 		patch,
 	)
+}
+
+// UpdatePaymentRefundStateInput represents one complete Payment refund state.
+//
+// Refund state is independent from PaymentStatus.
+// A refunded Payment therefore remains StatusSucceeded.
+type UpdatePaymentRefundStateInput struct {
+	PaymentID string
+
+	StripeRefundID string
+	RefundStatus   paymentdom.RefundStatus
+	RefundedAmount int
+	RefundedAt     *time.Time
+}
+
+// UpdateRefundState applies one complete refund state to an existing Payment.
+//
+// StripeRefundID, RefundStatus, RefundedAmount, and RefundedAt are validated
+// together through Payment.SetRefundState before Repository persistence.
+//
+// The current AMOL refund flow supports full refunds only. Therefore a
+// succeeded refund requires RefundedAmount == Payment.Amount.
+//
+// PaymentStatus is intentionally not changed here. A successful refund keeps
+// the original PaymentIntent lifecycle state as succeeded.
+func (u *PaymentUsecase) UpdateRefundState(
+	ctx context.Context,
+	in UpdatePaymentRefundStateInput,
+) (*paymentdom.Payment, error) {
+	if u == nil || u.repo == nil {
+		return nil, paymentdom.ErrNotFound
+	}
+
+	paymentID := strings.TrimSpace(
+		in.PaymentID,
+	)
+	if paymentID == "" {
+		return nil, paymentdom.ErrInvalidPaymentID
+	}
+
+	if in.RefundStatus == paymentdom.RefundStatusNone ||
+		!paymentdom.IsValidRefundStatus(
+			in.RefundStatus,
+		) {
+		return nil, paymentdom.ErrInvalidRefundStatus
+	}
+
+	stripeRefundID := strings.TrimSpace(
+		in.StripeRefundID,
+	)
+	if stripeRefundID == "" {
+		return nil, paymentdom.ErrInvalidStripeRefundID
+	}
+
+	current, err := u.repo.GetByPaymentID(
+		ctx,
+		paymentID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if current == nil ||
+		current.PaymentID != paymentID {
+		return nil, paymentdom.ErrNotFound
+	}
+
+	refundedAt := in.RefundedAt
+	if refundedAt != nil {
+		value := refundedAt.UTC()
+		refundedAt = &value
+	}
+
+	next := *current
+
+	if err := next.SetRefundState(
+		stripeRefundID,
+		in.RefundStatus,
+		in.RefundedAmount,
+		refundedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	refundStatus := next.RefundStatus
+	refundedAmount := next.RefundedAmount
+
+	patch := paymentdom.UpdatePaymentInput{
+		StripeRefundID: &next.StripeRefundID,
+		RefundStatus:   &refundStatus,
+		RefundedAmount: &refundedAmount,
+		RefundedAt:     next.RefundedAt,
+	}
+
+	updated, err := u.repo.UpdateByPaymentID(
+		ctx,
+		paymentID,
+		patch,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if updated == nil ||
+		updated.PaymentID != paymentID {
+		return nil, paymentdom.ErrNotFound
+	}
+
+	return updated, nil
 }
 
 // ApplyStripeEvent applies a verified Stripe webhook event.

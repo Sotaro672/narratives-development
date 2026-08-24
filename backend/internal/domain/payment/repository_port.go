@@ -4,6 +4,7 @@ package payment
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // CreatePaymentInput - 支払い作成入力（ドメイン契約）
@@ -17,6 +18,16 @@ import (
 //
 // StripeChargeID may be empty until Stripe has created a Charge.
 //
+// A newly created Payment must start with no refund state:
+//
+//	refundStatus = none
+//	stripeRefundId = ""
+//	refundedAmount = 0
+//	refundedAt = nil
+//
+// Refund fields are therefore not accepted by CreatePaymentInput. They are
+// applied later through UpdatePaymentInput after Stripe creates a Refund.
+//
 // 正規のFirestore payment record schema:
 //
 //	amount
@@ -28,6 +39,10 @@ import (
 //	stripePaymentIntentId
 //	stripePaymentMethodId
 //	transferGroup
+//	stripeRefundId
+//	refundStatus
+//	refundedAmount
+//	refundedAt
 //
 // paymentId itself is NOT stored as a field in the payment document.
 type CreatePaymentInput struct {
@@ -69,6 +84,23 @@ type CreatePaymentInput struct {
 // is created. When either field is specified in an update, it must not be empty.
 //
 // StripeChargeID may be added later when Stripe creates the Charge.
+//
+// Refund state is independent from PaymentStatus.
+//
+// StripeRefundID, RefundStatus, RefundedAmount, and RefundedAt represent one
+// logical refund state and should be updated together according to Payment
+// domain invariants.
+//
+// The current AMOL refund flow supports full refunds only. A successful refund
+// therefore requires:
+//
+//	Payment.Status = succeeded
+//	RefundStatus = succeeded
+//	StripeRefundID = re_...
+//	RefundedAmount = Payment.Amount
+//	RefundedAt != nil
+//
+// Payment.Status must remain succeeded after a successful refund.
 type UpdatePaymentInput struct {
 	PaymentMethodID *string `json:"paymentMethodId,omitempty"`
 
@@ -82,6 +114,11 @@ type UpdatePaymentInput struct {
 	Amount *int `json:"amount,omitempty"`
 
 	Status *PaymentStatus `json:"status,omitempty"`
+
+	StripeRefundID *string       `json:"stripeRefundId,omitempty"`
+	RefundStatus   *RefundStatus `json:"refundStatus,omitempty"`
+	RefundedAmount *int          `json:"refundedAmount,omitempty"`
+	RefundedAt     *time.Time    `json:"refundedAt,omitempty"`
 
 	ErrorType *string `json:"errorType,omitempty"`
 	ErrorCode *string `json:"errorCode,omitempty"`
@@ -107,6 +144,16 @@ type RepositoryPort interface {
 	//
 	// Implementations must reject an empty StripePaymentIntentID or
 	// TransferGroup, including when Status is StatusPending.
+	//
+	// A new Payment must be persisted with:
+	//
+	//	refundStatus = none
+	//	stripeRefundId omitted or empty
+	//	refundedAmount = 0
+	//	refundedAt omitted
+	//
+	// Implementations must validate the complete Payment entity before
+	// persisting it.
 	Create(
 		ctx context.Context,
 		in CreatePaymentInput,
@@ -115,8 +162,23 @@ type RepositoryPort interface {
 	// UpdateByPaymentID partially updates a payment document.
 	//
 	// A nil field means that the field is not updated.
-	// If StripePaymentIntentID, StripeChargeID, or TransferGroup is non-nil,
-	// its value must not be empty.
+	//
+	// If StripePaymentIntentID, StripeChargeID, TransferGroup, or
+	// StripeRefundID is non-nil, its value must not be empty.
+	//
+	// Refund fields must be applied as one validated refund state. Repository
+	// implementations must reconstruct the resulting Payment and enforce the
+	// same invariants as Payment.SetRefundState.
+	//
+	// In particular, a successful full refund must preserve:
+	//
+	//	Payment.Status = succeeded
+	//	RefundStatus = succeeded
+	//	RefundedAmount = Payment.Amount
+	//	RefundedAt != nil
+	//
+	// Implementations must validate the complete resulting Payment before
+	// persisting the update.
 	UpdateByPaymentID(
 		ctx context.Context,
 		paymentID string,

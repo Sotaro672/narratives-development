@@ -198,6 +198,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			c.PaymentFlowUC,
 			c.PaymentUC,
 			c.SettlementUC,
+			c.RefundUC,
 			c.settlementQueue,
 			c.OrderManagementQuery,
 			c.OrderDetailQuery,

@@ -367,7 +367,11 @@ $AllowedKeys = @(
   "SELF_BASE_URL",
 
   # Stripe webhook
-  "STRIPE_WEBHOOK_SECRET"
+  "STRIPE_WEBHOOK_SECRET",
+
+  # Settlement
+  "SETTLEMENT_PLATFORM_FEE_RATE",
+  "SETTLEMENT_PLATFORM_FEE_BASE"
 )
 
 $envMap = @{}

@@ -3,6 +3,7 @@ package payment
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -37,6 +38,41 @@ func IsValidStatus(s PaymentStatus) bool {
 	return ok
 }
 
+// RefundStatus represents the Stripe Refund lifecycle separately from
+// PaymentIntent lifecycle.
+//
+// Payment.Status remains succeeded after a refund because the original
+// PaymentIntent succeeded. RefundStatus records the subsequent refund state.
+type RefundStatus string
+
+const (
+	RefundStatusNone           RefundStatus = "none"
+	RefundStatusPending        RefundStatus = "pending"
+	RefundStatusRequiresAction RefundStatus = "requires_action"
+	RefundStatusSucceeded      RefundStatus = "succeeded"
+	RefundStatusFailed         RefundStatus = "failed"
+	RefundStatusCanceled       RefundStatus = "canceled"
+)
+
+var AllowedRefundStatuses = map[RefundStatus]struct{}{
+	RefundStatusNone:           {},
+	RefundStatusPending:        {},
+	RefundStatusRequiresAction: {},
+	RefundStatusSucceeded:      {},
+	RefundStatusFailed:         {},
+	RefundStatusCanceled:       {},
+}
+
+var DefaultRefundStatus = RefundStatusNone
+
+func IsValidRefundStatus(s RefundStatus) bool {
+	if s == "" {
+		return false
+	}
+	_, ok := AllowedRefundStatuses[s]
+	return ok
+}
+
 // Payment is the application-side representation of a payment attempt/result.
 //
 // Firestore rule:
@@ -55,6 +91,10 @@ func IsValidStatus(s PaymentStatus) bool {
 //	stripePaymentIntentId
 //	stripePaymentMethodId
 //	transferGroup
+//	stripeRefundId
+//	refundStatus
+//	refundedAmount
+//	refundedAt
 //
 // stripePaymentIntentId and transferGroup are required for every payment status,
 // including pending.
@@ -62,6 +102,12 @@ func IsValidStatus(s PaymentStatus) bool {
 // stripeChargeId is optional until Stripe has created a Charge.
 // When available, it identifies the source transaction used by the later
 // Stripe Connect settlement transfer.
+//
+// Refund state is independent from PaymentStatus. A successful refund keeps
+// PaymentStatus=succeeded and records RefundStatus=succeeded instead.
+//
+// The current AMOL refund flow supports full refunds only. Therefore a
+// successful refund must have RefundedAmount equal to Amount.
 type Payment struct {
 	// PaymentID is the Firestore payment document ID.
 	// It must be the same value as order.ID.
@@ -79,6 +125,11 @@ type Payment struct {
 	Amount int
 	Status PaymentStatus
 
+	StripeRefundID string
+	RefundStatus   RefundStatus
+	RefundedAmount int
+	RefundedAt     *time.Time
+
 	ErrorType *string
 	ErrorCode *string
 	ErrorMsg  *string
@@ -94,9 +145,15 @@ var (
 	ErrInvalidStripePaymentMethod = errors.New("payment: invalid stripePaymentMethodId")
 	ErrInvalidStripePaymentIntent = errors.New("payment: invalid stripePaymentIntentId")
 	ErrInvalidStripeChargeID      = errors.New("payment: invalid stripeChargeId")
+	ErrInvalidStripeRefundID      = errors.New("payment: invalid stripeRefundId")
 	ErrInvalidTransferGroup       = errors.New("payment: invalid transferGroup")
 	ErrInvalidAmount              = errors.New("payment: invalid amount")
 	ErrInvalidStatus              = errors.New("payment: invalid status")
+	ErrInvalidRefundStatus        = errors.New("payment: invalid refund status")
+	ErrInvalidRefundedAmount      = errors.New("payment: invalid refundedAmount")
+	ErrInvalidRefundedAt          = errors.New("payment: invalid refundedAt")
+	ErrRefundRequiresSucceeded    = errors.New("payment: refund requires succeeded payment")
+	ErrInvalidRefundState         = errors.New("payment: invalid refund state")
 	ErrInvalidErrorType           = errors.New("payment: invalid errorType")
 	ErrInvalidErrorCode           = errors.New("payment: invalid errorCode")
 	ErrInvalidErrorMsg            = errors.New("payment: invalid errorMsg")
@@ -120,6 +177,9 @@ var (
 // including pending.
 //
 // stripeChargeID may be empty until Stripe has created a Charge.
+//
+// A newly created Payment starts with RefundStatusNone. Refund state is applied
+// later with SetRefundState after Stripe creates a Refund object.
 func New(
 	paymentID string,
 	paymentMethodID string,
@@ -150,6 +210,10 @@ func New(
 		TransferGroup:         transferGroup,
 		Amount:                amount,
 		Status:                st,
+		StripeRefundID:        "",
+		RefundStatus:          DefaultRefundStatus,
+		RefundedAmount:        0,
+		RefundedAt:            nil,
 		ErrorType:             errorType,
 		ErrorCode:             errorCode,
 		ErrorMsg:              errorMsg,
@@ -213,6 +277,16 @@ func (p *Payment) SetStatus(next PaymentStatus) error {
 	if !IsValidStatus(next) {
 		return ErrInvalidStatus
 	}
+
+	if p == nil {
+		return ErrInvalidStatus
+	}
+
+	if p.RefundStatus != RefundStatusNone &&
+		next != StatusSucceeded {
+		return ErrRefundRequiresSucceeded
+	}
+
 	p.Status = next
 	return nil
 }
@@ -274,7 +348,75 @@ func (p *Payment) SetAmount(amount int) error {
 	if amount < MinAmount || (MaxAmount > 0 && amount > MaxAmount) {
 		return ErrInvalidAmount
 	}
+
+	if p == nil {
+		return ErrInvalidAmount
+	}
+
+	next := *p
+	next.Amount = amount
+
+	if err := next.validateRefundState(); err != nil {
+		return err
+	}
+
 	p.Amount = amount
+	return nil
+}
+
+// SetRefundState records the Stripe Refund lifecycle without changing the
+// original PaymentIntent lifecycle represented by Payment.Status.
+//
+// The current AMOL flow supports full refunds only.
+//
+// State invariants:
+//
+// - none:
+//
+//	StripeRefundID="", RefundedAmount=0, RefundedAt=nil
+//
+// - pending / requires_action / failed / canceled:
+//
+//	StripeRefundID=re_..., RefundedAmount=0, RefundedAt=nil
+//
+// - succeeded:
+//
+//	StripeRefundID=re_..., RefundedAmount=Payment.Amount,
+//	RefundedAt must be non-nil
+//
+// Any refund state other than none requires Payment.Status=succeeded.
+func (p *Payment) SetRefundState(
+	stripeRefundID string,
+	refundStatus RefundStatus,
+	refundedAmount int,
+	refundedAt *time.Time,
+) error {
+	if p == nil {
+		return ErrInvalidRefundState
+	}
+
+	next := *p
+
+	next.StripeRefundID = stripeRefundID
+	next.RefundStatus = refundStatus
+	next.RefundedAmount = refundedAmount
+
+	if refundedAt == nil {
+		next.RefundedAt = nil
+	} else {
+		value := refundedAt.UTC()
+		next.RefundedAt = &value
+	}
+
+	if err := next.validateRefundState(); err != nil {
+		return err
+	}
+
+	p.StripeRefundID = next.StripeRefundID
+	p.RefundStatus = next.RefundStatus
+	p.RefundedAmount = next.RefundedAmount
+	p.RefundedAt = next.RefundedAt
+
 	return nil
 }
 
@@ -357,5 +499,96 @@ func (p Payment) validate() error {
 	if p.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
+
+	if err := p.validateRefundState(); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func (p Payment) validateRefundState() error {
+	if !IsValidRefundStatus(
+		p.RefundStatus,
+	) {
+		return ErrInvalidRefundStatus
+	}
+
+	switch p.RefundStatus {
+	case RefundStatusNone:
+		if p.StripeRefundID != "" ||
+			p.RefundedAmount != 0 ||
+			p.RefundedAt != nil {
+			return ErrInvalidRefundState
+		}
+
+		return nil
+
+	case RefundStatusPending,
+		RefundStatusRequiresAction,
+		RefundStatusFailed,
+		RefundStatusCanceled:
+		if p.Status != StatusSucceeded {
+			return ErrRefundRequiresSucceeded
+		}
+
+		if !isStripeRefundID(
+			p.StripeRefundID,
+		) {
+			return ErrInvalidStripeRefundID
+		}
+
+		if p.RefundedAmount != 0 {
+			return ErrInvalidRefundedAmount
+		}
+
+		if p.RefundedAt != nil {
+			return ErrInvalidRefundedAt
+		}
+
+		return nil
+
+	case RefundStatusSucceeded:
+		if p.Status != StatusSucceeded {
+			return ErrRefundRequiresSucceeded
+		}
+
+		if !isStripeRefundID(
+			p.StripeRefundID,
+		) {
+			return ErrInvalidStripeRefundID
+		}
+
+		if p.Amount <= 0 ||
+			p.RefundedAmount != p.Amount {
+			return ErrInvalidRefundedAmount
+		}
+
+		if p.RefundedAt == nil ||
+			p.RefundedAt.IsZero() {
+			return ErrInvalidRefundedAt
+		}
+
+		if !p.CreatedAt.IsZero() &&
+			p.RefundedAt.Before(
+				p.CreatedAt,
+			) {
+			return ErrInvalidRefundedAt
+		}
+
+		return nil
+
+	default:
+		return ErrInvalidRefundStatus
+	}
+}
+
+func isStripeRefundID(
+	value string,
+) bool {
+	return strings.HasPrefix(
+		value,
+		"re_",
+	) &&
+		len(value) > len("re_")
 }
