@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 
 	listcloudtasksadp "narratives/internal/adapters/out/cloudtasks"
 	firebaseadp "narratives/internal/adapters/out/firebase"
@@ -480,9 +481,20 @@ func buildUsecases(
 
 	memberUC := uc.NewMemberUsecase(r.memberRepo)
 
+	autoCreateTestAccount := strings.Contains(
+		strings.ToLower(
+			strings.TrimSpace(
+				c.firestoreProjectID,
+			),
+		),
+		"development",
+	)
+
 	authBootstrapSvc := &uc.BootstrapService{
-		Members:   r.memberRepo,
-		Companies: r.companyRepo,
+		Members:               r.memberRepo,
+		Companies:             r.companyRepo,
+		Accounts:              accountUC,
+		AutoCreateTestAccount: autoCreateTestAccount,
 	}
 
 	_ = res

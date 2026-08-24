@@ -24,8 +24,6 @@ export default function BrandCreate() {
     accountCandidates,
     loadingAccounts,
     accountLoadError,
-    handleSelectAccount,
-    handleOpenAccountConnect,
 
     name,
     setName,
@@ -366,13 +364,6 @@ export default function BrandCreate() {
           accountLoadError ||
           accountIdError
         }
-        onSelectAccount={
-          handleSelectAccount
-        }
-        onOpenAccountConnect={
-          handleOpenAccountConnect
-        }
-        mode="edit"
       />
     </div>
   );

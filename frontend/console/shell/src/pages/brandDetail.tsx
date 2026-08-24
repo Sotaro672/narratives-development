@@ -42,12 +42,9 @@ export default function BrandDetail() {
     editingManagerName,
     handleSelectManager,
 
-    accountId,
     accountCandidates,
     loadingAccounts,
     accountError,
-    handleSelectAccount,
-    handleOpenAccountConnect,
 
     brandImageAccept,
 
@@ -422,17 +419,10 @@ export default function BrandDetail() {
       />
 
       <AccountSelectCard
-        accountId={
-          isEditing
-            ? accountId
-            : brand.accountId
-        }
+        accountId={brand.accountId}
         accountCandidates={accountCandidates}
         loadingAccounts={loadingAccounts}
         accountError={accountError}
-        onSelectAccount={handleSelectAccount}
-        onOpenAccountConnect={handleOpenAccountConnect}
-        mode={isEditing ? "edit" : "view"}
       />
     </div>
   );
