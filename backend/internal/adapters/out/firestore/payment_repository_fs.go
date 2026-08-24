@@ -221,6 +221,18 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(
 			usecase.ErrPaymentStatusUpdateRequiresStripeEvent
 	}
 
+	if hasPaymentRefundPatch(patch) {
+		if hasPaymentNonRefundPatch(patch) {
+			return nil, paymentdom.ErrInvalidRefundState
+		}
+
+		return r.updateRefundStateByPaymentID(
+			ctx,
+			paymentID,
+			patch,
+		)
+	}
+
 	documentReference := r.col().Doc(paymentID)
 	updates := make(
 		[]firestore.Update,
@@ -407,6 +419,148 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(
 		ctx,
 		paymentID,
 	)
+}
+
+func hasPaymentRefundPatch(
+	patch paymentdom.UpdatePaymentInput,
+) bool {
+	return patch.StripeRefundID != nil ||
+		patch.RefundStatus != nil ||
+		patch.RefundedAmount != nil ||
+		patch.RefundedAt != nil
+}
+
+func hasPaymentNonRefundPatch(
+	patch paymentdom.UpdatePaymentInput,
+) bool {
+	return patch.PaymentMethodID != nil ||
+		patch.StripeCustomerID != nil ||
+		patch.StripePaymentMethodID != nil ||
+		patch.StripePaymentIntentID != nil ||
+		patch.StripeChargeID != nil ||
+		patch.TransferGroup != nil ||
+		patch.Amount != nil ||
+		patch.ErrorType != nil ||
+		patch.ErrorCode != nil ||
+		patch.ErrorMsg != nil
+}
+
+func (r *PaymentRepositoryFS) updateRefundStateByPaymentID(
+	ctx context.Context,
+	paymentID string,
+	patch paymentdom.UpdatePaymentInput,
+) (*paymentdom.Payment, error) {
+	if patch.StripeRefundID == nil ||
+		patch.RefundStatus == nil ||
+		patch.RefundedAmount == nil {
+		return nil, paymentdom.ErrInvalidRefundState
+	}
+
+	stripeRefundID := strings.TrimSpace(
+		*patch.StripeRefundID,
+	)
+	if stripeRefundID == "" {
+		return nil, paymentdom.ErrInvalidStripeRefundID
+	}
+
+	documentReference := r.col().Doc(paymentID)
+
+	var updated paymentdom.Payment
+
+	err := r.Client.RunTransaction(
+		ctx,
+		func(
+			ctx context.Context,
+			transaction *firestore.Transaction,
+		) error {
+			snapshot, err :=
+				transaction.Get(documentReference)
+			if err != nil {
+				if status.Code(err) == codes.NotFound {
+					return paymentdom.ErrNotFound
+				}
+
+				return err
+			}
+
+			current, err := docToPayment(snapshot)
+			if err != nil {
+				return err
+			}
+
+			next := current
+
+			if err := next.SetRefundState(
+				stripeRefundID,
+				*patch.RefundStatus,
+				*patch.RefundedAmount,
+				patch.RefundedAt,
+			); err != nil {
+				return err
+			}
+
+			updates := []firestore.Update{
+				{
+					Path:  "stripeRefundId",
+					Value: next.StripeRefundID,
+				},
+				{
+					Path:  "refundStatus",
+					Value: string(next.RefundStatus),
+				},
+				{
+					Path:  "refundedAmount",
+					Value: next.RefundedAmount,
+				},
+			}
+
+			if next.RefundedAt == nil {
+				updates = append(
+					updates,
+					firestore.Update{
+						Path:  "refundedAt",
+						Value: firestore.Delete,
+					},
+				)
+			} else {
+				updates = append(
+					updates,
+					firestore.Update{
+						Path:  "refundedAt",
+						Value: next.RefundedAt.UTC(),
+					},
+				)
+			}
+
+			updates = append(
+				updates,
+				firestore.Update{
+					Path:  "updatedAt",
+					Value: time.Now().UTC(),
+				},
+			)
+
+			if err := transaction.Update(
+				documentReference,
+				updates,
+			); err != nil {
+				return err
+			}
+
+			updated = next
+
+			return nil
+		},
+	)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, paymentdom.ErrNotFound
+		}
+
+		return nil, err
+	}
+
+	return &updated, nil
 }
 
 // ============================================================
@@ -602,6 +756,15 @@ func (r *PaymentRepositoryFS) ApplyStripePaymentEvent(
 						next.CreatedAt,
 					)
 				if validationErr != nil {
+					return validationErr
+				}
+
+				if validationErr := validated.SetRefundState(
+					current.StripeRefundID,
+					current.RefundStatus,
+					current.RefundedAmount,
+					current.RefundedAt,
+				); validationErr != nil {
 					return validationErr
 				}
 
@@ -844,10 +1007,20 @@ func paymentToCreateData(
 		"stripePaymentIntentId": payment.StripePaymentIntentID,
 		"stripePaymentMethodId": payment.StripePaymentMethodID,
 		"transferGroup":         payment.TransferGroup,
+		"refundStatus":          string(payment.RefundStatus),
+		"refundedAmount":        payment.RefundedAmount,
 	}
 
 	if payment.StripeChargeID != "" {
 		data["stripeChargeId"] = payment.StripeChargeID
+	}
+
+	if payment.StripeRefundID != "" {
+		data["stripeRefundId"] = payment.StripeRefundID
+	}
+
+	if payment.RefundedAt != nil {
+		data["refundedAt"] = payment.RefundedAt.UTC()
 	}
 
 	if payment.ErrorType != nil {
@@ -996,12 +1169,148 @@ func docToPayment(
 		return paymentdom.Payment{}, err
 	}
 
+	stripeRefundID, err :=
+		paymentRefundString(
+			data,
+			"stripeRefundId",
+		)
+	if err != nil {
+		return paymentdom.Payment{}, err
+	}
+
+	refundStatus, err :=
+		paymentRefundStatus(
+			data,
+			"refundStatus",
+		)
+	if err != nil {
+		return paymentdom.Payment{}, err
+	}
+
+	refundedAmount, err :=
+		paymentRefundedAmount(
+			data,
+			"refundedAmount",
+		)
+	if err != nil {
+		return paymentdom.Payment{}, err
+	}
+
+	refundedAt, err :=
+		paymentRefundedAt(
+			data,
+			"refundedAt",
+		)
+	if err != nil {
+		return paymentdom.Payment{}, err
+	}
+
+	if err := payment.SetRefundState(
+		stripeRefundID,
+		refundStatus,
+		refundedAmount,
+		refundedAt,
+	); err != nil {
+		return paymentdom.Payment{}, err
+	}
+
 	return payment, nil
 }
 
 // ============================================================
 // Firestore field helpers
 // ============================================================
+
+func paymentRefundString(
+	values map[string]any,
+	key string,
+) (string, error) {
+	value, exists := values[key]
+	if !exists || value == nil {
+		return "", nil
+	}
+
+	text, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf(
+			"payment: invalid %s",
+			key,
+		)
+	}
+
+	return strings.TrimSpace(text), nil
+}
+
+func paymentRefundStatus(
+	values map[string]any,
+	key string,
+) (paymentdom.RefundStatus, error) {
+	value, exists := values[key]
+	if !exists || value == nil {
+		return paymentdom.DefaultRefundStatus, nil
+	}
+
+	text, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf(
+			"payment: invalid %s",
+			key,
+		)
+	}
+
+	refundStatus := paymentdom.RefundStatus(
+		strings.TrimSpace(text),
+	)
+	if !paymentdom.IsValidRefundStatus(
+		refundStatus,
+	) {
+		return "", paymentdom.ErrInvalidRefundStatus
+	}
+
+	return refundStatus, nil
+}
+
+func paymentRefundedAmount(
+	values map[string]any,
+	key string,
+) (int, error) {
+	value, exists := values[key]
+	if !exists || value == nil {
+		return 0, nil
+	}
+
+	number, ok := value.(int64)
+	if !ok {
+		return 0, fmt.Errorf(
+			"payment: invalid %s",
+			key,
+		)
+	}
+
+	return int(number), nil
+}
+
+func paymentRefundedAt(
+	values map[string]any,
+	key string,
+) (*time.Time, error) {
+	value, exists := values[key]
+	if !exists || value == nil {
+		return nil, nil
+	}
+
+	timestamp, ok := value.(time.Time)
+	if !ok || timestamp.IsZero() {
+		return nil, fmt.Errorf(
+			"payment: invalid %s",
+			key,
+		)
+	}
+
+	timestamp = timestamp.UTC()
+
+	return &timestamp, nil
+}
 
 func paymentRequiredString(
 	values map[string]any,

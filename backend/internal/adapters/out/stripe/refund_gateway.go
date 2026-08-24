@@ -33,8 +33,7 @@ var _ usecase.StripeRefundGateway = (*RefundGateway)(nil)
 // Completed seller Transfers are reversed separately through
 // StripeTransferReversalGateway.
 type RefundGateway struct {
-	secretKey string
-
+	secretKey  string
 	httpClient *http.Client
 }
 
@@ -80,14 +79,9 @@ func (g *RefundGateway) CreateRefund(
 		return nil, err
 	}
 
-	stripeChargeID :=
-		in.StripeChargeID
-
-	idempotencyKey :=
-		in.IdempotencyKey
-
-	paymentID :=
-		in.PaymentID
+	stripeChargeID := in.StripeChargeID
+	idempotencyKey := in.IdempotencyKey
+	paymentID := in.PaymentID
 
 	if stripeChargeID == "" ||
 		!strings.HasPrefix(
@@ -390,44 +384,28 @@ func (g *RefundGateway) postRefund(
 // ============================================================
 
 type stripeRefundResponse struct {
-	ID string `json:"id"`
-
-	Object string `json:"object"`
-
-	Amount int `json:"amount"`
-
-	BalanceTransaction string `json:"balance_transaction"`
-
-	Charge string `json:"charge"`
-
-	Created int64 `json:"created"`
-
-	Currency string `json:"currency"`
-
-	Metadata map[string]string `json:"metadata"`
-
-	PaymentIntent string `json:"payment_intent"`
-
-	Reason *string `json:"reason"`
-
-	ReceiptNumber *string `json:"receipt_number"`
-
-	SourceTransferReversal *string `json:"source_transfer_reversal"`
-
-	Status string `json:"status"`
-
-	TransferReversal *string `json:"transfer_reversal"`
+	ID                     string            `json:"id"`
+	Object                 string            `json:"object"`
+	Amount                 int               `json:"amount"`
+	BalanceTransaction     string            `json:"balance_transaction"`
+	Charge                 string            `json:"charge"`
+	Created                int64             `json:"created"`
+	Currency               string            `json:"currency"`
+	Metadata               map[string]string `json:"metadata"`
+	PaymentIntent          string            `json:"payment_intent"`
+	Reason                 *string           `json:"reason"`
+	ReceiptNumber          *string           `json:"receipt_number"`
+	SourceTransferReversal *string           `json:"source_transfer_reversal"`
+	Status                 string            `json:"status"`
+	TransferReversal       *string           `json:"transfer_reversal"`
 }
 
 type stripeRefundErrorResponse struct {
 	Error struct {
-		Type string `json:"type"`
-		Code string `json:"code"`
-
-		Message string `json:"message"`
-
-		Param string `json:"param"`
-
+		Type          string `json:"type"`
+		Code          string `json:"code"`
+		Message       string `json:"message"`
+		Param         string `json:"param"`
 		RequestLogURL string `json:"request_log_url"`
 	} `json:"error"`
 }
@@ -440,13 +418,10 @@ type stripeRefundErrorResponse struct {
 // deterministic idempotent request is safe.
 type RefundError struct {
 	statusCode int
-
-	errorType string
-	errorCode string
-
-	message string
-
-	retryable bool
+	errorType  string
+	errorCode  string
+	message    string
+	retryable  bool
 }
 
 func (e *RefundError) Error() string {

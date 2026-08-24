@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	paymentdom "narratives/internal/domain/payment"
 	settlementdom "narratives/internal/domain/settlement"
@@ -19,9 +20,8 @@ import (
 // RefundPaymentReader provides the authoritative Payment required for a full
 // Stripe refund.
 //
-// The current Payment domain mirrors PaymentIntent lifecycle and does not yet
-// persist refund-specific fields. RefundUsecase therefore reads Payment but
-// does not change Payment.Status.
+// Payment.Status mirrors PaymentIntent lifecycle and remains succeeded after
+// a refund. Refund lifecycle is persisted separately on Payment.
 type RefundPaymentReader interface {
 	GetByPaymentID(
 		ctx context.Context,
@@ -68,16 +68,15 @@ type StripeRefundGateway interface {
 
 type CreateStripeRefundInput struct {
 	StripeChargeID string
-
-	Amount int
-
+	Amount         int
 	IdempotencyKey string
-
-	PaymentID string
+	PaymentID      string
 }
 
 type CreateStripeRefundResult struct {
 	StripeRefundID string
+	Status         paymentdom.RefundStatus
+	CreatedAt      time.Time
 }
 
 // ============================================================
@@ -160,6 +159,15 @@ var (
 	ErrRefundStripeRefundIDEmpty = errors.New(
 		"refund: Stripe refund id is empty",
 	)
+	ErrRefundStripeRefundStatusInvalid = errors.New(
+		"refund: Stripe refund status is invalid",
+	)
+	ErrRefundStripeRefundCreatedAtInvalid = errors.New(
+		"refund: Stripe refund createdAt is invalid",
+	)
+	ErrRefundStripeRefundMismatch = errors.New(
+		"refund: Stripe refund does not match payment",
+	)
 	ErrRefundStripeTransferReversalResultEmpty = errors.New(
 		"refund: Stripe transfer reversal result is empty",
 	)
@@ -175,12 +183,9 @@ var (
 type RefundSettlementAction string
 
 const (
-	RefundSettlementActionCanceled RefundSettlementAction = "canceled"
-
+	RefundSettlementActionCanceled        RefundSettlementAction = "canceled"
 	RefundSettlementActionAlreadyCanceled RefundSettlementAction = "already_canceled"
-
-	RefundSettlementActionReversed RefundSettlementAction = "reversed"
-
+	RefundSettlementActionReversed        RefundSettlementAction = "reversed"
 	RefundSettlementActionAlreadyReversed RefundSettlementAction = "already_reversed"
 )
 
@@ -207,8 +212,17 @@ type RefundByPaymentIDResult struct {
 	Amount int
 
 	StripeRefundID string
+	RefundStatus   paymentdom.RefundStatus
+	RefundedAmount int
+	RefundedAt     *time.Time
 
 	Settlements []RefundSettlementResult
+}
+
+type CompleteSucceededRefundInput struct {
+	PaymentID string
+
+	StripeRefundID string
 }
 
 // ============================================================
@@ -237,28 +251,23 @@ type RefundByPaymentIDResult struct {
 //  3. Reject any Settlement whose Transfer result is currently uncertain.
 //  4. Cancel untransferred Settlements so a payout cannot begin during refund.
 //  5. Create the Stripe Charge refund with a deterministic idempotency key.
-//  6. Reverse each already-transferred seller Transfer.
-//  7. Persist each successful Transfer Reversal as Settlement reversed.
+//  6. Respect the actual Stripe Refund status returned by Stripe.
+//  7. Reverse already-transferred seller Transfers only when Refund succeeded.
+//  8. Persist each successful Transfer Reversal as Settlement reversed.
 //
 // If the process stops after Stripe accepted a request, retries reuse
 // deterministic Stripe idempotency keys.
 type RefundUsecase struct {
-	paymentReader RefundPaymentReader
-
-	settlementRepo RefundSettlementRepository
-
-	stripeRefundGateway StripeRefundGateway
-
+	paymentReader                 RefundPaymentReader
+	settlementRepo                RefundSettlementRepository
+	stripeRefundGateway           StripeRefundGateway
 	stripeTransferReversalGateway StripeTransferReversalGateway
 }
 
 type NewRefundUsecaseInput struct {
-	PaymentReader RefundPaymentReader
-
-	SettlementRepository RefundSettlementRepository
-
-	StripeRefundGateway StripeRefundGateway
-
+	PaymentReader                 RefundPaymentReader
+	SettlementRepository          RefundSettlementRepository
+	StripeRefundGateway           StripeRefundGateway
 	StripeTransferReversalGateway StripeTransferReversalGateway
 }
 
@@ -266,12 +275,9 @@ func NewRefundUsecase(
 	in NewRefundUsecaseInput,
 ) *RefundUsecase {
 	return &RefundUsecase{
-		paymentReader: in.PaymentReader,
-
-		settlementRepo: in.SettlementRepository,
-
-		stripeRefundGateway: in.StripeRefundGateway,
-
+		paymentReader:                 in.PaymentReader,
+		settlementRepo:                in.SettlementRepository,
+		stripeRefundGateway:           in.StripeRefundGateway,
 		stripeTransferReversalGateway: in.StripeTransferReversalGateway,
 	}
 }
@@ -281,8 +287,8 @@ func NewRefundUsecase(
 // PaymentID is currently the same value as OrderID.
 //
 // Payment.Status remains succeeded because that status mirrors the original
-// PaymentIntent lifecycle. Refund-specific persistence should be added to the
-// Payment domain separately rather than overloading PaymentStatus.
+// PaymentIntent lifecycle. Refund lifecycle is returned separately through
+// RefundStatus / RefundedAmount / RefundedAt.
 func (u *RefundUsecase) RefundByPaymentID(
 	ctx context.Context,
 	in RefundByPaymentIDInput,
@@ -375,80 +381,32 @@ func (u *RefundUsecase) RefundByPaymentID(
 			ErrRefundStripeTransferReversalGatewayMissing
 	}
 
-	result := &RefundByPaymentIDResult{
-		PaymentID: paymentID,
-		Amount:    payment.Amount,
-		Settlements: make(
-			[]RefundSettlementResult,
-			0,
-			len(settlements),
-		),
-	}
-
-	settlementResults := make(
-		map[string]RefundSettlementResult,
-		len(settlements),
+	result := newRefundByPaymentIDResult(
+		*payment,
+		settlements,
 	)
 
-	for _, settlement := range settlements {
-		settlementResults[settlement.ID] =
-			RefundSettlementResult{
-				SettlementID: settlement.ID,
-				AccountID:    settlement.AccountID,
-
-				PreviousStatus: settlement.Status,
-				Status:         settlement.Status,
-
-				StripeTransferID: settlement.StripeTransferID,
-
-				StripeTransferReversalID: settlement.StripeTransferReversalID,
-			}
-	}
+	settlementResults :=
+		newRefundSettlementResultMap(
+			settlements,
+		)
 
 	// Freeze every Settlement that has not sent money to a seller yet.
 	//
 	// This is deliberately done before the purchaser refund so a ready worker
 	// cannot intentionally start a new payout after the refund begins.
-	for _, settlement := range settlements {
-		switch settlement.Status {
-		case settlementdom.StatusPending,
-			settlementdom.StatusReady,
-			settlementdom.StatusFailedRetryable:
+	if err := u.cancelUntransferredSettlementsForRefund(
+		ctx,
+		settlements,
+		settlementResults,
+	); err != nil {
+		result.Settlements =
+			buildRefundSettlementResults(
+				settlements,
+				settlementResults,
+			)
 
-			updated, err :=
-				u.cancelSettlementForRefund(
-					ctx,
-					settlement,
-				)
-			if err != nil {
-				result.Settlements =
-					buildRefundSettlementResults(
-						settlements,
-						settlementResults,
-					)
-
-				return result,
-					fmt.Errorf(
-						"refund: cancel settlement %q: %w",
-						settlement.ID,
-						err,
-					)
-			}
-
-			item := settlementResults[settlement.ID]
-			item.Status = updated.Status
-			item.Action = RefundSettlementActionCanceled
-			settlementResults[settlement.ID] = item
-
-		case settlementdom.StatusCanceled:
-			item := settlementResults[settlement.ID]
-			item.Action = RefundSettlementActionAlreadyCanceled
-			settlementResults[settlement.ID] = item
-
-		case settlementdom.StatusTransferred,
-			settlementdom.StatusReversed:
-			// These states are handled after the purchaser Charge refund.
-		}
+		return result, err
 	}
 
 	refundResult, refundErr :=
@@ -488,11 +446,54 @@ func (u *RefundUsecase) RefundByPaymentID(
 			ErrRefundStripeRefundResultEmpty
 	}
 
-	stripeRefundID :=
-		refundResult.StripeRefundID
-	if !isStripeRefundID(
-		stripeRefundID,
-	) {
+	if err := applyCreateStripeRefundResult(
+		result,
+		payment.Amount,
+		refundResult,
+	); err != nil {
+		result.Settlements =
+			buildRefundSettlementResults(
+				settlements,
+				settlementResults,
+			)
+
+		return result, err
+	}
+
+	switch result.RefundStatus {
+	case paymentdom.RefundStatusPending,
+		paymentdom.RefundStatusRequiresAction,
+		paymentdom.RefundStatusFailed,
+		paymentdom.RefundStatusCanceled:
+		// Stripe accepted or completed the Refund request, but purchaser funds
+		// are not confirmed as refunded. Keep seller payouts frozen and do not
+		// reverse already-transferred seller funds yet.
+		result.Settlements =
+			buildRefundSettlementResults(
+				settlements,
+				settlementResults,
+			)
+
+		return result, nil
+
+	case paymentdom.RefundStatusSucceeded:
+		// A Charge refund does not reverse Separate Charges and Transfers
+		// payouts. Reverse each already-transferred Settlement independently.
+		if err := u.reverseTransferredSettlementsForRefund(
+			ctx,
+			settlements,
+			settlementResults,
+		); err != nil {
+			result.Settlements =
+				buildRefundSettlementResults(
+					settlements,
+					settlementResults,
+				)
+
+			return result, err
+		}
+
+	default:
 		result.Settlements =
 			buildRefundSettlementResults(
 				settlements,
@@ -500,14 +501,337 @@ func (u *RefundUsecase) RefundByPaymentID(
 			)
 
 		return result,
+			ErrRefundStripeRefundStatusInvalid
+	}
+
+	result.Settlements =
+		buildRefundSettlementResults(
+			settlements,
+			settlementResults,
+		)
+
+	return result, nil
+}
+
+// CompleteSucceededRefund completes seller-side settlement handling after a
+// Stripe Refund has become succeeded asynchronously.
+//
+// This method is intended to be called from the verified Stripe refund webhook
+// after Payment refund state has been persisted as succeeded.
+//
+// It is idempotent at the application level:
+//
+// - CANCELED Settlement remains CANCELED.
+// - REVERSED Settlement remains REVERSED.
+// - TRANSFERRED Settlement uses the deterministic Stripe reversal key.
+func (u *RefundUsecase) CompleteSucceededRefund(
+	ctx context.Context,
+	in CompleteSucceededRefundInput,
+) (*RefundByPaymentIDResult, error) {
+	if u == nil || u.paymentReader == nil {
+		return nil,
+			ErrRefundPaymentReaderMissing
+	}
+
+	if u.settlementRepo == nil {
+		return nil,
+			ErrRefundSettlementRepositoryMissing
+	}
+
+	paymentID := in.PaymentID
+	if paymentID == "" {
+		return nil,
+			paymentdom.ErrInvalidPaymentID
+	}
+
+	if !isStripeRefundID(in.StripeRefundID) {
+		return nil,
 			ErrRefundStripeRefundIDEmpty
+	}
+
+	payment, err := u.paymentReader.GetByPaymentID(
+		ctx,
+		paymentID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if payment == nil ||
+		payment.PaymentID != paymentID {
+		return nil,
+			paymentdom.ErrNotFound
+	}
+
+	if payment.Status != paymentdom.StatusSucceeded {
+		return nil,
+			ErrRefundPaymentNotSucceeded
+	}
+
+	if payment.RefundStatus !=
+		paymentdom.RefundStatusSucceeded {
+		return nil,
+			paymentdom.ErrInvalidRefundState
+	}
+
+	if payment.StripeRefundID !=
+		in.StripeRefundID {
+		return nil,
+			ErrRefundStripeRefundMismatch
+	}
+
+	if payment.RefundedAmount != payment.Amount ||
+		payment.RefundedAt == nil {
+		return nil,
+			paymentdom.ErrInvalidRefundState
+	}
+
+	settlements, err :=
+		u.settlementRepo.ListByPaymentID(
+			ctx,
+			paymentID,
+		)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(settlements) == 0 {
+		return nil,
+			ErrRefundSettlementEmpty
+	}
+
+	sort.Slice(
+		settlements,
+		func(i, j int) bool {
+			return settlements[i].ID <
+				settlements[j].ID
+		},
+	)
+
+	hasTransferredSettlement, err :=
+		validateRefundSettlements(
+			paymentID,
+			payment.Amount,
+			settlements,
+		)
+	if err != nil {
+		return nil, err
+	}
+
+	if hasTransferredSettlement &&
+		u.stripeTransferReversalGateway == nil {
+		return nil,
+			ErrRefundStripeTransferReversalGatewayMissing
+	}
+
+	result := newRefundByPaymentIDResult(
+		*payment,
+		settlements,
+	)
+
+	settlementResults :=
+		newRefundSettlementResultMap(
+			settlements,
+		)
+
+	// A succeeded refund must keep every not-yet-transferred seller payout
+	// frozen. This also repairs a partially completed earlier attempt.
+	if err := u.cancelUntransferredSettlementsForRefund(
+		ctx,
+		settlements,
+		settlementResults,
+	); err != nil {
+		result.Settlements =
+			buildRefundSettlementResults(
+				settlements,
+				settlementResults,
+			)
+
+		return result, err
+	}
+
+	if err := u.reverseTransferredSettlementsForRefund(
+		ctx,
+		settlements,
+		settlementResults,
+	); err != nil {
+		result.Settlements =
+			buildRefundSettlementResults(
+				settlements,
+				settlementResults,
+			)
+
+		return result, err
+	}
+
+	result.Settlements =
+		buildRefundSettlementResults(
+			settlements,
+			settlementResults,
+		)
+
+	return result, nil
+}
+
+func newRefundByPaymentIDResult(
+	payment paymentdom.Payment,
+	settlements []settlementdom.Settlement,
+) *RefundByPaymentIDResult {
+	result := &RefundByPaymentIDResult{
+		PaymentID: payment.PaymentID,
+		Amount:    payment.Amount,
+		Settlements: make(
+			[]RefundSettlementResult,
+			0,
+			len(settlements),
+		),
+	}
+
+	if payment.RefundStatus != "" &&
+		payment.RefundStatus !=
+			paymentdom.RefundStatusNone {
+		result.StripeRefundID =
+			payment.StripeRefundID
+		result.RefundStatus =
+			payment.RefundStatus
+		result.RefundedAmount =
+			payment.RefundedAmount
+
+		if payment.RefundedAt != nil {
+			value := payment.RefundedAt.UTC()
+			result.RefundedAt = &value
+		}
+	}
+
+	return result
+}
+
+func newRefundSettlementResultMap(
+	settlements []settlementdom.Settlement,
+) map[string]RefundSettlementResult {
+	result := make(
+		map[string]RefundSettlementResult,
+		len(settlements),
+	)
+
+	for _, settlement := range settlements {
+		result[settlement.ID] =
+			RefundSettlementResult{
+				SettlementID: settlement.ID,
+				AccountID:    settlement.AccountID,
+
+				PreviousStatus: settlement.Status,
+				Status:         settlement.Status,
+
+				StripeTransferID: settlement.StripeTransferID,
+
+				StripeTransferReversalID: settlement.StripeTransferReversalID,
+			}
+	}
+
+	return result
+}
+
+func applyCreateStripeRefundResult(
+	result *RefundByPaymentIDResult,
+	paymentAmount int,
+	refundResult *CreateStripeRefundResult,
+) error {
+	if result == nil || refundResult == nil {
+		return ErrRefundStripeRefundResultEmpty
+	}
+
+	stripeRefundID :=
+		refundResult.StripeRefundID
+	if !isStripeRefundID(
+		stripeRefundID,
+	) {
+		return ErrRefundStripeRefundIDEmpty
+	}
+
+	if !paymentdom.IsValidRefundStatus(
+		refundResult.Status,
+	) ||
+		refundResult.Status ==
+			paymentdom.RefundStatusNone {
+		return ErrRefundStripeRefundStatusInvalid
+	}
+
+	if refundResult.CreatedAt.IsZero() {
+		return ErrRefundStripeRefundCreatedAtInvalid
 	}
 
 	result.StripeRefundID =
 		stripeRefundID
+	result.RefundStatus =
+		refundResult.Status
+	result.RefundedAmount = 0
+	result.RefundedAt = nil
 
-	// A Charge refund does not reverse Separate Charges and Transfers payouts.
-	// Reverse each already-transferred Settlement independently.
+	if refundResult.Status ==
+		paymentdom.RefundStatusSucceeded {
+		if paymentAmount <= 0 {
+			return paymentdom.ErrInvalidAmount
+		}
+
+		result.RefundedAmount =
+			paymentAmount
+
+		value := refundResult.CreatedAt.UTC()
+		result.RefundedAt = &value
+	}
+
+	return nil
+}
+
+func (u *RefundUsecase) cancelUntransferredSettlementsForRefund(
+	ctx context.Context,
+	settlements []settlementdom.Settlement,
+	settlementResults map[string]RefundSettlementResult,
+) error {
+	for _, settlement := range settlements {
+		switch settlement.Status {
+		case settlementdom.StatusPending,
+			settlementdom.StatusReady,
+			settlementdom.StatusFailedRetryable:
+
+			updated, err :=
+				u.cancelSettlementForRefund(
+					ctx,
+					settlement,
+				)
+			if err != nil {
+				return fmt.Errorf(
+					"refund: cancel settlement %q: %w",
+					settlement.ID,
+					err,
+				)
+			}
+
+			item := settlementResults[settlement.ID]
+			item.Status = updated.Status
+			item.Action = RefundSettlementActionCanceled
+			settlementResults[settlement.ID] = item
+
+		case settlementdom.StatusCanceled:
+			item := settlementResults[settlement.ID]
+			item.Action = RefundSettlementActionAlreadyCanceled
+			settlementResults[settlement.ID] = item
+
+		case settlementdom.StatusTransferred,
+			settlementdom.StatusReversed:
+			// Transferred funds are handled only after purchaser Refund succeeded.
+		}
+	}
+
+	return nil
+}
+
+func (u *RefundUsecase) reverseTransferredSettlementsForRefund(
+	ctx context.Context,
+	settlements []settlementdom.Settlement,
+	settlementResults map[string]RefundSettlementResult,
+) error {
 	for _, settlement := range settlements {
 		switch settlement.Status {
 		case settlementdom.StatusTransferred:
@@ -517,18 +841,11 @@ func (u *RefundUsecase) RefundByPaymentID(
 					settlement,
 				)
 			if err != nil {
-				result.Settlements =
-					buildRefundSettlementResults(
-						settlements,
-						settlementResults,
-					)
-
-				return result,
-					fmt.Errorf(
-						"refund: reverse settlement %q: %w",
-						settlement.ID,
-						err,
-					)
+				return fmt.Errorf(
+					"refund: reverse settlement %q: %w",
+					settlement.ID,
+					err,
+				)
 			}
 
 			item := settlementResults[settlement.ID]
@@ -545,13 +862,7 @@ func (u *RefundUsecase) RefundByPaymentID(
 		}
 	}
 
-	result.Settlements =
-		buildRefundSettlementResults(
-			settlements,
-			settlementResults,
-		)
-
-	return result, nil
+	return nil
 }
 
 func (u *RefundUsecase) cancelSettlementForRefund(
@@ -770,9 +1081,10 @@ func validateRefundSettlements(
 			settlementdom.StatusFailedRetryable,
 			settlementdom.StatusCanceled:
 
-		case settlementdom.StatusTransferred,
-			settlementdom.StatusReversed:
+		case settlementdom.StatusTransferred:
 			hasTransferredSettlement = true
+
+		case settlementdom.StatusReversed:
 
 		case settlementdom.StatusTransferring:
 			return false,
