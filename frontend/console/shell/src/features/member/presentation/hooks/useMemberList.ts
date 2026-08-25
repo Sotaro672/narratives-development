@@ -50,9 +50,17 @@ export function useMemberList(
   // ─────────────────────────────────────────────
 
   const load = useCallback(
-    async (targetPage: PageState, targetFilter: MemberFilter) => {
-      setLoading(true);
-      setIsResetting(true);
+    async (
+      targetPage: PageState,
+      targetFilter: MemberFilter,
+      resetting: boolean,
+    ) => {
+      if (resetting) {
+        setIsResetting(true);
+      } else {
+        setLoading(true);
+      }
+
       setError(null);
 
       try {
@@ -75,15 +83,18 @@ export function useMemberList(
         console.error("[useMemberList] load error:", normalizedError);
         setError(normalizedError);
       } finally {
-        setLoading(false);
-        setIsResetting(false);
+        if (resetting) {
+          setIsResetting(false);
+        } else {
+          setLoading(false);
+        }
       }
     },
     [],
   );
 
   useEffect(() => {
-    void load(page, filter);
+    void load(page, filter, false);
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -143,7 +154,7 @@ export function useMemberList(
       };
 
       setPage(nextPage);
-      void load(nextPage, filter);
+      void load(nextPage, filter, false);
     },
     [page, filter, load],
   );
@@ -328,7 +339,7 @@ export function useMemberList(
     };
 
     setPage(nextPage);
-    void load(nextPage, filter);
+    void load(nextPage, filter, true);
   }, [page, filter, load]);
 
   return {
