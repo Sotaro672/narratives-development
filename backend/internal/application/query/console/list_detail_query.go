@@ -51,34 +51,37 @@ type ListImageLister interface {
 // ============================================================
 
 type ListDetailQuery struct {
-	getter       ListGetter
-	nameResolver *resolver.NameResolver
-	memberRepo   memberdom.Repository
-	pbGetter     applicationport.ProductBlueprintGetter
-	tbGetter     applicationport.TokenBlueprintGetter
-	invGetter    InventoryDetailGetter
-	imgLister    ListImageLister
+	getter             ListGetter
+	nameResolver       *resolver.NameResolver
+	memberRepo         memberdom.Repository
+	pbGetter           applicationport.ProductBlueprintGetter
+	tbGetter           applicationport.TokenBlueprintGetter
+	invGetter          InventoryDetailGetter
+	imgLister          ListImageLister
+	salesSummaryReader applicationport.ListSalesSummaryReader
 }
 
 type NewListDetailQueryParams struct {
-	Getter       ListGetter
-	NameResolver *resolver.NameResolver
-	MemberRepo   memberdom.Repository
-	PBGetter     applicationport.ProductBlueprintGetter
-	TBGetter     applicationport.TokenBlueprintGetter
-	InvGetter    InventoryDetailGetter
-	ImgLister    ListImageLister
+	Getter             ListGetter
+	NameResolver       *resolver.NameResolver
+	MemberRepo         memberdom.Repository
+	PBGetter           applicationport.ProductBlueprintGetter
+	TBGetter           applicationport.TokenBlueprintGetter
+	InvGetter          InventoryDetailGetter
+	ImgLister          ListImageLister
+	SalesSummaryReader applicationport.ListSalesSummaryReader
 }
 
 func NewListDetailQuery(p NewListDetailQueryParams) *ListDetailQuery {
 	return &ListDetailQuery{
-		getter:       p.Getter,
-		nameResolver: p.NameResolver,
-		memberRepo:   p.MemberRepo,
-		pbGetter:     p.PBGetter,
-		tbGetter:     p.TBGetter,
-		invGetter:    p.InvGetter,
-		imgLister:    p.ImgLister,
+		getter:             p.Getter,
+		nameResolver:       p.NameResolver,
+		memberRepo:         p.MemberRepo,
+		pbGetter:           p.PBGetter,
+		tbGetter:           p.TBGetter,
+		invGetter:          p.InvGetter,
+		imgLister:          p.ImgLister,
+		salesSummaryReader: p.SalesSummaryReader,
 	}
 }
 
@@ -93,6 +96,10 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 
 	if q.invGetter == nil {
 		return querydto.ListDetailDTO{}, errors.New("ListDetailQuery.BuildListDetailDTO: inventory detail getter is nil")
+	}
+
+	if q.salesSummaryReader == nil {
+		return querydto.ListDetailDTO{}, errors.New("ListDetailQuery.BuildListDetailDTO: sales summary reader is nil")
 	}
 
 	if listID == "" {
@@ -230,6 +237,27 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 		displayOrderByModel,
 	)
 
+	allowedInventoryIDs := map[string]struct{}{
+		invID: {},
+	}
+
+	summaries, err := q.salesSummaryReader.ListByListIDs(
+		ctx,
+		[]string{it.ID},
+		allowedInventoryIDs,
+	)
+	if err != nil {
+		return querydto.ListDetailDTO{}, err
+	}
+
+	totalOrderCount := 0
+	var totalSalesAmount int64
+
+	if summary, ok := summaries[it.ID]; ok {
+		totalOrderCount = summary.TotalOrderCount
+		totalSalesAmount = summary.TotalSalesAmount
+	}
+
 	return querydto.ListDetailDTO{
 		ID:          it.ID,
 		ReadableID:  it.ReadableID,
@@ -264,6 +292,9 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 		Images:         images,
 
 		PriceRows: priceRows,
+
+		TotalOrderCount:  totalOrderCount,
+		TotalSalesAmount: totalSalesAmount,
 	}, nil
 }
 

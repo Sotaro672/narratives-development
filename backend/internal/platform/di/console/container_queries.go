@@ -318,12 +318,13 @@ func buildQueries(
 	// =========================================================
 	listManagementQuery := companyquery.NewListManagementQuery(
 		companyquery.NewListManagementQueryParams{
-			Lister:       r.listRepoFS,
-			NameResolver: res.nameResolver,
-			MemberRepo:   r.memberRepo,
-			PBGetter:     r.productBlueprintRepo,
-			TBGetter:     r.tokenBlueprintRepo,
-			InvRows:      inventoryManagementQuery,
+			Lister:             r.listRepoFS,
+			NameResolver:       res.nameResolver,
+			MemberRepo:         r.memberRepo,
+			PBGetter:           r.productBlueprintRepo,
+			TBGetter:           r.tokenBlueprintRepo,
+			SalesSummaryReader: r.orderConsoleLister,
+			InvRows:            inventoryManagementQuery,
 		},
 	)
 
@@ -337,12 +338,13 @@ func buildQueries(
 	// =========================================================
 	listDetailQuery := companyquery.NewListDetailQuery(
 		companyquery.NewListDetailQueryParams{
-			Getter:       r.listRepoFS,
-			NameResolver: res.nameResolver,
-			MemberRepo:   r.memberRepo,
-			PBGetter:     r.productBlueprintRepo,
-			TBGetter:     r.tokenBlueprintRepo,
-			InvGetter:    inventoryDetailQuery,
+			Getter:             r.listRepoFS,
+			NameResolver:       res.nameResolver,
+			MemberRepo:         r.memberRepo,
+			PBGetter:           r.productBlueprintRepo,
+			TBGetter:           r.tokenBlueprintRepo,
+			InvGetter:          inventoryDetailQuery,
+			SalesSummaryReader: r.orderConsoleLister,
 
 			// Firebase Storage 移行後:
 			// - frontend が Firebase Storage へ直接 upload

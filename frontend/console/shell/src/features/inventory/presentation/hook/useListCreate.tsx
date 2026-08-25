@@ -10,6 +10,7 @@ import type {
   ListStatus,
 } from "../../../../shared/types/list";
 import type { ListCreateDTO } from "../../../../shared/types/inventory";
+import { fetchListsByInventoryIdHTTP } from "../../../list/infrastructure/repository";
 
 import {
   createCompletedListProgress,
@@ -35,6 +36,13 @@ import {
 } from "../../application/listCreateService";
 
 type ImageInputRef = React.RefObject<HTMLInputElement | null>;
+
+export type ListCreateInventoryListItem = {
+  id: string;
+  readableId: string;
+  totalOrderCount: number;
+  totalSalesAmount: number;
+};
 
 export type UseListCreateResult = {
   title: string;
@@ -79,6 +87,11 @@ export type UseListCreateResult = {
   assigneeCandidates: AssigneeCandidate[];
   loadingMembers: boolean;
   handleSelectAssignee: (id: string) => void;
+
+  listItems: ListCreateInventoryListItem[];
+  listLoading: boolean;
+  listError: string | null;
+  onOpenList: (listId: string) => void;
 
   status: ListStatus;
   setStatus: React.Dispatch<React.SetStateAction<ListStatus>>;
@@ -345,6 +358,107 @@ function useListCreateNavigation(
   return {
     navigate,
     onBack,
+  };
+}
+
+function useExistingInventoryLists(
+  resolvedParams: ResolvedListCreateParams,
+  navigate: NavigateFunction,
+): {
+  listItems: ListCreateInventoryListItem[];
+  listLoading: boolean;
+  listError: string | null;
+  onOpenList: (listId: string) => void;
+} {
+  const inventoryId = String(
+    resolvedParams.inventoryId ?? "",
+  );
+
+  const [listItems, setListItems] = React.useState<ListCreateInventoryListItem[]>([]);
+  const [listLoading, setListLoading] = React.useState(false);
+  const [listError, setListError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!inventoryId) {
+      setListItems([]);
+      setListLoading(false);
+      setListError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadLists() {
+      try {
+        setListLoading(true);
+        setListError(null);
+
+        const items = await fetchListsByInventoryIdHTTP(
+          inventoryId,
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setListItems(
+          items
+            .filter(
+              (item) =>
+                item.inventoryId === inventoryId,
+            )
+            .map((item) => ({
+              id: item.id,
+              readableId: item.readableId,
+              totalOrderCount: item.totalOrderCount,
+              totalSalesAmount: item.totalSalesAmount,
+            })),
+        );
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setListItems([]);
+        setListError(
+          error instanceof Error
+            ? error.message
+            : String(error),
+        );
+      } finally {
+        if (!cancelled) {
+          setListLoading(false);
+        }
+      }
+    }
+
+    void loadLists();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    inventoryId,
+  ]);
+
+  const onOpenList = React.useCallback(
+    (listId: string) => {
+      if (!listId) {
+        return;
+      }
+
+      navigate(
+        `/list/${encodeURIComponent(listId)}`,
+      );
+    },
+    [navigate],
+  );
+
+  return {
+    listItems,
+    listLoading,
+    listError,
+    onOpenList,
   };
 }
 
@@ -839,6 +953,16 @@ export function useListCreate(): UseListCreateResult {
   });
 
   const {
+    listItems,
+    listLoading,
+    listError,
+    onOpenList,
+  } = useExistingInventoryLists(
+    resolvedParams,
+    navigate,
+  );
+
+  const {
     onCreate,
   } = useCreateList({
     resolvedParams,
@@ -899,6 +1023,11 @@ export function useListCreate(): UseListCreateResult {
     assigneeCandidates,
     loadingMembers,
     handleSelectAssignee,
+
+    listItems,
+    listLoading,
+    listError,
+    onOpenList,
 
     status,
     setStatus,

@@ -42,6 +42,9 @@ type ListRowDTO struct {
 	TokenBrandID   string `json:"tokenBrandId"`
 	TokenBrandName string `json:"tokenBrandName"`
 
+	TotalOrderCount  int   `json:"totalOrderCount"`
+	TotalSalesAmount int64 `json:"totalSalesAmount"`
+
 	AssigneeID   string `json:"assigneeId"`
 	AssigneeName string `json:"assigneeName"`
 
@@ -62,6 +65,8 @@ type ListManagementQuery struct {
 
 	pbGetter applicationport.ProductBlueprintGetter
 	tbGetter applicationport.TokenBlueprintGetter
+
+	salesSummaryReader applicationport.ListSalesSummaryReader
 
 	// company boundary source
 	invRows InventoryRowsLister
@@ -89,17 +94,20 @@ type NewListManagementQueryParams struct {
 	PBGetter applicationport.ProductBlueprintGetter
 	TBGetter applicationport.TokenBlueprintGetter
 
+	SalesSummaryReader applicationport.ListSalesSummaryReader
+
 	InvRows InventoryRowsLister // REQUIRED
 }
 
 func NewListManagementQuery(p NewListManagementQueryParams) *ListManagementQuery {
 	return &ListManagementQuery{
-		lister:       p.Lister,
-		nameResolver: p.NameResolver,
-		memberRepo:   p.MemberRepo,
-		pbGetter:     p.PBGetter,
-		tbGetter:     p.TBGetter,
-		invRows:      p.InvRows,
+		lister:             p.Lister,
+		nameResolver:       p.NameResolver,
+		memberRepo:         p.MemberRepo,
+		pbGetter:           p.PBGetter,
+		tbGetter:           p.TBGetter,
+		salesSummaryReader: p.SalesSummaryReader,
+		invRows:            p.InvRows,
 	}
 }
 
@@ -116,8 +124,8 @@ func (q *ListManagementQuery) ListRows(
 	page = NormalizePage(page)
 	_ = sort // 現状は company boundary first の取得順を維持する
 
-	if q == nil || q.lister == nil || q.invRows == nil {
-		return listdom.PageResult[ListRowDTO]{}, errors.New("ListManagementQuery.ListRows: wiring is incomplete (lister/invRows required)")
+	if q == nil || q.lister == nil || q.invRows == nil || q.salesSummaryReader == nil {
+		return listdom.PageResult[ListRowDTO]{}, errors.New("ListManagementQuery.ListRows: wiring is incomplete (lister/invRows/salesSummaryReader required)")
 	}
 
 	allowedInventoryIDs, allowedSet, err := AllowedInventoryIDsFromContext(ctx, q.invRows)
@@ -363,8 +371,38 @@ func (q *ListManagementQuery) ListRows(
 
 	end := MinInt(start+page.PerPage, totalCount)
 
+	pageItems := allowedAll[start:end]
+
+	listIDs := make([]string, 0, len(pageItems))
+	for _, item := range pageItems {
+		if item.ID == "" {
+			continue
+		}
+
+		listIDs = append(listIDs, item.ID)
+	}
+
+	summaries, err := q.salesSummaryReader.ListByListIDs(
+		ctx,
+		listIDs,
+		allowedSet,
+	)
+	if err != nil {
+		return listdom.PageResult[ListRowDTO]{}, err
+	}
+
+	for i := range pageItems {
+		summary, ok := summaries[pageItems[i].ID]
+		if !ok {
+			continue
+		}
+
+		pageItems[i].TotalOrderCount = summary.TotalOrderCount
+		pageItems[i].TotalSalesAmount = summary.TotalSalesAmount
+	}
+
 	return listdom.PageResult[ListRowDTO]{
-		Items:      allowedAll[start:end],
+		Items:      pageItems,
 		Page:       page.Number,
 		PerPage:    page.PerPage,
 		TotalCount: totalCount,

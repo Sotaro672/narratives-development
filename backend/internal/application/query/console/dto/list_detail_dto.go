@@ -49,6 +49,9 @@ type ListDetailDTO struct {
 	Images         []ListDetailImageDTO `json:"images"`
 
 	PriceRows []ListDetailPriceRowDTO `json:"priceRows"`
+
+	TotalOrderCount  int   `json:"totalOrderCount"`
+	TotalSalesAmount int64 `json:"totalSalesAmount"`
 }
 
 // ListDetailImageDTO is the image information required by the list detail page.

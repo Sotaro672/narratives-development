@@ -70,6 +70,9 @@ export type UseListDetailResult = {
   tokenBrandName: string;
   tokenName: string;
 
+  totalOrderCount: number;
+  totalSalesAmount: number;
+
   imageUrls: string[];
   onAddImages: (files: FileList | null) => void;
   onRemoveImageAt: (index: number) => void;
@@ -187,6 +190,8 @@ export function useListDetail(): UseListDetailResult {
   const productName = derived?.productName ?? "";
   const tokenBrandName = derived?.tokenBrandName ?? "";
   const tokenName = derived?.tokenName ?? "";
+  const totalOrderCount = derived?.totalOrderCount ?? 0;
+  const totalSalesAmount = derived?.totalSalesAmount ?? 0;
   const assigneeId = derived?.assigneeId ?? "";
   const assigneeName = derived?.assigneeName ?? "";
   const createdByName = derived?.createdByName ?? "";
@@ -872,6 +877,9 @@ export function useListDetail(): UseListDetailResult {
     productName,
     tokenBrandName,
     tokenName,
+
+    totalOrderCount,
+    totalSalesAmount,
 
     imageUrls:
       effectiveImageUrls,

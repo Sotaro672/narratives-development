@@ -21,6 +21,8 @@ import { fetchListsByInventoryIdHTTP } from "../../../list/infrastructure/reposi
 export type InventoryListItem = { 
   id: string; 
   readableId: string; 
+  totalOrderCount: number; 
+  totalSalesAmount: number; 
 }; 
  
 export type UseInventoryDetailResult = { 
@@ -161,6 +163,8 @@ export function useInventoryDetail(
             .map((item) => ({ 
               id: item.id, 
               readableId: item.readableId, 
+              totalOrderCount: item.totalOrderCount, 
+              totalSalesAmount: item.totalSalesAmount, 
             })), 
         ); 
       } catch (error) { 

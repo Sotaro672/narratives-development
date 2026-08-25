@@ -35,4 +35,6 @@ export type ListDetailDTO = {
   primaryImageId?: string;
   images: ListDetailImageDTO[];
   priceRows: ListDetailPriceRowDTO[];
+  totalOrderCount: number;
+  totalSalesAmount: number;
 };

@@ -9,6 +9,7 @@ import (
 	"google.golang.org/api/iterator"
 
 	fscommon "narratives/internal/adapters/out/firestore/common"
+	applicationport "narratives/internal/application/port"
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
 )
@@ -48,7 +49,7 @@ func (r *OrderConsoleListerFS) ListByInventoryIDs(
 	sort common.Sort,
 	page common.Page,
 ) (common.PageResult[orderdom.Order], error) {
-	if r.Client == nil {
+	if r == nil || r.Client == nil {
 		return common.PageResult[orderdom.Order]{}, errors.New("firestore client is nil")
 	}
 
@@ -108,6 +109,116 @@ func (r *OrderConsoleListerFS) ListByInventoryIDs(
 		Page:       pageNum,
 		PerPage:    perPage,
 	}, nil
+}
+
+// ListByListIDs returns cumulative paid order statistics for the requested lists.
+//
+// Aggregation rules:
+// - Paid == true orders only.
+// - type == "list" items only.
+// - cancelled items are excluded.
+// - items outside allowedInventoryIDs are excluded.
+// - TotalOrderCount counts each Order only once per List.
+// - TotalSalesAmount is the sum of Price * Qty and excludes tax and shipping.
+func (r *OrderConsoleListerFS) ListByListIDs(
+	ctx context.Context,
+	listIDs []string,
+	allowedInventoryIDs map[string]struct{},
+) (
+	map[string]applicationport.ListSalesSummary,
+	error,
+) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	result := make(
+		map[string]applicationport.ListSalesSummary,
+	)
+
+	if len(listIDs) == 0 || len(allowedInventoryIDs) == 0 {
+		return result, nil
+	}
+
+	targetListIDs := make(
+		map[string]struct{},
+		len(listIDs),
+	)
+
+	for _, listID := range listIDs {
+		if listID == "" {
+			continue
+		}
+
+		targetListIDs[listID] = struct{}{}
+	}
+
+	if len(targetListIDs) == 0 {
+		return result, nil
+	}
+
+	it := r.ordersCol().Documents(ctx)
+	defer it.Stop()
+
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		o, err := docToOrder(doc)
+		if err != nil {
+			return nil, err
+		}
+
+		if !o.Paid {
+			continue
+		}
+
+		countedListIDs := make(
+			map[string]struct{},
+		)
+
+		for _, item := range o.Items {
+			if item.Type != orderdom.OrderItemTypeList {
+				continue
+			}
+
+			if item.IsCancelled {
+				continue
+			}
+
+			if item.ListID == "" || item.InventoryID == "" {
+				continue
+			}
+
+			if _, ok := targetListIDs[item.ListID]; !ok {
+				continue
+			}
+
+			if _, ok := allowedInventoryIDs[item.InventoryID]; !ok {
+				continue
+			}
+
+			summary := result[item.ListID]
+
+			summary.TotalSalesAmount +=
+				int64(item.Price) *
+					int64(item.Qty)
+
+			if _, counted := countedListIDs[item.ListID]; !counted {
+				summary.TotalOrderCount++
+				countedListIDs[item.ListID] = struct{}{}
+			}
+
+			result[item.ListID] = summary
+		}
+	}
+
+	return result, nil
 }
 
 func normalizeOrderConsolePage(p common.Page) common.Page {
