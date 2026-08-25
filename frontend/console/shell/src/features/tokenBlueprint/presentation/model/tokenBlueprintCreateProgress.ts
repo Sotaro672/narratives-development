@@ -4,6 +4,14 @@ import type {
   TokenBlueprintCreateOperation,
   TokenBlueprintCreateOperationStatus,
 } from "../../infrastructure/repository/tokenBlueprintCreateOperationRepositoryHTTP";
+import {
+  createCompletedTokenBlueprintProgress,
+  createFailedTokenBlueprintProgress,
+  createInitialTokenBlueprintProgress,
+  createUploadingTokenBlueprintProgress as createUploadingBaseProgress,
+  type TokenBlueprintProgress,
+  type TokenBlueprintProgressTarget,
+} from "./tokenBlueprintProgress";
 
 export type TokenBlueprintCreateProgressPhase =
   | "idle"
@@ -15,119 +23,41 @@ export type TokenBlueprintCreateProgressPhase =
   | "failed_retryable"
   | "failed_fatal";
 
-export type TokenBlueprintCreateUploadTarget =
-  | "icon"
-  | "content";
+export type TokenBlueprintCreateUploadTarget = TokenBlueprintProgressTarget;
 
-export type TokenBlueprintCreateProgress = {
+export type TokenBlueprintCreateProgress = Omit<TokenBlueprintProgress, "phase"> & {
   phase: TokenBlueprintCreateProgressPhase;
-
   operationId?: string;
-
   tokenBlueprintId?: string;
-
-  title: string;
-
-  message: string;
-
-  percentage: number;
-
-  transferredBytes: number;
-
-  totalBytes: number;
-
-  currentFileName?: string;
-
-  currentUploadTarget?: TokenBlueprintCreateUploadTarget;
-
-  completedUploadCount: number;
-
-  expectedUploadCount: number;
-
   retryCount: number;
-
   maxRetries: number;
-
-  errorMessage?: string;
-
-  isBrowserDependent: boolean;
-
-  isBlockingNavigation: boolean;
-
   canRetry: boolean;
-
-  isTerminal: boolean;
 };
 
 export type TokenBlueprintCreateUploadProgressInput = {
   operation?: TokenBlueprintCreateOperation | null;
-
   target: TokenBlueprintCreateUploadTarget;
-
   fileName: string;
-
   transferredBytes: number;
-
   totalBytes: number;
-
   completedUploadCount: number;
-
   expectedUploadCount: number;
 };
 
-function clampPercentage(
-  value: number,
-): number {
+function clampPercentage(value: number): number {
   if (!Number.isFinite(value)) {
     return 0;
   }
 
-  return Math.min(
-    100,
-    Math.max(
-      0,
-      Math.round(value),
-    ),
-  );
+  return Math.min(100, Math.max(0, Math.round(value)));
 }
 
-function calculatePercentage(
-  transferredBytes: number,
-  totalBytes: number,
-): number {
-  if (totalBytes <= 0) {
-    return 0;
-  }
-
-  return clampPercentage(
-    (transferredBytes / totalBytes) * 100,
-  );
-}
-
-function normalizeByteCount(
-  value: number,
-): number {
+function normalizeCount(value: number): number {
   if (!Number.isFinite(value)) {
     return 0;
   }
 
-  return Math.max(
-    0,
-    value,
-  );
-}
-
-function normalizeCount(
-  value: number,
-): number {
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-
-  return Math.max(
-    0,
-    Math.floor(value),
-  );
+  return Math.max(0, Math.floor(value));
 }
 
 function operationStatusToPhase(
@@ -154,242 +84,201 @@ function operationStatusToPhase(
   }
 }
 
-function phaseTitle(
+function createCreateProgress(
+  base: TokenBlueprintProgress,
   phase: TokenBlueprintCreateProgressPhase,
-): string {
-  switch (phase) {
-    case "idle":
-      return "";
-
-    case "starting":
-      return "作成準備中";
-
-    case "uploading":
-      return "ファイルを転送中";
-
-    case "queued":
-      return "ファイル転送完了・保存準備中";
-
-    case "processing":
-      return "トークン設計を保存中";
-
-    case "completed":
-      return "保存が完了しました";
-
-    case "failed_retryable":
-      return "保存処理に失敗しました";
-
-    case "failed_fatal":
-      return "トークン設計を保存できませんでした";
-  }
-}
-
-function phaseMessage(
-  phase: TokenBlueprintCreateProgressPhase,
-): string {
-  switch (phase) {
-    case "idle":
-      return "";
-
-    case "starting":
-      return "トークン設計の作成準備をしています。";
-
-    case "uploading":
-      return "ファイル転送が完了するまで、この画面を閉じたり移動したりしないでください。";
-
-    case "queued":
-      return "ファイル転送は完了しました。保存処理を開始します。";
-
-    case "processing":
-      return "サーバーでトークン設計を保存しています。この画面を離れても処理は継続します。";
-
-    case "completed":
-      return "トークン設計の保存が完了しました。";
-
-    case "failed_retryable":
-      return "一時的なエラーが発生しました。再試行できます。";
-
-    case "failed_fatal":
-      return "保存処理を継続できないエラーが発生しました。";
-  }
-}
-
-function buildBaseProgress(
-  phase: TokenBlueprintCreateProgressPhase,
+  overrides?: Partial<Omit<TokenBlueprintCreateProgress, "phase">>,
 ): TokenBlueprintCreateProgress {
   return {
+    ...base,
+    ...overrides,
     phase,
-
-    title: phaseTitle(phase),
-
-    message: phaseMessage(phase),
-
-    percentage: 0,
-
-    transferredBytes: 0,
-
-    totalBytes: 0,
-
-    completedUploadCount: 0,
-
-    expectedUploadCount: 0,
-
-    retryCount: 0,
-
-    maxRetries: 0,
-
-    isBrowserDependent:
-      phase === "uploading",
-
-    isBlockingNavigation:
-      phase === "uploading",
-
-    canRetry:
-      phase === "failed_retryable",
-
-    isTerminal:
-      phase === "completed" ||
-      phase === "failed_fatal",
+    retryCount: overrides?.retryCount ?? 0,
+    maxRetries: overrides?.maxRetries ?? 0,
+    canRetry: overrides?.canRetry ?? false,
   };
 }
 
 export function createInitialTokenBlueprintCreateProgress(): TokenBlueprintCreateProgress {
-  return buildBaseProgress(
+  return createCreateProgress(
+    createInitialTokenBlueprintProgress(),
     "idle",
   );
 }
 
 export function createStartingTokenBlueprintCreateProgress(): TokenBlueprintCreateProgress {
-  return buildBaseProgress(
+  return createCreateProgress(
+    createInitialTokenBlueprintProgress(),
     "starting",
+    {
+      title: "作成準備中",
+      message: "トークン設計の作成準備をしています。",
+      isBrowserDependent: false,
+      isBlockingNavigation: false,
+      isTerminal: false,
+    },
   );
 }
 
 export function createUploadingTokenBlueprintCreateProgress(
   input: TokenBlueprintCreateUploadProgressInput,
 ): TokenBlueprintCreateProgress {
-  const transferredBytes =
-    normalizeByteCount(
-      input.transferredBytes,
-    );
+  const base = createUploadingBaseProgress({
+    target: input.target,
+    fileName: input.fileName,
+    transferredBytes: input.transferredBytes,
+    totalBytes: input.totalBytes,
+    completedUploadCount: input.completedUploadCount,
+    expectedUploadCount: input.expectedUploadCount,
+  });
 
-  const totalBytes =
-    normalizeByteCount(
-      input.totalBytes,
-    );
-
-  const completedUploadCount =
-    normalizeCount(
-      input.completedUploadCount,
-    );
-
-  const expectedUploadCount =
-    normalizeCount(
-      input.expectedUploadCount,
-    );
-
-  return {
-    ...buildBaseProgress(
-      "uploading",
-    ),
-
-    operationId:
-      input.operation?.id,
-
-    tokenBlueprintId:
-      input.operation?.tokenBlueprintId,
-
-    percentage:
-      calculatePercentage(
-        transferredBytes,
-        totalBytes,
-      ),
-
-    transferredBytes,
-
-    totalBytes,
-
-    currentFileName:
-      input.fileName,
-
-    currentUploadTarget:
-      input.target,
-
-    completedUploadCount,
-
-    expectedUploadCount,
-
-    retryCount:
-      input.operation?.retryCount ?? 0,
-
-    maxRetries:
-      input.operation?.maxRetries ?? 0,
-  };
+  return createCreateProgress(base, "uploading", {
+    operationId: input.operation?.id,
+    tokenBlueprintId: input.operation?.tokenBlueprintId,
+    retryCount: input.operation?.retryCount ?? 0,
+    maxRetries: input.operation?.maxRetries ?? 0,
+  });
 }
 
 export function createTokenBlueprintCreateProgressFromOperation(
   operation: TokenBlueprintCreateOperation,
 ): TokenBlueprintCreateProgress {
-  const phase =
-    operationStatusToPhase(
-      operation.status,
-    );
-
-  const completedUploadCount =
-    normalizeCount(
-      operation.completedUploadCount,
-    );
-
-  const expectedUploadCount =
-    normalizeCount(
-      operation.expectedUploadCount,
-    );
+  const phase = operationStatusToPhase(operation.status);
+  const completedUploadCount = normalizeCount(operation.completedUploadCount);
+  const expectedUploadCount = normalizeCount(operation.expectedUploadCount);
 
   const uploadPercentage =
     expectedUploadCount > 0
-      ? clampPercentage(
-          (
-            completedUploadCount /
-            expectedUploadCount
-          ) * 100,
-        )
-      : phase === "queued" ||
-          phase === "processing" ||
-          phase === "completed"
+      ? clampPercentage((completedUploadCount / expectedUploadCount) * 100)
+      : phase === "queued" || phase === "processing" || phase === "completed"
         ? 100
         : 0;
 
-  return {
-    ...buildBaseProgress(
-      phase,
-    ),
+  if (phase === "completed") {
+    return createCreateProgress(
+      createCompletedTokenBlueprintProgress({
+        completedUploadCount,
+        expectedUploadCount,
+        title: "保存が完了しました",
+        message: "トークン設計の保存が完了しました。",
+      }),
+      "completed",
+      {
+        operationId: operation.id,
+        tokenBlueprintId: operation.tokenBlueprintId,
+        percentage: 100,
+        retryCount: operation.retryCount,
+        maxRetries: operation.maxRetries,
+      },
+    );
+  }
 
-    operationId:
-      operation.id,
+  if (phase === "failed_retryable") {
+    return createCreateProgress(
+      createFailedTokenBlueprintProgress(
+        operation.lastError || "",
+        {
+          title: "保存処理に失敗しました",
+          message: "一時的なエラーが発生しました。再試行できます。",
+        },
+      ),
+      "failed_retryable",
+      {
+        operationId: operation.id,
+        tokenBlueprintId: operation.tokenBlueprintId,
+        percentage: uploadPercentage,
+        completedUploadCount,
+        expectedUploadCount,
+        retryCount: operation.retryCount,
+        maxRetries: operation.maxRetries,
+        canRetry: true,
+        isTerminal: false,
+      },
+    );
+  }
 
-    tokenBlueprintId:
-      operation.tokenBlueprintId,
+  if (phase === "failed_fatal") {
+    return createCreateProgress(
+      createFailedTokenBlueprintProgress(
+        operation.lastError || "",
+        {
+          title: "トークン設計を保存できませんでした",
+          message: "保存処理を継続できないエラーが発生しました。",
+        },
+      ),
+      "failed_fatal",
+      {
+        operationId: operation.id,
+        tokenBlueprintId: operation.tokenBlueprintId,
+        percentage: uploadPercentage,
+        completedUploadCount,
+        expectedUploadCount,
+        retryCount: operation.retryCount,
+        maxRetries: operation.maxRetries,
+      },
+    );
+  }
 
-    percentage:
-      phase === "queued" ||
-      phase === "processing" ||
-      phase === "completed"
-        ? 100
-        : uploadPercentage,
+  if (phase === "queued") {
+    return createCreateProgress(
+      createInitialTokenBlueprintProgress(),
+      "queued",
+      {
+        operationId: operation.id,
+        tokenBlueprintId: operation.tokenBlueprintId,
+        title: "ファイル転送完了・保存準備中",
+        message: "ファイル転送は完了しました。保存処理を開始します。",
+        percentage: 100,
+        completedUploadCount,
+        expectedUploadCount,
+        retryCount: operation.retryCount,
+        maxRetries: operation.maxRetries,
+        isBrowserDependent: false,
+        isBlockingNavigation: false,
+        isTerminal: false,
+      },
+    );
+  }
 
-    completedUploadCount,
+  if (phase === "processing") {
+    return createCreateProgress(
+      createInitialTokenBlueprintProgress(),
+      "processing",
+      {
+        operationId: operation.id,
+        tokenBlueprintId: operation.tokenBlueprintId,
+        title: "トークン設計を保存中",
+        message: "サーバーでトークン設計を保存しています。この画面を離れても処理は継続します。",
+        percentage: 100,
+        completedUploadCount,
+        expectedUploadCount,
+        retryCount: operation.retryCount,
+        maxRetries: operation.maxRetries,
+        isBrowserDependent: false,
+        isBlockingNavigation: false,
+        isTerminal: false,
+      },
+    );
+  }
 
-    expectedUploadCount,
-
-    retryCount:
-      operation.retryCount,
-
-    maxRetries:
-      operation.maxRetries,
-
-    errorMessage:
-      operation.lastError || undefined,
-  };
+  return createCreateProgress(
+    createInitialTokenBlueprintProgress(),
+    "uploading",
+    {
+      operationId: operation.id,
+      tokenBlueprintId: operation.tokenBlueprintId,
+      title: "ファイルを転送中",
+      message: "ファイル転送が完了するまで、この画面を閉じたり移動したりしないでください。",
+      percentage: uploadPercentage,
+      completedUploadCount,
+      expectedUploadCount,
+      retryCount: operation.retryCount,
+      maxRetries: operation.maxRetries,
+      isBrowserDependent: true,
+      isBlockingNavigation: true,
+      isTerminal: false,
+    },
+  );
 }
 
 export function isTokenBlueprintCreateBrowserUploadPhase(
@@ -407,17 +296,11 @@ export function shouldBlockTokenBlueprintCreateNavigation(
 export function isTokenBlueprintCreateOperationPollingRequired(
   progress: TokenBlueprintCreateProgress,
 ): boolean {
-  return (
-    progress.phase === "queued" ||
-    progress.phase === "processing"
-  );
+  return progress.phase === "queued" || progress.phase === "processing";
 }
 
 export function isTokenBlueprintCreateOperationFinished(
   progress: TokenBlueprintCreateProgress,
 ): boolean {
-  return (
-    progress.phase === "completed" ||
-    progress.phase === "failed_fatal"
-  );
+  return progress.phase === "completed" || progress.phase === "failed_fatal";
 }

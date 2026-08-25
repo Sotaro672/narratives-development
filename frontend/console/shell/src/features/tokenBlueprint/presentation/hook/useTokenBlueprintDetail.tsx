@@ -16,6 +16,17 @@ import {
 import { createTokenBlueprintContentId } from "../../application/tokenBlueprintContentService";
 import { patchTokenBlueprintContentFiles } from "../../infrastructure/repository/tokenBlueprintRepositoryHTTP";
 import { uploadTokenBlueprintContentToFirebaseStorage } from "../../infrastructure/storage/tokenBlueprintAssetStorage";
+import {
+  createCompletedTokenBlueprintProgress,
+  createFailedTokenBlueprintProgress,
+  createInitialTokenBlueprintProgress,
+  createPreparingTokenBlueprintProgress,
+  createSavingTokenBlueprintProgress,
+  createUploadingTokenBlueprintProgress,
+  isTokenBlueprintProgressVisible,
+  type TokenBlueprintProgress,
+  type TokenBlueprintUploadProgressInput,
+} from "../model/tokenBlueprintProgress";
 import { useTokenBlueprintCard } from "./useTokenBlueprintCard";
 
 type TokenBlueprintCardHookResult = ReturnType<typeof useTokenBlueprintCard>;
@@ -39,6 +50,8 @@ type UseTokenBlueprintDetailVM = {
   cardVm: TokenBlueprintCardHookResult["vm"];
   isEditMode: boolean;
   isUploadingContents: boolean;
+  progress: TokenBlueprintProgress;
+  progressOpen: boolean;
 };
 
 type UseTokenBlueprintDetailHandlers = {
@@ -50,6 +63,7 @@ type UseTokenBlueprintDetailHandlers = {
   onSelectAssignee: (id: string) => void;
   onEditAssignee: () => void;
   onClickAssignee: () => void;
+  onCloseProgress: () => void;
   cardHandlers: TokenBlueprintCardHookResult["handlers"];
   onTokenContentsFilesSelected: (files: File[]) => Promise<void>;
   onDeleteTokenContent: (item: ContentFile, index: number) => Promise<void>;
@@ -60,17 +74,45 @@ export type UseTokenBlueprintDetailResult = {
   handlers: UseTokenBlueprintDetailHandlers;
 };
 
+type ExistingTokenBlueprintContentsProgressHandlers = {
+  onUploadProgress?: (progress: TokenBlueprintUploadProgressInput) => void;
+  onSaving?: (progress: {
+    transferredBytes: number;
+    totalBytes: number;
+    completedUploadCount: number;
+    expectedUploadCount: number;
+  }) => void;
+};
+
+function errorMessageFromUnknown(
+  error: unknown,
+): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "トークン設計の保存に失敗しました。";
+}
+
 async function uploadAndAppendExistingTokenBlueprintContents(params: {
   companyId: string;
   tokenBlueprintId: string;
   actorId: string;
   files: File[];
   existingContentFiles: ContentFile[];
+  progressHandlers?: ExistingTokenBlueprintContentsProgressHandlers;
 }): Promise<TokenBlueprint> {
   let currentContentFiles = [...params.existingContentFiles];
   let updatedBlueprint: TokenBlueprint | null = null;
 
-  for (const file of params.files) {
+  const totalBytes = params.files.reduce(
+    (total, file) => total + file.size,
+    0,
+  );
+
+  let completedBytes = 0;
+
+  for (const [index, file] of params.files.entries()) {
     const contentId = createTokenBlueprintContentId();
 
     const uploaded = await uploadTokenBlueprintContentToFirebaseStorage({
@@ -78,7 +120,21 @@ async function uploadAndAppendExistingTokenBlueprintContents(params: {
       tokenBlueprintId: params.tokenBlueprintId,
       contentId,
       file,
+      onProgress: (progress) => {
+        params.progressHandlers?.onUploadProgress?.({
+          target: "content",
+          fileName: file.name,
+          transferredBytes:
+            completedBytes +
+            progress.transferredBytes,
+          totalBytes,
+          completedUploadCount: index,
+          expectedUploadCount: params.files.length,
+        });
+      },
     });
+
+    completedBytes += file.size;
 
     const nowIso = new Date().toISOString();
 
@@ -101,6 +157,13 @@ async function uploadAndAppendExistingTokenBlueprintContents(params: {
       ...currentContentFiles,
       contentFile,
     ];
+
+    params.progressHandlers?.onSaving?.({
+      transferredBytes: completedBytes,
+      totalBytes,
+      completedUploadCount: index + 1,
+      expectedUploadCount: params.files.length,
+    });
 
     updatedBlueprint = await patchTokenBlueprintContentFiles({
       tokenBlueprintId: params.tokenBlueprintId,
@@ -125,7 +188,9 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
   const [blueprint, setBlueprint] = useState<TokenBlueprint | null>(null);
   const [loading, setLoading] = useState(false);
-  const [isUploadingContents, setIsUploadingContents] = useState(false);
+  const [progress, setProgress] = useState<TokenBlueprintProgress>(
+    createInitialTokenBlueprintProgress,
+  );
 
   const {
     assigneeId,
@@ -178,6 +243,31 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     };
   }, [tokenBlueprintId, navigate]);
 
+  useEffect(() => {
+    if (!progress.isBlockingNavigation) {
+      return;
+    }
+
+    const handleBeforeUnload = (
+      event: BeforeUnloadEvent,
+    ) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener(
+      "beforeunload",
+      handleBeforeUnload,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "beforeunload",
+        handleBeforeUnload,
+      );
+    };
+  }, [progress.isBlockingNavigation]);
+
   const minted = blueprint?.minted ?? false;
   const createdByName = blueprint?.createdByName ?? "";
   const updatedByName = blueprint?.updatedByName ?? "";
@@ -194,23 +284,57 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   });
 
   const isEditMode = cardVm.isEditMode;
+  const progressOpen = isTokenBlueprintProgressVisible(progress);
+  const isUploadingContents =
+    progress.phase === "uploading" &&
+    progress.currentUploadTarget === "content";
 
   const handleBack = useCallback(() => {
+    if (progress.isBlockingNavigation) {
+      return;
+    }
+
     navigate("/tokenBlueprint", { replace: true });
-  }, [navigate]);
+  }, [progress.isBlockingNavigation, navigate]);
 
   const handleEdit = useCallback(() => {
+    if (progress.isBlockingNavigation) {
+      return;
+    }
+
     cardHandlers.setEditMode?.(true);
-  }, [cardHandlers]);
+  }, [progress.isBlockingNavigation, cardHandlers]);
 
   const handleCancel = useCallback(() => {
+    if (progress.isBlockingNavigation) {
+      return;
+    }
+
     cardHandlers.reset?.();
     cardHandlers.setEditMode?.(false);
     resetAssignee();
-  }, [cardHandlers, resetAssignee]);
+  }, [
+    progress.isBlockingNavigation,
+    cardHandlers,
+    resetAssignee,
+  ]);
+
+  const handleCloseProgress = useCallback(() => {
+    if (progress.isBlockingNavigation) {
+      return;
+    }
+
+    setProgress(
+      createInitialTokenBlueprintProgress(),
+    );
+  }, [progress.isBlockingNavigation]);
 
   const handleSave = useCallback(async (): Promise<void> => {
-    if (loading || !blueprint) {
+    if (
+      loading ||
+      progress.isBlockingNavigation ||
+      !blueprint
+    ) {
       return;
     }
 
@@ -219,8 +343,20 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
       return;
     }
 
+    const iconFile = cardVm.iconFile ?? null;
+    const totalBytes = iconFile?.size ?? 0;
+
+    let transferredBytes = 0;
+
     try {
       setLoading(true);
+
+      setProgress(
+        createPreparingTokenBlueprintProgress({
+          title: "保存準備中",
+          message: "トークン設計の変更内容を確認しています。",
+        }),
+      );
 
       const sourceBlueprint: TokenBlueprint = {
         ...blueprint,
@@ -228,19 +364,81 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         assigneeName,
       };
 
-      const updated = await updateTokenBlueprintFromCard(sourceBlueprint, cardVm);
+      const updated = await updateTokenBlueprintFromCard(
+        sourceBlueprint,
+        cardVm,
+        {
+          onSaving: () => {
+            setProgress(
+              createSavingTokenBlueprintProgress({
+                transferredBytes,
+                totalBytes,
+                completedUploadCount:
+                  iconFile &&
+                  totalBytes > 0 &&
+                  transferredBytes >= totalBytes
+                    ? 1
+                    : 0,
+                expectedUploadCount:
+                  iconFile
+                    ? 1
+                    : 0,
+              }),
+            );
+          },
+
+          onIconProgress: (uploadProgress) => {
+            transferredBytes =
+              uploadProgress.transferredBytes;
+
+            setProgress(
+              createUploadingTokenBlueprintProgress({
+                target: "icon",
+                fileName: iconFile?.name ?? "",
+                transferredBytes:
+                  uploadProgress.transferredBytes,
+                totalBytes:
+                  uploadProgress.totalBytes,
+                completedUploadCount:
+                  uploadProgress.percentage >= 100
+                    ? 1
+                    : 0,
+                expectedUploadCount: 1,
+              }),
+            );
+          },
+        },
+      );
 
       setBlueprint(updated);
       cardHandlers.setEditMode?.(false);
 
-      window.alert("編集が完了しました。");
-    } catch {
-      // 保存失敗時は現在の編集状態を維持する。
+      setProgress(
+        createCompletedTokenBlueprintProgress({
+          transferredBytes: totalBytes,
+          totalBytes,
+          completedUploadCount:
+            iconFile
+              ? 1
+              : 0,
+          expectedUploadCount:
+            iconFile
+              ? 1
+              : 0,
+        }),
+      );
+    } catch (error) {
+      setProgress(
+        createFailedTokenBlueprintProgress(
+          errorMessageFromUnknown(error),
+        ),
+      );
     } finally {
       setLoading(false);
     }
   }, [
     loading,
+    progress.isBlockingNavigation,
     blueprint,
     assigneeId,
     assigneeName,
@@ -249,7 +447,12 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   ]);
 
   const handleDelete = useCallback(async (): Promise<void> => {
-    if (loading || !blueprint || blueprint.minted) {
+    if (
+      loading ||
+      progress.isBlockingNavigation ||
+      !blueprint ||
+      blueprint.minted
+    ) {
       return;
     }
 
@@ -260,7 +463,12 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     } catch {
       setLoading(false);
     }
-  }, [loading, blueprint, navigate]);
+  }, [
+    loading,
+    progress.isBlockingNavigation,
+    blueprint,
+    navigate,
+  ]);
 
   const handleEditAssignee = useCallback(() => {
     // AdminCard互換イベント。
@@ -274,7 +482,12 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     async (files: File[]): Promise<void> => {
       const id = tokenBlueprintId;
 
-      if (!id || !blueprint || files.length === 0) {
+      if (
+        progress.isBlockingNavigation ||
+        !id ||
+        !blueprint ||
+        files.length === 0
+      ) {
         return;
       }
 
@@ -286,23 +499,76 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         throw new Error("memberId is required");
       }
 
-      setIsUploadingContents(true);
+      const totalBytes = files.reduce(
+        (total, file) => total + file.size,
+        0,
+      );
 
       try {
+        setProgress(
+          createPreparingTokenBlueprintProgress({
+            title: "アップロード準備中",
+            message: "追加するコンテンツを準備しています。",
+          }),
+        );
+
         const updated = await uploadAndAppendExistingTokenBlueprintContents({
           companyId: blueprint.companyId,
           tokenBlueprintId: id,
           actorId: memberId,
           files,
           existingContentFiles: blueprint.contentFiles,
+          progressHandlers: {
+            onUploadProgress: (uploadProgress) => {
+              setProgress(
+                createUploadingTokenBlueprintProgress(
+                  uploadProgress,
+                ),
+              );
+            },
+
+            onSaving: (savingProgress) => {
+              setProgress(
+                createSavingTokenBlueprintProgress({
+                  ...savingProgress,
+                  title: "コンテンツを保存中",
+                  message: "転送したコンテンツ情報を保存しています。",
+                }),
+              );
+            },
+          },
         });
 
         setBlueprint(updated);
-      } finally {
-        setIsUploadingContents(false);
+
+        setProgress(
+          createCompletedTokenBlueprintProgress({
+            transferredBytes: totalBytes,
+            totalBytes,
+            completedUploadCount: files.length,
+            expectedUploadCount: files.length,
+            title: "コンテンツの追加が完了しました",
+            message: "選択したコンテンツの保存が完了しました。",
+          }),
+        );
+      } catch (error) {
+        setProgress(
+          createFailedTokenBlueprintProgress(
+            errorMessageFromUnknown(error),
+            {
+              title: "コンテンツを追加できませんでした",
+              message: "コンテンツの保存中にエラーが発生しました。",
+            },
+          ),
+        );
       }
     },
-    [tokenBlueprintId, blueprint, memberId],
+    [
+      tokenBlueprintId,
+      blueprint,
+      memberId,
+      progress.isBlockingNavigation,
+    ],
   );
 
   const onDeleteTokenContent = useCallback(
@@ -312,7 +578,11 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     ): Promise<void> => {
       const id = tokenBlueprintId;
 
-      if (!id || !blueprint) {
+      if (
+        progress.isBlockingNavigation ||
+        !id ||
+        !blueprint
+      ) {
         return;
       }
 
@@ -320,14 +590,44 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         (contentFile) => contentFile.id !== item.id,
       );
 
-      const updated = await patchTokenBlueprintContentFiles({
-        tokenBlueprintId: id,
-        contentFiles: nextContentFiles,
-      });
+      try {
+        setProgress(
+          createSavingTokenBlueprintProgress({
+            title: "コンテンツを削除中",
+            message: "トークン設計からコンテンツを削除しています。",
+          }),
+        );
 
-      setBlueprint(updated);
+        const updated = await patchTokenBlueprintContentFiles({
+          tokenBlueprintId: id,
+          contentFiles: nextContentFiles,
+        });
+
+        setBlueprint(updated);
+
+        setProgress(
+          createCompletedTokenBlueprintProgress({
+            title: "コンテンツを削除しました",
+            message: "コンテンツの削除が完了しました。",
+          }),
+        );
+      } catch (error) {
+        setProgress(
+          createFailedTokenBlueprintProgress(
+            errorMessageFromUnknown(error),
+            {
+              title: "コンテンツを削除できませんでした",
+              message: "コンテンツの削除中にエラーが発生しました。",
+            },
+          ),
+        );
+      }
     },
-    [tokenBlueprintId, blueprint],
+    [
+      tokenBlueprintId,
+      blueprint,
+      progress.isBlockingNavigation,
+    ],
   );
 
   const vm: UseTokenBlueprintDetailVM = {
@@ -346,6 +646,8 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     cardVm,
     isEditMode,
     isUploadingContents,
+    progress,
+    progressOpen,
   };
 
   const handlers: UseTokenBlueprintDetailHandlers = {
@@ -357,6 +659,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     onSelectAssignee: handleSelectAssignee,
     onEditAssignee: handleEditAssignee,
     onClickAssignee: handleClickAssignee,
+    onCloseProgress: handleCloseProgress,
     cardHandlers,
     onTokenContentsFilesSelected,
     onDeleteTokenContent,
