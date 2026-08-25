@@ -116,8 +116,9 @@ type OrderItemInventoryRowDTO struct {
 	Qty   int `json:"qty,omitempty"`
 	Price int `json:"price,omitempty"`
 
-	IsCancelled  bool `json:"isCancelled"`
-	IsDispatched bool `json:"isDispatched"`
+	IsCancelled       bool `json:"isCancelled"`
+	IsDispatched      bool `json:"isDispatched"`
+	IsReturnRequested bool `json:"isReturnRequested"`
 
 	Transferred   bool   `json:"transferred"`
 	TransferredAt string `json:"transferredAt,omitempty"` // RFC3339(UTC)
@@ -498,8 +499,9 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					Qty:   it.Qty,
 					Price: it.Price,
 
-					IsCancelled:  it.IsCancelled,
-					IsDispatched: it.IsDispatched,
+					IsCancelled:       it.IsCancelled,
+					IsDispatched:      it.IsDispatched,
+					IsReturnRequested: it.IsReturnRequested,
 
 					Transferred:   it.Transferred,
 					TransferredAt: transferredAt,

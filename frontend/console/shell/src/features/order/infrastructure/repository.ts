@@ -113,6 +113,7 @@ export type OrderItemInventoryRowDTO = {
   price?: number;
   isCancelled: boolean;
   isDispatched: boolean;
+  isReturnRequested: boolean;
   transferred: boolean;
   transferredAt?: string;
 };
