@@ -6,6 +6,32 @@ export type InquiryStatus = "open" | "resolved" | "closed";
 
 export type InquiryReplySenderType = "avatar" | "member";
 
+export const INQUIRY_TYPES = [
+  "product",
+  "return_unopened",
+  "return_opened",
+] as const;
+
+export type InquiryType = (typeof INQUIRY_TYPES)[number];
+
+export function getInquiryTypeLabel(
+  inquiryType: InquiryType,
+): string {
+  switch (inquiryType) {
+    case "product":
+      return "商品についての説明";
+
+    case "return_unopened":
+      return "未開封での返品";
+
+    case "return_opened":
+      return "開封後の返品";
+
+    default:
+      return inquiryType;
+  }
+}
+
 export type InquiryImageFile = {
   inquiryId: string;
   fileName: string;
@@ -39,12 +65,14 @@ export type InquiryReply = {
 
 export type Inquiry = {
   id: string;
-  productId: string;
+  productId?: string;
+  orderId?: string;
+  orderItemIndex?: number;
   avatarId: string;
   subject: string;
   content: string;
   status: InquiryStatus;
-  inquiryType: string;
+  inquiryType: InquiryType;
   isRead: boolean;
   images?: InquiryImageFile[];
   createdAt: string;
@@ -58,16 +86,27 @@ export type Inquiry = {
   closedBy?: string;
 };
 
+export type InquiryOrderItemType = "list" | "resale";
+
 export type InquiryOrderItemSummary = {
+  itemIndex: number;
+  itemType: InquiryOrderItemType;
   modelId: string;
   inventoryId: string;
+  listId: string;
+  resaleId: string;
+  productId: string;
+  productBlueprintId: string;
   tokenBlueprintId: string;
   tokenName: string;
-  listId: string;
+  brandId: string;
   qty: number;
   price: number;
   isCancelled: boolean;
   isDispatched: boolean;
+  isReturnRequested: boolean;
+  returnRequestedAt?: string;
+  tokenTransferVerifiedAt?: string;
   transferred: boolean;
   transferredAt?: string;
 };
@@ -121,7 +160,7 @@ export type ListInquiriesParams = {
   productId?: string;
   avatarId?: string;
   status?: InquiryStatus;
-  inquiryType?: string;
+  inquiryType?: InquiryType;
   updatedBy?: string;
   deletedBy?: string;
   resolvedBy?: string;

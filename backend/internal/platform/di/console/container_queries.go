@@ -131,6 +131,7 @@ func buildQueries(
 		r.brandRepo,
 		r.avatarRepo,
 		r.userRepo,
+		r.orderRepo,
 	)
 
 	inquiryReplyRepo := fsrepo.NewInquiryReplyRepositoryFS(r.inquiryRepo.Client)

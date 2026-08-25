@@ -123,8 +123,6 @@ function createRecoveredTransferResult(
     avatarId: previewState.raw.owner?.avatarId ?? "",
     productId: previewState.raw.productId,
     matched: true,
-    matchedOrderId: "",
-    matchedItemIndex: -1,
     txSignature: "",
     fromDisplayName,
     toDisplayName,

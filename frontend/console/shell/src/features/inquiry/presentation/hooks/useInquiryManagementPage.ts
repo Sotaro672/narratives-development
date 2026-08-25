@@ -15,7 +15,10 @@ import { listInquiriesHTTP } from "../../infrastructure/inquiryRepositoryHTTP";
 import { getInquiryStatusLabel } from "../utils/inquiryStatus";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
-import type { InquiryManagementItem } from "../../../../shared/types/inquiry";
+import {
+  getInquiryTypeLabel,
+  type InquiryManagementItem,
+} from "../../../../shared/types/inquiry";
 
 const CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER = "current";
 const INQUIRY_DETAIL_ROUTE_BASE = "/inquiry";
@@ -38,6 +41,7 @@ export type InquiryManagementFilterOption = {
 export type InquiryManagementRowViewModel = {
   inquiryId: string;
   subject: string;
+  inquiryType: string;
   customerName: string;
   status: string;
   productName: string;
@@ -88,6 +92,14 @@ function getSubject(
   item: InquiryManagementItem,
 ): string {
   return textOrDash(item.inquiry.subject);
+}
+
+function getInquiryType(
+  item: InquiryManagementItem,
+): string {
+  return getInquiryTypeLabel(
+    item.inquiry.inquiryType,
+  );
 }
 
 function getCustomerName(
@@ -176,6 +188,7 @@ function toRowViewModel(
   return {
     inquiryId: getInquiryId(item),
     subject: getSubject(item),
+    inquiryType: getInquiryType(item),
     customerName: getCustomerName(item),
     status: getStatus(item),
     productName: getProductName(item),

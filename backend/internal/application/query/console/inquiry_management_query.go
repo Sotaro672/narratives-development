@@ -10,6 +10,7 @@ import (
 	branddom "narratives/internal/domain/brand"
 	inquirydom "narratives/internal/domain/inquiry"
 	modeldom "narratives/internal/domain/model"
+	orderdom "narratives/internal/domain/order"
 	productdom "narratives/internal/domain/product"
 	productblueprintdom "narratives/internal/domain/productBlueprint"
 	userdom "narratives/internal/domain/user"
@@ -18,10 +19,22 @@ import (
 // InquiryManagementQuery は Console 管理画面向けの Inquiry 一覧 read model を扱います。
 //
 // 一覧画面で必要な軽量情報のみを解決します。
-// Inquiry.ProductID から Product.ModelID を解決し、
-// ModelVariation.GetProductBlueprintID() から productBlueprintId を解決し、
-// ProductBlueprint.CompanyID / ProductName / BrandID を解決します。
-// さらに Brand.GetByID() から BrandName を解決します。
+//
+// product inquiry:
+// Inquiry.ProductID
+// -> Product.ModelID
+// -> ProductBlueprintID
+// -> ProductBlueprint
+//
+// return inquiry:
+// Inquiry.OrderID + Inquiry.OrderItemIndex
+// -> Order item
+// -> ModelID / ProductBlueprintID
+// -> ProductBlueprint
+//
+// ProductBlueprint から CompanyID / ProductName / BrandID を解決し、
+// Brand.GetByID() から BrandName を解決します。
+//
 // Inquiry.AvatarID から Avatar.GetByID() を使って UserID を解決し、
 // User.GetByID() を使って UserFullName を解決します。
 //
@@ -36,6 +49,7 @@ type InquiryManagementQuery struct {
 	brandRepo            branddom.Repository
 	avatarRepo           avatardom.Repository
 	userRepo             userdom.RepositoryPort
+	orderRepo            orderdom.Repository
 }
 
 // NewInquiryManagementQuery は InquiryManagementQuery を初期化します。
@@ -47,6 +61,7 @@ func NewInquiryManagementQuery(
 	brandRepo branddom.Repository,
 	avatarRepo avatardom.Repository,
 	userRepo userdom.RepositoryPort,
+	orderRepo orderdom.Repository,
 ) *InquiryManagementQuery {
 	return &InquiryManagementQuery{
 		repo:                 repo,
@@ -56,6 +71,7 @@ func NewInquiryManagementQuery(
 		brandRepo:            brandRepo,
 		avatarRepo:           avatarRepo,
 		userRepo:             userRepo,
+		orderRepo:            orderRepo,
 	}
 }
 
@@ -78,8 +94,8 @@ type InquiryManagementItem struct {
 // companyID は middleware.MemberAuth により context に格納された
 // ログイン中 member の companyId を handler 側で取り出して渡す想定です。
 //
-// Inquiry 自体は companyId を保持しないため、
-// Inquiry.ProductID -> Product.ModelID -> ProductBlueprintID -> CompanyID を query 側で解決し、
+// Inquiry 自体は companyId を保持しないため、product inquiry は ProductID、
+// return inquiry は OrderID + OrderItemIndex から ProductBlueprint を解決し、
 // resolved companyId がログイン中 member の companyId と一致する Inquiry のみを返します。
 func (q *InquiryManagementQuery) ListByCompanyID(
 	ctx context.Context,
@@ -89,21 +105,43 @@ func (q *InquiryManagementQuery) ListByCompanyID(
 	page inquirydom.Page,
 ) (inquirydom.PageResult[InquiryManagementItem], error) {
 	if q == nil || q.repo == nil {
-		return inquirydom.PageResult[InquiryManagementItem]{}, fmt.Errorf("inquiry management query: repository is nil")
+		return inquirydom.PageResult[InquiryManagementItem]{},
+			fmt.Errorf("inquiry management query: repository is nil")
 	}
 
 	if companyID == "" {
-		return inquirydom.PageResult[InquiryManagementItem]{}, fmt.Errorf("inquiry management query: companyId is empty")
+		return inquirydom.PageResult[InquiryManagementItem]{},
+			fmt.Errorf("inquiry management query: companyId is empty")
 	}
 
-	result, err := q.repo.ListByCompanyID(ctx, companyID, filter, sort, page)
+	result, err := q.repo.ListByCompanyID(
+		ctx,
+		companyID,
+		filter,
+		sort,
+		page,
+	)
 	if err != nil {
 		return inquirydom.PageResult[InquiryManagementItem]{}, err
 	}
 
-	items := make([]InquiryManagementItem, 0, len(result.Items))
+	items := make(
+		[]InquiryManagementItem,
+		0,
+		len(result.Items),
+	)
+
 	for _, inq := range result.Items {
-		modelID, productBlueprintID, productName, brandID, brandName, resolvedCompanyID, err := q.resolveProductModelRefByInquiryProductID(ctx, inq.ProductID)
+		modelID,
+			productBlueprintID,
+			productName,
+			brandID,
+			brandName,
+			resolvedCompanyID,
+			err := q.resolveProductModelRefByInquiry(
+			ctx,
+			inq,
+		)
 		if err != nil {
 			return inquirydom.PageResult[InquiryManagementItem]{}, err
 		}
@@ -116,21 +154,28 @@ func (q *InquiryManagementQuery) ListByCompanyID(
 			continue
 		}
 
-		userFullName, err := q.resolveUserFullNameByAvatarID(ctx, inq.AvatarID)
+		userFullName, err :=
+			q.resolveUserFullNameByAvatarID(
+				ctx,
+				inq.AvatarID,
+			)
 		if err != nil {
 			return inquirydom.PageResult[InquiryManagementItem]{}, err
 		}
 
-		items = append(items, InquiryManagementItem{
-			Inquiry:            inq,
-			ModelID:            modelID,
-			ProductBlueprintID: productBlueprintID,
-			ProductName:        productName,
-			BrandID:            brandID,
-			BrandName:          brandName,
-			UserFullName:       userFullName,
-			CompanyID:          resolvedCompanyID,
-		})
+		items = append(
+			items,
+			InquiryManagementItem{
+				Inquiry:            inq,
+				ModelID:            modelID,
+				ProductBlueprintID: productBlueprintID,
+				ProductName:        productName,
+				BrandID:            brandID,
+				BrandName:          brandName,
+				UserFullName:       userFullName,
+				CompanyID:          resolvedCompanyID,
+			},
+		)
 	}
 
 	return inquirydom.PageResult[InquiryManagementItem]{
@@ -145,30 +190,338 @@ func (q *InquiryManagementQuery) CountUnreadByCompanyID(
 	filter inquirydom.Filter,
 ) (int, error) {
 	if q == nil || q.repo == nil {
-		return 0, fmt.Errorf("inquiry management query: repository is nil")
+		return 0,
+			fmt.Errorf("inquiry management query: repository is nil")
 	}
 
 	if companyID == "" {
-		return 0, fmt.Errorf("inquiry management query: companyId is empty")
+		return 0,
+			fmt.Errorf("inquiry management query: companyId is empty")
 	}
 
-	return q.repo.CountUnreadByCompanyID(ctx, companyID, filter)
+	return q.repo.CountUnreadByCompanyID(
+		ctx,
+		companyID,
+		filter,
+	)
 }
 
 // GetByID は Inquiry を返します。
 //
 // command 処理前の現在状態取得など、domain entity が必要な場合に使います。
 // 詳細画面表示では InquiryDetailQuery.GetDetailByID を使ってください。
-func (q *InquiryManagementQuery) GetByID(ctx context.Context, id string) (inquirydom.Inquiry, error) {
+func (q *InquiryManagementQuery) GetByID(
+	ctx context.Context,
+	id string,
+) (inquirydom.Inquiry, error) {
 	if q == nil || q.repo == nil {
-		return inquirydom.Inquiry{}, fmt.Errorf("inquiry management query: repository is nil")
+		return inquirydom.Inquiry{},
+			fmt.Errorf("inquiry management query: repository is nil")
 	}
 
 	if id == "" {
-		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
+		return inquirydom.Inquiry{},
+			inquirydom.ErrInvalidID
 	}
 
-	return q.repo.GetByID(ctx, id)
+	return q.repo.GetByID(
+		ctx,
+		id,
+	)
+}
+
+func (q *InquiryManagementQuery) resolveProductModelRefByInquiry(
+	ctx context.Context,
+	inq inquirydom.Inquiry,
+) (
+	modelID string,
+	productBlueprintID string,
+	productName string,
+	brandID string,
+	brandName string,
+	companyID string,
+	err error,
+) {
+	switch inq.InquiryType {
+	case inquirydom.InquiryTypeReturnUnopened,
+		inquirydom.InquiryTypeReturnOpened:
+		return q.resolveProductModelRefByReturnInquiry(
+			ctx,
+			inq,
+		)
+
+	default:
+		return q.resolveProductModelRefByInquiryProductID(
+			ctx,
+			inq.ProductID,
+		)
+	}
+}
+
+func (q *InquiryManagementQuery) resolveProductModelRefByReturnInquiry(
+	ctx context.Context,
+	inq inquirydom.Inquiry,
+) (
+	modelID string,
+	productBlueprintID string,
+	productName string,
+	brandID string,
+	brandName string,
+	companyID string,
+	err error,
+) {
+	if q == nil {
+		return "", "", "", "", "", "",
+			fmt.Errorf("inquiry management query: query is nil")
+	}
+
+	if q.orderRepo == nil {
+		return "", "", "", "", "", "",
+			fmt.Errorf("inquiry management query: order repository is nil")
+	}
+
+	if inq.OrderID == "" {
+		return "", "", "", "", "", "",
+			inquirydom.ErrInvalidOrderID
+	}
+
+	if inq.OrderItemIndex == nil ||
+		*inq.OrderItemIndex < 0 {
+		return "", "", "", "", "", "",
+			inquirydom.ErrInvalidOrderItemIndex
+	}
+
+	order, err := q.orderRepo.GetByID(
+		ctx,
+		inq.OrderID,
+	)
+	if err != nil {
+		if errors.Is(
+			err,
+			orderdom.ErrNotFound,
+		) {
+			return "", "", "", "", "", "", nil
+		}
+
+		return "", "", "", "", "", "", err
+	}
+
+	if order.AvatarID != inq.AvatarID {
+		return "", "", "", "", "", "", nil
+	}
+
+	itemIndex := *inq.OrderItemIndex
+
+	if itemIndex >= len(order.Items) {
+		return "", "", "", "", "", "",
+			inquirydom.ErrInvalidOrderItemIndex
+	}
+
+	item := order.Items[itemIndex]
+
+	productID := inq.ProductID
+
+	if productID == "" {
+		productID = item.ProductID
+	} else if item.ProductID != "" &&
+		item.ProductID != productID {
+		return "", "", "", "", "", "",
+			inquirydom.ErrInquiryInvalidWorkflow
+	}
+
+	return q.resolveProductModelRefByOrderItem(
+		ctx,
+		item,
+		productID,
+	)
+}
+
+func (q *InquiryManagementQuery) resolveProductModelRefByOrderItem(
+	ctx context.Context,
+	item orderdom.OrderItemSnapshot,
+	productID string,
+) (
+	modelID string,
+	productBlueprintID string,
+	productName string,
+	brandID string,
+	brandName string,
+	companyID string,
+	err error,
+) {
+	if q == nil {
+		return "", "", "", "", "", "",
+			fmt.Errorf("inquiry management query: query is nil")
+	}
+
+	modelID = item.ModelID
+	productBlueprintID =
+		item.ProductBlueprintID
+
+	if modelID == "" &&
+		productID != "" {
+		if q.productRepo == nil {
+			return "", "", "", "", "", "",
+				fmt.Errorf("inquiry management query: product repository is nil")
+		}
+
+		product, productErr :=
+			q.productRepo.GetByID(
+				ctx,
+				productID,
+			)
+		if productErr != nil {
+			if !errors.Is(
+				productErr,
+				productdom.ErrNotFound,
+			) {
+				return "", "", "", "", "", "",
+					productErr
+			}
+		} else {
+			modelID = product.ModelID
+		}
+	}
+
+	if productBlueprintID == "" &&
+		modelID != "" {
+		if q.modelRepo == nil {
+			return modelID, "", "", "", "", "",
+				fmt.Errorf("inquiry management query: model repository is nil")
+		}
+
+		model, modelErr :=
+			q.modelRepo.GetByID(
+				ctx,
+				modelID,
+			)
+		if modelErr != nil {
+			if !errors.Is(
+				modelErr,
+				modeldom.ErrNotFound,
+			) {
+				return modelID, "", "", "", "", "",
+					modelErr
+			}
+		} else {
+			productBlueprintID =
+				model.GetProductBlueprintID()
+		}
+	}
+
+	if productBlueprintID == "" {
+		return modelID, "", "", "", "", "", nil
+	}
+
+	return q.resolveProductBlueprintDisplay(
+		ctx,
+		modelID,
+		productBlueprintID,
+	)
+}
+
+func (q *InquiryManagementQuery) resolveProductBlueprintDisplay(
+	ctx context.Context,
+	modelID string,
+	productBlueprintID string,
+) (
+	resolvedModelID string,
+	resolvedProductBlueprintID string,
+	productName string,
+	brandID string,
+	brandName string,
+	companyID string,
+	err error,
+) {
+	if q == nil {
+		return "", "", "", "", "", "",
+			fmt.Errorf("inquiry management query: query is nil")
+	}
+
+	if productBlueprintID == "" {
+		return modelID, "", "", "", "", "", nil
+	}
+
+	if q.productBlueprintRepo == nil {
+		return modelID, productBlueprintID, "", "", "", "",
+			fmt.Errorf("inquiry management query: product blueprint repository is nil")
+	}
+
+	productBlueprint, err :=
+		q.productBlueprintRepo.GetByID(
+			ctx,
+			productBlueprintID,
+		)
+	if err != nil {
+		return modelID,
+			productBlueprintID,
+			"",
+			"",
+			"",
+			"",
+			err
+	}
+
+	productName = productBlueprint.ProductName
+	brandID = productBlueprint.BrandID
+	companyID = productBlueprint.CompanyID
+
+	if brandID == "" {
+		return modelID,
+			productBlueprintID,
+			productName,
+			"",
+			"",
+			companyID,
+			nil
+	}
+
+	if q.brandRepo == nil {
+		return modelID,
+			productBlueprintID,
+			productName,
+			brandID,
+			"",
+			companyID,
+			fmt.Errorf("inquiry management query: brand repository is nil")
+	}
+
+	brand, err := q.brandRepo.GetByID(
+		ctx,
+		brandID,
+	)
+	if err != nil {
+		if errors.Is(
+			err,
+			branddom.ErrNotFound,
+		) {
+			return modelID,
+				productBlueprintID,
+				productName,
+				brandID,
+				"",
+				companyID,
+				nil
+		}
+
+		return modelID,
+			productBlueprintID,
+			productName,
+			brandID,
+			"",
+			companyID,
+			err
+	}
+
+	brandName = brand.Name
+
+	return modelID,
+		productBlueprintID,
+		productName,
+		brandID,
+		brandName,
+		companyID,
+		nil
 }
 
 func (q *InquiryManagementQuery) resolveProductModelRefByInquiryProductID(
@@ -184,7 +537,8 @@ func (q *InquiryManagementQuery) resolveProductModelRefByInquiryProductID(
 	err error,
 ) {
 	if q == nil {
-		return "", "", "", "", "", "", fmt.Errorf("inquiry management query: query is nil")
+		return "", "", "", "", "", "",
+			fmt.Errorf("inquiry management query: query is nil")
 	}
 
 	if productID == "" {
@@ -192,71 +546,63 @@ func (q *InquiryManagementQuery) resolveProductModelRefByInquiryProductID(
 	}
 
 	if q.productRepo == nil {
-		return "", "", "", "", "", "", fmt.Errorf("inquiry management query: product repository is nil")
+		return "", "", "", "", "", "",
+			fmt.Errorf("inquiry management query: product repository is nil")
 	}
 
-	product, err := q.productRepo.GetByID(ctx, productID)
+	product, err := q.productRepo.GetByID(
+		ctx,
+		productID,
+	)
 	if err != nil {
-		if errors.Is(err, productdom.ErrNotFound) {
+		if errors.Is(
+			err,
+			productdom.ErrNotFound,
+		) {
 			return "", "", "", "", "", "", nil
 		}
+
 		return "", "", "", "", "", "", err
 	}
 
 	modelID = product.ModelID
+
 	if modelID == "" {
 		return "", "", "", "", "", "", nil
 	}
 
 	if q.modelRepo == nil {
-		return modelID, "", "", "", "", "", fmt.Errorf("inquiry management query: model repository is nil")
+		return modelID, "", "", "", "", "",
+			fmt.Errorf("inquiry management query: model repository is nil")
 	}
 
-	model, err := q.modelRepo.GetByID(ctx, modelID)
+	model, err := q.modelRepo.GetByID(
+		ctx,
+		modelID,
+	)
 	if err != nil {
-		if errors.Is(err, modeldom.ErrNotFound) {
+		if errors.Is(
+			err,
+			modeldom.ErrNotFound,
+		) {
 			return modelID, "", "", "", "", "", nil
 		}
+
 		return modelID, "", "", "", "", "", err
 	}
 
-	productBlueprintID = model.GetProductBlueprintID()
+	productBlueprintID =
+		model.GetProductBlueprintID()
+
 	if productBlueprintID == "" {
 		return modelID, "", "", "", "", "", nil
 	}
 
-	if q.productBlueprintRepo == nil {
-		return modelID, productBlueprintID, "", "", "", "", fmt.Errorf("inquiry management query: product blueprint repository is nil")
-	}
-
-	productBlueprint, err := q.productBlueprintRepo.GetByID(ctx, productBlueprintID)
-	if err != nil {
-		return modelID, productBlueprintID, "", "", "", "", err
-	}
-
-	productName = productBlueprint.ProductName
-	brandID = productBlueprint.BrandID
-	companyID = productBlueprint.CompanyID
-
-	if brandID == "" {
-		return modelID, productBlueprintID, productName, "", "", companyID, nil
-	}
-
-	if q.brandRepo == nil {
-		return modelID, productBlueprintID, productName, brandID, "", companyID, fmt.Errorf("inquiry management query: brand repository is nil")
-	}
-
-	brand, err := q.brandRepo.GetByID(ctx, brandID)
-	if err != nil {
-		if errors.Is(err, branddom.ErrNotFound) {
-			return modelID, productBlueprintID, productName, brandID, "", companyID, nil
-		}
-		return modelID, productBlueprintID, productName, brandID, "", companyID, err
-	}
-
-	brandName = brand.Name
-
-	return modelID, productBlueprintID, productName, brandID, brandName, companyID, nil
+	return q.resolveProductBlueprintDisplay(
+		ctx,
+		modelID,
+		productBlueprintID,
+	)
 }
 
 func (q *InquiryManagementQuery) resolveUserFullNameByAvatarID(
@@ -264,7 +610,8 @@ func (q *InquiryManagementQuery) resolveUserFullNameByAvatarID(
 	avatarID string,
 ) (string, error) {
 	if q == nil {
-		return "", fmt.Errorf("inquiry management query: query is nil")
+		return "",
+			fmt.Errorf("inquiry management query: query is nil")
 	}
 
 	if avatarID == "" {
@@ -272,10 +619,14 @@ func (q *InquiryManagementQuery) resolveUserFullNameByAvatarID(
 	}
 
 	if q.avatarRepo == nil {
-		return "", fmt.Errorf("inquiry management query: avatar repository is nil")
+		return "",
+			fmt.Errorf("inquiry management query: avatar repository is nil")
 	}
 
-	avatar, err := q.avatarRepo.GetByID(ctx, avatarID)
+	avatar, err := q.avatarRepo.GetByID(
+		ctx,
+		avatarID,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -285,14 +636,22 @@ func (q *InquiryManagementQuery) resolveUserFullNameByAvatarID(
 	}
 
 	if q.userRepo == nil {
-		return "", fmt.Errorf("inquiry management query: user repository is nil")
+		return "",
+			fmt.Errorf("inquiry management query: user repository is nil")
 	}
 
-	user, err := q.userRepo.GetByID(ctx, avatar.UserID)
+	user, err := q.userRepo.GetByID(
+		ctx,
+		avatar.UserID,
+	)
 	if err != nil {
-		if errors.Is(err, userdom.ErrNotFound) {
+		if errors.Is(
+			err,
+			userdom.ErrNotFound,
+		) {
 			return "", nil
 		}
+
 		return "", err
 	}
 

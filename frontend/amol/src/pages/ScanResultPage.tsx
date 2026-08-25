@@ -57,12 +57,13 @@ export default function ScanResultPage() {
       }); 
  
     const matchedOrderId = 
-      state.transferResult?.matchedOrderId.trim() ?? ""; 
+      state.transferResult?.matchedOrderId?.trim() ?? ""; 
  
     const matchedItemIndex = 
       state.transferResult?.matchedItemIndex; 
  
     if ( 
+      state.transferResult?.matched === true && 
       matchedOrderId && 
       typeof matchedItemIndex === "number" && 
       Number.isInteger(matchedItemIndex) && 

@@ -26,6 +26,9 @@ type ScanTransferResult struct {
 
 	Matched bool `json:"matched"`
 
+	MatchedOrderID   string `json:"matchedOrderId,omitempty"`
+	MatchedItemIndex *int   `json:"matchedItemIndex,omitempty"`
+
 	// Transfer result
 	TxSignature string `json:"txSignature,omitempty"`
 
@@ -272,10 +275,14 @@ func (h *TransferHandler) ServeHTTP(
 		return
 	}
 
+	matchedItemIndex := ucOut.MatchedItemIndex
+
 	out := &ScanTransferResult{
 		AvatarID:         avatarID,
 		ProductID:        productID,
 		Matched:          true,
+		MatchedOrderID:   ucOut.MatchedOrderID,
+		MatchedItemIndex: &matchedItemIndex,
 		TxSignature:      ucOut.TxSignature,
 		FromDisplayName:  ucOut.FromDisplayName,
 		ToDisplayName:    ucOut.ToDisplayName,

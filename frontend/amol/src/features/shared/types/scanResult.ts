@@ -133,8 +133,8 @@ export type MallScanTransferResponse = {
   avatarId: string;
   productId: string;
   matched: boolean;
-  matchedOrderId: string;
-  matchedItemIndex: number;
+  matchedOrderId?: string;
+  matchedItemIndex?: number;
   txSignature: string;
   fromDisplayName: string;
   toDisplayName: string;
