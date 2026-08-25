@@ -4,6 +4,7 @@ import React from "react";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
+import { toProductBlueprintCategoryPathKey } from "../features/productBlueprint/domain/productBlueprintCategory";
 import ProductionQuantityCard from "../features/production/presentation/components/productionQuantityCard";
 import { useProductionDetail } from "../features/production/presentation/hook/useProductionDetail";
 import LogCard from "../features/log/presentation/LogCard";
@@ -45,7 +46,11 @@ export default function ProductionDetail() {
 
   const isPrinted = production?.printed === true;
   const productBlueprintCategoryCode =
-    production?.productBlueprintCategory?.code ?? "";
+    production?.productBlueprintCategoryPath
+      ? toProductBlueprintCategoryPathKey(
+          production.productBlueprintCategoryPath,
+        )
+      : "";
 
   const { onPrint, printing } = usePrintCard({
     productionId: productionId ?? null,
@@ -130,8 +135,8 @@ export default function ProductionDetail() {
               mode="view"
               productName={production.productName}
               brandName={production.brandName}
-              productBlueprintCategory={
-                production.productBlueprintCategory
+              productBlueprintCategoryPath={
+                production.productBlueprintCategoryPath
               }
             />
 
