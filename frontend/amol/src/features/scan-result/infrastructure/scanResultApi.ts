@@ -1,5 +1,7 @@
 // frontend/amol/src/features/scan-result/infrastructure/scanResultApi.ts 
  
+// frontend/amol/src/features/scan-result/infrastructure/scanResultApi.ts 
+ 
 import { requestJson } from "../../../lib/http"; 
 import { getOptionalAuthHeaders } from "../../../lib/authHeaders"; 
 import { HttpError } from "../../../lib/http/httpError"; 
@@ -15,6 +17,12 @@ import type {
   PreviewState, 
 } from "../../shared/types/scanResult"; 
  
+export const RETURN_IN_PROGRESS_OPENED_ERROR_CODE = 
+  "return_in_progress_opened" as const; 
+ 
+const RETURN_IN_PROGRESS_OPENED_MESSAGE = 
+  "返品申請中の商品で開封が確認されました。返品区分を「開封後の返品」に変更しました。Token Transfer は実行していません。"; 
+ 
 export type WalletResolvedTokenResponse = { 
   productId: string; 
   brandId: string; 
@@ -25,16 +33,12 @@ export type WalletResolvedTokenResponse = {
   assetId: string; 
 }; 
  
-export const RETURN_IN_PROGRESS_OPENED_ERROR_CODE = 
-  "return_in_progress_opened" as const; 
- 
-export type ReturnInProgressOpenedErrorBody = { 
-  error: typeof RETURN_IN_PROGRESS_OPENED_ERROR_CODE; 
+type ReturnInProgressOpenedErrorParams = { 
   message: string; 
   avatarId: string; 
   productId: string; 
-  orderId: string; 
-  itemIndex: number; 
+  matchedOrderId: string; 
+  matchedItemIndex: number; 
 }; 
  
 export class ReturnInProgressOpenedError extends Error { 
@@ -44,30 +48,40 @@ export class ReturnInProgressOpenedError extends Error {
   readonly status = 409; 
  
   readonly avatarId: string; 
+ 
   readonly productId: string; 
+ 
   readonly matchedOrderId: string; 
+ 
   readonly matchedItemIndex: number; 
  
   constructor( 
-    body: ReturnInProgressOpenedErrorBody, 
+    params: ReturnInProgressOpenedErrorParams, 
   ) { 
-    super(body.message); 
+    super(params.message); 
  
     this.name = 
       "ReturnInProgressOpenedError"; 
  
     this.avatarId = 
-      body.avatarId; 
+      params.avatarId; 
  
     this.productId = 
-      body.productId; 
+      params.productId; 
  
     this.matchedOrderId = 
-      body.orderId; 
+      params.matchedOrderId; 
  
     this.matchedItemIndex = 
-      body.itemIndex; 
+      params.matchedItemIndex; 
   } 
+} 
+ 
+export function isReturnInProgressOpenedError( 
+  caught: unknown, 
+): caught is ReturnInProgressOpenedError { 
+  return caught instanceof 
+    ReturnInProgressOpenedError; 
 } 
  
 function isRecord( 
@@ -80,71 +94,109 @@ function isRecord(
   ); 
 } 
  
-function toReturnInProgressOpenedError( 
-  caught: unknown, 
-  fallbackProductId: string, 
-): ReturnInProgressOpenedError | null { 
+function unwrapErrorBody( 
+  value: unknown, 
+): Record<string, unknown> | null { 
+  if (!isRecord(value)) { 
+    return null; 
+  } 
+ 
+  if (isRecord(value.data)) { 
+    return value.data; 
+  } 
+ 
+  return value; 
+} 
+ 
+function readStringValue( 
+  value: unknown, 
+): string { 
+  return typeof value === "string" 
+    ? value.trim() 
+    : ""; 
+} 
+ 
+function readItemIndex( 
+  value: unknown, 
+): number | null { 
   if ( 
-    !(caught instanceof HttpError) || 
-    caught.status !== 409 || 
-    !isRecord(caught.body) 
+    typeof value !== "number" || 
+    !Number.isInteger(value) || 
+    value < 0 
   ) { 
     return null; 
   } 
  
+  return value; 
+} 
+ 
+function toReturnInProgressOpenedError( 
+  caught: unknown, 
+  requestedProductId: string, 
+): ReturnInProgressOpenedError | null { 
   if ( 
-    caught.body.error !== 
+    !(caught instanceof HttpError) || 
+    caught.status !== 409 
+  ) { 
+    return null; 
+  } 
+ 
+  const body = 
+    unwrapErrorBody( 
+      caught.body, 
+    ); 
+ 
+  if (!body) { 
+    return null; 
+  } 
+ 
+  const errorCode = 
+    readStringValue( 
+      body.error, 
+    ); 
+ 
+  if ( 
+    errorCode !== 
     RETURN_IN_PROGRESS_OPENED_ERROR_CODE 
   ) { 
     return null; 
   } 
  
-  const rawOrderId = 
-    caught.body.orderId; 
+  const matchedOrderId = 
+    readStringValue( 
+      body.orderId, 
+    ); 
  
-  const rawItemIndex = 
-    caught.body.itemIndex; 
+  const matchedItemIndex = 
+    readItemIndex( 
+      body.itemIndex, 
+    ); 
  
   if ( 
-    typeof rawOrderId !== "string" || 
-    !rawOrderId.trim() || 
-    typeof rawItemIndex !== "number" || 
-    !Number.isInteger(rawItemIndex) || 
-    rawItemIndex < 0 
+    !matchedOrderId || 
+    matchedItemIndex === null 
   ) { 
     return null; 
   } 
  
-  const rawMessage = 
-    caught.body.message; 
- 
-  const rawAvatarId = 
-    caught.body.avatarId; 
- 
-  const rawProductId = 
-    caught.body.productId; 
+  const message = 
+    readStringValue( 
+      body.message, 
+    ) || 
+    RETURN_IN_PROGRESS_OPENED_MESSAGE; 
  
   return new ReturnInProgressOpenedError({ 
-    error: 
-      RETURN_IN_PROGRESS_OPENED_ERROR_CODE, 
-    message: 
-      typeof rawMessage === "string" && 
-      rawMessage.trim() 
-        ? rawMessage.trim() 
-        : "返品申請中の商品で開封が確認されました。返品区分を「開封後の返品」に変更しました。Token Transfer は実行していません。", 
+    message, 
     avatarId: 
-      typeof rawAvatarId === "string" 
-        ? rawAvatarId.trim() 
-        : "", 
+      readStringValue( 
+        body.avatarId, 
+      ), 
     productId: 
-      typeof rawProductId === "string" && 
-      rawProductId.trim() 
-        ? rawProductId.trim() 
-        : fallbackProductId, 
-    orderId: 
-      rawOrderId.trim(), 
-    itemIndex: 
-      rawItemIndex, 
+      readStringValue( 
+        body.productId, 
+      ) || requestedProductId, 
+    matchedOrderId, 
+    matchedItemIndex, 
   }); 
 } 
  

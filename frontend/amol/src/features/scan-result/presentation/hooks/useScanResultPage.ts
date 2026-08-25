@@ -13,6 +13,7 @@ import {
   createProductBlueprintReview,
   fetchReviewsByProductBlueprintId,
   isOwnedByWalletAssetId,
+  isReturnInProgressOpenedError,
   loadPreviewState,
   resolveOwnedWalletTokenByAssetId,
   transferScanPurchased,
@@ -86,6 +87,10 @@ function clearStoredTransferOperationId(productId: string, operationId: string):
 }
 
 function isRetryableTransferError(error: unknown): boolean {
+  if (isReturnInProgressOpenedError(error)) {
+    return false;
+  }
+
   if (error instanceof HttpError) {
     return error.status === 408 || error.status >= 500;
   }
@@ -118,6 +123,8 @@ function createRecoveredTransferResult(
     avatarId: previewState.raw.owner?.avatarId ?? "",
     productId: previewState.raw.productId,
     matched: true,
+    matchedOrderId: "",
+    matchedItemIndex: -1,
     txSignature: "",
     fromDisplayName,
     toDisplayName,
@@ -425,6 +432,38 @@ export function useScanResultPage() {
       } catch (caughtError) {
         if (!mountedRef.current) {
           return null;
+        }
+
+        if (isReturnInProgressOpenedError(caughtError)) {
+          const blockedResult: MallScanTransferResponse = {
+            avatarId: caughtError.avatarId,
+            productId:
+              caughtError.productId ||
+              normalizedProductId,
+            matched: false,
+            matchedOrderId:
+              caughtError.matchedOrderId,
+            matchedItemIndex:
+              caughtError.matchedItemIndex,
+            txSignature: "",
+            fromDisplayName: "",
+            toDisplayName: "",
+            updatedToAddress: false,
+            assetId: normalizedAssetId,
+          };
+
+          setTransferResult(blockedResult);
+          setTransferError(caughtError.message);
+          setTransferModalError(null);
+          setTransferModalOpen(false);
+
+          clearStoredTransferOperationId(
+            normalizedProductId,
+            operationIdRef.current,
+          );
+          operationIdRef.current = "";
+
+          return blockedResult;
         }
 
         if (isRetryableTransferError(caughtError) && normalizedAssetId) {
