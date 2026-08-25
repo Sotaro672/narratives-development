@@ -62,6 +62,7 @@ type Container struct {
 	TransportationUC                *uc.TransportationUsecase
 	TokenUC                         *uc.TokenUsecase
 	TokenBlueprintUC                *uc.TokenBlueprintUsecase
+	TokenBlueprintCreateOperationUC *uc.TokenBlueprintCreateOperationUsecase
 	UserUC                          *uc.UserUsecase
 	WalletUC                        *uc.WalletUsecase
 	CartUC                          *uc.CartUsecase

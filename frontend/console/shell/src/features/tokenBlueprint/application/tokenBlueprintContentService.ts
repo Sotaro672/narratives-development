@@ -1,135 +1,255 @@
-// frontend/console/shell/src/features/tokenBlueprint/application/tokenBlueprintContentService.ts
-
-import type { ContentFile, TokenBlueprint } from "../../../shared/types/tokenBlueprint";
-import { patchTokenBlueprintContentFiles } from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
-import { uploadTokenBlueprintContentToFirebaseStorage } from "../infrastructure/storage/tokenBlueprintAssetStorage";
-
-export type UploadAndAppendTokenBlueprintContentsInput = {
-  companyId: string;
-  tokenBlueprintId: string;
-  actorId: string;
-  files: File[];
-  existingContentFiles: ContentFile[];
-};
-
-/**
- * TokenBlueprintコンテンツ用IDを生成する。
- *
- * 作成画面のローカルコンテンツIDでも利用するためexportする。
- */
-export function createTokenBlueprintContentId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-
-  return `c_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-}
-
-/**
- * Firebase Storageへのupload結果からBackendへ保存するContentFileを生成する。
- *
- * fileName / contentType / size / kindはStorage層の戻り値を正とし、
- * Application層ではfallback・normalizeを行わない。
- */
-async function uploadContentFile(params: {
-  companyId: string;
-  tokenBlueprintId: string;
-  actorId: string;
-  file: File;
-}): Promise<ContentFile> {
-  const contentId = createTokenBlueprintContentId();
-
-  const uploaded = await uploadTokenBlueprintContentToFirebaseStorage({
-    companyId: params.companyId,
-    tokenBlueprintId: params.tokenBlueprintId,
-    contentId,
-    file: params.file,
-  });
-
-  const nowIso = new Date().toISOString();
-
-  return {
-    id: contentId,
-    name: uploaded.fileName,
-    type: uploaded.kind,
-    contentType: uploaded.contentType,
-    objectPath: uploaded.objectPath,
-    url: uploaded.downloadUrl,
-    size: uploaded.size,
-    isPublic: false,
-    createdAt: nowIso,
-    createdBy: params.actorId,
-    updatedAt: nowIso,
-    updatedBy: params.actorId,
-  };
-}
-
-/**
- * 既存コンテンツと新規コンテンツをID単位で結合する。
- * 同一IDがある場合は新しいContentFileを正とする。
- */
-function mergeContentFiles(
-  existingContentFiles: ContentFile[],
-  newContentFiles: ContentFile[],
-): ContentFile[] {
-  const merged = new Map<string, ContentFile>();
-
-  for (const contentFile of existingContentFiles) {
-    merged.set(contentFile.id, contentFile);
-  }
-
-  for (const contentFile of newContentFiles) {
-    merged.set(contentFile.id, contentFile);
-  }
-
-  return Array.from(merged.values());
-}
-
-/**
- * 選択されたファイルをFirebase Storageへuploadし、
- * TokenBlueprint.contentFilesへ追加する。
- *
- * 処理順:
- * 1. 入力値を確認
- * 2. Firebase Storageへ順番にupload
- * 3. upload結果からContentFileを生成
- * 4. 既存contentFilesと結合
- * 5. Backendへ保存
- */
-export async function uploadAndAppendTokenBlueprintContents(
-  input: UploadAndAppendTokenBlueprintContentsInput,
-): Promise<TokenBlueprint> {
-  if (!input.companyId) {
-    throw new Error("companyId is required");
-  }
-
-  if (!input.tokenBlueprintId) {
-    throw new Error("tokenBlueprintId is required");
-  }
-
-  if (!input.actorId) {
-    throw new Error("actorId is required");
-  }
-
-  if (input.files.length === 0) {
-    throw new Error("files must contain at least one file");
-  }
-
-  const newContentFiles: ContentFile[] = [];
-
-  for (const file of input.files) {
-    const contentFile = await uploadContentFile({
-      companyId: input.companyId,
-      tokenBlueprintId: input.tokenBlueprintId,
-      actorId: input.actorId,
-      file,
-    });
-
-    newContentFiles.push(contentFile);
-  }
-
-  return patchTokenBlueprintContentFiles({
-    tokenBlueprintId: input.tokenBlueprintId,
-    contentFiles: mergeContentFiles(input.existingContentFiles, newContentFiles),
-  });
-}
+// frontend/console/shell/src/features/tokenBlueprint/application/tokenBlueprintContentService.ts 
+ 
+import type { ContentType } from "../../../shared/types/tokenBlueprint"; 
+import { 
+  registerTokenBlueprintCreateOperationContent, 
+  type TokenBlueprintCreateOperation, 
+} from "../infrastructure/repository/tokenBlueprintCreateOperationRepositoryHTTP"; 
+import { 
+  uploadTokenBlueprintContentToFirebaseStorage, 
+  type FirebaseStorageUploadProgress, 
+} from "../infrastructure/storage/tokenBlueprintAssetStorage"; 
+ 
+export type TokenBlueprintContentUploadInput = { 
+  id: string; 
+  file: File; 
+  type: ContentType; 
+}; 
+ 
+export type TokenBlueprintContentUploadProgress = { 
+  contentId: string; 
+  fileName: string; 
+  completedCount: number; 
+  totalCount: number; 
+  transferredBytes: number; 
+  totalBytes: number; 
+  percentage: number; 
+}; 
+ 
+export type UploadTokenBlueprintCreateOperationContentsInput = { 
+  companyId: string; 
+  tokenBlueprintId: string; 
+  operationId: string; 
+  contents: TokenBlueprintContentUploadInput[]; 
+  onProgress?: (progress: TokenBlueprintContentUploadProgress) => void; 
+}; 
+ 
+export type UploadTokenBlueprintCreateOperationContentsResult = { 
+  operation: TokenBlueprintCreateOperation; 
+  uploadedContentIds: string[]; 
+}; 
+ 
+/** 
+ * TokenBlueprintコンテンツ用IDを生成する。 
+ * 
+ * 作成画面のローカルコンテンツIDでも利用するためexportする。 
+ */ 
+export function createTokenBlueprintContentId(): string { 
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") { 
+    return crypto.randomUUID(); 
+  } 
+ 
+  return `c_${Date.now()}_${Math.random().toString(16).slice(2)}`; 
+} 
+ 
+function requireContentUploadInput( 
+  input: TokenBlueprintContentUploadInput, 
+): void { 
+  if (!input.id) { 
+    throw new Error("content.id is required"); 
+  } 
+ 
+  if (!input.file) { 
+    throw new Error("content.file is required"); 
+  } 
+ 
+  if (!input.file.name) { 
+    throw new Error("content.file.name is required"); 
+  } 
+ 
+  if (!input.type) { 
+    throw new Error("content.type is required"); 
+  } 
+} 
+ 
+function calculatePercentage( 
+  transferredBytes: number, 
+  totalBytes: number, 
+): number { 
+  if (totalBytes <= 0) { 
+    return 100; 
+  } 
+ 
+  return Math.min( 
+    100, 
+    Math.max( 
+      0, 
+      Math.round( 
+        (transferredBytes / totalBytes) * 100, 
+      ), 
+    ), 
+  ); 
+} 
+ 
+function calculateTotalBytes( 
+  contents: TokenBlueprintContentUploadInput[], 
+): number { 
+  return contents.reduce( 
+    (total, content) => total + content.file.size, 
+    0, 
+  ); 
+} 
+ 
+/** 
+ * 選択されたコンテンツをFirebase Storageへ順番にuploadし、 
+ * upload完了ごとにCreate Operationへ即時登録する。 
+ * 
+ * TokenBlueprint.contentFilesはこの処理では直接更新しない。 
+ * 最終的なContentFileへの反映はCloud Tasks workerが行う。 
+ * 
+ * 処理順: 
+ * 1. 入力値を確認 
+ * 2. Firebase Storageへ1件upload 
+ * 3. upload完了直後にCreate Operationへ登録 
+ * 4. 次のファイルをupload 
+ * 5. 全件登録済みのOperationを返す 
+ */ 
+export async function uploadTokenBlueprintCreateOperationContents( 
+  input: UploadTokenBlueprintCreateOperationContentsInput, 
+): Promise<UploadTokenBlueprintCreateOperationContentsResult> { 
+  if (!input.companyId) { 
+    throw new Error("companyId is required"); 
+  } 
+ 
+  if (!input.tokenBlueprintId) { 
+    throw new Error("tokenBlueprintId is required"); 
+  } 
+ 
+  if (!input.operationId) { 
+    throw new Error("operationId is required"); 
+  } 
+ 
+  if (input.contents.length === 0) { 
+    throw new Error("contents must contain at least one content"); 
+  } 
+ 
+  for (const content of input.contents) { 
+    requireContentUploadInput(content); 
+  } 
+ 
+  const totalBytes = calculateTotalBytes(input.contents); 
+ 
+  const transferredByContentId = new Map<string, number>(); 
+ 
+  const uploadedContentIds: string[] = []; 
+ 
+  let completedCount = 0; 
+ 
+  let latestOperation: TokenBlueprintCreateOperation | null = null; 
+ 
+  const emitProgress = ( 
+    content: TokenBlueprintContentUploadInput, 
+    progress: FirebaseStorageUploadProgress, 
+  ): void => { 
+    transferredByContentId.set( 
+      content.id, 
+      progress.transferredBytes, 
+    ); 
+ 
+    let transferredBytes = 0; 
+ 
+    for (const value of transferredByContentId.values()) { 
+      transferredBytes += value; 
+    } 
+ 
+    input.onProgress?.({ 
+      contentId: content.id, 
+      fileName: content.file.name, 
+      completedCount, 
+      totalCount: input.contents.length, 
+      transferredBytes, 
+      totalBytes, 
+      percentage: calculatePercentage( 
+        transferredBytes, 
+        totalBytes, 
+      ), 
+    }); 
+  }; 
+ 
+  for (const content of input.contents) { 
+    transferredByContentId.set( 
+      content.id, 
+      0, 
+    ); 
+ 
+    const uploaded = await uploadTokenBlueprintContentToFirebaseStorage({ 
+      companyId: input.companyId, 
+      tokenBlueprintId: input.tokenBlueprintId, 
+      contentId: content.id, 
+      file: content.file, 
+      onProgress: (progress) => { 
+        emitProgress( 
+          content, 
+          progress, 
+        ); 
+      }, 
+    }); 
+ 
+    if (uploaded.kind !== content.type) { 
+      throw new Error( 
+        `content type mismatch: contentId=${content.id}, expected=${content.type}, actual=${uploaded.kind}`, 
+      ); 
+    } 
+ 
+    latestOperation = await registerTokenBlueprintCreateOperationContent( 
+      input.operationId, 
+      content.id, 
+      { 
+        url: uploaded.downloadUrl, 
+        objectPath: uploaded.objectPath, 
+        name: uploaded.fileName, 
+        contentType: uploaded.contentType, 
+        size: uploaded.size, 
+      }, 
+    ); 
+ 
+    transferredByContentId.set( 
+      content.id, 
+      uploaded.size, 
+    ); 
+ 
+    uploadedContentIds.push( 
+      content.id, 
+    ); 
+ 
+    completedCount += 1; 
+ 
+    let transferredBytes = 0; 
+ 
+    for (const value of transferredByContentId.values()) { 
+      transferredBytes += value; 
+    } 
+ 
+    input.onProgress?.({ 
+      contentId: content.id, 
+      fileName: content.file.name, 
+      completedCount, 
+      totalCount: input.contents.length, 
+      transferredBytes, 
+      totalBytes, 
+      percentage: calculatePercentage( 
+        transferredBytes, 
+        totalBytes, 
+      ), 
+    }); 
+  } 
+ 
+  if (!latestOperation) { 
+    throw new Error("token blueprint create operation was not updated"); 
+  } 
+ 
+  return { 
+    operation: latestOperation, 
+    uploadedContentIds, 
+  }; 
+} 

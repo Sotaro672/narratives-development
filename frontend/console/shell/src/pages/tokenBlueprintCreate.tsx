@@ -1,19 +1,16 @@
 // frontend/console/shell/src/pages/tokenBlueprintCreate.tsx
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import TokenBlueprintCard from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 import TokenContentsCard from "../features/tokenBlueprint/presentation/components/tokenContentsCard";
+import TokenBlueprintCreateProgressModal from "../features/tokenBlueprint/presentation/components/tokenBlueprintCreateProgressModal";
 import { useTokenBlueprintCard } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCard";
 import { useTokenBlueprintCreate } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCreate";
 import type { ContentFile } from "../shared/types/tokenBlueprint";
-import {
-  createTokenBlueprintContentId,
-  uploadAndAppendTokenBlueprintContents,
-} from "../features/tokenBlueprint/application/tokenBlueprintContentService";
+import { createTokenBlueprintContentId } from "../features/tokenBlueprint/application/tokenBlueprintContentService";
 import {
   getTokenBlueprintContentType,
   guessTokenBlueprintContentType,
@@ -36,8 +33,6 @@ function revokePendingPreviews(items: PendingContent[]): void {
 }
 
 export default function TokenBlueprintCreate() {
-  const navigate = useNavigate();
-
   const {
     initialTokenBlueprint,
     assigneeId,
@@ -47,6 +42,10 @@ export default function TokenBlueprintCreate() {
     onSelectAssignee,
     onEditAssignee,
     onClickAssignee,
+    progress,
+    progressOpen,
+    saving,
+    onCloseProgress,
     onBack,
     onSave,
     initialEditMode,
@@ -60,8 +59,6 @@ export default function TokenBlueprintCreate() {
   });
 
   const [pending, setPending] = useState<PendingContent[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isUploadingContents, setIsUploadingContents] = useState(false);
   const pendingRef = useRef<PendingContent[]>([]);
 
   useEffect(() => {
@@ -74,47 +71,60 @@ export default function TokenBlueprintCreate() {
     };
   }, []);
 
-  const handleTokenContentsFilesSelected = useCallback((files: File[]): void => {
-    if (files.length === 0) {
-      return;
-    }
-
-    setPending((previousItems) => {
-      const nextItems = [...previousItems];
-
-      for (const file of files) {
-        nextItems.push({
-          id: `local_${createTokenBlueprintContentId()}`,
-          file,
-          previewUrl: URL.createObjectURL(file),
-          type: guessTokenBlueprintContentType(file),
-          contentType: getTokenBlueprintContentType(file),
-        });
+  const handleTokenContentsFilesSelected = useCallback(
+    (files: File[]): void => {
+      if (saving || files.length === 0) {
+        return;
       }
 
-      return nextItems;
-    });
-  }, []);
+      setPending((previousItems) => {
+        const nextItems = [...previousItems];
+
+        for (const file of files) {
+          nextItems.push({
+            id: createTokenBlueprintContentId(),
+            file,
+            previewUrl: URL.createObjectURL(file),
+            type: guessTokenBlueprintContentType(file),
+            contentType: getTokenBlueprintContentType(file),
+          });
+        }
+
+        return nextItems;
+      });
+    },
+    [saving],
+  );
 
   const handleDeleteTokenContent = useCallback(
     async (item: ContentFile, _index: number): Promise<void> => {
+      if (saving) {
+        return;
+      }
+
       setPending((previousItems) => {
-        const target = previousItems.find((pendingItem) => pendingItem.id === item.id);
+        const target = previousItems.find(
+          (pendingItem) => pendingItem.id === item.id,
+        );
 
         if (target) {
           URL.revokeObjectURL(target.previewUrl);
         }
 
-        return previousItems.filter((pendingItem) => pendingItem.id !== item.id);
+        return previousItems.filter(
+          (pendingItem) => pendingItem.id !== item.id,
+        );
       });
     },
-    [],
+    [saving],
   );
 
   /**
    * TokenContentsCard表示専用。
+   *
    * objectPath・監査情報は未upload段階なので永続化には使用しない。
-   * create APIへこの配列を送信しないことを前提とする。
+   * Create Operationにはid / file / typeだけを渡し、
+   * contentType等の確定値はApplication層で構築する。
    */
   const pendingContents = useMemo<ContentFile[]>(() => {
     const nowIso = new Date().toISOString();
@@ -136,7 +146,7 @@ export default function TokenBlueprintCreate() {
   }, [pending]);
 
   const handleSave = useCallback(async (): Promise<void> => {
-    if (isSaving || isUploadingContents) {
+    if (saving) {
       return;
     }
 
@@ -145,98 +155,85 @@ export default function TokenBlueprintCreate() {
       return;
     }
 
-    setIsSaving(true);
-
     try {
-      const created = await onSave({
+      await onSave({
         name: vm.name,
         symbol: vm.symbol,
         brandId: vm.brandId,
         description: vm.description,
         assigneeId,
         iconFile: selectedIconFile ?? null,
+        contents: pending.map((item) => ({
+          id: item.id,
+          file: item.file,
+          type: item.type,
+        })),
       });
 
-      if (pending.length > 0) {
-        if (!created.createdBy) {
-          throw new Error("作成結果にcreatedByがありません。");
-        }
-
-        setIsUploadingContents(true);
-
-        try {
-          await uploadAndAppendTokenBlueprintContents({
-            companyId: created.companyId,
-            tokenBlueprintId: created.id,
-            actorId: created.createdBy,
-            files: pending.map((item) => item.file),
-            existingContentFiles: created.contentFiles,
-          });
-
-          revokePendingPreviews(pending);
-          setPending([]);
-        } finally {
-          setIsUploadingContents(false);
-        }
-      }
-
-      window.alert("トークン設計が完了しました。");
-      navigate(`/tokenBlueprint/${encodeURIComponent(created.id)}`, { replace: true });
+      revokePendingPreviews(pending);
+      setPending([]);
     } catch (error) {
-      console.error("[TokenBlueprintCreate.page] save failed", error);
       window.alert(
         error instanceof Error
           ? error.message
           : "トークン設計の保存に失敗しました。",
       );
-    } finally {
-      setIsSaving(false);
     }
   }, [
+    saving,
     assigneeId,
-    isSaving,
-    isUploadingContents,
     vm.name,
     vm.symbol,
     vm.brandId,
     vm.description,
     selectedIconFile,
-    onSave,
     pending,
-    navigate,
+    onSave,
   ]);
 
+  const progressCanClose =
+    progress.phase === "failed_retryable" ||
+    progress.phase === "failed_fatal";
+
   return (
-    <PageStyle
-      layout="grid-2"
-      title="トークン設計を作成"
-      onBack={onBack}
-      onSave={handleSave}
-    >
-      <div>
-        <TokenBlueprintCard vm={vm} handlers={handlers} />
+    <>
+      <PageStyle
+        layout="grid-2"
+        title="トークン設計を作成"
+        onBack={onBack}
+        onSave={handleSave}
+      >
+        <div>
+          <TokenBlueprintCard vm={vm} handlers={handlers} />
 
-        <div style={{ marginTop: 16 }}>
-          <TokenContentsCard
-            mode="edit"
-            contents={pendingContents}
-            onFilesSelected={handleTokenContentsFilesSelected}
-            onDelete={handleDeleteTokenContent}
-          />
+          <div style={{ marginTop: 16 }}>
+            <TokenContentsCard
+              mode="edit"
+              contents={pendingContents}
+              onFilesSelected={handleTokenContentsFilesSelected}
+              onDelete={handleDeleteTokenContent}
+            />
+          </div>
         </div>
-      </div>
 
-      <AdminCard
-        title="管理情報"
-        mode="edit"
-        assigneeId={assigneeId || undefined}
-        assigneeName={assigneeName}
-        assigneeCandidates={assigneeCandidates}
-        loadingMembers={loadingMembers}
-        onSelectAssignee={onSelectAssignee}
-        onEditAssignee={onEditAssignee}
-        onClickAssignee={onClickAssignee}
+        <AdminCard
+          title="管理情報"
+          mode="edit"
+          assigneeId={assigneeId || undefined}
+          assigneeName={assigneeName}
+          assigneeCandidates={assigneeCandidates}
+          loadingMembers={loadingMembers}
+          onSelectAssignee={onSelectAssignee}
+          onEditAssignee={onEditAssignee}
+          onClickAssignee={onClickAssignee}
+        />
+      </PageStyle>
+
+      <TokenBlueprintCreateProgressModal
+        open={progressOpen}
+        progress={progress}
+        onClose={progressCanClose ? onCloseProgress : undefined}
       />
-    </PageStyle>
+    </>
   );
 }

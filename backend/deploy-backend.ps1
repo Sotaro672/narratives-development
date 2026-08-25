@@ -572,7 +572,34 @@ $envMap["LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE"] =
   $ResolvedBackendURL
 
 # ------------------------------------------------------------
-# 11) Build Cloud Run env argument
+# 11) Token Blueprint Create Operation
+#
+# 現状は共通 Cloud Tasks queue を再利用します。
+# .env に重複設定は持たせません。
+# ------------------------------------------------------------
+
+$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_PROJECT_ID"] =
+  $ProjectId
+
+$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_LOCATION"] =
+  $Region
+
+$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_ID"] =
+  $CloudTasksQueueID
+
+$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_TARGET_BASE_URL"] =
+  $ResolvedBackendURL
+
+$envMap[
+  "TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"
+] =
+  $RunServiceAccount
+
+$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_OIDC_AUDIENCE"] =
+  $ResolvedBackendURL
+
+# ------------------------------------------------------------
+# 12) Build Cloud Run env argument
 # ------------------------------------------------------------
 
 $envPairs = @()
@@ -602,7 +629,7 @@ $envKeysForLog =
 Write-Step "Env vars to update: $envKeysForLog"
 
 # ------------------------------------------------------------
-# 12) Remove obsolete Cloud Run environment variables
+# 13) Remove obsolete Cloud Run environment variables
 # ------------------------------------------------------------
 
 $removeEnvVars = @(
@@ -640,7 +667,7 @@ $removeEnvVars = @(
 )
 
 # ------------------------------------------------------------
-# 13) Deploy Cloud Run
+# 14) Deploy Cloud Run
 # ------------------------------------------------------------
 
 Write-Step "Deploying to Cloud Run"
@@ -701,7 +728,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Ok "Cloud Run deployment finished: service '$ServiceName'"
 
 # ------------------------------------------------------------
-# 14) Ensure Cloud Tasks queue is running
+# 15) Ensure Cloud Tasks queue is running
 #
 # Cloud Tasks queue が PAUSED の場合、
 # CreateTask 自体は成功しても worker は実行されません。
@@ -716,7 +743,7 @@ Ensure-CloudTasksQueueRunning `
   -ProjectID $ProjectId
 
 # ------------------------------------------------------------
-# 15) Deployment summary
+# 16) Deployment summary
 # ------------------------------------------------------------
 
 Write-Ok "Deployed image: $Image"

@@ -3,6 +3,7 @@ package tokenBlueprint
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	common "narratives/internal/domain/common"
@@ -169,6 +170,78 @@ type RepositoryPort interface {
 	// 一意性チェック
 	IsSymbolUnique(ctx context.Context, symbol string, excludeID string) (bool, error)
 	IsNameUnique(ctx context.Context, name string, excludeID string) (bool, error)
+}
+
+// ===============================
+// CreateOperation Repository
+// ===============================
+
+var (
+	ErrCreateOperationNotFound = errors.New(
+		"tokenBlueprint create operation: not found",
+	)
+
+	ErrCreateOperationConflict = errors.New(
+		"tokenBlueprint create operation: conflict",
+	)
+
+	ErrCreateOperationIdempotencyConflict = errors.New(
+		"tokenBlueprint create operation: idempotency key conflict",
+	)
+)
+
+// CreateOperationRepository persists TokenBlueprint create operations.
+//
+// TokenBlueprint 本体とは別の永続化境界として扱う。
+//
+// Idempotency policy:
+//   - IdempotencyKey は一意でなければならない。
+//   - 未使用の IdempotencyKey に対する Create は新しい Operation を作成する。
+//   - 同一要求で同じ IdempotencyKey が再送された場合は既存 Operation を返してよい。
+//   - 同じ IdempotencyKey が異なる要求に使用された場合は
+//     ErrCreateOperationIdempotencyConflict を返す。
+//
+// Concurrency policy:
+// - Update は楽観ロックを使用する。
+// - expectedVersion は読み込み時点の Version と一致しなければならない。
+// - Update 成功時は Version をインクリメントする。
+// - Version が一致しない場合は ErrCreateOperationConflict を返す。
+//
+// Upload policy:
+// - frontend が Firebase Storage へ直接 upload する。
+// - icon / contents の upload 完了結果は CreateOperation に逐次記録する。
+// - waiting_upload の間は frontend が処理主体となる。
+// - queued 以降は Cloud Tasks / backend が処理主体となる。
+type CreateOperationRepository interface {
+	// Create は新しい waiting_upload Operation を永続化する。
+	Create(
+		ctx context.Context,
+		operation CreateOperation,
+	) (CreateOperation, error)
+
+	// GetByID は Operation ID から CreateOperation を取得する。
+	GetByID(
+		ctx context.Context,
+		operationID string,
+	) (CreateOperation, error)
+
+	// GetByIdempotencyKey は IdempotencyKey に対応する
+	// CreateOperation を取得する。
+	GetByIdempotencyKey(
+		ctx context.Context,
+		idempotencyKey string,
+	) (CreateOperation, error)
+
+	// Update は楽観ロックを使用して現在の Operation 状態を永続化する。
+	//
+	// expectedVersion は更新前に読み込んだ Version を指定する。
+	// 更新成功時、返却される Operation の Version は
+	// インクリメントされていなければならない。
+	Update(
+		ctx context.Context,
+		operation CreateOperation,
+		expectedVersion int64,
+	) (CreateOperation, error)
 }
 
 // ===============================

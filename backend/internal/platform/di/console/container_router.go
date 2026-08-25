@@ -24,44 +24,46 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	var (
-		authBootstrapH                             http.Handler
-		accountsH                                  http.Handler
-		announcementsH                             http.Handler
-		permissionsH                               http.Handler
-		brandsH                                    http.Handler
-		companiesH                                 http.Handler
-		companyShippingAddressesH                  http.Handler
-		transportationH                            http.Handler
-		inquiriesH                                 http.Handler
-		inventoriesH                               http.Handler
-		listsH                                     http.Handler
-		listSaveOperationsH                        http.Handler
-		internalListSaveOperationTasksH            http.Handler
-		salesH                                     http.Handler
-		productsPrintH                             http.Handler
-		productBPH                                 http.Handler
-		productBPCategoriesH                       http.Handler
-		tokenBPH                                   http.Handler
-		tokenBPReviewH                             http.Handler
-		productBPReviewH                           http.Handler
-		messagesH                                  http.Handler
-		ordersH                                    http.Handler
-		transactionsH                              http.Handler
-		walletsH                                   http.Handler
-		membersH                                   http.Handler
-		productionsH                               http.Handler
-		modelsH                                    http.Handler
-		inspectorH                                 http.Handler
-		mintH                                      http.Handler
-		internalMintTasksH                         http.Handler
-		invitationH                                http.Handler
-		internalInvitationDeliveryProcessH         http.Handler
-		internalInvitationDeliveryDispatchH        http.Handler
-		internalOrderDispatchNotificationProcessH  http.Handler
-		internalOrderDispatchNotificationDispatchH http.Handler
-		internalSettlementProcessH                 http.Handler
-		internalSettlementDispatchH                http.Handler
-		ownerResolveH                              http.Handler
+		authBootstrapH                              http.Handler
+		accountsH                                   http.Handler
+		announcementsH                              http.Handler
+		permissionsH                                http.Handler
+		brandsH                                     http.Handler
+		companiesH                                  http.Handler
+		companyShippingAddressesH                   http.Handler
+		transportationH                             http.Handler
+		inquiriesH                                  http.Handler
+		inventoriesH                                http.Handler
+		listsH                                      http.Handler
+		listSaveOperationsH                         http.Handler
+		internalListSaveOperationTasksH             http.Handler
+		internalTokenBlueprintCreateOperationTasksH http.Handler
+		salesH                                      http.Handler
+		productsPrintH                              http.Handler
+		productBPH                                  http.Handler
+		productBPCategoriesH                        http.Handler
+		tokenBPH                                    http.Handler
+		tokenBPCreateOperationsH                    http.Handler
+		tokenBPReviewH                              http.Handler
+		productBPReviewH                            http.Handler
+		messagesH                                   http.Handler
+		ordersH                                     http.Handler
+		transactionsH                               http.Handler
+		walletsH                                    http.Handler
+		membersH                                    http.Handler
+		productionsH                                http.Handler
+		modelsH                                     http.Handler
+		inspectorH                                  http.Handler
+		mintH                                       http.Handler
+		internalMintTasksH                          http.Handler
+		invitationH                                 http.Handler
+		internalInvitationDeliveryProcessH          http.Handler
+		internalInvitationDeliveryDispatchH         http.Handler
+		internalOrderDispatchNotificationProcessH   http.Handler
+		internalOrderDispatchNotificationDispatchH  http.Handler
+		internalSettlementProcessH                  http.Handler
+		internalSettlementDispatchH                 http.Handler
+		ownerResolveH                               http.Handler
 	)
 
 	if c.AuthBootstrap != nil && bootstrapMw != nil {
@@ -162,6 +164,20 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			c.TokenBlueprintUC,
 			c.TokenBlueprintDetailQuery,
 			c.TokenBlueprintManagementQuery,
+		)
+	}
+
+	if c.TokenBlueprintCreateOperationUC != nil {
+		tokenBPCreateOperationsH = consoleHandler.NewTokenBlueprintCreateOperationHandler(
+			consoleHandler.NewTokenBlueprintCreateOperationHandlerParams{
+				UC: c.TokenBlueprintCreateOperationUC,
+			},
+		)
+
+		internalTokenBlueprintCreateOperationTasksH = consoleHandler.NewTokenBlueprintCreateOperationTaskHandler(
+			consoleHandler.NewTokenBlueprintCreateOperationTaskHandlerParams{
+				UC: c.TokenBlueprintCreateOperationUC,
+			},
 		)
 	}
 
@@ -319,45 +335,47 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	return httpin.RouterDeps{
-		AuthMw:                                   authMw,
-		BootstrapMw:                              bootstrapMw,
-		AuthBootstrap:                            authBootstrapH,
-		Accounts:                                 accountsH,
-		Announcements:                            announcementsH,
-		Permissions:                              permissionsH,
-		Brands:                                   brandsH,
-		Companies:                                companiesH,
-		CompanyShippingAddresses:                 companyShippingAddressesH,
-		Transportation:                           transportationH,
-		Inquiries:                                inquiriesH,
-		Inventories:                              inventoriesH,
-		Lists:                                    listsH,
-		ListSaveOperations:                       listSaveOperationsH,
-		ProductsPrint:                            productsPrintH,
-		ProductBP:                                productBPH,
-		ProductBPCategories:                      productBPCategoriesH,
-		TokenBP:                                  tokenBPH,
-		Messages:                                 messagesH,
-		Orders:                                   ordersH,
-		Transactions:                             transactionsH,
-		Wallets:                                  walletsH,
-		Members:                                  membersH,
-		Productions:                              productionsH,
-		Models:                                   modelsH,
-		Inspector:                                inspectorH,
-		Mint:                                     mintH,
-		InternalMintTasks:                        internalMintTasksH,
-		InternalListSaveOperationTasks:           internalListSaveOperationTasksH,
-		InternalInvitationDeliveryProcess:        internalInvitationDeliveryProcessH,
-		InternalInvitationDeliveryDispatch:       internalInvitationDeliveryDispatchH,
-		InternalOrderDispatchNotificationProcess: internalOrderDispatchNotificationProcessH,
-		InternalOrderDispatchNotificationDispatch: internalOrderDispatchNotificationDispatchH,
-		InternalSettlementProcess:                 internalSettlementProcessH,
-		InternalSettlementDispatch:                internalSettlementDispatchH,
-		OwnerResolve:                              ownerResolveH,
-		Invitation:                                invitationH,
-		Sales:                                     salesH,
-		TokenBPReview:                             tokenBPReviewH,
-		ProductBPReview:                           productBPReviewH,
+		AuthMw:                         authMw,
+		BootstrapMw:                    bootstrapMw,
+		AuthBootstrap:                  authBootstrapH,
+		Accounts:                       accountsH,
+		Announcements:                  announcementsH,
+		Permissions:                    permissionsH,
+		Brands:                         brandsH,
+		Companies:                      companiesH,
+		CompanyShippingAddresses:       companyShippingAddressesH,
+		Transportation:                 transportationH,
+		Inquiries:                      inquiriesH,
+		Inventories:                    inventoriesH,
+		Lists:                          listsH,
+		ListSaveOperations:             listSaveOperationsH,
+		ProductsPrint:                  productsPrintH,
+		ProductBP:                      productBPH,
+		ProductBPCategories:            productBPCategoriesH,
+		TokenBP:                        tokenBPH,
+		TokenBPCreateOperations:        tokenBPCreateOperationsH,
+		Messages:                       messagesH,
+		Orders:                         ordersH,
+		Transactions:                   transactionsH,
+		Wallets:                        walletsH,
+		Members:                        membersH,
+		Productions:                    productionsH,
+		Models:                         modelsH,
+		Inspector:                      inspectorH,
+		Mint:                           mintH,
+		InternalMintTasks:              internalMintTasksH,
+		InternalListSaveOperationTasks: internalListSaveOperationTasksH,
+		InternalTokenBlueprintCreateOperationTasks: internalTokenBlueprintCreateOperationTasksH,
+		InternalInvitationDeliveryProcess:          internalInvitationDeliveryProcessH,
+		InternalInvitationDeliveryDispatch:         internalInvitationDeliveryDispatchH,
+		InternalOrderDispatchNotificationProcess:   internalOrderDispatchNotificationProcessH,
+		InternalOrderDispatchNotificationDispatch:  internalOrderDispatchNotificationDispatchH,
+		InternalSettlementProcess:                  internalSettlementProcessH,
+		InternalSettlementDispatch:                 internalSettlementDispatchH,
+		OwnerResolve:                               ownerResolveH,
+		Invitation:                                 invitationH,
+		Sales:                                      salesH,
+		TokenBPReview:                              tokenBPReviewH,
+		ProductBPReview:                            productBPReviewH,
 	}
 }

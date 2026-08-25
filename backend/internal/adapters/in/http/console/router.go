@@ -32,6 +32,7 @@ type RouterDeps struct {
 	ProductBP                http.Handler
 	ProductBPCategories      http.Handler
 	TokenBP                  http.Handler
+	TokenBPCreateOperations  http.Handler
 	Messages                 http.Handler
 	Orders                   http.Handler
 	Transactions             http.Handler
@@ -51,6 +52,10 @@ type RouterDeps struct {
 	// Cloud Tasksから呼ばれるList保存Operationの内部worker用です。
 	// endpoint:
 	//   POST /internal/list/save-operations/{operationId}/retry
+	//
+	// Cloud Tasksから呼ばれるTokenBlueprint作成Operationの内部worker用です。
+	// endpoint:
+	//   POST /internal/token-blueprint/create-operations/{operationId}/execute
 	//
 	// Cloud Tasksから呼ばれる招待メール送信worker用です。
 	// endpoint:
@@ -79,14 +84,15 @@ type RouterDeps struct {
 	// 注意:
 	// - 通常のConsole Firebase Authではなく、Cloud Tasks OIDC / Cloud Run Invoker
 	//   または各internal handlerの認証処理で保護します。
-	InternalMintTasks                         http.Handler
-	InternalListSaveOperationTasks            http.Handler
-	InternalInvitationDeliveryProcess         http.Handler
-	InternalInvitationDeliveryDispatch        http.Handler
-	InternalOrderDispatchNotificationProcess  http.Handler
-	InternalOrderDispatchNotificationDispatch http.Handler
-	InternalSettlementProcess                 http.Handler
-	InternalSettlementDispatch                http.Handler
+	InternalMintTasks                          http.Handler
+	InternalListSaveOperationTasks             http.Handler
+	InternalTokenBlueprintCreateOperationTasks http.Handler
+	InternalInvitationDeliveryProcess          http.Handler
+	InternalInvitationDeliveryDispatch         http.Handler
+	InternalOrderDispatchNotificationProcess   http.Handler
+	InternalOrderDispatchNotificationDispatch  http.Handler
+	InternalSettlementProcess                  http.Handler
+	InternalSettlementDispatch                 http.Handler
 
 	OwnerResolve    http.Handler
 	Invitation      http.Handler
@@ -217,6 +223,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/console/product-blueprint-categories/", h)
 	}
 
+	if deps.TokenBPCreateOperations != nil {
+		h := withAuth(deps.TokenBPCreateOperations)
+		mux.Handle("/token-blueprints/create-operations", h)
+		mux.Handle("/token-blueprints/create-operations/", h)
+	}
+
 	if deps.TokenBP != nil {
 		h := withAuth(deps.TokenBP)
 		mux.Handle("/token-blueprints", h)
@@ -302,6 +314,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if deps.InternalListSaveOperationTasks != nil {
 		h := withPublic(deps.InternalListSaveOperationTasks)
 		mux.Handle("/internal/list/save-operations/", h)
+	}
+
+	if deps.InternalTokenBlueprintCreateOperationTasks != nil {
+		h := withPublic(deps.InternalTokenBlueprintCreateOperationTasks)
+		mux.Handle("/internal/token-blueprint/create-operations/", h)
 	}
 
 	if deps.InternalInvitationDeliveryProcess != nil {

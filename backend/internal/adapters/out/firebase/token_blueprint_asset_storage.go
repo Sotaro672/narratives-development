@@ -70,6 +70,106 @@ func NewTokenBlueprintAssetStorageFromEnv(
 
 var _ usecase.TokenBlueprintAssetStorage = (*TokenBlueprintAssetStorage)(nil)
 
+func (s *TokenBlueprintAssetStorage) Exists(
+	ctx context.Context,
+	objectPath string,
+) (bool, error) {
+	if s == nil {
+		return false, errors.New(
+			"token blueprint asset storage is nil",
+		)
+	}
+
+	if s.Client == nil {
+		return false, errors.New(
+			"cloud storage client is nil",
+		)
+	}
+
+	if ctx == nil {
+		return false, errors.New(
+			"context is nil",
+		)
+	}
+
+	bucketName := strings.TrimSpace(
+		s.BucketName,
+	)
+	if bucketName == "" {
+		return false, errors.New(
+			"cloud storage bucket name is empty",
+		)
+	}
+
+	objectPath = strings.TrimSpace(
+		objectPath,
+	)
+	if objectPath == "" {
+		return false, errors.New(
+			"objectPath is required",
+		)
+	}
+
+	lowerObjectPath := strings.ToLower(
+		objectPath,
+	)
+
+	if strings.HasPrefix(
+		lowerObjectPath,
+		"gs://",
+	) ||
+		strings.HasPrefix(
+			lowerObjectPath,
+			"http://",
+		) ||
+		strings.HasPrefix(
+			lowerObjectPath,
+			"https://",
+		) {
+		return false, errors.New(
+			"objectPath must be an object path, not a URL",
+		)
+	}
+
+	objectPath = strings.TrimLeft(
+		objectPath,
+		"/",
+	)
+
+	if objectPath == "" {
+		return false, errors.New(
+			"objectPath is required",
+		)
+	}
+
+	_, err := s.Client.
+		Bucket(
+			bucketName,
+		).
+		Object(
+			objectPath,
+		).
+		Attrs(ctx)
+
+	if err == nil {
+		return true, nil
+	}
+
+	if errors.Is(
+		err,
+		gcs.ErrObjectNotExist,
+	) {
+		return false, nil
+	}
+
+	return false, fmt.Errorf(
+		"get token blueprint storage object attributes %q from bucket %q: %w",
+		objectPath,
+		bucketName,
+		err,
+	)
+}
+
 func (s *TokenBlueprintAssetStorage) DeleteAll(
 	ctx context.Context,
 	companyID string,

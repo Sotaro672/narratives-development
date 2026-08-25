@@ -13,8 +13,9 @@ import {
   fetchTokenBlueprintDetail,
   updateTokenBlueprintFromCard,
 } from "../../application/tokenBlueprintDetailService";
-import { uploadAndAppendTokenBlueprintContents } from "../../application/tokenBlueprintContentService";
+import { createTokenBlueprintContentId } from "../../application/tokenBlueprintContentService";
 import { patchTokenBlueprintContentFiles } from "../../infrastructure/repository/tokenBlueprintRepositoryHTTP";
+import { uploadTokenBlueprintContentToFirebaseStorage } from "../../infrastructure/storage/tokenBlueprintAssetStorage";
 import { useTokenBlueprintCard } from "./useTokenBlueprintCard";
 
 type TokenBlueprintCardHookResult = ReturnType<typeof useTokenBlueprintCard>;
@@ -58,6 +59,63 @@ export type UseTokenBlueprintDetailResult = {
   vm: UseTokenBlueprintDetailVM;
   handlers: UseTokenBlueprintDetailHandlers;
 };
+
+async function uploadAndAppendExistingTokenBlueprintContents(params: {
+  companyId: string;
+  tokenBlueprintId: string;
+  actorId: string;
+  files: File[];
+  existingContentFiles: ContentFile[];
+}): Promise<TokenBlueprint> {
+  let currentContentFiles = [...params.existingContentFiles];
+  let updatedBlueprint: TokenBlueprint | null = null;
+
+  for (const file of params.files) {
+    const contentId = createTokenBlueprintContentId();
+
+    const uploaded = await uploadTokenBlueprintContentToFirebaseStorage({
+      companyId: params.companyId,
+      tokenBlueprintId: params.tokenBlueprintId,
+      contentId,
+      file,
+    });
+
+    const nowIso = new Date().toISOString();
+
+    const contentFile: ContentFile = {
+      id: contentId,
+      name: uploaded.fileName,
+      type: uploaded.kind,
+      contentType: uploaded.contentType,
+      objectPath: uploaded.objectPath,
+      url: uploaded.downloadUrl,
+      size: uploaded.size,
+      isPublic: false,
+      createdAt: nowIso,
+      createdBy: params.actorId,
+      updatedAt: nowIso,
+      updatedBy: params.actorId,
+    };
+
+    currentContentFiles = [
+      ...currentContentFiles,
+      contentFile,
+    ];
+
+    updatedBlueprint = await patchTokenBlueprintContentFiles({
+      tokenBlueprintId: params.tokenBlueprintId,
+      contentFiles: currentContentFiles,
+    });
+
+    currentContentFiles = updatedBlueprint.contentFiles;
+  }
+
+  if (!updatedBlueprint) {
+    throw new Error("files must contain at least one file");
+  }
+
+  return updatedBlueprint;
+}
 
 export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   const navigate = useNavigate();
@@ -231,7 +289,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
       setIsUploadingContents(true);
 
       try {
-        const updated = await uploadAndAppendTokenBlueprintContents({
+        const updated = await uploadAndAppendExistingTokenBlueprintContents({
           companyId: blueprint.companyId,
           tokenBlueprintId: id,
           actorId: memberId,
