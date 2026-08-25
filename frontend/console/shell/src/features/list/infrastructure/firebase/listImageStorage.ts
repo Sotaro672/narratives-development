@@ -46,6 +46,7 @@ function createListImageId(): string {
 
 function safeListImageFileName(file: File): string {
   const raw = String(file?.name ?? "").trim() || "image";
+
   const normalized = raw
     .replace(/[\\/:*?"<>|#%{}^~[\]`]/g, "_")
     .replace(/\s+/g, "_")
@@ -64,10 +65,12 @@ function buildListImageObjectPath(args: {
     args.listId,
     "invalid_list_id",
   );
+
   const imageId = normalizeListImagePathSegment(
     args.imageId,
     "invalid_image_id",
   );
+
   const name = safeListImageFileName(args.file);
 
   return `lists/${listId}/images/${imageId}/${name}`;
@@ -78,7 +81,7 @@ function calculateUploadPercentage(
   totalBytes: number,
 ): number {
   if (totalBytes <= 0) {
-    return 100;
+    return 0;
   }
 
   return Math.min(
@@ -92,6 +95,21 @@ function calculateUploadPercentage(
   );
 }
 
+function emitUploadProgress(
+  handler: ListImageUploadProgressHandler | undefined,
+  transferredBytes: number,
+  totalBytes: number,
+): void {
+  handler?.({
+    transferredBytes,
+    totalBytes,
+    percentage: calculateUploadPercentage(
+      transferredBytes,
+      totalBytes,
+    ),
+  });
+}
+
 export async function uploadListImageToFirebaseStorage(
   input: UploadListImageToFirebaseStorageInput,
 ): Promise<UploadedListImageFromFirebaseStorage> {
@@ -99,10 +117,12 @@ export async function uploadListImageToFirebaseStorage(
     input.listId,
     "invalid_list_id",
   );
+
   const imageId = normalizeListImagePathSegment(
     String(input.imageId ?? "").trim() || createListImageId(),
     "invalid_image_id",
   );
+
   const file = input.file;
 
   if (!file) {
@@ -114,7 +134,17 @@ export async function uploadListImageToFirebaseStorage(
     imageId,
     file,
   });
-  const storageRef = ref(storage, objectPath);
+
+  const storageRef = ref(
+    storage,
+    objectPath,
+  );
+
+  emitUploadProgress(
+    input.onProgress,
+    0,
+    file.size,
+  );
 
   const uploadTask = uploadBytesResumable(
     storageRef,
@@ -128,14 +158,11 @@ export async function uploadListImageToFirebaseStorage(
     uploadTask.on(
       "state_changed",
       (snapshot) => {
-        input.onProgress?.({
-          transferredBytes: snapshot.bytesTransferred,
-          totalBytes: snapshot.totalBytes,
-          percentage: calculateUploadPercentage(
-            snapshot.bytesTransferred,
-            snapshot.totalBytes,
-          ),
-        });
+        emitUploadProgress(
+          input.onProgress,
+          snapshot.bytesTransferred,
+          snapshot.totalBytes,
+        );
       },
       (error) => {
         reject(error);
@@ -143,24 +170,26 @@ export async function uploadListImageToFirebaseStorage(
       () => {
         const snapshot = uploadTask.snapshot;
 
-        input.onProgress?.({
-          transferredBytes: snapshot.totalBytes,
-          totalBytes: snapshot.totalBytes,
-          percentage: 100,
-        });
+        emitUploadProgress(
+          input.onProgress,
+          snapshot.totalBytes,
+          snapshot.totalBytes,
+        );
 
         resolve();
       },
     );
   });
 
+  const snapshot = uploadTask.snapshot;
+
   const url = String(
-    await getDownloadURL(storageRef),
+    await getDownloadURL(snapshot.ref),
   ).trim();
 
   if (!url) {
     try {
-      await deleteObject(storageRef);
+      await deleteObject(snapshot.ref);
     } catch {
       // Download URL取得失敗を優先して返す。
     }
@@ -178,10 +207,14 @@ export async function uploadListImageToFirebaseStorage(
 export async function deleteListImageFromFirebaseStorage(
   input: DeleteListImageFromFirebaseStorageInput,
 ): Promise<void> {
-  const storagePath = normalizeListImageObjectPath(input?.storagePath);
+  const storagePath = normalizeListImageObjectPath(
+    input?.storagePath,
+  );
 
   try {
-    await deleteObject(ref(storage, storagePath));
+    await deleteObject(
+      ref(storage, storagePath),
+    );
   } catch (error) {
     if (isFirebaseStorageObjectNotFound(error)) {
       return;
@@ -191,8 +224,12 @@ export async function deleteListImageFromFirebaseStorage(
   }
 }
 
-function normalizeListImageObjectPath(value: unknown): string {
-  const storagePath = String(value ?? "").trim().replace(/^\/+/, "");
+function normalizeListImageObjectPath(
+  value: unknown,
+): string {
+  const storagePath = String(value ?? "")
+    .trim()
+    .replace(/^\/+/, "");
 
   if (!storagePath) {
     throw new Error("invalid_storage_path");
@@ -219,10 +256,19 @@ function normalizeListImageObjectPath(value: unknown): string {
     throw new Error("invalid_storage_path");
   }
 
-  normalizeListImagePathSegment(parts[1], "invalid_storage_path_list_id");
-  normalizeListImagePathSegment(parts[3], "invalid_storage_path_image_id");
+  normalizeListImagePathSegment(
+    parts[1],
+    "invalid_storage_path_list_id",
+  );
 
-  const fileName = String(parts[4] ?? "").trim();
+  normalizeListImagePathSegment(
+    parts[3],
+    "invalid_storage_path_image_id",
+  );
+
+  const fileName = String(
+    parts[4] ?? "",
+  ).trim();
 
   if (
     !fileName ||
@@ -240,7 +286,9 @@ function normalizeListImagePathSegment(
   value: unknown,
   errorCode: string,
 ): string {
-  const normalized = String(value ?? "").trim();
+  const normalized = String(
+    value ?? "",
+  ).trim();
 
   if (
     !normalized ||
@@ -257,7 +305,9 @@ function normalizeListImagePathSegment(
   return normalized;
 }
 
-function isFirebaseStorageObjectNotFound(error: unknown): boolean {
+function isFirebaseStorageObjectNotFound(
+  error: unknown,
+): boolean {
   if (!error || typeof error !== "object") {
     return false;
   }

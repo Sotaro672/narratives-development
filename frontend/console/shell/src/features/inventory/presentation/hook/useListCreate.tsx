@@ -42,6 +42,7 @@ export type UseListCreateResult = {
   onCreate: () => void;
 
   saving: boolean;
+  isUploading: boolean;
 
   progress: ListProgress;
   progressOpen: boolean;
@@ -322,7 +323,7 @@ function usePriceRows(): UsePriceRowsResult {
 
 function useListCreateNavigation(
   resolvedParams: ResolvedListCreateParams,
-  isBlockingNavigation: boolean,
+  isUploading: boolean,
 ): {
   navigate: NavigateFunction;
   onBack: () => void;
@@ -330,7 +331,7 @@ function useListCreateNavigation(
   const navigate = useNavigate();
 
   const onBack = React.useCallback(() => {
-    if (isBlockingNavigation) {
+    if (isUploading) {
       return;
     }
 
@@ -338,7 +339,7 @@ function useListCreateNavigation(
   }, [
     navigate,
     resolvedParams,
-    isBlockingNavigation,
+    isUploading,
   ]);
 
   return {
@@ -458,7 +459,6 @@ function useCreateList(
     images: File[];
     mainImageIndex: number;
     saving: boolean;
-    isBlockingNavigation: boolean;
     setSaving: React.Dispatch<React.SetStateAction<boolean>>;
     setProgress: React.Dispatch<React.SetStateAction<ListProgress>>;
     setCreatedListId: React.Dispatch<React.SetStateAction<string>>;
@@ -476,17 +476,13 @@ function useCreateList(
     images,
     mainImageIndex,
     saving,
-    isBlockingNavigation,
     setSaving,
     setProgress,
     setCreatedListId,
   } = args;
 
   const onCreate = React.useCallback(async () => {
-    if (
-      saving ||
-      isBlockingNavigation
-    ) {
+    if (saving) {
       return;
     }
 
@@ -598,7 +594,7 @@ function useCreateList(
                   "出品を保存中",
 
                 message:
-                  "画像情報と出品情報を保存しています。この画面を閉じたり移動したりしないでください。",
+                  "画像転送が完了しました。出品情報を保存しています。",
               }),
             );
           },
@@ -679,7 +675,6 @@ function useCreateList(
     images,
     mainImageIndex,
     saving,
-    isBlockingNavigation,
     setSaving,
     setProgress,
     setCreatedListId,
@@ -741,6 +736,10 @@ export function useListCreate(): UseListCreateResult {
     setCreatedListId,
   ] = React.useState("");
 
+  const isUploading =
+    progress.phase === "uploading" &&
+    saving;
+
   const progressOpen =
     isListProgressVisible(
       progress,
@@ -751,11 +750,11 @@ export function useListCreate(): UseListCreateResult {
     onBack,
   } = useListCreateNavigation(
     resolvedParams,
-    progress.isBlockingNavigation,
+    isUploading,
   );
 
   React.useEffect(() => {
-    if (!progress.isBlockingNavigation) {
+    if (!isUploading) {
       return;
     }
 
@@ -778,11 +777,11 @@ export function useListCreate(): UseListCreateResult {
       );
     };
   }, [
-    progress.isBlockingNavigation,
+    isUploading,
   ]);
 
   const onCloseProgress = React.useCallback(() => {
-    if (progress.isBlockingNavigation) {
+    if (isUploading) {
       return;
     }
 
@@ -809,7 +808,7 @@ export function useListCreate(): UseListCreateResult {
       createInitialListProgress(),
     );
   }, [
-    progress.isBlockingNavigation,
+    isUploading,
     progress.phase,
     createdListId,
     navigate,
@@ -851,8 +850,6 @@ export function useListCreate(): UseListCreateResult {
     images,
     mainImageIndex,
     saving,
-    isBlockingNavigation:
-      progress.isBlockingNavigation,
     setSaving,
     setProgress,
     setCreatedListId,
@@ -864,6 +861,7 @@ export function useListCreate(): UseListCreateResult {
     onCreate,
 
     saving,
+    isUploading,
 
     progress,
     progressOpen,

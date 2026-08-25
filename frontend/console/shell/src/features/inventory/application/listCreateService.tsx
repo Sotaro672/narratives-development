@@ -214,6 +214,7 @@ export type ListCreateImageUploadProgress = {
   fileName: string;
   transferredBytes: number;
   totalBytes: number;
+  percentage: number;
   completedUploadCount: number;
   expectedUploadCount: number;
 };
@@ -227,8 +228,12 @@ export type ListCreateSavingProgress = {
 
 export type ListCreateProgressHandlers = {
   onPreparing?: () => void;
-  onImageProgress?: (progress: ListCreateImageUploadProgress) => void;
-  onSaving?: (progress: ListCreateSavingProgress) => void;
+  onImageProgress?: (
+    progress: ListCreateImageUploadProgress,
+  ) => void;
+  onSaving?: (
+    progress: ListCreateSavingProgress,
+  ) => void;
 };
 
 /**
@@ -388,6 +393,25 @@ export function validateCreateListInput(
   }
 }
 
+function calculateAggregateUploadPercentage(
+  transferredBytes: number,
+  totalBytes: number,
+): number {
+  if (totalBytes <= 0) {
+    return 0;
+  }
+
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round(
+        (transferredBytes / totalBytes) * 100,
+      ),
+    ),
+  );
+}
+
 /**
  * 複数画像をFirebase Storageへ直接アップロード
  * → backendに画像レコード登録
@@ -397,6 +421,11 @@ export function validateCreateListInput(
  * - List作成後のlistIdを使ってFirebase Storageへupload
  * - Firebase Storage download URLを取得
  * - saveListImageFromFirebaseStorageHTTPでimage recordを登録
+ *
+ * progress:
+ * - Firebase Storageから通知されるbytesTransferredを正とする
+ * - 複数画像は全画像のtotalBytesへ集約する
+ * - completedBytes + 現在画像のbytesTransferredで全体進捗を算出する
  *
  * primary:
  * - backendのList.imageIdはimages subcollectionのdocID
@@ -419,7 +448,8 @@ export async function uploadListImagesPolicyB(
   }>;
   primaryImageId?: string;
 }> {
-  const listId = String(args.listId ?? "").trim();
+  const listId =
+    String(args.listId ?? "").trim();
 
   if (!listId) {
     throw new Error("invalid_list_id");
@@ -435,10 +465,13 @@ export async function uploadListImagesPolicyB(
       ? args.mainImageIndex
       : 0;
 
-  const totalBytes = args.files.reduce(
-    (total, file) => total + file.size,
-    0,
-  );
+  const totalBytes =
+    args.files.reduce(
+      (total, file) =>
+        total + file.size,
+      0,
+    );
+
   let completedBytes = 0;
 
   const registered: Array<{
@@ -457,25 +490,49 @@ export async function uploadListImagesPolicyB(
       continue;
     }
 
-    const uploaded = await uploadListImageToFirebaseStorage({
-      listId,
-      file,
-      onProgress: (progress) => {
-        args.progressHandlers?.onImageProgress?.({
-          fileName: file.name,
-          transferredBytes:
-            completedBytes + progress.transferredBytes,
-          totalBytes,
-          completedUploadCount:
-            progress.percentage >= 100
-              ? index + 1
-              : index,
-          expectedUploadCount: args.files.length,
-        });
-      },
-    });
+    const uploaded =
+      await uploadListImageToFirebaseStorage({
+        listId,
+        file,
 
-    completedBytes += file.size;
+        onProgress: (progress) => {
+          const transferredBytes =
+            Math.min(
+              totalBytes,
+              completedBytes +
+                progress.transferredBytes,
+            );
+
+          args.progressHandlers?.onImageProgress?.({
+            fileName:
+              file.name,
+
+            transferredBytes,
+
+            totalBytes,
+
+            percentage:
+              calculateAggregateUploadPercentage(
+                transferredBytes,
+                totalBytes,
+              ),
+
+            completedUploadCount:
+              progress.percentage >= 100
+                ? index + 1
+                : index,
+
+            expectedUploadCount:
+              args.files.length,
+          });
+        },
+      });
+
+    completedBytes =
+      Math.min(
+        totalBytes,
+        completedBytes + file.size,
+      );
 
     await saveListImageFromFirebaseStorageHTTP({
       listId,
@@ -491,10 +548,16 @@ export async function uploadListImagesPolicyB(
   }
 
   args.progressHandlers?.onSaving?.({
-    transferredBytes: totalBytes,
+    transferredBytes:
+      totalBytes,
+
     totalBytes,
-    completedUploadCount: args.files.length,
-    expectedUploadCount: args.files.length,
+
+    completedUploadCount:
+      args.files.length,
+
+    expectedUploadCount:
+      args.files.length,
   });
 
   const primary =
@@ -582,21 +645,25 @@ export async function createListWithImages(
 
   assertCompletedPriceRows(args.priceRows);
 
-  const input = buildCreateListInput({
-    params: args.params,
-    listingTitle: args.listingTitle,
-    description: args.description,
-    priceRows: args.priceRows,
-    status: args.status,
-    assigneeId: args.assigneeId,
-  });
+  const input =
+    buildCreateListInput({
+      params: args.params,
+      listingTitle: args.listingTitle,
+      description: args.description,
+      priceRows: args.priceRows,
+      status: args.status,
+      assigneeId: args.assigneeId,
+    });
 
   validateCreateListInput(input);
 
   args.progressHandlers?.onPreparing?.();
 
-  const created = await createListHTTP(input);
-  const listId = created.id;
+  const created =
+    await createListHTTP(input);
+
+  const listId =
+    String(created.id ?? "").trim();
 
   if (!listId) {
     throw new Error("created_list_missing_id");
