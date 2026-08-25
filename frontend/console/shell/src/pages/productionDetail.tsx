@@ -9,7 +9,6 @@ import ProductionQuantityCard from "../features/production/presentation/componen
 import { useProductionDetail } from "../features/production/presentation/hook/useProductionDetail";
 import LogCard from "../features/log/presentation/LogCard";
 import { usePrintCard } from "../features/print/presentation/hook/usePrintCard";
-import PrintCard from "../features/print/presentation/component/printCard";
 
 import "../styles/production.css";
 
@@ -101,6 +100,19 @@ export default function ProductionDetail() {
       layout="grid-2"
       title="生産詳細"
       onBack={onBack}
+      statusButtonLabel={
+        isPrinted ? "印刷結果" : "印刷"
+      }
+      statusButtonBusyLabel="発行中..."
+      onStatusButtonClick={
+        isViewMode && production
+          ? handlePrint
+          : undefined
+      }
+      isStatusButtonLoading={printing}
+      statusButtonDisabled={
+        loading || !productionId
+      }
       onEdit={isViewMode && canEdit ? switchToEdit : undefined}
       onDelete={
         isEditMode && canEdit && !deleting
@@ -151,14 +163,6 @@ export default function ProductionDetail() {
                 isEditMode ? setQuantityRows : undefined
               }
             />
-
-            {isViewMode && (
-              <PrintCard
-                printing={printing}
-                onClick={handlePrint}
-                printed={isPrinted}
-              />
-            )}
           </>
         )}
       </div>
