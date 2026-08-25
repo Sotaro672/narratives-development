@@ -1,6 +1,10 @@
 // frontend/console/shell/src/auth/presentation/components/Header.tsx
 
-import { ChevronDown, UserRound } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  UserRound,
+} from "lucide-react";
 
 import "../../../styles/auth.css";
 
@@ -55,10 +59,26 @@ export default function Header(props: HeaderProps) {
             aria-haspopup="menu"
             aria-expanded={openAdmin}
             aria-controls={openAdmin ? "admin-dropdown" : undefined}
+            aria-label={
+              openAdmin
+                ? "アカウントメニューを閉じる"
+                : "アカウントメニューを開く"
+            }
             onClick={handleToggleAdmin}
           >
             <UserRound className="icon" aria-hidden />
-            <ChevronDown className={`caret ${openAdmin ? "open" : ""}`} aria-hidden />
+
+            {openAdmin ? (
+              <ChevronUp
+                className="caret"
+                aria-hidden
+              />
+            ) : (
+              <ChevronDown
+                className="caret"
+                aria-hidden
+              />
+            )}
           </button>
 
           {openAdmin && (

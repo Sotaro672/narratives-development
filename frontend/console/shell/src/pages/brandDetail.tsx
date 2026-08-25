@@ -72,6 +72,12 @@ export default function BrandDetail() {
 
   const canEditImage = isEditing && !saving;
 
+  const accountLabel =
+    accountCandidates.find(
+      (candidate) =>
+        candidate.id === brand.accountId,
+    )?.label ?? null;
+
   const hero = (
     <Card>
       <CardContent>
@@ -419,7 +425,7 @@ export default function BrandDetail() {
       />
 
       <AccountSelectCard
-        accountId={brand.accountId}
+        accountLabel={accountLabel}
         accountCandidates={accountCandidates}
         loadingAccounts={loadingAccounts}
         accountError={accountError}
