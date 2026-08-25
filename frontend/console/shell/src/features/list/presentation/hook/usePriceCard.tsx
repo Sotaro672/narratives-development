@@ -203,43 +203,16 @@ export function usePriceCard(
           };
 
           return {
-            modelId:
-              row.modelId,
-
-            kind:
-              row.kind ?? null,
-
-            displayOrder:
-              row.displayOrder ??
-              null,
-
-            size:
-              row.size ?? null,
-
-            color:
-              row.color ?? null,
-
-            volumeValue:
-              row.volumeValue ??
-              null,
-
-            volumeUnit:
-              row.volumeUnit ??
-              null,
-
-            stock:
-              row.stock,
-
-            bgColor:
-              getBgColor(
-                row.rgb,
-              ),
-
-            rgbTitle:
-              getRgbTitle(
-                row.rgb,
-              ),
-
+            modelId:row.modelId,
+            kind:row.kind ?? null,
+            displayOrder:row.displayOrder ?? null,
+            size:row.size ?? null,
+            color:row.color ?? null,
+            volumeValue:row.volumeValue ?? null,
+            volumeUnit:row.volumeUnit ?? null,
+            stock:row.stock,
+            bgColor:getBgColor(row.rgb,),
+            rgbTitle:getRgbTitle(row.rgb,),
             priceInputValue,
             priceDisplayText,
             onChangePriceInput,
