@@ -21,6 +21,31 @@ export type SaveListDetailDraftImage = {
   file?: File;
 };
 
+export type SaveListDetailImageUploadProgress = {
+  fileName: string;
+  transferredBytes: number;
+  totalBytes: number;
+  completedUploadCount: number;
+  expectedUploadCount: number;
+};
+
+export type SaveListDetailSavingProgress = {
+  transferredBytes: number;
+  totalBytes: number;
+  completedUploadCount: number;
+  expectedUploadCount: number;
+};
+
+export type SaveListDetailProgressHandlers = {
+  onPreparing?: () => void;
+  onImageProgress?: (
+    progress: SaveListDetailImageUploadProgress,
+  ) => void;
+  onSaving?: (
+    progress: SaveListDetailSavingProgress,
+  ) => void;
+};
+
 export type SaveListDetailChangesInput = {
   listId: string;
   currentDTO: ListDetailDTO | null;
@@ -32,6 +57,7 @@ export type SaveListDetailChangesInput = {
   draftPriceRows: any[];
   draftImages: SaveListDetailDraftImage[];
   mainImageIndex: number;
+  progressHandlers?: SaveListDetailProgressHandlers;
 };
 
 export type SaveListDetailChangesResult = {
@@ -209,16 +235,40 @@ async function buildNewImageUploadPlans(args: {
 async function uploadNewImages(args: {
   listId: string;
   plans: NewImageUploadPlan[];
+  progressHandlers?: Pick<
+    SaveListDetailProgressHandlers,
+    "onImageProgress"
+  >;
 }): Promise<UploadedDraftImageItem[]> {
   const uploadedItems: UploadedDraftImageItem[] = [];
+  const totalBytes = args.plans.reduce(
+    (total, plan) => total + plan.file.size,
+    0,
+  );
+  let completedBytes = 0;
 
   try {
-    for (const plan of args.plans) {
+    for (const [index, plan] of args.plans.entries()) {
       const uploaded = await uploadListImageToFirebaseStorage({
         listId: args.listId,
         imageId: plan.imageId,
         file: plan.file,
+        onProgress: (progress) => {
+          args.progressHandlers?.onImageProgress?.({
+            fileName: plan.file.name,
+            transferredBytes:
+              completedBytes + progress.transferredBytes,
+            totalBytes,
+            completedUploadCount:
+              progress.percentage >= 100
+                ? index + 1
+                : index,
+            expectedUploadCount: args.plans.length,
+          });
+        },
       });
+
+      completedBytes += plan.file.size;
 
       uploadedItems.push({
         draftIndex: plan.draftIndex,
@@ -444,6 +494,8 @@ export async function saveListDetailChanges(
     throw new Error("invalid_list_updated_by");
   }
 
+  input.progressHandlers?.onPreparing?.();
+
   const draftImages = input.draftImages;
   const currentImages = getCurrentImages(input.currentDTO);
 
@@ -499,6 +551,19 @@ export async function saveListDetailChanges(
   const uploadedItems = await uploadNewImages({
     listId,
     plans: uploadPlans,
+    progressHandlers: input.progressHandlers,
+  });
+
+  const totalUploadBytes = uploadPlans.reduce(
+    (total, plan) => total + plan.file.size,
+    0,
+  );
+
+  input.progressHandlers?.onSaving?.({
+    transferredBytes: totalUploadBytes,
+    totalBytes: totalUploadBytes,
+    completedUploadCount: uploadPlans.length,
+    expectedUploadCount: uploadPlans.length,
   });
 
   const operation = await startListSaveOperationHTTP({

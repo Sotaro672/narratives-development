@@ -4,14 +4,26 @@ import {
   deleteObject,
   getDownloadURL,
   ref,
-  uploadBytes,
+  uploadBytesResumable,
 } from "firebase/storage";
+
 import { storage } from "../../../../auth/infrastructure/config/firebaseClient";
+
+export type ListImageUploadProgress = {
+  transferredBytes: number;
+  totalBytes: number;
+  percentage: number;
+};
+
+export type ListImageUploadProgressHandler = (
+  progress: ListImageUploadProgress,
+) => void;
 
 export type UploadListImageToFirebaseStorageInput = {
   listId: string;
   file: File;
   imageId?: string;
+  onProgress?: ListImageUploadProgressHandler;
 };
 
 export type UploadedListImageFromFirebaseStorage = {
@@ -61,6 +73,25 @@ function buildListImageObjectPath(args: {
   return `lists/${listId}/images/${imageId}/${name}`;
 }
 
+function calculateUploadPercentage(
+  transferredBytes: number,
+  totalBytes: number,
+): number {
+  if (totalBytes <= 0) {
+    return 100;
+  }
+
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round(
+        (transferredBytes / totalBytes) * 100,
+      ),
+    ),
+  );
+}
+
 export async function uploadListImageToFirebaseStorage(
   input: UploadListImageToFirebaseStorageInput,
 ): Promise<UploadedListImageFromFirebaseStorage> {
@@ -84,14 +115,52 @@ export async function uploadListImageToFirebaseStorage(
     file,
   });
   const storageRef = ref(storage, objectPath);
-  const snapshot = await uploadBytes(storageRef, file, {
-    contentType: file.type || "application/octet-stream",
+
+  const uploadTask = uploadBytesResumable(
+    storageRef,
+    file,
+    {
+      contentType: file.type || "application/octet-stream",
+    },
+  );
+
+  await new Promise<void>((resolve, reject) => {
+    uploadTask.on(
+      "state_changed",
+      (snapshot) => {
+        input.onProgress?.({
+          transferredBytes: snapshot.bytesTransferred,
+          totalBytes: snapshot.totalBytes,
+          percentage: calculateUploadPercentage(
+            snapshot.bytesTransferred,
+            snapshot.totalBytes,
+          ),
+        });
+      },
+      (error) => {
+        reject(error);
+      },
+      () => {
+        const snapshot = uploadTask.snapshot;
+
+        input.onProgress?.({
+          transferredBytes: snapshot.totalBytes,
+          totalBytes: snapshot.totalBytes,
+          percentage: 100,
+        });
+
+        resolve();
+      },
+    );
   });
-  const url = String(await getDownloadURL(snapshot.ref)).trim();
+
+  const url = String(
+    await getDownloadURL(storageRef),
+  ).trim();
 
   if (!url) {
     try {
-      await deleteObject(snapshot.ref);
+      await deleteObject(storageRef);
     } catch {
       // Download URL取得失敗を優先して返す。
     }

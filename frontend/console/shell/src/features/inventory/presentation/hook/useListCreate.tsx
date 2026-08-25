@@ -12,6 +12,17 @@ import type {
 import type { ListCreateDTO } from "../../../../shared/types/inventory";
 
 import {
+  createCompletedListProgress,
+  createFailedListProgress,
+  createInitialListProgress,
+  createPreparingListProgress,
+  createSavingListProgress,
+  createUploadingListProgress,
+  isListProgressVisible,
+  type ListProgress,
+} from "../../../list/presentation/modal/listProgress";
+
+import {
   buildBackPath,
   canFetchListCreate,
   createListWithImages,
@@ -29,6 +40,12 @@ export type UseListCreateResult = {
   title: string;
   onBack: () => void;
   onCreate: () => void;
+
+  saving: boolean;
+
+  progress: ListProgress;
+  progressOpen: boolean;
+  onCloseProgress: () => void;
 
   dto: ListCreateDTO | null;
   loadingDTO: boolean;
@@ -73,6 +90,16 @@ type UsePriceRowsResult = {
   onChangePrice: (index: number, price: number | undefined) => void;
   priceCard: ReturnType<typeof usePriceCard>;
 };
+
+function errorMessageFromUnknown(
+  error: unknown,
+): string {
+  return String(
+    error instanceof Error
+      ? error.message
+      : error,
+  );
+}
 
 function dedupeFiles(previousFiles: File[], addedFiles: File[]): File[] {
   const existingKeys = new Set(
@@ -295,6 +322,7 @@ function usePriceRows(): UsePriceRowsResult {
 
 function useListCreateNavigation(
   resolvedParams: ResolvedListCreateParams,
+  isBlockingNavigation: boolean,
 ): {
   navigate: NavigateFunction;
   onBack: () => void;
@@ -302,8 +330,16 @@ function useListCreateNavigation(
   const navigate = useNavigate();
 
   const onBack = React.useCallback(() => {
+    if (isBlockingNavigation) {
+      return;
+    }
+
     navigate(buildBackPath(resolvedParams));
-  }, [navigate, resolvedParams]);
+  }, [
+    navigate,
+    resolvedParams,
+    isBlockingNavigation,
+  ]);
 
   return {
     navigate,
@@ -413,7 +449,6 @@ function useListCreateDTO(
 
 function useCreateList(
   args: {
-    navigate: NavigateFunction;
     resolvedParams: ResolvedListCreateParams;
     status: ListStatus;
     listingTitle: string;
@@ -422,12 +457,16 @@ function useCreateList(
     assigneeId: string | undefined;
     images: File[];
     mainImageIndex: number;
+    saving: boolean;
+    isBlockingNavigation: boolean;
+    setSaving: React.Dispatch<React.SetStateAction<boolean>>;
+    setProgress: React.Dispatch<React.SetStateAction<ListProgress>>;
+    setCreatedListId: React.Dispatch<React.SetStateAction<string>>;
   },
 ): {
   onCreate: () => Promise<void>;
 } {
   const {
-    navigate,
     resolvedParams,
     status,
     listingTitle,
@@ -436,10 +475,30 @@ function useCreateList(
     assigneeId,
     images,
     mainImageIndex,
+    saving,
+    isBlockingNavigation,
+    setSaving,
+    setProgress,
+    setCreatedListId,
   } = args;
 
   const onCreate = React.useCallback(async () => {
+    if (
+      saving ||
+      isBlockingNavigation
+    ) {
+      return;
+    }
+
     let imageUploadFailedMessage = "";
+
+    let transferredBytes = 0;
+    let totalBytes = 0;
+    let completedUploadCount = 0;
+    let expectedUploadCount = 0;
+
+    setSaving(true);
+    setCreatedListId("");
 
     try {
       const inventoryId = String(
@@ -458,6 +517,93 @@ function useCreateList(
         assigneeId,
         images,
         mainImageIndex,
+
+        progressHandlers: {
+          onPreparing: () => {
+            setProgress(
+              createPreparingListProgress({
+                title: "作成準備中",
+                message: "出品情報の作成準備をしています。",
+              }),
+            );
+          },
+
+          onImageProgress: (imageProgress) => {
+            transferredBytes =
+              imageProgress.transferredBytes;
+
+            totalBytes =
+              imageProgress.totalBytes;
+
+            completedUploadCount =
+              imageProgress.completedUploadCount;
+
+            expectedUploadCount =
+              imageProgress.expectedUploadCount;
+
+            setProgress(
+              createUploadingListProgress({
+                fileName:
+                  imageProgress.fileName,
+
+                transferredBytes:
+                  imageProgress.transferredBytes,
+
+                totalBytes:
+                  imageProgress.totalBytes,
+
+                completedUploadCount:
+                  imageProgress.completedUploadCount,
+
+                expectedUploadCount:
+                  imageProgress.expectedUploadCount,
+
+                title:
+                  "画像を転送中",
+
+                message:
+                  "画像転送が完了するまで、この画面を閉じたり移動したりしないでください。",
+              }),
+            );
+          },
+
+          onSaving: (savingProgress) => {
+            transferredBytes =
+              savingProgress.transferredBytes;
+
+            totalBytes =
+              savingProgress.totalBytes;
+
+            completedUploadCount =
+              savingProgress.completedUploadCount;
+
+            expectedUploadCount =
+              savingProgress.expectedUploadCount;
+
+            setProgress(
+              createSavingListProgress({
+                transferredBytes:
+                  savingProgress.transferredBytes,
+
+                totalBytes:
+                  savingProgress.totalBytes,
+
+                completedUploadCount:
+                  savingProgress.completedUploadCount,
+
+                expectedUploadCount:
+                  savingProgress.expectedUploadCount,
+
+                title:
+                  "出品を保存中",
+
+                message:
+                  "画像情報と出品情報を保存しています。この画面を閉じたり移動したりしないでください。",
+              }),
+            );
+          },
+        },
+
         onImageUploadFailed: (message) => {
           imageUploadFailedMessage = message;
         },
@@ -467,26 +613,63 @@ function useCreateList(
         throw new Error("created_list_missing_id");
       }
 
+      setCreatedListId(
+        created.id,
+      );
+
       if (imageUploadFailedMessage) {
-        alert(imageUploadFailedMessage);
-      } else {
-        alert("作成しました");
+        setProgress(
+          createCompletedListProgress({
+            title:
+              "出品を作成しました",
+
+            message:
+              imageUploadFailedMessage,
+          }),
+        );
+
+        return;
       }
 
-      navigate(
-        `/list/${encodeURIComponent(created.id)}`,
+      setProgress(
+        createCompletedListProgress({
+          transferredBytes,
+
+          totalBytes,
+
+          completedUploadCount,
+
+          expectedUploadCount,
+
+          title:
+            "作成が完了しました",
+
+          message:
+            "出品の作成が完了しました。",
+        }),
       );
     } catch (error) {
-      alert(
-        String(
-          error instanceof Error
-            ? error.message
-            : error,
+      const message =
+        errorMessageFromUnknown(
+          error,
+        );
+
+      setProgress(
+        createFailedListProgress(
+          message,
+          {
+            title:
+              "作成に失敗しました",
+
+            message:
+              "出品の作成中にエラーが発生しました。",
+          },
         ),
       );
+    } finally {
+      setSaving(false);
     }
   }, [
-    navigate,
     resolvedParams,
     status,
     listingTitle,
@@ -495,6 +678,11 @@ function useCreateList(
     assigneeId,
     images,
     mainImageIndex,
+    saving,
+    isBlockingNavigation,
+    setSaving,
+    setProgress,
+    setCreatedListId,
   ]);
 
   return {
@@ -539,10 +727,93 @@ export function useListCreate(): UseListCreateResult {
     priceCard,
   } = usePriceRows();
 
+  const [saving, setSaving] = React.useState(false);
+
+  const [
+    progress,
+    setProgress,
+  ] = React.useState<ListProgress>(
+    createInitialListProgress,
+  );
+
+  const [
+    createdListId,
+    setCreatedListId,
+  ] = React.useState("");
+
+  const progressOpen =
+    isListProgressVisible(
+      progress,
+    );
+
   const {
     navigate,
     onBack,
-  } = useListCreateNavigation(resolvedParams);
+  } = useListCreateNavigation(
+    resolvedParams,
+    progress.isBlockingNavigation,
+  );
+
+  React.useEffect(() => {
+    if (!progress.isBlockingNavigation) {
+      return;
+    }
+
+    const handleBeforeUnload = (
+      event: BeforeUnloadEvent,
+    ) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener(
+      "beforeunload",
+      handleBeforeUnload,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "beforeunload",
+        handleBeforeUnload,
+      );
+    };
+  }, [
+    progress.isBlockingNavigation,
+  ]);
+
+  const onCloseProgress = React.useCallback(() => {
+    if (progress.isBlockingNavigation) {
+      return;
+    }
+
+    if (
+      progress.phase === "completed" &&
+      createdListId
+    ) {
+      const listId = createdListId;
+
+      setProgress(
+        createInitialListProgress(),
+      );
+
+      setCreatedListId("");
+
+      navigate(
+        `/list/${encodeURIComponent(listId)}`,
+      );
+
+      return;
+    }
+
+    setProgress(
+      createInitialListProgress(),
+    );
+  }, [
+    progress.isBlockingNavigation,
+    progress.phase,
+    createdListId,
+    navigate,
+  ]);
 
   const {
     assigneeId,
@@ -571,7 +842,6 @@ export function useListCreate(): UseListCreateResult {
   const {
     onCreate,
   } = useCreateList({
-    navigate,
     resolvedParams,
     status,
     listingTitle,
@@ -580,12 +850,24 @@ export function useListCreate(): UseListCreateResult {
     assigneeId,
     images,
     mainImageIndex,
+    saving,
+    isBlockingNavigation:
+      progress.isBlockingNavigation,
+    setSaving,
+    setProgress,
+    setCreatedListId,
   });
 
   return {
     title,
     onBack,
     onCreate,
+
+    saving,
+
+    progress,
+    progressOpen,
+    onCloseProgress,
 
     dto,
     loadingDTO,

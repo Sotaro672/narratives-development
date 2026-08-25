@@ -22,6 +22,16 @@ import {
   type ListDetailDTO,
   type ListDetailRouteParams,
 } from "../../application/listDetailService";
+import {
+  createCompletedListProgress,
+  createFailedListProgress,
+  createInitialListProgress,
+  createPreparingListProgress,
+  createSavingListProgress,
+  createUploadingListProgress,
+  isListProgressVisible,
+  type ListProgress,
+} from "../modal/listProgress";
 
 export type { DraftImage } from "./useListImages";
 
@@ -33,10 +43,15 @@ export type UseListDetailResult = {
   deleting: boolean;
   deleteError: string;
   isEdit: boolean;
+  onBack: () => void;
   onEdit: () => void;
   onCancel: () => void;
   onDelete: () => Promise<void>;
   onSave: (payload?: ListDetailSavePayload) => Promise<void>;
+
+  progress: ListProgress;
+  progressOpen: boolean;
+  onCloseProgress: () => void;
 
   readableId: string;
   listingTitle: string;
@@ -89,6 +104,16 @@ export type UseListDetailResult = {
 
 function clonePriceRows(rows: readonly PriceRow[]): PriceRow[] {
   return rows.map((row) => ({ ...row }));
+}
+
+function errorMessageFromUnknown(
+  error: unknown,
+): string {
+  return String(
+    error instanceof Error
+      ? error.message
+      : error,
+  );
 }
 
 export function useListDetail(): UseListDetailResult {
@@ -238,6 +263,11 @@ export function useListDetail(): UseListDetailResult {
   const [saveError, setSaveError] = React.useState("");
   const [deleting, setDeleting] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState("");
+  const [progress, setProgress] = React.useState<ListProgress>(
+    createInitialListProgress,
+  );
+
+  const progressOpen = isListProgressVisible(progress);
 
   const [
     mainImageIndex,
@@ -251,6 +281,31 @@ export function useListDetail(): UseListDetailResult {
     saving,
     initialImages: viewImages,
   });
+
+  React.useEffect(() => {
+    if (!progress.isBlockingNavigation) {
+      return;
+    }
+
+    const handleBeforeUnload = (
+      event: BeforeUnloadEvent,
+    ) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener(
+      "beforeunload",
+      handleBeforeUnload,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "beforeunload",
+        handleBeforeUnload,
+      );
+    };
+  }, [progress.isBlockingNavigation]);
 
   const resetDraftFromView = React.useCallback(() => {
     setDraftListingTitle(listingTitle);
@@ -292,8 +347,40 @@ export function useListDetail(): UseListDetailResult {
     viewPrimaryImageIndex,
   ]);
 
+  const onBack = React.useCallback(() => {
+    if (
+      progress.isBlockingNavigation ||
+      deleting
+    ) {
+      return;
+    }
+
+    navigate("/list");
+  }, [
+    progress.isBlockingNavigation,
+    deleting,
+    navigate,
+  ]);
+
+  const onCloseProgress = React.useCallback(() => {
+    if (progress.isBlockingNavigation) {
+      return;
+    }
+
+    setProgress(
+      createInitialListProgress(),
+    );
+  }, [
+    progress.isBlockingNavigation,
+  ]);
+
   const onEdit = React.useCallback(() => {
-    if (deleting) return;
+    if (
+      deleting ||
+      progress.isBlockingNavigation
+    ) {
+      return;
+    }
 
     resetDraftFromView();
 
@@ -306,12 +393,19 @@ export function useListDetail(): UseListDetailResult {
     setIsEdit(true);
   }, [
     deleting,
+    progress.isBlockingNavigation,
     resetDraftFromView,
     viewPrimaryImageIndex,
   ]);
 
   const onCancel = React.useCallback(() => {
-    if (saving || deleting) return;
+    if (
+      saving ||
+      deleting ||
+      progress.isBlockingNavigation
+    ) {
+      return;
+    }
 
     images.releaseDraftBlobUrls();
 
@@ -327,6 +421,7 @@ export function useListDetail(): UseListDetailResult {
   }, [
     saving,
     deleting,
+    progress.isBlockingNavigation,
     images.releaseDraftBlobUrls,
     resetDraftFromView,
     viewPrimaryImageIndex,
@@ -340,7 +435,13 @@ export function useListDetail(): UseListDetailResult {
       return;
     }
 
-    if (saving || deleting) return;
+    if (
+      saving ||
+      deleting ||
+      progress.isBlockingNavigation
+    ) {
+      return;
+    }
 
     const confirmed = window.confirm(
       "この出品を削除しますか？削除後は元に戻せません。",
@@ -383,6 +484,7 @@ export function useListDetail(): UseListDetailResult {
     listId,
     saving,
     deleting,
+    progress.isBlockingNavigation,
     cancelledRef,
     images.releaseDraftBlobUrls,
     navigate,
@@ -500,7 +602,13 @@ export function useListDetail(): UseListDetailResult {
         return;
       }
 
-      if (deleting) return;
+      if (
+        saving ||
+        deleting ||
+        progress.isBlockingNavigation
+      ) {
+        return;
+      }
 
       if (!draftAssigneeId) {
         setSaveError(
@@ -510,27 +618,32 @@ export function useListDetail(): UseListDetailResult {
         return;
       }
 
-      const saveInput =
-        buildListDetailSaveInput({
-          payload,
-
-          draftListingTitle,
-
-          draftDescription,
-
-          draftStatus,
-
-          draftAssigneeId,
-
-          currentUserUid:
-            user?.uid,
-        });
+      let transferredBytes = 0;
+      let totalBytes = 0;
+      let completedUploadCount = 0;
+      let expectedUploadCount = 0;
 
       setSaving(true);
       setSaveError("");
       setDeleteError("");
 
       try {
+        const saveInput =
+          buildListDetailSaveInput({
+            payload,
+
+            draftListingTitle,
+
+            draftDescription,
+
+            draftStatus,
+
+            draftAssigneeId,
+
+            currentUserUid:
+              user?.uid,
+          });
+
         const result =
           await saveListDetailChanges({
             listId: id,
@@ -559,6 +672,86 @@ export function useListDetail(): UseListDetailResult {
               images.draftImages,
 
             mainImageIndex,
+
+            progressHandlers: {
+              onPreparing: () => {
+                setProgress(
+                  createPreparingListProgress({
+                    title: "保存準備中",
+                    message: "出品情報の保存準備をしています。",
+                  }),
+                );
+              },
+
+              onImageProgress: (imageProgress) => {
+                transferredBytes =
+                  imageProgress.transferredBytes;
+
+                totalBytes =
+                  imageProgress.totalBytes;
+
+                completedUploadCount =
+                  imageProgress.completedUploadCount;
+
+                expectedUploadCount =
+                  imageProgress.expectedUploadCount;
+
+                setProgress(
+                  createUploadingListProgress({
+                    fileName:
+                      imageProgress.fileName,
+
+                    transferredBytes:
+                      imageProgress.transferredBytes,
+
+                    totalBytes:
+                      imageProgress.totalBytes,
+
+                    completedUploadCount:
+                      imageProgress.completedUploadCount,
+
+                    expectedUploadCount:
+                      imageProgress.expectedUploadCount,
+                  }),
+                );
+              },
+
+              onSaving: (savingProgress) => {
+                transferredBytes =
+                  savingProgress.transferredBytes;
+
+                totalBytes =
+                  savingProgress.totalBytes;
+
+                completedUploadCount =
+                  savingProgress.completedUploadCount;
+
+                expectedUploadCount =
+                  savingProgress.expectedUploadCount;
+
+                setProgress(
+                  createSavingListProgress({
+                    transferredBytes:
+                      savingProgress.transferredBytes,
+
+                    totalBytes:
+                      savingProgress.totalBytes,
+
+                    completedUploadCount:
+                      savingProgress.completedUploadCount,
+
+                    expectedUploadCount:
+                      savingProgress.expectedUploadCount,
+
+                    title:
+                      "出品を保存中",
+
+                    message:
+                      "画像情報と出品情報を保存しています。この画面を閉じたり移動したりしないでください。",
+                  }),
+                );
+              },
+            },
           });
 
         if (cancelledRef.current) {
@@ -574,16 +767,48 @@ export function useListDetail(): UseListDetailResult {
         setIsEdit(
           false,
         );
+
+        setProgress(
+          createCompletedListProgress({
+            transferredBytes,
+
+            totalBytes,
+
+            completedUploadCount,
+
+            expectedUploadCount,
+
+            title:
+              "保存が完了しました",
+
+            message:
+              "出品情報の保存が完了しました。",
+          }),
+        );
       } catch (caughtError) {
         if (cancelledRef.current) {
           return;
         }
 
+        const message =
+          errorMessageFromUnknown(
+            caughtError,
+          );
+
         setSaveError(
-          String(
-            caughtError instanceof Error
-              ? caughtError.message
-              : caughtError,
+          message,
+        );
+
+        setProgress(
+          createFailedListProgress(
+            message,
+            {
+              title:
+                "保存に失敗しました",
+
+              message:
+                "出品情報の保存中にエラーが発生しました。",
+            },
           ),
         );
       } finally {
@@ -606,7 +831,9 @@ export function useListDetail(): UseListDetailResult {
       images.draftImages,
       images.releaseDraftBlobUrls,
       mainImageIndex,
+      saving,
       deleting,
+      progress.isBlockingNavigation,
       cancelledRef,
     ],
   );
@@ -619,10 +846,15 @@ export function useListDetail(): UseListDetailResult {
     deleting,
     deleteError,
     isEdit,
+    onBack,
     onEdit,
     onCancel,
     onDelete,
     onSave,
+
+    progress,
+    progressOpen,
+    onCloseProgress,
 
     readableId,
     listingTitle,

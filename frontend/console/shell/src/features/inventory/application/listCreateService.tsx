@@ -210,6 +210,27 @@ export const IMAGE_REQUIRED_MESSAGE = "画像が必須です。";
 export const PRICE_REQUIRED_MESSAGE = "価格が未入力の商品があります。";
 export const LIST_IMAGE_UPLOAD_FAILED_MESSAGE = "画像アップロードに失敗しました。後から追加できます。";
 
+export type ListCreateImageUploadProgress = {
+  fileName: string;
+  transferredBytes: number;
+  totalBytes: number;
+  completedUploadCount: number;
+  expectedUploadCount: number;
+};
+
+export type ListCreateSavingProgress = {
+  transferredBytes: number;
+  totalBytes: number;
+  completedUploadCount: number;
+  expectedUploadCount: number;
+};
+
+export type ListCreateProgressHandlers = {
+  onPreparing?: () => void;
+  onImageProgress?: (progress: ListCreateImageUploadProgress) => void;
+  onSaving?: (progress: ListCreateSavingProgress) => void;
+};
+
 /**
  * - UIルートはinventoryId（= inventoryKey: "pb__tb"）のみを正とする
  * - backend fetchもinventoryIdのみを使う
@@ -386,6 +407,10 @@ export async function uploadListImagesPolicyB(
     listId: string;
     files: File[];
     mainImageIndex: number;
+    progressHandlers?: Pick<
+      ListCreateProgressHandlers,
+      "onImageProgress" | "onSaving"
+    >;
   },
 ): Promise<{
   registered: Array<{
@@ -394,8 +419,7 @@ export async function uploadListImagesPolicyB(
   }>;
   primaryImageId?: string;
 }> {
-  const listId =
-    String(args.listId ?? "").trim();
+  const listId = String(args.listId ?? "").trim();
 
   if (!listId) {
     throw new Error("invalid_list_id");
@@ -410,6 +434,12 @@ export async function uploadListImagesPolicyB(
     args.mainImageIndex < args.files.length
       ? args.mainImageIndex
       : 0;
+
+  const totalBytes = args.files.reduce(
+    (total, file) => total + file.size,
+    0,
+  );
+  let completedBytes = 0;
 
   const registered: Array<{
     imageId: string;
@@ -427,11 +457,25 @@ export async function uploadListImagesPolicyB(
       continue;
     }
 
-    const uploaded =
-      await uploadListImageToFirebaseStorage({
-        listId,
-        file,
-      });
+    const uploaded = await uploadListImageToFirebaseStorage({
+      listId,
+      file,
+      onProgress: (progress) => {
+        args.progressHandlers?.onImageProgress?.({
+          fileName: file.name,
+          transferredBytes:
+            completedBytes + progress.transferredBytes,
+          totalBytes,
+          completedUploadCount:
+            progress.percentage >= 100
+              ? index + 1
+              : index,
+          expectedUploadCount: args.files.length,
+        });
+      },
+    });
+
+    completedBytes += file.size;
 
     await saveListImageFromFirebaseStorageHTTP({
       listId,
@@ -445,6 +489,13 @@ export async function uploadListImagesPolicyB(
       displayOrder: index,
     });
   }
+
+  args.progressHandlers?.onSaving?.({
+    transferredBytes: totalBytes,
+    totalBytes,
+    completedUploadCount: args.files.length,
+    expectedUploadCount: args.files.length,
+  });
 
   const primary =
     registered.find(
@@ -513,6 +564,8 @@ export async function createListWithImages(
     images: File[];
     mainImageIndex: number;
 
+    progressHandlers?: ListCreateProgressHandlers;
+
     onImageUploadFailed?: (
       message: string,
       error: unknown,
@@ -529,21 +582,20 @@ export async function createListWithImages(
 
   assertCompletedPriceRows(args.priceRows);
 
-  const input =
-    buildCreateListInput({
-      params: args.params,
-      listingTitle: args.listingTitle,
-      description: args.description,
-      priceRows: args.priceRows,
-      status: args.status,
-      assigneeId: args.assigneeId,
-    });
+  const input = buildCreateListInput({
+    params: args.params,
+    listingTitle: args.listingTitle,
+    description: args.description,
+    priceRows: args.priceRows,
+    status: args.status,
+    assigneeId: args.assigneeId,
+  });
 
   validateCreateListInput(input);
 
-  const created =
-    await createListHTTP(input);
+  args.progressHandlers?.onPreparing?.();
 
+  const created = await createListHTTP(input);
   const listId = created.id;
 
   if (!listId) {
@@ -555,6 +607,7 @@ export async function createListWithImages(
       listId,
       files: args.images,
       mainImageIndex: args.mainImageIndex,
+      progressHandlers: args.progressHandlers,
     });
   } catch (error) {
     args.onImageUploadFailed?.(
