@@ -46,26 +46,29 @@ const (
 	settlementPlatformFeeRateEnv = "SETTLEMENT_PLATFORM_FEE_RATE"
 
 	settlementPlatformFeeBaseEnv = "SETTLEMENT_PLATFORM_FEE_BASE"
+
+	mallAutoCreateStripeTestPaymentMethodEnv = "MALL_AUTO_CREATE_STRIPE_TEST_PAYMENT_METHOD"
 )
 
 type Container struct {
 	Infra *shared.Infra
 
-	AvatarUC          *usecase.AvatarUsecase
-	SetupUC           *usecase.SetupUsecase
-	ListUC            *usecase.ListUsecase
-	ShippingAddressUC *usecase.ShippingAddressUsecase
-	ShippingQuoteUC   *usecase.ShippingQuoteUsecase
-	PaymentMethodUC   *usecase.PaymentMethodUsecase
-	UserUC            *usecase.UserUsecase
-	WalletUC          *usecase.WalletUsecase
-	CartUC            *usecase.CartUsecase
-	PaymentUC         *usecase.PaymentUsecase
-	SettlementUC      *usecase.SettlementUsecase
-	OrderUC           *usecase.OrderUsecase
-	InquiryUC         *usecase.InquiryUsecase
-	AnnouncementUC    *usecase.AnnouncementUsecase
-	ResaleUC          *usecase.ResaleUsecase
+	AvatarUC             *usecase.AvatarUsecase
+	AvatarRegistrationUC *usecase.AvatarRegistrationUsecase
+	SetupUC              *usecase.SetupUsecase
+	ListUC               *usecase.ListUsecase
+	ShippingAddressUC    *usecase.ShippingAddressUsecase
+	ShippingQuoteUC      *usecase.ShippingQuoteUsecase
+	PaymentMethodUC      *usecase.PaymentMethodUsecase
+	UserUC               *usecase.UserUsecase
+	WalletUC             *usecase.WalletUsecase
+	CartUC               *usecase.CartUsecase
+	PaymentUC            *usecase.PaymentUsecase
+	SettlementUC         *usecase.SettlementUsecase
+	OrderUC              *usecase.OrderUsecase
+	InquiryUC            *usecase.InquiryUsecase
+	AnnouncementUC       *usecase.AnnouncementUsecase
+	ResaleUC             *usecase.ResaleUsecase
 
 	OrderMailer   *mailadp.OrderMailer
 	OrderMailFrom string
@@ -325,6 +328,23 @@ func NewContainer(
 		paymentMethodRepo,
 		infra.PaymentMethodGateway,
 	)
+
+	autoCreateDevelopmentPaymentMethod :=
+		strings.EqualFold(
+			strings.TrimSpace(
+				os.Getenv(
+					mallAutoCreateStripeTestPaymentMethodEnv,
+				),
+			),
+			"true",
+		)
+
+	c.AvatarRegistrationUC =
+		usecase.NewAvatarRegistrationUsecase(
+			c.AvatarUC,
+			c.PaymentMethodUC,
+			autoCreateDevelopmentPaymentMethod,
+		)
 
 	c.UserUC = usecase.NewUserUsecase(
 		userRepo,

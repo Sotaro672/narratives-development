@@ -14,13 +14,30 @@ var (
 	ErrSetupIntentNotImplemented = errors.New(
 		"paymentMethod: setup intent not implemented",
 	)
+	ErrDevelopmentTestPaymentMethodNotImplemented = errors.New(
+		"paymentMethod: development test payment method not implemented",
+	)
 )
 
+// DevelopmentTestPaymentMethodResultは、development環境で
+// Stripeに作成したテスト用PaymentMethodの結果です。
+type DevelopmentTestPaymentMethodResult struct {
+	StripeCustomerID      string
+	StripePaymentMethodID string
+	Brand                 string
+	Last4                 string
+	ExpMonth              int
+	ExpYear               int
+}
+
 // StripePaymentMethodGatewayは、PaymentMethod登録に必要な
-// Stripe CustomerおよびSetupIntentの操作を定義します。
+// Stripe Customer、SetupIntentおよびdevelopment用
+// テストPaymentMethodの操作を定義します。
 //
 // cardNumberおよびCVCなどの生カード情報は扱いません。
 // 生カード情報はStripe.js / Elementsから直接Stripeへ送信します。
+// development用テストPaymentMethodについてもStripeの
+// テストトークンを使用し、生カード情報は扱いません。
 type StripePaymentMethodGateway interface {
 	GetOrCreateCustomer(
 		ctx context.Context,
@@ -33,6 +50,12 @@ type StripePaymentMethodGateway interface {
 		stripeCustomerID string,
 		cardholderName string,
 	) (clientSecret string, err error)
+
+	CreateDevelopmentTestPaymentMethod(
+		ctx context.Context,
+		userID string,
+		cardholderName string,
+	) (*DevelopmentTestPaymentMethodResult, error)
 }
 
 // PaymentMethodSetupIntentResultは、setup-intent endpoint用の返却値です。
@@ -152,6 +175,105 @@ func (u *PaymentMethodUsecase) CreateSetupIntent(
 		ClientSecret:     clientSecret,
 		StripeCustomerID: stripeCustomerID,
 	}, nil
+}
+
+// ============================================================
+// Development test PaymentMethod
+// ============================================================
+
+// EnsureDevelopmentDefaultPaymentMethodは、development環境で
+// ユーザーの既定PaymentMethodが存在しない場合に限り、
+// Stripeのテスト用PaymentMethodを作成して既定として保存します。
+//
+// 既に既定PaymentMethodが存在する場合は新しいPaymentMethodを
+// 作成せず、その既定PaymentMethodを返します。
+//
+// development環境でのみ呼び出すことを前提とし、
+// Stripe側でもtest secret keyであることを検証します。
+func (u *PaymentMethodUsecase) EnsureDevelopmentDefaultPaymentMethod(
+	ctx context.Context,
+	userID string,
+	cardholderName string,
+) (*pm.PaymentMethod, error) {
+	if u == nil || u.repo == nil {
+		return nil, ErrDevelopmentTestPaymentMethodNotImplemented
+	}
+
+	if u.stripeGate == nil {
+		return nil, ErrDevelopmentTestPaymentMethodNotImplemented
+	}
+
+	if userID == "" {
+		return nil, pm.ErrInvalidUserID
+	}
+
+	if cardholderName == "" {
+		return nil, pm.ErrInvalidCardholderName
+	}
+
+	existing, err := u.repo.GetDefaultByUser(
+		ctx,
+		userID,
+	)
+	if err == nil && existing != nil {
+		return existing, nil
+	}
+
+	if err != nil && !errors.Is(err, pm.ErrNotFound) {
+		return nil, err
+	}
+
+	result, err := u.stripeGate.CreateDevelopmentTestPaymentMethod(
+		ctx,
+		userID,
+		cardholderName,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if result == nil {
+		return nil, ErrDevelopmentTestPaymentMethodNotImplemented
+	}
+
+	if result.StripeCustomerID == "" {
+		return nil, pm.ErrInvalidStripeCustomerID
+	}
+
+	if result.StripePaymentMethodID == "" {
+		return nil, pm.ErrInvalidStripePaymentMethod
+	}
+
+	if result.Brand == "" {
+		return nil, pm.ErrInvalidBrand
+	}
+
+	if result.Last4 == "" {
+		return nil, pm.ErrInvalidLast4
+	}
+
+	if result.ExpMonth <= 0 {
+		return nil, pm.ErrInvalidExpMonth
+	}
+
+	if result.ExpYear <= 0 {
+		return nil, pm.ErrInvalidExpYear
+	}
+
+	return u.Create(
+		ctx,
+		pm.CreatePaymentMethodInput{
+			UserID:                userID,
+			StripeCustomerID:      result.StripeCustomerID,
+			StripePaymentMethodID: result.StripePaymentMethodID,
+			Brand:                 result.Brand,
+			Last4:                 result.Last4,
+			ExpMonth:              result.ExpMonth,
+			ExpYear:               result.ExpYear,
+			CardholderName:        cardholderName,
+			IsDefault:             true,
+		},
+	)
 }
 
 // ============================================================

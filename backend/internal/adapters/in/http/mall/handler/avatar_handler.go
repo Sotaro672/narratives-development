@@ -8,16 +8,24 @@ import (
 	"strings"
 	"time"
 
+	"narratives/internal/adapters/in/http/middleware"
 	avataruc "narratives/internal/application/usecase"
 	avatardom "narratives/internal/domain/avatar"
 )
 
 type AvatarHandler struct {
-	uc *avataruc.AvatarUsecase
+	uc             *avataruc.AvatarUsecase
+	registrationUC *avataruc.AvatarRegistrationUsecase
 }
 
-func NewAvatarHandler(avatarUC *avataruc.AvatarUsecase) http.Handler {
-	return &AvatarHandler{uc: avatarUC}
+func NewAvatarHandler(
+	avatarUC *avataruc.AvatarUsecase,
+	registrationUC *avataruc.AvatarRegistrationUsecase,
+) http.Handler {
+	return &AvatarHandler{
+		uc:             avatarUC,
+		registrationUC: registrationUC,
+	}
 }
 
 func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -68,13 +76,18 @@ func extractIDFromPath(path0 string, prefix string) (string, bool) {
 func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if h == nil || h.uc == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "avatar usecase not configured"})
+	if h == nil || h.registrationUC == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "avatar registration usecase not configured"})
+		return
+	}
+
+	userUID, ok := middleware.CurrentUserUID(r)
+	if !ok || strings.TrimSpace(userUID) == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
 	var body struct {
-		UserUID      string  `json:"userUid"`
 		AvatarName   string  `json:"avatarName"`
 		AvatarIcon   *string `json:"avatarIcon,omitempty"`
 		Profile      *string `json:"profile,omitempty"`
@@ -87,14 +100,14 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in := avataruc.CreateAvatarInput{
-		UserUID:      body.UserUID,
+		UserUID:      userUID,
 		AvatarName:   body.AvatarName,
 		AvatarIcon:   body.AvatarIcon,
 		Profile:      body.Profile,
 		ExternalLink: body.ExternalLink,
 	}
 
-	created, err := h.uc.Create(ctx, in)
+	created, err := h.registrationUC.Create(ctx, in)
 	if err != nil {
 		writeAvatarErr(w, err)
 		return

@@ -56,6 +56,29 @@ func (h *AccountHandler) ServeHTTP(
 		path == "/accounts/connect":
 		h.connect(w, r)
 
+	case r.Method == http.MethodPost &&
+		strings.HasPrefix(
+			path,
+			"/accounts/",
+		) &&
+		strings.HasSuffix(
+			path,
+			"/sync-stripe-status",
+		):
+		id := strings.TrimSuffix(
+			strings.TrimPrefix(
+				path,
+				"/accounts/",
+			),
+			"/sync-stripe-status",
+		)
+
+		h.syncStripeStatus(
+			w,
+			r,
+			id,
+		)
+
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(
 			path,
@@ -532,6 +555,62 @@ func (h *AccountHandler) connect(
 			),
 			ExpiresAt: result.ExpiresAt,
 		},
+	)
+}
+
+// ========================================
+// POST /accounts/{id}/sync-stripe-status
+// ========================================
+
+func (h *AccountHandler) syncStripeStatus(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
+	if h.uc == nil {
+		writeAccountErr(
+			w,
+			errors.New(
+				"account: usecase is nil",
+			),
+		)
+		return
+	}
+
+	id = strings.TrimSpace(
+		id,
+	)
+
+	if id == "" ||
+		strings.Contains(
+			id,
+			"/",
+		) {
+		writeAccountErr(
+			w,
+			accountdom.ErrInvalidID,
+		)
+		return
+	}
+
+	account, err := h.uc.SyncStripeStatus(
+		r.Context(),
+		id,
+	)
+	if err != nil {
+		writeAccountErr(
+			w,
+			err,
+		)
+		return
+	}
+
+	w.WriteHeader(
+		http.StatusOK,
+	)
+
+	_ = json.NewEncoder(w).Encode(
+		account,
 	)
 }
 

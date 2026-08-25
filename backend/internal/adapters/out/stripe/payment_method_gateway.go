@@ -16,7 +16,10 @@ import (
 	pm "narratives/internal/domain/paymentMethod"
 )
 
-const stripeAPIBaseURL = "https://api.stripe.com/v1"
+const (
+	stripeAPIBaseURL                  = "https://api.stripe.com/v1"
+	developmentTestPaymentMethodToken = "tok_visa"
+)
 
 type PaymentMethodCustomerStore interface {
 	GetStripeCustomerIDByUser(ctx context.Context, userID string) (string, error)
@@ -132,6 +135,113 @@ func (g *PaymentMethodGateway) CreateSetupIntent(
 	}
 
 	return clientSecret, nil
+}
+
+func (g *PaymentMethodGateway) CreateDevelopmentTestPaymentMethod(
+	ctx context.Context,
+	userID string,
+	cardholderName string,
+) (*usecase.DevelopmentTestPaymentMethodResult, error) {
+	if err := g.validateReady(); err != nil {
+		return nil, err
+	}
+
+	if !strings.HasPrefix(
+		strings.TrimSpace(g.secretKey),
+		"sk_test_",
+	) {
+		return nil, errors.New(
+			"stripe development test payment method requires sk_test_ secret key",
+		)
+	}
+
+	userID = strings.TrimSpace(userID)
+	cardholderName = strings.TrimSpace(cardholderName)
+
+	if userID == "" {
+		return nil, pm.ErrInvalidUserID
+	}
+
+	if cardholderName == "" {
+		return nil, pm.ErrInvalidCardholderName
+	}
+
+	stripeCustomerID, err := g.GetOrCreateCustomer(
+		ctx,
+		userID,
+		cardholderName,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	form := url.Values{}
+	form.Set("type", "card")
+	form.Set("card[token]", developmentTestPaymentMethodToken)
+	form.Set("billing_details[name]", cardholderName)
+	form.Set("metadata[userId]", userID)
+
+	var created stripePaymentMethodResponse
+	if err := g.postForm(
+		ctx,
+		"/payment_methods",
+		form,
+		&created,
+	); err != nil {
+		return nil, err
+	}
+
+	stripePaymentMethodID := strings.TrimSpace(created.ID)
+	if stripePaymentMethodID == "" {
+		return nil, errors.New(
+			"stripe development test payment method id is empty",
+		)
+	}
+
+	attachForm := url.Values{}
+	attachForm.Set("customer", stripeCustomerID)
+
+	var attached stripePaymentMethodResponse
+	if err := g.postForm(
+		ctx,
+		"/payment_methods/"+url.PathEscape(stripePaymentMethodID)+"/attach",
+		attachForm,
+		&attached,
+	); err != nil {
+		return nil, err
+	}
+
+	if strings.TrimSpace(attached.ID) != "" {
+		created = attached
+	}
+
+	brand := strings.TrimSpace(created.Card.Brand)
+	last4 := strings.TrimSpace(created.Card.Last4)
+
+	if brand == "" {
+		return nil, pm.ErrInvalidBrand
+	}
+
+	if last4 == "" {
+		return nil, pm.ErrInvalidLast4
+	}
+
+	if created.Card.ExpMonth <= 0 {
+		return nil, pm.ErrInvalidExpMonth
+	}
+
+	if created.Card.ExpYear <= 0 {
+		return nil, pm.ErrInvalidExpYear
+	}
+
+	return &usecase.DevelopmentTestPaymentMethodResult{
+		StripeCustomerID:      stripeCustomerID,
+		StripePaymentMethodID: stripePaymentMethodID,
+		Brand:                 brand,
+		Last4:                 last4,
+		ExpMonth:              created.Card.ExpMonth,
+		ExpYear:               created.Card.ExpYear,
+	}, nil
 }
 
 // CreateAndConfirmPaymentIntent creates and confirms a Stripe PaymentIntent.

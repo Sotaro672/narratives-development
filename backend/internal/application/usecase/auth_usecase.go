@@ -285,22 +285,6 @@ func (s *BootstrapService) ensureDefaultTestAccount(
 		)
 	}
 
-	companyID = strings.TrimSpace(
-		companyID,
-	)
-
-	memberID = strings.TrimSpace(
-		memberID,
-	)
-
-	companyName = strings.TrimSpace(
-		companyName,
-	)
-
-	email = strings.TrimSpace(
-		email,
-	)
-
 	if companyID == "" {
 		return accountdom.ErrInvalidCompanyID
 	}
@@ -376,6 +360,8 @@ func (s *BootstrapService) applyDefaultTestAccountValues(
 	bankName := defaultTestBankName
 	branchName := defaultTestBranchName
 	accountNumber := defaultTestAccountNumber
+	accountType := accountdom.TypeFutsu
+	status := accountdom.StatusActive
 
 	_, err := s.Accounts.repo.Update(
 		ctx,
@@ -385,6 +371,8 @@ func (s *BootstrapService) applyDefaultTestAccountValues(
 			BankName:      &bankName,
 			BranchName:    &branchName,
 			AccountNumber: &accountNumber,
+			AccountType:   &accountType,
+			Status:        &status,
 			UpdatedBy:     &memberID,
 		},
 	)

@@ -83,9 +83,7 @@ export class AccountRepositoryHTTP {
    */
   async getById(id: string): Promise<Account> {
     if (!id) {
-      throw new Error(
-        "[AccountRepositoryHTTP] accountId is required.",
-      );
+      throw new Error("[AccountRepositoryHTTP] accountId is required.");
     }
 
     const url = `${this.baseUrl}/${encodeURIComponent(id)}`;
@@ -141,9 +139,7 @@ export class AccountRepositoryHTTP {
     patch: UpdateAccountInput,
   ): Promise<Account> {
     if (!id) {
-      throw new Error(
-        "[AccountRepositoryHTTP] accountId is required.",
-      );
+      throw new Error("[AccountRepositoryHTTP] accountId is required.");
     }
 
     const url = `${this.baseUrl}/${encodeURIComponent(id)}`;
@@ -176,21 +172,15 @@ export class AccountRepositoryHTTP {
     input: ConnectAccountInput,
   ): Promise<ConnectAccountResponse> {
     if (!input.contactEmail) {
-      throw new Error(
-        "[AccountRepositoryHTTP] contactEmail is required.",
-      );
+      throw new Error("[AccountRepositoryHTTP] contactEmail is required.");
     }
 
     if (!input.returnUrl) {
-      throw new Error(
-        "[AccountRepositoryHTTP] returnUrl is required.",
-      );
+      throw new Error("[AccountRepositoryHTTP] returnUrl is required.");
     }
 
     if (!input.refreshUrl) {
-      throw new Error(
-        "[AccountRepositoryHTTP] refreshUrl is required.",
-      );
+      throw new Error("[AccountRepositoryHTTP] refreshUrl is required.");
     }
 
     const url = `${this.baseUrl}/connect`;
@@ -211,6 +201,36 @@ export class AccountRepositoryHTTP {
           returnUrl: input.returnUrl,
           refreshUrl: input.refreshUrl,
         }),
+      },
+    );
+  }
+
+  /**
+   * Stripe Connected Account の最新状態を取得し、
+   * Account.status へ同期します。
+   *
+   * Backend:
+   * POST /accounts/{id}/sync-stripe-status
+   *
+   * Stripe 側の transfer capability が active の場合は active、
+   * pending の場合は inactive、
+   * restricted / unsupported / closed の場合は suspended になります。
+   */
+  async syncStripeStatus(
+    id: string,
+  ): Promise<Account> {
+    if (!id) {
+      throw new Error("[AccountRepositoryHTTP] accountId is required.");
+    }
+
+    const url =
+      `${this.baseUrl}/${encodeURIComponent(id)}/sync-stripe-status`;
+
+    return fetchJSON<Account>(
+      url,
+      {
+        method: "POST",
+        auth: "required",
       },
     );
   }

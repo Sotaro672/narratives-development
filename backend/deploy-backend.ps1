@@ -369,6 +369,9 @@ $AllowedKeys = @(
   # Stripe webhook
   "STRIPE_WEBHOOK_SECRET",
 
+  # Mall development
+  "MALL_AUTO_CREATE_STRIPE_TEST_PAYMENT_METHOD",
+
   # Settlement
   "SETTLEMENT_PLATFORM_FEE_RATE",
   "SETTLEMENT_PLATFORM_FEE_BASE"
@@ -439,6 +442,21 @@ if (
   )
 ) {
   throw "SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY is required."
+}
+
+if (
+  -not $envMap.ContainsKey(
+    "MALL_AUTO_CREATE_STRIPE_TEST_PAYMENT_METHOD"
+  ) -or
+  [string]::IsNullOrWhiteSpace(
+    $envMap[
+      "MALL_AUTO_CREATE_STRIPE_TEST_PAYMENT_METHOD"
+    ]
+  )
+) {
+  $envMap[
+    "MALL_AUTO_CREATE_STRIPE_TEST_PAYMENT_METHOD"
+  ] = "false"
 }
 
 # Bubblegum Cloud Run の ID Token audience は
