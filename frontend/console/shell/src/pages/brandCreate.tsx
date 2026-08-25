@@ -74,6 +74,12 @@ export default function BrandCreate() {
     handleSave,
   } = useBrandCreate();
 
+  const accountLabel =
+    accountCandidates.find(
+      (candidate) =>
+        candidate.id === accountId,
+    )?.label ?? null;
+
   const left = (
     <div className="space-y-4">
       <Card>
@@ -353,7 +359,7 @@ export default function BrandCreate() {
       )}
 
       <AccountSelectCard
-        accountId={accountId}
+        accountLabel={accountLabel}
         accountCandidates={
           accountCandidates
         }
