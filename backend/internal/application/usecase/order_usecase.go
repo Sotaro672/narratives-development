@@ -611,6 +611,7 @@ type ReturnOrderItemInput struct {
 	ID        string
 	AvatarID  string
 	ItemIndex int
+	Kind      orderdom.ReturnRequestKind
 }
 
 // ReturnItem records a purchaser return request.
@@ -663,9 +664,25 @@ func (u *OrderUsecase) ReturnItem(
 	targetItem := order.Items[in.ItemIndex]
 
 	if targetItem.IsCancelled ||
-		!targetItem.IsDispatched ||
-		targetItem.Transferred {
+		!targetItem.IsDispatched {
 		return orderdom.Order{}, orderdom.ErrConflict
+	}
+
+	switch in.Kind {
+	case orderdom.ReturnRequestKindUnopened:
+		if targetItem.Transferred ||
+			targetItem.TokenTransferVerifiedAt != nil {
+			return orderdom.Order{}, orderdom.ErrConflict
+		}
+
+	case orderdom.ReturnRequestKindOpened:
+		if !targetItem.Transferred &&
+			targetItem.TokenTransferVerifiedAt == nil {
+			return orderdom.Order{}, orderdom.ErrConflict
+		}
+
+	default:
+		return orderdom.Order{}, orderdom.ErrInvalidItemSnapshot
 	}
 
 	if targetItem.IsReturnRequested {
@@ -674,6 +691,7 @@ func (u *OrderUsecase) ReturnItem(
 
 	if err := order.RequestItemReturn(
 		in.ItemIndex,
+		in.Kind,
 		u.now().UTC(),
 	); err != nil {
 		return orderdom.Order{}, err
@@ -1428,12 +1446,15 @@ func (u *OrderUsecase) resolveListOrderItem(
 		ProductBlueprintCategoryPath: productBlueprintCategoryPath,
 		ConsumptionTaxRate:           consumptionTaxRate,
 
-		Qty:           item.Qty,
-		Price:         price,
-		IsCancelled:   false,
-		IsDispatched:  false,
-		Transferred:   false,
-		TransferredAt: nil,
+		Qty:                     item.Qty,
+		Price:                   price,
+		IsCancelled:             false,
+		IsDispatched:            false,
+		IsReturnRequested:       false,
+		ReturnRequestedAt:       nil,
+		TokenTransferVerifiedAt: nil,
+		Transferred:             false,
+		TransferredAt:           nil,
 	}, nil
 }
 

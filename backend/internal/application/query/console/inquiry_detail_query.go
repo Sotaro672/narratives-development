@@ -26,19 +26,19 @@ import (
 // InquiryDetailQuery は Console 問い合わせ詳細画面向けの read model を扱います。
 //
 // 詳細画面で必要な重い解決をこちらに集約します。
-// Inquiry.ProductID から Product.ModelID を解決し、
-// ModelVariation.GetProductBlueprintID() から productBlueprintId を解決し、
-// ProductBlueprint.CompanyID / ProductName / BrandID を解決します。
+// product Inquiry は Inquiry.ProductID から従来どおり商品・注文情報を解決します。
+// return Inquiry は Inquiry.OrderID + Inquiry.OrderItemIndex を正として Order item を直接解決し、
+// ProductID が存在しない未開封返品でも Model / List / Resale / ProductBlueprint / Brand を解決します。
+// ProductBlueprint.CompanyID / ProductName / BrandID を解決し、
 // さらに Brand.GetByID() から BrandName を解決します。
-// Inquiry.ProductID を tokens/{productId} として解決し、Token.AssetID を取得します。
-// 取得した AssetID から Transfer.TransferredAt を解決します。
+// ProductID が存在する場合は tokens/{productId} から Token.AssetID を取得します。
+// product Inquiry では AssetID から Transfer.TransferredAt を解決します。
+// return Inquiry では対象 Order item の TransferredAt を正として扱います。
 // Inquiry.AvatarID から Avatar.GetByID() を使って AvatarName / UserID を解決します。
 // 解決した UserID から User.GetByID() を使って UserFullName を解決します。
 // 解決した UserID から ShippingAddress.ListByUserID() を使って配送先住所一覧を解決します。
-// Inquiry.AvatarID から Order.ListByAvatarID() を使って注文一覧を取得し、
-// Inquiry.ProductID 由来の modelId と AssetID 由来の transferredAt が一致する Order.Items を持つ注文のみ返します。
 // ReplyRepository から replies を取得し、詳細 BFF の完成 DTO に含めます。
-// Order item の tokenBlueprintId / tokenName は InventoryID から正規の inventory repository を通して解決します。
+// Order item の tokenBlueprintId / tokenName は Order snapshot を優先し、必要時のみ InventoryID から補完します。
 type InquiryDetailQuery struct {
 	repo                 inquirydom.Repository
 	replyRepo            inquirydom.ReplyRepository
@@ -139,17 +139,26 @@ type InquiryOrderSummary struct {
 
 // InquiryOrderItemSummary は Inquiry 詳細画面向けの注文 item read model です。
 type InquiryOrderItemSummary struct {
-	ModelID          string     `json:"modelId"`
-	InventoryID      string     `json:"inventoryId"`
-	TokenBlueprintID string     `json:"tokenBlueprintId"`
-	TokenName        string     `json:"tokenName"`
-	ListID           string     `json:"listId"`
-	Qty              int        `json:"qty"`
-	Price            int        `json:"price"`
-	IsCancelled      bool       `json:"isCancelled"`
-	IsDispatched     bool       `json:"isDispatched"`
-	Transferred      bool       `json:"transferred"`
-	TransferredAt    *time.Time `json:"transferredAt,omitempty"`
+	ItemIndex               int                    `json:"itemIndex"`
+	ItemType                orderdom.OrderItemType `json:"itemType"`
+	ModelID                 string                 `json:"modelId"`
+	InventoryID             string                 `json:"inventoryId"`
+	ListID                  string                 `json:"listId"`
+	ResaleID                string                 `json:"resaleId"`
+	ProductID               string                 `json:"productId"`
+	ProductBlueprintID      string                 `json:"productBlueprintId"`
+	TokenBlueprintID        string                 `json:"tokenBlueprintId"`
+	TokenName               string                 `json:"tokenName"`
+	BrandID                 string                 `json:"brandId"`
+	Qty                     int                    `json:"qty"`
+	Price                   int                    `json:"price"`
+	IsCancelled             bool                   `json:"isCancelled"`
+	IsDispatched            bool                   `json:"isDispatched"`
+	IsReturnRequested       bool                   `json:"isReturnRequested"`
+	ReturnRequestedAt       *time.Time             `json:"returnRequestedAt,omitempty"`
+	TokenTransferVerifiedAt *time.Time             `json:"tokenTransferVerifiedAt,omitempty"`
+	Transferred             bool                   `json:"transferred"`
+	TransferredAt           *time.Time             `json:"transferredAt,omitempty"`
 }
 
 // GetByID は Inquiry を返します。
@@ -206,33 +215,22 @@ func (q *InquiryDetailQuery) getDetailBaseByID(ctx context.Context, id string) (
 		return InquiryDetail{}, err
 	}
 
-	modelID, productBlueprintID, productName, brandID, brandName, companyID, err := q.resolveProductModelRefByInquiryProductID(ctx, inq.ProductID)
+	resolved, err := q.resolveInquiryDetailRefs(ctx, inq)
 	if err != nil {
 		return InquiryDetail{}, err
 	}
-	assetID, err := q.resolveAssetIDByProductID(ctx, inq.ProductID)
-	if err != nil {
-		return InquiryDetail{}, err
-	}
-	transferredAt, err := q.resolveTransferredAtByAssetID(ctx, assetID)
-	if err != nil {
-		return InquiryDetail{}, err
-	}
+
 	avatarName, userID, userFullName, shippingAddresses, err := q.resolveAvatarUserRefByAvatarID(ctx, inq.AvatarID)
-	if err != nil {
-		return InquiryDetail{}, err
-	}
-	orders, err := q.resolveOrdersByAvatarIDModelIDAndTransferredAt(ctx, inq.AvatarID, modelID, transferredAt)
 	if err != nil {
 		return InquiryDetail{}, err
 	}
 
 	return InquiryDetail{
-		Inquiry: inq, Replies: []inquirydom.Reply{}, ModelID: modelID, ProductBlueprintID: productBlueprintID,
-		ProductName: productName, BrandID: brandID, BrandName: brandName,
-		AssetID: assetID, TransferredAt: transferredAt, AvatarName: avatarName,
+		Inquiry: inq, Replies: []inquirydom.Reply{}, ModelID: resolved.ModelID, ProductBlueprintID: resolved.ProductBlueprintID,
+		ProductName: resolved.ProductName, BrandID: resolved.BrandID, BrandName: resolved.BrandName,
+		AssetID: resolved.AssetID, TransferredAt: resolved.TransferredAt, AvatarName: avatarName,
 		UserID: userID, UserFullName: userFullName, ShippingAddresses: shippingAddresses,
-		Orders: orders, CompanyID: companyID,
+		Orders: resolved.Orders, CompanyID: resolved.CompanyID,
 	}, nil
 }
 
@@ -288,15 +286,7 @@ func (q *InquiryDetailQuery) GetAggregate(ctx context.Context, id string) (Inqui
 		images = []inquirydom.ImageFile{}
 	}
 
-	modelID, productBlueprintID, productName, brandID, brandName, companyID, err := q.resolveProductModelRefByInquiryProductID(ctx, inq.ProductID)
-	if err != nil {
-		return InquiryAggregate{}, err
-	}
-	assetID, err := q.resolveAssetIDByProductID(ctx, inq.ProductID)
-	if err != nil {
-		return InquiryAggregate{}, err
-	}
-	transferredAt, err := q.resolveTransferredAtByAssetID(ctx, assetID)
+	resolved, err := q.resolveInquiryDetailRefs(ctx, inq)
 	if err != nil {
 		return InquiryAggregate{}, err
 	}
@@ -304,18 +294,14 @@ func (q *InquiryDetailQuery) GetAggregate(ctx context.Context, id string) (Inqui
 	if err != nil {
 		return InquiryAggregate{}, err
 	}
-	orders, err := q.resolveOrdersByAvatarIDModelIDAndTransferredAt(ctx, inq.AvatarID, modelID, transferredAt)
-	if err != nil {
-		return InquiryAggregate{}, err
-	}
 
 	return InquiryAggregate{
-		Inquiry: inq, Images: images, ModelID: modelID,
-		ProductBlueprintID: productBlueprintID, ProductName: productName,
-		BrandID: brandID, BrandName: brandName, AssetID: assetID,
-		TransferredAt: transferredAt, AvatarName: avatarName, UserID: userID,
+		Inquiry: inq, Images: images, ModelID: resolved.ModelID,
+		ProductBlueprintID: resolved.ProductBlueprintID, ProductName: resolved.ProductName,
+		BrandID: resolved.BrandID, BrandName: resolved.BrandName, AssetID: resolved.AssetID,
+		TransferredAt: resolved.TransferredAt, AvatarName: avatarName, UserID: userID,
 		UserFullName: userFullName, ShippingAddresses: shippingAddresses,
-		Orders: orders, CompanyID: companyID,
+		Orders: resolved.Orders, CompanyID: resolved.CompanyID,
 	}, nil
 }
 
@@ -333,6 +319,371 @@ func (q *InquiryDetailQuery) GetAggregateForCompany(ctx context.Context, id stri
 		return InquiryAggregate{}, inquirydom.ErrNotFound
 	}
 	return aggregate, nil
+}
+
+type inquiryDetailResolvedRefs struct {
+	ModelID            string
+	ProductBlueprintID string
+	ProductName        string
+	BrandID            string
+	BrandName          string
+	AssetID            string
+	TransferredAt      *time.Time
+	Orders             []InquiryOrderSummary
+	CompanyID          string
+}
+
+func (q *InquiryDetailQuery) resolveInquiryDetailRefs(
+	ctx context.Context,
+	inq inquirydom.Inquiry,
+) (inquiryDetailResolvedRefs, error) {
+	switch inq.InquiryType {
+	case inquirydom.InquiryTypeReturnUnopened,
+		inquirydom.InquiryTypeReturnOpened:
+		return q.resolveReturnInquiryDetailRefs(
+			ctx,
+			inq,
+		)
+
+	default:
+		return q.resolveProductInquiryDetailRefs(
+			ctx,
+			inq,
+		)
+	}
+}
+
+func (q *InquiryDetailQuery) resolveProductInquiryDetailRefs(
+	ctx context.Context,
+	inq inquirydom.Inquiry,
+) (inquiryDetailResolvedRefs, error) {
+	modelID, productBlueprintID, productName, brandID, brandName, companyID, err :=
+		q.resolveProductModelRefByInquiryProductID(
+			ctx,
+			inq.ProductID,
+		)
+	if err != nil {
+		return inquiryDetailResolvedRefs{}, err
+	}
+
+	assetID, err :=
+		q.resolveAssetIDByProductID(
+			ctx,
+			inq.ProductID,
+		)
+	if err != nil {
+		return inquiryDetailResolvedRefs{}, err
+	}
+
+	transferredAt, err :=
+		q.resolveTransferredAtByAssetID(
+			ctx,
+			assetID,
+		)
+	if err != nil {
+		return inquiryDetailResolvedRefs{}, err
+	}
+
+	orders, err :=
+		q.resolveOrdersByAvatarIDModelIDAndTransferredAt(
+			ctx,
+			inq.AvatarID,
+			modelID,
+			transferredAt,
+		)
+	if err != nil {
+		return inquiryDetailResolvedRefs{}, err
+	}
+
+	return inquiryDetailResolvedRefs{
+		ModelID:            modelID,
+		ProductBlueprintID: productBlueprintID,
+		ProductName:        productName,
+		BrandID:            brandID,
+		BrandName:          brandName,
+		AssetID:            assetID,
+		TransferredAt:      transferredAt,
+		Orders:             orders,
+		CompanyID:          companyID,
+	}, nil
+}
+
+func (q *InquiryDetailQuery) resolveReturnInquiryDetailRefs(
+	ctx context.Context,
+	inq inquirydom.Inquiry,
+) (inquiryDetailResolvedRefs, error) {
+	if q == nil {
+		return inquiryDetailResolvedRefs{},
+			fmt.Errorf("inquiry detail query: query is nil")
+	}
+	if q.orderRepo == nil {
+		return inquiryDetailResolvedRefs{},
+			fmt.Errorf("inquiry detail query: order repository is nil")
+	}
+	if inq.OrderID == "" {
+		return inquiryDetailResolvedRefs{},
+			inquirydom.ErrInvalidOrderID
+	}
+	if inq.OrderItemIndex == nil ||
+		*inq.OrderItemIndex < 0 {
+		return inquiryDetailResolvedRefs{},
+			inquirydom.ErrInvalidOrderItemIndex
+	}
+
+	order, err :=
+		q.orderRepo.GetByID(
+			ctx,
+			inq.OrderID,
+		)
+	if err != nil {
+		if errors.Is(err, orderdom.ErrNotFound) {
+			return inquiryDetailResolvedRefs{},
+				inquirydom.ErrNotFound
+		}
+
+		return inquiryDetailResolvedRefs{}, err
+	}
+
+	if order.AvatarID != inq.AvatarID {
+		return inquiryDetailResolvedRefs{},
+			inquirydom.ErrNotFound
+	}
+
+	itemIndex := *inq.OrderItemIndex
+	if itemIndex >= len(order.Items) {
+		return inquiryDetailResolvedRefs{},
+			inquirydom.ErrInvalidOrderItemIndex
+	}
+
+	item := order.Items[itemIndex]
+
+	productID := inq.ProductID
+	if productID == "" {
+		productID = item.ProductID
+	} else if item.ProductID != "" &&
+		item.ProductID != productID {
+		return inquiryDetailResolvedRefs{},
+			inquirydom.ErrInquiryInvalidWorkflow
+	}
+
+	modelID,
+		productBlueprintID,
+		productName,
+		brandID,
+		brandName,
+		companyID,
+		err :=
+		q.resolveProductModelRefByOrderItem(
+			ctx,
+			item,
+			productID,
+		)
+	if err != nil {
+		return inquiryDetailResolvedRefs{}, err
+	}
+
+	assetID, err :=
+		q.resolveAssetIDByProductID(
+			ctx,
+			productID,
+		)
+	if err != nil {
+		return inquiryDetailResolvedRefs{}, err
+	}
+
+	var transferredAt *time.Time
+	if item.TransferredAt != nil &&
+		!item.TransferredAt.IsZero() {
+		value := item.TransferredAt.UTC()
+		transferredAt = &value
+	}
+
+	itemSummary, err :=
+		q.buildInquiryOrderItemSummary(
+			ctx,
+			itemIndex,
+			item,
+		)
+	if err != nil {
+		return inquiryDetailResolvedRefs{}, err
+	}
+
+	orders := []InquiryOrderSummary{
+		{
+			ID:        order.ID,
+			UserID:    order.UserID,
+			AvatarID:  order.AvatarID,
+			CartID:    order.CartID,
+			Paid:      order.Paid,
+			Items:     []InquiryOrderItemSummary{itemSummary},
+			CreatedAt: order.CreatedAt,
+		},
+	}
+
+	return inquiryDetailResolvedRefs{
+		ModelID:            modelID,
+		ProductBlueprintID: productBlueprintID,
+		ProductName:        productName,
+		BrandID:            brandID,
+		BrandName:          brandName,
+		AssetID:            assetID,
+		TransferredAt:      transferredAt,
+		Orders:             orders,
+		CompanyID:          companyID,
+	}, nil
+}
+
+func (q *InquiryDetailQuery) resolveProductModelRefByOrderItem(
+	ctx context.Context,
+	item orderdom.OrderItemSnapshot,
+	productID string,
+) (
+	modelID string,
+	productBlueprintID string,
+	productName string,
+	brandID string,
+	brandName string,
+	companyID string,
+	err error,
+) {
+	if q == nil {
+		return "", "", "", "", "", "",
+			fmt.Errorf("inquiry detail query: query is nil")
+	}
+
+	modelID = item.ModelID
+	productBlueprintID =
+		item.ProductBlueprintID
+
+	if modelID == "" &&
+		productID != "" {
+		if q.productRepo == nil {
+			return "", "", "", "", "", "",
+				fmt.Errorf("inquiry detail query: product repository is nil")
+		}
+
+		product, productErr :=
+			q.productRepo.GetByID(
+				ctx,
+				productID,
+			)
+		if productErr != nil {
+			if !errors.Is(
+				productErr,
+				productdom.ErrNotFound,
+			) {
+				return "", "", "", "", "", "",
+					productErr
+			}
+		} else {
+			modelID = product.ModelID
+		}
+	}
+
+	if productBlueprintID == "" &&
+		modelID != "" {
+		if q.modelRepo == nil {
+			return modelID, "", "", "", "", "",
+				fmt.Errorf("inquiry detail query: model repository is nil")
+		}
+
+		model, modelErr :=
+			q.modelRepo.GetByID(
+				ctx,
+				modelID,
+			)
+		if modelErr != nil {
+			if !errors.Is(
+				modelErr,
+				modeldom.ErrNotFound,
+			) {
+				return modelID, "", "", "", "", "",
+					modelErr
+			}
+		} else {
+			productBlueprintID =
+				model.GetProductBlueprintID()
+		}
+	}
+
+	if productBlueprintID == "" {
+		return modelID, "", "", "", "", "", nil
+	}
+
+	return q.resolveProductBlueprintDisplay(
+		ctx,
+		modelID,
+		productBlueprintID,
+	)
+}
+
+func (q *InquiryDetailQuery) resolveProductBlueprintDisplay(
+	ctx context.Context,
+	modelID string,
+	productBlueprintID string,
+) (
+	resolvedModelID string,
+	resolvedProductBlueprintID string,
+	productName string,
+	brandID string,
+	brandName string,
+	companyID string,
+	err error,
+) {
+	if q == nil {
+		return "", "", "", "", "", "",
+			fmt.Errorf("inquiry detail query: query is nil")
+	}
+	if productBlueprintID == "" {
+		return modelID, "", "", "", "", "", nil
+	}
+	if q.productBlueprintRepo == nil {
+		return modelID, productBlueprintID, "", "", "", "",
+			fmt.Errorf("inquiry detail query: product blueprint repository is nil")
+	}
+
+	productBlueprint, err :=
+		q.productBlueprintRepo.GetByID(
+			ctx,
+			productBlueprintID,
+		)
+	if err != nil {
+		return modelID, productBlueprintID, "", "", "", "", err
+	}
+
+	productName = productBlueprint.ProductName
+	brandID = productBlueprint.BrandID
+	companyID = productBlueprint.CompanyID
+
+	if brandID == "" {
+		return modelID, productBlueprintID,
+			productName, "", "", companyID, nil
+	}
+	if q.brandRepo == nil {
+		return modelID, productBlueprintID,
+			productName, brandID, "", companyID,
+			fmt.Errorf("inquiry detail query: brand repository is nil")
+	}
+
+	brand, err :=
+		q.brandRepo.GetByID(
+			ctx,
+			brandID,
+		)
+	if err != nil {
+		if errors.Is(err, branddom.ErrNotFound) {
+			return modelID, productBlueprintID,
+				productName, brandID, "", companyID, nil
+		}
+
+		return modelID, productBlueprintID,
+			productName, brandID, "", companyID, err
+	}
+
+	brandName = brand.Name
+
+	return modelID, productBlueprintID,
+		productName, brandID, brandName, companyID, nil
 }
 
 func (q *InquiryDetailQuery) resolveProductModelRefByInquiryProductID(
@@ -595,7 +946,7 @@ func (q *InquiryDetailQuery) filterInquiryOrderItemsByModelIDAndTransferredAt(
 	expectedTransferredAt := transferredAt.UTC()
 	filtered := make([]InquiryOrderItemSummary, 0, len(items))
 
-	for _, item := range items {
+	for itemIndex, item := range items {
 		if item.ModelID != modelID {
 			continue
 		}
@@ -608,20 +959,126 @@ func (q *InquiryDetailQuery) filterInquiryOrderItemsByModelIDAndTransferredAt(
 			continue
 		}
 
-		tokenBlueprintID, tokenName, err := q.resolveTokenBlueprintSnapshotByInventoryID(ctx, item.InventoryID)
+		summary, err :=
+			q.buildInquiryOrderItemSummary(
+				ctx,
+				itemIndex,
+				item,
+			)
 		if err != nil {
 			return nil, err
 		}
 
-		filtered = append(filtered, InquiryOrderItemSummary{
-			ModelID: item.ModelID, InventoryID: item.InventoryID,
-			TokenBlueprintID: tokenBlueprintID, TokenName: tokenName,
-			ListID: item.ListID, Qty: item.Qty, Price: item.Price,
-			IsCancelled: item.IsCancelled, IsDispatched: item.IsDispatched,
-			Transferred: item.Transferred, TransferredAt: item.TransferredAt,
-		})
+		filtered = append(
+			filtered,
+			summary,
+		)
 	}
 	return filtered, nil
+}
+
+func (q *InquiryDetailQuery) buildInquiryOrderItemSummary(
+	ctx context.Context,
+	itemIndex int,
+	item orderdom.OrderItemSnapshot,
+) (InquiryOrderItemSummary, error) {
+	tokenBlueprintID, tokenName, err :=
+		q.resolveTokenBlueprintSnapshotByOrderItem(
+			ctx,
+			item,
+		)
+	if err != nil {
+		return InquiryOrderItemSummary{}, err
+	}
+
+	return InquiryOrderItemSummary{
+		ItemIndex: itemIndex,
+		ItemType:  item.Type,
+
+		ModelID:     item.ModelID,
+		InventoryID: item.InventoryID,
+		ListID:      item.ListID,
+		ResaleID:    item.ResaleID,
+
+		ProductID:          item.ProductID,
+		ProductBlueprintID: item.ProductBlueprintID,
+		TokenBlueprintID:   tokenBlueprintID,
+		TokenName:          tokenName,
+		BrandID:            item.BrandID,
+
+		Qty:   item.Qty,
+		Price: item.Price,
+
+		IsCancelled:       item.IsCancelled,
+		IsDispatched:      item.IsDispatched,
+		IsReturnRequested: item.IsReturnRequested,
+		ReturnRequestedAt: normalizeInquiryDetailTimePointer(
+			item.ReturnRequestedAt,
+		),
+		TokenTransferVerifiedAt: normalizeInquiryDetailTimePointer(
+			item.TokenTransferVerifiedAt,
+		),
+
+		Transferred: item.Transferred,
+		TransferredAt: normalizeInquiryDetailTimePointer(
+			item.TransferredAt,
+		),
+	}, nil
+}
+
+func (q *InquiryDetailQuery) resolveTokenBlueprintSnapshotByOrderItem(
+	ctx context.Context,
+	item orderdom.OrderItemSnapshot,
+) (tokenBlueprintID string, tokenName string, err error) {
+	if q == nil {
+		return "", "",
+			fmt.Errorf("inquiry detail query: query is nil")
+	}
+
+	tokenBlueprintID = item.TokenBlueprintID
+
+	if tokenBlueprintID == "" {
+		return q.resolveTokenBlueprintSnapshotByInventoryID(
+			ctx,
+			item.InventoryID,
+		)
+	}
+
+	if q.tokenBlueprintRepo == nil {
+		return "", "",
+			fmt.Errorf("inquiry detail query: token blueprint repository is nil")
+	}
+
+	tb, err :=
+		q.tokenBlueprintRepo.GetByID(
+			ctx,
+			tokenBlueprintID,
+		)
+	if err != nil {
+		return "", "", err
+	}
+	if tb == nil {
+		return "", "",
+			fmt.Errorf(
+				"inquiry detail query: token blueprint is nil: tokenBlueprintId=%q",
+				tokenBlueprintID,
+			)
+	}
+
+	return tb.ID, tb.Name, nil
+}
+
+func normalizeInquiryDetailTimePointer(
+	in *time.Time,
+) *time.Time {
+	if in == nil ||
+		in.IsZero() {
+		return nil
+	}
+
+	value := in.UTC()
+
+	return &value
 }
 
 func (q *InquiryDetailQuery) resolveTokenBlueprintSnapshotByInventoryID(

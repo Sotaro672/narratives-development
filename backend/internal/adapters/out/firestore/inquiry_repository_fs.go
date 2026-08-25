@@ -407,6 +407,13 @@ func inquiryToDocData(in idom.Inquiry) map[string]any {
 		"updatedAt":   in.UpdatedAt.UTC(),
 	}
 
+	if in.OrderID != "" {
+		m["orderId"] = in.OrderID
+	}
+	if in.OrderItemIndex != nil {
+		m["orderItemIndex"] = *in.OrderItemIndex
+	}
+
 	setOptionalTime(m, "resolvedAt", in.ResolvedAt)
 	setOptionalString(m, "resolvedBy", in.ResolvedBy)
 	setOptionalTime(m, "closedAt", in.ClosedAt)
@@ -474,6 +481,7 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 	in := idom.Inquiry{
 		ID:          asString(data["id"]),
 		ProductID:   asString(data["productId"]),
+		OrderID:     asString(data["orderId"]),
 		AvatarID:    asString(data["avatarId"]),
 		Subject:     asString(data["subject"]),
 		Content:     asString(data["content"]),
@@ -487,6 +495,11 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 		UpdatedBy:   ptrStringFromMap(data, "updatedBy"),
 		DeletedAt:   ptrTimeFromMap(data, "deletedAt"),
 		DeletedBy:   ptrStringFromMap(data, "deletedBy"),
+	}
+
+	if rawOrderItemIndex, ok := data["orderItemIndex"]; ok && rawOrderItemIndex != nil {
+		orderItemIndex := asInt(rawOrderItemIndex)
+		in.OrderItemIndex = &orderItemIndex
 	}
 
 	if in.ID == "" {
@@ -620,6 +633,13 @@ func applyInquiryPatchToDomain(in *idom.Inquiry, patch idom.InquiryPatch) error 
 	if patch.ProductID != nil {
 		in.ProductID = *patch.ProductID
 	}
+	if patch.OrderID != nil {
+		in.OrderID = *patch.OrderID
+	}
+	if patch.OrderItemIndex != nil {
+		orderItemIndex := *patch.OrderItemIndex
+		in.OrderItemIndex = &orderItemIndex
+	}
 	if patch.Subject != nil {
 		in.Subject = *patch.Subject
 	}
@@ -695,6 +715,14 @@ func matchInquiryFilter(in idom.Inquiry, f idom.Filter) bool {
 	if f.ProductID != nil && *f.ProductID != "" && in.ProductID != *f.ProductID {
 		return false
 	}
+	if f.OrderID != nil && *f.OrderID != "" && in.OrderID != *f.OrderID {
+		return false
+	}
+	if f.OrderItemIndex != nil {
+		if in.OrderItemIndex == nil || *in.OrderItemIndex != *f.OrderItemIndex {
+			return false
+		}
+	}
 	if f.AvatarID != nil && *f.AvatarID != "" && in.AvatarID != *f.AvatarID {
 		return false
 	}
@@ -764,6 +792,10 @@ func mapInquirySort(sort idom.Sort) (string, firestore.Direction) {
 		return "id", sortDirection(sort)
 	case "productid", "product_id":
 		return "productId", sortDirection(sort)
+	case "orderid", "order_id":
+		return "orderId", sortDirection(sort)
+	case "orderitemindex", "order_item_index":
+		return "orderItemIndex", sortDirection(sort)
 	case "avatarid", "avatar_id":
 		return "avatarId", sortDirection(sort)
 	case "subject":
@@ -818,6 +850,12 @@ func searchText(in idom.Inquiry) string {
 	var b strings.Builder
 
 	b.WriteString(in.ProductID)
+	b.WriteString(" ")
+	b.WriteString(in.OrderID)
+	if in.OrderItemIndex != nil {
+		b.WriteString(" ")
+		b.WriteString(fmt.Sprintf("%d", *in.OrderItemIndex))
+	}
 	b.WriteString(" ")
 	b.WriteString(in.AvatarID)
 	b.WriteString(" ")

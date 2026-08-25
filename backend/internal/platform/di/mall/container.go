@@ -67,6 +67,7 @@ type Container struct {
 	SettlementUC         *usecase.SettlementUsecase
 	OrderUC              *usecase.OrderUsecase
 	InquiryUC            *usecase.InquiryUsecase
+	ReturnRequestUC      *usecase.ReturnRequestUsecase
 	AnnouncementUC       *usecase.AnnouncementUsecase
 	ResaleUC             *usecase.ResaleUsecase
 
@@ -531,6 +532,13 @@ func NewContainer(
 		authUserReader,
 	)
 
+	c.ReturnRequestUC =
+		usecase.NewReturnRequestUsecase(
+			c.OrderUC,
+			inquiryRepo,
+			c.InquiryUC,
+		)
+
 	{
 		paymentFlowUC, configured, err := buildPaymentFlowUsecase(
 			infra,
@@ -710,7 +718,8 @@ func NewContainer(
 			transferExecutionUC,
 			c.InventoryUC,
 		).
-			WithResaleTransferDependencies(resaleRepo)
+			WithResaleTransferDependencies(resaleRepo).
+			WithReturnOpeningHandler(c.ReturnRequestUC)
 
 		c.ShareTransferUC = usecase.NewShareTransferUsecase(
 			tokenResolver,

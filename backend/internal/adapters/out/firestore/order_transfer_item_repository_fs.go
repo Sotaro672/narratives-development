@@ -60,8 +60,8 @@ var (
 const defaultTransferLockTTL = 10 * time.Minute
 
 // OrderRepoForTransferFS reads and updates the canonical orderTransferItems
-// projection. Order documents are read only when MarkTransferredItem must
-// update the Order aggregate and its projection atomically.
+// projection. Order documents are also read for verified-scan recording,
+// transfer locking, and final transferred-state updates.
 type OrderRepoForTransferFS struct {
 	Client *firestore.Client
 
@@ -279,6 +279,10 @@ func (r *OrderRepoForTransferFS) ListEligibleTransferItemsByAvatarID(
 				ErrInvalidOrderTransferItemData
 		}
 
+		if projection.IsReturnRequested {
+			continue
+		}
+
 		item :=
 			projection.toEligibleTransferItem()
 		if err := item.Validate(); err != nil {
@@ -316,10 +320,11 @@ func (r *OrderRepoForTransferFS) LockTransferItem(
 
 	now = now.UTC()
 	lockExpiresAt := now.Add(r.lockTTL())
-	ref := r.transferItemDoc(
+	projectionRef := r.transferItemDoc(
 		orderID,
 		itemIndex,
 	)
+	orderRef := r.ordersCol().Doc(orderID)
 
 	return r.Client.RunTransaction(
 		ctx,
@@ -327,15 +332,27 @@ func (r *OrderRepoForTransferFS) LockTransferItem(
 			ctx context.Context,
 			tx *firestore.Transaction,
 		) error {
-			snap, err := tx.Get(ref)
+			projectionSnap, err := tx.Get(projectionRef)
 			if err != nil {
 				return mapOrderTransferItemNotFound(
 					err,
 				)
 			}
 
+			orderSnap, err := tx.Get(orderRef)
+			if err != nil {
+				if status.Code(err) ==
+					codes.NotFound {
+					return orderdom.ErrNotFound
+				}
+
+				return err
+			}
+
 			projection, err :=
-				orderTransferItemFromSnapshot(snap)
+				orderTransferItemFromSnapshot(
+					projectionSnap,
+				)
 			if err != nil {
 				return err
 			}
@@ -349,8 +366,37 @@ func (r *OrderRepoForTransferFS) LockTransferItem(
 			if projection.IsCancelled {
 				return ErrTransferItemCancelled
 			}
+			if projection.IsReturnRequested {
+				return orderdom.ErrConflict
+			}
 			if projection.Transferred {
 				return ErrTransferItemTransferred
+			}
+
+			order, err := docToOrder(orderSnap)
+			if err != nil {
+				return err
+			}
+			if !order.Paid {
+				return ErrOrderNotPaid
+			}
+			if itemIndex >= len(order.Items) {
+				return ErrTransferItemProjectionMismatch
+			}
+			if order.Items[itemIndex].IsCancelled {
+				return ErrTransferItemCancelled
+			}
+			if order.Items[itemIndex].IsReturnRequested {
+				return orderdom.ErrConflict
+			}
+			if order.Items[itemIndex].Transferred {
+				return ErrTransferItemTransferred
+			}
+			if !orderItemMatchesProjection(
+				order.Items[itemIndex],
+				projection,
+			) {
+				return ErrTransferItemProjectionMismatch
 			}
 
 			if projection.TransferLockedAt != nil {
@@ -369,7 +415,7 @@ func (r *OrderRepoForTransferFS) LockTransferItem(
 			}
 
 			return tx.Update(
-				ref,
+				projectionRef,
 				[]firestore.Update{
 					{
 						Path:  "transferLockedAt",
@@ -383,6 +429,158 @@ func (r *OrderRepoForTransferFS) LockTransferItem(
 			)
 		},
 	)
+}
+
+func (r *OrderRepoForTransferFS) MarkTokenTransferVerified(
+	ctx context.Context,
+	orderID string,
+	itemIndex int,
+	at time.Time,
+) (orderdom.OrderItemSnapshot, error) {
+	if r == nil || r.Client == nil {
+		return orderdom.OrderItemSnapshot{},
+			ErrOrderTransferItemRepoNotConfigured
+	}
+	if orderID == "" {
+		return orderdom.OrderItemSnapshot{},
+			ErrInvalidTransferOrderID
+	}
+	if itemIndex < 0 {
+		return orderdom.OrderItemSnapshot{},
+			ErrInvalidTransferItemIndex
+	}
+	if at.IsZero() {
+		return orderdom.OrderItemSnapshot{},
+			transferdom.ErrInvalidCreatedAt
+	}
+
+	at = at.UTC()
+
+	projectionRef := r.transferItemDoc(
+		orderID,
+		itemIndex,
+	)
+	orderRef := r.ordersCol().Doc(orderID)
+
+	var updatedItem orderdom.OrderItemSnapshot
+
+	err := r.Client.RunTransaction(
+		ctx,
+		func(
+			ctx context.Context,
+			tx *firestore.Transaction,
+		) error {
+			projectionSnap, err :=
+				tx.Get(projectionRef)
+			if err != nil {
+				return mapOrderTransferItemNotFound(
+					err,
+				)
+			}
+
+			orderSnap, err := tx.Get(orderRef)
+			if err != nil {
+				if status.Code(err) ==
+					codes.NotFound {
+					return orderdom.ErrNotFound
+				}
+
+				return err
+			}
+
+			projection, err :=
+				orderTransferItemFromSnapshot(
+					projectionSnap,
+				)
+			if err != nil {
+				return err
+			}
+			if projection.OrderID != orderID ||
+				projection.ItemIndex != itemIndex {
+				return ErrTransferItemProjectionMismatch
+			}
+			if !projection.Paid {
+				return ErrOrderNotPaid
+			}
+			if projection.IsCancelled {
+				return ErrTransferItemCancelled
+			}
+			if projection.Transferred {
+				return ErrTransferItemTransferred
+			}
+
+			order, err := docToOrder(orderSnap)
+			if err != nil {
+				return err
+			}
+			if !order.Paid {
+				return ErrOrderNotPaid
+			}
+			if itemIndex >= len(order.Items) {
+				return ErrTransferItemProjectionMismatch
+			}
+			if order.Items[itemIndex].IsCancelled {
+				return ErrTransferItemCancelled
+			}
+			if order.Items[itemIndex].Transferred {
+				return ErrTransferItemTransferred
+			}
+			if !orderItemMatchesProjection(
+				order.Items[itemIndex],
+				projection,
+			) {
+				return ErrTransferItemProjectionMismatch
+			}
+
+			if err := order.MarkItemTokenTransferVerified(
+				itemIndex,
+				at,
+			); err != nil {
+				return err
+			}
+			if err := order.Validate(); err != nil {
+				return err
+			}
+
+			verifiedAt :=
+				order.Items[itemIndex].
+					TokenTransferVerifiedAt
+			if verifiedAt == nil ||
+				verifiedAt.IsZero() {
+				return ErrInvalidOrderTransferItemData
+			}
+
+			if err := tx.Set(
+				orderRef,
+				orderToDoc(order),
+				firestore.MergeAll,
+			); err != nil {
+				return err
+			}
+
+			if err := tx.Set(
+				projectionRef,
+				map[string]any{
+					"isReturnRequested": order.Items[itemIndex].
+						IsReturnRequested,
+					"tokenTransferVerifiedAt": verifiedAt.UTC(),
+				},
+				firestore.MergeAll,
+			); err != nil {
+				return err
+			}
+
+			updatedItem =
+				order.Items[itemIndex]
+
+			return nil
+		},
+	)
+	if err != nil {
+		return orderdom.OrderItemSnapshot{}, err
+	}
+
+	return updatedItem, nil
 }
 
 func (r *OrderRepoForTransferFS) UnlockTransferItem(
@@ -513,6 +711,9 @@ func (r *OrderRepoForTransferFS) MarkTransferredItem(
 			if projection.IsCancelled {
 				return ErrTransferItemCancelled
 			}
+			if projection.IsReturnRequested {
+				return orderdom.ErrConflict
+			}
 			if projection.Transferred {
 				return ErrTransferItemTransferred
 			}
@@ -529,6 +730,9 @@ func (r *OrderRepoForTransferFS) MarkTransferredItem(
 			}
 			if order.Items[itemIndex].IsCancelled {
 				return ErrTransferItemCancelled
+			}
+			if order.Items[itemIndex].IsReturnRequested {
+				return orderdom.ErrConflict
 			}
 			if !orderItemMatchesProjection(
 				order.Items[itemIndex],
@@ -559,9 +763,25 @@ func (r *OrderRepoForTransferFS) MarkTransferredItem(
 				return err
 			}
 
+			verifiedAt :=
+				order.Items[itemIndex].
+					TokenTransferVerifiedAt
+			if verifiedAt == nil ||
+				verifiedAt.IsZero() {
+				return ErrInvalidOrderTransferItemData
+			}
+
 			return tx.Update(
 				projectionRef,
 				[]firestore.Update{
+					{
+						Path:  "tokenTransferVerifiedAt",
+						Value: verifiedAt.UTC(),
+					},
+					{
+						Path:  "isReturnRequested",
+						Value: false,
+					},
 					{
 						Path:  "transferred",
 						Value: true,
@@ -590,11 +810,13 @@ type orderTransferItemProjection struct {
 	ItemType  orderdom.OrderItemType
 	ItemIndex int
 
-	Paid          bool
-	IsCancelled   bool
-	Transferred   bool
-	TransferredAt *time.Time
-	CreatedAt     time.Time
+	Paid                    bool
+	IsCancelled             bool
+	IsReturnRequested       bool
+	TokenTransferVerifiedAt *time.Time
+	Transferred             bool
+	TransferredAt           *time.Time
+	CreatedAt               time.Time
 
 	TransferLockedAt      *time.Time
 	TransferLockExpiresAt *time.Time
@@ -681,6 +903,18 @@ func orderTransferItemFromSnapshot(
 			ErrInvalidOrderTransferItemData
 	}
 
+	isReturnRequested,
+		_,
+		err :=
+		optionalOrderTransferItemBool(
+			raw,
+			"isReturnRequested",
+		)
+	if err != nil {
+		return orderTransferItemProjection{},
+			err
+	}
+
 	transferred, ok := requiredOrderTransferItemBool(
 		raw,
 		"transferred",
@@ -712,11 +946,12 @@ func orderTransferItemFromSnapshot(
 		ItemType: orderdom.OrderItemType(
 			rawItemType,
 		),
-		ItemIndex:   itemIndex,
-		Paid:        paid,
-		IsCancelled: isCancelled,
-		Transferred: transferred,
-		CreatedAt:   createdAt.UTC(),
+		ItemIndex:         itemIndex,
+		Paid:              paid,
+		IsCancelled:       isCancelled,
+		IsReturnRequested: isReturnRequested,
+		Transferred:       transferred,
+		CreatedAt:         createdAt.UTC(),
 
 		ModelID: optionalOrderTransferItemString(
 			raw,
@@ -752,6 +987,21 @@ func orderTransferItemFromSnapshot(
 		),
 	}
 
+	tokenTransferVerifiedAt,
+		tokenTransferVerifiedAtExists,
+		err :=
+		optionalOrderTransferItemTime(
+			raw,
+			"tokenTransferVerifiedAt",
+		)
+	if err != nil {
+		return orderTransferItemProjection{}, err
+	}
+	if tokenTransferVerifiedAtExists {
+		projection.TokenTransferVerifiedAt =
+			&tokenTransferVerifiedAt
+	}
+
 	transferredAt, transferredAtExists, err :=
 		optionalOrderTransferItemTime(
 			raw,
@@ -771,7 +1021,9 @@ func orderTransferItemFromSnapshot(
 	}
 
 	if projection.IsCancelled &&
-		projection.Transferred {
+		(projection.IsReturnRequested ||
+			projection.Transferred ||
+			projection.TokenTransferVerifiedAt != nil) {
 		return orderTransferItemProjection{},
 			ErrInvalidOrderTransferItemData
 	}
@@ -931,6 +1183,25 @@ func requiredOrderTransferItemBool(
 
 	result, ok := value.(bool)
 	return result, ok
+}
+
+func optionalOrderTransferItemBool(
+	raw map[string]any,
+	field string,
+) (bool, bool, error) {
+	value, exists := raw[field]
+	if !exists || value == nil {
+		return false, false, nil
+	}
+
+	result, ok := value.(bool)
+	if !ok {
+		return false,
+			false,
+			ErrInvalidOrderTransferItemData
+	}
+
+	return result, true, nil
 }
 
 func requiredOrderTransferItemInt(

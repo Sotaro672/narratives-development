@@ -205,6 +205,25 @@ func (h *TransferHandler) ServeHTTP(
 			return
 		}
 
+		if errors.Is(
+			err,
+			usecase.ErrTransferBlockedByReturn,
+		) {
+			writeJSON(
+				w,
+				http.StatusConflict,
+				map[string]any{
+					"error":     "return_in_progress_opened",
+					"message":   "返品申請中の商品で開封が確認されました。返品区分を「開封後の返品」に変更しました。Token Transfer は実行していません。",
+					"avatarId":  avatarID,
+					"productId": productID,
+					"orderId":   ucOut.MatchedOrderID,
+					"itemIndex": ucOut.MatchedItemIndex,
+				},
+			)
+			return
+		}
+
 		if isNotFoundLike(err) {
 			writeJSON(
 				w,

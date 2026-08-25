@@ -21,6 +21,12 @@ const (
 )
 
 const (
+	InquiryTypeProduct        InquiryType = "product"
+	InquiryTypeReturnUnopened InquiryType = "return_unopened"
+	InquiryTypeReturnOpened   InquiryType = "return_opened"
+)
+
+const (
 	ReplySenderTypeAvatar ReplySenderType = "avatar"
 	ReplySenderTypeMember ReplySenderType = "member"
 )
@@ -55,7 +61,8 @@ type ImageFile struct {
 
 // Inquiry is the root aggregate.
 //
-// Inquiry is identified in the mall context by productId + avatarId.
+// Product inquiries are identified in the mall context by productId + avatarId.
+// Return inquiries are identified by orderId + orderItemIndex + avatarId.
 // Images are part of the inquiry aggregate.
 // Replies are NOT stored in Inquiry.Content.
 // Replies should be stored in Firestore subcollection:
@@ -69,15 +76,17 @@ type ImageFile struct {
 // - company member can reopen it.
 // - owner avatar can close the inquiry.
 type Inquiry struct {
-	ID          string        `json:"id"`
-	ProductID   string        `json:"productId"`
-	AvatarID    string        `json:"avatarId"`
-	Subject     string        `json:"subject"`
-	Content     string        `json:"content"`
-	Status      InquiryStatus `json:"status"`
-	InquiryType InquiryType   `json:"inquiryType"`
-	IsRead      bool          `json:"isRead"`
-	Images      []ImageFile   `json:"images,omitempty"`
+	ID             string        `json:"id"`
+	ProductID      string        `json:"productId,omitempty"`
+	OrderID        string        `json:"orderId,omitempty"`
+	OrderItemIndex *int          `json:"orderItemIndex,omitempty"`
+	AvatarID       string        `json:"avatarId"`
+	Subject        string        `json:"subject"`
+	Content        string        `json:"content"`
+	Status         InquiryStatus `json:"status"`
+	InquiryType    InquiryType   `json:"inquiryType"`
+	IsRead         bool          `json:"isRead"`
+	Images         []ImageFile   `json:"images,omitempty"`
 
 	ResolvedAt *time.Time `json:"resolvedAt,omitempty"`
 	ResolvedBy *string    `json:"resolvedBy,omitempty"`
@@ -145,22 +154,24 @@ var (
 
 // Errors
 var (
-	ErrInvalidID          = errors.New("inquiry: invalid id")
-	ErrInvalidProductID   = errors.New("inquiry: invalid productId")
-	ErrInvalidAvatarID    = errors.New("inquiry: invalid avatarId")
-	ErrInvalidSubject     = errors.New("inquiry: invalid subject")
-	ErrInvalidContent     = errors.New("inquiry: invalid content")
-	ErrInvalidStatus      = errors.New("inquiry: invalid status")
-	ErrInvalidInquiryType = errors.New("inquiry: invalid inquiryType")
-	ErrInvalidCreatedAt   = errors.New("inquiry: invalid createdAt")
-	ErrInvalidUpdatedAt   = errors.New("inquiry: invalid updatedAt")
-	ErrInvalidUpdatedBy   = errors.New("inquiry: invalid updatedBy")
-	ErrInvalidDeletedAt   = errors.New("inquiry: invalid deletedAt")
-	ErrInvalidDeletedBy   = errors.New("inquiry: invalid deletedBy")
-	ErrInvalidResolvedAt  = errors.New("inquiry: invalid resolvedAt")
-	ErrInvalidResolvedBy  = errors.New("inquiry: invalid resolvedBy")
-	ErrInvalidClosedAt    = errors.New("inquiry: invalid closedAt")
-	ErrInvalidClosedBy    = errors.New("inquiry: invalid closedBy")
+	ErrInvalidID             = errors.New("inquiry: invalid id")
+	ErrInvalidProductID      = errors.New("inquiry: invalid productId")
+	ErrInvalidOrderID        = errors.New("inquiry: invalid orderId")
+	ErrInvalidOrderItemIndex = errors.New("inquiry: invalid orderItemIndex")
+	ErrInvalidAvatarID       = errors.New("inquiry: invalid avatarId")
+	ErrInvalidSubject        = errors.New("inquiry: invalid subject")
+	ErrInvalidContent        = errors.New("inquiry: invalid content")
+	ErrInvalidStatus         = errors.New("inquiry: invalid status")
+	ErrInvalidInquiryType    = errors.New("inquiry: invalid inquiryType")
+	ErrInvalidCreatedAt      = errors.New("inquiry: invalid createdAt")
+	ErrInvalidUpdatedAt      = errors.New("inquiry: invalid updatedAt")
+	ErrInvalidUpdatedBy      = errors.New("inquiry: invalid updatedBy")
+	ErrInvalidDeletedAt      = errors.New("inquiry: invalid deletedAt")
+	ErrInvalidDeletedBy      = errors.New("inquiry: invalid deletedBy")
+	ErrInvalidResolvedAt     = errors.New("inquiry: invalid resolvedAt")
+	ErrInvalidResolvedBy     = errors.New("inquiry: invalid resolvedBy")
+	ErrInvalidClosedAt       = errors.New("inquiry: invalid closedAt")
+	ErrInvalidClosedBy       = errors.New("inquiry: invalid closedBy")
 
 	ErrInvalidImageInquiryID  = errors.New("inquiry: invalid image inquiryId")
 	ErrInvalidImageFileName   = errors.New("inquiry: invalid image fileName")
@@ -201,11 +212,15 @@ var (
 
 // Constructors
 
-func New(
-	id, productID, avatarID, subject, content string,
+func NewProduct(
+	id string,
+	productID string,
+	avatarID string,
+	subject string,
+	content string,
 	status InquiryStatus,
-	inquiryType InquiryType,
-	createdAt, updatedAt time.Time,
+	createdAt time.Time,
+	updatedAt time.Time,
 ) (Inquiry, error) {
 	in := Inquiry{
 		ID:          id,
@@ -214,7 +229,7 @@ func New(
 		Subject:     subject,
 		Content:     content,
 		Status:      status,
-		InquiryType: inquiryType,
+		InquiryType: InquiryTypeProduct,
 		IsRead:      false,
 		Images:      []ImageFile{},
 		CreatedAt:   createdAt.UTC(),
@@ -228,52 +243,94 @@ func New(
 	if err := in.Validate(); err != nil {
 		return Inquiry{}, err
 	}
+
 	return in, nil
 }
 
-func NewWithOptional(
-	id, productID, avatarID, subject, content string,
-	status InquiryStatus,
-	inquiryType InquiryType,
-	createdAt, updatedAt time.Time,
-	resolvedAt *time.Time,
-	resolvedBy *string,
-	closedAt *time.Time,
-	closedBy *string,
-	updatedBy, deletedBy *string,
-	deletedAt *time.Time,
-	images []ImageFile,
+func NewReturnUnopened(
+	id string,
+	productID string,
+	orderID string,
+	orderItemIndex int,
+	avatarID string,
+	subject string,
+	content string,
+	createdAt time.Time,
+	updatedAt time.Time,
 ) (Inquiry, error) {
+	return newReturn(
+		id,
+		productID,
+		orderID,
+		orderItemIndex,
+		avatarID,
+		subject,
+		content,
+		InquiryTypeReturnUnopened,
+		createdAt,
+		updatedAt,
+	)
+}
+
+func NewReturnOpened(
+	id string,
+	productID string,
+	orderID string,
+	orderItemIndex int,
+	avatarID string,
+	subject string,
+	content string,
+	createdAt time.Time,
+	updatedAt time.Time,
+) (Inquiry, error) {
+	return newReturn(
+		id,
+		productID,
+		orderID,
+		orderItemIndex,
+		avatarID,
+		subject,
+		content,
+		InquiryTypeReturnOpened,
+		createdAt,
+		updatedAt,
+	)
+}
+
+func newReturn(
+	id string,
+	productID string,
+	orderID string,
+	orderItemIndex int,
+	avatarID string,
+	subject string,
+	content string,
+	inquiryType InquiryType,
+	createdAt time.Time,
+	updatedAt time.Time,
+) (Inquiry, error) {
+	itemIndex := orderItemIndex
+
 	in := Inquiry{
-		ID:          id,
-		ProductID:   productID,
-		AvatarID:    avatarID,
-		Subject:     subject,
-		Content:     content,
-		Status:      status,
-		InquiryType: inquiryType,
-		IsRead:      false,
-		Images:      images,
-		ResolvedAt:  normalizeOptionalTime(resolvedAt),
-		ResolvedBy:  resolvedBy,
-		ClosedAt:    normalizeOptionalTime(closedAt),
-		ClosedBy:    closedBy,
-		CreatedAt:   createdAt.UTC(),
-		UpdatedAt:   updatedAt.UTC(),
-		UpdatedBy:   updatedBy,
-		DeletedAt:   normalizeOptionalTime(deletedAt),
-		DeletedBy:   deletedBy,
+		ID:             id,
+		ProductID:      productID,
+		OrderID:        orderID,
+		OrderItemIndex: &itemIndex,
+		AvatarID:       avatarID,
+		Subject:        subject,
+		Content:        content,
+		Status:         InquiryStatusOpen,
+		InquiryType:    inquiryType,
+		IsRead:         false,
+		Images:         []ImageFile{},
+		CreatedAt:      createdAt.UTC(),
+		UpdatedAt:      updatedAt.UTC(),
 	}
 
-	if in.Status == "" {
-		in.Status = InquiryStatusOpen
-	}
-	if in.Images == nil {
-		in.Images = []ImageFile{}
-	}
 	if err := in.Validate(); err != nil {
 		return Inquiry{}, err
 	}
+
 	return in, nil
 }
 
@@ -511,6 +568,29 @@ func (i *Inquiry) CloseByAvatar(avatarID string, now time.Time) error {
 	return nil
 }
 
+func (i *Inquiry) PromoteReturnOpened(now time.Time) error {
+	if i == nil {
+		return ErrInquiryInvalidWorkflow
+	}
+
+	if now.IsZero() {
+		return ErrInvalidUpdatedAt
+	}
+
+	switch i.InquiryType {
+	case InquiryTypeReturnOpened:
+		return nil
+
+	case InquiryTypeReturnUnopened:
+		i.InquiryType = InquiryTypeReturnOpened
+		i.UpdatedAt = now.UTC()
+		return nil
+
+	default:
+		return ErrInquiryInvalidWorkflow
+	}
+}
+
 func (i *Inquiry) AddImage(img ImageFile) error {
 	if err := validateImageFile(img); err != nil {
 		return err
@@ -689,8 +769,8 @@ func (i Inquiry) Validate() error {
 	if i.ID == "" {
 		return ErrInvalidID
 	}
-	if i.ProductID == "" {
-		return ErrInvalidProductID
+	if err := validateInquiryIdentity(i); err != nil {
+		return err
 	}
 	if i.AvatarID == "" {
 		return ErrInvalidAvatarID
@@ -703,9 +783,6 @@ func (i Inquiry) Validate() error {
 	}
 	if !isValidInquiryStatus(i.Status) {
 		return ErrInvalidStatus
-	}
-	if string(i.InquiryType) == "" {
-		return ErrInvalidInquiryType
 	}
 	if i.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
@@ -823,6 +900,32 @@ func (r Reply) Validate() error {
 	return nil
 }
 
+func validateInquiryIdentity(i Inquiry) error {
+	if !isValidInquiryType(i.InquiryType) {
+		return ErrInvalidInquiryType
+	}
+
+	switch i.InquiryType {
+	case InquiryTypeProduct:
+		if i.ProductID == "" {
+			return ErrInvalidProductID
+		}
+		if i.OrderID != "" || i.OrderItemIndex != nil {
+			return ErrInquiryInvalidWorkflow
+		}
+
+	case InquiryTypeReturnUnopened, InquiryTypeReturnOpened:
+		if i.OrderID == "" {
+			return ErrInvalidOrderID
+		}
+		if i.OrderItemIndex == nil || *i.OrderItemIndex < 0 {
+			return ErrInvalidOrderItemIndex
+		}
+	}
+
+	return nil
+}
+
 func validateResolvedFields(i Inquiry) error {
 	if i.ResolvedAt != nil {
 		if i.ResolvedAt.IsZero() || i.ResolvedAt.Before(i.CreatedAt) {
@@ -930,6 +1033,17 @@ func validateImageFile(img ImageFile) error {
 func isValidInquiryStatus(status InquiryStatus) bool {
 	switch status {
 	case InquiryStatusOpen, InquiryStatusResolved, InquiryStatusClosed:
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidInquiryType(inquiryType InquiryType) bool {
+	switch inquiryType {
+	case InquiryTypeProduct,
+		InquiryTypeReturnUnopened,
+		InquiryTypeReturnOpened:
 		return true
 	default:
 		return false

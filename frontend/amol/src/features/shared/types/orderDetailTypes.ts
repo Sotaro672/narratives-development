@@ -1,4 +1,4 @@
-// frontend/amol/src/features/order/types/orderDetailTypes.ts
+// frontend\amol\src\features\shared\types\orderDetailTypes.ts
 
 import type { WalletOrderShippingQuoteSnapshot } from "../../shared/types/orderTypes";
 
@@ -39,12 +39,17 @@ export type OrderDetailItem = {
   measurements?: Record<string, number>;
   volumeValue?: number;
   volumeUnit?: string;
+
   qty: number;
   price: number;
+
   isCancelled: boolean;
   isDispatched: boolean;
+
   isReturnRequested: boolean;
   returnRequestedAt?: string;
+  tokenTransferVerifiedAt?: string;
+
   transferred: boolean;
   transferredAt?: string;
 };

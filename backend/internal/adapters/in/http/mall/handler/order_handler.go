@@ -29,13 +29,15 @@ import (
 //   - PATCH /mall/me/orders/{orderId}/items/{itemIndex}/cancel
 //   - PATCH /mall/me/orders/{orderId}/items/{itemIndex}/return
 //
-// The Mall return endpoint records a purchaser return request only.
+// The Mall return endpoint records an unopened purchaser return request and
+// creates the associated return_unopened Inquiry.
 // It must not execute Stripe Refund, Stripe Transfer Reversal, Payment refund
 // state mutation, or Settlement cancellation/reversal.
 //
 // Financial refund execution belongs to the Console-side approval flow.
 type OrderHandler struct {
 	uc               *usecase.OrderUsecase
+	returnRequestUC  *usecase.ReturnRequestUsecase
 	historyQuery     OrderHistoryQuery
 	orderDetailQuery OrderDetailQuery
 }
@@ -53,11 +55,13 @@ type OrderDetailQuery interface {
 
 func NewOrderHandler(
 	uc *usecase.OrderUsecase,
+	returnRequestUC *usecase.ReturnRequestUsecase,
 	historyQuery OrderHistoryQuery,
 	orderDetailQuery OrderDetailQuery,
 ) http.Handler {
 	return &OrderHandler{
 		uc:               uc,
+		returnRequestUC:  returnRequestUC,
 		historyQuery:     historyQuery,
 		orderDetailQuery: orderDetailQuery,
 	}
@@ -452,28 +456,39 @@ func (h *OrderHandler) returnMe(
 		return
 	}
 
-	// Mallから行うのは返品申請の記録だけとする。
+	// MallのOrderDetailから行う返品申請は未開封返品として扱う。
 	//
-	// ReturnItemはOrder itemのIsReturnRequestedを更新する責務だけを持ち、
+	// ReturnRequestUsecaseはOrder itemのIsReturnRequested更新と、
+	// return_unopened Inquiryの作成を同じapplication flowで調整する。
+	//
 	// Stripe Refund / Transfer Reversalは実行しない。
-	//
-	// 現在のRefundUsecaseはPayment単位の全額返金のみを扱うため、
-	// item単位の返品申請をここから直接RefundByPaymentIDへ接続してはいけない。
-	out, err :=
-		h.uc.ReturnItem(
+	if h == nil || h.returnRequestUC == nil {
+		writeOrderErr(
+			w,
+			errors.New(
+				"order handler: return request usecase not configured",
+			),
+		)
+		return
+	}
+
+	result, err :=
+		h.returnRequestUC.RequestUnopened(
 			ctx,
-			usecase.ReturnOrderItemInput{
-				ID:        orderID,
+			usecase.RequestUnopenedReturnInput{
+				OrderID:   orderID,
 				AvatarID:  avatarID,
 				ItemIndex: itemIndex,
 			},
 		)
+
+	out := result.Order
 	if err != nil {
 		writeOrderErr(w, err)
 		return
 	}
 
-	if h == nil || h.orderDetailQuery == nil {
+	if h.orderDetailQuery == nil {
 		writeOrderErr(
 			w,
 			errors.New(

@@ -17,13 +17,15 @@ import (
 // image add/update/delete should be handled by reading Inquiry,
 // mutating Inquiry.Images, and calling Update.
 type InquiryPatch struct {
-	ProductID   *string
-	Subject     *string
-	Content     *string
-	Status      *InquiryStatus
-	InquiryType *InquiryType
-	IsRead      *bool
-	Images      *[]ImageFile
+	ProductID      *string
+	OrderID        *string
+	OrderItemIndex *int
+	Subject        *string
+	Content        *string
+	Status         *InquiryStatus
+	InquiryType    *InquiryType
+	IsRead         *bool
+	Images         *[]ImageFile
 
 	ResolvedAt *time.Time
 	ResolvedBy *string
@@ -38,18 +40,21 @@ type InquiryPatch struct {
 
 // Filter is used by repository implementations.
 //
-// Inquiry is identified in the mall context by productId + avatarId.
+// Product inquiries are identified in the mall context by productId + avatarId.
+// Return inquiries are identified by orderId + orderItemIndex + avatarId.
 // Image filters are included here because inquiryImage is no longer a separate domain.
 type Filter struct {
 	SearchQuery string
 
-	IDs         []string
-	ProductID   *string
-	AvatarID    *string
-	Status      *InquiryStatus
-	InquiryType *InquiryType
-	UpdatedBy   *string
-	DeletedBy   *string
+	IDs            []string
+	ProductID      *string
+	OrderID        *string
+	OrderItemIndex *int
+	AvatarID       *string
+	Status         *InquiryStatus
+	InquiryType    *InquiryType
+	UpdatedBy      *string
+	DeletedBy      *string
 
 	ResolvedBy *string
 	ClosedBy   *string

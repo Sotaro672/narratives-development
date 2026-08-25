@@ -1,12 +1,20 @@
 // frontend/amol/src/features/shared/types/inquiryTypes.ts
 
 export const INQUIRY_STATUSES = ["open", "resolved", "closed"] as const;
+
 export type InquiryStatus = (typeof INQUIRY_STATUSES)[number];
 
 export const INQUIRY_REPLY_SENDER_TYPES = ["avatar", "member"] as const;
+
 export type InquiryReplySenderType = (typeof INQUIRY_REPLY_SENDER_TYPES)[number];
 
-export type InquiryType = string;
+export const INQUIRY_TYPES = [
+  "product",
+  "return_unopened",
+  "return_opened",
+] as const;
+
+export type InquiryType = (typeof INQUIRY_TYPES)[number];
 
 export type InquiryImageUpload = {
   fileName: string;
@@ -33,7 +41,9 @@ export type InquiryImage = {
 };
 
 export type CreateInquiryRequest = {
-  productId: string;
+  productId?: string;
+  orderId?: string;
+  orderItemIndex?: number;
   subject: string;
   content: string;
   inquiryType: InquiryType;
@@ -47,7 +57,9 @@ export type ReplyInquiryRequest = {
 
 export type Inquiry = {
   id: string;
-  productId: string;
+  productId?: string;
+  orderId?: string;
+  orderItemIndex?: number;
   avatarId: string;
   subject: string;
   content: string;

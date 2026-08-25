@@ -176,6 +176,13 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 				Format(time.RFC3339Nano)
 		}
 
+		if sourceItem.TokenTransferVerifiedAt != nil &&
+			!sourceItem.TokenTransferVerifiedAt.IsZero() {
+			item.TokenTransferVerifiedAt = sourceItem.TokenTransferVerifiedAt.
+				UTC().
+				Format(time.RFC3339Nano)
+		}
+
 		if sourceItem.TransferredAt != nil &&
 			!sourceItem.TransferredAt.IsZero() {
 			item.TransferredAt = sourceItem.TransferredAt.

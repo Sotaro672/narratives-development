@@ -11,17 +11,27 @@ import (
 	mallquery "narratives/internal/application/query/mall"
 	usecase "narratives/internal/application/usecase"
 	inquirydom "narratives/internal/domain/inquiry"
+	orderdom "narratives/internal/domain/order"
 )
 
 // InquiryHandler は mall 側の問い合わせエンドポイントを担当します。
 type InquiryHandler struct {
-	uc    *usecase.InquiryUsecase
-	query *mallquery.InquiryQuery
+	uc              *usecase.InquiryUsecase
+	returnRequestUC *usecase.ReturnRequestUsecase
+	query           *mallquery.InquiryQuery
 }
 
 // NewInquiryHandler は mall inquiry handler を初期化します。
-func NewInquiryHandler(uc *usecase.InquiryUsecase, query *mallquery.InquiryQuery) http.Handler {
-	return &InquiryHandler{uc: uc, query: query}
+func NewInquiryHandler(
+	uc *usecase.InquiryUsecase,
+	returnRequestUC *usecase.ReturnRequestUsecase,
+	query *mallquery.InquiryQuery,
+) http.Handler {
+	return &InquiryHandler{
+		uc:              uc,
+		returnRequestUC: returnRequestUC,
+		query:           query,
+	}
 }
 
 // ServeHTTP はHTTPルーティングの入口です。
@@ -132,11 +142,13 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // productId は /mall/me/preview?productId=... の productId を渡します。
 // avatarId は request body では受け取らず、AvatarContextMiddleware 由来で解決します。
 type createInquiryRequest struct {
-	ProductID   string                 `json:"productId"`
-	Subject     string                 `json:"subject"`
-	Content     string                 `json:"content"`
-	InquiryType string                 `json:"inquiryType"`
-	Images      []createInquiryImageIn `json:"images"`
+	ProductID      string                 `json:"productId"`
+	OrderID        string                 `json:"orderId"`
+	OrderItemIndex *int                   `json:"orderItemIndex"`
+	Subject        string                 `json:"subject"`
+	Content        string                 `json:"content"`
+	InquiryType    string                 `json:"inquiryType"`
+	Images         []createInquiryImageIn `json:"images"`
 }
 
 // createInquiryImageIn は問い合わせ画像メタデータです。
@@ -195,40 +207,155 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.InquiryType == "" {
-		req.InquiryType = "product"
+		req.InquiryType = string(
+			inquirydom.InquiryTypeProduct,
+		)
 	}
 
 	now := time.Now().UTC()
-	inquiry := inquirydom.Inquiry{
-		ID:          "",
-		ProductID:   req.ProductID,
-		AvatarID:    avatarID,
-		Subject:     req.Subject,
-		Content:     req.Content,
-		Status:      inquirydom.InquiryStatusOpen,
-		InquiryType: inquirydom.InquiryType(req.InquiryType),
-		IsRead:      false,
-		Images:      []inquirydom.ImageFile{},
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
+	images := []inquirydom.ImageFile{}
 
 	if len(req.Images) > 0 {
-		images, err := buildInquiryImagesForMall("", avatarID, now, req.Images)
+		builtImages, err :=
+			buildInquiryImagesForMall(
+				"",
+				avatarID,
+				now,
+				req.Images,
+			)
 		if err != nil {
 			writeInquiryErr(w, err)
 			return
 		}
-		inquiry.Images = images
+
+		images = builtImages
 	}
 
-	created, err := h.uc.Create(ctx, inquiry)
-	if err != nil {
-		writeInquiryErr(w, err)
+	switch inquirydom.InquiryType(req.InquiryType) {
+	case inquirydom.InquiryTypeProduct:
+		if req.OrderID != "" ||
+			req.OrderItemIndex != nil {
+			writeInquiryErr(
+				w,
+				inquirydom.ErrInquiryInvalidWorkflow,
+			)
+			return
+		}
+
+		inquiry, err :=
+			inquirydom.NewProduct(
+				"",
+				req.ProductID,
+				avatarID,
+				req.Subject,
+				req.Content,
+				inquirydom.InquiryStatusOpen,
+				now,
+				now,
+			)
+		if err != nil {
+			writeInquiryErr(w, err)
+			return
+		}
+
+		inquiry.Images = images
+
+		created, err :=
+			h.uc.Create(
+				ctx,
+				inquiry,
+			)
+		if err != nil {
+			writeInquiryErr(w, err)
+			return
+		}
+
+		writeJSON(
+			w,
+			http.StatusCreated,
+			map[string]any{
+				"data": created,
+			},
+		)
+		return
+
+	case inquirydom.InquiryTypeReturnOpened:
+		if h.returnRequestUC == nil {
+			writeJSON(
+				w,
+				http.StatusInternalServerError,
+				map[string]string{
+					"error": "return request usecase is nil",
+				},
+			)
+			return
+		}
+
+		if strings.TrimSpace(req.OrderID) == "" {
+			writeInquiryErr(
+				w,
+				inquirydom.ErrInvalidOrderID,
+			)
+			return
+		}
+
+		if req.OrderItemIndex == nil ||
+			*req.OrderItemIndex < 0 {
+			writeInquiryErr(
+				w,
+				inquirydom.ErrInvalidOrderItemIndex,
+			)
+			return
+		}
+
+		result, err :=
+			h.returnRequestUC.RequestOpened(
+				ctx,
+				usecase.RequestOpenedReturnInput{
+					OrderID: strings.TrimSpace(
+						req.OrderID,
+					),
+					AvatarID:  avatarID,
+					ItemIndex: *req.OrderItemIndex,
+					ProductID: req.ProductID,
+					Subject:   req.Subject,
+					Content:   req.Content,
+					Images:    images,
+				},
+			)
+		if err != nil {
+			writeInquiryErr(w, err)
+			return
+		}
+
+		statusCode := http.StatusOK
+		if result.InquiryCreated {
+			statusCode = http.StatusCreated
+		}
+
+		writeJSON(
+			w,
+			statusCode,
+			map[string]any{
+				"data": result.Inquiry,
+			},
+		)
+		return
+
+	case inquirydom.InquiryTypeReturnUnopened:
+		writeInquiryErr(
+			w,
+			inquirydom.ErrInquiryInvalidWorkflow,
+		)
+		return
+
+	default:
+		writeInquiryErr(
+			w,
+			inquirydom.ErrInvalidInquiryType,
+		)
 		return
 	}
-
-	writeJSON(w, http.StatusCreated, map[string]any{"data": created})
 }
 
 // GET /mall/me/inquiries/unread-count
@@ -507,6 +634,8 @@ func inquiryHTTPStatus(err error) int {
 	switch {
 	case errors.Is(err, inquirydom.ErrInvalidID),
 		errors.Is(err, inquirydom.ErrInvalidProductID),
+		errors.Is(err, inquirydom.ErrInvalidOrderID),
+		errors.Is(err, inquirydom.ErrInvalidOrderItemIndex),
 		errors.Is(err, inquirydom.ErrInvalidAvatarID),
 		errors.Is(err, inquirydom.ErrInvalidSubject),
 		errors.Is(err, inquirydom.ErrInvalidContent),
@@ -552,10 +681,17 @@ func inquiryHTTPStatus(err error) int {
 
 	case errors.Is(err, inquirydom.ErrInquiryForbidden):
 		return http.StatusForbidden
-	case errors.Is(err, inquirydom.ErrNotFound):
+	case errors.Is(err, inquirydom.ErrNotFound),
+		errors.Is(err, orderdom.ErrNotFound):
 		return http.StatusNotFound
-	case errors.Is(err, inquirydom.ErrConflict):
+	case errors.Is(err, inquirydom.ErrConflict),
+		errors.Is(err, orderdom.ErrConflict):
 		return http.StatusConflict
+	case errors.Is(err, orderdom.ErrInvalidID),
+		errors.Is(err, orderdom.ErrInvalidAvatarID),
+		errors.Is(err, orderdom.ErrInvalidItems),
+		errors.Is(err, orderdom.ErrInvalidItemSnapshot):
+		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError
 	}

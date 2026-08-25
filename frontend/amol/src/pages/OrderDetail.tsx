@@ -433,6 +433,7 @@ export default function OrderDetail() {
                   const showReturnButton =
                     item.isDispatched &&
                     !item.transferred &&
+                    !item.tokenTransferVerifiedAt &&
                     !item.isCancelled &&
                     !item.isReturnRequested;
 

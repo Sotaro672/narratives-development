@@ -77,10 +77,16 @@ type SellerSnapshot struct {
 
 // OrderItemType identifies what kind of item is stored in Order.Items.
 type OrderItemType string
+type ReturnRequestKind string
 
 const (
 	OrderItemTypeList   OrderItemType = "list"
 	OrderItemTypeResale OrderItemType = "resale"
+)
+
+const (
+	ReturnRequestKindUnopened ReturnRequestKind = "unopened"
+	ReturnRequestKindOpened   ReturnRequestKind = "opened"
 )
 
 // OrderItemSnapshot is stored inside Order.Items.
@@ -134,6 +140,8 @@ type OrderItemSnapshot struct {
 
 	IsReturnRequested bool       `json:"isReturnRequested"`
 	ReturnRequestedAt *time.Time `json:"returnRequestedAt,omitempty"`
+
+	TokenTransferVerifiedAt *time.Time `json:"tokenTransferVerifiedAt,omitempty"`
 
 	Transferred   bool       `json:"transferred"`
 	TransferredAt *time.Time `json:"transferredAt,omitempty"`
@@ -322,7 +330,8 @@ func (o *Order) CancelItem(
 	}
 
 	if item.IsDispatched ||
-		item.Transferred {
+		item.Transferred ||
+		item.TokenTransferVerifiedAt != nil {
 		return ErrConflict
 	}
 
@@ -331,6 +340,60 @@ func (o *Order) CancelItem(
 }
 
 func (o *Order) RequestItemReturn(
+	index int,
+	kind ReturnRequestKind,
+	at time.Time,
+) error {
+	if o == nil {
+		return ErrInvalidItems
+	}
+
+	if index < 0 || index >= len(o.Items) {
+		return ErrInvalidItems
+	}
+
+	if !isValidReturnRequestKind(kind) {
+		return ErrInvalidItemSnapshot
+	}
+
+	if at.IsZero() {
+		return ErrInvalidItemSnapshot
+	}
+
+	item := &o.Items[index]
+
+	if item.IsCancelled ||
+		!item.IsDispatched {
+		return ErrConflict
+	}
+
+	switch kind {
+	case ReturnRequestKindUnopened:
+		if item.Transferred ||
+			item.TokenTransferVerifiedAt != nil {
+			return ErrConflict
+		}
+
+	case ReturnRequestKindOpened:
+		if !item.Transferred &&
+			item.TokenTransferVerifiedAt == nil {
+			return ErrConflict
+		}
+	}
+
+	if item.IsReturnRequested {
+		return nil
+	}
+
+	returnRequestedAt := at.UTC()
+
+	item.IsReturnRequested = true
+	item.ReturnRequestedAt = &returnRequestedAt
+
+	return nil
+}
+
+func (o *Order) MarkItemTokenTransferVerified(
 	index int,
 	at time.Time,
 ) error {
@@ -342,26 +405,22 @@ func (o *Order) RequestItemReturn(
 		return ErrInvalidItems
 	}
 
-	item := &o.Items[index]
-
-	if item.IsReturnRequested {
-		return nil
-	}
-
-	if item.IsCancelled ||
-		!item.IsDispatched ||
-		item.Transferred {
-		return ErrConflict
-	}
-
 	if at.IsZero() {
 		return ErrInvalidItemSnapshot
 	}
 
-	returnRequestedAt := at.UTC()
+	item := &o.Items[index]
 
-	item.IsReturnRequested = true
-	item.ReturnRequestedAt = &returnRequestedAt
+	if item.IsCancelled {
+		return ErrConflict
+	}
+
+	if item.TokenTransferVerifiedAt != nil {
+		return nil
+	}
+
+	verifiedAt := at.UTC()
+	item.TokenTransferVerifiedAt = &verifiedAt
 
 	return nil
 }
@@ -418,6 +477,12 @@ func (o *Order) UpdateItemTransferred(
 		}
 
 		transferredAt := at.UTC()
+
+		if o.Items[index].TokenTransferVerifiedAt == nil {
+			verifiedAt := transferredAt
+			o.Items[index].TokenTransferVerifiedAt = &verifiedAt
+		}
+
 		o.Items[index].Transferred = true
 		o.Items[index].TransferredAt = &transferredAt
 		return nil
@@ -869,17 +934,21 @@ func validateItemTransferState(
 		if item.IsDispatched ||
 			item.IsReturnRequested ||
 			item.ReturnRequestedAt != nil ||
+			item.TokenTransferVerifiedAt != nil ||
 			item.Transferred ||
 			item.TransferredAt != nil {
 			return ErrInvalidItemSnapshot
 		}
 	}
 
+	if item.TokenTransferVerifiedAt != nil &&
+		item.TokenTransferVerifiedAt.IsZero() {
+		return ErrInvalidItemSnapshot
+	}
+
 	if item.IsReturnRequested {
 		if item.IsCancelled ||
 			!item.IsDispatched ||
-			item.Transferred ||
-			item.TransferredAt != nil ||
 			item.ReturnRequestedAt == nil ||
 			item.ReturnRequestedAt.IsZero() {
 			return ErrInvalidItemSnapshot
@@ -889,10 +958,16 @@ func validateItemTransferState(
 	}
 
 	if item.Transferred {
-		if item.IsReturnRequested ||
-			item.ReturnRequestedAt != nil ||
-			item.TransferredAt == nil ||
-			item.TransferredAt.IsZero() {
+		if item.TransferredAt == nil ||
+			item.TransferredAt.IsZero() ||
+			item.TokenTransferVerifiedAt == nil ||
+			item.TokenTransferVerifiedAt.IsZero() {
+			return ErrInvalidItemSnapshot
+		}
+
+		if item.TokenTransferVerifiedAt.After(
+			*item.TransferredAt,
+		) {
 			return ErrInvalidItemSnapshot
 		}
 
@@ -904,4 +979,17 @@ func validateItemTransferState(
 	}
 
 	return nil
+}
+
+func isValidReturnRequestKind(
+	kind ReturnRequestKind,
+) bool {
+	switch kind {
+	case ReturnRequestKindUnopened,
+		ReturnRequestKindOpened:
+		return true
+
+	default:
+		return false
+	}
 }

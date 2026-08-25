@@ -74,10 +74,20 @@ type TransferTargetItem struct {
 type OrderRepoForTransfer interface {
 	// FindEligibleTransferItem returns orderdom.ErrNotFound when no paid,
 	// untransferred item exactly matches the input.
+	//
+	// Return-requested items must remain discoverable here so a valid scan can
+	// record tokenTransferVerifiedAt before token transfer is blocked.
 	FindEligibleTransferItem(
 		ctx context.Context,
 		in FindEligibleTransferItemInput,
 	) (TransferTargetItem, error)
+
+	MarkTokenTransferVerified(
+		ctx context.Context,
+		orderID string,
+		itemIndex int,
+		at time.Time,
+	) (orderdom.OrderItemSnapshot, error)
 
 	LockTransferItem(
 		ctx context.Context,
@@ -98,6 +108,13 @@ type OrderRepoForTransfer interface {
 		itemIndex int,
 		at time.Time,
 	) error
+}
+
+type ReturnOpeningHandler interface {
+	PromoteUnopenedToOpened(
+		ctx context.Context,
+		in PromoteUnopenedToOpenedInput,
+	) (ReturnRequestResult, error)
 }
 
 type TokenResolver interface {
@@ -201,6 +218,8 @@ type TransferUsecase struct {
 
 	resaleRepo applicationport.ResaleGetter
 
+	returnOpening ReturnOpeningHandler
+
 	executionUC *TokenTransferExecutionUsecase
 	inventoryUC *InventoryUsecase
 
@@ -246,6 +265,16 @@ func (u *TransferUsecase) WithResaleTransferDependencies(
 	return u
 }
 
+func (u *TransferUsecase) WithReturnOpeningHandler(
+	returnOpening ReturnOpeningHandler,
+) *TransferUsecase {
+	if u != nil {
+		u.returnOpening = returnOpening
+	}
+
+	return u
+}
+
 var (
 	ErrTransferNotConfigured          = errors.New("transfer_uc: not configured")
 	ErrTransferAvatarIDEmpty          = errors.New("transfer_uc: avatarId is empty")
@@ -261,6 +290,7 @@ var (
 	ErrTransferResolveAfterFailed     = errors.New("transfer_uc: post-transfer resolve failed")
 	ErrTransferInventoryCleanupFailed = errors.New("transfer_uc: inventory cleanup failed")
 	ErrTransferAttemptNotCreated      = errors.New("transfer_uc: transfer attempt was not created")
+	ErrTransferBlockedByReturn        = errors.New("transfer_uc: transfer blocked by return request")
 
 	ErrTransferResaleNotConfigured       = errors.New("transfer_uc: resale transfer dependencies are not configured")
 	ErrTransferResaleIDEmpty             = errors.New("transfer_uc: resaleId is empty")
@@ -434,6 +464,60 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 			ErrTransferNoEligibleOrder
 	}
 
+	matchedResult := TransferByVerifiedScanResult{
+		MatchedOrderID:     target.OrderID,
+		MatchedInventoryID: target.InventoryID,
+		MatchedModelID:     target.ModelID,
+
+		MatchedItemIndex: target.ItemIndex,
+		MatchedItemType:  target.ItemType,
+		MatchedResaleID:  target.ResaleID,
+
+		ProductID:        productID,
+		AssetID:          assetID,
+		TokenBlueprintID: scannedTokenBlueprintID,
+	}
+
+	verifiedAt := u.now().UTC()
+
+	verifiedItem, err :=
+		u.orderRepo.MarkTokenTransferVerified(
+			ctx,
+			target.OrderID,
+			target.ItemIndex,
+			verifiedAt,
+		)
+	if err != nil {
+		return matchedResult,
+			fmt.Errorf(
+				"transfer_uc: mark token transfer verified failed orderId=%s itemIndex=%d: %w",
+				target.OrderID,
+				target.ItemIndex,
+				err,
+			)
+	}
+
+	if verifiedItem.IsReturnRequested {
+		if err := u.promoteReturnOpened(
+			ctx,
+			target,
+			avatarID,
+			productID,
+		); err != nil {
+			return matchedResult,
+				fmt.Errorf(
+					"%w: promote return failed orderId=%s itemIndex=%d: %v",
+					ErrTransferBlockedByReturn,
+					target.OrderID,
+					target.ItemIndex,
+					err,
+				)
+		}
+
+		return matchedResult,
+			ErrTransferBlockedByReturn
+	}
+
 	lockAt := u.now().UTC()
 
 	if err := u.orderRepo.LockTransferItem(
@@ -442,7 +526,57 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 		target.ItemIndex,
 		lockAt,
 	); err != nil {
-		return TransferByVerifiedScanResult{},
+		if errors.Is(
+			err,
+			orderdom.ErrConflict,
+		) {
+			// A return request may have started after the first verified-scan
+			// transaction but before the transfer lock.
+			//
+			// Record the verified scan again against the latest Order state so
+			// tokenTransferVerifiedAt cannot be lost by that competing return
+			// update.
+			latestItem, verifiedErr :=
+				u.orderRepo.MarkTokenTransferVerified(
+					ctx,
+					target.OrderID,
+					target.ItemIndex,
+					verifiedAt,
+				)
+			if verifiedErr != nil {
+				return matchedResult,
+					fmt.Errorf(
+						"%w: refresh token transfer verified failed orderId=%s itemIndex=%d: %v",
+						ErrTransferBlockedByReturn,
+						target.OrderID,
+						target.ItemIndex,
+						verifiedErr,
+					)
+			}
+
+			if latestItem.IsReturnRequested {
+				if promoteErr := u.promoteReturnOpened(
+					ctx,
+					target,
+					avatarID,
+					productID,
+				); promoteErr != nil {
+					return matchedResult,
+						fmt.Errorf(
+							"%w: promote return failed orderId=%s itemIndex=%d: %v",
+							ErrTransferBlockedByReturn,
+							target.OrderID,
+							target.ItemIndex,
+							promoteErr,
+						)
+				}
+			}
+
+			return matchedResult,
+				ErrTransferBlockedByReturn
+		}
+
+		return matchedResult,
 			fmt.Errorf(
 				"transfer_uc: lock failed orderId=%s itemIndex=%d: %w",
 				target.OrderID,
@@ -468,7 +602,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 			avatarID,
 		)
 	if err != nil {
-		return TransferByVerifiedScanResult{},
+		return matchedResult,
 			fmt.Errorf(
 				"transfer_uc: resolve receiver avatar wallet failed avatarId=%s: %w",
 				avatarID,
@@ -476,7 +610,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 			)
 	}
 	if toWallet == "" {
-		return TransferByVerifiedScanResult{},
+		return matchedResult,
 			ErrTransferToWalletEmpty
 	}
 
@@ -487,7 +621,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 		avatarID,
 	)
 	if err != nil {
-		return TransferByVerifiedScanResult{}, err
+		return matchedResult, err
 	}
 
 	removeFromSenderWallet :=
@@ -581,7 +715,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 		},
 	)
 	if err != nil {
-		return TransferByVerifiedScanResult{},
+		return matchedResult,
 			mapTransferExecutionError(err)
 	}
 
@@ -625,6 +759,34 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 		FromDisplayName: fromDisplayName,
 		ToDisplayName:   toDisplayName,
 	}, nil
+}
+
+func (u *TransferUsecase) promoteReturnOpened(
+	ctx context.Context,
+	target TransferTargetItem,
+	avatarID string,
+	productID string,
+) error {
+	if u == nil ||
+		u.returnOpening == nil {
+		return ErrTransferNotConfigured
+	}
+
+	_, err :=
+		u.returnOpening.PromoteUnopenedToOpened(
+			ctx,
+			PromoteUnopenedToOpenedInput{
+				OrderID:   target.OrderID,
+				AvatarID:  avatarID,
+				ItemIndex: target.ItemIndex,
+				ProductID: productID,
+			},
+		)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func mapTransferExecutionError(err error) error {

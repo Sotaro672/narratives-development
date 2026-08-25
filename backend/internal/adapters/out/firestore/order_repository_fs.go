@@ -287,6 +287,7 @@ func (r *OrderRepositoryFS) Update(
 					o.AvatarID != projection.AvatarID ||
 					!o.Paid ||
 					o.Items[itemIndex].IsCancelled ||
+					o.Items[itemIndex].IsReturnRequested ||
 					o.Items[itemIndex].Transferred ||
 					!orderItemMatchesProjection(
 						o.Items[itemIndex],
@@ -430,6 +431,8 @@ type itemDoc struct {
 	IsReturnRequested bool       `firestore:"isReturnRequested"`
 	ReturnRequestedAt *time.Time `firestore:"returnRequestedAt,omitempty"`
 
+	TokenTransferVerifiedAt *time.Time `firestore:"tokenTransferVerifiedAt,omitempty"`
+
 	Transferred   bool       `firestore:"transferred"`
 	TransferredAt *time.Time `firestore:"transferredAt,omitempty"`
 }
@@ -500,10 +503,26 @@ func docToOrder(
 			returnRequestedAt = &value
 		}
 
+		var tokenTransferVerifiedAt *time.Time
+		if item.TokenTransferVerifiedAt != nil {
+			value := item.TokenTransferVerifiedAt.UTC()
+			tokenTransferVerifiedAt = &value
+		}
+
 		var transferredAt *time.Time
 		if item.TransferredAt != nil {
 			value := item.TransferredAt.UTC()
 			transferredAt = &value
+		}
+
+		// Existing transferred Order documents may predate
+		// tokenTransferVerifiedAt. A successful historical transfer itself is
+		// sufficient evidence that token transfer verification occurred.
+		if tokenTransferVerifiedAt == nil &&
+			item.Transferred &&
+			transferredAt != nil {
+			value := transferredAt.UTC()
+			tokenTransferVerifiedAt = &value
 		}
 
 		items = append(
@@ -544,6 +563,8 @@ func docToOrder(
 
 				IsReturnRequested: item.IsReturnRequested,
 				ReturnRequestedAt: returnRequestedAt,
+
+				TokenTransferVerifiedAt: tokenTransferVerifiedAt,
 
 				Transferred:   item.Transferred,
 				TransferredAt: transferredAt,
@@ -735,6 +756,11 @@ func orderItemToDocMap(
 			item.ReturnRequestedAt.UTC()
 	}
 
+	if item.TokenTransferVerifiedAt != nil {
+		doc["tokenTransferVerifiedAt"] =
+			item.TokenTransferVerifiedAt.UTC()
+	}
+
 	if item.Transferred && item.TransferredAt != nil {
 		doc["transferredAt"] =
 			item.TransferredAt.UTC()
@@ -780,14 +806,15 @@ func orderTransferItemDocuments(
 		}
 
 		doc := map[string]any{
-			"orderId":     o.ID,
-			"avatarId":    o.AvatarID,
-			"itemType":    string(item.Type),
-			"itemIndex":   itemIndex,
-			"paid":        o.Paid,
-			"isCancelled": item.IsCancelled,
-			"transferred": item.Transferred,
-			"createdAt":   o.CreatedAt.UTC(),
+			"orderId":           o.ID,
+			"avatarId":          o.AvatarID,
+			"itemType":          string(item.Type),
+			"itemIndex":         itemIndex,
+			"paid":              o.Paid,
+			"isCancelled":       item.IsCancelled,
+			"isReturnRequested": item.IsReturnRequested,
+			"transferred":       item.Transferred,
+			"createdAt":         o.CreatedAt.UTC(),
 		}
 
 		switch item.Type {
@@ -808,6 +835,11 @@ func orderTransferItemDocuments(
 			doc["tokenBlueprintId"] =
 				item.TokenBlueprintID
 			doc["brandId"] = item.BrandID
+		}
+
+		if item.TokenTransferVerifiedAt != nil {
+			doc["tokenTransferVerifiedAt"] =
+				item.TokenTransferVerifiedAt.UTC()
 		}
 
 		if item.Transferred &&
@@ -1172,6 +1204,15 @@ func validateOrderItemDocumentShape(
 		optionalOrderTime(raw, "returnRequestedAt")
 	if err != nil ||
 		isReturnRequested != returnRequestedAtExists {
+		return ErrInvalidOrderDocumentData
+	}
+
+	_, _, err =
+		optionalOrderTime(
+			raw,
+			"tokenTransferVerifiedAt",
+		)
+	if err != nil {
 		return ErrInvalidOrderDocumentData
 	}
 
