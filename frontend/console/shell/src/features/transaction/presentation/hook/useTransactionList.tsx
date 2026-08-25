@@ -44,6 +44,11 @@ export function useTransactionList() {
   ] = useState(true);
 
   const [
+    isResetting,
+    setIsResetting,
+  ] = useState(false);
+
+  const [
     error,
     setError,
   ] = useState<Error | null>(
@@ -55,79 +60,73 @@ export function useTransactionList() {
     setTotalCount,
   ] = useState(0);
 
-  const [
-    reloadKey,
-    setReloadKey,
-  ] = useState(0);
+  const load =
+    useCallback(
+      async (
+        resetting: boolean,
+      ) => {
+        if (resetting) {
+          setIsResetting(true);
+        } else {
+          setLoading(true);
+        }
+
+        try {
+          setError(null);
+
+          const result =
+            await listTransactions({
+              page: 1,
+              perPage: 100,
+            });
+
+          setTransactions(
+            result.items,
+          );
+
+          setTotalCount(
+            result.totalCount,
+          );
+        } catch (
+          caughtError: unknown
+        ) {
+          setTransactions([]);
+
+          setTotalCount(0);
+
+          setError(
+            normalizeError(
+              caughtError,
+            ),
+          );
+        } finally {
+          if (resetting) {
+            setIsResetting(false);
+          } else {
+            setLoading(false);
+          }
+        }
+      },
+      [],
+    );
 
   useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const result =
-          await listTransactions({
-            page: 1,
-            perPage: 100,
-          });
-
-        if (cancelled) {
-          return;
-        }
-
-        setTransactions(
-          result.items,
-        );
-
-        setTotalCount(
-          result.totalCount,
-        );
-      } catch (
-        caughtError: unknown
-      ) {
-        if (cancelled) {
-          return;
-        }
-
-        setTransactions([]);
-
-        setTotalCount(0);
-
-        setError(
-          normalizeError(
-            caughtError,
-          ),
-        );
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
+    void load(false);
   }, [
-    reloadKey,
+    load,
   ]);
 
   const reload =
     useCallback(() => {
-      setReloadKey(
-        (current) =>
-          current + 1,
-      );
-    }, []);
+      void load(true);
+    }, [
+      load,
+    ]);
 
   return {
     transactions,
     loading,
+    isResetting,
     error,
     totalCount,
     reload,

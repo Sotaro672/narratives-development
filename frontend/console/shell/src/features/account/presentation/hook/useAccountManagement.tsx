@@ -46,76 +46,75 @@ export function useAccountManagement() {
   ] = useState(true);
 
   const [
+    isResetting,
+    setIsResetting,
+  ] = useState(false);
+
+  const [
     error,
     setError,
   ] = useState<Error | null>(
     null,
   );
 
-  const [
-    reloadKey,
-    setReloadKey,
-  ] = useState(0);
+  const load =
+    useCallback(
+      async (
+        resetting: boolean,
+      ) => {
+        if (resetting) {
+          setIsResetting(true);
+        } else {
+          setLoading(true);
+        }
+
+        try {
+          setError(null);
+
+          const rows =
+            await listAccounts();
+
+          setAccounts(
+            rows,
+          );
+        } catch (
+          caughtError: unknown
+        ) {
+          setAccounts([]);
+
+          setError(
+            normalizeError(
+              caughtError,
+            ),
+          );
+        } finally {
+          if (resetting) {
+            setIsResetting(false);
+          } else {
+            setLoading(false);
+          }
+        }
+      },
+      [],
+    );
 
   useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const rows =
-          await listAccounts();
-
-        if (cancelled) {
-          return;
-        }
-
-        setAccounts(
-          rows,
-        );
-      } catch (
-        caughtError: unknown
-      ) {
-        if (cancelled) {
-          return;
-        }
-
-        setAccounts([]);
-
-        setError(
-          normalizeError(
-            caughtError,
-          ),
-        );
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
+    void load(false);
   }, [
-    reloadKey,
+    load,
   ]);
 
   const reload =
     useCallback(() => {
-      setReloadKey(
-        (current) =>
-          current + 1,
-      );
-    }, []);
+      void load(true);
+    }, [
+      load,
+    ]);
 
   return {
     accounts,
     loading,
+    isResetting,
     error,
     reload,
   };
