@@ -229,6 +229,43 @@ func handleSafeAuthAvatar(
 	)
 }
 
+// avatarPublicHandler keeps public avatar reads available while requiring
+// user authentication only for avatar creation.
+func avatarPublicHandler(
+	h http.Handler,
+	auth func(http.Handler) http.Handler,
+) http.Handler {
+	if h == nil {
+		return nil
+	}
+
+	if auth == nil {
+		log.Printf(
+			"[mall.router] WARN: nil auth middleware: Avatar(create) (registering WITHOUT auth)",
+		)
+
+		return h
+	}
+
+	authed := auth(h)
+
+	return http.HandlerFunc(
+		func(
+			w http.ResponseWriter,
+			r *http.Request,
+		) {
+			if r.Method == http.MethodPost &&
+				(r.URL.Path == "/mall/avatars" ||
+					r.URL.Path == "/mall/avatars/") {
+				authed.ServeHTTP(w, r)
+				return
+			}
+
+			h.ServeHTTP(w, r)
+		},
+	)
+}
+
 // paymentReadOnlyHandler limits the buyer-facing payment endpoint to reads.
 //
 // Payment creation is performed only from the Console dispatch flow.
@@ -365,9 +402,17 @@ func Register(
 		"PaymentMethod(stripe.config)",
 	)
 
-	// avatars (public)
-	handleSafe(mux, "/mall/avatars", deps.Avatar, "Avatar")
-	handleSafe(mux, "/mall/avatars/", deps.Avatar, "Avatar")
+	// avatars
+	// - POST /mall/avatars: auth required
+	// - GET  /mall/avatars/{id}: public
+	avatarHandler :=
+		avatarPublicHandler(
+			deps.Avatar,
+			auth,
+		)
+
+	handleSafe(mux, "/mall/avatars", avatarHandler, "Avatar")
+	handleSafe(mux, "/mall/avatars/", avatarHandler, "Avatar")
 
 	// wallets (public)
 	handleSafe(mux, "/mall/wallets", deps.Wallet, "Wallet")
