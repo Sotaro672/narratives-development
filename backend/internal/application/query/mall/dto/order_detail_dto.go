@@ -72,8 +72,9 @@ type OrderDetailItem struct {
 	IsCancelled  bool `json:"isCancelled"`
 	IsDispatched bool `json:"isDispatched"`
 
-	IsReturnRequested bool   `json:"isReturnRequested"`
-	ReturnRequestedAt string `json:"returnRequestedAt,omitempty"`
+	IsReturnRequested bool                       `json:"isReturnRequested"`
+	ReturnRequestKind orderdom.ReturnRequestKind `json:"returnRequestKind,omitempty"`
+	ReturnRequestedAt string                     `json:"returnRequestedAt,omitempty"`
 
 	IsReturnCompleted bool   `json:"isReturnCompleted"`
 	ReturnCompletedAt string `json:"returnCompletedAt,omitempty"`

@@ -4,6 +4,8 @@ import type { WalletOrderShippingQuoteSnapshot } from "../../shared/types/orderT
 
 export type OrderDetailItemType = "list" | "resale";
 
+export type ReturnRequestKind = "unopened" | "opened";
+
 export type OrderRefundStatus =
   | "none"
   | "pending"
@@ -46,6 +48,7 @@ export type OrderDetailItem = {
   isCancelled: boolean;
   isDispatched: boolean;
   isReturnRequested: boolean;
+  returnRequestKind?: ReturnRequestKind;
   returnRequestedAt?: string;
   isReturnCompleted: boolean;
   returnCompletedAt?: string;

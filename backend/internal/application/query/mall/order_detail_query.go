@@ -202,6 +202,7 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 			IsCancelled:       sourceItem.IsCancelled,
 			IsDispatched:      sourceItem.IsDispatched,
 			IsReturnRequested: sourceItem.IsReturnRequested,
+			ReturnRequestKind: sourceItem.ReturnRequestKind,
 			IsReturnCompleted: sourceItem.IsReturnCompleted,
 
 			Transferred: sourceItem.Transferred,
