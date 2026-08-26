@@ -42,9 +42,7 @@ var AllowedStatuses = map[RefundStatus]struct{}{
 
 var DefaultStatus = StatusCreated
 
-func IsValidStatus(
-	status RefundStatus,
-) bool {
+func IsValidStatus(status RefundStatus) bool {
 	if status == "" {
 		return false
 	}
@@ -88,16 +86,12 @@ var AllowedTransferReversalStatuses = map[TransferReversalStatus]struct{}{
 	TransferReversalStatusFailed:          {},
 }
 
-func IsValidTransferReversalStatus(
-	status TransferReversalStatus,
-) bool {
+func IsValidTransferReversalStatus(status TransferReversalStatus) bool {
 	if status == "" {
 		return false
 	}
 
-	_, ok :=
-		AllowedTransferReversalStatuses[status]
-
+	_, ok := AllowedTransferReversalStatuses[status]
 	return ok
 }
 
@@ -126,24 +120,49 @@ const (
 //   - retry and idempotency can be handled without mutating Payment's
 //     full-refund-only invariant
 //
-// Amount invariant:
+// Policy:
+//
+//	Policy == ""
+//
+// represents the legacy / unopened-return flow.
+//
+// For that flow:
+//
+//	OutboundShippingAmount == 0
+//	OutboundShippingTaxAmount == 0
+//	ReturnShippingAmount == 0
+//	ReturnShippingTaxAmount == 0
+//
+// and:
 //
 //	RefundAmount = MerchandiseAmount + MerchandiseTaxAmount
 //
-// ShippingAmount and ShippingTaxAmount are intentionally not included.
+// For an opened return, Policy must be one of the values defined by
+// OpenedReturnRefundPolicy.
 //
-// Current return receipt policy:
+// Stripe purchaser Refund amount:
 //
-// - merchandise price is refunded
-// - consumption tax attributable to the merchandise is refunded
-// - shipping charge is not refunded
-// - shipping consumption tax is not refunded
+//	RefundAmount
+//	  = MerchandiseAmount
+//	  + MerchandiseTaxAmount
+//	  + OutboundShippingAmount
+//	  + OutboundShippingTaxAmount
+//
+// ReturnShippingAmount and ReturnShippingTaxAmount are intentionally excluded
+// from RefundAmount because the return shipment is not part of the purchaser's
+// original Stripe Charge.
+//
+// Total company burden can therefore be calculated as:
+//
+//	RefundAmount
+//	+ ReturnShippingAmount
+//	+ ReturnShippingTaxAmount
 //
 // TransferReversalAmount represents the seller-side amount that must be
 // reclaimed from the Settlement when the seller Transfer has already completed.
 //
-// TransferReversalAmount may therefore be smaller than RefundAmount because
-// AMOL platform fees may remain outside the seller Transfer.
+// TransferReversalAmount may be smaller than RefundAmount because AMOL platform
+// fees may remain outside the seller Transfer.
 type Refund struct {
 	ID string
 
@@ -158,9 +177,18 @@ type Refund struct {
 
 	SettlementID string
 
+	Policy OpenedReturnRefundPolicy
+
 	MerchandiseAmount    int
 	MerchandiseTaxAmount int
-	RefundAmount         int
+
+	OutboundShippingAmount    int
+	OutboundShippingTaxAmount int
+
+	ReturnShippingAmount    int
+	ReturnShippingTaxAmount int
+
+	RefundAmount int
 
 	Currency string
 
@@ -227,12 +255,32 @@ var (
 		"refund: invalid merchandiseTaxAmount",
 	)
 
+	ErrInvalidOutboundShippingAmount = errors.New(
+		"refund: invalid outboundShippingAmount",
+	)
+
+	ErrInvalidOutboundShippingTaxAmount = errors.New(
+		"refund: invalid outboundShippingTaxAmount",
+	)
+
+	ErrInvalidReturnShippingAmount = errors.New(
+		"refund: invalid returnShippingAmount",
+	)
+
+	ErrInvalidReturnShippingTaxAmount = errors.New(
+		"refund: invalid returnShippingTaxAmount",
+	)
+
+	ErrInvalidOpenedReturnAmounts = errors.New(
+		"refund: invalid opened return amounts",
+	)
+
 	ErrInvalidRefundAmount = errors.New(
 		"refund: invalid refundAmount",
 	)
 
 	ErrRefundAmountMismatch = errors.New(
-		"refund: refundAmount does not equal merchandiseAmount + merchandiseTaxAmount",
+		"refund: refundAmount does not equal refundable merchandise and outbound shipping amounts",
 	)
 
 	ErrInvalidCurrency = errors.New(
@@ -300,54 +348,33 @@ var (
 //
 //	{orderId}_{orderItemIndex}
 //
-// This allows retries of POST /inquiries/{id}/receive-return to resolve to the
-// same Refund record.
-func NewID(
-	orderID string,
-	orderItemIndex int,
-) (string, error) {
-	if orderID == "" ||
-		strings.Contains(
-			orderID,
-			"/",
-		) {
-		return "",
-			ErrInvalidOrderID
+// This allows retries of return receipt endpoints to resolve to the same Refund
+// record.
+func NewID(orderID string, orderItemIndex int) (string, error) {
+	if orderID == "" || strings.Contains(orderID, "/") {
+		return "", ErrInvalidOrderID
 	}
 
 	if orderItemIndex < 0 {
-		return "",
-			ErrInvalidOrderItemIndex
+		return "", ErrInvalidOrderItemIndex
 	}
 
-	return orderID +
-			"_" +
-			strconv.Itoa(
-				orderItemIndex,
-			),
-		nil
+	return orderID + "_" + strconv.Itoa(orderItemIndex), nil
 }
 
 // ============================================================
 // Constructor
 // ============================================================
 
-// New creates one item-level Refund before Stripe Refund execution.
+// New creates one legacy / unopened-return item-level Refund.
 //
-// Refund begins with:
+// Existing callers intentionally keep this constructor unchanged.
 //
-//	StatusCreated
+// Policy remains empty and no shipping component is included in RefundAmount.
 //
-// StripeRefundID remains empty until Stripe has created the Refund object.
+// RefundAmount:
 //
-// TransferReversalStatus is:
-//
-// - not_required when transferReversalAmount == 0
-// - pending when transferReversalAmount > 0
-//
-// transferReversalAmount must be determined by the application layer from the
-// authoritative Settlement allocation. The Refund entity does not calculate
-// platform fees or Settlement allocation.
+//	merchandiseAmount + merchandiseTaxAmount
 func New(
 	id string,
 	inquiryID string,
@@ -363,19 +390,124 @@ func New(
 	currency string,
 	createdAt time.Time,
 ) (Refund, error) {
-	createdAt =
-		createdAt.UTC()
+	return newRefund(
+		id,
+		inquiryID,
+		orderID,
+		paymentID,
+		orderItemIndex,
+		companyID,
+		accountID,
+		settlementID,
+		"",
+		merchandiseAmount,
+		merchandiseTaxAmount,
+		0,
+		0,
+		0,
+		0,
+		transferReversalAmount,
+		currency,
+		createdAt,
+	)
+}
 
-	refundAmount :=
-		merchandiseAmount +
-			merchandiseTaxAmount
+// NewOpenedReturn creates one item-level Refund for an opened return.
+//
+// The application layer must calculate every monetary value from the
+// authoritative Order snapshot. The frontend must never provide these amounts.
+//
+// RefundAmount contains only amounts refundable against the original purchaser
+// Stripe Charge:
+//
+//	merchandiseAmount
+//	+ merchandiseTaxAmount
+//	+ outboundShippingAmount
+//	+ outboundShippingTaxAmount
+//
+// ReturnShippingAmount and ReturnShippingTaxAmount are recorded as additional
+// company burden and are not included in the Stripe Refund amount.
+func NewOpenedReturn(
+	id string,
+	inquiryID string,
+	orderID string,
+	paymentID string,
+	orderItemIndex int,
+	companyID string,
+	accountID string,
+	settlementID string,
+	policy OpenedReturnRefundPolicy,
+	merchandiseAmount int,
+	merchandiseTaxAmount int,
+	outboundShippingAmount int,
+	outboundShippingTaxAmount int,
+	returnShippingAmount int,
+	returnShippingTaxAmount int,
+	transferReversalAmount int,
+	currency string,
+	createdAt time.Time,
+) (Refund, error) {
+	if err := ValidateOpenedReturnRefundPolicy(policy); err != nil {
+		return Refund{}, err
+	}
 
-	transferReversalStatus :=
-		TransferReversalStatusNotRequired
+	return newRefund(
+		id,
+		inquiryID,
+		orderID,
+		paymentID,
+		orderItemIndex,
+		companyID,
+		accountID,
+		settlementID,
+		policy,
+		merchandiseAmount,
+		merchandiseTaxAmount,
+		outboundShippingAmount,
+		outboundShippingTaxAmount,
+		returnShippingAmount,
+		returnShippingTaxAmount,
+		transferReversalAmount,
+		currency,
+		createdAt,
+	)
+}
 
+func newRefund(
+	id string,
+	inquiryID string,
+	orderID string,
+	paymentID string,
+	orderItemIndex int,
+	companyID string,
+	accountID string,
+	settlementID string,
+	policy OpenedReturnRefundPolicy,
+	merchandiseAmount int,
+	merchandiseTaxAmount int,
+	outboundShippingAmount int,
+	outboundShippingTaxAmount int,
+	returnShippingAmount int,
+	returnShippingTaxAmount int,
+	transferReversalAmount int,
+	currency string,
+	createdAt time.Time,
+) (Refund, error) {
+	createdAt = createdAt.UTC()
+
+	refundAmount, err := calculateRefundAmount(
+		merchandiseAmount,
+		merchandiseTaxAmount,
+		outboundShippingAmount,
+		outboundShippingTaxAmount,
+	)
+	if err != nil {
+		return Refund{}, err
+	}
+
+	transferReversalStatus := TransferReversalStatusNotRequired
 	if transferReversalAmount > 0 {
-		transferReversalStatus =
-			TransferReversalStatusPending
+		transferReversalStatus = TransferReversalStatusPending
 	}
 
 	r := Refund{
@@ -392,9 +524,18 @@ func New(
 
 		SettlementID: settlementID,
 
+		Policy: policy,
+
 		MerchandiseAmount:    merchandiseAmount,
 		MerchandiseTaxAmount: merchandiseTaxAmount,
-		RefundAmount:         refundAmount,
+
+		OutboundShippingAmount:    outboundShippingAmount,
+		OutboundShippingTaxAmount: outboundShippingTaxAmount,
+
+		ReturnShippingAmount:    returnShippingAmount,
+		ReturnShippingTaxAmount: returnShippingTaxAmount,
+
+		RefundAmount: refundAmount,
 
 		Currency: currency,
 
@@ -419,7 +560,8 @@ func New(
 	return r, nil
 }
 
-// NewForOrderItem creates a Refund using the deterministic Refund ID.
+// NewForOrderItem creates a legacy / unopened-return Refund using the
+// deterministic Refund ID.
 func NewForOrderItem(
 	inquiryID string,
 	orderID string,
@@ -434,11 +576,7 @@ func NewForOrderItem(
 	currency string,
 	createdAt time.Time,
 ) (Refund, error) {
-	id, err :=
-		NewID(
-			orderID,
-			orderItemIndex,
-		)
+	id, err := NewID(orderID, orderItemIndex)
 	if err != nil {
 		return Refund{}, err
 	}
@@ -458,6 +596,68 @@ func NewForOrderItem(
 		currency,
 		createdAt,
 	)
+}
+
+// NewOpenedReturnForOrderItem creates an opened-return Refund using the
+// deterministic Refund ID.
+func NewOpenedReturnForOrderItem(
+	inquiryID string,
+	orderID string,
+	paymentID string,
+	orderItemIndex int,
+	companyID string,
+	accountID string,
+	settlementID string,
+	policy OpenedReturnRefundPolicy,
+	merchandiseAmount int,
+	merchandiseTaxAmount int,
+	outboundShippingAmount int,
+	outboundShippingTaxAmount int,
+	returnShippingAmount int,
+	returnShippingTaxAmount int,
+	transferReversalAmount int,
+	currency string,
+	createdAt time.Time,
+) (Refund, error) {
+	id, err := NewID(orderID, orderItemIndex)
+	if err != nil {
+		return Refund{}, err
+	}
+
+	return NewOpenedReturn(
+		id,
+		inquiryID,
+		orderID,
+		paymentID,
+		orderItemIndex,
+		companyID,
+		accountID,
+		settlementID,
+		policy,
+		merchandiseAmount,
+		merchandiseTaxAmount,
+		outboundShippingAmount,
+		outboundShippingTaxAmount,
+		returnShippingAmount,
+		returnShippingTaxAmount,
+		transferReversalAmount,
+		currency,
+		createdAt,
+	)
+}
+
+// TotalBrandBurdenAmount returns the total company burden represented by this
+// Refund.
+//
+// Return shipping is deliberately excluded from Stripe RefundAmount because it
+// was not part of the original purchaser Charge.
+func (r Refund) TotalBrandBurdenAmount() (int, error) {
+	total, err := safeAddRefundAmount(r.RefundAmount, r.ReturnShippingAmount)
+	if err != nil {
+		return 0, err
+	}
+
+	return safeAddRefundAmount(total, r.ReturnShippingTaxAmount)
 }
 
 // ============================================================
@@ -483,16 +683,11 @@ func (r *Refund) ApplyStripeRefund(
 		return ErrInvalidStatusTransition
 	}
 
-	if !isStripeRefundID(
-		stripeRefundID,
-	) {
+	if !isStripeRefundID(stripeRefundID) {
 		return ErrInvalidStripeRefundID
 	}
 
-	if !IsValidStatus(
-		status,
-	) ||
-		status == StatusCreated {
+	if !IsValidStatus(status) || status == StatusCreated {
 		return ErrInvalidStatus
 	}
 
@@ -500,90 +695,56 @@ func (r *Refund) ApplyStripeRefund(
 		return ErrInvalidUpdatedAt
 	}
 
-	if r.StripeRefundID != "" &&
-		r.StripeRefundID != stripeRefundID {
+	if r.StripeRefundID != "" && r.StripeRefundID != stripeRefundID {
 		return ErrInvalidStripeRefundID
 	}
 
-	if !canTransitionRefundStatus(
-		r.Status,
-		status,
-	) {
+	if !canTransitionRefundStatus(r.Status, status) {
 		return ErrInvalidStatusTransition
 	}
 
 	next := *r
-
-	next.StripeRefundID =
-		stripeRefundID
-
-	next.Status =
-		status
+	next.StripeRefundID = stripeRefundID
+	next.Status = status
 
 	switch status {
 	case StatusSucceeded:
-		if refundedAt == nil ||
-			refundedAt.IsZero() {
+		if refundedAt == nil || refundedAt.IsZero() {
 			return ErrInvalidRefundedAt
 		}
 
-		value :=
-			refundedAt.UTC()
+		value := refundedAt.UTC()
+		next.RefundedAt = &value
 
-		next.RefundedAt =
-			&value
-
-	case StatusPending,
-		StatusRequiresAction,
-		StatusFailed,
-		StatusCanceled:
+	case StatusPending, StatusRequiresAction, StatusFailed, StatusCanceled:
 		if refundedAt != nil {
 			return ErrInvalidRefundedAt
 		}
 
-		next.RefundedAt =
-			nil
+		next.RefundedAt = nil
 
 	default:
 		return ErrInvalidStatus
 	}
 
-	next.UpdatedAt =
-		now.UTC()
+	next.UpdatedAt = now.UTC()
 
 	if err := next.Validate(); err != nil {
 		return err
 	}
 
 	*r = next
-
 	return nil
 }
 
 // MarkStripeRefundPending records a pending Stripe Refund.
-func (r *Refund) MarkStripeRefundPending(
-	stripeRefundID string,
-	now time.Time,
-) error {
-	return r.ApplyStripeRefund(
-		stripeRefundID,
-		StatusPending,
-		nil,
-		now,
-	)
+func (r *Refund) MarkStripeRefundPending(stripeRefundID string, now time.Time) error {
+	return r.ApplyStripeRefund(stripeRefundID, StatusPending, nil, now)
 }
 
 // MarkStripeRefundRequiresAction records a Refund requiring additional action.
-func (r *Refund) MarkStripeRefundRequiresAction(
-	stripeRefundID string,
-	now time.Time,
-) error {
-	return r.ApplyStripeRefund(
-		stripeRefundID,
-		StatusRequiresAction,
-		nil,
-		now,
-	)
+func (r *Refund) MarkStripeRefundRequiresAction(stripeRefundID string, now time.Time) error {
+	return r.ApplyStripeRefund(stripeRefundID, StatusRequiresAction, nil, now)
 }
 
 // MarkStripeRefundSucceeded records a successfully completed Stripe Refund.
@@ -596,41 +757,18 @@ func (r *Refund) MarkStripeRefundSucceeded(
 		return ErrInvalidRefundedAt
 	}
 
-	value :=
-		refundedAt.UTC()
-
-	return r.ApplyStripeRefund(
-		stripeRefundID,
-		StatusSucceeded,
-		&value,
-		now,
-	)
+	value := refundedAt.UTC()
+	return r.ApplyStripeRefund(stripeRefundID, StatusSucceeded, &value, now)
 }
 
 // MarkStripeRefundFailed records a failed Stripe Refund object.
-func (r *Refund) MarkStripeRefundFailed(
-	stripeRefundID string,
-	now time.Time,
-) error {
-	return r.ApplyStripeRefund(
-		stripeRefundID,
-		StatusFailed,
-		nil,
-		now,
-	)
+func (r *Refund) MarkStripeRefundFailed(stripeRefundID string, now time.Time) error {
+	return r.ApplyStripeRefund(stripeRefundID, StatusFailed, nil, now)
 }
 
 // MarkStripeRefundCanceled records a canceled Stripe Refund object.
-func (r *Refund) MarkStripeRefundCanceled(
-	stripeRefundID string,
-	now time.Time,
-) error {
-	return r.ApplyStripeRefund(
-		stripeRefundID,
-		StatusCanceled,
-		nil,
-		now,
-	)
+func (r *Refund) MarkStripeRefundCanceled(stripeRefundID string, now time.Time) error {
+	return r.ApplyStripeRefund(stripeRefundID, StatusCanceled, nil, now)
 }
 
 // ============================================================
@@ -645,9 +783,7 @@ func (r *Refund) MarkStripeRefundCanceled(
 // - TransferReversalAmount > 0
 //
 // failed_retryable may transition back to pending before retrying Stripe.
-func (r *Refund) MarkTransferReversalPending(
-	now time.Time,
-) error {
+func (r *Refund) MarkTransferReversalPending(now time.Time) error {
 	if r == nil {
 		return ErrInvalidTransferReversalStatusTransition
 	}
@@ -665,27 +801,21 @@ func (r *Refund) MarkTransferReversalPending(
 	}
 
 	switch r.TransferReversalStatus {
-	case TransferReversalStatusPending,
-		TransferReversalStatusFailedRetryable:
+	case TransferReversalStatusPending, TransferReversalStatusFailedRetryable:
 
 	default:
 		return ErrInvalidTransferReversalStatusTransition
 	}
 
 	next := *r
-
-	next.TransferReversalStatus =
-		TransferReversalStatusPending
-
-	next.UpdatedAt =
-		now.UTC()
+	next.TransferReversalStatus = TransferReversalStatusPending
+	next.UpdatedAt = now.UTC()
 
 	if err := next.Validate(); err != nil {
 		return err
 	}
 
 	*r = next
-
 	return nil
 }
 
@@ -708,9 +838,7 @@ func (r *Refund) MarkTransferReversalSucceeded(
 		return ErrInvalidTransferReversalAmount
 	}
 
-	if !isStripeTransferReversalID(
-		stripeTransferReversalID,
-	) {
+	if !isStripeTransferReversalID(stripeTransferReversalID) {
 		return ErrInvalidStripeTransferReversalID
 	}
 
@@ -723,12 +851,10 @@ func (r *Refund) MarkTransferReversalSucceeded(
 	}
 
 	switch r.TransferReversalStatus {
-	case TransferReversalStatusPending,
-		TransferReversalStatusFailedRetryable:
+	case TransferReversalStatusPending, TransferReversalStatusFailedRetryable:
 
 	case TransferReversalStatusSucceeded:
-		if r.StripeTransferReversalID ==
-			stripeTransferReversalID {
+		if r.StripeTransferReversalID == stripeTransferReversalID {
 			return nil
 		}
 
@@ -739,36 +865,24 @@ func (r *Refund) MarkTransferReversalSucceeded(
 	}
 
 	next := *r
+	reversedAt = reversedAt.UTC()
 
-	reversedAt =
-		reversedAt.UTC()
-
-	next.StripeTransferReversalID =
-		stripeTransferReversalID
-
-	next.TransferReversalStatus =
-		TransferReversalStatusSucceeded
-
-	next.TransferReversedAt =
-		&reversedAt
-
-	next.UpdatedAt =
-		now.UTC()
+	next.StripeTransferReversalID = stripeTransferReversalID
+	next.TransferReversalStatus = TransferReversalStatusSucceeded
+	next.TransferReversedAt = &reversedAt
+	next.UpdatedAt = now.UTC()
 
 	if err := next.Validate(); err != nil {
 		return err
 	}
 
 	*r = next
-
 	return nil
 }
 
 // MarkTransferReversalFailedRetryable records a retryable Stripe Transfer
 // Reversal failure.
-func (r *Refund) MarkTransferReversalFailedRetryable(
-	now time.Time,
-) error {
+func (r *Refund) MarkTransferReversalFailedRetryable(now time.Time) error {
 	return r.markTransferReversalFailed(
 		TransferReversalStatusFailedRetryable,
 		now,
@@ -777,9 +891,7 @@ func (r *Refund) MarkTransferReversalFailedRetryable(
 
 // MarkTransferReversalFailed records a terminal Stripe Transfer Reversal
 // failure.
-func (r *Refund) MarkTransferReversalFailed(
-	now time.Time,
-) error {
+func (r *Refund) MarkTransferReversalFailed(now time.Time) error {
 	return r.markTransferReversalFailed(
 		TransferReversalStatusFailed,
 		now,
@@ -806,41 +918,29 @@ func (r *Refund) markTransferReversalFailed(
 		return ErrInvalidUpdatedAt
 	}
 
-	if status !=
-		TransferReversalStatusFailedRetryable &&
-		status !=
-			TransferReversalStatusFailed {
+	if status != TransferReversalStatusFailedRetryable &&
+		status != TransferReversalStatusFailed {
 		return ErrInvalidTransferReversalStatus
 	}
 
 	switch r.TransferReversalStatus {
-	case TransferReversalStatusPending,
-		TransferReversalStatusFailedRetryable:
+	case TransferReversalStatusPending, TransferReversalStatusFailedRetryable:
 
 	default:
 		return ErrInvalidTransferReversalStatusTransition
 	}
 
 	next := *r
-
-	next.StripeTransferReversalID =
-		""
-
-	next.TransferReversalStatus =
-		status
-
-	next.TransferReversedAt =
-		nil
-
-	next.UpdatedAt =
-		now.UTC()
+	next.StripeTransferReversalID = ""
+	next.TransferReversalStatus = status
+	next.TransferReversedAt = nil
+	next.UpdatedAt = now.UTC()
 
 	if err := next.Validate(); err != nil {
 		return err
 	}
 
 	*r = next
-
 	return nil
 }
 
@@ -848,8 +948,11 @@ func (r *Refund) markTransferReversalFailed(
 // Completion
 // ============================================================
 
-// IsFinanciallyCompleted reports whether all financial operations required for
-// the item return have completed.
+// IsFinanciallyCompleted reports whether all purchaser-refund and seller-side
+// Transfer Reversal operations required for the item return have completed.
+//
+// Return-shipping cost is additional company burden and is not itself represented
+// by the Stripe Refund / Transfer Reversal lifecycle in this aggregate.
 //
 // Order.IsReturnCompleted and Inquiry resolved should only be updated after this
 // returns true.
@@ -859,8 +962,7 @@ func (r Refund) IsFinanciallyCompleted() bool {
 	}
 
 	switch r.TransferReversalStatus {
-	case TransferReversalStatusNotRequired,
-		TransferReversalStatusSucceeded:
+	case TransferReversalStatusNotRequired, TransferReversalStatusSucceeded:
 		return true
 
 	default:
@@ -874,19 +976,11 @@ func (r Refund) IsFinanciallyCompleted() bool {
 
 // Validate verifies all Refund persistence invariants.
 func (r Refund) Validate() error {
-	if r.ID == "" ||
-		strings.Contains(
-			r.ID,
-			"/",
-		) {
+	if r.ID == "" || strings.Contains(r.ID, "/") {
 		return ErrInvalidID
 	}
 
-	if r.InquiryID == "" ||
-		strings.Contains(
-			r.InquiryID,
-			"/",
-		) {
+	if r.InquiryID == "" || strings.Contains(r.InquiryID, "/") {
 		return ErrInvalidInquiryID
 	}
 
@@ -927,23 +1021,53 @@ func (r Refund) Validate() error {
 		return ErrInvalidMerchandiseTaxAmount
 	}
 
+	if r.OutboundShippingAmount < 0 {
+		return ErrInvalidOutboundShippingAmount
+	}
+
+	if r.OutboundShippingTaxAmount < 0 {
+		return ErrInvalidOutboundShippingTaxAmount
+	}
+
+	if r.ReturnShippingAmount < 0 {
+		return ErrInvalidReturnShippingAmount
+	}
+
+	if r.ReturnShippingTaxAmount < 0 {
+		return ErrInvalidReturnShippingTaxAmount
+	}
+
+	if err := r.validatePolicyAmounts(); err != nil {
+		return err
+	}
+
 	if r.RefundAmount <= 0 {
 		return ErrInvalidRefundAmount
 	}
 
-	if r.RefundAmount !=
-		r.MerchandiseAmount+
-			r.MerchandiseTaxAmount {
+	expectedRefundAmount, err := calculateRefundAmount(
+		r.MerchandiseAmount,
+		r.MerchandiseTaxAmount,
+		r.OutboundShippingAmount,
+		r.OutboundShippingTaxAmount,
+	)
+	if err != nil {
+		return err
+	}
+
+	if r.RefundAmount != expectedRefundAmount {
 		return ErrRefundAmountMismatch
+	}
+
+	if _, err := r.TotalBrandBurdenAmount(); err != nil {
+		return err
 	}
 
 	if r.Currency != CurrencyJPY {
 		return ErrInvalidCurrency
 	}
 
-	if !IsValidStatus(
-		r.Status,
-	) {
+	if !IsValidStatus(r.Status) {
 		return ErrInvalidStatus
 	}
 
@@ -952,14 +1076,11 @@ func (r Refund) Validate() error {
 	}
 
 	if r.TransferReversalAmount < 0 ||
-		r.TransferReversalAmount >
-			r.RefundAmount {
+		r.TransferReversalAmount > r.RefundAmount {
 		return ErrInvalidTransferReversalAmount
 	}
 
-	if !IsValidTransferReversalStatus(
-		r.TransferReversalStatus,
-	) {
+	if !IsValidTransferReversalStatus(r.TransferReversalStatus) {
 		return ErrInvalidTransferReversalStatus
 	}
 
@@ -975,24 +1096,57 @@ func (r Refund) Validate() error {
 		return ErrInvalidUpdatedAt
 	}
 
-	if r.UpdatedAt.Before(
-		r.CreatedAt,
-	) {
+	if r.UpdatedAt.Before(r.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
 
-	if r.RefundedAt != nil &&
-		r.RefundedAt.Before(
-			r.CreatedAt,
-		) {
+	if r.RefundedAt != nil && r.RefundedAt.Before(r.CreatedAt) {
 		return ErrInvalidRefundedAt
 	}
 
 	if r.TransferReversedAt != nil &&
-		r.TransferReversedAt.Before(
-			r.CreatedAt,
-		) {
+		r.TransferReversedAt.Before(r.CreatedAt) {
 		return ErrInvalidTransferReversedAt
+	}
+
+	return nil
+}
+
+func (r Refund) validatePolicyAmounts() error {
+	// Empty Policy is intentionally reserved for existing unopened-return
+	// Refund documents and the legacy constructor.
+	if r.Policy == "" {
+		if r.OutboundShippingAmount != 0 ||
+			r.OutboundShippingTaxAmount != 0 ||
+			r.ReturnShippingAmount != 0 ||
+			r.ReturnShippingTaxAmount != 0 {
+			return ErrInvalidOpenedReturnAmounts
+		}
+
+		return nil
+	}
+
+	if err := ValidateOpenedReturnRefundPolicy(r.Policy); err != nil {
+		return err
+	}
+
+	switch r.Policy {
+	case OpenedReturnRefundHalfMerchandise,
+		OpenedReturnRefundMerchandiseOnly:
+		if r.OutboundShippingAmount != 0 ||
+			r.OutboundShippingTaxAmount != 0 ||
+			r.ReturnShippingAmount != 0 ||
+			r.ReturnShippingTaxAmount != 0 {
+			return ErrInvalidOpenedReturnAmounts
+		}
+
+	case OpenedReturnRefundMerchandiseRoundTripShipping:
+		// Zero shipping is valid when the original or return shipment is free.
+		// Exact authoritative values are validated against Order snapshots by
+		// the application / Order domain.
+
+	default:
+		return ErrInvalidOpenedReturnRefundPolicy
 	}
 
 	return nil
@@ -1012,9 +1166,7 @@ func (r Refund) validateStripeRefundState() error {
 		StatusRequiresAction,
 		StatusFailed,
 		StatusCanceled:
-		if !isStripeRefundID(
-			r.StripeRefundID,
-		) {
+		if !isStripeRefundID(r.StripeRefundID) {
 			return ErrInvalidStripeRefundID
 		}
 
@@ -1025,9 +1177,7 @@ func (r Refund) validateStripeRefundState() error {
 		return nil
 
 	case StatusSucceeded:
-		if !isStripeRefundID(
-			r.StripeRefundID,
-		) {
+		if !isStripeRefundID(r.StripeRefundID) {
 			return ErrInvalidStripeRefundID
 		}
 
@@ -1045,8 +1195,7 @@ func (r Refund) validateStripeRefundState() error {
 
 func (r Refund) validateTransferReversalState() error {
 	if r.TransferReversalAmount == 0 {
-		if r.TransferReversalStatus !=
-			TransferReversalStatusNotRequired {
+		if r.TransferReversalStatus != TransferReversalStatusNotRequired {
 			return ErrInvalidTransferReversalStatus
 		}
 
@@ -1058,8 +1207,7 @@ func (r Refund) validateTransferReversalState() error {
 		return nil
 	}
 
-	if r.TransferReversalStatus ==
-		TransferReversalStatusNotRequired {
+	if r.TransferReversalStatus == TransferReversalStatusNotRequired {
 		return ErrInvalidTransferReversalStatus
 	}
 
@@ -1082,9 +1230,7 @@ func (r Refund) validateTransferReversalState() error {
 			return ErrTransferReversalRequiresSucceededRefund
 		}
 
-		if !isStripeTransferReversalID(
-			r.StripeTransferReversalID,
-		) {
+		if !isStripeTransferReversalID(r.StripeTransferReversalID) {
 			return ErrInvalidStripeTransferReversalID
 		}
 
@@ -1098,6 +1244,76 @@ func (r Refund) validateTransferReversalState() error {
 	default:
 		return ErrInvalidTransferReversalStatus
 	}
+}
+
+// ============================================================
+// Refund Amount
+// ============================================================
+
+func calculateRefundAmount(
+	merchandiseAmount int,
+	merchandiseTaxAmount int,
+	outboundShippingAmount int,
+	outboundShippingTaxAmount int,
+) (int, error) {
+	if merchandiseAmount < 0 {
+		return 0, ErrInvalidMerchandiseAmount
+	}
+
+	if merchandiseTaxAmount < 0 {
+		return 0, ErrInvalidMerchandiseTaxAmount
+	}
+
+	if outboundShippingAmount < 0 {
+		return 0, ErrInvalidOutboundShippingAmount
+	}
+
+	if outboundShippingTaxAmount < 0 {
+		return 0, ErrInvalidOutboundShippingTaxAmount
+	}
+
+	total, err := safeAddRefundAmount(
+		merchandiseAmount,
+		merchandiseTaxAmount,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	total, err = safeAddRefundAmount(
+		total,
+		outboundShippingAmount,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	total, err = safeAddRefundAmount(
+		total,
+		outboundShippingTaxAmount,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	if total <= 0 {
+		return 0, ErrInvalidRefundAmount
+	}
+
+	return total, nil
+}
+
+func safeAddRefundAmount(left int, right int) (int, error) {
+	if left < 0 || right < 0 {
+		return 0, ErrInvalidRefundAmount
+	}
+
+	maxInt := int(^uint(0) >> 1)
+	if left > maxInt-right {
+		return 0, ErrInvalidRefundAmount
+	}
+
+	return left + right, nil
 }
 
 // ============================================================
@@ -1164,26 +1380,14 @@ func canTransitionRefundStatus(
 // Stripe ID Validation
 // ============================================================
 
-func isStripeRefundID(
-	value string,
-) bool {
-	return strings.HasPrefix(
-		value,
-		"re_",
-	) &&
-		len(value) >
-			len("re_")
+func isStripeRefundID(value string) bool {
+	return strings.HasPrefix(value, "re_") &&
+		len(value) > len("re_")
 }
 
-func isStripeTransferReversalID(
-	value string,
-) bool {
-	return strings.HasPrefix(
-		value,
-		"trr_",
-	) &&
-		len(value) >
-			len("trr_")
+func isStripeTransferReversalID(value string) bool {
+	return strings.HasPrefix(value, "trr_") &&
+		len(value) > len("trr_")
 }
 
 // ============================================================
@@ -1193,10 +1397,11 @@ func isStripeTransferReversalID(
 // String provides a concise identifier for logs without exposing Stripe IDs.
 func (r Refund) String() string {
 	return fmt.Sprintf(
-		"refund{id=%s orderId=%s itemIndex=%d status=%s reversalStatus=%s}",
+		"refund{id=%s orderId=%s itemIndex=%d policy=%s status=%s reversalStatus=%s}",
 		r.ID,
 		r.OrderID,
 		r.OrderItemIndex,
+		r.Policy,
 		r.Status,
 		r.TransferReversalStatus,
 	)

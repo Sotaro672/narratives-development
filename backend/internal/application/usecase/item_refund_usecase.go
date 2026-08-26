@@ -169,28 +169,31 @@ var (
 // ItemRefundUsecase coordinates one purchaser-side partial Stripe Refund and,
 // when required, one seller-side partial Stripe Transfer Reversal.
 //
-// The authoritative refund amount is:
+// Unopened returns use the existing merchandise-only calculation:
 //
 //	merchandise amount
 //	+ merchandise consumption tax
 //
-// Shipping and shipping consumption tax are intentionally excluded.
+// Opened returns require an explicit OpenedReturnRefundPolicy and may include:
+//
+//	merchandise amount
+//	+ merchandise consumption tax
+//	+ outbound shipping amount
+//	+ outbound shipping consumption tax
+//
+// Return shipping is recorded as additional company burden in refund.Refund but
+// is not included in the purchaser Stripe Refund because it was not part of the
+// original Charge.
 //
 // Seller-side reversal amount is:
 //
-//	refund amount
-//	- platform fee attributable to the returned merchandise/tax
-//
-// Platform fee calculation uses the same PlatformFeeCalculator policy used by
-// Settlement creation, with:
-//
-//	ShippingAmount    = 0
-//	ShippingTaxAmount = 0
+//	purchaser Stripe Refund amount
+//	- platform fee attributable to the refunded components
 //
 // Execution order:
 //
 //  1. Load authoritative Order.
-//  2. Calculate exact item refund amount.
+//  2. Calculate the exact refund amount from the Order snapshot.
 //  3. Load succeeded Payment.
 //  4. Resolve seller Settlement.
 //  5. Load or create deterministic Refund aggregate.
@@ -200,7 +203,7 @@ var (
 //  9. Persist Transfer Reversal result.
 //
 // Order return completion and Inquiry resolution are intentionally NOT handled
-// here. ReturnReceiptUsecase performs them only after:
+// here. Return receipt orchestrators perform them only after:
 //
 //	Refund.IsFinanciallyCompleted() == true
 type ItemRefundUsecase struct {
@@ -243,8 +246,7 @@ func NewItemRefundUsecase(
 func (u *ItemRefundUsecase) SetNowFunc(
 	now func() time.Time,
 ) {
-	if u == nil ||
-		now == nil {
+	if u == nil || now == nil {
 		return
 	}
 
@@ -255,140 +257,178 @@ func (u *ItemRefundUsecase) SetNowFunc(
 // Refund Order Item
 // ============================================================
 
-// RefundOrderItem executes or resumes one item-level refund.
+// RefundOpenedReturnItemInput identifies one opened-return financial refund.
 //
-// The operation is idempotent:
-//
-// - Refund ID is deterministic from orderId + itemIndex.
-// - Stripe Refund uses a deterministic idempotency key.
-// - Stripe Transfer Reversal uses a deterministic idempotency key.
-// - RefundRepository persists every completed financial transition.
-//
-// A persisted pending/requires_action Stripe Refund is returned without
-// completing the seller reversal. A verified Stripe webhook should later
-// update the same Refund aggregate to succeeded, after which retrying this
-// method resumes from the seller reversal step.
+// Only Policy is accepted in addition to identity fields. All monetary amounts
+// are calculated from the authoritative Order snapshot.
+type RefundOpenedReturnItemInput struct {
+	InquiryID string
+	OrderID   string
+	ItemIndex int
+	CompanyID string
+	Policy    refunddom.OpenedReturnRefundPolicy
+}
+
+type itemRefundRequest struct {
+	InquiryID string
+	OrderID   string
+	ItemIndex int
+	CompanyID string
+	Policy    refunddom.OpenedReturnRefundPolicy
+}
+
+type itemRefundAmountSummary struct {
+	Policy refunddom.OpenedReturnRefundPolicy
+
+	MerchandiseAmount    int
+	MerchandiseTaxAmount int
+
+	OutboundShippingAmount    int
+	OutboundShippingTaxAmount int
+
+	ReturnShippingAmount    int
+	ReturnShippingTaxAmount int
+
+	RefundAmount int
+}
+
+// RefundOrderItem executes or resumes the existing unopened-return refund.
 func (u *ItemRefundUsecase) RefundOrderItem(
 	ctx context.Context,
 	in RefundOrderItemInput,
+) (refunddom.Refund, error) {
+	return u.refundOrderItem(
+		ctx,
+		itemRefundRequest{
+			InquiryID: in.InquiryID,
+			OrderID:   in.OrderID,
+			ItemIndex: in.ItemIndex,
+			CompanyID: in.CompanyID,
+		},
+	)
+}
+
+// RefundOpenedReturnOrderItem executes or resumes one opened-return refund.
+//
+// The operation is idempotent. Policy is persisted in the deterministic Refund
+// aggregate and a retry must use the same Policy.
+func (u *ItemRefundUsecase) RefundOpenedReturnOrderItem(
+	ctx context.Context,
+	in RefundOpenedReturnItemInput,
+) (refunddom.Refund, error) {
+	if err := refunddom.ValidateOpenedReturnRefundPolicy(in.Policy); err != nil {
+		return refunddom.Refund{}, err
+	}
+
+	return u.refundOrderItem(
+		ctx,
+		itemRefundRequest{
+			InquiryID: in.InquiryID,
+			OrderID:   in.OrderID,
+			ItemIndex: in.ItemIndex,
+			CompanyID: in.CompanyID,
+			Policy:    in.Policy,
+		},
+	)
+}
+
+func (u *ItemRefundUsecase) refundOrderItem(
+	ctx context.Context,
+	in itemRefundRequest,
 ) (refunddom.Refund, error) {
 	if err := u.validateConfigured(); err != nil {
 		return refunddom.Refund{}, err
 	}
 
 	if in.InquiryID == "" {
-		return refunddom.Refund{},
-			ErrItemRefundInvalidInquiryID
+		return refunddom.Refund{}, ErrItemRefundInvalidInquiryID
 	}
 
-	if in.OrderID == "" ||
-		in.ItemIndex < 0 {
-		return refunddom.Refund{},
-			ErrItemRefundOrderMismatch
+	if in.OrderID == "" || in.ItemIndex < 0 {
+		return refunddom.Refund{}, ErrItemRefundOrderMismatch
 	}
 
 	if in.CompanyID == "" {
-		return refunddom.Refund{},
-			ErrItemRefundInvalidCompanyID
+		return refunddom.Refund{}, ErrItemRefundInvalidCompanyID
 	}
 
-	order, err :=
-		u.orderReader.GetByID(
-			ctx,
-			in.OrderID,
-		)
+	if in.Policy != "" {
+		if err := refunddom.ValidateOpenedReturnRefundPolicy(in.Policy); err != nil {
+			return refunddom.Refund{}, err
+		}
+	}
+
+	order, err := u.orderReader.GetByID(ctx, in.OrderID)
 	if err != nil {
 		return refunddom.Refund{}, err
 	}
 
-	if order.ID != in.OrderID ||
-		in.ItemIndex >= len(order.Items) {
-		return refunddom.Refund{},
-			ErrItemRefundOrderMismatch
+	if order.ID != in.OrderID || in.ItemIndex >= len(order.Items) {
+		return refunddom.Refund{}, ErrItemRefundOrderMismatch
 	}
 
-	targetItem :=
-		order.Items[in.ItemIndex]
+	targetItem := order.Items[in.ItemIndex]
 
-	if targetItem.SellerSnapshot.CompanyID !=
-		in.CompanyID {
-		return refunddom.Refund{},
-			ErrItemRefundCompanyMismatch
+	if targetItem.SellerSnapshot.CompanyID != in.CompanyID {
+		return refunddom.Refund{}, ErrItemRefundCompanyMismatch
 	}
 
 	if targetItem.SellerSnapshot.AccountID == "" {
-		return refunddom.Refund{},
-			ErrItemRefundAccountMissing
+		return refunddom.Refund{}, ErrItemRefundAccountMissing
 	}
 
-	amountSummary, err :=
-		orderdom.CalculateOrderItemRefundAmount(
-			order,
-			in.ItemIndex,
-		)
+	amountSummary, err := calculateItemRefundAmount(
+		order,
+		in.ItemIndex,
+		in.Policy,
+	)
 	if err != nil {
 		return refunddom.Refund{}, err
 	}
 
 	if amountSummary.RefundAmount <= 0 {
-		return refunddom.Refund{},
-			refunddom.ErrInvalidRefundAmount
+		return refunddom.Refund{}, refunddom.ErrInvalidRefundAmount
 	}
 
-	payment, err :=
-		u.paymentReader.GetByPaymentID(
-			ctx,
-			order.ID,
-		)
+	payment, err := u.paymentReader.GetByPaymentID(ctx, order.ID)
 	if err != nil {
 		return refunddom.Refund{}, err
 	}
 
-	if payment == nil ||
-		payment.PaymentID != order.ID {
-		return refunddom.Refund{},
-			paymentdom.ErrNotFound
+	if payment == nil || payment.PaymentID != order.ID {
+		return refunddom.Refund{}, paymentdom.ErrNotFound
 	}
 
-	if payment.Status !=
-		paymentdom.StatusSucceeded {
-		return refunddom.Refund{},
-			ErrItemRefundPaymentNotSucceeded
+	if payment.Status != paymentdom.StatusSucceeded {
+		return refunddom.Refund{}, ErrItemRefundPaymentNotSucceeded
 	}
 
 	if payment.StripeChargeID == "" ||
-		!strings.HasPrefix(
-			payment.StripeChargeID,
-			"ch_",
-		) {
-		return refunddom.Refund{},
-			ErrItemRefundStripeChargeMissing
+		!strings.HasPrefix(payment.StripeChargeID, "ch_") {
+		return refunddom.Refund{}, ErrItemRefundStripeChargeMissing
 	}
 
-	settlement, err :=
-		u.resolveSettlement(
-			ctx,
-			*payment,
-			targetItem,
-		)
+	settlement, err := u.resolveSettlement(
+		ctx,
+		*payment,
+		targetItem,
+	)
 	if err != nil {
 		return refunddom.Refund{}, err
 	}
 
-	refundID, err :=
-		refunddom.NewID(
-			order.ID,
-			in.ItemIndex,
-		)
+	refundID, err := refunddom.NewID(
+		order.ID,
+		in.ItemIndex,
+	)
 	if err != nil {
 		return refunddom.Refund{}, err
 	}
 
-	existingRefund, err :=
-		u.refundRepo.GetByID(
-			ctx,
-			refundID,
-		)
+	existingRefund, err := u.refundRepo.GetByID(
+		ctx,
+		refundID,
+	)
 	if err == nil {
 		if err := validateExistingItemRefund(
 			*existingRefund,
@@ -409,17 +449,12 @@ func (u *ItemRefundUsecase) RefundOrderItem(
 		)
 	}
 
-	if !errors.Is(
-		err,
-		refunddom.ErrNotFound,
-	) {
+	if !errors.Is(err, refunddom.ErrNotFound) {
 		return refunddom.Refund{}, err
 	}
 
-	if payment.RefundStatus !=
-		paymentdom.RefundStatusNone {
-		return refunddom.Refund{},
-			ErrItemRefundPaymentAlreadyRefunding
+	if payment.RefundStatus != paymentdom.RefundStatusNone {
+		return refunddom.Refund{}, ErrItemRefundPaymentAlreadyRefunding
 	}
 
 	if err := u.validatePaymentRefundCapacity(
@@ -432,13 +467,12 @@ func (u *ItemRefundUsecase) RefundOrderItem(
 		return refunddom.Refund{}, err
 	}
 
-	transferReversalAmount, err :=
-		u.resolveTransferReversalAmount(
-			ctx,
-			settlement,
-			targetItem,
-			amountSummary,
-		)
+	transferReversalAmount, err := u.resolveTransferReversalAmount(
+		ctx,
+		settlement,
+		targetItem,
+		amountSummary,
+	)
 	if err != nil {
 		return refunddom.Refund{}, err
 	}
@@ -452,38 +486,38 @@ func (u *ItemRefundUsecase) RefundOrderItem(
 		return refunddom.Refund{}, err
 	}
 
-	now :=
-		u.nowUTC()
-
-	createdRefund, err :=
-		u.refundRepo.Create(
-			ctx,
-			refunddom.CreateRefundInput{
-				RefundID:               refundID,
-				InquiryID:              in.InquiryID,
-				OrderID:                order.ID,
-				PaymentID:              payment.PaymentID,
-				OrderItemIndex:         in.ItemIndex,
-				CompanyID:              targetItem.SellerSnapshot.CompanyID,
-				AccountID:              targetItem.SellerSnapshot.AccountID,
-				SettlementID:           settlement.ID,
-				MerchandiseAmount:      amountSummary.MerchandiseAmount,
-				MerchandiseTaxAmount:   amountSummary.MerchandiseTaxAmount,
-				TransferReversalAmount: transferReversalAmount,
-				Currency:               refunddom.CurrencyJPY,
-				CreatedAt:              now,
-			},
-		)
+	createdRefund, err := u.refundRepo.Create(
+		ctx,
+		refunddom.CreateRefundInput{
+			RefundID:                  refundID,
+			InquiryID:                 in.InquiryID,
+			OrderID:                   order.ID,
+			PaymentID:                 payment.PaymentID,
+			OrderItemIndex:            in.ItemIndex,
+			CompanyID:                 targetItem.SellerSnapshot.CompanyID,
+			AccountID:                 targetItem.SellerSnapshot.AccountID,
+			SettlementID:              settlement.ID,
+			Policy:                    amountSummary.Policy,
+			MerchandiseAmount:         amountSummary.MerchandiseAmount,
+			MerchandiseTaxAmount:      amountSummary.MerchandiseTaxAmount,
+			OutboundShippingAmount:    amountSummary.OutboundShippingAmount,
+			OutboundShippingTaxAmount: amountSummary.OutboundShippingTaxAmount,
+			ReturnShippingAmount:      amountSummary.ReturnShippingAmount,
+			ReturnShippingTaxAmount:   amountSummary.ReturnShippingTaxAmount,
+			TransferReversalAmount:    transferReversalAmount,
+			Currency:                  refunddom.CurrencyJPY,
+			CreatedAt:                 u.nowUTC(),
+		},
+	)
 	if err != nil {
 		if !isRefundCreateConflict(err) {
 			return refunddom.Refund{}, err
 		}
 
-		existing, getErr :=
-			u.refundRepo.GetByID(
-				ctx,
-				refundID,
-			)
+		existing, getErr := u.refundRepo.GetByID(
+			ctx,
+			refundID,
+		)
 		if getErr != nil {
 			return refunddom.Refund{}, err
 		}
@@ -508,8 +542,7 @@ func (u *ItemRefundUsecase) RefundOrderItem(
 	}
 
 	if createdRefund == nil {
-		return refunddom.Refund{},
-			refunddom.ErrConflict
+		return refunddom.Refund{}, refunddom.ErrConflict
 	}
 
 	return u.resumeRefund(
@@ -536,12 +569,11 @@ func (u *ItemRefundUsecase) resumeRefund(
 
 	switch refund.Status {
 	case refunddom.StatusCreated:
-		updated, err :=
-			u.createPurchaserRefund(
-				ctx,
-				payment,
-				refund,
-			)
+		updated, err := u.createPurchaserRefund(
+			ctx,
+			payment,
+			refund,
+		)
 		if err != nil {
 			return updated, err
 		}
@@ -561,16 +593,13 @@ func (u *ItemRefundUsecase) resumeRefund(
 
 	case refunddom.StatusFailed,
 		refunddom.StatusCanceled:
-		return refund,
-			ErrItemRefundStripeRefundTerminal
+		return refund, ErrItemRefundStripeRefundTerminal
 
 	default:
-		return refund,
-			refunddom.ErrInvalidStatus
+		return refund, refunddom.ErrInvalidStatus
 	}
 
-	if refund.Status !=
-		refunddom.StatusSucceeded {
+	if refund.Status != refunddom.StatusSucceeded {
 		return refund, nil
 	}
 
@@ -591,101 +620,76 @@ func (u *ItemRefundUsecase) createPurchaserRefund(
 	payment paymentdom.Payment,
 	refund refunddom.Refund,
 ) (refunddom.Refund, error) {
-	result, err :=
-		u.stripeRefundGateway.CreateRefund(
-			ctx,
-			CreateStripeRefundInput{
-				StripeChargeID: payment.StripeChargeID,
-				Amount:         refund.RefundAmount,
-				IdempotencyKey: itemRefundIdempotencyKey(
-					"refund",
-					refund.ID,
-				),
-
-				PaymentID: payment.PaymentID,
-			},
-		)
+	result, err := u.stripeRefundGateway.CreateRefund(
+		ctx,
+		CreateStripeRefundInput{
+			StripeChargeID: payment.StripeChargeID,
+			Amount:         refund.RefundAmount,
+			IdempotencyKey: itemRefundIdempotencyKey(
+				"refund",
+				refund.ID,
+			),
+			PaymentID: payment.PaymentID,
+		},
+	)
 	if err != nil {
-		return refund,
-			fmt.Errorf(
-				"item refund: create Stripe refund: %w",
-				err,
-			)
+		return refund, fmt.Errorf(
+			"item refund: create Stripe refund: %w",
+			err,
+		)
 	}
 
 	if result == nil {
-		return refund,
-			ErrItemRefundStripeRefundResultEmpty
+		return refund, ErrItemRefundStripeRefundResultEmpty
 	}
 
 	if result.StripeRefundID == "" ||
-		!strings.HasPrefix(
-			result.StripeRefundID,
-			"re_",
-		) {
-		return refund,
-			refunddom.ErrInvalidStripeRefundID
+		!strings.HasPrefix(result.StripeRefundID, "re_") {
+		return refund, refunddom.ErrInvalidStripeRefundID
 	}
 
 	if result.CreatedAt.IsZero() {
-		return refund,
-			refunddom.ErrInvalidRefundedAt
+		return refund, refunddom.ErrInvalidRefundedAt
 	}
 
-	status, refundedAt, err :=
-		mapStripeRefundResult(
-			result,
-		)
+	status, refundedAt, err := mapStripeRefundResult(result)
 	if err != nil {
 		return refund, err
 	}
 
-	if status ==
-		refunddom.StatusSucceeded &&
+	if status == refunddom.StatusSucceeded &&
 		refundedAt != nil &&
-		refundedAt.Before(
-			refund.CreatedAt,
-		) {
-		delta :=
-			refund.CreatedAt.Sub(
-				*refundedAt,
-			)
+		refundedAt.Before(refund.CreatedAt) {
+		delta := refund.CreatedAt.Sub(*refundedAt)
 
 		if delta >= time.Second {
-			return refund,
-				refunddom.ErrInvalidRefundedAt
+			return refund, refunddom.ErrInvalidRefundedAt
 		}
 
-		normalized :=
-			refund.CreatedAt.UTC()
-
-		refundedAt =
-			&normalized
+		normalized := refund.CreatedAt.UTC()
+		refundedAt = &normalized
 	}
 
-	updated, err :=
-		u.refundRepo.UpdateByID(
-			ctx,
-			refund.ID,
-			refunddom.UpdateRefundInput{
-				Operation:      refunddom.UpdateOperationApplyStripeRefund,
-				StripeRefundID: result.StripeRefundID,
-				RefundStatus:   status,
-				RefundedAt:     refundedAt,
-				UpdatedAt:      u.nowUTC(),
-			},
-		)
+	updated, err := u.refundRepo.UpdateByID(
+		ctx,
+		refund.ID,
+		refunddom.UpdateRefundInput{
+			Operation:      refunddom.UpdateOperationApplyStripeRefund,
+			StripeRefundID: result.StripeRefundID,
+			RefundStatus:   status,
+			RefundedAt:     refundedAt,
+			UpdatedAt:      u.nowUTC(),
+		},
+	)
 	if err != nil {
-		return refund,
-			fmt.Errorf(
-				"item refund: persist Stripe refund result: %w",
-				err,
-			)
+		return refund, fmt.Errorf(
+			"item refund: persist Stripe refund result: %w",
+			err,
+		)
 	}
 
 	if updated == nil {
-		return refund,
-			refunddom.ErrConflict
+		return refund, refunddom.ErrConflict
 	}
 
 	switch updated.Status {
@@ -696,12 +700,10 @@ func (u *ItemRefundUsecase) createPurchaserRefund(
 
 	case refunddom.StatusFailed,
 		refunddom.StatusCanceled:
-		return *updated,
-			ErrItemRefundStripeRefundTerminal
+		return *updated, ErrItemRefundStripeRefundTerminal
 
 	default:
-		return *updated,
-			ErrItemRefundStripeRefundStatusInvalid
+		return *updated, ErrItemRefundStripeRefundStatusInvalid
 	}
 }
 
@@ -713,50 +715,32 @@ func mapStripeRefundResult(
 	error,
 ) {
 	if result == nil {
-		return "",
-			nil,
-			ErrItemRefundStripeRefundResultEmpty
+		return "", nil, ErrItemRefundStripeRefundResultEmpty
 	}
 
 	switch result.Status {
 	case paymentdom.RefundStatusPending:
-		return refunddom.StatusPending,
-			nil,
-			nil
+		return refunddom.StatusPending, nil, nil
 
 	case paymentdom.RefundStatusRequiresAction:
-		return refunddom.StatusRequiresAction,
-			nil,
-			nil
+		return refunddom.StatusRequiresAction, nil, nil
 
 	case paymentdom.RefundStatusSucceeded:
 		if result.CreatedAt.IsZero() {
-			return "",
-				nil,
-				refunddom.ErrInvalidRefundedAt
+			return "", nil, refunddom.ErrInvalidRefundedAt
 		}
 
-		refundedAt :=
-			result.CreatedAt.UTC()
-
-		return refunddom.StatusSucceeded,
-			&refundedAt,
-			nil
+		refundedAt := result.CreatedAt.UTC()
+		return refunddom.StatusSucceeded, &refundedAt, nil
 
 	case paymentdom.RefundStatusFailed:
-		return refunddom.StatusFailed,
-			nil,
-			nil
+		return refunddom.StatusFailed, nil, nil
 
 	case paymentdom.RefundStatusCanceled:
-		return refunddom.StatusCanceled,
-			nil,
-			nil
+		return refunddom.StatusCanceled, nil, nil
 
 	default:
-		return "",
-			nil,
-			ErrItemRefundStripeRefundStatusInvalid
+		return "", nil, ErrItemRefundStripeRefundStatusInvalid
 	}
 }
 
@@ -773,26 +757,19 @@ func (u *ItemRefundUsecase) completeTransferReversal(
 	if refund.TransferReversalAmount == 0 {
 		if refund.TransferReversalStatus !=
 			refunddom.TransferReversalStatusNotRequired {
-			return refund,
-				refunddom.ErrInvalidTransferReversalStatus
+			return refund, refunddom.ErrInvalidTransferReversalStatus
 		}
 
 		return refund, nil
 	}
 
-	if settlement.Status !=
-		settlementdom.StatusTransferred {
-		return refund,
-			ErrItemRefundSettlementNotTransferred
+	if settlement.Status != settlementdom.StatusTransferred {
+		return refund, ErrItemRefundSettlementNotTransferred
 	}
 
 	if settlement.StripeTransferID == "" ||
-		!strings.HasPrefix(
-			settlement.StripeTransferID,
-			"tr_",
-		) {
-		return refund,
-			ErrItemRefundSettlementMismatch
+		!strings.HasPrefix(settlement.StripeTransferID, "tr_") {
+		return refund, ErrItemRefundSettlementMismatch
 	}
 
 	switch refund.TransferReversalStatus {
@@ -800,31 +777,26 @@ func (u *ItemRefundUsecase) completeTransferReversal(
 		return refund, nil
 
 	case refunddom.TransferReversalStatusNotRequired:
-		return refund,
-			refunddom.ErrInvalidTransferReversalStatus
+		return refund, refunddom.ErrInvalidTransferReversalStatus
 
 	case refunddom.TransferReversalStatusFailed:
-		return refund,
-			ErrItemRefundTransferReversalTerminal
+		return refund, ErrItemRefundTransferReversalTerminal
 
 	case refunddom.TransferReversalStatusFailedRetryable:
-		updated, err :=
-			u.refundRepo.UpdateByID(
-				ctx,
-				refund.ID,
-				refunddom.UpdateRefundInput{
-					Operation: refunddom.UpdateOperationMarkTransferReversalPending,
-
-					UpdatedAt: u.nowUTC(),
-				},
-			)
+		updated, err := u.refundRepo.UpdateByID(
+			ctx,
+			refund.ID,
+			refunddom.UpdateRefundInput{
+				Operation: refunddom.UpdateOperationMarkTransferReversalPending,
+				UpdatedAt: u.nowUTC(),
+			},
+		)
 		if err != nil {
 			return refund, err
 		}
 
 		if updated == nil {
-			return refund,
-				refunddom.ErrConflict
+			return refund, refunddom.ErrConflict
 		}
 
 		refund = *updated
@@ -833,27 +805,25 @@ func (u *ItemRefundUsecase) completeTransferReversal(
 		// Continue.
 
 	default:
-		return refund,
-			refunddom.ErrInvalidTransferReversalStatus
+		return refund, refunddom.ErrInvalidTransferReversalStatus
 	}
 
-	result, reversalErr :=
-		u.stripeTransferReversalGateway.CreateTransferReversal(
-			ctx,
-			CreateStripeTransferReversalInput{
-				StripeTransferID: settlement.StripeTransferID,
-				Amount:           refund.TransferReversalAmount,
-				IdempotencyKey: itemRefundIdempotencyKey(
-					"transfer-reversal",
-					refund.ID,
-				),
-				OrderID:      refund.OrderID,
-				PaymentID:    payment.PaymentID,
-				SettlementID: settlement.ID,
-				CompanyID:    refund.CompanyID,
-				AccountID:    refund.AccountID,
-			},
-		)
+	result, reversalErr := u.stripeTransferReversalGateway.CreateTransferReversal(
+		ctx,
+		CreateStripeTransferReversalInput{
+			StripeTransferID: settlement.StripeTransferID,
+			Amount:           refund.TransferReversalAmount,
+			IdempotencyKey: itemRefundIdempotencyKey(
+				"transfer-reversal",
+				refund.ID,
+			),
+			OrderID:      refund.OrderID,
+			PaymentID:    payment.PaymentID,
+			SettlementID: settlement.ID,
+			CompanyID:    refund.CompanyID,
+			AccountID:    refund.AccountID,
+		},
+	)
 	if reversalErr != nil {
 		return u.persistTransferReversalFailure(
 			ctx,
@@ -871,10 +841,7 @@ func (u *ItemRefundUsecase) completeTransferReversal(
 	}
 
 	if result.StripeTransferReversalID == "" ||
-		!strings.HasPrefix(
-			result.StripeTransferReversalID,
-			"trr_",
-		) {
+		!strings.HasPrefix(result.StripeTransferReversalID, "trr_") {
 		return u.persistTransferReversalFailure(
 			ctx,
 			refund,
@@ -882,31 +849,27 @@ func (u *ItemRefundUsecase) completeTransferReversal(
 		)
 	}
 
-	now :=
-		u.nowUTC()
+	now := u.nowUTC()
 
-	updated, err :=
-		u.refundRepo.UpdateByID(
-			ctx,
-			refund.ID,
-			refunddom.UpdateRefundInput{
-				Operation:                refunddom.UpdateOperationMarkTransferReversalSucceeded,
-				StripeTransferReversalID: result.StripeTransferReversalID,
-				TransferReversedAt:       &now,
-				UpdatedAt:                now,
-			},
-		)
+	updated, err := u.refundRepo.UpdateByID(
+		ctx,
+		refund.ID,
+		refunddom.UpdateRefundInput{
+			Operation:                refunddom.UpdateOperationMarkTransferReversalSucceeded,
+			StripeTransferReversalID: result.StripeTransferReversalID,
+			TransferReversedAt:       &now,
+			UpdatedAt:                now,
+		},
+	)
 	if err != nil {
-		return refund,
-			fmt.Errorf(
-				"item refund: persist Stripe transfer reversal result: %w",
-				err,
-			)
+		return refund, fmt.Errorf(
+			"item refund: persist Stripe transfer reversal result: %w",
+			err,
+		)
 	}
 
 	if updated == nil {
-		return refund,
-			refunddom.ErrConflict
+		return refund, refunddom.ErrConflict
 	}
 
 	return *updated, nil
@@ -917,44 +880,36 @@ func (u *ItemRefundUsecase) persistTransferReversalFailure(
 	refund refunddom.Refund,
 	reversalErr error,
 ) (refunddom.Refund, error) {
-	operation :=
-		refunddom.UpdateOperationMarkTransferReversalFailed
+	operation := refunddom.UpdateOperationMarkTransferReversalFailed
 
-	if isRetryableItemRefundError(
-		reversalErr,
-	) {
-		operation =
-			refunddom.UpdateOperationMarkTransferReversalFailedRetryable
+	if isRetryableItemRefundError(reversalErr) {
+		operation = refunddom.UpdateOperationMarkTransferReversalFailedRetryable
 	}
 
-	updated, persistErr :=
-		u.refundRepo.UpdateByID(
-			ctx,
-			refund.ID,
-			refunddom.UpdateRefundInput{
-				Operation: operation,
-
-				UpdatedAt: u.nowUTC(),
-			},
-		)
+	updated, persistErr := u.refundRepo.UpdateByID(
+		ctx,
+		refund.ID,
+		refunddom.UpdateRefundInput{
+			Operation: operation,
+			UpdatedAt: u.nowUTC(),
+		},
+	)
 	if persistErr != nil {
-		return refund,
-			fmt.Errorf(
-				"item refund: Stripe transfer reversal failed: %w; persist failure state: %v",
-				reversalErr,
-				persistErr,
-			)
+		return refund, fmt.Errorf(
+			"item refund: Stripe transfer reversal failed: %w; persist failure state: %v",
+			reversalErr,
+			persistErr,
+		)
 	}
 
 	if updated != nil {
 		refund = *updated
 	}
 
-	return refund,
-		fmt.Errorf(
-			"item refund: create Stripe transfer reversal: %w",
-			reversalErr,
-		)
+	return refund, fmt.Errorf(
+		"item refund: create Stripe transfer reversal: %w",
+		reversalErr,
+	)
 }
 
 // ============================================================
@@ -966,11 +921,10 @@ func (u *ItemRefundUsecase) resolveSettlement(
 	payment paymentdom.Payment,
 	targetItem orderdom.OrderItemSnapshot,
 ) (settlementdom.Settlement, error) {
-	settlements, err :=
-		u.settlementRepo.ListByPaymentID(
-			ctx,
-			payment.PaymentID,
-		)
+	settlements, err := u.settlementRepo.ListByPaymentID(
+		ctx,
+		payment.PaymentID,
+	)
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
@@ -978,11 +932,9 @@ func (u *ItemRefundUsecase) resolveSettlement(
 	var matched *settlementdom.Settlement
 
 	for index := range settlements {
-		settlement :=
-			settlements[index]
+		settlement := settlements[index]
 
-		if settlement.AccountID !=
-			targetItem.SellerSnapshot.AccountID {
+		if settlement.AccountID != targetItem.SellerSnapshot.AccountID {
 			continue
 		}
 
@@ -991,11 +943,8 @@ func (u *ItemRefundUsecase) resolveSettlement(
 				ErrItemRefundSettlementDuplicate
 		}
 
-		copy :=
-			settlement
-
-		matched =
-			&copy
+		copy := settlement
+		matched = &copy
 	}
 
 	if matched == nil {
@@ -1003,33 +952,26 @@ func (u *ItemRefundUsecase) resolveSettlement(
 			ErrItemRefundSettlementNotFound
 	}
 
-	if matched.PaymentID !=
-		payment.PaymentID ||
-		matched.OrderID !=
-			payment.PaymentID ||
-		matched.CompanyID !=
-			targetItem.SellerSnapshot.CompanyID ||
-		matched.AccountID !=
-			targetItem.SellerSnapshot.AccountID {
+	if matched.PaymentID != payment.PaymentID ||
+		matched.OrderID != payment.PaymentID ||
+		matched.CompanyID != targetItem.SellerSnapshot.CompanyID ||
+		matched.AccountID != targetItem.SellerSnapshot.AccountID {
 		return settlementdom.Settlement{},
 			ErrItemRefundSettlementMismatch
 	}
 
-	if matched.Currency !=
-		settlementdom.CurrencyJPY {
+	if matched.Currency != settlementdom.CurrencyJPY {
 		return settlementdom.Settlement{},
 			ErrItemRefundSettlementMismatch
 	}
 
-	if matched.StripeChargeID !=
-		payment.StripeChargeID {
+	if matched.StripeChargeID != payment.StripeChargeID {
 		return settlementdom.Settlement{},
 			ErrItemRefundSettlementMismatch
 	}
 
 	if targetItem.SellerSnapshot.StripeAccountID != "" &&
-		matched.StripeAccountID !=
-			targetItem.SellerSnapshot.StripeAccountID {
+		matched.StripeAccountID != targetItem.SellerSnapshot.StripeAccountID {
 		return settlementdom.Settlement{},
 			ErrItemRefundSettlementMismatch
 	}
@@ -1068,21 +1010,63 @@ func (u *ItemRefundUsecase) resolveSettlement(
 // Amount Calculation
 // ============================================================
 
+func calculateItemRefundAmount(
+	order orderdom.Order,
+	itemIndex int,
+	policy refunddom.OpenedReturnRefundPolicy,
+) (itemRefundAmountSummary, error) {
+	if policy == "" {
+		summary, err := orderdom.CalculateOrderItemRefundAmount(
+			order,
+			itemIndex,
+		)
+		if err != nil {
+			return itemRefundAmountSummary{}, err
+		}
+
+		return itemRefundAmountSummary{
+			MerchandiseAmount:    summary.MerchandiseAmount,
+			MerchandiseTaxAmount: summary.MerchandiseTaxAmount,
+			RefundAmount:         summary.RefundAmount,
+		}, nil
+	}
+
+	if err := refunddom.ValidateOpenedReturnRefundPolicy(policy); err != nil {
+		return itemRefundAmountSummary{}, err
+	}
+
+	summary, err := orderdom.CalculateOpenedReturnRefundAmount(
+		order,
+		itemIndex,
+		policy,
+	)
+	if err != nil {
+		return itemRefundAmountSummary{}, err
+	}
+
+	return itemRefundAmountSummary{
+		Policy:                    summary.Policy,
+		MerchandiseAmount:         summary.MerchandiseAmount,
+		MerchandiseTaxAmount:      summary.MerchandiseTaxAmount,
+		OutboundShippingAmount:    summary.OutboundShippingAmount,
+		OutboundShippingTaxAmount: summary.OutboundShippingTaxAmount,
+		ReturnShippingAmount:      summary.ReturnShippingAmount,
+		ReturnShippingTaxAmount:   summary.ReturnShippingTaxAmount,
+		RefundAmount:              summary.StripeRefundAmount,
+	}, nil
+}
+
 func (u *ItemRefundUsecase) resolveTransferReversalAmount(
 	ctx context.Context,
 	settlement settlementdom.Settlement,
 	targetItem orderdom.OrderItemSnapshot,
-	amountSummary orderdom.OrderItemRefundAmountSummary,
+	amountSummary itemRefundAmountSummary,
 ) (int, error) {
 	switch settlement.Status {
 	case settlementdom.StatusTransferred:
 		if settlement.StripeTransferID == "" ||
-			!strings.HasPrefix(
-				settlement.StripeTransferID,
-				"tr_",
-			) {
-			return 0,
-				ErrItemRefundSettlementMismatch
+			!strings.HasPrefix(settlement.StripeTransferID, "tr_") {
+			return 0, ErrItemRefundSettlementMismatch
 		}
 
 		return u.calculateTransferReversalAmount(
@@ -1095,8 +1079,7 @@ func (u *ItemRefundUsecase) resolveTransferReversalAmount(
 		settlementdom.StatusCanceled:
 		if settlement.StripeTransferID != "" ||
 			settlement.TransferredAt != nil {
-			return 0,
-				ErrItemRefundSettlementMismatch
+			return 0, ErrItemRefundSettlementMismatch
 		}
 
 		// Seller Transfer never completed, so purchaser refund does not need
@@ -1109,51 +1092,43 @@ func (u *ItemRefundUsecase) resolveTransferReversalAmount(
 		settlementdom.StatusFailedRetryable:
 		// These states may still result in a future seller Transfer.
 		// Refunding the purchaser now would risk paying the seller afterward.
-		return 0,
-			ErrItemRefundSettlementNotTransferred
+		return 0, ErrItemRefundSettlementNotTransferred
 
 	case settlementdom.StatusReversed:
-		return 0,
-			ErrItemRefundSettlementUnavailable
+		return 0, ErrItemRefundSettlementUnavailable
 
 	default:
-		return 0,
-			ErrItemRefundSettlementUnavailable
+		return 0, ErrItemRefundSettlementUnavailable
 	}
 }
 
 func (u *ItemRefundUsecase) calculateTransferReversalAmount(
 	ctx context.Context,
 	targetItem orderdom.OrderItemSnapshot,
-	amountSummary orderdom.OrderItemRefundAmountSummary,
+	amountSummary itemRefundAmountSummary,
 ) (int, error) {
-	platformFeeAmount, err :=
-		u.platformFeeCalculator.CalculatePlatformFee(
-			ctx,
-			settlementdom.PlatformFeeInput{
-				CompanyID:            targetItem.SellerSnapshot.CompanyID,
-				AccountID:            targetItem.SellerSnapshot.AccountID,
-				MerchandiseAmount:    amountSummary.MerchandiseAmount,
-				MerchandiseTaxAmount: amountSummary.MerchandiseTaxAmount,
-				ShippingAmount:       0,
-				ShippingTaxAmount:    0,
-				GrossAmount:          amountSummary.RefundAmount,
-			},
-		)
+	platformFeeAmount, err := u.platformFeeCalculator.CalculatePlatformFee(
+		ctx,
+		settlementdom.PlatformFeeInput{
+			CompanyID:            targetItem.SellerSnapshot.CompanyID,
+			AccountID:            targetItem.SellerSnapshot.AccountID,
+			MerchandiseAmount:    amountSummary.MerchandiseAmount,
+			MerchandiseTaxAmount: amountSummary.MerchandiseTaxAmount,
+			ShippingAmount:       amountSummary.OutboundShippingAmount,
+			ShippingTaxAmount:    amountSummary.OutboundShippingTaxAmount,
+			GrossAmount:          amountSummary.RefundAmount,
+		},
+	)
 	if err != nil {
 		return 0, err
 	}
 
 	if platformFeeAmount < 0 ||
-		platformFeeAmount >
-			amountSummary.RefundAmount {
-		return 0,
-			ErrItemRefundInvalidPlatformFee
+		platformFeeAmount > amountSummary.RefundAmount {
+		return 0, ErrItemRefundInvalidPlatformFee
 	}
 
-	return amountSummary.RefundAmount -
-			platformFeeAmount,
-		nil
+	return amountSummary.RefundAmount - platformFeeAmount, nil
 }
 
 func (u *ItemRefundUsecase) validatePaymentRefundCapacity(
@@ -1163,46 +1138,37 @@ func (u *ItemRefundUsecase) validatePaymentRefundCapacity(
 	newRefundAmount int,
 	paymentAmount int,
 ) error {
-	if newRefundAmount <= 0 ||
-		paymentAmount <= 0 {
+	if newRefundAmount <= 0 || paymentAmount <= 0 {
 		return refunddom.ErrInvalidRefundAmount
 	}
 
-	refunds, err :=
-		u.refundRepo.ListByPaymentID(
-			ctx,
-			paymentID,
-		)
+	refunds, err := u.refundRepo.ListByPaymentID(
+		ctx,
+		paymentID,
+	)
 	if err != nil {
 		return err
 	}
 
-	total :=
-		0
+	total := 0
 
 	for _, refund := range refunds {
-		if refund.ID ==
-			currentRefundID {
+		if refund.ID == currentRefundID {
 			continue
 		}
 
-		if !reservesPurchaserRefundAmount(
-			refund,
-		) {
+		if !reservesPurchaserRefundAmount(refund) {
 			continue
 		}
 
-		total +=
-			refund.RefundAmount
-
-		if total >
-			paymentAmount {
+		if refund.RefundAmount > paymentAmount-total {
 			return ErrItemRefundPaymentAmountExceeded
 		}
+
+		total += refund.RefundAmount
 	}
 
-	if total >
-		paymentAmount-newRefundAmount {
+	if newRefundAmount > paymentAmount-total {
 		return ErrItemRefundPaymentAmountExceeded
 	}
 
@@ -1219,47 +1185,38 @@ func (u *ItemRefundUsecase) validateTransferReversalCapacity(
 		return refunddom.ErrInvalidTransferReversalAmount
 	}
 
-	if newReversalAmount >
-		settlement.TransferAmount {
+	if newReversalAmount > settlement.TransferAmount {
 		return ErrItemRefundTransferReversalAmountExceeded
 	}
 
-	refunds, err :=
-		u.refundRepo.ListBySettlementID(
-			ctx,
-			settlement.ID,
-		)
+	refunds, err := u.refundRepo.ListBySettlementID(
+		ctx,
+		settlement.ID,
+	)
 	if err != nil {
 		return err
 	}
 
-	total :=
-		0
+	total := 0
 
 	for _, refund := range refunds {
-		if refund.ID ==
-			currentRefundID {
+		if refund.ID == currentRefundID {
 			continue
 		}
 
-		if !reservesTransferReversalAmount(
-			refund,
-		) {
+		if !reservesTransferReversalAmount(refund) {
 			continue
 		}
 
-		total +=
-			refund.TransferReversalAmount
-
-		if total >
-			settlement.TransferAmount {
+		if refund.TransferReversalAmount >
+			settlement.TransferAmount-total {
 			return ErrItemRefundTransferReversalAmountExceeded
 		}
+
+		total += refund.TransferReversalAmount
 	}
 
-	if total >
-		settlement.TransferAmount-
-			newReversalAmount {
+	if newReversalAmount > settlement.TransferAmount-total {
 		return ErrItemRefundTransferReversalAmountExceeded
 	}
 
@@ -1308,66 +1265,51 @@ func reservesTransferReversalAmount(
 
 func validateExistingItemRefund(
 	refund refunddom.Refund,
-	in RefundOrderItemInput,
+	in itemRefundRequest,
 	order orderdom.Order,
 	targetItem orderdom.OrderItemSnapshot,
 	settlement settlementdom.Settlement,
-	amountSummary orderdom.OrderItemRefundAmountSummary,
+	amountSummary itemRefundAmountSummary,
 ) error {
 	if err := refund.Validate(); err != nil {
 		return err
 	}
 
-	if refund.InquiryID !=
-		in.InquiryID {
+	if refund.InquiryID != in.InquiryID ||
+		refund.OrderID != order.ID ||
+		refund.PaymentID != order.ID ||
+		refund.OrderItemIndex != in.ItemIndex {
 		return ErrItemRefundExistingRefundMismatch
 	}
 
-	if refund.OrderID !=
-		order.ID ||
-		refund.PaymentID !=
-			order.ID ||
-		refund.OrderItemIndex !=
-			in.ItemIndex {
+	if refund.CompanyID != targetItem.SellerSnapshot.CompanyID ||
+		refund.AccountID != targetItem.SellerSnapshot.AccountID ||
+		refund.SettlementID != settlement.ID {
 		return ErrItemRefundExistingRefundMismatch
 	}
 
-	if refund.CompanyID !=
-		targetItem.SellerSnapshot.CompanyID ||
-		refund.AccountID !=
-			targetItem.SellerSnapshot.AccountID {
+	if refund.Policy != amountSummary.Policy ||
+		refund.MerchandiseAmount != amountSummary.MerchandiseAmount ||
+		refund.MerchandiseTaxAmount != amountSummary.MerchandiseTaxAmount ||
+		refund.OutboundShippingAmount != amountSummary.OutboundShippingAmount ||
+		refund.OutboundShippingTaxAmount != amountSummary.OutboundShippingTaxAmount ||
+		refund.ReturnShippingAmount != amountSummary.ReturnShippingAmount ||
+		refund.ReturnShippingTaxAmount != amountSummary.ReturnShippingTaxAmount ||
+		refund.RefundAmount != amountSummary.RefundAmount {
 		return ErrItemRefundExistingRefundMismatch
 	}
 
-	if refund.SettlementID !=
-		settlement.ID {
-		return ErrItemRefundExistingRefundMismatch
-	}
-
-	if refund.MerchandiseAmount !=
-		amountSummary.MerchandiseAmount ||
-		refund.MerchandiseTaxAmount !=
-			amountSummary.MerchandiseTaxAmount ||
-		refund.RefundAmount !=
-			amountSummary.RefundAmount {
-		return ErrItemRefundExistingRefundMismatch
-	}
-
-	if refund.Currency !=
-		refunddom.CurrencyJPY {
+	if refund.Currency != refunddom.CurrencyJPY {
 		return ErrItemRefundExistingRefundMismatch
 	}
 
 	if refund.TransferReversalAmount < 0 ||
-		refund.TransferReversalAmount >
-			settlement.TransferAmount {
+		refund.TransferReversalAmount > settlement.TransferAmount {
 		return ErrItemRefundExistingRefundMismatch
 	}
 
-	if (settlement.Status ==
-		settlementdom.StatusFailed ||
-		settlement.Status ==
-			settlementdom.StatusCanceled) &&
+	if (settlement.Status == settlementdom.StatusFailed ||
+		settlement.Status == settlementdom.StatusCanceled) &&
 		refund.TransferReversalAmount != 0 {
 		return ErrItemRefundExistingRefundMismatch
 	}
@@ -1412,10 +1354,7 @@ func isRetryableItemRefundError(
 
 	var retryableError itemRefundRetryableError
 
-	if errors.As(
-		err,
-		&retryableError,
-	) {
+	if errors.As(err, &retryableError) {
 		return retryableError.Retryable()
 	}
 
@@ -1443,25 +1382,15 @@ func itemRefundIdempotencyKey(
 	operation string,
 	refundID string,
 ) string {
-	value :=
-		operation +
-			"|" +
-			refundID
-
-	hash :=
-		sha256.Sum256(
-			[]byte(value),
-		)
+	value := operation + "|" + refundID
+	hash := sha256.Sum256([]byte(value))
 
 	return "amol_item_refund_" +
 		operation +
 		"_" +
-		hex.EncodeToString(
-			hash[:],
-		)
+		hex.EncodeToString(hash[:])
 }
 
 func (u *ItemRefundUsecase) nowUTC() time.Time {
-	return u.now().
-		UTC()
+	return u.now().UTC()
 }

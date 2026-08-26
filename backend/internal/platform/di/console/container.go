@@ -43,6 +43,7 @@ type Container struct {
 	CompanyQuery                       *query.CompanyQuery
 	InquiryUC                          *uc.InquiryUsecase
 	ReturnReceiptUC                    *uc.ReturnReceiptUsecase
+	OpenedReturnReceiptUC              *uc.OpenedReturnReceiptUsecase
 	InventoryUC                        *uc.InventoryUsecase
 	ListUC                             *uc.ListUsecase
 	ListSaveOperationUC                *uc.ListSaveOperationUsecase
@@ -292,6 +293,7 @@ func NewContainer(
 		CompanyQuery:                       q.companyQuery,
 		InquiryUC:                          u.inquiryUC,
 		ReturnReceiptUC:                    u.returnReceiptUC,
+		OpenedReturnReceiptUC:              u.openedReturnReceiptUC,
 		InventoryUC:                        u.inventoryUC,
 		ListUC:                             u.listUC,
 		ListSaveOperationUC:                u.listSaveOperationUC,

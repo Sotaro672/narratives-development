@@ -15,6 +15,7 @@ import InquiryReplyListCard from "../features/inquiry/presentation/components/in
 import ReplyModal from "../features/inquiry/presentation/components/replyModal";
 import { useInquiryDetailPage } from "../features/inquiry/presentation/hooks/useInquiryDetailPage";
 import { useInquiryReply } from "../features/inquiry/presentation/hooks/useInquiryReply";
+import { useOpenedReturnRefund } from "../features/inquiry/presentation/hooks/useOpenedReturnRefund";
 import {
   textOrDash,
 } from "../features/inquiry/presentation/utils/inquiryDetailView";
@@ -62,6 +63,20 @@ export default function InquiryDetail() {
     onClearPageError: clearErrorMessage,
   });
 
+  const {
+    selectedPolicy,
+    submitting: openedReturnSubmitting,
+    errorMessage: openedReturnErrorMessage,
+    policyLocked: openedReturnPolicyLocked,
+    canSubmit: openedReturnCanSubmit,
+    onChangePolicy: onChangeOpenedReturnPolicy,
+    onSubmit: onSubmitOpenedReturnRefund,
+  } = useOpenedReturnRefund({
+    inquiryId,
+    onReloadDetail: reloadDetail,
+    onClearPageError: clearErrorMessage,
+  });
+
   const inquiry = detail?.inquiry ?? null;
   const orders = detail?.orders ?? [];
 
@@ -78,6 +93,13 @@ export default function InquiryDetail() {
 
   const isOpenedReturn =
     inquiry?.inquiryType === "return_opened";
+
+  const isResolved =
+    inquiry?.status === "resolved";
+
+  const isOpenOrInProgress =
+    inquiry?.status === "open" ||
+    inquiry?.status === "in_progress";
 
   const inquiryType = inquiry?.inquiryType
     ? getInquiryTypeLabel(inquiry.inquiryType)
@@ -97,30 +119,53 @@ export default function InquiryDetail() {
     </div>
   );
 
+  const statusTab = (
+    <span
+      className={[
+        "inq-status-tab",
+        inquiry?.status
+          ? `inq-status-tab--${inquiry.status}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {status}
+    </span>
+  );
+
   const statusButtonVariant =
     getInquiryStatusButtonVariant(inquiry?.status);
 
-  const statusButtonLabel =
-    isUnopenedReturn &&
+  const hideStatusButton =
+    isClosedStatus(inquiry?.status) ||
     (
-      inquiry?.status === "open" ||
-      inquiry?.status === "in_progress"
-    )
-      ? "返品受領"
-      : status;
+      isOpenedReturn &&
+      isOpenOrInProgress
+    );
+
+  const statusButtonLabel =
+    hideStatusButton
+      ? undefined
+      : isResolved
+        ? "再対応する"
+        : isUnopenedReturn &&
+            isOpenOrInProgress
+          ? "返品受領"
+          : isOpenOrInProgress
+            ? "対応済みにする"
+            : undefined;
 
   const statusButtonBusyLabel =
-    isUnopenedReturn
+    isUnopenedReturn &&
+    isOpenOrInProgress
       ? "返品処理中"
       : "更新中";
 
-  const statusButtonDisabled =
-    !detail ||
-    isClosedStatus(inquiry?.status);
-
-  const hideStatusButton =
+  const showOpenedReturnRefund =
     isOpenedReturn &&
-    inquiry?.status === "open";
+    isOpenOrInProgress &&
+    !isClosedStatus(inquiry?.status);
 
   if (loading) {
     return (
@@ -237,28 +282,36 @@ export default function InquiryDetail() {
       <PageStyle
         layout="grid-2"
         title={pageTitle}
+        badge={statusTab}
         onBack={onBack}
         onSave={undefined}
-        statusButtonLabel={
-          hideStatusButton
-            ? undefined
-            : statusButtonLabel
-        }
+        statusButtonLabel={statusButtonLabel}
         statusButtonBusyLabel={statusButtonBusyLabel}
         statusButtonVariant={statusButtonVariant}
         onStatusButtonClick={
-          hideStatusButton
-            ? undefined
-            : onToggleStatus
+          statusButtonLabel
+            ? onToggleStatus
+            : undefined
         }
         isStatusButtonLoading={statusUpdating}
-        statusButtonDisabled={statusButtonDisabled}
+        statusButtonDisabled={
+          !detail ||
+          isClosedStatus(inquiry?.status)
+        }
       >
         <div>
           <InquiryContentCard
             content={inquiry?.content}
             images={inquiry?.images}
             errorMessage={errorMessage}
+            showOpenedReturnRefund={showOpenedReturnRefund}
+            openedReturnPolicy={selectedPolicy}
+            openedReturnSubmitting={openedReturnSubmitting}
+            openedReturnPolicyLocked={openedReturnPolicyLocked}
+            openedReturnCanSubmit={openedReturnCanSubmit}
+            openedReturnErrorMessage={openedReturnErrorMessage}
+            onChangeOpenedReturnPolicy={onChangeOpenedReturnPolicy}
+            onSubmitOpenedReturnRefund={onSubmitOpenedReturnRefund}
           />
 
           <InquiryReplyListCard

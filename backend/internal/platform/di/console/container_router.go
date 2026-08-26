@@ -108,11 +108,13 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 
 	if c.InquiryUC != nil &&
 		c.ReturnReceiptUC != nil &&
+		c.OpenedReturnReceiptUC != nil &&
 		c.InquiryManagementQuery != nil &&
 		c.InquiryDetailQuery != nil {
 		inquiriesH = consoleHandler.NewInquiryHandler(
 			c.InquiryUC,
 			c.ReturnReceiptUC,
+			c.OpenedReturnReceiptUC,
 			c.InquiryManagementQuery,
 			c.InquiryDetailQuery,
 		)

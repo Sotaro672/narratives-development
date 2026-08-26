@@ -25,13 +25,35 @@ import (
 //	StripeRefundID = ""
 //	RefundedAt = nil
 //
-// TransferReversalStatus is derived by Refund.New:
+// Policy:
+//
+//	Policy == ""
+//
+// represents the legacy / unopened-return flow.
+//
+// For an opened return, Policy must be one of the valid
+// OpenedReturnRefundPolicy values.
+//
+// Monetary values must be calculated by the application / Order domain from
+// authoritative persisted snapshots. The frontend must never supply refund
+// amounts directly.
+//
+// RefundAmount itself is not accepted here because Refund derives it from:
+//
+//	MerchandiseAmount
+//	+ MerchandiseTaxAmount
+//	+ OutboundShippingAmount
+//	+ OutboundShippingTaxAmount
+//
+// ReturnShippingAmount and ReturnShippingTaxAmount are additional company
+// burden and are intentionally excluded from the purchaser Stripe Refund.
+//
+// TransferReversalStatus is derived by Refund constructors:
 //
 // - transferReversalAmount == 0 -> not_required
 // - transferReversalAmount > 0  -> pending
 //
-// Stripe-generated IDs are therefore intentionally not accepted during
-// creation.
+// Stripe-generated IDs are intentionally not accepted during creation.
 type CreateRefundInput struct {
 	RefundID string
 
@@ -46,8 +68,16 @@ type CreateRefundInput struct {
 
 	SettlementID string
 
+	Policy OpenedReturnRefundPolicy
+
 	MerchandiseAmount    int
 	MerchandiseTaxAmount int
+
+	OutboundShippingAmount    int
+	OutboundShippingTaxAmount int
+
+	ReturnShippingAmount    int
+	ReturnShippingTaxAmount int
 
 	TransferReversalAmount int
 
@@ -98,9 +128,7 @@ func IsValidUpdateOperation(
 		return false
 	}
 
-	_, ok :=
-		AllowedUpdateOperations[operation]
-
+	_, ok := AllowedUpdateOperations[operation]
 	return ok
 }
 
@@ -177,6 +205,17 @@ type UpdateRefundInput struct {
 //
 // Refund owns one item-level partial purchaser refund and the seller-side
 // partial Transfer Reversal attributable to that same returned Order item.
+//
+// For opened returns, Refund additionally records:
+//
+// - selected refund Policy
+// - outbound shipping refunded against the original Charge
+// - outbound shipping consumption tax
+// - return shipping borne by the seller
+// - return shipping consumption tax
+//
+// Return shipping is additional company burden and is not necessarily part of
+// the purchaser's original Stripe Charge.
 //
 // The application layer coordinates:
 //
@@ -262,8 +301,13 @@ type RepositoryPort interface {
 	// - reject an existing RefundID instead of overwriting it
 	// - reject a duplicate InquiryID
 	// - reject a duplicate OrderID + OrderItemIndex
-	// - construct the entity through Refund.New or equivalent validated logic
+	// - use Refund.New when Policy == ""
+	// - use Refund.NewOpenedReturn when Policy is set
 	// - persist the complete validated Refund
+	//
+	// Financial values must never be accepted directly from an untrusted
+	// frontend request. The application layer must calculate them from the
+	// authoritative Order and Settlement state before calling Create.
 	//
 	// StripeRefundID and StripeTransferReversalID are not accepted during
 	// creation because neither Stripe operation has occurred yet.

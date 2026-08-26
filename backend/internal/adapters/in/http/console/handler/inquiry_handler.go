@@ -18,24 +18,27 @@ import (
 
 // InquiryHandler は /inquiries 関連のエンドポイントを担当します。
 type InquiryHandler struct {
-	uc              *usecase.InquiryUsecase
-	returnReceiptUC *usecase.ReturnReceiptUsecase
-	managementQuery *consolequery.InquiryManagementQuery
-	detailQuery     *consolequery.InquiryDetailQuery
+	uc                    *usecase.InquiryUsecase
+	returnReceiptUC       *usecase.ReturnReceiptUsecase
+	openedReturnReceiptUC *usecase.OpenedReturnReceiptUsecase
+	managementQuery       *consolequery.InquiryManagementQuery
+	detailQuery           *consolequery.InquiryDetailQuery
 }
 
 // NewInquiryHandler はHTTPハンドラを初期化します。
 func NewInquiryHandler(
 	uc *usecase.InquiryUsecase,
 	returnReceiptUC *usecase.ReturnReceiptUsecase,
+	openedReturnReceiptUC *usecase.OpenedReturnReceiptUsecase,
 	managementQuery *consolequery.InquiryManagementQuery,
 	detailQuery *consolequery.InquiryDetailQuery,
 ) http.Handler {
 	return &InquiryHandler{
-		uc:              uc,
-		returnReceiptUC: returnReceiptUC,
-		managementQuery: managementQuery,
-		detailQuery:     detailQuery,
+		uc:                    uc,
+		returnReceiptUC:       returnReceiptUC,
+		openedReturnReceiptUC: openedReturnReceiptUC,
+		managementQuery:       managementQuery,
+		detailQuery:           detailQuery,
 	}
 }
 
@@ -115,6 +118,14 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			h.receiveReturn(w, r, id)
+			return
+
+		case "receive-opened-return":
+			if r.Method != http.MethodPost {
+				methodNotAllowed(w)
+				return
+			}
+			h.receiveOpenedReturn(w, r, id)
 			return
 
 		case "resolve":
@@ -471,6 +482,128 @@ func (h *InquiryHandler) receiveReturn(w http.ResponseWriter, r *http.Request, i
 	_ = json.NewEncoder(w).Encode(response)
 }
 
+// POST /inquiries/{id}/receive-opened-return
+//
+// 開封後返品の商品受領を確定し、選択された refund policy に従って返金します。
+//
+// Body:
+//
+//	{
+//	  "policy": "half_merchandise"
+//	}
+//
+// policy は次の3択のみです:
+//
+// - half_merchandise
+// - merchandise_only
+// - merchandise_round_trip_shipping
+//
+// request body から返金額・送料・orderId・orderItemIndex は受け取りません。
+// Inquiry.OrderID + Inquiry.OrderItemIndex と Order snapshot を正とします。
+//
+// companyId / memberId は request body から受け取らず、
+// 認証 context の値を正とします。
+func (h *InquiryHandler) receiveOpenedReturn(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	companyID, ok := currentCompanyID(w, r)
+	if !ok {
+		return
+	}
+
+	memberID, ok := currentMemberID(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Policy refunddom.OpenedReturnRefundPolicy `json:"policy"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	if err := refunddom.ValidateOpenedReturnRefundPolicy(req.Policy); err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	// OpenedReturnReceiptUsecase 自体でも company boundary を再検証するが、
+	// 先に Console detail query を通して他 company の Inquiry を
+	// financial usecase へ渡さない。
+	if _, err := h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID); err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	if h.openedReturnReceiptUC == nil {
+		writeInquiryErr(w, usecase.ErrOpenedReturnReceiptUsecaseNotConfigured)
+		return
+	}
+
+	result, err := h.openedReturnReceiptUC.ReceiveOpenedReturn(
+		ctx,
+		usecase.ReceiveOpenedReturnInput{
+			InquiryID: id,
+			CompanyID: companyID,
+			MemberID:  memberID,
+			Policy:    req.Policy,
+		},
+	)
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	totalBrandBurdenAmount, err := result.Refund.TotalBrandBurdenAmount()
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	response := struct {
+		Inquiry                 inquirydom.Inquiry `json:"inquiry"`
+		RefundID                string             `json:"refundId"`
+		Policy                  string             `json:"policy"`
+		RefundAmount            int                `json:"refundAmount"`
+		ReturnShippingAmount    int                `json:"returnShippingAmount"`
+		ReturnShippingTaxAmount int                `json:"returnShippingTaxAmount"`
+		TotalBrandBurdenAmount  int                `json:"totalBrandBurdenAmount"`
+		RefundStatus            string             `json:"refundStatus"`
+		TransferReversalStatus  string             `json:"transferReversalStatus"`
+		FinanciallyCompleted    bool               `json:"financiallyCompleted"`
+		OrderCompleted          bool               `json:"orderCompleted"`
+		InquiryResolved         bool               `json:"inquiryResolved"`
+		AlreadyCompleted        bool               `json:"alreadyCompleted"`
+	}{
+		Inquiry:                 result.Inquiry,
+		RefundID:                result.Refund.ID,
+		Policy:                  string(result.Refund.Policy),
+		RefundAmount:            result.Refund.RefundAmount,
+		ReturnShippingAmount:    result.Refund.ReturnShippingAmount,
+		ReturnShippingTaxAmount: result.Refund.ReturnShippingTaxAmount,
+		TotalBrandBurdenAmount:  totalBrandBurdenAmount,
+		RefundStatus:            string(result.Refund.Status),
+		TransferReversalStatus:  string(result.Refund.TransferReversalStatus),
+		FinanciallyCompleted:    result.FinanciallyCompleted,
+		OrderCompleted:          result.OrderCompleted,
+		InquiryResolved:         result.InquiryResolved,
+		AlreadyCompleted:        result.AlreadyCompleted,
+	}
+
+	if !result.FinanciallyCompleted {
+		w.WriteHeader(http.StatusAccepted)
+	}
+
+	_ = json.NewEncoder(w).Encode(response)
+}
+
 // POST /inquiries/{id}/resolve
 //
 // memberId は request body から受け取らず、認証 context の memberId を正とします。
@@ -493,13 +626,19 @@ func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id stri
 		return
 	}
 
-	// return_unopened は返品受領に伴う返金処理を必須とするため、
-	// generic resolve では対応済みにしない。
+	// 返品 Inquiry は返金処理を必須とするため generic resolve では
+	// 対応済みにしない。
 	//
-	// POST /inquiries/{id}/receive-return を通し、
-	// Refund -> Transfer Reversal -> Order return completion の完了後に
-	// ReturnReceiptUsecase から Inquiry を resolved へ遷移させる。
-	if detail.Inquiry.InquiryType == inquirydom.InquiryTypeReturnUnopened {
+	// return_unopened:
+	// POST /inquiries/{id}/receive-return
+	//
+	// return_opened:
+	// POST /inquiries/{id}/receive-opened-return
+	//
+	// どちらも Refund -> Transfer Reversal -> Order return completion の
+	// 完了後に専用 Usecase から Inquiry を resolved へ遷移させる。
+	if detail.Inquiry.InquiryType == inquirydom.InquiryTypeReturnUnopened ||
+		detail.Inquiry.InquiryType == inquirydom.InquiryTypeReturnOpened {
 		writeInquiryErr(w, inquirydom.ErrInquiryInvalidWorkflow)
 		return
 	}
@@ -795,6 +934,8 @@ func writeInquiryErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, inquirydom.ErrInvalidID),
 		errors.Is(err, usecase.ErrReturnReceiptInvalidInquiryType),
+		errors.Is(err, usecase.ErrOpenedReturnReceiptInvalidInquiryType),
+		errors.Is(err, refunddom.ErrInvalidOpenedReturnRefundPolicy),
 		errors.Is(err, inquirydom.ErrInvalidProductID),
 		errors.Is(err, inquirydom.ErrInvalidAvatarID),
 		errors.Is(err, inquirydom.ErrInvalidSubject),
@@ -846,13 +987,16 @@ func writeInquiryErr(w http.ResponseWriter, err error) {
 
 	case errors.Is(err, inquirydom.ErrInquiryForbidden),
 		errors.Is(err, usecase.ErrReturnReceiptInvalidCompanyID),
-		errors.Is(err, usecase.ErrReturnReceiptInvalidMemberID):
+		errors.Is(err, usecase.ErrReturnReceiptInvalidMemberID),
+		errors.Is(err, usecase.ErrOpenedReturnReceiptInvalidCompanyID),
+		errors.Is(err, usecase.ErrOpenedReturnReceiptInvalidMemberID):
 		code = http.StatusForbidden
 
 	case errors.Is(err, inquirydom.ErrNotFound),
 		errors.Is(err, orderdom.ErrNotFound),
 		errors.Is(err, refunddom.ErrNotFound),
-		errors.Is(err, usecase.ErrReturnReceiptCompanyMismatch):
+		errors.Is(err, usecase.ErrReturnReceiptCompanyMismatch),
+		errors.Is(err, usecase.ErrOpenedReturnReceiptCompanyMismatch):
 		code = http.StatusNotFound
 
 	case errors.Is(err, inquirydom.ErrConflict),
@@ -866,7 +1010,16 @@ func writeInquiryErr(w http.ResponseWriter, err error) {
 		errors.Is(err, usecase.ErrReturnReceiptReturnNotUnopened),
 		errors.Is(err, usecase.ErrReturnReceiptRefundMismatch),
 		errors.Is(err, usecase.ErrReturnReceiptOrderCompletionMismatch),
-		errors.Is(err, usecase.ErrReturnReceiptInquiryResolutionMismatch):
+		errors.Is(err, usecase.ErrReturnReceiptInquiryResolutionMismatch),
+		errors.Is(err, usecase.ErrOpenedReturnReceiptInquiryNotOpen),
+		errors.Is(err, usecase.ErrOpenedReturnReceiptInquiryClosed),
+		errors.Is(err, usecase.ErrOpenedReturnReceiptOrderMismatch),
+		errors.Is(err, usecase.ErrOpenedReturnReceiptOrderNotPaid),
+		errors.Is(err, usecase.ErrOpenedReturnReceiptReturnNotRequested),
+		errors.Is(err, usecase.ErrOpenedReturnReceiptReturnNotOpened),
+		errors.Is(err, usecase.ErrOpenedReturnReceiptRefundMismatch),
+		errors.Is(err, usecase.ErrOpenedReturnReceiptOrderCompletionMismatch),
+		errors.Is(err, usecase.ErrOpenedReturnReceiptInquiryResolutionMismatch):
 		code = http.StatusConflict
 	}
 

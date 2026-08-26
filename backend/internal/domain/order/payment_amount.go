@@ -4,6 +4,8 @@ package order
 import (
 	"errors"
 	"sort"
+
+	refunddom "narratives/internal/domain/refund"
 )
 
 // -------------------------------------------------------
@@ -304,6 +306,508 @@ func CalculateOrderItemRefundAmount(
 		MerchandiseTaxAmount: merchandiseTaxAmount,
 		RefundAmount:         refundAmount,
 	}, nil
+}
+
+// -------------------------------------------------------
+// Opened Return Refund Amount
+// -------------------------------------------------------
+
+// OpenedReturnRefundAmountSummary represents the authoritative financial
+// amounts for one opened-return policy.
+//
+// StripeRefundAmount is the amount that can be refunded against the original
+// purchaser Charge.
+//
+// TotalBrandBurdenAmount additionally includes return-shipping cost that is not
+// part of the original Charge.
+//
+// Current return-shipping policy:
+//   - no separate return-shipping quote snapshot exists in Order yet
+//   - return shipping is therefore modeled using the same tax-exclusive amount
+//     as the target item's original outbound shipping
+//   - return shipping consumption tax is calculated at the standard 10% rate
+//
+// Once an authoritative return-shipping quote is persisted, the application
+// layer should replace this modeled amount with that snapshot.
+type OpenedReturnRefundAmountSummary struct {
+	Policy refunddom.OpenedReturnRefundPolicy
+
+	MerchandiseAmount    int
+	MerchandiseTaxAmount int
+
+	OutboundShippingAmount    int
+	OutboundShippingTaxAmount int
+
+	ReturnShippingAmount    int
+	ReturnShippingTaxAmount int
+
+	StripeRefundAmount     int
+	TotalBrandBurdenAmount int
+}
+
+// CalculateOpenedReturnRefundAmount calculates one opened-return refund option
+// from the persisted Order snapshot.
+//
+// The frontend may select only policy. Monetary amounts are never accepted from
+// the frontend.
+//
+// Policies:
+//
+// half_merchandise:
+//   - 50% of merchandise + proportional merchandise tax
+//   - shipping is excluded
+//
+// merchandise_only:
+//   - full merchandise + merchandise tax
+//   - shipping is excluded
+//
+// merchandise_round_trip_shipping:
+//   - Stripe Refund:
+//     merchandise + merchandise tax + outbound shipping + outbound shipping tax
+//   - Additional company burden:
+//     modeled return shipping + return shipping tax
+//
+// Half-refund rounding:
+// JPY cannot represent fractional yen, so the total purchaser refund is rounded
+// up to the nearest yen. Merchandise is also halved with the same rule and the
+// remaining amount is treated as merchandise tax.
+func CalculateOpenedReturnRefundAmount(
+	order Order,
+	orderItemIndex int,
+	policy refunddom.OpenedReturnRefundPolicy,
+) (OpenedReturnRefundAmountSummary, error) {
+	if err := refunddom.ValidateOpenedReturnRefundPolicy(policy); err != nil {
+		return OpenedReturnRefundAmountSummary{}, err
+	}
+
+	fullMerchandise, err := CalculateOrderItemRefundAmount(
+		order,
+		orderItemIndex,
+	)
+	if err != nil {
+		return OpenedReturnRefundAmountSummary{}, err
+	}
+
+	switch policy {
+	case refunddom.OpenedReturnRefundHalfMerchandise:
+		stripeRefundAmount := halfPaymentAmountRoundedUp(
+			fullMerchandise.RefundAmount,
+		)
+
+		merchandiseAmount := halfPaymentAmountRoundedUp(
+			fullMerchandise.MerchandiseAmount,
+		)
+
+		merchandiseTaxAmount :=
+			stripeRefundAmount - merchandiseAmount
+
+		if stripeRefundAmount <= 0 ||
+			merchandiseAmount < 0 ||
+			merchandiseTaxAmount < 0 ||
+			merchandiseAmount > fullMerchandise.MerchandiseAmount ||
+			merchandiseTaxAmount > fullMerchandise.MerchandiseTaxAmount {
+			return OpenedReturnRefundAmountSummary{},
+				ErrInvalidOrderItemRefund
+		}
+
+		return OpenedReturnRefundAmountSummary{
+			Policy: policy,
+
+			MerchandiseAmount:    merchandiseAmount,
+			MerchandiseTaxAmount: merchandiseTaxAmount,
+
+			StripeRefundAmount:     stripeRefundAmount,
+			TotalBrandBurdenAmount: stripeRefundAmount,
+		}, nil
+
+	case refunddom.OpenedReturnRefundMerchandiseOnly:
+		return OpenedReturnRefundAmountSummary{
+			Policy: policy,
+
+			MerchandiseAmount:    fullMerchandise.MerchandiseAmount,
+			MerchandiseTaxAmount: fullMerchandise.MerchandiseTaxAmount,
+
+			StripeRefundAmount:     fullMerchandise.RefundAmount,
+			TotalBrandBurdenAmount: fullMerchandise.RefundAmount,
+		}, nil
+
+	case refunddom.OpenedReturnRefundMerchandiseRoundTripShipping:
+		shippingAmounts, err := calculateOrderItemShippingAmounts(order)
+		if err != nil {
+			return OpenedReturnRefundAmountSummary{}, err
+		}
+
+		_, totalShippingTax, err := calculateOrderItemTaxAllocations(order)
+		if err != nil {
+			return OpenedReturnRefundAmountSummary{}, err
+		}
+
+		shippingTaxes, err := allocateOpenedReturnShippingTaxToItems(
+			shippingAmounts,
+			totalShippingTax,
+		)
+		if err != nil {
+			return OpenedReturnRefundAmountSummary{}, err
+		}
+
+		outboundShippingAmount, ok := shippingAmounts[orderItemIndex]
+		if !ok || outboundShippingAmount < 0 {
+			return OpenedReturnRefundAmountSummary{},
+				ErrInvalidOrderItemRefund
+		}
+
+		outboundShippingTaxAmount, ok := shippingTaxes[orderItemIndex]
+		if !ok || outboundShippingTaxAmount < 0 {
+			return OpenedReturnRefundAmountSummary{},
+				ErrInvalidOrderItemRefund
+		}
+
+		stripeRefundAmount, err := safeAddPaymentAmount(
+			fullMerchandise.RefundAmount,
+			outboundShippingAmount,
+		)
+		if err != nil {
+			return OpenedReturnRefundAmountSummary{}, err
+		}
+
+		stripeRefundAmount, err = safeAddPaymentAmount(
+			stripeRefundAmount,
+			outboundShippingTaxAmount,
+		)
+		if err != nil {
+			return OpenedReturnRefundAmountSummary{}, err
+		}
+
+		// Until Order stores a dedicated return-shipping quote, use the
+		// target item's original outbound shipping amount as the modeled
+		// reverse-route shipping amount.
+		returnShippingAmount := outboundShippingAmount
+
+		returnShippingTaxProduct, err := safeMultiplyPaymentAmount(
+			returnShippingAmount,
+			ConsumptionTaxRateStandard,
+		)
+		if err != nil {
+			return OpenedReturnRefundAmountSummary{}, err
+		}
+
+		returnShippingTaxAmount :=
+			returnShippingTaxProduct / 100
+
+		totalBrandBurdenAmount, err := safeAddPaymentAmount(
+			stripeRefundAmount,
+			returnShippingAmount,
+		)
+		if err != nil {
+			return OpenedReturnRefundAmountSummary{}, err
+		}
+
+		totalBrandBurdenAmount, err = safeAddPaymentAmount(
+			totalBrandBurdenAmount,
+			returnShippingTaxAmount,
+		)
+		if err != nil {
+			return OpenedReturnRefundAmountSummary{}, err
+		}
+
+		return OpenedReturnRefundAmountSummary{
+			Policy: policy,
+
+			MerchandiseAmount:    fullMerchandise.MerchandiseAmount,
+			MerchandiseTaxAmount: fullMerchandise.MerchandiseTaxAmount,
+
+			OutboundShippingAmount:    outboundShippingAmount,
+			OutboundShippingTaxAmount: outboundShippingTaxAmount,
+
+			ReturnShippingAmount:    returnShippingAmount,
+			ReturnShippingTaxAmount: returnShippingTaxAmount,
+
+			StripeRefundAmount:     stripeRefundAmount,
+			TotalBrandBurdenAmount: totalBrandBurdenAmount,
+		}, nil
+
+	default:
+		return OpenedReturnRefundAmountSummary{},
+			refunddom.ErrInvalidOpenedReturnRefundPolicy
+	}
+}
+
+type openedReturnShippingQuote struct {
+	UnitAmount int
+	Qty        int
+	Amount     int
+}
+
+type openedReturnShippingTaxItem struct {
+	Index     int
+	Base      int
+	Tax       int
+	Remainder int
+}
+
+// calculateOrderItemShippingAmounts allocates the persisted outbound shipping
+// quote to active Order items using the quote's unit amount and each item's Qty.
+//
+// Every active List Order item must map to exactly one shipping key and the
+// resulting allocation must reconcile to ShippingQuoteSnapshot.Amount.
+func calculateOrderItemShippingAmounts(
+	order Order,
+) (map[int]int, error) {
+	snapshot := order.ShippingQuoteSnapshot
+
+	if snapshot.Currency != ShippingQuoteCurrencyJPY ||
+		snapshot.Amount < 0 ||
+		len(snapshot.Items) == 0 {
+		return nil, ErrInvalidOrderItemRefund
+	}
+
+	quotes := make(map[refundShippingKey]openedReturnShippingQuote)
+
+	for _, quoteItem := range snapshot.Items {
+		if quoteItem.ListID == "" ||
+			quoteItem.InventoryID == "" ||
+			quoteItem.ModelID == "" ||
+			quoteItem.Qty <= 0 ||
+			quoteItem.UnitAmount < 0 ||
+			quoteItem.Amount < 0 ||
+			quoteItem.Currency != ShippingQuoteCurrencyJPY {
+			return nil, ErrInvalidOrderItemRefund
+		}
+
+		expectedAmount, err := safeMultiplyPaymentAmount(
+			quoteItem.UnitAmount,
+			quoteItem.Qty,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if expectedAmount != quoteItem.Amount {
+			return nil, ErrInvalidOrderItemRefund
+		}
+
+		key := refundShippingKey{
+			ListID:      quoteItem.ListID,
+			InventoryID: quoteItem.InventoryID,
+			ModelID:     quoteItem.ModelID,
+		}
+
+		existing := quotes[key]
+
+		if existing.Qty > 0 &&
+			existing.UnitAmount != quoteItem.UnitAmount {
+			return nil, ErrInvalidOrderItemRefund
+		}
+
+		nextQty, err := safeAddPaymentAmount(
+			existing.Qty,
+			quoteItem.Qty,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		nextAmount, err := safeAddPaymentAmount(
+			existing.Amount,
+			quoteItem.Amount,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		quotes[key] = openedReturnShippingQuote{
+			UnitAmount: quoteItem.UnitAmount,
+			Qty:        nextQty,
+			Amount:     nextAmount,
+		}
+	}
+
+	result := make(map[int]int)
+	usedQty := make(map[refundShippingKey]int)
+	usedAmount := make(map[refundShippingKey]int)
+	totalAmount := 0
+
+	for index, item := range order.Items {
+		if item.IsCancelled {
+			continue
+		}
+
+		if item.Type != OrderItemTypeList ||
+			item.ListID == "" ||
+			item.InventoryID == "" ||
+			item.ModelID == "" ||
+			item.Qty <= 0 {
+			return nil, ErrInvalidOrderItemRefund
+		}
+
+		key := refundShippingKey{
+			ListID:      item.ListID,
+			InventoryID: item.InventoryID,
+			ModelID:     item.ModelID,
+		}
+
+		quote, exists := quotes[key]
+		if !exists {
+			return nil, ErrInvalidOrderItemRefund
+		}
+
+		itemShippingAmount, err := safeMultiplyPaymentAmount(
+			quote.UnitAmount,
+			item.Qty,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		result[index] = itemShippingAmount
+
+		usedQty[key], err = safeAddPaymentAmount(
+			usedQty[key],
+			item.Qty,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		usedAmount[key], err = safeAddPaymentAmount(
+			usedAmount[key],
+			itemShippingAmount,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		totalAmount, err = safeAddPaymentAmount(
+			totalAmount,
+			itemShippingAmount,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(result) == 0 ||
+		totalAmount != snapshot.Amount {
+		return nil, ErrInvalidOrderItemRefund
+	}
+
+	for key, quote := range quotes {
+		if usedQty[key] != quote.Qty ||
+			usedAmount[key] != quote.Amount {
+			return nil, ErrInvalidOrderItemRefund
+		}
+	}
+
+	return result, nil
+}
+
+// allocateOpenedReturnShippingTaxToItems allocates the already-authoritative
+// shipping tax total to Order items.
+//
+// The target shipping tax is produced by calculateOrderItemTaxAllocations,
+// which reconciles to the original Order's ConsumptionTax. This second-stage
+// allocation therefore preserves the original payment tax exactly instead of
+// recalculating each item's outbound shipping tax independently.
+func allocateOpenedReturnShippingTaxToItems(
+	shippingAmounts map[int]int,
+	targetTax int,
+) (map[int]int, error) {
+	if len(shippingAmounts) == 0 ||
+		targetTax < 0 {
+		return nil, ErrInvalidOrderItemRefund
+	}
+
+	items := make([]openedReturnShippingTaxItem, 0, len(shippingAmounts))
+	allocatedTax := 0
+
+	for index, amount := range shippingAmounts {
+		if index < 0 || amount < 0 {
+			return nil, ErrInvalidOrderItemRefund
+		}
+
+		product, err := safeMultiplyPaymentAmount(
+			amount,
+			ConsumptionTaxRateStandard,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		tax := product / 100
+		remainder := product % 100
+
+		allocatedTax, err = safeAddPaymentAmount(
+			allocatedTax,
+			tax,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		items = append(
+			items,
+			openedReturnShippingTaxItem{
+				Index:     index,
+				Base:      amount,
+				Tax:       tax,
+				Remainder: remainder,
+			},
+		)
+	}
+
+	residual := targetTax - allocatedTax
+
+	if residual < 0 ||
+		residual > len(items) {
+		return nil, ErrInvalidOrderItemRefund
+	}
+
+	sort.SliceStable(
+		items,
+		func(i, j int) bool {
+			if items[i].Remainder != items[j].Remainder {
+				return items[i].Remainder > items[j].Remainder
+			}
+
+			return items[i].Index < items[j].Index
+		},
+	)
+
+	for index := 0; index < residual; index++ {
+		items[index].Tax++
+	}
+
+	result := make(map[int]int, len(items))
+	allocatedResultTax := 0
+
+	for _, item := range items {
+		result[item.Index] = item.Tax
+
+		var err error
+		allocatedResultTax, err = safeAddPaymentAmount(
+			allocatedResultTax,
+			item.Tax,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if allocatedResultTax != targetTax {
+		return nil, ErrInvalidOrderItemRefund
+	}
+
+	return result, nil
+}
+
+func halfPaymentAmountRoundedUp(
+	amount int,
+) int {
+	if amount <= 0 {
+		return 0
+	}
+
+	return amount/2 + amount%2
 }
 
 // -------------------------------------------------------

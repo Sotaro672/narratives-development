@@ -89,6 +89,47 @@
   white-space: nowrap;
 }
 
+/* =========================================================
+   Inquiry status tab
+========================================================= */
+.inq-status-tab {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
+  border-radius: 6px 6px 0 0;
+  background: hsl(var(--muted, 210 40% 96.1%));
+  color: hsl(var(--foreground, 222.2 84% 4.9%));
+  padding: 0 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+
+.inq-status-tab--open {
+  border-bottom: 2px solid #dc2626;
+  color: #b91c1c;
+}
+
+.inq-status-tab--in_progress {
+  border-bottom: 2px solid #d97706;
+  color: #b45309;
+}
+
+.inq-status-tab--resolved {
+  border-bottom: 2px solid #16a34a;
+  color: #15803d;
+}
+
+.inq-status-tab--closed {
+  border-bottom: 2px solid #64748b;
+  color: #475569;
+}
+
 .inq__empty {
   border-radius: 12px;
   background: hsl(var(--muted, 210 40% 96.1%));

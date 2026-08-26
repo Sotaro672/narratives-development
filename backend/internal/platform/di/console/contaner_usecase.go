@@ -42,6 +42,7 @@ type usecases struct {
 	inquiryUC                          *uc.InquiryUsecase
 	itemRefundUC                       *uc.ItemRefundUsecase
 	returnReceiptUC                    *uc.ReturnReceiptUsecase
+	openedReturnReceiptUC              *uc.OpenedReturnReceiptUsecase
 	inventoryUC                        *uc.InventoryUsecase
 	listUC                             *uc.ListUsecase
 	listSaveOperationUC                *uc.ListSaveOperationUsecase
@@ -712,6 +713,17 @@ func buildUsecases(
 		itemRefundUC,
 	)
 
+	// OpenedReturnReceiptUsecase は開封後返品受領の orchestration を担当します。
+	//
+	// 返金額そのものは frontend から受け取らず、選択された refund policy と
+	// Order snapshot から ItemRefundUsecase が権威的に算出します。
+	openedReturnReceiptUC := uc.NewOpenedReturnReceiptUsecase(
+		orderUC,
+		r.inquiryRepo,
+		inquiryUC,
+		itemRefundUC,
+	)
+
 	if paymentUC == nil {
 		_ = listSaveOperationRetryQueue.Close()
 		_ = listSaveOperationStorage.Close()
@@ -982,6 +994,7 @@ func buildUsecases(
 		inquiryUC:                          inquiryUC,
 		itemRefundUC:                       itemRefundUC,
 		returnReceiptUC:                    returnReceiptUC,
+		openedReturnReceiptUC:              openedReturnReceiptUC,
 		inventoryUC:                        inventoryUC,
 		listUC:                             listUC,
 		listSaveOperationUC:                listSaveOperationUC,

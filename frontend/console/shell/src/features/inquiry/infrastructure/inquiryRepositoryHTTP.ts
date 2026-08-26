@@ -14,6 +14,9 @@ import type {
   InquiryManagementItem,
   InquiryReply,
   ListInquiriesParams,
+  ReceiveOpenedReturnParams,
+  ReceiveOpenedReturnResult,
+  ReceiveReturnResult,
   ReplyInquiryParams,
 } from "../../../shared/types/inquiry";
 
@@ -27,17 +30,6 @@ export type UploadInquiryReplyImagesParams = {
   inquiryId: string;
   memberId: string;
   files: File[];
-};
-
-export type ReceiveReturnResult = {
-  inquiry: Inquiry;
-  refundId: string;
-  refundStatus: string;
-  transferReversalStatus: string;
-  financiallyCompleted: boolean;
-  orderCompleted: boolean;
-  inquiryResolved: boolean;
-  alreadyCompleted: boolean;
 };
 
 // -----------------------------------------------------------
@@ -336,9 +328,67 @@ export async function receiveReturnHTTP(
 }
 
 // -----------------------------------------------------------
+// POST: 開封後返品の商品受領
+//   backend: POST /inquiries/{id}/receive-opened-return
+//
+//   frontend から送信する financial parameter は policy のみ。
+//
+//   refundAmount / merchandiseAmount / tax / shipping / orderId /
+//   orderItemIndex / accountId / settlementId は送信しない。
+//
+//   backend は Inquiry、Order snapshot、選択された policy を正として
+//   purchaser refund と seller Transfer Reversal を算出する。
+//
+//   200:
+//     Refund + Transfer Reversal + Order completion +
+//     Inquiry resolve まで完了。
+//
+//   202:
+//     Stripe refund 等の financial 処理が pending。
+//     Order / Inquiry は未完了のまま。
+// -----------------------------------------------------------
+
+export async function receiveOpenedReturnHTTP(
+  id: string,
+  params: ReceiveOpenedReturnParams,
+): Promise<ReceiveOpenedReturnResult> {
+  const inquiryId = assertID(id, "id");
+  const authHeaders = await getAuthHeaders();
+
+  const response = await fetch(
+    `${API_BASE}/inquiries/${encodeURIComponent(
+      inquiryId,
+    )}/receive-opened-return`,
+    {
+      method: "POST",
+      headers: {
+        ...authHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        policy: params.policy,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const detail = await readErrorDetail(response);
+
+    throw new Error(
+      `開封後返品の受領処理に失敗しました（${response.status} ${response.statusText}）\n${detail}`,
+    );
+  }
+
+  return (await response.json()) as ReceiveOpenedReturnResult;
+}
+
+// -----------------------------------------------------------
 // POST: Inquiry を resolved にする
 //   backend: POST /inquiries/{id}/resolve
 //   memberId は backend の認証 context を正とする。
+//
+//   return_unopened / return_opened はこのAPIを使用せず、
+//   それぞれ専用の返品受領APIを使用する。
 // -----------------------------------------------------------
 
 export async function resolveInquiryHTTP(id: string): Promise<Inquiry> {

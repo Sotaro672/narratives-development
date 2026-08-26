@@ -34,6 +34,49 @@ export function getInquiryTypeLabel(
   }
 }
 
+// ============================================================
+// Opened Return Refund Policy
+// ============================================================
+
+export const OPENED_RETURN_REFUND_POLICIES = [
+  "half_merchandise",
+  "merchandise_only",
+  "merchandise_round_trip_shipping",
+] as const;
+
+export type OpenedReturnRefundPolicy =
+  (typeof OPENED_RETURN_REFUND_POLICIES)[number];
+
+export function getOpenedReturnRefundPolicyLabel(
+  policy: OpenedReturnRefundPolicy,
+): string {
+  switch (policy) {
+    case "half_merchandise":
+      return "商品代金の半分";
+
+    case "merchandise_only":
+      return "商品代金のみ";
+
+    case "merchandise_round_trip_shipping":
+      return "商品代金＋往復配送料";
+
+    default:
+      return policy;
+  }
+}
+
+export function isOpenedReturnRefundPolicy(
+  value: string,
+): value is OpenedReturnRefundPolicy {
+  return (
+    OPENED_RETURN_REFUND_POLICIES as readonly string[]
+  ).includes(value);
+}
+
+// ============================================================
+// Inquiry
+// ============================================================
+
 export type InquiryImageFile = {
   inquiryId: string;
   fileName: string;
@@ -88,6 +131,10 @@ export type Inquiry = {
   closedBy?: string;
 };
 
+// ============================================================
+// Order Summary
+// ============================================================
+
 export type InquiryOrderItemType = "list" | "resale";
 
 export type InquiryOrderItemSummary = {
@@ -127,6 +174,10 @@ export type InquiryOrderSummary = {
   createdAt: string;
 };
 
+// ============================================================
+// Management / Detail
+// ============================================================
+
 export type InquiryManagementItem = {
   inquiry: Inquiry;
   modelId: string;
@@ -158,6 +209,10 @@ export type InquiryActionRequiredCountResult = {
   count: number;
 };
 
+// ============================================================
+// Inquiry List
+// ============================================================
+
 export type ListInquiriesParams = {
   companyId: string;
   searchQuery?: string;
@@ -176,7 +231,50 @@ export type ListInquiriesParams = {
   closed?: boolean;
 };
 
+// ============================================================
+// Reply
+// ============================================================
+
 export type ReplyInquiryParams = {
   content: string;
   images: InquiryImageFile[];
+};
+
+// ============================================================
+// Return Receipt
+// ============================================================
+
+export type ReceiveReturnResult = {
+  inquiry: Inquiry;
+  refundId: string;
+  refundStatus: string;
+  transferReversalStatus: string;
+  financiallyCompleted: boolean;
+  orderCompleted: boolean;
+  inquiryResolved: boolean;
+  alreadyCompleted: boolean;
+};
+
+// ============================================================
+// Opened Return Receipt
+// ============================================================
+
+export type ReceiveOpenedReturnParams = {
+  policy: OpenedReturnRefundPolicy;
+};
+
+export type ReceiveOpenedReturnResult = {
+  inquiry: Inquiry;
+  refundId: string;
+  policy: OpenedReturnRefundPolicy;
+  refundAmount: number;
+  returnShippingAmount: number;
+  returnShippingTaxAmount: number;
+  totalBrandBurdenAmount: number;
+  refundStatus: string;
+  transferReversalStatus: string;
+  financiallyCompleted: boolean;
+  orderCompleted: boolean;
+  inquiryResolved: boolean;
+  alreadyCompleted: boolean;
 };
