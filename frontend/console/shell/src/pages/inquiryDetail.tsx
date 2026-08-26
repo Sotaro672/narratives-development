@@ -1,6 +1,7 @@
 // frontend/console/shell/src/pages/inquiryDetail.tsx
-import * as React from "react";
+
 import { Link } from "react-router-dom";
+
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import { safeDateTimeLabelJa } from "../../../shell/src/shared/util/dateJa";
 import { Button } from "../../../shell/src/shared/ui/button";
@@ -10,19 +11,10 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../shell/src/shared/ui/card";
-import {
-  replyInquiryHTTP,
-  uploadInquiryReplyImagesToStorage,
-} from "../features/inquiry/infrastructure/inquiryRepositoryHTTP";
-import ReplyModal, {
-  type ReplyUploadImage,
-} from "../features/inquiry/presentation/components/replyModal";
+
+import ReplyModal from "../features/inquiry/presentation/components/replyModal";
 import { useInquiryDetailPage } from "../features/inquiry/presentation/hooks/useInquiryDetailPage";
-import {
-  MAX_REPLY_IMAGES,
-  MAX_REPLY_IMAGE_SIZE_BYTES,
-  MAX_REPLY_IMAGE_SIZE_MB,
-} from "../features/inquiry/constants/inquiryReply";
+import { useInquiryReply } from "../features/inquiry/presentation/hooks/useInquiryReply";
 import {
   getInquiryStatusButtonVariant,
   getInquiryStatusLabel,
@@ -35,6 +27,7 @@ import {
   type InquiryOrderItemSummary,
   type InquiryOrderSummary,
 } from "../shared/types/inquiry";
+
 import "../styles/inquiry-page.css";
 
 type InquiryImageView = {
@@ -44,12 +37,9 @@ type InquiryImageView = {
   mimeType: string;
 };
 
-type InquiryReplyView =
-  InquiryDetailDTO["replies"][number];
+type InquiryReplyView = InquiryDetailDTO["replies"][number];
 
-function textOrDash(
-  value: string | null | undefined,
-): string {
+function textOrDash(value: string | null | undefined): string {
   const normalized = String(value ?? "").trim();
   return normalized || "-";
 }
@@ -80,14 +70,6 @@ function uniqueTextValues(
   }
 
   return result;
-}
-
-function createClientID(prefix: string): string {
-  const randomID =
-    globalThis.crypto?.randomUUID?.() ??
-    `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-  return `${prefix}-${randomID}`;
 }
 
 function getOrderTransferredAtLabel(
@@ -127,9 +109,7 @@ function normalizeImages(
       image: InquiryImageFile,
       index: number,
     ): InquiryImageView => ({
-      id:
-        image.objectPath ||
-        `${image.fileUrl}-${index}`,
+      id: image.objectPath || `${image.fileUrl}-${index}`,
       fileName: image.fileName,
       fileUrl: image.fileUrl,
       mimeType: image.mimeType,
@@ -184,101 +164,60 @@ export default function InquiryDetail() {
     onToggleStatus,
   } = useInquiryDetailPage();
 
-  const [
+  const {
     replyModalOpen,
-    setReplyModalOpen,
-  ] = React.useState(false);
-
-  const [
     replyContent,
-    setReplyContent,
-  ] = React.useState("");
-
-  const [
     replyImages,
-    setReplyImages,
-  ] = React.useState<ReplyUploadImage[]>([]);
-
-  const [
     replySubmitting,
-    setReplySubmitting,
-  ] = React.useState(false);
-
-  const [
     replyErrorMessage,
-    setReplyErrorMessage,
-  ] = React.useState<string | null>(null);
+    onOpenReplyModal,
+    onCloseReplyModal,
+    onChangeReplyContent,
+    onChangeReplyImages,
+    onRemoveReplyImage,
+    onSubmitReply,
+  } = useInquiryReply({
+    inquiryId,
+    memberId,
+    onReloadDetail: reloadDetail,
+    onClearPageError: clearErrorMessage,
+  });
 
-  const replyImagePreviewUrlsRef =
-    React.useRef<Set<string>>(
-      new Set(),
-    );
-
-  React.useEffect(() => {
-    return () => {
-      for (
-        const previewUrl of
-        replyImagePreviewUrlsRef.current
-      ) {
-        URL.revokeObjectURL(previewUrl);
-      }
-
-      replyImagePreviewUrlsRef.current.clear();
-    };
-  }, []);
-
-  const inquiry =
-    detail?.inquiry ?? null;
+  const inquiry = detail?.inquiry ?? null;
 
   const title =
     inquiry?.inquiryType === "product"
       ? textOrDash(inquiry.subject)
       : "";
 
-  const body =
-    textOrDash(inquiry?.content);
-
-  const userFullName =
-    textOrDash(detail?.userFullName);
-
-  const status =
-    getInquiryStatusLabel(inquiry?.status);
+  const body = textOrDash(inquiry?.content);
+  const userFullName = textOrDash(detail?.userFullName);
+  const status = getInquiryStatusLabel(inquiry?.status);
 
   const isUnopenedReturn =
-    inquiry?.inquiryType ===
-    "return_unopened";
+    inquiry?.inquiryType === "return_unopened";
 
   const isOpenedReturn =
-    inquiry?.inquiryType ===
-    "return_opened";
+    inquiry?.inquiryType === "return_opened";
 
-  const inquiryType =
-    inquiry?.inquiryType
-      ? getInquiryTypeLabel(
-          inquiry.inquiryType,
-        )
-      : "-";
+  const inquiryType = inquiry?.inquiryType
+    ? getInquiryTypeLabel(inquiry.inquiryType)
+    : "-";
 
-  const productName =
-    textOrDash(detail?.productName);
+  const productName = textOrDash(detail?.productName);
+  const brandName = textOrDash(detail?.brandName);
 
-  const brandName =
-    textOrDash(detail?.brandName);
+  const inquiredAt = safeDateTimeLabelJa(
+    inquiry?.createdAt,
+    "-",
+  );
 
-  const inquiredAt =
-    safeDateTimeLabelJa(
-      inquiry?.createdAt,
-      "-",
-    );
+  const updatedAt = safeDateTimeLabelJa(
+    inquiry?.updatedAt,
+    "-",
+  );
 
-  const updatedAt =
-    safeDateTimeLabelJa(
-      inquiry?.updatedAt,
-      "-",
-    );
-
-  const inquiryImages =
-    getInquiryImages(inquiry);
+  const inquiryImages = getInquiryImages(inquiry);
 
   const replies: InquiryReplyView[] =
     detail?.replies ?? [];
@@ -287,22 +226,16 @@ export default function InquiryDetail() {
     detail?.orders ?? [];
 
   const targetOrderItem =
-    orders
-      .flatMap(
-        (
-          order:
-            InquiryOrderSummary,
-        ) =>
-          order.items,
-      )[0] ?? null;
+    orders.flatMap(
+      (order: InquiryOrderSummary) =>
+        order.items,
+    )[0] ?? null;
 
   const productDisplayName =
     `${productName} / ${brandName}`;
 
   const tokenDisplayName =
-    `${textOrDash(
-      targetOrderItem?.tokenName,
-    )} / ${textOrDash(
+    `${textOrDash(targetOrderItem?.tokenName)} / ${textOrDash(
       targetOrderItem?.tokenBrandName,
     )}`;
 
@@ -316,17 +249,15 @@ export default function InquiryDetail() {
         ? "返品対応中"
         : "-";
 
-  const returnRequestedAt =
-    safeDateTimeLabelJa(
-      targetOrderItem?.returnRequestedAt,
-      "-",
-    );
+  const returnRequestedAt = safeDateTimeLabelJa(
+    targetOrderItem?.returnRequestedAt,
+    "-",
+  );
 
-  const returnCompletedAt =
-    safeDateTimeLabelJa(
-      targetOrderItem?.returnCompletedAt,
-      "-",
-    );
+  const returnCompletedAt = safeDateTimeLabelJa(
+    targetOrderItem?.returnCompletedAt,
+    "-",
+  );
 
   const pageTitle = (
     <div className="inq-detail__page-title">
@@ -369,411 +300,113 @@ export default function InquiryDetail() {
     isOpenedReturn &&
     inquiry?.status === "open";
 
-  const revokeReplyImagePreviewUrl =
-    React.useCallback(
-      (previewUrl: string) => {
-        URL.revokeObjectURL(previewUrl);
-
-        replyImagePreviewUrlsRef.current.delete(
-          previewUrl,
-        );
-      },
-      [],
-    );
-
-  const clearReplyImages =
-    React.useCallback(() => {
-      setReplyImages(
-        (
-          currentImages: ReplyUploadImage[],
-        ) => {
-          for (const image of currentImages) {
-            revokeReplyImagePreviewUrl(
-              image.previewUrl,
-            );
-          }
-
-          return [];
-        },
-      );
-    }, [revokeReplyImagePreviewUrl]);
-
-  const onChangeReplyImages =
-    React.useCallback(
-      (
-        event:
-          React.ChangeEvent<HTMLInputElement>,
-      ) => {
-        const files = Array.from(
-          event.target.files ?? [],
-        );
-
-        event.target.value = "";
-
-        if (files.length === 0) {
-          return;
-        }
-
-        setReplyErrorMessage(null);
-
-        setReplyImages(
-          (
-            currentImages:
-              ReplyUploadImage[],
-          ) => {
-            const remainingCount =
-              MAX_REPLY_IMAGES -
-              currentImages.length;
-
-            if (remainingCount <= 0) {
-              setReplyErrorMessage(
-                `添付画像は最大${MAX_REPLY_IMAGES}枚までです。`,
-              );
-
-              return currentImages;
-            }
-
-            const acceptedFiles: File[] = [];
-
-            for (
-              const file of files.slice(
-                0,
-                remainingCount,
-              )
-            ) {
-              if (
-                !file.type.startsWith(
-                  "image/",
-                )
-              ) {
-                setReplyErrorMessage(
-                  "画像ファイルのみ添付できます。",
-                );
-
-                continue;
-              }
-
-              if (
-                file.size >
-                MAX_REPLY_IMAGE_SIZE_BYTES
-              ) {
-                setReplyErrorMessage(
-                  `画像サイズは1枚あたり${MAX_REPLY_IMAGE_SIZE_MB}MB以下にしてください。`,
-                );
-
-                continue;
-              }
-
-              acceptedFiles.push(file);
-            }
-
-            if (
-              files.length >
-              remainingCount
-            ) {
-              setReplyErrorMessage(
-                `添付画像は最大${MAX_REPLY_IMAGES}枚までです。`,
-              );
-            }
-
-            const nextImages =
-              acceptedFiles.map(
-                (
-                  file: File,
-                ): ReplyUploadImage => {
-                  const previewUrl =
-                    URL.createObjectURL(file);
-
-                  replyImagePreviewUrlsRef.current.add(
-                    previewUrl,
-                  );
-
-                  return {
-                    id: createClientID(
-                      "reply-image",
-                    ),
-                    file,
-                    previewUrl,
-                  };
-                },
-              );
-
-            return [
-              ...currentImages,
-              ...nextImages,
-            ];
-          },
-        );
-      },
-      [],
-    );
-
-  const onRemoveReplyImage =
-    React.useCallback(
-      (id: string) => {
-        setReplyImages(
-          (
-            currentImages:
-              ReplyUploadImage[],
-          ) => {
-            const target =
-              currentImages.find(
-                (
-                  image:
-                    ReplyUploadImage,
-                ) =>
-                  image.id === id,
-              );
-
-            if (target) {
-              revokeReplyImagePreviewUrl(
-                target.previewUrl,
-              );
-            }
-
-            return currentImages.filter(
-              (
-                image:
-                  ReplyUploadImage,
-              ) =>
-                image.id !== id,
-            );
-          },
-        );
-      },
-      [revokeReplyImagePreviewUrl],
-    );
-
-  const onOpenReplyModal =
-    React.useCallback(() => {
-      setReplyErrorMessage(null);
-      setReplyModalOpen(true);
-    }, []);
-
-  const onCloseReplyModal =
-    React.useCallback(() => {
-      if (replySubmitting) {
-        return;
-      }
-
-      setReplyModalOpen(false);
-      setReplyContent("");
-      setReplyErrorMessage(null);
-      clearReplyImages();
-    }, [
-      clearReplyImages,
-      replySubmitting,
-    ]);
-
-  const onSubmitReply =
-    React.useCallback(
-      async () => {
-        const trimmedContent =
-          replyContent.trim();
-
-        if (!inquiryId) {
-          setReplyErrorMessage(
-            "問い合わせIDが指定されていません。",
-          );
-
-          return;
-        }
-
-        if (
-          !trimmedContent &&
-          replyImages.length === 0
-        ) {
-          setReplyErrorMessage(
-            "返信内容または画像を入力してください。",
-          );
-
-          return;
-        }
-
-        if (
-          replyImages.length > 0 &&
-          !memberId
-        ) {
-          setReplyErrorMessage(
-            "メンバーIDが取得できません。ログインし直してください。",
-          );
-
-          return;
-        }
-
-        setReplySubmitting(true);
-        setReplyErrorMessage(null);
-        clearErrorMessage();
-
-        try {
-          const uploadedImages =
-            replyImages.length > 0
-              ? await uploadInquiryReplyImagesToStorage(
-                  {
-                    inquiryId,
-                    memberId,
-                    files:
-                      replyImages.map(
-                        (
-                          image:
-                            ReplyUploadImage,
-                        ) =>
-                          image.file,
-                      ),
-                  },
-                )
-              : [];
-
-          await replyInquiryHTTP(
-            inquiryId,
-            {
-              content: trimmedContent,
-              images: uploadedImages,
-            },
-          );
-
-          await reloadDetail();
-
-          setReplyModalOpen(false);
-          setReplyContent("");
-          setReplyErrorMessage(null);
-          clearReplyImages();
-        } catch (error) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "問い合わせ返信の送信に失敗しました";
-
-          setReplyErrorMessage(message);
-        } finally {
-          setReplySubmitting(false);
-        }
-      },
-      [
-        clearErrorMessage,
-        clearReplyImages,
-        inquiryId,
-        memberId,
-        reloadDetail,
-        replyContent,
-        replyImages,
-      ],
-    );
-
   if (loading) {
     return (
-      <>
-        <PageStyle
-          layout="grid-2"
-          title="問い合わせ詳細"
-          onBack={onBack}
-          onSave={undefined}
-        >
+      <PageStyle
+        layout="grid-2"
+        title="問い合わせ詳細"
+        onBack={onBack}
+        onSave={undefined}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              問い合わせ内容
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent>
+            <div className="inq__empty">
+              問い合わせ詳細を読み込み中です。
+            </div>
+          </CardContent>
+        </Card>
+
+        <div>
           <Card>
             <CardHeader>
               <CardTitle>
-                問い合わせ内容
+                問い合わせ情報
               </CardTitle>
             </CardHeader>
 
             <CardContent>
               <div className="inq__empty">
-                問い合わせ詳細を読み込み中です。
+                問い合わせ情報を読み込み中です。
               </div>
             </CardContent>
           </Card>
 
-          <div>
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  問い合わせ情報
-                </CardTitle>
-              </CardHeader>
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                商品・注文情報
+              </CardTitle>
+            </CardHeader>
 
-              <CardContent>
-                <div className="inq__empty">
-                  問い合わせ情報を読み込み中です。
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  商品・注文情報
-                </CardTitle>
-              </CardHeader>
-
-              <CardContent>
-                <div className="inq__empty">
-                  商品・注文情報を読み込み中です。
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </PageStyle>
-      </>
+            <CardContent>
+              <div className="inq__empty">
+                商品・注文情報を読み込み中です。
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </PageStyle>
     );
   }
 
-  if (
-    errorMessage &&
-    !detail
-  ) {
+  if (errorMessage && !detail) {
     return (
-      <>
-        <PageStyle
-          layout="grid-2"
-          title="問い合わせ詳細"
-          onBack={onBack}
-          onSave={undefined}
-        >
+      <PageStyle
+        layout="grid-2"
+        title="問い合わせ詳細"
+        onBack={onBack}
+        onSave={undefined}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              問い合わせ内容
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent>
+            <div className="inq__empty">
+              {errorMessage}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div>
           <Card>
             <CardHeader>
               <CardTitle>
-                問い合わせ内容
+                問い合わせ情報
               </CardTitle>
             </CardHeader>
 
             <CardContent>
               <div className="inq__empty">
-                {errorMessage}
+                問い合わせ情報を表示できません。
               </div>
             </CardContent>
           </Card>
 
-          <div>
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  問い合わせ情報
-                </CardTitle>
-              </CardHeader>
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                商品・注文情報
+              </CardTitle>
+            </CardHeader>
 
-              <CardContent>
-                <div className="inq__empty">
-                  問い合わせ情報を表示できません。
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  商品・注文情報
-                </CardTitle>
-              </CardHeader>
-
-              <CardContent>
-                <div className="inq__empty">
-                  商品・注文情報を表示できません。
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </PageStyle>
-      </>
+            <CardContent>
+              <div className="inq__empty">
+                商品・注文情報を表示できません。
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </PageStyle>
     );
   }
 
@@ -847,21 +480,15 @@ export default function InquiryDetail() {
                         ) => (
                           <a
                             key={image.id}
-                            href={
-                              image.fileUrl
-                            }
+                            href={image.fileUrl}
                             target="_blank"
                             rel="noreferrer"
                             className="inq-detail__image-link"
                             aria-label={`${image.fileName}を開く`}
                           >
                             <img
-                              src={
-                                image.fileUrl
-                              }
-                              alt={
-                                image.fileName
-                              }
+                              src={image.fileUrl}
+                              alt={image.fileName}
                               className="inq-detail__image"
                               loading="lazy"
                             />
@@ -917,8 +544,10 @@ export default function InquiryDetail() {
                         );
 
                       const isSelf =
-                        reply.senderType === "member" &&
-                        reply.senderId === memberId;
+                        reply.senderType ===
+                          "member" &&
+                        reply.senderId ===
+                          memberId;
 
                       return (
                         <article
@@ -935,9 +564,7 @@ export default function InquiryDetail() {
                             </span>
 
                             <span className="inq-reply-item__date">
-                              {
-                                createdAtLabel
-                              }
+                              {createdAtLabel}
                             </span>
                           </div>
 
@@ -1190,7 +817,9 @@ export default function InquiryDetail() {
         submitting={replySubmitting}
         errorMessage={replyErrorMessage}
         onClose={onCloseReplyModal}
-        onChangeContent={setReplyContent}
+        onChangeContent={
+          onChangeReplyContent
+        }
         onChangeImages={
           onChangeReplyImages
         }
