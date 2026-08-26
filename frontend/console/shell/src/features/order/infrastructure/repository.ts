@@ -118,7 +118,7 @@ export type OrderItemInventoryRowDTO = {
   transferredAt?: string;
 };
 
-export type OrderUndispatchedCountResult = {
+export type OrderActionRequiredCountResult = {
   count: number;
 };
 
@@ -146,7 +146,6 @@ function buildQuery(
   }
 
   const query = searchParams.toString();
-
   return query ? `?${query}` : "";
 }
 
@@ -170,7 +169,6 @@ async function readErrorMessage(response: Response): Promise<string> {
     }
 
     const text = await response.text();
-
     return text
       ? text.slice(0, 200)
       : `${response.status} ${response.statusText}`;
@@ -204,9 +202,7 @@ async function requestJSON<T>(
   });
 
   if (!response.ok) {
-    throw new Error(
-      await readErrorMessage(response),
-    );
+    throw new Error(await readErrorMessage(response));
   }
 
   const contentType = response.headers.get("content-type") ?? "";
@@ -230,7 +226,7 @@ export interface OrderRepository {
   listItemInventoryRows(
     params?: OrderListParams,
   ): Promise<PageResult<OrderItemInventoryRowDTO>>;
-  countUndispatched(): Promise<OrderUndispatchedCountResult>;
+  countActionRequired(): Promise<OrderActionRequiredCountResult>;
 }
 
 export function createOrderRepository(): OrderRepository {
@@ -238,7 +234,6 @@ export function createOrderRepository(): OrderRepository {
 
   const buildUrl = (path: string): string => {
     const normalizedPath = path.replace(/^\/+/g, "");
-
     return `${resolvedBaseUrl}/${normalizedPath}`;
   };
 
@@ -285,9 +280,9 @@ export function createOrderRepository(): OrderRepository {
       );
     },
 
-    async countUndispatched(): Promise<OrderUndispatchedCountResult> {
-      return requestJSON<OrderUndispatchedCountResult>(
-        buildUrl("/orders/undispatched-count"),
+    async countActionRequired(): Promise<OrderActionRequiredCountResult> {
+      return requestJSON<OrderActionRequiredCountResult>(
+        buildUrl("/orders/action-required-count"),
         { method: "GET" },
       );
     },

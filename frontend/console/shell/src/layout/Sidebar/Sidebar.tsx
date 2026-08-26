@@ -53,7 +53,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   const location = useLocation();
   const orderRepository = useMemo(() => createOrderRepository(), []);
   const [inquiryUnreadCount, setInquiryUnreadCount] = useState<number | null>(null);
-  const [orderUndispatchedCount, setOrderUndispatchedCount] = useState<number | null>(null);
+  const [orderActionRequiredCount, setOrderActionRequiredCount] = useState<number | null>(null);
   const [openKey, setOpenKey] = useState<OpenKey>(null);
 
   const loadInquiryUnreadCount = useCallback(async () => {
@@ -65,12 +65,12 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     }
   }, []);
 
-  const loadOrderUndispatchedCount = useCallback(async () => {
+  const loadOrderActionRequiredCount = useCallback(async () => {
     try {
-      const result = await orderRepository.countUndispatched();
-      setOrderUndispatchedCount(toSafeCount(result.count));
+      const result = await orderRepository.countActionRequired();
+      setOrderActionRequiredCount(toSafeCount(result.count));
     } catch {
-      setOrderUndispatchedCount(null);
+      setOrderActionRequiredCount(null);
     }
   }, [orderRepository]);
 
@@ -79,8 +79,8 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   }, [loadInquiryUnreadCount]);
 
   useEffect(() => {
-    void loadOrderUndispatchedCount();
-  }, [loadOrderUndispatchedCount]);
+    void loadOrderActionRequiredCount();
+  }, [loadOrderActionRequiredCount]);
 
   useEffect(() => {
     const refresh = () => void loadInquiryUnreadCount();
@@ -95,7 +95,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   }, [loadInquiryUnreadCount]);
 
   useEffect(() => {
-    const refresh = () => void loadOrderUndispatchedCount();
+    const refresh = () => void loadOrderActionRequiredCount();
 
     window.addEventListener("focus", refresh);
     window.addEventListener(ORDER_DISPATCH_STATE_CHANGED_EVENT, refresh);
@@ -104,7 +104,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       window.removeEventListener("focus", refresh);
       window.removeEventListener(ORDER_DISPATCH_STATE_CHANGED_EVENT, refresh);
     };
-  }, [loadOrderUndispatchedCount]);
+  }, [loadOrderActionRequiredCount]);
 
   const menuItems: MenuItem[] = useMemo(
     () => [
@@ -112,13 +112,13 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       { label: "商品", path: "/product", icon: Box, hasSubmenu: true },
       { label: "トークン", path: "/token", icon: Coins, hasSubmenu: true },
       { label: "出品", path: "/list", icon: Store },
-      { label: "注文", path: "/order", icon: ShoppingCart, badgeCount: orderUndispatchedCount },
+      { label: "注文", path: "/order", icon: ShoppingCart, badgeCount: orderActionRequiredCount },
       { label: "配送", path: "/shipping", icon: Truck, hasSubmenu: true },
       { label: "レビュー", path: "/review", icon: MessagesSquare, hasSubmenu: true },
       { label: "組織", path: "/company", icon: Building2, hasSubmenu: true },
       { label: "財務", path: "/finance", icon: Wallet, hasSubmenu: true },
     ],
-    [inquiryUnreadCount, orderUndispatchedCount],
+    [inquiryUnreadCount, orderActionRequiredCount],
   );
 
   const productSubItems: SubItem[] = useMemo(

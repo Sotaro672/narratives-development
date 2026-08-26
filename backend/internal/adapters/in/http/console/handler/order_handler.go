@@ -48,7 +48,7 @@ type SettlementReadinessMarker interface {
 
 // OrderHandler handles:
 //   - GET /orders/items
-//   - GET /orders/undispatched-count
+//   - GET /orders/action-required-count
 //   - PATCH /orders/{id}/dispatch
 //   - PATCH /orders/{id}/refund
 //   - GET /orders/{id}
@@ -96,8 +96,8 @@ func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.listItemRows(w, r)
 		return
 
-	case r.Method == http.MethodGet && r.URL.Path == "/orders/undispatched-count":
-		h.countUndispatchedOrders(w, r)
+	case r.Method == http.MethodGet && r.URL.Path == "/orders/action-required-count":
+		h.countActionRequiredOrders(w, r)
 		return
 
 	case r.Method == http.MethodPatch &&
@@ -668,7 +668,7 @@ func (h *OrderHandler) listItemRows(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(pr)
 }
 
-func (h *OrderHandler) countUndispatchedOrders(w http.ResponseWriter, r *http.Request) {
+func (h *OrderHandler) countActionRequiredOrders(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h == nil || h.q == nil {
@@ -677,7 +677,7 @@ func (h *OrderHandler) countUndispatchedOrders(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	count, err := h.q.CountUndispatchedOrders(ctx)
+	count, err := h.q.CountActionRequiredOrders(ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})

@@ -551,11 +551,11 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 	}, nil
 }
 
-func (q *OrderManagementQuery) CountUndispatchedOrders(
+func (q *OrderManagementQuery) CountActionRequiredOrders(
 	ctx context.Context,
 ) (int, error) {
 	if q == nil || q.lister == nil || q.invRows == nil {
-		return 0, errors.New("OrderManagementQuery.CountUndispatchedOrders: wiring is incomplete (lister/invRows required)")
+		return 0, errors.New("OrderManagementQuery.CountActionRequiredOrders: wiring is incomplete (lister/invRows required)")
 	}
 
 	allowedSet, err := AllowedInventoryIDSetFromContext(ctx, q.invRows)
@@ -614,12 +614,11 @@ func (q *OrderManagementQuery) CountUndispatchedOrders(
 					continue
 				}
 
-				if item.IsDispatched {
-					continue
+				if !item.IsDispatched ||
+					item.IsReturnRequested {
+					orderIDs[ord.ID] = struct{}{}
+					break
 				}
-
-				orderIDs[ord.ID] = struct{}{}
-				break
 			}
 		}
 
