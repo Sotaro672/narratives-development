@@ -1,10 +1,6 @@
 // frontend/console/shell/src/pages/inquiryDetail.tsx
 
-import { Link } from "react-router-dom";
-
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import { safeDateTimeLabelJa } from "../../../shell/src/shared/util/dateJa";
-import { Button } from "../../../shell/src/shared/ui/button";
 import {
   Card,
   CardContent,
@@ -12,9 +8,16 @@ import {
   CardTitle,
 } from "../../../shell/src/shared/ui/card";
 
+import InquiryContentCard from "../features/inquiry/presentation/components/inquiryContentCard";
+import InquiryInfoCard from "../features/inquiry/presentation/components/inquiryInfoCard";
+import InquiryOrderInfoCard from "../features/inquiry/presentation/components/inquiryOrderInfoCard";
+import InquiryReplyListCard from "../features/inquiry/presentation/components/inquiryReplyListCard";
 import ReplyModal from "../features/inquiry/presentation/components/replyModal";
 import { useInquiryDetailPage } from "../features/inquiry/presentation/hooks/useInquiryDetailPage";
 import { useInquiryReply } from "../features/inquiry/presentation/hooks/useInquiryReply";
+import {
+  textOrDash,
+} from "../features/inquiry/presentation/utils/inquiryDetailView";
 import {
   getInquiryStatusButtonVariant,
   getInquiryStatusLabel,
@@ -22,133 +25,9 @@ import {
 } from "../features/inquiry/presentation/utils/inquiryStatus";
 import {
   getInquiryTypeLabel,
-  type InquiryDetail as InquiryDetailDTO,
-  type InquiryImageFile,
-  type InquiryOrderItemSummary,
-  type InquiryOrderSummary,
 } from "../shared/types/inquiry";
 
 import "../styles/inquiry-page.css";
-
-type InquiryImageView = {
-  id: string;
-  fileName: string;
-  fileUrl: string;
-  mimeType: string;
-};
-
-type InquiryReplyView = InquiryDetailDTO["replies"][number];
-
-function textOrDash(value: string | null | undefined): string {
-  const normalized = String(value ?? "").trim();
-  return normalized || "-";
-}
-
-function normalizeText(value: unknown): string {
-  return String(value ?? "").trim();
-}
-
-function uniqueTextValues(
-  values: Array<string | null | undefined>,
-): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const value of values) {
-    const normalized = normalizeText(value);
-
-    if (!normalized || normalized === "-") {
-      continue;
-    }
-
-    if (seen.has(normalized)) {
-      continue;
-    }
-
-    seen.add(normalized);
-    result.push(normalized);
-  }
-
-  return result;
-}
-
-function getOrderTransferredAtLabel(
-  order: InquiryOrderSummary,
-): string {
-  if (order.items.length === 0) {
-    return "-";
-  }
-
-  const transferredAtValues = uniqueTextValues(
-    order.items.map(
-      (item: InquiryOrderItemSummary) =>
-        item.transferredAt ?? null,
-    ),
-  );
-
-  if (transferredAtValues.length === 0) {
-    return "-";
-  }
-
-  return transferredAtValues
-    .map((transferredAt) =>
-      safeDateTimeLabelJa(transferredAt, "-"),
-    )
-    .join(" / ");
-}
-
-function normalizeImages(
-  images: InquiryImageFile[] | undefined,
-): InquiryImageView[] {
-  if (!images) {
-    return [];
-  }
-
-  return images.map(
-    (
-      image: InquiryImageFile,
-      index: number,
-    ): InquiryImageView => ({
-      id: image.objectPath || `${image.fileUrl}-${index}`,
-      fileName: image.fileName,
-      fileUrl: image.fileUrl,
-      mimeType: image.mimeType,
-    }),
-  );
-}
-
-function getInquiryImages(
-  inquiry:
-    | InquiryDetailDTO["inquiry"]
-    | null
-    | undefined,
-): InquiryImageView[] {
-  return normalizeImages(inquiry?.images);
-}
-
-function getReplyImages(
-  reply:
-    | InquiryReplyView
-    | null
-    | undefined,
-): InquiryImageView[] {
-  return normalizeImages(reply?.images);
-}
-
-function replySenderLabel(
-  reply: InquiryReplyView,
-  params: {
-    memberId: string;
-  },
-): string {
-  if (reply.senderType === "member") {
-    return reply.senderId === params.memberId
-      ? "自分"
-      : "担当者";
-  }
-
-  return "お客様";
-}
 
 export default function InquiryDetail() {
   const {
@@ -184,15 +63,15 @@ export default function InquiryDetail() {
   });
 
   const inquiry = detail?.inquiry ?? null;
+  const orders = detail?.orders ?? [];
 
   const title =
     inquiry?.inquiryType === "product"
       ? textOrDash(inquiry.subject)
       : "";
 
-  const body = textOrDash(inquiry?.content);
-  const userFullName = textOrDash(detail?.userFullName);
-  const status = getInquiryStatusLabel(inquiry?.status);
+  const status =
+    getInquiryStatusLabel(inquiry?.status);
 
   const isUnopenedReturn =
     inquiry?.inquiryType === "return_unopened";
@@ -203,61 +82,6 @@ export default function InquiryDetail() {
   const inquiryType = inquiry?.inquiryType
     ? getInquiryTypeLabel(inquiry.inquiryType)
     : "-";
-
-  const productName = textOrDash(detail?.productName);
-  const brandName = textOrDash(detail?.brandName);
-
-  const inquiredAt = safeDateTimeLabelJa(
-    inquiry?.createdAt,
-    "-",
-  );
-
-  const updatedAt = safeDateTimeLabelJa(
-    inquiry?.updatedAt,
-    "-",
-  );
-
-  const inquiryImages = getInquiryImages(inquiry);
-
-  const replies: InquiryReplyView[] =
-    detail?.replies ?? [];
-
-  const orders: InquiryOrderSummary[] =
-    detail?.orders ?? [];
-
-  const targetOrderItem =
-    orders.flatMap(
-      (order: InquiryOrderSummary) =>
-        order.items,
-    )[0] ?? null;
-
-  const productDisplayName =
-    `${productName} / ${brandName}`;
-
-  const tokenDisplayName =
-    `${textOrDash(targetOrderItem?.tokenName)} / ${textOrDash(
-      targetOrderItem?.tokenBrandName,
-    )}`;
-
-  const quantity =
-    targetOrderItem?.qty ?? 0;
-
-  const returnStatus =
-    targetOrderItem?.isReturnCompleted
-      ? "返品対応済"
-      : targetOrderItem?.isReturnRequested
-        ? "返品対応中"
-        : "-";
-
-  const returnRequestedAt = safeDateTimeLabelJa(
-    targetOrderItem?.returnRequestedAt,
-    "-",
-  );
-
-  const returnCompletedAt = safeDateTimeLabelJa(
-    targetOrderItem?.returnCompletedAt,
-    "-",
-  );
 
   const pageTitle = (
     <div className="inq-detail__page-title">
@@ -274,9 +98,7 @@ export default function InquiryDetail() {
   );
 
   const statusButtonVariant =
-    getInquiryStatusButtonVariant(
-      inquiry?.status,
-    );
+    getInquiryStatusButtonVariant(inquiry?.status);
 
   const statusButtonLabel =
     isUnopenedReturn &&
@@ -422,391 +244,43 @@ export default function InquiryDetail() {
             ? undefined
             : statusButtonLabel
         }
-        statusButtonBusyLabel={
-          statusButtonBusyLabel
-        }
-        statusButtonVariant={
-          statusButtonVariant
-        }
+        statusButtonBusyLabel={statusButtonBusyLabel}
+        statusButtonVariant={statusButtonVariant}
         onStatusButtonClick={
           hideStatusButton
             ? undefined
             : onToggleStatus
         }
-        isStatusButtonLoading={
-          statusUpdating
-        }
-        statusButtonDisabled={
-          statusButtonDisabled
-        }
+        isStatusButtonLoading={statusUpdating}
+        statusButtonDisabled={statusButtonDisabled}
       >
         <div>
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                問い合わせ内容
-              </CardTitle>
-            </CardHeader>
+          <InquiryContentCard
+            content={inquiry?.content}
+            images={inquiry?.images}
+            errorMessage={errorMessage}
+          />
 
-            <CardContent>
-              <div className="inq-detail">
-                {errorMessage ? (
-                  <div className="inq__empty">
-                    {errorMessage}
-                  </div>
-                ) : null}
-
-                <div className="inq-detail__body">
-                  <div className="inq-detail__label">
-                    問い合わせ本文
-                  </div>
-
-                  <p className="inq-detail__text">
-                    {body}
-                  </p>
-                </div>
-
-                {inquiryImages.length > 0 ? (
-                  <div className="inq-detail__body">
-                    <div className="inq-detail__label">
-                      添付画像
-                    </div>
-
-                    <div className="inq-detail__image-grid">
-                      {inquiryImages.map(
-                        (
-                          image:
-                            InquiryImageView,
-                        ) => (
-                          <a
-                            key={image.id}
-                            href={image.fileUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inq-detail__image-link"
-                            aria-label={`${image.fileName}を開く`}
-                          >
-                            <img
-                              src={image.fileUrl}
-                              alt={image.fileName}
-                              className="inq-detail__image"
-                              loading="lazy"
-                            />
-                          </a>
-                        ),
-                      )}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-3">
-              <CardTitle>
-                返信一覧
-              </CardTitle>
-
-              <Button
-                type="button"
-                onClick={onOpenReplyModal}
-              >
-                返信
-              </Button>
-            </CardHeader>
-
-            <CardContent>
-              {replies.length > 0 ? (
-                <div className="inq-reply-list">
-                  {replies.map(
-                    (
-                      reply:
-                        InquiryReplyView,
-                    ) => {
-                      const replyImagesView =
-                        getReplyImages(
-                          reply,
-                        );
-
-                      const senderLabel =
-                        replySenderLabel(
-                          reply,
-                          {
-                            memberId,
-                          },
-                        );
-
-                      const createdAtLabel =
-                        safeDateTimeLabelJa(
-                          reply.createdAt,
-                          "-",
-                        );
-
-                      const isSelf =
-                        reply.senderType ===
-                          "member" &&
-                        reply.senderId ===
-                          memberId;
-
-                      return (
-                        <article
-                          key={reply.id}
-                          className={
-                            isSelf
-                              ? "inq-reply-item inq-reply-item--self"
-                              : "inq-reply-item inq-reply-item--other"
-                          }
-                        >
-                          <div className="inq-reply-item__header">
-                            <span className="inq-reply-item__sender">
-                              {senderLabel}
-                            </span>
-
-                            <span className="inq-reply-item__date">
-                              {createdAtLabel}
-                            </span>
-                          </div>
-
-                          <p className="inq-reply-item__content">
-                            {textOrDash(
-                              reply.content,
-                            )}
-                          </p>
-
-                          {replyImagesView.length >
-                          0 ? (
-                            <div className="inq-detail__image-grid">
-                              {replyImagesView.map(
-                                (
-                                  image:
-                                    InquiryImageView,
-                                ) => (
-                                  <a
-                                    key={
-                                      image.id
-                                    }
-                                    href={
-                                      image.fileUrl
-                                    }
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inq-detail__image-link"
-                                    aria-label={`${image.fileName}を開く`}
-                                  >
-                                    <img
-                                      src={
-                                        image.fileUrl
-                                      }
-                                      alt={
-                                        image.fileName
-                                      }
-                                      className="inq-detail__image"
-                                      loading="lazy"
-                                    />
-                                  </a>
-                                ),
-                              )}
-                            </div>
-                          ) : null}
-                        </article>
-                      );
-                    },
-                  )}
-                </div>
-              ) : (
-                <div className="inq__empty">
-                  返信はありません。
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <InquiryReplyListCard
+            replies={detail?.replies ?? []}
+            memberId={memberId}
+            onOpenReplyModal={onOpenReplyModal}
+          />
         </div>
 
         <div>
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                問い合わせ情報
-              </CardTitle>
-            </CardHeader>
+          <InquiryInfoCard
+            userFullName={detail?.userFullName}
+            createdAt={inquiry?.createdAt}
+            updatedAt={inquiry?.updatedAt}
+          />
 
-            <CardContent>
-              <div className="inq-detail">
-                <div className="inq-detail__meta">
-                  <div>
-                    <span className="inq-detail__label">
-                      ユーザー名
-                    </span>
-
-                    <span className="inq-detail__value">
-                      {userFullName}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="inq-detail__label">
-                      問い合わせ日
-                    </span>
-
-                    <span className="inq-detail__value">
-                      {inquiredAt}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="inq-detail__label">
-                      最終更新日
-                    </span>
-
-                    <span className="inq-detail__value">
-                      {updatedAt}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                商品・注文情報
-              </CardTitle>
-            </CardHeader>
-
-            <CardContent>
-              <div className="inq-detail">
-                <div className="inq-detail__meta">
-                  <div>
-                    <span className="inq-detail__label">
-                      商品名
-                    </span>
-
-                    <span className="inq-detail__value">
-                      {productDisplayName}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="inq-detail__label">
-                      トークン名
-                    </span>
-
-                    <span className="inq-detail__value">
-                      {tokenDisplayName}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="inq-detail__label">
-                      数量
-                    </span>
-
-                    <span className="inq-detail__value">
-                      {quantity}
-                    </span>
-                  </div>
-
-                  {isUnopenedReturn ? (
-                    <>
-                      <div>
-                        <span className="inq-detail__label">
-                          返品ステータス
-                        </span>
-
-                        <span className="inq-detail__value">
-                          {returnStatus}
-                        </span>
-                      </div>
-
-                      <div>
-                        <span className="inq-detail__label">
-                          返品申請日
-                        </span>
-
-                        <span className="inq-detail__value">
-                          {returnRequestedAt}
-                        </span>
-                      </div>
-
-                      <div>
-                        <span className="inq-detail__label">
-                          返品完了日
-                        </span>
-
-                        <span className="inq-detail__value">
-                          {returnCompletedAt}
-                        </span>
-                      </div>
-                    </>
-                  ) : null}
-
-                  {orders.length > 0 ? (
-                    orders.flatMap(
-                      (
-                        order:
-                          InquiryOrderSummary,
-                        index: number,
-                      ) => [
-                        <div
-                          key={`${order.id}-id-${index}`}
-                        >
-                          <span className="inq-detail__label">
-                            注文ID
-                          </span>
-
-                          <Link
-                            to={`/order/${encodeURIComponent(
-                              order.id,
-                            )}`}
-                            className="inq-detail__value inq-detail__value--link"
-                          >
-                            {textOrDash(
-                              order.id,
-                            )}
-                          </Link>
-                        </div>,
-
-                        <div
-                          key={`${order.id}-created-at-${index}`}
-                        >
-                          <span className="inq-detail__label">
-                            発注日時
-                          </span>
-
-                          <span className="inq-detail__value">
-                            {safeDateTimeLabelJa(
-                              order.createdAt,
-                              "-",
-                            )}
-                          </span>
-                        </div>,
-
-                        <div
-                          key={`${order.id}-transferred-at-${index}`}
-                        >
-                          <span className="inq-detail__label">
-                            移譲日
-                          </span>
-
-                          <span className="inq-detail__value">
-                            {getOrderTransferredAtLabel(
-                              order,
-                            )}
-                          </span>
-                        </div>,
-                      ],
-                    )
-                  ) : (
-                    <div className="inq__empty">
-                      注文情報はありません。
-                    </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <InquiryOrderInfoCard
+            productName={detail?.productName}
+            brandName={detail?.brandName}
+            orders={orders}
+            isUnopenedReturn={isUnopenedReturn}
+          />
         </div>
       </PageStyle>
 
@@ -817,18 +291,10 @@ export default function InquiryDetail() {
         submitting={replySubmitting}
         errorMessage={replyErrorMessage}
         onClose={onCloseReplyModal}
-        onChangeContent={
-          onChangeReplyContent
-        }
-        onChangeImages={
-          onChangeReplyImages
-        }
-        onRemoveImage={
-          onRemoveReplyImage
-        }
-        onSubmit={() =>
-          void onSubmitReply()
-        }
+        onChangeContent={onChangeReplyContent}
+        onChangeImages={onChangeReplyImages}
+        onRemoveImage={onRemoveReplyImage}
+        onSubmit={() => void onSubmitReply()}
       />
     </>
   );
