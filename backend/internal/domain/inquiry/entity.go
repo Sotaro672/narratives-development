@@ -15,9 +15,10 @@ type InquiryType string
 type ReplySenderType string
 
 const (
-	InquiryStatusOpen     InquiryStatus = "open"
-	InquiryStatusResolved InquiryStatus = "resolved"
-	InquiryStatusClosed   InquiryStatus = "closed"
+	InquiryStatusOpen       InquiryStatus = "open"
+	InquiryStatusInProgress InquiryStatus = "in_progress"
+	InquiryStatusResolved   InquiryStatus = "resolved"
+	InquiryStatusClosed     InquiryStatus = "closed"
 )
 
 const (
@@ -73,7 +74,8 @@ type ImageFile struct {
 //
 // Lifecycle:
 // - avatar creates an inquiry as open.
-// - company member can reply to the inquiry.
+// - company member first reply moves open to in_progress.
+// - company member can continue replying while in_progress.
 // - company member can mark it as resolved.
 // - company member can reopen it.
 // - owner avatar can close the inquiry.
@@ -430,9 +432,11 @@ func NewImageFile(
 		DeletedAt:  normalizeOptionalTime(deletedAt),
 		DeletedBy:  deletedBy,
 	}
+
 	if err := validateImageFile(img); err != nil {
 		return ImageFile{}, err
 	}
+
 	return img, nil
 }
 
@@ -466,7 +470,9 @@ func (i *Inquiry) Touch(now time.Time) error {
 	if now.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
+
 	i.UpdatedAt = now.UTC()
+
 	return nil
 }
 
@@ -474,8 +480,10 @@ func (i *Inquiry) MarkAsRead(now time.Time) error {
 	if now.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
+
 	i.IsRead = true
 	i.UpdatedAt = now.UTC()
+
 	return nil
 }
 
@@ -483,8 +491,10 @@ func (i *Inquiry) MarkAsUnread(now time.Time) error {
 	if now.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
+
 	i.IsRead = false
 	i.UpdatedAt = now.UTC()
+
 	return nil
 }
 
@@ -493,9 +503,11 @@ func (i *Inquiry) ResolveByMember(memberID string, now time.Time) error {
 	if memberID == "" {
 		return ErrInvalidResolvedBy
 	}
+
 	if now.IsZero() {
 		return ErrInvalidResolvedAt
 	}
+
 	if i.Status == InquiryStatusClosed {
 		return ErrInquiryAlreadyClosed
 	}
@@ -517,6 +529,7 @@ func (i *Inquiry) ReopenByMember(memberID string, now time.Time) error {
 	if memberID == "" {
 		return ErrInvalidUpdatedBy
 	}
+
 	if now.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
@@ -542,12 +555,15 @@ func (i *Inquiry) CloseByAvatar(avatarID string, now time.Time) error {
 	if avatarID == "" {
 		return ErrInvalidAvatarID
 	}
+
 	if now.IsZero() {
 		return ErrInvalidClosedAt
 	}
+
 	if i.AvatarID != avatarID {
 		return ErrInquiryForbidden
 	}
+
 	if i.Status == InquiryStatusClosed {
 		return ErrInquiryAlreadyClosed
 	}
@@ -580,6 +596,7 @@ func (i *Inquiry) PromoteReturnOpened(now time.Time) error {
 	case InquiryTypeReturnUnopened:
 		i.InquiryType = InquiryTypeReturnOpened
 		i.UpdatedAt = now.UTC()
+
 		return nil
 
 	default:
@@ -591,17 +608,21 @@ func (i *Inquiry) AddImage(img ImageFile) error {
 	if err := validateImageFile(img); err != nil {
 		return err
 	}
+
 	if img.InquiryID != i.ID {
 		return ErrInconsistentInquiry
 	}
+
 	if containsImageURL(i.Images, img.FileURL) {
 		return ErrDuplicateImage
 	}
+
 	if MaxImages > 0 && len(i.Images) >= MaxImages {
 		return ErrTooManyImages
 	}
 
 	i.Images = append(i.Images, img)
+
 	return nil
 }
 
@@ -613,16 +634,18 @@ func (i *Inquiry) ReplaceImages(images []ImageFile) error {
 		if err := validateImageFile(img); err != nil {
 			return err
 		}
+
 		if img.InquiryID != i.ID {
 			return ErrInconsistentInquiry
 		}
 
 		u := normURL(img.FileURL)
+
 		if _, ok := seen[u]; ok {
 			return ErrDuplicateImage
 		}
-		seen[u] = struct{}{}
 
+		seen[u] = struct{}{}
 		out = append(out, img)
 	}
 
@@ -631,6 +654,7 @@ func (i *Inquiry) ReplaceImages(images []ImageFile) error {
 	}
 
 	i.Images = out
+
 	return nil
 }
 
@@ -643,12 +667,15 @@ func (i *Inquiry) RemoveImageByURL(fileURL string) bool {
 	for _, img := range i.Images {
 		if normURL(img.FileURL) == fileURL {
 			removed = true
+
 			continue
 		}
+
 		out = append(out, img)
 	}
 
 	i.Images = out
+
 	return removed
 }
 
@@ -659,12 +686,15 @@ func (i *Inquiry) RemoveImageByFileName(fileName string) bool {
 	for _, img := range i.Images {
 		if img.FileName == fileName {
 			removed = true
+
 			continue
 		}
+
 		out = append(out, img)
 	}
 
 	i.Images = out
+
 	return removed
 }
 
@@ -675,6 +705,7 @@ func (i Inquiry) FirebaseStorageDeleteOps() []FirebaseStorageDeleteOp {
 		if img.ObjectPath == nil || *img.ObjectPath == "" {
 			continue
 		}
+
 		out = append(out, FirebaseStorageDeleteOp{
 			ObjectPath: *img.ObjectPath,
 		})
@@ -713,6 +744,7 @@ func (r *Reply) Touch(now time.Time, updatedBy string) error {
 	if now.IsZero() {
 		return ErrInvalidReplyUpdatedAt
 	}
+
 	if strings.TrimSpace(updatedBy) == "" {
 		return ErrInvalidReplyUpdatedBy
 	}
@@ -730,6 +762,7 @@ func (r *Reply) SoftDelete(now time.Time, deletedBy string) error {
 	if now.IsZero() {
 		return ErrInvalidReplyDeletedAt
 	}
+
 	if strings.TrimSpace(deletedBy) == "" {
 		return ErrInvalidReplyDeletedBy
 	}
@@ -765,30 +798,39 @@ func (i Inquiry) Validate() error {
 	if i.ID == "" {
 		return ErrInvalidID
 	}
+
 	if err := validateInquiryIdentity(i); err != nil {
 		return err
 	}
+
 	if i.AvatarID == "" {
 		return ErrInvalidAvatarID
 	}
+
 	if i.Content == "" {
 		return ErrInvalidContent
 	}
+
 	if !isValidInquiryStatus(i.Status) {
 		return ErrInvalidStatus
 	}
+
 	if i.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
+
 	if i.UpdatedAt.IsZero() || i.UpdatedAt.Before(i.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
+
 	if i.UpdatedBy != nil && *i.UpdatedBy == "" {
 		return ErrInvalidUpdatedBy
 	}
+
 	if i.DeletedAt != nil && i.DeletedAt.Before(i.CreatedAt) {
 		return ErrInvalidDeletedAt
 	}
+
 	if i.DeletedBy != nil && *i.DeletedBy == "" {
 		return ErrInvalidDeletedBy
 	}
@@ -796,6 +838,7 @@ func (i Inquiry) Validate() error {
 	if err := validateResolvedFields(i); err != nil {
 		return err
 	}
+
 	if err := validateClosedFields(i); err != nil {
 		return err
 	}
@@ -805,18 +848,22 @@ func (i Inquiry) Validate() error {
 	}
 
 	seen := map[string]struct{}{}
+
 	for _, img := range i.Images {
 		if err := validateImageFile(img); err != nil {
 			return err
 		}
+
 		if img.InquiryID != i.ID {
 			return ErrInconsistentInquiry
 		}
 
 		u := normURL(img.FileURL)
+
 		if _, ok := seen[u]; ok {
 			return ErrDuplicateImage
 		}
+
 		seen[u] = struct{}{}
 	}
 
@@ -827,20 +874,25 @@ func (r Reply) Validate() error {
 	if strings.TrimSpace(r.ID) == "" {
 		return ErrInvalidReplyID
 	}
+
 	if strings.TrimSpace(r.InquiryID) == "" {
 		return ErrInvalidReplyInquiryID
 	}
+
 	if !isValidReplySenderType(r.SenderType) {
 		return ErrInvalidReplySenderType
 	}
+
 	if strings.TrimSpace(r.SenderID) == "" {
 		return ErrInvalidReplySenderID
 	}
 
 	trimmedContent := strings.TrimSpace(r.Content)
+
 	if trimmedContent == "" && len(r.Images) == 0 {
 		return ErrReplyContentOrImageRequired
 	}
+
 	if MaxReplyContentLength > 0 && len([]rune(trimmedContent)) > MaxReplyContentLength {
 		return ErrInvalidReplyContent
 	}
@@ -848,6 +900,7 @@ func (r Reply) Validate() error {
 	if r.CreatedAt.IsZero() {
 		return ErrInvalidReplyCreatedAt
 	}
+
 	if strings.TrimSpace(r.CreatedBy) == "" {
 		return ErrInvalidReplyCreatedBy
 	}
@@ -857,6 +910,7 @@ func (r Reply) Validate() error {
 			return ErrInvalidReplyUpdatedAt
 		}
 	}
+
 	if r.UpdatedBy != nil && strings.TrimSpace(*r.UpdatedBy) == "" {
 		return ErrInvalidReplyUpdatedBy
 	}
@@ -866,6 +920,7 @@ func (r Reply) Validate() error {
 			return ErrInvalidReplyDeletedAt
 		}
 	}
+
 	if r.DeletedBy != nil && strings.TrimSpace(*r.DeletedBy) == "" {
 		return ErrInvalidReplyDeletedBy
 	}
@@ -875,18 +930,22 @@ func (r Reply) Validate() error {
 	}
 
 	seen := map[string]struct{}{}
+
 	for _, img := range r.Images {
 		if err := validateImageFile(img); err != nil {
 			return err
 		}
+
 		if img.InquiryID != r.InquiryID {
 			return ErrReplyInconsistentImage
 		}
 
 		u := normURL(img.FileURL)
+
 		if _, ok := seen[u]; ok {
 			return ErrReplyDuplicateImage
 		}
+
 		seen[u] = struct{}{}
 	}
 
@@ -903,9 +962,11 @@ func validateInquiryIdentity(i Inquiry) error {
 		if i.ProductID == "" {
 			return ErrInvalidProductID
 		}
+
 		if i.OrderID != "" || i.OrderItemIndex != nil {
 			return ErrInquiryInvalidWorkflow
 		}
+
 		if strings.TrimSpace(i.Subject) == "" {
 			return ErrInvalidSubject
 		}
@@ -915,9 +976,11 @@ func validateInquiryIdentity(i Inquiry) error {
 		if i.OrderID == "" {
 			return ErrInvalidOrderID
 		}
+
 		if i.OrderItemIndex == nil || *i.OrderItemIndex < 0 {
 			return ErrInvalidOrderItemIndex
 		}
+
 		if strings.TrimSpace(i.Subject) != "" {
 			return ErrInvalidSubject
 		}
@@ -932,6 +995,7 @@ func validateResolvedFields(i Inquiry) error {
 			return ErrInvalidResolvedAt
 		}
 	}
+
 	if i.ResolvedBy != nil && *i.ResolvedBy == "" {
 		return ErrInvalidResolvedBy
 	}
@@ -940,6 +1004,7 @@ func validateResolvedFields(i Inquiry) error {
 		if i.ResolvedAt == nil || i.ResolvedAt.IsZero() {
 			return ErrInvalidResolvedAt
 		}
+
 		if i.ResolvedBy == nil || *i.ResolvedBy == "" {
 			return ErrInvalidResolvedBy
 		}
@@ -954,6 +1019,7 @@ func validateClosedFields(i Inquiry) error {
 			return ErrInvalidClosedAt
 		}
 	}
+
 	if i.ClosedBy != nil && *i.ClosedBy == "" {
 		return ErrInvalidClosedBy
 	}
@@ -962,6 +1028,7 @@ func validateClosedFields(i Inquiry) error {
 		if i.ClosedAt == nil || i.ClosedAt.IsZero() {
 			return ErrInvalidClosedAt
 		}
+
 		if i.ClosedBy == nil || *i.ClosedBy == "" {
 			return ErrInvalidClosedBy
 		}
@@ -994,6 +1061,7 @@ func validateImageFile(img ImageFile) error {
 	if img.MimeType == "" || (mimeRe != nil && !mimeRe.MatchString(img.MimeType)) {
 		return ErrInvalidImageMIMEType
 	}
+
 	if len(AllowedMimeTypes) > 0 {
 		if _, ok := AllowedMimeTypes[img.MimeType]; !ok {
 			return ErrInvalidImageMIMEType
@@ -1003,6 +1071,7 @@ func validateImageFile(img ImageFile) error {
 	if img.CreatedAt.IsZero() {
 		return ErrInvalidImageCreatedAt
 	}
+
 	if img.CreatedBy == "" {
 		return ErrInvalidImageCreatedBy
 	}
@@ -1012,6 +1081,7 @@ func validateImageFile(img ImageFile) error {
 			return ErrInvalidImageUpdatedAt
 		}
 	}
+
 	if img.UpdatedBy != nil && *img.UpdatedBy == "" {
 		return ErrInvalidImageUpdatedBy
 	}
@@ -1021,6 +1091,7 @@ func validateImageFile(img ImageFile) error {
 			return ErrInvalidImageDeletedAt
 		}
 	}
+
 	if img.DeletedBy != nil && *img.DeletedBy == "" {
 		return ErrInvalidImageDeletedBy
 	}
@@ -1032,8 +1103,12 @@ func validateImageFile(img ImageFile) error {
 
 func isValidInquiryStatus(status InquiryStatus) bool {
 	switch status {
-	case InquiryStatusOpen, InquiryStatusResolved, InquiryStatusClosed:
+	case InquiryStatusOpen,
+		InquiryStatusInProgress,
+		InquiryStatusResolved,
+		InquiryStatusClosed:
 		return true
+
 	default:
 		return false
 	}
@@ -1045,6 +1120,7 @@ func isValidInquiryType(inquiryType InquiryType) bool {
 		InquiryTypeReturnUnopened,
 		InquiryTypeReturnOpened:
 		return true
+
 	default:
 		return false
 	}
@@ -1054,6 +1130,7 @@ func isValidReplySenderType(senderType ReplySenderType) bool {
 	switch senderType {
 	case ReplySenderTypeAvatar, ReplySenderTypeMember:
 		return true
+
 	default:
 		return false
 	}
@@ -1063,7 +1140,9 @@ func normalizeOptionalTime(t *time.Time) *time.Time {
 	if t == nil {
 		return nil
 	}
+
 	utc := t.UTC()
+
 	return &utc
 }
 
@@ -1077,12 +1156,14 @@ func urlOK(raw string) bool {
 	}
 
 	u, err := url.Parse(raw)
+
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return false
 	}
 
 	if len(AllowedURLHosts) > 0 {
 		host := strings.ToLower(u.Hostname())
+
 		if _, ok := AllowedURLHosts[host]; !ok {
 			return false
 		}

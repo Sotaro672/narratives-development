@@ -31,6 +31,9 @@ export function getInquiryStatusLabel(
     case "open":
       return "未対応";
 
+    case "in_progress":
+      return "対応中";
+
     case "resolved":
       return "対応済み";
 
@@ -67,6 +70,15 @@ export function isUnresolvedStatus(
   statusValue: InquiryStatusValue,
 ): boolean {
   return statusValue === "open";
+}
+
+/**
+ * 問い合わせが対応中か判定する。
+ */
+export function isInProgressStatus(
+  statusValue: InquiryStatusValue,
+): boolean {
+  return statusValue === "in_progress";
 }
 
 /**

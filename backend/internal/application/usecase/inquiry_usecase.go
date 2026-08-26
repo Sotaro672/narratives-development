@@ -35,7 +35,7 @@ type AvatarEmailResolver interface {
 //
 // 画像は Inquiry.Images として Inquiry 集約内で管理します。
 // Firebase Storage への保存・削除は frontend / application 層の責務とし、
-// domain / repository では fileUrl と objectPath のメタデータのみ扱います。
+// domain / repository では fileUrl と objectPath のメタデータのみ扱います.
 //
 // 返信は Inquiry.Content へ追記せず、Firestore subcollection:
 //
@@ -59,10 +59,10 @@ type InquiryUsecase struct {
 	now func() time.Time
 }
 
-// NewInquiryUsecase は InquiryUsecase の唯一の生成入口です。
+// NewInquiryUsecase は InquiryUsecase の唯一の生成入口です.
 //
 // InquiryUsecase が必要とする依存はここに集約します。
-// replyRepo は reply 作成・一覧取得・既読化・avatar 未読件数集計で必須です。
+// replyRepo は reply 作成・一覧取得・既読化・avatar 未読件数集計で必須です.
 //
 // mailer / mailFrom / mailTo / avatarEmailResolver / authUserGetter はメール送信用です。
 // メール送信を使わない場合は nil / 空文字を渡してください。
@@ -96,7 +96,7 @@ func (uc *InquiryUsecase) SetNowFunc(now func() time.Time) {
 	uc.now = now
 }
 
-// Create は Inquiry を作成します。
+// Create は Inquiry を作成します.
 //
 // 作成後、メール設定がある場合は問い合わせ作成通知メールを送信します。
 // メール送信に失敗した場合、Inquiry 作成自体は完了済みのため、作成済み Inquiry と error を返します。
@@ -117,7 +117,7 @@ func (uc *InquiryUsecase) Create(ctx context.Context, inq inquirydom.Inquiry) (i
 	return created, nil
 }
 
-// CreateInquiryReplyInput は company member / avatar が問い合わせへ返信する入力です。
+// CreateInquiryReplyInput は company member / avatar が問い合わせへ返信する入力です.
 //
 // Console からの返信では SenderType=member, SenderID=memberId を使います。
 // Mall / SNS から avatar が返信する場合は SenderType=avatar, SenderID=avatarId を使います。
@@ -129,14 +129,15 @@ type CreateInquiryReplyInput struct {
 	Images     []inquirydom.ImageFile
 }
 
-// CreateReply は Inquiry の reply subcollection に返信を作成します。
+// CreateReply は Inquiry の reply subcollection に返信を作成します.
 //
 // 保存先:
 //
 //	inquiries/{inquiryId}/replies/{replyId}
 //
 // Inquiry.Content へ返信本文を追記しません。
-// Inquiry 本体は updatedAt / updatedBy のみ更新します。
+// Inquiry 本体は updatedAt / updatedBy を更新します。
+// company member の返信時、status=open の Inquiry は in_progress へ遷移させます。
 func (uc *InquiryUsecase) CreateReply(
 	ctx context.Context,
 	in CreateInquiryReplyInput,
@@ -192,17 +193,25 @@ func (uc *InquiryUsecase) CreateReply(
 	}
 
 	updatedBy := senderID
-	if _, err := uc.repo.Update(ctx, inquiryID, inquirydom.InquiryPatch{
+	patch := inquirydom.InquiryPatch{
 		UpdatedAt: &now,
 		UpdatedBy: &updatedBy,
-	}); err != nil {
+	}
+
+	if in.SenderType == inquirydom.ReplySenderTypeMember &&
+		current.Status == inquirydom.InquiryStatusOpen {
+		status := inquirydom.InquiryStatusInProgress
+		patch.Status = &status
+	}
+
+	if _, err := uc.repo.Update(ctx, inquiryID, patch); err != nil {
 		return inquirydom.Reply{}, err
 	}
 
 	return created, nil
 }
 
-// CreateReplyByMember は company member が問い合わせへ返信します。
+// CreateReplyByMember は company member が問い合わせへ返信します.
 //
 // Console 用の shorthand です。
 func (uc *InquiryUsecase) CreateReplyByMember(
@@ -221,7 +230,7 @@ func (uc *InquiryUsecase) CreateReplyByMember(
 	})
 }
 
-// CreateReplyByAvatar は avatar が問い合わせへ返信します。
+// CreateReplyByAvatar は avatar が問い合わせへ返信します.
 //
 // Mall / SNS 用の shorthand です。
 func (uc *InquiryUsecase) CreateReplyByAvatar(
@@ -240,7 +249,7 @@ func (uc *InquiryUsecase) CreateReplyByAvatar(
 	})
 }
 
-// ListReplies は Inquiry の reply subcollection を取得します。
+// ListReplies は Inquiry の reply subcollection を取得します.
 //
 // 保存先:
 //
@@ -260,7 +269,7 @@ func (uc *InquiryUsecase) ListReplies(
 	return uc.replyRepo.ListByInquiryID(ctx, inquiryID)
 }
 
-// CountUnreadInquiriesForAvatarInput は avatar 向けの未読件数集計入力です。
+// CountUnreadInquiriesForAvatarInput は avatar 向けの未読件数集計入力です.
 //
 // CountUnreadByCompanyIDForAvatar は以下を合算します。
 // - avatarId が受け取る対象 Inquiry 配下 replies の isRead=false
@@ -273,9 +282,9 @@ type CountUnreadInquiriesForAvatarInput struct {
 	Filter    inquirydom.Filter
 }
 
-// CountUnreadByAvatarIDInput は avatar 向けの未読件数集計入力です。
+// CountUnreadByAvatarIDInput は avatar 向けの未読件数集計入力です.
 //
-// companyId を使わず、avatarId に紐づく Inquiry 配下 replies の未読数を返します。
+// companyId を使わず、avatarId に紐づく Inquiry 配下 replies の未読数を返します.
 //
 // avatar 側では、avatar 自身が起票した Inquiry 本体を未読件数に含めません。
 // member が avatar 宛に返信した unread reply を count 対象にします。
@@ -284,7 +293,7 @@ type CountUnreadByAvatarIDInput struct {
 	Filter   inquirydom.Filter
 }
 
-// CountUnreadByCompanyIDForAvatar は avatar 向けに replies を対象に未読件数を返します。
+// CountUnreadByCompanyIDForAvatar は avatar 向けに replies を対象に未読件数を返します.
 //
 // avatar 側では、avatar 自身が起票した Inquiry 本体を未読件数には含めません。
 // reply の count 条件:
@@ -359,10 +368,10 @@ func (uc *InquiryUsecase) CountUnreadByCompanyIDForAvatar(
 	return total, nil
 }
 
-// CountUnreadByAvatarID は avatarId のみで avatar 向け未読件数を返します。
+// CountUnreadByAvatarID は avatarId のみで avatar 向け未読件数を返します.
 //
 // Inquiry 本体の IsRead は avatar 自身が起票した初回本文に対する既読状態のため、
-// avatar 向け未読数には含めません。
+// avatar 向け未読数には含めません.
 //
 // count 条件は ReplyRepository 側で以下として扱います:
 //
@@ -437,7 +446,7 @@ type ResolveInquiryInput struct {
 	MemberID  string
 }
 
-// ResolveByMember は company member が Inquiry を resolved にします。
+// ResolveByMember は company member が Inquiry を resolved にします.
 //
 // company member は close せず、対処済みとして resolved にします。
 func (uc *InquiryUsecase) ResolveByMember(
@@ -531,7 +540,7 @@ type CloseInquiryByAvatarInput struct {
 	AvatarID  string
 }
 
-// CloseByAvatar は avatar が Inquiry を closed にします。
+// CloseByAvatar は avatar が Inquiry を closed にします.
 //
 // Inquiry を起票した avatar のみ close できます。
 func (uc *InquiryUsecase) CloseByAvatar(
@@ -572,9 +581,9 @@ func (uc *InquiryUsecase) CloseByAvatar(
 	})
 }
 
-// MarkInquiryAsReadInput は Inquiry を既読にする入力です。
+// MarkInquiryAsReadInput は Inquiry を既読にする入力です.
 //
-// ReaderSenderType / ReaderSenderID は reply の既読化で自分の reply を除外するために使います。
+// ReaderSenderType / ReaderSenderID は reply の既読化で自分の reply を除外するために使います.
 //
 // Console 側で company member が読む場合:
 //
@@ -591,7 +600,7 @@ type MarkInquiryAsReadInput struct {
 	ReaderSenderID   string
 }
 
-// MarkAsRead は Inquiry と配下の replies を既読にします。
+// MarkAsRead は Inquiry と配下の replies を既読にします.
 //
 // replies の既読化では、自分が送信した reply は除外します。
 func (uc *InquiryUsecase) MarkAsRead(
@@ -651,7 +660,7 @@ func (uc *InquiryUsecase) MarkAsRead(
 	return updated, nil
 }
 
-// Update は Inquiry を部分更新します。
+// Update は Inquiry を部分更新します.
 //
 // 画像追加・更新・削除は InquiryPatch.Images に更新後の Images 全体を渡して行います。
 func (uc *InquiryUsecase) Update(

@@ -1,8 +1,6 @@
 // frontend/console/shell/src/pages/inquiryDetail.tsx
-
 import * as React from "react";
 import { Link } from "react-router-dom";
-
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import { safeDateTimeLabelJa } from "../../../shell/src/shared/util/dateJa";
 import { Button } from "../../../shell/src/shared/ui/button";
@@ -12,30 +10,24 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../shell/src/shared/ui/card";
-
 import {
   replyInquiryHTTP,
   uploadInquiryReplyImagesToStorage,
 } from "../features/inquiry/infrastructure/inquiryRepositoryHTTP";
-
 import ReplyModal, {
   type ReplyUploadImage,
 } from "../features/inquiry/presentation/components/replyModal";
-
 import { useInquiryDetailPage } from "../features/inquiry/presentation/hooks/useInquiryDetailPage";
-
 import {
   MAX_REPLY_IMAGES,
   MAX_REPLY_IMAGE_SIZE_BYTES,
   MAX_REPLY_IMAGE_SIZE_MB,
 } from "../features/inquiry/constants/inquiryReply";
-
 import {
   getInquiryStatusButtonVariant,
   getInquiryStatusLabel,
   isClosedStatus,
 } from "../features/inquiry/presentation/utils/inquiryStatus";
-
 import {
   getInquiryTypeLabel,
   type InquiryDetail as InquiryDetailDTO,
@@ -43,7 +35,6 @@ import {
   type InquiryOrderItemSummary,
   type InquiryOrderSummary,
 } from "../shared/types/inquiry";
-
 import "../styles/inquiry-page.css";
 
 type InquiryImageView = {
@@ -60,7 +51,6 @@ function textOrDash(
   value: string | null | undefined,
 ): string {
   const normalized = String(value ?? "").trim();
-
   return normalized || "-";
 }
 
@@ -153,9 +143,7 @@ function getInquiryImages(
     | null
     | undefined,
 ): InquiryImageView[] {
-  return normalizeImages(
-    inquiry?.images,
-  );
+  return normalizeImages(inquiry?.images);
 }
 
 function getReplyImages(
@@ -164,9 +152,7 @@ function getReplyImages(
     | null
     | undefined,
 ): InquiryImageView[] {
-  return normalizeImages(
-    reply?.images,
-  );
+  return normalizeImages(reply?.images);
 }
 
 function replySenderLabel(
@@ -181,7 +167,7 @@ function replySenderLabel(
       : "担当者";
   }
 
-  return "アバター";
+  return "お客様";
 }
 
 export default function InquiryDetail() {
@@ -363,7 +349,10 @@ export default function InquiryDetail() {
 
   const statusButtonLabel =
     isUnopenedReturn &&
-    inquiry?.status === "open"
+    (
+      inquiry?.status === "open" ||
+      inquiry?.status === "in_progress"
+    )
       ? "返品受領"
       : status;
 
@@ -927,10 +916,18 @@ export default function InquiryDetail() {
                           "-",
                         );
 
+                      const isSelf =
+                        reply.senderType === "member" &&
+                        reply.senderId === memberId;
+
                       return (
                         <article
                           key={reply.id}
-                          className="inq-reply-item"
+                          className={
+                            isSelf
+                              ? "inq-reply-item inq-reply-item--self"
+                              : "inq-reply-item inq-reply-item--other"
+                          }
                         >
                           <div className="inq-reply-item__header">
                             <span className="inq-reply-item__sender">

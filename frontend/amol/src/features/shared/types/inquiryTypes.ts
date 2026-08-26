@@ -1,9 +1,16 @@
 // frontend/amol/src/features/shared/types/inquiryTypes.ts
 
-export const INQUIRY_STATUSES = ["open", "resolved", "closed"] as const;
+export const INQUIRY_STATUSES = [
+  "open",
+  "in_progress",
+  "resolved",
+  "closed",
+] as const;
+
 export type InquiryStatus = (typeof INQUIRY_STATUSES)[number];
 
 export const INQUIRY_REPLY_SENDER_TYPES = ["avatar", "member"] as const;
+
 export type InquiryReplySenderType = (typeof INQUIRY_REPLY_SENDER_TYPES)[number];
 
 export const INQUIRY_TYPES = [
@@ -18,8 +25,10 @@ export function getInquiryTypeLabel(inquiryType: InquiryType): string {
   switch (inquiryType) {
     case "product":
       return "商品説明";
+
     case "return_unopened":
       return "未開封返品";
+
     case "return_opened":
       return "開封後返品";
   }

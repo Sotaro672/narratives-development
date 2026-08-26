@@ -183,7 +183,7 @@ func (q *InquiryManagementQuery) ListByCompanyID(
 	}, nil
 }
 
-// CountActionRequiredByCompanyID は companyID に紐づく未対応 Inquiry 件数を返します。
+// CountActionRequiredByCompanyID は companyID に紐づく未対応・対応中 Inquiry 件数を返します。
 func (q *InquiryManagementQuery) CountActionRequiredByCompanyID(
 	ctx context.Context,
 	companyID string,
@@ -199,60 +199,68 @@ func (q *InquiryManagementQuery) CountActionRequiredByCompanyID(
 			fmt.Errorf("inquiry management query: companyId is empty")
 	}
 
-	status := inquirydom.InquiryStatusOpen
-	filter.Status = &status
+	statuses := []inquirydom.InquiryStatus{
+		inquirydom.InquiryStatusOpen,
+		inquirydom.InquiryStatusInProgress,
+	}
 
 	total := 0
-	pageNumber := 1
 	perPage := 200
 
-	for {
-		result, err := q.repo.ListByCompanyID(
-			ctx,
-			companyID,
-			filter,
-			inquirydom.Sort{},
-			inquirydom.Page{
-				Number:  pageNumber,
-				PerPage: perPage,
-			},
-		)
-		if err != nil {
-			return 0, err
-		}
+	for _, status := range statuses {
+		currentStatus := status
+		currentFilter := filter
+		currentFilter.Status = &currentStatus
+		pageNumber := 1
 
-		for _, inq := range result.Items {
-			_,
-				_,
-				_,
-				_,
-				_,
-				resolvedCompanyID,
-				err := q.resolveProductModelRefByInquiry(
+		for {
+			result, err := q.repo.ListByCompanyID(
 				ctx,
-				inq,
+				companyID,
+				currentFilter,
+				inquirydom.Sort{},
+				inquirydom.Page{
+					Number:  pageNumber,
+					PerPage: perPage,
+				},
 			)
 			if err != nil {
 				return 0, err
 			}
 
-			if resolvedCompanyID == "" {
-				continue
+			for _, inq := range result.Items {
+				_,
+					_,
+					_,
+					_,
+					_,
+					resolvedCompanyID,
+					err := q.resolveProductModelRefByInquiry(
+					ctx,
+					inq,
+				)
+				if err != nil {
+					return 0, err
+				}
+
+				if resolvedCompanyID == "" {
+					continue
+				}
+
+				if resolvedCompanyID != companyID {
+					continue
+				}
+
+				total++
 			}
 
-			if resolvedCompanyID != companyID {
-				continue
+			if result.TotalPages <= 0 ||
+				pageNumber >= result.TotalPages {
+				break
 			}
 
-			total++
+			pageNumber++
 		}
-
-		if result.TotalPages <= 0 ||
-			pageNumber >= result.TotalPages {
-			break
-		}
-
-		pageNumber++
 	}
 
 	return total, nil
@@ -370,7 +378,6 @@ func (q *InquiryManagementQuery) resolveProductModelRefByReturnInquiry(
 	}
 
 	item := order.Items[itemIndex]
-
 	productID := inq.ProductID
 
 	if productID == "" {
