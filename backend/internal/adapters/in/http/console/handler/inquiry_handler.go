@@ -12,11 +12,14 @@ import (
 	consolequery "narratives/internal/application/query/console"
 	usecase "narratives/internal/application/usecase"
 	inquirydom "narratives/internal/domain/inquiry"
+	orderdom "narratives/internal/domain/order"
+	refunddom "narratives/internal/domain/refund"
 )
 
 // InquiryHandler は /inquiries 関連のエンドポイントを担当します。
 type InquiryHandler struct {
 	uc              *usecase.InquiryUsecase
+	returnReceiptUC *usecase.ReturnReceiptUsecase
 	managementQuery *consolequery.InquiryManagementQuery
 	detailQuery     *consolequery.InquiryDetailQuery
 }
@@ -24,11 +27,13 @@ type InquiryHandler struct {
 // NewInquiryHandler はHTTPハンドラを初期化します。
 func NewInquiryHandler(
 	uc *usecase.InquiryUsecase,
+	returnReceiptUC *usecase.ReturnReceiptUsecase,
 	managementQuery *consolequery.InquiryManagementQuery,
 	detailQuery *consolequery.InquiryDetailQuery,
 ) http.Handler {
 	return &InquiryHandler{
 		uc:              uc,
+		returnReceiptUC: returnReceiptUC,
 		managementQuery: managementQuery,
 		detailQuery:     detailQuery,
 	}
@@ -102,6 +107,14 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			h.reply(w, r, id)
+			return
+
+		case "receive-return":
+			if r.Method != http.MethodPost {
+				methodNotAllowed(w)
+				return
+			}
+			h.receiveReturn(w, r, id)
 			return
 
 		case "resolve":
@@ -383,6 +396,81 @@ func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string
 	_ = json.NewEncoder(w).Encode(created)
 }
 
+// POST /inquiries/{id}/receive-return
+//
+// 未開封返品の商品受領を確定し、商品代金 + 対象商品の消費税を返金します。
+//
+// request body から返金額・orderId・orderItemIndex は受け取りません。
+// Inquiry.OrderID + Inquiry.OrderItemIndex と Order snapshot を正とします。
+//
+// companyId / memberId は request body から受け取らず、
+// 認証 context の値を正とします。
+func (h *InquiryHandler) receiveReturn(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	companyID, ok := currentCompanyID(w, r)
+	if !ok {
+		return
+	}
+
+	memberID, ok := currentMemberID(w, r)
+	if !ok {
+		return
+	}
+
+	// ReturnReceiptUsecase 自体でも company boundary を再検証するが、
+	// 先に Console detail query を通して他 company の Inquiry を
+	// financial usecase へ渡さない。
+	if _, err := h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID); err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	if h.returnReceiptUC == nil {
+		writeInquiryErr(w, usecase.ErrReturnReceiptUsecaseNotConfigured)
+		return
+	}
+
+	result, err := h.returnReceiptUC.ReceiveReturn(
+		ctx,
+		usecase.ReceiveReturnInput{
+			InquiryID: id,
+			CompanyID: companyID,
+			MemberID:  memberID,
+		},
+	)
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	response := struct {
+		Inquiry                inquirydom.Inquiry `json:"inquiry"`
+		RefundID               string             `json:"refundId"`
+		RefundStatus           string             `json:"refundStatus"`
+		TransferReversalStatus string             `json:"transferReversalStatus"`
+		FinanciallyCompleted   bool               `json:"financiallyCompleted"`
+		OrderCompleted         bool               `json:"orderCompleted"`
+		InquiryResolved        bool               `json:"inquiryResolved"`
+		AlreadyCompleted       bool               `json:"alreadyCompleted"`
+	}{
+		Inquiry:                result.Inquiry,
+		RefundID:               result.Refund.ID,
+		RefundStatus:           string(result.Refund.Status),
+		TransferReversalStatus: string(result.Refund.TransferReversalStatus),
+		FinanciallyCompleted:   result.FinanciallyCompleted,
+		OrderCompleted:         result.OrderCompleted,
+		InquiryResolved:        result.InquiryResolved,
+		AlreadyCompleted:       result.AlreadyCompleted,
+	}
+
+	if !result.FinanciallyCompleted {
+		w.WriteHeader(http.StatusAccepted)
+	}
+
+	_ = json.NewEncoder(w).Encode(response)
+}
+
 // POST /inquiries/{id}/resolve
 //
 // memberId は request body から受け取らず、認証 context の memberId を正とします。
@@ -399,8 +487,20 @@ func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id stri
 		return
 	}
 
-	if _, err := h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID); err != nil {
+	detail, err := h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID)
+	if err != nil {
 		writeInquiryErr(w, err)
+		return
+	}
+
+	// return_unopened は返品受領に伴う返金処理を必須とするため、
+	// generic resolve では対応済みにしない。
+	//
+	// POST /inquiries/{id}/receive-return を通し、
+	// Refund -> Transfer Reversal -> Order return completion の完了後に
+	// ReturnReceiptUsecase から Inquiry を resolved へ遷移させる。
+	if detail.Inquiry.InquiryType == inquirydom.InquiryTypeReturnUnopened {
+		writeInquiryErr(w, inquirydom.ErrInquiryInvalidWorkflow)
 		return
 	}
 
@@ -694,6 +794,7 @@ func writeInquiryErr(w http.ResponseWriter, err error) {
 
 	switch {
 	case errors.Is(err, inquirydom.ErrInvalidID),
+		errors.Is(err, usecase.ErrReturnReceiptInvalidInquiryType),
 		errors.Is(err, inquirydom.ErrInvalidProductID),
 		errors.Is(err, inquirydom.ErrInvalidAvatarID),
 		errors.Is(err, inquirydom.ErrInvalidSubject),
@@ -743,13 +844,29 @@ func writeInquiryErr(w http.ResponseWriter, err error) {
 		errors.Is(err, inquirydom.ErrInquiryInvalidWorkflow):
 		code = http.StatusBadRequest
 
-	case errors.Is(err, inquirydom.ErrInquiryForbidden):
+	case errors.Is(err, inquirydom.ErrInquiryForbidden),
+		errors.Is(err, usecase.ErrReturnReceiptInvalidCompanyID),
+		errors.Is(err, usecase.ErrReturnReceiptInvalidMemberID):
 		code = http.StatusForbidden
 
-	case errors.Is(err, inquirydom.ErrNotFound):
+	case errors.Is(err, inquirydom.ErrNotFound),
+		errors.Is(err, orderdom.ErrNotFound),
+		errors.Is(err, refunddom.ErrNotFound),
+		errors.Is(err, usecase.ErrReturnReceiptCompanyMismatch):
 		code = http.StatusNotFound
 
-	case errors.Is(err, inquirydom.ErrConflict):
+	case errors.Is(err, inquirydom.ErrConflict),
+		errors.Is(err, orderdom.ErrConflict),
+		errors.Is(err, refunddom.ErrConflict),
+		errors.Is(err, usecase.ErrReturnReceiptInquiryNotOpen),
+		errors.Is(err, usecase.ErrReturnReceiptInquiryClosed),
+		errors.Is(err, usecase.ErrReturnReceiptOrderMismatch),
+		errors.Is(err, usecase.ErrReturnReceiptOrderNotPaid),
+		errors.Is(err, usecase.ErrReturnReceiptReturnNotRequested),
+		errors.Is(err, usecase.ErrReturnReceiptReturnNotUnopened),
+		errors.Is(err, usecase.ErrReturnReceiptRefundMismatch),
+		errors.Is(err, usecase.ErrReturnReceiptOrderCompletionMismatch),
+		errors.Is(err, usecase.ErrReturnReceiptInquiryResolutionMismatch):
 		code = http.StatusConflict
 	}
 

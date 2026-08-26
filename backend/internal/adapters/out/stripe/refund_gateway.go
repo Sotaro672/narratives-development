@@ -12,6 +12,7 @@ import (
 	"time"
 
 	usecase "narratives/internal/application/usecase"
+	paymentdom "narratives/internal/domain/payment"
 )
 
 var _ usecase.StripeRefundGateway = (*RefundGateway)(nil)
@@ -213,8 +214,47 @@ func (g *RefundGateway) CreateRefund(
 			)
 	}
 
+	refundStatus :=
+		paymentdom.RefundStatus(
+			out.Status,
+		)
+
+	if !paymentdom.IsValidRefundStatus(
+		refundStatus,
+	) ||
+		refundStatus ==
+			paymentdom.RefundStatusNone {
+		return nil,
+			newRefundError(
+				http.StatusOK,
+				"invalid_response",
+				"invalid_refund_status",
+				"stripe refund status is invalid",
+				true,
+			)
+	}
+
+	if out.Created <= 0 {
+		return nil,
+			newRefundError(
+				http.StatusOK,
+				"invalid_response",
+				"invalid_created_at",
+				"stripe refund created timestamp is invalid",
+				true,
+			)
+	}
+
+	createdAt :=
+		time.Unix(
+			out.Created,
+			0,
+		).UTC()
+
 	return &usecase.CreateStripeRefundResult{
 		StripeRefundID: stripeRefundID,
+		Status:         refundStatus,
+		CreatedAt:      createdAt,
 	}, nil
 }
 

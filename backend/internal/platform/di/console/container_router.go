@@ -107,7 +107,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.InquiryUC != nil && c.InquiryManagementQuery != nil && c.InquiryDetailQuery != nil {
-		inquiriesH = consoleHandler.NewInquiryHandler(c.InquiryUC, c.InquiryManagementQuery, c.InquiryDetailQuery)
+		inquiriesH = consoleHandler.NewInquiryHandler(c.InquiryUC, nil, c.InquiryManagementQuery, c.InquiryDetailQuery)
 	}
 
 	if c.InventoryUC != nil && c.InventoryManagementQuery != nil && c.InventoryDetailQuery != nil && c.ListCreateQuery != nil {
@@ -295,9 +295,11 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		orderDispatchNotificationHandler := internalHandler.NewOrderDispatchNotificationHandler(
 			c.OrderDispatchNotificationUC,
 		)
+
 		internalOrderDispatchNotificationProcessH = http.HandlerFunc(
 			orderDispatchNotificationHandler.Process,
 		)
+
 		internalOrderDispatchNotificationDispatchH = http.HandlerFunc(
 			orderDispatchNotificationHandler.DispatchDue,
 		)

@@ -40,6 +40,7 @@ type usecases struct {
 	brandUC                            *uc.BrandUsecase
 	companyUC                          *uc.CompanyUsecase
 	inquiryUC                          *uc.InquiryUsecase
+	returnReceiptUC                    *uc.ReturnReceiptUsecase
 	inventoryUC                        *uc.InventoryUsecase
 	listUC                             *uc.ListUsecase
 	listSaveOperationUC                *uc.ListSaveOperationUsecase
@@ -526,6 +527,20 @@ func buildUsecases(
 		r.accountRepo,
 	)
 
+	// ReturnReceiptUsecase は未開封返品受領の orchestration を担当します。
+	//
+	// item-level partial refund は既存 RefundUsecase の full Payment refund と
+	// 責務が異なるため、ここでは既存 RefundUsecase を流用しません。
+	//
+	// ItemRefundUsecase の実装・DI完了後、第4引数へ渡してください。
+	// 現時点では nil とし、receive-return が誤って全額返金へ進まないようにします。
+	returnReceiptUC := uc.NewReturnReceiptUsecase(
+		orderUC,
+		r.inquiryRepo,
+		inquiryUC,
+		nil,
+	)
+
 	if paymentUC == nil {
 		_ = listSaveOperationRetryQueue.Close()
 		_ = listSaveOperationStorage.Close()
@@ -794,6 +809,7 @@ func buildUsecases(
 		brandUC:                            brandUC,
 		companyUC:                          companyUC,
 		inquiryUC:                          inquiryUC,
+		returnReceiptUC:                    returnReceiptUC,
 		inventoryUC:                        inventoryUC,
 		listUC:                             listUC,
 		listSaveOperationUC:                listSaveOperationUC,

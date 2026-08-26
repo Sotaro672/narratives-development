@@ -3,7 +3,6 @@
 /* =========================================================
    Inquiry detail common
 ========================================================= */
-
 .inq-detail {
   display: flex;
   flex-direction: column;
@@ -104,7 +103,6 @@
 /* =========================================================
    Inquiry images
 ========================================================= */
-
 .inq-detail__image-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -136,9 +134,19 @@
 }
 
 /* =========================================================
+   Reply list
+========================================================= */
+.inq-reply-card__header {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* =========================================================
    Reply modal
 ========================================================= */
-
 .inq-reply-modal {
   position: fixed;
   inset: 0;
@@ -311,7 +319,6 @@
 /* =========================================================
    Reply modal upload
 ========================================================= */
-
 .inq-reply-modal__upload {
   display: flex;
   flex-direction: column;

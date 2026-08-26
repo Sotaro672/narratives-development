@@ -141,6 +141,9 @@ type OrderItemSnapshot struct {
 	IsReturnRequested bool       `json:"isReturnRequested"`
 	ReturnRequestedAt *time.Time `json:"returnRequestedAt,omitempty"`
 
+	IsReturnCompleted bool       `json:"isReturnCompleted"`
+	ReturnCompletedAt *time.Time `json:"returnCompletedAt,omitempty"`
+
 	TokenTransferVerifiedAt *time.Time `json:"tokenTransferVerifiedAt,omitempty"`
 
 	Transferred   bool       `json:"transferred"`
@@ -363,7 +366,8 @@ func (o *Order) RequestItemReturn(
 	item := &o.Items[index]
 
 	if item.IsCancelled ||
-		!item.IsDispatched {
+		!item.IsDispatched ||
+		item.IsReturnCompleted {
 		return ErrConflict
 	}
 
@@ -393,6 +397,50 @@ func (o *Order) RequestItemReturn(
 	return nil
 }
 
+func (o *Order) CompleteItemReturn(
+	index int,
+	at time.Time,
+) error {
+	if o == nil {
+		return ErrInvalidItems
+	}
+
+	if index < 0 || index >= len(o.Items) {
+		return ErrInvalidItems
+	}
+
+	if at.IsZero() {
+		return ErrInvalidItemSnapshot
+	}
+
+	item := &o.Items[index]
+
+	if item.IsReturnCompleted {
+		return nil
+	}
+
+	if item.IsCancelled ||
+		!item.IsDispatched ||
+		!item.IsReturnRequested ||
+		item.ReturnRequestedAt == nil ||
+		item.ReturnRequestedAt.IsZero() {
+		return ErrConflict
+	}
+
+	returnCompletedAt := at.UTC()
+
+	if returnCompletedAt.Before(
+		item.ReturnRequestedAt.UTC(),
+	) {
+		return ErrInvalidItemSnapshot
+	}
+
+	item.IsReturnCompleted = true
+	item.ReturnCompletedAt = &returnCompletedAt
+
+	return nil
+}
+
 func (o *Order) MarkItemTokenTransferVerified(
 	index int,
 	at time.Time,
@@ -411,7 +459,8 @@ func (o *Order) MarkItemTokenTransferVerified(
 
 	item := &o.Items[index]
 
-	if item.IsCancelled {
+	if item.IsCancelled ||
+		item.IsReturnCompleted {
 		return ErrConflict
 	}
 
@@ -934,6 +983,8 @@ func validateItemTransferState(
 		if item.IsDispatched ||
 			item.IsReturnRequested ||
 			item.ReturnRequestedAt != nil ||
+			item.IsReturnCompleted ||
+			item.ReturnCompletedAt != nil ||
 			item.TokenTransferVerifiedAt != nil ||
 			item.Transferred ||
 			item.TransferredAt != nil {
@@ -953,7 +1004,23 @@ func validateItemTransferState(
 			item.ReturnRequestedAt.IsZero() {
 			return ErrInvalidItemSnapshot
 		}
-	} else if item.ReturnRequestedAt != nil {
+	} else {
+		if item.ReturnRequestedAt != nil ||
+			item.IsReturnCompleted ||
+			item.ReturnCompletedAt != nil {
+			return ErrInvalidItemSnapshot
+		}
+	}
+
+	if item.IsReturnCompleted {
+		if item.ReturnCompletedAt == nil ||
+			item.ReturnCompletedAt.IsZero() ||
+			item.ReturnCompletedAt.Before(
+				item.ReturnRequestedAt.UTC(),
+			) {
+			return ErrInvalidItemSnapshot
+		}
+	} else if item.ReturnCompletedAt != nil {
 		return ErrInvalidItemSnapshot
 	}
 

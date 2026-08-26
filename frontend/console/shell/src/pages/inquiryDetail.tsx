@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import { safeDateTimeLabelJa } from "../../../shell/src/shared/util/dateJa";
+import { Button } from "../../../shell/src/shared/ui/button";
 import {
   Card,
   CardContent,
@@ -257,6 +258,10 @@ export default function InquiryDetail() {
   const status =
     getInquiryStatusLabel(inquiry?.status);
 
+  const isUnopenedReturn =
+    inquiry?.inquiryType ===
+    "return_unopened";
+
   const inquiryType =
     inquiry?.inquiryType
       ? getInquiryTypeLabel(
@@ -314,6 +319,25 @@ export default function InquiryDetail() {
   const quantity =
     targetOrderItem?.qty ?? 0;
 
+  const returnStatus =
+    targetOrderItem?.isReturnCompleted
+      ? "返品対応済"
+      : targetOrderItem?.isReturnRequested
+        ? "返品対応中"
+        : "-";
+
+  const returnRequestedAt =
+    safeDateTimeLabelJa(
+      targetOrderItem?.returnRequestedAt,
+      "-",
+    );
+
+  const returnCompletedAt =
+    safeDateTimeLabelJa(
+      targetOrderItem?.returnCompletedAt,
+      "-",
+    );
+
   const pageTitle = (
     <div className="inq-detail__page-title">
       <span className="inq__chip">
@@ -332,6 +356,17 @@ export default function InquiryDetail() {
     getInquiryStatusButtonVariant(
       inquiry?.status,
     );
+
+  const statusButtonLabel =
+    isUnopenedReturn &&
+    inquiry?.status === "open"
+      ? "返品受領"
+      : status;
+
+  const statusButtonBusyLabel =
+    isUnopenedReturn
+      ? "返品処理中"
+      : "更新中";
 
   const statusButtonDisabled =
     !detail ||
@@ -752,9 +787,12 @@ export default function InquiryDetail() {
         title={pageTitle}
         onBack={onBack}
         onSave={undefined}
-        onReply={onOpenReplyModal}
-        statusButtonLabel={status}
-        statusButtonBusyLabel="更新中"
+        statusButtonLabel={
+          statusButtonLabel
+        }
+        statusButtonBusyLabel={
+          statusButtonBusyLabel
+        }
         statusButtonVariant={
           statusButtonVariant
         }
@@ -794,13 +832,12 @@ export default function InquiryDetail() {
                   </p>
                 </div>
 
-                <div className="inq-detail__body">
-                  <div className="inq-detail__label">
-                    添付画像
-                  </div>
+                {inquiryImages.length > 0 ? (
+                  <div className="inq-detail__body">
+                    <div className="inq-detail__label">
+                      添付画像
+                    </div>
 
-                  {inquiryImages.length >
-                  0 ? (
                     <div className="inq-detail__image-grid">
                       {inquiryImages.map(
                         (
@@ -831,21 +868,24 @@ export default function InquiryDetail() {
                         ),
                       )}
                     </div>
-                  ) : (
-                    <div className="inq__empty">
-                      添付画像はありません。
-                    </div>
-                  )}
-                </div>
+                  </div>
+                ) : null}
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-3">
               <CardTitle>
                 返信一覧
               </CardTitle>
+
+              <Button
+                type="button"
+                onClick={onOpenReplyModal}
+              >
+                返信
+              </Button>
             </CardHeader>
 
             <CardContent>
@@ -1031,6 +1071,40 @@ export default function InquiryDetail() {
                       {quantity}
                     </span>
                   </div>
+
+                  {isUnopenedReturn ? (
+                    <>
+                      <div>
+                        <span className="inq-detail__label">
+                          返品ステータス
+                        </span>
+
+                        <span className="inq-detail__value">
+                          {returnStatus}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="inq-detail__label">
+                          返品申請日
+                        </span>
+
+                        <span className="inq-detail__value">
+                          {returnRequestedAt}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="inq-detail__label">
+                          返品完了日
+                        </span>
+
+                        <span className="inq-detail__value">
+                          {returnCompletedAt}
+                        </span>
+                      </div>
+                    </>
+                  ) : null}
 
                   {orders.length > 0 ? (
                     orders.flatMap(

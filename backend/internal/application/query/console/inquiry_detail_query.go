@@ -150,6 +150,8 @@ type InquiryOrderItemSummary struct {
 	IsDispatched            bool                   `json:"isDispatched"`
 	IsReturnRequested       bool                   `json:"isReturnRequested"`
 	ReturnRequestedAt       *time.Time             `json:"returnRequestedAt,omitempty"`
+	IsReturnCompleted       bool                   `json:"isReturnCompleted"`
+	ReturnCompletedAt       *time.Time             `json:"returnCompletedAt,omitempty"`
 	TokenTransferVerifiedAt *time.Time             `json:"tokenTransferVerifiedAt,omitempty"`
 	Transferred             bool                   `json:"transferred"`
 	TransferredAt           *time.Time             `json:"transferredAt,omitempty"`
@@ -997,6 +999,10 @@ func (q *InquiryDetailQuery) buildInquiryOrderItemSummary(
 		IsReturnRequested: item.IsReturnRequested,
 		ReturnRequestedAt: normalizeInquiryDetailTimePointer(
 			item.ReturnRequestedAt,
+		),
+		IsReturnCompleted: item.IsReturnCompleted,
+		ReturnCompletedAt: normalizeInquiryDetailTimePointer(
+			item.ReturnCompletedAt,
 		),
 		TokenTransferVerifiedAt: normalizeInquiryDetailTimePointer(
 			item.TokenTransferVerifiedAt,

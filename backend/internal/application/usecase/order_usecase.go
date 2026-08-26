@@ -664,7 +664,8 @@ func (u *OrderUsecase) ReturnItem(
 	targetItem := order.Items[in.ItemIndex]
 
 	if targetItem.IsCancelled ||
-		!targetItem.IsDispatched {
+		!targetItem.IsDispatched ||
+		targetItem.IsReturnCompleted {
 		return orderdom.Order{}, orderdom.ErrConflict
 	}
 
@@ -692,6 +693,79 @@ func (u *OrderUsecase) ReturnItem(
 	if err := order.RequestItemReturn(
 		in.ItemIndex,
 		in.Kind,
+		u.now().UTC(),
+	); err != nil {
+		return orderdom.Order{}, err
+	}
+
+	updated, err := u.repo.Update(ctx, order, nil)
+	if err != nil {
+		return orderdom.Order{}, err
+	}
+
+	return updated, nil
+}
+
+// CompleteReturnOrderItemInput identifies one Order item whose return has
+// completed financially and may therefore be marked as completed.
+//
+// This command must only be called after the item-level Refund aggregate reports
+// that all required purchaser refund and seller Transfer Reversal operations are
+// financially completed.
+type CompleteReturnOrderItemInput struct {
+	ID        string
+	ItemIndex int
+}
+
+// CompleteReturnItem records completion of an already requested item return.
+//
+// This method intentionally does not execute:
+//
+// - Stripe Refund
+// - Stripe Transfer Reversal
+// - Refund aggregate mutation
+// - Inquiry resolution
+//
+// The caller must complete and persist those financial operations first.
+// Order completion is the application-side state transition performed only after
+// the Refund aggregate is financially completed.
+func (u *OrderUsecase) CompleteReturnItem(
+	ctx context.Context,
+	in CompleteReturnOrderItemInput,
+) (orderdom.Order, error) {
+	orderID := strings.TrimSpace(in.ID)
+	if orderID == "" {
+		return orderdom.Order{}, orderdom.ErrInvalidID
+	}
+
+	if in.ItemIndex < 0 {
+		return orderdom.Order{}, orderdom.ErrInvalidItems
+	}
+
+	order, err := u.repo.GetByID(ctx, orderID)
+	if err != nil {
+		return orderdom.Order{}, err
+	}
+
+	if in.ItemIndex >= len(order.Items) {
+		return orderdom.Order{}, orderdom.ErrNotFound
+	}
+
+	targetItem := order.Items[in.ItemIndex]
+
+	if targetItem.IsReturnCompleted {
+		return order, nil
+	}
+
+	if targetItem.IsCancelled ||
+		!targetItem.IsDispatched ||
+		!targetItem.IsReturnRequested ||
+		targetItem.ReturnRequestedAt == nil {
+		return orderdom.Order{}, orderdom.ErrConflict
+	}
+
+	if err := order.CompleteItemReturn(
+		in.ItemIndex,
 		u.now().UTC(),
 	); err != nil {
 		return orderdom.Order{}, err
@@ -1452,6 +1526,8 @@ func (u *OrderUsecase) resolveListOrderItem(
 		IsDispatched:            false,
 		IsReturnRequested:       false,
 		ReturnRequestedAt:       nil,
+		IsReturnCompleted:       false,
+		ReturnCompletedAt:       nil,
 		TokenTransferVerifiedAt: nil,
 		Transferred:             false,
 		TransferredAt:           nil,

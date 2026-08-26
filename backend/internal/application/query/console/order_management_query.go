@@ -116,9 +116,12 @@ type OrderItemInventoryRowDTO struct {
 	Qty   int `json:"qty,omitempty"`
 	Price int `json:"price,omitempty"`
 
-	IsCancelled       bool `json:"isCancelled"`
-	IsDispatched      bool `json:"isDispatched"`
-	IsReturnRequested bool `json:"isReturnRequested"`
+	IsCancelled       bool   `json:"isCancelled"`
+	IsDispatched      bool   `json:"isDispatched"`
+	IsReturnRequested bool   `json:"isReturnRequested"`
+	ReturnRequestedAt string `json:"returnRequestedAt,omitempty"`
+	IsReturnCompleted bool   `json:"isReturnCompleted"`
+	ReturnCompletedAt string `json:"returnCompletedAt,omitempty"`
 
 	Transferred   bool   `json:"transferred"`
 	TransferredAt string `json:"transferredAt,omitempty"` // RFC3339(UTC)
@@ -457,6 +460,16 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					}
 				}
 
+				returnRequestedAt := ""
+				if it.ReturnRequestedAt != nil && !it.ReturnRequestedAt.IsZero() {
+					returnRequestedAt = it.ReturnRequestedAt.UTC().Format(time.RFC3339)
+				}
+
+				returnCompletedAt := ""
+				if it.ReturnCompletedAt != nil && !it.ReturnCompletedAt.IsZero() {
+					returnCompletedAt = it.ReturnCompletedAt.UTC().Format(time.RFC3339)
+				}
+
 				transferredAt := ""
 				if it.TransferredAt != nil && !it.TransferredAt.IsZero() {
 					transferredAt = it.TransferredAt.UTC().Format(time.RFC3339)
@@ -502,6 +515,9 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					IsCancelled:       it.IsCancelled,
 					IsDispatched:      it.IsDispatched,
 					IsReturnRequested: it.IsReturnRequested,
+					ReturnRequestedAt: returnRequestedAt,
+					IsReturnCompleted: it.IsReturnCompleted,
+					ReturnCompletedAt: returnCompletedAt,
 
 					Transferred:   it.Transferred,
 					TransferredAt: transferredAt,
@@ -615,7 +631,8 @@ func (q *OrderManagementQuery) CountActionRequiredOrders(
 				}
 
 				if !item.IsDispatched ||
-					item.IsReturnRequested {
+					(item.IsReturnRequested &&
+						!item.IsReturnCompleted) {
 					orderIDs[ord.ID] = struct{}{}
 					break
 				}

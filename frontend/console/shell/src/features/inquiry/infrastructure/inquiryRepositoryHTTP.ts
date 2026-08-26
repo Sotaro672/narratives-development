@@ -29,6 +29,17 @@ export type UploadInquiryReplyImagesParams = {
   files: File[];
 };
 
+export type ReceiveReturnResult = {
+  inquiry: Inquiry;
+  refundId: string;
+  refundStatus: string;
+  transferReversalStatus: string;
+  financiallyCompleted: boolean;
+  orderCompleted: boolean;
+  inquiryResolved: boolean;
+  alreadyCompleted: boolean;
+};
+
 // -----------------------------------------------------------
 // internal helpers
 // -----------------------------------------------------------
@@ -277,6 +288,51 @@ export async function getInquiryHTTP(id: string): Promise<InquiryDetail> {
   }
 
   return (await response.json()) as InquiryDetail;
+}
+
+// -----------------------------------------------------------
+// POST: 未開封返品の商品受領
+//   backend: POST /inquiries/{id}/receive-return
+//
+//   orderId / orderItemIndex / refundAmount は frontend から送らない。
+//   backend は Inquiry と Order snapshot を正として返金対象を解決する。
+//
+//   companyId / memberId は backend の認証 context を正とする。
+//
+//   200:
+//     Refund + Transfer Reversal + Order completion +
+//     Inquiry resolve まで完了。
+//
+//   202:
+//     Stripe refund 等の financial 処理が pending。
+//     Order / Inquiry は未完了のまま。
+// -----------------------------------------------------------
+
+export async function receiveReturnHTTP(
+  id: string,
+): Promise<ReceiveReturnResult> {
+  const inquiryId = assertID(id, "id");
+  const headers = await getAuthHeaders();
+
+  const response = await fetch(
+    `${API_BASE}/inquiries/${encodeURIComponent(
+      inquiryId,
+    )}/receive-return`,
+    {
+      method: "POST",
+      headers,
+    },
+  );
+
+  if (!response.ok) {
+    const detail = await readErrorDetail(response);
+
+    throw new Error(
+      `返品受領処理に失敗しました（${response.status} ${response.statusText}）\n${detail}`,
+    );
+  }
+
+  return (await response.json()) as ReceiveReturnResult;
 }
 
 // -----------------------------------------------------------
