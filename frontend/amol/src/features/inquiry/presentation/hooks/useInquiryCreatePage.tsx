@@ -188,9 +188,15 @@ export function useInquiryCreatePage() {
     }; 
   }, []); 
  
+  const subjectSatisfied = 
+    inquiryType === 
+    PRODUCT_INQUIRY_TYPE 
+      ? Boolean(subject.trim()) 
+      : true; 
+ 
   const canSubmit = 
     Boolean(productId) && 
-    Boolean(subject.trim()) && 
+    subjectSatisfied && 
     Boolean(content.trim()) && 
     ( 
       !hasReturnContext || 
@@ -414,33 +420,46 @@ export function useInquiryCreatePage() {
             ), 
           ); 
  
-        const payload: 
-          CreateInquiryRequest = 
-          { 
-            productId, 
-            subject: 
-              subject.trim(), 
-            content: 
-              content.trim(), 
-            inquiryType, 
-            images: 
-              uploadedImages, 
-          }; 
+        let payload: 
+          CreateInquiryRequest; 
  
         if ( 
           inquiryType === 
           RETURN_OPENED_INQUIRY_TYPE 
         ) { 
-          payload.orderId = 
-            orderId; 
- 
           if ( 
-            orderItemIndex !== 
-            null 
+            !orderId || 
+            orderItemIndex === 
+              null 
           ) { 
-            payload.orderItemIndex = 
-              orderItemIndex; 
+            throw new Error( 
+              "返品対象の注文情報を確認できませんでした。", 
+            ); 
           } 
+ 
+          payload = { 
+            productId, 
+            orderId, 
+            orderItemIndex, 
+            content: 
+              content.trim(), 
+            inquiryType: 
+              RETURN_OPENED_INQUIRY_TYPE, 
+            images: 
+              uploadedImages, 
+          }; 
+        } else { 
+          payload = { 
+            productId, 
+            subject: 
+              subject.trim(), 
+            content: 
+              content.trim(), 
+            inquiryType: 
+              PRODUCT_INQUIRY_TYPE, 
+            images: 
+              uploadedImages, 
+          }; 
         } 
  
         await createInquiry( 

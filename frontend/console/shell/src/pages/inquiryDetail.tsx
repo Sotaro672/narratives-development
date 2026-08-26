@@ -308,7 +308,9 @@ export default function InquiryDetail() {
     detail?.inquiry ?? null;
 
   const title =
-    textOrDash(inquiry?.subject);
+    inquiry?.inquiryType === "product"
+      ? textOrDash(inquiry.subject)
+      : "";
 
   const body =
     textOrDash(inquiry?.content);
@@ -365,9 +367,11 @@ export default function InquiryDetail() {
         {inquiryType}
       </span>
 
-      <span className="inq-detail__page-title-text">
-        {title}
-      </span>
+      {title ? (
+        <span className="inq-detail__page-title-text">
+          {title}
+        </span>
+      ) : null}
     </div>
   );
 

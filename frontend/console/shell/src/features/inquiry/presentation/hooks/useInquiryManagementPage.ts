@@ -91,6 +91,13 @@ function getInquiryId(
 function getSubject(
   item: InquiryManagementItem,
 ): string {
+  if (
+    item.inquiry.inquiryType === "return_unopened" ||
+    item.inquiry.inquiryType === "return_opened"
+  ) {
+    return "";
+  }
+
   return textOrDash(item.inquiry.subject);
 }
 

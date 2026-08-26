@@ -206,6 +206,7 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "invalid json")
 		return
 	}
+
 	if req.InquiryType == "" {
 		req.InquiryType = string(
 			inquirydom.InquiryTypeProduct,
@@ -291,6 +292,14 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if strings.TrimSpace(req.Subject) != "" {
+			writeInquiryErr(
+				w,
+				inquirydom.ErrInvalidSubject,
+			)
+			return
+		}
+
 		if strings.TrimSpace(req.OrderID) == "" {
 			writeInquiryErr(
 				w,
@@ -371,6 +380,7 @@ func (h *InquiryHandler) countUnread(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filter := buildInquiryFilterFromQuery(r)
+
 	count, err := h.uc.CountUnreadByAvatarID(ctx, usecase.CountUnreadByAvatarIDInput{
 		AvatarID: avatarID,
 		Filter:   filter,
@@ -481,6 +491,7 @@ func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string
 		badRequest(w, "invalid json")
 		return
 	}
+
 	if req.Content == "" && len(req.Images) == 0 {
 		badRequest(w, "content or images is required")
 		return
@@ -491,6 +502,7 @@ func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string
 		writeInquiryErr(w, err)
 		return
 	}
+
 	if inquiry.Status == inquirydom.InquiryStatusClosed {
 		writeInquiryErr(w, inquirydom.ErrInquiryAlreadyClosed)
 		return
@@ -498,12 +510,14 @@ func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string
 
 	now := time.Now().UTC()
 	images := []inquirydom.ImageFile{}
+
 	if len(req.Images) > 0 {
 		replyImages, err := buildInquiryImagesForMall(id, avatarID, now, req.Images)
 		if err != nil {
 			writeInquiryErr(w, err)
 			return
 		}
+
 		images = replyImages
 	}
 
@@ -550,13 +564,16 @@ func buildInquiryFilterFromQuery(r *http.Request) inquirydom.Filter {
 	if searchQuery := query.Get("searchQuery"); searchQuery != "" {
 		filter.SearchQuery = searchQuery
 	}
+
 	if productID := query.Get("productId"); productID != "" {
 		filter.ProductID = &productID
 	}
+
 	if statusRaw := query.Get("status"); statusRaw != "" {
 		status := inquirydom.InquiryStatus(statusRaw)
 		filter.Status = &status
 	}
+
 	if inquiryTypeRaw := query.Get("inquiryType"); inquiryTypeRaw != "" {
 		inquiryType := inquirydom.InquiryType(inquiryTypeRaw)
 		filter.InquiryType = &inquiryType
@@ -588,17 +605,21 @@ func buildInquiryImagesForMall(
 	}
 
 	images := make([]inquirydom.ImageFile, 0, len(rawImages))
+
 	for _, raw := range rawImages {
 		imgCreatedAt := now
+
 		if raw.CreatedAt != nil && *raw.CreatedAt != "" {
 			parsed, err := time.Parse(time.RFC3339, *raw.CreatedAt)
 			if err != nil {
 				return nil, inquirydom.ErrInvalidImageCreatedAt
 			}
+
 			imgCreatedAt = parsed.UTC()
 		}
 
 		var objectPath *string
+
 		if raw.ObjectPath != "" {
 			value := raw.ObjectPath
 			objectPath = &value
@@ -622,6 +643,7 @@ func buildInquiryImagesForMall(
 // エラーハンドリング
 func writeInquiryErr(w http.ResponseWriter, err error) {
 	message := "internal_error"
+
 	if err != nil {
 		message = err.Error()
 	}
@@ -680,17 +702,21 @@ func inquiryHTTPStatus(err error) int {
 
 	case errors.Is(err, inquirydom.ErrInquiryForbidden):
 		return http.StatusForbidden
+
 	case errors.Is(err, inquirydom.ErrNotFound),
 		errors.Is(err, orderdom.ErrNotFound):
 		return http.StatusNotFound
+
 	case errors.Is(err, inquirydom.ErrConflict),
 		errors.Is(err, orderdom.ErrConflict):
 		return http.StatusConflict
+
 	case errors.Is(err, orderdom.ErrInvalidID),
 		errors.Is(err, orderdom.ErrInvalidAvatarID),
 		errors.Is(err, orderdom.ErrInvalidItems),
 		errors.Is(err, orderdom.ErrInvalidItemSnapshot):
 		return http.StatusBadRequest
+
 	default:
 		return http.StatusInternalServerError
 	}

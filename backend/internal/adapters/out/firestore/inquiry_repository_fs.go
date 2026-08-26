@@ -397,7 +397,6 @@ func inquiryToDocData(in idom.Inquiry) map[string]any {
 		"id":          in.ID,
 		"productId":   in.ProductID,
 		"avatarId":    in.AvatarID,
-		"subject":     in.Subject,
 		"content":     in.Content,
 		"status":      string(in.Status),
 		"inquiryType": string(in.InquiryType),
@@ -405,6 +404,10 @@ func inquiryToDocData(in idom.Inquiry) map[string]any {
 		"images":      imagesToDocData(in.Images),
 		"createdAt":   in.CreatedAt.UTC(),
 		"updatedAt":   in.UpdatedAt.UTC(),
+	}
+
+	if in.InquiryType == idom.InquiryTypeProduct {
+		m["subject"] = in.Subject
 	}
 
 	if in.OrderID != "" {

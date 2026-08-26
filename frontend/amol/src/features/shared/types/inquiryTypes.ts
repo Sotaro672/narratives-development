@@ -16,6 +16,17 @@ export const INQUIRY_TYPES = [
 
 export type InquiryType = (typeof INQUIRY_TYPES)[number];
 
+export function getInquiryTypeLabel(inquiryType: InquiryType): string {
+  switch (inquiryType) {
+    case "product":
+      return "商品説明";
+    case "return_unopened":
+      return "未開封返品";
+    case "return_opened":
+      return "開封後返品";
+  }
+}
+
 export type InquiryImageUpload = {
   fileName: string;
   fileUrl: string;
@@ -40,15 +51,26 @@ export type InquiryImage = {
   deletedBy?: string;
 };
 
-export type CreateInquiryRequest = {
-  productId?: string;
-  orderId?: string;
-  orderItemIndex?: number;
+export type CreateProductInquiryRequest = {
+  productId: string;
   subject: string;
   content: string;
-  inquiryType: InquiryType;
+  inquiryType: "product";
   images: InquiryImageUpload[];
 };
+
+export type CreateOpenedReturnInquiryRequest = {
+  productId: string;
+  orderId: string;
+  orderItemIndex: number;
+  content: string;
+  inquiryType: "return_opened";
+  images: InquiryImageUpload[];
+};
+
+export type CreateInquiryRequest =
+  | CreateProductInquiryRequest
+  | CreateOpenedReturnInquiryRequest;
 
 export type ReplyInquiryRequest = {
   content: string;
@@ -61,7 +83,7 @@ export type Inquiry = {
   orderId?: string;
   orderItemIndex?: number;
   avatarId: string;
-  subject: string;
+  subject?: string;
   content: string;
   status: InquiryStatus;
   inquiryType: InquiryType;
