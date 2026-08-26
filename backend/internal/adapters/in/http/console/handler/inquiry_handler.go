@@ -140,6 +140,7 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Query:
 //   - searchQuery
 //   - productId
+//   - orderId
 //   - avatarId
 //   - status
 //   - inquiryType
@@ -209,6 +210,9 @@ func inquiryFilterFromRequest(r *http.Request) inquirydom.Filter {
 
 	if v := q.Get("productId"); v != "" {
 		filter.ProductID = &v
+	}
+	if v := q.Get("orderId"); v != "" {
+		filter.OrderID = &v
 	}
 	if v := q.Get("avatarId"); v != "" {
 		filter.AvatarID = &v

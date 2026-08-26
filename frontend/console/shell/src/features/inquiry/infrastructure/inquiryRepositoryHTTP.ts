@@ -70,6 +70,7 @@ function buildInquiryListQuery(params: ListInquiriesParams): string {
 
   appendStringParam(query, "searchQuery", params.searchQuery);
   appendStringParam(query, "productId", params.productId);
+  appendStringParam(query, "orderId", params.orderId);
   appendStringParam(query, "avatarId", params.avatarId);
   appendStringParam(query, "status", params.status);
   appendStringParam(query, "inquiryType", params.inquiryType);

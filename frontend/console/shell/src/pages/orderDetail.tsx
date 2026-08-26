@@ -58,6 +58,7 @@ export default function OrderDetail() {
     dispatching,
     dispatchError,
     canDispatch,
+    hasReturnInProgress,
     items,
     quantity,
     subtotal,
@@ -72,6 +73,7 @@ export default function OrderDetail() {
     pageTitle,
     onBack,
     goListDetail,
+    goReturnInquiryDetail,
     onDispatch,
   } = useOrderDetail();
 
@@ -489,22 +491,46 @@ export default function OrderDetail() {
     </div>
   );
 
+  const cancelledStatusTab = isCancelled ? (
+    <span className="page-header__btn page-header__btn--ghost">
+      キャンセル済
+    </span>
+  ) : null;
+
   return (
     <PageStyle
       layout="grid-2"
       title={pageTitle}
       onBack={onBack}
+      actions={cancelledStatusTab}
       statusButtonLabel={
         isCancelled
           ? undefined
-          : canDispatch
-            ? "発送"
-            : getOrderStatusLabel(order?.paid ?? true)
+          : hasReturnInProgress
+            ? "返品対応"
+            : canDispatch
+              ? "発送"
+              : getOrderStatusLabel(order?.paid ?? true)
       }
       statusButtonBusyLabel="発送中..."
-      onStatusButtonClick={isCancelled ? undefined : onDispatch}
-      isStatusButtonLoading={dispatching}
-      statusButtonDisabled={loading || dispatching || !canDispatch}
+      onStatusButtonClick={
+        isCancelled
+          ? undefined
+          : hasReturnInProgress
+            ? goReturnInquiryDetail
+            : onDispatch
+      }
+      isStatusButtonLoading={!hasReturnInProgress && dispatching}
+      statusButtonDisabled={
+        loading ||
+        (
+          !hasReturnInProgress &&
+          (
+            dispatching ||
+            !canDispatch
+          )
+        )
+      }
     >
       {[left, right]}
     </PageStyle>
