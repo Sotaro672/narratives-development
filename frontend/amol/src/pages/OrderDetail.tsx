@@ -73,13 +73,13 @@ function getOrderStatusLabel(order: OrderDetailType): string {
   const allTransferred = activeItems.every((item) => item.transferred);
 
   if (allTransferred) {
-    return order.paid ? "受け取り済み" : "未決済";
+    return "受け取り済み";
   }
 
   const partiallyTransferred = activeItems.some((item) => item.transferred);
 
   if (partiallyTransferred) {
-    return order.paid ? "一部受け取り済み" : "未決済";
+    return "一部受け取り済み";
   }
 
   const allDispatched = activeItems.every((item) => item.isDispatched);
@@ -94,7 +94,7 @@ function getOrderStatusLabel(order: OrderDetailType): string {
     return "一部発送済み";
   }
 
-  return order.paid ? "決済済み" : "未決済";
+  return "発送前";
 }
 
 function getRefundStatusLabel(order: OrderDetailType): string {
@@ -163,7 +163,7 @@ function getItemStatusLabel(item: OrderDetailItem): string {
     return "発送済み";
   }
 
-  return "未発送";
+  return "発送前";
 }
 
 function getProductTitle(item: OrderDetailItem): string {
