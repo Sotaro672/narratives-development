@@ -32,6 +32,8 @@ export type OrderDetailItem = {
   brandIcon?: string;
   tokenName?: string;
   tokenIcon?: string;
+  productBlueprintCategoryPath?: string[];
+  consumptionTaxRate: number;
   kind?: string;
   modelNumber?: string;
   size?: string;
@@ -39,17 +41,13 @@ export type OrderDetailItem = {
   measurements?: Record<string, number>;
   volumeValue?: number;
   volumeUnit?: string;
-
   qty: number;
   price: number;
-
   isCancelled: boolean;
   isDispatched: boolean;
-
   isReturnRequested: boolean;
   returnRequestedAt?: string;
   tokenTransferVerifiedAt?: string;
-
   transferred: boolean;
   transferredAt?: string;
 };
@@ -60,6 +58,10 @@ export type OrderDetail = {
   avatarId: string;
   cartId: string;
   shippingQuoteSnapshot: WalletOrderShippingQuoteSnapshot;
+  subtotalAmount: number;
+  shippingAmount: number;
+  consumptionTax: number;
+  totalAmount: number;
   paid: boolean;
   refundStatus: OrderRefundStatus;
   refundedAmount: number;

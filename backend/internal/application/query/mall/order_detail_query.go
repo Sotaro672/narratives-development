@@ -54,6 +54,32 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 			ErrOrderDetailQueryNotConfigured
 	}
 
+	amountSummary :=
+		orderdom.PaymentAmountSummary{}
+
+	hasActiveItem := false
+
+	for _, item := range in.Items {
+		if !item.IsCancelled {
+			hasActiveItem = true
+			break
+		}
+	}
+
+	if hasActiveItem {
+		resolvedAmountSummary, err :=
+			orderdom.CalculatePaymentAmountSummary(
+				in,
+			)
+		if err != nil {
+			return orderdetaildto.OrderDetail{},
+				err
+		}
+
+		amountSummary =
+			resolvedAmountSummary
+	}
+
 	out := orderdetaildto.OrderDetail{
 		ID:       in.ID,
 		UserID:   in.UserID,
@@ -63,6 +89,11 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 		ShippingQuoteSnapshot: cloneOrderDetailShippingQuote(
 			in.ShippingQuoteSnapshot,
 		),
+
+		SubtotalAmount: amountSummary.SubtotalAmount,
+		ShippingAmount: amountSummary.ShippingAmount,
+		ConsumptionTax: amountSummary.ConsumptionTax,
+		TotalAmount:    amountSummary.TotalAmount,
 
 		Paid: in.Paid,
 
@@ -158,6 +189,12 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 			TokenBlueprintID:   sourceItem.TokenBlueprintID,
 
 			BrandID: sourceItem.BrandID,
+
+			ProductBlueprintCategoryPath: append(
+				[]string(nil),
+				sourceItem.ProductBlueprintCategoryPath...,
+			),
+			ConsumptionTaxRate: sourceItem.ConsumptionTaxRate,
 
 			Qty:   sourceItem.Qty,
 			Price: sourceItem.Price,

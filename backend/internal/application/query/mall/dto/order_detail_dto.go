@@ -11,6 +11,11 @@ type OrderDetail struct {
 
 	ShippingQuoteSnapshot orderdom.ShippingQuoteSnapshot `json:"shippingQuoteSnapshot"`
 
+	SubtotalAmount int `json:"subtotalAmount"`
+	ShippingAmount int `json:"shippingAmount"`
+	ConsumptionTax int `json:"consumptionTax"`
+	TotalAmount    int `json:"totalAmount"`
+
 	Paid bool `json:"paid"`
 
 	RefundStatus   string `json:"refundStatus"`
@@ -48,6 +53,9 @@ type OrderDetailItem struct {
 
 	TokenName string `json:"tokenName,omitempty"`
 	TokenIcon string `json:"tokenIcon,omitempty"`
+
+	ProductBlueprintCategoryPath []string `json:"productBlueprintCategoryPath,omitempty"`
+	ConsumptionTaxRate           int      `json:"consumptionTaxRate"`
 
 	Kind         string            `json:"kind,omitempty"`
 	ModelNumber  string            `json:"modelNumber,omitempty"`

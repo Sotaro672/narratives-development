@@ -17,26 +17,6 @@ import { formatAmount } from "../features/wallet/utils/format";
 import "../styles/page-layout.css";
 import "../styles/order-detail-page.css";
 
-function getOrderSubtotal(order: OrderDetailType): number {
-  return order.items.reduce((sum, item) => {
-    return sum + item.price * item.qty;
-  }, 0);
-}
-
-function getOrderShippingAmount(order: OrderDetailType): number {
-  const amount = order.shippingQuoteSnapshot?.amount;
-
-  if (typeof amount !== "number" || !Number.isFinite(amount)) {
-    return 0;
-  }
-
-  return amount;
-}
-
-function getOrderTotal(order: OrderDetailType): number {
-  return getOrderSubtotal(order) + getOrderShippingAmount(order);
-}
-
 function getOrderStatusLabel(order: OrderDetailType): string {
   switch (order.refundStatus) {
     case "pending":
@@ -520,6 +500,13 @@ export default function OrderDetail() {
                           </div>
 
                           <div className="order-detail-page__item-meta-row">
+                            <dt>消費税率</dt>
+                            <dd>
+                              {item.consumptionTaxRate}%
+                            </dd>
+                          </div>
+
+                          <div className="order-detail-page__item-meta-row">
                             <dt>発送状況</dt>
                             <dd>
                               {getItemStatusLabel(item)}
@@ -611,7 +598,7 @@ export default function OrderDetail() {
                   <dt>商品小計</dt>
                   <dd>
                     {formatAmount(
-                      getOrderSubtotal(order),
+                      order.subtotalAmount,
                     )}
                   </dd>
                 </div>
@@ -620,7 +607,16 @@ export default function OrderDetail() {
                   <dt>配送料</dt>
                   <dd>
                     {formatAmount(
-                      getOrderShippingAmount(order),
+                      order.shippingAmount,
+                    )}
+                  </dd>
+                </div>
+
+                <div className="order-detail-page__detail-row">
+                  <dt>消費税</dt>
+                  <dd>
+                    {formatAmount(
+                      order.consumptionTax,
                     )}
                   </dd>
                 </div>
@@ -629,7 +625,7 @@ export default function OrderDetail() {
                   <dt>合計</dt>
                   <dd>
                     {formatAmount(
-                      getOrderTotal(order),
+                      order.totalAmount,
                     )}
                   </dd>
                 </div>
