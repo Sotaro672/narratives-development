@@ -1,5 +1,9 @@
 // frontend/amol/src/features/order/components/ReturnRequestModal.tsx
 
+import {
+  useEffect,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 
 import Button from "../../../components/ui/Button";
@@ -23,6 +27,19 @@ export default function ReturnRequestModal({
   onCancel,
   onSubmit,
 }: ReturnRequestModalProps) {
+  const [
+    agreedToReturnConditions,
+    setAgreedToReturnConditions,
+  ] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setAgreedToReturnConditions(false);
+    }
+  }, [
+    open,
+  ]);
+
   if (
     !open ||
     typeof document === "undefined"
@@ -35,6 +52,7 @@ export default function ReturnRequestModal({
 
   const canSubmit =
     normalizedReason.length > 0 &&
+    agreedToReturnConditions &&
     !submitting;
 
   const handleSubmit = () => {
@@ -55,7 +73,7 @@ export default function ReturnRequestModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="order-detail-return-modal-title"
-        aria-describedby="order-detail-return-modal-notice"
+        aria-describedby="order-detail-return-modal-conditions"
       >
         <div className="order-detail-page__return-modal-header">
           <h2 id="order-detail-return-modal-title">
@@ -74,24 +92,34 @@ export default function ReturnRequestModal({
         </div>
 
         <div
-          id="order-detail-return-modal-notice"
+          id="order-detail-return-modal-conditions"
           className="order-detail-page__return-modal-notice"
         >
-          <p>
-            返品が承認された場合、返金対象は商品代金（税込）のみです。
-          </p>
+          <h3 className="order-detail-page__return-modal-notice-title">
+            返品条件
+          </h3>
 
-          <p>
-            商品代金（税込）には、商品本体価格とその商品にかかる消費税が含まれます。
-          </p>
+          <ol className="order-detail-page__return-modal-condition-list">
+            <li>
+              返品が承認された場合、返金対象は商品代金（税込）のみです。
+            </li>
 
-          <p>
-            ご購入時の配送料および配送料にかかる消費税は返金対象外です。
-          </p>
+            <li>
+              商品代金（税込）には、商品本体価格とその商品にかかる消費税が含まれます。
+            </li>
 
-          <p>
-            返品商品の返送にかかる配送料はお客様のご負担となります。
-          </p>
+            <li>
+              ご購入時の配送料および配送料にかかる消費税は返金対象外です。
+            </li>
+
+            <li>
+              返品商品の返送にかかる配送料はお客様のご負担となります。
+            </li>
+
+            <li>
+              返品手続き中は、商品が入っている配送用梱包材を開けないでください。
+            </li>
+          </ol>
         </div>
 
         <label
@@ -125,6 +153,24 @@ export default function ReturnRequestModal({
           />
         </label>
 
+        <label className="order-detail-page__return-modal-agreement">
+          <input
+            type="checkbox"
+            className="order-detail-page__return-modal-agreement-checkbox"
+            checked={agreedToReturnConditions}
+            onChange={(event) => {
+              setAgreedToReturnConditions(
+                event.target.checked,
+              );
+            }}
+            disabled={submitting}
+          />
+
+          <span>
+            返品条件に合意する
+          </span>
+        </label>
+
         {error ? (
           <div
             className="order-detail-page__return-modal-error"
@@ -138,7 +184,7 @@ export default function ReturnRequestModal({
           <Button
             variant="secondary"
             size="md"
-            className="order-detail-page__return-modal-action"
+            className="order-detail-page__return-modal-action order-detail-page__return-modal-cancel-action"
             onClick={onCancel}
             disabled={submitting}
           >
