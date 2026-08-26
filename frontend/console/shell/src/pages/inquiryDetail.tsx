@@ -262,6 +262,10 @@ export default function InquiryDetail() {
     inquiry?.inquiryType ===
     "return_unopened";
 
+  const isOpenedReturn =
+    inquiry?.inquiryType ===
+    "return_opened";
+
   const inquiryType =
     inquiry?.inquiryType
       ? getInquiryTypeLabel(
@@ -371,6 +375,10 @@ export default function InquiryDetail() {
   const statusButtonDisabled =
     !detail ||
     isClosedStatus(inquiry?.status);
+
+  const hideStatusButton =
+    isOpenedReturn &&
+    inquiry?.status === "open";
 
   const revokeReplyImagePreviewUrl =
     React.useCallback(
@@ -788,7 +796,9 @@ export default function InquiryDetail() {
         onBack={onBack}
         onSave={undefined}
         statusButtonLabel={
-          statusButtonLabel
+          hideStatusButton
+            ? undefined
+            : statusButtonLabel
         }
         statusButtonBusyLabel={
           statusButtonBusyLabel
@@ -797,7 +807,9 @@ export default function InquiryDetail() {
           statusButtonVariant
         }
         onStatusButtonClick={
-          onToggleStatus
+          hideStatusButton
+            ? undefined
+            : onToggleStatus
         }
         isStatusButtonLoading={
           statusUpdating

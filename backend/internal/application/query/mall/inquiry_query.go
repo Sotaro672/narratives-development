@@ -16,6 +16,7 @@ type InquiryListItem struct {
 	inquirydom.Inquiry
 	LatestReply      *inquirydom.Reply `json:"latestReply,omitempty"`
 	ReplyCount       int               `json:"replyCount"`
+	UnreadReplyCount int               `json:"unreadReplyCount"`
 	LatestActivityAt time.Time         `json:"latestActivityAt"`
 }
 
@@ -91,6 +92,10 @@ func (q *InquiryQuery) ListForAvatar(
 		}
 
 		latestReply := findLatestInquiryReply(replies)
+		unreadReplyCount := countUnreadInquiryRepliesForAvatar(
+			replies,
+			avatarID,
+		)
 		latestActivityAt := inquiry.UpdatedAt
 		if latestActivityAt.IsZero() {
 			latestActivityAt = inquiry.CreatedAt
@@ -109,6 +114,7 @@ func (q *InquiryQuery) ListForAvatar(
 			Inquiry:          inquiry,
 			LatestReply:      latestReply,
 			ReplyCount:       len(replies),
+			UnreadReplyCount: unreadReplyCount,
 			LatestActivityAt: latestActivityAt,
 		})
 	}
@@ -221,6 +227,30 @@ func (q *InquiryQuery) ListRepliesByInquiryIDForAvatar(
 	}
 
 	return q.ListByInquiryID(ctx, inquiryID)
+}
+
+// countUnreadInquiryRepliesForAvatar は avatar が受け取った未読 reply 数を返します。
+// avatar 自身が送信した reply は未読件数に含めません。
+func countUnreadInquiryRepliesForAvatar(
+	replies []inquirydom.Reply,
+	avatarID string,
+) int {
+	count := 0
+
+	for _, reply := range replies {
+		if reply.IsRead {
+			continue
+		}
+
+		if reply.SenderType == inquirydom.ReplySenderTypeAvatar &&
+			reply.SenderID == avatarID {
+			continue
+		}
+
+		count++
+	}
+
+	return count
 }
 
 // findLatestInquiryReply は reply 一覧から最終更新日時が最も新しい reply を返します。

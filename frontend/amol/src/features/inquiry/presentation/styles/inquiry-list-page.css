@@ -225,12 +225,20 @@
   color: #1d4ed8;
 }
 
-.chat-list-page__unread-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
+.chat-list-page__unread-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
   border-radius: 999px;
   background: #2563eb;
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
   box-shadow:
     0 0 0 3px
     rgba(37, 99, 235, 0.12);

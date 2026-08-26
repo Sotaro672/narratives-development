@@ -1,11 +1,9 @@
 // frontend/amol/src/features/shared/types/inquiryTypes.ts
 
 export const INQUIRY_STATUSES = ["open", "resolved", "closed"] as const;
-
 export type InquiryStatus = (typeof INQUIRY_STATUSES)[number];
 
 export const INQUIRY_REPLY_SENDER_TYPES = ["avatar", "member"] as const;
-
 export type InquiryReplySenderType = (typeof INQUIRY_REPLY_SENDER_TYPES)[number];
 
 export const INQUIRY_TYPES = [
@@ -119,6 +117,7 @@ export type InquiryReply = {
 export type InquiryListItem = Inquiry & {
   latestReply?: InquiryReply;
   replyCount: number;
+  unreadReplyCount: number;
   latestActivityAt: string;
 };
 
