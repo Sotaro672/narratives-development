@@ -88,7 +88,7 @@ var (
 // - seller Company / Account
 // - payment state
 // - return-request state
-// - opened state
+// - return-request kind
 // - return-completion state
 // - merchandise and shipping amounts
 type OpenedReturnReceiptOrderService interface {
@@ -198,7 +198,7 @@ type OpenedReturnReceiptResult struct {
 //  3. Validate selected refund Policy.
 //  4. Resolve authoritative Order and Order item.
 //  5. Validate company boundary.
-//  6. Revalidate return-request and opened state.
+//  6. Require Order.ReturnRequestKind=opened.
 //  7. Execute or resume opened-return financial Refund.
 //  8. Require Refund.IsFinanciallyCompleted().
 //  9. Mark the Order item return as completed.
@@ -390,21 +390,8 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 		}, ErrOpenedReturnReceiptReturnNotRequested
 	}
 
-	// return_opened must correspond to an item whose opening / ownership scan
-	// has already been established in the authoritative Order state.
-	//
-	// The current Order model treats either:
-	//
-	//	Transferred == true
-	//
-	// or:
-	//
-	//	TokenTransferVerifiedAt != nil
-	//
-	// as sufficient evidence that the item can no longer be handled by the
-	// unopened-return flow.
-	if !targetItem.Transferred &&
-		targetItem.TokenTransferVerifiedAt == nil {
+	if targetItem.ReturnRequestKind !=
+		orderdom.ReturnRequestKindOpened {
 		return OpenedReturnReceiptResult{
 			Inquiry: inquiry,
 			Order:   order,

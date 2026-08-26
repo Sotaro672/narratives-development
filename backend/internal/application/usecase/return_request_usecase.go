@@ -23,9 +23,12 @@ var (
 // ReturnRequestOrderService is the minimum Order application service required
 // by ReturnRequestUsecase.
 //
-// Order state remains authoritative for server-observed transfer state.
-// An OrderDetail flow may explicitly declare an item opened, but an unopened
-// request must never bypass transferred / tokenTransferVerifiedAt validation.
+// Order state remains authoritative for return-request kind and
+// server-observed transfer state.
+//
+// An OrderDetail flow may explicitly declare an item opened without a prior
+// token transfer. Scan-based opened flows still require Transferred or
+// TokenTransferVerifiedAt as server-observed evidence.
 type ReturnRequestOrderService interface {
 	GetByID(
 		ctx context.Context,
@@ -56,7 +59,7 @@ type ReturnRequestInquiryCreator interface {
 // - OrderDetail unopened return -> return_unopened
 // - OrderDetail opened declaration -> return_opened
 // - scanned/opened return -> return_opened
-// - valid scan during return_unopened -> promote to return_opened
+// - valid scan during return_unopened -> persist opened kind and promote Inquiry
 // - prevent duplicate return inquiries for the same Order item
 //
 // Financial operations are intentionally outside this usecase.
@@ -249,6 +252,32 @@ func (uc *ReturnRequestUsecase) RequestUnopened(
 		switch existing.InquiryType {
 		case inquirydom.InquiryTypeReturnUnopened:
 			if targetItem.IsReturnRequested {
+				desiredKind :=
+					orderdom.ReturnRequestKindUnopened
+
+				if isServerObservedOpenedReturnItem(
+					targetItem,
+				) {
+					desiredKind =
+						orderdom.ReturnRequestKindOpened
+				}
+
+				updatedOrder, err :=
+					uc.orderService.ReturnItem(
+						ctx,
+						ReturnOrderItemInput{
+							ID:        orderID,
+							AvatarID:  avatarID,
+							ItemIndex: in.ItemIndex,
+							Kind:      desiredKind,
+						},
+					)
+				if err != nil {
+					return ReturnRequestResult{
+						Order: order,
+					}, err
+				}
+
 				latestOrder, latestItem, err :=
 					uc.getReturnTarget(
 						ctx,
@@ -258,7 +287,7 @@ func (uc *ReturnRequestUsecase) RequestUnopened(
 					)
 				if err != nil {
 					return ReturnRequestResult{
-						Order: order,
+						Order: updatedOrder,
 					}, err
 				}
 
@@ -323,6 +352,43 @@ func (uc *ReturnRequestUsecase) RequestUnopened(
 		}, orderdom.ErrConflict
 	}
 
+	// A verified scan may win the race after the unopened request was written.
+	// Persist the stronger opened kind before creating or reconciling Inquiry.
+	if isServerObservedOpenedReturnItem(latestItem) &&
+		latestItem.ReturnRequestKind !=
+			orderdom.ReturnRequestKindOpened {
+		updatedOrder, err =
+			uc.orderService.ReturnItem(
+				ctx,
+				ReturnOrderItemInput{
+					ID:        orderID,
+					AvatarID:  avatarID,
+					ItemIndex: in.ItemIndex,
+					Kind:      orderdom.ReturnRequestKindOpened,
+				},
+			)
+		if err != nil {
+			return ReturnRequestResult{
+				Order: latestOrder,
+			}, err
+		}
+
+		latestOrder, latestItem, err =
+			uc.getReturnTarget(
+				ctx,
+				orderID,
+				avatarID,
+				in.ItemIndex,
+			)
+		if err != nil {
+			return ReturnRequestResult{
+				Order: updatedOrder,
+			}, err
+		}
+
+		updatedOrder = latestOrder
+	}
+
 	// Check again after the Order mutation.
 	//
 	// This recovers from:
@@ -357,8 +423,8 @@ func (uc *ReturnRequestUsecase) RequestUnopened(
 	var inquiry inquirydom.Inquiry
 
 	opened :=
-		latestItem.Transferred ||
-			latestItem.TokenTransferVerifiedAt != nil
+		latestItem.ReturnRequestKind ==
+			orderdom.ReturnRequestKindOpened
 
 	if opened {
 		inquiry, err =
@@ -576,7 +642,9 @@ func (uc *ReturnRequestUsecase) RequestOpenedFromOrderDetail(
 	if latestItem.IsCancelled ||
 		!latestItem.IsDispatched ||
 		latestItem.IsReturnCompleted ||
-		!latestItem.IsReturnRequested {
+		!latestItem.IsReturnRequested ||
+		latestItem.ReturnRequestKind !=
+			orderdom.ReturnRequestKindOpened {
 		return ReturnRequestResult{
 			Order: updatedOrder,
 		}, orderdom.ErrConflict
@@ -696,16 +764,17 @@ func (uc *ReturnRequestUsecase) RequestOpenedFromOrderDetail(
 // RequestOpened records an opened return request and creates or updates the
 // associated return Inquiry.
 //
-// The Order state is authoritative:
+// A scan-based opened return requires server-observed opened evidence:
 //
-//	transferred == true
+//	Transferred == true
 //
 // OR:
 //
-//	tokenTransferVerifiedAt != nil
+//	TokenTransferVerifiedAt != nil
 //
-// Therefore a client cannot forge return_opened only by sending that
-// inquiryType.
+// After that validation succeeds, Order.ReturnRequestKind is persisted as
+// opened. Therefore a client cannot forge return_opened only by sending an
+// inquiry type.
 func (uc *ReturnRequestUsecase) RequestOpened(
 	ctx context.Context,
 	in RequestOpenedReturnInput,
@@ -779,6 +848,31 @@ func (uc *ReturnRequestUsecase) RequestOpened(
 	if err != nil {
 		return ReturnRequestResult{}, err
 	}
+
+	latestOrder, latestItem, err :=
+		uc.getReturnTarget(
+			ctx,
+			orderID,
+			avatarID,
+			in.ItemIndex,
+		)
+	if err != nil {
+		return ReturnRequestResult{
+			Order: updatedOrder,
+		}, err
+	}
+
+	if latestItem.IsCancelled ||
+		!latestItem.IsDispatched ||
+		!latestItem.IsReturnRequested ||
+		latestItem.ReturnRequestKind !=
+			orderdom.ReturnRequestKindOpened {
+		return ReturnRequestResult{
+			Order: latestOrder,
+		}, orderdom.ErrConflict
+	}
+
+	updatedOrder = latestOrder
 
 	existing, found, err :=
 		uc.findReturnInquiry(
@@ -1011,8 +1105,7 @@ func (uc *ReturnRequestUsecase) PromoteUnopenedToOpened(
 			orderdom.ErrConflict
 	}
 
-	if !targetItem.Transferred &&
-		targetItem.TokenTransferVerifiedAt == nil {
+	if !isServerObservedOpenedReturnItem(targetItem) {
 		return ReturnRequestResult{},
 			orderdom.ErrConflict
 	}
@@ -1021,6 +1114,50 @@ func (uc *ReturnRequestUsecase) PromoteUnopenedToOpened(
 		targetItem.ProductID != productID {
 		return ReturnRequestResult{},
 			orderdom.ErrNotFound
+	}
+
+	// Persist unopened -> opened on Order before promoting Inquiry.
+	// The scan has already provided server-observed opened evidence above.
+	updatedOrder, err :=
+		uc.orderService.ReturnItem(
+			ctx,
+			ReturnOrderItemInput{
+				ID:        orderID,
+				AvatarID:  avatarID,
+				ItemIndex: in.ItemIndex,
+				Kind:      orderdom.ReturnRequestKindOpened,
+			},
+		)
+	if err != nil {
+		return ReturnRequestResult{
+			Order: order,
+		}, err
+	}
+
+	latestOrder, latestItem, err :=
+		uc.getReturnTarget(
+			ctx,
+			orderID,
+			avatarID,
+			in.ItemIndex,
+		)
+	if err != nil {
+		return ReturnRequestResult{
+			Order: updatedOrder,
+		}, err
+	}
+
+	order = latestOrder
+	targetItem = latestItem
+
+	if targetItem.IsCancelled ||
+		!targetItem.IsDispatched ||
+		!targetItem.IsReturnRequested ||
+		targetItem.ReturnRequestKind !=
+			orderdom.ReturnRequestKindOpened {
+		return ReturnRequestResult{
+			Order: order,
+		}, orderdom.ErrConflict
 	}
 
 	existing, found, err :=
@@ -1218,7 +1355,9 @@ func (uc *ReturnRequestUsecase) reconcileDeclaredOpenedInquiry(
 	if item.IsCancelled ||
 		!item.IsDispatched ||
 		item.IsReturnCompleted ||
-		!item.IsReturnRequested {
+		!item.IsReturnRequested ||
+		item.ReturnRequestKind !=
+			orderdom.ReturnRequestKindOpened {
 		return ReturnRequestResult{
 			Order:          order,
 			Inquiry:        inquiry,
@@ -1315,8 +1454,18 @@ func (uc *ReturnRequestUsecase) reconcileReturnInquiryWithOrderState(
 	}
 
 	opened :=
-		item.Transferred ||
-			item.TokenTransferVerifiedAt != nil
+		item.ReturnRequestKind ==
+			orderdom.ReturnRequestKindOpened
+
+	// Legacy Orders may not have returnRequestKind persisted. In that case,
+	// retain compatibility with server-observed scan state and an already
+	// promoted return_opened Inquiry. New writes always persist the kind.
+	if item.ReturnRequestKind == "" {
+		opened =
+			isServerObservedOpenedReturnItem(item) ||
+				inquiry.InquiryType ==
+					inquirydom.InquiryTypeReturnOpened
+	}
 
 	if !opened {
 		if inquiry.InquiryType !=
@@ -1492,6 +1641,13 @@ func (uc *ReturnRequestUsecase) setReturnInquiryProductID(
 			UpdatedAt: &now,
 		},
 	)
+}
+
+func isServerObservedOpenedReturnItem(
+	item orderdom.OrderItemSnapshot,
+) bool {
+	return item.Transferred ||
+		item.TokenTransferVerifiedAt != nil
 }
 
 func validateReturnInquiryProductID(

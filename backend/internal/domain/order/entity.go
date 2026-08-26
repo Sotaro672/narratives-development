@@ -138,8 +138,9 @@ type OrderItemSnapshot struct {
 	IsCancelled  bool `json:"isCancelled"`
 	IsDispatched bool `json:"isDispatched"`
 
-	IsReturnRequested bool       `json:"isReturnRequested"`
-	ReturnRequestedAt *time.Time `json:"returnRequestedAt,omitempty"`
+	IsReturnRequested bool              `json:"isReturnRequested"`
+	ReturnRequestKind ReturnRequestKind `json:"returnRequestKind,omitempty"`
+	ReturnRequestedAt *time.Time        `json:"returnRequestedAt,omitempty"`
 
 	IsReturnCompleted bool       `json:"isReturnCompleted"`
 	ReturnCompletedAt *time.Time `json:"returnCompletedAt,omitempty"`
@@ -382,12 +383,32 @@ func (o *Order) RequestItemReturn(
 	}
 
 	if item.IsReturnRequested {
-		return nil
+		switch {
+		case item.ReturnRequestKind == kind:
+			return nil
+
+		case item.ReturnRequestKind == "":
+			item.ReturnRequestKind = kind
+			return nil
+
+		case item.ReturnRequestKind == ReturnRequestKindUnopened &&
+			kind == ReturnRequestKindOpened:
+			item.ReturnRequestKind = ReturnRequestKindOpened
+			return nil
+
+		case item.ReturnRequestKind == ReturnRequestKindOpened &&
+			kind == ReturnRequestKindUnopened:
+			return ErrConflict
+
+		default:
+			return ErrInvalidItemSnapshot
+		}
 	}
 
 	returnRequestedAt := at.UTC()
 
 	item.IsReturnRequested = true
+	item.ReturnRequestKind = kind
 	item.ReturnRequestedAt = &returnRequestedAt
 
 	return nil
@@ -978,6 +999,7 @@ func validateItemTransferState(
 	if item.IsCancelled {
 		if item.IsDispatched ||
 			item.IsReturnRequested ||
+			item.ReturnRequestKind != "" ||
 			item.ReturnRequestedAt != nil ||
 			item.IsReturnCompleted ||
 			item.ReturnCompletedAt != nil ||
@@ -1000,8 +1022,17 @@ func validateItemTransferState(
 			item.ReturnRequestedAt.IsZero() {
 			return ErrInvalidItemSnapshot
 		}
+
+		// Legacy Orders created before ReturnRequestKind was persisted may have
+		// an empty value here. New return requests always persist the kind, but
+		// the empty value remains valid for backward compatibility.
+		if item.ReturnRequestKind != "" &&
+			!isValidReturnRequestKind(item.ReturnRequestKind) {
+			return ErrInvalidItemSnapshot
+		}
 	} else {
-		if item.ReturnRequestedAt != nil ||
+		if item.ReturnRequestKind != "" ||
+			item.ReturnRequestedAt != nil ||
 			item.IsReturnCompleted ||
 			item.ReturnCompletedAt != nil {
 			return ErrInvalidItemSnapshot

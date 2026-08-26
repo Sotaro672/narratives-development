@@ -682,9 +682,8 @@ func (u *OrderUsecase) ReturnItem(
 		return orderdom.Order{}, orderdom.ErrInvalidItemSnapshot
 	}
 
-	if targetItem.IsReturnRequested {
-		return order, nil
-	}
+	wasReturnRequested := targetItem.IsReturnRequested
+	previousReturnRequestKind := targetItem.ReturnRequestKind
 
 	if err := order.RequestItemReturn(
 		in.ItemIndex,
@@ -692,6 +691,13 @@ func (u *OrderUsecase) ReturnItem(
 		u.now().UTC(),
 	); err != nil {
 		return orderdom.Order{}, err
+	}
+
+	updatedItem := order.Items[in.ItemIndex]
+
+	if wasReturnRequested &&
+		previousReturnRequestKind == updatedItem.ReturnRequestKind {
+		return order, nil
 	}
 
 	updated, err := u.repo.Update(ctx, order, nil)
@@ -1521,6 +1527,7 @@ func (u *OrderUsecase) resolveListOrderItem(
 		IsCancelled:             false,
 		IsDispatched:            false,
 		IsReturnRequested:       false,
+		ReturnRequestKind:       "",
 		ReturnRequestedAt:       nil,
 		IsReturnCompleted:       false,
 		ReturnCompletedAt:       nil,
