@@ -40,6 +40,7 @@ type usecases struct {
 	brandUC                            *uc.BrandUsecase
 	companyUC                          *uc.CompanyUsecase
 	inquiryUC                          *uc.InquiryUsecase
+	itemRefundUC                       *uc.ItemRefundUsecase
 	returnReceiptUC                    *uc.ReturnReceiptUsecase
 	inventoryUC                        *uc.InventoryUsecase
 	listUC                             *uc.ListUsecase
@@ -300,6 +301,165 @@ func buildRefundUsecase(
 	return refundUC, nil
 }
 
+func buildItemRefundUsecase(
+	ctx context.Context,
+	c *clients,
+	r *repos,
+	orderUC *uc.OrderUsecase,
+	paymentUC *uc.PaymentUsecase,
+) (*uc.ItemRefundUsecase, error) {
+	if c == nil ||
+		c.infra == nil {
+		return nil, errors.New(
+			"di.console: shared infra is nil",
+		)
+	}
+
+	if r == nil ||
+		r.settlementRepo == nil {
+		return nil, errors.New(
+			"di.console: settlement repository is nil",
+		)
+	}
+
+	if r.refundRepo == nil {
+		return nil, errors.New(
+			"di.console: refund repository is nil",
+		)
+	}
+
+	if orderUC == nil {
+		return nil, errors.New(
+			"di.console: order usecase is nil",
+		)
+	}
+
+	if paymentUC == nil {
+		return nil, errors.New(
+			"di.console: payment usecase is nil",
+		)
+	}
+
+	stripeSecretKey, err :=
+		c.infra.AccessSecretVersion(
+			ctx,
+			settlementStripeSecretID,
+		)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"di.console: load Stripe item refund secret: %w",
+			err,
+		)
+	}
+
+	stripeSecretKey = strings.TrimSpace(
+		stripeSecretKey,
+	)
+	if stripeSecretKey == "" ||
+		!strings.HasPrefix(
+			stripeSecretKey,
+			"sk_",
+		) {
+		return nil, errors.New(
+			"di.console: Stripe item refund secret is invalid",
+		)
+	}
+
+	platformFeeRateText := strings.TrimSpace(
+		os.Getenv(
+			settlementPlatformFeeRateEnv,
+		),
+	)
+	if platformFeeRateText == "" {
+		return nil, fmt.Errorf(
+			"di.console: %s is empty",
+			settlementPlatformFeeRateEnv,
+		)
+	}
+
+	platformFeeRate, err := strconv.Atoi(
+		platformFeeRateText,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"di.console: invalid %s: %w",
+			settlementPlatformFeeRateEnv,
+			err,
+		)
+	}
+
+	platformFeeBaseText := strings.TrimSpace(
+		os.Getenv(
+			settlementPlatformFeeBaseEnv,
+		),
+	)
+	if platformFeeBaseText == "" {
+		return nil, fmt.Errorf(
+			"di.console: %s is empty",
+			settlementPlatformFeeBaseEnv,
+		)
+	}
+
+	platformFeeCalculator, err :=
+		settlementdom.NewPercentagePlatformFeeCalculator(
+			platformFeeRate,
+			settlementdom.PlatformFeeBase(
+				platformFeeBaseText,
+			),
+		)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"di.console: build item refund platform fee calculator: %w",
+			err,
+		)
+	}
+
+	stripeRefundGateway :=
+		stripeadapter.NewRefundGateway(
+			stripeSecretKey,
+		)
+	if stripeRefundGateway == nil {
+		return nil, errors.New(
+			"di.console: Stripe item refund gateway is nil",
+		)
+	}
+
+	stripeTransferReversalGateway :=
+		stripeadapter.NewTransferReversalGateway(
+			stripeSecretKey,
+		)
+	if stripeTransferReversalGateway == nil {
+		return nil, errors.New(
+			"di.console: Stripe item transfer reversal gateway is nil",
+		)
+	}
+
+	itemRefundUC := uc.NewItemRefundUsecase(
+		uc.NewItemRefundUsecaseInput{
+			OrderReader: orderUC,
+
+			PaymentReader: paymentUC,
+
+			SettlementRepository: r.settlementRepo,
+
+			RefundRepository: r.refundRepo,
+
+			PlatformFeeCalculator: platformFeeCalculator,
+
+			StripeRefundGateway: stripeRefundGateway,
+
+			StripeTransferReversalGateway: stripeTransferReversalGateway,
+		},
+	)
+	if itemRefundUC == nil {
+		return nil, errors.New(
+			"di.console: item refund usecase is nil",
+		)
+	}
+
+	return itemRefundUC, nil
+}
+
 func buildUsecases(
 	ctx context.Context,
 	c *clients,
@@ -527,18 +687,29 @@ func buildUsecases(
 		r.accountRepo,
 	)
 
+	itemRefundUC, err := buildItemRefundUsecase(
+		ctx,
+		c,
+		r,
+		orderUC,
+		paymentUC,
+	)
+	if err != nil {
+		_ = listSaveOperationRetryQueue.Close()
+		_ = listSaveOperationStorage.Close()
+		_ = announcementAttachmentStorage.Close()
+		return nil, err
+	}
+
 	// ReturnReceiptUsecase は未開封返品受領の orchestration を担当します。
 	//
 	// item-level partial refund は既存 RefundUsecase の full Payment refund と
-	// 責務が異なるため、ここでは既存 RefundUsecase を流用しません。
-	//
-	// ItemRefundUsecase の実装・DI完了後、第4引数へ渡してください。
-	// 現時点では nil とし、receive-return が誤って全額返金へ進まないようにします。
+	// 責務が異なるため、ItemRefundUsecase を明示的に注入します。
 	returnReceiptUC := uc.NewReturnReceiptUsecase(
 		orderUC,
 		r.inquiryRepo,
 		inquiryUC,
-		nil,
+		itemRefundUC,
 	)
 
 	if paymentUC == nil {
@@ -809,6 +980,7 @@ func buildUsecases(
 		brandUC:                            brandUC,
 		companyUC:                          companyUC,
 		inquiryUC:                          inquiryUC,
+		itemRefundUC:                       itemRefundUC,
 		returnReceiptUC:                    returnReceiptUC,
 		inventoryUC:                        inventoryUC,
 		listUC:                             listUC,
