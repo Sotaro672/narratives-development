@@ -54,7 +54,7 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// GET /inquiries/company/{companyId}
-	// GET /inquiries/company/{companyId}/unread-count
+	// GET /inquiries/company/{companyId}/action-required-count
 	//
 	// URL 上の companyId は既存 route 互換のため受け取るが、
 	// 実際の company boundary は middleware の companyId を正とする。
@@ -69,8 +69,8 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if len(parts) == 3 && parts[1] != "" && parts[2] == "unread-count" {
-			h.countUnreadByCompanyID(w, r)
+		if len(parts) == 3 && parts[1] != "" && parts[2] == "action-required-count" {
+			h.countActionRequiredByCompanyID(w, r)
 			return
 		}
 
@@ -176,8 +176,8 @@ func (h *InquiryHandler) listByCompanyID(w http.ResponseWriter, r *http.Request)
 	_ = json.NewEncoder(w).Encode(result)
 }
 
-// GET /inquiries/company/{companyId}/unread-count
-func (h *InquiryHandler) countUnreadByCompanyID(w http.ResponseWriter, r *http.Request) {
+// GET /inquiries/company/{companyId}/action-required-count
+func (h *InquiryHandler) countActionRequiredByCompanyID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	companyID, ok := currentCompanyID(w, r)
@@ -185,20 +185,12 @@ func (h *InquiryHandler) countUnreadByCompanyID(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	memberID, ok := currentMemberID(w, r)
-	if !ok {
-		return
-	}
-
 	filter := inquiryFilterFromRequest(r)
 
-	count, err := h.uc.CountUnreadByCompanyIDForMember(
+	count, err := h.managementQuery.CountActionRequiredByCompanyID(
 		ctx,
-		usecase.CountUnreadInquiriesForMemberInput{
-			CompanyID: companyID,
-			MemberID:  memberID,
-			Filter:    filter,
-		},
+		companyID,
+		filter,
 	)
 	if err != nil {
 		writeInquiryErr(w, err)

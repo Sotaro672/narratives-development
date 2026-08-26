@@ -8,11 +8,11 @@ import { getAuthHeaders } from "../../../shared/http/authHeaders";
 import type { ItemsResult } from "../../../shared/types/common/common";
 import type {
   Inquiry,
+  InquiryActionRequiredCountResult,
   InquiryDetail,
   InquiryImageFile,
   InquiryManagementItem,
   InquiryReply,
-  InquiryUnreadCountResult,
   ListInquiriesParams,
   ReplyInquiryParams,
 } from "../../../shared/types/inquiry";
@@ -220,19 +220,19 @@ export async function listInquiriesHTTP(
 }
 
 // -----------------------------------------------------------
-// GET: Inquiry 未読件数
-//   backend: GET /inquiries/company/{companyId}/unread-count
+// GET: Inquiry 未対応件数
+//   backend: GET /inquiries/company/{companyId}/action-required-count
 // -----------------------------------------------------------
 
-export async function countUnreadInquiriesHTTP(
+export async function countActionRequiredInquiriesHTTP(
   params: ListInquiriesParams,
-): Promise<InquiryUnreadCountResult> {
+): Promise<InquiryActionRequiredCountResult> {
   const companyId = assertID(params.companyId, "companyId");
   const headers = await getAuthHeaders();
   const query = buildInquiryListQuery(params);
   const url = `${API_BASE}/inquiries/company/${encodeURIComponent(
     companyId,
-  )}/unread-count${query}`;
+  )}/action-required-count${query}`;
 
   const response = await fetch(url, {
     method: "GET",
@@ -243,11 +243,11 @@ export async function countUnreadInquiriesHTTP(
     const detail = await readErrorDetail(response);
 
     throw new Error(
-      `問い合わせ未読件数の取得に失敗しました（${response.status} ${response.statusText}）\n${detail}`,
+      `問い合わせ未対応件数の取得に失敗しました（${response.status} ${response.statusText}）\n${detail}`,
     );
   }
 
-  return (await response.json()) as InquiryUnreadCountResult;
+  return (await response.json()) as InquiryActionRequiredCountResult;
 }
 
 // -----------------------------------------------------------

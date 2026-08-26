@@ -218,55 +218,6 @@ func (r *InquiryRepositoryFS) ListByAvatarID(
 	}, nil
 }
 
-func (r *InquiryRepositoryFS) CountUnreadByCompanyID(
-	ctx context.Context,
-	companyID string,
-	filter idom.Filter,
-) (int, error) {
-	if r.Client == nil {
-		return 0, errors.New("firestore client is nil")
-	}
-	if companyID == "" {
-		return 0, idom.ErrNotFound
-	}
-
-	// Inquiry no longer stores companyId.
-	// Company-scoped counting should eventually move to a query service that resolves
-	// companyId -> productIds and then counts inquiries by productId.
-	q := r.col().Query
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	count := 0
-
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-
-		in, err := docToInquiry(doc)
-		if err != nil {
-			return 0, err
-		}
-
-		if in.IsRead {
-			continue
-		}
-		if !matchInquiryFilter(in, filter) {
-			continue
-		}
-
-		count++
-	}
-
-	return count, nil
-}
-
 func (r *InquiryRepositoryFS) GetByID(ctx context.Context, id string) (idom.Inquiry, error) {
 	if r.Client == nil {
 		return idom.Inquiry{}, errors.New("firestore client is nil")

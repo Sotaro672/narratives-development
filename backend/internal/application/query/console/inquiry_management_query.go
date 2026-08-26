@@ -183,8 +183,8 @@ func (q *InquiryManagementQuery) ListByCompanyID(
 	}, nil
 }
 
-// CountUnreadByCompanyID は companyID に紐づく未読 Inquiry 件数を返します。
-func (q *InquiryManagementQuery) CountUnreadByCompanyID(
+// CountActionRequiredByCompanyID は companyID に紐づく未対応 Inquiry 件数を返します。
+func (q *InquiryManagementQuery) CountActionRequiredByCompanyID(
 	ctx context.Context,
 	companyID string,
 	filter inquirydom.Filter,
@@ -199,11 +199,63 @@ func (q *InquiryManagementQuery) CountUnreadByCompanyID(
 			fmt.Errorf("inquiry management query: companyId is empty")
 	}
 
-	return q.repo.CountUnreadByCompanyID(
-		ctx,
-		companyID,
-		filter,
-	)
+	status := inquirydom.InquiryStatusOpen
+	filter.Status = &status
+
+	total := 0
+	pageNumber := 1
+	perPage := 200
+
+	for {
+		result, err := q.repo.ListByCompanyID(
+			ctx,
+			companyID,
+			filter,
+			inquirydom.Sort{},
+			inquirydom.Page{
+				Number:  pageNumber,
+				PerPage: perPage,
+			},
+		)
+		if err != nil {
+			return 0, err
+		}
+
+		for _, inq := range result.Items {
+			_,
+				_,
+				_,
+				_,
+				_,
+				resolvedCompanyID,
+				err := q.resolveProductModelRefByInquiry(
+				ctx,
+				inq,
+			)
+			if err != nil {
+				return 0, err
+			}
+
+			if resolvedCompanyID == "" {
+				continue
+			}
+
+			if resolvedCompanyID != companyID {
+				continue
+			}
+
+			total++
+		}
+
+		if result.TotalPages <= 0 ||
+			pageNumber >= result.TotalPages {
+			break
+		}
+
+		pageNumber++
+	}
+
+	return total, nil
 }
 
 // GetByID は Inquiry を返します。

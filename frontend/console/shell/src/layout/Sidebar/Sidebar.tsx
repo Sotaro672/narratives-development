@@ -15,7 +15,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-import { countUnreadInquiriesHTTP } from "../../features/inquiry/infrastructure/inquiryRepositoryHTTP";
+import { countActionRequiredInquiriesHTTP } from "../../features/inquiry/infrastructure/inquiryRepositoryHTTP";
 import { createOrderRepository } from "../../features/order/infrastructure/repository";
 import "./Sidebar.css";
 
@@ -39,7 +39,7 @@ type SubItem = {
 type OpenKey = "products" | "tokens" | "shipping" | "reviews" | "org" | "finance" | null;
 
 const CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER = "current";
-const INQUIRY_READ_STATE_CHANGED_EVENT = "inquiry:read-state-changed";
+const INQUIRY_STATUS_CHANGED_EVENT = "inquiry:status-changed";
 const ORDER_DISPATCH_STATE_CHANGED_EVENT = "order:dispatch-state-changed";
 
 function toSafeCount(value: unknown): number | null {
@@ -52,16 +52,16 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const orderRepository = useMemo(() => createOrderRepository(), []);
-  const [inquiryUnreadCount, setInquiryUnreadCount] = useState<number | null>(null);
+  const [inquiryActionRequiredCount, setInquiryActionRequiredCount] = useState<number | null>(null);
   const [orderActionRequiredCount, setOrderActionRequiredCount] = useState<number | null>(null);
   const [openKey, setOpenKey] = useState<OpenKey>(null);
 
-  const loadInquiryUnreadCount = useCallback(async () => {
+  const loadInquiryActionRequiredCount = useCallback(async () => {
     try {
-      const result = await countUnreadInquiriesHTTP({ companyId: CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER });
-      setInquiryUnreadCount(toSafeCount(result.count));
+      const result = await countActionRequiredInquiriesHTTP({ companyId: CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER });
+      setInquiryActionRequiredCount(toSafeCount(result.count));
     } catch {
-      setInquiryUnreadCount(null);
+      setInquiryActionRequiredCount(null);
     }
   }, []);
 
@@ -75,24 +75,24 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   }, [orderRepository]);
 
   useEffect(() => {
-    void loadInquiryUnreadCount();
-  }, [loadInquiryUnreadCount]);
+    void loadInquiryActionRequiredCount();
+  }, [loadInquiryActionRequiredCount]);
 
   useEffect(() => {
     void loadOrderActionRequiredCount();
   }, [loadOrderActionRequiredCount]);
 
   useEffect(() => {
-    const refresh = () => void loadInquiryUnreadCount();
+    const refresh = () => void loadInquiryActionRequiredCount();
 
     window.addEventListener("focus", refresh);
-    window.addEventListener(INQUIRY_READ_STATE_CHANGED_EVENT, refresh);
+    window.addEventListener(INQUIRY_STATUS_CHANGED_EVENT, refresh);
 
     return () => {
       window.removeEventListener("focus", refresh);
-      window.removeEventListener(INQUIRY_READ_STATE_CHANGED_EVENT, refresh);
+      window.removeEventListener(INQUIRY_STATUS_CHANGED_EVENT, refresh);
     };
-  }, [loadInquiryUnreadCount]);
+  }, [loadInquiryActionRequiredCount]);
 
   useEffect(() => {
     const refresh = () => void loadOrderActionRequiredCount();
@@ -108,7 +108,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
 
   const menuItems: MenuItem[] = useMemo(
     () => [
-      { label: "問い合わせ", path: "/inquiry", icon: MessageSquare, badgeCount: inquiryUnreadCount },
+      { label: "問い合わせ", path: "/inquiry", icon: MessageSquare, badgeCount: inquiryActionRequiredCount },
       { label: "商品", path: "/product", icon: Box, hasSubmenu: true },
       { label: "トークン", path: "/token", icon: Coins, hasSubmenu: true },
       { label: "出品", path: "/list", icon: Store },
@@ -118,7 +118,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       { label: "組織", path: "/company", icon: Building2, hasSubmenu: true },
       { label: "財務", path: "/finance", icon: Wallet, hasSubmenu: true },
     ],
-    [inquiryUnreadCount, orderActionRequiredCount],
+    [inquiryActionRequiredCount, orderActionRequiredCount],
   );
 
   const productSubItems: SubItem[] = useMemo(

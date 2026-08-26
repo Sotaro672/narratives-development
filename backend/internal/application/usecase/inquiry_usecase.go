@@ -260,19 +260,6 @@ func (uc *InquiryUsecase) ListReplies(
 	return uc.replyRepo.ListByInquiryID(ctx, inquiryID)
 }
 
-// CountUnreadInquiriesForMemberInput は company member 向けの未読件数集計入力です。
-//
-// CountUnreadByCompanyIDForMember は以下を合算します。
-// - Inquiry 本体の isRead=false
-// - Inquiry 配下 replies の isRead=false
-//
-// ただし、member 側から送信された reply は未読件数に含めません。
-type CountUnreadInquiriesForMemberInput struct {
-	CompanyID string
-	MemberID  string
-	Filter    inquirydom.Filter
-}
-
 // CountUnreadInquiriesForAvatarInput は avatar 向けの未読件数集計入力です。
 //
 // CountUnreadByCompanyIDForAvatar は以下を合算します。
@@ -295,76 +282,6 @@ type CountUnreadInquiriesForAvatarInput struct {
 type CountUnreadByAvatarIDInput struct {
 	AvatarID string
 	Filter   inquirydom.Filter
-}
-
-// CountUnreadByCompanyIDForMember は Inquiry 本体と replies を対象に未読件数を返します。
-//
-// reply の count 条件:
-//
-//	!reply.IsRead
-//	&& reply.SenderType != member
-//
-// NOTE:
-// company scope / filter に一致する Inquiry のみを対象に replies を集計します。
-func (uc *InquiryUsecase) CountUnreadByCompanyIDForMember(
-	ctx context.Context,
-	in CountUnreadInquiriesForMemberInput,
-) (int, error) {
-	if uc == nil || uc.repo == nil {
-		return 0, fmt.Errorf("inquiry usecase: repository is nil")
-	}
-
-	companyID := in.CompanyID
-	memberID := in.MemberID
-
-	if companyID == "" {
-		return 0, inquirydom.ErrNotFound
-	}
-
-	if memberID == "" {
-		return 0, inquirydom.ErrInvalidReplySenderID
-	}
-
-	total := 0
-	pageNumber := 1
-	perPage := 200
-
-	for {
-		result, err := uc.repo.ListByCompanyID(
-			ctx,
-			companyID,
-			in.Filter,
-			inquirydom.Sort{},
-			inquirydom.Page{
-				Number:  pageNumber,
-				PerPage: perPage,
-			},
-		)
-		if err != nil {
-			return 0, err
-		}
-
-		for _, inquiry := range result.Items {
-			if !inquiry.IsRead {
-				total++
-			}
-
-			replyUnreadCount, err := uc.countUnreadRepliesForMember(ctx, inquiry.ID)
-			if err != nil {
-				return 0, err
-			}
-
-			total += replyUnreadCount
-		}
-
-		if result.TotalPages <= 0 || pageNumber >= result.TotalPages {
-			break
-		}
-
-		pageNumber++
-	}
-
-	return total, nil
 }
 
 // CountUnreadByCompanyIDForAvatar は avatar 向けに replies を対象に未読件数を返します。
@@ -468,60 +385,6 @@ func (uc *InquiryUsecase) CountUnreadByAvatarID(
 	filter.AvatarID = &avatarID
 
 	return uc.replyRepo.CountUnreadByAvatarID(ctx, avatarID, filter)
-}
-
-// CountUnreadByCompanyID は後方互換用の shorthand です。
-//
-// memberId / avatarId を指定しない既存呼び出しでは、自分の reply を除外できないため、
-// reply は集計せず Inquiry 本体の未読数のみ返します。
-func (uc *InquiryUsecase) CountUnreadByCompanyID(
-	ctx context.Context,
-	companyID string,
-	filter inquirydom.Filter,
-) (int, error) {
-	if uc == nil || uc.repo == nil {
-		return 0, fmt.Errorf("inquiry usecase: repository is nil")
-	}
-
-	if companyID == "" {
-		return 0, inquirydom.ErrNotFound
-	}
-
-	return uc.repo.CountUnreadByCompanyID(ctx, companyID, filter)
-}
-
-func (uc *InquiryUsecase) countUnreadRepliesForMember(
-	ctx context.Context,
-	inquiryID string,
-) (int, error) {
-	if uc == nil || uc.replyRepo == nil {
-		return 0, nil
-	}
-
-	if inquiryID == "" {
-		return 0, inquirydom.ErrInvalidReplyInquiryID
-	}
-
-	replies, err := uc.replyRepo.ListByInquiryID(ctx, inquiryID)
-	if err != nil {
-		return 0, err
-	}
-
-	count := 0
-
-	for _, reply := range replies {
-		if reply.IsRead {
-			continue
-		}
-
-		if reply.SenderType == inquirydom.ReplySenderTypeMember {
-			continue
-		}
-
-		count++
-	}
-
-	return count, nil
 }
 
 func (uc *InquiryUsecase) countUnreadRepliesExcludingSender(

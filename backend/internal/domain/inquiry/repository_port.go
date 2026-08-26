@@ -109,18 +109,6 @@ type Repository interface {
 		page Page,
 	) (PageResult[Inquiry], error)
 
-	// CountUnreadByCompanyID counts inquiries where isRead is false
-	// within the given company scope.
-	//
-	// Inquiry itself does not store companyId. Repository implementations that
-	// cannot resolve company scope directly should keep this as a compatibility
-	// method until company-scoped inquiry listing/counting is moved to a query service.
-	CountUnreadByCompanyID(
-		ctx context.Context,
-		companyID string,
-		filter Filter,
-	) (int, error)
-
 	GetByID(ctx context.Context, id string) (Inquiry, error)
 	Create(ctx context.Context, inq Inquiry) (Inquiry, error)
 	Update(ctx context.Context, id string, patch InquiryPatch) (Inquiry, error)
