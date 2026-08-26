@@ -7,6 +7,10 @@ import type {
   OrderDetail,  
 } from "../../shared/types/orderDetailTypes";  
   
+export type ReturnPackageState =  
+  | "unopened"  
+  | "opened";  
+  
 export type CancelOrderItemInput =  
   FetchOrderDetailInput & {  
     itemIndex: number;  
@@ -15,6 +19,7 @@ export type CancelOrderItemInput =
 export type ReturnOrderItemInput =  
   FetchOrderDetailInput & {  
     itemIndex: number;  
+    packageState: ReturnPackageState;  
     reason: string;  
   };  
   
@@ -111,6 +116,7 @@ export async function returnOrderItem({
   idToken,  
   orderId,  
   itemIndex,  
+  packageState,  
   reason,  
 }: ReturnOrderItemInput): Promise<OrderDetail> {  
   const normalizedOrderId = orderId.trim();  
@@ -130,10 +136,22 @@ export async function returnOrderItem({
     );  
   }  
   
+  if (  
+    packageState !== "unopened" &&  
+    packageState !== "opened"  
+  ) {  
+    throw new Error(  
+      "商品の開封状態を選択してください。",  
+    );  
+  }  
+  
   const normalizedReason =  
     reason.trim();  
   
-  if (!normalizedReason) {  
+  if (  
+    packageState === "opened" &&  
+    !normalizedReason  
+  ) {  
     throw new Error(  
       "返品理由を入力してください。",  
     );  
@@ -151,6 +169,7 @@ export async function returnOrderItem({
         "Content-Type": "application/json",  
       },  
       body: JSON.stringify({  
+        packageState,  
         reason: normalizedReason,  
       }),  
     },  

@@ -20,12 +20,14 @@ var (
 	)
 )
 
+const unopenedReturnInquiryContent = "未開封での返品申請"
+
 // ReturnRequestOrderService is the minimum Order application service required
 // by ReturnRequestUsecase.
 //
-// Order state is authoritative for deciding whether a return is unopened or
-// opened. The client-provided route or inquiryType must never bypass the Order
-// domain validation.
+// Order state remains authoritative for server-observed transfer state.
+// An OrderDetail flow may explicitly declare an item opened, but an unopened
+// request must never bypass transferred / tokenTransferVerifiedAt validation.
 type ReturnRequestOrderService interface {
 	GetByID(
 		ctx context.Context,
@@ -53,7 +55,8 @@ type ReturnRequestInquiryCreator interface {
 // ReturnRequestUsecase coordinates Order return state and its Inquiry.
 //
 // Responsibilities:
-// - OrderDetail return -> return_unopened
+// - OrderDetail unopened return -> return_unopened
+// - OrderDetail opened declaration -> return_opened
 // - scanned/opened return -> return_opened
 // - valid scan during return_unopened -> promote to return_opened
 // - prevent duplicate return inquiries for the same Order item
@@ -117,8 +120,22 @@ type ReturnRequestResult struct {
 //	-> backend validates unopened state
 //	-> return_unopened
 //
-// Inquiry content uses the purchaser-provided return reason.
+// Reason is optional for this flow. When it is empty, a fixed unopened-return
+// message is stored as Inquiry.Content so the Inquiry domain remains valid.
 type RequestUnopenedReturnInput struct {
+	OrderID   string
+	AvatarID  string
+	ItemIndex int
+	Reason    string
+}
+
+// RequestOpenedFromOrderDetailInput identifies an opened return declared by
+// the purchaser from OrderDetail.
+//
+// Unlike RequestOpened, this flow does not require a prior token transfer or
+// tokenTransferVerifiedAt. The opened state is an explicit purchaser
+// declaration, and Reason is required.
+type RequestOpenedFromOrderDetailInput struct {
 	OrderID   string
 	AvatarID  string
 	ItemIndex int
@@ -192,8 +209,7 @@ func (uc *ReturnRequestUsecase) RequestUnopened(
 
 	reason := strings.TrimSpace(in.Reason)
 	if reason == "" {
-		return ReturnRequestResult{},
-			inquirydom.ErrInvalidContent
+		reason = unopenedReturnInquiryContent
 	}
 
 	if in.ItemIndex < 0 {
@@ -469,6 +485,214 @@ func (uc *ReturnRequestUsecase) RequestUnopened(
 		created,
 		true,
 	)
+}
+
+// RequestOpenedFromOrderDetail records an opened return declaration from
+// OrderDetail and creates or promotes the associated return_opened Inquiry.
+//
+// This flow intentionally differs from RequestOpened:
+//   - RequestOpened requires server-observed opened state from a valid scan.
+//   - RequestOpenedFromOrderDetail accepts the purchaser's explicit opened
+//     declaration even when transferred == false and tokenTransferVerifiedAt == nil.
+//
+// The Order application service still owns the item-level return state mutation.
+// Financial refund operations remain outside this usecase.
+func (uc *ReturnRequestUsecase) RequestOpenedFromOrderDetail(
+	ctx context.Context,
+	in RequestOpenedFromOrderDetailInput,
+) (ReturnRequestResult, error) {
+	if err := uc.validateConfigured(); err != nil {
+		return ReturnRequestResult{}, err
+	}
+
+	orderID := strings.TrimSpace(in.OrderID)
+	if orderID == "" {
+		return ReturnRequestResult{},
+			orderdom.ErrInvalidID
+	}
+
+	avatarID := strings.TrimSpace(in.AvatarID)
+	if avatarID == "" {
+		return ReturnRequestResult{},
+			orderdom.ErrInvalidAvatarID
+	}
+
+	reason := strings.TrimSpace(in.Reason)
+	if reason == "" {
+		return ReturnRequestResult{},
+			inquirydom.ErrInvalidContent
+	}
+
+	if in.ItemIndex < 0 {
+		return ReturnRequestResult{},
+			orderdom.ErrInvalidItems
+	}
+
+	_, targetItem, err :=
+		uc.getReturnTarget(
+			ctx,
+			orderID,
+			avatarID,
+			in.ItemIndex,
+		)
+	if err != nil {
+		return ReturnRequestResult{}, err
+	}
+
+	if targetItem.IsCancelled ||
+		!targetItem.IsDispatched ||
+		targetItem.IsReturnCompleted {
+		return ReturnRequestResult{},
+			orderdom.ErrConflict
+	}
+
+	updatedOrder, err :=
+		uc.orderService.ReturnItem(
+			ctx,
+			ReturnOrderItemInput{
+				ID:        orderID,
+				AvatarID:  avatarID,
+				ItemIndex: in.ItemIndex,
+				Kind:      orderdom.ReturnRequestKindOpened,
+			},
+		)
+	if err != nil {
+		return ReturnRequestResult{}, err
+	}
+
+	latestOrder, latestItem, err :=
+		uc.getReturnTarget(
+			ctx,
+			orderID,
+			avatarID,
+			in.ItemIndex,
+		)
+	if err != nil {
+		return ReturnRequestResult{
+			Order: updatedOrder,
+		}, err
+	}
+
+	updatedOrder = latestOrder
+
+	if latestItem.IsCancelled ||
+		!latestItem.IsDispatched ||
+		latestItem.IsReturnCompleted ||
+		!latestItem.IsReturnRequested {
+		return ReturnRequestResult{
+			Order: updatedOrder,
+		}, orderdom.ErrConflict
+	}
+
+	existing, found, err :=
+		uc.findReturnInquiry(
+			ctx,
+			avatarID,
+			orderID,
+			in.ItemIndex,
+		)
+	if err != nil {
+		return ReturnRequestResult{
+			Order: updatedOrder,
+		}, err
+	}
+
+	if found {
+		return uc.reconcileDeclaredOpenedInquiry(
+			ctx,
+			updatedOrder,
+			latestItem,
+			existing,
+			reason,
+			false,
+		)
+	}
+
+	now := uc.nowUTC()
+
+	inquiry, err :=
+		inquirydom.NewReturnOpened(
+			returnInquiryID(
+				orderID,
+				in.ItemIndex,
+			),
+			latestItem.ProductID,
+			orderID,
+			in.ItemIndex,
+			avatarID,
+			reason,
+			now,
+			now,
+		)
+	if err != nil {
+		return ReturnRequestResult{
+			Order: updatedOrder,
+		}, err
+	}
+
+	inquiry.Images =
+		[]inquirydom.ImageFile{}
+
+	created, err :=
+		uc.inquiryCreator.Create(
+			ctx,
+			inquiry,
+		)
+	if err != nil {
+		if errors.Is(
+			err,
+			inquirydom.ErrConflict,
+		) {
+			latestOrder, latestItem, latestErr :=
+				uc.getReturnTarget(
+					ctx,
+					orderID,
+					avatarID,
+					in.ItemIndex,
+				)
+			if latestErr != nil {
+				return ReturnRequestResult{
+					Order: updatedOrder,
+				}, latestErr
+			}
+
+			existing, found, findErr :=
+				uc.findReturnInquiry(
+					ctx,
+					avatarID,
+					orderID,
+					in.ItemIndex,
+				)
+			if findErr != nil {
+				return ReturnRequestResult{
+					Order: latestOrder,
+				}, findErr
+			}
+
+			if found {
+				return uc.reconcileDeclaredOpenedInquiry(
+					ctx,
+					latestOrder,
+					latestItem,
+					existing,
+					reason,
+					false,
+				)
+			}
+		}
+
+		return ReturnRequestResult{
+			Order:          updatedOrder,
+			Inquiry:        created,
+			InquiryCreated: created.ID != "",
+		}, err
+	}
+
+	return ReturnRequestResult{
+		Order:          updatedOrder,
+		Inquiry:        created,
+		InquiryCreated: true,
+	}, nil
 }
 
 // RequestOpened records an opened return request and creates or updates the
@@ -985,6 +1209,96 @@ func (uc *ReturnRequestUsecase) findReturnInquiry(
 		nil
 }
 
+func (uc *ReturnRequestUsecase) reconcileDeclaredOpenedInquiry(
+	ctx context.Context,
+	order orderdom.Order,
+	item orderdom.OrderItemSnapshot,
+	inquiry inquirydom.Inquiry,
+	content string,
+	created bool,
+) (ReturnRequestResult, error) {
+	if item.IsCancelled ||
+		!item.IsDispatched ||
+		item.IsReturnCompleted ||
+		!item.IsReturnRequested {
+		return ReturnRequestResult{
+			Order:          order,
+			Inquiry:        inquiry,
+			InquiryCreated: created,
+		}, orderdom.ErrConflict
+	}
+
+	switch inquiry.InquiryType {
+	case inquirydom.InquiryTypeReturnOpened:
+		if item.ProductID != "" {
+			if err := validateReturnInquiryProductID(
+				inquiry,
+				item.ProductID,
+			); err != nil {
+				return ReturnRequestResult{
+					Order:          order,
+					Inquiry:        inquiry,
+					InquiryCreated: created,
+				}, err
+			}
+
+			if inquiry.ProductID == "" {
+				updatedInquiry, err :=
+					uc.setReturnInquiryProductID(
+						ctx,
+						inquiry,
+						item.ProductID,
+					)
+				if err != nil {
+					return ReturnRequestResult{
+						Order:          order,
+						Inquiry:        inquiry,
+						InquiryCreated: created,
+					}, err
+				}
+
+				inquiry = updatedInquiry
+			}
+		}
+
+		return ReturnRequestResult{
+			Order:          order,
+			Inquiry:        inquiry,
+			InquiryCreated: created,
+		}, nil
+
+	case inquirydom.InquiryTypeReturnUnopened:
+		promoted, err :=
+			uc.promoteInquiryToOpenedWithContent(
+				ctx,
+				inquiry,
+				item.ProductID,
+				content,
+			)
+		if err != nil {
+			return ReturnRequestResult{
+				Order:          order,
+				Inquiry:        inquiry,
+				InquiryCreated: created,
+			}, err
+		}
+
+		return ReturnRequestResult{
+			Order:           order,
+			Inquiry:         promoted,
+			InquiryCreated:  created,
+			InquiryPromoted: true,
+		}, nil
+
+	default:
+		return ReturnRequestResult{
+			Order:          order,
+			Inquiry:        inquiry,
+			InquiryCreated: created,
+		}, inquirydom.ErrConflict
+	}
+}
+
 func (uc *ReturnRequestUsecase) reconcileReturnInquiryWithOrderState(
 	ctx context.Context,
 	order orderdom.Order,
@@ -1098,7 +1412,22 @@ func (uc *ReturnRequestUsecase) promoteInquiryToOpened(
 	inquiry inquirydom.Inquiry,
 	productID string,
 ) (inquirydom.Inquiry, error) {
+	return uc.promoteInquiryToOpenedWithContent(
+		ctx,
+		inquiry,
+		productID,
+		"",
+	)
+}
+
+func (uc *ReturnRequestUsecase) promoteInquiryToOpenedWithContent(
+	ctx context.Context,
+	inquiry inquirydom.Inquiry,
+	productID string,
+	content string,
+) (inquirydom.Inquiry, error) {
 	productID = strings.TrimSpace(productID)
+	content = strings.TrimSpace(content)
 
 	if productID != "" {
 		if err := validateReturnInquiryProductID(
@@ -1128,6 +1457,10 @@ func (uc *ReturnRequestUsecase) promoteInquiryToOpened(
 	if inquiry.ProductID == "" &&
 		productID != "" {
 		patch.ProductID = &productID
+	}
+
+	if content != "" {
+		patch.Content = &content
 	}
 
 	return uc.inquiryRepo.Update(

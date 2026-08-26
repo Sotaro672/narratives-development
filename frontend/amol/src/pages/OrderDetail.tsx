@@ -8,7 +8,9 @@ import MediaIcon from "../components/ui/MediaIcon";
 import SectionHeader from "../components/ui/SectionHeader";
 import { formatDateTime } from "../components/utils/date";
 
-import ReturnRequestModal from "../features/order/components/ReturnRequestModal";
+import ReturnRequestModal, {
+  type ReturnPackageState,
+} from "../features/order/components/ReturnRequestModal";
 import { useOrderDetail } from "../features/order/hooks/useOrderDetail";
 import type {
   OrderDetail as OrderDetailType,
@@ -279,6 +281,9 @@ export default function OrderDetail() {
   const [returnTargetIndex, setReturnTargetIndex] =
     useState<number | null>(null);
 
+  const [returnPackageState, setReturnPackageState] =
+    useState<ReturnPackageState | null>(null);
+
   const [returnReason, setReturnReason] =
     useState("");
 
@@ -316,6 +321,7 @@ export default function OrderDetail() {
     }
 
     setReturnTargetIndex(itemIndex);
+    setReturnPackageState(null);
     setReturnReason("");
   };
 
@@ -325,24 +331,32 @@ export default function OrderDetail() {
     }
 
     setReturnTargetIndex(null);
+    setReturnPackageState(null);
     setReturnReason("");
   };
 
   const handleSubmitReturn = async () => {
-    if (returnTargetIndex === null) {
+    if (
+      returnTargetIndex === null ||
+      returnPackageState === null
+    ) {
       return;
     }
 
     const normalizedReason =
       returnReason.trim();
 
-    if (!normalizedReason) {
+    if (
+      returnPackageState === "opened" &&
+      !normalizedReason
+    ) {
       return;
     }
 
     const succeeded =
       await returnItem(
         returnTargetIndex,
+        returnPackageState,
         normalizedReason,
       );
 
@@ -351,6 +365,7 @@ export default function OrderDetail() {
     }
 
     setReturnTargetIndex(null);
+    setReturnPackageState(null);
     setReturnReason("");
   };
 
@@ -467,8 +482,6 @@ export default function OrderDetail() {
 
                   const showReturnButton =
                     item.isDispatched &&
-                    !item.transferred &&
-                    !item.tokenTransferVerifiedAt &&
                     !item.isCancelled &&
                     !item.isReturnRequested;
 
@@ -730,6 +743,7 @@ export default function OrderDetail() {
 
       <ReturnRequestModal
         open={returnTargetIndex !== null}
+        packageState={returnPackageState}
         reason={returnReason}
         error={
           returnTargetIndex !== null
@@ -740,6 +754,10 @@ export default function OrderDetail() {
           returnTargetIndex !== null &&
           returningItemIndex === returnTargetIndex
         }
+        onPackageStateChange={(value) => {
+          setReturnPackageState(value);
+          setReturnReason("");
+        }}
         onReasonChange={setReturnReason}
         onCancel={handleCloseReturnModal}
         onSubmit={() =>

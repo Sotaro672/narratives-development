@@ -379,10 +379,6 @@ func (o *Order) RequestItemReturn(
 		}
 
 	case ReturnRequestKindOpened:
-		if !item.Transferred &&
-			item.TokenTransferVerifiedAt == nil {
-			return ErrConflict
-		}
 	}
 
 	if item.IsReturnRequested {

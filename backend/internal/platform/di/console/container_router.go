@@ -106,8 +106,16 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		)
 	}
 
-	if c.InquiryUC != nil && c.InquiryManagementQuery != nil && c.InquiryDetailQuery != nil {
-		inquiriesH = consoleHandler.NewInquiryHandler(c.InquiryUC, nil, c.InquiryManagementQuery, c.InquiryDetailQuery)
+	if c.InquiryUC != nil &&
+		c.ReturnReceiptUC != nil &&
+		c.InquiryManagementQuery != nil &&
+		c.InquiryDetailQuery != nil {
+		inquiriesH = consoleHandler.NewInquiryHandler(
+			c.InquiryUC,
+			c.ReturnReceiptUC,
+			c.InquiryManagementQuery,
+			c.InquiryDetailQuery,
+		)
 	}
 
 	if c.InventoryUC != nil && c.InventoryManagementQuery != nil && c.InventoryDetailQuery != nil && c.ListCreateQuery != nil {

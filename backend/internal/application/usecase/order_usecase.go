@@ -677,10 +677,6 @@ func (u *OrderUsecase) ReturnItem(
 		}
 
 	case orderdom.ReturnRequestKindOpened:
-		if !targetItem.Transferred &&
-			targetItem.TokenTransferVerifiedAt == nil {
-			return orderdom.Order{}, orderdom.ErrConflict
-		}
 
 	default:
 		return orderdom.Order{}, orderdom.ErrInvalidItemSnapshot

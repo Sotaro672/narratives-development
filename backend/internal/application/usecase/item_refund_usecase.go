@@ -433,30 +433,14 @@ func (u *ItemRefundUsecase) RefundOrderItem(
 	}
 
 	transferReversalAmount, err :=
-		u.calculateTransferReversalAmount(
+		u.resolveTransferReversalAmount(
 			ctx,
+			settlement,
 			targetItem,
 			amountSummary,
 		)
 	if err != nil {
 		return refunddom.Refund{}, err
-	}
-
-	if transferReversalAmount > 0 {
-		if settlement.Status !=
-			settlementdom.StatusTransferred {
-			return refunddom.Refund{},
-				ErrItemRefundSettlementNotTransferred
-		}
-
-		if settlement.StripeTransferID == "" ||
-			!strings.HasPrefix(
-				settlement.StripeTransferID,
-				"tr_",
-			) {
-			return refunddom.Refund{},
-				ErrItemRefundSettlementMismatch
-		}
 	}
 
 	if err := u.validateTransferReversalCapacity(
@@ -654,6 +638,29 @@ func (u *ItemRefundUsecase) createPurchaserRefund(
 		)
 	if err != nil {
 		return refund, err
+	}
+
+	if status ==
+		refunddom.StatusSucceeded &&
+		refundedAt != nil &&
+		refundedAt.Before(
+			refund.CreatedAt,
+		) {
+		delta :=
+			refund.CreatedAt.Sub(
+				*refundedAt,
+			)
+
+		if delta >= time.Second {
+			return refund,
+				refunddom.ErrInvalidRefundedAt
+		}
+
+		normalized :=
+			refund.CreatedAt.UTC()
+
+		refundedAt =
+			&normalized
 	}
 
 	updated, err :=
@@ -1038,8 +1045,16 @@ func (u *ItemRefundUsecase) resolveSettlement(
 		return *matched, nil
 
 	case settlementdom.StatusFailed,
-		settlementdom.StatusCanceled,
-		settlementdom.StatusReversed:
+		settlementdom.StatusCanceled:
+		if matched.StripeTransferID != "" ||
+			matched.TransferredAt != nil {
+			return settlementdom.Settlement{},
+				ErrItemRefundSettlementMismatch
+		}
+
+		return *matched, nil
+
+	case settlementdom.StatusReversed:
 		return settlementdom.Settlement{},
 			ErrItemRefundSettlementUnavailable
 
@@ -1052,6 +1067,60 @@ func (u *ItemRefundUsecase) resolveSettlement(
 // ============================================================
 // Amount Calculation
 // ============================================================
+
+func (u *ItemRefundUsecase) resolveTransferReversalAmount(
+	ctx context.Context,
+	settlement settlementdom.Settlement,
+	targetItem orderdom.OrderItemSnapshot,
+	amountSummary orderdom.OrderItemRefundAmountSummary,
+) (int, error) {
+	switch settlement.Status {
+	case settlementdom.StatusTransferred:
+		if settlement.StripeTransferID == "" ||
+			!strings.HasPrefix(
+				settlement.StripeTransferID,
+				"tr_",
+			) {
+			return 0,
+				ErrItemRefundSettlementMismatch
+		}
+
+		return u.calculateTransferReversalAmount(
+			ctx,
+			targetItem,
+			amountSummary,
+		)
+
+	case settlementdom.StatusFailed,
+		settlementdom.StatusCanceled:
+		if settlement.StripeTransferID != "" ||
+			settlement.TransferredAt != nil {
+			return 0,
+				ErrItemRefundSettlementMismatch
+		}
+
+		// Seller Transfer never completed, so purchaser refund does not need
+		// a seller-side Transfer Reversal.
+		return 0, nil
+
+	case settlementdom.StatusPending,
+		settlementdom.StatusReady,
+		settlementdom.StatusTransferring,
+		settlementdom.StatusFailedRetryable:
+		// These states may still result in a future seller Transfer.
+		// Refunding the purchaser now would risk paying the seller afterward.
+		return 0,
+			ErrItemRefundSettlementNotTransferred
+
+	case settlementdom.StatusReversed:
+		return 0,
+			ErrItemRefundSettlementUnavailable
+
+	default:
+		return 0,
+			ErrItemRefundSettlementUnavailable
+	}
+}
 
 func (u *ItemRefundUsecase) calculateTransferReversalAmount(
 	ctx context.Context,
@@ -1292,6 +1361,14 @@ func validateExistingItemRefund(
 	if refund.TransferReversalAmount < 0 ||
 		refund.TransferReversalAmount >
 			settlement.TransferAmount {
+		return ErrItemRefundExistingRefundMismatch
+	}
+
+	if (settlement.Status ==
+		settlementdom.StatusFailed ||
+		settlement.Status ==
+			settlementdom.StatusCanceled) &&
+		refund.TransferReversalAmount != 0 {
 		return ErrItemRefundExistingRefundMismatch
 	}
 

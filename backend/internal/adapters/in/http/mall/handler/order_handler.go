@@ -29,8 +29,11 @@ import (
 //   - PATCH /mall/me/orders/{orderId}/items/{itemIndex}/cancel
 //   - PATCH /mall/me/orders/{orderId}/items/{itemIndex}/return
 //
-// The Mall return endpoint records an unopened purchaser return request and
-// creates the associated return_unopened Inquiry.
+// The Mall return endpoint records either:
+// - an unopened purchaser return request
+// - an opened purchaser return request
+//
+// It creates the associated return_unopened or return_opened Inquiry.
 // It must not execute Stripe Refund, Stripe Transfer Reversal, Payment refund
 // state mutation, or Settlement cancellation/reversal.
 //
@@ -136,7 +139,8 @@ type createOrderRequest struct {
 }
 
 type returnOrderItemRequest struct {
-	Reason string `json:"reason"`
+	PackageState string `json:"packageState"`
+	Reason       string `json:"reason"`
 }
 
 func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
@@ -468,21 +472,40 @@ func (h *OrderHandler) returnMe(
 		return
 	}
 
+	packageState :=
+		strings.TrimSpace(
+			req.PackageState,
+		)
+
 	reason :=
 		strings.TrimSpace(
 			req.Reason,
 		)
 
-	if reason == "" {
+	if packageState != "unopened" &&
+		packageState != "opened" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid packageState"})
+		return
+	}
+
+	if packageState == "opened" &&
+		reason == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "return reason is required"})
 		return
 	}
 
-	// MallのOrderDetailから行う返品申請は未開封返品として扱う。
+	// MallのOrderDetailから行う返品申請は、
+	// packageStateに応じて未開封返品または開封済返品として扱う。
 	//
-	// ReturnRequestUsecaseはOrder itemのIsReturnRequested更新と、
-	// return_unopened Inquiryの作成を同じapplication flowで調整する。
+	// unopened:
+	// ReturnRequestUsecase.RequestUnopenedを使用し、
+	// return_unopened Inquiryを作成する。
+	//
+	// opened:
+	// ReturnRequestUsecase.RequestOpenedFromOrderDetailを使用し、
+	// 購入者による開封済み申告としてreturn_opened Inquiryを作成する。
 	//
 	// Stripe Refund / Transfer Reversalは実行しない。
 	if h == nil || h.returnRequestUC == nil {
@@ -495,16 +518,33 @@ func (h *OrderHandler) returnMe(
 		return
 	}
 
-	result, err :=
-		h.returnRequestUC.RequestUnopened(
-			ctx,
-			usecase.RequestUnopenedReturnInput{
-				OrderID:   orderID,
-				AvatarID:  avatarID,
-				ItemIndex: itemIndex,
-				Reason:    reason,
-			},
-		)
+	var result usecase.ReturnRequestResult
+
+	switch packageState {
+	case "unopened":
+		result, err =
+			h.returnRequestUC.RequestUnopened(
+				ctx,
+				usecase.RequestUnopenedReturnInput{
+					OrderID:   orderID,
+					AvatarID:  avatarID,
+					ItemIndex: itemIndex,
+					Reason:    reason,
+				},
+			)
+
+	case "opened":
+		result, err =
+			h.returnRequestUC.RequestOpenedFromOrderDetail(
+				ctx,
+				usecase.RequestOpenedFromOrderDetailInput{
+					OrderID:   orderID,
+					AvatarID:  avatarID,
+					ItemIndex: itemIndex,
+					Reason:    reason,
+				},
+			)
+	}
 
 	out := result.Order
 	if err != nil {
