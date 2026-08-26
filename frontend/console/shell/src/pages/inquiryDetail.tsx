@@ -1,6 +1,7 @@
 // frontend/console/shell/src/pages/inquiryDetail.tsx
 
 import * as React from "react";
+import { Link } from "react-router-dom";
 
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import { safeDateTimeLabelJa } from "../../../shell/src/shared/util/dateJa";
@@ -41,10 +42,6 @@ import {
   type InquiryOrderItemSummary,
   type InquiryOrderSummary,
 } from "../shared/types/inquiry";
-
-import type {
-  ShippingAddress,
-} from "../shared/types/shippingAddress";
 
 import "../styles/inquiry-page.css";
 
@@ -100,64 +97,6 @@ function createClientID(prefix: string): string {
     `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   return `${prefix}-${randomID}`;
-}
-
-function getShippingAddressLine(
-  address: ShippingAddress,
-): string {
-  const zipCode = normalizeText(
-    address.zipCode,
-  );
-
-  const state = normalizeText(
-    address.state,
-  );
-
-  const city = normalizeText(
-    address.city,
-  );
-
-  const street = normalizeText(
-    address.street,
-  );
-
-  const parts = [
-    zipCode ? `〒${zipCode}` : "",
-    state,
-    city,
-    street,
-  ].filter(Boolean);
-
-  return parts.length > 0
-    ? parts.join(" ")
-    : "-";
-}
-
-function getShippingAddressStreet2(
-  address: ShippingAddress,
-): string {
-  return normalizeText(
-    address.street2,
-  );
-}
-
-function getOrderItemsLabel(
-  order: InquiryOrderSummary,
-): string {
-  if (order.items.length === 0) {
-    return "-";
-  }
-
-  return order.items
-    .map((item: InquiryOrderItemSummary) => {
-      const tokenName = textOrDash(item.tokenName);
-      const quantity = item.qty;
-
-      return quantity > 0
-        ? `${tokenName} × ${quantity}`
-        : tokenName;
-    })
-    .join(" / ");
 }
 
 function getOrderTransferredAtLabel(
@@ -233,7 +172,6 @@ function replySenderLabel(
   reply: InquiryReplyView,
   params: {
     memberId: string;
-    avatarName: string;
   },
 ): string {
   if (reply.senderType === "member") {
@@ -242,9 +180,7 @@ function replySenderLabel(
       : "担当者";
   }
 
-  return params.avatarName !== "-"
-    ? params.avatarName
-    : "アバター";
+  return "アバター";
 }
 
 export default function InquiryDetail() {
@@ -315,9 +251,6 @@ export default function InquiryDetail() {
   const body =
     textOrDash(inquiry?.content);
 
-  const avatarName =
-    textOrDash(detail?.avatarName);
-
   const userFullName =
     textOrDash(detail?.userFullName);
 
@@ -355,11 +288,31 @@ export default function InquiryDetail() {
   const replies: InquiryReplyView[] =
     detail?.replies ?? [];
 
-  const shippingAddresses =
-    detail?.shippingAddresses ?? [];
-
   const orders: InquiryOrderSummary[] =
     detail?.orders ?? [];
+
+  const targetOrderItem =
+    orders
+      .flatMap(
+        (
+          order:
+            InquiryOrderSummary,
+        ) =>
+          order.items,
+      )[0] ?? null;
+
+  const productDisplayName =
+    `${productName} / ${brandName}`;
+
+  const tokenDisplayName =
+    `${textOrDash(
+      targetOrderItem?.tokenName,
+    )} / ${textOrDash(
+      targetOrderItem?.tokenBrandName,
+    )}`;
+
+  const quantity =
+    targetOrderItem?.qty ?? 0;
 
   const pageTitle = (
     <div className="inq-detail__page-title">
@@ -913,7 +866,6 @@ export default function InquiryDetail() {
                           reply,
                           {
                             memberId,
-                            avatarName,
                           },
                         );
 
@@ -1008,68 +960,12 @@ export default function InquiryDetail() {
                 <div className="inq-detail__meta">
                   <div>
                     <span className="inq-detail__label">
-                      アバター名
-                    </span>
-
-                    <span className="inq-detail__value">
-                      {avatarName}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="inq-detail__label">
                       ユーザー名
                     </span>
 
                     <span className="inq-detail__value">
                       {userFullName}
                     </span>
-                  </div>
-
-                  <div>
-                    <span className="inq-detail__label">
-                      配送先情報
-                    </span>
-
-                    {shippingAddresses.length >
-                    0 ? (
-                      <div className="inq-detail__value">
-                        {shippingAddresses.map(
-                          (
-                            address:
-                              ShippingAddress,
-                          ) => {
-                            const addressLine =
-                              getShippingAddressLine(
-                                address,
-                              );
-
-                            const street2 =
-                              getShippingAddressStreet2(
-                                address,
-                              );
-
-                            return (
-                              <span
-                                key={address.id}
-                              >
-                                {
-                                  addressLine
-                                }
-
-                                {street2
-                                  ? ` ${street2}`
-                                  : ""}
-                              </span>
-                            );
-                          },
-                        )}
-                      </div>
-                    ) : (
-                      <span className="inq-detail__value">
-                        -
-                      </span>
-                    )}
                   </div>
 
                   <div>
@@ -1112,17 +1008,27 @@ export default function InquiryDetail() {
                     </span>
 
                     <span className="inq-detail__value">
-                      {productName}
+                      {productDisplayName}
                     </span>
                   </div>
 
                   <div>
                     <span className="inq-detail__label">
-                      ブランド
+                      トークン名
                     </span>
 
                     <span className="inq-detail__value">
-                      {brandName}
+                      {tokenDisplayName}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="inq-detail__label">
+                      数量
+                    </span>
+
+                    <span className="inq-detail__value">
+                      {quantity}
                     </span>
                   </div>
 
@@ -1140,11 +1046,16 @@ export default function InquiryDetail() {
                             注文ID
                           </span>
 
-                          <span className="inq-detail__value">
+                          <Link
+                            to={`/order/${encodeURIComponent(
+                              order.id,
+                            )}`}
+                            className="inq-detail__value inq-detail__value--link"
+                          >
                             {textOrDash(
                               order.id,
                             )}
-                          </span>
+                          </Link>
                         </div>,
 
                         <div
@@ -1171,20 +1082,6 @@ export default function InquiryDetail() {
 
                           <span className="inq-detail__value">
                             {getOrderTransferredAtLabel(
-                              order,
-                            )}
-                          </span>
-                        </div>,
-
-                        <div
-                          key={`${order.id}-items-${index}`}
-                        >
-                          <span className="inq-detail__label">
-                            注文内容
-                          </span>
-
-                          <span className="inq-detail__value">
-                            {getOrderItemsLabel(
                               order,
                             )}
                           </span>

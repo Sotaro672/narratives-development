@@ -149,7 +149,6 @@ func buildQueries(
 		r.brandRepo,
 		r.avatarRepo,
 		r.userRepo,
-		r.shippingAddressRepo,
 		r.orderRepo,
 	)
 

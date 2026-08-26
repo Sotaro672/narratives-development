@@ -16,7 +16,6 @@ import (
 	orderdom "narratives/internal/domain/order"
 	productdom "narratives/internal/domain/product"
 	productblueprintdom "narratives/internal/domain/productBlueprint"
-	shippingaddressdom "narratives/internal/domain/shippingAddress"
 	tokendom "narratives/internal/domain/token"
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 	transferdom "narratives/internal/domain/transfer"
@@ -34,11 +33,10 @@ import (
 // ProductID が存在する場合は tokens/{productId} から Token.AssetID を取得します。
 // product Inquiry では AssetID から Transfer.TransferredAt を解決します。
 // return Inquiry では対象 Order item の TransferredAt を正として扱います。
-// Inquiry.AvatarID から Avatar.GetByID() を使って AvatarName / UserID を解決します。
+// Inquiry.AvatarID から Avatar.GetByID() を使って UserID を解決します。
 // 解決した UserID から User.GetByID() を使って UserFullName を解決します。
-// 解決した UserID から ShippingAddress.ListByUserID() を使って配送先住所一覧を解決します。
 // ReplyRepository から replies を取得し、詳細 BFF の完成 DTO に含めます。
-// Order item の tokenBlueprintId / tokenName は Order snapshot を優先し、必要時のみ InventoryID から補完します。
+// Order item の tokenBlueprintId / tokenName は Order snapshot を優先し、必要時のみ InventoryID から補完し、TokenBlueprint.BrandID から BrandName を解決します。
 type InquiryDetailQuery struct {
 	repo                 inquirydom.Repository
 	replyRepo            inquirydom.ReplyRepository
@@ -52,7 +50,6 @@ type InquiryDetailQuery struct {
 	brandRepo            branddom.Repository
 	avatarRepo           avatardom.Repository
 	userRepo             userdom.RepositoryPort
-	shippingAddressRepo  shippingaddressdom.RepositoryPort
 	orderRepo            orderdom.Repository
 }
 
@@ -70,7 +67,6 @@ func NewInquiryDetailQuery(
 	brandRepo branddom.Repository,
 	avatarRepo avatardom.Repository,
 	userRepo userdom.RepositoryPort,
-	shippingAddressRepo shippingaddressdom.RepositoryPort,
 	orderRepo orderdom.Repository,
 ) *InquiryDetailQuery {
 	return &InquiryDetailQuery{
@@ -78,27 +74,25 @@ func NewInquiryDetailQuery(
 		productBlueprintRepo: productBlueprintRepo, tokenBlueprintRepo: tokenBlueprintRepo,
 		tokenQueryRepo: tokenQueryRepo, transferQueryRepo: transferQueryRepo,
 		brandRepo: brandRepo, avatarRepo: avatarRepo, userRepo: userRepo,
-		shippingAddressRepo: shippingAddressRepo, orderRepo: orderRepo,
+		orderRepo: orderRepo,
 	}
 }
 
 // InquiryDetail は Console 管理画面向けの Inquiry 詳細 read model です。
 type InquiryDetail struct {
-	Inquiry            inquirydom.Inquiry                   `json:"inquiry"`
-	Replies            []inquirydom.Reply                   `json:"replies"`
-	ModelID            string                               `json:"modelId"`
-	ProductBlueprintID string                               `json:"productBlueprintId"`
-	ProductName        string                               `json:"productName"`
-	BrandID            string                               `json:"brandId"`
-	BrandName          string                               `json:"brandName"`
-	AssetID            string                               `json:"assetId"`
-	TransferredAt      *time.Time                           `json:"transferredAt,omitempty"`
-	AvatarName         string                               `json:"avatarName"`
-	UserID             string                               `json:"userId"`
-	UserFullName       string                               `json:"userFullName"`
-	ShippingAddresses  []shippingaddressdom.ShippingAddress `json:"shippingAddresses"`
-	Orders             []InquiryOrderSummary                `json:"orders"`
-	CompanyID          string                               `json:"companyId"`
+	Inquiry            inquirydom.Inquiry    `json:"inquiry"`
+	Replies            []inquirydom.Reply    `json:"replies"`
+	ModelID            string                `json:"modelId"`
+	ProductBlueprintID string                `json:"productBlueprintId"`
+	ProductName        string                `json:"productName"`
+	BrandID            string                `json:"brandId"`
+	BrandName          string                `json:"brandName"`
+	AssetID            string                `json:"assetId"`
+	TransferredAt      *time.Time            `json:"transferredAt,omitempty"`
+	UserID             string                `json:"userId"`
+	UserFullName       string                `json:"userFullName"`
+	Orders             []InquiryOrderSummary `json:"orders"`
+	CompanyID          string                `json:"companyId"`
 }
 
 // InquiryAggregate は Inquiry とその画像一覧をまとめた管理画面向けビューです。
@@ -106,26 +100,24 @@ type InquiryDetail struct {
 // inquiryImage ドメインは inquiry ドメインへ統合済みのため、
 // Images は Inquiry.Images から取得します。
 type InquiryAggregate struct {
-	Inquiry            inquirydom.Inquiry                   `json:"inquiry"`
-	Images             []inquirydom.ImageFile               `json:"images"`
-	ModelID            string                               `json:"modelId"`
-	ProductBlueprintID string                               `json:"productBlueprintId"`
-	ProductName        string                               `json:"productName"`
-	BrandID            string                               `json:"brandId"`
-	BrandName          string                               `json:"brandName"`
-	AssetID            string                               `json:"assetId"`
-	TransferredAt      *time.Time                           `json:"transferredAt,omitempty"`
-	AvatarName         string                               `json:"avatarName"`
-	UserID             string                               `json:"userId"`
-	UserFullName       string                               `json:"userFullName"`
-	ShippingAddresses  []shippingaddressdom.ShippingAddress `json:"shippingAddresses"`
-	Orders             []InquiryOrderSummary                `json:"orders"`
-	CompanyID          string                               `json:"companyId"`
+	Inquiry            inquirydom.Inquiry     `json:"inquiry"`
+	Images             []inquirydom.ImageFile `json:"images"`
+	ModelID            string                 `json:"modelId"`
+	ProductBlueprintID string                 `json:"productBlueprintId"`
+	ProductName        string                 `json:"productName"`
+	BrandID            string                 `json:"brandId"`
+	BrandName          string                 `json:"brandName"`
+	AssetID            string                 `json:"assetId"`
+	TransferredAt      *time.Time             `json:"transferredAt,omitempty"`
+	UserID             string                 `json:"userId"`
+	UserFullName       string                 `json:"userFullName"`
+	Orders             []InquiryOrderSummary  `json:"orders"`
+	CompanyID          string                 `json:"companyId"`
 }
 
 // InquiryOrderSummary は Inquiry 詳細画面向けの注文 read model です。
 //
-// 配送先情報は ShippingAddress から取得済みのため、Order.ShippingSnapshot は含めません。
+// Order.ShippingSnapshot は問い合わせ詳細では使用しないため含めません。
 // 決済情報も別用途のため、Order.PaymentMethodSnapshot は含めません。
 type InquiryOrderSummary struct {
 	ID        string                    `json:"id"`
@@ -149,6 +141,8 @@ type InquiryOrderItemSummary struct {
 	ProductBlueprintID      string                 `json:"productBlueprintId"`
 	TokenBlueprintID        string                 `json:"tokenBlueprintId"`
 	TokenName               string                 `json:"tokenName"`
+	TokenBrandID            string                 `json:"tokenBrandId"`
+	TokenBrandName          string                 `json:"tokenBrandName"`
 	BrandID                 string                 `json:"brandId"`
 	Qty                     int                    `json:"qty"`
 	Price                   int                    `json:"price"`
@@ -220,7 +214,7 @@ func (q *InquiryDetailQuery) getDetailBaseByID(ctx context.Context, id string) (
 		return InquiryDetail{}, err
 	}
 
-	avatarName, userID, userFullName, shippingAddresses, err := q.resolveAvatarUserRefByAvatarID(ctx, inq.AvatarID)
+	userID, userFullName, err := q.resolveUserRefByAvatarID(ctx, inq.AvatarID)
 	if err != nil {
 		return InquiryDetail{}, err
 	}
@@ -228,8 +222,8 @@ func (q *InquiryDetailQuery) getDetailBaseByID(ctx context.Context, id string) (
 	return InquiryDetail{
 		Inquiry: inq, Replies: []inquirydom.Reply{}, ModelID: resolved.ModelID, ProductBlueprintID: resolved.ProductBlueprintID,
 		ProductName: resolved.ProductName, BrandID: resolved.BrandID, BrandName: resolved.BrandName,
-		AssetID: resolved.AssetID, TransferredAt: resolved.TransferredAt, AvatarName: avatarName,
-		UserID: userID, UserFullName: userFullName, ShippingAddresses: shippingAddresses,
+		AssetID: resolved.AssetID, TransferredAt: resolved.TransferredAt,
+		UserID: userID, UserFullName: userFullName,
 		Orders: resolved.Orders, CompanyID: resolved.CompanyID,
 	}, nil
 }
@@ -290,7 +284,7 @@ func (q *InquiryDetailQuery) GetAggregate(ctx context.Context, id string) (Inqui
 	if err != nil {
 		return InquiryAggregate{}, err
 	}
-	avatarName, userID, userFullName, shippingAddresses, err := q.resolveAvatarUserRefByAvatarID(ctx, inq.AvatarID)
+	userID, userFullName, err := q.resolveUserRefByAvatarID(ctx, inq.AvatarID)
 	if err != nil {
 		return InquiryAggregate{}, err
 	}
@@ -299,9 +293,9 @@ func (q *InquiryDetailQuery) GetAggregate(ctx context.Context, id string) (Inqui
 		Inquiry: inq, Images: images, ModelID: resolved.ModelID,
 		ProductBlueprintID: resolved.ProductBlueprintID, ProductName: resolved.ProductName,
 		BrandID: resolved.BrandID, BrandName: resolved.BrandName, AssetID: resolved.AssetID,
-		TransferredAt: resolved.TransferredAt, AvatarName: avatarName, UserID: userID,
-		UserFullName: userFullName, ShippingAddresses: shippingAddresses,
-		Orders: resolved.Orders, CompanyID: resolved.CompanyID,
+		TransferredAt: resolved.TransferredAt, UserID: userID,
+		UserFullName: userFullName,
+		Orders:       resolved.Orders, CompanyID: resolved.CompanyID,
 	}, nil
 }
 
@@ -809,60 +803,43 @@ func (q *InquiryDetailQuery) resolveTransferredAtByAssetID(ctx context.Context, 
 	return &transferredAt, nil
 }
 
-func (q *InquiryDetailQuery) resolveAvatarUserRefByAvatarID(
+func (q *InquiryDetailQuery) resolveUserRefByAvatarID(
 	ctx context.Context,
 	avatarID string,
-) (avatarName string, userID string, userFullName string, shippingAddresses []shippingaddressdom.ShippingAddress, err error) {
+) (userID string, userFullName string, err error) {
 	if q == nil {
-		return "", "", "", nil, fmt.Errorf("inquiry detail query: query is nil")
+		return "", "", fmt.Errorf("inquiry detail query: query is nil")
 	}
 	if avatarID == "" {
-		return "", "", "", []shippingaddressdom.ShippingAddress{}, nil
+		return "", "", nil
 	}
 	if q.avatarRepo == nil {
-		return "", "", "", nil, fmt.Errorf("inquiry detail query: avatar repository is nil")
+		return "", "", fmt.Errorf("inquiry detail query: avatar repository is nil")
 	}
 
 	avatar, err := q.avatarRepo.GetByID(ctx, avatarID)
 	if err != nil {
-		return "", "", "", nil, err
+		return "", "", err
 	}
 
-	avatarName = avatar.AvatarName
 	userID = avatar.UserID
 	if userID == "" {
-		return avatarName, "", "", []shippingaddressdom.ShippingAddress{}, nil
+		return "", "", nil
 	}
 	if q.userRepo == nil {
-		return avatarName, userID, "", nil, fmt.Errorf("inquiry detail query: user repository is nil")
+		return userID, "", fmt.Errorf("inquiry detail query: user repository is nil")
 	}
 
 	user, err := q.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, userdom.ErrNotFound) {
-			userFullName = ""
-		} else {
-			return avatarName, userID, "", nil, err
+			return userID, "", nil
 		}
-	} else {
-		userFullName = userdom.FormatName(user)
+		return userID, "", err
 	}
 
-	if q.shippingAddressRepo == nil {
-		return avatarName, userID, userFullName, nil, fmt.Errorf("inquiry detail query: shipping address repository is nil")
-	}
-
-	shippingAddresses, err = q.shippingAddressRepo.ListByUserID(ctx, userID)
-	if err != nil {
-		if errors.Is(err, shippingaddressdom.ErrNotFound) {
-			return avatarName, userID, userFullName, []shippingaddressdom.ShippingAddress{}, nil
-		}
-		return avatarName, userID, userFullName, nil, err
-	}
-	if shippingAddresses == nil {
-		shippingAddresses = []shippingaddressdom.ShippingAddress{}
-	}
-	return avatarName, userID, userFullName, shippingAddresses, nil
+	userFullName = userdom.FormatName(user)
+	return userID, userFullName, nil
 }
 
 func (q *InquiryDetailQuery) resolveRepliesByInquiryID(ctx context.Context, inquiryID string) ([]inquirydom.Reply, error) {
@@ -982,7 +959,11 @@ func (q *InquiryDetailQuery) buildInquiryOrderItemSummary(
 	itemIndex int,
 	item orderdom.OrderItemSnapshot,
 ) (InquiryOrderItemSummary, error) {
-	tokenBlueprintID, tokenName, err :=
+	tokenBlueprintID,
+		tokenName,
+		tokenBrandID,
+		tokenBrandName,
+		err :=
 		q.resolveTokenBlueprintSnapshotByOrderItem(
 			ctx,
 			item,
@@ -1004,6 +985,8 @@ func (q *InquiryDetailQuery) buildInquiryOrderItemSummary(
 		ProductBlueprintID: item.ProductBlueprintID,
 		TokenBlueprintID:   tokenBlueprintID,
 		TokenName:          tokenName,
+		TokenBrandID:       tokenBrandID,
+		TokenBrandName:     tokenBrandName,
 		BrandID:            item.BrandID,
 
 		Qty:   item.Qty,
@@ -1029,9 +1012,15 @@ func (q *InquiryDetailQuery) buildInquiryOrderItemSummary(
 func (q *InquiryDetailQuery) resolveTokenBlueprintSnapshotByOrderItem(
 	ctx context.Context,
 	item orderdom.OrderItemSnapshot,
-) (tokenBlueprintID string, tokenName string, err error) {
+) (
+	tokenBlueprintID string,
+	tokenName string,
+	tokenBrandID string,
+	tokenBrandName string,
+	err error,
+) {
 	if q == nil {
-		return "", "",
+		return "", "", "", "",
 			fmt.Errorf("inquiry detail query: query is nil")
 	}
 
@@ -1044,28 +1033,10 @@ func (q *InquiryDetailQuery) resolveTokenBlueprintSnapshotByOrderItem(
 		)
 	}
 
-	if q.tokenBlueprintRepo == nil {
-		return "", "",
-			fmt.Errorf("inquiry detail query: token blueprint repository is nil")
-	}
-
-	tb, err :=
-		q.tokenBlueprintRepo.GetByID(
-			ctx,
-			tokenBlueprintID,
-		)
-	if err != nil {
-		return "", "", err
-	}
-	if tb == nil {
-		return "", "",
-			fmt.Errorf(
-				"inquiry detail query: token blueprint is nil: tokenBlueprintId=%q",
-				tokenBlueprintID,
-			)
-	}
-
-	return tb.ID, tb.Name, nil
+	return q.resolveTokenBlueprintDisplayByID(
+		ctx,
+		tokenBlueprintID,
+	)
 }
 
 func normalizeInquiryDetailTimePointer(
@@ -1084,37 +1055,109 @@ func normalizeInquiryDetailTimePointer(
 func (q *InquiryDetailQuery) resolveTokenBlueprintSnapshotByInventoryID(
 	ctx context.Context,
 	inventoryID string,
-) (tokenBlueprintID string, tokenName string, err error) {
+) (
+	tokenBlueprintID string,
+	tokenName string,
+	tokenBrandID string,
+	tokenBrandName string,
+	err error,
+) {
 	if q == nil {
-		return "", "", fmt.Errorf("inquiry detail query: query is nil")
+		return "", "", "", "", fmt.Errorf("inquiry detail query: query is nil")
 	}
 	if inventoryID == "" {
-		return "", "", nil
+		return "", "", "", "", nil
 	}
 	if q.inventoryRepo == nil {
-		return "", "", fmt.Errorf("inquiry detail query: inventory repository is nil")
+		return "", "", "", "", fmt.Errorf("inquiry detail query: inventory repository is nil")
 	}
 
 	_, tokenBlueprintID, err = q.inventoryRepo.ResolveBlueprintIDsByInventoryID(ctx, inventoryID)
 	if err != nil {
 		if errors.Is(err, inventorydom.ErrNotFound) {
-			return "", "", nil
+			return "", "", "", "", nil
 		}
-		return "", "", err
+		return "", "", "", "", err
 	}
 	if tokenBlueprintID == "" {
-		return "", "", inventorydom.ErrInvalidTokenBlueprintID
-	}
-	if q.tokenBlueprintRepo == nil {
-		return "", "", fmt.Errorf("inquiry detail query: token blueprint repository is nil")
+		return "", "", "", "", inventorydom.ErrInvalidTokenBlueprintID
 	}
 
-	tb, err := q.tokenBlueprintRepo.GetByID(ctx, tokenBlueprintID)
+	return q.resolveTokenBlueprintDisplayByID(
+		ctx,
+		tokenBlueprintID,
+	)
+}
+
+func (q *InquiryDetailQuery) resolveTokenBlueprintDisplayByID(
+	ctx context.Context,
+	tokenBlueprintID string,
+) (
+	resolvedTokenBlueprintID string,
+	tokenName string,
+	tokenBrandID string,
+	tokenBrandName string,
+	err error,
+) {
+	if q == nil {
+		return "", "", "", "",
+			fmt.Errorf("inquiry detail query: query is nil")
+	}
+	if tokenBlueprintID == "" {
+		return "", "", "", "", nil
+	}
+	if q.tokenBlueprintRepo == nil {
+		return "", "", "", "",
+			fmt.Errorf("inquiry detail query: token blueprint repository is nil")
+	}
+
+	tb, err :=
+		q.tokenBlueprintRepo.GetByID(
+			ctx,
+			tokenBlueprintID,
+		)
 	if err != nil {
-		return "", "", err
+		return "", "", "", "", err
 	}
 	if tb == nil {
-		return "", "", fmt.Errorf("inquiry detail query: token blueprint is nil: tokenBlueprintId=%q", tokenBlueprintID)
+		return "", "", "", "",
+			fmt.Errorf(
+				"inquiry detail query: token blueprint is nil: tokenBlueprintId=%q",
+				tokenBlueprintID,
+			)
 	}
-	return tb.ID, tb.Name, nil
+
+	resolvedTokenBlueprintID = tb.ID
+	tokenName = tb.Name
+	tokenBrandID = tb.BrandID
+
+	if tokenBrandID == "" {
+		return resolvedTokenBlueprintID,
+			tokenName, "", "", nil
+	}
+	if q.brandRepo == nil {
+		return resolvedTokenBlueprintID,
+			tokenName, tokenBrandID, "",
+			fmt.Errorf("inquiry detail query: brand repository is nil")
+	}
+
+	brand, err :=
+		q.brandRepo.GetByID(
+			ctx,
+			tokenBrandID,
+		)
+	if err != nil {
+		if errors.Is(err, branddom.ErrNotFound) {
+			return resolvedTokenBlueprintID,
+				tokenName, tokenBrandID, "", nil
+		}
+
+		return resolvedTokenBlueprintID,
+			tokenName, tokenBrandID, "", err
+	}
+
+	tokenBrandName = brand.Name
+
+	return resolvedTokenBlueprintID,
+		tokenName, tokenBrandID, tokenBrandName, nil
 }
