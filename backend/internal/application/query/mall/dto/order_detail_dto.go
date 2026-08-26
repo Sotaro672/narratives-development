@@ -75,6 +75,9 @@ type OrderDetailItem struct {
 	IsReturnRequested bool   `json:"isReturnRequested"`
 	ReturnRequestedAt string `json:"returnRequestedAt,omitempty"`
 
+	IsReturnCompleted bool   `json:"isReturnCompleted"`
+	ReturnCompletedAt string `json:"returnCompletedAt,omitempty"`
+
 	TokenTransferVerifiedAt string `json:"tokenTransferVerifiedAt,omitempty"`
 
 	Transferred   bool   `json:"transferred"`

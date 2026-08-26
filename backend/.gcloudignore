@@ -24,6 +24,7 @@ Thumbs.db
 /tmp/
 /temp/
 /.cache/
+/server
 **/*.log
 *.exe
 
@@ -55,6 +56,12 @@ yarn-error.log*
 !.env.example
 **/*credentials*
 **/*key*.json
+
+# ----------------------------
+# Cloud Build diagnostics
+# ----------------------------
+/upload-files.txt
+/upload-files-after.txt
 
 # ----------------------------
 # Large misc

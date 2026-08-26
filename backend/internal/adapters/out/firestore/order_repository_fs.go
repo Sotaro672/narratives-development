@@ -431,6 +431,9 @@ type itemDoc struct {
 	IsReturnRequested bool       `firestore:"isReturnRequested"`
 	ReturnRequestedAt *time.Time `firestore:"returnRequestedAt,omitempty"`
 
+	IsReturnCompleted bool       `firestore:"isReturnCompleted,omitempty"`
+	ReturnCompletedAt *time.Time `firestore:"returnCompletedAt,omitempty"`
+
 	TokenTransferVerifiedAt *time.Time `firestore:"tokenTransferVerifiedAt,omitempty"`
 
 	Transferred   bool       `firestore:"transferred"`
@@ -503,6 +506,12 @@ func docToOrder(
 			returnRequestedAt = &value
 		}
 
+		var returnCompletedAt *time.Time
+		if item.ReturnCompletedAt != nil {
+			value := item.ReturnCompletedAt.UTC()
+			returnCompletedAt = &value
+		}
+
 		var tokenTransferVerifiedAt *time.Time
 		if item.TokenTransferVerifiedAt != nil {
 			value := item.TokenTransferVerifiedAt.UTC()
@@ -563,6 +572,9 @@ func docToOrder(
 
 				IsReturnRequested: item.IsReturnRequested,
 				ReturnRequestedAt: returnRequestedAt,
+
+				IsReturnCompleted: item.IsReturnCompleted,
+				ReturnCompletedAt: returnCompletedAt,
 
 				TokenTransferVerifiedAt: tokenTransferVerifiedAt,
 
@@ -728,6 +740,7 @@ func orderItemToDocMap(
 		"isCancelled":       item.IsCancelled,
 		"isDispatched":      item.IsDispatched,
 		"isReturnRequested": item.IsReturnRequested,
+		"isReturnCompleted": item.IsReturnCompleted,
 		"transferred":       item.Transferred,
 	}
 
@@ -754,6 +767,11 @@ func orderItemToDocMap(
 	if item.IsReturnRequested && item.ReturnRequestedAt != nil {
 		doc["returnRequestedAt"] =
 			item.ReturnRequestedAt.UTC()
+	}
+
+	if item.IsReturnCompleted && item.ReturnCompletedAt != nil {
+		doc["returnCompletedAt"] =
+			item.ReturnCompletedAt.UTC()
 	}
 
 	if item.TokenTransferVerifiedAt != nil {
@@ -1204,6 +1222,25 @@ func validateOrderItemDocumentShape(
 		optionalOrderTime(raw, "returnRequestedAt")
 	if err != nil ||
 		isReturnRequested != returnRequestedAtExists {
+		return ErrInvalidOrderDocumentData
+	}
+
+	isReturnCompleted := false
+	if value, exists := raw["isReturnCompleted"]; exists &&
+		value != nil {
+		result, ok := value.(bool)
+		if !ok {
+			return ErrInvalidOrderDocumentData
+		}
+
+		isReturnCompleted = result
+	}
+
+	_, returnCompletedAtExists, err :=
+		optionalOrderTime(raw, "returnCompletedAt")
+	if err != nil ||
+		isReturnCompleted != returnCompletedAtExists ||
+		(isReturnCompleted && !isReturnRequested) {
 		return ErrInvalidOrderDocumentData
 	}
 

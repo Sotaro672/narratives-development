@@ -489,8 +489,7 @@ func (h *OrderHandler) returnMe(
 		return
 	}
 
-	if packageState == "opened" &&
-		reason == "" {
+	if reason == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "return reason is required"})
 		return

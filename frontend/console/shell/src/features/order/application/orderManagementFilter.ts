@@ -14,8 +14,10 @@ export function getOrderManagementStatus(
   order: OrderItemInventoryRowDTO,
 ): string {
   if (order.isCancelled) return "キャンセル";
+  if (order.isReturnCompleted) return "返品済";
   if (order.isReturnRequested) return "返品対応中";
   if (order.transferred) return "移譲済";
+
   return getOrderStatusLabel(order.paid);
 }
 

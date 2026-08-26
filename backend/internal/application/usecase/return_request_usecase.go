@@ -20,8 +20,6 @@ var (
 	)
 )
 
-const unopenedReturnInquiryContent = "未開封での返品申請"
-
 // ReturnRequestOrderService is the minimum Order application service required
 // by ReturnRequestUsecase.
 //
@@ -120,8 +118,7 @@ type ReturnRequestResult struct {
 //	-> backend validates unopened state
 //	-> return_unopened
 //
-// Reason is optional for this flow. When it is empty, a fixed unopened-return
-// message is stored as Inquiry.Content so the Inquiry domain remains valid.
+// Reason is required for this flow and is stored as Inquiry.Content.
 type RequestUnopenedReturnInput struct {
 	OrderID   string
 	AvatarID  string
@@ -209,7 +206,8 @@ func (uc *ReturnRequestUsecase) RequestUnopened(
 
 	reason := strings.TrimSpace(in.Reason)
 	if reason == "" {
-		reason = unopenedReturnInquiryContent
+		return ReturnRequestResult{},
+			inquirydom.ErrInvalidContent
 	}
 
 	if in.ItemIndex < 0 {

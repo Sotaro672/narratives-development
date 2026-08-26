@@ -202,6 +202,7 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 			IsCancelled:       sourceItem.IsCancelled,
 			IsDispatched:      sourceItem.IsDispatched,
 			IsReturnRequested: sourceItem.IsReturnRequested,
+			IsReturnCompleted: sourceItem.IsReturnCompleted,
 
 			Transferred: sourceItem.Transferred,
 		}
@@ -209,6 +210,13 @@ func (q *OrderDetailQuery) EnrichOrderDetail(
 		if sourceItem.ReturnRequestedAt != nil &&
 			!sourceItem.ReturnRequestedAt.IsZero() {
 			item.ReturnRequestedAt = sourceItem.ReturnRequestedAt.
+				UTC().
+				Format(time.RFC3339Nano)
+		}
+
+		if sourceItem.ReturnCompletedAt != nil &&
+			!sourceItem.ReturnCompletedAt.IsZero() {
+			item.ReturnCompletedAt = sourceItem.ReturnCompletedAt.
 				UTC().
 				Format(time.RFC3339Nano)
 		}

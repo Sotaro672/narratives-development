@@ -47,6 +47,8 @@ export type OrderDetailItem = {
   isDispatched: boolean;
   isReturnRequested: boolean;
   returnRequestedAt?: string;
+  isReturnCompleted: boolean;
+  returnCompletedAt?: string;
   tokenTransferVerifiedAt?: string;
   transferred: boolean;
   transferredAt?: string;

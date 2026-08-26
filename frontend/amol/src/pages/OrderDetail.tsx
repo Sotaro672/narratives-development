@@ -22,27 +22,6 @@ import "../styles/page-layout.css";
 import "../styles/order-detail-page.css";
 
 function getOrderStatusLabel(order: OrderDetailType): string {
-  switch (order.refundStatus) {
-    case "pending":
-      return "返金処理中";
-
-    case "requires_action":
-      return "返金対応待ち";
-
-    case "succeeded":
-      return "返金済み";
-
-    case "failed":
-      return "返金失敗";
-
-    case "canceled":
-      return "返金キャンセル";
-
-    case "none":
-    default:
-      break;
-  }
-
   if (order.items.length === 0) {
     return "商品なし";
   }
@@ -57,6 +36,22 @@ function getOrderStatusLabel(order: OrderDetailType): string {
 
   if (hasCancelledItem) {
     return "一部キャンセル済み";
+  }
+
+  const allReturnCompleted = activeItems.every(
+    (item) => item.isReturnCompleted,
+  );
+
+  if (allReturnCompleted) {
+    return "返品済み";
+  }
+
+  const partiallyReturnCompleted = activeItems.some(
+    (item) => item.isReturnCompleted,
+  );
+
+  if (partiallyReturnCompleted) {
+    return "一部返品済み";
   }
 
   const allReturnRequested = activeItems.every(
@@ -103,6 +98,28 @@ function getOrderStatusLabel(order: OrderDetailType): string {
 }
 
 function getRefundStatusLabel(order: OrderDetailType): string {
+  const activeItems = order.items.filter(
+    (item) => !item.isCancelled,
+  );
+
+  const allReturnCompleted =
+    activeItems.length > 0 &&
+    activeItems.every(
+      (item) => item.isReturnCompleted,
+    );
+
+  if (allReturnCompleted) {
+    return "返金済み";
+  }
+
+  const partiallyReturnCompleted = activeItems.some(
+    (item) => item.isReturnCompleted,
+  );
+
+  if (partiallyReturnCompleted) {
+    return "一部返金済み";
+  }
+
   switch (order.refundStatus) {
     case "pending":
       return "返金処理中";
@@ -128,6 +145,10 @@ function getRefundStatusLabel(order: OrderDetailType): string {
 function getItemStatusLabel(item: OrderDetailItem): string {
   if (item.isCancelled) {
     return "キャンセル済み";
+  }
+
+  if (item.isReturnCompleted) {
+    return "返品済み";
   }
 
   if (item.isReturnRequested) {
@@ -346,10 +367,7 @@ export default function OrderDetail() {
     const normalizedReason =
       returnReason.trim();
 
-    if (
-      returnPackageState === "opened" &&
-      !normalizedReason
-    ) {
+    if (!normalizedReason) {
       return;
     }
 
@@ -477,13 +495,15 @@ export default function OrderDetail() {
                     item.isCancelled ||
                     item.isDispatched ||
                     item.transferred ||
+                    item.isReturnCompleted ||
                     isCancelling ||
                     returningItemIndex !== null;
 
                   const showReturnButton =
                     item.isDispatched &&
                     !item.isCancelled &&
-                    !item.isReturnRequested;
+                    !item.isReturnRequested &&
+                    !item.isReturnCompleted;
 
                   return (
                     <li
@@ -592,6 +612,17 @@ export default function OrderDetail() {
                             </div>
                           ) : null}
 
+                          {item.returnCompletedAt ? (
+                            <div className="order-detail-page__item-meta-row">
+                              <dt>返品完了日時</dt>
+                              <dd>
+                                {formatDateTime(
+                                  item.returnCompletedAt,
+                                )}
+                              </dd>
+                            </div>
+                          ) : null}
+
                           {item.transferredAt ? (
                             <div className="order-detail-page__item-meta-row">
                               <dt>受取日時</dt>
@@ -605,7 +636,15 @@ export default function OrderDetail() {
                         </dl>
 
                         <div className="page-actions order-detail-page__cancel-actions">
-                          {item.isReturnRequested ? (
+                          {item.isReturnCompleted ? (
+                            <button
+                              type="button"
+                              className="order-detail-page__cancel-button order-detail-page__return-button"
+                              disabled
+                            >
+                              返品済み
+                            </button>
+                          ) : item.isReturnRequested ? (
                             <button
                               type="button"
                               className="order-detail-page__cancel-button order-detail-page__return-button"

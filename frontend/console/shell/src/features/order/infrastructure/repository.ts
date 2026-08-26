@@ -56,6 +56,10 @@ export type OrderDetailItemDTO = {
   price: number;
   isCancelled: boolean;
   isDispatched: boolean;
+  isReturnRequested: boolean;
+  returnRequestedAt?: string;
+  isReturnCompleted: boolean;
+  returnCompletedAt?: string;
   transferred: boolean;
   transferredAt?: string;
 };
@@ -114,6 +118,9 @@ export type OrderItemInventoryRowDTO = {
   isCancelled: boolean;
   isDispatched: boolean;
   isReturnRequested: boolean;
+  returnRequestedAt?: string;
+  isReturnCompleted: boolean;
+  returnCompletedAt?: string;
   transferred: boolean;
   transferredAt?: string;
 };
@@ -169,6 +176,7 @@ async function readErrorMessage(response: Response): Promise<string> {
     }
 
     const text = await response.text();
+
     return text
       ? text.slice(0, 200)
       : `${response.status} ${response.statusText}`;
@@ -223,9 +231,11 @@ async function requestJSON<T>(
 export interface OrderRepository {
   getById(id: string): Promise<OrderDetailDTO>;
   dispatch(id: string): Promise<OrderDetailDTO>;
+
   listItemInventoryRows(
     params?: OrderListParams,
   ): Promise<PageResult<OrderItemInventoryRowDTO>>;
+
   countActionRequired(): Promise<OrderActionRequiredCountResult>;
 }
 
