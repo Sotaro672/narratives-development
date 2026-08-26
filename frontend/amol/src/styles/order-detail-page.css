@@ -448,10 +448,7 @@
 }
 
 .order-detail-page__return-modal-notice {
-  display: grid;
-  gap: 8px;
-
-  margin-bottom: 24px;
+  margin-bottom: 12px;
   padding: 16px;
 
   background: #fffaf0;
@@ -459,13 +456,65 @@
   border-radius: 12px;
 }
 
-.order-detail-page__return-modal-notice p {
+.order-detail-page__return-modal-notice-title {
+  margin: 0 0 12px;
+
+  color: #111827;
+
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.order-detail-page__return-modal-condition-list {
   margin: 0;
+  padding-left: 22px;
 
   color: #4b5563;
 
   font-size: 14px;
   line-height: 1.7;
+}
+
+.order-detail-page__return-modal-condition-list li {
+  padding-left: 4px;
+}
+
+.order-detail-page__return-modal-condition-list li + li {
+  margin-top: 8px;
+}
+
+.order-detail-page__return-modal-agreement {
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+
+  margin-bottom: 20px;
+
+  color: #111827;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.order-detail-page__return-modal-agreement-checkbox {
+  flex: 0 0 auto;
+
+  width: 18px;
+  height: 18px;
+
+  margin: 0;
+
+  accent-color: var(--color-primary);
+
+  cursor: pointer;
+}
+
+.order-detail-page__return-modal-agreement-checkbox:disabled {
+  cursor: not-allowed;
 }
 
 .order-detail-page__return-modal-field {
@@ -554,13 +603,11 @@
   align-items: center;
   justify-content: flex-end;
 
-  gap: 12px;
-
   margin-top: 24px;
 }
 
-.order-detail-page__return-modal-actions .page-button {
-  min-width: 132px;
+.order-detail-page__return-modal-action {
+  min-width: 160px;
 }
 
 @media (max-width: 640px) {
@@ -590,14 +637,26 @@
   .order-detail-page__return-modal-notice {
     padding: 14px;
 
-    margin-bottom: 20px;
+    margin-bottom: 12px;
+  }
+
+  .order-detail-page__return-modal-condition-list {
+    padding-left: 20px;
+
+    font-size: 13px;
+  }
+
+  .order-detail-page__return-modal-agreement {
+    margin-bottom: 18px;
+
+    font-size: 13px;
   }
 
   .order-detail-page__return-modal-actions {
-    flex-direction: column-reverse;
+    width: 100%;
   }
 
-  .order-detail-page__return-modal-actions .page-button {
+  .order-detail-page__return-modal-action {
     width: 100%;
   }
 }

@@ -318,7 +318,6 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 					AvatarID:  avatarID,
 					ItemIndex: *req.OrderItemIndex,
 					ProductID: req.ProductID,
-					Subject:   req.Subject,
 					Content:   req.Content,
 					Images:    images,
 				},

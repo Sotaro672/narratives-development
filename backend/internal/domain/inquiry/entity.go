@@ -63,6 +63,8 @@ type ImageFile struct {
 //
 // Product inquiries are identified in the mall context by productId + avatarId.
 // Return inquiries are identified by orderId + orderItemIndex + avatarId.
+// Product inquiries require Subject.
+// Return inquiries do not use Subject.
 // Images are part of the inquiry aggregate.
 // Replies are NOT stored in Inquiry.Content.
 // Replies should be stored in Firestore subcollection:
@@ -81,7 +83,7 @@ type Inquiry struct {
 	OrderID        string        `json:"orderId,omitempty"`
 	OrderItemIndex *int          `json:"orderItemIndex,omitempty"`
 	AvatarID       string        `json:"avatarId"`
-	Subject        string        `json:"subject"`
+	Subject        string        `json:"subject,omitempty"`
 	Content        string        `json:"content"`
 	Status         InquiryStatus `json:"status"`
 	InquiryType    InquiryType   `json:"inquiryType"`
@@ -178,7 +180,7 @@ var (
 	ErrInvalidImageFileURL    = errors.New("inquiry: invalid image fileUrl")
 	ErrInvalidImageObjectPath = errors.New("inquiry: invalid image objectPath")
 	ErrInvalidImageFileSize   = errors.New("inquiry: invalid image fileSize")
-	ErrInvalidImageMIMEType   = errors.New("inquiry: invalid image mimeType")
+	ErrInvalidImageMIMEType   = errors.New("inquiry: invalid mimeType")
 	ErrInvalidImageCreatedAt  = errors.New("inquiry: invalid image createdAt")
 	ErrInvalidImageCreatedBy  = errors.New("inquiry: invalid image createdBy")
 	ErrInvalidImageUpdatedAt  = errors.New("inquiry: invalid image updatedAt")
@@ -253,7 +255,6 @@ func NewReturnUnopened(
 	orderID string,
 	orderItemIndex int,
 	avatarID string,
-	subject string,
 	content string,
 	createdAt time.Time,
 	updatedAt time.Time,
@@ -264,7 +265,6 @@ func NewReturnUnopened(
 		orderID,
 		orderItemIndex,
 		avatarID,
-		subject,
 		content,
 		InquiryTypeReturnUnopened,
 		createdAt,
@@ -278,7 +278,6 @@ func NewReturnOpened(
 	orderID string,
 	orderItemIndex int,
 	avatarID string,
-	subject string,
 	content string,
 	createdAt time.Time,
 	updatedAt time.Time,
@@ -289,7 +288,6 @@ func NewReturnOpened(
 		orderID,
 		orderItemIndex,
 		avatarID,
-		subject,
 		content,
 		InquiryTypeReturnOpened,
 		createdAt,
@@ -303,7 +301,6 @@ func newReturn(
 	orderID string,
 	orderItemIndex int,
 	avatarID string,
-	subject string,
 	content string,
 	inquiryType InquiryType,
 	createdAt time.Time,
@@ -317,7 +314,6 @@ func newReturn(
 		OrderID:        orderID,
 		OrderItemIndex: &itemIndex,
 		AvatarID:       avatarID,
-		Subject:        subject,
 		Content:        content,
 		Status:         InquiryStatusOpen,
 		InquiryType:    inquiryType,
@@ -775,9 +771,6 @@ func (i Inquiry) Validate() error {
 	if i.AvatarID == "" {
 		return ErrInvalidAvatarID
 	}
-	if i.Subject == "" {
-		return ErrInvalidSubject
-	}
 	if i.Content == "" {
 		return ErrInvalidContent
 	}
@@ -913,13 +906,20 @@ func validateInquiryIdentity(i Inquiry) error {
 		if i.OrderID != "" || i.OrderItemIndex != nil {
 			return ErrInquiryInvalidWorkflow
 		}
+		if strings.TrimSpace(i.Subject) == "" {
+			return ErrInvalidSubject
+		}
 
-	case InquiryTypeReturnUnopened, InquiryTypeReturnOpened:
+	case InquiryTypeReturnUnopened,
+		InquiryTypeReturnOpened:
 		if i.OrderID == "" {
 			return ErrInvalidOrderID
 		}
 		if i.OrderItemIndex == nil || *i.OrderItemIndex < 0 {
 			return ErrInvalidOrderItemIndex
+		}
+		if strings.TrimSpace(i.Subject) != "" {
+			return ErrInvalidSubject
 		}
 	}
 

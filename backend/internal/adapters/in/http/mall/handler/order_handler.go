@@ -135,6 +135,10 @@ type createOrderRequest struct {
 	Items             []orderItemRequest `json:"items"`
 }
 
+type returnOrderItemRequest struct {
+	Reason string `json:"reason"`
+}
+
 func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -456,6 +460,25 @@ func (h *OrderHandler) returnMe(
 		return
 	}
 
+	var req returnOrderItemRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_json"})
+		return
+	}
+
+	reason :=
+		strings.TrimSpace(
+			req.Reason,
+		)
+
+	if reason == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "return reason is required"})
+		return
+	}
+
 	// MallのOrderDetailから行う返品申請は未開封返品として扱う。
 	//
 	// ReturnRequestUsecaseはOrder itemのIsReturnRequested更新と、
@@ -479,6 +502,7 @@ func (h *OrderHandler) returnMe(
 				OrderID:   orderID,
 				AvatarID:  avatarID,
 				ItemIndex: itemIndex,
+				Reason:    reason,
 			},
 		)
 

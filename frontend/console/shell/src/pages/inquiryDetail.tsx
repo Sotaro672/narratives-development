@@ -34,11 +34,12 @@ import {
   isClosedStatus,
 } from "../features/inquiry/presentation/utils/inquiryStatus";
 
-import type {
-  InquiryDetail as InquiryDetailDTO,
-  InquiryImageFile,
-  InquiryOrderItemSummary,
-  InquiryOrderSummary,
+import {
+  getInquiryTypeLabel,
+  type InquiryDetail as InquiryDetailDTO,
+  type InquiryImageFile,
+  type InquiryOrderItemSummary,
+  type InquiryOrderSummary,
 } from "../shared/types/inquiry";
 
 import type {
@@ -67,35 +68,6 @@ function textOrDash(
 
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
-}
-
-function typeLabel(
-  value: string | null | undefined,
-): string {
-  const inquiryType = normalizeText(value);
-
-  switch (inquiryType) {
-    case "product_description":
-      return "商品説明";
-
-    case "exchange":
-      return "交換";
-
-    case "shipping":
-      return "配送";
-
-    case "payment":
-      return "決済";
-
-    case "other":
-      return "その他";
-
-    case "product":
-      return "商品";
-
-    default:
-      return inquiryType || "-";
-  }
 }
 
 function uniqueTextValues(
@@ -351,7 +323,11 @@ export default function InquiryDetail() {
     getInquiryStatusLabel(inquiry?.status);
 
   const inquiryType =
-    typeLabel(inquiry?.inquiryType);
+    inquiry?.inquiryType
+      ? getInquiryTypeLabel(
+          inquiry.inquiryType,
+        )
+      : "-";
 
   const productName =
     textOrDash(detail?.productName);

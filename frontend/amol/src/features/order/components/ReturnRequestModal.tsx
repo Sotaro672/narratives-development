@@ -122,6 +122,24 @@ export default function ReturnRequestModal({
           </ol>
         </div>
 
+        <label className="order-detail-page__return-modal-agreement">
+          <input
+            type="checkbox"
+            className="order-detail-page__return-modal-agreement-checkbox"
+            checked={agreedToReturnConditions}
+            onChange={(event) => {
+              setAgreedToReturnConditions(
+                event.target.checked,
+              );
+            }}
+            disabled={submitting}
+          />
+
+          <span>
+            返品条件に合意する
+          </span>
+        </label>
+
         <label
           className="order-detail-page__return-modal-field"
           htmlFor="order-detail-return-reason"
@@ -153,24 +171,6 @@ export default function ReturnRequestModal({
           />
         </label>
 
-        <label className="order-detail-page__return-modal-agreement">
-          <input
-            type="checkbox"
-            className="order-detail-page__return-modal-agreement-checkbox"
-            checked={agreedToReturnConditions}
-            onChange={(event) => {
-              setAgreedToReturnConditions(
-                event.target.checked,
-              );
-            }}
-            disabled={submitting}
-          />
-
-          <span>
-            返品条件に合意する
-          </span>
-        </label>
-
         {error ? (
           <div
             className="order-detail-page__return-modal-error"
@@ -181,16 +181,6 @@ export default function ReturnRequestModal({
         ) : null}
 
         <div className="order-detail-page__return-modal-actions">
-          <Button
-            variant="secondary"
-            size="md"
-            className="order-detail-page__return-modal-action order-detail-page__return-modal-cancel-action"
-            onClick={onCancel}
-            disabled={submitting}
-          >
-            キャンセル
-          </Button>
-
           <Button
             variant="primary"
             size="md"
