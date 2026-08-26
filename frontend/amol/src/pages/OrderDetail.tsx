@@ -1,5 +1,6 @@
 // frontend/amol/src/pages/OrderDetail.tsx
 
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
@@ -7,6 +8,7 @@ import MediaIcon from "../components/ui/MediaIcon";
 import SectionHeader from "../components/ui/SectionHeader";
 import { formatDateTime } from "../components/utils/date";
 
+import ReturnRequestModal from "../features/order/components/ReturnRequestModal";
 import { useOrderDetail } from "../features/order/hooks/useOrderDetail";
 import type {
   OrderDetail as OrderDetailType,
@@ -274,6 +276,12 @@ function renderModelMeta(item: OrderDetailItem) {
 export default function OrderDetail() {
   const navigate = useNavigate();
 
+  const [returnTargetIndex, setReturnTargetIndex] =
+    useState<number | null>(null);
+
+  const [returnReason, setReturnReason] =
+    useState("");
+
   const {
     order,
     loading,
@@ -297,6 +305,53 @@ export default function OrderDetail() {
     }
 
     navigate(`/brands/${encodeURIComponent(id)}`);
+  };
+
+  const handleOpenReturnModal = (itemIndex: number) => {
+    if (
+      !Number.isInteger(itemIndex) ||
+      itemIndex < 0
+    ) {
+      return;
+    }
+
+    setReturnTargetIndex(itemIndex);
+    setReturnReason("");
+  };
+
+  const handleCloseReturnModal = () => {
+    if (returningItemIndex !== null) {
+      return;
+    }
+
+    setReturnTargetIndex(null);
+    setReturnReason("");
+  };
+
+  const handleSubmitReturn = async () => {
+    if (returnTargetIndex === null) {
+      return;
+    }
+
+    const normalizedReason =
+      returnReason.trim();
+
+    if (!normalizedReason) {
+      return;
+    }
+
+    const succeeded =
+      await returnItem(
+        returnTargetIndex,
+        normalizedReason,
+      );
+
+    if (!succeeded) {
+      return;
+    }
+
+    setReturnTargetIndex(null);
+    setReturnReason("");
   };
 
   const showError =
@@ -554,7 +609,7 @@ export default function OrderDetail() {
                                 cancellingItemIndex !== null
                               }
                               onClick={() =>
-                                void returnItem(index)
+                                handleOpenReturnModal(index)
                               }
                             >
                               {isReturning
@@ -672,6 +727,25 @@ export default function OrderDetail() {
           </div>
         ) : null}
       </section>
+
+      <ReturnRequestModal
+        open={returnTargetIndex !== null}
+        reason={returnReason}
+        error={
+          returnTargetIndex !== null
+            ? error
+            : null
+        }
+        submitting={
+          returnTargetIndex !== null &&
+          returningItemIndex === returnTargetIndex
+        }
+        onReasonChange={setReturnReason}
+        onCancel={handleCloseReturnModal}
+        onSubmit={() =>
+          void handleSubmitReturn()
+        }
+      />
     </Layout>
   );
 }
