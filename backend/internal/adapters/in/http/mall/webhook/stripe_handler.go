@@ -22,9 +22,11 @@ import (
 const stripeWebhookMaxBodyBytes int64 = 1 << 20 // 1 MiB
 
 type StripeWebhookHandler struct {
-	paymentUC    *usecase.PaymentUsecase
-	orderUC      *usecase.OrderUsecase
-	settlementUC *usecase.SettlementUsecase
+	paymentUC                      *usecase.PaymentUsecase
+	orderUC                        *usecase.OrderUsecase
+	settlementUC                   *usecase.SettlementUsecase
+	refundUC                       *usecase.RefundUsecase
+	refundCompletionNotificationUC usecase.RefundCompletionNotificationUsecasePort
 
 	// Stripe webhook signing secret (whsec_...).
 	signingSecret string
@@ -40,16 +42,19 @@ func NewStripeWebhookHandler(
 	paymentUC *usecase.PaymentUsecase,
 	orderUC *usecase.OrderUsecase,
 	settlementUC *usecase.SettlementUsecase,
+	refundUC *usecase.RefundUsecase,
+	refundCompletionNotificationUC usecase.RefundCompletionNotificationUsecasePort,
 	signingSecret string,
 ) http.Handler {
 	return &StripeWebhookHandler{
-		paymentUC:    paymentUC,
-		orderUC:      orderUC,
-		settlementUC: settlementUC,
-
-		signingSecret: signingSecret,
-		tolerance:     5 * time.Minute,
-		now:           time.Now,
+		paymentUC:                      paymentUC,
+		orderUC:                        orderUC,
+		settlementUC:                   settlementUC,
+		refundUC:                       refundUC,
+		refundCompletionNotificationUC: refundCompletionNotificationUC,
+		signingSecret:                  signingSecret,
+		tolerance:                      5 * time.Minute,
+		now:                            time.Now,
 	}
 }
 
@@ -194,6 +199,27 @@ func (h *StripeWebhookHandler) ServeHTTP(
 		); err != nil {
 			// Refund state is financial state. Return 500 so Stripe retries
 			// transient persistence failures instead of acknowledging them.
+			writeStripeWebhookJSON(
+				w,
+				http.StatusInternalServerError,
+				map[string]string{
+					"error": "internal_error",
+				},
+			)
+			return
+		}
+
+		// Re-read the authoritative Payment after applying the Stripe event.
+		// If the persisted Refund is succeeded, always finish seller-side
+		// Transfer Reversal and ensure the purchaser notification delivery.
+		//
+		// This intentionally also runs for duplicate or out-of-order webhook
+		// deliveries so a previous crash after refund-state persistence can be
+		// repaired safely.
+		if err := h.completeSucceededRefund(
+			r.Context(),
+			refundInput.PaymentID,
+		); err != nil {
 			writeStripeWebhookJSON(
 				w,
 				http.StatusInternalServerError,
@@ -467,6 +493,99 @@ func (h *StripeWebhookHandler) applyStripeRefundEvent(
 			RefundStatus:   in.Status,
 			RefundedAmount: refundedAmount,
 			RefundedAt:     refundedAt,
+		},
+	)
+	return err
+}
+
+// completeSucceededRefund performs post-refund processing from the authoritative
+// persisted Payment state.
+//
+// It is safe to call for every supported Refund webhook:
+//   - non-succeeded Refunds are a no-op
+//   - seller-side reversal is idempotent in RefundUsecase
+//   - notification delivery uses a deterministic delivery ID
+func (h *StripeWebhookHandler) completeSucceededRefund(
+	ctx context.Context,
+	paymentID string,
+) error {
+	if h == nil || h.paymentUC == nil {
+		return errors.New("stripe webhook: payment usecase is not initialized")
+	}
+
+	paymentID = strings.TrimSpace(paymentID)
+	if paymentID == "" {
+		return paymentdom.ErrInvalidPaymentID
+	}
+
+	payment, err := h.paymentUC.GetByPaymentID(ctx, paymentID)
+	if err != nil {
+		return err
+	}
+	if payment == nil || payment.PaymentID != paymentID {
+		return paymentdom.ErrNotFound
+	}
+
+	if payment.RefundStatus != paymentdom.RefundStatusSucceeded {
+		return nil
+	}
+
+	if h.refundUC == nil {
+		return errors.New("stripe webhook: refund usecase is not initialized")
+	}
+	if h.orderUC == nil {
+		return errors.New("stripe webhook: order usecase is not initialized")
+	}
+	if h.refundCompletionNotificationUC == nil {
+		return errors.New(
+			"stripe webhook: refund completion notification usecase is not initialized",
+		)
+	}
+
+	stripeRefundID := strings.TrimSpace(payment.StripeRefundID)
+	if stripeRefundID == "" {
+		return paymentdom.ErrInvalidRefundState
+	}
+	if payment.RefundedAmount <= 0 || payment.RefundedAt == nil {
+		return paymentdom.ErrInvalidRefundState
+	}
+
+	if _, err := h.refundUC.CompleteSucceededRefund(
+		ctx,
+		usecase.CompleteSucceededRefundInput{
+			PaymentID:      payment.PaymentID,
+			StripeRefundID: stripeRefundID,
+		},
+	); err != nil {
+		return err
+	}
+
+	order, err := h.orderUC.GetByID(
+		ctx,
+		payment.PaymentID,
+	)
+	if err != nil {
+		return err
+	}
+
+	orderID := strings.TrimSpace(order.ID)
+	if orderID == "" || orderID != payment.PaymentID {
+		return errors.New("stripe webhook: refund order does not match payment")
+	}
+
+	userID := strings.TrimSpace(order.UserID)
+	if userID == "" {
+		return errors.New("stripe webhook: refund order userId is empty")
+	}
+
+	_, err = h.refundCompletionNotificationUC.EnsureDelivery(
+		ctx,
+		usecase.EnsureRefundCompletionNotificationInput{
+			PaymentID:      payment.PaymentID,
+			OrderID:        orderID,
+			UserID:         userID,
+			StripeRefundID: stripeRefundID,
+			RefundedAmount: payment.RefundedAmount,
 		},
 	)
 	return err
@@ -1040,7 +1159,7 @@ func extractStripePaymentEventInput(
 }
 
 // paymentStatusFromStripeEventType maps supported Stripe PaymentIntent event
-// types to the Payment Domain status.
+// types to Payment Domain status.
 //
 // payment_intent.requires_action is accepted for environments/API versions
 // that emit it. The initial PaymentFlow response also persists

@@ -380,11 +380,12 @@ func (h *OrderHandler) refund(w http.ResponseWriter, r *http.Request, id string)
 			},
 		)
 
-	// Stripe purchaser refundが成功してStripeRefundIDが得られた時点で、
-	// PaymentIntentのStatus=succeededは維持したままRefund stateを保存する。
+	// Stripeが返した実際のRefund stateをそのままPaymentへ保存する。
+	// PaymentIntentのStatus=succeededは維持し、Refund lifecycleだけを更新する。
 	//
-	// Transfer Reversalで後続エラーが発生した場合でも、購入者側Refund自体の
-	// 成功事実は失われないようにする。
+	// pending / requires_action / failed / canceledをsucceededへ上書きしない。
+	// Transfer Reversalで後続エラーが発生した場合でも、購入者側Refundの
+	// 実際の状態は失われないようにする。
 	if result != nil &&
 		result.StripeRefundID != "" {
 		_, stateErr :=
@@ -394,12 +395,9 @@ func (h *OrderHandler) refund(w http.ResponseWriter, r *http.Request, id string)
 					PaymentID: id,
 
 					StripeRefundID: result.StripeRefundID,
-					RefundStatus:   paymentdom.RefundStatusSucceeded,
-					RefundedAmount: result.Amount,
-					RefundedAt: func() *time.Time {
-						now := time.Now().UTC()
-						return &now
-					}(),
+					RefundStatus:   result.RefundStatus,
+					RefundedAmount: result.RefundedAmount,
+					RefundedAt:     result.RefundedAt,
 				},
 			)
 		if stateErr != nil {

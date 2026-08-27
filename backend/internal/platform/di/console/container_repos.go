@@ -28,6 +28,7 @@ type repos struct {
 	transferRepo                      *fs.TransferRepositoryFS
 	orderRepo                         *fs.OrderRepositoryFS
 	orderDispatchNotificationRepo     *fs.OrderDispatchNotificationRepositoryFS
+	refundCompletionNotificationRepo  *fs.RefundCompletionNotificationRepositoryFS
 	orderConsoleLister                *fs.OrderConsoleListerFS
 	paymentRepo                       *fs.PaymentRepositoryFS
 	settlementRepo                    *fs.SettlementRepositoryFS
@@ -78,6 +79,7 @@ func buildRepos(c *clients) *repos {
 	transferRepo := fs.NewTransferRepositoryFS(fsClient)
 	orderRepo := fs.NewOrderRepositoryFS(fsClient)
 	orderDispatchNotificationRepo := fs.NewOrderDispatchNotificationRepositoryFS(fsClient)
+	refundCompletionNotificationRepo := fs.NewRefundCompletionNotificationRepositoryFS(fsClient)
 	orderConsoleLister := fs.NewOrderConsoleListerFS(fsClient)
 	paymentRepo := fs.NewPaymentRepositoryFS(fsClient)
 	settlementRepo := fs.NewSettlementRepositoryFS(fsClient)
@@ -122,6 +124,7 @@ func buildRepos(c *clients) *repos {
 		transferRepo:                      transferRepo,
 		orderRepo:                         orderRepo,
 		orderDispatchNotificationRepo:     orderDispatchNotificationRepo,
+		refundCompletionNotificationRepo:  refundCompletionNotificationRepo,
 		orderConsoleLister:                orderConsoleLister,
 		paymentRepo:                       paymentRepo,
 		settlementRepo:                    settlementRepo,

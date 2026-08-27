@@ -53,6 +53,8 @@ type usecases struct {
 	orderUC                            *uc.OrderUsecase
 	orderDispatchNotificationUC        uc.OrderDispatchNotificationUsecasePort
 	orderDispatchNotificationQueue     *listcloudtasksadp.OrderDispatchNotificationQueue
+	refundCompletionNotificationUC     uc.RefundCompletionNotificationUsecasePort
+	refundCompletionNotificationQueue  *listcloudtasksadp.RefundCompletionNotificationQueue
 	paymentUC                          *uc.PaymentUsecase
 	paymentFlowUC                      *uc.PaymentFlowUsecase
 	settlementUC                       *uc.SettlementUsecase
@@ -961,6 +963,36 @@ func buildUsecases(
 		orderDispatchNotificationQueue,
 	)
 
+	refundCompletionNotificationQueue, err :=
+		listcloudtasksadp.NewRefundCompletionNotificationQueueFromEnv(
+			ctx,
+		)
+	if err != nil {
+		_ = orderDispatchNotificationQueue.Close()
+		_ = invitationDeliveryQueue.Close()
+		_ = tokenBlueprintCreateOperationQueue.Close()
+		_ = tokenBlueprintAssetStorage.Close()
+		_ = listSaveOperationStorage.Close()
+		_ = announcementAttachmentStorage.Close()
+		return nil, err
+	}
+
+	refundCompletionNotificationRepo :=
+		fsrepo.NewRefundCompletionNotificationRepositoryFS(
+			c.fsClient,
+		)
+
+	refundCompletionNotificationMailer :=
+		mailadp.NewRefundCompletionNotificationMailerWithResend()
+
+	refundCompletionNotificationUC :=
+		uc.NewRefundCompletionNotificationUsecase(
+			refundCompletionNotificationRepo,
+			authUserReader,
+			refundCompletionNotificationMailer,
+			refundCompletionNotificationQueue,
+		)
+
 	memberUC := uc.NewMemberUsecase(r.memberRepo)
 
 	autoCreateTestAccount := strings.Contains(
@@ -1005,6 +1037,8 @@ func buildUsecases(
 		orderUC:                            orderUC,
 		orderDispatchNotificationUC:        orderDispatchNotificationUC,
 		orderDispatchNotificationQueue:     orderDispatchNotificationQueue,
+		refundCompletionNotificationUC:     refundCompletionNotificationUC,
+		refundCompletionNotificationQueue:  refundCompletionNotificationQueue,
 		paymentUC:                          paymentUC,
 		paymentFlowUC:                      paymentFlowUC,
 		settlementUC:                       settlementUC,

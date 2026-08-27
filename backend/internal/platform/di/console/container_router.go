@@ -15,55 +15,62 @@ import (
 func (c *Container) RouterDeps() httpin.RouterDeps {
 	var authMw *middleware.AuthMiddleware
 	if c.Infra.FirebaseAuth != nil && c.MemberRepo != nil {
-		authMw = &middleware.AuthMiddleware{FirebaseAuth: c.Infra.FirebaseAuth, MemberRepo: c.MemberRepo}
+		authMw = &middleware.AuthMiddleware{
+			FirebaseAuth: c.Infra.FirebaseAuth,
+			MemberRepo:   c.MemberRepo,
+		}
 	}
 
 	var bootstrapMw *middleware.BootstrapAuthMiddleware
 	if c.Infra.FirebaseAuth != nil {
-		bootstrapMw = &middleware.BootstrapAuthMiddleware{FirebaseAuth: c.Infra.FirebaseAuth}
+		bootstrapMw = &middleware.BootstrapAuthMiddleware{
+			FirebaseAuth: c.Infra.FirebaseAuth,
+		}
 	}
 
 	var (
-		authBootstrapH                              http.Handler
-		accountsH                                   http.Handler
-		announcementsH                              http.Handler
-		permissionsH                                http.Handler
-		brandsH                                     http.Handler
-		companiesH                                  http.Handler
-		companyShippingAddressesH                   http.Handler
-		transportationH                             http.Handler
-		inquiriesH                                  http.Handler
-		inventoriesH                                http.Handler
-		listsH                                      http.Handler
-		listSaveOperationsH                         http.Handler
-		internalListSaveOperationTasksH             http.Handler
-		internalTokenBlueprintCreateOperationTasksH http.Handler
-		salesH                                      http.Handler
-		productsPrintH                              http.Handler
-		productBPH                                  http.Handler
-		productBPCategoriesH                        http.Handler
-		tokenBPH                                    http.Handler
-		tokenBPCreateOperationsH                    http.Handler
-		tokenBPReviewH                              http.Handler
-		productBPReviewH                            http.Handler
-		messagesH                                   http.Handler
-		ordersH                                     http.Handler
-		transactionsH                               http.Handler
-		walletsH                                    http.Handler
-		membersH                                    http.Handler
-		productionsH                                http.Handler
-		modelsH                                     http.Handler
-		inspectorH                                  http.Handler
-		mintH                                       http.Handler
-		internalMintTasksH                          http.Handler
-		invitationH                                 http.Handler
-		internalInvitationDeliveryProcessH          http.Handler
-		internalInvitationDeliveryDispatchH         http.Handler
-		internalOrderDispatchNotificationProcessH   http.Handler
-		internalOrderDispatchNotificationDispatchH  http.Handler
-		internalSettlementProcessH                  http.Handler
-		internalSettlementDispatchH                 http.Handler
-		ownerResolveH                               http.Handler
+		authBootstrapH                                http.Handler
+		accountsH                                     http.Handler
+		announcementsH                                http.Handler
+		permissionsH                                  http.Handler
+		brandsH                                       http.Handler
+		companiesH                                    http.Handler
+		companyShippingAddressesH                     http.Handler
+		transportationH                               http.Handler
+		inquiriesH                                    http.Handler
+		inventoriesH                                  http.Handler
+		listsH                                        http.Handler
+		listSaveOperationsH                           http.Handler
+		internalListSaveOperationTasksH               http.Handler
+		internalTokenBlueprintCreateOperationTasksH   http.Handler
+		salesH                                        http.Handler
+		productsPrintH                                http.Handler
+		productBPH                                    http.Handler
+		productBPCategoriesH                          http.Handler
+		tokenBPH                                      http.Handler
+		tokenBPCreateOperationsH                      http.Handler
+		tokenBPReviewH                                http.Handler
+		productBPReviewH                              http.Handler
+		messagesH                                     http.Handler
+		ordersH                                       http.Handler
+		transactionsH                                 http.Handler
+		walletsH                                      http.Handler
+		membersH                                      http.Handler
+		productionsH                                  http.Handler
+		modelsH                                       http.Handler
+		inspectorH                                    http.Handler
+		mintH                                         http.Handler
+		internalMintTasksH                            http.Handler
+		invitationH                                   http.Handler
+		internalInvitationDeliveryProcessH            http.Handler
+		internalInvitationDeliveryDispatchH           http.Handler
+		internalOrderDispatchNotificationProcessH     http.Handler
+		internalOrderDispatchNotificationDispatchH    http.Handler
+		internalRefundCompletionNotificationProcessH  http.Handler
+		internalRefundCompletionNotificationDispatchH http.Handler
+		internalSettlementProcessH                    http.Handler
+		internalSettlementDispatchH                   http.Handler
+		ownerResolveH                                 http.Handler
 	)
 
 	if c.AuthBootstrap != nil && bootstrapMw != nil {
@@ -74,23 +81,40 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		accountsH = consoleHandler.NewAccountHandler(c.AccountUC)
 	}
 
-	if c.AnnouncementUC != nil && c.AnnouncementManagementQuery != nil && c.AnnouncementDetailQuery != nil {
-		announcementsH = consoleHandler.NewAnnouncementHandler(c.AnnouncementUC, c.AnnouncementManagementQuery, c.AnnouncementDetailQuery)
+	if c.AnnouncementUC != nil &&
+		c.AnnouncementManagementQuery != nil &&
+		c.AnnouncementDetailQuery != nil {
+		announcementsH = consoleHandler.NewAnnouncementHandler(
+			c.AnnouncementUC,
+			c.AnnouncementManagementQuery,
+			c.AnnouncementDetailQuery,
+		)
 	}
 
 	if c.PermissionUC != nil {
 		permissionsH = consoleHandler.NewPermissionHandler(c.PermissionUC)
 	}
 
-	if c.BrandUC != nil && c.BrandManagementQuery != nil && c.BrandDetailQuery != nil {
-		brandsH = consoleHandler.NewBrandHandler(c.BrandUC, c.BrandManagementQuery, c.BrandDetailQuery)
+	if c.BrandUC != nil &&
+		c.BrandManagementQuery != nil &&
+		c.BrandDetailQuery != nil {
+		brandsH = consoleHandler.NewBrandHandler(
+			c.BrandUC,
+			c.BrandManagementQuery,
+			c.BrandDetailQuery,
+		)
 	}
 
 	if c.CompanyUC != nil && c.CompanyQuery != nil {
-		companiesH = consoleHandler.NewCompanyHandler(c.CompanyUC, c.CompanyQuery)
+		companiesH = consoleHandler.NewCompanyHandler(
+			c.CompanyUC,
+			c.CompanyQuery,
+		)
 	}
 
-	if c.ShippingAddressUC != nil && c.LocationManagementQuery != nil && c.LocationDetailQuery != nil {
+	if c.ShippingAddressUC != nil &&
+		c.LocationManagementQuery != nil &&
+		c.LocationDetailQuery != nil {
 		companyShippingAddressesH = consoleHandler.NewCompanyShippingAddressHandler(
 			c.ShippingAddressUC,
 			c.LocationManagementQuery,
@@ -98,7 +122,9 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		)
 	}
 
-	if c.TransportationUC != nil && c.TransportationManagementQuery != nil && c.TransportationDetailQuery != nil {
+	if c.TransportationUC != nil &&
+		c.TransportationManagementQuery != nil &&
+		c.TransportationDetailQuery != nil {
 		transportationH = consoleHandler.NewTransportationHandler(
 			c.TransportationUC,
 			c.TransportationManagementQuery,
@@ -120,7 +146,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		)
 	}
 
-	if c.InventoryUC != nil && c.InventoryManagementQuery != nil && c.InventoryDetailQuery != nil && c.ListCreateQuery != nil {
+	if c.InventoryUC != nil &&
+		c.InventoryManagementQuery != nil &&
+		c.InventoryDetailQuery != nil &&
+		c.ListCreateQuery != nil {
 		inventoriesH = consoleHandler.NewInventoryHandlerWithListCreateQuery(
 			c.InventoryUC,
 			c.InventoryManagementQuery,
@@ -141,23 +170,34 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 
 	if c.ListSaveOperationUC != nil {
 		listSaveOperationsH = consoleHandler.NewListSaveOperationHandler(
-			consoleHandler.NewListSaveOperationHandlerParams{UC: c.ListSaveOperationUC},
+			consoleHandler.NewListSaveOperationHandlerParams{
+				UC: c.ListSaveOperationUC,
+			},
 		)
 
 		internalListSaveOperationTasksH = consoleHandler.NewListSaveOperationTaskHandler(
-			consoleHandler.NewListSaveOperationTaskHandlerParams{UC: c.ListSaveOperationUC},
+			consoleHandler.NewListSaveOperationTaskHandlerParams{
+				UC: c.ListSaveOperationUC,
+			},
 		)
 	}
 
 	if c.SalesQuery != nil {
-		salesH = &consoleHandler.SalesHandler{SalesQuery: c.SalesQuery}
+		salesH = &consoleHandler.SalesHandler{
+			SalesQuery: c.SalesQuery,
+		}
 	}
 
 	if c.PrintUC != nil && c.PrintQueryService != nil {
-		productsPrintH = consoleHandler.NewPrintHandler(c.PrintUC, c.PrintQueryService)
+		productsPrintH = consoleHandler.NewPrintHandler(
+			c.PrintUC,
+			c.PrintQueryService,
+		)
 	}
 
-	if c.ProductBlueprintUC != nil && c.ProductBlueprintManagementQuery != nil && c.ProductBlueprintDetailQuery != nil {
+	if c.ProductBlueprintUC != nil &&
+		c.ProductBlueprintManagementQuery != nil &&
+		c.ProductBlueprintDetailQuery != nil {
 		productBPH = consoleHandler.NewProductBlueprintHandler(
 			c.ProductBlueprintUC,
 			c.ProductBlueprintManagementQuery,
@@ -166,10 +206,14 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.ProductBlueprintCategoryUC != nil {
-		productBPCategoriesH = consoleHandler.NewProductBlueprintCategoryHandler(c.ProductBlueprintCategoryUC)
+		productBPCategoriesH = consoleHandler.NewProductBlueprintCategoryHandler(
+			c.ProductBlueprintCategoryUC,
+		)
 	}
 
-	if c.TokenBlueprintUC != nil && c.TokenBlueprintManagementQuery != nil && c.TokenBlueprintDetailQuery != nil {
+	if c.TokenBlueprintUC != nil &&
+		c.TokenBlueprintManagementQuery != nil &&
+		c.TokenBlueprintDetailQuery != nil {
 		tokenBPH = consoleHandler.NewTokenBlueprintHandler(
 			c.TokenBlueprintUC,
 			c.TokenBlueprintDetailQuery,
@@ -191,7 +235,9 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		)
 	}
 
-	if c.TokenBlueprintRepo != nil && c.TokenBlueprintReviewRepo != nil && c.BrandRepo != nil {
+	if c.TokenBlueprintRepo != nil &&
+		c.TokenBlueprintReviewRepo != nil &&
+		c.BrandRepo != nil {
 		tbReviewUC := usecase.NewTokenBlueprintReviewUsecase(
 			c.TokenBlueprintReviewRepo,
 			c.AvatarRepo,
@@ -202,7 +248,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		tokenBPReviewH = consoleHandler.NewTokenBlueprintReviewHandler(tbReviewUC)
 	}
 
-	if c.ProductBlueprintRepo != nil && c.ProductBlueprintReviewRepo != nil && c.BrandRepo != nil && c.WalletUC != nil {
+	if c.ProductBlueprintRepo != nil &&
+		c.ProductBlueprintReviewRepo != nil &&
+		c.BrandRepo != nil &&
+		c.WalletUC != nil {
 		pbReviewUC := usecase.NewProductBlueprintReviewUsecase(
 			c.ProductBlueprintReviewRepo,
 			c.ProductBlueprintRepo,
@@ -247,13 +296,22 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.ProductionUC != nil && c.CompanyProductionQueryService != nil {
-		productionsH = consoleHandler.NewProductionHandler(c.CompanyProductionQueryService, c.ProductionUC)
+		productionsH = consoleHandler.NewProductionHandler(
+			c.CompanyProductionQueryService,
+			c.ProductionUC,
+		)
 	}
 
 	if c.ModelUC != nil && c.ProductBlueprintRepo != nil {
 		modelAccessPolicy := consoleHandler.NewModelAccessPolicy(
-			func(ctx context.Context, productBlueprintID string) (consoleHandler.ProductBlueprintAccess, error) {
-				productBlueprint, err := c.ProductBlueprintRepo.GetByID(ctx, productBlueprintID)
+			func(
+				ctx context.Context,
+				productBlueprintID string,
+			) (consoleHandler.ProductBlueprintAccess, error) {
+				productBlueprint, err := c.ProductBlueprintRepo.GetByID(
+					ctx,
+					productBlueprintID,
+				)
 				if err != nil {
 					return consoleHandler.ProductBlueprintAccess{}, err
 				}
@@ -265,7 +323,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			},
 		)
 
-		modelsH = consoleHandler.NewModelHandler(c.ModelUC, modelAccessPolicy)
+		modelsH = consoleHandler.NewModelHandler(
+			c.ModelUC,
+			modelAccessPolicy,
+		)
 	}
 
 	if c.InspectionUC != nil && c.InspectorQuery != nil {
@@ -296,9 +357,17 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.InvitationDeliveryUC != nil {
-		invitationDeliveryHandler := internalHandler.NewInvitationDeliveryHandler(c.InvitationDeliveryUC)
-		internalInvitationDeliveryProcessH = http.HandlerFunc(invitationDeliveryHandler.Process)
-		internalInvitationDeliveryDispatchH = http.HandlerFunc(invitationDeliveryHandler.DispatchDue)
+		invitationDeliveryHandler := internalHandler.NewInvitationDeliveryHandler(
+			c.InvitationDeliveryUC,
+		)
+
+		internalInvitationDeliveryProcessH = http.HandlerFunc(
+			invitationDeliveryHandler.Process,
+		)
+
+		internalInvitationDeliveryDispatchH = http.HandlerFunc(
+			invitationDeliveryHandler.DispatchDue,
+		)
 	}
 
 	if c.OrderDispatchNotificationUC != nil {
@@ -315,22 +384,33 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		)
 	}
 
+	if c.RefundCompletionNotificationUC != nil {
+		refundCompletionNotificationHandler := internalHandler.NewRefundCompletionNotificationHandler(
+			c.RefundCompletionNotificationUC,
+		)
+
+		internalRefundCompletionNotificationProcessH = http.HandlerFunc(
+			refundCompletionNotificationHandler.Process,
+		)
+
+		internalRefundCompletionNotificationDispatchH = http.HandlerFunc(
+			refundCompletionNotificationHandler.DispatchDue,
+		)
+	}
+
 	if c.SettlementUC != nil {
-		settlementTaskHandler :=
-			internalHandler.NewSettlementTaskHandler(
-				c.SettlementUC,
-				c.settlementQueue,
-			)
+		settlementTaskHandler := internalHandler.NewSettlementTaskHandler(
+			c.SettlementUC,
+			c.settlementQueue,
+		)
 
-		internalSettlementProcessH =
-			http.HandlerFunc(
-				settlementTaskHandler.Process,
-			)
+		internalSettlementProcessH = http.HandlerFunc(
+			settlementTaskHandler.Process,
+		)
 
-		internalSettlementDispatchH =
-			http.HandlerFunc(
-				settlementTaskHandler.DispatchDue,
-			)
+		internalSettlementDispatchH = http.HandlerFunc(
+			settlementTaskHandler.DispatchDue,
+		)
 	}
 
 	if c.OwnerResolveQ != nil {
@@ -377,17 +457,19 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		Mint:                           mintH,
 		InternalMintTasks:              internalMintTasksH,
 		InternalListSaveOperationTasks: internalListSaveOperationTasksH,
-		InternalTokenBlueprintCreateOperationTasks: internalTokenBlueprintCreateOperationTasksH,
-		InternalInvitationDeliveryProcess:          internalInvitationDeliveryProcessH,
-		InternalInvitationDeliveryDispatch:         internalInvitationDeliveryDispatchH,
-		InternalOrderDispatchNotificationProcess:   internalOrderDispatchNotificationProcessH,
-		InternalOrderDispatchNotificationDispatch:  internalOrderDispatchNotificationDispatchH,
-		InternalSettlementProcess:                  internalSettlementProcessH,
-		InternalSettlementDispatch:                 internalSettlementDispatchH,
-		OwnerResolve:                               ownerResolveH,
-		Invitation:                                 invitationH,
-		Sales:                                      salesH,
-		TokenBPReview:                              tokenBPReviewH,
-		ProductBPReview:                            productBPReviewH,
+		InternalTokenBlueprintCreateOperationTasks:   internalTokenBlueprintCreateOperationTasksH,
+		InternalInvitationDeliveryProcess:            internalInvitationDeliveryProcessH,
+		InternalInvitationDeliveryDispatch:           internalInvitationDeliveryDispatchH,
+		InternalOrderDispatchNotificationProcess:     internalOrderDispatchNotificationProcessH,
+		InternalOrderDispatchNotificationDispatch:    internalOrderDispatchNotificationDispatchH,
+		InternalRefundCompletionNotificationProcess:  internalRefundCompletionNotificationProcessH,
+		InternalRefundCompletionNotificationDispatch: internalRefundCompletionNotificationDispatchH,
+		InternalSettlementProcess:                    internalSettlementProcessH,
+		InternalSettlementDispatch:                   internalSettlementDispatchH,
+		OwnerResolve:                                 ownerResolveH,
+		Invitation:                                   invitationH,
+		Sales:                                        salesH,
+		TokenBPReview:                                tokenBPReviewH,
+		ProductBPReview:                              productBPReviewH,
 	}
 }

@@ -17,6 +17,7 @@ import (
 
 	mallhandler "narratives/internal/adapters/in/http/mall/handler"
 
+	cloudtasksadp "narratives/internal/adapters/out/cloudtasks"
 	outfirebase "narratives/internal/adapters/out/firebase"
 	outfs "narratives/internal/adapters/out/firestore"
 	mallfs "narratives/internal/adapters/out/firestore/mall"
@@ -53,23 +54,25 @@ const (
 type Container struct {
 	Infra *shared.Infra
 
-	AvatarUC             *usecase.AvatarUsecase
-	AvatarRegistrationUC *usecase.AvatarRegistrationUsecase
-	SetupUC              *usecase.SetupUsecase
-	ListUC               *usecase.ListUsecase
-	ShippingAddressUC    *usecase.ShippingAddressUsecase
-	ShippingQuoteUC      *usecase.ShippingQuoteUsecase
-	PaymentMethodUC      *usecase.PaymentMethodUsecase
-	UserUC               *usecase.UserUsecase
-	WalletUC             *usecase.WalletUsecase
-	CartUC               *usecase.CartUsecase
-	PaymentUC            *usecase.PaymentUsecase
-	SettlementUC         *usecase.SettlementUsecase
-	OrderUC              *usecase.OrderUsecase
-	InquiryUC            *usecase.InquiryUsecase
-	ReturnRequestUC      *usecase.ReturnRequestUsecase
-	AnnouncementUC       *usecase.AnnouncementUsecase
-	ResaleUC             *usecase.ResaleUsecase
+	AvatarUC                       *usecase.AvatarUsecase
+	AvatarRegistrationUC           *usecase.AvatarRegistrationUsecase
+	SetupUC                        *usecase.SetupUsecase
+	ListUC                         *usecase.ListUsecase
+	ShippingAddressUC              *usecase.ShippingAddressUsecase
+	ShippingQuoteUC                *usecase.ShippingQuoteUsecase
+	PaymentMethodUC                *usecase.PaymentMethodUsecase
+	UserUC                         *usecase.UserUsecase
+	WalletUC                       *usecase.WalletUsecase
+	CartUC                         *usecase.CartUsecase
+	PaymentUC                      *usecase.PaymentUsecase
+	SettlementUC                   *usecase.SettlementUsecase
+	RefundUC                       *usecase.RefundUsecase
+	RefundCompletionNotificationUC usecase.RefundCompletionNotificationUsecasePort
+	OrderUC                        *usecase.OrderUsecase
+	InquiryUC                      *usecase.InquiryUsecase
+	ReturnRequestUC                *usecase.ReturnRequestUsecase
+	AnnouncementUC                 *usecase.AnnouncementUsecase
+	ResaleUC                       *usecase.ResaleUsecase
 
 	OrderMailer   *mailadp.OrderMailer
 	OrderMailFrom string
@@ -118,7 +121,6 @@ func NewContainer(
 ) (*Container, error) {
 	if infra == nil {
 		var err error
-
 		infra, err = shared.NewInfra(ctx)
 		if err != nil {
 			return nil, err
@@ -400,7 +402,7 @@ func NewContainer(
 			)
 		if err != nil {
 			return nil, fmt.Errorf(
-				"di.mall: load Stripe settlement secret: %w",
+				"di.mall: load Stripe settlement/refund secret: %w",
 				err,
 			)
 		}
@@ -414,7 +416,7 @@ func NewContainer(
 				"sk_",
 			) {
 			return nil, errors.New(
-				"di.mall: Stripe settlement secret is invalid",
+				"di.mall: Stripe settlement/refund secret is invalid",
 			)
 		}
 
@@ -498,6 +500,43 @@ func NewContainer(
 		if c.SettlementUC == nil {
 			return nil, errors.New(
 				"di.mall: settlement usecase is nil",
+			)
+		}
+
+		stripeRefundGateway :=
+			stripeadapter.NewRefundGateway(
+				stripeSecretKey,
+			)
+		if stripeRefundGateway == nil {
+			return nil, errors.New(
+				"di.mall: Stripe refund gateway is nil",
+			)
+		}
+
+		stripeTransferReversalGateway :=
+			stripeadapter.NewTransferReversalGateway(
+				stripeSecretKey,
+			)
+		if stripeTransferReversalGateway == nil {
+			return nil, errors.New(
+				"di.mall: Stripe transfer reversal gateway is nil",
+			)
+		}
+
+		c.RefundUC = usecase.NewRefundUsecase(
+			usecase.NewRefundUsecaseInput{
+				PaymentReader: c.PaymentUC,
+
+				SettlementRepository: settlementRepo,
+
+				StripeRefundGateway: stripeRefundGateway,
+
+				StripeTransferReversalGateway: stripeTransferReversalGateway,
+			},
+		)
+		if c.RefundUC == nil {
+			return nil, errors.New(
+				"di.mall: refund usecase is nil",
 			)
 		}
 	}
@@ -727,6 +766,35 @@ func NewContainer(
 			transferExecutionUC,
 		)
 	}
+
+	// Stripe Refund webhook が succeeded を確定した後に、
+	// purchaser向け返金完了通知deliveryを作成・Cloud Tasksへ投入します。
+	refundCompletionNotificationRepo :=
+		outfs.NewRefundCompletionNotificationRepositoryFS(
+			fsClient,
+		)
+
+	refundCompletionNotificationQueue, err :=
+		cloudtasksadp.NewRefundCompletionNotificationQueueFromEnv(
+			ctx,
+		)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"di.mall: build refund completion notification queue: %w",
+			err,
+		)
+	}
+
+	refundCompletionNotificationMailer :=
+		mailadp.NewRefundCompletionNotificationMailerWithResend()
+
+	c.RefundCompletionNotificationUC =
+		usecase.NewRefundCompletionNotificationUsecase(
+			refundCompletionNotificationRepo,
+			authUserReader,
+			refundCompletionNotificationMailer,
+			refundCompletionNotificationQueue,
+		)
 
 	return c, nil
 }

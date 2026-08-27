@@ -73,6 +73,14 @@ type RouterDeps struct {
 	// endpoint:
 	//   POST /internal/order-dispatch-notifications/dispatch-due
 	//
+	// Cloud Tasksから呼ばれる返金完了通知メール送信worker用です。
+	// endpoint:
+	//   POST /internal/refund-completion-notifications/process
+	//
+	// Cloud Scheduler等から呼ばれる返金完了通知delivery投入用です。
+	// endpoint:
+	//   POST /internal/refund-completion-notifications/dispatch-due
+	//
 	// Cloud Tasksから呼ばれるSettlement送金worker用です。
 	// endpoint:
 	//   POST /internal/settlements/process
@@ -84,15 +92,17 @@ type RouterDeps struct {
 	// 注意:
 	// - 通常のConsole Firebase Authではなく、Cloud Tasks OIDC / Cloud Run Invoker
 	//   または各internal handlerの認証処理で保護します。
-	InternalMintTasks                          http.Handler
-	InternalListSaveOperationTasks             http.Handler
-	InternalTokenBlueprintCreateOperationTasks http.Handler
-	InternalInvitationDeliveryProcess          http.Handler
-	InternalInvitationDeliveryDispatch         http.Handler
-	InternalOrderDispatchNotificationProcess   http.Handler
-	InternalOrderDispatchNotificationDispatch  http.Handler
-	InternalSettlementProcess                  http.Handler
-	InternalSettlementDispatch                 http.Handler
+	InternalMintTasks                            http.Handler
+	InternalListSaveOperationTasks               http.Handler
+	InternalTokenBlueprintCreateOperationTasks   http.Handler
+	InternalInvitationDeliveryProcess            http.Handler
+	InternalInvitationDeliveryDispatch           http.Handler
+	InternalOrderDispatchNotificationProcess     http.Handler
+	InternalOrderDispatchNotificationDispatch    http.Handler
+	InternalRefundCompletionNotificationProcess  http.Handler
+	InternalRefundCompletionNotificationDispatch http.Handler
+	InternalSettlementProcess                    http.Handler
+	InternalSettlementDispatch                   http.Handler
 
 	OwnerResolve    http.Handler
 	Invitation      http.Handler
@@ -109,6 +119,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if deps.AuthMw == nil {
 			return h
 		}
+
 		return deps.AuthMw.Handler(h)
 	}
 
@@ -117,6 +128,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if deps.BootstrapMw == nil {
 			return h
 		}
+
 		return deps.BootstrapMw.Handler(h)
 	}
 
@@ -339,6 +351,16 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if deps.InternalOrderDispatchNotificationDispatch != nil {
 		h := withPublic(deps.InternalOrderDispatchNotificationDispatch)
 		mux.Handle("/internal/order-dispatch-notifications/dispatch-due", h)
+	}
+
+	if deps.InternalRefundCompletionNotificationProcess != nil {
+		h := withPublic(deps.InternalRefundCompletionNotificationProcess)
+		mux.Handle("/internal/refund-completion-notifications/process", h)
+	}
+
+	if deps.InternalRefundCompletionNotificationDispatch != nil {
+		h := withPublic(deps.InternalRefundCompletionNotificationDispatch)
+		mux.Handle("/internal/refund-completion-notifications/dispatch-due", h)
 	}
 
 	if deps.InternalSettlementProcess != nil {

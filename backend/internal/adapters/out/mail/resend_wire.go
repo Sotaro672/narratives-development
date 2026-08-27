@@ -55,6 +55,23 @@ func NewOrderDispatchNotificationMailerWithResend() *OrderDispatchNotificationMa
 	)
 }
 
+// NewRefundCompletionNotificationMailerWithResendは、
+// Resendを使ったRefundCompletionNotificationMailerを生成します。
+//
+// - RESEND_API_KEY: ResendのAPIキー
+// - RESEND_FROM  : 送信元メールアドレス
+func NewRefundCompletionNotificationMailerWithResend() *RefundCompletionNotificationMailer {
+	apiKey := strings.TrimSpace(os.Getenv(envResendAPIKey))
+	fromAddress := strings.TrimSpace(os.Getenv(envResendFrom))
+
+	client := NewResendClient(apiKey)
+
+	return NewRefundCompletionNotificationMailer(
+		client,
+		fromAddress,
+	)
+}
+
 // NewAuthMailerWithResendは、Resendを使ったAuthMailerを生成します。
 //
 // - RESEND_API_KEY: ResendのAPIキー

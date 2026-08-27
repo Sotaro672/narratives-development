@@ -1,4 +1,4 @@
-// backend\internal\platform\di\mall\container_router.go
+// backend/internal/platform/di/mall/container_router.go
 package mall
 
 import (
@@ -458,6 +458,8 @@ func Register(mux *http.ServeMux, cont *Container) {
 				cont.PaymentUC,
 				cont.OrderUC,
 				cont.SettlementUC,
+				cont.RefundUC,
+				cont.RefundCompletionNotificationUC,
 				secret,
 			)
 

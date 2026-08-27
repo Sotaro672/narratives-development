@@ -51,6 +51,7 @@ type Container struct {
 	ModelUC                            *uc.ModelUsecase
 	OrderUC                            *uc.OrderUsecase
 	OrderDispatchNotificationUC        uc.OrderDispatchNotificationUsecasePort
+	RefundCompletionNotificationUC     uc.RefundCompletionNotificationUsecasePort
 	PaymentUC                          *uc.PaymentUsecase
 	PaymentFlowUC                      *uc.PaymentFlowUsecase
 	SettlementUC                       *uc.SettlementUsecase
@@ -110,6 +111,7 @@ type Container struct {
 	tokenBlueprintCreateOperationQueue *listcloudtasksadp.TokenBlueprintCreateOperationQueue
 	invitationDeliveryQueue            *listcloudtasksadp.InvitationDeliveryQueue
 	orderDispatchNotificationQueue     *listcloudtasksadp.OrderDispatchNotificationQueue
+	refundCompletionNotificationQueue  *listcloudtasksadp.RefundCompletionNotificationQueue
 	settlementQueue                    *listcloudtasksadp.SettlementQueue
 }
 
@@ -142,9 +144,16 @@ func NewContainer(
 			ctx,
 		)
 	if err != nil {
+		var refundCompletionNotificationQueueErr error
+		if u != nil && u.refundCompletionNotificationQueue != nil {
+			refundCompletionNotificationQueueErr =
+				u.refundCompletionNotificationQueue.Close()
+		}
+
 		var orderDispatchNotificationQueueErr error
 		if u != nil && u.orderDispatchNotificationQueue != nil {
-			orderDispatchNotificationQueueErr = u.orderDispatchNotificationQueue.Close()
+			orderDispatchNotificationQueueErr =
+				u.orderDispatchNotificationQueue.Close()
 		}
 
 		var invitationQueueErr error
@@ -154,7 +163,8 @@ func NewContainer(
 
 		var tokenBlueprintCreateOperationQueueErr error
 		if u != nil && u.tokenBlueprintCreateOperationQueue != nil {
-			tokenBlueprintCreateOperationQueueErr = u.tokenBlueprintCreateOperationQueue.Close()
+			tokenBlueprintCreateOperationQueueErr =
+				u.tokenBlueprintCreateOperationQueue.Close()
 		}
 
 		var listQueueErr error
@@ -174,6 +184,7 @@ func NewContainer(
 
 		return nil, errors.Join(
 			err,
+			refundCompletionNotificationQueueErr,
 			orderDispatchNotificationQueueErr,
 			invitationQueueErr,
 			tokenBlueprintCreateOperationQueueErr,
@@ -197,9 +208,16 @@ func NewContainer(
 			settlementQueueErr = settlementQueue.Close()
 		}
 
+		var refundCompletionNotificationQueueErr error
+		if u != nil && u.refundCompletionNotificationQueue != nil {
+			refundCompletionNotificationQueueErr =
+				u.refundCompletionNotificationQueue.Close()
+		}
+
 		var orderDispatchNotificationQueueErr error
 		if u != nil && u.orderDispatchNotificationQueue != nil {
-			orderDispatchNotificationQueueErr = u.orderDispatchNotificationQueue.Close()
+			orderDispatchNotificationQueueErr =
+				u.orderDispatchNotificationQueue.Close()
 		}
 
 		var invitationQueueErr error
@@ -209,7 +227,8 @@ func NewContainer(
 
 		var tokenBlueprintCreateOperationQueueErr error
 		if u != nil && u.tokenBlueprintCreateOperationQueue != nil {
-			tokenBlueprintCreateOperationQueueErr = u.tokenBlueprintCreateOperationQueue.Close()
+			tokenBlueprintCreateOperationQueueErr =
+				u.tokenBlueprintCreateOperationQueue.Close()
 		}
 
 		var listQueueErr error
@@ -230,6 +249,7 @@ func NewContainer(
 		return nil, errors.Join(
 			errors.New("clients/infra is nil"),
 			settlementQueueErr,
+			refundCompletionNotificationQueueErr,
 			orderDispatchNotificationQueueErr,
 			invitationQueueErr,
 			tokenBlueprintCreateOperationQueueErr,
@@ -301,6 +321,7 @@ func NewContainer(
 		ModelUC:                            u.modelUC,
 		OrderUC:                            u.orderUC,
 		OrderDispatchNotificationUC:        u.orderDispatchNotificationUC,
+		RefundCompletionNotificationUC:     u.refundCompletionNotificationUC,
 		PaymentUC:                          u.paymentUC,
 		PaymentFlowUC:                      u.paymentFlowUC,
 		SettlementUC:                       u.settlementUC,
@@ -360,6 +381,7 @@ func NewContainer(
 		tokenBlueprintCreateOperationQueue: u.tokenBlueprintCreateOperationQueue,
 		invitationDeliveryQueue:            u.invitationDeliveryQueue,
 		orderDispatchNotificationQueue:     u.orderDispatchNotificationQueue,
+		refundCompletionNotificationQueue:  u.refundCompletionNotificationQueue,
 		settlementQueue:                    settlementQueue,
 	}, nil
 }
@@ -374,9 +396,16 @@ func (c *Container) Close() error {
 		settlementQueueErr = c.settlementQueue.Close()
 	}
 
+	var refundCompletionNotificationQueueErr error
+	if c.refundCompletionNotificationQueue != nil {
+		refundCompletionNotificationQueueErr =
+			c.refundCompletionNotificationQueue.Close()
+	}
+
 	var orderDispatchNotificationQueueErr error
 	if c.orderDispatchNotificationQueue != nil {
-		orderDispatchNotificationQueueErr = c.orderDispatchNotificationQueue.Close()
+		orderDispatchNotificationQueueErr =
+			c.orderDispatchNotificationQueue.Close()
 	}
 
 	var invitationQueueErr error
@@ -386,7 +415,8 @@ func (c *Container) Close() error {
 
 	var tokenBlueprintCreateOperationQueueErr error
 	if c.tokenBlueprintCreateOperationQueue != nil {
-		tokenBlueprintCreateOperationQueueErr = c.tokenBlueprintCreateOperationQueue.Close()
+		tokenBlueprintCreateOperationQueueErr =
+			c.tokenBlueprintCreateOperationQueue.Close()
 	}
 
 	var listQueueErr error
@@ -411,6 +441,7 @@ func (c *Container) Close() error {
 
 	return errors.Join(
 		settlementQueueErr,
+		refundCompletionNotificationQueueErr,
 		orderDispatchNotificationQueueErr,
 		invitationQueueErr,
 		tokenBlueprintCreateOperationQueueErr,
