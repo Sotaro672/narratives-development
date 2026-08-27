@@ -21,12 +21,8 @@ import (
 )
 
 var (
-	ErrOrderRepositoryNotConfigured = errors.New(
-		"order_repository_fs: not configured",
-	)
-	ErrInvalidOrderDocumentData = errors.New(
-		"order_repository_fs: invalid order document data",
-	)
+	ErrOrderRepositoryNotConfigured = errors.New("order_repository_fs: not configured")
+	ErrInvalidOrderDocumentData     = errors.New("order_repository_fs: invalid order document data")
 )
 
 // OrderRepositoryFS is the Firestore implementation of orderdom.Repository.
@@ -49,19 +45,11 @@ func (r *OrderRepositoryFS) orderTransferItemsCol() *firestore.CollectionRef {
 	return r.Client.Collection("orderTransferItems")
 }
 
-func (r *OrderRepositoryFS) orderTransferItemDoc(
-	orderID string,
-	itemIndex int,
-) *firestore.DocumentRef {
-	return r.orderTransferItemsCol().Doc(
-		orderID + "__" + strconv.Itoa(itemIndex),
-	)
+func (r *OrderRepositoryFS) orderTransferItemDoc(orderID string, itemIndex int) *firestore.DocumentRef {
+	return r.orderTransferItemsCol().Doc(orderID + "__" + strconv.Itoa(itemIndex))
 }
 
-func (r *OrderRepositoryFS) GetByID(
-	ctx context.Context,
-	id string,
-) (orderdom.Order, error) {
+func (r *OrderRepositoryFS) GetByID(ctx context.Context, id string) (orderdom.Order, error) {
 	if r == nil || r.Client == nil {
 		return orderdom.Order{}, ErrOrderRepositoryNotConfigured
 	}
@@ -87,18 +75,11 @@ func (r *OrderRepositoryFS) ListByAvatarID(
 	page common.Page,
 ) (common.PageResult[orderdom.Order], error) {
 	if r == nil || r.Client == nil {
-		return common.PageResult[orderdom.Order]{},
-			ErrOrderRepositoryNotConfigured
+		return common.PageResult[orderdom.Order]{}, ErrOrderRepositoryNotConfigured
 	}
 
-	pageNum, perPage, offset := fscommon.NormalizePage(
-		page.Number,
-		page.PerPage,
-		50,
-		200,
-	)
+	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
 
-	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		return common.PageResult[orderdom.Order]{
 			Items:      []orderdom.Order{},
@@ -109,18 +90,14 @@ func (r *OrderRepositoryFS) ListByAvatarID(
 		}, nil
 	}
 
-	baseQuery := r.ordersCol().
-		Where("avatarId", "==", avatarID)
+	baseQuery := r.ordersCol().Where("avatarId", "==", avatarID)
 
 	total, err := countOrderQuery(ctx, baseQuery)
 	if err != nil {
 		return common.PageResult[orderdom.Order]{}, err
 	}
 
-	query := applyOrderSort(baseQuery, sort).
-		Offset(offset).
-		Limit(perPage)
-
+	query := applyOrderSort(baseQuery, sort).Offset(offset).Limit(perPage)
 	iter := query.Documents(ctx)
 	defer iter.Stop()
 
@@ -140,8 +117,7 @@ func (r *OrderRepositoryFS) ListByAvatarID(
 			return common.PageResult[orderdom.Order]{}, err
 		}
 		if order.AvatarID != avatarID {
-			return common.PageResult[orderdom.Order]{},
-				ErrInvalidOrderDocumentData
+			return common.PageResult[orderdom.Order]{}, ErrInvalidOrderDocumentData
 		}
 
 		items = append(items, order)
@@ -156,10 +132,7 @@ func (r *OrderRepositoryFS) ListByAvatarID(
 	}, nil
 }
 
-func (r *OrderRepositoryFS) Create(
-	ctx context.Context,
-	o orderdom.Order,
-) (orderdom.Order, error) {
+func (r *OrderRepositoryFS) Create(ctx context.Context, o orderdom.Order) (orderdom.Order, error) {
 	if r == nil || r.Client == nil {
 		return orderdom.Order{}, ErrOrderRepositoryNotConfigured
 	}
@@ -175,26 +148,20 @@ func (r *OrderRepositoryFS) Create(
 		return orderdom.Order{}, err
 	}
 
-	err = r.Client.RunTransaction(
-		ctx,
-		func(
-			ctx context.Context,
-			tx *firestore.Transaction,
-		) error {
-			if err := tx.Create(orderRef, orderData); err != nil {
+	err = r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		if err := tx.Create(orderRef, orderData); err != nil {
+			return err
+		}
+
+		for itemIndex, data := range projectionData {
+			ref := r.orderTransferItemDoc(o.ID, itemIndex)
+			if err := tx.Create(ref, data); err != nil {
 				return err
 			}
+		}
 
-			for itemIndex, data := range projectionData {
-				ref := r.orderTransferItemDoc(o.ID, itemIndex)
-				if err := tx.Create(ref, data); err != nil {
-					return err
-				}
-			}
-
-			return nil
-		},
-	)
+		return nil
+	})
 	if err != nil {
 		if status.Code(err) == codes.AlreadyExists {
 			return orderdom.Order{}, orderdom.ErrConflict
@@ -230,99 +197,85 @@ func (r *OrderRepositoryFS) Update(
 
 	now := time.Now().UTC()
 
-	err = r.Client.RunTransaction(
-		ctx,
-		func(
-			ctx context.Context,
-			tx *firestore.Transaction,
-		) error {
-			existingSnap, err := tx.Get(orderRef)
+	err = r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		existingSnap, err := tx.Get(orderRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return orderdom.ErrNotFound
+			}
+			return err
+		}
+
+		existingOrder, err := docToOrder(existingSnap)
+		if err != nil {
+			return err
+		}
+
+		existingProjections := make([]orderTransferItemProjection, len(existingOrder.Items))
+
+		for itemIndex := range existingOrder.Items {
+			ref := r.orderTransferItemDoc(o.ID, itemIndex)
+
+			snap, err := tx.Get(ref)
 			if err != nil {
 				if status.Code(err) == codes.NotFound {
-					return orderdom.ErrNotFound
+					return ErrInvalidOrderTransferItemData
 				}
 				return err
 			}
 
-			existingOrder, err := docToOrder(existingSnap)
+			projection, err := orderTransferItemFromSnapshot(snap)
 			if err != nil {
 				return err
 			}
 
-			existingProjections := make(
-				[]orderTransferItemProjection,
-				len(existingOrder.Items),
-			)
+			existingProjections[itemIndex] = projection
+		}
 
-			for itemIndex := range existingOrder.Items {
-				ref := r.orderTransferItemDoc(o.ID, itemIndex)
+		for itemIndex, projection := range existingProjections {
+			locked := projection.TransferLockExpiresAt != nil &&
+				projection.TransferLockExpiresAt.After(now)
 
-				snap, err := tx.Get(ref)
-				if err != nil {
-					if status.Code(err) == codes.NotFound {
-						return ErrInvalidOrderTransferItemData
-					}
-					return err
-				}
-
-				projection, err :=
-					orderTransferItemFromSnapshot(snap)
-				if err != nil {
-					return err
-				}
-
-				existingProjections[itemIndex] = projection
+			if !locked {
+				continue
 			}
 
-			for itemIndex, projection := range existingProjections {
-				locked :=
-					projection.TransferLockExpiresAt != nil &&
-						projection.TransferLockExpiresAt.After(now)
-
-				if !locked {
-					continue
-				}
-
-				if itemIndex >= len(o.Items) ||
-					o.AvatarID != projection.AvatarID ||
-					!o.Paid ||
-					o.Items[itemIndex].IsCancelled ||
-					o.Items[itemIndex].IsReturnRequested ||
-					o.Items[itemIndex].Transferred ||
-					!orderItemMatchesProjection(
-						o.Items[itemIndex],
-						projection,
-					) {
-					return ErrTransferItemLocked
-				}
-
-				newProjectionData[itemIndex]["transferLockedAt"] =
-					projection.TransferLockedAt.UTC()
-				newProjectionData[itemIndex]["transferLockExpiresAt"] =
-					projection.TransferLockExpiresAt.UTC()
+			if itemIndex >= len(o.Items) ||
+				o.AvatarID != projection.AvatarID ||
+				!o.Paid ||
+				o.Items[itemIndex].IsCancelled ||
+				o.Items[itemIndex].IsReturnRequested ||
+				o.Items[itemIndex].Transferred ||
+				!orderItemMatchesProjection(o.Items[itemIndex], projection) {
+				return ErrTransferItemLocked
 			}
 
-			if err := tx.Set(orderRef, orderData); err != nil {
+			newProjectionData[itemIndex]["transferLockedAt"] =
+				projection.TransferLockedAt.UTC()
+			newProjectionData[itemIndex]["transferLockExpiresAt"] =
+				projection.TransferLockExpiresAt.UTC()
+		}
+
+		if err := tx.Set(orderRef, orderData); err != nil {
+			return err
+		}
+
+		for itemIndex, data := range newProjectionData {
+			ref := r.orderTransferItemDoc(o.ID, itemIndex)
+			if err := tx.Set(ref, data); err != nil {
 				return err
 			}
+		}
 
-			for itemIndex, data := range newProjectionData {
-				ref := r.orderTransferItemDoc(o.ID, itemIndex)
-				if err := tx.Set(ref, data); err != nil {
-					return err
-				}
+		for itemIndex := len(o.Items); itemIndex < len(existingOrder.Items); itemIndex++ {
+			ref := r.orderTransferItemDoc(o.ID, itemIndex)
+			if err := tx.Delete(ref); err != nil {
+				return err
 			}
+		}
 
-			for itemIndex := len(o.Items); itemIndex < len(existingOrder.Items); itemIndex++ {
-				ref := r.orderTransferItemDoc(o.ID, itemIndex)
-				if err := tx.Delete(ref); err != nil {
-					return err
-				}
-			}
-
-			return nil
-		},
-	)
+		return nil
+	})
 	if err != nil {
 		return orderdom.Order{}, err
 	}
@@ -374,8 +327,7 @@ type shippingQuoteItemSnapshotDoc struct {
 	TransportationID string `firestore:"transportationId,omitempty"`
 
 	Size int `firestore:"size"`
-
-	Qty int `firestore:"qty"`
+	Qty  int `firestore:"qty"`
 
 	UnitAmount int `firestore:"unitAmount"`
 	Amount     int `firestore:"amount"`
@@ -419,8 +371,7 @@ type itemDoc struct {
 	SellerSnapshot sellerSnapshotDoc `firestore:"sellerSnapshot"`
 
 	ProductBlueprintCategoryPath []string `firestore:"productBlueprintCategoryPath"`
-
-	ConsumptionTaxRate int `firestore:"consumptionTaxRate"`
+	ConsumptionTaxRate           int      `firestore:"consumptionTaxRate"`
 
 	Qty   int `firestore:"qty"`
 	Price int `firestore:"price"`
@@ -429,6 +380,7 @@ type itemDoc struct {
 	IsDispatched bool `firestore:"isDispatched"`
 
 	IsReturnRequested bool       `firestore:"isReturnRequested"`
+	ReturnRequestKind string     `firestore:"returnRequestKind,omitempty"`
 	ReturnRequestedAt *time.Time `firestore:"returnRequestedAt,omitempty"`
 
 	IsReturnCompleted bool       `firestore:"isReturnCompleted,omitempty"`
@@ -440,19 +392,13 @@ type itemDoc struct {
 	TransferredAt *time.Time `firestore:"transferredAt,omitempty"`
 }
 
-func docToOrder(
-	snap *firestore.DocumentSnapshot,
-) (orderdom.Order, error) {
+func docToOrder(snap *firestore.DocumentSnapshot) (orderdom.Order, error) {
 	if snap == nil || snap.Ref == nil || !snap.Exists() {
 		return orderdom.Order{}, orderdom.ErrNotFound
 	}
 
 	if err := validateOrderDocumentShape(snap.Data()); err != nil {
-		return orderdom.Order{}, fmt.Errorf(
-			"order %s: %w",
-			snap.Ref.ID,
-			err,
-		)
+		return orderdom.Order{}, fmt.Errorf("order %s: %w", snap.Ref.ID, err)
 	}
 
 	var doc orderDoc
@@ -460,12 +406,7 @@ func docToOrder(
 		return orderdom.Order{}, err
 	}
 
-	items := make(
-		[]orderdom.OrderItemSnapshot,
-		0,
-		len(doc.Items),
-	)
-
+	items := make([]orderdom.OrderItemSnapshot, 0, len(doc.Items))
 	shippingQuoteItems := make(
 		[]orderdom.ShippingQuoteItemSnapshot,
 		0,
@@ -473,30 +414,20 @@ func docToOrder(
 	)
 
 	for _, item := range doc.ShippingQuoteSnapshot.Items {
-		shippingQuoteItems = append(
-			shippingQuoteItems,
-			orderdom.ShippingQuoteItemSnapshot{
-				ListID:      item.ListID,
-				InventoryID: item.InventoryID,
-				ModelID:     item.ModelID,
-
-				OriginShippingAddressID:      item.OriginShippingAddressID,
-				DestinationShippingAddressID: item.DestinationShippingAddressID,
-
-				Carrier: item.Carrier,
-
-				TransportationID: item.TransportationID,
-
-				Size: item.Size,
-
-				Qty: item.Qty,
-
-				UnitAmount: item.UnitAmount,
-				Amount:     item.Amount,
-
-				Currency: item.Currency,
-			},
-		)
+		shippingQuoteItems = append(shippingQuoteItems, orderdom.ShippingQuoteItemSnapshot{
+			ListID:                       item.ListID,
+			InventoryID:                  item.InventoryID,
+			ModelID:                      item.ModelID,
+			OriginShippingAddressID:      item.OriginShippingAddressID,
+			DestinationShippingAddressID: item.DestinationShippingAddressID,
+			Carrier:                      item.Carrier,
+			TransportationID:             item.TransportationID,
+			Size:                         item.Size,
+			Qty:                          item.Qty,
+			UnitAmount:                   item.UnitAmount,
+			Amount:                       item.Amount,
+			Currency:                     item.Currency,
+		})
 	}
 
 	for _, item := range doc.Items {
@@ -524,64 +455,47 @@ func docToOrder(
 			transferredAt = &value
 		}
 
-		// Existing transferred Order documents may predate
-		// tokenTransferVerifiedAt. A successful historical transfer itself is
-		// sufficient evidence that token transfer verification occurred.
-		if tokenTransferVerifiedAt == nil &&
-			item.Transferred &&
-			transferredAt != nil {
-			value := transferredAt.UTC()
-			tokenTransferVerifiedAt = &value
-		}
+		items = append(items, orderdom.OrderItemSnapshot{
+			Type:               orderdom.OrderItemType(item.Type),
+			ModelID:            item.ModelID,
+			InventoryID:        item.InventoryID,
+			ListID:             item.ListID,
+			ResaleID:           item.ResaleID,
+			ProductID:          item.ProductID,
+			ProductBlueprintID: item.ProductBlueprintID,
+			TokenBlueprintID:   item.TokenBlueprintID,
+			BrandID:            item.BrandID,
 
-		items = append(
-			items,
-			orderdom.OrderItemSnapshot{
-				Type: orderdom.OrderItemType(item.Type),
-
-				ModelID:     item.ModelID,
-				InventoryID: item.InventoryID,
-				ListID:      item.ListID,
-
-				ResaleID: item.ResaleID,
-
-				ProductID:          item.ProductID,
-				ProductBlueprintID: item.ProductBlueprintID,
-				TokenBlueprintID:   item.TokenBlueprintID,
-				BrandID:            item.BrandID,
-
-				SellerSnapshot: orderdom.SellerSnapshot{
-					BrandID:         item.SellerSnapshot.BrandID,
-					CompanyID:       item.SellerSnapshot.CompanyID,
-					AccountID:       item.SellerSnapshot.AccountID,
-					StripeAccountID: item.SellerSnapshot.StripeAccountID,
-				},
-
-				ProductBlueprintCategoryPath: append(
-					[]string(nil),
-					item.ProductBlueprintCategoryPath...,
-				),
-
-				ConsumptionTaxRate: item.ConsumptionTaxRate,
-
-				Qty:   item.Qty,
-				Price: item.Price,
-
-				IsCancelled:  item.IsCancelled,
-				IsDispatched: item.IsDispatched,
-
-				IsReturnRequested: item.IsReturnRequested,
-				ReturnRequestedAt: returnRequestedAt,
-
-				IsReturnCompleted: item.IsReturnCompleted,
-				ReturnCompletedAt: returnCompletedAt,
-
-				TokenTransferVerifiedAt: tokenTransferVerifiedAt,
-
-				Transferred:   item.Transferred,
-				TransferredAt: transferredAt,
+			SellerSnapshot: orderdom.SellerSnapshot{
+				BrandID:         item.SellerSnapshot.BrandID,
+				CompanyID:       item.SellerSnapshot.CompanyID,
+				AccountID:       item.SellerSnapshot.AccountID,
+				StripeAccountID: item.SellerSnapshot.StripeAccountID,
 			},
-		)
+
+			ProductBlueprintCategoryPath: append(
+				[]string(nil),
+				item.ProductBlueprintCategoryPath...,
+			),
+			ConsumptionTaxRate: item.ConsumptionTaxRate,
+
+			Qty:   item.Qty,
+			Price: item.Price,
+
+			IsCancelled:  item.IsCancelled,
+			IsDispatched: item.IsDispatched,
+
+			IsReturnRequested: item.IsReturnRequested,
+			ReturnRequestKind: orderdom.ReturnRequestKind(item.ReturnRequestKind),
+			ReturnRequestedAt: returnRequestedAt,
+
+			IsReturnCompleted: item.IsReturnCompleted,
+			ReturnCompletedAt: returnCompletedAt,
+
+			TokenTransferVerifiedAt: tokenTransferVerifiedAt,
+			Transferred:             item.Transferred,
+			TransferredAt:           transferredAt,
+		})
 	}
 
 	order := orderdom.Order{
@@ -623,11 +537,7 @@ func docToOrder(
 	}
 
 	if err := order.Validate(); err != nil {
-		return orderdom.Order{}, fmt.Errorf(
-			"order %s: %w",
-			snap.Ref.ID,
-			err,
-		)
+		return orderdom.Order{}, fmt.Errorf("order %s: %w", snap.Ref.ID, err)
 	}
 
 	return order, nil
@@ -644,7 +554,6 @@ func orderToDoc(o orderdom.Order) map[string]any {
 		0,
 		len(o.ShippingQuoteSnapshot.Items),
 	)
-
 	for _, item := range o.ShippingQuoteSnapshot.Items {
 		shippingQuoteItems = append(
 			shippingQuoteItems,
@@ -656,7 +565,6 @@ func orderToDoc(o orderdom.Order) map[string]any {
 		"userId":   o.UserID,
 		"avatarId": o.AvatarID,
 		"cartId":   o.CartID,
-
 		"shippingSnapshot": map[string]any{
 			"zipCode": o.ShippingSnapshot.ZipCode,
 			"state":   o.ShippingSnapshot.State,
@@ -665,13 +573,11 @@ func orderToDoc(o orderdom.Order) map[string]any {
 			"street2": o.ShippingSnapshot.Street2,
 			"country": o.ShippingSnapshot.Country,
 		},
-
 		"shippingQuoteSnapshot": map[string]any{
 			"items":    shippingQuoteItems,
 			"amount":   o.ShippingQuoteSnapshot.Amount,
 			"currency": o.ShippingQuoteSnapshot.Currency,
 		},
-
 		"paymentMethodSnapshot": map[string]any{
 			"paymentMethodId":       o.PaymentMethodSnapshot.PaymentMethodID,
 			"customerId":            o.PaymentMethodSnapshot.CustomerID,
@@ -683,16 +589,13 @@ func orderToDoc(o orderdom.Order) map[string]any {
 			"cardholderName":        o.PaymentMethodSnapshot.CardholderName,
 			"isDefault":             o.PaymentMethodSnapshot.IsDefault,
 		},
-
 		"paid":      o.Paid,
 		"items":     items,
 		"createdAt": o.CreatedAt.UTC(),
 	}
 }
 
-func shippingQuoteItemToDocMap(
-	item orderdom.ShippingQuoteItemSnapshot,
-) map[string]any {
+func shippingQuoteItemToDocMap(item orderdom.ShippingQuoteItemSnapshot) map[string]any {
 	doc := map[string]any{
 		"listId":                       item.ListID,
 		"inventoryId":                  item.InventoryID,
@@ -708,40 +611,33 @@ func shippingQuoteItemToDocMap(
 	}
 
 	if item.TransportationID != "" {
-		doc["transportationId"] =
-			item.TransportationID
+		doc["transportationId"] = item.TransportationID
 	}
 
 	return doc
 }
 
-func orderItemToDocMap(
-	item orderdom.OrderItemSnapshot,
-) map[string]any {
+func orderItemToDocMap(item orderdom.OrderItemSnapshot) map[string]any {
 	doc := map[string]any{
 		"type": string(item.Type),
-
 		"sellerSnapshot": map[string]any{
 			"brandId":         item.SellerSnapshot.BrandID,
 			"companyId":       item.SellerSnapshot.CompanyID,
 			"accountId":       item.SellerSnapshot.AccountID,
 			"stripeAccountId": item.SellerSnapshot.StripeAccountID,
 		},
-
 		"productBlueprintCategoryPath": append(
 			[]string(nil),
 			item.ProductBlueprintCategoryPath...,
 		),
-
 		"consumptionTaxRate": item.ConsumptionTaxRate,
-
-		"qty":               item.Qty,
-		"price":             item.Price,
-		"isCancelled":       item.IsCancelled,
-		"isDispatched":      item.IsDispatched,
-		"isReturnRequested": item.IsReturnRequested,
-		"isReturnCompleted": item.IsReturnCompleted,
-		"transferred":       item.Transferred,
+		"qty":                item.Qty,
+		"price":              item.Price,
+		"isCancelled":        item.IsCancelled,
+		"isDispatched":       item.IsDispatched,
+		"isReturnRequested":  item.IsReturnRequested,
+		"isReturnCompleted":  item.IsReturnCompleted,
+		"transferred":        item.Transferred,
 	}
 
 	switch item.Type {
@@ -749,65 +645,51 @@ func orderItemToDocMap(
 		doc["modelId"] = item.ModelID
 		doc["inventoryId"] = item.InventoryID
 		doc["listId"] = item.ListID
-		doc["productBlueprintId"] =
-			item.ProductBlueprintID
-		doc["tokenBlueprintId"] =
-			item.TokenBlueprintID
+		doc["productBlueprintId"] = item.ProductBlueprintID
+		doc["tokenBlueprintId"] = item.TokenBlueprintID
 
 	case orderdom.OrderItemTypeResale:
 		doc["resaleId"] = item.ResaleID
 		doc["productId"] = item.ProductID
-		doc["productBlueprintId"] =
-			item.ProductBlueprintID
-		doc["tokenBlueprintId"] =
-			item.TokenBlueprintID
+		doc["productBlueprintId"] = item.ProductBlueprintID
+		doc["tokenBlueprintId"] = item.TokenBlueprintID
 		doc["brandId"] = item.BrandID
 	}
 
-	if item.IsReturnRequested && item.ReturnRequestedAt != nil {
-		doc["returnRequestedAt"] =
-			item.ReturnRequestedAt.UTC()
+	if item.IsReturnRequested {
+		doc["returnRequestKind"] = string(item.ReturnRequestKind)
+		if item.ReturnRequestedAt != nil {
+			doc["returnRequestedAt"] = item.ReturnRequestedAt.UTC()
+		}
 	}
 
 	if item.IsReturnCompleted && item.ReturnCompletedAt != nil {
-		doc["returnCompletedAt"] =
-			item.ReturnCompletedAt.UTC()
+		doc["returnCompletedAt"] = item.ReturnCompletedAt.UTC()
 	}
 
 	if item.TokenTransferVerifiedAt != nil {
-		doc["tokenTransferVerifiedAt"] =
-			item.TokenTransferVerifiedAt.UTC()
+		doc["tokenTransferVerifiedAt"] = item.TokenTransferVerifiedAt.UTC()
 	}
 
 	if item.Transferred && item.TransferredAt != nil {
-		doc["transferredAt"] =
-			item.TransferredAt.UTC()
+		doc["transferredAt"] = item.TransferredAt.UTC()
 	}
 
 	return doc
 }
 
-func orderTransferItemDocuments(
-	o orderdom.Order,
-) ([]map[string]any, error) {
-	documents := make(
-		[]map[string]any,
-		0,
-		len(o.Items),
-	)
+func orderTransferItemDocuments(o orderdom.Order) ([]map[string]any, error) {
+	documents := make([]map[string]any, 0, len(o.Items))
 
 	for itemIndex, item := range o.Items {
 		eligible := orderdom.EligibleTransferItem{
-			OrderID:   o.ID,
-			ItemType:  item.Type,
-			ItemIndex: itemIndex,
-
-			ModelID:     item.ModelID,
-			InventoryID: item.InventoryID,
-			ListID:      item.ListID,
-
-			ResaleID: item.ResaleID,
-
+			OrderID:            o.ID,
+			ItemType:           item.Type,
+			ItemIndex:          itemIndex,
+			ModelID:            item.ModelID,
+			InventoryID:        item.InventoryID,
+			ListID:             item.ListID,
+			ResaleID:           item.ResaleID,
 			ProductID:          item.ProductID,
 			ProductBlueprintID: item.ProductBlueprintID,
 			TokenBlueprintID:   item.TokenBlueprintID,
@@ -815,12 +697,7 @@ func orderTransferItemDocuments(
 		}
 
 		if err := eligible.Validate(); err != nil {
-			return nil, fmt.Errorf(
-				"order %s item %d: %w",
-				o.ID,
-				itemIndex,
-				err,
-			)
+			return nil, fmt.Errorf("order %s item %d: %w", o.ID, itemIndex, err)
 		}
 
 		doc := map[string]any{
@@ -840,18 +717,14 @@ func orderTransferItemDocuments(
 			doc["modelId"] = item.ModelID
 			doc["inventoryId"] = item.InventoryID
 			doc["listId"] = item.ListID
-			doc["productBlueprintId"] =
-				item.ProductBlueprintID
-			doc["tokenBlueprintId"] =
-				item.TokenBlueprintID
+			doc["productBlueprintId"] = item.ProductBlueprintID
+			doc["tokenBlueprintId"] = item.TokenBlueprintID
 
 		case orderdom.OrderItemTypeResale:
 			doc["resaleId"] = item.ResaleID
 			doc["productId"] = item.ProductID
-			doc["productBlueprintId"] =
-				item.ProductBlueprintID
-			doc["tokenBlueprintId"] =
-				item.TokenBlueprintID
+			doc["productBlueprintId"] = item.ProductBlueprintID
+			doc["tokenBlueprintId"] = item.TokenBlueprintID
 			doc["brandId"] = item.BrandID
 		}
 
@@ -860,10 +733,8 @@ func orderTransferItemDocuments(
 				item.TokenTransferVerifiedAt.UTC()
 		}
 
-		if item.Transferred &&
-			item.TransferredAt != nil {
-			doc["transferredAt"] =
-				item.TransferredAt.UTC()
+		if item.Transferred && item.TransferredAt != nil {
+			doc["transferredAt"] = item.TransferredAt.UTC()
 		}
 
 		documents = append(documents, doc)
@@ -872,9 +743,7 @@ func orderTransferItemDocuments(
 	return documents, nil
 }
 
-func validateOrderDocumentShape(
-	raw map[string]any,
-) error {
+func validateOrderDocumentShape(raw map[string]any) error {
 	if raw == nil {
 		return ErrInvalidOrderDocumentData
 	}
@@ -891,34 +760,25 @@ func validateOrderDocumentShape(
 	if _, ok := requiredOrderBool(raw, "paid"); !ok {
 		return ErrInvalidOrderDocumentData
 	}
+
 	createdAt, ok := requiredOrderTime(raw, "createdAt")
 	if !ok || createdAt.IsZero() {
 		return ErrInvalidOrderDocumentData
 	}
 
-	rawPaymentMethod, ok :=
-		raw["paymentMethodSnapshot"].(map[string]any)
+	rawPaymentMethod, ok := raw["paymentMethodSnapshot"].(map[string]any)
 	if !ok || rawPaymentMethod == nil {
 		return ErrInvalidOrderDocumentData
 	}
-
-	if err :=
-		validatePaymentMethodDocumentShape(
-			rawPaymentMethod,
-		); err != nil {
+	if err := validatePaymentMethodDocumentShape(rawPaymentMethod); err != nil {
 		return err
 	}
 
-	rawShippingQuote, ok :=
-		raw["shippingQuoteSnapshot"].(map[string]any)
+	rawShippingQuote, ok := raw["shippingQuoteSnapshot"].(map[string]any)
 	if !ok || rawShippingQuote == nil {
 		return ErrInvalidOrderDocumentData
 	}
-
-	if err :=
-		validateShippingQuoteDocumentShape(
-			rawShippingQuote,
-		); err != nil {
+	if err := validateShippingQuoteDocumentShape(rawShippingQuote); err != nil {
 		return err
 	}
 
@@ -932,7 +792,6 @@ func validateOrderDocumentShape(
 		if !ok || item == nil {
 			return ErrInvalidOrderDocumentData
 		}
-
 		if err := validateOrderItemDocumentShape(item); err != nil {
 			return err
 		}
@@ -941,9 +800,7 @@ func validateOrderDocumentShape(
 	return nil
 }
 
-func validatePaymentMethodDocumentShape(
-	raw map[string]any,
-) error {
+func validatePaymentMethodDocumentShape(raw map[string]any) error {
 	for _, field := range []string{
 		"paymentMethodId",
 		"customerId",
@@ -957,42 +814,24 @@ func validatePaymentMethodDocumentShape(
 		}
 	}
 
-	expMonth, ok :=
-		requiredOrderInt(
-			raw,
-			"expMonth",
-		)
-	if !ok ||
-		expMonth < 1 ||
-		expMonth > 12 {
+	expMonth, ok := requiredOrderInt(raw, "expMonth")
+	if !ok || expMonth < 1 || expMonth > 12 {
 		return ErrInvalidOrderDocumentData
 	}
 
-	expYear, ok :=
-		requiredOrderInt(
-			raw,
-			"expYear",
-		)
-	if !ok ||
-		expYear < 2000 ||
-		expYear > 9999 {
+	expYear, ok := requiredOrderInt(raw, "expYear")
+	if !ok || expYear < 2000 || expYear > 9999 {
 		return ErrInvalidOrderDocumentData
 	}
 
-	if _, ok :=
-		requiredOrderBool(
-			raw,
-			"isDefault",
-		); !ok {
+	if _, ok := requiredOrderBool(raw, "isDefault"); !ok {
 		return ErrInvalidOrderDocumentData
 	}
 
 	return nil
 }
 
-func validateShippingQuoteDocumentShape(
-	raw map[string]any,
-) error {
+func validateShippingQuoteDocumentShape(raw map[string]any) error {
 	rawItems, ok := raw["items"].([]any)
 	if !ok || len(rawItems) == 0 {
 		return ErrInvalidOrderDocumentData
@@ -1004,8 +843,7 @@ func validateShippingQuoteDocumentShape(
 	}
 
 	currency, ok := requiredOrderString(raw, "currency")
-	if !ok ||
-		currency != orderdom.ShippingQuoteCurrencyJPY {
+	if !ok || currency != orderdom.ShippingQuoteCurrencyJPY {
 		return ErrInvalidOrderDocumentData
 	}
 
@@ -1018,14 +856,10 @@ func validateShippingQuoteDocumentShape(
 			return ErrInvalidOrderDocumentData
 		}
 
-		itemAmount, err :=
-			validateShippingQuoteItemDocumentShape(
-				item,
-			)
+		itemAmount, err := validateShippingQuoteItemDocumentShape(item)
 		if err != nil {
 			return err
 		}
-
 		if total > maxInt-itemAmount {
 			return ErrInvalidOrderDocumentData
 		}
@@ -1040,9 +874,7 @@ func validateShippingQuoteDocumentShape(
 	return nil
 }
 
-func validateShippingQuoteItemDocumentShape(
-	raw map[string]any,
-) (int, error) {
+func validateShippingQuoteItemDocumentShape(raw map[string]any) (int, error) {
 	for _, field := range []string{
 		"listId",
 		"inventoryId",
@@ -1085,9 +917,7 @@ func validateShippingQuoteItemDocumentShape(
 	}
 
 	switch carrier {
-	case "yamato",
-		"sagawa",
-		"post":
+	case "yamato", "sagawa", "post":
 		if size <= 0 {
 			return 0, ErrInvalidOrderDocumentData
 		}
@@ -1096,12 +926,7 @@ func validateShippingQuoteItemDocumentShape(
 		if size != 0 {
 			return 0, ErrInvalidOrderDocumentData
 		}
-
-		if _, ok :=
-			requiredOrderString(
-				raw,
-				"transportationId",
-			); !ok {
+		if _, ok := requiredOrderString(raw, "transportationId"); !ok {
 			return 0, ErrInvalidOrderDocumentData
 		}
 
@@ -1110,8 +935,7 @@ func validateShippingQuoteItemDocumentShape(
 	}
 
 	maxInt := int(^uint(0) >> 1)
-	if unitAmount > 0 &&
-		qty > maxInt/unitAmount {
+	if unitAmount > 0 && qty > maxInt/unitAmount {
 		return 0, ErrInvalidOrderDocumentData
 	}
 
@@ -1122,71 +946,42 @@ func validateShippingQuoteItemDocumentShape(
 	return amount, nil
 }
 
-func validateSellerSnapshotDocumentShape(
-	raw map[string]any,
-) error {
-	for _, field := range []string{
-		"brandId",
-		"companyId",
-		"accountId",
-	} {
+func validateSellerSnapshotDocumentShape(raw map[string]any) error {
+	for _, field := range []string{"brandId", "companyId", "accountId"} {
 		if _, ok := requiredOrderString(raw, field); !ok {
 			return ErrInvalidOrderDocumentData
 		}
 	}
 
-	stripeAccountID, ok :=
-		requiredOrderString(
-			raw,
-			"stripeAccountId",
-		)
-	if !ok ||
-		!strings.HasPrefix(
-			stripeAccountID,
-			"acct_",
-		) {
+	stripeAccountID, ok := requiredOrderString(raw, "stripeAccountId")
+	if !ok || !strings.HasPrefix(stripeAccountID, "acct_") {
 		return ErrInvalidOrderDocumentData
 	}
 
 	return nil
 }
 
-func validateOrderItemDocumentShape(
-	raw map[string]any,
-) error {
+func validateOrderItemDocumentShape(raw map[string]any) error {
 	itemType, ok := requiredOrderString(raw, "type")
 	if !ok {
 		return ErrInvalidOrderDocumentData
 	}
 
-	rawSellerSnapshot, ok :=
-		raw["sellerSnapshot"].(map[string]any)
+	rawSellerSnapshot, ok := raw["sellerSnapshot"].(map[string]any)
 	if !ok || rawSellerSnapshot == nil {
 		return ErrInvalidOrderDocumentData
 	}
-
-	if err :=
-		validateSellerSnapshotDocumentShape(
-			rawSellerSnapshot,
-		); err != nil {
+	if err := validateSellerSnapshotDocumentShape(rawSellerSnapshot); err != nil {
 		return err
 	}
 
 	productBlueprintCategoryPath, ok :=
-		requiredOrderStringSlice(
-			raw,
-			"productBlueprintCategoryPath",
-		)
-	if !ok ||
-		len(productBlueprintCategoryPath) == 0 {
+		requiredOrderStringSlice(raw, "productBlueprintCategoryPath")
+	if !ok || len(productBlueprintCategoryPath) == 0 {
 		return ErrInvalidOrderDocumentData
 	}
 
-	consumptionTaxRate, ok :=
-		requiredOrderInt(
-			raw,
-			"consumptionTaxRate",
-		)
+	consumptionTaxRate, ok := requiredOrderInt(raw, "consumptionTaxRate")
 	if !ok {
 		return ErrInvalidOrderDocumentData
 	}
@@ -1194,7 +989,6 @@ func validateOrderItemDocumentShape(
 	switch consumptionTaxRate {
 	case orderdom.ConsumptionTaxRateReduced,
 		orderdom.ConsumptionTaxRateStandard:
-
 	default:
 		return ErrInvalidOrderDocumentData
 	}
@@ -1212,27 +1006,41 @@ func validateOrderItemDocumentShape(
 		return ErrInvalidOrderDocumentData
 	}
 
-	isReturnRequested, ok :=
-		requiredOrderBool(raw, "isReturnRequested")
+	isReturnRequested, ok := requiredOrderBool(raw, "isReturnRequested")
 	if !ok {
 		return ErrInvalidOrderDocumentData
 	}
 
 	_, returnRequestedAtExists, err :=
 		optionalOrderTime(raw, "returnRequestedAt")
-	if err != nil ||
-		isReturnRequested != returnRequestedAtExists {
+	if err != nil {
 		return ErrInvalidOrderDocumentData
 	}
 
+	if isReturnRequested {
+		returnRequestKind, ok :=
+			requiredOrderString(raw, "returnRequestKind")
+		if !ok ||
+			!returnRequestKindDocumentValueValid(returnRequestKind) ||
+			!returnRequestedAtExists {
+			return ErrInvalidOrderDocumentData
+		}
+	} else {
+		if returnRequestedAtExists {
+			return ErrInvalidOrderDocumentData
+		}
+
+		if value, exists := raw["returnRequestKind"]; exists && value != nil {
+			return ErrInvalidOrderDocumentData
+		}
+	}
+
 	isReturnCompleted := false
-	if value, exists := raw["isReturnCompleted"]; exists &&
-		value != nil {
+	if value, exists := raw["isReturnCompleted"]; exists && value != nil {
 		result, ok := value.(bool)
 		if !ok {
 			return ErrInvalidOrderDocumentData
 		}
-
 		isReturnCompleted = result
 	}
 
@@ -1244,25 +1052,18 @@ func validateOrderItemDocumentShape(
 		return ErrInvalidOrderDocumentData
 	}
 
-	_, _, err =
-		optionalOrderTime(
-			raw,
-			"tokenTransferVerifiedAt",
-		)
+	_, _, err = optionalOrderTime(raw, "tokenTransferVerifiedAt")
 	if err != nil {
 		return ErrInvalidOrderDocumentData
 	}
 
-	transferred, ok :=
-		requiredOrderBool(raw, "transferred")
+	transferred, ok := requiredOrderBool(raw, "transferred")
 	if !ok {
 		return ErrInvalidOrderDocumentData
 	}
 
-	_, transferredAtExists, err :=
-		optionalOrderTime(raw, "transferredAt")
-	if err != nil ||
-		transferred != transferredAtExists {
+	_, transferredAtExists, err := optionalOrderTime(raw, "transferredAt")
+	if err != nil || transferred != transferredAtExists {
 		return ErrInvalidOrderDocumentData
 	}
 
@@ -1300,10 +1101,17 @@ func validateOrderItemDocumentShape(
 	return nil
 }
 
-func requiredOrderString(
-	raw map[string]any,
-	field string,
-) (string, bool) {
+func returnRequestKindDocumentValueValid(value string) bool {
+	switch orderdom.ReturnRequestKind(value) {
+	case orderdom.ReturnRequestKindUnopened,
+		orderdom.ReturnRequestKindOpened:
+		return true
+	default:
+		return false
+	}
+}
+
+func requiredOrderString(raw map[string]any, field string) (string, bool) {
 	value, exists := raw[field]
 	if !exists || value == nil {
 		return "", false
@@ -1313,10 +1121,7 @@ func requiredOrderString(
 	return result, ok && result != ""
 }
 
-func requiredOrderStringSlice(
-	raw map[string]any,
-	field string,
-) ([]string, bool) {
+func requiredOrderStringSlice(raw map[string]any, field string) ([]string, bool) {
 	value, exists := raw[field]
 	if !exists || value == nil {
 		return nil, false
@@ -1328,12 +1133,7 @@ func requiredOrderStringSlice(
 			return nil, false
 		}
 
-		result :=
-			append(
-				[]string(nil),
-				values...,
-			)
-
+		result := append([]string(nil), values...)
 		for _, item := range result {
 			if item == "" {
 				return nil, false
@@ -1347,24 +1147,13 @@ func requiredOrderStringSlice(
 			return nil, false
 		}
 
-		result :=
-			make(
-				[]string,
-				0,
-				len(values),
-			)
-
+		result := make([]string, 0, len(values))
 		for _, value := range values {
 			item, ok := value.(string)
 			if !ok || item == "" {
 				return nil, false
 			}
-
-			result =
-				append(
-					result,
-					item,
-				)
+			result = append(result, item)
 		}
 
 		return result, true
@@ -1374,10 +1163,7 @@ func requiredOrderStringSlice(
 	}
 }
 
-func requiredOrderBool(
-	raw map[string]any,
-	field string,
-) (bool, bool) {
+func requiredOrderBool(raw map[string]any, field string) (bool, bool) {
 	value, exists := raw[field]
 	if !exists || value == nil {
 		return false, false
@@ -1387,10 +1173,7 @@ func requiredOrderBool(
 	return result, ok
 }
 
-func requiredOrderInt(
-	raw map[string]any,
-	field string,
-) (int, bool) {
+func requiredOrderInt(raw map[string]any, field string) (int, bool) {
 	value, exists := raw[field]
 	if !exists || value == nil {
 		return 0, false
@@ -1399,19 +1182,14 @@ func requiredOrderInt(
 	switch result := value.(type) {
 	case int:
 		return result, true
-
 	case int64:
 		return int(result), true
-
 	default:
 		return 0, false
 	}
 }
 
-func requiredOrderTime(
-	raw map[string]any,
-	field string,
-) (time.Time, bool) {
+func requiredOrderTime(raw map[string]any, field string) (time.Time, bool) {
 	value, exists := raw[field]
 	if !exists || value == nil {
 		return time.Time{}, false
@@ -1432,9 +1210,7 @@ func optionalOrderTime(
 
 	result, ok := value.(time.Time)
 	if !ok || result.IsZero() {
-		return time.Time{},
-			false,
-			ErrInvalidOrderDocumentData
+		return time.Time{}, false, ErrInvalidOrderDocumentData
 	}
 
 	return result.UTC(), true, nil
@@ -1442,10 +1218,7 @@ func optionalOrderTime(
 
 const orderCountAlias = "total"
 
-func countOrderQuery(
-	ctx context.Context,
-	query firestore.Query,
-) (int, error) {
+func countOrderQuery(ctx context.Context, query firestore.Query) (int, error) {
 	result, err := query.
 		NewAggregationQuery().
 		WithCount(orderCountAlias).
@@ -1456,9 +1229,7 @@ func countOrderQuery(
 
 	rawCount, ok := result[orderCountAlias]
 	if !ok {
-		return 0, errors.New(
-			"firestore: order count result is missing",
-		)
+		return 0, errors.New("firestore: order count result is missing")
 	}
 
 	countValue, ok := rawCount.(*firestorepb.Value)
@@ -1488,17 +1259,13 @@ func countOrderQuery(
 	return total, nil
 }
 
-func applyOrderSort(
-	query firestore.Query,
-	sort common.Sort,
-) firestore.Query {
+func applyOrderSort(query firestore.Query, sort common.Sort) firestore.Query {
 	direction := firestore.Desc
 	if sort.Order == common.SortAsc {
 		direction = firestore.Asc
 	}
 
-	if sort.Column != "" &&
-		sort.Column != orderdom.SortByCreatedAt {
+	if sort.Column != "" && sort.Column != orderdom.SortByCreatedAt {
 		direction = firestore.Desc
 	}
 

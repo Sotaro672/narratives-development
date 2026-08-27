@@ -324,21 +324,46 @@ func (r *RefundRepositoryFS) Create(
 		return nil, refunddom.ErrInvalidID
 	}
 
-	entity, err := refunddom.New(
-		in.RefundID,
-		in.InquiryID,
-		in.OrderID,
-		in.PaymentID,
-		in.OrderItemIndex,
-		in.CompanyID,
-		in.AccountID,
-		in.SettlementID,
-		in.MerchandiseAmount,
-		in.MerchandiseTaxAmount,
-		in.TransferReversalAmount,
-		in.Currency,
-		in.CreatedAt,
-	)
+	var entity refunddom.Refund
+
+	if in.Policy == "" {
+		entity, err = refunddom.New(
+			in.RefundID,
+			in.InquiryID,
+			in.OrderID,
+			in.PaymentID,
+			in.OrderItemIndex,
+			in.CompanyID,
+			in.AccountID,
+			in.SettlementID,
+			in.MerchandiseAmount,
+			in.MerchandiseTaxAmount,
+			in.TransferReversalAmount,
+			in.Currency,
+			in.CreatedAt,
+		)
+	} else {
+		entity, err = refunddom.NewOpenedReturn(
+			in.RefundID,
+			in.InquiryID,
+			in.OrderID,
+			in.PaymentID,
+			in.OrderItemIndex,
+			in.CompanyID,
+			in.AccountID,
+			in.SettlementID,
+			in.Policy,
+			in.MerchandiseAmount,
+			in.MerchandiseTaxAmount,
+			in.OutboundShippingAmount,
+			in.OutboundShippingTaxAmount,
+			in.ReturnShippingAmount,
+			in.ReturnShippingTaxAmount,
+			in.TransferReversalAmount,
+			in.Currency,
+			in.CreatedAt,
+		)
+	}
 	if err != nil {
 		return nil, err
 	}

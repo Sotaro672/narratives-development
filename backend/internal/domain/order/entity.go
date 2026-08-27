@@ -387,10 +387,6 @@ func (o *Order) RequestItemReturn(
 		case item.ReturnRequestKind == kind:
 			return nil
 
-		case item.ReturnRequestKind == "":
-			item.ReturnRequestKind = kind
-			return nil
-
 		case item.ReturnRequestKind == ReturnRequestKindUnopened &&
 			kind == ReturnRequestKindOpened:
 			item.ReturnRequestKind = ReturnRequestKindOpened
@@ -1023,11 +1019,7 @@ func validateItemTransferState(
 			return ErrInvalidItemSnapshot
 		}
 
-		// Legacy Orders created before ReturnRequestKind was persisted may have
-		// an empty value here. New return requests always persist the kind, but
-		// the empty value remains valid for backward compatibility.
-		if item.ReturnRequestKind != "" &&
-			!isValidReturnRequestKind(item.ReturnRequestKind) {
+		if !isValidReturnRequestKind(item.ReturnRequestKind) {
 			return ErrInvalidItemSnapshot
 		}
 	} else {
