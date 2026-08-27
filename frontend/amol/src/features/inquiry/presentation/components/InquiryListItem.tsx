@@ -23,7 +23,7 @@ export default function InquiryListItem({
   const dateLabel = formatInquiryDate(item.latestActivityAt);
   const statusLabel = getInquiryStatusLabel(item.status);
   const countLabel = getReplyCountLabel(item);
-  const avatarInitial = getInitial(title);
+  const brandInitial = getInitial(item.brandName || item.productName);
 
   const handleOpen = () => {
     if (navigating) {
@@ -61,7 +61,15 @@ export default function InquiryListItem({
         className="chat-list-page__avatar"
         aria-hidden="true"
       >
-        <span>{avatarInitial}</span>
+        {item.brandIcon ? (
+          <img
+            src={item.brandIcon}
+            alt=""
+            className="chat-list-page__avatar-image"
+          />
+        ) : (
+          <span>{brandInitial}</span>
+        )}
       </div>
 
       <div className="chat-list-page__body">
@@ -72,7 +80,7 @@ export default function InquiryListItem({
             </h2>
 
             <span className="chat-list-page__sub-label">
-              {item.productId}
+              {item.brandName}
             </span>
           </div>
 
@@ -118,11 +126,13 @@ export default function InquiryListItem({
 }
 
 function getInquiryTitle(item: InquiryChatListItem): string {
-  if (item.inquiryType === "product") {
-    return item.subject || getInquiryTypeLabel(item.inquiryType);
+  const typeLabel = getInquiryTypeLabel(item.inquiryType);
+
+  if (!item.productName) {
+    return typeLabel;
   }
 
-  return getInquiryTypeLabel(item.inquiryType);
+  return `${item.productName}/${typeLabel}`;
 }
 
 function getInquiryPreview(item: InquiryChatListItem): string {

@@ -219,6 +219,7 @@ func NewContainer(
 	c.InquiryQ = mallquery.NewInquiryQuery(
 		inquiryRepo,
 		inquiryReplyRepo,
+		mallDisplayResolver,
 	)
 
 	announcementRepo := outfs.NewAnnouncementRepositoryFS(fsClient)

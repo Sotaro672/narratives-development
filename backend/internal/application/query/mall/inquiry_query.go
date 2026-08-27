@@ -11,9 +11,13 @@ import (
 )
 
 // InquiryListItem は mall の問い合わせ一覧画面向け read model です。
-// Inquiry の基本情報に、一覧表示で必要な reply 集約値を付加します。
+// Inquiry の基本情報に、一覧表示で必要な商品・ブランド表示情報と reply 集約値を付加します。
 type InquiryListItem struct {
 	inquirydom.Inquiry
+	ProductName      string            `json:"productName"`
+	BrandID          string            `json:"brandId"`
+	BrandName        string            `json:"brandName"`
+	BrandIcon        string            `json:"brandIcon"`
 	LatestReply      *inquirydom.Reply `json:"latestReply,omitempty"`
 	ReplyCount       int               `json:"replyCount"`
 	UnreadReplyCount int               `json:"unreadReplyCount"`
@@ -30,15 +34,17 @@ type InquiryListResult struct {
 // InquiryQuery は mall 側の Inquiry / Reply read model を扱います。
 // usecase は command 専用に寄せ、mall 画面で必要な read 処理はこの query service に集約します。
 type InquiryQuery struct {
-	repo      inquirydom.Repository
-	replyRepo inquirydom.ReplyRepository
+	repo            inquirydom.Repository
+	replyRepo       inquirydom.ReplyRepository
+	displayResolver mallshared.MallDisplayResolver
 }
 
 // NewInquiryQuery は InquiryQuery を初期化します。
-func NewInquiryQuery(repo inquirydom.Repository, replyRepo inquirydom.ReplyRepository) *InquiryQuery {
+func NewInquiryQuery(repo inquirydom.Repository, replyRepo inquirydom.ReplyRepository, displayResolver mallshared.MallDisplayResolver) *InquiryQuery {
 	return &InquiryQuery{
-		repo:      repo,
-		replyRepo: replyRepo,
+		repo:            repo,
+		replyRepo:       replyRepo,
+		displayResolver: displayResolver,
 	}
 }
 
@@ -66,7 +72,7 @@ func (q *InquiryQuery) ListByAvatarID(
 }
 
 // ListForAvatar は問い合わせ一覧画面用の BFF read model を返します。
-// frontend が inquiry ごとに replies API を呼び出して latest reply / reply count / latest activity を
+// frontend が inquiry ごとに商品・ブランド・replies API を呼び出して表示情報を
 // 組み立てる必要がないよう、この query service で集約します。
 func (q *InquiryQuery) ListForAvatar(
 	ctx context.Context,
@@ -77,6 +83,9 @@ func (q *InquiryQuery) ListForAvatar(
 ) (InquiryListResult, error) {
 	if q == nil || q.replyRepo == nil {
 		return InquiryListResult{}, fmt.Errorf("mall inquiry query: reply repository is nil")
+	}
+	if q.displayResolver == nil {
+		return InquiryListResult{}, fmt.Errorf("mall inquiry query: display resolver is nil")
 	}
 
 	result, err := q.ListByAvatarID(ctx, avatarID, filter, sort, page)
@@ -91,11 +100,27 @@ func (q *InquiryQuery) ListForAvatar(
 			return InquiryListResult{}, err
 		}
 
+		modelInfo, err := q.displayResolver.ResolveModelByProductID(ctx, inquiry.ProductID)
+		if err != nil {
+			return InquiryListResult{}, err
+		}
+
+		productInfo, err := q.displayResolver.ResolveProductBlueprintInfo(ctx, modelInfo.ProductBlueprintID)
+		if err != nil {
+			return InquiryListResult{}, err
+		}
+
+		brandInfo, err := q.displayResolver.ResolveBrandInfo(ctx, productInfo.BrandID)
+		if err != nil {
+			return InquiryListResult{}, err
+		}
+
 		latestReply := findLatestInquiryReply(replies)
 		unreadReplyCount := countUnreadInquiryRepliesForAvatar(
 			replies,
 			avatarID,
 		)
+
 		latestActivityAt := inquiry.UpdatedAt
 		if latestActivityAt.IsZero() {
 			latestActivityAt = inquiry.CreatedAt
@@ -112,6 +137,10 @@ func (q *InquiryQuery) ListForAvatar(
 
 		items = append(items, InquiryListItem{
 			Inquiry:          inquiry,
+			ProductName:      productInfo.ProductName,
+			BrandID:          brandInfo.BrandID,
+			BrandName:        brandInfo.BrandName,
+			BrandIcon:        brandInfo.BrandIcon,
 			LatestReply:      latestReply,
 			ReplyCount:       len(replies),
 			UnreadReplyCount: unreadReplyCount,

@@ -129,6 +129,10 @@ export type InquiryReply = {
 };
 
 export type InquiryListItem = Inquiry & {
+  productName: string;
+  brandId: string;
+  brandName: string;
+  brandIcon: string;
   latestReply?: InquiryReply;
   replyCount: number;
   unreadReplyCount: number;
