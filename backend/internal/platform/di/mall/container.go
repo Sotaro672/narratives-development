@@ -576,7 +576,7 @@ func NewContainer(
 			c.OrderUC,
 			inquiryRepo,
 			c.InquiryUC,
-		)
+		).WithReplyRepository(inquiryReplyRepo)
 
 	{
 		paymentFlowUC, configured, err := buildPaymentFlowUsecase(

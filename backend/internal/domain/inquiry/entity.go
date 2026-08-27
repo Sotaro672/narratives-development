@@ -30,6 +30,7 @@ const (
 const (
 	ReplySenderTypeAvatar ReplySenderType = "avatar"
 	ReplySenderTypeMember ReplySenderType = "member"
+	ReplySenderTypeSystem ReplySenderType = "system"
 )
 
 // FirebaseStorageDeleteOp represents a delete operation target in Firebase Storage.
@@ -113,6 +114,8 @@ type Inquiry struct {
 // Notes:
 //   - Inquiry.Content remains the first inquiry body only.
 //   - Reply.Content stores each reply body.
+//   - Reply.SenderType is avatar, member, or system.
+//   - system replies represent application-generated inquiry timeline messages.
 //   - Reply.Images stores metadata only. The binary files are uploaded directly
 //     from frontend to Firebase Storage.
 //   - Reply.IsRead is false when a reply is created.
@@ -1128,7 +1131,9 @@ func isValidInquiryType(inquiryType InquiryType) bool {
 
 func isValidReplySenderType(senderType ReplySenderType) bool {
 	switch senderType {
-	case ReplySenderTypeAvatar, ReplySenderTypeMember:
+	case ReplySenderTypeAvatar,
+		ReplySenderTypeMember,
+		ReplySenderTypeSystem:
 		return true
 
 	default:

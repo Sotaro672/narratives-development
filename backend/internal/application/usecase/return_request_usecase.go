@@ -19,6 +19,11 @@ var (
 	)
 )
 
+const (
+	returnOpenedByTransferSystemSenderID = "system"
+	returnOpenedByTransferSystemMessage  = "トークン移譲操作が確認されたため、返品区分を「未開封での返品」から「開封後の返品」へ変更しました。返品対応中のため、トークン移譲は実行されていません。"
+)
+
 // ReturnRequestOrderService is the minimum Order application service required
 // by ReturnRequestUsecase.
 //
@@ -70,6 +75,7 @@ type ReturnRequestUsecase struct {
 	orderService   ReturnRequestOrderService
 	inquiryRepo    inquirydom.Repository
 	inquiryCreator ReturnRequestInquiryCreator
+	replyRepo      inquirydom.ReplyRepository
 
 	now func() time.Time
 }
@@ -85,6 +91,16 @@ func NewReturnRequestUsecase(
 		inquiryCreator: inquiryCreator,
 		now:            time.Now,
 	}
+}
+
+func (uc *ReturnRequestUsecase) WithReplyRepository(
+	replyRepo inquirydom.ReplyRepository,
+) *ReturnRequestUsecase {
+	if uc != nil {
+		uc.replyRepo = replyRepo
+	}
+
+	return uc
 }
 
 // SetNowFunc replaces the current time function for tests.
@@ -737,6 +753,12 @@ func (uc *ReturnRequestUsecase) PromoteUnopenedToOpened(
 	inquiry := existing
 	inquiryPromoted := false
 
+	shouldEnsureSystemReply :=
+		existing.InquiryType ==
+			inquirydom.InquiryTypeReturnUnopened ||
+			targetItem.ReturnRequestKind ==
+				orderdom.ReturnRequestKindUnopened
+
 	switch existing.InquiryType {
 	case inquirydom.InquiryTypeReturnOpened:
 		if err := validateReturnInquiryProductID(
@@ -788,6 +810,19 @@ func (uc *ReturnRequestUsecase) PromoteUnopenedToOpened(
 			Order:   order,
 			Inquiry: existing,
 		}, inquirydom.ErrConflict
+	}
+
+	if shouldEnsureSystemReply {
+		if err := uc.ensureReturnOpenedByTransferSystemReply(
+			ctx,
+			inquiry,
+		); err != nil {
+			return ReturnRequestResult{
+				Order:           order,
+				Inquiry:         inquiry,
+				InquiryPromoted: inquiryPromoted,
+			}, err
+		}
 	}
 
 	updatedOrder, err :=
@@ -1471,6 +1506,52 @@ func (uc *ReturnRequestUsecase) promoteInquiryToOpenedWithContent(
 	)
 }
 
+func (uc *ReturnRequestUsecase) ensureReturnOpenedByTransferSystemReply(
+	ctx context.Context,
+	inquiry inquirydom.Inquiry,
+) error {
+	if uc == nil || uc.replyRepo == nil {
+		return ErrReturnRequestUsecaseNotConfigured
+	}
+
+	if inquiry.ID == "" {
+		return inquirydom.ErrInvalidID
+	}
+
+	now := uc.nowUTC()
+
+	reply, err := inquirydom.NewReply(
+		returnOpenedByTransferSystemReplyID(inquiry.ID),
+		inquiry.ID,
+		inquirydom.ReplySenderTypeSystem,
+		returnOpenedByTransferSystemSenderID,
+		returnOpenedByTransferSystemMessage,
+		[]inquirydom.ImageFile{},
+		now,
+		returnOpenedByTransferSystemSenderID,
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = uc.replyRepo.Create(
+		ctx,
+		reply,
+	)
+	if err != nil {
+		if errors.Is(
+			err,
+			inquirydom.ErrConflict,
+		) {
+			return nil
+		}
+
+		return err
+	}
+
+	return nil
+}
+
 func (uc *ReturnRequestUsecase) setReturnInquiryProductID(
 	ctx context.Context,
 	inquiry inquirydom.Inquiry,
@@ -1558,6 +1639,22 @@ func returnInquiryID(
 	)
 
 	return "inq_return_" +
+		hex.EncodeToString(
+			sum[:16],
+		)
+}
+
+func returnOpenedByTransferSystemReplyID(
+	inquiryID string,
+) string {
+	sum := sha256.Sum256(
+		[]byte(
+			"return_opened_by_transfer:" +
+				inquiryID,
+		),
+	)
+
+	return "reply_return_opened_transfer_" +
 		hex.EncodeToString(
 			sum[:16],
 		)
