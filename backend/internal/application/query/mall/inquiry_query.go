@@ -8,6 +8,7 @@ import (
 
 	mallshared "narratives/internal/application/query/mall/shared"
 	inquirydom "narratives/internal/domain/inquiry"
+	orderdom "narratives/internal/domain/order"
 )
 
 // InquiryListItem は mall の問い合わせ一覧画面向け read model です。
@@ -31,20 +32,32 @@ type InquiryListResult struct {
 	PerPage int               `json:"perPage"`
 }
 
+// InquiryOrderReader は問い合わせ一覧表示に必要な Order 取得を定義します。
+type InquiryOrderReader interface {
+	GetByID(ctx context.Context, id string) (orderdom.Order, error)
+}
+
 // InquiryQuery は mall 側の Inquiry / Reply read model を扱います。
 // usecase は command 専用に寄せ、mall 画面で必要な read 処理はこの query service に集約します。
 type InquiryQuery struct {
 	repo            inquirydom.Repository
 	replyRepo       inquirydom.ReplyRepository
 	displayResolver mallshared.MallDisplayResolver
+	orderReader     InquiryOrderReader
 }
 
 // NewInquiryQuery は InquiryQuery を初期化します。
-func NewInquiryQuery(repo inquirydom.Repository, replyRepo inquirydom.ReplyRepository, displayResolver mallshared.MallDisplayResolver) *InquiryQuery {
+func NewInquiryQuery(
+	repo inquirydom.Repository,
+	replyRepo inquirydom.ReplyRepository,
+	displayResolver mallshared.MallDisplayResolver,
+	orderReader InquiryOrderReader,
+) *InquiryQuery {
 	return &InquiryQuery{
 		repo:            repo,
 		replyRepo:       replyRepo,
 		displayResolver: displayResolver,
+		orderReader:     orderReader,
 	}
 }
 
@@ -100,17 +113,10 @@ func (q *InquiryQuery) ListForAvatar(
 			return InquiryListResult{}, err
 		}
 
-		modelInfo, err := q.displayResolver.ResolveModelByProductID(ctx, inquiry.ProductID)
-		if err != nil {
-			return InquiryListResult{}, err
-		}
-
-		productInfo, err := q.displayResolver.ResolveProductBlueprintInfo(ctx, modelInfo.ProductBlueprintID)
-		if err != nil {
-			return InquiryListResult{}, err
-		}
-
-		brandInfo, err := q.displayResolver.ResolveBrandInfo(ctx, productInfo.BrandID)
+		productInfo, brandInfo, err := q.resolveInquiryDisplay(
+			ctx,
+			inquiry,
+		)
 		if err != nil {
 			return InquiryListResult{}, err
 		}
@@ -153,6 +159,196 @@ func (q *InquiryQuery) ListForAvatar(
 		Page:    page.Number,
 		PerPage: page.PerPage,
 	}, nil
+}
+
+// resolveInquiryDisplay は Inquiry 種別に応じて商品・ブランド表示情報を解決します。
+// product は productId、返品は orderId + orderItemIndex を正とします。
+func (q *InquiryQuery) resolveInquiryDisplay(
+	ctx context.Context,
+	inquiry inquirydom.Inquiry,
+) (
+	mallshared.ProductBlueprintDisplay,
+	mallshared.BrandDisplay,
+	error,
+) {
+	switch inquiry.InquiryType {
+	case inquirydom.InquiryTypeProduct:
+		return q.resolveProductInquiryDisplay(ctx, inquiry)
+
+	case inquirydom.InquiryTypeReturnUnopened,
+		inquirydom.InquiryTypeReturnOpened:
+		return q.resolveReturnInquiryDisplay(ctx, inquiry)
+
+	default:
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			inquirydom.ErrInvalidInquiryType
+	}
+}
+
+func (q *InquiryQuery) resolveProductInquiryDisplay(
+	ctx context.Context,
+	inquiry inquirydom.Inquiry,
+) (
+	mallshared.ProductBlueprintDisplay,
+	mallshared.BrandDisplay,
+	error,
+) {
+	if inquiry.ProductID == "" {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			inquirydom.ErrInvalidProductID
+	}
+
+	modelInfo, err := q.displayResolver.ResolveModelByProductID(
+		ctx,
+		inquiry.ProductID,
+	)
+	if err != nil {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			err
+	}
+
+	if modelInfo.ProductBlueprintID == "" {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			fmt.Errorf("mall inquiry query: productBlueprintId could not be resolved from productId")
+	}
+
+	productInfo, err := q.displayResolver.ResolveProductBlueprintInfo(
+		ctx,
+		modelInfo.ProductBlueprintID,
+	)
+	if err != nil {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			err
+	}
+
+	if productInfo.BrandID == "" {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			fmt.Errorf("mall inquiry query: brandId could not be resolved from product")
+	}
+
+	brandInfo, err := q.displayResolver.ResolveBrandInfo(
+		ctx,
+		productInfo.BrandID,
+	)
+	if err != nil {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			err
+	}
+
+	return productInfo, brandInfo, nil
+}
+
+func (q *InquiryQuery) resolveReturnInquiryDisplay(
+	ctx context.Context,
+	inquiry inquirydom.Inquiry,
+) (
+	mallshared.ProductBlueprintDisplay,
+	mallshared.BrandDisplay,
+	error,
+) {
+	if q.orderReader == nil {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			fmt.Errorf("mall inquiry query: order reader is nil")
+	}
+	if inquiry.OrderID == "" {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			inquirydom.ErrInvalidOrderID
+	}
+	if inquiry.OrderItemIndex == nil || *inquiry.OrderItemIndex < 0 {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			inquirydom.ErrInvalidOrderItemIndex
+	}
+
+	order, err := q.orderReader.GetByID(
+		ctx,
+		inquiry.OrderID,
+	)
+	if err != nil {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			err
+	}
+
+	if order.AvatarID != inquiry.AvatarID {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			inquirydom.ErrInquiryForbidden
+	}
+
+	itemIndex := *inquiry.OrderItemIndex
+	if itemIndex >= len(order.Items) {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			inquirydom.ErrInvalidOrderItemIndex
+	}
+
+	item := order.Items[itemIndex]
+	productBlueprintID := item.ProductBlueprintID
+
+	if productBlueprintID == "" && item.ModelID != "" {
+		modelInfo, err := q.displayResolver.ResolveModelByModelID(
+			ctx,
+			item.ModelID,
+		)
+		if err != nil {
+			return mallshared.ProductBlueprintDisplay{},
+				mallshared.BrandDisplay{},
+				err
+		}
+
+		productBlueprintID = modelInfo.ProductBlueprintID
+	}
+
+	if productBlueprintID == "" {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			fmt.Errorf("mall inquiry query: productBlueprintId could not be resolved from order item")
+	}
+
+	productInfo, err := q.displayResolver.ResolveProductBlueprintInfo(
+		ctx,
+		productBlueprintID,
+	)
+	if err != nil {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			err
+	}
+
+	brandID := item.BrandID
+	if brandID == "" {
+		brandID = item.SellerSnapshot.BrandID
+	}
+	if brandID == "" {
+		brandID = productInfo.BrandID
+	}
+	if brandID == "" {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			fmt.Errorf("mall inquiry query: brandId could not be resolved from order item")
+	}
+
+	brandInfo, err := q.displayResolver.ResolveBrandInfo(
+		ctx,
+		brandID,
+	)
+	if err != nil {
+		return mallshared.ProductBlueprintDisplay{},
+			mallshared.BrandDisplay{},
+			err
+	}
+
+	return productInfo, brandInfo, nil
 }
 
 // GetByID は Inquiry を取得します。
@@ -308,5 +504,6 @@ func inquiryReplyActivityAt(reply inquirydom.Reply) time.Time {
 	if reply.UpdatedAt != nil && !reply.UpdatedAt.IsZero() {
 		return *reply.UpdatedAt
 	}
+
 	return reply.CreatedAt
 }
