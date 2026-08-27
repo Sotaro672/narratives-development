@@ -26,6 +26,9 @@ type InquiryImageView = {
 export type InquiryReplyListCardProps = {
   replies: InquiryReplyView[];
   memberId: string;
+  brandName: string;
+  brandIcon: string;
+  userName: string;
   onOpenReplyModal: () => void;
 };
 
@@ -59,19 +62,18 @@ function normalizeImages(
 
 function replySenderLabel(
   reply: InquiryReplyView,
-  memberId: string,
+  brandName: string,
+  userName: string,
 ): string {
   switch (reply.senderType) {
     case "member":
-      return reply.senderId === memberId
-        ? "自分"
-        : "担当者";
+      return textOrDash(brandName);
 
     case "system":
       return "AMOL";
 
     case "avatar":
-      return "お客様";
+      return textOrDash(userName);
 
     default:
       return "-";
@@ -81,6 +83,9 @@ function replySenderLabel(
 export default function InquiryReplyListCard({
   replies,
   memberId,
+  brandName,
+  brandIcon,
+  userName,
   onOpenReplyModal,
 }: InquiryReplyListCardProps) {
   return (
@@ -110,7 +115,8 @@ export default function InquiryReplyListCard({
               const senderLabel =
                 replySenderLabel(
                   reply,
-                  memberId,
+                  brandName,
+                  userName,
                 );
 
               const createdAtLabel =
@@ -125,6 +131,11 @@ export default function InquiryReplyListCard({
                 reply.senderId ===
                   memberId;
 
+              const showBrandIcon =
+                reply.senderType ===
+                  "member" &&
+                Boolean(brandIcon);
+
               return (
                 <article
                   key={reply.id}
@@ -135,9 +146,19 @@ export default function InquiryReplyListCard({
                   }
                 >
                   <div className="inq-reply-item__header">
-                    <span className="inq-reply-item__sender">
-                      {senderLabel}
-                    </span>
+                    <div className="inq-reply-item__sender-profile">
+                      {showBrandIcon ? (
+                        <img
+                          src={brandIcon}
+                          alt=""
+                          className="inq-reply-item__sender-icon"
+                        />
+                      ) : null}
+
+                      <span className="inq-reply-item__sender">
+                        {senderLabel}
+                      </span>
+                    </div>
 
                     <span className="inq-reply-item__date">
                       {createdAtLabel}

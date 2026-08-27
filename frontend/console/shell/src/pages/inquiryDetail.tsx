@@ -301,6 +301,7 @@ export default function InquiryDetail() {
       >
         <div>
           <InquiryContentCard
+            userName={detail?.userName}
             content={inquiry?.content}
             images={inquiry?.images}
             errorMessage={errorMessage}
@@ -317,13 +318,16 @@ export default function InquiryDetail() {
           <InquiryReplyListCard
             replies={detail?.replies ?? []}
             memberId={memberId}
+            brandName={detail?.brandName ?? ""}
+            brandIcon={detail?.brandIcon ?? ""}
+            userName={detail?.userName ?? ""}
             onOpenReplyModal={onOpenReplyModal}
           />
         </div>
 
         <div>
           <InquiryInfoCard
-            userFullName={detail?.userFullName}
+            userName={detail?.userName}
             createdAt={inquiry?.createdAt}
             updatedAt={inquiry?.updatedAt}
           />

@@ -9,7 +9,7 @@ import {
 } from "../../../../shared/ui/card";
 
 export type InquiryInfoCardProps = {
-  userFullName?: string | null;
+  userName?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -18,17 +18,16 @@ function textOrDash(
   value: string | null | undefined,
 ): string {
   const normalized = String(value ?? "").trim();
-
   return normalized || "-";
 }
 
 export default function InquiryInfoCard({
-  userFullName,
+  userName,
   createdAt,
   updatedAt,
 }: InquiryInfoCardProps) {
   const userNameLabel =
-    textOrDash(userFullName);
+    textOrDash(userName);
 
   const createdAtLabel =
     safeDateTimeLabelJa(

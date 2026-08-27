@@ -200,10 +200,11 @@ export type InquiryDetail = {
   productName: string;
   brandId: string;
   brandName: string;
+  brandIcon: string;
   assetId: string;
   transferredAt?: string;
   userId: string;
-  userFullName: string;
+  userName: string;
   orders: InquiryOrderSummary[];
   companyId: string;
 };

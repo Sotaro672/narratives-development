@@ -29,12 +29,13 @@ import (
 // return Inquiry は Inquiry.OrderID + Inquiry.OrderItemIndex を正として Order item を直接解決し、
 // ProductID が存在しない未開封返品でも Model / List / Resale / ProductBlueprint / Brand を解決します。
 // ProductBlueprint.CompanyID / ProductName / BrandID を解決し、
-// さらに Brand.GetByID() から BrandName を解決します。
+// さらに Brand.GetByID() から BrandName / BrandIcon を解決します。
 // ProductID が存在する場合は tokens/{productId} から Token.AssetID を取得します。
 // product Inquiry では AssetID から Transfer.TransferredAt を解決します。
 // return Inquiry では対象 Order item の TransferredAt を正として扱います。
 // Inquiry.AvatarID から Avatar.GetByID() を使って UserID を解決します。
-// 解決した UserID から User.GetByID() を使って UserFullName を解決します。
+// 解決した UserID から User.GetByID() を使って UserName を解決します。
+// Console read model には AvatarName / AvatarIcon を返しません。
 // ReplyRepository から replies を取得し、詳細 BFF の完成 DTO に含めます。
 // Order item の tokenBlueprintId / tokenName は Order snapshot を優先し、必要時のみ InventoryID から補完し、TokenBlueprint.BrandID から BrandName を解決します。
 type InquiryDetailQuery struct {
@@ -87,10 +88,11 @@ type InquiryDetail struct {
 	ProductName        string                `json:"productName"`
 	BrandID            string                `json:"brandId"`
 	BrandName          string                `json:"brandName"`
+	BrandIcon          string                `json:"brandIcon"`
 	AssetID            string                `json:"assetId"`
 	TransferredAt      *time.Time            `json:"transferredAt,omitempty"`
 	UserID             string                `json:"userId"`
-	UserFullName       string                `json:"userFullName"`
+	UserName           string                `json:"userName"`
 	Orders             []InquiryOrderSummary `json:"orders"`
 	CompanyID          string                `json:"companyId"`
 }
@@ -216,16 +218,21 @@ func (q *InquiryDetailQuery) getDetailBaseByID(ctx context.Context, id string) (
 		return InquiryDetail{}, err
 	}
 
-	userID, userFullName, err := q.resolveUserRefByAvatarID(ctx, inq.AvatarID)
+	userID, userName, err := q.resolveUserRefByAvatarID(ctx, inq.AvatarID)
+	if err != nil {
+		return InquiryDetail{}, err
+	}
+
+	brandIcon, err := q.resolveBrandIconByBrandID(ctx, resolved.BrandID)
 	if err != nil {
 		return InquiryDetail{}, err
 	}
 
 	return InquiryDetail{
 		Inquiry: inq, Replies: []inquirydom.Reply{}, ModelID: resolved.ModelID, ProductBlueprintID: resolved.ProductBlueprintID,
-		ProductName: resolved.ProductName, BrandID: resolved.BrandID, BrandName: resolved.BrandName,
+		ProductName: resolved.ProductName, BrandID: resolved.BrandID, BrandName: resolved.BrandName, BrandIcon: brandIcon,
 		AssetID: resolved.AssetID, TransferredAt: resolved.TransferredAt,
-		UserID: userID, UserFullName: userFullName,
+		UserID: userID, UserName: userName,
 		Orders: resolved.Orders, CompanyID: resolved.CompanyID,
 	}, nil
 }
@@ -805,10 +812,35 @@ func (q *InquiryDetailQuery) resolveTransferredAtByAssetID(ctx context.Context, 
 	return &transferredAt, nil
 }
 
+func (q *InquiryDetailQuery) resolveBrandIconByBrandID(
+	ctx context.Context,
+	brandID string,
+) (string, error) {
+	if q == nil {
+		return "", fmt.Errorf("inquiry detail query: query is nil")
+	}
+	if brandID == "" {
+		return "", nil
+	}
+	if q.brandRepo == nil {
+		return "", fmt.Errorf("inquiry detail query: brand repository is nil")
+	}
+
+	brand, err := q.brandRepo.GetByID(ctx, brandID)
+	if err != nil {
+		if errors.Is(err, branddom.ErrNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+
+	return brand.BrandIcon, nil
+}
+
 func (q *InquiryDetailQuery) resolveUserRefByAvatarID(
 	ctx context.Context,
 	avatarID string,
-) (userID string, userFullName string, err error) {
+) (userID string, userName string, err error) {
 	if q == nil {
 		return "", "", fmt.Errorf("inquiry detail query: query is nil")
 	}
@@ -840,8 +872,8 @@ func (q *InquiryDetailQuery) resolveUserRefByAvatarID(
 		return userID, "", err
 	}
 
-	userFullName = userdom.FormatName(user)
-	return userID, userFullName, nil
+	userName = userdom.FormatName(user)
+	return userID, userName, nil
 }
 
 func (q *InquiryDetailQuery) resolveRepliesByInquiryID(ctx context.Context, inquiryID string) ([]inquirydom.Reply, error) {

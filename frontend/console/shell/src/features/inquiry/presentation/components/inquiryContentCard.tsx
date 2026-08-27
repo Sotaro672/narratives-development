@@ -21,6 +21,7 @@ import type {
 import InquiryImageGrid from "./inquiryImageGrid";
 
 export type InquiryContentCardProps = {
+  userName?: string | null;
   content?: string | null;
   images?: InquiryImageFile[];
   errorMessage?: string | null;
@@ -43,6 +44,7 @@ function textOrDash(
 }
 
 export default function InquiryContentCard({
+  userName,
   content,
   images,
   errorMessage,
@@ -55,6 +57,7 @@ export default function InquiryContentCard({
   onChangeOpenedReturnPolicy,
   onSubmitOpenedReturnRefund,
 }: InquiryContentCardProps) {
+  const userNameLabel = textOrDash(userName);
   const body = textOrDash(content);
 
   return (
@@ -72,6 +75,16 @@ export default function InquiryContentCard({
               {errorMessage}
             </div>
           ) : null}
+
+          <div className="inq-detail__body">
+            <div className="inq-detail__label">
+              ユーザー名
+            </div>
+
+            <div className="inq-detail__value">
+              {userNameLabel}
+            </div>
+          </div>
 
           <div className="inq-detail__body">
             <div className="inq-detail__label">
