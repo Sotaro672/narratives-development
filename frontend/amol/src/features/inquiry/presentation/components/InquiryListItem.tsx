@@ -1,9 +1,7 @@
 // frontend/amol/src/features/inquiry/presentation/components/InquiryListItem.tsx
 
 import type { InquiryChatListItem } from "../hooks/useInquiryListPage";
-import {
-  getInquiryTypeLabel,
-} from "../../../shared/types/inquiryTypes";
+import { getInquiryTypeLabel } from "../../../shared/types/inquiryTypes";
 
 type InquiryListItemProps = {
   item: InquiryChatListItem;
@@ -16,8 +14,10 @@ export default function InquiryListItem({
   navigating,
   onOpen,
 }: InquiryListItemProps) {
-  const unreadCount = item.unreadReplyCount;
-  const isUnread = unreadCount > 0;
+  const closePendingCount = item.status === "resolved" ? 1 : 0;
+  const badgeCount = item.unreadReplyCount + closePendingCount;
+  const hasAttention = badgeCount > 0;
+
   const title = getInquiryTitle(item);
   const preview = getInquiryPreview(item);
   const dateLabel = formatInquiryDate(item.latestActivityAt);
@@ -36,8 +36,8 @@ export default function InquiryListItem({
   return (
     <article
       className={
-        isUnread
-          ? "chat-list-page__row chat-list-page__row--unread"
+        hasAttention
+          ? "chat-list-page__row chat-list-page__row--attention"
           : "chat-list-page__row"
       }
       role="button"
@@ -102,14 +102,12 @@ export default function InquiryListItem({
               {statusLabel}
             </span>
 
-            {isUnread ? (
+            {hasAttention ? (
               <span
-                className="chat-list-page__unread-count"
-                aria-label={`未読 ${unreadCount} 件`}
+                className="chat-list-page__badge-count"
+                aria-label={`要確認 ${badgeCount} 件`}
               >
-                {unreadCount > 99
-                  ? "99+"
-                  : unreadCount}
+                {badgeCount > 99 ? "99+" : badgeCount}
               </span>
             ) : null}
           </div>
