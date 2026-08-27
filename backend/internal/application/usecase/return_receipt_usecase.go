@@ -161,6 +161,18 @@ type ReturnReceiptItemRefundService interface {
 	) (refunddom.Refund, error)
 }
 
+// ReturnReceiptRefundCompletionNotifier is the minimum notification contract
+// required after one item-level return has completed financially.
+//
+// EnsureDelivery must be idempotent so retrying ReceiveReturn can repair a
+// previously completed refund whose notification delivery was not yet queued.
+type ReturnReceiptRefundCompletionNotifier interface {
+	EnsureDelivery(
+		ctx context.Context,
+		in EnsureRefundCompletionNotificationInput,
+	) (refunddom.CompletionNotificationDelivery, error)
+}
+
 // ============================================================
 // Input / Result
 // ============================================================
@@ -225,6 +237,7 @@ type ReturnReceiptResult struct {
 //  7. Require Refund.IsFinanciallyCompleted().
 //  8. Mark the Order item return as completed.
 //  9. Resolve the Inquiry.
+//  10. Ensure the purchaser refund-completion notification delivery.
 //
 // The execution order is intentional:
 //
@@ -232,6 +245,7 @@ type ReturnReceiptResult struct {
 //	-> seller Transfer Reversal
 //	-> Order IsReturnCompleted
 //	-> Inquiry resolved
+//	-> refund completion notification delivery
 //
 // Order and Inquiry must never be marked completed before the financial Refund
 // aggregate is financially completed.
@@ -245,6 +259,8 @@ type ReturnReceiptUsecase struct {
 	inquiryResolver ReturnReceiptInquiryResolver
 
 	itemRefundService ReturnReceiptItemRefundService
+
+	refundCompletionNotifier ReturnReceiptRefundCompletionNotifier
 }
 
 func NewReturnReceiptUsecase(
@@ -259,6 +275,17 @@ func NewReturnReceiptUsecase(
 		inquiryResolver:   inquiryResolver,
 		itemRefundService: itemRefundService,
 	}
+}
+
+func (uc *ReturnReceiptUsecase) WithRefundCompletionNotifier(
+	notifier ReturnReceiptRefundCompletionNotifier,
+) *ReturnReceiptUsecase {
+	if uc == nil {
+		return nil
+	}
+
+	uc.refundCompletionNotifier = notifier
+	return uc
 }
 
 // ============================================================
@@ -544,6 +571,26 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 
 	result.InquiryResolved = true
 
+	// EnsureDelivery is intentionally executed even when the Order and Inquiry
+	// were already completed by a previous attempt.
+	//
+	// This repairs the partial-failure case where the financial refund, Order
+	// completion, and Inquiry resolution succeeded but delivery creation or
+	// Cloud Tasks enqueue did not complete.
+	_, err = uc.refundCompletionNotifier.EnsureDelivery(
+		ctx,
+		EnsureRefundCompletionNotificationInput{
+			PaymentID:      refund.PaymentID,
+			OrderID:        refund.OrderID,
+			UserID:         order.UserID,
+			StripeRefundID: refund.StripeRefundID,
+			RefundedAmount: refund.RefundAmount,
+		},
+	)
+	if err != nil {
+		return result, err
+	}
+
 	result.AlreadyCompleted =
 		alreadyOrderCompleted
 
@@ -559,7 +606,8 @@ func (uc *ReturnReceiptUsecase) validateConfigured() error {
 		uc.orderService == nil ||
 		uc.inquiryRepo == nil ||
 		uc.inquiryResolver == nil ||
-		uc.itemRefundService == nil {
+		uc.itemRefundService == nil ||
+		uc.refundCompletionNotifier == nil {
 		return ErrReturnReceiptUsecaseNotConfigured
 	}
 

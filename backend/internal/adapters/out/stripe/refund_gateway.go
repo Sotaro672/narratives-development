@@ -63,9 +63,14 @@ func NewRefundGateway(
 //
 //	charge
 //	amount
+//	metadata[paymentId]
+//	metadata[refundId] (item-level refund only)
 //
-// RefundUsecase currently passes the complete Payment amount, so AMOL's first
-// refund flow is a full refund.
+// RefundUsecase passes the complete Payment amount and leaves RefundID empty.
+//
+// ItemRefundUsecase passes the item-level partial refund amount together with
+// the deterministic RefundID. That RefundID is persisted to Stripe metadata so
+// the webhook can distinguish an item-level refund from a full Payment refund.
 //
 // reverse_transfer is intentionally not set here. AMOL uses Separate Charges
 // and Transfers and coordinates each seller Transfer Reversal explicitly.
@@ -83,6 +88,7 @@ func (g *RefundGateway) CreateRefund(
 	stripeChargeID := in.StripeChargeID
 	idempotencyKey := in.IdempotencyKey
 	paymentID := in.PaymentID
+	refundID := strings.TrimSpace(in.RefundID)
 
 	if stripeChargeID == "" ||
 		!strings.HasPrefix(
@@ -151,6 +157,13 @@ func (g *RefundGateway) CreateRefund(
 		"metadata[paymentId]",
 		paymentID,
 	)
+
+	if refundID != "" {
+		form.Set(
+			"metadata[refundId]",
+			refundID,
+		)
+	}
 
 	var out stripeRefundResponse
 

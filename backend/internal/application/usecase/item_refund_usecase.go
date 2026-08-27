@@ -630,6 +630,7 @@ func (u *ItemRefundUsecase) createPurchaserRefund(
 				refund.ID,
 			),
 			PaymentID: payment.PaymentID,
+			RefundID:  refund.ID,
 		},
 	)
 	if err != nil {

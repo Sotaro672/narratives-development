@@ -203,6 +203,7 @@ type OpenedReturnReceiptResult struct {
 //  8. Require Refund.IsFinanciallyCompleted().
 //  9. Mark the Order item return as completed.
 //  10. Resolve the Inquiry.
+//  11. Ensure the purchaser refund-completion notification delivery.
 //
 // Execution order:
 //
@@ -210,6 +211,7 @@ type OpenedReturnReceiptResult struct {
 //	-> seller Transfer Reversal
 //	-> Order IsReturnCompleted
 //	-> Inquiry resolved
+//	-> refund completion notification delivery
 //
 // Order and Inquiry must never be marked complete before the financial Refund
 // aggregate is complete.
@@ -223,6 +225,8 @@ type OpenedReturnReceiptUsecase struct {
 	inquiryResolver OpenedReturnReceiptInquiryResolver
 
 	itemRefundService OpenedReturnReceiptItemRefundService
+
+	refundCompletionNotifier ReturnReceiptRefundCompletionNotifier
 }
 
 func NewOpenedReturnReceiptUsecase(
@@ -237,6 +241,17 @@ func NewOpenedReturnReceiptUsecase(
 		inquiryResolver:   inquiryResolver,
 		itemRefundService: itemRefundService,
 	}
+}
+
+func (uc *OpenedReturnReceiptUsecase) WithRefundCompletionNotifier(
+	notifier ReturnReceiptRefundCompletionNotifier,
+) *OpenedReturnReceiptUsecase {
+	if uc == nil {
+		return nil
+	}
+
+	uc.refundCompletionNotifier = notifier
+	return uc
 }
 
 // ============================================================
@@ -521,7 +536,29 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 	}
 
 	result.InquiryResolved = true
-	result.AlreadyCompleted = alreadyOrderCompleted
+
+	// EnsureDelivery is intentionally executed even when the Order and Inquiry
+	// were already completed by a previous attempt.
+	//
+	// This allows a retry to repair the partial-failure case where the financial
+	// refund and business-state completion succeeded but delivery creation or
+	// Cloud Tasks enqueue did not complete.
+	_, err = uc.refundCompletionNotifier.EnsureDelivery(
+		ctx,
+		EnsureRefundCompletionNotificationInput{
+			PaymentID:      refund.PaymentID,
+			OrderID:        refund.OrderID,
+			UserID:         order.UserID,
+			StripeRefundID: refund.StripeRefundID,
+			RefundedAmount: refund.RefundAmount,
+		},
+	)
+	if err != nil {
+		return result, err
+	}
+
+	result.AlreadyCompleted =
+		alreadyOrderCompleted
 
 	return result, nil
 }
@@ -535,7 +572,8 @@ func (uc *OpenedReturnReceiptUsecase) validateConfigured() error {
 		uc.orderService == nil ||
 		uc.inquiryRepo == nil ||
 		uc.inquiryResolver == nil ||
-		uc.itemRefundService == nil {
+		uc.itemRefundService == nil ||
+		uc.refundCompletionNotifier == nil {
 		return ErrOpenedReturnReceiptUsecaseNotConfigured
 	}
 

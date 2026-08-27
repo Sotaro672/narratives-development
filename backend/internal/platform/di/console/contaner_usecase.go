@@ -704,28 +704,6 @@ func buildUsecases(
 		return nil, err
 	}
 
-	// ReturnReceiptUsecase は未開封返品受領の orchestration を担当します。
-	//
-	// item-level partial refund は既存 RefundUsecase の full Payment refund と
-	// 責務が異なるため、ItemRefundUsecase を明示的に注入します。
-	returnReceiptUC := uc.NewReturnReceiptUsecase(
-		orderUC,
-		r.inquiryRepo,
-		inquiryUC,
-		itemRefundUC,
-	)
-
-	// OpenedReturnReceiptUsecase は開封後返品受領の orchestration を担当します。
-	//
-	// 返金額そのものは frontend から受け取らず、選択された refund policy と
-	// Order snapshot から ItemRefundUsecase が権威的に算出します。
-	openedReturnReceiptUC := uc.NewOpenedReturnReceiptUsecase(
-		orderUC,
-		r.inquiryRepo,
-		inquiryUC,
-		itemRefundUC,
-	)
-
 	if paymentUC == nil {
 		_ = listSaveOperationRetryQueue.Close()
 		_ = listSaveOperationStorage.Close()
@@ -992,6 +970,32 @@ func buildUsecases(
 			refundCompletionNotificationMailer,
 			refundCompletionNotificationQueue,
 		)
+
+	// ReturnReceiptUsecase は未開封返品受領の orchestration を担当します。
+	//
+	// item-level partial refund は既存 RefundUsecase の full Payment refund と
+	// 責務が異なるため、ItemRefundUsecase を明示的に注入します。
+	returnReceiptUC := uc.NewReturnReceiptUsecase(
+		orderUC,
+		r.inquiryRepo,
+		inquiryUC,
+		itemRefundUC,
+	).WithRefundCompletionNotifier(
+		refundCompletionNotificationUC,
+	)
+
+	// OpenedReturnReceiptUsecase は開封後返品受領の orchestration を担当します。
+	//
+	// 返金額そのものは frontend から受け取らず、選択された refund policy と
+	// Order snapshot から ItemRefundUsecase が権威的に算出します。
+	openedReturnReceiptUC := uc.NewOpenedReturnReceiptUsecase(
+		orderUC,
+		r.inquiryRepo,
+		inquiryUC,
+		itemRefundUC,
+	).WithRefundCompletionNotifier(
+		refundCompletionNotificationUC,
+	)
 
 	memberUC := uc.NewMemberUsecase(r.memberRepo)
 

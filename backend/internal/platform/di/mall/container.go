@@ -28,6 +28,7 @@ import (
 
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
+	refunddom "narratives/internal/domain/refund"
 	resaledom "narratives/internal/domain/resale"
 	settlementdom "narratives/internal/domain/settlement"
 	tokenblueprintreview "narratives/internal/domain/tokenBlueprint_review"
@@ -67,6 +68,8 @@ type Container struct {
 	PaymentUC                      *usecase.PaymentUsecase
 	SettlementUC                   *usecase.SettlementUsecase
 	RefundUC                       *usecase.RefundUsecase
+	ItemRefundUC                   *usecase.ItemRefundUsecase
+	RefundRepo                     refunddom.RepositoryPort
 	RefundCompletionNotificationUC usecase.RefundCompletionNotificationUsecasePort
 	OrderUC                        *usecase.OrderUsecase
 	InquiryUC                      *usecase.InquiryUsecase
@@ -190,7 +193,10 @@ func NewContainer(
 	cartRepo := outfs.NewCartRepositoryFS(fsClient)
 	paymentRepo := outfs.NewPaymentRepositoryFS(fsClient)
 	settlementRepo := outfs.NewSettlementRepositoryFS(fsClient)
+	refundRepo := outfs.NewRefundRepositoryFS(fsClient)
 	orderRepo := outfs.NewOrderRepositoryFS(fsClient)
+
+	c.RefundRepo = refundRepo
 
 	// The projection repository is shared by PreviewQuery and TransferUsecase.
 	orderTransferItemRepo := outfs.NewOrderRepoForTransferFS(fsClient)
@@ -394,6 +400,10 @@ func NewContainer(
 		},
 	)
 
+	var itemRefundPlatformFeeCalculator settlementdom.PlatformFeeCalculator
+	var itemRefundStripeRefundGateway usecase.StripeRefundGateway
+	var itemRefundStripeTransferReversalGateway usecase.StripeTransferReversalGateway
+
 	{
 		stripeSecretKey, err :=
 			infra.AccessSecretVersion(
@@ -469,6 +479,8 @@ func NewContainer(
 			)
 		}
 
+		itemRefundPlatformFeeCalculator = platformFeeCalculator
+
 		calculator := settlementdom.NewCalculator(
 			platformFeeCalculator,
 		)
@@ -513,6 +525,8 @@ func NewContainer(
 			)
 		}
 
+		itemRefundStripeRefundGateway = stripeRefundGateway
+
 		stripeTransferReversalGateway :=
 			stripeadapter.NewTransferReversalGateway(
 				stripeSecretKey,
@@ -522,6 +536,8 @@ func NewContainer(
 				"di.mall: Stripe transfer reversal gateway is nil",
 			)
 		}
+
+		itemRefundStripeTransferReversalGateway = stripeTransferReversalGateway
 
 		c.RefundUC = usecase.NewRefundUsecase(
 			usecase.NewRefundUsecaseInput{
@@ -560,6 +576,23 @@ func NewContainer(
 			authUserReader,
 			orderCancellationMailer,
 		)
+
+	c.ItemRefundUC = usecase.NewItemRefundUsecase(
+		usecase.NewItemRefundUsecaseInput{
+			OrderReader:                   c.OrderUC,
+			PaymentReader:                 c.PaymentUC,
+			SettlementRepository:          settlementRepo,
+			RefundRepository:              refundRepo,
+			PlatformFeeCalculator:         itemRefundPlatformFeeCalculator,
+			StripeRefundGateway:           itemRefundStripeRefundGateway,
+			StripeTransferReversalGateway: itemRefundStripeTransferReversalGateway,
+		},
+	)
+	if c.ItemRefundUC == nil {
+		return nil, errors.New(
+			"di.mall: item refund usecase is nil",
+		)
+	}
 
 	c.InquiryUC = usecase.NewInquiryUsecase(
 		inquiryRepo,

@@ -459,6 +459,8 @@ func Register(mux *http.ServeMux, cont *Container) {
 				cont.OrderUC,
 				cont.SettlementUC,
 				cont.RefundUC,
+				cont.ItemRefundUC,
+				cont.RefundRepo,
 				cont.RefundCompletionNotificationUC,
 				secret,
 			)

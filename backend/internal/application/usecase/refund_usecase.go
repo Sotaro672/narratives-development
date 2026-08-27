@@ -71,6 +71,7 @@ type CreateStripeRefundInput struct {
 	Amount         int
 	IdempotencyKey string
 	PaymentID      string
+	RefundID       string
 }
 
 type CreateStripeRefundResult struct {
