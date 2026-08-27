@@ -6,7 +6,6 @@ import (
 	"errors"
 
 	listcloudtasksadp "narratives/internal/adapters/out/cloudtasks"
-	firebaseadp "narratives/internal/adapters/out/firebase"
 	query "narratives/internal/application/query/console"
 	inspectorquery "narratives/internal/application/query/inspector"
 	sharedquery "narratives/internal/application/query/shared"
@@ -24,95 +23,89 @@ import (
 )
 
 type Container struct {
-	Infra                              *shared.Infra
-	MemberRepo                         memdom.Repository
-	BrandRepo                          branddom.Repository
-	CompanyRepo                        companydom.Repository
-	TokenBlueprintRepo                 tokenBlueprint.RepositoryPort
-	TokenBlueprintReviewRepo           tbReview.RepositoryPort
-	ProductBlueprintRepo               pbdomain.Repository
-	ProductBlueprintReviewRepo         pbReview.Repository
-	AvatarRepo                         avatar.Repository
-	MemberService                      *memdom.Service
-	AccountUC                          *uc.AccountUsecase
-	AnnouncementUC                     *uc.AnnouncementUsecase
-	AvatarUC                           *uc.AvatarUsecase
-	PaymentMethodUC                    *uc.PaymentMethodUsecase
-	BrandUC                            *uc.BrandUsecase
-	CompanyUC                          *uc.CompanyUsecase
-	CompanyQuery                       *query.CompanyQuery
-	InquiryUC                          *uc.InquiryUsecase
-	ReturnReceiptUC                    *uc.ReturnReceiptUsecase
-	OpenedReturnReceiptUC              *uc.OpenedReturnReceiptUsecase
-	InventoryUC                        *uc.InventoryUsecase
-	ListUC                             *uc.ListUsecase
-	ListSaveOperationUC                *uc.ListSaveOperationUsecase
-	MemberUC                           *uc.MemberUsecase
-	ModelUC                            *uc.ModelUsecase
-	OrderUC                            *uc.OrderUsecase
-	OrderDispatchNotificationUC        uc.OrderDispatchNotificationUsecasePort
-	RefundCompletionNotificationUC     uc.RefundCompletionNotificationUsecasePort
-	PaymentUC                          *uc.PaymentUsecase
-	PaymentFlowUC                      *uc.PaymentFlowUsecase
-	SettlementUC                       *uc.SettlementUsecase
-	RefundUC                           *uc.RefundUsecase
-	PermissionUC                       *uc.PermissionUsecase
-	PrintUC                            *uc.PrintUsecase
-	ProductionUC                       *uc.ProductionUsecase
-	ProductBlueprintUC                 *uc.ProductBlueprintUsecase
-	ProductBlueprintCategoryUC         *uc.ProductBlueprintCategoryUsecase
-	ShippingAddressUC                  *uc.ShippingAddressUsecase
-	TransportationUC                   *uc.TransportationUsecase
-	TokenUC                            *uc.TokenUsecase
-	TokenBlueprintUC                   *uc.TokenBlueprintUsecase
-	TokenBlueprintCreateOperationUC    *uc.TokenBlueprintCreateOperationUsecase
-	UserUC                             *uc.UserUsecase
-	WalletUC                           *uc.WalletUsecase
-	CartUC                             *uc.CartUsecase
-	CompanyProductionQueryService      *query.CompanyProductionQueryService
-	MintRequestQueryService            *query.MintRequestQueryService
-	MintFundingEstimateQuery           *query.MintFundingEstimateQuery
-	BrandManagementQuery               *query.BrandManagementQuery
-	BrandDetailQuery                   *query.BrandDetailQuery
-	ProductBlueprintManagementQuery    *query.ProductBlueprintManagementQuery
-	ProductBlueprintDetailQuery        *query.ProductBlueprintDetailQuery
-	TokenBlueprintManagementQuery      *query.TokenBlueprintManagementQuery
-	TokenBlueprintDetailQuery          *query.TokenBlueprintDetailQuery
-	LocationManagementQuery            *query.LocationManagementQuery
-	LocationDetailQuery                *query.LocationDetailQuery
-	TransportationManagementQuery      *query.TransportationManagementQuery
-	TransportationDetailQuery          *query.TransportationDetailQuery
-	InquiryManagementQuery             *query.InquiryManagementQuery
-	InquiryDetailQuery                 *query.InquiryDetailQuery
-	InventoryManagementQuery           *query.InventoryManagementQuery
-	InventoryDetailQuery               *query.InventoryDetailQuery
-	ListCreateQuery                    *query.ListCreateQuery
-	SalesQuery                         *query.SalesQuery
-	AnnouncementManagementQuery        *query.AnnouncementManagementQuery
-	AnnouncementDetailQuery            *query.AnnouncementDetailQuery
-	PrintQueryService                  *query.PrintQueryService
-	ListManagementQuery                *query.ListManagementQuery
-	ListDetailQuery                    *query.ListDetailQuery
-	OrderManagementQuery               *query.OrderManagementQuery
-	OrderDetailQuery                   *query.OrderDetailQuery
-	TransactionManagementQuery         *query.TransactionManagementQuery
-	InspectorQuery                     *inspectorquery.QueryService
-	InventoryBlueprintResolver         query.InventoryBlueprintResolver
-	OwnerResolveQ                      *sharedquery.OwnerResolveQuery
-	InspectionUC                       *uc.InspectionUsecase
-	MintUC                             *uc.MintUsecase
-	InvitationUC                       uc.InvitationUsecasePort
-	InvitationDeliveryUC               uc.InvitationDeliveryUsecasePort
-	AuthBootstrap                      *uc.BootstrapService
-	NameResolver                       *resolver.NameResolver
-	listSaveOperationStorage           *firebaseadp.ListSaveOperationStorage
-	tokenBlueprintAssetStorage         *firebaseadp.TokenBlueprintAssetStorage
-	listSaveOperationRetryQueue        *listcloudtasksadp.ListSaveOperationQueue
-	tokenBlueprintCreateOperationQueue *listcloudtasksadp.TokenBlueprintCreateOperationQueue
-	invitationDeliveryQueue            *listcloudtasksadp.InvitationDeliveryQueue
-	orderDispatchNotificationQueue     *listcloudtasksadp.OrderDispatchNotificationQueue
-	refundCompletionNotificationQueue  *listcloudtasksadp.RefundCompletionNotificationQueue
-	settlementQueue                    *listcloudtasksadp.SettlementQueue
+	Infra                           *shared.Infra
+	resources                       *containerResources
+	MemberRepo                      memdom.Repository
+	BrandRepo                       branddom.Repository
+	CompanyRepo                     companydom.Repository
+	TokenBlueprintRepo              tokenBlueprint.RepositoryPort
+	TokenBlueprintReviewRepo        tbReview.RepositoryPort
+	ProductBlueprintRepo            pbdomain.Repository
+	ProductBlueprintReviewRepo      pbReview.Repository
+	AvatarRepo                      avatar.Repository
+	MemberService                   *memdom.Service
+	AccountUC                       *uc.AccountUsecase
+	AnnouncementUC                  *uc.AnnouncementUsecase
+	AvatarUC                        *uc.AvatarUsecase
+	PaymentMethodUC                 *uc.PaymentMethodUsecase
+	BrandUC                         *uc.BrandUsecase
+	CompanyUC                       *uc.CompanyUsecase
+	CompanyQuery                    *query.CompanyQuery
+	InquiryUC                       *uc.InquiryUsecase
+	ReturnReceiptUC                 *uc.ReturnReceiptUsecase
+	OpenedReturnReceiptUC           *uc.OpenedReturnReceiptUsecase
+	InventoryUC                     *uc.InventoryUsecase
+	ListUC                          *uc.ListUsecase
+	ListSaveOperationUC             *uc.ListSaveOperationUsecase
+	MemberUC                        *uc.MemberUsecase
+	ModelUC                         *uc.ModelUsecase
+	OrderUC                         *uc.OrderUsecase
+	OrderDispatchNotificationUC     uc.OrderDispatchNotificationUsecasePort
+	RefundCompletionNotificationUC  uc.RefundCompletionNotificationUsecasePort
+	PaymentUC                       *uc.PaymentUsecase
+	PaymentFlowUC                   *uc.PaymentFlowUsecase
+	SettlementUC                    *uc.SettlementUsecase
+	SettlementQueue                 uc.SettlementTransferQueue
+	RefundUC                        *uc.RefundUsecase
+	PermissionUC                    *uc.PermissionUsecase
+	PrintUC                         *uc.PrintUsecase
+	ProductionUC                    *uc.ProductionUsecase
+	ProductBlueprintUC              *uc.ProductBlueprintUsecase
+	ProductBlueprintCategoryUC      *uc.ProductBlueprintCategoryUsecase
+	ShippingAddressUC               *uc.ShippingAddressUsecase
+	TransportationUC                *uc.TransportationUsecase
+	TokenUC                         *uc.TokenUsecase
+	TokenBlueprintUC                *uc.TokenBlueprintUsecase
+	TokenBlueprintCreateOperationUC *uc.TokenBlueprintCreateOperationUsecase
+	UserUC                          *uc.UserUsecase
+	WalletUC                        *uc.WalletUsecase
+	CartUC                          *uc.CartUsecase
+	CompanyProductionQueryService   *query.CompanyProductionQueryService
+	MintRequestQueryService         *query.MintRequestQueryService
+	MintFundingEstimateQuery        *query.MintFundingEstimateQuery
+	BrandManagementQuery            *query.BrandManagementQuery
+	BrandDetailQuery                *query.BrandDetailQuery
+	ProductBlueprintManagementQuery *query.ProductBlueprintManagementQuery
+	ProductBlueprintDetailQuery     *query.ProductBlueprintDetailQuery
+	TokenBlueprintManagementQuery   *query.TokenBlueprintManagementQuery
+	TokenBlueprintDetailQuery       *query.TokenBlueprintDetailQuery
+	LocationManagementQuery         *query.LocationManagementQuery
+	LocationDetailQuery             *query.LocationDetailQuery
+	TransportationManagementQuery   *query.TransportationManagementQuery
+	TransportationDetailQuery       *query.TransportationDetailQuery
+	InquiryManagementQuery          *query.InquiryManagementQuery
+	InquiryDetailQuery              *query.InquiryDetailQuery
+	InventoryManagementQuery        *query.InventoryManagementQuery
+	InventoryDetailQuery            *query.InventoryDetailQuery
+	ListCreateQuery                 *query.ListCreateQuery
+	SalesQuery                      *query.SalesQuery
+	AnnouncementManagementQuery     *query.AnnouncementManagementQuery
+	AnnouncementDetailQuery         *query.AnnouncementDetailQuery
+	PrintQueryService               *query.PrintQueryService
+	ListManagementQuery             *query.ListManagementQuery
+	ListDetailQuery                 *query.ListDetailQuery
+	OrderManagementQuery            *query.OrderManagementQuery
+	OrderDetailQuery                *query.OrderDetailQuery
+	TransactionManagementQuery      *query.TransactionManagementQuery
+	InspectorQuery                  *inspectorquery.QueryService
+	InventoryBlueprintResolver      query.InventoryBlueprintResolver
+	OwnerResolveQ                   *sharedquery.OwnerResolveQuery
+	InspectionUC                    *uc.InspectionUsecase
+	MintUC                          *uc.MintUsecase
+	InvitationUC                    uc.InvitationUsecasePort
+	InvitationDeliveryUC            uc.InvitationDeliveryUsecasePort
+	AuthBootstrap                   *uc.BootstrapService
+	NameResolver                    *resolver.NameResolver
 }
 
 func NewContainer(
@@ -122,6 +115,9 @@ func NewContainer(
 	clients, err := ensureClients(ctx, infra)
 	if err != nil {
 		return nil, err
+	}
+	if clients == nil || clients.infra == nil {
+		return nil, errors.New("di.console: clients/infra is nil")
 	}
 
 	repos := buildRepos(clients)
@@ -138,61 +134,24 @@ func NewContainer(
 	if err != nil {
 		return nil, err
 	}
+	if u == nil {
+		return nil, errors.New("di.console: usecases is nil")
+	}
+	if u.resources == nil {
+		return nil, errors.New("di.console: container resources is nil")
+	}
+	resources := u.resources
 
-	settlementQueue, err :=
-		listcloudtasksadp.NewSettlementQueueFromEnv(
-			ctx,
-		)
+	settlementQueue, err := listcloudtasksadp.NewSettlementQueueFromEnv(ctx)
 	if err != nil {
-		var refundCompletionNotificationQueueErr error
-		if u != nil && u.refundCompletionNotificationQueue != nil {
-			refundCompletionNotificationQueueErr =
-				u.refundCompletionNotificationQueue.Close()
-		}
-
-		var orderDispatchNotificationQueueErr error
-		if u != nil && u.orderDispatchNotificationQueue != nil {
-			orderDispatchNotificationQueueErr =
-				u.orderDispatchNotificationQueue.Close()
-		}
-
-		var invitationQueueErr error
-		if u != nil && u.invitationDeliveryQueue != nil {
-			invitationQueueErr = u.invitationDeliveryQueue.Close()
-		}
-
-		var tokenBlueprintCreateOperationQueueErr error
-		if u != nil && u.tokenBlueprintCreateOperationQueue != nil {
-			tokenBlueprintCreateOperationQueueErr =
-				u.tokenBlueprintCreateOperationQueue.Close()
-		}
-
-		var listQueueErr error
-		if u != nil && u.listSaveOperationRetryQueue != nil {
-			listQueueErr = u.listSaveOperationRetryQueue.Close()
-		}
-
-		var tokenBlueprintStorageErr error
-		if u != nil && u.tokenBlueprintAssetStorage != nil {
-			tokenBlueprintStorageErr = u.tokenBlueprintAssetStorage.Close()
-		}
-
-		var storageErr error
-		if u != nil && u.listSaveOperationStorage != nil {
-			storageErr = u.listSaveOperationStorage.Close()
-		}
-
-		return nil, errors.Join(
-			err,
-			refundCompletionNotificationQueueErr,
-			orderDispatchNotificationQueueErr,
-			invitationQueueErr,
-			tokenBlueprintCreateOperationQueueErr,
-			listQueueErr,
-			tokenBlueprintStorageErr,
-			storageErr,
+		return nil, resources.CloseWithError(err)
+	}
+	if settlementQueue == nil {
+		return nil, resources.CloseWithError(
+			errors.New("di.console: settlement queue is nil"),
 		)
 	}
+	resources.Add("settlement queue", settlementQueue)
 
 	q := buildQueries(
 		clients.infra,
@@ -201,63 +160,6 @@ func NewContainer(
 		u,
 		services,
 	)
-
-	if clients == nil || clients.infra == nil {
-		var settlementQueueErr error
-		if settlementQueue != nil {
-			settlementQueueErr = settlementQueue.Close()
-		}
-
-		var refundCompletionNotificationQueueErr error
-		if u != nil && u.refundCompletionNotificationQueue != nil {
-			refundCompletionNotificationQueueErr =
-				u.refundCompletionNotificationQueue.Close()
-		}
-
-		var orderDispatchNotificationQueueErr error
-		if u != nil && u.orderDispatchNotificationQueue != nil {
-			orderDispatchNotificationQueueErr =
-				u.orderDispatchNotificationQueue.Close()
-		}
-
-		var invitationQueueErr error
-		if u != nil && u.invitationDeliveryQueue != nil {
-			invitationQueueErr = u.invitationDeliveryQueue.Close()
-		}
-
-		var tokenBlueprintCreateOperationQueueErr error
-		if u != nil && u.tokenBlueprintCreateOperationQueue != nil {
-			tokenBlueprintCreateOperationQueueErr =
-				u.tokenBlueprintCreateOperationQueue.Close()
-		}
-
-		var listQueueErr error
-		if u != nil && u.listSaveOperationRetryQueue != nil {
-			listQueueErr = u.listSaveOperationRetryQueue.Close()
-		}
-
-		var tokenBlueprintStorageErr error
-		if u != nil && u.tokenBlueprintAssetStorage != nil {
-			tokenBlueprintStorageErr = u.tokenBlueprintAssetStorage.Close()
-		}
-
-		var storageErr error
-		if u != nil && u.listSaveOperationStorage != nil {
-			storageErr = u.listSaveOperationStorage.Close()
-		}
-
-		return nil, errors.Join(
-			errors.New("clients/infra is nil"),
-			settlementQueueErr,
-			refundCompletionNotificationQueueErr,
-			orderDispatchNotificationQueueErr,
-			invitationQueueErr,
-			tokenBlueprintCreateOperationQueueErr,
-			listQueueErr,
-			tokenBlueprintStorageErr,
-			storageErr,
-		)
-	}
 
 	var invBlueprint query.InventoryBlueprintResolver
 	if repos.inventoryRepo != nil {
@@ -294,95 +196,89 @@ func NewContainer(
 	)
 
 	return &Container{
-		Infra:                              clients.infra,
-		MemberRepo:                         repos.memberRepo,
-		BrandRepo:                          repos.brandRepo,
-		CompanyRepo:                        repos.companyRepo,
-		TokenBlueprintRepo:                 repos.tokenBlueprintRepo,
-		TokenBlueprintReviewRepo:           repos.tokenBlueprintReviewRepo,
-		ProductBlueprintRepo:               repos.productBlueprintRepo,
-		ProductBlueprintReviewRepo:         repos.productBlueprintReviewRepo,
-		AvatarRepo:                         repos.avatarRepo,
-		MemberService:                      services.memberSvc,
-		AccountUC:                          u.accountUC,
-		AnnouncementUC:                     u.announcementUC,
-		AvatarUC:                           u.avatarUC,
-		PaymentMethodUC:                    u.paymentMethodUC,
-		BrandUC:                            u.brandUC,
-		CompanyUC:                          u.companyUC,
-		CompanyQuery:                       q.companyQuery,
-		InquiryUC:                          u.inquiryUC,
-		ReturnReceiptUC:                    u.returnReceiptUC,
-		OpenedReturnReceiptUC:              u.openedReturnReceiptUC,
-		InventoryUC:                        u.inventoryUC,
-		ListUC:                             u.listUC,
-		ListSaveOperationUC:                u.listSaveOperationUC,
-		MemberUC:                           u.memberUC,
-		ModelUC:                            u.modelUC,
-		OrderUC:                            u.orderUC,
-		OrderDispatchNotificationUC:        u.orderDispatchNotificationUC,
-		RefundCompletionNotificationUC:     u.refundCompletionNotificationUC,
-		PaymentUC:                          u.paymentUC,
-		PaymentFlowUC:                      u.paymentFlowUC,
-		SettlementUC:                       u.settlementUC,
-		RefundUC:                           u.refundUC,
-		PermissionUC:                       u.permissionUC,
-		PrintUC:                            u.printUC,
-		ProductionUC:                       u.productionUC,
-		ProductBlueprintUC:                 u.productBlueprintUC,
-		ProductBlueprintCategoryUC:         u.productBlueprintCategoryUC,
-		ShippingAddressUC:                  u.shippingAddressUC,
-		TransportationUC:                   u.transportationUC,
-		TokenUC:                            u.tokenUC,
-		TokenBlueprintUC:                   u.tokenBlueprintUC,
-		TokenBlueprintCreateOperationUC:    u.tokenBlueprintCreateOperationUC,
-		UserUC:                             u.userUC,
-		WalletUC:                           u.walletUC,
-		CartUC:                             u.cartUC,
-		CompanyProductionQueryService:      q.companyProductionQueryService,
-		MintRequestQueryService:            q.mintRequestQueryService,
-		MintFundingEstimateQuery:           q.mintFundingEstimateQuery,
-		BrandManagementQuery:               q.brandManagementQuery,
-		BrandDetailQuery:                   q.brandDetailQuery,
-		ProductBlueprintManagementQuery:    q.productBlueprintManagementQuery,
-		ProductBlueprintDetailQuery:        q.productBlueprintDetailQuery,
-		TokenBlueprintManagementQuery:      q.tokenBlueprintManagementQuery,
-		TokenBlueprintDetailQuery:          q.tokenBlueprintDetailQuery,
-		LocationManagementQuery:            q.locationManagementQuery,
-		LocationDetailQuery:                q.locationDetailQuery,
-		TransportationManagementQuery:      q.transportationManagementQuery,
-		TransportationDetailQuery:          q.transportationDetailQuery,
-		InquiryManagementQuery:             q.inquiryManagementQuery,
-		InquiryDetailQuery:                 q.inquiryDetailQuery,
-		InventoryManagementQuery:           q.inventoryManagementQuery,
-		InventoryDetailQuery:               q.inventoryDetailQuery,
-		ListCreateQuery:                    q.listCreateQuery,
-		SalesQuery:                         q.salesQuery,
-		AnnouncementManagementQuery:        announcementManagementQuery,
-		AnnouncementDetailQuery:            announcementDetailQuery,
-		PrintQueryService:                  q.printQueryService,
-		ListManagementQuery:                q.listManagementQuery,
-		ListDetailQuery:                    q.listDetailQuery,
-		OrderManagementQuery:               orderMgmtQ,
-		OrderDetailQuery:                   q.orderDetailQuery,
-		TransactionManagementQuery:         q.transactionManagementQuery,
-		InspectorQuery:                     q.inspectorQuery,
-		InventoryBlueprintResolver:         invBlueprint,
-		OwnerResolveQ:                      res.ownerResolveQuery,
-		InspectionUC:                       u.inspectionUC,
-		MintUC:                             u.mintUC,
-		InvitationUC:                       u.invitationUC,
-		InvitationDeliveryUC:               u.invitationDeliveryUC,
-		AuthBootstrap:                      u.authBootstrapSvc,
-		NameResolver:                       res.nameResolver,
-		listSaveOperationStorage:           u.listSaveOperationStorage,
-		tokenBlueprintAssetStorage:         u.tokenBlueprintAssetStorage,
-		listSaveOperationRetryQueue:        u.listSaveOperationRetryQueue,
-		tokenBlueprintCreateOperationQueue: u.tokenBlueprintCreateOperationQueue,
-		invitationDeliveryQueue:            u.invitationDeliveryQueue,
-		orderDispatchNotificationQueue:     u.orderDispatchNotificationQueue,
-		refundCompletionNotificationQueue:  u.refundCompletionNotificationQueue,
-		settlementQueue:                    settlementQueue,
+		Infra:                           clients.infra,
+		resources:                       resources,
+		MemberRepo:                      repos.memberRepo,
+		BrandRepo:                       repos.brandRepo,
+		CompanyRepo:                     repos.companyRepo,
+		TokenBlueprintRepo:              repos.tokenBlueprintRepo,
+		TokenBlueprintReviewRepo:        repos.tokenBlueprintReviewRepo,
+		ProductBlueprintRepo:            repos.productBlueprintRepo,
+		ProductBlueprintReviewRepo:      repos.productBlueprintReviewRepo,
+		AvatarRepo:                      repos.avatarRepo,
+		MemberService:                   services.memberSvc,
+		AccountUC:                       u.accountUC,
+		AnnouncementUC:                  u.announcementUC,
+		AvatarUC:                        u.avatarUC,
+		PaymentMethodUC:                 u.paymentMethodUC,
+		BrandUC:                         u.brandUC,
+		CompanyUC:                       u.companyUC,
+		CompanyQuery:                    q.companyQuery,
+		InquiryUC:                       u.inquiryUC,
+		ReturnReceiptUC:                 u.returnReceiptUC,
+		OpenedReturnReceiptUC:           u.openedReturnReceiptUC,
+		InventoryUC:                     u.inventoryUC,
+		ListUC:                          u.listUC,
+		ListSaveOperationUC:             u.listSaveOperationUC,
+		MemberUC:                        u.memberUC,
+		ModelUC:                         u.modelUC,
+		OrderUC:                         u.orderUC,
+		OrderDispatchNotificationUC:     u.orderDispatchNotificationUC,
+		RefundCompletionNotificationUC:  u.refundCompletionNotificationUC,
+		PaymentUC:                       u.paymentUC,
+		PaymentFlowUC:                   u.paymentFlowUC,
+		SettlementUC:                    u.settlementUC,
+		SettlementQueue:                 settlementQueue,
+		RefundUC:                        u.refundUC,
+		PermissionUC:                    u.permissionUC,
+		PrintUC:                         u.printUC,
+		ProductionUC:                    u.productionUC,
+		ProductBlueprintUC:              u.productBlueprintUC,
+		ProductBlueprintCategoryUC:      u.productBlueprintCategoryUC,
+		ShippingAddressUC:               u.shippingAddressUC,
+		TransportationUC:                u.transportationUC,
+		TokenUC:                         u.tokenUC,
+		TokenBlueprintUC:                u.tokenBlueprintUC,
+		TokenBlueprintCreateOperationUC: u.tokenBlueprintCreateOperationUC,
+		UserUC:                          u.userUC,
+		WalletUC:                        u.walletUC,
+		CartUC:                          u.cartUC,
+		CompanyProductionQueryService:   q.companyProductionQueryService,
+		MintRequestQueryService:         q.mintRequestQueryService,
+		MintFundingEstimateQuery:        q.mintFundingEstimateQuery,
+		BrandManagementQuery:            q.brandManagementQuery,
+		BrandDetailQuery:                q.brandDetailQuery,
+		ProductBlueprintManagementQuery: q.productBlueprintManagementQuery,
+		ProductBlueprintDetailQuery:     q.productBlueprintDetailQuery,
+		TokenBlueprintManagementQuery:   q.tokenBlueprintManagementQuery,
+		TokenBlueprintDetailQuery:       q.tokenBlueprintDetailQuery,
+		LocationManagementQuery:         q.locationManagementQuery,
+		LocationDetailQuery:             q.locationDetailQuery,
+		TransportationManagementQuery:   q.transportationManagementQuery,
+		TransportationDetailQuery:       q.transportationDetailQuery,
+		InquiryManagementQuery:          q.inquiryManagementQuery,
+		InquiryDetailQuery:              q.inquiryDetailQuery,
+		InventoryManagementQuery:        q.inventoryManagementQuery,
+		InventoryDetailQuery:            q.inventoryDetailQuery,
+		ListCreateQuery:                 q.listCreateQuery,
+		SalesQuery:                      q.salesQuery,
+		AnnouncementManagementQuery:     announcementManagementQuery,
+		AnnouncementDetailQuery:         announcementDetailQuery,
+		PrintQueryService:               q.printQueryService,
+		ListManagementQuery:             q.listManagementQuery,
+		ListDetailQuery:                 q.listDetailQuery,
+		OrderManagementQuery:            orderMgmtQ,
+		OrderDetailQuery:                q.orderDetailQuery,
+		TransactionManagementQuery:      q.transactionManagementQuery,
+		InspectorQuery:                  q.inspectorQuery,
+		InventoryBlueprintResolver:      invBlueprint,
+		OwnerResolveQ:                   res.ownerResolveQuery,
+		InspectionUC:                    u.inspectionUC,
+		MintUC:                          u.mintUC,
+		InvitationUC:                    u.invitationUC,
+		InvitationDeliveryUC:            u.invitationDeliveryUC,
+		AuthBootstrap:                   u.authBootstrapSvc,
+		NameResolver:                    res.nameResolver,
 	}, nil
 }
 
@@ -391,47 +287,9 @@ func (c *Container) Close() error {
 		return nil
 	}
 
-	var settlementQueueErr error
-	if c.settlementQueue != nil {
-		settlementQueueErr = c.settlementQueue.Close()
-	}
-
-	var refundCompletionNotificationQueueErr error
-	if c.refundCompletionNotificationQueue != nil {
-		refundCompletionNotificationQueueErr =
-			c.refundCompletionNotificationQueue.Close()
-	}
-
-	var orderDispatchNotificationQueueErr error
-	if c.orderDispatchNotificationQueue != nil {
-		orderDispatchNotificationQueueErr =
-			c.orderDispatchNotificationQueue.Close()
-	}
-
-	var invitationQueueErr error
-	if c.invitationDeliveryQueue != nil {
-		invitationQueueErr = c.invitationDeliveryQueue.Close()
-	}
-
-	var tokenBlueprintCreateOperationQueueErr error
-	if c.tokenBlueprintCreateOperationQueue != nil {
-		tokenBlueprintCreateOperationQueueErr =
-			c.tokenBlueprintCreateOperationQueue.Close()
-	}
-
-	var listQueueErr error
-	if c.listSaveOperationRetryQueue != nil {
-		listQueueErr = c.listSaveOperationRetryQueue.Close()
-	}
-
-	var tokenBlueprintStorageErr error
-	if c.tokenBlueprintAssetStorage != nil {
-		tokenBlueprintStorageErr = c.tokenBlueprintAssetStorage.Close()
-	}
-
-	var storageErr error
-	if c.listSaveOperationStorage != nil {
-		storageErr = c.listSaveOperationStorage.Close()
+	var resourcesErr error
+	if c.resources != nil {
+		resourcesErr = c.resources.Close()
 	}
 
 	var infraErr error
@@ -440,14 +298,7 @@ func (c *Container) Close() error {
 	}
 
 	return errors.Join(
-		settlementQueueErr,
-		refundCompletionNotificationQueueErr,
-		orderDispatchNotificationQueueErr,
-		invitationQueueErr,
-		tokenBlueprintCreateOperationQueueErr,
-		listQueueErr,
-		tokenBlueprintStorageErr,
-		storageErr,
+		resourcesErr,
 		infraErr,
 	)
 }

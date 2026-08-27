@@ -107,9 +107,22 @@ type OpenedReturnReceiptOrderService interface {
 // Inquiry Port
 // ============================================================
 
-// OpenedReturnReceiptInquiryResolver resolves the Inquiry after every required
-// financial operation and Order return completion have succeeded.
+// OpenedReturnReceiptInquiryResolver handles the purchaser-visible refund
+// completion reply and resolves the Inquiry after every required financial
+// operation and Order return completion have succeeded.
+//
+// EnsureReplyByMember must be idempotent for a deterministic reply ID so a
+// retry never creates duplicate refund-completion replies.
 type OpenedReturnReceiptInquiryResolver interface {
+	EnsureReplyByMember(
+		ctx context.Context,
+		replyID string,
+		inquiryID string,
+		memberID string,
+		content string,
+		images []inquirydom.ImageFile,
+	) (inquirydom.Reply, error)
+
 	ResolveByMember(
 		ctx context.Context,
 		in ResolveInquiryInput,
@@ -202,22 +215,24 @@ type OpenedReturnReceiptResult struct {
 //  7. Execute or resume opened-return financial Refund.
 //  8. Require Refund.IsFinanciallyCompleted().
 //  9. Mark the Order item return as completed.
-//  10. Resolve the Inquiry.
-//  11. Ensure the purchaser refund-completion notification delivery.
+//  10. Ensure the refund amount / breakdown reply from the company member.
+//  11. Resolve the Inquiry.
+//  12. Ensure the purchaser refund-completion notification delivery.
 //
 // Execution order:
 //
 //	Stripe purchaser Refund
 //	-> seller Transfer Reversal
 //	-> Order IsReturnCompleted
+//	-> refund completion reply
 //	-> Inquiry resolved
 //	-> refund completion notification delivery
 //
 // Order and Inquiry must never be marked complete before the financial Refund
 // aggregate is complete.
 //
-// Stripe and Firestore cannot participate in one transaction. Every financial
-// step before Order / Inquiry completion must therefore remain idempotent.
+// Stripe and Firestore cannot participate in one transaction. Every step that
+// can be retried must therefore remain idempotent.
 type OpenedReturnReceiptUsecase struct {
 	orderService OpenedReturnReceiptOrderService
 
@@ -281,6 +296,7 @@ func (uc *OpenedReturnReceiptUsecase) WithRefundCompletionNotifier(
 //
 //	Refund.IsFinanciallyCompleted() == true
 //	Order.Items[itemIndex].IsReturnCompleted == true
+//	refund completion reply exists
 //	Inquiry.Status == resolved
 func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 	ctx context.Context,
@@ -503,10 +519,45 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 
 	result.OrderCompleted = true
 
-	// Inquiry resolution is always last.
+	// Ensure the purchaser-visible refund completion reply before resolving the
+	// Inquiry.
 	//
-	// If this step fails, retrying the operation resumes from the deterministic
-	// Refund and already-completed Order item.
+	// The reply uses only authoritative values persisted in Refund. In
+	// particular, ReturnShippingAmount / ReturnShippingTaxAmount are company-side
+	// burden and are not included in the purchaser Stripe refund breakdown.
+	replyContent, err :=
+		buildRefundCompletionReplyContent(
+			refund,
+		)
+	if err != nil {
+		return result, err
+	}
+
+	// The deterministic reply ID makes this operation idempotent.
+	//
+	// If the reply was created by a previous attempt and a later operation
+	// failed, EnsureReplyByMember returns the existing matching reply rather than
+	// creating another purchaser-visible message.
+	_, err =
+		uc.inquiryResolver.EnsureReplyByMember(
+			ctx,
+			refundCompletionReplyID(
+				refund.ID,
+			),
+			inquiry.ID,
+			memberID,
+			replyContent,
+			nil,
+		)
+	if err != nil {
+		return result, err
+	}
+
+	// Inquiry resolution follows the refund completion reply.
+	//
+	// If this step fails, retrying resumes from the deterministic Refund and
+	// already-completed Order item, ensures the same deterministic reply, and
+	// retries Inquiry resolution.
 	if inquiry.Status !=
 		inquirydom.InquiryStatusResolved {
 		resolvedInquiry, err :=
@@ -541,8 +592,8 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 	// were already completed by a previous attempt.
 	//
 	// This allows a retry to repair the partial-failure case where the financial
-	// refund and business-state completion succeeded but delivery creation or
-	// Cloud Tasks enqueue did not complete.
+	// refund, Order completion, refund completion reply, and Inquiry resolution
+	// succeeded but delivery creation or Cloud Tasks enqueue did not complete.
 	_, err = uc.refundCompletionNotifier.EnsureDelivery(
 		ctx,
 		EnsureRefundCompletionNotificationInput{

@@ -126,6 +126,17 @@ type Repository interface {
 type ReplyRepository interface {
 	Create(ctx context.Context, reply Reply) (Reply, error)
 
+	// GetByID retrieves one reply by Inquiry ID and Reply ID.
+	//
+	// This is used by idempotent application flows such as refund-completion
+	// replies where the reply ID is deterministic and a retry must resolve the
+	// already-created reply instead of creating a duplicate.
+	GetByID(
+		ctx context.Context,
+		inquiryID string,
+		replyID string,
+	) (Reply, error)
+
 	ListByInquiryID(
 		ctx context.Context,
 		inquiryID string,

@@ -4,9 +4,7 @@ package console
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	listcloudtasksadp "narratives/internal/adapters/out/cloudtasks"
@@ -16,448 +14,163 @@ import (
 	mailadp "narratives/internal/adapters/out/mail"
 	stripeadapter "narratives/internal/adapters/out/stripe"
 	uc "narratives/internal/application/usecase"
-	settlementdom "narratives/internal/domain/settlement"
 	"narratives/internal/infra/arweave"
 	solanainfra "narratives/internal/infra/solana"
-)
-
-const (
-	settlementStripeSecretID = "stripe-secret-key"
-
-	settlementPlatformFeeRateEnv = "SETTLEMENT_PLATFORM_FEE_RATE"
-
-	settlementPlatformFeeBaseEnv = "SETTLEMENT_PLATFORM_FEE_BASE"
+	shared "narratives/internal/platform/di/shared"
 )
 
 type usecases struct {
-	solanaMintClient                   *solanainfra.MintClient
-	tokenUC                            *uc.TokenUsecase
-	accountUC                          *uc.AccountUsecase
-	announcementUC                     *uc.AnnouncementUsecase
-	announcementAttachmentStorage      *firebaseadp.AnnouncementAttachmentStorage
-	avatarUC                           *uc.AvatarUsecase
-	paymentMethodUC                    *uc.PaymentMethodUsecase
-	brandUC                            *uc.BrandUsecase
-	companyUC                          *uc.CompanyUsecase
-	inquiryUC                          *uc.InquiryUsecase
-	itemRefundUC                       *uc.ItemRefundUsecase
-	returnReceiptUC                    *uc.ReturnReceiptUsecase
-	openedReturnReceiptUC              *uc.OpenedReturnReceiptUsecase
-	inventoryUC                        *uc.InventoryUsecase
-	listUC                             *uc.ListUsecase
-	listSaveOperationUC                *uc.ListSaveOperationUsecase
-	listSaveOperationStorage           *firebaseadp.ListSaveOperationStorage
-	listSaveOperationRetryQueue        *listcloudtasksadp.ListSaveOperationQueue
-	memberUC                           *uc.MemberUsecase
-	modelUC                            *uc.ModelUsecase
-	orderUC                            *uc.OrderUsecase
-	orderDispatchNotificationUC        uc.OrderDispatchNotificationUsecasePort
-	orderDispatchNotificationQueue     *listcloudtasksadp.OrderDispatchNotificationQueue
-	refundCompletionNotificationUC     uc.RefundCompletionNotificationUsecasePort
-	refundCompletionNotificationQueue  *listcloudtasksadp.RefundCompletionNotificationQueue
-	paymentUC                          *uc.PaymentUsecase
-	paymentFlowUC                      *uc.PaymentFlowUsecase
-	settlementUC                       *uc.SettlementUsecase
-	refundUC                           *uc.RefundUsecase
-	permissionUC                       *uc.PermissionUsecase
-	printUC                            *uc.PrintUsecase
-	productionUC                       *uc.ProductionUsecase
-	productBlueprintUC                 *uc.ProductBlueprintUsecase
-	productBlueprintCategoryUC         *uc.ProductBlueprintCategoryUsecase
-	inspectionUC                       *uc.InspectionUsecase
-	mintUC                             *uc.MintUsecase
-	shippingAddressUC                  *uc.ShippingAddressUsecase
-	transportationUC                   *uc.TransportationUsecase
-	tokenBlueprintUC                   *uc.TokenBlueprintUsecase
-	tokenBlueprintAssetStorage         *firebaseadp.TokenBlueprintAssetStorage
-	tokenBlueprintCreateOperationUC    *uc.TokenBlueprintCreateOperationUsecase
-	tokenBlueprintCreateOperationQueue *listcloudtasksadp.TokenBlueprintCreateOperationQueue
-	tokenBlueprintReviewUC             *uc.TokenBlueprintReviewUsecase
-	productBlueprintReviewUC           *uc.ProductBlueprintReviewUsecase
-	userUC                             *uc.UserUsecase
-	walletUC                           *uc.WalletUsecase
-	cartUC                             *uc.CartUsecase
-	invitationUC                       uc.InvitationUsecasePort
-	invitationDeliveryUC               uc.InvitationDeliveryUsecasePort
-	invitationDeliveryQueue            *listcloudtasksadp.InvitationDeliveryQueue
-	authBootstrapSvc                   *uc.BootstrapService
+	resources                       *containerResources
+	solanaMintClient                *solanainfra.MintClient
+	tokenUC                         *uc.TokenUsecase
+	accountUC                       *uc.AccountUsecase
+	announcementUC                  *uc.AnnouncementUsecase
+	avatarUC                        *uc.AvatarUsecase
+	paymentMethodUC                 *uc.PaymentMethodUsecase
+	brandUC                         *uc.BrandUsecase
+	companyUC                       *uc.CompanyUsecase
+	inquiryUC                       *uc.InquiryUsecase
+	itemRefundUC                    *uc.ItemRefundUsecase
+	returnReceiptUC                 *uc.ReturnReceiptUsecase
+	openedReturnReceiptUC           *uc.OpenedReturnReceiptUsecase
+	inventoryUC                     *uc.InventoryUsecase
+	listUC                          *uc.ListUsecase
+	listSaveOperationUC             *uc.ListSaveOperationUsecase
+	memberUC                        *uc.MemberUsecase
+	modelUC                         *uc.ModelUsecase
+	orderUC                         *uc.OrderUsecase
+	orderDispatchNotificationUC     uc.OrderDispatchNotificationUsecasePort
+	refundCompletionNotificationUC  uc.RefundCompletionNotificationUsecasePort
+	paymentUC                       *uc.PaymentUsecase
+	paymentFlowUC                   *uc.PaymentFlowUsecase
+	settlementUC                    *uc.SettlementUsecase
+	refundUC                        *uc.RefundUsecase
+	permissionUC                    *uc.PermissionUsecase
+	printUC                         *uc.PrintUsecase
+	productionUC                    *uc.ProductionUsecase
+	productBlueprintUC              *uc.ProductBlueprintUsecase
+	productBlueprintCategoryUC      *uc.ProductBlueprintCategoryUsecase
+	inspectionUC                    *uc.InspectionUsecase
+	mintUC                          *uc.MintUsecase
+	shippingAddressUC               *uc.ShippingAddressUsecase
+	transportationUC                *uc.TransportationUsecase
+	tokenBlueprintUC                *uc.TokenBlueprintUsecase
+	tokenBlueprintCreateOperationUC *uc.TokenBlueprintCreateOperationUsecase
+	tokenBlueprintReviewUC          *uc.TokenBlueprintReviewUsecase
+	productBlueprintReviewUC        *uc.ProductBlueprintReviewUsecase
+	userUC                          *uc.UserUsecase
+	walletUC                        *uc.WalletUsecase
+	cartUC                          *uc.CartUsecase
+	invitationUC                    uc.InvitationUsecasePort
+	invitationDeliveryUC            uc.InvitationDeliveryUsecasePort
+	authBootstrapSvc                *uc.BootstrapService
 }
 
 func buildSettlementUsecase(
-	ctx context.Context,
-	c *clients,
 	r *repos,
+	dependencies *shared.SettlementDependencies,
 ) (*uc.SettlementUsecase, error) {
-	if c == nil ||
-		c.infra == nil {
-		return nil, errors.New(
-			"di.console: shared infra is nil",
-		)
+	if r == nil || r.settlementRepo == nil {
+		return nil, errors.New("di.console: settlement repository is nil")
+	}
+	if dependencies == nil {
+		return nil, errors.New("di.console: settlement dependencies are nil")
+	}
+	if dependencies.SettlementCalculator == nil {
+		return nil, errors.New("di.console: settlement calculator is nil")
+	}
+	if dependencies.StripeTransferGateway == nil {
+		return nil, errors.New("di.console: Stripe settlement transfer gateway is nil")
 	}
 
-	if r == nil ||
-		r.settlementRepo == nil {
-		return nil, errors.New(
-			"di.console: settlement repository is nil",
-		)
-	}
-
-	stripeSecretKey, err :=
-		c.infra.AccessSecretVersion(
-			ctx,
-			settlementStripeSecretID,
-		)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"di.console: load Stripe settlement secret: %w",
-			err,
-		)
-	}
-
-	stripeSecretKey = strings.TrimSpace(
-		stripeSecretKey,
-	)
-	if stripeSecretKey == "" ||
-		!strings.HasPrefix(
-			stripeSecretKey,
-			"sk_",
-		) {
-		return nil, errors.New(
-			"di.console: Stripe settlement secret is invalid",
-		)
-	}
-
-	platformFeeRateText := strings.TrimSpace(
-		os.Getenv(
-			settlementPlatformFeeRateEnv,
-		),
-	)
-	if platformFeeRateText == "" {
-		return nil, fmt.Errorf(
-			"di.console: %s is empty",
-			settlementPlatformFeeRateEnv,
-		)
-	}
-
-	platformFeeRate, err := strconv.Atoi(
-		platformFeeRateText,
-	)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"di.console: invalid %s: %w",
-			settlementPlatformFeeRateEnv,
-			err,
-		)
-	}
-
-	platformFeeBaseText := strings.TrimSpace(
-		os.Getenv(
-			settlementPlatformFeeBaseEnv,
-		),
-	)
-	if platformFeeBaseText == "" {
-		return nil, fmt.Errorf(
-			"di.console: %s is empty",
-			settlementPlatformFeeBaseEnv,
-		)
-	}
-
-	platformFeeCalculator, err :=
-		settlementdom.NewPercentagePlatformFeeCalculator(
-			platformFeeRate,
-			settlementdom.PlatformFeeBase(
-				platformFeeBaseText,
-			),
-		)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"di.console: build settlement platform fee calculator: %w",
-			err,
-		)
-	}
-
-	calculator := settlementdom.NewCalculator(
-		platformFeeCalculator,
-	)
-	if calculator == nil {
-		return nil, errors.New(
-			"di.console: settlement calculator is nil",
-		)
-	}
-
-	stripeTransferGateway :=
-		stripeadapter.NewTransferGateway(
-			stripeSecretKey,
-		)
-	if stripeTransferGateway == nil {
-		return nil, errors.New(
-			"di.console: Stripe settlement transfer gateway is nil",
-		)
-	}
-
-	settlementUC := uc.NewSettlementUsecase(
-		uc.NewSettlementUsecaseInput{
-			Repository: r.settlementRepo,
-
-			Calculator: calculator,
-
-			StripeTransferGateway: stripeTransferGateway,
-		},
-	)
+	settlementUC := uc.NewSettlementUsecase(uc.NewSettlementUsecaseInput{
+		Repository:            r.settlementRepo,
+		Calculator:            dependencies.SettlementCalculator,
+		StripeTransferGateway: dependencies.StripeTransferGateway,
+	})
 	if settlementUC == nil {
-		return nil, errors.New(
-			"di.console: settlement usecase is nil",
-		)
+		return nil, errors.New("di.console: settlement usecase is nil")
 	}
 
 	return settlementUC, nil
 }
 
 func buildRefundUsecase(
-	ctx context.Context,
-	c *clients,
 	r *repos,
 	paymentUC *uc.PaymentUsecase,
+	dependencies *shared.SettlementDependencies,
 ) (*uc.RefundUsecase, error) {
-	if c == nil ||
-		c.infra == nil {
-		return nil, errors.New(
-			"di.console: shared infra is nil",
-		)
+	if r == nil || r.settlementRepo == nil {
+		return nil, errors.New("di.console: settlement repository is nil")
 	}
-
-	if r == nil ||
-		r.settlementRepo == nil {
-		return nil, errors.New(
-			"di.console: settlement repository is nil",
-		)
-	}
-
 	if paymentUC == nil {
-		return nil, errors.New(
-			"di.console: payment usecase is nil",
-		)
+		return nil, errors.New("di.console: payment usecase is nil")
+	}
+	if dependencies == nil {
+		return nil, errors.New("di.console: settlement dependencies are nil")
+	}
+	if dependencies.StripeRefundGateway == nil {
+		return nil, errors.New("di.console: Stripe refund gateway is nil")
+	}
+	if dependencies.StripeTransferReversalGateway == nil {
+		return nil, errors.New("di.console: Stripe transfer reversal gateway is nil")
 	}
 
-	stripeSecretKey, err :=
-		c.infra.AccessSecretVersion(
-			ctx,
-			settlementStripeSecretID,
-		)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"di.console: load Stripe refund secret: %w",
-			err,
-		)
-	}
-
-	stripeSecretKey = strings.TrimSpace(
-		stripeSecretKey,
-	)
-	if stripeSecretKey == "" ||
-		!strings.HasPrefix(
-			stripeSecretKey,
-			"sk_",
-		) {
-		return nil, errors.New(
-			"di.console: Stripe refund secret is invalid",
-		)
-	}
-
-	stripeRefundGateway :=
-		stripeadapter.NewRefundGateway(
-			stripeSecretKey,
-		)
-	if stripeRefundGateway == nil {
-		return nil, errors.New(
-			"di.console: Stripe refund gateway is nil",
-		)
-	}
-
-	stripeTransferReversalGateway :=
-		stripeadapter.NewTransferReversalGateway(
-			stripeSecretKey,
-		)
-	if stripeTransferReversalGateway == nil {
-		return nil, errors.New(
-			"di.console: Stripe transfer reversal gateway is nil",
-		)
-	}
-
-	refundUC := uc.NewRefundUsecase(
-		uc.NewRefundUsecaseInput{
-			PaymentReader: paymentUC,
-
-			SettlementRepository: r.settlementRepo,
-
-			StripeRefundGateway: stripeRefundGateway,
-
-			StripeTransferReversalGateway: stripeTransferReversalGateway,
-		},
-	)
+	refundUC := uc.NewRefundUsecase(uc.NewRefundUsecaseInput{
+		PaymentReader:                 paymentUC,
+		SettlementRepository:          r.settlementRepo,
+		StripeRefundGateway:           dependencies.StripeRefundGateway,
+		StripeTransferReversalGateway: dependencies.StripeTransferReversalGateway,
+	})
 	if refundUC == nil {
-		return nil, errors.New(
-			"di.console: refund usecase is nil",
-		)
+		return nil, errors.New("di.console: refund usecase is nil")
 	}
 
 	return refundUC, nil
 }
 
 func buildItemRefundUsecase(
-	ctx context.Context,
-	c *clients,
 	r *repos,
 	orderUC *uc.OrderUsecase,
 	paymentUC *uc.PaymentUsecase,
+	dependencies *shared.SettlementDependencies,
 ) (*uc.ItemRefundUsecase, error) {
-	if c == nil ||
-		c.infra == nil {
-		return nil, errors.New(
-			"di.console: shared infra is nil",
-		)
+	if r == nil || r.settlementRepo == nil {
+		return nil, errors.New("di.console: settlement repository is nil")
 	}
-
-	if r == nil ||
-		r.settlementRepo == nil {
-		return nil, errors.New(
-			"di.console: settlement repository is nil",
-		)
-	}
-
 	if r.refundRepo == nil {
-		return nil, errors.New(
-			"di.console: refund repository is nil",
-		)
+		return nil, errors.New("di.console: refund repository is nil")
 	}
-
 	if orderUC == nil {
-		return nil, errors.New(
-			"di.console: order usecase is nil",
-		)
+		return nil, errors.New("di.console: order usecase is nil")
 	}
-
 	if paymentUC == nil {
-		return nil, errors.New(
-			"di.console: payment usecase is nil",
-		)
+		return nil, errors.New("di.console: payment usecase is nil")
+	}
+	if dependencies == nil {
+		return nil, errors.New("di.console: settlement dependencies are nil")
+	}
+	if dependencies.Calculator == nil {
+		return nil, errors.New("di.console: platform fee calculator is nil")
+	}
+	if dependencies.StripeRefundGateway == nil {
+		return nil, errors.New("di.console: Stripe item refund gateway is nil")
+	}
+	if dependencies.StripeTransferReversalGateway == nil {
+		return nil, errors.New("di.console: Stripe item transfer reversal gateway is nil")
 	}
 
-	stripeSecretKey, err :=
-		c.infra.AccessSecretVersion(
-			ctx,
-			settlementStripeSecretID,
-		)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"di.console: load Stripe item refund secret: %w",
-			err,
-		)
-	}
-
-	stripeSecretKey = strings.TrimSpace(
-		stripeSecretKey,
-	)
-	if stripeSecretKey == "" ||
-		!strings.HasPrefix(
-			stripeSecretKey,
-			"sk_",
-		) {
-		return nil, errors.New(
-			"di.console: Stripe item refund secret is invalid",
-		)
-	}
-
-	platformFeeRateText := strings.TrimSpace(
-		os.Getenv(
-			settlementPlatformFeeRateEnv,
-		),
-	)
-	if platformFeeRateText == "" {
-		return nil, fmt.Errorf(
-			"di.console: %s is empty",
-			settlementPlatformFeeRateEnv,
-		)
-	}
-
-	platformFeeRate, err := strconv.Atoi(
-		platformFeeRateText,
-	)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"di.console: invalid %s: %w",
-			settlementPlatformFeeRateEnv,
-			err,
-		)
-	}
-
-	platformFeeBaseText := strings.TrimSpace(
-		os.Getenv(
-			settlementPlatformFeeBaseEnv,
-		),
-	)
-	if platformFeeBaseText == "" {
-		return nil, fmt.Errorf(
-			"di.console: %s is empty",
-			settlementPlatformFeeBaseEnv,
-		)
-	}
-
-	platformFeeCalculator, err :=
-		settlementdom.NewPercentagePlatformFeeCalculator(
-			platformFeeRate,
-			settlementdom.PlatformFeeBase(
-				platformFeeBaseText,
-			),
-		)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"di.console: build item refund platform fee calculator: %w",
-			err,
-		)
-	}
-
-	stripeRefundGateway :=
-		stripeadapter.NewRefundGateway(
-			stripeSecretKey,
-		)
-	if stripeRefundGateway == nil {
-		return nil, errors.New(
-			"di.console: Stripe item refund gateway is nil",
-		)
-	}
-
-	stripeTransferReversalGateway :=
-		stripeadapter.NewTransferReversalGateway(
-			stripeSecretKey,
-		)
-	if stripeTransferReversalGateway == nil {
-		return nil, errors.New(
-			"di.console: Stripe item transfer reversal gateway is nil",
-		)
-	}
-
-	itemRefundUC := uc.NewItemRefundUsecase(
-		uc.NewItemRefundUsecaseInput{
-			OrderReader: orderUC,
-
-			PaymentReader: paymentUC,
-
-			SettlementRepository: r.settlementRepo,
-
-			RefundRepository: r.refundRepo,
-
-			PlatformFeeCalculator: platformFeeCalculator,
-
-			StripeRefundGateway: stripeRefundGateway,
-
-			StripeTransferReversalGateway: stripeTransferReversalGateway,
-		},
-	)
+	itemRefundUC := uc.NewItemRefundUsecase(uc.NewItemRefundUsecaseInput{
+		OrderReader:                   orderUC,
+		PaymentReader:                 paymentUC,
+		SettlementRepository:          r.settlementRepo,
+		RefundRepository:              r.refundRepo,
+		PlatformFeeCalculator:         dependencies.Calculator,
+		StripeRefundGateway:           dependencies.StripeRefundGateway,
+		StripeTransferReversalGateway: dependencies.StripeTransferReversalGateway,
+	})
 	if itemRefundUC == nil {
-		return nil, errors.New(
-			"di.console: item refund usecase is nil",
-		)
+		return nil, errors.New("di.console: item refund usecase is nil")
 	}
 
 	return itemRefundUC, nil
@@ -470,79 +183,70 @@ func buildUsecases(
 	s *services,
 	res *resolvers,
 ) (*usecases, error) {
+	if c == nil || c.infra == nil {
+		return nil, errors.New("di.console: shared infra is nil")
+	}
+	if r == nil {
+		return nil, errors.New("di.console: repositories are nil")
+	}
+	if s == nil {
+		return nil, errors.New("di.console: services are nil")
+	}
+
+	resources := newContainerResources()
+
 	solanaClient, err := solanainfra.NewMintClient(ctx)
 	if err != nil {
-		return nil, err
+		return nil, resources.CloseWithError(err)
 	}
-
 	tokenUC := uc.NewTokenUsecase(solanaClient)
-
-	if c == nil ||
-		c.infra == nil {
-		return nil, errors.New(
-			"di.console: shared infra is nil",
-		)
-	}
 
 	if c.infra.PaymentMethodGateway == nil {
 		var customerStore stripeadapter.PaymentMethodCustomerStore
 
-		if value, ok :=
-			any(r.paymentMethodRepo).(stripeadapter.PaymentMethodCustomerStore); ok {
+		if value, ok := any(r.paymentMethodRepo).(stripeadapter.PaymentMethodCustomerStore); ok {
 			customerStore = value
-		} else if value, ok :=
-			any(r.userRepo).(stripeadapter.PaymentMethodCustomerStore); ok {
+		} else if value, ok := any(r.userRepo).(stripeadapter.PaymentMethodCustomerStore); ok {
 			customerStore = value
 		}
 
 		if customerStore == nil {
-			return nil, errors.New(
+			return nil, resources.CloseWithError(errors.New(
 				"di.console: PaymentMethodCustomerStore is not implemented by current repositories",
-			)
+			))
 		}
 
-		if err :=
-			c.infra.RegisterPaymentMethodGatewayFromSecret(
-				ctx,
-				customerStore,
-			); err != nil {
-			return nil, err
+		if err := c.infra.RegisterPaymentMethodGatewayFromSecret(ctx, customerStore); err != nil {
+			return nil, resources.CloseWithError(err)
 		}
-
 		if c.infra.PaymentMethodGateway == nil {
-			return nil, errors.New(
+			return nil, resources.CloseWithError(errors.New(
 				"di.console: stripe payment method gateway is nil after registration",
-			)
+			))
 		}
 	}
 
 	if c.infra.AccountGateway == nil {
-		if err :=
-			c.infra.RegisterAccountGatewayFromSecret(
-				ctx,
-			); err != nil {
-			return nil, err
+		if err := c.infra.RegisterAccountGatewayFromSecret(ctx); err != nil {
+			return nil, resources.CloseWithError(err)
 		}
-
 		if c.infra.AccountGateway == nil {
-			return nil, errors.New(
+			return nil, resources.CloseWithError(errors.New(
 				"di.console: stripe account gateway is nil after registration",
-			)
+			))
 		}
 	}
 
-	accountUC := uc.NewAccountUsecase(
-		r.accountRepo,
-		c.infra.AccountGateway,
-	)
+	accountUC := uc.NewAccountUsecase(r.accountRepo, c.infra.AccountGateway)
 
 	announcementAvatarRepo := fsrepo.NewAnnouncementAvatarRepositoryFS(c.fsClient)
 	announcementAttachmentRepo := fsrepo.NewAnnouncementAttachmentRepositoryFS(c.fsClient)
 
 	announcementAttachmentStorage, err := firebaseadp.NewAnnouncementAttachmentStorageFromEnv(ctx)
 	if err != nil {
-		return nil, err
+		return nil, resources.CloseWithError(err)
 	}
+	resources.Add("announcement attachment storage", announcementAttachmentStorage)
 
 	announcementUC := uc.NewAnnouncementUsecase(
 		r.announcementRepo,
@@ -597,40 +301,32 @@ func buildUsecases(
 		}
 	}
 
-	paymentUC := uc.NewPaymentUsecase(
-		uc.NewPaymentUsecaseInput{
-			PaymentRepo: r.paymentRepo,
-			OrderRepo:   r.orderRepo,
-			ResaleRepo:  r.resaleRepo,
-		},
-	)
+	paymentUC := uc.NewPaymentUsecase(uc.NewPaymentUsecaseInput{
+		PaymentRepo: r.paymentRepo,
+		OrderRepo:   r.orderRepo,
+		ResaleRepo:  r.resaleRepo,
+	})
 
-	settlementUC, err := buildSettlementUsecase(
-		ctx,
-		c,
-		r,
-	)
+	settlementDependencies, err := shared.BuildSettlementDependencies(ctx, c.infra)
 	if err != nil {
-		_ = announcementAttachmentStorage.Close()
-		return nil, err
+		return nil, resources.CloseWithError(err)
 	}
 
-	refundUC, err := buildRefundUsecase(
-		ctx,
-		c,
-		r,
-		paymentUC,
-	)
+	settlementUC, err := buildSettlementUsecase(r, settlementDependencies)
 	if err != nil {
-		_ = announcementAttachmentStorage.Close()
-		return nil, err
+		return nil, resources.CloseWithError(err)
+	}
+
+	refundUC, err := buildRefundUsecase(r, paymentUC, settlementDependencies)
+	if err != nil {
+		return nil, resources.CloseWithError(err)
 	}
 
 	listSaveOperationStorage, err := firebaseadp.NewListSaveOperationStorageFromEnv(ctx)
 	if err != nil {
-		_ = announcementAttachmentStorage.Close()
-		return nil, err
+		return nil, resources.CloseWithError(err)
 	}
+	resources.Add("list save operation storage", listSaveOperationStorage)
 
 	transportationRepo := fsrepo.NewTransportationRepositoryFS(c.fsClient)
 
@@ -647,10 +343,9 @@ func buildUsecases(
 
 	listSaveOperationRetryQueue, err := listcloudtasksadp.NewListSaveOperationQueueFromEnv(ctx)
 	if err != nil {
-		_ = listSaveOperationStorage.Close()
-		_ = announcementAttachmentStorage.Close()
-		return nil, err
+		return nil, resources.CloseWithError(err)
 	}
+	resources.Add("list save operation retry queue", listSaveOperationRetryQueue)
 
 	listSaveOperationUC := uc.NewListSaveOperationUsecase(
 		uc.NewListSaveOperationUsecaseParams{
@@ -690,47 +385,23 @@ func buildUsecases(
 	)
 
 	itemRefundUC, err := buildItemRefundUsecase(
-		ctx,
-		c,
 		r,
 		orderUC,
 		paymentUC,
+		settlementDependencies,
 	)
 	if err != nil {
-		_ = listSaveOperationRetryQueue.Close()
-		_ = listSaveOperationStorage.Close()
-		_ = announcementAttachmentStorage.Close()
-		return nil, err
+		return nil, resources.CloseWithError(err)
 	}
 
 	if paymentUC == nil {
-		_ = listSaveOperationRetryQueue.Close()
-		_ = listSaveOperationStorage.Close()
-		_ = announcementAttachmentStorage.Close()
-
-		return nil, errors.New(
-			"di.console: payment usecase is nil",
-		)
+		return nil, resources.CloseWithError(errors.New("di.console: payment usecase is nil"))
 	}
-
 	if r.orderRepo == nil {
-		_ = listSaveOperationRetryQueue.Close()
-		_ = listSaveOperationStorage.Close()
-		_ = announcementAttachmentStorage.Close()
-
-		return nil, errors.New(
-			"di.console: order repository is nil",
-		)
+		return nil, resources.CloseWithError(errors.New("di.console: order repository is nil"))
 	}
-
 	if c.infra.PaymentMethodGateway == nil {
-		_ = listSaveOperationRetryQueue.Close()
-		_ = listSaveOperationStorage.Close()
-		_ = announcementAttachmentStorage.Close()
-
-		return nil, errors.New(
-			"di.console: payment method gateway is nil",
-		)
+		return nil, resources.CloseWithError(errors.New("di.console: payment method gateway is nil"))
 	}
 
 	paymentFlowUC := uc.NewPaymentFlowUsecase(
@@ -738,15 +409,8 @@ func buildUsecases(
 		r.orderRepo,
 		c.infra.PaymentMethodGateway,
 	)
-
 	if paymentFlowUC == nil {
-		_ = listSaveOperationRetryQueue.Close()
-		_ = listSaveOperationStorage.Close()
-		_ = announcementAttachmentStorage.Close()
-
-		return nil, errors.New(
-			"di.console: payment flow usecase is nil",
-		)
+		return nil, resources.CloseWithError(errors.New("di.console: payment flow usecase is nil"))
 	}
 
 	permissionUC := uc.NewPermissionUsecase(r.permissionRepo)
@@ -795,17 +459,12 @@ func buildUsecases(
 	// application startup 自体を失敗させます。
 	mintTaskQueue, err := cloudtasksadp.NewMintTaskQueueFromEnv(ctx)
 	if err != nil {
-		_ = listSaveOperationStorage.Close()
-		_ = announcementAttachmentStorage.Close()
-		return nil, err
+		return nil, resources.CloseWithError(err)
 	}
-
 	if mintTaskQueue == nil {
-		_ = listSaveOperationStorage.Close()
-		_ = announcementAttachmentStorage.Close()
-		return nil, errors.New("mint task queue is nil")
+		return nil, resources.CloseWithError(errors.New("di.console: mint task queue is nil"))
 	}
-
+	resources.Add("mint task queue", mintTaskQueue)
 	mintUC.SetMintTaskEnqueuer(mintTaskQueue)
 
 	baseURL := os.Getenv("ARWEAVE_BASE_URL")
@@ -816,10 +475,9 @@ func buildUsecases(
 
 	tokenBlueprintAssetStorage, err := firebaseadp.NewTokenBlueprintAssetStorageFromEnv(ctx)
 	if err != nil {
-		_ = listSaveOperationStorage.Close()
-		_ = announcementAttachmentStorage.Close()
-		return nil, err
+		return nil, resources.CloseWithError(err)
 	}
+	resources.Add("token blueprint asset storage", tokenBlueprintAssetStorage)
 
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
 		r.tokenBlueprintRepo,
@@ -829,16 +487,11 @@ func buildUsecases(
 	)
 
 	tokenBlueprintCreateOperationQueue, err :=
-		listcloudtasksadp.NewTokenBlueprintCreateOperationQueueFromEnv(
-			ctx,
-		)
+		listcloudtasksadp.NewTokenBlueprintCreateOperationQueueFromEnv(ctx)
 	if err != nil {
-		_ = tokenBlueprintAssetStorage.Close()
-		_ = listSaveOperationRetryQueue.Close()
-		_ = listSaveOperationStorage.Close()
-		_ = announcementAttachmentStorage.Close()
-		return nil, err
+		return nil, resources.CloseWithError(err)
 	}
+	resources.Add("token blueprint create operation queue", tokenBlueprintCreateOperationQueue)
 
 	tokenBlueprintCreateOperationUC :=
 		uc.NewTokenBlueprintCreateOperationUsecase(
@@ -890,12 +543,9 @@ func buildUsecases(
 
 	invitationDeliveryQueue, err := listcloudtasksadp.NewInvitationDeliveryQueueFromEnv(ctx)
 	if err != nil {
-		_ = tokenBlueprintCreateOperationQueue.Close()
-		_ = tokenBlueprintAssetStorage.Close()
-		_ = listSaveOperationStorage.Close()
-		_ = announcementAttachmentStorage.Close()
-		return nil, err
+		return nil, resources.CloseWithError(err)
 	}
+	resources.Add("invitation delivery queue", invitationDeliveryQueue)
 
 	invitationMailer := mailadp.NewInvitationMailerWithResend(
 		r.companyRepo,
@@ -915,21 +565,16 @@ func buildUsecases(
 		invitationDeliveryQueue,
 	)
 
-	orderDispatchNotificationQueue, err := listcloudtasksadp.NewOrderDispatchNotificationQueueFromEnv(ctx)
+	orderDispatchNotificationQueue, err :=
+		listcloudtasksadp.NewOrderDispatchNotificationQueueFromEnv(ctx)
 	if err != nil {
-		_ = invitationDeliveryQueue.Close()
-		_ = tokenBlueprintCreateOperationQueue.Close()
-		_ = tokenBlueprintAssetStorage.Close()
-		_ = listSaveOperationStorage.Close()
-		_ = announcementAttachmentStorage.Close()
-		return nil, err
+		return nil, resources.CloseWithError(err)
 	}
+	resources.Add("order dispatch notification queue", orderDispatchNotificationQueue)
 
-	authUserReader := firebaseadp.NewAuthUserReader(
-		c.infra.FirebaseAuth,
-	)
-
-	orderDispatchNotificationMailer := mailadp.NewOrderDispatchNotificationMailerWithResend()
+	authUserReader := firebaseadp.NewAuthUserReader(c.infra.FirebaseAuth)
+	orderDispatchNotificationMailer :=
+		mailadp.NewOrderDispatchNotificationMailerWithResend()
 
 	orderDispatchNotificationUC := uc.NewOrderDispatchNotificationUsecase(
 		r.orderDispatchNotificationRepo,
@@ -941,23 +586,14 @@ func buildUsecases(
 	)
 
 	refundCompletionNotificationQueue, err :=
-		listcloudtasksadp.NewRefundCompletionNotificationQueueFromEnv(
-			ctx,
-		)
+		listcloudtasksadp.NewRefundCompletionNotificationQueueFromEnv(ctx)
 	if err != nil {
-		_ = orderDispatchNotificationQueue.Close()
-		_ = invitationDeliveryQueue.Close()
-		_ = tokenBlueprintCreateOperationQueue.Close()
-		_ = tokenBlueprintAssetStorage.Close()
-		_ = listSaveOperationStorage.Close()
-		_ = announcementAttachmentStorage.Close()
-		return nil, err
+		return nil, resources.CloseWithError(err)
 	}
+	resources.Add("refund completion notification queue", refundCompletionNotificationQueue)
 
 	refundCompletionNotificationRepo :=
-		fsrepo.NewRefundCompletionNotificationRepositoryFS(
-			c.fsClient,
-		)
+		fsrepo.NewRefundCompletionNotificationRepositoryFS(c.fsClient)
 
 	refundCompletionNotificationMailer :=
 		mailadp.NewRefundCompletionNotificationMailerWithResend()
@@ -971,7 +607,6 @@ func buildUsecases(
 		)
 
 	// ReturnReceiptUsecase は未開封返品受領の orchestration を担当します。
-	//
 	// item-level partial refund は既存 RefundUsecase の full Payment refund と
 	// 責務が異なるため、ItemRefundUsecase を明示的に注入します。
 	returnReceiptUC := uc.NewReturnReceiptUsecase(
@@ -984,7 +619,6 @@ func buildUsecases(
 	)
 
 	// OpenedReturnReceiptUsecase は開封後返品受領の orchestration を担当します。
-	//
 	// 返金額そのものは frontend から受け取らず、選択された refund policy と
 	// Order snapshot から ItemRefundUsecase が権威的に算出します。
 	openedReturnReceiptUC := uc.NewOpenedReturnReceiptUsecase(
@@ -999,11 +633,7 @@ func buildUsecases(
 	memberUC := uc.NewMemberUsecase(r.memberRepo)
 
 	autoCreateTestAccount := strings.Contains(
-		strings.ToLower(
-			strings.TrimSpace(
-				c.firestoreProjectID,
-			),
-		),
+		strings.ToLower(strings.TrimSpace(c.firestoreProjectID)),
 		"development",
 	)
 
@@ -1017,50 +647,43 @@ func buildUsecases(
 	_ = res
 
 	return &usecases{
-		solanaMintClient:                   solanaClient,
-		tokenUC:                            tokenUC,
-		accountUC:                          accountUC,
-		announcementUC:                     announcementUC,
-		announcementAttachmentStorage:      announcementAttachmentStorage,
-		avatarUC:                           avatarUC,
-		paymentMethodUC:                    paymentMethodUC,
-		brandUC:                            brandUC,
-		companyUC:                          companyUC,
-		inquiryUC:                          inquiryUC,
-		itemRefundUC:                       itemRefundUC,
-		returnReceiptUC:                    returnReceiptUC,
-		openedReturnReceiptUC:              openedReturnReceiptUC,
-		inventoryUC:                        inventoryUC,
-		listUC:                             listUC,
-		listSaveOperationUC:                listSaveOperationUC,
-		listSaveOperationStorage:           listSaveOperationStorage,
-		listSaveOperationRetryQueue:        listSaveOperationRetryQueue,
-		memberUC:                           memberUC,
-		modelUC:                            modelUC,
-		orderUC:                            orderUC,
-		orderDispatchNotificationUC:        orderDispatchNotificationUC,
-		orderDispatchNotificationQueue:     orderDispatchNotificationQueue,
-		refundCompletionNotificationUC:     refundCompletionNotificationUC,
-		refundCompletionNotificationQueue:  refundCompletionNotificationQueue,
-		paymentUC:                          paymentUC,
-		paymentFlowUC:                      paymentFlowUC,
-		settlementUC:                       settlementUC,
-		refundUC:                           refundUC,
-		permissionUC:                       permissionUC,
-		printUC:                            printUC,
-		productionUC:                       productionUC,
-		productBlueprintUC:                 productBlueprintUC,
-		productBlueprintCategoryUC:         productBlueprintCategoryUC,
-		inspectionUC:                       inspectionUC,
-		mintUC:                             mintUC,
-		shippingAddressUC:                  shippingAddressUC,
-		transportationUC:                   transportationUC,
-		tokenBlueprintUC:                   tokenBlueprintUC,
-		tokenBlueprintAssetStorage:         tokenBlueprintAssetStorage,
-		tokenBlueprintCreateOperationUC:    tokenBlueprintCreateOperationUC,
-		tokenBlueprintCreateOperationQueue: tokenBlueprintCreateOperationQueue,
-		tokenBlueprintReviewUC:             tokenBlueprintReviewUC,
-
+		resources:                       resources,
+		solanaMintClient:                solanaClient,
+		tokenUC:                         tokenUC,
+		accountUC:                       accountUC,
+		announcementUC:                  announcementUC,
+		avatarUC:                        avatarUC,
+		paymentMethodUC:                 paymentMethodUC,
+		brandUC:                         brandUC,
+		companyUC:                       companyUC,
+		inquiryUC:                       inquiryUC,
+		itemRefundUC:                    itemRefundUC,
+		returnReceiptUC:                 returnReceiptUC,
+		openedReturnReceiptUC:           openedReturnReceiptUC,
+		inventoryUC:                     inventoryUC,
+		listUC:                          listUC,
+		listSaveOperationUC:             listSaveOperationUC,
+		memberUC:                        memberUC,
+		modelUC:                         modelUC,
+		orderUC:                         orderUC,
+		orderDispatchNotificationUC:     orderDispatchNotificationUC,
+		refundCompletionNotificationUC:  refundCompletionNotificationUC,
+		paymentUC:                       paymentUC,
+		paymentFlowUC:                   paymentFlowUC,
+		settlementUC:                    settlementUC,
+		refundUC:                        refundUC,
+		permissionUC:                    permissionUC,
+		printUC:                         printUC,
+		productionUC:                    productionUC,
+		productBlueprintUC:              productBlueprintUC,
+		productBlueprintCategoryUC:      productBlueprintCategoryUC,
+		inspectionUC:                    inspectionUC,
+		mintUC:                          mintUC,
+		shippingAddressUC:               shippingAddressUC,
+		transportationUC:                transportationUC,
+		tokenBlueprintUC:                tokenBlueprintUC,
+		tokenBlueprintCreateOperationUC: tokenBlueprintCreateOperationUC,
+		tokenBlueprintReviewUC:          tokenBlueprintReviewUC,
 		productBlueprintReviewUC: func() *uc.ProductBlueprintReviewUsecase {
 			if r.productBlueprintReviewRepo == nil ||
 				r.productBlueprintRepo == nil ||
@@ -1078,13 +701,11 @@ func buildUsecases(
 				nil,
 			)
 		}(),
-
-		userUC:                  userUC,
-		walletUC:                walletUC,
-		cartUC:                  cartUC,
-		invitationUC:            invitationUC,
-		invitationDeliveryUC:    invitationDeliveryUC,
-		invitationDeliveryQueue: invitationDeliveryQueue,
-		authBootstrapSvc:        authBootstrapSvc,
+		userUC:               userUC,
+		walletUC:             walletUC,
+		cartUC:               cartUC,
+		invitationUC:         invitationUC,
+		invitationDeliveryUC: invitationDeliveryUC,
+		authBootstrapSvc:     authBootstrapSvc,
 	}, nil
 }

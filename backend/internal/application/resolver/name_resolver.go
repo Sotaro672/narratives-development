@@ -116,7 +116,6 @@ func (r *NameResolver) ResolveBrandName(ctx context.Context, brandID string) str
 	if r == nil || r.brandRepo == nil {
 		return ""
 	}
-
 	if brandID == "" {
 		return ""
 	}
@@ -136,7 +135,6 @@ func (r *NameResolver) ResolveBrandCompanyID(ctx context.Context, brandID string
 	if r == nil || r.brandRepo == nil {
 		return ""
 	}
-
 	if brandID == "" {
 		return ""
 	}
@@ -159,7 +157,6 @@ func (r *NameResolver) ResolveCompanyName(ctx context.Context, companyID string)
 	if r == nil || r.companyRepo == nil {
 		return ""
 	}
-
 	if companyID == "" {
 		return ""
 	}
@@ -186,7 +183,6 @@ func (r *NameResolver) ResolveProductName(ctx context.Context, productBlueprintI
 	if r == nil || r.productBlueprintRepo == nil {
 		return ""
 	}
-
 	if productBlueprintID == "" {
 		return ""
 	}
@@ -226,7 +222,6 @@ func (r *NameResolver) ResolveMemberNameByUID(ctx context.Context, memberUID str
 	if r == nil || r.memberRepo == nil {
 		return ""
 	}
-
 	if memberUID == "" {
 		return ""
 	}
@@ -249,15 +244,6 @@ func (r *NameResolver) resolveMemberNameByUIDFromPtr(ctx context.Context, member
 	return r.ResolveMemberNameByUID(ctx, *memberUID)
 }
 
-// ResolveAssigneeName は assigneeId から member の表示名（例: "姓 名"）を解決する。
-//
-// IMPORTANT:
-// - assigneeId は Firebase Auth UID 前提
-// - member docId fallback はしない
-func (r *NameResolver) ResolveAssigneeName(ctx context.Context, assigneeUID string) string {
-	return r.ResolveMemberNameByUID(ctx, assigneeUID)
-}
-
 func (r *NameResolver) ResolveCreatedByName(ctx context.Context, createdBy *string) string {
 	return r.resolveMemberNameByUIDFromPtr(ctx, createdBy)
 }
@@ -266,30 +252,12 @@ func (r *NameResolver) ResolveUpdatedByName(ctx context.Context, updatedBy *stri
 	return r.resolveMemberNameByUIDFromPtr(ctx, updatedBy)
 }
 
-func (r *NameResolver) ResolveRequestedByName(ctx context.Context, requestedBy *string) string {
-	return r.resolveMemberNameByUIDFromPtr(ctx, requestedBy)
-}
-
 func (r *NameResolver) ResolveInspectedByName(ctx context.Context, inspectedBy *string) string {
 	return r.resolveMemberNameByUIDFromPtr(ctx, inspectedBy)
 }
 
 func (r *NameResolver) ResolvePrintedByName(ctx context.Context, printedBy *string) string {
 	return r.resolveMemberNameByUIDFromPtr(ctx, printedBy)
-}
-
-// ---- ProductBlueprint 専用: member UID 解決 ----
-
-func (r *NameResolver) ResolveProductBlueprintAssigneeName(ctx context.Context, assigneeUID string) string {
-	return r.ResolveMemberNameByUID(ctx, assigneeUID)
-}
-
-func (r *NameResolver) ResolveProductBlueprintCreatedByName(ctx context.Context, createdBy *string) string {
-	return r.resolveMemberNameByUIDFromPtr(ctx, createdBy)
-}
-
-func (r *NameResolver) ResolveProductBlueprintUpdatedByName(ctx context.Context, updatedBy *string) string {
-	return r.resolveMemberNameByUIDFromPtr(ctx, updatedBy)
 }
 
 // ------------------------------------------------------------
@@ -349,7 +317,6 @@ func (r *NameResolver) ResolveModelNumber(ctx context.Context, variationID strin
 	if r == nil || r.modelNumberRepo == nil {
 		return ""
 	}
-
 	if variationID == "" {
 		return ""
 	}
@@ -362,7 +329,6 @@ func (r *NameResolver) ResolveModelNumber(ctx context.Context, variationID strin
 	if apparelMV, ok := mv.(modeldom.ApparelModelVariation); ok {
 		return apparelMV.ModelNumber
 	}
-
 	if alcoholMV, ok := mv.(modeldom.AlcoholModelVariation); ok {
 		return alcoholMV.ModelNumber
 	}
@@ -380,7 +346,6 @@ func (r *NameResolver) ResolveTokenName(ctx context.Context, tokenBlueprintID st
 	if r == nil || r.tokenBlueprintRepo == nil {
 		return ""
 	}
-
 	if tokenBlueprintID == "" {
 		return ""
 	}

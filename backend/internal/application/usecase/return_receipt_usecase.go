@@ -108,9 +108,21 @@ type ReturnReceiptOrderService interface {
 // ReturnReceiptInquiryResolver is the minimum Inquiry application service
 // required after financial completion.
 //
-// Resolution must go through InquiryUsecase instead of mutating the repository
-// directly so Inquiry domain lifecycle rules remain authoritative.
+// Reply creation and resolution must go through InquiryUsecase instead of
+// mutating the repository directly so Inquiry domain lifecycle rules remain
+// authoritative.
+//
+// EnsureReplyByMember must be idempotent for a deterministic reply ID.
 type ReturnReceiptInquiryResolver interface {
+	EnsureReplyByMember(
+		ctx context.Context,
+		replyID string,
+		inquiryID string,
+		memberID string,
+		content string,
+		images []inquirydom.ImageFile,
+	) (inquirydom.Reply, error)
+
 	ResolveByMember(
 		ctx context.Context,
 		in ResolveInquiryInput,
@@ -236,14 +248,16 @@ type ReturnReceiptResult struct {
 //  6. Execute or resume the item-level financial Refund.
 //  7. Require Refund.IsFinanciallyCompleted().
 //  8. Mark the Order item return as completed.
-//  9. Resolve the Inquiry.
-//  10. Ensure the purchaser refund-completion notification delivery.
+//  9. Ensure the refund amount / breakdown reply from the company member.
+//  10. Resolve the Inquiry.
+//  11. Ensure the purchaser refund-completion notification delivery.
 //
 // The execution order is intentional:
 //
 //	Stripe purchaser Refund
 //	-> seller Transfer Reversal
 //	-> Order IsReturnCompleted
+//	-> refund completion reply
 //	-> Inquiry resolved
 //	-> refund completion notification delivery
 //
@@ -251,7 +265,7 @@ type ReturnReceiptResult struct {
 // aggregate is financially completed.
 //
 // Stripe and Firestore cannot participate in one transaction. Therefore every
-// step before Order / Inquiry completion must be idempotent.
+// step before and after Order completion that can be retried must be idempotent.
 type ReturnReceiptUsecase struct {
 	orderService ReturnReceiptOrderService
 
@@ -305,6 +319,7 @@ func (uc *ReturnReceiptUsecase) WithRefundCompletionNotifier(
 //
 //	Refund.IsFinanciallyCompleted() == true
 //	Order.Items[itemIndex].IsReturnCompleted == true
+//	refund completion reply exists
 //	Inquiry.Status == resolved
 //
 // If Stripe Refund is pending, the Refund is returned but Order / Inquiry remain
@@ -537,10 +552,41 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 
 	result.OrderCompleted = true
 
-	// Inquiry resolution is always last.
+	// The refund completion reply is ensured before Inquiry resolution.
+	//
+	// replyID is deterministic from Refund.ID, so retrying this flow must not
+	// create duplicate purchaser-visible refund completion replies.
+	//
+	// If reply creation succeeds but a later step fails, EnsureReplyByMember
+	// resolves the existing reply on the next attempt.
+	replyContent, err :=
+		buildRefundCompletionReplyContent(
+			refund,
+		)
+	if err != nil {
+		return result, err
+	}
+
+	_, err =
+		uc.inquiryResolver.EnsureReplyByMember(
+			ctx,
+			refundCompletionReplyID(
+				refund.ID,
+			),
+			inquiry.ID,
+			memberID,
+			replyContent,
+			nil,
+		)
+	if err != nil {
+		return result, err
+	}
+
+	// Inquiry resolution follows the refund completion reply.
 	//
 	// If this step fails, a retry resumes from the deterministic Refund and the
-	// already-completed Order item, then retries only Inquiry resolution.
+	// already-completed Order item, ensures the same deterministic reply, then
+	// retries only Inquiry resolution.
 	if inquiry.Status !=
 		inquirydom.InquiryStatusResolved {
 		resolvedInquiry, err :=
@@ -575,8 +621,8 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 	// were already completed by a previous attempt.
 	//
 	// This repairs the partial-failure case where the financial refund, Order
-	// completion, and Inquiry resolution succeeded but delivery creation or
-	// Cloud Tasks enqueue did not complete.
+	// completion, refund completion reply, and Inquiry resolution succeeded but
+	// delivery creation or Cloud Tasks enqueue did not complete.
 	_, err = uc.refundCompletionNotifier.EnsureDelivery(
 		ctx,
 		EnsureRefundCompletionNotificationInput{

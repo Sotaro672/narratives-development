@@ -3,7 +3,9 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	applicationport "narratives/internal/application/port"
@@ -251,6 +253,146 @@ func (uc *InquiryUsecase) CreateReplyByMember(
 			Images:     images,
 		},
 	)
+}
+
+// EnsureReplyByMember は company member 名義の reply を決定的 ID で冪等に作成します.
+//
+// 返金完了通知など、同一 application operation の再試行で同じ reply を
+// 重複作成してはならない処理で使用します.
+//
+// replyID は caller が operation に対して決定的に生成した値を渡します。
+// Create が ErrConflict を返した場合は同じ replyID の既存 reply を取得し、
+// immutable fields が今回の要求と一致する場合のみ成功済みとして扱います。
+func (uc *InquiryUsecase) EnsureReplyByMember(
+	ctx context.Context,
+	replyID string,
+	inquiryID string,
+	memberID string,
+	content string,
+	images []inquirydom.ImageFile,
+) (inquirydom.Reply, error) {
+	if uc == nil || uc.repo == nil {
+		return inquirydom.Reply{},
+			fmt.Errorf("inquiry usecase: repository is nil")
+	}
+	if uc.replyRepo == nil {
+		return inquirydom.Reply{},
+			fmt.Errorf("inquiry usecase: reply repository is nil")
+	}
+	if replyID == "" {
+		return inquirydom.Reply{},
+			inquirydom.ErrInvalidReplyID
+	}
+	if inquiryID == "" {
+		return inquirydom.Reply{},
+			inquirydom.ErrInvalidReplyInquiryID
+	}
+	if memberID == "" {
+		return inquirydom.Reply{},
+			inquirydom.ErrInvalidReplySenderID
+	}
+
+	current, err := uc.repo.GetByID(ctx, inquiryID)
+	if err != nil {
+		return inquirydom.Reply{}, err
+	}
+	if current.Status == inquirydom.InquiryStatusClosed {
+		return inquirydom.Reply{},
+			inquirydom.ErrInquiryAlreadyClosed
+	}
+
+	now := uc.nowUTC()
+	expected, err := inquirydom.NewReply(
+		replyID,
+		inquiryID,
+		inquirydom.ReplySenderTypeMember,
+		memberID,
+		content,
+		images,
+		now,
+		memberID,
+	)
+	if err != nil {
+		return inquirydom.Reply{}, err
+	}
+
+	created, err := uc.replyRepo.Create(ctx, expected)
+	createdNow := err == nil
+	if err != nil {
+		if !errors.Is(err, inquirydom.ErrConflict) {
+			return inquirydom.Reply{}, err
+		}
+
+		existing, getErr := uc.replyRepo.GetByID(
+			ctx,
+			inquiryID,
+			replyID,
+		)
+		if getErr != nil {
+			return inquirydom.Reply{}, getErr
+		}
+		if !sameEnsuredInquiryReply(existing, expected) {
+			return inquirydom.Reply{},
+				inquirydom.ErrConflict
+		}
+
+		created = existing
+	}
+
+	// A retry after the reply was already created only needs to repair the
+	// Inquiry-side transition when it is still open. If the Inquiry already
+	// progressed or resolved, avoid changing updatedAt again.
+	if !createdNow &&
+		current.Status != inquirydom.InquiryStatusOpen {
+		return created, nil
+	}
+
+	updatedBy := memberID
+	patch := inquirydom.InquiryPatch{
+		UpdatedAt: &now,
+		UpdatedBy: &updatedBy,
+	}
+	if current.Status == inquirydom.InquiryStatusOpen {
+		status := inquirydom.InquiryStatusInProgress
+		patch.Status = &status
+	}
+
+	if _, err := uc.repo.Update(
+		ctx,
+		inquiryID,
+		patch,
+	); err != nil {
+		return inquirydom.Reply{}, err
+	}
+
+	return created, nil
+}
+
+func sameEnsuredInquiryReply(
+	existing inquirydom.Reply,
+	expected inquirydom.Reply,
+) bool {
+	if existing.ID != expected.ID ||
+		existing.InquiryID != expected.InquiryID ||
+		existing.SenderType != expected.SenderType ||
+		existing.SenderID != expected.SenderID ||
+		existing.Content != expected.Content ||
+		existing.CreatedBy != expected.CreatedBy ||
+		existing.DeletedAt != nil ||
+		len(existing.Images) != len(expected.Images) {
+		return false
+	}
+
+	for i := range existing.Images {
+		if !reflect.DeepEqual(
+			existing.Images[i],
+			expected.Images[i],
+		) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // CreateReplyByAvatar は avatar が問い合わせへ返信します.

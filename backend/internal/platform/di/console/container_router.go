@@ -274,7 +274,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			c.PaymentUC,
 			c.SettlementUC,
 			c.RefundUC,
-			c.settlementQueue,
+			c.SettlementQueue,
 			c.OrderManagementQuery,
 			c.OrderDetailQuery,
 			c.OrderDispatchNotificationUC,
@@ -398,10 +398,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		)
 	}
 
-	if c.SettlementUC != nil {
+	if c.SettlementUC != nil && c.SettlementQueue != nil {
 		settlementTaskHandler := internalHandler.NewSettlementTaskHandler(
 			c.SettlementUC,
-			c.settlementQueue,
+			c.SettlementQueue,
 		)
 
 		internalSettlementProcessH = http.HandlerFunc(

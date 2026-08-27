@@ -68,6 +68,41 @@ func (r *InquiryReplyRepositoryFS) Create(
 	return docToReplyWithFallbackInquiryID(snap, reply.InquiryID)
 }
 
+func (r *InquiryReplyRepositoryFS) GetByID(
+	ctx context.Context,
+	inquiryID string,
+	replyID string,
+) (idom.Reply, error) {
+	if r.Client == nil {
+		return idom.Reply{}, errors.New("firestore client is nil")
+	}
+	if inquiryID == "" {
+		return idom.Reply{}, idom.ErrInvalidReplyInquiryID
+	}
+	if replyID == "" {
+		return idom.Reply{}, idom.ErrInvalidReplyID
+	}
+
+	snap, err := r.col(inquiryID).Doc(replyID).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return idom.Reply{}, idom.ErrNotFound
+		}
+		return idom.Reply{}, err
+	}
+
+	reply, err := docToReplyWithFallbackInquiryID(snap, inquiryID)
+	if err != nil {
+		return idom.Reply{}, err
+	}
+
+	if reply.ID != replyID || reply.InquiryID != inquiryID {
+		return idom.Reply{}, idom.ErrNotFound
+	}
+
+	return reply, nil
+}
+
 func (r *InquiryReplyRepositoryFS) ListByInquiryID(
 	ctx context.Context,
 	inquiryID string,
@@ -232,16 +267,16 @@ func (r *InquiryReplyRepositoryFS) MarkAsReadByInquiryID(
 	return nil
 }
 
-// CountUnreadByInquiryIDExcludingSender は、指定 inquiry 配下の未読 reply 数を返します。
+// CountUnreadByInquiryIDExcludingSender は、指定 inquiry 配下の未読 reply 数を返します.
 //
 // count 条件:
 //
 //	!reply.isRead
 //	&& !(reply.senderType == excludedSenderType && reply.senderId == excludedSenderID)
 //
-// usecase 側では member / avatar どちらもこの考え方で集計できます。
+// usecase 側では member / avatar どちらもこの考え方で集計できます.
 // 現在の usecase interface では必須メソッドではありませんが、
-// repository 側の任意拡張として用意しています。
+// repository 側の任意拡張として用意しています.
 func (r *InquiryReplyRepositoryFS) CountUnreadByInquiryIDExcludingSender(
 	ctx context.Context,
 	inquiryID string,
