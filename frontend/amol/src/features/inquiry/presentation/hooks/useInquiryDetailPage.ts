@@ -21,6 +21,10 @@ import {
   type Inquiry,
   type InquiryReply,
 } from "../../api/inquiryApi";
+import {
+  refreshInquiryBadgeCount,
+  updateInquiryBadgeCount,
+} from "../inquiryBadgeEvents";
 
 type InquiryDetailLocationState = {
   inquiry?: Inquiry;
@@ -99,6 +103,7 @@ export function useInquiryDetailPage() {
 
       setInquiry(updatedInquiry);
       setReplies(nextReplies);
+      refreshInquiryBadgeCount();
     } catch (caught) {
       setInquiry(null);
       setReplies([]);
@@ -251,10 +256,21 @@ export function useInquiryDetailPage() {
     setClosingInquiry(true);
     setCloseError("");
 
+    const shouldDecreaseBadge =
+      inquiry?.status === "resolved";
+
+    if (shouldDecreaseBadge) {
+      updateInquiryBadgeCount(-1);
+    }
+
     try {
       const closedInquiry = await closeInquiry(inquiryId);
       setInquiry(closedInquiry);
     } catch (caught) {
+      if (shouldDecreaseBadge) {
+        refreshInquiryBadgeCount();
+      }
+
       setCloseError(
         getErrorMessage(
           caught,
@@ -264,9 +280,14 @@ export function useInquiryDetailPage() {
     } finally {
       setClosingInquiry(false);
     }
-  }, [inquiryId, closingInquiry]);
+  }, [
+    inquiry,
+    inquiryId,
+    closingInquiry,
+  ]);
 
   const title = getInquiryTitle(inquiry);
+
   const shouldShowClosePrompt =
     inquiry?.status === "resolved";
 

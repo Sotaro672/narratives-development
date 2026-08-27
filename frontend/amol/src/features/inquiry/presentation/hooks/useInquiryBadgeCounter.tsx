@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { getInquiryBadgeCount } from "../../api/inquiryApi";
+import {
+  subscribeInquiryBadgeDelta,
+  subscribeInquiryBadgeRefresh,
+} from "../inquiryBadgeEvents";
 
 type UseInquiryBadgeCounterParams = {
   enabled?: boolean;
@@ -60,6 +64,28 @@ export function useInquiryBadgeCounter(
   useEffect(() => {
     void loadBadgeCount();
   }, [loadBadgeCount]);
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    return subscribeInquiryBadgeDelta((delta) => {
+      setBadgeCount((currentCount) =>
+        Math.max(0, currentCount + delta),
+      );
+    });
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    return subscribeInquiryBadgeRefresh(() => {
+      void loadBadgeCount();
+    });
+  }, [enabled, loadBadgeCount]);
 
   return {
     badgeCount,
