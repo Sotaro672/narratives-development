@@ -1,8 +1,10 @@
 // frontend/amol/src/components/layout/header/HeaderActions.tsx
+
 import { Link, useLocation } from "react-router-dom";
 
 import { useAnnouncementUnreadCount } from "../../../features/announcement/hooks/useAnnouncementUnreadCount";
-import { useInquiryUnreadCounter } from "../../../features/inquiry/presentation/hooks/useInquiryUnreadCounter";
+import { useInquiryBadgeCounter } from "../../../features/inquiry/presentation/hooks/useInquiryBadgeCounter";
+
 import type { HeaderActionState } from "./types";
 
 type HeaderActionsProps = {
@@ -35,27 +37,22 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     actionButtonLabel,
     onActionButtonClick,
     actionButtonDisabled,
-
     hasSecondaryActionButton,
     secondaryActionButtonLabel,
     onSecondaryActionButtonClick,
     secondaryActionButtonDisabled,
-
     hasTertiaryActionButton,
     tertiaryActionButtonLabel,
     onTertiaryActionButtonClick,
     tertiaryActionButtonDisabled,
-
     shouldShowLoginButton,
     shouldShowAnnouncementButton,
     shouldShowSettingsButton,
-
     shouldShowCartButton,
     cartButtonLabel,
     onCartButtonClick,
     cartButtonDisabled,
     cartItemCount,
-
     toggleSettings,
   } = actions;
 
@@ -63,38 +60,27 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     enabled: shouldShowAnnouncementButton,
   });
 
-  const { unreadCount: inquiryUnreadCount } = useInquiryUnreadCounter({
+  const { badgeCount: inquiryBadgeCount } = useInquiryBadgeCounter({
     enabled: shouldShowAnnouncementButton,
   });
 
   const safeCartItemCount = normalizeCount(cartItemCount);
-  const safeAnnouncementUnreadCount = normalizeCount(
-    announcementUnreadCount,
-  );
-  const safeInquiryUnreadCount = normalizeCount(inquiryUnreadCount);
-
-  const safeChatUnreadCount = safeInquiryUnreadCount;
+  const safeAnnouncementUnreadCount = normalizeCount(announcementUnreadCount);
+  const safeInquiryBadgeCount = normalizeCount(inquiryBadgeCount);
 
   const cartBadgeLabel = formatBadgeLabel(safeCartItemCount);
   const announcementUnreadBadgeLabel = formatBadgeLabel(
     safeAnnouncementUnreadCount,
   );
-  const chatUnreadBadgeLabel = formatBadgeLabel(safeChatUnreadCount);
+  const chatBadgeLabel = formatBadgeLabel(safeInquiryBadgeCount);
 
-  const shouldShowResaleButton = isResalePagePath(
-    location.pathname,
-  );
-
+  const shouldShowResaleButton = isResalePagePath(location.pathname);
   const shouldShowResaleDetailActions = isResaleDetailPagePath(
     location.pathname,
   );
 
-  const resaleButtonLabel =
-    actionButtonLabel || "出品";
-
-  const resaleButtonDisabled =
-    !onActionButtonClick ||
-    actionButtonDisabled;
+  const resaleButtonLabel = actionButtonLabel || "出品";
+  const resaleButtonDisabled = !onActionButtonClick || actionButtonDisabled;
 
   const primaryActionClassName = [
     "header__settings-link",
@@ -185,10 +171,7 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
       ) : null}
 
       {shouldShowLoginButton ? (
-        <Link
-          to="/signin/select"
-          className="header__login-link"
-        >
+        <Link to="/signin/select" className="header__login-link">
           ログイン
         </Link>
       ) : null}
@@ -200,18 +183,12 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           aria-label={`お知らせ ${safeAnnouncementUnreadCount}件`}
           title="お知らせ"
         >
-          <span
-            className="header__cart-icon"
-            aria-hidden="true"
-          >
+          <span className="header__cart-icon" aria-hidden="true">
             🔔
           </span>
 
           {safeAnnouncementUnreadCount > 0 ? (
-            <span
-              className="header__cart-badge"
-              aria-hidden="true"
-            >
+            <span className="header__cart-badge" aria-hidden="true">
               {announcementUnreadBadgeLabel}
             </span>
           ) : null}
@@ -222,22 +199,16 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
         <Link
           to="/chats"
           className="header__settings-link header__cart-link"
-          aria-label={`メッセージ ${safeChatUnreadCount}件`}
+          aria-label={`メッセージ ${safeInquiryBadgeCount}件`}
           title="メッセージ"
         >
-          <span
-            className="header__cart-icon"
-            aria-hidden="true"
-          >
+          <span className="header__cart-icon" aria-hidden="true">
             💬
           </span>
 
-          {safeChatUnreadCount > 0 ? (
-            <span
-              className="header__cart-badge"
-              aria-hidden="true"
-            >
-              {chatUnreadBadgeLabel}
+          {safeInquiryBadgeCount > 0 ? (
+            <span className="header__cart-badge" aria-hidden="true">
+              {chatBadgeLabel}
             </span>
           ) : null}
         </Link>
@@ -252,18 +223,12 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           onClick={onCartButtonClick}
           disabled={cartButtonDisabled}
         >
-          <span
-            className="header__cart-icon"
-            aria-hidden="true"
-          >
+          <span className="header__cart-icon" aria-hidden="true">
             🛒
           </span>
 
           {safeCartItemCount > 0 ? (
-            <span
-              className="header__cart-badge"
-              aria-hidden="true"
-            >
+            <span className="header__cart-badge" aria-hidden="true">
               {cartBadgeLabel}
             </span>
           ) : null}

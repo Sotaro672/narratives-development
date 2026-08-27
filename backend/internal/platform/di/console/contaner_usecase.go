@@ -580,7 +580,6 @@ func buildUsecases(
 		r.inquiryReplyRepo,
 		nil,
 		"",
-		"",
 		nil,
 		nil,
 	)

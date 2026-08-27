@@ -6,18 +6,18 @@ import {
   fetchInquiryWithAuth,
   INQUIRY_BASE_PATH,
   type ApiPagedItemsResponse,
-  type ApiUnreadCountResponse,
 } from "./inquiryHttpClient";
 
 import type {
-  GetUnreadInquiryCountParams,
+  GetInquiryBadgeCountParams,
+  InquiryBadgeCountResponse,
   InquiryListItem,
   ListMeInquiriesParams,
   ListMeInquiriesResult,
 } from "../../shared/types/inquiryTypes";
 
 function buildInquiryFilterQuery(
-  params: GetUnreadInquiryCountParams,
+  params: GetInquiryBadgeCountParams,
 ): ApiQueryParams {
   return {
     productId: params.productId,
@@ -55,16 +55,14 @@ export async function listMeInquiries(
   };
 }
 
-export async function getUnreadInquiryCount(
-  params: GetUnreadInquiryCountParams = {},
-): Promise<number> {
-  const json = await fetchInquiryWithAuth<ApiUnreadCountResponse>(
-    `${INQUIRY_BASE_PATH}/unread-count`,
+export async function getInquiryBadgeCount(
+  params: GetInquiryBadgeCountParams = {},
+): Promise<InquiryBadgeCountResponse> {
+  return fetchInquiryWithAuth<InquiryBadgeCountResponse>(
+    `${INQUIRY_BASE_PATH}/badge-count`,
     {
       method: "GET",
       query: buildInquiryFilterQuery(params),
     },
   );
-
-  return json.unreadCount;
 }

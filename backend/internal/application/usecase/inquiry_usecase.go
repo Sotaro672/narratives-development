@@ -31,7 +31,7 @@ type AvatarEmailResolver interface {
 	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 }
 
-// InquiryUsecase は Inquiry の command を扱います。
+// InquiryUsecase は Inquiry の command を扱います.
 //
 // 画像は Inquiry.Images として Inquiry 集約内で管理します。
 // Firebase Storage への保存・削除は frontend / application 層の責務とし、
@@ -49,10 +49,6 @@ type InquiryUsecase struct {
 	mailer   InquiryCreatedMailer
 	mailFrom string
 
-	// mailTo は後方互換 / fallback 用です。
-	// 原則として問い合わせ作成者 avatar の UserID から Firebase Auth email を解決します。
-	mailTo string
-
 	avatarEmailResolver AvatarEmailResolver
 	authUserGetter      applicationport.AuthUserReader
 
@@ -64,14 +60,13 @@ type InquiryUsecase struct {
 // InquiryUsecase が必要とする依存はここに集約します。
 // replyRepo は reply 作成・一覧取得・既読化・avatar 未読件数集計で必須です.
 //
-// mailer / mailFrom / mailTo / avatarEmailResolver / authUserGetter はメール送信用です。
+// mailer / mailFrom / avatarEmailResolver / authUserGetter はメール送信用です。
 // メール送信を使わない場合は nil / 空文字を渡してください。
 func NewInquiryUsecase(
 	repo inquirydom.Repository,
 	replyRepo inquirydom.ReplyRepository,
 	mailer InquiryCreatedMailer,
 	mailFrom string,
-	mailTo string,
 	avatarEmailResolver AvatarEmailResolver,
 	authUserGetter applicationport.AuthUserReader,
 ) *InquiryUsecase {
@@ -80,7 +75,6 @@ func NewInquiryUsecase(
 		replyRepo:           replyRepo,
 		mailer:              mailer,
 		mailFrom:            mailFrom,
-		mailTo:              mailTo,
 		avatarEmailResolver: avatarEmailResolver,
 		authUserGetter:      authUserGetter,
 		now:                 time.Now,
@@ -100,9 +94,13 @@ func (uc *InquiryUsecase) SetNowFunc(now func() time.Time) {
 //
 // 作成後、メール設定がある場合は問い合わせ作成通知メールを送信します。
 // メール送信に失敗した場合、Inquiry 作成自体は完了済みのため、作成済み Inquiry と error を返します。
-func (uc *InquiryUsecase) Create(ctx context.Context, inq inquirydom.Inquiry) (inquirydom.Inquiry, error) {
+func (uc *InquiryUsecase) Create(
+	ctx context.Context,
+	inq inquirydom.Inquiry,
+) (inquirydom.Inquiry, error) {
 	if uc == nil || uc.repo == nil {
-		return inquirydom.Inquiry{}, fmt.Errorf("inquiry usecase: repository is nil")
+		return inquirydom.Inquiry{},
+			fmt.Errorf("inquiry usecase: repository is nil")
 	}
 
 	created, err := uc.repo.Create(ctx, inq)
@@ -110,7 +108,10 @@ func (uc *InquiryUsecase) Create(ctx context.Context, inq inquirydom.Inquiry) (i
 		return inquirydom.Inquiry{}, err
 	}
 
-	if err := uc.sendInquiryCreatedMail(ctx, created); err != nil {
+	if err := uc.sendInquiryCreatedMail(
+		ctx,
+		created,
+	); err != nil {
 		return created, err
 	}
 
@@ -120,7 +121,7 @@ func (uc *InquiryUsecase) Create(ctx context.Context, inq inquirydom.Inquiry) (i
 // CreateInquiryReplyInput は company member / avatar が問い合わせへ返信する入力です.
 //
 // Console からの返信では SenderType=member, SenderID=memberId を使います。
-// Mall / SNS から avatar が返信する場合は SenderType=avatar, SenderID=avatarId を使います。
+// Mall から avatar が返信する場合は SenderType=avatar, SenderID=avatarId を使います。
 type CreateInquiryReplyInput struct {
 	InquiryID  string
 	SenderType inquirydom.ReplySenderType
@@ -143,31 +144,40 @@ func (uc *InquiryUsecase) CreateReply(
 	in CreateInquiryReplyInput,
 ) (inquirydom.Reply, error) {
 	if uc == nil || uc.repo == nil {
-		return inquirydom.Reply{}, fmt.Errorf("inquiry usecase: repository is nil")
+		return inquirydom.Reply{},
+			fmt.Errorf("inquiry usecase: repository is nil")
 	}
 
 	if uc.replyRepo == nil {
-		return inquirydom.Reply{}, fmt.Errorf("inquiry usecase: reply repository is nil")
+		return inquirydom.Reply{},
+			fmt.Errorf("inquiry usecase: reply repository is nil")
 	}
 
 	inquiryID := in.InquiryID
 	senderID := in.SenderID
 
 	if inquiryID == "" {
-		return inquirydom.Reply{}, inquirydom.ErrInvalidReplyInquiryID
+		return inquirydom.Reply{},
+			inquirydom.ErrInvalidReplyInquiryID
 	}
 
 	if senderID == "" {
-		return inquirydom.Reply{}, inquirydom.ErrInvalidReplySenderID
+		return inquirydom.Reply{},
+			inquirydom.ErrInvalidReplySenderID
 	}
 
-	current, err := uc.repo.GetByID(ctx, inquiryID)
+	current, err := uc.repo.GetByID(
+		ctx,
+		inquiryID,
+	)
 	if err != nil {
 		return inquirydom.Reply{}, err
 	}
 
-	if current.Status == inquirydom.InquiryStatusClosed {
-		return inquirydom.Reply{}, inquirydom.ErrInquiryAlreadyClosed
+	if current.Status ==
+		inquirydom.InquiryStatusClosed {
+		return inquirydom.Reply{},
+			inquirydom.ErrInquiryAlreadyClosed
 	}
 
 	now := uc.nowUTC()
@@ -187,7 +197,10 @@ func (uc *InquiryUsecase) CreateReply(
 		return inquirydom.Reply{}, err
 	}
 
-	created, err := uc.replyRepo.Create(ctx, reply)
+	created, err := uc.replyRepo.Create(
+		ctx,
+		reply,
+	)
 	if err != nil {
 		return inquirydom.Reply{}, err
 	}
@@ -198,13 +211,20 @@ func (uc *InquiryUsecase) CreateReply(
 		UpdatedBy: &updatedBy,
 	}
 
-	if in.SenderType == inquirydom.ReplySenderTypeMember &&
-		current.Status == inquirydom.InquiryStatusOpen {
-		status := inquirydom.InquiryStatusInProgress
+	if in.SenderType ==
+		inquirydom.ReplySenderTypeMember &&
+		current.Status ==
+			inquirydom.InquiryStatusOpen {
+		status :=
+			inquirydom.InquiryStatusInProgress
 		patch.Status = &status
 	}
 
-	if _, err := uc.repo.Update(ctx, inquiryID, patch); err != nil {
+	if _, err := uc.repo.Update(
+		ctx,
+		inquiryID,
+		patch,
+	); err != nil {
 		return inquirydom.Reply{}, err
 	}
 
@@ -221,18 +241,21 @@ func (uc *InquiryUsecase) CreateReplyByMember(
 	content string,
 	images []inquirydom.ImageFile,
 ) (inquirydom.Reply, error) {
-	return uc.CreateReply(ctx, CreateInquiryReplyInput{
-		InquiryID:  inquiryID,
-		SenderType: inquirydom.ReplySenderTypeMember,
-		SenderID:   memberID,
-		Content:    content,
-		Images:     images,
-	})
+	return uc.CreateReply(
+		ctx,
+		CreateInquiryReplyInput{
+			InquiryID:  inquiryID,
+			SenderType: inquirydom.ReplySenderTypeMember,
+			SenderID:   memberID,
+			Content:    content,
+			Images:     images,
+		},
+	)
 }
 
 // CreateReplyByAvatar は avatar が問い合わせへ返信します.
 //
-// Mall / SNS 用の shorthand です。
+// Mall 用の shorthand です。
 func (uc *InquiryUsecase) CreateReplyByAvatar(
 	ctx context.Context,
 	inquiryID string,
@@ -240,13 +263,16 @@ func (uc *InquiryUsecase) CreateReplyByAvatar(
 	content string,
 	images []inquirydom.ImageFile,
 ) (inquirydom.Reply, error) {
-	return uc.CreateReply(ctx, CreateInquiryReplyInput{
-		InquiryID:  inquiryID,
-		SenderType: inquirydom.ReplySenderTypeAvatar,
-		SenderID:   avatarID,
-		Content:    content,
-		Images:     images,
-	})
+	return uc.CreateReply(
+		ctx,
+		CreateInquiryReplyInput{
+			InquiryID:  inquiryID,
+			SenderType: inquirydom.ReplySenderTypeAvatar,
+			SenderID:   avatarID,
+			Content:    content,
+			Images:     images,
+		},
+	)
 }
 
 // ListReplies は Inquiry の reply subcollection を取得します.
@@ -259,33 +285,24 @@ func (uc *InquiryUsecase) ListReplies(
 	inquiryID string,
 ) ([]inquirydom.Reply, error) {
 	if uc == nil || uc.replyRepo == nil {
-		return nil, fmt.Errorf("inquiry usecase: reply repository is nil")
+		return nil,
+			fmt.Errorf("inquiry usecase: reply repository is nil")
 	}
 
 	if inquiryID == "" {
-		return nil, inquirydom.ErrInvalidReplyInquiryID
+		return nil,
+			inquirydom.ErrInvalidReplyInquiryID
 	}
 
-	return uc.replyRepo.ListByInquiryID(ctx, inquiryID)
-}
-
-// CountUnreadInquiriesForAvatarInput は avatar 向けの未読件数集計入力です.
-//
-// CountUnreadByCompanyIDForAvatar は以下を合算します。
-// - avatarId が受け取る対象 Inquiry 配下 replies の isRead=false
-//
-// ただし、avatarId 自身が送信した reply は未読件数に含めません。
-// また、avatar 自身が起票した Inquiry 本体は未読件数に含めません。
-type CountUnreadInquiriesForAvatarInput struct {
-	CompanyID string
-	AvatarID  string
-	Filter    inquirydom.Filter
+	return uc.replyRepo.ListByInquiryID(
+		ctx,
+		inquiryID,
+	)
 }
 
 // CountUnreadByAvatarIDInput は avatar 向けの未読件数集計入力です.
 //
-// companyId を使わず、avatarId に紐づく Inquiry 配下 replies の未読数を返します.
-//
+// avatarId に紐づく Inquiry 配下 replies の未読数を返します。
 // avatar 側では、avatar 自身が起票した Inquiry 本体を未読件数に含めません。
 // member が avatar 宛に返信した unread reply を count 対象にします。
 type CountUnreadByAvatarIDInput struct {
@@ -293,79 +310,26 @@ type CountUnreadByAvatarIDInput struct {
 	Filter   inquirydom.Filter
 }
 
-// CountUnreadByCompanyIDForAvatar は avatar 向けに replies を対象に未読件数を返します.
+// CountInquiryBadgeByAvatarIDInput は avatar 向け Chat badge 件数集計入力です.
 //
-// avatar 側では、avatar 自身が起票した Inquiry 本体を未読件数には含めません。
-// reply の count 条件:
+// Chat badge は未読 reply 数と、avatar の close 操作待ちである
+// status=resolved の Inquiry 数を合算します。
+type CountInquiryBadgeByAvatarIDInput struct {
+	AvatarID string
+	Filter   inquirydom.Filter
+}
+
+// InquiryBadgeCount は avatar 向け Chat badge の内訳です.
 //
-//	!reply.IsRead
-//	&& !(reply.SenderType == avatar && reply.SenderID == avatarId)
-//
-// NOTE:
-// company scope / filter に一致し、かつ avatarId に紐づく Inquiry のみを対象に replies を集計します。
-func (uc *InquiryUsecase) CountUnreadByCompanyIDForAvatar(
-	ctx context.Context,
-	in CountUnreadInquiriesForAvatarInput,
-) (int, error) {
-	if uc == nil || uc.repo == nil {
-		return 0, fmt.Errorf("inquiry usecase: repository is nil")
-	}
+// UnreadReplyCount は member 等から届いた未読 reply 数です。
+// ClosePendingCount は status=resolved の Inquiry 数です。
+// TotalCount は両者の合計です。
+type InquiryBadgeCount struct {
+	UnreadReplyCount int `json:"unreadReplyCount"`
 
-	companyID := in.CompanyID
-	avatarID := in.AvatarID
+	ClosePendingCount int `json:"closePendingCount"`
 
-	if companyID == "" {
-		return 0, inquirydom.ErrNotFound
-	}
-
-	if avatarID == "" {
-		return 0, inquirydom.ErrInvalidAvatarID
-	}
-
-	filter := in.Filter
-	filter.AvatarID = &avatarID
-
-	total := 0
-	pageNumber := 1
-	perPage := 200
-
-	for {
-		result, err := uc.repo.ListByCompanyID(
-			ctx,
-			companyID,
-			filter,
-			inquirydom.Sort{},
-			inquirydom.Page{
-				Number:  pageNumber,
-				PerPage: perPage,
-			},
-		)
-		if err != nil {
-			return 0, err
-		}
-
-		for _, inquiry := range result.Items {
-			replyUnreadCount, err := uc.countUnreadRepliesExcludingSender(
-				ctx,
-				inquiry.ID,
-				inquirydom.ReplySenderTypeAvatar,
-				avatarID,
-			)
-			if err != nil {
-				return 0, err
-			}
-
-			total += replyUnreadCount
-		}
-
-		if result.TotalPages <= 0 || pageNumber >= result.TotalPages {
-			break
-		}
-
-		pageNumber++
-	}
-
-	return total, nil
+	TotalCount int `json:"totalCount"`
 }
 
 // CountUnreadByAvatarID は avatarId のみで avatar 向け未読件数を返します.
@@ -382,62 +346,98 @@ func (uc *InquiryUsecase) CountUnreadByAvatarID(
 	in CountUnreadByAvatarIDInput,
 ) (int, error) {
 	if uc == nil || uc.replyRepo == nil {
-		return 0, fmt.Errorf("inquiry usecase: reply repository is nil")
+		return 0,
+			fmt.Errorf("inquiry usecase: reply repository is nil")
 	}
 
 	avatarID := in.AvatarID
 	if avatarID == "" {
-		return 0, inquirydom.ErrInvalidAvatarID
+		return 0,
+			inquirydom.ErrInvalidAvatarID
 	}
 
 	filter := in.Filter
 	filter.AvatarID = &avatarID
 
-	return uc.replyRepo.CountUnreadByAvatarID(ctx, avatarID, filter)
+	return uc.replyRepo.CountUnreadByAvatarID(
+		ctx,
+		avatarID,
+		filter,
+	)
 }
 
-func (uc *InquiryUsecase) countUnreadRepliesExcludingSender(
+// CountBadgeByAvatarID は avatar 向け Chat badge 件数を返します.
+//
+// badge は以下を独立した attention として合算します。
+// - avatar が受け取った未読 reply 数
+// - status=resolved で avatar の close 操作待ちとなっている Inquiry 数
+//
+// resolved Inquiry に未読 reply が存在する場合は両方を加算します。
+// Inquiry の既読状態と close 操作待ちは別概念として扱います。
+func (uc *InquiryUsecase) CountBadgeByAvatarID(
 	ctx context.Context,
-	inquiryID string,
-	excludedSenderType inquirydom.ReplySenderType,
-	excludedSenderID string,
-) (int, error) {
-	if uc == nil || uc.replyRepo == nil {
-		return 0, nil
+	in CountInquiryBadgeByAvatarIDInput,
+) (InquiryBadgeCount, error) {
+	if uc == nil || uc.repo == nil {
+		return InquiryBadgeCount{},
+			fmt.Errorf("inquiry usecase: repository is nil")
 	}
 
-	if inquiryID == "" {
-		return 0, inquirydom.ErrInvalidReplyInquiryID
+	avatarID := in.AvatarID
+	if avatarID == "" {
+		return InquiryBadgeCount{},
+			inquirydom.ErrInvalidAvatarID
 	}
 
-	if excludedSenderType == "" {
-		return 0, inquirydom.ErrInvalidReplySenderType
-	}
-
-	if excludedSenderID == "" {
-		return 0, inquirydom.ErrInvalidReplySenderID
-	}
-
-	replies, err := uc.replyRepo.ListByInquiryID(ctx, inquiryID)
+	unreadReplyCount, err :=
+		uc.CountUnreadByAvatarID(
+			ctx,
+			CountUnreadByAvatarIDInput{
+				AvatarID: avatarID,
+				Filter:   in.Filter,
+			},
+		)
 	if err != nil {
-		return 0, err
+		return InquiryBadgeCount{}, err
 	}
 
-	count := 0
+	closePendingCount := 0
+	resolvedStatus :=
+		inquirydom.InquiryStatusResolved
 
-	for _, reply := range replies {
-		if reply.IsRead {
-			continue
+	if in.Filter.Status == nil ||
+		*in.Filter.Status == resolvedStatus {
+		closeFilter := in.Filter
+		closeFilter.AvatarID = &avatarID
+		closeFilter.Status = &resolvedStatus
+
+		result, err :=
+			uc.repo.ListByAvatarID(
+				ctx,
+				avatarID,
+				closeFilter,
+				inquirydom.Sort{},
+				inquirydom.Page{
+					Number:  1,
+					PerPage: 1,
+				},
+			)
+		if err != nil {
+			return InquiryBadgeCount{}, err
 		}
 
-		if reply.SenderType == excludedSenderType && reply.SenderID == excludedSenderID {
-			continue
-		}
-
-		count++
+		closePendingCount =
+			result.TotalCount
 	}
 
-	return count, nil
+	return InquiryBadgeCount{
+		UnreadReplyCount: unreadReplyCount,
+
+		ClosePendingCount: closePendingCount,
+
+		TotalCount: unreadReplyCount +
+			closePendingCount,
+	}, nil
 }
 
 // ResolveInquiryInput は company member が問い合わせを対処済みにする入力です。
@@ -454,37 +454,58 @@ func (uc *InquiryUsecase) ResolveByMember(
 	in ResolveInquiryInput,
 ) (inquirydom.Inquiry, error) {
 	if uc == nil || uc.repo == nil {
-		return inquirydom.Inquiry{}, fmt.Errorf("inquiry usecase: repository is nil")
+		return inquirydom.Inquiry{},
+			fmt.Errorf("inquiry usecase: repository is nil")
 	}
 
 	inquiryID := in.InquiryID
 	memberID := in.MemberID
 
 	if inquiryID == "" {
-		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
+		return inquirydom.Inquiry{},
+			inquirydom.ErrInvalidID
 	}
 
 	if memberID == "" {
-		return inquirydom.Inquiry{}, inquirydom.ErrInvalidResolvedBy
+		return inquirydom.Inquiry{},
+			inquirydom.ErrInvalidResolvedBy
 	}
 
-	current, err := uc.repo.GetByID(ctx, inquiryID)
+	current, err :=
+		uc.repo.GetByID(
+			ctx,
+			inquiryID,
+		)
 	if err != nil {
-		return inquirydom.Inquiry{}, err
+		return inquirydom.Inquiry{},
+			err
 	}
 
 	now := uc.nowUTC()
-	if err := current.ResolveByMember(memberID, now); err != nil {
-		return inquirydom.Inquiry{}, err
+
+	if err := current.ResolveByMember(
+		memberID,
+		now,
+	); err != nil {
+		return inquirydom.Inquiry{},
+			err
 	}
 
-	return uc.repo.Update(ctx, current.ID, inquirydom.InquiryPatch{
-		Status:     &current.Status,
-		ResolvedAt: current.ResolvedAt,
-		ResolvedBy: current.ResolvedBy,
-		UpdatedAt:  &current.UpdatedAt,
-		UpdatedBy:  current.UpdatedBy,
-	})
+	return uc.repo.Update(
+		ctx,
+		current.ID,
+		inquirydom.InquiryPatch{
+			Status: &current.Status,
+
+			ResolvedAt: current.ResolvedAt,
+
+			ResolvedBy: current.ResolvedBy,
+
+			UpdatedAt: &current.UpdatedAt,
+
+			UpdatedBy: current.UpdatedBy,
+		},
+	)
 }
 
 // ReopenInquiryInput は company member が問い合わせを open に戻す入力です。
@@ -499,39 +520,62 @@ func (uc *InquiryUsecase) ReopenByMember(
 	in ReopenInquiryInput,
 ) (inquirydom.Inquiry, error) {
 	if uc == nil || uc.repo == nil {
-		return inquirydom.Inquiry{}, fmt.Errorf("inquiry usecase: repository is nil")
+		return inquirydom.Inquiry{},
+			fmt.Errorf("inquiry usecase: repository is nil")
 	}
 
 	inquiryID := in.InquiryID
 	memberID := in.MemberID
 
 	if inquiryID == "" {
-		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
+		return inquirydom.Inquiry{},
+			inquirydom.ErrInvalidID
 	}
 
 	if memberID == "" {
-		return inquirydom.Inquiry{}, inquirydom.ErrInvalidUpdatedBy
+		return inquirydom.Inquiry{},
+			inquirydom.ErrInvalidUpdatedBy
 	}
 
-	current, err := uc.repo.GetByID(ctx, inquiryID)
+	current, err :=
+		uc.repo.GetByID(
+			ctx,
+			inquiryID,
+		)
 	if err != nil {
-		return inquirydom.Inquiry{}, err
+		return inquirydom.Inquiry{},
+			err
 	}
 
 	now := uc.nowUTC()
-	if err := current.ReopenByMember(memberID, now); err != nil {
-		return inquirydom.Inquiry{}, err
+
+	if err := current.ReopenByMember(
+		memberID,
+		now,
+	); err != nil {
+		return inquirydom.Inquiry{},
+			err
 	}
 
-	return uc.repo.Update(ctx, current.ID, inquirydom.InquiryPatch{
-		Status:     &current.Status,
-		ResolvedAt: current.ResolvedAt,
-		ResolvedBy: current.ResolvedBy,
-		ClosedAt:   current.ClosedAt,
-		ClosedBy:   current.ClosedBy,
-		UpdatedAt:  &current.UpdatedAt,
-		UpdatedBy:  current.UpdatedBy,
-	})
+	return uc.repo.Update(
+		ctx,
+		current.ID,
+		inquirydom.InquiryPatch{
+			Status: &current.Status,
+
+			ResolvedAt: current.ResolvedAt,
+
+			ResolvedBy: current.ResolvedBy,
+
+			ClosedAt: current.ClosedAt,
+
+			ClosedBy: current.ClosedBy,
+
+			UpdatedAt: &current.UpdatedAt,
+
+			UpdatedBy: current.UpdatedBy,
+		},
+	)
 }
 
 // CloseInquiryByAvatarInput は avatar が問い合わせを close する入力です。
@@ -548,37 +592,58 @@ func (uc *InquiryUsecase) CloseByAvatar(
 	in CloseInquiryByAvatarInput,
 ) (inquirydom.Inquiry, error) {
 	if uc == nil || uc.repo == nil {
-		return inquirydom.Inquiry{}, fmt.Errorf("inquiry usecase: repository is nil")
+		return inquirydom.Inquiry{},
+			fmt.Errorf("inquiry usecase: repository is nil")
 	}
 
 	inquiryID := in.InquiryID
 	avatarID := in.AvatarID
 
 	if inquiryID == "" {
-		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
+		return inquirydom.Inquiry{},
+			inquirydom.ErrInvalidID
 	}
 
 	if avatarID == "" {
-		return inquirydom.Inquiry{}, inquirydom.ErrInvalidAvatarID
+		return inquirydom.Inquiry{},
+			inquirydom.ErrInvalidAvatarID
 	}
 
-	current, err := uc.repo.GetByID(ctx, inquiryID)
+	current, err :=
+		uc.repo.GetByID(
+			ctx,
+			inquiryID,
+		)
 	if err != nil {
-		return inquirydom.Inquiry{}, err
+		return inquirydom.Inquiry{},
+			err
 	}
 
 	now := uc.nowUTC()
-	if err := current.CloseByAvatar(avatarID, now); err != nil {
-		return inquirydom.Inquiry{}, err
+
+	if err := current.CloseByAvatar(
+		avatarID,
+		now,
+	); err != nil {
+		return inquirydom.Inquiry{},
+			err
 	}
 
-	return uc.repo.Update(ctx, current.ID, inquirydom.InquiryPatch{
-		Status:    &current.Status,
-		ClosedAt:  current.ClosedAt,
-		ClosedBy:  current.ClosedBy,
-		UpdatedAt: &current.UpdatedAt,
-		UpdatedBy: current.UpdatedBy,
-	})
+	return uc.repo.Update(
+		ctx,
+		current.ID,
+		inquirydom.InquiryPatch{
+			Status: &current.Status,
+
+			ClosedAt: current.ClosedAt,
+
+			ClosedBy: current.ClosedBy,
+
+			UpdatedAt: &current.UpdatedAt,
+
+			UpdatedBy: current.UpdatedBy,
+		},
+	)
 }
 
 // MarkInquiryAsReadInput は Inquiry を既読にする入力です.
@@ -590,14 +655,16 @@ func (uc *InquiryUsecase) CloseByAvatar(
 //	ReaderSenderType: inquirydom.ReplySenderTypeMember
 //	ReaderSenderID:   memberId
 //
-// Mall / SNS 側で avatar が読む場合:
+// Mall 側で avatar が読む場合:
 //
 //	ReaderSenderType: inquirydom.ReplySenderTypeAvatar
 //	ReaderSenderID:   avatarId
 type MarkInquiryAsReadInput struct {
-	InquiryID        string
+	InquiryID string
+
 	ReaderSenderType inquirydom.ReplySenderType
-	ReaderSenderID   string
+
+	ReaderSenderID string
 }
 
 // MarkAsRead は Inquiry と配下の replies を既読にします.
@@ -608,52 +675,76 @@ func (uc *InquiryUsecase) MarkAsRead(
 	in MarkInquiryAsReadInput,
 ) (inquirydom.Inquiry, error) {
 	if uc == nil || uc.repo == nil {
-		return inquirydom.Inquiry{}, fmt.Errorf("inquiry usecase: repository is nil")
+		return inquirydom.Inquiry{},
+			fmt.Errorf("inquiry usecase: repository is nil")
 	}
 
 	inquiryID := in.InquiryID
-	readerSenderType := in.ReaderSenderType
-	readerSenderID := in.ReaderSenderID
+	readerSenderType :=
+		in.ReaderSenderType
+	readerSenderID :=
+		in.ReaderSenderID
 
 	if inquiryID == "" {
-		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
+		return inquirydom.Inquiry{},
+			inquirydom.ErrInvalidID
 	}
 
 	if readerSenderType == "" {
-		return inquirydom.Inquiry{}, inquirydom.ErrInvalidReplySenderType
+		return inquirydom.Inquiry{},
+			inquirydom.ErrInvalidReplySenderType
 	}
 
 	if readerSenderID == "" {
-		return inquirydom.Inquiry{}, inquirydom.ErrInvalidReplySenderID
+		return inquirydom.Inquiry{},
+			inquirydom.ErrInvalidReplySenderID
 	}
 
-	current, err := uc.repo.GetByID(ctx, inquiryID)
+	current, err :=
+		uc.repo.GetByID(
+			ctx,
+			inquiryID,
+		)
 	if err != nil {
-		return inquirydom.Inquiry{}, err
+		return inquirydom.Inquiry{},
+			err
 	}
 
 	now := uc.nowUTC()
-	if err := current.MarkAsRead(now); err != nil {
-		return inquirydom.Inquiry{}, err
+
+	if err := current.MarkAsRead(
+		now,
+	); err != nil {
+		return inquirydom.Inquiry{},
+			err
 	}
 
-	updated, err := uc.repo.Update(ctx, current.ID, inquirydom.InquiryPatch{
-		IsRead:    &current.IsRead,
-		UpdatedAt: &current.UpdatedAt,
-	})
+	updated, err :=
+		uc.repo.Update(
+			ctx,
+			current.ID,
+			inquirydom.InquiryPatch{
+				IsRead: &current.IsRead,
+
+				UpdatedAt: &current.UpdatedAt,
+			},
+		)
 	if err != nil {
-		return inquirydom.Inquiry{}, err
+		return inquirydom.Inquiry{},
+			err
 	}
 
 	if uc.replyRepo != nil {
-		if err := uc.replyRepo.MarkAsReadByInquiryID(
-			ctx,
-			inquiryID,
-			readerSenderType,
-			readerSenderID,
-			now,
-		); err != nil {
-			return inquirydom.Inquiry{}, err
+		if err :=
+			uc.replyRepo.MarkAsReadByInquiryID(
+				ctx,
+				inquiryID,
+				readerSenderType,
+				readerSenderID,
+				now,
+			); err != nil {
+			return inquirydom.Inquiry{},
+				err
 		}
 	}
 
@@ -669,22 +760,38 @@ func (uc *InquiryUsecase) Update(
 	patch inquirydom.InquiryPatch,
 ) (inquirydom.Inquiry, error) {
 	if uc == nil || uc.repo == nil {
-		return inquirydom.Inquiry{}, fmt.Errorf("inquiry usecase: repository is nil")
+		return inquirydom.Inquiry{},
+			fmt.Errorf("inquiry usecase: repository is nil")
 	}
 
-	return uc.repo.Update(ctx, id, patch)
+	return uc.repo.Update(
+		ctx,
+		id,
+		patch,
+	)
 }
 
 // Delete は Inquiry を削除します。
-func (uc *InquiryUsecase) Delete(ctx context.Context, id string) error {
+func (uc *InquiryUsecase) Delete(
+	ctx context.Context,
+	id string,
+) error {
 	if uc == nil || uc.repo == nil {
-		return fmt.Errorf("inquiry usecase: repository is nil")
+		return fmt.Errorf(
+			"inquiry usecase: repository is nil",
+		)
 	}
 
-	return uc.repo.Delete(ctx, id)
+	return uc.repo.Delete(
+		ctx,
+		id,
+	)
 }
 
-func (uc *InquiryUsecase) sendInquiryCreatedMail(ctx context.Context, inq inquirydom.Inquiry) error {
+func (uc *InquiryUsecase) sendInquiryCreatedMail(
+	ctx context.Context,
+	inq inquirydom.Inquiry,
+) error {
 	if uc == nil || uc.mailer == nil {
 		return nil
 	}
@@ -694,50 +801,79 @@ func (uc *InquiryUsecase) sendInquiryCreatedMail(ctx context.Context, inq inquir
 		return nil
 	}
 
-	to, err := uc.resolveInquiryMailTo(ctx, inq)
+	to, err := uc.resolveInquiryMailTo(
+		ctx,
+		inq,
+	)
 	if err != nil {
-		return fmt.Errorf("inquiry usecase: failed to resolve inquiry mail recipient: %w", err)
+		return fmt.Errorf(
+			"inquiry usecase: failed to resolve inquiry mail recipient: %w",
+			err,
+		)
 	}
 
 	if to == "" {
 		return nil
 	}
 
-	if err := uc.mailer.SendInquiryCreatedNotification(ctx, from, to, inq); err != nil {
-		return fmt.Errorf("inquiry usecase: failed to send inquiry created mail: %w", err)
+	if err :=
+		uc.mailer.SendInquiryCreatedNotification(
+			ctx,
+			from,
+			to,
+			inq,
+		); err != nil {
+		return fmt.Errorf(
+			"inquiry usecase: failed to send inquiry created mail: %w",
+			err,
+		)
 	}
 
 	return nil
 }
 
-func (uc *InquiryUsecase) resolveInquiryMailTo(ctx context.Context, inq inquirydom.Inquiry) (string, error) {
+func (uc *InquiryUsecase) resolveInquiryMailTo(
+	ctx context.Context,
+	inq inquirydom.Inquiry,
+) (string, error) {
 	if uc == nil {
 		return "", nil
 	}
 
-	if uc.avatarEmailResolver != nil && uc.authUserGetter != nil {
-		avatarID := inq.AvatarID
-		if avatarID != "" {
-			avatar, err := uc.avatarEmailResolver.GetByID(ctx, avatarID)
-			if err != nil {
-				return "", err
-			}
-
-			uid := avatar.UserID
-			if uid != "" {
-				email, err := uc.authUserGetter.GetEmailByUID(ctx, uid)
-				if err != nil {
-					return "", err
-				}
-
-				if email != "" {
-					return email, nil
-				}
-			}
-		}
+	if uc.avatarEmailResolver == nil ||
+		uc.authUserGetter == nil {
+		return "", nil
 	}
 
-	return uc.mailTo, nil
+	avatarID := inq.AvatarID
+	if avatarID == "" {
+		return "", nil
+	}
+
+	avatar, err :=
+		uc.avatarEmailResolver.GetByID(
+			ctx,
+			avatarID,
+		)
+	if err != nil {
+		return "", err
+	}
+
+	uid := avatar.UserID
+	if uid == "" {
+		return "", nil
+	}
+
+	email, err :=
+		uc.authUserGetter.GetEmailByUID(
+			ctx,
+			uid,
+		)
+	if err != nil {
+		return "", err
+	}
+
+	return email, nil
 }
 
 func (uc *InquiryUsecase) nowUTC() time.Time {
@@ -748,10 +884,15 @@ func (uc *InquiryUsecase) nowUTC() time.Time {
 	return uc.now().UTC()
 }
 
-func newInquiryReplyID(now time.Time) string {
+func newInquiryReplyID(
+	now time.Time,
+) string {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
 
-	return fmt.Sprintf("reply_%d", now.UTC().UnixNano())
+	return fmt.Sprintf(
+		"reply_%d",
+		now.UTC().UnixNano(),
+	)
 }

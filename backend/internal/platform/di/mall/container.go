@@ -81,7 +81,6 @@ type Container struct {
 	OrderMailFrom string
 
 	InquiryMailer *mailadp.InquiryMailer
-	InquiryMailTo string
 
 	AvatarRepo avatardom.Repository
 	BrandRepo  branddom.Repository
@@ -294,8 +293,6 @@ func NewContainer(
 	c.InquiryMailer = mailadp.NewInquiryMailer(
 		mailadp.NewResendClient(os.Getenv("RESEND_API_KEY")),
 	)
-
-	c.InquiryMailTo = os.Getenv("INQUIRY_MAIL_TO")
 
 	projectID := infra.ProjectID
 
@@ -599,7 +596,6 @@ func NewContainer(
 		inquiryReplyRepo,
 		c.InquiryMailer,
 		c.OrderMailFrom,
-		c.InquiryMailTo,
 		avatarRepo,
 		authUserReader,
 	)

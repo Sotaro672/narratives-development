@@ -40,7 +40,7 @@ func NewInquiryHandler(
 //
 //	GET  /mall/me/inquiries
 //	POST /mall/me/inquiries
-//	GET  /mall/me/inquiries/unread-count
+//	GET  /mall/me/inquiries/badge-count
 //	GET  /mall/me/inquiries/{id}
 //	GET  /mall/me/inquiries/{id}/replies
 //	POST /mall/me/inquiries/{id}/mark-as-read
@@ -72,12 +72,12 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if r.URL.Path == "/mall/me/inquiries/unread-count" {
+	if r.URL.Path == "/mall/me/inquiries/badge-count" {
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w)
 			return
 		}
-		h.countUnread(w, r)
+		h.countBadge(w, r)
 		return
 	}
 
@@ -366,13 +366,12 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// GET /mall/me/inquiries/unread-count
+// GET /mall/me/inquiries/badge-count
 //
-// avatar 側が受け取る未読 reply 数を avatarId のみで返します。
-// companyId は使いません。
-// 自分が送信した reply は count 対象外です。
-// response field は unreadCount を唯一の正とします。
-func (h *InquiryHandler) countUnread(w http.ResponseWriter, r *http.Request) {
+// avatar 向け Chat badge 件数を返します。
+// unreadReplyCount は未読 reply 数、closePendingCount は status=resolved の
+// close 操作待ち Inquiry 数、totalCount は両者の合計です。
+func (h *InquiryHandler) countBadge(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
@@ -381,7 +380,7 @@ func (h *InquiryHandler) countUnread(w http.ResponseWriter, r *http.Request) {
 
 	filter := buildInquiryFilterFromQuery(r)
 
-	count, err := h.uc.CountUnreadByAvatarID(ctx, usecase.CountUnreadByAvatarIDInput{
+	count, err := h.uc.CountBadgeByAvatarID(ctx, usecase.CountInquiryBadgeByAvatarIDInput{
 		AvatarID: avatarID,
 		Filter:   filter,
 	})
@@ -390,7 +389,7 @@ func (h *InquiryHandler) countUnread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"unreadCount": count})
+	writeJSON(w, http.StatusOK, count)
 }
 
 // GET /mall/me/inquiries/{id}

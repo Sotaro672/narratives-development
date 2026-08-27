@@ -6,7 +6,7 @@ export {
 } from "./inquiryImageApi";
 
 export {
-  getUnreadInquiryCount,
+  getInquiryBadgeCount,
   listMeInquiries,
 } from "./inquiryListApi";
 
@@ -24,8 +24,9 @@ export {
 
 export type {
   CreateInquiryRequest,
-  GetUnreadInquiryCountParams,
+  GetInquiryBadgeCountParams,
   Inquiry,
+  InquiryBadgeCountResponse,
   InquiryImage,
   InquiryImageUpload,
   InquiryListItem,
@@ -36,7 +37,6 @@ export type {
   ListMeInquiriesParams,
   ListMeInquiriesResult,
   ReplyInquiryRequest,
-  UnreadInquiryCountResponse,
   UploadInquiryImageParams,
   UploadReplyImageParams,
 } from "../../shared/types/inquiryTypes";

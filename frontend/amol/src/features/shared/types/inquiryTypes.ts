@@ -151,15 +151,17 @@ export type ListMeInquiriesResult = {
   perPage: number;
 };
 
-export type GetUnreadInquiryCountParams = {
+export type GetInquiryBadgeCountParams = {
   productId?: string;
   status?: InquiryStatus;
   inquiryType?: InquiryType;
   searchQuery?: string;
 };
 
-export type UnreadInquiryCountResponse = {
-  unreadCount: number;
+export type InquiryBadgeCountResponse = {
+  unreadReplyCount: number;
+  closePendingCount: number;
+  totalCount: number;
 };
 
 export type UploadInquiryImageParams = {
