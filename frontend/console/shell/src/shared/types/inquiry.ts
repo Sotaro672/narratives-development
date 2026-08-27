@@ -6,7 +6,10 @@ export type InquiryStatus =
   | "resolved"
   | "closed";
 
-export type InquiryReplySenderType = "avatar" | "member";
+export type InquiryReplySenderType =
+  | "avatar"
+  | "member"
+  | "system";
 
 export const INQUIRY_TYPES = [
   "product",

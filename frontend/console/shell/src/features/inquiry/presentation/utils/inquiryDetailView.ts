@@ -91,15 +91,21 @@ export function getReplySenderLabel(
   reply: InquiryReplyView,
   memberId: string,
 ): string {
-  if (
-    reply.senderType === "member"
-  ) {
-    return reply.senderId === memberId
-      ? "自分"
-      : "担当者";
-  }
+  switch (reply.senderType) {
+    case "member":
+      return reply.senderId === memberId
+        ? "自分"
+        : "担当者";
 
-  return "お客様";
+    case "system":
+      return "AMOL";
+
+    case "avatar":
+      return "お客様";
+
+    default:
+      return "-";
+  }
 }
 
 export function isReplyFromCurrentMember(
