@@ -7,10 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import {
-  useLocation,
-  useParams,
-} from "react-router-dom";
+import { useParams } from "react-router-dom";
 
 import {
   closeInquiry,
@@ -18,17 +15,15 @@ import {
   markInquiryAsRead,
   replyInquiry,
   uploadReplyImage,
-  type Inquiry,
-  type InquiryReply,
 } from "../../api/inquiryApi";
+import type {
+  InquiryDetail,
+  InquiryReply,
+} from "../../../shared/types/inquiryTypes";
 import {
   refreshInquiryBadgeCount,
   updateInquiryBadgeCount,
 } from "../inquiryBadgeEvents";
-
-type InquiryDetailLocationState = {
-  inquiry?: Inquiry;
-};
 
 type InquiryDetailRouteParams = {
   inquiryId?: string;
@@ -44,21 +39,17 @@ function getErrorMessage(
 }
 
 function getInquiryTitle(
-  inquiry: Inquiry | null,
+  inquiry: InquiryDetail | null,
 ): string {
   return inquiry?.subject || "チャット詳細";
 }
 
 export function useInquiryDetailPage() {
   const { inquiryId } = useParams<InquiryDetailRouteParams>();
-  const location = useLocation();
-  const locationState = location.state as InquiryDetailLocationState | null;
 
-  const [inquiry, setInquiry] = useState<Inquiry | null>(
-    locationState?.inquiry ?? null,
-  );
+  const [inquiry, setInquiry] = useState<InquiryDetail | null>(null);
   const [replies, setReplies] = useState<InquiryReply[]>([]);
-  const [loading, setLoading] = useState(!locationState?.inquiry);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const [isReplyModalOpen, setIsReplyModalOpen] = useState(false);

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	mallshared "narratives/internal/application/query/mall/shared"
+	avatardom "narratives/internal/domain/avatar"
 	inquirydom "narratives/internal/domain/inquiry"
 	orderdom "narratives/internal/domain/order"
 )
@@ -25,6 +26,37 @@ type InquiryListItem struct {
 	LatestActivityAt time.Time         `json:"latestActivityAt"`
 }
 
+// InquiryDetailColor は問い合わせ詳細に表示する対象商品のカラー情報です。
+type InquiryDetailColor struct {
+	Name string `json:"name,omitempty"`
+	RGB  int    `json:"rgb,omitempty"`
+}
+
+// InquiryDetailModelMeta は返品問い合わせの対象商品を識別するための model 表示情報です。
+type InquiryDetailModelMeta struct {
+	ModelID      string              `json:"modelId"`
+	Kind         string              `json:"kind,omitempty"`
+	ModelNumber  string              `json:"modelNumber,omitempty"`
+	Size         string              `json:"size,omitempty"`
+	Color        *InquiryDetailColor `json:"color,omitempty"`
+	Measurements map[string]int      `json:"measurements,omitempty"`
+	VolumeValue  *int                `json:"volumeValue,omitempty"`
+	VolumeUnit   string              `json:"volumeUnit,omitempty"`
+}
+
+// InquiryDetail は mall の問い合わせ詳細画面向け read model です。
+// Inquiry に商品・ブランド・avatar の表示情報を付加し、返品問い合わせでは対象商品の model meta も返します。
+type InquiryDetail struct {
+	inquirydom.Inquiry
+	ProductName string                  `json:"productName"`
+	BrandID     string                  `json:"brandId"`
+	BrandName   string                  `json:"brandName"`
+	BrandIcon   string                  `json:"brandIcon"`
+	AvatarName  string                  `json:"avatarName"`
+	AvatarIcon  string                  `json:"avatarIcon"`
+	ModelMeta   *InquiryDetailModelMeta `json:"modelMeta,omitempty"`
+}
+
 // InquiryListResult は mall の問い合わせ一覧 BFF response 用 read model です。
 type InquiryListResult struct {
 	Items   []InquiryListItem `json:"items"`
@@ -32,9 +64,14 @@ type InquiryListResult struct {
 	PerPage int               `json:"perPage"`
 }
 
-// InquiryOrderReader は問い合わせ一覧表示に必要な Order 取得を定義します。
+// InquiryOrderReader は問い合わせ表示に必要な Order 取得を定義します。
 type InquiryOrderReader interface {
 	GetByID(ctx context.Context, id string) (orderdom.Order, error)
+}
+
+// InquiryAvatarReader は問い合わせ詳細表示に必要な Avatar 取得を定義します。
+type InquiryAvatarReader interface {
+	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 }
 
 // InquiryQuery は mall 側の Inquiry / Reply read model を扱います。
@@ -44,6 +81,7 @@ type InquiryQuery struct {
 	replyRepo       inquirydom.ReplyRepository
 	displayResolver mallshared.MallDisplayResolver
 	orderReader     InquiryOrderReader
+	avatarReader    InquiryAvatarReader
 }
 
 // NewInquiryQuery は InquiryQuery を初期化します。
@@ -52,12 +90,14 @@ func NewInquiryQuery(
 	replyRepo inquirydom.ReplyRepository,
 	displayResolver mallshared.MallDisplayResolver,
 	orderReader InquiryOrderReader,
+	avatarReader InquiryAvatarReader,
 ) *InquiryQuery {
 	return &InquiryQuery{
 		repo:            repo,
 		replyRepo:       replyRepo,
 		displayResolver: displayResolver,
 		orderReader:     orderReader,
+		avatarReader:    avatarReader,
 	}
 }
 
@@ -113,19 +153,13 @@ func (q *InquiryQuery) ListForAvatar(
 			return InquiryListResult{}, err
 		}
 
-		productInfo, brandInfo, err := q.resolveInquiryDisplay(
-			ctx,
-			inquiry,
-		)
+		productInfo, brandInfo, err := q.resolveInquiryDisplay(ctx, inquiry)
 		if err != nil {
 			return InquiryListResult{}, err
 		}
 
 		latestReply := findLatestInquiryReply(replies)
-		unreadReplyCount := countUnreadInquiryRepliesForAvatar(
-			replies,
-			avatarID,
-		)
+		unreadReplyCount := countUnreadInquiryRepliesForAvatar(replies, avatarID)
 
 		latestActivityAt := inquiry.UpdatedAt
 		if latestActivityAt.IsZero() {
@@ -200,10 +234,7 @@ func (q *InquiryQuery) resolveProductInquiryDisplay(
 			inquirydom.ErrInvalidProductID
 	}
 
-	modelInfo, err := q.displayResolver.ResolveModelByProductID(
-		ctx,
-		inquiry.ProductID,
-	)
+	modelInfo, err := q.displayResolver.ResolveModelByProductID(ctx, inquiry.ProductID)
 	if err != nil {
 		return mallshared.ProductBlueprintDisplay{},
 			mallshared.BrandDisplay{},
@@ -216,10 +247,7 @@ func (q *InquiryQuery) resolveProductInquiryDisplay(
 			fmt.Errorf("mall inquiry query: productBlueprintId could not be resolved from productId")
 	}
 
-	productInfo, err := q.displayResolver.ResolveProductBlueprintInfo(
-		ctx,
-		modelInfo.ProductBlueprintID,
-	)
+	productInfo, err := q.displayResolver.ResolveProductBlueprintInfo(ctx, modelInfo.ProductBlueprintID)
 	if err != nil {
 		return mallshared.ProductBlueprintDisplay{},
 			mallshared.BrandDisplay{},
@@ -232,10 +260,7 @@ func (q *InquiryQuery) resolveProductInquiryDisplay(
 			fmt.Errorf("mall inquiry query: brandId could not be resolved from product")
 	}
 
-	brandInfo, err := q.displayResolver.ResolveBrandInfo(
-		ctx,
-		productInfo.BrandID,
-	)
+	brandInfo, err := q.displayResolver.ResolveBrandInfo(ctx, productInfo.BrandID)
 	if err != nil {
 		return mallshared.ProductBlueprintDisplay{},
 			mallshared.BrandDisplay{},
@@ -269,10 +294,7 @@ func (q *InquiryQuery) resolveReturnInquiryDisplay(
 			inquirydom.ErrInvalidOrderItemIndex
 	}
 
-	order, err := q.orderReader.GetByID(
-		ctx,
-		inquiry.OrderID,
-	)
+	order, err := q.orderReader.GetByID(ctx, inquiry.OrderID)
 	if err != nil {
 		return mallshared.ProductBlueprintDisplay{},
 			mallshared.BrandDisplay{},
@@ -296,10 +318,7 @@ func (q *InquiryQuery) resolveReturnInquiryDisplay(
 	productBlueprintID := item.ProductBlueprintID
 
 	if productBlueprintID == "" && item.ModelID != "" {
-		modelInfo, err := q.displayResolver.ResolveModelByModelID(
-			ctx,
-			item.ModelID,
-		)
+		modelInfo, err := q.displayResolver.ResolveModelByModelID(ctx, item.ModelID)
 		if err != nil {
 			return mallshared.ProductBlueprintDisplay{},
 				mallshared.BrandDisplay{},
@@ -315,10 +334,7 @@ func (q *InquiryQuery) resolveReturnInquiryDisplay(
 			fmt.Errorf("mall inquiry query: productBlueprintId could not be resolved from order item")
 	}
 
-	productInfo, err := q.displayResolver.ResolveProductBlueprintInfo(
-		ctx,
-		productBlueprintID,
-	)
+	productInfo, err := q.displayResolver.ResolveProductBlueprintInfo(ctx, productBlueprintID)
 	if err != nil {
 		return mallshared.ProductBlueprintDisplay{},
 			mallshared.BrandDisplay{},
@@ -338,10 +354,7 @@ func (q *InquiryQuery) resolveReturnInquiryDisplay(
 			fmt.Errorf("mall inquiry query: brandId could not be resolved from order item")
 	}
 
-	brandInfo, err := q.displayResolver.ResolveBrandInfo(
-		ctx,
-		brandID,
-	)
+	brandInfo, err := q.displayResolver.ResolveBrandInfo(ctx, brandID)
 	if err != nil {
 		return mallshared.ProductBlueprintDisplay{},
 			mallshared.BrandDisplay{},
@@ -349,6 +362,75 @@ func (q *InquiryQuery) resolveReturnInquiryDisplay(
 	}
 
 	return productInfo, brandInfo, nil
+}
+
+// resolveReturnInquiryModelMeta は返品問い合わせの orderId + orderItemIndex を基準に
+// 対象 OrderItem を特定し、その商品の model meta を解決します。
+func (q *InquiryQuery) resolveReturnInquiryModelMeta(
+	ctx context.Context,
+	inquiry inquirydom.Inquiry,
+) (*InquiryDetailModelMeta, error) {
+	if q.orderReader == nil {
+		return nil, fmt.Errorf("mall inquiry query: order reader is nil")
+	}
+	if inquiry.OrderID == "" {
+		return nil, inquirydom.ErrInvalidOrderID
+	}
+	if inquiry.OrderItemIndex == nil || *inquiry.OrderItemIndex < 0 {
+		return nil, inquirydom.ErrInvalidOrderItemIndex
+	}
+
+	order, err := q.orderReader.GetByID(ctx, inquiry.OrderID)
+	if err != nil {
+		return nil, err
+	}
+	if order.AvatarID != inquiry.AvatarID {
+		return nil, inquirydom.ErrInquiryForbidden
+	}
+
+	itemIndex := *inquiry.OrderItemIndex
+	if itemIndex >= len(order.Items) {
+		return nil, inquirydom.ErrInvalidOrderItemIndex
+	}
+
+	item := order.Items[itemIndex]
+	var modelInfo mallshared.ModelDisplay
+
+	switch {
+	case item.ModelID != "":
+		modelInfo, err = q.displayResolver.ResolveModelByModelID(ctx, item.ModelID)
+
+	case item.ProductID != "":
+		modelInfo, err = q.displayResolver.ResolveModelByProductID(ctx, item.ProductID)
+
+	default:
+		return nil, fmt.Errorf("mall inquiry query: model could not be resolved from order item")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if modelInfo.ModelID == "" {
+		return nil, fmt.Errorf("mall inquiry query: modelId could not be resolved from order item")
+	}
+
+	modelMeta := &InquiryDetailModelMeta{
+		ModelID:      modelInfo.ModelID,
+		Kind:         modelInfo.Kind,
+		ModelNumber:  modelInfo.ModelNumber,
+		Size:         modelInfo.Size,
+		Measurements: cloneInquiryMeasurements(modelInfo.Measurements),
+		VolumeValue:  cloneInquiryIntPointer(modelInfo.VolumeValue),
+		VolumeUnit:   modelInfo.VolumeUnit,
+	}
+
+	if modelInfo.ColorName != "" || modelInfo.ColorRGB != 0 {
+		modelMeta.Color = &InquiryDetailColor{
+			Name: modelInfo.ColorName,
+			RGB:  modelInfo.ColorRGB,
+		}
+	}
+
+	return modelMeta, nil
 }
 
 // GetByID は Inquiry を取得します。
@@ -417,6 +499,55 @@ func (q *InquiryQuery) GetByIDForAvatar(
 	}
 
 	return inquiry, nil
+}
+
+// GetDetailByIDForAvatar は avatar 所有確認込みで問い合わせ詳細画面用 read model を返します。
+func (q *InquiryQuery) GetDetailByIDForAvatar(
+	ctx context.Context,
+	id string,
+	avatarID string,
+) (InquiryDetail, error) {
+	inquiry, err := q.GetByIDForAvatar(ctx, id, avatarID)
+	if err != nil {
+		return InquiryDetail{}, err
+	}
+	if q.displayResolver == nil {
+		return InquiryDetail{}, fmt.Errorf("mall inquiry query: display resolver is nil")
+	}
+	if q.avatarReader == nil {
+		return InquiryDetail{}, fmt.Errorf("mall inquiry query: avatar reader is nil")
+	}
+
+	productInfo, brandInfo, err := q.resolveInquiryDisplay(ctx, inquiry)
+	if err != nil {
+		return InquiryDetail{}, err
+	}
+
+	avatar, err := q.avatarReader.GetByID(ctx, inquiry.AvatarID)
+	if err != nil {
+		return InquiryDetail{}, err
+	}
+
+	var modelMeta *InquiryDetailModelMeta
+	switch inquiry.InquiryType {
+	case inquirydom.InquiryTypeReturnUnopened,
+		inquirydom.InquiryTypeReturnOpened:
+		modelMeta, err = q.resolveReturnInquiryModelMeta(ctx, inquiry)
+		if err != nil {
+			return InquiryDetail{}, err
+		}
+	}
+
+	return InquiryDetail{
+		Inquiry:     inquiry,
+		ProductName: productInfo.ProductName,
+		BrandID:     brandInfo.BrandID,
+		BrandName:   brandInfo.BrandName,
+		BrandIcon:   brandInfo.BrandIcon,
+		AvatarName:  avatar.AvatarName,
+		AvatarIcon:  avatarIconValue(avatar.AvatarIcon),
+		ModelMeta:   modelMeta,
+	}, nil
 }
 
 // ListByInquiryID は Inquiry の reply subcollection を取得します。
@@ -506,4 +637,34 @@ func inquiryReplyActivityAt(reply inquirydom.Reply) time.Time {
 	}
 
 	return reply.CreatedAt
+}
+
+func avatarIconValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+
+	return *value
+}
+
+func cloneInquiryMeasurements(values map[string]int) map[string]int {
+	if len(values) == 0 {
+		return nil
+	}
+
+	cloned := make(map[string]int, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+
+	return cloned
+}
+
+func cloneInquiryIntPointer(value *int) *int {
+	if value == nil {
+		return nil
+	}
+
+	cloned := *value
+	return &cloned
 }

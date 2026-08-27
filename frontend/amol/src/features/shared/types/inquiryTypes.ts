@@ -139,6 +139,15 @@ export type InquiryListItem = Inquiry & {
   latestActivityAt: string;
 };
 
+export type InquiryDetail = Inquiry & {
+  productName: string;
+  brandId: string;
+  brandName: string;
+  brandIcon: string;
+  avatarName: string;
+  avatarIcon: string;
+};
+
 export type ListMeInquiriesParams = {
   page?: number;
   perPage?: number;

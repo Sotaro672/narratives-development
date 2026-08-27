@@ -2,16 +2,13 @@
 
 import { formatDateTime } from "../../../../components/utils/date";
 
-import type { Inquiry } from "../../api/inquiryApi";
-
-import {
-  getInquiryTypeLabel,
-} from "../../../shared/types/inquiryTypes";
+import type { InquiryDetail } from "../../../shared/types/inquiryTypes";
+import { getInquiryTypeLabel } from "../../../shared/types/inquiryTypes";
 
 import InquiryImageGrid from "./InquiryImageGrid";
 
 type InquiryMessageCardProps = {
-  inquiry: Inquiry;
+  inquiry: InquiryDetail;
 };
 
 export default function InquiryMessageCard({
@@ -19,21 +16,39 @@ export default function InquiryMessageCard({
 }: InquiryMessageCardProps) {
   const statusLabel = getInquiryStatusLabel(inquiry.status);
   const title = getInquiryTitle(inquiry);
+  const avatarInitial = getInitial(inquiry.avatarName);
 
   return (
     <article className="chat-detail-page__inquiry">
       <div className="chat-detail-page__message-head">
-        <div>
-          <span className="chat-detail-page__sender">
-            あなたの問い合わせ
-          </span>
-
-          <time
-            className="chat-detail-page__date"
-            dateTime={inquiry.createdAt}
+        <div className="chat-detail-page__sender-profile">
+          <div
+            className="chat-detail-page__sender-icon"
+            aria-hidden="true"
           >
-            {formatDateTime(inquiry.createdAt)}
-          </time>
+            {inquiry.avatarIcon ? (
+              <img
+                src={inquiry.avatarIcon}
+                alt=""
+                className="chat-detail-page__sender-icon-image"
+              />
+            ) : (
+              <span>{avatarInitial}</span>
+            )}
+          </div>
+
+          <div>
+            <span className="chat-detail-page__sender">
+              {inquiry.avatarName}
+            </span>
+
+            <time
+              className="chat-detail-page__date"
+              dateTime={inquiry.createdAt}
+            >
+              {formatDateTime(inquiry.createdAt)}
+            </time>
+          </div>
         </div>
 
         <span className="chat-detail-page__status">
@@ -55,17 +70,18 @@ export default function InquiryMessageCard({
 }
 
 function getInquiryTitle(
-  inquiry: Inquiry,
+  inquiry: InquiryDetail,
 ): string {
-  if (inquiry.inquiryType === "product") {
-    return inquiry.subject || getInquiryTypeLabel(inquiry.inquiryType);
-  }
+  const inquiryLabel =
+    inquiry.inquiryType === "product"
+      ? inquiry.subject || getInquiryTypeLabel(inquiry.inquiryType)
+      : getInquiryTypeLabel(inquiry.inquiryType);
 
-  return getInquiryTypeLabel(inquiry.inquiryType);
+  return `${inquiry.productName}/${inquiryLabel}`;
 }
 
 function getInquiryStatusLabel(
-  status: Inquiry["status"],
+  status: InquiryDetail["status"],
 ): string {
   switch (status) {
     case "open":
@@ -80,4 +96,8 @@ function getInquiryStatusLabel(
     case "closed":
       return "クローズ";
   }
+}
+
+function getInitial(value: string): string {
+  return Array.from(value)[0] ?? "？";
 }

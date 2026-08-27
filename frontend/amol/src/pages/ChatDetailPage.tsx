@@ -101,6 +101,10 @@ export default function ChatDetailPage() {
                   <div className="chat-detail-page__replies">
                     <InquiryReplyList
                       replies={sortedReplies}
+                      brandName={inquiry.brandName}
+                      brandIcon={inquiry.brandIcon}
+                      avatarName={inquiry.avatarName}
+                      avatarIcon={inquiry.avatarIcon}
                     />
 
                     {shouldShowClosePrompt ? (

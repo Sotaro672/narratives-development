@@ -221,6 +221,7 @@ func NewContainer(
 		inquiryReplyRepo,
 		mallDisplayResolver,
 		orderRepo,
+		avatarRepo,
 	)
 
 	announcementRepo := outfs.NewAnnouncementRepositoryFS(fsClient)

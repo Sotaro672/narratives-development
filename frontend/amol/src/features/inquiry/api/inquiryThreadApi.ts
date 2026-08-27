@@ -8,22 +8,21 @@ import {
 } from "./inquiryHttpClient";
 
 import type {
-  Inquiry,
+  InquiryDetail,
   InquiryReply,
 } from "../../shared/types/inquiryTypes";
 
 export async function getInquiry(
   inquiryId: string,
-): Promise<Inquiry | null> {
-  const json =
-    await fetchInquiryWithAuth<
-      ApiDataResponse<Inquiry>
-    >(
-      buildInquiryPath(inquiryId),
-      {
-        method: "GET",
-      },
-    );
+): Promise<InquiryDetail | null> {
+  const json = await fetchInquiryWithAuth<
+    ApiDataResponse<InquiryDetail>
+  >(
+    buildInquiryPath(inquiryId),
+    {
+      method: "GET",
+    },
+  );
 
   return json.data ?? null;
 }
@@ -31,15 +30,13 @@ export async function getInquiry(
 export async function listInquiryReplies(
   inquiryId: string,
 ): Promise<InquiryReply[]> {
-  const path =
-    `${buildInquiryPath(inquiryId)}/replies`;
+  const path = `${buildInquiryPath(inquiryId)}/replies`;
 
-  const json =
-    await fetchInquiryWithAuth<
-      ApiItemsResponse<InquiryReply>
-    >(path, {
-      method: "GET",
-    });
+  const json = await fetchInquiryWithAuth<
+    ApiItemsResponse<InquiryReply>
+  >(path, {
+    method: "GET",
+  });
 
   return Array.isArray(json.items)
     ? json.items

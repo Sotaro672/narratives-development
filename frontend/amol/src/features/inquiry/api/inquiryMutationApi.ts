@@ -10,6 +10,7 @@ import {
 import type {
   CreateInquiryRequest,
   Inquiry,
+  InquiryDetail,
   InquiryReply,
   ReplyInquiryRequest,
 } from "../../shared/types/inquiryTypes";
@@ -30,12 +31,15 @@ export async function createInquiry(
 
 export async function markInquiryAsRead(
   inquiryId: string,
-): Promise<Inquiry> {
+): Promise<InquiryDetail> {
   const path = `${buildInquiryPath(inquiryId)}/mark-as-read`;
 
-  const json = await fetchInquiryWithAuth<ApiDataResponse<Inquiry>>(path, {
-    method: "POST",
-  });
+  const json = await fetchInquiryWithAuth<ApiDataResponse<InquiryDetail>>(
+    path,
+    {
+      method: "POST",
+    },
+  );
 
   return json.data;
 }
@@ -59,12 +63,15 @@ export async function replyInquiry(
 
 export async function closeInquiry(
   inquiryId: string,
-): Promise<Inquiry> {
+): Promise<InquiryDetail> {
   const path = `${buildInquiryPath(inquiryId)}/close`;
 
-  const json = await fetchInquiryWithAuth<ApiDataResponse<Inquiry>>(path, {
-    method: "POST",
-  });
+  const json = await fetchInquiryWithAuth<ApiDataResponse<InquiryDetail>>(
+    path,
+    {
+      method: "POST",
+    },
+  );
 
   return json.data;
 }
