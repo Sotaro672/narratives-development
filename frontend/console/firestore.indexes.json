@@ -151,6 +151,7 @@
       "fields": [
         { "fieldPath": "avatarId", "order": "ASCENDING" },
         { "fieldPath": "paid", "order": "ASCENDING" },
+        { "fieldPath": "isCancelled", "order": "ASCENDING" },
         { "fieldPath": "transferred", "order": "ASCENDING" },
         { "fieldPath": "itemType", "order": "ASCENDING" },
         { "fieldPath": "productId", "order": "ASCENDING" },
@@ -166,6 +167,7 @@
       "fields": [
         { "fieldPath": "avatarId", "order": "ASCENDING" },
         { "fieldPath": "paid", "order": "ASCENDING" },
+        { "fieldPath": "isCancelled", "order": "ASCENDING" },
         { "fieldPath": "transferred", "order": "ASCENDING" },
         { "fieldPath": "itemType", "order": "ASCENDING" },
         { "fieldPath": "modelId", "order": "ASCENDING" },
@@ -181,6 +183,7 @@
       "fields": [
         { "fieldPath": "avatarId", "order": "ASCENDING" },
         { "fieldPath": "paid", "order": "ASCENDING" },
+        { "fieldPath": "isCancelled", "order": "ASCENDING" },
         { "fieldPath": "transferred", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "ASCENDING" },
         { "fieldPath": "itemIndex", "order": "ASCENDING" },
