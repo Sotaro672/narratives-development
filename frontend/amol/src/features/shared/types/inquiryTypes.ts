@@ -139,6 +139,22 @@ export type InquiryListItem = Inquiry & {
   latestActivityAt: string;
 };
 
+export type InquiryDetailColor = {
+  name?: string;
+  rgb?: number;
+};
+
+export type InquiryDetailModelMeta = {
+  modelId: string;
+  kind?: string;
+  modelNumber?: string;
+  size?: string;
+  color?: InquiryDetailColor;
+  measurements?: Record<string, number>;
+  volumeValue?: number;
+  volumeUnit?: string;
+};
+
 export type InquiryDetail = Inquiry & {
   productName: string;
   brandId: string;
@@ -146,6 +162,7 @@ export type InquiryDetail = Inquiry & {
   brandIcon: string;
   avatarName: string;
   avatarIcon: string;
+  modelMeta?: InquiryDetailModelMeta;
 };
 
 export type ListMeInquiriesParams = {

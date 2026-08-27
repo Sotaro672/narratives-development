@@ -6,6 +6,7 @@ import type { InquiryDetail } from "../../../shared/types/inquiryTypes";
 import { getInquiryTypeLabel } from "../../../shared/types/inquiryTypes";
 
 import InquiryImageGrid from "./InquiryImageGrid";
+import InquiryModelMeta from "./InquiryModelMeta";
 
 type InquiryMessageCardProps = {
   inquiry: InquiryDetail;
@@ -59,6 +60,10 @@ export default function InquiryMessageCard({
       <h2 className="chat-detail-page__subject">
         {title}
       </h2>
+
+      {inquiry.inquiryType !== "product" && inquiry.modelMeta ? (
+        <InquiryModelMeta modelMeta={inquiry.modelMeta} />
+      ) : null}
 
       <p className="chat-detail-page__content">
         {inquiry.content}
