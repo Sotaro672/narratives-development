@@ -86,14 +86,6 @@ func resolvePreviewModelInfoFromRequest(
 	)
 	if err != nil {
 		switch {
-		case isNotFoundLike(err):
-			writePreviewError(
-				w,
-				http.StatusNotFound,
-				"not found",
-				productID,
-				extraResponseFields,
-			)
 		case errors.Is(err, context.Canceled),
 			errors.Is(err, context.DeadlineExceeded):
 			writePreviewError(

@@ -53,7 +53,7 @@ type Announcement struct {
 	TargetAvatars []string   `json:"targetAvatars,omitempty"`
 	Published     bool       `json:"published"`
 	PublishedAt   *time.Time `json:"publishedAt,omitempty"`
-	Attachments   []string   `json:"attachments,omitempty"` // IDs of AnnouncementAttachment
+	Attachments   []string   `json:"attachments,omitempty"`
 	CreatedAt     time.Time  `json:"createdAt"`
 	CreatedBy     string     `json:"createdBy"`
 	UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
@@ -98,9 +98,11 @@ func New(
 		UpdatedAt:     updatedAt,
 		UpdatedBy:     updatedBy,
 	}
+
 	if err := a.validate(); err != nil {
 		return Announcement{}, err
 	}
+
 	return a, nil
 }
 
@@ -119,9 +121,11 @@ func NewAnnouncementAvatar(
 		CreatedAt:      createdAt,
 		UpdatedAt:      nil,
 	}
+
 	if err := av.validate(); err != nil {
 		return AnnouncementAvatar{}, err
 	}
+
 	return av, nil
 }
 
@@ -143,9 +147,11 @@ func NewAnnouncementAvatarWithState(
 		CreatedAt:      createdAt,
 		UpdatedAt:      updatedAt,
 	}
+
 	if err := av.validate(); err != nil {
 		return AnnouncementAvatar{}, err
 	}
+
 	return av, nil
 }
 
@@ -154,24 +160,31 @@ func (a Announcement) validate() error {
 	if a.ID == "" {
 		return ErrInvalidID
 	}
+
 	if a.Title == "" {
 		return ErrInvalidTitle
 	}
+
 	if a.Content == "" {
 		return ErrInvalidContent
 	}
+
 	if a.CreatedBy == "" {
 		return ErrInvalidCreatedBy
 	}
+
 	if a.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
+
 	if a.UpdatedAt != nil && a.UpdatedAt.Before(a.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
+
 	if a.PublishedAt != nil && a.PublishedAt.Before(a.CreatedAt) {
 		return ErrInvalidPublishedAt
 	}
+
 	return nil
 }
 
@@ -179,24 +192,31 @@ func (av AnnouncementAvatar) validate() error {
 	if av.AnnouncementID == "" {
 		return ErrInvalidAnnouncementID
 	}
+
 	if av.AvatarID == "" {
 		return ErrInvalidAvatarID
 	}
+
 	if av.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
+
 	if av.UpdatedAt != nil && av.UpdatedAt.Before(av.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
+
 	if av.ReadAt != nil && av.ReadAt.Before(av.CreatedAt) {
 		return ErrInvalidReadAt
 	}
+
 	if av.IsRead && av.ReadAt == nil {
 		return ErrInvalidReadAt
 	}
+
 	if !av.IsRead && av.ReadAt != nil {
 		return ErrInvalidReadAt
 	}
+
 	return nil
 }
 
@@ -217,6 +237,7 @@ func (av AnnouncementAvatar) MarkRead(now time.Time) (AnnouncementAvatar, error)
 	if err := av.validate(); err != nil {
 		return AnnouncementAvatar{}, err
 	}
+
 	return av, nil
 }
 
@@ -234,6 +255,7 @@ func (av AnnouncementAvatar) MarkUnread(now time.Time) (AnnouncementAvatar, erro
 	if err := av.validate(); err != nil {
 		return AnnouncementAvatar{}, err
 	}
+
 	return av, nil
 }
 
@@ -282,24 +304,32 @@ var (
 
 // BuildAttachmentObjectPath builds the standard Firebase Storage object path.
 // e.g. announcements/{announcementId}/attachments/{fileName}
-//
-// attachmentID is kept in the signature for backward compatibility,
-// but it is not used in the Firebase Storage object path.
-// The Firestore attachment document ID is still AttachmentFile.ID.
-func BuildAttachmentObjectPath(announcementID, attachmentID, fileName string) (string, error) {
+func BuildAttachmentObjectPath(
+	announcementID string,
+	fileName string,
+) (string, error) {
 	if announcementID == "" {
 		return "", ErrInvalidAnnouncementID
 	}
+
 	if fileName == "" {
 		return "", ErrInvalidFileName
 	}
 
-	return path.Join("announcements", announcementID, "attachments", fileName), nil
+	return path.Join(
+		"announcements",
+		announcementID,
+		"attachments",
+		fileName,
+	), nil
 }
 
 // MakeAttachmentID は announcementId と fileName から安定IDを生成します。
 // 形式: hex(sha1(lower(trim(announcementId))+":"+trim(fileName)))
-func MakeAttachmentID(announcementID, fileName string) string {
+func MakeAttachmentID(
+	announcementID string,
+	fileName string,
+) string {
 	aid := strings.ToLower(strings.TrimSpace(announcementID))
 	fn := strings.TrimSpace(fileName)
 
@@ -310,13 +340,21 @@ func MakeAttachmentID(announcementID, fileName string) string {
 // NewAttachmentFile creates AttachmentFile metadata.
 // Firebase Storage upload itself is handled by frontend Firebase Storage SDK.
 func NewAttachmentFile(
-	announcementID, fileName, fileURL string,
+	announcementID string,
+	fileName string,
+	fileURL string,
 	fileSize int64,
 	mimeType string,
 ) (AttachmentFile, error) {
-	id := MakeAttachmentID(announcementID, fileName)
+	id := MakeAttachmentID(
+		announcementID,
+		fileName,
+	)
 
-	objectPath, err := BuildAttachmentObjectPath(announcementID, id, fileName)
+	objectPath, err := BuildAttachmentObjectPath(
+		announcementID,
+		fileName,
+	)
 	if err != nil {
 		return AttachmentFile{}, err
 	}
@@ -330,6 +368,7 @@ func NewAttachmentFile(
 		MimeType:       mimeType,
 		ObjectPath:     objectPath,
 	}
+
 	if err := validateAttachmentFile(f); err != nil {
 		return AttachmentFile{}, err
 	}
@@ -339,18 +378,30 @@ func NewAttachmentFile(
 
 // NewAttachmentFileWithObjectPath creates AttachmentFile metadata using frontend-generated Firebase Storage metadata.
 func NewAttachmentFileWithObjectPath(
-	announcementID, id, fileName, fileURL string,
+	announcementID string,
+	id string,
+	fileName string,
+	fileURL string,
 	fileSize int64,
-	mimeType, objectPath string,
+	mimeType string,
+	objectPath string,
 ) (AttachmentFile, error) {
 	if id == "" {
-		id = MakeAttachmentID(announcementID, fileName)
+		id = MakeAttachmentID(
+			announcementID,
+			fileName,
+		)
 	}
+
 	if objectPath == "" {
-		p, err := BuildAttachmentObjectPath(announcementID, id, fileName)
+		p, err := BuildAttachmentObjectPath(
+			announcementID,
+			fileName,
+		)
 		if err != nil {
 			return AttachmentFile{}, err
 		}
+
 		objectPath = p
 	}
 
@@ -363,6 +414,7 @@ func NewAttachmentFileWithObjectPath(
 		MimeType:       mimeType,
 		ObjectPath:     objectPath,
 	}
+
 	if err := validateAttachmentFile(f); err != nil {
 		return AttachmentFile{}, err
 	}
@@ -374,34 +426,51 @@ func validateAttachmentFile(f AttachmentFile) error {
 	if f.AnnouncementID == "" {
 		return ErrInvalidAnnouncementID
 	}
-	if f.FileName == "" || (MaxFileNameLength > 0 && len([]rune(f.FileName)) > MaxFileNameLength) {
+
+	if f.FileName == "" ||
+		(MaxFileNameLength > 0 &&
+			len([]rune(f.FileName)) > MaxFileNameLength) {
 		return ErrInvalidFileName
 	}
+
 	if f.ID == "" {
 		return ErrInvalidID
 	}
+
 	if !urlOK(f.FileURL) {
 		return ErrInvalidFileURL
 	}
-	if f.FileSize < MinFileSizeBytes || (MaxFileSizeBytes > 0 && f.FileSize > MaxFileSizeBytes) {
+
+	if f.FileSize < MinFileSizeBytes ||
+		(MaxFileSizeBytes > 0 &&
+			f.FileSize > MaxFileSizeBytes) {
 		return ErrInvalidFileSize
 	}
-	if f.MimeType == "" || (mimeRe != nil && !mimeRe.MatchString(f.MimeType)) {
+
+	if f.MimeType == "" ||
+		(mimeRe != nil &&
+			!mimeRe.MatchString(f.MimeType)) {
 		return ErrInvalidMimeType
 	}
+
 	if len(AllowedMimeTypes) > 0 {
 		if _, ok := AllowedMimeTypes[f.MimeType]; !ok {
 			return ErrInvalidMimeType
 		}
 	}
+
 	if f.ObjectPath == "" {
 		return ErrInvalidObjectPath
 	}
 
-	expected, err := BuildAttachmentObjectPath(f.AnnouncementID, f.ID, f.FileName)
+	expected, err := BuildAttachmentObjectPath(
+		f.AnnouncementID,
+		f.FileName,
+	)
 	if err != nil {
 		return err
 	}
+
 	if strings.TrimLeft(f.ObjectPath, "/") != expected {
 		return ErrInvalidObjectPath
 	}
@@ -415,7 +484,9 @@ func urlOK(raw string) bool {
 	}
 
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme == "" || u.Host == "" {
+	if err != nil ||
+		u.Scheme == "" ||
+		u.Host == "" {
 		return false
 	}
 
@@ -436,11 +507,14 @@ func urlOK(raw string) bool {
 //	a.Attachments = AttachmentIDsFromFiles(files)
 func AttachmentIDsFromFiles(files []AttachmentFile) []string {
 	ids := make([]string, 0, len(files))
+
 	for _, f := range files {
 		if f.ID == "" {
 			continue
 		}
+
 		ids = append(ids, f.ID)
 	}
+
 	return ids
 }

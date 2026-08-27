@@ -50,23 +50,14 @@ type ResaleCartItemDisplayInput struct {
 	ProductName        string
 }
 
-// InferCartItemType infers the cart item type from explicit Type first,
-// then from legacy/partial fields.
+// InferCartItemType returns the explicitly defined cart item type.
 func InferCartItemType(it cartdom.CartItem) cartdom.CartItemType {
 	switch it.Type {
 	case cartdom.CartItemTypeList, cartdom.CartItemTypeResale:
 		return it.Type
+	default:
+		return ""
 	}
-
-	if it.ResaleID != "" || it.ProductID != "" {
-		return cartdom.CartItemTypeResale
-	}
-
-	if it.InventoryID != "" || it.ListID != "" || it.ModelID != "" {
-		return cartdom.CartItemTypeList
-	}
-
-	return ""
 }
 
 // ResaleCartItemToDTO maps a resale cart item to CartItemDTO.
@@ -74,8 +65,6 @@ func InferCartItemType(it cartdom.CartItem) cartdom.CartItemType {
 // Policy:
 // - invalid resale item returns false
 // - qty is always normalized to 1
-// - ImageURL is also copied to ListImage for existing frontend compatibility
-// - ProductName is also copied to Title for existing frontend compatibility
 func ResaleCartItemToDTO(
 	in ResaleCartItemDisplayInput,
 ) (malldto.CartItemDTO, bool) {
@@ -119,7 +108,6 @@ func ResaleCartItemToDTO(
 
 	if in.ImageURL != "" {
 		item.ImageURL = in.ImageURL
-		item.ListImage = in.ImageURL
 	}
 
 	if in.BrandName != "" {
@@ -134,7 +122,6 @@ func ResaleCartItemToDTO(
 
 	if in.ProductName != "" {
 		item.ProductName = in.ProductName
-		item.Title = in.ProductName
 	}
 
 	return item, true

@@ -47,9 +47,7 @@ func NewMeAnnouncementHandler(
 	}
 }
 
-const (
-	meAnnouncementsPath = "/mall/me/announcement"
-)
+const meAnnouncementsPath = "/mall/me/announcement"
 
 func (h *MeAnnouncementHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
@@ -107,7 +105,11 @@ func (h *MeAnnouncementHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func (h *MeAnnouncementHandler) handleList(w http.ResponseWriter, r *http.Request, uid string) {
+func (h *MeAnnouncementHandler) handleList(
+	w http.ResponseWriter,
+	r *http.Request,
+	uid string,
+) {
 	avatarID, err := h.resolveAvatarID(r.Context(), uid)
 	if err != nil {
 		writeMeAnnouncementErr(w, err)
@@ -191,6 +193,7 @@ func extractAnnouncementIDForRead(path0 string) string {
 	if len(parts) != 5 {
 		return ""
 	}
+
 	if parts[0] != "mall" ||
 		parts[1] != "me" ||
 		parts[2] != "announcement" ||
@@ -240,7 +243,7 @@ func writeMeAnnouncementErr(w http.ResponseWriter, err error) {
 		code = http.StatusBadRequest
 		message = err.Error()
 
-	case isNotFoundLike(err):
+	case isNotFound(err):
 		code = http.StatusNotFound
 		message = err.Error()
 

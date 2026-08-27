@@ -16,10 +16,38 @@ import (
 // Shared helpers
 // ============================================================
 
-// isNotFound is a package-level helper used by multiple handlers.
-// It delegates to isNotFoundLike for backwards compatibility.
-func isNotFound(err error) bool {
-	return isNotFoundLike(err)
+func isNotFound(
+	err error,
+) bool {
+	if err == nil {
+		return false
+	}
+
+	if errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+
+	message := strings.ToLower(
+		err.Error(),
+	)
+
+	return strings.Contains(
+		message,
+		"not_found",
+	) ||
+		strings.Contains(
+			message,
+			"not found",
+		) ||
+		strings.Contains(
+			message,
+			"404",
+		) ||
+		strings.Contains(
+			message,
+			"avatar_not_found_for_uid",
+		)
 }
 
 // ============================================================
@@ -134,40 +162,6 @@ func readJSON(
 	decoder.DisallowUnknownFields()
 
 	return decoder.Decode(dst)
-}
-
-func isNotFoundLike(
-	err error,
-) bool {
-	if err == nil {
-		return false
-	}
-
-	if errors.Is(err, context.Canceled) ||
-		errors.Is(err, context.DeadlineExceeded) {
-		return false
-	}
-
-	message := strings.ToLower(
-		err.Error(),
-	)
-
-	return strings.Contains(
-		message,
-		"not_found",
-	) ||
-		strings.Contains(
-			message,
-			"not found",
-		) ||
-		strings.Contains(
-			message,
-			"404",
-		) ||
-		strings.Contains(
-			message,
-			"avatar_not_found_for_uid",
-		)
 }
 
 func parsePositiveIntDefault(

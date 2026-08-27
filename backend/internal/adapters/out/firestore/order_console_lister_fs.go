@@ -16,36 +16,31 @@ import (
 
 // OrderConsoleListerFS is a console/query-side order lister.
 //
-// NOTE:
-// This is intentionally separated from OrderRepositoryFS.
-//   - OrderRepositoryFS is used by mall/usecase flows and exposes ListByAvatarID only.
-//   - OrderConsoleListerFS is used by console read models that need broader search.
+// OrderRepositoryFS is used by mall/usecase flows.
+// OrderConsoleListerFS is used by console read models that need broader order access.
 //
-// Company-bound inventory filtering is intentionally handled by
-// OrderManagementQuery at item level.
+// Company-bound inventory filtering is handled by OrderManagementQuery
+// at item level.
 type OrderConsoleListerFS struct {
 	Client *firestore.Client
 }
 
 func NewOrderConsoleListerFS(client *firestore.Client) *OrderConsoleListerFS {
-	return &OrderConsoleListerFS{Client: client}
+	return &OrderConsoleListerFS{
+		Client: client,
+	}
 }
 
 func (r *OrderConsoleListerFS) ordersCol() *firestore.CollectionRef {
 	return r.Client.Collection("orders")
 }
 
-// ListByInventoryIDs lists orders for console query processing.
+// List lists orders for console query processing.
 //
-// NOTE:
-// allowedInventoryIDs and filter are intentionally kept in the signature for
-// OrderLister interface compatibility.
-// This lister does not apply company-bound inventory filtering.
-// OrderManagementQuery applies allowed inventory filtering at item level.
-func (r *OrderConsoleListerFS) ListByInventoryIDs(
+// Company-bound inventory filtering is applied by OrderManagementQuery
+// after orders are loaded.
+func (r *OrderConsoleListerFS) List(
 	ctx context.Context,
-	allowedInventoryIDs map[string]struct{},
-	filter orderdom.Filter,
 	sort common.Sort,
 	page common.Page,
 ) (common.PageResult[orderdom.Order], error) {
@@ -54,7 +49,12 @@ func (r *OrderConsoleListerFS) ListByInventoryIDs(
 	}
 
 	page = normalizeOrderConsolePage(page)
-	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
+	pageNum, perPage, offset := fscommon.NormalizePage(
+		page.Number,
+		page.PerPage,
+		50,
+		200,
+	)
 
 	q := r.ordersCol().Query
 	q = applyOrderSort(q, sort)

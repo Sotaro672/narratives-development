@@ -111,59 +111,38 @@ func (r *RefundRepositoryFS) GetByInquiryID(
 	}
 
 	keySnapshot, err := r.inquiryKeyCol().Doc(inquiryID).Get(ctx)
-	if err == nil {
-		var key refundInquiryKeyDocument
-
-		if err := keySnapshot.DataTo(&key); err != nil {
-			return nil, err
-		}
-
-		if key.RefundID == "" || key.InquiryID != inquiryID {
-			return nil, refunddom.ErrConflict
-		}
-
-		refund, err := r.GetByID(ctx, key.RefundID)
-		if err != nil {
-			if errors.Is(err, refunddom.ErrNotFound) {
-				return nil, refunddom.ErrConflict
-			}
-
-			return nil, err
-		}
-
-		if refund.InquiryID != inquiryID {
-			return nil, refunddom.ErrConflict
-		}
-
-		return refund, nil
-	}
-
-	if status.Code(err) != codes.NotFound {
-		return nil, err
-	}
-
-	// Compatibility fallback for Refund documents that may have been created
-	// before refundInquiryKeys was introduced.
-	refunds, err := r.listByField(
-		ctx,
-		"inquiryId",
-		inquiryID,
-	)
 	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, refunddom.ErrNotFound
+		}
+
 		return nil, err
 	}
 
-	switch len(refunds) {
-	case 0:
-		return nil, refunddom.ErrNotFound
+	var key refundInquiryKeyDocument
 
-	case 1:
-		refund := refunds[0]
-		return &refund, nil
+	if err := keySnapshot.DataTo(&key); err != nil {
+		return nil, err
+	}
 
-	default:
+	if key.RefundID == "" || key.InquiryID != inquiryID {
 		return nil, refunddom.ErrConflict
 	}
+
+	refund, err := r.GetByID(ctx, key.RefundID)
+	if err != nil {
+		if errors.Is(err, refunddom.ErrNotFound) {
+			return nil, refunddom.ErrConflict
+		}
+
+		return nil, err
+	}
+
+	if refund.InquiryID != inquiryID {
+		return nil, refunddom.ErrConflict
+	}
+
+	return refund, nil
 }
 
 func (r *RefundRepositoryFS) GetByOrderItem(
@@ -362,22 +341,6 @@ func (r *RefundRepositoryFS) Create(
 	)
 	if err != nil {
 		return nil, err
-	}
-
-	// Compatibility preflight for any Refund data that predates the unique
-	// inquiry key collection. The transaction below still provides the actual
-	// concurrent uniqueness guarantee for all new writes.
-	existingByInquiry, err := r.listByField(
-		ctx,
-		"inquiryId",
-		entity.InquiryID,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(existingByInquiry) > 0 {
-		return nil, refunddom.ErrDuplicateInquiry
 	}
 
 	refundReference := r.col().Doc(entity.ID)

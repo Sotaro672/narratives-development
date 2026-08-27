@@ -5,15 +5,14 @@ package query
 // 機能: OrderManagementQuery (console)
 //   - currentCompany 境界（inventory_query 相当）で許可された inventoryId のみを対象に
 //     Order.Items[].InventoryID をフラットに列挙する
-//   - order lister の ListByInventoryIDs を使い、orders を取得する
+//   - order lister の List を使い、orders を取得する
 //   - allowed items を集約してから item 単位で再ページングする
 //
 // 目的:
 // - order テーブルの items に記載された inventoryId を、company 境界に従って安全に一覧できるようにする
 //
 // ✅ DI整合のための方針:
-//   - Query側の port は domain/order.Filter / common.Sort / common.Page を引数に取る。
-//   - currentCompany 境界のため、OrderLister は List ではなく ListByInventoryIDs を要求する。
+//   - Query側の port は common.Sort / common.Page を引数に取る。
 //   - company-bound inventory filtering は OrderManagementQuery 側で item 単位に適用する。
 //
 // ✅ 重要:
@@ -55,10 +54,8 @@ import (
 // NOTE:
 // Company-bound inventory filtering is applied by OrderManagementQuery at item level.
 type OrderLister interface {
-	ListByInventoryIDs(
+	List(
 		ctx context.Context,
-		allowedInventoryIDs map[string]struct{},
-		filter orderdom.Filter,
 		sort common.Sort,
 		page common.Page,
 	) (common.PageResult[orderdom.Order], error)
@@ -133,8 +130,8 @@ type OrderItemInventoryRowDTO struct {
 
 type OrderManagementQuery struct {
 	lister       OrderLister
-	invRows      InventoryRowsLister        // REQUIRED
-	invBlueprint InventoryBlueprintResolver // REQUIRED
+	invRows      InventoryRowsLister
+	invBlueprint InventoryBlueprintResolver
 
 	productBlueprint applicationport.ProductBlueprintGetter
 	tbName           applicationport.TokenBlueprintGetter
@@ -145,8 +142,8 @@ type OrderManagementQuery struct {
 
 type NewOrderManagementQueryParams struct {
 	Lister       OrderLister
-	InvRows      InventoryRowsLister        // REQUIRED
-	InvBlueprint InventoryBlueprintResolver // REQUIRED
+	InvRows      InventoryRowsLister
+	InvBlueprint InventoryBlueprintResolver
 
 	ProductBlueprint applicationport.ProductBlueprintGetter
 	TBName           applicationport.TokenBlueprintGetter
@@ -196,7 +193,9 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 	page = NormalizeCommonPage(page)
 
 	if q == nil || q.lister == nil || q.invRows == nil || q.invBlueprint == nil {
-		return common.PageResult[OrderItemInventoryRowDTO]{}, errors.New("OrderManagementQuery.ListItemInventoryRows: wiring is incomplete (lister/invRows/invBlueprint required)")
+		return common.PageResult[OrderItemInventoryRowDTO]{}, errors.New(
+			"OrderManagementQuery.ListItemInventoryRows: wiring is incomplete (lister/invRows/invBlueprint required)",
+		)
 	}
 
 	allowedSet, err := AllowedInventoryIDSetFromContext(ctx, q.invRows)
@@ -241,7 +240,10 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			return "", "", e
 		}
 
-		blueprintCache[invID] = bt{pb: pbID, tb: tbID}
+		blueprintCache[invID] = bt{
+			pb: pbID,
+			tb: tbID,
+		}
 		return pbID, tbID, nil
 	}
 
@@ -344,12 +346,13 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			break
 		}
 
-		pr, e := q.lister.ListByInventoryIDs(
+		pr, e := q.lister.List(
 			ctx,
-			allowedSet,
-			filter,
 			sort,
-			common.Page{Number: srcPage, PerPage: page.PerPage},
+			common.Page{
+				Number:  srcPage,
+				PerPage: page.PerPage,
+			},
 		)
 		if e != nil {
 			return common.PageResult[OrderItemInventoryRowDTO]{}, e
@@ -571,7 +574,9 @@ func (q *OrderManagementQuery) CountActionRequiredOrders(
 	ctx context.Context,
 ) (int, error) {
 	if q == nil || q.lister == nil || q.invRows == nil {
-		return 0, errors.New("OrderManagementQuery.CountActionRequiredOrders: wiring is incomplete (lister/invRows required)")
+		return 0, errors.New(
+			"OrderManagementQuery.CountActionRequiredOrders: wiring is incomplete (lister/invRows required)",
+		)
 	}
 
 	allowedSet, err := AllowedInventoryIDSetFromContext(ctx, q.invRows)
@@ -596,10 +601,8 @@ func (q *OrderManagementQuery) CountActionRequiredOrders(
 			break
 		}
 
-		pr, err := q.lister.ListByInventoryIDs(
+		pr, err := q.lister.List(
 			ctx,
-			allowedSet,
-			orderdom.Filter{},
 			common.Sort{},
 			common.Page{
 				Number:  srcPage,

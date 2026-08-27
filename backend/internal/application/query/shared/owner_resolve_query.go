@@ -57,9 +57,8 @@ type BrandReader interface {
 type OwnerType string
 
 const (
-	OwnerTypeUnknown OwnerType = "unknown"
-	OwnerTypeAvatar  OwnerType = "avatar"
-	OwnerTypeBrand   OwnerType = "brand"
+	OwnerTypeAvatar OwnerType = "avatar"
+	OwnerTypeBrand  OwnerType = "brand"
 )
 
 // OwnerResolveResult is the unified response for "who owns this wallet address?".
@@ -80,23 +79,22 @@ type OwnerResolveResult struct {
 // Query
 // ------------------------------------------------------------
 
-// OwnerResolveQuery resolves (brandId or avatarId) from a wallet address.
+// OwnerResolveQuery resolves brandId or avatarId from a wallet address.
+//
 // 方針:
 // - 既に購入済み（tokens/{productId}.toAddress が buyer avatar wallet に更新済み）なら avatarId がヒット
 // - まだ誰にも購入されていない在庫（toAddress が brand wallet のまま）なら brandId がヒット
-//
-// NOTE:
-// - 競合した場合の優先順位は avatar を優先（購入済みの解決を優先）。
+// - 競合した場合は avatar を優先する
 type OwnerResolveQuery struct {
 	AvatarRepo AvatarWalletAddressReader
 	BrandRepo  BrandWalletAddressReader
 
-	// ID -> Avatar / Brand（nil 許容 / Resolve は継続）
 	Avatar AvatarReader
 	Brand  BrandReader
 }
 
 // NewOwnerResolveQuery constructs OwnerResolveQuery.
+//
 // AvatarRepo / BrandRepo はどちらも nil 許容だが、Resolve には最低1つ必要。
 // Avatar / Brand は nil でも Resolve は動作する（名前は埋めない）。
 func NewOwnerResolveQuery(
@@ -114,8 +112,9 @@ func NewOwnerResolveQuery(
 }
 
 // Resolve resolves owner by wallet address.
-// - avatar が見つかれば avatar を返す（+ 可能なら avatarName も埋める）
-// - 見つからなければ brand を返す（+ 可能なら brandName も埋める）
+//
+// - avatar が見つかれば avatar を返す
+// - 見つからなければ brand を返す
 // - どちらも見つからなければ ErrOwnerNotFound
 func (q *OwnerResolveQuery) Resolve(
 	ctx context.Context,
@@ -130,69 +129,53 @@ func (q *OwnerResolveQuery) Resolve(
 		return nil, ErrInvalidWalletAddress
 	}
 
-	// 1) avatar 優先（購入済みのケース）
 	if q.AvatarRepo != nil {
 		avatarID, err := q.AvatarRepo.FindAvatarIDByWalletAddress(ctx, addr)
 		if err != nil {
 			return nil, err
 		}
+
 		if avatarID != "" {
-			res := &OwnerResolveResult{
+			result := &OwnerResolveResult{
 				WalletAddress: addr,
 				OwnerType:     OwnerTypeAvatar,
 				AvatarID:      avatarID,
 			}
 
-			// optional: avatarId -> avatarName
 			if q.Avatar != nil {
-				if a, err := q.Avatar.GetByID(ctx, avatarID); err == nil {
-					res.AvatarName = a.AvatarName
+				if avatar, err := q.Avatar.GetByID(ctx, avatarID); err == nil {
+					result.AvatarName = avatar.AvatarName
 				}
 			}
 
-			return res, nil
+			return result, nil
 		}
 	}
 
-	// 2) brand（未購入在庫のケース）
 	if q.BrandRepo != nil {
 		brandID, err := q.BrandRepo.FindBrandIDByWalletAddress(ctx, addr)
 		if err != nil {
 			return nil, err
 		}
+
 		if brandID != "" {
-			res := &OwnerResolveResult{
+			result := &OwnerResolveResult{
 				WalletAddress: addr,
 				OwnerType:     OwnerTypeBrand,
 				BrandID:       brandID,
 			}
 
-			// optional: brandId -> brandName
 			if q.Brand != nil {
-				if b, err := q.Brand.GetByID(ctx, brandID); err == nil {
-					res.BrandName = b.Name
+				if brand, err := q.Brand.GetByID(ctx, brandID); err == nil {
+					result.BrandName = brand.Name
 				}
 			}
 
-			return res, nil
+			return result, nil
 		}
 	}
 
 	return nil, ErrOwnerNotFound
-}
-
-// ResolveIDs is a compatibility helper if you only need IDs.
-// Returns (brandId, avatarId, ownerType, error).
-func (q *OwnerResolveQuery) ResolveIDs(
-	ctx context.Context,
-	walletAddress string,
-) (brandID string, avatarID string, ownerType OwnerType, err error) {
-	r, err := q.Resolve(ctx, walletAddress)
-	if err != nil {
-		return "", "", OwnerTypeUnknown, err
-	}
-
-	return r.BrandID, r.AvatarID, r.OwnerType, nil
 }
 
 // ------------------------------------------------------------
@@ -200,16 +183,15 @@ func (q *OwnerResolveQuery) ResolveIDs(
 // ------------------------------------------------------------
 
 // looksLikeSolanaAddress performs a light validation for Solana base58 public key.
+//
 // - 空/空白は NG
-// - 長さはざっくり 32〜64
+// - 長さは 32〜64
 // - base58 文字だけ許容（0,O,I,l を除外）
 func looksLikeSolanaAddress(s string) bool {
 	if s == "" {
 		return false
 	}
 
-	// Solana pubkey は通常 32 bytes -> base58 で 32〜44 文字程度。
-	// 将来の拡張を踏まえゆるめに。
 	if len(s) < 32 || len(s) > 64 {
 		return false
 	}
@@ -224,8 +206,6 @@ func looksLikeSolanaAddress(s string) bool {
 }
 
 func isBase58Rune(r rune) bool {
-	// Bitcoin base58 alphabet
-	// 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
 	switch {
 	case r >= '1' && r <= '9':
 		return true

@@ -40,6 +40,7 @@ func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && path0 == "/mall/avatars":
 		h.post(w, r)
 		return
+
 	case r.Method == http.MethodGet && strings.HasPrefix(path0, "/mall/avatars/"):
 		id, ok := extractIDFromPath(path0, "/mall/avatars/")
 		if !ok {
@@ -49,8 +50,11 @@ func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		h.get(w, r, id)
 		return
+
 	default:
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "not_found",
+		})
 		return
 	}
 }
@@ -77,13 +81,17 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h == nil || h.registrationUC == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "avatar registration usecase not configured"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "avatar registration usecase not configured",
+		})
 		return
 	}
 
 	userUID, ok := middleware.CurrentUserUID(r)
 	if !ok || strings.TrimSpace(userUID) == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized",
+		})
 		return
 	}
 
@@ -95,7 +103,9 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "invalid_json",
+		})
 		return
 	}
 
@@ -133,7 +143,8 @@ func publicAvatarIconURL(value *string) *string {
 		return nil
 	}
 
-	if !strings.HasPrefix(*value, "http://") && !strings.HasPrefix(*value, "https://") {
+	if !strings.HasPrefix(*value, "http://") &&
+		!strings.HasPrefix(*value, "https://") {
 		return nil
 	}
 
@@ -158,12 +169,16 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_id"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "invalid_id",
+		})
 		return
 	}
 
 	if h == nil || h.uc == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "avatar usecase not configured"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "avatar usecase not configured",
+		})
 		return
 	}
 
@@ -188,9 +203,12 @@ func writeAvatarErr(w http.ResponseWriter, err error) {
 		errors.Is(err, avatardom.ErrInvalidProfile),
 		errors.Is(err, avatardom.ErrInvalidExternalLink):
 		code = http.StatusBadRequest
-	case isNotFoundLike(err):
+
+	case isNotFound(err):
 		code = http.StatusNotFound
 	}
 
-	writeJSON(w, code, map[string]string{"error": err.Error()})
+	writeJSON(w, code, map[string]string{
+		"error": err.Error(),
+	})
 }

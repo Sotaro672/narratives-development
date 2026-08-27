@@ -226,21 +226,6 @@ func (h *TransferHandler) ServeHTTP(
 			)
 			return
 		}
-
-		if isNotFoundLike(err) {
-			writeJSON(
-				w,
-				http.StatusNotFound,
-				map[string]any{
-					"error":     "not found",
-					"message":   err.Error(),
-					"avatarId":  avatarID,
-					"productId": productID,
-				},
-			)
-			return
-		}
-
 		if errors.Is(
 			err,
 			context.Canceled,

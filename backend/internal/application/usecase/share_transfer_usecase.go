@@ -10,19 +10,6 @@ import (
 	walletdom "narratives/internal/domain/wallet"
 )
 
-// AvatarSecretProvider is kept temporarily as a compatibility contract for
-// existing DI code.
-//
-// Bubblegum V2 transfer execution must not load or pass avatar private keys
-// through the Go application layer. Signer resolution belongs to the internal
-// Bubblegum service.
-type AvatarSecretProvider interface {
-	GetAvatarSigner(
-		ctx context.Context,
-		avatarID string,
-	) (any, error)
-}
-
 // AvatarWalletItemTransferUpdater updates sender / receiver wallet asset caches.
 //
 // NOTE:

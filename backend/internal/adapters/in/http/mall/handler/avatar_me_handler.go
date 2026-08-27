@@ -41,7 +41,10 @@ type meAvatarResponse struct {
 	ExternalLink  *string `json:"externalLink,omitempty"`
 }
 
-func NewMeAvatarHandler(repo MeAvatarResolver, avatarUC *avataruc.AvatarUsecase) http.Handler {
+func NewMeAvatarHandler(
+	repo MeAvatarResolver,
+	avatarUC *avataruc.AvatarUsecase,
+) http.Handler {
 	return &MeAvatarHandler{
 		Repo:     repo,
 		AvatarUC: avatarUC,
@@ -81,12 +84,15 @@ func (h *MeAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && path0 == meAvatarsPath:
 		h.handleGet(w, r, uid)
 		return
+
 	case r.Method == http.MethodPatch && path0 == meAvatarsPath:
 		h.handlePatch(w, r, uid)
 		return
+
 	case r.Method == http.MethodDelete && path0 == meAvatarsPath:
 		h.handleDelete(w, r, uid)
 		return
+
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -101,14 +107,18 @@ func httpAvatarIcon(value *string) *string {
 		return nil
 	}
 
-	if !strings.HasPrefix(*value, "http://") && !strings.HasPrefix(*value, "https://") {
+	if !strings.HasPrefix(*value, "http://") &&
+		!strings.HasPrefix(*value, "https://") {
 		return nil
 	}
 
 	return value
 }
 
-func newMeAvatarResponse(avatarID string, patch avatardom.AvatarPatch) (meAvatarResponse, error) {
+func newMeAvatarResponse(
+	avatarID string,
+	patch avatardom.AvatarPatch,
+) (meAvatarResponse, error) {
 	if avatarID == "" {
 		return meAvatarResponse{}, avatardom.ErrInvalidID
 	}
@@ -136,7 +146,10 @@ func newMeAvatarResponse(avatarID string, patch avatardom.AvatarPatch) (meAvatar
 	}, nil
 }
 
-func (h *MeAvatarHandler) ResolveAvatarByUID(ctx context.Context, uid string) (string, string, avatardom.AvatarPatch, error) {
+func (h *MeAvatarHandler) ResolveAvatarByUID(
+	ctx context.Context,
+	uid string,
+) (string, string, avatardom.AvatarPatch, error) {
 	if h == nil || h.Repo == nil {
 		return "", "", avatardom.AvatarPatch{}, errors.New("me avatar handler not configured")
 	}
@@ -171,7 +184,11 @@ func (h *MeAvatarHandler) ResolveAvatarByUID(ctx context.Context, uid string) (s
 	return avatarID, walletAddress, patch, nil
 }
 
-func (h *MeAvatarHandler) updateAvatarPatchByUID(ctx context.Context, uid string, patch avatardom.AvatarPatch) (string, avatardom.AvatarPatch, error) {
+func (h *MeAvatarHandler) updateAvatarPatchByUID(
+	ctx context.Context,
+	uid string,
+	patch avatardom.AvatarPatch,
+) (string, avatardom.AvatarPatch, error) {
 	if h == nil || h.Repo == nil {
 		return "", avatardom.AvatarPatch{}, errors.New("me avatar handler not configured")
 	}
@@ -206,7 +223,11 @@ func (h *MeAvatarHandler) updateAvatarPatchByUID(ctx context.Context, uid string
 	return avatarID, out, nil
 }
 
-func (h *MeAvatarHandler) handleGet(w http.ResponseWriter, r *http.Request, uid string) {
+func (h *MeAvatarHandler) handleGet(
+	w http.ResponseWriter,
+	r *http.Request,
+	uid string,
+) {
 	avatarID, _, patch, err := h.ResolveAvatarByUID(r.Context(), uid)
 	if err != nil {
 		writeMeAvatarErr(w, err)
@@ -238,7 +259,11 @@ func (h *MeAvatarHandler) handleGet(w http.ResponseWriter, r *http.Request, uid 
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, uid string) {
+func (h *MeAvatarHandler) handlePatch(
+	w http.ResponseWriter,
+	r *http.Request,
+	uid string,
+) {
 	type meAvatarUpdateRequest struct {
 		AvatarName   *string `json:"avatarName,omitempty"`
 		Profile      *string `json:"profile,omitempty"`
@@ -272,7 +297,10 @@ func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, ui
 		return
 	}
 
-	if req.AvatarName == nil && req.Profile == nil && req.ExternalLink == nil && req.AvatarIcon == nil {
+	if req.AvatarName == nil &&
+		req.Profile == nil &&
+		req.ExternalLink == nil &&
+		req.AvatarIcon == nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "no_fields_to_update",
@@ -287,7 +315,11 @@ func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, ui
 		ExternalLink: req.ExternalLink,
 	}
 
-	avatarID, outPatch, err := h.updateAvatarPatchByUID(r.Context(), uid, patch)
+	avatarID, outPatch, err := h.updateAvatarPatchByUID(
+		r.Context(),
+		uid,
+		patch,
+	)
 	if err != nil {
 		writeMeAvatarErr(w, err)
 		return
@@ -318,7 +350,11 @@ func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, ui
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-func (h *MeAvatarHandler) handleDelete(w http.ResponseWriter, r *http.Request, uid string) {
+func (h *MeAvatarHandler) handleDelete(
+	w http.ResponseWriter,
+	r *http.Request,
+	uid string,
+) {
 	if h == nil || h.AvatarUC == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -354,17 +390,23 @@ func meAvatarHTTPStatus(err error) int {
 	switch {
 	case err == nil:
 		return http.StatusInternalServerError
-	case isNotFoundLike(err):
+
+	case isNotFound(err):
 		return http.StatusNotFound
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+
+	case errors.Is(err, context.Canceled),
+		errors.Is(err, context.DeadlineExceeded):
 		return http.StatusRequestTimeout
+
 	case errors.Is(err, avatardom.ErrInvalidID):
 		return http.StatusNotFound
+
 	case errors.Is(err, avatardom.ErrInvalidAvatarName),
 		errors.Is(err, avatardom.ErrInvalidAvatarIcon),
 		errors.Is(err, avatardom.ErrInvalidProfile),
 		errors.Is(err, avatardom.ErrInvalidExternalLink):
 		return http.StatusBadRequest
+
 	default:
 		return http.StatusInternalServerError
 	}
@@ -374,17 +416,23 @@ func meAvatarErrorMessage(err error) string {
 	switch {
 	case err == nil:
 		return "internal_error"
-	case isNotFoundLike(err):
+
+	case isNotFound(err):
 		return "avatar_not_found_for_uid"
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+
+	case errors.Is(err, context.Canceled),
+		errors.Is(err, context.DeadlineExceeded):
 		return "request_timeout"
+
 	case errors.Is(err, avatardom.ErrInvalidID):
 		return "avatar_not_found_for_uid"
+
 	case errors.Is(err, avatardom.ErrInvalidAvatarName),
 		errors.Is(err, avatardom.ErrInvalidAvatarIcon),
 		errors.Is(err, avatardom.ErrInvalidProfile),
 		errors.Is(err, avatardom.ErrInvalidExternalLink):
 		return err.Error()
+
 	default:
 		return "internal_error"
 	}
