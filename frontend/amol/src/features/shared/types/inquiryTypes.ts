@@ -9,9 +9,14 @@ export const INQUIRY_STATUSES = [
 
 export type InquiryStatus = (typeof INQUIRY_STATUSES)[number];
 
-export const INQUIRY_REPLY_SENDER_TYPES = ["avatar", "member"] as const;
+export const INQUIRY_REPLY_SENDER_TYPES = [
+  "avatar",
+  "member",
+  "system",
+] as const;
 
-export type InquiryReplySenderType = (typeof INQUIRY_REPLY_SENDER_TYPES)[number];
+export type InquiryReplySenderType =
+  (typeof INQUIRY_REPLY_SENDER_TYPES)[number];
 
 export const INQUIRY_TYPES = [
   "product",

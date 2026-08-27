@@ -10,13 +10,37 @@ type InquiryReplyListProps = {
   replies: InquiryReply[];
 };
 
+function getReplySenderLabel(
+  senderType: InquiryReply["senderType"],
+): string {
+  switch (senderType) {
+    case "avatar":
+      return "あなた";
+
+    case "member":
+      return "テナント";
+
+    case "system":
+      return "AMOL";
+
+    default:
+      return "-";
+  }
+}
+
 export default function InquiryReplyList({
   replies,
 }: InquiryReplyListProps) {
   return (
     <>
       {replies.map((reply) => {
-        const isAvatarReply = reply.senderType === "avatar";
+        const isAvatarReply =
+          reply.senderType === "avatar";
+
+        const senderLabel =
+          getReplySenderLabel(
+            reply.senderType,
+          );
 
         return (
           <article
@@ -30,7 +54,7 @@ export default function InquiryReplyList({
             <div className="chat-detail-page__message-head">
               <div>
                 <span className="chat-detail-page__sender">
-                  {isAvatarReply ? "あなた" : "テナント"}
+                  {senderLabel}
                 </span>
 
                 <time
