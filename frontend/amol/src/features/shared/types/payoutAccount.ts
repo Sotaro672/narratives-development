@@ -1,14 +1,22 @@
 // frontend/amol/src/features/shared/types/payoutAccount.ts
 
+export type PayoutAccountStatus = "unregistered" | "pending" | "registered" | "restricted";
+
+export type PayoutBankAccountType = "ordinary" | "current";
+
 export type PayoutBankAccount = {
-  bankName?: string;
-  last4?: string;
+  bankCode: string;
+  bankName: string;
+  branchCode: string;
+  branchName: string;
+  accountType: PayoutBankAccountType;
+  last4: string;
+  accountHolderName: string;
 };
 
 export type PayoutAccount = {
-  stripeAccountId: string;
-  detailsSubmitted: boolean;
-  payoutsEnabled: boolean;
+  status: PayoutAccountStatus;
+  payoutReady: boolean;
   bankAccount?: PayoutBankAccount | null;
 };
 
@@ -17,11 +25,17 @@ export type PayoutAccountResponse = {
   error?: string;
 };
 
-export type PayoutAccountSession = {
-  clientSecret: string;
+export type PayoutAccountRegistrationInput = {
+  bankCode: string;
+  bankName: string;
+  branchCode: string;
+  branchName: string;
+  accountType: PayoutBankAccountType;
+  accountNumber: string;
+  accountHolderName: string;
 };
 
-export type PayoutAccountSessionResponse = {
-  data?: PayoutAccountSession;
+export type PayoutAccountRegistrationResponse = {
+  data?: PayoutAccount | null;
   error?: string;
 };

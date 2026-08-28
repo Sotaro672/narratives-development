@@ -4,19 +4,21 @@ import { buildBackendUrl } from "../../../lib/apiBaseUrl";
 
 import type {
   PayoutAccount,
+  PayoutAccountRegistrationInput,
+  PayoutAccountRegistrationResponse,
   PayoutAccountResponse,
-  PayoutAccountSessionResponse,
 } from "../../shared/types/payoutAccount";
 
 type AuthenticatedRequestInput = {
   idToken: string;
 };
 
-async function readJson<T>(
-  response: Response
-): Promise<T | null> {
-  const contentType =
-    response.headers.get("content-type") || "";
+type RegisterPayoutAccountRequestInput = AuthenticatedRequestInput & {
+  input: PayoutAccountRegistrationInput;
+};
+
+async function readJson<T>(response: Response): Promise<T | null> {
+  const contentType = response.headers.get("content-type") || "";
 
   if (!contentType.includes("application/json")) {
     return null;
@@ -39,8 +41,7 @@ export async function fetchPayoutAccount({
     }
   );
 
-  const body =
-    await readJson<PayoutAccountResponse>(response);
+  const body = await readJson<PayoutAccountResponse>(response);
 
   if (!response.ok) {
     throw new Error(
@@ -52,41 +53,42 @@ export async function fetchPayoutAccount({
   return body?.data || null;
 }
 
-export async function createPayoutAccountSession({
+export async function registerPayoutAccount({
   idToken,
-}: AuthenticatedRequestInput): Promise<string> {
+  input,
+}: RegisterPayoutAccountRequestInput): Promise<PayoutAccount> {
   const response = await fetch(
-    buildBackendUrl(
-      "/mall/me/payout-account/account-session"
-    ),
+    buildBackendUrl("/mall/me/payout-account"),
     {
-      method: "POST",
+      method: "PUT",
       headers: {
         Authorization: `Bearer ${idToken}`,
         Accept: "application/json",
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify(input),
     }
   );
 
   const body =
-    await readJson<PayoutAccountSessionResponse>(
+    await readJson<PayoutAccountRegistrationResponse>(
       response
     );
 
   if (!response.ok) {
     throw new Error(
       body?.error ||
-        "Stripeとの接続に失敗しました。"
+        "売上受取口座の登録に失敗しました。"
     );
   }
 
-  const clientSecret = body?.data?.clientSecret;
+  const payoutAccount = body?.data;
 
-  if (!clientSecret) {
+  if (!payoutAccount) {
     throw new Error(
-      "StripeのAccount Sessionを取得できませんでした。"
+      "登録した売上受取口座の情報を取得できませんでした。"
     );
   }
 
-  return clientSecret;
+  return payoutAccount;
 }
