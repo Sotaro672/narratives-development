@@ -4,7 +4,6 @@ package usecase
 import (
 	"context"
 	"errors"
-	"net/url"
 	"strings"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 const (
 	defaultPayoutAccountCountry     = "JP"
 	defaultPayoutAccountDisplayName = "AMOL Seller"
+	defaultPayoutAccountEntityType  = "individual"
 
 	payoutAccountCreateIdempotencyKeyPrefix = "payout-account-create:"
 )
@@ -26,43 +26,31 @@ var (
 	ErrPayoutAccountStripeGatewayMissing = errors.New(
 		"payoutAccount: stripe gateway is not configured",
 	)
-	ErrPayoutAccountAllowedReturnOriginMissing = errors.New(
-		"payoutAccount: allowed return origin is not configured",
-	)
-	ErrPayoutAccountInvalidReturnURL = errors.New(
-		"payoutAccount: invalid returnUrl",
-	)
-	ErrPayoutAccountInvalidRefreshURL = errors.New(
-		"payoutAccount: invalid refreshUrl",
-	)
 	ErrPayoutAccountStripeResultEmpty = errors.New(
 		"payoutAccount: stripe account result is empty",
 	)
 	ErrPayoutAccountStripeAccountMismatch = errors.New(
 		"payoutAccount: stripe account mismatch",
 	)
-	ErrPayoutAccountStripeLinkEmpty = errors.New(
-		"payoutAccount: stripe account link is empty",
+	ErrPayoutAccountStripeSessionEmpty = errors.New(
+		"payoutAccount: stripe account session is empty",
 	)
 )
 
-// CreatePayoutAccountLinkInput is supplied by the authenticated Mall handler.
+// CreatePayoutAccountSessionInput is supplied by the authenticated Mall handler.
 //
 // UserID must be obtained from UserAuthMiddleware rather than request JSON.
 // DisplayName and ContactEmail are authentication/profile values used only
 // when the Stripe Connected Account is created for the first time.
-type CreatePayoutAccountLinkInput struct {
+type CreatePayoutAccountSessionInput struct {
 	UserID       string
 	DisplayName  string
 	ContactEmail string
-	ReturnURL    string
-	RefreshURL   string
 }
 
-type CreatePayoutAccountLinkResult struct {
-	Account       payoutdom.PayoutAccount
-	OnboardingURL string
-	ExpiresAt     time.Time
+type CreatePayoutAccountSessionResult struct {
+	Account      payoutdom.PayoutAccount
+	ClientSecret string
 }
 
 // PayoutAccountUsecase manages the resale seller's Stripe payout destination.
@@ -71,26 +59,23 @@ type CreatePayoutAccountLinkResult struct {
 //   - one User has at most one PayoutAccount
 //   - PayoutAccount.UserID is also the Firestore document ID
 //   - one Stripe Connected Account is created per User
-//   - repeated Account Link creation reuses the existing Connected Account
+//   - repeated Account Session creation reuses the existing Connected Account
 //   - Stripe is the source of truth for onboarding and bank account state
 type PayoutAccountUsecase struct {
 	repo    payoutdom.Repository
 	gateway applicationport.StripePayoutAccountGateway
 
-	allowedReturnOrigin string
-	now                 func() time.Time
+	now func() time.Time
 }
 
 func NewPayoutAccountUsecase(
 	repo payoutdom.Repository,
 	gateway applicationport.StripePayoutAccountGateway,
-	allowedReturnOrigin string,
 ) *PayoutAccountUsecase {
 	return &PayoutAccountUsecase{
-		repo:                repo,
-		gateway:             gateway,
-		allowedReturnOrigin: strings.TrimSpace(allowedReturnOrigin),
-		now:                 time.Now,
+		repo:    repo,
+		gateway: gateway,
+		now:     time.Now,
 	}
 }
 
@@ -107,7 +92,6 @@ func (u *PayoutAccountUsecase) GetByUserID(
 		return nil, err
 	}
 
-	userID = strings.TrimSpace(userID)
 	if userID == "" {
 		return nil, payoutdom.ErrInvalidUserID
 	}
@@ -125,44 +109,32 @@ func (u *PayoutAccountUsecase) GetByUserID(
 	return &synced, nil
 }
 
-// CreateAccountLink creates or continues Stripe hosted onboarding.
+// CreateAccountSession creates or continues Stripe Embedded Onboarding.
 //
 // First request:
 //   - create Stripe Connected Account with a stable idempotency key
 //   - persist payoutAccounts/{userId}
-//   - create Account Link
+//   - create Account Session
 //
 // Later requests:
 //   - reuse the stored StripeAccountID
 //   - synchronize current Stripe state
-//   - create a fresh single-use Account Link
+//   - create a fresh short-lived Account Session
 //
-// Account Link itself is intentionally not idempotent because Stripe links are
-// single-use and should be regenerated for every request.
-func (u *PayoutAccountUsecase) CreateAccountLink(
+// Account Session client secrets are intentionally not persisted because they
+// are short-lived credentials used only by Stripe Connect.js.
+func (u *PayoutAccountUsecase) CreateAccountSession(
 	ctx context.Context,
-	in CreatePayoutAccountLinkInput,
-) (CreatePayoutAccountLinkResult, error) {
+	in CreatePayoutAccountSessionInput,
+) (CreatePayoutAccountSessionResult, error) {
 	if err := u.validateReady(); err != nil {
-		return CreatePayoutAccountLinkResult{}, err
+		return CreatePayoutAccountSessionResult{}, err
 	}
 
-	userID := strings.TrimSpace(in.UserID)
+	userID := in.UserID
 	if userID == "" {
-		return CreatePayoutAccountLinkResult{},
+		return CreatePayoutAccountSessionResult{},
 			payoutdom.ErrInvalidUserID
-	}
-
-	returnURL := strings.TrimSpace(in.ReturnURL)
-	if err := u.validateCallbackURL(returnURL); err != nil {
-		return CreatePayoutAccountLinkResult{},
-			ErrPayoutAccountInvalidReturnURL
-	}
-
-	refreshURL := strings.TrimSpace(in.RefreshURL)
-	if err := u.validateCallbackURL(refreshURL); err != nil {
-		return CreatePayoutAccountLinkResult{},
-			ErrPayoutAccountInvalidRefreshURL
 	}
 
 	account, err := u.repo.GetByUserID(ctx, userID)
@@ -170,58 +142,48 @@ func (u *PayoutAccountUsecase) CreateAccountLink(
 	case err == nil:
 		account, err = u.syncStripeState(ctx, account)
 		if err != nil {
-			return CreatePayoutAccountLinkResult{}, err
+			return CreatePayoutAccountSessionResult{}, err
 		}
 
 	case errors.Is(err, payoutdom.ErrNotFound):
 		account, err = u.createPayoutAccount(
 			ctx,
 			userID,
-			strings.TrimSpace(in.DisplayName),
-			strings.TrimSpace(in.ContactEmail),
+			in.DisplayName,
+			in.ContactEmail,
 		)
 		if err != nil {
-			return CreatePayoutAccountLinkResult{}, err
+			return CreatePayoutAccountSessionResult{}, err
 		}
 
 	default:
-		return CreatePayoutAccountLinkResult{}, err
+		return CreatePayoutAccountSessionResult{}, err
 	}
 
-	linkUseCase := applicationport.StripePayoutAccountLinkUseCaseOnboarding
-	if account.DetailsSubmitted {
-		linkUseCase = applicationport.StripePayoutAccountLinkUseCaseUpdate
-	}
-
-	link, err := u.gateway.CreatePayoutAccountLink(
+	session, err := u.gateway.CreatePayoutAccountSession(
 		ctx,
-		applicationport.CreateStripePayoutAccountLinkInput{
+		applicationport.CreateStripePayoutAccountSessionInput{
 			StripeAccountID: account.StripeAccountID,
-			UseCase:         linkUseCase,
-			ReturnURL:       returnURL,
-			RefreshURL:      refreshURL,
 		},
 	)
 	if err != nil {
-		return CreatePayoutAccountLinkResult{}, err
+		return CreatePayoutAccountSessionResult{}, err
 	}
 
-	if link == nil || strings.TrimSpace(link.URL) == "" {
-		return CreatePayoutAccountLinkResult{},
-			ErrPayoutAccountStripeLinkEmpty
+	if session == nil || session.ClientSecret == "" {
+		return CreatePayoutAccountSessionResult{},
+			ErrPayoutAccountStripeSessionEmpty
 	}
 
-	linkAccountID := strings.TrimSpace(link.AccountID)
-	if linkAccountID == "" ||
-		linkAccountID != account.StripeAccountID {
-		return CreatePayoutAccountLinkResult{},
+	if session.AccountID == "" ||
+		session.AccountID != account.StripeAccountID {
+		return CreatePayoutAccountSessionResult{},
 			ErrPayoutAccountStripeAccountMismatch
 	}
 
-	return CreatePayoutAccountLinkResult{
-		Account:       account,
-		OnboardingURL: strings.TrimSpace(link.URL),
-		ExpiresAt:     link.ExpiresAt,
+	return CreatePayoutAccountSessionResult{
+		Account:      account,
+		ClientSecret: session.ClientSecret,
 	}, nil
 }
 
@@ -231,6 +193,9 @@ func (u *PayoutAccountUsecase) CreateAccountLink(
 // The Stripe create request uses a stable per-user idempotency key. Therefore
 // concurrent/retried requests do not intentionally create multiple Stripe
 // Connected Accounts.
+//
+// Mall resale sellers are created as individual legal entities because the
+// resale flow is intended for personal second-hand sales rather than businesses.
 //
 // If Firestore reports ErrConflict, another request already persisted the
 // canonical PayoutAccount, so that record is loaded and used instead.
@@ -254,6 +219,7 @@ func (u *PayoutAccountUsecase) createPayoutAccount(
 			DisplayName:    displayName,
 			ContactEmail:   contactEmail,
 			Country:        defaultPayoutAccountCountry,
+			EntityType:     defaultPayoutAccountEntityType,
 			IdempotencyKey: payoutAccountCreateIdempotencyKeyPrefix + userID,
 		},
 	)
@@ -266,7 +232,7 @@ func (u *PayoutAccountUsecase) createPayoutAccount(
 			ErrPayoutAccountStripeResultEmpty
 	}
 
-	stripeAccountID := strings.TrimSpace(stripeAccount.ID)
+	stripeAccountID := stripeAccount.ID
 	if stripeAccountID == "" ||
 		!strings.HasPrefix(stripeAccountID, "acct_") {
 		return payoutdom.PayoutAccount{},
@@ -334,7 +300,7 @@ func (u *PayoutAccountUsecase) syncStripeState(
 			ErrPayoutAccountStripeResultEmpty
 	}
 
-	stripeAccountID := strings.TrimSpace(stripeAccount.ID)
+	stripeAccountID := stripeAccount.ID
 	if stripeAccountID == "" ||
 		stripeAccountID != account.StripeAccountID {
 		return payoutdom.PayoutAccount{},
@@ -353,8 +319,8 @@ func (u *PayoutAccountUsecase) syncStripeState(
 	}
 
 	if bankAccount != nil {
-		bankName = strings.TrimSpace(bankAccount.BankName)
-		bankLast4 = strings.TrimSpace(bankAccount.Last4)
+		bankName = bankAccount.BankName
+		bankLast4 = bankAccount.Last4
 	}
 
 	if account.DetailsSubmitted == stripeAccount.DetailsSubmitted &&
@@ -387,57 +353,6 @@ func (u *PayoutAccountUsecase) validateReady() error {
 	}
 	if u.gateway == nil {
 		return ErrPayoutAccountStripeGatewayMissing
-	}
-	if strings.TrimSpace(u.allowedReturnOrigin) == "" {
-		return ErrPayoutAccountAllowedReturnOriginMissing
-	}
-
-	allowedURL, err := url.Parse(u.allowedReturnOrigin)
-	if err != nil ||
-		allowedURL.Scheme == "" ||
-		allowedURL.Host == "" ||
-		(allowedURL.Scheme != "https" && allowedURL.Scheme != "http") {
-		return ErrPayoutAccountAllowedReturnOriginMissing
-	}
-
-	return nil
-}
-
-// validateCallbackURL prevents the client from supplying an arbitrary external
-// Stripe return/refresh destination.
-//
-// Only URLs whose scheme and host match allowedReturnOrigin are accepted.
-// Path and query may differ so the frontend can use callback state such as:
-//
-//	/settings/payout-account?stripe=return
-//	/settings/payout-account?stripe=refresh
-func (u *PayoutAccountUsecase) validateCallbackURL(
-	rawURL string,
-) error {
-	if rawURL == "" {
-		return ErrPayoutAccountInvalidReturnURL
-	}
-
-	callbackURL, err := url.Parse(rawURL)
-	if err != nil ||
-		callbackURL.Scheme == "" ||
-		callbackURL.Host == "" ||
-		callbackURL.User != nil {
-		return ErrPayoutAccountInvalidReturnURL
-	}
-
-	allowedURL, err := url.Parse(
-		strings.TrimSpace(u.allowedReturnOrigin),
-	)
-	if err != nil ||
-		allowedURL.Scheme == "" ||
-		allowedURL.Host == "" {
-		return ErrPayoutAccountAllowedReturnOriginMissing
-	}
-
-	if !strings.EqualFold(callbackURL.Scheme, allowedURL.Scheme) ||
-		!strings.EqualFold(callbackURL.Host, allowedURL.Host) {
-		return ErrPayoutAccountInvalidReturnURL
 	}
 
 	return nil

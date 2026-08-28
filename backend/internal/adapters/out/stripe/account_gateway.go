@@ -89,6 +89,7 @@ func (g *AccountGateway) CreateAccount(
 		displayName,
 		contactEmail,
 		country,
+		"",
 		map[string]string{
 			"accountId": accountID,
 			"companyId": companyID,
@@ -161,6 +162,7 @@ func (g *AccountGateway) CreatePayoutAccount(
 	displayName := strings.TrimSpace(in.DisplayName)
 	contactEmail := strings.TrimSpace(in.ContactEmail)
 	country := strings.ToUpper(strings.TrimSpace(in.Country))
+	entityType := strings.ToLower(strings.TrimSpace(in.EntityType))
 
 	if userID == "" {
 		return nil, errors.New("stripe payout account: userId is empty")
@@ -171,12 +173,16 @@ func (g *AccountGateway) CreatePayoutAccount(
 	if country == "" {
 		country = defaultAccountCountry
 	}
+	if entityType != "individual" {
+		return nil, errors.New("stripe payout account: entityType must be individual")
+	}
 
 	out, err := g.createRecipientAccount(
 		ctx,
 		displayName,
 		contactEmail,
 		country,
+		entityType,
 		map[string]string{
 			"userId":    userID,
 			"ownerType": "mall_user",
@@ -204,39 +210,64 @@ func (g *AccountGateway) GetPayoutAccount(
 	return payoutAccountResultFromResponse(*out)
 }
 
-// CreatePayoutAccountLink creates a single-use hosted flow.
+// CreatePayoutAccountSession creates a short-lived Stripe Account Session for
+// Connect Embedded Components.
 //
-// Supported use cases:
-//   - account_onboarding: first registration or outstanding onboarding
-//   - account_update: previously onboarded account maintenance
-func (g *AccountGateway) CreatePayoutAccountLink(
+// The session enables account onboarding and account management. The returned
+// client secret must be sent only to the authenticated account owner and must
+// not be persisted or logged.
+func (g *AccountGateway) CreatePayoutAccountSession(
 	ctx context.Context,
-	in applicationport.CreateStripePayoutAccountLinkInput,
-) (*applicationport.StripePayoutAccountLinkResult, error) {
-	useCase := strings.TrimSpace(string(in.UseCase))
-
-	switch useCase {
-	case string(applicationport.StripePayoutAccountLinkUseCaseOnboarding),
-		string(applicationport.StripePayoutAccountLinkUseCaseUpdate):
-	default:
-		return nil, errors.New("stripe payout account: invalid account link use case")
-	}
-
-	out, err := g.createAccountLink(
-		ctx,
-		strings.TrimSpace(in.StripeAccountID),
-		useCase,
-		strings.TrimSpace(in.ReturnURL),
-		strings.TrimSpace(in.RefreshURL),
-	)
-	if err != nil {
+	in applicationport.CreateStripePayoutAccountSessionInput,
+) (*applicationport.StripePayoutAccountSessionResult, error) {
+	if err := g.validateReady(); err != nil {
 		return nil, err
 	}
 
-	return &applicationport.StripePayoutAccountLinkResult{
-		AccountID: strings.TrimSpace(out.Account),
-		URL:       strings.TrimSpace(out.URL),
-		ExpiresAt: out.ExpiresAt,
+	stripeAccountID := strings.TrimSpace(in.StripeAccountID)
+	if !isValidStripeAccountID(stripeAccountID) {
+		return nil, errors.New("stripe payout account: invalid stripeAccountId")
+	}
+
+	form := url.Values{}
+	form.Set("account", stripeAccountID)
+	form.Set("components[account_onboarding][enabled]", "true")
+	form.Set(
+		"components[account_onboarding][features][external_account_collection]",
+		"true",
+	)
+	form.Set("components[account_management][enabled]", "true")
+	form.Set(
+		"components[account_management][features][external_account_collection]",
+		"true",
+	)
+
+	var out stripeAccountSessionResponse
+	if err := g.doFormWithBaseURL(
+		ctx,
+		stripeAccountsV1BaseURL,
+		http.MethodPost,
+		"/account_sessions",
+		form,
+		"",
+		&out,
+	); err != nil {
+		return nil, err
+	}
+
+	out.Account = strings.TrimSpace(out.Account)
+	out.ClientSecret = strings.TrimSpace(out.ClientSecret)
+
+	if out.Account == "" || out.Account != stripeAccountID {
+		return nil, errors.New("stripe payout account: account session account is empty or mismatched")
+	}
+	if out.ClientSecret == "" {
+		return nil, errors.New("stripe payout account: account session client secret is empty")
+	}
+
+	return &applicationport.StripePayoutAccountSessionResult{
+		AccountID:    out.Account,
+		ClientSecret: out.ClientSecret,
 	}, nil
 }
 
@@ -302,6 +333,7 @@ func (g *AccountGateway) createRecipientAccount(
 	displayName string,
 	contactEmail string,
 	country string,
+	entityType string,
 	metadata map[string]string,
 	idempotencyKey string,
 ) (*stripeAccountResponse, error) {
@@ -312,6 +344,7 @@ func (g *AccountGateway) createRecipientAccount(
 	displayName = strings.TrimSpace(displayName)
 	contactEmail = strings.TrimSpace(contactEmail)
 	country = strings.ToUpper(strings.TrimSpace(country))
+	entityType = strings.ToLower(strings.TrimSpace(entityType))
 
 	if displayName == "" {
 		return nil, errors.New("stripe account: displayName is empty")
@@ -325,7 +358,8 @@ func (g *AccountGateway) createRecipientAccount(
 		ContactEmail: contactEmail,
 		Dashboard:    "express",
 		Identity: accountIdentityRequest{
-			Country: country,
+			Country:    country,
+			EntityType: entityType,
 		},
 		Defaults: accountDefaultsRequest{
 			Responsibilities: accountResponsibilitiesRequest{
@@ -510,7 +544,8 @@ type createAccountRequest struct {
 }
 
 type accountIdentityRequest struct {
-	Country string `json:"country"`
+	Country    string `json:"country"`
+	EntityType string `json:"entity_type,omitempty"`
 }
 
 type accountDefaultsRequest struct {
@@ -632,6 +667,14 @@ type stripeAccountLinkResponse struct {
 	ExpiresAt time.Time `json:"expires_at"`
 	Livemode  bool      `json:"livemode"`
 	URL       string    `json:"url"`
+}
+
+type stripeAccountSessionResponse struct {
+	Object       string `json:"object"`
+	Account      string `json:"account"`
+	ClientSecret string `json:"client_secret"`
+	ExpiresAt    int64  `json:"expires_at"`
+	Livemode     bool   `json:"livemode"`
 }
 
 type stripeExternalBankAccountListResponse struct {
@@ -849,6 +892,90 @@ func (g *AccountGateway) doJSONWithBaseURL(
 			"application/json",
 		)
 	}
+
+	if key := strings.TrimSpace(idempotencyKey); key != "" {
+		req.Header.Set(
+			"Idempotency-Key",
+			key,
+		)
+	}
+
+	res, err := g.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	responseBody, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return stripeAccountHTTPError(
+			res.StatusCode,
+			responseBody,
+		)
+	}
+
+	if dst == nil || len(responseBody) == 0 {
+		return nil
+	}
+
+	if err := json.Unmarshal(responseBody, dst); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (g *AccountGateway) doFormWithBaseURL(
+	ctx context.Context,
+	baseURL string,
+	method string,
+	path string,
+	form url.Values,
+	idempotencyKey string,
+	dst any,
+) error {
+	if err := g.validateReady(); err != nil {
+		return err
+	}
+
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	path = "/" + strings.TrimLeft(strings.TrimSpace(path), "/")
+
+	if baseURL == "" {
+		return errors.New("stripe account: base url is empty")
+	}
+
+	requestURL := baseURL + path
+	req, err := http.NewRequestWithContext(
+		ctx,
+		method,
+		requestURL,
+		strings.NewReader(form.Encode()),
+	)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set(
+		"Authorization",
+		"Bearer "+strings.TrimSpace(g.secretKey),
+	)
+	req.Header.Set(
+		"Stripe-Version",
+		stripeAccountsAPIVersion,
+	)
+	req.Header.Set(
+		"Accept",
+		"application/json",
+	)
+	req.Header.Set(
+		"Content-Type",
+		"application/x-www-form-urlencoded",
+	)
 
 	if key := strings.TrimSpace(idempotencyKey); key != "" {
 		req.Header.Set(

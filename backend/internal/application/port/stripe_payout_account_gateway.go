@@ -1,15 +1,7 @@
 // backend/internal/application/port/stripe_payout_account_gateway.go
 package port
 
-import (
-	"context"
-	"time"
-)
-
-const (
-	StripePayoutAccountLinkUseCaseOnboarding StripePayoutAccountLinkUseCase = "account_onboarding"
-	StripePayoutAccountLinkUseCaseUpdate     StripePayoutAccountLinkUseCase = "account_update"
-)
+import "context"
 
 // StripePayoutAccountGateway defines the Stripe Connect operations required by
 // the PayoutAccount application flow.
@@ -26,10 +18,10 @@ type StripePayoutAccountGateway interface {
 		stripeAccountID string,
 	) (*StripePayoutAccountResult, error)
 
-	CreatePayoutAccountLink(
+	CreatePayoutAccountSession(
 		ctx context.Context,
-		in CreateStripePayoutAccountLinkInput,
-	) (*StripePayoutAccountLinkResult, error)
+		in CreateStripePayoutAccountSessionInput,
+	) (*StripePayoutAccountSessionResult, error)
 
 	GetPayoutBankAccount(
 		ctx context.Context,
@@ -42,11 +34,16 @@ type StripePayoutAccountGateway interface {
 //
 // UserID is stored in Stripe metadata so the Connected Account can be traced
 // back to its AMOL owner without using AvatarID as the KYC identity.
+//
+// EntityType identifies the legal entity represented by the Connected Account.
+// Mall resale sellers are non-business individuals, so the application layer
+// supplies "individual".
 type CreateStripePayoutAccountInput struct {
 	UserID         string
 	DisplayName    string
 	ContactEmail   string
 	Country        string
+	EntityType     string
 	IdempotencyKey string
 }
 
@@ -62,6 +59,24 @@ type StripePayoutAccountResult struct {
 	PayoutsEnabled   bool
 }
 
+// CreateStripePayoutAccountSessionInput contains the Connected Account for
+// which an Embedded Connect Account Session must be created.
+//
+// StripeAccountID must be resolved from the authenticated AMOL user's persisted
+// PayoutAccount rather than accepted directly from the browser.
+type CreateStripePayoutAccountSessionInput struct {
+	StripeAccountID string
+}
+
+// StripePayoutAccountSessionResult contains the short-lived client secret used
+// by Stripe Connect.js to render Embedded Components.
+//
+// ClientSecret must not be persisted by the application.
+type StripePayoutAccountSessionResult struct {
+	AccountID    string
+	ClientSecret string
+}
+
 // StripePayoutBankAccountResult contains display-only bank information.
 //
 // Full account numbers, routing numbers, and branch numbers must not be
@@ -69,19 +84,4 @@ type StripePayoutAccountResult struct {
 type StripePayoutBankAccountResult struct {
 	BankName string
 	Last4    string
-}
-
-type StripePayoutAccountLinkUseCase string
-
-type CreateStripePayoutAccountLinkInput struct {
-	StripeAccountID string
-	UseCase         StripePayoutAccountLinkUseCase
-	ReturnURL       string
-	RefreshURL      string
-}
-
-type StripePayoutAccountLinkResult struct {
-	AccountID string
-	URL       string
-	ExpiresAt time.Time
 }

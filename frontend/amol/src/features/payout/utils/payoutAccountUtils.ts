@@ -28,16 +28,15 @@ export function getPayoutAccountStatusLabel(
 }
 
 export function getPayoutAccountActionLabel(
-  payoutAccount: PayoutAccount | null,
-  isOpeningStripe: boolean
+  payoutAccount: PayoutAccount | null
 ): string {
-  if (isOpeningStripe) {
-    return "Stripeへ接続中...";
+  if (!payoutAccount) {
+    return "売上受取口座を登録";
   }
 
-  if (payoutAccount) {
-    return "口座情報を変更";
+  if (!payoutAccount.payoutsEnabled) {
+    return "登録を続ける";
   }
 
-  return "売上受取口座を登録";
+  return "口座情報を変更";
 }

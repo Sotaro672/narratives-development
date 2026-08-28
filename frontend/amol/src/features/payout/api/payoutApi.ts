@@ -4,17 +4,12 @@ import { buildBackendUrl } from "../../../lib/apiBaseUrl";
 
 import type {
   PayoutAccount,
-  PayoutAccountLinkResponse,
   PayoutAccountResponse,
+  PayoutAccountSessionResponse,
 } from "../../shared/types/payoutAccount";
 
 type AuthenticatedRequestInput = {
   idToken: string;
-};
-
-export type CreatePayoutAccountLinkInput = AuthenticatedRequestInput & {
-  returnUrl: string;
-  refreshUrl: string;
 };
 
 async function readJson<T>(
@@ -57,31 +52,24 @@ export async function fetchPayoutAccount({
   return body?.data || null;
 }
 
-export async function createPayoutAccountLink({
+export async function createPayoutAccountSession({
   idToken,
-  returnUrl,
-  refreshUrl,
-}: CreatePayoutAccountLinkInput): Promise<string> {
+}: AuthenticatedRequestInput): Promise<string> {
   const response = await fetch(
     buildBackendUrl(
-      "/mall/me/payout-account/account-link"
+      "/mall/me/payout-account/account-session"
     ),
     {
       method: "POST",
       headers: {
         Authorization: `Bearer ${idToken}`,
-        "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({
-        returnUrl,
-        refreshUrl,
-      }),
     }
   );
 
   const body =
-    await readJson<PayoutAccountLinkResponse>(
+    await readJson<PayoutAccountSessionResponse>(
       response
     );
 
@@ -92,13 +80,13 @@ export async function createPayoutAccountLink({
     );
   }
 
-  const url = body?.data?.url;
+  const clientSecret = body?.data?.clientSecret;
 
-  if (!url) {
+  if (!clientSecret) {
     throw new Error(
-      "Stripeの口座登録URLを取得できませんでした。"
+      "StripeのAccount Sessionを取得できませんでした。"
     );
   }
 
-  return url;
+  return clientSecret;
 }

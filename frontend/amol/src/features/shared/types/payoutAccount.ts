@@ -17,11 +17,11 @@ export type PayoutAccountResponse = {
   error?: string;
 };
 
-export type PayoutAccountLink = {
-  url?: string;
+export type PayoutAccountSession = {
+  clientSecret: string;
 };
 
-export type PayoutAccountLinkResponse = {
-  data?: PayoutAccountLink;
+export type PayoutAccountSessionResponse = {
+  data?: PayoutAccountSession;
   error?: string;
 };

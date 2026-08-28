@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAuth } from "firebase/auth";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import {
-  createPayoutAccountLink,
+  createPayoutAccountSession,
   fetchPayoutAccount,
 } from "../api/payoutApi";
 import {
@@ -13,20 +13,30 @@ import {
   getPayoutAccountStatusLabel,
 } from "../utils/payoutAccountUtils";
 
+import { fetchStripeConfig } from "../../payment-method/api/paymentMethodApi";
+import {
+  getBackendUrl,
+  getStripePublishableKey,
+} from "../../payment-method/utils/paymentMethodUtils";
+
 import type { PayoutAccount } from "../../shared/types/payoutAccount";
+
+export type PayoutAccountConnectMode =
+  | "onboarding"
+  | "management";
 
 export function usePayoutAccountPage() {
   const auth = getAuth();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+
+  const backendUrl = useMemo(() => getBackendUrl(), []);
 
   const [payoutAccount, setPayoutAccount] =
     useState<PayoutAccount | null>(null);
+  const [stripePublishableKey, setStripePublishableKey] = useState("");
+  const [showConnectPanel, setShowConnectPanel] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isOpeningStripe, setIsOpeningStripe] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-
-  const stripeReturnState = searchParams.get("stripe");
 
   const loadPayoutAccount = useCallback(async () => {
     const currentUser = auth.currentUser;
@@ -57,31 +67,77 @@ export function usePayoutAccountPage() {
     }
   }, [auth, navigate]);
 
+  const loadStripeConfig = useCallback(async () => {
+    try {
+      if (!backendUrl) {
+        throw new Error("VITE_API_BASE_URL が設定されていません。");
+      }
+
+      const response = await fetchStripeConfig(backendUrl);
+      const publishableKey = getStripePublishableKey(response);
+
+      if (!publishableKey) {
+        throw new Error("Stripe 公開鍵を取得できませんでした。");
+      }
+
+      setStripePublishableKey(publishableKey);
+    } catch (error) {
+      console.error(error);
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Stripeの初期化情報取得に失敗しました。"
+      );
+    }
+  }, [backendUrl]);
+
   useEffect(() => {
     void loadPayoutAccount();
-  }, [loadPayoutAccount]);
+    void loadStripeConfig();
+  }, [loadPayoutAccount, loadStripeConfig]);
 
-  useEffect(() => {
-    if (!stripeReturnState) {
-      return;
+  const fetchClientSecret = useCallback(async (): Promise<string> => {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      navigate("/signin", { replace: true });
+      throw new Error("ログイン情報を確認できませんでした。");
     }
 
-    if (stripeReturnState === "return") {
-      void loadPayoutAccount();
+    try {
+      setErrorMessage("");
+
+      const idToken = await currentUser.getIdToken(true);
+
+      return await createPayoutAccountSession({
+        idToken,
+      });
+    } catch (error) {
+      console.error(error);
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : "StripeのAccount Session作成に失敗しました。";
+
+      setErrorMessage(message);
+
+      throw error instanceof Error
+        ? error
+        : new Error(message);
+    }
+  }, [auth, navigate]);
+
+  const connectMode = useMemo<PayoutAccountConnectMode>(() => {
+    if (payoutAccount?.payoutsEnabled) {
+      return "management";
     }
 
-    const nextSearchParams = new URLSearchParams(searchParams);
-    nextSearchParams.delete("stripe");
+    return "onboarding";
+  }, [payoutAccount]);
 
-    setSearchParams(nextSearchParams, { replace: true });
-  }, [
-    loadPayoutAccount,
-    searchParams,
-    setSearchParams,
-    stripeReturnState,
-  ]);
-
-  const handleOpenStripe = useCallback(async () => {
+  const handleOpenStripe = useCallback(() => {
     const currentUser = auth.currentUser;
 
     if (!currentUser) {
@@ -89,37 +145,31 @@ export function usePayoutAccountPage() {
       return;
     }
 
-    try {
-      setIsOpeningStripe(true);
-      setErrorMessage("");
-
-      const idToken = await currentUser.getIdToken(true);
-      const origin = window.location.origin;
-
-      const returnUrl =
-        `${origin}/settings/payout-account?stripe=return`;
-      const refreshUrl =
-        `${origin}/settings/payout-account?stripe=refresh`;
-
-      const url = await createPayoutAccountLink({
-        idToken,
-        returnUrl,
-        refreshUrl,
-      });
-
-      window.location.assign(url);
-    } catch (error) {
-      console.error(error);
-
+    if (!stripePublishableKey) {
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Stripeとの接続に失敗しました。"
+        "Stripeの初期化が完了していません。少し待ってからもう一度お試しください。"
       );
-
-      setIsOpeningStripe(false);
+      return;
     }
-  }, [auth, navigate]);
+
+    setErrorMessage("");
+    setShowConnectPanel(true);
+  }, [auth, navigate, stripePublishableKey]);
+
+  const handleConnectExit = useCallback(async () => {
+    setShowConnectPanel(false);
+    await loadPayoutAccount();
+  }, [loadPayoutAccount]);
+
+  const handleConnectError = useCallback((error: unknown) => {
+    console.error(error);
+
+    setErrorMessage(
+      error instanceof Error
+        ? error.message
+        : "Stripeの口座登録画面を読み込めませんでした。"
+    );
+  }, []);
 
   const statusLabel = useMemo(
     () => getPayoutAccountStatusLabel(payoutAccount, isLoading),
@@ -127,8 +177,8 @@ export function usePayoutAccountPage() {
   );
 
   const actionLabel = useMemo(
-    () => getPayoutAccountActionLabel(payoutAccount, isOpeningStripe),
-    [payoutAccount, isOpeningStripe]
+    () => getPayoutAccountActionLabel(payoutAccount),
+    [payoutAccount]
   );
 
   const bankName = payoutAccount?.bankAccount?.bankName || "";
@@ -136,15 +186,19 @@ export function usePayoutAccountPage() {
 
   return {
     payoutAccount,
+    stripePublishableKey,
+    showConnectPanel,
+    connectMode,
     isLoading,
-    isOpeningStripe,
     errorMessage,
-    stripeReturnState,
     statusLabel,
     actionLabel,
     bankName,
     bankLast4,
+    fetchClientSecret,
     handleOpenStripe,
+    handleConnectExit,
+    handleConnectError,
     reloadPayoutAccount: loadPayoutAccount,
   };
 }

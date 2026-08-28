@@ -1,9 +1,7 @@
 // backend/internal/adapters/in/http/mall/handler/payoutAccount_handler.go
-
 package mallHandler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -41,17 +39,12 @@ type payoutAccountResponse struct {
 	Data *payoutAccountDTO `json:"data"`
 }
 
-type payoutAccountLinkBody struct {
-	ReturnURL  string `json:"returnUrl"`
-	RefreshURL string `json:"refreshUrl"`
+type payoutAccountSessionDTO struct {
+	ClientSecret string `json:"clientSecret"`
 }
 
-type payoutAccountLinkDTO struct {
-	URL string `json:"url"`
-}
-
-type payoutAccountLinkResponse struct {
-	Data payoutAccountLinkDTO `json:"data"`
+type payoutAccountSessionResponse struct {
+	Data payoutAccountSessionDTO `json:"data"`
 }
 
 func (h *PayoutAccountHandler) ServeHTTP(
@@ -75,8 +68,8 @@ func (h *PayoutAccountHandler) ServeHTTP(
 		return
 
 	case r.Method == http.MethodPost &&
-		path == "/me/payout-account/account-link":
-		h.createAccountLink(w, r)
+		path == "/me/payout-account/account-session":
+		h.createAccountSession(w, r)
 		return
 
 	default:
@@ -107,7 +100,7 @@ func (h *PayoutAccountHandler) getMe(
 	}
 
 	userID, ok := middleware.CurrentUserUID(r)
-	if !ok || strings.TrimSpace(userID) == "" {
+	if !ok || userID == "" {
 		writeJSON(
 			w,
 			http.StatusUnauthorized,
@@ -158,7 +151,7 @@ func (h *PayoutAccountHandler) getMe(
 	)
 }
 
-func (h *PayoutAccountHandler) createAccountLink(
+func (h *PayoutAccountHandler) createAccountSession(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
@@ -176,7 +169,7 @@ func (h *PayoutAccountHandler) createAccountLink(
 	userID, email, ok :=
 		middleware.CurrentUserUIDAndEmail(r)
 
-	if !ok || strings.TrimSpace(userID) == "" {
+	if !ok || userID == "" {
 		writeJSON(
 			w,
 			http.StatusUnauthorized,
@@ -187,62 +180,18 @@ func (h *PayoutAccountHandler) createAccountLink(
 		return
 	}
 
-	var body payoutAccountLinkBody
-
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&body); err != nil {
-		writeJSON(
-			w,
-			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid_json",
-			},
-		)
-		return
-	}
-
-	body.ReturnURL = strings.TrimSpace(body.ReturnURL)
-	body.RefreshURL = strings.TrimSpace(body.RefreshURL)
-
-	if body.ReturnURL == "" {
-		writeJSON(
-			w,
-			http.StatusBadRequest,
-			map[string]string{
-				"error": "returnUrl is required",
-			},
-		)
-		return
-	}
-
-	if body.RefreshURL == "" {
-		writeJSON(
-			w,
-			http.StatusBadRequest,
-			map[string]string{
-				"error": "refreshUrl is required",
-			},
-		)
-		return
-	}
-
 	displayName := ""
-
 	if fullName, exists :=
 		middleware.CurrentUserFullName(r); exists {
-		displayName = strings.TrimSpace(fullName)
+		displayName = fullName
 	}
 
-	result, err := h.uc.CreateAccountLink(
+	result, err := h.uc.CreateAccountSession(
 		r.Context(),
-		usecase.CreatePayoutAccountLinkInput{
-			UserID:       strings.TrimSpace(userID),
+		usecase.CreatePayoutAccountSessionInput{
+			UserID:       userID,
 			DisplayName:  displayName,
-			ContactEmail: strings.TrimSpace(email),
-			ReturnURL:    body.ReturnURL,
-			RefreshURL:   body.RefreshURL,
+			ContactEmail: email,
 		},
 	)
 	if err != nil {
@@ -250,24 +199,26 @@ func (h *PayoutAccountHandler) createAccountLink(
 		return
 	}
 
-	url := strings.TrimSpace(result.OnboardingURL)
-	if url == "" {
+	clientSecret := result.ClientSecret
+	if clientSecret == "" {
 		writeJSON(
 			w,
 			http.StatusInternalServerError,
 			map[string]string{
-				"error": "stripe_account_link_url_empty",
+				"error": "stripe_account_session_client_secret_empty",
 			},
 		)
 		return
 	}
 
+	w.Header().Set("Cache-Control", "no-store")
+
 	writeJSON(
 		w,
 		http.StatusOK,
-		payoutAccountLinkResponse{
-			Data: payoutAccountLinkDTO{
-				URL: url,
+		payoutAccountSessionResponse{
+			Data: payoutAccountSessionDTO{
+				ClientSecret: clientSecret,
 			},
 		},
 	)
@@ -277,16 +228,14 @@ func payoutAccountToDTO(
 	account payoutdom.PayoutAccount,
 ) *payoutAccountDTO {
 	dto := &payoutAccountDTO{
-		StripeAccountID: strings.TrimSpace(
-			account.StripeAccountID,
-		),
+		StripeAccountID:  account.StripeAccountID,
 		DetailsSubmitted: account.DetailsSubmitted,
 		PayoutsEnabled:   account.PayoutsEnabled,
 		BankAccount:      nil,
 	}
 
-	bankName := strings.TrimSpace(account.BankName)
-	bankLast4 := strings.TrimSpace(account.BankLast4)
+	bankName := account.BankName
+	bankLast4 := account.BankLast4
 
 	if bankName != "" || bankLast4 != "" {
 		dto.BankAccount = &payoutAccountBankDTO{
@@ -339,14 +288,6 @@ func writePayoutAccountError(
 		errors.Is(
 			err,
 			payoutdom.ErrInvalidUpdatedAt,
-		),
-		errors.Is(
-			err,
-			usecase.ErrPayoutAccountInvalidReturnURL,
-		),
-		errors.Is(
-			err,
-			usecase.ErrPayoutAccountInvalidRefreshURL,
 		):
 		statusCode = http.StatusBadRequest
 
@@ -369,10 +310,6 @@ func writePayoutAccountError(
 		errors.Is(
 			err,
 			usecase.ErrPayoutAccountStripeGatewayMissing,
-		),
-		errors.Is(
-			err,
-			usecase.ErrPayoutAccountAllowedReturnOriginMissing,
 		):
 		statusCode = http.StatusServiceUnavailable
 	}

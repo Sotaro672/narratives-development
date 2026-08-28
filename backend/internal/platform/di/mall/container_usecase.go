@@ -214,18 +214,9 @@ func buildMallUsecases(
 		)
 	}
 
-	payoutAccountAllowedReturnOrigin := cfg.FrontendBaseURL
-	if payoutAccountAllowedReturnOrigin == "" {
-		return nil, fmt.Errorf(
-			"di.mall: %s is empty",
-			mallFrontendBaseURLEnv,
-		)
-	}
-
 	payoutAccountUC := usecase.NewPayoutAccountUsecase(
 		r.payoutAccountRepo,
 		infra.AccountGateway,
-		payoutAccountAllowedReturnOrigin,
 	)
 	if payoutAccountUC == nil {
 		return nil, errors.New("di.mall: payout account usecase is nil")
