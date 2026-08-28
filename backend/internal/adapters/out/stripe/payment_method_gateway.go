@@ -13,7 +13,6 @@ import (
 	"time"
 
 	applicationport "narratives/internal/application/port"
-	usecase "narratives/internal/application/usecase"
 	pm "narratives/internal/domain/paymentMethod"
 )
 
@@ -33,7 +32,7 @@ type PaymentMethodGateway struct {
 	httpClient    *http.Client
 }
 
-var _ usecase.StripePaymentMethodGateway = (*PaymentMethodGateway)(nil)
+var _ applicationport.StripePaymentMethodGateway = (*PaymentMethodGateway)(nil)
 var _ applicationport.StripePaymentIntentGateway = (*PaymentMethodGateway)(nil)
 
 func NewPaymentMethodGateway(
@@ -142,7 +141,7 @@ func (g *PaymentMethodGateway) CreateDevelopmentTestPaymentMethod(
 	ctx context.Context,
 	userID string,
 	cardholderName string,
-) (*usecase.DevelopmentTestPaymentMethodResult, error) {
+) (*applicationport.DevelopmentTestPaymentMethodResult, error) {
 	if err := g.validateReady(); err != nil {
 		return nil, err
 	}
@@ -235,7 +234,7 @@ func (g *PaymentMethodGateway) CreateDevelopmentTestPaymentMethod(
 		return nil, pm.ErrInvalidExpYear
 	}
 
-	return &usecase.DevelopmentTestPaymentMethodResult{
+	return &applicationport.DevelopmentTestPaymentMethodResult{
 		StripeCustomerID:      stripeCustomerID,
 		StripePaymentMethodID: stripePaymentMethodID,
 		Brand:                 brand,

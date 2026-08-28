@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode"
 
+	applicationport "narratives/internal/application/port"
 	pm "narratives/internal/domain/paymentMethod"
 )
 
@@ -19,45 +20,6 @@ var (
 	)
 )
 
-// DevelopmentTestPaymentMethodResultは、development環境で
-// Stripeに作成したテスト用PaymentMethodの結果です。
-type DevelopmentTestPaymentMethodResult struct {
-	StripeCustomerID      string
-	StripePaymentMethodID string
-	Brand                 string
-	Last4                 string
-	ExpMonth              int
-	ExpYear               int
-}
-
-// StripePaymentMethodGatewayは、PaymentMethod登録に必要な
-// Stripe Customer、SetupIntentおよびdevelopment用
-// テストPaymentMethodの操作を定義します。
-//
-// cardNumberおよびCVCなどの生カード情報は扱いません。
-// 生カード情報はStripe.js / Elementsから直接Stripeへ送信します。
-// development用テストPaymentMethodについてもStripeの
-// テストトークンを使用し、生カード情報は扱いません。
-type StripePaymentMethodGateway interface {
-	GetOrCreateCustomer(
-		ctx context.Context,
-		userID string,
-		cardholderName string,
-	) (stripeCustomerID string, err error)
-
-	CreateSetupIntent(
-		ctx context.Context,
-		stripeCustomerID string,
-		cardholderName string,
-	) (clientSecret string, err error)
-
-	CreateDevelopmentTestPaymentMethod(
-		ctx context.Context,
-		userID string,
-		cardholderName string,
-	) (*DevelopmentTestPaymentMethodResult, error)
-}
-
 // PaymentMethodSetupIntentResultは、setup-intent endpoint用の返却値です。
 type PaymentMethodSetupIntentResult struct {
 	ClientSecret     string `json:"clientSecret"`
@@ -67,13 +29,13 @@ type PaymentMethodSetupIntentResult struct {
 // PaymentMethodUsecaseは、PaymentMethodに関するユースケースを提供します。
 type PaymentMethodUsecase struct {
 	repo       pm.RepositoryPort
-	stripeGate StripePaymentMethodGateway
+	stripeGate applicationport.StripePaymentMethodGateway
 	now        func() time.Time
 }
 
 func NewPaymentMethodUsecase(
 	repo pm.RepositoryPort,
-	stripeGate StripePaymentMethodGateway,
+	stripeGate applicationport.StripePaymentMethodGateway,
 ) *PaymentMethodUsecase {
 	return &PaymentMethodUsecase{
 		repo:       repo,
@@ -84,7 +46,7 @@ func NewPaymentMethodUsecase(
 
 // SetStripeGatewayは、後からStripe gatewayを注入する場合に使用します。
 func (u *PaymentMethodUsecase) SetStripeGateway(
-	stripeGate StripePaymentMethodGateway,
+	stripeGate applicationport.StripePaymentMethodGateway,
 ) {
 	u.stripeGate = stripeGate
 }

@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	usecase "narratives/internal/application/usecase"
+	applicationport "narratives/internal/application/port"
 	orderdom "narratives/internal/domain/order"
 	transferdom "narratives/internal/domain/transfer"
 )
@@ -69,7 +69,7 @@ type OrderRepoForTransferFS struct {
 	LockTTL    time.Duration
 }
 
-var _ usecase.OrderRepoForTransfer = (*OrderRepoForTransferFS)(nil)
+var _ applicationport.OrderRepoForTransfer = (*OrderRepoForTransferFS)(nil)
 
 func NewOrderRepoForTransferFS(
 	client *firestore.Client,
@@ -118,22 +118,22 @@ func (r *OrderRepoForTransferFS) lockTTL() time.Duration {
 
 func (r *OrderRepoForTransferFS) FindEligibleTransferItem(
 	ctx context.Context,
-	in usecase.FindEligibleTransferItemInput,
-) (usecase.TransferTargetItem, error) {
+	in applicationport.FindEligibleTransferItemInput,
+) (applicationport.TransferTargetItem, error) {
 	if r == nil || r.Client == nil {
-		return usecase.TransferTargetItem{},
+		return applicationport.TransferTargetItem{},
 			ErrOrderTransferItemRepoNotConfigured
 	}
 	if in.AvatarID == "" {
-		return usecase.TransferTargetItem{},
+		return applicationport.TransferTargetItem{},
 			ErrInvalidTransferAvatarID
 	}
 	if in.ProductID == "" {
-		return usecase.TransferTargetItem{},
+		return applicationport.TransferTargetItem{},
 			ErrInvalidTransferProductID
 	}
 	if in.TokenBlueprintID == "" {
-		return usecase.TransferTargetItem{},
+		return applicationport.TransferTargetItem{},
 			ErrInvalidTransferTokenBlueprintID
 	}
 
@@ -165,11 +165,11 @@ func (r *OrderRepoForTransferFS) FindEligibleTransferItem(
 		return target, nil
 	}
 	if !errors.Is(err, orderdom.ErrNotFound) {
-		return usecase.TransferTargetItem{}, err
+		return applicationport.TransferTargetItem{}, err
 	}
 
 	if in.ModelID == "" {
-		return usecase.TransferTargetItem{},
+		return applicationport.TransferTargetItem{},
 			orderdom.ErrNotFound
 	}
 
@@ -201,29 +201,29 @@ func (r *OrderRepoForTransferFS) FindEligibleTransferItem(
 func (r *OrderRepoForTransferFS) findOneEligibleTransferItem(
 	ctx context.Context,
 	query firestore.Query,
-) (usecase.TransferTargetItem, error) {
+) (applicationport.TransferTargetItem, error) {
 	iter := query.Documents(ctx)
 	defer iter.Stop()
 
 	snap, err := iter.Next()
 	if err != nil {
 		if errors.Is(err, iterator.Done) {
-			return usecase.TransferTargetItem{},
+			return applicationport.TransferTargetItem{},
 				orderdom.ErrNotFound
 		}
 
-		return usecase.TransferTargetItem{}, err
+		return applicationport.TransferTargetItem{}, err
 	}
 
 	projection, err :=
 		orderTransferItemFromSnapshot(snap)
 	if err != nil {
-		return usecase.TransferTargetItem{}, err
+		return applicationport.TransferTargetItem{}, err
 	}
 	if projection.IsCancelled ||
 		projection.Transferred ||
 		!projection.Paid {
-		return usecase.TransferTargetItem{},
+		return applicationport.TransferTargetItem{},
 			ErrInvalidOrderTransferItemData
 	}
 
@@ -1091,8 +1091,8 @@ func (
 
 func (
 	p orderTransferItemProjection,
-) toTransferTarget() usecase.TransferTargetItem {
-	return usecase.TransferTargetItem{
+) toTransferTarget() applicationport.TransferTargetItem {
+	return applicationport.TransferTargetItem{
 		OrderID:   p.OrderID,
 		ItemIndex: p.ItemIndex,
 		ItemType:  p.ItemType,

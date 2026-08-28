@@ -8,7 +8,6 @@ import (
 	"time"
 
 	applicationport "narratives/internal/application/port"
-	avatardom "narratives/internal/domain/avatar"
 	orderdom "narratives/internal/domain/order"
 )
 
@@ -46,159 +45,11 @@ type ScanVerifier interface {
 	) (VerifyResult, error)
 }
 
-type FindEligibleTransferItemInput struct {
-	AvatarID         string
-	ProductID        string
-	ModelID          string
-	TokenBlueprintID string
-}
-
-type TransferTargetItem struct {
-	OrderID   string
-	ItemIndex int
-	ItemType  orderdom.OrderItemType
-
-	InventoryID string
-	ModelID     string
-	ResaleID    string
-
-	ProductID          string
-	ProductBlueprintID string
-	TokenBlueprintID   string
-	BrandID            string
-}
-
-// OrderRepoForTransfer provides exact lookup and state transitions for one
-// transfer-eligible order item. Implementations must use the canonical
-// orderTransferItems read model and must not scan Order documents in memory.
-type OrderRepoForTransfer interface {
-	// FindEligibleTransferItem returns orderdom.ErrNotFound when no paid,
-	// untransferred item exactly matches the input.
-	//
-	// Return-requested items must remain discoverable here so a valid scan can
-	// record tokenTransferVerifiedAt before token transfer is blocked.
-	FindEligibleTransferItem(
-		ctx context.Context,
-		in FindEligibleTransferItemInput,
-	) (TransferTargetItem, error)
-
-	MarkTokenTransferVerified(
-		ctx context.Context,
-		orderID string,
-		itemIndex int,
-		at time.Time,
-	) (orderdom.OrderItemSnapshot, error)
-
-	LockTransferItem(
-		ctx context.Context,
-		orderID string,
-		itemIndex int,
-		now time.Time,
-	) error
-
-	UnlockTransferItem(
-		ctx context.Context,
-		orderID string,
-		itemIndex int,
-	) error
-
-	MarkTransferredItem(
-		ctx context.Context,
-		orderID string,
-		itemIndex int,
-		at time.Time,
-	) error
-}
-
 type ReturnOpeningHandler interface {
 	PromoteUnopenedToOpened(
 		ctx context.Context,
 		in PromoteUnopenedToOpenedInput,
 	) (ReturnRequestResult, error)
-}
-
-type TokenResolver interface {
-	ResolveTokenByProductID(
-		ctx context.Context,
-		productID string,
-	) (TokenForTransfer, error)
-}
-
-type TokenForTransfer struct {
-	ProductID string
-
-	BrandID string
-
-	AssetID string
-
-	TokenBlueprintID string
-}
-
-type TokenOwnerUpdater interface {
-	UpdateToAddressByProductID(
-		ctx context.Context,
-		productID string,
-		newToAddress string,
-		now time.Time,
-		txSignature string,
-	) error
-}
-
-type BrandWalletResolver interface {
-	ResolveBrandWalletAddress(
-		ctx context.Context,
-		brandID string,
-	) (string, error)
-}
-
-type AvatarWalletResolver interface {
-	ResolveAvatarWalletAddress(
-		ctx context.Context,
-		avatarID string,
-	) (string, error)
-}
-
-type AvatarDisplayResolver interface {
-	GetByID(
-		ctx context.Context,
-		id string,
-	) (avatardom.Avatar, error)
-}
-
-type TokenTransferExecutor interface {
-	ExecuteTransfer(
-		ctx context.Context,
-		in ExecuteTransferInput,
-	) (ExecuteTransferResult, error)
-}
-
-type ExecuteTransferInput struct {
-	ProductID   string
-	OperationID string
-
-	FromAvatarID     string
-	ToAvatarID       string
-	FromBrandID      string
-	BrandID          string
-	ModelID          string
-	TokenBlueprintID string
-
-	AssetID string
-
-	FromWalletAddress string
-	ToWalletAddress   string
-}
-
-type ExecuteTransferResult struct {
-	TxSignature string
-}
-
-type PostTransferResolveWarmer interface {
-	ResolveAfterTransfer(
-		ctx context.Context,
-		avatarID string,
-		assetID string,
-	) error
 }
 
 // ============================================================
@@ -207,14 +58,14 @@ type PostTransferResolveWarmer interface {
 
 type TransferUsecase struct {
 	verifier  ScanVerifier
-	orderRepo OrderRepoForTransfer
-	tokenRepo TokenResolver
+	orderRepo applicationport.OrderRepoForTransfer
+	tokenRepo applicationport.TokenResolver
 
-	brandWallet  BrandWalletResolver
-	avatarWallet AvatarWalletResolver
+	brandWallet  applicationport.BrandWalletResolver
+	avatarWallet applicationport.AvatarWalletResolver
 
 	brandDisplay  applicationport.BrandGetter
-	avatarDisplay AvatarDisplayResolver
+	avatarDisplay applicationport.AvatarDisplayResolver
 
 	resaleRepo applicationport.ResaleGetter
 
@@ -228,12 +79,12 @@ type TransferUsecase struct {
 
 func NewTransferUsecase(
 	verifier ScanVerifier,
-	orderRepo OrderRepoForTransfer,
-	tokenRepo TokenResolver,
-	brandWallet BrandWalletResolver,
-	avatarWallet AvatarWalletResolver,
+	orderRepo applicationport.OrderRepoForTransfer,
+	tokenRepo applicationport.TokenResolver,
+	brandWallet applicationport.BrandWalletResolver,
+	avatarWallet applicationport.AvatarWalletResolver,
 	brandDisplay applicationport.BrandGetter,
-	avatarDisplay AvatarDisplayResolver,
+	avatarDisplay applicationport.AvatarDisplayResolver,
 	executionUC *TokenTransferExecutionUsecase,
 	inventoryUC *InventoryUsecase,
 ) *TransferUsecase {
@@ -438,7 +289,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 
 	target, err := u.orderRepo.FindEligibleTransferItem(
 		ctx,
-		FindEligibleTransferItemInput{
+		applicationport.FindEligibleTransferItemInput{
 			AvatarID:         avatarID,
 			ProductID:        productID,
 			ModelID:          scannedModelID,
@@ -763,7 +614,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 
 func (u *TransferUsecase) promoteReturnOpened(
 	ctx context.Context,
-	target TransferTargetItem,
+	target applicationport.TransferTargetItem,
 	avatarID string,
 	productID string,
 ) error {
@@ -872,7 +723,7 @@ func mapTransferExecutionError(err error) error {
 
 func (u *TransferUsecase) resolveTransferSource(
 	ctx context.Context,
-	target TransferTargetItem,
+	target applicationport.TransferTargetItem,
 	brandID string,
 	buyerAvatarID string,
 ) (transferExecutionSource, error) {
@@ -931,7 +782,7 @@ func (u *TransferUsecase) resolveListTransferSource(
 
 func (u *TransferUsecase) resolveResaleTransferSource(
 	ctx context.Context,
-	target TransferTargetItem,
+	target applicationport.TransferTargetItem,
 	buyerAvatarID string,
 ) (transferExecutionSource, error) {
 	if u.resaleRepo == nil {

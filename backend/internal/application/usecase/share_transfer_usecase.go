@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	walletdom "narratives/internal/domain/wallet"
 )
 
@@ -41,16 +42,16 @@ type AvatarWalletSyncer interface {
 }
 
 type ShareTransferUsecase struct {
-	tokenRepo TokenResolver
+	tokenRepo applicationport.TokenResolver
 
-	avatarWallet AvatarWalletResolver
+	avatarWallet applicationport.AvatarWalletResolver
 
 	executionUC *TokenTransferExecutionUsecase
 }
 
 func NewShareTransferUsecase(
-	tokenRepo TokenResolver,
-	avatarWallet AvatarWalletResolver,
+	tokenRepo applicationport.TokenResolver,
+	avatarWallet applicationport.AvatarWalletResolver,
 	executionUC *TokenTransferExecutionUsecase,
 ) *ShareTransferUsecase {
 	return &ShareTransferUsecase{

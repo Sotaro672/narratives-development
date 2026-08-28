@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 
-	usecase "narratives/internal/application/usecase"
+	applicationport "narratives/internal/application/port"
 	branddom "narratives/internal/domain/brand"
 	walletdom "narratives/internal/domain/wallet"
 )
@@ -15,11 +15,11 @@ var (
 )
 
 // WalletResolverRepoFS provides BOTH:
-// - usecase.BrandWalletResolver
-// - usecase.AvatarWalletResolver
+// - applicationport.BrandWalletResolver
+// - applicationport.AvatarWalletResolver
 //
-// ✅ Brand: brands/{brandId}.walletAddress (via BrandRepositoryFS)
-// ✅ Avatar: wallets/{avatarId}.walletAddress (via WalletRepositoryFS)
+// Brand: brands/{brandId}.walletAddress (via BrandRepositoryFS)
+// Avatar: wallets/{avatarId}.walletAddress (via WalletRepositoryFS)
 type WalletResolverRepoFS struct {
 	BrandRepo  *BrandRepositoryFS
 	WalletRepo *WalletRepositoryFS
@@ -35,11 +35,11 @@ func NewWalletResolverRepoFS(
 	}
 }
 
-// Compile-time interface checks
-var _ usecase.BrandWalletResolver = (*WalletResolverRepoFS)(nil)
-var _ usecase.AvatarWalletResolver = (*WalletResolverRepoFS)(nil)
+// Compile-time interface checks.
+var _ applicationport.BrandWalletResolver = (*WalletResolverRepoFS)(nil)
+var _ applicationport.AvatarWalletResolver = (*WalletResolverRepoFS)(nil)
 
-// ResolveBrandWalletAddress implements usecase.BrandWalletResolver.
+// ResolveBrandWalletAddress implements applicationport.BrandWalletResolver.
 func (r *WalletResolverRepoFS) ResolveBrandWalletAddress(ctx context.Context, brandID string) (string, error) {
 	if r == nil || r.BrandRepo == nil {
 		return "", ErrWalletResolverNotConfigured
@@ -58,7 +58,7 @@ func (r *WalletResolverRepoFS) ResolveBrandWalletAddress(ctx context.Context, br
 	return b.WalletAddress, nil
 }
 
-// ResolveAvatarWalletAddress implements usecase.AvatarWalletResolver.
+// ResolveAvatarWalletAddress implements applicationport.AvatarWalletResolver.
 func (r *WalletResolverRepoFS) ResolveAvatarWalletAddress(ctx context.Context, avatarID string) (string, error) {
 	if r == nil || r.WalletRepo == nil {
 		return "", ErrWalletResolverNotConfigured

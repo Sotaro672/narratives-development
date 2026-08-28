@@ -11,6 +11,7 @@ import (
 	mallfs "narratives/internal/adapters/out/firestore/mall"
 	mailadp "narratives/internal/adapters/out/mail"
 	stripeadapter "narratives/internal/adapters/out/stripe"
+	applicationport "narratives/internal/application/port"
 	mallquery "narratives/internal/application/query/mall"
 	usecase "narratives/internal/application/usecase"
 	transportationdom "narratives/internal/domain/transportation"
@@ -433,24 +434,19 @@ func buildMallTransferUsecase(
 		return nil, errors.New("di.mall: inventory usecase is nil")
 	}
 
-	var orderRepoForTransfer usecase.OrderRepoForTransfer = r.orderTransferItemRepo
+	var orderRepoForTransfer applicationport.OrderRepoForTransfer = r.orderTransferItemRepo
 
-	var tokenResolver usecase.TokenResolver = mallfs.NewTokenResolverFS(
+	var tokenResolver applicationport.TokenResolver = mallfs.NewTokenResolverFS(
 		infra.Firestore,
 		"tokens",
 	)
 
-	var tokenOwnerUpdater usecase.TokenOwnerUpdater = r.tokenOwnerUpdater
-
-	var walletResolver usecase.BrandWalletResolver = r.walletResolverRepo
-
-	var avatarWalletResolver usecase.AvatarWalletResolver = r.walletResolverRepo
-
+	var tokenOwnerUpdater applicationport.TokenOwnerUpdater = r.tokenOwnerUpdater
+	var walletResolver applicationport.BrandWalletResolver = r.walletResolverRepo
+	var avatarWalletResolver applicationport.AvatarWalletResolver = r.walletResolverRepo
 	var walletTransferUpdate usecase.AvatarWalletItemTransferUpdater = r.walletRepo
-
 	var walletSync usecase.AvatarWalletSyncer = u.walletUC
-
-	var executor usecase.TokenTransferExecutor = solana.NewTokenTransferExecutorSolana("")
+	var executor applicationport.TokenTransferExecutor = solana.NewTokenTransferExecutorSolana("")
 
 	transferExecutionUC := usecase.NewTokenTransferExecutionUsecase(
 		tokenOwnerUpdater,

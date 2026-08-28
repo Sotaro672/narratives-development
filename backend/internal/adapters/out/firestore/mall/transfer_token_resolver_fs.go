@@ -6,11 +6,10 @@ import (
 	"errors"
 
 	"cloud.google.com/go/firestore"
-
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	usecase "narratives/internal/application/usecase"
+	applicationport "narratives/internal/application/port"
 )
 
 var (
@@ -23,10 +22,12 @@ type tokenResolverFS struct {
 	col string
 }
 
+var _ applicationport.TokenResolver = (*tokenResolverFS)(nil)
+
 func NewTokenResolverFS(
 	fs *firestore.Client,
 	col string,
-) usecase.TokenResolver {
+) applicationport.TokenResolver {
 	return &tokenResolverFS{
 		fs:  fs,
 		col: col,
@@ -36,13 +37,13 @@ func NewTokenResolverFS(
 func (r *tokenResolverFS) ResolveTokenByProductID(
 	ctx context.Context,
 	productID string,
-) (usecase.TokenForTransfer, error) {
+) (applicationport.TokenForTransfer, error) {
 	if r == nil || r.fs == nil {
-		return usecase.TokenForTransfer{},
+		return applicationport.TokenForTransfer{},
 			errTokenResolverNotConfigured
 	}
 	if productID == "" {
-		return usecase.TokenForTransfer{},
+		return applicationport.TokenForTransfer{},
 			errors.New("tokenResolverFS: productId is empty")
 	}
 
@@ -56,21 +57,21 @@ func (r *tokenResolverFS) ResolveTokenByProductID(
 		Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return usecase.TokenForTransfer{},
+			return applicationport.TokenForTransfer{},
 				errTokenDocNotFound
 		}
 
-		return usecase.TokenForTransfer{}, err
+		return applicationport.TokenForTransfer{}, err
 	}
 
 	if snap == nil || !snap.Exists() {
-		return usecase.TokenForTransfer{},
+		return applicationport.TokenForTransfer{},
 			errTokenDocNotFound
 	}
 
 	raw := snap.Data()
 	if raw == nil {
-		return usecase.TokenForTransfer{},
+		return applicationport.TokenForTransfer{},
 			errTokenDocNotFound
 	}
 
@@ -88,7 +89,7 @@ func (r *tokenResolverFS) ResolveTokenByProductID(
 		return s
 	}
 
-	return usecase.TokenForTransfer{
+	return applicationport.TokenForTransfer{
 		ProductID:        productID,
 		BrandID:          getStr("brandId"),
 		AssetID:          getStr("assetId"),

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	transferdom "narratives/internal/domain/transfer"
 )
 
@@ -36,24 +37,24 @@ import (
 // order item state transition, and inventory-specific business rules remain
 // responsibilities of the caller.
 type TokenTransferExecutionUsecase struct {
-	tokenUpdate  TokenOwnerUpdater
+	tokenUpdate  applicationport.TokenOwnerUpdater
 	walletUpdate AvatarWalletItemTransferUpdater
 	walletSync   AvatarWalletSyncer
 	transferRepo transferdom.RepositoryPort
-	executor     TokenTransferExecutor
+	executor     applicationport.TokenTransferExecutor
 
-	resolveWarmer PostTransferResolveWarmer
+	resolveWarmer applicationport.PostTransferResolveWarmer
 
 	now func() time.Time
 }
 
 func NewTokenTransferExecutionUsecase(
-	tokenUpdate TokenOwnerUpdater,
+	tokenUpdate applicationport.TokenOwnerUpdater,
 	walletUpdate AvatarWalletItemTransferUpdater,
 	walletSync AvatarWalletSyncer,
 	transferRepo transferdom.RepositoryPort,
-	executor TokenTransferExecutor,
-	resolveWarmer PostTransferResolveWarmer,
+	executor applicationport.TokenTransferExecutor,
+	resolveWarmer applicationport.PostTransferResolveWarmer,
 ) *TokenTransferExecutionUsecase {
 	return &TokenTransferExecutionUsecase{
 		tokenUpdate:   tokenUpdate,
@@ -453,7 +454,7 @@ func (u *TokenTransferExecutionUsecase) Execute(
 
 	executeResult, err := u.executor.ExecuteTransfer(
 		ctx,
-		ExecuteTransferInput{
+		applicationport.ExecuteTransferInput{
 			ProductID:   in.ProductID,
 			OperationID: in.OperationID,
 

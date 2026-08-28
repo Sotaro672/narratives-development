@@ -17,7 +17,7 @@ import (
 
 	"google.golang.org/api/idtoken"
 
-	usecase "narratives/internal/application/usecase"
+	applicationport "narratives/internal/application/port"
 )
 
 var (
@@ -103,7 +103,7 @@ type TokenTransferExecutorSolana struct {
 	initErr    error
 }
 
-var _ usecase.TokenTransferExecutor = (*TokenTransferExecutorSolana)(nil)
+var _ applicationport.TokenTransferExecutor = (*TokenTransferExecutorSolana)(nil)
 
 // NewTokenTransferExecutorSolana constructs a Bubblegum V2 transfer executor.
 //
@@ -257,61 +257,61 @@ type bubblegumTransferErrorResponse struct {
 // Private keys and signer objects must never be included in this request.
 func (e *TokenTransferExecutorSolana) ExecuteTransfer(
 	ctx context.Context,
-	in usecase.ExecuteTransferInput,
+	in applicationport.ExecuteTransferInput,
 ) (
-	usecase.ExecuteTransferResult,
+	applicationport.ExecuteTransferResult,
 	error,
 ) {
 	if e == nil {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			ErrTokenTransferNotConfigured
 	}
 
 	if e.initErr != nil {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			e.initErr
 	}
 
 	if e.httpClient == nil ||
 		e.serviceURL == "" {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			ErrTokenTransferNotConfigured
 	}
 
 	if in.ProductID == "" {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			ErrTokenTransferProductIDEmpty
 	}
 
 	if in.AssetID == "" {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			ErrTokenTransferAssetIDEmpty
 	}
 
 	if in.FromAvatarID == "" &&
 		in.FromBrandID == "" {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			ErrTokenTransferSenderEmpty
 	}
 
 	if in.FromAvatarID != "" &&
 		in.FromBrandID != "" {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			ErrTokenTransferSenderAmbiguous
 	}
 
 	if in.ToAvatarID == "" {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			ErrTokenTransferToAvatarEmpty
 	}
 
 	if in.FromWalletAddress == "" {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			ErrTokenTransferFromWalletEmpty
 	}
 
 	if in.ToWalletAddress == "" {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			ErrTokenTransferToWalletEmpty
 	}
 
@@ -335,7 +335,7 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(
 
 	requestBody, err := json.Marshal(payload)
 	if err != nil {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			fmt.Errorf(
 				"token_transfer_executor: marshal request: %w",
 				err,
@@ -365,7 +365,7 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(
 		bytes.NewReader(requestBody),
 	)
 	if err != nil {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			fmt.Errorf(
 				"token_transfer_executor: create request: %w",
 				err,
@@ -395,7 +395,7 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(
 
 	resp, err := e.httpClient.Do(req)
 	if err != nil {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			fmt.Errorf(
 				"token_transfer_executor: bubblegum transfer request failed productId=%s assetId=%s: %w",
 				in.ProductID,
@@ -412,7 +412,7 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(
 		),
 	)
 	if err != nil {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			fmt.Errorf(
 				"token_transfer_executor: read bubblegum transfer response: %w",
 				err,
@@ -421,13 +421,13 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(
 
 	if int64(len(body)) >
 		maxBubblegumTransferResponseBodyBytes {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			ErrTokenTransferResponseTooLarge
 	}
 
 	if resp.StatusCode < http.StatusOK ||
 		resp.StatusCode >= http.StatusMultipleChoices {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			bubblegumTransferHTTPError(
 				resp.StatusCode,
 				body,
@@ -440,7 +440,7 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(
 		body,
 		&result,
 	); err != nil {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			fmt.Errorf(
 				"token_transfer_executor: decode bubblegum transfer response: %w",
 				err,
@@ -458,13 +458,13 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(
 	)
 
 	if result.Signature == "" {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			ErrTokenTransferEmptySignature
 	}
 
 	if result.AssetID != "" &&
 		result.AssetID != in.AssetID {
-		return usecase.ExecuteTransferResult{},
+		return applicationport.ExecuteTransferResult{},
 			fmt.Errorf(
 				"%w: requested=%s returned=%s",
 				ErrTokenTransferAssetMismatch,
@@ -481,7 +481,7 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(
 		result.Slot,
 	)
 
-	return usecase.ExecuteTransferResult{
+	return applicationport.ExecuteTransferResult{
 		TxSignature: result.Signature,
 	}, nil
 }

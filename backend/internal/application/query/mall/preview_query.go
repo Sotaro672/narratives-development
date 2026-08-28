@@ -53,7 +53,6 @@ var (
 // Preview additionally needs modelId -> productBlueprintId resolution.
 type ProductBlueprintReader interface {
 	applicationport.ProductBlueprintGetter
-
 	GetIDByModelID(ctx context.Context, modelID string) (string, []pbdom.ModelRef, error)
 }
 
@@ -71,24 +70,17 @@ type AvatarNameIconReader interface {
 
 // TransferReader resolves assetId -> transfer records.
 type TransferReader interface {
-	ListByAssetID(
-		ctx context.Context,
-		assetID string,
-	) ([]dto.PreviewTransferInfo, error)
+	ListByAssetID(ctx context.Context, assetID string) ([]dto.PreviewTransferInfo, error)
 }
 
 // OrderTransferItemReader reads the canonical orderTransferItems projection.
 // It must not load Order documents and filter their items in memory.
 type OrderTransferItemReader interface {
-	ListEligibleTransferItemsByAvatarID(
-		ctx context.Context,
-		avatarID string,
-	) ([]orderdom.EligibleTransferItem, error)
-
+	ListEligibleTransferItemsByAvatarID(ctx context.Context, avatarID string) ([]orderdom.EligibleTransferItem, error)
 	FindEligibleTransferItem(
 		ctx context.Context,
-		in appusecase.FindEligibleTransferItemInput,
-	) (appusecase.TransferTargetItem, error)
+		in applicationport.FindEligibleTransferItemInput,
+	) (applicationport.TransferTargetItem, error)
 }
 
 // ------------------------------------------------------------
@@ -201,10 +193,7 @@ func NewPreviewQuery(
 }
 
 // ResolveModelIDByProductID resolves modelId from productId.
-func (q *PreviewQuery) ResolveModelIDByProductID(
-	ctx context.Context,
-	productID string,
-) (string, error) {
+func (q *PreviewQuery) ResolveModelIDByProductID(ctx context.Context, productID string) (string, error) {
 	if q == nil || q.ProductRepo == nil {
 		return "", ErrPreviewQueryNotConfigured
 	}
@@ -265,7 +254,6 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	if err != nil {
 		return nil, err
 	}
-
 	if pbID == "" {
 		return nil, ErrProductBlueprintIDEmpty
 	}
@@ -275,30 +263,22 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		return nil, err
 	}
 
-	productBlueprintCategoryPath := append(
-		[]string(nil),
-		pb.ProductBlueprintCategoryPath...,
-	)
+	productBlueprintCategoryPath := append([]string(nil), pb.ProductBlueprintCategoryPath...)
 
 	categoryKind := commondom.ProductCategoryKind("")
 	if len(productBlueprintCategoryPath) > 0 {
-		categoryKind = commondom.ProductCategoryKind(
-			productBlueprintCategoryPath[0],
-		)
+		categoryKind = commondom.ProductCategoryKind(productBlueprintCategoryPath[0])
 	}
 
 	out := &dto.PreviewModelInfo{
 		ProductID: id,
 		ModelID:   modelID,
-
 		ProductBlueprintCategoryPath: append(
 			[]string(nil),
 			productBlueprintCategoryPath...,
 		),
-
 		ProductBlueprintID: pbID,
 		ProductBlueprint:   &pb,
-
 		// nullではなく[]を返す。
 		Transfers: make([]dto.PreviewTransferInfo, 0),
 	}
@@ -306,10 +286,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	pbPatch := productBlueprintPatchForPreview(pb)
 	out.ProductBlueprintPatch = &pbPatch
 
-	categoryCode := strings.Join(
-		productBlueprintCategoryPath,
-		".",
-	)
+	categoryCode := strings.Join(productBlueprintCategoryPath, ".")
 	if schema, ok := pbcatdom.GetCategoryInputSchema(categoryCode); ok {
 		out.CategoryInputSchema = &schema
 	}
@@ -329,18 +306,13 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	}
 
 	out.Token = tok
-
 	if tok == nil {
 		return out, nil
 	}
 
 	// brandId -> brandName（tokens側）
 	if brandID := tok.BrandID; brandID != "" {
-		if brandName := q.resolveBrandNameForPreview(
-			ctx,
-			brandID,
-			out,
-		); brandName != "" {
+		if brandName := q.resolveBrandNameForPreview(ctx, brandID, out); brandName != "" {
 			tok.BrandName = brandName
 		}
 	}
@@ -348,24 +320,13 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	// tokenBlueprint.Patch は domain/tokenBlueprint 側の Patch を再利用する。
 	if q.TokenBlueprintRepo != nil {
 		tokenBlueprintID := tok.TokenBlueprintID
-
 		if tokenBlueprintID != "" {
-			tb, perr := q.TokenBlueprintRepo.GetByID(
-				ctx,
-				tokenBlueprintID,
-			)
+			tb, perr := q.TokenBlueprintRepo.GetByID(ctx, tokenBlueprintID)
 			if perr == nil && tb != nil {
 				tbPatch := tbdom.NewPatchFromTokenBlueprint(tb)
-
-				if tbPatch.BrandID != "" &&
-					tbPatch.BrandName == "" {
-					tbPatch.BrandName = q.resolveBrandNameForPreview(
-						ctx,
-						tbPatch.BrandID,
-						out,
-					)
+				if tbPatch.BrandID != "" && tbPatch.BrandName == "" {
+					tbPatch.BrandName = q.resolveBrandNameForPreview(ctx, tbPatch.BrandID, out)
 				}
-
 				out.TokenBlueprintPatch = &tbPatch
 			}
 		}
@@ -380,15 +341,10 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	return out, nil
 }
 
-func (q *PreviewQuery) resolveCurrentOwner(
-	ctx context.Context,
-	tok *dto.TokenInfo,
-	out *dto.PreviewModelInfo,
-) {
+func (q *PreviewQuery) resolveCurrentOwner(ctx context.Context, tok *dto.TokenInfo, out *dto.PreviewModelInfo) {
 	if out == nil || tok == nil {
 		return
 	}
-
 	if q == nil || q.OwnerResolveQ == nil {
 		return
 	}
@@ -399,11 +355,7 @@ func (q *PreviewQuery) resolveCurrentOwner(
 	}
 
 	res, err := q.OwnerResolveQ.Resolve(ctx, walletAddress)
-	if err != nil {
-		return
-	}
-
-	if res == nil {
+	if err != nil || res == nil {
 		return
 	}
 
@@ -411,7 +363,6 @@ func (q *PreviewQuery) resolveCurrentOwner(
 	case sharedquery.OwnerTypeAvatar:
 		res.BrandID = ""
 		res.BrandName = ""
-
 	case sharedquery.OwnerTypeBrand:
 		res.AvatarID = ""
 		res.AvatarName = ""
@@ -420,11 +371,7 @@ func (q *PreviewQuery) resolveCurrentOwner(
 	out.Owner = res
 }
 
-func (q *PreviewQuery) resolvePreviewTransfers(
-	ctx context.Context,
-	tok *dto.TokenInfo,
-	out *dto.PreviewModelInfo,
-) {
+func (q *PreviewQuery) resolvePreviewTransfers(ctx context.Context, tok *dto.TokenInfo, out *dto.PreviewModelInfo) {
 	if out == nil {
 		return
 	}
@@ -433,12 +380,7 @@ func (q *PreviewQuery) resolvePreviewTransfers(
 	if out.Transfers == nil {
 		out.Transfers = make([]dto.PreviewTransferInfo, 0)
 	}
-
-	if q == nil || q.TransferRepo == nil {
-		return
-	}
-
-	if tok == nil {
+	if q == nil || q.TransferRepo == nil || tok == nil {
 		return
 	}
 
@@ -447,14 +389,10 @@ func (q *PreviewQuery) resolvePreviewTransfers(
 		return
 	}
 
-	transfers, err := q.TransferRepo.ListByAssetID(
-		ctx,
-		assetID,
-	)
+	transfers, err := q.TransferRepo.ListByAssetID(ctx, assetID)
 	if err != nil {
 		return
 	}
-
 	if transfers == nil {
 		transfers = make([]dto.PreviewTransferInfo, 0)
 	}
@@ -496,7 +434,6 @@ func (q *PreviewQuery) ListEligiblePairsByAvatarID(
 	}
 
 	pairs := make([]PurchasedPair, 0, len(items))
-
 	for _, item := range items {
 		switch item.ItemType {
 		case orderdom.OrderItemTypeResale:
@@ -533,63 +470,53 @@ func (q *PreviewQuery) VerifyMatch(
 		q.OrderTransferItemRepo == nil ||
 		q.ProductRepo == nil ||
 		q.NameResolver == nil {
-		return appusecase.VerifyResult{},
-			ErrOrderScanVerifyQueryNotConfigured
+		return appusecase.VerifyResult{}, ErrOrderScanVerifyQueryNotConfigured
 	}
 
 	avatarID := in.AvatarID
 	productID := in.ProductID
 
 	if avatarID == "" {
-		return appusecase.VerifyResult{},
-			ErrOrderScanVerifyAvatarIDEmpty
+		return appusecase.VerifyResult{}, ErrOrderScanVerifyAvatarIDEmpty
 	}
-
 	if productID == "" {
-		return appusecase.VerifyResult{},
-			ErrOrderScanVerifyProductIDEmpty
+		return appusecase.VerifyResult{}, ErrOrderScanVerifyProductIDEmpty
 	}
 
 	// 1) scan side: productId -> modelId + tokenBlueprintId(tokens/{productId}.tokenBlueprintId)
 	info, err := q.ResolveModelInfoByProductID(ctx, productID)
 	if err != nil {
-		return appusecase.VerifyResult{},
-			fmt.Errorf(
-				"order_scan_verify_query: preview resolve failed: %w",
-				err,
-			)
+		return appusecase.VerifyResult{}, fmt.Errorf(
+			"order_scan_verify_query: preview resolve failed: %w",
+			err,
+		)
 	}
-
 	if info == nil {
-		return appusecase.VerifyResult{},
-			fmt.Errorf(
-				"order_scan_verify_query: preview resolve returned nil",
-			)
+		return appusecase.VerifyResult{}, fmt.Errorf(
+			"order_scan_verify_query: preview resolve returned nil",
+		)
 	}
 
 	scannedModelID := info.ModelID
 	if scannedModelID == "" {
-		return appusecase.VerifyResult{},
-			fmt.Errorf(
-				"order_scan_verify_query: scanned modelId is empty",
-			)
+		return appusecase.VerifyResult{}, fmt.Errorf(
+			"order_scan_verify_query: scanned modelId is empty",
+		)
 	}
 
 	if info.Token == nil {
-		return appusecase.VerifyResult{},
-			ErrOrderScanVerifyTokenNotFound
+		return appusecase.VerifyResult{}, ErrOrderScanVerifyTokenNotFound
 	}
 
 	scannedTokenBlueprintID := info.Token.TokenBlueprintID
 	if scannedTokenBlueprintID == "" {
-		return appusecase.VerifyResult{},
-			ErrOrderScanVerifyTokenBlueprintEmpty
+		return appusecase.VerifyResult{}, ErrOrderScanVerifyTokenBlueprintEmpty
 	}
 
 	// 2) purchased side: perform one indexed lookup against orderTransferItems.
 	target, err := q.OrderTransferItemRepo.FindEligibleTransferItem(
 		ctx,
-		appusecase.FindEligibleTransferItemInput{
+		applicationport.FindEligibleTransferItemInput{
 			AvatarID:         avatarID,
 			ProductID:        productID,
 			ModelID:          scannedModelID,
@@ -609,18 +536,16 @@ func (q *PreviewQuery) VerifyMatch(
 			}, nil
 		}
 
-		return appusecase.VerifyResult{},
-			fmt.Errorf(
-				"order_scan_verify_query: eligible transfer item lookup failed: %w",
-				err,
-			)
+		return appusecase.VerifyResult{}, fmt.Errorf(
+			"order_scan_verify_query: eligible transfer item lookup failed: %w",
+			err,
+		)
 	}
 
 	if target.OrderID == "" || target.ItemIndex < 0 {
-		return appusecase.VerifyResult{},
-			fmt.Errorf(
-				"order_scan_verify_query: invalid eligible transfer item",
-			)
+		return appusecase.VerifyResult{}, fmt.Errorf(
+			"order_scan_verify_query: invalid eligible transfer item",
+		)
 	}
 
 	match := appusecase.ModelTokenPair{
@@ -645,12 +570,9 @@ func (q *PreviewQuery) VerifyMatch(
 // Helpers
 // ------------------------------------------------------------
 
-func purchasedPairFromListItem(
-	item orderdom.EligibleTransferItem,
-) (PurchasedPair, bool) {
+func purchasedPairFromListItem(item orderdom.EligibleTransferItem) (PurchasedPair, bool) {
 	modelID := item.ModelID
 	inventoryID := item.InventoryID
-
 	if modelID == "" || inventoryID == "" {
 		return PurchasedPair{}, false
 	}
@@ -661,40 +583,30 @@ func purchasedPairFromListItem(
 	}
 
 	return PurchasedPair{
-		OrderID: item.OrderID,
-
-		ItemType:  orderdom.OrderItemTypeList,
-		ItemIndex: item.ItemIndex,
-
-		ModelID:     modelID,
-		InventoryID: inventoryID,
-		ListID:      item.ListID,
-
+		OrderID:          item.OrderID,
+		ItemType:         orderdom.OrderItemTypeList,
+		ItemIndex:        item.ItemIndex,
+		ModelID:          modelID,
+		InventoryID:      inventoryID,
+		ListID:           item.ListID,
 		TokenBlueprintID: tokenBlueprintID,
 	}, true
 }
 
-func purchasedPairFromResaleItem(
-	item orderdom.EligibleTransferItem,
-) (PurchasedPair, bool) {
+func purchasedPairFromResaleItem(item orderdom.EligibleTransferItem) (PurchasedPair, bool) {
 	resaleID := item.ResaleID
 	productID := item.ProductID
 	tokenBlueprintID := item.TokenBlueprintID
 
-	if resaleID == "" ||
-		productID == "" ||
-		tokenBlueprintID == "" {
+	if resaleID == "" || productID == "" || tokenBlueprintID == "" {
 		return PurchasedPair{}, false
 	}
 
 	return PurchasedPair{
-		OrderID: item.OrderID,
-
-		ItemType:  orderdom.OrderItemTypeResale,
-		ItemIndex: item.ItemIndex,
-
-		ResaleID: resaleID,
-
+		OrderID:            item.OrderID,
+		ItemType:           orderdom.OrderItemTypeResale,
+		ItemIndex:          item.ItemIndex,
+		ResaleID:           resaleID,
 		ProductID:          productID,
 		ProductBlueprintID: item.ProductBlueprintID,
 		TokenBlueprintID:   tokenBlueprintID,
@@ -702,13 +614,8 @@ func purchasedPairFromResaleItem(
 	}, true
 }
 
-func productBlueprintPatchForPreview(
-	pb pbdom.ProductBlueprint,
-) pbdom.Patch {
-	productBlueprintCategoryPath := append(
-		[]string(nil),
-		pb.ProductBlueprintCategoryPath...,
-	)
+func productBlueprintPatchForPreview(pb pbdom.ProductBlueprint) pbdom.Patch {
+	productBlueprintCategoryPath := append([]string(nil), pb.ProductBlueprintCategoryPath...)
 
 	return pbdom.Patch{
 		ProductName:                  stringPtrOrNil(pb.ProductName),
@@ -728,22 +635,15 @@ func stringPtrOrNil(value string) *string {
 	if v == "" {
 		return nil
 	}
-
 	return &v
 }
 
-func (q *PreviewQuery) getBrandNameIcon(
-	ctx context.Context,
-	brandID string,
-) (branddom.NameIcon, error) {
+func (q *PreviewQuery) getBrandNameIcon(ctx context.Context, brandID string) (branddom.NameIcon, error) {
 	if q == nil || q.BrandRepo == nil {
-		return branddom.NameIcon{},
-			ErrPreviewQueryNotConfigured
+		return branddom.NameIcon{}, ErrPreviewQueryNotConfigured
 	}
-
 	if brandID == "" {
-		return branddom.NameIcon{},
-			branddom.ErrInvalidID
+		return branddom.NameIcon{}, branddom.ErrInvalidID
 	}
 
 	b, err := q.BrandRepo.GetByID(ctx, brandID)
@@ -762,18 +662,12 @@ func (q *PreviewQuery) resolveBrandNameForPreview(
 	brandID string,
 	out *dto.PreviewModelInfo,
 ) string {
-	if q == nil ||
-		q.BrandRepo == nil ||
-		brandID == "" {
+	if q == nil || q.BrandRepo == nil || brandID == "" {
 		return ""
 	}
 
 	ni, err := q.getBrandNameIcon(ctx, brandID)
-	if err != nil {
-		return ""
-	}
-
-	if ni.Name == "" {
+	if err != nil || ni.Name == "" {
 		return ""
 	}
 
@@ -790,20 +684,12 @@ func (q *PreviewQuery) fillResolvedModelInfo(
 	modelID string,
 	categoryKind commondom.ProductCategoryKind,
 ) error {
-	if out == nil {
+	if out == nil || q == nil || q.NameResolver == nil {
 		return ErrPreviewQueryNotConfigured
 	}
 
-	if q == nil || q.NameResolver == nil {
-		return ErrPreviewQueryNotConfigured
-	}
-
-	resolved := q.NameResolver.ResolveModelResolved(
-		ctx,
-		modelID,
-	)
-	if resolved.Kind == "" &&
-		resolved.ModelNumber == "" {
+	resolved := q.NameResolver.ResolveModelResolved(ctx, modelID)
+	if resolved.Kind == "" && resolved.ModelNumber == "" {
 		return ErrModelVariationNotFound
 	}
 
@@ -812,9 +698,7 @@ func (q *PreviewQuery) fillResolvedModelInfo(
 		modelKind = string(categoryKind)
 	}
 
-	out.ModelKind = commondom.ProductCategoryKind(
-		modelKind,
-	)
+	out.ModelKind = commondom.ProductCategoryKind(modelKind)
 	out.ModelNumber = resolved.ModelNumber
 	out.ModelLabel = buildPreviewModelLabel(
 		modelKind,
@@ -827,16 +711,13 @@ func (q *PreviewQuery) fillResolvedModelInfo(
 
 	out.Size = resolved.Size
 	out.Color = resolved.Color
-
 	if resolved.RGB != nil {
 		out.RGB = *resolved.RGB
 	}
 
 	out.VolumeValue = resolved.VolumeValue
 	out.VolumeUnit = resolved.VolumeUnit
-	out.Measurements = cloneMeasurements(
-		resolved.Measurements,
-	)
+	out.Measurements = cloneMeasurements(resolved.Measurements)
 
 	return nil
 }
@@ -853,67 +734,31 @@ func buildPreviewModelLabel(
 	case "alcohol":
 		if volumeValue != nil && volumeUnit != "" {
 			if modelNumber != "" {
-				return fmt.Sprintf(
-					"%s / %d%s",
-					modelNumber,
-					*volumeValue,
-					volumeUnit,
-				)
+				return fmt.Sprintf("%s / %d%s", modelNumber, *volumeValue, volumeUnit)
 			}
-
-			return fmt.Sprintf(
-				"%d%s",
-				*volumeValue,
-				volumeUnit,
-			)
+			return fmt.Sprintf("%d%s", *volumeValue, volumeUnit)
 		}
-
 		return modelNumber
 
 	default:
-		if modelNumber != "" &&
-			size != "" &&
-			color != "" {
-			return fmt.Sprintf(
-				"%s / %s / %s",
-				modelNumber,
-				size,
-				color,
-			)
+		if modelNumber != "" && size != "" && color != "" {
+			return fmt.Sprintf("%s / %s / %s", modelNumber, size, color)
 		}
-
 		if modelNumber != "" && size != "" {
-			return fmt.Sprintf(
-				"%s / %s",
-				modelNumber,
-				size,
-			)
+			return fmt.Sprintf("%s / %s", modelNumber, size)
 		}
-
 		if modelNumber != "" && color != "" {
-			return fmt.Sprintf(
-				"%s / %s",
-				modelNumber,
-				color,
-			)
+			return fmt.Sprintf("%s / %s", modelNumber, color)
 		}
-
 		if size != "" && color != "" {
-			return fmt.Sprintf(
-				"%s / %s",
-				size,
-				color,
-			)
+			return fmt.Sprintf("%s / %s", size, color)
 		}
-
 		if modelNumber != "" {
 			return modelNumber
 		}
-
 		if size != "" {
 			return size
 		}
-
 		return color
 	}
 }
@@ -926,12 +771,7 @@ func (q *PreviewQuery) resolveTransferOwners(
 		return make([]dto.PreviewTransferInfo, 0)
 	}
 
-	out := make(
-		[]dto.PreviewTransferInfo,
-		0,
-		len(transfers),
-	)
-
+	out := make([]dto.PreviewTransferInfo, 0, len(transfers))
 	for _, tr := range transfers {
 		fromWalletAddress := tr.FromWalletAddress
 		toWalletAddress := tr.ToWalletAddress
@@ -946,18 +786,8 @@ func (q *PreviewQuery) resolveTransferOwners(
 			continue
 		}
 
-		q.resolveTransferFromOwnerID(
-			ctx,
-			fromWalletAddress,
-			&item,
-		)
-
-		q.resolveTransferToOwnerID(
-			ctx,
-			toWalletAddress,
-			&item,
-		)
-
+		q.resolveTransferFromOwnerID(ctx, fromWalletAddress, &item)
+		q.resolveTransferToOwnerID(ctx, toWalletAddress, &item)
 		out = append(out, item)
 	}
 
@@ -969,25 +799,12 @@ func (q *PreviewQuery) resolveTransferFromOwnerID(
 	walletAddress string,
 	item *dto.PreviewTransferInfo,
 ) {
-	if q == nil ||
-		q.OwnerResolveQ == nil ||
-		item == nil {
+	if q == nil || q.OwnerResolveQ == nil || item == nil || walletAddress == "" {
 		return
 	}
 
-	if walletAddress == "" {
-		return
-	}
-
-	res, err := q.OwnerResolveQ.Resolve(
-		ctx,
-		walletAddress,
-	)
-	if err != nil {
-		return
-	}
-
-	if res == nil {
+	res, err := q.OwnerResolveQ.Resolve(ctx, walletAddress)
+	if err != nil || res == nil {
 		return
 	}
 
@@ -995,7 +812,6 @@ func (q *PreviewQuery) resolveTransferFromOwnerID(
 	case sharedquery.OwnerTypeAvatar:
 		item.FromAvatarID = res.AvatarID
 		item.FromBrandID = ""
-
 	case sharedquery.OwnerTypeBrand:
 		item.FromBrandID = res.BrandID
 		item.FromAvatarID = ""
@@ -1007,25 +823,12 @@ func (q *PreviewQuery) resolveTransferToOwnerID(
 	walletAddress string,
 	item *dto.PreviewTransferInfo,
 ) {
-	if q == nil ||
-		q.OwnerResolveQ == nil ||
-		item == nil {
+	if q == nil || q.OwnerResolveQ == nil || item == nil || walletAddress == "" {
 		return
 	}
 
-	if walletAddress == "" {
-		return
-	}
-
-	res, err := q.OwnerResolveQ.Resolve(
-		ctx,
-		walletAddress,
-	)
-	if err != nil {
-		return
-	}
-
-	if res == nil {
+	res, err := q.OwnerResolveQ.Resolve(ctx, walletAddress)
+	if err != nil || res == nil {
 		return
 	}
 
@@ -1033,7 +836,6 @@ func (q *PreviewQuery) resolveTransferToOwnerID(
 	case sharedquery.OwnerTypeAvatar:
 		item.ToAvatarID = res.AvatarID
 		item.ToBrandID = ""
-
 	case sharedquery.OwnerTypeBrand:
 		item.ToBrandID = res.BrandID
 		item.ToAvatarID = ""

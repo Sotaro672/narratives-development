@@ -14,7 +14,6 @@ import (
 	"time"
 
 	applicationport "narratives/internal/application/port"
-	usecase "narratives/internal/application/usecase"
 )
 
 const (
@@ -41,7 +40,7 @@ type AccountGateway struct {
 }
 
 var _ applicationport.StripeAccountGateway = (*AccountGateway)(nil)
-var _ usecase.StripePayoutAccountGateway = (*AccountGateway)(nil)
+var _ applicationport.StripePayoutAccountGateway = (*AccountGateway)(nil)
 
 // NewAccountGateway creates a Stripe Connected Account gateway.
 func NewAccountGateway(secretKey string) *AccountGateway {
@@ -152,8 +151,8 @@ func (g *AccountGateway) CreateOnboardingLink(
 // by the stable Idempotency-Key supplied to this method.
 func (g *AccountGateway) CreatePayoutAccount(
 	ctx context.Context,
-	in usecase.CreateStripePayoutAccountInput,
-) (*usecase.StripePayoutAccountResult, error) {
+	in applicationport.CreateStripePayoutAccountInput,
+) (*applicationport.StripePayoutAccountResult, error) {
 	if err := g.validateReady(); err != nil {
 		return nil, err
 	}
@@ -196,7 +195,7 @@ func (g *AccountGateway) CreatePayoutAccount(
 func (g *AccountGateway) GetPayoutAccount(
 	ctx context.Context,
 	stripeAccountID string,
-) (*usecase.StripePayoutAccountResult, error) {
+) (*applicationport.StripePayoutAccountResult, error) {
 	out, err := g.getAccount(ctx, stripeAccountID)
 	if err != nil {
 		return nil, err
@@ -212,13 +211,13 @@ func (g *AccountGateway) GetPayoutAccount(
 //   - account_update: previously onboarded account maintenance
 func (g *AccountGateway) CreatePayoutAccountLink(
 	ctx context.Context,
-	in usecase.CreateStripePayoutAccountLinkInput,
-) (*usecase.StripePayoutAccountLinkResult, error) {
+	in applicationport.CreateStripePayoutAccountLinkInput,
+) (*applicationport.StripePayoutAccountLinkResult, error) {
 	useCase := strings.TrimSpace(string(in.UseCase))
 
 	switch useCase {
-	case string(usecase.StripePayoutAccountLinkUseCaseOnboarding),
-		string(usecase.StripePayoutAccountLinkUseCaseUpdate):
+	case string(applicationport.StripePayoutAccountLinkUseCaseOnboarding),
+		string(applicationport.StripePayoutAccountLinkUseCaseUpdate):
 	default:
 		return nil, errors.New("stripe payout account: invalid account link use case")
 	}
@@ -234,7 +233,7 @@ func (g *AccountGateway) CreatePayoutAccountLink(
 		return nil, err
 	}
 
-	return &usecase.StripePayoutAccountLinkResult{
+	return &applicationport.StripePayoutAccountLinkResult{
 		AccountID: strings.TrimSpace(out.Account),
 		URL:       strings.TrimSpace(out.URL),
 		ExpiresAt: out.ExpiresAt,
@@ -248,7 +247,7 @@ func (g *AccountGateway) CreatePayoutAccountLink(
 func (g *AccountGateway) GetPayoutBankAccount(
 	ctx context.Context,
 	stripeAccountID string,
-) (*usecase.StripePayoutBankAccountResult, error) {
+) (*applicationport.StripePayoutBankAccountResult, error) {
 	if err := g.validateReady(); err != nil {
 		return nil, err
 	}
@@ -288,7 +287,7 @@ func (g *AccountGateway) GetPayoutBankAccount(
 		return nil, errors.New("stripe payout account: invalid bank account last4")
 	}
 
-	return &usecase.StripePayoutBankAccountResult{
+	return &applicationport.StripePayoutBankAccountResult{
 		BankName: bankName,
 		Last4:    last4,
 	}, nil
@@ -684,7 +683,7 @@ func accountResultFromResponse(
 
 func payoutAccountResultFromResponse(
 	out stripeAccountResponse,
-) (*usecase.StripePayoutAccountResult, error) {
+) (*applicationport.StripePayoutAccountResult, error) {
 	id := strings.TrimSpace(out.ID)
 	if !isValidStripeAccountID(id) {
 		return nil, errors.New("stripe payout account: stripe account id is empty or invalid")
@@ -702,7 +701,7 @@ func payoutAccountResultFromResponse(
 		detailsSubmitted = false
 	}
 
-	return &usecase.StripePayoutAccountResult{
+	return &applicationport.StripePayoutAccountResult{
 		ID:               id,
 		DetailsSubmitted: detailsSubmitted,
 		PayoutsEnabled:   payoutsEnabled,
@@ -815,13 +814,11 @@ func (g *AccountGateway) doJSONWithBaseURL(
 	}
 
 	var reader io.Reader
-
 	if body != nil {
 		payload, err := json.Marshal(body)
 		if err != nil {
 			return err
 		}
-
 		reader = bytes.NewReader(payload)
 	}
 
