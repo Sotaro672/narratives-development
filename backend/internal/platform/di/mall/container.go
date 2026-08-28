@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"strings"
 
 	mallquery "narratives/internal/application/query/mall"
 	mallshared "narratives/internal/application/query/mall/shared"
@@ -34,13 +32,7 @@ import (
 	shared "narratives/internal/platform/di/shared"
 )
 
-const (
-	StripeWebhookPath = "/mall/webhooks/stripe"
-
-	mallAutoCreateStripeTestPaymentMethodEnv = "MALL_AUTO_CREATE_STRIPE_TEST_PAYMENT_METHOD"
-
-	mallPayoutAccountAllowedReturnOriginEnv = "MALL_FRONTEND_BASE_URL"
-)
+const StripeWebhookPath = "/mall/webhooks/stripe"
 
 type Container struct {
 	Infra *shared.Infra
@@ -114,6 +106,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		return nil, errors.New("di.mall: infra.Firestore is nil")
 	}
 
+	cfg := loadMallConfigFromEnv()
 	c := &Container{Infra: infra}
 
 	authUserReader := outfirebase.NewAuthUserReader(infra.FirebaseAuth)
@@ -160,6 +153,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	tokenBlueprintRepo := outfs.NewTokenBlueprintRepositoryFS(fsClient)
 	productBlueprintRepoFS := outfs.NewProductBlueprintRepositoryFS(fsClient)
 	modelRepoFS := outfs.NewModelRepositoryFS(fsClient)
+	tokenReader := outfs.NewTokenReaderFS(fsClient)
 
 	mallDisplayResolver := mallshared.NewDisplayResolver(
 		productRepo,
@@ -229,7 +223,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	)
 
 	orderMailer := mailadp.NewOrderMailer(
-		mailadp.NewResendClient(os.Getenv("RESEND_API_KEY")),
+		mailadp.NewResendClient(cfg.ResendAPIKey),
 		modelRepoFS,
 		inventoryRepo,
 		productBlueprintRepoFS,
@@ -238,15 +232,15 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		companyRepo,
 	)
 
-	orderMailFrom := os.Getenv("RESEND_FROM")
+	orderMailFrom := cfg.ResendFrom
 
 	orderCancellationMailer := mailadp.NewOrderCancellationMailer(
-		mailadp.NewResendClient(os.Getenv("RESEND_API_KEY")),
+		mailadp.NewResendClient(cfg.ResendAPIKey),
 		orderMailFrom,
 	)
 
 	inquiryMailer := mailadp.NewInquiryMailer(
-		mailadp.NewResendClient(os.Getenv("RESEND_API_KEY")),
+		mailadp.NewResendClient(cfg.ResendAPIKey),
 	)
 
 	projectID := infra.ProjectID
@@ -283,10 +277,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		infra.PaymentMethodGateway,
 	)
 
-	autoCreateDevelopmentPaymentMethod := strings.EqualFold(
-		strings.TrimSpace(os.Getenv(mallAutoCreateStripeTestPaymentMethodEnv)),
-		"true",
-	)
+	autoCreateDevelopmentPaymentMethod := cfg.AutoCreateStripeTestPaymentMethod
 
 	c.AvatarRegistrationUC = usecase.NewAvatarRegistrationUsecase(
 		c.AvatarUC,
@@ -297,12 +288,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.UserUC = usecase.NewUserUsecase(userRepo, nil)
 
 	onchainReader := solana.NewOnchainWalletReaderDevnet()
-	tokenQuery := outfs.NewTokenReaderFS(fsClient)
 
 	c.WalletUC = usecase.NewWalletUsecase(
 		walletRepo,
 		onchainReader,
-		tokenQuery,
+		tokenReader,
 		brandRepo,
 		productRepo,
 		productBlueprintRepoFS,
@@ -349,13 +339,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	{
-		payoutAccountAllowedReturnOrigin := strings.TrimSpace(
-			os.Getenv(mallPayoutAccountAllowedReturnOriginEnv),
-		)
+		payoutAccountAllowedReturnOrigin := cfg.FrontendBaseURL
 		if payoutAccountAllowedReturnOrigin == "" {
 			return nil, fmt.Errorf(
 				"di.mall: %s is empty",
-				mallPayoutAccountAllowedReturnOriginEnv,
+				mallFrontendBaseURLEnv,
 			)
 		}
 
@@ -531,8 +519,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			mallDisplayResolver,
 			mallquery.WithCartQueryBrandRepo(brandRepo),
 		)
-
-		tokenReader := outfs.NewTokenReaderFS(fsClient)
 
 		solanaTransferReader := solana.NewTokenTransferReaderSolana("")
 		previewTransferReader := outsolana.NewPreviewTransferReader(solanaTransferReader)

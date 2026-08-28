@@ -108,8 +108,18 @@ func handleSafe(
 	mux.Handle(pattern, h)
 }
 
+func mallRouterUnavailableHandler(errorCode string) http.Handler {
+	return http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"error":"` + errorCode + `"}`))
+		},
+	)
+}
+
 // handleSafeAuth registers pattern with auth-wrapped handler.
-// If auth is nil, it falls back to plain handleSafe (and warns) to avoid crash.
+// Missing auth middleware fails closed with Service Unavailable.
 func handleSafeAuth(
 	mux *http.ServeMux,
 	pattern string,
@@ -129,7 +139,7 @@ func handleSafeAuth(
 
 	if auth == nil {
 		log.Printf(
-			"[mall.router] WARN: nil auth middleware: %s pattern=%s (registering WITHOUT auth)",
+			"[mall.router] ERROR: nil auth middleware: %s pattern=%s (failing closed)",
 			name,
 			pattern,
 		)
@@ -137,7 +147,7 @@ func handleSafeAuth(
 		handleSafe(
 			mux,
 			pattern,
-			h,
+			mallRouterUnavailableHandler("auth_middleware_not_configured"),
 			name,
 		)
 
@@ -178,7 +188,7 @@ func handleSafeAuthAvatar(
 
 	if auth == nil {
 		log.Printf(
-			"[mall.router] WARN: nil auth middleware: %s pattern=%s (registering WITHOUT auth+avatar)",
+			"[mall.router] ERROR: nil auth middleware: %s pattern=%s (failing closed)",
 			name,
 			pattern,
 		)
@@ -186,7 +196,7 @@ func handleSafeAuthAvatar(
 		handleSafe(
 			mux,
 			pattern,
-			h,
+			mallRouterUnavailableHandler("auth_middleware_not_configured"),
 			name,
 		)
 
@@ -195,7 +205,7 @@ func handleSafeAuthAvatar(
 
 	if avatar == nil {
 		log.Printf(
-			"[mall.router] WARN: nil avatar context middleware: %s pattern=%s (registering WITHOUT avatar context)",
+			"[mall.router] ERROR: nil avatar context middleware: %s pattern=%s (failing closed)",
 			name,
 			pattern,
 		)
@@ -203,7 +213,7 @@ func handleSafeAuthAvatar(
 		handleSafe(
 			mux,
 			pattern,
-			auth(h),
+			mallRouterUnavailableHandler("avatar_context_middleware_not_configured"),
 			name,
 		)
 
@@ -219,7 +229,8 @@ func handleSafeAuthAvatar(
 }
 
 // avatarPublicHandler keeps public avatar reads available while requiring
-// user authentication only for avatar creation.
+// user authentication for avatar creation.
+// If auth middleware is unavailable, avatar creation fails closed.
 func avatarPublicHandler(
 	h http.Handler,
 	auth func(http.Handler) http.Handler,
@@ -230,19 +241,29 @@ func avatarPublicHandler(
 
 	if auth == nil {
 		log.Printf(
-			"[mall.router] WARN: nil auth middleware: Avatar(create) (registering WITHOUT auth)",
+			"[mall.router] ERROR: nil auth middleware: Avatar(create) (failing closed for POST)",
 		)
 
-		return h
+		unavailable := mallRouterUnavailableHandler("auth_middleware_not_configured")
+
+		return http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodPost &&
+					(r.URL.Path == "/mall/avatars" ||
+						r.URL.Path == "/mall/avatars/") {
+					unavailable.ServeHTTP(w, r)
+					return
+				}
+
+				h.ServeHTTP(w, r)
+			},
+		)
 	}
 
 	authed := auth(h)
 
 	return http.HandlerFunc(
-		func(
-			w http.ResponseWriter,
-			r *http.Request,
-		) {
+		func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodPost &&
 				(r.URL.Path == "/mall/avatars" ||
 					r.URL.Path == "/mall/avatars/") {
@@ -267,10 +288,7 @@ func paymentReadOnlyHandler(
 	}
 
 	return http.HandlerFunc(
-		func(
-			w http.ResponseWriter,
-			r *http.Request,
-		) {
+		func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodGet ||
 				r.Method == http.MethodOptions {
 				h.ServeHTTP(w, r)

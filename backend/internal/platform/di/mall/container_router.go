@@ -3,7 +3,6 @@ package mall
 
 import (
 	"net/http"
-	"os"
 
 	mallhttp "narratives/internal/adapters/in/http/mall"
 	mallhandler "narratives/internal/adapters/in/http/mall/handler"
@@ -17,6 +16,8 @@ func Register(mux *http.ServeMux, cont *Container) {
 	if mux == nil || cont == nil {
 		return
 	}
+
+	cfg := loadMallConfigFromEnv()
 
 	// ------------------------------------------------------------
 	// Auth middleware (buyer/user side)
@@ -71,7 +72,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		authH = mallhandler.NewAuthHandler(
 			cont.Infra.FirebaseAuth,
 			mailadp.NewAuthMailerWithResend(),
-			os.Getenv("AUTH_ACTION_BASE_URL"),
+			cfg.AuthActionBaseURL,
 		)
 	}
 
@@ -349,7 +350,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// Webhooks (no auth)
 	// ----------------------------
 	if cont.PaymentUC != nil {
-		secret := os.Getenv("STRIPE_WEBHOOK_SECRET")
+		secret := cfg.StripeWebhookSecret
 		if secret == "" {
 			return
 		}
