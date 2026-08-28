@@ -6,19 +6,15 @@ import (
 	"errors"
 	"fmt"
 
-	mallquery "narratives/internal/application/query/mall"
-	usecase "narratives/internal/application/usecase"
-
 	cloudtasksadp "narratives/internal/adapters/out/cloudtasks"
 	outfirebase "narratives/internal/adapters/out/firebase"
 	mallfs "narratives/internal/adapters/out/firestore/mall"
 	mailadp "narratives/internal/adapters/out/mail"
 	stripeadapter "narratives/internal/adapters/out/stripe"
-
+	mallquery "narratives/internal/application/query/mall"
+	usecase "narratives/internal/application/usecase"
 	transportationdom "narratives/internal/domain/transportation"
-
 	solana "narratives/internal/infra/solana"
-
 	shared "narratives/internal/platform/di/shared"
 )
 
@@ -95,16 +91,6 @@ func buildMallUsecases(
 	}
 
 	resendClient := mailadp.NewResendClient(cfg.ResendAPIKey)
-
-	orderMailer := mailadp.NewOrderMailer(
-		resendClient,
-		r.modelRepoFS,
-		r.inventoryRepo,
-		r.productBlueprintRepoFS,
-		r.tokenBlueprintRepo,
-		r.brandRepo,
-		r.companyRepo,
-	)
 
 	orderCancellationMailer := mailadp.NewOrderCancellationMailer(
 		resendClient,
@@ -211,15 +197,8 @@ func buildMallUsecases(
 	paymentUC := usecase.NewPaymentUsecase(
 		usecase.NewPaymentUsecaseInput{
 			PaymentRepo: r.paymentRepo,
-
-			CartRepo:      r.cartRepo,
-			OrderRepo:     r.orderRepo,
-			InventoryRepo: r.inventoryRepo,
-			ResaleRepo:    r.resaleRepo,
-
-			AuthUserGetter: authUserReader,
-			MailSender:     orderMailer,
-			MailFrom:       cfg.ResendFrom,
+			OrderRepo:   r.orderRepo,
+			ResaleRepo:  r.resaleRepo,
 		},
 	)
 

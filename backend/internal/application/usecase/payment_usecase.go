@@ -53,8 +53,6 @@ import (
 	"strings"
 	"time"
 
-	applicationport "narratives/internal/application/port"
-	cartdom "narratives/internal/domain/cart"
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
@@ -120,23 +118,6 @@ type ApplyStripePaymentEventResult struct {
 	PostPaidRequired bool
 }
 
-// InventoryRepoForPayment is retained as a wiring-compatible port while
-// inventory reservation is moved to the order-placement flow.
-//
-// PaymentUsecase does not reserve inventory after payment.
-type InventoryRepoForPayment interface {
-	// ReserveByOrder sets:
-	// - stock[modelId].reservedByOrder[orderId] = qty
-	// - reservedCount = sum(reservedByOrder), normalized by repository
-	ReserveByOrder(
-		ctx context.Context,
-		inventoryID string,
-		modelID string,
-		orderID string,
-		qty int,
-	) error
-}
-
 // OrderRepoForPayment is the minimal port for reading/updating orders after
 // payment.
 type OrderRepoForPayment interface {
@@ -169,19 +150,6 @@ type ResaleRepoForPayment interface {
 		id string,
 		item resaledom.Resale,
 	) (resaledom.Resale, error)
-}
-
-// MailSenderForPayment is retained as a wiring-compatible port while
-// order-acceptance mail is moved to the order-placement flow.
-//
-// PaymentUsecase does not send order confirmation mail after payment.
-type MailSenderForPayment interface {
-	SendOrderConfirmation(
-		ctx context.Context,
-		from string,
-		to string,
-		order orderdom.Order,
-	) error
 }
 
 // ============================================================
@@ -219,16 +187,8 @@ type PaymentUsecase struct {
 
 	stripeEventRepo StripePaymentEventRepository
 
-	cartRepo      cartdom.Repository
-	inventoryRepo InventoryRepoForPayment
-	orderRepo     OrderRepoForPayment
-	resaleRepo    ResaleRepoForPayment
-
-	// authUserGetter gets the email associated with a UID from Firebase
-	// Authentication. Email is not stored in the Firestore users collection.
-	authUserGetter applicationport.AuthUserReader
-	mailSender     MailSenderForPayment
-	mailFrom       string
+	orderRepo  OrderRepoForPayment
+	resaleRepo ResaleRepoForPayment
 
 	now func() time.Time
 }
@@ -240,14 +200,8 @@ type NewPaymentUsecaseInput struct {
 	// StripePaymentEventRepository.
 	StripeEventRepo StripePaymentEventRepository
 
-	CartRepo      cartdom.Repository
-	InventoryRepo InventoryRepoForPayment
-	OrderRepo     OrderRepoForPayment
-	ResaleRepo    ResaleRepoForPayment
-
-	AuthUserGetter applicationport.AuthUserReader
-	MailSender     MailSenderForPayment
-	MailFrom       string
+	OrderRepo  OrderRepoForPayment
+	ResaleRepo ResaleRepoForPayment
 
 	Now func() time.Time
 }
@@ -272,14 +226,8 @@ func NewPaymentUsecase(
 		repo:            in.PaymentRepo,
 		stripeEventRepo: stripeEventRepo,
 
-		cartRepo:      in.CartRepo,
-		inventoryRepo: in.InventoryRepo,
-		orderRepo:     in.OrderRepo,
-		resaleRepo:    in.ResaleRepo,
-
-		authUserGetter: in.AuthUserGetter,
-		mailSender:     in.MailSender,
-		mailFrom:       in.MailFrom,
+		orderRepo:  in.OrderRepo,
+		resaleRepo: in.ResaleRepo,
 
 		now: now,
 	}
