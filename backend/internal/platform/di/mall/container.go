@@ -4,30 +4,15 @@ package mall
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	mallquery "narratives/internal/application/query/mall"
-	mallshared "narratives/internal/application/query/mall/shared"
 	sharedquery "narratives/internal/application/query/shared"
 	appresolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
 
 	mallhandler "narratives/internal/adapters/in/http/mall/handler"
 
-	cloudtasksadp "narratives/internal/adapters/out/cloudtasks"
-	outfirebase "narratives/internal/adapters/out/firebase"
-	outfs "narratives/internal/adapters/out/firestore"
-	mallfs "narratives/internal/adapters/out/firestore/mall"
-	sharedfs "narratives/internal/adapters/out/firestore/shared"
-	mailadp "narratives/internal/adapters/out/mail"
-	outsolana "narratives/internal/adapters/out/solana"
-	stripeadapter "narratives/internal/adapters/out/stripe"
-
 	refunddom "narratives/internal/domain/refund"
-	transferdom "narratives/internal/domain/transfer"
-	transportationdom "narratives/internal/domain/transportation"
-
-	solana "narratives/internal/infra/solana"
 
 	shared "narratives/internal/platform/di/shared"
 )
@@ -35,7 +20,8 @@ import (
 const StripeWebhookPath = "/mall/webhooks/stripe"
 
 type Container struct {
-	Infra *shared.Infra
+	Infra  *shared.Infra
+	config mallConfig
 
 	AvatarUC                       *usecase.AvatarUsecase
 	AvatarRegistrationUC           *usecase.AvatarRegistrationUsecase
@@ -100,532 +86,75 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	if infra.Config == nil {
 		return nil, errors.New("di.mall: shared infra config is nil")
 	}
-
-	fsClient := infra.Firestore
-	if fsClient == nil {
+	if infra.Firestore == nil {
 		return nil, errors.New("di.mall: infra.Firestore is nil")
 	}
 
 	cfg := loadMallConfigFromEnv()
-	c := &Container{Infra: infra}
 
-	authUserReader := outfirebase.NewAuthUserReader(infra.FirebaseAuth)
-	avatarRepo := outfs.NewAvatarRepositoryFS(fsClient)
-
-	c.MeAvatarResolver = avatarRepo
-	c.SetupUC = usecase.NewSetupUsecase(avatarRepo)
-
-	shippingAddressRepo := outfs.NewShippingAddressRepositoryFS(fsClient)
-	paymentMethodRepo := outfs.NewPaymentMethodRepositoryFS(fsClient)
-	payoutAccountRepo := outfs.NewPayoutAccountRepositoryFS(fsClient)
-	userRepo := outfs.NewUserRepositoryFS(fsClient)
-	memberRepo := outfs.NewMemberRepositoryFS(fsClient)
-	walletRepo := outfs.NewWalletRepositoryFS(fsClient)
-	productRepo := outfs.NewProductRepositoryFS(fsClient)
-
-	{
-		var customerStore stripeadapter.PaymentMethodCustomerStore = paymentMethodRepo
-
-		if err := infra.RegisterPaymentMethodGatewayFromSecret(ctx, customerStore); err != nil {
-			return nil, err
-		}
-		if infra.PaymentMethodGateway == nil {
-			return nil, errors.New("di.mall: stripe payment method gateway is nil after registration")
-		}
+	c := &Container{
+		Infra:  infra,
+		config: cfg,
 	}
 
-	brandRepo := outfs.NewBrandRepositoryFS(fsClient)
+	repos := buildMallRepositories(infra.Firestore)
+	if repos == nil {
+		return nil, errors.New("di.mall: repositories are nil")
+	}
 
-	accountRepo := outfs.NewAccountRepositoryFS(fsClient)
-	companyRepo := outfs.NewCompanyRepositoryFS(fsClient)
-	cartRepo := outfs.NewCartRepositoryFS(fsClient)
-	paymentRepo := outfs.NewPaymentRepositoryFS(fsClient)
-	settlementRepo := outfs.NewSettlementRepositoryFS(fsClient)
-	refundRepo := outfs.NewRefundRepositoryFS(fsClient)
-	orderRepo := outfs.NewOrderRepositoryFS(fsClient)
+	if repos.avatarRepo == nil {
+		return nil, errors.New("di.mall: avatar repository is nil")
+	}
+	if repos.refundRepo == nil {
+		return nil, errors.New("di.mall: refund repository is nil")
+	}
 
-	c.RefundRepo = refundRepo
+	c.MeAvatarResolver = repos.avatarRepo
+	c.RefundRepo = repos.refundRepo
 
-	// The projection repository is shared by PreviewQuery and TransferUsecase.
-	orderTransferItemRepo := outfs.NewOrderRepoForTransferFS(fsClient)
-
-	inventoryRepo := outfs.NewInventoryRepositoryFS(fsClient)
-	tokenBlueprintRepo := outfs.NewTokenBlueprintRepositoryFS(fsClient)
-	productBlueprintRepoFS := outfs.NewProductBlueprintRepositoryFS(fsClient)
-	modelRepoFS := outfs.NewModelRepositoryFS(fsClient)
-	tokenReader := outfs.NewTokenReaderFS(fsClient)
-
-	mallDisplayResolver := mallshared.NewDisplayResolver(
-		productRepo,
-		modelRepoFS,
-		productBlueprintRepoFS,
-		tokenBlueprintRepo,
-		brandRepo,
+	usecases, err := buildMallUsecases(
+		ctx,
+		infra,
+		cfg,
+		repos,
 	)
-
-	inquiryRepo := outfs.NewInquiryRepositoryFS(fsClient)
-	inquiryReplyRepo := outfs.NewInquiryReplyRepositoryFS(fsClient)
-
-	c.InquiryQ = mallquery.NewInquiryQuery(
-		inquiryRepo,
-		inquiryReplyRepo,
-		mallDisplayResolver,
-		orderRepo,
-		avatarRepo,
-	)
-
-	announcementRepo := outfs.NewAnnouncementRepositoryFS(fsClient)
-	announcementAvatarRepo := outfs.NewAnnouncementAvatarRepositoryFS(fsClient)
-	announcementAttachmentRepo := outfs.NewAnnouncementAttachmentRepositoryFS(fsClient)
-
-	c.AnnouncementUC = usecase.NewAnnouncementUsecase(
-		announcementRepo,
-		announcementAvatarRepo,
-		announcementAttachmentRepo,
-	)
-
-	c.AnnouncementQ = mallquery.NewAnnouncementQueryService(
-		announcementRepo,
-		announcementAvatarRepo,
-		announcementAttachmentRepo,
-		tokenBlueprintRepo,
-	)
-
-	tokenBlueprintReviewRepo := outfs.NewTokenBlueprintReviewRepositoryFS(fsClient)
-	productBlueprintReviewRepo := outfs.NewProductBlueprintReviewRepositoryFS(fsClient)
-	listRepoFS := outfs.NewListRepositoryFS(fsClient)
-	listImageRecordRepo := outfs.NewListImageRepositoryFS(fsClient)
-	resaleRepo := outfs.NewResaleRepositoryFS(fsClient)
-	resaleImageRepo := outfs.NewResaleImageRepositoryFS(fsClient)
-
-	resaleImageStorage, err := outfirebase.NewResaleImageStorageFromEnv(ctx)
 	if err != nil {
 		return nil, err
 	}
+	if usecases == nil {
+		return nil, errors.New("di.mall: usecases are nil")
+	}
 
-	c.ResaleUC = usecase.NewResaleUsecase(
-		resaleRepo,
-		resaleImageRepo,
-		resaleImageStorage,
+	usecases.applyToContainer(c)
+
+	queries, err := buildMallQueries(
+		infra,
+		repos,
+		usecases,
 	)
-
-	c.ResaleQ = mallquery.NewResaleQuery(
-		resaleRepo,
-		resaleImageRepo,
-		mallDisplayResolver,
-	)
-
-	c.MarketQ = mallquery.NewMarketQuery(
-		resaleRepo,
-		resaleImageRepo,
-		mallDisplayResolver,
-		avatarRepo,
-	)
-
-	orderMailer := mailadp.NewOrderMailer(
-		mailadp.NewResendClient(cfg.ResendAPIKey),
-		modelRepoFS,
-		inventoryRepo,
-		productBlueprintRepoFS,
-		tokenBlueprintRepo,
-		brandRepo,
-		companyRepo,
-	)
-
-	orderMailFrom := cfg.ResendFrom
-
-	orderCancellationMailer := mailadp.NewOrderCancellationMailer(
-		mailadp.NewResendClient(cfg.ResendAPIKey),
-		orderMailFrom,
-	)
-
-	inquiryMailer := mailadp.NewInquiryMailer(
-		mailadp.NewResendClient(cfg.ResendAPIKey),
-	)
-
-	projectID := infra.ProjectID
-	avatarWalletSvc := solana.NewAvatarWalletService(projectID)
-
-	c.AvatarUC = usecase.NewAvatarUsecase(
-		avatarRepo,
-		avatarWalletSvc,
-		walletRepo,
-		cartRepo,
-		nil,
-	)
-
-	transportationRepo := outfs.NewTransportationRepositoryFS(fsClient)
-	transportationSvc := transportationdom.NewService(transportationRepo)
-
-	c.ShippingQuoteUC = usecase.NewShippingQuoteUsecase(
-		listRepoFS,
-		inventoryRepo,
-		modelRepoFS,
-		shippingAddressRepo,
-		transportationSvc,
-	)
-
-	c.ListQ = mallquery.NewListQuery(
-		listRepoFS,
-		listImageRecordRepo,
-	)
-
-	c.ShippingAddressUC = usecase.NewShippingAddressUsecase(shippingAddressRepo)
-
-	c.PaymentMethodUC = usecase.NewPaymentMethodUsecase(
-		paymentMethodRepo,
-		infra.PaymentMethodGateway,
-	)
-
-	autoCreateDevelopmentPaymentMethod := cfg.AutoCreateStripeTestPaymentMethod
-
-	c.AvatarRegistrationUC = usecase.NewAvatarRegistrationUsecase(
-		c.AvatarUC,
-		c.PaymentMethodUC,
-		autoCreateDevelopmentPaymentMethod,
-	)
-
-	c.UserUC = usecase.NewUserUsecase(userRepo, nil)
-
-	onchainReader := solana.NewOnchainWalletReaderDevnet()
-
-	c.WalletUC = usecase.NewWalletUsecase(
-		walletRepo,
-		onchainReader,
-		tokenReader,
-		brandRepo,
-		productRepo,
-		productBlueprintRepoFS,
-		productBlueprintRepoFS,
-	)
-
-	c.ProductBlueprintReviewUC = usecase.NewProductBlueprintReviewUsecase(
-		productBlueprintReviewRepo,
-		productBlueprintRepoFS,
-		brandRepo,
-		memberRepo,
-		c.WalletUC,
-		avatarRepo,
-		nil,
-	)
-
-	c.TokenBlueprintReviewUC = usecase.NewTokenBlueprintReviewUsecase(
-		tokenBlueprintReviewRepo,
-		avatarRepo,
-		tokenBlueprintRepo,
-		brandRepo,
-	)
-
-	c.CartUC = usecase.NewCartUsecase(cartRepo)
-
-	c.PaymentUC = usecase.NewPaymentUsecase(
-		usecase.NewPaymentUsecaseInput{
-			PaymentRepo: paymentRepo,
-
-			CartRepo:      cartRepo,
-			OrderRepo:     orderRepo,
-			InventoryRepo: inventoryRepo,
-			ResaleRepo:    resaleRepo,
-
-			AuthUserGetter: authUserReader,
-			MailSender:     orderMailer,
-			MailFrom:       orderMailFrom,
-		},
-	)
-
-	settlementDependencies, err := shared.BuildSettlementDependencies(ctx, infra)
 	if err != nil {
-		return nil, fmt.Errorf("di.mall: build settlement dependencies: %w", err)
+		return nil, err
+	}
+	if queries == nil {
+		return nil, errors.New("di.mall: queries are nil")
 	}
 
-	{
-		payoutAccountAllowedReturnOrigin := cfg.FrontendBaseURL
-		if payoutAccountAllowedReturnOrigin == "" {
-			return nil, fmt.Errorf(
-				"di.mall: %s is empty",
-				mallFrontendBaseURLEnv,
-			)
-		}
+	queries.applyToContainer(c)
 
-		if infra.AccountGateway == nil {
-			if err := infra.RegisterAccountGatewayFromSecret(ctx); err != nil {
-				return nil, fmt.Errorf(
-					"di.mall: register Stripe payout account gateway: %w",
-					err,
-				)
-			}
-		}
-		if infra.AccountGateway == nil {
-			return nil, errors.New("di.mall: Stripe payout account gateway is nil")
-		}
-
-		c.PayoutAccountUC = usecase.NewPayoutAccountUsecase(
-			payoutAccountRepo,
-			infra.AccountGateway,
-			payoutAccountAllowedReturnOrigin,
-		)
-		if c.PayoutAccountUC == nil {
-			return nil, errors.New("di.mall: payout account usecase is nil")
-		}
-	}
-
-	c.SettlementUC = usecase.NewSettlementUsecase(
-		usecase.NewSettlementUsecaseInput{
-			Repository:            settlementRepo,
-			Calculator:            settlementDependencies.SettlementCalculator,
-			StripeTransferGateway: settlementDependencies.StripeTransferGateway,
-		},
+	transferUC, err := buildMallTransferUsecase(
+		infra,
+		repos,
+		usecases,
+		queries.previewQ,
 	)
-	if c.SettlementUC == nil {
-		return nil, errors.New("di.mall: settlement usecase is nil")
-	}
-
-	c.RefundUC = usecase.NewRefundUsecase(
-		usecase.NewRefundUsecaseInput{
-			PaymentReader:                 c.PaymentUC,
-			SettlementRepository:          settlementRepo,
-			StripeRefundGateway:           settlementDependencies.StripeRefundGateway,
-			StripeTransferReversalGateway: settlementDependencies.StripeTransferReversalGateway,
-		},
-	)
-	if c.RefundUC == nil {
-		return nil, errors.New("di.mall: refund usecase is nil")
-	}
-
-	c.OrderUC = usecase.NewOrderUsecase(
-		orderRepo,
-		listRepoFS,
-		inventoryRepo,
-		productBlueprintRepoFS,
-		resaleRepo,
-		paymentMethodRepo,
-		shippingAddressRepo,
-		c.ShippingQuoteUC,
-	).
-		WithCartRepository(cartRepo).
-		WithSellerRepositories(
-			brandRepo,
-			accountRepo,
-		).
-		WithCancellationNotification(
-			authUserReader,
-			orderCancellationMailer,
-		)
-
-	c.ItemRefundUC = usecase.NewItemRefundUsecase(
-		usecase.NewItemRefundUsecaseInput{
-			OrderReader:                   c.OrderUC,
-			PaymentReader:                 c.PaymentUC,
-			SettlementRepository:          settlementRepo,
-			RefundRepository:              refundRepo,
-			PlatformFeeCalculator:         settlementDependencies.Calculator,
-			StripeRefundGateway:           settlementDependencies.StripeRefundGateway,
-			StripeTransferReversalGateway: settlementDependencies.StripeTransferReversalGateway,
-		},
-	)
-	if c.ItemRefundUC == nil {
-		return nil, errors.New("di.mall: item refund usecase is nil")
-	}
-
-	c.InquiryUC = usecase.NewInquiryUsecase(
-		inquiryRepo,
-		inquiryReplyRepo,
-		inquiryMailer,
-		orderMailFrom,
-		avatarRepo,
-		authUserReader,
-	)
-
-	c.ReturnRequestUC = usecase.NewReturnRequestUsecase(
-		c.OrderUC,
-		inquiryRepo,
-		c.InquiryUC,
-	).WithReplyRepository(inquiryReplyRepo)
-
-	if infra.PaymentMethodGateway == nil {
-		return nil, errors.New("di.mall: stripe payment intent gateway is nil")
-	}
-
-	c.PaymentFlowUC = usecase.NewPaymentFlowUsecase(
-		c.PaymentUC,
-		orderRepo,
-		infra.PaymentMethodGateway,
-	)
-
-	inventoryUC := usecase.NewInventoryUsecase(inventoryRepo)
-
-	{
-		c.NameResolver = appresolver.NewNameResolver(
-			brandRepo,
-			companyRepo,
-			productBlueprintRepoFS,
-			memberRepo,
-			userRepo,
-			modelRepoFS,
-			tokenBlueprintRepo,
-		)
-	}
-
-	{
-		brandsCol := infra.BrandsCollection
-		avatarsCol := infra.AvatarsCollection
-
-		brandReader := sharedfs.NewBrandWalletAddressReaderFS(
-			fsClient,
-			brandsCol,
-		)
-
-		avatarReader := sharedfs.NewAvatarWalletAddressReaderFS(
-			fsClient,
-			avatarsCol,
-		)
-
-		c.OwnerResolveQ = sharedquery.NewOwnerResolveQuery(
-			avatarReader,
-			brandReader,
-			avatarRepo,
-			brandRepo,
-		)
-	}
-
-	{
-		c.BrandQ = mallquery.NewBrandQuery(
-			brandRepo,
-			companyRepo,
-			productBlueprintRepoFS,
-			inventoryRepo,
-			listRepoFS,
-		)
-
-		c.CatalogQ = mallquery.NewCatalogQuery(
-			listRepoFS,
-			inventoryRepo,
-			productBlueprintRepoFS,
-			modelRepoFS,
-			listImageRecordRepo,
-			tokenBlueprintRepo,
-			productBlueprintReviewRepo,
-			c.NameResolver,
-		)
-
-		c.CartQ = mallquery.NewCartQuery(
-			cartRepo,
-			listRepoFS,
-			listImageRecordRepo,
-			inventoryRepo,
-			productBlueprintRepoFS,
-			resaleRepo,
-			resaleImageRepo,
-			mallDisplayResolver,
-			mallquery.WithCartQueryBrandRepo(brandRepo),
-		)
-
-		solanaTransferReader := solana.NewTokenTransferReaderSolana("")
-		previewTransferReader := outsolana.NewPreviewTransferReader(solanaTransferReader)
-
-		c.PreviewQ = mallquery.NewPreviewQuery(
-			productRepo,
-			productBlueprintRepoFS,
-			orderTransferItemRepo,
-			c.NameResolver,
-			tokenReader,
-			tokenBlueprintRepo,
-			c.OwnerResolveQ,
-			brandRepo,
-			avatarRepo,
-			previewTransferReader,
-		)
-
-		c.OrderQ = mallquery.NewOrderQuery(
-			avatarRepo,
-			cartRepo,
-			shippingAddressRepo,
-			paymentMethodRepo,
-			productBlueprintRepoFS,
-			resaleRepo,
-			resaleImageRepo,
-			c.NameResolver,
-		)
-
-		c.HistoryQ = mallquery.NewHistoryQuery(
-			inventoryRepo,
-			mallDisplayResolver,
-		)
-
-		c.OrderDetailQ = mallquery.NewOrderDetailQuery(
-			inventoryRepo,
-			mallDisplayResolver,
-			c.PaymentUC,
-		)
-	}
-
-	{
-		var orderRepoForTransfer usecase.OrderRepoForTransfer = orderTransferItemRepo
-
-		var tokenResolver usecase.TokenResolver = mallfs.NewTokenResolverFS(
-			fsClient,
-			"tokens",
-		)
-
-		var tokenOwnerUpdater usecase.TokenOwnerUpdater = outfs.NewTokenOwnerUpdaterFS(fsClient)
-		var transferRepo transferdom.RepositoryPort = outfs.NewTransferRepositoryFS(fsClient)
-
-		walletResolverRepo := outfs.NewWalletResolverRepoFS(
-			brandRepo,
-			walletRepo,
-		)
-
-		var walletResolver usecase.BrandWalletResolver = walletResolverRepo
-		var avatarWalletResolver usecase.AvatarWalletResolver = walletResolverRepo
-
-		var walletTransferUpdate usecase.AvatarWalletItemTransferUpdater = walletRepo
-		var walletSync usecase.AvatarWalletSyncer = c.WalletUC
-		var executor usecase.TokenTransferExecutor = solana.NewTokenTransferExecutorSolana("")
-
-		transferExecutionUC := usecase.NewTokenTransferExecutionUsecase(
-			tokenOwnerUpdater,
-			walletTransferUpdate,
-			walletSync,
-			transferRepo,
-			executor,
-			nil,
-		)
-
-		c.TransferUC = usecase.NewTransferUsecase(
-			c.PreviewQ,
-			orderRepoForTransfer,
-			tokenResolver,
-			walletResolver,
-			avatarWalletResolver,
-			brandRepo,
-			avatarRepo,
-			transferExecutionUC,
-			inventoryUC,
-		).
-			WithResaleTransferDependencies(resaleRepo).
-			WithReturnOpeningHandler(c.ReturnRequestUC)
-	}
-
-	// Stripe Refund webhook が succeeded を確定した後に、
-	// purchaser向け返金完了通知deliveryを作成・Cloud Tasksへ投入します。
-	refundCompletionNotificationRepo := outfs.NewRefundCompletionNotificationRepositoryFS(fsClient)
-
-	refundCompletionNotificationQueue, err := cloudtasksadp.NewRefundCompletionNotificationQueueFromEnv(ctx)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"di.mall: build refund completion notification queue: %w",
-			err,
-		)
+		return nil, err
+	}
+	if transferUC == nil {
+		return nil, errors.New("di.mall: transfer usecase is nil")
 	}
 
-	refundCompletionNotificationMailer := mailadp.NewRefundCompletionNotificationMailerWithResend()
-
-	c.RefundCompletionNotificationUC = usecase.NewRefundCompletionNotificationUsecase(
-		refundCompletionNotificationRepo,
-		authUserReader,
-		refundCompletionNotificationMailer,
-		refundCompletionNotificationQueue,
-	)
+	c.TransferUC = transferUC
 
 	return c, nil
 }

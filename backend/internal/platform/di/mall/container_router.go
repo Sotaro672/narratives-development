@@ -17,7 +17,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		return
 	}
 
-	cfg := loadMallConfigFromEnv()
+	cfg := cont.config
 
 	// ------------------------------------------------------------
 	// Auth middleware (buyer/user side)
@@ -69,9 +69,14 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// Auth email verification
 	if cont.Infra != nil && cont.Infra.FirebaseAuth != nil {
+		authMailer := mailadp.NewAuthMailer(
+			mailadp.NewResendClient(cfg.ResendAPIKey),
+			cfg.ResendFrom,
+		)
+
 		authH = mallhandler.NewAuthHandler(
 			cont.Infra.FirebaseAuth,
-			mailadp.NewAuthMailerWithResend(),
+			authMailer,
 			cfg.AuthActionBaseURL,
 		)
 	}
