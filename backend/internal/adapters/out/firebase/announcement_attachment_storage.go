@@ -5,13 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	usecase "narratives/internal/application/usecase"
 	"os"
 	"strings"
 	"unicode/utf8"
 
 	gcs "cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
+
+	applicationport "narratives/internal/application/port"
 )
 
 const announcementAttachmentStorageBucketEnv = "FIREBASE_STORAGE_BUCKET"
@@ -68,7 +69,7 @@ func NewAnnouncementAttachmentStorageFromEnv(
 	}, nil
 }
 
-var _ usecase.AnnouncementAttachmentStorage = (*AnnouncementAttachmentStorage)(nil)
+var _ applicationport.AnnouncementAttachmentStorage = (*AnnouncementAttachmentStorage)(nil)
 
 func (s *AnnouncementAttachmentStorage) DeleteAll(
 	ctx context.Context,

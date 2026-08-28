@@ -5,13 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	usecase "narratives/internal/application/usecase"
 	"os"
 	"strings"
 	"unicode/utf8"
 
 	gcs "cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
+
+	applicationport "narratives/internal/application/port"
 )
 
 const listSaveOperationStorageBucketEnv = "FIREBASE_STORAGE_BUCKET"
@@ -36,7 +37,6 @@ func NewListSaveOperationStorageFromEnv(ctx context.Context) (*ListSaveOperation
 	}
 
 	bucketName := os.Getenv(listSaveOperationStorageBucketEnv)
-
 	if bucketName == "" {
 		return nil, fmt.Errorf("%s is required", listSaveOperationStorageBucketEnv)
 	}
@@ -53,7 +53,7 @@ func NewListSaveOperationStorageFromEnv(ctx context.Context) (*ListSaveOperation
 	}, nil
 }
 
-var _ usecase.ListSaveOperationStorage = (*ListSaveOperationStorage)(nil)
+var _ applicationport.ListSaveOperationStorage = (*ListSaveOperationStorage)(nil)
 
 func (s *ListSaveOperationStorage) Exists(ctx context.Context, storagePath string) (bool, error) {
 	bucketName, objectPath, err := s.resolveObjectPath(ctx, storagePath)
@@ -115,7 +115,6 @@ func (s *ListSaveOperationStorage) DeleteAll(ctx context.Context, listID string)
 	}
 
 	bucketName := s.BucketName
-
 	if bucketName == "" {
 		return errors.New("cloud storage bucket name is empty")
 	}
@@ -145,7 +144,6 @@ func (s *ListSaveOperationStorage) DeleteAll(ctx context.Context, listID string)
 	}
 
 	prefix := "lists/" + listID + "/images/"
-
 	bucket := s.Client.Bucket(bucketName)
 
 	it := bucket.Objects(
@@ -223,7 +221,6 @@ func (s *ListSaveOperationStorage) resolveObjectPath(ctx context.Context, storag
 	}
 
 	bucketName := s.BucketName
-
 	if bucketName == "" {
 		return "", "", errors.New("cloud storage bucket name is empty")
 	}
@@ -238,7 +235,6 @@ func (s *ListSaveOperationStorage) resolveObjectPath(ctx context.Context, storag
 
 func normalizeListSaveOperationObjectPath(storagePath string) (string, error) {
 	value := storagePath
-
 	if value == "" {
 		return "", errors.New("storagePath is required")
 	}
@@ -256,7 +252,6 @@ func normalizeListSaveOperationObjectPath(storagePath string) (string, error) {
 	}
 
 	lowerValue := strings.ToLower(value)
-
 	if strings.HasPrefix(lowerValue, "gs://") ||
 		strings.HasPrefix(lowerValue, "http://") ||
 		strings.HasPrefix(lowerValue, "https://") {
@@ -264,7 +259,6 @@ func normalizeListSaveOperationObjectPath(storagePath string) (string, error) {
 	}
 
 	value = strings.TrimLeft(value, "/")
-
 	parts := strings.Split(value, "/")
 
 	if len(parts) != 5 {

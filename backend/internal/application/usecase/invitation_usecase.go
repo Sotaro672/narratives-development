@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	applicationport "narratives/internal/application/port"
 	invdom "narratives/internal/domain/invitation"
 	memdom "narratives/internal/domain/member"
 )
@@ -50,24 +51,6 @@ type InvitationUsecasePort interface {
 }
 
 // ==============================
-// Outbound Ports
-// ==============================
-
-// InvitationDeliveryQueuePortは、delivery IDをメール送信queueへ投入します。
-//
-// 実装側は、Cloud Tasksなどへtokenやemailを直接渡さず、
-// delivery IDだけをpayloadとして使用します。
-//
-// delivery.NextAttemptAtが現在より未来の場合は、
-// その時刻以降に処理されるようscheduleを設定します。
-type InvitationDeliveryQueuePort interface {
-	EnqueueInvitationDelivery(
-		ctx context.Context,
-		delivery invdom.InvitationDelivery,
-	) error
-}
-
-// ==============================
 // Usecase
 // ==============================
 
@@ -75,7 +58,7 @@ type invitationUsecase struct {
 	invitationTokenRepo    invdom.Repository
 	invitationDeliveryRepo invdom.DeliveryRepository
 	memberRepo             memdom.Repository
-	deliveryQueue          InvitationDeliveryQueuePort
+	deliveryQueue          applicationport.InvitationDeliveryQueuePort
 }
 
 // NewInvitationUsecaseは、招待ユースケースの唯一の生成入口です。
@@ -96,7 +79,7 @@ func NewInvitationUsecase(
 	invitationTokenRepo invdom.Repository,
 	invitationDeliveryRepo invdom.DeliveryRepository,
 	memberRepo memdom.Repository,
-	deliveryQueue InvitationDeliveryQueuePort,
+	deliveryQueue applicationport.InvitationDeliveryQueuePort,
 ) InvitationUsecasePort {
 	return &invitationUsecase{
 		invitationTokenRepo:    invitationTokenRepo,

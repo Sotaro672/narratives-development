@@ -21,7 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	uc "narratives/internal/application/usecase"
+	applicationport "narratives/internal/application/port"
 	invdom "narratives/internal/domain/invitation"
 )
 
@@ -76,7 +76,7 @@ type InvitationDeliveryQueue struct {
 	now              func() time.Time
 }
 
-var _ uc.InvitationDeliveryQueuePort = (*InvitationDeliveryQueue)(nil)
+var _ applicationport.InvitationDeliveryQueuePort = (*InvitationDeliveryQueue)(nil)
 
 // NewInvitationDeliveryQueueFromEnvは、現在の共通Cloud Tasks設定から
 // InvitationDeliveryQueueを生成します。

@@ -5,13 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	usecase "narratives/internal/application/usecase"
 	"os"
 	"strings"
 	"unicode/utf8"
 
 	gcs "cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
+
+	applicationport "narratives/internal/application/port"
 )
 
 const resaleImageStorageBucketEnv = "FIREBASE_STORAGE_BUCKET"
@@ -66,7 +67,7 @@ func NewResaleImageStorageFromEnv(
 	}, nil
 }
 
-var _ usecase.ResaleImageStorage = (*ResaleImageStorage)(nil)
+var _ applicationport.ResaleImageStorage = (*ResaleImageStorage)(nil)
 
 func (s *ResaleImageStorage) DeleteAll(
 	ctx context.Context,

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	refundnotificationuc "narratives/internal/application/usecase"
+	applicationport "narratives/internal/application/port"
 	refunddom "narratives/internal/domain/refund"
 )
 
@@ -29,7 +29,7 @@ type RefundCompletionNotificationMailer struct {
 	fromAddress string
 }
 
-var _ refundnotificationuc.RefundCompletionNotificationMailerPort = (*RefundCompletionNotificationMailer)(nil)
+var _ applicationport.RefundCompletionNotificationMailerPort = (*RefundCompletionNotificationMailer)(nil)
 
 func NewRefundCompletionNotificationMailer(
 	client RefundCompletionNotificationEmailClient,
@@ -43,70 +43,70 @@ func NewRefundCompletionNotificationMailer(
 
 func (m *RefundCompletionNotificationMailer) SendRefundCompletionNotification(
 	ctx context.Context,
-	message refundnotificationuc.RefundCompletionNotificationMailMessage,
-) (refundnotificationuc.RefundCompletionNotificationMailSendResult, error) {
+	message applicationport.RefundCompletionNotificationMailMessage,
+) (applicationport.RefundCompletionNotificationMailSendResult, error) {
 	if m == nil {
-		return refundnotificationuc.RefundCompletionNotificationMailSendResult{
+		return applicationport.RefundCompletionNotificationMailSendResult{
 			Retryable: false,
 		}, fmt.Errorf("refund completion notification mailer is nil")
 	}
 
 	if m.client == nil {
-		return refundnotificationuc.RefundCompletionNotificationMailSendResult{
+		return applicationport.RefundCompletionNotificationMailSendResult{
 			Retryable: false,
 		}, fmt.Errorf("refund completion notification email client is not configured")
 	}
 
 	fromAddress := strings.TrimSpace(m.fromAddress)
 	if fromAddress == "" {
-		return refundnotificationuc.RefundCompletionNotificationMailSendResult{
+		return applicationport.RefundCompletionNotificationMailSendResult{
 			Retryable: false,
 		}, fmt.Errorf("from address is empty")
 	}
 
 	idempotencyKey := strings.TrimSpace(message.IdempotencyKey)
 	if idempotencyKey == "" {
-		return refundnotificationuc.RefundCompletionNotificationMailSendResult{
+		return applicationport.RefundCompletionNotificationMailSendResult{
 			Retryable: false,
 		}, refunddom.ErrCompletionNotificationDeliveryIDRequired
 	}
 
 	toEmail := strings.ToLower(strings.TrimSpace(message.ToEmail))
 	if toEmail == "" {
-		return refundnotificationuc.RefundCompletionNotificationMailSendResult{
+		return applicationport.RefundCompletionNotificationMailSendResult{
 			Retryable: false,
 		}, fmt.Errorf("to email is empty")
 	}
 
 	paymentID := strings.TrimSpace(message.PaymentID)
 	if paymentID == "" {
-		return refundnotificationuc.RefundCompletionNotificationMailSendResult{
+		return applicationport.RefundCompletionNotificationMailSendResult{
 			Retryable: false,
 		}, refunddom.ErrCompletionNotificationPaymentIDRequired
 	}
 
 	orderID := strings.TrimSpace(message.OrderID)
 	if orderID == "" {
-		return refundnotificationuc.RefundCompletionNotificationMailSendResult{
+		return applicationport.RefundCompletionNotificationMailSendResult{
 			Retryable: false,
 		}, refunddom.ErrCompletionNotificationOrderIDRequired
 	}
 
 	stripeRefundID := strings.TrimSpace(message.StripeRefundID)
 	if stripeRefundID == "" {
-		return refundnotificationuc.RefundCompletionNotificationMailSendResult{
+		return applicationport.RefundCompletionNotificationMailSendResult{
 			Retryable: false,
 		}, refunddom.ErrCompletionNotificationStripeRefundIDRequired
 	}
 
 	if !strings.HasPrefix(stripeRefundID, "re_") {
-		return refundnotificationuc.RefundCompletionNotificationMailSendResult{
+		return applicationport.RefundCompletionNotificationMailSendResult{
 			Retryable: false,
 		}, refunddom.ErrCompletionNotificationStripeRefundIDInvalid
 	}
 
 	if message.RefundedAmount <= 0 {
-		return refundnotificationuc.RefundCompletionNotificationMailSendResult{
+		return applicationport.RefundCompletionNotificationMailSendResult{
 			Retryable: false,
 		}, refunddom.ErrCompletionNotificationRefundedAmountInvalid
 	}
@@ -126,7 +126,7 @@ func (m *RefundCompletionNotificationMailer) SendRefundCompletionNotification(
 		idempotencyKey,
 	)
 	if err != nil {
-		return refundnotificationuc.RefundCompletionNotificationMailSendResult{
+		return applicationport.RefundCompletionNotificationMailSendResult{
 				ProviderMessageID: sendResult.ProviderMessageID,
 				Retryable:         sendResult.Retryable,
 			}, fmt.Errorf(
@@ -137,7 +137,7 @@ func (m *RefundCompletionNotificationMailer) SendRefundCompletionNotification(
 			)
 	}
 
-	return refundnotificationuc.RefundCompletionNotificationMailSendResult{
+	return applicationport.RefundCompletionNotificationMailSendResult{
 		ProviderMessageID: strings.TrimSpace(sendResult.ProviderMessageID),
 		Retryable:         false,
 	}, nil

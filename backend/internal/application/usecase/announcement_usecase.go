@@ -8,18 +8,10 @@ import (
 	"fmt"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	ann "narratives/internal/domain/announcement"
 	common "narratives/internal/domain/common"
 )
-
-// AnnouncementAttachmentStorage manages Firebase Storage objects
-// associated with an announcement.
-type AnnouncementAttachmentStorage interface {
-	DeleteAll(
-		ctx context.Context,
-		announcementID string,
-	) error
-}
 
 // AnnouncementUsecase coordinates Announcement, avatar read state,
 // attachment metadata, and attachment storage.
@@ -27,7 +19,7 @@ type AnnouncementUsecase struct {
 	annRepo           ann.Repository
 	avatarRepo        ann.AvatarRepository
 	attRepo           ann.AttachmentRepository
-	attachmentStorage AnnouncementAttachmentStorage
+	attachmentStorage applicationport.AnnouncementAttachmentStorage
 
 	now func() time.Time
 }
@@ -51,7 +43,7 @@ func (u *AnnouncementUsecase) WithNow(now func() time.Time) *AnnouncementUsecase
 }
 
 func (u *AnnouncementUsecase) WithAttachmentStorage(
-	attachmentStorage AnnouncementAttachmentStorage,
+	attachmentStorage applicationport.AnnouncementAttachmentStorage,
 ) *AnnouncementUsecase {
 	u.attachmentStorage = attachmentStorage
 	return u

@@ -20,7 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	uc "narratives/internal/application/usecase"
+	applicationport "narratives/internal/application/port"
 	refunddom "narratives/internal/domain/refund"
 )
 
@@ -63,7 +63,7 @@ type RefundCompletionNotificationQueue struct {
 	now              func() time.Time
 }
 
-var _ uc.RefundCompletionNotificationQueuePort = (*RefundCompletionNotificationQueue)(nil)
+var _ applicationport.RefundCompletionNotificationQueuePort = (*RefundCompletionNotificationQueue)(nil)
 
 func NewRefundCompletionNotificationQueueFromEnv(
 	ctx context.Context,

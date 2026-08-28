@@ -7,23 +7,20 @@ import (
 	"strings"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	resaledom "narratives/internal/domain/resale"
 )
-
-type ResaleImageStorage interface {
-	DeleteAll(ctx context.Context, resaleID string) error
-}
 
 type ResaleUsecase struct {
 	resaleRepo   resaledom.Repository
 	imageRepo    resaledom.ImageRepository
-	imageStorage ResaleImageStorage
+	imageStorage applicationport.ResaleImageStorage
 }
 
 func NewResaleUsecase(
 	resaleRepo resaledom.Repository,
 	imageRepo resaledom.ImageRepository,
-	imageStorage ResaleImageStorage,
+	imageStorage applicationport.ResaleImageStorage,
 ) *ResaleUsecase {
 	return &ResaleUsecase{
 		resaleRepo:   resaleRepo,

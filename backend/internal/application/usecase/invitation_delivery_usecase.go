@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	invdom "narratives/internal/domain/invitation"
 )
 
@@ -48,48 +49,13 @@ type InvitationDeliveryUsecasePort interface {
 }
 
 // ==============================
-// Outbound Port
-// ==============================
-
-// InvitationMailMessageは、招待メール送信adapterへ渡す入力です。
-//
-// IdempotencyKeyにはdelivery IDを設定します。
-// メールadapterは、可能な場合、この値を外部providerの冪等キーとして
-// 使用します。
-type InvitationMailMessage struct {
-	IdempotencyKey string
-	ToEmail        string
-	Token          string
-	Info           invdom.InvitationInfo
-}
-
-// InvitationMailSendResultは、メールproviderから得られた送信結果です。
-//
-// Retryableは、送信エラーが一時的で再試行可能な場合にtrueとします。
-type InvitationMailSendResult struct {
-	ProviderMessageID string
-	Retryable         bool
-}
-
-// InvitationDeliveryMailerPortは、招待メールを外部providerへ送信します。
-//
-// Firestoreのdelivery stateやtoken stateは更新しません。
-// 状態更新はInvitationDeliveryUsecaseがDeliveryRepositoryを通して行います。
-type InvitationDeliveryMailerPort interface {
-	SendInvitationEmail(
-		ctx context.Context,
-		message InvitationMailMessage,
-	) (InvitationMailSendResult, error)
-}
-
-// ==============================
 // Usecase
 // ==============================
 
 type InvitationDeliveryUsecase struct {
 	deliveryRepo  invdom.DeliveryRepository
-	mailer        InvitationDeliveryMailerPort
-	deliveryQueue InvitationDeliveryQueuePort
+	mailer        applicationport.InvitationDeliveryMailerPort
+	deliveryQueue applicationport.InvitationDeliveryQueuePort
 
 	now           func() time.Time
 	leaseDuration time.Duration
@@ -100,8 +66,8 @@ type InvitationDeliveryUsecase struct {
 // NewInvitationDeliveryUsecaseは、招待メールdelivery usecaseを生成します。
 func NewInvitationDeliveryUsecase(
 	deliveryRepo invdom.DeliveryRepository,
-	mailer InvitationDeliveryMailerPort,
-	deliveryQueue InvitationDeliveryQueuePort,
+	mailer applicationport.InvitationDeliveryMailerPort,
+	deliveryQueue applicationport.InvitationDeliveryQueuePort,
 ) *InvitationDeliveryUsecase {
 	return &InvitationDeliveryUsecase{
 		deliveryRepo:  deliveryRepo,
@@ -173,7 +139,6 @@ func (u *InvitationDeliveryUsecase) DispatchDue(
 					err,
 				)
 			}
-
 			continue
 		}
 
@@ -193,7 +158,6 @@ func (u *InvitationDeliveryUsecase) DispatchDue(
 					err,
 				)
 			}
-
 			continue
 		}
 
@@ -314,7 +278,7 @@ func (u *InvitationDeliveryUsecase) Process(
 
 	result, sendErr := u.mailer.SendInvitationEmail(
 		ctx,
-		InvitationMailMessage{
+		applicationport.InvitationMailMessage{
 			IdempotencyKey: delivery.ID,
 			ToEmail:        delivery.Email,
 			Token:          delivery.Token,
@@ -338,7 +302,6 @@ func (u *InvitationDeliveryUsecase) Process(
 				err,
 			)
 		}
-
 		return nil
 	}
 

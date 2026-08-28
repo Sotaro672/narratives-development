@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	usecase "narratives/internal/application/usecase"
 	"net/url"
 	"os"
 	"strings"
@@ -20,6 +19,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	applicationport "narratives/internal/application/port"
 )
 
 const (
@@ -41,6 +42,7 @@ type ListSaveOperationQueueConfig struct {
 	ServiceAccountEmail string
 	OIDCAudience        string
 }
+
 type ListSaveOperationQueue struct {
 	Client              *cloudtasksv2.Client
 	ProjectID           string
@@ -51,6 +53,7 @@ type ListSaveOperationQueue struct {
 	OIDCAudience        string
 	ownsClient          bool
 }
+
 type listSaveOperationRetryTaskPayload struct {
 	OperationID string `json:"operationId"`
 }
@@ -74,6 +77,7 @@ func NewListSaveOperationQueue(client *cloudtasksv2.Client, config ListSaveOpera
 		ownsClient:          false,
 	}, nil
 }
+
 func NewListSaveOperationQueueFromEnv(ctx context.Context) (*ListSaveOperationQueue, error) {
 	if ctx == nil {
 		return nil, errors.New("context is nil")
@@ -113,7 +117,7 @@ func NewListSaveOperationQueueFromEnv(ctx context.Context) (*ListSaveOperationQu
 	return queue, nil
 }
 
-var _ usecase.ListSaveOperationRetryQueue = (*ListSaveOperationQueue)(nil)
+var _ applicationport.ListSaveOperationRetryQueue = (*ListSaveOperationQueue)(nil)
 
 func (q *ListSaveOperationQueue) EnqueueRetry(ctx context.Context, operationID string, scheduledAt time.Time) error {
 	if ctx == nil {
@@ -195,6 +199,7 @@ func (q *ListSaveOperationQueue) EnqueueRetry(ctx context.Context, operationID s
 		err,
 	)
 }
+
 func (q *ListSaveOperationQueue) Close() error {
 	if q == nil || q.Client == nil || !q.ownsClient {
 		return nil
@@ -206,6 +211,7 @@ func (q *ListSaveOperationQueue) Close() error {
 	q.ownsClient = false
 	return nil
 }
+
 func (q *ListSaveOperationQueue) resolveConfig() (ListSaveOperationQueueConfig, error) {
 	if q == nil {
 		return ListSaveOperationQueueConfig{}, errors.New("list save operation queue is nil")
@@ -222,6 +228,7 @@ func (q *ListSaveOperationQueue) resolveConfig() (ListSaveOperationQueueConfig, 
 		OIDCAudience:        q.OIDCAudience,
 	})
 }
+
 func normalizeListSaveOperationQueueConfig(config ListSaveOperationQueueConfig) (ListSaveOperationQueueConfig, error) {
 	config.ProjectID = strings.TrimSpace(config.ProjectID)
 	config.Location = strings.TrimSpace(config.Location)
@@ -285,6 +292,7 @@ func normalizeListSaveOperationQueueConfig(config ListSaveOperationQueueConfig) 
 	}
 	return config, nil
 }
+
 func normalizeListSaveOperationOperationID(operationID string) (string, error) {
 	operationID = strings.TrimSpace(operationID)
 	if operationID == "" {
@@ -300,6 +308,7 @@ func normalizeListSaveOperationOperationID(operationID string) (string, error) {
 	}
 	return operationID, nil
 }
+
 func validateListSaveOperationQueueIdentifier(fieldName string, value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -319,11 +328,13 @@ func validateListSaveOperationQueueIdentifier(fieldName string, value string) er
 	}
 	return nil
 }
+
 func buildListSaveOperationRetryTaskID(operationID string, scheduledAt time.Time) string {
 	source := operationID + "\x00" + scheduledAt.UTC().Format(time.RFC3339Nano)
 	digest := sha256.Sum256([]byte(source))
 	return "list-save-retry-" + hex.EncodeToString(digest[:16])
 }
+
 func firstNonEmptyEnvironmentValue(names ...string) string {
 	for _, name := range names {
 		value := strings.TrimSpace(os.Getenv(name))

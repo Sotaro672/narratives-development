@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	invitationuc "narratives/internal/application/usecase"
+	applicationport "narratives/internal/application/port"
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	invitationdom "narratives/internal/domain/invitation"
@@ -50,7 +50,7 @@ type InvitationMailer struct {
 	brandNameResolver BrandNameResolver
 }
 
-var _ invitationuc.InvitationDeliveryMailerPort = (*InvitationMailer)(nil)
+var _ applicationport.InvitationDeliveryMailerPort = (*InvitationMailer)(nil)
 
 func NewInvitationMailer(
 	client InvitationEmailClient,
@@ -157,16 +157,16 @@ func (m *InvitationMailer) resolveBrandDisplayNames(
 // 状態更新はInvitationDeliveryUsecaseとDeliveryRepositoryが担当します。
 func (m *InvitationMailer) SendInvitationEmail(
 	ctx context.Context,
-	message invitationuc.InvitationMailMessage,
-) (invitationuc.InvitationMailSendResult, error) {
+	message applicationport.InvitationMailMessage,
+) (applicationport.InvitationMailSendResult, error) {
 	if m == nil {
-		return invitationuc.InvitationMailSendResult{
+		return applicationport.InvitationMailSendResult{
 			Retryable: false,
 		}, fmt.Errorf("invitation mailer is nil")
 	}
 
 	if m.client == nil {
-		return invitationuc.InvitationMailSendResult{
+		return applicationport.InvitationMailSendResult{
 				Retryable: false,
 			}, fmt.Errorf(
 				"invitation email client is not configured",
@@ -175,35 +175,35 @@ func (m *InvitationMailer) SendInvitationEmail(
 
 	fromAddress := m.fromAddress
 	if fromAddress == "" {
-		return invitationuc.InvitationMailSendResult{
+		return applicationport.InvitationMailSendResult{
 			Retryable: false,
 		}, fmt.Errorf("from address is empty")
 	}
 
 	idempotencyKey := message.IdempotencyKey
 	if idempotencyKey == "" {
-		return invitationuc.InvitationMailSendResult{
+		return applicationport.InvitationMailSendResult{
 			Retryable: false,
 		}, invitationdom.ErrInvitationDeliveryIDRequired
 	}
 
 	toEmail := strings.ToLower(message.ToEmail)
 	if toEmail == "" {
-		return invitationuc.InvitationMailSendResult{
+		return applicationport.InvitationMailSendResult{
 			Retryable: false,
 		}, invitationdom.ErrInvitationEmailRequired
 	}
 
 	token := message.Token
 	if token == "" {
-		return invitationuc.InvitationMailSendResult{
+		return applicationport.InvitationMailSendResult{
 			Retryable: false,
 		}, invitationdom.ErrInvitationTokenRequired
 	}
 
 	info, err := message.Info.Normalize()
 	if err != nil {
-		return invitationuc.InvitationMailSendResult{
+		return applicationport.InvitationMailSendResult{
 				Retryable: false,
 			}, fmt.Errorf(
 				"normalize invitation mail info: %w",
@@ -212,7 +212,7 @@ func (m *InvitationMailer) SendInvitationEmail(
 	}
 
 	if info.Email != toEmail {
-		return invitationuc.InvitationMailSendResult{
+		return applicationport.InvitationMailSendResult{
 			Retryable: false,
 		}, invitationdom.ErrInvitationEmailMismatch
 	}
@@ -265,7 +265,7 @@ AMOL Console`,
 		idempotencyKey,
 	)
 	if err != nil {
-		return invitationuc.InvitationMailSendResult{
+		return applicationport.InvitationMailSendResult{
 				ProviderMessageID: sendResult.ProviderMessageID,
 				Retryable:         sendResult.Retryable,
 			}, fmt.Errorf(
@@ -275,7 +275,7 @@ AMOL Console`,
 			)
 	}
 
-	return invitationuc.InvitationMailSendResult{
+	return applicationport.InvitationMailSendResult{
 		ProviderMessageID: sendResult.ProviderMessageID,
 		Retryable:         false,
 	}, nil
