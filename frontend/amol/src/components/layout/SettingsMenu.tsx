@@ -1,4 +1,5 @@
 // frontend/amol/src/components/layout/SettingsMenu.tsx
+
 import { useState } from "react";
 import {
   EmailAuthProvider,
@@ -122,6 +123,11 @@ export default function SettingsMenu({ onItemClick }: SettingsMenuProps) {
       <Item
         label="支払方法"
         onClick={() => handleNavigate("/settings/payment-method")}
+      />
+
+      <Item
+        label="口座変更"
+        onClick={() => handleNavigate("/settings/payout-account")}
       />
 
       <Item

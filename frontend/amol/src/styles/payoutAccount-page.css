@@ -1,0 +1,117 @@
+/* frontend/amol/src/styles/payoutAccount-page.css */
+
+.payout-account-page {
+  width: 100%;
+}
+
+.payout-account-page__content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.payout-account-page__description {
+  margin: 0;
+}
+
+.payout-account-page__status-card {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+  background: #fff;
+}
+
+.payout-account-page__status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.payout-account-page__label {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.payout-account-page__status {
+  font-size: 14px;
+}
+
+.payout-account-page__bank-account {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.payout-account-page__bank-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.payout-account-page__bank-value {
+  font-size: 14px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.payout-account-page__notice {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.payout-account-page__notice-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #4b5563;
+}
+
+.payout-account-page__error {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #c62828;
+}
+
+.payout-account-page__action-button {
+  width: 100%;
+  min-height: 48px;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.payout-account-page__action-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.payout-account-page__note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #6b7280;
+}
+
+@media (max-width: 480px) {
+  .payout-account-page__status-card {
+    padding: 16px;
+  }
+
+  .payout-account-page__bank-row {
+    gap: 12px;
+  }
+}

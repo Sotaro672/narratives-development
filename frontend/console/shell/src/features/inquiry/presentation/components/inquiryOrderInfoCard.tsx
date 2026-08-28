@@ -11,7 +11,6 @@ import {
 } from "../../../../shared/ui/card";
 
 import type {
-  InquiryOrderItemSummary,
   InquiryOrderSummary,
 } from "../../../../shared/types/inquiry";
 
@@ -29,64 +28,6 @@ function textOrDash(
   return normalized || "-";
 }
 
-function normalizeText(
-  value: unknown,
-): string {
-  return String(value ?? "").trim();
-}
-
-function uniqueTextValues(
-  values: Array<string | null | undefined>,
-): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const value of values) {
-    const normalized = normalizeText(value);
-
-    if (!normalized || normalized === "-") {
-      continue;
-    }
-
-    if (seen.has(normalized)) {
-      continue;
-    }
-
-    seen.add(normalized);
-    result.push(normalized);
-  }
-
-  return result;
-}
-
-function getOrderTransferredAtLabel(
-  order: InquiryOrderSummary,
-): string {
-  if (order.items.length === 0) {
-    return "-";
-  }
-
-  const transferredAtValues = uniqueTextValues(
-    order.items.map(
-      (item: InquiryOrderItemSummary) =>
-        item.transferredAt ?? null,
-    ),
-  );
-
-  if (transferredAtValues.length === 0) {
-    return "-";
-  }
-
-  return transferredAtValues
-    .map((transferredAt) =>
-      safeDateTimeLabelJa(
-        transferredAt,
-        "-",
-      ),
-    )
-    .join(" / ");
-}
-
 export default function InquiryOrderInfoCard({
   productName,
   brandName,
@@ -95,8 +36,7 @@ export default function InquiryOrderInfoCard({
 }: InquiryOrderInfoCardProps) {
   const targetOrderItem =
     orders.flatMap(
-      (order: InquiryOrderSummary) =>
-        order.items,
+      (order: InquiryOrderSummary) => order.items,
     )[0] ?? null;
 
   const productDisplayName =
@@ -240,20 +180,6 @@ export default function InquiryOrderInfoCard({
                       {safeDateTimeLabelJa(
                         order.createdAt,
                         "-",
-                      )}
-                    </span>
-                  </div>,
-
-                  <div
-                    key={`${order.id}-transferred-at-${index}`}
-                  >
-                    <span className="inq-detail__label">
-                      移譲日
-                    </span>
-
-                    <span className="inq-detail__value">
-                      {getOrderTransferredAtLabel(
-                        order,
                       )}
                     </span>
                   </div>,
