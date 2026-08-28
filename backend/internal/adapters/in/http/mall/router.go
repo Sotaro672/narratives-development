@@ -51,8 +51,6 @@ type Deps struct {
 
 	OrderScanTransfer http.Handler
 
-	OwnerResolve http.Handler
-
 	Order http.Handler
 
 	// market resales (auth + avatar required)
@@ -412,20 +410,6 @@ func Register(
 	// wallets (public)
 	handleSafe(mux, "/mall/wallets", deps.Wallet, "Wallet")
 	handleSafe(mux, "/mall/wallets/", deps.Wallet, "Wallet")
-
-	// owner resolve (public OK)
-	handleSafe(
-		mux,
-		"/mall/owners/resolve",
-		deps.OwnerResolve,
-		"OwnerResolve",
-	)
-	handleSafe(
-		mux,
-		"/mall/owners/resolve/",
-		deps.OwnerResolve,
-		"OwnerResolve",
-	)
 
 	// preview (public)
 	handleSafe(mux, "/mall/preview", deps.Preview, "Preview")

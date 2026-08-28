@@ -37,8 +37,6 @@ import (
 const (
 	StripeWebhookPath = "/mall/webhooks/stripe"
 
-	settlementStripeSecretID = "stripe-secret-key"
-
 	mallAutoCreateStripeTestPaymentMethodEnv = "MALL_AUTO_CREATE_STRIPE_TEST_PAYMENT_METHOD"
 
 	mallPayoutAccountAllowedReturnOriginEnv = "MALL_FRONTEND_BASE_URL"
@@ -351,16 +349,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	{
-		stripeSecretKey, err := infra.AccessSecretVersion(ctx, settlementStripeSecretID)
-		if err != nil {
-			return nil, fmt.Errorf("di.mall: load Stripe payout account secret: %w", err)
-		}
-
-		stripeSecretKey = strings.TrimSpace(stripeSecretKey)
-		if stripeSecretKey == "" || !strings.HasPrefix(stripeSecretKey, "sk_") {
-			return nil, errors.New("di.mall: Stripe payout account secret is invalid")
-		}
-
 		payoutAccountAllowedReturnOrigin := strings.TrimSpace(
 			os.Getenv(mallPayoutAccountAllowedReturnOriginEnv),
 		)
@@ -371,14 +359,21 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			)
 		}
 
-		payoutAccountGateway := stripeadapter.NewAccountGateway(stripeSecretKey)
-		if payoutAccountGateway == nil {
+		if infra.AccountGateway == nil {
+			if err := infra.RegisterAccountGatewayFromSecret(ctx); err != nil {
+				return nil, fmt.Errorf(
+					"di.mall: register Stripe payout account gateway: %w",
+					err,
+				)
+			}
+		}
+		if infra.AccountGateway == nil {
 			return nil, errors.New("di.mall: Stripe payout account gateway is nil")
 		}
 
 		c.PayoutAccountUC = usecase.NewPayoutAccountUsecase(
 			payoutAccountRepo,
-			payoutAccountGateway,
+			infra.AccountGateway,
 			payoutAccountAllowedReturnOrigin,
 		)
 		if c.PayoutAccountUC == nil {

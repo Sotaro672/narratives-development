@@ -334,8 +334,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 		OrderScanTransfer: orderScanTransferH,
 
-		OwnerResolve: http.NotFoundHandler(),
-
 		Payment:      payH,
 		Order:        orderH,
 		Inquiry:      inquiryH,
