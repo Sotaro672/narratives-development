@@ -26,12 +26,9 @@ import (
 	outsolana "narratives/internal/adapters/out/solana"
 	stripeadapter "narratives/internal/adapters/out/stripe"
 
-	avatardom "narratives/internal/domain/avatar"
-	branddom "narratives/internal/domain/brand"
 	refunddom "narratives/internal/domain/refund"
 	resaledom "narratives/internal/domain/resale"
 	settlementdom "narratives/internal/domain/settlement"
-	tokenblueprintreview "narratives/internal/domain/tokenBlueprint_review"
 	transferdom "narratives/internal/domain/transfer"
 	transportationdom "narratives/internal/domain/transportation"
 
@@ -85,22 +82,18 @@ type Container struct {
 
 	InquiryMailer *mailadp.InquiryMailer
 
-	AvatarRepo avatardom.Repository
-	BrandRepo  branddom.Repository
-
 	ResaleRepo      resaledom.Repository
 	ResaleImageRepo resaledom.ImageRepository
 
 	MeAvatarResolver mallhandler.MeAvatarResolver
 
 	ProductBlueprintReviewUC *usecase.ProductBlueprintReviewUsecase
+	TokenBlueprintReviewUC   *usecase.TokenBlueprintReviewUsecase
 
 	TransferUC      *usecase.TransferUsecase
 	ShareTransferUC *usecase.ShareTransferUsecase
 	PaymentFlowUC   *usecase.PaymentFlowUsecase
 	InventoryUC     *usecase.InventoryUsecase
-
-	TokenBlueprintReviewRepo tokenblueprintreview.RepositoryPort
 
 	NameResolver *appresolver.NameResolver
 
@@ -146,7 +139,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	authUserReader := outfirebase.NewAuthUserReader(infra.FirebaseAuth)
 	avatarRepo := outfs.NewAvatarRepositoryFS(fsClient)
 
-	c.AvatarRepo = avatarRepo
 	c.MeAvatarResolver = avatarRepo
 	c.SetupUC = usecase.NewSetupUsecase(avatarRepo)
 
@@ -180,7 +172,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	brandRepo := outfs.NewBrandRepositoryFS(fsClient)
-	c.BrandRepo = brandRepo
 
 	accountRepo := outfs.NewAccountRepositoryFS(fsClient)
 	companyRepo := outfs.NewCompanyRepositoryFS(fsClient)
@@ -236,8 +227,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		tokenBlueprintRepo,
 	)
 
-	c.TokenBlueprintReviewRepo = outfs.NewTokenBlueprintReviewRepositoryFS(fsClient)
-
+	tokenBlueprintReviewRepo := outfs.NewTokenBlueprintReviewRepositoryFS(fsClient)
 	productBlueprintReviewRepo := outfs.NewProductBlueprintReviewRepositoryFS(fsClient)
 	listRepoFS := outfs.NewListRepositoryFS(fsClient)
 	listImageRecordRepo := outfs.NewListImageRepositoryFS(fsClient)
@@ -366,6 +356,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.WalletUC,
 		avatarRepo,
 		nil,
+	)
+
+	c.TokenBlueprintReviewUC = usecase.NewTokenBlueprintReviewUsecase(
+		tokenBlueprintReviewRepo,
+		avatarRepo,
+		tokenBlueprintRepo,
+		brandRepo,
 	)
 
 	c.CartUC = usecase.NewCartUsecase(cartRepo)

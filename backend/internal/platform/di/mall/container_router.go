@@ -9,10 +9,7 @@ import (
 	mallhandler "narratives/internal/adapters/in/http/mall/handler"
 	mallwebhook "narratives/internal/adapters/in/http/mall/webhook"
 	"narratives/internal/adapters/in/http/middleware"
-	firestoreOut "narratives/internal/adapters/out/firestore"
 	mailadp "narratives/internal/adapters/out/mail"
-	"narratives/internal/application/usecase"
-	tokenBlueprint "narratives/internal/domain/tokenBlueprint"
 )
 
 // Register registers mall routes onto mux.
@@ -48,24 +45,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 			avatarCtxMW = &middleware.AvatarContextMiddleware{
 				Resolver: nil,
 			}
-		}
-	}
-
-	// ------------------------------------------------------------
-	// Local repositories recreated from Firestore when needed
-	// ------------------------------------------------------------
-	var tokenBlueprintRepo tokenBlueprint.RepositoryPort
-	{
-		hasFS :=
-			cont.Infra != nil &&
-				cont.Infra.Firestore != nil
-
-		if hasFS {
-			repo := firestoreOut.NewTokenBlueprintRepositoryFS(
-				cont.Infra.Firestore,
-			)
-
-			tokenBlueprintRepo = repo
 		}
 	}
 
@@ -137,17 +116,12 @@ func Register(mux *http.ServeMux, cont *Container) {
 		)
 	}
 
-	// ProductBlueprintReview wiring (catalog composite)
+	// ProductBlueprintReview
 	if cont.ProductBlueprintReviewUC != nil {
 		pbReviewH =
 			mallhandler.NewProductBlueprintReviewHandler(
 				cont.ProductBlueprintReviewUC,
 			)
-
-		catalogH = newCatalogCompositeHandler(
-			catalogH,
-			pbReviewH,
-		)
 	}
 
 	// Brand
@@ -167,24 +141,12 @@ func Register(mux *http.ServeMux, cont *Container) {
 		)
 	}
 
-	// TokenBlueprintReview wiring
-	if cont.TokenBlueprintReviewRepo != nil {
-		tbReviewUC :=
-			usecase.NewTokenBlueprintReviewUsecase(
-				cont.TokenBlueprintReviewRepo,
-				cont.AvatarRepo,
-				tokenBlueprintRepo,
-				cont.BrandRepo,
-			)
-
+	// TokenBlueprintReview
+	if cont.TokenBlueprintReviewUC != nil {
 		tbReviewH =
 			mallhandler.NewTokenBlueprintReviewHandler(
-				tbReviewUC,
+				cont.TokenBlueprintReviewUC,
 			)
-	}
-
-	if tbReviewH != nil &&
-		tbReviewH != http.NotFoundHandler() {
 
 		tbH =
 			mallhandler.NewTokenBlueprintCompositeHandler(
