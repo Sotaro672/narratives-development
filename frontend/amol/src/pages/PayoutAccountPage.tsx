@@ -9,22 +9,15 @@ import "../styles/settings-page.css";
 import "../styles/payoutAccount-page.css";
 
 import Layout from "../components/layout/Layout";
+
+import {
+  createPayoutAccountLink,
+  fetchPayoutAccount,
+} from "../features/payout/api/payoutApi";
+
 import type {
   PayoutAccount,
-  PayoutAccountLinkResponse,
-  PayoutAccountResponse,
 } from "../features/shared/types/payoutAccount";
-import { buildBackendUrl } from "../lib/apiBaseUrl";
-
-async function readJson<T>(response: Response): Promise<T | null> {
-  const contentType = response.headers.get("content-type") || "";
-
-  if (!contentType.includes("application/json")) {
-    return null;
-  }
-
-  return (await response.json()) as T;
-}
 
 function getStatusLabel(
   payoutAccount: PayoutAccount | null,
@@ -52,65 +45,63 @@ function getStatusLabel(
 export default function PayoutAccountPage() {
   const auth = getAuth();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] =
+    useSearchParams();
 
   const [payoutAccount, setPayoutAccount] =
     useState<PayoutAccount | null>(null);
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [isOpeningStripe, setIsOpeningStripe] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [isLoading, setIsLoading] =
+    useState(true);
 
-  const stripeReturnState = searchParams.get("stripe");
+  const [
+    isOpeningStripe,
+    setIsOpeningStripe,
+  ] = useState(false);
 
-  const loadPayoutAccount = useCallback(async () => {
-    const currentUser = auth.currentUser;
+  const [errorMessage, setErrorMessage] =
+    useState("");
 
-    if (!currentUser) {
-      navigate("/signin", { replace: true });
-      return;
-    }
+  const stripeReturnState =
+    searchParams.get("stripe");
 
-    try {
-      setIsLoading(true);
-      setErrorMessage("");
+  const loadPayoutAccount =
+    useCallback(async () => {
+      const currentUser =
+        auth.currentUser;
 
-      const idToken = await currentUser.getIdToken(true);
-
-      const response = await fetch(
-        buildBackendUrl("/mall/me/payout-account"),
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${idToken}`,
-            Accept: "application/json",
-          },
-        }
-      );
-
-      const body =
-        await readJson<PayoutAccountResponse>(response);
-
-      if (!response.ok) {
-        throw new Error(
-          body?.error ||
-            "売上受取口座の情報取得に失敗しました。"
-        );
+      if (!currentUser) {
+        navigate("/signin", {
+          replace: true,
+        });
+        return;
       }
 
-      setPayoutAccount(body?.data || null);
-    } catch (error) {
-      console.error(error);
+      try {
+        setIsLoading(true);
+        setErrorMessage("");
 
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "売上受取口座の情報取得に失敗しました。"
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [auth, navigate]);
+        const idToken =
+          await currentUser.getIdToken(true);
+
+        const account =
+          await fetchPayoutAccount({
+            idToken,
+          });
+
+        setPayoutAccount(account);
+      } catch (error) {
+        console.error(error);
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "売上受取口座の情報取得に失敗しました。"
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    }, [auth, navigate]);
 
   useEffect(() => {
     void loadPayoutAccount();
@@ -126,13 +117,20 @@ export default function PayoutAccountPage() {
     }
 
     const nextSearchParams =
-      new URLSearchParams(searchParams);
+      new URLSearchParams(
+        searchParams
+      );
 
-    nextSearchParams.delete("stripe");
+    nextSearchParams.delete(
+      "stripe"
+    );
 
-    setSearchParams(nextSearchParams, {
-      replace: true,
-    });
+    setSearchParams(
+      nextSearchParams,
+      {
+        replace: true,
+      }
+    );
   }, [
     loadPayoutAccount,
     searchParams,
@@ -140,97 +138,79 @@ export default function PayoutAccountPage() {
     stripeReturnState,
   ]);
 
-  const handleOpenStripe = async () => {
-    const currentUser = auth.currentUser;
+  const handleOpenStripe =
+    async () => {
+      const currentUser =
+        auth.currentUser;
 
-    if (!currentUser) {
-      navigate("/signin", { replace: true });
-      return;
-    }
+      if (!currentUser) {
+        navigate("/signin", {
+          replace: true,
+        });
+        return;
+      }
 
-    try {
-      setIsOpeningStripe(true);
-      setErrorMessage("");
+      try {
+        setIsOpeningStripe(true);
+        setErrorMessage("");
 
-      const idToken =
-        await currentUser.getIdToken(true);
+        const idToken =
+          await currentUser.getIdToken(
+            true
+          );
 
-      const origin = window.location.origin;
+        const origin =
+          window.location.origin;
 
-      const returnUrl =
-        `${origin}/settings/payout-account?stripe=return`;
+        const returnUrl =
+          `${origin}/settings/payout-account?stripe=return`;
 
-      const refreshUrl =
-        `${origin}/settings/payout-account?stripe=refresh`;
+        const refreshUrl =
+          `${origin}/settings/payout-account?stripe=refresh`;
 
-      const response = await fetch(
-        buildBackendUrl(
-          "/mall/me/payout-account/account-link"
-        ),
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${idToken}`,
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({
+        const url =
+          await createPayoutAccountLink({
+            idToken,
             returnUrl,
             refreshUrl,
-          }),
-        }
-      );
+          });
 
-      const body =
-        await readJson<PayoutAccountLinkResponse>(
-          response
+        window.location.assign(url);
+      } catch (error) {
+        console.error(error);
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Stripeとの接続に失敗しました。"
         );
 
-      if (!response.ok) {
-        throw new Error(
-          body?.error ||
-            "Stripeとの接続に失敗しました。"
-        );
+        setIsOpeningStripe(false);
       }
+    };
 
-      const url = body?.data?.url;
+  const statusLabel =
+    getStatusLabel(
+      payoutAccount,
+      isLoading
+    );
 
-      if (!url) {
-        throw new Error(
-          "Stripeの口座登録URLを取得できませんでした。"
-        );
-      }
-
-      window.location.assign(url);
-    } catch (error) {
-      console.error(error);
-
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Stripeとの接続に失敗しました。"
-      );
-
-      setIsOpeningStripe(false);
-    }
-  };
-
-  const statusLabel = getStatusLabel(
-    payoutAccount,
-    isLoading
-  );
-
-  const actionLabel = isOpeningStripe
-    ? "Stripeへ接続中..."
-    : payoutAccount
-      ? "口座情報を変更"
-      : "売上受取口座を登録";
+  const actionLabel =
+    isOpeningStripe
+      ? "Stripeへ接続中..."
+      : payoutAccount
+        ? "口座情報を変更"
+        : "売上受取口座を登録";
 
   const bankName =
-    payoutAccount?.bankAccount?.bankName || "";
+    payoutAccount
+      ?.bankAccount
+      ?.bankName || "";
 
   const bankLast4 =
-    payoutAccount?.bankAccount?.last4 || "";
+    payoutAccount
+      ?.bankAccount
+      ?.last4 || "";
 
   return (
     <Layout
@@ -258,7 +238,8 @@ export default function PayoutAccountPage() {
               </strong>
             </div>
 
-            {bankName || bankLast4 ? (
+            {bankName ||
+            bankLast4 ? (
               <div className="payout-account-page__bank-account">
                 {bankName ? (
                   <div className="payout-account-page__bank-row">
@@ -288,7 +269,8 @@ export default function PayoutAccountPage() {
           </div>
 
           {payoutAccount &&
-          !payoutAccount.payoutsEnabled ? (
+          !payoutAccount
+            .payoutsEnabled ? (
             <div className="payout-account-page__notice">
               <p className="payout-account-page__notice-text">
                 Stripeで追加情報の登録または確認が必要です。
@@ -297,7 +279,8 @@ export default function PayoutAccountPage() {
             </div>
           ) : null}
 
-          {stripeReturnState === "refresh" ? (
+          {stripeReturnState ===
+          "refresh" ? (
             <div className="payout-account-page__notice">
               <p className="payout-account-page__notice-text">
                 Stripeの登録リンクの有効期限が切れました。
@@ -314,7 +297,9 @@ export default function PayoutAccountPage() {
 
           <button
             type="button"
-            onClick={handleOpenStripe}
+            onClick={
+              handleOpenStripe
+            }
             disabled={
               isLoading ||
               isOpeningStripe
