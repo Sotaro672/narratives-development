@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	usecase "narratives/internal/application/usecase"
+	applicationport "narratives/internal/application/port"
 	paymentdom "narratives/internal/domain/payment"
 )
 
-var _ usecase.StripeRefundGateway = (*RefundGateway)(nil)
+var _ applicationport.StripeRefundGateway = (*RefundGateway)(nil)
 
 // ============================================================
 // RefundGateway
@@ -79,8 +79,8 @@ func NewRefundGateway(
 // the request result is uncertain.
 func (g *RefundGateway) CreateRefund(
 	ctx context.Context,
-	in usecase.CreateStripeRefundInput,
-) (*usecase.CreateStripeRefundResult, error) {
+	in applicationport.CreateStripeRefundInput,
+) (*applicationport.CreateStripeRefundResult, error) {
 	if err := g.validateReady(); err != nil {
 		return nil, err
 	}
@@ -264,7 +264,7 @@ func (g *RefundGateway) CreateRefund(
 			0,
 		).UTC()
 
-	return &usecase.CreateStripeRefundResult{
+	return &applicationport.CreateStripeRefundResult{
 		StripeRefundID: stripeRefundID,
 		Status:         refundStatus,
 		CreatedAt:      createdAt,

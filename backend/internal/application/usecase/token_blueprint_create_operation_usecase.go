@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -28,7 +29,7 @@ type TokenBlueprintCreateOperationQueue interface {
 type TokenBlueprintCreateOperationUsecase struct {
 	tokenBlueprintUC *TokenBlueprintUsecase
 	operationRepo    tbdom.CreateOperationRepository
-	storage          TokenBlueprintAssetStorage
+	storage          applicationport.TokenBlueprintAssetStorage
 	queue            TokenBlueprintCreateOperationQueue
 	now              func() time.Time
 	isRetryableError func(error) bool
@@ -37,7 +38,7 @@ type TokenBlueprintCreateOperationUsecase struct {
 type NewTokenBlueprintCreateOperationUsecaseParams struct {
 	TokenBlueprintUsecase *TokenBlueprintUsecase
 	OperationRepository   tbdom.CreateOperationRepository
-	Storage               TokenBlueprintAssetStorage
+	Storage               applicationport.TokenBlueprintAssetStorage
 	Queue                 TokenBlueprintCreateOperationQueue
 	Now                   func() time.Time
 	IsRetryableError      func(error) bool

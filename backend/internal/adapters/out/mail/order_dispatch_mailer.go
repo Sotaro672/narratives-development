@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	orderdispatchuc "narratives/internal/application/usecase"
+	applicationport "narratives/internal/application/port"
 	orderdom "narratives/internal/domain/order"
 )
 
@@ -28,7 +28,7 @@ type OrderDispatchNotificationMailer struct {
 	fromAddress string
 }
 
-var _ orderdispatchuc.OrderDispatchNotificationMailerPort = (*OrderDispatchNotificationMailer)(nil)
+var _ applicationport.OrderDispatchNotificationMailerPort = (*OrderDispatchNotificationMailer)(nil)
 
 func NewOrderDispatchNotificationMailer(
 	client OrderDispatchNotificationEmailClient,
@@ -42,16 +42,16 @@ func NewOrderDispatchNotificationMailer(
 
 func (m *OrderDispatchNotificationMailer) SendOrderDispatchNotification(
 	ctx context.Context,
-	message orderdispatchuc.OrderDispatchNotificationMailMessage,
-) (orderdispatchuc.OrderDispatchNotificationMailSendResult, error) {
+	message applicationport.OrderDispatchNotificationMailMessage,
+) (applicationport.OrderDispatchNotificationMailSendResult, error) {
 	if m == nil {
-		return orderdispatchuc.OrderDispatchNotificationMailSendResult{
+		return applicationport.OrderDispatchNotificationMailSendResult{
 			Retryable: false,
 		}, fmt.Errorf("order dispatch notification mailer is nil")
 	}
 
 	if m.client == nil {
-		return orderdispatchuc.OrderDispatchNotificationMailSendResult{
+		return applicationport.OrderDispatchNotificationMailSendResult{
 				Retryable: false,
 			}, fmt.Errorf(
 				"order dispatch notification email client is not configured",
@@ -60,14 +60,14 @@ func (m *OrderDispatchNotificationMailer) SendOrderDispatchNotification(
 
 	fromAddress := strings.TrimSpace(m.fromAddress)
 	if fromAddress == "" {
-		return orderdispatchuc.OrderDispatchNotificationMailSendResult{
+		return applicationport.OrderDispatchNotificationMailSendResult{
 			Retryable: false,
 		}, fmt.Errorf("from address is empty")
 	}
 
 	idempotencyKey := strings.TrimSpace(message.IdempotencyKey)
 	if idempotencyKey == "" {
-		return orderdispatchuc.OrderDispatchNotificationMailSendResult{
+		return applicationport.OrderDispatchNotificationMailSendResult{
 			Retryable: false,
 		}, orderdom.ErrDispatchNotificationDeliveryIDRequired
 	}
@@ -76,14 +76,14 @@ func (m *OrderDispatchNotificationMailer) SendOrderDispatchNotification(
 		strings.TrimSpace(message.ToEmail),
 	)
 	if toEmail == "" {
-		return orderdispatchuc.OrderDispatchNotificationMailSendResult{
+		return applicationport.OrderDispatchNotificationMailSendResult{
 			Retryable: false,
 		}, fmt.Errorf("to email is empty")
 	}
 
 	orderID := strings.TrimSpace(message.OrderID)
 	if orderID == "" {
-		return orderdispatchuc.OrderDispatchNotificationMailSendResult{
+		return applicationport.OrderDispatchNotificationMailSendResult{
 			Retryable: false,
 		}, orderdom.ErrDispatchNotificationOrderIDRequired
 	}
@@ -92,7 +92,7 @@ func (m *OrderDispatchNotificationMailer) SendOrderDispatchNotification(
 		message.Items,
 	)
 	if err != nil {
-		return orderdispatchuc.OrderDispatchNotificationMailSendResult{
+		return applicationport.OrderDispatchNotificationMailSendResult{
 			Retryable: false,
 		}, err
 	}
@@ -111,7 +111,7 @@ func (m *OrderDispatchNotificationMailer) SendOrderDispatchNotification(
 		idempotencyKey,
 	)
 	if err != nil {
-		return orderdispatchuc.OrderDispatchNotificationMailSendResult{
+		return applicationport.OrderDispatchNotificationMailSendResult{
 				ProviderMessageID: sendResult.ProviderMessageID,
 				Retryable:         sendResult.Retryable,
 			}, fmt.Errorf(
@@ -121,7 +121,7 @@ func (m *OrderDispatchNotificationMailer) SendOrderDispatchNotification(
 			)
 	}
 
-	return orderdispatchuc.OrderDispatchNotificationMailSendResult{
+	return applicationport.OrderDispatchNotificationMailSendResult{
 		ProviderMessageID: strings.TrimSpace(
 			sendResult.ProviderMessageID,
 		),
@@ -130,14 +130,14 @@ func (m *OrderDispatchNotificationMailer) SendOrderDispatchNotification(
 }
 
 func normalizeOrderDispatchNotificationMailItems(
-	items []orderdispatchuc.OrderDispatchNotificationMailItem,
-) ([]orderdispatchuc.OrderDispatchNotificationMailItem, error) {
+	items []applicationport.OrderDispatchNotificationMailItem,
+) ([]applicationport.OrderDispatchNotificationMailItem, error) {
 	if len(items) == 0 {
 		return nil, orderdom.ErrDispatchNotificationItemsRequired
 	}
 
 	normalized := make(
-		[]orderdispatchuc.OrderDispatchNotificationMailItem,
+		[]applicationport.OrderDispatchNotificationMailItem,
 		0,
 		len(items),
 	)
@@ -150,7 +150,7 @@ func normalizeOrderDispatchNotificationMailItems(
 
 		normalized = append(
 			normalized,
-			orderdispatchuc.OrderDispatchNotificationMailItem{
+			applicationport.OrderDispatchNotificationMailItem{
 				ProductName: productName,
 				Qty:         item.Qty,
 			},
@@ -162,7 +162,7 @@ func normalizeOrderDispatchNotificationMailItems(
 
 func buildOrderDispatchNotificationMailBody(
 	orderID string,
-	items []orderdispatchuc.OrderDispatchNotificationMailItem,
+	items []applicationport.OrderDispatchNotificationMailItem,
 ) string {
 	var builder strings.Builder
 

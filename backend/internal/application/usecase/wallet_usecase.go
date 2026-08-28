@@ -73,7 +73,7 @@ func NewWalletUsecase(
 	}
 }
 
-var _ OwnedProductResolver = (*WalletUsecase)(nil)
+var _ applicationport.OwnedProductResolver = (*WalletUsecase)(nil)
 
 var (
 	ErrWalletUsecaseNotConfigured     = errors.New("wallet usecase: not configured")
@@ -273,7 +273,7 @@ func (uc *WalletUsecase) GetWalletByAvatarIDWithReadThroughSync(
 	return synced, nil
 }
 
-// ListOwnedAssetIDs は walletAddress から on-chain 保有 assetId 一覧を取得します.
+// ListOwnedAssetIDs は walletAddress から on-chain 保有 assetId 一覧を取得します。
 //
 // Handler など外側の層は onchainReader に直接触らず、この method 経由で取得する。
 func (uc *WalletUsecase) ListOwnedAssetIDs(
@@ -349,7 +349,7 @@ func (uc *WalletUsecase) SyncWalletAssetIDs(
 	return w, nil
 }
 
-// EnsureAvatarOwnsAssetID は avatar が assetId を現在保有していることを確認します.
+// EnsureAvatarOwnsAssetID は avatar が assetId を現在保有していることを確認します。
 //
 // IMPORTANT:
 // - Firestore wallet.assetIds は同期済み read model / cache としてのみ扱います。

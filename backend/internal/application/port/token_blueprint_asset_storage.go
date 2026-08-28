@@ -1,5 +1,5 @@
-// backend/internal/application/usecase/tokenBlueprint_asset_storage.go
-package usecase
+// backend/internal/application/port/token_blueprint_asset_storage.go
+package port
 
 import "context"
 

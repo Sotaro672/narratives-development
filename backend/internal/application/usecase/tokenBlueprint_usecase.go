@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 	tbReview "narratives/internal/domain/tokenBlueprint_review"
 )
@@ -18,7 +19,7 @@ type arweaveUploader interface {
 type TokenBlueprintUsecase struct {
 	tbRepo       tbdom.RepositoryPort
 	tbReviewRepo tbReview.RepositoryPort
-	assetStorage TokenBlueprintAssetStorage
+	assetStorage applicationport.TokenBlueprintAssetStorage
 
 	metadata *tokenBlueprintMetadataUsecase
 	command  *tokenBlueprintCommandUsecase
@@ -27,7 +28,7 @@ type TokenBlueprintUsecase struct {
 func NewTokenBlueprintUsecase(
 	tbRepo tbdom.RepositoryPort,
 	tbReviewRepo tbReview.RepositoryPort,
-	assetStorage TokenBlueprintAssetStorage,
+	assetStorage applicationport.TokenBlueprintAssetStorage,
 	uploader arweaveUploader,
 ) *TokenBlueprintUsecase {
 	if tbRepo == nil {

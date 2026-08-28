@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
 	refunddom "narratives/internal/domain/refund"
@@ -212,8 +213,8 @@ type ItemRefundUsecase struct {
 	settlementRepo                ItemRefundSettlementRepository
 	refundRepo                    refunddom.RepositoryPort
 	platformFeeCalculator         settlementdom.PlatformFeeCalculator
-	stripeRefundGateway           StripeRefundGateway
-	stripeTransferReversalGateway StripeTransferReversalGateway
+	stripeRefundGateway           applicationport.StripeRefundGateway
+	stripeTransferReversalGateway applicationport.StripeTransferReversalGateway
 	now                           func() time.Time
 }
 
@@ -223,8 +224,8 @@ type NewItemRefundUsecaseInput struct {
 	SettlementRepository          ItemRefundSettlementRepository
 	RefundRepository              refunddom.RepositoryPort
 	PlatformFeeCalculator         settlementdom.PlatformFeeCalculator
-	StripeRefundGateway           StripeRefundGateway
-	StripeTransferReversalGateway StripeTransferReversalGateway
+	StripeRefundGateway           applicationport.StripeRefundGateway
+	StripeTransferReversalGateway applicationport.StripeTransferReversalGateway
 }
 
 func NewItemRefundUsecase(
@@ -622,7 +623,7 @@ func (u *ItemRefundUsecase) createPurchaserRefund(
 ) (refunddom.Refund, error) {
 	result, err := u.stripeRefundGateway.CreateRefund(
 		ctx,
-		CreateStripeRefundInput{
+		applicationport.CreateStripeRefundInput{
 			StripeChargeID: payment.StripeChargeID,
 			Amount:         refund.RefundAmount,
 			IdempotencyKey: itemRefundIdempotencyKey(
@@ -709,7 +710,7 @@ func (u *ItemRefundUsecase) createPurchaserRefund(
 }
 
 func mapStripeRefundResult(
-	result *CreateStripeRefundResult,
+	result *applicationport.CreateStripeRefundResult,
 ) (
 	refunddom.RefundStatus,
 	*time.Time,
@@ -811,7 +812,7 @@ func (u *ItemRefundUsecase) completeTransferReversal(
 
 	result, reversalErr := u.stripeTransferReversalGateway.CreateTransferReversal(
 		ctx,
-		CreateStripeTransferReversalInput{
+		applicationport.CreateStripeTransferReversalInput{
 			StripeTransferID: settlement.StripeTransferID,
 			Amount:           refund.TransferReversalAmount,
 			IdempotencyKey: itemRefundIdempotencyKey(

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	stripeadapter "narratives/internal/adapters/out/stripe"
+	applicationport "narratives/internal/application/port"
 	uc "narratives/internal/application/usecase"
 	settlementdom "narratives/internal/domain/settlement"
 )
@@ -31,8 +32,8 @@ type SettlementDependencies struct {
 	SettlementCalculator uc.SettlementCalculator
 
 	StripeTransferGateway         uc.StripeSettlementTransferGateway
-	StripeRefundGateway           uc.StripeRefundGateway
-	StripeTransferReversalGateway uc.StripeTransferReversalGateway
+	StripeRefundGateway           applicationport.StripeRefundGateway
+	StripeTransferReversalGateway applicationport.StripeTransferReversalGateway
 }
 
 // BuildSettlementDependencies builds the common settlement/refund

@@ -64,7 +64,7 @@ type ProductBlueprintReviewUsecase struct {
 	MemberRepo memberdom.Repository
 
 	// verified purchase 判定
-	ownedProductResolver OwnedProductResolver
+	ownedProductResolver applicationport.OwnedProductResolver
 
 	// avatarId -> Avatar
 	// 実体は avatar.Repository を注入して使う想定
@@ -78,7 +78,7 @@ func NewProductBlueprintReviewUsecase(
 	productBlueprintRepo applicationport.ProductBlueprintReader,
 	brandGetter applicationport.BrandGetter,
 	memberRepo memberdom.Repository,
-	ownedProductResolver OwnedProductResolver,
+	ownedProductResolver applicationport.OwnedProductResolver,
 	avatarRepo AvatarGetter,
 	now func() time.Time,
 ) *ProductBlueprintReviewUsecase {

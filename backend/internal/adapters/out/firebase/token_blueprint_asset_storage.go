@@ -11,7 +11,7 @@ import (
 	gcs "cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
 
-	usecase "narratives/internal/application/usecase"
+	applicationport "narratives/internal/application/port"
 )
 
 const tokenBlueprintAssetStorageBucketEnv = "FIREBASE_STORAGE_BUCKET"
@@ -68,7 +68,7 @@ func NewTokenBlueprintAssetStorageFromEnv(
 	}, nil
 }
 
-var _ usecase.TokenBlueprintAssetStorage = (*TokenBlueprintAssetStorage)(nil)
+var _ applicationport.TokenBlueprintAssetStorage = (*TokenBlueprintAssetStorage)(nil)
 
 func (s *TokenBlueprintAssetStorage) Exists(
 	ctx context.Context,

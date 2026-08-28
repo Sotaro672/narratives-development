@@ -7,13 +7,14 @@ import (
 	"strings"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	accdom "narratives/internal/domain/account"
 )
 
 // AccountUsecase provides application-level operations for Account.
 type AccountUsecase struct {
 	repo           AccountRepo
-	accountGateway StripeAccountGateway
+	accountGateway applicationport.StripeAccountGateway
 }
 
 // AccountRepo is the minimal repository contract needed by this use case.
@@ -44,71 +45,6 @@ type AccountRepo interface {
 	) (accdom.Account, error)
 }
 
-// StripeAccountGateway defines the Stripe Connect operations
-// required by AccountUsecase.
-//
-// application/usecase は Stripe adapter の具体型へ依存せず、
-// outbound adapter がこの Port を実装します。
-type StripeAccountGateway interface {
-	CreateAccount(
-		ctx context.Context,
-		in CreateStripeAccountInput,
-	) (*StripeAccountResult, error)
-
-	GetAccount(
-		ctx context.Context,
-		stripeAccountID string,
-	) (*StripeAccountResult, error)
-
-	CreateOnboardingLink(
-		ctx context.Context,
-		in CreateStripeAccountLinkInput,
-	) (*StripeAccountLinkResult, error)
-}
-
-// CreateStripeAccountInput represents information required
-// to create a Stripe Connected Account.
-type CreateStripeAccountInput struct {
-	AccountID      string
-	CompanyID      string
-	DisplayName    string
-	ContactEmail   string
-	Country        string
-	IdempotencyKey string
-}
-
-// StripeAccountResult represents the Stripe Connected Account state
-// required by the application layer.
-type StripeAccountResult struct {
-	ID                      string
-	DisplayName             string
-	ContactEmail            string
-	Country                 string
-	Dashboard               string
-	Livemode                bool
-	Closed                  bool
-	RecipientTransferStatus string
-	CreatedAt               time.Time
-}
-
-// CreateStripeAccountLinkInput represents information required
-// to create a Stripe hosted onboarding link.
-//
-// Account Link は single-use であり、都度新しく発行するため
-// stable な Idempotency-Key は保持しません。
-type CreateStripeAccountLinkInput struct {
-	StripeAccountID string
-	ReturnURL       string
-	RefreshURL      string
-}
-
-// StripeAccountLinkResult represents a Stripe hosted onboarding link.
-type StripeAccountLinkResult struct {
-	AccountID string
-	URL       string
-	ExpiresAt time.Time
-}
-
 // ConnectAccountInput contains the information required
 // to create or continue Stripe onboarding for an Account.
 //
@@ -135,7 +71,7 @@ type ConnectAccountResult struct {
 // NewAccountUsecase creates an AccountUsecase.
 func NewAccountUsecase(
 	repo AccountRepo,
-	accountGateway StripeAccountGateway,
+	accountGateway applicationport.StripeAccountGateway,
 ) *AccountUsecase {
 	return &AccountUsecase{
 		repo:           repo,
@@ -321,7 +257,7 @@ func (u *AccountUsecase) ConnectAccount(
 
 	link, err := u.accountGateway.CreateOnboardingLink(
 		ctx,
-		CreateStripeAccountLinkInput{
+		applicationport.CreateStripeAccountLinkInput{
 			StripeAccountID: stripeAccountID,
 			ReturnURL:       returnURL,
 			RefreshURL:      refreshURL,
@@ -620,7 +556,7 @@ func (u *AccountUsecase) createStripeAccount(
 
 	stripeAccount, err := u.accountGateway.CreateAccount(
 		ctx,
-		CreateStripeAccountInput{
+		applicationport.CreateStripeAccountInput{
 			AccountID:    accountID,
 			CompanyID:    companyID,
 			DisplayName:  displayName,

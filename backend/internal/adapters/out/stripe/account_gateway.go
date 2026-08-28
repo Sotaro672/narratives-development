@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	usecase "narratives/internal/application/usecase"
 )
 
@@ -39,7 +40,7 @@ type AccountGateway struct {
 	httpClient *http.Client
 }
 
-var _ usecase.StripeAccountGateway = (*AccountGateway)(nil)
+var _ applicationport.StripeAccountGateway = (*AccountGateway)(nil)
 var _ usecase.StripePayoutAccountGateway = (*AccountGateway)(nil)
 
 // NewAccountGateway creates a Stripe Connected Account gateway.
@@ -59,8 +60,8 @@ func NewAccountGateway(secretKey string) *AccountGateway {
 // CreateAccount creates a Company-owned Stripe Connected Account.
 func (g *AccountGateway) CreateAccount(
 	ctx context.Context,
-	in usecase.CreateStripeAccountInput,
-) (*usecase.StripeAccountResult, error) {
+	in applicationport.CreateStripeAccountInput,
+) (*applicationport.StripeAccountResult, error) {
 	if err := g.validateReady(); err != nil {
 		return nil, err
 	}
@@ -107,7 +108,7 @@ func (g *AccountGateway) CreateAccount(
 func (g *AccountGateway) GetAccount(
 	ctx context.Context,
 	stripeAccountID string,
-) (*usecase.StripeAccountResult, error) {
+) (*applicationport.StripeAccountResult, error) {
 	out, err := g.getAccount(ctx, stripeAccountID)
 	if err != nil {
 		return nil, err
@@ -120,8 +121,8 @@ func (g *AccountGateway) GetAccount(
 // the existing Company Account flow.
 func (g *AccountGateway) CreateOnboardingLink(
 	ctx context.Context,
-	in usecase.CreateStripeAccountLinkInput,
-) (*usecase.StripeAccountLinkResult, error) {
+	in applicationport.CreateStripeAccountLinkInput,
+) (*applicationport.StripeAccountLinkResult, error) {
 	out, err := g.createAccountLink(
 		ctx,
 		strings.TrimSpace(in.StripeAccountID),
@@ -133,7 +134,7 @@ func (g *AccountGateway) CreateOnboardingLink(
 		return nil, err
 	}
 
-	return &usecase.StripeAccountLinkResult{
+	return &applicationport.StripeAccountLinkResult{
 		AccountID: strings.TrimSpace(out.Account),
 		URL:       strings.TrimSpace(out.URL),
 		ExpiresAt: out.ExpiresAt,
@@ -658,7 +659,7 @@ type stripeExternalBankAccount struct {
 
 func accountResultFromResponse(
 	out stripeAccountResponse,
-) (*usecase.StripeAccountResult, error) {
+) (*applicationport.StripeAccountResult, error) {
 	id := strings.TrimSpace(out.ID)
 	if !isValidStripeAccountID(id) {
 		return nil, errors.New("stripe account: stripe account id is empty or invalid")
@@ -666,7 +667,7 @@ func accountResultFromResponse(
 
 	closed := out.Closed != nil && *out.Closed
 
-	return &usecase.StripeAccountResult{
+	return &applicationport.StripeAccountResult{
 		ID:           id,
 		DisplayName:  strings.TrimSpace(out.DisplayName),
 		ContactEmail: strings.TrimSpace(out.ContactEmail),

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	usecase "narratives/internal/application/usecase"
 	pm "narratives/internal/domain/paymentMethod"
 )
@@ -33,7 +34,7 @@ type PaymentMethodGateway struct {
 }
 
 var _ usecase.StripePaymentMethodGateway = (*PaymentMethodGateway)(nil)
-var _ usecase.StripePaymentIntentGateway = (*PaymentMethodGateway)(nil)
+var _ applicationport.StripePaymentIntentGateway = (*PaymentMethodGateway)(nil)
 
 func NewPaymentMethodGateway(
 	secretKey string,
@@ -255,8 +256,8 @@ func (g *PaymentMethodGateway) CreateDevelopmentTestPaymentMethod(
 // 後続のStripe Transferも同じtransfer_groupを使用する。
 func (g *PaymentMethodGateway) CreateAndConfirmPaymentIntent(
 	ctx context.Context,
-	in usecase.CreateAndConfirmPaymentIntentInput,
-) (*usecase.CreateAndConfirmPaymentIntentResult, error) {
+	in applicationport.CreateAndConfirmPaymentIntentInput,
+) (*applicationport.CreateAndConfirmPaymentIntentResult, error) {
 	if err := g.validateReady(); err != nil {
 		return nil, err
 	}
@@ -326,7 +327,7 @@ func (g *PaymentMethodGateway) CreateAndConfirmPaymentIntent(
 		return nil, requestErr
 	}
 
-	result := &usecase.CreateAndConfirmPaymentIntentResult{
+	result := &applicationport.CreateAndConfirmPaymentIntentResult{
 		StripePaymentIntentID: paymentIntentID,
 		StripeChargeID:        stripeChargeID,
 		Status:                status,

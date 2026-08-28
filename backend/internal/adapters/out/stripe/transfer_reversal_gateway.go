@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	usecase "narratives/internal/application/usecase"
+	applicationport "narratives/internal/application/port"
 )
 
-var _ usecase.StripeTransferReversalGateway = (*TransferReversalGateway)(nil)
+var _ applicationport.StripeTransferReversalGateway = (*TransferReversalGateway)(nil)
 
 // ============================================================
 // TransferReversalGateway
@@ -71,8 +71,8 @@ func NewTransferReversalGateway(
 // the result.
 func (g *TransferReversalGateway) CreateTransferReversal(
 	ctx context.Context,
-	in usecase.CreateStripeTransferReversalInput,
-) (*usecase.CreateStripeTransferReversalResult, error) {
+	in applicationport.CreateStripeTransferReversalInput,
+) (*applicationport.CreateStripeTransferReversalResult, error) {
 	if err := g.validateReady(); err != nil {
 		return nil, err
 	}
@@ -250,7 +250,7 @@ func (g *TransferReversalGateway) CreateTransferReversal(
 			)
 	}
 
-	return &usecase.CreateStripeTransferReversalResult{
+	return &applicationport.CreateStripeTransferReversalResult{
 		StripeTransferReversalID: stripeTransferReversalID,
 	}, nil
 }

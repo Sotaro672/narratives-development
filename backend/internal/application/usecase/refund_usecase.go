@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	paymentdom "narratives/internal/domain/payment"
 	settlementdom "narratives/internal/domain/settlement"
 )
@@ -48,66 +49,6 @@ type RefundSettlementRepository interface {
 		settlementID string,
 		patch settlementdom.UpdateSettlementInput,
 	) (settlementdom.Settlement, error)
-}
-
-// ============================================================
-// Stripe Refund Port
-// ============================================================
-
-// StripeRefundGateway executes a Stripe Charge refund.
-//
-// AMOL uses Separate Charges and Transfers. Refunding the platform Charge does
-// not automatically reverse seller Transfers, so transferred Settlements must
-// also be processed through StripeTransferReversalGateway.
-type StripeRefundGateway interface {
-	CreateRefund(
-		ctx context.Context,
-		in CreateStripeRefundInput,
-	) (*CreateStripeRefundResult, error)
-}
-
-type CreateStripeRefundInput struct {
-	StripeChargeID string
-	Amount         int
-	IdempotencyKey string
-	PaymentID      string
-	RefundID       string
-}
-
-type CreateStripeRefundResult struct {
-	StripeRefundID string
-	Status         paymentdom.RefundStatus
-	CreatedAt      time.Time
-}
-
-// ============================================================
-// Stripe Transfer Reversal Port
-// ============================================================
-
-// StripeTransferReversalGateway reverses a completed Stripe Connect Transfer.
-type StripeTransferReversalGateway interface {
-	CreateTransferReversal(
-		ctx context.Context,
-		in CreateStripeTransferReversalInput,
-	) (*CreateStripeTransferReversalResult, error)
-}
-
-type CreateStripeTransferReversalInput struct {
-	StripeTransferID string
-
-	Amount int
-
-	IdempotencyKey string
-
-	OrderID      string
-	PaymentID    string
-	SettlementID string
-	CompanyID    string
-	AccountID    string
-}
-
-type CreateStripeTransferReversalResult struct {
-	StripeTransferReversalID string
 }
 
 // ============================================================
@@ -261,15 +202,15 @@ type CompleteSucceededRefundInput struct {
 type RefundUsecase struct {
 	paymentReader                 RefundPaymentReader
 	settlementRepo                RefundSettlementRepository
-	stripeRefundGateway           StripeRefundGateway
-	stripeTransferReversalGateway StripeTransferReversalGateway
+	stripeRefundGateway           applicationport.StripeRefundGateway
+	stripeTransferReversalGateway applicationport.StripeTransferReversalGateway
 }
 
 type NewRefundUsecaseInput struct {
 	PaymentReader                 RefundPaymentReader
 	SettlementRepository          RefundSettlementRepository
-	StripeRefundGateway           StripeRefundGateway
-	StripeTransferReversalGateway StripeTransferReversalGateway
+	StripeRefundGateway           applicationport.StripeRefundGateway
+	StripeTransferReversalGateway applicationport.StripeTransferReversalGateway
 }
 
 func NewRefundUsecase(
@@ -413,7 +354,7 @@ func (u *RefundUsecase) RefundByPaymentID(
 	refundResult, refundErr :=
 		u.stripeRefundGateway.CreateRefund(
 			ctx,
-			CreateStripeRefundInput{
+			applicationport.CreateStripeRefundInput{
 				StripeChargeID: payment.StripeChargeID,
 				Amount:         payment.Amount,
 				IdempotencyKey: refundIdempotencyKey(
@@ -736,7 +677,7 @@ func newRefundSettlementResultMap(
 func applyCreateStripeRefundResult(
 	result *RefundByPaymentIDResult,
 	paymentAmount int,
-	refundResult *CreateStripeRefundResult,
+	refundResult *applicationport.CreateStripeRefundResult,
 ) error {
 	if result == nil || refundResult == nil {
 		return ErrRefundStripeRefundResultEmpty
@@ -927,7 +868,7 @@ func (u *RefundUsecase) reverseTransferredSettlement(
 	reversalResult, reversalErr :=
 		u.stripeTransferReversalGateway.CreateTransferReversal(
 			ctx,
-			CreateStripeTransferReversalInput{
+			applicationport.CreateStripeTransferReversalInput{
 				StripeTransferID: settlement.StripeTransferID,
 				Amount:           settlement.TransferAmount,
 				IdempotencyKey: transferReversalIdempotencyKey(

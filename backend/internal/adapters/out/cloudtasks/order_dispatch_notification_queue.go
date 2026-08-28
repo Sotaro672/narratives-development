@@ -20,7 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	uc "narratives/internal/application/usecase"
+	applicationport "narratives/internal/application/port"
 	orderdom "narratives/internal/domain/order"
 )
 
@@ -63,7 +63,7 @@ type OrderDispatchNotificationQueue struct {
 	now              func() time.Time
 }
 
-var _ uc.OrderDispatchNotificationQueuePort = (*OrderDispatchNotificationQueue)(nil)
+var _ applicationport.OrderDispatchNotificationQueuePort = (*OrderDispatchNotificationQueue)(nil)
 
 func NewOrderDispatchNotificationQueueFromEnv(
 	ctx context.Context,

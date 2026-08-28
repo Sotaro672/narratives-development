@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
@@ -38,45 +39,6 @@ type OrderWriterForPaymentFlow interface {
 	) (orderdom.Order, error)
 }
 
-// StripePaymentIntentGateway is an outbound port for real Stripe payment
-// execution.
-//
-// A purchase payment uses PaymentIntent rather than SetupIntent.
-// The backend creates the PaymentIntent with a Stripe secret key and confirms
-// it using the registered Stripe PaymentMethod.
-type StripePaymentIntentGateway interface {
-	CreateAndConfirmPaymentIntent(
-		ctx context.Context,
-		in CreateAndConfirmPaymentIntentInput,
-	) (*CreateAndConfirmPaymentIntentResult, error)
-}
-
-type CreateAndConfirmPaymentIntentInput struct {
-	StripeCustomerID      string
-	StripePaymentMethodID string
-	Amount                int
-	Currency              string
-	IdempotencyKey        string
-	Description           string
-	TransferGroup         string
-
-	PaymentMethodID string
-
-	OffSession bool
-}
-
-type CreateAndConfirmPaymentIntentResult struct {
-	StripePaymentIntentID string
-	StripeChargeID        string
-	Status                string
-	ClientSecret          string
-	RequiresAction        bool
-
-	ErrorType    string
-	ErrorCode    string
-	ErrorMessage string
-}
-
 // PaymentFlowUsecase orchestrates:
 //
 //  1. Verify the authoritative Order.
@@ -100,7 +62,7 @@ type PaymentFlowUsecase struct {
 	paymentUC *PaymentUsecase
 
 	orderReader          OrderReaderForPaymentFlow
-	paymentIntentGateway StripePaymentIntentGateway
+	paymentIntentGateway applicationport.StripePaymentIntentGateway
 
 	now func() time.Time
 }
@@ -110,7 +72,7 @@ type PaymentFlowUsecase struct {
 func NewPaymentFlowUsecase(
 	paymentUC *PaymentUsecase,
 	orderReader OrderReaderForPaymentFlow,
-	paymentIntentGateway StripePaymentIntentGateway,
+	paymentIntentGateway applicationport.StripePaymentIntentGateway,
 ) *PaymentFlowUsecase {
 	return &PaymentFlowUsecase{
 		paymentUC:            paymentUC,
@@ -417,7 +379,7 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 	pi, stripeErr :=
 		u.paymentIntentGateway.CreateAndConfirmPaymentIntent(
 			ctx,
-			CreateAndConfirmPaymentIntentInput{
+			applicationport.CreateAndConfirmPaymentIntentInput{
 				StripeCustomerID:      stripeCustomerID,
 				StripePaymentMethodID: stripePaymentMethodID,
 				Amount:                amount,

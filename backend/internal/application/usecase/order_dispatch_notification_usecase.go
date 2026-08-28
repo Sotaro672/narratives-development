@@ -46,42 +46,6 @@ type OrderDispatchNotificationUsecasePort interface {
 }
 
 // ==============================
-// Outbound Ports
-// ==============================
-
-type OrderDispatchNotificationMailItem struct {
-	ProductName string
-	Qty         int
-}
-
-type OrderDispatchNotificationMailMessage struct {
-	IdempotencyKey string
-	ToEmail        string
-
-	OrderID string
-	Items   []OrderDispatchNotificationMailItem
-}
-
-type OrderDispatchNotificationMailSendResult struct {
-	ProviderMessageID string
-	Retryable         bool
-}
-
-type OrderDispatchNotificationMailerPort interface {
-	SendOrderDispatchNotification(
-		ctx context.Context,
-		message OrderDispatchNotificationMailMessage,
-	) (OrderDispatchNotificationMailSendResult, error)
-}
-
-type OrderDispatchNotificationQueuePort interface {
-	EnqueueOrderDispatchNotification(
-		ctx context.Context,
-		delivery orderdom.DispatchNotificationDelivery,
-	) error
-}
-
-// ==============================
 // Usecase
 // ==============================
 
@@ -94,8 +58,8 @@ type OrderDispatchNotificationUsecase struct {
 
 	productBlueprint applicationport.ProductBlueprintGetter
 
-	mailer OrderDispatchNotificationMailerPort
-	queue  OrderDispatchNotificationQueuePort
+	mailer applicationport.OrderDispatchNotificationMailerPort
+	queue  applicationport.OrderDispatchNotificationQueuePort
 
 	now           func() time.Time
 	leaseDuration time.Duration
@@ -108,8 +72,8 @@ func NewOrderDispatchNotificationUsecase(
 	authUser applicationport.AuthUserReader,
 	companyIDFromContext applicationport.CompanyIDResolver,
 	productBlueprint applicationport.ProductBlueprintGetter,
-	mailer OrderDispatchNotificationMailerPort,
-	queue OrderDispatchNotificationQueuePort,
+	mailer applicationport.OrderDispatchNotificationMailerPort,
+	queue applicationport.OrderDispatchNotificationQueuePort,
 ) *OrderDispatchNotificationUsecase {
 	return &OrderDispatchNotificationUsecase{
 		deliveryRepo:         deliveryRepo,
@@ -522,7 +486,7 @@ func (u *OrderDispatchNotificationUsecase) Process(
 
 	result, sendErr := u.mailer.SendOrderDispatchNotification(
 		ctx,
-		OrderDispatchNotificationMailMessage{
+		applicationport.OrderDispatchNotificationMailMessage{
 			IdempotencyKey: delivery.ID,
 			ToEmail:        toEmail,
 			OrderID:        delivery.OrderID,
@@ -574,14 +538,14 @@ func (
 ) resolveOrderDispatchNotificationMailItems(
 	ctx context.Context,
 	delivery orderdom.DispatchNotificationDelivery,
-) ([]OrderDispatchNotificationMailItem, error) {
+) ([]applicationport.OrderDispatchNotificationMailItem, error) {
 	productNames := make(
 		map[string]string,
 		len(delivery.Items),
 	)
 
 	result := make(
-		[]OrderDispatchNotificationMailItem,
+		[]applicationport.OrderDispatchNotificationMailItem,
 		0,
 		len(delivery.Items),
 	)
@@ -645,7 +609,7 @@ func (
 
 		result = append(
 			result,
-			OrderDispatchNotificationMailItem{
+			applicationport.OrderDispatchNotificationMailItem{
 				ProductName: productName,
 				Qty:         item.Qty,
 			},
