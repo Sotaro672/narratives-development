@@ -1,7 +1,7 @@
 // frontend/amol/src/router/index.tsx
 
 import { useEffect, useState } from "react";
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
 import { onAuthStateChanged, type User } from "firebase/auth";
 
 import { auth } from "../lib/firebase";
@@ -17,6 +17,11 @@ import EmailPage from "../pages/EmailPage";
 import PasswordPage from "../pages/PasswordPage";
 import PaymentMethodPage from "../pages/PaymentMethodPage";
 import PayoutAccountPage from "../pages/PayoutAccountPage";
+import PayoutBankSelectPage from "../pages/PayoutBankSelectPage";
+import PayoutBranchSelectPage from "../pages/PayoutBranchSelectPage";
+import PayoutBankAccountPage from "../pages/PayoutBankAccountPage";
+import PayoutAccountConfirmPage from "../pages/PayoutAccountConfirmPage";
+import PayoutAccountCompletePage from "../pages/PayoutAccountCompletePage";
 import ShippingAddressPage from "../pages/ShippingAddressPage";
 import AuthActionPage from "../pages/AuthActionPage";
 import ListsPage from "../pages/ListsPage";
@@ -44,6 +49,7 @@ import HowToUsePage from "../pages/HowToUsePage";
 import ResaleCreatePage from "../pages/ResaleCreatePage";
 import ResaleDetailPage from "../pages/ResaleDetailPage";
 import ProtectedRoute from "../components/auth/ProtectedRoute";
+import { PayoutAccountRegistrationProvider } from "../features/payout/context/PayoutAccountRegistrationProvider";
 
 function RootPage() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
@@ -65,6 +71,16 @@ function RootPage() {
   }
 
   return <LandingPage />;
+}
+
+function PayoutAccountRouteGroup() {
+  return (
+    <ProtectedRoute>
+      <PayoutAccountRegistrationProvider>
+        <Outlet />
+      </PayoutAccountRegistrationProvider>
+    </ProtectedRoute>
+  );
 }
 
 export const router = createBrowserRouter([
@@ -321,11 +337,33 @@ export const router = createBrowserRouter([
   },
   {
     path: "/settings/payout-account",
-    element: (
-      <ProtectedRoute>
-        <PayoutAccountPage />
-      </ProtectedRoute>
-    ),
+    element: <PayoutAccountRouteGroup />,
+    children: [
+      {
+        index: true,
+        element: <PayoutAccountPage />,
+      },
+      {
+        path: "bank",
+        element: <PayoutBankSelectPage />,
+      },
+      {
+        path: "branch",
+        element: <PayoutBranchSelectPage />,
+      },
+      {
+        path: "account",
+        element: <PayoutBankAccountPage />,
+      },
+      {
+        path: "confirm",
+        element: <PayoutAccountConfirmPage />,
+      },
+      {
+        path: "complete",
+        element: <PayoutAccountCompletePage />,
+      },
+    ],
   },
   {
     path: "/settings/shipping-address",

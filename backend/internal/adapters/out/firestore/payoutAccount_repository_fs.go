@@ -22,6 +22,9 @@ const payoutAccountsCollection = "payoutAccounts"
 //   - collection: payoutAccounts
 //   - document ID: UserID
 //   - one User has at most one PayoutAccount
+//   - ProviderAccountID is persisted for backend provider operations
+//   - full bank account numbers are never persisted
+//   - only BankLast4 is persisted as an account-number fragment
 type PayoutAccountRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -76,8 +79,10 @@ func (r *PayoutAccountRepositoryFS) GetByUserID(
 		return payoutdom.PayoutAccount{}, err
 	}
 
+	normalizePayoutAccount(&account)
+
 	// document ID and persisted UserID must always identify the same owner.
-	if strings.TrimSpace(account.UserID) != userID {
+	if account.UserID != userID {
 		return payoutdom.PayoutAccount{},
 			payoutdom.ErrInvalidUserID
 	}
@@ -92,8 +97,10 @@ func (r *PayoutAccountRepositoryFS) GetByUserID(
 // Create persists a new payout account.
 //
 // payoutAccounts/{UserID} is created atomically. If the document already
-// exists, ErrConflict is returned so a second Stripe Connected Account is not
-// silently associated with the same User.
+// exists, ErrConflict is returned.
+//
+// Full bank account numbers are never accepted by PayoutAccount and therefore
+// cannot be persisted through this repository.
 func (r *PayoutAccountRepositoryFS) Create(
 	ctx context.Context,
 	account payoutdom.PayoutAccount,
@@ -103,10 +110,7 @@ func (r *PayoutAccountRepositoryFS) Create(
 			errors.New("payoutAccount: repository is nil")
 	}
 
-	account.UserID = strings.TrimSpace(account.UserID)
-	account.StripeAccountID = strings.TrimSpace(account.StripeAccountID)
-	account.BankName = strings.TrimSpace(account.BankName)
-	account.BankLast4 = strings.TrimSpace(account.BankLast4)
+	normalizePayoutAccount(&account)
 
 	if err := account.Validate(); err != nil {
 		return payoutdom.PayoutAccount{}, err
@@ -134,8 +138,8 @@ func (r *PayoutAccountRepositoryFS) Create(
 //   - UserID cannot change
 //   - CreatedAt cannot change
 //
-// StripeAccountID may only change through the domain's controlled
-// SetStripeAccountID path before this repository is called.
+// Provider, ProviderAccountID and bank-account snapshot fields may change when
+// the user registers or replaces a payout destination.
 func (r *PayoutAccountRepositoryFS) Update(
 	ctx context.Context,
 	account payoutdom.PayoutAccount,
@@ -145,10 +149,7 @@ func (r *PayoutAccountRepositoryFS) Update(
 			errors.New("payoutAccount: repository is nil")
 	}
 
-	account.UserID = strings.TrimSpace(account.UserID)
-	account.StripeAccountID = strings.TrimSpace(account.StripeAccountID)
-	account.BankName = strings.TrimSpace(account.BankName)
-	account.BankLast4 = strings.TrimSpace(account.BankLast4)
+	normalizePayoutAccount(&account)
 
 	if err := account.Validate(); err != nil {
 		return payoutdom.PayoutAccount{}, err
@@ -176,7 +177,7 @@ func (r *PayoutAccountRepositoryFS) Update(
 				return err
 			}
 
-			current.UserID = strings.TrimSpace(current.UserID)
+			normalizePayoutAccount(&current)
 
 			if current.UserID != account.UserID {
 				return payoutdom.ErrInvalidUserID
@@ -195,4 +196,22 @@ func (r *PayoutAccountRepositoryFS) Update(
 	}
 
 	return account, nil
+}
+
+func normalizePayoutAccount(
+	account *payoutdom.PayoutAccount,
+) {
+	if account == nil {
+		return
+	}
+
+	account.UserID = strings.TrimSpace(account.UserID)
+	account.Provider = strings.TrimSpace(account.Provider)
+	account.ProviderAccountID = strings.TrimSpace(account.ProviderAccountID)
+	account.BankCode = strings.TrimSpace(account.BankCode)
+	account.BankName = strings.TrimSpace(account.BankName)
+	account.BranchCode = strings.TrimSpace(account.BranchCode)
+	account.BranchName = strings.TrimSpace(account.BranchName)
+	account.BankLast4 = strings.TrimSpace(account.BankLast4)
+	account.AccountHolderName = strings.TrimSpace(account.AccountHolderName)
 }

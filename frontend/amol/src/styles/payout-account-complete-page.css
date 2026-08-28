@@ -1,0 +1,99 @@
+/* frontend/amol/src/styles/payout-account-complete-page.css */
+
+.payout-account-complete-page {
+  width: 100%;
+  padding-bottom: 104px;
+}
+
+.payout-account-complete-page__hero {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 32px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.payout-account-complete-page__icon {
+  width: 72px;
+  height: 72px;
+  margin-bottom: 20px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  color: #111827;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.payout-account-complete-page__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.payout-account-complete-page__description {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #6b7280;
+}
+
+.payout-account-complete-page__notice {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.payout-account-complete-page__notice-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.payout-account-complete-page__notice-text {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #6b7280;
+}
+
+.payout-account-complete-page__security-note {
+  margin: 16px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #6b7280;
+}
+
+@media (min-width: 1024px) {
+  .payout-account-complete-page {
+    padding-bottom: 32px;
+  }
+
+  .payout-account-complete-page__hero {
+    padding-top: 40px;
+    padding-bottom: 40px;
+  }
+}
+
+@media (max-width: 480px) {
+  .payout-account-complete-page__hero {
+    padding: 28px 16px;
+  }
+
+  .payout-account-complete-page__icon {
+    width: 68px;
+    height: 68px;
+  }
+
+  .payout-account-complete-page__title {
+    font-size: 19px;
+  }
+}

@@ -10,6 +10,7 @@ import (
 	outfirebase "narratives/internal/adapters/out/firebase"
 	mallfs "narratives/internal/adapters/out/firestore/mall"
 	mailadp "narratives/internal/adapters/out/mail"
+	payoutadapter "narratives/internal/adapters/out/payout"
 	stripeadapter "narratives/internal/adapters/out/stripe"
 	applicationport "narratives/internal/application/port"
 	mallquery "narratives/internal/application/query/mall"
@@ -72,18 +73,6 @@ func buildMallUsecases(
 	}
 	if infra.PaymentMethodGateway == nil {
 		return nil, errors.New("di.mall: stripe payment method gateway is nil after registration")
-	}
-
-	if infra.AccountGateway == nil {
-		if err := infra.RegisterAccountGatewayFromSecret(ctx); err != nil {
-			return nil, fmt.Errorf(
-				"di.mall: register Stripe payout account gateway: %w",
-				err,
-			)
-		}
-	}
-	if infra.AccountGateway == nil {
-		return nil, errors.New("di.mall: Stripe payout account gateway is nil")
 	}
 
 	resaleImageStorage, err := outfirebase.NewResaleImageStorageFromEnv(ctx)
@@ -214,9 +203,14 @@ func buildMallUsecases(
 		)
 	}
 
+	payoutAccountProvider := payoutadapter.NewMockPayoutAccountProvider()
+	if payoutAccountProvider == nil {
+		return nil, errors.New("di.mall: payout account provider is nil")
+	}
+
 	payoutAccountUC := usecase.NewPayoutAccountUsecase(
 		r.payoutAccountRepo,
-		infra.AccountGateway,
+		payoutAccountProvider,
 	)
 	if payoutAccountUC == nil {
 		return nil, errors.New("di.mall: payout account usecase is nil")

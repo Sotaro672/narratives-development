@@ -1,0 +1,173 @@
+/* frontend/amol/src/styles/payout-account-confirm-page.css */
+
+.payout-account-confirm-page {
+  width: 100%;
+  padding-bottom: 104px;
+}
+
+.payout-account-confirm-page__description {
+  margin: 0 0 20px;
+}
+
+.payout-account-confirm-page__card {
+  width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.payout-account-confirm-page__row {
+  width: 100%;
+  min-height: 72px;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.payout-account-confirm-page__row:last-child {
+  border-bottom: none;
+}
+
+.payout-account-confirm-page__row-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.payout-account-confirm-page__label {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #6b7280;
+}
+
+.payout-account-confirm-page__value {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  text-align: right;
+}
+
+.payout-account-confirm-page__value strong {
+  max-width: 100%;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.payout-account-confirm-page__value span {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #6b7280;
+}
+
+.payout-account-confirm-page__single-value {
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-text);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.payout-account-confirm-page__account-number {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.payout-account-confirm-page__holder-name {
+  word-break: break-word;
+}
+
+.payout-account-confirm-page__edit-button {
+  flex-shrink: 0;
+  border: none;
+  padding: 6px 4px;
+  background: transparent;
+  color: #4b5563;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.payout-account-confirm-page__edit-button:hover {
+  text-decoration: underline;
+}
+
+.payout-account-confirm-page__edit-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+  text-decoration: none;
+}
+
+.payout-account-confirm-page__notice {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.payout-account-confirm-page__notice-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.payout-account-confirm-page__notice-text {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #6b7280;
+}
+
+.payout-account-confirm-page__error {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #c62828;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+@media (min-width: 1024px) {
+  .payout-account-confirm-page {
+    padding-bottom: 32px;
+  }
+}
+
+@media (max-width: 480px) {
+  .payout-account-confirm-page__row {
+    min-height: 68px;
+    padding: 13px 14px;
+    gap: 12px;
+  }
+
+  .payout-account-confirm-page__row-main {
+    gap: 12px;
+  }
+
+  .payout-account-confirm-page__edit-button {
+    padding-left: 6px;
+  }
+}

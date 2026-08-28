@@ -1,0 +1,227 @@
+/* frontend/amol/src/styles/payout-bank-account-page.css */
+
+.payout-bank-account-page {
+  width: 100%;
+  padding-bottom: 104px;
+}
+
+.payout-bank-account-page__description {
+  margin: 0 0 20px;
+}
+
+.payout-bank-account-page__destination {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 24px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.payout-bank-account-page__destination-row {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.payout-bank-account-page__destination-row:last-child {
+  border-bottom: none;
+}
+
+.payout-bank-account-page__destination-label {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.payout-bank-account-page__destination-value {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  text-align: right;
+}
+
+.payout-bank-account-page__destination-value strong {
+  max-width: 100%;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.payout-bank-account-page__destination-value span {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #6b7280;
+}
+
+.payout-bank-account-page__form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.payout-bank-account-page__field {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.payout-bank-account-page__fieldset {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.payout-bank-account-page__label {
+  padding: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.payout-bank-account-page__account-type {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.payout-bank-account-page__account-type-option {
+  min-height: 48px;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 11px 16px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.payout-bank-account-page__account-type-option:hover {
+  background: #f9fafb;
+}
+
+.payout-bank-account-page__account-type-option--selected {
+  border-color: #111827;
+  background: #f3f4f6;
+}
+
+.payout-bank-account-page__account-type-option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #111827;
+}
+
+.payout-bank-account-page__input {
+  width: 100%;
+  min-height: 48px;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 11px 14px;
+  background: #fff;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.5;
+  outline: none;
+}
+
+.payout-bank-account-page__input::placeholder {
+  color: #9ca3af;
+}
+
+.payout-bank-account-page__input:focus {
+  border-color: #111827;
+  box-shadow: 0 0 0 1px #111827;
+}
+
+.payout-bank-account-page__input--error {
+  border-color: #c62828;
+}
+
+.payout-bank-account-page__input--error:focus {
+  border-color: #c62828;
+  box-shadow: 0 0 0 1px #c62828;
+}
+
+.payout-bank-account-page__help,
+.payout-bank-account-page__error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.payout-bank-account-page__help {
+  color: #6b7280;
+}
+
+.payout-bank-account-page__error {
+  color: #c62828;
+}
+
+.payout-bank-account-page__notice {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 24px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.payout-bank-account-page__notice-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.payout-bank-account-page__notice-text {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #6b7280;
+}
+
+@media (min-width: 1024px) {
+  .payout-bank-account-page {
+    padding-bottom: 32px;
+  }
+}
+
+@media (max-width: 480px) {
+  .payout-bank-account-page__destination-row {
+    gap: 12px;
+  }
+
+  .payout-bank-account-page__input {
+    font-size: 16px;
+  }
+
+  .payout-bank-account-page__account-type {
+    gap: 10px;
+  }
+}

@@ -1,4 +1,5 @@
 // backend/internal/application/usecase/payoutAccount_usecase.go
+
 package usecase
 
 import (
@@ -11,76 +12,65 @@ import (
 	payoutdom "narratives/internal/domain/payoutAccount"
 )
 
-const (
-	defaultPayoutAccountCountry     = "JP"
-	defaultPayoutAccountDisplayName = "AMOL Seller"
-	defaultPayoutAccountEntityType  = "individual"
-
-	payoutAccountCreateIdempotencyKeyPrefix = "payout-account-create:"
-)
-
 var (
-	ErrPayoutAccountRepositoryMissing = errors.New(
-		"payoutAccount: repository is not configured",
-	)
-	ErrPayoutAccountStripeGatewayMissing = errors.New(
-		"payoutAccount: stripe gateway is not configured",
-	)
-	ErrPayoutAccountStripeResultEmpty = errors.New(
-		"payoutAccount: stripe account result is empty",
-	)
-	ErrPayoutAccountStripeAccountMismatch = errors.New(
-		"payoutAccount: stripe account mismatch",
-	)
-	ErrPayoutAccountStripeSessionEmpty = errors.New(
-		"payoutAccount: stripe account session is empty",
-	)
+	ErrPayoutAccountRepositoryMissing   = errors.New("payoutAccount: repository is not configured")
+	ErrPayoutAccountProviderMissing     = errors.New("payoutAccount: provider is not configured")
+	ErrPayoutAccountProviderResultEmpty = errors.New("payoutAccount: provider registration result is empty")
+	ErrPayoutAccountProviderStateEmpty  = errors.New("payoutAccount: provider state is empty")
+	ErrPayoutAccountProviderMismatch    = errors.New("payoutAccount: provider mismatch")
 )
 
-// CreatePayoutAccountSessionInput is supplied by the authenticated Mall handler.
+// RegisterPayoutAccountInput contains payout destination information submitted
+// by the authenticated Mall user.
 //
 // UserID must be obtained from UserAuthMiddleware rather than request JSON.
-// DisplayName and ContactEmail are authentication/profile values used only
-// when the Stripe Connected Account is created for the first time.
-type CreatePayoutAccountSessionInput struct {
-	UserID       string
-	DisplayName  string
-	ContactEmail string
+//
+// AccountNumber is transient sensitive data. It is passed to the configured
+// PayoutAccountProvider only during registration and must never be persisted
+// by this usecase or repository.
+type RegisterPayoutAccountInput struct {
+	UserID string
+
+	BankCode   string
+	BankName   string
+	BranchCode string
+	BranchName string
+
+	AccountType       payoutdom.BankAccountType
+	AccountNumber     string
+	AccountHolderName string
 }
 
-type CreatePayoutAccountSessionResult struct {
-	Account      payoutdom.PayoutAccount
-	ClientSecret string
-}
-
-// PayoutAccountUsecase manages the resale seller's Stripe payout destination.
+// PayoutAccountUsecase manages a Mall user's payout destination.
 //
 // Policy:
-//   - one User has at most one PayoutAccount
+//   - one User has at most one persisted PayoutAccount
 //   - PayoutAccount.UserID is also the Firestore document ID
-//   - one Stripe Connected Account is created per User
-//   - repeated Account Session creation reuses the existing Connected Account
-//   - Stripe is the source of truth for onboarding and bank account state
+//   - application code does not depend on a specific payout vendor
+//   - full bank account numbers are never persisted
+//   - ProviderAccountID is backend-only
+//   - StatusRegistered means AMOL registration completed
+//   - PayoutReady independently represents actual payout availability
 type PayoutAccountUsecase struct {
-	repo    payoutdom.Repository
-	gateway applicationport.StripePayoutAccountGateway
+	repo     payoutdom.Repository
+	provider applicationport.PayoutAccountProvider
 
 	now func() time.Time
 }
 
 func NewPayoutAccountUsecase(
 	repo payoutdom.Repository,
-	gateway applicationport.StripePayoutAccountGateway,
+	provider applicationport.PayoutAccountProvider,
 ) *PayoutAccountUsecase {
 	return &PayoutAccountUsecase{
-		repo:    repo,
-		gateway: gateway,
-		now:     time.Now,
+		repo:     repo,
+		provider: provider,
+		now:      time.Now,
 	}
 }
 
-// GetByUserID returns the user's PayoutAccount after synchronizing its current
-// Stripe state.
+// GetByUserID returns the user's persisted PayoutAccount after synchronizing
+// provider-side availability state.
 //
 // payoutdom.ErrNotFound is returned when the user has not registered a payout
 // account yet. The HTTP handler may translate that case to {"data": null}.
@@ -92,6 +82,7 @@ func (u *PayoutAccountUsecase) GetByUserID(
 		return nil, err
 	}
 
+	userID = strings.TrimSpace(userID)
 	if userID == "" {
 		return nil, payoutdom.ErrInvalidUserID
 	}
@@ -101,7 +92,7 @@ func (u *PayoutAccountUsecase) GetByUserID(
 		return nil, err
 	}
 
-	synced, err := u.syncStripeState(ctx, account)
+	synced, err := u.syncProviderState(ctx, account)
 	if err != nil {
 		return nil, err
 	}
@@ -109,233 +100,206 @@ func (u *PayoutAccountUsecase) GetByUserID(
 	return &synced, nil
 }
 
-// CreateAccountSession creates or continues Stripe Embedded Onboarding.
+// Register registers or replaces the authenticated user's payout destination.
 //
-// First request:
-//   - create Stripe Connected Account with a stable idempotency key
-//   - persist payoutAccounts/{userId}
-//   - create Account Session
+// The full AccountNumber is passed only to PayoutAccountProvider.Register.
+// Only BankLast4 returned by the provider is persisted.
 //
-// Later requests:
-//   - reuse the stored StripeAccountID
-//   - synchronize current Stripe state
-//   - create a fresh short-lived Account Session
+// Existing payoutAccounts/{userId} documents are updated in place so CreatedAt
+// remains unchanged. A missing document is created.
 //
-// Account Session client secrets are intentionally not persisted because they
-// are short-lived credentials used only by Stripe Connect.js.
-func (u *PayoutAccountUsecase) CreateAccountSession(
+// If a concurrent request creates the document first, the canonical document is
+// loaded and updated with the registration result from this request.
+func (u *PayoutAccountUsecase) Register(
 	ctx context.Context,
-	in CreatePayoutAccountSessionInput,
-) (CreatePayoutAccountSessionResult, error) {
+	in RegisterPayoutAccountInput,
+) (*payoutdom.PayoutAccount, error) {
 	if err := u.validateReady(); err != nil {
-		return CreatePayoutAccountSessionResult{}, err
+		return nil, err
 	}
 
-	userID := in.UserID
-	if userID == "" {
-		return CreatePayoutAccountSessionResult{},
-			payoutdom.ErrInvalidUserID
+	in.UserID = strings.TrimSpace(in.UserID)
+	in.BankCode = strings.TrimSpace(in.BankCode)
+	in.BankName = strings.TrimSpace(in.BankName)
+	in.BranchCode = strings.TrimSpace(in.BranchCode)
+	in.BranchName = strings.TrimSpace(in.BranchName)
+	in.AccountNumber = strings.TrimSpace(in.AccountNumber)
+	in.AccountHolderName = strings.TrimSpace(in.AccountHolderName)
+
+	if in.UserID == "" {
+		return nil, payoutdom.ErrInvalidUserID
 	}
 
-	account, err := u.repo.GetByUserID(ctx, userID)
-	switch {
-	case err == nil:
-		account, err = u.syncStripeState(ctx, account)
-		if err != nil {
-			return CreatePayoutAccountSessionResult{}, err
-		}
-
-	case errors.Is(err, payoutdom.ErrNotFound):
-		account, err = u.createPayoutAccount(
-			ctx,
-			userID,
-			in.DisplayName,
-			in.ContactEmail,
-		)
-		if err != nil {
-			return CreatePayoutAccountSessionResult{}, err
-		}
-
-	default:
-		return CreatePayoutAccountSessionResult{}, err
+	providerName := strings.TrimSpace(u.provider.Name())
+	if providerName == "" {
+		return nil, payoutdom.ErrInvalidProvider
 	}
 
-	session, err := u.gateway.CreatePayoutAccountSession(
+	result, err := u.provider.Register(
 		ctx,
-		applicationport.CreateStripePayoutAccountSessionInput{
-			StripeAccountID: account.StripeAccountID,
+		applicationport.RegisterPayoutAccountInput{
+			UserID:            in.UserID,
+			BankCode:          in.BankCode,
+			BankName:          in.BankName,
+			BranchCode:        in.BranchCode,
+			BranchName:        in.BranchName,
+			AccountType:       in.AccountType,
+			AccountNumber:     in.AccountNumber,
+			AccountHolderName: in.AccountHolderName,
 		},
 	)
 	if err != nil {
-		return CreatePayoutAccountSessionResult{}, err
+		return nil, err
 	}
-
-	if session == nil || session.ClientSecret == "" {
-		return CreatePayoutAccountSessionResult{},
-			ErrPayoutAccountStripeSessionEmpty
-	}
-
-	if session.AccountID == "" ||
-		session.AccountID != account.StripeAccountID {
-		return CreatePayoutAccountSessionResult{},
-			ErrPayoutAccountStripeAccountMismatch
-	}
-
-	return CreatePayoutAccountSessionResult{
-		Account:      account,
-		ClientSecret: session.ClientSecret,
-	}, nil
-}
-
-// createPayoutAccount creates the Stripe Connected Account and persists its
-// association with the User.
-//
-// The Stripe create request uses a stable per-user idempotency key. Therefore
-// concurrent/retried requests do not intentionally create multiple Stripe
-// Connected Accounts.
-//
-// Mall resale sellers are created as individual legal entities because the
-// resale flow is intended for personal second-hand sales rather than businesses.
-//
-// If Firestore reports ErrConflict, another request already persisted the
-// canonical PayoutAccount, so that record is loaded and used instead.
-func (u *PayoutAccountUsecase) createPayoutAccount(
-	ctx context.Context,
-	userID string,
-	displayName string,
-	contactEmail string,
-) (payoutdom.PayoutAccount, error) {
-	if displayName == "" {
-		displayName = contactEmail
-	}
-	if displayName == "" {
-		displayName = defaultPayoutAccountDisplayName
-	}
-
-	stripeAccount, err := u.gateway.CreatePayoutAccount(
-		ctx,
-		applicationport.CreateStripePayoutAccountInput{
-			UserID:         userID,
-			DisplayName:    displayName,
-			ContactEmail:   contactEmail,
-			Country:        defaultPayoutAccountCountry,
-			EntityType:     defaultPayoutAccountEntityType,
-			IdempotencyKey: payoutAccountCreateIdempotencyKeyPrefix + userID,
-		},
-	)
-	if err != nil {
-		return payoutdom.PayoutAccount{}, err
-	}
-
-	if stripeAccount == nil {
-		return payoutdom.PayoutAccount{},
-			ErrPayoutAccountStripeResultEmpty
-	}
-
-	stripeAccountID := stripeAccount.ID
-	if stripeAccountID == "" ||
-		!strings.HasPrefix(stripeAccountID, "acct_") {
-		return payoutdom.PayoutAccount{},
-			payoutdom.ErrInvalidStripeAccountID
+	if result == nil {
+		return nil, ErrPayoutAccountProviderResultEmpty
 	}
 
 	now := u.now().UTC()
 
-	account, err := payoutdom.New(
-		userID,
-		stripeAccountID,
-		stripeAccount.DetailsSubmitted,
-		stripeAccount.PayoutsEnabled,
-		"",
-		"",
-		now,
-		now,
-	)
-	if err != nil {
-		return payoutdom.PayoutAccount{}, err
-	}
+	existing, err := u.repo.GetByUserID(ctx, in.UserID)
+	switch {
+	case err == nil:
+		updated := existing
 
-	created, err := u.repo.Create(ctx, account)
-	if err == nil {
-		return created, nil
-	}
+		if err := updated.ApplyRegistration(
+			providerName,
+			result.ProviderAccountID,
+			result.Status,
+			result.PayoutReady,
+			in.BankCode,
+			in.BankName,
+			in.BranchCode,
+			in.BranchName,
+			in.AccountType,
+			result.BankLast4,
+			in.AccountHolderName,
+			now,
+		); err != nil {
+			return nil, err
+		}
 
-	if !errors.Is(err, payoutdom.ErrConflict) {
-		return payoutdom.PayoutAccount{}, err
-	}
+		saved, err := u.repo.Update(ctx, updated)
+		if err != nil {
+			return nil, err
+		}
 
-	// A concurrent request already persisted payoutAccounts/{userId}.
-	// The persisted document is the canonical association.
-	existing, getErr := u.repo.GetByUserID(ctx, userID)
-	if getErr != nil {
-		return payoutdom.PayoutAccount{}, getErr
-	}
+		return &saved, nil
 
-	return existing, nil
+	case errors.Is(err, payoutdom.ErrNotFound):
+		account, err := payoutdom.New(
+			in.UserID,
+			providerName,
+			result.ProviderAccountID,
+			result.Status,
+			result.PayoutReady,
+			in.BankCode,
+			in.BankName,
+			in.BranchCode,
+			in.BranchName,
+			in.AccountType,
+			result.BankLast4,
+			in.AccountHolderName,
+			now,
+			now,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		created, err := u.repo.Create(ctx, account)
+		if err == nil {
+			return &created, nil
+		}
+		if !errors.Is(err, payoutdom.ErrConflict) {
+			return nil, err
+		}
+
+		return u.applyRegistrationAfterConflict(ctx, in, providerName, result, now)
+
+	default:
+		return nil, err
+	}
 }
 
-// syncStripeState refreshes the persisted application snapshot from Stripe.
+// applyRegistrationAfterConflict handles the case where another request created
+// payoutAccounts/{userId} between GetByUserID and Create.
 //
-// Stripe remains the source of truth for:
-//   - onboarding completion
-//   - transfer availability
-//   - display-only bank name
-//   - bank account last4
+// The persisted document remains canonical, while the latest successful
+// provider registration result is applied to it.
+func (u *PayoutAccountUsecase) applyRegistrationAfterConflict(
+	ctx context.Context,
+	in RegisterPayoutAccountInput,
+	providerName string,
+	result *applicationport.RegisterPayoutAccountResult,
+	now time.Time,
+) (*payoutdom.PayoutAccount, error) {
+	existing, err := u.repo.GetByUserID(ctx, in.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := existing.ApplyRegistration(
+		providerName,
+		result.ProviderAccountID,
+		result.Status,
+		result.PayoutReady,
+		in.BankCode,
+		in.BankName,
+		in.BranchCode,
+		in.BranchName,
+		in.AccountType,
+		result.BankLast4,
+		in.AccountHolderName,
+		now,
+	); err != nil {
+		return nil, err
+	}
+
+	updated, err := u.repo.Update(ctx, existing)
+	if err != nil {
+		return nil, err
+	}
+
+	return &updated, nil
+}
+
+// syncProviderState refreshes only provider-owned availability state.
 //
-// Firestore is updated only when one of those values changed.
-func (u *PayoutAccountUsecase) syncStripeState(
+// Bank metadata is not overwritten here because it is the snapshot registered
+// through AMOL. If bank information changes, the user must perform a new
+// registration operation.
+//
+// A persisted account belonging to another provider is not sent to the currently
+// configured provider because ProviderAccountID namespaces are provider-specific.
+func (u *PayoutAccountUsecase) syncProviderState(
 	ctx context.Context,
 	account payoutdom.PayoutAccount,
 ) (payoutdom.PayoutAccount, error) {
-	stripeAccount, err := u.gateway.GetPayoutAccount(
-		ctx,
-		account.StripeAccountID,
-	)
+	providerName := strings.TrimSpace(u.provider.Name())
+	if providerName == "" {
+		return payoutdom.PayoutAccount{}, payoutdom.ErrInvalidProvider
+	}
+	if account.Provider != providerName {
+		return payoutdom.PayoutAccount{}, ErrPayoutAccountProviderMismatch
+	}
+
+	state, err := u.provider.Get(ctx, account.ProviderAccountID)
 	if err != nil {
 		return payoutdom.PayoutAccount{}, err
 	}
-
-	if stripeAccount == nil {
-		return payoutdom.PayoutAccount{},
-			ErrPayoutAccountStripeResultEmpty
+	if state == nil {
+		return payoutdom.PayoutAccount{}, ErrPayoutAccountProviderStateEmpty
 	}
 
-	stripeAccountID := stripeAccount.ID
-	if stripeAccountID == "" ||
-		stripeAccountID != account.StripeAccountID {
-		return payoutdom.PayoutAccount{},
-			ErrPayoutAccountStripeAccountMismatch
-	}
-
-	bankName := ""
-	bankLast4 := ""
-
-	bankAccount, err := u.gateway.GetPayoutBankAccount(
-		ctx,
-		account.StripeAccountID,
-	)
-	if err != nil {
-		return payoutdom.PayoutAccount{}, err
-	}
-
-	if bankAccount != nil {
-		bankName = bankAccount.BankName
-		bankLast4 = bankAccount.Last4
-	}
-
-	if account.DetailsSubmitted == stripeAccount.DetailsSubmitted &&
-		account.PayoutsEnabled == stripeAccount.PayoutsEnabled &&
-		account.BankName == bankName &&
-		account.BankLast4 == bankLast4 {
+	if account.Status == state.Status && account.PayoutReady == state.PayoutReady {
 		return account, nil
 	}
 
 	updated := account
-	if err := updated.ApplyStripeState(
-		stripeAccount.DetailsSubmitted,
-		stripeAccount.PayoutsEnabled,
-		bankName,
-		bankLast4,
+	if err := updated.ApplyProviderState(
+		state.Status,
+		state.PayoutReady,
 		u.now().UTC(),
 	); err != nil {
 		return payoutdom.PayoutAccount{}, err
@@ -345,14 +309,11 @@ func (u *PayoutAccountUsecase) syncStripeState(
 }
 
 func (u *PayoutAccountUsecase) validateReady() error {
-	if u == nil {
+	if u == nil || u.repo == nil {
 		return ErrPayoutAccountRepositoryMissing
 	}
-	if u.repo == nil {
-		return ErrPayoutAccountRepositoryMissing
-	}
-	if u.gateway == nil {
-		return ErrPayoutAccountStripeGatewayMissing
+	if u.provider == nil {
+		return ErrPayoutAccountProviderMissing
 	}
 
 	return nil
