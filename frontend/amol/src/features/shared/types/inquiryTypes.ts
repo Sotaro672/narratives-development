@@ -71,18 +71,8 @@ export type CreateProductInquiryRequest = {
   images: InquiryImageUpload[];
 };
 
-export type CreateOpenedReturnInquiryRequest = {
-  productId: string;
-  orderId: string;
-  orderItemIndex: number;
-  content: string;
-  inquiryType: "return_opened";
-  images: InquiryImageUpload[];
-};
-
 export type CreateInquiryRequest =
-  | CreateProductInquiryRequest
-  | CreateOpenedReturnInquiryRequest;
+  CreateProductInquiryRequest;
 
 export type ReplyInquiryRequest = {
   content: string;

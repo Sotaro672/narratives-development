@@ -16,25 +16,22 @@ import (
 
 // InquiryHandler は mall 側の問い合わせエンドポイントを担当します。
 type InquiryHandler struct {
-	uc              *usecase.InquiryUsecase
-	returnRequestUC *usecase.ReturnRequestUsecase
-	query           *mallquery.InquiryQuery
+	uc    *usecase.InquiryUsecase
+	query *mallquery.InquiryQuery
 }
 
 // NewInquiryHandler は mall inquiry handler を初期化します。
 func NewInquiryHandler(
 	uc *usecase.InquiryUsecase,
-	returnRequestUC *usecase.ReturnRequestUsecase,
 	query *mallquery.InquiryQuery,
 ) http.Handler {
 	return &InquiryHandler{
-		uc:              uc,
-		returnRequestUC: returnRequestUC,
-		query:           query,
+		uc:    uc,
+		query: query,
 	}
 }
 
-// ServeHTTP はHTTPルーティングの入口です。
+// ServeHTTP はHTTPルーティングの入口です.
 //
 // Supported:
 //
@@ -148,17 +145,15 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// createInquiryRequest は mall 画面から問い合わせを起票する request です。
+// createInquiryRequest は mall 画面から商品問い合わせを起票する request です。
 // productId は /mall/me/preview?productId=... の productId を渡します。
 // avatarId は request body では受け取らず、AvatarContextMiddleware 由来で解決します。
 type createInquiryRequest struct {
-	ProductID      string                 `json:"productId"`
-	OrderID        string                 `json:"orderId"`
-	OrderItemIndex *int                   `json:"orderItemIndex"`
-	Subject        string                 `json:"subject"`
-	Content        string                 `json:"content"`
-	InquiryType    string                 `json:"inquiryType"`
-	Images         []createInquiryImageIn `json:"images"`
+	ProductID   string                 `json:"productId"`
+	Subject     string                 `json:"subject"`
+	Content     string                 `json:"content"`
+	InquiryType string                 `json:"inquiryType"`
+	Images      []createInquiryImageIn `json:"images"`
 }
 
 // createInquiryImageIn は問い合わせ画像メタデータです。
@@ -204,6 +199,9 @@ func (h *InquiryHandler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /mall/me/inquiries
+//
+// Mall の問い合わせ作成 endpoint は商品問い合わせのみを受け付けます。
+// 返品問い合わせは OrderDetail の返品 endpoint から ReturnRequestUsecase を経由して作成します。
 func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	avatarID, ok := requireAvatarID(w, r)
@@ -219,6 +217,17 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	if req.InquiryType == "" {
 		req.InquiryType = string(inquirydom.InquiryTypeProduct)
+	}
+
+	if inquirydom.InquiryType(req.InquiryType) != inquirydom.InquiryTypeProduct {
+		switch inquirydom.InquiryType(req.InquiryType) {
+		case inquirydom.InquiryTypeReturnOpened,
+			inquirydom.InquiryTypeReturnUnopened:
+			writeInquiryErr(w, inquirydom.ErrInquiryInvalidWorkflow)
+		default:
+			writeInquiryErr(w, inquirydom.ErrInvalidInquiryType)
+		}
+		return
 	}
 
 	now := time.Now().UTC()
@@ -239,110 +248,36 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 		images = builtImages
 	}
 
-	switch inquirydom.InquiryType(req.InquiryType) {
-	case inquirydom.InquiryTypeProduct:
-		if req.OrderID != "" || req.OrderItemIndex != nil {
-			writeInquiryErr(w, inquirydom.ErrInquiryInvalidWorkflow)
-			return
-		}
-
-		inquiry, err := inquirydom.NewProduct(
-			"",
-			req.ProductID,
-			avatarID,
-			req.Subject,
-			req.Content,
-			inquirydom.InquiryStatusOpen,
-			now,
-			now,
-		)
-		if err != nil {
-			writeInquiryErr(w, err)
-			return
-		}
-
-		inquiry.Images = images
-
-		created, err := h.uc.Create(ctx, inquiry)
-		if err != nil {
-			writeInquiryErr(w, err)
-			return
-		}
-
-		writeJSON(
-			w,
-			http.StatusCreated,
-			map[string]any{
-				"data": created,
-			},
-		)
-		return
-
-	case inquirydom.InquiryTypeReturnOpened:
-		if h.returnRequestUC == nil {
-			writeJSON(
-				w,
-				http.StatusInternalServerError,
-				map[string]string{
-					"error": "return request usecase is nil",
-				},
-			)
-			return
-		}
-
-		if strings.TrimSpace(req.Subject) != "" {
-			writeInquiryErr(w, inquirydom.ErrInvalidSubject)
-			return
-		}
-
-		if strings.TrimSpace(req.OrderID) == "" {
-			writeInquiryErr(w, inquirydom.ErrInvalidOrderID)
-			return
-		}
-
-		if req.OrderItemIndex == nil || *req.OrderItemIndex < 0 {
-			writeInquiryErr(w, inquirydom.ErrInvalidOrderItemIndex)
-			return
-		}
-
-		result, err := h.returnRequestUC.RequestOpened(
-			ctx,
-			usecase.RequestOpenedReturnInput{
-				OrderID:   strings.TrimSpace(req.OrderID),
-				AvatarID:  avatarID,
-				ItemIndex: *req.OrderItemIndex,
-				ProductID: req.ProductID,
-				Content:   req.Content,
-				Images:    images,
-			},
-		)
-		if err != nil {
-			writeInquiryErr(w, err)
-			return
-		}
-
-		statusCode := http.StatusOK
-		if result.InquiryCreated {
-			statusCode = http.StatusCreated
-		}
-
-		writeJSON(
-			w,
-			statusCode,
-			map[string]any{
-				"data": result.Inquiry,
-			},
-		)
-		return
-
-	case inquirydom.InquiryTypeReturnUnopened:
-		writeInquiryErr(w, inquirydom.ErrInquiryInvalidWorkflow)
-		return
-
-	default:
-		writeInquiryErr(w, inquirydom.ErrInvalidInquiryType)
+	inquiry, err := inquirydom.NewProduct(
+		"",
+		req.ProductID,
+		avatarID,
+		req.Subject,
+		req.Content,
+		inquirydom.InquiryStatusOpen,
+		now,
+		now,
+	)
+	if err != nil {
+		writeInquiryErr(w, err)
 		return
 	}
+
+	inquiry.Images = images
+
+	created, err := h.uc.Create(ctx, inquiry)
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	writeJSON(
+		w,
+		http.StatusCreated,
+		map[string]any{
+			"data": created,
+		},
+	)
 }
 
 // GET /mall/me/inquiries/badge-count

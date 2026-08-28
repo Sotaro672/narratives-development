@@ -501,6 +501,7 @@ export default function OrderDetail() {
 
                   const showReturnButton =
                     item.isDispatched &&
+                    !item.transferred &&
                     !item.isCancelled &&
                     !item.isReturnRequested &&
                     !item.isReturnCompleted;

@@ -299,6 +299,13 @@ export function useOrderDetail() {
         return false;
       }
 
+      if (targetItem.transferred) {
+        setError(
+          "受け取り済みの商品は返品できません。",
+        );
+        return false;
+      }
+
       if (targetItem.isReturnCompleted) {
         setError(
           "この商品の返品は完了しています。",
@@ -325,10 +332,7 @@ export function useOrderDetail() {
 
       if (
         packageState === "unopened" &&
-        (
-          targetItem.tokenTransferVerifiedAt ||
-          targetItem.transferred
-        )
+        targetItem.tokenTransferVerifiedAt
       ) {
         setError(
           "この商品は開封確認済みのため、開封前として返品を申請できません。",

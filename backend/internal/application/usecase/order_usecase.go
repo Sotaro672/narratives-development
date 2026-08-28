@@ -665,14 +665,14 @@ func (u *OrderUsecase) ReturnItem(
 
 	if targetItem.IsCancelled ||
 		!targetItem.IsDispatched ||
-		targetItem.IsReturnCompleted {
+		targetItem.IsReturnCompleted ||
+		targetItem.Transferred {
 		return orderdom.Order{}, orderdom.ErrConflict
 	}
 
 	switch in.Kind {
 	case orderdom.ReturnRequestKindUnopened:
-		if targetItem.Transferred ||
-			targetItem.TokenTransferVerifiedAt != nil {
+		if targetItem.TokenTransferVerifiedAt != nil {
 			return orderdom.Order{}, orderdom.ErrConflict
 		}
 

@@ -318,7 +318,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 		inquiryH = mallhandler.NewInquiryHandler(
 			cont.InquiryUC,
-			cont.ReturnRequestUC,
 			cont.InquiryQ,
 		)
 	}
