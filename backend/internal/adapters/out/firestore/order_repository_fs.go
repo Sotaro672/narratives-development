@@ -708,6 +708,7 @@ func orderTransferItemDocuments(o orderdom.Order) ([]map[string]any, error) {
 			"paid":              o.Paid,
 			"isCancelled":       item.IsCancelled,
 			"isReturnRequested": item.IsReturnRequested,
+			"isReturnCompleted": item.IsReturnCompleted,
 			"transferred":       item.Transferred,
 			"createdAt":         o.CreatedAt.UTC(),
 		}

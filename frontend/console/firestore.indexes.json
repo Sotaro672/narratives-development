@@ -254,6 +254,16 @@
       "density": "SPARSE_ALL"
     },
     {
+      "collectionGroup": "shippingAddresses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companyId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "token_blueprints",
       "queryScope": "COLLECTION",
       "fields": [
