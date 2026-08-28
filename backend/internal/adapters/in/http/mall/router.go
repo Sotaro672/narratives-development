@@ -8,10 +8,9 @@ import (
 
 // Deps is a buyer-facing (mall) handler set.
 type Deps struct {
-	List             http.Handler
-	ProductBlueprint http.Handler
-	Catalog          http.Handler
-	TokenBlueprint   http.Handler // patch
+	List           http.Handler
+	Catalog        http.Handler
+	TokenBlueprint http.Handler // patch
 
 	// ProductBlueprint reviews (catalog + me/catalog)
 	// - public: GET /mall/catalog/product-blueprints/{pbId}/reviews
@@ -36,9 +35,6 @@ type Deps struct {
 
 	// /mall/me/avatar (resolve avatarId by current user uid)
 	MeAvatar http.Handler
-
-	// public: /mall/wallets
-	Wallet http.Handler
 
 	// me: /mall/me/wallets
 	MeWallet http.Handler
@@ -328,20 +324,6 @@ func Register(
 	handleSafe(mux, "/mall/lists", deps.List, "List")
 	handleSafe(mux, "/mall/lists/", deps.List, "List")
 
-	// product blueprints (public)
-	handleSafe(
-		mux,
-		"/mall/product-blueprints",
-		deps.ProductBlueprint,
-		"ProductBlueprint",
-	)
-	handleSafe(
-		mux,
-		"/mall/product-blueprints/",
-		deps.ProductBlueprint,
-		"ProductBlueprint",
-	)
-
 	// catalog (public)
 	handleSafe(mux, "/mall/catalog", deps.Catalog, "Catalog")
 	handleSafe(mux, "/mall/catalog/", deps.Catalog, "Catalog")
@@ -398,18 +380,13 @@ func Register(
 	// avatars
 	// - POST /mall/avatars: auth required
 	// - GET  /mall/avatars/{id}: public
-	avatarHandler :=
-		avatarPublicHandler(
-			deps.Avatar,
-			auth,
-		)
+	avatarHandler := avatarPublicHandler(
+		deps.Avatar,
+		auth,
+	)
 
 	handleSafe(mux, "/mall/avatars", avatarHandler, "Avatar")
 	handleSafe(mux, "/mall/avatars/", avatarHandler, "Avatar")
-
-	// wallets (public)
-	handleSafe(mux, "/mall/wallets", deps.Wallet, "Wallet")
-	handleSafe(mux, "/mall/wallets/", deps.Wallet, "Wallet")
 
 	// preview (public)
 	handleSafe(mux, "/mall/preview", deps.Preview, "Preview")
@@ -741,10 +718,9 @@ func Register(
 	)
 
 	// payment context (me) - GET only
-	paymentHandler :=
-		paymentReadOnlyHandler(
-			deps.Payment,
-		)
+	paymentHandler := paymentReadOnlyHandler(
+		deps.Payment,
+	)
 
 	handleSafeAuthAvatar(
 		mux,

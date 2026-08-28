@@ -37,7 +37,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// Handlers (construct only)
 	// ----------------------------
 	var listH http.Handler
-	var pbH http.Handler
 	var catalogH http.Handler
 	var pbReviewH http.Handler
 	var brandH http.Handler
@@ -48,7 +47,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	var paymentMethodH http.Handler
 	var payoutAccountH http.Handler
 	var avatarH http.Handler
-	var walletH http.Handler
 	var meWalletH http.Handler
 	var cartH http.Handler
 	var payH http.Handler
@@ -302,9 +300,8 @@ func Register(mux *http.ServeMux, cont *Container) {
 	deps := mallhttp.Deps{
 		List: listH,
 
-		ProductBlueprint: pbH,
-		Catalog:          catalogH,
-		TokenBlueprint:   tbH,
+		Catalog:        catalogH,
+		TokenBlueprint: tbH,
 
 		ProductBlueprintReview: pbReviewH,
 
@@ -322,7 +319,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 		Avatar:          avatarH,
 
 		MeAvatar: meAvatarsH,
-		Wallet:   walletH,
 		MeWallet: meWalletH,
 		Cart:     cartH,
 

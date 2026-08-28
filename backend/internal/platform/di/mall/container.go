@@ -584,17 +584,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		var tokenOwnerUpdater usecase.TokenOwnerUpdater = outfs.NewTokenOwnerUpdaterFS(fsClient)
 		var transferRepo transferdom.RepositoryPort = outfs.NewTransferRepositoryFS(fsClient)
 
-		var walletResolver usecase.BrandWalletResolver = outfs.NewWalletResolverRepoFS(
+		walletResolverRepo := outfs.NewWalletResolverRepoFS(
 			brandRepo,
 			walletRepo,
 		)
 
-		avatarWalletResolver, ok := any(walletResolver).(usecase.AvatarWalletResolver)
-		if !ok {
-			return nil, errors.New(
-				"di.mall: wallet resolver does not implement AvatarWalletResolver",
-			)
-		}
+		var walletResolver usecase.BrandWalletResolver = walletResolverRepo
+		var avatarWalletResolver usecase.AvatarWalletResolver = walletResolverRepo
 
 		var walletTransferUpdate usecase.AvatarWalletItemTransferUpdater = walletRepo
 		var walletSync usecase.AvatarWalletSyncer = c.WalletUC
