@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	mallquery "narratives/internal/application/query/mall"
@@ -27,8 +26,6 @@ import (
 	stripeadapter "narratives/internal/adapters/out/stripe"
 
 	refunddom "narratives/internal/domain/refund"
-	resaledom "narratives/internal/domain/resale"
-	settlementdom "narratives/internal/domain/settlement"
 	transferdom "narratives/internal/domain/transfer"
 	transportationdom "narratives/internal/domain/transportation"
 
@@ -42,10 +39,6 @@ const (
 
 	settlementStripeSecretID = "stripe-secret-key"
 
-	settlementPlatformFeeRateEnv = "SETTLEMENT_PLATFORM_FEE_RATE"
-
-	settlementPlatformFeeBaseEnv = "SETTLEMENT_PLATFORM_FEE_BASE"
-
 	mallAutoCreateStripeTestPaymentMethodEnv = "MALL_AUTO_CREATE_STRIPE_TEST_PAYMENT_METHOD"
 
 	mallPayoutAccountAllowedReturnOriginEnv = "MALL_FRONTEND_BASE_URL"
@@ -57,7 +50,6 @@ type Container struct {
 	AvatarUC                       *usecase.AvatarUsecase
 	AvatarRegistrationUC           *usecase.AvatarRegistrationUsecase
 	SetupUC                        *usecase.SetupUsecase
-	ListUC                         *usecase.ListUsecase
 	ShippingAddressUC              *usecase.ShippingAddressUsecase
 	ShippingQuoteUC                *usecase.ShippingQuoteUsecase
 	PaymentMethodUC                *usecase.PaymentMethodUsecase
@@ -77,23 +69,13 @@ type Container struct {
 	AnnouncementUC                 *usecase.AnnouncementUsecase
 	ResaleUC                       *usecase.ResaleUsecase
 
-	OrderMailer   *mailadp.OrderMailer
-	OrderMailFrom string
-
-	InquiryMailer *mailadp.InquiryMailer
-
-	ResaleRepo      resaledom.Repository
-	ResaleImageRepo resaledom.ImageRepository
-
 	MeAvatarResolver mallhandler.MeAvatarResolver
 
 	ProductBlueprintReviewUC *usecase.ProductBlueprintReviewUsecase
 	TokenBlueprintReviewUC   *usecase.TokenBlueprintReviewUsecase
 
-	TransferUC      *usecase.TransferUsecase
-	ShareTransferUC *usecase.ShareTransferUsecase
-	PaymentFlowUC   *usecase.PaymentFlowUsecase
-	InventoryUC     *usecase.InventoryUsecase
+	TransferUC    *usecase.TransferUsecase
+	PaymentFlowUC *usecase.PaymentFlowUsecase
 
 	NameResolver *appresolver.NameResolver
 
@@ -151,17 +133,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	productRepo := outfs.NewProductRepositoryFS(fsClient)
 
 	{
-		var customerStore stripeadapter.PaymentMethodCustomerStore
-
-		if value, ok := any(paymentMethodRepo).(stripeadapter.PaymentMethodCustomerStore); ok {
-			customerStore = value
-		} else if value, ok := any(userRepo).(stripeadapter.PaymentMethodCustomerStore); ok {
-			customerStore = value
-		}
-
-		if customerStore == nil {
-			return nil, errors.New("di.mall: PaymentMethodCustomerStore is not implemented by current repositories")
-		}
+		var customerStore stripeadapter.PaymentMethodCustomerStore = paymentMethodRepo
 
 		if err := infra.RegisterPaymentMethodGatewayFromSecret(ctx, customerStore); err != nil {
 			return nil, err
@@ -239,9 +211,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		return nil, err
 	}
 
-	c.ResaleRepo = resaleRepo
-	c.ResaleImageRepo = resaleImageRepo
-
 	c.ResaleUC = usecase.NewResaleUsecase(
 		resaleRepo,
 		resaleImageRepo,
@@ -261,7 +230,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		avatarRepo,
 	)
 
-	c.OrderMailer = mailadp.NewOrderMailer(
+	orderMailer := mailadp.NewOrderMailer(
 		mailadp.NewResendClient(os.Getenv("RESEND_API_KEY")),
 		modelRepoFS,
 		inventoryRepo,
@@ -271,14 +240,14 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		companyRepo,
 	)
 
-	c.OrderMailFrom = os.Getenv("RESEND_FROM")
+	orderMailFrom := os.Getenv("RESEND_FROM")
 
 	orderCancellationMailer := mailadp.NewOrderCancellationMailer(
 		mailadp.NewResendClient(os.Getenv("RESEND_API_KEY")),
-		c.OrderMailFrom,
+		orderMailFrom,
 	)
 
-	c.InquiryMailer = mailadp.NewInquiryMailer(
+	inquiryMailer := mailadp.NewInquiryMailer(
 		mailadp.NewResendClient(os.Getenv("RESEND_API_KEY")),
 	)
 
@@ -302,12 +271,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		modelRepoFS,
 		shippingAddressRepo,
 		transportationSvc,
-	)
-
-	c.ListUC = usecase.NewListUsecase(
-		listRepoFS,
-		listImageRecordRepo,
-		nil,
 	)
 
 	c.ListQ = mallquery.NewListQuery(
@@ -377,24 +340,25 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			ResaleRepo:    resaleRepo,
 
 			AuthUserGetter: authUserReader,
-			MailSender:     c.OrderMailer,
-			MailFrom:       c.OrderMailFrom,
+			MailSender:     orderMailer,
+			MailFrom:       orderMailFrom,
 		},
 	)
 
-	var itemRefundPlatformFeeCalculator settlementdom.PlatformFeeCalculator
-	var itemRefundStripeRefundGateway usecase.StripeRefundGateway
-	var itemRefundStripeTransferReversalGateway usecase.StripeTransferReversalGateway
+	settlementDependencies, err := shared.BuildSettlementDependencies(ctx, infra)
+	if err != nil {
+		return nil, fmt.Errorf("di.mall: build settlement dependencies: %w", err)
+	}
 
 	{
 		stripeSecretKey, err := infra.AccessSecretVersion(ctx, settlementStripeSecretID)
 		if err != nil {
-			return nil, fmt.Errorf("di.mall: load Stripe settlement/refund secret: %w", err)
+			return nil, fmt.Errorf("di.mall: load Stripe payout account secret: %w", err)
 		}
 
 		stripeSecretKey = strings.TrimSpace(stripeSecretKey)
 		if stripeSecretKey == "" || !strings.HasPrefix(stripeSecretKey, "sk_") {
-			return nil, errors.New("di.mall: Stripe settlement/refund secret is invalid")
+			return nil, errors.New("di.mall: Stripe payout account secret is invalid")
 		}
 
 		payoutAccountAllowedReturnOrigin := strings.TrimSpace(
@@ -420,96 +384,29 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		if c.PayoutAccountUC == nil {
 			return nil, errors.New("di.mall: payout account usecase is nil")
 		}
+	}
 
-		platformFeeRateText := strings.TrimSpace(os.Getenv(settlementPlatformFeeRateEnv))
-		if platformFeeRateText == "" {
-			return nil, fmt.Errorf(
-				"di.mall: %s is empty",
-				settlementPlatformFeeRateEnv,
-			)
-		}
+	c.SettlementUC = usecase.NewSettlementUsecase(
+		usecase.NewSettlementUsecaseInput{
+			Repository:            settlementRepo,
+			Calculator:            settlementDependencies.SettlementCalculator,
+			StripeTransferGateway: settlementDependencies.StripeTransferGateway,
+		},
+	)
+	if c.SettlementUC == nil {
+		return nil, errors.New("di.mall: settlement usecase is nil")
+	}
 
-		platformFeeRate, err := strconv.Atoi(platformFeeRateText)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"di.mall: invalid %s: %w",
-				settlementPlatformFeeRateEnv,
-				err,
-			)
-		}
-
-		platformFeeBaseText := strings.TrimSpace(os.Getenv(settlementPlatformFeeBaseEnv))
-		if platformFeeBaseText == "" {
-			return nil, fmt.Errorf(
-				"di.mall: %s is empty",
-				settlementPlatformFeeBaseEnv,
-			)
-		}
-
-		platformFeeCalculator, err := settlementdom.NewPercentagePlatformFeeCalculator(
-			platformFeeRate,
-			settlementdom.PlatformFeeBase(platformFeeBaseText),
-		)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"di.mall: build settlement platform fee calculator: %w",
-				err,
-			)
-		}
-
-		itemRefundPlatformFeeCalculator = platformFeeCalculator
-
-		calculator := settlementdom.NewCalculator(platformFeeCalculator)
-		if calculator == nil {
-			return nil, errors.New("di.mall: settlement calculator is nil")
-		}
-
-		stripeTransferGateway := stripeadapter.NewTransferGateway(stripeSecretKey)
-		if stripeTransferGateway == nil {
-			return nil, errors.New("di.mall: Stripe settlement transfer gateway is nil")
-		}
-
-		c.SettlementUC = usecase.NewSettlementUsecase(
-			usecase.NewSettlementUsecaseInput{
-				Repository: settlementRepo,
-
-				Calculator: calculator,
-
-				StripeTransferGateway: stripeTransferGateway,
-			},
-		)
-		if c.SettlementUC == nil {
-			return nil, errors.New("di.mall: settlement usecase is nil")
-		}
-
-		stripeRefundGateway := stripeadapter.NewRefundGateway(stripeSecretKey)
-		if stripeRefundGateway == nil {
-			return nil, errors.New("di.mall: Stripe refund gateway is nil")
-		}
-
-		itemRefundStripeRefundGateway = stripeRefundGateway
-
-		stripeTransferReversalGateway := stripeadapter.NewTransferReversalGateway(stripeSecretKey)
-		if stripeTransferReversalGateway == nil {
-			return nil, errors.New("di.mall: Stripe transfer reversal gateway is nil")
-		}
-
-		itemRefundStripeTransferReversalGateway = stripeTransferReversalGateway
-
-		c.RefundUC = usecase.NewRefundUsecase(
-			usecase.NewRefundUsecaseInput{
-				PaymentReader: c.PaymentUC,
-
-				SettlementRepository: settlementRepo,
-
-				StripeRefundGateway: stripeRefundGateway,
-
-				StripeTransferReversalGateway: stripeTransferReversalGateway,
-			},
-		)
-		if c.RefundUC == nil {
-			return nil, errors.New("di.mall: refund usecase is nil")
-		}
+	c.RefundUC = usecase.NewRefundUsecase(
+		usecase.NewRefundUsecaseInput{
+			PaymentReader:                 c.PaymentUC,
+			SettlementRepository:          settlementRepo,
+			StripeRefundGateway:           settlementDependencies.StripeRefundGateway,
+			StripeTransferReversalGateway: settlementDependencies.StripeTransferReversalGateway,
+		},
+	)
+	if c.RefundUC == nil {
+		return nil, errors.New("di.mall: refund usecase is nil")
 	}
 
 	c.OrderUC = usecase.NewOrderUsecase(
@@ -538,9 +435,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			PaymentReader:                 c.PaymentUC,
 			SettlementRepository:          settlementRepo,
 			RefundRepository:              refundRepo,
-			PlatformFeeCalculator:         itemRefundPlatformFeeCalculator,
-			StripeRefundGateway:           itemRefundStripeRefundGateway,
-			StripeTransferReversalGateway: itemRefundStripeTransferReversalGateway,
+			PlatformFeeCalculator:         settlementDependencies.Calculator,
+			StripeRefundGateway:           settlementDependencies.StripeRefundGateway,
+			StripeTransferReversalGateway: settlementDependencies.StripeTransferReversalGateway,
 		},
 	)
 	if c.ItemRefundUC == nil {
@@ -550,8 +447,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.InquiryUC = usecase.NewInquiryUsecase(
 		inquiryRepo,
 		inquiryReplyRepo,
-		c.InquiryMailer,
-		c.OrderMailFrom,
+		inquiryMailer,
+		orderMailFrom,
 		avatarRepo,
 		authUserReader,
 	)
@@ -562,21 +459,17 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.InquiryUC,
 	).WithReplyRepository(inquiryReplyRepo)
 
-	{
-		paymentFlowUC, configured, err := buildPaymentFlowUsecase(
-			infra,
-			c.PaymentUC,
-			orderRepo,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		c.PaymentFlowUC = paymentFlowUC
-		_ = configured
+	if infra.PaymentMethodGateway == nil {
+		return nil, errors.New("di.mall: stripe payment intent gateway is nil")
 	}
 
-	c.InventoryUC = usecase.NewInventoryUsecase(inventoryRepo)
+	c.PaymentFlowUC = usecase.NewPaymentFlowUsecase(
+		c.PaymentUC,
+		orderRepo,
+		infra.PaymentMethodGateway,
+	)
+
+	inventoryUC := usecase.NewInventoryUsecase(inventoryRepo)
 
 	{
 		c.NameResolver = appresolver.NewNameResolver(
@@ -686,11 +579,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	{
-		scanVerifier := buildScanVerifier(c.PreviewQ)
-		if scanVerifier == nil {
-			return nil, errors.New("di.mall: scan verifier is nil")
-		}
-
 		var orderRepoForTransfer usecase.OrderRepoForTransfer = orderTransferItemRepo
 
 		var tokenResolver usecase.TokenResolver = mallfs.NewTokenResolverFS(
@@ -727,7 +615,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		)
 
 		c.TransferUC = usecase.NewTransferUsecase(
-			scanVerifier,
+			c.PreviewQ,
 			orderRepoForTransfer,
 			tokenResolver,
 			walletResolver,
@@ -735,16 +623,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			brandRepo,
 			avatarRepo,
 			transferExecutionUC,
-			c.InventoryUC,
+			inventoryUC,
 		).
 			WithResaleTransferDependencies(resaleRepo).
 			WithReturnOpeningHandler(c.ReturnRequestUC)
-
-		c.ShareTransferUC = usecase.NewShareTransferUsecase(
-			tokenResolver,
-			avatarWalletResolver,
-			transferExecutionUC,
-		)
 	}
 
 	// Stripe Refund webhook が succeeded を確定した後に、

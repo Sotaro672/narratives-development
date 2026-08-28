@@ -21,80 +21,55 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// ------------------------------------------------------------
 	// Auth middleware (buyer/user side)
 	// ------------------------------------------------------------
-	var userAuthMW *middleware.UserAuthMiddleware
-	if cont.Infra != nil && cont.Infra.FirebaseAuth != nil {
-		userAuthMW = &middleware.UserAuthMiddleware{
-			FirebaseAuth: cont.Infra.FirebaseAuth,
-		}
-	} else {
-		userAuthMW = &middleware.UserAuthMiddleware{
-			FirebaseAuth: nil,
-		}
+	userAuthMW := &middleware.UserAuthMiddleware{}
+	if cont.Infra != nil {
+		userAuthMW.FirebaseAuth = cont.Infra.FirebaseAuth
 	}
 
 	// ------------------------------------------------------------
 	// Avatar context middleware (uid -> avatarId (+walletAddress))
 	// ------------------------------------------------------------
-	var avatarCtxMW *middleware.AvatarContextMiddleware
-	{
-		if cont.MeAvatarResolver != nil {
-			avatarCtxMW = &middleware.AvatarContextMiddleware{
-				Resolver: cont.MeAvatarResolver,
-			}
-		} else {
-			avatarCtxMW = &middleware.AvatarContextMiddleware{
-				Resolver: nil,
-			}
-		}
+	avatarCtxMW := &middleware.AvatarContextMiddleware{
+		Resolver: cont.MeAvatarResolver,
 	}
 
 	// ----------------------------
 	// Handlers (construct only)
 	// ----------------------------
-	listH := notImplemented("List")
-	invH := notImplemented("Inventory")
-	pbH := notImplemented("ProductBlueprint")
-	catalogH := notImplemented("Catalog")
-	tbH := notImplemented("TokenBlueprint")
+	var listH http.Handler
+	var pbH http.Handler
+	var catalogH http.Handler
+	var pbReviewH http.Handler
+	var brandH http.Handler
+	var authH http.Handler
+	var userH http.Handler
+	var shipH http.Handler
+	var shippingQuoteH http.Handler
+	var paymentMethodH http.Handler
+	var payoutAccountH http.Handler
+	var avatarH http.Handler
+	var walletH http.Handler
+	var meWalletH http.Handler
+	var cartH http.Handler
+	var payH http.Handler
+	var orderH http.Handler
+	var inquiryH http.Handler
+	var meAvatarsH http.Handler
+	var announcementH http.Handler
+	var marketH http.Handler
+	var resaleH http.Handler
+	var previewPublicH http.Handler
+	var previewMeH http.Handler
+	var setupStatusH http.Handler
 
-	pbReviewH := notImplemented("ProductBlueprintReview")
-	tbReviewH := notImplemented("TokenBlueprintReview")
+	// TokenBlueprintには現時点でreview以外のMall handlerがないため、
+	// review対象外のpathは404へ委譲する。
+	var tbH http.Handler = http.NotFoundHandler()
 
-	companyH := notImplemented("Company")
-	brandH := notImplemented("Brand")
-
-	authH := notImplemented("Auth")
-
-	userH := notImplemented("User")
-	shipH := notImplemented("ShippingAddress")
-	shippingQuoteH := notImplemented("ShippingQuote")
-	paymentMethodH := notImplemented("PaymentMethod")
-	payoutAccountH := notImplemented("PayoutAccount")
-	avatarH := notImplemented("Avatar")
-	walletH := notImplemented("Wallet")
-	meWalletH := notImplemented("MeWallet")
-	cartH := notImplemented("Cart")
-	payH := notImplemented("Payment")
-	orderH := notImplemented("Order")
-	inquiryH := notImplemented("Inquiry")
-	meAvatarsH := notImplemented("MeAvatars")
-	announcementH := notImplemented("Announcement")
-
-	marketH := notImplemented("Market")
-	resaleH := notImplemented("Resale")
-
-	previewPublicH := notImplemented("PreviewPublic")
-	previewMeH := notImplemented("PreviewMe")
-
-	orderScanTransferH :=
-		transferUsecaseNotConfiguredHandler()
-
-	setupStatusH := notImplemented("SetupStatus")
+	orderScanTransferH := transferUsecaseNotConfiguredHandler()
 
 	// Auth email verification
-	if cont.Infra != nil &&
-		cont.Infra.FirebaseAuth != nil {
-
+	if cont.Infra != nil && cont.Infra.FirebaseAuth != nil {
 		authH = mallhandler.NewAuthHandler(
 			cont.Infra.FirebaseAuth,
 			mailadp.NewAuthMailerWithResend(),
@@ -118,10 +93,9 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// ProductBlueprintReview
 	if cont.ProductBlueprintReviewUC != nil {
-		pbReviewH =
-			mallhandler.NewProductBlueprintReviewHandler(
-				cont.ProductBlueprintReviewUC,
-			)
+		pbReviewH = mallhandler.NewProductBlueprintReviewHandler(
+			cont.ProductBlueprintReviewUC,
+		)
 	}
 
 	// Brand
@@ -132,9 +106,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	// Avatar
-	if cont.AvatarUC != nil &&
-		cont.AvatarRegistrationUC != nil {
-
+	if cont.AvatarUC != nil && cont.AvatarRegistrationUC != nil {
 		avatarH = mallhandler.NewAvatarHandler(
 			cont.AvatarUC,
 			cont.AvatarRegistrationUC,
@@ -143,16 +115,14 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// TokenBlueprintReview
 	if cont.TokenBlueprintReviewUC != nil {
-		tbReviewH =
-			mallhandler.NewTokenBlueprintReviewHandler(
-				cont.TokenBlueprintReviewUC,
-			)
+		tbReviewH := mallhandler.NewTokenBlueprintReviewHandler(
+			cont.TokenBlueprintReviewUC,
+		)
 
-		tbH =
-			mallhandler.NewTokenBlueprintCompositeHandler(
-				tbH,
-				tbReviewH,
-			)
+		tbH = mallhandler.NewTokenBlueprintCompositeHandler(
+			tbH,
+			tbReviewH,
+		)
 	}
 
 	// Core resources
@@ -163,53 +133,43 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	if cont.ShippingAddressUC != nil {
-		shipH =
-			mallhandler.NewShippingAddressHandler(
-				cont.ShippingAddressUC,
-			)
+		shipH = mallhandler.NewShippingAddressHandler(
+			cont.ShippingAddressUC,
+		)
 	}
 
 	if cont.ShippingQuoteUC != nil {
-		shippingQuoteH =
-			mallhandler.NewShippingQuoteHandler(
-				cont.ShippingQuoteUC,
-			)
+		shippingQuoteH = mallhandler.NewShippingQuoteHandler(
+			cont.ShippingQuoteUC,
+		)
 	}
 
-	if cont.PaymentMethodUC != nil &&
-		cont.Infra != nil {
-
-		paymentMethodH =
-			mallhandler.NewPaymentMethodHandler(
-				cont.PaymentMethodUC,
-				cont.Infra,
-			)
+	if cont.PaymentMethodUC != nil && cont.Infra != nil {
+		paymentMethodH = mallhandler.NewPaymentMethodHandler(
+			cont.PaymentMethodUC,
+			cont.Infra,
+		)
 	}
 
 	if cont.PayoutAccountUC != nil {
-		payoutAccountH =
-			mallhandler.NewPayoutAccountHandler(
-				cont.PayoutAccountUC,
-			)
+		payoutAccountH = mallhandler.NewPayoutAccountHandler(
+			cont.PayoutAccountUC,
+		)
 	}
 
 	// Wallet (me)
 	if cont.WalletUC != nil {
-		meWalletH =
-			mallhandler.NewMallMeWalletHandler(
-				cont.WalletUC,
-			)
+		meWalletH = mallhandler.NewMallMeWalletHandler(
+			cont.WalletUC,
+		)
 	}
 
 	// /mall/me/avatars
-	if cont.MeAvatarResolver != nil &&
-		cont.AvatarUC != nil {
-
-		meAvatarsH =
-			mallhandler.NewMeAvatarHandler(
-				cont.MeAvatarResolver,
-				cont.AvatarUC,
-			)
+	if cont.MeAvatarResolver != nil && cont.AvatarUC != nil {
+		meAvatarsH = mallhandler.NewMeAvatarHandler(
+			cont.MeAvatarResolver,
+			cont.AvatarUC,
+		)
 	}
 
 	// /mall/me/announcements
@@ -217,12 +177,11 @@ func Register(mux *http.ServeMux, cont *Container) {
 		cont.AnnouncementUC != nil &&
 		cont.AnnouncementQ != nil {
 
-		announcementH =
-			mallhandler.NewMeAnnouncementHandler(
-				cont.MeAvatarResolver,
-				cont.AnnouncementUC,
-				cont.AnnouncementQ,
-			)
+		announcementH = mallhandler.NewMeAnnouncementHandler(
+			cont.MeAvatarResolver,
+			cont.AnnouncementUC,
+			cont.AnnouncementQ,
+		)
 	}
 
 	// /mall/market/resales
@@ -235,9 +194,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	// /mall/me/resales
-	if cont.ResaleUC != nil &&
-		cont.ResaleQ != nil {
-
+	if cont.ResaleUC != nil && cont.ResaleQ != nil {
 		resaleH = mallhandler.NewResaleHandler(
 			mallhandler.NewResaleHandlerParams{
 				UC:    cont.ResaleUC,
@@ -246,14 +203,11 @@ func Register(mux *http.ServeMux, cont *Container) {
 		)
 	}
 
-	// ------------------------------------------------------------
-	// setup-status wiring
-	// ------------------------------------------------------------
+	// setup-status
 	if cont.SetupUC != nil {
-		setupStatusH =
-			mallhandler.NewSetupStatusHandler(
-				cont.SetupUC,
-			)
+		setupStatusH = mallhandler.NewSetupStatusHandler(
+			cont.SetupUC,
+		)
 	}
 
 	// Cart
@@ -283,9 +237,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	// Inquiry
-	if cont.InquiryUC != nil &&
-		cont.InquiryQ != nil {
-
+	if cont.InquiryUC != nil && cont.InquiryQ != nil {
 		inquiryH = mallhandler.NewInquiryHandler(
 			cont.InquiryUC,
 			cont.InquiryQ,
@@ -294,8 +246,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// Preview
 	if cont.PreviewQ != nil {
-		opts :=
-			[]mallhandler.PreviewHandlerOption{}
+		opts := []mallhandler.PreviewHandlerOption{}
 
 		if cont.OwnerResolveQ != nil {
 			opts = append(
@@ -315,27 +266,24 @@ func Register(mux *http.ServeMux, cont *Container) {
 			)
 		}
 
-		previewPublicH =
-			mallhandler.NewPreviewHandler(
-				cont.PreviewQ,
-				opts...,
-			)
+		previewPublicH = mallhandler.NewPreviewHandler(
+			cont.PreviewQ,
+			opts...,
+		)
 
-		previewMeH =
-			mallhandler.NewPreviewMeHandler(
-				cont.PreviewQ,
-				cont.OwnerResolveQ,
-				nil,
-				cont.NameResolver,
-			)
+		previewMeH = mallhandler.NewPreviewMeHandler(
+			cont.PreviewQ,
+			cont.OwnerResolveQ,
+			nil,
+			cont.NameResolver,
+		)
 	}
 
 	// Order scan transfer
 	if cont.TransferUC != nil {
-		orderScanTransferH =
-			mallhandler.NewTransferHandler(
-				cont.TransferUC,
-			)
+		orderScanTransferH = mallhandler.NewTransferHandler(
+			cont.TransferUC,
+		)
 	}
 
 	// SignIn: keep a stable no-op endpoint
@@ -344,9 +292,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 			w http.ResponseWriter,
 			r *http.Request,
 		) {
-			w.WriteHeader(
-				http.StatusNoContent,
-			)
+			w.WriteHeader(http.StatusNoContent)
 		},
 	)
 
@@ -356,16 +302,13 @@ func Register(mux *http.ServeMux, cont *Container) {
 	deps := mallhttp.Deps{
 		List: listH,
 
-		Inventory:        invH,
 		ProductBlueprint: pbH,
 		Catalog:          catalogH,
 		TokenBlueprint:   tbH,
 
 		ProductBlueprintReview: pbReviewH,
-		TokenBlueprintReview:   tbReviewH,
 
-		Company: companyH,
-		Brand:   brandH,
+		Brand: brandH,
 
 		SignIn: signInH,
 
@@ -391,9 +334,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 		OrderScanTransfer: orderScanTransferH,
 
-		OwnerResolve: notImplemented(
-			"OwnerResolve(endpoint_disabled)",
-		),
+		OwnerResolve: http.NotFoundHandler(),
 
 		Payment:      payH,
 		Order:        orderH,
@@ -414,26 +355,21 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// Webhooks (no auth)
 	// ----------------------------
 	if cont.PaymentUC != nil {
-		secret :=
-			os.Getenv(
-				"STRIPE_WEBHOOK_SECRET",
-			)
-
+		secret := os.Getenv("STRIPE_WEBHOOK_SECRET")
 		if secret == "" {
 			return
 		}
 
-		stripeWH :=
-			mallwebhook.NewStripeWebhookHandler(
-				cont.PaymentUC,
-				cont.OrderUC,
-				cont.SettlementUC,
-				cont.RefundUC,
-				cont.ItemRefundUC,
-				cont.RefundRepo,
-				cont.RefundCompletionNotificationUC,
-				secret,
-			)
+		stripeWH := mallwebhook.NewStripeWebhookHandler(
+			cont.PaymentUC,
+			cont.OrderUC,
+			cont.SettlementUC,
+			cont.RefundUC,
+			cont.ItemRefundUC,
+			cont.RefundRepo,
+			cont.RefundCompletionNotificationUC,
+			secret,
+		)
 
 		mux.Handle(
 			StripeWebhookPath,

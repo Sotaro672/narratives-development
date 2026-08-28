@@ -9,21 +9,15 @@ import (
 // Deps is a buyer-facing (mall) handler set.
 type Deps struct {
 	List             http.Handler
-	Inventory        http.Handler
 	ProductBlueprint http.Handler
 	Catalog          http.Handler
 	TokenBlueprint   http.Handler // patch
-
-	// tokenBlueprint reviews
-	TokenBlueprintReview http.Handler
 
 	// ProductBlueprint reviews (catalog + me/catalog)
 	// - public: GET /mall/catalog/product-blueprints/{pbId}/reviews
 	// - me:     GET/POST /mall/me/catalog/product-blueprints/{pbId}/reviews
 	ProductBlueprintReview http.Handler
-
-	Company http.Handler
-	Brand   http.Handler
+	Brand                  http.Handler
 
 	SignIn http.Handler
 
