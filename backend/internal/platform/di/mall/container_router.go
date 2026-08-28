@@ -90,6 +90,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	shipH := notImplemented("ShippingAddress")
 	shippingQuoteH := notImplemented("ShippingQuote")
 	paymentMethodH := notImplemented("PaymentMethod")
+	payoutAccountH := notImplemented("PayoutAccount")
 	avatarH := notImplemented("Avatar")
 	walletH := notImplemented("Wallet")
 	meWalletH := notImplemented("MeWallet")
@@ -220,6 +221,13 @@ func Register(mux *http.ServeMux, cont *Container) {
 			mallhandler.NewPaymentMethodHandler(
 				cont.PaymentMethodUC,
 				cont.Infra,
+			)
+	}
+
+	if cont.PayoutAccountUC != nil {
+		payoutAccountH =
+			mallhandler.NewPayoutAccountHandler(
+				cont.PayoutAccountUC,
 			)
 	}
 
@@ -405,6 +413,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		ShippingAddress: shipH,
 		ShippingQuote:   shippingQuoteH,
 		PaymentMethod:   paymentMethodH,
+		PayoutAccount:   payoutAccountH,
 		Avatar:          avatarH,
 
 		MeAvatar: meAvatarsH,

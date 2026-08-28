@@ -50,6 +50,8 @@ const (
 	settlementPlatformFeeBaseEnv = "SETTLEMENT_PLATFORM_FEE_BASE"
 
 	mallAutoCreateStripeTestPaymentMethodEnv = "MALL_AUTO_CREATE_STRIPE_TEST_PAYMENT_METHOD"
+
+	mallPayoutAccountAllowedReturnOriginEnv = "MALL_FRONTEND_BASE_URL"
 )
 
 type Container struct {
@@ -62,6 +64,7 @@ type Container struct {
 	ShippingAddressUC              *usecase.ShippingAddressUsecase
 	ShippingQuoteUC                *usecase.ShippingQuoteUsecase
 	PaymentMethodUC                *usecase.PaymentMethodUsecase
+	PayoutAccountUC                *usecase.PayoutAccountUsecase
 	UserUC                         *usecase.UserUsecase
 	WalletUC                       *usecase.WalletUsecase
 	CartUC                         *usecase.CartUsecase
@@ -117,10 +120,7 @@ type Container struct {
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 }
 
-func NewContainer(
-	ctx context.Context,
-	infra *shared.Infra,
-) (*Container, error) {
+func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) {
 	if infra == nil {
 		var err error
 		infra, err = shared.NewInfra(ctx)
@@ -132,7 +132,6 @@ func NewContainer(
 	if infra == nil {
 		return nil, errors.New("di.mall: shared infra is nil")
 	}
-
 	if infra.Config == nil {
 		return nil, errors.New("di.mall: shared infra config is nil")
 	}
@@ -153,6 +152,7 @@ func NewContainer(
 
 	shippingAddressRepo := outfs.NewShippingAddressRepositoryFS(fsClient)
 	paymentMethodRepo := outfs.NewPaymentMethodRepositoryFS(fsClient)
+	payoutAccountRepo := outfs.NewPayoutAccountRepositoryFS(fsClient)
 	userRepo := outfs.NewUserRepositoryFS(fsClient)
 	memberRepo := outfs.NewMemberRepositoryFS(fsClient)
 	walletRepo := outfs.NewWalletRepositoryFS(fsClient)
@@ -168,19 +168,14 @@ func NewContainer(
 		}
 
 		if customerStore == nil {
-			return nil, errors.New(
-				"di.mall: PaymentMethodCustomerStore is not implemented by current repositories",
-			)
+			return nil, errors.New("di.mall: PaymentMethodCustomerStore is not implemented by current repositories")
 		}
 
 		if err := infra.RegisterPaymentMethodGatewayFromSecret(ctx, customerStore); err != nil {
 			return nil, err
 		}
-
 		if infra.PaymentMethodGateway == nil {
-			return nil, errors.New(
-				"di.mall: stripe payment method gateway is nil after registration",
-			)
+			return nil, errors.New("di.mall: stripe payment method gateway is nil after registration")
 		}
 	}
 
@@ -298,7 +293,6 @@ func NewContainer(
 	)
 
 	projectID := infra.ProjectID
-
 	avatarWalletSvc := solana.NewAvatarWalletService(projectID)
 
 	c.AvatarUC = usecase.NewAvatarUsecase(
@@ -338,27 +332,18 @@ func NewContainer(
 		infra.PaymentMethodGateway,
 	)
 
-	autoCreateDevelopmentPaymentMethod :=
-		strings.EqualFold(
-			strings.TrimSpace(
-				os.Getenv(
-					mallAutoCreateStripeTestPaymentMethodEnv,
-				),
-			),
-			"true",
-		)
-
-	c.AvatarRegistrationUC =
-		usecase.NewAvatarRegistrationUsecase(
-			c.AvatarUC,
-			c.PaymentMethodUC,
-			autoCreateDevelopmentPaymentMethod,
-		)
-
-	c.UserUC = usecase.NewUserUsecase(
-		userRepo,
-		nil,
+	autoCreateDevelopmentPaymentMethod := strings.EqualFold(
+		strings.TrimSpace(os.Getenv(mallAutoCreateStripeTestPaymentMethodEnv)),
+		"true",
 	)
+
+	c.AvatarRegistrationUC = usecase.NewAvatarRegistrationUsecase(
+		c.AvatarUC,
+		c.PaymentMethodUC,
+		autoCreateDevelopmentPaymentMethod,
+	)
+
+	c.UserUC = usecase.NewUserUsecase(userRepo, nil)
 
 	onchainReader := solana.NewOnchainWalletReaderDevnet()
 	tokenQuery := outfs.NewTokenReaderFS(fsClient)
@@ -405,36 +390,41 @@ func NewContainer(
 	var itemRefundStripeTransferReversalGateway usecase.StripeTransferReversalGateway
 
 	{
-		stripeSecretKey, err :=
-			infra.AccessSecretVersion(
-				ctx,
-				settlementStripeSecretID,
-			)
+		stripeSecretKey, err := infra.AccessSecretVersion(ctx, settlementStripeSecretID)
 		if err != nil {
+			return nil, fmt.Errorf("di.mall: load Stripe settlement/refund secret: %w", err)
+		}
+
+		stripeSecretKey = strings.TrimSpace(stripeSecretKey)
+		if stripeSecretKey == "" || !strings.HasPrefix(stripeSecretKey, "sk_") {
+			return nil, errors.New("di.mall: Stripe settlement/refund secret is invalid")
+		}
+
+		payoutAccountAllowedReturnOrigin := strings.TrimSpace(
+			os.Getenv(mallPayoutAccountAllowedReturnOriginEnv),
+		)
+		if payoutAccountAllowedReturnOrigin == "" {
 			return nil, fmt.Errorf(
-				"di.mall: load Stripe settlement/refund secret: %w",
-				err,
+				"di.mall: %s is empty",
+				mallPayoutAccountAllowedReturnOriginEnv,
 			)
 		}
 
-		stripeSecretKey = strings.TrimSpace(
-			stripeSecretKey,
-		)
-		if stripeSecretKey == "" ||
-			!strings.HasPrefix(
-				stripeSecretKey,
-				"sk_",
-			) {
-			return nil, errors.New(
-				"di.mall: Stripe settlement/refund secret is invalid",
-			)
+		payoutAccountGateway := stripeadapter.NewAccountGateway(stripeSecretKey)
+		if payoutAccountGateway == nil {
+			return nil, errors.New("di.mall: Stripe payout account gateway is nil")
 		}
 
-		platformFeeRateText := strings.TrimSpace(
-			os.Getenv(
-				settlementPlatformFeeRateEnv,
-			),
+		c.PayoutAccountUC = usecase.NewPayoutAccountUsecase(
+			payoutAccountRepo,
+			payoutAccountGateway,
+			payoutAccountAllowedReturnOrigin,
 		)
+		if c.PayoutAccountUC == nil {
+			return nil, errors.New("di.mall: payout account usecase is nil")
+		}
+
+		platformFeeRateText := strings.TrimSpace(os.Getenv(settlementPlatformFeeRateEnv))
 		if platformFeeRateText == "" {
 			return nil, fmt.Errorf(
 				"di.mall: %s is empty",
@@ -442,9 +432,7 @@ func NewContainer(
 			)
 		}
 
-		platformFeeRate, err := strconv.Atoi(
-			platformFeeRateText,
-		)
+		platformFeeRate, err := strconv.Atoi(platformFeeRateText)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"di.mall: invalid %s: %w",
@@ -453,11 +441,7 @@ func NewContainer(
 			)
 		}
 
-		platformFeeBaseText := strings.TrimSpace(
-			os.Getenv(
-				settlementPlatformFeeBaseEnv,
-			),
-		)
+		platformFeeBaseText := strings.TrimSpace(os.Getenv(settlementPlatformFeeBaseEnv))
 		if platformFeeBaseText == "" {
 			return nil, fmt.Errorf(
 				"di.mall: %s is empty",
@@ -465,13 +449,10 @@ func NewContainer(
 			)
 		}
 
-		platformFeeCalculator, err :=
-			settlementdom.NewPercentagePlatformFeeCalculator(
-				platformFeeRate,
-				settlementdom.PlatformFeeBase(
-					platformFeeBaseText,
-				),
-			)
+		platformFeeCalculator, err := settlementdom.NewPercentagePlatformFeeCalculator(
+			platformFeeRate,
+			settlementdom.PlatformFeeBase(platformFeeBaseText),
+		)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"di.mall: build settlement platform fee calculator: %w",
@@ -481,23 +462,14 @@ func NewContainer(
 
 		itemRefundPlatformFeeCalculator = platformFeeCalculator
 
-		calculator := settlementdom.NewCalculator(
-			platformFeeCalculator,
-		)
+		calculator := settlementdom.NewCalculator(platformFeeCalculator)
 		if calculator == nil {
-			return nil, errors.New(
-				"di.mall: settlement calculator is nil",
-			)
+			return nil, errors.New("di.mall: settlement calculator is nil")
 		}
 
-		stripeTransferGateway :=
-			stripeadapter.NewTransferGateway(
-				stripeSecretKey,
-			)
+		stripeTransferGateway := stripeadapter.NewTransferGateway(stripeSecretKey)
 		if stripeTransferGateway == nil {
-			return nil, errors.New(
-				"di.mall: Stripe settlement transfer gateway is nil",
-			)
+			return nil, errors.New("di.mall: Stripe settlement transfer gateway is nil")
 		}
 
 		c.SettlementUC = usecase.NewSettlementUsecase(
@@ -510,31 +482,19 @@ func NewContainer(
 			},
 		)
 		if c.SettlementUC == nil {
-			return nil, errors.New(
-				"di.mall: settlement usecase is nil",
-			)
+			return nil, errors.New("di.mall: settlement usecase is nil")
 		}
 
-		stripeRefundGateway :=
-			stripeadapter.NewRefundGateway(
-				stripeSecretKey,
-			)
+		stripeRefundGateway := stripeadapter.NewRefundGateway(stripeSecretKey)
 		if stripeRefundGateway == nil {
-			return nil, errors.New(
-				"di.mall: Stripe refund gateway is nil",
-			)
+			return nil, errors.New("di.mall: Stripe refund gateway is nil")
 		}
 
 		itemRefundStripeRefundGateway = stripeRefundGateway
 
-		stripeTransferReversalGateway :=
-			stripeadapter.NewTransferReversalGateway(
-				stripeSecretKey,
-			)
+		stripeTransferReversalGateway := stripeadapter.NewTransferReversalGateway(stripeSecretKey)
 		if stripeTransferReversalGateway == nil {
-			return nil, errors.New(
-				"di.mall: Stripe transfer reversal gateway is nil",
-			)
+			return nil, errors.New("di.mall: Stripe transfer reversal gateway is nil")
 		}
 
 		itemRefundStripeTransferReversalGateway = stripeTransferReversalGateway
@@ -551,9 +511,7 @@ func NewContainer(
 			},
 		)
 		if c.RefundUC == nil {
-			return nil, errors.New(
-				"di.mall: refund usecase is nil",
-			)
+			return nil, errors.New("di.mall: refund usecase is nil")
 		}
 	}
 
@@ -589,9 +547,7 @@ func NewContainer(
 		},
 	)
 	if c.ItemRefundUC == nil {
-		return nil, errors.New(
-			"di.mall: item refund usecase is nil",
-		)
+		return nil, errors.New("di.mall: item refund usecase is nil")
 	}
 
 	c.InquiryUC = usecase.NewInquiryUsecase(
@@ -603,12 +559,11 @@ func NewContainer(
 		authUserReader,
 	)
 
-	c.ReturnRequestUC =
-		usecase.NewReturnRequestUsecase(
-			c.OrderUC,
-			inquiryRepo,
-			c.InquiryUC,
-		).WithReplyRepository(inquiryReplyRepo)
+	c.ReturnRequestUC = usecase.NewReturnRequestUsecase(
+		c.OrderUC,
+		inquiryRepo,
+		c.InquiryUC,
+	).WithReplyRepository(inquiryReplyRepo)
 
 	{
 		paymentFlowUC, configured, err := buildPaymentFlowUsecase(
@@ -695,10 +650,7 @@ func NewContainer(
 		tokenReader := outfs.NewTokenReaderFS(fsClient)
 
 		solanaTransferReader := solana.NewTokenTransferReaderSolana("")
-
-		previewTransferReader := outsolana.NewPreviewTransferReader(
-			solanaTransferReader,
-		)
+		previewTransferReader := outsolana.NewPreviewTransferReader(solanaTransferReader)
 
 		c.PreviewQ = mallquery.NewPreviewQuery(
 			productRepo,
@@ -750,7 +702,6 @@ func NewContainer(
 		)
 
 		var tokenOwnerUpdater usecase.TokenOwnerUpdater = outfs.NewTokenOwnerUpdaterFS(fsClient)
-
 		var transferRepo transferdom.RepositoryPort = outfs.NewTransferRepositoryFS(fsClient)
 
 		var walletResolver usecase.BrandWalletResolver = outfs.NewWalletResolverRepoFS(
@@ -801,15 +752,9 @@ func NewContainer(
 
 	// Stripe Refund webhook が succeeded を確定した後に、
 	// purchaser向け返金完了通知deliveryを作成・Cloud Tasksへ投入します。
-	refundCompletionNotificationRepo :=
-		outfs.NewRefundCompletionNotificationRepositoryFS(
-			fsClient,
-		)
+	refundCompletionNotificationRepo := outfs.NewRefundCompletionNotificationRepositoryFS(fsClient)
 
-	refundCompletionNotificationQueue, err :=
-		cloudtasksadp.NewRefundCompletionNotificationQueueFromEnv(
-			ctx,
-		)
+	refundCompletionNotificationQueue, err := cloudtasksadp.NewRefundCompletionNotificationQueueFromEnv(ctx)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"di.mall: build refund completion notification queue: %w",
@@ -817,16 +762,14 @@ func NewContainer(
 		)
 	}
 
-	refundCompletionNotificationMailer :=
-		mailadp.NewRefundCompletionNotificationMailerWithResend()
+	refundCompletionNotificationMailer := mailadp.NewRefundCompletionNotificationMailerWithResend()
 
-	c.RefundCompletionNotificationUC =
-		usecase.NewRefundCompletionNotificationUsecase(
-			refundCompletionNotificationRepo,
-			authUserReader,
-			refundCompletionNotificationMailer,
-			refundCompletionNotificationQueue,
-		)
+	c.RefundCompletionNotificationUC = usecase.NewRefundCompletionNotificationUsecase(
+		refundCompletionNotificationRepo,
+		authUserReader,
+		refundCompletionNotificationMailer,
+		refundCompletionNotificationQueue,
+	)
 
 	return c, nil
 }

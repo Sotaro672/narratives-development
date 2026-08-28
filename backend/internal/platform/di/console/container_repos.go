@@ -8,6 +8,7 @@ import (
 type repos struct {
 	// FS repos
 	accountRepo                       *fs.AccountRepositoryFS
+	payoutAccountRepo                 *fs.PayoutAccountRepositoryFS
 	announcementRepo                  *fs.AnnouncementRepositoryFS
 	announcementAttachmentRepo        *fs.AnnouncementAttachmentRepositoryFS
 	avatarRepo                        *fs.AvatarRepositoryFS
@@ -59,6 +60,7 @@ func buildRepos(c *clients) *repos {
 	// Outbound adapters (repositories)
 	// =========================================================
 	accountRepo := fs.NewAccountRepositoryFS(fsClient)
+	payoutAccountRepo := fs.NewPayoutAccountRepositoryFS(fsClient)
 	announcementRepo := fs.NewAnnouncementRepositoryFS(fsClient)
 	announcementAttachmentRepo := fs.NewAnnouncementAttachmentRepositoryFS(fsClient)
 	avatarRepo := fs.NewAvatarRepositoryFS(fsClient)
@@ -104,6 +106,7 @@ func buildRepos(c *clients) *repos {
 
 	return &repos{
 		accountRepo:                       accountRepo,
+		payoutAccountRepo:                 payoutAccountRepo,
 		announcementRepo:                  announcementRepo,
 		announcementAttachmentRepo:        announcementAttachmentRepo,
 		avatarRepo:                        avatarRepo,

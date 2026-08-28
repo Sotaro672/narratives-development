@@ -369,7 +369,8 @@ $AllowedKeys = @(
   # Stripe webhook
   "STRIPE_WEBHOOK_SECRET",
 
-  # Mall development
+  # Mall
+  "MALL_FRONTEND_BASE_URL",
   "MALL_AUTO_CREATE_STRIPE_TEST_PAYMENT_METHOD",
 
   # Settlement
@@ -443,6 +444,53 @@ if (
 ) {
   throw "SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY is required."
 }
+
+if (
+  -not $envMap.ContainsKey("MALL_FRONTEND_BASE_URL") -or
+  [string]::IsNullOrWhiteSpace(
+    $envMap["MALL_FRONTEND_BASE_URL"]
+  )
+) {
+  throw "MALL_FRONTEND_BASE_URL is required."
+}
+
+$MallFrontendBaseURL =
+  $envMap["MALL_FRONTEND_BASE_URL"].TrimEnd("/")
+
+$MallFrontendURI = $null
+
+if (
+  -not [System.Uri]::TryCreate(
+    $MallFrontendBaseURL,
+    [System.UriKind]::Absolute,
+    [ref]$MallFrontendURI
+  ) -or
+  (
+    $MallFrontendURI.Scheme -ne "https" -and
+    $MallFrontendURI.Scheme -ne "http"
+  ) -or
+  [string]::IsNullOrWhiteSpace($MallFrontendURI.Host)
+) {
+  throw "MALL_FRONTEND_BASE_URL must be an absolute http/https URL."
+}
+
+if (
+  -not [string]::IsNullOrWhiteSpace($MallFrontendURI.AbsolutePath) -and
+  $MallFrontendURI.AbsolutePath -ne "/"
+) {
+  throw "MALL_FRONTEND_BASE_URL must contain only the origin and must not contain a path."
+}
+
+if (-not [string]::IsNullOrWhiteSpace($MallFrontendURI.Query)) {
+  throw "MALL_FRONTEND_BASE_URL must not contain a query string."
+}
+
+if (-not [string]::IsNullOrWhiteSpace($MallFrontendURI.Fragment)) {
+  throw "MALL_FRONTEND_BASE_URL must not contain a fragment."
+}
+
+$envMap["MALL_FRONTEND_BASE_URL"] =
+  $MallFrontendBaseURL
 
 if (
   -not $envMap.ContainsKey(

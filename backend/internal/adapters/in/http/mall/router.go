@@ -35,6 +35,7 @@ type Deps struct {
 	ShippingAddress http.Handler
 	ShippingQuote   http.Handler
 	PaymentMethod   http.Handler
+	PayoutAccount   http.Handler
 
 	// /mall/avatars (POST create) + /mall/avatars/{id} (GET/PATCH/DELETE)
 	Avatar http.Handler
@@ -494,7 +495,7 @@ func Register(
 
 	// ------------------------------------------------------------
 	// Auth-required routes (/mall/me/**)
-	// setup-status / users / shipping-addresses / payment-methods are auth-only.
+	// setup-status / users / shipping-addresses / payment-methods / payout-account are auth-only.
 	// ------------------------------------------------------------
 
 	// setup status (me) - auth only
@@ -558,6 +559,22 @@ func Register(
 		"/mall/me/payment-methods/",
 		deps.PaymentMethod,
 		"PaymentMethod(me)",
+		auth,
+	)
+
+	// payout account (me) - auth only
+	handleSafeAuth(
+		mux,
+		"/mall/me/payout-account",
+		deps.PayoutAccount,
+		"PayoutAccount(me)",
+		auth,
+	)
+	handleSafeAuth(
+		mux,
+		"/mall/me/payout-account/",
+		deps.PayoutAccount,
+		"PayoutAccount(me)",
 		auth,
 	)
 
