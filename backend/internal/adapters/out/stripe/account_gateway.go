@@ -329,9 +329,8 @@ func (g *AccountGateway) createRecipientAccount(
 		},
 		Defaults: accountDefaultsRequest{
 			Responsibilities: accountResponsibilitiesRequest{
-				FeesCollector:         "application",
-				LossesCollector:       "application",
-				RequirementsCollector: "stripe",
+				FeesCollector:   "application",
+				LossesCollector: "application",
 			},
 		},
 		Configuration: accountConfigurationRequest{
@@ -519,9 +518,8 @@ type accountDefaultsRequest struct {
 }
 
 type accountResponsibilitiesRequest struct {
-	FeesCollector         string `json:"fees_collector"`
-	LossesCollector       string `json:"losses_collector"`
-	RequirementsCollector string `json:"requirements_collector,omitempty"`
+	FeesCollector   string `json:"fees_collector"`
+	LossesCollector string `json:"losses_collector"`
 }
 
 type accountConfigurationRequest struct {

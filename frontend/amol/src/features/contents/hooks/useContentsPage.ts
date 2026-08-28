@@ -1,10 +1,12 @@
 // frontend/amol/src/features/contents/hooks/useContentsPage.ts
 
 import { useEffect, useMemo, useState } from "react";
+import { getAuth } from "firebase/auth";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import type { MediaGalleryItem } from "../../../components/ui/MediaGallery";
 import { useMobilePortrait } from "../../../components/hooks/useMobilePortrait";
+import { fetchPayoutAccount } from "../../payout/api/payoutApi";
 import type {
   ContentsMetadata,
   ContentsSearchParams,
@@ -146,22 +148,55 @@ export function useContentsPage() {
     );
   };
 
-  const handleOpenResalePage = () => {
+  const handleOpenResalePage = async () => {
     if (!contents.productId || !contents.tokenBlueprintId) return;
 
-    navigate("/resale", {
-      state: {
-        assetId: contents.assetId,
-        productId: contents.productId,
-        brandId: contents.brandId,
-        brandName: contents.brandName,
-        productName: contents.productName,
-        productBlueprintId: contents.productBlueprintId,
-        tokenBlueprintId: contents.tokenBlueprintId,
-        tokenName,
-        tokenIconUrl,
-      },
-    });
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      navigate("/signin", { replace: true });
+      return;
+    }
+
+    try {
+      setError("");
+
+      const idToken = await currentUser.getIdToken(true);
+      const payoutAccount = await fetchPayoutAccount({
+        idToken,
+      });
+
+      if (!payoutAccount) {
+        navigate("/settings/payout-account");
+        return;
+      }
+
+      navigate("/resale", {
+        state: {
+          assetId: contents.assetId,
+          productId: contents.productId,
+          brandId: contents.brandId,
+          brandName: contents.brandName,
+          productName: contents.productName,
+          productBlueprintId: contents.productBlueprintId,
+          tokenBlueprintId: contents.tokenBlueprintId,
+          tokenName,
+          tokenIconUrl,
+        },
+      });
+    } catch (err) {
+      console.error(
+        "failed to check payout account before resale:",
+        err,
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "売上受取口座の確認に失敗しました。",
+      );
+    }
   };
 
   return {

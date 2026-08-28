@@ -396,6 +396,14 @@ export default function OrderDetail() {
     !loading &&
     Boolean(order);
 
+  const hasReturnInProgress =
+    order?.items.some(
+      (item) =>
+        !item.isCancelled &&
+        item.isReturnRequested &&
+        !item.isReturnCompleted,
+    ) ?? false;
+
   return (
     <Layout
       title="注文詳細"
@@ -636,58 +644,60 @@ export default function OrderDetail() {
                           ) : null}
                         </dl>
 
-                        <div className="page-actions order-detail-page__cancel-actions">
-                          {item.isReturnCompleted ? (
-                            <button
-                              type="button"
-                              className="order-detail-page__cancel-button order-detail-page__return-button"
-                              disabled
-                            >
-                              返品済み
-                            </button>
-                          ) : item.isReturnRequested ? (
-                            <button
-                              type="button"
-                              className="order-detail-page__cancel-button order-detail-page__return-button"
-                              disabled
-                            >
-                              返品申請済み
-                            </button>
-                          ) : showReturnButton ? (
-                            <button
-                              type="button"
-                              className="order-detail-page__cancel-button order-detail-page__return-button"
-                              disabled={
-                                isReturning ||
-                                cancellingItemIndex !== null
-                              }
-                              onClick={() =>
-                                handleOpenReturnModal(index)
-                              }
-                            >
-                              {isReturning
-                                ? "返品申請中..."
-                                : "返品"}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="order-detail-page__cancel-button"
-                              disabled={cancelDisabled}
-                              onClick={() =>
-                                void cancelItem(index)
-                              }
-                            >
-                              {item.isCancelled
-                                ? "キャンセル済み"
-                                : isCancelling
-                                  ? "キャンセル中..."
-                                  : item.transferred
-                                    ? "受け取り済み"
+                        {item.transferred &&
+                        !item.isReturnRequested &&
+                        !item.isReturnCompleted ? null : (
+                          <div className="page-actions order-detail-page__cancel-actions">
+                            {item.isReturnCompleted ? (
+                              <button
+                                type="button"
+                                className="order-detail-page__cancel-button order-detail-page__return-button"
+                                disabled
+                              >
+                                返品済み
+                              </button>
+                            ) : item.isReturnRequested ? (
+                              <button
+                                type="button"
+                                className="order-detail-page__cancel-button order-detail-page__return-button"
+                                disabled
+                              >
+                                返品申請済み
+                              </button>
+                            ) : showReturnButton ? (
+                              <button
+                                type="button"
+                                className="order-detail-page__cancel-button order-detail-page__return-button"
+                                disabled={
+                                  isReturning ||
+                                  cancellingItemIndex !== null
+                                }
+                                onClick={() =>
+                                  handleOpenReturnModal(index)
+                                }
+                              >
+                                {isReturning
+                                  ? "返品申請中..."
+                                  : "返品"}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="order-detail-page__cancel-button"
+                                disabled={cancelDisabled}
+                                onClick={() =>
+                                  void cancelItem(index)
+                                }
+                              >
+                                {item.isCancelled
+                                  ? "キャンセル済み"
+                                  : isCancelling
+                                    ? "キャンセル中..."
                                     : "商品をキャンセル"}
-                            </button>
-                          )}
-                        </div>
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </li>
                   );
@@ -747,12 +757,14 @@ export default function OrderDetail() {
                   </dd>
                 </div>
 
-                <div className="order-detail-page__detail-row">
-                  <dt>返金状況</dt>
-                  <dd>
-                    {getRefundStatusLabel(order)}
-                  </dd>
-                </div>
+                {hasReturnInProgress ? (
+                  <div className="order-detail-page__detail-row">
+                    <dt>返金状況</dt>
+                    <dd>
+                      {getRefundStatusLabel(order)}
+                    </dd>
+                  </div>
+                ) : null}
 
                 {order.refundedAmount > 0 ? (
                   <div className="order-detail-page__detail-row">
