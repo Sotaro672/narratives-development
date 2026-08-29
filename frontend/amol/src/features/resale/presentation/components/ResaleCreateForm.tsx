@@ -1,9 +1,6 @@
 // frontend/amol/src/features/resale/presentation/components/ResaleCreateForm.tsx
 
-import type { ChangeEvent, RefObject } from "react";
-
 import Input from "../../../../components/ui/Input";
-import MediaUploader from "../../../../components/ui/MediaUploader";
 import SectionHeader from "../../../../components/ui/SectionHeader";
 import Textbox from "../../../../components/ui/Textbox";
 
@@ -12,44 +9,26 @@ import {
   type ResaleCondition,
 } from "../../../shared/types/resale";
 
-import type { ResaleConditionMediaItem } from "../types/resaleCreatePageTypes";
-
 const DESCRIPTION_MAX_LENGTH = 1000;
 
 export type ResaleCreateFormProps = {
   formattedPrice: string;
   condition: ResaleCondition;
   description: string;
-  conditionMediaItems: ResaleConditionMediaItem[];
-  conditionMediaCurrentIndex: number;
-  conditionMediaInputRef: RefObject<HTMLInputElement>;
-  conditionMediaCarouselRef: RefObject<HTMLDivElement>;
   disabled?: boolean;
   onPriceChange: (value: string) => void;
   onConditionChange: (value: ResaleCondition) => void;
   onDescriptionChange: (value: string) => void;
-  onConditionMediaSelected: (event: ChangeEvent<HTMLInputElement>) => void;
-  onRemoveConditionMedia: (id: string) => void;
-  onConditionMediaCarouselScroll: () => void;
-  onMoveToConditionMediaSlide: (index: number) => void;
 };
 
 export default function ResaleCreateForm({
   formattedPrice,
   condition,
   description,
-  conditionMediaItems,
-  conditionMediaCurrentIndex,
-  conditionMediaInputRef,
-  conditionMediaCarouselRef,
   disabled = false,
   onPriceChange,
   onConditionChange,
   onDescriptionChange,
-  onConditionMediaSelected,
-  onRemoveConditionMedia,
-  onConditionMediaCarouselScroll,
-  onMoveToConditionMediaSlide,
 }: ResaleCreateFormProps) {
   return (
     <section className="page-card">
@@ -85,25 +64,6 @@ export default function ResaleCreateForm({
             ))}
           </select>
         </label>
-
-        <MediaUploader
-          label="商品状態の写真"
-          hint="傷・汚れ・タグ・付属品など、購入者が状態を確認できる写真を追加してください。必須項目です。"
-          emptyText="商品状態の写真が登録されていません。"
-          selectButtonLabel="写真を追加"
-          selectingButtonLabel="追加中..."
-          accept="image/*"
-          multiple
-          disabled={disabled}
-          items={conditionMediaItems}
-          currentIndex={conditionMediaCurrentIndex}
-          inputRef={conditionMediaInputRef}
-          carouselRef={conditionMediaCarouselRef}
-          onFilesSelected={onConditionMediaSelected}
-          onRemoveItem={onRemoveConditionMedia}
-          onCarouselScroll={onConditionMediaCarouselScroll}
-          onMoveToSlide={onMoveToConditionMediaSlide}
-        />
 
         <Textbox
           label="説明文"

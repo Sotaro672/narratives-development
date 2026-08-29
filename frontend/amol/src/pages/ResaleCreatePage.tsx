@@ -2,8 +2,11 @@
 
 import Layout from "../components/layout/Layout";
 
+import ProductDetailLayout from "../features/shared/presentation/components/ProductDetailLayout";
 import ProductIdentity from "../features/shared/presentation/components/ProductIdentity";
 import TokenSummaryCard from "../features/shared/presentation/components/TokenSummaryCard";
+
+import ResaleConditionMediaField from "../features/resale/presentation/components/ResaleConditionMediaField";
 import ResaleCreateForm from "../features/resale/presentation/components/ResaleCreateForm";
 import ResaleCreateMissingTarget from "../features/resale/presentation/components/ResaleCreateMissingTarget";
 import { useResaleCreatePage } from "../features/resale/presentation/hooks/useResaleCreatePage";
@@ -58,37 +61,42 @@ export default function ResaleCreatePage() {
         {!hasRequiredListingTarget ? (
           <ResaleCreateMissingTarget onBackToWallet={handleBackToWallet} />
         ) : (
-          <div className="page-stack">
-            <section className="page-card">
-              <ProductIdentity
-                brandName={target.brandName}
-                productName={target.productName}
-                tokenName={target.tokenName}
+          <ProductDetailLayout
+            media={
+              <ResaleConditionMediaField
+                items={conditionMediaItems}
+                currentIndex={conditionMediaCurrentIndex}
+                inputRef={conditionMediaInputRef}
+                carouselRef={conditionMediaCarouselRef}
+                disabled={isSubmitting}
+                onFilesSelected={handleConditionMediaSelected}
+                onRemoveItem={handleRemoveConditionMedia}
+                onCarouselScroll={handleConditionMediaCarouselScroll}
+                onMoveToSlide={handleMoveToConditionMediaSlide}
               />
-
+            }
+            mediaFooter={
               <TokenSummaryCard
                 brandName={target.brandName}
                 tokenName={target.tokenName}
                 tokenIcon={target.tokenIconUrl}
               />
-            </section>
+            }
+          >
+            <ProductIdentity
+              brandName={target.brandName}
+              productName={target.productName}
+              tokenName={target.tokenName}
+            />
 
             <ResaleCreateForm
               formattedPrice={formattedPrice}
               condition={condition}
               description={description}
-              conditionMediaItems={conditionMediaItems}
-              conditionMediaCurrentIndex={conditionMediaCurrentIndex}
-              conditionMediaInputRef={conditionMediaInputRef}
-              conditionMediaCarouselRef={conditionMediaCarouselRef}
               disabled={isSubmitting}
               onPriceChange={handlePriceChange}
               onConditionChange={handleConditionChange}
               onDescriptionChange={handleDescriptionChange}
-              onConditionMediaSelected={handleConditionMediaSelected}
-              onRemoveConditionMedia={handleRemoveConditionMedia}
-              onConditionMediaCarouselScroll={handleConditionMediaCarouselScroll}
-              onMoveToConditionMediaSlide={handleMoveToConditionMediaSlide}
             />
 
             {errorMessage ? (
@@ -96,7 +104,7 @@ export default function ResaleCreatePage() {
                 {errorMessage}
               </p>
             ) : null}
-          </div>
+          </ProductDetailLayout>
         )}
       </section>
     </Layout>

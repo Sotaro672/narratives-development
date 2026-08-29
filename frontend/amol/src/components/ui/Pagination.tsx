@@ -1,4 +1,7 @@
-// frontend\amol\src\components\ui\Pagination.tsx
+// frontend/amol/src/components/ui/Pagination.tsx
+
+import "./pagination.css";
+
 export type PaginationProps = {
   page: number;
   totalPages: number;
@@ -33,10 +36,7 @@ export default function Pagination({
   }
 
   return (
-    <nav
-      className={joinClassNames("pagination", className)}
-      aria-label={ariaLabel}
-    >
+    <nav className={joinClassNames("pagination", className)} aria-label={ariaLabel}>
       <button
         type="button"
         className="pagination__button"
