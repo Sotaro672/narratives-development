@@ -3,11 +3,14 @@
 import Layout from "../components/layout/Layout";
 import SectionHeader from "../components/ui/SectionHeader";
 
+import ProductDescription from "../features/shared/presentation/components/ProductDescription";
 import ProductDetailLayout from "../features/shared/presentation/components/ProductDetailLayout";
 import ProductIdentity from "../features/shared/presentation/components/ProductIdentity";
 import ProductMediaGallery from "../features/shared/presentation/components/ProductMediaGallery";
 import ProductModelMeta from "../features/shared/presentation/components/ProductModelMeta";
+import ProductPrice from "../features/shared/presentation/components/ProductPrice";
 import TokenSummaryCard from "../features/shared/presentation/components/TokenSummaryCard";
+
 import ResaleConditionMediaField from "../features/resale/presentation/components/ResaleConditionMediaField";
 import ResaleDetailEditForm from "../features/resale/presentation/components/ResaleDetailEditForm";
 import ResaleDetailReadonlyInfo from "../features/resale/presentation/components/ResaleDetailReadonlyInfo";
@@ -150,22 +153,47 @@ export default function ResaleDetailPage() {
               tokenName={listingTarget.tokenName}
             />
 
-            <ProductModelMeta model={model} />
-
             {isEditing ? (
-              <ResaleDetailEditForm {...editFormProps} />
+              <>
+                <ProductModelMeta model={model} />
+
+                <ResaleDetailEditForm {...editFormProps} />
+              </>
             ) : (
-              <ResaleDetailReadonlyInfo {...readonlyInfoProps} />
+              <>
+                <ProductPrice priceLabel={readonlyInfoProps.priceLabel} />
+
+                <ProductModelMeta
+                  conditionLabel={readonlyInfoProps.conditionLabel}
+                  model={model}
+                />
+
+                <ProductDescription
+                  description={readonlyInfoProps.description || "説明文はありません。"}
+                />
+
+                <ResaleDetailReadonlyInfo
+                  statusLabel={readonlyInfoProps.statusLabel}
+                  createdAtLabel={readonlyInfoProps.createdAtLabel}
+                  updatedAtLabel={readonlyInfoProps.updatedAtLabel}
+                />
+              </>
             )}
 
             {errorMessage ? (
-              <p className="resale-detail-page__message resale-detail-page__message--error" role="alert">
+              <p
+                className="resale-detail-page__message resale-detail-page__message--error"
+                role="alert"
+              >
                 {errorMessage}
               </p>
             ) : null}
 
             {saveMessage ? (
-              <p className="resale-detail-page__message resale-detail-page__message--success" role="status">
+              <p
+                className="resale-detail-page__message resale-detail-page__message--success"
+                role="status"
+              >
                 {saveMessage}
               </p>
             ) : null}

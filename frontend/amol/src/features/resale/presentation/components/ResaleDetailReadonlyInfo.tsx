@@ -1,45 +1,35 @@
 // frontend/amol/src/features/resale/presentation/components/ResaleDetailReadonlyInfo.tsx
 
-import ProductDescription from "../../../shared/presentation/components/ProductDescription";
 import ProductMetaList from "../../../shared/presentation/components/ProductMetaList";
-import ProductPrice from "../../../shared/presentation/components/ProductPrice";
 
 import type { ResaleDetailReadonlyInfoProps } from "../types/resaleDetailPageTypes";
 
+type ResaleDetailReadonlyInfoViewProps = Pick<
+  ResaleDetailReadonlyInfoProps,
+  "statusLabel" | "createdAtLabel" | "updatedAtLabel"
+>;
+
 export default function ResaleDetailReadonlyInfo({
-  priceLabel,
-  conditionLabel,
   statusLabel,
   createdAtLabel,
   updatedAtLabel,
-  description,
-}: ResaleDetailReadonlyInfoProps) {
+}: ResaleDetailReadonlyInfoViewProps) {
   return (
-    <>
-      <ProductPrice priceLabel={priceLabel} />
-
-      <ProductMetaList
-        items={[
-          {
-            label: "商品の状態",
-            value: conditionLabel,
-          },
-          {
-            label: "出品ステータス",
-            value: statusLabel,
-          },
-          {
-            label: "出品日時",
-            value: createdAtLabel,
-          },
-          {
-            label: "更新日時",
-            value: updatedAtLabel,
-          },
-        ]}
-      />
-
-      <ProductDescription description={description || "説明文はありません。"} />
-    </>
+    <ProductMetaList
+      items={[
+        {
+          label: "出品ステータス",
+          value: statusLabel,
+        },
+        {
+          label: "出品日時",
+          value: createdAtLabel,
+        },
+        {
+          label: "更新日時",
+          value: updatedAtLabel,
+        },
+      ]}
+    />
   );
 }
