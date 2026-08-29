@@ -2,12 +2,17 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
   type ChangeEvent,
 } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import {
+  useBlocker,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 
 import { textOrEmpty } from "../../../../components/utils/textOrEmpty";
 import { createResaleListing } from "../../api/resaleApi";
@@ -16,6 +21,16 @@ import {
   type ResaleCondition,
 } from "../../../shared/types/resale";
 
+import {
+  createFailedResaleCreateProgress,
+  createInitialResaleCreateProgress,
+  createPreparingResaleCreateProgress,
+  createSavingResaleCreateProgress,
+  createUploadingResaleCreateProgress,
+  isResaleCreateProgressVisible,
+  shouldBlockResaleCreateNavigation,
+  type ResaleCreateProgress,
+} from "../models/resaleCreateProgress";
 import type {
   ResaleCreatePageLocationState,
   ResaleCreateTarget,
@@ -99,6 +114,9 @@ export function useResaleCreatePage() {
   const [description, setDescription] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [progress, setProgress] = useState<ResaleCreateProgress>(
+    createInitialResaleCreateProgress,
+  );
 
   const isSubmittingRef = useRef(false);
 
@@ -140,6 +158,36 @@ export function useResaleCreatePage() {
     Boolean(price) &&
     hasConditionMedia;
 
+  const progressOpen = isResaleCreateProgressVisible(progress);
+  const isUploading = shouldBlockResaleCreateNavigation(progress);
+
+  const blocker = useBlocker(isUploading);
+
+  useEffect(() => {
+    if (blocker.state !== "blocked") {
+      return;
+    }
+
+    blocker.reset();
+  }, [blocker]);
+
+  useEffect(() => {
+    if (!isUploading) {
+      return;
+    }
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [isUploading]);
+
   const handlePriceChange = useCallback((value: string) => {
     setPrice(normalizePriceInput(value));
     setErrorMessage("");
@@ -172,8 +220,22 @@ export function useResaleCreatePage() {
   );
 
   const handleBackToWallet = useCallback(() => {
+    if (isUploading) {
+      return;
+    }
+
     navigate("/wallet");
-  }, [navigate]);
+  }, [isUploading, navigate]);
+
+  const handleCloseProgress = useCallback(() => {
+    if (progress.isBlockingNavigation) {
+      return;
+    }
+
+    if (progress.phase === "failed") {
+      setProgress(createInitialResaleCreateProgress());
+    }
+  }, [progress]);
 
   const handleSubmit = useCallback(async (): Promise<void> => {
     if (isSubmittingRef.current) {
@@ -188,19 +250,54 @@ export function useResaleCreatePage() {
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     setErrorMessage("");
+    setProgress(createPreparingResaleCreateProgress());
 
     try {
-      const created = await createResaleListing({
-        assetId: target.assetId,
-        tokenBlueprintId: target.tokenBlueprintId,
-        productId: target.productId,
-        brandId: target.brandId,
-        productBlueprintId: target.productBlueprintId,
-        price: Number(price),
-        condition,
-        description,
-        conditionImages: conditionMediaItems.map((item) => item.file),
-      });
+      const created = await createResaleListing(
+        {
+          assetId: target.assetId,
+          tokenBlueprintId: target.tokenBlueprintId,
+          productId: target.productId,
+          brandId: target.brandId,
+          productBlueprintId: target.productBlueprintId,
+          price: Number(price),
+          condition,
+          description,
+          conditionImages: conditionMediaItems.map((item) => item.file),
+        },
+        {
+          onProgress: (nextProgress) => {
+            switch (nextProgress.phase) {
+              case "preparing":
+                setProgress(createPreparingResaleCreateProgress());
+                break;
+
+              case "uploading":
+                setProgress(
+                  createUploadingResaleCreateProgress({
+                    fileName: nextProgress.fileName,
+                    transferredBytes: nextProgress.transferredBytes,
+                    totalBytes: nextProgress.totalBytes,
+                    completedUploadCount: nextProgress.completedUploadCount,
+                    expectedUploadCount: nextProgress.expectedUploadCount,
+                  }),
+                );
+                break;
+
+              case "saving":
+                setProgress(
+                  createSavingResaleCreateProgress({
+                    transferredBytes: nextProgress.transferredBytes,
+                    totalBytes: nextProgress.totalBytes,
+                    completedUploadCount: nextProgress.completedUploadCount,
+                    expectedUploadCount: nextProgress.expectedUploadCount,
+                  }),
+                );
+                break;
+            }
+          },
+        },
+      );
 
       navigate("/wallet", {
         replace: true,
@@ -210,11 +307,13 @@ export function useResaleCreatePage() {
         },
       });
     } catch (error) {
-      setErrorMessage(
+      const message =
         error instanceof Error
           ? error.message
-          : CREATE_RESALE_ERROR_MESSAGE,
-      );
+          : CREATE_RESALE_ERROR_MESSAGE;
+
+      setErrorMessage(message);
+      setProgress(createFailedResaleCreateProgress(message));
     } finally {
       isSubmittingRef.current = false;
       setIsSubmitting(false);
@@ -243,7 +342,10 @@ export function useResaleCreatePage() {
     hasConditionMedia,
     canSubmit,
     isSubmitting,
+    isUploading,
     errorMessage,
+    progress,
+    progressOpen,
     submitButtonLabel: isSubmitting ? "出品中..." : "出品する",
     handlePriceChange,
     handleConditionChange,
@@ -254,6 +356,7 @@ export function useResaleCreatePage() {
     handleMoveToConditionMediaSlide,
     clearConditionMedia,
     handleBackToWallet,
+    handleCloseProgress,
     handleSubmit,
   };
 }

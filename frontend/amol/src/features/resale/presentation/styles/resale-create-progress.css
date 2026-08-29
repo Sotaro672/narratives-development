@@ -1,0 +1,348 @@
+/* frontend/amol/src/features/resale/presentation/styles/resale-create-progress.css */
+
+.resale-create-progress-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.52);
+  backdrop-filter: blur(2px);
+}
+
+.resale-create-progress-modal__panel {
+  width: min(100%, 520px);
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
+}
+
+.resale-create-progress-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.resale-create-progress-modal__heading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resale-create-progress-modal__status {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.resale-create-progress-modal__status--preparing {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.resale-create-progress-modal__status--uploading {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.resale-create-progress-modal__status--saving {
+  color: #7c3aed;
+  background: #ede9fe;
+}
+
+.resale-create-progress-modal__status--failed {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.resale-create-progress-modal__title {
+  margin: 0;
+  color: #111827;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.resale-create-progress-modal__close {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #64748b;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.resale-create-progress-modal__close:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.resale-create-progress-modal__close:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.resale-create-progress-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+}
+
+.resale-create-progress-modal__description {
+  margin: 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.resale-create-progress-modal__indeterminate {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.resale-create-progress-modal__indeterminate-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  border-radius: inherit;
+  background: #2563eb;
+  animation: resale-create-progress-indeterminate 1.2s ease-in-out infinite;
+}
+
+.resale-create-progress-modal__progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resale-create-progress-modal__progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.resale-create-progress-modal__progress-label {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.resale-create-progress-modal__progress-percentage {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.resale-create-progress-modal__progress {
+  width: 100%;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.resale-create-progress-modal__progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+  transition: width 160ms ease;
+}
+
+.resale-create-progress-modal__bytes {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.resale-create-progress-modal__current {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.resale-create-progress-modal__current-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.resale-create-progress-modal__current-file {
+  min-width: 0;
+  overflow: hidden;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resale-create-progress-modal__count {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  color: #475569;
+  background: #ffffff;
+  font-size: 13px;
+}
+
+.resale-create-progress-modal__count strong {
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+.resale-create-progress-modal__warning {
+  padding: 12px 14px;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  color: #92400e;
+  background: #fffbeb;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.resale-create-progress-modal__notice {
+  padding: 12px 14px;
+  border: 1px solid #c4b5fd;
+  border-radius: 10px;
+  color: #5b21b6;
+  background: #f5f3ff;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.resale-create-progress-modal__error {
+  padding: 12px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  color: #b91c1c;
+  background: #fef2f2;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.resale-create-progress-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 20px 20px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.resale-create-progress-modal__button {
+  min-width: 96px;
+  min-height: 42px;
+  padding: 9px 18px;
+  border: 0;
+  border-radius: 10px;
+  background: #111827;
+  color: #ffffff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.resale-create-progress-modal__button:hover {
+  background: #1f2937;
+}
+
+.resale-create-progress-modal__button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+@keyframes resale-create-progress-indeterminate {
+  0% {
+    left: -40%;
+  }
+
+  50% {
+    left: 35%;
+  }
+
+  100% {
+    left: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .resale-create-progress-modal {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  .resale-create-progress-modal__panel {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
+    border-radius: 16px;
+  }
+
+  .resale-create-progress-modal__header {
+    padding: 18px 16px 14px;
+  }
+
+  .resale-create-progress-modal__body {
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .resale-create-progress-modal__actions {
+    padding: 14px 16px 16px;
+  }
+
+  .resale-create-progress-modal__button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .resale-create-progress-modal__indeterminate-bar {
+    animation: none;
+    left: 30%;
+  }
+
+  .resale-create-progress-modal__progress-bar {
+    transition: none;
+  }
+}

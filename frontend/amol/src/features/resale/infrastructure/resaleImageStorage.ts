@@ -3,7 +3,7 @@
 import {
   getDownloadURL,
   ref,
-  uploadBytes,
+  uploadBytesResumable,
 } from "firebase/storage";
 
 import {
@@ -16,6 +16,16 @@ export type UploadedResaleConditionImage = {
   url: string;
   displayOrder: number;
 };
+
+export type ResaleImageUploadProgress = {
+  transferredBytes: number;
+  totalBytes: number;
+  percentage: number;
+};
+
+export type ResaleImageUploadProgressHandler = (
+  progress: ResaleImageUploadProgress,
+) => void;
 
 function createUploadImageId(): string {
   if (
@@ -43,11 +53,31 @@ function sanitizeStorageFileName(
   );
 }
 
+function calculateUploadPercentage(
+  transferredBytes: number,
+  totalBytes: number,
+): number {
+  if (totalBytes <= 0) {
+    return 100;
+  }
+
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round(
+        (transferredBytes / totalBytes) * 100,
+      ),
+    ),
+  );
+}
+
 export async function uploadResaleConditionImage(
   params: {
     resaleId: string;
     file: File;
     displayOrder: number;
+    onProgress?: ResaleImageUploadProgressHandler;
   },
 ): Promise<UploadedResaleConditionImage> {
   const imageId = createUploadImageId();
@@ -62,7 +92,7 @@ export async function uploadResaleConditionImage(
     objectPath,
   );
 
-  await uploadBytes(
+  const uploadTask = uploadBytesResumable(
     storageRef,
     params.file,
     {
@@ -71,6 +101,36 @@ export async function uploadResaleConditionImage(
         "application/octet-stream",
     },
   );
+
+  await new Promise<void>((resolve, reject) => {
+    uploadTask.on(
+      "state_changed",
+      (snapshot) => {
+        params.onProgress?.({
+          transferredBytes: snapshot.bytesTransferred,
+          totalBytes: snapshot.totalBytes,
+          percentage: calculateUploadPercentage(
+            snapshot.bytesTransferred,
+            snapshot.totalBytes,
+          ),
+        });
+      },
+      (error) => {
+        reject(error);
+      },
+      () => {
+        const snapshot = uploadTask.snapshot;
+
+        params.onProgress?.({
+          transferredBytes: snapshot.totalBytes,
+          totalBytes: snapshot.totalBytes,
+          percentage: 100,
+        });
+
+        resolve();
+      },
+    );
+  });
 
   const url = await getDownloadURL(storageRef);
 
