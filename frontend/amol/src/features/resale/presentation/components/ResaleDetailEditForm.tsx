@@ -6,6 +6,8 @@ import Dropdown from "../../../../components/ui/Dropdown";
 import Input from "../../../../components/ui/Input";
 import Textbox from "../../../../components/ui/Textbox";
 
+import ProductMetaList from "../../../shared/presentation/components/ProductMetaList";
+
 import {
   RESALE_CONDITION_OPTIONS,
   RESALE_STATUS_OPTIONS,
@@ -126,17 +128,19 @@ export default function ResaleDetailEditForm({
         />
       </div>
 
-      <dl className="product-detail__meta resale-detail-page__edit-meta">
-        <div className="product-detail__meta-row">
-          <dt>出品日時</dt>
-          <dd>{createdAtLabel}</dd>
-        </div>
-
-        <div className="product-detail__meta-row">
-          <dt>更新日時</dt>
-          <dd>{updatedAtLabel}</dd>
-        </div>
-      </dl>
+      <ProductMetaList
+        className="resale-detail-page__edit-meta"
+        items={[
+          {
+            label: "出品日時",
+            value: createdAtLabel,
+          },
+          {
+            label: "更新日時",
+            value: updatedAtLabel,
+          },
+        ]}
+      />
     </div>
   );
 }

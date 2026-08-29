@@ -1,6 +1,7 @@
 // frontend/amol/src/features/resale/presentation/components/ResaleDetailReadonlyInfo.tsx
 
 import ProductDescription from "../../../shared/presentation/components/ProductDescription";
+import ProductMetaList from "../../../shared/presentation/components/ProductMetaList";
 import ProductPrice from "../../../shared/presentation/components/ProductPrice";
 
 import type { ResaleDetailReadonlyInfoProps } from "../types/resaleDetailPageTypes";
@@ -17,27 +18,26 @@ export default function ResaleDetailReadonlyInfo({
     <>
       <ProductPrice priceLabel={priceLabel} />
 
-      <dl className="product-detail__meta">
-        <div className="product-detail__meta-row">
-          <dt>商品の状態</dt>
-          <dd>{conditionLabel}</dd>
-        </div>
-
-        <div className="product-detail__meta-row">
-          <dt>出品ステータス</dt>
-          <dd>{statusLabel}</dd>
-        </div>
-
-        <div className="product-detail__meta-row">
-          <dt>出品日時</dt>
-          <dd>{createdAtLabel}</dd>
-        </div>
-
-        <div className="product-detail__meta-row">
-          <dt>更新日時</dt>
-          <dd>{updatedAtLabel}</dd>
-        </div>
-      </dl>
+      <ProductMetaList
+        items={[
+          {
+            label: "商品の状態",
+            value: conditionLabel,
+          },
+          {
+            label: "出品ステータス",
+            value: statusLabel,
+          },
+          {
+            label: "出品日時",
+            value: createdAtLabel,
+          },
+          {
+            label: "更新日時",
+            value: updatedAtLabel,
+          },
+        ]}
+      />
 
       <ProductDescription description={description || "説明文はありません。"} />
     </>

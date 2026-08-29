@@ -1,4 +1,8 @@
-// frontend\amol\src\features\shared\presentation\components\ProductModelMeta.tsx
+// frontend/amol/src/features/shared/presentation/components/ProductModelMeta.tsx
+
+import ProductMetaList, {
+  type ProductMetaListItem,
+} from "./ProductMetaList";
 
 import type { ProductModelDisplay } from "../utils/productModelDisplay";
 
@@ -26,69 +30,68 @@ export default function ProductModelMeta({
     return null;
   }
 
-  return (
-    <dl className="product-detail__meta">
-      {conditionLabel ? (
-        <div className="product-detail__meta-row">
-          <dt>商品の状態</dt>
-          <dd>{conditionLabel}</dd>
-        </div>
-      ) : null}
+  const items: ProductMetaListItem[] = [];
 
-      {kindLabel ? (
-        <div className="product-detail__meta-row">
-          <dt>種別</dt>
-          <dd>{kindLabel}</dd>
-        </div>
-      ) : null}
+  if (conditionLabel) {
+    items.push({
+      label: "商品の状態",
+      value: conditionLabel,
+    });
+  }
 
-      {modelNumber ? (
-        <div className="product-detail__meta-row">
-          <dt>モデル番号</dt>
-          <dd>{modelNumber}</dd>
-        </div>
-      ) : null}
+  if (kindLabel) {
+    items.push({
+      label: "種別",
+      value: kindLabel,
+    });
+  }
 
-      {size ? (
-        <div className="product-detail__meta-row">
-          <dt>サイズ</dt>
-          <dd>{size}</dd>
-        </div>
-      ) : null}
+  if (modelNumber) {
+    items.push({
+      label: "モデル番号",
+      value: modelNumber,
+    });
+  }
 
-      {colorLabel || colorCssValue ? (
-        <div className="product-detail__meta-row">
-          <dt>カラー</dt>
-          <dd>
-            <span className="product-detail__color-value">
-              {colorCssValue ? (
-                <span
-                  className="product-detail__color-swatch"
-                  style={{ backgroundColor: colorCssValue }}
-                  aria-label={colorLabel || "商品カラー"}
-                  title={colorLabel || "商品カラー"}
-                />
-              ) : null}
+  if (size) {
+    items.push({
+      label: "サイズ",
+      value: size,
+    });
+  }
 
-              <span>{colorLabel || colorCssValue || "カラー未設定"}</span>
-            </span>
-          </dd>
-        </div>
-      ) : null}
+  if (colorLabel || colorCssValue) {
+    items.push({
+      label: "カラー",
+      value: (
+        <span className="product-detail__color-value">
+          {colorCssValue ? (
+            <span
+              className="product-detail__color-swatch"
+              style={{ backgroundColor: colorCssValue }}
+              aria-label={colorLabel || "商品カラー"}
+              title={colorLabel || "商品カラー"}
+            />
+          ) : null}
+          <span>{colorLabel || colorCssValue || "カラー未設定"}</span>
+        </span>
+      ),
+    });
+  }
 
-      {measurementsLabel !== "-" ? (
-        <div className="product-detail__meta-row">
-          <dt>採寸</dt>
-          <dd>{measurementsLabel}</dd>
-        </div>
-      ) : null}
+  if (measurementsLabel !== "-") {
+    items.push({
+      label: "採寸",
+      value: measurementsLabel,
+    });
+  }
 
-      {volumeLabel !== "-" ? (
-        <div className="product-detail__meta-row">
-          <dt>容量</dt>
-          <dd>{volumeLabel}</dd>
-        </div>
-      ) : null}
-    </dl>
-  );
+  if (volumeLabel !== "-") {
+    items.push({
+      label: "容量",
+      value: volumeLabel,
+    });
+  }
+
+  return <ProductMetaList items={items} />;
 }
