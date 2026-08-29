@@ -2,8 +2,8 @@
 
 import Layout from "../components/layout/Layout";
 
-import ResaleProductIdentity from "../features/shared/presentation/components/ResaleProductIdentity";
-import ResaleTokenCard from "../features/shared/presentation/components/ResaleTokenCard";
+import ResaleProductIdentity from "../features/shared/presentation/components/ProductIdentity";
+import ResaleTokenCard from "../features/shared/presentation/components/TokenSummaryCard";
 import ResaleCreateForm from "../features/resale/presentation/components/ResaleCreateForm";
 import ResaleCreateMissingTarget from "../features/resale/presentation/components/ResaleCreateMissingTarget";
 

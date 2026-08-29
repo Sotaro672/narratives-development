@@ -1,4 +1,4 @@
-// frontend/amol/src/features/shared/presentation/componentns/ResaleModelMeta.tsx
+// frontend\amol\src\features\shared\presentation\components\ProductModelMeta.tsx
 
 import type {
   ResaleModelDisplay,

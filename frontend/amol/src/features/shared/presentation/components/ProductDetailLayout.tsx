@@ -1,4 +1,4 @@
-// frontend/amol/src/features/shared/presentation/componentns/ResaleDetailLayout.tsx
+// frontend\amol\src\features\shared\presentation\components\ProductDetailLayout.tsx
 
 import type { ReactNode } from "react";
 

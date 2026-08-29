@@ -1,5 +1,4 @@
-// frontend/amol/src/features/shared/presentation/componentns/ResaleConditionGallery.tsx
-
+// frontend\amol\src\features\shared\presentation\components\ProductMediaGallery.tsx
 import MediaGallery, {
   type MediaGalleryItem,
 } from "../../../../components/ui/MediaGallery";

@@ -1,4 +1,4 @@
-// frontend/amol/src/features/shared/presentation/componentns/ResaleTokenCard.tsx
+// frontend\amol\src\features\shared\presentation\components\TokenSummaryCard.tsx
 
 import MediaIcon from "../../../../components/ui/MediaIcon";
 

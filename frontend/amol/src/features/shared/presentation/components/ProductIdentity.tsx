@@ -1,5 +1,4 @@
-// frontend/amol/src/features/shared/presentation/componentns/ResaleProductIdentity.tsx
-
+// frontend\amol\src\features\shared\presentation\components\ProductIdentity.tsx
 export type ResaleProductIdentityProps = {
   brandName?: string | null;
   productName?: string | null;

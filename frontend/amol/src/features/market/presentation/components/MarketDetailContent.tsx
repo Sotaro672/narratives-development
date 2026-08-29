@@ -4,11 +4,11 @@ import type {
   UseMarketDetailPageResult,
 } from "../hooks/useMarketDetailPage";
 
-import ResaleConditionGallery from "../../../shared/presentation/components/ResaleConditionGallery";
-import ResaleDetailLayout from "../../../shared/presentation/components/ResaleDetailLayout";
-import ResaleModelMeta from "../../../shared/presentation/components/ResaleModelMeta";
-import ResaleProductIdentity from "../../../shared/presentation/components/ResaleProductIdentity";
-import ResaleTokenCard from "../../../shared/presentation/components/ResaleTokenCard";
+import ResaleConditionGallery from "../../../shared/presentation/components/ProductMediaGallery";
+import ResaleDetailLayout from "../../../shared/presentation/components/ProductDetailLayout";
+import ResaleModelMeta from "../../../shared/presentation/components/ProductModelMeta";
+import ResaleProductIdentity from "../../../shared/presentation/components/ProductIdentity";
+import ResaleTokenCard from "../../../shared/presentation/components/TokenSummaryCard";
 
 import MarketReviewSection from "./MarketReviewSection";
 import MarketSellerCard from "./MarketSellerCard";

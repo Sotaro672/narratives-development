@@ -3,11 +3,11 @@
 import Layout from "../components/layout/Layout";
 import SectionHeader from "../components/ui/SectionHeader";
 
-import ResaleConditionGallery from "../features/shared/presentation/components/ResaleConditionGallery";
-import ResaleDetailLayout from "../features/shared/presentation/components/ResaleDetailLayout";
-import ResaleModelMeta from "../features/shared/presentation/components/ResaleModelMeta";
-import ResaleProductIdentity from "../features/shared/presentation/components/ResaleProductIdentity";
-import ResaleTokenCard from "../features/shared/presentation/components/ResaleTokenCard";
+import ResaleConditionGallery from "../features/shared/presentation/components/ProductMediaGallery";
+import ResaleDetailLayout from "../features/shared/presentation/components/ProductDetailLayout";
+import ResaleModelMeta from "../features/shared/presentation/components/ProductModelMeta";
+import ResaleProductIdentity from "../features/shared/presentation/components/ProductIdentity";
+import ResaleTokenCard from "../features/shared/presentation/components/TokenSummaryCard";
 import ResaleConditionMediaField from "../features/resale/presentation/components/ResaleConditionMediaField";
 import ResaleDetailEditForm from "../features/resale/presentation/components/ResaleDetailEditForm";
 import ResaleDetailReadonlyInfo from "../features/resale/presentation/components/ResaleDetailReadonlyInfo";
