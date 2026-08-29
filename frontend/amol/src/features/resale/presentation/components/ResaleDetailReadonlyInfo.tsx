@@ -15,10 +15,13 @@ export default function ResaleDetailReadonlyInfo({
 }: ResaleDetailReadonlyInfoViewProps) {
   return (
     <div className="resale-detail-page__listing-meta-card">
+      <div className="resale-detail-page__listing-status-tab">
+        {statusLabel}
+      </div>
+
       <ProductMetaList
         className="resale-detail-page__listing-meta"
         items={[
-          { label: "出品ステータス", value: statusLabel },
           { label: "出品日時", value: createdAtLabel },
           { label: "更新日時", value: updatedAtLabel },
         ]}
