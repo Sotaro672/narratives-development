@@ -4,11 +4,16 @@ import type {
   UseMarketDetailPageResult,
 } from "../hooks/useMarketDetailPage";
 
-import MarketProductMeta from "./MarketProductMeta";
-import MarketResaleGallery from "./MarketResaleGallery";
+import ResaleConditionGallery from "../../../shared/presentation/componentns/ResaleConditionGallery";
+import ResaleDetailLayout from "../../../shared/presentation/componentns/ResaleDetailLayout";
+import ResaleModelMeta from "../../../shared/presentation/componentns/ResaleModelMeta";
+import ResaleProductIdentity from "../../../shared/presentation/componentns/ResaleProductIdentity";
+import ResaleTokenCard from "../../../shared/presentation/componentns/ResaleTokenCard";
+
 import MarketReviewSection from "./MarketReviewSection";
 import MarketSellerCard from "./MarketSellerCard";
-import MarketTokenSummary from "./MarketTokenSummary";
+
+import "../../../shared/styles/resale-product-detail.css";
 
 type MarketDetailContentState =
   Pick<
@@ -85,6 +90,17 @@ export default function MarketDetailContent({
     handleSelectMedia,
   } = detail;
 
+  const model = {
+    hasModelInfo,
+    kindLabel: modelKind ? modelKindLabel : "",
+    modelNumber,
+    size: modelSize,
+    colorLabel: hasColorInfo ? modelColorName : "",
+    colorCssValue: hasColorInfo ? modelColorCssValue : "",
+    measurementsLabel,
+    volumeLabel: modelVolumeLabel,
+  };
+
   return (
     <div className="page-layout market-detail-page">
       {loading ? (
@@ -100,93 +116,78 @@ export default function MarketDetailContent({
       ) : null}
 
       {!loading && !error && item ? (
-        <section className="market-detail-page__card">
-          <div className="market-detail-page__media-column">
-            <MarketResaleGallery
+        <ResaleDetailLayout
+          media={
+            <ResaleConditionGallery
               items={galleryItems}
               activeIndex={safeActiveMediaIndex}
-              altFallback={
-                item.productName ||
-                item.tokenName ||
-                "出品画像"
-              }
+              altFallback={item.productName || item.tokenName || "出品画像"}
+              placeholderText="No Image"
               onPrev={handlePrevMedia}
               onNext={handleNextMedia}
               onSelect={handleSelectMedia}
             />
-
-              <MarketTokenSummary
+          }
+          mediaFooter={
+            <>
+              <ResaleTokenCard
+                brandName={item.brandName}
                 tokenName={tokenName}
                 tokenIcon={tokenIcon}
-                brandName={item.brandName || ""}
               />
 
-            <MarketSellerCard
-              avatarId={sellerAvatarId}
-              avatarName={avatarName}
-              avatarIcon={avatarIcon}
-              onOpen={onOpenSeller}
-            />
-          </div>
+              <MarketSellerCard
+                avatarId={sellerAvatarId}
+                avatarName={avatarName}
+                avatarIcon={avatarIcon}
+                onOpen={onOpenSeller}
+              />
+            </>
+          }
+        >
+          <ResaleProductIdentity
+            brandName={item.brandName}
+            productName={item.productName}
+            tokenName={item.tokenName}
+          />
 
-          <div className="market-detail-page__content">
-            <p className="market-detail-page__brand">
-              {item.brandName || "ブランド名未設定"}
+          <p className="resale-product-detail__price">
+            {priceLabel}
+          </p>
+
+          <ResaleModelMeta
+            conditionLabel={item.condition}
+            model={model}
+          />
+
+          {item.description ? (
+            <div className="resale-product-detail__description">
+              <h2>商品説明</h2>
+              <p>{item.description}</p>
+            </div>
+          ) : null}
+
+          <MarketReviewSection
+            reviews={reviews}
+            loading={loadingReviews}
+            error={reviewsError}
+          />
+
+          {cartMessage ? (
+            <p className="market-detail-page__cart-message">
+              {cartMessage}
             </p>
+          ) : null}
 
-            <h1 className="market-detail-page__title">
-              {item.productName ||
-                item.tokenName ||
-                "商品名未設定"}
-            </h1>
-
-            <p className="market-detail-page__price">
-              {priceLabel}
+          {cartErrorMessage ? (
+            <p
+              className="market-detail-page__cart-error"
+              role="alert"
+            >
+              {cartErrorMessage}
             </p>
-
-            <MarketProductMeta
-              condition={item.condition}
-              hasModelInfo={hasModelInfo}
-              modelKind={modelKind}
-              modelKindLabel={modelKindLabel}
-              modelNumber={modelNumber}
-              modelSize={modelSize}
-              hasColorInfo={hasColorInfo}
-              modelColorName={modelColorName}
-              modelColorCssValue={modelColorCssValue}
-              measurementsLabel={measurementsLabel}
-              modelVolumeLabel={modelVolumeLabel}
-            />
-
-            {item.description ? (
-              <div className="market-detail-page__description">
-                <h2>商品説明</h2>
-                <p>{item.description}</p>
-              </div>
-            ) : null}
-
-            <MarketReviewSection
-              reviews={reviews}
-              loading={loadingReviews}
-              error={reviewsError}
-            />
-
-            {cartMessage ? (
-              <p className="market-detail-page__cart-message">
-                {cartMessage}
-              </p>
-            ) : null}
-
-            {cartErrorMessage ? (
-              <p
-                className="market-detail-page__cart-error"
-                role="alert"
-              >
-                {cartErrorMessage}
-              </p>
-            ) : null}
-          </div>
-        </section>
+          ) : null}
+        </ResaleDetailLayout>
       ) : null}
     </div>
   );

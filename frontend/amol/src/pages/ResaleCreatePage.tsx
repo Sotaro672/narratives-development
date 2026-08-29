@@ -2,9 +2,10 @@
 
 import Layout from "../components/layout/Layout";
 
+import ResaleProductIdentity from "../features/shared/presentation/componentns/ResaleProductIdentity";
+import ResaleTokenCard from "../features/shared/presentation/componentns/ResaleTokenCard";
 import ResaleCreateForm from "../features/resale/presentation/components/ResaleCreateForm";
 import ResaleCreateMissingTarget from "../features/resale/presentation/components/ResaleCreateMissingTarget";
-import ResaleListingTargetCard from "../features/resale/presentation/components/ResaleListingTargetCard";
 
 import {
   useResaleCreatePage,
@@ -16,31 +17,25 @@ import "../styles/resale-page.css";
 export default function ResaleCreatePage() {
   const {
     target,
-
     formattedPrice,
     condition,
     description,
-
     conditionMediaItems,
     conditionMediaCurrentIndex,
     conditionMediaInputRef,
     conditionMediaCarouselRef,
-
     hasRequiredListingTarget,
     canSubmit,
     isSubmitting,
     errorMessage,
     submitButtonLabel,
-
     handlePriceChange,
     handleConditionChange,
     handleDescriptionChange,
-
     handleConditionMediaSelected,
     handleRemoveConditionMedia,
     handleConditionMediaCarouselScroll,
     handleMoveToConditionMediaSlide,
-
     handleBackToWallet,
     handleSubmit,
   } = useResaleCreatePage();
@@ -56,74 +51,48 @@ export default function ResaleCreatePage() {
       showFooter
       footerProps={{
         variant: "action",
-        buttonLabel:
-          submitButtonLabel,
-        disabled:
-          !canSubmit ||
-          isSubmitting,
-        onButtonClick:
-          handleSubmit,
+        buttonLabel: submitButtonLabel,
+        disabled: !canSubmit || isSubmitting,
+        onButtonClick: handleSubmit,
       }}
     >
       <section className="page-section">
         {!hasRequiredListingTarget ? (
           <ResaleCreateMissingTarget
-            onBackToWallet={
-              handleBackToWallet
-            }
+            onBackToWallet={handleBackToWallet}
           />
         ) : (
           <div className="page-stack">
-            <ResaleListingTargetCard
-              target={target}
-            />
+            <section className="page-card">
+              <ResaleProductIdentity
+                brandName={target.brandName}
+                productName={target.productName}
+                tokenName={target.tokenName}
+              />
+
+              <ResaleTokenCard
+                brandName={target.brandName}
+                tokenName={target.tokenName}
+                tokenIcon={target.tokenIconUrl}
+              />
+            </section>
 
             <ResaleCreateForm
-              formattedPrice={
-                formattedPrice
-              }
-              condition={
-                condition
-              }
-              description={
-                description
-              }
-              conditionMediaItems={
-                conditionMediaItems
-              }
-              conditionMediaCurrentIndex={
-                conditionMediaCurrentIndex
-              }
-              conditionMediaInputRef={
-                conditionMediaInputRef
-              }
-              conditionMediaCarouselRef={
-                conditionMediaCarouselRef
-              }
-              disabled={
-                isSubmitting
-              }
-              onPriceChange={
-                handlePriceChange
-              }
-              onConditionChange={
-                handleConditionChange
-              }
-              onDescriptionChange={
-                handleDescriptionChange
-              }
-              onConditionMediaSelected={
-                handleConditionMediaSelected
-              }
-              onRemoveConditionMedia={
-                handleRemoveConditionMedia
-              }
-              onConditionMediaCarouselScroll={
-                handleConditionMediaCarouselScroll
-              }
-              onMoveToConditionMediaSlide={
-                handleMoveToConditionMediaSlide
-              }
+              formattedPrice={formattedPrice}
+              condition={condition}
+              description={description}
+              conditionMediaItems={conditionMediaItems}
+              conditionMediaCurrentIndex={conditionMediaCurrentIndex}
+              conditionMediaInputRef={conditionMediaInputRef}
+              conditionMediaCarouselRef={conditionMediaCarouselRef}
+              disabled={isSubmitting}
+              onPriceChange={handlePriceChange}
+              onConditionChange={handleConditionChange}
+              onDescriptionChange={handleDescriptionChange}
+              onConditionMediaSelected={handleConditionMediaSelected}
+              onRemoveConditionMedia={handleRemoveConditionMedia}
+              onConditionMediaCarouselScroll={handleConditionMediaCarouselScroll}
+              onMoveToConditionMediaSlide={handleMoveToConditionMediaSlide}
             />
 
             {errorMessage ? (
