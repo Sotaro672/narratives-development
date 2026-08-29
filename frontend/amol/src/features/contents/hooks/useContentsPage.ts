@@ -219,6 +219,19 @@ export function useContentsPage() {
       return;
     }
 
+    const resaleCreateState = {
+      assetId: contents.assetId,
+      productId: contents.productId,
+      brandId: contents.brandId,
+      brandName: contents.brandName,
+      productName: contents.productName,
+      productBlueprintId: contents.productBlueprintId,
+      tokenBlueprintId: contents.tokenBlueprintId,
+      tokenName,
+      tokenIconUrl,
+      tokenDescription,
+    };
+
     try {
       setError("");
 
@@ -228,23 +241,19 @@ export function useContentsPage() {
       });
 
       if (!payoutAccount) {
-        navigate("/settings/payout-account");
+        navigate("/settings/payout-account", {
+          state: {
+            returnAfterRegistration: {
+              pathname: "/resale",
+              state: resaleCreateState,
+            },
+          },
+        });
         return;
       }
 
       navigate("/resale", {
-        state: {
-          assetId: contents.assetId,
-          productId: contents.productId,
-          brandId: contents.brandId,
-          brandName: contents.brandName,
-          productName: contents.productName,
-          productBlueprintId: contents.productBlueprintId,
-          tokenBlueprintId: contents.tokenBlueprintId,
-          tokenName,
-          tokenIconUrl,
-          tokenDescription,
-        },
+        state: resaleCreateState,
       });
     } catch (err) {
       console.error(

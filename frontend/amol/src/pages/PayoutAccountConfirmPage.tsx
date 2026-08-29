@@ -29,7 +29,11 @@ export default function PayoutAccountConfirmPage() {
   const auth = getAuth();
   const navigate = useNavigate();
   const { isDesktop } = useContactViewport();
-  const { draft, isComplete } = usePayoutAccountRegistration();
+  const {
+    draft,
+    isComplete,
+    returnAfterRegistration,
+  } = usePayoutAccountRegistration();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -45,10 +49,7 @@ export default function PayoutAccountConfirmPage() {
       return;
     }
 
-    if (
-      !draft.accountNumber.trim() ||
-      !draft.accountHolderName.trim()
-    ) {
+    if (!draft.accountNumber.trim() || !draft.accountHolderName.trim()) {
       navigate("/settings/payout-account/account", { replace: true });
     }
   }, [
@@ -92,6 +93,14 @@ export default function PayoutAccountConfirmPage() {
         },
       });
 
+      if (returnAfterRegistration) {
+        navigate(returnAfterRegistration.pathname, {
+          replace: true,
+          state: returnAfterRegistration.state,
+        });
+        return;
+      }
+
       navigate("/settings/payout-account/complete", { replace: true });
     } catch (error) {
       console.error(error);
@@ -99,12 +108,19 @@ export default function PayoutAccountConfirmPage() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "売上受取口座の登録に失敗しました。"
+          : "売上受取口座の登録に失敗しました。",
       );
     } finally {
       setIsSubmitting(false);
     }
-  }, [auth, draft, isComplete, isSubmitting, navigate]);
+  }, [
+    auth,
+    draft,
+    isComplete,
+    isSubmitting,
+    navigate,
+    returnAfterRegistration,
+  ]);
 
   const actionButtonDisabled = !isComplete || isSubmitting;
 
@@ -147,9 +163,7 @@ export default function PayoutAccountConfirmPage() {
             <button
               type="button"
               className="payout-account-confirm-page__edit-button"
-              onClick={() =>
-                navigate("/settings/payout-account/bank")
-              }
+              onClick={() => navigate("/settings/payout-account/bank")}
               disabled={isSubmitting}
             >
               変更
@@ -170,9 +184,7 @@ export default function PayoutAccountConfirmPage() {
             <button
               type="button"
               className="payout-account-confirm-page__edit-button"
-              onClick={() =>
-                navigate("/settings/payout-account/branch")
-              }
+              onClick={() => navigate("/settings/payout-account/branch")}
               disabled={isSubmitting}
             >
               変更
@@ -192,9 +204,7 @@ export default function PayoutAccountConfirmPage() {
             <button
               type="button"
               className="payout-account-confirm-page__edit-button"
-              onClick={() =>
-                navigate("/settings/payout-account/account")
-              }
+              onClick={() => navigate("/settings/payout-account/account")}
               disabled={isSubmitting}
             >
               変更
@@ -214,9 +224,7 @@ export default function PayoutAccountConfirmPage() {
             <button
               type="button"
               className="payout-account-confirm-page__edit-button"
-              onClick={() =>
-                navigate("/settings/payout-account/account")
-              }
+              onClick={() => navigate("/settings/payout-account/account")}
               disabled={isSubmitting}
             >
               変更
@@ -236,9 +244,7 @@ export default function PayoutAccountConfirmPage() {
             <button
               type="button"
               className="payout-account-confirm-page__edit-button"
-              onClick={() =>
-                navigate("/settings/payout-account/account")
-              }
+              onClick={() => navigate("/settings/payout-account/account")}
               disabled={isSubmitting}
             >
               変更
@@ -256,10 +262,7 @@ export default function PayoutAccountConfirmPage() {
         </div>
 
         {errorMessage ? (
-          <p
-            className="payout-account-confirm-page__error"
-            role="alert"
-          >
+          <p className="payout-account-confirm-page__error" role="alert">
             {errorMessage}
           </p>
         ) : null}

@@ -1,5 +1,7 @@
 // frontend/amol/src/pages/PaymentMethodPage.tsx
+
 import { Elements } from "@stripe/react-stripe-js";
+import { useLocation } from "react-router-dom";
 
 import "../styles/page-layout.css";
 import "../styles/settings-page.css";
@@ -12,6 +14,8 @@ import PaymentMethodStatusCard from "../features/payment-method/components/Payme
 import usePaymentMethodPage from "../features/payment-method/hooks/usePaymentMethodPage";
 
 export default function PaymentMethodPage() {
+  const location = useLocation();
+
   const {
     paymentMethod,
     cardholderName,
@@ -27,13 +31,24 @@ export default function PaymentMethodPage() {
     handleCompleted,
   } = usePaymentMethodPage();
 
+  const requestedBackTo =
+    (
+      location.state as {
+        paymentBackTo?: string;
+      } | null
+    )?.paymentBackTo ?? "";
+
+  const backTo = requestedBackTo.startsWith("/payments/")
+    ? requestedBackTo
+    : "/lists";
+
   return (
     <Layout
       title="支払方法"
       titleClickable={false}
       showBackButton
       mode="signin"
-      backTo="/lists"
+      backTo={backTo}
     >
       <section className="page-section settings-page">
         <div className="payment-method-page-content">

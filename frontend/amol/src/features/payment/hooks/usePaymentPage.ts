@@ -48,24 +48,17 @@ type ShippingQuoteItemResponse = {
   listId: string;
   modelId: string;
   qty: number;
-
   carrier: string;
-
   transportationId?: string;
-
   size: number;
-
   unitAmount: number;
   amount: number;
-
   currency: string;
 };
 
 type ShippingQuoteResponse = {
   items: ShippingQuoteItemResponse[];
-
   shippingAmount: number;
-
   currency: string;
 };
 
@@ -198,15 +191,11 @@ function calculatePaymentAmount(
   }
 
   let taxableAmount8 = 0;
-
-  let taxableAmount10 =
-    shippingAmount;
-
+  let taxableAmount10 = shippingAmount;
   let calculatedSubtotalAmount = 0;
 
   for (const item of cartItems) {
-    const price =
-      item.price;
+    const price = item.price;
 
     if (
       price === undefined ||
@@ -486,6 +475,10 @@ export function usePaymentPage({
       : listId
         ? `/lists/${encodeURIComponent(listId)}`
         : "/lists";
+
+  const paymentPagePath = listId
+    ? `/payments/${encodeURIComponent(listId)}`
+    : "/lists";
 
   const paymentButtonLabel = isPaying
     ? "購入処理中..."
@@ -780,11 +773,19 @@ export function usePaymentPage({
   };
 
   const handleGoToPaymentMethod = () => {
-    navigate("/settings/payment-method");
+    navigate("/settings/payment-method", {
+      state: {
+        paymentBackTo: paymentPagePath,
+      },
+    });
   };
 
   const handleGoToShippingAddress = () => {
-    navigate("/settings/shipping-address");
+    navigate("/settings/shipping-address", {
+      state: {
+        paymentBackTo: paymentPagePath,
+      },
+    });
   };
 
   return {
