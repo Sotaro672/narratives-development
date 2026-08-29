@@ -97,6 +97,29 @@
 }
 
 /* ===============================
+   Color
+================================ */
+
+.resale-detail-page__color-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.resale-detail-page__color-swatch {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+/* ===============================
    Description
 ================================ */
 
@@ -217,5 +240,11 @@
 
   .resale-detail-page .page-definition-list__row dd {
     font-size: 15px;
+  }
+
+  .resale-detail-page__color-swatch {
+    width: 18px;
+    height: 18px;
+    flex-basis: 18px;
   }
 }

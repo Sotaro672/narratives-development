@@ -1,7 +1,5 @@
 // frontend/amol/src/features/resale/presentation/components/ResaleDetailModelInfo.tsx
 
-import SectionHeader from "../../../../components/ui/SectionHeader";
-
 import type {
   ResaleDetailModelInfoProps,
 } from "../types/resaleDetailPageTypes";
@@ -21,11 +19,6 @@ export default function ResaleDetailModelInfo({
 
   return (
     <section className="page-card">
-      <SectionHeader
-        title="商品情報"
-        titleAs="h2"
-      />
-
       <dl className="page-definition-list resale-detail-page__readonly-meta">
         {kindLabel ? (
           <div className="page-definition-list__row">
@@ -55,8 +48,7 @@ export default function ResaleDetailModelInfo({
           </div>
         ) : null}
 
-        {measurementsLabel &&
-        measurementsLabel !== "-" ? (
+        {measurementsLabel && measurementsLabel !== "-" ? (
           <div className="page-definition-list__row">
             <dt>採寸</dt>
             <dd>{measurementsLabel}</dd>

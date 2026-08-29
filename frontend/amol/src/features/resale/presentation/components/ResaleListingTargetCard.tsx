@@ -1,7 +1,6 @@
 // frontend/amol/src/features/resale/presentation/components/ResaleListingTargetCard.tsx
 
 import MediaIcon from "../../../../components/ui/MediaIcon";
-import SectionHeader from "../../../../components/ui/SectionHeader";
 import type { ResaleCreateTarget } from "../types/resaleCreatePageTypes";
 
 export type ResaleListingTargetCardTarget = Pick<
@@ -13,13 +12,13 @@ export type ResaleListingTargetCardProps = {
   target: ResaleListingTargetCardTarget;
 };
 
-export default function ResaleListingTargetCard({ target }: ResaleListingTargetCardProps) {
+export default function ResaleListingTargetCard({
+  target,
+}: ResaleListingTargetCardProps) {
   const { brandName, productName, tokenIconUrl, tokenName } = target;
 
   return (
     <section className="page-card">
-      <SectionHeader title="出品対象" titleAs="h2" />
-
       <div className="resale-token-summary">
         <MediaIcon
           src={tokenIconUrl}

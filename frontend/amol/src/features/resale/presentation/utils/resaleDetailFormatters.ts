@@ -16,10 +16,8 @@ export function formatResaleStatus(
   switch (status) {
     case "listing":
       return "出品中";
-
     case "suspended":
       return "公開停止";
-
     case "sold":
       return "売却済み";
   }
@@ -34,39 +32,55 @@ export function formatResaleModelKind(
   switch (kind) {
     case "apparel":
       return "アパレル";
-
     case "alcohol":
       return "酒類";
-
     default:
       return kind || "-";
   }
 }
 
+export type ResaleModelColorDisplay = {
+  label: string;
+  cssColor: string;
+};
+
 /**
- * カラー情報を表示用の文言へ変換する。
+ * カラー情報を表示用の色名とCSSカラーへ変換する。
+ *
+ * rgb は 0xRRGGBB 相当の整数値として扱う。
+ * 例:
+ * - 16711680 -> #ff0000
+ * - 65280    -> #00ff00
+ * - 255      -> #0000ff
  */
 export function formatResaleModelColor(
   color: ResaleListing["color"],
-): string {
+): ResaleModelColorDisplay | null {
   if (!color) {
-    return "-";
+    return null;
   }
 
   const name = textOrEmpty(color.name);
   const rgb = color.rgb;
 
-  if (!name && rgb === undefined) {
-    return "-";
+  if (
+    rgb === undefined ||
+    !Number.isInteger(rgb) ||
+    rgb < 0 ||
+    rgb > 0xffffff
+  ) {
+    return name
+      ? {
+          label: name,
+          cssColor: "",
+        }
+      : null;
   }
 
-  if (rgb === undefined) {
-    return name || "-";
-  }
-
-  return name
-    ? `${name} / RGB: ${rgb}`
-    : `RGB: ${rgb}`;
+  return {
+    label: name,
+    cssColor: `#${rgb.toString(16).padStart(6, "0")}`,
+  };
 }
 
 /**
@@ -82,10 +96,7 @@ export function formatResaleModelVolume(
   const amount = volume.amount;
   const unit = textOrEmpty(volume.unit);
 
-  if (
-    amount === undefined ||
-    amount <= 0
-  ) {
+  if (amount === undefined || amount <= 0) {
     return unit || "-";
   }
 

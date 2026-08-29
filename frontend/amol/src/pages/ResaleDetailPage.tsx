@@ -1,8 +1,10 @@
 // frontend/amol/src/pages/ResaleDetailPage.tsx
 
 import Layout from "../components/layout/Layout";
+import MediaGallery from "../components/ui/MediaGallery";
 import SectionHeader from "../components/ui/SectionHeader";
 
+import ResaleConditionMediaField from "../features/resale/presentation/components/ResaleConditionMediaField";
 import ResaleDetailEditForm from "../features/resale/presentation/components/ResaleDetailEditForm";
 import ResaleDetailModelInfo from "../features/resale/presentation/components/ResaleDetailModelInfo";
 import ResaleDetailReadonlyInfo from "../features/resale/presentation/components/ResaleDetailReadonlyInfo";
@@ -31,47 +33,27 @@ export default function ResaleDetailPage() {
     handleBackToWallet,
   } = useResaleDetailPage();
 
-  const showLoadError =
-    !loading &&
-    !item &&
-    Boolean(errorMessage);
-
-  const showDetail =
-    !loading &&
-    Boolean(item);
+  const showLoadError = !loading && !item && Boolean(errorMessage);
+  const showDetail = !loading && Boolean(item);
 
   const headerActionProps =
     footerProps?.variant === "action"
       ? {
-          actionButtonLabel:
-            footerProps.buttonLabel,
-          onActionButtonClick:
-            footerProps.onButtonClick,
-          actionButtonDisabled:
-            footerProps.disabled,
+          actionButtonLabel: footerProps.buttonLabel,
+          onActionButtonClick: footerProps.onButtonClick,
+          actionButtonDisabled: footerProps.disabled,
         }
       : footerProps?.variant === "tripleAction"
         ? {
-            actionButtonLabel:
-              footerProps.centerButtonLabel,
-            onActionButtonClick:
-              footerProps.onCenterButtonClick,
-            actionButtonDisabled:
-              footerProps.centerButtonDisabled,
-
-            secondaryActionButtonLabel:
-              footerProps.leftButtonLabel,
-            onSecondaryActionButtonClick:
-              footerProps.onLeftButtonClick,
-            secondaryActionButtonDisabled:
-              footerProps.leftButtonDisabled,
-
-            tertiaryActionButtonLabel:
-              footerProps.rightButtonLabel,
-            onTertiaryActionButtonClick:
-              footerProps.onRightButtonClick,
-            tertiaryActionButtonDisabled:
-              footerProps.rightButtonDisabled,
+            actionButtonLabel: footerProps.centerButtonLabel,
+            onActionButtonClick: footerProps.onCenterButtonClick,
+            actionButtonDisabled: footerProps.centerButtonDisabled,
+            secondaryActionButtonLabel: footerProps.leftButtonLabel,
+            onSecondaryActionButtonClick: footerProps.onLeftButtonClick,
+            secondaryActionButtonDisabled: footerProps.leftButtonDisabled,
+            tertiaryActionButtonLabel: footerProps.rightButtonLabel,
+            onTertiaryActionButtonClick: footerProps.onRightButtonClick,
+            tertiaryActionButtonDisabled: footerProps.rightButtonDisabled,
           }
         : {};
 
@@ -91,21 +73,14 @@ export default function ResaleDetailPage() {
       <section className="page-section resale-detail-page">
         {loading ? (
           <div className="page-card">
-            <p className="page-card__text">
-              読み込み中です...
-            </p>
+            <p className="page-card__text">読み込み中です...</p>
           </div>
         ) : null}
 
         {showLoadError ? (
           <div className="page-card">
-            <SectionHeader
-              title="出品情報を表示できません"
-              titleAs="h2"
-            >
-              <p className="page-card__text">
-                {errorMessage}
-              </p>
+            <SectionHeader title="出品情報を表示できません" titleAs="h2">
+              <p className="page-card__text">{errorMessage}</p>
             </SectionHeader>
 
             <div className="page-actions">
@@ -130,38 +105,52 @@ export default function ResaleDetailPage() {
 
         {showDetail ? (
           <div className="page-stack">
-            <ResaleListingTargetCard
-              target={listingTarget}
-            />
+            <section className="page-card">
+              {isEditing ? (
+                <ResaleConditionMediaField
+                  items={editFormProps.conditionMediaItems}
+                  currentIndex={editFormProps.conditionMediaCurrentIndex}
+                  inputRef={editFormProps.conditionMediaInputRef}
+                  carouselRef={editFormProps.conditionMediaCarouselRef}
+                  disabled={editFormProps.saving}
+                  selecting={editFormProps.saving}
+                  onFilesSelected={editFormProps.onConditionMediaSelected}
+                  onRemoveItem={editFormProps.onRemoveConditionMedia}
+                  onCarouselScroll={editFormProps.onConditionMediaCarouselScroll}
+                  onMoveToSlide={editFormProps.onMoveToConditionMediaSlide}
+                />
+              ) : (
+                <MediaGallery
+                  items={readonlyInfoProps.galleryItems}
+                  activeIndex={readonlyInfoProps.activeGalleryIndex}
+                  altFallback="商品状態の写真"
+                  placeholderText="商品状態の写真はありません。"
+                  className="resale-detail-page__gallery"
+                  onPrev={readonlyInfoProps.onPrevGalleryItem}
+                  onNext={readonlyInfoProps.onNextGalleryItem}
+                  onSelect={readonlyInfoProps.onSelectGalleryItem}
+                />
+              )}
+            </section>
 
-            <ResaleDetailModelInfo
-              {...modelInfoProps}
-            />
+            <ResaleListingTargetCard target={listingTarget} />
+
+            <ResaleDetailModelInfo {...modelInfoProps} />
 
             {isEditing ? (
-              <ResaleDetailEditForm
-                {...editFormProps}
-              />
+              <ResaleDetailEditForm {...editFormProps} />
             ) : (
-              <ResaleDetailReadonlyInfo
-                {...readonlyInfoProps}
-              />
+              <ResaleDetailReadonlyInfo {...readonlyInfoProps} />
             )}
 
             {errorMessage ? (
-              <p
-                className="page-error"
-                role="alert"
-              >
+              <p className="page-error" role="alert">
                 {errorMessage}
               </p>
             ) : null}
 
             {saveMessage ? (
-              <p
-                className="page-card__text"
-                role="status"
-              >
+              <p className="page-card__text" role="status">
                 {saveMessage}
               </p>
             ) : null}

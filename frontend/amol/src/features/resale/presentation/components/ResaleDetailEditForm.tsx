@@ -4,7 +4,6 @@ import type { MouseEventHandler } from "react";
 
 import Dropdown from "../../../../components/ui/Dropdown";
 import Input from "../../../../components/ui/Input";
-import SectionHeader from "../../../../components/ui/SectionHeader";
 import Textbox from "../../../../components/ui/Textbox";
 
 import {
@@ -14,8 +13,6 @@ import {
 import { getResaleEditableStatusLabel } from "../../constants/resaleStatusOptions";
 
 import type { ResaleDetailEditFormProps } from "../types/resaleDetailPageTypes";
-
-import ResaleConditionMediaField from "./ResaleConditionMediaField";
 
 const DESCRIPTION_MAX_LENGTH = 1000;
 
@@ -54,25 +51,15 @@ export default function ResaleDetailEditForm({
   saving,
   createdAtLabel,
   updatedAtLabel,
-  conditionMediaItems,
-  conditionMediaCurrentIndex,
-  conditionMediaInputRef,
-  conditionMediaCarouselRef,
   onPriceChange,
   onConditionChange,
   onStatusChange,
   onDescriptionChange,
-  onConditionMediaSelected,
-  onRemoveConditionMedia,
-  onConditionMediaCarouselScroll,
-  onMoveToConditionMediaSlide,
 }: ResaleDetailEditFormProps) {
   const statusLabel = getResaleEditableStatusLabel(status);
 
   return (
     <section className="page-card">
-      <SectionHeader title="販売情報" titleAs="h2" />
-
       <div className="page-form">
         <Input
           label="販売価格"
@@ -123,19 +110,6 @@ export default function ResaleDetailEditForm({
             )}
           />
         </div>
-
-        <ResaleConditionMediaField
-          items={conditionMediaItems}
-          currentIndex={conditionMediaCurrentIndex}
-          inputRef={conditionMediaInputRef}
-          carouselRef={conditionMediaCarouselRef}
-          disabled={saving}
-          selecting={saving}
-          onFilesSelected={onConditionMediaSelected}
-          onRemoveItem={onRemoveConditionMedia}
-          onCarouselScroll={onConditionMediaCarouselScroll}
-          onMoveToSlide={onMoveToConditionMediaSlide}
-        />
 
         <Textbox
           label="説明文"

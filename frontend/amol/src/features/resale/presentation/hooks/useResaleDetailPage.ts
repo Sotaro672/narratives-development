@@ -223,7 +223,9 @@ export function useResaleDetailPage() {
     ? formatResaleModelKind(modelKind)
     : "";
 
-  const modelColorLabel = formatResaleModelColor(item?.color);
+  const modelColor = formatResaleModelColor(item?.color);
+  const modelColorLabel = modelColor?.label ?? "";
+  const modelColorCssValue = modelColor?.cssColor ?? "";
   const modelVolumeLabel = formatResaleModelVolume(item?.volume);
   const measurementsLabel = formatResaleMeasurements(item?.measurements);
 
@@ -232,7 +234,8 @@ export function useResaleDetailPage() {
     Boolean(modelKindLabel) ||
     Boolean(modelNumber) ||
     Boolean(modelSize) ||
-    modelColorLabel !== "-" ||
+    Boolean(modelColorLabel) ||
+    Boolean(modelColorCssValue) ||
     modelVolumeLabel !== "-" ||
     measurementsLabel !== "-";
 
@@ -573,12 +576,14 @@ export function useResaleDetailPage() {
       modelNumber,
       size: modelSize,
       colorLabel: modelColorLabel,
+      colorCssValue: modelColorCssValue,
       measurementsLabel,
       volumeLabel: modelVolumeLabel,
     }),
     [
       hasModelInfo,
       measurementsLabel,
+      modelColorCssValue,
       modelColorLabel,
       modelKindLabel,
       modelNumber,

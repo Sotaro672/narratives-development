@@ -33,6 +33,7 @@ export type ResaleDetailModelInfoProps = {
   modelNumber: string;
   size: string;
   colorLabel: string;
+  colorCssValue: string;
   measurementsLabel: string;
   volumeLabel: string;
 };
