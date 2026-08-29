@@ -3,15 +3,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { MediaGalleryItem } from "../../../../components/ui/MediaGallery";
-import { rgbToCssColor, toSafeColorRGB } from "../../../../components/utils/color";
 import { textOrEmpty } from "../../../../components/utils/textOrEmpty";
 
 import { fetchMarketProductBlueprintReviews } from "../../infrastructure/marketReviewApi";
 import { fetchMarketResaleById } from "../../infrastructure/marketResaleApi";
 import { fetchMarketResaleConditionImages } from "../../infrastructure/marketResaleImageApi";
 
+import {
+  createResaleConditionGalleryItems,
+} from "../../../shared/presentation/utils/resaleConditionMedia";
+import {
+  createResaleModelDisplay,
+  type ResaleModelDisplay,
+} from "../../../shared/presentation/utils/resaleModelDisplay";
 import type { MarketResaleListing } from "../../../shared/types/marketResale";
-import type { ResaleColor, ResaleConditionImage, ResaleVolume } from "../../../shared/types/resale";
+import type { ResaleConditionImage } from "../../../shared/types/resale";
 import type { ProductBlueprintReviewPage } from "../../../shared/types/review";
 
 const DEFAULT_REVIEW_PAGE = 1;
@@ -43,20 +49,7 @@ export type UseMarketDetailPageResult = {
 
   title: string;
   priceLabel: string;
-
-  modelId: string;
-  modelKind: string;
-  modelKindLabel: string;
-  modelNumber: string;
-  modelSize: string;
-
-  modelColorName: string;
-  modelColorCssValue: string;
-  hasColorInfo: boolean;
-
-  modelVolumeLabel: string;
-  measurementsLabel: string;
-  hasModelInfo: boolean;
+  model: ResaleModelDisplay;
 
   tokenName: string;
   tokenIcon: string;
@@ -76,123 +69,6 @@ export type UseMarketDetailPageResult = {
   handleSelectMedia: (index: number) => void;
   handleAddToCart: () => Promise<boolean>;
 };
-
-function formatModelKind(value: string): string {
-  switch (value) {
-    case "apparel":
-      return "アパレル";
-    case "alcohol":
-      return "酒類";
-    default:
-      return value || "-";
-  }
-}
-
-function getModelColorName(color: ResaleColor | null | undefined): string {
-  return textOrEmpty(color?.name);
-}
-
-function getModelColorCssValue(color: ResaleColor | null | undefined): string {
-  if (!color) {
-    return "";
-  }
-
-  return rgbToCssColor(toSafeColorRGB(color.rgb));
-}
-
-function hasModelColor(color: ResaleColor | null | undefined): boolean {
-  if (!color) {
-    return false;
-  }
-
-  return Boolean(getModelColorName(color)) || Number.isFinite(Number(color.rgb));
-}
-
-function formatModelVolume(volume: ResaleVolume | null | undefined): string {
-  if (!volume) {
-    return "-";
-  }
-
-  const amount = Number(volume.amount ?? 0);
-  const unit = textOrEmpty(volume.unit);
-
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return unit || "-";
-  }
-
-  return unit ? `${amount.toLocaleString("ja-JP")}${unit}` : `${amount}`;
-}
-
-function formatMeasurements(
-  measurements: Record<string, number> | null | undefined,
-): string {
-  if (!measurements) {
-    return "-";
-  }
-
-  const entries = Object.entries(measurements).filter(([key, value]) => {
-    return textOrEmpty(key) !== "" && Number.isFinite(Number(value));
-  });
-
-  if (entries.length === 0) {
-    return "-";
-  }
-
-  return entries
-    .sort(([a], [b]) => a.localeCompare(b, "ja"))
-    .map(([key, value]) => `${key}: ${Number(value).toLocaleString("ja-JP")}cm`)
-    .join(" / ");
-}
-
-function getFileTypeFromUrl(url: string): string {
-  const normalizedUrl = url.toLowerCase();
-
-  if (
-    normalizedUrl.includes(".mp4") ||
-    normalizedUrl.includes(".mov") ||
-    normalizedUrl.includes(".webm")
-  ) {
-    return "video/mp4";
-  }
-
-  return "image/*";
-}
-
-function sortMarketResaleImages(images: ResaleConditionImage[]): ResaleConditionImage[] {
-  return [...images].sort((a, b) => {
-    if (a.displayOrder !== b.displayOrder) {
-      return a.displayOrder - b.displayOrder;
-    }
-
-    return a.id.localeCompare(b.id, "ja");
-  });
-}
-
-function createGalleryItemFromImage(image: ResaleConditionImage): MediaGalleryItem {
-  return {
-    id: image.id,
-    url: image.url,
-    fileName: "出品画像",
-    type: getFileTypeFromUrl(image.url),
-  };
-}
-
-function createFallbackGalleryItem(
-  item: MarketResaleListing,
-): MediaGalleryItem | null {
-  const imageUrl = textOrEmpty(item.imageUrl);
-
-  if (!imageUrl) {
-    return null;
-  }
-
-  return {
-    id: item.id,
-    url: imageUrl,
-    fileName: item.productName || item.tokenName || "出品画像",
-    type: getFileTypeFromUrl(imageUrl),
-  };
-}
 
 function getErrorMessage(error: unknown, fallbackMessage: string): string {
   if (error instanceof Error && error.message.trim() !== "") {
@@ -291,7 +167,9 @@ export function useMarketDetailPage({
           setItem(null);
           setImages([]);
           setReviews(null);
-          setError(getErrorMessage(loadError, "出品情報の取得に失敗しました。"));
+          setError(
+            getErrorMessage(loadError, "出品情報の取得に失敗しました。"),
+          );
         }
       } finally {
         if (!cancelled) {
@@ -312,30 +190,10 @@ export function useMarketDetailPage({
     ? `${item.price.toLocaleString("ja-JP")}円`
     : "価格未設定";
 
-  const modelId = textOrEmpty(item?.modelId);
-  const modelKind = textOrEmpty(item?.kind);
-  const modelKindLabel = formatModelKind(modelKind);
-  const modelNumber = textOrEmpty(item?.modelNumber);
-  const modelSize = textOrEmpty(item?.size);
-
-  const modelColorName = getModelColorName(item?.color);
-  const modelColorCssValue = getModelColorCssValue(item?.color);
-  const hasColorInfo = hasModelColor(item?.color);
-  const modelVolumeLabel = formatModelVolume(item?.volume);
-
-  const measurementsLabel = useMemo(
-    () => formatMeasurements(item?.measurements),
-    [item?.measurements],
+  const model = useMemo(
+    () => createResaleModelDisplay(item),
+    [item],
   );
-
-  const hasModelInfo =
-    Boolean(modelId) ||
-    Boolean(modelKind) ||
-    Boolean(modelNumber) ||
-    Boolean(modelSize) ||
-    hasColorInfo ||
-    modelVolumeLabel !== "-" ||
-    measurementsLabel !== "-";
 
   const tokenName = textOrEmpty(item?.tokenName);
   const tokenIcon = textOrEmpty(item?.tokenIcon);
@@ -343,20 +201,19 @@ export function useMarketDetailPage({
   const avatarName = textOrEmpty(item?.avatarName);
   const avatarIcon = textOrEmpty(item?.avatarIcon);
 
-  const galleryItems = useMemo<MediaGalleryItem[]>(() => {
-    const imageItems = sortMarketResaleImages(images).map(createGalleryItemFromImage);
-
-    if (imageItems.length > 0) {
-      return imageItems;
-    }
-
-    if (!item) {
-      return [];
-    }
-
-    const fallbackItem = createFallbackGalleryItem(item);
-    return fallbackItem ? [fallbackItem] : [];
-  }, [images, item]);
+  const galleryItems = useMemo<MediaGalleryItem[]>(
+    () =>
+      createResaleConditionGalleryItems(images, {
+        fallback: item
+          ? {
+              id: item.id,
+              url: item.imageUrl,
+              fileName: item.productName || item.tokenName || "出品画像",
+            }
+          : null,
+      }),
+    [images, item],
+  );
 
   const safeActiveMediaIndex =
     activeMediaIndex >= 0 && activeMediaIndex < galleryItems.length
@@ -447,17 +304,7 @@ export function useMarketDetailPage({
     cartErrorMessage,
     title,
     priceLabel,
-    modelId,
-    modelKind,
-    modelKindLabel,
-    modelNumber,
-    modelSize,
-    modelColorName,
-    modelColorCssValue,
-    hasColorInfo,
-    modelVolumeLabel,
-    measurementsLabel,
-    hasModelInfo,
+    model,
     tokenName,
     tokenIcon,
     sellerAvatarId,

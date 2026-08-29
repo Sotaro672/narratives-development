@@ -2,8 +2,8 @@
 
 import Layout from "../components/layout/Layout";
 
-import ResaleProductIdentity from "../features/shared/presentation/componentns/ResaleProductIdentity";
-import ResaleTokenCard from "../features/shared/presentation/componentns/ResaleTokenCard";
+import ResaleProductIdentity from "../features/shared/presentation/components/ResaleProductIdentity";
+import ResaleTokenCard from "../features/shared/presentation/components/ResaleTokenCard";
 import ResaleCreateForm from "../features/resale/presentation/components/ResaleCreateForm";
 import ResaleCreateMissingTarget from "../features/resale/presentation/components/ResaleCreateMissingTarget";
 
@@ -13,6 +13,7 @@ import {
 
 import "../styles/page-layout.css";
 import "../styles/resale-page.css";
+import "../features/shared/styles/resale-product-detail.css";
 
 export default function ResaleCreatePage() {
   const {
@@ -96,10 +97,7 @@ export default function ResaleCreatePage() {
             />
 
             {errorMessage ? (
-              <p
-                className="page-error"
-                role="alert"
-              >
+              <p className="page-error" role="alert">
                 {errorMessage}
               </p>
             ) : null}

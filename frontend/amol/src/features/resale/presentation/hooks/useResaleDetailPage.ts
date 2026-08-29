@@ -17,6 +17,14 @@ import {
 } from "../../api/resaleApi";
 
 import {
+  createResaleConditionGalleryItems,
+  sortResaleConditionImages,
+} from "../../../shared/presentation/utils/resaleConditionMedia";
+import {
+  createResaleModelDisplay,
+} from "../../../shared/presentation/utils/resaleModelDisplay";
+
+import {
   DEFAULT_RESALE_CONDITION,
   DEFAULT_RESALE_EDITABLE_STATUS,
   type ResaleCondition,
@@ -28,23 +36,13 @@ import {
 import type {
   ResaleDetailEditFormProps,
   ResaleDetailFooterProps,
-  ResaleDetailModelInfoProps,
   ResaleDetailReadonlyInfoProps,
   ResaleListingTargetSummary,
 } from "../types/resaleDetailPageTypes";
 
 import {
-  formatResaleMeasurements,
-  formatResaleModelColor,
-  formatResaleModelKind,
-  formatResaleModelVolume,
   formatResaleStatus,
 } from "../utils/resaleDetailFormatters";
-
-import {
-  createResaleGalleryItems,
-  sortResaleConditionImages,
-} from "../utils/resaleDetailImages";
 
 import {
   formatResalePriceInput,
@@ -70,7 +68,9 @@ export function useResaleDetailPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [priceInput, setPriceInput] = useState("");
-  const [conditionInput, setConditionInput] = useState<ResaleCondition>(DEFAULT_RESALE_CONDITION);
+  const [conditionInput, setConditionInput] = useState<ResaleCondition>(
+    DEFAULT_RESALE_CONDITION,
+  );
   const [descriptionInput, setDescriptionInput] = useState("");
   const [statusInput, setStatusInput] = useState<ResaleEditableStatus>(
     DEFAULT_RESALE_EDITABLE_STATUS,
@@ -189,14 +189,9 @@ export function useResaleDetailPage() {
     };
   }, [loadDetail]);
 
-  const sortedImages = useMemo(
-    () => sortResaleConditionImages(images),
-    [images],
-  );
-
   const galleryItems = useMemo(
-    () => createResaleGalleryItems(sortedImages),
-    [sortedImages],
+    () => createResaleConditionGalleryItems(images),
+    [images],
   );
 
   useEffect(() => {
@@ -213,31 +208,12 @@ export function useResaleDetailPage() {
   const tokenName = item?.tokenName ?? "";
   const brandName = item?.brandName ?? "";
   const tokenIconUrl = item?.tokenIcon ?? "";
-  const description = item ? item.description : "";
-  const modelId = item?.modelId ?? "";
-  const modelKind = item?.kind ?? "";
-  const modelNumber = item?.modelNumber ?? "";
-  const modelSize = item?.size ?? "";
+  const description = item?.description ?? "";
 
-  const modelKindLabel = modelKind
-    ? formatResaleModelKind(modelKind)
-    : "";
-
-  const modelColor = formatResaleModelColor(item?.color);
-  const modelColorLabel = modelColor?.label ?? "";
-  const modelColorCssValue = modelColor?.cssColor ?? "";
-  const modelVolumeLabel = formatResaleModelVolume(item?.volume);
-  const measurementsLabel = formatResaleMeasurements(item?.measurements);
-
-  const hasModelInfo =
-    Boolean(modelId) ||
-    Boolean(modelKindLabel) ||
-    Boolean(modelNumber) ||
-    Boolean(modelSize) ||
-    Boolean(modelColorLabel) ||
-    Boolean(modelColorCssValue) ||
-    modelVolumeLabel !== "-" ||
-    measurementsLabel !== "-";
+  const model = useMemo(
+    () => createResaleModelDisplay(item),
+    [item],
+  );
 
   const isSold = item?.status === "sold";
   const title = productName || tokenName || "出品詳細";
@@ -247,7 +223,6 @@ export function useResaleDetailPage() {
     : "-";
 
   const editablePriceLabel = formatResalePriceInput(priceInput);
-
   const createdAtLabel = formatDateTime(item?.createdAt);
   const updatedAtLabel = formatDateTime(item?.updatedAt);
 
@@ -569,29 +544,6 @@ export function useResaleDetailPage() {
     ],
   );
 
-  const modelInfoProps = useMemo<ResaleDetailModelInfoProps>(
-    () => ({
-      hasModelInfo,
-      kindLabel: modelKindLabel,
-      modelNumber,
-      size: modelSize,
-      colorLabel: modelColorLabel,
-      colorCssValue: modelColorCssValue,
-      measurementsLabel,
-      volumeLabel: modelVolumeLabel,
-    }),
-    [
-      hasModelInfo,
-      measurementsLabel,
-      modelColorCssValue,
-      modelColorLabel,
-      modelKindLabel,
-      modelNumber,
-      modelSize,
-      modelVolumeLabel,
-    ],
-  );
-
   const readonlyInfoProps = useMemo<ResaleDetailReadonlyInfoProps>(
     () => ({
       galleryItems,
@@ -719,7 +671,7 @@ export function useResaleDetailPage() {
     errorMessage,
     saveMessage,
     listingTarget,
-    modelInfoProps,
+    model,
     readonlyInfoProps,
     editFormProps,
     handleBack,

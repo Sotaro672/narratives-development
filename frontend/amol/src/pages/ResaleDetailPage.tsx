@@ -3,11 +3,11 @@
 import Layout from "../components/layout/Layout";
 import SectionHeader from "../components/ui/SectionHeader";
 
-import ResaleConditionGallery from "../features/shared/presentation/componentns/ResaleConditionGallery";
-import ResaleDetailLayout from "../features/shared/presentation/componentns/ResaleDetailLayout";
-import ResaleModelMeta from "../features/shared/presentation/componentns/ResaleModelMeta";
-import ResaleProductIdentity from "../features/shared/presentation/componentns/ResaleProductIdentity";
-import ResaleTokenCard from "../features/shared/presentation/componentns/ResaleTokenCard";
+import ResaleConditionGallery from "../features/shared/presentation/components/ResaleConditionGallery";
+import ResaleDetailLayout from "../features/shared/presentation/components/ResaleDetailLayout";
+import ResaleModelMeta from "../features/shared/presentation/components/ResaleModelMeta";
+import ResaleProductIdentity from "../features/shared/presentation/components/ResaleProductIdentity";
+import ResaleTokenCard from "../features/shared/presentation/components/ResaleTokenCard";
 import ResaleConditionMediaField from "../features/resale/presentation/components/ResaleConditionMediaField";
 import ResaleDetailEditForm from "../features/resale/presentation/components/ResaleDetailEditForm";
 import ResaleDetailReadonlyInfo from "../features/resale/presentation/components/ResaleDetailReadonlyInfo";
@@ -28,7 +28,7 @@ export default function ResaleDetailPage() {
     errorMessage,
     saveMessage,
     listingTarget,
-    modelInfoProps,
+    model,
     readonlyInfoProps,
     editFormProps,
     handleBack,
@@ -38,17 +38,6 @@ export default function ResaleDetailPage() {
 
   const showLoadError = !loading && !item && Boolean(errorMessage);
   const showDetail = !loading && Boolean(item);
-
-  const model = {
-    hasModelInfo: modelInfoProps.hasModelInfo,
-    kindLabel: modelInfoProps.kindLabel,
-    modelNumber: modelInfoProps.modelNumber,
-    size: modelInfoProps.size,
-    colorLabel: modelInfoProps.colorLabel,
-    colorCssValue: modelInfoProps.colorCssValue,
-    measurementsLabel: modelInfoProps.measurementsLabel,
-    volumeLabel: modelInfoProps.volumeLabel,
-  };
 
   const headerActionProps =
     footerProps?.variant === "action"

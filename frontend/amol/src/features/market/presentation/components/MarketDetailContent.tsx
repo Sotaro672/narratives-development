@@ -4,11 +4,11 @@ import type {
   UseMarketDetailPageResult,
 } from "../hooks/useMarketDetailPage";
 
-import ResaleConditionGallery from "../../../shared/presentation/componentns/ResaleConditionGallery";
-import ResaleDetailLayout from "../../../shared/presentation/componentns/ResaleDetailLayout";
-import ResaleModelMeta from "../../../shared/presentation/componentns/ResaleModelMeta";
-import ResaleProductIdentity from "../../../shared/presentation/componentns/ResaleProductIdentity";
-import ResaleTokenCard from "../../../shared/presentation/componentns/ResaleTokenCard";
+import ResaleConditionGallery from "../../../shared/presentation/components/ResaleConditionGallery";
+import ResaleDetailLayout from "../../../shared/presentation/components/ResaleDetailLayout";
+import ResaleModelMeta from "../../../shared/presentation/components/ResaleModelMeta";
+import ResaleProductIdentity from "../../../shared/presentation/components/ResaleProductIdentity";
+import ResaleTokenCard from "../../../shared/presentation/components/ResaleTokenCard";
 
 import MarketReviewSection from "./MarketReviewSection";
 import MarketSellerCard from "./MarketSellerCard";
@@ -27,16 +27,7 @@ type MarketDetailContentState =
     | "cartMessage"
     | "cartErrorMessage"
     | "priceLabel"
-    | "modelKind"
-    | "modelKindLabel"
-    | "modelNumber"
-    | "modelSize"
-    | "modelColorName"
-    | "modelColorCssValue"
-    | "hasColorInfo"
-    | "modelVolumeLabel"
-    | "measurementsLabel"
-    | "hasModelInfo"
+    | "model"
     | "tokenName"
     | "tokenIcon"
     | "sellerAvatarId"
@@ -68,16 +59,7 @@ export default function MarketDetailContent({
     cartMessage,
     cartErrorMessage,
     priceLabel,
-    modelKind,
-    modelKindLabel,
-    modelNumber,
-    modelSize,
-    modelColorName,
-    modelColorCssValue,
-    hasColorInfo,
-    modelVolumeLabel,
-    measurementsLabel,
-    hasModelInfo,
+    model,
     tokenName,
     tokenIcon,
     sellerAvatarId,
@@ -89,17 +71,6 @@ export default function MarketDetailContent({
     handleNextMedia,
     handleSelectMedia,
   } = detail;
-
-  const model = {
-    hasModelInfo,
-    kindLabel: modelKind ? modelKindLabel : "",
-    modelNumber,
-    size: modelSize,
-    colorLabel: hasColorInfo ? modelColorName : "",
-    colorCssValue: hasColorInfo ? modelColorCssValue : "",
-    measurementsLabel,
-    volumeLabel: modelVolumeLabel,
-  };
 
   return (
     <div className="page-layout market-detail-page">
