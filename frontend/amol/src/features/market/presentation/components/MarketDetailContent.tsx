@@ -2,6 +2,7 @@
 
 import type { UseMarketDetailPageResult } from "../hooks/useMarketDetailPage";
 
+import AvatarSummaryCard from "../../../shared/presentation/components/AvatarSummaryCard";
 import ProductDescription from "../../../shared/presentation/components/ProductDescription";
 import ProductDetailLayout from "../../../shared/presentation/components/ProductDetailLayout";
 import ProductIdentity from "../../../shared/presentation/components/ProductIdentity";
@@ -10,8 +11,6 @@ import ProductModelMeta from "../../../shared/presentation/components/ProductMod
 import ProductPrice from "../../../shared/presentation/components/ProductPrice";
 import ProductReviewSection from "../../../shared/presentation/components/ProductReviewSection";
 import TokenSummaryCard from "../../../shared/presentation/components/TokenSummaryCard";
-
-import MarketSellerCard from "./MarketSellerCard";
 
 import "../../../shared/styles/product-detail.css";
 
@@ -109,11 +108,11 @@ export default function MarketDetailContent({
                 description={tokenDescription}
               />
 
-              <MarketSellerCard
+              <AvatarSummaryCard
                 avatarId={sellerAvatarId}
                 avatarName={avatarName}
                 avatarIcon={avatarIcon}
-                onOpen={onOpenSeller}
+                onClick={onOpenSeller}
               />
             </>
           }

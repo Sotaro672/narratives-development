@@ -28,7 +28,7 @@ export default function ProductDetailLayout({
   return (
     <section className={joinClassNames("product-detail__layout", className)}>
       <div className={joinClassNames("product-detail__media-column", mediaColumnClassName)}>
-        {media}
+        <div className="product-detail__media">{media}</div>
 
         {mediaFooter ? (
           <div className="product-detail__media-footer">{mediaFooter}</div>
@@ -40,7 +40,9 @@ export default function ProductDetailLayout({
           {children}
         </div>
 
-        {contentFooter}
+        {contentFooter ? (
+          <div className="product-detail__content-footer">{contentFooter}</div>
+        ) : null}
       </div>
     </section>
   );

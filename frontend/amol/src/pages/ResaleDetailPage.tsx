@@ -3,6 +3,7 @@
 import Layout from "../components/layout/Layout";
 import SectionHeader from "../components/ui/SectionHeader";
 
+import AvatarSummaryCard from "../features/shared/presentation/components/AvatarSummaryCard";
 import ProductDescription from "../features/shared/presentation/components/ProductDescription";
 import ProductDetailLayout from "../features/shared/presentation/components/ProductDetailLayout";
 import ProductIdentity from "../features/shared/presentation/components/ProductIdentity";
@@ -140,11 +141,20 @@ export default function ResaleDetailPage() {
               )
             }
             mediaFooter={
-              <TokenSummaryCard
-                brandName={listingTarget.brandName}
-                tokenName={listingTarget.tokenName}
-                tokenIcon={listingTarget.tokenIconUrl}
-              />
+              <>
+                <TokenSummaryCard
+                  brandName={listingTarget.brandName}
+                  tokenName={listingTarget.tokenName}
+                  tokenIcon={listingTarget.tokenIconUrl}
+                  description={listingTarget.tokenDescription}
+                />
+
+                <AvatarSummaryCard
+                  avatarId={item?.avatarId}
+                  avatarName={item?.avatarName}
+                  avatarIcon={item?.avatarIcon}
+                />
+              </>
             }
             contentFooter={
               !isEditing ? (
