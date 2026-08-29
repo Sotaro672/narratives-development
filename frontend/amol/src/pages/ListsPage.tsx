@@ -1,17 +1,16 @@
 // frontend/amol/src/pages/ListsPage.tsx
 
-import {
-  useNavigate,
-} from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import { formatPrice } from "../components/utils/price";
 
-import ListGrid from "../features/list/presentation/components/ListGrid";
-import ListPagination from "../features/shared/presentation/ui/ListPagination";
+import ProductListingGrid, {
+  type ProductListingCardViewModel,
+} from "../features/shared/presentation/components/ProductListingGrid";
+import ListPagination from "../components/ui/Pagination";
 
-import {
-  useListsPage,
-} from "../features/list/presentation/hooks/useListsPage";
+import { useListsPage } from "../features/list/presentation/hooks/useListsPage";
 
 import "../styles/lists-page.css";
 
@@ -29,25 +28,30 @@ export default function ListsPage() {
     goNext,
   } = useListsPage();
 
+  const listingItems: ProductListingCardViewModel[] = items.map((item) => {
+    const firstPrice = Array.isArray(item.prices) ? item.prices[0] : undefined;
+    const priceAmount = firstPrice?.amount ?? firstPrice?.price;
+
+    return {
+      id: item.id,
+      title: item.productName?.trim() || item.title.trim() || "商品名未設定",
+      imageUrl: item.image,
+      brandName: item.brandName,
+      priceLabel: formatPrice(priceAmount, {
+        currency: firstPrice?.currency,
+      }),
+    };
+  });
+
   function handleCartButtonClick() {
     navigate("/cart");
   }
 
-  function handleOpenItem(
-    listId: string,
-  ) {
-    const normalizedListId =
-      listId.trim();
+  function handleOpenItem(listId: string) {
+    const normalizedListId = listId.trim();
+    if (!normalizedListId) return;
 
-    if (!normalizedListId) {
-      return;
-    }
-
-    navigate(
-      `/lists/${encodeURIComponent(
-        normalizedListId,
-      )}`,
-    );
+    navigate(`/lists/${encodeURIComponent(normalizedListId)}`);
   }
 
   return (
@@ -56,34 +60,23 @@ export default function ListsPage() {
       mode="mypage"
       showCartButton
       cartButtonLabel="カート"
-      onCartButtonClick={
-        handleCartButtonClick
-      }
+      onCartButtonClick={handleCartButtonClick}
     >
       <section className="content-page-section rooms-page-section-root lists-page-section-root">
-        {!isLoading &&
-        items.length > 0 ? (
-          <ListGrid
-            items={items}
-            onOpenItem={
-              handleOpenItem
-            }
+        {!isLoading ? (
+          <ProductListingGrid
+            items={listingItems}
+            onOpen={handleOpenItem}
+            emptyText="現在、販売中の商品はありません。"
           />
         ) : null}
 
-        {!isLoading &&
-        totalPages > 1 ? (
+        {!isLoading && totalPages > 1 ? (
           <ListPagination
             page={page}
-            totalPages={
-              totalPages
-            }
-            canGoPrev={
-              canGoPrev
-            }
-            canGoNext={
-              canGoNext
-            }
+            totalPages={totalPages}
+            canGoPrev={canGoPrev}
+            canGoNext={canGoNext}
             onPrev={goPrev}
             onNext={goNext}
           />

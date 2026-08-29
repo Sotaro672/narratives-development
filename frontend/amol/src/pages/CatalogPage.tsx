@@ -6,15 +6,17 @@ import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
 import { formatPrice } from "../components/utils/price";
 
+import ProductDescription from "../features/shared/presentation/components/ProductDescription";
 import ProductDetailLayout from "../features/shared/presentation/components/ProductDetailLayout";
 import ProductIdentity from "../features/shared/presentation/components/ProductIdentity";
 import ProductMediaGallery from "../features/shared/presentation/components/ProductMediaGallery";
+import ProductPrice from "../features/shared/presentation/components/ProductPrice";
+import ProductReviewSection from "../features/shared/presentation/components/ProductReviewSection";
 import TokenSummaryCard from "../features/shared/presentation/components/TokenSummaryCard";
 
 import MeasurementTable from "../features/catalog/presentation/components/MeasurementTable";
 import ModelSelector from "../features/catalog/presentation/components/ModelSelector";
 import ProductInfoCard from "../features/catalog/presentation/components/ProductInfoCard";
-import ReviewSection from "../features/catalog/presentation/components/ReviewSection";
 
 import { useCatalogPage } from "../features/catalog/presentation/hooks/useCatalogPage";
 import { useAuthState } from "../features/shared/hooks/useAuthState";
@@ -127,6 +129,8 @@ export default function CatalogPage() {
                 brandName={catalog.productBlueprint.brandName}
                 tokenName={catalog.tokenBlueprint.tokenName}
                 tokenIcon={catalog.tokenBlueprint.tokenIcon}
+                symbol={catalog.tokenBlueprint.symbol}
+                description={catalog.tokenBlueprint.description}
               />
             }
             mediaColumnClassName="catalog-page-media"
@@ -137,14 +141,8 @@ export default function CatalogPage() {
               tokenName={catalog.tokenBlueprint.tokenName}
             />
 
-            {catalog.list.description ? (
-              <div className="product-detail__description">
-                <h2>商品説明</h2>
-                <p>{catalog.list.description}</p>
-              </div>
-            ) : null}
-
-            <p className="product-detail__price">{formatPrice(firstPrice?.price)}</p>
+            <ProductDescription description={catalog.list.description} />
+            <ProductPrice priceLabel={formatPrice(firstPrice?.price)} />
 
             <ProductInfoCard
               productBlueprint={catalog.productBlueprint}
@@ -176,10 +174,12 @@ export default function CatalogPage() {
               onSelectModel={handleSelectModel}
             />
 
-            <ReviewSection
-              reviewSummary={reviewSummary}
-              reviewItems={reviewItems}
-              reviewErrorMessage={reviewErrorMessage}
+            <ProductReviewSection
+              items={reviewItems}
+              averageRating={reviewSummary?.averageRating}
+              totalCount={reviewSummary?.totalCount}
+              errorMessage={reviewErrorMessage}
+              showHelpfulVotes
               onAvatarClick={handleAvatarClick}
             />
           </ProductDetailLayout>

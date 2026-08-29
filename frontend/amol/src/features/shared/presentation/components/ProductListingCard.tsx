@@ -1,5 +1,7 @@
 // frontend/amol/src/features/shared/presentation/components/ProductListingCard.tsx
 
+import "../../styles/product-listing.css";
+
 export type ProductListingCardViewModel = {
   id: string;
   title: string;
@@ -56,9 +58,7 @@ export default function ProductListingCard({
             loading="lazy"
           />
         ) : (
-          <div className="product-listing-card__image-placeholder">
-            No Image
-          </div>
+          <div className="product-listing-card__image-placeholder">No Image</div>
         )}
       </div>
 

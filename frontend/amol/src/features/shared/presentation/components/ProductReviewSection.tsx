@@ -2,6 +2,8 @@
 
 import { formatDateTime } from "../../../../components/utils/date";
 
+import "../../styles/product-review.css";
+
 export type ProductReviewItem = {
   id: string;
   avatarId?: string | null;
@@ -61,9 +63,7 @@ export default function ProductReviewSection({
       {hasSummary ? (
         <div className="product-review__summary">
           {Number.isFinite(averageRating) ? (
-            <strong className="product-review__average">
-              {Number(averageRating).toFixed(1)}
-            </strong>
+            <strong className="product-review__average">{Number(averageRating).toFixed(1)}</strong>
           ) : null}
           {Number.isFinite(totalCount) ? (
             <span className="product-review__count">{Number(totalCount)}件</span>

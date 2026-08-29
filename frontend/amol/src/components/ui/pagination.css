@@ -1,0 +1,71 @@
+/* frontend/amol/src/components/ui/pagination.css */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 24px;
+}
+
+.pagination__button {
+  min-width: 72px;
+  padding: 10px 14px;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  background: #fff;
+  color: #222;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.pagination__button:hover:not(:disabled) {
+  border-color: #d4d4d4;
+  background: #f8f8f8;
+}
+
+.pagination__button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.pagination__button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.pagination__status {
+  min-width: 72px;
+  color: #666;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .pagination {
+    gap: 8px;
+    margin-top: 20px;
+  }
+
+  .pagination__button {
+    min-width: 64px;
+    padding: 9px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+  }
+
+  .pagination__status {
+    min-width: 64px;
+    font-size: 12px;
+  }
+}

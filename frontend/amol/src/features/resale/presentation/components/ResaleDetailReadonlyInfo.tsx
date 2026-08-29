@@ -1,5 +1,8 @@
 // frontend/amol/src/features/resale/presentation/components/ResaleDetailReadonlyInfo.tsx
 
+import ProductDescription from "../../../shared/presentation/components/ProductDescription";
+import ProductPrice from "../../../shared/presentation/components/ProductPrice";
+
 import type { ResaleDetailReadonlyInfoProps } from "../types/resaleDetailPageTypes";
 
 export default function ResaleDetailReadonlyInfo({
@@ -12,7 +15,7 @@ export default function ResaleDetailReadonlyInfo({
 }: ResaleDetailReadonlyInfoProps) {
   return (
     <>
-      <p className="product-detail__price">{priceLabel}</p>
+      <ProductPrice priceLabel={priceLabel} />
 
       <dl className="product-detail__meta">
         <div className="product-detail__meta-row">
@@ -36,10 +39,7 @@ export default function ResaleDetailReadonlyInfo({
         </div>
       </dl>
 
-      <div className="product-detail__description">
-        <h2>商品説明</h2>
-        <p>{description || "説明文はありません。"}</p>
-      </div>
+      <ProductDescription description={description || "説明文はありません。"} />
     </>
   );
 }

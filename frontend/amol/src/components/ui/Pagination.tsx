@@ -1,5 +1,4 @@
-// frontend/amol/src/features/list/presentation/components/ListPagination.tsx
-
+// frontend\amol\src\components\ui\Pagination.tsx
 export type PaginationProps = {
   page: number;
   totalPages: number;

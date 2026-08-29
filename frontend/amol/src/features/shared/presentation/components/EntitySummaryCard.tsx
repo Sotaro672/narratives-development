@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 
 import MediaIcon from "../../../../components/ui/MediaIcon";
 
+import "../../styles/entity-summary-card.css";
+
 export type EntitySummaryCardProps = {
   icon?: string | null;
   iconAlt?: string;
@@ -40,13 +42,7 @@ export default function EntitySummaryCard({
   const safeDescription = description?.trim() || "";
   const isInteractive = Boolean(onClick);
 
-  if (
-    !safeIcon &&
-    !safeLabel &&
-    !safeName &&
-    !safeSecondaryText &&
-    !safeDescription
-  ) {
+  if (!safeIcon && !safeLabel && !safeName && !safeSecondaryText && !safeDescription) {
     return null;
   }
 
@@ -62,20 +58,11 @@ export default function EntitySummaryCard({
       />
 
       <div className="entity-summary-card__body">
-        {safeLabel ? (
-          <span className="entity-summary-card__label">{safeLabel}</span>
-        ) : null}
-
-        {safeName ? (
-          <span className="entity-summary-card__name">{safeName}</span>
-        ) : null}
-
+        {safeLabel ? <span className="entity-summary-card__label">{safeLabel}</span> : null}
+        {safeName ? <span className="entity-summary-card__name">{safeName}</span> : null}
         {safeSecondaryText ? (
-          <span className="entity-summary-card__secondary">
-            {safeSecondaryText}
-          </span>
+          <span className="entity-summary-card__secondary">{safeSecondaryText}</span>
         ) : null}
-
         {safeDescription ? (
           <p className="entity-summary-card__description">{safeDescription}</p>
         ) : null}
@@ -93,11 +80,7 @@ export default function EntitySummaryCard({
     return (
       <button
         type="button"
-        className={joinClassNames(
-          "entity-summary-card",
-          "entity-summary-card--button",
-          className,
-        )}
+        className={joinClassNames("entity-summary-card", "entity-summary-card--button", className)}
         onClick={onClick}
         disabled={disabled}
       >
@@ -106,9 +89,5 @@ export default function EntitySummaryCard({
     );
   }
 
-  return (
-    <div className={joinClassNames("entity-summary-card", className)}>
-      {content}
-    </div>
-  );
+  return <div className={joinClassNames("entity-summary-card", className)}>{content}</div>;
 }

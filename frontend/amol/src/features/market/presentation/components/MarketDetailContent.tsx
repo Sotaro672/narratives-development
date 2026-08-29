@@ -2,13 +2,15 @@
 
 import type { UseMarketDetailPageResult } from "../hooks/useMarketDetailPage";
 
-import ProductMediaGallery from "../../../shared/presentation/components/ProductMediaGallery";
+import ProductDescription from "../../../shared/presentation/components/ProductDescription";
 import ProductDetailLayout from "../../../shared/presentation/components/ProductDetailLayout";
-import ProductModelMeta from "../../../shared/presentation/components/ProductModelMeta";
 import ProductIdentity from "../../../shared/presentation/components/ProductIdentity";
+import ProductMediaGallery from "../../../shared/presentation/components/ProductMediaGallery";
+import ProductModelMeta from "../../../shared/presentation/components/ProductModelMeta";
+import ProductPrice from "../../../shared/presentation/components/ProductPrice";
+import ProductReviewSection from "../../../shared/presentation/components/ProductReviewSection";
 import TokenSummaryCard from "../../../shared/presentation/components/TokenSummaryCard";
 
-import MarketReviewSection from "./MarketReviewSection";
 import MarketSellerCard from "./MarketSellerCard";
 
 import "../../../shared/styles/product-detail.css";
@@ -119,24 +121,19 @@ export default function MarketDetailContent({
             tokenName={item.tokenName}
           />
 
-          <p className="product-detail__price">{priceLabel}</p>
+          <ProductPrice priceLabel={priceLabel} />
 
           <ProductModelMeta
             conditionLabel={item.condition}
             model={model}
           />
 
-          {item.description ? (
-            <div className="product-detail__description">
-              <h2>商品説明</h2>
-              <p>{item.description}</p>
-            </div>
-          ) : null}
+          <ProductDescription description={item.description} />
 
-          <MarketReviewSection
-            reviews={reviews}
+          <ProductReviewSection
+            items={reviews?.items ?? []}
             loading={loadingReviews}
-            error={reviewsError}
+            errorMessage={reviewsError}
           />
 
           {cartMessage ? (

@@ -4,6 +4,10 @@ import ProductListingCard, {
   type ProductListingCardViewModel,
 } from "./ProductListingCard";
 
+import "../../styles/product-listing.css";
+
+export type { ProductListingCardViewModel } from "./ProductListingCard";
+
 export type ProductListingGridProps = {
   items: ProductListingCardViewModel[];
   onOpen: (id: string) => void;
