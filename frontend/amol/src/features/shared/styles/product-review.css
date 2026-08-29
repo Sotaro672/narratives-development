@@ -192,6 +192,33 @@
   line-height: 1.5;
 }
 
+.product-review__toggle {
+  appearance: none;
+  align-self: flex-start;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #555;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.product-review__toggle:hover {
+  color: #111;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.product-review__toggle:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
 @media (max-width: 760px) {
   .product-review {
     gap: 14px;
@@ -229,5 +256,9 @@
 
   .product-review__title {
     font-size: 14px;
+  }
+
+  .product-review__toggle {
+    font-size: 12px;
   }
 }

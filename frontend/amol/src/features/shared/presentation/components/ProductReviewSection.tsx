@@ -1,5 +1,7 @@
 // frontend/amol/src/features/shared/presentation/components/ProductReviewSection.tsx
 
+import { useState } from "react";
+
 import { formatDateTime } from "../../../../components/utils/date";
 
 import "../../styles/product-review.css";
@@ -49,9 +51,13 @@ export default function ProductReviewSection({
   onAvatarClick,
   className,
 }: ProductReviewSectionProps) {
+  const [reviewsExpanded, setReviewsExpanded] = useState(false);
+
   const safeItems = Array.isArray(items) ? items : [];
   const safeErrorMessage = errorMessage?.trim() || "";
   const hasSummary = Number.isFinite(averageRating) || Number.isFinite(totalCount);
+  const hasMoreReviews = safeItems.length > 1;
+  const visibleItems = reviewsExpanded ? safeItems : safeItems.slice(0, 1);
 
   return (
     <section className={joinClassNames("product-review", className)}>
@@ -82,16 +88,29 @@ export default function ProductReviewSection({
       ) : null}
 
       {!safeErrorMessage && safeItems.length > 0 ? (
-        <div className="product-review__list">
-          {safeItems.map((review) => (
-            <ProductReviewItemView
-              key={review.id}
-              review={review}
-              showHelpfulVotes={showHelpfulVotes}
-              onAvatarClick={onAvatarClick}
-            />
-          ))}
-        </div>
+        <>
+          <div className="product-review__list">
+            {visibleItems.map((review) => (
+              <ProductReviewItemView
+                key={review.id}
+                review={review}
+                showHelpfulVotes={showHelpfulVotes}
+                onAvatarClick={onAvatarClick}
+              />
+            ))}
+          </div>
+
+          {hasMoreReviews ? (
+            <button
+              type="button"
+              className="product-review__toggle"
+              aria-expanded={reviewsExpanded}
+              onClick={() => setReviewsExpanded((current) => !current)}
+            >
+              {reviewsExpanded ? "閉じる" : "詳しく見る"}
+            </button>
+          ) : null}
+        </>
       ) : null}
     </section>
   );
