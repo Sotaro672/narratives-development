@@ -27,9 +27,7 @@ export default function ContentsPage() {
               variant: "commentAction",
               value: page.commentCard.commentBody,
               placeholder: "コメントを書く…",
-              buttonLabel: page.commentCard.posting
-                ? "投稿中"
-                : "投稿",
+              buttonLabel: page.commentCard.posting ? "投稿中" : "投稿",
               disabled:
                 page.commentCard.posting ||
                 page.loading ||
@@ -66,6 +64,8 @@ export default function ContentsPage() {
             loading={page.loading}
             isMobilePortrait={page.isMobilePortrait}
             commentCard={page.commentCard}
+            resaleDisabled={page.resaleButtonDisabled}
+            resaleLabel={page.resaleButtonLabel}
             onProductNameClick={page.handleProductNameClick}
             onBrandNameClick={page.handleBrandNameClick}
             onResaleClick={page.handleOpenResalePage}

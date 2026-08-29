@@ -5,12 +5,16 @@ import { useTokenReviewAggregateCard } from "../hooks/useTokenReviewAggregateCar
 type TokenReviewAggregateCardProps = {
   tokenBlueprintId: string;
   productId: string;
+  resaleDisabled?: boolean;
+  resaleLabel?: string;
   onResaleClick?: () => void;
 };
 
 export default function TokenReviewAggregateCard({
   tokenBlueprintId,
   productId,
+  resaleDisabled = false,
+  resaleLabel = "出品",
   onResaleClick,
 }: TokenReviewAggregateCardProps) {
   const {
@@ -29,6 +33,7 @@ export default function TokenReviewAggregateCard({
 
   const canOpenResalePage =
     canTap &&
+    !resaleDisabled &&
     Boolean(productId.trim()) &&
     Boolean(tokenBlueprintId.trim()) &&
     typeof onResaleClick === "function";
@@ -76,9 +81,7 @@ export default function TokenReviewAggregateCard({
         <span className="token-review-aggregate__icon" aria-hidden="true">
           ↗
         </span>
-        <span className="token-review-aggregate__label">
-          出品
-        </span>
+        <span className="token-review-aggregate__label">{resaleLabel}</span>
       </button>
 
       <span className="token-review-aggregate__spacer" />

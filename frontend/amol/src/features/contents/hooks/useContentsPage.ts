@@ -7,6 +7,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import type { MediaGalleryItem } from "../../../components/ui/MediaGallery";
 import { useMobilePortrait } from "../../../components/hooks/useMobilePortrait";
 import { fetchPayoutAccount } from "../../payout/api/payoutApi";
+import { hasMyResaleListingByProductId } from "../../resale/api/resaleApi";
 import type {
   ContentsMetadata,
   ContentsSearchParams,
@@ -47,6 +48,8 @@ export function useContentsPage() {
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [resaleChecking, setResaleChecking] = useState(false);
+  const [isResaleListed, setIsResaleListed] = useState(false);
 
   const handleProductNameClick = () => {
     if (!contents.productId) return;
@@ -108,6 +111,50 @@ export function useContentsPage() {
     };
   }, [contents.metadataUri]);
 
+  useEffect(() => {
+    if (!contents.productId) {
+      setIsResaleListed(false);
+      setResaleChecking(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const load = async () => {
+      setResaleChecking(true);
+      setIsResaleListed(false);
+
+      try {
+        const listed = await hasMyResaleListingByProductId(
+          contents.productId,
+        );
+
+        if (!isMounted) return;
+
+        setIsResaleListed(listed);
+      } catch (err) {
+        if (!isMounted) return;
+
+        console.error(
+          "failed to check existing resale listing:",
+          err,
+        );
+
+        setIsResaleListed(false);
+      } finally {
+        if (isMounted) {
+          setResaleChecking(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [contents.productId]);
+
   const tokenName = metadata?.name ?? "";
   const tokenIconUrl = metadata?.image ?? "";
   const tokenDescription = metadata?.description ?? "";
@@ -132,6 +179,12 @@ export function useContentsPage() {
   }, [activeFileIndex, mediaItems.length]);
 
   const hasMediaItems = mediaItems.length > 0;
+  const resaleButtonDisabled = resaleChecking || isResaleListed;
+  const resaleButtonLabel = resaleChecking
+    ? "確認中"
+    : isResaleListed
+      ? "出品済"
+      : "出品";
 
   const handlePrevFile = () => {
     if (!hasMediaItems) return;
@@ -150,7 +203,13 @@ export function useContentsPage() {
   };
 
   const handleOpenResalePage = async () => {
-    if (!contents.productId || !contents.tokenBlueprintId) return;
+    if (
+      resaleButtonDisabled ||
+      !contents.productId ||
+      !contents.tokenBlueprintId
+    ) {
+      return;
+    }
 
     const auth = getAuth();
     const currentUser = auth.currentUser;
@@ -216,6 +275,10 @@ export function useContentsPage() {
     pageTitle,
     hasMediaItems,
     isMobilePortrait,
+    resaleChecking,
+    isResaleListed,
+    resaleButtonDisabled,
+    resaleButtonLabel,
     handleProductNameClick,
     handleBrandNameClick,
     handlePrevFile,

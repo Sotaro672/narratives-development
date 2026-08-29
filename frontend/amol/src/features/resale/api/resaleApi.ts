@@ -16,6 +16,7 @@ export {
 export {
   deleteResaleListing,
   getMyResaleListing,
+  hasMyResaleListingByProductId,
   listMyResaleListings,
   updatePrimaryResaleImage,
   updateResaleListing,

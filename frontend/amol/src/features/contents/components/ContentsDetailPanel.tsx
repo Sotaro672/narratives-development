@@ -16,6 +16,8 @@ type ContentsDetailPanelProps = {
   loading: boolean;
   isMobilePortrait: boolean;
   commentCard: TokenCommentCardController;
+  resaleDisabled: boolean;
+  resaleLabel: string;
   onProductNameClick: () => void;
   onBrandNameClick: () => void;
   onResaleClick: () => void;
@@ -28,6 +30,8 @@ export default function ContentsDetailPanel({
   loading,
   isMobilePortrait,
   commentCard,
+  resaleDisabled,
+  resaleLabel,
   onProductNameClick,
   onBrandNameClick,
   onResaleClick,
@@ -38,79 +42,35 @@ export default function ContentsDetailPanel({
         contents={contents}
         tokenName={tokenName}
         tokenIconUrl={tokenIconUrl}
-        onProductNameClick={
-          onProductNameClick
-        }
-        onBrandNameClick={
-          onBrandNameClick
-        }
-        onResaleClick={
-          onResaleClick
-        }
+        resaleDisabled={resaleDisabled}
+        resaleLabel={resaleLabel}
+        onProductNameClick={onProductNameClick}
+        onBrandNameClick={onBrandNameClick}
+        onResaleClick={onResaleClick}
       />
 
       <TokenCommentCard
-        tokenBlueprintId={
-          contents.tokenBlueprintId
-        }
+        tokenBlueprintId={contents.tokenBlueprintId}
         loading={loading}
-        hideCommentForm={
-          isMobilePortrait
-        }
-        commentTree={
-          commentCard.commentTree
-        }
-        commentsLoading={
-          commentCard.commentsLoading
-        }
-        commentsError={
-          commentCard.commentsError
-        }
-        posting={
-          commentCard.posting
-        }
-        commentBody={
-          commentCard.commentBody
-        }
-        expandedIds={
-          commentCard.expandedIds
-        }
-        replyingCommentId={
-          commentCard.replyingCommentId
-        }
-        replyBody={
-          commentCard.replyBody
-        }
-        replyPosting={
-          commentCard.replyPosting
-        }
-        onCommentBodyChange={
-          commentCard.setCommentBody
-        }
-        onReplyBodyChange={
-          commentCard.setReplyBody
-        }
-        onPostComment={
-          commentCard.postComment
-        }
-        onToggleExpanded={
-          commentCard.toggleExpanded
-        }
-        onLikeComment={
-          commentCard.likeComment
-        }
-        onDislikeComment={
-          commentCard.dislikeComment
-        }
-        onStartReply={
-          commentCard.startReply
-        }
-        onCancelReply={
-          commentCard.cancelReply
-        }
-        onSubmitReply={
-          commentCard.submitReply
-        }
+        hideCommentForm={isMobilePortrait}
+        commentTree={commentCard.commentTree}
+        commentsLoading={commentCard.commentsLoading}
+        commentsError={commentCard.commentsError}
+        posting={commentCard.posting}
+        commentBody={commentCard.commentBody}
+        expandedIds={commentCard.expandedIds}
+        replyingCommentId={commentCard.replyingCommentId}
+        replyBody={commentCard.replyBody}
+        replyPosting={commentCard.replyPosting}
+        onCommentBodyChange={commentCard.setCommentBody}
+        onReplyBodyChange={commentCard.setReplyBody}
+        onPostComment={commentCard.postComment}
+        onToggleExpanded={commentCard.toggleExpanded}
+        onLikeComment={commentCard.likeComment}
+        onDislikeComment={commentCard.dislikeComment}
+        onStartReply={commentCard.startReply}
+        onCancelReply={commentCard.cancelReply}
+        onSubmitReply={commentCard.submitReply}
       />
     </div>
   );

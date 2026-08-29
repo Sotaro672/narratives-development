@@ -114,6 +114,40 @@ export async function listMyResaleListings(
   );
 }
 
+export async function hasMyResaleListingByProductId(
+  productId: string,
+): Promise<boolean> {
+  const normalizedProductId = productId.trim();
+
+  if (!normalizedProductId) {
+    return false;
+  }
+
+  const perPage = 50;
+  let page = 1;
+
+  while (true) {
+    const result = await listMyResaleListings({
+      page,
+      perPage,
+    });
+
+    const exists = result.items.some(
+      (item) => item.productId.trim() === normalizedProductId,
+    );
+
+    if (exists) {
+      return true;
+    }
+
+    if (page >= result.totalPages) {
+      return false;
+    }
+
+    page += 1;
+  }
+}
+
 export async function updatePrimaryResaleImage({
   resaleId,
   imageId,
