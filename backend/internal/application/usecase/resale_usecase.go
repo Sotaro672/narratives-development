@@ -9,12 +9,14 @@ import (
 
 	applicationport "narratives/internal/application/port"
 	resaledom "narratives/internal/domain/resale"
+	resalereview "narratives/internal/domain/resale_review"
 )
 
 type ResaleUsecase struct {
-	resaleRepo   resaledom.Repository
-	imageRepo    resaledom.ImageRepository
-	imageStorage applicationport.ResaleImageStorage
+	resaleRepo    resaledom.Repository
+	imageRepo     resaledom.ImageRepository
+	imageStorage  applicationport.ResaleImageStorage
+	reviewCleanup resalereview.CleanupRepository
 }
 
 func NewResaleUsecase(
@@ -27,6 +29,17 @@ func NewResaleUsecase(
 		imageRepo:    imageRepo,
 		imageStorage: imageStorage,
 	}
+}
+
+func (uc *ResaleUsecase) WithReviewCleanup(
+	reviewCleanup resalereview.CleanupRepository,
+) *ResaleUsecase {
+	if uc == nil {
+		return nil
+	}
+
+	uc.reviewCleanup = reviewCleanup
+	return uc
 }
 
 func (uc *ResaleUsecase) Create(
@@ -85,6 +98,12 @@ func (uc *ResaleUsecase) Delete(
 
 	if err := uc.imageStorage.DeleteAll(ctx, id); err != nil {
 		return err
+	}
+
+	if uc.reviewCleanup != nil {
+		if err := uc.reviewCleanup.DeleteByResaleID(ctx, id); err != nil {
+			return err
+		}
 	}
 
 	return uc.resaleRepo.Delete(ctx, id)

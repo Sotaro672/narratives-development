@@ -192,7 +192,8 @@ func Register(mux *http.ServeMux, cont *Container) {
 	if cont.MarketQ != nil {
 		marketH = mallhandler.NewMarketHandler(
 			mallhandler.NewMarketHandlerParams{
-				MarketQ: cont.MarketQ,
+				MarketQ:        cont.MarketQ,
+				ResaleReviewUC: cont.ResaleReviewUC,
 			},
 		)
 	}
@@ -201,8 +202,9 @@ func Register(mux *http.ServeMux, cont *Container) {
 	if cont.ResaleUC != nil && cont.ResaleQ != nil {
 		resaleH = mallhandler.NewResaleHandler(
 			mallhandler.NewResaleHandlerParams{
-				UC:    cont.ResaleUC,
-				Query: cont.ResaleQ,
+				UC:             cont.ResaleUC,
+				Query:          cont.ResaleQ,
+				ResaleReviewUC: cont.ResaleReviewUC,
 			},
 		)
 	}

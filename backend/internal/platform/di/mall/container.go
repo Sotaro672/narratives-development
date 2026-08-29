@@ -44,6 +44,7 @@ type Container struct {
 	ReturnRequestUC                *usecase.ReturnRequestUsecase
 	AnnouncementUC                 *usecase.AnnouncementUsecase
 	ResaleUC                       *usecase.ResaleUsecase
+	ResaleReviewUC                 *usecase.ResaleReviewUsecase
 
 	MeAvatarResolver mallhandler.MeAvatarResolver
 

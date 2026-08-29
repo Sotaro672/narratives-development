@@ -1,0 +1,686 @@
+// backend/internal/application/usecase/resale_review_usecase.go
+package usecase
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"time"
+
+	avatardom "narratives/internal/domain/avatar"
+	common "narratives/internal/domain/common"
+	resaledom "narratives/internal/domain/resale"
+	resalereview "narratives/internal/domain/resale_review"
+)
+
+// ResaleReviewAvatarGetter resolves avatar display information.
+//
+// Authentication identity itself must come from middleware/handler.
+// This dependency is used only for enriching comment responses.
+type ResaleReviewAvatarGetter interface {
+	GetByID(
+		ctx context.Context,
+		id string,
+	) (avatardom.Avatar, error)
+}
+
+// ResaleReviewCommentListItem is a comment response enriched with
+// current avatar display information.
+//
+// AvatarName / AvatarIcon are not persisted in resaleReviews.
+type ResaleReviewCommentListItem struct {
+	resalereview.Comment
+
+	AvatarName string `json:"avatarName"`
+	AvatarIcon string `json:"avatarIcon"`
+}
+
+type ResaleReviewUsecase struct {
+	resaleRepo resaledom.Repository
+	reviewRepo resalereview.RepositoryPort
+	avatarRepo ResaleReviewAvatarGetter
+	now        func() time.Time
+}
+
+func NewResaleReviewUsecase(
+	resaleRepo resaledom.Repository,
+	reviewRepo resalereview.RepositoryPort,
+	avatarRepo ResaleReviewAvatarGetter,
+	now func() time.Time,
+) *ResaleReviewUsecase {
+	if now == nil {
+		now = time.Now
+	}
+
+	return &ResaleReviewUsecase{
+		resaleRepo: resaleRepo,
+		reviewRepo: reviewRepo,
+		avatarRepo: avatarRepo,
+		now:        now,
+	}
+}
+
+// ============================================================
+// Summary
+// ============================================================
+
+// GetSummary returns viewer-specific interaction state.
+//
+// Rules:
+// - target resale must exist
+// - only listing resale exposes interaction state
+// - seller can read the summary, but cannot like their own resale
+// - missing resaleReview aggregate is treated as zero interactions
+func (uc *ResaleReviewUsecase) GetSummary(
+	ctx context.Context,
+	resaleID string,
+	viewerAvatarID string,
+) (resalereview.InteractionSummary, error) {
+	if err := uc.requireConfigured("ResaleReview.GetSummary"); err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	resaleID = strings.TrimSpace(resaleID)
+	viewerAvatarID = strings.TrimSpace(viewerAvatarID)
+
+	if resaleID == "" {
+		return resalereview.InteractionSummary{}, resalereview.ErrInvalidResaleID
+	}
+
+	if viewerAvatarID == "" {
+		return resalereview.InteractionSummary{}, resalereview.ErrInvalidAvatarID
+	}
+
+	if _, err := uc.requireListingResale(ctx, resaleID); err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	aggregate, err := uc.reviewRepo.Aggregates().GetByID(ctx, resaleID)
+	if err != nil {
+		if !resalereview.IsNotFound(err) {
+			return resalereview.InteractionSummary{}, err
+		}
+
+		return resalereview.NewInteractionSummary(
+			resaleID,
+			0,
+			0,
+			false,
+		)
+	}
+
+	likedByMe, err := uc.reviewRepo.Likes().ExistsByAvatar(
+		ctx,
+		resaleID,
+		viewerAvatarID,
+	)
+	if err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	return resalereview.NewInteractionSummary(
+		resaleID,
+		aggregate.LikeCount,
+		aggregate.CommentCount,
+		likedByMe,
+	)
+}
+
+// ============================================================
+// Like
+// ============================================================
+
+// AddLike adds one like from avatarID.
+//
+// Rules:
+// - resale must be listing
+// - avatar cannot like its own resale
+// - one avatar can like one resale only once
+func (uc *ResaleReviewUsecase) AddLike(
+	ctx context.Context,
+	resaleID string,
+	avatarID string,
+) (resalereview.InteractionSummary, error) {
+	if err := uc.requireConfigured("ResaleReview.AddLike"); err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	resaleID = strings.TrimSpace(resaleID)
+	avatarID = strings.TrimSpace(avatarID)
+
+	if err := resalereview.ValidateLikeTarget(resaleID, avatarID); err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	resale, err := uc.requireListingResale(ctx, resaleID)
+	if err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	if resale.AvatarID == avatarID {
+		return resalereview.InteractionSummary{}, resalereview.ErrForbidden
+	}
+
+	like, err := resalereview.NewLike(
+		resaleID,
+		avatarID,
+		uc.nowUTC(),
+	)
+	if err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	aggregate, _, err := uc.reviewRepo.Mutations().AddLike(ctx, *like)
+	if err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	return resalereview.NewInteractionSummary(
+		resaleID,
+		aggregate.LikeCount,
+		aggregate.CommentCount,
+		true,
+	)
+}
+
+// RemoveLike removes the current avatar's like.
+//
+// This operation is idempotent at repository level: if the like does not
+// exist, LikeCount is not decremented.
+func (uc *ResaleReviewUsecase) RemoveLike(
+	ctx context.Context,
+	resaleID string,
+	avatarID string,
+) (resalereview.InteractionSummary, error) {
+	if err := uc.requireConfigured("ResaleReview.RemoveLike"); err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	resaleID = strings.TrimSpace(resaleID)
+	avatarID = strings.TrimSpace(avatarID)
+
+	if err := resalereview.ValidateLikeTarget(resaleID, avatarID); err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	resale, err := uc.requireListingResale(ctx, resaleID)
+	if err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	if resale.AvatarID == avatarID {
+		return resalereview.InteractionSummary{}, resalereview.ErrForbidden
+	}
+
+	aggregate, err := uc.reviewRepo.Mutations().RemoveLike(
+		ctx,
+		resaleID,
+		avatarID,
+	)
+	if err != nil {
+		if resalereview.IsNotFound(err) {
+			return resalereview.NewInteractionSummary(
+				resaleID,
+				0,
+				0,
+				false,
+			)
+		}
+
+		return resalereview.InteractionSummary{}, err
+	}
+
+	return resalereview.NewInteractionSummary(
+		resaleID,
+		aggregate.LikeCount,
+		aggregate.CommentCount,
+		false,
+	)
+}
+
+// ============================================================
+// Comment list
+// ============================================================
+
+// ListComments returns visible comments for one resale.
+//
+// Seller comments and buyer comments use the same Avatar identity model.
+// Deleted comments are excluded.
+func (uc *ResaleReviewUsecase) ListComments(
+	ctx context.Context,
+	resaleID string,
+	page common.Page,
+) (common.PageResult[ResaleReviewCommentListItem], error) {
+	if err := uc.requireConfigured("ResaleReview.ListComments"); err != nil {
+		return common.PageResult[ResaleReviewCommentListItem]{}, err
+	}
+
+	resaleID = strings.TrimSpace(resaleID)
+	if resaleID == "" {
+		return common.PageResult[ResaleReviewCommentListItem]{}, resalereview.ErrInvalidResaleID
+	}
+
+	if _, err := uc.requireListingResale(ctx, resaleID); err != nil {
+		return common.PageResult[ResaleReviewCommentListItem]{}, err
+	}
+
+	if page.Number <= 0 {
+		page.Number = 1
+	}
+
+	if page.PerPage <= 0 {
+		page.PerPage = 20
+	}
+
+	visible := false
+
+	result, err := uc.reviewRepo.Comments().List(
+		ctx,
+		resalereview.FilterComment{
+			ResaleID: resaleID,
+			Deleted:  &visible,
+		},
+		common.Sort{
+			Column: "createdAt",
+			Order:  common.SortDesc,
+		},
+		page,
+	)
+	if err != nil {
+		return common.PageResult[ResaleReviewCommentListItem]{}, err
+	}
+
+	items := make([]ResaleReviewCommentListItem, 0, len(result.Items))
+	avatarCache := make(map[string]resaleReviewAvatarDisplay, 8)
+
+	for _, comment := range result.Items {
+		display := uc.resolveAvatarDisplay(
+			ctx,
+			comment.AvatarID,
+			avatarCache,
+		)
+
+		items = append(items, ResaleReviewCommentListItem{
+			Comment:    comment,
+			AvatarName: display.Name,
+			AvatarIcon: display.Icon,
+		})
+	}
+
+	return common.PageResult[ResaleReviewCommentListItem]{
+		Items:      items,
+		TotalCount: result.TotalCount,
+		TotalPages: result.TotalPages,
+		Page:       result.Page,
+		PerPage:    result.PerPage,
+	}, nil
+}
+
+// ============================================================
+// Create comment
+// ============================================================
+
+type CreateResaleReviewCommentInput struct {
+	ResaleID string
+	AvatarID string
+	Body     string
+}
+
+func (uc *ResaleReviewUsecase) CreateComment(
+	ctx context.Context,
+	input CreateResaleReviewCommentInput,
+) (ResaleReviewCommentListItem, resalereview.InteractionSummary, error) {
+	if err := uc.requireConfigured("ResaleReview.CreateComment"); err != nil {
+		return ResaleReviewCommentListItem{}, resalereview.InteractionSummary{}, err
+	}
+
+	resaleID := strings.TrimSpace(input.ResaleID)
+	avatarID := strings.TrimSpace(input.AvatarID)
+
+	if resaleID == "" {
+		return ResaleReviewCommentListItem{}, resalereview.InteractionSummary{}, resalereview.ErrInvalidResaleID
+	}
+
+	if avatarID == "" {
+		return ResaleReviewCommentListItem{}, resalereview.InteractionSummary{}, resalereview.ErrInvalidAvatarID
+	}
+
+	if _, err := uc.requireListingResale(ctx, resaleID); err != nil {
+		return ResaleReviewCommentListItem{}, resalereview.InteractionSummary{}, err
+	}
+
+	comment, err := resalereview.NewComment(
+		resalereview.NewCommentParams{
+			ResaleID: resaleID,
+			AvatarID: avatarID,
+			Body:     input.Body,
+			Now:      uc.nowUTC(),
+		},
+	)
+	if err != nil {
+		return ResaleReviewCommentListItem{}, resalereview.InteractionSummary{}, err
+	}
+
+	aggregate, created, err := uc.reviewRepo.Mutations().AddComment(
+		ctx,
+		*comment,
+	)
+	if err != nil {
+		return ResaleReviewCommentListItem{}, resalereview.InteractionSummary{}, err
+	}
+
+	display := uc.resolveAvatarDisplay(
+		ctx,
+		created.AvatarID,
+		nil,
+	)
+
+	summary, err := resalereview.NewInteractionSummary(
+		resaleID,
+		aggregate.LikeCount,
+		aggregate.CommentCount,
+		false,
+	)
+	if err != nil {
+		return ResaleReviewCommentListItem{}, resalereview.InteractionSummary{}, err
+	}
+
+	return ResaleReviewCommentListItem{
+		Comment:    created,
+		AvatarName: display.Name,
+		AvatarIcon: display.Icon,
+	}, summary, nil
+}
+
+// ============================================================
+// Update comment
+// ============================================================
+
+type UpdateResaleReviewCommentInput struct {
+	ResaleID  string
+	CommentID string
+	AvatarID  string
+	Body      string
+}
+
+func (uc *ResaleReviewUsecase) UpdateComment(
+	ctx context.Context,
+	input UpdateResaleReviewCommentInput,
+) (ResaleReviewCommentListItem, error) {
+	if err := uc.requireConfigured("ResaleReview.UpdateComment"); err != nil {
+		return ResaleReviewCommentListItem{}, err
+	}
+
+	resaleID := strings.TrimSpace(input.ResaleID)
+	commentID := strings.TrimSpace(input.CommentID)
+	avatarID := strings.TrimSpace(input.AvatarID)
+
+	if resaleID == "" {
+		return ResaleReviewCommentListItem{}, resalereview.ErrInvalidResaleID
+	}
+
+	if commentID == "" {
+		return ResaleReviewCommentListItem{}, resalereview.ErrInvalidCommentID
+	}
+
+	if avatarID == "" {
+		return ResaleReviewCommentListItem{}, resalereview.ErrInvalidAvatarID
+	}
+
+	if _, err := uc.requireListingResale(ctx, resaleID); err != nil {
+		return ResaleReviewCommentListItem{}, err
+	}
+
+	comment, err := uc.reviewRepo.Comments().GetByParentID(
+		ctx,
+		resaleID,
+		commentID,
+	)
+	if err != nil {
+		return ResaleReviewCommentListItem{}, err
+	}
+
+	if err := comment.RequireOwner(avatarID); err != nil {
+		return ResaleReviewCommentListItem{}, resalereview.ErrForbidden
+	}
+
+	if err := comment.UpdateBody(input.Body, uc.nowUTC()); err != nil {
+		return ResaleReviewCommentListItem{}, err
+	}
+
+	updated, err := uc.reviewRepo.Comments().UpdateUnderParent(
+		ctx,
+		resaleID,
+		commentID,
+		resalereview.NewContentPatchFromComment(comment),
+	)
+	if err != nil {
+		return ResaleReviewCommentListItem{}, err
+	}
+
+	display := uc.resolveAvatarDisplay(
+		ctx,
+		updated.AvatarID,
+		nil,
+	)
+
+	return ResaleReviewCommentListItem{
+		Comment:    updated,
+		AvatarName: display.Name,
+		AvatarIcon: display.Icon,
+	}, nil
+}
+
+// ============================================================
+// Delete comment
+// ============================================================
+
+// DeleteComment logically deletes the current avatar's own comment.
+//
+// The MutationRepository updates the comment and decrements CommentCount
+// atomically. Repeated deletion does not decrement the count again.
+func (uc *ResaleReviewUsecase) DeleteComment(
+	ctx context.Context,
+	resaleID string,
+	commentID string,
+	avatarID string,
+) (resalereview.InteractionSummary, error) {
+	if err := uc.requireConfigured("ResaleReview.DeleteComment"); err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	resaleID = strings.TrimSpace(resaleID)
+	commentID = strings.TrimSpace(commentID)
+	avatarID = strings.TrimSpace(avatarID)
+
+	if resaleID == "" {
+		return resalereview.InteractionSummary{}, resalereview.ErrInvalidResaleID
+	}
+
+	if commentID == "" {
+		return resalereview.InteractionSummary{}, resalereview.ErrInvalidCommentID
+	}
+
+	if avatarID == "" {
+		return resalereview.InteractionSummary{}, resalereview.ErrInvalidAvatarID
+	}
+
+	if _, err := uc.requireListingResale(ctx, resaleID); err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	comment, err := uc.reviewRepo.Comments().GetByParentID(
+		ctx,
+		resaleID,
+		commentID,
+	)
+	if err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	if err := comment.RequireOwner(avatarID); err != nil {
+		return resalereview.InteractionSummary{}, resalereview.ErrForbidden
+	}
+
+	aggregate, _, err := uc.reviewRepo.Mutations().MarkCommentDeleted(
+		ctx,
+		resaleID,
+		commentID,
+	)
+	if err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	likedByMe, err := uc.reviewRepo.Likes().ExistsByAvatar(
+		ctx,
+		resaleID,
+		avatarID,
+	)
+	if err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	return resalereview.NewInteractionSummary(
+		resaleID,
+		aggregate.LikeCount,
+		aggregate.CommentCount,
+		likedByMe,
+	)
+}
+
+// ============================================================
+// Cleanup
+// ============================================================
+
+// DeleteByResaleID physically removes the whole resaleReview tree.
+//
+// This should be invoked when a Resale itself is physically deleted.
+// Firestore does not automatically remove subcollections when deleting
+// the parent resaleReview document.
+func (uc *ResaleReviewUsecase) DeleteByResaleID(
+	ctx context.Context,
+	resaleID string,
+) error {
+	if err := uc.requireConfigured("ResaleReview.DeleteByResaleID"); err != nil {
+		return err
+	}
+
+	resaleID = strings.TrimSpace(resaleID)
+	if resaleID == "" {
+		return resalereview.ErrInvalidResaleID
+	}
+
+	return uc.reviewRepo.Cleanup().DeleteByResaleID(
+		ctx,
+		resaleID,
+	)
+}
+
+// ============================================================
+// Internal helpers
+// ============================================================
+
+func (uc *ResaleReviewUsecase) requireConfigured(
+	operation string,
+) error {
+	if uc == nil {
+		return ErrNotSupported(operation)
+	}
+
+	if uc.resaleRepo == nil {
+		return ErrNotSupported(operation + ".ResaleRepo")
+	}
+
+	if uc.reviewRepo == nil {
+		return ErrNotSupported(operation + ".ReviewRepo")
+	}
+
+	if uc.reviewRepo.Aggregates() == nil ||
+		uc.reviewRepo.Likes() == nil ||
+		uc.reviewRepo.Comments() == nil ||
+		uc.reviewRepo.Mutations() == nil ||
+		uc.reviewRepo.Cleanup() == nil {
+		return ErrNotSupported(operation + ".Repository")
+	}
+
+	return nil
+}
+
+// requireListingResale verifies that interaction target exists and is
+// currently listed.
+//
+// Suspended / sold resales are treated as not found from interaction APIs,
+// matching the current market visibility policy.
+func (uc *ResaleReviewUsecase) requireListingResale(
+	ctx context.Context,
+	resaleID string,
+) (resaledom.Resale, error) {
+	resaleID = strings.TrimSpace(resaleID)
+
+	if resaleID == "" {
+		return resaledom.Resale{}, resalereview.ErrInvalidResaleID
+	}
+
+	item, err := uc.resaleRepo.GetByID(ctx, resaleID)
+	if err != nil {
+		if errors.Is(err, resaledom.ErrNotFound) {
+			return resaledom.Resale{}, resalereview.ErrNotFound
+		}
+
+		return resaledom.Resale{}, err
+	}
+
+	if item.Status != resaledom.StatusListing {
+		return resaledom.Resale{}, resalereview.ErrNotFound
+	}
+
+	return item, nil
+}
+
+type resaleReviewAvatarDisplay struct {
+	Name string
+	Icon string
+}
+
+func (uc *ResaleReviewUsecase) resolveAvatarDisplay(
+	ctx context.Context,
+	avatarID string,
+	cache map[string]resaleReviewAvatarDisplay,
+) resaleReviewAvatarDisplay {
+	avatarID = strings.TrimSpace(avatarID)
+
+	if avatarID == "" || uc == nil || uc.avatarRepo == nil {
+		return resaleReviewAvatarDisplay{}
+	}
+
+	if cache != nil {
+		if value, ok := cache[avatarID]; ok {
+			return value
+		}
+	}
+
+	display := resaleReviewAvatarDisplay{}
+
+	avatar, err := uc.avatarRepo.GetByID(ctx, avatarID)
+	if err == nil {
+		display.Name = avatar.AvatarName
+
+		if avatar.AvatarIcon != nil {
+			display.Icon = *avatar.AvatarIcon
+		}
+	}
+
+	if cache != nil {
+		cache[avatarID] = display
+	}
+
+	return display
+}
+
+func (uc *ResaleReviewUsecase) nowUTC() time.Time {
+	if uc == nil || uc.now == nil {
+		return time.Now().UTC()
+	}
+
+	return uc.now().UTC()
+}

@@ -2,26 +2,33 @@
 package mallHandler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 
 	middleware "narratives/internal/adapters/in/http/middleware"
 	mallquery "narratives/internal/application/query/mall"
+	usecase "narratives/internal/application/usecase"
+	common "narratives/internal/domain/common"
 	resaledom "narratives/internal/domain/resale"
+	resalereview "narratives/internal/domain/resale_review"
 )
 
 type MarketHandler struct {
-	marketQ *mallquery.MarketQuery
+	marketQ        *mallquery.MarketQuery
+	resaleReviewUC *usecase.ResaleReviewUsecase
 }
 
 type NewMarketHandlerParams struct {
-	MarketQ *mallquery.MarketQuery
+	MarketQ        *mallquery.MarketQuery
+	ResaleReviewUC *usecase.ResaleReviewUsecase
 }
 
 func NewMarketHandler(p NewMarketHandlerParams) http.Handler {
 	return &MarketHandler{
-		marketQ: p.MarketQ,
+		marketQ:        p.MarketQ,
+		resaleReviewUC: p.ResaleReviewUC,
 	}
 }
 
@@ -69,14 +76,14 @@ func (h *MarketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	rest := strings.TrimPrefix(path, marketResalesPath+"/")
 	parts := strings.Split(rest, "/")
-	resaleID := strings.TrimSpace(parts[0])
+	resaleID := parts[0]
 
 	if resaleID == "" {
 		notFound(w)
 		return
 	}
 
-	if len(parts) == 2 && strings.TrimSpace(parts[1]) == "images" {
+	if len(parts) == 2 && parts[1] == "images" {
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w)
 			return
@@ -84,6 +91,60 @@ func (h *MarketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		h.listResaleImages(w, r, resaleID)
 		return
+	}
+
+	if len(parts) == 2 && parts[1] == "interactions" {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.getResaleInteractions(w, r, resaleID)
+		return
+	}
+
+	if len(parts) == 2 && parts[1] == "like" {
+		switch r.Method {
+		case http.MethodPut:
+			h.addResaleLike(w, r, resaleID)
+			return
+		case http.MethodDelete:
+			h.removeResaleLike(w, r, resaleID)
+			return
+		default:
+			methodNotAllowed(w)
+			return
+		}
+	}
+
+	if len(parts) == 2 && parts[1] == "comments" {
+		switch r.Method {
+		case http.MethodGet:
+			h.listResaleComments(w, r, resaleID)
+			return
+		case http.MethodPost:
+			h.createResaleComment(w, r, resaleID)
+			return
+		default:
+			methodNotAllowed(w)
+			return
+		}
+	}
+
+	if len(parts) == 3 && parts[1] == "comments" && parts[2] != "" {
+		commentID := parts[2]
+
+		switch r.Method {
+		case http.MethodPut:
+			h.updateResaleComment(w, r, resaleID, commentID)
+			return
+		case http.MethodDelete:
+			h.deleteResaleComment(w, r, resaleID, commentID)
+			return
+		default:
+			methodNotAllowed(w)
+			return
+		}
 	}
 
 	if len(parts) != 1 {
@@ -243,6 +304,236 @@ func (h *MarketHandler) listResaleImages(w http.ResponseWriter, r *http.Request,
 	})
 }
 
+func (h *MarketHandler) getResaleInteractions(w http.ResponseWriter, r *http.Request, resaleID string) {
+	ctx := r.Context()
+
+	if h == nil || h.resaleReviewUC == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	avatarID, ok := currentMarketAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	summary, err := h.resaleReviewUC.GetSummary(ctx, resaleID, avatarID)
+	if err != nil {
+		writeResaleReviewErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": summary,
+	})
+}
+
+func (h *MarketHandler) addResaleLike(w http.ResponseWriter, r *http.Request, resaleID string) {
+	ctx := r.Context()
+
+	if h == nil || h.resaleReviewUC == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	avatarID, ok := currentMarketAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	summary, err := h.resaleReviewUC.AddLike(ctx, resaleID, avatarID)
+	if err != nil {
+		writeResaleReviewErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": summary,
+	})
+}
+
+func (h *MarketHandler) removeResaleLike(w http.ResponseWriter, r *http.Request, resaleID string) {
+	ctx := r.Context()
+
+	if h == nil || h.resaleReviewUC == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	avatarID, ok := currentMarketAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	summary, err := h.resaleReviewUC.RemoveLike(ctx, resaleID, avatarID)
+	if err != nil {
+		writeResaleReviewErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": summary,
+	})
+}
+
+func (h *MarketHandler) listResaleComments(w http.ResponseWriter, r *http.Request, resaleID string) {
+	ctx := r.Context()
+
+	if h == nil || h.resaleReviewUC == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	if _, ok := currentMarketAvatarID(w, r); !ok {
+		return
+	}
+
+	result, err := h.resaleReviewUC.ListComments(
+		ctx,
+		resaleID,
+		buildMarketResaleReviewPageFromQuery(r),
+	)
+	if err != nil {
+		writeResaleReviewErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items":      result.Items,
+		"totalCount": result.TotalCount,
+		"totalPages": result.TotalPages,
+		"page":       result.Page,
+		"perPage":    result.PerPage,
+	})
+}
+
+type marketResaleCommentRequest struct {
+	Body string `json:"body"`
+}
+
+func (h *MarketHandler) createResaleComment(w http.ResponseWriter, r *http.Request, resaleID string) {
+	ctx := r.Context()
+
+	if h == nil || h.resaleReviewUC == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	avatarID, ok := currentMarketAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	var req marketResaleCommentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "invalid_json",
+		})
+		return
+	}
+
+	comment, summary, err := h.resaleReviewUC.CreateComment(
+		ctx,
+		usecase.CreateResaleReviewCommentInput{
+			ResaleID: resaleID,
+			AvatarID: avatarID,
+			Body:     req.Body,
+		},
+	)
+	if err != nil {
+		writeResaleReviewErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"data":        comment,
+		"interaction": summary,
+	})
+}
+
+func (h *MarketHandler) updateResaleComment(w http.ResponseWriter, r *http.Request, resaleID string, commentID string) {
+	ctx := r.Context()
+
+	if h == nil || h.resaleReviewUC == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	avatarID, ok := currentMarketAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	var req marketResaleCommentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "invalid_json",
+		})
+		return
+	}
+
+	comment, err := h.resaleReviewUC.UpdateComment(
+		ctx,
+		usecase.UpdateResaleReviewCommentInput{
+			ResaleID:  resaleID,
+			CommentID: commentID,
+			AvatarID:  avatarID,
+			Body:      req.Body,
+		},
+	)
+	if err != nil {
+		writeResaleReviewErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": comment,
+	})
+}
+
+func (h *MarketHandler) deleteResaleComment(w http.ResponseWriter, r *http.Request, resaleID string, commentID string) {
+	ctx := r.Context()
+
+	if h == nil || h.resaleReviewUC == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	avatarID, ok := currentMarketAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	summary, err := h.resaleReviewUC.DeleteComment(
+		ctx,
+		resaleID,
+		commentID,
+		avatarID,
+	)
+	if err != nil {
+		writeResaleReviewErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": summary,
+	})
+}
+
 func currentMarketAvatarID(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -258,19 +549,53 @@ func currentMarketAvatarID(
 	return avatarID, true
 }
 
+func writeResaleReviewErr(w http.ResponseWriter, err error) {
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "internal_error",
+		})
+
+	case resalereview.IsInvalid(err):
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": err.Error(),
+		})
+
+	case resalereview.IsForbidden(err):
+		writeJSON(w, http.StatusForbidden, map[string]string{
+			"error": "forbidden",
+		})
+
+	case resalereview.IsNotFound(err):
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "not_found",
+		})
+
+	case resalereview.IsConflict(err):
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "conflict",
+		})
+
+	default:
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "internal_error",
+		})
+	}
+}
+
 func isCursorMarketRequest(r *http.Request) bool {
 	qp := r.URL.Query()
 
-	mode := strings.ToLower(strings.TrimSpace(qp.Get("mode")))
+	mode := strings.ToLower(qp.Get("mode"))
 	if mode == "cursor" {
 		return true
 	}
 
-	if strings.TrimSpace(qp.Get("after")) != "" {
+	if qp.Get("after") != "" {
 		return true
 	}
 
-	if strings.TrimSpace(qp.Get("cursor")) != "" {
+	if qp.Get("cursor") != "" {
 		return true
 	}
 
@@ -282,11 +607,11 @@ func buildMarketResaleFilterFromQuery(r *http.Request) resaledom.Filter {
 
 	filter := resaledom.Filter{}
 
-	if s := strings.TrimSpace(qp.Get("q")); s != "" {
+	if s := qp.Get("q"); s != "" {
 		filter.SearchQuery = s
-	} else if s := strings.TrimSpace(qp.Get("search")); s != "" {
+	} else if s := qp.Get("search"); s != "" {
 		filter.SearchQuery = s
-	} else if s := strings.TrimSpace(qp.Get("searchQuery")); s != "" {
+	} else if s := qp.Get("searchQuery"); s != "" {
 		filter.SearchQuery = s
 	}
 
@@ -356,9 +681,9 @@ func buildMarketResaleFilterFromQuery(r *http.Request) resaledom.Filter {
 		}
 	}
 
-	statusesRaw := strings.TrimSpace(qp.Get("statuses"))
+	statusesRaw := qp.Get("statuses")
 	if statusesRaw == "" {
-		statusesRaw = strings.TrimSpace(qp.Get("status"))
+		statusesRaw = qp.Get("status")
 	}
 
 	if statusesRaw != "" {
@@ -383,9 +708,9 @@ func buildMarketResaleFilterFromQuery(r *http.Request) resaledom.Filter {
 		filter.Status = &status
 	}
 
-	conditionsRaw := strings.TrimSpace(qp.Get("conditions"))
+	conditionsRaw := qp.Get("conditions")
 	if conditionsRaw == "" {
-		conditionsRaw = strings.TrimSpace(qp.Get("condition"))
+		conditionsRaw = qp.Get("condition")
 	}
 
 	if conditionsRaw != "" {
@@ -407,13 +732,13 @@ func buildMarketResaleFilterFromQuery(r *http.Request) resaledom.Filter {
 		}
 	}
 
-	if v := strings.TrimSpace(qp.Get("minPrice")); v != "" {
+	if v := qp.Get("minPrice"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			filter.MinPrice = &n
 		}
 	}
 
-	if v := strings.TrimSpace(qp.Get("maxPrice")); v != "" {
+	if v := qp.Get("maxPrice"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			filter.MaxPrice = &n
 		}
@@ -425,23 +750,23 @@ func buildMarketResaleFilterFromQuery(r *http.Request) resaledom.Filter {
 func buildMarketResaleSortFromQuery(r *http.Request) resaledom.Sort {
 	qp := r.URL.Query()
 
-	column := strings.TrimSpace(qp.Get("sort"))
+	column := qp.Get("sort")
 	if column == "" {
-		column = strings.TrimSpace(qp.Get("sortBy"))
+		column = qp.Get("sortBy")
 	}
 	if column == "" {
-		column = strings.TrimSpace(qp.Get("orderBy"))
+		column = qp.Get("orderBy")
 	}
 	if column == "" {
 		column = "createdAt"
 	}
 
-	orderRaw := strings.ToLower(strings.TrimSpace(qp.Get("order")))
+	orderRaw := strings.ToLower(qp.Get("order"))
 	if orderRaw == "" {
-		orderRaw = strings.ToLower(strings.TrimSpace(qp.Get("sortOrder")))
+		orderRaw = strings.ToLower(qp.Get("sortOrder"))
 	}
 	if orderRaw == "" {
-		orderRaw = strings.ToLower(strings.TrimSpace(qp.Get("direction")))
+		orderRaw = strings.ToLower(qp.Get("direction"))
 	}
 
 	order := resaledom.SortDesc
@@ -470,12 +795,27 @@ func buildMarketResalePageFromQuery(r *http.Request) resaledom.Page {
 	}
 }
 
+func buildMarketResaleReviewPageFromQuery(r *http.Request) common.Page {
+	qp := r.URL.Query()
+
+	pageNum := parsePositiveIntDefault(qp.Get("page"), 1)
+	perPage := parsePositiveIntDefault(qp.Get("perPage"), 20)
+	if perPage > 100 {
+		perPage = 100
+	}
+
+	return common.Page{
+		Number:  pageNum,
+		PerPage: perPage,
+	}
+}
+
 func buildMarketResaleCursorPageFromQuery(r *http.Request) resaledom.CursorPage {
 	qp := r.URL.Query()
 
-	after := strings.TrimSpace(qp.Get("after"))
+	after := qp.Get("after")
 	if after == "" {
-		after = strings.TrimSpace(qp.Get("cursor"))
+		after = qp.Get("cursor")
 	}
 
 	limit := parsePositiveIntDefault(qp.Get("limit"), 50)
@@ -494,12 +834,11 @@ func splitMarketResaleCSV(raw string) []string {
 	out := make([]string, 0, len(parts))
 
 	for _, part := range parts {
-		v := strings.TrimSpace(part)
-		if v == "" {
+		if part == "" {
 			continue
 		}
 
-		out = append(out, v)
+		out = append(out, part)
 	}
 
 	return out

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	usecase "narratives/internal/application/usecase"
+	common "narratives/internal/domain/common"
 	resaledom "narratives/internal/domain/resale"
 )
 
@@ -39,19 +40,22 @@ type ResaleQuery interface {
 }
 
 type ResaleHandler struct {
-	uc    *usecase.ResaleUsecase
-	query ResaleQuery
+	uc             *usecase.ResaleUsecase
+	query          ResaleQuery
+	resaleReviewUC *usecase.ResaleReviewUsecase
 }
 
 type NewResaleHandlerParams struct {
-	UC    *usecase.ResaleUsecase
-	Query ResaleQuery
+	UC             *usecase.ResaleUsecase
+	Query          ResaleQuery
+	ResaleReviewUC *usecase.ResaleReviewUsecase
 }
 
 func NewResaleHandler(p NewResaleHandlerParams) http.Handler {
 	return &ResaleHandler{
-		uc:    p.UC,
-		query: p.Query,
+		uc:             p.UC,
+		query:          p.Query,
+		resaleReviewUC: p.ResaleReviewUC,
 	}
 }
 
@@ -163,6 +167,47 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			h.setPrimaryImage(w, r, resaleID)
+			return
+
+		case "comments":
+			if len(parts) == 2 {
+				switch r.Method {
+				case http.MethodGet:
+					h.listOwnedResaleComments(w, r, resaleID)
+					return
+
+				case http.MethodPost:
+					h.createOwnedResaleComment(w, r, resaleID)
+					return
+
+				default:
+					methodNotAllowed(w)
+					return
+				}
+			}
+
+			if len(parts) == 3 && parts[2] != "" {
+				commentID := parts[2]
+
+				switch r.Method {
+				case http.MethodPut:
+					h.updateOwnedResaleComment(w, r, resaleID, commentID)
+					return
+
+				case http.MethodDelete:
+					h.deleteOwnedResaleComment(w, r, resaleID, commentID)
+					return
+
+				default:
+					methodNotAllowed(w)
+					return
+				}
+			}
+
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "not_found",
+			})
 			return
 
 		default:
@@ -884,6 +929,196 @@ func (h *ResaleHandler) setPrimaryImage(
 	})
 }
 
+type resaleCommentRequest struct {
+	Body string `json:"body"`
+}
+
+func (h *ResaleHandler) listOwnedResaleComments(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+) {
+	ctx := r.Context()
+
+	if h == nil || h.resaleReviewUC == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	if _, ok := h.getOwnedResale(
+		w,
+		r,
+		ctx,
+		resaleID,
+	); !ok {
+		return
+	}
+
+	result, err := h.resaleReviewUC.ListComments(
+		ctx,
+		resaleID,
+		buildResaleReviewPageFromQuery(r),
+	)
+	if err != nil {
+		writeResaleReviewErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items":      result.Items,
+		"totalCount": result.TotalCount,
+		"totalPages": result.TotalPages,
+		"page":       result.Page,
+		"perPage":    result.PerPage,
+	})
+}
+
+func (h *ResaleHandler) createOwnedResaleComment(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+) {
+	ctx := r.Context()
+
+	if h == nil || h.resaleReviewUC == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	item, ok := h.getOwnedResale(
+		w,
+		r,
+		ctx,
+		resaleID,
+	)
+	if !ok {
+		return
+	}
+
+	var req resaleCommentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "invalid_json",
+		})
+		return
+	}
+
+	comment, summary, err := h.resaleReviewUC.CreateComment(
+		ctx,
+		usecase.CreateResaleReviewCommentInput{
+			ResaleID: resaleID,
+			AvatarID: item.AvatarID,
+			Body:     req.Body,
+		},
+	)
+	if err != nil {
+		writeResaleReviewErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"data":        comment,
+		"interaction": summary,
+	})
+}
+
+func (h *ResaleHandler) updateOwnedResaleComment(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+	commentID string,
+) {
+	ctx := r.Context()
+
+	if h == nil || h.resaleReviewUC == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	item, ok := h.getOwnedResale(
+		w,
+		r,
+		ctx,
+		resaleID,
+	)
+	if !ok {
+		return
+	}
+
+	var req resaleCommentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "invalid_json",
+		})
+		return
+	}
+
+	comment, err := h.resaleReviewUC.UpdateComment(
+		ctx,
+		usecase.UpdateResaleReviewCommentInput{
+			ResaleID:  resaleID,
+			CommentID: commentID,
+			AvatarID:  item.AvatarID,
+			Body:      req.Body,
+		},
+	)
+	if err != nil {
+		writeResaleReviewErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": comment,
+	})
+}
+
+func (h *ResaleHandler) deleteOwnedResaleComment(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+	commentID string,
+) {
+	ctx := r.Context()
+
+	if h == nil || h.resaleReviewUC == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	item, ok := h.getOwnedResale(
+		w,
+		r,
+		ctx,
+		resaleID,
+	)
+	if !ok {
+		return
+	}
+
+	summary, err := h.resaleReviewUC.DeleteComment(
+		ctx,
+		resaleID,
+		commentID,
+		item.AvatarID,
+	)
+	if err != nil {
+		writeResaleReviewErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": summary,
+	})
+}
+
 func (h *ResaleHandler) getOwnedResale(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -992,6 +1227,22 @@ func buildResalePageFromQuery(r *http.Request) resaledom.Page {
 	}
 
 	return resaledom.Page{
+		Number:  pageNum,
+		PerPage: perPage,
+	}
+}
+
+func buildResaleReviewPageFromQuery(r *http.Request) common.Page {
+	query := r.URL.Query()
+
+	pageNum := parsePositiveIntDefault(query.Get("page"), 1)
+	perPage := parsePositiveIntDefault(query.Get("perPage"), 20)
+
+	if perPage > 100 {
+		perPage = 100
+	}
+
+	return common.Page{
 		Number:  pageNum,
 		PerPage: perPage,
 	}
