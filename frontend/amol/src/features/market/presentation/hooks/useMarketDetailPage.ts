@@ -35,7 +35,6 @@ export type UseMarketDetailPageParams = {
 
 export type UseMarketDetailPageResult = {
   item: MarketResaleListing | null;
-  images: ResaleConditionImage[];
   reviews: ProductBlueprintReviewPage | null;
 
   loading: boolean;
@@ -59,7 +58,6 @@ export type UseMarketDetailPageResult = {
   avatarIcon: string;
 
   galleryItems: MediaGalleryItem[];
-  activeMediaIndex: number;
   safeActiveMediaIndex: number;
 
   canAddToCart: boolean;
@@ -293,7 +291,6 @@ export function useMarketDetailPage({
 
   return {
     item,
-    images,
     reviews,
     loading,
     loadingReviews,
@@ -311,7 +308,6 @@ export function useMarketDetailPage({
     avatarName,
     avatarIcon,
     galleryItems,
-    activeMediaIndex,
     safeActiveMediaIndex,
     canAddToCart,
     handlePrevMedia,

@@ -6,6 +6,9 @@ import type { MediaGalleryItem } from "../../../../components/ui/MediaGallery";
 import type { MediaUploaderItem } from "../../../../components/ui/MediaUploader";
 
 import type {
+  ResaleModelDisplay,
+} from "../../../shared/presentation/utils/resaleModelDisplay";
+import type {
   ResaleCondition,
   ResaleConditionImage,
   ResaleEditableStatus,
@@ -25,17 +28,6 @@ export type ResaleListingTargetSummary = {
   tokenName: string;
   brandName: string;
   productName: string;
-};
-
-export type ResaleDetailModelInfoProps = {
-  hasModelInfo: boolean;
-  kindLabel: string;
-  modelNumber: string;
-  size: string;
-  colorLabel: string;
-  colorCssValue: string;
-  measurementsLabel: string;
-  volumeLabel: string;
 };
 
 export type ResaleDetailReadonlyInfoProps = {
@@ -108,7 +100,7 @@ export type ResaleDetailPageViewModel = {
   errorMessage: string;
   saveMessage: string;
   listingTarget: ResaleListingTargetSummary;
-  modelInfoProps: ResaleDetailModelInfoProps;
+  model: ResaleModelDisplay;
   readonlyInfoProps: ResaleDetailReadonlyInfoProps;
   editFormProps: ResaleDetailEditFormProps;
   handleBack: () => void;

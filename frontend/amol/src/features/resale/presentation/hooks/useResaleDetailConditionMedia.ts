@@ -8,6 +8,9 @@ import {
   type ChangeEvent,
 } from "react";
 
+import {
+  sortResaleConditionImages,
+} from "../../../shared/presentation/utils/resaleConditionMedia";
 import type {
   ResaleConditionImage,
 } from "../../../shared/types/resale";
@@ -19,10 +22,6 @@ import type {
 import {
   createResaleConditionMediaItems,
 } from "../utils/resaleConditionMedia";
-
-import {
-  sortResaleConditionImages,
-} from "../utils/resaleDetailImages";
 
 /**
  * APIから取得した既存画像を、
@@ -48,10 +47,7 @@ function revokeNewConditionMediaPreviews(
   items: readonly ResaleDetailConditionMediaItem[],
 ): void {
   items.forEach((item) => {
-    if (
-      item.source !== "new" ||
-      !item.previewUrl
-    ) {
+    if (item.source !== "new" || !item.previewUrl) {
       return;
     }
 
@@ -63,17 +59,10 @@ function revokeNewConditionMediaPreviews(
  * 再販詳細画面の商品状態画像を管理する。
  */
 export function useResaleDetailConditionMedia() {
-  const conditionMediaInputRef =
-    useRef<HTMLInputElement>(null);
-
-  const conditionMediaCarouselRef =
-    useRef<HTMLDivElement>(null);
-
-  const conditionMediaItemsRef =
-    useRef<ResaleDetailConditionMediaItem[]>([]);
-
-  const deletedImageIdsRef =
-    useRef<string[]>([]);
+  const conditionMediaInputRef = useRef<HTMLInputElement>(null);
+  const conditionMediaCarouselRef = useRef<HTMLDivElement>(null);
+  const conditionMediaItemsRef = useRef<ResaleDetailConditionMediaItem[]>([]);
+  const deletedImageIdsRef = useRef<string[]>([]);
 
   const [
     conditionMediaItems,
@@ -90,289 +79,207 @@ export function useResaleDetailConditionMedia() {
     setDeletedImageIds,
   ] = useState<string[]>([]);
 
-  const replaceConditionMediaItems =
-    useCallback(
-      (
-        items: ResaleDetailConditionMediaItem[],
-      ) => {
-        conditionMediaItemsRef.current = items;
-        setConditionMediaItems(items);
-      },
-      [],
-    );
+  const replaceConditionMediaItems = useCallback(
+    (items: ResaleDetailConditionMediaItem[]) => {
+      conditionMediaItemsRef.current = items;
+      setConditionMediaItems(items);
+    },
+    [],
+  );
 
-  const replaceDeletedImageIds =
-    useCallback(
-      (
-        imageIds: readonly string[],
-      ) => {
-        const nextImageIds =
-          Array.from(new Set(imageIds));
+  const replaceDeletedImageIds = useCallback(
+    (imageIds: readonly string[]) => {
+      const nextImageIds = Array.from(new Set(imageIds));
 
-        deletedImageIdsRef.current =
-          nextImageIds;
+      deletedImageIdsRef.current = nextImageIds;
+      setDeletedImageIds(nextImageIds);
+    },
+    [],
+  );
 
-        setDeletedImageIds(
-          nextImageIds,
-        );
-      },
-      [],
-    );
+  const resetConditionMedia = useCallback(
+    (images: readonly ResaleConditionImage[]) => {
+      revokeNewConditionMediaPreviews(
+        conditionMediaItemsRef.current,
+      );
 
-  const resetConditionMedia =
-    useCallback(
-      (
-        images: readonly ResaleConditionImage[],
-      ) => {
-        revokeNewConditionMediaPreviews(
-          conditionMediaItemsRef.current,
-        );
+      const nextItems = sortResaleConditionImages(images).map(
+        createExistingConditionMediaItem,
+      );
 
-        const nextItems =
-          sortResaleConditionImages(
-            images,
-          ).map(
-            createExistingConditionMediaItem,
-          );
+      replaceConditionMediaItems(nextItems);
+      replaceDeletedImageIds([]);
+      setConditionMediaCurrentIndex(0);
 
-        replaceConditionMediaItems(
-          nextItems,
-        );
+      if (conditionMediaInputRef.current) {
+        conditionMediaInputRef.current.value = "";
+      }
 
-        replaceDeletedImageIds([]);
-        setConditionMediaCurrentIndex(0);
+      conditionMediaCarouselRef.current?.scrollTo({
+        left: 0,
+        behavior: "auto",
+      });
+    },
+    [
+      replaceConditionMediaItems,
+      replaceDeletedImageIds,
+    ],
+  );
 
-        if (
-          conditionMediaInputRef.current
-        ) {
-          conditionMediaInputRef.current.value =
-            "";
-        }
+  const handleConditionMediaSelected = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const input = event.currentTarget;
 
-        conditionMediaCarouselRef.current?.scrollTo({
-          left: 0,
-          behavior: "auto",
-        });
-      },
-      [
-        replaceConditionMediaItems,
-        replaceDeletedImageIds,
-      ],
-    );
+      const newItems = createResaleConditionMediaItems(
+        input.files,
+      ).map<ResaleDetailConditionMediaItem>((item) => ({
+        ...item,
+        source: "new",
+      }));
 
-  const handleConditionMediaSelected =
-    useCallback(
-      (
-        event: ChangeEvent<HTMLInputElement>,
-      ) => {
-        const input =
-          event.currentTarget;
+      input.value = "";
 
-        const newItems =
-          createResaleConditionMediaItems(
-            input.files,
-          ).map<ResaleDetailConditionMediaItem>(
-            (item) => ({
-              ...item,
-              source: "new",
-            }),
-          );
-
-        input.value = "";
-
-        if (newItems.length === 0) {
-          return;
-        }
-
-        replaceConditionMediaItems([
-          ...conditionMediaItemsRef.current,
-          ...newItems,
-        ]);
-      },
-      [
-        replaceConditionMediaItems,
-      ],
-    );
-
-  const handleRemoveConditionMedia =
-    useCallback(
-      (
-        id: string,
-      ) => {
-        if (!id) {
-          return;
-        }
-
-        const currentItems =
-          conditionMediaItemsRef.current;
-
-        const removingItem =
-          currentItems.find(
-            (item) =>
-              item.id === id,
-          );
-
-        if (!removingItem) {
-          return;
-        }
-
-        if (
-          removingItem.source ===
-          "existing"
-        ) {
-          replaceDeletedImageIds([
-            ...deletedImageIdsRef.current,
-            removingItem.id,
-          ]);
-        }
-
-        if (
-          removingItem.source === "new" &&
-          removingItem.previewUrl
-        ) {
-          URL.revokeObjectURL(
-            removingItem.previewUrl,
-          );
-        }
-
-        const nextItems =
-          currentItems.filter(
-            (item) =>
-              item.id !== id,
-          );
-
-        replaceConditionMediaItems(
-          nextItems,
-        );
-
-        setConditionMediaCurrentIndex(
-          (currentIndex) => {
-            if (
-              nextItems.length === 0
-            ) {
-              return 0;
-            }
-
-            return Math.min(
-              currentIndex,
-              nextItems.length - 1,
-            );
-          },
-        );
-      },
-      [
-        replaceConditionMediaItems,
-        replaceDeletedImageIds,
-      ],
-    );
-
-  const handleConditionMediaCarouselScroll =
-    useCallback(() => {
-      const carousel =
-        conditionMediaCarouselRef.current;
-
-      if (!carousel) {
+      if (newItems.length === 0) {
         return;
       }
 
-      const itemCount =
-        conditionMediaItemsRef.current.length;
+      replaceConditionMediaItems([
+        ...conditionMediaItemsRef.current,
+        ...newItems,
+      ]);
+    },
+    [replaceConditionMediaItems],
+  );
+
+  const handleRemoveConditionMedia = useCallback(
+    (id: string) => {
+      if (!id) {
+        return;
+      }
+
+      const currentItems = conditionMediaItemsRef.current;
+      const removingItem = currentItems.find(
+        (item) => item.id === id,
+      );
+
+      if (!removingItem) {
+        return;
+      }
+
+      if (removingItem.source === "existing") {
+        replaceDeletedImageIds([
+          ...deletedImageIdsRef.current,
+          removingItem.id,
+        ]);
+      }
+
+      if (
+        removingItem.source === "new" &&
+        removingItem.previewUrl
+      ) {
+        URL.revokeObjectURL(removingItem.previewUrl);
+      }
+
+      const nextItems = currentItems.filter(
+        (item) => item.id !== id,
+      );
+
+      replaceConditionMediaItems(nextItems);
+
+      setConditionMediaCurrentIndex((currentIndex) => {
+        if (nextItems.length === 0) {
+          return 0;
+        }
+
+        return Math.min(
+          currentIndex,
+          nextItems.length - 1,
+        );
+      });
+    },
+    [
+      replaceConditionMediaItems,
+      replaceDeletedImageIds,
+    ],
+  );
+
+  const handleConditionMediaCarouselScroll = useCallback(() => {
+    const carousel = conditionMediaCarouselRef.current;
+
+    if (!carousel) {
+      return;
+    }
+
+    const itemCount = conditionMediaItemsRef.current.length;
+
+    if (itemCount === 0) {
+      setConditionMediaCurrentIndex(0);
+      return;
+    }
+
+    const carouselWidth = carousel.clientWidth;
+
+    if (carouselWidth <= 0) {
+      return;
+    }
+
+    const calculatedIndex = Math.round(
+      carousel.scrollLeft / carouselWidth,
+    );
+
+    const nextIndex = Math.min(
+      Math.max(calculatedIndex, 0),
+      itemCount - 1,
+    );
+
+    setConditionMediaCurrentIndex(nextIndex);
+  }, []);
+
+  const handleMoveToConditionMediaSlide = useCallback(
+    (index: number) => {
+      const itemCount = conditionMediaItemsRef.current.length;
 
       if (itemCount === 0) {
         setConditionMediaCurrentIndex(0);
         return;
       }
 
-      const carouselWidth =
-        carousel.clientWidth;
+      const nextIndex = Math.min(
+        Math.max(index, 0),
+        itemCount - 1,
+      );
 
-      if (carouselWidth <= 0) {
-        return;
+      const carousel = conditionMediaCarouselRef.current;
+
+      if (carousel) {
+        carousel.scrollTo({
+          left: carousel.clientWidth * nextIndex,
+          behavior: "smooth",
+        });
       }
 
-      const calculatedIndex =
-        Math.round(
-          carousel.scrollLeft /
-          carouselWidth,
-        );
+      setConditionMediaCurrentIndex(nextIndex);
+    },
+    [],
+  );
 
-      const nextIndex =
-        Math.min(
-          Math.max(
-            calculatedIndex,
-            0,
-          ),
-          itemCount - 1,
-        );
-
-      setConditionMediaCurrentIndex(
-        nextIndex,
-      );
-    }, []);
-
-  const handleMoveToConditionMediaSlide =
-    useCallback(
-      (
-        index: number,
-      ) => {
-        const itemCount =
-          conditionMediaItemsRef.current.length;
-
-        if (itemCount === 0) {
-          setConditionMediaCurrentIndex(0);
-          return;
-        }
-
-        const nextIndex =
-          Math.min(
-            Math.max(
-              index,
-              0,
-            ),
-            itemCount - 1,
-          );
-
-        const carousel =
-          conditionMediaCarouselRef.current;
-
-        if (carousel) {
-          carousel.scrollTo({
-            left:
-              carousel.clientWidth *
-              nextIndex,
-            behavior: "smooth",
-          });
-        }
-
-        setConditionMediaCurrentIndex(
-          nextIndex,
-        );
-      },
-      [],
-    );
-
-  const getNewConditionFiles =
-    useCallback(
-      (): File[] => {
-        return conditionMediaItemsRef.current
-          .filter(
-            (
-              item,
-            ): item is
-              ResaleDetailConditionMediaItem & {
-                source: "new";
-                file: File;
-              } =>
-              item.source === "new" &&
-              item.file instanceof File,
-          )
-          .map(
-            (item) =>
-              item.file,
-          );
-      },
-      [],
-    );
+  const getNewConditionFiles = useCallback(
+    (): File[] => {
+      return conditionMediaItemsRef.current
+        .filter(
+          (
+            item,
+          ): item is ResaleDetailConditionMediaItem & {
+            source: "new";
+            file: File;
+          } =>
+            item.source === "new" &&
+            item.file instanceof File,
+        )
+        .map((item) => item.file);
+    },
+    [],
+  );
 
   useEffect(() => {
     return () => {
@@ -380,11 +287,8 @@ export function useResaleDetailConditionMedia() {
         conditionMediaItemsRef.current,
       );
 
-      conditionMediaItemsRef.current =
-        [];
-
-      deletedImageIdsRef.current =
-        [];
+      conditionMediaItemsRef.current = [];
+      deletedImageIdsRef.current = [];
     };
   }, []);
 
@@ -394,13 +298,9 @@ export function useResaleDetailConditionMedia() {
     conditionMediaInputRef,
     conditionMediaCarouselRef,
     deletedImageIds,
-
-    hasConditionMedia:
-      conditionMediaItems.length > 0,
-
+    hasConditionMedia: conditionMediaItems.length > 0,
     resetConditionMedia,
     getNewConditionFiles,
-
     handleConditionMediaSelected,
     handleRemoveConditionMedia,
     handleConditionMediaCarouselScroll,

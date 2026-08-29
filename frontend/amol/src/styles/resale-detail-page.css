@@ -32,63 +32,6 @@
   box-sizing: border-box;
 }
 
-.resale-detail-page__price {
-  margin: 18px 0 0;
-  color: #111;
-  font-size: 28px;
-  font-weight: 800;
-  line-height: 1.2;
-}
-
-.resale-detail-page__meta {
-  margin: 24px 0 0;
-  border-top: 1px solid #eee;
-}
-
-.resale-detail-page__meta-row {
-  display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
-  gap: 12px;
-  padding: 16px 0;
-  border-bottom: 1px solid #eee;
-}
-
-.resale-detail-page__meta-row dt {
-  margin: 0;
-  color: #777;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.resale-detail-page__meta-row dd {
-  min-width: 0;
-  margin: 0;
-  color: #222;
-  font-size: 14px;
-  line-height: 1.7;
-  overflow-wrap: anywhere;
-}
-
-.resale-detail-page__description {
-  margin-top: 24px;
-}
-
-.resale-detail-page__description h2 {
-  margin: 0 0 10px;
-  color: #111;
-  font-size: 16px;
-  line-height: 1.4;
-}
-
-.resale-detail-page__description p {
-  margin: 0;
-  color: #333;
-  font-size: 15px;
-  line-height: 1.8;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
 .resale-detail-page__edit-form {
   margin-top: 24px;
   padding-top: 24px;
@@ -169,14 +112,6 @@
 
   .resale-detail-page__image-wrap--editing {
     padding: 16px;
-  }
-
-  .resale-detail-page__price {
-    font-size: 24px;
-  }
-
-  .resale-detail-page__meta-row {
-    grid-template-columns: 80px minmax(0, 1fr);
   }
 
   .resale-detail-page__edit-form {
