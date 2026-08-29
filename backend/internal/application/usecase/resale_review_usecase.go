@@ -4,7 +4,6 @@ package usecase
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	avatardom "narratives/internal/domain/avatar"
@@ -80,9 +79,6 @@ func (uc *ResaleReviewUsecase) GetSummary(
 		return resalereview.InteractionSummary{}, err
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
-	viewerAvatarID = strings.TrimSpace(viewerAvatarID)
-
 	if resaleID == "" {
 		return resalereview.InteractionSummary{}, resalereview.ErrInvalidResaleID
 	}
@@ -145,9 +141,6 @@ func (uc *ResaleReviewUsecase) AddLike(
 		return resalereview.InteractionSummary{}, err
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
-	avatarID = strings.TrimSpace(avatarID)
-
 	if err := resalereview.ValidateLikeTarget(resaleID, avatarID); err != nil {
 		return resalereview.InteractionSummary{}, err
 	}
@@ -195,9 +188,6 @@ func (uc *ResaleReviewUsecase) RemoveLike(
 	if err := uc.requireConfigured("ResaleReview.RemoveLike"); err != nil {
 		return resalereview.InteractionSummary{}, err
 	}
-
-	resaleID = strings.TrimSpace(resaleID)
-	avatarID = strings.TrimSpace(avatarID)
 
 	if err := resalereview.ValidateLikeTarget(resaleID, avatarID); err != nil {
 		return resalereview.InteractionSummary{}, err
@@ -255,12 +245,11 @@ func (uc *ResaleReviewUsecase) ListComments(
 		return common.PageResult[ResaleReviewCommentListItem]{}, err
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
 	if resaleID == "" {
 		return common.PageResult[ResaleReviewCommentListItem]{}, resalereview.ErrInvalidResaleID
 	}
 
-	if _, err := uc.requireListingResale(ctx, resaleID); err != nil {
+	if _, err := uc.requireExistingResale(ctx, resaleID); err != nil {
 		return common.PageResult[ResaleReviewCommentListItem]{}, err
 	}
 
@@ -334,8 +323,8 @@ func (uc *ResaleReviewUsecase) CreateComment(
 		return ResaleReviewCommentListItem{}, resalereview.InteractionSummary{}, err
 	}
 
-	resaleID := strings.TrimSpace(input.ResaleID)
-	avatarID := strings.TrimSpace(input.AvatarID)
+	resaleID := input.ResaleID
+	avatarID := input.AvatarID
 
 	if resaleID == "" {
 		return ResaleReviewCommentListItem{}, resalereview.InteractionSummary{}, resalereview.ErrInvalidResaleID
@@ -375,11 +364,20 @@ func (uc *ResaleReviewUsecase) CreateComment(
 		nil,
 	)
 
+	likedByMe, err := uc.reviewRepo.Likes().ExistsByAvatar(
+		ctx,
+		resaleID,
+		avatarID,
+	)
+	if err != nil {
+		return ResaleReviewCommentListItem{}, resalereview.InteractionSummary{}, err
+	}
+
 	summary, err := resalereview.NewInteractionSummary(
 		resaleID,
 		aggregate.LikeCount,
 		aggregate.CommentCount,
-		false,
+		likedByMe,
 	)
 	if err != nil {
 		return ResaleReviewCommentListItem{}, resalereview.InteractionSummary{}, err
@@ -411,9 +409,9 @@ func (uc *ResaleReviewUsecase) UpdateComment(
 		return ResaleReviewCommentListItem{}, err
 	}
 
-	resaleID := strings.TrimSpace(input.ResaleID)
-	commentID := strings.TrimSpace(input.CommentID)
-	avatarID := strings.TrimSpace(input.AvatarID)
+	resaleID := input.ResaleID
+	commentID := input.CommentID
+	avatarID := input.AvatarID
 
 	if resaleID == "" {
 		return ResaleReviewCommentListItem{}, resalereview.ErrInvalidResaleID
@@ -489,10 +487,6 @@ func (uc *ResaleReviewUsecase) DeleteComment(
 		return resalereview.InteractionSummary{}, err
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
-	commentID = strings.TrimSpace(commentID)
-	avatarID = strings.TrimSpace(avatarID)
-
 	if resaleID == "" {
 		return resalereview.InteractionSummary{}, resalereview.ErrInvalidResaleID
 	}
@@ -565,7 +559,6 @@ func (uc *ResaleReviewUsecase) DeleteByResaleID(
 		return err
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
 	if resaleID == "" {
 		return resalereview.ErrInvalidResaleID
 	}
@@ -606,17 +599,14 @@ func (uc *ResaleReviewUsecase) requireConfigured(
 	return nil
 }
 
-// requireListingResale verifies that interaction target exists and is
-// currently listed.
+// requireExistingResale verifies that the target resale exists.
 //
-// Suspended / sold resales are treated as not found from interaction APIs,
-// matching the current market visibility policy.
-func (uc *ResaleReviewUsecase) requireListingResale(
+// This is used for read-only comment access so historical comments remain
+// visible after the resale becomes suspended or sold.
+func (uc *ResaleReviewUsecase) requireExistingResale(
 	ctx context.Context,
 	resaleID string,
 ) (resaledom.Resale, error) {
-	resaleID = strings.TrimSpace(resaleID)
-
 	if resaleID == "" {
 		return resaledom.Resale{}, resalereview.ErrInvalidResaleID
 	}
@@ -627,6 +617,23 @@ func (uc *ResaleReviewUsecase) requireListingResale(
 			return resaledom.Resale{}, resalereview.ErrNotFound
 		}
 
+		return resaledom.Resale{}, err
+	}
+
+	return item, nil
+}
+
+// requireListingResale verifies that interaction target exists and is
+// currently listed.
+//
+// Suspended / sold resales are treated as not found from interaction APIs,
+// matching the current market visibility policy.
+func (uc *ResaleReviewUsecase) requireListingResale(
+	ctx context.Context,
+	resaleID string,
+) (resaledom.Resale, error) {
+	item, err := uc.requireExistingResale(ctx, resaleID)
+	if err != nil {
 		return resaledom.Resale{}, err
 	}
 
@@ -647,8 +654,6 @@ func (uc *ResaleReviewUsecase) resolveAvatarDisplay(
 	avatarID string,
 	cache map[string]resaleReviewAvatarDisplay,
 ) resaleReviewAvatarDisplay {
-	avatarID = strings.TrimSpace(avatarID)
-
 	if avatarID == "" || uc == nil || uc.avatarRepo == nil {
 		return resaleReviewAvatarDisplay{}
 	}
