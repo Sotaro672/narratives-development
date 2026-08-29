@@ -131,22 +131,6 @@ func (h *MarketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if len(parts) == 3 && parts[1] == "comments" && parts[2] != "" {
-		commentID := parts[2]
-
-		switch r.Method {
-		case http.MethodPut:
-			h.updateResaleComment(w, r, resaleID, commentID)
-			return
-		case http.MethodDelete:
-			h.deleteResaleComment(w, r, resaleID, commentID)
-			return
-		default:
-			methodNotAllowed(w)
-			return
-		}
-	}
-
 	if len(parts) != 1 {
 		notFound(w)
 		return
@@ -458,79 +442,6 @@ func (h *MarketHandler) createResaleComment(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"data":        comment,
 		"interaction": summary,
-	})
-}
-
-func (h *MarketHandler) updateResaleComment(w http.ResponseWriter, r *http.Request, resaleID string, commentID string) {
-	ctx := r.Context()
-
-	if h == nil || h.resaleReviewUC == nil {
-		writeJSON(w, http.StatusNotImplemented, map[string]string{
-			"error": "not_implemented",
-		})
-		return
-	}
-
-	avatarID, ok := currentMarketAvatarID(w, r)
-	if !ok {
-		return
-	}
-
-	var req marketResaleCommentRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "invalid_json",
-		})
-		return
-	}
-
-	comment, err := h.resaleReviewUC.UpdateComment(
-		ctx,
-		usecase.UpdateResaleReviewCommentInput{
-			ResaleID:  resaleID,
-			CommentID: commentID,
-			AvatarID:  avatarID,
-			Body:      req.Body,
-		},
-	)
-	if err != nil {
-		writeResaleReviewErr(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data": comment,
-	})
-}
-
-func (h *MarketHandler) deleteResaleComment(w http.ResponseWriter, r *http.Request, resaleID string, commentID string) {
-	ctx := r.Context()
-
-	if h == nil || h.resaleReviewUC == nil {
-		writeJSON(w, http.StatusNotImplemented, map[string]string{
-			"error": "not_implemented",
-		})
-		return
-	}
-
-	avatarID, ok := currentMarketAvatarID(w, r)
-	if !ok {
-		return
-	}
-
-	summary, err := h.resaleReviewUC.DeleteComment(
-		ctx,
-		resaleID,
-		commentID,
-		avatarID,
-	)
-	if err != nil {
-		writeResaleReviewErr(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data": summary,
 	})
 }
 

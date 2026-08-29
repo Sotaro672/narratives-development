@@ -78,34 +78,6 @@ type FilterComment struct {
 	Deleted             *bool  `json:"deleted"`
 }
 
-// PatchComment is a partial update model for:
-//
-// resaleReviews/{resaleId}/comments/{commentId}
-//
-// UpdateBody and MarkDeleted should first be executed against the domain
-// entity, then the resulting values should be persisted using this patch.
-type PatchComment struct {
-	Body    *string `json:"body"`
-	Deleted *bool   `json:"deleted"`
-}
-
-func NewContentPatchFromComment(
-	comment Comment,
-) PatchComment {
-	return PatchComment{
-		Body: &comment.Body,
-	}
-}
-
-func NewDeletionPatchFromComment(
-	comment Comment,
-) PatchComment {
-	return PatchComment{
-		Body:    &comment.Body,
-		Deleted: &comment.Deleted,
-	}
-}
-
 // ============================================================
 // Aggregate repository
 // ============================================================
@@ -207,6 +179,10 @@ type LikeRepository interface {
 // CommentRepository manages:
 //
 // resaleReviews/{resaleId}/comments/{commentId}
+//
+// Comments are immutable after creation.
+// Normal deletion is handled by MutationRepository.MarkCommentDeleted.
+// Physical deletion is reserved for resale-review cleanup.
 type CommentRepository interface {
 	// List lists comments under a resale review.
 	List(
@@ -232,19 +208,10 @@ type CommentRepository interface {
 		comment Comment,
 	) (Comment, error)
 
-	// UpdateUnderParent updates a comment under resaleId.
-	UpdateUnderParent(
-		ctx context.Context,
-		resaleID string,
-		commentID string,
-		patch PatchComment,
-	) (Comment, error)
-
 	// DeleteUnderParent physically deletes a comment document.
 	//
-	// Normal user deletion should generally use Comment.MarkDeleted and
-	// UpdateUnderParent instead. Physical deletion is primarily intended for
-	// resale-review cleanup.
+	// Normal seller deletion must use MutationRepository.MarkCommentDeleted.
+	// Physical deletion is intended for resale-review cleanup.
 	DeleteUnderParent(
 		ctx context.Context,
 		resaleID string,

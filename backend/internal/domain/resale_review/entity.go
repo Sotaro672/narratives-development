@@ -4,8 +4,8 @@ package resale_review
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -23,17 +23,15 @@ var (
 	ErrForbidden = errors.New("resaleReview: forbidden")
 	ErrInternal  = errors.New("resaleReview: internal")
 
-	ErrInvalidResaleID       = errors.New("resaleReview: invalid resaleId")
-	ErrInvalidAvatarID       = errors.New("resaleReview: invalid avatarId")
-	ErrInvalidCommentID      = errors.New("resaleReview: invalid commentId")
-	ErrInvalidCommentBody    = errors.New("resaleReview: invalid comment body")
-	ErrInvalidCreatedAt      = errors.New("resaleReview: invalid createdAt")
-	ErrInvalidUpdatedAt      = errors.New("resaleReview: invalid updatedAt")
-	ErrInvalidLikeCount      = errors.New("resaleReview: invalid like count")
-	ErrInvalidCommentCount   = errors.New("resaleReview: invalid comment count")
-	ErrNegativeCounter       = errors.New("resaleReview: counter would become negative")
-	ErrDeletedComment        = errors.New("resaleReview: comment is deleted")
-	ErrCommentAuthorMismatch = errors.New("resaleReview: comment author mismatch")
+	ErrInvalidResaleID     = errors.New("resaleReview: invalid resaleId")
+	ErrInvalidAvatarID     = errors.New("resaleReview: invalid avatarId")
+	ErrInvalidCommentID    = errors.New("resaleReview: invalid commentId")
+	ErrInvalidCommentBody  = errors.New("resaleReview: invalid comment body")
+	ErrInvalidCreatedAt    = errors.New("resaleReview: invalid createdAt")
+	ErrInvalidUpdatedAt    = errors.New("resaleReview: invalid updatedAt")
+	ErrInvalidLikeCount    = errors.New("resaleReview: invalid like count")
+	ErrInvalidCommentCount = errors.New("resaleReview: invalid comment count")
+	ErrNegativeCounter     = errors.New("resaleReview: counter would become negative")
 )
 
 func IsNotFound(err error) bool {
@@ -100,8 +98,6 @@ func NewResaleReviewAggregate(
 	resaleID string,
 	now time.Time,
 ) (*ResaleReviewAggregate, error) {
-	resaleID = strings.TrimSpace(resaleID)
-
 	if !isValidReferenceID(resaleID) {
 		return nil, ErrInvalidResaleID
 	}
@@ -208,9 +204,6 @@ func NewLike(
 	avatarID string,
 	now time.Time,
 ) (*Like, error) {
-	resaleID = strings.TrimSpace(resaleID)
-	avatarID = strings.TrimSpace(avatarID)
-
 	if !isValidReferenceID(resaleID) {
 		return nil, ErrInvalidResaleID
 	}
@@ -258,6 +251,9 @@ func (l Like) DocumentID() (string, error) {
 
 // ============================================================
 // Comment
+//
+// Comments are immutable after creation.
+// They may only transition from visible to logically deleted.
 // ============================================================
 
 type CommentID string
@@ -286,19 +282,15 @@ type NewCommentParams struct {
 func NewComment(
 	p NewCommentParams,
 ) (*Comment, error) {
-	resaleID := strings.TrimSpace(p.ResaleID)
-	avatarID := strings.TrimSpace(p.AvatarID)
-	body := strings.TrimSpace(p.Body)
-
-	if !isValidReferenceID(resaleID) {
+	if !isValidReferenceID(p.ResaleID) {
 		return nil, ErrInvalidResaleID
 	}
 
-	if !isValidReferenceID(avatarID) {
+	if !isValidReferenceID(p.AvatarID) {
 		return nil, ErrInvalidAvatarID
 	}
 
-	if err := validateCommentBody(body); err != nil {
+	if err := validateCommentBody(p.Body); err != nil {
 		return nil, err
 	}
 
@@ -311,9 +303,9 @@ func NewComment(
 
 	return &Comment{
 		CommentID: NewCommentID(),
-		ResaleID:  resaleID,
-		AvatarID:  avatarID,
-		Body:      body,
+		ResaleID:  p.ResaleID,
+		AvatarID:  p.AvatarID,
+		Body:      p.Body,
 		Deleted:   false,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -331,8 +323,8 @@ func RestoreComment(
 ) (*Comment, error) {
 	comment := &Comment{
 		CommentID: commentID,
-		ResaleID:  strings.TrimSpace(resaleID),
-		AvatarID:  strings.TrimSpace(avatarID),
+		ResaleID:  resaleID,
+		AvatarID:  avatarID,
 		Body:      body,
 		Deleted:   deleted,
 		CreatedAt: createdAt,
@@ -376,47 +368,13 @@ func (c Comment) Validate() error {
 	return nil
 }
 
-func (c *Comment) UpdateBody(
-	body string,
-	now time.Time,
-) error {
-	if c == nil {
-		return ErrInvalid
-	}
-
-	if c.Deleted {
-		return ErrDeletedComment
-	}
-
-	body = strings.TrimSpace(body)
-
-	if err := validateCommentBody(body); err != nil {
-		return err
-	}
-
-	if now.IsZero() {
-		now = time.Now().UTC()
-	} else {
-		now = now.UTC()
-	}
-
-	if !c.CreatedAt.IsZero() && now.Before(c.CreatedAt) {
-		return ErrInvalidUpdatedAt
-	}
-
-	c.Body = body
-	c.UpdatedAt = now
-
-	return nil
-}
-
 // MarkDeleted performs a logical deletion.
 //
 // Keeping the document allows moderation / future reply support without
 // destroying the original interaction node.
 //
-// Whether this method is called by the comment author or an administrator
-// must be validated by application.usecase.
+// Authorization must be validated by application.usecase.
+// Current policy allows the resale seller to delete comments while listing.
 func (c *Comment) MarkDeleted(now time.Time) error {
 	if c == nil {
 		return ErrInvalid
@@ -443,26 +401,6 @@ func (c *Comment) MarkDeleted(now time.Time) error {
 	return nil
 }
 
-func (c Comment) IsOwnedBy(
-	avatarID string,
-) bool {
-	return c.AvatarID == strings.TrimSpace(avatarID)
-}
-
-func (c Comment) RequireOwner(
-	avatarID string,
-) error {
-	if !isValidReferenceID(avatarID) {
-		return ErrInvalidAvatarID
-	}
-
-	if !c.IsOwnedBy(avatarID) {
-		return ErrCommentAuthorMismatch
-	}
-
-	return nil
-}
-
 // ============================================================
 // Viewer-specific summary
 //
@@ -484,7 +422,7 @@ func NewInteractionSummary(
 	likedByMe bool,
 ) (InteractionSummary, error) {
 	summary := InteractionSummary{
-		ResaleID:     strings.TrimSpace(resaleID),
+		ResaleID:     resaleID,
 		LikeCount:    likeCount,
 		CommentCount: commentCount,
 		LikedByMe:    likedByMe,
@@ -520,9 +458,24 @@ func (s InteractionSummary) Validate() error {
 func validateCommentBody(
 	body string,
 ) error {
-	body = strings.TrimSpace(body)
-
 	if body == "" {
+		return ErrInvalidCommentBody
+	}
+
+	if !utf8.ValidString(body) {
+		return ErrInvalidCommentBody
+	}
+
+	hasContent := false
+
+	for _, r := range body {
+		if !unicode.IsSpace(r) {
+			hasContent = true
+			break
+		}
+	}
+
+	if !hasContent {
 		return ErrInvalidCommentBody
 	}
 
@@ -536,13 +489,22 @@ func validateCommentBody(
 func isValidReferenceID(
 	value string,
 ) bool {
-	value = strings.TrimSpace(value)
-
 	if value == "" {
 		return false
 	}
 
+	if !utf8.ValidString(value) {
+		return false
+	}
+
 	if len(value) > MaxReferenceIDLength {
+		return false
+	}
+
+	firstRune, _ := utf8.DecodeRuneInString(value)
+	lastRune, _ := utf8.DecodeLastRuneInString(value)
+
+	if unicode.IsSpace(firstRune) || unicode.IsSpace(lastRune) {
 		return false
 	}
 

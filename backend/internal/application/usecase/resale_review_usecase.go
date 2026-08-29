@@ -236,6 +236,7 @@ func (uc *ResaleReviewUsecase) RemoveLike(
 //
 // Seller comments and buyer comments use the same Avatar identity model.
 // Deleted comments are excluded.
+// Historical comments remain readable after suspended / sold.
 func (uc *ResaleReviewUsecase) ListComments(
 	ctx context.Context,
 	resaleID string,
@@ -391,92 +392,16 @@ func (uc *ResaleReviewUsecase) CreateComment(
 }
 
 // ============================================================
-// Update comment
-// ============================================================
-
-type UpdateResaleReviewCommentInput struct {
-	ResaleID  string
-	CommentID string
-	AvatarID  string
-	Body      string
-}
-
-func (uc *ResaleReviewUsecase) UpdateComment(
-	ctx context.Context,
-	input UpdateResaleReviewCommentInput,
-) (ResaleReviewCommentListItem, error) {
-	if err := uc.requireConfigured("ResaleReview.UpdateComment"); err != nil {
-		return ResaleReviewCommentListItem{}, err
-	}
-
-	resaleID := input.ResaleID
-	commentID := input.CommentID
-	avatarID := input.AvatarID
-
-	if resaleID == "" {
-		return ResaleReviewCommentListItem{}, resalereview.ErrInvalidResaleID
-	}
-
-	if commentID == "" {
-		return ResaleReviewCommentListItem{}, resalereview.ErrInvalidCommentID
-	}
-
-	if avatarID == "" {
-		return ResaleReviewCommentListItem{}, resalereview.ErrInvalidAvatarID
-	}
-
-	if _, err := uc.requireListingResale(ctx, resaleID); err != nil {
-		return ResaleReviewCommentListItem{}, err
-	}
-
-	comment, err := uc.reviewRepo.Comments().GetByParentID(
-		ctx,
-		resaleID,
-		commentID,
-	)
-	if err != nil {
-		return ResaleReviewCommentListItem{}, err
-	}
-
-	if err := comment.RequireOwner(avatarID); err != nil {
-		return ResaleReviewCommentListItem{}, resalereview.ErrForbidden
-	}
-
-	if err := comment.UpdateBody(input.Body, uc.nowUTC()); err != nil {
-		return ResaleReviewCommentListItem{}, err
-	}
-
-	updated, err := uc.reviewRepo.Comments().UpdateUnderParent(
-		ctx,
-		resaleID,
-		commentID,
-		resalereview.NewContentPatchFromComment(comment),
-	)
-	if err != nil {
-		return ResaleReviewCommentListItem{}, err
-	}
-
-	display := uc.resolveAvatarDisplay(
-		ctx,
-		updated.AvatarID,
-		nil,
-	)
-
-	return ResaleReviewCommentListItem{
-		Comment:    updated,
-		AvatarName: display.Name,
-		AvatarIcon: display.Icon,
-	}, nil
-}
-
-// ============================================================
 // Delete comment
 // ============================================================
 
-// DeleteComment logically deletes the current avatar's own comment.
+// DeleteComment logically deletes a comment.
 //
-// The MutationRepository updates the comment and decrements CommentCount
-// atomically. Repeated deletion does not decrement the count again.
+// Rules:
+// - resale must still be listing
+// - only the seller of the resale may delete comments
+// - the original comment author cannot delete it from the market side
+// - CommentCount is decremented atomically by MutationRepository
 func (uc *ResaleReviewUsecase) DeleteComment(
 	ctx context.Context,
 	resaleID string,
@@ -499,21 +424,21 @@ func (uc *ResaleReviewUsecase) DeleteComment(
 		return resalereview.InteractionSummary{}, resalereview.ErrInvalidAvatarID
 	}
 
-	if _, err := uc.requireListingResale(ctx, resaleID); err != nil {
-		return resalereview.InteractionSummary{}, err
-	}
-
-	comment, err := uc.reviewRepo.Comments().GetByParentID(
-		ctx,
-		resaleID,
-		commentID,
-	)
+	resale, err := uc.requireListingResale(ctx, resaleID)
 	if err != nil {
 		return resalereview.InteractionSummary{}, err
 	}
 
-	if err := comment.RequireOwner(avatarID); err != nil {
+	if resale.AvatarID != avatarID {
 		return resalereview.InteractionSummary{}, resalereview.ErrForbidden
+	}
+
+	if _, err := uc.reviewRepo.Comments().GetByParentID(
+		ctx,
+		resaleID,
+		commentID,
+	); err != nil {
+		return resalereview.InteractionSummary{}, err
 	}
 
 	aggregate, _, err := uc.reviewRepo.Mutations().MarkCommentDeleted(
@@ -525,20 +450,11 @@ func (uc *ResaleReviewUsecase) DeleteComment(
 		return resalereview.InteractionSummary{}, err
 	}
 
-	likedByMe, err := uc.reviewRepo.Likes().ExistsByAvatar(
-		ctx,
-		resaleID,
-		avatarID,
-	)
-	if err != nil {
-		return resalereview.InteractionSummary{}, err
-	}
-
 	return resalereview.NewInteractionSummary(
 		resaleID,
 		aggregate.LikeCount,
 		aggregate.CommentCount,
-		likedByMe,
+		false,
 	)
 }
 
@@ -626,8 +542,8 @@ func (uc *ResaleReviewUsecase) requireExistingResale(
 // requireListingResale verifies that interaction target exists and is
 // currently listed.
 //
-// Suspended / sold resales are treated as not found from interaction APIs,
-// matching the current market visibility policy.
+// Suspended / sold resales remain readable through ListComments, but
+// Like / Comment create / delete operations are blocked.
 func (uc *ResaleReviewUsecase) requireListingResale(
 	ctx context.Context,
 	resaleID string,

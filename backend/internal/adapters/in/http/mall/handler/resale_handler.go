@@ -189,19 +189,13 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if len(parts) == 3 && parts[2] != "" {
 				commentID := parts[2]
 
-				switch r.Method {
-				case http.MethodPut:
-					h.updateOwnedResaleComment(w, r, resaleID, commentID)
-					return
-
-				case http.MethodDelete:
-					h.deleteOwnedResaleComment(w, r, resaleID, commentID)
-					return
-
-				default:
+				if r.Method != http.MethodDelete {
 					methodNotAllowed(w)
 					return
 				}
+
+				h.deleteOwnedResaleComment(w, r, resaleID, commentID)
+				return
 			}
 
 			w.WriteHeader(http.StatusNotFound)
@@ -1023,58 +1017,6 @@ func (h *ResaleHandler) createOwnedResaleComment(
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"data":        comment,
 		"interaction": summary,
-	})
-}
-
-func (h *ResaleHandler) updateOwnedResaleComment(
-	w http.ResponseWriter,
-	r *http.Request,
-	resaleID string,
-	commentID string,
-) {
-	ctx := r.Context()
-
-	if h == nil || h.resaleReviewUC == nil {
-		writeJSON(w, http.StatusNotImplemented, map[string]string{
-			"error": "not_implemented",
-		})
-		return
-	}
-
-	item, ok := h.getOwnedResale(
-		w,
-		r,
-		ctx,
-		resaleID,
-	)
-	if !ok {
-		return
-	}
-
-	var req resaleCommentRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "invalid_json",
-		})
-		return
-	}
-
-	comment, err := h.resaleReviewUC.UpdateComment(
-		ctx,
-		usecase.UpdateResaleReviewCommentInput{
-			ResaleID:  resaleID,
-			CommentID: commentID,
-			AvatarID:  item.AvatarID,
-			Body:      req.Body,
-		},
-	)
-	if err != nil {
-		writeResaleReviewErr(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data": comment,
 	})
 }
 

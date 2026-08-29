@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"sort"
-	"strings"
 	"time"
 
 	gfs "cloud.google.com/go/firestore"
@@ -251,7 +250,6 @@ func (r *resaleReviewAggregateRepositoryFS) GetByID(ctx context.Context, resaleI
 		return resalereview.ResaleReviewAggregate{}, err
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
 	if resaleID == "" {
 		return resalereview.ResaleReviewAggregate{}, resalereview.ErrInvalidResaleID
 	}
@@ -297,7 +295,6 @@ func (r *resaleReviewAggregateRepositoryFS) Update(ctx context.Context, resaleID
 		return resalereview.ResaleReviewAggregate{}, err
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
 	if resaleID == "" {
 		return resalereview.ResaleReviewAggregate{}, resalereview.ErrInvalidResaleID
 	}
@@ -338,7 +335,6 @@ func (r *resaleReviewAggregateRepositoryFS) Delete(ctx context.Context, resaleID
 		return err
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
 	if resaleID == "" {
 		return resalereview.ErrInvalidResaleID
 	}
@@ -365,8 +361,6 @@ func (r *resaleReviewLikeRepositoryFS) List(ctx context.Context, filter resalere
 		return common.PageResult[resalereview.Like]{}, err
 	}
 
-	filter.ResaleID = strings.TrimSpace(filter.ResaleID)
-	filter.AvatarID = strings.TrimSpace(filter.AvatarID)
 	if filter.ResaleID == "" && filter.AvatarID == "" {
 		return common.PageResult[resalereview.Like]{}, resalereview.ErrInvalid
 	}
@@ -444,7 +438,7 @@ func (r *resaleReviewLikeRepositoryFS) FindByAvatar(ctx context.Context, resaleI
 		return resalereview.Like{}, err
 	}
 
-	snapshot, err := r.root.likeDoc(strings.TrimSpace(resaleID), strings.TrimSpace(avatarID)).Get(ctx)
+	snapshot, err := r.root.likeDoc(resaleID, avatarID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return resalereview.Like{}, resalereview.ErrNotFound
@@ -474,7 +468,6 @@ func (r *resaleReviewLikeRepositoryFS) CreateUnderParent(ctx context.Context, re
 		return resalereview.Like{}, err
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
 	if err := like.Validate(); err != nil {
 		return resalereview.Like{}, err
 	}
@@ -504,7 +497,7 @@ func (r *resaleReviewLikeRepositoryFS) DeleteByAvatar(ctx context.Context, resal
 		return err
 	}
 
-	_, err := r.root.likeDoc(strings.TrimSpace(resaleID), strings.TrimSpace(avatarID)).Delete(ctx)
+	_, err := r.root.likeDoc(resaleID, avatarID).Delete(ctx)
 	return err
 }
 
@@ -526,8 +519,6 @@ func (r *resaleReviewCommentRepositoryFS) List(ctx context.Context, filter resal
 		return common.PageResult[resalereview.Comment]{}, err
 	}
 
-	filter.ResaleID = strings.TrimSpace(filter.ResaleID)
-	filter.AvatarID = strings.TrimSpace(filter.AvatarID)
 	if filter.ResaleID == "" {
 		return common.PageResult[resalereview.Comment]{}, resalereview.ErrInvalidResaleID
 	}
@@ -568,8 +559,6 @@ func (r *resaleReviewCommentRepositoryFS) GetByParentID(ctx context.Context, res
 		return resalereview.Comment{}, err
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
-	commentID = strings.TrimSpace(commentID)
 	if resaleID == "" {
 		return resalereview.Comment{}, resalereview.ErrInvalidResaleID
 	}
@@ -596,7 +585,6 @@ func (r *resaleReviewCommentRepositoryFS) CreateUnderParent(ctx context.Context,
 		return resalereview.Comment{}, err
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
 	if err := comment.Validate(); err != nil {
 		return resalereview.Comment{}, err
 	}
@@ -620,43 +608,6 @@ func (r *resaleReviewCommentRepositoryFS) CreateUnderParent(ctx context.Context,
 	return comment, nil
 }
 
-func (r *resaleReviewCommentRepositoryFS) UpdateUnderParent(ctx context.Context, resaleID string, commentID string, patch resalereview.PatchComment) (resalereview.Comment, error) {
-	if r == nil || r.root == nil {
-		return resalereview.Comment{}, errResaleReviewRepositoryNotConfigured
-	}
-	if err := r.root.validateConfigured(); err != nil {
-		return resalereview.Comment{}, err
-	}
-
-	resaleID = strings.TrimSpace(resaleID)
-	commentID = strings.TrimSpace(commentID)
-	if resaleID == "" {
-		return resalereview.Comment{}, resalereview.ErrInvalidResaleID
-	}
-	if commentID == "" {
-		return resalereview.Comment{}, resalereview.ErrInvalidCommentID
-	}
-
-	updates := make([]gfs.Update, 0, 3)
-	if patch.Body != nil {
-		updates = append(updates, gfs.Update{Path: "body", Value: *patch.Body})
-	}
-	if patch.Deleted != nil {
-		updates = append(updates, gfs.Update{Path: "deleted", Value: *patch.Deleted})
-	}
-	updates = append(updates, gfs.Update{Path: "updatedAt", Value: time.Now().UTC()})
-
-	_, err := r.root.commentDoc(resaleID, commentID).Update(ctx, updates)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return resalereview.Comment{}, resalereview.ErrNotFound
-		}
-		return resalereview.Comment{}, err
-	}
-
-	return r.GetByParentID(ctx, resaleID, commentID)
-}
-
 func (r *resaleReviewCommentRepositoryFS) DeleteUnderParent(ctx context.Context, resaleID string, commentID string) error {
 	if r == nil || r.root == nil {
 		return errResaleReviewRepositoryNotConfigured
@@ -665,8 +616,6 @@ func (r *resaleReviewCommentRepositoryFS) DeleteUnderParent(ctx context.Context,
 		return err
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
-	commentID = strings.TrimSpace(commentID)
 	if resaleID == "" {
 		return resalereview.ErrInvalidResaleID
 	}
@@ -774,8 +723,6 @@ func (r *resaleReviewMutationRepositoryFS) RemoveLike(ctx context.Context, resal
 		return resalereview.ResaleReviewAggregate{}, err
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
-	avatarID = strings.TrimSpace(avatarID)
 	aggregateRef := r.root.rootDoc(resaleID)
 	likeRef := r.root.likeDoc(resaleID, avatarID)
 	var resultAggregate resalereview.ResaleReviewAggregate
@@ -908,8 +855,6 @@ func (r *resaleReviewMutationRepositoryFS) MarkCommentDeleted(ctx context.Contex
 		return resalereview.ResaleReviewAggregate{}, resalereview.Comment{}, err
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
-	commentID = strings.TrimSpace(commentID)
 	if resaleID == "" {
 		return resalereview.ResaleReviewAggregate{}, resalereview.Comment{}, resalereview.ErrInvalidResaleID
 	}
@@ -998,7 +943,6 @@ func (r *resaleReviewCleanupRepositoryFS) DeleteByResaleID(ctx context.Context, 
 		return err
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
 	if resaleID == "" {
 		return resalereview.ErrInvalidResaleID
 	}
