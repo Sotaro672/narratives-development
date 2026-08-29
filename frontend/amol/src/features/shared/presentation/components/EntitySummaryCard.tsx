@@ -1,10 +1,16 @@
 // frontend/amol/src/features/shared/presentation/components/EntitySummaryCard.tsx
 
-import type { ReactNode } from "react";
+import {
+  useId,
+  useState,
+  type ReactNode,
+} from "react";
 
 import MediaIcon from "../../../../components/ui/MediaIcon";
 
 import "../../styles/entity-summary-card.css";
+
+const DESCRIPTION_COLLAPSE_THRESHOLD = 80;
 
 export type EntitySummaryCardProps = {
   icon?: string | null;
@@ -35,18 +41,22 @@ export default function EntitySummaryCard({
   disabled = false,
   className,
 }: EntitySummaryCardProps) {
+  const descriptionId = useId();
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+
   const safeIcon = icon?.trim() || "";
   const safeLabel = label?.trim() || "";
   const safeName = name?.trim() || "";
   const safeSecondaryText = secondaryText?.trim() || "";
   const safeDescription = description?.trim() || "";
   const isInteractive = Boolean(onClick);
+  const isDescriptionExpandable = safeDescription.length > DESCRIPTION_COLLAPSE_THRESHOLD;
 
   if (!safeIcon && !safeLabel && !safeName && !safeSecondaryText && !safeDescription) {
     return null;
   }
 
-  const content = (
+  const summaryContent = (
     <>
       <MediaIcon
         src={safeIcon}
@@ -63,9 +73,6 @@ export default function EntitySummaryCard({
         {safeSecondaryText ? (
           <span className="entity-summary-card__secondary">{safeSecondaryText}</span>
         ) : null}
-        {safeDescription ? (
-          <p className="entity-summary-card__description">{safeDescription}</p>
-        ) : null}
       </div>
 
       {isInteractive && !disabled ? (
@@ -76,18 +83,57 @@ export default function EntitySummaryCard({
     </>
   );
 
-  if (isInteractive) {
-    return (
-      <button
-        type="button"
-        className={joinClassNames("entity-summary-card", "entity-summary-card--button", className)}
-        onClick={onClick}
-        disabled={disabled}
-      >
-        {content}
-      </button>
-    );
-  }
+  return (
+    <div
+      className={joinClassNames(
+        "entity-summary-card",
+        isInteractive && "entity-summary-card--interactive",
+        disabled && "entity-summary-card--disabled",
+        className,
+      )}
+    >
+      {isInteractive ? (
+        <button
+          type="button"
+          className="entity-summary-card__main entity-summary-card__main--button"
+          onClick={onClick}
+          disabled={disabled}
+        >
+          {summaryContent}
+        </button>
+      ) : (
+        <div className="entity-summary-card__main">
+          {summaryContent}
+        </div>
+      )}
 
-  return <div className={joinClassNames("entity-summary-card", className)}>{content}</div>;
+      {safeDescription ? (
+        <div className="entity-summary-card__description-area">
+          <p
+            id={descriptionId}
+            className={joinClassNames(
+              "entity-summary-card__description",
+              isDescriptionExpandable &&
+                !descriptionExpanded &&
+                "entity-summary-card__description--collapsed",
+            )}
+          >
+            {safeDescription}
+          </p>
+
+          {isDescriptionExpandable ? (
+            <button
+              type="button"
+              className="entity-summary-card__description-toggle"
+              aria-expanded={descriptionExpanded}
+              aria-controls={descriptionId}
+              onClick={() => setDescriptionExpanded((current) => !current)}
+            >
+              {descriptionExpanded ? "閉じる" : "詳しく見る"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
 }
