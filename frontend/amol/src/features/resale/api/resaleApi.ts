@@ -23,6 +23,12 @@ export {
 } from "./resaleListingApi";
 
 export {
+  createMyResaleComment,
+  deleteMyResaleComment,
+  fetchMyResaleComments,
+} from "./resaleReviewApi";
+
+export {
   listPublicResaleConditionImages,
   listResaleListingsByAvatarId,
 } from "./publicResaleApi";

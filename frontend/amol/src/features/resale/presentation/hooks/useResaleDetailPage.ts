@@ -8,8 +8,11 @@ import { formatYen } from "../../../../components/utils/price";
 
 import {
   addMyResaleConditionImages,
+  createMyResaleComment,
+  deleteMyResaleComment,
   deleteMyResaleConditionImage,
   deleteResaleListing,
+  fetchMyResaleComments,
   getMyResaleListing,
   listMyResaleConditionImages,
   updatePrimaryResaleImage,
@@ -30,6 +33,7 @@ import {
   type ResaleEditableStatus,
   type ResaleListing,
 } from "../../../shared/types/resale";
+import type { ResaleReviewComment } from "../../../shared/types/resaleReview";
 
 import type {
   ResaleDetailEditFormProps,
@@ -48,6 +52,17 @@ import {
 
 import { useResaleDetailConditionMedia } from "./useResaleDetailConditionMedia";
 
+const DEFAULT_COMMENT_PAGE = 1;
+const DEFAULT_COMMENT_PER_PAGE = 20;
+
+function getErrorMessage(error: unknown, fallbackMessage: string): string {
+  if (error instanceof Error && error.message !== "") {
+    return error.message;
+  }
+
+  return fallbackMessage;
+}
+
 export function useResaleDetailPage() {
   const navigate = useNavigate();
   const { resaleId } = useParams<{ resaleId: string }>();
@@ -57,12 +72,20 @@ export function useResaleDetailPage() {
 
   const [item, setItem] = useState<ResaleListing | null>(null);
   const [images, setImages] = useState<ResaleConditionImage[]>([]);
+  const [comments, setComments] = useState<ResaleReviewComment[]>([]);
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
+
   const [loading, setLoading] = useState(true);
+  const [loadingComments, setLoadingComments] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [deletingCommentId, setDeletingCommentId] = useState("");
+
   const [isEditing, setIsEditing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
+  const [commentError, setCommentError] = useState("");
+
   const [priceInput, setPriceInput] = useState("");
   const [conditionInput, setConditionInput] = useState<ResaleCondition>(
     DEFAULT_RESALE_CONDITION,
@@ -115,67 +138,98 @@ export function useResaleDetailPage() {
     [resetConditionMedia],
   );
 
-  const loadDetail = useCallback(
-    async (): Promise<void> => {
-      const requestId = ++loadRequestIdRef.current;
+  const loadDetail = useCallback(async (): Promise<void> => {
+    const requestId = ++loadRequestIdRef.current;
 
-      if (!normalizedResaleId) {
-        setItem(null);
-        setImages([]);
-        resetFormFromItem(null, []);
-        setActiveGalleryIndex(0);
-        setIsEditing(false);
-        setErrorMessage("出品情報が見つかりません。");
-        setSaveMessage("");
-        setLoading(false);
+    if (!normalizedResaleId) {
+      setItem(null);
+      setImages([]);
+      setComments([]);
+      resetFormFromItem(null, []);
+      setActiveGalleryIndex(0);
+      setIsEditing(false);
+      setErrorMessage("出品情報が見つかりません。");
+      setSaveMessage("");
+      setCommentError("");
+      setLoading(false);
+      setLoadingComments(false);
+      return;
+    }
+
+    setLoading(true);
+    setLoadingComments(true);
+    setErrorMessage("");
+    setSaveMessage("");
+    setCommentError("");
+
+    const commentsPromise = fetchMyResaleComments({
+      resaleId: normalizedResaleId,
+      page: DEFAULT_COMMENT_PAGE,
+      perPage: DEFAULT_COMMENT_PER_PAGE,
+    })
+      .then((result) => ({
+        result,
+        error: null as unknown,
+      }))
+      .catch((error: unknown) => ({
+        result: null,
+        error,
+      }));
+
+    try {
+      const [nextItem, nextImages, commentsResult] = await Promise.all([
+        getMyResaleListing(normalizedResaleId),
+        listMyResaleConditionImages(normalizedResaleId),
+        commentsPromise,
+      ]);
+
+      if (requestId !== loadRequestIdRef.current) {
         return;
       }
 
-      setLoading(true);
-      setErrorMessage("");
-      setSaveMessage("");
+      const sortedNextImages = sortResaleConditionImages(nextImages);
 
-      try {
-        const [nextItem, nextImages] = await Promise.all([
-          getMyResaleListing(normalizedResaleId),
-          listMyResaleConditionImages(normalizedResaleId),
-        ]);
+      setItem(nextItem);
+      setImages(sortedNextImages);
+      resetFormFromItem(nextItem, sortedNextImages);
+      setActiveGalleryIndex(0);
+      setIsEditing(false);
 
-        if (requestId !== loadRequestIdRef.current) {
-          return;
-        }
-
-        const sortedNextImages = sortResaleConditionImages(nextImages);
-
-        setItem(nextItem);
-        setImages(sortedNextImages);
-        resetFormFromItem(nextItem, sortedNextImages);
-        setActiveGalleryIndex(0);
-        setIsEditing(false);
-      } catch (error) {
-        if (requestId !== loadRequestIdRef.current) {
-          return;
-        }
-
-        setItem(null);
-        setImages([]);
-        resetFormFromItem(null, []);
-        setActiveGalleryIndex(0);
-        setIsEditing(false);
-
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "出品情報の取得に失敗しました。",
+      if (commentsResult.result) {
+        setComments(commentsResult.result.items);
+        setCommentError("");
+      } else {
+        setComments([]);
+        setCommentError(
+          getErrorMessage(
+            commentsResult.error,
+            "コメントの取得に失敗しました。",
+          ),
         );
-      } finally {
-        if (requestId === loadRequestIdRef.current) {
-          setLoading(false);
-        }
       }
-    },
-    [normalizedResaleId, resetFormFromItem],
-  );
+    } catch (error) {
+      if (requestId !== loadRequestIdRef.current) {
+        return;
+      }
+
+      setItem(null);
+      setImages([]);
+      setComments([]);
+      resetFormFromItem(null, []);
+      setActiveGalleryIndex(0);
+      setIsEditing(false);
+      setCommentError("");
+
+      setErrorMessage(
+        getErrorMessage(error, "出品情報の取得に失敗しました。"),
+      );
+    } finally {
+      if (requestId === loadRequestIdRef.current) {
+        setLoading(false);
+        setLoadingComments(false);
+      }
+    }
+  }, [normalizedResaleId, resetFormFromItem]);
 
   useEffect(() => {
     void loadDetail();
@@ -213,6 +267,7 @@ export function useResaleDetailPage() {
   );
 
   const isSold = item?.status === "sold";
+  const isListing = item?.status === "listing";
   const title = productName || tokenName || "出品詳細";
 
   const priceLabel = item
@@ -250,6 +305,18 @@ export function useResaleDetailPage() {
     item !== null &&
     !isEditing &&
     !isSold;
+
+  const canComment =
+    !loading &&
+    !loadingComments &&
+    isListing &&
+    !submittingComment;
+
+  const canDeleteComments =
+    !loading &&
+    !loadingComments &&
+    isListing &&
+    deletingCommentId === "";
 
   const handlePrevGalleryItem = useCallback(() => {
     if (galleryItems.length <= 1) {
@@ -316,6 +383,121 @@ export function useResaleDetailPage() {
       clearMessages();
     },
     [clearMessages],
+  );
+
+  const handleCreateComment = useCallback(
+    async (body: string): Promise<boolean> => {
+      if (!normalizedResaleId) {
+        setCommentError("出品情報が見つかりません。");
+        return false;
+      }
+
+      if (!isListing) {
+        setCommentError("現在の出品状態ではコメントできません。");
+        return false;
+      }
+
+      if (!body || !/\S/u.test(body)) {
+        setCommentError("コメントを入力してください。");
+        return false;
+      }
+
+      if (submittingComment) {
+        return false;
+      }
+
+      setSubmittingComment(true);
+      setCommentError("");
+
+      try {
+        const result = await createMyResaleComment({
+          resaleId: normalizedResaleId,
+          body,
+        });
+
+        setComments((current) => [
+          result.comment,
+          ...current.filter(
+            (comment) => comment.commentId !== result.comment.commentId,
+          ),
+        ]);
+
+        return true;
+      } catch (error) {
+        setCommentError(
+          getErrorMessage(error, "コメントの投稿に失敗しました。"),
+        );
+        return false;
+      } finally {
+        setSubmittingComment(false);
+      }
+    },
+    [
+      isListing,
+      normalizedResaleId,
+      submittingComment,
+    ],
+  );
+
+  const handleDeleteComment = useCallback(
+    async (commentId: string): Promise<boolean> => {
+      if (!normalizedResaleId) {
+        setCommentError("出品情報が見つかりません。");
+        return false;
+      }
+
+      if (!isListing) {
+        setCommentError("現在の出品状態ではコメントを削除できません。");
+        return false;
+      }
+
+      if (!commentId) {
+        setCommentError("コメント情報が見つかりません。");
+        return false;
+      }
+
+      if (deletingCommentId !== "") {
+        return false;
+      }
+
+      const confirmed = window.confirm(
+        "このコメントを削除します。よろしいですか？",
+      );
+
+      if (!confirmed) {
+        return false;
+      }
+
+      setDeletingCommentId(commentId);
+      setCommentError("");
+
+      try {
+        await deleteMyResaleComment({
+          resaleId: normalizedResaleId,
+          commentId,
+        });
+
+        setComments((current) =>
+          current.filter(
+            (comment) => comment.commentId !== commentId,
+          ),
+        );
+
+        return true;
+      } catch (error) {
+        setCommentError(
+          getErrorMessage(error, "コメントの削除に失敗しました。"),
+        );
+        return false;
+      } finally {
+        setDeletingCommentId("");
+      }
+    },
+    [
+      deletingCommentId,
+      isListing,
+      normalizedResaleId,
+    ],
   );
 
   const handleStartEdit = useCallback(() => {
@@ -436,9 +618,7 @@ export function useResaleDetailPage() {
         setSaveMessage("出品情報を更新しました。");
       } catch (error) {
         setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "出品情報の更新に失敗しました。",
+          getErrorMessage(error, "出品情報の更新に失敗しました。"),
         );
       } finally {
         setSaving(false);
@@ -494,9 +674,7 @@ export function useResaleDetailPage() {
         });
       } catch (error) {
         setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "出品情報の削除に失敗しました。",
+          getErrorMessage(error, "出品情報の削除に失敗しました。"),
         );
       } finally {
         setSaving(false);
@@ -519,12 +697,9 @@ export function useResaleDetailPage() {
     navigate("/wallet");
   }, [navigate]);
 
-  const handleReload = useCallback(
-    async (): Promise<void> => {
-      await loadDetail();
-    },
-    [loadDetail],
-  );
+  const handleReload = useCallback(async (): Promise<void> => {
+    await loadDetail();
+  }, [loadDetail]);
 
   const listingTarget = useMemo<ResaleListingTargetSummary>(
     () => ({
@@ -664,15 +839,24 @@ export function useResaleDetailPage() {
     title,
     footerProps,
     loading,
+    loadingComments,
     item,
     isEditing,
     isSold,
+    comments,
+    submittingComment,
+    deletingCommentId,
+    canComment,
+    canDeleteComments,
+    commentError,
     errorMessage,
     saveMessage,
     listingTarget,
     model,
     readonlyInfoProps,
     editFormProps,
+    handleCreateComment,
+    handleDeleteComment,
     handleBack,
     handleReload,
     handleBackToWallet,

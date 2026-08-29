@@ -43,7 +43,15 @@ func IsConflict(err error) bool {
 }
 
 func IsInvalid(err error) bool {
-	return errors.Is(err, ErrInvalid)
+	return errors.Is(err, ErrInvalid) ||
+		errors.Is(err, ErrInvalidResaleID) ||
+		errors.Is(err, ErrInvalidAvatarID) ||
+		errors.Is(err, ErrInvalidCommentID) ||
+		errors.Is(err, ErrInvalidCommentBody) ||
+		errors.Is(err, ErrInvalidCreatedAt) ||
+		errors.Is(err, ErrInvalidUpdatedAt) ||
+		errors.Is(err, ErrInvalidLikeCount) ||
+		errors.Is(err, ErrInvalidCommentCount)
 }
 
 func IsForbidden(err error) bool {
@@ -263,13 +271,13 @@ func NewCommentID() CommentID {
 }
 
 type Comment struct {
-	CommentID CommentID
-	ResaleID  string
-	AvatarID  string
-	Body      string
-	Deleted   bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CommentID CommentID `json:"commentId"`
+	ResaleID  string    `json:"resaleId"`
+	AvatarID  string    `json:"avatarId"`
+	Body      string    `json:"body"`
+	Deleted   bool      `json:"deleted"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type NewCommentParams struct {
@@ -409,10 +417,10 @@ func (c *Comment) MarkDeleted(now time.Time) error {
 // ============================================================
 
 type InteractionSummary struct {
-	ResaleID     string
-	LikeCount    int64
-	CommentCount int64
-	LikedByMe    bool
+	ResaleID     string `json:"resaleId"`
+	LikeCount    int64  `json:"likeCount"`
+	CommentCount int64  `json:"commentCount"`
+	LikedByMe    bool   `json:"likedByMe"`
 }
 
 func NewInteractionSummary(
