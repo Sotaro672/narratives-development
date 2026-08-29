@@ -1,26 +1,15 @@
 // frontend/amol/src/features/resale/presentation/types/resaleDetailPageTypes.ts
 
-import type {
-  ChangeEvent,
-  RefObject,
-} from "react";
+import type { ChangeEvent, RefObject } from "react";
 
-import type {
-  MediaGalleryItem,
-} from "../../../../components/ui/MediaGallery";
-
-import type {
-  MediaUploaderItem,
-} from "../../../../components/ui/MediaUploader";
-
-import type {
-  ResaleConditionImage,
-  ResaleListing,
-} from "../../../shared/types/resale";
+import type { MediaGalleryItem } from "../../../../components/ui/MediaGallery";
+import type { MediaUploaderItem } from "../../../../components/ui/MediaUploader";
 
 import type {
   ResaleCondition,
+  ResaleConditionImage,
   ResaleEditableStatus,
+  ResaleListing,
 } from "../../../shared/types/resale";
 
 export type ResaleDetailConditionMediaItem =
@@ -32,7 +21,7 @@ export type ResaleDetailConditionMediaItem =
   };
 
 export type ResaleListingTargetSummary = {
-  tokenIcon: string;
+  tokenIconUrl: string;
   tokenName: string;
   brandName: string;
   productName: string;

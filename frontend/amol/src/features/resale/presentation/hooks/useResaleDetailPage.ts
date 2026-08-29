@@ -1,12 +1,6 @@
 // frontend/amol/src/features/resale/presentation/hooks/useResaleDetailPage.ts
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { formatDateTime } from "../../../../components/utils/date";
@@ -76,9 +70,7 @@ export function useResaleDetailPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [priceInput, setPriceInput] = useState("");
-  const [conditionInput, setConditionInput] = useState<ResaleCondition>(
-    DEFAULT_RESALE_CONDITION,
-  );
+  const [conditionInput, setConditionInput] = useState<ResaleCondition>(DEFAULT_RESALE_CONDITION);
   const [descriptionInput, setDescriptionInput] = useState("");
   const [statusInput, setStatusInput] = useState<ResaleEditableStatus>(
     DEFAULT_RESALE_EDITABLE_STATUS,
@@ -104,10 +96,7 @@ export function useResaleDetailPage() {
   }, []);
 
   const resetFormFromItem = useCallback(
-    (
-      nextItem: ResaleListing | null,
-      nextImages: ResaleConditionImage[],
-    ) => {
+    (nextItem: ResaleListing | null, nextImages: ResaleConditionImage[]) => {
       if (!nextItem) {
         setPriceInput("");
         setConditionInput(DEFAULT_RESALE_CONDITION);
@@ -223,7 +212,7 @@ export function useResaleDetailPage() {
   const productName = item?.productName ?? "";
   const tokenName = item?.tokenName ?? "";
   const brandName = item?.brandName ?? "";
-  const tokenIcon = item?.tokenIcon ?? "";
+  const tokenIconUrl = item?.tokenIcon ?? "";
   const description = item ? item.description : "";
   const modelId = item?.modelId ?? "";
   const modelKind = item?.kind ?? "";
@@ -248,7 +237,6 @@ export function useResaleDetailPage() {
     measurementsLabel !== "-";
 
   const isSold = item?.status === "sold";
-
   const title = productName || tokenName || "出品詳細";
 
   const priceLabel = item
@@ -314,10 +302,7 @@ export function useResaleDetailPage() {
 
   const handleSelectGalleryItem = useCallback(
     (index: number) => {
-      if (
-        index < 0 ||
-        index >= galleryItems.length
-      ) {
+      if (index < 0 || index >= galleryItems.length) {
         return;
       }
 
@@ -412,10 +397,7 @@ export function useResaleDetailPage() {
 
         const nextDisplayOrder =
           conditionMediaItems.reduce(
-            (
-              currentMax,
-              mediaItem,
-            ) => {
+            (currentMax, mediaItem) => {
               if (
                 mediaItem.source !== "existing" ||
                 !mediaItem.image
@@ -510,10 +492,7 @@ export function useResaleDetailPage() {
         return;
       }
 
-      if (
-        !normalizedResaleId ||
-        saving
-      ) {
+      if (!normalizedResaleId || saving) {
         return;
       }
 
@@ -572,168 +551,158 @@ export function useResaleDetailPage() {
     [loadDetail],
   );
 
-  const listingTarget =
-    useMemo<ResaleListingTargetSummary>(
-      () => ({
-        tokenIcon,
-        tokenName,
-        brandName,
-        productName,
-      }),
-      [
-        brandName,
-        productName,
-        tokenIcon,
-        tokenName,
-      ],
-    );
+  const listingTarget = useMemo<ResaleListingTargetSummary>(
+    () => ({
+      tokenIconUrl,
+      tokenName,
+      brandName,
+      productName,
+    }),
+    [
+      brandName,
+      productName,
+      tokenIconUrl,
+      tokenName,
+    ],
+  );
 
-  const modelInfoProps =
-    useMemo<ResaleDetailModelInfoProps>(
-      () => ({
-        hasModelInfo,
-        kindLabel: modelKindLabel,
-        modelNumber,
-        size: modelSize,
-        colorLabel: modelColorLabel,
-        measurementsLabel,
-        volumeLabel: modelVolumeLabel,
-      }),
-      [
-        hasModelInfo,
-        measurementsLabel,
-        modelColorLabel,
-        modelKindLabel,
-        modelNumber,
-        modelSize,
-        modelVolumeLabel,
-      ],
-    );
+  const modelInfoProps = useMemo<ResaleDetailModelInfoProps>(
+    () => ({
+      hasModelInfo,
+      kindLabel: modelKindLabel,
+      modelNumber,
+      size: modelSize,
+      colorLabel: modelColorLabel,
+      measurementsLabel,
+      volumeLabel: modelVolumeLabel,
+    }),
+    [
+      hasModelInfo,
+      measurementsLabel,
+      modelColorLabel,
+      modelKindLabel,
+      modelNumber,
+      modelSize,
+      modelVolumeLabel,
+    ],
+  );
 
-  const readonlyInfoProps =
-    useMemo<ResaleDetailReadonlyInfoProps>(
-      () => ({
-        galleryItems,
-        activeGalleryIndex,
-        priceLabel,
-        conditionLabel,
-        statusLabel,
-        createdAtLabel,
-        updatedAtLabel,
-        description,
-        onPrevGalleryItem: handlePrevGalleryItem,
-        onNextGalleryItem: handleNextGalleryItem,
-        onSelectGalleryItem: handleSelectGalleryItem,
-      }),
-      [
-        activeGalleryIndex,
-        conditionLabel,
-        createdAtLabel,
-        description,
-        galleryItems,
-        handleNextGalleryItem,
-        handlePrevGalleryItem,
-        handleSelectGalleryItem,
-        priceLabel,
-        statusLabel,
-        updatedAtLabel,
-      ],
-    );
+  const readonlyInfoProps = useMemo<ResaleDetailReadonlyInfoProps>(
+    () => ({
+      galleryItems,
+      activeGalleryIndex,
+      priceLabel,
+      conditionLabel,
+      statusLabel,
+      createdAtLabel,
+      updatedAtLabel,
+      description,
+      onPrevGalleryItem: handlePrevGalleryItem,
+      onNextGalleryItem: handleNextGalleryItem,
+      onSelectGalleryItem: handleSelectGalleryItem,
+    }),
+    [
+      activeGalleryIndex,
+      conditionLabel,
+      createdAtLabel,
+      description,
+      galleryItems,
+      handleNextGalleryItem,
+      handlePrevGalleryItem,
+      handleSelectGalleryItem,
+      priceLabel,
+      statusLabel,
+      updatedAtLabel,
+    ],
+  );
 
-  const editFormProps =
-    useMemo<ResaleDetailEditFormProps>(
-      () => ({
-        priceValue: editablePriceLabel,
-        condition: conditionInput,
-        status: statusInput,
-        description: descriptionInput,
-        saving,
-        createdAtLabel,
-        updatedAtLabel,
-        conditionMediaItems,
-        conditionMediaCurrentIndex,
-        conditionMediaInputRef,
-        conditionMediaCarouselRef,
-        onPriceChange: handlePriceChange,
-        onConditionChange: handleConditionChange,
-        onStatusChange: handleStatusChange,
-        onDescriptionChange: handleDescriptionChange,
-        onConditionMediaSelected: handleConditionMediaSelected,
-        onRemoveConditionMedia: handleRemoveConditionMedia,
-        onConditionMediaCarouselScroll:
-          handleConditionMediaCarouselScroll,
-        onMoveToConditionMediaSlide:
-          handleMoveToConditionMediaSlide,
-      }),
-      [
-        conditionInput,
-        conditionMediaCarouselRef,
-        conditionMediaCurrentIndex,
-        conditionMediaInputRef,
-        conditionMediaItems,
-        createdAtLabel,
-        descriptionInput,
-        editablePriceLabel,
-        handleConditionChange,
-        handleConditionMediaCarouselScroll,
-        handleConditionMediaSelected,
-        handleDescriptionChange,
-        handleMoveToConditionMediaSlide,
-        handlePriceChange,
-        handleRemoveConditionMedia,
-        handleStatusChange,
-        saving,
-        statusInput,
-        updatedAtLabel,
-      ],
-    );
+  const editFormProps = useMemo<ResaleDetailEditFormProps>(
+    () => ({
+      priceValue: editablePriceLabel,
+      condition: conditionInput,
+      status: statusInput,
+      description: descriptionInput,
+      saving,
+      createdAtLabel,
+      updatedAtLabel,
+      conditionMediaItems,
+      conditionMediaCurrentIndex,
+      conditionMediaInputRef,
+      conditionMediaCarouselRef,
+      onPriceChange: handlePriceChange,
+      onConditionChange: handleConditionChange,
+      onStatusChange: handleStatusChange,
+      onDescriptionChange: handleDescriptionChange,
+      onConditionMediaSelected: handleConditionMediaSelected,
+      onRemoveConditionMedia: handleRemoveConditionMedia,
+      onConditionMediaCarouselScroll: handleConditionMediaCarouselScroll,
+      onMoveToConditionMediaSlide: handleMoveToConditionMediaSlide,
+    }),
+    [
+      conditionInput,
+      conditionMediaCarouselRef,
+      conditionMediaCurrentIndex,
+      conditionMediaInputRef,
+      conditionMediaItems,
+      createdAtLabel,
+      descriptionInput,
+      editablePriceLabel,
+      handleConditionChange,
+      handleConditionMediaCarouselScroll,
+      handleConditionMediaSelected,
+      handleDescriptionChange,
+      handleMoveToConditionMediaSlide,
+      handlePriceChange,
+      handleRemoveConditionMedia,
+      handleStatusChange,
+      saving,
+      statusInput,
+      updatedAtLabel,
+    ],
+  );
 
-  const footerProps =
-    useMemo<ResaleDetailFooterProps | undefined>(
-      () => {
-        if (
-          isEditing &&
-          !isSold
-        ) {
-          return {
-            variant: "tripleAction",
-            leftButtonLabel: "キャンセル",
-            centerButtonLabel: saving
-              ? "保存中..."
-              : "保存する",
-            rightButtonLabel: "削除",
-            leftButtonDisabled: saving,
-            centerButtonDisabled: !canSave,
-            rightButtonDisabled: saving,
-            onLeftButtonClick: handleCancelEdit,
-            onCenterButtonClick: handleSave,
-            onRightButtonClick: handleDelete,
-          };
-        }
+  const footerProps = useMemo<ResaleDetailFooterProps | undefined>(
+    () => {
+      if (isEditing && !isSold) {
+        return {
+          variant: "tripleAction",
+          leftButtonLabel: "キャンセル",
+          centerButtonLabel: saving
+            ? "保存中..."
+            : "保存する",
+          rightButtonLabel: "削除",
+          leftButtonDisabled: saving,
+          centerButtonDisabled: !canSave,
+          rightButtonDisabled: saving,
+          onLeftButtonClick: handleCancelEdit,
+          onCenterButtonClick: handleSave,
+          onRightButtonClick: handleDelete,
+        };
+      }
 
-        if (canEdit) {
-          return {
-            variant: "action",
-            buttonLabel: "編集する",
-            disabled: false,
-            onButtonClick: handleStartEdit,
-          };
-        }
+      if (canEdit) {
+        return {
+          variant: "action",
+          buttonLabel: "編集する",
+          disabled: false,
+          onButtonClick: handleStartEdit,
+        };
+      }
 
-        return undefined;
-      },
-      [
-        canEdit,
-        canSave,
-        handleCancelEdit,
-        handleDelete,
-        handleSave,
-        handleStartEdit,
-        isEditing,
-        isSold,
-        saving,
-      ],
-    );
+      return undefined;
+    },
+    [
+      canEdit,
+      canSave,
+      handleCancelEdit,
+      handleDelete,
+      handleSave,
+      handleStartEdit,
+      isEditing,
+      isSold,
+      saving,
+    ],
+  );
 
   return {
     title,

@@ -17,21 +17,22 @@ import type {
 export async function createResaleListingRecord(
   params: CreateResaleListingRecordParams,
 ): Promise<ResaleListing> {
-  const result = await fetchResaleWithAuth<
-    ApiDataResponse<ResaleListing>
-  >("/mall/me/resales", {
-    method: "POST",
-    body: JSON.stringify({
-      assetId: params.assetId,
-      tokenBlueprintId: params.tokenBlueprintId,
-      productId: params.productId,
-      brandId: params.brandId,
-      productBlueprintId: params.productBlueprintId,
-      price: params.price,
-      condition: params.condition,
-      description: params.description,
-    }),
-  });
+  const result = await fetchResaleWithAuth<ApiDataResponse<ResaleListing>>(
+    "/mall/me/resales",
+    {
+      method: "POST",
+      json: {
+        assetId: params.assetId,
+        tokenBlueprintId: params.tokenBlueprintId,
+        productId: params.productId,
+        brandId: params.brandId,
+        productBlueprintId: params.productBlueprintId,
+        price: params.price,
+        condition: params.condition,
+        description: params.description,
+      },
+    },
+  );
 
   return result.data;
 }
@@ -68,12 +69,13 @@ export async function updateResaleListing(
     body.status = params.status;
   }
 
-  const result = await fetchResaleWithAuth<
-    ApiDataResponse<ResaleListing>
-  >(`/mall/me/resales/${encodeURIComponent(resaleId)}`, {
-    method: "PUT",
-    body: JSON.stringify(body),
-  });
+  const result = await fetchResaleWithAuth<ApiDataResponse<ResaleListing>>(
+    `/mall/me/resales/${encodeURIComponent(resaleId)}`,
+    {
+      method: "PUT",
+      json: body,
+    },
+  );
 
   return result.data;
 }
@@ -87,11 +89,12 @@ export async function getMyResaleListing(
     throw new Error("resaleId is required");
   }
 
-  const result = await fetchResaleWithAuth<
-    ApiDataResponse<ResaleListing>
-  >(`/mall/me/resales/${encodeURIComponent(normalizedResaleId)}`, {
-    method: "GET",
-  });
+  const result = await fetchResaleWithAuth<ApiDataResponse<ResaleListing>>(
+    `/mall/me/resales/${encodeURIComponent(normalizedResaleId)}`,
+    {
+      method: "GET",
+    },
+  );
 
   return result.data;
 }
@@ -126,17 +129,13 @@ export async function updatePrimaryResaleImage({
     throw new Error("imageId is required");
   }
 
-  const result = await fetchResaleWithAuth<
-    ApiDataResponse<ResaleListing>
-  >(
-    `/mall/me/resales/${encodeURIComponent(
-      normalizedResaleId,
-    )}/primary-image`,
+  const result = await fetchResaleWithAuth<ApiDataResponse<ResaleListing>>(
+    `/mall/me/resales/${encodeURIComponent(normalizedResaleId)}/primary-image`,
     {
       method: "PUT",
-      body: JSON.stringify({
+      json: {
         imageId: normalizedImageId,
-      }),
+      },
     },
   );
 

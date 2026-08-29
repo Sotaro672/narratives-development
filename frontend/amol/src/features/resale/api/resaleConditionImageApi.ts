@@ -30,11 +30,11 @@ export async function createResaleConditionImage(
     `/mall/me/resales/${encodeURIComponent(resaleId)}/images`,
     {
       method: "POST",
-      body: JSON.stringify({
+      json: {
         id: image.id,
         url: image.url,
         displayOrder: image.displayOrder,
-      }),
+      },
     },
   );
 
@@ -80,9 +80,7 @@ export async function deleteMyResaleConditionImage({
   await fetchResaleWithAuth<{
     ok: boolean;
   }>(
-    `/mall/me/resales/${encodeURIComponent(
-      normalizedResaleId,
-    )}/images/${encodeURIComponent(normalizedImageId)}`,
+    `/mall/me/resales/${encodeURIComponent(normalizedResaleId)}/images/${encodeURIComponent(normalizedImageId)}`,
     {
       method: "DELETE",
     },
