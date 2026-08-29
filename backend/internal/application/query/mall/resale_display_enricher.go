@@ -17,7 +17,7 @@ import (
 // - productId -> modelId
 // - modelId -> variation display fields
 // - productBlueprintId -> productName
-// - tokenBlueprintId -> tokenName / tokenIcon / imageUrl fallback
+// - tokenBlueprintId -> tokenName / tokenIcon / tokenDescription / imageUrl fallback
 // - brandId -> brandName
 // - optional avatar display enrichment
 // - optional primary resale image URL enrichment
@@ -232,6 +232,10 @@ func (e *resaleDisplayEnricher) enrichResaleWithTokenBlueprint(
 		if e.useTokenIconAsImageFallback && item.ImageURL == "" {
 			item.ImageURL = tb.TokenIcon
 		}
+	}
+
+	if tb.Description != "" {
+		item.TokenDescription = tb.Description
 	}
 
 	if item.BrandID == "" && tb.BrandID != "" {

@@ -18,6 +18,7 @@ export type ResaleCreatePageLocationState = {
   tokenBlueprintId?: string;
   tokenName?: string;
   tokenIconUrl?: string;
+  tokenDescription?: string;
 };
 
 export type ResaleCreateTarget = {
@@ -30,6 +31,7 @@ export type ResaleCreateTarget = {
   tokenBlueprintId: string;
   tokenName: string;
   tokenIconUrl: string;
+  tokenDescription: string;
 };
 
 /**

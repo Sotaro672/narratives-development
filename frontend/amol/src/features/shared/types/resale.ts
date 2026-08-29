@@ -63,6 +63,7 @@ export type ResaleListingBase = {
   productName?: string;
   tokenName?: string;
   tokenIcon?: string;
+  tokenDescription?: string;
   brandName?: string;
   avatarName?: string;
   avatarIcon?: string;

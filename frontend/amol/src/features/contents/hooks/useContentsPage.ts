@@ -110,6 +110,7 @@ export function useContentsPage() {
 
   const tokenName = metadata?.name ?? "";
   const tokenIconUrl = metadata?.image ?? "";
+  const tokenDescription = metadata?.description ?? "";
   const pageTitle = tokenName || "トークン詳細";
 
   const mediaItems = useMemo<MediaGalleryItem[]>(() => {
@@ -183,6 +184,7 @@ export function useContentsPage() {
           tokenBlueprintId: contents.tokenBlueprintId,
           tokenName,
           tokenIconUrl,
+          tokenDescription,
         },
       });
     } catch (err) {
@@ -210,6 +212,7 @@ export function useContentsPage() {
     error,
     tokenName,
     tokenIconUrl,
+    tokenDescription,
     pageTitle,
     hasMediaItems,
     isMobilePortrait,

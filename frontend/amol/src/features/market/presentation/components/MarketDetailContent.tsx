@@ -29,6 +29,7 @@ type MarketDetailContentState = Pick<
   | "model"
   | "tokenName"
   | "tokenIcon"
+  | "tokenDescription"
   | "sellerAvatarId"
   | "avatarName"
   | "avatarIcon"
@@ -61,6 +62,7 @@ export default function MarketDetailContent({
     model,
     tokenName,
     tokenIcon,
+    tokenDescription,
     sellerAvatarId,
     avatarName,
     avatarIcon,
@@ -104,6 +106,7 @@ export default function MarketDetailContent({
                 brandName={item.brandName}
                 tokenName={tokenName}
                 tokenIcon={tokenIcon}
+                description={tokenDescription}
               />
 
               <MarketSellerCard

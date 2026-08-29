@@ -8,6 +8,7 @@ const METADATA_PROXY_PATH = "/mall/me/wallets/metadata/proxy";
 type MetadataProxyResponse = {
   name: string;
   image: string;
+  description: string;
   properties: {
     files: Array<{
       uri: string;
@@ -37,6 +38,7 @@ export async function fetchContentsMetadata(
   return {
     name: body.name,
     image: body.image,
+    description: body.description,
     files: body.properties.files,
   };
 }

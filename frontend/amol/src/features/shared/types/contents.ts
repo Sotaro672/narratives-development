@@ -10,6 +10,7 @@ export type ContentsMetadataFile = {
 export type ContentsMetadata = {
   name: string;
   image: string;
+  description: string;
   files: ContentsMetadataFile[];
 };
 

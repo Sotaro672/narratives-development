@@ -36,6 +36,7 @@ const RESALE_LOCATION_STATE_KEYS = [
   "tokenBlueprintId",
   "tokenName",
   "tokenIconUrl",
+  "tokenDescription",
 ] as const satisfies readonly (keyof ResaleCreatePageLocationState)[];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -71,6 +72,7 @@ function createResaleTarget(state: ResaleCreatePageLocationState): ResaleCreateT
     tokenBlueprintId: textOrEmpty(state.tokenBlueprintId),
     tokenName: textOrEmpty(state.tokenName),
     tokenIconUrl: textOrEmpty(state.tokenIconUrl),
+    tokenDescription: textOrEmpty(state.tokenDescription),
   };
 }
 

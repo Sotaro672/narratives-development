@@ -26,6 +26,7 @@ export type ResaleDetailConditionMediaItem =
 export type ResaleListingTargetSummary = {
   tokenIconUrl: string;
   tokenName: string;
+  tokenDescription: string;
   brandName: string;
   productName: string;
 };

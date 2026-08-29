@@ -80,6 +80,7 @@ export default function ResaleCreatePage() {
                 brandName={target.brandName}
                 tokenName={target.tokenName}
                 tokenIcon={target.tokenIconUrl}
+                description={target.tokenDescription}
               />
             }
           >

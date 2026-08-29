@@ -46,6 +46,7 @@ export type UseMarketDetailPageResult = {
   model: ProductModelDisplay;
   tokenName: string;
   tokenIcon: string;
+  tokenDescription: string;
   sellerAvatarId: string;
   avatarName: string;
   avatarIcon: string;
@@ -183,6 +184,7 @@ export function useMarketDetailPage({
 
   const tokenName = textOrEmpty(item?.tokenName);
   const tokenIcon = textOrEmpty(item?.tokenIcon);
+  const tokenDescription = textOrEmpty(item?.tokenDescription);
   const sellerAvatarId = textOrEmpty(item?.avatarId);
   const avatarName = textOrEmpty(item?.avatarName);
   const avatarIcon = textOrEmpty(item?.avatarIcon);
@@ -292,6 +294,7 @@ export function useMarketDetailPage({
     model,
     tokenName,
     tokenIcon,
+    tokenDescription,
     sellerAvatarId,
     avatarName,
     avatarIcon,

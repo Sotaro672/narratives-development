@@ -202,6 +202,7 @@ export function useResaleDetailPage() {
 
   const productName = item?.productName ?? "";
   const tokenName = item?.tokenName ?? "";
+  const tokenDescription = item?.tokenDescription ?? "";
   const brandName = item?.brandName ?? "";
   const tokenIconUrl = item?.tokenIcon ?? "";
   const description = item?.description ?? "";
@@ -529,12 +530,14 @@ export function useResaleDetailPage() {
     () => ({
       tokenIconUrl,
       tokenName,
+      tokenDescription,
       brandName,
       productName,
     }),
     [
       brandName,
       productName,
+      tokenDescription,
       tokenIconUrl,
       tokenName,
     ],
