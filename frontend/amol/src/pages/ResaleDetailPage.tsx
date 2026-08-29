@@ -155,6 +155,13 @@ export default function ResaleDetailPage() {
                   avatarName={item?.avatarName}
                   avatarIcon={item?.avatarIcon}
                 />
+
+                {!isEditing ? (
+                  <ProductDescription
+                    description={readonlyInfoProps.description || "説明文はありません。"}
+                    className="product-detail__description--standalone"
+                  />
+                ) : null}
               </>
             }
             contentFooter={
@@ -184,9 +191,6 @@ export default function ResaleDetailPage() {
                 <ProductModelMeta
                   conditionLabel={readonlyInfoProps.conditionLabel}
                   model={model}
-                />
-                <ProductDescription
-                  description={readonlyInfoProps.description || "説明文はありません。"}
                 />
               </>
             )}

@@ -115,6 +115,11 @@ export default function MarketDetailContent({
                 avatarIcon={avatarIcon}
                 onClick={onOpenSeller}
               />
+
+              <ProductDescription
+                description={item.description}
+                className="product-detail__description--standalone"
+              />
             </>
           }
         >
@@ -126,12 +131,7 @@ export default function MarketDetailContent({
 
           <ProductPrice priceLabel={priceLabel} />
 
-          <ProductModelMeta
-            conditionLabel={item.condition}
-            model={model}
-          />
-
-          <ProductDescription description={item.description} />
+          <ProductModelMeta conditionLabel={item.condition} model={model} />
 
           <ProductReviewSection
             items={reviews?.items ?? []}
