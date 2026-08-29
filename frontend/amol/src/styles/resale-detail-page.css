@@ -32,6 +32,18 @@
   box-sizing: border-box;
 }
 
+.resale-detail-page__listing-meta-card {
+  padding: 24px;
+  border: 1px solid #eee;
+  border-radius: 24px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.resale-detail-page__listing-meta {
+  margin-top: 0;
+}
+
 .resale-detail-page__edit-form {
   margin-top: 24px;
   padding-top: 24px;
@@ -112,6 +124,11 @@
 
   .resale-detail-page__image-wrap--editing {
     padding: 16px;
+  }
+
+  .resale-detail-page__listing-meta-card {
+    padding: 20px;
+    border-radius: 20px;
   }
 
   .resale-detail-page__edit-form {

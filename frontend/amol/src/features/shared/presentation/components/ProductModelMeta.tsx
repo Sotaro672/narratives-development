@@ -39,7 +39,7 @@ export default function ProductModelMeta({
     });
   }
 
-  if (kindLabel) {
+  if (kindLabel && kindLabel !== "アパレル") {
     items.push({
       label: "種別",
       value: kindLabel,

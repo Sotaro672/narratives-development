@@ -20,6 +20,13 @@
   gap: 16px;
 }
 
+.product-detail__content-column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .product-detail__image-wrap {
   width: 100%;
   min-width: 0;
@@ -146,7 +153,8 @@
   }
 
   .product-detail__media-column,
-  .product-detail__media-footer {
+  .product-detail__media-footer,
+  .product-detail__content-column {
     gap: 12px;
   }
 
@@ -154,8 +162,11 @@
     border-radius: 20px;
   }
 
-  .product-detail__content {
+  .product-detail__content-column {
     margin-top: 16px;
+  }
+
+  .product-detail__content {
     padding: 20px;
     border-radius: 20px;
   }

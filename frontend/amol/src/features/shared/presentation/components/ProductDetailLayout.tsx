@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 export type ProductDetailLayoutProps = {
   media: ReactNode;
   mediaFooter?: ReactNode;
+  contentFooter?: ReactNode;
   children: ReactNode;
   className?: string;
   mediaColumnClassName?: string;
@@ -18,6 +19,7 @@ function joinClassNames(...classNames: Array<string | undefined | false>): strin
 export default function ProductDetailLayout({
   media,
   mediaFooter,
+  contentFooter,
   children,
   className,
   mediaColumnClassName,
@@ -29,14 +31,16 @@ export default function ProductDetailLayout({
         {media}
 
         {mediaFooter ? (
-          <div className="product-detail__media-footer">
-            {mediaFooter}
-          </div>
+          <div className="product-detail__media-footer">{mediaFooter}</div>
         ) : null}
       </div>
 
-      <div className={joinClassNames("product-detail__content", contentClassName)}>
-        {children}
+      <div className="product-detail__content-column">
+        <div className={joinClassNames("product-detail__content", contentClassName)}>
+          {children}
+        </div>
+
+        {contentFooter}
       </div>
     </section>
   );

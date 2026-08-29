@@ -146,6 +146,15 @@ export default function ResaleDetailPage() {
                 tokenIcon={listingTarget.tokenIconUrl}
               />
             }
+            contentFooter={
+              !isEditing ? (
+                <ResaleDetailReadonlyInfo
+                  statusLabel={readonlyInfoProps.statusLabel}
+                  createdAtLabel={readonlyInfoProps.createdAtLabel}
+                  updatedAtLabel={readonlyInfoProps.updatedAtLabel}
+                />
+              ) : null
+            }
           >
             <ProductIdentity
               brandName={listingTarget.brandName}
@@ -156,26 +165,17 @@ export default function ResaleDetailPage() {
             {isEditing ? (
               <>
                 <ProductModelMeta model={model} />
-
                 <ResaleDetailEditForm {...editFormProps} />
               </>
             ) : (
               <>
                 <ProductPrice priceLabel={readonlyInfoProps.priceLabel} />
-
                 <ProductModelMeta
                   conditionLabel={readonlyInfoProps.conditionLabel}
                   model={model}
                 />
-
                 <ProductDescription
                   description={readonlyInfoProps.description || "説明文はありません。"}
-                />
-
-                <ResaleDetailReadonlyInfo
-                  statusLabel={readonlyInfoProps.statusLabel}
-                  createdAtLabel={readonlyInfoProps.createdAtLabel}
-                  updatedAtLabel={readonlyInfoProps.updatedAtLabel}
                 />
               </>
             )}

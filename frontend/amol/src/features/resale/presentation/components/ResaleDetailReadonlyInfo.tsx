@@ -1,7 +1,6 @@
 // frontend/amol/src/features/resale/presentation/components/ResaleDetailReadonlyInfo.tsx
 
 import ProductMetaList from "../../../shared/presentation/components/ProductMetaList";
-
 import type { ResaleDetailReadonlyInfoProps } from "../types/resaleDetailPageTypes";
 
 type ResaleDetailReadonlyInfoViewProps = Pick<
@@ -15,21 +14,15 @@ export default function ResaleDetailReadonlyInfo({
   updatedAtLabel,
 }: ResaleDetailReadonlyInfoViewProps) {
   return (
-    <ProductMetaList
-      items={[
-        {
-          label: "出品ステータス",
-          value: statusLabel,
-        },
-        {
-          label: "出品日時",
-          value: createdAtLabel,
-        },
-        {
-          label: "更新日時",
-          value: updatedAtLabel,
-        },
-      ]}
-    />
+    <div className="resale-detail-page__listing-meta-card">
+      <ProductMetaList
+        className="resale-detail-page__listing-meta"
+        items={[
+          { label: "出品ステータス", value: statusLabel },
+          { label: "出品日時", value: createdAtLabel },
+          { label: "更新日時", value: updatedAtLabel },
+        ]}
+      />
+    </div>
   );
 }
