@@ -1,5 +1,7 @@
 // frontend/amol/src/pages/ResaleDetailPage.tsx
 
+import { useNavigate } from "react-router-dom";
+
 import Layout from "../components/layout/Layout";
 import SectionHeader from "../components/ui/SectionHeader";
 
@@ -23,6 +25,8 @@ import "../styles/resale-detail-page.css";
 import "../features/shared/styles/product-detail.css";
 
 export default function ResaleDetailPage() {
+  const navigate = useNavigate();
+
   const {
     title,
     footerProps,
@@ -63,6 +67,20 @@ export default function ResaleDetailPage() {
             tertiaryActionButtonDisabled: footerProps.rightButtonDisabled,
           }
         : {};
+
+  function handleOpenResaleChat() {
+    const resaleId = item?.id?.trim() ?? "";
+
+    if (!resaleId) {
+      return;
+    }
+
+    navigate(`/chats/resales/${encodeURIComponent(resaleId)}`, {
+      state: {
+        source: "owner",
+      },
+    });
+  }
 
   return (
     <Layout
@@ -188,10 +206,21 @@ export default function ResaleDetailPage() {
             ) : (
               <>
                 <ProductPrice priceLabel={readonlyInfoProps.priceLabel} />
+
                 <ProductModelMeta
                   conditionLabel={readonlyInfoProps.conditionLabel}
                   model={model}
                 />
+
+                <div className="page-actions">
+                  <button
+                    type="button"
+                    className="page-button page-button--secondary"
+                    onClick={handleOpenResaleChat}
+                  >
+                    コメントを見る
+                  </button>
+                </div>
               </>
             )}
 

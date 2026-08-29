@@ -42,11 +42,13 @@ type MarketDetailContentState = Pick<
 type MarketDetailContentProps = {
   detail: MarketDetailContentState;
   onOpenSeller: () => void;
+  onOpenResaleChat: () => void;
 };
 
 export default function MarketDetailContent({
   detail,
   onOpenSeller,
+  onOpenResaleChat,
 }: MarketDetailContentProps) {
   const {
     item,
@@ -132,6 +134,16 @@ export default function MarketDetailContent({
           <ProductPrice priceLabel={priceLabel} />
 
           <ProductModelMeta conditionLabel={item.condition} model={model} />
+
+          <div className="page-actions">
+            <button
+              type="button"
+              className="page-button page-button--secondary"
+              onClick={onOpenResaleChat}
+            >
+              コメントを見る
+            </button>
+          </div>
 
           <ProductReviewSection
             items={reviews?.items ?? []}

@@ -48,6 +48,20 @@ export default function MarketDetailPage() {
     navigate(`/avatars/${encodeURIComponent(sellerAvatarId)}`);
   }
 
+  function handleOpenResaleChat() {
+    const normalizedResaleId = resaleId?.trim() ?? "";
+
+    if (!normalizedResaleId) {
+      return;
+    }
+
+    navigate(`/chats/resales/${encodeURIComponent(normalizedResaleId)}`, {
+      state: {
+        source: "market",
+      },
+    });
+  }
+
   return (
     <Layout
       title={title}
@@ -74,6 +88,7 @@ export default function MarketDetailPage() {
       <MarketDetailContent
         detail={detail}
         onOpenSeller={handleOpenSellerAvatar}
+        onOpenResaleChat={handleOpenResaleChat}
       />
     </Layout>
   );

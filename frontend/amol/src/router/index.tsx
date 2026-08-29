@@ -264,6 +264,14 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: "/chats/resales/:resaleId",
+    element: (
+      <ProtectedRoute>
+        <ChatDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
     path: "/chats/:inquiryId",
     element: (
       <ProtectedRoute>
