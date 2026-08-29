@@ -7,6 +7,7 @@ import (
 
 	applicationport "narratives/internal/application/port"
 	mallshared "narratives/internal/application/query/mall/shared"
+	avatardom "narratives/internal/domain/avatar"
 	resaledom "narratives/internal/domain/resale"
 )
 
@@ -14,17 +15,20 @@ type ResaleQuery struct {
 	resaleRepo      resaledom.Repository
 	imageRepo       applicationport.ResaleImageLister
 	displayResolver mallshared.MallDisplayResolver
+	avatarRepo      avatardom.Repository
 }
 
 func NewResaleQuery(
 	resaleRepo resaledom.Repository,
 	imageRepo applicationport.ResaleImageLister,
 	displayResolver mallshared.MallDisplayResolver,
+	avatarRepo avatardom.Repository,
 ) *ResaleQuery {
 	return &ResaleQuery{
 		resaleRepo:      resaleRepo,
 		imageRepo:       imageRepo,
 		displayResolver: displayResolver,
+		avatarRepo:      avatarRepo,
 	}
 }
 
@@ -148,12 +152,13 @@ func (q *ResaleQuery) newDisplayEnricher() *resaleDisplayEnricher {
 
 	return newResaleDisplayEnricher(resaleDisplayEnricherConfig{
 		displayResolver: q.displayResolver,
+		avatarRepo:      q.avatarRepo,
 
-		// ResaleQuery の既存挙動:
-		// - avatarName/avatarIcon は補完しない
+		// ResaleQuery の表示補完:
+		// - avatarName/avatarIcon を補完する
 		// - resale image は ListImages API 側で取得する
 		// - tokenBlueprint.IconURL を ImageURL fallback として使う
-		includeAvatar:               false,
+		includeAvatar:               true,
 		includeImage:                false,
 		useTokenIconAsImageFallback: true,
 	})

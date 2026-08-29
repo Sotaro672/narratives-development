@@ -88,6 +88,7 @@ export default function MarketDetailContent({
 
       {!loading && !error && item ? (
         <ProductDetailLayout
+          className="product-detail__layout--summary-after-content-mobile"
           media={
             <ProductMediaGallery
               items={galleryItems}

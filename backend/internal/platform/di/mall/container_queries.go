@@ -110,6 +110,7 @@ func buildMallQueries(
 		r.resaleRepo,
 		r.resaleImageRepo,
 		mallDisplayResolver,
+		r.avatarRepo,
 	)
 
 	marketQ := mallquery.NewMarketQuery(

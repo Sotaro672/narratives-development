@@ -112,6 +112,7 @@ export default function ResaleDetailPage() {
 
         {showDetail ? (
           <ProductDetailLayout
+            className="product-detail__layout--summary-after-content-mobile"
             media={
               isEditing ? (
                 <div className="product-detail__image-wrap resale-detail-page__image-wrap--editing">
