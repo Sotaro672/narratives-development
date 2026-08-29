@@ -1,26 +1,26 @@
 /* frontend\amol\src\features\shared\styles\product-detail.css */
 
-.resale-product-detail__layout {
+.product-detail__layout {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
   gap: 32px;
   align-items: start;
 }
 
-.resale-product-detail__media-column {
+.product-detail__media-column {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.resale-product-detail__media-footer {
+.product-detail__media-footer {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.resale-product-detail__image-wrap {
+.product-detail__image-wrap {
   width: 100%;
   min-width: 0;
   overflow: hidden;
@@ -30,12 +30,12 @@
   box-sizing: border-box;
 }
 
-.resale-product-detail__gallery {
+.product-detail__gallery {
   display: block;
   width: 100%;
 }
 
-.resale-product-detail__content {
+.product-detail__content {
   min-width: 0;
   padding: 24px;
   border: 1px solid #eee;
@@ -44,7 +44,7 @@
   box-sizing: border-box;
 }
 
-.resale-product-detail__brand {
+.product-detail__brand {
   margin: 0 0 8px;
   color: #777;
   font-size: 14px;
@@ -53,7 +53,7 @@
   overflow-wrap: anywhere;
 }
 
-.resale-product-detail__title {
+.product-detail__title {
   margin: 0;
   color: #111;
   font-size: 28px;
@@ -63,7 +63,7 @@
   overflow-wrap: anywhere;
 }
 
-.resale-product-detail__token {
+.product-detail__token {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -76,7 +76,7 @@
   box-sizing: border-box;
 }
 
-.resale-product-detail__token-icon {
+.product-detail__token-icon {
   display: block;
   flex: 0 0 auto;
   width: 44px;
@@ -88,14 +88,14 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-.resale-product-detail__token-body {
+.product-detail__token-body {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.resale-product-detail__token-label {
+.product-detail__token-label {
   color: #777;
   font-size: 12px;
   font-weight: 700;
@@ -103,7 +103,7 @@
   overflow-wrap: anywhere;
 }
 
-.resale-product-detail__token-name {
+.product-detail__token-name {
   color: #222;
   font-size: 15px;
   font-weight: 800;
@@ -111,7 +111,7 @@
   overflow-wrap: anywhere;
 }
 
-.resale-product-detail__price {
+.product-detail__price {
   margin: 18px 0 0;
   color: #111;
   font-size: 28px;
@@ -119,12 +119,12 @@
   line-height: 1.2;
 }
 
-.resale-product-detail__meta {
+.product-detail__meta {
   margin: 24px 0 0;
   border-top: 1px solid #eee;
 }
 
-.resale-product-detail__meta-row {
+.product-detail__meta-row {
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr);
   gap: 12px;
@@ -132,7 +132,7 @@
   border-bottom: 1px solid #eee;
 }
 
-.resale-product-detail__meta-row dt {
+.product-detail__meta-row dt {
   margin: 0;
   color: #777;
   font-size: 14px;
@@ -140,7 +140,7 @@
   line-height: 1.7;
 }
 
-.resale-product-detail__meta-row dd {
+.product-detail__meta-row dd {
   min-width: 0;
   margin: 0;
   color: #222;
@@ -149,7 +149,7 @@
   overflow-wrap: anywhere;
 }
 
-.resale-product-detail__color-value {
+.product-detail__color-value {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -157,23 +157,21 @@
   vertical-align: middle;
 }
 
-.resale-product-detail__color-swatch {
+.product-detail__color-swatch {
   display: inline-block;
   flex: 0 0 auto;
   width: 18px;
   height: 18px;
   border: 1px solid rgba(0, 0, 0, 0.18);
   border-radius: 999px;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.45),
-    0 1px 2px rgba(0, 0, 0, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45), 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
-.resale-product-detail__description {
+.product-detail__description {
   margin-top: 24px;
 }
 
-.resale-product-detail__description h2 {
+.product-detail__description h2 {
   margin: 0 0 10px;
   color: #111;
   font-size: 16px;
@@ -181,7 +179,7 @@
   line-height: 1.4;
 }
 
-.resale-product-detail__description p {
+.product-detail__description p {
   margin: 0;
   color: #333;
   font-size: 15px;
@@ -191,52 +189,52 @@
 }
 
 @media (max-width: 760px) {
-  .resale-product-detail__layout {
+  .product-detail__layout {
     display: block;
   }
 
-  .resale-product-detail__media-column,
-  .resale-product-detail__media-footer {
+  .product-detail__media-column,
+  .product-detail__media-footer {
     gap: 12px;
   }
 
-  .resale-product-detail__image-wrap {
+  .product-detail__image-wrap {
     border-radius: 20px;
   }
 
-  .resale-product-detail__content {
+  .product-detail__content {
     margin-top: 16px;
     padding: 20px;
     border-radius: 20px;
   }
 
-  .resale-product-detail__title {
+  .product-detail__title {
     font-size: 22px;
   }
 
-  .resale-product-detail__token {
+  .product-detail__token {
     padding: 12px;
     border-radius: 20px;
   }
 
-  .resale-product-detail__token-icon {
+  .product-detail__token-icon {
     width: 40px;
     height: 40px;
   }
 
-  .resale-product-detail__token-name {
+  .product-detail__token-name {
     font-size: 14px;
   }
 
-  .resale-product-detail__price {
+  .product-detail__price {
     font-size: 24px;
   }
 
-  .resale-product-detail__meta-row {
+  .product-detail__meta-row {
     grid-template-columns: 80px minmax(0, 1fr);
   }
 
-  .resale-product-detail__color-swatch {
+  .product-detail__color-swatch {
     width: 16px;
     height: 16px;
   }
