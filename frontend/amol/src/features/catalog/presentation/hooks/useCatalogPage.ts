@@ -1,17 +1,18 @@
 // frontend/amol/src/features/catalog/presentation/hooks/useCatalogPage.ts
 
-import { useEffect, useMemo, useState, type TouchEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+
+import type { MediaGalleryItem } from "../../../../components/ui/MediaGallery";
+import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
+import { getApiBaseUrl } from "../../../../lib/apiBaseUrl";
 
 import { addSelectedCatalogItemToCart } from "../../application/catalogCartUsecase";
 import { loadCatalogPage } from "../../application/catalogPageLoader";
 import { createCatalogPageViewModel } from "../../application/catalogPageViewModelFactory";
-import { resolveCatalogSwipeDirection } from "../../application/catalogSwipeUsecase";
-import { SWIPE_THRESHOLD_PX } from "../../constants";
-import { getApiBaseUrl } from "../../../../lib/apiBaseUrl";
+
 import type { CatalogResponse } from "../../../shared/types/catalog";
 import type { ProductBlueprintReviewPage } from "../../../shared/types/review";
-import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
 
 export function useCatalogPage() {
   const navigate = useNavigate();
@@ -25,8 +26,6 @@ export function useCatalogPage() {
   const [reviewErrorMessage, setReviewErrorMessage] = useState("");
   const [cartErrorMessage, setCartErrorMessage] = useState("");
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
-  const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [selectedColorKey, setSelectedColorKey] = useState("");
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedModelId, setSelectedModelId] = useState("");
@@ -44,7 +43,27 @@ export function useCatalogPage() {
       activeImageIndex,
       isAddingToCart,
     });
-  }, [catalog, reviews, selectedColorKey, selectedSize, selectedModelId, activeImageIndex, isAddingToCart]);
+  }, [
+    catalog,
+    reviews,
+    selectedColorKey,
+    selectedSize,
+    selectedModelId,
+    activeImageIndex,
+    isAddingToCart,
+  ]);
+
+  const galleryItems = useMemo<MediaGalleryItem[]>(
+    () =>
+      viewModel.catalogImages
+        .filter((image) => Boolean(image.url))
+        .map((image) => ({
+          id: image.id,
+          url: image.url,
+          fileName: image.fileName,
+        })),
+    [viewModel.catalogImages],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -69,8 +88,6 @@ export function useCatalogPage() {
       setSelectedColorKey("");
       setSelectedSize("");
       setSelectedModelId("");
-      setTouchStartX(null);
-      setTouchStartY(null);
 
       try {
         const result = await loadCatalogPage({ apiBaseUrl, listId });
@@ -110,7 +127,10 @@ export function useCatalogPage() {
       return;
     }
 
-    if (selectedColorKey && !viewModel.colorOptions.some((option) => option.key === selectedColorKey)) {
+    if (
+      selectedColorKey &&
+      !viewModel.colorOptions.some((option) => option.key === selectedColorKey)
+    ) {
       setSelectedColorKey("");
     }
   }, [selectedColorKey, viewModel.colorOptions, viewModel.isAlcoholCatalog]);
@@ -123,7 +143,9 @@ export function useCatalogPage() {
       return;
     }
 
-    if (selectedSize && !viewModel.sizeOptions.includes(selectedSize)) setSelectedSize("");
+    if (selectedSize && !viewModel.sizeOptions.includes(selectedSize)) {
+      setSelectedSize("");
+    }
   }, [selectedSize, viewModel.sizeOptions, viewModel.isAlcoholCatalog]);
 
   useEffect(() => {
@@ -137,68 +159,39 @@ export function useCatalogPage() {
       return;
     }
 
-    if (selectedModelId && !viewModel.alcoholOptions.some((option) => option.modelId === selectedModelId)) {
+    if (
+      selectedModelId &&
+      !viewModel.alcoholOptions.some((option) => option.modelId === selectedModelId)
+    ) {
       setSelectedModelId("");
     }
   }, [selectedModelId, viewModel.alcoholOptions, viewModel.isAlcoholCatalog]);
 
   useEffect(() => {
-    if (activeImageIndex > viewModel.catalogImages.length - 1) setActiveImageIndex(0);
-  }, [activeImageIndex, viewModel.catalogImages.length]);
+    if (activeImageIndex >= galleryItems.length) {
+      setActiveImageIndex(0);
+    }
+  }, [activeImageIndex, galleryItems.length]);
 
   function handlePrevImage() {
-    if (viewModel.catalogImages.length === 0) return;
+    if (galleryItems.length === 0) return;
 
     setActiveImageIndex((current) =>
-      current === 0 ? viewModel.catalogImages.length - 1 : current - 1,
+      current === 0 ? galleryItems.length - 1 : current - 1,
     );
   }
 
   function handleNextImage() {
-    if (viewModel.catalogImages.length === 0) return;
+    if (galleryItems.length === 0) return;
 
     setActiveImageIndex((current) =>
-      current === viewModel.catalogImages.length - 1 ? 0 : current + 1,
+      current === galleryItems.length - 1 ? 0 : current + 1,
     );
   }
 
-  function handleImageTouchStart(event: TouchEvent<HTMLDivElement>) {
-    if (!isMobilePortrait || viewModel.catalogImages.length <= 1) return;
-
-    const touch = event.touches[0];
-    if (!touch) return;
-
-    setTouchStartX(touch.clientX);
-    setTouchStartY(touch.clientY);
-  }
-
-  function handleImageTouchEnd(event: TouchEvent<HTMLDivElement>) {
-    if (!isMobilePortrait || viewModel.catalogImages.length <= 1 || touchStartX === null || touchStartY === null) {
-      setTouchStartX(null);
-      setTouchStartY(null);
-      return;
-    }
-
-    const touch = event.changedTouches[0];
-    setTouchStartX(null);
-    setTouchStartY(null);
-
-    if (!touch) return;
-
-    const direction = resolveCatalogSwipeDirection({
-      startX: touchStartX,
-      startY: touchStartY,
-      endX: touch.clientX,
-      endY: touch.clientY,
-      thresholdPx: SWIPE_THRESHOLD_PX,
-    });
-
-    if (direction === "next") {
-      handleNextImage();
-      return;
-    }
-
-    if (direction === "prev") handlePrevImage();
+  function handleSelectImage(index: number) {
+    if (index < 0 || index >= galleryItems.length) return;
+    setActiveImageIndex(index);
   }
 
   function handleSelectColor(colorKey: string) {
@@ -267,13 +260,12 @@ export function useCatalogPage() {
     selectedSize,
     selectedModelId,
     activeImageIndex,
+    galleryItems,
     isMobilePortrait,
     ...viewModel,
-    setActiveImageIndex,
     handlePrevImage,
     handleNextImage,
-    handleImageTouchStart,
-    handleImageTouchEnd,
+    handleSelectImage,
     handleSelectColor,
     handleSelectSize,
     handleSelectModel,

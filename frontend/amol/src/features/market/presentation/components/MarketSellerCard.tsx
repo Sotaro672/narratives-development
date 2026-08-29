@@ -1,5 +1,7 @@
 // frontend/amol/src/features/market/presentation/components/MarketSellerCard.tsx
 
+import EntitySummaryCard from "../../../shared/presentation/components/EntitySummaryCard";
+
 type MarketSellerCardProps = {
   avatarId: string;
   avatarName: string;
@@ -13,59 +15,19 @@ export default function MarketSellerCard({
   avatarIcon,
   onOpen,
 }: MarketSellerCardProps) {
-  if (
-    !avatarId &&
-    !avatarName &&
-    !avatarIcon
-  ) {
+  if (!avatarId && !avatarName && !avatarIcon) {
     return null;
   }
 
   return (
-    <button
-      type="button"
-      className="market-detail-page__seller market-detail-page__seller--button"
+    <EntitySummaryCard
+      icon={avatarIcon}
+      iconAlt={avatarName || "出品者アイコン"}
+      iconFallback="◎"
+      label="出品者"
+      name={avatarName || avatarId || "アバター名未設定"}
       onClick={onOpen}
       disabled={!avatarId}
-    >
-      {avatarIcon ? (
-        <img
-          src={avatarIcon}
-          alt={
-            avatarName ||
-            "出品者アイコン"
-          }
-          className="market-detail-page__seller-icon"
-        />
-      ) : (
-        <span
-          className="market-detail-page__seller-icon market-detail-page__seller-icon--placeholder"
-          aria-hidden="true"
-        >
-          ◎
-        </span>
-      )}
-
-      <div className="market-detail-page__seller-body">
-        <span className="market-detail-page__seller-label">
-          出品者
-        </span>
-
-        <span className="market-detail-page__seller-name">
-          {avatarName ||
-            avatarId ||
-            "アバター名未設定"}
-        </span>
-      </div>
-
-      {avatarId ? (
-        <span
-          className="market-detail-page__seller-arrow"
-          aria-hidden="true"
-        >
-          ›
-        </span>
-      ) : null}
-    </button>
+    />
   );
 }

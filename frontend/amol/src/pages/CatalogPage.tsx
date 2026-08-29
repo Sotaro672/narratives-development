@@ -8,13 +8,13 @@ import { formatPrice } from "../components/utils/price";
 
 import ProductDetailLayout from "../features/shared/presentation/components/ProductDetailLayout";
 import ProductIdentity from "../features/shared/presentation/components/ProductIdentity";
+import ProductMediaGallery from "../features/shared/presentation/components/ProductMediaGallery";
+import TokenSummaryCard from "../features/shared/presentation/components/TokenSummaryCard";
 
-import CatalogImageGallery from "../features/catalog/presentation/components/CatalogImageGallery";
 import MeasurementTable from "../features/catalog/presentation/components/MeasurementTable";
 import ModelSelector from "../features/catalog/presentation/components/ModelSelector";
 import ProductInfoCard from "../features/catalog/presentation/components/ProductInfoCard";
 import ReviewSection from "../features/catalog/presentation/components/ReviewSection";
-import TokenInfoCard from "../features/catalog/presentation/components/TokenInfoCard";
 
 import { useCatalogPage } from "../features/catalog/presentation/hooks/useCatalogPage";
 import { useAuthState } from "../features/shared/hooks/useAuthState";
@@ -35,10 +35,8 @@ export default function CatalogPage() {
     errorMessage,
     reviewErrorMessage,
     cartErrorMessage,
-    activeImage,
     activeImageIndex,
-    catalogImages,
-    hasMultipleImages,
+    galleryItems,
     firstPrice,
     reviewSummary,
     reviewItems,
@@ -56,11 +54,9 @@ export default function CatalogPage() {
     selectedModelStock,
     canAddToCart,
     isMobilePortrait,
-    setActiveImageIndex,
     handlePrevImage,
     handleNextImage,
-    handleImageTouchStart,
-    handleImageTouchEnd,
+    handleSelectImage,
     handleSelectColor,
     handleSelectSize,
     handleSelectModel,
@@ -116,17 +112,21 @@ export default function CatalogPage() {
         {!isLoadingCatalog && !errorMessage && catalog ? (
           <ProductDetailLayout
             media={
-              <CatalogImageGallery
-                activeImage={activeImage}
-                activeImageIndex={activeImageIndex}
-                catalogImages={catalogImages}
-                productBlueprint={catalog.productBlueprint}
-                hasMultipleImages={hasMultipleImages}
-                onPrevImage={handlePrevImage}
-                onNextImage={handleNextImage}
-                onSelectImage={setActiveImageIndex}
-                onTouchStart={handleImageTouchStart}
-                onTouchEnd={handleImageTouchEnd}
+              <ProductMediaGallery
+                items={galleryItems}
+                activeIndex={activeImageIndex}
+                altFallback={catalog.productBlueprint.productName || catalog.list.title || "商品画像"}
+                placeholderText="No Image"
+                onPrev={handlePrevImage}
+                onNext={handleNextImage}
+                onSelect={handleSelectImage}
+              />
+            }
+            mediaFooter={
+              <TokenSummaryCard
+                brandName={catalog.productBlueprint.brandName}
+                tokenName={catalog.tokenBlueprint.tokenName}
+                tokenIcon={catalog.tokenBlueprint.tokenIcon}
               />
             }
             mediaColumnClassName="catalog-page-media"
@@ -144,9 +144,7 @@ export default function CatalogPage() {
               </div>
             ) : null}
 
-            <p className="product-detail__price">
-              {formatPrice(firstPrice?.price)}
-            </p>
+            <p className="product-detail__price">{formatPrice(firstPrice?.price)}</p>
 
             <ProductInfoCard
               productBlueprint={catalog.productBlueprint}
@@ -177,8 +175,6 @@ export default function CatalogPage() {
               onSelectSize={handleSelectSize}
               onSelectModel={handleSelectModel}
             />
-
-            <TokenInfoCard tokenBlueprint={catalog.tokenBlueprint} />
 
             <ReviewSection
               reviewSummary={reviewSummary}

@@ -2,17 +2,17 @@
 
 import MediaIcon from "../../../../components/ui/MediaIcon";
 
-export type ResaleTokenCardProps = {
+export type TokenSummaryCardProps = {
   brandName?: string | null;
   tokenName?: string | null;
   tokenIcon?: string | null;
 };
 
-export default function ResaleTokenCard({
+export default function TokenSummaryCard({
   brandName,
   tokenName,
   tokenIcon,
-}: ResaleTokenCardProps) {
+}: TokenSummaryCardProps) {
   const safeBrandName = brandName?.trim() || "ブランド名未設定";
   const safeTokenName = tokenName?.trim() || "トークン名未設定";
   const safeTokenIcon = tokenIcon?.trim() || "";
@@ -22,24 +22,19 @@ export default function ResaleTokenCard({
   }
 
   return (
-    <div className="resale-product-detail__token">
+    <div className="product-detail__token">
       <MediaIcon
         src={safeTokenIcon}
         alt={tokenName?.trim() ? `${tokenName.trim()}のトークンアイコン` : "トークンアイコン"}
         fallback="◎"
         size="lg"
         shape="rounded"
-        className="resale-product-detail__token-icon"
+        className="product-detail__token-icon"
       />
 
-      <div className="resale-product-detail__token-body">
-        <span className="resale-product-detail__token-label">
-          {safeBrandName}
-        </span>
-
-        <span className="resale-product-detail__token-name">
-          {safeTokenName}
-        </span>
+      <div className="product-detail__token-body">
+        <span className="product-detail__token-label">{safeBrandName}</span>
+        <span className="product-detail__token-name">{safeTokenName}</span>
       </div>
     </div>
   );
