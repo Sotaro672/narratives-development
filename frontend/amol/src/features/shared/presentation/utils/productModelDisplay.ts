@@ -1,12 +1,20 @@
-// frontend/amol/src/features/shared/presentation/utils/resaleModelDisplay.ts
+// frontend\amol\src\features\shared\presentation\utils\productModelDisplay.ts
 
 import { textOrEmpty } from "../../../../components/utils/textOrEmpty";
 
-import type {
-  ResaleListingBase,
-} from "../../types/resale";
+export type ProductModelColor = {
+  name?: string;
+  rgb?: number;
+};
 
-export type ResaleModelDisplay = {
+export type ProductModelVolume = {
+  amount?: number;
+  unit?: string;
+};
+
+export type ProductModelMeasurements = Record<string, number>;
+
+export type ProductModelDisplay = {
   hasModelInfo: boolean;
   kindLabel: string;
   modelNumber: string;
@@ -17,16 +25,15 @@ export type ResaleModelDisplay = {
   volumeLabel: string;
 };
 
-type ResaleModelDisplaySource = Pick<
-  ResaleListingBase,
-  | "modelId"
-  | "kind"
-  | "modelNumber"
-  | "size"
-  | "color"
-  | "measurements"
-  | "volume"
->;
+export type ProductModelDisplaySource = {
+  modelId?: string;
+  kind?: string;
+  modelNumber?: string;
+  size?: string;
+  color?: ProductModelColor | null;
+  measurements?: ProductModelMeasurements | null;
+  volume?: ProductModelVolume | null;
+};
 
 function formatModelKind(kind: string | undefined): string {
   switch (textOrEmpty(kind)) {
@@ -40,7 +47,7 @@ function formatModelKind(kind: string | undefined): string {
 }
 
 function formatModelColor(
-  color: ResaleListingBase["color"],
+  color: ProductModelColor | null | undefined,
 ): {
   label: string;
   cssColor: string;
@@ -58,12 +65,7 @@ function formatModelColor(
     rgb < 0 ||
     rgb > 0xffffff
   ) {
-    return label
-      ? {
-          label,
-          cssColor: "",
-        }
-      : null;
+    return label ? { label, cssColor: "" } : null;
   }
 
   return {
@@ -73,7 +75,7 @@ function formatModelColor(
 }
 
 function formatModelVolume(
-  volume: ResaleListingBase["volume"],
+  volume: ProductModelVolume | null | undefined,
 ): string {
   if (!volume) {
     return "-";
@@ -91,7 +93,7 @@ function formatModelVolume(
 }
 
 function formatMeasurements(
-  measurements: ResaleListingBase["measurements"],
+  measurements: ProductModelMeasurements | null | undefined,
 ): string {
   if (!measurements) {
     return "-";
@@ -108,16 +110,13 @@ function formatMeasurements(
   }
 
   return entries
-    .map(
-      ([label, value]) =>
-        `${label}: ${Number(value).toLocaleString("ja-JP")}cm`,
-    )
+    .map(([label, value]) => `${label}: ${Number(value).toLocaleString("ja-JP")}cm`)
     .join(" / ");
 }
 
-export function createResaleModelDisplay(
-  item: ResaleModelDisplaySource | null | undefined,
-): ResaleModelDisplay {
+export function createProductModelDisplay(
+  item: ProductModelDisplaySource | null | undefined,
+): ProductModelDisplay {
   const modelId = textOrEmpty(item?.modelId);
   const kind = textOrEmpty(item?.kind);
   const kindLabel = kind ? formatModelKind(kind) : "";

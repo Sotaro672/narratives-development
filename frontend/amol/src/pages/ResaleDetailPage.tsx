@@ -3,11 +3,11 @@
 import Layout from "../components/layout/Layout";
 import SectionHeader from "../components/ui/SectionHeader";
 
-import ResaleConditionGallery from "../features/shared/presentation/components/ProductMediaGallery";
-import ResaleDetailLayout from "../features/shared/presentation/components/ProductDetailLayout";
-import ResaleModelMeta from "../features/shared/presentation/components/ProductModelMeta";
-import ResaleProductIdentity from "../features/shared/presentation/components/ProductIdentity";
-import ResaleTokenCard from "../features/shared/presentation/components/TokenSummaryCard";
+import ProductDetailLayout from "../features/shared/presentation/components/ProductDetailLayout";
+import ProductIdentity from "../features/shared/presentation/components/ProductIdentity";
+import ProductMediaGallery from "../features/shared/presentation/components/ProductMediaGallery";
+import ProductModelMeta from "../features/shared/presentation/components/ProductModelMeta";
+import TokenSummaryCard from "../features/shared/presentation/components/TokenSummaryCard";
 import ResaleConditionMediaField from "../features/resale/presentation/components/ResaleConditionMediaField";
 import ResaleDetailEditForm from "../features/resale/presentation/components/ResaleDetailEditForm";
 import ResaleDetailReadonlyInfo from "../features/resale/presentation/components/ResaleDetailReadonlyInfo";
@@ -16,7 +16,7 @@ import { useResaleDetailPage } from "../features/resale/presentation/hooks/useRe
 import "../styles/page-layout.css";
 import "../styles/resale-page.css";
 import "../styles/resale-detail-page.css";
-import "../features/shared/styles/resale-product-detail.css";
+import "../features/shared/styles/product-detail.css";
 
 export default function ResaleDetailPage() {
   const {
@@ -107,10 +107,10 @@ export default function ResaleDetailPage() {
         ) : null}
 
         {showDetail ? (
-          <ResaleDetailLayout
+          <ProductDetailLayout
             media={
               isEditing ? (
-                <div className="resale-product-detail__image-wrap resale-detail-page__image-wrap--editing">
+                <div className="product-detail__image-wrap resale-detail-page__image-wrap--editing">
                   <ResaleConditionMediaField
                     items={editFormProps.conditionMediaItems}
                     currentIndex={editFormProps.conditionMediaCurrentIndex}
@@ -125,7 +125,7 @@ export default function ResaleDetailPage() {
                   />
                 </div>
               ) : (
-                <ResaleConditionGallery
+                <ProductMediaGallery
                   items={readonlyInfoProps.galleryItems}
                   activeIndex={readonlyInfoProps.activeGalleryIndex}
                   altFallback="商品状態の写真"
@@ -137,20 +137,20 @@ export default function ResaleDetailPage() {
               )
             }
             mediaFooter={
-              <ResaleTokenCard
+              <TokenSummaryCard
                 brandName={listingTarget.brandName}
                 tokenName={listingTarget.tokenName}
                 tokenIcon={listingTarget.tokenIconUrl}
               />
             }
           >
-            <ResaleProductIdentity
+            <ProductIdentity
               brandName={listingTarget.brandName}
               productName={listingTarget.productName}
               tokenName={listingTarget.tokenName}
             />
 
-            <ResaleModelMeta model={model} />
+            <ProductModelMeta model={model} />
 
             {isEditing ? (
               <ResaleDetailEditForm {...editFormProps} />
@@ -159,23 +159,17 @@ export default function ResaleDetailPage() {
             )}
 
             {errorMessage ? (
-              <p
-                className="resale-detail-page__message resale-detail-page__message--error"
-                role="alert"
-              >
+              <p className="resale-detail-page__message resale-detail-page__message--error" role="alert">
                 {errorMessage}
               </p>
             ) : null}
 
             {saveMessage ? (
-              <p
-                className="resale-detail-page__message resale-detail-page__message--success"
-                role="status"
-              >
+              <p className="resale-detail-page__message resale-detail-page__message--success" role="status">
                 {saveMessage}
               </p>
             ) : null}
-          </ResaleDetailLayout>
+          </ProductDetailLayout>
         ) : null}
       </div>
     </Layout>

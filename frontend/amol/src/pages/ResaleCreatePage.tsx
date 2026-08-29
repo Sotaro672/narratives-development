@@ -2,18 +2,15 @@
 
 import Layout from "../components/layout/Layout";
 
-import ResaleProductIdentity from "../features/shared/presentation/components/ProductIdentity";
-import ResaleTokenCard from "../features/shared/presentation/components/TokenSummaryCard";
+import ProductIdentity from "../features/shared/presentation/components/ProductIdentity";
+import TokenSummaryCard from "../features/shared/presentation/components/TokenSummaryCard";
 import ResaleCreateForm from "../features/resale/presentation/components/ResaleCreateForm";
 import ResaleCreateMissingTarget from "../features/resale/presentation/components/ResaleCreateMissingTarget";
-
-import {
-  useResaleCreatePage,
-} from "../features/resale/presentation/hooks/useResaleCreatePage";
+import { useResaleCreatePage } from "../features/resale/presentation/hooks/useResaleCreatePage";
 
 import "../styles/page-layout.css";
 import "../styles/resale-page.css";
-import "../features/shared/styles/resale-product-detail.css";
+import "../features/shared/styles/product-detail.css";
 
 export default function ResaleCreatePage() {
   const {
@@ -59,19 +56,17 @@ export default function ResaleCreatePage() {
     >
       <section className="page-section">
         {!hasRequiredListingTarget ? (
-          <ResaleCreateMissingTarget
-            onBackToWallet={handleBackToWallet}
-          />
+          <ResaleCreateMissingTarget onBackToWallet={handleBackToWallet} />
         ) : (
           <div className="page-stack">
             <section className="page-card">
-              <ResaleProductIdentity
+              <ProductIdentity
                 brandName={target.brandName}
                 productName={target.productName}
                 tokenName={target.tokenName}
               />
 
-              <ResaleTokenCard
+              <TokenSummaryCard
                 brandName={target.brandName}
                 tokenName={target.tokenName}
                 tokenIcon={target.tokenIconUrl}

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 
-export type ResaleDetailLayoutProps = {
+export type ProductDetailLayoutProps = {
   media: ReactNode;
   mediaFooter?: ReactNode;
   children: ReactNode;
@@ -11,48 +11,31 @@ export type ResaleDetailLayoutProps = {
   contentClassName?: string;
 };
 
-function joinClassNames(
-  ...classNames: Array<string | undefined | false>
-): string {
+function joinClassNames(...classNames: Array<string | undefined | false>): string {
   return classNames.filter(Boolean).join(" ");
 }
 
-export default function ResaleDetailLayout({
+export default function ProductDetailLayout({
   media,
   mediaFooter,
   children,
   className,
   mediaColumnClassName,
   contentClassName,
-}: ResaleDetailLayoutProps) {
+}: ProductDetailLayoutProps) {
   return (
-    <section
-      className={joinClassNames(
-        "resale-product-detail__layout",
-        className,
-      )}
-    >
-      <div
-        className={joinClassNames(
-          "resale-product-detail__media-column",
-          mediaColumnClassName,
-        )}
-      >
+    <section className={joinClassNames("product-detail__layout", className)}>
+      <div className={joinClassNames("product-detail__media-column", mediaColumnClassName)}>
         {media}
 
         {mediaFooter ? (
-          <div className="resale-product-detail__media-footer">
+          <div className="product-detail__media-footer">
             {mediaFooter}
           </div>
         ) : null}
       </div>
 
-      <div
-        className={joinClassNames(
-          "resale-product-detail__content",
-          contentClassName,
-        )}
-      >
+      <div className={joinClassNames("product-detail__content", contentClassName)}>
         {children}
       </div>
     </section>

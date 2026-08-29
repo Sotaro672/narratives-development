@@ -126,13 +126,13 @@ export default function ResaleDetailEditForm({
         />
       </div>
 
-      <dl className="resale-product-detail__meta resale-detail-page__edit-meta">
-        <div className="resale-product-detail__meta-row">
+      <dl className="product-detail__meta resale-detail-page__edit-meta">
+        <div className="product-detail__meta-row">
           <dt>出品日時</dt>
           <dd>{createdAtLabel}</dd>
         </div>
 
-        <div className="resale-product-detail__meta-row">
+        <div className="product-detail__meta-row">
           <dt>更新日時</dt>
           <dd>{updatedAtLabel}</dd>
         </div>

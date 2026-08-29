@@ -4,8 +4,11 @@ import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
+import { formatPrice } from "../components/utils/price";
 
-import CatalogSummary from "../features/catalog/presentation/components/CatalogSummary";
+import ProductDetailLayout from "../features/shared/presentation/components/ProductDetailLayout";
+import ProductIdentity from "../features/shared/presentation/components/ProductIdentity";
+
 import CatalogImageGallery from "../features/catalog/presentation/components/CatalogImageGallery";
 import MeasurementTable from "../features/catalog/presentation/components/MeasurementTable";
 import ModelSelector from "../features/catalog/presentation/components/ModelSelector";
@@ -17,6 +20,7 @@ import { useCatalogPage } from "../features/catalog/presentation/hooks/useCatalo
 import { useAuthState } from "../features/shared/hooks/useAuthState";
 
 import "../styles/catalog-page.css";
+import "../features/shared/styles/product-detail.css";
 
 export default function CatalogPage() {
   const navigate = useNavigate();
@@ -88,12 +92,20 @@ export default function CatalogPage() {
       showCartButton={isLoggedIn}
       cartButtonLabel="カート"
       onCartButtonClick={isLoggedIn ? () => navigate("/cart") : undefined}
-      actionButtonLabel={!isLoggedIn || isMobilePortrait ? undefined : isAddingToCart ? "追加中" : "カートに入れる"}
+      actionButtonLabel={
+        !isLoggedIn || isMobilePortrait
+          ? undefined
+          : isAddingToCart
+            ? "追加中"
+            : "カートに入れる"
+      }
       onActionButtonClick={!isLoggedIn || isMobilePortrait ? undefined : handleAddToCart}
       actionButtonDisabled={!isLoggedIn || !canAddToCart}
     >
-      <section className="split-page catalog-page-section">
-        {isLoadingCatalog ? <p className="catalog-page-state">カタログ詳細を読み込んでいます。</p> : null}
+      <section className="catalog-page-section">
+        {isLoadingCatalog ? (
+          <p className="catalog-page-state">カタログ詳細を読み込んでいます。</p>
+        ) : null}
 
         {!isLoadingCatalog && errorMessage ? (
           <p className="catalog-page-error" role="alert">
@@ -102,8 +114,8 @@ export default function CatalogPage() {
         ) : null}
 
         {!isLoadingCatalog && !errorMessage && catalog ? (
-          <div className="split-page-content catalog-page-content">
-            <div className="split-page-left catalog-page-media">
+          <ProductDetailLayout
+            media={
               <CatalogImageGallery
                 activeImage={activeImage}
                 activeImageIndex={activeImageIndex}
@@ -116,55 +128,65 @@ export default function CatalogPage() {
                 onTouchStart={handleImageTouchStart}
                 onTouchEnd={handleImageTouchEnd}
               />
-            </div>
+            }
+            mediaColumnClassName="catalog-page-media"
+          >
+            <ProductIdentity
+              brandName={catalog.productBlueprint.brandName}
+              productName={catalog.list.title}
+              tokenName={catalog.tokenBlueprint.tokenName}
+            />
 
-            <div className="split-page-right catalog-page-detail">
-              <CatalogSummary
-                title={catalog.list.title}
-                description={catalog.list.description}
-                price={firstPrice?.price}
+            {catalog.list.description ? (
+              <div className="product-detail__description">
+                <h2>商品説明</h2>
+                <p>{catalog.list.description}</p>
+              </div>
+            ) : null}
+
+            <p className="product-detail__price">
+              {formatPrice(firstPrice?.price)}
+            </p>
+
+            <ProductInfoCard
+              productBlueprint={catalog.productBlueprint}
+              categoryKind={catalogKind}
+              onBrandClick={handleBrandClick}
+            />
+
+            {shouldShowMeasurementTable ? (
+              <MeasurementTable
+                measurementRows={measurementRows}
+                measurementKeys={measurementKeys}
               />
+            ) : null}
 
-              <ProductInfoCard
-                productBlueprint={catalog.productBlueprint}
-                categoryKind={catalogKind}
-                onBrandClick={handleBrandClick}
-              />
+            <ModelSelector
+              alcoholOptions={alcoholOptions}
+              colorOptions={colorOptions}
+              sizeOptions={sizeOptions}
+              selectedColorKey={selectedColorKey}
+              selectedSize={selectedSize}
+              selectedModelId={selectedModelId}
+              selectedModel={selectedModel}
+              selectedModelPrice={selectedModelPrice}
+              selectedModelStock={selectedModelStock}
+              cartErrorMessage={isLoggedIn ? cartErrorMessage : ""}
+              isAlcoholCatalog={isAlcoholCatalog}
+              onSelectColor={handleSelectColor}
+              onSelectSize={handleSelectSize}
+              onSelectModel={handleSelectModel}
+            />
 
-              {shouldShowMeasurementTable ? (
-                <MeasurementTable
-                  measurementRows={measurementRows}
-                  measurementKeys={measurementKeys}
-                />
-              ) : null}
+            <TokenInfoCard tokenBlueprint={catalog.tokenBlueprint} />
 
-              <ModelSelector
-                alcoholOptions={alcoholOptions}
-                colorOptions={colorOptions}
-                sizeOptions={sizeOptions}
-                selectedColorKey={selectedColorKey}
-                selectedSize={selectedSize}
-                selectedModelId={selectedModelId}
-                selectedModel={selectedModel}
-                selectedModelPrice={selectedModelPrice}
-                selectedModelStock={selectedModelStock}
-                cartErrorMessage={isLoggedIn ? cartErrorMessage : ""}
-                isAlcoholCatalog={isAlcoholCatalog}
-                onSelectColor={handleSelectColor}
-                onSelectSize={handleSelectSize}
-                onSelectModel={handleSelectModel}
-              />
-
-              <TokenInfoCard tokenBlueprint={catalog.tokenBlueprint} />
-
-              <ReviewSection
-                reviewSummary={reviewSummary}
-                reviewItems={reviewItems}
-                reviewErrorMessage={reviewErrorMessage}
-                onAvatarClick={handleAvatarClick}
-              />
-            </div>
-          </div>
+            <ReviewSection
+              reviewSummary={reviewSummary}
+              reviewItems={reviewItems}
+              reviewErrorMessage={reviewErrorMessage}
+              onAvatarClick={handleAvatarClick}
+            />
+          </ProductDetailLayout>
         ) : null}
       </section>
 

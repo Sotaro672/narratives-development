@@ -1,44 +1,41 @@
 // frontend/amol/src/features/market/presentation/components/MarketDetailContent.tsx
 
-import type {
-  UseMarketDetailPageResult,
-} from "../hooks/useMarketDetailPage";
+import type { UseMarketDetailPageResult } from "../hooks/useMarketDetailPage";
 
-import ResaleConditionGallery from "../../../shared/presentation/components/ProductMediaGallery";
-import ResaleDetailLayout from "../../../shared/presentation/components/ProductDetailLayout";
-import ResaleModelMeta from "../../../shared/presentation/components/ProductModelMeta";
-import ResaleProductIdentity from "../../../shared/presentation/components/ProductIdentity";
-import ResaleTokenCard from "../../../shared/presentation/components/TokenSummaryCard";
+import ProductMediaGallery from "../../../shared/presentation/components/ProductMediaGallery";
+import ProductDetailLayout from "../../../shared/presentation/components/ProductDetailLayout";
+import ProductModelMeta from "../../../shared/presentation/components/ProductModelMeta";
+import ProductIdentity from "../../../shared/presentation/components/ProductIdentity";
+import TokenSummaryCard from "../../../shared/presentation/components/TokenSummaryCard";
 
 import MarketReviewSection from "./MarketReviewSection";
 import MarketSellerCard from "./MarketSellerCard";
 
-import "../../../shared/styles/resale-product-detail.css";
+import "../../../shared/styles/product-detail.css";
 
-type MarketDetailContentState =
-  Pick<
-    UseMarketDetailPageResult,
-    | "item"
-    | "reviews"
-    | "loading"
-    | "loadingReviews"
-    | "error"
-    | "reviewsError"
-    | "cartMessage"
-    | "cartErrorMessage"
-    | "priceLabel"
-    | "model"
-    | "tokenName"
-    | "tokenIcon"
-    | "sellerAvatarId"
-    | "avatarName"
-    | "avatarIcon"
-    | "galleryItems"
-    | "safeActiveMediaIndex"
-    | "handlePrevMedia"
-    | "handleNextMedia"
-    | "handleSelectMedia"
-  >;
+type MarketDetailContentState = Pick<
+  UseMarketDetailPageResult,
+  | "item"
+  | "reviews"
+  | "loading"
+  | "loadingReviews"
+  | "error"
+  | "reviewsError"
+  | "cartMessage"
+  | "cartErrorMessage"
+  | "priceLabel"
+  | "model"
+  | "tokenName"
+  | "tokenIcon"
+  | "sellerAvatarId"
+  | "avatarName"
+  | "avatarIcon"
+  | "galleryItems"
+  | "safeActiveMediaIndex"
+  | "handlePrevMedia"
+  | "handleNextMedia"
+  | "handleSelectMedia"
+>;
 
 type MarketDetailContentProps = {
   detail: MarketDetailContentState;
@@ -87,9 +84,9 @@ export default function MarketDetailContent({
       ) : null}
 
       {!loading && !error && item ? (
-        <ResaleDetailLayout
+        <ProductDetailLayout
           media={
-            <ResaleConditionGallery
+            <ProductMediaGallery
               items={galleryItems}
               activeIndex={safeActiveMediaIndex}
               altFallback={item.productName || item.tokenName || "出品画像"}
@@ -101,7 +98,7 @@ export default function MarketDetailContent({
           }
           mediaFooter={
             <>
-              <ResaleTokenCard
+              <TokenSummaryCard
                 brandName={item.brandName}
                 tokenName={tokenName}
                 tokenIcon={tokenIcon}
@@ -116,23 +113,21 @@ export default function MarketDetailContent({
             </>
           }
         >
-          <ResaleProductIdentity
+          <ProductIdentity
             brandName={item.brandName}
             productName={item.productName}
             tokenName={item.tokenName}
           />
 
-          <p className="resale-product-detail__price">
-            {priceLabel}
-          </p>
+          <p className="product-detail__price">{priceLabel}</p>
 
-          <ResaleModelMeta
+          <ProductModelMeta
             conditionLabel={item.condition}
             model={model}
           />
 
           {item.description ? (
-            <div className="resale-product-detail__description">
+            <div className="product-detail__description">
               <h2>商品説明</h2>
               <p>{item.description}</p>
             </div>
@@ -145,20 +140,15 @@ export default function MarketDetailContent({
           />
 
           {cartMessage ? (
-            <p className="market-detail-page__cart-message">
-              {cartMessage}
-            </p>
+            <p className="market-detail-page__cart-message">{cartMessage}</p>
           ) : null}
 
           {cartErrorMessage ? (
-            <p
-              className="market-detail-page__cart-error"
-              role="alert"
-            >
+            <p className="market-detail-page__cart-error" role="alert">
               {cartErrorMessage}
             </p>
           ) : null}
-        </ResaleDetailLayout>
+        </ProductDetailLayout>
       ) : null}
     </div>
   );

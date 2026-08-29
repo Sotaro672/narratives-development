@@ -20,9 +20,7 @@ import {
   createResaleConditionGalleryItems,
   sortResaleConditionImages,
 } from "../../../shared/presentation/utils/resaleConditionMedia";
-import {
-  createResaleModelDisplay,
-} from "../../../shared/presentation/utils/resaleModelDisplay";
+import { createProductModelDisplay } from "../../../shared/presentation/utils/productModelDisplay";
 
 import {
   DEFAULT_RESALE_CONDITION,
@@ -40,9 +38,7 @@ import type {
   ResaleListingTargetSummary,
 } from "../types/resaleDetailPageTypes";
 
-import {
-  formatResaleStatus,
-} from "../utils/resaleDetailFormatters";
+import { formatResaleStatus } from "../utils/resaleDetailFormatters";
 
 import {
   formatResalePriceInput,
@@ -211,7 +207,7 @@ export function useResaleDetailPage() {
   const description = item?.description ?? "";
 
   const model = useMemo(
-    () => createResaleModelDisplay(item),
+    () => createProductModelDisplay(item),
     [item],
   );
 

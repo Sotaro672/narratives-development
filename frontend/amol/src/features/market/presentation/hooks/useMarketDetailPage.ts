@@ -9,13 +9,11 @@ import { fetchMarketProductBlueprintReviews } from "../../infrastructure/marketR
 import { fetchMarketResaleById } from "../../infrastructure/marketResaleApi";
 import { fetchMarketResaleConditionImages } from "../../infrastructure/marketResaleImageApi";
 
+import { createResaleConditionGalleryItems } from "../../../shared/presentation/utils/resaleConditionMedia";
 import {
-  createResaleConditionGalleryItems,
-} from "../../../shared/presentation/utils/resaleConditionMedia";
-import {
-  createResaleModelDisplay,
-  type ResaleModelDisplay,
-} from "../../../shared/presentation/utils/resaleModelDisplay";
+  createProductModelDisplay,
+  type ProductModelDisplay,
+} from "../../../shared/presentation/utils/productModelDisplay";
 import type { MarketResaleListing } from "../../../shared/types/marketResale";
 import type { ResaleConditionImage } from "../../../shared/types/resale";
 import type { ProductBlueprintReviewPage } from "../../../shared/types/review";
@@ -36,32 +34,24 @@ export type UseMarketDetailPageParams = {
 export type UseMarketDetailPageResult = {
   item: MarketResaleListing | null;
   reviews: ProductBlueprintReviewPage | null;
-
   loading: boolean;
   loadingReviews: boolean;
   addingToCart: boolean;
-
   error: string;
   reviewsError: string;
   cartMessage: string;
   cartErrorMessage: string;
-
   title: string;
   priceLabel: string;
-  model: ResaleModelDisplay;
-
+  model: ProductModelDisplay;
   tokenName: string;
   tokenIcon: string;
-
   sellerAvatarId: string;
   avatarName: string;
   avatarIcon: string;
-
   galleryItems: MediaGalleryItem[];
   safeActiveMediaIndex: number;
-
   canAddToCart: boolean;
-
   handlePrevMedia: () => void;
   handleNextMedia: () => void;
   handleSelectMedia: (index: number) => void;
@@ -85,12 +75,10 @@ export function useMarketDetailPage({
   const [item, setItem] = useState<MarketResaleListing | null>(null);
   const [images, setImages] = useState<ResaleConditionImage[]>([]);
   const [reviews, setReviews] = useState<ProductBlueprintReviewPage | null>(null);
-
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false);
-
   const [error, setError] = useState("");
   const [reviewsError, setReviewsError] = useState("");
   const [cartMessage, setCartMessage] = useState("");
@@ -189,7 +177,7 @@ export function useMarketDetailPage({
     : "価格未設定";
 
   const model = useMemo(
-    () => createResaleModelDisplay(item),
+    () => createProductModelDisplay(item),
     [item],
   );
 

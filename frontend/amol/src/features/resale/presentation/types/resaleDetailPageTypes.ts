@@ -6,8 +6,8 @@ import type { MediaGalleryItem } from "../../../../components/ui/MediaGallery";
 import type { MediaUploaderItem } from "../../../../components/ui/MediaUploader";
 
 import type {
-  ResaleModelDisplay,
-} from "../../../shared/presentation/utils/resaleModelDisplay";
+  ProductModelDisplay,
+} from "../../../shared/presentation/utils/productModelDisplay";
 import type {
   ResaleCondition,
   ResaleConditionImage,
@@ -100,7 +100,7 @@ export type ResaleDetailPageViewModel = {
   errorMessage: string;
   saveMessage: string;
   listingTarget: ResaleListingTargetSummary;
-  model: ResaleModelDisplay;
+  model: ProductModelDisplay;
   readonlyInfoProps: ResaleDetailReadonlyInfoProps;
   editFormProps: ResaleDetailEditFormProps;
   handleBack: () => void;
