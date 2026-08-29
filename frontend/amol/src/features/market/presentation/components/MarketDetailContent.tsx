@@ -45,8 +45,7 @@ type MarketDetailContentState =
   >;
 
 type MarketDetailContentProps = {
-  detail:
-    MarketDetailContentState;
+  detail: MarketDetailContentState;
   onOpenSeller: () => void;
 };
 
@@ -57,40 +56,30 @@ export default function MarketDetailContent({
   const {
     item,
     reviews,
-
     loading,
     loadingReviews,
-
     error,
     reviewsError,
     cartMessage,
     cartErrorMessage,
-
     priceLabel,
-
     modelKind,
     modelKindLabel,
     modelNumber,
     modelSize,
-
     modelColorName,
     modelColorCssValue,
     hasColorInfo,
-
     modelVolumeLabel,
     measurementsLabel,
     hasModelInfo,
-
     tokenName,
     tokenIcon,
-
     sellerAvatarId,
     avatarName,
     avatarIcon,
-
     galleryItems,
     safeActiveMediaIndex,
-
     handlePrevMedia,
     handleNextMedia,
     handleSelectMedia,
@@ -100,51 +89,49 @@ export default function MarketDetailContent({
     <div className="page-layout market-detail-page">
       {loading ? (
         <div className="market-detail-page__state">
-          <p>
-            読み込み中です...
-          </p>
+          <p>読み込み中です...</p>
         </div>
       ) : null}
 
       {!loading && error ? (
         <div className="market-detail-page__state market-detail-page__state--error">
-          <p>
-            {error}
-          </p>
+          <p>{error}</p>
         </div>
       ) : null}
 
-      {!loading &&
-      !error &&
-      item ? (
+      {!loading && !error && item ? (
         <section className="market-detail-page__card">
-          <MarketResaleGallery
-            items={
-              galleryItems
-            }
-            activeIndex={
-              safeActiveMediaIndex
-            }
-            altFallback={
-              item.productName ||
-              item.tokenName ||
-              "出品画像"
-            }
-            onPrev={
-              handlePrevMedia
-            }
-            onNext={
-              handleNextMedia
-            }
-            onSelect={
-              handleSelectMedia
-            }
-          />
+          <div className="market-detail-page__media-column">
+            <MarketResaleGallery
+              items={galleryItems}
+              activeIndex={safeActiveMediaIndex}
+              altFallback={
+                item.productName ||
+                item.tokenName ||
+                "出品画像"
+              }
+              onPrev={handlePrevMedia}
+              onNext={handleNextMedia}
+              onSelect={handleSelectMedia}
+            />
+
+              <MarketTokenSummary
+                tokenName={tokenName}
+                tokenIcon={tokenIcon}
+                brandName={item.brandName || ""}
+              />
+
+            <MarketSellerCard
+              avatarId={sellerAvatarId}
+              avatarName={avatarName}
+              avatarIcon={avatarIcon}
+              onOpen={onOpenSeller}
+            />
+          </div>
 
           <div className="market-detail-page__content">
             <p className="market-detail-page__brand">
-              {item.brandName ||
-                "ブランド名未設定"}
+              {item.brandName || "ブランド名未設定"}
             </p>
 
             <h1 className="market-detail-page__title">
@@ -153,92 +140,35 @@ export default function MarketDetailContent({
                 "商品名未設定"}
             </h1>
 
-            <MarketSellerCard
-              avatarId={
-                sellerAvatarId
-              }
-              avatarName={
-                avatarName
-              }
-              avatarIcon={
-                avatarIcon
-              }
-              onOpen={
-                onOpenSeller
-              }
-            />
-
-            <MarketTokenSummary
-              tokenName={
-                tokenName
-              }
-              tokenIcon={
-                tokenIcon
-              }
-            />
-
             <p className="market-detail-page__price">
               {priceLabel}
             </p>
 
             <MarketProductMeta
-              condition={
-                item.condition
-              }
-              hasModelInfo={
-                hasModelInfo
-              }
-              modelKind={
-                modelKind
-              }
-              modelKindLabel={
-                modelKindLabel
-              }
-              modelNumber={
-                modelNumber
-              }
-              modelSize={
-                modelSize
-              }
-              hasColorInfo={
-                hasColorInfo
-              }
-              modelColorName={
-                modelColorName
-              }
-              modelColorCssValue={
-                modelColorCssValue
-              }
-              measurementsLabel={
-                measurementsLabel
-              }
-              modelVolumeLabel={
-                modelVolumeLabel
-              }
+              condition={item.condition}
+              hasModelInfo={hasModelInfo}
+              modelKind={modelKind}
+              modelKindLabel={modelKindLabel}
+              modelNumber={modelNumber}
+              modelSize={modelSize}
+              hasColorInfo={hasColorInfo}
+              modelColorName={modelColorName}
+              modelColorCssValue={modelColorCssValue}
+              measurementsLabel={measurementsLabel}
+              modelVolumeLabel={modelVolumeLabel}
             />
 
             {item.description ? (
               <div className="market-detail-page__description">
-                <h2>
-                  商品説明
-                </h2>
-
-                <p>
-                  {item.description}
-                </p>
+                <h2>商品説明</h2>
+                <p>{item.description}</p>
               </div>
             ) : null}
 
             <MarketReviewSection
-              reviews={
-                reviews
-              }
-              loading={
-                loadingReviews
-              }
-              error={
-                reviewsError
-              }
+              reviews={reviews}
+              loading={loadingReviews}
+              error={reviewsError}
             />
 
             {cartMessage ? (

@@ -140,7 +140,7 @@ function formatMeasurements(
 
   return entries
     .sort(([a], [b]) => a.localeCompare(b, "ja"))
-    .map(([key, value]) => `${key}: ${Number(value).toLocaleString("ja-JP")}`)
+    .map(([key, value]) => `${key}: ${Number(value).toLocaleString("ja-JP")}cm`)
     .join(" / ");
 }
 
