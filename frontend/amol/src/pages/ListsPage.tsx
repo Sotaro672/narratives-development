@@ -7,7 +7,7 @@ import {
 import Layout from "../components/layout/Layout";
 
 import ListGrid from "../features/list/presentation/components/ListGrid";
-import ListPagination from "../features/list/presentation/components/ListPagination";
+import ListPagination from "../features/shared/presentation/ui/ListPagination";
 
 import {
   useListsPage,

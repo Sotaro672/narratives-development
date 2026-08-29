@@ -1,0 +1,132 @@
+/* frontend/amol/src/features/shared/styles/entity-summary-card.css */
+
+.entity-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid #eee;
+  border-radius: 24px;
+  background: #fff;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+.entity-summary-card--button {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.entity-summary-card--button:hover:not(:disabled) {
+  border-color: #ddd;
+  background: #fafafa;
+}
+
+.entity-summary-card--button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.entity-summary-card--button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.entity-summary-card--button:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.entity-summary-card__icon {
+  display: block;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #e5e5e5;
+  border-radius: 999px;
+  object-fit: cover;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.entity-summary-card__body {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.entity-summary-card__label {
+  color: #777;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.entity-summary-card__name {
+  color: #222;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.entity-summary-card__secondary {
+  color: #666;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.entity-summary-card__description {
+  margin: 6px 0 0;
+  color: #555;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.entity-summary-card__arrow {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #888;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+@media (max-width: 760px) {
+  .entity-summary-card {
+    gap: 10px;
+    padding: 12px;
+    border-radius: 20px;
+  }
+
+  .entity-summary-card__icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .entity-summary-card__name {
+    font-size: 14px;
+  }
+
+  .entity-summary-card__secondary,
+  .entity-summary-card__description {
+    font-size: 12px;
+  }
+
+  .entity-summary-card__arrow {
+    font-size: 22px;
+  }
+}

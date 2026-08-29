@@ -1,41 +1,41 @@
 // frontend\amol\src\features\shared\presentation\components\TokenSummaryCard.tsx
 
-import MediaIcon from "../../../../components/ui/MediaIcon";
+import EntitySummaryCard from "./EntitySummaryCard";
 
 export type TokenSummaryCardProps = {
   brandName?: string | null;
   tokenName?: string | null;
   tokenIcon?: string | null;
+  symbol?: string | null;
+  description?: string | null;
 };
 
 export default function TokenSummaryCard({
   brandName,
   tokenName,
   tokenIcon,
+  symbol,
+  description,
 }: TokenSummaryCardProps) {
   const safeBrandName = brandName?.trim() || "ブランド名未設定";
   const safeTokenName = tokenName?.trim() || "トークン名未設定";
   const safeTokenIcon = tokenIcon?.trim() || "";
+  const safeSymbol = symbol?.trim() || "";
+  const safeDescription = description?.trim() || "";
 
   if (!safeTokenIcon && !tokenName?.trim()) {
     return null;
   }
 
   return (
-    <div className="product-detail__token">
-      <MediaIcon
-        src={safeTokenIcon}
-        alt={tokenName?.trim() ? `${tokenName.trim()}のトークンアイコン` : "トークンアイコン"}
-        fallback="◎"
-        size="lg"
-        shape="rounded"
-        className="product-detail__token-icon"
-      />
-
-      <div className="product-detail__token-body">
-        <span className="product-detail__token-label">{safeBrandName}</span>
-        <span className="product-detail__token-name">{safeTokenName}</span>
-      </div>
-    </div>
+    <EntitySummaryCard
+      icon={safeTokenIcon}
+      iconAlt={tokenName?.trim() ? `${tokenName.trim()}のトークンアイコン` : "トークンアイコン"}
+      iconFallback="◎"
+      label={safeBrandName}
+      name={safeTokenName}
+      secondaryText={safeSymbol}
+      description={safeDescription}
+    />
   );
 }

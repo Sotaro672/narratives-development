@@ -1,0 +1,171 @@
+// frontend/amol/src/features/shared/presentation/components/ProductReviewSection.tsx
+
+import { formatDateTime } from "../../../../components/utils/date";
+
+export type ProductReviewItem = {
+  id: string;
+  avatarId?: string | null;
+  avatarName?: string | null;
+  avatarIcon?: string | null;
+  rating?: number | null;
+  title?: string | null;
+  body?: string | null;
+  reviewedAt?: string | null;
+  helpfulVotes?: number | null;
+  totalVotes?: number | null;
+};
+
+export type ProductReviewSectionProps = {
+  items: ProductReviewItem[];
+  averageRating?: number | null;
+  totalCount?: number | null;
+  loading?: boolean;
+  errorMessage?: string | null;
+  emptyText?: string;
+  showHelpfulVotes?: boolean;
+  onAvatarClick?: (avatarId: string) => void;
+  className?: string;
+};
+
+function joinClassNames(...classNames: Array<string | undefined | false>): string {
+  return classNames.filter(Boolean).join(" ");
+}
+
+function renderRatingStars(value?: number | null): string {
+  const rating = Math.max(0, Math.min(5, Math.trunc(Number(value ?? 0))));
+  return rating <= 0 ? "評価なし" : "★".repeat(rating) + "☆".repeat(5 - rating);
+}
+
+export default function ProductReviewSection({
+  items,
+  averageRating,
+  totalCount,
+  loading = false,
+  errorMessage,
+  emptyText = "まだレビューはありません。",
+  showHelpfulVotes = false,
+  onAvatarClick,
+  className,
+}: ProductReviewSectionProps) {
+  const safeItems = Array.isArray(items) ? items : [];
+  const safeErrorMessage = errorMessage?.trim() || "";
+  const hasSummary = Number.isFinite(averageRating) || Number.isFinite(totalCount);
+
+  return (
+    <section className={joinClassNames("product-review", className)}>
+      <div className="product-review__header">
+        <h2 className="product-review__heading">レビュー</h2>
+        {loading ? <span className="product-review__status">読み込み中...</span> : null}
+      </div>
+
+      {hasSummary ? (
+        <div className="product-review__summary">
+          {Number.isFinite(averageRating) ? (
+            <strong className="product-review__average">
+              {Number(averageRating).toFixed(1)}
+            </strong>
+          ) : null}
+          {Number.isFinite(totalCount) ? (
+            <span className="product-review__count">{Number(totalCount)}件</span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {safeErrorMessage ? (
+        <p className="product-review__error" role="alert">
+          {safeErrorMessage}
+        </p>
+      ) : null}
+
+      {!loading && !safeErrorMessage && safeItems.length === 0 ? (
+        <p className="product-review__empty">{emptyText}</p>
+      ) : null}
+
+      {!safeErrorMessage && safeItems.length > 0 ? (
+        <div className="product-review__list">
+          {safeItems.map((review) => (
+            <ProductReviewItemView
+              key={review.id}
+              review={review}
+              showHelpfulVotes={showHelpfulVotes}
+              onAvatarClick={onAvatarClick}
+            />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function ProductReviewItemView({
+  review,
+  showHelpfulVotes,
+  onAvatarClick,
+}: {
+  review: ProductReviewItem;
+  showHelpfulVotes: boolean;
+  onAvatarClick?: (avatarId: string) => void;
+}) {
+  const avatarId = review.avatarId?.trim() || "";
+  const avatarName = review.avatarName?.trim() || "匿名ユーザー";
+  const avatarIcon = review.avatarIcon?.trim() || "";
+  const reviewTitle = review.title?.trim() || "";
+  const reviewBody = review.body?.trim() || "";
+  const reviewedAt = review.reviewedAt?.trim() || "";
+  const reviewedAtLabel = reviewedAt ? formatDateTime(reviewedAt) : "-";
+  const canOpenAvatar = Boolean(avatarId && onAvatarClick);
+
+  const avatarContent = (
+    <>
+      {avatarIcon ? (
+        <img
+          src={avatarIcon}
+          alt={avatarName}
+          className="product-review__avatar"
+          loading="lazy"
+        />
+      ) : (
+        <span className="product-review__avatar-placeholder" aria-hidden="true">
+          {avatarName.slice(0, 1)}
+        </span>
+      )}
+
+      <div className="product-review__author-body">
+        <span className="product-review__author-name">{avatarName}</span>
+        <span className="product-review__meta">
+          {renderRatingStars(review.rating)}
+          {reviewedAtLabel !== "-" ? `・${reviewedAtLabel}` : ""}
+        </span>
+      </div>
+    </>
+  );
+
+  return (
+    <article className="product-review__item">
+      <div className="product-review__item-header">
+        {canOpenAvatar ? (
+          <button
+            type="button"
+            className="product-review__author product-review__author--button"
+            onClick={() => onAvatarClick?.(avatarId)}
+          >
+            {avatarContent}
+          </button>
+        ) : (
+          <div className="product-review__author">{avatarContent}</div>
+        )}
+      </div>
+
+      {reviewTitle ? <h3 className="product-review__title">{reviewTitle}</h3> : null}
+      {reviewBody ? <p className="product-review__body">{reviewBody}</p> : null}
+
+      {showHelpfulVotes &&
+      Number.isFinite(review.helpfulVotes) &&
+      Number.isFinite(review.totalVotes) ? (
+        <p className="product-review__votes">
+          参考になった: {Number(review.helpfulVotes)} / {Number(review.totalVotes)}
+        </p>
+      ) : null}
+    </article>
+  );
+}
