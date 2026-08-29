@@ -10,6 +10,7 @@ export default function ResaleDetailModelInfo({
   modelNumber,
   size,
   colorLabel,
+  colorCssValue,
   measurementsLabel,
   volumeLabel,
 }: ResaleDetailModelInfoProps) {
@@ -41,10 +42,22 @@ export default function ResaleDetailModelInfo({
           </div>
         ) : null}
 
-        {colorLabel && colorLabel !== "-" ? (
+        {colorLabel || colorCssValue ? (
           <div className="page-definition-list__row">
             <dt>カラー</dt>
-            <dd>{colorLabel}</dd>
+            <dd>
+              <span className="resale-detail-page__color-value">
+                {colorCssValue ? (
+                  <span
+                    className="resale-detail-page__color-swatch"
+                    style={{ backgroundColor: colorCssValue }}
+                    aria-label={colorLabel || "商品カラー"}
+                    title={colorLabel || "商品カラー"}
+                  />
+                ) : null}
+                {colorLabel ? <span>{colorLabel}</span> : null}
+              </span>
+            </dd>
           </div>
         ) : null}
 

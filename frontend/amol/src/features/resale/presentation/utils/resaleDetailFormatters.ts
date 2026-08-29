@@ -48,10 +48,6 @@ export type ResaleModelColorDisplay = {
  * カラー情報を表示用の色名とCSSカラーへ変換する。
  *
  * rgb は 0xRRGGBB 相当の整数値として扱う。
- * 例:
- * - 16711680 -> #ff0000
- * - 65280    -> #00ff00
- * - 255      -> #0000ff
  */
 export function formatResaleModelColor(
   color: ResaleListing["color"],
@@ -130,7 +126,7 @@ export function formatResaleMeasurements(
   return entries
     .map(
       ([label, value]) =>
-        `${label}: ${value.toLocaleString("ja-JP")}`,
+        `${label}: ${value.toLocaleString("ja-JP")}cm`,
     )
     .join(" / ");
 }
