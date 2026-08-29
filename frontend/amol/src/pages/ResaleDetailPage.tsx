@@ -70,17 +70,17 @@ export default function ResaleDetailPage() {
       footerProps={footerProps}
       {...headerActionProps}
     >
-      <section className="page-section resale-detail-page">
+      <div className="page-layout resale-detail-page">
         {loading ? (
-          <div className="page-card">
-            <p className="page-card__text">読み込み中です...</p>
+          <div className="resale-detail-page__state">
+            <p>読み込み中です...</p>
           </div>
         ) : null}
 
         {showLoadError ? (
-          <div className="page-card">
+          <div className="resale-detail-page__state resale-detail-page__state--error">
             <SectionHeader title="出品情報を表示できません" titleAs="h2">
-              <p className="page-card__text">{errorMessage}</p>
+              <p>{errorMessage}</p>
             </SectionHeader>
 
             <div className="page-actions">
@@ -104,8 +104,14 @@ export default function ResaleDetailPage() {
         ) : null}
 
         {showDetail ? (
-          <div className="page-stack">
-            <section className="page-card">
+          <section className="resale-detail-page__card">
+            <div
+              className={
+                isEditing
+                  ? "resale-detail-page__image-wrap resale-detail-page__image-wrap--editing"
+                  : "resale-detail-page__image-wrap"
+              }
+            >
               {isEditing ? (
                 <ResaleConditionMediaField
                   items={editFormProps.conditionMediaItems}
@@ -131,34 +137,34 @@ export default function ResaleDetailPage() {
                   onSelect={readonlyInfoProps.onSelectGalleryItem}
                 />
               )}
-            </section>
+            </div>
 
-            <ResaleListingTargetCard target={listingTarget} />
+            <div className="resale-detail-page__content">
+              <ResaleListingTargetCard target={listingTarget} />
 
-            <ResaleDetailModelInfo {...modelInfoProps} />
+              <ResaleDetailModelInfo {...modelInfoProps} />
 
-            {isEditing ? (
-              <ResaleDetailEditForm {...editFormProps} />
-            ) : (
-              <ResaleDetailReadonlyInfo {...readonlyInfoProps} />
-            )}
+              {isEditing ? (
+                <ResaleDetailEditForm {...editFormProps} />
+              ) : (
+                <ResaleDetailReadonlyInfo {...readonlyInfoProps} />
+              )}
 
-            {errorMessage ? (
-              <p className="page-error" role="alert">
-                {errorMessage}
-              </p>
-            ) : null}
+              {errorMessage ? (
+                <p className="resale-detail-page__message resale-detail-page__message--error" role="alert">
+                  {errorMessage}
+                </p>
+              ) : null}
 
-            {saveMessage ? (
-              <p className="page-card__text" role="status">
-                {saveMessage}
-              </p>
-            ) : null}
-
-            <div className="resale-detail-page__footer-spacer" />
-          </div>
+              {saveMessage ? (
+                <p className="resale-detail-page__message resale-detail-page__message--success" role="status">
+                  {saveMessage}
+                </p>
+              ) : null}
+            </div>
+          </section>
         ) : null}
-      </section>
+      </div>
     </Layout>
   );
 }

@@ -59,7 +59,7 @@ export default function ResaleDetailEditForm({
   const statusLabel = getResaleEditableStatusLabel(status);
 
   return (
-    <section className="page-card">
+    <div className="resale-detail-page__edit-form">
       <div className="page-form">
         <Input
           label="販売価格"
@@ -126,16 +126,17 @@ export default function ResaleDetailEditForm({
         />
       </div>
 
-      <dl className="page-definition-list resale-detail-page__readonly-meta">
-        <div className="page-definition-list__row">
+      <dl className="resale-detail-page__meta resale-detail-page__edit-meta">
+        <div className="resale-detail-page__meta-row">
           <dt>出品日時</dt>
           <dd>{createdAtLabel}</dd>
         </div>
-        <div className="page-definition-list__row">
+
+        <div className="resale-detail-page__meta-row">
           <dt>更新日時</dt>
           <dd>{updatedAtLabel}</dd>
         </div>
       </dl>
-    </section>
+    </div>
   );
 }

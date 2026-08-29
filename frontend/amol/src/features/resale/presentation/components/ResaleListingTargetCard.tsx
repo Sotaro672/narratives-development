@@ -18,23 +18,30 @@ export default function ResaleListingTargetCard({
   const { brandName, productName, tokenIconUrl, tokenName } = target;
 
   return (
-    <section className="page-card">
-      <div className="resale-token-summary">
+    <>
+      <p className="resale-detail-page__brand">{brandName || "ブランド名未設定"}</p>
+
+      <h1 className="resale-detail-page__title">
+        {productName || tokenName || "商品名未設定"}
+      </h1>
+
+      <div className="resale-detail-page__token">
         <MediaIcon
           src={tokenIconUrl}
           alt={tokenName ? `${tokenName}のトークンアイコン` : "トークンアイコン"}
           fallback="◎"
           size="lg"
           shape="rounded"
-          className="resale-token-summary__icon"
+          className="resale-detail-page__token-icon"
         />
 
-        <div className="resale-token-summary__body">
-          <p className="resale-token-summary__token-name">{tokenName || "-"}</p>
-          <p className="resale-token-summary__brand-name">{brandName || "-"}</p>
-          {productName ? <p className="resale-token-summary__product-name">{productName}</p> : null}
+        <div className="resale-detail-page__token-body">
+          <span className="resale-detail-page__token-label">トークン</span>
+          <span className="resale-detail-page__token-name">
+            {tokenName || "トークン名未設定"}
+          </span>
         </div>
       </div>
-    </section>
+    </>
   );
 }
