@@ -1,8 +1,6 @@
 // frontend/amol/src/features/payment/hooks/usePaymentPage.ts
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
-
 import { formatPrice } from "../../../components/utils/price";
 import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
 import { getFirebaseIdToken } from "../../../lib/authToken";
@@ -11,26 +9,13 @@ import { loadCartPage } from "../../cart/application/loadCartPage";
 import { calculateCartTotalAmount } from "../../cart/utils/cartUtils";
 import { fetchShippingAddressPageInitialData } from "../../shipping-address/api/shippingAddressApi";
 import type { CartDisplayItem } from "../../shared/types/cart";
-import type {
-  CanonicalShippingAddress,
-  CreateOrderRequest,
-} from "../../shared/types/payment";
+import type { CanonicalShippingAddress, CreateOrderRequest } from "../../shared/types/payment";
 import type { CardPaymentMethod } from "../../shared/types/paymentMethods";
 import type { UserProfile } from "../../shared/types/shippingAddress";
-import {
-  createOrder,
-  fetchPaymentMethods,
-} from "../api/paymentApi";
+import { createOrder, fetchPaymentMethods } from "../api/paymentApi";
 import { usePaymentCheckout } from "../context/PaymentCheckoutContext";
-import {
-  getShippingAddressLabel,
-  getUserFullName,
-} from "../utils/format";
-import {
-  buildOrderItems,
-  selectPrimaryPaymentMethod,
-  validateOrderItems,
-} from "../utils/order";
+import { getShippingAddressLabel, getUserFullName } from "../utils/format";
+import { buildOrderItems, selectPrimaryPaymentMethod, validateOrderItems } from "../utils/order";
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -68,9 +53,7 @@ type PaymentAmountSummary = {
   totalAmount: number;
 };
 
-function buildShippingQuoteItems(
-  cartItems: CartDisplayItem[],
-): ShippingQuoteItemRequest[] {
+function buildShippingQuoteItems(cartItems: CartDisplayItem[]): ShippingQuoteItemRequest[] {
   const items: ShippingQuoteItemRequest[] = [];
 
   for (const item of cartItems) {
@@ -79,21 +62,15 @@ function buildShippingQuoteItems(
     }
 
     if (!item.listId) {
-      throw new Error(
-        "送料計算に必要なリストIDを取得できませんでした。",
-      );
+      throw new Error("送料計算に必要なリストIDを取得できませんでした。");
     }
 
     if (!item.modelId) {
-      throw new Error(
-        "送料計算に必要なモデルIDを取得できませんでした。",
-      );
+      throw new Error("送料計算に必要なモデルIDを取得できませんでした。");
     }
 
     if (item.qty <= 0) {
-      throw new Error(
-        "送料計算に必要な数量が不正です。",
-      );
+      throw new Error("送料計算に必要な数量が不正です。");
     }
 
     items.push({
@@ -106,20 +83,13 @@ function buildShippingQuoteItems(
   return items;
 }
 
-async function fetchShippingQuote(
-  cartItems: CartDisplayItem[],
-  shippingAddressId: string,
-): Promise<number> {
+async function fetchShippingQuote(cartItems: CartDisplayItem[], shippingAddressId: string): Promise<number> {
   if (!shippingAddressId) {
-    throw new Error(
-      "配送先住所IDを取得できませんでした。",
-    );
+    throw new Error("配送先住所IDを取得できませんでした。");
   }
 
   if (cartItems.length === 0) {
-    throw new Error(
-      "送料計算対象の商品がありません。",
-    );
+    throw new Error("送料計算対象の商品がありません。");
   }
 
   const items = buildShippingQuoteItems(cartItems);
@@ -128,36 +98,25 @@ async function fetchShippingQuote(
     return 0;
   }
 
-  const result = await requestJson<ShippingQuoteResponse>(
-    "/mall/me/shipping-quotes",
-    {
-      method: "POST",
-      auth: "required",
-      credentials: "include",
-      json: {
-        items,
-        shippingAddressId,
-      },
-      messages: {
-        requestErrorMessage:
-          "送料の取得に失敗しました。",
-      },
+  const result = await requestJson<ShippingQuoteResponse>("/mall/me/shipping-quotes", {
+    method: "POST",
+    auth: "required",
+    credentials: "include",
+    json: {
+      items,
+      shippingAddressId,
     },
-  );
+    messages: {
+      requestErrorMessage: "送料の取得に失敗しました。",
+    },
+  });
 
-  if (
-    !Number.isSafeInteger(result.shippingAmount) ||
-    result.shippingAmount < 0
-  ) {
-    throw new Error(
-      "取得した送料が不正です。",
-    );
+  if (!Number.isSafeInteger(result.shippingAmount) || result.shippingAmount < 0) {
+    throw new Error("取得した送料が不正です。");
   }
 
   if (result.currency !== "JPY") {
-    throw new Error(
-      "送料の通貨が不正です。",
-    );
+    throw new Error("送料の通貨が不正です。");
   }
 
   return result.shippingAmount;
@@ -168,20 +127,14 @@ function calculatePaymentAmount(
   subtotalAmount: number,
   shippingAmount: number,
 ): PaymentAmountSummary {
-  if (
-    !Number.isSafeInteger(subtotalAmount) ||
-    subtotalAmount < 0
-  ) {
+  if (!Number.isSafeInteger(subtotalAmount) || subtotalAmount < 0) {
     return {
       taxAmount: 0,
       totalAmount: 0,
     };
   }
 
-  if (
-    !Number.isSafeInteger(shippingAmount) ||
-    shippingAmount < 0
-  ) {
+  if (!Number.isSafeInteger(shippingAmount) || shippingAmount < 0) {
     return {
       taxAmount: 0,
       totalAmount: 0,
@@ -195,21 +148,14 @@ function calculatePaymentAmount(
   for (const item of cartItems) {
     const price = item.price;
 
-    if (
-      price === undefined ||
-      !Number.isSafeInteger(price) ||
-      price < 0
-    ) {
+    if (price === undefined || !Number.isSafeInteger(price) || price < 0) {
       return {
         taxAmount: 0,
         totalAmount: 0,
       };
     }
 
-    if (
-      !Number.isSafeInteger(item.qty) ||
-      item.qty <= 0
-    ) {
+    if (!Number.isSafeInteger(item.qty) || item.qty <= 0) {
       return {
         taxAmount: 0,
         totalAmount: 0,
@@ -225,8 +171,7 @@ function calculatePaymentAmount(
       };
     }
 
-    const nextSubtotalAmount =
-      calculatedSubtotalAmount + lineAmount;
+    const nextSubtotalAmount = calculatedSubtotalAmount + lineAmount;
 
     if (!Number.isSafeInteger(nextSubtotalAmount)) {
       return {
@@ -237,10 +182,13 @@ function calculatePaymentAmount(
 
     calculatedSubtotalAmount = nextSubtotalAmount;
 
+    if (item.type === "resale") {
+      continue;
+    }
+
     switch (item.consumptionTaxRate) {
       case 8: {
-        const nextTaxableAmount8 =
-          taxableAmount8 + lineAmount;
+        const nextTaxableAmount8 = taxableAmount8 + lineAmount;
 
         if (!Number.isSafeInteger(nextTaxableAmount8)) {
           return {
@@ -254,8 +202,7 @@ function calculatePaymentAmount(
       }
 
       case 10: {
-        const nextTaxableAmount10 =
-          taxableAmount10 + lineAmount;
+        const nextTaxableAmount10 = taxableAmount10 + lineAmount;
 
         if (!Number.isSafeInteger(nextTaxableAmount10)) {
           return {
@@ -293,35 +240,20 @@ function calculatePaymentAmount(
     };
   }
 
-  const taxAmount8 = Math.floor(
-    taxableAmount8 * 8 / 100,
-  );
-
-  const taxAmount10 = Math.floor(
-    taxableAmount10 * 10 / 100,
-  );
-
+  const taxAmount8 = Math.floor((taxableAmount8 * 8) / 100);
+  const taxAmount10 = Math.floor((taxableAmount10 * 10) / 100);
   const taxAmount = taxAmount8 + taxAmount10;
 
-  if (
-    !Number.isSafeInteger(taxAmount) ||
-    taxAmount < 0
-  ) {
+  if (!Number.isSafeInteger(taxAmount) || taxAmount < 0) {
     return {
       taxAmount: 0,
       totalAmount: 0,
     };
   }
 
-  const totalAmount =
-    subtotalAmount +
-    shippingAmount +
-    taxAmount;
+  const totalAmount = subtotalAmount + shippingAmount + taxAmount;
 
-  if (
-    !Number.isSafeInteger(totalAmount) ||
-    totalAmount <= 0
-  ) {
+  if (!Number.isSafeInteger(totalAmount) || totalAmount <= 0) {
     return {
       taxAmount: 0,
       totalAmount: 0,
@@ -334,9 +266,7 @@ function calculatePaymentAmount(
   };
 }
 
-function createCheckoutOrderId(
-  cartItems: CartDisplayItem[],
-): string {
+function createCheckoutOrderId(cartItems: CartDisplayItem[]): string {
   const firstItem = cartItems[0];
 
   if (!firstItem?.avatarId) {
@@ -346,51 +276,31 @@ function createCheckoutOrderId(
   return `${firstItem.avatarId}__${Date.now()}`;
 }
 
-function validateCartItems(
-  cartItems: CartDisplayItem[],
-): void {
+function validateCartItems(cartItems: CartDisplayItem[]): void {
   for (const item of cartItems) {
-    if (
-      item.consumptionTaxRate !== 8 &&
-      item.consumptionTaxRate !== 10
-    ) {
-      throw new Error(
-        "商品の消費税率を取得できませんでした。",
-      );
+    if (item.type === "resale") {
+      continue;
+    }
+
+    if (item.consumptionTaxRate !== 8 && item.consumptionTaxRate !== 10) {
+      throw new Error("商品の消費税率を取得できませんでした。");
     }
   }
 }
 
-export function usePaymentPage({
-  listId,
-  navigate,
-}: UsePaymentPageParams) {
-  const {
-    draft,
-    setDraft,
-    updateDraft,
-    clearDraft,
-  } = usePaymentCheckout();
-
+export function usePaymentPage({ listId, navigate }: UsePaymentPageParams) {
+  const { draft, setDraft, updateDraft, clearDraft } = usePaymentCheckout();
   const draftRef = useRef(draft);
   draftRef.current = draft;
 
-  const [paymentMethods, setPaymentMethods] =
-    useState<CardPaymentMethod[]>([]);
-  const [cartItems, setCartItems] =
-    useState<CartDisplayItem[]>([]);
-  const [userProfile, setUserProfile] =
-    useState<UserProfile | null>(null);
-  const [shippingAddresses, setShippingAddresses] =
-    useState<CanonicalShippingAddress[]>([]);
-  const [
-    selectedPaymentMethodId,
-    setSelectedPaymentMethodIdState,
-  ] = useState("");
+  const [paymentMethods, setPaymentMethods] = useState<CardPaymentMethod[]>([]);
+  const [cartItems, setCartItems] = useState<CartDisplayItem[]>([]);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [shippingAddresses, setShippingAddresses] = useState<CanonicalShippingAddress[]>([]);
+  const [selectedPaymentMethodId, setSelectedPaymentMethodIdState] = useState("");
   const [orderId, setOrderId] = useState("");
   const [shippingAmount, setShippingAmount] = useState(0);
-  const [isShippingQuoteReady, setIsShippingQuoteReady] =
-    useState(false);
+  const [isShippingQuoteReady, setIsShippingQuoteReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isPaying, setIsPaying] = useState(false);
   const [modalMessage, setModalMessage] = useState("");
@@ -410,9 +320,7 @@ export function usePaymentPage({
       return "";
     }
 
-    return getShippingAddressLabel(
-      primaryShippingAddress,
-    );
+    return getShippingAddressLabel(primaryShippingAddress);
   }, [primaryShippingAddress]);
 
   const subtotalAmount = useMemo(
@@ -421,17 +329,8 @@ export function usePaymentPage({
   );
 
   const paymentAmount = useMemo(
-    () =>
-      calculatePaymentAmount(
-        cartItems,
-        subtotalAmount,
-        shippingAmount,
-      ),
-    [
-      cartItems,
-      subtotalAmount,
-      shippingAmount,
-    ],
+    () => calculatePaymentAmount(cartItems, subtotalAmount, shippingAmount),
+    [cartItems, subtotalAmount, shippingAmount],
   );
 
   const taxAmount = paymentAmount.taxAmount;
@@ -443,16 +342,9 @@ export function usePaymentPage({
     }
 
     return (
-      paymentMethods.find(
-        (method) =>
-          method.id ===
-          selectedPaymentMethodId,
-      ) ?? null
+      paymentMethods.find((method) => method.id === selectedPaymentMethodId) ?? null
     );
-  }, [
-    paymentMethods,
-    selectedPaymentMethodId,
-  ]);
+  }, [paymentMethods, selectedPaymentMethodId]);
 
   const backTo =
     listId === "cart"
@@ -480,12 +372,9 @@ export function usePaymentPage({
     amount <= 0 ||
     cartItems.length === 0;
 
-  const showErrorModal = useCallback(
-    (message: string) => {
-      setModalMessage(message);
-    },
-    [],
-  );
+  const showErrorModal = useCallback((message: string) => {
+    setModalMessage(message);
+  }, []);
 
   const closeErrorModal = useCallback(() => {
     setModalMessage("");
@@ -493,409 +382,277 @@ export function usePaymentPage({
 
   const setSelectedPaymentMethodId = useCallback(
     (paymentMethodId: string) => {
-      setSelectedPaymentMethodIdState(
-        paymentMethodId,
-      );
+      setSelectedPaymentMethodIdState(paymentMethodId);
 
       const currentDraft = draftRef.current;
 
-      if (
-        currentDraft?.paymentPath !==
-        paymentPagePath
-      ) {
+      if (currentDraft?.paymentPath !== paymentPagePath) {
         return;
       }
 
       updateDraft({
-        selectedPaymentMethodId:
-          paymentMethodId,
+        selectedPaymentMethodId: paymentMethodId,
       });
     },
-    [
-      paymentPagePath,
-      updateDraft,
-    ],
+    [paymentPagePath, updateDraft],
   );
 
-  const loadPaymentPage =
-    useCallback(async (): Promise<void> => {
-      setIsLoading(true);
-      setModalMessage("");
+  const loadPaymentPage = useCallback(async (): Promise<void> => {
+    setIsLoading(true);
+    setModalMessage("");
+    setShippingAmount(0);
+    setIsShippingQuoteReady(false);
+
+    try {
+      const idToken = await getFirebaseIdToken();
+      const currentDraft = draftRef.current;
+
+      const matchingDraft =
+        currentDraft?.paymentPath === paymentPagePath &&
+        currentDraft.cartItems.length > 0
+          ? currentDraft
+          : null;
+
+      const cartItemsPromise = matchingDraft
+        ? Promise.resolve(matchingDraft.cartItems)
+        : loadCartPage().then((result) => result.items);
+
+      const [
+        paymentMethodResult,
+        shippingAddressInitialData,
+        resolvedCartItems,
+      ] = await Promise.all([
+        fetchPaymentMethods(),
+        fetchShippingAddressPageInitialData({
+          backendUrl: API_BASE_URL,
+          idToken,
+        }),
+        cartItemsPromise,
+      ]);
+
+      validateCartItems(resolvedCartItems);
+      setPaymentMethods(paymentMethodResult.methods);
+      setUserProfile(shippingAddressInitialData.userProfile);
+
+      const shippingAddress =
+        shippingAddressInitialData.shippingAddresses[0];
+
+      const normalizedShippingAddress = shippingAddress
+        ? {
+            ...shippingAddress,
+            street2: shippingAddress.street2 ?? "",
+          }
+        : null;
+
+      setShippingAddresses(
+        normalizedShippingAddress ? [normalizedShippingAddress] : [],
+      );
+
+      const primaryPaymentMethod = selectPrimaryPaymentMethod(
+        paymentMethodResult.methods,
+        paymentMethodResult.defaultMethod,
+      );
+
+      const draftPaymentMethodId =
+        matchingDraft?.selectedPaymentMethodId ?? "";
+
+      const draftPaymentMethodExists =
+        Boolean(draftPaymentMethodId) &&
+        paymentMethodResult.methods.some(
+          (method) => method.id === draftPaymentMethodId,
+        );
+
+      const resolvedPaymentMethodId = draftPaymentMethodExists
+        ? draftPaymentMethodId
+        : primaryPaymentMethod?.id ?? "";
+
+      setSelectedPaymentMethodIdState(resolvedPaymentMethodId);
+      setCartItems(resolvedCartItems);
+
+      const resolvedOrderId =
+        matchingDraft?.orderId ||
+        createCheckoutOrderId(resolvedCartItems);
+
+      setOrderId(resolvedOrderId);
+
+      if (resolvedCartItems.length > 0 && resolvedOrderId) {
+        setDraft({
+          paymentPath: paymentPagePath,
+          orderId: resolvedOrderId,
+          cartItems: resolvedCartItems,
+          selectedPaymentMethodId: resolvedPaymentMethodId,
+        });
+      }
+
+      if (normalizedShippingAddress && resolvedCartItems.length > 0) {
+        try {
+          const resolvedShippingAmount = await fetchShippingQuote(
+            resolvedCartItems,
+            normalizedShippingAddress.id,
+          );
+
+          setShippingAmount(resolvedShippingAmount);
+          setIsShippingQuoteReady(true);
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "送料の取得に失敗しました。";
+
+          showErrorModal(message);
+          setShippingAmount(0);
+          setIsShippingQuoteReady(false);
+        }
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "購入情報の取得に失敗しました。";
+
+      showErrorModal(message);
+      setPaymentMethods([]);
+      setSelectedPaymentMethodIdState("");
+      setCartItems([]);
+      setUserProfile(null);
+      setShippingAddresses([]);
+      setOrderId("");
       setShippingAmount(0);
       setIsShippingQuoteReady(false);
-
-      try {
-        const idToken =
-          await getFirebaseIdToken();
-
-        const currentDraft =
-          draftRef.current;
-
-        const matchingDraft =
-          currentDraft?.paymentPath ===
-            paymentPagePath &&
-          currentDraft.cartItems.length > 0
-            ? currentDraft
-            : null;
-
-        const cartItemsPromise =
-          matchingDraft
-            ? Promise.resolve(
-                matchingDraft.cartItems,
-              )
-            : loadCartPage().then(
-                (result) => result.items,
-              );
-
-        const [
-          paymentMethodResult,
-          shippingAddressInitialData,
-          resolvedCartItems,
-        ] = await Promise.all([
-          fetchPaymentMethods(),
-          fetchShippingAddressPageInitialData({
-            backendUrl: API_BASE_URL,
-            idToken,
-          }),
-          cartItemsPromise,
-        ]);
-
-        validateCartItems(
-          resolvedCartItems,
-        );
-
-        setPaymentMethods(
-          paymentMethodResult.methods,
-        );
-
-        setUserProfile(
-          shippingAddressInitialData.userProfile,
-        );
-
-        const shippingAddress =
-          shippingAddressInitialData
-            .shippingAddresses[0];
-
-        const normalizedShippingAddress =
-          shippingAddress
-            ? {
-                ...shippingAddress,
-                street2:
-                  shippingAddress.street2 ??
-                  "",
-              }
-            : null;
-
-        setShippingAddresses(
-          normalizedShippingAddress
-            ? [normalizedShippingAddress]
-            : [],
-        );
-
-        const primaryPaymentMethod =
-          selectPrimaryPaymentMethod(
-            paymentMethodResult.methods,
-            paymentMethodResult.defaultMethod,
-          );
-
-        const draftPaymentMethodId =
-          matchingDraft
-            ?.selectedPaymentMethodId ??
-          "";
-
-        const draftPaymentMethodExists =
-          Boolean(
-            draftPaymentMethodId,
-          ) &&
-          paymentMethodResult.methods.some(
-            (method) =>
-              method.id ===
-              draftPaymentMethodId,
-          );
-
-        const resolvedPaymentMethodId =
-          draftPaymentMethodExists
-            ? draftPaymentMethodId
-            : primaryPaymentMethod?.id ??
-              "";
-
-        setSelectedPaymentMethodIdState(
-          resolvedPaymentMethodId,
-        );
-
-        setCartItems(
-          resolvedCartItems,
-        );
-
-        const resolvedOrderId =
-          matchingDraft?.orderId ||
-          createCheckoutOrderId(
-            resolvedCartItems,
-          );
-
-        setOrderId(
-          resolvedOrderId,
-        );
-
-        if (
-          resolvedCartItems.length > 0 &&
-          resolvedOrderId
-        ) {
-          setDraft({
-            paymentPath:
-              paymentPagePath,
-            orderId:
-              resolvedOrderId,
-            cartItems:
-              resolvedCartItems,
-            selectedPaymentMethodId:
-              resolvedPaymentMethodId,
-          });
-        }
-
-        if (
-          normalizedShippingAddress &&
-          resolvedCartItems.length > 0
-        ) {
-          try {
-            const resolvedShippingAmount =
-              await fetchShippingQuote(
-                resolvedCartItems,
-                normalizedShippingAddress.id,
-              );
-
-            setShippingAmount(
-              resolvedShippingAmount,
-            );
-
-            setIsShippingQuoteReady(
-              true,
-            );
-          } catch (error) {
-            const message =
-              error instanceof Error
-                ? error.message
-                : "送料の取得に失敗しました。";
-
-            showErrorModal(message);
-            setShippingAmount(0);
-            setIsShippingQuoteReady(false);
-          }
-        }
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "購入情報の取得に失敗しました。";
-
-        showErrorModal(message);
-        setPaymentMethods([]);
-        setSelectedPaymentMethodIdState("");
-        setCartItems([]);
-        setUserProfile(null);
-        setShippingAddresses([]);
-        setOrderId("");
-        setShippingAmount(0);
-        setIsShippingQuoteReady(false);
-      } finally {
-        setIsLoading(false);
-      }
-    }, [
-      paymentPagePath,
-      setDraft,
-      showErrorModal,
-    ]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [paymentPagePath, setDraft, showErrorModal]);
 
   useEffect(() => {
     void loadPaymentPage();
   }, [loadPaymentPage]);
 
-  const handleSubmitPayment =
-    async (): Promise<void> => {
-      if (isPaying) {
+  const handleSubmitPayment = async (): Promise<void> => {
+    if (isPaying) {
+      return;
+    }
+
+    if (!orderId) {
+      showErrorModal("注文IDを生成できませんでした。");
+      return;
+    }
+
+    if (!selectedPaymentMethod) {
+      showErrorModal("支払い方法を選択してください。");
+      return;
+    }
+
+    if (!selectedPaymentMethod.id) {
+      showErrorModal("支払い方法IDを取得できませんでした。");
+      return;
+    }
+
+    if (!primaryShippingAddress) {
+      showErrorModal("配送先情報を登録してください。");
+      return;
+    }
+
+    if (!isShippingQuoteReady) {
+      showErrorModal("送料を取得できていません。");
+      return;
+    }
+
+    if (amount <= 0) {
+      showErrorModal("購入金額が不正です。");
+      return;
+    }
+
+    const orderItems = buildOrderItems(cartItems);
+    const orderItemsError = validateOrderItems(orderItems);
+
+    if (orderItemsError) {
+      showErrorModal(orderItemsError);
+      return;
+    }
+
+    setIsPaying(true);
+    setModalMessage("");
+
+    try {
+      const orderPayload: CreateOrderRequest = {
+        id: orderId,
+        shippingAddressId: primaryShippingAddress.id,
+        paymentMethodId: selectedPaymentMethod.id,
+        items: orderItems,
+      };
+
+      const order = await createOrder(orderPayload);
+      const resolvedOrderId = order.id ?? orderId;
+
+      const resolvedShippingAmount =
+        order.shippingQuoteSnapshot?.amount;
+
+      if (
+        !Number.isSafeInteger(resolvedShippingAmount) ||
+        resolvedShippingAmount === undefined ||
+        resolvedShippingAmount < 0
+      ) {
+        showErrorModal("注文の確定送料を取得できませんでした。");
         return;
       }
 
-      if (!orderId) {
-        showErrorModal(
-          "注文IDを生成できませんでした。",
-        );
+      if (order.shippingQuoteSnapshot?.currency !== "JPY") {
+        showErrorModal("注文の送料通貨が不正です。");
         return;
       }
 
-      if (!selectedPaymentMethod) {
-        showErrorModal(
-          "支払い方法を選択してください。",
-        );
+      const resolvedPaymentAmount = calculatePaymentAmount(
+        cartItems,
+        subtotalAmount,
+        resolvedShippingAmount,
+      );
+
+      const resolvedAmount = resolvedPaymentAmount.totalAmount;
+
+      if (resolvedAmount <= 0) {
+        showErrorModal("注文金額が不正です。");
         return;
       }
 
-      if (!selectedPaymentMethod.id) {
-        showErrorModal(
-          "支払い方法IDを取得できませんでした。",
-        );
-        return;
-      }
+      setShippingAmount(resolvedShippingAmount);
+      clearDraft();
 
-      if (!primaryShippingAddress) {
-        showErrorModal(
-          "配送先情報を登録してください。",
-        );
-        return;
-      }
-
-      if (!isShippingQuoteReady) {
-        showErrorModal(
-          "送料を取得できていません。",
-        );
-        return;
-      }
-
-      if (amount <= 0) {
-        showErrorModal(
-          "購入金額が不正です。",
-        );
-        return;
-      }
-
-      const orderItems =
-        buildOrderItems(
+      navigate("/order-confirmed", {
+        replace: true,
+        state: {
+          orderId: resolvedOrderId,
+          amount: resolvedAmount,
           cartItems,
-        );
+          shippingAddress: primaryShippingAddress,
+        },
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "注文処理に失敗しました。";
 
-      const orderItemsError =
-        validateOrderItems(
-          orderItems,
-        );
-
-      if (orderItemsError) {
-        showErrorModal(
-          orderItemsError,
-        );
-        return;
-      }
-
-      setIsPaying(true);
-      setModalMessage("");
-
-      try {
-        const orderPayload:
-          CreateOrderRequest = {
-            id: orderId,
-            shippingAddressId:
-              primaryShippingAddress.id,
-            paymentMethodId:
-              selectedPaymentMethod.id,
-            items:
-              orderItems,
-          };
-
-        const order =
-          await createOrder(
-            orderPayload,
-          );
-
-        const resolvedOrderId =
-          order.id ??
-          orderId;
-
-        const resolvedShippingAmount =
-          order.shippingQuoteSnapshot
-            ?.amount;
-
-        if (
-          !Number.isSafeInteger(
-            resolvedShippingAmount,
-          ) ||
-          resolvedShippingAmount ===
-            undefined ||
-          resolvedShippingAmount < 0
-        ) {
-          showErrorModal(
-            "注文の確定送料を取得できませんでした。",
-          );
-          return;
-        }
-
-        if (
-          order.shippingQuoteSnapshot
-            ?.currency !== "JPY"
-        ) {
-          showErrorModal(
-            "注文の送料通貨が不正です。",
-          );
-          return;
-        }
-
-        const resolvedPaymentAmount =
-          calculatePaymentAmount(
-            cartItems,
-            subtotalAmount,
-            resolvedShippingAmount,
-          );
-
-        const resolvedAmount =
-          resolvedPaymentAmount.totalAmount;
-
-        if (resolvedAmount <= 0) {
-          showErrorModal(
-            "注文金額が不正です。",
-          );
-          return;
-        }
-
-        setShippingAmount(
-          resolvedShippingAmount,
-        );
-
-        clearDraft();
-
-        navigate("/order-confirmed", {
-          replace: true,
-          state: {
-            orderId:
-              resolvedOrderId,
-            amount:
-              resolvedAmount,
-            cartItems,
-            shippingAddress:
-              primaryShippingAddress,
-          },
-        });
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "注文処理に失敗しました。";
-
-        showErrorModal(message);
-      } finally {
-        setIsPaying(false);
-      }
-    };
+      showErrorModal(message);
+    } finally {
+      setIsPaying(false);
+    }
+  };
 
   const handleGoToPaymentMethod = () => {
-    navigate(
-      "/settings/payment-method",
-      {
-        state: {
-          paymentBackTo:
-            paymentPagePath,
-        },
+    navigate("/settings/payment-method", {
+      state: {
+        paymentBackTo: paymentPagePath,
       },
-    );
+    });
   };
 
   const handleGoToShippingAddress = () => {
-    navigate(
-      "/settings/shipping-address",
-      {
-        state: {
-          paymentBackTo:
-            paymentPagePath,
-        },
+    navigate("/settings/shipping-address", {
+      state: {
+        paymentBackTo: paymentPagePath,
       },
-    );
+    });
   };
 
   return {

@@ -46,6 +46,7 @@ type PaymentAmountSummary struct {
 //
 //	軽減税率対象商品: 8%
 //	標準税率対象商品: 10%
+//	Resale商品: 非課税
 //	配送料: 10%
 //
 // キャンセル済み商品:
@@ -107,6 +108,14 @@ func CalculatePaymentAmountSummary(
 		}
 
 		subtotalAmount += lineAmount
+
+		switch item.Type {
+		case OrderItemTypeResale:
+			continue
+		case OrderItemTypeList:
+		default:
+			return PaymentAmountSummary{}, ErrInvalidPaymentAmount
+		}
 
 		switch item.ConsumptionTaxRate {
 		case ConsumptionTaxRateReduced:

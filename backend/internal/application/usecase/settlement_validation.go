@@ -57,26 +57,102 @@ func validateSettlementOrderItems(
 		return ErrSettlementUnsupportedOrderItem
 	}
 
+	activeItemCount := 0
+
 	for _, item := range order.Items {
 		if item.IsCancelled {
 			continue
 		}
 
-		// Current settlement implementation supports primary List sales only.
-		//
-		// Resale.BrandID identifies the product brand, not necessarily the
-		// resale seller. A separate consumer payout identity is required before
-		// resale proceeds can safely use Stripe Connect.
-		if item.Type != orderdom.OrderItemTypeList {
+		activeItemCount++
+
+		switch item.Type {
+		case orderdom.OrderItemTypeList:
+			if err := validateListSettlementSeller(
+				item.SellerSnapshot,
+			); err != nil {
+				return err
+			}
+
+		case orderdom.OrderItemTypeResale:
+			if err := validateResaleSettlementSeller(
+				item.SellerSnapshot,
+			); err != nil {
+				return err
+			}
+
+		default:
 			return ErrSettlementUnsupportedOrderItem
 		}
+	}
 
-		if item.SellerSnapshot.BrandID == "" ||
-			item.SellerSnapshot.CompanyID == "" ||
-			item.SellerSnapshot.AccountID == "" ||
-			item.SellerSnapshot.StripeAccountID == "" {
-			return orderdom.ErrInvalidSellerSnapshot
-		}
+	if activeItemCount == 0 {
+		return ErrSettlementUnsupportedOrderItem
+	}
+
+	return nil
+}
+
+func validateListSettlementSeller(
+	seller orderdom.SellerSnapshot,
+) error {
+	if seller.BrandID == "" ||
+		seller.CompanyID == "" ||
+		seller.AccountID == "" ||
+		seller.StripeAccountID == "" {
+		return orderdom.ErrInvalidSellerSnapshot
+	}
+
+	if seller.AvatarID != "" ||
+		seller.UserID != "" ||
+		seller.PayoutAccountID != "" {
+		return orderdom.ErrInvalidSellerSnapshot
+	}
+
+	settlementSeller := settlementdom.SellerIdentity{
+		Type:            settlementdom.SellerTypeAccount,
+		CompanyID:       seller.CompanyID,
+		AccountID:       seller.AccountID,
+		StripeAccountID: seller.StripeAccountID,
+	}
+
+	if err := settlementSeller.Validate(); err != nil {
+		return orderdom.ErrInvalidSellerSnapshot
+	}
+
+	return nil
+}
+
+func validateResaleSettlementSeller(
+	seller orderdom.SellerSnapshot,
+) error {
+	if seller.AvatarID == "" ||
+		seller.UserID == "" ||
+		seller.PayoutAccountID == "" ||
+		seller.StripeAccountID == "" {
+		return orderdom.ErrInvalidSellerSnapshot
+	}
+
+	if seller.PayoutAccountID != seller.UserID {
+		return orderdom.ErrInvalidSellerSnapshot
+	}
+
+	if seller.BrandID != "" ||
+		seller.CompanyID != "" ||
+		seller.AccountID != "" {
+		return orderdom.ErrInvalidSellerSnapshot
+	}
+
+	settlementSeller := settlementdom.SellerIdentity{
+		Type:            settlementdom.SellerTypeAvatar,
+		AvatarID:        seller.AvatarID,
+		UserID:          seller.UserID,
+		PayoutAccountID: seller.PayoutAccountID,
+		StripeAccountID: seller.StripeAccountID,
+	}
+
+	if err := settlementSeller.Validate(); err != nil {
+		return orderdom.ErrInvalidSellerSnapshot
 	}
 
 	return nil
@@ -92,7 +168,7 @@ func validateSettlementAllocations(
 
 	maxInt := int(^uint(0) >> 1)
 
-	seenAccounts := make(
+	seenSellers := make(
 		map[string]struct{},
 		len(allocations),
 	)
@@ -100,21 +176,36 @@ func validateSettlementAllocations(
 	total := 0
 
 	for _, allocation := range allocations {
-		if allocation.CompanyID == "" ||
-			allocation.AccountID == "" ||
-			allocation.StripeAccountID == "" {
+		if err := allocation.Seller.Validate(); err != nil {
 			return ErrSettlementAllocationInvalid
 		}
 
-		if _, exists := seenAccounts[allocation.AccountID]; exists {
+		sellerID, err := allocation.Seller.Key()
+		if err != nil || sellerID == "" {
+			return ErrSettlementAllocationInvalid
+		}
+
+		sellerKey :=
+			string(allocation.Seller.Type) +
+				":" +
+				sellerID
+
+		if _, exists := seenSellers[sellerKey]; exists {
 			return ErrSettlementDuplicateAccount
 		}
 
-		seenAccounts[allocation.AccountID] = struct{}{}
+		seenSellers[sellerKey] = struct{}{}
 
 		if allocation.GrossAmount <= 0 ||
 			allocation.PlatformFeeAmount < 0 ||
 			allocation.TransferAmount <= 0 {
+			return ErrSettlementAllocationInvalid
+		}
+
+		if allocation.MerchandiseAmount < 0 ||
+			allocation.MerchandiseTaxAmount < 0 ||
+			allocation.ShippingAmount < 0 ||
+			allocation.ShippingTaxAmount < 0 {
 			return ErrSettlementAllocationInvalid
 		}
 
@@ -131,6 +222,55 @@ func validateSettlementAllocations(
 		if allocation.GrossAmount-
 			allocation.PlatformFeeAmount !=
 			allocation.TransferAmount {
+			return ErrSettlementAllocationInvalid
+		}
+
+		calculatedGrossAmount := allocation.MerchandiseAmount
+
+		if calculatedGrossAmount >
+			maxInt-allocation.MerchandiseTaxAmount {
+			return ErrSettlementAllocationInvalid
+		}
+
+		calculatedGrossAmount +=
+			allocation.MerchandiseTaxAmount
+
+		if calculatedGrossAmount >
+			maxInt-allocation.ShippingAmount {
+			return ErrSettlementAllocationInvalid
+		}
+
+		calculatedGrossAmount +=
+			allocation.ShippingAmount
+
+		if calculatedGrossAmount >
+			maxInt-allocation.ShippingTaxAmount {
+			return ErrSettlementAllocationInvalid
+		}
+
+		calculatedGrossAmount +=
+			allocation.ShippingTaxAmount
+
+		if calculatedGrossAmount !=
+			allocation.GrossAmount {
+			return ErrSettlementAllocationInvalid
+		}
+
+		switch allocation.Seller.Type {
+		case settlementdom.SellerTypeAccount:
+			// Primary List settlement may contain merchandise tax and
+			// shipping amounts according to the Order snapshot.
+
+		case settlementdom.SellerTypeAvatar:
+			// Resale is non-taxable for the purchaser and has no
+			// purchaser-side shipping charge.
+			if allocation.MerchandiseTaxAmount != 0 ||
+				allocation.ShippingAmount != 0 ||
+				allocation.ShippingTaxAmount != 0 {
+				return ErrSettlementAllocationInvalid
+			}
+
+		default:
 			return ErrSettlementAllocationInvalid
 		}
 
@@ -153,12 +293,16 @@ func validateExistingSettlement(
 	existing settlementdom.Settlement,
 	expected settlementdom.Settlement,
 ) error {
+	existingSeller := existing.SellerIdentity()
+	expectedSeller := expected.SellerIdentity()
+
+	if existingSeller != expectedSeller {
+		return settlementdom.ErrConflict
+	}
+
 	if existing.ID != expected.ID ||
 		existing.OrderID != expected.OrderID ||
 		existing.PaymentID != expected.PaymentID ||
-		existing.CompanyID != expected.CompanyID ||
-		existing.AccountID != expected.AccountID ||
-		existing.StripeAccountID != expected.StripeAccountID ||
 		existing.StripePaymentIntentID != expected.StripePaymentIntentID ||
 		existing.StripeChargeID != expected.StripeChargeID ||
 		existing.TransferGroup != expected.TransferGroup ||

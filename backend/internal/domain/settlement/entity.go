@@ -19,6 +19,44 @@ import (
 // AMOL Stripe Platform -> Stripe Connected Account
 type SettlementStatus string
 
+// SellerType identifies the payout identity represented by a Settlement.
+//
+// account: primary List sale paid out to a company Account.
+// avatar: consumer resale paid out to an Avatar owner payout account.
+type SellerType string
+
+const (
+	SellerTypeAccount SellerType = "account"
+	SellerTypeAvatar  SellerType = "avatar"
+)
+
+var AllowedSellerTypes = map[SellerType]struct{}{
+	SellerTypeAccount: {},
+	SellerTypeAvatar:  {},
+}
+
+// SellerIdentity is the immutable payout identity captured by a Settlement.
+//
+// account seller:
+//   - CompanyID, AccountID and StripeAccountID are required.
+//   - AvatarID, UserID and PayoutAccountID must be empty.
+//
+// avatar seller:
+//   - AvatarID, UserID, PayoutAccountID and StripeAccountID are required.
+//   - CompanyID and AccountID must be empty.
+type SellerIdentity struct {
+	Type SellerType
+
+	CompanyID string
+	AccountID string
+
+	AvatarID        string
+	UserID          string
+	PayoutAccountID string
+
+	StripeAccountID string
+}
+
 const (
 	StatusPending         SettlementStatus = "pending"
 	StatusReady           SettlementStatus = "ready"
@@ -41,25 +79,19 @@ var AllowedStatuses = map[SettlementStatus]struct{}{
 	StatusReversed:        {},
 }
 
-const (
-	CurrencyJPY = "JPY"
-)
+const CurrencyJPY = "JPY"
 
 var DefaultStatus = StatusPending
 
-// Settlement represents the amount attributable to one seller Stripe Account
+// Settlement represents the amount attributable to one seller payout identity
 // inside one Order.
 //
-// One Order may therefore have multiple Settlement records.
+// One Order may therefore have multiple Settlement records. Primary List sales
+// use an Account seller identity, while resale transactions use an Avatar seller
+// identity backed by a registered payout account.
 //
-// Example:
-//
-// Order
-//   - Account A -> Settlement A
-//   - Account B -> Settlement B
-//
-// Multiple Brands that use the same AccountID must be aggregated into the same
-// Settlement before this entity is created.
+// Multiple primary-sale Brands using the same AccountID are aggregated into one
+// Settlement. Resale proceeds are aggregated by PayoutAccountID.
 //
 // Amount invariant:
 //
@@ -73,8 +105,14 @@ type Settlement struct {
 	OrderID   string
 	PaymentID string
 
+	SellerType SellerType
+
 	CompanyID string
 	AccountID string
+
+	AvatarID        string
+	UserID          string
+	PayoutAccountID string
 
 	StripeAccountID string
 
@@ -91,8 +129,7 @@ type Settlement struct {
 	TransferAmount    int
 
 	Currency string
-
-	Status SettlementStatus
+	Status   SettlementStatus
 
 	ErrorType *string
 	ErrorCode *string
@@ -120,11 +157,29 @@ var (
 	ErrPaymentOrderMismatch = errors.New(
 		"settlement: paymentId does not match orderId",
 	)
+	ErrInvalidSellerType = errors.New(
+		"settlement: invalid sellerType",
+	)
+	ErrInvalidSellerID = errors.New(
+		"settlement: invalid seller id",
+	)
+	ErrInvalidSellerIdentity = errors.New(
+		"settlement: invalid seller identity",
+	)
 	ErrInvalidCompanyID = errors.New(
 		"settlement: invalid companyId",
 	)
 	ErrInvalidAccountID = errors.New(
 		"settlement: invalid accountId",
+	)
+	ErrInvalidAvatarID = errors.New(
+		"settlement: invalid avatarId",
+	)
+	ErrInvalidUserID = errors.New(
+		"settlement: invalid userId",
+	)
+	ErrInvalidPayoutAccountID = errors.New(
+		"settlement: invalid payoutAccountId",
 	)
 	ErrInvalidStripeAccountID = errors.New(
 		"settlement: invalid stripeAccountId",
@@ -193,36 +248,105 @@ var (
 
 // NewID creates the deterministic Firestore Settlement document ID.
 //
-// A Payment document ID is the Order ID in the current payment model.
-// Combining PaymentID and AccountID guarantees one Settlement per Account
-// inside one payment.
-func NewID(
-	paymentID string,
-	accountID string,
-) (string, error) {
+// The seller type is included in the key so AccountID and PayoutAccountID
+// namespaces cannot collide.
+//
+// account: paymentID + "_account_" + accountID
+// avatar:  paymentID + "_avatar_" + payoutAccountID
+func NewID(paymentID string, seller SellerIdentity) (string, error) {
 	if paymentID == "" {
 		return "", ErrInvalidPaymentID
 	}
-
-	if accountID == "" {
-		return "", ErrInvalidAccountID
+	if strings.Contains(paymentID, "/") {
+		return "", ErrInvalidID
+	}
+	if err := seller.Validate(); err != nil {
+		return "", err
 	}
 
-	if strings.Contains(paymentID, "/") ||
-		strings.Contains(accountID, "/") {
+	sellerID, err := seller.Key()
+	if err != nil {
+		return "", err
+	}
+	if strings.Contains(sellerID, "/") {
 		return "", ErrInvalidID
 	}
 
-	return paymentID + "_" + accountID, nil
+	return paymentID + "_" + string(seller.Type) + "_" + sellerID, nil
 }
 
-func IsValidStatus(
-	status SettlementStatus,
-) bool {
+func IsValidSellerType(sellerType SellerType) bool {
+	if sellerType == "" {
+		return false
+	}
+	_, ok := AllowedSellerTypes[sellerType]
+	return ok
+}
+
+func (s SellerIdentity) Key() (string, error) {
+	switch s.Type {
+	case SellerTypeAccount:
+		if s.AccountID == "" {
+			return "", ErrInvalidAccountID
+		}
+		return s.AccountID, nil
+
+	case SellerTypeAvatar:
+		if s.PayoutAccountID == "" {
+			return "", ErrInvalidPayoutAccountID
+		}
+		return s.PayoutAccountID, nil
+
+	default:
+		return "", ErrInvalidSellerType
+	}
+}
+
+func (s SellerIdentity) Validate() error {
+	if !IsValidSellerType(s.Type) {
+		return ErrInvalidSellerType
+	}
+	if !isStripeAccountID(s.StripeAccountID) {
+		return ErrInvalidStripeAccountID
+	}
+
+	switch s.Type {
+	case SellerTypeAccount:
+		if s.CompanyID == "" {
+			return ErrInvalidCompanyID
+		}
+		if s.AccountID == "" {
+			return ErrInvalidAccountID
+		}
+		if s.AvatarID != "" || s.UserID != "" || s.PayoutAccountID != "" {
+			return ErrInvalidSellerIdentity
+		}
+
+	case SellerTypeAvatar:
+		if s.AvatarID == "" {
+			return ErrInvalidAvatarID
+		}
+		if s.UserID == "" {
+			return ErrInvalidUserID
+		}
+		if s.PayoutAccountID == "" {
+			return ErrInvalidPayoutAccountID
+		}
+		if s.CompanyID != "" || s.AccountID != "" {
+			return ErrInvalidSellerIdentity
+		}
+
+	default:
+		return ErrInvalidSellerType
+	}
+
+	return nil
+}
+
+func IsValidStatus(status SettlementStatus) bool {
 	if status == "" {
 		return false
 	}
-
 	_, ok := AllowedStatuses[status]
 	return ok
 }
@@ -235,17 +359,15 @@ func IsValidStatus(
 // status must be pending.
 //
 // Payment success creates a pending Settlement. Ready is intentionally not
-// accepted at creation time because ready means that the seller Account has
-// completed dispatch and payout may be executed.
+// accepted at creation time because ready means that the seller has completed
+// the dispatch boundary and payout may be executed.
 //
 // An empty status defaults to pending.
 func New(
 	id string,
 	orderID string,
 	paymentID string,
-	companyID string,
-	accountID string,
-	stripeAccountID string,
+	seller SellerIdentity,
 	stripePaymentIntentID string,
 	stripeChargeID string,
 	transferGroup string,
@@ -259,6 +381,9 @@ func New(
 	if status == "" {
 		status = DefaultStatus
 	}
+	if err := seller.Validate(); err != nil {
+		return Settlement{}, err
+	}
 
 	createdAt = createdAt.UTC()
 
@@ -266,9 +391,13 @@ func New(
 		ID:                       id,
 		OrderID:                  orderID,
 		PaymentID:                paymentID,
-		CompanyID:                companyID,
-		AccountID:                accountID,
-		StripeAccountID:          stripeAccountID,
+		SellerType:               seller.Type,
+		CompanyID:                seller.CompanyID,
+		AccountID:                seller.AccountID,
+		AvatarID:                 seller.AvatarID,
+		UserID:                   seller.UserID,
+		PayoutAccountID:          seller.PayoutAccountID,
+		StripeAccountID:          seller.StripeAccountID,
 		StripePaymentIntentID:    stripePaymentIntentID,
 		StripeChargeID:           stripeChargeID,
 		StripeTransferID:         "",
@@ -289,10 +418,8 @@ func New(
 	}
 
 	if status != StatusPending {
-		return Settlement{},
-			ErrInvalidStatus
+		return Settlement{}, ErrInvalidStatus
 	}
-
 	if err := s.Validate(); err != nil {
 		return Settlement{}, err
 	}
@@ -305,16 +432,13 @@ func New(
 //
 // Only pending may become ready. A failed_retryable Settlement has already
 // passed the dispatch boundary and retries directly through StartTransfer.
-func (s *Settlement) MarkReady(
-	now time.Time,
-) error {
+func (s *Settlement) MarkReady(now time.Time) error {
 	if s == nil {
 		return ErrInvalidStatusTransition
 	}
 
 	switch s.Status {
 	case StatusPending:
-
 	default:
 		return ErrInvalidStatusTransition
 	}
@@ -333,17 +457,13 @@ func (s *Settlement) MarkReady(
 }
 
 // StartTransfer claims the Settlement for Stripe Transfer processing.
-func (s *Settlement) StartTransfer(
-	now time.Time,
-) error {
+func (s *Settlement) StartTransfer(now time.Time) error {
 	if s == nil {
 		return ErrInvalidStatusTransition
 	}
 
 	switch s.Status {
-	case StatusReady,
-		StatusFailedRetryable:
-
+	case StatusReady, StatusFailedRetryable:
 	default:
 		return ErrInvalidStatusTransition
 	}
@@ -367,23 +487,17 @@ func (s *Settlement) StartTransfer(
 // The lease-expiration decision belongs to the repository/application layer.
 // This method only permits an already-transferring Settlement to be claimed
 // again after that layer has determined that the previous claim is stale.
-func (s *Settlement) ReclaimTransfer(
-	now time.Time,
-) error {
-	if s == nil ||
-		s.Status != StatusTransferring {
+func (s *Settlement) ReclaimTransfer(now time.Time) error {
+	if s == nil || s.Status != StatusTransferring {
 		return ErrInvalidStatusTransition
 	}
-
 	if now.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
 
 	now = now.UTC()
 
-	if !now.After(
-		s.UpdatedAt,
-	) {
+	if !now.After(s.UpdatedAt) {
 		return ErrInvalidUpdatedAt
 	}
 
@@ -396,21 +510,13 @@ func (s *Settlement) ReclaimTransfer(
 }
 
 // MarkTransferred records a successfully created Stripe Connect Transfer.
-func (s *Settlement) MarkTransferred(
-	stripeTransferID string,
-	now time.Time,
-) error {
-	if s == nil ||
-		s.Status != StatusTransferring {
+func (s *Settlement) MarkTransferred(stripeTransferID string, now time.Time) error {
+	if s == nil || s.Status != StatusTransferring {
 		return ErrInvalidStatusTransition
 	}
-
-	if !isStripeTransferID(
-		stripeTransferID,
-	) {
+	if !isStripeTransferID(stripeTransferID) {
 		return ErrInvalidStripeTransferID
 	}
-
 	if now.IsZero() {
 		return ErrInvalidTransferredAt
 	}
@@ -435,19 +541,12 @@ func (s *Settlement) MarkFailedRetryable(
 	errorMsg *string,
 	now time.Time,
 ) error {
-	if s == nil ||
-		s.Status != StatusTransferring {
+	if s == nil || s.Status != StatusTransferring {
 		return ErrInvalidStatusTransition
 	}
-
-	if err := validateFailureReason(
-		errorType,
-		errorCode,
-		errorMsg,
-	); err != nil {
+	if err := validateFailureReason(errorType, errorCode, errorMsg); err != nil {
 		return err
 	}
-
 	if now.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
@@ -468,19 +567,12 @@ func (s *Settlement) MarkFailed(
 	errorMsg *string,
 	now time.Time,
 ) error {
-	if s == nil ||
-		s.Status != StatusTransferring {
+	if s == nil || s.Status != StatusTransferring {
 		return ErrInvalidStatusTransition
 	}
-
-	if err := validateFailureReason(
-		errorType,
-		errorCode,
-		errorMsg,
-	); err != nil {
+	if err := validateFailureReason(errorType, errorCode, errorMsg); err != nil {
 		return err
 	}
-
 	if now.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
@@ -498,18 +590,13 @@ func (s *Settlement) MarkFailed(
 //
 // A transferring Settlement cannot be canceled because the result of the
 // Stripe request must first be reconciled.
-func (s *Settlement) Cancel(
-	now time.Time,
-) error {
+func (s *Settlement) Cancel(now time.Time) error {
 	if s == nil {
 		return ErrInvalidStatusTransition
 	}
 
 	switch s.Status {
-	case StatusPending,
-		StatusReady,
-		StatusFailedRetryable:
-
+	case StatusPending, StatusReady, StatusFailedRetryable:
 	default:
 		return ErrInvalidStatusTransition
 	}
@@ -531,30 +618,20 @@ func (s *Settlement) Cancel(
 //
 // This is separate from a card payment Refund.
 // Refund and Transfer Reversal must be coordinated by the application layer.
-func (s *Settlement) MarkReversed(
-	stripeTransferReversalID string,
-	now time.Time,
-) error {
-	if s == nil ||
-		s.Status != StatusTransferred {
+func (s *Settlement) MarkReversed(stripeTransferReversalID string, now time.Time) error {
+	if s == nil || s.Status != StatusTransferred {
 		return ErrInvalidStatusTransition
 	}
-
-	if !isStripeTransferReversalID(
-		stripeTransferReversalID,
-	) {
+	if !isStripeTransferReversalID(stripeTransferReversalID) {
 		return ErrInvalidStripeTransferReversalID
 	}
-
 	if now.IsZero() {
 		return ErrInvalidReversedAt
 	}
 
 	reversedAt := now.UTC()
 
-	s.StripeTransferReversalID =
-		stripeTransferReversalID
-
+	s.StripeTransferReversalID = stripeTransferReversalID
 	s.Status = StatusReversed
 	s.ErrorType = nil
 	s.ErrorCode = nil
@@ -567,15 +644,12 @@ func (s *Settlement) MarkReversed(
 
 // Validate verifies all Settlement persistence invariants.
 func (s Settlement) Validate() error {
-	if s.ID == "" ||
-		strings.Contains(s.ID, "/") {
+	if s.ID == "" || strings.Contains(s.ID, "/") {
 		return ErrInvalidID
 	}
-
 	if s.OrderID == "" {
 		return ErrInvalidOrderID
 	}
-
 	if s.PaymentID == "" {
 		return ErrInvalidPaymentID
 	}
@@ -585,198 +659,115 @@ func (s Settlement) Validate() error {
 		return ErrPaymentOrderMismatch
 	}
 
-	if s.CompanyID == "" {
-		return ErrInvalidCompanyID
+	seller := s.SellerIdentity()
+	if err := seller.Validate(); err != nil {
+		return err
 	}
 
-	if s.AccountID == "" {
-		return ErrInvalidAccountID
-	}
-
-	if !isStripeAccountID(
-		s.StripeAccountID,
-	) {
-		return ErrInvalidStripeAccountID
-	}
-
-	if !isStripePaymentIntentID(
-		s.StripePaymentIntentID,
-	) {
+	if !isStripePaymentIntentID(s.StripePaymentIntentID) {
 		return ErrInvalidStripePaymentIntentID
 	}
-
-	if !isStripeChargeID(
-		s.StripeChargeID,
-	) {
+	if !isStripeChargeID(s.StripeChargeID) {
 		return ErrInvalidStripeChargeID
 	}
-
 	if s.TransferGroup == "" {
 		return ErrInvalidTransferGroup
 	}
-
 	if s.GrossAmount <= 0 {
 		return ErrInvalidGrossAmount
 	}
-
-	if s.PlatformFeeAmount < 0 ||
-		s.PlatformFeeAmount > s.GrossAmount {
+	if s.PlatformFeeAmount < 0 || s.PlatformFeeAmount > s.GrossAmount {
 		return ErrInvalidPlatformFeeAmount
 	}
-
-	if s.TransferAmount <= 0 ||
-		s.TransferAmount > s.GrossAmount {
+	if s.TransferAmount <= 0 || s.TransferAmount > s.GrossAmount {
 		return ErrInvalidTransferAmount
 	}
-
-	if s.GrossAmount-
-		s.PlatformFeeAmount !=
-		s.TransferAmount {
+	if s.GrossAmount-s.PlatformFeeAmount != s.TransferAmount {
 		return ErrAmountMismatch
 	}
-
 	if s.Currency != CurrencyJPY {
 		return ErrInvalidCurrency
 	}
-
 	if !IsValidStatus(s.Status) {
 		return ErrInvalidStatus
 	}
-
 	if s.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
-
-	if s.UpdatedAt.IsZero() ||
-		s.UpdatedAt.Before(
-			s.CreatedAt,
-		) {
+	if s.UpdatedAt.IsZero() || s.UpdatedAt.Before(s.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
 
-	if err :=
-		validateOptionalErrorString(
-			s.ErrorType,
-			ErrInvalidErrorType,
-		); err != nil {
+	if err := validateOptionalErrorString(s.ErrorType, ErrInvalidErrorType); err != nil {
 		return err
 	}
-
-	if err :=
-		validateOptionalErrorString(
-			s.ErrorCode,
-			ErrInvalidErrorCode,
-		); err != nil {
+	if err := validateOptionalErrorString(s.ErrorCode, ErrInvalidErrorCode); err != nil {
 		return err
 	}
-
-	if err :=
-		validateOptionalErrorString(
-			s.ErrorMsg,
-			ErrInvalidErrorMsg,
-		); err != nil {
+	if err := validateOptionalErrorString(s.ErrorMsg, ErrInvalidErrorMsg); err != nil {
 		return err
 	}
 
 	switch s.Status {
-	case StatusPending,
-		StatusReady,
-		StatusTransferring,
-		StatusCanceled:
+	case StatusPending, StatusReady, StatusTransferring, StatusCanceled:
 		if s.StripeTransferID != "" ||
 			s.StripeTransferReversalID != "" ||
 			s.TransferredAt != nil ||
 			s.ReversedAt != nil {
 			return ErrInvalidStatus
 		}
-
-		if s.ErrorType != nil ||
-			s.ErrorCode != nil ||
-			s.ErrorMsg != nil {
+		if s.ErrorType != nil || s.ErrorCode != nil || s.ErrorMsg != nil {
 			return ErrInvalidStatus
 		}
 
-	case StatusFailedRetryable,
-		StatusFailed:
+	case StatusFailedRetryable, StatusFailed:
 		if s.StripeTransferID != "" ||
 			s.StripeTransferReversalID != "" ||
 			s.TransferredAt != nil ||
 			s.ReversedAt != nil {
 			return ErrInvalidStatus
 		}
-
-		if err := validateFailureReason(
-			s.ErrorType,
-			s.ErrorCode,
-			s.ErrorMsg,
-		); err != nil {
+		if err := validateFailureReason(s.ErrorType, s.ErrorCode, s.ErrorMsg); err != nil {
 			return err
 		}
 
 	case StatusTransferred:
-		if !isStripeTransferID(
-			s.StripeTransferID,
-		) {
+		if !isStripeTransferID(s.StripeTransferID) {
 			return ErrInvalidStripeTransferID
 		}
-
 		if s.StripeTransferReversalID != "" {
 			return ErrInvalidStripeTransferReversalID
 		}
-
-		if s.TransferredAt == nil ||
-			s.TransferredAt.IsZero() {
+		if s.TransferredAt == nil || s.TransferredAt.IsZero() {
 			return ErrInvalidTransferredAt
 		}
-
-		if s.TransferredAt.Before(
-			s.CreatedAt,
-		) {
+		if s.TransferredAt.Before(s.CreatedAt) {
 			return ErrInvalidTransferredAt
 		}
-
 		if s.ReversedAt != nil {
 			return ErrInvalidReversedAt
 		}
-
-		if s.ErrorType != nil ||
-			s.ErrorCode != nil ||
-			s.ErrorMsg != nil {
+		if s.ErrorType != nil || s.ErrorCode != nil || s.ErrorMsg != nil {
 			return ErrInvalidStatus
 		}
 
 	case StatusReversed:
-		if !isStripeTransferID(
-			s.StripeTransferID,
-		) {
+		if !isStripeTransferID(s.StripeTransferID) {
 			return ErrInvalidStripeTransferID
 		}
-
-		if !isStripeTransferReversalID(
-			s.StripeTransferReversalID,
-		) {
+		if !isStripeTransferReversalID(s.StripeTransferReversalID) {
 			return ErrInvalidStripeTransferReversalID
 		}
-
-		if s.TransferredAt == nil ||
-			s.TransferredAt.IsZero() {
+		if s.TransferredAt == nil || s.TransferredAt.IsZero() {
 			return ErrInvalidTransferredAt
 		}
-
-		if s.ReversedAt == nil ||
-			s.ReversedAt.IsZero() {
+		if s.ReversedAt == nil || s.ReversedAt.IsZero() {
 			return ErrInvalidReversedAt
 		}
-
-		if s.ReversedAt.Before(
-			*s.TransferredAt,
-		) {
+		if s.ReversedAt.Before(*s.TransferredAt) {
 			return ErrInvalidReversedAt
 		}
-
-		if s.ErrorType != nil ||
-			s.ErrorCode != nil ||
-			s.ErrorMsg != nil {
+		if s.ErrorType != nil || s.ErrorCode != nil || s.ErrorMsg != nil {
 			return ErrInvalidStatus
 		}
 	}
@@ -784,99 +775,73 @@ func (s Settlement) Validate() error {
 	return nil
 }
 
-func validateFailureReason(
-	errorType *string,
-	errorCode *string,
-	errorMsg *string,
-) error {
-	if err := validateOptionalErrorString(
-		errorType,
-		ErrInvalidErrorType,
-	); err != nil {
-		return err
+// SellerIdentity returns the normalized seller payout identity.
+//
+// SellerType may be absent on legacy primary-sale Settlement records. Those
+// records are interpreted as account sellers when the old CompanyID/AccountID
+// shape is otherwise complete.
+func (s Settlement) SellerIdentity() SellerIdentity {
+	sellerType := s.SellerType
+
+	if sellerType == "" &&
+		s.CompanyID != "" &&
+		s.AccountID != "" &&
+		s.AvatarID == "" &&
+		s.UserID == "" &&
+		s.PayoutAccountID == "" {
+		sellerType = SellerTypeAccount
 	}
 
-	if err := validateOptionalErrorString(
-		errorCode,
-		ErrInvalidErrorCode,
-	); err != nil {
+	return SellerIdentity{
+		Type:            sellerType,
+		CompanyID:       s.CompanyID,
+		AccountID:       s.AccountID,
+		AvatarID:        s.AvatarID,
+		UserID:          s.UserID,
+		PayoutAccountID: s.PayoutAccountID,
+		StripeAccountID: s.StripeAccountID,
+	}
+}
+
+func validateFailureReason(errorType *string, errorCode *string, errorMsg *string) error {
+	if err := validateOptionalErrorString(errorType, ErrInvalidErrorType); err != nil {
 		return err
 	}
-
-	if err := validateOptionalErrorString(
-		errorMsg,
-		ErrInvalidErrorMsg,
-	); err != nil {
+	if err := validateOptionalErrorString(errorCode, ErrInvalidErrorCode); err != nil {
 		return err
 	}
-
-	if errorType == nil &&
-		errorCode == nil &&
-		errorMsg == nil {
+	if err := validateOptionalErrorString(errorMsg, ErrInvalidErrorMsg); err != nil {
+		return err
+	}
+	if errorType == nil && errorCode == nil && errorMsg == nil {
 		return ErrFailureReasonRequired
 	}
-
 	return nil
 }
 
-func validateOptionalErrorString(
-	value *string,
-	invalidError error,
-) error {
-	if value != nil &&
-		*value == "" {
+func validateOptionalErrorString(value *string, invalidError error) error {
+	if value != nil && *value == "" {
 		return invalidError
 	}
-
 	return nil
 }
 
-func isStripeAccountID(
-	value string,
-) bool {
-	return strings.HasPrefix(
-		value,
-		"acct_",
-	) &&
-		len(value) > len("acct_")
+func isStripeAccountID(value string) bool {
+	return strings.HasPrefix(value, "acct_") && len(value) > len("acct_")
 }
 
-func isStripePaymentIntentID(
-	value string,
-) bool {
-	return strings.HasPrefix(
-		value,
-		"pi_",
-	) &&
-		len(value) > len("pi_")
+func isStripePaymentIntentID(value string) bool {
+	return strings.HasPrefix(value, "pi_") && len(value) > len("pi_")
 }
 
-func isStripeChargeID(
-	value string,
-) bool {
-	return strings.HasPrefix(
-		value,
-		"ch_",
-	) &&
-		len(value) > len("ch_")
+func isStripeChargeID(value string) bool {
+	return strings.HasPrefix(value, "ch_") && len(value) > len("ch_")
 }
 
-func isStripeTransferID(
-	value string,
-) bool {
-	return strings.HasPrefix(
-		value,
-		"tr_",
-	) &&
-		len(value) > len("tr_")
+func isStripeTransferID(value string) bool {
+	return strings.HasPrefix(value, "tr_") && len(value) > len("tr_")
 }
 
-func isStripeTransferReversalID(
-	value string,
-) bool {
-	return strings.HasPrefix(
-		value,
-		"trr_",
-	) &&
-		len(value) > len("trr_")
+func isStripeTransferReversalID(value string) bool {
+	return strings.HasPrefix(value, "trr_") && len(value) > len("trr_")
 }

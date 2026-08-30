@@ -8,14 +8,21 @@ import (
 )
 
 // CreateSettlementInput represents the persistence input used when a new
-// seller-side settlement is created.
+// seller-side Settlement is created.
 //
-// SettlementID should be generated deterministically from:
+// SettlementID should be generated deterministically with NewID from:
 //
-//	paymentID + accountID
+//	account seller:
+//	  paymentID + "_account_" + accountID
+//
+//	avatar seller:
+//	  paymentID + "_avatar_" + payoutAccountID
 //
 // so that one Payment cannot create duplicate Settlement records for the same
-// seller Account.
+// seller payout identity.
+//
+// Seller contains the immutable payout identity captured at Order/payment time.
+// The repository must persist its fields into the resulting Settlement.
 //
 // A newly created Settlement must be pending.
 //
@@ -31,10 +38,7 @@ type CreateSettlementInput struct {
 	OrderID   string
 	PaymentID string
 
-	CompanyID string
-	AccountID string
-
-	StripeAccountID string
+	Seller SellerIdentity
 
 	StripePaymentIntentID string
 	StripeChargeID        string
@@ -46,8 +50,7 @@ type CreateSettlementInput struct {
 	TransferAmount    int
 
 	Currency string
-
-	Status SettlementStatus
+	Status   SettlementStatus
 }
 
 // UpdateSettlementInput represents a partial Settlement update.
@@ -58,6 +61,9 @@ type CreateSettlementInput struct {
 //
 // StripeTransferReversalID is normally set when a completed Stripe Transfer
 // is reversed.
+//
+// Seller identity is intentionally immutable and therefore cannot be changed
+// through this input.
 //
 // Status changes should be performed together with the fields required by the
 // target Settlement state.
@@ -90,8 +96,8 @@ type UpdateSettlementInput struct {
 // - failed_retryable
 // - transferring whose UpdatedAt is equal to or before StaleBefore
 //
-// pending must never be returned because pending means the seller Account has
-// not yet crossed the dispatch boundary.
+// pending must never be returned because pending means the seller has not yet
+// crossed the dispatch boundary.
 //
 // A non-stale transferring Settlement must not be returned because another
 // worker may still own its transfer lease.
@@ -100,12 +106,11 @@ type UpdateSettlementInput struct {
 // The application layer must provide a positive value.
 type ListTransferCandidatesInput struct {
 	StaleBefore time.Time
-
-	Limit int
+	Limit       int
 }
 
 // Repository is the persistence contract for seller-side Stripe Connect
-// settlements.
+// Settlements.
 //
 // Settlement is intentionally separate from:
 //
@@ -113,7 +118,15 @@ type ListTransferCandidatesInput struct {
 // - Order item token transfer state
 //
 // One Payment may have multiple Settlement records when one Order contains
-// products belonging to multiple seller Accounts.
+// multiple seller payout identities.
+//
+// Primary List sales use SellerTypeAccount.
+// Resale transactions use SellerTypeAvatar.
+//
+// A Payment must contain at most one Settlement for each normalized seller key:
+//
+// - account seller: AccountID
+// - avatar seller: PayoutAccountID
 type Repository interface {
 	// GetByID returns a Settlement by its Settlement document ID.
 	GetByID(
@@ -123,7 +136,8 @@ type Repository interface {
 
 	// ListByPaymentID returns every seller Settlement belonging to one Payment.
 	//
-	// The result is expected to contain at most one Settlement per AccountID.
+	// The result is expected to contain at most one Settlement per normalized
+	// seller payout identity.
 	ListByPaymentID(
 		ctx context.Context,
 		paymentID string,
@@ -138,7 +152,10 @@ type Repository interface {
 		orderID string,
 	) ([]Settlement, error)
 
-	// ListByCompanyID returns Settlements attributable to one Company.
+	// ListByCompanyID returns primary-sale Settlements attributable to one
+	// Company.
+	//
+	// Avatar/resale Settlements do not have CompanyID and must not be returned.
 	//
 	// This is used by Console transaction and settlement management queries.
 	ListByCompanyID(
@@ -146,10 +163,32 @@ type Repository interface {
 		companyID string,
 	) ([]Settlement, error)
 
-	// ListByAccountID returns Settlements attributable to one payout Account.
+	// ListByAccountID returns primary-sale Settlements attributable to one
+	// company payout Account.
+	//
+	// Avatar/resale Settlements do not have AccountID and must not be returned.
 	ListByAccountID(
 		ctx context.Context,
 		accountID string,
+	) ([]Settlement, error)
+
+	// ListByAvatarID returns resale Settlements attributable to one Avatar.
+	//
+	// Account/primary-sale Settlements do not have AvatarID and must not be
+	// returned.
+	ListByAvatarID(
+		ctx context.Context,
+		avatarID string,
+	) ([]Settlement, error)
+
+	// ListByPayoutAccountID returns resale Settlements attributable to one
+	// consumer payout account.
+	//
+	// PayoutAccountID is the stable payout identity used for resale Settlement
+	// aggregation and deterministic Settlement IDs.
+	ListByPayoutAccountID(
+		ctx context.Context,
+		payoutAccountID string,
 	) ([]Settlement, error)
 
 	// ListTransferCandidates returns Settlements that may require a transfer
@@ -170,8 +209,8 @@ type Repository interface {
 	// - canceled
 	// - reversed
 	//
-	// pending is excluded because it represents a Settlement whose seller
-	// Account has not yet completed the dispatch boundary.
+	// pending is excluded because it represents a Settlement whose seller has
+	// not yet completed the dispatch boundary.
 	//
 	// The result must be deterministic and contain no duplicate Settlement ID.
 	//
@@ -187,14 +226,29 @@ type Repository interface {
 	// Implementations must reject an existing SettlementID instead of
 	// overwriting it so deterministic Settlement IDs provide idempotency.
 	//
+	// Implementations must persist the complete immutable Seller identity.
+	//
+	// SellerTypeAccount requires:
+	//
+	// - CompanyID
+	// - AccountID
+	// - StripeAccountID
+	//
+	// SellerTypeAvatar requires:
+	//
+	// - AvatarID
+	// - UserID
+	// - PayoutAccountID
+	// - StripeAccountID
+	//
 	// Implementations must persist the new Settlement as pending.
 	//
 	// An empty input Status may be normalized to pending. Any non-empty Status
 	// other than pending must be rejected.
 	//
 	// ready must never be accepted during creation because ready means that the
-	// corresponding seller Account has completed dispatch and is eligible for
-	// Stripe Transfer.
+	// corresponding seller has completed dispatch and is eligible for Stripe
+	// Transfer.
 	//
 	// Implementations must reconstruct or validate the complete Settlement
 	// entity before persisting it.
@@ -207,6 +261,8 @@ type Repository interface {
 	//
 	// Implementations must read the current Settlement and execute validated
 	// domain state transitions before persisting the resulting entity.
+	//
+	// Seller identity must not be modified by this operation.
 	//
 	// In particular:
 	//

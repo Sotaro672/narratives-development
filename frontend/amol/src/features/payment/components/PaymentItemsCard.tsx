@@ -54,6 +54,10 @@ export function PaymentItemsCard({
   subtotalAmount,
   taxAmount,
 }: PaymentItemsCardProps) {
+  const isResaleOnly =
+    cartItems.length > 0 &&
+    cartItems.every((item) => item.type === "resale");
+
   return (
     <section className="payment-page__card">
       <h2 className="payment-page__section-title">注文内容</h2>
@@ -90,22 +94,26 @@ export function PaymentItemsCard({
       )}
 
       <div className="payment-page__total">
-        <span>商品小計（税抜）</span>
+        <span>{isResaleOnly ? "商品小計" : "商品小計（税抜）"}</span>
         <strong>{formatPrice(subtotalAmount)}</strong>
       </div>
 
-      <div className="payment-page__total">
-        <span>送料（税抜）</span>
-        <strong>{formatPrice(shippingAmount)}</strong>
-      </div>
+      {!isResaleOnly ? (
+        <>
+          <div className="payment-page__total">
+            <span>送料（税抜）</span>
+            <strong>{formatPrice(shippingAmount)}</strong>
+          </div>
+
+          <div className="payment-page__total">
+            <span>消費税</span>
+            <strong>{formatPrice(taxAmount)}</strong>
+          </div>
+        </>
+      ) : null}
 
       <div className="payment-page__total">
-        <span>消費税</span>
-        <strong>{formatPrice(taxAmount)}</strong>
-      </div>
-
-      <div className="payment-page__total">
-        <span>支払額（税込）</span>
+        <span>{isResaleOnly ? "支払額" : "支払額（税込）"}</span>
         <strong>{formatPrice(amount)}</strong>
       </div>
     </section>

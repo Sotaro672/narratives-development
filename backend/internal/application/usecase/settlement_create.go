@@ -14,19 +14,26 @@ import (
 // Settlement creation
 // ============================================================
 
-// EnsureForSucceededPayment creates Account-level Settlements for one
+// EnsureForSucceededPayment creates seller-level Settlements for one
 // successfully completed Payment.
+//
+// Primary List sales are settled to an Account seller identity.
+// Resale transactions are settled to an Avatar seller payout identity.
 //
 // This method is idempotent because each Settlement ID is deterministic:
 //
-//	paymentID + "_" + accountID
+//	account seller:
+//	  paymentID + "_account_" + accountID
+//
+//	avatar seller:
+//	  paymentID + "_avatar_" + payoutAccountID
 //
 // Existing Settlement records are loaded and verified instead of overwritten.
 //
 // This method creates Settlements as pending and does not send money.
 //
-// A Settlement becomes ready only after the corresponding seller Account's
-// Order items have been dispatched through MarkReadyByPaymentAndAccount.
+// A Settlement becomes ready only after the corresponding seller's Order items
+// have crossed the dispatch boundary.
 //
 // Keeping payment success and payout readiness separate prevents reconciliation
 // from sending funds for merchandise that has not been dispatched yet.
@@ -79,9 +86,13 @@ func (u *SettlementUsecase) EnsureForSucceededPayment(
 	)
 
 	for _, allocation := range allocations {
+		if err := allocation.Seller.Validate(); err != nil {
+			return nil, err
+		}
+
 		settlementID, err := settlementdom.NewID(
 			payment.PaymentID,
-			allocation.AccountID,
+			allocation.Seller,
 		)
 		if err != nil {
 			return nil, err
@@ -91,9 +102,7 @@ func (u *SettlementUsecase) EnsureForSucceededPayment(
 			settlementID,
 			order.ID,
 			payment.PaymentID,
-			allocation.CompanyID,
-			allocation.AccountID,
-			allocation.StripeAccountID,
+			allocation.Seller,
 			payment.StripePaymentIntentID,
 			payment.StripeChargeID,
 			payment.TransferGroup,
@@ -115,10 +124,7 @@ func (u *SettlementUsecase) EnsureForSucceededPayment(
 				OrderID:      entity.OrderID,
 				PaymentID:    entity.PaymentID,
 
-				CompanyID: entity.CompanyID,
-				AccountID: entity.AccountID,
-
-				StripeAccountID: entity.StripeAccountID,
+				Seller: entity.SellerIdentity(),
 
 				StripePaymentIntentID: entity.StripePaymentIntentID,
 				StripeChargeID:        entity.StripeChargeID,
@@ -161,6 +167,13 @@ func (u *SettlementUsecase) EnsureForSucceededPayment(
 				existing,
 			)
 			continue
+		}
+
+		if err := validateExistingSettlement(
+			created,
+			entity,
+		); err != nil {
+			return nil, err
 		}
 
 		result = append(
