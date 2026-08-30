@@ -10,6 +10,7 @@ import ProductMediaGallery from "../../../shared/presentation/components/Product
 import ProductModelMeta from "../../../shared/presentation/components/ProductModelMeta";
 import ProductPrice from "../../../shared/presentation/components/ProductPrice";
 import ProductReviewSection from "../../../shared/presentation/components/ProductReviewSection";
+import ResaleCommentButton from "../../../shared/presentation/components/ResaleCommentButton";
 import TokenSummaryCard from "../../../shared/presentation/components/TokenSummaryCard";
 
 import "../../../shared/styles/product-detail.css";
@@ -18,6 +19,7 @@ type MarketDetailContentState = Pick<
   UseMarketDetailPageResult,
   | "item"
   | "reviews"
+  | "commentCount"
   | "loading"
   | "loadingReviews"
   | "error"
@@ -53,6 +55,7 @@ export default function MarketDetailContent({
   const {
     item,
     reviews,
+    commentCount,
     loading,
     loadingReviews,
     error,
@@ -102,6 +105,12 @@ export default function MarketDetailContent({
               onSelect={handleSelectMedia}
             />
           }
+          mediaAfter={
+            <ResaleCommentButton
+              commentCount={commentCount}
+              onClick={onOpenResaleChat}
+            />
+          }
           mediaFooter={
             <>
               <TokenSummaryCard
@@ -133,17 +142,10 @@ export default function MarketDetailContent({
 
           <ProductPrice priceLabel={priceLabel} />
 
-          <ProductModelMeta conditionLabel={item.condition} model={model} />
-
-          <div className="page-actions">
-            <button
-              type="button"
-              className="page-button page-button--secondary"
-              onClick={onOpenResaleChat}
-            >
-              コメントを見る
-            </button>
-          </div>
+          <ProductModelMeta
+            conditionLabel={item.condition}
+            model={model}
+          />
 
           <ProductReviewSection
             items={reviews?.items ?? []}
@@ -152,11 +154,16 @@ export default function MarketDetailContent({
           />
 
           {cartMessage ? (
-            <p className="market-detail-page__cart-message">{cartMessage}</p>
+            <p className="market-detail-page__cart-message">
+              {cartMessage}
+            </p>
           ) : null}
 
           {cartErrorMessage ? (
-            <p className="market-detail-page__cart-error" role="alert">
+            <p
+              className="market-detail-page__cart-error"
+              role="alert"
+            >
               {cartErrorMessage}
             </p>
           ) : null}

@@ -8,6 +8,7 @@ import { textOrEmpty } from "../../../../components/utils/textOrEmpty";
 import { fetchMarketProductBlueprintReviews } from "../../infrastructure/marketReviewApi";
 import { fetchMarketResaleById } from "../../infrastructure/marketResaleApi";
 import { fetchMarketResaleConditionImages } from "../../infrastructure/marketResaleImageApi";
+import { fetchMarketResaleInteractions } from "../../infrastructure/marketResaleReviewApi";
 
 import { createResaleConditionGalleryItems } from "../../../shared/presentation/utils/resaleConditionMedia";
 import {
@@ -34,6 +35,7 @@ export type UseMarketDetailPageParams = {
 export type UseMarketDetailPageResult = {
   item: MarketResaleListing | null;
   reviews: ProductBlueprintReviewPage | null;
+  commentCount: number;
   loading: boolean;
   loadingReviews: boolean;
   addingToCart: boolean;
@@ -76,6 +78,7 @@ export function useMarketDetailPage({
   const [item, setItem] = useState<MarketResaleListing | null>(null);
   const [images, setImages] = useState<ResaleConditionImage[]>([]);
   const [reviews, setReviews] = useState<ProductBlueprintReviewPage | null>(null);
+  const [commentCount, setCommentCount] = useState(0);
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingReviews, setLoadingReviews] = useState(false);
@@ -94,6 +97,7 @@ export function useMarketDetailPage({
       setItem(null);
       setImages([]);
       setReviews(null);
+      setCommentCount(0);
       setError("");
       setReviewsError("");
       setCartMessage("");
@@ -106,10 +110,15 @@ export function useMarketDetailPage({
         return;
       }
 
+      const interactionPromise = fetchMarketResaleInteractions(normalizedResaleId)
+        .then((interaction) => interaction)
+        .catch(() => null);
+
       try {
-        const [nextItem, nextImages] = await Promise.all([
+        const [nextItem, nextImages, interaction] = await Promise.all([
           fetchMarketResaleById(normalizedResaleId),
           fetchMarketResaleConditionImages(normalizedResaleId),
+          interactionPromise,
         ]);
 
         if (cancelled) {
@@ -118,6 +127,7 @@ export function useMarketDetailPage({
 
         setItem(nextItem);
         setImages(nextImages);
+        setCommentCount(interaction?.commentCount ?? 0);
 
         const productBlueprintId = textOrEmpty(nextItem.productBlueprintId);
 
@@ -154,6 +164,7 @@ export function useMarketDetailPage({
           setItem(null);
           setImages([]);
           setReviews(null);
+          setCommentCount(0);
           setError(
             getErrorMessage(loadError, "出品情報の取得に失敗しました。"),
           );
@@ -282,6 +293,7 @@ export function useMarketDetailPage({
   return {
     item,
     reviews,
+    commentCount,
     loading,
     loadingReviews,
     addingToCart,

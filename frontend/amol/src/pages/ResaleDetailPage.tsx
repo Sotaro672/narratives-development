@@ -12,6 +12,7 @@ import ProductIdentity from "../features/shared/presentation/components/ProductI
 import ProductMediaGallery from "../features/shared/presentation/components/ProductMediaGallery";
 import ProductModelMeta from "../features/shared/presentation/components/ProductModelMeta";
 import ProductPrice from "../features/shared/presentation/components/ProductPrice";
+import ResaleCommentButton from "../features/shared/presentation/components/ResaleCommentButton";
 import TokenSummaryCard from "../features/shared/presentation/components/TokenSummaryCard";
 
 import ResaleConditionMediaField from "../features/resale/presentation/components/ResaleConditionMediaField";
@@ -33,6 +34,7 @@ export default function ResaleDetailPage() {
     loading,
     item,
     isEditing,
+    commentCount,
     errorMessage,
     saveMessage,
     listingTarget,
@@ -159,6 +161,14 @@ export default function ResaleDetailPage() {
                 />
               )
             }
+            mediaAfter={
+              !isEditing ? (
+                <ResaleCommentButton
+                  commentCount={commentCount}
+                  onClick={handleOpenResaleChat}
+                />
+              ) : null
+            }
             mediaFooter={
               <>
                 <TokenSummaryCard
@@ -211,16 +221,6 @@ export default function ResaleDetailPage() {
                   conditionLabel={readonlyInfoProps.conditionLabel}
                   model={model}
                 />
-
-                <div className="page-actions">
-                  <button
-                    type="button"
-                    className="page-button page-button--secondary"
-                    onClick={handleOpenResaleChat}
-                  >
-                    コメントを見る
-                  </button>
-                </div>
               </>
             )}
 

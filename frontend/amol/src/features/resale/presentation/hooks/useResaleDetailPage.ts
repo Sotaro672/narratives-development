@@ -10,6 +10,7 @@ import {
   addMyResaleConditionImages,
   deleteMyResaleConditionImage,
   deleteResaleListing,
+  fetchMyResaleComments,
   getMyResaleListing,
   listMyResaleConditionImages,
   updatePrimaryResaleImage,
@@ -48,6 +49,9 @@ import {
 
 import { useResaleDetailConditionMedia } from "./useResaleDetailConditionMedia";
 
+const COMMENT_COUNT_PAGE = 1;
+const COMMENT_COUNT_PER_PAGE = 1;
+
 function getErrorMessage(error: unknown, fallbackMessage: string): string {
   if (error instanceof Error && error.message !== "") {
     return error.message;
@@ -65,6 +69,7 @@ export function useResaleDetailPage() {
 
   const [item, setItem] = useState<ResaleListing | null>(null);
   const [images, setImages] = useState<ResaleConditionImage[]>([]);
+  const [commentCount, setCommentCount] = useState(0);
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
 
   const [loading, setLoading] = useState(true);
@@ -131,6 +136,7 @@ export function useResaleDetailPage() {
     if (!normalizedResaleId) {
       setItem(null);
       setImages([]);
+      setCommentCount(0);
       resetFormFromItem(null, []);
       setActiveGalleryIndex(0);
       setIsEditing(false);
@@ -143,11 +149,21 @@ export function useResaleDetailPage() {
     setLoading(true);
     setErrorMessage("");
     setSaveMessage("");
+    setCommentCount(0);
+
+    const commentCountPromise = fetchMyResaleComments({
+      resaleId: normalizedResaleId,
+      page: COMMENT_COUNT_PAGE,
+      perPage: COMMENT_COUNT_PER_PAGE,
+    })
+      .then((result) => result.totalCount)
+      .catch(() => 0);
 
     try {
-      const [nextItem, nextImages] = await Promise.all([
+      const [nextItem, nextImages, nextCommentCount] = await Promise.all([
         getMyResaleListing(normalizedResaleId),
         listMyResaleConditionImages(normalizedResaleId),
+        commentCountPromise,
       ]);
 
       if (requestId !== loadRequestIdRef.current) {
@@ -158,6 +174,7 @@ export function useResaleDetailPage() {
 
       setItem(nextItem);
       setImages(sortedNextImages);
+      setCommentCount(nextCommentCount);
       resetFormFromItem(nextItem, sortedNextImages);
       setActiveGalleryIndex(0);
       setIsEditing(false);
@@ -168,6 +185,7 @@ export function useResaleDetailPage() {
 
       setItem(null);
       setImages([]);
+      setCommentCount(0);
       resetFormFromItem(null, []);
       setActiveGalleryIndex(0);
       setIsEditing(false);
@@ -664,6 +682,7 @@ export function useResaleDetailPage() {
     item,
     isEditing,
     isSold,
+    commentCount,
     errorMessage,
     saveMessage,
     listingTarget,

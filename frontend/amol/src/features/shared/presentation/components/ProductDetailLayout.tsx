@@ -1,9 +1,10 @@
-// frontend\amol\src\features\shared\presentation\components\ProductDetailLayout.tsx
+// frontend/amol/src/features/shared/presentation/components/ProductDetailLayout.tsx
 
 import type { ReactNode } from "react";
 
 export type ProductDetailLayoutProps = {
   media: ReactNode;
+  mediaAfter?: ReactNode;
   mediaFooter?: ReactNode;
   contentFooter?: ReactNode;
   children: ReactNode;
@@ -18,6 +19,7 @@ function joinClassNames(...classNames: Array<string | undefined | false>): strin
 
 export default function ProductDetailLayout({
   media,
+  mediaAfter,
   mediaFooter,
   contentFooter,
   children,
@@ -29,6 +31,10 @@ export default function ProductDetailLayout({
     <section className={joinClassNames("product-detail__layout", className)}>
       <div className={joinClassNames("product-detail__media-column", mediaColumnClassName)}>
         <div className="product-detail__media">{media}</div>
+
+        {mediaAfter ? (
+          <div className="product-detail__media-after">{mediaAfter}</div>
+        ) : null}
 
         {mediaFooter ? (
           <div className="product-detail__media-footer">{mediaFooter}</div>
