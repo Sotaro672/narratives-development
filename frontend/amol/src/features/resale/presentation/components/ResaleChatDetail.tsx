@@ -751,9 +751,17 @@ function ResaleThreadHeader({
       ) : null}
 
       {item.description ? (
-        <p className="chat-detail-page__content">
-          {item.description}
-        </p>
+        <details className="chat-detail-page__description-accordion">
+          <summary className="chat-detail-page__description-summary">
+            商品説明
+          </summary>
+
+          <div className="chat-detail-page__description-body">
+            <p className="chat-detail-page__content">
+              {item.description}
+            </p>
+          </div>
+        </details>
       ) : null}
 
       {images.length > 0 ? (
