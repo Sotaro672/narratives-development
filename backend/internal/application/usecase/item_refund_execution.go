@@ -56,6 +56,16 @@ func (u *ItemRefundUsecase) refundOrderItem(
 		return refunddom.Refund{}, ErrItemRefundAccountMissing
 	}
 
+	refundSeller := refunddom.SellerIdentity{
+		Type:            refunddom.SellerTypeAccount,
+		CompanyID:       targetItem.SellerSnapshot.CompanyID,
+		AccountID:       targetItem.SellerSnapshot.AccountID,
+		StripeAccountID: targetItem.SellerSnapshot.StripeAccountID,
+	}
+	if err := refundSeller.Validate(); err != nil {
+		return refunddom.Refund{}, err
+	}
+
 	amountSummary, err := calculateItemRefundAmount(
 		order,
 		in.ItemIndex,
@@ -173,8 +183,7 @@ func (u *ItemRefundUsecase) refundOrderItem(
 			OrderID:                   order.ID,
 			PaymentID:                 payment.PaymentID,
 			OrderItemIndex:            in.ItemIndex,
-			CompanyID:                 targetItem.SellerSnapshot.CompanyID,
-			AccountID:                 targetItem.SellerSnapshot.AccountID,
+			Seller:                    refundSeller,
 			SettlementID:              settlement.ID,
 			Policy:                    amountSummary.Policy,
 			MerchandiseAmount:         amountSummary.MerchandiseAmount,

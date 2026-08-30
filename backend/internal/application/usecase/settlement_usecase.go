@@ -26,8 +26,11 @@ import (
 //
 // must remain outside SettlementUsecase.
 //
-// The calculator must guarantee that allocations are grouped by AccountID.
-// Multiple Brands sharing one AccountID must therefore produce one allocation.
+// The calculator must guarantee that allocations are grouped by seller payout
+// identity.
+//
+// Primary List sales are grouped by AccountID.
+// Resale transactions are grouped by PayoutAccountID.
 type SettlementCalculator interface {
 	Calculate(
 		ctx context.Context,
@@ -54,6 +57,13 @@ type StripeSettlementTransferGateway interface {
 	) (*CreateStripeSettlementTransferResult, error)
 }
 
+// CreateStripeSettlementTransferInput represents one Stripe Connect Transfer.
+//
+// Seller is the immutable seller payout identity stored in the Settlement.
+//
+// DestinationStripeAccountID remains explicit because it is the actual Stripe
+// destination used by the transfer request. It must match
+// Seller.StripeAccountID before the gateway is called.
 type CreateStripeSettlementTransferInput struct {
 	Amount int
 
@@ -71,8 +81,8 @@ type CreateStripeSettlementTransferInput struct {
 	OrderID      string
 	PaymentID    string
 	SettlementID string
-	CompanyID    string
-	AccountID    string
+
+	Seller settlementdom.SellerIdentity
 }
 
 type CreateStripeSettlementTransferResult struct {
@@ -105,8 +115,9 @@ type StripeSettlementErrorMetadata interface {
 // SettlementTransferQueue is the minimal outbound contract used by settlement
 // reconciliation.
 //
-// The queue payload must contain only SettlementID. Financial values must be
-// loaded again from the authoritative Settlement document by the worker.
+// The queue payload must contain only SettlementID. Financial values and seller
+// identity must be loaded again from the authoritative Settlement document by
+// the worker.
 type SettlementTransferQueue interface {
 	EnqueueSettlementTransfer(
 		ctx context.Context,
@@ -212,8 +223,8 @@ var (
 	ErrSettlementAllocationInvalid = errors.New(
 		"settlement: invalid allocation",
 	)
-	ErrSettlementDuplicateAccount = errors.New(
-		"settlement: duplicate account allocation",
+	ErrSettlementDuplicateSeller = errors.New(
+		"settlement: duplicate seller allocation",
 	)
 	ErrSettlementAllocationAmountMismatch = errors.New(
 		"settlement: allocation total does not match payment amount",
@@ -277,8 +288,7 @@ func NewSettlementUsecase(
 
 	transferLease := in.TransferLease
 	if transferLease <= 0 {
-		transferLease =
-			defaultSettlementTransferLease
+		transferLease = defaultSettlementTransferLease
 	}
 
 	return &SettlementUsecase{

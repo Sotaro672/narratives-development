@@ -25,11 +25,17 @@ import (
 //	StripeRefundID = ""
 //	RefundedAt = nil
 //
+// Seller is the immutable seller payout identity captured from the
+// authoritative Order item snapshot.
+//
+// Primary List sales use SellerTypeAccount.
+// Resale transactions use SellerTypeAvatar.
+//
 // Policy:
 //
 //	Policy == ""
 //
-// represents the legacy / unopened-return flow.
+// represents the unopened-return flow.
 //
 // For an opened return, Policy must be one of the valid
 // OpenedReturnRefundPolicy values.
@@ -45,15 +51,16 @@ import (
 //	+ OutboundShippingAmount
 //	+ OutboundShippingTaxAmount
 //
-// ReturnShippingAmount and ReturnShippingTaxAmount are additional company
+// ReturnShippingAmount and ReturnShippingTaxAmount are additional seller-side
 // burden and are intentionally excluded from the purchaser Stripe Refund.
 //
 // TransferReversalStatus is derived by Refund constructors:
 //
-// - transferReversalAmount == 0 -> not_required
-// - transferReversalAmount > 0  -> pending
+// - TransferReversalAmount == 0 -> not_required
+// - TransferReversalAmount > 0  -> pending
 //
-// Stripe-generated IDs are intentionally not accepted during creation.
+// Stripe-generated Refund and Transfer Reversal IDs are intentionally not
+// accepted during creation.
 type CreateRefundInput struct {
 	RefundID string
 
@@ -63,8 +70,7 @@ type CreateRefundInput struct {
 	PaymentID      string
 	OrderItemIndex int
 
-	CompanyID string
-	AccountID string
+	Seller SellerIdentity
 
 	SettlementID string
 
@@ -206,6 +212,11 @@ type UpdateRefundInput struct {
 // Refund owns one item-level partial purchaser refund and the seller-side
 // partial Transfer Reversal attributable to that same returned Order item.
 //
+// The seller may be:
+//
+// - an Account for a primary List sale
+// - an Avatar payout identity for a resale transaction
+//
 // For opened returns, Refund additionally records:
 //
 // - selected refund Policy
@@ -214,8 +225,8 @@ type UpdateRefundInput struct {
 // - return shipping borne by the seller
 // - return shipping consumption tax
 //
-// Return shipping is additional company burden and is not necessarily part of
-// the purchaser's original Stripe Charge.
+// Return shipping is additional seller-side burden and is not necessarily part
+// of the purchaser's original Stripe Charge.
 //
 // The application layer coordinates:
 //
@@ -285,10 +296,10 @@ type RepositoryPort interface {
 		settlementID string,
 	) ([]Refund, error)
 
-	// ListByCompanyID returns Refunds attributable to one seller Company.
+	// ListByCompanyID returns Refunds attributable to one Account seller Company.
 	//
-	// This may be used by future Console refund management and reconciliation
-	// queries.
+	// Avatar seller Refunds are not returned by this query because they do not
+	// have a CompanyID.
 	ListByCompanyID(
 		ctx context.Context,
 		companyID string,
@@ -301,6 +312,7 @@ type RepositoryPort interface {
 	// - reject an existing RefundID instead of overwriting it
 	// - reject a duplicate InquiryID
 	// - reject a duplicate OrderID + OrderItemIndex
+	// - validate Seller
 	// - use Refund.New when Policy == ""
 	// - use Refund.NewOpenedReturn when Policy is set
 	// - persist the complete validated Refund

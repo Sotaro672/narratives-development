@@ -18,6 +18,11 @@ func (u *ItemRefundUsecase) resolveSettlement(
 	payment paymentdom.Payment,
 	targetItem orderdom.OrderItemSnapshot,
 ) (settlementdom.Settlement, error) {
+	targetSeller, err := itemRefundSellerIdentity(targetItem)
+	if err != nil {
+		return settlementdom.Settlement{}, err
+	}
+
 	settlements, err := u.settlementRepo.ListByPaymentID(
 		ctx,
 		payment.PaymentID,
@@ -30,8 +35,9 @@ func (u *ItemRefundUsecase) resolveSettlement(
 
 	for index := range settlements {
 		settlement := settlements[index]
+		settlementSeller := settlement.SellerIdentity()
 
-		if settlement.AccountID != targetItem.SellerSnapshot.AccountID {
+		if settlementSeller != targetSeller {
 			continue
 		}
 
@@ -49,10 +55,15 @@ func (u *ItemRefundUsecase) resolveSettlement(
 			ErrItemRefundSettlementNotFound
 	}
 
+	matchedSeller := matched.SellerIdentity()
+	if err := matchedSeller.Validate(); err != nil {
+		return settlementdom.Settlement{},
+			ErrItemRefundSettlementMismatch
+	}
+
 	if matched.PaymentID != payment.PaymentID ||
 		matched.OrderID != payment.PaymentID ||
-		matched.CompanyID != targetItem.SellerSnapshot.CompanyID ||
-		matched.AccountID != targetItem.SellerSnapshot.AccountID {
+		matchedSeller != targetSeller {
 		return settlementdom.Settlement{},
 			ErrItemRefundSettlementMismatch
 	}
@@ -63,12 +74,6 @@ func (u *ItemRefundUsecase) resolveSettlement(
 	}
 
 	if matched.StripeChargeID != payment.StripeChargeID {
-		return settlementdom.Settlement{},
-			ErrItemRefundSettlementMismatch
-	}
-
-	if targetItem.SellerSnapshot.StripeAccountID != "" &&
-		matched.StripeAccountID != targetItem.SellerSnapshot.StripeAccountID {
 		return settlementdom.Settlement{},
 			ErrItemRefundSettlementMismatch
 	}

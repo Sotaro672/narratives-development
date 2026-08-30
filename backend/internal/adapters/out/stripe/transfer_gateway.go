@@ -13,6 +13,7 @@ import (
 	"time"
 
 	usecase "narratives/internal/application/usecase"
+	settlementdom "narratives/internal/domain/settlement"
 )
 
 var _ usecase.StripeSettlementTransferGateway = (*TransferGateway)(nil)
@@ -99,25 +100,21 @@ func (g *TransferGateway) CreateTransfer(
 		),
 	)
 
-	destinationStripeAccountID :=
-		strings.TrimSpace(
-			in.DestinationStripeAccountID,
-		)
+	destinationStripeAccountID := strings.TrimSpace(
+		in.DestinationStripeAccountID,
+	)
 
-	sourceTransaction :=
-		strings.TrimSpace(
-			in.SourceTransaction,
-		)
+	sourceTransaction := strings.TrimSpace(
+		in.SourceTransaction,
+	)
 
-	transferGroup :=
-		strings.TrimSpace(
-			in.TransferGroup,
-		)
+	transferGroup := strings.TrimSpace(
+		in.TransferGroup,
+	)
 
-	idempotencyKey :=
-		strings.TrimSpace(
-			in.IdempotencyKey,
-		)
+	idempotencyKey := strings.TrimSpace(
+		in.IdempotencyKey,
+	)
 
 	if in.Amount <= 0 {
 		return nil,
@@ -130,8 +127,7 @@ func (g *TransferGateway) CreateTransfer(
 			)
 	}
 
-	if currency == "" ||
-		len(currency) != 3 {
+	if currency == "" || len(currency) != 3 {
 		return nil,
 			newSettlementTransferError(
 				0,
@@ -194,6 +190,29 @@ func (g *TransferGateway) CreateTransfer(
 			)
 	}
 
+	seller := in.Seller
+	if err := seller.Validate(); err != nil {
+		return nil,
+			newSettlementTransferError(
+				0,
+				"invalid_request",
+				"invalid_seller",
+				err.Error(),
+				false,
+			)
+	}
+
+	if strings.TrimSpace(seller.StripeAccountID) != destinationStripeAccountID {
+		return nil,
+			newSettlementTransferError(
+				0,
+				"invalid_request",
+				"seller_destination_mismatch",
+				"seller Stripe account does not match transfer destination",
+				false,
+			)
+	}
+
 	form := url.Values{}
 
 	form.Set(
@@ -251,21 +270,34 @@ func (g *TransferGateway) CreateTransfer(
 		)
 	}
 
-	if value := strings.TrimSpace(
-		in.CompanyID,
-	); value != "" {
+	form.Set(
+		"metadata[sellerType]",
+		string(seller.Type),
+	)
+
+	switch seller.Type {
+	case settlementdom.SellerTypeAccount:
 		form.Set(
 			"metadata[companyId]",
-			value,
+			strings.TrimSpace(seller.CompanyID),
 		)
-	}
-
-	if value := strings.TrimSpace(
-		in.AccountID,
-	); value != "" {
 		form.Set(
 			"metadata[accountId]",
-			value,
+			strings.TrimSpace(seller.AccountID),
+		)
+
+	case settlementdom.SellerTypeAvatar:
+		form.Set(
+			"metadata[avatarId]",
+			strings.TrimSpace(seller.AvatarID),
+		)
+		form.Set(
+			"metadata[userId]",
+			strings.TrimSpace(seller.UserID),
+		)
+		form.Set(
+			"metadata[payoutAccountId]",
+			strings.TrimSpace(seller.PayoutAccountID),
 		)
 	}
 
@@ -280,10 +312,9 @@ func (g *TransferGateway) CreateTransfer(
 		return nil, err
 	}
 
-	stripeTransferID :=
-		strings.TrimSpace(
-			out.ID,
-		)
+	stripeTransferID := strings.TrimSpace(
+		out.ID,
+	)
 
 	if stripeTransferID == "" ||
 		!strings.HasPrefix(
@@ -385,10 +416,9 @@ func (g *TransferGateway) validateReady() error {
 		)
 	}
 
-	secretKey :=
-		strings.TrimSpace(
-			g.secretKey,
-		)
+	secretKey := strings.TrimSpace(
+		g.secretKey,
+	)
 
 	if secretKey == "" {
 		return newSettlementTransferError(
@@ -480,8 +510,7 @@ func (g *TransferGateway) postTransfer(
 		),
 	)
 
-	response, err :=
-		g.httpClient.Do(req)
+	response, err := g.httpClient.Do(req)
 	if err != nil {
 		return newSettlementTransferError(
 			0,
@@ -493,10 +522,9 @@ func (g *TransferGateway) postTransfer(
 	}
 	defer response.Body.Close()
 
-	body, err :=
-		io.ReadAll(
-			response.Body,
-		)
+	body, err := io.ReadAll(
+		response.Body,
+	)
 	if err != nil {
 		return newSettlementTransferError(
 			response.StatusCode,
@@ -664,8 +692,7 @@ func newSettlementTransferError(
 	)
 
 	if message == "" {
-		message =
-			"stripe transfer failed"
+		message = "stripe transfer failed"
 	}
 
 	return &SettlementTransferError{
@@ -712,24 +739,20 @@ func stripeTransferHTTPError(
 		)
 	}
 
-	errorType :=
-		strings.TrimSpace(
-			response.Error.Type,
-		)
+	errorType := strings.TrimSpace(
+		response.Error.Type,
+	)
 
-	errorCode :=
-		strings.TrimSpace(
-			response.Error.Code,
-		)
+	errorCode := strings.TrimSpace(
+		response.Error.Code,
+	)
 
-	errorMessage :=
-		strings.TrimSpace(
-			response.Error.Message,
-		)
+	errorMessage := strings.TrimSpace(
+		response.Error.Message,
+	)
 
 	if errorMessage == "" {
-		errorMessage =
-			"Stripe Transfer request failed"
+		errorMessage = "Stripe Transfer request failed"
 	}
 
 	message := fmt.Sprintf(

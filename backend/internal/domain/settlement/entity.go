@@ -775,25 +775,13 @@ func (s Settlement) Validate() error {
 	return nil
 }
 
-// SellerIdentity returns the normalized seller payout identity.
+// SellerIdentity returns the immutable seller payout identity stored by this
+// Settlement.
 //
-// SellerType may be absent on legacy primary-sale Settlement records. Those
-// records are interpreted as account sellers when the old CompanyID/AccountID
-// shape is otherwise complete.
+// SellerType is mandatory. No legacy seller inference is performed.
 func (s Settlement) SellerIdentity() SellerIdentity {
-	sellerType := s.SellerType
-
-	if sellerType == "" &&
-		s.CompanyID != "" &&
-		s.AccountID != "" &&
-		s.AvatarID == "" &&
-		s.UserID == "" &&
-		s.PayoutAccountID == "" {
-		sellerType = SellerTypeAccount
-	}
-
 	return SellerIdentity{
-		Type:            sellerType,
+		Type:            s.SellerType,
 		CompanyID:       s.CompanyID,
 		AccountID:       s.AccountID,
 		AvatarID:        s.AvatarID,

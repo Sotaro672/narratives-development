@@ -23,16 +23,42 @@ func validateExistingItemRefund(
 		return err
 	}
 
-	if refund.InquiryID != in.InquiryID ||
-		refund.OrderID != order.ID ||
-		refund.PaymentID != order.ID ||
-		refund.OrderItemIndex != in.ItemIndex {
+	targetSeller, err := itemRefundSellerIdentity(targetItem)
+	if err != nil {
 		return ErrItemRefundExistingRefundMismatch
 	}
 
-	if refund.CompanyID != targetItem.SellerSnapshot.CompanyID ||
-		refund.AccountID != targetItem.SellerSnapshot.AccountID ||
+	settlementSeller := settlement.SellerIdentity()
+	if err := settlementSeller.Validate(); err != nil {
+		return ErrItemRefundExistingRefundMismatch
+	}
+
+	if settlementSeller != targetSeller {
+		return ErrItemRefundExistingRefundMismatch
+	}
+
+	if refund.InquiryID != in.InquiryID ||
+		refund.OrderID != order.ID ||
+		refund.PaymentID != order.ID ||
+		refund.OrderItemIndex != in.ItemIndex ||
 		refund.SettlementID != settlement.ID {
+		return ErrItemRefundExistingRefundMismatch
+	}
+
+	switch targetSeller.Type {
+	case settlementdom.SellerTypeAccount:
+		if refund.CompanyID != targetSeller.CompanyID ||
+			refund.AccountID != targetSeller.AccountID {
+			return ErrItemRefundExistingRefundMismatch
+		}
+
+	case settlementdom.SellerTypeAvatar:
+		// The current Refund aggregate still requires CompanyID and AccountID
+		// and cannot persist an Avatar seller identity. Resale Refund support
+		// must be enabled only after refund.Refund is generalized to SellerIdentity.
+		return ErrItemRefundExistingRefundMismatch
+
+	default:
 		return ErrItemRefundExistingRefundMismatch
 	}
 

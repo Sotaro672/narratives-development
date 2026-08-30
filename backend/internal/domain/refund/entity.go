@@ -104,6 +104,104 @@ const (
 )
 
 // ============================================================
+// Seller Identity
+// ============================================================
+
+// SellerType identifies the seller payout identity associated with a Refund.
+//
+// account: primary List sale paid out to a company Account.
+// avatar: consumer resale paid out to an Avatar owner payout account.
+type SellerType string
+
+const (
+	SellerTypeAccount SellerType = "account"
+	SellerTypeAvatar  SellerType = "avatar"
+)
+
+var AllowedSellerTypes = map[SellerType]struct{}{
+	SellerTypeAccount: {},
+	SellerTypeAvatar:  {},
+}
+
+// SellerIdentity is the immutable seller payout identity captured by a Refund.
+//
+// account seller:
+//   - CompanyID, AccountID and StripeAccountID are required.
+//   - AvatarID, UserID and PayoutAccountID must be empty.
+//
+// avatar seller:
+//   - AvatarID, UserID, PayoutAccountID and StripeAccountID are required.
+//   - CompanyID and AccountID must be empty.
+type SellerIdentity struct {
+	Type SellerType
+
+	CompanyID string
+	AccountID string
+
+	AvatarID        string
+	UserID          string
+	PayoutAccountID string
+
+	StripeAccountID string
+}
+
+func IsValidSellerType(sellerType SellerType) bool {
+	if sellerType == "" {
+		return false
+	}
+
+	_, ok := AllowedSellerTypes[sellerType]
+	return ok
+}
+
+func (s SellerIdentity) Validate() error {
+	if !IsValidSellerType(s.Type) {
+		return ErrInvalidSellerType
+	}
+
+	if !isStripeAccountID(s.StripeAccountID) {
+		return ErrInvalidStripeAccountID
+	}
+
+	switch s.Type {
+	case SellerTypeAccount:
+		if s.CompanyID == "" {
+			return ErrInvalidCompanyID
+		}
+
+		if s.AccountID == "" {
+			return ErrInvalidAccountID
+		}
+
+		if s.AvatarID != "" || s.UserID != "" || s.PayoutAccountID != "" {
+			return ErrInvalidSellerIdentity
+		}
+
+	case SellerTypeAvatar:
+		if s.AvatarID == "" {
+			return ErrInvalidAvatarID
+		}
+
+		if s.UserID == "" {
+			return ErrInvalidUserID
+		}
+
+		if s.PayoutAccountID == "" {
+			return ErrInvalidPayoutAccountID
+		}
+
+		if s.CompanyID != "" || s.AccountID != "" {
+			return ErrInvalidSellerIdentity
+		}
+
+	default:
+		return ErrInvalidSellerType
+	}
+
+	return nil
+}
+
+// ============================================================
 // Refund
 // ============================================================
 
@@ -124,7 +222,7 @@ const (
 //
 //	Policy == ""
 //
-// represents the legacy / unopened-return flow.
+// represents the unopened-return flow.
 //
 // For that flow:
 //
@@ -172,8 +270,16 @@ type Refund struct {
 	PaymentID      string
 	OrderItemIndex int
 
+	SellerType SellerType
+
 	CompanyID string
 	AccountID string
+
+	AvatarID        string
+	UserID          string
+	PayoutAccountID string
+
+	StripeAccountID string
 
 	SettlementID string
 
@@ -235,12 +341,36 @@ var (
 		"refund: invalid orderItemIndex",
 	)
 
+	ErrInvalidSellerType = errors.New(
+		"refund: invalid sellerType",
+	)
+
+	ErrInvalidSellerIdentity = errors.New(
+		"refund: invalid seller identity",
+	)
+
 	ErrInvalidCompanyID = errors.New(
 		"refund: invalid companyId",
 	)
 
 	ErrInvalidAccountID = errors.New(
 		"refund: invalid accountId",
+	)
+
+	ErrInvalidAvatarID = errors.New(
+		"refund: invalid avatarId",
+	)
+
+	ErrInvalidUserID = errors.New(
+		"refund: invalid userId",
+	)
+
+	ErrInvalidPayoutAccountID = errors.New(
+		"refund: invalid payoutAccountId",
+	)
+
+	ErrInvalidStripeAccountID = errors.New(
+		"refund: invalid stripeAccountId",
 	)
 
 	ErrInvalidSettlementID = errors.New(
@@ -366,9 +496,7 @@ func NewID(orderID string, orderItemIndex int) (string, error) {
 // Constructor
 // ============================================================
 
-// New creates one legacy / unopened-return item-level Refund.
-//
-// Existing callers intentionally keep this constructor unchanged.
+// New creates one unopened-return item-level Refund.
 //
 // Policy remains empty and no shipping component is included in RefundAmount.
 //
@@ -381,8 +509,7 @@ func New(
 	orderID string,
 	paymentID string,
 	orderItemIndex int,
-	companyID string,
-	accountID string,
+	seller SellerIdentity,
 	settlementID string,
 	merchandiseAmount int,
 	merchandiseTaxAmount int,
@@ -396,8 +523,7 @@ func New(
 		orderID,
 		paymentID,
 		orderItemIndex,
-		companyID,
-		accountID,
+		seller,
 		settlementID,
 		"",
 		merchandiseAmount,
@@ -426,15 +552,14 @@ func New(
 //	+ outboundShippingTaxAmount
 //
 // ReturnShippingAmount and ReturnShippingTaxAmount are recorded as additional
-// company burden and are not included in the Stripe Refund amount.
+// seller-side burden and are not included in the Stripe Refund amount.
 func NewOpenedReturn(
 	id string,
 	inquiryID string,
 	orderID string,
 	paymentID string,
 	orderItemIndex int,
-	companyID string,
-	accountID string,
+	seller SellerIdentity,
 	settlementID string,
 	policy OpenedReturnRefundPolicy,
 	merchandiseAmount int,
@@ -457,8 +582,7 @@ func NewOpenedReturn(
 		orderID,
 		paymentID,
 		orderItemIndex,
-		companyID,
-		accountID,
+		seller,
 		settlementID,
 		policy,
 		merchandiseAmount,
@@ -479,8 +603,7 @@ func newRefund(
 	orderID string,
 	paymentID string,
 	orderItemIndex int,
-	companyID string,
-	accountID string,
+	seller SellerIdentity,
 	settlementID string,
 	policy OpenedReturnRefundPolicy,
 	merchandiseAmount int,
@@ -493,6 +616,10 @@ func newRefund(
 	currency string,
 	createdAt time.Time,
 ) (Refund, error) {
+	if err := seller.Validate(); err != nil {
+		return Refund{}, err
+	}
+
 	createdAt = createdAt.UTC()
 
 	refundAmount, err := calculateRefundAmount(
@@ -519,8 +646,16 @@ func newRefund(
 		PaymentID:      paymentID,
 		OrderItemIndex: orderItemIndex,
 
-		CompanyID: companyID,
-		AccountID: accountID,
+		SellerType: seller.Type,
+
+		CompanyID: seller.CompanyID,
+		AccountID: seller.AccountID,
+
+		AvatarID:        seller.AvatarID,
+		UserID:          seller.UserID,
+		PayoutAccountID: seller.PayoutAccountID,
+
+		StripeAccountID: seller.StripeAccountID,
 
 		SettlementID: settlementID,
 
@@ -560,15 +695,14 @@ func newRefund(
 	return r, nil
 }
 
-// NewForOrderItem creates a legacy / unopened-return Refund using the
-// deterministic Refund ID.
+// NewForOrderItem creates an unopened-return Refund using the deterministic
+// Refund ID.
 func NewForOrderItem(
 	inquiryID string,
 	orderID string,
 	paymentID string,
 	orderItemIndex int,
-	companyID string,
-	accountID string,
+	seller SellerIdentity,
 	settlementID string,
 	merchandiseAmount int,
 	merchandiseTaxAmount int,
@@ -587,8 +721,7 @@ func NewForOrderItem(
 		orderID,
 		paymentID,
 		orderItemIndex,
-		companyID,
-		accountID,
+		seller,
 		settlementID,
 		merchandiseAmount,
 		merchandiseTaxAmount,
@@ -605,8 +738,7 @@ func NewOpenedReturnForOrderItem(
 	orderID string,
 	paymentID string,
 	orderItemIndex int,
-	companyID string,
-	accountID string,
+	seller SellerIdentity,
 	settlementID string,
 	policy OpenedReturnRefundPolicy,
 	merchandiseAmount int,
@@ -630,8 +762,7 @@ func NewOpenedReturnForOrderItem(
 		orderID,
 		paymentID,
 		orderItemIndex,
-		companyID,
-		accountID,
+		seller,
 		settlementID,
 		policy,
 		merchandiseAmount,
@@ -1001,12 +1132,9 @@ func (r Refund) Validate() error {
 		return ErrInvalidOrderItemIndex
 	}
 
-	if r.CompanyID == "" {
-		return ErrInvalidCompanyID
-	}
-
-	if r.AccountID == "" {
-		return ErrInvalidAccountID
+	seller := r.SellerIdentity()
+	if err := seller.Validate(); err != nil {
+		return err
 	}
 
 	if r.SettlementID == "" {
@@ -1112,9 +1240,24 @@ func (r Refund) Validate() error {
 	return nil
 }
 
+// SellerIdentity returns the immutable seller payout identity stored by this
+// Refund.
+//
+// SellerType is mandatory. No legacy seller inference is performed.
+func (r Refund) SellerIdentity() SellerIdentity {
+	return SellerIdentity{
+		Type:            r.SellerType,
+		CompanyID:       r.CompanyID,
+		AccountID:       r.AccountID,
+		AvatarID:        r.AvatarID,
+		UserID:          r.UserID,
+		PayoutAccountID: r.PayoutAccountID,
+		StripeAccountID: r.StripeAccountID,
+	}
+}
+
 func (r Refund) validatePolicyAmounts() error {
-	// Empty Policy is intentionally reserved for existing unopened-return
-	// Refund documents and the legacy constructor.
+	// Empty Policy represents the unopened-return flow.
 	if r.Policy == "" {
 		if r.OutboundShippingAmount != 0 ||
 			r.OutboundShippingTaxAmount != 0 ||
@@ -1379,6 +1522,11 @@ func canTransitionRefundStatus(
 // ============================================================
 // Stripe ID Validation
 // ============================================================
+
+func isStripeAccountID(value string) bool {
+	return strings.HasPrefix(value, "acct_") &&
+		len(value) > len("acct_")
+}
 
 func isStripeRefundID(value string) bool {
 	return strings.HasPrefix(value, "re_") &&

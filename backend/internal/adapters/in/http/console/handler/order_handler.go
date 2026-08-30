@@ -36,13 +36,17 @@ type SettlementTransferEnqueuer interface {
 // SettlementReadinessMarker is the minimal application contract required by
 // OrderHandler after dispatch has been persisted.
 //
-// Payment success creates Settlement as pending. Only a seller Account whose
+// Payment success creates Settlement as pending. Only an Account seller whose
 // active Order items have been dispatched may move to ready.
+//
+// The complete immutable SellerIdentity is passed to the Settlement usecase so
+// CompanyID, AccountID and StripeAccountID remain part of the readiness
+// boundary.
 type SettlementReadinessMarker interface {
-	MarkReadyByPaymentAndAccount(
+	MarkReadyByPaymentAndSeller(
 		ctx context.Context,
 		paymentID string,
-		accountID string,
+		seller settlementdom.SellerIdentity,
 	) (settlementdom.Settlement, error)
 }
 
@@ -272,14 +276,15 @@ func (h *OrderHandler) dispatch(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
-	// このConsole企業が実際に発送したTargetItemsからAccountIDを抽出する。
+	// このConsole企業が実際に発送したTargetItemsからAccount sellerを抽出する。
 	//
 	// Accountに属する有効なOrder itemがすべて発送済みであることを確認した後、
-	// そのAccountのSettlementだけをPENDING -> READYへ進めてCloud Tasksへ投入する。
+	// そのSellerのSettlementだけをPENDING -> READYへ進めてCloud Tasksへ投入する。
 	//
 	// Order全体のSettlementをREADYにしてはいけない。
 	// Company Aの発送でCompany BのSettlementを送金しないため、
-	// SellerSnapshot.CompanyIDとAccountIDの両方を照合する。
+	// SellerSnapshotのCompanyID、AccountID、StripeAccountIDを含む完全な
+	// SellerIdentityを照合する。
 	err = enqueueDispatchedSettlementTransfers(
 		ctx,
 		payment.PaymentID,
@@ -477,11 +482,12 @@ func enqueueDispatchedSettlementTransfers(
 		return orderdom.ErrNotFound
 	}
 
-	// AccountID -> CompanyID
+	// AccountID -> SellerIdentity
 	//
+	// このConsole発送routeは一次販売Account seller専用。
 	// 同一Accountに複数Brandが紐づく場合でも1回だけREADY化・enqueueする。
-	targetAccounts := make(
-		map[string]string,
+	targetSellers := make(
+		map[string]settlementdom.SellerIdentity,
 	)
 
 	for _, item := range targetItems {
@@ -491,38 +497,39 @@ func enqueueDispatchedSettlementTransfers(
 			return orderdom.ErrConflict
 		}
 
-		accountID :=
-			item.SellerSnapshot.AccountID
+		snapshot := item.SellerSnapshot
 
-		companyID :=
-			item.SellerSnapshot.CompanyID
+		seller := settlementdom.SellerIdentity{
+			Type:            settlementdom.SellerTypeAccount,
+			CompanyID:       snapshot.CompanyID,
+			AccountID:       snapshot.AccountID,
+			StripeAccountID: snapshot.StripeAccountID,
+		}
 
-		if accountID == "" ||
-			companyID == "" {
+		if err := seller.Validate(); err != nil {
 			return orderdom.ErrInvalidSellerSnapshot
 		}
 
-		if existingCompanyID, exists :=
-			targetAccounts[accountID]; exists &&
-			existingCompanyID != companyID {
+		if existing, exists :=
+			targetSellers[seller.AccountID]; exists &&
+			existing != seller {
 			return orderdom.ErrInvalidSellerSnapshot
 		}
 
-		targetAccounts[accountID] =
-			companyID
+		targetSellers[seller.AccountID] = seller
 	}
 
-	if len(targetAccounts) == 0 {
+	if len(targetSellers) == 0 {
 		return orderdom.ErrNotFound
 	}
 
 	accountIDs := make(
 		[]string,
 		0,
-		len(targetAccounts),
+		len(targetSellers),
 	)
 
-	for accountID := range targetAccounts {
+	for accountID := range targetSellers {
 		accountIDs = append(
 			accountIDs,
 			accountID,
@@ -532,14 +539,13 @@ func enqueueDispatchedSettlementTransfers(
 	sort.Strings(accountIDs)
 
 	for _, accountID := range accountIDs {
-		companyID :=
-			targetAccounts[accountID]
+		seller := targetSellers[accountID]
 
 		allDispatched, err :=
 			areSettlementAccountItemsDispatched(
 				orderItems,
-				companyID,
-				accountID,
+				seller.CompanyID,
+				seller.AccountID,
 			)
 		if err != nil {
 			return err
@@ -550,10 +556,10 @@ func enqueueDispatchedSettlementTransfers(
 		}
 
 		settlement, err :=
-			settlementReadiness.MarkReadyByPaymentAndAccount(
+			settlementReadiness.MarkReadyByPaymentAndSeller(
 				ctx,
 				paymentID,
-				accountID,
+				seller,
 			)
 		if err != nil {
 			return err
@@ -563,9 +569,15 @@ func enqueueDispatchedSettlementTransfers(
 			return settlementdom.ErrInvalidID
 		}
 
+		settlementSeller := settlement.SellerIdentity()
+		if err := settlementSeller.Validate(); err != nil {
+			return errors.New(
+				"order dispatch: invalid settlement seller identity",
+			)
+		}
+
 		if settlement.PaymentID != paymentID ||
-			settlement.AccountID != accountID ||
-			settlement.CompanyID != companyID {
+			settlementSeller != seller {
 			return errors.New(
 				"order dispatch: settlement identity mismatch",
 			)

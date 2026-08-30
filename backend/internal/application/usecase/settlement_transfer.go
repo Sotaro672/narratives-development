@@ -14,37 +14,31 @@ import (
 // Stripe Transfer
 // ============================================================
 
-// TransferByPaymentAndAccount executes one Account-level Stripe Transfer.
+// TransferByPaymentAndSeller executes one seller-level Stripe Transfer.
 //
-// This is useful after dispatch because an Order item already stores
-// SellerSnapshot.AccountID.
-func (u *SettlementUsecase) TransferByPaymentAndAccount(
+// Primary List sales use SellerTypeAccount.
+// Resale transactions use SellerTypeAvatar.
+//
+// The Settlement ID is derived deterministically from PaymentID and the seller
+// payout identity.
+func (u *SettlementUsecase) TransferByPaymentAndSeller(
 	ctx context.Context,
 	paymentID string,
-	accountID string,
+	seller settlementdom.SellerIdentity,
 ) (settlementdom.Settlement, error) {
 	if paymentID == "" {
-		return settlementdom.Settlement{},
-			settlementdom.ErrInvalidPaymentID
+		return settlementdom.Settlement{}, settlementdom.ErrInvalidPaymentID
+	}
+	if err := seller.Validate(); err != nil {
+		return settlementdom.Settlement{}, err
 	}
 
-	if accountID == "" {
-		return settlementdom.Settlement{},
-			settlementdom.ErrInvalidAccountID
-	}
-
-	settlementID, err := settlementdom.NewID(
-		paymentID,
-		accountID,
-	)
+	settlementID, err := settlementdom.NewID(paymentID, seller)
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
 
-	return u.TransferByID(
-		ctx,
-		settlementID,
-	)
+	return u.TransferByID(ctx, settlementID)
 }
 
 // TransferByID executes a Stripe Connect Transfer for one Settlement.
@@ -65,32 +59,23 @@ func (u *SettlementUsecase) TransferByID(
 	settlementID string,
 ) (settlementdom.Settlement, error) {
 	if u == nil || u.repo == nil {
-		return settlementdom.Settlement{},
-			ErrSettlementRepositoryMissing
+		return settlementdom.Settlement{}, ErrSettlementRepositoryMissing
 	}
-
 	if u.stripeTransferGateway == nil {
-		return settlementdom.Settlement{},
-			ErrSettlementStripeTransferGatewayMissing
+		return settlementdom.Settlement{}, ErrSettlementStripeTransferGatewayMissing
 	}
-
 	if settlementID == "" {
-		return settlementdom.Settlement{},
-			settlementdom.ErrInvalidID
+		return settlementdom.Settlement{}, settlementdom.ErrInvalidID
 	}
 
 	now := u.now().UTC()
 
 	transferLease := u.transferLease
 	if transferLease <= 0 {
-		transferLease =
-			defaultSettlementTransferLease
+		transferLease = defaultSettlementTransferLease
 	}
 
-	staleBefore :=
-		now.Add(
-			-transferLease,
-		)
+	staleBefore := now.Add(-transferLease)
 
 	claim, err := u.repo.ClaimForTransfer(
 		ctx,
@@ -103,21 +88,29 @@ func (u *SettlementUsecase) TransferByID(
 	}
 
 	if !claim.Claimed {
-		if claim.Settlement.Status ==
-			settlementdom.StatusTransferred {
+		if claim.Settlement.Status == settlementdom.StatusTransferred {
 			return claim.Settlement, nil
 		}
 
-		return claim.Settlement,
-			ErrSettlementTransferNotReady
+		return claim.Settlement, ErrSettlementTransferNotReady
 	}
 
 	settlement := claim.Settlement
 
-	if settlement.Status !=
-		settlementdom.StatusTransferring {
-		return settlementdom.Settlement{},
-			ErrSettlementTransferNotReady
+	if settlement.Status != settlementdom.StatusTransferring {
+		return settlementdom.Settlement{}, ErrSettlementTransferNotReady
+	}
+
+	seller := settlement.SellerIdentity()
+	if err := seller.Validate(); err != nil {
+		return u.failClaimedSettlement(
+			ctx,
+			settlement,
+			false,
+			nil,
+			nil,
+			err,
+		)
 	}
 
 	if settlement.StripeChargeID == "" {
@@ -142,48 +135,54 @@ func (u *SettlementUsecase) TransferByID(
 		)
 	}
 
+	if settlement.StripeAccountID != seller.StripeAccountID {
+		return u.failClaimedSettlement(
+			ctx,
+			settlement,
+			false,
+			nil,
+			nil,
+			settlementdom.ErrInvalidSellerIdentity,
+		)
+	}
+
+	// Settlement ID already contains PaymentID, SellerType and the normalized
+	// seller payout key, so it is sufficient as the deterministic Stripe
+	// idempotency boundary for both Account and Avatar sellers.
 	idempotencyKey := fmt.Sprintf(
-		"settlement:%s:%s",
-		settlement.PaymentID,
-		settlement.AccountID,
+		"settlement:%s",
+		settlement.ID,
 	)
 
-	stripeResult, stripeErr :=
-		u.stripeTransferGateway.CreateTransfer(
-			ctx,
-			CreateStripeSettlementTransferInput{
-				Amount: settlement.TransferAmount,
+	stripeResult, stripeErr := u.stripeTransferGateway.CreateTransfer(
+		ctx,
+		CreateStripeSettlementTransferInput{
+			Amount: settlement.TransferAmount,
 
-				Currency: strings.ToLower(
-					settlement.Currency,
-				),
+			Currency: strings.ToLower(
+				settlement.Currency,
+			),
 
-				DestinationStripeAccountID: settlement.StripeAccountID,
-				SourceTransaction:          settlement.StripeChargeID,
-				TransferGroup:              settlement.TransferGroup,
-				IdempotencyKey:             idempotencyKey,
+			DestinationStripeAccountID: settlement.StripeAccountID,
+			SourceTransaction:          settlement.StripeChargeID,
+			TransferGroup:              settlement.TransferGroup,
+			IdempotencyKey:             idempotencyKey,
 
-				OrderID:      settlement.OrderID,
-				PaymentID:    settlement.PaymentID,
-				SettlementID: settlement.ID,
-				CompanyID:    settlement.CompanyID,
-				AccountID:    settlement.AccountID,
-			},
-		)
+			OrderID:      settlement.OrderID,
+			PaymentID:    settlement.PaymentID,
+			SettlementID: settlement.ID,
+
+			Seller: seller,
+		},
+	)
 
 	if stripeErr != nil {
 		return u.failClaimedSettlement(
 			ctx,
 			settlement,
-			isSettlementTransferErrorRetryable(
-				stripeErr,
-			),
-			settlementErrorType(
-				stripeErr,
-			),
-			settlementErrorCode(
-				stripeErr,
-			),
+			isSettlementTransferErrorRetryable(stripeErr),
+			settlementErrorType(stripeErr),
+			settlementErrorCode(stripeErr),
 			stripeErr,
 		)
 	}
@@ -199,8 +198,7 @@ func (u *SettlementUsecase) TransferByID(
 		)
 	}
 
-	stripeTransferID :=
-		stripeResult.StripeTransferID
+	stripeTransferID := stripeResult.StripeTransferID
 	if stripeTransferID == "" {
 		return u.failClaimedSettlement(
 			ctx,
@@ -261,12 +259,8 @@ func (u *SettlementUsecase) failClaimedSettlement(
 		ctx,
 		settlement.ID,
 		nextStatus,
-		normalizeSettlementErrorString(
-			errorType,
-		),
-		normalizeSettlementErrorString(
-			errorCode,
-		),
+		normalizeSettlementErrorString(errorType),
+		normalizeSettlementErrorString(errorCode),
 		&errorMessage,
 		u.now().UTC(),
 	)

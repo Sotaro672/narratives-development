@@ -191,7 +191,7 @@ func validateSettlementAllocations(
 				sellerID
 
 		if _, exists := seenSellers[sellerKey]; exists {
-			return ErrSettlementDuplicateAccount
+			return ErrSettlementDuplicateSeller
 		}
 
 		seenSellers[sellerKey] = struct{}{}

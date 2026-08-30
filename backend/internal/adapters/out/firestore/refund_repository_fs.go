@@ -324,6 +324,10 @@ func (r *RefundRepositoryFS) Create(
 		return nil, refunddom.ErrInvalidID
 	}
 
+	if err := in.Seller.Validate(); err != nil {
+		return nil, err
+	}
+
 	var entity refunddom.Refund
 
 	if in.Policy == "" {
@@ -333,8 +337,7 @@ func (r *RefundRepositoryFS) Create(
 			in.OrderID,
 			in.PaymentID,
 			in.OrderItemIndex,
-			in.CompanyID,
-			in.AccountID,
+			in.Seller,
 			in.SettlementID,
 			in.MerchandiseAmount,
 			in.MerchandiseTaxAmount,
@@ -349,8 +352,7 @@ func (r *RefundRepositoryFS) Create(
 			in.OrderID,
 			in.PaymentID,
 			in.OrderItemIndex,
-			in.CompanyID,
-			in.AccountID,
+			in.Seller,
 			in.SettlementID,
 			in.Policy,
 			in.MerchandiseAmount,
@@ -617,8 +619,16 @@ type refundDocument struct {
 	PaymentID      string `firestore:"paymentId"`
 	OrderItemIndex int    `firestore:"orderItemIndex"`
 
-	CompanyID string `firestore:"companyId"`
-	AccountID string `firestore:"accountId"`
+	SellerType string `firestore:"sellerType"`
+
+	CompanyID string `firestore:"companyId,omitempty"`
+	AccountID string `firestore:"accountId,omitempty"`
+
+	AvatarID        string `firestore:"avatarId,omitempty"`
+	UserID          string `firestore:"userId,omitempty"`
+	PayoutAccountID string `firestore:"payoutAccountId,omitempty"`
+
+	StripeAccountID string `firestore:"stripeAccountId"`
 
 	SettlementID string `firestore:"settlementId"`
 
@@ -674,8 +684,16 @@ func refundToData(
 		PaymentID:      refund.PaymentID,
 		OrderItemIndex: refund.OrderItemIndex,
 
+		SellerType: string(refund.SellerType),
+
 		CompanyID: refund.CompanyID,
 		AccountID: refund.AccountID,
+
+		AvatarID:        refund.AvatarID,
+		UserID:          refund.UserID,
+		PayoutAccountID: refund.PayoutAccountID,
+
+		StripeAccountID: refund.StripeAccountID,
 
 		SettlementID: refund.SettlementID,
 
@@ -735,8 +753,16 @@ func docToRefund(
 		PaymentID:      document.PaymentID,
 		OrderItemIndex: document.OrderItemIndex,
 
+		SellerType: refunddom.SellerType(document.SellerType),
+
 		CompanyID: document.CompanyID,
 		AccountID: document.AccountID,
+
+		AvatarID:        document.AvatarID,
+		UserID:          document.UserID,
+		PayoutAccountID: document.PayoutAccountID,
+
+		StripeAccountID: document.StripeAccountID,
 
 		SettlementID: document.SettlementID,
 

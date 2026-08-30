@@ -111,11 +111,15 @@ func (u *ItemRefundUsecase) calculateTransferReversalAmount(
 	targetItem orderdom.OrderItemSnapshot,
 	amountSummary itemRefundAmountSummary,
 ) (int, error) {
+	seller, err := itemRefundSellerIdentity(targetItem)
+	if err != nil {
+		return 0, err
+	}
+
 	platformFeeAmount, err := u.platformFeeCalculator.CalculatePlatformFee(
 		ctx,
 		settlementdom.PlatformFeeInput{
-			CompanyID:            targetItem.SellerSnapshot.CompanyID,
-			AccountID:            targetItem.SellerSnapshot.AccountID,
+			Seller:               seller,
 			MerchandiseAmount:    amountSummary.MerchandiseAmount,
 			MerchandiseTaxAmount: amountSummary.MerchandiseTaxAmount,
 			ShippingAmount:       amountSummary.OutboundShippingAmount,
@@ -133,4 +137,47 @@ func (u *ItemRefundUsecase) calculateTransferReversalAmount(
 	}
 
 	return amountSummary.RefundAmount - platformFeeAmount, nil
+}
+
+func itemRefundSellerIdentity(
+	targetItem orderdom.OrderItemSnapshot,
+) (settlementdom.SellerIdentity, error) {
+	snapshot := targetItem.SellerSnapshot
+
+	var seller settlementdom.SellerIdentity
+
+	switch targetItem.Type {
+	case orderdom.OrderItemTypeList:
+		seller = settlementdom.SellerIdentity{
+			Type:            settlementdom.SellerTypeAccount,
+			CompanyID:       snapshot.CompanyID,
+			AccountID:       snapshot.AccountID,
+			StripeAccountID: snapshot.StripeAccountID,
+		}
+
+	case orderdom.OrderItemTypeResale:
+		if snapshot.PayoutAccountID != snapshot.UserID {
+			return settlementdom.SellerIdentity{},
+				ErrItemRefundSettlementMismatch
+		}
+
+		seller = settlementdom.SellerIdentity{
+			Type:            settlementdom.SellerTypeAvatar,
+			AvatarID:        snapshot.AvatarID,
+			UserID:          snapshot.UserID,
+			PayoutAccountID: snapshot.PayoutAccountID,
+			StripeAccountID: snapshot.StripeAccountID,
+		}
+
+	default:
+		return settlementdom.SellerIdentity{},
+			ErrItemRefundSettlementMismatch
+	}
+
+	if err := seller.Validate(); err != nil {
+		return settlementdom.SellerIdentity{},
+			ErrItemRefundSettlementMismatch
+	}
+
+	return seller, nil
 }
