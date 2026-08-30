@@ -11,6 +11,7 @@ import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
 import { useContactViewport } from "../features/contact/hooks/useContactViewport";
 import { usePayoutAccountRegistration } from "../features/payout/context/PayoutAccountRegistrationProvider";
+import { usePayoutAccountRegistrationRules } from "../features/payout/hooks/usePayoutAccountRegistrationRules";
 import { usePayoutAccountRegistrationSubmit } from "../features/payout/hooks/usePayoutAccountRegistrationSubmit";
 
 function getAccountTypeLabel(accountType: "ordinary" | "current"): string {
@@ -27,12 +28,24 @@ function getAccountTypeLabel(accountType: "ordinary" | "current"): string {
 export default function PayoutAccountConfirmPage() {
   const navigate = useNavigate();
   const { isDesktop } = useContactViewport();
+
   const {
     draft,
     isComplete,
     returnAfterRegistration,
     resetDraft,
   } = usePayoutAccountRegistration();
+
+  const {
+    isLoading: isRulesLoading,
+    isReady: isRulesReady,
+    errorMessage: rulesErrorMessage,
+    validateBankCode,
+    validateBranchCode,
+    validateAccountNumber,
+    isRegistrationInputValid,
+  } = usePayoutAccountRegistrationRules();
+
   const {
     isSubmitting,
     errorMessage,
@@ -64,8 +77,54 @@ export default function PayoutAccountConfirmPage() {
     navigate,
   ]);
 
+  useEffect(() => {
+    if (!isRulesReady) {
+      return;
+    }
+
+    if (validateBankCode(draft.bankCode)) {
+      navigate("/settings/payout-account/bank", { replace: true });
+      return;
+    }
+
+    if (validateBranchCode(draft.bankCode, draft.branchCode)) {
+      navigate("/settings/payout-account/branch", { replace: true });
+      return;
+    }
+
+    if (
+      validateAccountNumber(
+        draft.bankCode,
+        draft.branchCode,
+        draft.accountNumber,
+      )
+    ) {
+      navigate("/settings/payout-account/account", { replace: true });
+    }
+  }, [
+    draft.accountNumber,
+    draft.bankCode,
+    draft.branchCode,
+    isRulesReady,
+    navigate,
+    validateAccountNumber,
+    validateBankCode,
+    validateBranchCode,
+  ]);
+
+  const registrationInputValid =
+    isRulesReady &&
+    isComplete &&
+    isRegistrationInputValid(draft);
+
   const handleRegister = useCallback(async () => {
-    if (!isComplete || isSubmitting) {
+    if (
+      isRulesLoading ||
+      !isRulesReady ||
+      !isComplete ||
+      !isRegistrationInputValid(draft) ||
+      isSubmitting
+    ) {
       return;
     }
 
@@ -98,6 +157,9 @@ export default function PayoutAccountConfirmPage() {
   }, [
     draft,
     isComplete,
+    isRegistrationInputValid,
+    isRulesLoading,
+    isRulesReady,
     isSubmitting,
     navigate,
     resetDraft,
@@ -120,7 +182,10 @@ export default function PayoutAccountConfirmPage() {
     navigate("/settings/payout-account/account");
   }, [clearError, navigate]);
 
-  const actionButtonDisabled = !isComplete || isSubmitting;
+  const actionButtonDisabled =
+    isRulesLoading ||
+    !registrationInputValid ||
+    isSubmitting;
 
   return (
     <Layout
@@ -135,7 +200,9 @@ export default function PayoutAccountConfirmPage() {
         isDesktop
           ? isSubmitting
             ? "登録中..."
-            : "登録する"
+            : isRulesLoading
+              ? "確認中..."
+              : "登録する"
           : undefined
       }
       onActionButtonClick={isDesktop ? handleRegister : undefined}
@@ -259,6 +326,18 @@ export default function PayoutAccountConfirmPage() {
           </p>
         </div>
 
+        {isRulesLoading ? (
+          <p className="content-page-description payout-account-confirm-page__description">
+            Stripe設定を確認しています...
+          </p>
+        ) : null}
+
+        {!isRulesLoading && rulesErrorMessage ? (
+          <p className="payout-account-confirm-page__error" role="alert">
+            {rulesErrorMessage}
+          </p>
+        ) : null}
+
         {errorMessage ? (
           <p className="payout-account-confirm-page__error" role="alert">
             {errorMessage}
@@ -269,7 +348,13 @@ export default function PayoutAccountConfirmPage() {
       {!isDesktop ? (
         <FooterNav
           variant="action"
-          buttonLabel={isSubmitting ? "登録中..." : "登録する"}
+          buttonLabel={
+            isSubmitting
+              ? "登録中..."
+              : isRulesLoading
+                ? "確認中..."
+                : "登録する"
+          }
           disabled={actionButtonDisabled}
           onButtonClick={handleRegister}
         />

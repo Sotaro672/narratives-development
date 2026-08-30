@@ -11,11 +11,24 @@ import {
   getStripePublishableKey,
 } from "../../payment-method/utils/paymentMethodUtils";
 import { registerPayoutAccount } from "../api/payoutApi";
+import {
+  STRIPE_TEST_ACCOUNT_NUMBER,
+  STRIPE_TEST_BANK_CODE,
+  STRIPE_TEST_BRANCH_CODE,
+} from "./usePayoutAccountRegistrationRules";
 import type {
   PayoutAccount,
   PayoutAccountRegistrationDraft,
   PayoutBankAccountType,
 } from "../../shared/types/payoutAccount";
+
+type StripeMode = "test" | "live";
+
+type StripeTokenError = {
+  type?: string;
+  code?: string;
+  message?: string;
+};
 
 function getStripeAccountType(
   accountType: PayoutBankAccountType,
@@ -65,8 +78,8 @@ function validateDraft(draft: PayoutAccountRegistrationDraft): void {
     throw new Error("口座番号を確認してください。");
   }
 
-  if (!/^\d+$/.test(draft.accountNumber)) {
-    throw new Error("口座番号は数字で入力してください。");
+  if (!/^\d{7}$/.test(draft.accountNumber)) {
+    throw new Error("口座番号は7桁の数字で入力してください。");
   }
 
   if (!draft.accountHolderName) {
@@ -74,12 +87,68 @@ function validateDraft(draft: PayoutAccountRegistrationDraft): void {
   }
 }
 
-function getStripeErrorMessage(
-  error: { message?: string } | null | undefined,
-): string {
-  const message = error?.message?.trim();
+function resolveStripeMode(publishableKey: string): StripeMode {
+  const normalizedKey = publishableKey.trim();
 
-  return message || "銀行口座情報をStripeへ登録できませんでした。";
+  if (normalizedKey.startsWith("pk_test_")) {
+    return "test";
+  }
+
+  if (normalizedKey.startsWith("pk_live_")) {
+    return "live";
+  }
+
+  throw new Error("Stripe 公開鍵の環境を判定できませんでした。");
+}
+
+function validateDraftForStripeMode(
+  draft: PayoutAccountRegistrationDraft,
+  stripeMode: StripeMode,
+): void {
+  if (stripeMode !== "test") {
+    return;
+  }
+
+  if (draft.bankCode !== STRIPE_TEST_BANK_CODE) {
+    throw new Error(
+      `開発環境では金融機関コード ${STRIPE_TEST_BANK_CODE} のStripeテスト銀行を使用してください。`,
+    );
+  }
+
+  if (draft.branchCode !== STRIPE_TEST_BRANCH_CODE) {
+    throw new Error(
+      `開発環境では支店コード ${STRIPE_TEST_BRANCH_CODE} のStripeテスト支店を使用してください。`,
+    );
+  }
+
+  if (draft.accountNumber !== STRIPE_TEST_ACCOUNT_NUMBER) {
+    throw new Error(
+      `開発環境ではStripeテスト口座番号 ${STRIPE_TEST_ACCOUNT_NUMBER} を使用してください。`,
+    );
+  }
+}
+
+function isValidBankAccountToken(value: string): boolean {
+  if (!value || /\s/.test(value)) {
+    return false;
+  }
+
+  return value.startsWith("btok_") || value.startsWith("tok_");
+}
+
+function getStripeErrorMessage(
+  error: StripeTokenError | null | undefined,
+): string {
+  const code = error?.code?.trim();
+
+  switch (code) {
+    case "routing_number_invalid":
+      return "金融機関コードまたは支店コードを確認してください。";
+    case "account_number_invalid":
+      return "口座番号を確認してください。";
+    default:
+      return "銀行口座情報をStripeへ登録できませんでした。入力内容を確認してください。";
+  }
 }
 
 export function usePayoutAccountRegistrationSubmit() {
@@ -124,6 +193,9 @@ export function usePayoutAccountRegistrationSubmit() {
           throw new Error("Stripe 公開鍵を取得できませんでした。");
         }
 
+        const stripeMode = resolveStripeMode(publishableKey);
+        validateDraftForStripeMode(draft, stripeMode);
+
         const stripe = await loadStripe(publishableKey);
 
         if (!stripe) {
@@ -146,6 +218,11 @@ export function usePayoutAccountRegistrationSubmit() {
         );
 
         if (tokenResult.error) {
+          console.error("Stripe bank account tokenization failed:", {
+            type: tokenResult.error.type,
+            code: tokenResult.error.code,
+          });
+
           throw new Error(getStripeErrorMessage(tokenResult.error));
         }
 
@@ -154,6 +231,16 @@ export function usePayoutAccountRegistrationSubmit() {
         if (!bankAccountToken) {
           throw new Error(
             "Stripeの銀行口座トークンを取得できませんでした。",
+          );
+        }
+
+        if (!isValidBankAccountToken(bankAccountToken)) {
+          console.error(
+            "Stripe returned an unsupported bank account token format.",
+          );
+
+          throw new Error(
+            "Stripeの銀行口座トークン形式を確認できませんでした。",
           );
         }
 

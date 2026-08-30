@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/grpc/codes"
@@ -110,6 +111,9 @@ func (r *PayoutAccountRepositoryFS) Create(
 			errors.New("payoutAccount: repository is nil")
 	}
 
+	// Firestore Timestamp is persisted at microsecond precision.
+	// Normalize before validation and persistence so the value returned from
+	// Create is identical to the value that will be read back from Firestore.
 	normalizePayoutAccount(&account)
 
 	if err := account.Validate(); err != nil {
@@ -177,6 +181,8 @@ func (r *PayoutAccountRepositoryFS) Update(
 				return err
 			}
 
+			// Normalize both the persisted state and the incoming state to the
+			// same Firestore-compatible timestamp precision before comparison.
 			normalizePayoutAccount(&current)
 
 			if current.UserID != account.UserID {
@@ -214,4 +220,16 @@ func normalizePayoutAccount(
 	account.BranchName = strings.TrimSpace(account.BranchName)
 	account.BankLast4 = strings.TrimSpace(account.BankLast4)
 	account.AccountHolderName = strings.TrimSpace(account.AccountHolderName)
+	account.CreatedAt = normalizePayoutAccountTimestamp(account.CreatedAt)
+	account.UpdatedAt = normalizePayoutAccountTimestamp(account.UpdatedAt)
+}
+
+func normalizePayoutAccountTimestamp(
+	value time.Time,
+) time.Time {
+	if value.IsZero() {
+		return value
+	}
+
+	return value.UTC().Truncate(time.Microsecond)
 }

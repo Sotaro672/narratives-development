@@ -18,7 +18,6 @@ export default function ProductModelMeta({
   const {
     hasModelInfo,
     kindLabel,
-    modelNumber,
     size,
     colorLabel,
     colorCssValue,
@@ -43,13 +42,6 @@ export default function ProductModelMeta({
     items.push({
       label: "種別",
       value: kindLabel,
-    });
-  }
-
-  if (modelNumber) {
-    items.push({
-      label: "モデル番号",
-      value: modelNumber,
     });
   }
 

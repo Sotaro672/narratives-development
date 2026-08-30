@@ -638,8 +638,11 @@ func isValidPayoutStripeAccountID(value string) bool {
 }
 
 func isValidPayoutBankAccountToken(value string) bool {
-	return value != "" &&
-		!strings.ContainsAny(value, " \t\r\n") &&
+	if value == "" || strings.ContainsAny(value, " \t\r\n") {
+		return false
+	}
+
+	return strings.HasPrefix(value, "btok_") ||
 		strings.HasPrefix(value, "tok_")
 }
 

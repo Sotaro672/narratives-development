@@ -1130,8 +1130,12 @@ func isValidStripeAccountID(
 func isValidStripeBankAccountToken(
 	value string,
 ) bool {
-	return value != "" &&
-		!strings.ContainsAny(value, " \t\r\n")
+	if value == "" || strings.ContainsAny(value, " \t\r\n") {
+		return false
+	}
+
+	return strings.HasPrefix(value, "btok_") ||
+		strings.HasPrefix(value, "tok_")
 }
 
 func isValidLast4(
