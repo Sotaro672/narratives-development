@@ -224,11 +224,12 @@ type OrderItemRefundAmountSummary struct {
 //
 // そのため税額は以下の順序で配賦します。
 //
-//  1. seller Account ごとに merchandise 8%, merchandise 10%,
-//     shipping 10% を集約する。
+//  1. List商品だけを seller Account ごとに merchandise 8%, merchandise 10%,
+//     shipping 10% として集約する。Resale商品は非課税・送料0として保持する。
 //  2. 税率ごとの正規税額を最大剰余法で Account/component へ配賦する。
 //  3. Account の merchandise component に配賦された税額を、
-//     同一 Account・同一税率の商品へ最大剰余法で再配賦する。
+//     同一 Account・同一税率のList商品へ最大剰余法で再配賦する。
+//  4. Resale商品には MerchandiseTaxAmount=0 を割り当てる。
 //
 // 第一段階の tie-break は Settlement calculator と同じく:
 //
@@ -557,8 +558,10 @@ type openedReturnShippingTaxItem struct {
 // calculateOrderItemShippingAmounts allocates the persisted outbound shipping
 // quote to active Order items using the quote's unit amount and each item's Qty.
 //
-// Every active List Order item must map to exactly one shipping key and the
-// resulting allocation must reconcile to ShippingQuoteSnapshot.Amount.
+// List items must map to their persisted shipping key. Resale items must map to
+// a zero-yen resale shipping snapshot. The resulting allocation must reconcile
+// to ShippingQuoteSnapshot.Amount, and every active Order item receives exactly
+// one shipping allocation entry.
 func calculateOrderItemShippingAmounts(
 	order Order,
 ) (map[int]int, error) {
@@ -571,12 +574,10 @@ func calculateOrderItemShippingAmounts(
 	}
 
 	quotes := make(map[refundShippingKey]openedReturnShippingQuote)
+	resaleQuotedQty := make(map[string]int)
 
 	for _, quoteItem := range snapshot.Items {
-		if quoteItem.ListID == "" ||
-			quoteItem.InventoryID == "" ||
-			quoteItem.ModelID == "" ||
-			quoteItem.Qty <= 0 ||
+		if quoteItem.Qty <= 0 ||
 			quoteItem.UnitAmount < 0 ||
 			quoteItem.Amount < 0 ||
 			quoteItem.Currency != ShippingQuoteCurrencyJPY {
@@ -590,50 +591,72 @@ func calculateOrderItemShippingAmounts(
 		if err != nil {
 			return nil, err
 		}
-
 		if expectedAmount != quoteItem.Amount {
 			return nil, ErrInvalidOrderItemRefund
 		}
 
-		key := refundShippingKey{
-			ListID:      quoteItem.ListID,
-			InventoryID: quoteItem.InventoryID,
-			ModelID:     quoteItem.ModelID,
-		}
+		switch quoteItem.Type {
+		case OrderItemTypeList:
+			if quoteItem.ListID == "" ||
+				quoteItem.InventoryID == "" ||
+				quoteItem.ModelID == "" ||
+				quoteItem.ResaleID != "" {
+				return nil, ErrInvalidOrderItemRefund
+			}
 
-		existing := quotes[key]
+			key := refundShippingKey{
+				ListID:      quoteItem.ListID,
+				InventoryID: quoteItem.InventoryID,
+				ModelID:     quoteItem.ModelID,
+			}
+			existing := quotes[key]
+			if existing.Qty > 0 && existing.UnitAmount != quoteItem.UnitAmount {
+				return nil, ErrInvalidOrderItemRefund
+			}
 
-		if existing.Qty > 0 &&
-			existing.UnitAmount != quoteItem.UnitAmount {
+			nextQty, err := safeAddPaymentAmount(existing.Qty, quoteItem.Qty)
+			if err != nil {
+				return nil, err
+			}
+			nextAmount, err := safeAddPaymentAmount(existing.Amount, quoteItem.Amount)
+			if err != nil {
+				return nil, err
+			}
+
+			quotes[key] = openedReturnShippingQuote{
+				UnitAmount: quoteItem.UnitAmount,
+				Qty:        nextQty,
+				Amount:     nextAmount,
+			}
+
+		case OrderItemTypeResale:
+			if quoteItem.ResaleID == "" ||
+				quoteItem.ListID != "" ||
+				quoteItem.InventoryID != "" ||
+				quoteItem.ModelID != "" ||
+				quoteItem.Qty != 1 ||
+				quoteItem.UnitAmount != 0 ||
+				quoteItem.Amount != 0 {
+				return nil, ErrInvalidOrderItemRefund
+			}
+
+			resaleQuotedQty[quoteItem.ResaleID], err = safeAddPaymentAmount(
+				resaleQuotedQty[quoteItem.ResaleID],
+				quoteItem.Qty,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+		default:
 			return nil, ErrInvalidOrderItemRefund
-		}
-
-		nextQty, err := safeAddPaymentAmount(
-			existing.Qty,
-			quoteItem.Qty,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		nextAmount, err := safeAddPaymentAmount(
-			existing.Amount,
-			quoteItem.Amount,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		quotes[key] = openedReturnShippingQuote{
-			UnitAmount: quoteItem.UnitAmount,
-			Qty:        nextQty,
-			Amount:     nextAmount,
 		}
 	}
 
 	result := make(map[int]int)
 	usedQty := make(map[refundShippingKey]int)
 	usedAmount := make(map[refundShippingKey]int)
+	usedResaleQty := make(map[string]int)
 	totalAmount := 0
 
 	for index, item := range order.Items {
@@ -641,68 +664,83 @@ func calculateOrderItemShippingAmounts(
 			continue
 		}
 
-		if item.Type != OrderItemTypeList ||
-			item.ListID == "" ||
-			item.InventoryID == "" ||
-			item.ModelID == "" ||
-			item.Qty <= 0 {
+		switch item.Type {
+		case OrderItemTypeList:
+			if item.ListID == "" ||
+				item.InventoryID == "" ||
+				item.ModelID == "" ||
+				item.ResaleID != "" ||
+				item.Qty <= 0 {
+				return nil, ErrInvalidOrderItemRefund
+			}
+
+			key := refundShippingKey{
+				ListID:      item.ListID,
+				InventoryID: item.InventoryID,
+				ModelID:     item.ModelID,
+			}
+			quote, exists := quotes[key]
+			if !exists {
+				return nil, ErrInvalidOrderItemRefund
+			}
+
+			itemShippingAmount, err := safeMultiplyPaymentAmount(quote.UnitAmount, item.Qty)
+			if err != nil {
+				return nil, err
+			}
+			result[index] = itemShippingAmount
+
+			usedQty[key], err = safeAddPaymentAmount(usedQty[key], item.Qty)
+			if err != nil {
+				return nil, err
+			}
+			usedAmount[key], err = safeAddPaymentAmount(usedAmount[key], itemShippingAmount)
+			if err != nil {
+				return nil, err
+			}
+			totalAmount, err = safeAddPaymentAmount(totalAmount, itemShippingAmount)
+			if err != nil {
+				return nil, err
+			}
+
+		case OrderItemTypeResale:
+			if item.ResaleID == "" ||
+				item.ListID != "" ||
+				item.InventoryID != "" ||
+				item.ModelID != "" ||
+				item.Qty != 1 {
+				return nil, ErrInvalidOrderItemRefund
+			}
+			if resaleQuotedQty[item.ResaleID] == 0 {
+				return nil, ErrInvalidOrderItemRefund
+			}
+
+			var err error
+			usedResaleQty[item.ResaleID], err = safeAddPaymentAmount(
+				usedResaleQty[item.ResaleID],
+				item.Qty,
+			)
+			if err != nil {
+				return nil, err
+			}
+			result[index] = 0
+
+		default:
 			return nil, ErrInvalidOrderItemRefund
-		}
-
-		key := refundShippingKey{
-			ListID:      item.ListID,
-			InventoryID: item.InventoryID,
-			ModelID:     item.ModelID,
-		}
-
-		quote, exists := quotes[key]
-		if !exists {
-			return nil, ErrInvalidOrderItemRefund
-		}
-
-		itemShippingAmount, err := safeMultiplyPaymentAmount(
-			quote.UnitAmount,
-			item.Qty,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		result[index] = itemShippingAmount
-
-		usedQty[key], err = safeAddPaymentAmount(
-			usedQty[key],
-			item.Qty,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		usedAmount[key], err = safeAddPaymentAmount(
-			usedAmount[key],
-			itemShippingAmount,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		totalAmount, err = safeAddPaymentAmount(
-			totalAmount,
-			itemShippingAmount,
-		)
-		if err != nil {
-			return nil, err
 		}
 	}
 
-	if len(result) == 0 ||
-		totalAmount != snapshot.Amount {
+	if len(result) == 0 || totalAmount != snapshot.Amount {
 		return nil, ErrInvalidOrderItemRefund
 	}
 
 	for key, quote := range quotes {
-		if usedQty[key] != quote.Qty ||
-			usedAmount[key] != quote.Amount {
+		if usedQty[key] != quote.Qty || usedAmount[key] != quote.Amount {
+			return nil, ErrInvalidOrderItemRefund
+		}
+	}
+	for resaleID, quotedQty := range resaleQuotedQty {
+		if usedResaleQty[resaleID] != quotedQty {
 			return nil, ErrInvalidOrderItemRefund
 		}
 	}
@@ -710,13 +748,6 @@ func calculateOrderItemShippingAmounts(
 	return result, nil
 }
 
-// allocateOpenedReturnShippingTaxToItems allocates the already-authoritative
-// shipping tax total to Order items.
-//
-// The target shipping tax is produced by calculateOrderItemTaxAllocations,
-// which reconciles to the original Order's ConsumptionTax. This second-stage
-// allocation therefore preserves the original payment tax exactly instead of
-// recalculating each item's outbound shipping tax independently.
 func allocateOpenedReturnShippingTaxToItems(
 	shippingAmounts map[int]int,
 	targetTax int,
@@ -875,105 +906,115 @@ func calculateOrderItemTaxAllocations(
 ) (map[int]int, int, error) {
 	builders := make(map[string]*refundTaxAccountBuilder)
 	bindings := make(map[refundShippingKey]refundShippingBinding)
-	items := make([]refundTaxItem, 0, len(order.Items))
+	resaleBindings := make(map[string]int)
+	taxableItems := make([]refundTaxItem, 0, len(order.Items))
+	resaleIndexes := make([]int, 0)
+	activeItemCount := 0
 
 	for index, item := range order.Items {
 		if item.IsCancelled {
 			continue
 		}
+		activeItemCount++
 
-		if item.Type != OrderItemTypeList ||
-			item.ListID == "" ||
-			item.InventoryID == "" ||
-			item.ModelID == "" ||
-			item.SellerSnapshot.AccountID == "" ||
-			item.Price < 0 ||
-			item.Qty <= 0 {
+		if item.Price < 0 || item.Qty <= 0 {
 			return nil, 0, ErrInvalidOrderItemRefund
 		}
 
-		lineAmount, err := safeMultiplyPaymentAmount(
-			item.Price,
-			item.Qty,
-		)
-		if err != nil {
-			return nil, 0, err
-		}
+		switch item.Type {
+		case OrderItemTypeList:
+			if item.ListID == "" ||
+				item.InventoryID == "" ||
+				item.ModelID == "" ||
+				item.ResaleID != "" ||
+				item.SellerSnapshot.AccountID == "" {
+				return nil, 0, ErrInvalidOrderItemRefund
+			}
 
-		accountID := item.SellerSnapshot.AccountID
-		builder := builders[accountID]
+			lineAmount, err := safeMultiplyPaymentAmount(item.Price, item.Qty)
+			if err != nil {
+				return nil, 0, err
+			}
 
-		if builder == nil {
-			builder = &refundTaxAccountBuilder{}
-			builders[accountID] = builder
-		}
+			accountID := item.SellerSnapshot.AccountID
+			builder := builders[accountID]
+			if builder == nil {
+				builder = &refundTaxAccountBuilder{}
+				builders[accountID] = builder
+			}
 
-		switch item.ConsumptionTaxRate {
-		case ConsumptionTaxRateReduced:
-			builder.MerchandiseAmount8, err = safeAddPaymentAmount(
-				builder.MerchandiseAmount8,
-				lineAmount,
-			)
+			switch item.ConsumptionTaxRate {
+			case ConsumptionTaxRateReduced:
+				builder.MerchandiseAmount8, err = safeAddPaymentAmount(
+					builder.MerchandiseAmount8,
+					lineAmount,
+				)
+			case ConsumptionTaxRateStandard:
+				builder.MerchandiseAmount10, err = safeAddPaymentAmount(
+					builder.MerchandiseAmount10,
+					lineAmount,
+				)
+			default:
+				return nil, 0, ErrInvalidOrderItemRefund
+			}
+			if err != nil {
+				return nil, 0, err
+			}
 
-		case ConsumptionTaxRateStandard:
-			builder.MerchandiseAmount10, err = safeAddPaymentAmount(
-				builder.MerchandiseAmount10,
-				lineAmount,
-			)
-
-		default:
-			return nil, 0, ErrInvalidOrderItemRefund
-		}
-
-		if err != nil {
-			return nil, 0, err
-		}
-
-		items = append(
-			items,
-			refundTaxItem{
+			taxableItems = append(taxableItems, refundTaxItem{
 				Index:     index,
 				AccountID: accountID,
 				Rate:      item.ConsumptionTaxRate,
 				Base:      lineAmount,
-			},
-		)
+			})
 
-		key := refundShippingKey{
-			ListID:      item.ListID,
-			InventoryID: item.InventoryID,
-			ModelID:     item.ModelID,
-		}
+			key := refundShippingKey{
+				ListID:      item.ListID,
+				InventoryID: item.InventoryID,
+				ModelID:     item.ModelID,
+			}
+			binding, exists := bindings[key]
+			if exists && binding.AccountID != accountID {
+				return nil, 0, ErrInvalidOrderItemRefund
+			}
+			nextQty, err := safeAddPaymentAmount(binding.Qty, item.Qty)
+			if err != nil {
+				return nil, 0, err
+			}
+			bindings[key] = refundShippingBinding{
+				AccountID: accountID,
+				Qty:       nextQty,
+			}
 
-		binding, exists := bindings[key]
+		case OrderItemTypeResale:
+			if item.ResaleID == "" ||
+				item.ListID != "" ||
+				item.InventoryID != "" ||
+				item.ModelID != "" ||
+				item.Qty != 1 {
+				return nil, 0, ErrInvalidOrderItemRefund
+			}
 
-		if exists && binding.AccountID != accountID {
+			var err error
+			resaleBindings[item.ResaleID], err = safeAddPaymentAmount(
+				resaleBindings[item.ResaleID],
+				item.Qty,
+			)
+			if err != nil {
+				return nil, 0, err
+			}
+			resaleIndexes = append(resaleIndexes, index)
+
+		default:
 			return nil, 0, ErrInvalidOrderItemRefund
-		}
-
-		nextQty, err := safeAddPaymentAmount(
-			binding.Qty,
-			item.Qty,
-		)
-		if err != nil {
-			return nil, 0, err
-		}
-
-		bindings[key] = refundShippingBinding{
-			AccountID: accountID,
-			Qty:       nextQty,
 		}
 	}
 
-	if len(items) == 0 || len(builders) == 0 {
+	if activeItemCount == 0 {
 		return nil, 0, ErrInvalidOrderItemRefund
 	}
 
-	if err := applyRefundShippingAmounts(
-		order,
-		builders,
-		bindings,
-	); err != nil {
+	if err := applyRefundShippingAmounts(order, builders, bindings, resaleBindings); err != nil {
 		return nil, 0, err
 	}
 
@@ -982,12 +1023,18 @@ func calculateOrderItemTaxAllocations(
 		return nil, 0, err
 	}
 
-	itemTaxes, err := allocateRefundTaxToItems(
-		items,
-		groupTaxes,
-	)
+	itemTaxes, err := allocateRefundTaxToItems(taxableItems, groupTaxes)
 	if err != nil {
 		return nil, 0, err
+	}
+	for _, index := range resaleIndexes {
+		if _, exists := itemTaxes[index]; exists {
+			return nil, 0, ErrInvalidOrderItemRefund
+		}
+		itemTaxes[index] = 0
+	}
+	if len(itemTaxes) != activeItemCount {
+		return nil, 0, ErrInvalidOrderItemRefund
 	}
 
 	return itemTaxes, shippingTax, nil
@@ -997,9 +1044,9 @@ func applyRefundShippingAmounts(
 	order Order,
 	builders map[string]*refundTaxAccountBuilder,
 	bindings map[refundShippingKey]refundShippingBinding,
+	resaleBindings map[string]int,
 ) error {
 	snapshot := order.ShippingQuoteSnapshot
-
 	if snapshot.Currency != ShippingQuoteCurrencyJPY ||
 		snapshot.Amount < 0 ||
 		len(snapshot.Items) == 0 {
@@ -1007,78 +1054,100 @@ func applyRefundShippingAmounts(
 	}
 
 	quotedQty := make(map[refundShippingKey]int, len(bindings))
+	quotedResaleQty := make(map[string]int, len(resaleBindings))
 	shippingTotal := 0
 
 	for _, item := range snapshot.Items {
-		if item.ListID == "" ||
-			item.InventoryID == "" ||
-			item.ModelID == "" ||
-			item.Qty <= 0 ||
+		if item.Qty <= 0 ||
 			item.UnitAmount < 0 ||
 			item.Amount < 0 ||
 			item.Currency != ShippingQuoteCurrencyJPY {
 			return ErrInvalidOrderItemRefund
 		}
 
-		expectedAmount, err := safeMultiplyPaymentAmount(
-			item.UnitAmount,
-			item.Qty,
-		)
+		expectedAmount, err := safeMultiplyPaymentAmount(item.UnitAmount, item.Qty)
 		if err != nil {
 			return err
 		}
-
 		if expectedAmount != item.Amount {
 			return ErrInvalidOrderItemRefund
 		}
 
-		key := refundShippingKey{
-			ListID:      item.ListID,
-			InventoryID: item.InventoryID,
-			ModelID:     item.ModelID,
-		}
+		switch item.Type {
+		case OrderItemTypeList:
+			if item.ListID == "" ||
+				item.InventoryID == "" ||
+				item.ModelID == "" ||
+				item.ResaleID != "" {
+				return ErrInvalidOrderItemRefund
+			}
 
-		binding, exists := bindings[key]
-		if !exists {
+			key := refundShippingKey{
+				ListID:      item.ListID,
+				InventoryID: item.InventoryID,
+				ModelID:     item.ModelID,
+			}
+			binding, exists := bindings[key]
+			if !exists {
+				return ErrInvalidOrderItemRefund
+			}
+			builder := builders[binding.AccountID]
+			if builder == nil {
+				return ErrInvalidOrderItemRefund
+			}
+
+			builder.ShippingAmount, err = safeAddPaymentAmount(
+				builder.ShippingAmount,
+				item.Amount,
+			)
+			if err != nil {
+				return err
+			}
+			quotedQty[key], err = safeAddPaymentAmount(quotedQty[key], item.Qty)
+			if err != nil {
+				return err
+			}
+			shippingTotal, err = safeAddPaymentAmount(shippingTotal, item.Amount)
+			if err != nil {
+				return err
+			}
+
+		case OrderItemTypeResale:
+			if item.ResaleID == "" ||
+				item.ListID != "" ||
+				item.InventoryID != "" ||
+				item.ModelID != "" ||
+				item.Qty != 1 ||
+				item.UnitAmount != 0 ||
+				item.Amount != 0 {
+				return ErrInvalidOrderItemRefund
+			}
+			if resaleBindings[item.ResaleID] == 0 {
+				return ErrInvalidOrderItemRefund
+			}
+			quotedResaleQty[item.ResaleID], err = safeAddPaymentAmount(
+				quotedResaleQty[item.ResaleID],
+				item.Qty,
+			)
+			if err != nil {
+				return err
+			}
+
+		default:
 			return ErrInvalidOrderItemRefund
-		}
-
-		builder := builders[binding.AccountID]
-		if builder == nil {
-			return ErrInvalidOrderItemRefund
-		}
-
-		builder.ShippingAmount, err = safeAddPaymentAmount(
-			builder.ShippingAmount,
-			item.Amount,
-		)
-		if err != nil {
-			return err
-		}
-
-		quotedQty[key], err = safeAddPaymentAmount(
-			quotedQty[key],
-			item.Qty,
-		)
-		if err != nil {
-			return err
-		}
-
-		shippingTotal, err = safeAddPaymentAmount(
-			shippingTotal,
-			item.Amount,
-		)
-		if err != nil {
-			return err
 		}
 	}
 
 	if shippingTotal != snapshot.Amount {
 		return ErrInvalidOrderItemRefund
 	}
-
 	for key, binding := range bindings {
 		if quotedQty[key] != binding.Qty {
+			return ErrInvalidOrderItemRefund
+		}
+	}
+	for resaleID, expectedQty := range resaleBindings {
+		if quotedResaleQty[resaleID] != expectedQty {
 			return ErrInvalidOrderItemRefund
 		}
 	}

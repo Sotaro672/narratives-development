@@ -32,6 +32,7 @@ type mallUsecases struct {
 	cartUC                         *usecase.CartUsecase
 	paymentUC                      *usecase.PaymentUsecase
 	settlementUC                   *usecase.SettlementUsecase
+	settlementQueue                usecase.SettlementTransferQueue
 	refundUC                       *usecase.RefundUsecase
 	itemRefundUC                   *usecase.ItemRefundUsecase
 	refundCompletionNotificationUC usecase.RefundCompletionNotificationUsecasePort
@@ -239,6 +240,14 @@ func buildMallUsecases(
 		return nil, errors.New("di.mall: settlement usecase is nil")
 	}
 
+	settlementQueue, err := cloudtasksadp.NewSettlementQueueFromEnv(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("di.mall: build settlement queue: %w", err)
+	}
+	if settlementQueue == nil {
+		return nil, errors.New("di.mall: settlement queue is nil")
+	}
+
 	refundUC := usecase.NewRefundUsecase(
 		usecase.NewRefundUsecaseInput{
 			PaymentReader:                 paymentUC,
@@ -354,6 +363,7 @@ func buildMallUsecases(
 		cartUC:                         cartUC,
 		paymentUC:                      paymentUC,
 		settlementUC:                   settlementUC,
+		settlementQueue:                settlementQueue,
 		refundUC:                       refundUC,
 		itemRefundUC:                   itemRefundUC,
 		refundCompletionNotificationUC: refundCompletionNotificationUC,
@@ -433,6 +443,12 @@ func buildMallTransferUsecase(
 	if u.inventoryUC == nil {
 		return nil, errors.New("di.mall: inventory usecase is nil")
 	}
+	if u.settlementUC == nil {
+		return nil, errors.New("di.mall: settlement usecase is nil")
+	}
+	if u.settlementQueue == nil {
+		return nil, errors.New("di.mall: settlement queue is nil")
+	}
 
 	var orderRepoForTransfer applicationport.OrderRepoForTransfer = r.orderTransferItemRepo
 
@@ -470,6 +486,10 @@ func buildMallTransferUsecase(
 	).
 		WithResaleTransferDependencies(
 			r.resaleRepo,
+		).
+		WithResaleSettlementDependencies(
+			u.settlementUC,
+			u.settlementQueue,
 		).
 		WithReturnOpeningHandler(
 			u.returnRequestUC,

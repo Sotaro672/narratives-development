@@ -12,6 +12,7 @@ import (
 	"time"
 
 	applicationport "narratives/internal/application/port"
+	settlementdom "narratives/internal/domain/settlement"
 )
 
 var _ applicationport.StripeTransferReversalGateway = (*TransferReversalGateway)(nil)
@@ -77,11 +78,13 @@ func (g *TransferReversalGateway) CreateTransferReversal(
 		return nil, err
 	}
 
-	stripeTransferID :=
-		in.StripeTransferID
+	stripeTransferID := strings.TrimSpace(
+		in.StripeTransferID,
+	)
 
-	idempotencyKey :=
-		in.IdempotencyKey
+	idempotencyKey := strings.TrimSpace(
+		in.IdempotencyKey,
+	)
 
 	if stripeTransferID == "" ||
 		!strings.HasPrefix(
@@ -124,7 +127,8 @@ func (g *TransferReversalGateway) CreateTransferReversal(
 			)
 	}
 
-	if in.PaymentID == "" {
+	paymentID := strings.TrimSpace(in.PaymentID)
+	if paymentID == "" {
 		return nil,
 			newTransferReversalError(
 				0,
@@ -135,13 +139,26 @@ func (g *TransferReversalGateway) CreateTransferReversal(
 			)
 	}
 
-	if in.SettlementID == "" {
+	settlementID := strings.TrimSpace(in.SettlementID)
+	if settlementID == "" {
 		return nil,
 			newTransferReversalError(
 				0,
 				"invalid_request",
 				"invalid_settlement_id",
 				"stripe transfer reversal settlement id is empty",
+				false,
+			)
+	}
+
+	seller := in.Seller
+	if err := seller.Validate(); err != nil {
+		return nil,
+			newTransferReversalError(
+				0,
+				"invalid_request",
+				"invalid_seller",
+				err.Error(),
 				false,
 			)
 	}
@@ -156,34 +173,51 @@ func (g *TransferReversalGateway) CreateTransferReversal(
 		),
 	)
 
-	if in.OrderID != "" {
+	if orderID := strings.TrimSpace(in.OrderID); orderID != "" {
 		form.Set(
 			"metadata[orderId]",
-			in.OrderID,
+			orderID,
 		)
 	}
 
 	form.Set(
 		"metadata[paymentId]",
-		in.PaymentID,
+		paymentID,
 	)
 
 	form.Set(
 		"metadata[settlementId]",
-		in.SettlementID,
+		settlementID,
 	)
 
-	if in.CompanyID != "" {
+	form.Set(
+		"metadata[sellerType]",
+		string(seller.Type),
+	)
+
+	switch seller.Type {
+	case settlementdom.SellerTypeAccount:
 		form.Set(
 			"metadata[companyId]",
-			in.CompanyID,
+			strings.TrimSpace(seller.CompanyID),
 		)
-	}
-
-	if in.AccountID != "" {
 		form.Set(
 			"metadata[accountId]",
-			in.AccountID,
+			strings.TrimSpace(seller.AccountID),
+		)
+
+	case settlementdom.SellerTypeAvatar:
+		form.Set(
+			"metadata[avatarId]",
+			strings.TrimSpace(seller.AvatarID),
+		)
+		form.Set(
+			"metadata[userId]",
+			strings.TrimSpace(seller.UserID),
+		)
+		form.Set(
+			"metadata[payoutAccountId]",
+			strings.TrimSpace(seller.PayoutAccountID),
 		)
 	}
 

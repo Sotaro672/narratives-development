@@ -1,7 +1,11 @@
 // backend/internal/application/port/stripe_transfer_reversal_gateway.go
 package port
 
-import "context"
+import (
+	"context"
+
+	settlementdom "narratives/internal/domain/settlement"
+)
 
 // StripeTransferReversalGateway reverses a completed Stripe Connect Transfer.
 type StripeTransferReversalGateway interface {
@@ -21,8 +25,8 @@ type CreateStripeTransferReversalInput struct {
 	OrderID      string
 	PaymentID    string
 	SettlementID string
-	CompanyID    string
-	AccountID    string
+
+	Seller settlementdom.SellerIdentity
 }
 
 type CreateStripeTransferReversalResult struct {

@@ -35,6 +35,49 @@ func (u *ItemRefundUsecase) completeTransferReversal(
 		return refund, ErrItemRefundSettlementNotTransferred
 	}
 
+	if refund.SettlementID != settlement.ID ||
+		refund.PaymentID != payment.PaymentID ||
+		settlement.PaymentID != payment.PaymentID {
+		return refund, ErrItemRefundSettlementMismatch
+	}
+
+	settlementSeller := settlement.SellerIdentity()
+	if err := settlementSeller.Validate(); err != nil {
+		return refund, ErrItemRefundSettlementMismatch
+	}
+
+	refundSeller := refund.SellerIdentity()
+	if err := refundSeller.Validate(); err != nil {
+		return refund, ErrItemRefundSettlementMismatch
+	}
+
+	switch settlementSeller.Type {
+	case settlementdom.SellerTypeAccount:
+		if refundSeller.Type != refunddom.SellerTypeAccount ||
+			refundSeller.CompanyID != settlementSeller.CompanyID ||
+			refundSeller.AccountID != settlementSeller.AccountID ||
+			refundSeller.StripeAccountID != settlementSeller.StripeAccountID ||
+			refundSeller.AvatarID != "" ||
+			refundSeller.UserID != "" ||
+			refundSeller.PayoutAccountID != "" {
+			return refund, ErrItemRefundSettlementMismatch
+		}
+
+	case settlementdom.SellerTypeAvatar:
+		if refundSeller.Type != refunddom.SellerTypeAvatar ||
+			refundSeller.AvatarID != settlementSeller.AvatarID ||
+			refundSeller.UserID != settlementSeller.UserID ||
+			refundSeller.PayoutAccountID != settlementSeller.PayoutAccountID ||
+			refundSeller.StripeAccountID != settlementSeller.StripeAccountID ||
+			refundSeller.CompanyID != "" ||
+			refundSeller.AccountID != "" {
+			return refund, ErrItemRefundSettlementMismatch
+		}
+
+	default:
+		return refund, ErrItemRefundSettlementMismatch
+	}
+
 	if settlement.StripeTransferID == "" ||
 		!strings.HasPrefix(settlement.StripeTransferID, "tr_") {
 		return refund, ErrItemRefundSettlementMismatch
@@ -88,8 +131,7 @@ func (u *ItemRefundUsecase) completeTransferReversal(
 			OrderID:      refund.OrderID,
 			PaymentID:    payment.PaymentID,
 			SettlementID: settlement.ID,
-			CompanyID:    refund.CompanyID,
-			AccountID:    refund.AccountID,
+			Seller:       settlementSeller,
 		},
 	)
 	if reversalErr != nil {

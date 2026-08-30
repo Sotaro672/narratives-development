@@ -9,6 +9,7 @@ import (
 
 	applicationport "narratives/internal/application/port"
 	orderdom "narratives/internal/domain/order"
+	settlementdom "narratives/internal/domain/settlement"
 )
 
 // ============================================================
@@ -69,6 +70,9 @@ type TransferUsecase struct {
 
 	resaleRepo applicationport.ResaleGetter
 
+	settlementUC    *SettlementUsecase
+	settlementQueue SettlementTransferQueue
+
 	returnOpening ReturnOpeningHandler
 
 	executionUC *TokenTransferExecutionUsecase
@@ -116,6 +120,18 @@ func (u *TransferUsecase) WithResaleTransferDependencies(
 	return u
 }
 
+func (u *TransferUsecase) WithResaleSettlementDependencies(
+	settlementUC *SettlementUsecase,
+	settlementQueue SettlementTransferQueue,
+) *TransferUsecase {
+	if u != nil {
+		u.settlementUC = settlementUC
+		u.settlementQueue = settlementQueue
+	}
+
+	return u
+}
+
 func (u *TransferUsecase) WithReturnOpeningHandler(
 	returnOpening ReturnOpeningHandler,
 ) *TransferUsecase {
@@ -143,11 +159,14 @@ var (
 	ErrTransferAttemptNotCreated      = errors.New("transfer_uc: transfer attempt was not created")
 	ErrTransferBlockedByReturn        = errors.New("transfer_uc: transfer blocked by return request")
 
-	ErrTransferResaleNotConfigured       = errors.New("transfer_uc: resale transfer dependencies are not configured")
-	ErrTransferResaleIDEmpty             = errors.New("transfer_uc: resaleId is empty")
-	ErrTransferResaleSellerAvatarIDEmpty = errors.New("transfer_uc: resale seller avatarId is empty")
-	ErrTransferSameAvatar                = errors.New("transfer_uc: seller avatarId and buyer avatarId must be different")
-	ErrTransferWalletSyncFailed          = errors.New("transfer_uc: wallet sync failed")
+	ErrTransferResaleNotConfigured           = errors.New("transfer_uc: resale transfer dependencies are not configured")
+	ErrTransferResaleIDEmpty                 = errors.New("transfer_uc: resaleId is empty")
+	ErrTransferResaleSellerAvatarIDEmpty     = errors.New("transfer_uc: resale seller avatarId is empty")
+	ErrTransferResaleSettlementNotConfigured = errors.New("transfer_uc: resale settlement dependencies are not configured")
+	ErrTransferResaleSettlementMismatch      = errors.New("transfer_uc: resale settlement identity mismatch")
+	ErrTransferResaleSettlementUnavailable   = errors.New("transfer_uc: resale settlement is unavailable")
+	ErrTransferSameAvatar                    = errors.New("transfer_uc: seller avatarId and buyer avatarId must be different")
+	ErrTransferWalletSyncFailed              = errors.New("transfer_uc: wallet sync failed")
 )
 
 type TransferByVerifiedScanInput struct {
@@ -482,11 +501,56 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 	syncReceiverWallet :=
 		target.ItemType == orderdom.OrderItemTypeResale
 
+	var resaleSettlementSeller settlementdom.SellerIdentity
+	if target.ItemType == orderdom.OrderItemTypeResale {
+		resaleSettlementSeller, err = u.resolveResaleSettlementSeller(
+			verifiedItem,
+			source.FromAvatarID,
+		)
+		if err != nil {
+			return matchedResult, err
+		}
+
+		if err := u.validateResaleSettlementBeforeTransfer(
+			ctx,
+			target.OrderID,
+			resaleSettlementSeller,
+		); err != nil {
+			return matchedResult, err
+		}
+	}
+
 	afterOnChain := func(
 		ctx context.Context,
 		txSignature string,
 		now time.Time,
 	) error {
+		var readySettlement settlementdom.Settlement
+
+		if target.ItemType == orderdom.OrderItemTypeResale {
+			readySettlement, err = u.settlementUC.MarkReadyByPaymentAndSeller(
+				ctx,
+				target.OrderID,
+				resaleSettlementSeller,
+			)
+			if err != nil {
+				return fmt.Errorf(
+					"resale settlement readiness failed orderId=%s itemIndex=%d: %w",
+					target.OrderID,
+					target.ItemIndex,
+					err,
+				)
+			}
+
+			if err := validateResaleReadySettlement(
+				readySettlement,
+				target.OrderID,
+				resaleSettlementSeller,
+			); err != nil {
+				return err
+			}
+		}
+
 		if err := u.orderRepo.MarkTransferredItem(
 			ctx,
 			target.OrderID,
@@ -499,6 +563,18 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 				target.ItemIndex,
 				txSignature,
 				err,
+			)
+		}
+
+		if target.ItemType == orderdom.OrderItemTypeResale &&
+			shouldEnqueueResaleSettlement(readySettlement.Status) {
+			// READY is already durable. Queue delivery is best-effort here because
+			// settlement reconciliation can re-enqueue READY / FAILED_RETRYABLE
+			// settlements. A queue outage must not turn a completed on-chain token
+			// transfer into a failed transfer attempt.
+			_ = u.settlementQueue.EnqueueSettlementTransfer(
+				ctx,
+				readySettlement.ID,
 			)
 		}
 
@@ -841,6 +917,149 @@ func (u *TransferUsecase) resolveResaleTransferSource(
 		FromAvatarID: fromAvatarID,
 		FromWallet:   fromWallet,
 	}, nil
+}
+
+// ============================================================
+// Resale settlement helpers
+// ============================================================
+
+func (u *TransferUsecase) resolveResaleSettlementSeller(
+	item orderdom.OrderItemSnapshot,
+	expectedAvatarID string,
+) (settlementdom.SellerIdentity, error) {
+	if u == nil ||
+		u.settlementUC == nil ||
+		u.settlementQueue == nil {
+		return settlementdom.SellerIdentity{},
+			ErrTransferResaleSettlementNotConfigured
+	}
+
+	if item.Type != orderdom.OrderItemTypeResale {
+		return settlementdom.SellerIdentity{},
+			ErrTransferResaleSettlementMismatch
+	}
+
+	snapshot := item.SellerSnapshot
+	if snapshot.AvatarID == "" ||
+		snapshot.UserID == "" ||
+		snapshot.PayoutAccountID == "" ||
+		snapshot.StripeAccountID == "" ||
+		snapshot.PayoutAccountID != snapshot.UserID ||
+		expectedAvatarID == "" ||
+		snapshot.AvatarID != expectedAvatarID {
+		return settlementdom.SellerIdentity{},
+			ErrTransferResaleSettlementMismatch
+	}
+
+	seller := settlementdom.SellerIdentity{
+		Type:            settlementdom.SellerTypeAvatar,
+		AvatarID:        snapshot.AvatarID,
+		UserID:          snapshot.UserID,
+		PayoutAccountID: snapshot.PayoutAccountID,
+		StripeAccountID: snapshot.StripeAccountID,
+	}
+	if err := seller.Validate(); err != nil {
+		return settlementdom.SellerIdentity{},
+			ErrTransferResaleSettlementMismatch
+	}
+
+	return seller, nil
+}
+
+func (u *TransferUsecase) validateResaleSettlementBeforeTransfer(
+	ctx context.Context,
+	paymentID string,
+	seller settlementdom.SellerIdentity,
+) error {
+	if u == nil ||
+		u.settlementUC == nil ||
+		u.settlementQueue == nil {
+		return ErrTransferResaleSettlementNotConfigured
+	}
+	if paymentID == "" {
+		return ErrTransferResaleSettlementMismatch
+	}
+	if err := seller.Validate(); err != nil {
+		return ErrTransferResaleSettlementMismatch
+	}
+
+	settlementID, err := settlementdom.NewID(paymentID, seller)
+	if err != nil {
+		return ErrTransferResaleSettlementMismatch
+	}
+
+	settlement, err := u.settlementUC.GetByID(
+		ctx,
+		settlementID,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"%w: load settlement %s: %v",
+			ErrTransferResaleSettlementUnavailable,
+			settlementID,
+			err,
+		)
+	}
+
+	if settlement.ID != settlementID ||
+		settlement.PaymentID != paymentID ||
+		settlement.OrderID != paymentID ||
+		settlement.SellerIdentity() != seller {
+		return ErrTransferResaleSettlementMismatch
+	}
+
+	switch settlement.Status {
+	case settlementdom.StatusPending,
+		settlementdom.StatusReady,
+		settlementdom.StatusFailedRetryable,
+		settlementdom.StatusTransferring,
+		settlementdom.StatusTransferred,
+		settlementdom.StatusFailed:
+		return nil
+
+	case settlementdom.StatusCanceled,
+		settlementdom.StatusReversed:
+		return ErrTransferResaleSettlementUnavailable
+
+	default:
+		return ErrTransferResaleSettlementUnavailable
+	}
+}
+
+func validateResaleReadySettlement(
+	settlement settlementdom.Settlement,
+	paymentID string,
+	seller settlementdom.SellerIdentity,
+) error {
+	if settlement.ID == "" ||
+		settlement.PaymentID != paymentID ||
+		settlement.OrderID != paymentID ||
+		settlement.SellerIdentity() != seller {
+		return ErrTransferResaleSettlementMismatch
+	}
+
+	switch settlement.Status {
+	case settlementdom.StatusReady,
+		settlementdom.StatusFailedRetryable,
+		settlementdom.StatusTransferring,
+		settlementdom.StatusTransferred,
+		settlementdom.StatusFailed:
+		return nil
+	default:
+		return ErrTransferResaleSettlementUnavailable
+	}
+}
+
+func shouldEnqueueResaleSettlement(
+	status settlementdom.SettlementStatus,
+) bool {
+	switch status {
+	case settlementdom.StatusReady,
+		settlementdom.StatusFailedRetryable:
+		return true
+	default:
+		return false
+	}
 }
 
 // ============================================================

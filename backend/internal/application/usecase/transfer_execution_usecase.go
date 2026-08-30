@@ -9,14 +9,49 @@ import (
 
 	applicationport "narratives/internal/application/port"
 	transferdom "narratives/internal/domain/transfer"
+	walletdom "narratives/internal/domain/wallet"
 )
+
+// -----------------------------------------------------------------------------
+// Wallet Ports
+// -----------------------------------------------------------------------------
+
+// AvatarWalletItemTransferUpdater updates sender / receiver wallet asset caches.
+//
+// Method names follow the current assetId-based wallet repository contract.
+// The identifier passed to these methods is a Bubblegum V2 assetId, not a
+// legacy SPL mint address.
+type AvatarWalletItemTransferUpdater interface {
+	RemoveAssetIDFromAvatarWalletItems(
+		ctx context.Context,
+		avatarID string,
+		assetID string,
+		now time.Time,
+	) error
+
+	AddAssetIDToAvatarWalletItems(
+		ctx context.Context,
+		avatarID string,
+		assetID string,
+		now time.Time,
+	) error
+}
+
+// AvatarWalletSyncer fully synchronizes one Avatar wallet from the current
+// on-chain asset state after a transfer.
+type AvatarWalletSyncer interface {
+	SyncWalletAssetIDs(
+		ctx context.Context,
+		avatarID string,
+	) (walletdom.Wallet, error)
+}
 
 // -----------------------------------------------------------------------------
 // Usecase
 // -----------------------------------------------------------------------------
 
 // TokenTransferExecutionUsecase executes the common Bubblegum V2 cNFT transfer
-// flow shared by TransferUsecase and ShareTransferUsecase.
+// flow used by TransferUsecase.
 //
 // This use case is responsible only for the common transfer execution:
 //
@@ -34,8 +69,8 @@ import (
 // of the Bubblegum service. The Go backend must not load or send private keys.
 //
 // Scan verification, order lookup / locking, transfer source resolution,
-// order item state transition, and inventory-specific business rules remain
-// responsibilities of the caller.
+// order item state transition, settlement readiness, and inventory-specific
+// business rules remain responsibilities of TransferUsecase.
 type TokenTransferExecutionUsecase struct {
 	tokenUpdate  applicationport.TokenOwnerUpdater
 	walletUpdate AvatarWalletItemTransferUpdater
@@ -143,17 +178,14 @@ var (
 // Input / Result
 // -----------------------------------------------------------------------------
 
-// TokenTransferExecutionHook allows the caller to execute business-specific
-// processing while the transfer attempt is still PENDING.
+// TokenTransferExecutionHook allows TransferUsecase to execute
+// business-specific processing while the transfer attempt is still PENDING.
 //
 // Typical usage:
 //
 // TransferUsecase:
-//   - AfterOnChain: MarkTransferredItem
-//   - BeforeSuccess: inventory cleanup
-//
-// ShareTransferUsecase:
-//   - no hook required
+//   - AfterOnChain: Order item transition / Resale Settlement readiness
+//   - BeforeSuccess: List inventory cleanup
 //
 // Returning an error causes the transfer attempt to be marked FAILED.
 // When the on-chain transaction already exists, its transaction signature is
@@ -176,8 +208,7 @@ type TokenTransferExecutionInput struct {
 
 	// AttemptReference is persisted to transfer.OrderID.
 	//
-	// TransferUsecase passes the actual order ID.
-	// ShareTransferUsecase passes the generated share reference.
+	// TransferUsecase passes the actual Order ID.
 	AttemptReference string
 
 	// Exactly one of FromAvatarID / FromBrandID identifies the logical sender.
@@ -198,30 +229,31 @@ type TokenTransferExecutionInput struct {
 	FromWallet string
 	ToWallet   string
 
-	// RemoveFromSenderWallet is true for avatar -> avatar transfer such as
-	// resale and share.
+	// RemoveFromSenderWallet is true for avatar -> avatar transfers such as
+	// Resale.
 	//
-	// It is false for brand -> avatar transfer.
+	// It is false for brand -> avatar transfers.
 	RemoveFromSenderWallet bool
 
-	// SyncSenderWallet synchronizes the sender avatar wallet from on-chain
+	// SyncSenderWallet synchronizes the sender Avatar wallet from on-chain
 	// after the transfer.
 	SyncSenderWallet bool
 
-	// SyncReceiverWallet synchronizes the receiver avatar wallet from on-chain
+	// SyncReceiverWallet synchronizes the receiver Avatar wallet from on-chain
 	// after the transfer.
 	SyncReceiverWallet bool
 
 	// AfterOnChain is executed immediately after the blockchain transaction
 	// succeeds and before token / wallet state updates.
 	//
-	// TransferUsecase can use this to mark the matched order item transferred.
+	// TransferUsecase uses this for Order item state transition and, for
+	// Resale, Settlement readiness.
 	AfterOnChain TokenTransferExecutionHook
 
 	// BeforeSuccess is executed after common token / wallet processing and
 	// resolver warmup, but before transfer status becomes SUCCEEDED.
 	//
-	// TransferUsecase can use this for inventory cleanup.
+	// TransferUsecase uses this for List inventory cleanup.
 	BeforeSuccess TokenTransferExecutionHook
 }
 
