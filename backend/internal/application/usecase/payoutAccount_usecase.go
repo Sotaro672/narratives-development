@@ -3,6 +3,8 @@ package usecase
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
@@ -13,13 +15,16 @@ import (
 )
 
 const (
-	payoutAccountCountryJapan         = "JP"
-	payoutAccountEntityTypeIndividual = "individual"
-	payoutAccountIdempotencyPrefix    = "mall-payout-account:"
+	payoutAccountCountryJapan                = "JP"
+	payoutAccountEntityTypeIndividual        = "individual"
+	payoutAccountIdempotencyPrefix           = "mall-payout-account:"
+	payoutAccountBankAttachIdempotencyPrefix = "mall-payout-bank-account:"
 )
 
 var (
-	ErrPayoutAccountRepositoryMissing    = errors.New("payoutAccount: repository is not configured")
+	ErrPayoutAccountRepositoryMissing = errors.New(
+		"payoutAccount: repository is not configured",
+	)
 	ErrPayoutAccountStripeGatewayMissing = errors.New(
 		"payoutAccount: Stripe gateway is not configured",
 	)
@@ -32,6 +37,9 @@ var (
 	ErrPayoutAccountStripeResultEmpty = errors.New(
 		"payoutAccount: Stripe account result is empty",
 	)
+	ErrPayoutAccountBankResultEmpty = errors.New(
+		"payoutAccount: Stripe bank account result is empty",
+	)
 	ErrPayoutAccountSessionResultEmpty = errors.New(
 		"payoutAccount: Stripe account session result is empty",
 	)
@@ -41,12 +49,16 @@ var (
 	ErrPayoutAccountProviderMismatch = errors.New(
 		"payoutAccount: provider mismatch",
 	)
+	ErrPayoutAccountBankAccountTokenInvalid = errors.New(
+		"payoutAccount: invalid bank account token",
+	)
 	ErrPayoutAccountDirectRegistrationDisabled = errors.New(
 		"payoutAccount: direct bank account registration is disabled",
 	)
 
 	// Legacy aliases kept temporarily so old callers continue to compile while
-	// the Stripe Account Session flow replaces direct bank registration.
+	// the token-based Stripe bank account registration flow replaces legacy
+	// direct bank registration.
 	ErrPayoutAccountProviderMissing     = ErrPayoutAccountStripeGatewayMissing
 	ErrPayoutAccountProviderResultEmpty = ErrPayoutAccountStripeResultEmpty
 	ErrPayoutAccountProviderStateEmpty  = ErrPayoutAccountStripeResultEmpty
@@ -55,8 +67,8 @@ var (
 // RegisterPayoutAccountInput is retained temporarily for compatibility with
 // legacy callers.
 //
-// Direct bank-account registration through AMOL is disabled. Bank information
-// must be collected by Stripe Connect Embedded Components instead.
+// Direct bank-account registration through AMOL is disabled. Full bank account
+// information must never be sent to the AMOL backend.
 type RegisterPayoutAccountInput struct {
 	UserID string
 
@@ -73,7 +85,8 @@ type RegisterPayoutAccountInput struct {
 // PayoutAccountSession contains only the short-lived client secret that may be
 // returned to the authenticated browser.
 //
-// StripeAccountID remains backend-only.
+// Deprecated: retained temporarily until the legacy Embedded Connect flow is
+// removed.
 type PayoutAccountSession struct {
 	ClientSecret string `json:"clientSecret"`
 }
@@ -86,9 +99,11 @@ type PayoutAccountSession struct {
 //   - payoutAccounts/{userId} is the canonical persistence location
 //   - Provider is always "stripe" for the production resale payout flow
 //   - ProviderAccountID is backend-only
-//   - bank onboarding is performed by Stripe, not AMOL
+//   - bank account details are tokenized directly by Stripe.js
+//   - AMOL receives only the resulting Stripe bank account token
 //   - full bank account numbers never pass through this usecase
 //   - Stripe account creation uses a stable per-user idempotency key
+//   - bank attachment uses a token-hash-based idempotency key
 //   - PayoutReady is synchronized from Stripe before payout account reads
 type PayoutAccountUsecase struct {
 	repo payoutdom.Repository
@@ -143,8 +158,7 @@ func (u *PayoutAccountUsecase) GetByUserID(
 		return nil, err
 	}
 
-	userID = strings.TrimSpace(userID)
-	if userID == "" {
+	if !isValidPayoutUserID(userID) {
 		return nil, payoutdom.ErrInvalidUserID
 	}
 
@@ -153,7 +167,7 @@ func (u *PayoutAccountUsecase) GetByUserID(
 		return nil, err
 	}
 
-	if strings.TrimSpace(account.Provider) != payoutdom.ProviderStripe {
+	if account.Provider != payoutdom.ProviderStripe {
 		return nil, ErrPayoutAccountProviderMismatch
 	}
 
@@ -178,8 +192,7 @@ func (u *PayoutAccountUsecase) EnsureStripeAccount(
 		return nil, err
 	}
 
-	userID = strings.TrimSpace(userID)
-	if userID == "" {
+	if !isValidPayoutUserID(userID) {
 		return nil, payoutdom.ErrInvalidUserID
 	}
 
@@ -190,7 +203,7 @@ func (u *PayoutAccountUsecase) EnsureStripeAccount(
 	case getErr == nil:
 		existingFound = true
 
-		if strings.TrimSpace(existing.Provider) == payoutdom.ProviderStripe {
+		if existing.Provider == payoutdom.ProviderStripe {
 			synced, err := u.syncStripeState(ctx, existing)
 			if err != nil {
 				return nil, err
@@ -211,11 +224,11 @@ func (u *PayoutAccountUsecase) EnsureStripeAccount(
 		return nil, err
 	}
 
-	if strings.TrimSpace(avatar.UserID) != userID {
+	if avatar.UserID != userID {
 		return nil, payoutdom.ErrInvalidUserID
 	}
 
-	displayName := strings.TrimSpace(avatar.AvatarName)
+	displayName := avatar.AvatarName
 	if displayName == "" {
 		return nil, avatardom.ErrInvalidAvatarName
 	}
@@ -230,7 +243,7 @@ func (u *PayoutAccountUsecase) EnsureStripeAccount(
 		applicationport.CreateStripePayoutAccountInput{
 			UserID:         userID,
 			DisplayName:    displayName,
-			ContactEmail:   strings.TrimSpace(contactEmail),
+			ContactEmail:   contactEmail,
 			Country:        payoutAccountCountryJapan,
 			EntityType:     payoutAccountEntityTypeIndividual,
 			IdempotencyKey: payoutAccountIdempotencyPrefix + userID,
@@ -243,8 +256,8 @@ func (u *PayoutAccountUsecase) EnsureStripeAccount(
 		return nil, ErrPayoutAccountStripeResultEmpty
 	}
 
-	stripeAccountID := strings.TrimSpace(result.ID)
-	if stripeAccountID == "" || !strings.HasPrefix(stripeAccountID, "acct_") {
+	stripeAccountID := result.ID
+	if !isValidPayoutStripeAccountID(stripeAccountID) {
 		return nil, payoutdom.ErrInvalidProviderAccountID
 	}
 
@@ -326,10 +339,78 @@ func (u *PayoutAccountUsecase) EnsureStripeAccount(
 	return &synced, nil
 }
 
+// RegisterBankAccount attaches a Stripe.js-created single-use bank account
+// token to the authenticated user's persisted Connected Account.
+//
+// The browser supplies only bankAccountToken. StripeAccountID is always resolved
+// on the backend from the authenticated user's PayoutAccount.
+//
+// Raw bank account numbers, routing numbers, bank codes, branch codes, account
+// types, and account holder names must never pass through this method.
+func (u *PayoutAccountUsecase) RegisterBankAccount(
+	ctx context.Context,
+	userID string,
+	bankAccountToken string,
+) (*payoutdom.PayoutAccount, error) {
+	if err := u.validateStripeReady(); err != nil {
+		return nil, err
+	}
+
+	if !isValidPayoutUserID(userID) {
+		return nil, payoutdom.ErrInvalidUserID
+	}
+	if !isValidPayoutBankAccountToken(bankAccountToken) {
+		return nil, ErrPayoutAccountBankAccountTokenInvalid
+	}
+
+	account, err := u.EnsureStripeAccount(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if account == nil {
+		return nil, ErrPayoutAccountStripeResultEmpty
+	}
+
+	if account.Provider != payoutdom.ProviderStripe {
+		return nil, ErrPayoutAccountProviderMismatch
+	}
+
+	stripeAccountID := account.ProviderAccountID
+	if !isValidPayoutStripeAccountID(stripeAccountID) {
+		return nil, payoutdom.ErrInvalidProviderAccountID
+	}
+
+	result, err := u.stripeGateway.AttachPayoutBankAccount(
+		ctx,
+		applicationport.AttachStripePayoutBankAccountInput{
+			StripeAccountID:  stripeAccountID,
+			BankAccountToken: bankAccountToken,
+			IdempotencyKey: payoutAccountBankAttachIdempotencyKey(
+				userID,
+				bankAccountToken,
+			),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, ErrPayoutAccountBankResultEmpty
+	}
+
+	synced, err := u.syncStripeState(ctx, *account)
+	if err != nil {
+		return nil, err
+	}
+
+	return &synced, nil
+}
+
 // CreateAccountSession creates a short-lived Stripe Account Session for the
 // authenticated user's Connected Account.
 //
-// The Connected Account is created automatically when it does not yet exist.
+// Deprecated: retained temporarily until the legacy Embedded Connect flow is
+// removed.
 func (u *PayoutAccountUsecase) CreateAccountSession(
 	ctx context.Context,
 	userID string,
@@ -339,8 +420,8 @@ func (u *PayoutAccountUsecase) CreateAccountSession(
 		return nil, err
 	}
 
-	stripeAccountID := strings.TrimSpace(account.ProviderAccountID)
-	if stripeAccountID == "" || !strings.HasPrefix(stripeAccountID, "acct_") {
+	stripeAccountID := account.ProviderAccountID
+	if !isValidPayoutStripeAccountID(stripeAccountID) {
 		return nil, payoutdom.ErrInvalidProviderAccountID
 	}
 
@@ -357,11 +438,11 @@ func (u *PayoutAccountUsecase) CreateAccountSession(
 		return nil, ErrPayoutAccountSessionResultEmpty
 	}
 
-	if strings.TrimSpace(result.AccountID) != stripeAccountID {
+	if result.AccountID != stripeAccountID {
 		return nil, ErrPayoutAccountStripeAccountMismatch
 	}
 
-	clientSecret := strings.TrimSpace(result.ClientSecret)
+	clientSecret := result.ClientSecret
 	if clientSecret == "" {
 		return nil, ErrPayoutAccountSessionResultEmpty
 	}
@@ -374,8 +455,8 @@ func (u *PayoutAccountUsecase) CreateAccountSession(
 // Register is retained only until all legacy direct-registration callers are
 // removed.
 //
-// AMOL must no longer receive full bank account numbers. Stripe Embedded
-// onboarding is the only supported registration flow.
+// AMOL must never receive full bank account numbers. The supported registration
+// flow is Stripe.js tokenization followed by RegisterBankAccount.
 func (u *PayoutAccountUsecase) Register(
 	ctx context.Context,
 	in RegisterPayoutAccountInput,
@@ -399,8 +480,8 @@ func (u *PayoutAccountUsecase) applyStripeAccountAfterConflict(
 		return payoutdom.PayoutAccount{}, err
 	}
 
-	if strings.TrimSpace(existing.Provider) == payoutdom.ProviderStripe {
-		if strings.TrimSpace(existing.ProviderAccountID) != stripeAccountID {
+	if existing.Provider == payoutdom.ProviderStripe {
+		if existing.ProviderAccountID != stripeAccountID {
 			return payoutdom.PayoutAccount{}, ErrPayoutAccountStripeAccountMismatch
 		}
 
@@ -436,12 +517,12 @@ func (u *PayoutAccountUsecase) syncStripeState(
 	ctx context.Context,
 	account payoutdom.PayoutAccount,
 ) (payoutdom.PayoutAccount, error) {
-	if strings.TrimSpace(account.Provider) != payoutdom.ProviderStripe {
+	if account.Provider != payoutdom.ProviderStripe {
 		return payoutdom.PayoutAccount{}, ErrPayoutAccountProviderMismatch
 	}
 
-	stripeAccountID := strings.TrimSpace(account.ProviderAccountID)
-	if stripeAccountID == "" || !strings.HasPrefix(stripeAccountID, "acct_") {
+	stripeAccountID := account.ProviderAccountID
+	if !isValidPayoutStripeAccountID(stripeAccountID) {
 		return payoutdom.PayoutAccount{}, payoutdom.ErrInvalidProviderAccountID
 	}
 
@@ -452,7 +533,7 @@ func (u *PayoutAccountUsecase) syncStripeState(
 	if state == nil {
 		return payoutdom.PayoutAccount{}, ErrPayoutAccountStripeResultEmpty
 	}
-	if strings.TrimSpace(state.ID) != stripeAccountID {
+	if state.ID != stripeAccountID {
 		return payoutdom.PayoutAccount{}, ErrPayoutAccountStripeAccountMismatch
 	}
 
@@ -467,8 +548,8 @@ func (u *PayoutAccountUsecase) syncStripeState(
 	bankLast4 := ""
 
 	if bank != nil {
-		bankName = strings.TrimSpace(bank.BankName)
-		bankLast4 = strings.TrimSpace(bank.Last4)
+		bankName = bank.BankName
+		bankLast4 = bank.Last4
 	}
 
 	stateChanged :=
@@ -531,6 +612,35 @@ func payoutAccountStateFromStripe(
 	}
 
 	return payoutdom.StatusPending, false
+}
+
+func payoutAccountBankAttachIdempotencyKey(
+	userID string,
+	bankAccountToken string,
+) string {
+	sum := sha256.Sum256([]byte(bankAccountToken))
+
+	return payoutAccountBankAttachIdempotencyPrefix +
+		userID +
+		":" +
+		hex.EncodeToString(sum[:])
+}
+
+func isValidPayoutUserID(value string) bool {
+	return value != "" &&
+		!strings.ContainsAny(value, " \t\r\n")
+}
+
+func isValidPayoutStripeAccountID(value string) bool {
+	return value != "" &&
+		!strings.ContainsAny(value, " \t\r\n") &&
+		strings.HasPrefix(value, "acct_")
+}
+
+func isValidPayoutBankAccountToken(value string) bool {
+	return value != "" &&
+		!strings.ContainsAny(value, " \t\r\n") &&
+		strings.HasPrefix(value, "tok_")
 }
 
 func (u *PayoutAccountUsecase) validateStripeReady() error {

@@ -45,7 +45,7 @@ var _ applicationport.StripePayoutAccountGateway = (*AccountGateway)(nil)
 // NewAccountGateway creates a Stripe Connected Account gateway.
 func NewAccountGateway(secretKey string) *AccountGateway {
 	return &AccountGateway{
-		secretKey: strings.TrimSpace(secretKey),
+		secretKey: secretKey,
 		httpClient: &http.Client{
 			Timeout: 15 * time.Second,
 		},
@@ -65,11 +65,11 @@ func (g *AccountGateway) CreateAccount(
 		return nil, err
 	}
 
-	accountID := strings.TrimSpace(in.AccountID)
-	companyID := strings.TrimSpace(in.CompanyID)
-	displayName := strings.TrimSpace(in.DisplayName)
-	contactEmail := strings.TrimSpace(in.ContactEmail)
-	country := strings.ToUpper(strings.TrimSpace(in.Country))
+	accountID := in.AccountID
+	companyID := in.CompanyID
+	displayName := in.DisplayName
+	contactEmail := in.ContactEmail
+	country := strings.ToUpper(in.Country)
 
 	if accountID == "" {
 		return nil, errors.New("stripe account: accountId is empty")
@@ -95,7 +95,7 @@ func (g *AccountGateway) CreateAccount(
 			"companyId": companyID,
 			"ownerType": "company_account",
 		},
-		strings.TrimSpace(in.IdempotencyKey),
+		in.IdempotencyKey,
 	)
 	if err != nil {
 		return nil, err
@@ -125,18 +125,18 @@ func (g *AccountGateway) CreateOnboardingLink(
 ) (*applicationport.StripeAccountLinkResult, error) {
 	out, err := g.createAccountLink(
 		ctx,
-		strings.TrimSpace(in.StripeAccountID),
+		in.StripeAccountID,
 		"account_onboarding",
-		strings.TrimSpace(in.ReturnURL),
-		strings.TrimSpace(in.RefreshURL),
+		in.ReturnURL,
+		in.RefreshURL,
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	return &applicationport.StripeAccountLinkResult{
-		AccountID: strings.TrimSpace(out.Account),
-		URL:       strings.TrimSpace(out.URL),
+		AccountID: out.Account,
+		URL:       out.URL,
 		ExpiresAt: out.ExpiresAt,
 	}, nil
 }
@@ -158,11 +158,11 @@ func (g *AccountGateway) CreatePayoutAccount(
 		return nil, err
 	}
 
-	userID := strings.TrimSpace(in.UserID)
-	displayName := strings.TrimSpace(in.DisplayName)
-	contactEmail := strings.TrimSpace(in.ContactEmail)
-	country := strings.ToUpper(strings.TrimSpace(in.Country))
-	entityType := strings.ToLower(strings.TrimSpace(in.EntityType))
+	userID := in.UserID
+	displayName := in.DisplayName
+	contactEmail := in.ContactEmail
+	country := strings.ToUpper(in.Country)
+	entityType := strings.ToLower(in.EntityType)
 
 	if userID == "" {
 		return nil, errors.New("stripe payout account: userId is empty")
@@ -187,7 +187,7 @@ func (g *AccountGateway) CreatePayoutAccount(
 			"userId":    userID,
 			"ownerType": "mall_user",
 		},
-		strings.TrimSpace(in.IdempotencyKey),
+		in.IdempotencyKey,
 	)
 	if err != nil {
 		return nil, err
@@ -210,6 +210,67 @@ func (g *AccountGateway) GetPayoutAccount(
 	return payoutAccountResultFromResponse(*out)
 }
 
+// AttachPayoutBankAccount attaches a Stripe.js-created bank account token to
+// the Mall user's Connected Account.
+//
+// The application layer passes only the Stripe-generated token. Raw bank
+// account numbers, routing numbers, bank codes, branch codes, and account
+// holder names are never accepted by this adapter method.
+func (g *AccountGateway) AttachPayoutBankAccount(
+	ctx context.Context,
+	in applicationport.AttachStripePayoutBankAccountInput,
+) (*applicationport.StripePayoutBankAccountResult, error) {
+	if err := g.validateReady(); err != nil {
+		return nil, err
+	}
+
+	stripeAccountID := in.StripeAccountID
+	bankAccountToken := in.BankAccountToken
+	idempotencyKey := in.IdempotencyKey
+
+	if !isValidStripeAccountID(stripeAccountID) {
+		return nil, errors.New("stripe payout account: invalid stripeAccountId")
+	}
+	if !isValidStripeBankAccountToken(bankAccountToken) {
+		return nil, errors.New("stripe payout account: invalid bank account token")
+	}
+	if idempotencyKey == "" {
+		return nil, errors.New("stripe payout account: idempotency key is empty")
+	}
+
+	form := url.Values{}
+	form.Set("external_account", bankAccountToken)
+	form.Set("default_for_currency", "true")
+
+	var out stripeExternalBankAccount
+	if err := g.doFormWithBaseURL(
+		ctx,
+		stripeAccountsV1BaseURL,
+		http.MethodPost,
+		"/accounts/"+url.PathEscape(stripeAccountID)+"/external_accounts",
+		form,
+		idempotencyKey,
+		&out,
+	); err != nil {
+		return nil, err
+	}
+
+	if out.Object != "" && out.Object != "bank_account" {
+		return nil, errors.New("stripe payout account: external account is not a bank account")
+	}
+	if out.Account != "" && out.Account != stripeAccountID {
+		return nil, errors.New("stripe payout account: bank account owner mismatch")
+	}
+	if !isValidLast4(out.Last4) {
+		return nil, errors.New("stripe payout account: invalid bank account last4")
+	}
+
+	return &applicationport.StripePayoutBankAccountResult{
+		BankName: out.BankName,
+		Last4:    out.Last4,
+	}, nil
+}
+
 // CreatePayoutAccountSession creates a short-lived Stripe Account Session for
 // Connect Embedded Components.
 //
@@ -224,7 +285,7 @@ func (g *AccountGateway) CreatePayoutAccountSession(
 		return nil, err
 	}
 
-	stripeAccountID := strings.TrimSpace(in.StripeAccountID)
+	stripeAccountID := in.StripeAccountID
 	if !isValidStripeAccountID(stripeAccountID) {
 		return nil, errors.New("stripe payout account: invalid stripeAccountId")
 	}
@@ -255,9 +316,6 @@ func (g *AccountGateway) CreatePayoutAccountSession(
 		return nil, err
 	}
 
-	out.Account = strings.TrimSpace(out.Account)
-	out.ClientSecret = strings.TrimSpace(out.ClientSecret)
-
 	if out.Account == "" || out.Account != stripeAccountID {
 		return nil, errors.New("stripe payout account: account session account is empty or mismatched")
 	}
@@ -283,7 +341,6 @@ func (g *AccountGateway) GetPayoutBankAccount(
 		return nil, err
 	}
 
-	stripeAccountID = strings.TrimSpace(stripeAccountID)
 	if !isValidStripeAccountID(stripeAccountID) {
 		return nil, errors.New("stripe payout account: invalid stripeAccountId")
 	}
@@ -311,8 +368,8 @@ func (g *AccountGateway) GetPayoutBankAccount(
 	}
 
 	bank := out.Data[0]
-	bankName := strings.TrimSpace(bank.BankName)
-	last4 := strings.TrimSpace(bank.Last4)
+	bankName := bank.BankName
+	last4 := bank.Last4
 
 	if last4 != "" && !isValidLast4(last4) {
 		return nil, errors.New("stripe payout account: invalid bank account last4")
@@ -341,10 +398,8 @@ func (g *AccountGateway) createRecipientAccount(
 		return nil, err
 	}
 
-	displayName = strings.TrimSpace(displayName)
-	contactEmail = strings.TrimSpace(contactEmail)
-	country = strings.ToUpper(strings.TrimSpace(country))
-	entityType = strings.ToLower(strings.TrimSpace(entityType))
+	country = strings.ToUpper(country)
+	entityType = strings.ToLower(entityType)
 
 	if displayName == "" {
 		return nil, errors.New("stripe account: displayName is empty")
@@ -394,7 +449,7 @@ func (g *AccountGateway) createRecipientAccount(
 		"/accounts",
 		nil,
 		reqBody,
-		strings.TrimSpace(idempotencyKey),
+		idempotencyKey,
 		&out,
 	); err != nil {
 		return nil, err
@@ -415,7 +470,6 @@ func (g *AccountGateway) getAccount(
 		return nil, err
 	}
 
-	stripeAccountID = strings.TrimSpace(stripeAccountID)
 	if !isValidStripeAccountID(stripeAccountID) {
 		return nil, errors.New("stripe account: invalid stripeAccountId")
 	}
@@ -439,7 +493,7 @@ func (g *AccountGateway) getAccount(
 		return nil, err
 	}
 
-	if strings.TrimSpace(out.ID) != stripeAccountID {
+	if out.ID != stripeAccountID {
 		return nil, errors.New("stripe account: retrieved account id mismatch")
 	}
 
@@ -456,11 +510,6 @@ func (g *AccountGateway) createAccountLink(
 	if err := g.validateReady(); err != nil {
 		return nil, err
 	}
-
-	stripeAccountID = strings.TrimSpace(stripeAccountID)
-	useCase = strings.TrimSpace(useCase)
-	returnURL = strings.TrimSpace(returnURL)
-	refreshURL = strings.TrimSpace(refreshURL)
 
 	if !isValidStripeAccountID(stripeAccountID) {
 		return nil, errors.New("stripe account: invalid stripeAccountId")
@@ -514,9 +563,6 @@ func (g *AccountGateway) createAccountLink(
 	); err != nil {
 		return nil, err
 	}
-
-	out.Account = strings.TrimSpace(out.Account)
-	out.URL = strings.TrimSpace(out.URL)
 
 	if out.Account == "" || out.Account != stripeAccountID {
 		return nil, errors.New("stripe account: account link account is empty or mismatched")
@@ -700,7 +746,7 @@ type stripeExternalBankAccount struct {
 func accountResultFromResponse(
 	out stripeAccountResponse,
 ) (*applicationport.StripeAccountResult, error) {
-	id := strings.TrimSpace(out.ID)
+	id := out.ID
 	if !isValidStripeAccountID(id) {
 		return nil, errors.New("stripe account: stripe account id is empty or invalid")
 	}
@@ -708,32 +754,30 @@ func accountResultFromResponse(
 	closed := out.Closed != nil && *out.Closed
 
 	return &applicationport.StripeAccountResult{
-		ID:           id,
-		DisplayName:  strings.TrimSpace(out.DisplayName),
-		ContactEmail: strings.TrimSpace(out.ContactEmail),
-		Country:      strings.ToUpper(strings.TrimSpace(out.Identity.Country)),
-		Dashboard:    strings.TrimSpace(out.Dashboard),
-		Livemode:     out.Livemode,
-		Closed:       closed,
-		RecipientTransferStatus: strings.TrimSpace(
-			out.Configuration.Recipient.Capabilities.StripeBalance.StripeTransfers.Status,
-		),
-		CreatedAt: out.Created,
+		ID:                      id,
+		DisplayName:             out.DisplayName,
+		ContactEmail:            out.ContactEmail,
+		Country:                 strings.ToUpper(out.Identity.Country),
+		Dashboard:               out.Dashboard,
+		Livemode:                out.Livemode,
+		Closed:                  closed,
+		RecipientTransferStatus: out.Configuration.Recipient.Capabilities.StripeBalance.StripeTransfers.Status,
+		CreatedAt:               out.Created,
 	}, nil
 }
 
 func payoutAccountResultFromResponse(
 	out stripeAccountResponse,
 ) (*applicationport.StripePayoutAccountResult, error) {
-	id := strings.TrimSpace(out.ID)
+	id := out.ID
 	if !isValidStripeAccountID(id) {
 		return nil, errors.New("stripe payout account: stripe account id is empty or invalid")
 	}
 
 	closed := out.Closed != nil && *out.Closed
-	transferStatus := strings.ToLower(strings.TrimSpace(
+	transferStatus := strings.ToLower(
 		out.Configuration.Recipient.Capabilities.StripeBalance.StripeTransfers.Status,
-	))
+	)
 
 	detailsSubmitted := !hasOutstandingUserRequirements(out.Requirements)
 	payoutsEnabled := !closed && transferStatus == "active"
@@ -754,15 +798,13 @@ func hasOutstandingUserRequirements(
 ) bool {
 	for _, entry := range requirements.Entries {
 		if !strings.EqualFold(
-			strings.TrimSpace(entry.AwaitingActionFrom),
+			entry.AwaitingActionFrom,
 			"user",
 		) {
 			continue
 		}
 
-		status := strings.ToLower(strings.TrimSpace(
-			entry.MinimumDeadline.Status,
-		))
+		status := strings.ToLower(entry.MinimumDeadline.Status)
 
 		switch status {
 		case "":
@@ -793,7 +835,7 @@ func (g *AccountGateway) validateReady() error {
 		return errors.New("stripe account gateway is nil")
 	}
 
-	secretKey := strings.TrimSpace(g.secretKey)
+	secretKey := g.secretKey
 	if secretKey == "" {
 		return errors.New("stripe account gateway secret key is empty")
 	}
@@ -842,8 +884,8 @@ func (g *AccountGateway) doJSONWithBaseURL(
 		return err
 	}
 
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	path = "/" + strings.TrimLeft(strings.TrimSpace(path), "/")
+	baseURL = strings.TrimRight(baseURL, "/")
+	path = "/" + strings.TrimLeft(path, "/")
 
 	if baseURL == "" {
 		return errors.New("stripe account: base url is empty")
@@ -860,6 +902,7 @@ func (g *AccountGateway) doJSONWithBaseURL(
 		if err != nil {
 			return err
 		}
+
 		reader = bytes.NewReader(payload)
 	}
 
@@ -875,7 +918,7 @@ func (g *AccountGateway) doJSONWithBaseURL(
 
 	req.Header.Set(
 		"Authorization",
-		"Bearer "+strings.TrimSpace(g.secretKey),
+		"Bearer "+g.secretKey,
 	)
 	req.Header.Set(
 		"Stripe-Version",
@@ -893,10 +936,10 @@ func (g *AccountGateway) doJSONWithBaseURL(
 		)
 	}
 
-	if key := strings.TrimSpace(idempotencyKey); key != "" {
+	if idempotencyKey != "" {
 		req.Header.Set(
 			"Idempotency-Key",
-			key,
+			idempotencyKey,
 		)
 	}
 
@@ -942,8 +985,8 @@ func (g *AccountGateway) doFormWithBaseURL(
 		return err
 	}
 
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	path = "/" + strings.TrimLeft(strings.TrimSpace(path), "/")
+	baseURL = strings.TrimRight(baseURL, "/")
+	path = "/" + strings.TrimLeft(path, "/")
 
 	if baseURL == "" {
 		return errors.New("stripe account: base url is empty")
@@ -962,7 +1005,7 @@ func (g *AccountGateway) doFormWithBaseURL(
 
 	req.Header.Set(
 		"Authorization",
-		"Bearer "+strings.TrimSpace(g.secretKey),
+		"Bearer "+g.secretKey,
 	)
 	req.Header.Set(
 		"Stripe-Version",
@@ -977,10 +1020,10 @@ func (g *AccountGateway) doFormWithBaseURL(
 		"application/x-www-form-urlencoded",
 	)
 
-	if key := strings.TrimSpace(idempotencyKey); key != "" {
+	if idempotencyKey != "" {
 		req.Header.Set(
 			"Idempotency-Key",
-			key,
+			idempotencyKey,
 		)
 	}
 
@@ -1032,8 +1075,8 @@ func stripeAccountHTTPError(
 	var out stripeAccountErrorResponse
 
 	if err := json.Unmarshal(body, &out); err == nil {
-		code := strings.TrimSpace(out.Error.Code)
-		message := strings.TrimSpace(out.Error.Message)
+		code := out.Error.Code
+		message := out.Error.Message
 
 		switch {
 		case code != "" && message != "":
@@ -1060,7 +1103,7 @@ func stripeAccountHTTPError(
 		}
 	}
 
-	raw := strings.TrimSpace(string(body))
+	raw := string(body)
 	if raw == "" {
 		raw = http.StatusText(statusCode)
 	}
@@ -1079,17 +1122,21 @@ func stripeAccountHTTPError(
 func isValidStripeAccountID(
 	value string,
 ) bool {
-	value = strings.TrimSpace(value)
-
 	return value != "" &&
+		!strings.ContainsAny(value, " \t\r\n") &&
 		strings.HasPrefix(value, "acct_")
+}
+
+func isValidStripeBankAccountToken(
+	value string,
+) bool {
+	return value != "" &&
+		!strings.ContainsAny(value, " \t\r\n")
 }
 
 func isValidLast4(
 	value string,
 ) bool {
-	value = strings.TrimSpace(value)
-
 	if len(value) != 4 {
 		return false
 	}
@@ -1106,7 +1153,6 @@ func isValidLast4(
 func isValidHTTPURL(
 	value string,
 ) bool {
-	value = strings.TrimSpace(value)
 	if value == "" {
 		return false
 	}
