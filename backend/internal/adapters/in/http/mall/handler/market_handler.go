@@ -131,6 +131,22 @@ func (h *MarketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if len(parts) == 3 && parts[1] == "comments" {
+		commentID := parts[2]
+		if commentID == "" {
+			notFound(w)
+			return
+		}
+
+		if r.Method != http.MethodDelete {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.deleteResaleComment(w, r, resaleID, commentID)
+		return
+	}
+
 	if len(parts) != 1 {
 		notFound(w)
 		return
@@ -442,6 +458,42 @@ func (h *MarketHandler) createResaleComment(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"data":        comment,
 		"interaction": summary,
+	})
+}
+
+func (h *MarketHandler) deleteResaleComment(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+	commentID string,
+) {
+	ctx := r.Context()
+
+	if h == nil || h.resaleReviewUC == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	avatarID, ok := currentMarketAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	summary, err := h.resaleReviewUC.DeleteComment(
+		ctx,
+		resaleID,
+		commentID,
+		avatarID,
+	)
+	if err != nil {
+		writeResaleReviewErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": summary,
 	})
 }
 

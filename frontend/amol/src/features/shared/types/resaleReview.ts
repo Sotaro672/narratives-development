@@ -28,6 +28,8 @@ export type ResaleReviewCommentPage = {
   perPage: number;
 };
 
+export type ResaleChatSource = "owner" | "market";
+
 export type ResaleChatLatestComment = {
   commentId: string;
   resaleId: string;
@@ -48,6 +50,7 @@ export type ResaleChatListItem = {
   brandName: string;
   imageUrl: string;
   price: number;
+  chatSource: ResaleChatSource;
   latestComment?: ResaleChatLatestComment;
   commentCount: number;
   unreadCommentCount: number;

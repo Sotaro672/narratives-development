@@ -65,11 +65,20 @@ type FilterLike struct {
 
 // FilterComment is used for listing comments.
 //
-// ResaleID is normally required because comments belong to a resale review.
+// ResaleID:
+// - non-empty = comments are limited to the specified resale review
+// - empty     = comments may be listed across resale reviews when AvatarID is specified
 //
 // AvatarID:
-// - empty = no avatar filter
+// - empty     = no avatar filter
 // - non-empty = comments created by the specified avatar only
+//
+// At least one of ResaleID / AvatarID must be specified.
+//
+// Typical usages:
+// - ResaleID only           = all comments for one resale
+// - ResaleID + AvatarID     = one avatar's comments for one resale
+// - AvatarID only           = one avatar's comments across all resale reviews
 //
 // Deleted:
 // - nil   = no deleted-state filter
@@ -194,10 +203,17 @@ type LikeRepository interface {
 //
 // Comment body is immutable after creation.
 // Read-state changes are handled by MutationRepository.MarkCommentsRead.
-// Normal deletion is handled by MutationRepository.MarkCommentDeleted.
+// Normal logical deletion is handled by MutationRepository.MarkCommentDeleted.
 // Physical deletion is reserved for resale-review cleanup.
 type CommentRepository interface {
-	// List lists comments under a resale review.
+	// List lists comments by resaleId and/or avatarId.
+	//
+	// Supported query forms:
+	// - ResaleID only       = comments under one resale review
+	// - ResaleID + AvatarID = comments by one avatar under one resale review
+	// - AvatarID only       = comments by one avatar across resale reviews
+	//
+	// At least one of ResaleID / AvatarID must be specified.
 	List(
 		ctx context.Context,
 		filter FilterComment,
@@ -223,7 +239,7 @@ type CommentRepository interface {
 
 	// DeleteUnderParent physically deletes a comment document.
 	//
-	// Normal seller deletion must use MutationRepository.MarkCommentDeleted.
+	// Normal logical deletion must use MutationRepository.MarkCommentDeleted.
 	// Physical deletion is intended for resale-review cleanup.
 	DeleteUnderParent(
 		ctx context.Context,
@@ -288,6 +304,9 @@ type MutationRepository interface {
 
 	// MarkCommentDeleted logically deletes a comment and decrements
 	// CommentCount atomically.
+	//
+	// Authorization and delete eligibility must be validated by
+	// application.usecase before invoking this repository method.
 	//
 	// When the comment is already deleted, the counter must not be
 	// decremented again.

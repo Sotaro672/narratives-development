@@ -522,32 +522,74 @@ func (r *resaleReviewCommentRepositoryFS) List(ctx context.Context, filter resal
 		return common.PageResult[resalereview.Comment]{}, err
 	}
 
-	if filter.ResaleID == "" {
-		return common.PageResult[resalereview.Comment]{}, resalereview.ErrInvalidResaleID
+	if filter.ResaleID == "" && filter.AvatarID == "" {
+		return common.PageResult[resalereview.Comment]{}, resalereview.ErrInvalid
 	}
 
-	it := r.root.commentsCol(filter.ResaleID).Documents(ctx)
-	defer it.Stop()
-
 	items := make([]resalereview.Comment, 0)
-	for {
-		snapshot, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return common.PageResult[resalereview.Comment]{}, err
-		}
 
-		item, err := commentFromSnapshot(snapshot)
-		if err != nil {
-			return common.PageResult[resalereview.Comment]{}, err
-		}
-		if !matchesCommentFilter(item, filter) {
-			continue
-		}
+	if filter.ResaleID != "" {
+		it := r.root.commentsCol(filter.ResaleID).Documents(ctx)
+		defer it.Stop()
 
-		items = append(items, item)
+		for {
+			snapshot, err := it.Next()
+			if errors.Is(err, iterator.Done) {
+				break
+			}
+			if err != nil {
+				return common.PageResult[resalereview.Comment]{}, err
+			}
+
+			item, err := commentFromSnapshot(snapshot)
+			if err != nil {
+				return common.PageResult[resalereview.Comment]{}, err
+			}
+			if !matchesCommentFilter(item, filter) {
+				continue
+			}
+
+			items = append(items, item)
+		}
+	} else {
+		parentIt := r.root.rootCol().Documents(ctx)
+		defer parentIt.Stop()
+
+		for {
+			parentSnapshot, err := parentIt.Next()
+			if errors.Is(err, iterator.Done) {
+				break
+			}
+			if err != nil {
+				return common.PageResult[resalereview.Comment]{}, err
+			}
+
+			commentIt := r.root.commentsCol(parentSnapshot.Ref.ID).Documents(ctx)
+
+			for {
+				snapshot, err := commentIt.Next()
+				if errors.Is(err, iterator.Done) {
+					break
+				}
+				if err != nil {
+					commentIt.Stop()
+					return common.PageResult[resalereview.Comment]{}, err
+				}
+
+				item, err := commentFromSnapshot(snapshot)
+				if err != nil {
+					commentIt.Stop()
+					return common.PageResult[resalereview.Comment]{}, err
+				}
+				if !matchesCommentFilter(item, filter) {
+					continue
+				}
+
+				items = append(items, item)
+			}
+
+			commentIt.Stop()
+		}
 	}
 
 	sortComments(items, sortSpec)

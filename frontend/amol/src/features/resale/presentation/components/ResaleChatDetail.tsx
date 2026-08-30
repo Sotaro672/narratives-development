@@ -13,6 +13,7 @@ import { fetchMarketResaleById } from "../../../market/infrastructure/marketResa
 import { fetchMarketResaleConditionImages } from "../../../market/infrastructure/marketResaleImageApi";
 import {
   createMarketResaleComment,
+  deleteMarketResaleComment,
   fetchMarketResaleComments,
 } from "../../../market/infrastructure/marketResaleReviewApi";
 
@@ -394,10 +395,6 @@ export default function ResaleChatDetail({
     item.status !== "listing" ||
     postingReply;
 
-  const canDeleteComments =
-    source === "owner" &&
-    item?.status === "listing";
-
   const openReplyModal = useCallback(() => {
     if (replyActionDisabled) {
       return;
@@ -486,11 +483,16 @@ export default function ResaleChatDetail({
   ]);
 
   const handleDeleteComment = useCallback(
-    async (commentId: string): Promise<void> => {
+    async (comment: ResaleReviewComment): Promise<void> => {
       if (
-        !canDeleteComments ||
+        !source ||
+        !item ||
+        item.status !== "listing" ||
         !normalizedResaleId ||
-        !commentId ||
+        !viewerAvatarId ||
+        comment.avatarId !== viewerAvatarId ||
+        comment.isRead ||
+        !comment.commentId ||
         deletingCommentId !== ""
       ) {
         return;
@@ -504,19 +506,27 @@ export default function ResaleChatDetail({
         return;
       }
 
-      setDeletingCommentId(commentId);
+      setDeletingCommentId(comment.commentId);
       setError("");
 
       try {
-        await deleteMyResaleComment({
-          resaleId: normalizedResaleId,
-          commentId,
-        });
+        if (source === "owner") {
+          await deleteMyResaleComment({
+            resaleId: normalizedResaleId,
+            commentId: comment.commentId,
+          });
+        } else {
+          await deleteMarketResaleComment({
+            resaleId: normalizedResaleId,
+            commentId: comment.commentId,
+          });
+        }
 
         setComments((currentComments) =>
           currentComments.filter(
-            (comment) =>
-              comment.commentId !== commentId,
+            (currentComment) =>
+              currentComment.commentId !==
+              comment.commentId,
           ),
         );
       } catch (caught) {
@@ -531,9 +541,11 @@ export default function ResaleChatDetail({
       }
     },
     [
-      canDeleteComments,
       deletingCommentId,
+      item,
       normalizedResaleId,
+      source,
+      viewerAvatarId,
     ],
   );
 
@@ -603,19 +615,24 @@ export default function ResaleChatDetail({
                         comment.avatarId ===
                           viewerAvatarId;
 
+                      const canDelete =
+                        item.status === "listing" &&
+                        isMine &&
+                        !comment.isRead;
+
                       return (
                         <ResaleCommentMessage
                           key={comment.commentId}
                           comment={comment}
                           isMine={isMine}
-                          canDelete={canDeleteComments}
+                          canDelete={canDelete}
                           deleting={
                             deletingCommentId ===
                             comment.commentId
                           }
                           onDelete={() => {
                             void handleDeleteComment(
-                              comment.commentId,
+                              comment,
                             );
                           }}
                         />

@@ -173,7 +173,10 @@ export function useInquiryListPage() {
       const resaleId = item.resaleId;
       let nextItem: ResaleChatListItem = item;
 
-      if (item.unreadCommentCount > 0) {
+      if (
+        item.chatSource === "owner" &&
+        item.unreadCommentCount > 0
+      ) {
         const result = await markMyResaleCommentsAsRead({
           resaleId,
         });
@@ -204,7 +207,7 @@ export function useInquiryListPage() {
 
       navigate(`/chats/resales/${encodeURIComponent(resaleId)}`, {
         state: {
-          source: "owner",
+          source: item.chatSource,
           resale: nextItem,
         },
       });

@@ -15,6 +15,13 @@ import (
 	resalereview "narratives/internal/domain/resale_review"
 )
 
+type ResaleChatSource string
+
+const (
+	ResaleChatSourceOwner  ResaleChatSource = "owner"
+	ResaleChatSourceMarket ResaleChatSource = "market"
+)
+
 type ResaleChatListItem struct {
 	ResaleID           string                 `json:"resaleId"`
 	Status             resaledom.ResaleStatus `json:"status"`
@@ -24,6 +31,7 @@ type ResaleChatListItem struct {
 	BrandName          string                 `json:"brandName"`
 	ImageURL           string                 `json:"imageUrl"`
 	Price              int                    `json:"price"`
+	ChatSource         ResaleChatSource       `json:"chatSource"`
 	LatestComment      *resalereview.Comment  `json:"latestComment,omitempty"`
 	CommentCount       int                    `json:"commentCount"`
 	UnreadCommentCount int                    `json:"unreadCommentCount"`
@@ -138,13 +146,26 @@ func (q *ResaleQuery) ListByAvatarID(
 	return items, nil
 }
 
-// ListChatItems returns resale comment threads owned by avatarID.
+// ListChatItems returns resale comment threads related to avatarID.
+//
+// A thread is included when either:
+// - avatarID owns the resale, or
+// - avatarID has posted at least one visible comment to the resale.
 //
 // Only resales with at least one visible comment are returned.
-// Threads are ordered by the creation time of the latest visible comment.
+// The same resale is returned only once.
 //
-// IsRead is seller-side state, therefore UnreadCommentCount represents
-// comments that the resale owner has not yet read.
+// ChatSource identifies how the current avatar participates in the thread:
+// - owner  = the current avatar owns the resale
+// - market = the current avatar commented on another avatar's resale
+//
+// Owner takes precedence when both conditions apply.
+//
+// IsRead is seller-side state, therefore UnreadCommentCount is populated
+// only for owner threads. Market-side threads always return zero unread
+// comments because seller read-state is not viewer unread-state.
+//
+// Threads are ordered by the creation time of the latest visible comment.
 func (q *ResaleQuery) ListChatItems(
 	ctx context.Context,
 	avatarID string,
@@ -160,16 +181,61 @@ func (q *ResaleQuery) ListChatItems(
 		return []ResaleChatListItem{}, nil
 	}
 
-	resales, err := q.resaleRepo.ListByAvatarID(ctx, avatarID)
+	ownedResales, err := q.resaleRepo.ListByAvatarID(ctx, avatarID)
 	if err != nil {
 		return nil, err
+	}
+
+	resalesByID := make(map[string]resaledom.Resale, len(ownedResales))
+	for _, resale := range ownedResales {
+		if resale.ID == "" {
+			continue
+		}
+
+		resalesByID[resale.ID] = resale
+	}
+
+	authoredComments, err := q.listVisibleCommentsByAvatarID(ctx, avatarID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, comment := range authoredComments {
+		if comment.ResaleID == "" {
+			continue
+		}
+
+		if _, exists := resalesByID[comment.ResaleID]; exists {
+			continue
+		}
+
+		resale, err := q.resaleRepo.GetByID(ctx, comment.ResaleID)
+		if err != nil {
+			return nil, err
+		}
+
+		resalesByID[resale.ID] = resale
+	}
+
+	resales := make([]resaledom.Resale, 0, len(resalesByID))
+	for _, resale := range resalesByID {
+		resales = append(resales, resale)
 	}
 
 	resales = q.enrichResalesForDisplay(ctx, resales)
 	items := make([]ResaleChatListItem, 0, len(resales))
 
 	for _, resale := range resales {
-		item, ok, err := q.buildChatListItem(ctx, resale)
+		chatSource := ResaleChatSourceMarket
+		if resale.AvatarID == avatarID {
+			chatSource = ResaleChatSourceOwner
+		}
+
+		item, ok, err := q.buildChatListItem(
+			ctx,
+			resale,
+			chatSource,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -184,6 +250,7 @@ func (q *ResaleQuery) ListChatItems(
 		if items[i].LatestActivityAt.Equal(items[j].LatestActivityAt) {
 			return items[i].ResaleID > items[j].ResaleID
 		}
+
 		return items[i].LatestActivityAt.After(items[j].LatestActivityAt)
 	})
 
@@ -192,6 +259,9 @@ func (q *ResaleQuery) ListChatItems(
 
 // CountUnreadCommentsByAvatarID returns the total number of visible unread
 // comments across all resales owned by avatarID.
+//
+// IsRead is seller-side state, so comments on resales merely commented on by
+// avatarID are intentionally excluded from this count.
 //
 // This method intentionally does not load display information or latest
 // comments because it is intended for the chat badge counter.
@@ -261,9 +331,59 @@ func (q *ResaleQuery) ListImages(
 	return q.imageRepo.ListByResaleID(ctx, resaleID)
 }
 
+func (q *ResaleQuery) listVisibleCommentsByAvatarID(
+	ctx context.Context,
+	avatarID string,
+) ([]resalereview.Comment, error) {
+	if q == nil || q.resaleReviewRepo == nil || q.resaleReviewRepo.Comments() == nil {
+		return nil, errors.New("not supported: ResaleQuery.listVisibleCommentsByAvatarID")
+	}
+	if avatarID == "" {
+		return []resalereview.Comment{}, nil
+	}
+
+	const perPage = 200
+
+	visible := false
+	items := make([]resalereview.Comment, 0)
+	pageNumber := 1
+
+	for {
+		result, err := q.resaleReviewRepo.Comments().List(
+			ctx,
+			resalereview.FilterComment{
+				AvatarID: avatarID,
+				Deleted:  &visible,
+			},
+			common.Sort{
+				Column: "createdAt",
+				Order:  common.SortDesc,
+			},
+			common.Page{
+				Number:  pageNumber,
+				PerPage: perPage,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		items = append(items, result.Items...)
+
+		if result.TotalPages <= pageNumber {
+			break
+		}
+
+		pageNumber++
+	}
+
+	return items, nil
+}
+
 func (q *ResaleQuery) buildChatListItem(
 	ctx context.Context,
 	resale resaledom.Resale,
+	chatSource ResaleChatSource,
 ) (ResaleChatListItem, bool, error) {
 	if q == nil || q.resaleReviewRepo == nil || q.resaleReviewRepo.Comments() == nil {
 		return ResaleChatListItem{}, false, errors.New("not supported: ResaleQuery.buildChatListItem")
@@ -298,26 +418,32 @@ func (q *ResaleQuery) buildChatListItem(
 	}
 
 	latestComment := latestResult.Items[0]
-	unread := false
+	unreadCommentCount := 0
 
-	unreadResult, err := q.resaleReviewRepo.Comments().List(
-		ctx,
-		resalereview.FilterComment{
-			ResaleID: resale.ID,
-			Deleted:  &visible,
-			IsRead:   &unread,
-		},
-		common.Sort{
-			Column: "createdAt",
-			Order:  common.SortDesc,
-		},
-		common.Page{
-			Number:  1,
-			PerPage: 1,
-		},
-	)
-	if err != nil {
-		return ResaleChatListItem{}, false, err
+	if chatSource == ResaleChatSourceOwner {
+		unread := false
+
+		unreadResult, err := q.resaleReviewRepo.Comments().List(
+			ctx,
+			resalereview.FilterComment{
+				ResaleID: resale.ID,
+				Deleted:  &visible,
+				IsRead:   &unread,
+			},
+			common.Sort{
+				Column: "createdAt",
+				Order:  common.SortDesc,
+			},
+			common.Page{
+				Number:  1,
+				PerPage: 1,
+			},
+		)
+		if err != nil {
+			return ResaleChatListItem{}, false, err
+		}
+
+		unreadCommentCount = unreadResult.TotalCount
 	}
 
 	return ResaleChatListItem{
@@ -329,9 +455,10 @@ func (q *ResaleQuery) buildChatListItem(
 		BrandName:          resale.BrandName,
 		ImageURL:           resale.ImageURL,
 		Price:              resale.Price,
+		ChatSource:         chatSource,
 		LatestComment:      &latestComment,
 		CommentCount:       latestResult.TotalCount,
-		UnreadCommentCount: unreadResult.TotalCount,
+		UnreadCommentCount: unreadCommentCount,
 		LatestActivityAt:   latestComment.CreatedAt,
 	}, true, nil
 }

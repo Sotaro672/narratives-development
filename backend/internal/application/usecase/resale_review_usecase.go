@@ -446,8 +446,9 @@ func (uc *ResaleReviewUsecase) MarkCommentsRead(
 //
 // Rules:
 // - resale must still be listing
-// - only the seller of the resale may delete comments
-// - the original comment author cannot delete it from the market side
+// - only the original comment author may delete the comment
+// - a comment already read by the resale owner cannot be deleted
+// - another avatar's comment cannot be deleted, including by the resale owner
 // - CommentCount is decremented atomically by MutationRepository
 func (uc *ResaleReviewUsecase) DeleteComment(
 	ctx context.Context,
@@ -471,21 +472,25 @@ func (uc *ResaleReviewUsecase) DeleteComment(
 		return resalereview.InteractionSummary{}, resalereview.ErrInvalidAvatarID
 	}
 
-	resale, err := uc.requireListingResale(ctx, resaleID)
+	if _, err := uc.requireListingResale(ctx, resaleID); err != nil {
+		return resalereview.InteractionSummary{}, err
+	}
+
+	comment, err := uc.reviewRepo.Comments().GetByParentID(
+		ctx,
+		resaleID,
+		commentID,
+	)
 	if err != nil {
 		return resalereview.InteractionSummary{}, err
 	}
 
-	if resale.AvatarID != avatarID {
+	if comment.AvatarID != avatarID {
 		return resalereview.InteractionSummary{}, resalereview.ErrForbidden
 	}
 
-	if _, err := uc.reviewRepo.Comments().GetByParentID(
-		ctx,
-		resaleID,
-		commentID,
-	); err != nil {
-		return resalereview.InteractionSummary{}, err
+	if comment.IsRead {
+		return resalereview.InteractionSummary{}, resalereview.ErrConflict
 	}
 
 	aggregate, _, err := uc.reviewRepo.Mutations().MarkCommentDeleted(

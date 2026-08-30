@@ -34,6 +34,11 @@ export type CreateMarketResaleCommentParams = {
   body: string;
 };
 
+export type DeleteMarketResaleCommentParams = {
+  resaleId: string;
+  commentId: string;
+};
+
 function requireResaleId(resaleId: string): string {
   const normalizedResaleId = resaleId.trim();
 
@@ -42,6 +47,16 @@ function requireResaleId(resaleId: string): string {
   }
 
   return normalizedResaleId;
+}
+
+function requireCommentId(commentId: string): string {
+  const normalizedCommentId = commentId.trim();
+
+  if (!normalizedCommentId) {
+    throw new Error("コメントIDが未指定です。");
+  }
+
+  return normalizedCommentId;
 }
 
 function buildMarketResaleReviewPath(
@@ -177,4 +192,27 @@ export async function createMarketResaleComment(
     comment: result.data,
     interaction: result.interaction,
   };
+}
+
+export async function deleteMarketResaleComment(
+  params: DeleteMarketResaleCommentParams,
+): Promise<ResaleInteractionSummary> {
+  const resaleId = requireResaleId(params.resaleId);
+  const commentId = requireCommentId(params.commentId);
+
+  const result = await requestJson<ApiDataResponse<ResaleInteractionSummary>>(
+    `${MARKET_RESALES_PATH}/${encodeURIComponent(resaleId)}/comments/${encodeURIComponent(commentId)}`,
+    {
+      method: "DELETE",
+      auth: "required",
+      credentials: "include",
+      messages: {
+        requestErrorMessage: "コメントの削除に失敗しました。",
+        nonJsonErrorMessage: "コメント削除APIがJSON以外を返しました。",
+        invalidJsonErrorMessage: "コメント削除APIのレスポンスが不正です。",
+      },
+    },
+  );
+
+  return result.data;
 }
