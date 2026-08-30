@@ -1,8 +1,8 @@
 // frontend/amol/src/pages/PayoutAccountCompletePage.tsx
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect } from "react";
 import { CheckCircle2 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
 import "../styles/settings-page.css";
@@ -11,27 +11,28 @@ import "../styles/payout-account-complete-page.css";
 import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
 import { useContactViewport } from "../features/contact/hooks/useContactViewport";
-import { usePayoutAccountRegistration } from "../features/payout/context/PayoutAccountRegistrationProvider";
+
+type PayoutAccountCompleteLocationState = {
+  registrationCompleted?: boolean;
+};
 
 export default function PayoutAccountCompletePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isDesktop } = useContactViewport();
-  const { isComplete, resetDraft } = usePayoutAccountRegistration();
 
-  const registrationCompleted = useRef(isComplete).current;
+  const state = location.state as PayoutAccountCompleteLocationState | null;
+  const registrationCompleted = state?.registrationCompleted === true;
 
   useEffect(() => {
     if (!registrationCompleted) {
       navigate("/settings/payout-account", { replace: true });
-      return;
     }
+  }, [navigate, registrationCompleted]);
 
-    resetDraft();
-  }, [navigate, registrationCompleted, resetDraft]);
-
-  const handleBackToPayoutAccount = () => {
+  const handleBackToPayoutAccount = useCallback(() => {
     navigate("/settings/payout-account", { replace: true });
-  };
+  }, [navigate]);
 
   if (!registrationCompleted) {
     return null;
@@ -76,12 +77,12 @@ export default function PayoutAccountCompletePage() {
           </p>
 
           <p className="payout-account-complete-page__notice-text">
-            登録した口座が実際に売上の受取先として利用可能になるまで、確認が必要な場合があります。利用状況は売上受取口座画面から確認できます。
+            Stripe側で確認が必要な場合、売上を受け取れるようになるまで時間がかかることがあります。現在の利用状況は売上受取口座画面から確認できます。
           </p>
         </div>
 
         <p className="payout-account-complete-page__security-note">
-          入力した口座番号の全桁は、この画面への遷移後にブラウザ上の登録情報から削除されます。
+          入力した銀行口座番号はStripeへ直接送信し、AMOLでは銀行口座番号の全桁を保存しません。
         </p>
       </section>
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAuth } from "firebase/auth";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { fetchPayoutAccount } from "../api/payoutApi";
 import type { PayoutAccount } from "../../shared/types/payoutAccount";
@@ -10,6 +10,7 @@ import type { PayoutAccount } from "../../shared/types/payoutAccount";
 export function usePayoutAccountPage() {
   const auth = getAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [payoutAccount, setPayoutAccount] = useState<PayoutAccount | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,7 +38,7 @@ export function usePayoutAccountPage() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "売上受取口座の情報取得に失敗しました。"
+          : "売上受取口座の情報取得に失敗しました。",
       );
     } finally {
       setIsLoading(false);
@@ -57,8 +58,11 @@ export function usePayoutAccountPage() {
     }
 
     setErrorMessage("");
-    navigate("/settings/payout-account/bank");
-  }, [auth, navigate]);
+
+    navigate("/settings/payout-account/bank", {
+      state: location.state,
+    });
+  }, [auth, location.state, navigate]);
 
   const statusLabel = useMemo(() => {
     if (isLoading) {
@@ -71,9 +75,9 @@ export function usePayoutAccountPage() {
 
     switch (payoutAccount.status) {
       case "pending":
-        return "確認中";
+        return "登録手続き中";
       case "registered":
-        return "登録済み";
+        return payoutAccount.payoutReady ? "登録済み" : "確認中";
       case "restricted":
         return "利用制限中";
       default:
@@ -86,7 +90,18 @@ export function usePayoutAccountPage() {
       return "口座を登録する";
     }
 
-    return "口座を変更する";
+    switch (payoutAccount.status) {
+      case "pending":
+        return "登録を続ける";
+      case "restricted":
+        return "登録内容を確認する";
+      case "registered":
+        return payoutAccount.payoutReady
+          ? "口座を変更する"
+          : "登録内容を確認する";
+      default:
+        return "口座を登録する";
+    }
   }, [payoutAccount]);
 
   const bankName = payoutAccount?.bankAccount?.bankName || "";

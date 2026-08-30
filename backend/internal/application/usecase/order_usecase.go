@@ -7,6 +7,7 @@ import (
 
 	applicationport "narratives/internal/application/port"
 	accountdom "narratives/internal/domain/account"
+	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	cartdom "narratives/internal/domain/cart"
 	inventorydom "narratives/internal/domain/inventory"
@@ -43,6 +44,8 @@ type OrderUsecase struct {
 	brandRepo            branddom.Repository
 	accountRepo          accountdom.Repository
 	resaleRepo           resaledom.Repository
+	avatarRepo           avatardom.Repository
+	payoutAccountUC      *PayoutAccountUsecase
 	paymentMethodRepo    paymentmethoddom.RepositoryPort
 	shippingAddressRepo  shippingaddressdom.RepositoryPort
 	shippingQuoteUC      *ShippingQuoteUsecase
@@ -76,7 +79,9 @@ func NewOrderUsecase(
 	}
 }
 
-func (u *OrderUsecase) WithCartRepository(cartRepo cartdom.Repository) *OrderUsecase {
+func (u *OrderUsecase) WithCartRepository(
+	cartRepo cartdom.Repository,
+) *OrderUsecase {
 	if u == nil {
 		return u
 	}
@@ -95,6 +100,19 @@ func (u *OrderUsecase) WithSellerRepositories(
 
 	u.brandRepo = brandRepo
 	u.accountRepo = accountRepo
+	return u
+}
+
+func (u *OrderUsecase) WithResaleSellerRepositories(
+	avatarRepo avatardom.Repository,
+	payoutAccountUC *PayoutAccountUsecase,
+) *OrderUsecase {
+	if u == nil {
+		return u
+	}
+
+	u.avatarRepo = avatarRepo
+	u.payoutAccountUC = payoutAccountUC
 	return u
 }
 

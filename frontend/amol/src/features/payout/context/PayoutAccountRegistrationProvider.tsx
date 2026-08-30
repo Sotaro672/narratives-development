@@ -4,7 +4,7 @@ import * as React from "react";
 import { useLocation } from "react-router-dom";
 
 import type {
-  PayoutAccountRegistrationInput,
+  PayoutAccountRegistrationDraft,
   PayoutBankAccountType,
 } from "../../shared/types/payoutAccount";
 
@@ -30,7 +30,7 @@ export type PayoutRegistrationReturnTarget = {
 };
 
 type PayoutAccountRegistrationContextValue = {
-  draft: PayoutAccountRegistrationInput;
+  draft: PayoutAccountRegistrationDraft;
   returnAfterRegistration: PayoutRegistrationReturnTarget | null;
   setBank: (bank: PayoutBankSelection) => void;
   setBranch: (branch: PayoutBranchSelection) => void;
@@ -39,7 +39,7 @@ type PayoutAccountRegistrationContextValue = {
   isComplete: boolean;
 };
 
-const initialDraft: PayoutAccountRegistrationInput = {
+const initialDraft: PayoutAccountRegistrationDraft = {
   bankCode: "",
   bankName: "",
   branchCode: "",
@@ -83,7 +83,7 @@ export const PayoutAccountRegistrationProvider: React.FC<{
   const location = useLocation();
 
   const [draft, setDraft] =
-    React.useState<PayoutAccountRegistrationInput>(initialDraft);
+    React.useState<PayoutAccountRegistrationDraft>(initialDraft);
   const [returnAfterRegistration, setReturnAfterRegistration] =
     React.useState<PayoutRegistrationReturnTarget | null>(() =>
       parseReturnAfterRegistration(location.state),

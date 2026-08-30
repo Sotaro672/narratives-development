@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import Layout from "../../../../components/layout/Layout";
 import { formatDateTime } from "../../../../components/utils/date";
@@ -238,6 +238,7 @@ export default function ResaleChatDetail({
   onBack,
 }: ResaleChatDetailProps) {
   const location = useLocation();
+  const navigate = useNavigate();
 
   const routeState =
     location.state as ResaleChatRouteState | null;
@@ -380,6 +381,11 @@ export default function ResaleChatDetail({
         : [],
     [item],
   );
+
+  const handleOpenMarketDetail = useCallback(() => {
+    if (!normalizedResaleId) return;
+    navigate(`/market/${encodeURIComponent(normalizedResaleId)}`);
+  }, [navigate, normalizedResaleId]);
 
   const title =
     item?.productName ||
@@ -596,6 +602,11 @@ export default function ResaleChatDetail({
                 item={item}
                 images={images}
                 productMetaItems={productMetaItems}
+                onOpenMarketDetail={
+                  source === "market" && item.status === "listing"
+                    ? handleOpenMarketDetail
+                    : undefined
+                }
               />
 
               <div className="chat-detail-page__reply-section">
@@ -666,10 +677,12 @@ function ResaleThreadHeader({
   item,
   images,
   productMetaItems,
+  onOpenMarketDetail,
 }: {
   item: ResaleChatItem;
   images: ResaleConditionImage[];
   productMetaItems: ProductMetaItem[];
+  onOpenMarketDetail?: () => void;
 }) {
   const sellerName =
     item.avatarName ||
@@ -782,6 +795,12 @@ function ResaleThreadHeader({
               />
             </a>
           ))}
+        </div>
+      ) : null}
+
+      {onOpenMarketDetail ? (
+        <div className="chat-detail-page__close-prompt-actions">
+          <button type="button" onClick={onOpenMarketDetail}>商品ページを見る</button>
         </div>
       ) : null}
     </article>

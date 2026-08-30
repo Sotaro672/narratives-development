@@ -1,7 +1,6 @@
 // frontend/amol/src/pages/PayoutAccountConfirmPage.tsx
 
-import { useCallback, useEffect, useState } from "react";
-import { getAuth } from "firebase/auth";
+import { useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
@@ -11,8 +10,8 @@ import "../styles/payout-account-confirm-page.css";
 import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
 import { useContactViewport } from "../features/contact/hooks/useContactViewport";
-import { registerPayoutAccount } from "../features/payout/api/payoutApi";
 import { usePayoutAccountRegistration } from "../features/payout/context/PayoutAccountRegistrationProvider";
+import { usePayoutAccountRegistrationSubmit } from "../features/payout/hooks/usePayoutAccountRegistrationSubmit";
 
 function getAccountTypeLabel(accountType: "ordinary" | "current"): string {
   switch (accountType) {
@@ -26,17 +25,20 @@ function getAccountTypeLabel(accountType: "ordinary" | "current"): string {
 }
 
 export default function PayoutAccountConfirmPage() {
-  const auth = getAuth();
   const navigate = useNavigate();
   const { isDesktop } = useContactViewport();
   const {
     draft,
     isComplete,
     returnAfterRegistration,
+    resetDraft,
   } = usePayoutAccountRegistration();
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  const {
+    isSubmitting,
+    errorMessage,
+    clearError,
+    submitPayoutAccountRegistration,
+  } = usePayoutAccountRegistrationSubmit();
 
   useEffect(() => {
     if (!draft.bankCode.trim() || !draft.bankName.trim()) {
@@ -67,33 +69,16 @@ export default function PayoutAccountConfirmPage() {
       return;
     }
 
-    const currentUser = auth.currentUser;
-
-    if (!currentUser) {
-      navigate("/signin", { replace: true });
-      return;
-    }
-
     try {
-      setIsSubmitting(true);
-      setErrorMessage("");
+      const payoutAccount = await submitPayoutAccountRegistration(draft);
 
-      const idToken = await currentUser.getIdToken(true);
+      resetDraft();
 
-      await registerPayoutAccount({
-        idToken,
-        input: {
-          bankCode: draft.bankCode.trim(),
-          bankName: draft.bankName.trim(),
-          branchCode: draft.branchCode.trim(),
-          branchName: draft.branchName.trim(),
-          accountType: draft.accountType,
-          accountNumber: draft.accountNumber.trim(),
-          accountHolderName: draft.accountHolderName.trim(),
-        },
-      });
-
-      if (returnAfterRegistration) {
+      if (
+        returnAfterRegistration &&
+        payoutAccount.status === "registered" &&
+        payoutAccount.payoutReady
+      ) {
         navigate(returnAfterRegistration.pathname, {
           replace: true,
           state: returnAfterRegistration.state,
@@ -101,26 +86,39 @@ export default function PayoutAccountConfirmPage() {
         return;
       }
 
-      navigate("/settings/payout-account/complete", { replace: true });
-    } catch (error) {
-      console.error(error);
-
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "売上受取口座の登録に失敗しました。",
-      );
-    } finally {
-      setIsSubmitting(false);
+      navigate("/settings/payout-account/complete", {
+        replace: true,
+        state: {
+          registrationCompleted: true,
+        },
+      });
+    } catch {
+      // エラーメッセージはusePayoutAccountRegistrationSubmit側で管理する。
     }
   }, [
-    auth,
     draft,
     isComplete,
     isSubmitting,
     navigate,
+    resetDraft,
     returnAfterRegistration,
+    submitPayoutAccountRegistration,
   ]);
+
+  const handleEditBank = useCallback(() => {
+    clearError();
+    navigate("/settings/payout-account/bank");
+  }, [clearError, navigate]);
+
+  const handleEditBranch = useCallback(() => {
+    clearError();
+    navigate("/settings/payout-account/branch");
+  }, [clearError, navigate]);
+
+  const handleEditAccount = useCallback(() => {
+    clearError();
+    navigate("/settings/payout-account/account");
+  }, [clearError, navigate]);
 
   const actionButtonDisabled = !isComplete || isSubmitting;
 
@@ -163,7 +161,7 @@ export default function PayoutAccountConfirmPage() {
             <button
               type="button"
               className="payout-account-confirm-page__edit-button"
-              onClick={() => navigate("/settings/payout-account/bank")}
+              onClick={handleEditBank}
               disabled={isSubmitting}
             >
               変更
@@ -184,7 +182,7 @@ export default function PayoutAccountConfirmPage() {
             <button
               type="button"
               className="payout-account-confirm-page__edit-button"
-              onClick={() => navigate("/settings/payout-account/branch")}
+              onClick={handleEditBranch}
               disabled={isSubmitting}
             >
               変更
@@ -204,7 +202,7 @@ export default function PayoutAccountConfirmPage() {
             <button
               type="button"
               className="payout-account-confirm-page__edit-button"
-              onClick={() => navigate("/settings/payout-account/account")}
+              onClick={handleEditAccount}
               disabled={isSubmitting}
             >
               変更
@@ -224,7 +222,7 @@ export default function PayoutAccountConfirmPage() {
             <button
               type="button"
               className="payout-account-confirm-page__edit-button"
-              onClick={() => navigate("/settings/payout-account/account")}
+              onClick={handleEditAccount}
               disabled={isSubmitting}
             >
               変更
@@ -244,7 +242,7 @@ export default function PayoutAccountConfirmPage() {
             <button
               type="button"
               className="payout-account-confirm-page__edit-button"
-              onClick={() => navigate("/settings/payout-account/account")}
+              onClick={handleEditAccount}
               disabled={isSubmitting}
             >
               変更

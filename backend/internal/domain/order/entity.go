@@ -21,18 +21,24 @@ type ShippingSnapshot struct {
 }
 
 type ShippingQuoteItemSnapshot struct {
-	ListID      string `json:"listId"`
-	InventoryID string `json:"inventoryId"`
-	ModelID     string `json:"modelId"`
+	Type OrderItemType `json:"type,omitempty"`
 
-	OriginShippingAddressID      string `json:"originShippingAddressId"`
+	// List item identifiers.
+	ListID      string `json:"listId,omitempty"`
+	InventoryID string `json:"inventoryId,omitempty"`
+	ModelID     string `json:"modelId,omitempty"`
+
+	// Resale item identifier.
+	ResaleID string `json:"resaleId,omitempty"`
+
+	OriginShippingAddressID      string `json:"originShippingAddressId,omitempty"`
 	DestinationShippingAddressID string `json:"destinationShippingAddressId"`
 
-	Carrier string `json:"carrier"`
+	Carrier string `json:"carrier,omitempty"`
 
 	TransportationID string `json:"transportationId,omitempty"`
 
-	Size int `json:"size"`
+	Size int `json:"size,omitempty"`
 
 	Qty int `json:"qty"`
 
@@ -62,16 +68,25 @@ type PaymentMethodSnapshot struct {
 	IsDefault             bool   `json:"isDefault"`
 }
 
-// SellerSnapshot fixes the seller and Stripe Connect destination at the
-// time the Order is created.
+// SellerSnapshot fixes the seller identity and Stripe Connect destination at
+// the time the Order is created.
 //
-// It is intentionally stored inside each Order item so later Brand or Account
-// changes cannot silently change the settlement destination of an existing
-// Order.
+// List sales use BrandID / CompanyID / AccountID.
+// Resale sales use AvatarID / UserID / PayoutAccountID.
+//
+// StripeAccountID is common to both seller types and is the immutable Stripe
+// Connect destination captured when the Order is created.
 type SellerSnapshot struct {
-	BrandID         string `json:"brandId"`
-	CompanyID       string `json:"companyId"`
-	AccountID       string `json:"accountId"`
+	// List seller identifiers.
+	BrandID   string `json:"brandId,omitempty"`
+	CompanyID string `json:"companyId,omitempty"`
+	AccountID string `json:"accountId,omitempty"`
+
+	// Resale seller identifiers.
+	AvatarID        string `json:"avatarId,omitempty"`
+	UserID          string `json:"userId,omitempty"`
+	PayoutAccountID string `json:"payoutAccountId,omitempty"`
+
 	StripeAccountID string `json:"stripeAccountId"`
 }
 
@@ -681,6 +696,21 @@ func validateShippingQuoteSnapshot(
 func validateShippingQuoteItemSnapshot(
 	item ShippingQuoteItemSnapshot,
 ) error {
+	switch item.Type {
+	case "", OrderItemTypeList:
+		return validateListShippingQuoteItemSnapshot(item)
+
+	case OrderItemTypeResale:
+		return validateResaleShippingQuoteItemSnapshot(item)
+
+	default:
+		return ErrInvalidShippingQuoteItem
+	}
+}
+
+func validateListShippingQuoteItemSnapshot(
+	item ShippingQuoteItemSnapshot,
+) error {
 	if item.ListID == "" {
 		return ErrInvalidShippingQuoteItem
 	}
@@ -690,6 +720,10 @@ func validateShippingQuoteItemSnapshot(
 	}
 
 	if item.ModelID == "" {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.ResaleID != "" {
 		return ErrInvalidShippingQuoteItem
 	}
 
@@ -721,6 +755,56 @@ func validateShippingQuoteItemSnapshot(
 		}
 	}
 
+	return validateShippingQuoteAmountSnapshot(item)
+}
+
+func validateResaleShippingQuoteItemSnapshot(
+	item ShippingQuoteItemSnapshot,
+) error {
+	if item.ResaleID == "" {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.ListID != "" ||
+		item.InventoryID != "" ||
+		item.ModelID != "" {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.OriginShippingAddressID != "" {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.DestinationShippingAddressID == "" {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.Carrier != "" ||
+		item.TransportationID != "" ||
+		item.Size != 0 {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.Qty != 1 {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.UnitAmount != 0 ||
+		item.Amount != 0 {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	if item.Currency !=
+		ShippingQuoteCurrencyJPY {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	return nil
+}
+
+func validateShippingQuoteAmountSnapshot(
+	item ShippingQuoteItemSnapshot,
+) error {
 	if item.Qty <= 0 {
 		return ErrInvalidShippingQuoteItem
 	}
@@ -826,12 +910,6 @@ func validateItems(items []OrderItemSnapshot) error {
 func validateItemSnapshot(
 	item OrderItemSnapshot,
 ) error {
-	if err := validateSellerSnapshot(
-		item.SellerSnapshot,
-	); err != nil {
-		return err
-	}
-
 	if err :=
 		validateProductBlueprintCategorySnapshot(
 			item,
@@ -841,9 +919,21 @@ func validateItemSnapshot(
 
 	switch item.Type {
 	case OrderItemTypeList:
+		if err := validateListSellerSnapshot(
+			item.SellerSnapshot,
+		); err != nil {
+			return err
+		}
+
 		return validateListItemSnapshot(item)
 
 	case OrderItemTypeResale:
+		if err := validateResaleSellerSnapshot(
+			item.SellerSnapshot,
+		); err != nil {
+			return err
+		}
+
 		return validateResaleItemSnapshot(item)
 
 	default:
@@ -851,24 +941,60 @@ func validateItemSnapshot(
 	}
 }
 
-func validateSellerSnapshot(
+func validateListSellerSnapshot(
 	seller SellerSnapshot,
 ) error {
-	if seller.BrandID == "" {
+	if seller.BrandID == "" ||
+		seller.CompanyID == "" ||
+		seller.AccountID == "" {
 		return ErrInvalidSellerSnapshot
 	}
 
-	if seller.CompanyID == "" {
+	if seller.AvatarID != "" ||
+		seller.UserID != "" ||
+		seller.PayoutAccountID != "" {
 		return ErrInvalidSellerSnapshot
 	}
 
-	if seller.AccountID == "" {
+	return validateSellerStripeAccountID(
+		seller.StripeAccountID,
+	)
+}
+
+func validateResaleSellerSnapshot(
+	seller SellerSnapshot,
+) error {
+	if seller.AvatarID == "" ||
+		seller.UserID == "" ||
+		seller.PayoutAccountID == "" {
 		return ErrInvalidSellerSnapshot
 	}
 
-	if seller.StripeAccountID == "" ||
+	if seller.PayoutAccountID != seller.UserID {
+		return ErrInvalidSellerSnapshot
+	}
+
+	if seller.BrandID != "" ||
+		seller.CompanyID != "" ||
+		seller.AccountID != "" {
+		return ErrInvalidSellerSnapshot
+	}
+
+	return validateSellerStripeAccountID(
+		seller.StripeAccountID,
+	)
+}
+
+func validateSellerStripeAccountID(
+	stripeAccountID string,
+) error {
+	stripeAccountID = strings.TrimSpace(
+		stripeAccountID,
+	)
+
+	if stripeAccountID == "" ||
 		!strings.HasPrefix(
-			seller.StripeAccountID,
+			stripeAccountID,
 			"acct_",
 		) {
 		return ErrInvalidSellerSnapshot
@@ -966,11 +1092,8 @@ func validateResaleItemSnapshot(
 		return ErrInvalidItemSnapshot
 	}
 
-	if item.BrandID !=
-		item.SellerSnapshot.BrandID {
-		return ErrInvalidItemSnapshot
-	}
-
+	// BrandID identifies the product brand. It must not be treated as the
+	// consumer resale seller or compared with SellerSnapshot.BrandID.
 	// List-only identifiers must not be mixed into a resale item.
 	if item.ModelID != "" ||
 		item.InventoryID != "" ||

@@ -1,6 +1,10 @@
 // frontend/amol/src/features/shared/types/payoutAccount.ts
 
-export type PayoutAccountStatus = "unregistered" | "pending" | "registered" | "restricted";
+export type PayoutAccountStatus =
+  | "unregistered"
+  | "pending"
+  | "registered"
+  | "restricted";
 
 export type PayoutBankAccountType = "ordinary" | "current";
 
@@ -25,7 +29,7 @@ export type PayoutAccountResponse = {
   error?: string;
 };
 
-export type PayoutAccountRegistrationInput = {
+export type PayoutAccountRegistrationDraft = {
   bankCode: string;
   bankName: string;
   branchCode: string;
@@ -35,7 +39,6 @@ export type PayoutAccountRegistrationInput = {
   accountHolderName: string;
 };
 
-export type PayoutAccountRegistrationResponse = {
-  data?: PayoutAccount | null;
-  error?: string;
+export type PayoutAccountTokenRegistrationInput = {
+  bankAccountToken: string;
 };

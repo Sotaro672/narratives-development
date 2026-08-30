@@ -18,43 +18,32 @@ func (u *OrderUsecase) resolveShippingSnapshot(
 	userID string,
 	shippingAddressID string,
 ) (orderdom.ShippingSnapshot, error) {
-	if u == nil ||
-		u.shippingAddressRepo == nil {
-		return orderdom.ShippingSnapshot{},
-			orderdom.ErrInvalidShippingSnapshot
+	if u == nil || u.shippingAddressRepo == nil {
+		return orderdom.ShippingSnapshot{}, orderdom.ErrInvalidShippingSnapshot
 	}
 
 	userID = strings.TrimSpace(userID)
 	shippingAddressID = strings.TrimSpace(shippingAddressID)
 
-	if userID == "" ||
-		shippingAddressID == "" {
-		return orderdom.ShippingSnapshot{},
-			orderdom.ErrInvalidShippingSnapshot
+	if userID == "" || shippingAddressID == "" {
+		return orderdom.ShippingSnapshot{}, orderdom.ErrInvalidShippingSnapshot
 	}
 
-	address, err := u.shippingAddressRepo.GetByUser(
-		ctx,
-		shippingAddressID,
-		userID,
-	)
+	address, err := u.shippingAddressRepo.GetByUser(ctx, shippingAddressID, userID)
 	if err != nil {
 		return orderdom.ShippingSnapshot{}, err
 	}
 
 	if address == nil {
-		return orderdom.ShippingSnapshot{},
-			shippingaddressdom.ErrNotFound
+		return orderdom.ShippingSnapshot{}, shippingaddressdom.ErrNotFound
 	}
 
 	if address.ID != shippingAddressID {
-		return orderdom.ShippingSnapshot{},
-			shippingaddressdom.ErrNotFound
+		return orderdom.ShippingSnapshot{}, shippingaddressdom.ErrNotFound
 	}
 
 	if address.UserID != userID {
-		return orderdom.ShippingSnapshot{},
-			shippingaddressdom.ErrNotFound
+		return orderdom.ShippingSnapshot{}, shippingaddressdom.ErrNotFound
 	}
 
 	return orderdom.ShippingSnapshot{
@@ -77,97 +66,109 @@ func (u *OrderUsecase) resolveShippingQuoteSnapshot(
 	shippingAddressID string,
 	input []CreateOrderItemInput,
 ) (orderdom.ShippingQuoteSnapshot, error) {
-	if u == nil ||
-		u.shippingQuoteUC == nil {
-		return orderdom.ShippingQuoteSnapshot{},
-			orderdom.ErrInvalidShippingQuote
+	if u == nil {
+		return orderdom.ShippingQuoteSnapshot{}, orderdom.ErrInvalidShippingQuote
 	}
 
 	userID = strings.TrimSpace(userID)
 	shippingAddressID = strings.TrimSpace(shippingAddressID)
 
-	if userID == "" ||
-		shippingAddressID == "" ||
-		len(input) == 0 {
-		return orderdom.ShippingQuoteSnapshot{},
-			orderdom.ErrInvalidShippingQuote
+	if userID == "" || shippingAddressID == "" || len(input) == 0 {
+		return orderdom.ShippingQuoteSnapshot{}, orderdom.ErrInvalidShippingQuote
 	}
 
-	quoteItems := make(
-		[]orderdom.ShippingQuoteItemSnapshot,
-		0,
-		len(input),
-	)
-
+	quoteItems := make([]orderdom.ShippingQuoteItemSnapshot, 0, len(input))
 	maxInt := int(^uint(0) >> 1)
 	total := 0
 
 	for _, item := range input {
-		if item.Type != orderdom.OrderItemTypeList {
-			return orderdom.ShippingQuoteSnapshot{},
-				orderdom.ErrInvalidShippingQuote
+		switch item.Type {
+		case orderdom.OrderItemTypeList:
+			if u.shippingQuoteUC == nil {
+				return orderdom.ShippingQuoteSnapshot{}, orderdom.ErrInvalidShippingQuote
+			}
+
+			if item.ListID == "" || item.ModelID == "" || item.Qty <= 0 {
+				return orderdom.ShippingQuoteSnapshot{}, orderdom.ErrInvalidShippingQuoteItem
+			}
+
+			quote, err := u.shippingQuoteUC.Quote(
+				ctx,
+				ShippingQuoteInput{
+					UserID:                       userID,
+					ListID:                       item.ListID,
+					ModelID:                      item.ModelID,
+					DestinationShippingAddressID: shippingAddressID,
+				},
+			)
+			if err != nil {
+				return orderdom.ShippingQuoteSnapshot{}, err
+			}
+
+			if quote.Amount < 0 || quote.Amount > int64(maxInt) {
+				return orderdom.ShippingQuoteSnapshot{}, orderdom.ErrInvalidShippingQuoteItem
+			}
+
+			unitAmount := int(quote.Amount)
+
+			if unitAmount > 0 && item.Qty > maxInt/unitAmount {
+				return orderdom.ShippingQuoteSnapshot{}, orderdom.ErrInvalidShippingQuoteItem
+			}
+
+			lineAmount := unitAmount * item.Qty
+
+			if total > maxInt-lineAmount {
+				return orderdom.ShippingQuoteSnapshot{}, orderdom.ErrInvalidShippingQuote
+			}
+
+			total += lineAmount
+
+			quoteItems = append(
+				quoteItems,
+				orderdom.ShippingQuoteItemSnapshot{
+					Type:                         orderdom.OrderItemTypeList,
+					ListID:                       quote.ListID,
+					InventoryID:                  quote.InventoryID,
+					ModelID:                      quote.ModelID,
+					OriginShippingAddressID:      quote.OriginShippingAddressID,
+					DestinationShippingAddressID: quote.DestinationShippingAddressID,
+					Carrier:                      string(quote.TransportationOption),
+					TransportationID:             quote.TransportationID,
+					Size:                         quote.Size,
+					Qty:                          item.Qty,
+					UnitAmount:                   unitAmount,
+					Amount:                       lineAmount,
+					Currency:                     quote.Currency,
+				},
+			)
+
+		case orderdom.OrderItemTypeResale:
+			resaleID := strings.TrimSpace(item.ResaleID)
+
+			if resaleID == "" || item.Qty != 1 {
+				return orderdom.ShippingQuoteSnapshot{}, orderdom.ErrInvalidShippingQuoteItem
+			}
+
+			quoteItems = append(
+				quoteItems,
+				orderdom.ShippingQuoteItemSnapshot{
+					Type:                         orderdom.OrderItemTypeResale,
+					ResaleID:                     resaleID,
+					DestinationShippingAddressID: shippingAddressID,
+					Qty:                          1,
+					UnitAmount:                   0,
+					Amount:                       0,
+					Currency:                     orderdom.ShippingQuoteCurrencyJPY,
+				},
+			)
+
+		default:
+			return orderdom.ShippingQuoteSnapshot{}, orderdom.ErrInvalidShippingQuoteItem
 		}
+	}
 
-		if item.ListID == "" ||
-			item.ModelID == "" ||
-			item.Qty <= 0 {
-			return orderdom.ShippingQuoteSnapshot{},
-				orderdom.ErrInvalidShippingQuoteItem
-		}
-
-		quote, err := u.shippingQuoteUC.Quote(
-			ctx,
-			ShippingQuoteInput{
-				UserID:                       userID,
-				ListID:                       item.ListID,
-				ModelID:                      item.ModelID,
-				DestinationShippingAddressID: shippingAddressID,
-			},
-		)
-		if err != nil {
-			return orderdom.ShippingQuoteSnapshot{}, err
-		}
-
-		if quote.Amount < 0 ||
-			quote.Amount > int64(maxInt) {
-			return orderdom.ShippingQuoteSnapshot{},
-				orderdom.ErrInvalidShippingQuoteItem
-		}
-
-		unitAmount := int(quote.Amount)
-
-		if unitAmount > 0 &&
-			item.Qty > maxInt/unitAmount {
-			return orderdom.ShippingQuoteSnapshot{},
-				orderdom.ErrInvalidShippingQuoteItem
-		}
-
-		lineAmount := unitAmount * item.Qty
-
-		if total > maxInt-lineAmount {
-			return orderdom.ShippingQuoteSnapshot{},
-				orderdom.ErrInvalidShippingQuote
-		}
-
-		total += lineAmount
-
-		quoteItems = append(
-			quoteItems,
-			orderdom.ShippingQuoteItemSnapshot{
-				ListID:                       quote.ListID,
-				InventoryID:                  quote.InventoryID,
-				ModelID:                      quote.ModelID,
-				OriginShippingAddressID:      quote.OriginShippingAddressID,
-				DestinationShippingAddressID: quote.DestinationShippingAddressID,
-				Carrier:                      string(quote.TransportationOption),
-				TransportationID:             quote.TransportationID,
-				Size:                         quote.Size,
-				Qty:                          item.Qty,
-				UnitAmount:                   unitAmount,
-				Amount:                       lineAmount,
-				Currency:                     quote.Currency,
-			},
-		)
+	if len(quoteItems) == 0 {
+		return orderdom.ShippingQuoteSnapshot{}, orderdom.ErrInvalidShippingQuote
 	}
 
 	return orderdom.ShippingQuoteSnapshot{
@@ -181,8 +182,7 @@ func resolveOrderDestinationShippingAddressID(
 	snapshot orderdom.ShippingQuoteSnapshot,
 ) (string, error) {
 	if len(snapshot.Items) == 0 {
-		return "",
-			orderdom.ErrInvalidShippingQuote
+		return "", orderdom.ErrInvalidShippingQuote
 	}
 
 	destinationShippingAddressID := strings.TrimSpace(
@@ -190,16 +190,12 @@ func resolveOrderDestinationShippingAddressID(
 	)
 
 	if destinationShippingAddressID == "" {
-		return "",
-			orderdom.ErrInvalidShippingQuote
+		return "", orderdom.ErrInvalidShippingQuote
 	}
 
 	for _, item := range snapshot.Items {
-		if strings.TrimSpace(
-			item.DestinationShippingAddressID,
-		) != destinationShippingAddressID {
-			return "",
-				orderdom.ErrInvalidShippingQuote
+		if strings.TrimSpace(item.DestinationShippingAddressID) != destinationShippingAddressID {
+			return "", orderdom.ErrInvalidShippingQuote
 		}
 	}
 
@@ -210,15 +206,10 @@ func createOrderItemInputsFromSnapshots(
 	items []orderdom.OrderItemSnapshot,
 ) ([]CreateOrderItemInput, error) {
 	if len(items) == 0 {
-		return nil,
-			orderdom.ErrInvalidItems
+		return nil, orderdom.ErrInvalidItems
 	}
 
-	result := make(
-		[]CreateOrderItemInput,
-		0,
-		len(items),
-	)
+	result := make([]CreateOrderItemInput, 0, len(items))
 
 	for _, item := range items {
 		if item.IsCancelled {
@@ -240,13 +231,28 @@ func createOrderItemInputsFromSnapshots(
 			)
 
 		case orderdom.OrderItemTypeResale:
-			return nil,
-				orderdom.ErrInvalidShippingQuote
+			if strings.TrimSpace(item.ResaleID) == "" || item.Qty != 1 {
+				return nil, orderdom.ErrInvalidItemSnapshot
+			}
+
+			result = append(
+				result,
+				CreateOrderItemInput{
+					Type:         orderdom.OrderItemTypeResale,
+					ResaleID:     item.ResaleID,
+					Qty:          1,
+					IsCancelled:  item.IsCancelled,
+					IsDispatched: item.IsDispatched,
+				},
+			)
 
 		default:
-			return nil,
-				orderdom.ErrInvalidItemSnapshot
+			return nil, orderdom.ErrInvalidItemSnapshot
 		}
+	}
+
+	if len(result) == 0 {
+		return nil, orderdom.ErrInvalidItems
 	}
 
 	return result, nil

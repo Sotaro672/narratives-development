@@ -1,11 +1,8 @@
 // backend/internal/adapters/in/http/mall/handler/payoutAccount_handler.go
-
 package mallHandler
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 
@@ -13,8 +10,6 @@ import (
 	usecase "narratives/internal/application/usecase"
 	payoutdom "narratives/internal/domain/payoutAccount"
 )
-
-const maxPayoutAccountBodyBytes int64 = 64 << 10 // 64 KiB
 
 type PayoutAccountHandler struct {
 	uc *usecase.PayoutAccountUsecase
@@ -48,14 +43,12 @@ type payoutAccountResponse struct {
 	Data *payoutAccountDTO `json:"data"`
 }
 
-type payoutAccountRegistrationRequest struct {
-	BankCode          string                    `json:"bankCode"`
-	BankName          string                    `json:"bankName"`
-	BranchCode        string                    `json:"branchCode"`
-	BranchName        string                    `json:"branchName"`
-	AccountType       payoutdom.BankAccountType `json:"accountType"`
-	AccountNumber     string                    `json:"accountNumber"`
-	AccountHolderName string                    `json:"accountHolderName"`
+type payoutAccountSessionDTO struct {
+	ClientSecret string `json:"clientSecret"`
+}
+
+type payoutAccountSessionResponse struct {
+	Data *payoutAccountSessionDTO `json:"data"`
 }
 
 func (h *PayoutAccountHandler) ServeHTTP(
@@ -78,9 +71,23 @@ func (h *PayoutAccountHandler) ServeHTTP(
 		h.getMe(w, r)
 		return
 
-	case r.Method == http.MethodPut &&
-		path == "/me/payout-account":
-		h.putMe(w, r)
+	case r.Method == http.MethodPost &&
+		path == "/me/payout-account/session":
+		h.createSession(w, r)
+		return
+
+	case path == "/me/payout-account":
+		w.Header().Set("Allow", "GET, OPTIONS")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{
+			"error": "method_not_allowed",
+		})
+		return
+
+	case path == "/me/payout-account/session":
+		w.Header().Set("Allow", "POST, OPTIONS")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{
+			"error": "method_not_allowed",
+		})
 		return
 
 	default:
@@ -135,7 +142,7 @@ func (h *PayoutAccountHandler) getMe(
 	})
 }
 
-func (h *PayoutAccountHandler) putMe(
+func (h *PayoutAccountHandler) createSession(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
@@ -148,56 +155,28 @@ func (h *PayoutAccountHandler) putMe(
 		return
 	}
 
-	var request payoutAccountRegistrationRequest
-	if err := decodePayoutAccountJSON(w, r, &request); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "invalid_json",
-		})
-		return
-	}
-
-	request.BankCode = strings.TrimSpace(request.BankCode)
-	request.BankName = strings.TrimSpace(request.BankName)
-	request.BranchCode = strings.TrimSpace(request.BranchCode)
-	request.BranchName = strings.TrimSpace(request.BranchName)
-	request.AccountNumber = strings.TrimSpace(request.AccountNumber)
-	request.AccountHolderName = strings.TrimSpace(request.AccountHolderName)
-
-	if !validatePayoutAccountRegistrationRequest(request) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "invalid_payout_account",
-		})
-		return
-	}
-
-	account, err := h.uc.Register(
+	session, err := h.uc.CreateAccountSession(
 		r.Context(),
-		usecase.RegisterPayoutAccountInput{
-			UserID:            userID,
-			BankCode:          request.BankCode,
-			BankName:          request.BankName,
-			BranchCode:        request.BranchCode,
-			BranchName:        request.BranchName,
-			AccountType:       request.AccountType,
-			AccountNumber:     request.AccountNumber,
-			AccountHolderName: request.AccountHolderName,
-		},
+		userID,
 	)
 	if err != nil {
 		writePayoutAccountError(w, err)
 		return
 	}
 
-	if account == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "payout_account_registration_result_empty",
+	if session == nil ||
+		strings.TrimSpace(session.ClientSecret) == "" {
+		writeJSON(w, http.StatusBadGateway, map[string]string{
+			"error": "payout_account_session_result_empty",
 		})
 		return
 	}
 
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, payoutAccountResponse{
-		Data: payoutAccountToDTO(*account),
+	writeJSON(w, http.StatusOK, payoutAccountSessionResponse{
+		Data: &payoutAccountSessionDTO{
+			ClientSecret: session.ClientSecret,
+		},
 	})
 }
 
@@ -233,107 +212,13 @@ func (h *PayoutAccountHandler) requireUserID(
 	return "", false
 }
 
-func decodePayoutAccountJSON(
-	w http.ResponseWriter,
-	r *http.Request,
-	dst any,
-) error {
-	r.Body = http.MaxBytesReader(
-		w,
-		r.Body,
-		maxPayoutAccountBodyBytes,
-	)
-
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(dst); err != nil {
-		return err
-	}
-
-	var trailing any
-	err := decoder.Decode(&trailing)
-	if !errors.Is(err, io.EOF) {
-		if err == nil {
-			return errors.New(
-				"request body must contain exactly one JSON value",
-			)
-		}
-
-		return err
-	}
-
-	return nil
-}
-
-func validatePayoutAccountRegistrationRequest(
-	request payoutAccountRegistrationRequest,
-) bool {
-	if !isPayoutAccountFixedDigits(request.BankCode, 4) {
-		return false
-	}
-
-	if request.BankName == "" ||
-		(payoutdom.MaxBankNameLength > 0 &&
-			len([]rune(request.BankName)) > payoutdom.MaxBankNameLength) {
-		return false
-	}
-
-	if !isPayoutAccountFixedDigits(request.BranchCode, 3) {
-		return false
-	}
-
-	if request.BranchName == "" ||
-		(payoutdom.MaxBranchNameLength > 0 &&
-			len([]rune(request.BranchName)) > payoutdom.MaxBranchNameLength) {
-		return false
-	}
-
-	switch request.AccountType {
-	case payoutdom.BankAccountTypeOrdinary,
-		payoutdom.BankAccountTypeCurrent:
-	default:
-		return false
-	}
-
-	if !isPayoutAccountFixedDigits(request.AccountNumber, 7) {
-		return false
-	}
-
-	if request.AccountHolderName == "" ||
-		(payoutdom.MaxAccountHolderNameLength > 0 &&
-			len([]rune(request.AccountHolderName)) >
-				payoutdom.MaxAccountHolderNameLength) {
-		return false
-	}
-
-	return true
-}
-
-func isPayoutAccountFixedDigits(
-	value string,
-	length int,
-) bool {
-	if len(value) != length {
-		return false
-	}
-
-	for _, r := range value {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-
-	return true
-}
-
 func payoutAccountToDTO(
 	account payoutdom.PayoutAccount,
 ) *payoutAccountDTO {
-	return &payoutAccountDTO{
-		Status:      account.Status,
-		PayoutReady: account.PayoutReady,
-		BankAccount: &payoutAccountBankDTO{
+	var bankAccount *payoutAccountBankDTO
+
+	if hasPayoutAccountBankSnapshot(account) {
+		bankAccount = &payoutAccountBankDTO{
 			BankCode:          account.BankCode,
 			BankName:          account.BankName,
 			BranchCode:        account.BranchCode,
@@ -341,8 +226,26 @@ func payoutAccountToDTO(
 			AccountType:       account.AccountType,
 			Last4:             account.BankLast4,
 			AccountHolderName: account.AccountHolderName,
-		},
+		}
 	}
+
+	return &payoutAccountDTO{
+		Status:      account.Status,
+		PayoutReady: account.PayoutReady,
+		BankAccount: bankAccount,
+	}
+}
+
+func hasPayoutAccountBankSnapshot(
+	account payoutdom.PayoutAccount,
+) bool {
+	return strings.TrimSpace(account.BankCode) != "" ||
+		strings.TrimSpace(account.BankName) != "" ||
+		strings.TrimSpace(account.BranchCode) != "" ||
+		strings.TrimSpace(account.BranchName) != "" ||
+		account.AccountType != "" ||
+		strings.TrimSpace(account.BankLast4) != "" ||
+		strings.TrimSpace(account.AccountHolderName) != ""
 }
 
 func isInvalidPayoutAccountError(err error) bool {
@@ -350,6 +253,7 @@ func isInvalidPayoutAccountError(err error) bool {
 		errors.Is(err, payoutdom.ErrInvalidProvider) ||
 		errors.Is(err, payoutdom.ErrInvalidProviderAccountID) ||
 		errors.Is(err, payoutdom.ErrInvalidStatus) ||
+		errors.Is(err, payoutdom.ErrInvalidPayoutReady) ||
 		errors.Is(err, payoutdom.ErrInvalidBankCode) ||
 		errors.Is(err, payoutdom.ErrInvalidBankName) ||
 		errors.Is(err, payoutdom.ErrInvalidBranchCode) ||
@@ -381,11 +285,22 @@ func writePayoutAccountError(
 	case errors.Is(err, payoutdom.ErrNotFound):
 		statusCode = http.StatusNotFound
 
-	case errors.Is(err, payoutdom.ErrConflict):
+	case errors.Is(err, payoutdom.ErrConflict),
+		errors.Is(err, usecase.ErrPayoutAccountProviderMismatch):
 		statusCode = http.StatusConflict
 
+	case errors.Is(err, usecase.ErrPayoutAccountDirectRegistrationDisabled):
+		statusCode = http.StatusMethodNotAllowed
+
+	case errors.Is(err, usecase.ErrPayoutAccountStripeResultEmpty),
+		errors.Is(err, usecase.ErrPayoutAccountSessionResultEmpty),
+		errors.Is(err, usecase.ErrPayoutAccountStripeAccountMismatch):
+		statusCode = http.StatusBadGateway
+
 	case errors.Is(err, usecase.ErrPayoutAccountRepositoryMissing),
-		errors.Is(err, usecase.ErrPayoutAccountProviderMissing):
+		errors.Is(err, usecase.ErrPayoutAccountStripeGatewayMissing),
+		errors.Is(err, usecase.ErrPayoutAccountAvatarRepositoryMissing),
+		errors.Is(err, usecase.ErrPayoutAccountAuthUserReaderMissing):
 		statusCode = http.StatusServiceUnavailable
 	}
 

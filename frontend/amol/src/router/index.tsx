@@ -92,7 +92,6 @@ export const router = createBrowserRouter([
     path: "/landing",
     element: <LandingPage />,
   },
-
   {
     path: "/signin",
     element: <SignInPage />,
@@ -113,7 +112,6 @@ export const router = createBrowserRouter([
     path: "/password-reset",
     element: <PasswordResetPage />,
   },
-
   {
     path: "/how-to-use",
     element: <HowToUsePage />,
@@ -134,7 +132,6 @@ export const router = createBrowserRouter([
     path: "/specified-commercial-transactions",
     element: <TermsPage />,
   },
-
   {
     path: "/avatar",
     element: (
