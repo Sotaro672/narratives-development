@@ -106,14 +106,15 @@ type resaleReviewLikeDocument struct {
 }
 
 type resaleReviewCommentDocument struct {
-	CommentID string    `firestore:"commentId"`
-	ResaleID  string    `firestore:"resaleId"`
-	AvatarID  string    `firestore:"avatarId"`
-	Body      string    `firestore:"body"`
-	Deleted   bool      `firestore:"deleted"`
-	IsRead    bool      `firestore:"isRead"`
-	CreatedAt time.Time `firestore:"createdAt"`
-	UpdatedAt time.Time `firestore:"updatedAt"`
+	CommentID string                   `firestore:"commentId"`
+	ResaleID  string                   `firestore:"resaleId"`
+	AvatarID  string                   `firestore:"avatarId"`
+	Kind      resalereview.CommentKind `firestore:"kind"`
+	Body      string                   `firestore:"body"`
+	Deleted   bool                     `firestore:"deleted"`
+	IsRead    bool                     `firestore:"isRead"`
+	CreatedAt time.Time                `firestore:"createdAt"`
+	UpdatedAt time.Time                `firestore:"updatedAt"`
 }
 
 func aggregateToDocument(entity resalereview.ResaleReviewAggregate) resaleReviewAggregateDocument {
@@ -195,6 +196,7 @@ func commentToDocument(entity resalereview.Comment) resaleReviewCommentDocument 
 		CommentID: string(entity.CommentID),
 		ResaleID:  entity.ResaleID,
 		AvatarID:  entity.AvatarID,
+		Kind:      entity.Kind,
 		Body:      entity.Body,
 		Deleted:   entity.Deleted,
 		IsRead:    entity.IsRead,
@@ -222,6 +224,7 @@ func commentFromSnapshot(snapshot *gfs.DocumentSnapshot) (resalereview.Comment, 
 		resalereview.CommentID(commentID),
 		document.ResaleID,
 		document.AvatarID,
+		document.Kind,
 		document.Body,
 		document.Deleted,
 		document.IsRead,

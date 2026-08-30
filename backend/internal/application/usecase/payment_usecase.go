@@ -37,6 +37,7 @@ Refund状態更新:
 支払い成功後の処理:
 0) order.Paid=true更新
 1) resale status=sold更新（best-effort）
+2) resale購入通知コメント作成（best-effort）
 
 注文受付時に行うべき処理:
 - inventory reserve
@@ -152,6 +153,16 @@ type ResaleRepoForPayment interface {
 	) (resaledom.Resale, error)
 }
 
+// ResalePurchaseCommentWriter creates a purchase notification comment after
+// a resale has been successfully marked as sold.
+type ResalePurchaseCommentWriter interface {
+	CreatePurchaseComment(
+		ctx context.Context,
+		resaleID string,
+		buyerAvatarID string,
+	) error
+}
+
 // ============================================================
 // Errors
 // ============================================================
@@ -187,8 +198,9 @@ type PaymentUsecase struct {
 
 	stripeEventRepo StripePaymentEventRepository
 
-	orderRepo  OrderRepoForPayment
-	resaleRepo ResaleRepoForPayment
+	orderRepo                   OrderRepoForPayment
+	resaleRepo                  ResaleRepoForPayment
+	resalePurchaseCommentWriter ResalePurchaseCommentWriter
 
 	now func() time.Time
 }
@@ -200,8 +212,9 @@ type NewPaymentUsecaseInput struct {
 	// StripePaymentEventRepository.
 	StripeEventRepo StripePaymentEventRepository
 
-	OrderRepo  OrderRepoForPayment
-	ResaleRepo ResaleRepoForPayment
+	OrderRepo                   OrderRepoForPayment
+	ResaleRepo                  ResaleRepoForPayment
+	ResalePurchaseCommentWriter ResalePurchaseCommentWriter
 
 	Now func() time.Time
 }
@@ -226,8 +239,9 @@ func NewPaymentUsecase(
 		repo:            in.PaymentRepo,
 		stripeEventRepo: stripeEventRepo,
 
-		orderRepo:  in.OrderRepo,
-		resaleRepo: in.ResaleRepo,
+		orderRepo:                   in.OrderRepo,
+		resaleRepo:                  in.ResaleRepo,
+		resalePurchaseCommentWriter: in.ResalePurchaseCommentWriter,
 
 		now: now,
 	}
@@ -408,7 +422,7 @@ type UpdatePaymentRefundStateInput struct {
 	RefundedAt     *time.Time
 }
 
-// UpdateRefundState applies one complete refund state to an existing Payment.
+// UpdateRefundState applies one complete Payment refund state.
 //
 // StripeRefundID, RefundStatus, RefundedAmount, and RefundedAt are validated
 // together through Payment.SetRefundState before Repository persistence.
@@ -632,6 +646,7 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(
 	}
 
 	// 1) resale status=sold
+	// 2) purchase notification comment
 	if u.resaleRepo != nil && order != nil {
 		_ = u.markResalesSoldByOrder(
 			ctx,
@@ -735,11 +750,22 @@ func (u *PaymentUsecase) markResalesSoldByOrder(
 			continue
 		}
 
-		_, _ = u.resaleRepo.Update(
+		_, err = u.resaleRepo.Update(
 			ctx,
 			resaleID,
 			current,
 		)
+		if err != nil {
+			continue
+		}
+
+		if u.resalePurchaseCommentWriter != nil {
+			_ = u.resalePurchaseCommentWriter.CreatePurchaseComment(
+				ctx,
+				resaleID,
+				order.AvatarID,
+			)
+		}
 	}
 
 	return nil

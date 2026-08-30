@@ -344,6 +344,7 @@ func (uc *ResaleReviewUsecase) CreateComment(
 		resalereview.NewCommentParams{
 			ResaleID: resaleID,
 			AvatarID: avatarID,
+			Kind:     resalereview.CommentKindUser,
 			Body:     input.Body,
 			IsRead:   resale.AvatarID == avatarID,
 			Now:      uc.nowUTC(),
@@ -391,6 +392,76 @@ func (uc *ResaleReviewUsecase) CreateComment(
 		AvatarName: display.Name,
 		AvatarIcon: display.Icon,
 	}, summary, nil
+}
+
+// ============================================================
+// Purchase comment
+// ============================================================
+
+// CreatePurchaseComment creates a system purchase notification after a resale
+// has been sold.
+//
+// Rules:
+// - target resale must exist and already be sold
+// - buyerAvatarID identifies the purchasing avatar
+// - body is generated from the current avatar name
+// - purchase comments are unread for the resale owner when created
+// - purchase comments are system events and cannot be deleted
+func (uc *ResaleReviewUsecase) CreatePurchaseComment(
+	ctx context.Context,
+	resaleID string,
+	buyerAvatarID string,
+) error {
+	if err := uc.requireConfigured("ResaleReview.CreatePurchaseComment"); err != nil {
+		return err
+	}
+
+	if resaleID == "" {
+		return resalereview.ErrInvalidResaleID
+	}
+
+	if buyerAvatarID == "" {
+		return resalereview.ErrInvalidAvatarID
+	}
+
+	if uc.avatarRepo == nil {
+		return ErrNotSupported("ResaleReview.CreatePurchaseComment.AvatarRepo")
+	}
+
+	resale, err := uc.requireExistingResale(ctx, resaleID)
+	if err != nil {
+		return err
+	}
+
+	if resale.Status != resaledom.StatusSold {
+		return resalereview.ErrConflict
+	}
+
+	avatar, err := uc.avatarRepo.GetByID(ctx, buyerAvatarID)
+	if err != nil {
+		return err
+	}
+
+	comment, err := resalereview.NewComment(
+		resalereview.NewCommentParams{
+			ResaleID: resaleID,
+			AvatarID: buyerAvatarID,
+			Kind:     resalereview.CommentKindPurchase,
+			Body:     avatar.AvatarName + "が購入しました。",
+			IsRead:   false,
+			Now:      uc.nowUTC(),
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = uc.reviewRepo.Mutations().AddComment(
+		ctx,
+		*comment,
+	)
+
+	return err
 }
 
 // ============================================================
@@ -446,9 +517,11 @@ func (uc *ResaleReviewUsecase) MarkCommentsRead(
 //
 // Rules:
 // - resale must still be listing
+// - only user comments can be deleted
 // - only the original comment author may delete the comment
 // - a comment already read by the resale owner cannot be deleted
 // - another avatar's comment cannot be deleted, including by the resale owner
+// - purchase comments cannot be deleted
 // - CommentCount is decremented atomically by MutationRepository
 func (uc *ResaleReviewUsecase) DeleteComment(
 	ctx context.Context,
@@ -483,6 +556,10 @@ func (uc *ResaleReviewUsecase) DeleteComment(
 	)
 	if err != nil {
 		return resalereview.InteractionSummary{}, err
+	}
+
+	if comment.Kind != resalereview.CommentKindUser {
+		return resalereview.InteractionSummary{}, resalereview.ErrForbidden
 	}
 
 	if comment.AvatarID != avatarID {

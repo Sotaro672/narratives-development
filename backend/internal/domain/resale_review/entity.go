@@ -26,6 +26,7 @@ var (
 	ErrInvalidResaleID     = errors.New("resaleReview: invalid resaleId")
 	ErrInvalidAvatarID     = errors.New("resaleReview: invalid avatarId")
 	ErrInvalidCommentID    = errors.New("resaleReview: invalid commentId")
+	ErrInvalidCommentKind  = errors.New("resaleReview: invalid comment kind")
 	ErrInvalidCommentBody  = errors.New("resaleReview: invalid comment body")
 	ErrInvalidCreatedAt    = errors.New("resaleReview: invalid createdAt")
 	ErrInvalidUpdatedAt    = errors.New("resaleReview: invalid updatedAt")
@@ -47,6 +48,7 @@ func IsInvalid(err error) bool {
 		errors.Is(err, ErrInvalidResaleID) ||
 		errors.Is(err, ErrInvalidAvatarID) ||
 		errors.Is(err, ErrInvalidCommentID) ||
+		errors.Is(err, ErrInvalidCommentKind) ||
 		errors.Is(err, ErrInvalidCommentBody) ||
 		errors.Is(err, ErrInvalidCreatedAt) ||
 		errors.Is(err, ErrInvalidUpdatedAt) ||
@@ -82,6 +84,7 @@ func IsInternal(err error) bool {
 //     - commentId
 //     - resaleId
 //     - avatarId
+//     - kind
 //     - body
 //     - deleted
 //     - isRead
@@ -262,12 +265,35 @@ func (l Like) DocumentID() (string, error) {
 // Comment
 //
 // Comment body is immutable after creation.
+//
+// Comment kinds:
+// - user: ordinary user-generated comment
+// - purchase: system-generated purchase notification
+//
 // A comment may transition:
 // - unread -> read
 // - visible -> logically deleted
 //
 // IsRead represents whether the resale owner has read the comment.
+// Deletion authorization and comment-kind policy are application.usecase
+// responsibilities.
 // ============================================================
+
+type CommentKind string
+
+const (
+	CommentKindUser     CommentKind = "user"
+	CommentKindPurchase CommentKind = "purchase"
+)
+
+func IsValidCommentKind(kind CommentKind) bool {
+	switch kind {
+	case CommentKindUser, CommentKindPurchase:
+		return true
+	default:
+		return false
+	}
+}
 
 type CommentID string
 
@@ -276,19 +302,21 @@ func NewCommentID() CommentID {
 }
 
 type Comment struct {
-	CommentID CommentID `json:"commentId"`
-	ResaleID  string    `json:"resaleId"`
-	AvatarID  string    `json:"avatarId"`
-	Body      string    `json:"body"`
-	Deleted   bool      `json:"deleted"`
-	IsRead    bool      `json:"isRead"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	CommentID CommentID   `json:"commentId"`
+	ResaleID  string      `json:"resaleId"`
+	AvatarID  string      `json:"avatarId"`
+	Kind      CommentKind `json:"kind"`
+	Body      string      `json:"body"`
+	Deleted   bool        `json:"deleted"`
+	IsRead    bool        `json:"isRead"`
+	CreatedAt time.Time   `json:"createdAt"`
+	UpdatedAt time.Time   `json:"updatedAt"`
 }
 
 type NewCommentParams struct {
 	ResaleID string
 	AvatarID string
+	Kind     CommentKind
 	Body     string
 	IsRead   bool
 	Now      time.Time
@@ -303,6 +331,10 @@ func NewComment(
 
 	if !isValidReferenceID(p.AvatarID) {
 		return nil, ErrInvalidAvatarID
+	}
+
+	if !IsValidCommentKind(p.Kind) {
+		return nil, ErrInvalidCommentKind
 	}
 
 	if err := validateCommentBody(p.Body); err != nil {
@@ -320,6 +352,7 @@ func NewComment(
 		CommentID: NewCommentID(),
 		ResaleID:  p.ResaleID,
 		AvatarID:  p.AvatarID,
+		Kind:      p.Kind,
 		Body:      p.Body,
 		Deleted:   false,
 		IsRead:    p.IsRead,
@@ -332,6 +365,7 @@ func RestoreComment(
 	commentID CommentID,
 	resaleID string,
 	avatarID string,
+	kind CommentKind,
 	body string,
 	deleted bool,
 	isRead bool,
@@ -342,6 +376,7 @@ func RestoreComment(
 		CommentID: commentID,
 		ResaleID:  resaleID,
 		AvatarID:  avatarID,
+		Kind:      kind,
 		Body:      body,
 		Deleted:   deleted,
 		IsRead:    isRead,
@@ -367,6 +402,10 @@ func (c Comment) Validate() error {
 
 	if !isValidReferenceID(c.AvatarID) {
 		return ErrInvalidAvatarID
+	}
+
+	if !IsValidCommentKind(c.Kind) {
+		return ErrInvalidCommentKind
 	}
 
 	if !c.Deleted {
@@ -420,8 +459,8 @@ func (c *Comment) MarkRead(now time.Time) error {
 // Keeping the document allows moderation / future reply support without
 // destroying the original interaction node.
 //
-// Authorization must be validated by application.usecase.
-// Current policy allows the resale seller to delete comments while listing.
+// Authorization and deletion policy must be validated by application.usecase.
+// Purchase comments are system events and must not be deleted.
 func (c *Comment) MarkDeleted(now time.Time) error {
 	if c == nil {
 		return ErrInvalid
