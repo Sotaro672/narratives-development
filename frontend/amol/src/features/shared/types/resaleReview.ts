@@ -28,6 +28,17 @@ export type ResaleReviewCommentPage = {
   perPage: number;
 };
 
+export type ResaleChatLatestComment = {
+  commentId: string;
+  resaleId: string;
+  avatarId: string;
+  body: string;
+  deleted: boolean;
+  isRead: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ResaleChatListItem = {
   resaleId: string;
   status: "listing" | "suspended" | "sold";
@@ -37,7 +48,7 @@ export type ResaleChatListItem = {
   brandName: string;
   imageUrl: string;
   price: number;
-  latestComment?: ResaleReviewComment;
+  latestComment?: ResaleChatLatestComment;
   commentCount: number;
   unreadCommentCount: number;
   latestActivityAt: string;
