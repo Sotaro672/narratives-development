@@ -4,6 +4,7 @@ import { Link, useLocation } from "react-router-dom";
 
 import { useAnnouncementUnreadCount } from "../../../features/announcement/hooks/useAnnouncementUnreadCount";
 import { useInquiryBadgeCounter } from "../../../features/inquiry/presentation/hooks/useInquiryBadgeCounter";
+import { useResaleChatBadgeCounter } from "../../../features/resale/presentation/hooks/useResaleChatBadgeCounter";
 
 import type { HeaderActionState } from "./types";
 
@@ -64,20 +65,22 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     enabled: shouldShowAnnouncementButton,
   });
 
+  const { badgeCount: resaleChatBadgeCount } = useResaleChatBadgeCounter({
+    enabled: shouldShowAnnouncementButton,
+  });
+
   const safeCartItemCount = normalizeCount(cartItemCount);
   const safeAnnouncementUnreadCount = normalizeCount(announcementUnreadCount);
   const safeInquiryBadgeCount = normalizeCount(inquiryBadgeCount);
+  const safeResaleChatBadgeCount = normalizeCount(resaleChatBadgeCount);
+  const safeChatBadgeCount = safeInquiryBadgeCount + safeResaleChatBadgeCount;
 
   const cartBadgeLabel = formatBadgeLabel(safeCartItemCount);
-  const announcementUnreadBadgeLabel = formatBadgeLabel(
-    safeAnnouncementUnreadCount,
-  );
-  const chatBadgeLabel = formatBadgeLabel(safeInquiryBadgeCount);
+  const announcementUnreadBadgeLabel = formatBadgeLabel(safeAnnouncementUnreadCount);
+  const chatBadgeLabel = formatBadgeLabel(safeChatBadgeCount);
 
   const shouldShowResaleButton = isResalePagePath(location.pathname);
-  const shouldShowResaleDetailActions = isResaleDetailPagePath(
-    location.pathname,
-  );
+  const shouldShowResaleDetailActions = isResaleDetailPagePath(location.pathname);
 
   const resaleButtonLabel = actionButtonLabel || "出品";
   const resaleButtonDisabled = !onActionButtonClick || actionButtonDisabled;
@@ -199,14 +202,14 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
         <Link
           to="/chats"
           className="header__settings-link header__cart-link"
-          aria-label={`メッセージ ${safeInquiryBadgeCount}件`}
+          aria-label={`メッセージ ${safeChatBadgeCount}件`}
           title="メッセージ"
         >
           <span className="header__cart-icon" aria-hidden="true">
             💬
           </span>
 
-          {safeInquiryBadgeCount > 0 ? (
+          {safeChatBadgeCount > 0 ? (
             <span className="header__cart-badge" aria-hidden="true">
               {chatBadgeLabel}
             </span>

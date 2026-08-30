@@ -13,6 +13,9 @@ import {
   fetchMyResaleChats,
   markMyResaleCommentsAsRead,
 } from "../../../resale/api/resaleReviewApi";
+import {
+  updateResaleChatBadgeCount,
+} from "../../../resale/presentation/resaleChatBadgeEvents";
 
 import type {
   ResaleChatListItem as ResaleChatListItemDTO,
@@ -171,7 +174,7 @@ export function useInquiryListPage() {
       let nextItem: ResaleChatListItem = item;
 
       if (item.unreadCommentCount > 0) {
-        await markMyResaleCommentsAsRead({
+        const result = await markMyResaleCommentsAsRead({
           resaleId,
         });
 
@@ -193,6 +196,10 @@ export function useInquiryListPage() {
             return currentItem;
           }),
         );
+
+        if (result.markedCount > 0) {
+          updateResaleChatBadgeCount(-result.markedCount);
+        }
       }
 
       navigate(`/chats/resales/${encodeURIComponent(resaleId)}`, {

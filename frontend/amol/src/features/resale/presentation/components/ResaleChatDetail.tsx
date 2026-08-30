@@ -23,6 +23,8 @@ import {
   getMyResaleListing,
   listMyResaleConditionImages,
 } from "../../api/resaleApi";
+import { markMyResaleCommentsAsRead } from "../../api/resaleReviewApi";
+import { updateResaleChatBadgeCount } from "../resaleChatBadgeEvents";
 
 import type { MarketResaleListing } from "../../../shared/types/marketResale";
 import type {
@@ -283,6 +285,25 @@ export default function ResaleChatDetail({
         getMyAvatar().catch(() => null),
       ]);
 
+      let readError = "";
+
+      if (chatData.source === "owner") {
+        try {
+          const result = await markMyResaleCommentsAsRead({
+            resaleId: normalizedResaleId,
+          });
+
+          if (result.markedCount > 0) {
+            updateResaleChatBadgeCount(-result.markedCount);
+          }
+        } catch (caught) {
+          readError = getErrorMessage(
+            caught,
+            "コメントの既読状態の更新に失敗しました。",
+          );
+        }
+      }
+
       setSource(chatData.source);
       setItem(chatData.item);
       setImages(chatData.images);
@@ -295,6 +316,10 @@ export default function ResaleChatDetail({
               : ""
           ),
       );
+
+      if (readError) {
+        setError(readError);
+      }
     } catch (caught) {
       setSource(null);
       setItem(null);
