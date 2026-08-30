@@ -67,15 +67,27 @@ type FilterLike struct {
 //
 // ResaleID is normally required because comments belong to a resale review.
 //
+// AvatarID:
+// - empty = no avatar filter
+// - non-empty = comments created by the specified avatar only
+//
 // Deleted:
 // - nil   = no deleted-state filter
 // - false = visible comments only
 // - true  = deleted comments only
+//
+// IsRead:
+// - nil   = no read-state filter
+// - false = unread comments only
+// - true  = read comments only
+//
+// IsRead represents whether the resale owner has read the comment.
 type FilterComment struct {
 	common.FilterCommon `json:",inline"`
 	ResaleID            string `json:"resaleId"`
 	AvatarID            string `json:"avatarId"`
 	Deleted             *bool  `json:"deleted"`
+	IsRead              *bool  `json:"isRead"`
 }
 
 // ============================================================
@@ -180,7 +192,8 @@ type LikeRepository interface {
 //
 // resaleReviews/{resaleId}/comments/{commentId}
 //
-// Comments are immutable after creation.
+// Comment body is immutable after creation.
+// Read-state changes are handled by MutationRepository.MarkCommentsRead.
 // Normal deletion is handled by MutationRepository.MarkCommentDeleted.
 // Physical deletion is reserved for resale-review cleanup.
 type CommentRepository interface {
@@ -223,10 +236,10 @@ type CommentRepository interface {
 // Atomic mutation repository
 // ============================================================
 
-// MutationRepository represents operations that must keep the parent aggregate
-// counters and child documents consistent.
+// MutationRepository represents operations that mutate resale-review state.
 //
-// Firestore implementations should execute each operation in one transaction.
+// Operations that affect aggregate counters should keep the parent aggregate
+// and child documents consistent in one transaction.
 //
 // This prevents states such as:
 // - like document exists but LikeCount was not incremented
@@ -257,6 +270,21 @@ type MutationRepository interface {
 		ctx context.Context,
 		comment Comment,
 	) (ResaleReviewAggregate, Comment, error)
+
+	// MarkCommentsRead marks all visible unread comments under resaleId as read.
+	//
+	// IsRead represents whether the resale owner has read the comment.
+	// Authorization that the caller is the resale owner must be validated by
+	// application.usecase before invoking this repository method.
+	//
+	// Implementations should keep this operation idempotent:
+	// comments already marked as read must remain unchanged.
+	//
+	// The returned value is the number of comments newly marked as read.
+	MarkCommentsRead(
+		ctx context.Context,
+		resaleID string,
+	) (int, error)
 
 	// MarkCommentDeleted logically deletes a comment and decrements
 	// CommentCount atomically.

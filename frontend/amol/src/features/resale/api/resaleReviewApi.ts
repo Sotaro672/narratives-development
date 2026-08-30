@@ -6,6 +6,9 @@ import {
 } from "./resaleHttpClient";
 
 import type {
+  ResaleChatBadgeCountResponse,
+  ResaleChatListResponse,
+  ResaleCommentsMarkAsReadResponse,
   ResaleInteractionSummary,
   ResaleReviewComment,
   ResaleReviewCommentPage,
@@ -25,6 +28,10 @@ export type CreateMyResaleCommentParams = {
 export type DeleteMyResaleCommentParams = {
   resaleId: string;
   commentId: string;
+};
+
+export type MarkMyResaleCommentsAsReadParams = {
+  resaleId: string;
 };
 
 export type CreateMyResaleCommentResult = {
@@ -55,6 +62,24 @@ function requireCommentId(commentId: string): string {
   }
 
   return normalizedCommentId;
+}
+
+export async function fetchMyResaleChats(): Promise<ResaleChatListResponse> {
+  return fetchResaleWithAuth<ResaleChatListResponse>(
+    "/mall/me/resales/chats",
+    {
+      method: "GET",
+    },
+  );
+}
+
+export async function getMyResaleChatBadgeCount(): Promise<ResaleChatBadgeCountResponse> {
+  return fetchResaleWithAuth<ResaleChatBadgeCountResponse>(
+    "/mall/me/resales/chat-badge-count",
+    {
+      method: "GET",
+    },
+  );
 }
 
 export async function fetchMyResaleComments(
@@ -102,6 +127,19 @@ export async function createMyResaleComment(
     comment: result.data,
     interaction: result.interaction,
   };
+}
+
+export async function markMyResaleCommentsAsRead(
+  params: MarkMyResaleCommentsAsReadParams,
+): Promise<ResaleCommentsMarkAsReadResponse> {
+  const resaleId = requireResaleId(params.resaleId);
+
+  return fetchResaleWithAuth<ResaleCommentsMarkAsReadResponse>(
+    `/mall/me/resales/${encodeURIComponent(resaleId)}/comments/mark-as-read`,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export async function deleteMyResaleComment(

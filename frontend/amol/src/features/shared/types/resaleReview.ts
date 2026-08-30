@@ -1,4 +1,5 @@
-//frontend\amol\src\features\shared\types\resaleReview.ts
+// frontend/amol/src/features/shared/types/resaleReview.ts
+
 export type ResaleInteractionSummary = {
   resaleId: string;
   likeCount: number;
@@ -12,6 +13,7 @@ export type ResaleReviewComment = {
   avatarId: string;
   body: string;
   deleted: boolean;
+  isRead: boolean;
   createdAt: string;
   updatedAt: string;
   avatarName: string;
@@ -24,4 +26,34 @@ export type ResaleReviewCommentPage = {
   totalPages: number;
   page: number;
   perPage: number;
+};
+
+export type ResaleChatListItem = {
+  resaleId: string;
+  status: "listing" | "suspended" | "sold";
+  productName: string;
+  tokenName: string;
+  tokenIcon: string;
+  brandName: string;
+  imageUrl: string;
+  price: number;
+  latestComment?: ResaleReviewComment;
+  commentCount: number;
+  unreadCommentCount: number;
+  latestActivityAt: string;
+};
+
+export type ResaleChatListResponse = {
+  items: ResaleChatListItem[];
+  totalCount: number;
+};
+
+export type ResaleChatBadgeCountResponse = {
+  unreadCommentCount: number;
+};
+
+export type ResaleCommentsMarkAsReadResponse = {
+  ok: boolean;
+  resaleId: string;
+  markedCount: number;
 };

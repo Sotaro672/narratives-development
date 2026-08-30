@@ -111,6 +111,7 @@ type resaleReviewCommentDocument struct {
 	AvatarID  string    `firestore:"avatarId"`
 	Body      string    `firestore:"body"`
 	Deleted   bool      `firestore:"deleted"`
+	IsRead    bool      `firestore:"isRead"`
 	CreatedAt time.Time `firestore:"createdAt"`
 	UpdatedAt time.Time `firestore:"updatedAt"`
 }
@@ -196,6 +197,7 @@ func commentToDocument(entity resalereview.Comment) resaleReviewCommentDocument 
 		AvatarID:  entity.AvatarID,
 		Body:      entity.Body,
 		Deleted:   entity.Deleted,
+		IsRead:    entity.IsRead,
 		CreatedAt: entity.CreatedAt.UTC(),
 		UpdatedAt: entity.UpdatedAt.UTC(),
 	}
@@ -222,6 +224,7 @@ func commentFromSnapshot(snapshot *gfs.DocumentSnapshot) (resalereview.Comment, 
 		document.AvatarID,
 		document.Body,
 		document.Deleted,
+		document.IsRead,
 		document.CreatedAt.UTC(),
 		document.UpdatedAt.UTC(),
 	)
@@ -847,6 +850,79 @@ func (r *resaleReviewMutationRepositoryFS) AddComment(ctx context.Context, comme
 	return resultAggregate, comment, nil
 }
 
+func (r *resaleReviewMutationRepositoryFS) MarkCommentsRead(ctx context.Context, resaleID string) (int, error) {
+	if r == nil || r.root == nil {
+		return 0, errResaleReviewRepositoryNotConfigured
+	}
+	if err := r.root.validateConfigured(); err != nil {
+		return 0, err
+	}
+	if resaleID == "" {
+		return 0, resalereview.ErrInvalidResaleID
+	}
+
+	it := r.root.commentsCol(resaleID).Documents(ctx)
+	defer it.Stop()
+
+	now := time.Now().UTC()
+	refs := make([]*gfs.DocumentRef, 0, resaleReviewCleanupBatchSize)
+	markedCount := 0
+
+	commit := func() error {
+		if len(refs) == 0 {
+			return nil
+		}
+
+		batch := r.root.Client.Batch()
+		for _, ref := range refs {
+			batch.Update(ref, []gfs.Update{
+				{Path: "isRead", Value: true},
+				{Path: "updatedAt", Value: now},
+			})
+		}
+
+		if _, err := batch.Commit(ctx); err != nil {
+			return err
+		}
+
+		refs = refs[:0]
+		return nil
+	}
+
+	for {
+		snapshot, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return 0, err
+		}
+
+		comment, err := commentFromSnapshot(snapshot)
+		if err != nil {
+			return 0, err
+		}
+		if comment.Deleted || comment.IsRead {
+			continue
+		}
+
+		refs = append(refs, snapshot.Ref)
+		markedCount++
+
+		if len(refs) >= resaleReviewCleanupBatchSize {
+			if err := commit(); err != nil {
+				return 0, err
+			}
+		}
+	}
+
+	if err := commit(); err != nil {
+		return 0, err
+	}
+
+	return markedCount, nil
+}
+
 func (r *resaleReviewMutationRepositoryFS) MarkCommentDeleted(ctx context.Context, resaleID string, commentID string) (resalereview.ResaleReviewAggregate, resalereview.Comment, error) {
 	if r == nil || r.root == nil {
 		return resalereview.ResaleReviewAggregate{}, resalereview.Comment{}, errResaleReviewRepositoryNotConfigured
@@ -1037,6 +1113,9 @@ func matchesCommentFilter(item resalereview.Comment, filter resalereview.FilterC
 		return false
 	}
 	if filter.Deleted != nil && item.Deleted != *filter.Deleted {
+		return false
+	}
+	if filter.IsRead != nil && item.IsRead != *filter.IsRead {
 		return false
 	}
 	if filter.Created.From != nil && item.CreatedAt.Before(*filter.Created.From) {

@@ -1,6 +1,6 @@
 // frontend/amol/src/pages/ChatDetailPage.tsx
 
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 
@@ -20,37 +20,49 @@ type ChatDetailRouteParams = {
   resaleId?: string;
 };
 
+type InquiryChatDetailProps = {
+  onBack: () => void;
+};
+
 export default function ChatDetailPage() {
+  const navigate = useNavigate();
   const { resaleId } = useParams<ChatDetailRouteParams>();
 
+  const handleBack = () => {
+    navigate(-1);
+  };
+
   if (resaleId) {
-    return <ResaleChatDetail resaleId={resaleId} />;
+    return (
+      <ResaleChatDetail
+        resaleId={resaleId}
+        onBack={handleBack}
+      />
+    );
   }
 
-  return <InquiryChatDetail />;
+  return <InquiryChatDetail onBack={handleBack} />;
 }
 
-function InquiryChatDetail() {
+function InquiryChatDetail({
+  onBack,
+}: InquiryChatDetailProps) {
   const {
     title,
     inquiry,
     sortedReplies,
     loading,
     error,
-
     isReplyModalOpen,
     replyContent,
     replyFiles,
     replyError,
     postingReply,
     canSubmitReply,
-
     closingInquiry,
     closeError,
-
     shouldShowClosePrompt,
     replyActionDisabled,
-
     setReplyContent,
     openReplyModal,
     closeReplyModal,
@@ -65,6 +77,7 @@ function InquiryChatDetail() {
       <Layout
         title={title}
         showBackButton
+        onBackButtonClick={onBack}
         showFooter={!isReplyModalOpen}
         mode="mypage"
         mainClassName="chat-detail-page-layout"

@@ -335,7 +335,8 @@ func (uc *ResaleReviewUsecase) CreateComment(
 		return ResaleReviewCommentListItem{}, resalereview.InteractionSummary{}, resalereview.ErrInvalidAvatarID
 	}
 
-	if _, err := uc.requireListingResale(ctx, resaleID); err != nil {
+	resale, err := uc.requireListingResale(ctx, resaleID)
+	if err != nil {
 		return ResaleReviewCommentListItem{}, resalereview.InteractionSummary{}, err
 	}
 
@@ -344,6 +345,7 @@ func (uc *ResaleReviewUsecase) CreateComment(
 			ResaleID: resaleID,
 			AvatarID: avatarID,
 			Body:     input.Body,
+			IsRead:   resale.AvatarID == avatarID,
 			Now:      uc.nowUTC(),
 		},
 	)
@@ -389,6 +391,51 @@ func (uc *ResaleReviewUsecase) CreateComment(
 		AvatarName: display.Name,
 		AvatarIcon: display.Icon,
 	}, summary, nil
+}
+
+// ============================================================
+// Mark comments read
+// ============================================================
+
+// MarkCommentsRead marks all visible unread comments for one resale as read.
+//
+// Rules:
+// - resale must exist
+// - resale may be listing, suspended, or sold
+// - only the resale owner may mark comments as read
+// - repeated calls are idempotent
+//
+// The returned count is the number of comments newly marked as read.
+func (uc *ResaleReviewUsecase) MarkCommentsRead(
+	ctx context.Context,
+	resaleID string,
+	avatarID string,
+) (int, error) {
+	if err := uc.requireConfigured("ResaleReview.MarkCommentsRead"); err != nil {
+		return 0, err
+	}
+
+	if resaleID == "" {
+		return 0, resalereview.ErrInvalidResaleID
+	}
+
+	if avatarID == "" {
+		return 0, resalereview.ErrInvalidAvatarID
+	}
+
+	resale, err := uc.requireExistingResale(ctx, resaleID)
+	if err != nil {
+		return 0, err
+	}
+
+	if resale.AvatarID != avatarID {
+		return 0, resalereview.ErrForbidden
+	}
+
+	return uc.reviewRepo.Mutations().MarkCommentsRead(
+		ctx,
+		resaleID,
+	)
 }
 
 // ============================================================

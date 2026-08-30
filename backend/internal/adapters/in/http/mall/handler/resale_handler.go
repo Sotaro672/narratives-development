@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	mallquery "narratives/internal/application/query/mall"
 	usecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	resaledom "narratives/internal/domain/resale"
@@ -27,6 +28,16 @@ type ResaleQuery interface {
 		ctx context.Context,
 		avatarID string,
 	) ([]resaledom.Resale, error)
+
+	ListChatItems(
+		ctx context.Context,
+		avatarID string,
+	) ([]mallquery.ResaleChatListItem, error)
+
+	CountUnreadCommentsByAvatarID(
+		ctx context.Context,
+		avatarID string,
+	) (int, error)
 
 	GetByID(
 		ctx context.Context,
@@ -97,6 +108,26 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
+	}
+
+	if path == meResalesPath+"/chats" {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.listOwnedResaleChats(w, r)
+		return
+	}
+
+	if path == meResalesPath+"/chat-badge-count" {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.getOwnedResaleChatBadgeCount(w, r)
+		return
 	}
 
 	if !strings.HasPrefix(path, meResalesPath+"/") {
@@ -184,6 +215,16 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					methodNotAllowed(w)
 					return
 				}
+			}
+
+			if len(parts) == 3 && parts[2] == "mark-as-read" {
+				if r.Method != http.MethodPost {
+					methodNotAllowed(w)
+					return
+				}
+
+				h.markOwnedResaleCommentsRead(w, r, resaleID)
+				return
 			}
 
 			if len(parts) == 3 && parts[2] != "" {
@@ -504,6 +545,65 @@ func (h *ResaleHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	)
 
 	_ = json.NewEncoder(w).Encode(page)
+}
+
+func (h *ResaleHandler) listOwnedResaleChats(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	ctx := r.Context()
+
+	if h == nil || h.query == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	items, err := h.query.ListChatItems(ctx, avatarID)
+	if err != nil {
+		writeResaleErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items":      items,
+		"totalCount": len(items),
+	})
+}
+
+func (h *ResaleHandler) getOwnedResaleChatBadgeCount(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	ctx := r.Context()
+
+	if h == nil || h.query == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	count, err := h.query.CountUnreadCommentsByAvatarID(ctx, avatarID)
+	if err != nil {
+		writeResaleErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"unreadCommentCount": count,
+	})
 }
 
 func (h *ResaleHandler) get(
@@ -1017,6 +1117,42 @@ func (h *ResaleHandler) createOwnedResaleComment(
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"data":        comment,
 		"interaction": summary,
+	})
+}
+
+func (h *ResaleHandler) markOwnedResaleCommentsRead(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+) {
+	ctx := r.Context()
+
+	if h == nil || h.resaleReviewUC == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	markedCount, err := h.resaleReviewUC.MarkCommentsRead(
+		ctx,
+		resaleID,
+		avatarID,
+	)
+	if err != nil {
+		writeResaleReviewErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":          true,
+		"resaleId":    resaleID,
+		"markedCount": markedCount,
 	})
 }
 

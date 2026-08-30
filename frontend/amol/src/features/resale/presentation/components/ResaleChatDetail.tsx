@@ -54,6 +54,7 @@ type ResaleChatData = {
 
 type ResaleChatDetailProps = {
   resaleId: string;
+  onBack: () => void;
 };
 
 type ProductMetaItem = {
@@ -231,6 +232,7 @@ async function loadResaleChat(
 
 export default function ResaleChatDetail({
   resaleId,
+  onBack,
 }: ResaleChatDetailProps) {
   const location = useLocation();
 
@@ -515,6 +517,7 @@ export default function ResaleChatDetail({
       <Layout
         title={title}
         showBackButton
+        onBackButtonClick={onBack}
         showFooter={!isReplyModalOpen}
         mode="mypage"
         mainClassName="chat-detail-page-layout"

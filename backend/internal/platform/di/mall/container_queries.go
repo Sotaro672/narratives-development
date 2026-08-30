@@ -109,6 +109,7 @@ func buildMallQueries(
 	resaleQ := mallquery.NewResaleQuery(
 		r.resaleRepo,
 		r.resaleImageRepo,
+		r.resaleReviewRepo,
 		mallDisplayResolver,
 		r.avatarRepo,
 	)

@@ -84,6 +84,7 @@ func IsInternal(err error) bool {
 //     - avatarId
 //     - body
 //     - deleted
+//     - isRead
 //     - createdAt
 //     - updatedAt
 //
@@ -260,8 +261,12 @@ func (l Like) DocumentID() (string, error) {
 // ============================================================
 // Comment
 //
-// Comments are immutable after creation.
-// They may only transition from visible to logically deleted.
+// Comment body is immutable after creation.
+// A comment may transition:
+// - unread -> read
+// - visible -> logically deleted
+//
+// IsRead represents whether the resale owner has read the comment.
 // ============================================================
 
 type CommentID string
@@ -276,6 +281,7 @@ type Comment struct {
 	AvatarID  string    `json:"avatarId"`
 	Body      string    `json:"body"`
 	Deleted   bool      `json:"deleted"`
+	IsRead    bool      `json:"isRead"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -284,6 +290,7 @@ type NewCommentParams struct {
 	ResaleID string
 	AvatarID string
 	Body     string
+	IsRead   bool
 	Now      time.Time
 }
 
@@ -315,6 +322,7 @@ func NewComment(
 		AvatarID:  p.AvatarID,
 		Body:      p.Body,
 		Deleted:   false,
+		IsRead:    p.IsRead,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}, nil
@@ -326,6 +334,7 @@ func RestoreComment(
 	avatarID string,
 	body string,
 	deleted bool,
+	isRead bool,
 	createdAt time.Time,
 	updatedAt time.Time,
 ) (*Comment, error) {
@@ -335,6 +344,7 @@ func RestoreComment(
 		AvatarID:  avatarID,
 		Body:      body,
 		Deleted:   deleted,
+		IsRead:    isRead,
 		CreatedAt: createdAt,
 		UpdatedAt: updatedAt,
 	}
@@ -372,6 +382,35 @@ func (c Comment) Validate() error {
 	if c.UpdatedAt.IsZero() || c.UpdatedAt.Before(c.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
+
+	return nil
+}
+
+// MarkRead marks the comment as read by the resale owner.
+//
+// Authorization must be validated by application.usecase.
+// Calling MarkRead repeatedly is idempotent.
+func (c *Comment) MarkRead(now time.Time) error {
+	if c == nil {
+		return ErrInvalid
+	}
+
+	if c.IsRead {
+		return nil
+	}
+
+	if now.IsZero() {
+		now = time.Now().UTC()
+	} else {
+		now = now.UTC()
+	}
+
+	if !c.CreatedAt.IsZero() && now.Before(c.CreatedAt) {
+		return ErrInvalidUpdatedAt
+	}
+
+	c.IsRead = true
+	c.UpdatedAt = now
 
 	return nil
 }
