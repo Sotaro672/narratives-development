@@ -502,6 +502,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 		target.ItemType == orderdom.OrderItemTypeResale
 
 	var resaleSettlementSeller settlementdom.SellerIdentity
+	var resaleSettlement settlementdom.Settlement
 	if target.ItemType == orderdom.OrderItemTypeResale {
 		resaleSettlementSeller, err = u.resolveResaleSettlementSeller(
 			verifiedItem,
@@ -511,11 +512,12 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 			return matchedResult, err
 		}
 
-		if err := u.validateResaleSettlementBeforeTransfer(
+		resaleSettlement, err = u.requirePendingResaleSettlement(
 			ctx,
 			target.OrderID,
 			resaleSettlementSeller,
-		); err != nil {
+		)
+		if err != nil {
 			return matchedResult, err
 		}
 	}
@@ -525,30 +527,44 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 		txSignature string,
 		now time.Time,
 	) error {
-		var readySettlement settlementdom.Settlement
-
 		if target.ItemType == orderdom.OrderItemTypeResale {
-			readySettlement, err = u.settlementUC.MarkReadyByPaymentAndSeller(
+			readySettlement, err := u.orderRepo.CompleteResaleTransferFulfillment(
 				ctx,
 				target.OrderID,
+				target.ItemIndex,
+				resaleSettlement.ID,
 				resaleSettlementSeller,
+				now,
 			)
 			if err != nil {
 				return fmt.Errorf(
-					"resale settlement readiness failed orderId=%s itemIndex=%d: %w",
+					"complete resale transfer fulfillment failed orderId=%s itemIndex=%d settlementId=%s tx=%s: %w",
 					target.OrderID,
 					target.ItemIndex,
+					resaleSettlement.ID,
+					txSignature,
 					err,
 				)
 			}
 
-			if err := validateResaleReadySettlement(
+			if err := validateCompletedResaleSettlement(
 				readySettlement,
 				target.OrderID,
+				resaleSettlement.ID,
 				resaleSettlementSeller,
 			); err != nil {
 				return err
 			}
+
+			// Order item transferred=true and Settlement ready are already durable
+			// in one Firestore transaction. Queue delivery is best-effort because
+			// settlement reconciliation can re-enqueue a durable READY Settlement.
+			_ = u.settlementQueue.EnqueueSettlementTransfer(
+				ctx,
+				readySettlement.ID,
+			)
+
+			return nil
 		}
 
 		if err := u.orderRepo.MarkTransferredItem(
@@ -563,18 +579,6 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 				target.ItemIndex,
 				txSignature,
 				err,
-			)
-		}
-
-		if target.ItemType == orderdom.OrderItemTypeResale &&
-			shouldEnqueueResaleSettlement(readySettlement.Status) {
-			// READY is already durable. Queue delivery is best-effort here because
-			// settlement reconciliation can re-enqueue READY / FAILED_RETRYABLE
-			// settlements. A queue outage must not turn a completed on-chain token
-			// transfer into a failed transfer attempt.
-			_ = u.settlementQueue.EnqueueSettlementTransfer(
-				ctx,
-				readySettlement.ID,
 			)
 		}
 
@@ -966,26 +970,33 @@ func (u *TransferUsecase) resolveResaleSettlementSeller(
 	return seller, nil
 }
 
-func (u *TransferUsecase) validateResaleSettlementBeforeTransfer(
+func (u *TransferUsecase) requirePendingResaleSettlement(
 	ctx context.Context,
 	paymentID string,
 	seller settlementdom.SellerIdentity,
-) error {
+) (settlementdom.Settlement, error) {
 	if u == nil ||
 		u.settlementUC == nil ||
 		u.settlementQueue == nil {
-		return ErrTransferResaleSettlementNotConfigured
+		return settlementdom.Settlement{},
+			ErrTransferResaleSettlementNotConfigured
 	}
 	if paymentID == "" {
-		return ErrTransferResaleSettlementMismatch
+		return settlementdom.Settlement{},
+			ErrTransferResaleSettlementMismatch
 	}
 	if err := seller.Validate(); err != nil {
-		return ErrTransferResaleSettlementMismatch
+		return settlementdom.Settlement{},
+			ErrTransferResaleSettlementMismatch
 	}
 
-	settlementID, err := settlementdom.NewID(paymentID, seller)
+	settlementID, err := settlementdom.NewID(
+		paymentID,
+		seller,
+	)
 	if err != nil {
-		return ErrTransferResaleSettlementMismatch
+		return settlementdom.Settlement{},
+			ErrTransferResaleSettlementMismatch
 	}
 
 	settlement, err := u.settlementUC.GetByID(
@@ -993,73 +1004,50 @@ func (u *TransferUsecase) validateResaleSettlementBeforeTransfer(
 		settlementID,
 	)
 	if err != nil {
-		return fmt.Errorf(
-			"%w: load settlement %s: %v",
-			ErrTransferResaleSettlementUnavailable,
-			settlementID,
-			err,
-		)
+		return settlementdom.Settlement{},
+			fmt.Errorf(
+				"%w: load settlement %s: %v",
+				ErrTransferResaleSettlementUnavailable,
+				settlementID,
+				err,
+			)
 	}
 
 	if settlement.ID != settlementID ||
 		settlement.PaymentID != paymentID ||
 		settlement.OrderID != paymentID ||
 		settlement.SellerIdentity() != seller {
-		return ErrTransferResaleSettlementMismatch
+		return settlementdom.Settlement{},
+			ErrTransferResaleSettlementMismatch
 	}
 
-	switch settlement.Status {
-	case settlementdom.StatusPending,
-		settlementdom.StatusReady,
-		settlementdom.StatusFailedRetryable,
-		settlementdom.StatusTransferring,
-		settlementdom.StatusTransferred,
-		settlementdom.StatusFailed:
-		return nil
-
-	case settlementdom.StatusCanceled,
-		settlementdom.StatusReversed:
-		return ErrTransferResaleSettlementUnavailable
-
-	default:
-		return ErrTransferResaleSettlementUnavailable
+	if settlement.Status != settlementdom.StatusPending {
+		return settlementdom.Settlement{},
+			ErrTransferResaleSettlementUnavailable
 	}
+
+	return settlement, nil
 }
 
-func validateResaleReadySettlement(
+func validateCompletedResaleSettlement(
 	settlement settlementdom.Settlement,
 	paymentID string,
+	settlementID string,
 	seller settlementdom.SellerIdentity,
 ) error {
 	if settlement.ID == "" ||
+		settlement.ID != settlementID ||
 		settlement.PaymentID != paymentID ||
 		settlement.OrderID != paymentID ||
 		settlement.SellerIdentity() != seller {
 		return ErrTransferResaleSettlementMismatch
 	}
 
-	switch settlement.Status {
-	case settlementdom.StatusReady,
-		settlementdom.StatusFailedRetryable,
-		settlementdom.StatusTransferring,
-		settlementdom.StatusTransferred,
-		settlementdom.StatusFailed:
-		return nil
-	default:
+	if settlement.Status != settlementdom.StatusReady {
 		return ErrTransferResaleSettlementUnavailable
 	}
-}
 
-func shouldEnqueueResaleSettlement(
-	status settlementdom.SettlementStatus,
-) bool {
-	switch status {
-	case settlementdom.StatusReady,
-		settlementdom.StatusFailedRetryable:
-		return true
-	default:
-		return false
-	}
+	return nil
 }
 
 // ============================================================

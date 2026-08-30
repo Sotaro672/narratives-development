@@ -100,3 +100,39 @@ func (u *SettlementUsecase) ListByAccountID(
 		accountID,
 	)
 }
+
+func (u *SettlementUsecase) ListByAvatarID(
+	ctx context.Context,
+	avatarID string,
+) ([]settlementdom.Settlement, error) {
+	if u == nil || u.repo == nil {
+		return nil, ErrSettlementRepositoryMissing
+	}
+
+	if avatarID == "" {
+		return nil, settlementdom.ErrInvalidAvatarID
+	}
+
+	return u.repo.ListByAvatarID(
+		ctx,
+		avatarID,
+	)
+}
+
+func (u *SettlementUsecase) ListByPayoutAccountID(
+	ctx context.Context,
+	payoutAccountID string,
+) ([]settlementdom.Settlement, error) {
+	if u == nil || u.repo == nil {
+		return nil, ErrSettlementRepositoryMissing
+	}
+
+	if payoutAccountID == "" {
+		return nil, settlementdom.ErrInvalidPayoutAccountID
+	}
+
+	return u.repo.ListByPayoutAccountID(
+		ctx,
+		payoutAccountID,
+	)
+}

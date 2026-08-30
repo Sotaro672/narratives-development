@@ -15,6 +15,7 @@ import (
 
 	applicationport "narratives/internal/application/port"
 	orderdom "narratives/internal/domain/order"
+	settlementdom "narratives/internal/domain/settlement"
 	transferdom "narratives/internal/domain/transfer"
 )
 
@@ -876,6 +877,290 @@ func (r *OrderRepoForTransferFS) MarkTransferredItem(
 			)
 		},
 	)
+}
+
+func (r *OrderRepoForTransferFS) CompleteResaleTransferFulfillment(
+	ctx context.Context,
+	orderID string,
+	itemIndex int,
+	settlementID string,
+	seller settlementdom.SellerIdentity,
+	at time.Time,
+) (settlementdom.Settlement, error) {
+	if r == nil || r.Client == nil {
+		return settlementdom.Settlement{},
+			ErrOrderTransferItemRepoNotConfigured
+	}
+	if orderID == "" {
+		return settlementdom.Settlement{},
+			ErrInvalidTransferOrderID
+	}
+	if itemIndex < 0 {
+		return settlementdom.Settlement{},
+			ErrInvalidTransferItemIndex
+	}
+	if settlementID == "" {
+		return settlementdom.Settlement{},
+			settlementdom.ErrInvalidID
+	}
+	if at.IsZero() {
+		return settlementdom.Settlement{},
+			transferdom.ErrInvalidTransferredAt
+	}
+	if err := seller.Validate(); err != nil {
+		return settlementdom.Settlement{}, err
+	}
+	if seller.Type != settlementdom.SellerTypeAvatar {
+		return settlementdom.Settlement{},
+			settlementdom.ErrInvalidSellerType
+	}
+
+	expectedSettlementID, err := settlementdom.NewID(
+		orderID,
+		seller,
+	)
+	if err != nil {
+		return settlementdom.Settlement{}, err
+	}
+	if expectedSettlementID != settlementID {
+		return settlementdom.Settlement{},
+			settlementdom.ErrConflict
+	}
+
+	at = at.UTC()
+
+	projectionRef := r.transferItemDoc(
+		orderID,
+		itemIndex,
+	)
+	orderRef := r.ordersCol().Doc(orderID)
+	settlementRef := r.Client.
+		Collection("settlements").
+		Doc(settlementID)
+
+	var result settlementdom.Settlement
+
+	err = r.Client.RunTransaction(
+		ctx,
+		func(
+			ctx context.Context,
+			tx *firestore.Transaction,
+		) error {
+			// Firestore transactions require all reads before writes.
+			projectionSnap, err := tx.Get(projectionRef)
+			if err != nil {
+				return mapOrderTransferItemNotFound(err)
+			}
+
+			orderSnap, err := tx.Get(orderRef)
+			if err != nil {
+				if status.Code(err) == codes.NotFound {
+					return orderdom.ErrNotFound
+				}
+
+				return err
+			}
+
+			settlementSnap, err := tx.Get(settlementRef)
+			if err != nil {
+				if status.Code(err) == codes.NotFound {
+					return settlementdom.ErrNotFound
+				}
+
+				return err
+			}
+
+			projection, err :=
+				orderTransferItemFromSnapshot(
+					projectionSnap,
+				)
+			if err != nil {
+				return err
+			}
+			if projection.OrderID != orderID ||
+				projection.ItemIndex != itemIndex ||
+				projection.ItemType != orderdom.OrderItemTypeResale {
+				return ErrTransferItemProjectionMismatch
+			}
+			if !projection.Paid {
+				return ErrOrderNotPaid
+			}
+			if projection.IsCancelled {
+				return ErrTransferItemCancelled
+			}
+			if projection.IsReturnRequested ||
+				projection.IsReturnCompleted {
+				return orderdom.ErrConflict
+			}
+			if projection.Transferred {
+				return ErrTransferItemTransferred
+			}
+			if projection.TokenTransferVerifiedAt == nil ||
+				projection.TokenTransferVerifiedAt.IsZero() {
+				return ErrInvalidOrderTransferItemData
+			}
+
+			order, err := docToOrder(orderSnap)
+			if err != nil {
+				return err
+			}
+			if order.ID != orderID ||
+				!order.Paid ||
+				itemIndex >= len(order.Items) {
+				if !order.Paid {
+					return ErrOrderNotPaid
+				}
+
+				return ErrTransferItemProjectionMismatch
+			}
+
+			item := order.Items[itemIndex]
+			if item.Type != orderdom.OrderItemTypeResale {
+				return ErrTransferItemProjectionMismatch
+			}
+			if item.IsCancelled {
+				return ErrTransferItemCancelled
+			}
+			if item.IsReturnRequested ||
+				item.IsReturnCompleted {
+				return orderdom.ErrConflict
+			}
+			if item.Transferred {
+				return ErrTransferItemTransferred
+			}
+			if !orderItemMatchesProjection(
+				item,
+				projection,
+			) {
+				return ErrTransferItemProjectionMismatch
+			}
+			if item.TokenTransferVerifiedAt == nil ||
+				item.TokenTransferVerifiedAt.IsZero() ||
+				!item.TokenTransferVerifiedAt.Equal(
+					*projection.TokenTransferVerifiedAt,
+				) {
+				return ErrInvalidOrderTransferItemData
+			}
+
+			itemSeller := settlementdom.SellerIdentity{
+				Type: settlementdom.SellerTypeAvatar,
+
+				CompanyID: item.SellerSnapshot.CompanyID,
+				AccountID: item.SellerSnapshot.AccountID,
+
+				AvatarID: item.SellerSnapshot.AvatarID,
+				UserID:   item.SellerSnapshot.UserID,
+
+				PayoutAccountID: item.SellerSnapshot.PayoutAccountID,
+				StripeAccountID: item.SellerSnapshot.StripeAccountID,
+			}
+			if err := itemSeller.Validate(); err != nil {
+				return settlementdom.ErrConflict
+			}
+			if itemSeller != seller {
+				return settlementdom.ErrConflict
+			}
+
+			settlement, err := docToSettlement(
+				settlementSnap,
+			)
+			if err != nil {
+				return err
+			}
+			if settlement.ID != settlementID ||
+				settlement.OrderID != orderID ||
+				settlement.PaymentID != orderID ||
+				settlement.SellerIdentity() != seller {
+				return settlementdom.ErrConflict
+			}
+			if settlement.Status !=
+				settlementdom.StatusPending {
+				return settlementdom.ErrInvalidStatusTransition
+			}
+
+			if err := order.UpdateItemTransferred(
+				itemIndex,
+				true,
+				at,
+			); err != nil {
+				return err
+			}
+			if err := order.Validate(); err != nil {
+				return err
+			}
+
+			if err := settlement.MarkReady(at); err != nil {
+				return err
+			}
+
+			verifiedAt :=
+				order.Items[itemIndex].
+					TokenTransferVerifiedAt
+			if verifiedAt == nil ||
+				verifiedAt.IsZero() {
+				return ErrInvalidOrderTransferItemData
+			}
+
+			if err := tx.Set(
+				orderRef,
+				orderToDoc(order),
+				firestore.MergeAll,
+			); err != nil {
+				return err
+			}
+
+			if err := tx.Update(
+				projectionRef,
+				[]firestore.Update{
+					{
+						Path:  "tokenTransferVerifiedAt",
+						Value: verifiedAt.UTC(),
+					},
+					{
+						Path:  "isReturnRequested",
+						Value: false,
+					},
+					{
+						Path:  "isReturnCompleted",
+						Value: false,
+					},
+					{
+						Path:  "transferred",
+						Value: true,
+					},
+					{
+						Path:  "transferredAt",
+						Value: at,
+					},
+					{
+						Path:  "transferLockedAt",
+						Value: firestore.Delete,
+					},
+					{
+						Path:  "transferLockExpiresAt",
+						Value: firestore.Delete,
+					},
+				},
+			); err != nil {
+				return err
+			}
+
+			if err := tx.Set(
+				settlementRef,
+				settlementToData(settlement),
+			); err != nil {
+				return err
+			}
+
+			result = settlement
+			return nil
+		},
+	)
+	if err != nil {
+		return settlementdom.Settlement{}, err
+	}
+
+	return result, nil
 }
 
 type orderTransferItemProjection struct {

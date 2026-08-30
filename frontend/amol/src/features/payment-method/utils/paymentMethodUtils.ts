@@ -1,10 +1,11 @@
-//frontend\amol\src\features\payment-method\utils\paymentMethodUtils.ts
+// frontend/amol/src/features/payment-method/utils/paymentMethodUtils.ts
+
 import type {
+  CardPaymentMethod,
   PaymentMethodDefaultResponse,
   PaymentMethodListResponse,
   SetupIntentResponse,
   StripeConfigResponse,
-  CardPaymentMethod,
 } from "../../shared/types/paymentMethods";
 
 export function cardBrandLabel(brand: string): string {
@@ -55,18 +56,14 @@ export async function readJsonResponse<T>(
 export function extractSetupIntentClientSecret(
   responseBody: SetupIntentResponse | null,
 ): string {
-  const clientSecret =
-    responseBody?.data?.clientSecret ?? responseBody?.clientSecret ?? "";
-
+  const clientSecret = responseBody?.data?.clientSecret ?? "";
   return typeof clientSecret === "string" ? clientSecret.trim() : "";
 }
 
 export function extractSetupIntentStripeCustomerId(
   responseBody: SetupIntentResponse | null,
 ): string {
-  const stripeCustomerId =
-    responseBody?.data?.stripeCustomerId ?? responseBody?.stripeCustomerId ?? "";
-
+  const stripeCustomerId = responseBody?.data?.stripeCustomerId ?? "";
   return typeof stripeCustomerId === "string" ? stripeCustomerId.trim() : "";
 }
 
@@ -79,7 +76,6 @@ export function selectPrimaryPaymentMethod(
   }
 
   const items = Array.isArray(listResponse?.data) ? listResponse.data : [];
-
   return items.find((item) => item.isDefault) ?? items[0] ?? null;
 }
 
@@ -87,6 +83,5 @@ export function getStripePublishableKey(
   responseBody: StripeConfigResponse | null,
 ): string {
   const publishableKey = responseBody?.publishableKey ?? "";
-
   return typeof publishableKey === "string" ? publishableKey.trim() : "";
 }

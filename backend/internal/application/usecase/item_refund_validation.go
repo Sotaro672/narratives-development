@@ -37,28 +37,26 @@ func validateExistingItemRefund(
 		return ErrItemRefundExistingRefundMismatch
 	}
 
+	expectedRefundSeller, err :=
+		itemRefundDomainSellerIdentity(targetSeller)
+	if err != nil {
+		return ErrItemRefundExistingRefundMismatch
+	}
+
+	refundSeller := refund.SellerIdentity()
+	if err := refundSeller.Validate(); err != nil {
+		return ErrItemRefundExistingRefundMismatch
+	}
+
+	if refundSeller != expectedRefundSeller {
+		return ErrItemRefundExistingRefundMismatch
+	}
+
 	if refund.InquiryID != in.InquiryID ||
 		refund.OrderID != order.ID ||
 		refund.PaymentID != order.ID ||
 		refund.OrderItemIndex != in.ItemIndex ||
 		refund.SettlementID != settlement.ID {
-		return ErrItemRefundExistingRefundMismatch
-	}
-
-	switch targetSeller.Type {
-	case settlementdom.SellerTypeAccount:
-		if refund.CompanyID != targetSeller.CompanyID ||
-			refund.AccountID != targetSeller.AccountID {
-			return ErrItemRefundExistingRefundMismatch
-		}
-
-	case settlementdom.SellerTypeAvatar:
-		// The current Refund aggregate still requires CompanyID and AccountID
-		// and cannot persist an Avatar seller identity. Resale Refund support
-		// must be enabled only after refund.Refund is generalized to SellerIdentity.
-		return ErrItemRefundExistingRefundMismatch
-
-	default:
 		return ErrItemRefundExistingRefundMismatch
 	}
 
@@ -89,6 +87,45 @@ func validateExistingItemRefund(
 	}
 
 	return nil
+}
+
+func itemRefundDomainSellerIdentity(
+	seller settlementdom.SellerIdentity,
+) (refunddom.SellerIdentity, error) {
+	if err := seller.Validate(); err != nil {
+		return refunddom.SellerIdentity{}, err
+	}
+
+	var result refunddom.SellerIdentity
+
+	switch seller.Type {
+	case settlementdom.SellerTypeAccount:
+		result = refunddom.SellerIdentity{
+			Type:            refunddom.SellerTypeAccount,
+			CompanyID:       seller.CompanyID,
+			AccountID:       seller.AccountID,
+			StripeAccountID: seller.StripeAccountID,
+		}
+
+	case settlementdom.SellerTypeAvatar:
+		result = refunddom.SellerIdentity{
+			Type:            refunddom.SellerTypeAvatar,
+			AvatarID:        seller.AvatarID,
+			UserID:          seller.UserID,
+			PayoutAccountID: seller.PayoutAccountID,
+			StripeAccountID: seller.StripeAccountID,
+		}
+
+	default:
+		return refunddom.SellerIdentity{},
+			settlementdom.ErrInvalidSellerType
+	}
+
+	if err := result.Validate(); err != nil {
+		return refunddom.SellerIdentity{}, err
+	}
+
+	return result, nil
 }
 
 // ============================================================
