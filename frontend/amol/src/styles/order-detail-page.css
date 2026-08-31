@@ -249,6 +249,44 @@
   opacity: 0.8;
 }
 
+.order-detail-page__trade-button {
+  appearance: none;
+  min-height: 40px;
+  padding: 9px 18px;
+  border: 1px solid var(--color-text, #111827);
+  border-radius: 10px;
+  background: var(--color-text, #111827);
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.3;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+}
+
+.order-detail-page__trade-button:hover:not(:disabled) {
+  border-color: #374151;
+  background: #374151;
+}
+
+.order-detail-page__trade-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.order-detail-page__trade-button:focus-visible {
+  outline: 2px solid var(--color-text, #111827);
+  outline-offset: 2px;
+}
+
+.order-detail-page__trade-button:disabled {
+  border-color: var(--color-border, #e5e7eb);
+  background: var(--color-muted-surface, #f3f4f6);
+  color: var(--color-text-muted, #9ca3af);
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
 .order-detail-page__detail-list {
   display: flex;
   flex-direction: column;
@@ -353,7 +391,8 @@
     justify-content: stretch;
   }
 
-  .order-detail-page__cancel-button {
+  .order-detail-page__cancel-button,
+  .order-detail-page__trade-button {
     width: 100%;
   }
 }
@@ -366,28 +405,21 @@
   position: fixed;
   inset: 0;
   z-index: 1000;
-
   display: flex;
   align-items: center;
   justify-content: center;
-
   padding: 24px;
-
   background: rgba(0, 0, 0, 0.42);
 }
 
 .order-detail-page__return-modal {
   width: min(100%, 560px);
   max-height: calc(100vh - 48px);
-
   overflow-y: auto;
-
   padding: 24px;
-
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 16px;
-
   box-shadow:
     0 20px 25px -5px rgba(0, 0, 0, 0.12),
     0 8px 10px -6px rgba(0, 0, 0, 0.1);
@@ -397,19 +429,15 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-
   gap: 16px;
-
   margin-bottom: 20px;
 }
 
 .order-detail-page__return-modal-header h2 {
   margin: 0;
-
   font-size: 20px;
   font-weight: 700;
   line-height: 1.4;
-
   color: #111827;
 }
 
@@ -417,23 +445,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-
   flex: 0 0 auto;
-
   width: 36px;
   height: 36px;
-
   padding: 0;
-
   background: transparent;
   border: 0;
   border-radius: 8px;
-
   color: #6b7280;
-
   font-size: 24px;
   line-height: 1;
-
   cursor: pointer;
 }
 
@@ -450,18 +471,14 @@
 .order-detail-page__return-modal-package-options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-
   gap: 12px;
-
   margin: 0 0 20px;
   padding: 0;
-
   border: 0;
 }
 
 .order-detail-page__return-modal-package-options > legend {
   width: 100%;
-
   margin-bottom: 10px;
   padding: 0;
 }
@@ -469,23 +486,16 @@
 .order-detail-page__return-modal-package-option {
   display: flex;
   align-items: center;
-
   gap: 10px;
-
   min-height: 48px;
-
   padding: 12px 14px;
-
   background: #ffffff;
   border: 1px solid #d1d5db;
   border-radius: 10px;
-
   color: #111827;
-
   font-size: 14px;
   font-weight: 600;
   line-height: 1.4;
-
   cursor: pointer;
 }
 
@@ -499,7 +509,6 @@
 ) {
   border-color: #111827;
   background: #f9fafb;
-
   box-shadow: 0 0 0 1px #111827;
 }
 
@@ -511,14 +520,10 @@
 
 .order-detail-page__return-modal-package-radio {
   flex: 0 0 auto;
-
   width: 18px;
   height: 18px;
-
   margin: 0;
-
   accent-color: var(--color-primary);
-
   cursor: pointer;
 }
 
@@ -529,7 +534,6 @@
 .order-detail-page__return-modal-notice {
   margin-bottom: 12px;
   padding: 16px;
-
   background: #fffaf0;
   border: 1px solid #f3dfb3;
   border-radius: 12px;
@@ -537,9 +541,7 @@
 
 .order-detail-page__return-modal-notice-title {
   margin: 0 0 12px;
-
   color: #111827;
-
   font-size: 15px;
   font-weight: 700;
   line-height: 1.5;
@@ -548,9 +550,7 @@
 .order-detail-page__return-modal-condition-list {
   margin: 0;
   padding-left: 22px;
-
   color: #4b5563;
-
   font-size: 14px;
   line-height: 1.7;
 }
@@ -566,29 +566,20 @@
 .order-detail-page__return-modal-agreement {
   display: flex;
   align-items: center;
-
   gap: 10px;
-
   margin-bottom: 20px;
-
   color: #111827;
-
   font-size: 14px;
   font-weight: 600;
-
   cursor: pointer;
 }
 
 .order-detail-page__return-modal-agreement-checkbox {
   flex: 0 0 auto;
-
   width: 18px;
   height: 18px;
-
   margin: 0;
-
   accent-color: var(--color-primary);
-
   cursor: pointer;
 }
 
@@ -599,18 +590,14 @@
 .order-detail-page__return-modal-field {
   display: flex;
   flex-direction: column;
-
   gap: 8px;
 }
 
 .order-detail-page__return-modal-label {
   display: inline-flex;
   align-items: center;
-
   gap: 4px;
-
   color: #111827;
-
   font-size: 14px;
   font-weight: 600;
 }
@@ -622,23 +609,16 @@
 .order-detail-page__return-modal-textarea {
   width: 100%;
   min-height: 144px;
-
   box-sizing: border-box;
-
   padding: 12px 14px;
-
   resize: vertical;
-
   background: #ffffff;
   border: 1px solid #d1d5db;
   border-radius: 10px;
-
   color: #111827;
-
   font: inherit;
   font-size: 14px;
   line-height: 1.6;
-
   outline: none;
 }
 
@@ -652,13 +632,11 @@
 
 .order-detail-page__return-modal-textarea:focus {
   border-color: #111827;
-
   box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
 }
 
 .order-detail-page__return-modal-textarea:disabled {
   background: #f9fafb;
-
   cursor: not-allowed;
   opacity: 0.7;
 }
@@ -666,13 +644,10 @@
 .order-detail-page__return-modal-error {
   margin-top: 12px;
   padding: 10px 12px;
-
   background: #fef2f2;
   border: 1px solid #fecaca;
   border-radius: 8px;
-
   color: #b91c1c;
-
   font-size: 13px;
   line-height: 1.5;
 }
@@ -681,7 +656,6 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-
   margin-top: 24px;
 }
 
@@ -692,20 +666,16 @@
 @media (max-width: 640px) {
   .order-detail-page__return-modal-backdrop {
     align-items: flex-end;
-
     padding: 0;
   }
 
   .order-detail-page__return-modal {
     width: 100%;
     max-height: 88vh;
-
     padding: 20px 16px;
-
     border-right: 0;
     border-bottom: 0;
     border-left: 0;
-
     border-radius: 18px 18px 0 0;
   }
 
@@ -715,35 +685,28 @@
 
   .order-detail-page__return-modal-package-options {
     grid-template-columns: 1fr;
-
     gap: 8px;
-
     margin-bottom: 18px;
   }
 
   .order-detail-page__return-modal-package-option {
     min-height: 46px;
-
     padding: 11px 12px;
-
     font-size: 13px;
   }
 
   .order-detail-page__return-modal-notice {
     padding: 14px;
-
     margin-bottom: 12px;
   }
 
   .order-detail-page__return-modal-condition-list {
     padding-left: 20px;
-
     font-size: 13px;
   }
 
   .order-detail-page__return-modal-agreement {
     margin-bottom: 18px;
-
     font-size: 13px;
   }
 

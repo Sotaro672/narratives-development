@@ -465,7 +465,7 @@ export default function OrderDetail() {
                           <div className="page-actions order-detail-page__cancel-actions">
                             <button
                               type="button"
-                              className="page-button page-button--secondary"
+                              className="order-detail-page__trade-button"
                               onClick={() => handleOpenTrade(order.id)}
                             >
                               取引画面
