@@ -10,41 +10,32 @@ import (
 )
 
 var (
-	ErrSalesReceivableRepositoryMissing = errors.New(
-		"salesReceivable: repository is not configured",
-	)
-	ErrSalesReceivableClockMissing = errors.New(
-		"salesReceivable: clock is not configured",
-	)
-	ErrSalesReceivableExistingMismatch = errors.New(
-		"salesReceivable: existing receivable does not match requested allocation",
-	)
-	ErrSalesReceivableNotAvailable = errors.New(
-		"salesReceivable: receivable cannot become available",
-	)
-	ErrSalesReceivableCannotCancel = errors.New(
-		"salesReceivable: receivable cannot be canceled",
-	)
-	ErrSalesReceivableInvalidLimit = errors.New(
-		"salesReceivable: invalid list limit",
-	)
+	ErrSalesReceivableRepositoryMissing = errors.New("salesReceivable: repository is not configured")
+	ErrSalesReceivableClockMissing      = errors.New("salesReceivable: clock is not configured")
+	ErrSalesReceivableExistingMismatch  = errors.New("salesReceivable: existing receivable does not match requested allocation")
+	ErrSalesReceivableNotAvailable      = errors.New("salesReceivable: receivable cannot become available")
+	ErrSalesReceivableCannotCancel      = errors.New("salesReceivable: receivable cannot be canceled")
+	ErrSalesReceivableInvalidLimit      = errors.New("salesReceivable: invalid list limit")
 )
 
-// EnsureSalesReceivableInput represents one resale seller allocation created
+// EnsureSalesReceivableInput represents one item-level resale allocation created
 // after a successful buyer payment.
 //
-// Multiple resale items belonging to the same PayoutAccountID within one
-// Payment may be aggregated before this input reaches the usecase.
+// One resale Order item must create exactly one SalesReceivable. Multiple resale
+// items belonging to the same seller must remain independent receivables.
 //
 // The resulting document ID is deterministic:
 //
-//	PaymentID + "_resale_" + PayoutAccountID
+//	PaymentID + "_resale_item_" + OrderItemIndex
 //
 // This operation is idempotent. If the deterministic document already exists,
-// the existing entity is returned only when its immutable allocation matches.
+// the existing entity is returned only when its immutable item allocation
+// matches exactly.
 type EnsureSalesReceivableInput struct {
-	OrderID   string
-	PaymentID string
+	OrderID        string
+	PaymentID      string
+	OrderItemIndex int
+	ResaleID       string
 
 	AvatarID        string
 	UserID          string
@@ -57,13 +48,13 @@ type EnsureSalesReceivableInput struct {
 	Currency string
 }
 
-// SalesReceivableUsecase manages resale proceeds owed by AMOL to Mall resale
-// sellers.
+// SalesReceivableUsecase manages item-level resale proceeds owed by AMOL to Mall
+// resale sellers.
 //
 // Responsibilities:
-//   - create the pending receivable after successful payment
+//   - create one pending receivable for each successfully paid resale Order item
 //   - provide authoritative receivable reads
-//   - make a pending receivable available after resale fulfillment
+//   - make a pending receivable available after that exact item's fulfillment
 //   - cancel an unpaid pending/available receivable
 //
 // Bank payout reservation and completion intentionally do not belong here.
@@ -74,9 +65,7 @@ type SalesReceivableUsecase struct {
 	now  func() time.Time
 }
 
-func NewSalesReceivableUsecase(
-	repo salesreceivabledom.Repository,
-) *SalesReceivableUsecase {
+func NewSalesReceivableUsecase(repo salesreceivabledom.Repository) *SalesReceivableUsecase {
 	return &SalesReceivableUsecase{
 		repo: repo,
 		now:  time.Now,
@@ -109,7 +98,8 @@ func (u *SalesReceivableUsecase) GetByID(
 	return &receivable, nil
 }
 
-// ListByPaymentID returns every resale receivable associated with one Payment.
+// ListByPaymentID returns every item-level resale receivable associated with one
+// Payment.
 func (u *SalesReceivableUsecase) ListByPaymentID(
 	ctx context.Context,
 	paymentID string,
@@ -124,7 +114,8 @@ func (u *SalesReceivableUsecase) ListByPaymentID(
 	return u.repo.ListByPaymentID(ctx, paymentID)
 }
 
-// ListByOrderID returns every resale receivable associated with one Order.
+// ListByOrderID returns every item-level resale receivable associated with one
+// Order.
 func (u *SalesReceivableUsecase) ListByOrderID(
 	ctx context.Context,
 	orderID string,
@@ -139,7 +130,8 @@ func (u *SalesReceivableUsecase) ListByOrderID(
 	return u.repo.ListByOrderID(ctx, orderID)
 }
 
-// ListByAvatarID returns receivables belonging to one resale seller Avatar.
+// ListByAvatarID returns item-level receivables belonging to one resale seller
+// Avatar.
 func (u *SalesReceivableUsecase) ListByAvatarID(
 	ctx context.Context,
 	avatarID string,
@@ -154,7 +146,7 @@ func (u *SalesReceivableUsecase) ListByAvatarID(
 	return u.repo.ListByAvatarID(ctx, avatarID)
 }
 
-// ListByUserID returns receivables belonging to one Mall user.
+// ListByUserID returns item-level receivables belonging to one Mall user.
 func (u *SalesReceivableUsecase) ListByUserID(
 	ctx context.Context,
 	userID string,
@@ -169,8 +161,8 @@ func (u *SalesReceivableUsecase) ListByUserID(
 	return u.repo.ListByUserID(ctx, userID)
 }
 
-// ListByPayoutAccountID returns receivables associated with one payout-account
-// identity.
+// ListByPayoutAccountID returns item-level receivables associated with one
+// payout-account identity.
 func (u *SalesReceivableUsecase) ListByPayoutAccountID(
 	ctx context.Context,
 	payoutAccountID string,
@@ -200,8 +192,8 @@ func (u *SalesReceivableUsecase) ListByBankPayoutID(
 	return u.repo.ListByBankPayoutID(ctx, bankPayoutID)
 }
 
-// ListAvailableByUserID returns receivables eligible for inclusion in a future
-// BankPayout.
+// ListAvailableByUserID returns item-level receivables eligible for inclusion in
+// a future BankPayout.
 //
 // This only reads candidates. It must not reserve them.
 func (u *SalesReceivableUsecase) ListAvailableByUserID(
@@ -229,13 +221,13 @@ func (u *SalesReceivableUsecase) ListAvailableByUserID(
 }
 
 // EnsurePending creates the pending SalesReceivable corresponding to one
-// successfully paid resale allocation.
+// successfully paid resale Order item.
 //
-// The deterministic ID makes the operation safe to retry after payment webhook
-// or application retries.
+// The deterministic PaymentID + OrderItemIndex ID makes the operation safe to
+// retry after payment webhook or application retries.
 //
-// If the document already exists and its immutable allocation is identical, the
-// existing entity is returned even if it has subsequently advanced to
+// If the document already exists and its immutable item allocation is identical,
+// the existing entity is returned even if it has subsequently advanced to
 // available, reserved, paid, or canceled. This prevents a repeated payment
 // success event from recreating or rewinding financial state.
 func (u *SalesReceivableUsecase) EnsurePending(
@@ -248,7 +240,7 @@ func (u *SalesReceivableUsecase) EnsurePending(
 
 	receivableID, err := salesreceivabledom.NewID(
 		in.PaymentID,
-		in.PayoutAccountID,
+		in.OrderItemIndex,
 	)
 	if err != nil {
 		return nil, err
@@ -260,6 +252,8 @@ func (u *SalesReceivableUsecase) EnsurePending(
 		receivableID,
 		in.OrderID,
 		in.PaymentID,
+		in.OrderItemIndex,
+		in.ResaleID,
 		in.AvatarID,
 		in.UserID,
 		in.PayoutAccountID,
@@ -275,15 +269,11 @@ func (u *SalesReceivableUsecase) EnsurePending(
 
 	created, err := u.repo.Create(ctx, receivable)
 	if err == nil {
-		if err := validateCreatedSalesReceivable(
-			created,
-			receivable,
-		); err != nil {
+		if err := validateCreatedSalesReceivable(created, receivable); err != nil {
 			return nil, err
 		}
 		return &created, nil
 	}
-
 	if !errors.Is(err, salesreceivabledom.ErrConflict) {
 		return nil, err
 	}
@@ -292,18 +282,15 @@ func (u *SalesReceivableUsecase) EnsurePending(
 	if getErr != nil {
 		return nil, getErr
 	}
-	if err := validateExistingSalesReceivableAllocation(
-		existing,
-		receivable,
-	); err != nil {
+	if err := validateExistingSalesReceivableAllocation(existing, receivable); err != nil {
 		return nil, err
 	}
 
 	return &existing, nil
 }
 
-// MarkAvailable transitions a pending resale receivable to available after the
-// resale fulfillment boundary has completed.
+// MarkAvailable transitions a pending item-level resale receivable to available
+// after its exact resale Order item has crossed the fulfillment boundary.
 //
 // Repeated execution is idempotent once the receivable has reached available or
 // a later payout state. A canceled receivable cannot be reopened.
@@ -414,10 +401,7 @@ func validateCreatedSalesReceivable(
 		return ErrSalesReceivableExistingMismatch
 	}
 
-	return validateExistingSalesReceivableAllocation(
-		actual,
-		expected,
-	)
+	return validateExistingSalesReceivableAllocation(actual, expected)
 }
 
 func validateExistingSalesReceivableAllocation(
@@ -427,10 +411,15 @@ func validateExistingSalesReceivableAllocation(
 	if err := actual.Validate(); err != nil {
 		return err
 	}
+	if err := expected.Validate(); err != nil {
+		return err
+	}
 
 	if actual.ID != expected.ID ||
 		actual.OrderID != expected.OrderID ||
 		actual.PaymentID != expected.PaymentID ||
+		actual.OrderItemIndex != expected.OrderItemIndex ||
+		actual.ResaleID != expected.ResaleID ||
 		actual.AvatarID != expected.AvatarID ||
 		actual.UserID != expected.UserID ||
 		actual.PayoutAccountID != expected.PayoutAccountID ||
@@ -438,6 +427,17 @@ func validateExistingSalesReceivableAllocation(
 		actual.PlatformFeeAmount != expected.PlatformFeeAmount ||
 		actual.ReceivableAmount != expected.ReceivableAmount ||
 		actual.Currency != expected.Currency {
+		return ErrSalesReceivableExistingMismatch
+	}
+
+	expectedID, err := salesreceivabledom.NewID(
+		actual.PaymentID,
+		actual.OrderItemIndex,
+	)
+	if err != nil {
+		return err
+	}
+	if actual.ID != expectedID {
 		return ErrSalesReceivableExistingMismatch
 	}
 

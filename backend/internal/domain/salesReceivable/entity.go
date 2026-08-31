@@ -3,6 +3,7 @@ package salesReceivable
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -11,8 +12,7 @@ import (
 //
 // pending:
 //
-//	Payment has succeeded, but the resale fulfillment boundary has not yet been
-//	completed.
+//	Payment has succeeded, but the resale fulfillment boundary has not yet been completed.
 //
 // available:
 //
@@ -20,8 +20,7 @@ import (
 //
 // reserved:
 //
-//	The receivable has been assigned to a bank payout and must not be selected
-//	by another payout.
+//	The receivable has been assigned to a bank payout and must not be selected by another payout.
 //
 // paid:
 //
@@ -29,8 +28,7 @@ import (
 //
 // canceled:
 //
-//	The receivable was canceled before being paid, for example because the
-//	underlying transaction was refunded before payout.
+//	The receivable was canceled before being paid, for example because the underlying resale item was refunded before payout.
 type Status string
 
 const (
@@ -54,98 +52,56 @@ const CurrencyJPY = "JPY"
 var DefaultStatus = StatusPending
 
 var (
-	ErrInvalidID = errors.New(
-		"salesReceivable: invalid id",
-	)
-	ErrInvalidOrderID = errors.New(
-		"salesReceivable: invalid orderId",
-	)
-	ErrInvalidPaymentID = errors.New(
-		"salesReceivable: invalid paymentId",
-	)
-	ErrPaymentOrderMismatch = errors.New(
-		"salesReceivable: paymentId does not match orderId",
-	)
-	ErrInvalidAvatarID = errors.New(
-		"salesReceivable: invalid avatarId",
-	)
-	ErrInvalidUserID = errors.New(
-		"salesReceivable: invalid userId",
-	)
-	ErrInvalidPayoutAccountID = errors.New(
-		"salesReceivable: invalid payoutAccountId",
-	)
-	ErrPayoutAccountOwnerMismatch = errors.New(
-		"salesReceivable: payoutAccountId does not match userId",
-	)
-	ErrInvalidGrossAmount = errors.New(
-		"salesReceivable: invalid grossAmount",
-	)
-	ErrInvalidPlatformFeeAmount = errors.New(
-		"salesReceivable: invalid platformFeeAmount",
-	)
-	ErrInvalidReceivableAmount = errors.New(
-		"salesReceivable: invalid receivableAmount",
-	)
-	ErrAmountMismatch = errors.New(
-		"salesReceivable: grossAmount does not equal platformFeeAmount + receivableAmount",
-	)
-	ErrInvalidCurrency = errors.New(
-		"salesReceivable: invalid currency",
-	)
-	ErrInvalidStatus = errors.New(
-		"salesReceivable: invalid status",
-	)
-	ErrInvalidStatusTransition = errors.New(
-		"salesReceivable: invalid status transition",
-	)
-	ErrInvalidBankPayoutID = errors.New(
-		"salesReceivable: invalid bankPayoutId",
-	)
-	ErrInvalidCreatedAt = errors.New(
-		"salesReceivable: invalid createdAt",
-	)
-	ErrInvalidUpdatedAt = errors.New(
-		"salesReceivable: invalid updatedAt",
-	)
-	ErrInvalidAvailableAt = errors.New(
-		"salesReceivable: invalid availableAt",
-	)
-	ErrInvalidReservedAt = errors.New(
-		"salesReceivable: invalid reservedAt",
-	)
-	ErrInvalidPaidAt = errors.New(
-		"salesReceivable: invalid paidAt",
-	)
-	ErrInvalidCanceledAt = errors.New(
-		"salesReceivable: invalid canceledAt",
-	)
+	ErrInvalidID                  = errors.New("salesReceivable: invalid id")
+	ErrInvalidOrderID             = errors.New("salesReceivable: invalid orderId")
+	ErrInvalidPaymentID           = errors.New("salesReceivable: invalid paymentId")
+	ErrPaymentOrderMismatch       = errors.New("salesReceivable: paymentId does not match orderId")
+	ErrInvalidOrderItemIndex      = errors.New("salesReceivable: invalid orderItemIndex")
+	ErrInvalidResaleID            = errors.New("salesReceivable: invalid resaleId")
+	ErrInvalidAvatarID            = errors.New("salesReceivable: invalid avatarId")
+	ErrInvalidUserID              = errors.New("salesReceivable: invalid userId")
+	ErrInvalidPayoutAccountID     = errors.New("salesReceivable: invalid payoutAccountId")
+	ErrPayoutAccountOwnerMismatch = errors.New("salesReceivable: payoutAccountId does not match userId")
+	ErrInvalidGrossAmount         = errors.New("salesReceivable: invalid grossAmount")
+	ErrInvalidPlatformFeeAmount   = errors.New("salesReceivable: invalid platformFeeAmount")
+	ErrInvalidReceivableAmount    = errors.New("salesReceivable: invalid receivableAmount")
+	ErrAmountMismatch             = errors.New("salesReceivable: grossAmount does not equal platformFeeAmount + receivableAmount")
+	ErrInvalidCurrency            = errors.New("salesReceivable: invalid currency")
+	ErrInvalidStatus              = errors.New("salesReceivable: invalid status")
+	ErrInvalidStatusTransition    = errors.New("salesReceivable: invalid status transition")
+	ErrInvalidBankPayoutID        = errors.New("salesReceivable: invalid bankPayoutId")
+	ErrInvalidCreatedAt           = errors.New("salesReceivable: invalid createdAt")
+	ErrInvalidUpdatedAt           = errors.New("salesReceivable: invalid updatedAt")
+	ErrInvalidAvailableAt         = errors.New("salesReceivable: invalid availableAt")
+	ErrInvalidReservedAt          = errors.New("salesReceivable: invalid reservedAt")
+	ErrInvalidPaidAt              = errors.New("salesReceivable: invalid paidAt")
+	ErrInvalidCanceledAt          = errors.New("salesReceivable: invalid canceledAt")
 )
 
-// SalesReceivable represents resale proceeds that AMOL owes to one resale
-// seller for one successfully paid Order.
+// SalesReceivable represents resale proceeds that AMOL owes to one resale seller for one successfully paid resale Order item.
 //
 // Persistence:
 //   - collection: salesReceivables
-//   - document ID is deterministic by PaymentID and PayoutAccountID
-//   - multiple resale items belonging to the same seller in one payment may be
-//     aggregated into one SalesReceivable
+//   - one active resale Order item creates one SalesReceivable
+//   - document ID is deterministic by PaymentID and OrderItemIndex
+//   - SalesReceivables are never aggregated across multiple Order items
 //
 // Amount invariant:
 //
 //	GrossAmount = PlatformFeeAmount + ReceivableAmount
 //
-// PayoutAccountID identifies the seller's registered payout account at the time
-// the Order was created. It is not a bank-destination snapshot.
+// OrderItemIndex and ResaleID identify the immutable resale item represented by this receivable.
 //
-// Bank account fields and plaintext/ciphertext account numbers must never be
-// persisted in SalesReceivable. The actual bank destination is snapshotted only
-// when a BankPayout is created.
+// PayoutAccountID identifies the seller's registered payout account at the time the Order was created. It is not a bank-destination snapshot.
+//
+// Bank account fields and plaintext/ciphertext account numbers must never be persisted in SalesReceivable. The actual bank destination is snapshotted only when a BankPayout is created.
 type SalesReceivable struct {
 	ID string `json:"id" firestore:"id"`
 
-	OrderID   string `json:"orderId" firestore:"orderId"`
-	PaymentID string `json:"paymentId" firestore:"paymentId"`
+	OrderID        string `json:"orderId" firestore:"orderId"`
+	PaymentID      string `json:"paymentId" firestore:"paymentId"`
+	OrderItemIndex int    `json:"orderItemIndex" firestore:"orderItemIndex"`
+	ResaleID       string `json:"resaleId" firestore:"resaleId"`
 
 	AvatarID        string `json:"avatarId" firestore:"avatarId"`
 	UserID          string `json:"userId" firestore:"userId"`
@@ -171,30 +127,32 @@ type SalesReceivable struct {
 
 // NewID creates the deterministic Firestore document ID.
 //
-//	PaymentID + "_resale_" + PayoutAccountID
+//	PaymentID + "_resale_item_" + OrderItemIndex
 //
-// PayoutAccountID currently equals the payout-account owner's UserID.
-func NewID(paymentID string, payoutAccountID string) (string, error) {
+// OrderItemIndex is immutable within the Order and allows one Payment to contain multiple independent resale receivables, including multiple items belonging to the same seller.
+func NewID(paymentID string, orderItemIndex int) (string, error) {
 	if paymentID == "" {
 		return "", ErrInvalidPaymentID
 	}
-	if payoutAccountID == "" {
-		return "", ErrInvalidPayoutAccountID
-	}
-	if strings.Contains(paymentID, "/") || strings.Contains(payoutAccountID, "/") {
+	if strings.Contains(paymentID, "/") {
 		return "", ErrInvalidID
 	}
-	return paymentID + "_resale_" + payoutAccountID, nil
+	if orderItemIndex < 0 {
+		return "", ErrInvalidOrderItemIndex
+	}
+
+	return paymentID + "_resale_item_" + strconv.Itoa(orderItemIndex), nil
 }
 
 // New creates a pending SalesReceivable after a successful resale payment.
 //
-// No bank payout is assigned at creation. The receivable becomes available only
-// after the applicable resale fulfillment boundary has completed.
+// No bank payout is assigned at creation. The receivable becomes available only after this exact resale Order item has crossed the fulfillment boundary.
 func New(
 	id string,
 	orderID string,
 	paymentID string,
+	orderItemIndex int,
+	resaleID string,
 	avatarID string,
 	userID string,
 	payoutAccountID string,
@@ -207,29 +165,39 @@ func New(
 	createdAt = createdAt.UTC()
 
 	receivable := SalesReceivable{
-		ID:                id,
-		OrderID:           orderID,
-		PaymentID:         paymentID,
-		AvatarID:          avatarID,
-		UserID:            userID,
-		PayoutAccountID:   payoutAccountID,
+		ID: id,
+
+		OrderID:        orderID,
+		PaymentID:      paymentID,
+		OrderItemIndex: orderItemIndex,
+		ResaleID:       resaleID,
+
+		AvatarID:        avatarID,
+		UserID:          userID,
+		PayoutAccountID: payoutAccountID,
+
 		GrossAmount:       grossAmount,
 		PlatformFeeAmount: platformFeeAmount,
 		ReceivableAmount:  receivableAmount,
-		Currency:          currency,
-		Status:            DefaultStatus,
-		BankPayoutID:      "",
-		CreatedAt:         createdAt,
-		UpdatedAt:         createdAt,
-		AvailableAt:       nil,
-		ReservedAt:        nil,
-		PaidAt:            nil,
-		CanceledAt:        nil,
+
+		Currency: currency,
+		Status:   DefaultStatus,
+
+		BankPayoutID: "",
+
+		CreatedAt: createdAt,
+		UpdatedAt: createdAt,
+
+		AvailableAt: nil,
+		ReservedAt:  nil,
+		PaidAt:      nil,
+		CanceledAt:  nil,
 	}
 
 	if err := receivable.Validate(); err != nil {
 		return SalesReceivable{}, err
 	}
+
 	return receivable, nil
 }
 
@@ -283,8 +251,7 @@ func (r *SalesReceivable) Reserve(bankPayoutID string, now time.Time) error {
 
 // ReleaseReservation returns a reserved receivable to available.
 //
-// This is used when a bank payout is abandoned before money movement has
-// completed. A paid receivable cannot be released.
+// This is used when a bank payout is abandoned before money movement has completed. A paid receivable cannot be released.
 func (r *SalesReceivable) ReleaseReservation(now time.Time) error {
 	if r == nil || r.Status != StatusReserved {
 		return ErrInvalidStatusTransition
@@ -306,8 +273,7 @@ func (r *SalesReceivable) ReleaseReservation(now time.Time) error {
 	return r.Validate()
 }
 
-// MarkPaid records completion of the BankPayout currently reserving this
-// receivable.
+// MarkPaid records completion of the BankPayout currently reserving this receivable.
 func (r *SalesReceivable) MarkPaid(now time.Time) error {
 	if r == nil || r.Status != StatusReserved {
 		return ErrInvalidStatusTransition
@@ -333,10 +299,7 @@ func (r *SalesReceivable) MarkPaid(now time.Time) error {
 
 // Cancel cancels an unpaid receivable.
 //
-// pending and available receivables may be canceled. A reserved receivable must
-// first be released from its BankPayout. A paid receivable cannot be canceled;
-// post-payout recovery must be represented separately rather than rewriting
-// payout history.
+// pending and available receivables may be canceled. A reserved receivable must first be released from its BankPayout. A paid receivable cannot be canceled; post-payout recovery must be represented separately rather than rewriting payout history.
 func (r *SalesReceivable) Cancel(now time.Time) error {
 	if r == nil {
 		return ErrInvalidStatusTransition
@@ -373,22 +336,22 @@ func IsValidStatus(status Status) bool {
 	if status == "" {
 		return false
 	}
+
 	_, ok := AllowedStatuses[status]
 	return ok
 }
 
 // Validate verifies all persistence invariants.
 //
-// No input normalization is performed. Values supplied by the application layer
-// are validated exactly as received.
+// No input normalization is performed. Values supplied by the application layer are validated exactly as received.
 func (r SalesReceivable) Validate() error {
 	if r.ID == "" || strings.Contains(r.ID, "/") {
 		return ErrInvalidID
 	}
-	if r.OrderID == "" {
+	if r.OrderID == "" || strings.Contains(r.OrderID, "/") {
 		return ErrInvalidOrderID
 	}
-	if r.PaymentID == "" {
+	if r.PaymentID == "" || strings.Contains(r.PaymentID, "/") {
 		return ErrInvalidPaymentID
 	}
 
@@ -396,6 +359,22 @@ func (r SalesReceivable) Validate() error {
 	if r.PaymentID != r.OrderID {
 		return ErrPaymentOrderMismatch
 	}
+
+	if r.OrderItemIndex < 0 {
+		return ErrInvalidOrderItemIndex
+	}
+	if r.ResaleID == "" || strings.Contains(r.ResaleID, "/") {
+		return ErrInvalidResaleID
+	}
+
+	expectedID, err := NewID(r.PaymentID, r.OrderItemIndex)
+	if err != nil {
+		return err
+	}
+	if r.ID != expectedID {
+		return ErrInvalidID
+	}
+
 	if r.AvatarID == "" {
 		return ErrInvalidAvatarID
 	}
@@ -408,6 +387,7 @@ func (r SalesReceivable) Validate() error {
 	if r.PayoutAccountID != r.UserID {
 		return ErrPayoutAccountOwnerMismatch
 	}
+
 	if r.GrossAmount <= 0 {
 		return ErrInvalidGrossAmount
 	}
@@ -455,6 +435,9 @@ func (r SalesReceivable) Validate() error {
 		if r.AvailableAt.Before(r.CreatedAt) {
 			return ErrInvalidAvailableAt
 		}
+		if !r.UpdatedAt.Equal(*r.AvailableAt) {
+			return ErrInvalidUpdatedAt
+		}
 
 	case StatusReserved:
 		if r.BankPayoutID == "" ||
@@ -472,6 +455,9 @@ func (r SalesReceivable) Validate() error {
 		}
 		if r.ReservedAt.Before(*r.AvailableAt) {
 			return ErrInvalidReservedAt
+		}
+		if !r.UpdatedAt.Equal(*r.ReservedAt) {
+			return ErrInvalidUpdatedAt
 		}
 
 	case StatusPaid:
@@ -495,6 +481,9 @@ func (r SalesReceivable) Validate() error {
 		if r.PaidAt.Before(*r.ReservedAt) {
 			return ErrInvalidPaidAt
 		}
+		if !r.UpdatedAt.Equal(*r.PaidAt) {
+			return ErrInvalidUpdatedAt
+		}
 
 	case StatusCanceled:
 		if r.BankPayoutID != "" ||
@@ -514,6 +503,9 @@ func (r SalesReceivable) Validate() error {
 			if r.CanceledAt.Before(*r.AvailableAt) {
 				return ErrInvalidCanceledAt
 			}
+		}
+		if !r.UpdatedAt.Equal(*r.CanceledAt) {
+			return ErrInvalidUpdatedAt
 		}
 	}
 

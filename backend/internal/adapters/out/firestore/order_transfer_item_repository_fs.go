@@ -570,18 +570,17 @@ func (r *OrderRepoForTransferFS) MarkTransferredItem(ctx context.Context, orderI
 }
 
 // CompleteResaleReceivableFulfillment atomically completes one successfully
-// executed resale token transfer and updates the seller SalesReceivable.
+// executed resale token transfer and makes that exact item's SalesReceivable
+// available for a future BankPayout.
 //
-// The canonical Order item and orderTransferItems projection are always marked
-// transferred in the same Firestore transaction.
+// One resale Order item maps to exactly one SalesReceivable identified by
+// PaymentID + OrderItemIndex. The canonical Order item, orderTransferItems
+// projection, and SalesReceivable pending -> available transition are committed
+// in the same Firestore transaction.
 //
-// SalesReceivable is aggregated by PaymentID + PayoutAccountID. Therefore one
-// receivable may represent multiple resale items from the same seller in the
-// same Order. The receivable remains pending while any active resale item
-// belonging to that seller is still untransferred and moves pending -> available
-// only when the final active item has crossed the transfer boundary.
-//
-// No Stripe Settlement or Stripe Transfer state is touched by this operation.
+// No other resale item belonging to the same seller participates in this
+// fulfillment boundary. No Stripe Settlement or Stripe Transfer state is
+// touched by this operation.
 func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 	ctx context.Context,
 	orderID string,
@@ -604,11 +603,15 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 	if err := expected.Validate(); err != nil {
 		return salesreceivabledom.SalesReceivable{}, err
 	}
-	if expected.OrderID != orderID || expected.PaymentID != orderID || expected.Status != salesreceivabledom.StatusPending {
+	if expected.OrderID != orderID ||
+		expected.PaymentID != orderID ||
+		expected.OrderItemIndex != itemIndex ||
+		expected.ResaleID == "" ||
+		expected.Status != salesreceivabledom.StatusPending {
 		return salesreceivabledom.SalesReceivable{}, salesreceivabledom.ErrConflict
 	}
 
-	expectedID, err := salesreceivabledom.NewID(orderID, expected.PayoutAccountID)
+	expectedID, err := salesreceivabledom.NewID(orderID, itemIndex)
 	if err != nil {
 		return salesreceivabledom.SalesReceivable{}, err
 	}
@@ -619,7 +622,7 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 	at = at.UTC()
 	projectionRef := r.transferItemDoc(orderID, itemIndex)
 	orderRef := r.ordersCol().Doc(orderID)
-	receivableRef := r.Client.Collection("salesReceivables").Doc(expected.ID)
+	receivableRef := r.Client.Collection(salesReceivablesCollection).Doc(expected.ID)
 	var result salesreceivabledom.SalesReceivable
 
 	err = r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
@@ -647,7 +650,10 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 		if err != nil {
 			return err
 		}
-		if projection.OrderID != orderID || projection.ItemIndex != itemIndex || projection.ItemType != orderdom.OrderItemTypeResale {
+		if projection.OrderID != orderID ||
+			projection.ItemIndex != itemIndex ||
+			projection.ItemType != orderdom.OrderItemTypeResale ||
+			projection.ResaleID != expected.ResaleID {
 			return ErrTransferItemProjectionMismatch
 		}
 		if !projection.Paid {
@@ -678,7 +684,11 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 		}
 
 		item := order.Items[itemIndex]
-		if item.Type != orderdom.OrderItemTypeResale {
+		if item.Type != orderdom.OrderItemTypeResale ||
+			item.ResaleID != expected.ResaleID ||
+			item.Qty != 1 ||
+			item.Price <= 0 ||
+			item.Price != expected.GrossAmount {
 			return ErrTransferItemProjectionMismatch
 		}
 		if item.IsCancelled {
@@ -706,6 +716,11 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 		if !salesReceivableImmutableFieldsEqual(receivable, expected) {
 			return salesreceivabledom.ErrConflict
 		}
+		if receivable.OrderItemIndex != itemIndex ||
+			receivable.ResaleID != item.ResaleID ||
+			receivable.GrossAmount != item.Price {
+			return salesreceivabledom.ErrConflict
+		}
 		if receivable.Status != salesreceivabledom.StatusPending {
 			return salesreceivabledom.ErrInvalidStatusTransition
 		}
@@ -719,15 +734,12 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 		if err := order.Validate(); err != nil {
 			return err
 		}
-
-		allTransferred, err := allActiveResaleReceivableItemsTransferred(order, receivable)
-		if err != nil {
+		if err := receivable.MarkAvailable(at); err != nil {
 			return err
 		}
-		if allTransferred {
-			if err := receivable.MarkAvailable(at); err != nil {
-				return err
-			}
+		normalizeSalesReceivableTimestamps(&receivable)
+		if err := receivable.Validate(); err != nil {
+			return err
 		}
 
 		verifiedAt := order.Items[itemIndex].TokenTransferVerifiedAt
@@ -749,11 +761,8 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 		}); err != nil {
 			return err
 		}
-
-		if allTransferred {
-			if err := tx.Set(receivableRef, receivable); err != nil {
-				return err
-			}
+		if err := tx.Set(receivableRef, receivable); err != nil {
+			return err
 		}
 
 		result = receivable
@@ -770,6 +779,8 @@ func salesReceivableImmutableFieldsEqual(left, right salesreceivabledom.SalesRec
 	return left.ID == right.ID &&
 		left.OrderID == right.OrderID &&
 		left.PaymentID == right.PaymentID &&
+		left.OrderItemIndex == right.OrderItemIndex &&
+		left.ResaleID == right.ResaleID &&
 		left.AvatarID == right.AvatarID &&
 		left.UserID == right.UserID &&
 		left.PayoutAccountID == right.PayoutAccountID &&
@@ -789,38 +800,6 @@ func resaleSellerSnapshotMatchesReceivable(seller orderdom.SellerSnapshot, recei
 		seller.CompanyID == "" &&
 		seller.AccountID == "" &&
 		seller.StripeAccountID == ""
-}
-
-func allActiveResaleReceivableItemsTransferred(order orderdom.Order, receivable salesreceivabledom.SalesReceivable) (bool, error) {
-	matched := false
-	allTransferred := true
-	activeGrossAmount := 0
-	maxInt := int(^uint(0) >> 1)
-
-	for _, item := range order.Items {
-		if item.IsCancelled ||
-			item.Type != orderdom.OrderItemTypeResale ||
-			item.SellerSnapshot.PayoutAccountID != receivable.PayoutAccountID {
-			continue
-		}
-		if !resaleSellerSnapshotMatchesReceivable(item.SellerSnapshot, receivable) {
-			return false, salesreceivabledom.ErrConflict
-		}
-		if item.Qty != 1 || item.Price < 0 || activeGrossAmount > maxInt-item.Price {
-			return false, salesreceivabledom.ErrConflict
-		}
-
-		matched = true
-		activeGrossAmount += item.Price
-		if !item.Transferred {
-			allTransferred = false
-		}
-	}
-
-	if !matched || activeGrossAmount != receivable.GrossAmount {
-		return false, salesreceivabledom.ErrConflict
-	}
-	return allTransferred, nil
 }
 
 type orderTransferItemProjection struct {

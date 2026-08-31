@@ -53,25 +53,6 @@ type ReturnOpeningHandler interface {
 	) (ReturnRequestResult, error)
 }
 
-// ResaleReceivableFulfillmentRepository is the atomic persistence boundary used
-// after a resale token transfer has succeeded on-chain.
-//
-// The implementation must commit the canonical Order item, orderTransferItems
-// projection, and SalesReceivable lifecycle in one Firestore transaction.
-//
-// A receivable may remain pending when other active resale items belonging to
-// the same receivable are still untransferred. It becomes available only when
-// every active resale item represented by that receivable is transferred.
-type ResaleReceivableFulfillmentRepository interface {
-	CompleteResaleReceivableFulfillment(
-		ctx context.Context,
-		orderID string,
-		itemIndex int,
-		receivable salesreceivabledom.SalesReceivable,
-		at time.Time,
-	) (salesreceivabledom.SalesReceivable, error)
-}
-
 // ============================================================
 // Usecase
 // ============================================================
@@ -522,6 +503,8 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 		resaleReceivable, err = u.requirePendingResaleReceivable(
 			ctx,
 			target.OrderID,
+			target.ItemIndex,
+			target.ResaleID,
 			verifiedItem,
 			source.FromAvatarID,
 		)
@@ -536,12 +519,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 		now time.Time,
 	) error {
 		if target.ItemType == orderdom.OrderItemTypeResale {
-			fulfillmentRepo, ok := u.orderRepo.(ResaleReceivableFulfillmentRepository)
-			if !ok {
-				return ErrTransferResaleReceivableNotConfigured
-			}
-
-			completedReceivable, err := fulfillmentRepo.CompleteResaleReceivableFulfillment(
+			completedReceivable, err := u.orderRepo.CompleteResaleReceivableFulfillment(
 				ctx,
 				target.OrderID,
 				target.ItemIndex,
@@ -932,6 +910,8 @@ func (u *TransferUsecase) resolveResaleTransferSource(
 func (u *TransferUsecase) requirePendingResaleReceivable(
 	ctx context.Context,
 	paymentID string,
+	itemIndex int,
+	expectedResaleID string,
 	item orderdom.OrderItemSnapshot,
 	expectedAvatarID string,
 ) (salesreceivabledom.SalesReceivable, error) {
@@ -940,7 +920,16 @@ func (u *TransferUsecase) requirePendingResaleReceivable(
 			ErrTransferResaleReceivableNotConfigured
 	}
 	if paymentID == "" ||
+		itemIndex < 0 ||
+		expectedResaleID == "" ||
 		item.Type != orderdom.OrderItemTypeResale ||
+		item.ResaleID != expectedResaleID ||
+		item.Qty != 1 ||
+		item.Price <= 0 ||
+		item.IsCancelled ||
+		item.IsReturnRequested ||
+		item.IsReturnCompleted ||
+		item.Transferred ||
 		expectedAvatarID == "" {
 		return salesreceivabledom.SalesReceivable{},
 			ErrTransferResaleReceivableMismatch
@@ -962,7 +951,7 @@ func (u *TransferUsecase) requirePendingResaleReceivable(
 
 	receivableID, err := salesreceivabledom.NewID(
 		paymentID,
-		snapshot.PayoutAccountID,
+		itemIndex,
 	)
 	if err != nil {
 		return salesreceivabledom.SalesReceivable{},
@@ -989,9 +978,12 @@ func (u *TransferUsecase) requirePendingResaleReceivable(
 	if receivable.ID != receivableID ||
 		receivable.PaymentID != paymentID ||
 		receivable.OrderID != paymentID ||
+		receivable.OrderItemIndex != itemIndex ||
+		receivable.ResaleID != expectedResaleID ||
 		receivable.AvatarID != snapshot.AvatarID ||
 		receivable.UserID != snapshot.UserID ||
-		receivable.PayoutAccountID != snapshot.PayoutAccountID {
+		receivable.PayoutAccountID != snapshot.PayoutAccountID ||
+		receivable.GrossAmount != item.Price {
 		return salesreceivabledom.SalesReceivable{},
 			ErrTransferResaleReceivableMismatch
 	}
@@ -1017,14 +1009,14 @@ func validateCompletedResaleReceivable(
 	); err != nil {
 		return ErrTransferResaleReceivableMismatch
 	}
-
-	switch actual.Status {
-	case salesreceivabledom.StatusPending,
-		salesreceivabledom.StatusAvailable:
-		return nil
-	default:
+	if actual.Status != salesreceivabledom.StatusAvailable ||
+		actual.AvailableAt == nil ||
+		actual.AvailableAt.IsZero() ||
+		actual.BankPayoutID != "" {
 		return ErrTransferResaleReceivableUnavailable
 	}
+
+	return nil
 }
 
 // ============================================================

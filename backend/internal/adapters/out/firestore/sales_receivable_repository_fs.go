@@ -25,7 +25,11 @@ const salesReceivablesCollection = "salesReceivables"
 //
 //	salesReceivables/{receivableId}
 //
-// The document ID is deterministic and must equal SalesReceivable.ID.
+// One resale Order item creates one SalesReceivable.
+//
+// The document ID is deterministic and must equal:
+//
+//	NewID(PaymentID, OrderItemIndex)
 //
 // Bank-account details must never be stored in this collection. The receivable
 // stores only PayoutAccountID. The actual bank destination is snapshotted later
@@ -161,8 +165,8 @@ func (r *SalesReceivableRepositoryFS) ListByBankPayoutID(
 	return r.listByField(ctx, "bankPayoutId", bankPayoutID)
 }
 
-// ListAvailableByUserID returns receivables currently eligible for a future
-// BankPayout.
+// ListAvailableByUserID returns item-level receivables currently eligible for a
+// future BankPayout.
 //
 // Firestore queries only UserID here. Status and BankPayoutID are filtered in
 // memory so this operation does not require a composite index on
@@ -264,7 +268,10 @@ func (r *SalesReceivableRepositoryFS) listByField(
 	// filter and deterministic ordering is applied in application memory.
 	sort.Slice(result, func(i, j int) bool {
 		if result[i].CreatedAt.Equal(result[j].CreatedAt) {
-			return result[i].ID < result[j].ID
+			if result[i].OrderItemIndex == result[j].OrderItemIndex {
+				return result[i].ID < result[j].ID
+			}
+			return result[i].OrderItemIndex < result[j].OrderItemIndex
 		}
 		return result[i].CreatedAt.Before(result[j].CreatedAt)
 	})
@@ -276,7 +283,7 @@ func (r *SalesReceivableRepositoryFS) listByField(
 // Create
 // ============================================================
 
-// Create persists a new pending SalesReceivable.
+// Create persists a new pending item-level SalesReceivable.
 //
 // The deterministic ID is used directly as the Firestore document ID.
 // Existing documents are never overwritten.
@@ -309,7 +316,7 @@ func (r *SalesReceivableRepositoryFS) Create(
 
 	expectedID, err := salesreceivabledom.NewID(
 		receivable.PaymentID,
-		receivable.PayoutAccountID,
+		receivable.OrderItemIndex,
 	)
 	if err != nil {
 		return salesreceivabledom.SalesReceivable{}, err
@@ -361,7 +368,7 @@ func (r *SalesReceivableRepositoryFS) Update(
 
 	expectedID, err := salesreceivabledom.NewID(
 		receivable.PaymentID,
-		receivable.PayoutAccountID,
+		receivable.OrderItemIndex,
 	)
 	if err != nil {
 		return salesreceivabledom.SalesReceivable{}, err
@@ -442,6 +449,8 @@ func validateSalesReceivableImmutableFields(
 	if current.ID != next.ID ||
 		current.OrderID != next.OrderID ||
 		current.PaymentID != next.PaymentID ||
+		current.OrderItemIndex != next.OrderItemIndex ||
+		current.ResaleID != next.ResaleID ||
 		current.AvatarID != next.AvatarID ||
 		current.UserID != next.UserID ||
 		current.PayoutAccountID != next.PayoutAccountID ||
@@ -517,7 +526,7 @@ func docToSalesReceivable(
 
 	expectedID, err := salesreceivabledom.NewID(
 		receivable.PaymentID,
-		receivable.PayoutAccountID,
+		receivable.OrderItemIndex,
 	)
 	if err != nil {
 		return salesreceivabledom.SalesReceivable{}, err
@@ -536,9 +545,9 @@ func docToSalesReceivable(
 
 // Firestore Timestamp values are persisted at microsecond precision.
 //
-// This is persistence-level precision normalization only. Seller identity,
-// amounts, payout identity, status, and other business values are never
-// normalized by the repository.
+// This is persistence-level precision normalization only. Item identity, seller
+// identity, amounts, payout identity, status, and other business values are
+// never normalized by the repository.
 func normalizeSalesReceivableTimestamps(
 	receivable *salesreceivabledom.SalesReceivable,
 ) {
@@ -589,6 +598,8 @@ func salesReceivableStateEqual(
 	return left.ID == right.ID &&
 		left.OrderID == right.OrderID &&
 		left.PaymentID == right.PaymentID &&
+		left.OrderItemIndex == right.OrderItemIndex &&
+		left.ResaleID == right.ResaleID &&
 		left.AvatarID == right.AvatarID &&
 		left.UserID == right.UserID &&
 		left.PayoutAccountID == right.PayoutAccountID &&

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strconv"
 
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
@@ -87,10 +88,11 @@ func (s ResaleSellerIdentity) Validate() error {
 	return nil
 }
 
-// ReceivableAllocation represents resale proceeds attributable to one consumer
-// seller.
+// ReceivableAllocation represents resale proceeds attributable to one resale
+// Order item.
 //
-// Resale transactions are aggregated by PayoutAccountID.
+// One active resale Order item produces exactly one ReceivableAllocation and
+// later exactly one SalesReceivable. Allocations are never aggregated by seller.
 //
 // Resale merchandise is non-taxable and resale shipping is zero.
 //
@@ -98,6 +100,9 @@ func (s ResaleSellerIdentity) Validate() error {
 //
 //	GrossAmount - PlatformFeeAmount
 type ReceivableAllocation struct {
+	OrderItemIndex int
+	ResaleID       string
+
 	Seller ResaleSellerIdentity
 
 	MerchandiseAmount int
@@ -124,8 +129,8 @@ type Calculation struct {
 // Platform fee
 // ============================================================
 
-// PlatformFeeInput contains the seller-level amount breakdown used to determine
-// the AMOL platform fee.
+// PlatformFeeInput contains the allocation-level amount breakdown used to
+// determine the AMOL platform fee.
 //
 // Exactly one seller identity must be present:
 //
@@ -167,7 +172,7 @@ const (
 	// merchandise consumption tax but excludes shipping.
 	PlatformFeeBaseMerchandiseWithTax PlatformFeeBase = "merchandise_with_tax"
 
-	// PlatformFeeBaseGross applies the fee to the complete seller-level gross.
+	// PlatformFeeBaseGross applies the fee to the complete allocation gross.
 	PlatformFeeBaseGross PlatformFeeBase = "gross"
 )
 
@@ -309,9 +314,9 @@ func isValidPlatformFeeBase(base PlatformFeeBase) bool {
 //   - later persisted as Settlement
 //
 // Resale transactions:
-//   - aggregated by PayoutAccountID
+//   - allocated independently by Order item
 //   - represented by ReceivableAllocation
-//   - later persisted as SalesReceivable
+//   - later persisted as one SalesReceivable per resale Order item
 //
 // The calculator uses Order snapshots only. Current Brand, Account, Avatar, or
 // payout-account state is intentionally not resolved here.
@@ -454,12 +459,16 @@ type allocationSeller struct {
 
 	SettlementSeller SellerIdentity
 	ResaleSeller     ResaleSellerIdentity
+
+	ResaleOrderItemIndex int
+	ResaleID             string
 }
 
 func (s allocationSeller) Validate() error {
 	switch s.Kind {
 	case allocationSellerKindAccount:
-		if !isZeroResaleSellerIdentity(s.ResaleSeller) {
+		if !isZeroResaleSellerIdentity(s.ResaleSeller) ||
+			s.ResaleID != "" {
 			return ErrCalculatorInvalidSellerSnapshot
 		}
 		if err := s.SettlementSeller.Validate(); err != nil {
@@ -471,7 +480,9 @@ func (s allocationSeller) Validate() error {
 		return nil
 
 	case allocationSellerKindResale:
-		if !isZeroSellerIdentity(s.SettlementSeller) {
+		if !isZeroSellerIdentity(s.SettlementSeller) ||
+			s.ResaleOrderItemIndex < 0 ||
+			s.ResaleID == "" {
 			return ErrCalculatorInvalidSellerSnapshot
 		}
 		return s.ResaleSeller.Validate()
@@ -495,8 +506,8 @@ func (s allocationSeller) Key() (string, error) {
 		return string(allocationSellerKindAccount) + ":" + key, nil
 
 	case allocationSellerKindResale:
-		return string(allocationSellerKindResale) + ":" +
-			s.ResaleSeller.PayoutAccountID, nil
+		return string(allocationSellerKindResale) + "_item:" +
+			strconv.Itoa(s.ResaleOrderItemIndex), nil
 
 	default:
 		return "", ErrCalculatorInvalidSellerSnapshot
@@ -539,7 +550,7 @@ func buildMerchandiseAllocations(
 	shippingBindings := make(map[shippingKey]shippingBinding)
 	resaleBindings := make(map[string]int)
 
-	for _, item := range order.Items {
+	for itemIndex, item := range order.Items {
 		if item.IsCancelled {
 			continue
 		}
@@ -644,8 +655,10 @@ func buildMerchandiseAllocations(
 			}
 
 			allocationIdentity := allocationSeller{
-				Kind:         allocationSellerKindResale,
-				ResaleSeller: seller,
+				Kind:                 allocationSellerKindResale,
+				ResaleSeller:         seller,
+				ResaleOrderItemIndex: itemIndex,
+				ResaleID:             item.ResaleID,
 			}
 
 			key, err := allocationIdentity.Key()
@@ -1304,7 +1317,9 @@ func (c *Calculator) finalizeAllocations(
 			result.Receivables = append(
 				result.Receivables,
 				ReceivableAllocation{
-					Seller: builder.Seller.ResaleSeller,
+					OrderItemIndex: builder.Seller.ResaleOrderItemIndex,
+					ResaleID:       builder.Seller.ResaleID,
+					Seller:         builder.Seller.ResaleSeller,
 
 					MerchandiseAmount: merchandiseAmount,
 
@@ -1318,6 +1333,13 @@ func (c *Calculator) finalizeAllocations(
 			return Calculation{}, ErrCalculatorInvalidSellerSnapshot
 		}
 	}
+
+	sort.Slice(result.Receivables, func(i, j int) bool {
+		if result.Receivables[i].OrderItemIndex == result.Receivables[j].OrderItemIndex {
+			return result.Receivables[i].ResaleID < result.Receivables[j].ResaleID
+		}
+		return result.Receivables[i].OrderItemIndex < result.Receivables[j].OrderItemIndex
+	})
 
 	return result, nil
 }

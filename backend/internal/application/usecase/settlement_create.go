@@ -4,6 +4,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	orderdom "narratives/internal/domain/order"
@@ -30,7 +31,7 @@ type sellerFinancialAllocationCalculator interface {
 // one successfully completed Payment.
 //
 // Primary List sales create Stripe Settlements.
-// Consumer resale transactions create SalesReceivables.
+// Consumer resale transactions create one SalesReceivable per resale Order item.
 //
 // Both persistence paths use deterministic IDs and are safe to retry after a
 // partial failure or duplicate Stripe webhook.
@@ -67,7 +68,7 @@ func (u *SettlementUsecase) EnsureForSucceededPayment(
 	if err != nil {
 		return nil, err
 	}
-	if err := validateSellerFinancialCalculation(payment, calculation); err != nil {
+	if err := validateSellerFinancialCalculation(order, payment, calculation); err != nil {
 		return nil, err
 	}
 	if len(calculation.Receivables) > 0 && u.salesReceivableUC == nil {
@@ -78,7 +79,13 @@ func (u *SettlementUsecase) EnsureForSucceededPayment(
 	result := make([]settlementdom.Settlement, 0, len(calculation.Settlements))
 
 	for _, allocation := range calculation.Settlements {
-		settlement, err := u.ensurePrimarySettlement(ctx, order, payment, allocation, now)
+		settlement, err := u.ensurePrimarySettlement(
+			ctx,
+			order,
+			payment,
+			allocation,
+			now,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -91,6 +98,8 @@ func (u *SettlementUsecase) EnsureForSucceededPayment(
 			EnsureSalesReceivableInput{
 				OrderID:           order.ID,
 				PaymentID:         payment.PaymentID,
+				OrderItemIndex:    allocation.OrderItemIndex,
+				ResaleID:          allocation.ResaleID,
 				AvatarID:          allocation.Seller.AvatarID,
 				UserID:            allocation.Seller.UserID,
 				PayoutAccountID:   allocation.Seller.PayoutAccountID,
@@ -253,6 +262,7 @@ func validateResaleReceivableSeller(
 }
 
 func validateSellerFinancialCalculation(
+	order orderdom.Order,
 	payment paymentdom.Payment,
 	calculation settlementdom.Calculation,
 ) error {
@@ -262,7 +272,9 @@ func validateSellerFinancialCalculation(
 	}
 
 	maxInt := int(^uint(0) >> 1)
-	seen := make(map[string]struct{}, len(calculation.Settlements)+len(calculation.Receivables))
+	seenSettlements := make(map[string]struct{}, len(calculation.Settlements))
+	seenReceivableItems := make(map[int]struct{}, len(calculation.Receivables))
+	seenResaleIDs := make(map[string]struct{}, len(calculation.Receivables))
 	total := 0
 
 	for _, allocation := range calculation.Settlements {
@@ -277,10 +289,10 @@ func validateSellerFinancialCalculation(
 		}
 
 		sellerKey := "account:" + sellerID
-		if _, exists := seen[sellerKey]; exists {
+		if _, exists := seenSettlements[sellerKey]; exists {
 			return ErrSettlementDuplicateSeller
 		}
-		seen[sellerKey] = struct{}{}
+		seenSettlements[sellerKey] = struct{}{}
 
 		if allocation.MerchandiseAmount < 0 ||
 			allocation.MerchandiseTaxAmount < 0 ||
@@ -300,14 +312,17 @@ func validateSellerFinancialCalculation(
 			return ErrSettlementAllocationInvalid
 		}
 		calculatedGross += allocation.MerchandiseTaxAmount
+
 		if calculatedGross > maxInt-allocation.ShippingAmount {
 			return ErrSettlementAllocationInvalid
 		}
 		calculatedGross += allocation.ShippingAmount
+
 		if calculatedGross > maxInt-allocation.ShippingTaxAmount {
 			return ErrSettlementAllocationInvalid
 		}
 		calculatedGross += allocation.ShippingTaxAmount
+
 		if calculatedGross != allocation.GrossAmount {
 			return ErrSettlementAllocationInvalid
 		}
@@ -319,9 +334,35 @@ func validateSellerFinancialCalculation(
 	}
 
 	for _, allocation := range calculation.Receivables {
+		if allocation.OrderItemIndex < 0 ||
+			allocation.OrderItemIndex >= len(order.Items) ||
+			allocation.ResaleID == "" {
+			return ErrSettlementAllocationInvalid
+		}
 		if err := allocation.Seller.Validate(); err != nil {
 			return ErrSettlementAllocationInvalid
 		}
+
+		item := order.Items[allocation.OrderItemIndex]
+		if item.IsCancelled ||
+			item.Type != orderdom.OrderItemTypeResale ||
+			item.ResaleID != allocation.ResaleID ||
+			item.Qty != 1 ||
+			item.Price < 0 {
+			return ErrSettlementAllocationInvalid
+		}
+
+		if item.SellerSnapshot.AvatarID != allocation.Seller.AvatarID ||
+			item.SellerSnapshot.UserID != allocation.Seller.UserID ||
+			item.SellerSnapshot.PayoutAccountID != allocation.Seller.PayoutAccountID ||
+			item.SellerSnapshot.PayoutAccountID != item.SellerSnapshot.UserID ||
+			item.SellerSnapshot.BrandID != "" ||
+			item.SellerSnapshot.CompanyID != "" ||
+			item.SellerSnapshot.AccountID != "" ||
+			item.SellerSnapshot.StripeAccountID != "" {
+			return ErrSettlementAllocationInvalid
+		}
+
 		if allocation.MerchandiseAmount < 0 ||
 			allocation.GrossAmount <= 0 ||
 			allocation.PlatformFeeAmount < 0 ||
@@ -329,15 +370,33 @@ func validateSellerFinancialCalculation(
 			allocation.PlatformFeeAmount >= allocation.GrossAmount ||
 			allocation.ReceivableAmount > allocation.GrossAmount ||
 			allocation.GrossAmount-allocation.PlatformFeeAmount != allocation.ReceivableAmount ||
-			allocation.MerchandiseAmount != allocation.GrossAmount {
+			allocation.MerchandiseAmount != allocation.GrossAmount ||
+			allocation.GrossAmount != item.Price {
 			return ErrSettlementAllocationInvalid
 		}
 
-		sellerKey := "resale:" + allocation.Seller.PayoutAccountID
-		if _, exists := seen[sellerKey]; exists {
-			return ErrSettlementDuplicateSeller
+		if _, exists := seenReceivableItems[allocation.OrderItemIndex]; exists {
+			return ErrSettlementAllocationInvalid
 		}
-		seen[sellerKey] = struct{}{}
+		seenReceivableItems[allocation.OrderItemIndex] = struct{}{}
+
+		if _, exists := seenResaleIDs[allocation.ResaleID]; exists {
+			return ErrSettlementAllocationInvalid
+		}
+		seenResaleIDs[allocation.ResaleID] = struct{}{}
+
+		expectedReceivableID, err := salesreceivabledom.NewID(
+			payment.PaymentID,
+			allocation.OrderItemIndex,
+		)
+		if err != nil || expectedReceivableID == "" {
+			return ErrSettlementAllocationInvalid
+		}
+
+		itemKey := "resale_item:" + strconv.Itoa(allocation.OrderItemIndex)
+		if expectedReceivableID != payment.PaymentID+"_"+itemKey {
+			return ErrSettlementAllocationInvalid
+		}
 
 		if total > maxInt-allocation.GrossAmount {
 			return ErrSettlementAllocationAmountMismatch
