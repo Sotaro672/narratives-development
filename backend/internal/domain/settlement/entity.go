@@ -25,46 +25,25 @@ type SettlementStatus string
 
 // SellerType identifies the seller identity represented by a Settlement.
 //
-// New Settlement records support only SellerTypeAccount.
-//
-// SellerTypeAvatar is retained temporarily so dependent code can be migrated
-// incrementally. It must not be accepted when creating or validating a new
-// Settlement and will be removed after resale proceeds have moved completely
-// to the salesReceivable domain.
+// Settlement supports only primary-sale Account sellers.
 type SellerType string
 
 const (
 	SellerTypeAccount SellerType = "account"
-
-	// Deprecated: resale proceeds no longer use Stripe Settlement.
-	// Retained temporarily for migration compatibility.
-	SellerTypeAvatar SellerType = "avatar"
 )
 
 var AllowedSellerTypes = map[SellerType]struct{}{
 	SellerTypeAccount: {},
 }
 
-// SellerIdentity is the immutable primary-sale payout identity captured by a
-// Settlement.
+// SellerIdentity is the immutable primary-sale payout identity captured by a Settlement.
 //
-// Account seller:
-//   - CompanyID, AccountID and StripeAccountID are required.
-//   - AvatarID, UserID and PayoutAccountID must be empty.
-//
-// AvatarID, UserID and PayoutAccountID are retained temporarily for migration
-// compatibility with code and persisted documents created by the former resale
-// Stripe Connect flow. They are not valid for new Settlement records.
+// CompanyID, AccountID and StripeAccountID are required.
 type SellerIdentity struct {
 	Type SellerType
 
 	CompanyID string
 	AccountID string
-
-	// Deprecated: resale proceeds no longer belong to Settlement.
-	AvatarID        string
-	UserID          string
-	PayoutAccountID string
 
 	StripeAccountID string
 }
@@ -95,14 +74,13 @@ const CurrencyJPY = "JPY"
 
 var DefaultStatus = StatusPending
 
-// Settlement represents the amount attributable to one primary-sale seller
-// payout identity inside one Order.
+// Settlement represents the amount attributable to one primary-sale Account
+// seller inside one Order.
 //
-// Primary List sales use an Account seller identity. Multiple Brands using the
-// same AccountID are aggregated into one Settlement.
+// Multiple Brands using the same AccountID are aggregated into one Settlement.
 //
-// Resale proceeds must not be stored as Settlement records. They are represented
-// by the salesReceivable domain.
+// Consumer resale proceeds must not be stored as Settlement records. They are
+// represented by the salesReceivable domain.
 //
 // Amount invariant:
 //
@@ -120,12 +98,6 @@ type Settlement struct {
 
 	CompanyID string
 	AccountID string
-
-	// Deprecated: retained temporarily while legacy resale Settlement references
-	// are migrated to salesReceivable.
-	AvatarID        string
-	UserID          string
-	PayoutAccountID string
 
 	StripeAccountID string
 
@@ -185,22 +157,6 @@ var (
 	ErrInvalidAccountID = errors.New(
 		"settlement: invalid accountId",
 	)
-
-	// Deprecated: retained temporarily for migration compatibility.
-	ErrInvalidAvatarID = errors.New(
-		"settlement: invalid avatarId",
-	)
-
-	// Deprecated: retained temporarily for migration compatibility.
-	ErrInvalidUserID = errors.New(
-		"settlement: invalid userId",
-	)
-
-	// Deprecated: retained temporarily for migration compatibility.
-	ErrInvalidPayoutAccountID = errors.New(
-		"settlement: invalid payoutAccountId",
-	)
-
 	ErrInvalidStripeAccountID = errors.New(
 		"settlement: invalid stripeAccountId",
 	)
@@ -268,7 +224,7 @@ var (
 
 // NewID creates the deterministic Firestore Settlement document ID.
 //
-// New Settlement records are primary-sale Account settlements only:
+// Settlement supports only primary-sale Account sellers:
 //
 //	paymentID + "_account_" + accountID
 func NewID(paymentID string, seller SellerIdentity) (string, error) {
@@ -303,31 +259,18 @@ func IsValidSellerType(sellerType SellerType) bool {
 }
 
 func (s SellerIdentity) Key() (string, error) {
-	switch s.Type {
-	case SellerTypeAccount:
-		if s.AccountID == "" {
-			return "", ErrInvalidAccountID
-		}
-		return s.AccountID, nil
-
-	case SellerTypeAvatar:
-		// Deprecated compatibility path. SellerTypeAvatar is not accepted by
-		// Validate and therefore cannot be used to create a new Settlement.
-		if s.PayoutAccountID == "" {
-			return "", ErrInvalidPayoutAccountID
-		}
-		return s.PayoutAccountID, nil
-
-	default:
+	if s.Type != SellerTypeAccount {
 		return "", ErrInvalidSellerType
 	}
+	if s.AccountID == "" {
+		return "", ErrInvalidAccountID
+	}
+
+	return s.AccountID, nil
 }
 
 func (s SellerIdentity) Validate() error {
-	if !IsValidSellerType(s.Type) {
-		return ErrInvalidSellerType
-	}
-	if s.Type != SellerTypeAccount {
+	if !IsValidSellerType(s.Type) || s.Type != SellerTypeAccount {
 		return ErrInvalidSellerType
 	}
 	if s.CompanyID == "" {
@@ -335,9 +278,6 @@ func (s SellerIdentity) Validate() error {
 	}
 	if s.AccountID == "" {
 		return ErrInvalidAccountID
-	}
-	if s.AvatarID != "" || s.UserID != "" || s.PayoutAccountID != "" {
-		return ErrInvalidSellerIdentity
 	}
 	if !isStripeAccountID(s.StripeAccountID) {
 		return ErrInvalidStripeAccountID
@@ -398,9 +338,6 @@ func New(
 		SellerType:               seller.Type,
 		CompanyID:                seller.CompanyID,
 		AccountID:                seller.AccountID,
-		AvatarID:                 "",
-		UserID:                   "",
-		PayoutAccountID:          "",
 		StripeAccountID:          seller.StripeAccountID,
 		StripePaymentIntentID:    stripePaymentIntentID,
 		StripeChargeID:           stripeChargeID,
@@ -591,8 +528,8 @@ func (s *Settlement) MarkFailed(
 
 // Cancel cancels a Settlement that has not been transferred.
 //
-// A transferring Settlement cannot be canceled because the result of the
-// Stripe request must first be reconciled.
+// A transferring Settlement cannot be canceled because the result of the Stripe
+// request must first be reconciled.
 func (s *Settlement) Cancel(now time.Time) error {
 	if s == nil {
 		return ErrInvalidStatusTransition
@@ -647,8 +584,8 @@ func (s *Settlement) MarkReversed(stripeTransferReversalID string, now time.Time
 
 // Validate verifies all Settlement persistence invariants.
 //
-// Settlement is a primary-sale Stripe Connect entity. Resale seller identities
-// are intentionally rejected.
+// Settlement is a primary-sale Stripe Connect entity. Consumer resale seller
+// identities are represented by salesReceivable and are not valid here.
 func (s Settlement) Validate() error {
 	if s.ID == "" || strings.Contains(s.ID, "/") {
 		return ErrInvalidID
@@ -781,19 +718,13 @@ func (s Settlement) Validate() error {
 	return nil
 }
 
-// SellerIdentity returns the immutable primary-sale payout identity stored by
-// this Settlement.
-//
-// Legacy Avatar fields are returned temporarily so dependent migration code can
-// inspect an older document, but Validate rejects such a Settlement.
+// SellerIdentity returns the immutable primary-sale Account payout identity
+// stored by this Settlement.
 func (s Settlement) SellerIdentity() SellerIdentity {
 	return SellerIdentity{
 		Type:            s.SellerType,
 		CompanyID:       s.CompanyID,
 		AccountID:       s.AccountID,
-		AvatarID:        s.AvatarID,
-		UserID:          s.UserID,
-		PayoutAccountID: s.PayoutAccountID,
 		StripeAccountID: s.StripeAccountID,
 	}
 }
@@ -823,6 +754,7 @@ func validateOptionalErrorString(value *string, invalidError error) error {
 	if value != nil && *value == "" {
 		return invalidError
 	}
+
 	return nil
 }
 

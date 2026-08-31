@@ -11,6 +11,7 @@ import (
 // Queries
 // ============================================================
 
+// GetByID returns one primary-sale Stripe Settlement.
 func (u *SettlementUsecase) GetByID(
 	ctx context.Context,
 	settlementID string,
@@ -18,17 +19,15 @@ func (u *SettlementUsecase) GetByID(
 	if u == nil || u.repo == nil {
 		return settlementdom.Settlement{}, ErrSettlementRepositoryMissing
 	}
-
 	if settlementID == "" {
 		return settlementdom.Settlement{}, settlementdom.ErrInvalidID
 	}
 
-	return u.repo.GetByID(
-		ctx,
-		settlementID,
-	)
+	return u.repo.GetByID(ctx, settlementID)
 }
 
+// ListByPaymentID returns every primary-sale Settlement belonging to one
+// succeeded buyer Payment.
 func (u *SettlementUsecase) ListByPaymentID(
 	ctx context.Context,
 	paymentID string,
@@ -36,17 +35,17 @@ func (u *SettlementUsecase) ListByPaymentID(
 	if u == nil || u.repo == nil {
 		return nil, ErrSettlementRepositoryMissing
 	}
-
 	if paymentID == "" {
 		return nil, settlementdom.ErrInvalidPaymentID
 	}
 
-	return u.repo.ListByPaymentID(
-		ctx,
-		paymentID,
-	)
+	return u.repo.ListByPaymentID(ctx, paymentID)
 }
 
+// ListByOrderID returns every primary-sale Settlement belonging to one Order.
+//
+// PaymentID currently equals OrderID, but the Order boundary remains explicit
+// for application and query use.
 func (u *SettlementUsecase) ListByOrderID(
 	ctx context.Context,
 	orderID string,
@@ -54,17 +53,14 @@ func (u *SettlementUsecase) ListByOrderID(
 	if u == nil || u.repo == nil {
 		return nil, ErrSettlementRepositoryMissing
 	}
-
 	if orderID == "" {
 		return nil, settlementdom.ErrInvalidOrderID
 	}
 
-	return u.repo.ListByOrderID(
-		ctx,
-		orderID,
-	)
+	return u.repo.ListByOrderID(ctx, orderID)
 }
 
+// ListByCompanyID returns primary-sale Settlements attributable to one Company.
 func (u *SettlementUsecase) ListByCompanyID(
 	ctx context.Context,
 	companyID string,
@@ -72,17 +68,15 @@ func (u *SettlementUsecase) ListByCompanyID(
 	if u == nil || u.repo == nil {
 		return nil, ErrSettlementRepositoryMissing
 	}
-
 	if companyID == "" {
 		return nil, settlementdom.ErrInvalidCompanyID
 	}
 
-	return u.repo.ListByCompanyID(
-		ctx,
-		companyID,
-	)
+	return u.repo.ListByCompanyID(ctx, companyID)
 }
 
+// ListByAccountID returns primary-sale Settlements attributable to one Stripe
+// Connected Account payout identity.
 func (u *SettlementUsecase) ListByAccountID(
 	ctx context.Context,
 	accountID string,
@@ -90,49 +84,9 @@ func (u *SettlementUsecase) ListByAccountID(
 	if u == nil || u.repo == nil {
 		return nil, ErrSettlementRepositoryMissing
 	}
-
 	if accountID == "" {
 		return nil, settlementdom.ErrInvalidAccountID
 	}
 
-	return u.repo.ListByAccountID(
-		ctx,
-		accountID,
-	)
-}
-
-func (u *SettlementUsecase) ListByAvatarID(
-	ctx context.Context,
-	avatarID string,
-) ([]settlementdom.Settlement, error) {
-	if u == nil || u.repo == nil {
-		return nil, ErrSettlementRepositoryMissing
-	}
-
-	if avatarID == "" {
-		return nil, settlementdom.ErrInvalidAvatarID
-	}
-
-	return u.repo.ListByAvatarID(
-		ctx,
-		avatarID,
-	)
-}
-
-func (u *SettlementUsecase) ListByPayoutAccountID(
-	ctx context.Context,
-	payoutAccountID string,
-) ([]settlementdom.Settlement, error) {
-	if u == nil || u.repo == nil {
-		return nil, ErrSettlementRepositoryMissing
-	}
-
-	if payoutAccountID == "" {
-		return nil, settlementdom.ErrInvalidPayoutAccountID
-	}
-
-	return u.repo.ListByPayoutAccountID(
-		ctx,
-		payoutAccountID,
-	)
+	return u.repo.ListByAccountID(ctx, accountID)
 }

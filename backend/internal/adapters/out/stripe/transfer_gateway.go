@@ -13,7 +13,6 @@ import (
 	"time"
 
 	usecase "narratives/internal/application/usecase"
-	settlementdom "narratives/internal/domain/settlement"
 )
 
 var _ usecase.StripeSettlementTransferGateway = (*TransferGateway)(nil)
@@ -275,31 +274,15 @@ func (g *TransferGateway) CreateTransfer(
 		string(seller.Type),
 	)
 
-	switch seller.Type {
-	case settlementdom.SellerTypeAccount:
-		form.Set(
-			"metadata[companyId]",
-			strings.TrimSpace(seller.CompanyID),
-		)
-		form.Set(
-			"metadata[accountId]",
-			strings.TrimSpace(seller.AccountID),
-		)
+	form.Set(
+		"metadata[companyId]",
+		strings.TrimSpace(seller.CompanyID),
+	)
 
-	case settlementdom.SellerTypeAvatar:
-		form.Set(
-			"metadata[avatarId]",
-			strings.TrimSpace(seller.AvatarID),
-		)
-		form.Set(
-			"metadata[userId]",
-			strings.TrimSpace(seller.UserID),
-		)
-		form.Set(
-			"metadata[payoutAccountId]",
-			strings.TrimSpace(seller.PayoutAccountID),
-		)
-	}
+	form.Set(
+		"metadata[accountId]",
+		strings.TrimSpace(seller.AccountID),
+	)
 
 	var out stripeTransferResponse
 

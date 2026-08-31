@@ -12,7 +12,6 @@ import (
 	"time"
 
 	applicationport "narratives/internal/application/port"
-	settlementdom "narratives/internal/domain/settlement"
 )
 
 var _ applicationport.StripeTransferReversalGateway = (*TransferReversalGateway)(nil)
@@ -31,8 +30,10 @@ var _ applicationport.StripeTransferReversalGateway = (*TransferReversalGateway)
 //		-> Transfer B
 //
 // A purchaser-side Charge refund does not by itself restore money already sent
-// to a seller Connected Account. Each completed seller Transfer is therefore
-// reversed explicitly through this gateway.
+// to a seller Connected Account. Each completed primary-sale seller Transfer is
+// therefore reversed explicitly through this gateway.
+//
+// Consumer resale proceeds do not use Stripe Settlement or this gateway.
 type TransferReversalGateway struct {
 	secretKey string
 
@@ -64,8 +65,8 @@ func NewTransferReversalGateway(
 //
 //	amount
 //
-// RefundUsecase currently passes the complete Settlement TransferAmount, so
-// AMOL's first refund flow performs a full seller Transfer reversal.
+// The caller passes the authoritative reversal amount calculated from the
+// primary-sale Settlement.
 //
 // The deterministic Idempotency-Key protects against duplicate reversals when
 // Stripe accepted the request but the application did not receive or persist
@@ -78,148 +79,86 @@ func (g *TransferReversalGateway) CreateTransferReversal(
 		return nil, err
 	}
 
-	stripeTransferID := strings.TrimSpace(
-		in.StripeTransferID,
-	)
-
-	idempotencyKey := strings.TrimSpace(
-		in.IdempotencyKey,
-	)
+	stripeTransferID := strings.TrimSpace(in.StripeTransferID)
+	idempotencyKey := strings.TrimSpace(in.IdempotencyKey)
 
 	if stripeTransferID == "" ||
-		!strings.HasPrefix(
-			stripeTransferID,
-			"tr_",
-		) ||
-		strings.Contains(
-			stripeTransferID,
-			"/",
-		) {
-		return nil,
-			newTransferReversalError(
-				0,
-				"invalid_request",
-				"invalid_transfer",
-				"stripe transfer reversal transfer id is invalid",
-				false,
-			)
+		!strings.HasPrefix(stripeTransferID, "tr_") ||
+		strings.Contains(stripeTransferID, "/") {
+		return nil, newTransferReversalError(
+			0,
+			"invalid_request",
+			"invalid_transfer",
+			"stripe transfer reversal transfer id is invalid",
+			false,
+		)
 	}
 
 	if in.Amount <= 0 {
-		return nil,
-			newTransferReversalError(
-				0,
-				"invalid_request",
-				"invalid_amount",
-				"stripe transfer reversal amount is invalid",
-				false,
-			)
+		return nil, newTransferReversalError(
+			0,
+			"invalid_request",
+			"invalid_amount",
+			"stripe transfer reversal amount is invalid",
+			false,
+		)
 	}
 
 	if idempotencyKey == "" {
-		return nil,
-			newTransferReversalError(
-				0,
-				"invalid_request",
-				"invalid_idempotency_key",
-				"stripe transfer reversal idempotency key is empty",
-				false,
-			)
+		return nil, newTransferReversalError(
+			0,
+			"invalid_request",
+			"invalid_idempotency_key",
+			"stripe transfer reversal idempotency key is empty",
+			false,
+		)
 	}
 
 	paymentID := strings.TrimSpace(in.PaymentID)
 	if paymentID == "" {
-		return nil,
-			newTransferReversalError(
-				0,
-				"invalid_request",
-				"invalid_payment_id",
-				"stripe transfer reversal payment id is empty",
-				false,
-			)
+		return nil, newTransferReversalError(
+			0,
+			"invalid_request",
+			"invalid_payment_id",
+			"stripe transfer reversal payment id is empty",
+			false,
+		)
 	}
 
 	settlementID := strings.TrimSpace(in.SettlementID)
 	if settlementID == "" {
-		return nil,
-			newTransferReversalError(
-				0,
-				"invalid_request",
-				"invalid_settlement_id",
-				"stripe transfer reversal settlement id is empty",
-				false,
-			)
+		return nil, newTransferReversalError(
+			0,
+			"invalid_request",
+			"invalid_settlement_id",
+			"stripe transfer reversal settlement id is empty",
+			false,
+		)
 	}
 
 	seller := in.Seller
 	if err := seller.Validate(); err != nil {
-		return nil,
-			newTransferReversalError(
-				0,
-				"invalid_request",
-				"invalid_seller",
-				err.Error(),
-				false,
-			)
+		return nil, newTransferReversalError(
+			0,
+			"invalid_request",
+			"invalid_seller",
+			err.Error(),
+			false,
+		)
 	}
 
 	form := url.Values{}
-
-	form.Set(
-		"amount",
-		fmt.Sprintf(
-			"%d",
-			in.Amount,
-		),
-	)
+	form.Set("amount", fmt.Sprintf("%d", in.Amount))
 
 	if orderID := strings.TrimSpace(in.OrderID); orderID != "" {
-		form.Set(
-			"metadata[orderId]",
-			orderID,
-		)
+		form.Set("metadata[orderId]", orderID)
 	}
 
-	form.Set(
-		"metadata[paymentId]",
-		paymentID,
-	)
-
-	form.Set(
-		"metadata[settlementId]",
-		settlementID,
-	)
-
-	form.Set(
-		"metadata[sellerType]",
-		string(seller.Type),
-	)
-
-	switch seller.Type {
-	case settlementdom.SellerTypeAccount:
-		form.Set(
-			"metadata[companyId]",
-			strings.TrimSpace(seller.CompanyID),
-		)
-		form.Set(
-			"metadata[accountId]",
-			strings.TrimSpace(seller.AccountID),
-		)
-
-	case settlementdom.SellerTypeAvatar:
-		form.Set(
-			"metadata[avatarId]",
-			strings.TrimSpace(seller.AvatarID),
-		)
-		form.Set(
-			"metadata[userId]",
-			strings.TrimSpace(seller.UserID),
-		)
-		form.Set(
-			"metadata[payoutAccountId]",
-			strings.TrimSpace(seller.PayoutAccountID),
-		)
-	}
+	form.Set("metadata[paymentId]", paymentID)
+	form.Set("metadata[settlementId]", settlementID)
+	form.Set("metadata[sellerType]", string(seller.Type))
+	form.Set("metadata[companyId]", strings.TrimSpace(seller.CompanyID))
+	form.Set("metadata[accountId]", strings.TrimSpace(seller.AccountID))
 
 	var out stripeTransferReversalResponse
 
@@ -233,55 +172,46 @@ func (g *TransferReversalGateway) CreateTransferReversal(
 		return nil, err
 	}
 
-	stripeTransferReversalID :=
-		out.ID
-
+	stripeTransferReversalID := out.ID
 	if stripeTransferReversalID == "" ||
-		!strings.HasPrefix(
-			stripeTransferReversalID,
-			"trr_",
-		) {
-		return nil,
-			newTransferReversalError(
-				http.StatusOK,
-				"invalid_response",
-				"invalid_transfer_reversal_id",
-				"stripe transfer reversal id is empty or invalid",
-				true,
-			)
+		!strings.HasPrefix(stripeTransferReversalID, "trr_") {
+		return nil, newTransferReversalError(
+			http.StatusOK,
+			"invalid_response",
+			"invalid_transfer_reversal_id",
+			"stripe transfer reversal id is empty or invalid",
+			true,
+		)
 	}
 
 	if out.Object != "transfer_reversal" {
-		return nil,
-			newTransferReversalError(
-				http.StatusOK,
-				"invalid_response",
-				"invalid_object",
-				"stripe transfer reversal object is invalid",
-				true,
-			)
+		return nil, newTransferReversalError(
+			http.StatusOK,
+			"invalid_response",
+			"invalid_object",
+			"stripe transfer reversal object is invalid",
+			true,
+		)
 	}
 
 	if out.Amount != in.Amount {
-		return nil,
-			newTransferReversalError(
-				http.StatusOK,
-				"invalid_response",
-				"amount_mismatch",
-				"stripe transfer reversal amount does not match request",
-				true,
-			)
+		return nil, newTransferReversalError(
+			http.StatusOK,
+			"invalid_response",
+			"amount_mismatch",
+			"stripe transfer reversal amount does not match request",
+			true,
+		)
 	}
 
 	if out.Transfer != stripeTransferID {
-		return nil,
-			newTransferReversalError(
-				http.StatusOK,
-				"invalid_response",
-				"transfer_mismatch",
-				"stripe transfer reversal transfer does not match request",
-				true,
-			)
+		return nil, newTransferReversalError(
+			http.StatusOK,
+			"invalid_response",
+			"transfer_mismatch",
+			"stripe transfer reversal transfer does not match request",
+			true,
+		)
 	}
 
 	return &applicationport.CreateStripeTransferReversalResult{
@@ -314,10 +244,7 @@ func (g *TransferReversalGateway) validateReady() error {
 		)
 	}
 
-	if !strings.HasPrefix(
-		g.secretKey,
-		"sk_",
-	) {
+	if !strings.HasPrefix(g.secretKey, "sk_") {
 		return newTransferReversalError(
 			0,
 			"configuration_error",
@@ -352,14 +279,8 @@ func (g *TransferReversalGateway) postTransferReversal(
 	}
 
 	if stripeTransferID == "" ||
-		!strings.HasPrefix(
-			stripeTransferID,
-			"tr_",
-		) ||
-		strings.Contains(
-			stripeTransferID,
-			"/",
-		) {
+		!strings.HasPrefix(stripeTransferID, "tr_") ||
+		strings.Contains(stripeTransferID, "/") {
 		return newTransferReversalError(
 			0,
 			"invalid_request",
@@ -382,18 +303,14 @@ func (g *TransferReversalGateway) postTransferReversal(
 	endpoint :=
 		stripeAPIBaseURL +
 			"/transfers/" +
-			url.PathEscape(
-				stripeTransferID,
-			) +
+			url.PathEscape(stripeTransferID) +
 			"/reversals"
 
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
 		endpoint,
-		strings.NewReader(
-			form.Encode(),
-		),
+		strings.NewReader(form.Encode()),
 	)
 	if err != nil {
 		return newTransferReversalError(
@@ -405,28 +322,12 @@ func (g *TransferReversalGateway) postTransferReversal(
 		)
 	}
 
-	req.Header.Set(
-		"Authorization",
-		"Bearer "+g.secretKey,
-	)
+	req.Header.Set("Authorization", "Bearer "+g.secretKey)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Idempotency-Key", idempotencyKey)
 
-	req.Header.Set(
-		"Content-Type",
-		"application/x-www-form-urlencoded",
-	)
-
-	req.Header.Set(
-		"Accept",
-		"application/json",
-	)
-
-	req.Header.Set(
-		"Idempotency-Key",
-		idempotencyKey,
-	)
-
-	response, err :=
-		g.httpClient.Do(req)
+	response, err := g.httpClient.Do(req)
 	if err != nil {
 		return newTransferReversalError(
 			0,
@@ -438,10 +339,7 @@ func (g *TransferReversalGateway) postTransferReversal(
 	}
 	defer response.Body.Close()
 
-	body, err :=
-		io.ReadAll(
-			response.Body,
-		)
+	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return newTransferReversalError(
 			response.StatusCode,
@@ -452,8 +350,7 @@ func (g *TransferReversalGateway) postTransferReversal(
 		)
 	}
 
-	if response.StatusCode < 200 ||
-		response.StatusCode >= 300 {
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return stripeTransferReversalHTTPError(
 			response.StatusCode,
 			body,
@@ -470,10 +367,7 @@ func (g *TransferReversalGateway) postTransferReversal(
 		)
 	}
 
-	if err := json.Unmarshal(
-		body,
-		dst,
-	); err != nil {
+	if err := json.Unmarshal(body, dst); err != nil {
 		return newTransferReversalError(
 			response.StatusCode,
 			"invalid_response",
@@ -608,10 +502,7 @@ func stripeTransferReversalHTTPError(
 ) error {
 	var stripeError stripeTransferReversalErrorResponse
 
-	if err := json.Unmarshal(
-		body,
-		&stripeError,
-	); err != nil {
+	if err := json.Unmarshal(body, &stripeError); err != nil {
 		return newTransferReversalError(
 			statusCode,
 			"stripe_error",
@@ -620,9 +511,7 @@ func stripeTransferReversalHTTPError(
 				"stripe transfer reversal request failed with status %d",
 				statusCode,
 			),
-			isRetryableTransferReversalStatusCode(
-				statusCode,
-			),
+			isRetryableTransferReversalStatusCode(statusCode),
 		)
 	}
 
@@ -642,9 +531,7 @@ func stripeTransferReversalHTTPError(
 		errorType,
 		errorCode,
 		message,
-		isRetryableTransferReversalStatusCode(
-			statusCode,
-		),
+		isRetryableTransferReversalStatusCode(statusCode),
 	)
 }
 
@@ -654,16 +541,12 @@ func isRetryableTransferReversalStatusCode(
 	switch {
 	case statusCode == http.StatusRequestTimeout:
 		return true
-
 	case statusCode == http.StatusConflict:
 		return true
-
 	case statusCode == http.StatusTooManyRequests:
 		return true
-
 	case statusCode >= 500:
 		return true
-
 	default:
 		return false
 	}

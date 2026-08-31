@@ -137,8 +137,8 @@ type Calculation struct {
 //   - Seller for a primary List sale
 //   - ResaleSeller for a consumer resale
 //
-// Seller is retained for compatibility with existing primary-sale and refund
-// calculation code.
+// Seller identifies the primary List-sale Account seller used by Settlement
+// calculations.
 //
 // The calculator intentionally does not hard-code a fee rate or fee base.
 type PlatformFeeInput struct {
@@ -278,9 +278,6 @@ func isZeroSellerIdentity(s SellerIdentity) bool {
 	return s.Type == "" &&
 		s.CompanyID == "" &&
 		s.AccountID == "" &&
-		s.AvatarID == "" &&
-		s.UserID == "" &&
-		s.PayoutAccountID == "" &&
 		s.StripeAccountID == ""
 }
 
