@@ -3,12 +3,10 @@ package usecase
 
 import (
 	"context"
-	"strings"
 
 	accountdom "narratives/internal/domain/account"
 	listdom "narratives/internal/domain/list"
 	orderdom "narratives/internal/domain/order"
-	payoutaccountdom "narratives/internal/domain/payoutAccount"
 	productblueprintcategorydom "narratives/internal/domain/productBlueprintCategory"
 	resaledom "narratives/internal/domain/resale"
 )
@@ -57,7 +55,6 @@ func (u *OrderUsecase) resolveProductBlueprintTaxSnapshot(
 		return nil, 0, orderdom.ErrInvalidItemSnapshot
 	}
 
-	productBlueprintID = strings.TrimSpace(productBlueprintID)
 	if productBlueprintID == "" {
 		return nil, 0, orderdom.ErrInvalidItemSnapshot
 	}
@@ -143,7 +140,6 @@ func (u *OrderUsecase) resolveResaleSellerSnapshot(
 		return orderdom.SellerSnapshot{}, orderdom.ErrInvalidSellerSnapshot
 	}
 
-	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		return orderdom.SellerSnapshot{}, orderdom.ErrInvalidSellerSnapshot
 	}
@@ -153,7 +149,7 @@ func (u *OrderUsecase) resolveResaleSellerSnapshot(
 		return orderdom.SellerSnapshot{}, err
 	}
 
-	userID := strings.TrimSpace(avatar.UserID)
+	userID := avatar.UserID
 	if avatar.ID != avatarID || userID == "" {
 		return orderdom.SellerSnapshot{}, orderdom.ErrInvalidSellerSnapshot
 	}
@@ -165,16 +161,10 @@ func (u *OrderUsecase) resolveResaleSellerSnapshot(
 	if payoutAccount == nil {
 		return orderdom.SellerSnapshot{}, orderdom.ErrInvalidSellerSnapshot
 	}
-
-	provider := strings.TrimSpace(payoutAccount.Provider)
-	providerAccountID := strings.TrimSpace(payoutAccount.ProviderAccountID)
-
-	if payoutAccount.UserID != userID ||
-		provider != payoutaccountdom.ProviderStripe ||
-		payoutAccount.Status != payoutaccountdom.StatusRegistered ||
-		!payoutAccount.PayoutReady ||
-		providerAccountID == "" ||
-		!strings.HasPrefix(providerAccountID, "acct_") {
+	if payoutAccount.UserID != userID {
+		return orderdom.SellerSnapshot{}, orderdom.ErrInvalidSellerSnapshot
+	}
+	if err := payoutAccount.Validate(); err != nil {
 		return orderdom.SellerSnapshot{}, orderdom.ErrInvalidSellerSnapshot
 	}
 
@@ -182,7 +172,6 @@ func (u *OrderUsecase) resolveResaleSellerSnapshot(
 		AvatarID:        avatar.ID,
 		UserID:          userID,
 		PayoutAccountID: userID,
-		StripeAccountID: providerAccountID,
 	}, nil
 }
 
@@ -288,7 +277,7 @@ func (u *OrderUsecase) resolveResaleOrderItem(
 		return orderdom.OrderItemSnapshot{}, orderdom.ErrInvalidItemSnapshot
 	}
 
-	resaleID := strings.TrimSpace(item.ResaleID)
+	resaleID := item.ResaleID
 	if resaleID == "" || item.Qty != 1 {
 		return orderdom.OrderItemSnapshot{}, orderdom.ErrInvalidItemSnapshot
 	}

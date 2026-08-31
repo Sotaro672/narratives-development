@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/firestore"
+	cloudkms "cloud.google.com/go/kms/apiv1"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 
@@ -41,6 +42,7 @@ type Infra struct {
 	FirebaseApp   *firebase.App
 	FirebaseAuth  *firebaseauth.Client
 	SecretManager *secretmanager.Client
+	KMS           *cloudkms.KeyManagementClient
 
 	// Adapters / gateways
 	PaymentMethodGateway *stripeadapter.PaymentMethodGateway
@@ -149,6 +151,34 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 	}
 
 	// --------------------------------------------------------
+	// Cloud KMS
+	// --------------------------------------------------------
+	{
+		var kmsClient *cloudkms.KeyManagementClient
+		var err error
+
+		if len(clientOpts) > 0 {
+			kmsClient, err = cloudkms.NewKeyManagementClient(
+				ctx,
+				clientOpts...,
+			)
+		} else {
+			kmsClient, err = cloudkms.NewKeyManagementClient(ctx)
+		}
+
+		if err != nil {
+			_ = inf.Close()
+
+			return nil, fmt.Errorf(
+				"shared.infra: cloudkms.NewKeyManagementClient failed: %w",
+				err,
+			)
+		}
+
+		inf.KMS = kmsClient
+	}
+
+	// --------------------------------------------------------
 	// Firestore
 	// --------------------------------------------------------
 	{
@@ -228,6 +258,14 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 
 		return nil, errors.New(
 			"shared.infra: secret manager client is nil after initialization",
+		)
+	}
+
+	if inf.KMS == nil {
+		_ = inf.Close()
+
+		return nil, errors.New(
+			"shared.infra: KMS client is nil after initialization",
 		)
 	}
 
@@ -486,6 +524,11 @@ func (i *Infra) Close() error {
 	if i.SecretManager != nil {
 		_ = i.SecretManager.Close()
 		i.SecretManager = nil
+	}
+
+	if i.KMS != nil {
+		_ = i.KMS.Close()
+		i.KMS = nil
 	}
 
 	return nil

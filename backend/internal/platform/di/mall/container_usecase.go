@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	cloudtasksadp "narratives/internal/adapters/out/cloudtasks"
 	outfirebase "narratives/internal/adapters/out/firebase"
 	mallfs "narratives/internal/adapters/out/firestore/mall"
+	payoutkms "narratives/internal/adapters/out/kms"
 	mailadp "narratives/internal/adapters/out/mail"
 	stripeadapter "narratives/internal/adapters/out/stripe"
 	applicationport "narratives/internal/application/port"
@@ -18,6 +20,8 @@ import (
 	solana "narratives/internal/infra/solana"
 	shared "narratives/internal/platform/di/shared"
 )
+
+const payoutAccountKMSKeyNameEnv = "PAYOUT_ACCOUNT_KMS_KEY_NAME"
 
 type mallUsecases struct {
 	avatarUC                       *usecase.AvatarUsecase
@@ -62,6 +66,9 @@ func buildMallUsecases(
 	if infra.Firestore == nil {
 		return nil, errors.New("di.mall: firestore client is nil")
 	}
+	if infra.KMS == nil {
+		return nil, errors.New("di.mall: KMS client is nil")
+	}
 	if r == nil {
 		return nil, errors.New("di.mall: repositories are nil")
 	}
@@ -74,15 +81,6 @@ func buildMallUsecases(
 	}
 	if infra.PaymentMethodGateway == nil {
 		return nil, errors.New("di.mall: stripe payment method gateway is nil after registration")
-	}
-
-	if infra.AccountGateway == nil {
-		if err := infra.RegisterAccountGatewayFromSecret(ctx); err != nil {
-			return nil, fmt.Errorf("di.mall: register Stripe payout account gateway: %w", err)
-		}
-	}
-	if infra.AccountGateway == nil {
-		return nil, errors.New("di.mall: Stripe payout account gateway is nil after registration")
 	}
 
 	resaleImageStorage, err := outfirebase.NewResaleImageStorageFromEnv(ctx)
@@ -219,11 +217,28 @@ func buildMallUsecases(
 		return nil, fmt.Errorf("di.mall: build settlement dependencies: %w", err)
 	}
 
-	payoutAccountUC := usecase.NewStripePayoutAccountUsecase(
+	payoutAccountKMSKeyName := os.Getenv(payoutAccountKMSKeyNameEnv)
+	if payoutAccountKMSKeyName == "" {
+		return nil, fmt.Errorf(
+			"di.mall: %s is empty",
+			payoutAccountKMSKeyNameEnv,
+		)
+	}
+
+	payoutAccountCipher, err := payoutkms.NewPayoutAccountCipher(
+		infra.KMS,
+		payoutAccountKMSKeyName,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"di.mall: build payout account cipher: %w",
+			err,
+		)
+	}
+
+	payoutAccountUC := usecase.NewPayoutAccountUsecase(
 		r.payoutAccountRepo,
-		infra.AccountGateway,
-		r.avatarRepo,
-		authUserReader,
+		payoutAccountCipher,
 	)
 	if payoutAccountUC == nil {
 		return nil, errors.New("di.mall: payout account usecase is nil")

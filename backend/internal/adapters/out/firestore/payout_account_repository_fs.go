@@ -1,11 +1,9 @@
 // backend/internal/adapters/out/firestore/payoutAccount_repository_fs.go
-
 package firestore
 
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -23,16 +21,14 @@ const payoutAccountsCollection = "payoutAccounts"
 //   - collection: payoutAccounts
 //   - document ID: UserID
 //   - one User has at most one PayoutAccount
-//   - ProviderAccountID is persisted for backend provider operations
-//   - full bank account numbers are never persisted
-//   - only BankLast4 is persisted as an account-number fragment
+//   - plaintext bank account numbers are never persisted
+//   - AccountNumberCiphertext contains only the encrypted account number
+//   - BankLast4 is persisted separately for display
 type PayoutAccountRepositoryFS struct {
 	Client *firestore.Client
 }
 
-func NewPayoutAccountRepositoryFS(
-	client *firestore.Client,
-) *PayoutAccountRepositoryFS {
+func NewPayoutAccountRepositoryFS(client *firestore.Client) *PayoutAccountRepositoryFS {
 	return &PayoutAccountRepositoryFS{
 		Client: client,
 	}
@@ -41,9 +37,7 @@ func NewPayoutAccountRepositoryFS(
 // Compile-time interface check.
 var _ payoutdom.Repository = (*PayoutAccountRepositoryFS)(nil)
 
-func (r *PayoutAccountRepositoryFS) doc(
-	userID string,
-) *firestore.DocumentRef {
+func (r *PayoutAccountRepositoryFS) doc(userID string) *firestore.DocumentRef {
 	return r.Client.
 		Collection(payoutAccountsCollection).
 		Doc(userID)
@@ -58,8 +52,6 @@ func (r *PayoutAccountRepositoryFS) GetByUserID(
 		return payoutdom.PayoutAccount{},
 			errors.New("payoutAccount: repository is nil")
 	}
-
-	userID = strings.TrimSpace(userID)
 	if userID == "" {
 		return payoutdom.PayoutAccount{},
 			payoutdom.ErrInvalidUserID
@@ -80,14 +72,13 @@ func (r *PayoutAccountRepositoryFS) GetByUserID(
 		return payoutdom.PayoutAccount{}, err
 	}
 
-	normalizePayoutAccount(&account)
+	normalizePayoutAccountTimestamps(&account)
 
-	// document ID and persisted UserID must always identify the same owner.
+	// Document ID and persisted UserID must always identify the same owner.
 	if account.UserID != userID {
 		return payoutdom.PayoutAccount{},
 			payoutdom.ErrInvalidUserID
 	}
-
 	if err := account.Validate(); err != nil {
 		return payoutdom.PayoutAccount{}, err
 	}
@@ -100,8 +91,9 @@ func (r *PayoutAccountRepositoryFS) GetByUserID(
 // payoutAccounts/{UserID} is created atomically. If the document already
 // exists, ErrConflict is returned.
 //
-// Full bank account numbers are never accepted by PayoutAccount and therefore
-// cannot be persisted through this repository.
+// AccountNumberCiphertext must already contain the encrypted bank account
+// number. This repository must never receive or persist a plaintext account
+// number.
 func (r *PayoutAccountRepositoryFS) Create(
 	ctx context.Context,
 	account payoutdom.PayoutAccount,
@@ -114,7 +106,7 @@ func (r *PayoutAccountRepositoryFS) Create(
 	// Firestore Timestamp is persisted at microsecond precision.
 	// Normalize before validation and persistence so the value returned from
 	// Create is identical to the value that will be read back from Firestore.
-	normalizePayoutAccount(&account)
+	normalizePayoutAccountTimestamps(&account)
 
 	if err := account.Validate(); err != nil {
 		return payoutdom.PayoutAccount{}, err
@@ -142,8 +134,8 @@ func (r *PayoutAccountRepositoryFS) Create(
 //   - UserID cannot change
 //   - CreatedAt cannot change
 //
-// Provider, ProviderAccountID and bank-account snapshot fields may change when
-// the user registers or replaces a payout destination.
+// Bank-account destination fields, including the encrypted account number, may
+// change when the user replaces the registered payout destination.
 func (r *PayoutAccountRepositoryFS) Update(
 	ctx context.Context,
 	account payoutdom.PayoutAccount,
@@ -153,7 +145,7 @@ func (r *PayoutAccountRepositoryFS) Update(
 			errors.New("payoutAccount: repository is nil")
 	}
 
-	normalizePayoutAccount(&account)
+	normalizePayoutAccountTimestamps(&account)
 
 	if err := account.Validate(); err != nil {
 		return payoutdom.PayoutAccount{}, err
@@ -181,9 +173,9 @@ func (r *PayoutAccountRepositoryFS) Update(
 				return err
 			}
 
-			// Normalize both the persisted state and the incoming state to the
-			// same Firestore-compatible timestamp precision before comparison.
-			normalizePayoutAccount(&current)
+			// Normalize both persisted and incoming timestamps to the same
+			// Firestore-compatible precision before comparison.
+			normalizePayoutAccountTimestamps(&current)
 
 			if current.UserID != account.UserID {
 				return payoutdom.ErrInvalidUserID
@@ -204,22 +196,13 @@ func (r *PayoutAccountRepositoryFS) Update(
 	return account, nil
 }
 
-func normalizePayoutAccount(
+func normalizePayoutAccountTimestamps(
 	account *payoutdom.PayoutAccount,
 ) {
 	if account == nil {
 		return
 	}
 
-	account.UserID = strings.TrimSpace(account.UserID)
-	account.Provider = strings.TrimSpace(account.Provider)
-	account.ProviderAccountID = strings.TrimSpace(account.ProviderAccountID)
-	account.BankCode = strings.TrimSpace(account.BankCode)
-	account.BankName = strings.TrimSpace(account.BankName)
-	account.BranchCode = strings.TrimSpace(account.BranchCode)
-	account.BranchName = strings.TrimSpace(account.BranchName)
-	account.BankLast4 = strings.TrimSpace(account.BankLast4)
-	account.AccountHolderName = strings.TrimSpace(account.AccountHolderName)
 	account.CreatedAt = normalizePayoutAccountTimestamp(account.CreatedAt)
 	account.UpdatedAt = normalizePayoutAccountTimestamp(account.UpdatedAt)
 }
