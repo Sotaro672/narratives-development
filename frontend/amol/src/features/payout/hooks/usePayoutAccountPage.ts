@@ -59,10 +59,22 @@ export function usePayoutAccountPage() {
 
     setErrorMessage("");
 
-    navigate("/settings/payout-account/bank", {
-      state: location.state,
-    });
-  }, [auth, location.state, navigate]);
+    const requiresOnboarding =
+      payoutAccount !== null &&
+      payoutAccount.status !== "unregistered" &&
+      (payoutAccount.status === "pending" ||
+        payoutAccount.status === "restricted" ||
+        (payoutAccount.status === "registered" && !payoutAccount.payoutReady));
+
+    navigate(
+      requiresOnboarding
+        ? "/settings/payout-account/onboarding"
+        : "/settings/payout-account/bank",
+      {
+        state: location.state,
+      },
+    );
+  }, [auth, location.state, navigate, payoutAccount]);
 
   const statusLabel = useMemo(() => {
     if (isLoading) {

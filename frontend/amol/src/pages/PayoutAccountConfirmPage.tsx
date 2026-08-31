@@ -130,14 +130,23 @@ export default function PayoutAccountConfirmPage() {
 
     try {
       const payoutAccount = await submitPayoutAccountRegistration(draft);
-
       resetDraft();
 
-      if (
-        returnAfterRegistration &&
+      const payoutReady =
         payoutAccount.status === "registered" &&
-        payoutAccount.payoutReady
-      ) {
+        payoutAccount.payoutReady;
+
+      if (!payoutReady) {
+        navigate("/settings/payout-account/onboarding", {
+          replace: true,
+          state: returnAfterRegistration
+            ? { returnAfterRegistration }
+            : undefined,
+        });
+        return;
+      }
+
+      if (returnAfterRegistration) {
         navigate(returnAfterRegistration.pathname, {
           replace: true,
           state: returnAfterRegistration.state,
