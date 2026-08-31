@@ -1,8 +1,6 @@
 // backend/internal/domain/order/validation.go
 package order
 
-import "strings"
-
 // ========================================
 // Order validation
 // ========================================
@@ -16,46 +14,30 @@ func (o Order) Validate() error {
 	if o.ID == "" {
 		return ErrInvalidID
 	}
-
 	if o.UserID == "" {
 		return ErrInvalidUserID
 	}
-
 	if o.AvatarID == "" {
 		return ErrInvalidAvatarID
 	}
-
 	if o.CartID == "" {
 		return ErrInvalidCartID
 	}
-
-	if err := validateShippingSnapshot(
-		o.ShippingSnapshot,
-	); err != nil {
+	if err := validateShippingSnapshot(o.ShippingSnapshot); err != nil {
 		return err
 	}
-
-	if err :=
-		validateShippingQuoteSnapshot(
-			o.ShippingQuoteSnapshot,
-		); err != nil {
+	if err := validateShippingQuoteSnapshot(o.ShippingQuoteSnapshot); err != nil {
 		return err
 	}
-
-	if err := validatePaymentMethodSnapshot(
-		o.PaymentMethodSnapshot,
-	); err != nil {
+	if err := validatePaymentMethodSnapshot(o.PaymentMethodSnapshot); err != nil {
 		return err
 	}
-
 	if err := validateItems(o.Items); err != nil {
 		return err
 	}
-
 	if o.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
-
 	return nil
 }
 
@@ -63,118 +45,83 @@ func (o Order) Validate() error {
 // Shipping validation
 // ========================================
 
-func validateShippingSnapshot(
-	s ShippingSnapshot,
-) error {
+func validateShippingSnapshot(s ShippingSnapshot) error {
 	if s.State == "" {
 		return ErrInvalidShippingSnapshot
 	}
-
 	if s.City == "" {
 		return ErrInvalidShippingSnapshot
 	}
-
 	if s.Street == "" {
 		return ErrInvalidShippingSnapshot
 	}
-
 	if s.Country == "" {
 		return ErrInvalidShippingSnapshot
 	}
-
 	return nil
 }
 
-func validateShippingQuoteSnapshot(
-	s ShippingQuoteSnapshot,
-) error {
+func validateShippingQuoteSnapshot(s ShippingQuoteSnapshot) error {
 	if len(s.Items) == 0 {
 		return ErrInvalidShippingQuote
 	}
-
 	if s.Amount < 0 {
 		return ErrInvalidShippingQuote
 	}
-
-	if s.Currency !=
-		ShippingQuoteCurrencyJPY {
+	if s.Currency != ShippingQuoteCurrencyJPY {
 		return ErrInvalidShippingQuote
 	}
 
-	maxInt :=
-		int(^uint(0) >> 1)
-
+	maxInt := int(^uint(0) >> 1)
 	total := 0
 
 	for _, item := range s.Items {
-		if err :=
-			validateShippingQuoteItemSnapshot(
-				item,
-			); err != nil {
+		if err := validateShippingQuoteItemSnapshot(item); err != nil {
 			return err
 		}
-
-		if total >
-			maxInt-item.Amount {
+		if total > maxInt-item.Amount {
 			return ErrInvalidShippingQuote
 		}
-
-		total +=
-			item.Amount
+		total += item.Amount
 	}
 
 	if total != s.Amount {
 		return ErrInvalidShippingQuote
 	}
-
 	return nil
 }
 
-func validateShippingQuoteItemSnapshot(
-	item ShippingQuoteItemSnapshot,
-) error {
+func validateShippingQuoteItemSnapshot(item ShippingQuoteItemSnapshot) error {
 	switch item.Type {
 	case "", OrderItemTypeList:
 		return validateListShippingQuoteItemSnapshot(item)
-
 	case OrderItemTypeResale:
 		return validateResaleShippingQuoteItemSnapshot(item)
-
 	default:
 		return ErrInvalidShippingQuoteItem
 	}
 }
 
-func validateListShippingQuoteItemSnapshot(
-	item ShippingQuoteItemSnapshot,
-) error {
+func validateListShippingQuoteItemSnapshot(item ShippingQuoteItemSnapshot) error {
 	if item.ListID == "" {
 		return ErrInvalidShippingQuoteItem
 	}
-
 	if item.InventoryID == "" {
 		return ErrInvalidShippingQuoteItem
 	}
-
 	if item.ModelID == "" {
 		return ErrInvalidShippingQuoteItem
 	}
-
 	if item.ResaleID != "" {
 		return ErrInvalidShippingQuoteItem
 	}
-
 	if item.OriginShippingAddressID == "" {
 		return ErrInvalidShippingQuoteItem
 	}
-
 	if item.DestinationShippingAddressID == "" {
 		return ErrInvalidShippingQuoteItem
 	}
-
-	if !isValidShippingQuoteCarrier(
-		item.Carrier,
-	) {
+	if !isValidShippingQuoteCarrier(item.Carrier) {
 		return ErrInvalidShippingQuoteItem
 	}
 
@@ -182,7 +129,6 @@ func validateListShippingQuoteItemSnapshot(
 		if item.TransportationID == "" {
 			return ErrInvalidShippingQuoteItem
 		}
-
 		if item.Size != 0 {
 			return ErrInvalidShippingQuoteItem
 		}
@@ -195,98 +141,62 @@ func validateListShippingQuoteItemSnapshot(
 	return validateShippingQuoteAmountSnapshot(item)
 }
 
-func validateResaleShippingQuoteItemSnapshot(
-	item ShippingQuoteItemSnapshot,
-) error {
+func validateResaleShippingQuoteItemSnapshot(item ShippingQuoteItemSnapshot) error {
 	if item.ResaleID == "" {
 		return ErrInvalidShippingQuoteItem
 	}
-
-	if item.ListID != "" ||
-		item.InventoryID != "" ||
-		item.ModelID != "" {
+	if item.ListID != "" || item.InventoryID != "" || item.ModelID != "" {
 		return ErrInvalidShippingQuoteItem
 	}
-
 	if item.OriginShippingAddressID != "" {
 		return ErrInvalidShippingQuoteItem
 	}
-
 	if item.DestinationShippingAddressID == "" {
 		return ErrInvalidShippingQuoteItem
 	}
-
-	if item.Carrier != "" ||
-		item.TransportationID != "" ||
-		item.Size != 0 {
+	if item.Carrier != "" || item.TransportationID != "" || item.Size != 0 {
 		return ErrInvalidShippingQuoteItem
 	}
-
 	if item.Qty != 1 {
 		return ErrInvalidShippingQuoteItem
 	}
-
-	if item.UnitAmount != 0 ||
-		item.Amount != 0 {
+	if item.UnitAmount != 0 || item.Amount != 0 {
 		return ErrInvalidShippingQuoteItem
 	}
-
-	if item.Currency !=
-		ShippingQuoteCurrencyJPY {
+	if item.Currency != ShippingQuoteCurrencyJPY {
 		return ErrInvalidShippingQuoteItem
 	}
-
 	return nil
 }
 
-func validateShippingQuoteAmountSnapshot(
-	item ShippingQuoteItemSnapshot,
-) error {
+func validateShippingQuoteAmountSnapshot(item ShippingQuoteItemSnapshot) error {
 	if item.Qty <= 0 {
 		return ErrInvalidShippingQuoteItem
 	}
-
 	if item.UnitAmount < 0 {
 		return ErrInvalidShippingQuoteItem
 	}
-
 	if item.Amount < 0 {
 		return ErrInvalidShippingQuoteItem
 	}
-
-	if item.Currency !=
-		ShippingQuoteCurrencyJPY {
+	if item.Currency != ShippingQuoteCurrencyJPY {
 		return ErrInvalidShippingQuoteItem
 	}
 
-	maxInt :=
-		int(^uint(0) >> 1)
-
-	if item.UnitAmount > 0 &&
-		item.Qty >
-			maxInt/item.UnitAmount {
+	maxInt := int(^uint(0) >> 1)
+	if item.UnitAmount > 0 && item.Qty > maxInt/item.UnitAmount {
 		return ErrInvalidShippingQuoteItem
 	}
-
-	if item.UnitAmount*
-		item.Qty !=
-		item.Amount {
+	if item.UnitAmount*item.Qty != item.Amount {
 		return ErrInvalidShippingQuoteItem
 	}
-
 	return nil
 }
 
-func isValidShippingQuoteCarrier(
-	carrier string,
-) bool {
+func isValidShippingQuoteCarrier(carrier string) bool {
 	switch carrier {
-	case "yamato",
-		"sagawa",
-		"post",
-		"custom":
+	case "yamato", "sagawa", "post", "custom":
 		return true
-
 	default:
 		return false
 	}
@@ -296,41 +206,31 @@ func isValidShippingQuoteCarrier(
 // Payment method validation
 // ========================================
 
-func validatePaymentMethodSnapshot(
-	p PaymentMethodSnapshot,
-) error {
+func validatePaymentMethodSnapshot(p PaymentMethodSnapshot) error {
 	if p.PaymentMethodID == "" {
 		return ErrInvalidPaymentMethod
 	}
-
 	if p.CustomerID == "" {
 		return ErrInvalidPaymentMethod
 	}
-
 	if p.StripePaymentMethodID == "" {
 		return ErrInvalidPaymentMethod
 	}
-
 	if p.Brand == "" {
 		return ErrInvalidPaymentMethod
 	}
-
 	if p.Last4 == "" {
 		return ErrInvalidPaymentMethod
 	}
-
 	if p.ExpMonth < 1 || p.ExpMonth > 12 {
 		return ErrInvalidPaymentMethod
 	}
-
 	if p.ExpYear < 2000 || p.ExpYear > 9999 {
 		return ErrInvalidPaymentMethod
 	}
-
 	if p.CardholderName == "" {
 		return ErrInvalidPaymentMethod
 	}
-
 	return nil
 }
 
@@ -342,43 +242,30 @@ func validateItems(items []OrderItemSnapshot) error {
 	if len(items) < MinItemsRequired {
 		return ErrInvalidItems
 	}
-
 	for _, item := range items {
 		if err := validateItemSnapshot(item); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
-func validateItemSnapshot(
-	item OrderItemSnapshot,
-) error {
-	if err :=
-		validateProductBlueprintCategorySnapshot(
-			item,
-		); err != nil {
+func validateItemSnapshot(item OrderItemSnapshot) error {
+	if err := validateProductBlueprintCategorySnapshot(item); err != nil {
 		return err
 	}
 
 	switch item.Type {
 	case OrderItemTypeList:
-		if err := validateListSellerSnapshot(
-			item.SellerSnapshot,
-		); err != nil {
+		if err := validateListSellerSnapshot(item.SellerSnapshot); err != nil {
 			return err
 		}
-
 		return validateListItemSnapshot(item)
 
 	case OrderItemTypeResale:
-		if err := validateResaleSellerSnapshot(
-			item.SellerSnapshot,
-		); err != nil {
+		if err := validateResaleSellerSnapshot(item.SellerSnapshot); err != nil {
 			return err
 		}
-
 		return validateResaleItemSnapshot(item)
 
 	default:
@@ -390,65 +277,36 @@ func validateItemSnapshot(
 // Seller snapshot validation
 // ========================================
 
-func validateListSellerSnapshot(
-	seller SellerSnapshot,
-) error {
-	if seller.BrandID == "" ||
-		seller.CompanyID == "" ||
-		seller.AccountID == "" {
+func validateListSellerSnapshot(seller SellerSnapshot) error {
+	if seller.BrandID == "" || seller.CompanyID == "" || seller.AccountID == "" {
 		return ErrInvalidSellerSnapshot
 	}
-
-	if seller.AvatarID != "" ||
-		seller.UserID != "" ||
-		seller.PayoutAccountID != "" {
+	if seller.AvatarID != "" || seller.UserID != "" || seller.PayoutAccountID != "" {
 		return ErrInvalidSellerSnapshot
 	}
-
-	return validateSellerStripeAccountID(
-		seller.StripeAccountID,
-	)
+	return validateListSellerStripeAccountID(seller.StripeAccountID)
 }
 
-func validateResaleSellerSnapshot(
-	seller SellerSnapshot,
-) error {
-	if seller.AvatarID == "" ||
-		seller.UserID == "" ||
-		seller.PayoutAccountID == "" {
+func validateResaleSellerSnapshot(seller SellerSnapshot) error {
+	if seller.AvatarID == "" || seller.UserID == "" || seller.PayoutAccountID == "" {
 		return ErrInvalidSellerSnapshot
 	}
-
 	if seller.PayoutAccountID != seller.UserID {
 		return ErrInvalidSellerSnapshot
 	}
-
-	if seller.BrandID != "" ||
-		seller.CompanyID != "" ||
-		seller.AccountID != "" {
+	if seller.BrandID != "" || seller.CompanyID != "" || seller.AccountID != "" {
 		return ErrInvalidSellerSnapshot
 	}
-
-	return validateSellerStripeAccountID(
-		seller.StripeAccountID,
-	)
+	if seller.StripeAccountID != "" {
+		return ErrInvalidSellerSnapshot
+	}
+	return nil
 }
 
-func validateSellerStripeAccountID(
-	stripeAccountID string,
-) error {
-	stripeAccountID = strings.TrimSpace(
-		stripeAccountID,
-	)
-
-	if stripeAccountID == "" ||
-		!strings.HasPrefix(
-			stripeAccountID,
-			"acct_",
-		) {
+func validateListSellerStripeAccountID(stripeAccountID string) error {
+	if len(stripeAccountID) < len("acct_") || stripeAccountID[:len("acct_")] != "acct_" {
 		return ErrInvalidSellerSnapshot
 	}
-
 	return nil
 }
 
@@ -456,15 +314,10 @@ func validateSellerStripeAccountID(
 // Product / item validation
 // ========================================
 
-func validateProductBlueprintCategorySnapshot(
-	item OrderItemSnapshot,
-) error {
-	if len(
-		item.ProductBlueprintCategoryPath,
-	) == 0 {
+func validateProductBlueprintCategorySnapshot(item OrderItemSnapshot) error {
+	if len(item.ProductBlueprintCategoryPath) == 0 {
 		return ErrInvalidItemSnapshot
 	}
-
 	for _, segment := range item.ProductBlueprintCategoryPath {
 		if segment == "" {
 			return ErrInvalidItemSnapshot
@@ -472,75 +325,56 @@ func validateProductBlueprintCategorySnapshot(
 	}
 
 	switch item.ConsumptionTaxRate {
-	case ConsumptionTaxRateReduced,
-		ConsumptionTaxRateStandard:
+	case ConsumptionTaxRateReduced, ConsumptionTaxRateStandard:
 		return nil
-
 	default:
 		return ErrInvalidItemSnapshot
 	}
 }
 
-func validateListItemSnapshot(
-	item OrderItemSnapshot,
-) error {
+func validateListItemSnapshot(item OrderItemSnapshot) error {
 	if item.ModelID == "" {
 		return ErrInvalidItemSnapshot
 	}
-
 	if item.InventoryID == "" {
 		return ErrInvalidItemSnapshot
 	}
-
 	if item.ListID == "" {
 		return ErrInvalidItemSnapshot
 	}
-
 	if item.ProductBlueprintID == "" {
 		return ErrInvalidItemSnapshot
 	}
-
 	if item.TokenBlueprintID == "" {
 		return ErrInvalidItemSnapshot
 	}
 
 	// Resale-only identifiers must not be mixed into a list item.
-	if item.ResaleID != "" ||
-		item.ProductID != "" ||
-		item.BrandID != "" {
+	if item.ResaleID != "" || item.ProductID != "" || item.BrandID != "" {
 		return ErrInvalidItemSnapshot
 	}
-
 	if item.Qty <= 0 {
 		return ErrInvalidItemSnapshot
 	}
-
 	if item.Price < 0 {
 		return ErrInvalidItemSnapshot
 	}
-
 	return validateItemTransferState(item)
 }
 
-func validateResaleItemSnapshot(
-	item OrderItemSnapshot,
-) error {
+func validateResaleItemSnapshot(item OrderItemSnapshot) error {
 	if item.ResaleID == "" {
 		return ErrInvalidItemSnapshot
 	}
-
 	if item.ProductID == "" {
 		return ErrInvalidItemSnapshot
 	}
-
 	if item.ProductBlueprintID == "" {
 		return ErrInvalidItemSnapshot
 	}
-
 	if item.TokenBlueprintID == "" {
 		return ErrInvalidItemSnapshot
 	}
-
 	if item.BrandID == "" {
 		return ErrInvalidItemSnapshot
 	}
@@ -548,20 +382,15 @@ func validateResaleItemSnapshot(
 	// BrandID identifies the product brand. It must not be treated as the
 	// consumer resale seller or compared with SellerSnapshot.BrandID.
 	// List-only identifiers must not be mixed into a resale item.
-	if item.ModelID != "" ||
-		item.InventoryID != "" ||
-		item.ListID != "" {
+	if item.ModelID != "" || item.InventoryID != "" || item.ListID != "" {
 		return ErrInvalidItemSnapshot
 	}
-
 	if item.Qty != 1 {
 		return ErrInvalidItemSnapshot
 	}
-
 	if item.Price < 0 {
 		return ErrInvalidItemSnapshot
 	}
-
 	return validateItemTransferState(item)
 }
 
@@ -569,9 +398,7 @@ func validateResaleItemSnapshot(
 // Item lifecycle validation
 // ========================================
 
-func validateItemTransferState(
-	item OrderItemSnapshot,
-) error {
+func validateItemTransferState(item OrderItemSnapshot) error {
 	if item.IsCancelled {
 		if item.IsDispatched ||
 			item.IsReturnRequested ||
@@ -586,8 +413,7 @@ func validateItemTransferState(
 		}
 	}
 
-	if item.TokenTransferVerifiedAt != nil &&
-		item.TokenTransferVerifiedAt.IsZero() {
+	if item.TokenTransferVerifiedAt != nil && item.TokenTransferVerifiedAt.IsZero() {
 		return ErrInvalidItemSnapshot
 	}
 
@@ -614,9 +440,7 @@ func validateItemTransferState(
 	if item.IsReturnCompleted {
 		if item.ReturnCompletedAt == nil ||
 			item.ReturnCompletedAt.IsZero() ||
-			item.ReturnCompletedAt.Before(
-				item.ReturnRequestedAt.UTC(),
-			) {
+			item.ReturnCompletedAt.Before(item.ReturnRequestedAt.UTC()) {
 			return ErrInvalidItemSnapshot
 		}
 	} else if item.ReturnCompletedAt != nil {
@@ -631,30 +455,22 @@ func validateItemTransferState(
 			return ErrInvalidItemSnapshot
 		}
 
-		if item.TokenTransferVerifiedAt.After(
-			*item.TransferredAt,
-		) {
+		if item.TokenTransferVerifiedAt.After(*item.TransferredAt) {
 			return ErrInvalidItemSnapshot
 		}
-
 		return nil
 	}
 
 	if item.TransferredAt != nil {
 		return ErrInvalidItemSnapshot
 	}
-
 	return nil
 }
 
-func isValidReturnRequestKind(
-	kind ReturnRequestKind,
-) bool {
+func isValidReturnRequestKind(kind ReturnRequestKind) bool {
 	switch kind {
-	case ReturnRequestKindUnopened,
-		ReturnRequestKindOpened:
+	case ReturnRequestKindUnopened, ReturnRequestKindOpened:
 		return true
-
 	default:
 		return false
 	}

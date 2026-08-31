@@ -15,67 +15,33 @@ import (
 // ============================================================
 
 var (
-	ErrCalculatorPlatformFeeMissing = errors.New(
-		"settlement: platform fee calculator is not configured",
-	)
-	ErrCalculatorInvalidOrder = errors.New(
-		"settlement: invalid order",
-	)
-	ErrCalculatorInvalidPayment = errors.New(
-		"settlement: invalid payment",
-	)
-	ErrCalculatorPaymentOrderMismatch = errors.New(
-		"settlement: payment does not belong to order",
-	)
-	ErrCalculatorPaymentAmountMismatch = errors.New(
-		"settlement: payment amount does not match order amount",
-	)
-	ErrCalculatorUnsupportedOrderItem = errors.New(
-		"settlement: unsupported order item",
-	)
-	ErrCalculatorInvalidSellerSnapshot = errors.New(
-		"settlement: invalid seller snapshot",
-	)
-	ErrCalculatorSellerMismatch = errors.New(
-		"settlement: seller snapshot mismatch",
-	)
-	ErrCalculatorInvalidShippingQuote = errors.New(
-		"settlement: invalid shipping quote",
-	)
-	ErrCalculatorShippingQuoteMismatch = errors.New(
-		"settlement: shipping quote does not match order items",
-	)
-	ErrCalculatorInvalidTaxRate = errors.New(
-		"settlement: invalid consumption tax rate",
-	)
-	ErrCalculatorAmountOverflow = errors.New(
-		"settlement: amount overflow",
-	)
-	ErrCalculatorInvalidPlatformFee = errors.New(
-		"settlement: invalid platform fee",
-	)
-	ErrCalculatorAllocationEmpty = errors.New(
-		"settlement: allocation is empty",
-	)
-	ErrCalculatorAllocationAmountMismatch = errors.New(
-		"settlement: allocation total does not match payment amount",
-	)
-	ErrInvalidPlatformFeeRate = errors.New(
-		"settlement: invalid platform fee rate",
-	)
-	ErrInvalidPlatformFeeBase = errors.New(
-		"settlement: invalid platform fee base",
-	)
+	ErrCalculatorPlatformFeeMissing       = errors.New("settlement: platform fee calculator is not configured")
+	ErrCalculatorInvalidOrder             = errors.New("settlement: invalid order")
+	ErrCalculatorInvalidPayment           = errors.New("settlement: invalid payment")
+	ErrCalculatorPaymentOrderMismatch     = errors.New("settlement: payment does not belong to order")
+	ErrCalculatorPaymentAmountMismatch    = errors.New("settlement: payment amount does not match order amount")
+	ErrCalculatorUnsupportedOrderItem     = errors.New("settlement: unsupported order item")
+	ErrCalculatorInvalidSellerSnapshot    = errors.New("settlement: invalid seller snapshot")
+	ErrCalculatorSellerMismatch           = errors.New("settlement: seller snapshot mismatch")
+	ErrCalculatorInvalidShippingQuote     = errors.New("settlement: invalid shipping quote")
+	ErrCalculatorShippingQuoteMismatch    = errors.New("settlement: shipping quote does not match order items")
+	ErrCalculatorInvalidTaxRate           = errors.New("settlement: invalid consumption tax rate")
+	ErrCalculatorAmountOverflow           = errors.New("settlement: amount overflow")
+	ErrCalculatorInvalidPlatformFee       = errors.New("settlement: invalid platform fee")
+	ErrCalculatorAllocationEmpty          = errors.New("settlement: allocation is empty")
+	ErrCalculatorAllocationAmountMismatch = errors.New("settlement: allocation total does not match payment amount")
+	ErrInvalidPlatformFeeRate             = errors.New("settlement: invalid platform fee rate")
+	ErrInvalidPlatformFeeBase             = errors.New("settlement: invalid platform fee base")
 )
 
 // ============================================================
 // Allocation
 // ============================================================
 
-// Allocation represents the amount attributable to one seller payout identity.
+// Allocation represents the amount attributable to one primary-sale Stripe
+// Settlement identity.
 //
 // Primary List sales are aggregated by AccountID.
-// Resale transactions are aggregated by PayoutAccountID.
 //
 // GrossAmount:
 //
@@ -83,9 +49,6 @@ var (
 //	+ MerchandiseTaxAmount
 //	+ ShippingAmount
 //	+ ShippingTaxAmount
-//
-// Resale merchandise is included in MerchandiseAmount but contributes neither
-// MerchandiseTaxAmount nor ShippingAmount.
 //
 // TransferAmount:
 //
@@ -104,6 +67,59 @@ type Allocation struct {
 	TransferAmount    int
 }
 
+// ResaleSellerIdentity identifies the consumer resale seller whose proceeds are
+// represented by a SalesReceivable rather than a Stripe Settlement.
+//
+// No StripeAccountID exists here.
+type ResaleSellerIdentity struct {
+	AvatarID        string
+	UserID          string
+	PayoutAccountID string
+}
+
+func (s ResaleSellerIdentity) Validate() error {
+	if s.AvatarID == "" || s.UserID == "" || s.PayoutAccountID == "" {
+		return ErrCalculatorInvalidSellerSnapshot
+	}
+	if s.PayoutAccountID != s.UserID {
+		return ErrCalculatorInvalidSellerSnapshot
+	}
+	return nil
+}
+
+// ReceivableAllocation represents resale proceeds attributable to one consumer
+// seller.
+//
+// Resale transactions are aggregated by PayoutAccountID.
+//
+// Resale merchandise is non-taxable and resale shipping is zero.
+//
+// ReceivableAmount:
+//
+//	GrossAmount - PlatformFeeAmount
+type ReceivableAllocation struct {
+	Seller ResaleSellerIdentity
+
+	MerchandiseAmount int
+
+	GrossAmount       int
+	PlatformFeeAmount int
+	ReceivableAmount  int
+}
+
+// Calculation contains both financial allocation types derived from one Order
+// and Payment.
+//
+// Settlements contains primary List-sale Stripe Connect allocations only.
+//
+// Receivables contains consumer resale sales-receivable allocations only.
+//
+// The combined GrossAmount of both slices must equal Payment.Amount.
+type Calculation struct {
+	Settlements []Allocation
+	Receivables []ReceivableAllocation
+}
+
 // ============================================================
 // Platform fee
 // ============================================================
@@ -111,24 +127,18 @@ type Allocation struct {
 // PlatformFeeInput contains the seller-level amount breakdown used to determine
 // the AMOL platform fee.
 //
-// Seller may represent either a primary-sale Account or resale Avatar payout
-// identity.
+// Exactly one seller identity must be present:
 //
-// The Settlement calculator intentionally does not hard-code a fee rate or fee
-// base.
+//   - Seller for a primary List sale
+//   - ResaleSeller for a consumer resale
 //
-// For example:
+// Seller is retained for compatibility with existing primary-sale and refund
+// calculation code.
 //
-//   - AMOL marketplace sale:
-//     a percentage fee may apply
-//
-//   - external/self EC connection:
-//     platform fee may be zero
-//
-// The application layer should select the appropriate PlatformFeeCalculator
-// for the applicable sales policy.
+// The calculator intentionally does not hard-code a fee rate or fee base.
 type PlatformFeeInput struct {
-	Seller SellerIdentity
+	Seller       SellerIdentity
+	ResaleSeller ResaleSellerIdentity
 
 	MerchandiseAmount    int
 	MerchandiseTaxAmount int
@@ -146,29 +156,25 @@ type PlatformFeeCalculator interface {
 	) (int, error)
 }
 
-// PlatformFeeBase specifies the base used by
-// PercentagePlatformFeeCalculator.
+// PlatformFeeBase specifies the base used by PercentagePlatformFeeCalculator.
 type PlatformFeeBase string
 
 const (
-	// PlatformFeeBaseMerchandise applies the fee to the merchandise amount
-	// only. Resale merchandise is included in this base.
+	// PlatformFeeBaseMerchandise applies the fee to merchandise only.
 	PlatformFeeBaseMerchandise PlatformFeeBase = "merchandise"
 
-	// PlatformFeeBaseMerchandiseWithTax applies the fee to merchandise
-	// including merchandise consumption tax, but excludes shipping.
-	// Resale merchandise has no merchandise consumption tax.
+	// PlatformFeeBaseMerchandiseWithTax applies the fee to merchandise including
+	// merchandise consumption tax but excludes shipping.
 	PlatformFeeBaseMerchandiseWithTax PlatformFeeBase = "merchandise_with_tax"
 
-	// PlatformFeeBaseGross applies the fee to the complete seller-level gross
-	// amount including merchandise, tax, shipping, and shipping tax.
+	// PlatformFeeBaseGross applies the fee to the complete seller-level gross.
 	PlatformFeeBaseGross PlatformFeeBase = "gross"
 )
 
 // PercentagePlatformFeeCalculator provides a simple integer percentage policy.
 //
-// No default percentage is defined here. The caller must explicitly provide
-// the rate and fee base.
+// No default percentage is defined here. The caller must explicitly provide the
+// rate and fee base.
 type PercentagePlatformFeeCalculator struct {
 	rate int
 	base PlatformFeeBase
@@ -184,7 +190,6 @@ func NewPercentagePlatformFeeCalculator(
 	if !isValidPlatformFeeBase(base) {
 		return nil, ErrInvalidPlatformFeeBase
 	}
-
 	return &PercentagePlatformFeeCalculator{
 		rate: rate,
 		base: base,
@@ -204,8 +209,8 @@ func (c *PercentagePlatformFeeCalculator) CalculatePlatformFee(
 	if !isValidPlatformFeeBase(c.base) {
 		return 0, ErrInvalidPlatformFeeBase
 	}
-	if err := in.Seller.Validate(); err != nil {
-		return 0, ErrCalculatorInvalidSellerSnapshot
+	if err := validatePlatformFeeSeller(in); err != nil {
+		return 0, err
 	}
 
 	var baseAmount int
@@ -243,6 +248,43 @@ func (c *PercentagePlatformFeeCalculator) CalculatePlatformFee(
 	return product / 100, nil
 }
 
+func validatePlatformFeeSeller(in PlatformFeeInput) error {
+	hasSettlementSeller := !isZeroSellerIdentity(in.Seller)
+	hasResaleSeller := !isZeroResaleSellerIdentity(in.ResaleSeller)
+
+	if hasSettlementSeller == hasResaleSeller {
+		return ErrCalculatorInvalidSellerSnapshot
+	}
+
+	if hasSettlementSeller {
+		if err := in.Seller.Validate(); err != nil {
+			return ErrCalculatorInvalidSellerSnapshot
+		}
+		return nil
+	}
+
+	if err := in.ResaleSeller.Validate(); err != nil {
+		return ErrCalculatorInvalidSellerSnapshot
+	}
+	return nil
+}
+
+func isZeroSellerIdentity(s SellerIdentity) bool {
+	return s.Type == "" &&
+		s.CompanyID == "" &&
+		s.AccountID == "" &&
+		s.AvatarID == "" &&
+		s.UserID == "" &&
+		s.PayoutAccountID == "" &&
+		s.StripeAccountID == ""
+}
+
+func isZeroResaleSellerIdentity(s ResaleSellerIdentity) bool {
+	return s.AvatarID == "" &&
+		s.UserID == "" &&
+		s.PayoutAccountID == ""
+}
+
 func isValidPlatformFeeBase(base PlatformFeeBase) bool {
 	switch base {
 	case PlatformFeeBaseMerchandise,
@@ -258,28 +300,33 @@ func isValidPlatformFeeBase(base PlatformFeeBase) bool {
 // Calculator
 // ============================================================
 
-// Calculator calculates one Settlement Allocation per seller payout identity.
+// Calculator derives primary-sale Settlement allocations and resale
+// SalesReceivable allocations from one authoritative Order and Payment.
 //
-// Primary List sales use an Account seller identity and are aggregated by
-// AccountID. Resale transactions use an Avatar seller identity and are
-// aggregated by PayoutAccountID.
+// Primary List sales:
+//   - aggregated by AccountID
+//   - represented by Allocation
+//   - later persisted as Settlement
+//
+// Resale transactions:
+//   - aggregated by PayoutAccountID
+//   - represented by ReceivableAllocation
+//   - later persisted as SalesReceivable
 //
 // The calculator uses Order snapshots only. Current Brand, Account, Avatar, or
-// payout-account state is intentionally not resolved here because historical
-// Orders must continue to settle against their fixed SellerSnapshot.
+// payout-account state is intentionally not resolved here.
 //
 // Tax rounding follows the same order-level policy as
 // order.CalculatePaymentAmount:
 //
-// - reduced-rate List merchandise is aggregated at 8%
-// - standard-rate List merchandise and List shipping are aggregated at 10%
-// - resale merchandise is non-taxable
-// - resale shipping is zero
-// - integer division truncates fractions
+//   - reduced-rate List merchandise is aggregated at 8%
+//   - standard-rate List merchandise and List shipping are aggregated at 10%
+//   - resale merchandise is non-taxable
+//   - resale shipping is zero
+//   - integer division truncates fractions
 //
-// After the canonical tax amount is calculated, tax yen are distributed to
-// seller/component pairs using the largest-remainder method. Ties are resolved
-// by deterministic seller key and component kind.
+// Tax yen are distributed by the largest-remainder method. Ties are resolved by
+// deterministic seller key and component kind.
 type Calculator struct {
 	platformFeeCalculator PlatformFeeCalculator
 }
@@ -292,23 +339,58 @@ func NewCalculator(
 	}
 }
 
+// Calculate retains the existing SettlementCalculator contract.
+//
+// Only primary-sale Settlement allocations are returned.
+//
+// Call CalculateAll when resale SalesReceivable allocations are also required.
+//
+// The complete Order/Payment amount is still validated inside CalculateAll
+// before this method returns.
 func (c *Calculator) Calculate(
 	ctx context.Context,
 	order orderdom.Order,
 	payment paymentdom.Payment,
 ) ([]Allocation, error) {
+	result, err := c.CalculateAll(ctx, order, payment)
+	if err != nil {
+		return nil, err
+	}
+	return result.Settlements, nil
+}
+
+// CalculateReceivables returns only consumer resale receivable allocations.
+func (c *Calculator) CalculateReceivables(
+	ctx context.Context,
+	order orderdom.Order,
+	payment paymentdom.Payment,
+) ([]ReceivableAllocation, error) {
+	result, err := c.CalculateAll(ctx, order, payment)
+	if err != nil {
+		return nil, err
+	}
+	return result.Receivables, nil
+}
+
+// CalculateAll calculates both primary-sale Stripe Settlement allocations and
+// consumer resale SalesReceivable allocations.
+func (c *Calculator) CalculateAll(
+	ctx context.Context,
+	order orderdom.Order,
+	payment paymentdom.Payment,
+) (Calculation, error) {
 	if c == nil || c.platformFeeCalculator == nil {
-		return nil, ErrCalculatorPlatformFeeMissing
+		return Calculation{}, ErrCalculatorPlatformFeeMissing
 	}
 
 	if err := validateCalculatorSource(order, payment); err != nil {
-		return nil, err
+		return Calculation{}, err
 	}
 
 	builders, shippingBindings, resaleBindings, err :=
 		buildMerchandiseAllocations(order)
 	if err != nil {
-		return nil, err
+		return Calculation{}, err
 	}
 
 	if err := applyShippingAllocations(
@@ -317,44 +399,112 @@ func (c *Calculator) Calculate(
 		shippingBindings,
 		resaleBindings,
 	); err != nil {
-		return nil, err
+		return Calculation{}, err
 	}
 
 	if err := allocateConsumptionTax(builders); err != nil {
-		return nil, err
+		return Calculation{}, err
 	}
 
-	allocations, err := c.finalizeAllocations(ctx, builders)
+	result, err := c.finalizeAllocations(ctx, builders)
 	if err != nil {
-		return nil, err
+		return Calculation{}, err
 	}
 
-	if len(allocations) == 0 {
-		return nil, ErrCalculatorAllocationEmpty
+	if len(result.Settlements) == 0 && len(result.Receivables) == 0 {
+		return Calculation{}, ErrCalculatorAllocationEmpty
 	}
 
 	total := 0
 
-	for _, allocation := range allocations {
+	for _, allocation := range result.Settlements {
 		total, err = safeAddNonNegative(total, allocation.GrossAmount)
 		if err != nil {
-			return nil, err
+			return Calculation{}, err
+		}
+	}
+
+	for _, allocation := range result.Receivables {
+		total, err = safeAddNonNegative(total, allocation.GrossAmount)
+		if err != nil {
+			return Calculation{}, err
 		}
 	}
 
 	if total != payment.Amount {
-		return nil, ErrCalculatorAllocationAmountMismatch
+		return Calculation{}, ErrCalculatorAllocationAmountMismatch
 	}
 
-	return allocations, nil
+	return result, nil
 }
 
 // ============================================================
 // Internal allocation state
 // ============================================================
 
+type allocationSellerKind string
+
+const (
+	allocationSellerKindAccount allocationSellerKind = "account"
+	allocationSellerKindResale  allocationSellerKind = "resale"
+)
+
+type allocationSeller struct {
+	Kind allocationSellerKind
+
+	SettlementSeller SellerIdentity
+	ResaleSeller     ResaleSellerIdentity
+}
+
+func (s allocationSeller) Validate() error {
+	switch s.Kind {
+	case allocationSellerKindAccount:
+		if !isZeroResaleSellerIdentity(s.ResaleSeller) {
+			return ErrCalculatorInvalidSellerSnapshot
+		}
+		if err := s.SettlementSeller.Validate(); err != nil {
+			return ErrCalculatorInvalidSellerSnapshot
+		}
+		if s.SettlementSeller.Type != SellerTypeAccount {
+			return ErrCalculatorInvalidSellerSnapshot
+		}
+		return nil
+
+	case allocationSellerKindResale:
+		if !isZeroSellerIdentity(s.SettlementSeller) {
+			return ErrCalculatorInvalidSellerSnapshot
+		}
+		return s.ResaleSeller.Validate()
+
+	default:
+		return ErrCalculatorInvalidSellerSnapshot
+	}
+}
+
+func (s allocationSeller) Key() (string, error) {
+	if err := s.Validate(); err != nil {
+		return "", err
+	}
+
+	switch s.Kind {
+	case allocationSellerKindAccount:
+		key, err := s.SettlementSeller.Key()
+		if err != nil {
+			return "", ErrCalculatorInvalidSellerSnapshot
+		}
+		return string(allocationSellerKindAccount) + ":" + key, nil
+
+	case allocationSellerKindResale:
+		return string(allocationSellerKindResale) + ":" +
+			s.ResaleSeller.PayoutAccountID, nil
+
+	default:
+		return "", ErrCalculatorInvalidSellerSnapshot
+	}
+}
+
 type allocationBuilder struct {
-	Seller SellerIdentity
+	Seller allocationSeller
 
 	MerchandiseAmount8          int
 	MerchandiseAmount10         int
@@ -414,7 +564,12 @@ func buildMerchandiseAllocations(
 				return nil, nil, nil, err
 			}
 
-			key, err := calculatorSellerKey(seller)
+			allocationIdentity := allocationSeller{
+				Kind:             allocationSellerKindAccount,
+				SettlementSeller: seller,
+			}
+
+			key, err := allocationIdentity.Key()
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -422,7 +577,7 @@ func buildMerchandiseAllocations(
 			builder, err := getOrCreateAllocationBuilder(
 				builders,
 				key,
-				seller,
+				allocationIdentity,
 			)
 			if err != nil {
 				return nil, nil, nil, err
@@ -488,7 +643,12 @@ func buildMerchandiseAllocations(
 				return nil, nil, nil, err
 			}
 
-			key, err := calculatorSellerKey(seller)
+			allocationIdentity := allocationSeller{
+				Kind:         allocationSellerKindResale,
+				ResaleSeller: seller,
+			}
+
+			key, err := allocationIdentity.Key()
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -496,7 +656,7 @@ func buildMerchandiseAllocations(
 			builder, err := getOrCreateAllocationBuilder(
 				builders,
 				key,
-				seller,
+				allocationIdentity,
 			)
 			if err != nil {
 				return nil, nil, nil, err
@@ -557,54 +717,41 @@ func resolveListSellerIdentity(
 
 func resolveResaleSellerIdentity(
 	seller orderdom.SellerSnapshot,
-) (SellerIdentity, error) {
+) (ResaleSellerIdentity, error) {
 	if seller.AvatarID == "" ||
 		seller.UserID == "" ||
 		seller.PayoutAccountID == "" ||
 		seller.PayoutAccountID != seller.UserID ||
 		seller.BrandID != "" ||
 		seller.CompanyID != "" ||
-		seller.AccountID != "" {
-		return SellerIdentity{}, ErrCalculatorInvalidSellerSnapshot
+		seller.AccountID != "" ||
+		seller.StripeAccountID != "" {
+		return ResaleSellerIdentity{}, ErrCalculatorInvalidSellerSnapshot
 	}
 
-	resolved := SellerIdentity{
-		Type:            SellerTypeAvatar,
+	resolved := ResaleSellerIdentity{
 		AvatarID:        seller.AvatarID,
 		UserID:          seller.UserID,
 		PayoutAccountID: seller.PayoutAccountID,
-		StripeAccountID: seller.StripeAccountID,
 	}
 
 	if err := resolved.Validate(); err != nil {
-		return SellerIdentity{}, ErrCalculatorInvalidSellerSnapshot
+		return ResaleSellerIdentity{}, ErrCalculatorInvalidSellerSnapshot
 	}
 
 	return resolved, nil
 }
 
-func calculatorSellerKey(
-	seller SellerIdentity,
-) (string, error) {
-	if err := seller.Validate(); err != nil {
-		return "", ErrCalculatorInvalidSellerSnapshot
-	}
-
-	key, err := seller.Key()
-	if err != nil {
-		return "", ErrCalculatorInvalidSellerSnapshot
-	}
-
-	return string(seller.Type) + ":" + key, nil
-}
-
 func getOrCreateAllocationBuilder(
 	builders map[string]*allocationBuilder,
 	key string,
-	seller SellerIdentity,
+	seller allocationSeller,
 ) (*allocationBuilder, error) {
 	if key == "" {
 		return nil, ErrCalculatorInvalidSellerSnapshot
+	}
+	if err := seller.Validate(); err != nil {
+		return nil, err
 	}
 
 	builder, exists := builders[key]
@@ -682,6 +829,9 @@ func applyShippingAllocations(
 			if !exists || builder == nil {
 				return ErrCalculatorShippingQuoteMismatch
 			}
+			if builder.Seller.Kind != allocationSellerKindAccount {
+				return ErrCalculatorShippingQuoteMismatch
+			}
 
 			builder.ShippingAmount, err =
 				safeAddNonNegative(
@@ -731,7 +881,6 @@ func applyShippingAllocations(
 			if !exists || expectedQty != 1 {
 				return ErrCalculatorShippingQuoteMismatch
 			}
-
 			if quotedResales[item.ResaleID] != 0 {
 				return ErrCalculatorShippingQuoteMismatch
 			}
@@ -825,6 +974,10 @@ func allocateConsumptionTax(
 		}
 
 		if builder.ShippingAmount > 0 {
+			if builder.Seller.Kind != allocationSellerKindAccount {
+				return ErrCalculatorInvalidOrder
+			}
+
 			standardComponents = append(
 				standardComponents,
 				taxComponent{
@@ -1000,7 +1153,7 @@ func allocateTaxByRate(
 func (c *Calculator) finalizeAllocations(
 	ctx context.Context,
 	builders map[string]*allocationBuilder,
-) ([]Allocation, error) {
+) (Calculation, error) {
 	sellerKeys := make(
 		[]string,
 		0,
@@ -1013,19 +1166,18 @@ func (c *Calculator) finalizeAllocations(
 
 	sort.Strings(sellerKeys)
 
-	result := make(
-		[]Allocation,
-		0,
-		len(sellerKeys),
-	)
+	result := Calculation{
+		Settlements: make([]Allocation, 0),
+		Receivables: make([]ReceivableAllocation, 0),
+	}
 
 	for _, sellerKey := range sellerKeys {
 		builder := builders[sellerKey]
 		if builder == nil {
-			return nil, ErrCalculatorInvalidOrder
+			return Calculation{}, ErrCalculatorInvalidOrder
 		}
 		if err := builder.Seller.Validate(); err != nil {
-			return nil, ErrCalculatorInvalidSellerSnapshot
+			return Calculation{}, ErrCalculatorInvalidSellerSnapshot
 		}
 
 		taxableMerchandiseAmount, err :=
@@ -1034,7 +1186,7 @@ func (c *Calculator) finalizeAllocations(
 				builder.MerchandiseAmount10,
 			)
 		if err != nil {
-			return nil, err
+			return Calculation{}, err
 		}
 
 		merchandiseAmount, err :=
@@ -1043,7 +1195,7 @@ func (c *Calculator) finalizeAllocations(
 				builder.MerchandiseAmountNonTaxable,
 			)
 		if err != nil {
-			return nil, err
+			return Calculation{}, err
 		}
 
 		grossAmount, err :=
@@ -1052,7 +1204,7 @@ func (c *Calculator) finalizeAllocations(
 				builder.MerchandiseTaxAmount,
 			)
 		if err != nil {
-			return nil, err
+			return Calculation{}, err
 		}
 
 		grossAmount, err =
@@ -1061,7 +1213,7 @@ func (c *Calculator) finalizeAllocations(
 				builder.ShippingAmount,
 			)
 		if err != nil {
-			return nil, err
+			return Calculation{}, err
 		}
 
 		grossAmount, err =
@@ -1070,18 +1222,71 @@ func (c *Calculator) finalizeAllocations(
 				builder.ShippingTaxAmount,
 			)
 		if err != nil {
-			return nil, err
+			return Calculation{}, err
 		}
 
 		if grossAmount <= 0 {
-			return nil, ErrCalculatorAllocationEmpty
+			return Calculation{}, ErrCalculatorAllocationEmpty
+		}
+
+		platformFeeInput := PlatformFeeInput{
+			MerchandiseAmount:    merchandiseAmount,
+			MerchandiseTaxAmount: builder.MerchandiseTaxAmount,
+			ShippingAmount:       builder.ShippingAmount,
+			ShippingTaxAmount:    builder.ShippingTaxAmount,
+			GrossAmount:          grossAmount,
+		}
+
+		switch builder.Seller.Kind {
+		case allocationSellerKindAccount:
+			if builder.MerchandiseAmountNonTaxable != 0 {
+				return Calculation{}, ErrCalculatorInvalidOrder
+			}
+
+			platformFeeInput.Seller =
+				builder.Seller.SettlementSeller
+
+		case allocationSellerKindResale:
+			if builder.MerchandiseAmount8 != 0 ||
+				builder.MerchandiseAmount10 != 0 ||
+				builder.MerchandiseTaxAmount != 0 ||
+				builder.ShippingAmount != 0 ||
+				builder.ShippingTaxAmount != 0 {
+				return Calculation{}, ErrCalculatorInvalidOrder
+			}
+
+			platformFeeInput.ResaleSeller =
+				builder.Seller.ResaleSeller
+
+		default:
+			return Calculation{}, ErrCalculatorInvalidSellerSnapshot
 		}
 
 		platformFeeAmount, err :=
 			c.platformFeeCalculator.CalculatePlatformFee(
 				ctx,
-				PlatformFeeInput{
-					Seller: builder.Seller,
+				platformFeeInput,
+			)
+		if err != nil {
+			return Calculation{}, err
+		}
+
+		if platformFeeAmount < 0 ||
+			platformFeeAmount >= grossAmount {
+			return Calculation{}, ErrCalculatorInvalidPlatformFee
+		}
+
+		netAmount := grossAmount - platformFeeAmount
+		if netAmount <= 0 {
+			return Calculation{}, ErrCalculatorInvalidPlatformFee
+		}
+
+		switch builder.Seller.Kind {
+		case allocationSellerKindAccount:
+			result.Settlements = append(
+				result.Settlements,
+				Allocation{
+					Seller: builder.Seller.SettlementSeller,
 
 					MerchandiseAmount:    merchandiseAmount,
 					MerchandiseTaxAmount: builder.MerchandiseTaxAmount,
@@ -1089,42 +1294,29 @@ func (c *Calculator) finalizeAllocations(
 					ShippingAmount:    builder.ShippingAmount,
 					ShippingTaxAmount: builder.ShippingTaxAmount,
 
-					GrossAmount: grossAmount,
+					GrossAmount:       grossAmount,
+					PlatformFeeAmount: platformFeeAmount,
+					TransferAmount:    netAmount,
 				},
 			)
-		if err != nil {
-			return nil, err
+
+		case allocationSellerKindResale:
+			result.Receivables = append(
+				result.Receivables,
+				ReceivableAllocation{
+					Seller: builder.Seller.ResaleSeller,
+
+					MerchandiseAmount: merchandiseAmount,
+
+					GrossAmount:       grossAmount,
+					PlatformFeeAmount: platformFeeAmount,
+					ReceivableAmount:  netAmount,
+				},
+			)
+
+		default:
+			return Calculation{}, ErrCalculatorInvalidSellerSnapshot
 		}
-
-		if platformFeeAmount < 0 ||
-			platformFeeAmount >= grossAmount {
-			return nil, ErrCalculatorInvalidPlatformFee
-		}
-
-		transferAmount :=
-			grossAmount -
-				platformFeeAmount
-
-		if transferAmount <= 0 {
-			return nil, ErrCalculatorInvalidPlatformFee
-		}
-
-		result = append(
-			result,
-			Allocation{
-				Seller: builder.Seller,
-
-				MerchandiseAmount:    merchandiseAmount,
-				MerchandiseTaxAmount: builder.MerchandiseTaxAmount,
-
-				ShippingAmount:    builder.ShippingAmount,
-				ShippingTaxAmount: builder.ShippingTaxAmount,
-
-				GrossAmount:       grossAmount,
-				PlatformFeeAmount: platformFeeAmount,
-				TransferAmount:    transferAmount,
-			},
-		)
 	}
 
 	return result, nil

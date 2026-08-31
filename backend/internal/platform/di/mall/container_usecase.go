@@ -35,6 +35,7 @@ type mallUsecases struct {
 	walletUC                       *usecase.WalletUsecase
 	cartUC                         *usecase.CartUsecase
 	paymentUC                      *usecase.PaymentUsecase
+	salesReceivableUC              *usecase.SalesReceivableUsecase
 	settlementUC                   *usecase.SettlementUsecase
 	settlementQueue                usecase.SettlementTransferQueue
 	refundUC                       *usecase.RefundUsecase
@@ -244,11 +245,23 @@ func buildMallUsecases(
 		return nil, errors.New("di.mall: payout account usecase is nil")
 	}
 
+	if r.salesReceivableRepo == nil {
+		return nil, errors.New("di.mall: sales receivable repository is nil")
+	}
+
+	salesReceivableUC := usecase.NewSalesReceivableUsecase(
+		r.salesReceivableRepo,
+	)
+	if salesReceivableUC == nil {
+		return nil, errors.New("di.mall: sales receivable usecase is nil")
+	}
+
 	settlementUC := usecase.NewSettlementUsecase(
 		usecase.NewSettlementUsecaseInput{
-			Repository:            r.settlementRepo,
-			Calculator:            settlementDependencies.SettlementCalculator,
-			StripeTransferGateway: settlementDependencies.StripeTransferGateway,
+			Repository:             r.settlementRepo,
+			Calculator:             settlementDependencies.SettlementCalculator,
+			SalesReceivableUsecase: salesReceivableUC,
+			StripeTransferGateway:  settlementDependencies.StripeTransferGateway,
 		},
 	)
 	if settlementUC == nil {
@@ -377,6 +390,7 @@ func buildMallUsecases(
 		walletUC:                       walletUC,
 		cartUC:                         cartUC,
 		paymentUC:                      paymentUC,
+		salesReceivableUC:              salesReceivableUC,
 		settlementUC:                   settlementUC,
 		settlementQueue:                settlementQueue,
 		refundUC:                       refundUC,
@@ -458,11 +472,8 @@ func buildMallTransferUsecase(
 	if u.inventoryUC == nil {
 		return nil, errors.New("di.mall: inventory usecase is nil")
 	}
-	if u.settlementUC == nil {
-		return nil, errors.New("di.mall: settlement usecase is nil")
-	}
-	if u.settlementQueue == nil {
-		return nil, errors.New("di.mall: settlement queue is nil")
+	if u.salesReceivableUC == nil {
+		return nil, errors.New("di.mall: sales receivable usecase is nil")
 	}
 
 	var orderRepoForTransfer applicationport.OrderRepoForTransfer = r.orderTransferItemRepo
@@ -502,9 +513,8 @@ func buildMallTransferUsecase(
 		WithResaleTransferDependencies(
 			r.resaleRepo,
 		).
-		WithResaleSettlementDependencies(
-			u.settlementUC,
-			u.settlementQueue,
+		WithResaleReceivableDependencies(
+			u.salesReceivableUC,
 		).
 		WithReturnOpeningHandler(
 			u.returnRequestUC,

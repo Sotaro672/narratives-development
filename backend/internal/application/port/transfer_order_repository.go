@@ -6,7 +6,7 @@ import (
 	"time"
 
 	orderdom "narratives/internal/domain/order"
-	settlementdom "narratives/internal/domain/settlement"
+	salesreceivabledom "narratives/internal/domain/salesReceivable"
 )
 
 // FindEligibleTransferItemInput identifies one transfer-eligible order item.
@@ -41,24 +41,29 @@ type TransferTargetItem struct {
 // OrderRepoForTransfer provides exact lookup and state transitions for one
 // transfer-eligible order item.
 //
-// Implementations must use the canonical orderTransferItems read model and
-// must not scan Order documents in memory.
+// Implementations must use the canonical orderTransferItems read model and must
+// not scan Order documents in memory.
 //
-// Resale fulfillment has a stronger consistency requirement than a primary
-// List transfer. CompleteResaleTransferFulfillment must atomically persist:
+// Resale fulfillment has a stronger consistency requirement than a primary List
+// transfer. CompleteResaleReceivableFulfillment must atomically persist:
 //
 //  1. canonical Order item transferred=true,
 //  2. orderTransferItems projection transferred=true,
-//  3. matching resale Settlement pending -> ready.
+//  3. matching SalesReceivable lifecycle state.
 //
-// These writes must commit in one persistence transaction so seller payout can
-// never become eligible independently from the Order transfer state.
+// SalesReceivable is aggregated by PaymentID + PayoutAccountID. When multiple
+// active resale items belonging to the same seller are represented by one
+// receivable, the receivable must remain pending until the final active item has
+// been transferred. Only then may it transition pending -> available.
+//
+// These writes must commit in one persistence transaction so seller proceeds can
+// never become payout-eligible independently from the Order transfer state.
 type OrderRepoForTransfer interface {
 	// FindEligibleTransferItem returns orderdom.ErrNotFound when no paid,
 	// untransferred item exactly matches the input.
 	//
-	// Return-requested items must remain discoverable so a valid scan can
-	// record tokenTransferVerifiedAt before token transfer is blocked.
+	// Return-requested items must remain discoverable so a valid scan can record
+	// tokenTransferVerifiedAt before token transfer is blocked.
 	FindEligibleTransferItem(
 		ctx context.Context,
 		in FindEligibleTransferItemInput,
@@ -86,8 +91,8 @@ type OrderRepoForTransfer interface {
 
 	// MarkTransferredItem completes a primary List transfer.
 	//
-	// Resale transfers must use CompleteResaleTransferFulfillment so the Order
-	// transfer state and Settlement readiness are committed atomically.
+	// Resale transfers must use CompleteResaleReceivableFulfillment so Order
+	// transfer state and SalesReceivable availability are committed atomically.
 	MarkTransferredItem(
 		ctx context.Context,
 		orderID string,
@@ -95,8 +100,8 @@ type OrderRepoForTransfer interface {
 		at time.Time,
 	) error
 
-	// CompleteResaleTransferFulfillment atomically completes one successfully
-	// executed resale token transfer and crosses the seller payout boundary.
+	// CompleteResaleReceivableFulfillment atomically completes one successfully
+	// executed resale token transfer and updates its SalesReceivable.
 	//
 	// Implementations must validate that:
 	//
@@ -107,24 +112,27 @@ type OrderRepoForTransfer interface {
 	// - Item has no active or completed return.
 	// - Item has not already been transferred.
 	// - tokenTransferVerifiedAt exists.
-	// - Settlement belongs to the same Order / Payment.
-	// - Settlement seller exactly equals seller.
-	// - Settlement status is pending.
+	// - SalesReceivable belongs to the same Order / Payment.
+	// - SalesReceivable seller identity matches the item's SellerSnapshot.
+	// - SalesReceivable immutable allocation matches the persisted document.
+	// - SalesReceivable status is pending.
 	//
 	// On success the same persistence transaction must:
 	//
 	// - mark the canonical Order item transferred,
 	// - mark the orderTransferItems projection transferred,
 	// - clear the transfer lock,
-	// - transition Settlement pending -> ready.
+	// - keep SalesReceivable pending when another active resale item represented
+	//   by the same receivable remains untransferred,
+	// - otherwise transition SalesReceivable pending -> available.
 	//
-	// The returned Settlement must be the persisted ready Settlement.
-	CompleteResaleTransferFulfillment(
+	// The returned SalesReceivable must represent the persisted state after the
+	// transaction.
+	CompleteResaleReceivableFulfillment(
 		ctx context.Context,
 		orderID string,
 		itemIndex int,
-		settlementID string,
-		seller settlementdom.SellerIdentity,
+		receivable salesreceivabledom.SalesReceivable,
 		at time.Time,
-	) (settlementdom.Settlement, error)
+	) (salesreceivabledom.SalesReceivable, error)
 }

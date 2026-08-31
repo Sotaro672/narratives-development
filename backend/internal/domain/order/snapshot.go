@@ -33,8 +33,7 @@ type ShippingQuoteItemSnapshot struct {
 	TransportationID string `json:"transportationId,omitempty"`
 
 	Size int `json:"size,omitempty"`
-
-	Qty int `json:"qty"`
+	Qty  int `json:"qty"`
 
 	UnitAmount int `json:"unitAmount"`
 	Amount     int `json:"amount"`
@@ -45,8 +44,7 @@ type ShippingQuoteItemSnapshot struct {
 type ShippingQuoteSnapshot struct {
 	Items []ShippingQuoteItemSnapshot `json:"items"`
 
-	Amount int `json:"amount"`
-
+	Amount   int    `json:"amount"`
 	Currency string `json:"currency"`
 }
 
@@ -62,24 +60,26 @@ type PaymentMethodSnapshot struct {
 	IsDefault             bool   `json:"isDefault"`
 }
 
-// SellerSnapshot fixes the seller identity and Stripe Connect destination at
-// the time the Order is created.
+// SellerSnapshot fixes the seller identity at the time the Order is created.
 //
-// List sales use BrandID / CompanyID / AccountID.
+// List sales use BrandID / CompanyID / AccountID and StripeAccountID.
+// StripeAccountID is the immutable Stripe Connect destination captured for
+// primary-sale settlement.
+//
 // Resale sales use AvatarID / UserID / PayoutAccountID.
-//
-// StripeAccountID is common to both seller types and is the immutable Stripe
-// Connect destination captured when the Order is created.
+// Resale sellers do not use Stripe Connect. PayoutAccountID identifies the
+// seller's registered payout-account record and must not be treated as a fixed
+// bank destination snapshot. The actual bank destination is snapshotted later
+// when a bank payout is created.
 type SellerSnapshot struct {
 	// List seller identifiers.
-	BrandID   string `json:"brandId,omitempty"`
-	CompanyID string `json:"companyId,omitempty"`
-	AccountID string `json:"accountId,omitempty"`
+	BrandID         string `json:"brandId,omitempty"`
+	CompanyID       string `json:"companyId,omitempty"`
+	AccountID       string `json:"accountId,omitempty"`
+	StripeAccountID string `json:"stripeAccountId,omitempty"`
 
 	// Resale seller identifiers.
 	AvatarID        string `json:"avatarId,omitempty"`
 	UserID          string `json:"userId,omitempty"`
 	PayoutAccountID string `json:"payoutAccountId,omitempty"`
-
-	StripeAccountID string `json:"stripeAccountId"`
 }

@@ -15,22 +15,22 @@ import (
 // Calculator Port
 // ============================================================
 
-// SettlementCalculator calculates seller-side settlement allocations from an
-// authoritative Order and Payment.
+// SettlementCalculator calculates primary-sale Stripe Settlement allocations
+// from an authoritative Order and Payment.
 //
 // Calculation rules such as:
-// - item tax allocation
-// - shipping allocation
-// - platform fee
-// - integer rounding
+//   - item tax allocation
+//   - shipping allocation
+//   - platform fee
+//   - integer rounding
 //
 // must remain outside SettlementUsecase.
 //
-// The calculator must guarantee that allocations are grouped by seller payout
-// identity.
+// Calculate returns only primary List-sale allocations grouped by AccountID.
 //
-// Primary List sales are grouped by AccountID.
-// Resale transactions are grouped by PayoutAccountID.
+// A concrete calculator may additionally implement CalculateAll to expose
+// consumer resale SalesReceivable allocations. Payment-success creation uses
+// that extended contract when both financial record types must be guaranteed.
 type SettlementCalculator interface {
 	Calculate(
 		ctx context.Context,
@@ -43,12 +43,14 @@ type SettlementCalculator interface {
 // Stripe Transfer Port
 // ============================================================
 
-// StripeSettlementTransferGateway executes Stripe Connect Transfers.
+// StripeSettlementTransferGateway executes Stripe Connect Transfers for
+// primary-sale Settlements.
 //
 // This Transfer is a fiat settlement transfer:
 //
 //	AMOL Stripe Platform -> Stripe Connected Account
 //
+// Consumer resale proceeds do not use this gateway.
 // It is unrelated to Solana token transfer.
 type StripeSettlementTransferGateway interface {
 	CreateTransfer(
@@ -57,9 +59,10 @@ type StripeSettlementTransferGateway interface {
 	) (*CreateStripeSettlementTransferResult, error)
 }
 
-// CreateStripeSettlementTransferInput represents one Stripe Connect Transfer.
+// CreateStripeSettlementTransferInput represents one primary-sale Stripe
+// Connect Transfer.
 //
-// Seller is the immutable seller payout identity stored in the Settlement.
+// Seller is the immutable Account seller payout identity stored in Settlement.
 //
 // DestinationStripeAccountID remains explicit because it is the actual Stripe
 // destination used by the transfer request. It must match
@@ -112,12 +115,14 @@ type StripeSettlementErrorMetadata interface {
 // Transfer Queue Port
 // ============================================================
 
-// SettlementTransferQueue is the minimal outbound contract used by settlement
-// reconciliation.
+// SettlementTransferQueue is the minimal outbound contract used by primary-sale
+// Settlement reconciliation.
 //
 // The queue payload must contain only SettlementID. Financial values and seller
 // identity must be loaded again from the authoritative Settlement document by
 // the worker.
+//
+// Consumer resale SalesReceivables must never be enqueued here.
 type SettlementTransferQueue interface {
 	EnqueueSettlementTransfer(
 		ctx context.Context,
@@ -130,7 +135,8 @@ type SettlementTransferQueue interface {
 // ============================================================
 
 // SettlementTransferRepository extends the domain Settlement repository with
-// atomic state transitions required for safe financial transfer execution.
+// atomic state transitions required for safe primary-sale Stripe Transfer
+// execution.
 //
 // CreateStripeTransfer must never be called after a plain GetByID followed by
 // a non-transactional status update. Two workers could otherwise send the same
@@ -144,8 +150,8 @@ type SettlementTransferQueue interface {
 //  5. Persist UpdatedAt as now.
 //  6. Return Claimed=true.
 //
-// If another worker still owns a non-stale transferring claim or the
-// Settlement is already completed/terminal, Claimed must be false.
+// If another worker still owns a non-stale transferring claim or the Settlement
+// is already completed/terminal, Claimed must be false.
 type SettlementTransferRepository interface {
 	settlementdom.Repository
 
@@ -254,10 +260,19 @@ const (
 	maxSettlementTransferDispatchLimit     = 200
 )
 
+// SettlementUsecase manages primary-sale Stripe Settlements and coordinates
+// creation of resale SalesReceivables after successful buyer payment.
+//
+// Primary-sale transfer execution remains entirely Settlement/Stripe based.
+//
+// Consumer resale payout lifecycle is delegated to SalesReceivableUsecase and,
+// later, BankPayout.
 type SettlementUsecase struct {
 	repo SettlementTransferRepository
 
 	calculator SettlementCalculator
+
+	salesReceivableUC *SalesReceivableUsecase
 
 	stripeTransferGateway StripeSettlementTransferGateway
 
@@ -270,6 +285,8 @@ type NewSettlementUsecaseInput struct {
 	Repository SettlementTransferRepository
 
 	Calculator SettlementCalculator
+
+	SalesReceivableUsecase *SalesReceivableUsecase
 
 	StripeTransferGateway StripeSettlementTransferGateway
 
@@ -294,6 +311,7 @@ func NewSettlementUsecase(
 	return &SettlementUsecase{
 		repo:                  in.Repository,
 		calculator:            in.Calculator,
+		salesReceivableUC:     in.SalesReceivableUsecase,
 		stripeTransferGateway: in.StripeTransferGateway,
 		transferLease:         transferLease,
 		now:                   now,

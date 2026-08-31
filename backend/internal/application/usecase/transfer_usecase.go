@@ -9,7 +9,7 @@ import (
 
 	applicationport "narratives/internal/application/port"
 	orderdom "narratives/internal/domain/order"
-	settlementdom "narratives/internal/domain/settlement"
+	salesreceivabledom "narratives/internal/domain/salesReceivable"
 )
 
 // ============================================================
@@ -53,6 +53,25 @@ type ReturnOpeningHandler interface {
 	) (ReturnRequestResult, error)
 }
 
+// ResaleReceivableFulfillmentRepository is the atomic persistence boundary used
+// after a resale token transfer has succeeded on-chain.
+//
+// The implementation must commit the canonical Order item, orderTransferItems
+// projection, and SalesReceivable lifecycle in one Firestore transaction.
+//
+// A receivable may remain pending when other active resale items belonging to
+// the same receivable are still untransferred. It becomes available only when
+// every active resale item represented by that receivable is transferred.
+type ResaleReceivableFulfillmentRepository interface {
+	CompleteResaleReceivableFulfillment(
+		ctx context.Context,
+		orderID string,
+		itemIndex int,
+		receivable salesreceivabledom.SalesReceivable,
+		at time.Time,
+	) (salesreceivabledom.SalesReceivable, error)
+}
+
 // ============================================================
 // Usecase
 // ============================================================
@@ -70,8 +89,7 @@ type TransferUsecase struct {
 
 	resaleRepo applicationport.ResaleGetter
 
-	settlementUC    *SettlementUsecase
-	settlementQueue SettlementTransferQueue
+	salesReceivableUC *SalesReceivableUsecase
 
 	returnOpening ReturnOpeningHandler
 
@@ -120,13 +138,11 @@ func (u *TransferUsecase) WithResaleTransferDependencies(
 	return u
 }
 
-func (u *TransferUsecase) WithResaleSettlementDependencies(
-	settlementUC *SettlementUsecase,
-	settlementQueue SettlementTransferQueue,
+func (u *TransferUsecase) WithResaleReceivableDependencies(
+	salesReceivableUC *SalesReceivableUsecase,
 ) *TransferUsecase {
 	if u != nil {
-		u.settlementUC = settlementUC
-		u.settlementQueue = settlementQueue
+		u.salesReceivableUC = salesReceivableUC
 	}
 
 	return u
@@ -162,9 +178,9 @@ var (
 	ErrTransferResaleNotConfigured           = errors.New("transfer_uc: resale transfer dependencies are not configured")
 	ErrTransferResaleIDEmpty                 = errors.New("transfer_uc: resaleId is empty")
 	ErrTransferResaleSellerAvatarIDEmpty     = errors.New("transfer_uc: resale seller avatarId is empty")
-	ErrTransferResaleSettlementNotConfigured = errors.New("transfer_uc: resale settlement dependencies are not configured")
-	ErrTransferResaleSettlementMismatch      = errors.New("transfer_uc: resale settlement identity mismatch")
-	ErrTransferResaleSettlementUnavailable   = errors.New("transfer_uc: resale settlement is unavailable")
+	ErrTransferResaleReceivableNotConfigured = errors.New("transfer_uc: resale receivable dependencies are not configured")
+	ErrTransferResaleReceivableMismatch      = errors.New("transfer_uc: resale receivable identity mismatch")
+	ErrTransferResaleReceivableUnavailable   = errors.New("transfer_uc: resale receivable is unavailable")
 	ErrTransferSameAvatar                    = errors.New("transfer_uc: seller avatarId and buyer avatarId must be different")
 	ErrTransferWalletSyncFailed              = errors.New("transfer_uc: wallet sync failed")
 )
@@ -501,21 +517,13 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 	syncReceiverWallet :=
 		target.ItemType == orderdom.OrderItemTypeResale
 
-	var resaleSettlementSeller settlementdom.SellerIdentity
-	var resaleSettlement settlementdom.Settlement
+	var resaleReceivable salesreceivabledom.SalesReceivable
 	if target.ItemType == orderdom.OrderItemTypeResale {
-		resaleSettlementSeller, err = u.resolveResaleSettlementSeller(
-			verifiedItem,
-			source.FromAvatarID,
-		)
-		if err != nil {
-			return matchedResult, err
-		}
-
-		resaleSettlement, err = u.requirePendingResaleSettlement(
+		resaleReceivable, err = u.requirePendingResaleReceivable(
 			ctx,
 			target.OrderID,
-			resaleSettlementSeller,
+			verifiedItem,
+			source.FromAvatarID,
 		)
 		if err != nil {
 			return matchedResult, err
@@ -528,41 +536,35 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 		now time.Time,
 	) error {
 		if target.ItemType == orderdom.OrderItemTypeResale {
-			readySettlement, err := u.orderRepo.CompleteResaleTransferFulfillment(
+			fulfillmentRepo, ok := u.orderRepo.(ResaleReceivableFulfillmentRepository)
+			if !ok {
+				return ErrTransferResaleReceivableNotConfigured
+			}
+
+			completedReceivable, err := fulfillmentRepo.CompleteResaleReceivableFulfillment(
 				ctx,
 				target.OrderID,
 				target.ItemIndex,
-				resaleSettlement.ID,
-				resaleSettlementSeller,
+				resaleReceivable,
 				now,
 			)
 			if err != nil {
 				return fmt.Errorf(
-					"complete resale transfer fulfillment failed orderId=%s itemIndex=%d settlementId=%s tx=%s: %w",
+					"complete resale transfer fulfillment failed orderId=%s itemIndex=%d receivableId=%s tx=%s: %w",
 					target.OrderID,
 					target.ItemIndex,
-					resaleSettlement.ID,
+					resaleReceivable.ID,
 					txSignature,
 					err,
 				)
 			}
 
-			if err := validateCompletedResaleSettlement(
-				readySettlement,
-				target.OrderID,
-				resaleSettlement.ID,
-				resaleSettlementSeller,
+			if err := validateCompletedResaleReceivable(
+				completedReceivable,
+				resaleReceivable,
 			); err != nil {
 				return err
 			}
-
-			// Order item transferred=true and Settlement ready are already durable
-			// in one Firestore transaction. Queue delivery is best-effort because
-			// settlement reconciliation can re-enqueue a durable READY Settlement.
-			_ = u.settlementQueue.EnqueueSettlementTransfer(
-				ctx,
-				readySettlement.ID,
-			)
 
 			return nil
 		}
@@ -924,130 +926,105 @@ func (u *TransferUsecase) resolveResaleTransferSource(
 }
 
 // ============================================================
-// Resale settlement helpers
+// Resale receivable helpers
 // ============================================================
 
-func (u *TransferUsecase) resolveResaleSettlementSeller(
+func (u *TransferUsecase) requirePendingResaleReceivable(
+	ctx context.Context,
+	paymentID string,
 	item orderdom.OrderItemSnapshot,
 	expectedAvatarID string,
-) (settlementdom.SellerIdentity, error) {
-	if u == nil ||
-		u.settlementUC == nil ||
-		u.settlementQueue == nil {
-		return settlementdom.SellerIdentity{},
-			ErrTransferResaleSettlementNotConfigured
+) (salesreceivabledom.SalesReceivable, error) {
+	if u == nil || u.salesReceivableUC == nil {
+		return salesreceivabledom.SalesReceivable{},
+			ErrTransferResaleReceivableNotConfigured
 	}
-
-	if item.Type != orderdom.OrderItemTypeResale {
-		return settlementdom.SellerIdentity{},
-			ErrTransferResaleSettlementMismatch
+	if paymentID == "" ||
+		item.Type != orderdom.OrderItemTypeResale ||
+		expectedAvatarID == "" {
+		return salesreceivabledom.SalesReceivable{},
+			ErrTransferResaleReceivableMismatch
 	}
 
 	snapshot := item.SellerSnapshot
 	if snapshot.AvatarID == "" ||
 		snapshot.UserID == "" ||
 		snapshot.PayoutAccountID == "" ||
-		snapshot.StripeAccountID == "" ||
 		snapshot.PayoutAccountID != snapshot.UserID ||
-		expectedAvatarID == "" ||
-		snapshot.AvatarID != expectedAvatarID {
-		return settlementdom.SellerIdentity{},
-			ErrTransferResaleSettlementMismatch
+		snapshot.AvatarID != expectedAvatarID ||
+		snapshot.BrandID != "" ||
+		snapshot.CompanyID != "" ||
+		snapshot.AccountID != "" ||
+		snapshot.StripeAccountID != "" {
+		return salesreceivabledom.SalesReceivable{},
+			ErrTransferResaleReceivableMismatch
 	}
 
-	seller := settlementdom.SellerIdentity{
-		Type:            settlementdom.SellerTypeAvatar,
-		AvatarID:        snapshot.AvatarID,
-		UserID:          snapshot.UserID,
-		PayoutAccountID: snapshot.PayoutAccountID,
-		StripeAccountID: snapshot.StripeAccountID,
-	}
-	if err := seller.Validate(); err != nil {
-		return settlementdom.SellerIdentity{},
-			ErrTransferResaleSettlementMismatch
-	}
-
-	return seller, nil
-}
-
-func (u *TransferUsecase) requirePendingResaleSettlement(
-	ctx context.Context,
-	paymentID string,
-	seller settlementdom.SellerIdentity,
-) (settlementdom.Settlement, error) {
-	if u == nil ||
-		u.settlementUC == nil ||
-		u.settlementQueue == nil {
-		return settlementdom.Settlement{},
-			ErrTransferResaleSettlementNotConfigured
-	}
-	if paymentID == "" {
-		return settlementdom.Settlement{},
-			ErrTransferResaleSettlementMismatch
-	}
-	if err := seller.Validate(); err != nil {
-		return settlementdom.Settlement{},
-			ErrTransferResaleSettlementMismatch
-	}
-
-	settlementID, err := settlementdom.NewID(
+	receivableID, err := salesreceivabledom.NewID(
 		paymentID,
-		seller,
+		snapshot.PayoutAccountID,
 	)
 	if err != nil {
-		return settlementdom.Settlement{},
-			ErrTransferResaleSettlementMismatch
+		return salesreceivabledom.SalesReceivable{},
+			ErrTransferResaleReceivableMismatch
 	}
 
-	settlement, err := u.settlementUC.GetByID(
+	receivable, err := u.salesReceivableUC.GetByID(
 		ctx,
-		settlementID,
+		receivableID,
 	)
 	if err != nil {
-		return settlementdom.Settlement{},
+		return salesreceivabledom.SalesReceivable{},
 			fmt.Errorf(
-				"%w: load settlement %s: %v",
-				ErrTransferResaleSettlementUnavailable,
-				settlementID,
+				"%w: load receivable %s: %v",
+				ErrTransferResaleReceivableUnavailable,
+				receivableID,
 				err,
 			)
 	}
-
-	if settlement.ID != settlementID ||
-		settlement.PaymentID != paymentID ||
-		settlement.OrderID != paymentID ||
-		settlement.SellerIdentity() != seller {
-		return settlementdom.Settlement{},
-			ErrTransferResaleSettlementMismatch
+	if receivable == nil {
+		return salesreceivabledom.SalesReceivable{},
+			ErrTransferResaleReceivableUnavailable
+	}
+	if receivable.ID != receivableID ||
+		receivable.PaymentID != paymentID ||
+		receivable.OrderID != paymentID ||
+		receivable.AvatarID != snapshot.AvatarID ||
+		receivable.UserID != snapshot.UserID ||
+		receivable.PayoutAccountID != snapshot.PayoutAccountID {
+		return salesreceivabledom.SalesReceivable{},
+			ErrTransferResaleReceivableMismatch
+	}
+	if err := receivable.Validate(); err != nil {
+		return salesreceivabledom.SalesReceivable{},
+			ErrTransferResaleReceivableMismatch
+	}
+	if receivable.Status != salesreceivabledom.StatusPending {
+		return salesreceivabledom.SalesReceivable{},
+			ErrTransferResaleReceivableUnavailable
 	}
 
-	if settlement.Status != settlementdom.StatusPending {
-		return settlementdom.Settlement{},
-			ErrTransferResaleSettlementUnavailable
-	}
-
-	return settlement, nil
+	return *receivable, nil
 }
 
-func validateCompletedResaleSettlement(
-	settlement settlementdom.Settlement,
-	paymentID string,
-	settlementID string,
-	seller settlementdom.SellerIdentity,
+func validateCompletedResaleReceivable(
+	actual salesreceivabledom.SalesReceivable,
+	expected salesreceivabledom.SalesReceivable,
 ) error {
-	if settlement.ID == "" ||
-		settlement.ID != settlementID ||
-		settlement.PaymentID != paymentID ||
-		settlement.OrderID != paymentID ||
-		settlement.SellerIdentity() != seller {
-		return ErrTransferResaleSettlementMismatch
+	if err := validateExistingSalesReceivableAllocation(
+		actual,
+		expected,
+	); err != nil {
+		return ErrTransferResaleReceivableMismatch
 	}
 
-	if settlement.Status != settlementdom.StatusReady {
-		return ErrTransferResaleSettlementUnavailable
+	switch actual.Status {
+	case salesreceivabledom.StatusPending,
+		salesreceivabledom.StatusAvailable:
+		return nil
+	default:
+		return ErrTransferResaleReceivableUnavailable
 	}
-
-	return nil
 }
 
 // ============================================================

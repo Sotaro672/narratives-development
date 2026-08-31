@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// SettlementStatus represents the seller-side Stripe Connect settlement state.
+// SettlementStatus represents the primary seller-side Stripe Connect settlement state.
 //
 // Settlement is separate from:
 //
@@ -16,40 +16,52 @@ import (
 //
 // Settlement represents:
 //
-// AMOL Stripe Platform -> Stripe Connected Account
+// AMOL Stripe Platform -> primary-sale Stripe Connected Account
+//
+// Consumer resale proceeds must not be represented by Settlement.
+// They are represented separately as sales receivables and later paid to the
+// seller's registered bank destination.
 type SettlementStatus string
 
-// SellerType identifies the payout identity represented by a Settlement.
+// SellerType identifies the seller identity represented by a Settlement.
 //
-// account: primary List sale paid out to a company Account.
-// avatar: consumer resale paid out to an Avatar owner payout account.
+// New Settlement records support only SellerTypeAccount.
+//
+// SellerTypeAvatar is retained temporarily so dependent code can be migrated
+// incrementally. It must not be accepted when creating or validating a new
+// Settlement and will be removed after resale proceeds have moved completely
+// to the salesReceivable domain.
 type SellerType string
 
 const (
 	SellerTypeAccount SellerType = "account"
-	SellerTypeAvatar  SellerType = "avatar"
+
+	// Deprecated: resale proceeds no longer use Stripe Settlement.
+	// Retained temporarily for migration compatibility.
+	SellerTypeAvatar SellerType = "avatar"
 )
 
 var AllowedSellerTypes = map[SellerType]struct{}{
 	SellerTypeAccount: {},
-	SellerTypeAvatar:  {},
 }
 
-// SellerIdentity is the immutable payout identity captured by a Settlement.
+// SellerIdentity is the immutable primary-sale payout identity captured by a
+// Settlement.
 //
-// account seller:
+// Account seller:
 //   - CompanyID, AccountID and StripeAccountID are required.
 //   - AvatarID, UserID and PayoutAccountID must be empty.
 //
-// avatar seller:
-//   - AvatarID, UserID, PayoutAccountID and StripeAccountID are required.
-//   - CompanyID and AccountID must be empty.
+// AvatarID, UserID and PayoutAccountID are retained temporarily for migration
+// compatibility with code and persisted documents created by the former resale
+// Stripe Connect flow. They are not valid for new Settlement records.
 type SellerIdentity struct {
 	Type SellerType
 
 	CompanyID string
 	AccountID string
 
+	// Deprecated: resale proceeds no longer belong to Settlement.
 	AvatarID        string
 	UserID          string
 	PayoutAccountID string
@@ -83,22 +95,21 @@ const CurrencyJPY = "JPY"
 
 var DefaultStatus = StatusPending
 
-// Settlement represents the amount attributable to one seller payout identity
-// inside one Order.
+// Settlement represents the amount attributable to one primary-sale seller
+// payout identity inside one Order.
 //
-// One Order may therefore have multiple Settlement records. Primary List sales
-// use an Account seller identity, while resale transactions use an Avatar seller
-// identity backed by a registered payout account.
+// Primary List sales use an Account seller identity. Multiple Brands using the
+// same AccountID are aggregated into one Settlement.
 //
-// Multiple primary-sale Brands using the same AccountID are aggregated into one
-// Settlement. Resale proceeds are aggregated by PayoutAccountID.
+// Resale proceeds must not be stored as Settlement records. They are represented
+// by the salesReceivable domain.
 //
 // Amount invariant:
 //
 //	GrossAmount = PlatformFeeAmount + TransferAmount
 //
-// StripeTransferID is the Stripe Connect Transfer ID and is unrelated to
-// Solana token transfer.
+// StripeTransferID is the Stripe Connect Transfer ID and is unrelated to the
+// Solana token ownership transfer.
 type Settlement struct {
 	ID string
 
@@ -110,6 +121,8 @@ type Settlement struct {
 	CompanyID string
 	AccountID string
 
+	// Deprecated: retained temporarily while legacy resale Settlement references
+	// are migrated to salesReceivable.
 	AvatarID        string
 	UserID          string
 	PayoutAccountID string
@@ -172,15 +185,22 @@ var (
 	ErrInvalidAccountID = errors.New(
 		"settlement: invalid accountId",
 	)
+
+	// Deprecated: retained temporarily for migration compatibility.
 	ErrInvalidAvatarID = errors.New(
 		"settlement: invalid avatarId",
 	)
+
+	// Deprecated: retained temporarily for migration compatibility.
 	ErrInvalidUserID = errors.New(
 		"settlement: invalid userId",
 	)
+
+	// Deprecated: retained temporarily for migration compatibility.
 	ErrInvalidPayoutAccountID = errors.New(
 		"settlement: invalid payoutAccountId",
 	)
+
 	ErrInvalidStripeAccountID = errors.New(
 		"settlement: invalid stripeAccountId",
 	)
@@ -248,11 +268,9 @@ var (
 
 // NewID creates the deterministic Firestore Settlement document ID.
 //
-// The seller type is included in the key so AccountID and PayoutAccountID
-// namespaces cannot collide.
+// New Settlement records are primary-sale Account settlements only:
 //
-// account: paymentID + "_account_" + accountID
-// avatar:  paymentID + "_avatar_" + payoutAccountID
+//	paymentID + "_account_" + accountID
 func NewID(paymentID string, seller SellerIdentity) (string, error) {
 	if paymentID == "" {
 		return "", ErrInvalidPaymentID
@@ -279,6 +297,7 @@ func IsValidSellerType(sellerType SellerType) bool {
 	if sellerType == "" {
 		return false
 	}
+
 	_, ok := AllowedSellerTypes[sellerType]
 	return ok
 }
@@ -292,6 +311,8 @@ func (s SellerIdentity) Key() (string, error) {
 		return s.AccountID, nil
 
 	case SellerTypeAvatar:
+		// Deprecated compatibility path. SellerTypeAvatar is not accepted by
+		// Validate and therefore cannot be used to create a new Settlement.
 		if s.PayoutAccountID == "" {
 			return "", ErrInvalidPayoutAccountID
 		}
@@ -306,38 +327,20 @@ func (s SellerIdentity) Validate() error {
 	if !IsValidSellerType(s.Type) {
 		return ErrInvalidSellerType
 	}
+	if s.Type != SellerTypeAccount {
+		return ErrInvalidSellerType
+	}
+	if s.CompanyID == "" {
+		return ErrInvalidCompanyID
+	}
+	if s.AccountID == "" {
+		return ErrInvalidAccountID
+	}
+	if s.AvatarID != "" || s.UserID != "" || s.PayoutAccountID != "" {
+		return ErrInvalidSellerIdentity
+	}
 	if !isStripeAccountID(s.StripeAccountID) {
 		return ErrInvalidStripeAccountID
-	}
-
-	switch s.Type {
-	case SellerTypeAccount:
-		if s.CompanyID == "" {
-			return ErrInvalidCompanyID
-		}
-		if s.AccountID == "" {
-			return ErrInvalidAccountID
-		}
-		if s.AvatarID != "" || s.UserID != "" || s.PayoutAccountID != "" {
-			return ErrInvalidSellerIdentity
-		}
-
-	case SellerTypeAvatar:
-		if s.AvatarID == "" {
-			return ErrInvalidAvatarID
-		}
-		if s.UserID == "" {
-			return ErrInvalidUserID
-		}
-		if s.PayoutAccountID == "" {
-			return ErrInvalidPayoutAccountID
-		}
-		if s.CompanyID != "" || s.AccountID != "" {
-			return ErrInvalidSellerIdentity
-		}
-
-	default:
-		return ErrInvalidSellerType
 	}
 
 	return nil
@@ -347,11 +350,12 @@ func IsValidStatus(status SettlementStatus) bool {
 	if status == "" {
 		return false
 	}
+
 	_, ok := AllowedStatuses[status]
 	return ok
 }
 
-// New creates a Settlement before the Stripe Transfer is executed.
+// New creates a primary-sale Settlement before the Stripe Transfer is executed.
 //
 // stripePaymentIntentID and stripeChargeID must already be known.
 // StripeTransferID is intentionally empty at creation.
@@ -394,9 +398,9 @@ func New(
 		SellerType:               seller.Type,
 		CompanyID:                seller.CompanyID,
 		AccountID:                seller.AccountID,
-		AvatarID:                 seller.AvatarID,
-		UserID:                   seller.UserID,
-		PayoutAccountID:          seller.PayoutAccountID,
+		AvatarID:                 "",
+		UserID:                   "",
+		PayoutAccountID:          "",
 		StripeAccountID:          seller.StripeAccountID,
 		StripePaymentIntentID:    stripePaymentIntentID,
 		StripeChargeID:           stripeChargeID,
@@ -427,8 +431,8 @@ func New(
 	return s, nil
 }
 
-// MarkReady marks a dispatched seller Settlement as ready to be sent to the
-// Stripe Transfer worker.
+// MarkReady marks a dispatched primary-sale Settlement as ready to be sent to
+// the Stripe Transfer worker.
 //
 // Only pending may become ready. A failed_retryable Settlement has already
 // passed the dispatch boundary and retries directly through StartTransfer.
@@ -496,7 +500,6 @@ func (s *Settlement) ReclaimTransfer(now time.Time) error {
 	}
 
 	now = now.UTC()
-
 	if !now.After(s.UpdatedAt) {
 		return ErrInvalidUpdatedAt
 	}
@@ -643,6 +646,9 @@ func (s *Settlement) MarkReversed(stripeTransferReversalID string, now time.Time
 }
 
 // Validate verifies all Settlement persistence invariants.
+//
+// Settlement is a primary-sale Stripe Connect entity. Resale seller identities
+// are intentionally rejected.
 func (s Settlement) Validate() error {
 	if s.ID == "" || strings.Contains(s.ID, "/") {
 		return ErrInvalidID
@@ -775,10 +781,11 @@ func (s Settlement) Validate() error {
 	return nil
 }
 
-// SellerIdentity returns the immutable seller payout identity stored by this
-// Settlement.
+// SellerIdentity returns the immutable primary-sale payout identity stored by
+// this Settlement.
 //
-// SellerType is mandatory. No legacy seller inference is performed.
+// Legacy Avatar fields are returned temporarily so dependent migration code can
+// inspect an older document, but Validate rejects such a Settlement.
 func (s Settlement) SellerIdentity() SellerIdentity {
 	return SellerIdentity{
 		Type:            s.SellerType,
@@ -791,7 +798,11 @@ func (s Settlement) SellerIdentity() SellerIdentity {
 	}
 }
 
-func validateFailureReason(errorType *string, errorCode *string, errorMsg *string) error {
+func validateFailureReason(
+	errorType *string,
+	errorCode *string,
+	errorMsg *string,
+) error {
 	if err := validateOptionalErrorString(errorType, ErrInvalidErrorType); err != nil {
 		return err
 	}
@@ -804,6 +815,7 @@ func validateFailureReason(errorType *string, errorCode *string, errorMsg *strin
 	if errorType == nil && errorCode == nil && errorMsg == nil {
 		return ErrFailureReasonRequired
 	}
+
 	return nil
 }
 
