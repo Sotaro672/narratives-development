@@ -208,6 +208,86 @@ function Ensure-CloudTasksQueueRunning {
   Write-Ok "Cloud Tasks queue resumed: $QueueID"
 }
 
+function Ensure-PayoutAccountKMSAccess {
+  param(
+    [Parameter(Mandatory=$true)]
+    [string]$KeyName,
+
+    [Parameter(Mandatory=$true)]
+    [string]$ProjectID,
+
+    [Parameter(Mandatory=$true)]
+    [string]$ServiceAccount
+  )
+
+  if ([string]::IsNullOrWhiteSpace($KeyName)) {
+    throw "PAYOUT_ACCOUNT_KMS_KEY_NAME is empty."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($ProjectID)) {
+    throw "KMS project ID is empty."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($ServiceAccount)) {
+    throw "KMS service account is empty."
+  }
+
+  $KeyPattern =
+    "^projects/([^/]+)/locations/([^/]+)/keyRings/([^/]+)/cryptoKeys/([^/]+)$"
+
+  if ($KeyName -notmatch $KeyPattern) {
+    throw "PAYOUT_ACCOUNT_KMS_KEY_NAME must have the form projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{key}."
+  }
+
+  $KeyProjectID = $Matches[1]
+  $KeyLocation = $Matches[2]
+  $KeyRing = $Matches[3]
+  $CryptoKey = $Matches[4]
+
+  if ($KeyProjectID -ne $ProjectID) {
+    throw "PAYOUT_ACCOUNT_KMS_KEY_NAME project '$KeyProjectID' does not match gcloud project '$ProjectID'."
+  }
+
+  Write-Step "Ensuring Cloud KMS API"
+
+  & $GCLOUD services enable cloudkms.googleapis.com `
+    --project=$ProjectID | Out-Null
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to enable Cloud KMS API."
+  }
+
+  Write-Ok "Cloud KMS API is enabled"
+
+  Write-Step "Checking payout account KMS key"
+
+  & $GCLOUD kms keys describe $CryptoKey `
+    --keyring=$KeyRing `
+    --location=$KeyLocation `
+    --project=$ProjectID | Out-Null
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "Payout account KMS key was not found: $KeyName"
+  }
+
+  Write-Ok "Payout account KMS key exists"
+
+  Write-Step "Granting Cloud Run service account KMS encrypt/decrypt access"
+
+  & $GCLOUD kms keys add-iam-policy-binding $CryptoKey `
+    --keyring=$KeyRing `
+    --location=$KeyLocation `
+    --project=$ProjectID `
+    --member="serviceAccount:$ServiceAccount" `
+    --role="roles/cloudkms.cryptoKeyEncrypterDecrypter" | Out-Null
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to grant Cloud KMS encrypt/decrypt access to '$ServiceAccount'."
+  }
+
+  Write-Ok "Cloud Run service account can encrypt/decrypt with payout account KMS key"
+}
+
 # ------------------------------------------------------------
 # 0) gcloud environment
 # ------------------------------------------------------------
@@ -375,7 +455,10 @@ $AllowedKeys = @(
 
   # Settlement
   "SETTLEMENT_PLATFORM_FEE_RATE",
-  "SETTLEMENT_PLATFORM_FEE_BASE"
+  "SETTLEMENT_PLATFORM_FEE_BASE",
+
+  # Payout account encryption
+  "PAYOUT_ACCOUNT_KMS_KEY_NAME"
 )
 
 $envMap = @{}
@@ -506,6 +589,23 @@ if (
     "MALL_AUTO_CREATE_STRIPE_TEST_PAYMENT_METHOD"
   ] = "false"
 }
+
+if (
+  -not $envMap.ContainsKey("PAYOUT_ACCOUNT_KMS_KEY_NAME") -or
+  [string]::IsNullOrWhiteSpace(
+    $envMap["PAYOUT_ACCOUNT_KMS_KEY_NAME"]
+  )
+) {
+  throw "PAYOUT_ACCOUNT_KMS_KEY_NAME is required."
+}
+
+$PayoutAccountKMSKeyName =
+  $envMap["PAYOUT_ACCOUNT_KMS_KEY_NAME"]
+
+Ensure-PayoutAccountKMSAccess `
+  -KeyName $PayoutAccountKMSKeyName `
+  -ProjectID $ProjectId `
+  -ServiceAccount $RunServiceAccount
 
 # Bubblegum Cloud Run の ID Token audience は
 # service URL と同一にします。
