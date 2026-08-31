@@ -14,17 +14,15 @@ import { usePayoutAccountRegistration } from "../features/payout/context/PayoutA
 import { usePayoutAccountRegistrationRules } from "../features/payout/hooks/usePayoutAccountRegistrationRules";
 import type { PayoutBankAccountType } from "../features/shared/types/payoutAccount";
 
+function hasNonWhitespace(value: string): boolean {
+  return /\S/.test(value);
+}
+
 export default function PayoutBankAccountPage() {
   const navigate = useNavigate();
   const { isDesktop } = useContactViewport();
   const { draft, setAccountDetails } = usePayoutAccountRegistration();
   const {
-    isLoading,
-    isReady,
-    isTestMode,
-    errorMessage,
-    testAccountNumber,
-    normalizeAccountNumber,
     validateBankCode,
     validateBranchCode,
     validateAccountNumber,
@@ -37,12 +35,12 @@ export default function PayoutBankAccountPage() {
   const [accountHolderName, setAccountHolderName] = useState(draft.accountHolderName);
 
   useEffect(() => {
-    if (!draft.bankCode.trim() || !draft.bankName.trim()) {
+    if (validateBankCode(draft.bankCode) || !hasNonWhitespace(draft.bankName)) {
       navigate("/settings/payout-account/bank", { replace: true });
       return;
     }
 
-    if (!draft.branchCode.trim() || !draft.branchName.trim()) {
+    if (validateBranchCode(draft.branchCode) || !hasNonWhitespace(draft.branchName)) {
       navigate("/settings/payout-account/branch", { replace: true });
     }
   }, [
@@ -51,130 +49,63 @@ export default function PayoutBankAccountPage() {
     draft.branchCode,
     draft.branchName,
     navigate,
-  ]);
-
-  useEffect(() => {
-    if (!isReady) {
-      return;
-    }
-
-    if (validateBankCode(draft.bankCode)) {
-      navigate("/settings/payout-account/bank", { replace: true });
-      return;
-    }
-
-    if (validateBranchCode(draft.bankCode, draft.branchCode)) {
-      navigate("/settings/payout-account/branch", { replace: true });
-    }
-  }, [
-    draft.bankCode,
-    draft.branchCode,
-    isReady,
-    navigate,
     validateBankCode,
     validateBranchCode,
   ]);
 
-  useEffect(() => {
-    if (isReady && isTestMode) {
-      setAccountNumber(testAccountNumber);
-    }
-  }, [isReady, isTestMode, testAccountNumber]);
+  const bankCodeError = useMemo(
+    () => validateBankCode(draft.bankCode),
+    [draft.bankCode, validateBankCode],
+  );
 
-  const normalizedAccountHolderName = accountHolderName.trim();
-
-  const bankCodeError = useMemo(() => {
-    if (!isReady) {
-      return "";
-    }
-
-    return validateBankCode(draft.bankCode);
-  }, [draft.bankCode, isReady, validateBankCode]);
-
-  const branchCodeError = useMemo(() => {
-    if (!isReady) {
-      return "";
-    }
-
-    return validateBranchCode(draft.bankCode, draft.branchCode);
-  }, [
-    draft.bankCode,
-    draft.branchCode,
-    isReady,
-    validateBranchCode,
-  ]);
+  const branchCodeError = useMemo(
+    () => validateBranchCode(draft.branchCode),
+    [draft.branchCode, validateBranchCode],
+  );
 
   const accountNumberError = useMemo(() => {
-    if (!accountNumber || !isReady) {
+    if (!accountNumber) {
       return "";
     }
 
-    return validateAccountNumber(
-      draft.bankCode,
-      draft.branchCode,
-      accountNumber,
-    );
-  }, [
-    accountNumber,
-    draft.bankCode,
-    draft.branchCode,
-    isReady,
-    validateAccountNumber,
-  ]);
+    return validateAccountNumber(accountNumber);
+  }, [accountNumber, validateAccountNumber]);
+
+  const accountHolderNameValid = hasNonWhitespace(accountHolderName);
 
   const actionButtonDisabled =
-    isLoading ||
-    !isReady ||
     Boolean(bankCodeError) ||
     Boolean(branchCodeError) ||
     !accountNumber ||
     Boolean(accountNumberError) ||
-    !normalizedAccountHolderName;
-
-  const handleAccountNumberChange = (value: string) => {
-    if (isTestMode) {
-      return;
-    }
-
-    setAccountNumber(normalizeAccountNumber(value));
-  };
+    !accountHolderNameValid;
 
   const handleNext = () => {
-    if (!isReady || actionButtonDisabled) {
+    if (actionButtonDisabled) {
       return;
     }
 
     const currentBankCodeError = validateBankCode(draft.bankCode);
-
-    if (currentBankCodeError) {
+    if (currentBankCodeError || !hasNonWhitespace(draft.bankName)) {
       navigate("/settings/payout-account/bank", { replace: true });
       return;
     }
 
-    const currentBranchCodeError = validateBranchCode(
-      draft.bankCode,
-      draft.branchCode,
-    );
-
-    if (currentBranchCodeError) {
+    const currentBranchCodeError = validateBranchCode(draft.branchCode);
+    if (currentBranchCodeError || !hasNonWhitespace(draft.branchName)) {
       navigate("/settings/payout-account/branch", { replace: true });
       return;
     }
 
-    const currentAccountNumberError = validateAccountNumber(
-      draft.bankCode,
-      draft.branchCode,
-      accountNumber,
-    );
-
-    if (currentAccountNumberError) {
+    const currentAccountNumberError = validateAccountNumber(accountNumber);
+    if (currentAccountNumberError || !hasNonWhitespace(accountHolderName)) {
       return;
     }
 
     setAccountDetails({
       accountType,
       accountNumber,
-      accountHolderName: normalizedAccountHolderName,
+      accountHolderName,
     });
 
     navigate("/settings/payout-account/confirm");
@@ -220,23 +151,8 @@ export default function PayoutBankAccountPage() {
           </div>
         </div>
 
-        {isLoading ? (
-          <p className="content-page-description payout-bank-account-page__description">
-            Stripe設定を確認しています...
-          </p>
-        ) : null}
-
-        {!isLoading && errorMessage ? (
-          <p className="payout-bank-account-page__error" role="alert">
-            {errorMessage}
-          </p>
-        ) : null}
-
         <div className="payout-bank-account-page__form">
-          <fieldset
-            className="payout-bank-account-page__field payout-bank-account-page__fieldset"
-            disabled={!isReady}
-          >
+          <fieldset className="payout-bank-account-page__field payout-bank-account-page__fieldset">
             <legend className="payout-bank-account-page__label">
               口座種別
             </legend>
@@ -299,10 +215,8 @@ export default function PayoutBankAccountPage() {
               autoComplete="off"
               maxLength={7}
               value={accountNumber}
-              onChange={(event) => handleAccountNumberChange(event.target.value)}
-              placeholder={isTestMode ? testAccountNumber : "1234567"}
-              readOnly={isTestMode}
-              disabled={!isReady}
+              onChange={(event) => setAccountNumber(event.target.value)}
+              placeholder="1234567"
               className={[
                 "payout-bank-account-page__input",
                 accountNumberError
@@ -331,9 +245,7 @@ export default function PayoutBankAccountPage() {
                 id="payout-account-number-help"
                 className="payout-bank-account-page__help"
               >
-                {isTestMode
-                  ? `開発環境ではStripeのテスト口座番号 ${testAccountNumber} を使用します。`
-                  : "7桁の口座番号を入力してください。"}
+                7桁の口座番号を入力してください。
               </p>
             )}
           </div>
@@ -355,7 +267,6 @@ export default function PayoutBankAccountPage() {
               onChange={(event) => setAccountHolderName(event.target.value)}
               placeholder="例：ヤマダ タロウ"
               className="payout-bank-account-page__input"
-              disabled={!isReady}
             />
 
             <p className="payout-bank-account-page__help">

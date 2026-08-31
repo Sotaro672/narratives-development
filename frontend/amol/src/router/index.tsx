@@ -21,7 +21,6 @@ import PayoutBankSelectPage from "../pages/PayoutBankSelectPage";
 import PayoutBranchSelectPage from "../pages/PayoutBranchSelectPage";
 import PayoutBankAccountPage from "../pages/PayoutBankAccountPage";
 import PayoutAccountConfirmPage from "../pages/PayoutAccountConfirmPage";
-import PayoutAccountOnboardingPage from "../pages/PayoutAccountOnboardingPage";
 import PayoutAccountCompletePage from "../pages/PayoutAccountCompletePage";
 import ShippingAddressPage from "../pages/ShippingAddressPage";
 import AuthActionPage from "../pages/AuthActionPage";
@@ -365,10 +364,6 @@ export const router = createBrowserRouter([
       {
         path: "confirm",
         element: <PayoutAccountConfirmPage />,
-      },
-      {
-        path: "onboarding",
-        element: <PayoutAccountOnboardingPage />,
       },
       {
         path: "complete",

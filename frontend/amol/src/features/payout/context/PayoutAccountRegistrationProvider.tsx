@@ -53,6 +53,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function hasNonWhitespace(value: string): boolean {
+  return /\S/.test(value);
+}
+
+function isValidAccountType(value: PayoutBankAccountType): boolean {
+  return value === "ordinary" || value === "current";
+}
+
 function parseReturnAfterRegistration(
   value: unknown,
 ): PayoutRegistrationReturnTarget | null {
@@ -137,14 +145,13 @@ export const PayoutAccountRegistrationProvider: React.FC<{
 
   const isComplete = React.useMemo(
     () =>
-      Boolean(
-        draft.bankCode.trim() &&
-          draft.bankName.trim() &&
-          draft.branchCode.trim() &&
-          draft.branchName.trim() &&
-          draft.accountNumber.trim() &&
-          draft.accountHolderName.trim(),
-      ),
+      /^\d{4}$/.test(draft.bankCode) &&
+      hasNonWhitespace(draft.bankName) &&
+      /^\d{3}$/.test(draft.branchCode) &&
+      hasNonWhitespace(draft.branchName) &&
+      isValidAccountType(draft.accountType) &&
+      /^\d{7}$/.test(draft.accountNumber) &&
+      hasNonWhitespace(draft.accountHolderName),
     [draft],
   );
 

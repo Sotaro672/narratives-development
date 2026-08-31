@@ -5,13 +5,11 @@ import "../styles/settings-page.css";
 import "../styles/payoutAccount-page.css";
 
 import Layout from "../components/layout/Layout";
-import PayoutAccountNotice from "../features/payout/components/PayoutAccountNotice";
 import PayoutAccountStatusCard from "../features/payout/components/PayoutAccountStatusCard";
 import { usePayoutAccountPage } from "../features/payout/hooks/usePayoutAccountPage";
 
 export default function PayoutAccountPage() {
   const {
-    payoutAccount,
     isLoading,
     errorMessage,
     statusLabel,
@@ -41,12 +39,6 @@ export default function PayoutAccountPage() {
             bankName={bankName}
             bankLast4={bankLast4}
           />
-
-          {payoutAccount && !payoutAccount.payoutReady ? (
-            <PayoutAccountNotice>
-              口座情報の登録後、売上受取機能が利用可能になるまで確認が必要な場合があります。
-            </PayoutAccountNotice>
-          ) : null}
 
           {errorMessage ? (
             <p className="payout-account-page__error">

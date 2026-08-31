@@ -25,6 +25,10 @@ function getAccountTypeLabel(accountType: "ordinary" | "current"): string {
   }
 }
 
+function hasNonWhitespace(value: string): boolean {
+  return /\S/.test(value);
+}
+
 export default function PayoutAccountConfirmPage() {
   const navigate = useNavigate();
   const { isDesktop } = useContactViewport();
@@ -38,9 +42,6 @@ export default function PayoutAccountConfirmPage() {
   } = usePayoutAccountRegistration();
 
   const {
-    isLoading: isRulesLoading,
-    isReady: isRulesReady,
-    errorMessage: rulesErrorMessage,
     validateBankCode,
     validateBranchCode,
     validateAccountNumber,
@@ -59,58 +60,32 @@ export default function PayoutAccountConfirmPage() {
       return;
     }
 
-    if (!draft.bankCode.trim() || !draft.bankName.trim()) {
+    if (validateBankCode(draft.bankCode) || !hasNonWhitespace(draft.bankName)) {
       navigate("/settings/payout-account/bank", { replace: true });
       return;
     }
 
-    if (!draft.branchCode.trim() || !draft.branchName.trim()) {
-      navigate("/settings/payout-account/branch", { replace: true });
-      return;
-    }
-
-    if (!draft.accountNumber.trim() || !draft.accountHolderName.trim()) {
-      navigate("/settings/payout-account/account", { replace: true });
-    }
-  }, [
-    draft.bankCode,
-    draft.bankName,
-    draft.branchCode,
-    draft.branchName,
-    draft.accountNumber,
-    draft.accountHolderName,
-    navigate,
-  ]);
-
-  useEffect(() => {
-    if (registrationSucceededRef.current || !isRulesReady) {
-      return;
-    }
-
-    if (validateBankCode(draft.bankCode)) {
-      navigate("/settings/payout-account/bank", { replace: true });
-      return;
-    }
-
-    if (validateBranchCode(draft.bankCode, draft.branchCode)) {
+    if (
+      validateBranchCode(draft.branchCode) ||
+      !hasNonWhitespace(draft.branchName)
+    ) {
       navigate("/settings/payout-account/branch", { replace: true });
       return;
     }
 
     if (
-      validateAccountNumber(
-        draft.bankCode,
-        draft.branchCode,
-        draft.accountNumber,
-      )
+      validateAccountNumber(draft.accountNumber) ||
+      !hasNonWhitespace(draft.accountHolderName)
     ) {
       navigate("/settings/payout-account/account", { replace: true });
     }
   }, [
+    draft.accountHolderName,
     draft.accountNumber,
     draft.bankCode,
+    draft.bankName,
     draft.branchCode,
-    isRulesReady,
+    draft.branchName,
     navigate,
     validateAccountNumber,
     validateBankCode,
@@ -118,14 +93,11 @@ export default function PayoutAccountConfirmPage() {
   ]);
 
   const registrationInputValid =
-    isRulesReady &&
     isComplete &&
     isRegistrationInputValid(draft);
 
   const handleRegister = useCallback(async () => {
     if (
-      isRulesLoading ||
-      !isRulesReady ||
       !isComplete ||
       !isRegistrationInputValid(draft) ||
       isSubmitting
@@ -134,24 +106,10 @@ export default function PayoutAccountConfirmPage() {
     }
 
     try {
-      const payoutAccount = await submitPayoutAccountRegistration(draft);
+      await submitPayoutAccountRegistration(draft);
 
       registrationSucceededRef.current = true;
       resetDraft();
-
-      const payoutReady =
-        payoutAccount.status === "registered" &&
-        payoutAccount.payoutReady;
-
-      if (!payoutReady) {
-        navigate("/settings/payout-account/onboarding", {
-          replace: true,
-          state: returnAfterRegistration
-            ? { returnAfterRegistration }
-            : undefined,
-        });
-        return;
-      }
 
       if (returnAfterRegistration) {
         navigate(returnAfterRegistration.pathname, {
@@ -174,8 +132,6 @@ export default function PayoutAccountConfirmPage() {
     draft,
     isComplete,
     isRegistrationInputValid,
-    isRulesLoading,
-    isRulesReady,
     isSubmitting,
     navigate,
     resetDraft,
@@ -199,7 +155,6 @@ export default function PayoutAccountConfirmPage() {
   }, [clearError, navigate]);
 
   const actionButtonDisabled =
-    isRulesLoading ||
     !registrationInputValid ||
     isSubmitting;
 
@@ -216,9 +171,7 @@ export default function PayoutAccountConfirmPage() {
         isDesktop
           ? isSubmitting
             ? "登録中..."
-            : isRulesLoading
-              ? "確認中..."
-              : "登録する"
+            : "登録する"
           : undefined
       }
       onActionButtonClick={isDesktop ? handleRegister : undefined}
@@ -342,18 +295,6 @@ export default function PayoutAccountConfirmPage() {
           </p>
         </div>
 
-        {isRulesLoading ? (
-          <p className="content-page-description payout-account-confirm-page__description">
-            Stripe設定を確認しています...
-          </p>
-        ) : null}
-
-        {!isRulesLoading && rulesErrorMessage ? (
-          <p className="payout-account-confirm-page__error" role="alert">
-            {rulesErrorMessage}
-          </p>
-        ) : null}
-
         {errorMessage ? (
           <p className="payout-account-confirm-page__error" role="alert">
             {errorMessage}
@@ -364,13 +305,7 @@ export default function PayoutAccountConfirmPage() {
       {!isDesktop ? (
         <FooterNav
           variant="action"
-          buttonLabel={
-            isSubmitting
-              ? "登録中..."
-              : isRulesLoading
-                ? "確認中..."
-                : "登録する"
-          }
+          buttonLabel={isSubmitting ? "登録中..." : "登録する"}
           disabled={actionButtonDisabled}
           onButtonClick={handleRegister}
         />

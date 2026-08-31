@@ -59,65 +59,26 @@ export function usePayoutAccountPage() {
 
     setErrorMessage("");
 
-    const requiresOnboarding =
-      payoutAccount !== null &&
-      payoutAccount.status !== "unregistered" &&
-      (payoutAccount.status === "pending" ||
-        payoutAccount.status === "restricted" ||
-        (payoutAccount.status === "registered" && !payoutAccount.payoutReady));
-
-    navigate(
-      requiresOnboarding
-        ? "/settings/payout-account/onboarding"
-        : "/settings/payout-account/bank",
-      {
-        state: location.state,
-      },
-    );
-  }, [auth, location.state, navigate, payoutAccount]);
+    navigate("/settings/payout-account/bank", {
+      state: location.state,
+    });
+  }, [auth, location.state, navigate]);
 
   const statusLabel = useMemo(() => {
     if (isLoading) {
       return "確認中";
     }
 
-    if (!payoutAccount || payoutAccount.status === "unregistered") {
-      return "未登録";
-    }
+    return payoutAccount ? "登録済み" : "未登録";
+  }, [isLoading, payoutAccount]);
 
-    switch (payoutAccount.status) {
-      case "pending":
-        return "登録手続き中";
-      case "registered":
-        return payoutAccount.payoutReady ? "登録済み" : "確認中";
-      case "restricted":
-        return "利用制限中";
-      default:
-        return "未登録";
-    }
-  }, [payoutAccount, isLoading]);
+  const actionLabel = useMemo(
+    () => (payoutAccount ? "口座を変更する" : "口座を登録する"),
+    [payoutAccount],
+  );
 
-  const actionLabel = useMemo(() => {
-    if (!payoutAccount || payoutAccount.status === "unregistered") {
-      return "口座を登録する";
-    }
-
-    switch (payoutAccount.status) {
-      case "pending":
-        return "登録を続ける";
-      case "restricted":
-        return "登録内容を確認する";
-      case "registered":
-        return payoutAccount.payoutReady
-          ? "口座を変更する"
-          : "登録内容を確認する";
-      default:
-        return "口座を登録する";
-    }
-  }, [payoutAccount]);
-
-  const bankName = payoutAccount?.bankAccount?.bankName || "";
-  const bankLast4 = payoutAccount?.bankAccount?.last4 || "";
+  const bankName = payoutAccount?.bankAccount.bankName || "";
+  const bankLast4 = payoutAccount?.bankAccount.last4 || "";
 
   return {
     payoutAccount,
