@@ -19,9 +19,7 @@ export const INQUIRY_TYPES = [
 
 export type InquiryType = (typeof INQUIRY_TYPES)[number];
 
-export function getInquiryTypeLabel(
-  inquiryType: InquiryType,
-): string {
+export function getInquiryTypeLabel(inquiryType: InquiryType): string {
   switch (inquiryType) {
     case "product":
       return "商品説明";
@@ -71,9 +69,7 @@ export function getOpenedReturnRefundPolicyLabel(
 export function isOpenedReturnRefundPolicy(
   value: string,
 ): value is OpenedReturnRefundPolicy {
-  return (
-    OPENED_RETURN_REFUND_POLICIES as readonly string[]
-  ).includes(value);
+  return (OPENED_RETURN_REFUND_POLICIES as readonly string[]).includes(value);
 }
 
 // ============================================================
@@ -274,7 +270,7 @@ export type ReceiveOpenedReturnResult = {
   refundAmount: number;
   returnShippingAmount: number;
   returnShippingTaxAmount: number;
-  totalBrandBurdenAmount: number;
+  totalSellerBurdenAmount: number;
   refundStatus: string;
   transferReversalStatus: string;
   financiallyCompleted: boolean;
