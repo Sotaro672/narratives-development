@@ -28,7 +28,7 @@ type HistoryOrder struct {
 }
 
 type HistoryOrderItem struct {
-	ItemType string `json:"itemType,omitempty"`
+	Type orderdom.OrderItemType `json:"type"`
 
 	ModelID     string `json:"modelId,omitempty"`
 	InventoryID string `json:"inventoryId,omitempty"`

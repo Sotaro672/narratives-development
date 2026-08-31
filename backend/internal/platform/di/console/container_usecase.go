@@ -7,10 +7,9 @@ import (
 	"os"
 	"strings"
 
-	listcloudtasksadp "narratives/internal/adapters/out/cloudtasks"
+	cloudtasksadp "narratives/internal/adapters/out/cloudtasks"
 	firebaseadp "narratives/internal/adapters/out/firebase"
 	fsrepo "narratives/internal/adapters/out/firestore"
-	cloudtasksadp "narratives/internal/adapters/out/firestore/cloudtasks"
 	mailadp "narratives/internal/adapters/out/mail"
 	stripeadapter "narratives/internal/adapters/out/stripe"
 	uc "narratives/internal/application/usecase"
@@ -341,7 +340,7 @@ func buildUsecases(
 		listSaveOperationStorage,
 	)
 
-	listSaveOperationRetryQueue, err := listcloudtasksadp.NewListSaveOperationQueueFromEnv(ctx)
+	listSaveOperationRetryQueue, err := cloudtasksadp.NewListSaveOperationQueueFromEnv(ctx)
 	if err != nil {
 		return nil, resources.CloseWithError(err)
 	}
@@ -487,7 +486,7 @@ func buildUsecases(
 	)
 
 	tokenBlueprintCreateOperationQueue, err :=
-		listcloudtasksadp.NewTokenBlueprintCreateOperationQueueFromEnv(ctx)
+		cloudtasksadp.NewTokenBlueprintCreateOperationQueueFromEnv(ctx)
 	if err != nil {
 		return nil, resources.CloseWithError(err)
 	}
@@ -541,7 +540,7 @@ func buildUsecases(
 
 	cartUC := uc.NewCartUsecase(r.cartRepo)
 
-	invitationDeliveryQueue, err := listcloudtasksadp.NewInvitationDeliveryQueueFromEnv(ctx)
+	invitationDeliveryQueue, err := cloudtasksadp.NewInvitationDeliveryQueueFromEnv(ctx)
 	if err != nil {
 		return nil, resources.CloseWithError(err)
 	}
@@ -566,7 +565,7 @@ func buildUsecases(
 	)
 
 	orderDispatchNotificationQueue, err :=
-		listcloudtasksadp.NewOrderDispatchNotificationQueueFromEnv(ctx)
+		cloudtasksadp.NewOrderDispatchNotificationQueueFromEnv(ctx)
 	if err != nil {
 		return nil, resources.CloseWithError(err)
 	}
@@ -586,7 +585,7 @@ func buildUsecases(
 	)
 
 	refundCompletionNotificationQueue, err :=
-		listcloudtasksadp.NewRefundCompletionNotificationQueueFromEnv(ctx)
+		cloudtasksadp.NewRefundCompletionNotificationQueueFromEnv(ctx)
 	if err != nil {
 		return nil, resources.CloseWithError(err)
 	}
