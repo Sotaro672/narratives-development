@@ -6,7 +6,8 @@ package usecase
 - Paymentの取得・作成・部分更新を提供する。
 - Stripe webhook eventによるPayment status同期を提供する。
 - Refund stateの専用更新経路を提供する。
-- succeededへの初回遷移時だけ支払い後処理を実行する。
+- succeeded状態ではOrder.PaidとTradeを冪等に整合させる。
+- succeededへの初回遷移時だけbest-effortの支払い後処理を実行する。
 
 前提:
 - payment document ID = payment.PaymentID
@@ -35,9 +36,10 @@ Refund状態更新:
   1つの論理状態としてまとめて更新する。
 
 支払い成功後の処理:
-0) order.Paid=true更新
-1) resale status=sold更新（best-effort）
-2) resale購入通知コメント作成（best-effort）
+0) order.Paid=true更新（必須・冪等）
+1) OrderItemごとのTrade起票（必須・冪等）
+2) resale status=sold更新（best-effort）
+3) resale購入通知コメント作成（best-effort）
 
 注文受付時に行うべき処理:
 - inventory reserve
@@ -51,7 +53,6 @@ import (
 	"context"
 	"errors"
 	"sort"
-	"strings"
 	"time"
 
 	common "narratives/internal/domain/common"
@@ -79,10 +80,7 @@ import (
 // PostPaidRequired must be true only for the single caller that acquires the
 // post-paid execution marker.
 type StripePaymentEventRepository interface {
-	ApplyStripePaymentEvent(
-		ctx context.Context,
-		in ApplyStripePaymentEventInput,
-	) (*ApplyStripePaymentEventResult, error)
+	ApplyStripePaymentEvent(ctx context.Context, in ApplyStripePaymentEventInput) (*ApplyStripePaymentEventResult, error)
 }
 
 // ApplyStripePaymentEventInput is the application-level input generated from
@@ -122,16 +120,8 @@ type ApplyStripePaymentEventResult struct {
 // OrderRepoForPayment is the minimal port for reading/updating orders after
 // payment.
 type OrderRepoForPayment interface {
-	GetByID(
-		ctx context.Context,
-		id string,
-	) (orderdom.Order, error)
-
-	Update(
-		ctx context.Context,
-		order orderdom.Order,
-		opts *common.SaveOptions,
-	) (orderdom.Order, error)
+	GetByID(ctx context.Context, id string) (orderdom.Order, error)
+	Update(ctx context.Context, order orderdom.Order, opts *common.SaveOptions) (orderdom.Order, error)
 }
 
 // ResaleRepoForPayment is the minimal port for updating resale status after
@@ -141,26 +131,14 @@ type OrderRepoForPayment interface {
 // - order.Items[].Type == "resale"
 // - order.Items[].ResaleID points to resales/{resaleId}
 type ResaleRepoForPayment interface {
-	GetByID(
-		ctx context.Context,
-		id string,
-	) (resaledom.Resale, error)
-
-	Update(
-		ctx context.Context,
-		id string,
-		item resaledom.Resale,
-	) (resaledom.Resale, error)
+	GetByID(ctx context.Context, id string) (resaledom.Resale, error)
+	Update(ctx context.Context, id string, item resaledom.Resale) (resaledom.Resale, error)
 }
 
 // ResalePurchaseCommentWriter creates a purchase notification comment after
 // a resale has been successfully marked as sold.
 type ResalePurchaseCommentWriter interface {
-	CreatePurchaseComment(
-		ctx context.Context,
-		resaleID string,
-		buyerAvatarID string,
-	) error
+	CreatePurchaseComment(ctx context.Context, resaleID string, buyerAvatarID string) error
 }
 
 // ============================================================
@@ -186,6 +164,15 @@ var (
 	ErrPaymentRefundUpdateRequiresRefundState = errors.New(
 		"payment: refund update requires refund state application",
 	)
+	ErrPaymentOrderRepositoryMissing = errors.New(
+		"payment: order repository is not configured",
+	)
+	ErrPaymentTradeUsecaseMissing = errors.New(
+		"payment: trade usecase is not configured",
+	)
+	ErrPaymentPaidOrderUnavailable = errors.New(
+		"payment: paid order is unavailable",
+	)
 )
 
 // ============================================================
@@ -199,6 +186,7 @@ type PaymentUsecase struct {
 	stripeEventRepo StripePaymentEventRepository
 
 	orderRepo                   OrderRepoForPayment
+	tradeUC                     *TradeUsecase
 	resaleRepo                  ResaleRepoForPayment
 	resalePurchaseCommentWriter ResalePurchaseCommentWriter
 
@@ -208,42 +196,30 @@ type PaymentUsecase struct {
 type NewPaymentUsecaseInput struct {
 	PaymentRepo paymentdom.RepositoryPort
 
-	// StripeEventRepo may be omitted when PaymentRepo also implements
-	// StripePaymentEventRepository.
 	StripeEventRepo StripePaymentEventRepository
 
 	OrderRepo                   OrderRepoForPayment
+	TradeUsecase                *TradeUsecase
 	ResaleRepo                  ResaleRepoForPayment
 	ResalePurchaseCommentWriter ResalePurchaseCommentWriter
 
 	Now func() time.Time
 }
 
-func NewPaymentUsecase(
-	in NewPaymentUsecaseInput,
-) *PaymentUsecase {
+func NewPaymentUsecase(in NewPaymentUsecaseInput) *PaymentUsecase {
 	now := in.Now
 	if now == nil {
 		now = time.Now
 	}
 
-	stripeEventRepo := in.StripeEventRepo
-	if stripeEventRepo == nil && in.PaymentRepo != nil {
-		if repository, ok :=
-			in.PaymentRepo.(StripePaymentEventRepository); ok {
-			stripeEventRepo = repository
-		}
-	}
-
 	return &PaymentUsecase{
-		repo:            in.PaymentRepo,
-		stripeEventRepo: stripeEventRepo,
-
+		repo:                        in.PaymentRepo,
+		stripeEventRepo:             in.StripeEventRepo,
 		orderRepo:                   in.OrderRepo,
+		tradeUC:                     in.TradeUsecase,
 		resaleRepo:                  in.ResaleRepo,
 		resalePurchaseCommentWriter: in.ResalePurchaseCommentWriter,
-
-		now: now,
+		now:                         now,
 	}
 }
 
@@ -258,8 +234,6 @@ func (u *PaymentUsecase) GetByPaymentID(
 	if u == nil || u.repo == nil {
 		return nil, paymentdom.ErrNotFound
 	}
-
-	paymentID = strings.TrimSpace(paymentID)
 	if paymentID == "" {
 		return nil, paymentdom.ErrInvalidPaymentID
 	}
@@ -278,10 +252,10 @@ func (u *PaymentUsecase) GetByPaymentID(
 //
 // StripeChargeID may be empty until Stripe has created a Charge.
 //
-// A Payment created as succeeded runs post-paid processing once from this
-// creation path. Later succeeded webhook events must not run the processing
-// again because ApplyStripePaymentEvent must return PostPaidRequired=false
-// for an already-succeeded Payment.
+// A Payment created as succeeded synchronizes Order.Paid and Trade immediately.
+// Non-critical post-paid side effects are then executed once from this creation
+// path. Later succeeded webhook events still re-run the required synchronization
+// idempotently so missing Trade state can be repaired.
 //
 // The repository implementation must persist the post-paid execution marker
 // when it creates a Payment whose initial status is succeeded.
@@ -292,36 +266,20 @@ func (u *PaymentUsecase) Create(
 	if u == nil || u.repo == nil {
 		return nil, paymentdom.ErrNotFound
 	}
-
-	if strings.TrimSpace(payment.PaymentID) == "" {
+	if payment.PaymentID == "" {
 		return nil, paymentdom.ErrInvalidPaymentID
 	}
-
-	if strings.TrimSpace(
-		payment.StripePaymentIntentID,
-	) == "" {
+	if payment.StripePaymentIntentID == "" {
 		return nil, paymentdom.ErrInvalidStripePaymentIntent
 	}
-
-	if strings.TrimSpace(
-		payment.TransferGroup,
-	) == "" {
+	if payment.TransferGroup == "" {
 		return nil, paymentdom.ErrInvalidTransferGroup
 	}
-
-	if payment.StripeChargeID != "" &&
-		strings.TrimSpace(
-			payment.StripeChargeID,
-		) == "" {
-		return nil, paymentdom.ErrInvalidStripeChargeID
-	}
-
 	if payment.StripeRefundID != "" ||
 		payment.RefundedAmount != 0 ||
 		payment.RefundedAt != nil ||
 		(payment.RefundStatus != "" &&
-			payment.RefundStatus !=
-				paymentdom.RefundStatusNone) {
+			payment.RefundStatus != paymentdom.RefundStatusNone) {
 		return nil, paymentdom.ErrInvalidRefundState
 	}
 
@@ -345,9 +303,13 @@ func (u *PaymentUsecase) Create(
 		return nil, err
 	}
 
-	if created != nil &&
-		created.Status == paymentdom.StatusSucceeded {
-		u.handlePostPaidBestEffort(ctx, created)
+	if created != nil && created.Status == paymentdom.StatusSucceeded {
+		order, err := u.ensurePaidOrderAndTrades(ctx, created)
+		if err != nil {
+			return nil, err
+		}
+
+		u.handlePostPaidBestEffort(ctx, order)
 	}
 
 	return created, nil
@@ -370,35 +332,28 @@ func (u *PaymentUsecase) Update(
 	if u == nil || u.repo == nil {
 		return nil, paymentdom.ErrNotFound
 	}
-
-	paymentID = strings.TrimSpace(paymentID)
 	if paymentID == "" {
 		return nil, paymentdom.ErrInvalidPaymentID
 	}
-
 	if patch.Status != nil {
 		return nil, ErrPaymentStatusUpdateRequiresStripeEvent
 	}
-
 	if patch.StripeRefundID != nil ||
 		patch.RefundStatus != nil ||
 		patch.RefundedAmount != nil ||
 		patch.RefundedAt != nil {
 		return nil, ErrPaymentRefundUpdateRequiresRefundState
 	}
-
 	if patch.StripePaymentIntentID != nil &&
-		strings.TrimSpace(*patch.StripePaymentIntentID) == "" {
+		*patch.StripePaymentIntentID == "" {
 		return nil, paymentdom.ErrInvalidStripePaymentIntent
 	}
-
 	if patch.StripeChargeID != nil &&
-		strings.TrimSpace(*patch.StripeChargeID) == "" {
+		*patch.StripeChargeID == "" {
 		return nil, paymentdom.ErrInvalidStripeChargeID
 	}
-
 	if patch.TransferGroup != nil &&
-		strings.TrimSpace(*patch.TransferGroup) == "" {
+		*patch.TransferGroup == "" {
 		return nil, paymentdom.ErrInvalidTransferGroup
 	}
 
@@ -439,38 +394,26 @@ func (u *PaymentUsecase) UpdateRefundState(
 	if u == nil || u.repo == nil {
 		return nil, paymentdom.ErrNotFound
 	}
-
-	paymentID := strings.TrimSpace(
-		in.PaymentID,
-	)
-	if paymentID == "" {
+	if in.PaymentID == "" {
 		return nil, paymentdom.ErrInvalidPaymentID
 	}
-
 	if in.RefundStatus == paymentdom.RefundStatusNone ||
-		!paymentdom.IsValidRefundStatus(
-			in.RefundStatus,
-		) {
+		!paymentdom.IsValidRefundStatus(in.RefundStatus) {
 		return nil, paymentdom.ErrInvalidRefundStatus
 	}
-
-	stripeRefundID := strings.TrimSpace(
-		in.StripeRefundID,
-	)
-	if stripeRefundID == "" {
+	if in.StripeRefundID == "" {
 		return nil, paymentdom.ErrInvalidStripeRefundID
 	}
 
 	current, err := u.repo.GetByPaymentID(
 		ctx,
-		paymentID,
+		in.PaymentID,
 	)
 	if err != nil {
 		return nil, err
 	}
-
 	if current == nil ||
-		current.PaymentID != paymentID {
+		current.PaymentID != in.PaymentID {
 		return nil, paymentdom.ErrNotFound
 	}
 
@@ -481,9 +424,8 @@ func (u *PaymentUsecase) UpdateRefundState(
 	}
 
 	next := *current
-
 	if err := next.SetRefundState(
-		stripeRefundID,
+		in.StripeRefundID,
 		in.RefundStatus,
 		in.RefundedAmount,
 		refundedAt,
@@ -503,15 +445,14 @@ func (u *PaymentUsecase) UpdateRefundState(
 
 	updated, err := u.repo.UpdateByPaymentID(
 		ctx,
-		paymentID,
+		in.PaymentID,
 		patch,
 	)
 	if err != nil {
 		return nil, err
 	}
-
 	if updated == nil ||
-		updated.PaymentID != paymentID {
+		updated.PaymentID != in.PaymentID {
 		return nil, paymentdom.ErrNotFound
 	}
 
@@ -523,8 +464,11 @@ func (u *PaymentUsecase) UpdateRefundState(
 // Event deduplication and status transition must be performed atomically by
 // StripePaymentEventRepository.
 //
-// A duplicate event is returned as a successful no-op.
-// Post-paid processing is executed only when PostPaidRequired is true.
+// A duplicate event is returned as a successful no-op for Payment state.
+//
+// When the resulting Payment is succeeded, Order.Paid and Trade are ensured
+// on every call so a retry can repair missing required post-payment state.
+// Best-effort post-paid processing is executed only when PostPaidRequired is true.
 func (u *PaymentUsecase) ApplyStripeEvent(
 	ctx context.Context,
 	in ApplyStripePaymentEventInput,
@@ -532,59 +476,54 @@ func (u *PaymentUsecase) ApplyStripeEvent(
 	if u == nil || u.repo == nil {
 		return nil, paymentdom.ErrNotFound
 	}
-
 	if u.stripeEventRepo == nil {
 		return nil, ErrPaymentStripeEventRepositoryMissing
 	}
-
-	in.EventID = strings.TrimSpace(in.EventID)
-	in.PaymentID = strings.TrimSpace(in.PaymentID)
-	in.StripePaymentIntentID = strings.TrimSpace(
-		in.StripePaymentIntentID,
-	)
-	in.StripeChargeID = strings.TrimSpace(
-		in.StripeChargeID,
-	)
-
 	if in.EventID == "" {
 		return nil, ErrPaymentStripeEventIDEmpty
 	}
-
 	if in.PaymentID == "" {
 		return nil, paymentdom.ErrInvalidPaymentID
 	}
-
 	if in.StripePaymentIntentID == "" {
 		return nil, paymentdom.ErrInvalidStripePaymentIntent
 	}
-
 	if !paymentdom.IsValidStatus(in.Status) {
 		return nil, paymentdom.ErrInvalidStatus
 	}
-
 	if in.OccurredAt.IsZero() {
 		return nil, ErrPaymentStripeEventOccurredAtInvalid
 	}
 
 	in.OccurredAt = in.OccurredAt.UTC()
 
-	result, err :=
-		u.stripeEventRepo.ApplyStripePaymentEvent(
-			ctx,
-			in,
-		)
+	result, err := u.stripeEventRepo.ApplyStripePaymentEvent(
+		ctx,
+		in,
+	)
 	if err != nil {
 		return nil, err
 	}
-
-	if result == nil || result.Payment == nil {
+	if result == nil ||
+		result.Payment == nil {
 		return nil, ErrPaymentStripeEventResultEmpty
+	}
+
+	var paidOrder *orderdom.Order
+	if result.Payment.Status == paymentdom.StatusSucceeded {
+		paidOrder, err = u.ensurePaidOrderAndTrades(
+			ctx,
+			result.Payment,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if result.PostPaidRequired {
 		u.handlePostPaidBestEffort(
 			ctx,
-			result.Payment,
+			paidOrder,
 		)
 	}
 
@@ -592,62 +531,90 @@ func (u *PaymentUsecase) ApplyStripeEvent(
 }
 
 // ============================================================
-// Post-paid flow
+// Required paid-state synchronization
 // ============================================================
 
-// handlePostPaidBestEffort runs post-paid side effects.
+// ensurePaidOrderAndTrades synchronizes the required application state for a
+// succeeded Payment.
+//
+// This method is intentionally idempotent and may run for duplicate succeeded
+// Stripe webhook events:
+//   - Order.Paid is set to true if necessary.
+//   - TradeUsecase ensures exactly one Trade per eligible Order item.
+//
+// Trade creation is required transaction state, not a best-effort notification.
+// A failure is therefore returned to the caller so the webhook can be retried.
+func (u *PaymentUsecase) ensurePaidOrderAndTrades(
+	ctx context.Context,
+	payment *paymentdom.Payment,
+) (*orderdom.Order, error) {
+	if u == nil ||
+		u.orderRepo == nil {
+		return nil, ErrPaymentOrderRepositoryMissing
+	}
+	if u.tradeUC == nil {
+		return nil, ErrPaymentTradeUsecaseMissing
+	}
+	if payment == nil ||
+		payment.Status != paymentdom.StatusSucceeded {
+		return nil, nil
+	}
+	if payment.PaymentID == "" {
+		return nil, paymentdom.ErrInvalidPaymentID
+	}
+
+	order, err := u.orderRepo.GetByID(
+		ctx,
+		payment.PaymentID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	updatedOrder, err := u.markOrderPaidTrue(
+		ctx,
+		order,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if updatedOrder == nil {
+		return nil, ErrPaymentPaidOrderUnavailable
+	}
+
+	if err := u.tradeUC.EnsureForPaidOrder(
+		ctx,
+		*updatedOrder,
+	); err != nil {
+		return nil, err
+	}
+
+	return updatedOrder, nil
+}
+
+// ============================================================
+// Best-effort post-paid flow
+// ============================================================
+
+// handlePostPaidBestEffort runs non-critical post-paid side effects.
+//
+// Required state synchronization (Order.Paid and Trade creation) must already
+// have succeeded before this method is called.
 //
 // This method may only be called from:
-//
 //  1. A successful initial Create whose Repository transaction also stores
 //     the post-paid execution marker.
 //  2. ApplyStripeEvent when PostPaidRequired is true.
-//
-// The Repository guarantees that PostPaidRequired is acquired once.
 func (u *PaymentUsecase) handlePostPaidBestEffort(
 	ctx context.Context,
-	payment *paymentdom.Payment,
+	order *orderdom.Order,
 ) {
-	if u == nil || payment == nil {
+	if u == nil ||
+		order == nil {
 		return
 	}
 
-	if payment.Status != paymentdom.StatusSucceeded {
-		return
-	}
-
-	rootID := strings.TrimSpace(payment.PaymentID)
-	if rootID == "" {
-		return
-	}
-
-	var order *orderdom.Order
-
-	if u.orderRepo != nil {
-		foundOrder, err := u.orderRepo.GetByID(
-			ctx,
-			rootID,
-		)
-		if err == nil {
-			order = &foundOrder
-		}
-	}
-
-	// 0) order.Paid=true
-	if u.orderRepo != nil {
-		updatedOrder, err := u.markOrderPaidTrue(
-			ctx,
-			rootID,
-			order,
-		)
-		if err == nil && updatedOrder != nil {
-			order = updatedOrder
-		}
-	}
-
-	// 1) resale status=sold
-	// 2) purchase notification comment
-	if u.resaleRepo != nil && order != nil {
+	if u.resaleRepo != nil {
 		_ = u.markResalesSoldByOrder(
 			ctx,
 			*order,
@@ -665,43 +632,25 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(
 
 func (u *PaymentUsecase) markOrderPaidTrue(
 	ctx context.Context,
-	orderID string,
-	order *orderdom.Order,
+	order orderdom.Order,
 ) (*orderdom.Order, error) {
-	if u == nil || u.orderRepo == nil {
-		return order, nil
+	if u == nil ||
+		u.orderRepo == nil {
+		return nil, ErrPaymentOrderRepositoryMissing
+	}
+	if order.ID == "" {
+		return nil, orderdom.ErrInvalidID
 	}
 
-	orderID = strings.TrimSpace(orderID)
-	if orderID == "" {
-		return order, nil
+	if order.Paid {
+		return &order, nil
 	}
 
-	var current orderdom.Order
-
-	if order != nil {
-		current = *order
-	} else {
-		fetched, err := u.orderRepo.GetByID(
-			ctx,
-			orderID,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		current = fetched
-	}
-
-	if current.Paid {
-		return &current, nil
-	}
-
-	current.Paid = true
+	order.Paid = true
 
 	updated, err := u.orderRepo.Update(
 		ctx,
-		current,
+		order,
 		nil,
 	)
 	if err != nil {
@@ -719,7 +668,8 @@ func (u *PaymentUsecase) markResalesSoldByOrder(
 	ctx context.Context,
 	order orderdom.Order,
 ) error {
-	if u == nil || u.resaleRepo == nil {
+	if u == nil ||
+		u.resaleRepo == nil {
 		return nil
 	}
 
@@ -789,24 +739,20 @@ func extractResaleIDsFromOrder(
 		if item.Type != orderdom.OrderItemTypeResale {
 			continue
 		}
-
-		resaleID := strings.TrimSpace(item.ResaleID)
-		if resaleID == "" {
+		if item.ResaleID == "" {
+			continue
+		}
+		if _, exists := seen[item.ResaleID]; exists {
 			continue
 		}
 
-		if _, exists := seen[resaleID]; exists {
-			continue
-		}
-
-		seen[resaleID] = struct{}{}
+		seen[item.ResaleID] = struct{}{}
 		resaleIDs = append(
 			resaleIDs,
-			resaleID,
+			item.ResaleID,
 		)
 	}
 
 	sort.Strings(resaleIDs)
-
 	return resaleIDs
 }

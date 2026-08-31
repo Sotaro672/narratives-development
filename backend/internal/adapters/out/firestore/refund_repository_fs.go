@@ -754,8 +754,6 @@ func docToRefund(
 		return refunddom.Refund{}, err
 	}
 
-	// No legacy schema fallback is supported. The persisted ID field and
-	// Firestore document ID must both exist and match exactly.
 	if document.ID == "" ||
 		document.ID != snapshot.Ref.ID {
 		return refunddom.Refund{}, refunddom.ErrInvalidID

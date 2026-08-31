@@ -42,6 +42,7 @@ type mallUsecases struct {
 	itemRefundUC                   *usecase.ItemRefundUsecase
 	refundCompletionNotificationUC usecase.RefundCompletionNotificationUsecasePort
 	orderUC                        *usecase.OrderUsecase
+	tradeUC                        *usecase.TradeUsecase
 	inquiryUC                      *usecase.InquiryUsecase
 	returnRequestUC                *usecase.ReturnRequestUsecase
 	announcementUC                 *usecase.AnnouncementUsecase
@@ -72,6 +73,9 @@ func buildMallUsecases(
 	}
 	if r == nil {
 		return nil, errors.New("di.mall: repositories are nil")
+	}
+	if r.tradeRepo == nil {
+		return nil, errors.New("di.mall: trade repository is nil")
 	}
 
 	authUserReader := outfirebase.NewAuthUserReader(infra.FirebaseAuth)
@@ -202,13 +206,25 @@ func buildMallUsecases(
 		r.cartRepo,
 	)
 
+	tradeUC := usecase.NewTradeUsecase(
+		r.tradeRepo,
+	)
+	if tradeUC == nil {
+		return nil, errors.New("di.mall: trade usecase is nil")
+	}
+
 	paymentUC := usecase.NewPaymentUsecase(
 		usecase.NewPaymentUsecaseInput{
-			PaymentRepo: r.paymentRepo,
-			OrderRepo:   r.orderRepo,
-			ResaleRepo:  r.resaleRepo,
+			PaymentRepo:     r.paymentRepo,
+			StripeEventRepo: r.paymentRepo,
+			OrderRepo:       r.orderRepo,
+			TradeUsecase:    tradeUC,
+			ResaleRepo:      r.resaleRepo,
 		},
 	)
+	if paymentUC == nil {
+		return nil, errors.New("di.mall: payment usecase is nil")
+	}
 
 	settlementDependencies, err := shared.BuildSettlementDependencies(
 		ctx,
@@ -399,6 +415,7 @@ func buildMallUsecases(
 		itemRefundUC:                   itemRefundUC,
 		refundCompletionNotificationUC: refundCompletionNotificationUC,
 		orderUC:                        orderUC,
+		tradeUC:                        tradeUC,
 		inquiryUC:                      inquiryUC,
 		returnRequestUC:                returnRequestUC,
 		announcementUC:                 announcementUC,
@@ -434,6 +451,7 @@ func (u *mallUsecases) applyToContainer(c *Container) {
 	c.ItemRefundUC = u.itemRefundUC
 	c.RefundCompletionNotificationUC = u.refundCompletionNotificationUC
 	c.OrderUC = u.orderUC
+	c.TradeUC = u.tradeUC
 	c.InquiryUC = u.inquiryUC
 	c.ReturnRequestUC = u.returnRequestUC
 	c.AnnouncementUC = u.announcementUC

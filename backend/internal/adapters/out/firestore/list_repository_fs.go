@@ -394,7 +394,6 @@ func (r *ListRepositoryFS) Update(ctx context.Context, id string, l ldom.List) (
 		data := encodeListDoc(cur)
 
 		// Transportation configuration has been fully migrated to inventory.
-		// Remove legacy list-level transportation fields from Firestore.
 		data["transportation_option"] = gfs.Delete
 		data["transportation_id"] = gfs.Delete
 

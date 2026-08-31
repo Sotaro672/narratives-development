@@ -157,8 +157,6 @@ func (r *AnnouncementRepositoryFS) Update(
 		{Path: "Published", Value: a.Published},
 		{Path: "PublishedAt", Value: a.PublishedAt},
 		{Path: "UpdatedAt", Value: updatedAt},
-
-		// Remove legacy duplicated/embedded fields.
 		{Path: "ID", Value: firestore.Delete},
 		{Path: "TargetAvatars", Value: firestore.Delete},
 		{Path: "Attachments", Value: firestore.Delete},
@@ -221,7 +219,6 @@ func (r *AnnouncementRepositoryFS) MarkPublished(
 		{Path: "PublishedAt", Value: publishedAt},
 		{Path: "UpdatedAt", Value: publishedAt},
 
-		// Remove legacy duplicated/embedded fields when touched.
 		{Path: "ID", Value: firestore.Delete},
 		{Path: "TargetAvatars", Value: firestore.Delete},
 		{Path: "Attachments", Value: firestore.Delete},

@@ -5,12 +5,12 @@ import (
 	"context"
 	"errors"
 
+	mallhandler "narratives/internal/adapters/in/http/mall/handler"
+
 	mallquery "narratives/internal/application/query/mall"
 	sharedquery "narratives/internal/application/query/shared"
 	appresolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
-
-	mallhandler "narratives/internal/adapters/in/http/mall/handler"
 
 	refunddom "narratives/internal/domain/refund"
 
@@ -40,6 +40,7 @@ type Container struct {
 	RefundRepo                     refunddom.RepositoryPort
 	RefundCompletionNotificationUC usecase.RefundCompletionNotificationUsecasePort
 	OrderUC                        *usecase.OrderUsecase
+	TradeUC                        *usecase.TradeUsecase
 	InquiryUC                      *usecase.InquiryUsecase
 	ReturnRequestUC                *usecase.ReturnRequestUsecase
 	AnnouncementUC                 *usecase.AnnouncementUsecase

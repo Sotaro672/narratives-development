@@ -43,6 +43,8 @@ type mallRepositories struct {
 	tokenBlueprintReviewRepo         *fs.TokenBlueprintReviewRepositoryFS
 	tokenOwnerUpdater                *fs.TokenOwnerUpdaterFS
 	tokenReader                      *fs.TokenReaderFS
+	tradeRepo                        *fs.TradeRepositoryFS
+	tradeMessageRepo                 *fs.TradeMessageRepositoryFS
 	transferRepo                     *fs.TransferRepositoryFS
 	transportationRepo               *fs.TransportationRepositoryFS
 	userRepo                         *fs.UserRepositoryFS
@@ -88,6 +90,8 @@ func buildMallRepositories(fsClient *firestore.Client) *mallRepositories {
 	resaleReviewRepo := fs.NewResaleReviewRepositoryFS(fsClient)
 	transportationRepo := fs.NewTransportationRepositoryFS(fsClient)
 	tokenOwnerUpdater := fs.NewTokenOwnerUpdaterFS(fsClient)
+	tradeRepo := fs.NewTradeRepositoryFS(fsClient)
+	tradeMessageRepo := fs.NewTradeMessageRepositoryFS(fsClient)
 	transferRepo := fs.NewTransferRepositoryFS(fsClient)
 	refundCompletionNotificationRepo := fs.NewRefundCompletionNotificationRepositoryFS(fsClient)
 
@@ -132,6 +136,8 @@ func buildMallRepositories(fsClient *firestore.Client) *mallRepositories {
 		tokenBlueprintReviewRepo:         tokenBlueprintReviewRepo,
 		tokenOwnerUpdater:                tokenOwnerUpdater,
 		tokenReader:                      tokenReader,
+		tradeRepo:                        tradeRepo,
+		tradeMessageRepo:                 tradeMessageRepo,
 		transferRepo:                     transferRepo,
 		transportationRepo:               transportationRepo,
 		userRepo:                         userRepo,
