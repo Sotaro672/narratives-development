@@ -4,7 +4,6 @@ package usecase
 import (
 	"context"
 	"errors"
-	"strconv"
 	"time"
 
 	orderdom "narratives/internal/domain/order"
@@ -79,13 +78,7 @@ func (u *SettlementUsecase) EnsureForSucceededPayment(
 	result := make([]settlementdom.Settlement, 0, len(calculation.Settlements))
 
 	for _, allocation := range calculation.Settlements {
-		settlement, err := u.ensurePrimarySettlement(
-			ctx,
-			order,
-			payment,
-			allocation,
-			now,
-		)
+		settlement, err := u.ensurePrimarySettlement(ctx, order, payment, allocation, now)
 		if err != nil {
 			return nil, err
 		}
@@ -131,10 +124,7 @@ func (u *SettlementUsecase) ensurePrimarySettlement(
 		return settlementdom.Settlement{}, ErrSettlementAllocationInvalid
 	}
 
-	settlementID, err := settlementdom.NewID(
-		payment.PaymentID,
-		allocation.Seller,
-	)
+	settlementID, err := settlementdom.NewID(payment.PaymentID, allocation.Seller)
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
@@ -215,12 +205,10 @@ func validateSucceededPaymentSellerSnapshots(order orderdom.Order) error {
 			if err := validateListSettlementSeller(item.SellerSnapshot); err != nil {
 				return err
 			}
-
 		case orderdom.OrderItemTypeResale:
 			if err := validateResaleReceivableSeller(item.SellerSnapshot); err != nil {
 				return err
 			}
-
 		default:
 			return ErrSettlementUnsupportedOrderItem
 		}
@@ -266,8 +254,7 @@ func validateSellerFinancialCalculation(
 	payment paymentdom.Payment,
 	calculation settlementdom.Calculation,
 ) error {
-	if len(calculation.Settlements) == 0 &&
-		len(calculation.Receivables) == 0 {
+	if len(calculation.Settlements) == 0 && len(calculation.Receivables) == 0 {
 		return ErrSettlementAllocationEmpty
 	}
 
@@ -390,11 +377,6 @@ func validateSellerFinancialCalculation(
 			allocation.OrderItemIndex,
 		)
 		if err != nil || expectedReceivableID == "" {
-			return ErrSettlementAllocationInvalid
-		}
-
-		itemKey := "resale_item:" + strconv.Itoa(allocation.OrderItemIndex)
-		if expectedReceivableID != payment.PaymentID+"_"+itemKey {
 			return ErrSettlementAllocationInvalid
 		}
 

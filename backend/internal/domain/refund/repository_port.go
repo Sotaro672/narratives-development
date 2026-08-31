@@ -1,4 +1,4 @@
-// backend/internal/domain/refund/respository_port.go
+// backend/internal/domain/refund/repository_port.go
 package refund
 
 import (
@@ -13,11 +13,9 @@ import (
 
 // CreateRefundInput represents the persistence input for one item-level Refund.
 //
-// RefundID should be generated deterministically from:
+// RefundID must be generated deterministically by NewID from:
 //
 //	orderID + orderItemIndex
-//
-// by NewID.
 //
 // A newly created Refund always starts with:
 //
@@ -25,11 +23,21 @@ import (
 //	StripeRefundID = ""
 //	RefundedAt = nil
 //
-// Seller is the immutable seller payout identity captured from the
-// authoritative Order item snapshot.
+// Seller is the immutable seller payout identity captured from the authoritative
+// Order item snapshot.
 //
-// Primary List sales use SellerTypeAccount.
-// Resale transactions use SellerTypeAvatar.
+// Primary List sales use SellerTypeAccount and must reference SettlementID.
+//
+// Consumer resale transactions use SellerTypeResale and must reference
+// SalesReceivableID.
+//
+// Exactly one seller-side financial reference is allowed:
+//
+//	account -> SettlementID != "", SalesReceivableID == ""
+//	resale  -> SettlementID == "", SalesReceivableID != ""
+//
+// Resale Refunds never execute a Stripe Transfer Reversal, therefore
+// TransferReversalAmount must be zero.
 //
 // Policy:
 //
@@ -56,8 +64,8 @@ import (
 //
 // TransferReversalStatus is derived by Refund constructors:
 //
-// - TransferReversalAmount == 0 -> not_required
-// - TransferReversalAmount > 0  -> pending
+//	TransferReversalAmount == 0 -> not_required
+//	TransferReversalAmount > 0  -> pending
 //
 // Stripe-generated Refund and Transfer Reversal IDs are intentionally not
 // accepted during creation.
@@ -72,7 +80,8 @@ type CreateRefundInput struct {
 
 	Seller SellerIdentity
 
-	SettlementID string
+	SettlementID      string
+	SalesReceivableID string
 
 	Policy OpenedReturnRefundPolicy
 
@@ -98,10 +107,14 @@ type CreateRefundInput struct {
 
 // UpdateRefundOperation identifies one validated Refund domain transition.
 //
-// Refund contains two independent but coordinated state machines:
+// Refund always owns the purchaser-side Stripe Refund lifecycle.
 //
-//  1. purchaser-side Stripe Refund
-//  2. seller-side Stripe Transfer Reversal
+// Primary List-sale Refunds may additionally own a seller-side Stripe Transfer
+// Reversal lifecycle.
+//
+// Consumer resale Refunds never execute Transfer Reversal operations. Their
+// SalesReceivable cancellation is coordinated separately by the application
+// layer before the purchaser Stripe Refund is created.
 //
 // UpdateByID must not mutate persistence fields directly. The repository must
 // load the current Refund and execute the corresponding Refund domain method.
@@ -127,9 +140,7 @@ var AllowedUpdateOperations = map[UpdateRefundOperation]struct{}{
 	UpdateOperationMarkTransferReversalFailed:          {},
 }
 
-func IsValidUpdateOperation(
-	operation UpdateRefundOperation,
-) bool {
+func IsValidUpdateOperation(operation UpdateRefundOperation) bool {
 	if operation == "" {
 		return false
 	}
@@ -171,16 +182,19 @@ func IsValidUpdateOperation(
 //
 //	UpdatedAt
 //
+// Transfer Reversal operations are valid only for SellerTypeAccount Refunds.
+//
 // Repository implementations must reject fields that are invalid for the
 // requested Operation and execute the corresponding Refund domain method.
 //
 // Direct field mutation must not be used because doing so could bypass:
 //
-// - Refund status transition validation
-// - Stripe Refund ID validation
-// - Transfer Reversal status validation
-// - purchaser Refund completion requirement
-// - timestamp invariants
+//   - Refund status transition validation
+//   - Stripe Refund ID validation
+//   - Transfer Reversal status validation
+//   - seller-type restrictions
+//   - purchaser Refund completion requirement
+//   - timestamp invariants
 type UpdateRefundInput struct {
 	Operation UpdateRefundOperation
 
@@ -202,35 +216,45 @@ type UpdateRefundInput struct {
 //
 // Refund is intentionally separate from:
 //
-// - payment.RepositoryPort
-// - settlement.Repository
-// - Order return-request state
-// - Inquiry status
+//   - payment.RepositoryPort
+//   - settlement.Repository
+//   - salesReceivable.Repository
+//   - Order return-request state
+//   - Inquiry status
 //
 // Payment continues to own full-payment refund state.
 //
-// Refund owns one item-level partial purchaser refund and the seller-side
-// partial Transfer Reversal attributable to that same returned Order item.
+// Refund owns one item-level purchaser Stripe Refund and the immutable reference
+// to the corresponding seller-side financial state.
 //
-// The seller may be:
+// Primary List sale:
 //
-// - an Account for a primary List sale
-// - an Avatar payout identity for a resale transaction
+//	Refund
+//		-> Settlement
+//		-> optional Stripe Transfer Reversal
+//
+// Consumer resale:
+//
+//	Refund
+//		-> SalesReceivable
+//
+// Resale SalesReceivable cancellation is coordinated by the application layer.
+// It is deliberately not performed by this repository.
 //
 // For opened returns, Refund additionally records:
 //
-// - selected refund Policy
-// - outbound shipping refunded against the original Charge
-// - outbound shipping consumption tax
-// - return shipping borne by the seller
-// - return shipping consumption tax
+//   - selected refund Policy
+//   - outbound shipping refunded against the original Charge
+//   - outbound shipping consumption tax
+//   - return shipping borne by the seller
+//   - return shipping consumption tax
 //
 // Return shipping is additional seller-side burden and is not necessarily part
 // of the purchaser's original Stripe Charge.
 //
 // The application layer coordinates:
 //
-//	Refund
+//	Refund financial processing
 //		-> Order return completion
 //		-> Inquiry resolution
 //
@@ -286,20 +310,35 @@ type RepositoryPort interface {
 		paymentID string,
 	) ([]Refund, error)
 
-	// ListBySettlementID returns item-level Refunds whose seller-side amount is
-	// attributable to one Settlement.
+	// ListBySettlementID returns primary List-sale item Refunds attributable to
+	// one Settlement.
 	//
-	// This is required when calculating cumulative partial Transfer Reversals
-	// against a Settlement.
+	// This is required when calculating cumulative partial Stripe Transfer
+	// Reversals against one Settlement.
+	//
+	// SellerTypeResale Refunds must never be returned by this query.
 	ListBySettlementID(
 		ctx context.Context,
 		settlementID string,
 	) ([]Refund, error)
 
-	// ListByCompanyID returns Refunds attributable to one Account seller Company.
+	// ListBySalesReceivableID returns resale item Refunds attributable to one
+	// SalesReceivable.
 	//
-	// Avatar seller Refunds are not returned by this query because they do not
-	// have a CompanyID.
+	// One SalesReceivable represents one resale Order item, therefore normally at
+	// most one Refund should exist for a SalesReceivable. Multiple results must
+	// be treated as inconsistent financial state by higher-level reconciliation.
+	//
+	// SellerTypeAccount Refunds must never be returned by this query.
+	ListBySalesReceivableID(
+		ctx context.Context,
+		salesReceivableID string,
+	) ([]Refund, error)
+
+	// ListByCompanyID returns Refunds attributable to one primary-sale Account
+	// seller Company.
+	//
+	// SellerTypeResale Refunds do not have a CompanyID and must not be returned.
 	ListByCompanyID(
 		ctx context.Context,
 		companyID string,
@@ -309,17 +348,21 @@ type RepositoryPort interface {
 	//
 	// Implementations must:
 	//
-	// - reject an existing RefundID instead of overwriting it
-	// - reject a duplicate InquiryID
-	// - reject a duplicate OrderID + OrderItemIndex
-	// - validate Seller
-	// - use Refund.New when Policy == ""
-	// - use Refund.NewOpenedReturn when Policy is set
-	// - persist the complete validated Refund
+	//   - reject an existing RefundID instead of overwriting it
+	//   - reject a duplicate InquiryID
+	//   - reject a duplicate OrderID + OrderItemIndex
+	//   - validate Seller
+	//   - require exactly one seller-side financial reference
+	//   - require SettlementID for SellerTypeAccount
+	//   - require SalesReceivableID for SellerTypeResale
+	//   - require TransferReversalAmount == 0 for SellerTypeResale
+	//   - use Refund.New when Policy == ""
+	//   - use Refund.NewOpenedReturn when Policy is set
+	//   - persist the complete validated Refund
 	//
 	// Financial values must never be accepted directly from an untrusted
-	// frontend request. The application layer must calculate them from the
-	// authoritative Order and Settlement state before calling Create.
+	// frontend request. The application layer must calculate them from
+	// authoritative Order and seller-side financial state before calling Create.
 	//
 	// StripeRefundID and StripeTransferReversalID are not accepted during
 	// creation because neither Stripe operation has occurred yet.
@@ -353,6 +396,8 @@ type RepositoryPort interface {
 	// mark_transfer_reversal_failed:
 	//
 	//	Refund.MarkTransferReversalFailed
+	//
+	// Transfer Reversal operations must fail for SellerTypeResale.
 	//
 	// The repository must validate the complete resulting Refund before
 	// persisting it.

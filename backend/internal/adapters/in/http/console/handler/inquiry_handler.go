@@ -561,7 +561,7 @@ func (h *InquiryHandler) receiveOpenedReturn(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	totalBrandBurdenAmount, err := result.Refund.TotalBrandBurdenAmount()
+	totalSellerBurdenAmount, err := result.Refund.TotalSellerBurdenAmount()
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
@@ -574,7 +574,7 @@ func (h *InquiryHandler) receiveOpenedReturn(w http.ResponseWriter, r *http.Requ
 		RefundAmount            int                `json:"refundAmount"`
 		ReturnShippingAmount    int                `json:"returnShippingAmount"`
 		ReturnShippingTaxAmount int                `json:"returnShippingTaxAmount"`
-		TotalBrandBurdenAmount  int                `json:"totalBrandBurdenAmount"`
+		TotalSellerBurdenAmount int                `json:"totalSellerBurdenAmount"`
 		RefundStatus            string             `json:"refundStatus"`
 		TransferReversalStatus  string             `json:"transferReversalStatus"`
 		FinanciallyCompleted    bool               `json:"financiallyCompleted"`
@@ -588,7 +588,7 @@ func (h *InquiryHandler) receiveOpenedReturn(w http.ResponseWriter, r *http.Requ
 		RefundAmount:            result.Refund.RefundAmount,
 		ReturnShippingAmount:    result.Refund.ReturnShippingAmount,
 		ReturnShippingTaxAmount: result.Refund.ReturnShippingTaxAmount,
-		TotalBrandBurdenAmount:  totalBrandBurdenAmount,
+		TotalSellerBurdenAmount: totalSellerBurdenAmount,
 		RefundStatus:            string(result.Refund.Status),
 		TransferReversalStatus:  string(result.Refund.TransferReversalStatus),
 		FinanciallyCompleted:    result.FinanciallyCompleted,
@@ -635,7 +635,7 @@ func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id stri
 	// return_opened:
 	// POST /inquiries/{id}/receive-opened-return
 	//
-	// どちらも Refund -> Transfer Reversal -> Order return completion の
+	// どちらも seller-side financial completion -> Order return completion の
 	// 完了後に専用 Usecase から Inquiry を resolved へ遷移させる。
 	if detail.Inquiry.InquiryType == inquirydom.InquiryTypeReturnUnopened ||
 		detail.Inquiry.InquiryType == inquirydom.InquiryTypeReturnOpened {

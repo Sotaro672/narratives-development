@@ -683,12 +683,12 @@ func validateOpenedReturnReceiptRefund(
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
-	totalBrandBurdenAmount, err := refund.TotalBrandBurdenAmount()
+	totalSellerBurdenAmount, err := refund.TotalSellerBurdenAmount()
 	if err != nil {
 		return err
 	}
 
-	if totalBrandBurdenAmount != expectedAmount.TotalBrandBurdenAmount {
+	if totalSellerBurdenAmount != expectedAmount.TotalSellerBurdenAmount {
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 

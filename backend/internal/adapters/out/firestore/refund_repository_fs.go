@@ -27,8 +27,13 @@ var _ refunddom.RepositoryPort = (*RefundRepositoryFS)(nil)
 // RefundRepositoryFS
 // ============================================================
 
-// RefundRepositoryFS persists item-level purchaser refunds and the associated
-// seller-side Transfer Reversal state.
+// RefundRepositoryFS persists item-level purchaser Refunds.
+//
+// Primary List-sale Refunds reference one Settlement and may contain seller-side
+// Stripe Transfer Reversal state.
+//
+// Consumer resale Refunds reference one SalesReceivable and never contain Stripe
+// Transfer Reversal state.
 //
 // Firestore:
 //
@@ -38,23 +43,19 @@ var _ refunddom.RepositoryPort = (*RefundRepositoryFS)(nil)
 //
 //	{orderId}_{orderItemIndex}
 //
-// Inquiry uniqueness is protected by an internal key document:
+// Inquiry uniqueness is protected by:
 //
 //	refundInquiryKeys/{inquiryId}
 //
 // The key document and Refund document are created in the same Firestore
-// transaction so concurrent receive-return requests cannot create two Refunds
+// transaction so concurrent return-receipt requests cannot create two Refunds
 // for the same Inquiry.
 type RefundRepositoryFS struct {
 	Client *firestore.Client
 }
 
-func NewRefundRepositoryFS(
-	client *firestore.Client,
-) *RefundRepositoryFS {
-	return &RefundRepositoryFS{
-		Client: client,
-	}
+func NewRefundRepositoryFS(client *firestore.Client) *RefundRepositoryFS {
+	return &RefundRepositoryFS{Client: client}
 }
 
 func (r *RefundRepositoryFS) col() *firestore.CollectionRef {
@@ -76,7 +77,6 @@ func (r *RefundRepositoryFS) GetByID(
 	if err := r.validateReady(); err != nil {
 		return nil, err
 	}
-
 	if refundID == "" || strings.Contains(refundID, "/") {
 		return nil, refunddom.ErrInvalidID
 	}
@@ -86,7 +86,6 @@ func (r *RefundRepositoryFS) GetByID(
 		if status.Code(err) == codes.NotFound {
 			return nil, refunddom.ErrNotFound
 		}
-
 		return nil, err
 	}
 
@@ -105,7 +104,6 @@ func (r *RefundRepositoryFS) GetByInquiryID(
 	if err := r.validateReady(); err != nil {
 		return nil, err
 	}
-
 	if inquiryID == "" || strings.Contains(inquiryID, "/") {
 		return nil, refunddom.ErrInvalidInquiryID
 	}
@@ -115,17 +113,17 @@ func (r *RefundRepositoryFS) GetByInquiryID(
 		if status.Code(err) == codes.NotFound {
 			return nil, refunddom.ErrNotFound
 		}
-
 		return nil, err
 	}
 
 	var key refundInquiryKeyDocument
-
 	if err := keySnapshot.DataTo(&key); err != nil {
 		return nil, err
 	}
-
-	if key.RefundID == "" || key.InquiryID != inquiryID {
+	if key.RefundID == "" ||
+		key.InquiryID != inquiryID ||
+		keySnapshot.Ref == nil ||
+		keySnapshot.Ref.ID != inquiryID {
 		return nil, refunddom.ErrConflict
 	}
 
@@ -134,11 +132,11 @@ func (r *RefundRepositoryFS) GetByInquiryID(
 		if errors.Is(err, refunddom.ErrNotFound) {
 			return nil, refunddom.ErrConflict
 		}
-
 		return nil, err
 	}
-
-	if refund.InquiryID != inquiryID {
+	if refund.InquiryID != inquiryID ||
+		refund.OrderID != key.OrderID ||
+		refund.OrderItemIndex != key.OrderItemIndex {
 		return nil, refunddom.ErrConflict
 	}
 
@@ -154,22 +152,15 @@ func (r *RefundRepositoryFS) GetByOrderItem(
 		return nil, err
 	}
 
-	refundID, err := refunddom.NewID(
-		orderID,
-		orderItemIndex,
-	)
+	refundID, err := refunddom.NewID(orderID, orderItemIndex)
 	if err != nil {
 		return nil, err
 	}
 
-	refund, err := r.GetByID(
-		ctx,
-		refundID,
-	)
+	refund, err := r.GetByID(ctx, refundID)
 	if err != nil {
 		return nil, err
 	}
-
 	if refund.OrderID != orderID ||
 		refund.OrderItemIndex != orderItemIndex {
 		return nil, refunddom.ErrConflict
@@ -189,16 +180,11 @@ func (r *RefundRepositoryFS) ListByOrderID(
 	if err := r.validateReady(); err != nil {
 		return nil, err
 	}
-
-	if orderID == "" {
+	if orderID == "" || strings.Contains(orderID, "/") {
 		return nil, refunddom.ErrInvalidOrderID
 	}
 
-	return r.listByField(
-		ctx,
-		"orderId",
-		orderID,
-	)
+	return r.listByField(ctx, "orderId", orderID)
 }
 
 func (r *RefundRepositoryFS) ListByPaymentID(
@@ -208,16 +194,11 @@ func (r *RefundRepositoryFS) ListByPaymentID(
 	if err := r.validateReady(); err != nil {
 		return nil, err
 	}
-
-	if paymentID == "" {
+	if paymentID == "" || strings.Contains(paymentID, "/") {
 		return nil, refunddom.ErrInvalidPaymentID
 	}
 
-	return r.listByField(
-		ctx,
-		"paymentId",
-		paymentID,
-	)
+	return r.listByField(ctx, "paymentId", paymentID)
 }
 
 func (r *RefundRepositoryFS) ListBySettlementID(
@@ -227,16 +208,51 @@ func (r *RefundRepositoryFS) ListBySettlementID(
 	if err := r.validateReady(); err != nil {
 		return nil, err
 	}
-
-	if settlementID == "" {
+	if settlementID == "" || strings.Contains(settlementID, "/") {
 		return nil, refunddom.ErrInvalidSettlementID
 	}
 
-	return r.listByField(
-		ctx,
-		"settlementId",
-		settlementID,
-	)
+	refunds, err := r.listByField(ctx, "settlementId", settlementID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, refund := range refunds {
+		if refund.SellerType != refunddom.SellerTypeAccount ||
+			refund.SettlementID != settlementID ||
+			refund.SalesReceivableID != "" {
+			return nil, refunddom.ErrConflict
+		}
+	}
+
+	return refunds, nil
+}
+
+func (r *RefundRepositoryFS) ListBySalesReceivableID(
+	ctx context.Context,
+	salesReceivableID string,
+) ([]refunddom.Refund, error) {
+	if err := r.validateReady(); err != nil {
+		return nil, err
+	}
+	if salesReceivableID == "" || strings.Contains(salesReceivableID, "/") {
+		return nil, refunddom.ErrInvalidSalesReceivableID
+	}
+
+	refunds, err := r.listByField(ctx, "salesReceivableId", salesReceivableID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, refund := range refunds {
+		if refund.SellerType != refunddom.SellerTypeResale ||
+			refund.SalesReceivableID != salesReceivableID ||
+			refund.SettlementID != "" {
+			return nil, refunddom.ErrConflict
+		}
+	}
+
+	return refunds, nil
 }
 
 func (r *RefundRepositoryFS) ListByCompanyID(
@@ -246,16 +262,23 @@ func (r *RefundRepositoryFS) ListByCompanyID(
 	if err := r.validateReady(); err != nil {
 		return nil, err
 	}
-
 	if companyID == "" {
 		return nil, refunddom.ErrInvalidCompanyID
 	}
 
-	return r.listByField(
-		ctx,
-		"companyId",
-		companyID,
-	)
+	refunds, err := r.listByField(ctx, "companyId", companyID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, refund := range refunds {
+		if refund.SellerType != refunddom.SellerTypeAccount ||
+			refund.CompanyID != companyID {
+			return nil, refunddom.ErrConflict
+		}
+	}
+
+	return refunds, nil
 }
 
 func (r *RefundRepositoryFS) listByField(
@@ -264,11 +287,7 @@ func (r *RefundRepositoryFS) listByField(
 	value any,
 ) ([]refunddom.Refund, error) {
 	iter := r.col().
-		Where(
-			field,
-			"==",
-			value,
-		).
+		Where(field, "==", value).
 		Documents(ctx)
 	defer iter.Stop()
 
@@ -291,9 +310,8 @@ func (r *RefundRepositoryFS) listByField(
 		result = append(result, refund)
 	}
 
-	// Firestore OrderBy is intentionally avoided here so these single-field
-	// queries do not require extra composite indexes. Return ordering remains
-	// deterministic in application memory.
+	// Firestore OrderBy is intentionally avoided so these single-field queries
+	// do not require additional composite indexes.
 	sortRefunds(result)
 
 	return result, nil
@@ -318,12 +336,10 @@ func (r *RefundRepositoryFS) Create(
 	if err != nil {
 		return nil, err
 	}
-
 	if in.RefundID == "" ||
 		in.RefundID != expectedRefundID {
 		return nil, refunddom.ErrInvalidID
 	}
-
 	if err := in.Seller.Validate(); err != nil {
 		return nil, err
 	}
@@ -339,6 +355,7 @@ func (r *RefundRepositoryFS) Create(
 			in.OrderItemIndex,
 			in.Seller,
 			in.SettlementID,
+			in.SalesReceivableID,
 			in.MerchandiseAmount,
 			in.MerchandiseTaxAmount,
 			in.TransferReversalAmount,
@@ -354,6 +371,7 @@ func (r *RefundRepositoryFS) Create(
 			in.OrderItemIndex,
 			in.Seller,
 			in.SettlementID,
+			in.SalesReceivableID,
 			in.Policy,
 			in.MerchandiseAmount,
 			in.MerchandiseTaxAmount,
@@ -369,6 +387,9 @@ func (r *RefundRepositoryFS) Create(
 	if err != nil {
 		return nil, err
 	}
+	if err := entity.Validate(); err != nil {
+		return nil, err
+	}
 
 	refundReference := r.col().Doc(entity.ID)
 	inquiryKeyReference := r.inquiryKeyCol().Doc(entity.InquiryID)
@@ -379,36 +400,33 @@ func (r *RefundRepositoryFS) Create(
 			ctx context.Context,
 			transaction *firestore.Transaction,
 		) error {
-			refundSnapshot, err := transaction.Get(refundReference)
-			if err == nil {
+			// Firestore transactions require reads before writes.
+			refundSnapshot, refundErr := transaction.Get(refundReference)
+			if refundErr == nil {
 				current, decodeErr := docToRefund(refundSnapshot)
 				if decodeErr != nil {
 					return refunddom.ErrConflict
 				}
-
 				if current.OrderID == entity.OrderID &&
 					current.OrderItemIndex == entity.OrderItemIndex {
 					return refunddom.ErrDuplicateOrderItem
 				}
-
 				return refunddom.ErrConflict
 			}
-			if status.Code(err) != codes.NotFound {
-				return err
+			if status.Code(refundErr) != codes.NotFound {
+				return refundErr
 			}
 
-			keySnapshot, err := transaction.Get(inquiryKeyReference)
-			if err == nil {
+			keySnapshot, keyErr := transaction.Get(inquiryKeyReference)
+			if keyErr == nil {
 				var currentKey refundInquiryKeyDocument
-
 				if decodeErr := keySnapshot.DataTo(&currentKey); decodeErr != nil {
 					return refunddom.ErrConflict
 				}
-
 				return refunddom.ErrDuplicateInquiry
 			}
-			if status.Code(err) != codes.NotFound {
-				return err
+			if status.Code(keyErr) != codes.NotFound {
+				return keyErr
 			}
 
 			if err := transaction.Set(
@@ -448,10 +466,13 @@ func (r *RefundRepositoryFS) Create(
 
 // UpdateByID applies one validated Refund domain transition atomically.
 //
-// Financial fields are never patched directly. The current Refund is loaded
-// inside a Firestore transaction, the corresponding domain behavior is
-// executed, the resulting complete aggregate is validated, and only then is it
-// persisted.
+// Financial fields and seller-side references are never patched directly.
+// The persisted Refund is loaded inside the Firestore transaction, the
+// corresponding domain behavior is executed, and the complete aggregate is
+// validated before persistence.
+//
+// Transfer Reversal operations are accepted only for SellerTypeAccount because
+// the Refund domain rejects them for SellerTypeResale.
 func (r *RefundRepositoryFS) UpdateByID(
 	ctx context.Context,
 	refundID string,
@@ -460,21 +481,17 @@ func (r *RefundRepositoryFS) UpdateByID(
 	if err := r.validateReady(); err != nil {
 		return nil, err
 	}
-
 	if refundID == "" || strings.Contains(refundID, "/") {
 		return nil, refunddom.ErrInvalidID
 	}
-
 	if !refunddom.IsValidUpdateOperation(in.Operation) {
 		return nil, refunddom.ErrInvalidUpdateOperation
 	}
-
 	if in.UpdatedAt.IsZero() {
 		return nil, refunddom.ErrInvalidUpdatedAt
 	}
 
 	refundReference := r.col().Doc(refundID)
-
 	var result refunddom.Refund
 
 	err := r.Client.RunTransaction(
@@ -488,7 +505,6 @@ func (r *RefundRepositoryFS) UpdateByID(
 				if status.Code(err) == codes.NotFound {
 					return refunddom.ErrNotFound
 				}
-
 				return err
 			}
 
@@ -496,18 +512,13 @@ func (r *RefundRepositoryFS) UpdateByID(
 			if err != nil {
 				return err
 			}
-
 			if current.ID != refundID {
 				return refunddom.ErrConflict
 			}
 
-			if err := applyRefundUpdate(
-				&current,
-				in,
-			); err != nil {
+			if err := applyRefundUpdate(&current, in); err != nil {
 				return err
 			}
-
 			if err := current.Validate(); err != nil {
 				return err
 			}
@@ -628,9 +639,10 @@ type refundDocument struct {
 	UserID          string `firestore:"userId,omitempty"`
 	PayoutAccountID string `firestore:"payoutAccountId,omitempty"`
 
-	StripeAccountID string `firestore:"stripeAccountId"`
+	StripeAccountID string `firestore:"stripeAccountId,omitempty"`
 
-	SettlementID string `firestore:"settlementId"`
+	SettlementID      string `firestore:"settlementId,omitempty"`
+	SalesReceivableID string `firestore:"salesReceivableId,omitempty"`
 
 	Policy string `firestore:"policy,omitempty"`
 
@@ -695,7 +707,8 @@ func refundToData(
 
 		StripeAccountID: refund.StripeAccountID,
 
-		SettlementID: refund.SettlementID,
+		SettlementID:      refund.SettlementID,
+		SalesReceivableID: refund.SalesReceivableID,
 
 		Policy: string(refund.Policy),
 
@@ -730,18 +743,22 @@ func refundToData(
 func docToRefund(
 	snapshot *firestore.DocumentSnapshot,
 ) (refunddom.Refund, error) {
-	if snapshot == nil {
+	if snapshot == nil ||
+		snapshot.Ref == nil ||
+		!snapshot.Exists() {
 		return refunddom.Refund{}, refunddom.ErrNotFound
 	}
 
 	var document refundDocument
-
 	if err := snapshot.DataTo(&document); err != nil {
 		return refunddom.Refund{}, err
 	}
 
-	if document.ID == "" {
-		document.ID = snapshot.Ref.ID
+	// No legacy schema fallback is supported. The persisted ID field and
+	// Firestore document ID must both exist and match exactly.
+	if document.ID == "" ||
+		document.ID != snapshot.Ref.ID {
+		return refunddom.Refund{}, refunddom.ErrInvalidID
 	}
 
 	refund := refunddom.Refund{
@@ -764,7 +781,8 @@ func docToRefund(
 
 		StripeAccountID: document.StripeAccountID,
 
-		SettlementID: document.SettlementID,
+		SettlementID:      document.SettlementID,
+		SalesReceivableID: document.SalesReceivableID,
 
 		Policy: refunddom.OpenedReturnRefundPolicy(document.Policy),
 
@@ -782,10 +800,8 @@ func docToRefund(
 		Currency: document.Currency,
 
 		StripeRefundID: document.StripeRefundID,
-		Status: refunddom.RefundStatus(
-			document.Status,
-		),
-		RefundedAt: cloneTimePointer(document.RefundedAt),
+		Status:         refunddom.RefundStatus(document.Status),
+		RefundedAt:     cloneTimePointer(document.RefundedAt),
 
 		TransferReversalAmount: document.TransferReversalAmount,
 
@@ -801,6 +817,18 @@ func docToRefund(
 
 	if err := refund.Validate(); err != nil {
 		return refunddom.Refund{}, err
+	}
+
+	expectedID, err := refunddom.NewID(
+		refund.OrderID,
+		refund.OrderItemIndex,
+	)
+	if err != nil {
+		return refunddom.Refund{}, err
+	}
+	if refund.ID != expectedID ||
+		snapshot.Ref.ID != expectedID {
+		return refunddom.Refund{}, refunddom.ErrInvalidID
 	}
 
 	return refund, nil
@@ -827,14 +855,11 @@ func sortRefunds(
 	sort.Slice(
 		refunds,
 		func(i, j int) bool {
-			if refunds[i].OrderItemIndex ==
-				refunds[j].OrderItemIndex {
-				return refunds[i].ID <
-					refunds[j].ID
+			if refunds[i].OrderItemIndex == refunds[j].OrderItemIndex {
+				return refunds[i].ID < refunds[j].ID
 			}
 
-			return refunds[i].OrderItemIndex <
-				refunds[j].OrderItemIndex
+			return refunds[i].OrderItemIndex < refunds[j].OrderItemIndex
 		},
 	)
 }
@@ -842,9 +867,7 @@ func sortRefunds(
 func (r *RefundRepositoryFS) validateReady() error {
 	if r == nil ||
 		r.Client == nil {
-		return errors.New(
-			"refund: firestore client is nil",
-		)
+		return errors.New("refund: firestore client is nil")
 	}
 
 	return nil

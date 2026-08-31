@@ -10,6 +10,7 @@ import (
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
 	refunddom "narratives/internal/domain/refund"
+	salesreceivabledom "narratives/internal/domain/salesReceivable"
 	settlementdom "narratives/internal/domain/settlement"
 )
 
@@ -20,8 +21,9 @@ import (
 // ItemRefundOrderReader provides the authoritative Order snapshot required for
 // one item-level refund.
 //
-// Refund amount and seller identity must always be derived from the Order.
-// They must never be accepted from the frontend.
+// Refund amount, seller identity, item type, and seller-side financial reference
+// must always be derived from authoritative persisted state. They must never be
+// accepted from the frontend.
 type ItemRefundOrderReader interface {
 	GetByID(
 		ctx context.Context,
@@ -31,11 +33,11 @@ type ItemRefundOrderReader interface {
 
 // ItemRefundPaymentReader provides the original succeeded Stripe Payment.
 //
-// Payment is read-only in this flow.
+// Payment is read-only in this item-level flow.
 //
 // Item-level partial refund state is persisted in refund.Refund instead of
-// Payment because Payment's current refund fields represent the legacy
-// full-payment refund lifecycle.
+// Payment because Payment refund fields represent the full-payment refund
+// lifecycle.
 type ItemRefundPaymentReader interface {
 	GetByPaymentID(
 		ctx context.Context,
@@ -43,18 +45,48 @@ type ItemRefundPaymentReader interface {
 	) (*paymentdom.Payment, error)
 }
 
-// ItemRefundSettlementRepository provides seller Settlement state.
+// ItemRefundSettlementRepository provides primary List-sale Settlement state.
 //
-// The current item-level refund flow does not mark Settlement reversed because
-// one Settlement may contain multiple Order items and one item return performs
-// only a partial Transfer Reversal.
+// One Settlement may contain multiple List Order items belonging to the same
+// Account seller. Therefore one item return may perform only a partial Stripe
+// Transfer Reversal.
 //
 // Each partial reversal is persisted independently in refund.Refund.
+//
+// Consumer resale items never use this repository.
 type ItemRefundSettlementRepository interface {
 	ListByPaymentID(
 		ctx context.Context,
 		paymentID string,
 	) ([]settlementdom.Settlement, error)
+}
+
+// ItemRefundSalesReceivableService provides the item-level resale financial
+// state required by a consumer resale Refund.
+//
+// One resale Order item maps to exactly one SalesReceivable:
+//
+//	NewID(PaymentID, OrderItemIndex)
+//
+// Before the purchaser Stripe Refund is created:
+//
+//   - pending   -> canceled
+//   - available -> canceled
+//   - canceled  -> accepted as an idempotent retry
+//   - reserved  -> rejected until BankPayout coordination is implemented
+//   - paid      -> rejected until recovery/adjustment handling is implemented
+//
+// The Refund flow must never rewrite a paid SalesReceivable.
+type ItemRefundSalesReceivableService interface {
+	GetByID(
+		ctx context.Context,
+		receivableID string,
+	) (*salesreceivabledom.SalesReceivable, error)
+
+	Cancel(
+		ctx context.Context,
+		receivableID string,
+	) (*salesreceivabledom.SalesReceivable, error)
 }
 
 // ============================================================
@@ -118,6 +150,30 @@ var (
 		"item refund: settlement cannot be used for item refund",
 	)
 
+	ErrItemRefundSalesReceivableNotConfigured = errors.New(
+		"item refund: sales receivable service is not configured",
+	)
+
+	ErrItemRefundSalesReceivableNotFound = errors.New(
+		"item refund: resale sales receivable is not found",
+	)
+
+	ErrItemRefundSalesReceivableMismatch = errors.New(
+		"item refund: sales receivable does not match order item",
+	)
+
+	ErrItemRefundSalesReceivableUnavailable = errors.New(
+		"item refund: sales receivable cannot be used for item refund",
+	)
+
+	ErrItemRefundSalesReceivableReserved = errors.New(
+		"item refund: sales receivable is reserved for bank payout",
+	)
+
+	ErrItemRefundSalesReceivablePaid = errors.New(
+		"item refund: sales receivable has already been paid",
+	)
+
 	ErrItemRefundInvalidPlatformFee = errors.New(
 		"item refund: invalid item platform fee",
 	)
@@ -163,8 +219,24 @@ var (
 // Usecase
 // ============================================================
 
-// ItemRefundUsecase coordinates one purchaser-side partial Stripe Refund and,
-// when required, one seller-side partial Stripe Transfer Reversal.
+// ItemRefundUsecase coordinates one item-level purchaser Stripe Refund and the
+// corresponding seller-side financial state.
+//
+// Primary List sale:
+//
+//	Order item
+//		-> Settlement
+//		-> purchaser Stripe Refund
+//		-> optional partial Stripe Transfer Reversal
+//
+// Consumer resale:
+//
+//	Order item
+//		-> SalesReceivable
+//		-> cancel unpaid receivable
+//		-> purchaser Stripe Refund
+//
+// Consumer resale never uses Stripe Connect Transfer Reversal.
 //
 // Unopened returns use the existing merchandise-only calculation:
 //
@@ -178,49 +250,84 @@ var (
 //	+ outbound shipping amount
 //	+ outbound shipping consumption tax
 //
-// Return shipping is recorded as additional company burden in refund.Refund but
-// is not included in the purchaser Stripe Refund because it was not part of the
-// original Charge.
+// Return shipping is recorded as additional seller-side burden in refund.Refund
+// but is not included in the purchaser Stripe Refund because it was not part of
+// the original Charge.
 //
-// Seller-side reversal amount is:
+// For a transferred primary List Settlement, seller-side reversal amount is:
 //
 //	purchaser Stripe Refund amount
 //	- platform fee attributable to the refunded components
 //
-// Execution order:
+// Resale TransferReversalAmount is always zero.
+//
+// Common execution order:
 //
 //  1. Load authoritative Order.
-//  2. Calculate the exact refund amount from the Order snapshot.
-//  3. Load succeeded Payment.
-//  4. Resolve seller Settlement.
-//  5. Load or create deterministic Refund aggregate.
-//  6. Create Stripe purchaser Refund.
-//  7. Persist Stripe Refund result.
-//  8. If Refund succeeded, create seller partial Transfer Reversal.
-//  9. Persist Transfer Reversal result.
+//  2. Validate the target Order item.
+//  3. Calculate the exact refund amount from the Order snapshot.
+//  4. Load succeeded Payment.
+//  5. Resolve seller-side financial state.
+//
+// List path:
+//
+//  6. Resolve primary-sale Settlement.
+//  7. Calculate any required partial Stripe Transfer Reversal.
+//  8. Load or create deterministic Refund aggregate.
+//  9. Create or resume purchaser Stripe Refund.
+//  10. If purchaser Refund succeeded, execute any required Transfer Reversal.
+//
+// Resale path:
+//
+//  6. Resolve the exact item-level SalesReceivable.
+//  7. Require pending, available, or already canceled.
+//  8. Cancel pending/available SalesReceivable before purchaser Refund creation.
+//  9. Load or create deterministic Refund aggregate referencing SalesReceivable.
+//  10. Create or resume purchaser Stripe Refund.
+//  11. No Stripe Transfer Reversal is performed.
+//
+// reserved and paid SalesReceivables are intentionally rejected until
+// BankPayout coordination and paid-receivable recovery are implemented.
 //
 // Order return completion and Inquiry resolution are intentionally NOT handled
 // here. Return receipt orchestrators perform them only after:
 //
 //	Refund.IsFinanciallyCompleted() == true
 type ItemRefundUsecase struct {
-	orderReader                   ItemRefundOrderReader
-	paymentReader                 ItemRefundPaymentReader
-	settlementRepo                ItemRefundSettlementRepository
-	refundRepo                    refunddom.RepositoryPort
-	platformFeeCalculator         settlementdom.PlatformFeeCalculator
-	stripeRefundGateway           applicationport.StripeRefundGateway
+	orderReader ItemRefundOrderReader
+
+	paymentReader ItemRefundPaymentReader
+
+	settlementRepo ItemRefundSettlementRepository
+
+	salesReceivableService ItemRefundSalesReceivableService
+
+	refundRepo refunddom.RepositoryPort
+
+	platformFeeCalculator settlementdom.PlatformFeeCalculator
+
+	stripeRefundGateway applicationport.StripeRefundGateway
+
 	stripeTransferReversalGateway applicationport.StripeTransferReversalGateway
-	now                           func() time.Time
+
+	now func() time.Time
 }
 
 type NewItemRefundUsecaseInput struct {
-	OrderReader                   ItemRefundOrderReader
-	PaymentReader                 ItemRefundPaymentReader
-	SettlementRepository          ItemRefundSettlementRepository
-	RefundRepository              refunddom.RepositoryPort
-	PlatformFeeCalculator         settlementdom.PlatformFeeCalculator
-	StripeRefundGateway           applicationport.StripeRefundGateway
+	OrderReader ItemRefundOrderReader
+
+	PaymentReader ItemRefundPaymentReader
+
+	SettlementRepository ItemRefundSettlementRepository
+
+	SalesReceivableService ItemRefundSalesReceivableService
+
+	RefundRepository refunddom.RepositoryPort
+
+	PlatformFeeCalculator settlementdom.PlatformFeeCalculator
+
+	StripeRefundGateway applicationport.StripeRefundGateway
+
 	StripeTransferReversalGateway applicationport.StripeTransferReversalGateway
 }
 
@@ -231,6 +338,7 @@ func NewItemRefundUsecase(
 		orderReader:                   in.OrderReader,
 		paymentReader:                 in.PaymentReader,
 		settlementRepo:                in.SettlementRepository,
+		salesReceivableService:        in.SalesReceivableService,
 		refundRepo:                    in.RefundRepository,
 		platformFeeCalculator:         in.PlatformFeeCalculator,
 		stripeRefundGateway:           in.StripeRefundGateway,
@@ -258,20 +366,35 @@ func (u *ItemRefundUsecase) SetNowFunc(
 //
 // Only Policy is accepted in addition to identity fields. All monetary amounts
 // are calculated from the authoritative Order snapshot.
+//
+// CompanyID remains present because the current Console return-receipt endpoint
+// supplies it. It is authoritative only for primary List items. Consumer resale
+// seller identity is resolved from the Order SellerSnapshot instead.
 type RefundOpenedReturnItemInput struct {
 	InquiryID string
+
 	OrderID   string
 	ItemIndex int
+
 	CompanyID string
-	Policy    refunddom.OpenedReturnRefundPolicy
+
+	Policy refunddom.OpenedReturnRefundPolicy
 }
 
+// itemRefundRequest is the internal normalized request boundary shared by
+// unopened and opened return flows.
+//
+// CompanyID is required for a primary List item but is not used as the resale
+// seller identity.
 type itemRefundRequest struct {
 	InquiryID string
+
 	OrderID   string
 	ItemIndex int
+
 	CompanyID string
-	Policy    refunddom.OpenedReturnRefundPolicy
+
+	Policy refunddom.OpenedReturnRefundPolicy
 }
 
 type itemRefundAmountSummary struct {
@@ -290,6 +413,11 @@ type itemRefundAmountSummary struct {
 }
 
 // RefundOrderItem executes or resumes the existing unopened-return refund.
+//
+// List items validate CompanyID against the seller Company.
+//
+// Resale items ignore CompanyID for seller identity and instead validate the
+// immutable resale SellerSnapshot and SalesReceivable.
 func (u *ItemRefundUsecase) RefundOrderItem(
 	ctx context.Context,
 	in RefundOrderItemInput,
@@ -309,6 +437,11 @@ func (u *ItemRefundUsecase) RefundOrderItem(
 //
 // The operation is idempotent. Policy is persisted in the deterministic Refund
 // aggregate and a retry must use the same Policy.
+//
+// List items validate CompanyID against the seller Company.
+//
+// Resale items resolve seller identity from the authoritative Order snapshot and
+// SalesReceivable.
 func (u *ItemRefundUsecase) RefundOpenedReturnOrderItem(
 	ctx context.Context,
 	in RefundOpenedReturnItemInput,

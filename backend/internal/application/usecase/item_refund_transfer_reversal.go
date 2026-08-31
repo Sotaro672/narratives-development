@@ -16,28 +16,41 @@ import (
 // Seller Transfer Reversal
 // ============================================================
 
+// completeTransferReversal completes seller-side Stripe Transfer Reversal for
+// one primary List-sale item Refund.
+//
+// Consumer resale never reaches this function. Resale seller proceeds are
+// represented by SalesReceivable and must have:
+//
+//	SalesReceivableID != ""
+//	SettlementID == ""
+//	TransferReversalAmount == 0
+//
+// before purchaser Stripe Refund processing.
+//
+// Primary List sale:
+//
+//	Refund
+//		-> Settlement
+//		-> Stripe Transfer Reversal when the seller Transfer already completed
 func (u *ItemRefundUsecase) completeTransferReversal(
 	ctx context.Context,
 	payment paymentdom.Payment,
 	settlement settlementdom.Settlement,
 	refund refunddom.Refund,
 ) (refunddom.Refund, error) {
-	if refund.TransferReversalAmount == 0 {
-		if refund.TransferReversalStatus !=
-			refunddom.TransferReversalStatusNotRequired {
-			return refund, refunddom.ErrInvalidTransferReversalStatus
-		}
-
-		return refund, nil
+	if err := refund.Validate(); err != nil {
+		return refund, err
 	}
-
-	if settlement.Status != settlementdom.StatusTransferred {
-		return refund, ErrItemRefundSettlementNotTransferred
-	}
-
-	if refund.SettlementID != settlement.ID ||
+	if payment.PaymentID == "" ||
 		refund.PaymentID != payment.PaymentID ||
-		settlement.PaymentID != payment.PaymentID {
+		refund.OrderID != payment.PaymentID ||
+		settlement.PaymentID != payment.PaymentID ||
+		settlement.OrderID != payment.PaymentID ||
+		refund.SellerType != refunddom.SellerTypeAccount ||
+		refund.SettlementID == "" ||
+		refund.SettlementID != settlement.ID ||
+		refund.SalesReceivableID != "" {
 		return refund, ErrItemRefundSettlementMismatch
 	}
 
@@ -45,46 +58,92 @@ func (u *ItemRefundUsecase) completeTransferReversal(
 	if err := settlementSeller.Validate(); err != nil {
 		return refund, ErrItemRefundSettlementMismatch
 	}
+	if settlementSeller.Type != settlementdom.SellerTypeAccount {
+		return refund, ErrItemRefundSettlementMismatch
+	}
 
 	refundSeller := refund.SellerIdentity()
 	if err := refundSeller.Validate(); err != nil {
 		return refund, ErrItemRefundSettlementMismatch
 	}
-
-	switch settlementSeller.Type {
-	case settlementdom.SellerTypeAccount:
-		if refundSeller.Type != refunddom.SellerTypeAccount ||
-			refundSeller.CompanyID != settlementSeller.CompanyID ||
-			refundSeller.AccountID != settlementSeller.AccountID ||
-			refundSeller.StripeAccountID != settlementSeller.StripeAccountID ||
-			refundSeller.AvatarID != "" ||
-			refundSeller.UserID != "" ||
-			refundSeller.PayoutAccountID != "" {
-			return refund, ErrItemRefundSettlementMismatch
-		}
-
-	case settlementdom.SellerTypeAvatar:
-		if refundSeller.Type != refunddom.SellerTypeAvatar ||
-			refundSeller.AvatarID != settlementSeller.AvatarID ||
-			refundSeller.UserID != settlementSeller.UserID ||
-			refundSeller.PayoutAccountID != settlementSeller.PayoutAccountID ||
-			refundSeller.StripeAccountID != settlementSeller.StripeAccountID ||
-			refundSeller.CompanyID != "" ||
-			refundSeller.AccountID != "" {
-			return refund, ErrItemRefundSettlementMismatch
-		}
-
-	default:
+	if refundSeller.Type != refunddom.SellerTypeAccount ||
+		refundSeller.CompanyID != settlementSeller.CompanyID ||
+		refundSeller.AccountID != settlementSeller.AccountID ||
+		refundSeller.StripeAccountID != settlementSeller.StripeAccountID ||
+		refundSeller.AvatarID != "" ||
+		refundSeller.UserID != "" ||
+		refundSeller.PayoutAccountID != "" {
 		return refund, ErrItemRefundSettlementMismatch
 	}
 
+	if settlement.StripeChargeID == "" ||
+		payment.StripeChargeID == "" ||
+		settlement.StripeChargeID != payment.StripeChargeID {
+		return refund, ErrItemRefundSettlementMismatch
+	}
+
+	if refund.TransferReversalAmount < 0 ||
+		refund.TransferReversalAmount > settlement.TransferAmount {
+		return refund, ErrItemRefundTransferReversalAmountExceeded
+	}
+
+	if refund.TransferReversalAmount == 0 {
+		if refund.TransferReversalStatus != refunddom.TransferReversalStatusNotRequired ||
+			refund.StripeTransferReversalID != "" ||
+			refund.TransferReversedAt != nil {
+			return refund, refunddom.ErrInvalidTransferReversalStatus
+		}
+
+		switch settlement.Status {
+		case settlementdom.StatusTransferred:
+			if settlement.StripeTransferID == "" ||
+				!strings.HasPrefix(settlement.StripeTransferID, "tr_") ||
+				settlement.TransferredAt == nil ||
+				settlement.TransferredAt.IsZero() {
+				return refund, ErrItemRefundSettlementMismatch
+			}
+			return refund, nil
+
+		case settlementdom.StatusFailed,
+			settlementdom.StatusCanceled:
+			if settlement.StripeTransferID != "" ||
+				settlement.TransferredAt != nil {
+				return refund, ErrItemRefundSettlementMismatch
+			}
+			return refund, nil
+
+		case settlementdom.StatusPending,
+			settlementdom.StatusReady,
+			settlementdom.StatusTransferring,
+			settlementdom.StatusFailedRetryable:
+			return refund, ErrItemRefundSettlementNotTransferred
+
+		case settlementdom.StatusReversed:
+			return refund, ErrItemRefundSettlementUnavailable
+
+		default:
+			return refund, ErrItemRefundSettlementUnavailable
+		}
+	}
+
+	if settlement.Status != settlementdom.StatusTransferred {
+		return refund, ErrItemRefundSettlementNotTransferred
+	}
 	if settlement.StripeTransferID == "" ||
-		!strings.HasPrefix(settlement.StripeTransferID, "tr_") {
+		!strings.HasPrefix(settlement.StripeTransferID, "tr_") ||
+		settlement.TransferredAt == nil ||
+		settlement.TransferredAt.IsZero() {
 		return refund, ErrItemRefundSettlementMismatch
 	}
 
 	switch refund.TransferReversalStatus {
 	case refunddom.TransferReversalStatusSucceeded:
+		if refund.StripeTransferReversalID == "" ||
+			!strings.HasPrefix(refund.StripeTransferReversalID, "trr_") ||
+			refund.TransferReversedAt == nil ||
+			refund.TransferReversedAt.IsZero() {
+			return refund, refunddom.ErrInvalidTransferReversalStatus
+		}
 		return refund, nil
 
 	case refunddom.TransferReversalStatusNotRequired:
@@ -105,7 +164,6 @@ func (u *ItemRefundUsecase) completeTransferReversal(
 		if err != nil {
 			return refund, err
 		}
-
 		if updated == nil {
 			return refund, refunddom.ErrConflict
 		}
@@ -117,6 +175,13 @@ func (u *ItemRefundUsecase) completeTransferReversal(
 
 	default:
 		return refund, refunddom.ErrInvalidTransferReversalStatus
+	}
+
+	if refund.SellerType != refunddom.SellerTypeAccount ||
+		refund.SalesReceivableID != "" ||
+		refund.SettlementID != settlement.ID ||
+		refund.TransferReversalAmount <= 0 {
+		return refund, ErrItemRefundSettlementMismatch
 	}
 
 	result, reversalErr := u.stripeTransferReversalGateway.CreateTransferReversal(
@@ -177,8 +242,16 @@ func (u *ItemRefundUsecase) completeTransferReversal(
 			err,
 		)
 	}
-
 	if updated == nil {
+		return refund, refunddom.ErrConflict
+	}
+	if updated.SellerType != refunddom.SellerTypeAccount ||
+		updated.SettlementID != settlement.ID ||
+		updated.SalesReceivableID != "" ||
+		updated.TransferReversalStatus != refunddom.TransferReversalStatusSucceeded ||
+		updated.StripeTransferReversalID != result.StripeTransferReversalID ||
+		updated.TransferReversedAt == nil ||
+		updated.TransferReversedAt.IsZero() {
 		return refund, refunddom.ErrConflict
 	}
 
@@ -190,8 +263,14 @@ func (u *ItemRefundUsecase) persistTransferReversalFailure(
 	refund refunddom.Refund,
 	reversalErr error,
 ) (refunddom.Refund, error) {
-	operation := refunddom.UpdateOperationMarkTransferReversalFailed
+	if refund.SellerType != refunddom.SellerTypeAccount ||
+		refund.SettlementID == "" ||
+		refund.SalesReceivableID != "" ||
+		refund.TransferReversalAmount <= 0 {
+		return refund, ErrItemRefundSettlementMismatch
+	}
 
+	operation := refunddom.UpdateOperationMarkTransferReversalFailed
 	if isRetryableItemRefundError(reversalErr) {
 		operation = refunddom.UpdateOperationMarkTransferReversalFailedRetryable
 	}

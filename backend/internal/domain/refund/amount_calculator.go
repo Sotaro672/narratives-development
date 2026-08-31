@@ -133,7 +133,7 @@ func CalculateOrderItemRefundAmount(order orderdom.Order, orderItemIndex int) (O
 // StripeRefundAmount is the amount that can be refunded against the original
 // purchaser Charge.
 //
-// TotalBrandBurdenAmount additionally includes return-shipping cost that is not
+// TotalSellerBurdenAmount additionally includes return-shipping cost that is not
 // part of the original Charge.
 //
 // Current return-shipping policy:
@@ -156,8 +156,8 @@ type OpenedReturnRefundAmountSummary struct {
 	ReturnShippingAmount    int
 	ReturnShippingTaxAmount int
 
-	StripeRefundAmount     int
-	TotalBrandBurdenAmount int
+	StripeRefundAmount      int
+	TotalSellerBurdenAmount int
 }
 
 // CalculateOpenedReturnRefundAmount calculates one opened-return refund option
@@ -179,7 +179,7 @@ type OpenedReturnRefundAmountSummary struct {
 // merchandise_round_trip_shipping:
 //   - Stripe Refund:
 //     merchandise + merchandise tax + outbound shipping + outbound shipping tax
-//   - Additional company burden:
+//   - Additional seller burden:
 //     modeled return shipping + return shipping tax
 //
 // Half-refund rounding:
@@ -215,20 +215,20 @@ func CalculateOpenedReturnRefundAmount(
 		}
 
 		return OpenedReturnRefundAmountSummary{
-			Policy:                 policy,
-			MerchandiseAmount:      merchandiseAmount,
-			MerchandiseTaxAmount:   merchandiseTaxAmount,
-			StripeRefundAmount:     stripeRefundAmount,
-			TotalBrandBurdenAmount: stripeRefundAmount,
+			Policy:                  policy,
+			MerchandiseAmount:       merchandiseAmount,
+			MerchandiseTaxAmount:    merchandiseTaxAmount,
+			StripeRefundAmount:      stripeRefundAmount,
+			TotalSellerBurdenAmount: stripeRefundAmount,
 		}, nil
 
 	case OpenedReturnRefundMerchandiseOnly:
 		return OpenedReturnRefundAmountSummary{
-			Policy:                 policy,
-			MerchandiseAmount:      fullMerchandise.MerchandiseAmount,
-			MerchandiseTaxAmount:   fullMerchandise.MerchandiseTaxAmount,
-			StripeRefundAmount:     fullMerchandise.RefundAmount,
-			TotalBrandBurdenAmount: fullMerchandise.RefundAmount,
+			Policy:                  policy,
+			MerchandiseAmount:       fullMerchandise.MerchandiseAmount,
+			MerchandiseTaxAmount:    fullMerchandise.MerchandiseTaxAmount,
+			StripeRefundAmount:      fullMerchandise.RefundAmount,
+			TotalSellerBurdenAmount: fullMerchandise.RefundAmount,
 		}, nil
 
 	case OpenedReturnRefundMerchandiseRoundTripShipping:
@@ -257,18 +257,12 @@ func CalculateOpenedReturnRefundAmount(
 			return OpenedReturnRefundAmountSummary{}, ErrInvalidOrderItemRefund
 		}
 
-		stripeRefundAmount, err := safeAddPaymentAmount(
-			fullMerchandise.RefundAmount,
-			outboundShippingAmount,
-		)
+		stripeRefundAmount, err := safeAddPaymentAmount(fullMerchandise.RefundAmount, outboundShippingAmount)
 		if err != nil {
 			return OpenedReturnRefundAmountSummary{}, err
 		}
 
-		stripeRefundAmount, err = safeAddPaymentAmount(
-			stripeRefundAmount,
-			outboundShippingTaxAmount,
-		)
+		stripeRefundAmount, err = safeAddPaymentAmount(stripeRefundAmount, outboundShippingTaxAmount)
 		if err != nil {
 			return OpenedReturnRefundAmountSummary{}, err
 		}
@@ -288,18 +282,12 @@ func CalculateOpenedReturnRefundAmount(
 
 		returnShippingTaxAmount := returnShippingTaxProduct / 100
 
-		totalBrandBurdenAmount, err := safeAddPaymentAmount(
-			stripeRefundAmount,
-			returnShippingAmount,
-		)
+		totalSellerBurdenAmount, err := safeAddPaymentAmount(stripeRefundAmount, returnShippingAmount)
 		if err != nil {
 			return OpenedReturnRefundAmountSummary{}, err
 		}
 
-		totalBrandBurdenAmount, err = safeAddPaymentAmount(
-			totalBrandBurdenAmount,
-			returnShippingTaxAmount,
-		)
+		totalSellerBurdenAmount, err = safeAddPaymentAmount(totalSellerBurdenAmount, returnShippingTaxAmount)
 		if err != nil {
 			return OpenedReturnRefundAmountSummary{}, err
 		}
@@ -313,7 +301,7 @@ func CalculateOpenedReturnRefundAmount(
 			ReturnShippingAmount:      returnShippingAmount,
 			ReturnShippingTaxAmount:   returnShippingTaxAmount,
 			StripeRefundAmount:        stripeRefundAmount,
-			TotalBrandBurdenAmount:    totalBrandBurdenAmount,
+			TotalSellerBurdenAmount:   totalSellerBurdenAmount,
 		}, nil
 
 	default:
