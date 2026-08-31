@@ -332,53 +332,37 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 		return ReturnReceiptResult{}, err
 	}
 
-	inquiryID := strings.TrimSpace(
-		in.InquiryID,
-	)
+	inquiryID := strings.TrimSpace(in.InquiryID)
 	if inquiryID == "" {
-		return ReturnReceiptResult{},
-			inquirydom.ErrInvalidID
+		return ReturnReceiptResult{}, inquirydom.ErrInvalidID
 	}
 
-	companyID := strings.TrimSpace(
-		in.CompanyID,
-	)
+	companyID := strings.TrimSpace(in.CompanyID)
 	if companyID == "" {
-		return ReturnReceiptResult{},
-			ErrReturnReceiptInvalidCompanyID
+		return ReturnReceiptResult{}, ErrReturnReceiptInvalidCompanyID
 	}
 
-	memberID := strings.TrimSpace(
-		in.MemberID,
-	)
+	memberID := strings.TrimSpace(in.MemberID)
 	if memberID == "" {
-		return ReturnReceiptResult{},
-			ErrReturnReceiptInvalidMemberID
+		return ReturnReceiptResult{}, ErrReturnReceiptInvalidMemberID
 	}
 
-	inquiry, err := uc.inquiryRepo.GetByID(
-		ctx,
-		inquiryID,
-	)
+	inquiry, err := uc.inquiryRepo.GetByID(ctx, inquiryID)
 	if err != nil {
 		return ReturnReceiptResult{}, err
 	}
 
-	if inquiry.ID != inquiryID ||
-		inquiry.DeletedAt != nil {
-		return ReturnReceiptResult{},
-			inquirydom.ErrNotFound
+	if inquiry.ID != inquiryID || inquiry.DeletedAt != nil {
+		return ReturnReceiptResult{}, inquirydom.ErrNotFound
 	}
 
-	if inquiry.InquiryType !=
-		inquirydom.InquiryTypeReturnUnopened {
+	if inquiry.InquiryType != inquirydom.InquiryTypeReturnUnopened {
 		return ReturnReceiptResult{
 			Inquiry: inquiry,
 		}, ErrReturnReceiptInvalidInquiryType
 	}
 
-	if inquiry.Status ==
-		inquirydom.InquiryStatusClosed {
+	if inquiry.Status == inquirydom.InquiryStatusClosed {
 		return ReturnReceiptResult{
 			Inquiry: inquiry,
 		}, ErrReturnReceiptInquiryClosed
@@ -396,18 +380,14 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 	orderID := inquiry.OrderID
 	itemIndex := *inquiry.OrderItemIndex
 
-	order, err := uc.orderService.GetByID(
-		ctx,
-		orderID,
-	)
+	order, err := uc.orderService.GetByID(ctx, orderID)
 	if err != nil {
 		return ReturnReceiptResult{
 			Inquiry: inquiry,
 		}, err
 	}
 
-	if order.ID != orderID ||
-		order.AvatarID != inquiry.AvatarID {
+	if order.ID != orderID || order.AvatarID != inquiry.AvatarID {
 		return ReturnReceiptResult{
 			Inquiry: inquiry,
 			Order:   order,
@@ -423,8 +403,7 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 
 	targetItem := order.Items[itemIndex]
 
-	if targetItem.SellerSnapshot.CompanyID !=
-		companyID {
+	if targetItem.SellerSnapshot.CompanyID != companyID {
 		return ReturnReceiptResult{
 			Inquiry: inquiry,
 			Order:   order,
@@ -468,8 +447,7 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 	//
 	// This protects against a generic manual resolve operation bypassing the
 	// financial return workflow.
-	if inquiry.Status ==
-		inquirydom.InquiryStatusResolved &&
+	if inquiry.Status == inquirydom.InquiryStatusResolved &&
 		!targetItem.IsReturnCompleted {
 		return ReturnReceiptResult{
 			Inquiry: inquiry,
@@ -509,9 +487,7 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 		return result, err
 	}
 
-	result.FinanciallyCompleted =
-		refund.IsFinanciallyCompleted()
-
+	result.FinanciallyCompleted = refund.IsFinanciallyCompleted()
 	if !result.FinanciallyCompleted {
 		// Stripe may have accepted the Refund but still report pending or
 		// requires_action.
@@ -522,18 +498,16 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 		return result, nil
 	}
 
-	alreadyOrderCompleted :=
-		targetItem.IsReturnCompleted
+	alreadyOrderCompleted := targetItem.IsReturnCompleted
 
 	if !alreadyOrderCompleted {
-		completedOrder, err :=
-			uc.orderService.CompleteReturnItem(
-				ctx,
-				CompleteReturnOrderItemInput{
-					ID:        order.ID,
-					ItemIndex: itemIndex,
-				},
-			)
+		completedOrder, err := uc.orderService.CompleteReturnItem(
+			ctx,
+			CompleteReturnOrderItemInput{
+				ID:        order.ID,
+				ItemIndex: itemIndex,
+			},
+		)
 		if err != nil {
 			return result, err
 		}
@@ -546,8 +520,7 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 		!order.Items[itemIndex].IsReturnCompleted ||
 		order.Items[itemIndex].ReturnCompletedAt == nil ||
 		order.Items[itemIndex].ReturnCompletedAt.IsZero() {
-		return result,
-			ErrReturnReceiptOrderCompletionMismatch
+		return result, ErrReturnReceiptOrderCompletionMismatch
 	}
 
 	result.OrderCompleted = true
@@ -559,25 +532,19 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 	//
 	// If reply creation succeeds but a later step fails, EnsureReplyByMember
 	// resolves the existing reply on the next attempt.
-	replyContent, err :=
-		buildRefundCompletionReplyContent(
-			refund,
-		)
+	replyContent, err := buildRefundCompletionReplyContent(refund)
 	if err != nil {
 		return result, err
 	}
 
-	_, err =
-		uc.inquiryResolver.EnsureReplyByMember(
-			ctx,
-			refundCompletionReplyID(
-				refund.ID,
-			),
-			inquiry.ID,
-			memberID,
-			replyContent,
-			nil,
-		)
+	_, err = uc.inquiryResolver.EnsureReplyByMember(
+		ctx,
+		refundCompletionReplyID(refund.ID),
+		inquiry.ID,
+		memberID,
+		replyContent,
+		nil,
+	)
 	if err != nil {
 		return result, err
 	}
@@ -587,16 +554,14 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 	// If this step fails, a retry resumes from the deterministic Refund and the
 	// already-completed Order item, ensures the same deterministic reply, then
 	// retries only Inquiry resolution.
-	if inquiry.Status !=
-		inquirydom.InquiryStatusResolved {
-		resolvedInquiry, err :=
-			uc.inquiryResolver.ResolveByMember(
-				ctx,
-				ResolveInquiryInput{
-					InquiryID: inquiry.ID,
-					MemberID:  memberID,
-				},
-			)
+	if inquiry.Status != inquirydom.InquiryStatusResolved {
+		resolvedInquiry, err := uc.inquiryResolver.ResolveByMember(
+			ctx,
+			ResolveInquiryInput{
+				InquiryID: inquiry.ID,
+				MemberID:  memberID,
+			},
+		)
 		if err != nil {
 			return result, err
 		}
@@ -605,14 +570,12 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 		result.Inquiry = resolvedInquiry
 	}
 
-	if inquiry.Status !=
-		inquirydom.InquiryStatusResolved ||
+	if inquiry.Status != inquirydom.InquiryStatusResolved ||
 		inquiry.ResolvedAt == nil ||
 		inquiry.ResolvedAt.IsZero() ||
 		inquiry.ResolvedBy == nil ||
 		*inquiry.ResolvedBy == "" {
-		return result,
-			ErrReturnReceiptInquiryResolutionMismatch
+		return result, ErrReturnReceiptInquiryResolutionMismatch
 	}
 
 	result.InquiryResolved = true
@@ -637,9 +600,7 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 		return result, err
 	}
 
-	result.AlreadyCompleted =
-		alreadyOrderCompleted
-
+	result.AlreadyCompleted = alreadyOrderCompleted
 	return result, nil
 }
 
@@ -674,8 +635,7 @@ func validateReturnReceiptRefund(
 		)
 	}
 
-	if refund.InquiryID !=
-		inquiry.ID {
+	if refund.InquiryID != inquiry.ID {
 		return ErrReturnReceiptRefundMismatch
 	}
 
@@ -685,25 +645,21 @@ func validateReturnReceiptRefund(
 		return ErrReturnReceiptRefundMismatch
 	}
 
-	if itemIndex < 0 ||
-		itemIndex >= len(order.Items) {
+	if itemIndex < 0 || itemIndex >= len(order.Items) {
 		return ErrReturnReceiptRefundMismatch
 	}
 
 	targetItem := order.Items[itemIndex]
 
-	if refund.CompanyID !=
-		targetItem.SellerSnapshot.CompanyID {
+	if refund.CompanyID != targetItem.SellerSnapshot.CompanyID {
 		return ErrReturnReceiptRefundMismatch
 	}
 
-	if refund.AccountID !=
-		targetItem.SellerSnapshot.AccountID {
+	if refund.AccountID != targetItem.SellerSnapshot.AccountID {
 		return ErrReturnReceiptRefundMismatch
 	}
 
-	if refund.Currency !=
-		refunddom.CurrencyJPY {
+	if refund.Currency != refunddom.CurrencyJPY {
 		return ErrReturnReceiptRefundMismatch
 	}
 
@@ -711,27 +667,23 @@ func validateReturnReceiptRefund(
 	// snapshot.
 	//
 	// Shipping and shipping consumption tax are intentionally excluded.
-	expectedAmount, err :=
-		orderdom.CalculateOrderItemRefundAmount(
-			order,
-			itemIndex,
-		)
+	expectedAmount, err := refunddom.CalculateOrderItemRefundAmount(
+		order,
+		itemIndex,
+	)
 	if err != nil {
 		return err
 	}
 
-	if refund.MerchandiseAmount !=
-		expectedAmount.MerchandiseAmount {
+	if refund.MerchandiseAmount != expectedAmount.MerchandiseAmount {
 		return ErrReturnReceiptRefundMismatch
 	}
 
-	if refund.MerchandiseTaxAmount !=
-		expectedAmount.MerchandiseTaxAmount {
+	if refund.MerchandiseTaxAmount != expectedAmount.MerchandiseTaxAmount {
 		return ErrReturnReceiptRefundMismatch
 	}
 
-	if refund.RefundAmount !=
-		expectedAmount.RefundAmount {
+	if refund.RefundAmount != expectedAmount.RefundAmount {
 		return ErrReturnReceiptRefundMismatch
 	}
 

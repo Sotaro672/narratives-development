@@ -20,7 +20,7 @@ func calculateItemRefundAmount(
 	policy refunddom.OpenedReturnRefundPolicy,
 ) (itemRefundAmountSummary, error) {
 	if policy == "" {
-		summary, err := orderdom.CalculateOrderItemRefundAmount(
+		summary, err := refunddom.CalculateOrderItemRefundAmount(
 			order,
 			itemIndex,
 		)
@@ -39,7 +39,7 @@ func calculateItemRefundAmount(
 		return itemRefundAmountSummary{}, err
 	}
 
-	summary, err := orderdom.CalculateOpenedReturnRefundAmount(
+	summary, err := refunddom.CalculateOpenedReturnRefundAmount(
 		order,
 		itemIndex,
 		policy,
@@ -143,7 +143,6 @@ func itemRefundSellerIdentity(
 	targetItem orderdom.OrderItemSnapshot,
 ) (settlementdom.SellerIdentity, error) {
 	snapshot := targetItem.SellerSnapshot
-
 	var seller settlementdom.SellerIdentity
 
 	switch targetItem.Type {
@@ -157,8 +156,7 @@ func itemRefundSellerIdentity(
 
 	case orderdom.OrderItemTypeResale:
 		if snapshot.PayoutAccountID != snapshot.UserID {
-			return settlementdom.SellerIdentity{},
-				ErrItemRefundSettlementMismatch
+			return settlementdom.SellerIdentity{}, ErrItemRefundSettlementMismatch
 		}
 
 		seller = settlementdom.SellerIdentity{
@@ -170,13 +168,11 @@ func itemRefundSellerIdentity(
 		}
 
 	default:
-		return settlementdom.SellerIdentity{},
-			ErrItemRefundSettlementMismatch
+		return settlementdom.SellerIdentity{}, ErrItemRefundSettlementMismatch
 	}
 
 	if err := seller.Validate(); err != nil {
-		return settlementdom.SellerIdentity{},
-			ErrItemRefundSettlementMismatch
+		return settlementdom.SellerIdentity{}, ErrItemRefundSettlementMismatch
 	}
 
 	return seller, nil

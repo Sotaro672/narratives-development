@@ -308,49 +308,39 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 
 	inquiryID := strings.TrimSpace(in.InquiryID)
 	if inquiryID == "" {
-		return OpenedReturnReceiptResult{},
-			inquirydom.ErrInvalidID
+		return OpenedReturnReceiptResult{}, inquirydom.ErrInvalidID
 	}
 
 	companyID := strings.TrimSpace(in.CompanyID)
 	if companyID == "" {
-		return OpenedReturnReceiptResult{},
-			ErrOpenedReturnReceiptInvalidCompanyID
+		return OpenedReturnReceiptResult{}, ErrOpenedReturnReceiptInvalidCompanyID
 	}
 
 	memberID := strings.TrimSpace(in.MemberID)
 	if memberID == "" {
-		return OpenedReturnReceiptResult{},
-			ErrOpenedReturnReceiptInvalidMemberID
+		return OpenedReturnReceiptResult{}, ErrOpenedReturnReceiptInvalidMemberID
 	}
 
 	if err := refunddom.ValidateOpenedReturnRefundPolicy(in.Policy); err != nil {
 		return OpenedReturnReceiptResult{}, err
 	}
 
-	inquiry, err := uc.inquiryRepo.GetByID(
-		ctx,
-		inquiryID,
-	)
+	inquiry, err := uc.inquiryRepo.GetByID(ctx, inquiryID)
 	if err != nil {
 		return OpenedReturnReceiptResult{}, err
 	}
 
-	if inquiry.ID != inquiryID ||
-		inquiry.DeletedAt != nil {
-		return OpenedReturnReceiptResult{},
-			inquirydom.ErrNotFound
+	if inquiry.ID != inquiryID || inquiry.DeletedAt != nil {
+		return OpenedReturnReceiptResult{}, inquirydom.ErrNotFound
 	}
 
-	if inquiry.InquiryType !=
-		inquirydom.InquiryTypeReturnOpened {
+	if inquiry.InquiryType != inquirydom.InquiryTypeReturnOpened {
 		return OpenedReturnReceiptResult{
 			Inquiry: inquiry,
 		}, ErrOpenedReturnReceiptInvalidInquiryType
 	}
 
-	if inquiry.Status ==
-		inquirydom.InquiryStatusClosed {
+	if inquiry.Status == inquirydom.InquiryStatusClosed {
 		return OpenedReturnReceiptResult{
 			Inquiry: inquiry,
 		}, ErrOpenedReturnReceiptInquiryClosed
@@ -368,18 +358,14 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 	orderID := inquiry.OrderID
 	itemIndex := *inquiry.OrderItemIndex
 
-	order, err := uc.orderService.GetByID(
-		ctx,
-		orderID,
-	)
+	order, err := uc.orderService.GetByID(ctx, orderID)
 	if err != nil {
 		return OpenedReturnReceiptResult{
 			Inquiry: inquiry,
 		}, err
 	}
 
-	if order.ID != orderID ||
-		order.AvatarID != inquiry.AvatarID {
+	if order.ID != orderID || order.AvatarID != inquiry.AvatarID {
 		return OpenedReturnReceiptResult{
 			Inquiry: inquiry,
 			Order:   order,
@@ -395,8 +381,7 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 
 	targetItem := order.Items[itemIndex]
 
-	if targetItem.SellerSnapshot.CompanyID !=
-		companyID {
+	if targetItem.SellerSnapshot.CompanyID != companyID {
 		return OpenedReturnReceiptResult{
 			Inquiry: inquiry,
 			Order:   order,
@@ -421,8 +406,7 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 		}, ErrOpenedReturnReceiptReturnNotRequested
 	}
 
-	if targetItem.ReturnRequestKind !=
-		orderdom.ReturnRequestKindOpened {
+	if targetItem.ReturnRequestKind != orderdom.ReturnRequestKindOpened {
 		return OpenedReturnReceiptResult{
 			Inquiry: inquiry,
 			Order:   order,
@@ -434,8 +418,7 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 	//
 	// This prevents a generic Inquiry resolve operation from bypassing the
 	// selected refund policy and financial workflow.
-	if inquiry.Status ==
-		inquirydom.InquiryStatusResolved &&
+	if inquiry.Status == inquirydom.InquiryStatusResolved &&
 		!targetItem.IsReturnCompleted {
 		return OpenedReturnReceiptResult{
 			Inquiry: inquiry,
@@ -477,9 +460,7 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 		return result, err
 	}
 
-	result.FinanciallyCompleted =
-		refund.IsFinanciallyCompleted()
-
+	result.FinanciallyCompleted = refund.IsFinanciallyCompleted()
 	if !result.FinanciallyCompleted {
 		// Stripe may have accepted the purchaser Refund while still reporting
 		// pending / requires_action.
@@ -489,18 +470,15 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 		return result, nil
 	}
 
-	alreadyOrderCompleted :=
-		targetItem.IsReturnCompleted
-
+	alreadyOrderCompleted := targetItem.IsReturnCompleted
 	if !alreadyOrderCompleted {
-		completedOrder, err :=
-			uc.orderService.CompleteReturnItem(
-				ctx,
-				CompleteReturnOrderItemInput{
-					ID:        order.ID,
-					ItemIndex: itemIndex,
-				},
-			)
+		completedOrder, err := uc.orderService.CompleteReturnItem(
+			ctx,
+			CompleteReturnOrderItemInput{
+				ID:        order.ID,
+				ItemIndex: itemIndex,
+			},
+		)
 		if err != nil {
 			return result, err
 		}
@@ -513,8 +491,7 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 		!order.Items[itemIndex].IsReturnCompleted ||
 		order.Items[itemIndex].ReturnCompletedAt == nil ||
 		order.Items[itemIndex].ReturnCompletedAt.IsZero() {
-		return result,
-			ErrOpenedReturnReceiptOrderCompletionMismatch
+		return result, ErrOpenedReturnReceiptOrderCompletionMismatch
 	}
 
 	result.OrderCompleted = true
@@ -525,10 +502,7 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 	// The reply uses only authoritative values persisted in Refund. In
 	// particular, ReturnShippingAmount / ReturnShippingTaxAmount are company-side
 	// burden and are not included in the purchaser Stripe refund breakdown.
-	replyContent, err :=
-		buildRefundCompletionReplyContent(
-			refund,
-		)
+	replyContent, err := buildRefundCompletionReplyContent(refund)
 	if err != nil {
 		return result, err
 	}
@@ -538,17 +512,14 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 	// If the reply was created by a previous attempt and a later operation
 	// failed, EnsureReplyByMember returns the existing matching reply rather than
 	// creating another purchaser-visible message.
-	_, err =
-		uc.inquiryResolver.EnsureReplyByMember(
-			ctx,
-			refundCompletionReplyID(
-				refund.ID,
-			),
-			inquiry.ID,
-			memberID,
-			replyContent,
-			nil,
-		)
+	_, err = uc.inquiryResolver.EnsureReplyByMember(
+		ctx,
+		refundCompletionReplyID(refund.ID),
+		inquiry.ID,
+		memberID,
+		replyContent,
+		nil,
+	)
 	if err != nil {
 		return result, err
 	}
@@ -558,16 +529,14 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 	// If this step fails, retrying resumes from the deterministic Refund and
 	// already-completed Order item, ensures the same deterministic reply, and
 	// retries Inquiry resolution.
-	if inquiry.Status !=
-		inquirydom.InquiryStatusResolved {
-		resolvedInquiry, err :=
-			uc.inquiryResolver.ResolveByMember(
-				ctx,
-				ResolveInquiryInput{
-					InquiryID: inquiry.ID,
-					MemberID:  memberID,
-				},
-			)
+	if inquiry.Status != inquirydom.InquiryStatusResolved {
+		resolvedInquiry, err := uc.inquiryResolver.ResolveByMember(
+			ctx,
+			ResolveInquiryInput{
+				InquiryID: inquiry.ID,
+				MemberID:  memberID,
+			},
+		)
 		if err != nil {
 			return result, err
 		}
@@ -576,14 +545,12 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 		result.Inquiry = resolvedInquiry
 	}
 
-	if inquiry.Status !=
-		inquirydom.InquiryStatusResolved ||
+	if inquiry.Status != inquirydom.InquiryStatusResolved ||
 		inquiry.ResolvedAt == nil ||
 		inquiry.ResolvedAt.IsZero() ||
 		inquiry.ResolvedBy == nil ||
 		*inquiry.ResolvedBy == "" {
-		return result,
-			ErrOpenedReturnReceiptInquiryResolutionMismatch
+		return result, ErrOpenedReturnReceiptInquiryResolutionMismatch
 	}
 
 	result.InquiryResolved = true
@@ -608,9 +575,7 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 		return result, err
 	}
 
-	result.AlreadyCompleted =
-		alreadyOrderCompleted
-
+	result.AlreadyCompleted = alreadyOrderCompleted
 	return result, nil
 }
 
@@ -656,20 +621,17 @@ func validateOpenedReturnReceiptRefund(
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
-	if itemIndex < 0 ||
-		itemIndex >= len(order.Items) {
+	if itemIndex < 0 || itemIndex >= len(order.Items) {
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
 	targetItem := order.Items[itemIndex]
 
-	if refund.CompanyID !=
-		targetItem.SellerSnapshot.CompanyID {
+	if refund.CompanyID != targetItem.SellerSnapshot.CompanyID {
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
-	if refund.AccountID !=
-		targetItem.SellerSnapshot.AccountID {
+	if refund.AccountID != targetItem.SellerSnapshot.AccountID {
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
@@ -677,67 +639,56 @@ func validateOpenedReturnReceiptRefund(
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
-	if refund.Currency !=
-		refunddom.CurrencyJPY {
+	if refund.Currency != refunddom.CurrencyJPY {
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
 	// Recalculate every purchaser-refund and return-shipping amount from the
 	// authoritative Order snapshot. The frontend-selected Policy is the only
 	// non-Order value involved in this calculation.
-	expectedAmount, err :=
-		orderdom.CalculateOpenedReturnRefundAmount(
-			order,
-			itemIndex,
-			policy,
-		)
+	expectedAmount, err := refunddom.CalculateOpenedReturnRefundAmount(
+		order,
+		itemIndex,
+		policy,
+	)
 	if err != nil {
 		return err
 	}
 
-	if refund.MerchandiseAmount !=
-		expectedAmount.MerchandiseAmount {
+	if refund.MerchandiseAmount != expectedAmount.MerchandiseAmount {
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
-	if refund.MerchandiseTaxAmount !=
-		expectedAmount.MerchandiseTaxAmount {
+	if refund.MerchandiseTaxAmount != expectedAmount.MerchandiseTaxAmount {
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
-	if refund.OutboundShippingAmount !=
-		expectedAmount.OutboundShippingAmount {
+	if refund.OutboundShippingAmount != expectedAmount.OutboundShippingAmount {
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
-	if refund.OutboundShippingTaxAmount !=
-		expectedAmount.OutboundShippingTaxAmount {
+	if refund.OutboundShippingTaxAmount != expectedAmount.OutboundShippingTaxAmount {
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
-	if refund.ReturnShippingAmount !=
-		expectedAmount.ReturnShippingAmount {
+	if refund.ReturnShippingAmount != expectedAmount.ReturnShippingAmount {
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
-	if refund.ReturnShippingTaxAmount !=
-		expectedAmount.ReturnShippingTaxAmount {
+	if refund.ReturnShippingTaxAmount != expectedAmount.ReturnShippingTaxAmount {
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
-	if refund.RefundAmount !=
-		expectedAmount.StripeRefundAmount {
+	if refund.RefundAmount != expectedAmount.StripeRefundAmount {
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
-	totalBrandBurdenAmount, err :=
-		refund.TotalBrandBurdenAmount()
+	totalBrandBurdenAmount, err := refund.TotalBrandBurdenAmount()
 	if err != nil {
 		return err
 	}
 
-	if totalBrandBurdenAmount !=
-		expectedAmount.TotalBrandBurdenAmount {
+	if totalBrandBurdenAmount != expectedAmount.TotalBrandBurdenAmount {
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
