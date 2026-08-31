@@ -1,6 +1,6 @@
 // frontend/amol/src/pages/PayoutAccountConfirmPage.tsx
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
@@ -28,6 +28,7 @@ function getAccountTypeLabel(accountType: "ordinary" | "current"): string {
 export default function PayoutAccountConfirmPage() {
   const navigate = useNavigate();
   const { isDesktop } = useContactViewport();
+  const registrationSucceededRef = useRef(false);
 
   const {
     draft,
@@ -54,6 +55,10 @@ export default function PayoutAccountConfirmPage() {
   } = usePayoutAccountRegistrationSubmit();
 
   useEffect(() => {
+    if (registrationSucceededRef.current) {
+      return;
+    }
+
     if (!draft.bankCode.trim() || !draft.bankName.trim()) {
       navigate("/settings/payout-account/bank", { replace: true });
       return;
@@ -78,7 +83,7 @@ export default function PayoutAccountConfirmPage() {
   ]);
 
   useEffect(() => {
-    if (!isRulesReady) {
+    if (registrationSucceededRef.current || !isRulesReady) {
       return;
     }
 
@@ -130,6 +135,8 @@ export default function PayoutAccountConfirmPage() {
 
     try {
       const payoutAccount = await submitPayoutAccountRegistration(draft);
+
+      registrationSucceededRef.current = true;
       resetDraft();
 
       const payoutReady =
