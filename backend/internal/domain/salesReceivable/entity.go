@@ -435,7 +435,7 @@ func (r SalesReceivable) Validate() error {
 		if r.AvailableAt.Before(r.CreatedAt) {
 			return ErrInvalidAvailableAt
 		}
-		if !r.UpdatedAt.Equal(*r.AvailableAt) {
+		if r.UpdatedAt.Before(*r.AvailableAt) {
 			return ErrInvalidUpdatedAt
 		}
 

@@ -33,6 +33,7 @@ type repos struct {
 	orderConsoleLister                *fs.OrderConsoleListerFS
 	paymentRepo                       *fs.PaymentRepositoryFS
 	settlementRepo                    *fs.SettlementRepositoryFS
+	salesReceivableRepo               *fs.SalesReceivableRepositoryFS
 	refundRepo                        *fs.RefundRepositoryFS
 	permissionRepo                    *fs.PermissionRepositoryFS
 	productRepo                       *fs.ProductRepositoryFS
@@ -85,6 +86,7 @@ func buildRepos(c *clients) *repos {
 	orderConsoleLister := fs.NewOrderConsoleListerFS(fsClient)
 	paymentRepo := fs.NewPaymentRepositoryFS(fsClient)
 	settlementRepo := fs.NewSettlementRepositoryFS(fsClient)
+	salesReceivableRepo := fs.NewSalesReceivableRepositoryFS(fsClient)
 	refundRepo := fs.NewRefundRepositoryFS(fsClient)
 	permissionRepo := fs.NewPermissionRepositoryFS(fsClient)
 	productRepo := fs.NewProductRepositoryFS(fsClient)
@@ -131,6 +133,7 @@ func buildRepos(c *clients) *repos {
 		orderConsoleLister:                orderConsoleLister,
 		paymentRepo:                       paymentRepo,
 		settlementRepo:                    settlementRepo,
+		salesReceivableRepo:               salesReceivableRepo,
 		refundRepo:                        refundRepo,
 		permissionRepo:                    permissionRepo,
 		productRepo:                       productRepo,

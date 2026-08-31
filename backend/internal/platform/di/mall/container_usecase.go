@@ -280,6 +280,7 @@ func buildMallUsecases(
 		usecase.NewRefundUsecaseInput{
 			PaymentReader:                 paymentUC,
 			SettlementRepository:          r.settlementRepo,
+			SalesReceivableService:        salesReceivableUC,
 			StripeRefundGateway:           settlementDependencies.StripeRefundGateway,
 			StripeTransferReversalGateway: settlementDependencies.StripeTransferReversalGateway,
 		},
@@ -317,6 +318,7 @@ func buildMallUsecases(
 			OrderReader:                   orderUC,
 			PaymentReader:                 paymentUC,
 			SettlementRepository:          r.settlementRepo,
+			SalesReceivableService:        salesReceivableUC,
 			RefundRepository:              r.refundRepo,
 			PlatformFeeCalculator:         settlementDependencies.Calculator,
 			StripeRefundGateway:           settlementDependencies.StripeRefundGateway,

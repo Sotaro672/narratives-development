@@ -42,6 +42,7 @@ type usecases struct {
 	refundCompletionNotificationUC  uc.RefundCompletionNotificationUsecasePort
 	paymentUC                       *uc.PaymentUsecase
 	paymentFlowUC                   *uc.PaymentFlowUsecase
+	salesReceivableUC               *uc.SalesReceivableUsecase
 	settlementUC                    *uc.SettlementUsecase
 	refundUC                        *uc.RefundUsecase
 	permissionUC                    *uc.PermissionUsecase
@@ -67,10 +68,14 @@ type usecases struct {
 
 func buildSettlementUsecase(
 	r *repos,
+	salesReceivableUC *uc.SalesReceivableUsecase,
 	dependencies *shared.SettlementDependencies,
 ) (*uc.SettlementUsecase, error) {
 	if r == nil || r.settlementRepo == nil {
 		return nil, errors.New("di.console: settlement repository is nil")
+	}
+	if salesReceivableUC == nil {
+		return nil, errors.New("di.console: sales receivable usecase is nil")
 	}
 	if dependencies == nil {
 		return nil, errors.New("di.console: settlement dependencies are nil")
@@ -83,9 +88,10 @@ func buildSettlementUsecase(
 	}
 
 	settlementUC := uc.NewSettlementUsecase(uc.NewSettlementUsecaseInput{
-		Repository:            r.settlementRepo,
-		Calculator:            dependencies.SettlementCalculator,
-		StripeTransferGateway: dependencies.StripeTransferGateway,
+		Repository:             r.settlementRepo,
+		Calculator:             dependencies.SettlementCalculator,
+		SalesReceivableUsecase: salesReceivableUC,
+		StripeTransferGateway:  dependencies.StripeTransferGateway,
 	})
 	if settlementUC == nil {
 		return nil, errors.New("di.console: settlement usecase is nil")
@@ -97,6 +103,7 @@ func buildSettlementUsecase(
 func buildRefundUsecase(
 	r *repos,
 	paymentUC *uc.PaymentUsecase,
+	salesReceivableUC *uc.SalesReceivableUsecase,
 	dependencies *shared.SettlementDependencies,
 ) (*uc.RefundUsecase, error) {
 	if r == nil || r.settlementRepo == nil {
@@ -104,6 +111,9 @@ func buildRefundUsecase(
 	}
 	if paymentUC == nil {
 		return nil, errors.New("di.console: payment usecase is nil")
+	}
+	if salesReceivableUC == nil {
+		return nil, errors.New("di.console: sales receivable usecase is nil")
 	}
 	if dependencies == nil {
 		return nil, errors.New("di.console: settlement dependencies are nil")
@@ -118,6 +128,7 @@ func buildRefundUsecase(
 	refundUC := uc.NewRefundUsecase(uc.NewRefundUsecaseInput{
 		PaymentReader:                 paymentUC,
 		SettlementRepository:          r.settlementRepo,
+		SalesReceivableService:        salesReceivableUC,
 		StripeRefundGateway:           dependencies.StripeRefundGateway,
 		StripeTransferReversalGateway: dependencies.StripeTransferReversalGateway,
 	})
@@ -132,6 +143,7 @@ func buildItemRefundUsecase(
 	r *repos,
 	orderUC *uc.OrderUsecase,
 	paymentUC *uc.PaymentUsecase,
+	salesReceivableUC *uc.SalesReceivableUsecase,
 	dependencies *shared.SettlementDependencies,
 ) (*uc.ItemRefundUsecase, error) {
 	if r == nil || r.settlementRepo == nil {
@@ -145,6 +157,9 @@ func buildItemRefundUsecase(
 	}
 	if paymentUC == nil {
 		return nil, errors.New("di.console: payment usecase is nil")
+	}
+	if salesReceivableUC == nil {
+		return nil, errors.New("di.console: sales receivable usecase is nil")
 	}
 	if dependencies == nil {
 		return nil, errors.New("di.console: settlement dependencies are nil")
@@ -163,6 +178,7 @@ func buildItemRefundUsecase(
 		OrderReader:                   orderUC,
 		PaymentReader:                 paymentUC,
 		SettlementRepository:          r.settlementRepo,
+		SalesReceivableService:        salesReceivableUC,
 		RefundRepository:              r.refundRepo,
 		PlatformFeeCalculator:         dependencies.Calculator,
 		StripeRefundGateway:           dependencies.StripeRefundGateway,
@@ -306,17 +322,25 @@ func buildUsecases(
 		ResaleRepo:  r.resaleRepo,
 	})
 
+	if r.salesReceivableRepo == nil {
+		return nil, resources.CloseWithError(errors.New("di.console: sales receivable repository is nil"))
+	}
+	salesReceivableUC := uc.NewSalesReceivableUsecase(r.salesReceivableRepo)
+	if salesReceivableUC == nil {
+		return nil, resources.CloseWithError(errors.New("di.console: sales receivable usecase is nil"))
+	}
+
 	settlementDependencies, err := shared.BuildSettlementDependencies(ctx, c.infra)
 	if err != nil {
 		return nil, resources.CloseWithError(err)
 	}
 
-	settlementUC, err := buildSettlementUsecase(r, settlementDependencies)
+	settlementUC, err := buildSettlementUsecase(r, salesReceivableUC, settlementDependencies)
 	if err != nil {
 		return nil, resources.CloseWithError(err)
 	}
 
-	refundUC, err := buildRefundUsecase(r, paymentUC, settlementDependencies)
+	refundUC, err := buildRefundUsecase(r, paymentUC, salesReceivableUC, settlementDependencies)
 	if err != nil {
 		return nil, resources.CloseWithError(err)
 	}
@@ -387,6 +411,7 @@ func buildUsecases(
 		r,
 		orderUC,
 		paymentUC,
+		salesReceivableUC,
 		settlementDependencies,
 	)
 	if err != nil {
@@ -669,6 +694,7 @@ func buildUsecases(
 		refundCompletionNotificationUC:  refundCompletionNotificationUC,
 		paymentUC:                       paymentUC,
 		paymentFlowUC:                   paymentFlowUC,
+		salesReceivableUC:               salesReceivableUC,
 		settlementUC:                    settlementUC,
 		refundUC:                        refundUC,
 		permissionUC:                    permissionUC,

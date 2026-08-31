@@ -10,6 +10,7 @@ import (
 	inquirydom "narratives/internal/domain/inquiry"
 	orderdom "narratives/internal/domain/order"
 	refunddom "narratives/internal/domain/refund"
+	salesreceivabledom "narratives/internal/domain/salesReceivable"
 )
 
 // ============================================================
@@ -20,55 +21,42 @@ var (
 	ErrReturnReceiptUsecaseNotConfigured = errors.New(
 		"return receipt usecase: not configured",
 	)
-
 	ErrReturnReceiptInvalidCompanyID = errors.New(
 		"return receipt usecase: invalid companyId",
 	)
-
 	ErrReturnReceiptInvalidMemberID = errors.New(
 		"return receipt usecase: invalid memberId",
 	)
-
 	ErrReturnReceiptInvalidInquiryType = errors.New(
 		"return receipt usecase: inquiry is not return_unopened",
 	)
-
 	ErrReturnReceiptInquiryNotOpen = errors.New(
 		"return receipt usecase: inquiry is not open",
 	)
-
 	ErrReturnReceiptInquiryClosed = errors.New(
 		"return receipt usecase: inquiry is closed",
 	)
-
 	ErrReturnReceiptOrderMismatch = errors.New(
 		"return receipt usecase: inquiry does not match order",
 	)
-
 	ErrReturnReceiptCompanyMismatch = errors.New(
 		"return receipt usecase: order item does not belong to company",
 	)
-
 	ErrReturnReceiptOrderNotPaid = errors.New(
 		"return receipt usecase: order is not paid",
 	)
-
 	ErrReturnReceiptReturnNotRequested = errors.New(
 		"return receipt usecase: return is not requested",
 	)
-
 	ErrReturnReceiptReturnNotUnopened = errors.New(
 		"return receipt usecase: return item is no longer unopened",
 	)
-
 	ErrReturnReceiptRefundMismatch = errors.New(
 		"return receipt usecase: refund does not match return target",
 	)
-
 	ErrReturnReceiptOrderCompletionMismatch = errors.New(
 		"return receipt usecase: order return completion mismatch",
 	)
-
 	ErrReturnReceiptInquiryResolutionMismatch = errors.New(
 		"return receipt usecase: inquiry resolution mismatch",
 	)
@@ -81,14 +69,8 @@ var (
 // ReturnReceiptOrderService is the minimum Order application service required
 // by ReturnReceiptUsecase.
 //
-// Order is the authoritative source for:
-//
-// - purchaser / avatar ownership
-// - item index
-// - seller Company / Account
-// - return-request state
-// - unopened state
-// - return-completion state
+// Order is authoritative for purchaser ownership, item identity, immutable seller
+// snapshot, return-request state, unopened state and return-completion state.
 type ReturnReceiptOrderService interface {
 	GetByID(
 		ctx context.Context,
@@ -133,39 +115,28 @@ type ReturnReceiptInquiryResolver interface {
 // Item Refund Port
 // ============================================================
 
-// RefundOrderItemInput identifies the item-level financial refund that belongs
-// to one return Inquiry.
+// RefundOrderItemInput identifies the item-level financial refund belonging to
+// one return Inquiry.
 //
 // No amount is accepted from the HTTP/frontend layer.
 //
-// ItemRefundUsecase must resolve the authoritative refund amount from:
-//
-//	Order
-//	-> Order item
-//	-> merchandise amount
-//	-> allocated merchandise consumption tax
-//
-// and coordinate the corresponding seller-side partial Transfer Reversal.
+// CompanyID represents the authenticated Console scope. For a primary List item,
+// ItemRefundUsecase also validates it against the seller Company. For a consumer
+// resale item, CompanyID is not seller identity; seller financial state is
+// resolved from Avatar/User/PayoutAccount and SalesReceivable.
 type RefundOrderItemInput struct {
 	InquiryID string
-
 	OrderID   string
 	ItemIndex int
-
 	CompanyID string
 }
 
-// ReturnReceiptItemRefundService is the item-level financial service required
-// by ReturnReceiptUsecase.
+// ReturnReceiptItemRefundService is the item-level financial service required by
+// ReturnReceiptUsecase.
 //
-// RefundOrderItem must be idempotent.
-//
-// A deterministic Refund ID and deterministic Stripe idempotency keys should
-// ensure that retrying the receive-return endpoint does not create duplicate:
-//
-// - Stripe Refund objects
-// - Stripe Transfer Reversals
-// - Refund Firestore documents
+// RefundOrderItem must be idempotent. A deterministic Refund ID and deterministic
+// Stripe idempotency keys prevent duplicate purchaser Refunds, seller Transfer
+// Reversals and Refund documents.
 type ReturnReceiptItemRefundService interface {
 	RefundOrderItem(
 		ctx context.Context,
@@ -175,9 +146,6 @@ type ReturnReceiptItemRefundService interface {
 
 // ReturnReceiptRefundCompletionNotifier is the minimum notification contract
 // required after one item-level return has completed financially.
-//
-// EnsureDelivery must be idempotent so retrying ReceiveReturn can repair a
-// previously completed refund whose notification delivery was not yet queued.
 type ReturnReceiptRefundCompletionNotifier interface {
 	EnsureDelivery(
 		ctx context.Context,
@@ -191,11 +159,10 @@ type ReturnReceiptRefundCompletionNotifier interface {
 
 // ReceiveReturnInput identifies one Console return receipt operation.
 //
-// CompanyID and MemberID must come from authenticated Console context.
-// They must not be trusted from arbitrary request-body values.
+// CompanyID and MemberID must come from authenticated Console context. They must
+// not be trusted from arbitrary request-body values.
 type ReceiveReturnInput struct {
 	InquiryID string
-
 	CompanyID string
 	MemberID  string
 }
@@ -203,21 +170,17 @@ type ReceiveReturnInput struct {
 // ReturnReceiptResult represents the complete state of one return receipt
 // attempt.
 //
-// FinanciallyCompleted:
+// FinanciallyCompleted is true only after purchaser refund and the required
+// seller-side financial action have completed.
 //
-//	true only after purchaser refund and every required seller-side
-//	Transfer Reversal have completed.
+// For List:
+//   - Settlement / Stripe Transfer Reversal
 //
-// OrderCompleted:
+// For Resale:
+//   - SalesReceivable cancellation
 //
-//	true only after Order item IsReturnCompleted becomes true.
-//
-// InquiryResolved:
-//
-//	true only after Inquiry becomes resolved.
-//
-// If Stripe returns a pending refund state, ReceiveReturn returns a result with
-// FinanciallyCompleted=false and does not complete Order or Inquiry.
+// OrderCompleted is true only after the Order item is marked return-completed.
+// InquiryResolved is true only after Inquiry becomes resolved.
 type ReturnReceiptResult struct {
 	Inquiry inquirydom.Inquiry
 	Order   orderdom.Order
@@ -236,36 +199,24 @@ type ReturnReceiptResult struct {
 
 // ReturnReceiptUsecase coordinates receipt of one unopened returned item.
 //
-// This usecase intentionally acts as an orchestrator.
+// Execution:
 //
-// Responsibilities:
-//
-//  1. Load the authoritative Inquiry.
-//  2. Require inquiryType=return_unopened.
-//  3. Resolve the authoritative Order and Order item.
-//  4. Validate company boundary.
-//  5. Revalidate that the physical item is still unopened.
-//  6. Execute or resume the item-level financial Refund.
-//  7. Require Refund.IsFinanciallyCompleted().
-//  8. Mark the Order item return as completed.
-//  9. Ensure the refund amount / breakdown reply from the company member.
-//  10. Resolve the Inquiry.
-//  11. Ensure the purchaser refund-completion notification delivery.
-//
-// The execution order is intentional:
-//
-//	Stripe purchaser Refund
-//	-> seller Transfer Reversal
+//	Inquiry
+//	-> authoritative Order/item
+//	-> seller/item-type validation
+//	-> item-level purchaser Refund and seller-side financial completion
 //	-> Order IsReturnCompleted
 //	-> refund completion reply
 //	-> Inquiry resolved
-//	-> refund completion notification delivery
+//	-> refund completion notification
 //
-// Order and Inquiry must never be marked completed before the financial Refund
-// aggregate is financially completed.
+// Primary List items use Settlement and Stripe Transfer Reversal.
+// Consumer resale items use SalesReceivable and never use Stripe Connect.
 //
-// Stripe and Firestore cannot participate in one transaction. Therefore every
-// step before and after Order completion that can be retried must be idempotent.
+// Console company access to the Inquiry is established by the company-scoped
+// Inquiry detail query before this usecase is invoked. Inside this usecase,
+// CompanyID is additionally matched to SellerSnapshot.CompanyID only for List
+// items because a resale seller is an Avatar/User, not a Company.
 type ReturnReceiptUsecase struct {
 	orderService ReturnReceiptOrderService
 
@@ -308,22 +259,12 @@ func (uc *ReturnReceiptUsecase) WithRefundCompletionNotifier(
 
 // ReceiveReturn receives one unopened return.
 //
-// The frontend sends only the Inquiry ID through the route.
+// The frontend sends only the Inquiry ID through the route. CompanyID and
+// MemberID come from authenticated Console context.
 //
-// CompanyID and MemberID are supplied from authenticated Console context.
-//
-// Refund amount, Order ID, item index, Account ID, Settlement ID, tax rate,
-// merchandise amount, and tax amount are never accepted from the frontend.
-//
-// A successful completed flow ends with:
-//
-//	Refund.IsFinanciallyCompleted() == true
-//	Order.Items[itemIndex].IsReturnCompleted == true
-//	refund completion reply exists
-//	Inquiry.Status == resolved
-//
-// If Stripe Refund is pending, the Refund is returned but Order / Inquiry remain
-// in their current return-processing state.
+// Refund amount, Order ID, item index, seller identity, Settlement ID,
+// SalesReceivable ID, tax rate and monetary amounts are never accepted from the
+// frontend.
 func (uc *ReturnReceiptUsecase) ReceiveReturn(
 	ctx context.Context,
 	in ReceiveReturnInput,
@@ -403,11 +344,14 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 
 	targetItem := order.Items[itemIndex]
 
-	if targetItem.SellerSnapshot.CompanyID != companyID {
+	if err := validateReturnReceiptTargetSeller(
+		companyID,
+		targetItem,
+	); err != nil {
 		return ReturnReceiptResult{
 			Inquiry: inquiry,
 			Order:   order,
-		}, ErrReturnReceiptCompanyMismatch
+		}, err
 	}
 
 	if !order.Paid {
@@ -430,10 +374,9 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 
 	// return_unopened must still represent a physically unopened item.
 	//
-	// If a valid scan has already occurred, ReturnRequestUsecase should promote
-	// the Inquiry to return_opened. Even if that promotion has not yet been
-	// persisted because of a concurrent failure, the authoritative Order state
-	// prevents an unopened refund from proceeding here.
+	// A valid scan means the token transfer/opening boundary has already been
+	// crossed. Even if Inquiry promotion to return_opened failed concurrently,
+	// authoritative Order state prevents an unopened refund from proceeding.
 	if targetItem.Transferred ||
 		targetItem.TokenTransferVerifiedAt != nil {
 		return ReturnReceiptResult{
@@ -442,11 +385,9 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 		}, ErrReturnReceiptReturnNotUnopened
 	}
 
-	// A resolved return_unopened Inquiry is valid here only when the Order item
-	// has already completed.
-	//
-	// This protects against a generic manual resolve operation bypassing the
-	// financial return workflow.
+	// A resolved return_unopened Inquiry is valid here only when Order return
+	// completion has already succeeded. This prevents generic Inquiry resolution
+	// from bypassing the financial return workflow.
 	if inquiry.Status == inquirydom.InquiryStatusResolved &&
 		!targetItem.IsReturnCompleted {
 		return ReturnReceiptResult{
@@ -489,12 +430,9 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 
 	result.FinanciallyCompleted = refund.IsFinanciallyCompleted()
 	if !result.FinanciallyCompleted {
-		// Stripe may have accepted the Refund but still report pending or
-		// requires_action.
-		//
-		// Do not complete the Order and do not resolve the Inquiry until the
-		// Refund aggregate confirms both purchaser and seller-side financial
-		// completion.
+		// Stripe may have accepted the purchaser Refund but still report pending
+		// or requires_action. Do not complete Order or Inquiry until the complete
+		// Refund aggregate confirms seller-side and purchaser-side completion.
 		return result, nil
 	}
 
@@ -525,13 +463,8 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 
 	result.OrderCompleted = true
 
-	// The refund completion reply is ensured before Inquiry resolution.
-	//
-	// replyID is deterministic from Refund.ID, so retrying this flow must not
-	// create duplicate purchaser-visible refund completion replies.
-	//
-	// If reply creation succeeds but a later step fails, EnsureReplyByMember
-	// resolves the existing reply on the next attempt.
+	// The deterministic reply ID makes retrying this flow safe if a later step
+	// fails after the refund completion reply has already been created.
 	replyContent, err := buildRefundCompletionReplyContent(refund)
 	if err != nil {
 		return result, err
@@ -549,11 +482,6 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 		return result, err
 	}
 
-	// Inquiry resolution follows the refund completion reply.
-	//
-	// If this step fails, a retry resumes from the deterministic Refund and the
-	// already-completed Order item, ensures the same deterministic reply, then
-	// retries only Inquiry resolution.
 	if inquiry.Status != inquirydom.InquiryStatusResolved {
 		resolvedInquiry, err := uc.inquiryResolver.ResolveByMember(
 			ctx,
@@ -580,12 +508,8 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 
 	result.InquiryResolved = true
 
-	// EnsureDelivery is intentionally executed even when the Order and Inquiry
-	// were already completed by a previous attempt.
-	//
-	// This repairs the partial-failure case where the financial refund, Order
-	// completion, refund completion reply, and Inquiry resolution succeeded but
-	// delivery creation or Cloud Tasks enqueue did not complete.
+	// Always ensure notification delivery, including idempotent retries after
+	// Order and Inquiry completion.
 	_, err = uc.refundCompletionNotifier.EnsureDelivery(
 		ctx,
 		EnsureRefundCompletionNotificationInput{
@@ -621,6 +545,61 @@ func (uc *ReturnReceiptUsecase) validateConfigured() error {
 	return nil
 }
 
+// validateReturnReceiptTargetSeller validates the immutable seller snapshot
+// according to the Order item type.
+//
+// List:
+//   - Console Company must equal the seller Company.
+//   - Company/Account/Stripe account identity is required.
+//   - resale seller fields must be empty.
+//
+// Resale:
+//   - seller is Avatar/User/PayoutAccount, not the authenticated Console Company.
+//   - Company access to the Inquiry is established by the company-scoped Inquiry
+//     detail query before this usecase is invoked.
+//   - StripeAccountID must be empty.
+func validateReturnReceiptTargetSeller(
+	companyID string,
+	targetItem orderdom.OrderItemSnapshot,
+) error {
+	seller := targetItem.SellerSnapshot
+
+	switch targetItem.Type {
+	case orderdom.OrderItemTypeList:
+		if seller.CompanyID != companyID {
+			return ErrReturnReceiptCompanyMismatch
+		}
+
+		if seller.BrandID == "" ||
+			seller.CompanyID == "" ||
+			seller.AccountID == "" ||
+			seller.StripeAccountID == "" ||
+			seller.AvatarID != "" ||
+			seller.UserID != "" ||
+			seller.PayoutAccountID != "" {
+			return ErrReturnReceiptOrderMismatch
+		}
+
+	case orderdom.OrderItemTypeResale:
+		if targetItem.ResaleID == "" ||
+			seller.AvatarID == "" ||
+			seller.UserID == "" ||
+			seller.PayoutAccountID == "" ||
+			seller.PayoutAccountID != seller.UserID ||
+			seller.BrandID != "" ||
+			seller.CompanyID != "" ||
+			seller.AccountID != "" ||
+			seller.StripeAccountID != "" {
+			return ErrReturnReceiptOrderMismatch
+		}
+
+	default:
+		return ErrReturnReceiptOrderMismatch
+	}
+
+	return nil
+}
+
 func validateReturnReceiptRefund(
 	inquiry inquirydom.Inquiry,
 	order orderdom.Order,
@@ -650,12 +629,44 @@ func validateReturnReceiptRefund(
 	}
 
 	targetItem := order.Items[itemIndex]
+	seller := targetItem.SellerSnapshot
 
-	if refund.CompanyID != targetItem.SellerSnapshot.CompanyID {
-		return ErrReturnReceiptRefundMismatch
-	}
+	switch targetItem.Type {
+	case orderdom.OrderItemTypeList:
+		if refund.SellerType != refunddom.SellerTypeAccount ||
+			refund.CompanyID != seller.CompanyID ||
+			refund.AccountID != seller.AccountID ||
+			refund.StripeAccountID != seller.StripeAccountID ||
+			refund.AvatarID != "" ||
+			refund.UserID != "" ||
+			refund.PayoutAccountID != "" ||
+			refund.SettlementID == "" ||
+			refund.SalesReceivableID != "" {
+			return ErrReturnReceiptRefundMismatch
+		}
 
-	if refund.AccountID != targetItem.SellerSnapshot.AccountID {
+	case orderdom.OrderItemTypeResale:
+		if refund.SellerType != refunddom.SellerTypeResale ||
+			refund.CompanyID != "" ||
+			refund.AccountID != "" ||
+			refund.StripeAccountID != "" ||
+			refund.AvatarID != seller.AvatarID ||
+			refund.UserID != seller.UserID ||
+			refund.PayoutAccountID != seller.PayoutAccountID ||
+			refund.SettlementID != "" {
+			return ErrReturnReceiptRefundMismatch
+		}
+
+		expectedSalesReceivableID, err := salesreceivabledom.NewID(
+			order.ID,
+			itemIndex,
+		)
+		if err != nil ||
+			refund.SalesReceivableID != expectedSalesReceivableID {
+			return ErrReturnReceiptRefundMismatch
+		}
+
+	default:
 		return ErrReturnReceiptRefundMismatch
 	}
 
@@ -663,9 +674,7 @@ func validateReturnReceiptRefund(
 		return ErrReturnReceiptRefundMismatch
 	}
 
-	// Recalculate the expected purchaser refund from the authoritative Order
-	// snapshot.
-	//
+	// Unopened return refunds merchandise and merchandise consumption tax only.
 	// Shipping and shipping consumption tax are intentionally excluded.
 	expectedAmount, err := refunddom.CalculateOrderItemRefundAmount(
 		order,
@@ -675,15 +684,9 @@ func validateReturnReceiptRefund(
 		return err
 	}
 
-	if refund.MerchandiseAmount != expectedAmount.MerchandiseAmount {
-		return ErrReturnReceiptRefundMismatch
-	}
-
-	if refund.MerchandiseTaxAmount != expectedAmount.MerchandiseTaxAmount {
-		return ErrReturnReceiptRefundMismatch
-	}
-
-	if refund.RefundAmount != expectedAmount.RefundAmount {
+	if refund.MerchandiseAmount != expectedAmount.MerchandiseAmount ||
+		refund.MerchandiseTaxAmount != expectedAmount.MerchandiseTaxAmount ||
+		refund.RefundAmount != expectedAmount.RefundAmount {
 		return ErrReturnReceiptRefundMismatch
 	}
 
