@@ -1033,13 +1033,13 @@ func validateSellerSnapshotDocumentShape(
 	raw map[string]any,
 	itemType orderdom.OrderItemType,
 ) error {
-	stripeAccountID, ok := requiredOrderString(raw, "stripeAccountId")
-	if !ok || !strings.HasPrefix(stripeAccountID, "acct_") {
-		return ErrInvalidOrderDocumentData
-	}
-
 	switch itemType {
 	case orderdom.OrderItemTypeList:
+		stripeAccountID, ok := requiredOrderString(raw, "stripeAccountId")
+		if !ok || !strings.HasPrefix(stripeAccountID, "acct_") {
+			return ErrInvalidOrderDocumentData
+		}
+
 		for _, field := range []string{"brandId", "companyId", "accountId"} {
 			if _, ok := requiredOrderString(raw, field); !ok {
 				return ErrInvalidOrderDocumentData
@@ -1056,6 +1056,16 @@ func validateSellerSnapshotDocumentShape(
 		userID, _ := requiredOrderString(raw, "userId")
 		payoutAccountID, _ := requiredOrderString(raw, "payoutAccountId")
 		if payoutAccountID != userID {
+			return ErrInvalidOrderDocumentData
+		}
+
+		stripeAccountIDRaw, exists := raw["stripeAccountId"]
+		if !exists || stripeAccountIDRaw == nil {
+			return ErrInvalidOrderDocumentData
+		}
+
+		stripeAccountID, ok := stripeAccountIDRaw.(string)
+		if !ok || stripeAccountID != "" {
 			return ErrInvalidOrderDocumentData
 		}
 

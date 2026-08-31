@@ -81,61 +81,36 @@ export default function PayoutBankSelectPage() {
   const navigate = useNavigate();
   const { isDesktop } = useContactViewport();
   const { draft, setBank } = usePayoutAccountRegistration();
-  const {
-    isLoading,
-    isReady,
-    isTestMode,
-    errorMessage,
-    testBankCode,
-    validateBankCode,
-  } = usePayoutAccountRegistrationRules();
+  const { validateBankCode } = usePayoutAccountRegistrationRules();
 
   const [searchText, setSearchText] = useState("");
   const [selectedBankCode, setSelectedBankCode] = useState(draft.bankCode);
-
-  const bankCandidates = useMemo<BankCandidate[]>(() => {
-    if (!isReady) {
-      return [];
-    }
-
-    if (isTestMode) {
-      return [
-        {
-          bankCode: testBankCode,
-          bankName: "Stripeテスト銀行",
-          searchKeywords: "stripe test ストライプ テスト",
-        },
-      ];
-    }
-
-    return BANK_CANDIDATES;
-  }, [isReady, isTestMode, testBankCode]);
 
   const filteredBanks = useMemo(() => {
     const query = normalizeSearchValue(searchText);
 
     if (!query) {
-      return bankCandidates;
+      return BANK_CANDIDATES;
     }
 
-    return bankCandidates.filter((bank) => {
+    return BANK_CANDIDATES.filter((bank) => {
       const searchable = normalizeSearchValue(
         `${bank.bankCode} ${bank.bankName} ${bank.searchKeywords}`,
       );
 
       return searchable.includes(query);
     });
-  }, [bankCandidates, searchText]);
+  }, [searchText]);
 
   const selectedBank = useMemo(
     () =>
-      bankCandidates.find((bank) => bank.bankCode === selectedBankCode) ??
+      BANK_CANDIDATES.find((bank) => bank.bankCode === selectedBankCode) ??
       null,
-    [bankCandidates, selectedBankCode],
+    [selectedBankCode],
   );
 
   const handleSelectBank = (bank: BankCandidate) => {
-    if (!isReady || validateBankCode(bank.bankCode)) {
+    if (validateBankCode(bank.bankCode)) {
       return;
     }
 
@@ -143,7 +118,7 @@ export default function PayoutBankSelectPage() {
   };
 
   const handleNext = () => {
-    if (!isReady || !selectedBank) {
+    if (!selectedBank) {
       return;
     }
 
@@ -160,8 +135,6 @@ export default function PayoutBankSelectPage() {
   };
 
   const actionButtonDisabled =
-    isLoading ||
-    !isReady ||
     !selectedBank ||
     Boolean(selectedBank && validateBankCode(selectedBank.bankCode));
 
@@ -198,94 +171,70 @@ export default function PayoutBankSelectPage() {
             className="payout-bank-select-page__search-input"
             aria-label="金融機関を検索"
             autoComplete="off"
-            disabled={!isReady}
           />
         </div>
 
-        {isLoading ? (
-          <p className="content-page-description payout-bank-select-page__description">
-            Stripe設定を確認しています...
-          </p>
-        ) : null}
+        <div className="payout-bank-select-page__list" role="list">
+          {filteredBanks.map((bank) => {
+            const selected = bank.bankCode === selectedBankCode;
 
-        {!isLoading && errorMessage ? (
-          <div className="payout-bank-select-page__empty">
-            <p className="payout-bank-select-page__empty-title">
-              金融機関一覧を準備できませんでした
-            </p>
-            <p className="payout-bank-select-page__empty-description">
-              {errorMessage}
-            </p>
-          </div>
-        ) : null}
+            return (
+              <button
+                key={bank.bankCode}
+                type="button"
+                className={[
+                  "payout-bank-select-page__bank",
+                  selected
+                    ? "payout-bank-select-page__bank--selected"
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() => handleSelectBank(bank)}
+                aria-pressed={selected}
+                role="listitem"
+              >
+                <span className="payout-bank-select-page__bank-content">
+                  <strong className="payout-bank-select-page__bank-name">
+                    {bank.bankName}
+                  </strong>
+                  <span className="payout-bank-select-page__bank-code">
+                    金融機関コード {bank.bankCode}
+                  </span>
+                </span>
 
-        {!isLoading && isReady ? (
-          <div className="payout-bank-select-page__list" role="list">
-            {filteredBanks.map((bank) => {
-              const selected = bank.bankCode === selectedBankCode;
-
-              return (
-                <button
-                  key={bank.bankCode}
-                  type="button"
+                <span
                   className={[
-                    "payout-bank-select-page__bank",
+                    "payout-bank-select-page__check",
                     selected
-                      ? "payout-bank-select-page__bank--selected"
+                      ? "payout-bank-select-page__check--selected"
                       : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
-                  onClick={() => handleSelectBank(bank)}
-                  aria-pressed={selected}
-                  role="listitem"
+                  aria-hidden="true"
                 >
-                  <span className="payout-bank-select-page__bank-content">
-                    <strong className="payout-bank-select-page__bank-name">
-                      {bank.bankName}
-                    </strong>
-                    <span className="payout-bank-select-page__bank-code">
-                      金融機関コード {bank.bankCode}
-                    </span>
-                  </span>
+                  {selected ? <Check size={18} strokeWidth={2.5} /> : null}
+                </span>
+              </button>
+            );
+          })}
 
-                  <span
-                    className={[
-                      "payout-bank-select-page__check",
-                      selected
-                        ? "payout-bank-select-page__check--selected"
-                        : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    aria-hidden="true"
-                  >
-                    {selected ? <Check size={18} strokeWidth={2.5} /> : null}
-                  </span>
-                </button>
-              );
-            })}
+          {filteredBanks.length === 0 ? (
+            <div className="payout-bank-select-page__empty">
+              <p className="payout-bank-select-page__empty-title">
+                該当する金融機関が見つかりません
+              </p>
+              <p className="payout-bank-select-page__empty-description">
+                金融機関名または金融機関コードを確認して、もう一度検索してください。
+              </p>
+            </div>
+          ) : null}
+        </div>
 
-            {filteredBanks.length === 0 ? (
-              <div className="payout-bank-select-page__empty">
-                <p className="payout-bank-select-page__empty-title">
-                  該当する金融機関が見つかりません
-                </p>
-                <p className="payout-bank-select-page__empty-description">
-                  金融機関名または金融機関コードを確認して、もう一度検索してください。
-                </p>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {!isLoading && isReady ? (
-          <p className="payout-bank-select-page__note">
-            {isTestMode
-              ? `開発環境ではStripeのテスト銀行（金融機関コード ${testBankCode}）のみ選択できます。`
-              : "金融機関一覧は現在開発用データを使用しています。本番接続時は金融機関情報提供元のデータに切り替えます。"}
-          </p>
-        ) : null}
+        <p className="payout-bank-select-page__note">
+          金融機関一覧は現在開発用データを使用しています。本番接続時は金融機関情報提供元のデータに切り替えます。
+        </p>
       </section>
 
       {!isDesktop ? (

@@ -42,16 +42,15 @@ function normalizeSearchValue(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, "");
 }
 
+function hasNonWhitespace(value: string): boolean {
+  return /\S/.test(value);
+}
+
 export default function PayoutBranchSelectPage() {
   const navigate = useNavigate();
   const { isDesktop } = useContactViewport();
   const { draft, setBranch } = usePayoutAccountRegistration();
   const {
-    isLoading,
-    isReady,
-    isTestMode,
-    errorMessage,
-    testBranchCode,
     validateBankCode,
     validateBranchCode,
   } = usePayoutAccountRegistrationRules();
@@ -60,61 +59,45 @@ export default function PayoutBranchSelectPage() {
   const [selectedBranchCode, setSelectedBranchCode] = useState(draft.branchCode);
 
   useEffect(() => {
-    if (!draft.bankCode.trim() || !draft.bankName.trim()) {
+    if (
+      validateBankCode(draft.bankCode) ||
+      !hasNonWhitespace(draft.bankName)
+    ) {
       navigate("/settings/payout-account/bank", { replace: true });
     }
-  }, [draft.bankCode, draft.bankName, navigate]);
-
-  useEffect(() => {
-    if (!isReady) {
-      return;
-    }
-
-    if (validateBankCode(draft.bankCode)) {
-      navigate("/settings/payout-account/bank", { replace: true });
-    }
-  }, [draft.bankCode, isReady, navigate, validateBankCode]);
-
-  const branchCandidates = useMemo<BranchCandidate[]>(() => {
-    if (!isReady) {
-      return [];
-    }
-
-    if (isTestMode) {
-      return [
-        {
-          branchCode: testBranchCode,
-          branchName: "Stripeテスト支店",
-          searchKeywords: "stripe test ストライプ テスト",
-        },
-      ];
-    }
-
-    return MOCK_BRANCH_CANDIDATES;
-  }, [isReady, isTestMode, testBranchCode]);
+  }, [
+    draft.bankCode,
+    draft.bankName,
+    navigate,
+    validateBankCode,
+  ]);
 
   const filteredBranches = useMemo(() => {
     const query = normalizeSearchValue(searchText);
 
     if (!query) {
-      return branchCandidates;
+      return MOCK_BRANCH_CANDIDATES;
     }
 
-    return branchCandidates.filter((branch) => {
+    return MOCK_BRANCH_CANDIDATES.filter((branch) => {
       const searchable = normalizeSearchValue(
         `${branch.branchCode} ${branch.branchName} ${branch.searchKeywords}`,
       );
+
       return searchable.includes(query);
     });
-  }, [branchCandidates, searchText]);
+  }, [searchText]);
 
   const selectedBranch = useMemo(
-    () => branchCandidates.find((branch) => branch.branchCode === selectedBranchCode) ?? null,
-    [branchCandidates, selectedBranchCode],
+    () =>
+      MOCK_BRANCH_CANDIDATES.find(
+        (branch) => branch.branchCode === selectedBranchCode,
+      ) ?? null,
+    [selectedBranchCode],
   );
 
   const handleSelectBranch = (branch: BranchCandidate) => {
-    if (!isReady || validateBranchCode(draft.bankCode, branch.branchCode)) {
+    if (validateBranchCode(branch.branchCode)) {
       return;
     }
 
@@ -122,16 +105,19 @@ export default function PayoutBranchSelectPage() {
   };
 
   const handleNext = () => {
-    if (!isReady || !selectedBranch) {
+    if (!selectedBranch) {
       return;
     }
 
-    if (validateBankCode(draft.bankCode)) {
+    if (
+      validateBankCode(draft.bankCode) ||
+      !hasNonWhitespace(draft.bankName)
+    ) {
       navigate("/settings/payout-account/bank", { replace: true });
       return;
     }
 
-    if (validateBranchCode(draft.bankCode, selectedBranch.branchCode)) {
+    if (validateBranchCode(selectedBranch.branchCode)) {
       return;
     }
 
@@ -144,12 +130,10 @@ export default function PayoutBranchSelectPage() {
   };
 
   const selectedBranchError = selectedBranch
-    ? validateBranchCode(draft.bankCode, selectedBranch.branchCode)
+    ? validateBranchCode(selectedBranch.branchCode)
     : "";
 
   const actionButtonDisabled =
-    isLoading ||
-    !isReady ||
     !selectedBranch ||
     Boolean(selectedBranchError);
 
@@ -172,11 +156,15 @@ export default function PayoutBranchSelectPage() {
         </p>
 
         <div className="payout-branch-select-page__bank-summary">
-          <span className="payout-branch-select-page__bank-summary-label">金融機関</span>
+          <span className="payout-branch-select-page__bank-summary-label">
+            金融機関
+          </span>
+
           <div className="payout-branch-select-page__bank-summary-content">
             <strong className="payout-branch-select-page__bank-summary-name">
               {draft.bankName}
             </strong>
+
             <span className="payout-branch-select-page__bank-summary-code">
               金融機関コード {draft.bankCode}
             </span>
@@ -189,6 +177,7 @@ export default function PayoutBranchSelectPage() {
             size={20}
             aria-hidden="true"
           />
+
           <input
             type="search"
             value={searchText}
@@ -197,90 +186,72 @@ export default function PayoutBranchSelectPage() {
             className="payout-branch-select-page__search-input"
             aria-label="支店を検索"
             autoComplete="off"
-            disabled={!isReady}
           />
         </div>
 
-        {isLoading ? (
-          <p className="content-page-description payout-branch-select-page__description">
-            Stripe設定を確認しています...
-          </p>
-        ) : null}
+        <div className="payout-branch-select-page__list" role="list">
+          {filteredBranches.map((branch) => {
+            const selected = branch.branchCode === selectedBranchCode;
 
-        {!isLoading && errorMessage ? (
-          <div className="payout-branch-select-page__empty">
-            <p className="payout-branch-select-page__empty-title">
-              支店一覧を準備できませんでした
-            </p>
-            <p className="payout-branch-select-page__empty-description">
-              {errorMessage}
-            </p>
-          </div>
-        ) : null}
+            return (
+              <button
+                key={branch.branchCode}
+                type="button"
+                className={[
+                  "payout-branch-select-page__branch",
+                  selected
+                    ? "payout-branch-select-page__branch--selected"
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() => handleSelectBranch(branch)}
+                aria-pressed={selected}
+                role="listitem"
+              >
+                <span className="payout-branch-select-page__branch-content">
+                  <strong className="payout-branch-select-page__branch-name">
+                    {branch.branchName}
+                  </strong>
 
-        {!isLoading && isReady ? (
-          <div className="payout-branch-select-page__list" role="list">
-            {filteredBranches.map((branch) => {
-              const selected = branch.branchCode === selectedBranchCode;
+                  <span className="payout-branch-select-page__branch-code">
+                    支店コード {branch.branchCode}
+                  </span>
+                </span>
 
-              return (
-                <button
-                  key={branch.branchCode}
-                  type="button"
+                <span
                   className={[
-                    "payout-branch-select-page__branch",
-                    selected ? "payout-branch-select-page__branch--selected" : "",
+                    "payout-branch-select-page__check",
+                    selected
+                      ? "payout-branch-select-page__check--selected"
+                      : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
-                  onClick={() => handleSelectBranch(branch)}
-                  aria-pressed={selected}
-                  role="listitem"
+                  aria-hidden="true"
                 >
-                  <span className="payout-branch-select-page__branch-content">
-                    <strong className="payout-branch-select-page__branch-name">
-                      {branch.branchName}
-                    </strong>
-                    <span className="payout-branch-select-page__branch-code">
-                      支店コード {branch.branchCode}
-                    </span>
-                  </span>
+                  {selected ? <Check size={18} strokeWidth={2.5} /> : null}
+                </span>
+              </button>
+            );
+          })}
 
-                  <span
-                    className={[
-                      "payout-branch-select-page__check",
-                      selected ? "payout-branch-select-page__check--selected" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    aria-hidden="true"
-                  >
-                    {selected ? <Check size={18} strokeWidth={2.5} /> : null}
-                  </span>
-                </button>
-              );
-            })}
+          {filteredBranches.length === 0 ? (
+            <div className="payout-branch-select-page__empty">
+              <p className="payout-branch-select-page__empty-title">
+                該当する支店が見つかりません
+              </p>
 
-            {filteredBranches.length === 0 ? (
-              <div className="payout-branch-select-page__empty">
-                <p className="payout-branch-select-page__empty-title">
-                  該当する支店が見つかりません
-                </p>
-                <p className="payout-branch-select-page__empty-description">
-                  支店名または支店コードを確認して、もう一度検索してください。
-                </p>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+              <p className="payout-branch-select-page__empty-description">
+                支店名または支店コードを確認して、もう一度検索してください。
+              </p>
+            </div>
+          ) : null}
+        </div>
 
-        {!isLoading && isReady ? (
-          <p className="payout-branch-select-page__note">
-            {isTestMode
-              ? `開発環境ではStripeのテスト支店（支店コード ${testBranchCode}）のみ選択できます。`
-              : "支店一覧は現在開発用データを使用しています。本番接続時は金融機関情報提供元のデータに切り替えます。"}
-          </p>
-        ) : null}
+        <p className="payout-branch-select-page__note">
+          支店一覧は現在開発用データを使用しています。本番接続時は金融機関情報提供元のデータに切り替えます。
+        </p>
       </section>
 
       {!isDesktop ? (

@@ -46,12 +46,8 @@ export default function PayoutAccountCompletePage() {
       mode="default"
       hideHamburgerMenu
       hideSettingsButton
-      actionButtonLabel={
-        isDesktop ? "売上受取口座へ戻る" : undefined
-      }
-      onActionButtonClick={
-        isDesktop ? handleBackToPayoutAccount : undefined
-      }
+      actionButtonLabel={isDesktop ? "売上受取口座へ戻る" : undefined}
+      onActionButtonClick={isDesktop ? handleBackToPayoutAccount : undefined}
     >
       <section className="page-section content-page-section settings-page payout-account-complete-page">
         <div className="payout-account-complete-page__hero">
@@ -67,7 +63,7 @@ export default function PayoutAccountCompletePage() {
           </h1>
 
           <p className="payout-account-complete-page__description">
-            口座情報の登録を受け付けました。
+            口座情報の登録が完了しました。
           </p>
         </div>
 
@@ -77,12 +73,12 @@ export default function PayoutAccountCompletePage() {
           </p>
 
           <p className="payout-account-complete-page__notice-text">
-            Stripe側で確認が必要な場合、売上を受け取れるようになるまで時間がかかることがあります。現在の利用状況は売上受取口座画面から確認できます。
+            登録した銀行口座は、再販売で発生した売上の受取先として使用されます。登録内容は売上受取口座画面から確認・変更できます。
           </p>
         </div>
 
         <p className="payout-account-complete-page__security-note">
-          入力した銀行口座番号はStripeへ直接送信し、AMOLでは銀行口座番号の全桁を保存しません。
+          銀行口座番号は暗号化して保存し、AMOLの画面では末尾4桁のみ表示します。
         </p>
       </section>
 
