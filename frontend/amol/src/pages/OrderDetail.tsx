@@ -8,134 +8,72 @@ import MediaIcon from "../components/ui/MediaIcon";
 import SectionHeader from "../components/ui/SectionHeader";
 import { formatDateTime } from "../components/utils/date";
 
-import ReturnRequestModal, {
-  type ReturnPackageState,
-} from "../features/order/components/ReturnRequestModal";
+import ReturnRequestModal, { type ReturnPackageState } from "../features/order/components/ReturnRequestModal";
 import { useOrderDetail } from "../features/order/hooks/useOrderDetail";
-import type {
-  OrderDetail as OrderDetailType,
-  OrderDetailItem,
-} from "../features/shared/types/orderDetailTypes";
+import type { OrderDetail as OrderDetailType, OrderDetailItem } from "../features/shared/types/orderDetailTypes";
 import { formatAmount } from "../features/wallet/utils/format";
 
 import "../styles/page-layout.css";
 import "../styles/order-detail-page.css";
 
 function getOrderStatusLabel(order: OrderDetailType): string {
-  if (order.items.length === 0) {
-    return "商品なし";
-  }
+  if (order.items.length === 0) return "商品なし";
 
   const activeItems = order.items.filter((item) => !item.isCancelled);
-
-  if (activeItems.length === 0) {
-    return "キャンセル済み";
-  }
+  if (activeItems.length === 0) return "キャンセル済み";
 
   const hasCancelledItem = activeItems.length !== order.items.length;
+  if (hasCancelledItem) return "一部キャンセル済み";
 
-  if (hasCancelledItem) {
-    return "一部キャンセル済み";
-  }
+  const allReturnCompleted = activeItems.every((item) => item.isReturnCompleted);
+  if (allReturnCompleted) return "返品済み";
 
-  const allReturnCompleted = activeItems.every(
-    (item) => item.isReturnCompleted,
-  );
+  const partiallyReturnCompleted = activeItems.some((item) => item.isReturnCompleted);
+  if (partiallyReturnCompleted) return "一部返品済み";
 
-  if (allReturnCompleted) {
-    return "返品済み";
-  }
+  const allReturnRequested = activeItems.every((item) => item.isReturnRequested);
+  if (allReturnRequested) return "返品申請済み";
 
-  const partiallyReturnCompleted = activeItems.some(
-    (item) => item.isReturnCompleted,
-  );
-
-  if (partiallyReturnCompleted) {
-    return "一部返品済み";
-  }
-
-  const allReturnRequested = activeItems.every(
-    (item) => item.isReturnRequested,
-  );
-
-  if (allReturnRequested) {
-    return "返品申請済み";
-  }
-
-  const partiallyReturnRequested = activeItems.some(
-    (item) => item.isReturnRequested,
-  );
-
-  if (partiallyReturnRequested) {
-    return "一部返品申請済み";
-  }
+  const partiallyReturnRequested = activeItems.some((item) => item.isReturnRequested);
+  if (partiallyReturnRequested) return "一部返品申請済み";
 
   const allTransferred = activeItems.every((item) => item.transferred);
-
-  if (allTransferred) {
-    return "受け取り済み";
-  }
+  if (allTransferred) return "受け取り済み";
 
   const partiallyTransferred = activeItems.some((item) => item.transferred);
-
-  if (partiallyTransferred) {
-    return "一部受け取り済み";
-  }
+  if (partiallyTransferred) return "一部受け取り済み";
 
   const allDispatched = activeItems.every((item) => item.isDispatched);
-
-  if (allDispatched) {
-    return "発送済み";
-  }
+  if (allDispatched) return "発送済み";
 
   const partiallyDispatched = activeItems.some((item) => item.isDispatched);
-
-  if (partiallyDispatched) {
-    return "一部発送済み";
-  }
+  if (partiallyDispatched) return "一部発送済み";
 
   return "発送前";
 }
 
 function getRefundStatusLabel(order: OrderDetailType): string {
-  const activeItems = order.items.filter(
-    (item) => !item.isCancelled,
-  );
-
+  const activeItems = order.items.filter((item) => !item.isCancelled);
   const allReturnCompleted =
     activeItems.length > 0 &&
-    activeItems.every(
-      (item) => item.isReturnCompleted,
-    );
+    activeItems.every((item) => item.isReturnCompleted);
 
-  if (allReturnCompleted) {
-    return "返金済み";
-  }
+  if (allReturnCompleted) return "返金済み";
 
-  const partiallyReturnCompleted = activeItems.some(
-    (item) => item.isReturnCompleted,
-  );
-
-  if (partiallyReturnCompleted) {
-    return "一部返金済み";
-  }
+  const partiallyReturnCompleted = activeItems.some((item) => item.isReturnCompleted);
+  if (partiallyReturnCompleted) return "一部返金済み";
 
   switch (order.refundStatus) {
     case "pending":
       return "返金処理中";
-
     case "requires_action":
       return "返金対応待ち";
-
     case "succeeded":
       return "返金済み";
-
     case "failed":
       return "返金失敗";
-
     case "canceled":
       return "返金キャンセル";
-
     case "none":
     default:
       return "未返金";
@@ -143,26 +81,11 @@ function getRefundStatusLabel(order: OrderDetailType): string {
 }
 
 function getItemStatusLabel(item: OrderDetailItem): string {
-  if (item.isCancelled) {
-    return "キャンセル済み";
-  }
-
-  if (item.isReturnCompleted) {
-    return "返品済み";
-  }
-
-  if (item.isReturnRequested) {
-    return "返品申請済み";
-  }
-
-  if (item.transferred) {
-    return "受け取り済み";
-  }
-
-  if (item.isDispatched) {
-    return "発送済み";
-  }
-
+  if (item.isCancelled) return "キャンセル済み";
+  if (item.isReturnCompleted) return "返品済み";
+  if (item.isReturnRequested) return "返品申請済み";
+  if (item.transferred) return "受け取り済み";
+  if (item.isDispatched) return "発送済み";
   return "発送前";
 }
 
@@ -172,24 +95,12 @@ function getProductTitle(item: OrderDetailItem): string {
 
 function getFallbackInitial(value?: string): string {
   const trimmed = value?.trim() || "";
-
-  if (!trimmed) {
-    return "?";
-  }
-
+  if (!trimmed) return "?";
   return trimmed.slice(0, 1).toUpperCase();
 }
 
-function getModelMetaItems(
-  item: OrderDetailItem,
-): Array<{
-  label: string;
-  value: string;
-}> {
-  const metaItems: Array<{
-    label: string;
-    value: string;
-  }> = [];
+function getModelMetaItems(item: OrderDetailItem): Array<{ label: string; value: string }> {
+  const metaItems: Array<{ label: string; value: string }> = [];
 
   if (item.modelNumber) {
     metaItems.push({
@@ -214,7 +125,6 @@ function getModelMetaItems(
 
   if (item.volumeValue !== undefined && item.volumeValue !== null) {
     const volumeUnit = item.volumeUnit || "";
-
     metaItems.push({
       label: "容量",
       value: `${item.volumeValue}${volumeUnit}`,
@@ -228,28 +138,20 @@ function getMeasurementLabel(key: string): string {
   switch (key) {
     case "length":
       return "着丈";
-
     case "shoulder":
       return "肩幅";
-
     case "chest":
       return "身幅";
-
     case "sleeve":
       return "袖丈";
-
     case "waist":
       return "ウエスト";
-
     case "rise":
       return "股上";
-
     case "inseam":
       return "股下";
-
     case "hem":
       return "裾幅";
-
     default:
       return key;
   }
@@ -257,36 +159,25 @@ function getMeasurementLabel(key: string): string {
 
 function renderModelMeta(item: OrderDetailItem) {
   const metaItems = getModelMetaItems(item);
-
   const measurements =
     item.measurements && typeof item.measurements === "object"
-      ? Object.entries(item.measurements).filter(([, value]) =>
-          Number.isFinite(value),
-        )
+      ? Object.entries(item.measurements).filter(([, value]) => Number.isFinite(value))
       : [];
 
-  if (metaItems.length === 0 && measurements.length === 0) {
-    return null;
-  }
+  if (metaItems.length === 0 && measurements.length === 0) return null;
 
   return (
     <div className="order-detail-page__model-meta">
       <dl className="order-detail-page__item-meta">
         {metaItems.map((meta) => (
-          <div
-            key={meta.label}
-            className="order-detail-page__item-meta-row"
-          >
+          <div key={meta.label} className="order-detail-page__item-meta-row">
             <dt>{meta.label}</dt>
             <dd>{meta.value}</dd>
           </div>
         ))}
 
         {measurements.map(([key, value]) => (
-          <div
-            key={key}
-            className="order-detail-page__item-meta-row"
-          >
+          <div key={key} className="order-detail-page__item-meta-row">
             <dt>{getMeasurementLabel(key)}</dt>
             <dd>{value} mm</dd>
           </div>
@@ -299,14 +190,9 @@ function renderModelMeta(item: OrderDetailItem) {
 export default function OrderDetail() {
   const navigate = useNavigate();
 
-  const [returnTargetIndex, setReturnTargetIndex] =
-    useState<number | null>(null);
-
-  const [returnPackageState, setReturnPackageState] =
-    useState<ReturnPackageState | null>(null);
-
-  const [returnReason, setReturnReason] =
-    useState("");
+  const [returnTargetIndex, setReturnTargetIndex] = useState<number | null>(null);
+  const [returnPackageState, setReturnPackageState] = useState<ReturnPackageState | null>(null);
+  const [returnReason, setReturnReason] = useState("");
 
   const {
     order,
@@ -325,21 +211,17 @@ export default function OrderDetail() {
 
   const handleOpenBrand = (brandId?: string) => {
     const id = brandId?.trim() || "";
-
-    if (!id) {
-      return;
-    }
-
+    if (!id) return;
     navigate(`/brands/${encodeURIComponent(id)}`);
   };
 
+  const handleOpenTrade = (orderId: string) => {
+    if (!orderId) return;
+    navigate(`/orders/${encodeURIComponent(orderId)}/trade`);
+  };
+
   const handleOpenReturnModal = (itemIndex: number) => {
-    if (
-      !Number.isInteger(itemIndex) ||
-      itemIndex < 0
-    ) {
-      return;
-    }
+    if (!Number.isInteger(itemIndex) || itemIndex < 0) return;
 
     setReturnTargetIndex(itemIndex);
     setReturnPackageState(null);
@@ -347,9 +229,7 @@ export default function OrderDetail() {
   };
 
   const handleCloseReturnModal = () => {
-    if (returningItemIndex !== null) {
-      return;
-    }
+    if (returningItemIndex !== null) return;
 
     setReturnTargetIndex(null);
     setReturnPackageState(null);
@@ -357,44 +237,26 @@ export default function OrderDetail() {
   };
 
   const handleSubmitReturn = async () => {
-    if (
-      returnTargetIndex === null ||
-      returnPackageState === null
-    ) {
-      return;
-    }
+    if (returnTargetIndex === null || returnPackageState === null) return;
 
-    const normalizedReason =
-      returnReason.trim();
+    const normalizedReason = returnReason.trim();
+    if (!normalizedReason) return;
 
-    if (!normalizedReason) {
-      return;
-    }
+    const succeeded = await returnItem(
+      returnTargetIndex,
+      returnPackageState,
+      normalizedReason,
+    );
 
-    const succeeded =
-      await returnItem(
-        returnTargetIndex,
-        returnPackageState,
-        normalizedReason,
-      );
-
-    if (!succeeded) {
-      return;
-    }
+    if (!succeeded) return;
 
     setReturnTargetIndex(null);
     setReturnPackageState(null);
     setReturnReason("");
   };
 
-  const showError =
-    !loading &&
-    !order &&
-    Boolean(error);
-
-  const showDetail =
-    !loading &&
-    Boolean(order);
+  const showError = !loading && !order && Boolean(error);
+  const showDetail = !loading && Boolean(order);
 
   const hasReturnInProgress =
     order?.items.some(
@@ -416,22 +278,14 @@ export default function OrderDetail() {
       <section className="page-section order-detail-page">
         {loading ? (
           <div className="page-card">
-            <p className="page-card__text">
-              読み込み中です...
-            </p>
+            <p className="page-card__text">読み込み中です...</p>
           </div>
         ) : null}
 
         {showError ? (
           <div className="page-card">
-            <SectionHeader
-              title="注文情報を表示できません"
-              titleAs="h2"
-            >
-              <p
-                className="page-card__text"
-                role="alert"
-              >
+            <SectionHeader title="注文情報を表示できません" titleAs="h2">
+              <p className="page-card__text" role="alert">
                 {error}
               </p>
             </SectionHeader>
@@ -471,33 +325,24 @@ export default function OrderDetail() {
               </div>
 
               {error ? (
-                <p
-                  className="page-card__text"
-                  role="alert"
-                >
+                <p className="page-card__text" role="alert">
                   {error}
                 </p>
               ) : null}
             </div>
 
             <div className="page-card">
-              <SectionHeader
-                title="商品"
-                titleAs="h2"
-              />
+              <SectionHeader title="商品" titleAs="h2" />
 
               <ul className="order-detail-page__items">
                 {order.items.map((item, index) => {
                   const productTitle = getProductTitle(item);
-                  const brandName =
-                    item.brandName ||
-                    "ブランド未設定";
+                  const brandName = item.brandName || "ブランド未設定";
                   const itemKey =
                     `${order.id}-${item.inventoryId}-${item.modelId}-${index}`;
-                  const isCancelling =
-                    cancellingItemIndex === index;
-                  const isReturning =
-                    returningItemIndex === index;
+                  const isResaleItem = item.itemType === "resale";
+                  const isCancelling = cancellingItemIndex === index;
+                  const isReturning = returningItemIndex === index;
 
                   const cancelDisabled =
                     item.isCancelled ||
@@ -508,6 +353,7 @@ export default function OrderDetail() {
                     returningItemIndex !== null;
 
                   const showReturnButton =
+                    !isResaleItem &&
                     item.isDispatched &&
                     !item.transferred &&
                     !item.isCancelled &&
@@ -523,17 +369,13 @@ export default function OrderDetail() {
                         {item.tokenIcon ? (
                           <img
                             src={item.tokenIcon}
-                            alt={
-                              item.tokenName ||
-                              productTitle
-                            }
+                            alt={item.tokenName || productTitle}
                             loading="lazy"
                           />
                         ) : (
                           <span className="order-detail-page__item-image-fallback">
                             {getFallbackInitial(
-                              item.tokenName ||
-                                productTitle,
+                              item.tokenName || productTitle,
                             )}
                           </span>
                         )}
@@ -562,20 +404,15 @@ export default function OrderDetail() {
                           type="button"
                           className="order-detail-page__brand"
                           disabled={!item.brandId}
-                          onClick={() =>
-                            handleOpenBrand(item.brandId)
-                          }
+                          onClick={() => handleOpenBrand(item.brandId)}
                         >
                           <MediaIcon
                             src={item.brandIcon}
                             alt={brandName}
-                            fallback={getFallbackInitial(
-                              brandName,
-                            )}
+                            fallback={getFallbackInitial(brandName)}
                             size="xs"
                             shape="circle"
                           />
-
                           <span>{brandName}</span>
                         </button>
 
@@ -589,64 +426,54 @@ export default function OrderDetail() {
 
                           <div className="order-detail-page__item-meta-row">
                             <dt>小計</dt>
-                            <dd>
-                              {formatAmount(
-                                item.price * item.qty,
-                              )}
-                            </dd>
+                            <dd>{formatAmount(item.price * item.qty)}</dd>
                           </div>
 
                           <div className="order-detail-page__item-meta-row">
                             <dt>消費税率</dt>
-                            <dd>
-                              {item.consumptionTaxRate}%
-                            </dd>
+                            <dd>{item.consumptionTaxRate}%</dd>
                           </div>
 
                           <div className="order-detail-page__item-meta-row">
                             <dt>発送状況</dt>
-                            <dd>
-                              {getItemStatusLabel(item)}
-                            </dd>
+                            <dd>{getItemStatusLabel(item)}</dd>
                           </div>
 
                           {item.returnRequestedAt ? (
                             <div className="order-detail-page__item-meta-row">
                               <dt>返品申請日時</dt>
-                              <dd>
-                                {formatDateTime(
-                                  item.returnRequestedAt,
-                                )}
-                              </dd>
+                              <dd>{formatDateTime(item.returnRequestedAt)}</dd>
                             </div>
                           ) : null}
 
                           {item.returnCompletedAt ? (
                             <div className="order-detail-page__item-meta-row">
                               <dt>返品完了日時</dt>
-                              <dd>
-                                {formatDateTime(
-                                  item.returnCompletedAt,
-                                )}
-                              </dd>
+                              <dd>{formatDateTime(item.returnCompletedAt)}</dd>
                             </div>
                           ) : null}
 
                           {item.transferredAt ? (
                             <div className="order-detail-page__item-meta-row">
                               <dt>受取日時</dt>
-                              <dd>
-                                {formatDateTime(
-                                  item.transferredAt,
-                                )}
-                              </dd>
+                              <dd>{formatDateTime(item.transferredAt)}</dd>
                             </div>
                           ) : null}
                         </dl>
 
-                        {item.transferred &&
-                        !item.isReturnRequested &&
-                        !item.isReturnCompleted ? null : (
+                        {isResaleItem ? (
+                          <div className="page-actions order-detail-page__cancel-actions">
+                            <button
+                              type="button"
+                              className="page-button page-button--secondary"
+                              onClick={() => handleOpenTrade(order.id)}
+                            >
+                              取引画面
+                            </button>
+                          </div>
+                        ) : item.transferred &&
+                          !item.isReturnRequested &&
+                          !item.isReturnCompleted ? null : (
                           <div className="page-actions order-detail-page__cancel-actions">
                             {item.isReturnCompleted ? (
                               <button
@@ -685,9 +512,7 @@ export default function OrderDetail() {
                                 type="button"
                                 className="order-detail-page__cancel-button"
                                 disabled={cancelDisabled}
-                                onClick={() =>
-                                  void cancelItem(index)
-                                }
+                                onClick={() => void cancelItem(index)}
                               >
                                 {item.isCancelled
                                   ? "キャンセル済み"
@@ -706,85 +531,52 @@ export default function OrderDetail() {
             </div>
 
             <div className="page-card">
-              <SectionHeader
-                title="お支払い"
-                titleAs="h2"
-              />
+              <SectionHeader title="お支払い" titleAs="h2" />
 
               <dl className="order-detail-page__detail-list">
                 <div className="order-detail-page__detail-row">
                   <dt>商品小計</dt>
-                  <dd>
-                    {formatAmount(
-                      order.subtotalAmount,
-                    )}
-                  </dd>
+                  <dd>{formatAmount(order.subtotalAmount)}</dd>
                 </div>
 
                 <div className="order-detail-page__detail-row">
                   <dt>配送料</dt>
-                  <dd>
-                    {formatAmount(
-                      order.shippingAmount,
-                    )}
-                  </dd>
+                  <dd>{formatAmount(order.shippingAmount)}</dd>
                 </div>
 
                 <div className="order-detail-page__detail-row">
                   <dt>消費税</dt>
-                  <dd>
-                    {formatAmount(
-                      order.consumptionTax,
-                    )}
-                  </dd>
+                  <dd>{formatAmount(order.consumptionTax)}</dd>
                 </div>
 
                 <div className="order-detail-page__detail-row order-detail-page__detail-row--total">
                   <dt>合計</dt>
-                  <dd>
-                    {formatAmount(
-                      order.totalAmount,
-                    )}
-                  </dd>
+                  <dd>{formatAmount(order.totalAmount)}</dd>
                 </div>
 
                 <div className="order-detail-page__detail-row">
                   <dt>決済状況</dt>
-                  <dd>
-                    {order.paid
-                      ? "決済済み"
-                      : "未決済"}
-                  </dd>
+                  <dd>{order.paid ? "決済済み" : "未決済"}</dd>
                 </div>
 
                 {hasReturnInProgress ? (
                   <div className="order-detail-page__detail-row">
                     <dt>返金状況</dt>
-                    <dd>
-                      {getRefundStatusLabel(order)}
-                    </dd>
+                    <dd>{getRefundStatusLabel(order)}</dd>
                   </div>
                 ) : null}
 
                 {order.refundedAmount > 0 ? (
                   <div className="order-detail-page__detail-row">
                     <dt>返金額</dt>
-                    <dd>
-                      {formatAmount(
-                        order.refundedAmount,
-                      )}
-                    </dd>
+                    <dd>{formatAmount(order.refundedAmount)}</dd>
                   </div>
                 ) : null}
 
                 {order.refundedAt ? (
                   <div className="order-detail-page__detail-row">
                     <dt>返金日時</dt>
-                    <dd>
-                      {formatDateTime(
-                        order.refundedAt,
-                      )}
-                    </dd>
+                    <dd>{formatDateTime(order.refundedAt)}</dd>
                   </div>
                 ) : null}
               </dl>
@@ -797,11 +589,7 @@ export default function OrderDetail() {
         open={returnTargetIndex !== null}
         packageState={returnPackageState}
         reason={returnReason}
-        error={
-          returnTargetIndex !== null
-            ? error
-            : null
-        }
+        error={returnTargetIndex !== null ? error : null}
         submitting={
           returnTargetIndex !== null &&
           returningItemIndex === returnTargetIndex
@@ -812,9 +600,7 @@ export default function OrderDetail() {
         }}
         onReasonChange={setReturnReason}
         onCancel={handleCloseReturnModal}
-        onSubmit={() =>
-          void handleSubmitReturn()
-        }
+        onSubmit={() => void handleSubmitReturn()}
       />
     </Layout>
   );

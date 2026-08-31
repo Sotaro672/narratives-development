@@ -362,6 +362,7 @@ func buildQueries(
 	// =========================================================
 	// OrderDetailQuery
 	// - GET /orders/{id} が注文詳細画面に必要な値をすべて返す BFF
+	// - current company が所有する一次流通 inventory のみを返す
 	// - repository / resolver の正規 interface を直接 DI する
 	// - listId と listReadableId は別フィールドとして扱う
 	// =========================================================
@@ -375,6 +376,7 @@ func buildQueries(
 		orderDetailQuery = companyquery.NewOrderDetailQuery(
 			companyquery.NewOrderDetailQueryParams{
 				OrderGetter:   u.orderUC,
+				InvRows:       inventoryManagementQuery,
 				InvBlueprint:  r.inventoryRepo,
 				PBName:        r.productBlueprintRepo,
 				TBName:        r.tokenBlueprintRepo,

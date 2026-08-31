@@ -94,6 +94,7 @@ type OrderDetailItemDTO struct {
 
 type OrderDetailQuery struct {
 	orderGetter OrderDetailGetter
+	invRows     InventoryRowsLister
 
 	invBlueprint InventoryBlueprintResolver
 	pbName       applicationport.ProductBlueprintGetter
@@ -108,6 +109,7 @@ type OrderDetailQuery struct {
 
 type NewOrderDetailQueryParams struct {
 	OrderGetter OrderDetailGetter
+	InvRows     InventoryRowsLister
 
 	InvBlueprint InventoryBlueprintResolver
 	PBName       applicationport.ProductBlueprintGetter
@@ -123,6 +125,7 @@ type NewOrderDetailQueryParams struct {
 func NewOrderDetailQuery(p NewOrderDetailQueryParams) *OrderDetailQuery {
 	return &OrderDetailQuery{
 		orderGetter:   p.OrderGetter,
+		invRows:       p.InvRows,
 		invBlueprint:  p.InvBlueprint,
 		pbName:        p.PBName,
 		tbName:        p.TBName,
@@ -154,43 +157,73 @@ func (q *OrderDetailQuery) validateConfigured() error {
 	if q == nil {
 		return errors.New("OrderDetailQuery: query is nil")
 	}
-
 	if q.orderGetter == nil {
 		return errors.New("OrderDetailQuery: orderGetter is required")
 	}
-
+	if q.invRows == nil {
+		return errors.New("OrderDetailQuery: invRows is required")
+	}
 	if q.invBlueprint == nil {
 		return errors.New("OrderDetailQuery: invBlueprint is required")
 	}
-
 	if q.pbName == nil {
 		return errors.New("OrderDetailQuery: productBlueprint resolver is required")
 	}
-
 	if q.tbName == nil {
 		return errors.New("OrderDetailQuery: tokenBlueprint resolver is required")
 	}
-
 	if q.userName == nil {
 		return errors.New("OrderDetailQuery: userName resolver is required")
 	}
-
 	if q.authUser == nil {
 		return errors.New("OrderDetailQuery: authUser reader is required")
 	}
-
 	if q.modelResolver == nil {
 		return errors.New("OrderDetailQuery: modelResolver is required")
 	}
-
 	if q.listReadable == nil {
 		return errors.New("OrderDetailQuery: listReadable resolver is required")
 	}
-
 	return nil
 }
 
 func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDetailDTO, error) {
+	allowedInventoryIDs, err := AllowedInventoryIDSetFromContext(ctx, q.invRows)
+	if err != nil {
+		return OrderDetailDTO{}, err
+	}
+
+	visibleItems := make([]orderdom.OrderItemSnapshot, 0, len(o.Items))
+	for _, item := range o.Items {
+		if item.Type != orderdom.OrderItemTypeList {
+			continue
+		}
+		if !InventoryAllowed(allowedInventoryIDs, item.InventoryID) {
+			continue
+		}
+		visibleItems = append(visibleItems, item)
+	}
+
+	if len(visibleItems) == 0 {
+		return OrderDetailDTO{}, orderdom.ErrNotFound
+	}
+
+	shippingAmount, err := calculateOrderDetailShippingAmount(
+		o.ShippingQuoteSnapshot.Items,
+		allowedInventoryIDs,
+	)
+	if err != nil {
+		return OrderDetailDTO{}, err
+	}
+
+	consumptionTax, err := calculateOrderDetailConsumptionTax(
+		visibleItems,
+		shippingAmount,
+	)
+	if err != nil {
+		return OrderDetailDTO{}, err
+	}
+
 	email, err := q.authUser.GetEmailByUID(ctx, o.UserID)
 	if err != nil {
 		return OrderDetailDTO{}, fmt.Errorf(
@@ -198,12 +231,6 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 			o.UserID,
 			err,
 		)
-	}
-
-	consumptionTax, err :=
-		calculateOrderDetailConsumptionTax(o)
-	if err != nil {
-		return OrderDetailDTO{}, err
 	}
 
 	dto := OrderDetailDTO{
@@ -214,10 +241,10 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 		UserName:         q.userName.ResolveUserName(ctx, o.UserID),
 		Email:            email,
 		Paid:             o.Paid,
-		ShippingAmount:   o.ShippingQuoteSnapshot.Amount,
+		ShippingAmount:   shippingAmount,
 		ConsumptionTax:   consumptionTax,
 		ShippingSnapshot: o.ShippingSnapshot,
-		Items:            make([]OrderDetailItemDTO, 0, len(o.Items)),
+		Items:            make([]OrderDetailItemDTO, 0, len(visibleItems)),
 	}
 
 	if !o.CreatedAt.IsZero() {
@@ -233,7 +260,6 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 		if id == "" {
 			return pbdom.ProductBlueprint{}, nil
 		}
-
 		if cached, ok := productBlueprintCache[id]; ok {
 			return cached, nil
 		}
@@ -251,7 +277,6 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 		if id == "" {
 			return "", nil
 		}
-
 		if cached, ok := tokenNameCache[id]; ok {
 			return cached, nil
 		}
@@ -260,7 +285,6 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 		if err != nil {
 			return "", err
 		}
-
 		if tb == nil {
 			return "", fmt.Errorf("tokenBlueprint is nil: tokenBlueprintId=%q", id)
 		}
@@ -273,7 +297,6 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 		if modelID == "" {
 			return resolver.ModelResolved{}
 		}
-
 		if cached, ok := modelCache[modelID]; ok {
 			return cached
 		}
@@ -287,7 +310,6 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 		if listID == "" {
 			return "", nil
 		}
-
 		if cached, ok := listReadableCache[listID]; ok {
 			return cached, nil
 		}
@@ -301,7 +323,7 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 		return readableID, nil
 	}
 
-	for _, it := range o.Items {
+	for _, it := range visibleItems {
 		pbID := it.ProductBlueprintID
 		tbID := it.TokenBlueprintID
 
@@ -310,11 +332,9 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 			if err != nil {
 				return OrderDetailDTO{}, fmt.Errorf("resolve blueprint ids inventoryId=%q: %w", it.InventoryID, err)
 			}
-
 			if pbID == "" {
 				pbID = resolvedPBID
 			}
-
 			if tbID == "" {
 				tbID = resolvedTBID
 			}
@@ -401,13 +421,41 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) (OrderDe
 	return dto, nil
 }
 
-func calculateOrderDetailConsumptionTax(
-	o orderdom.Order,
+func calculateOrderDetailShippingAmount(
+	items []orderdom.ShippingQuoteItemSnapshot,
+	allowedInventoryIDs map[string]struct{},
 ) (int, error) {
 	maxInt := int(^uint(0) >> 1)
+	total := 0
 
-	shippingAmount :=
-		o.ShippingQuoteSnapshot.Amount
+	for _, item := range items {
+		if item.Type != orderdom.OrderItemTypeList {
+			continue
+		}
+		if !InventoryAllowed(allowedInventoryIDs, item.InventoryID) {
+			continue
+		}
+		if item.Amount < 0 {
+			return 0, errors.New(
+				"OrderDetailQuery: shipping amount is invalid",
+			)
+		}
+		if total > maxInt-item.Amount {
+			return 0, errors.New(
+				"OrderDetailQuery: shipping amount overflows int",
+			)
+		}
+		total += item.Amount
+	}
+
+	return total, nil
+}
+
+func calculateOrderDetailConsumptionTax(
+	items []orderdom.OrderItemSnapshot,
+	shippingAmount int,
+) (int, error) {
+	maxInt := int(^uint(0) >> 1)
 
 	if shippingAmount < 0 {
 		return 0, errors.New(
@@ -416,49 +464,43 @@ func calculateOrderDetailConsumptionTax(
 	}
 
 	taxableAmount8 := 0
+	taxableAmount10 := shippingAmount
 
-	taxableAmount10 :=
-		shippingAmount
-
-	for _, item := range o.Items {
+	for _, item := range items {
+		if item.Type != orderdom.OrderItemTypeList {
+			return 0, errors.New(
+				"OrderDetailQuery: non-list item reached console detail calculation",
+			)
+		}
 		if item.Price < 0 || item.Qty <= 0 {
 			return 0, errors.New(
 				"OrderDetailQuery: order item amount is invalid",
 			)
 		}
-
 		if item.Price > maxInt/item.Qty {
 			return 0, errors.New(
 				"OrderDetailQuery: order item amount overflows int",
 			)
 		}
 
-		lineAmount :=
-			item.Price *
-				item.Qty
+		lineAmount := item.Price * item.Qty
 
 		switch item.ConsumptionTaxRate {
 		case orderdom.ConsumptionTaxRateReduced:
-			if taxableAmount8 >
-				maxInt-lineAmount {
+			if taxableAmount8 > maxInt-lineAmount {
 				return 0, errors.New(
 					"OrderDetailQuery: reduced taxable amount overflows int",
 				)
 			}
-
-			taxableAmount8 +=
-				lineAmount
+			taxableAmount8 += lineAmount
 
 		case orderdom.ConsumptionTaxRateStandard:
-			if taxableAmount10 >
-				maxInt-lineAmount {
+			if taxableAmount10 > maxInt-lineAmount {
 				return 0, errors.New(
 					"OrderDetailQuery: standard taxable amount overflows int",
 				)
 			}
-
-			taxableAmount10 +=
-				lineAmount
+			taxableAmount10 += lineAmount
 
 		default:
 			return 0, errors.New(
@@ -467,38 +509,25 @@ func calculateOrderDetailConsumptionTax(
 		}
 	}
 
-	if taxableAmount8 >
-		maxInt/orderdom.ConsumptionTaxRateReduced {
+	if taxableAmount8 > maxInt/orderdom.ConsumptionTaxRateReduced {
 		return 0, errors.New(
 			"OrderDetailQuery: reduced consumption tax overflows int",
 		)
 	}
-
-	if taxableAmount10 >
-		maxInt/orderdom.ConsumptionTaxRateStandard {
+	if taxableAmount10 > maxInt/orderdom.ConsumptionTaxRateStandard {
 		return 0, errors.New(
 			"OrderDetailQuery: standard consumption tax overflows int",
 		)
 	}
 
-	taxAmount8 :=
-		taxableAmount8 *
-			orderdom.ConsumptionTaxRateReduced /
-			100
+	taxAmount8 := taxableAmount8 * orderdom.ConsumptionTaxRateReduced / 100
+	taxAmount10 := taxableAmount10 * orderdom.ConsumptionTaxRateStandard / 100
 
-	taxAmount10 :=
-		taxableAmount10 *
-			orderdom.ConsumptionTaxRateStandard /
-			100
-
-	if taxAmount8 >
-		maxInt-taxAmount10 {
+	if taxAmount8 > maxInt-taxAmount10 {
 		return 0, errors.New(
 			"OrderDetailQuery: consumption tax overflows int",
 		)
 	}
 
-	return taxAmount8 +
-			taxAmount10,
-		nil
+	return taxAmount8 + taxAmount10, nil
 }

@@ -44,6 +44,10 @@ func (u *OrderUsecase) PrepareDispatchItems(
 	)
 
 	for _, item := range order.Items {
+		if item.Type != orderdom.OrderItemTypeList {
+			continue
+		}
+
 		if _, ok :=
 			in.AllowedInventoryIDs[item.InventoryID]; !ok {
 			continue
@@ -102,6 +106,10 @@ func (u *OrderUsecase) DispatchItems(
 
 	for index := range order.Items {
 		item := order.Items[index]
+
+		if item.Type != orderdom.OrderItemTypeList {
+			continue
+		}
 
 		if _, ok :=
 			in.AllowedInventoryIDs[item.InventoryID]; !ok {
