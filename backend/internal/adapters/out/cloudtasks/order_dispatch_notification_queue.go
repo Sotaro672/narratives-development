@@ -21,7 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	applicationport "narratives/internal/application/port"
-	orderdom "narratives/internal/domain/order"
+	dispatchdom "narratives/internal/domain/dispatch"
 )
 
 const (
@@ -65,9 +65,7 @@ type OrderDispatchNotificationQueue struct {
 
 var _ applicationport.OrderDispatchNotificationQueuePort = (*OrderDispatchNotificationQueue)(nil)
 
-func NewOrderDispatchNotificationQueueFromEnv(
-	ctx context.Context,
-) (*OrderDispatchNotificationQueue, error) {
+func NewOrderDispatchNotificationQueueFromEnv(ctx context.Context) (*OrderDispatchNotificationQueue, error) {
 	config := OrderDispatchNotificationQueueConfig{
 		ProjectID: firstNonEmptyOrderDispatchNotificationEnv(
 			envOrderDispatchCloudTasksProjectID,
@@ -91,19 +89,14 @@ func NewOrderDispatchNotificationQueueFromEnv(
 		),
 	}
 
-	return NewOrderDispatchNotificationQueue(
-		ctx,
-		config,
-	)
+	return NewOrderDispatchNotificationQueue(ctx, config)
 }
 
 func NewOrderDispatchNotificationQueue(
 	ctx context.Context,
 	config OrderDispatchNotificationQueueConfig,
 ) (*OrderDispatchNotificationQueue, error) {
-	normalizedConfig, err := normalizeOrderDispatchNotificationQueueConfig(
-		config,
-	)
+	normalizedConfig, err := normalizeOrderDispatchNotificationQueueConfig(config)
 	if err != nil {
 		return nil, err
 	}
@@ -145,18 +138,14 @@ func NewOrderDispatchNotificationQueue(
 
 func (q *OrderDispatchNotificationQueue) EnqueueOrderDispatchNotification(
 	ctx context.Context,
-	delivery orderdom.DispatchNotificationDelivery,
+	delivery dispatchdom.DispatchNotificationDelivery,
 ) error {
 	if q == nil {
-		return errors.New(
-			"order dispatch notification queue is nil",
-		)
+		return errors.New("order dispatch notification queue is nil")
 	}
 
 	if q.client == nil {
-		return errors.New(
-			"order dispatch notification Cloud Tasks client is nil",
-		)
+		return errors.New("order dispatch notification Cloud Tasks client is nil")
 	}
 
 	if ctx == nil {
@@ -172,16 +161,16 @@ func (q *OrderDispatchNotificationQueue) EnqueueOrderDispatchNotification(
 	}
 
 	if normalizedDelivery.IsTerminal() {
-		return orderdom.ErrDispatchNotificationNotClaimable
+		return dispatchdom.ErrDispatchNotificationNotClaimable
 	}
 
 	if normalizedDelivery.AttemptCount >= normalizedDelivery.MaxAttempts {
-		return orderdom.ErrDispatchNotificationAttemptLimit
+		return dispatchdom.ErrDispatchNotificationAttemptLimit
 	}
 
 	deliveryID := strings.TrimSpace(normalizedDelivery.ID)
 	if deliveryID == "" {
-		return orderdom.ErrDispatchNotificationDeliveryIDRequired
+		return dispatchdom.ErrDispatchNotificationDeliveryIDRequired
 	}
 
 	payload, err := json.Marshal(
@@ -197,7 +186,6 @@ func (q *OrderDispatchNotificationQueue) EnqueueOrderDispatchNotification(
 	}
 
 	nextAttemptNumber := normalizedDelivery.AttemptCount + 1
-
 	taskID := buildOrderDispatchNotificationTaskID(
 		deliveryID,
 		nextAttemptNumber,
@@ -309,30 +297,22 @@ func normalizeOrderDispatchNotificationQueueConfig(
 
 	if config.ProjectID == "" {
 		return OrderDispatchNotificationQueueConfig{},
-			errors.New(
-				"CLOUD_TASKS_PROJECT_ID is empty",
-			)
+			errors.New("CLOUD_TASKS_PROJECT_ID is empty")
 	}
 
 	if config.Location == "" {
 		return OrderDispatchNotificationQueueConfig{},
-			errors.New(
-				"CLOUD_TASKS_LOCATION is empty",
-			)
+			errors.New("CLOUD_TASKS_LOCATION is empty")
 	}
 
 	if config.QueueID == "" {
 		return OrderDispatchNotificationQueueConfig{},
-			errors.New(
-				"CLOUD_TASKS_QUEUE_ID is empty",
-			)
+			errors.New("CLOUD_TASKS_QUEUE_ID is empty")
 	}
 
 	if config.InternalBaseURL == "" {
 		return OrderDispatchNotificationQueueConfig{},
-			errors.New(
-				"INTERNAL_BASE_URL is empty",
-			)
+			errors.New("INTERNAL_BASE_URL is empty")
 	}
 
 	if err := validateOrderDispatchNotificationURL(
@@ -347,9 +327,7 @@ func normalizeOrderDispatchNotificationQueueConfig(
 
 	if config.ServiceAccountEmail == "" {
 		return OrderDispatchNotificationQueueConfig{},
-			errors.New(
-				"CLOUD_TASKS_SERVICE_ACCOUNT is empty",
-			)
+			errors.New("CLOUD_TASKS_SERVICE_ACCOUNT is empty")
 	}
 
 	if config.Audience == "" {
@@ -369,9 +347,7 @@ func normalizeOrderDispatchNotificationQueueConfig(
 	return config, nil
 }
 
-func validateOrderDispatchNotificationURL(
-	value string,
-) error {
+func validateOrderDispatchNotificationURL(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return errors.New("URL is empty")
@@ -388,44 +364,36 @@ func validateOrderDispatchNotificationURL(
 	switch strings.ToLower(parsed.Scheme) {
 	case "http", "https":
 	default:
-		return errors.New(
-			"URL must use http or https",
-		)
+		return errors.New("URL must use http or https")
 	}
 
 	if strings.TrimSpace(parsed.Host) == "" {
-		return errors.New(
-			"URL host is empty",
-		)
+		return errors.New("URL host is empty")
 	}
 
 	if parsed.RawQuery != "" {
-		return errors.New(
-			"URL must not contain query parameters",
-		)
+		return errors.New("URL must not contain query parameters")
 	}
 
 	if parsed.Fragment != "" {
-		return errors.New(
-			"URL must not contain fragment",
-		)
+		return errors.New("URL must not contain fragment")
 	}
 
 	return nil
 }
 
 func orderDispatchNotificationScheduleTime(
-	delivery orderdom.DispatchNotificationDelivery,
+	delivery dispatchdom.DispatchNotificationDelivery,
 ) time.Time {
 	switch delivery.Status {
-	case orderdom.DispatchNotificationStatusPending,
-		orderdom.DispatchNotificationStatusRetryableFailed:
+	case dispatchdom.DispatchNotificationStatusPending,
+		dispatchdom.DispatchNotificationStatusRetryableFailed:
 		if delivery.NextAttemptAt != nil &&
 			!delivery.NextAttemptAt.IsZero() {
 			return delivery.NextAttemptAt.UTC()
 		}
 
-	case orderdom.DispatchNotificationStatusProcessing:
+	case dispatchdom.DispatchNotificationStatusProcessing:
 		if delivery.ProcessingUntil != nil &&
 			!delivery.ProcessingUntil.IsZero() {
 			return delivery.ProcessingUntil.UTC()

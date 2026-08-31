@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	orderdom "narratives/internal/domain/order"
+	dispatchdom "narratives/internal/domain/dispatch"
 )
 
 const (
@@ -41,9 +41,9 @@ type orderDispatchNotificationDeliveryDocument struct {
 
 	Items []orderDispatchNotificationItemDocument `firestore:"items"`
 
-	Status       orderdom.DispatchNotificationStatus `firestore:"status"`
-	AttemptCount int                                 `firestore:"attemptCount"`
-	MaxAttempts  int                                 `firestore:"maxAttempts"`
+	Status       dispatchdom.DispatchNotificationStatus `firestore:"status"`
+	AttemptCount int                                    `firestore:"attemptCount"`
+	MaxAttempts  int                                    `firestore:"maxAttempts"`
 
 	ProviderMessageID string `firestore:"providerMessageId"`
 	LastError         string `firestore:"lastError"`
@@ -62,91 +62,74 @@ type OrderDispatchNotificationRepositoryFS struct {
 	Client *firestore.Client
 }
 
-var _ orderdom.DispatchNotificationRepository = (*OrderDispatchNotificationRepositoryFS)(nil)
+var _ dispatchdom.DispatchNotificationRepository = (*OrderDispatchNotificationRepositoryFS)(nil)
 
-func NewOrderDispatchNotificationRepositoryFS(
-	client *firestore.Client,
-) *OrderDispatchNotificationRepositoryFS {
-	return &OrderDispatchNotificationRepositoryFS{
-		Client: client,
-	}
+func NewOrderDispatchNotificationRepositoryFS(client *firestore.Client) *OrderDispatchNotificationRepositoryFS {
+	return &OrderDispatchNotificationRepositoryFS{Client: client}
 }
 
 func (r *OrderDispatchNotificationRepositoryFS) deliveriesCol() *firestore.CollectionRef {
-	return r.Client.Collection(
-		orderDispatchNotificationDeliveriesCollectionName,
-	)
+	return r.Client.Collection(orderDispatchNotificationDeliveriesCollectionName)
 }
 
 func (r *OrderDispatchNotificationRepositoryFS) CreateIfAbsent(
 	ctx context.Context,
-	delivery orderdom.DispatchNotificationDelivery,
-) (orderdom.DispatchNotificationDelivery, bool, error) {
+	delivery dispatchdom.DispatchNotificationDelivery,
+) (dispatchdom.DispatchNotificationDelivery, bool, error) {
 	if r == nil || r.Client == nil {
-		return orderdom.DispatchNotificationDelivery{},
-			false,
-			ErrOrderDispatchNotificationRepositoryNotConfigured
+		return dispatchdom.DispatchNotificationDelivery{}, false, ErrOrderDispatchNotificationRepositoryNotConfigured
 	}
 
 	normalized, err := delivery.Normalize()
 	if err != nil {
-		return orderdom.DispatchNotificationDelivery{}, false, err
+		return dispatchdom.DispatchNotificationDelivery{}, false, err
 	}
 
 	deliveryRef := r.deliveriesCol().Doc(normalized.ID)
 
 	var (
-		result  orderdom.DispatchNotificationDelivery
+		result  dispatchdom.DispatchNotificationDelivery
 		created bool
 	)
 
-	err = r.Client.RunTransaction(
-		ctx,
-		func(
-			ctx context.Context,
-			tx *firestore.Transaction,
-		) error {
-			existingDoc, err := tx.Get(deliveryRef)
-			if err == nil {
-				existing, err := readOrderDispatchNotificationDeliverySnapshot(
-					existingDoc,
-				)
-				if err != nil {
-					return err
-				}
-
-				result = existing
-				created = false
-				return nil
+	err = r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		existingDoc, err := tx.Get(deliveryRef)
+		if err == nil {
+			existing, err := readOrderDispatchNotificationDeliverySnapshot(existingDoc)
+			if err != nil {
+				return err
 			}
 
-			if status.Code(err) != codes.NotFound {
-				return fmt.Errorf(
-					"get order dispatch notification delivery %q: %w",
-					normalized.ID,
-					err,
-				)
-			}
-
-			if err := tx.Create(
-				deliveryRef,
-				orderDispatchNotificationDeliveryToDocument(normalized),
-			); err != nil {
-				return fmt.Errorf(
-					"create order dispatch notification delivery %q: %w",
-					normalized.ID,
-					err,
-				)
-			}
-
-			result = normalized
-			created = true
+			result = existing
+			created = false
 			return nil
-		},
-	)
+		}
+
+		if status.Code(err) != codes.NotFound {
+			return fmt.Errorf(
+				"get order dispatch notification delivery %q: %w",
+				normalized.ID,
+				err,
+			)
+		}
+
+		if err := tx.Create(
+			deliveryRef,
+			orderDispatchNotificationDeliveryToDocument(normalized),
+		); err != nil {
+			return fmt.Errorf(
+				"create order dispatch notification delivery %q: %w",
+				normalized.ID,
+				err,
+			)
+		}
+
+		result = normalized
+		created = true
+		return nil
+	})
 	if err != nil {
-		return orderdom.DispatchNotificationDelivery{},
-			false,
+		return dispatchdom.DispatchNotificationDelivery{}, false,
 			fmt.Errorf(
 				"create order dispatch notification delivery transaction: %w",
 				err,
@@ -159,26 +142,24 @@ func (r *OrderDispatchNotificationRepositoryFS) CreateIfAbsent(
 func (r *OrderDispatchNotificationRepositoryFS) GetByID(
 	ctx context.Context,
 	id string,
-) (orderdom.DispatchNotificationDelivery, error) {
+) (dispatchdom.DispatchNotificationDelivery, error) {
 	if r == nil || r.Client == nil {
-		return orderdom.DispatchNotificationDelivery{},
-			ErrOrderDispatchNotificationRepositoryNotConfigured
+		return dispatchdom.DispatchNotificationDelivery{}, ErrOrderDispatchNotificationRepositoryNotConfigured
 	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return orderdom.DispatchNotificationDelivery{},
-			orderdom.ErrDispatchNotificationDeliveryIDRequired
+		return dispatchdom.DispatchNotificationDelivery{},
+			dispatchdom.ErrDispatchNotificationDeliveryIDRequired
 	}
 
 	doc, err := r.deliveriesCol().Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return orderdom.DispatchNotificationDelivery{},
-				orderdom.ErrNotFound
+			return dispatchdom.DispatchNotificationDelivery{}, dispatchdom.ErrNotFound
 		}
 
-		return orderdom.DispatchNotificationDelivery{},
+		return dispatchdom.DispatchNotificationDelivery{},
 			fmt.Errorf(
 				"get order dispatch notification delivery %q: %w",
 				id,
@@ -193,13 +174,12 @@ func (r *OrderDispatchNotificationRepositoryFS) ListDue(
 	ctx context.Context,
 	now time.Time,
 	limit int,
-) ([]orderdom.DispatchNotificationDelivery, error) {
+) ([]dispatchdom.DispatchNotificationDelivery, error) {
 	if r == nil || r.Client == nil {
 		return nil, ErrOrderDispatchNotificationRepositoryNotConfigured
 	}
 
 	now = now.UTC()
-
 	if limit <= 0 {
 		limit = 50
 	}
@@ -208,19 +188,16 @@ func (r *OrderDispatchNotificationRepositoryFS) ListDue(
 		"status",
 		"in",
 		[]string{
-			string(orderdom.DispatchNotificationStatusPending),
-			string(orderdom.DispatchNotificationStatusProcessing),
-			string(orderdom.DispatchNotificationStatusRetryableFailed),
+			string(dispatchdom.DispatchNotificationStatusPending),
+			string(dispatchdom.DispatchNotificationStatusProcessing),
+			string(dispatchdom.DispatchNotificationStatusRetryableFailed),
 		},
 	)
 
 	iter := query.Documents(ctx)
 	defer iter.Stop()
 
-	deliveries := make(
-		[]orderdom.DispatchNotificationDelivery,
-		0,
-	)
+	deliveries := make([]dispatchdom.DispatchNotificationDelivery, 0)
 
 	for {
 		doc, err := iter.Next()
@@ -242,7 +219,6 @@ func (r *OrderDispatchNotificationRepositoryFS) ListDue(
 		if delivery.AttemptCount >= delivery.MaxAttempts {
 			continue
 		}
-
 		if !delivery.IsDue(now) {
 			continue
 		}
@@ -250,21 +226,16 @@ func (r *OrderDispatchNotificationRepositoryFS) ListDue(
 		deliveries = append(deliveries, delivery)
 	}
 
-	sort.SliceStable(
-		deliveries,
-		func(i int, j int) bool {
-			left := orderDispatchNotificationDueTime(deliveries[i])
-			right := orderDispatchNotificationDueTime(deliveries[j])
+	sort.SliceStable(deliveries, func(i int, j int) bool {
+		left := orderDispatchNotificationDueTime(deliveries[i])
+		right := orderDispatchNotificationDueTime(deliveries[j])
 
-			if left.Equal(right) {
-				return deliveries[i].CreatedAt.Before(
-					deliveries[j].CreatedAt,
-				)
-			}
+		if left.Equal(right) {
+			return deliveries[i].CreatedAt.Before(deliveries[j].CreatedAt)
+		}
 
-			return left.Before(right)
-		},
-	)
+		return left.Before(right)
+	})
 
 	if len(deliveries) > limit {
 		deliveries = deliveries[:limit]
@@ -278,85 +249,54 @@ func (r *OrderDispatchNotificationRepositoryFS) Claim(
 	id string,
 	now time.Time,
 	processingUntil time.Time,
-) (orderdom.DispatchNotificationDelivery, error) {
+) (dispatchdom.DispatchNotificationDelivery, error) {
 	if r == nil || r.Client == nil {
-		return orderdom.DispatchNotificationDelivery{},
+		return dispatchdom.DispatchNotificationDelivery{},
 			ErrOrderDispatchNotificationRepositoryNotConfigured
 	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return orderdom.DispatchNotificationDelivery{},
-			orderdom.ErrDispatchNotificationDeliveryIDRequired
+		return dispatchdom.DispatchNotificationDelivery{},
+			dispatchdom.ErrDispatchNotificationDeliveryIDRequired
 	}
 
 	now = now.UTC()
 	processingUntil = processingUntil.UTC()
-
 	deliveryRef := r.deliveriesCol().Doc(id)
 
 	var (
-		result       orderdom.DispatchNotificationDelivery
+		result       dispatchdom.DispatchNotificationDelivery
 		committedErr error
 	)
 
-	err := r.Client.RunTransaction(
-		ctx,
-		func(
-			ctx context.Context,
-			tx *firestore.Transaction,
-		) error {
-			deliveryDoc, err := tx.Get(deliveryRef)
-			if err != nil {
-				if status.Code(err) == codes.NotFound {
-					return orderdom.ErrNotFound
-				}
-
-				return fmt.Errorf(
-					"get order dispatch notification delivery %q: %w",
-					id,
-					err,
-				)
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		deliveryDoc, err := tx.Get(deliveryRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return dispatchdom.ErrNotFound
 			}
 
-			delivery, err := readOrderDispatchNotificationDeliverySnapshot(
-				deliveryDoc,
+			return fmt.Errorf(
+				"get order dispatch notification delivery %q: %w",
+				id,
+				err,
 			)
-			if err != nil {
-				return err
-			}
+		}
 
-			if delivery.IsTerminal() {
-				return orderdom.ErrDispatchNotificationNotClaimable
-			}
+		delivery, err := readOrderDispatchNotificationDeliverySnapshot(deliveryDoc)
+		if err != nil {
+			return err
+		}
 
-			if delivery.AttemptCount >= delivery.MaxAttempts {
-				failed, err := delivery.MarkFailed(
-					orderDispatchNotificationAttemptError,
-					now,
-				)
-				if err != nil {
-					return err
-				}
+		if delivery.IsTerminal() {
+			return dispatchdom.ErrDispatchNotificationNotClaimable
+		}
 
-				if err := tx.Set(
-					deliveryRef,
-					orderDispatchNotificationDeliveryToDocument(failed),
-				); err != nil {
-					return fmt.Errorf(
-						"fail order dispatch notification delivery %q: %w",
-						id,
-						err,
-					)
-				}
-
-				committedErr = orderdom.ErrDispatchNotificationAttemptLimit
-				return nil
-			}
-
-			claimed, err := delivery.Claim(
+		if delivery.AttemptCount >= delivery.MaxAttempts {
+			failed, err := delivery.MarkFailed(
+				orderDispatchNotificationAttemptError,
 				now,
-				processingUntil,
 			)
 			if err != nil {
 				return err
@@ -364,21 +304,40 @@ func (r *OrderDispatchNotificationRepositoryFS) Claim(
 
 			if err := tx.Set(
 				deliveryRef,
-				orderDispatchNotificationDeliveryToDocument(claimed),
+				orderDispatchNotificationDeliveryToDocument(failed),
 			); err != nil {
 				return fmt.Errorf(
-					"claim order dispatch notification delivery %q: %w",
+					"fail order dispatch notification delivery %q: %w",
 					id,
 					err,
 				)
 			}
 
-			result = claimed
+			committedErr = dispatchdom.ErrDispatchNotificationAttemptLimit
 			return nil
-		},
-	)
+		}
+
+		claimed, err := delivery.Claim(now, processingUntil)
+		if err != nil {
+			return err
+		}
+
+		if err := tx.Set(
+			deliveryRef,
+			orderDispatchNotificationDeliveryToDocument(claimed),
+		); err != nil {
+			return fmt.Errorf(
+				"claim order dispatch notification delivery %q: %w",
+				id,
+				err,
+			)
+		}
+
+		result = claimed
+		return nil
+	})
 	if err != nil {
-		return orderdom.DispatchNotificationDelivery{},
+		return dispatchdom.DispatchNotificationDelivery{},
 			mapOrderDispatchNotificationRepositoryError(
 				"claim order dispatch notification delivery",
 				err,
@@ -386,7 +345,7 @@ func (r *OrderDispatchNotificationRepositoryFS) Claim(
 	}
 
 	if committedErr != nil {
-		return orderdom.DispatchNotificationDelivery{}, committedErr
+		return dispatchdom.DispatchNotificationDelivery{}, committedErr
 	}
 
 	return result, nil
@@ -405,69 +364,61 @@ func (r *OrderDispatchNotificationRepositoryFS) MarkDelivered(
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return orderdom.ErrDispatchNotificationDeliveryIDRequired
+		return dispatchdom.ErrDispatchNotificationDeliveryIDRequired
 	}
 
 	deliveredAt = deliveredAt.UTC()
 	deliveryRef := r.deliveriesCol().Doc(id)
 
-	err := r.Client.RunTransaction(
-		ctx,
-		func(
-			ctx context.Context,
-			tx *firestore.Transaction,
-		) error {
-			deliveryDoc, err := tx.Get(deliveryRef)
-			if err != nil {
-				if status.Code(err) == codes.NotFound {
-					return orderdom.ErrNotFound
-				}
-
-				return fmt.Errorf(
-					"get order dispatch notification delivery %q: %w",
-					id,
-					err,
-				)
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		deliveryDoc, err := tx.Get(deliveryRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return dispatchdom.ErrNotFound
 			}
 
-			delivery, err := readOrderDispatchNotificationDeliverySnapshot(
-				deliveryDoc,
+			return fmt.Errorf(
+				"get order dispatch notification delivery %q: %w",
+				id,
+				err,
 			)
-			if err != nil {
-				return err
-			}
+		}
 
-			if delivery.Status == orderdom.DispatchNotificationStatusDelivered {
-				return nil
-			}
+		delivery, err := readOrderDispatchNotificationDeliverySnapshot(deliveryDoc)
+		if err != nil {
+			return err
+		}
 
-			if delivery.AttemptCount != expectedAttemptCount ||
-				delivery.Status != orderdom.DispatchNotificationStatusProcessing {
-				return orderdom.ErrDispatchNotificationNotClaimable
-			}
-
-			delivered, err := delivery.MarkDelivered(
-				providerMessageID,
-				deliveredAt,
-			)
-			if err != nil {
-				return err
-			}
-
-			if err := tx.Set(
-				deliveryRef,
-				orderDispatchNotificationDeliveryToDocument(delivered),
-			); err != nil {
-				return fmt.Errorf(
-					"mark order dispatch notification delivery %q delivered: %w",
-					id,
-					err,
-				)
-			}
-
+		if delivery.Status == dispatchdom.DispatchNotificationStatusDelivered {
 			return nil
-		},
-	)
+		}
+
+		if delivery.AttemptCount != expectedAttemptCount ||
+			delivery.Status != dispatchdom.DispatchNotificationStatusProcessing {
+			return dispatchdom.ErrDispatchNotificationNotClaimable
+		}
+
+		delivered, err := delivery.MarkDelivered(
+			providerMessageID,
+			deliveredAt,
+		)
+		if err != nil {
+			return err
+		}
+
+		if err := tx.Set(
+			deliveryRef,
+			orderDispatchNotificationDeliveryToDocument(delivered),
+		); err != nil {
+			return fmt.Errorf(
+				"mark order dispatch notification delivery %q delivered: %w",
+				id,
+				err,
+			)
+		}
+
+		return nil
+	})
 	if err != nil {
 		return mapOrderDispatchNotificationRepositoryError(
 			"mark order dispatch notification delivery delivered",
@@ -492,73 +443,64 @@ func (r *OrderDispatchNotificationRepositoryFS) MarkRetryableFailed(
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return orderdom.ErrDispatchNotificationDeliveryIDRequired
+		return dispatchdom.ErrDispatchNotificationDeliveryIDRequired
 	}
 
 	nextAttemptAt = nextAttemptAt.UTC()
 	failedAt = failedAt.UTC()
 	deliveryRef := r.deliveriesCol().Doc(id)
 
-	err := r.Client.RunTransaction(
-		ctx,
-		func(
-			ctx context.Context,
-			tx *firestore.Transaction,
-		) error {
-			deliveryDoc, err := tx.Get(deliveryRef)
-			if err != nil {
-				if status.Code(err) == codes.NotFound {
-					return orderdom.ErrNotFound
-				}
-
-				return fmt.Errorf(
-					"get order dispatch notification delivery %q: %w",
-					id,
-					err,
-				)
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		deliveryDoc, err := tx.Get(deliveryRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return dispatchdom.ErrNotFound
 			}
 
-			delivery, err := readOrderDispatchNotificationDeliverySnapshot(
-				deliveryDoc,
+			return fmt.Errorf(
+				"get order dispatch notification delivery %q: %w",
+				id,
+				err,
 			)
-			if err != nil {
-				return err
-			}
+		}
 
-			if delivery.Status ==
-				orderdom.DispatchNotificationStatusRetryableFailed &&
-				delivery.AttemptCount == expectedAttemptCount {
-				return nil
-			}
+		delivery, err := readOrderDispatchNotificationDeliverySnapshot(deliveryDoc)
+		if err != nil {
+			return err
+		}
 
-			if delivery.AttemptCount != expectedAttemptCount ||
-				delivery.Status != orderdom.DispatchNotificationStatusProcessing {
-				return orderdom.ErrDispatchNotificationNotClaimable
-			}
-
-			retryable, err := delivery.MarkRetryableFailed(
-				lastError,
-				nextAttemptAt,
-				failedAt,
-			)
-			if err != nil {
-				return err
-			}
-
-			if err := tx.Set(
-				deliveryRef,
-				orderDispatchNotificationDeliveryToDocument(retryable),
-			); err != nil {
-				return fmt.Errorf(
-					"mark order dispatch notification delivery %q retryable failed: %w",
-					id,
-					err,
-				)
-			}
-
+		if delivery.Status == dispatchdom.DispatchNotificationStatusRetryableFailed &&
+			delivery.AttemptCount == expectedAttemptCount {
 			return nil
-		},
-	)
+		}
+
+		if delivery.AttemptCount != expectedAttemptCount ||
+			delivery.Status != dispatchdom.DispatchNotificationStatusProcessing {
+			return dispatchdom.ErrDispatchNotificationNotClaimable
+		}
+
+		retryable, err := delivery.MarkRetryableFailed(
+			lastError,
+			nextAttemptAt,
+			failedAt,
+		)
+		if err != nil {
+			return err
+		}
+
+		if err := tx.Set(
+			deliveryRef,
+			orderDispatchNotificationDeliveryToDocument(retryable),
+		); err != nil {
+			return fmt.Errorf(
+				"mark order dispatch notification delivery %q retryable failed: %w",
+				id,
+				err,
+			)
+		}
+
+		return nil
+	})
 	if err != nil {
 		return mapOrderDispatchNotificationRepositoryError(
 			"mark order dispatch notification delivery retryable failed",
@@ -582,72 +524,64 @@ func (r *OrderDispatchNotificationRepositoryFS) MarkFailed(
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return orderdom.ErrDispatchNotificationDeliveryIDRequired
+		return dispatchdom.ErrDispatchNotificationDeliveryIDRequired
 	}
 
 	failedAt = failedAt.UTC()
 	deliveryRef := r.deliveriesCol().Doc(id)
 
-	err := r.Client.RunTransaction(
-		ctx,
-		func(
-			ctx context.Context,
-			tx *firestore.Transaction,
-		) error {
-			deliveryDoc, err := tx.Get(deliveryRef)
-			if err != nil {
-				if status.Code(err) == codes.NotFound {
-					return orderdom.ErrNotFound
-				}
-
-				return fmt.Errorf(
-					"get order dispatch notification delivery %q: %w",
-					id,
-					err,
-				)
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		deliveryDoc, err := tx.Get(deliveryRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return dispatchdom.ErrNotFound
 			}
 
-			delivery, err := readOrderDispatchNotificationDeliverySnapshot(
-				deliveryDoc,
+			return fmt.Errorf(
+				"get order dispatch notification delivery %q: %w",
+				id,
+				err,
 			)
-			if err != nil {
-				return err
-			}
+		}
 
-			if delivery.Status == orderdom.DispatchNotificationStatusDelivered {
-				return orderdom.ErrDispatchNotificationStatusInvalid
-			}
+		delivery, err := readOrderDispatchNotificationDeliverySnapshot(deliveryDoc)
+		if err != nil {
+			return err
+		}
 
-			if delivery.Status == orderdom.DispatchNotificationStatusFailed {
-				return nil
-			}
+		if delivery.Status == dispatchdom.DispatchNotificationStatusDelivered {
+			return dispatchdom.ErrDispatchNotificationStatusInvalid
+		}
 
-			if delivery.AttemptCount != expectedAttemptCount {
-				return orderdom.ErrDispatchNotificationNotClaimable
-			}
-
-			failed, err := delivery.MarkFailed(
-				lastError,
-				failedAt,
-			)
-			if err != nil {
-				return err
-			}
-
-			if err := tx.Set(
-				deliveryRef,
-				orderDispatchNotificationDeliveryToDocument(failed),
-			); err != nil {
-				return fmt.Errorf(
-					"mark order dispatch notification delivery %q failed: %w",
-					id,
-					err,
-				)
-			}
-
+		if delivery.Status == dispatchdom.DispatchNotificationStatusFailed {
 			return nil
-		},
-	)
+		}
+
+		if delivery.AttemptCount != expectedAttemptCount {
+			return dispatchdom.ErrDispatchNotificationNotClaimable
+		}
+
+		failed, err := delivery.MarkFailed(
+			lastError,
+			failedAt,
+		)
+		if err != nil {
+			return err
+		}
+
+		if err := tx.Set(
+			deliveryRef,
+			orderDispatchNotificationDeliveryToDocument(failed),
+		); err != nil {
+			return fmt.Errorf(
+				"mark order dispatch notification delivery %q failed: %w",
+				id,
+				err,
+			)
+		}
+
+		return nil
+	})
 	if err != nil {
 		return mapOrderDispatchNotificationRepositoryError(
 			"mark order dispatch notification delivery failed",
@@ -659,7 +593,7 @@ func (r *OrderDispatchNotificationRepositoryFS) MarkFailed(
 }
 
 func orderDispatchNotificationDeliveryToDocument(
-	delivery orderdom.DispatchNotificationDelivery,
+	delivery dispatchdom.DispatchNotificationDelivery,
 ) orderDispatchNotificationDeliveryDocument {
 	items := make(
 		[]orderDispatchNotificationItemDocument,
@@ -712,9 +646,9 @@ func orderDispatchNotificationDeliveryToDocument(
 
 func readOrderDispatchNotificationDeliverySnapshot(
 	doc *firestore.DocumentSnapshot,
-) (orderdom.DispatchNotificationDelivery, error) {
+) (dispatchdom.DispatchNotificationDelivery, error) {
 	if doc == nil {
-		return orderdom.DispatchNotificationDelivery{},
+		return dispatchdom.DispatchNotificationDelivery{},
 			errors.New(
 				"order dispatch notification delivery document snapshot is nil",
 			)
@@ -722,7 +656,7 @@ func readOrderDispatchNotificationDeliverySnapshot(
 
 	var stored orderDispatchNotificationDeliveryDocument
 	if err := doc.DataTo(&stored); err != nil {
-		return orderdom.DispatchNotificationDelivery{},
+		return dispatchdom.DispatchNotificationDelivery{},
 			fmt.Errorf(
 				"decode order dispatch notification delivery %q: %w",
 				doc.Ref.ID,
@@ -731,7 +665,7 @@ func readOrderDispatchNotificationDeliverySnapshot(
 	}
 
 	items := make(
-		[]orderdom.DispatchNotificationItem,
+		[]dispatchdom.DispatchNotificationItem,
 		0,
 		len(stored.Items),
 	)
@@ -739,7 +673,7 @@ func readOrderDispatchNotificationDeliverySnapshot(
 	for _, item := range stored.Items {
 		items = append(
 			items,
-			orderdom.DispatchNotificationItem{
+			dispatchdom.DispatchNotificationItem{
 				InventoryID:        item.InventoryID,
 				ListID:             item.ListID,
 				ProductBlueprintID: item.ProductBlueprintID,
@@ -749,7 +683,7 @@ func readOrderDispatchNotificationDeliverySnapshot(
 		)
 	}
 
-	delivery := orderdom.DispatchNotificationDelivery{
+	delivery := dispatchdom.DispatchNotificationDelivery{
 		ID:                  doc.Ref.ID,
 		OrderID:             stored.OrderID,
 		CompanyID:           stored.CompanyID,
@@ -771,7 +705,7 @@ func readOrderDispatchNotificationDeliverySnapshot(
 
 	normalized, err := delivery.Normalize()
 	if err != nil {
-		return orderdom.DispatchNotificationDelivery{},
+		return dispatchdom.DispatchNotificationDelivery{},
 			fmt.Errorf(
 				"normalize order dispatch notification delivery %q: %w",
 				doc.Ref.ID,
@@ -783,10 +717,10 @@ func readOrderDispatchNotificationDeliverySnapshot(
 }
 
 func orderDispatchNotificationDueTime(
-	delivery orderdom.DispatchNotificationDelivery,
+	delivery dispatchdom.DispatchNotificationDelivery,
 ) time.Time {
 	switch delivery.Status {
-	case orderdom.DispatchNotificationStatusProcessing:
+	case dispatchdom.DispatchNotificationStatusProcessing:
 		if delivery.ProcessingUntil != nil {
 			return delivery.ProcessingUntil.UTC()
 		}
@@ -800,9 +734,7 @@ func orderDispatchNotificationDueTime(
 	return delivery.CreatedAt.UTC()
 }
 
-func copyOrderDispatchNotificationTimePointer(
-	value *time.Time,
-) *time.Time {
+func copyOrderDispatchNotificationTimePointer(value *time.Time) *time.Time {
 	if value == nil || value.IsZero() {
 		return nil
 	}
@@ -816,26 +748,26 @@ func mapOrderDispatchNotificationRepositoryError(
 	err error,
 ) error {
 	switch {
-	case errors.Is(err, orderdom.ErrNotFound):
-		return orderdom.ErrNotFound
+	case errors.Is(err, dispatchdom.ErrNotFound):
+		return dispatchdom.ErrNotFound
 
 	case errors.Is(
 		err,
-		orderdom.ErrDispatchNotificationNotClaimable,
+		dispatchdom.ErrDispatchNotificationNotClaimable,
 	):
-		return orderdom.ErrDispatchNotificationNotClaimable
+		return dispatchdom.ErrDispatchNotificationNotClaimable
 
 	case errors.Is(
 		err,
-		orderdom.ErrDispatchNotificationAttemptLimit,
+		dispatchdom.ErrDispatchNotificationAttemptLimit,
 	):
-		return orderdom.ErrDispatchNotificationAttemptLimit
+		return dispatchdom.ErrDispatchNotificationAttemptLimit
 
 	case errors.Is(
 		err,
-		orderdom.ErrDispatchNotificationStatusInvalid,
+		dispatchdom.ErrDispatchNotificationStatusInvalid,
 	):
-		return orderdom.ErrDispatchNotificationStatusInvalid
+		return dispatchdom.ErrDispatchNotificationStatusInvalid
 
 	default:
 		return fmt.Errorf("%s: %w", operation, err)

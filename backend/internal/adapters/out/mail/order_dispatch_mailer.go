@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	applicationport "narratives/internal/application/port"
-	orderdom "narratives/internal/domain/order"
+	dispatchdom "narratives/internal/domain/dispatch"
 )
 
 const orderDispatchNotificationSubject = "【AMOL】ご注文の商品を発送しました"
@@ -52,10 +52,8 @@ func (m *OrderDispatchNotificationMailer) SendOrderDispatchNotification(
 
 	if m.client == nil {
 		return applicationport.OrderDispatchNotificationMailSendResult{
-				Retryable: false,
-			}, fmt.Errorf(
-				"order dispatch notification email client is not configured",
-			)
+			Retryable: false,
+		}, fmt.Errorf("order dispatch notification email client is not configured")
 	}
 
 	fromAddress := strings.TrimSpace(m.fromAddress)
@@ -69,12 +67,10 @@ func (m *OrderDispatchNotificationMailer) SendOrderDispatchNotification(
 	if idempotencyKey == "" {
 		return applicationport.OrderDispatchNotificationMailSendResult{
 			Retryable: false,
-		}, orderdom.ErrDispatchNotificationDeliveryIDRequired
+		}, dispatchdom.ErrDispatchNotificationDeliveryIDRequired
 	}
 
-	toEmail := strings.ToLower(
-		strings.TrimSpace(message.ToEmail),
-	)
+	toEmail := strings.ToLower(strings.TrimSpace(message.ToEmail))
 	if toEmail == "" {
 		return applicationport.OrderDispatchNotificationMailSendResult{
 			Retryable: false,
@@ -85,22 +81,17 @@ func (m *OrderDispatchNotificationMailer) SendOrderDispatchNotification(
 	if orderID == "" {
 		return applicationport.OrderDispatchNotificationMailSendResult{
 			Retryable: false,
-		}, orderdom.ErrDispatchNotificationOrderIDRequired
+		}, dispatchdom.ErrDispatchNotificationOrderIDRequired
 	}
 
-	items, err := normalizeOrderDispatchNotificationMailItems(
-		message.Items,
-	)
+	items, err := normalizeOrderDispatchNotificationMailItems(message.Items)
 	if err != nil {
 		return applicationport.OrderDispatchNotificationMailSendResult{
 			Retryable: false,
 		}, err
 	}
 
-	body := buildOrderDispatchNotificationMailBody(
-		orderID,
-		items,
-	)
+	body := buildOrderDispatchNotificationMailBody(orderID, items)
 
 	sendResult, err := m.client.SendWithResult(
 		ctx,
@@ -122,10 +113,8 @@ func (m *OrderDispatchNotificationMailer) SendOrderDispatchNotification(
 	}
 
 	return applicationport.OrderDispatchNotificationMailSendResult{
-		ProviderMessageID: strings.TrimSpace(
-			sendResult.ProviderMessageID,
-		),
-		Retryable: false,
+		ProviderMessageID: strings.TrimSpace(sendResult.ProviderMessageID),
+		Retryable:         false,
 	}, nil
 }
 
@@ -133,7 +122,7 @@ func normalizeOrderDispatchNotificationMailItems(
 	items []applicationport.OrderDispatchNotificationMailItem,
 ) ([]applicationport.OrderDispatchNotificationMailItem, error) {
 	if len(items) == 0 {
-		return nil, orderdom.ErrDispatchNotificationItemsRequired
+		return nil, dispatchdom.ErrDispatchNotificationItemsRequired
 	}
 
 	normalized := make(
@@ -145,7 +134,7 @@ func normalizeOrderDispatchNotificationMailItems(
 	for _, item := range items {
 		productName := strings.TrimSpace(item.ProductName)
 		if productName == "" || item.Qty <= 0 {
-			return nil, orderdom.ErrDispatchNotificationItemInvalid
+			return nil, dispatchdom.ErrDispatchNotificationItemInvalid
 		}
 
 		normalized = append(

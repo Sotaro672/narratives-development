@@ -4,12 +4,12 @@ package port
 import (
 	"context"
 
-	orderdom "narratives/internal/domain/order"
+	dispatchdom "narratives/internal/domain/dispatch"
 )
 
 type OrderDispatchNotificationQueuePort interface {
 	EnqueueOrderDispatchNotification(
 		ctx context.Context,
-		delivery orderdom.DispatchNotificationDelivery,
+		delivery dispatchdom.DispatchNotificationDelivery,
 	) error
 }

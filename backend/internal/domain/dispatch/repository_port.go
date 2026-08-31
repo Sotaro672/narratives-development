@@ -1,9 +1,14 @@
-// backend/internal/domain/order/dispatch_notification_repository_port.go
-package order
+// backend/internal/domain/dispatch/repository_port.go
+package dispatch
 
 import (
 	"context"
+	"errors"
 	"time"
+)
+
+var (
+	ErrNotFound = errors.New("dispatch: not found")
 )
 
 // DispatchNotificationRepository manages shipment notification delivery state.

@@ -1,5 +1,5 @@
-// backend/internal/domain/order/dispatch_notification.go
-package order
+// backend/internal/domain/dispatch/entity.go
+package dispatch
 
 import (
 	"crypto/sha256"
@@ -22,34 +22,50 @@ const (
 )
 
 var (
-	ErrDispatchNotificationDeliveryIDRequired  = errors.New("order: dispatch notification deliveryID is required")
-	ErrDispatchNotificationDeliveryIDInvalid   = errors.New("order: dispatch notification deliveryID is invalid")
-	ErrDispatchNotificationOrderIDRequired     = errors.New("order: dispatch notification orderID is required")
-	ErrDispatchNotificationCompanyIDRequired   = errors.New("order: dispatch notification companyID is required")
-	ErrDispatchNotificationUserIDRequired      = errors.New("order: dispatch notification userID is required")
-	ErrDispatchNotificationItemsRequired       = errors.New("order: dispatch notification items are required")
-	ErrDispatchNotificationItemInvalid         = errors.New("order: dispatch notification item is invalid")
-	ErrDispatchNotificationStatusInvalid       = errors.New("order: dispatch notification status is invalid")
+	ErrDispatchNotificationDeliveryIDRequired = errors.New(
+		"dispatch: notification deliveryID is required",
+	)
+	ErrDispatchNotificationDeliveryIDInvalid = errors.New(
+		"dispatch: notification deliveryID is invalid",
+	)
+	ErrDispatchNotificationOrderIDRequired = errors.New(
+		"dispatch: notification orderID is required",
+	)
+	ErrDispatchNotificationCompanyIDRequired = errors.New(
+		"dispatch: notification companyID is required",
+	)
+	ErrDispatchNotificationUserIDRequired = errors.New(
+		"dispatch: notification userID is required",
+	)
+	ErrDispatchNotificationItemsRequired = errors.New(
+		"dispatch: notification items are required",
+	)
+	ErrDispatchNotificationItemInvalid = errors.New(
+		"dispatch: notification item is invalid",
+	)
+	ErrDispatchNotificationStatusInvalid = errors.New(
+		"dispatch: notification status is invalid",
+	)
 	ErrDispatchNotificationAttemptCountInvalid = errors.New(
-		"order: dispatch notification attempt count is invalid",
+		"dispatch: notification attempt count is invalid",
 	)
 	ErrDispatchNotificationMaxAttemptsInvalid = errors.New(
-		"order: dispatch notification max attempts is invalid",
+		"dispatch: notification max attempts is invalid",
 	)
 	ErrDispatchNotificationAttemptLimit = errors.New(
-		"order: dispatch notification attempt limit reached",
+		"dispatch: notification attempt limit reached",
 	)
 	ErrDispatchNotificationNotClaimable = errors.New(
-		"order: dispatch notification is not claimable",
+		"dispatch: notification is not claimable",
 	)
 	ErrDispatchNotificationLeaseInvalid = errors.New(
-		"order: dispatch notification lease is invalid",
+		"dispatch: notification lease is invalid",
 	)
 	ErrDispatchNotificationErrorRequired = errors.New(
-		"order: dispatch notification error is required",
+		"dispatch: notification error is required",
 	)
 	ErrDispatchNotificationNextAttemptInvalid = errors.New(
-		"order: dispatch notification next attempt is invalid",
+		"dispatch: notification next attempt is invalid",
 	)
 )
 
