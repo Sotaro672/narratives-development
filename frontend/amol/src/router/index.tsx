@@ -49,6 +49,7 @@ import HowToUsePage from "../pages/HowToUsePage";
 import ResaleCreatePage from "../pages/ResaleCreatePage";
 import ResaleDetailPage from "../pages/ResaleDetailPage";
 import ProtectedRoute from "../components/auth/ProtectedRoute";
+import TradePage from "../pages/TradePage";
 import { PayoutAccountRegistrationProvider } from "../features/payout/context/PayoutAccountRegistrationProvider";
 
 function RootPage() {
@@ -385,5 +386,13 @@ export const router = createBrowserRouter([
   {
     path: "/:productId",
     element: <ScanResultPage />,
+  },
+    {
+    path: "/orders/:orderId/trade",
+    element: (
+      <ProtectedRoute>
+        <TradePage />
+      </ProtectedRoute>
+    ),
   },
 ]);

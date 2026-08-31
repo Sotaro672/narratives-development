@@ -33,12 +33,12 @@ export default function OrderConfirmedPage() {
     statusLabel,
     items,
     shippingAddressLines,
-    handleGoToLists,
+    hasResaleItem,
+    handleGoToTrade,
   } = useOrderConfirmedPage();
 
   const handleGoToOrderDetail = () => {
-    const normalizedOrderId =
-      orderId.trim();
+    const normalizedOrderId = orderId.trim();
 
     if (!normalizedOrderId) {
       return;
@@ -84,7 +84,11 @@ export default function OrderConfirmedPage() {
             onGoToOrderDetail={
               handleGoToOrderDetail
             }
-            onGoToLists={handleGoToLists}
+            onGoToTrade={
+              hasResaleItem
+                ? handleGoToTrade
+                : undefined
+            }
           />
         </div>
       </section>

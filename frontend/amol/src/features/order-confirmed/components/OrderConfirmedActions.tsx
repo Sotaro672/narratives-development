@@ -2,12 +2,12 @@
 
 type OrderConfirmedActionsProps = {
   onGoToOrderDetail: () => void;
-  onGoToLists: () => void;
+  onGoToTrade?: () => void;
 };
 
 export function OrderConfirmedActions({
   onGoToOrderDetail,
-  onGoToLists,
+  onGoToTrade,
 }: OrderConfirmedActionsProps) {
   return (
     <div className="order-confirmed-page__actions">
@@ -19,13 +19,15 @@ export function OrderConfirmedActions({
         注文詳細へ
       </button>
 
-      <button
-        type="button"
-        className="order-confirmed-page__secondary-button"
-        onClick={onGoToLists}
-      >
-        商品一覧へ
-      </button>
+      {onGoToTrade ? (
+        <button
+          type="button"
+          className="order-confirmed-page__secondary-button"
+          onClick={onGoToTrade}
+        >
+          取引画面へ
+        </button>
+      ) : null}
     </div>
   );
 }

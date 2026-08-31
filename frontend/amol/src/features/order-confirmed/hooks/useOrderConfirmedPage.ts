@@ -11,8 +11,8 @@ import { getShippingAddressLines } from "../utils/format";
 import { toOrderConfirmedItemViewModels } from "../utils/item";
 
 export function useOrderConfirmedPage(): OrderConfirmedViewModel & {
-  handleGoToWallet: () => void;
-  handleGoToLists: () => void;
+  hasResaleItem: boolean;
+  handleGoToTrade: () => void;
 } {
   const navigate = useNavigate();
   const location = useLocation();
@@ -38,14 +38,23 @@ export function useOrderConfirmedPage(): OrderConfirmedViewModel & {
     [shippingAddress],
   );
 
+  const hasResaleItem = useMemo(
+    () => cartItems.some((item) => item.type === "resale"),
+    [cartItems],
+  );
+
   const statusLabel = "発送時に決済";
 
-  const handleGoToWallet = () => {
-    navigate("/wallet");
-  };
+  const handleGoToTrade = () => {
+    const normalizedOrderId = orderId.trim();
 
-  const handleGoToLists = () => {
-    navigate("/lists");
+    if (!normalizedOrderId || !hasResaleItem) {
+      return;
+    }
+
+    navigate(
+      `/orders/${encodeURIComponent(normalizedOrderId)}/trade`,
+    );
   };
 
   return {
@@ -54,7 +63,7 @@ export function useOrderConfirmedPage(): OrderConfirmedViewModel & {
     statusLabel,
     items,
     shippingAddressLines,
-    handleGoToWallet,
-    handleGoToLists,
+    hasResaleItem,
+    handleGoToTrade,
   };
 }
