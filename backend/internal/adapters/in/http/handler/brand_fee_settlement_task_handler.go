@@ -620,36 +620,9 @@ func writeBrandFeeSettlementTaskJSON(
 	statusCode int,
 	value any,
 ) {
-	w.Header().Set(
-		"Content-Type",
-		"application/json; charset=utf-8",
-	)
-
-	w.Header().Set(
-		"Cache-Control",
-		"no-store",
-	)
-
-	w.WriteHeader(
+	writeSettlementTaskJSON(
+		w,
 		statusCode,
-	)
-
-	// Reuse the existing strict Settlement task JSON response encoder so both
-	// internal financial workers follow the same response behavior.
-	writeBrandFeeSettlementTaskJSONBody(
-		w,
-		value,
-	)
-}
-
-func writeBrandFeeSettlementTaskJSONBody(
-	w http.ResponseWriter,
-	value any,
-) {
-	// writeSettlementTaskJSON cannot be used here because it also writes the
-	// HTTP status. The encoder itself is intentionally kept local.
-	_ = encodeBrandFeeSettlementTaskJSON(
-		w,
 		value,
 	)
 }
