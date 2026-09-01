@@ -33,10 +33,11 @@ type PaymentAmountSummary struct {
 //
 // 消費税:
 //
-//	軽減税率対象商品: 8%
-//	標準税率対象商品: 10%
+//	軽減税率対象List商品: 8%
+//	標準税率対象List商品: 10%
 //	Resale商品: 非課税
-//	配送料: 10%
+//	List商品の配送料: 10%
+//	Resale商品の配送料: 非課税
 //
 // キャンセル済み商品:
 //
@@ -49,27 +50,53 @@ func CalculatePaymentAmountSummary(order Order) (PaymentAmountSummary, error) {
 	if len(order.Items) == 0 {
 		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 	}
-
 	if len(order.ShippingQuoteSnapshot.Items) == 0 {
 		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 	}
-
 	if order.ShippingQuoteSnapshot.Currency != ShippingQuoteCurrencyJPY {
 		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 	}
 
 	maxInt := int(^uint(0) >> 1)
 	shippingAmount := order.ShippingQuoteSnapshot.Amount
-
 	if shippingAmount < 0 {
+		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
+	}
+
+	taxableShippingAmount10 := 0
+	calculatedShippingAmount := 0
+
+	for _, shippingItem := range order.ShippingQuoteSnapshot.Items {
+		if shippingItem.Amount < 0 {
+			return PaymentAmountSummary{}, ErrInvalidPaymentAmount
+		}
+		if calculatedShippingAmount > maxInt-shippingItem.Amount {
+			return PaymentAmountSummary{}, ErrInvalidPaymentAmount
+		}
+		calculatedShippingAmount += shippingItem.Amount
+
+		switch shippingItem.Type {
+		case "", OrderItemTypeList:
+			if taxableShippingAmount10 > maxInt-shippingItem.Amount {
+				return PaymentAmountSummary{}, ErrInvalidPaymentAmount
+			}
+			taxableShippingAmount10 += shippingItem.Amount
+
+		case OrderItemTypeResale:
+			// フリマ取引の配送料は非課税。
+
+		default:
+			return PaymentAmountSummary{}, ErrInvalidPaymentAmount
+		}
+	}
+
+	if calculatedShippingAmount != shippingAmount {
 		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 	}
 
 	subtotalAmount := 0
 	taxableAmount8 := 0
-
-	// 配送料は標準税率10%の課税対象。
-	taxableAmount10 := shippingAmount
+	taxableAmount10 := taxableShippingAmount10
 	activeItemCount := 0
 
 	for _, item := range order.Items {
@@ -82,7 +109,6 @@ func CalculatePaymentAmountSummary(order Order) (PaymentAmountSummary, error) {
 		if item.Price < 0 || item.Qty <= 0 {
 			return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 		}
-
 		if item.Price > maxInt/item.Qty {
 			return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 		}
@@ -91,12 +117,13 @@ func CalculatePaymentAmountSummary(order Order) (PaymentAmountSummary, error) {
 		if subtotalAmount > maxInt-lineAmount {
 			return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 		}
-
 		subtotalAmount += lineAmount
 
 		switch item.Type {
 		case OrderItemTypeResale:
+			// フリマ取引の商品代金は非課税。
 			continue
+
 		case OrderItemTypeList:
 		default:
 			return PaymentAmountSummary{}, ErrInvalidPaymentAmount
@@ -123,18 +150,15 @@ func CalculatePaymentAmountSummary(order Order) (PaymentAmountSummary, error) {
 	if activeItemCount == 0 {
 		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 	}
-
 	if taxableAmount8 > maxInt/ConsumptionTaxRateReduced {
 		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 	}
-
 	if taxableAmount10 > maxInt/ConsumptionTaxRateStandard {
 		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 	}
 
 	taxAmount8 := taxableAmount8 * ConsumptionTaxRateReduced / 100
 	taxAmount10 := taxableAmount10 * ConsumptionTaxRateStandard / 100
-
 	if taxAmount8 > maxInt-taxAmount10 {
 		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 	}
@@ -144,8 +168,8 @@ func CalculatePaymentAmountSummary(order Order) (PaymentAmountSummary, error) {
 	if subtotalAmount > maxInt-shippingAmount {
 		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 	}
-
 	subtotalWithShipping := subtotalAmount + shippingAmount
+
 	if subtotalWithShipping > maxInt-taxAmount {
 		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 	}
