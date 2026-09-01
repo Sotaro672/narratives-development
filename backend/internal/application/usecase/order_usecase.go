@@ -20,12 +20,11 @@ import (
 )
 
 type OrderCancellationMailerPort interface {
-	SendOrderCancellationReceipt(
-		ctx context.Context,
-		toEmail string,
-		orderID string,
-		itemIndex int,
-	) error
+	SendOrderCancellationReceipt(ctx context.Context, toEmail string, orderID string, itemIndex int) error
+}
+
+type ResaleOrderNotificationMailerPort interface {
+	SendResaleOrderNotification(ctx context.Context, toEmail string, orderID string, resaleID string, price int) error
 }
 
 // OrderUsecase orchestrates order operations.
@@ -50,8 +49,9 @@ type OrderUsecase struct {
 	shippingAddressRepo  shippingaddressdom.RepositoryPort
 	shippingQuoteUC      *ShippingQuoteUsecase
 
-	authUserReader     applicationport.AuthUserReader
-	cancellationMailer OrderCancellationMailerPort
+	authUserReader                applicationport.AuthUserReader
+	cancellationMailer            OrderCancellationMailerPort
+	resaleOrderNotificationMailer ResaleOrderNotificationMailerPort
 
 	now func() time.Time
 }
@@ -79,9 +79,7 @@ func NewOrderUsecase(
 	}
 }
 
-func (u *OrderUsecase) WithCartRepository(
-	cartRepo cartdom.Repository,
-) *OrderUsecase {
+func (u *OrderUsecase) WithCartRepository(cartRepo cartdom.Repository) *OrderUsecase {
 	if u == nil {
 		return u
 	}
@@ -126,5 +124,18 @@ func (u *OrderUsecase) WithCancellationNotification(
 
 	u.authUserReader = authUserReader
 	u.cancellationMailer = mailer
+	return u
+}
+
+func (u *OrderUsecase) WithResaleOrderNotification(
+	authUserReader applicationport.AuthUserReader,
+	mailer ResaleOrderNotificationMailerPort,
+) *OrderUsecase {
+	if u == nil {
+		return u
+	}
+
+	u.authUserReader = authUserReader
+	u.resaleOrderNotificationMailer = mailer
 	return u
 }

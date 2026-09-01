@@ -12,10 +12,9 @@ import (
 
 var (
 	ErrTradeUsecaseNotConfigured = errors.New("trade usecase: not configured")
-	ErrTradeOrderNotPaid         = errors.New("trade usecase: order is not paid")
 )
 
-// TradeUsecase coordinates Trade creation for paid Resale Order items.
+// TradeUsecase coordinates Trade creation for Resale Order items.
 //
 // Trade is used only for secondary-market transactions between Avatars:
 //
@@ -27,28 +26,33 @@ var (
 //
 // Primary List sales do not create Trade.
 //
+// Trade is created when the Order is placed.
+//
 // Trade creation is idempotent. If a Trade already exists for a Resale Order
-// item, EnsureForPaidOrder leaves it unchanged.
+// item, EnsureForOrder leaves it unchanged.
 //
 // Buyer identity is taken from Order.AvatarID.
 // Seller identity is taken from OrderItemSnapshot.SellerSnapshot.AvatarID.
 //
-// Cancellation, return, dispatch, transfer, refund, and settlement state remain
-// authoritative in their respective domains and are not copied into Trade.
+// Cancellation, return, payment, dispatch, transfer, refund, and settlement
+// state remain authoritative in their respective domains and are not copied
+// into Trade.
 type TradeUsecase struct {
 	repo tradedom.Repository
 }
 
 func NewTradeUsecase(repo tradedom.Repository) *TradeUsecase {
-	return &TradeUsecase{repo: repo}
+	return &TradeUsecase{
+		repo: repo,
+	}
 }
 
-// EnsureForPaidOrder ensures that every eligible Resale Order item has exactly
+// EnsureForOrder ensures that every eligible Resale Order item has exactly
 // one Trade.
 //
 // Preconditions:
-//   - Order must already be paid.
-//   - Order ID and buyer Avatar ID must be valid.
+//   - Order must already have a valid ID.
+//   - Order must have a valid buyer Avatar ID.
 //
 // Items are handled as follows:
 //   - cancelled item: skipped
@@ -64,27 +68,43 @@ func NewTradeUsecase(repo tradedom.Repository) *TradeUsecase {
 // Each Resale Order item is processed independently. If one item fails after
 // earlier items were created, a retry safely skips existing Trades and creates
 // only the missing Trade.
-func (u *TradeUsecase) EnsureForPaidOrder(ctx context.Context, order orderdom.Order) error {
+func (u *TradeUsecase) EnsureForOrder(
+	ctx context.Context,
+	order orderdom.Order,
+) error {
 	if u == nil || u.repo == nil {
 		return ErrTradeUsecaseNotConfigured
 	}
+
 	if order.ID == "" {
 		return orderdom.ErrInvalidID
 	}
+
 	if order.AvatarID == "" {
 		return orderdom.ErrInvalidAvatarID
 	}
-	if !order.Paid {
-		return ErrTradeOrderNotPaid
-	}
 
 	for itemIndex, item := range order.Items {
-		if item.IsCancelled || item.Type != orderdom.OrderItemTypeResale {
+		if item.IsCancelled {
 			continue
 		}
 
-		if err := u.ensureForResaleOrderItem(ctx, order, itemIndex, item); err != nil {
-			return fmt.Errorf("trade usecase: ensure order %s item %d: %w", order.ID, itemIndex, err)
+		if item.Type != orderdom.OrderItemTypeResale {
+			continue
+		}
+
+		if err := u.ensureForResaleOrderItem(
+			ctx,
+			order,
+			itemIndex,
+			item,
+		); err != nil {
+			return fmt.Errorf(
+				"trade usecase: ensure order %s item %d: %w",
+				order.ID,
+				itemIndex,
+				err,
+			)
 		}
 	}
 
@@ -100,14 +120,21 @@ func (u *TradeUsecase) ensureForResaleOrderItem(
 	if item.Type != orderdom.OrderItemTypeResale {
 		return orderdom.ErrInvalidItemSnapshot
 	}
+
 	if item.SellerSnapshot.AvatarID == "" {
 		return orderdom.ErrInvalidSellerSnapshot
 	}
 
-	_, err := u.repo.GetByOrderItem(ctx, order.ID, itemIndex)
+	_, err := u.repo.GetByOrderItem(
+		ctx,
+		order.ID,
+		itemIndex,
+	)
+
 	switch {
 	case err == nil:
 		return nil
+
 	case !errors.Is(err, tradedom.ErrNotFound):
 		return err
 	}
@@ -123,11 +150,15 @@ func (u *TradeUsecase) ensureForResaleOrderItem(
 		return err
 	}
 
-	_, err = u.repo.Create(ctx, trade)
+	_, err = u.repo.Create(
+		ctx,
+		trade,
+	)
 	if err != nil {
 		if errors.Is(err, tradedom.ErrAlreadyExists) {
 			return nil
 		}
+
 		return err
 	}
 

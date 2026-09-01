@@ -104,6 +104,11 @@ func buildMallUsecases(
 		cfg.ResendFrom,
 	)
 
+	resaleOrderNotificationMailer := mailadp.NewResaleOrderNotificationMailer(
+		resendClient,
+		cfg.ResendFrom,
+	)
+
 	inquiryMailer := mailadp.NewInquiryMailer(
 		resendClient,
 	)
@@ -230,7 +235,6 @@ func buildMallUsecases(
 			PaymentRepo:     r.paymentRepo,
 			StripeEventRepo: r.paymentRepo,
 			OrderRepo:       r.orderRepo,
-			TradeUsecase:    tradeUC,
 			ResaleRepo:      r.resaleRepo,
 		},
 	)
@@ -339,6 +343,10 @@ func buildMallUsecases(
 		WithCancellationNotification(
 			authUserReader,
 			orderCancellationMailer,
+		).
+		WithResaleOrderNotification(
+			authUserReader,
+			resaleOrderNotificationMailer,
 		)
 
 	itemRefundUC := usecase.NewItemRefundUsecase(

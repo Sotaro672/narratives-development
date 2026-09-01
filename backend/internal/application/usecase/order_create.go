@@ -4,7 +4,6 @@ package usecase
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -126,30 +125,71 @@ func (u *OrderUsecase) Create(
 		return orderdom.Order{}, err
 	}
 
+	// resale商品の注文受付が確定した時点で、出品者へ発注通知メールを送る。
+	// Orderは既に永続化済みのため、メール送信はbest-effortとする。
+	u.sendResaleOrderNotificationsBestEffort(
+		ctx,
+		created,
+	)
+
 	// 注文作成が確定した時点で、注文元のcartを削除する。
-	//
-	// Orderは既に永続化済みのため、cart削除失敗を購入APIの失敗として
-	// 返すと、クライアント再試行による重複注文を誘発する可能性がある。
-	// そのためcart削除はbest-effortとし、失敗はログへ残す。
+	// Orderは既に永続化済みのため、cart削除はbest-effortとする。
 	if u.cartRepo != nil {
-		cartID := strings.TrimSpace(created.CartID)
+		cartID := created.CartID
 
 		if cartID != "" {
-			if err := u.cartRepo.DeleteByAvatarID(
+			_ = u.cartRepo.DeleteByAvatarID(
 				ctx,
 				cartID,
-			); err != nil {
-				log.Printf(
-					"order usecase: clear cart after order failed orderId=%q cartId=%q err=%v",
-					created.ID,
-					cartID,
-					err,
-				)
-			}
+			)
 		}
 	}
 
 	return created, nil
+}
+
+func (u *OrderUsecase) sendResaleOrderNotificationsBestEffort(
+	ctx context.Context,
+	order orderdom.Order,
+) {
+	if u == nil ||
+		u.authUserReader == nil ||
+		u.resaleOrderNotificationMailer == nil {
+		return
+	}
+
+	for _, item := range order.Items {
+		if item.Type != orderdom.OrderItemTypeResale {
+			continue
+		}
+
+		if item.IsCancelled {
+			continue
+		}
+
+		resaleID := item.ResaleID
+		sellerUserID := item.SellerSnapshot.UserID
+
+		if resaleID == "" || sellerUserID == "" {
+			continue
+		}
+
+		toEmail, err := u.authUserReader.GetEmailByUID(
+			ctx,
+			sellerUserID,
+		)
+		if err != nil || toEmail == "" {
+			continue
+		}
+
+		_ = u.resaleOrderNotificationMailer.SendResaleOrderNotification(
+			ctx,
+			toEmail,
+			order.ID,
+			resaleID,
+			item.Price,
+		)
+	}
 }
 
 // =======================

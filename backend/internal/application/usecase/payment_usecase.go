@@ -6,7 +6,7 @@ package usecase
 - Paymentの取得・作成・部分更新を提供する。
 - Stripe webhook eventによるPayment status同期を提供する。
 - Refund stateの専用更新経路を提供する。
-- succeeded状態ではOrder.PaidとResale Tradeを冪等に整合させる。
+- succeeded状態ではOrder.Paidを冪等に整合させる。
 - succeededへの初回遷移時だけbest-effortの支払い後処理を実行する。
 
 前提:
@@ -37,9 +37,8 @@ Refund状態更新:
 
 支払い成功後の処理:
 0) order.Paid=true更新（必須・冪等）
-1) 未キャンセルのresale OrderItemごとのTrade起票（対象がある場合のみ必須・冪等）
-2) resale status=sold更新（best-effort）
-3) resale購入通知コメント作成（best-effort）
+1) resale status=sold更新（best-effort）
+2) resale購入通知コメント作成（best-effort）
 
 注文受付時に行うべき処理:
 - inventory reserve
@@ -167,9 +166,6 @@ var (
 	ErrPaymentOrderRepositoryMissing = errors.New(
 		"payment: order repository is not configured",
 	)
-	ErrPaymentTradeUsecaseMissing = errors.New(
-		"payment: trade usecase is not configured",
-	)
 	ErrPaymentPaidOrderUnavailable = errors.New(
 		"payment: paid order is unavailable",
 	)
@@ -186,7 +182,6 @@ type PaymentUsecase struct {
 	stripeEventRepo StripePaymentEventRepository
 
 	orderRepo                   OrderRepoForPayment
-	tradeUC                     *TradeUsecase
 	resaleRepo                  ResaleRepoForPayment
 	resalePurchaseCommentWriter ResalePurchaseCommentWriter
 
@@ -199,7 +194,6 @@ type NewPaymentUsecaseInput struct {
 	StripeEventRepo StripePaymentEventRepository
 
 	OrderRepo                   OrderRepoForPayment
-	TradeUsecase                *TradeUsecase
 	ResaleRepo                  ResaleRepoForPayment
 	ResalePurchaseCommentWriter ResalePurchaseCommentWriter
 
@@ -216,7 +210,6 @@ func NewPaymentUsecase(in NewPaymentUsecaseInput) *PaymentUsecase {
 		repo:                        in.PaymentRepo,
 		stripeEventRepo:             in.StripeEventRepo,
 		orderRepo:                   in.OrderRepo,
-		tradeUC:                     in.TradeUsecase,
 		resaleRepo:                  in.ResaleRepo,
 		resalePurchaseCommentWriter: in.ResalePurchaseCommentWriter,
 		now:                         now,
@@ -252,11 +245,10 @@ func (u *PaymentUsecase) GetByPaymentID(
 //
 // StripeChargeID may be empty until Stripe has created a Charge.
 //
-// A Payment created as succeeded synchronizes Order.Paid immediately and,
-// when the Order contains an eligible Resale item, ensures its Trade.
+// A Payment created as succeeded synchronizes Order.Paid immediately.
 // Non-critical post-paid side effects are then executed once from this creation
-// path. Later succeeded webhook events still re-run the required synchronization
-// idempotently so missing Trade state can be repaired.
+// path. Later succeeded webhook events still re-run the required Order.Paid
+// synchronization idempotently.
 //
 // The repository implementation must persist the post-paid execution marker
 // when it creates a Payment whose initial status is succeeded.
@@ -305,7 +297,7 @@ func (u *PaymentUsecase) Create(
 	}
 
 	if created != nil && created.Status == paymentdom.StatusSucceeded {
-		order, err := u.ensurePaidOrderAndTrades(ctx, created)
+		order, err := u.ensurePaidOrder(ctx, created)
 		if err != nil {
 			return nil, err
 		}
@@ -468,8 +460,6 @@ func (u *PaymentUsecase) UpdateRefundState(
 // A duplicate event is returned as a successful no-op for Payment state.
 //
 // When the resulting Payment is succeeded, Order.Paid is ensured on every call.
-// If the Order contains an eligible Resale item, its Trade is also ensured so a
-// retry can repair missing required post-payment state.
 // Best-effort post-paid processing is executed only when PostPaidRequired is true.
 func (u *PaymentUsecase) ApplyStripeEvent(
 	ctx context.Context,
@@ -513,7 +503,7 @@ func (u *PaymentUsecase) ApplyStripeEvent(
 
 	var paidOrder *orderdom.Order
 	if result.Payment.Status == paymentdom.StatusSucceeded {
-		paidOrder, err = u.ensurePaidOrderAndTrades(
+		paidOrder, err = u.ensurePaidOrder(
 			ctx,
 			result.Payment,
 		)
@@ -536,19 +526,15 @@ func (u *PaymentUsecase) ApplyStripeEvent(
 // Required paid-state synchronization
 // ============================================================
 
-// ensurePaidOrderAndTrades synchronizes the required application state for a
+// ensurePaidOrder synchronizes the required application state for a
 // succeeded Payment.
 //
 // This method is intentionally idempotent and may run for duplicate succeeded
-// Stripe webhook events:
-//   - Order.Paid is set to true if necessary.
-//   - TradeUsecase is required only when the Order contains an eligible Resale
-//     item and ensures exactly one Trade per eligible Resale Order item.
+// Stripe webhook events. Order.Paid is set to true if necessary.
 //
-// Primary List sales do not use Trade. Trade creation for Resale is required
-// transaction state, not a best-effort notification. A failure is therefore
-// returned to the caller so the webhook can be retried.
-func (u *PaymentUsecase) ensurePaidOrderAndTrades(
+// Trade creation belongs to the order-placement flow and is intentionally not
+// performed by PaymentUsecase.
+func (u *PaymentUsecase) ensurePaidOrder(
 	ctx context.Context,
 	payment *paymentdom.Payment,
 ) (*orderdom.Order, error) {
@@ -583,19 +569,6 @@ func (u *PaymentUsecase) ensurePaidOrderAndTrades(
 		return nil, ErrPaymentPaidOrderUnavailable
 	}
 
-	if hasEligibleResaleOrderItem(*updatedOrder) {
-		if u.tradeUC == nil {
-			return nil, ErrPaymentTradeUsecaseMissing
-		}
-
-		if err := u.tradeUC.EnsureForPaidOrder(
-			ctx,
-			*updatedOrder,
-		); err != nil {
-			return nil, err
-		}
-	}
-
 	return updatedOrder, nil
 }
 
@@ -605,8 +578,8 @@ func (u *PaymentUsecase) ensurePaidOrderAndTrades(
 
 // handlePostPaidBestEffort runs non-critical post-paid side effects.
 //
-// Required state synchronization (Order.Paid and eligible Resale Trade creation)
-// must already have succeeded before this method is called.
+// Required Order.Paid synchronization must already have succeeded before this
+// method is called.
 //
 // This method may only be called from:
 //  1. A successful initial Create whose Repository transaction also stores
@@ -726,19 +699,6 @@ func (u *PaymentUsecase) markResalesSoldByOrder(
 	}
 
 	return nil
-}
-
-func hasEligibleResaleOrderItem(order orderdom.Order) bool {
-	for _, item := range order.Items {
-		if item.IsCancelled {
-			continue
-		}
-		if item.Type == orderdom.OrderItemTypeResale {
-			return true
-		}
-	}
-
-	return false
 }
 
 func extractResaleIDsFromOrder(
