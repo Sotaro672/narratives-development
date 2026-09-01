@@ -34,7 +34,6 @@ const (
 
 const (
 	MessageSenderTypeAvatar MessageSenderType = "avatar"
-	MessageSenderTypeMember MessageSenderType = "member"
 	MessageSenderTypeSystem MessageSenderType = "system"
 )
 
@@ -254,7 +253,6 @@ func (t *Trade) MarkMessageActivity(at time.Time) error {
 	if t == nil {
 		return nil
 	}
-
 	if at.IsZero() {
 		return ErrInvalidLastMessageAt
 	}
@@ -612,8 +610,7 @@ func validateMessageSender(m Message) error {
 		}
 
 	case MessageSenderSideSeller:
-		if m.SenderType != MessageSenderTypeAvatar &&
-			m.SenderType != MessageSenderTypeMember {
+		if m.SenderType != MessageSenderTypeAvatar {
 			return ErrInvalidMessageSenderCombination
 		}
 
@@ -713,7 +710,6 @@ func IsValidMessageSenderSide(side MessageSenderSide) bool {
 func IsValidMessageSenderType(senderType MessageSenderType) bool {
 	switch senderType {
 	case MessageSenderTypeAvatar,
-		MessageSenderTypeMember,
 		MessageSenderTypeSystem:
 		return true
 	default:

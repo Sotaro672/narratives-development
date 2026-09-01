@@ -49,6 +49,14 @@ type Deps struct {
 
 	Order http.Handler
 
+	// trades (me)
+	// - GET  /mall/me/trades/order-items/{orderId}/{itemIndex}
+	// - GET  /mall/me/trades/{tradeId}
+	// - POST /mall/me/trades/{tradeId}/messages
+	// - POST /mall/me/trades/{tradeId}/read
+	// - GET  /mall/me/trades/{tradeId}/unread-count
+	Trade http.Handler
+
 	// market resales (auth + avatar required)
 	// - GET /mall/market/resales
 	// - GET /mall/market/resales/cursor
@@ -771,6 +779,24 @@ func Register(
 		"/mall/me/orders/",
 		deps.Order,
 		"Order(me)",
+		auth,
+		avatar,
+	)
+
+	// trades (me)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/trades",
+		deps.Trade,
+		"Trade(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/trades/",
+		deps.Trade,
+		"Trade(me)",
 		auth,
 		avatar,
 	)

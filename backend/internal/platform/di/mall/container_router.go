@@ -52,6 +52,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	var cartH http.Handler
 	var payH http.Handler
 	var orderH http.Handler
+	var tradeH http.Handler
 	var inquiryH http.Handler
 	var meAvatarsH http.Handler
 	var announcementH http.Handler
@@ -242,6 +243,14 @@ func Register(mux *http.ServeMux, cont *Container) {
 		)
 	}
 
+	// Trade
+	if cont.TradeQ != nil && cont.TradeMessageUC != nil {
+		tradeH = mallhandler.NewTradeHandler(
+			cont.TradeQ,
+			cont.TradeMessageUC,
+		)
+	}
+
 	// Inquiry
 	if cont.InquiryUC != nil && cont.InquiryQ != nil {
 		inquiryH = mallhandler.NewInquiryHandler(
@@ -340,6 +349,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 		Payment:      payH,
 		Order:        orderH,
+		Trade:        tradeH,
 		Inquiry:      inquiryH,
 		Announcement: announcementH,
 

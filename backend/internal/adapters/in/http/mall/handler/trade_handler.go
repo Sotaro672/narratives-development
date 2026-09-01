@@ -1,0 +1,497 @@
+// backend/internal/adapters/in/http/mall/handler/trade_handler.go
+package mallHandler
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	mallquery "narratives/internal/application/query/mall"
+	usecase "narratives/internal/application/usecase"
+	tradedom "narratives/internal/domain/trade"
+)
+
+// TradeHandler handles private Resale Trade communication in Mall.
+//
+// Trade is limited to secondary-market transactions:
+//
+//	buyer Avatar <-> seller Avatar
+//
+// Avatar identity is always resolved from AvatarContextMiddleware and is never
+// accepted from request body or query parameters.
+type TradeHandler struct {
+	query     *mallquery.TradeQuery
+	messageUC *usecase.TradeMessageUsecase
+}
+
+func NewTradeHandler(
+	query *mallquery.TradeQuery,
+	messageUC *usecase.TradeMessageUsecase,
+) http.Handler {
+	return &TradeHandler{
+		query:     query,
+		messageUC: messageUC,
+	}
+}
+
+// ServeHTTP is the routing entry point.
+//
+// Supported:
+//
+//	GET  /mall/me/trades/order-items/{orderId}/{itemIndex}
+//	GET  /mall/me/trades/{tradeId}
+//	POST /mall/me/trades/{tradeId}/messages
+//	POST /mall/me/trades/{tradeId}/read
+//	GET  /mall/me/trades/{tradeId}/unread-count
+func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if h == nil || h.query == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "trade query is nil",
+		})
+		return
+	}
+	if h.messageUC == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "trade message usecase is nil",
+		})
+		return
+	}
+
+	if r.URL.Path == "/mall/me/trades" || r.URL.Path == "/mall/me/trades/" {
+		methodNotAllowed(w)
+		return
+	}
+
+	if strings.HasPrefix(r.URL.Path, "/mall/me/trades/order-items/") {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.getByOrderItem(w, r)
+		return
+	}
+
+	if !strings.HasPrefix(r.URL.Path, "/mall/me/trades/") {
+		notFound(w)
+		return
+	}
+
+	rest := strings.TrimPrefix(r.URL.Path, "/mall/me/trades/")
+	parts := strings.Split(rest, "/")
+	if len(parts) == 0 || parts[0] == "" {
+		notFound(w)
+		return
+	}
+
+	tradeID := parts[0]
+
+	if len(parts) == 1 {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.getByID(w, r, tradeID)
+		return
+	}
+
+	if len(parts) != 2 || parts[1] == "" {
+		notFound(w)
+		return
+	}
+
+	switch parts[1] {
+	case "messages":
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w)
+			return
+		}
+		h.createMessage(w, r, tradeID)
+
+	case "read":
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w)
+			return
+		}
+		h.markRead(w, r, tradeID)
+
+	case "unread-count":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+		h.countUnread(w, r, tradeID)
+
+	default:
+		notFound(w)
+	}
+}
+
+type createTradeMessageRequest struct {
+	Content string `json:"content"`
+}
+
+// GET /mall/me/trades/order-items/{orderId}/{itemIndex}
+//
+// Resolves one Trade from its authoritative Order item identity and returns the
+// TradePage read model including messages.
+func (h *TradeHandler) getByOrderItem(w http.ResponseWriter, r *http.Request) {
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	rest := strings.TrimPrefix(
+		r.URL.Path,
+		"/mall/me/trades/order-items/",
+	)
+
+	parts := strings.Split(rest, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		badRequest(w, "invalid order item path")
+		return
+	}
+
+	orderID := parts[0]
+
+	itemIndex, err := strconv.Atoi(parts[1])
+	if err != nil || itemIndex < 0 {
+		badRequest(w, "invalid order item index")
+		return
+	}
+
+	messageLimit, beforeCreatedAt, afterCreatedAt, ok :=
+		parseTradeMessageListQuery(w, r)
+	if !ok {
+		return
+	}
+
+	detail, err := h.query.GetByOrderItem(
+		r.Context(),
+		mallquery.GetTradeByOrderItemInput{
+			AvatarID:        avatarID,
+			OrderID:         orderID,
+			OrderItemIndex:  itemIndex,
+			MessageLimit:    messageLimit,
+			BeforeCreatedAt: beforeCreatedAt,
+			AfterCreatedAt:  afterCreatedAt,
+		},
+	)
+	if err != nil {
+		writeTradeErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": detail,
+	})
+}
+
+// GET /mall/me/trades/{tradeId}
+//
+// Returns one TradePage read model when Trade ID is already known.
+func (h *TradeHandler) getByID(
+	w http.ResponseWriter,
+	r *http.Request,
+	tradeID string,
+) {
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	if tradeID == "" {
+		badRequest(w, "invalid trade id")
+		return
+	}
+
+	messageLimit, beforeCreatedAt, afterCreatedAt, ok :=
+		parseTradeMessageListQuery(w, r)
+	if !ok {
+		return
+	}
+
+	detail, err := h.query.GetByID(
+		r.Context(),
+		mallquery.GetTradeByIDInput{
+			AvatarID:        avatarID,
+			TradeID:         tradeID,
+			MessageLimit:    messageLimit,
+			BeforeCreatedAt: beforeCreatedAt,
+			AfterCreatedAt:  afterCreatedAt,
+		},
+	)
+	if err != nil {
+		writeTradeErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": detail,
+	})
+}
+
+// POST /mall/me/trades/{tradeId}/messages
+//
+// Body:
+//
+//	{
+//	  "content": "発送ありがとうございます"
+//	}
+//
+// SenderSide, SenderType and SenderID are never accepted from the client.
+// TradeMessageUsecase derives them from the authenticated Avatar and Trade.
+func (h *TradeHandler) createMessage(
+	w http.ResponseWriter,
+	r *http.Request,
+	tradeID string,
+) {
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	if tradeID == "" {
+		badRequest(w, "invalid trade id")
+		return
+	}
+
+	var req createTradeMessageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		badRequest(w, "invalid json")
+		return
+	}
+
+	if req.Content == "" {
+		badRequest(w, "content is required")
+		return
+	}
+
+	created, err := h.messageUC.CreateMessage(
+		r.Context(),
+		usecase.CreateTradeMessageInput{
+			TradeID:  tradeID,
+			AvatarID: avatarID,
+			Content:  req.Content,
+		},
+	)
+	if err != nil {
+		writeTradeErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"data": created,
+	})
+}
+
+// POST /mall/me/trades/{tradeId}/read
+//
+// Marks messages sent by the opposite side as read by the authenticated Avatar.
+func (h *TradeHandler) markRead(
+	w http.ResponseWriter,
+	r *http.Request,
+	tradeID string,
+) {
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	if tradeID == "" {
+		badRequest(w, "invalid trade id")
+		return
+	}
+
+	err := h.messageUC.MarkRead(
+		r.Context(),
+		usecase.MarkTradeMessagesReadInput{
+			TradeID:  tradeID,
+			AvatarID: avatarID,
+		},
+	)
+	if err != nil {
+		writeTradeErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]bool{
+		"success": true,
+	})
+}
+
+// GET /mall/me/trades/{tradeId}/unread-count
+//
+// Returns unread messages for the currently authenticated participant.
+func (h *TradeHandler) countUnread(
+	w http.ResponseWriter,
+	r *http.Request,
+	tradeID string,
+) {
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	if tradeID == "" {
+		badRequest(w, "invalid trade id")
+		return
+	}
+
+	count, err := h.messageUC.CountUnread(
+		r.Context(),
+		usecase.CountUnreadTradeMessagesInput{
+			TradeID:  tradeID,
+			AvatarID: avatarID,
+		},
+	)
+	if err != nil {
+		writeTradeErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]int{
+		"count": count,
+	})
+}
+
+func parseTradeMessageListQuery(
+	w http.ResponseWriter,
+	r *http.Request,
+) (
+	int,
+	*time.Time,
+	*time.Time,
+	bool,
+) {
+	limit := tradedom.DefaultMessageListLimit
+
+	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
+		value, err := strconv.Atoi(rawLimit)
+		if err != nil || value <= 0 {
+			badRequest(w, "invalid limit")
+			return 0, nil, nil, false
+		}
+
+		if value > tradedom.MaxMessageListLimit {
+			value = tradedom.MaxMessageListLimit
+		}
+
+		limit = value
+	}
+
+	beforeCreatedAt, ok := parseTradeMessageTimeQuery(
+		w,
+		r.URL.Query().Get("beforeCreatedAt"),
+		"beforeCreatedAt",
+	)
+	if !ok {
+		return 0, nil, nil, false
+	}
+
+	afterCreatedAt, ok := parseTradeMessageTimeQuery(
+		w,
+		r.URL.Query().Get("afterCreatedAt"),
+		"afterCreatedAt",
+	)
+	if !ok {
+		return 0, nil, nil, false
+	}
+
+	if beforeCreatedAt != nil &&
+		afterCreatedAt != nil &&
+		!afterCreatedAt.Before(*beforeCreatedAt) {
+		badRequest(w, "invalid message time range")
+		return 0, nil, nil, false
+	}
+
+	return limit, beforeCreatedAt, afterCreatedAt, true
+}
+
+func parseTradeMessageTimeQuery(
+	w http.ResponseWriter,
+	raw string,
+	field string,
+) (*time.Time, bool) {
+	if raw == "" {
+		return nil, true
+	}
+
+	value, err := time.Parse(
+		time.RFC3339Nano,
+		raw,
+	)
+	if err != nil {
+		badRequest(w, "invalid "+field)
+		return nil, false
+	}
+
+	value = value.UTC()
+	return &value, true
+}
+
+func writeTradeErr(
+	w http.ResponseWriter,
+	err error,
+) {
+	switch {
+	case err == nil:
+		return
+
+	case errors.Is(err, tradedom.ErrNotFound),
+		errors.Is(err, tradedom.ErrMessageNotFound):
+		notFound(w)
+
+	case errors.Is(err, mallquery.ErrTradeQueryAvatarIDEmpty),
+		errors.Is(err, usecase.ErrTradeMessageAvatarIDEmpty):
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "avatar context is required",
+		})
+
+	case errors.Is(err, mallquery.ErrTradeQueryUnsupportedTrade),
+		errors.Is(err, usecase.ErrTradeMessageUnsupportedTrade):
+		notFound(w)
+
+	case errors.Is(err, tradedom.ErrTradeAlreadyClosed):
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": err.Error(),
+		})
+
+	case errors.Is(err, tradedom.ErrMessageAlreadyExists),
+		errors.Is(err, tradedom.ErrAlreadyExists),
+		errors.Is(err, tradedom.ErrConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": err.Error(),
+		})
+
+	case errors.Is(err, tradedom.ErrInvalidID),
+		errors.Is(err, tradedom.ErrInvalidOrderID),
+		errors.Is(err, tradedom.ErrInvalidOrderItemIndex),
+		errors.Is(err, tradedom.ErrInvalidMessageID),
+		errors.Is(err, tradedom.ErrInvalidMessageTradeID),
+		errors.Is(err, tradedom.ErrInvalidMessageSenderSide),
+		errors.Is(err, tradedom.ErrInvalidMessageSenderType),
+		errors.Is(err, tradedom.ErrInvalidMessageSenderID),
+		errors.Is(err, tradedom.ErrInvalidMessageContent),
+		errors.Is(err, tradedom.ErrMessageContentOrImageRequired),
+		errors.Is(err, tradedom.ErrTooManyMessageImages),
+		errors.Is(err, tradedom.ErrInvalidMessageCreatedAt),
+		errors.Is(err, tradedom.ErrInvalidBuyerReadAt),
+		errors.Is(err, tradedom.ErrInvalidSellerReadAt),
+		errors.Is(err, tradedom.ErrInvalidStatus):
+		badRequest(w, err.Error())
+
+	case errors.Is(err, mallquery.ErrTradeQueryNotConfigured),
+		errors.Is(err, usecase.ErrTradeMessageUsecaseNotConfigured):
+		internalError(w, err.Error())
+
+	default:
+		internalError(w, "trade operation failed")
+	}
+}

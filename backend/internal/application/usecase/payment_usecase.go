@@ -6,7 +6,7 @@ package usecase
 - Paymentの取得・作成・部分更新を提供する。
 - Stripe webhook eventによるPayment status同期を提供する。
 - Refund stateの専用更新経路を提供する。
-- succeeded状態ではOrder.PaidとTradeを冪等に整合させる。
+- succeeded状態ではOrder.PaidとResale Tradeを冪等に整合させる。
 - succeededへの初回遷移時だけbest-effortの支払い後処理を実行する。
 
 前提:
@@ -37,7 +37,7 @@ Refund状態更新:
 
 支払い成功後の処理:
 0) order.Paid=true更新（必須・冪等）
-1) OrderItemごとのTrade起票（必須・冪等）
+1) 未キャンセルのresale OrderItemごとのTrade起票（対象がある場合のみ必須・冪等）
 2) resale status=sold更新（best-effort）
 3) resale購入通知コメント作成（best-effort）
 
@@ -252,7 +252,8 @@ func (u *PaymentUsecase) GetByPaymentID(
 //
 // StripeChargeID may be empty until Stripe has created a Charge.
 //
-// A Payment created as succeeded synchronizes Order.Paid and Trade immediately.
+// A Payment created as succeeded synchronizes Order.Paid immediately and,
+// when the Order contains an eligible Resale item, ensures its Trade.
 // Non-critical post-paid side effects are then executed once from this creation
 // path. Later succeeded webhook events still re-run the required synchronization
 // idempotently so missing Trade state can be repaired.
@@ -466,8 +467,9 @@ func (u *PaymentUsecase) UpdateRefundState(
 //
 // A duplicate event is returned as a successful no-op for Payment state.
 //
-// When the resulting Payment is succeeded, Order.Paid and Trade are ensured
-// on every call so a retry can repair missing required post-payment state.
+// When the resulting Payment is succeeded, Order.Paid is ensured on every call.
+// If the Order contains an eligible Resale item, its Trade is also ensured so a
+// retry can repair missing required post-payment state.
 // Best-effort post-paid processing is executed only when PostPaidRequired is true.
 func (u *PaymentUsecase) ApplyStripeEvent(
 	ctx context.Context,
@@ -540,10 +542,12 @@ func (u *PaymentUsecase) ApplyStripeEvent(
 // This method is intentionally idempotent and may run for duplicate succeeded
 // Stripe webhook events:
 //   - Order.Paid is set to true if necessary.
-//   - TradeUsecase ensures exactly one Trade per eligible Order item.
+//   - TradeUsecase is required only when the Order contains an eligible Resale
+//     item and ensures exactly one Trade per eligible Resale Order item.
 //
-// Trade creation is required transaction state, not a best-effort notification.
-// A failure is therefore returned to the caller so the webhook can be retried.
+// Primary List sales do not use Trade. Trade creation for Resale is required
+// transaction state, not a best-effort notification. A failure is therefore
+// returned to the caller so the webhook can be retried.
 func (u *PaymentUsecase) ensurePaidOrderAndTrades(
 	ctx context.Context,
 	payment *paymentdom.Payment,
@@ -551,9 +555,6 @@ func (u *PaymentUsecase) ensurePaidOrderAndTrades(
 	if u == nil ||
 		u.orderRepo == nil {
 		return nil, ErrPaymentOrderRepositoryMissing
-	}
-	if u.tradeUC == nil {
-		return nil, ErrPaymentTradeUsecaseMissing
 	}
 	if payment == nil ||
 		payment.Status != paymentdom.StatusSucceeded {
@@ -582,11 +583,17 @@ func (u *PaymentUsecase) ensurePaidOrderAndTrades(
 		return nil, ErrPaymentPaidOrderUnavailable
 	}
 
-	if err := u.tradeUC.EnsureForPaidOrder(
-		ctx,
-		*updatedOrder,
-	); err != nil {
-		return nil, err
+	if hasEligibleResaleOrderItem(*updatedOrder) {
+		if u.tradeUC == nil {
+			return nil, ErrPaymentTradeUsecaseMissing
+		}
+
+		if err := u.tradeUC.EnsureForPaidOrder(
+			ctx,
+			*updatedOrder,
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	return updatedOrder, nil
@@ -598,8 +605,8 @@ func (u *PaymentUsecase) ensurePaidOrderAndTrades(
 
 // handlePostPaidBestEffort runs non-critical post-paid side effects.
 //
-// Required state synchronization (Order.Paid and Trade creation) must already
-// have succeeded before this method is called.
+// Required state synchronization (Order.Paid and eligible Resale Trade creation)
+// must already have succeeded before this method is called.
 //
 // This method may only be called from:
 //  1. A successful initial Create whose Repository transaction also stores
@@ -719,6 +726,19 @@ func (u *PaymentUsecase) markResalesSoldByOrder(
 	}
 
 	return nil
+}
+
+func hasEligibleResaleOrderItem(order orderdom.Order) bool {
+	for _, item := range order.Items {
+		if item.IsCancelled {
+			continue
+		}
+		if item.Type == orderdom.OrderItemTypeResale {
+			return true
+		}
+	}
+
+	return false
 }
 
 func extractResaleIDsFromOrder(

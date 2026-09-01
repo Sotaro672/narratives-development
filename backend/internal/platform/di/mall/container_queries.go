@@ -33,6 +33,7 @@ type mallQueries struct {
 	orderQ        *mallquery.OrderQuery
 	historyQ      *mallquery.HistoryQuery
 	orderDetailQ  *mallquery.OrderDetailQuery
+	tradeQ        *mallquery.TradeQuery
 }
 
 func buildMallQueries(
@@ -54,6 +55,12 @@ func buildMallQueries(
 	}
 	if u.paymentUC == nil {
 		return nil, errors.New("di.mall: payment usecase is nil")
+	}
+	if r.tradeRepo == nil {
+		return nil, errors.New("di.mall: trade repository is nil")
+	}
+	if r.tradeMessageRepo == nil {
+		return nil, errors.New("di.mall: trade message repository is nil")
 	}
 
 	mallDisplayResolver := mallshared.NewDisplayResolver(
@@ -199,6 +206,11 @@ func buildMallQueries(
 		u.paymentUC,
 	)
 
+	tradeQ := mallquery.NewTradeQuery(
+		r.tradeRepo,
+		r.tradeMessageRepo,
+	)
+
 	return &mallQueries{
 		nameResolver:  nameResolver,
 		ownerResolveQ: ownerResolveQ,
@@ -215,6 +227,7 @@ func buildMallQueries(
 		orderQ:        orderQ,
 		historyQ:      historyQ,
 		orderDetailQ:  orderDetailQ,
+		tradeQ:        tradeQ,
 	}, nil
 }
 
@@ -238,4 +251,5 @@ func (q *mallQueries) applyToContainer(c *Container) {
 	c.OrderQ = q.orderQ
 	c.HistoryQ = q.historyQ
 	c.OrderDetailQ = q.orderDetailQ
+	c.TradeQ = q.tradeQ
 }

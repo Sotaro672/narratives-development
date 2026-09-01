@@ -43,6 +43,7 @@ type mallUsecases struct {
 	refundCompletionNotificationUC usecase.RefundCompletionNotificationUsecasePort
 	orderUC                        *usecase.OrderUsecase
 	tradeUC                        *usecase.TradeUsecase
+	tradeMessageUC                 *usecase.TradeMessageUsecase
 	inquiryUC                      *usecase.InquiryUsecase
 	returnRequestUC                *usecase.ReturnRequestUsecase
 	announcementUC                 *usecase.AnnouncementUsecase
@@ -76,6 +77,9 @@ func buildMallUsecases(
 	}
 	if r.tradeRepo == nil {
 		return nil, errors.New("di.mall: trade repository is nil")
+	}
+	if r.tradeMessageRepo == nil {
+		return nil, errors.New("di.mall: trade message repository is nil")
 	}
 
 	authUserReader := outfirebase.NewAuthUserReader(infra.FirebaseAuth)
@@ -211,6 +215,14 @@ func buildMallUsecases(
 	)
 	if tradeUC == nil {
 		return nil, errors.New("di.mall: trade usecase is nil")
+	}
+
+	tradeMessageUC := usecase.NewTradeMessageUsecase(
+		r.tradeRepo,
+		r.tradeMessageRepo,
+	)
+	if tradeMessageUC == nil {
+		return nil, errors.New("di.mall: trade message usecase is nil")
 	}
 
 	paymentUC := usecase.NewPaymentUsecase(
@@ -416,6 +428,7 @@ func buildMallUsecases(
 		refundCompletionNotificationUC: refundCompletionNotificationUC,
 		orderUC:                        orderUC,
 		tradeUC:                        tradeUC,
+		tradeMessageUC:                 tradeMessageUC,
 		inquiryUC:                      inquiryUC,
 		returnRequestUC:                returnRequestUC,
 		announcementUC:                 announcementUC,
@@ -452,6 +465,7 @@ func (u *mallUsecases) applyToContainer(c *Container) {
 	c.RefundCompletionNotificationUC = u.refundCompletionNotificationUC
 	c.OrderUC = u.orderUC
 	c.TradeUC = u.tradeUC
+	c.TradeMessageUC = u.tradeMessageUC
 	c.InquiryUC = u.inquiryUC
 	c.ReturnRequestUC = u.returnRequestUC
 	c.AnnouncementUC = u.announcementUC

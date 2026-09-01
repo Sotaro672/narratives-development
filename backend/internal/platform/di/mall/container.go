@@ -41,6 +41,7 @@ type Container struct {
 	RefundCompletionNotificationUC usecase.RefundCompletionNotificationUsecasePort
 	OrderUC                        *usecase.OrderUsecase
 	TradeUC                        *usecase.TradeUsecase
+	TradeMessageUC                 *usecase.TradeMessageUsecase
 	InquiryUC                      *usecase.InquiryUsecase
 	ReturnRequestUC                *usecase.ReturnRequestUsecase
 	AnnouncementUC                 *usecase.AnnouncementUsecase
@@ -69,6 +70,7 @@ type Container struct {
 	OrderQ        *mallquery.OrderQuery
 	HistoryQ      *mallquery.HistoryQuery
 	OrderDetailQ  *mallquery.OrderDetailQuery
+	TradeQ        *mallquery.TradeQuery
 
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 }
