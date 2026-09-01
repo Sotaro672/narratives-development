@@ -6,6 +6,7 @@ import InquiryListItem from "../features/inquiry/presentation/components/Inquiry
 import {
   useInquiryListPage,
   type ResaleChatListItem,
+  type TradeChatListItem,
 } from "../features/inquiry/presentation/hooks/useInquiryListPage";
 
 import "../styles/page-layout.css";
@@ -66,11 +67,24 @@ export default function ChatListPage() {
                 );
               }
 
+              if (item.chatKind === "resale") {
+                return (
+                  <ResaleListItem
+                    key={`resale:${item.resaleId}`}
+                    item={item}
+                    navigating={navigatingId === item.resaleId}
+                    onOpen={() => {
+                      void handleOpenChat(item);
+                    }}
+                  />
+                );
+              }
+
               return (
-                <ResaleListItem
-                  key={`resale:${item.resaleId}`}
+                <TradeListItem
+                  key={`trade:${item.id}`}
                   item={item}
-                  navigating={navigatingId === item.resaleId}
+                  navigating={navigatingId === item.id}
                   onOpen={() => {
                     void handleOpenChat(item);
                   }}
@@ -104,7 +118,9 @@ function ResaleListItem({
     ? `コメント ${item.commentCount} 件`
     : "";
   const imageUrl = item.imageUrl || item.tokenIcon;
-  const initial = getInitial(item.productName || item.tokenName || item.brandName);
+  const initial = getInitial(
+    item.productName || item.tokenName || item.brandName,
+  );
 
   const handleOpen = () => {
     if (navigating) {
@@ -210,6 +226,107 @@ function ResaleListItem({
   );
 }
 
+type TradeListItemProps = {
+  item: TradeChatListItem;
+  navigating: boolean;
+  onOpen: () => void;
+};
+
+function TradeListItem({
+  item,
+  navigating,
+  onOpen,
+}: TradeListItemProps) {
+  const hasAttention = item.unreadMessageCount > 0;
+  const title = "取引チャット";
+  const preview = getTradePreview(item);
+  const dateLabel = formatChatDate(item.latestActivityAt);
+  const statusLabel = getTradeStatusLabel(item.status);
+
+  const handleOpen = () => {
+    if (navigating) {
+      return;
+    }
+
+    onOpen();
+  };
+
+  return (
+    <article
+      className={
+        hasAttention
+          ? "chat-list-page__row chat-list-page__row--attention"
+          : "chat-list-page__row"
+      }
+      role="button"
+      tabIndex={0}
+      aria-label={`${title}を開く`}
+      aria-busy={navigating}
+      onClick={handleOpen}
+      onKeyDown={(event) => {
+        if (
+          navigating ||
+          (event.key !== "Enter" && event.key !== " ")
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        onOpen();
+      }}
+    >
+      <div
+        className="chat-list-page__avatar"
+        aria-hidden="true"
+      >
+        <span>取</span>
+      </div>
+
+      <div className="chat-list-page__body">
+        <div className="chat-list-page__head">
+          <div className="chat-list-page__title-wrap">
+            <h2 className="chat-list-page__title">
+              {title}
+            </h2>
+          </div>
+
+          {dateLabel ? (
+            <time
+              className="chat-list-page__date"
+              dateTime={item.latestActivityAt}
+            >
+              {dateLabel}
+            </time>
+          ) : null}
+        </div>
+
+        <div className="chat-list-page__content">
+          <p className="chat-list-page__preview">
+            {preview}
+          </p>
+
+          <div className="chat-list-page__meta">
+            <span className="chat-list-page__status">
+              {statusLabel}
+            </span>
+
+            {hasAttention ? (
+              <span
+                className="chat-list-page__badge-count"
+                aria-label={`未読 ${item.unreadMessageCount} 件`}
+              >
+                {item.unreadMessageCount > 99
+                  ? "99+"
+                  : item.unreadMessageCount}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function getResaleTitle(item: ResaleChatListItem): string {
   if (item.productName) {
     return `${item.productName}/再出品`;
@@ -244,6 +361,35 @@ function getResaleStatusLabel(
 
     case "sold":
       return "売却済";
+
+    default:
+      return "";
+  }
+}
+
+function getTradePreview(item: TradeChatListItem): string {
+  const content = item.latestMessage?.content?.trim();
+
+  if (content) {
+    return content;
+  }
+
+  if (item.latestMessage?.images?.length) {
+    return "画像が送信されました";
+  }
+
+  return "メッセージはありません";
+}
+
+function getTradeStatusLabel(
+  status: TradeChatListItem["status"],
+): string {
+  switch (status) {
+    case "active":
+      return "取引中";
+
+    case "closed":
+      return "取引終了";
 
     default:
       return "";
