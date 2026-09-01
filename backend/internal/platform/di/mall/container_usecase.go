@@ -341,6 +341,9 @@ func buildMallUsecases(
 			r.avatarRepo,
 			payoutAccountUC,
 		).
+		WithTradeUsecase(
+			tradeUC,
+		).
 		WithCancellationNotification(
 			authUserReader,
 			orderCancellationMailer,

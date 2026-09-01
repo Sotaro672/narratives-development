@@ -125,8 +125,22 @@ func (u *OrderUsecase) Create(
 		return orderdom.Order{}, err
 	}
 
-	// resale商品の注文受付が確定した時点で、出品者へ発注通知メールを送る。
-	// Orderは既に永続化済みのため、メール送信はbest-effortとする。
+	// Order起票時に、cancelされていないresale商品ごとのTradeを作成する。
+	// Trade作成はorderId + itemIndex単位で冪等に実行される。
+	if u.tradeUC == nil {
+		return orderdom.Order{}, ErrTradeUsecaseNotConfigured
+	}
+	if err := u.tradeUC.EnsureForOrder(ctx, created); err != nil {
+		return orderdom.Order{}, fmt.Errorf(
+			"order: ensure trades for order %s: %w",
+			created.ID,
+			err,
+		)
+	}
+
+	// resale商品の注文受付が確定し、Trade作成まで完了した時点で、
+	// 出品者へ発注通知メールを送る。
+	// OrderとTradeは既に永続化済みのため、メール送信はbest-effortとする。
 	u.sendResaleOrderNotificationsBestEffort(
 		ctx,
 		created,
@@ -191,7 +205,6 @@ func (u *OrderUsecase) sendResaleOrderNotificationsBestEffort(
 			item.Price,
 		)
 	}
-
 }
 
 // =======================

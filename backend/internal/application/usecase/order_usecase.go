@@ -32,6 +32,7 @@ type ResaleOrderNotificationMailerPort interface {
 // - /mall/me/orders は Order の取得・作成を担当する
 // - Invoice の作成は /mall/me/invoices の責務
 // - Payment の作成は /mall/me/payments の責務
+// - Trade は resale Order 起票時に作成する
 // - ReturnItem は返品申請のみを記録し、返金実行は担当しない
 // - Stripe Refund / Transfer Reversal は RefundUsecase の責務
 type OrderUsecase struct {
@@ -48,6 +49,7 @@ type OrderUsecase struct {
 	paymentMethodRepo    paymentmethoddom.RepositoryPort
 	shippingAddressRepo  shippingaddressdom.RepositoryPort
 	shippingQuoteUC      *ShippingQuoteUsecase
+	tradeUC              *TradeUsecase
 
 	authUserReader                applicationport.AuthUserReader
 	cancellationMailer            OrderCancellationMailerPort
@@ -111,6 +113,17 @@ func (u *OrderUsecase) WithResaleSellerRepositories(
 
 	u.avatarRepo = avatarRepo
 	u.payoutAccountUC = payoutAccountUC
+	return u
+}
+
+func (u *OrderUsecase) WithTradeUsecase(
+	tradeUC *TradeUsecase,
+) *OrderUsecase {
+	if u == nil {
+		return u
+	}
+
+	u.tradeUC = tradeUC
 	return u
 }
 
