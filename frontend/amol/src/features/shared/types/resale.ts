@@ -53,8 +53,8 @@ export type ResaleListingBase = {
   assetId: string;
   tokenBlueprintId: string;
   productId: string;
-  brandId?: string;
-  productBlueprintId?: string;
+  brandId: string;
+  productBlueprintId: string;
   avatarId: string;
   price: number;
   condition: ResaleCondition;
@@ -105,19 +105,13 @@ type ResaleCreateRequiredFields = Pick<
   | "description"
 >;
 
-type ResaleCreateOptionalFields = Pick<
-  ResaleListingBase,
-  "brandId" | "productBlueprintId"
->;
-
 type ResaleUpdateFields = Partial<
   Pick<ResaleListingBase, "price" | "condition" | "description">
 >;
 
-export type CreateResaleListingParams = ResaleCreateRequiredFields &
-  ResaleCreateOptionalFields & {
-    conditionImages: File[];
-  };
+export type CreateResaleListingParams = ResaleCreateRequiredFields & {
+  conditionImages: File[];
+};
 
 export type CreateResaleListingRecordParams = Omit<
   CreateResaleListingParams,

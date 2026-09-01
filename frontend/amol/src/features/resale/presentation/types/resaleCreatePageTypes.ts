@@ -11,10 +11,8 @@ import type {
 export type ResaleCreatePageLocationState = {
   assetId?: string;
   productId?: string;
-  brandId?: string;
   brandName?: string;
   productName?: string;
-  productBlueprintId?: string;
   tokenBlueprintId?: string;
   tokenName?: string;
   tokenIconUrl?: string;
@@ -24,10 +22,8 @@ export type ResaleCreatePageLocationState = {
 export type ResaleCreateTarget = {
   assetId: string;
   productId: string;
-  brandId: string;
   brandName: string;
   productName: string;
-  productBlueprintId: string;
   tokenBlueprintId: string;
   tokenName: string;
   tokenIconUrl: string;

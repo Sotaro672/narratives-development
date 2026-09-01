@@ -62,8 +62,6 @@ export async function createResaleListing(
     assetId: params.assetId,
     tokenBlueprintId: params.tokenBlueprintId,
     productId: params.productId,
-    brandId: params.brandId,
-    productBlueprintId: params.productBlueprintId,
     price: params.price,
     condition: params.condition,
     description: params.description,

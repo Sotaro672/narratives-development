@@ -44,10 +44,8 @@ const CREATE_RESALE_ERROR_MESSAGE = "出品に失敗しました。時間をお�
 const RESALE_LOCATION_STATE_KEYS = [
   "assetId",
   "productId",
-  "brandId",
   "brandName",
   "productName",
-  "productBlueprintId",
   "tokenBlueprintId",
   "tokenName",
   "tokenIconUrl",
@@ -76,14 +74,14 @@ function parseLocationState(value: unknown): ResaleCreatePageLocationState {
   return result;
 }
 
-function createResaleTarget(state: ResaleCreatePageLocationState): ResaleCreateTarget {
+function createResaleTarget(
+  state: ResaleCreatePageLocationState,
+): ResaleCreateTarget {
   return {
     assetId: textOrEmpty(state.assetId),
     productId: textOrEmpty(state.productId),
-    brandId: textOrEmpty(state.brandId),
     brandName: textOrEmpty(state.brandName),
     productName: textOrEmpty(state.productName),
-    productBlueprintId: textOrEmpty(state.productBlueprintId),
     tokenBlueprintId: textOrEmpty(state.tokenBlueprintId),
     tokenName: textOrEmpty(state.tokenName),
     tokenIconUrl: textOrEmpty(state.tokenIconUrl),
@@ -110,7 +108,9 @@ export function useResaleCreatePage() {
   const location = useLocation();
 
   const [price, setPrice] = useState("");
-  const [condition, setCondition] = useState<ResaleCondition>(DEFAULT_RESALE_CONDITION);
+  const [condition, setCondition] = useState<ResaleCondition>(
+    DEFAULT_RESALE_CONDITION,
+  );
   const [description, setDescription] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -258,8 +258,6 @@ export function useResaleCreatePage() {
           assetId: target.assetId,
           tokenBlueprintId: target.tokenBlueprintId,
           productId: target.productId,
-          brandId: target.brandId,
-          productBlueprintId: target.productBlueprintId,
           price: Number(price),
           condition,
           description,
