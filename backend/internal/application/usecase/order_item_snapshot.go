@@ -296,18 +296,23 @@ func (u *OrderUsecase) resolveResaleOrderItem(
 	if err != nil {
 		return orderdom.OrderItemSnapshot{}, err
 	}
-	if resale.ID != resaleID ||
-		resale.Status != resaledom.StatusListing ||
-		resale.AvatarID == "" ||
-		resale.ProductID == "" ||
-		resale.ProductBlueprintID == "" ||
-		resale.TokenBlueprintID == "" ||
-		resale.BrandID == "" ||
-		resale.Price <= 0 {
+
+	if resale.ID != resaleID {
 		return orderdom.OrderItemSnapshot{}, orderdom.ErrInvalidItemSnapshot
 	}
 
-	productBlueprintCategoryPath, consumptionTaxRate, err := u.resolveProductBlueprintTaxSnapshot(ctx, resale.ProductBlueprintID)
+	if err := resale.ValidateForPersist(); err != nil {
+		return orderdom.OrderItemSnapshot{}, orderdom.ErrInvalidItemSnapshot
+	}
+
+	if resale.Status != resaledom.StatusListing {
+		return orderdom.OrderItemSnapshot{}, orderdom.ErrInvalidItemSnapshot
+	}
+
+	productBlueprintCategoryPath, consumptionTaxRate, err := u.resolveProductBlueprintTaxSnapshot(
+		ctx,
+		resale.ProductBlueprintID,
+	)
 	if err != nil {
 		return orderdom.OrderItemSnapshot{}, err
 	}
@@ -317,10 +322,14 @@ func (u *OrderUsecase) resolveResaleOrderItem(
 		return orderdom.OrderItemSnapshot{}, err
 	}
 
-	brandRevenueSnapshot, err := u.resolveBrandRevenueSnapshotByProductBlueprintID(ctx, resale.ProductBlueprintID)
+	brandRevenueSnapshot, err := u.resolveBrandRevenueSnapshotByProductBlueprintID(
+		ctx,
+		resale.ProductBlueprintID,
+	)
 	if err != nil {
 		return orderdom.OrderItemSnapshot{}, err
 	}
+
 	if brandRevenueSnapshot.BrandID != resale.BrandID {
 		return orderdom.OrderItemSnapshot{}, orderdom.ErrInvalidItemSnapshot
 	}
