@@ -46,6 +46,11 @@ export type TradeChatListResponse = {
   items: TradeChatListItem[];
 };
 
+export type CancelTradeOrderItemParams = {
+  orderId: string;
+  orderItemIndex: number;
+};
+
 type TradeRequestInit = Omit<RequestInit, "body"> & {
   json?: unknown;
   query?: ApiQueryParams;
@@ -174,6 +179,24 @@ export async function fetchTradeById(
   );
 
   return result.data;
+}
+
+export async function cancelTradeOrderItem(
+  params: CancelTradeOrderItemParams,
+): Promise<void> {
+  const orderId = requireOrderId(params.orderId);
+  const orderItemIndex = requireOrderItemIndex(
+    params.orderItemIndex,
+  );
+
+  await fetchTradeWithAuth<unknown>(
+    `/mall/me/orders/${encodeURIComponent(
+      orderId,
+    )}/items/${orderItemIndex}/cancel`,
+    {
+      method: "PATCH",
+    },
+  );
 }
 
 export async function createTradeMessage(

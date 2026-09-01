@@ -23,17 +23,20 @@ import (
 // Avatar identity is always resolved from AvatarContextMiddleware and is never
 // accepted from request body or query parameters.
 type TradeHandler struct {
-	query     *mallquery.TradeQuery
-	messageUC *usecase.TradeMessageUsecase
+	query      *mallquery.TradeQuery
+	messageUC  *usecase.TradeMessageUsecase
+	dispatchUC *usecase.ResaleTradeDispatchUsecase
 }
 
 func NewTradeHandler(
 	query *mallquery.TradeQuery,
 	messageUC *usecase.TradeMessageUsecase,
+	dispatchUC *usecase.ResaleTradeDispatchUsecase,
 ) http.Handler {
 	return &TradeHandler{
-		query:     query,
-		messageUC: messageUC,
+		query:      query,
+		messageUC:  messageUC,
+		dispatchUC: dispatchUC,
 	}
 }
 
@@ -47,6 +50,7 @@ func NewTradeHandler(
 //	POST /mall/me/trades/{tradeId}/messages
 //	POST /mall/me/trades/{tradeId}/read
 //	GET  /mall/me/trades/{tradeId}/unread-count
+//	POST /mall/me/trades/{tradeId}/dispatch
 func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -133,6 +137,13 @@ func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.countUnread(w, r, tradeID)
+
+	case "dispatch":
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w)
+			return
+		}
+		h.dispatch(w, r, tradeID)
 
 	default:
 		notFound(w)
@@ -391,6 +402,59 @@ func (h *TradeHandler) countUnread(
 	})
 }
 
+// POST /mall/me/trades/{tradeId}/dispatch
+//
+// Dispatches the Resale Order item represented by the Trade.
+//
+// SellerAvatarID is never accepted from the client. The authenticated Avatar
+// from AvatarContextMiddleware is used as the seller identity.
+//
+// The usecase performs:
+//   - Trade seller authorization
+//   - authoritative Order item validation
+//   - off-session payment
+//   - SalesReceivable pending creation
+//   - Order item dispatch state update
+func (h *TradeHandler) dispatch(
+	w http.ResponseWriter,
+	r *http.Request,
+	tradeID string,
+) {
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	if tradeID == "" {
+		badRequest(w, "invalid trade id")
+		return
+	}
+
+	if h == nil || h.dispatchUC == nil {
+		internalError(
+			w,
+			"resale trade dispatch usecase is nil",
+		)
+		return
+	}
+
+	result, err := h.dispatchUC.Dispatch(
+		r.Context(),
+		usecase.DispatchResaleTradeInput{
+			TradeID:        tradeID,
+			SellerAvatarID: avatarID,
+		},
+	)
+	if err != nil {
+		writeTradeDispatchErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": result,
+	})
+}
+
 func parseTradeMessageListQuery(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -466,6 +530,33 @@ func parseTradeMessageTimeQuery(
 	return &value, true
 }
 
+func writeTradeDispatchErr(
+	w http.ResponseWriter,
+	err error,
+) {
+	switch {
+	case err == nil:
+		return
+
+	case errors.Is(err, tradedom.ErrNotFound):
+		notFound(w)
+
+	case errors.Is(err, tradedom.ErrConflict),
+		errors.Is(err, tradedom.ErrTradeAlreadyClosed),
+		errors.Is(err, usecase.ErrPaymentFlowDispatchNotSucceeded):
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": err.Error(),
+		})
+
+	case errors.Is(err, tradedom.ErrInvalidID),
+		errors.Is(err, tradedom.ErrInvalidSellerAvatarID):
+		badRequest(w, err.Error())
+
+	default:
+		writeOrderErr(w, err)
+	}
+}
+
 func writeTradeErr(
 	w http.ResponseWriter,
 	err error,
@@ -503,6 +594,7 @@ func writeTradeErr(
 	case errors.Is(err, tradedom.ErrInvalidID),
 		errors.Is(err, tradedom.ErrInvalidOrderID),
 		errors.Is(err, tradedom.ErrInvalidOrderItemIndex),
+		errors.Is(err, tradedom.ErrInvalidSellerAvatarID),
 		errors.Is(err, tradedom.ErrInvalidMessageID),
 		errors.Is(err, tradedom.ErrInvalidMessageTradeID),
 		errors.Is(err, tradedom.ErrInvalidMessageSenderSide),

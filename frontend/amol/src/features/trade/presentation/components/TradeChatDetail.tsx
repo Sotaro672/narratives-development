@@ -7,6 +7,7 @@ import Layout from "../../../../components/layout/Layout";
 import { formatDateTime } from "../../../../components/utils/date";
 
 import {
+  cancelTradeOrderItem,
   createTradeMessage,
   fetchTradeById,
   markTradeMessagesAsRead,
@@ -16,6 +17,8 @@ import type {
   TradeDetail,
   TradeMessage,
 } from "../../../shared/types/trade";
+
+import TradeOrderActionPrompt from "./TradeOrderActionPrompt";
 
 const MESSAGE_LIMIT = 100;
 
@@ -72,6 +75,9 @@ export default function TradeChatDetail({
   const [replyContent, setReplyContent] = useState("");
   const [replyError, setReplyError] = useState("");
   const [postingReply, setPostingReply] = useState(false);
+
+  const [orderActionProcessing, setOrderActionProcessing] = useState(false);
+  const [orderActionError, setOrderActionError] = useState("");
 
   const loadThread = useCallback(async (): Promise<void> => {
     if (!normalizedTradeId) {
@@ -149,11 +155,18 @@ export default function TradeChatDetail({
 
   const canSubmitReply = /\S/u.test(replyContent);
 
+  const shouldShowOrderAction =
+    trade?.viewerSide === "buyer" &&
+    trade.status === "active" &&
+    !trade.isCancelled &&
+    !trade.isDispatched;
+
   const replyActionDisabled =
     loading ||
     !trade ||
     trade.status !== "active" ||
-    postingReply;
+    postingReply ||
+    orderActionProcessing;
 
   const openReplyModal = useCallback(() => {
     if (replyActionDisabled) {
@@ -177,6 +190,7 @@ export default function TradeChatDetail({
   const submitReply = useCallback(async (): Promise<void> => {
     if (
       postingReply ||
+      orderActionProcessing ||
       !trade ||
       trade.status !== "active" ||
       !normalizedTradeId
@@ -231,8 +245,47 @@ export default function TradeChatDetail({
     }
   }, [
     normalizedTradeId,
+    orderActionProcessing,
     postingReply,
     replyContent,
+    trade,
+  ]);
+
+  const handleOrderAction = useCallback(async (): Promise<void> => {
+    if (
+      orderActionProcessing ||
+      !trade ||
+      trade.viewerSide !== "buyer" ||
+      trade.status !== "active" ||
+      trade.isCancelled ||
+      trade.isDispatched
+    ) {
+      return;
+    }
+
+    setOrderActionProcessing(true);
+    setOrderActionError("");
+
+    try {
+      await cancelTradeOrderItem({
+        orderId: trade.orderId,
+        orderItemIndex: trade.orderItemIndex,
+      });
+
+      await loadThread();
+    } catch (caught) {
+      setOrderActionError(
+        getErrorMessage(
+          caught,
+          "注文のキャンセルに失敗しました。",
+        ),
+      );
+    } finally {
+      setOrderActionProcessing(false);
+    }
+  }, [
+    loadThread,
+    orderActionProcessing,
     trade,
   ]);
 
@@ -283,7 +336,7 @@ export default function TradeChatDetail({
                   メッセージ一覧
                 </h3>
 
-                {sortedMessages.length === 0 ? (
+                {sortedMessages.length === 0 && !shouldShowOrderAction ? (
                   <div className="chat-detail-page__no-replies">
                     まだメッセージはありません。
                   </div>
@@ -296,6 +349,17 @@ export default function TradeChatDetail({
                         viewerSide={trade.viewerSide}
                       />
                     ))}
+
+                    {shouldShowOrderAction ? (
+                      <TradeOrderActionPrompt
+                        viewerSide={trade.viewerSide}
+                        processing={orderActionProcessing}
+                        error={orderActionError}
+                        onAction={() => {
+                          void handleOrderAction();
+                        }}
+                      />
+                    ) : null}
                   </div>
                 )}
               </div>

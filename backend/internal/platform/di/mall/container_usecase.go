@@ -44,6 +44,7 @@ type mallUsecases struct {
 	orderUC                        *usecase.OrderUsecase
 	tradeUC                        *usecase.TradeUsecase
 	tradeMessageUC                 *usecase.TradeMessageUsecase
+	resaleTradeDispatchUC          *usecase.ResaleTradeDispatchUsecase
 	inquiryUC                      *usecase.InquiryUsecase
 	returnRequestUC                *usecase.ReturnRequestUsecase
 	announcementUC                 *usecase.AnnouncementUsecase
@@ -396,6 +397,19 @@ func buildMallUsecases(
 		infra.PaymentMethodGateway,
 	)
 
+	resaleTradeDispatchUC := usecase.NewResaleTradeDispatchUsecase(
+		usecase.NewResaleTradeDispatchUsecaseInput{
+			TradeRepository:    r.tradeRepo,
+			OrderRepository:    r.orderRepo,
+			PaymentFlowUsecase: paymentFlowUC,
+			PaymentUsecase:     paymentUC,
+			SettlementUsecase:  settlementUC,
+		},
+	)
+	if resaleTradeDispatchUC == nil {
+		return nil, errors.New("di.mall: resale trade dispatch usecase is nil")
+	}
+
 	inventoryUC := usecase.NewInventoryUsecase(
 		r.inventoryRepo,
 	)
@@ -441,6 +455,7 @@ func buildMallUsecases(
 		orderUC:                        orderUC,
 		tradeUC:                        tradeUC,
 		tradeMessageUC:                 tradeMessageUC,
+		resaleTradeDispatchUC:          resaleTradeDispatchUC,
 		inquiryUC:                      inquiryUC,
 		returnRequestUC:                returnRequestUC,
 		announcementUC:                 announcementUC,
@@ -478,6 +493,7 @@ func (u *mallUsecases) applyToContainer(c *Container) {
 	c.OrderUC = u.orderUC
 	c.TradeUC = u.tradeUC
 	c.TradeMessageUC = u.tradeMessageUC
+	c.ResaleTradeDispatchUC = u.resaleTradeDispatchUC
 	c.InquiryUC = u.inquiryUC
 	c.ReturnRequestUC = u.returnRequestUC
 	c.AnnouncementUC = u.announcementUC
