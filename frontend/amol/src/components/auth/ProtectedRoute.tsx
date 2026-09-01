@@ -172,6 +172,11 @@ export default function ProtectedRoute({
   const isAvatarPage =
     location.pathname === "/avatar";
 
+  const redirectPath =
+    location.pathname +
+    location.search +
+    location.hash;
+
   useEffect(() => {
     const auth = getAuth();
 
@@ -265,7 +270,17 @@ export default function ProtectedRoute({
   }
 
   if (!authState.user) {
-    return <>{children}</>;
+    return (
+      <Navigate
+        to={{
+          pathname: "/signin",
+          search: `?redirect=${encodeURIComponent(
+            redirectPath,
+          )}`,
+        }}
+        replace
+      />
+    );
   }
 
   if (

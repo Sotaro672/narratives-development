@@ -1,6 +1,10 @@
 // frontend/amol/src/pages/SignInPage.tsx
+
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import {
+  useNavigate,
+  useSearchParams,
+} from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
 
 import "../styles/page-layout.css";
@@ -12,8 +16,24 @@ import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import { auth } from "../lib/firebase";
 
+function resolveRedirectPath(
+  redirect: string | null,
+): string {
+  if (
+    !redirect ||
+    !redirect.startsWith("/") ||
+    redirect.startsWith("//")
+  ) {
+    return "/lists";
+  }
+
+  return redirect;
+}
+
 export default function SignInPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,8 +49,20 @@ export default function SignInPage() {
 
     try {
       setLoading(true);
-      await signInWithEmailAndPassword(auth, email, password);
-      navigate("/lists");
+
+      await signInWithEmailAndPassword(
+        auth,
+        email,
+        password,
+      );
+
+      const redirectPath = resolveRedirectPath(
+        searchParams.get("redirect"),
+      );
+
+      navigate(redirectPath, {
+        replace: true,
+      });
     } catch (e) {
       if (e instanceof Error) {
         setError(e.message);
@@ -43,7 +75,12 @@ export default function SignInPage() {
   };
 
   return (
-    <Layout title="AMOL" showBackButton mode="signin" backTo="/">
+    <Layout
+      title="AMOL"
+      showBackButton
+      mode="signin"
+      backTo="/"
+    >
       <section className="signin-page-section">
         <div className="signin-page-section__inner">
           <p className="page-description signin-page-description">
@@ -71,7 +108,11 @@ export default function SignInPage() {
               fullWidth
             />
 
-            {error ? <p className="form-error-text">{error}</p> : null}
+            {error ? (
+              <p className="form-error-text">
+                {error}
+              </p>
+            ) : null}
 
             <button
               type="button"
@@ -91,7 +132,11 @@ export default function SignInPage() {
           </div>
 
           <div className="signin-page-actions">
-            <Button variant="primary" onClick={handleSignIn} disabled={loading}>
+            <Button
+              variant="primary"
+              onClick={handleSignIn}
+              disabled={loading}
+            >
               {loading ? "ログイン中..." : "ログイン"}
             </Button>
           </div>

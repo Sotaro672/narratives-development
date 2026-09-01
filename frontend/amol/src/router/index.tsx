@@ -39,6 +39,7 @@ import ScanResultPage from "../pages/ScanResultPage";
 import InquiryPage from "../pages/InquiryCreatePage";
 import ChatListPage from "../pages/ChatListPage";
 import ChatDetailPage from "../pages/ChatDetailPage";
+import TradeChatRedirectPage from "../pages/TradeChatRedirectPage";
 import WalletPage from "../pages/WalletPage";
 import PublicWalletPage from "../pages/PublicWalletPage";
 import ContentsPage from "../pages/ContentsPage";
@@ -265,6 +266,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <ChatDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/chats/trades/order-items/:orderId/:itemIndex",
+    element: (
+      <ProtectedRoute>
+        <TradeChatRedirectPage />
       </ProtectedRoute>
     ),
   },
