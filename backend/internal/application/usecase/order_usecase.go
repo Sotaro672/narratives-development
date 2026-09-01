@@ -25,6 +25,7 @@ type OrderCancellationMailerPort interface {
 
 type ResaleOrderNotificationMailerPort interface {
 	SendResaleOrderNotification(ctx context.Context, toEmail string, orderID string, itemIndex int, resaleID string, price int) error
+	SendResaleOrderCancellationNotification(ctx context.Context, toEmail string, orderID string, itemIndex int, resaleID string) error
 }
 
 // OrderUsecase orchestrates order operations.

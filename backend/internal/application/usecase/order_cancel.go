@@ -108,6 +108,12 @@ func (u *OrderUsecase) CancelItem(
 			order,
 			in.ItemIndex,
 		)
+
+		u.sendResaleOrderCancellationNotificationBestEffort(
+			ctx,
+			order,
+			in.ItemIndex,
+		)
 	}
 
 	if targetItem.Type == orderdom.OrderItemTypeList {
@@ -206,4 +212,47 @@ func (u *OrderUsecase) sendCancellationReceiptBestEffort(
 			err,
 		)
 	}
+}
+
+func (u *OrderUsecase) sendResaleOrderCancellationNotificationBestEffort(
+	ctx context.Context,
+	order orderdom.Order,
+	itemIndex int,
+) {
+	if u == nil ||
+		u.authUserReader == nil ||
+		u.resaleOrderNotificationMailer == nil {
+		return
+	}
+
+	if itemIndex < 0 || itemIndex >= len(order.Items) {
+		return
+	}
+
+	item := order.Items[itemIndex]
+	if item.Type != orderdom.OrderItemTypeResale {
+		return
+	}
+
+	sellerUserID := item.SellerSnapshot.UserID
+	resaleID := item.ResaleID
+	if sellerUserID == "" || resaleID == "" {
+		return
+	}
+
+	toEmail, err := u.authUserReader.GetEmailByUID(
+		ctx,
+		sellerUserID,
+	)
+	if err != nil || toEmail == "" {
+		return
+	}
+
+	_ = u.resaleOrderNotificationMailer.SendResaleOrderCancellationNotification(
+		ctx,
+		toEmail,
+		order.ID,
+		itemIndex,
+		resaleID,
+	)
 }

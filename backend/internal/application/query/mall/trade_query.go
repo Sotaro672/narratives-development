@@ -76,8 +76,11 @@ type TradeListResult struct {
 	Items []TradeListItem `json:"items"`
 }
 
-// ListForAvatar returns all Resale Trades in which the authenticated Avatar
+// ListForAvatar returns active Resale Trades in which the authenticated Avatar
 // participates as buyer or seller.
+//
+// Cancelled Trade Order items are excluded from ChatListPage. Cancellation is
+// read from the authoritative Order item rather than duplicated on Trade.
 //
 // The repository resolves both participant roles. This query enriches each
 // Trade with viewer-side information, latest message, unread count and latest
@@ -86,7 +89,10 @@ func (q *TradeQuery) ListForAvatar(
 	ctx context.Context,
 	avatarID string,
 ) (TradeListResult, error) {
-	if q == nil || q.tradeRepo == nil || q.messageRepo == nil {
+	if q == nil ||
+		q.tradeRepo == nil ||
+		q.messageRepo == nil ||
+		q.orderRepo == nil {
 		return TradeListResult{}, ErrTradeQueryNotConfigured
 	}
 	if avatarID == "" {
@@ -103,6 +109,17 @@ func (q *TradeQuery) ListForAvatar(
 		viewerSide, err := resolveTradeViewerSide(trade, avatarID)
 		if err != nil {
 			return TradeListResult{}, err
+		}
+
+		orderItemState, err := q.getTradeOrderItemState(
+			ctx,
+			trade,
+		)
+		if err != nil {
+			return TradeListResult{}, err
+		}
+		if orderItemState.IsCancelled {
+			continue
 		}
 
 		latestMessage, err := q.getLatestMessage(ctx, trade.ID)

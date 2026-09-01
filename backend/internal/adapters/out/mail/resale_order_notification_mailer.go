@@ -7,10 +7,19 @@ import (
 	"strings"
 )
 
-const resaleOrderNotificationSubject = "【AMOL】出品商品に注文が入りました"
+const (
+	resaleOrderNotificationSubject             = "【AMOL】出品商品に注文が入りました"
+	resaleOrderCancellationNotificationSubject = "【AMOL】注文がキャンセルされました"
+)
 
 type ResaleOrderNotificationEmailClient interface {
-	Send(ctx context.Context, from string, to string, subject string, body string) error
+	Send(
+		ctx context.Context,
+		from string,
+		to string,
+		subject string,
+		body string,
+	) error
 }
 
 type ResaleOrderNotificationMailer struct {
@@ -98,6 +107,58 @@ func (m *ResaleOrderNotificationMailer) SendResaleOrderNotification(
 	return nil
 }
 
+func (m *ResaleOrderNotificationMailer) SendResaleOrderCancellationNotification(
+	ctx context.Context,
+	toEmail string,
+	orderID string,
+	itemIndex int,
+	resaleID string,
+) error {
+	if m == nil {
+		return fmt.Errorf("resale order notification mailer is nil")
+	}
+	if m.client == nil {
+		return fmt.Errorf("resale order notification email client is not configured")
+	}
+	if m.fromAddress == "" {
+		return fmt.Errorf("from address is empty")
+	}
+	if toEmail == "" {
+		return fmt.Errorf("to email is empty")
+	}
+	if orderID == "" {
+		return fmt.Errorf("order id is empty")
+	}
+	if itemIndex < 0 {
+		return fmt.Errorf("item index is invalid")
+	}
+	if resaleID == "" {
+		return fmt.Errorf("resale id is empty")
+	}
+
+	body := buildResaleOrderCancellationNotificationMailBody(
+		orderID,
+		itemIndex,
+		resaleID,
+	)
+
+	if err := m.client.Send(
+		ctx,
+		m.fromAddress,
+		toEmail,
+		resaleOrderCancellationNotificationSubject,
+		body,
+	); err != nil {
+		return fmt.Errorf(
+			"send resale order cancellation notification failed: to=%s: %w",
+			toEmail,
+			err,
+		)
+	}
+
+	return nil
+}
+
 func buildResaleOrderNotificationMailBody(
 	orderID string,
 	resaleID string,
@@ -116,6 +177,27 @@ func buildResaleOrderNotificationMailBody(
 	builder.WriteString(chatURL)
 	builder.WriteString("\n\n")
 	builder.WriteString("注文内容をご確認のうえ、発送の準備をお願いいたします。\n\n")
+	builder.WriteString("本メールは自動送信です。\n\n")
+	builder.WriteString("--\n")
+	builder.WriteString("AMOL")
+
+	return builder.String()
+}
+
+func buildResaleOrderCancellationNotificationMailBody(
+	orderID string,
+	itemIndex int,
+	resaleID string,
+) string {
+	var builder strings.Builder
+
+	builder.WriteString("購入者が注文をキャンセルしました。\n\n")
+	builder.WriteString("注文情報\n")
+	builder.WriteString(fmt.Sprintf("注文ID: %s\n", orderID))
+	builder.WriteString(fmt.Sprintf("出品ID: %s\n", resaleID))
+	builder.WriteString(fmt.Sprintf("注文内の商品: %d\n", itemIndex+1))
+	builder.WriteString("\n")
+	builder.WriteString("この注文について発送する必要はありません。\n\n")
 	builder.WriteString("本メールは自動送信です。\n\n")
 	builder.WriteString("--\n")
 	builder.WriteString("AMOL")
