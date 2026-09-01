@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 
 import Layout from "../../../../components/layout/Layout";
 import { formatDateTime } from "../../../../components/utils/date";
@@ -65,6 +66,7 @@ export default function TradeChatDetail({
   tradeId,
   onBack,
 }: TradeChatDetailProps) {
+  const navigate = useNavigate();
   const normalizedTradeId = tradeId.trim();
 
   const [trade, setTrade] = useState<TradeDetail | null>(null);
@@ -156,7 +158,7 @@ export default function TradeChatDetail({
   const canSubmitReply = /\S/u.test(replyContent);
 
   const shouldShowOrderAction =
-    trade?.viewerSide === "buyer" &&
+    !!trade &&
     trade.status === "active" &&
     !trade.isCancelled &&
     !trade.isDispatched;
@@ -255,16 +257,24 @@ export default function TradeChatDetail({
     if (
       orderActionProcessing ||
       !trade ||
-      trade.viewerSide !== "buyer" ||
       trade.status !== "active" ||
       trade.isCancelled ||
-      trade.isDispatched
+      trade.isDispatched ||
+      !normalizedTradeId
     ) {
       return;
     }
 
-    setOrderActionProcessing(true);
     setOrderActionError("");
+
+    if (trade.viewerSide === "seller") {
+      navigate(
+        `/dispatch/trades/${encodeURIComponent(normalizedTradeId)}`,
+      );
+      return;
+    }
+
+    setOrderActionProcessing(true);
 
     try {
       await cancelTradeOrderItem({
@@ -285,6 +295,8 @@ export default function TradeChatDetail({
     }
   }, [
     loadThread,
+    navigate,
+    normalizedTradeId,
     orderActionProcessing,
     trade,
   ]);

@@ -538,12 +538,22 @@ func writeTradeDispatchErr(
 	case err == nil:
 		return
 
-	case errors.Is(err, tradedom.ErrNotFound):
+	case errors.Is(err, tradedom.ErrNotFound),
+		errors.Is(err, usecase.ErrPaymentFlowOrderNotFound):
 		notFound(w)
 
 	case errors.Is(err, tradedom.ErrConflict),
 		errors.Is(err, tradedom.ErrTradeAlreadyClosed),
-		errors.Is(err, usecase.ErrPaymentFlowDispatchNotSucceeded):
+		errors.Is(err, usecase.ErrPaymentFlowOrderAlreadyPaid),
+		errors.Is(err, usecase.ErrPaymentFlowPaymentMethodMismatch),
+		errors.Is(err, usecase.ErrPaymentFlowDispatchRequiresAction),
+		errors.Is(err, usecase.ErrPaymentFlowDispatchProcessing),
+		errors.Is(err, usecase.ErrPaymentFlowDispatchPending),
+		errors.Is(err, usecase.ErrPaymentFlowDispatchNotSucceeded),
+		errors.Is(err, usecase.ErrPaymentFlowDispatchPaymentMismatch),
+		errors.Is(err, usecase.ErrPaymentFlowDispatchPaidStateInvalid),
+		errors.Is(err, usecase.ErrPaymentFlowStripePaymentIntentFailed),
+		errors.Is(err, usecase.ErrPaymentFlowStripePaymentIntentCanceled):
 		writeJSON(w, http.StatusConflict, map[string]string{
 			"error": err.Error(),
 		})

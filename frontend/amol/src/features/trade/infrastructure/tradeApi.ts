@@ -199,6 +199,17 @@ export async function cancelTradeOrderItem(
   );
 }
 
+export async function dispatchTrade(
+  tradeId: string,
+): Promise<void> {
+  await fetchTradeWithAuth<unknown>(
+    `${buildTradePath(tradeId)}/dispatch`,
+    {
+      method: "POST",
+    },
+  );
+}
+
 export async function createTradeMessage(
   params: CreateTradeMessageParams,
 ): Promise<TradeMessage> {

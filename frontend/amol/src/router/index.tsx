@@ -40,6 +40,7 @@ import InquiryPage from "../pages/InquiryCreatePage";
 import ChatListPage from "../pages/ChatListPage";
 import ChatDetailPage from "../pages/ChatDetailPage";
 import TradeChatRedirectPage from "../pages/TradeChatRedirectPage";
+import DispatchPage from "../pages/DispatchPage";
 import WalletPage from "../pages/WalletPage";
 import PublicWalletPage from "../pages/PublicWalletPage";
 import ContentsPage from "../pages/ContentsPage";
@@ -282,6 +283,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <ChatDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/dispatch/trades/:tradeId",
+    element: (
+      <ProtectedRoute>
+        <DispatchPage />
       </ProtectedRoute>
     ),
   },
