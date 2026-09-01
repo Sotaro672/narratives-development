@@ -8,6 +8,7 @@ import (
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
 	tradedom "narratives/internal/domain/trade"
+	transportationdom "narratives/internal/domain/transportation"
 )
 
 var (
@@ -48,6 +49,8 @@ type NewResaleTradeDispatchUsecaseInput struct {
 type DispatchResaleTradeInput struct {
 	TradeID        string
 	SellerAvatarID string
+	Carrier        transportationdom.Carrier
+	BoxSize        int
 }
 
 type DispatchResaleTradeResult struct {
@@ -164,7 +167,37 @@ func (u *ResaleTradeDispatchUsecase) Dispatch(
 			orderdom.ErrConflict
 	}
 
-	// Orderに保存されたPaymentMethodSnapshotを使ってoff-session決済する。
+	if !transportationdom.IsValidResaleShippingCarrier(in.Carrier) {
+		return DispatchResaleTradeResult{},
+			transportationdom.ErrInvalidCarrier
+	}
+	if !transportationdom.IsValidResaleBoxSize(in.BoxSize) {
+		return DispatchResaleTradeResult{},
+			transportationdom.ErrInvalidResaleBoxSize
+	}
+
+	shippingQuote, err := transportationdom.CalculateResaleFlatRate(
+		in.Carrier,
+		in.BoxSize,
+	)
+	if err != nil {
+		return DispatchResaleTradeResult{}, err
+	}
+
+	order, err = u.ensureResaleShippingQuote(
+		ctx,
+		order,
+		item,
+		shippingQuote,
+	)
+	if err != nil {
+		return DispatchResaleTradeResult{}, err
+	}
+
+	// Orderに保存されたPaymentMethodSnapshotと、
+	// backendで確定・保存したShippingQuoteSnapshotを使って
+	// off-session決済する。
+	//
 	// succeeded Paymentが既に存在する場合は既存Paymentを再利用するため、
 	// 同一Tradeに対する再実行でも二重課金しない。
 	if err := u.paymentFlowUC.EnsureOrderPaidForDispatch(
@@ -272,6 +305,130 @@ func (u *ResaleTradeDispatchUsecase) Dispatch(
 		Item:    updatedOrder.Items[trade.OrderItemIndex],
 		Changed: true,
 	}, nil
+}
+
+func (u *ResaleTradeDispatchUsecase) ensureResaleShippingQuote(
+	ctx context.Context,
+	order orderdom.Order,
+	item orderdom.OrderItemSnapshot,
+	quote transportationdom.Quote,
+) (orderdom.Order, error) {
+	if quote.Carrier == "" ||
+		!transportationdom.IsValidResaleShippingCarrier(quote.Carrier) {
+		return orderdom.Order{},
+			transportationdom.ErrInvalidCarrier
+	}
+	if !transportationdom.IsValidResaleBoxSize(quote.Size) {
+		return orderdom.Order{},
+			transportationdom.ErrInvalidResaleBoxSize
+	}
+	if quote.Amount <= 0 {
+		return orderdom.Order{},
+			transportationdom.ErrInvalidRateAmount
+	}
+
+	maxInt := int64(^uint(0) >> 1)
+	if quote.Amount > maxInt {
+		return orderdom.Order{},
+			transportationdom.ErrInvalidRateAmount
+	}
+
+	amount := int(quote.Amount)
+	quoteItems := append(
+		[]orderdom.ShippingQuoteItemSnapshot(nil),
+		order.ShippingQuoteSnapshot.Items...,
+	)
+
+	targetIndex := -1
+
+	for i := range quoteItems {
+		quoteItem := quoteItems[i]
+
+		if quoteItem.Type != orderdom.OrderItemTypeResale ||
+			quoteItem.ResaleID != item.ResaleID {
+			continue
+		}
+
+		if targetIndex >= 0 {
+			return orderdom.Order{},
+				orderdom.ErrInvalidShippingQuote
+		}
+
+		targetIndex = i
+	}
+
+	if targetIndex < 0 {
+		return orderdom.Order{},
+			orderdom.ErrInvalidShippingQuote
+	}
+
+	current := quoteItems[targetIndex]
+
+	alreadyConfigured :=
+		current.Carrier == string(quote.Carrier) &&
+			current.Size == quote.Size &&
+			current.UnitAmount == amount &&
+			current.Amount == amount &&
+			current.Currency == orderdom.ShippingQuoteCurrencyJPY
+
+	if alreadyConfigured {
+		return order, nil
+	}
+
+	// 決済済みOrderの金額を発送側から変更してはいけない。
+	if order.Paid {
+		return orderdom.Order{},
+			orderdom.ErrConflict
+	}
+
+	current.Carrier = string(quote.Carrier)
+	current.TransportationID = ""
+	current.Size = quote.Size
+	current.Qty = 1
+	current.UnitAmount = amount
+	current.Amount = amount
+	current.Currency = orderdom.ShippingQuoteCurrencyJPY
+
+	quoteItems[targetIndex] = current
+
+	totalAmount := 0
+	maxOrderAmount := int(^uint(0) >> 1)
+
+	for _, quoteItem := range quoteItems {
+		if quoteItem.Amount < 0 {
+			return orderdom.Order{},
+				orderdom.ErrInvalidShippingQuote
+		}
+		if totalAmount > maxOrderAmount-quoteItem.Amount {
+			return orderdom.Order{},
+				orderdom.ErrInvalidShippingQuote
+		}
+
+		totalAmount += quoteItem.Amount
+	}
+
+	nextShippingQuote := orderdom.ShippingQuoteSnapshot{
+		Items:    quoteItems,
+		Amount:   totalAmount,
+		Currency: orderdom.ShippingQuoteCurrencyJPY,
+	}
+
+	if err := order.UpdateShippingQuoteSnapshot(
+		nextShippingQuote,
+	); err != nil {
+		return orderdom.Order{}, err
+	}
+
+	updatedOrder, err := u.orderRepo.Update(
+		ctx,
+		order,
+		nil,
+	)
+	if err != nil {
+		return orderdom.Order{}, err
+	}
+
+	return updatedOrder, nil
 }
 
 func validateResaleTradeDispatchTarget(

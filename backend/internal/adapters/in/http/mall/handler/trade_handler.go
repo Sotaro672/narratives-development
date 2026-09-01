@@ -12,6 +12,7 @@ import (
 	mallquery "narratives/internal/application/query/mall"
 	usecase "narratives/internal/application/usecase"
 	tradedom "narratives/internal/domain/trade"
+	transportationdom "narratives/internal/domain/transportation"
 )
 
 // TradeHandler handles private Resale Trade communication in Mall.
@@ -152,6 +153,11 @@ func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type createTradeMessageRequest struct {
 	Content string `json:"content"`
+}
+
+type dispatchTradeRequest struct {
+	Carrier transportationdom.Carrier `json:"carrier"`
+	BoxSize int                       `json:"boxSize"`
 }
 
 // GET /mall/me/trades
@@ -404,14 +410,24 @@ func (h *TradeHandler) countUnread(
 
 // POST /mall/me/trades/{tradeId}/dispatch
 //
-// Dispatches the Resale Order item represented by the Trade.
+// Body:
+//
+//	{
+//	  "carrier": "yamato",
+//	  "boxSize": 80
+//	}
 //
 // SellerAvatarID is never accepted from the client. The authenticated Avatar
 // from AvatarContextMiddleware is used as the seller identity.
 //
+// Shipping amount is never accepted from the client. The usecase resolves the
+// authoritative flat rate from carrier and boxSize before payment.
+//
 // The usecase performs:
 //   - Trade seller authorization
 //   - authoritative Order item validation
+//   - authoritative Resale shipping rate calculation
+//   - ShippingQuoteSnapshot update
 //   - off-session payment
 //   - SalesReceivable pending creation
 //   - Order item dispatch state update
@@ -438,11 +454,19 @@ func (h *TradeHandler) dispatch(
 		return
 	}
 
+	var req dispatchTradeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		badRequest(w, "invalid json")
+		return
+	}
+
 	result, err := h.dispatchUC.Dispatch(
 		r.Context(),
 		usecase.DispatchResaleTradeInput{
 			TradeID:        tradeID,
 			SellerAvatarID: avatarID,
+			Carrier:        req.Carrier,
+			BoxSize:        req.BoxSize,
 		},
 	)
 	if err != nil {
@@ -559,7 +583,9 @@ func writeTradeDispatchErr(
 		})
 
 	case errors.Is(err, tradedom.ErrInvalidID),
-		errors.Is(err, tradedom.ErrInvalidSellerAvatarID):
+		errors.Is(err, tradedom.ErrInvalidSellerAvatarID),
+		errors.Is(err, transportationdom.ErrInvalidCarrier),
+		errors.Is(err, transportationdom.ErrInvalidResaleBoxSize):
 		badRequest(w, err.Error())
 
 	default:

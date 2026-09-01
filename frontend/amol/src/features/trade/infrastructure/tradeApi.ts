@@ -51,6 +51,22 @@ export type CancelTradeOrderItemParams = {
   orderItemIndex: number;
 };
 
+export type TradeDispatchCarrier = "post" | "yamato";
+
+export type TradeDispatchBoxSize =
+  | 60
+  | 80
+  | 100
+  | 120
+  | 140
+  | 160;
+
+export type DispatchTradeParams = {
+  tradeId: string;
+  carrier: TradeDispatchCarrier;
+  boxSize: TradeDispatchBoxSize;
+};
+
 type TradeRequestInit = Omit<RequestInit, "body"> & {
   json?: unknown;
   query?: ApiQueryParams;
@@ -200,12 +216,16 @@ export async function cancelTradeOrderItem(
 }
 
 export async function dispatchTrade(
-  tradeId: string,
+  params: DispatchTradeParams,
 ): Promise<void> {
   await fetchTradeWithAuth<unknown>(
-    `${buildTradePath(tradeId)}/dispatch`,
+    `${buildTradePath(params.tradeId)}/dispatch`,
     {
       method: "POST",
+      json: {
+        carrier: params.carrier,
+        boxSize: params.boxSize,
+      },
     },
   );
 }

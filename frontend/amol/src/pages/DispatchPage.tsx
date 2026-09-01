@@ -7,6 +7,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
 import { useContactViewport } from "../features/contact/hooks/useContactViewport";
+import {
+  dispatchTrade,
+  type TradeDispatchBoxSize,
+  type TradeDispatchCarrier,
+} from "../features/trade/infrastructure/tradeApi";
 
 import "../styles/page-layout.css";
 import "../styles/settings-page.css";
@@ -15,21 +20,17 @@ type DispatchRouteParams = {
   tradeId: string;
 };
 
-type ShippingCarrier = "post" | "yamato";
-
-const BOX_SIZES = [
+const BOX_SIZES: TradeDispatchBoxSize[] = [
   60,
   80,
   100,
   120,
   140,
   160,
-] as const;
-
-type BoxSize = (typeof BOX_SIZES)[number];
+];
 
 type CarrierOption = {
-  value: ShippingCarrier;
+  value: TradeDispatchCarrier;
   label: string;
   description: string;
 };
@@ -47,9 +48,9 @@ const CARRIER_OPTIONS: CarrierOption[] = [
   },
 ];
 
-// AMOLの全国一律配送料。
-// 配送会社によって金額は変わらず、箱サイズだけで決まる。
-const SHIPPING_FEE_BY_BOX_SIZE: Record<BoxSize, number> = {
+// 画面表示用の料金表。
+// 実際の決済額はbackend側でcarrier / boxSizeから再計算して確定する。
+const SHIPPING_FEE_BY_BOX_SIZE: Record<TradeDispatchBoxSize, number> = {
   60: 750,
   80: 850,
   100: 1050,
@@ -66,14 +67,26 @@ function formatJPY(amount: number): string {
   }).format(amount);
 }
 
+function getErrorMessage(
+  caught: unknown,
+  fallbackMessage: string,
+): string {
+  if (caught instanceof Error && caught.message) {
+    return caught.message;
+  }
+
+  return fallbackMessage;
+}
+
 export default function DispatchPage() {
   const navigate = useNavigate();
   const { tradeId } = useParams<DispatchRouteParams>();
   const { isDesktop } = useContactViewport();
 
-  const [carrier, setCarrier] = useState<ShippingCarrier | null>(null);
-  const [boxSize, setBoxSize] = useState<BoxSize | null>(null);
-  const [submissionMessage, setSubmissionMessage] = useState("");
+  const [carrier, setCarrier] = useState<TradeDispatchCarrier | null>(null);
+  const [boxSize, setBoxSize] = useState<TradeDispatchBoxSize | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState("");
 
   const normalizedTradeId = tradeId?.trim() ?? "";
 
@@ -98,30 +111,53 @@ export default function DispatchPage() {
     : "/chats";
 
   const actionButtonDisabled =
+    submitting ||
     !normalizedTradeId ||
     carrier === null ||
     boxSize === null ||
     shippingFee === null;
 
   const handleBack = () => {
+    if (submitting) {
+      return;
+    }
+
     navigate(chatPath);
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async (): Promise<void> => {
     if (
-      actionButtonDisabled ||
-      !selectedCarrier ||
-      boxSize === null ||
-      shippingFee === null
+      submitting ||
+      !normalizedTradeId ||
+      carrier === null ||
+      boxSize === null
     ) {
       return;
     }
 
-    // carrier / boxSize / shippingFee を受け取る発送APIへ、
-    // 次のbackend・tradeApi修正で接続する。
-    setSubmissionMessage(
-      "発送内容を選択しました。発送確定APIへの接続は次の修正で追加します。",
-    );
+    setSubmitting(true);
+    setSubmissionError("");
+
+    try {
+      await dispatchTrade({
+        tradeId: normalizedTradeId,
+        carrier,
+        boxSize,
+      });
+
+      navigate(chatPath, {
+        replace: true,
+      });
+    } catch (caught) {
+      setSubmissionError(
+        getErrorMessage(
+          caught,
+          "商品の発送処理に失敗しました。",
+        ),
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -131,8 +167,20 @@ export default function DispatchPage() {
       showBackButton
       onBackButtonClick={handleBack}
       mode="mypage"
-      actionButtonLabel={isDesktop ? "発送を確定" : undefined}
-      onActionButtonClick={isDesktop ? handleConfirm : undefined}
+      actionButtonLabel={
+        isDesktop
+          ? submitting
+            ? "発送処理中..."
+            : "発送を確定"
+          : undefined
+      }
+      onActionButtonClick={
+        isDesktop
+          ? () => {
+              void handleConfirm();
+            }
+          : undefined
+      }
       actionButtonDisabled={actionButtonDisabled}
     >
       <section className="page-section content-page-section settings-page">
@@ -149,13 +197,9 @@ export default function DispatchPage() {
         <section>
           <h2>配送会社</h2>
 
-          <div
-            className="settings-list"
-            role="list"
-          >
+          <div className="settings-list" role="list">
             {CARRIER_OPTIONS.map((option) => {
-              const selected =
-                carrier === option.value;
+              const selected = carrier === option.value;
 
               return (
                 <button
@@ -163,20 +207,21 @@ export default function DispatchPage() {
                   type="button"
                   className="settings-item"
                   onClick={() => {
+                    if (submitting) {
+                      return;
+                    }
+
                     setCarrier(option.value);
-                    setSubmissionMessage("");
+                    setSubmissionError("");
                   }}
+                  disabled={submitting}
                   aria-pressed={selected}
                   role="listitem"
                 >
                   <span>
-                    <strong>
-                      {option.label}
-                    </strong>
+                    <strong>{option.label}</strong>
                     <br />
-                    <span>
-                      {option.description}
-                    </span>
+                    <span>{option.description}</span>
                   </span>
 
                   <span aria-hidden="true">
@@ -200,16 +245,10 @@ export default function DispatchPage() {
             梱包後の箱の3辺合計に収まるサイズを選択してください。重量や配送地域による料金差はありません。
           </p>
 
-          <div
-            className="settings-list"
-            role="list"
-          >
+          <div className="settings-list" role="list">
             {BOX_SIZES.map((size) => {
-              const selected =
-                boxSize === size;
-
-              const fee =
-                SHIPPING_FEE_BY_BOX_SIZE[size];
+              const selected = boxSize === size;
+              const fee = SHIPPING_FEE_BY_BOX_SIZE[size];
 
               return (
                 <button
@@ -217,16 +256,19 @@ export default function DispatchPage() {
                   type="button"
                   className="settings-item"
                   onClick={() => {
+                    if (submitting) {
+                      return;
+                    }
+
                     setBoxSize(size);
-                    setSubmissionMessage("");
+                    setSubmissionError("");
                   }}
+                  disabled={submitting}
                   aria-pressed={selected}
                   role="listitem"
                 >
                   <span>
-                    <strong>
-                      {size}サイズ
-                    </strong>
+                    <strong>{size}サイズ</strong>
                     <br />
                     <span>
                       3辺合計 {size}cm以内
@@ -234,9 +276,7 @@ export default function DispatchPage() {
                   </span>
 
                   <span>
-                    <strong>
-                      {formatJPY(fee)}
-                    </strong>
+                    <strong>{formatJPY(fee)}</strong>
 
                     {selected ? (
                       <>
@@ -262,8 +302,7 @@ export default function DispatchPage() {
             <div>
               <dt>配送会社</dt>
               <dd>
-                {selectedCarrier?.label ??
-                  "未選択"}
+                {selectedCarrier?.label ?? "未選択"}
               </dd>
             </div>
 
@@ -293,9 +332,9 @@ export default function DispatchPage() {
           </p>
         </section>
 
-        {submissionMessage ? (
-          <div role="status">
-            {submissionMessage}
+        {submissionError ? (
+          <div role="alert">
+            {submissionError}
           </div>
         ) : null}
       </section>
@@ -303,9 +342,15 @@ export default function DispatchPage() {
       {!isDesktop ? (
         <FooterNav
           variant="action"
-          buttonLabel="発送を確定"
+          buttonLabel={
+            submitting
+              ? "発送処理中..."
+              : "発送を確定"
+          }
           disabled={actionButtonDisabled}
-          onButtonClick={handleConfirm}
+          onButtonClick={() => {
+            void handleConfirm();
+          }}
         />
       ) : null}
     </Layout>

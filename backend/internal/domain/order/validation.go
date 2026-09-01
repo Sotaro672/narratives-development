@@ -1,6 +1,8 @@
 // backend/internal/domain/order/validation.go
 package order
 
+import transportationdom "narratives/internal/domain/transportation"
+
 // ========================================
 // Order validation
 // ========================================
@@ -154,19 +156,50 @@ func validateResaleShippingQuoteItemSnapshot(item ShippingQuoteItemSnapshot) err
 	if item.DestinationShippingAddressID == "" {
 		return ErrInvalidShippingQuoteItem
 	}
-	if item.Carrier != "" || item.TransportationID != "" || item.Size != 0 {
+	if item.TransportationID != "" {
 		return ErrInvalidShippingQuoteItem
 	}
 	if item.Qty != 1 {
 		return ErrInvalidShippingQuoteItem
 	}
-	if item.UnitAmount != 0 || item.Amount != 0 {
-		return ErrInvalidShippingQuoteItem
-	}
 	if item.Currency != ShippingQuoteCurrencyJPY {
 		return ErrInvalidShippingQuoteItem
 	}
-	return nil
+
+	if item.Carrier == "" {
+		if item.Size != 0 || item.UnitAmount != 0 || item.Amount != 0 {
+			return ErrInvalidShippingQuoteItem
+		}
+		return nil
+	}
+
+	carrier := transportationdom.Carrier(item.Carrier)
+	if !transportationdom.IsValidResaleShippingCarrier(carrier) {
+		return ErrInvalidShippingQuoteItem
+	}
+	if !transportationdom.IsValidResaleBoxSize(item.Size) {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	quote, err := transportationdom.CalculateResaleFlatRate(carrier, item.Size)
+	if err != nil {
+		return ErrInvalidShippingQuoteItem
+	}
+	if quote.Amount <= 0 {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	maxInt := int64(^uint(0) >> 1)
+	if quote.Amount > maxInt {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	expectedAmount := int(quote.Amount)
+	if item.UnitAmount != expectedAmount || item.Amount != expectedAmount {
+		return ErrInvalidShippingQuoteItem
+	}
+
+	return validateShippingQuoteAmountSnapshot(item)
 }
 
 func validateShippingQuoteAmountSnapshot(item ShippingQuoteItemSnapshot) error {
