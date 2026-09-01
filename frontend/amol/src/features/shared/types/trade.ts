@@ -55,6 +55,8 @@ export type TradeDetail = {
   buyerAvatarId: string;
   sellerAvatarId: string;
   status: TradeStatus;
+  isCancelled: boolean;
+  isDispatched: boolean;
   messages: TradeMessage[];
   createdAt?: string;
   updatedAt?: string;

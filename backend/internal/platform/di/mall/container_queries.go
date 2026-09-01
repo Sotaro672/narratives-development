@@ -4,16 +4,13 @@ package mall
 import (
 	"errors"
 
+	sharedfs "narratives/internal/adapters/out/firestore/shared"
+	outsolana "narratives/internal/adapters/out/solana"
 	mallquery "narratives/internal/application/query/mall"
 	mallshared "narratives/internal/application/query/mall/shared"
 	sharedquery "narratives/internal/application/query/shared"
 	appresolver "narratives/internal/application/resolver"
-
-	sharedfs "narratives/internal/adapters/out/firestore/shared"
-	outsolana "narratives/internal/adapters/out/solana"
-
 	solana "narratives/internal/infra/solana"
-
 	shared "narratives/internal/platform/di/shared"
 )
 
@@ -61,6 +58,9 @@ func buildMallQueries(
 	}
 	if r.tradeMessageRepo == nil {
 		return nil, errors.New("di.mall: trade message repository is nil")
+	}
+	if r.orderRepo == nil {
+		return nil, errors.New("di.mall: order repository is nil")
 	}
 
 	mallDisplayResolver := mallshared.NewDisplayResolver(
@@ -209,6 +209,7 @@ func buildMallQueries(
 	tradeQ := mallquery.NewTradeQuery(
 		r.tradeRepo,
 		r.tradeMessageRepo,
+		r.orderRepo,
 	)
 
 	return &mallQueries{

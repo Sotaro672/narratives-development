@@ -11,6 +11,9 @@ import tradedom "narratives/internal/domain/trade"
 //
 // ViewerSide is resolved by the backend from the authenticated Avatar and must
 // not be supplied by the client.
+//
+// Cancellation and dispatch state are read from the authoritative Order item
+// associated with this Trade and are not owned by the Trade aggregate.
 type TradeDetail struct {
 	ID             string `json:"id"`
 	OrderID        string `json:"orderId"`
@@ -22,6 +25,9 @@ type TradeDetail struct {
 	SellerAvatarID string `json:"sellerAvatarId"`
 
 	Status tradedom.Status `json:"status"`
+
+	IsCancelled  bool `json:"isCancelled"`
+	IsDispatched bool `json:"isDispatched"`
 
 	Messages []TradeMessage `json:"messages"`
 

@@ -158,7 +158,7 @@ func (u *OrderUsecase) sendResaleOrderNotificationsBestEffort(
 		return
 	}
 
-	for _, item := range order.Items {
+	for itemIndex, item := range order.Items {
 		if item.Type != orderdom.OrderItemTypeResale {
 			continue
 		}
@@ -186,10 +186,12 @@ func (u *OrderUsecase) sendResaleOrderNotificationsBestEffort(
 			ctx,
 			toEmail,
 			order.ID,
+			itemIndex,
 			resaleID,
 			item.Price,
 		)
 	}
+
 }
 
 // =======================

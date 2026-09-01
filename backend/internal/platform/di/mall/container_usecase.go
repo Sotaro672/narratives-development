@@ -107,6 +107,7 @@ func buildMallUsecases(
 	resaleOrderNotificationMailer := mailadp.NewResaleOrderNotificationMailer(
 		resendClient,
 		cfg.ResendFrom,
+		cfg.FrontendBaseURL,
 	)
 
 	inquiryMailer := mailadp.NewInquiryMailer(

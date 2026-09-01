@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tradedto "narratives/internal/application/query/mall/dto"
+	orderdom "narratives/internal/domain/order"
 	tradedom "narratives/internal/domain/trade"
 )
 
@@ -27,18 +28,24 @@ var (
 // Authorization is based only on the authenticated Avatar ID supplied from
 // AvatarContext. A caller that is not a participant receives ErrNotFound so the
 // existence of another user's private Trade is not exposed.
+//
+// Cancellation and dispatch state are read from the authoritative Order item.
+// Trade does not own or duplicate those states.
 type TradeQuery struct {
 	tradeRepo   tradedom.Repository
 	messageRepo tradedom.MessageRepository
+	orderRepo   orderdom.Repository
 }
 
 func NewTradeQuery(
 	tradeRepo tradedom.Repository,
 	messageRepo tradedom.MessageRepository,
+	orderRepo orderdom.Repository,
 ) *TradeQuery {
 	return &TradeQuery{
 		tradeRepo:   tradeRepo,
 		messageRepo: messageRepo,
+		orderRepo:   orderRepo,
 	}
 }
 
@@ -149,7 +156,7 @@ func (q *TradeQuery) GetByOrderItem(
 	ctx context.Context,
 	in GetTradeByOrderItemInput,
 ) (tradedto.TradeDetail, error) {
-	if q == nil || q.tradeRepo == nil || q.messageRepo == nil {
+	if q == nil || q.tradeRepo == nil || q.messageRepo == nil || q.orderRepo == nil {
 		return tradedto.TradeDetail{}, ErrTradeQueryNotConfigured
 	}
 	if in.AvatarID == "" {
@@ -184,6 +191,14 @@ func (q *TradeQuery) GetByOrderItem(
 		return tradedto.TradeDetail{}, err
 	}
 
+	orderItemState, err := q.getTradeOrderItemState(
+		ctx,
+		trade,
+	)
+	if err != nil {
+		return tradedto.TradeDetail{}, err
+	}
+
 	messages, err := q.messageRepo.ListByTradeID(
 		ctx,
 		trade.ID,
@@ -200,6 +215,7 @@ func (q *TradeQuery) GetByOrderItem(
 	return buildTradeDetailDTO(
 		trade,
 		viewerSide,
+		orderItemState,
 		messages,
 	), nil
 }
@@ -219,7 +235,7 @@ func (q *TradeQuery) GetByID(
 	ctx context.Context,
 	in GetTradeByIDInput,
 ) (tradedto.TradeDetail, error) {
-	if q == nil || q.tradeRepo == nil || q.messageRepo == nil {
+	if q == nil || q.tradeRepo == nil || q.messageRepo == nil || q.orderRepo == nil {
 		return tradedto.TradeDetail{}, ErrTradeQueryNotConfigured
 	}
 	if in.AvatarID == "" {
@@ -248,6 +264,14 @@ func (q *TradeQuery) GetByID(
 		return tradedto.TradeDetail{}, err
 	}
 
+	orderItemState, err := q.getTradeOrderItemState(
+		ctx,
+		trade,
+	)
+	if err != nil {
+		return tradedto.TradeDetail{}, err
+	}
+
 	messages, err := q.messageRepo.ListByTradeID(
 		ctx,
 		trade.ID,
@@ -264,8 +288,55 @@ func (q *TradeQuery) GetByID(
 	return buildTradeDetailDTO(
 		trade,
 		viewerSide,
+		orderItemState,
 		messages,
 	), nil
+}
+
+type tradeOrderItemState struct {
+	IsCancelled  bool
+	IsDispatched bool
+}
+
+func (q *TradeQuery) getTradeOrderItemState(
+	ctx context.Context,
+	trade tradedom.Trade,
+) (tradeOrderItemState, error) {
+	if q == nil || q.orderRepo == nil {
+		return tradeOrderItemState{}, ErrTradeQueryNotConfigured
+	}
+	if trade.OrderID == "" {
+		return tradeOrderItemState{}, tradedom.ErrInvalidOrderID
+	}
+	if trade.OrderItemIndex < 0 {
+		return tradeOrderItemState{}, tradedom.ErrInvalidOrderItemIndex
+	}
+
+	order, err := q.orderRepo.GetByID(
+		ctx,
+		trade.OrderID,
+	)
+	if err != nil {
+		return tradeOrderItemState{}, err
+	}
+
+	if order.ID != trade.OrderID ||
+		order.AvatarID != trade.BuyerAvatarID ||
+		trade.OrderItemIndex >= len(order.Items) {
+		return tradeOrderItemState{}, ErrTradeQueryUnsupportedTrade
+	}
+
+	item := order.Items[trade.OrderItemIndex]
+	if item.Type != orderdom.OrderItemTypeResale ||
+		item.SellerSnapshot.AvatarID == "" ||
+		item.SellerSnapshot.AvatarID != trade.SellerAvatarID {
+		return tradeOrderItemState{}, ErrTradeQueryUnsupportedTrade
+	}
+
+	return tradeOrderItemState{
+		IsCancelled:  item.IsCancelled,
+		IsDispatched: item.IsDispatched,
+	}, nil
 }
 
 func (q *TradeQuery) getLatestMessage(
@@ -417,6 +488,7 @@ func tradeListItemActivityTime(
 func buildTradeDetailDTO(
 	trade tradedom.Trade,
 	viewerSide tradedom.MessageSenderSide,
+	orderItemState tradeOrderItemState,
 	messages []tradedom.Message,
 ) tradedto.TradeDetail {
 	messageDTOs := make(
@@ -440,6 +512,8 @@ func buildTradeDetailDTO(
 		BuyerAvatarID:  trade.BuyerAvatarID,
 		SellerAvatarID: trade.SellerAvatarID,
 		Status:         trade.Status,
+		IsCancelled:    orderItemState.IsCancelled,
+		IsDispatched:   orderItemState.IsDispatched,
 		Messages:       messageDTOs,
 	}
 
