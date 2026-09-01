@@ -23,13 +23,21 @@ type PaymentAmountSummary struct {
 }
 
 // CalculatePaymentAmountSummary は Order に保存された snapshot を基に、
-// 支払金額の内訳を計算します。
+// buyer が支払う金額の内訳を計算します.
 //
-// 支払総額:
+// List:
 //
 //	商品小計
 //	+ 配送料
 //	+ 消費税
+//
+// Resale:
+//
+//	商品価格のみ
+//
+// Resale商品の配送料は buyer の支払総額には加算しません.
+// 発送時に確定したResale配送料は seller側の売上分配額から控除するために
+// ShippingQuoteSnapshotへ保持します.
 //
 // 消費税:
 //
@@ -37,15 +45,15 @@ type PaymentAmountSummary struct {
 //	標準税率対象List商品: 10%
 //	Resale商品: 非課税
 //	List商品の配送料: 10%
-//	Resale商品の配送料: 非課税
+//	Resale商品の配送料: 非課税かつbuyerへの追加請求対象外
 //
 // キャンセル済み商品:
 //
-//	IsCancelled == true の商品は支払対象から除外します。
+//	IsCancelled == true の商品は支払対象から除外します.
 //
-// 全商品がキャンセル済みの場合は決済できません。
+// 全商品がキャンセル済みの場合は決済できません.
 //
-// 金額の source of truth は Order であり、frontend から渡された金額は使用しません。
+// 金額の source of truth は Order であり、frontend から渡された金額は使用しません.
 func CalculatePaymentAmountSummary(order Order) (PaymentAmountSummary, error) {
 	if len(order.Items) == 0 {
 		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
@@ -58,39 +66,46 @@ func CalculatePaymentAmountSummary(order Order) (PaymentAmountSummary, error) {
 	}
 
 	maxInt := int(^uint(0) >> 1)
-	shippingAmount := order.ShippingQuoteSnapshot.Amount
-	if shippingAmount < 0 {
+	snapshotShippingAmount := order.ShippingQuoteSnapshot.Amount
+	if snapshotShippingAmount < 0 {
 		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 	}
 
+	chargedShippingAmount := 0
 	taxableShippingAmount10 := 0
-	calculatedShippingAmount := 0
+	calculatedSnapshotShippingAmount := 0
 
 	for _, shippingItem := range order.ShippingQuoteSnapshot.Items {
 		if shippingItem.Amount < 0 {
 			return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 		}
-		if calculatedShippingAmount > maxInt-shippingItem.Amount {
+		if calculatedSnapshotShippingAmount > maxInt-shippingItem.Amount {
 			return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 		}
-		calculatedShippingAmount += shippingItem.Amount
+		calculatedSnapshotShippingAmount += shippingItem.Amount
 
 		switch shippingItem.Type {
 		case "", OrderItemTypeList:
+			if chargedShippingAmount > maxInt-shippingItem.Amount {
+				return PaymentAmountSummary{}, ErrInvalidPaymentAmount
+			}
+			chargedShippingAmount += shippingItem.Amount
+
 			if taxableShippingAmount10 > maxInt-shippingItem.Amount {
 				return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 			}
 			taxableShippingAmount10 += shippingItem.Amount
 
 		case OrderItemTypeResale:
-			// フリマ取引の配送料は非課税。
+			// Resale配送料はbuyerへ追加請求しない.
+			// seller側の売上分配額から控除するためShippingQuoteSnapshotにのみ保持する.
 
 		default:
 			return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 		}
 	}
 
-	if calculatedShippingAmount != shippingAmount {
+	if calculatedSnapshotShippingAmount != snapshotShippingAmount {
 		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 	}
 
@@ -121,7 +136,8 @@ func CalculatePaymentAmountSummary(order Order) (PaymentAmountSummary, error) {
 
 		switch item.Type {
 		case OrderItemTypeResale:
-			// フリマ取引の商品代金は非課税。
+			// Resale商品は非課税.
+			// buyerは商品価格のみを支払い、Resale配送料はこの価格からseller側で控除する.
 			continue
 
 		case OrderItemTypeList:
@@ -165,10 +181,10 @@ func CalculatePaymentAmountSummary(order Order) (PaymentAmountSummary, error) {
 
 	taxAmount := taxAmount8 + taxAmount10
 
-	if subtotalAmount > maxInt-shippingAmount {
+	if subtotalAmount > maxInt-chargedShippingAmount {
 		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
 	}
-	subtotalWithShipping := subtotalAmount + shippingAmount
+	subtotalWithShipping := subtotalAmount + chargedShippingAmount
 
 	if subtotalWithShipping > maxInt-taxAmount {
 		return PaymentAmountSummary{}, ErrInvalidPaymentAmount
@@ -181,14 +197,14 @@ func CalculatePaymentAmountSummary(order Order) (PaymentAmountSummary, error) {
 
 	return PaymentAmountSummary{
 		SubtotalAmount: subtotalAmount,
-		ShippingAmount: shippingAmount,
+		ShippingAmount: chargedShippingAmount,
 		ConsumptionTax: taxAmount,
 		TotalAmount:    totalAmount,
 	}, nil
 }
 
 // CalculatePaymentAmount は Order に保存された snapshot を基に、
-// Stripe PaymentIntent へ渡す正規の支払総額を返します。
+// Stripe PaymentIntent へ渡す正規の支払総額を返します.
 func CalculatePaymentAmount(order Order) (int, error) {
 	summary, err := CalculatePaymentAmountSummary(order)
 	if err != nil {

@@ -24,6 +24,11 @@ var (
 // One resale Order item must create exactly one SalesReceivable. Multiple resale
 // items belonging to the same seller must remain independent receivables.
 //
+// GrossAmount is the resale distribution base after shipping cost has been
+// deducted from the merchandise amount.
+//
+//	GrossAmount = PlatformFeeAmount + BrandFeeAmount + ReceivableAmount
+//
 // The resulting document ID is deterministic:
 //
 //	PaymentID + "_resale_item_" + OrderItemIndex
@@ -43,6 +48,7 @@ type EnsureSalesReceivableInput struct {
 
 	GrossAmount       int
 	PlatformFeeAmount int
+	BrandFeeAmount    int
 	ReceivableAmount  int
 
 	Currency string
@@ -259,6 +265,7 @@ func (u *SalesReceivableUsecase) EnsurePending(
 		in.PayoutAccountID,
 		in.GrossAmount,
 		in.PlatformFeeAmount,
+		in.BrandFeeAmount,
 		in.ReceivableAmount,
 		in.Currency,
 		now,
@@ -272,6 +279,7 @@ func (u *SalesReceivableUsecase) EnsurePending(
 		if err := validateCreatedSalesReceivable(created, receivable); err != nil {
 			return nil, err
 		}
+
 		return &created, nil
 	}
 	if !errors.Is(err, salesreceivabledom.ErrConflict) {
@@ -329,6 +337,7 @@ func (u *SalesReceivableUsecase) MarkAvailable(
 		if err := current.Validate(); err != nil {
 			return nil, err
 		}
+
 		return &current, nil
 
 	case salesreceivabledom.StatusCanceled:
@@ -379,6 +388,7 @@ func (u *SalesReceivableUsecase) Cancel(
 		if err := current.Validate(); err != nil {
 			return nil, err
 		}
+
 		return &current, nil
 
 	case salesreceivabledom.StatusReserved,
@@ -425,6 +435,7 @@ func validateExistingSalesReceivableAllocation(
 		actual.PayoutAccountID != expected.PayoutAccountID ||
 		actual.GrossAmount != expected.GrossAmount ||
 		actual.PlatformFeeAmount != expected.PlatformFeeAmount ||
+		actual.BrandFeeAmount != expected.BrandFeeAmount ||
 		actual.ReceivableAmount != expected.ReceivableAmount ||
 		actual.Currency != expected.Currency {
 		return ErrSalesReceivableExistingMismatch
@@ -448,6 +459,7 @@ func (u *SalesReceivableUsecase) validateRepositoryReady() error {
 	if u == nil || u.repo == nil {
 		return ErrSalesReceivableRepositoryMissing
 	}
+
 	return nil
 }
 
@@ -458,5 +470,6 @@ func (u *SalesReceivableUsecase) validateWriteReady() error {
 	if u.now == nil {
 		return ErrSalesReceivableClockMissing
 	}
+
 	return nil
 }

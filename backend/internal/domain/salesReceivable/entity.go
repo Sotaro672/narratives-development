@@ -64,8 +64,9 @@ var (
 	ErrPayoutAccountOwnerMismatch = errors.New("salesReceivable: payoutAccountId does not match userId")
 	ErrInvalidGrossAmount         = errors.New("salesReceivable: invalid grossAmount")
 	ErrInvalidPlatformFeeAmount   = errors.New("salesReceivable: invalid platformFeeAmount")
+	ErrInvalidBrandFeeAmount      = errors.New("salesReceivable: invalid brandFeeAmount")
 	ErrInvalidReceivableAmount    = errors.New("salesReceivable: invalid receivableAmount")
-	ErrAmountMismatch             = errors.New("salesReceivable: grossAmount does not equal platformFeeAmount + receivableAmount")
+	ErrAmountMismatch             = errors.New("salesReceivable: grossAmount does not equal platformFeeAmount + brandFeeAmount + receivableAmount")
 	ErrInvalidCurrency            = errors.New("salesReceivable: invalid currency")
 	ErrInvalidStatus              = errors.New("salesReceivable: invalid status")
 	ErrInvalidStatusTransition    = errors.New("salesReceivable: invalid status transition")
@@ -86,9 +87,16 @@ var (
 //   - document ID is deterministic by PaymentID and OrderItemIndex
 //   - SalesReceivables are never aggregated across multiple Order items
 //
+// GrossAmount represents the resale distribution base after shipping cost has
+// been deducted from the merchandise amount.
+//
 // Amount invariant:
 //
-//	GrossAmount = PlatformFeeAmount + ReceivableAmount
+//	GrossAmount = PlatformFeeAmount + BrandFeeAmount + ReceivableAmount
+//
+// PlatformFeeAmount is AMOL's share of the resale distribution base.
+// BrandFeeAmount is the productBlueprint Brand's share.
+// ReceivableAmount is the amount owed to the resale seller.
 //
 // OrderItemIndex and ResaleID identify the immutable resale item represented by this receivable.
 //
@@ -109,6 +117,7 @@ type SalesReceivable struct {
 
 	GrossAmount       int `json:"grossAmount" firestore:"grossAmount"`
 	PlatformFeeAmount int `json:"platformFeeAmount" firestore:"platformFeeAmount"`
+	BrandFeeAmount    int `json:"brandFeeAmount" firestore:"brandFeeAmount"`
 	ReceivableAmount  int `json:"receivableAmount" firestore:"receivableAmount"`
 
 	Currency string `json:"currency" firestore:"currency"`
@@ -146,6 +155,7 @@ func NewID(paymentID string, orderItemIndex int) (string, error) {
 
 // New creates a pending SalesReceivable after a successful resale payment.
 //
+// GrossAmount is the resale distribution base after shipping cost has been deducted.
 // No bank payout is assigned at creation. The receivable becomes available only after this exact resale Order item has crossed the fulfillment boundary.
 func New(
 	id string,
@@ -158,6 +168,7 @@ func New(
 	payoutAccountID string,
 	grossAmount int,
 	platformFeeAmount int,
+	brandFeeAmount int,
 	receivableAmount int,
 	currency string,
 	createdAt time.Time,
@@ -178,6 +189,7 @@ func New(
 
 		GrossAmount:       grossAmount,
 		PlatformFeeAmount: platformFeeAmount,
+		BrandFeeAmount:    brandFeeAmount,
 		ReceivableAmount:  receivableAmount,
 
 		Currency: currency,
@@ -394,10 +406,16 @@ func (r SalesReceivable) Validate() error {
 	if r.PlatformFeeAmount < 0 || r.PlatformFeeAmount > r.GrossAmount {
 		return ErrInvalidPlatformFeeAmount
 	}
+	if r.BrandFeeAmount < 0 || r.BrandFeeAmount > r.GrossAmount {
+		return ErrInvalidBrandFeeAmount
+	}
 	if r.ReceivableAmount <= 0 || r.ReceivableAmount > r.GrossAmount {
 		return ErrInvalidReceivableAmount
 	}
-	if r.GrossAmount-r.PlatformFeeAmount != r.ReceivableAmount {
+	if r.PlatformFeeAmount > r.GrossAmount-r.BrandFeeAmount {
+		return ErrAmountMismatch
+	}
+	if r.GrossAmount-r.PlatformFeeAmount-r.BrandFeeAmount != r.ReceivableAmount {
 		return ErrAmountMismatch
 	}
 	if r.Currency != CurrencyJPY {
