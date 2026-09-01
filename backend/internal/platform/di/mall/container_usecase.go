@@ -314,6 +314,16 @@ func buildMallUsecases(
 		return nil, errors.New("di.mall: brand fee settlement transfer usecase is nil")
 	}
 
+	brandFeeSettlementRefundUC := usecase.NewBrandFeeSettlementRefundUsecase(
+		usecase.NewBrandFeeSettlementRefundUsecaseInput{
+			Repository:                    r.brandFeeSettlementRepo,
+			StripeTransferReversalGateway: settlementDependencies.StripeTransferReversalGateway,
+		},
+	)
+	if brandFeeSettlementRefundUC == nil {
+		return nil, errors.New("di.mall: brand fee settlement refund usecase is nil")
+	}
+
 	brandFeeSettlementQueue, err := cloudtasksadp.NewBrandFeeSettlementQueueFromEnv(ctx)
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -348,11 +358,12 @@ func buildMallUsecases(
 
 	refundUC := usecase.NewRefundUsecase(
 		usecase.NewRefundUsecaseInput{
-			PaymentReader:                 paymentUC,
-			SettlementRepository:          r.settlementRepo,
-			SalesReceivableService:        salesReceivableUC,
-			StripeRefundGateway:           settlementDependencies.StripeRefundGateway,
-			StripeTransferReversalGateway: settlementDependencies.StripeTransferReversalGateway,
+			PaymentReader:                   paymentUC,
+			SettlementRepository:            r.settlementRepo,
+			SalesReceivableService:          salesReceivableUC,
+			BrandFeeSettlementRefundService: brandFeeSettlementRefundUC,
+			StripeRefundGateway:             settlementDependencies.StripeRefundGateway,
+			StripeTransferReversalGateway:   settlementDependencies.StripeTransferReversalGateway,
 		},
 	)
 	if refundUC == nil {
@@ -392,14 +403,15 @@ func buildMallUsecases(
 
 	itemRefundUC := usecase.NewItemRefundUsecase(
 		usecase.NewItemRefundUsecaseInput{
-			OrderReader:                   orderUC,
-			PaymentReader:                 paymentUC,
-			SettlementRepository:          r.settlementRepo,
-			SalesReceivableService:        salesReceivableUC,
-			RefundRepository:              r.refundRepo,
-			PlatformFeeCalculator:         settlementDependencies.Calculator,
-			StripeRefundGateway:           settlementDependencies.StripeRefundGateway,
-			StripeTransferReversalGateway: settlementDependencies.StripeTransferReversalGateway,
+			OrderReader:                     orderUC,
+			PaymentReader:                   paymentUC,
+			SettlementRepository:            r.settlementRepo,
+			SalesReceivableService:          salesReceivableUC,
+			BrandFeeSettlementRefundService: brandFeeSettlementRefundUC,
+			RefundRepository:                r.refundRepo,
+			PlatformFeeCalculator:           settlementDependencies.Calculator,
+			StripeRefundGateway:             settlementDependencies.StripeRefundGateway,
+			StripeTransferReversalGateway:   settlementDependencies.StripeTransferReversalGateway,
 		},
 	)
 	if itemRefundUC == nil {

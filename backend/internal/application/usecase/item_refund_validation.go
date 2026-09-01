@@ -192,7 +192,7 @@ func validateExistingResaleItemRefund(
 		salesReceivable.UserID != snapshot.UserID ||
 		salesReceivable.PayoutAccountID != snapshot.PayoutAccountID ||
 		salesReceivable.PayoutAccountID != salesReceivable.UserID ||
-		salesReceivable.GrossAmount != targetItem.Price ||
+		salesReceivable.MerchandiseAmount != targetItem.Price ||
 		salesReceivable.Currency != salesreceivabledom.CurrencyJPY {
 		return ErrItemRefundExistingRefundMismatch
 	}

@@ -41,6 +41,7 @@ var (
 	ErrRefundPaymentReaderMissing                 = errors.New("refund: payment reader is not configured")
 	ErrRefundSettlementRepositoryMissing          = errors.New("refund: settlement repository is not configured")
 	ErrRefundSalesReceivableServiceMissing        = errors.New("refund: sales receivable service is not configured")
+	ErrRefundBrandFeeSettlementServiceMissing     = errors.New("refund: Brand fee settlement refund service is not configured")
 	ErrRefundStripeRefundGatewayMissing           = errors.New("refund: Stripe refund gateway is not configured")
 	ErrRefundStripeTransferReversalGatewayMissing = errors.New("refund: Stripe transfer reversal gateway is not configured")
 	ErrRefundPaymentNotSucceeded                  = errors.New("refund: payment is not succeeded")
@@ -117,14 +118,15 @@ type RefundByPaymentIDInput struct {
 }
 
 type RefundByPaymentIDResult struct {
-	PaymentID        string
-	Amount           int
-	StripeRefundID   string
-	RefundStatus     paymentdom.RefundStatus
-	RefundedAmount   int
-	RefundedAt       *time.Time
-	Settlements      []RefundSettlementResult
-	SalesReceivables []RefundSalesReceivableResult
+	PaymentID           string
+	Amount              int
+	StripeRefundID      string
+	RefundStatus        paymentdom.RefundStatus
+	RefundedAmount      int
+	RefundedAt          *time.Time
+	Settlements         []RefundSettlementResult
+	SalesReceivables    []RefundSalesReceivableResult
+	BrandFeeSettlements []BrandFeeSettlementRefundResult
 }
 
 type CompleteSucceededRefundInput struct {
@@ -136,37 +138,38 @@ type CompleteSucceededRefundInput struct {
 // Usecase
 // ============================================================
 
-// RefundUsecase coordinates one full purchaser Stripe refund with both seller-side
-// financial models used by AMOL.
-//
-// Primary List items use Settlement and may require a Stripe Transfer Reversal.
-// Consumer resale items use item-level SalesReceivable and never use Stripe
-// Connect. Unpaid resale receivables are canceled before the purchaser refund.
-// Reserved receivables are rejected until BankPayout coordination is implemented;
-// paid receivables are rejected until recovery/adjustment handling is implemented.
+// RefundUsecase coordinates one full purchaser Stripe refund with all seller-side
+// financial models used by AMOL. Primary List items use Settlement, consumer
+// resale seller proceeds use SalesReceivable, and the productBlueprint Brand
+// share uses BrandFeeSettlement. Untransferred seller-side amounts are canceled
+// before the purchaser refund; completed Stripe Transfers are reversed only after
+// the purchaser refund succeeds.
 type RefundUsecase struct {
-	paymentReader                 RefundPaymentReader
-	settlementRepo                RefundSettlementRepository
-	salesReceivableService        RefundSalesReceivableService
-	stripeRefundGateway           applicationport.StripeRefundGateway
-	stripeTransferReversalGateway applicationport.StripeTransferReversalGateway
+	paymentReader                   RefundPaymentReader
+	settlementRepo                  RefundSettlementRepository
+	salesReceivableService          RefundSalesReceivableService
+	brandFeeSettlementRefundService BrandFeeSettlementRefundService
+	stripeRefundGateway             applicationport.StripeRefundGateway
+	stripeTransferReversalGateway   applicationport.StripeTransferReversalGateway
 }
 
 type NewRefundUsecaseInput struct {
-	PaymentReader                 RefundPaymentReader
-	SettlementRepository          RefundSettlementRepository
-	SalesReceivableService        RefundSalesReceivableService
-	StripeRefundGateway           applicationport.StripeRefundGateway
-	StripeTransferReversalGateway applicationport.StripeTransferReversalGateway
+	PaymentReader                   RefundPaymentReader
+	SettlementRepository            RefundSettlementRepository
+	SalesReceivableService          RefundSalesReceivableService
+	BrandFeeSettlementRefundService BrandFeeSettlementRefundService
+	StripeRefundGateway             applicationport.StripeRefundGateway
+	StripeTransferReversalGateway   applicationport.StripeTransferReversalGateway
 }
 
 func NewRefundUsecase(in NewRefundUsecaseInput) *RefundUsecase {
 	return &RefundUsecase{
-		paymentReader:                 in.PaymentReader,
-		settlementRepo:                in.SettlementRepository,
-		salesReceivableService:        in.SalesReceivableService,
-		stripeRefundGateway:           in.StripeRefundGateway,
-		stripeTransferReversalGateway: in.StripeTransferReversalGateway,
+		paymentReader:                   in.PaymentReader,
+		settlementRepo:                  in.SettlementRepository,
+		salesReceivableService:          in.SalesReceivableService,
+		brandFeeSettlementRefundService: in.BrandFeeSettlementRefundService,
+		stripeRefundGateway:             in.StripeRefundGateway,
+		stripeTransferReversalGateway:   in.StripeTransferReversalGateway,
 	}
 }
 
@@ -225,6 +228,13 @@ func (u *RefundUsecase) RefundByPaymentID(ctx context.Context, in RefundByPaymen
 		return result, err
 	}
 
+	brandFeeResults, err := u.brandFeeSettlementRefundService.PrepareByPaymentID(ctx, paymentID)
+	result.BrandFeeSettlements = brandFeeResults
+	if err != nil {
+		populateRefundFinancialResults(result, settlements, settlementResults, receivables, receivableResults)
+		return result, fmt.Errorf("refund: prepare Brand fee settlements: %w", err)
+	}
+
 	refundResult, refundErr := u.stripeRefundGateway.CreateRefund(ctx, applicationport.CreateStripeRefundInput{
 		StripeChargeID: payment.StripeChargeID,
 		Amount:         payment.Amount,
@@ -248,11 +258,20 @@ func (u *RefundUsecase) RefundByPaymentID(ctx context.Context, in RefundByPaymen
 	case paymentdom.RefundStatusPending, paymentdom.RefundStatusRequiresAction, paymentdom.RefundStatusFailed, paymentdom.RefundStatusCanceled:
 		populateRefundFinancialResults(result, settlements, settlementResults, receivables, receivableResults)
 		return result, nil
+
 	case paymentdom.RefundStatusSucceeded:
 		if err := u.reverseTransferredSettlementsForRefund(ctx, settlements, settlementResults); err != nil {
 			populateRefundFinancialResults(result, settlements, settlementResults, receivables, receivableResults)
 			return result, err
 		}
+
+		brandFeeResults, err = u.brandFeeSettlementRefundService.CompleteByPaymentID(ctx, paymentID)
+		result.BrandFeeSettlements = brandFeeResults
+		if err != nil {
+			populateRefundFinancialResults(result, settlements, settlementResults, receivables, receivableResults)
+			return result, fmt.Errorf("refund: complete Brand fee settlements: %w", err)
+		}
+
 	default:
 		populateRefundFinancialResults(result, settlements, settlementResults, receivables, receivableResults)
 		return result, ErrRefundStripeRefundStatusInvalid
@@ -328,6 +347,13 @@ func (u *RefundUsecase) CompleteSucceededRefund(ctx context.Context, in Complete
 		return result, err
 	}
 
+	brandFeeResults, err := u.brandFeeSettlementRefundService.CompleteByPaymentID(ctx, paymentID)
+	result.BrandFeeSettlements = brandFeeResults
+	if err != nil {
+		populateRefundFinancialResults(result, settlements, settlementResults, receivables, receivableResults)
+		return result, fmt.Errorf("refund: complete Brand fee settlements: %w", err)
+	}
+
 	populateRefundFinancialResults(result, settlements, settlementResults, receivables, receivableResults)
 	return result, nil
 }
@@ -342,6 +368,9 @@ func (u *RefundUsecase) validateConfigured(requireStripeRefundGateway bool) erro
 	if u.salesReceivableService == nil {
 		return ErrRefundSalesReceivableServiceMissing
 	}
+	if u.brandFeeSettlementRefundService == nil {
+		return ErrRefundBrandFeeSettlementServiceMissing
+	}
 	if requireStripeRefundGateway && u.stripeRefundGateway == nil {
 		return ErrRefundStripeRefundGatewayMissing
 	}
@@ -353,10 +382,12 @@ func (u *RefundUsecase) loadFinancialSources(ctx context.Context, paymentID stri
 	if err != nil {
 		return nil, nil, err
 	}
+
 	receivables, err := u.salesReceivableService.ListByPaymentID(ctx, paymentID)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	sort.Slice(settlements, func(i, j int) bool { return settlements[i].ID < settlements[j].ID })
 	sort.Slice(receivables, func(i, j int) bool { return receivables[i].ID < receivables[j].ID })
 	return settlements, receivables, nil
@@ -364,11 +395,13 @@ func (u *RefundUsecase) loadFinancialSources(ctx context.Context, paymentID stri
 
 func newRefundByPaymentIDResult(payment paymentdom.Payment, settlements []settlementdom.Settlement, receivables []salesreceivabledom.SalesReceivable) *RefundByPaymentIDResult {
 	result := &RefundByPaymentIDResult{
-		PaymentID:        payment.PaymentID,
-		Amount:           payment.Amount,
-		Settlements:      make([]RefundSettlementResult, 0, len(settlements)),
-		SalesReceivables: make([]RefundSalesReceivableResult, 0, len(receivables)),
+		PaymentID:           payment.PaymentID,
+		Amount:              payment.Amount,
+		Settlements:         make([]RefundSettlementResult, 0, len(settlements)),
+		SalesReceivables:    make([]RefundSalesReceivableResult, 0, len(receivables)),
+		BrandFeeSettlements: make([]BrandFeeSettlementRefundResult, 0),
 	}
+
 	if payment.RefundStatus != "" && payment.RefundStatus != paymentdom.RefundStatusNone {
 		result.StripeRefundID = payment.StripeRefundID
 		result.RefundStatus = payment.RefundStatus
@@ -378,6 +411,7 @@ func newRefundByPaymentIDResult(payment paymentdom.Payment, settlements []settle
 			result.RefundedAt = &value
 		}
 	}
+
 	return result
 }
 
@@ -421,6 +455,7 @@ func populateRefundFinancialResults(result *RefundByPaymentIDResult, settlements
 	if result == nil {
 		return
 	}
+
 	result.Settlements = buildRefundSettlementResults(settlements, settlementValues)
 	result.SalesReceivables = buildRefundSalesReceivableResults(receivables, receivableValues)
 }
@@ -429,6 +464,7 @@ func applyCreateStripeRefundResult(result *RefundByPaymentIDResult, paymentAmoun
 	if result == nil || refundResult == nil {
 		return ErrRefundStripeRefundResultEmpty
 	}
+
 	stripeRefundID := refundResult.StripeRefundID
 	if !isStripeRefundID(stripeRefundID) {
 		return ErrRefundStripeRefundIDEmpty
@@ -444,6 +480,7 @@ func applyCreateStripeRefundResult(result *RefundByPaymentIDResult, paymentAmoun
 	result.RefundStatus = refundResult.Status
 	result.RefundedAmount = 0
 	result.RefundedAt = nil
+
 	if refundResult.Status == paymentdom.RefundStatusSucceeded {
 		if paymentAmount <= 0 {
 			return paymentdom.ErrInvalidAmount
@@ -452,6 +489,7 @@ func applyCreateStripeRefundResult(result *RefundByPaymentIDResult, paymentAmoun
 		value := refundResult.CreatedAt.UTC()
 		result.RefundedAt = &value
 	}
+
 	return nil
 }
 
@@ -467,17 +505,21 @@ func (u *RefundUsecase) cancelUntransferredSettlementsForRefund(ctx context.Cont
 			if err != nil {
 				return fmt.Errorf("refund: cancel settlement %q: %w", settlement.ID, err)
 			}
+
 			item := settlementResults[settlement.ID]
 			item.Status = updated.Status
 			item.Action = RefundSettlementActionCanceled
 			settlementResults[settlement.ID] = item
+
 		case settlementdom.StatusCanceled:
 			item := settlementResults[settlement.ID]
 			item.Action = RefundSettlementActionAlreadyCanceled
 			settlementResults[settlement.ID] = item
+
 		case settlementdom.StatusTransferred, settlementdom.StatusReversed:
 		}
 	}
+
 	return nil
 }
 
@@ -495,22 +537,28 @@ func (u *RefundUsecase) cancelUnpaidSalesReceivablesForRefund(ctx context.Contex
 			if err := updated.Validate(); err != nil {
 				return fmt.Errorf("%w: %v", ErrRefundSalesReceivableMismatch, err)
 			}
+
 			item := receivableResults[receivable.ID]
 			item.Status = updated.Status
 			item.Action = RefundSalesReceivableActionCanceled
 			receivableResults[receivable.ID] = item
+
 		case salesreceivabledom.StatusCanceled:
 			item := receivableResults[receivable.ID]
 			item.Action = RefundSalesReceivableActionAlreadyCanceled
 			receivableResults[receivable.ID] = item
+
 		case salesreceivabledom.StatusReserved:
 			return ErrRefundSalesReceivableReserved
+
 		case salesreceivabledom.StatusPaid:
 			return ErrRefundSalesReceivablePaid
+
 		default:
 			return ErrRefundSalesReceivableStatusUnsupported
 		}
 	}
+
 	return nil
 }
 
@@ -522,17 +570,20 @@ func (u *RefundUsecase) reverseTransferredSettlementsForRefund(ctx context.Conte
 			if err != nil {
 				return fmt.Errorf("refund: reverse settlement %q: %w", settlement.ID, err)
 			}
+
 			item := settlementResults[settlement.ID]
 			item.Status = updated.Status
 			item.StripeTransferReversalID = updated.StripeTransferReversalID
 			item.Action = RefundSettlementActionReversed
 			settlementResults[settlement.ID] = item
+
 		case settlementdom.StatusReversed:
 			item := settlementResults[settlement.ID]
 			item.Action = RefundSettlementActionAlreadyReversed
 			settlementResults[settlement.ID] = item
 		}
 	}
+
 	return nil
 }
 
@@ -541,11 +592,13 @@ func (u *RefundUsecase) cancelSettlementForRefund(ctx context.Context, settlemen
 	if err := seller.Validate(); err != nil {
 		return settlementdom.Settlement{}, ErrRefundSettlementPaymentMismatch
 	}
+
 	status := settlementdom.StatusCanceled
 	updated, err := u.settlementRepo.UpdateByID(ctx, settlement.ID, settlementdom.UpdateSettlementInput{Status: &status})
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
+
 	updatedSeller := updated.SellerIdentity()
 	if err := updatedSeller.Validate(); err != nil {
 		return settlementdom.Settlement{}, ErrRefundSettlementPaymentMismatch
@@ -556,6 +609,7 @@ func (u *RefundUsecase) cancelSettlementForRefund(ctx context.Context, settlemen
 	if updated.Status != settlementdom.StatusCanceled {
 		return settlementdom.Settlement{}, settlementdom.ErrInvalidStatusTransition
 	}
+
 	return updated, nil
 }
 
@@ -566,6 +620,7 @@ func (u *RefundUsecase) reverseTransferredSettlement(ctx context.Context, settle
 	if settlement.Status != settlementdom.StatusTransferred {
 		return settlementdom.Settlement{}, settlementdom.ErrInvalidStatusTransition
 	}
+
 	seller := settlement.SellerIdentity()
 	if err := seller.Validate(); err != nil {
 		return settlementdom.Settlement{}, ErrRefundSettlementPaymentMismatch
@@ -592,6 +647,7 @@ func (u *RefundUsecase) reverseTransferredSettlement(ctx context.Context, settle
 	if reversalResult == nil {
 		return settlementdom.Settlement{}, ErrRefundStripeTransferReversalResultEmpty
 	}
+
 	reversalID := reversalResult.StripeTransferReversalID
 	if !isStripeTransferReversalIDForRefund(reversalID) {
 		return settlementdom.Settlement{}, ErrRefundStripeTransferReversalIDEmpty
@@ -605,6 +661,7 @@ func (u *RefundUsecase) reverseTransferredSettlement(ctx context.Context, settle
 	if err != nil {
 		return settlementdom.Settlement{}, fmt.Errorf("persist Stripe transfer reversal %q: %w", reversalID, err)
 	}
+
 	updatedSeller := updated.SellerIdentity()
 	if err := updatedSeller.Validate(); err != nil {
 		return settlementdom.Settlement{}, ErrRefundSettlementPaymentMismatch
@@ -615,6 +672,7 @@ func (u *RefundUsecase) reverseTransferredSettlement(ctx context.Context, settle
 	if updated.Status != settlementdom.StatusReversed || updated.StripeTransferReversalID != reversalID {
 		return settlementdom.Settlement{}, settlementdom.ErrInvalidStatusTransition
 	}
+
 	return updated, nil
 }
 
@@ -637,14 +695,17 @@ func validateRefundFinancialSources(paymentID string, paymentAmount int, settlem
 	if err != nil {
 		return false, err
 	}
+
 	receivableTotal, err := validateRefundSalesReceivables(paymentID, receivables)
 	if err != nil {
 		return false, err
 	}
+
 	maxInt := int(^uint(0) >> 1)
 	if settlementTotal > maxInt-receivableTotal || settlementTotal+receivableTotal != paymentAmount {
 		return false, ErrRefundFinancialSourceAmountMismatch
 	}
+
 	return hasTransferredSettlement, nil
 }
 
@@ -663,6 +724,7 @@ func validateRefundSettlements(paymentID string, settlements []settlementdom.Set
 			return 0, false, ErrRefundSettlementDuplicate
 		}
 		seenSettlementIDs[settlement.ID] = struct{}{}
+
 		if err := settlement.Validate(); err != nil {
 			return 0, false, fmt.Errorf("%w: %v", ErrRefundSettlementPaymentMismatch, err)
 		}
@@ -671,14 +733,17 @@ func validateRefundSettlements(paymentID string, settlements []settlementdom.Set
 		if err := seller.Validate(); err != nil {
 			return 0, false, ErrRefundSettlementPaymentMismatch
 		}
+
 		expectedSettlementID, err := settlementdom.NewID(paymentID, seller)
 		if err != nil || expectedSettlementID != settlement.ID {
 			return 0, false, ErrRefundSettlementPaymentMismatch
 		}
+
 		sellerID, err := seller.Key()
 		if err != nil {
 			return 0, false, ErrRefundSettlementPaymentMismatch
 		}
+
 		sellerKey := string(seller.Type) + ":" + sellerID
 		if _, exists := seenSellerKeys[sellerKey]; exists {
 			return 0, false, ErrRefundSettlementDuplicate
@@ -706,6 +771,7 @@ func validateRefundSettlements(paymentID string, settlements []settlementdom.Set
 			return 0, false, ErrRefundSettlementStatusUnsupported
 		}
 	}
+
 	return total, hasTransferredSettlement, nil
 }
 
@@ -723,21 +789,25 @@ func validateRefundSalesReceivables(paymentID string, receivables []salesreceiva
 			return 0, ErrRefundSalesReceivableDuplicate
 		}
 		seenIDs[receivable.ID] = struct{}{}
+
 		if _, exists := seenItemIndexes[receivable.OrderItemIndex]; exists {
 			return 0, ErrRefundSalesReceivableDuplicate
 		}
 		seenItemIndexes[receivable.OrderItemIndex] = struct{}{}
+
 		if err := receivable.Validate(); err != nil {
 			return 0, fmt.Errorf("%w: %v", ErrRefundSalesReceivableMismatch, err)
 		}
+
 		expectedID, err := salesreceivabledom.NewID(paymentID, receivable.OrderItemIndex)
 		if err != nil || expectedID != receivable.ID {
 			return 0, ErrRefundSalesReceivableMismatch
 		}
-		if total > maxInt-receivable.GrossAmount {
+
+		if total > maxInt-receivable.MerchandiseAmount {
 			return 0, ErrRefundFinancialSourceAmountMismatch
 		}
-		total += receivable.GrossAmount
+		total += receivable.MerchandiseAmount
 
 		switch receivable.Status {
 		case salesreceivabledom.StatusPending, salesreceivabledom.StatusAvailable, salesreceivabledom.StatusCanceled:
@@ -749,6 +819,7 @@ func validateRefundSalesReceivables(paymentID string, receivables []salesreceiva
 			return 0, ErrRefundSalesReceivableStatusUnsupported
 		}
 	}
+
 	return total, nil
 }
 
@@ -761,8 +832,11 @@ func sameSalesReceivableAllocation(left, right salesreceivabledom.SalesReceivabl
 		left.AvatarID == right.AvatarID &&
 		left.UserID == right.UserID &&
 		left.PayoutAccountID == right.PayoutAccountID &&
+		left.MerchandiseAmount == right.MerchandiseAmount &&
+		left.ShippingAmount == right.ShippingAmount &&
 		left.GrossAmount == right.GrossAmount &&
 		left.PlatformFeeAmount == right.PlatformFeeAmount &&
+		left.BrandFeeAmount == right.BrandFeeAmount &&
 		left.ReceivableAmount == right.ReceivableAmount &&
 		left.Currency == right.Currency &&
 		left.CreatedAt.Equal(right.CreatedAt)

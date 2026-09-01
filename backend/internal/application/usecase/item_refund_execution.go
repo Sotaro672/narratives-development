@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	brandfeesettlementdom "narratives/internal/domain/brandFeeSettlement"
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
 	refunddom "narratives/internal/domain/refund"
@@ -121,6 +122,10 @@ func (u *ItemRefundUsecase) refundOrderItem(
 		salesReceivable = resolvedReceivable
 		salesReceivableID = resolvedReceivable.ID
 
+		if err := u.prepareResaleBrandFeeSettlementRefund(ctx, *payment, targetItem, in.ItemIndex); err != nil {
+			return refunddom.Refund{}, err
+		}
+
 	default:
 		return refunddom.Refund{}, ErrItemRefundOrderMismatch
 	}
@@ -130,6 +135,7 @@ func (u *ItemRefundUsecase) refundOrderItem(
 		if existingRefund == nil {
 			return refunddom.Refund{}, refunddom.ErrConflict
 		}
+
 		if err := validateExistingItemRefund(
 			*existingRefund,
 			in,
@@ -141,7 +147,8 @@ func (u *ItemRefundUsecase) refundOrderItem(
 		); err != nil {
 			return refunddom.Refund{}, err
 		}
-		return u.resumeRefund(ctx, *payment, settlement, *existingRefund)
+
+		return u.resumeRefund(ctx, *payment, targetItem, settlement, *existingRefund)
 	}
 	if !errors.Is(err, refunddom.ErrNotFound) {
 		return refunddom.Refund{}, err
@@ -150,6 +157,7 @@ func (u *ItemRefundUsecase) refundOrderItem(
 	if payment.RefundStatus != paymentdom.RefundStatusNone {
 		return refunddom.Refund{}, ErrItemRefundPaymentAlreadyRefunding
 	}
+
 	if err := u.validatePaymentRefundCapacity(
 		ctx,
 		payment.PaymentID,
@@ -230,14 +238,14 @@ func (u *ItemRefundUsecase) refundOrderItem(
 			return refunddom.Refund{}, err
 		}
 
-		return u.resumeRefund(ctx, *payment, settlement, *existing)
+		return u.resumeRefund(ctx, *payment, targetItem, settlement, *existing)
 	}
 
 	if createdRefund == nil {
 		return refunddom.Refund{}, refunddom.ErrConflict
 	}
 
-	return u.resumeRefund(ctx, *payment, settlement, *createdRefund)
+	return u.resumeRefund(ctx, *payment, targetItem, settlement, *createdRefund)
 }
 
 // ============================================================
@@ -360,12 +368,14 @@ func (u *ItemRefundUsecase) resolveAndCancelResaleReceivable(
 			canceled.BankPayoutID != "" {
 			return nil, ErrItemRefundSalesReceivableUnavailable
 		}
+
 		return canceled, nil
 
 	case salesreceivabledom.StatusCanceled:
 		if current.BankPayoutID != "" {
 			return nil, ErrItemRefundSalesReceivableMismatch
 		}
+
 		return current, nil
 
 	case salesreceivabledom.StatusReserved:
@@ -408,10 +418,13 @@ func (u *ItemRefundUsecase) resolveResaleReceivableCancellationRace(
 	switch current.Status {
 	case salesreceivabledom.StatusCanceled:
 		return current, nil
+
 	case salesreceivabledom.StatusReserved:
 		return nil, ErrItemRefundSalesReceivableReserved
+
 	case salesreceivabledom.StatusPaid:
 		return nil, ErrItemRefundSalesReceivablePaid
+
 	default:
 		return nil, ErrItemRefundSalesReceivableUnavailable
 	}
@@ -446,9 +459,149 @@ func validateResaleReceivableRefundTarget(
 		receivable.UserID != snapshot.UserID ||
 		receivable.PayoutAccountID != snapshot.PayoutAccountID ||
 		receivable.PayoutAccountID != receivable.UserID ||
-		receivable.GrossAmount != targetItem.Price ||
+		receivable.MerchandiseAmount != targetItem.Price ||
 		receivable.Currency != salesreceivabledom.CurrencyJPY {
 		return ErrItemRefundSalesReceivableMismatch
+	}
+
+	return nil
+}
+
+// ============================================================
+// Resale Brand Fee Refund
+// ============================================================
+
+func (u *ItemRefundUsecase) prepareResaleBrandFeeSettlementRefund(
+	ctx context.Context,
+	payment paymentdom.Payment,
+	targetItem orderdom.OrderItemSnapshot,
+	itemIndex int,
+) error {
+	if u == nil || u.brandFeeSettlementRefundService == nil {
+		return ErrItemRefundNotConfigured
+	}
+
+	result, err := u.brandFeeSettlementRefundService.PrepareByPaymentAndOrderItem(ctx, payment.PaymentID, itemIndex)
+	if err != nil {
+		return err
+	}
+	if err := validateResaleBrandFeeSettlementRefundResult(result, payment, targetItem, itemIndex); err != nil {
+		return err
+	}
+
+	switch result.Status {
+	case brandfeesettlementdom.StatusCanceled:
+		if result.Action != BrandFeeSettlementRefundActionCanceled &&
+			result.Action != BrandFeeSettlementRefundActionAlreadyCanceled {
+			return ErrBrandFeeSettlementRefundMismatch
+		}
+
+	case brandfeesettlementdom.StatusTransferred:
+		if result.Action != BrandFeeSettlementRefundActionReversalRequired {
+			return ErrBrandFeeSettlementRefundMismatch
+		}
+
+	case brandfeesettlementdom.StatusFailed:
+		if result.Action != BrandFeeSettlementRefundActionNoTransfer {
+			return ErrBrandFeeSettlementRefundMismatch
+		}
+
+	case brandfeesettlementdom.StatusReversed:
+		if result.Action != BrandFeeSettlementRefundActionAlreadyReversed {
+			return ErrBrandFeeSettlementRefundMismatch
+		}
+
+	default:
+		return ErrBrandFeeSettlementRefundStatusUnsupported
+	}
+
+	return nil
+}
+
+func (u *ItemRefundUsecase) completeResaleBrandFeeSettlementRefund(
+	ctx context.Context,
+	payment paymentdom.Payment,
+	targetItem orderdom.OrderItemSnapshot,
+	itemIndex int,
+) error {
+	if u == nil || u.brandFeeSettlementRefundService == nil {
+		return ErrItemRefundNotConfigured
+	}
+
+	result, err := u.brandFeeSettlementRefundService.CompleteByPaymentAndOrderItem(ctx, payment.PaymentID, itemIndex)
+	if err != nil {
+		return err
+	}
+	if err := validateResaleBrandFeeSettlementRefundResult(result, payment, targetItem, itemIndex); err != nil {
+		return err
+	}
+
+	switch result.Status {
+	case brandfeesettlementdom.StatusCanceled:
+		if result.Action != BrandFeeSettlementRefundActionCanceled &&
+			result.Action != BrandFeeSettlementRefundActionAlreadyCanceled {
+			return ErrBrandFeeSettlementRefundMismatch
+		}
+
+	case brandfeesettlementdom.StatusReversed:
+		if result.Action != BrandFeeSettlementRefundActionReversed &&
+			result.Action != BrandFeeSettlementRefundActionAlreadyReversed {
+			return ErrBrandFeeSettlementRefundMismatch
+		}
+
+	case brandfeesettlementdom.StatusFailed:
+		if result.Action != BrandFeeSettlementRefundActionNoTransfer {
+			return ErrBrandFeeSettlementRefundMismatch
+		}
+
+	default:
+		return ErrBrandFeeSettlementRefundStatusUnsupported
+	}
+
+	return nil
+}
+
+func validateResaleBrandFeeSettlementRefundResult(
+	result BrandFeeSettlementRefundResult,
+	payment paymentdom.Payment,
+	targetItem orderdom.OrderItemSnapshot,
+	itemIndex int,
+) error {
+	if payment.PaymentID == "" ||
+		itemIndex < 0 ||
+		targetItem.Type != orderdom.OrderItemTypeResale ||
+		targetItem.ResaleID == "" {
+		return ErrBrandFeeSettlementRefundMismatch
+	}
+
+	expectedID, err := brandfeesettlementdom.NewID(payment.PaymentID, itemIndex)
+	if err != nil {
+		return ErrBrandFeeSettlementRefundMismatch
+	}
+
+	brand := targetItem.BrandRevenueSnapshot
+	if brand.BrandID == "" ||
+		brand.CompanyID == "" ||
+		brand.AccountID == "" ||
+		brand.StripeAccountID == "" {
+		return ErrBrandFeeSettlementRefundMismatch
+	}
+	if targetItem.BrandID != "" && targetItem.BrandID != brand.BrandID {
+		return ErrBrandFeeSettlementRefundMismatch
+	}
+
+	if result.BrandFeeSettlementID != expectedID ||
+		result.OrderID != payment.PaymentID ||
+		result.PaymentID != payment.PaymentID ||
+		result.OrderItemIndex != itemIndex ||
+		result.ResaleID != targetItem.ResaleID ||
+		result.BrandID != brand.BrandID ||
+		result.CompanyID != brand.CompanyID ||
+		result.AccountID != brand.AccountID ||
+		result.StripeAccountID != brand.StripeAccountID ||
+		result.BrandFeeAmount <= 0 ||
+		result.Currency != brandfeesettlementdom.CurrencyJPY {
+		return ErrBrandFeeSettlementRefundMismatch
 	}
 
 	return nil
@@ -461,6 +614,7 @@ func validateResaleReceivableRefundTarget(
 func (u *ItemRefundUsecase) resumeRefund(
 	ctx context.Context,
 	payment paymentdom.Payment,
+	targetItem orderdom.OrderItemSnapshot,
 	settlement *settlementdom.Settlement,
 	refund refunddom.Refund,
 ) (refunddom.Refund, error) {
@@ -506,6 +660,16 @@ func (u *ItemRefundUsecase) resumeRefund(
 			refund.TransferReversalStatus != refunddom.TransferReversalStatusNotRequired {
 			return refund, ErrItemRefundExistingRefundMismatch
 		}
+
+		if err := u.completeResaleBrandFeeSettlementRefund(
+			ctx,
+			payment,
+			targetItem,
+			refund.OrderItemIndex,
+		); err != nil {
+			return refund, err
+		}
+
 		return refund, nil
 
 	case refunddom.SellerTypeAccount:

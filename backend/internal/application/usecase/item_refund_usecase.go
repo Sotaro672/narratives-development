@@ -25,10 +25,7 @@ import (
 // must always be derived from authoritative persisted state. They must never be
 // accepted from the frontend.
 type ItemRefundOrderReader interface {
-	GetByID(
-		ctx context.Context,
-		id string,
-	) (orderdom.Order, error)
+	GetByID(ctx context.Context, id string) (orderdom.Order, error)
 }
 
 // ItemRefundPaymentReader provides the original succeeded Stripe Payment.
@@ -39,10 +36,7 @@ type ItemRefundOrderReader interface {
 // Payment because Payment refund fields represent the full-payment refund
 // lifecycle.
 type ItemRefundPaymentReader interface {
-	GetByPaymentID(
-		ctx context.Context,
-		paymentID string,
-	) (*paymentdom.Payment, error)
+	GetByPaymentID(ctx context.Context, paymentID string) (*paymentdom.Payment, error)
 }
 
 // ItemRefundSettlementRepository provides primary List-sale Settlement state.
@@ -55,10 +49,7 @@ type ItemRefundPaymentReader interface {
 //
 // Consumer resale items never use this repository.
 type ItemRefundSettlementRepository interface {
-	ListByPaymentID(
-		ctx context.Context,
-		paymentID string,
-	) ([]settlementdom.Settlement, error)
+	ListByPaymentID(ctx context.Context, paymentID string) ([]settlementdom.Settlement, error)
 }
 
 // ItemRefundSalesReceivableService provides the item-level resale financial
@@ -78,15 +69,8 @@ type ItemRefundSettlementRepository interface {
 //
 // The Refund flow must never rewrite a paid SalesReceivable.
 type ItemRefundSalesReceivableService interface {
-	GetByID(
-		ctx context.Context,
-		receivableID string,
-	) (*salesreceivabledom.SalesReceivable, error)
-
-	Cancel(
-		ctx context.Context,
-		receivableID string,
-	) (*salesreceivabledom.SalesReceivable, error)
+	GetByID(ctx context.Context, receivableID string) (*salesreceivabledom.SalesReceivable, error)
+	Cancel(ctx context.Context, receivableID string) (*salesreceivabledom.SalesReceivable, error)
 }
 
 // ============================================================
@@ -233,10 +217,15 @@ var (
 //
 //	Order item
 //		-> SalesReceivable
-//		-> cancel unpaid receivable
+//		-> cancel unpaid seller proceeds
+//		-> BrandFeeSettlement
+//		-> cancel untransferred Brand fee before purchaser Refund
 //		-> purchaser Stripe Refund
+//		-> reverse transferred Brand fee after Refund success
 //
-// Consumer resale never uses Stripe Connect Transfer Reversal.
+// Consumer resale seller proceeds never use Stripe Connect Transfer Reversal.
+// The productBlueprint Brand fee is separate and may require a full Stripe
+// Transfer Reversal after the purchaser Refund succeeds.
 //
 // Unopened returns use the existing merchandise-only calculation:
 //
@@ -282,9 +271,10 @@ var (
 //  6. Resolve the exact item-level SalesReceivable.
 //  7. Require pending, available, or already canceled.
 //  8. Cancel pending/available SalesReceivable before purchaser Refund creation.
-//  9. Load or create deterministic Refund aggregate referencing SalesReceivable.
-//  10. Create or resume purchaser Stripe Refund.
-//  11. No Stripe Transfer Reversal is performed.
+//  9. Prepare the exact item-level BrandFeeSettlement before purchaser Refund.
+//  10. Load or create deterministic Refund aggregate referencing SalesReceivable.
+//  11. Create or resume purchaser Stripe Refund.
+//  12. After Refund success, reverse the Brand fee when it was transferred.
 //
 // reserved and paid SalesReceivables are intentionally rejected until
 // BankPayout coordination and paid-receivable recovery are implemented.
@@ -294,67 +284,50 @@ var (
 //
 //	Refund.IsFinanciallyCompleted() == true
 type ItemRefundUsecase struct {
-	orderReader ItemRefundOrderReader
-
-	paymentReader ItemRefundPaymentReader
-
-	settlementRepo ItemRefundSettlementRepository
-
-	salesReceivableService ItemRefundSalesReceivableService
-
-	refundRepo refunddom.RepositoryPort
-
-	platformFeeCalculator settlementdom.PlatformFeeCalculator
-
-	stripeRefundGateway applicationport.StripeRefundGateway
-
-	stripeTransferReversalGateway applicationport.StripeTransferReversalGateway
-
-	now func() time.Time
+	orderReader                     ItemRefundOrderReader
+	paymentReader                   ItemRefundPaymentReader
+	settlementRepo                  ItemRefundSettlementRepository
+	salesReceivableService          ItemRefundSalesReceivableService
+	brandFeeSettlementRefundService BrandFeeSettlementRefundService
+	refundRepo                      refunddom.RepositoryPort
+	platformFeeCalculator           settlementdom.PlatformFeeCalculator
+	stripeRefundGateway             applicationport.StripeRefundGateway
+	stripeTransferReversalGateway   applicationport.StripeTransferReversalGateway
+	now                             func() time.Time
 }
 
 type NewItemRefundUsecaseInput struct {
-	OrderReader ItemRefundOrderReader
-
-	PaymentReader ItemRefundPaymentReader
-
-	SettlementRepository ItemRefundSettlementRepository
-
-	SalesReceivableService ItemRefundSalesReceivableService
-
-	RefundRepository refunddom.RepositoryPort
-
-	PlatformFeeCalculator settlementdom.PlatformFeeCalculator
-
-	StripeRefundGateway applicationport.StripeRefundGateway
-
-	StripeTransferReversalGateway applicationport.StripeTransferReversalGateway
+	OrderReader                     ItemRefundOrderReader
+	PaymentReader                   ItemRefundPaymentReader
+	SettlementRepository            ItemRefundSettlementRepository
+	SalesReceivableService          ItemRefundSalesReceivableService
+	BrandFeeSettlementRefundService BrandFeeSettlementRefundService
+	RefundRepository                refunddom.RepositoryPort
+	PlatformFeeCalculator           settlementdom.PlatformFeeCalculator
+	StripeRefundGateway             applicationport.StripeRefundGateway
+	StripeTransferReversalGateway   applicationport.StripeTransferReversalGateway
 }
 
-func NewItemRefundUsecase(
-	in NewItemRefundUsecaseInput,
-) *ItemRefundUsecase {
+func NewItemRefundUsecase(in NewItemRefundUsecaseInput) *ItemRefundUsecase {
 	return &ItemRefundUsecase{
-		orderReader:                   in.OrderReader,
-		paymentReader:                 in.PaymentReader,
-		settlementRepo:                in.SettlementRepository,
-		salesReceivableService:        in.SalesReceivableService,
-		refundRepo:                    in.RefundRepository,
-		platformFeeCalculator:         in.PlatformFeeCalculator,
-		stripeRefundGateway:           in.StripeRefundGateway,
-		stripeTransferReversalGateway: in.StripeTransferReversalGateway,
-		now:                           time.Now,
+		orderReader:                     in.OrderReader,
+		paymentReader:                   in.PaymentReader,
+		settlementRepo:                  in.SettlementRepository,
+		salesReceivableService:          in.SalesReceivableService,
+		brandFeeSettlementRefundService: in.BrandFeeSettlementRefundService,
+		refundRepo:                      in.RefundRepository,
+		platformFeeCalculator:           in.PlatformFeeCalculator,
+		stripeRefundGateway:             in.StripeRefundGateway,
+		stripeTransferReversalGateway:   in.StripeTransferReversalGateway,
+		now:                             time.Now,
 	}
 }
 
 // SetNowFunc replaces the current-time source for tests.
-func (u *ItemRefundUsecase) SetNowFunc(
-	now func() time.Time,
-) {
+func (u *ItemRefundUsecase) SetNowFunc(now func() time.Time) {
 	if u == nil || now == nil {
 		return
 	}
-
 	u.now = now
 }
 
@@ -372,13 +345,10 @@ func (u *ItemRefundUsecase) SetNowFunc(
 // seller identity is resolved from the Order SellerSnapshot instead.
 type RefundOpenedReturnItemInput struct {
 	InquiryID string
-
 	OrderID   string
 	ItemIndex int
-
 	CompanyID string
-
-	Policy refunddom.OpenedReturnRefundPolicy
+	Policy    refunddom.OpenedReturnRefundPolicy
 }
 
 // itemRefundRequest is the internal normalized request boundary shared by
@@ -388,28 +358,21 @@ type RefundOpenedReturnItemInput struct {
 // seller identity.
 type itemRefundRequest struct {
 	InquiryID string
-
 	OrderID   string
 	ItemIndex int
-
 	CompanyID string
-
-	Policy refunddom.OpenedReturnRefundPolicy
+	Policy    refunddom.OpenedReturnRefundPolicy
 }
 
 type itemRefundAmountSummary struct {
-	Policy refunddom.OpenedReturnRefundPolicy
-
-	MerchandiseAmount    int
-	MerchandiseTaxAmount int
-
+	Policy                    refunddom.OpenedReturnRefundPolicy
+	MerchandiseAmount         int
+	MerchandiseTaxAmount      int
 	OutboundShippingAmount    int
 	OutboundShippingTaxAmount int
-
-	ReturnShippingAmount    int
-	ReturnShippingTaxAmount int
-
-	RefundAmount int
+	ReturnShippingAmount      int
+	ReturnShippingTaxAmount   int
+	RefundAmount              int
 }
 
 // RefundOrderItem executes or resumes the existing unopened-return refund.
@@ -418,19 +381,13 @@ type itemRefundAmountSummary struct {
 //
 // Resale items ignore CompanyID for seller identity and instead validate the
 // immutable resale SellerSnapshot and SalesReceivable.
-func (u *ItemRefundUsecase) RefundOrderItem(
-	ctx context.Context,
-	in RefundOrderItemInput,
-) (refunddom.Refund, error) {
-	return u.refundOrderItem(
-		ctx,
-		itemRefundRequest{
-			InquiryID: in.InquiryID,
-			OrderID:   in.OrderID,
-			ItemIndex: in.ItemIndex,
-			CompanyID: in.CompanyID,
-		},
-	)
+func (u *ItemRefundUsecase) RefundOrderItem(ctx context.Context, in RefundOrderItemInput) (refunddom.Refund, error) {
+	return u.refundOrderItem(ctx, itemRefundRequest{
+		InquiryID: in.InquiryID,
+		OrderID:   in.OrderID,
+		ItemIndex: in.ItemIndex,
+		CompanyID: in.CompanyID,
+	})
 }
 
 // RefundOpenedReturnOrderItem executes or resumes one opened-return refund.
@@ -442,22 +399,16 @@ func (u *ItemRefundUsecase) RefundOrderItem(
 //
 // Resale items resolve seller identity from the authoritative Order snapshot and
 // SalesReceivable.
-func (u *ItemRefundUsecase) RefundOpenedReturnOrderItem(
-	ctx context.Context,
-	in RefundOpenedReturnItemInput,
-) (refunddom.Refund, error) {
+func (u *ItemRefundUsecase) RefundOpenedReturnOrderItem(ctx context.Context, in RefundOpenedReturnItemInput) (refunddom.Refund, error) {
 	if err := refunddom.ValidateOpenedReturnRefundPolicy(in.Policy); err != nil {
 		return refunddom.Refund{}, err
 	}
 
-	return u.refundOrderItem(
-		ctx,
-		itemRefundRequest{
-			InquiryID: in.InquiryID,
-			OrderID:   in.OrderID,
-			ItemIndex: in.ItemIndex,
-			CompanyID: in.CompanyID,
-			Policy:    in.Policy,
-		},
-	)
+	return u.refundOrderItem(ctx, itemRefundRequest{
+		InquiryID: in.InquiryID,
+		OrderID:   in.OrderID,
+		ItemIndex: in.ItemIndex,
+		CompanyID: in.CompanyID,
+		Policy:    in.Policy,
+	})
 }

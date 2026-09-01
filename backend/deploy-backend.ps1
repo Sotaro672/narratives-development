@@ -11,7 +11,10 @@ param(
   [string]$RepoName = "narratives-backend",
 
   # Mint / internal worker Cloud Tasks queue
-  [string]$CloudTasksQueueID = "mint-product-tasks"
+  [string]$CloudTasksQueueID = "mint-product-tasks",
+
+  # Brand fee settlement Stripe Transfer Cloud Tasks queue
+  [string]$BrandFeeSettlementCloudTasksQueueID = "brand-fee-settlement-tasks"
 )
 
 $ErrorActionPreference = "Stop"
@@ -121,6 +124,55 @@ function Invoke-CloudBuildOrThrow {
   }
 
   Write-Ok "Image build & push completed by Cloud Build"
+}
+
+function Ensure-CloudTasksQueueExists {
+  param(
+    [Parameter(Mandatory=$true)]
+    [string]$QueueID,
+
+    [Parameter(Mandatory=$true)]
+    [string]$Location,
+
+    [Parameter(Mandatory=$true)]
+    [string]$ProjectID
+  )
+
+  if ([string]::IsNullOrWhiteSpace($QueueID)) {
+    throw "Cloud Tasks queue ID is empty."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($Location)) {
+    throw "Cloud Tasks location is empty."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($ProjectID)) {
+    throw "Cloud Tasks project ID is empty."
+  }
+
+  Write-Step "Checking Cloud Tasks queue existence: $QueueID"
+
+  & $GCLOUD tasks queues describe $QueueID `
+    --location=$Location `
+    --project=$ProjectID `
+    --format="value(name)" | Out-Null
+
+  if ($LASTEXITCODE -eq 0) {
+    Write-Ok "Cloud Tasks queue exists: $QueueID"
+    return
+  }
+
+  Write-Warn "Cloud Tasks queue '$QueueID' was not found. Creating it."
+
+  & $GCLOUD tasks queues create $QueueID `
+    --location=$Location `
+    --project=$ProjectID
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to create Cloud Tasks queue '$QueueID'."
+  }
+
+  Write-Ok "Cloud Tasks queue created: $QueueID"
 }
 
 function Ensure-CloudTasksQueueRunning {
@@ -674,6 +726,14 @@ if ([string]::IsNullOrWhiteSpace($CloudTasksQueueID)) {
   throw "CloudTasksQueueID is empty."
 }
 
+if ([string]::IsNullOrWhiteSpace($BrandFeeSettlementCloudTasksQueueID)) {
+  throw "BrandFeeSettlementCloudTasksQueueID is empty."
+}
+
+if ($BrandFeeSettlementCloudTasksQueueID -eq $CloudTasksQueueID) {
+  throw "BrandFeeSettlementCloudTasksQueueID must be different from CloudTasksQueueID."
+}
+
 $envMap["CLOUD_TASKS_PROJECT_ID"] =
   $ProjectId
 
@@ -688,6 +748,16 @@ $envMap["CLOUD_TASKS_SERVICE_ACCOUNT"] =
 
 $envMap["CLOUD_TASKS_AUDIENCE"] =
   $ResolvedBackendURL
+
+$envMap["BRAND_FEE_SETTLEMENT_CLOUD_TASKS_QUEUE_ID"] =
+  $BrandFeeSettlementCloudTasksQueueID
+
+# Brand fee Settlementはprimary/mint系queueとは分離する。
+# 初回のみ専用queueを作成し、既存queueはそのまま利用する。
+Ensure-CloudTasksQueueExists `
+  -QueueID $BrandFeeSettlementCloudTasksQueueID `
+  -Location $Region `
+  -ProjectID $ProjectId
 
 # MINT_TASK_DISPATCH_DELAY_SECONDS は設定しません。
 # runtime の default 0 = 即時実行を使用します。
@@ -876,17 +946,22 @@ if ($LASTEXITCODE -ne 0) {
 Write-Ok "Cloud Run deployment finished: service '$ServiceName'"
 
 # ------------------------------------------------------------
-# 15) Ensure Cloud Tasks queue is running
+# 15) Ensure Cloud Tasks queues are running
 #
 # Cloud Tasks queue が PAUSED の場合、
 # CreateTask 自体は成功しても worker は実行されません。
 #
-# Cloud Run の新revisionを正常にデプロイした後で queue を再開し、
-# 保留中の mint task を新revisionへ流します。
+# Cloud Run の新revisionを正常にデプロイした後でqueueを再開し、
+# 保留中taskを新revisionへ流します。
 # ------------------------------------------------------------
 
 Ensure-CloudTasksQueueRunning `
   -QueueID $CloudTasksQueueID `
+  -Location $Region `
+  -ProjectID $ProjectId
+
+Ensure-CloudTasksQueueRunning `
+  -QueueID $BrandFeeSettlementCloudTasksQueueID `
   -Location $Region `
   -ProjectID $ProjectId
 
@@ -897,3 +972,4 @@ Ensure-CloudTasksQueueRunning `
 Write-Ok "Deployed image: $Image"
 Write-Ok "Backend URL: $ResolvedBackendURL"
 Write-Ok "Cloud Tasks queue: $CloudTasksQueueID"
+Write-Ok "Brand fee settlement Cloud Tasks queue: $BrandFeeSettlementCloudTasksQueueID"
