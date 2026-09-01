@@ -3,8 +3,6 @@ package usecase
 
 import (
 	"context"
-	"log"
-	"strings"
 
 	orderdom "narratives/internal/domain/order"
 )
@@ -19,12 +17,12 @@ func (u *OrderUsecase) CancelItem(
 	ctx context.Context,
 	in CancelOrderItemInput,
 ) (orderdom.Order, error) {
-	orderID := strings.TrimSpace(in.ID)
+	orderID := in.ID
 	if orderID == "" {
 		return orderdom.Order{}, orderdom.ErrInvalidID
 	}
 
-	avatarID := strings.TrimSpace(in.AvatarID)
+	avatarID := in.AvatarID
 	if avatarID == "" {
 		return orderdom.Order{}, orderdom.ErrInvalidAvatarID
 	}
@@ -190,39 +188,16 @@ func (u *OrderUsecase) sendCancellationReceiptBestEffort(
 		ctx,
 		order.UserID,
 	)
-	if err != nil {
-		log.Printf(
-			"order cancellation mail: resolve email failed orderId=%q userId=%q err=%v",
-			order.ID,
-			order.UserID,
-			err,
-		)
+	if err != nil || toEmail == "" {
 		return
 	}
 
-	toEmail = strings.TrimSpace(toEmail)
-	if toEmail == "" {
-		log.Printf(
-			"order cancellation mail: resolved email is empty orderId=%q userId=%q",
-			order.ID,
-			order.UserID,
-		)
-		return
-	}
-
-	if err := u.cancellationMailer.SendOrderCancellationReceipt(
+	_ = u.cancellationMailer.SendOrderCancellationReceipt(
 		ctx,
 		toEmail,
 		order.ID,
 		itemIndex,
-	); err != nil {
-		log.Printf(
-			"order cancellation mail: send failed orderId=%q itemIndex=%d err=%v",
-			order.ID,
-			itemIndex,
-			err,
-		)
-	}
+	)
 }
 
 func (u *OrderUsecase) sendResaleOrderCancellationNotificationBestEffort(
