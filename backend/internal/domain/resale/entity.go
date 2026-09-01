@@ -85,7 +85,7 @@ var (
 	MaxReferenceIDLength = 128
 	MaxAssetIDLength     = 128
 	MaxDescriptionLength = 1000
-	MinPrice             = 0
+	MinPrice             = 1
 	MaxPrice             = 10_000_000
 	MaxImageIDLength     = 128
 )
@@ -164,6 +164,7 @@ func (r Resale) GetID() string {
 // - ID can be empty because repository generates it.
 // - CreatedAt can be zero because repository fills it.
 // - ImageID can be empty because images can be attached later.
+// - BrandID and ProductBlueprintID must be resolved by the backend before validation.
 func NewForCreate(
 	status ResaleStatus,
 	assetID string,
@@ -338,13 +339,11 @@ func (r Resale) ValidateImageLink() error {
 }
 
 // ValidateForCreate validates fields required at create time.
-//   - ID can be empty.
-//   - CreatedAt can be zero.
-//   - ImageID can be empty.
-//   - BrandID and ProductBlueprintID are optional because the frontend can submit
-//     a resale listing from token context where productId and tokenBlueprintId are
-//     the required listing target.
-//   - Model display fields are query-only and are not validated here.
+// - ID can be empty.
+// - CreatedAt can be zero.
+// - ImageID can be empty.
+// - BrandID and ProductBlueprintID are required canonical values resolved by the backend.
+// - Model display fields are query-only and are not validated here.
 func (r Resale) ValidateForCreate() error {
 	if r.Status != "" && !IsValidStatus(r.Status) {
 		return ErrInvalidStatus
@@ -362,11 +361,11 @@ func (r Resale) ValidateForCreate() error {
 		return ErrInvalidProductID
 	}
 
-	if r.BrandID != "" && !isValidReferenceID(r.BrandID) {
+	if !isValidReferenceID(r.BrandID) {
 		return ErrInvalidBrandID
 	}
 
-	if r.ProductBlueprintID != "" && !isValidReferenceID(r.ProductBlueprintID) {
+	if !isValidReferenceID(r.ProductBlueprintID) {
 		return ErrInvalidProductBlueprintID
 	}
 
@@ -406,7 +405,8 @@ func (r Resale) ValidateForCreate() error {
 }
 
 // ValidateForPersist validates a fully persisted Resale.
-//   - Model display fields are query-only and are not validated here.
+// - BrandID and ProductBlueprintID are required.
+// - Model display fields are query-only and are not validated here.
 func (r Resale) ValidateForPersist() error {
 	if r.ID == "" {
 		return ErrInvalidID
@@ -428,11 +428,11 @@ func (r Resale) ValidateForPersist() error {
 		return ErrInvalidProductID
 	}
 
-	if r.BrandID != "" && !isValidReferenceID(r.BrandID) {
+	if !isValidReferenceID(r.BrandID) {
 		return ErrInvalidBrandID
 	}
 
-	if r.ProductBlueprintID != "" && !isValidReferenceID(r.ProductBlueprintID) {
+	if !isValidReferenceID(r.ProductBlueprintID) {
 		return ErrInvalidProductBlueprintID
 	}
 

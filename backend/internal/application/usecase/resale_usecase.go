@@ -8,15 +8,19 @@ import (
 	"time"
 
 	applicationport "narratives/internal/application/port"
+	productdom "narratives/internal/domain/product"
+	productblueprintdom "narratives/internal/domain/productBlueprint"
 	resaledom "narratives/internal/domain/resale"
 	resalereview "narratives/internal/domain/resale_review"
 )
 
 type ResaleUsecase struct {
-	resaleRepo    resaledom.Repository
-	imageRepo     resaledom.ImageRepository
-	imageStorage  applicationport.ResaleImageStorage
-	reviewCleanup resalereview.CleanupRepository
+	resaleRepo           resaledom.Repository
+	imageRepo            resaledom.ImageRepository
+	imageStorage         applicationport.ResaleImageStorage
+	reviewCleanup        resalereview.CleanupRepository
+	productRepo          productdom.Repository
+	productBlueprintRepo productblueprintdom.Repository
 }
 
 func NewResaleUsecase(
@@ -31,9 +35,7 @@ func NewResaleUsecase(
 	}
 }
 
-func (uc *ResaleUsecase) WithReviewCleanup(
-	reviewCleanup resalereview.CleanupRepository,
-) *ResaleUsecase {
+func (uc *ResaleUsecase) WithReviewCleanup(reviewCleanup resalereview.CleanupRepository) *ResaleUsecase {
 	if uc == nil {
 		return nil
 	}
@@ -42,21 +44,76 @@ func (uc *ResaleUsecase) WithReviewCleanup(
 	return uc
 }
 
-func (uc *ResaleUsecase) Create(
-	ctx context.Context,
-	item resaledom.Resale,
-) (resaledom.Resale, error) {
+func (uc *ResaleUsecase) WithProductIdentityRepositories(
+	productRepo productdom.Repository,
+	productBlueprintRepo productblueprintdom.Repository,
+) *ResaleUsecase {
+	if uc == nil {
+		return nil
+	}
+
+	uc.productRepo = productRepo
+	uc.productBlueprintRepo = productBlueprintRepo
+	return uc
+}
+
+func (uc *ResaleUsecase) Create(ctx context.Context, item resaledom.Resale) (resaledom.Resale, error) {
 	if uc == nil || uc.resaleRepo == nil {
 		return resaledom.Resale{}, ErrNotSupported("Resale.Create")
+	}
+
+	if uc.productRepo == nil || uc.productBlueprintRepo == nil {
+		return resaledom.Resale{}, ErrNotSupported("Resale.Create.ProductIdentity")
+	}
+
+	if item.ProductID == "" {
+		return resaledom.Resale{}, resaledom.ErrInvalidProductID
+	}
+
+	product, err := uc.productRepo.GetByID(ctx, item.ProductID)
+	if err != nil {
+		return resaledom.Resale{}, err
+	}
+
+	if product.ID != item.ProductID || product.ModelID == "" {
+		return resaledom.Resale{}, resaledom.ErrInvalidProductID
+	}
+
+	productBlueprintID, _, err := uc.productBlueprintRepo.GetIDByModelID(ctx, product.ModelID)
+	if err != nil {
+		return resaledom.Resale{}, err
+	}
+
+	if productBlueprintID == "" {
+		return resaledom.Resale{}, resaledom.ErrInvalidProductBlueprintID
+	}
+
+	productBlueprint, err := uc.productBlueprintRepo.GetByID(ctx, productBlueprintID)
+	if err != nil {
+		return resaledom.Resale{}, err
+	}
+
+	if productBlueprint.ID != productBlueprintID {
+		return resaledom.Resale{}, resaledom.ErrInvalidProductBlueprintID
+	}
+
+	if productBlueprint.BrandID == "" {
+		return resaledom.Resale{}, resaledom.ErrInvalidBrandID
+	}
+
+	// BrandID / ProductBlueprintID are canonical server-side values.
+	// Client-provided values, if any, are intentionally ignored.
+	item.ProductBlueprintID = productBlueprint.ID
+	item.BrandID = productBlueprint.BrandID
+
+	if err := item.ValidateForCreate(); err != nil {
+		return resaledom.Resale{}, err
 	}
 
 	return uc.resaleRepo.Create(ctx, item)
 }
 
-func (uc *ResaleUsecase) Update(
-	ctx context.Context,
-	item resaledom.Resale,
-) (resaledom.Resale, error) {
+func (uc *ResaleUsecase) Update(ctx context.Context, item resaledom.Resale) (resaledom.Resale, error) {
 	if uc == nil || uc.resaleRepo == nil {
 		return resaledom.Resale{}, ErrNotSupported("Resale.Update")
 	}
@@ -67,14 +124,10 @@ func (uc *ResaleUsecase) Update(
 	}
 
 	item.ID = id
-
 	return uc.resaleRepo.Update(ctx, id, item)
 }
 
-func (uc *ResaleUsecase) Delete(
-	ctx context.Context,
-	id string,
-) error {
+func (uc *ResaleUsecase) Delete(ctx context.Context, id string) error {
 	if uc == nil || uc.resaleRepo == nil {
 		return ErrNotSupported("Resale.Delete")
 	}
@@ -109,10 +162,7 @@ func (uc *ResaleUsecase) Delete(
 	return uc.resaleRepo.Delete(ctx, id)
 }
 
-func (uc *ResaleUsecase) CreateImage(
-	ctx context.Context,
-	img resaledom.ResaleImage,
-) (resaledom.ResaleImage, error) {
+func (uc *ResaleUsecase) CreateImage(ctx context.Context, img resaledom.ResaleImage) (resaledom.ResaleImage, error) {
 	if uc == nil {
 		return resaledom.ResaleImage{}, ErrNotSupported("Resale.CreateImage")
 	}
@@ -155,11 +205,7 @@ func (uc *ResaleUsecase) CreateImage(
 	return created, nil
 }
 
-func (uc *ResaleUsecase) DeleteImage(
-	ctx context.Context,
-	resaleID string,
-	imageID string,
-) error {
+func (uc *ResaleUsecase) DeleteImage(ctx context.Context, resaleID string, imageID string) error {
 	if uc == nil {
 		return ErrNotSupported("Resale.DeleteImage")
 	}
@@ -191,10 +237,8 @@ func (uc *ResaleUsecase) DeleteImage(
 		r, err := uc.resaleRepo.GetByID(ctx, resaleID)
 		if err == nil && r.ImageID == imageID {
 			now := time.Now().UTC()
-
 			r.ImageID = ""
 			r.UpdatedAt = &now
-
 			_, _ = uc.resaleRepo.Update(ctx, resaleID, r)
 		}
 	}
@@ -260,9 +304,7 @@ func (uc *ResaleUsecase) SetPrimaryImage(
 	}
 
 	if selected.ResaleID != "" && selected.ResaleID != resaleID {
-		return resaledom.Resale{}, errors.New(
-			"resale: image belongs to other resale",
-		)
+		return resaledom.Resale{}, errors.New("resale: image belongs to other resale")
 	}
 
 	if selected.URL == "" {
@@ -279,7 +321,6 @@ func (uc *ResaleUsecase) SetPrimaryImage(
 	}
 
 	updatedAt := now.UTC()
-
 	r.ImageID = imageID
 	r.UpdatedAt = &updatedAt
 

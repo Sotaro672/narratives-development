@@ -419,6 +419,15 @@ func (h *ResaleHandler) listPublicImages(
 	})
 }
 
+type createResaleRequest struct {
+	AssetID          string                    `json:"assetId"`
+	TokenBlueprintID string                    `json:"tokenBlueprintId"`
+	ProductID        string                    `json:"productId"`
+	Price            int                       `json:"price"`
+	Condition        resaledom.ResaleCondition `json:"condition"`
+	Description      string                    `json:"description"`
+}
+
 func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -435,9 +444,7 @@ func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(
-		io.LimitReader(r.Body, 1<<20),
-	)
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -446,8 +453,8 @@ func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var item resaledom.Resale
-	if err := json.Unmarshal(body, &item); err != nil {
+	var req createResaleRequest
+	if err := json.Unmarshal(body, &req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "invalid json",
@@ -455,9 +462,7 @@ func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item.AvatarID = avatarID
-
-	if item.AssetID == "" {
+	if req.AssetID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "assetId is required",
@@ -465,7 +470,7 @@ func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if item.TokenBlueprintID == "" {
+	if req.TokenBlueprintID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "tokenBlueprintId is required",
@@ -473,7 +478,7 @@ func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if item.ProductID == "" {
+	if req.ProductID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "productId is required",
@@ -481,7 +486,7 @@ func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if item.Price <= 0 {
+	if req.Price <= 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "price must be greater than 0",
@@ -489,21 +494,25 @@ func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if item.Status == "" {
-		item.Status = resaledom.StatusListing
+	condition := req.Condition
+	if condition == "" {
+		condition = resaledom.ConditionLikeNew
 	}
-
-	if item.Condition == "" {
-		item.Condition = resaledom.ConditionLikeNew
-	}
-
-	item.CreatedBy = avatarID
 
 	now := time.Now().UTC()
-
-	item.CreatedAt = now
-	item.UpdatedAt = &now
-	item.UpdatedBy = nil
+	item := resaledom.Resale{
+		Status:           resaledom.StatusListing,
+		AssetID:          req.AssetID,
+		TokenBlueprintID: req.TokenBlueprintID,
+		ProductID:        req.ProductID,
+		AvatarID:         avatarID,
+		Price:            req.Price,
+		Condition:        condition,
+		Description:      req.Description,
+		CreatedBy:        avatarID,
+		CreatedAt:        now,
+		UpdatedAt:        &now,
+	}
 
 	created, err := h.uc.Create(ctx, item)
 	if err != nil {

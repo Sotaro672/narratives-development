@@ -113,10 +113,7 @@ func buildMallUsecases(
 		r.companyRepo,
 	)
 
-	orderCancellationMailer := mailadp.NewOrderCancellationMailer(
-		resendClient,
-		cfg.ResendFrom,
-	)
+	orderCancellationMailer := mailadp.NewOrderCancellationMailer(resendClient, cfg.ResendFrom)
 
 	resaleOrderNotificationMailer := mailadp.NewResaleOrderNotificationMailer(
 		resendClient,
@@ -124,21 +121,13 @@ func buildMallUsecases(
 		cfg.FrontendBaseURL,
 	)
 
-	inquiryMailer := mailadp.NewInquiryMailer(
-		resendClient,
-	)
+	inquiryMailer := mailadp.NewInquiryMailer(resendClient)
 
-	avatarWalletSvc := solana.NewAvatarWalletService(
-		infra.ProjectID,
-	)
+	avatarWalletSvc := solana.NewAvatarWalletService(infra.ProjectID)
 
-	transportationSvc := transportationdom.NewService(
-		r.transportationRepo,
-	)
+	transportationSvc := transportationdom.NewService(r.transportationRepo)
 
-	setupUC := usecase.NewSetupUsecase(
-		r.avatarRepo,
-	)
+	setupUC := usecase.NewSetupUsecase(r.avatarRepo)
 
 	announcementUC := usecase.NewAnnouncementUsecase(
 		r.announcementRepo,
@@ -150,9 +139,14 @@ func buildMallUsecases(
 		r.resaleRepo,
 		r.resaleImageRepo,
 		resaleImageStorage,
-	).WithReviewCleanup(
-		r.resaleReviewRepo.Cleanup(),
-	)
+	).
+		WithProductIdentityRepositories(
+			r.productRepo,
+			r.productBlueprintRepoFS,
+		).
+		WithReviewCleanup(
+			r.resaleReviewRepo.Cleanup(),
+		)
 
 	resaleReviewUC := usecase.NewResaleReviewUsecase(
 		r.resaleRepo,
@@ -177,9 +171,7 @@ func buildMallUsecases(
 		transportationSvc,
 	)
 
-	shippingAddressUC := usecase.NewShippingAddressUsecase(
-		r.shippingAddressRepo,
-	)
+	shippingAddressUC := usecase.NewShippingAddressUsecase(r.shippingAddressRepo)
 
 	paymentMethodUC := usecase.NewPaymentMethodUsecase(
 		r.paymentMethodRepo,
@@ -192,10 +184,7 @@ func buildMallUsecases(
 		cfg.AutoCreateStripeTestPaymentMethod,
 	)
 
-	userUC := usecase.NewUserUsecase(
-		r.userRepo,
-		nil,
-	)
+	userUC := usecase.NewUserUsecase(r.userRepo, nil)
 
 	onchainReader := solana.NewOnchainWalletReaderDevnet()
 
@@ -226,68 +215,44 @@ func buildMallUsecases(
 		r.brandRepo,
 	)
 
-	cartUC := usecase.NewCartUsecase(
-		r.cartRepo,
-	)
+	cartUC := usecase.NewCartUsecase(r.cartRepo)
 
-	tradeUC := usecase.NewTradeUsecase(
-		r.tradeRepo,
-	)
+	tradeUC := usecase.NewTradeUsecase(r.tradeRepo)
 	if tradeUC == nil {
 		return nil, errors.New("di.mall: trade usecase is nil")
 	}
 
-	tradeMessageUC := usecase.NewTradeMessageUsecase(
-		r.tradeRepo,
-		r.tradeMessageRepo,
-	)
+	tradeMessageUC := usecase.NewTradeMessageUsecase(r.tradeRepo, r.tradeMessageRepo)
 	if tradeMessageUC == nil {
 		return nil, errors.New("di.mall: trade message usecase is nil")
 	}
 
-	paymentUC := usecase.NewPaymentUsecase(
-		usecase.NewPaymentUsecaseInput{
-			PaymentRepo:     r.paymentRepo,
-			StripeEventRepo: r.paymentRepo,
-			OrderRepo:       r.orderRepo,
-			ResaleRepo:      r.resaleRepo,
-		},
-	)
+	paymentUC := usecase.NewPaymentUsecase(usecase.NewPaymentUsecaseInput{
+		PaymentRepo:     r.paymentRepo,
+		StripeEventRepo: r.paymentRepo,
+		OrderRepo:       r.orderRepo,
+		ResaleRepo:      r.resaleRepo,
+	})
 	if paymentUC == nil {
 		return nil, errors.New("di.mall: payment usecase is nil")
 	}
 
-	settlementDependencies, err := shared.BuildSettlementDependencies(
-		ctx,
-		infra,
-	)
+	settlementDependencies, err := shared.BuildSettlementDependencies(ctx, infra)
 	if err != nil {
 		return nil, fmt.Errorf("di.mall: build settlement dependencies: %w", err)
 	}
 
 	payoutAccountKMSKeyName := os.Getenv(payoutAccountKMSKeyNameEnv)
 	if payoutAccountKMSKeyName == "" {
-		return nil, fmt.Errorf(
-			"di.mall: %s is empty",
-			payoutAccountKMSKeyNameEnv,
-		)
+		return nil, fmt.Errorf("di.mall: %s is empty", payoutAccountKMSKeyNameEnv)
 	}
 
-	payoutAccountCipher, err := payoutkms.NewPayoutAccountCipher(
-		infra.KMS,
-		payoutAccountKMSKeyName,
-	)
+	payoutAccountCipher, err := payoutkms.NewPayoutAccountCipher(infra.KMS, payoutAccountKMSKeyName)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"di.mall: build payout account cipher: %w",
-			err,
-		)
+		return nil, fmt.Errorf("di.mall: build payout account cipher: %w", err)
 	}
 
-	payoutAccountUC := usecase.NewPayoutAccountUsecase(
-		r.payoutAccountRepo,
-		payoutAccountCipher,
-	)
+	payoutAccountUC := usecase.NewPayoutAccountUsecase(r.payoutAccountRepo, payoutAccountCipher)
 	if payoutAccountUC == nil {
 		return nil, errors.New("di.mall: payout account usecase is nil")
 	}
@@ -296,9 +261,7 @@ func buildMallUsecases(
 		return nil, errors.New("di.mall: sales receivable repository is nil")
 	}
 
-	salesReceivableUC := usecase.NewSalesReceivableUsecase(
-		r.salesReceivableRepo,
-	)
+	salesReceivableUC := usecase.NewSalesReceivableUsecase(r.salesReceivableRepo)
 	if salesReceivableUC == nil {
 		return nil, errors.New("di.mall: sales receivable usecase is nil")
 	}
@@ -307,9 +270,7 @@ func buildMallUsecases(
 		return nil, errors.New("di.mall: brand fee settlement repository is nil")
 	}
 
-	brandFeeSettlementUC := usecase.NewBrandFeeSettlementUsecase(
-		r.brandFeeSettlementRepo,
-	)
+	brandFeeSettlementUC := usecase.NewBrandFeeSettlementUsecase(r.brandFeeSettlementRepo)
 	if brandFeeSettlementUC == nil {
 		return nil, errors.New("di.mall: brand fee settlement usecase is nil")
 	}
@@ -336,10 +297,7 @@ func buildMallUsecases(
 
 	brandFeeSettlementQueue, err := cloudtasksadp.NewBrandFeeSettlementQueueFromEnv(ctx)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"di.mall: build brand fee settlement queue: %w",
-			err,
-		)
+		return nil, fmt.Errorf("di.mall: build brand fee settlement queue: %w", err)
 	}
 	if brandFeeSettlementQueue == nil {
 		return nil, errors.New("di.mall: brand fee settlement queue is nil")
@@ -475,9 +433,7 @@ func buildMallUsecases(
 		return nil, errors.New("di.mall: resale trade dispatch usecase is nil")
 	}
 
-	inventoryUC := usecase.NewInventoryUsecase(
-		r.inventoryRepo,
-	)
+	inventoryUC := usecase.NewInventoryUsecase(r.inventoryRepo)
 
 	refundCompletionNotificationQueue, err :=
 		cloudtasksadp.NewRefundCompletionNotificationQueueFromEnv(ctx)
