@@ -103,6 +103,16 @@ func buildMallUsecases(
 
 	resendClient := mailadp.NewResendClient(cfg.ResendAPIKey)
 
+	orderMailer := mailadp.NewOrderMailer(
+		resendClient,
+		r.modelRepoFS,
+		r.inventoryRepo,
+		r.productBlueprintRepoFS,
+		r.tokenBlueprintRepo,
+		r.brandRepo,
+		r.companyRepo,
+	)
+
 	orderCancellationMailer := mailadp.NewOrderCancellationMailer(
 		resendClient,
 		cfg.ResendFrom,
@@ -391,6 +401,11 @@ func buildMallUsecases(
 		).
 		WithTradeUsecase(
 			tradeUC,
+		).
+		WithOrderConfirmationNotification(
+			authUserReader,
+			orderMailer,
+			cfg.ResendFrom,
 		).
 		WithCancellationNotification(
 			authUserReader,

@@ -56,27 +56,38 @@ func (u *OrderUsecase) CancelItem(
 			return orderdom.Order{}, orderdom.ErrConflict
 		}
 
-		shippingAddressID, err :=
-			resolveOrderDestinationShippingAddressID(
-				order.ShippingQuoteSnapshot,
-			)
-		if err != nil {
-			return orderdom.Order{}, err
-		}
-
 		if err := order.CancelItem(in.ItemIndex); err != nil {
 			return orderdom.Order{}, err
 		}
 
-		shippingQuoteItems, err :=
-			createOrderItemInputsFromSnapshots(
-				order.Items,
-			)
-		if err != nil {
-			return orderdom.Order{}, err
+		// キャンセル後も有効な商品が残っている場合のみ送料を再計算する。
+		// 全商品がキャンセル済みの場合は既存のShippingQuoteSnapshotを
+		// 注文時点の履歴として保持する。
+		hasActiveItems := false
+		for _, item := range order.Items {
+			if !item.IsCancelled {
+				hasActiveItems = true
+				break
+			}
 		}
 
-		if len(shippingQuoteItems) > 0 {
+		if hasActiveItems {
+			shippingAddressID, err :=
+				resolveOrderDestinationShippingAddressID(
+					order.ShippingQuoteSnapshot,
+				)
+			if err != nil {
+				return orderdom.Order{}, err
+			}
+
+			shippingQuoteItems, err :=
+				createOrderItemInputsFromSnapshots(
+					order.Items,
+				)
+			if err != nil {
+				return orderdom.Order{}, err
+			}
+
 			shippingQuote, err :=
 				u.resolveShippingQuoteSnapshot(
 					ctx,

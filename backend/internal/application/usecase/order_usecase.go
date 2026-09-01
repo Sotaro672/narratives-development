@@ -19,13 +19,41 @@ import (
 	shippingaddressdom "narratives/internal/domain/shippingAddress"
 )
 
+type OrderConfirmationMailerPort interface {
+	SendOrderConfirmation(
+		ctx context.Context,
+		from string,
+		to string,
+		order orderdom.Order,
+	) error
+}
+
 type OrderCancellationMailerPort interface {
-	SendOrderCancellationReceipt(ctx context.Context, toEmail string, orderID string, itemIndex int) error
+	SendOrderCancellationReceipt(
+		ctx context.Context,
+		toEmail string,
+		orderID string,
+		itemIndex int,
+	) error
 }
 
 type ResaleOrderNotificationMailerPort interface {
-	SendResaleOrderNotification(ctx context.Context, toEmail string, orderID string, itemIndex int, resaleID string, price int) error
-	SendResaleOrderCancellationNotification(ctx context.Context, toEmail string, orderID string, itemIndex int, resaleID string) error
+	SendResaleOrderNotification(
+		ctx context.Context,
+		toEmail string,
+		orderID string,
+		itemIndex int,
+		resaleID string,
+		price int,
+	) error
+
+	SendResaleOrderCancellationNotification(
+		ctx context.Context,
+		toEmail string,
+		orderID string,
+		itemIndex int,
+		resaleID string,
+	) error
 }
 
 // OrderUsecase orchestrates order operations.
@@ -53,6 +81,8 @@ type OrderUsecase struct {
 	tradeUC              *TradeUsecase
 
 	authUserReader                applicationport.AuthUserReader
+	orderConfirmationMailer       OrderConfirmationMailerPort
+	orderConfirmationMailFrom     string
 	cancellationMailer            OrderCancellationMailerPort
 	resaleOrderNotificationMailer ResaleOrderNotificationMailerPort
 
@@ -82,7 +112,9 @@ func NewOrderUsecase(
 	}
 }
 
-func (u *OrderUsecase) WithCartRepository(cartRepo cartdom.Repository) *OrderUsecase {
+func (u *OrderUsecase) WithCartRepository(
+	cartRepo cartdom.Repository,
+) *OrderUsecase {
 	if u == nil {
 		return u
 	}
@@ -125,6 +157,21 @@ func (u *OrderUsecase) WithTradeUsecase(
 	}
 
 	u.tradeUC = tradeUC
+	return u
+}
+
+func (u *OrderUsecase) WithOrderConfirmationNotification(
+	authUserReader applicationport.AuthUserReader,
+	mailer OrderConfirmationMailerPort,
+	from string,
+) *OrderUsecase {
+	if u == nil {
+		return u
+	}
+
+	u.authUserReader = authUserReader
+	u.orderConfirmationMailer = mailer
+	u.orderConfirmationMailFrom = from
 	return u
 }
 

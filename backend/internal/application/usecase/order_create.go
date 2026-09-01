@@ -138,6 +138,13 @@ func (u *OrderUsecase) Create(
 		)
 	}
 
+	// 注文受付が確定した時点で、購入者へ注文確認メールを送る。
+	// Orderは既に永続化済みのため、メール送信はbest-effortとする。
+	u.sendOrderConfirmationBestEffort(
+		ctx,
+		created,
+	)
+
 	// resale商品の注文受付が確定し、Trade作成まで完了した時点で、
 	// 出品者へ発注通知メールを送る。
 	// OrderとTradeは既に永続化済みのため、メール送信はbest-effortとする。
@@ -160,6 +167,37 @@ func (u *OrderUsecase) Create(
 	}
 
 	return created, nil
+}
+
+func (u *OrderUsecase) sendOrderConfirmationBestEffort(
+	ctx context.Context,
+	order orderdom.Order,
+) {
+	if u == nil ||
+		u.authUserReader == nil ||
+		u.orderConfirmationMailer == nil ||
+		u.orderConfirmationMailFrom == "" {
+		return
+	}
+
+	if order.UserID == "" || order.ID == "" {
+		return
+	}
+
+	toEmail, err := u.authUserReader.GetEmailByUID(
+		ctx,
+		order.UserID,
+	)
+	if err != nil || toEmail == "" {
+		return
+	}
+
+	_ = u.orderConfirmationMailer.SendOrderConfirmation(
+		ctx,
+		u.orderConfirmationMailFrom,
+		toEmail,
+		order,
+	)
 }
 
 func (u *OrderUsecase) sendResaleOrderNotificationsBestEffort(
