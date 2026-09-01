@@ -11,6 +11,7 @@ import InquiryReplyModal from "../features/inquiry/presentation/components/Inqui
 import { useInquiryDetailPage } from "../features/inquiry/presentation/hooks/useInquiryDetailPage";
 
 import ResaleChatDetail from "../features/resale/presentation/components/ResaleChatDetail";
+import TradeChatDetail from "../features/trade/presentation/components/TradeChatDetail";
 
 import "../styles/page-layout.css";
 import "../features/inquiry/presentation/styles/inquiry-detail-page.css";
@@ -18,6 +19,7 @@ import "../features/inquiry/presentation/styles/inquiry-detail-page.css";
 type ChatDetailRouteParams = {
   inquiryId?: string;
   resaleId?: string;
+  tradeId?: string;
 };
 
 type InquiryChatDetailProps = {
@@ -26,11 +28,20 @@ type InquiryChatDetailProps = {
 
 export default function ChatDetailPage() {
   const navigate = useNavigate();
-  const { resaleId } = useParams<ChatDetailRouteParams>();
+  const { resaleId, tradeId } = useParams<ChatDetailRouteParams>();
 
   const handleBack = () => {
     navigate(-1);
   };
+
+  if (tradeId) {
+    return (
+      <TradeChatDetail
+        tradeId={tradeId}
+        onBack={handleBack}
+      />
+    );
+  }
 
   if (resaleId) {
     return (

@@ -41,6 +41,7 @@ func NewTradeHandler(
 //
 // Supported:
 //
+//	GET  /mall/me/trades
 //	GET  /mall/me/trades/order-items/{orderId}/{itemIndex}
 //	GET  /mall/me/trades/{tradeId}
 //	POST /mall/me/trades/{tradeId}/messages
@@ -63,7 +64,12 @@ func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.URL.Path == "/mall/me/trades" || r.URL.Path == "/mall/me/trades/" {
-		methodNotAllowed(w)
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.list(w, r)
 		return
 	}
 
@@ -137,10 +143,34 @@ type createTradeMessageRequest struct {
 	Content string `json:"content"`
 }
 
+// GET /mall/me/trades
+//
+// Returns all Resale Trades in which the authenticated Avatar participates as
+// buyer or seller. The result is intended for ChatListPage and includes latest
+// message, unread count and latest activity information.
+func (h *TradeHandler) list(w http.ResponseWriter, r *http.Request) {
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	result, err := h.query.ListForAvatar(
+		r.Context(),
+		avatarID,
+	)
+	if err != nil {
+		writeTradeErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
 // GET /mall/me/trades/order-items/{orderId}/{itemIndex}
 //
 // Resolves one Trade from its authoritative Order item identity and returns the
-// TradePage read model including messages.
+// Trade chat detail including messages. This endpoint is used when OrderDetail
+// knows orderId + itemIndex but does not yet know tradeId.
 func (h *TradeHandler) getByOrderItem(w http.ResponseWriter, r *http.Request) {
 	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
@@ -195,7 +225,7 @@ func (h *TradeHandler) getByOrderItem(w http.ResponseWriter, r *http.Request) {
 
 // GET /mall/me/trades/{tradeId}
 //
-// Returns one TradePage read model when Trade ID is already known.
+// Returns one Trade chat detail for ChatDetailPage when Trade ID is known.
 func (h *TradeHandler) getByID(
 	w http.ResponseWriter,
 	r *http.Request,

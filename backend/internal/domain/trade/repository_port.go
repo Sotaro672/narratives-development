@@ -30,7 +30,7 @@ var (
 //
 //	trades/{tradeId}
 //
-// One Trade belongs to exactly one Order item:
+// One Trade belongs to exactly one Resale Order item:
 //
 //	orderId + orderItemIndex -> Trade
 //
@@ -53,6 +53,21 @@ type Repository interface {
 	// Implementations should return ErrNotFound when no Trade exists and
 	// ErrConflict if persisted data contains multiple matching Trades.
 	GetByOrderItem(ctx context.Context, orderID string, orderItemIndex int) (Trade, error)
+
+	// ListByAvatarID returns Trades in which avatarID participates as either
+	// buyer or Resale seller.
+	//
+	// Expected participant conditions:
+	//   - buyerAvatarId == avatarID
+	//   - sellerAvatarId == avatarID
+	//
+	// Implementations must merge both roles without returning duplicate Trades.
+	// Returned Trades should belong only to Avatar-to-Avatar Resale transactions.
+	//
+	// Ordering is not part of the repository contract. The application/query
+	// layer should determine presentation ordering using LastMessageAt,
+	// UpdatedAt, or CreatedAt as appropriate.
+	ListByAvatarID(ctx context.Context, avatarID string) ([]Trade, error)
 
 	// Create persists one Trade.
 	//

@@ -4,6 +4,7 @@ package mall
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	tradedto "narratives/internal/application/query/mall/dto"
@@ -16,9 +17,10 @@ var (
 	ErrTradeQueryUnsupportedTrade = errors.New("mall trade query: unsupported trade")
 )
 
-// TradeQuery provides the read model required by the Mall TradePage.
+// TradeQuery provides the read models required by Mall ChatListPage and
+// ChatDetailPage.
 //
-// Trade is currently limited to Resale transactions:
+// Trade is limited to Resale transactions:
 //
 //	buyer Avatar <-> seller Avatar
 //
@@ -40,6 +42,90 @@ func NewTradeQuery(
 	}
 }
 
+// TradeListItem is the ChatListPage read model for one Trade.
+//
+// ViewerSide and CounterpartAvatarID are derived from the authenticated Avatar.
+// LatestMessage and UnreadMessageCount are aggregated from Trade messages.
+type TradeListItem struct {
+	ID             string `json:"id"`
+	OrderID        string `json:"orderId"`
+	OrderItemIndex int    `json:"orderItemIndex"`
+
+	ViewerSide          tradedom.MessageSenderSide `json:"viewerSide"`
+	CounterpartAvatarID string                     `json:"counterpartAvatarId"`
+
+	Status tradedom.Status `json:"status"`
+
+	LatestMessage      *tradedto.TradeMessage `json:"latestMessage,omitempty"`
+	UnreadMessageCount int                    `json:"unreadMessageCount"`
+	LatestActivityAt   string                 `json:"latestActivityAt"`
+
+	CreatedAt string `json:"createdAt,omitempty"`
+	UpdatedAt string `json:"updatedAt,omitempty"`
+}
+
+// TradeListResult is the Trade portion of the Mall chat list response.
+type TradeListResult struct {
+	Items []TradeListItem `json:"items"`
+}
+
+// ListForAvatar returns all Resale Trades in which the authenticated Avatar
+// participates as buyer or seller.
+//
+// The repository resolves both participant roles. This query enriches each
+// Trade with viewer-side information, latest message, unread count and latest
+// activity time, then orders the result newest-first for ChatListPage.
+func (q *TradeQuery) ListForAvatar(
+	ctx context.Context,
+	avatarID string,
+) (TradeListResult, error) {
+	if q == nil || q.tradeRepo == nil || q.messageRepo == nil {
+		return TradeListResult{}, ErrTradeQueryNotConfigured
+	}
+	if avatarID == "" {
+		return TradeListResult{}, ErrTradeQueryAvatarIDEmpty
+	}
+
+	trades, err := q.tradeRepo.ListByAvatarID(ctx, avatarID)
+	if err != nil {
+		return TradeListResult{}, err
+	}
+
+	items := make([]TradeListItem, 0, len(trades))
+	for _, trade := range trades {
+		viewerSide, err := resolveTradeViewerSide(trade, avatarID)
+		if err != nil {
+			return TradeListResult{}, err
+		}
+
+		latestMessage, err := q.getLatestMessage(ctx, trade.ID)
+		if err != nil {
+			return TradeListResult{}, err
+		}
+
+		unreadMessageCount, err := q.countUnreadMessages(ctx, trade.ID, viewerSide)
+		if err != nil {
+			return TradeListResult{}, err
+		}
+
+		items = append(items, buildTradeListItem(
+			trade,
+			viewerSide,
+			latestMessage,
+			unreadMessageCount,
+		))
+	}
+
+	sort.SliceStable(items, func(i, j int) bool {
+		return tradeListItemActivityTime(items[i]).
+			After(tradeListItemActivityTime(items[j]))
+	})
+
+	return TradeListResult{
+		Items: items,
+	}, nil
+}
+
 type GetTradeByOrderItemInput struct {
 	AvatarID       string
 	OrderID        string
@@ -53,6 +139,9 @@ type GetTradeByOrderItemInput struct {
 
 // GetByOrderItem returns the Trade and its message thread for one Resale
 // OrderItem.
+//
+// This is primarily used when an OrderDetail item has orderId + itemIndex and
+// needs to resolve the corresponding Trade before opening ChatDetailPage.
 //
 // The caller must supply AvatarID from authenticated AvatarContext rather than
 // request body or query parameters.
@@ -115,9 +204,6 @@ func (q *TradeQuery) GetByOrderItem(
 	), nil
 }
 
-// GetByID returns the Trade and its message thread when the Trade ID is already
-// known. This is useful after TradePage has resolved the Trade from
-// orderId + orderItemIndex and for future direct Trade routes.
 type GetTradeByIDInput struct {
 	AvatarID string
 	TradeID  string
@@ -128,6 +214,7 @@ type GetTradeByIDInput struct {
 	AfterCreatedAt  *time.Time
 }
 
+// GetByID returns the Trade and its message thread for ChatDetailPage.
 func (q *TradeQuery) GetByID(
 	ctx context.Context,
 	in GetTradeByIDInput,
@@ -181,6 +268,54 @@ func (q *TradeQuery) GetByID(
 	), nil
 }
 
+func (q *TradeQuery) getLatestMessage(
+	ctx context.Context,
+	tradeID string,
+) (*tradedto.TradeMessage, error) {
+	messages, err := q.messageRepo.ListByTradeID(
+		ctx,
+		tradeID,
+		tradedom.MessageListFilter{
+			Limit: 1,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(messages) == 0 {
+		return nil, nil
+	}
+
+	latest := buildTradeMessageDTO(
+		messages[len(messages)-1],
+	)
+
+	return &latest, nil
+}
+
+func (q *TradeQuery) countUnreadMessages(
+	ctx context.Context,
+	tradeID string,
+	viewerSide tradedom.MessageSenderSide,
+) (int, error) {
+	switch viewerSide {
+	case tradedom.MessageSenderSideBuyer:
+		return q.messageRepo.CountUnreadForBuyer(
+			ctx,
+			tradeID,
+		)
+
+	case tradedom.MessageSenderSideSeller:
+		return q.messageRepo.CountUnreadForSeller(
+			ctx,
+			tradeID,
+		)
+
+	default:
+		return 0, ErrTradeQueryUnsupportedTrade
+	}
+}
+
 func resolveTradeViewerSide(
 	trade tradedom.Trade,
 	avatarID string,
@@ -188,21 +323,95 @@ func resolveTradeViewerSide(
 	if avatarID == "" {
 		return "", ErrTradeQueryAvatarIDEmpty
 	}
-
 	if trade.SellerType != tradedom.SellerTypeAvatar ||
 		trade.SellerAvatarID == "" {
 		return "", ErrTradeQueryUnsupportedTrade
 	}
-
 	if avatarID == trade.BuyerAvatarID {
 		return tradedom.MessageSenderSideBuyer, nil
 	}
-
 	if avatarID == trade.SellerAvatarID {
 		return tradedom.MessageSenderSideSeller, nil
 	}
 
 	return "", tradedom.ErrNotFound
+}
+
+func buildTradeListItem(
+	trade tradedom.Trade,
+	viewerSide tradedom.MessageSenderSide,
+	latestMessage *tradedto.TradeMessage,
+	unreadMessageCount int,
+) TradeListItem {
+	counterpartAvatarID := trade.SellerAvatarID
+	if viewerSide == tradedom.MessageSenderSideSeller {
+		counterpartAvatarID = trade.BuyerAvatarID
+	}
+
+	latestActivityAt := tradeLatestActivityAt(trade)
+
+	out := TradeListItem{
+		ID:                  trade.ID,
+		OrderID:             trade.OrderID,
+		OrderItemIndex:      trade.OrderItemIndex,
+		ViewerSide:          viewerSide,
+		CounterpartAvatarID: counterpartAvatarID,
+		Status:              trade.Status,
+		LatestMessage:       latestMessage,
+		UnreadMessageCount:  unreadMessageCount,
+	}
+
+	if !latestActivityAt.IsZero() {
+		out.LatestActivityAt = latestActivityAt.
+			UTC().
+			Format(time.RFC3339Nano)
+	}
+	if !trade.CreatedAt.IsZero() {
+		out.CreatedAt = trade.CreatedAt.
+			UTC().
+			Format(time.RFC3339Nano)
+	}
+	if !trade.UpdatedAt.IsZero() {
+		out.UpdatedAt = trade.UpdatedAt.
+			UTC().
+			Format(time.RFC3339Nano)
+	}
+
+	return out
+}
+
+func tradeLatestActivityAt(
+	trade tradedom.Trade,
+) time.Time {
+	latest := trade.CreatedAt
+
+	if trade.UpdatedAt.After(latest) {
+		latest = trade.UpdatedAt
+	}
+	if trade.LastMessageAt != nil &&
+		trade.LastMessageAt.After(latest) {
+		latest = *trade.LastMessageAt
+	}
+
+	return latest.UTC()
+}
+
+func tradeListItemActivityTime(
+	item TradeListItem,
+) time.Time {
+	if item.LatestActivityAt == "" {
+		return time.Time{}
+	}
+
+	value, err := time.Parse(
+		time.RFC3339Nano,
+		item.LatestActivityAt,
+	)
+	if err != nil {
+		return time.Time{}
+	}
+
+	return value
 }
 
 func buildTradeDetailDTO(
@@ -239,13 +448,11 @@ func buildTradeDetailDTO(
 			UTC().
 			Format(time.RFC3339Nano)
 	}
-
 	if !trade.UpdatedAt.IsZero() {
 		out.UpdatedAt = trade.UpdatedAt.
 			UTC().
 			Format(time.RFC3339Nano)
 	}
-
 	if trade.LastMessageAt != nil &&
 		!trade.LastMessageAt.IsZero() {
 		out.LastMessageAt = trade.LastMessageAt.
@@ -273,14 +480,12 @@ func buildTradeMessageDTO(
 			UTC().
 			Format(time.RFC3339Nano)
 	}
-
 	if message.BuyerReadAt != nil &&
 		!message.BuyerReadAt.IsZero() {
 		out.BuyerReadAt = message.BuyerReadAt.
 			UTC().
 			Format(time.RFC3339Nano)
 	}
-
 	if message.SellerReadAt != nil &&
 		!message.SellerReadAt.IsZero() {
 		out.SellerReadAt = message.SellerReadAt.

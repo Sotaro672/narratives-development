@@ -10,6 +10,7 @@ import { formatDateTime } from "../components/utils/date";
 
 import ReturnRequestModal, { type ReturnPackageState } from "../features/order/components/ReturnRequestModal";
 import { useOrderDetail } from "../features/order/hooks/useOrderDetail";
+import { fetchTradeByOrderItem } from "../features/trade/infrastructure/tradeApi";
 import type { OrderDetail as OrderDetailType, OrderDetailItem } from "../features/shared/types/orderDetailTypes";
 import { formatAmount } from "../features/wallet/utils/format";
 
@@ -193,6 +194,8 @@ export default function OrderDetail() {
   const [returnTargetIndex, setReturnTargetIndex] = useState<number | null>(null);
   const [returnPackageState, setReturnPackageState] = useState<ReturnPackageState | null>(null);
   const [returnReason, setReturnReason] = useState("");
+  const [tradeNavigatingIndex, setTradeNavigatingIndex] = useState<number | null>(null);
+  const [tradeNavigationError, setTradeNavigationError] = useState("");
 
   const {
     order,
@@ -215,9 +218,38 @@ export default function OrderDetail() {
     navigate(`/brands/${encodeURIComponent(id)}`);
   };
 
-  const handleOpenTrade = (orderId: string) => {
-    if (!orderId) return;
-    navigate(`/orders/${encodeURIComponent(orderId)}/trade`);
+  const handleOpenTrade = async (orderId: string, itemIndex: number) => {
+    const normalizedOrderId = orderId.trim();
+    if (!normalizedOrderId || !Number.isInteger(itemIndex) || itemIndex < 0 || tradeNavigatingIndex !== null) return;
+
+    setTradeNavigatingIndex(itemIndex);
+    setTradeNavigationError("");
+
+    try {
+      const trade = await fetchTradeByOrderItem({
+        orderId: normalizedOrderId,
+        orderItemIndex: itemIndex,
+        limit: 1,
+      });
+
+      if (!trade.id) {
+        throw new Error("取引チャットが見つかりません。");
+      }
+
+      navigate(`/chats/trades/${encodeURIComponent(trade.id)}`, {
+        state: {
+          trade,
+        },
+      });
+    } catch (caught) {
+      setTradeNavigationError(
+        caught instanceof Error
+          ? caught.message
+          : "取引チャットを開けませんでした。",
+      );
+    } finally {
+      setTradeNavigatingIndex(null);
+    }
   };
 
   const handleOpenReturnModal = (itemIndex: number) => {
@@ -329,6 +361,12 @@ export default function OrderDetail() {
                   {error}
                 </p>
               ) : null}
+
+              {tradeNavigationError ? (
+                <p className="page-card__text" role="alert">
+                  {tradeNavigationError}
+                </p>
+              ) : null}
             </div>
 
             <div className="page-card">
@@ -343,6 +381,7 @@ export default function OrderDetail() {
                   const isResaleItem = item.itemType === "resale";
                   const isCancelling = cancellingItemIndex === index;
                   const isReturning = returningItemIndex === index;
+                  const isOpeningTrade = tradeNavigatingIndex === index;
 
                   const cancelDisabled =
                     item.isCancelled ||
@@ -466,9 +505,10 @@ export default function OrderDetail() {
                             <button
                               type="button"
                               className="order-detail-page__trade-button"
-                              onClick={() => handleOpenTrade(order.id)}
+                              disabled={tradeNavigatingIndex !== null}
+                              onClick={() => void handleOpenTrade(order.id, index)}
                             >
-                              取引画面
+                              {isOpeningTrade ? "移動中..." : "取引画面"}
                             </button>
                           </div>
                         ) : item.transferred &&

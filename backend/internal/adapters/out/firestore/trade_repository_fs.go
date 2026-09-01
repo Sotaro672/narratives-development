@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -123,6 +124,86 @@ func (r *TradeRepositoryFS) GetByOrderItem(ctx context.Context, orderID string, 
 	}
 
 	return trade, nil
+}
+
+// ListByAvatarID returns Resale Trades in which avatarID participates as either
+// buyer or seller.
+//
+// Firestore requires separate equality queries for buyerAvatarId and
+// sellerAvatarId. The results are merged by Trade ID to guarantee that one
+// Trade is returned at most once.
+func (r *TradeRepositoryFS) ListByAvatarID(ctx context.Context, avatarID string) ([]tradedom.Trade, error) {
+	if r == nil || r.Client == nil {
+		return nil, ErrTradeRepositoryNotConfigured
+	}
+	if avatarID == "" {
+		return nil, tradedom.ErrNotFound
+	}
+
+	merged := make(map[string]tradedom.Trade)
+
+	if err := r.collectTradesByParticipantField(ctx, "buyerAvatarId", avatarID, merged); err != nil {
+		return nil, err
+	}
+	if err := r.collectTradesByParticipantField(ctx, "sellerAvatarId", avatarID, merged); err != nil {
+		return nil, err
+	}
+
+	trades := make([]tradedom.Trade, 0, len(merged))
+	for _, trade := range merged {
+		trades = append(trades, trade)
+	}
+
+	return trades, nil
+}
+
+func (r *TradeRepositoryFS) collectTradesByParticipantField(
+	ctx context.Context,
+	field string,
+	avatarID string,
+	merged map[string]tradedom.Trade,
+) error {
+	it := r.col().Where(field, "==", avatarID).Documents(ctx)
+	defer it.Stop()
+
+	for {
+		snap, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		trade, err := docToTrade(snap)
+		if err != nil {
+			return err
+		}
+
+		// Trade is currently a Resale-only private conversation.
+		// Ignore any legacy/company Trade document if one remains persisted.
+		if trade.SellerType != tradedom.SellerTypeAvatar || trade.SellerAvatarID == "" {
+			continue
+		}
+
+		// Do not trust the Firestore query alone for authorization-sensitive
+		// participant data. Validate that the decoded entity still contains the
+		// requested Avatar on the queried side.
+		switch field {
+		case "buyerAvatarId":
+			if trade.BuyerAvatarID != avatarID {
+				return ErrInvalidTradeDocumentData
+			}
+		case "sellerAvatarId":
+			if trade.SellerAvatarID != avatarID {
+				return ErrInvalidTradeDocumentData
+			}
+		default:
+			return ErrInvalidTradeDocumentData
+		}
+
+		merged[trade.ID] = trade
+	}
 }
 
 // ============================================================
