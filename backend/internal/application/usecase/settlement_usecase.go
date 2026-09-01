@@ -29,8 +29,9 @@ import (
 // Calculate returns only primary List-sale allocations grouped by AccountID.
 //
 // A concrete calculator may additionally implement CalculateAll to expose
-// consumer resale SalesReceivable allocations. Payment-success creation uses
-// that extended contract when both financial record types must be guaranteed.
+// consumer resale SalesReceivable and BrandFeeSettlement allocations.
+// Payment-success creation uses that extended contract when all seller-side
+// financial records must be guaranteed.
 type SettlementCalculator interface {
 	Calculate(
 		ctx context.Context,
@@ -50,7 +51,8 @@ type SettlementCalculator interface {
 //
 //	AMOL Stripe Platform -> Stripe Connected Account
 //
-// Consumer resale proceeds do not use this gateway.
+// Consumer resale seller proceeds and resale Brand fees do not use this gateway.
+// They are handled by their own financial domains.
 // It is unrelated to Solana token transfer.
 type StripeSettlementTransferGateway interface {
 	CreateTransfer(
@@ -122,7 +124,8 @@ type StripeSettlementErrorMetadata interface {
 // identity must be loaded again from the authoritative Settlement document by
 // the worker.
 //
-// Consumer resale SalesReceivables must never be enqueued here.
+// Consumer resale SalesReceivables and BrandFeeSettlements must never be
+// enqueued through this primary-sale queue.
 type SettlementTransferQueue interface {
 	EnqueueSettlementTransfer(
 		ctx context.Context,
@@ -261,18 +264,25 @@ const (
 )
 
 // SettlementUsecase manages primary-sale Stripe Settlements and coordinates
-// creation of resale SalesReceivables after successful buyer payment.
+// creation of resale financial records after successful buyer payment.
 //
 // Primary-sale transfer execution remains entirely Settlement/Stripe based.
 //
-// Consumer resale payout lifecycle is delegated to SalesReceivableUsecase and,
-// later, BankPayout.
+// Consumer resale seller proceeds are delegated to SalesReceivableUsecase.
+// ProductBlueprint Brand resale fees are delegated to
+// BrandFeeSettlementUsecase.
+//
+// The later transfer and payout lifecycles remain independent:
+//   - primary seller -> Settlement
+//   - resale seller -> SalesReceivable / BankPayout
+//   - resale Brand fee -> BrandFeeSettlement
 type SettlementUsecase struct {
 	repo SettlementTransferRepository
 
 	calculator SettlementCalculator
 
-	salesReceivableUC *SalesReceivableUsecase
+	salesReceivableUC    *SalesReceivableUsecase
+	brandFeeSettlementUC *BrandFeeSettlementUsecase
 
 	stripeTransferGateway StripeSettlementTransferGateway
 
@@ -286,7 +296,8 @@ type NewSettlementUsecaseInput struct {
 
 	Calculator SettlementCalculator
 
-	SalesReceivableUsecase *SalesReceivableUsecase
+	SalesReceivableUsecase    *SalesReceivableUsecase
+	BrandFeeSettlementUsecase *BrandFeeSettlementUsecase
 
 	StripeTransferGateway StripeSettlementTransferGateway
 
@@ -312,6 +323,7 @@ func NewSettlementUsecase(
 		repo:                  in.Repository,
 		calculator:            in.Calculator,
 		salesReceivableUC:     in.SalesReceivableUsecase,
+		brandFeeSettlementUC:  in.BrandFeeSettlementUsecase,
 		stripeTransferGateway: in.StripeTransferGateway,
 		transferLease:         transferLease,
 		now:                   now,

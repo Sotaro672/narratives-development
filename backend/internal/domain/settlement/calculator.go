@@ -31,6 +31,7 @@ var (
 	ErrCalculatorAmountOverflow           = errors.New("settlement: amount overflow")
 	ErrCalculatorInvalidPlatformFee       = errors.New("settlement: invalid platform fee")
 	ErrCalculatorInvalidBrandFee          = errors.New("settlement: invalid brand fee")
+	ErrCalculatorInvalidBrandRevenue      = errors.New("settlement: invalid brand revenue snapshot")
 	ErrCalculatorAllocationEmpty          = errors.New("settlement: allocation is empty")
 	ErrCalculatorAllocationAmountMismatch = errors.New("settlement: allocation total does not match payment amount")
 	ErrInvalidPlatformFeeRate             = errors.New("settlement: invalid platform fee rate")
@@ -90,6 +91,29 @@ func (s ResaleSellerIdentity) Validate() error {
 	return nil
 }
 
+// BrandRevenueIdentity identifies the immutable productBlueprint Brand payout
+// destination captured in the resale Order item snapshot.
+type BrandRevenueIdentity struct {
+	BrandID         string
+	CompanyID       string
+	AccountID       string
+	StripeAccountID string
+}
+
+func (b BrandRevenueIdentity) Validate() error {
+	if b.BrandID == "" ||
+		b.CompanyID == "" ||
+		b.AccountID == "" ||
+		b.StripeAccountID == "" {
+		return ErrCalculatorInvalidBrandRevenue
+	}
+	if len(b.StripeAccountID) < len("acct_") ||
+		b.StripeAccountID[:len("acct_")] != "acct_" {
+		return ErrCalculatorInvalidBrandRevenue
+	}
+	return nil
+}
+
 // ReceivableAllocation represents resale proceeds attributable to one resale
 // Order item.
 //
@@ -108,13 +132,16 @@ func (s ResaleSellerIdentity) Validate() error {
 //
 // PlatformFeeAmount is AMOL's 5% share.
 // BrandFeeAmount is the productBlueprint Brand's 5% share.
+// BrandRevenue identifies the immutable Brand/Account/Stripe destination that
+// receives BrandFeeAmount.
 // ReceivableAmount is the remaining amount owed to the resale seller.
 type ReceivableAllocation struct {
 	OrderItemIndex int
 	ResaleID       string
 	BrandID        string
 
-	Seller ResaleSellerIdentity
+	Seller       ResaleSellerIdentity
+	BrandRevenue BrandRevenueIdentity
 
 	MerchandiseAmount int
 	ShippingAmount    int
@@ -303,6 +330,13 @@ func isZeroResaleSellerIdentity(s ResaleSellerIdentity) bool {
 		s.PayoutAccountID == ""
 }
 
+func isZeroBrandRevenueIdentity(b BrandRevenueIdentity) bool {
+	return b.BrandID == "" &&
+		b.CompanyID == "" &&
+		b.AccountID == "" &&
+		b.StripeAccountID == ""
+}
+
 func isValidPlatformFeeBase(base PlatformFeeBase) bool {
 	switch base {
 	case PlatformFeeBaseMerchandise,
@@ -481,6 +515,7 @@ type allocationSeller struct {
 	ResaleOrderItemIndex int
 	ResaleID             string
 	ResaleBrandID        string
+	ResaleBrandRevenue   BrandRevenueIdentity
 }
 
 func (s allocationSeller) Validate() error {
@@ -488,7 +523,8 @@ func (s allocationSeller) Validate() error {
 	case allocationSellerKindAccount:
 		if !isZeroResaleSellerIdentity(s.ResaleSeller) ||
 			s.ResaleID != "" ||
-			s.ResaleBrandID != "" {
+			s.ResaleBrandID != "" ||
+			!isZeroBrandRevenueIdentity(s.ResaleBrandRevenue) {
 			return ErrCalculatorInvalidSellerSnapshot
 		}
 		if err := s.SettlementSeller.Validate(); err != nil {
@@ -506,7 +542,16 @@ func (s allocationSeller) Validate() error {
 			s.ResaleBrandID == "" {
 			return ErrCalculatorInvalidSellerSnapshot
 		}
-		return s.ResaleSeller.Validate()
+		if err := s.ResaleSeller.Validate(); err != nil {
+			return err
+		}
+		if err := s.ResaleBrandRevenue.Validate(); err != nil {
+			return err
+		}
+		if s.ResaleBrandRevenue.BrandID != s.ResaleBrandID {
+			return ErrCalculatorInvalidBrandRevenue
+		}
+		return nil
 
 	default:
 		return ErrCalculatorInvalidSellerSnapshot
@@ -671,11 +716,19 @@ func buildMerchandiseAllocations(
 				item.TokenBlueprintID == "" ||
 				item.BrandID == "" ||
 				item.Qty != 1 ||
-				item.Price < 0 {
+				item.Price <= 0 {
 				return nil, nil, nil, ErrCalculatorInvalidOrder
 			}
 
 			seller, err := resolveResaleSellerIdentity(item.SellerSnapshot)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+
+			brandRevenue, err := resolveBrandRevenueIdentity(
+				item.BrandRevenueSnapshot,
+				item.BrandID,
+			)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -686,6 +739,7 @@ func buildMerchandiseAllocations(
 				ResaleOrderItemIndex: itemIndex,
 				ResaleID:             item.ResaleID,
 				ResaleBrandID:        item.BrandID,
+				ResaleBrandRevenue:   brandRevenue,
 			}
 
 			key, err := allocationIdentity.Key()
@@ -780,6 +834,32 @@ func resolveResaleSellerIdentity(
 
 	if err := resolved.Validate(); err != nil {
 		return ResaleSellerIdentity{}, ErrCalculatorInvalidSellerSnapshot
+	}
+
+	return resolved, nil
+}
+
+func resolveBrandRevenueIdentity(
+	snapshot orderdom.BrandRevenueSnapshot,
+	expectedBrandID string,
+) (BrandRevenueIdentity, error) {
+	if expectedBrandID == "" ||
+		snapshot.BrandID == "" ||
+		snapshot.BrandID != expectedBrandID ||
+		snapshot.CompanyID == "" ||
+		snapshot.AccountID == "" ||
+		snapshot.StripeAccountID == "" {
+		return BrandRevenueIdentity{}, ErrCalculatorInvalidBrandRevenue
+	}
+
+	resolved := BrandRevenueIdentity{
+		BrandID:         snapshot.BrandID,
+		CompanyID:       snapshot.CompanyID,
+		AccountID:       snapshot.AccountID,
+		StripeAccountID: snapshot.StripeAccountID,
+	}
+	if err := resolved.Validate(); err != nil {
+		return BrandRevenueIdentity{}, err
 	}
 
 	return resolved, nil
@@ -1430,6 +1510,7 @@ func (c *Calculator) finalizeAllocations(
 					ResaleID:       builder.Seller.ResaleID,
 					BrandID:        builder.Seller.ResaleBrandID,
 					Seller:         builder.Seller.ResaleSeller,
+					BrandRevenue:   builder.Seller.ResaleBrandRevenue,
 
 					MerchandiseAmount: merchandiseAmount,
 					ShippingAmount:    builder.ShippingAmount,

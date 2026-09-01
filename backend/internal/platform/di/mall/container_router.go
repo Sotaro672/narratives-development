@@ -4,6 +4,7 @@ package mall
 import (
 	"net/http"
 
+	internalHandler "narratives/internal/adapters/in/http/handler"
 	mallhttp "narratives/internal/adapters/in/http/mall"
 	mallhandler "narratives/internal/adapters/in/http/mall/handler"
 	mallwebhook "narratives/internal/adapters/in/http/mall/webhook"
@@ -366,6 +367,33 @@ func Register(mux *http.ServeMux, cont *Container) {
 		userAuthMW.Handler,
 		avatarCtxMW.Handler,
 	)
+
+	// ----------------------------
+	// Internal financial tasks
+	// ----------------------------
+	if cont.BrandFeeSettlementTransferUC != nil &&
+		cont.BrandFeeSettlementQueue != nil {
+
+		brandFeeSettlementTaskHandler :=
+			internalHandler.NewBrandFeeSettlementTaskHandler(
+				cont.BrandFeeSettlementTransferUC,
+				cont.BrandFeeSettlementQueue,
+			)
+
+		mux.Handle(
+			"/internal/brand-fee-settlements/process",
+			http.HandlerFunc(
+				brandFeeSettlementTaskHandler.Process,
+			),
+		)
+
+		mux.Handle(
+			"/internal/brand-fee-settlements/dispatch-due",
+			http.HandlerFunc(
+				brandFeeSettlementTaskHandler.DispatchDue,
+			),
+		)
+	}
 
 	// ----------------------------
 	// Webhooks (no auth)

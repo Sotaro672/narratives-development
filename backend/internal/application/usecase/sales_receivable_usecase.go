@@ -24,9 +24,10 @@ var (
 // One resale Order item must create exactly one SalesReceivable. Multiple resale
 // items belonging to the same seller must remain independent receivables.
 //
-// GrossAmount is the resale distribution base after shipping cost has been
-// deducted from the merchandise amount.
+// MerchandiseAmount is the resale merchandise price paid by the buyer.
+// ShippingAmount is the outbound resale shipping cost deducted from the merchandise proceeds.
 //
+//	GrossAmount = MerchandiseAmount - ShippingAmount
 //	GrossAmount = PlatformFeeAmount + BrandFeeAmount + ReceivableAmount
 //
 // The resulting document ID is deterministic:
@@ -45,6 +46,9 @@ type EnsureSalesReceivableInput struct {
 	AvatarID        string
 	UserID          string
 	PayoutAccountID string
+
+	MerchandiseAmount int
+	ShippingAmount    int
 
 	GrossAmount       int
 	PlatformFeeAmount int
@@ -263,6 +267,8 @@ func (u *SalesReceivableUsecase) EnsurePending(
 		in.AvatarID,
 		in.UserID,
 		in.PayoutAccountID,
+		in.MerchandiseAmount,
+		in.ShippingAmount,
 		in.GrossAmount,
 		in.PlatformFeeAmount,
 		in.BrandFeeAmount,
@@ -433,6 +439,8 @@ func validateExistingSalesReceivableAllocation(
 		actual.AvatarID != expected.AvatarID ||
 		actual.UserID != expected.UserID ||
 		actual.PayoutAccountID != expected.PayoutAccountID ||
+		actual.MerchandiseAmount != expected.MerchandiseAmount ||
+		actual.ShippingAmount != expected.ShippingAmount ||
 		actual.GrossAmount != expected.GrossAmount ||
 		actual.PlatformFeeAmount != expected.PlatformFeeAmount ||
 		actual.BrandFeeAmount != expected.BrandFeeAmount ||

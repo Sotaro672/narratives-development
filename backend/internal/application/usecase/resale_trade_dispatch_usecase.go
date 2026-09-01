@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 
+	brandfeesettlementdom "narratives/internal/domain/brandFeeSettlement"
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
 	tradedom "narratives/internal/domain/trade"
@@ -27,6 +28,12 @@ var (
 	ErrResaleTradeDispatchSettlementUsecaseMissing = errors.New(
 		"resale trade dispatch: settlement usecase is not configured",
 	)
+	ErrResaleTradeDispatchBrandFeeSettlementUsecaseMissing = errors.New(
+		"resale trade dispatch: brand fee settlement usecase is not configured",
+	)
+	ErrResaleTradeDispatchBrandFeeSettlementQueueMissing = errors.New(
+		"resale trade dispatch: brand fee settlement queue is not configured",
+	)
 )
 
 type ResaleTradeDispatchUsecase struct {
@@ -35,6 +42,9 @@ type ResaleTradeDispatchUsecase struct {
 	paymentFlowUC *PaymentFlowUsecase
 	paymentUC     *PaymentUsecase
 	settlementUC  *SettlementUsecase
+
+	brandFeeSettlementUC    *BrandFeeSettlementUsecase
+	brandFeeSettlementQueue BrandFeeSettlementTransferQueue
 }
 
 type NewResaleTradeDispatchUsecaseInput struct {
@@ -44,6 +54,9 @@ type NewResaleTradeDispatchUsecaseInput struct {
 	PaymentFlowUsecase *PaymentFlowUsecase
 	PaymentUsecase     *PaymentUsecase
 	SettlementUsecase  *SettlementUsecase
+
+	BrandFeeSettlementUsecase *BrandFeeSettlementUsecase
+	BrandFeeSettlementQueue   BrandFeeSettlementTransferQueue
 }
 
 type DispatchResaleTradeInput struct {
@@ -65,11 +78,13 @@ func NewResaleTradeDispatchUsecase(
 	in NewResaleTradeDispatchUsecaseInput,
 ) *ResaleTradeDispatchUsecase {
 	return &ResaleTradeDispatchUsecase{
-		tradeRepo:     in.TradeRepository,
-		orderRepo:     in.OrderRepository,
-		paymentFlowUC: in.PaymentFlowUsecase,
-		paymentUC:     in.PaymentUsecase,
-		settlementUC:  in.SettlementUsecase,
+		tradeRepo:               in.TradeRepository,
+		orderRepo:               in.OrderRepository,
+		paymentFlowUC:           in.PaymentFlowUsecase,
+		paymentUC:               in.PaymentUsecase,
+		settlementUC:            in.SettlementUsecase,
+		brandFeeSettlementUC:    in.BrandFeeSettlementUsecase,
+		brandFeeSettlementQueue: in.BrandFeeSettlementQueue,
 	}
 }
 
@@ -96,6 +111,14 @@ func (u *ResaleTradeDispatchUsecase) Dispatch(
 	if u.settlementUC == nil {
 		return DispatchResaleTradeResult{},
 			ErrResaleTradeDispatchSettlementUsecaseMissing
+	}
+	if u.brandFeeSettlementUC == nil {
+		return DispatchResaleTradeResult{},
+			ErrResaleTradeDispatchBrandFeeSettlementUsecaseMissing
+	}
+	if u.brandFeeSettlementQueue == nil {
+		return DispatchResaleTradeResult{},
+			ErrResaleTradeDispatchBrandFeeSettlementQueueMissing
 	}
 
 	if in.TradeID == "" {
@@ -149,7 +172,20 @@ func (u *ResaleTradeDispatchUsecase) Dispatch(
 		return DispatchResaleTradeResult{}, err
 	}
 
+	// 発送保存後にBrandFeeSettlementのready化やqueue投入だけ失敗した場合、
+	// 再実行時にはここへ入る。
+	//
+	// financial recordを再保証し、Brand feeをready化して再enqueueすることで
+	// 「発送済みだがBrand feeがpendingのまま」を復旧する。
 	if item.IsDispatched {
+		if err := u.reconcileDispatchedBrandFee(
+			ctx,
+			order,
+			trade.OrderItemIndex,
+		); err != nil {
+			return DispatchResaleTradeResult{}, err
+		}
+
 		return DispatchResaleTradeResult{
 			Trade:   trade,
 			Order:   order,
@@ -255,9 +291,14 @@ func (u *ResaleTradeDispatchUsecase) Dispatch(
 	// Webhook到着順に依存せず、succeeded Paymentからseller側の
 	// financial recordを冪等に保証する。
 	//
-	// Resale itemではStripe SettlementではなくSalesReceivable pendingが
-	// 作成される。availableへの遷移はtoken transfer完了時の責務であり、
+	// Resale itemではSalesReceivable pendingとBrandFeeSettlement pendingが
+	// 作成される。
+	//
+	// SalesReceivableのavailable化はtoken transfer完了時の責務であり、
 	// 発送時には行わない。
+	//
+	// BrandFeeSettlementもここではまだpendingのままとし、発送状態が
+	// 永続化された後にだけreadyへ遷移させる。
 	if _, err := u.settlementUC.EnsureForSucceededPayment(
 		ctx,
 		paidOrder,
@@ -266,9 +307,17 @@ func (u *ResaleTradeDispatchUsecase) Dispatch(
 		return DispatchResaleTradeResult{}, err
 	}
 
-	// 並行リクエスト等ですでに発送済みになっていれば、
-	// financial recordの保証だけ行い冪等成功として返す。
+	// 並行リクエスト等ですでに発送済みになっていれば、発送境界は既に
+	// 永続化されているためBrand feeをready化してenqueueする。
 	if paidItem.IsDispatched {
+		if err := u.ensureBrandFeeSettlementReadyAndEnqueued(
+			ctx,
+			payment.PaymentID,
+			trade.OrderItemIndex,
+		); err != nil {
+			return DispatchResaleTradeResult{}, err
+		}
+
 		return DispatchResaleTradeResult{
 			Trade:   trade,
 			Order:   paidOrder,
@@ -299,12 +348,121 @@ func (u *ResaleTradeDispatchUsecase) Dispatch(
 			orderdom.ErrNotFound
 	}
 
+	updatedItem := updatedOrder.Items[trade.OrderItemIndex]
+	if !updatedItem.IsDispatched {
+		return DispatchResaleTradeResult{},
+			orderdom.ErrConflict
+	}
+
+	// Brand feeは「発送済み」が永続化された後にだけ送金可能とする。
+	//
+	// MarkReadyとCloud Tasks enqueueの間で失敗しても、次回Dispatch時の
+	// IsDispatched分岐またはDispatchDue reconciliationから復旧できる。
+	if err := u.ensureBrandFeeSettlementReadyAndEnqueued(
+		ctx,
+		payment.PaymentID,
+		trade.OrderItemIndex,
+	); err != nil {
+		return DispatchResaleTradeResult{}, err
+	}
+
 	return DispatchResaleTradeResult{
 		Trade:   trade,
 		Order:   updatedOrder,
-		Item:    updatedOrder.Items[trade.OrderItemIndex],
+		Item:    updatedItem,
 		Changed: true,
 	}, nil
+}
+
+// reconcileDispatchedBrandFee repairs the financial side of an Order item whose
+// dispatch state has already been persisted.
+//
+// This path is required because the previous request may have succeeded in
+// persisting IsDispatched=true and then failed before BrandFeeSettlement was
+// marked ready or its Cloud Task was enqueued.
+func (u *ResaleTradeDispatchUsecase) reconcileDispatchedBrandFee(
+	ctx context.Context,
+	order orderdom.Order,
+	orderItemIndex int,
+) error {
+	if !order.Paid {
+		return orderdom.ErrConflict
+	}
+
+	payment, err := u.paymentUC.GetByPaymentID(
+		ctx,
+		order.ID,
+	)
+	if err != nil {
+		return err
+	}
+	if payment == nil ||
+		payment.PaymentID != order.ID ||
+		payment.Status != paymentdom.StatusSucceeded {
+		return ErrPaymentFlowDispatchNotSucceeded
+	}
+
+	// SalesReceivableとBrandFeeSettlementの存在を冪等に保証する。
+	if _, err := u.settlementUC.EnsureForSucceededPayment(
+		ctx,
+		order,
+		*payment,
+	); err != nil {
+		return err
+	}
+
+	return u.ensureBrandFeeSettlementReadyAndEnqueued(
+		ctx,
+		payment.PaymentID,
+		orderItemIndex,
+	)
+}
+
+// ensureBrandFeeSettlementReadyAndEnqueued moves the deterministic Brand fee
+// record across the fulfillment boundary and schedules Stripe Transfer.
+//
+// It must only be called after IsDispatched=true has been persisted.
+func (u *ResaleTradeDispatchUsecase) ensureBrandFeeSettlementReadyAndEnqueued(
+	ctx context.Context,
+	paymentID string,
+	orderItemIndex int,
+) error {
+	brandFeeSettlementID, err := brandfeesettlementdom.NewID(
+		paymentID,
+		orderItemIndex,
+	)
+	if err != nil {
+		return err
+	}
+
+	brandFeeSettlement, err := u.brandFeeSettlementUC.MarkReady(
+		ctx,
+		brandFeeSettlementID,
+	)
+	if err != nil {
+		return err
+	}
+
+	switch brandFeeSettlement.Status {
+	case brandfeesettlementdom.StatusReady,
+		brandfeesettlementdom.StatusFailedRetryable,
+		brandfeesettlementdom.StatusTransferring:
+
+		return u.brandFeeSettlementQueue.EnqueueBrandFeeSettlementTransfer(
+			ctx,
+			brandFeeSettlement.ID,
+		)
+
+	case brandfeesettlementdom.StatusTransferred,
+		brandfeesettlementdom.StatusFailed,
+		brandfeesettlementdom.StatusCanceled,
+		brandfeesettlementdom.StatusReversed:
+
+		return nil
+
+	default:
+		return ErrBrandFeeSettlementCannotReady
+	}
 }
 
 func (u *ResaleTradeDispatchUsecase) ensureResaleShippingQuote(

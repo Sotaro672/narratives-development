@@ -35,6 +35,9 @@ type Container struct {
 	CartUC                         *usecase.CartUsecase
 	PaymentUC                      *usecase.PaymentUsecase
 	SettlementUC                   *usecase.SettlementUsecase
+	BrandFeeSettlementUC           *usecase.BrandFeeSettlementUsecase
+	BrandFeeSettlementTransferUC   *usecase.BrandFeeSettlementTransferUsecase
+	BrandFeeSettlementQueue        usecase.BrandFeeSettlementTransferQueue
 	RefundUC                       *usecase.RefundUsecase
 	ItemRefundUC                   *usecase.ItemRefundUsecase
 	RefundRepo                     refunddom.RepositoryPort
@@ -131,6 +134,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	usecases.applyToContainer(c)
+
+	if usecases.brandFeeSettlementQueue == nil {
+		return nil, errors.New("di.mall: brand fee settlement queue is nil")
+	}
+	c.BrandFeeSettlementQueue = usecases.brandFeeSettlementQueue
 
 	queries, err := buildMallQueries(
 		infra,

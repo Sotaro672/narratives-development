@@ -36,6 +36,9 @@ type mallUsecases struct {
 	cartUC                         *usecase.CartUsecase
 	paymentUC                      *usecase.PaymentUsecase
 	salesReceivableUC              *usecase.SalesReceivableUsecase
+	brandFeeSettlementUC           *usecase.BrandFeeSettlementUsecase
+	brandFeeSettlementTransferUC   *usecase.BrandFeeSettlementTransferUsecase
+	brandFeeSettlementQueue        usecase.BrandFeeSettlementTransferQueue
 	settlementUC                   *usecase.SettlementUsecase
 	settlementQueue                usecase.SettlementTransferQueue
 	refundUC                       *usecase.RefundUsecase
@@ -290,12 +293,45 @@ func buildMallUsecases(
 		return nil, errors.New("di.mall: sales receivable usecase is nil")
 	}
 
+	if r.brandFeeSettlementRepo == nil {
+		return nil, errors.New("di.mall: brand fee settlement repository is nil")
+	}
+
+	brandFeeSettlementUC := usecase.NewBrandFeeSettlementUsecase(
+		r.brandFeeSettlementRepo,
+	)
+	if brandFeeSettlementUC == nil {
+		return nil, errors.New("di.mall: brand fee settlement usecase is nil")
+	}
+
+	brandFeeSettlementTransferUC := usecase.NewBrandFeeSettlementTransferUsecase(
+		usecase.NewBrandFeeSettlementTransferUsecaseInput{
+			Repository:            r.brandFeeSettlementRepo,
+			StripeTransferGateway: settlementDependencies.StripeTransferGateway,
+		},
+	)
+	if brandFeeSettlementTransferUC == nil {
+		return nil, errors.New("di.mall: brand fee settlement transfer usecase is nil")
+	}
+
+	brandFeeSettlementQueue, err := cloudtasksadp.NewBrandFeeSettlementQueueFromEnv(ctx)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"di.mall: build brand fee settlement queue: %w",
+			err,
+		)
+	}
+	if brandFeeSettlementQueue == nil {
+		return nil, errors.New("di.mall: brand fee settlement queue is nil")
+	}
+
 	settlementUC := usecase.NewSettlementUsecase(
 		usecase.NewSettlementUsecaseInput{
-			Repository:             r.settlementRepo,
-			Calculator:             settlementDependencies.SettlementCalculator,
-			SalesReceivableUsecase: salesReceivableUC,
-			StripeTransferGateway:  settlementDependencies.StripeTransferGateway,
+			Repository:                r.settlementRepo,
+			Calculator:                settlementDependencies.SettlementCalculator,
+			SalesReceivableUsecase:    salesReceivableUC,
+			BrandFeeSettlementUsecase: brandFeeSettlementUC,
+			StripeTransferGateway:     settlementDependencies.StripeTransferGateway,
 		},
 	)
 	if settlementUC == nil {
@@ -399,11 +435,13 @@ func buildMallUsecases(
 
 	resaleTradeDispatchUC := usecase.NewResaleTradeDispatchUsecase(
 		usecase.NewResaleTradeDispatchUsecaseInput{
-			TradeRepository:    r.tradeRepo,
-			OrderRepository:    r.orderRepo,
-			PaymentFlowUsecase: paymentFlowUC,
-			PaymentUsecase:     paymentUC,
-			SettlementUsecase:  settlementUC,
+			TradeRepository:           r.tradeRepo,
+			OrderRepository:           r.orderRepo,
+			PaymentFlowUsecase:        paymentFlowUC,
+			PaymentUsecase:            paymentUC,
+			SettlementUsecase:         settlementUC,
+			BrandFeeSettlementUsecase: brandFeeSettlementUC,
+			BrandFeeSettlementQueue:   brandFeeSettlementQueue,
 		},
 	)
 	if resaleTradeDispatchUC == nil {
@@ -447,6 +485,9 @@ func buildMallUsecases(
 		cartUC:                         cartUC,
 		paymentUC:                      paymentUC,
 		salesReceivableUC:              salesReceivableUC,
+		brandFeeSettlementUC:           brandFeeSettlementUC,
+		brandFeeSettlementTransferUC:   brandFeeSettlementTransferUC,
+		brandFeeSettlementQueue:        brandFeeSettlementQueue,
 		settlementUC:                   settlementUC,
 		settlementQueue:                settlementQueue,
 		refundUC:                       refundUC,
@@ -487,6 +528,8 @@ func (u *mallUsecases) applyToContainer(c *Container) {
 	c.CartUC = u.cartUC
 	c.PaymentUC = u.paymentUC
 	c.SettlementUC = u.settlementUC
+	c.BrandFeeSettlementUC = u.brandFeeSettlementUC
+	c.BrandFeeSettlementTransferUC = u.brandFeeSettlementTransferUC
 	c.RefundUC = u.refundUC
 	c.ItemRefundUC = u.itemRefundUC
 	c.RefundCompletionNotificationUC = u.refundCompletionNotificationUC

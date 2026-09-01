@@ -18,6 +18,7 @@ import (
 	fscommon "narratives/internal/adapters/out/firestore/common"
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
+	transportationdom "narratives/internal/domain/transportation"
 )
 
 var (
@@ -363,6 +364,13 @@ type sellerSnapshotDoc struct {
 	StripeAccountID string `firestore:"stripeAccountId"`
 }
 
+type brandRevenueSnapshotDoc struct {
+	BrandID         string `firestore:"brandId"`
+	CompanyID       string `firestore:"companyId"`
+	AccountID       string `firestore:"accountId"`
+	StripeAccountID string `firestore:"stripeAccountId"`
+}
+
 type itemDoc struct {
 	Type string `firestore:"type"`
 
@@ -377,7 +385,8 @@ type itemDoc struct {
 	TokenBlueprintID   string `firestore:"tokenBlueprintId,omitempty"`
 	BrandID            string `firestore:"brandId,omitempty"`
 
-	SellerSnapshot sellerSnapshotDoc `firestore:"sellerSnapshot"`
+	SellerSnapshot       sellerSnapshotDoc        `firestore:"sellerSnapshot"`
+	BrandRevenueSnapshot *brandRevenueSnapshotDoc `firestore:"brandRevenueSnapshot,omitempty"`
 
 	ProductBlueprintCategoryPath []string `firestore:"productBlueprintCategoryPath"`
 	ConsumptionTaxRate           int      `firestore:"consumptionTaxRate"`
@@ -466,6 +475,16 @@ func docToOrder(snap *firestore.DocumentSnapshot) (orderdom.Order, error) {
 			transferredAt = &value
 		}
 
+		brandRevenueSnapshot := orderdom.BrandRevenueSnapshot{}
+		if item.BrandRevenueSnapshot != nil {
+			brandRevenueSnapshot = orderdom.BrandRevenueSnapshot{
+				BrandID:         item.BrandRevenueSnapshot.BrandID,
+				CompanyID:       item.BrandRevenueSnapshot.CompanyID,
+				AccountID:       item.BrandRevenueSnapshot.AccountID,
+				StripeAccountID: item.BrandRevenueSnapshot.StripeAccountID,
+			}
+		}
+
 		items = append(items, orderdom.OrderItemSnapshot{
 			Type:               orderdom.OrderItemType(item.Type),
 			ModelID:            item.ModelID,
@@ -486,6 +505,7 @@ func docToOrder(snap *firestore.DocumentSnapshot) (orderdom.Order, error) {
 				PayoutAccountID: item.SellerSnapshot.PayoutAccountID,
 				StripeAccountID: item.SellerSnapshot.StripeAccountID,
 			},
+			BrandRevenueSnapshot: brandRevenueSnapshot,
 
 			ProductBlueprintCategoryPath: append(
 				[]string(nil),
@@ -637,6 +657,10 @@ func shippingQuoteItemToDocMap(item orderdom.ShippingQuoteItemSnapshot) map[stri
 	case orderdom.OrderItemTypeResale:
 		doc["type"] = string(item.Type)
 		doc["resaleId"] = item.ResaleID
+		if item.Carrier != "" {
+			doc["carrier"] = item.Carrier
+			doc["size"] = item.Size
+		}
 	}
 
 	return doc
@@ -690,6 +714,12 @@ func orderItemToDocMap(item orderdom.OrderItemSnapshot) map[string]any {
 		doc["productBlueprintId"] = item.ProductBlueprintID
 		doc["tokenBlueprintId"] = item.TokenBlueprintID
 		doc["brandId"] = item.BrandID
+		doc["brandRevenueSnapshot"] = map[string]any{
+			"brandId":         item.BrandRevenueSnapshot.BrandID,
+			"companyId":       item.BrandRevenueSnapshot.CompanyID,
+			"accountId":       item.BrandRevenueSnapshot.AccountID,
+			"stripeAccountId": item.BrandRevenueSnapshot.StripeAccountID,
+		}
 	}
 
 	if item.IsReturnRequested {
@@ -987,7 +1017,7 @@ func validateShippingQuoteItemDocumentShape(raw map[string]any) (int, error) {
 		if _, ok := requiredOrderString(raw, "resaleId"); !ok {
 			return 0, ErrInvalidOrderDocumentData
 		}
-		if qty != 1 || unitAmount != 0 || amount != 0 {
+		if qty != 1 {
 			return 0, ErrInvalidOrderDocumentData
 		}
 
@@ -996,7 +1026,6 @@ func validateShippingQuoteItemDocumentShape(raw map[string]any) (int, error) {
 			"inventoryId",
 			"modelId",
 			"originShippingAddressId",
-			"carrier",
 			"transportationId",
 		} {
 			if value, exists := raw[field]; exists && value != nil {
@@ -1006,11 +1035,51 @@ func validateShippingQuoteItemDocumentShape(raw map[string]any) (int, error) {
 			}
 		}
 
-		if value, exists := raw["size"]; exists && value != nil {
-			size, ok := requiredOrderInt(raw, "size")
-			if !ok || size != 0 {
+		carrier := ""
+		if value, exists := raw["carrier"]; exists && value != nil {
+			text, ok := value.(string)
+			if !ok {
 				return 0, ErrInvalidOrderDocumentData
 			}
+			carrier = text
+		}
+
+		if carrier == "" {
+			if unitAmount != 0 || amount != 0 {
+				return 0, ErrInvalidOrderDocumentData
+			}
+			if value, exists := raw["size"]; exists && value != nil {
+				size, ok := requiredOrderInt(raw, "size")
+				if !ok || size != 0 {
+					return 0, ErrInvalidOrderDocumentData
+				}
+			}
+			break
+		}
+
+		resaleCarrier := transportationdom.Carrier(carrier)
+		if !transportationdom.IsValidResaleShippingCarrier(resaleCarrier) {
+			return 0, ErrInvalidOrderDocumentData
+		}
+
+		size, ok := requiredOrderInt(raw, "size")
+		if !ok || !transportationdom.IsValidResaleBoxSize(size) {
+			return 0, ErrInvalidOrderDocumentData
+		}
+
+		quote, err := transportationdom.CalculateResaleFlatRate(resaleCarrier, size)
+		if err != nil || quote.Amount <= 0 {
+			return 0, ErrInvalidOrderDocumentData
+		}
+
+		maxInt64 := int64(^uint(0) >> 1)
+		if quote.Amount > maxInt64 {
+			return 0, ErrInvalidOrderDocumentData
+		}
+
+		expectedAmount := int(quote.Amount)
+		if unitAmount != expectedAmount || amount != expectedAmount {
+			return 0, ErrInvalidOrderDocumentData
 		}
 
 	default:
@@ -1070,6 +1139,32 @@ func validateSellerSnapshotDocumentShape(
 		}
 
 	default:
+		return ErrInvalidOrderDocumentData
+	}
+
+	return nil
+}
+
+func validateBrandRevenueSnapshotDocumentShape(
+	raw map[string]any,
+	itemBrandID string,
+) error {
+	if raw == nil || itemBrandID == "" {
+		return ErrInvalidOrderDocumentData
+	}
+
+	brandID, ok := requiredOrderString(raw, "brandId")
+	if !ok || brandID != itemBrandID {
+		return ErrInvalidOrderDocumentData
+	}
+	for _, field := range []string{"companyId", "accountId"} {
+		if _, ok := requiredOrderString(raw, field); !ok {
+			return ErrInvalidOrderDocumentData
+		}
+	}
+
+	stripeAccountID, ok := requiredOrderString(raw, "stripeAccountId")
+	if !ok || !strings.HasPrefix(stripeAccountID, "acct_") {
 		return ErrInvalidOrderDocumentData
 	}
 
@@ -1201,6 +1296,10 @@ func validateOrderItemDocumentShape(raw map[string]any) error {
 			}
 		}
 
+		if value, exists := raw["brandRevenueSnapshot"]; exists && value != nil {
+			return ErrInvalidOrderDocumentData
+		}
+
 	case orderdom.OrderItemTypeResale:
 		for _, field := range []string{
 			"resaleId",
@@ -1212,6 +1311,15 @@ func validateOrderItemDocumentShape(raw map[string]any) error {
 			if _, ok := requiredOrderString(raw, field); !ok {
 				return ErrInvalidOrderDocumentData
 			}
+		}
+
+		itemBrandID, _ := requiredOrderString(raw, "brandId")
+		rawBrandRevenueSnapshot, ok := raw["brandRevenueSnapshot"].(map[string]any)
+		if !ok || rawBrandRevenueSnapshot == nil {
+			return ErrInvalidOrderDocumentData
+		}
+		if err := validateBrandRevenueSnapshotDocumentShape(rawBrandRevenueSnapshot, itemBrandID); err != nil {
+			return err
 		}
 
 	default:

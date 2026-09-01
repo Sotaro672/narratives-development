@@ -23,6 +23,29 @@ const (
 )
 
 // ========================================
+// Brand revenue snapshot
+// ========================================
+
+// BrandRevenueSnapshot identifies the immutable productBlueprint Brand payout
+// destination captured when a resale Order item is created.
+//
+// This snapshot is separate from SellerSnapshot.
+//
+// For a Resale item:
+//   - SellerSnapshot identifies the resale seller Avatar/User/PayoutAccount.
+//   - BrandRevenueSnapshot identifies the original productBlueprint Brand
+//     Account that receives the Brand share of the resale proceeds.
+//
+// StripeAccountID is snapshotted at Order creation so later Brand or Account
+// changes do not alter the financial destination of an already-created Order.
+type BrandRevenueSnapshot struct {
+	BrandID         string `json:"brandId"`
+	CompanyID       string `json:"companyId"`
+	AccountID       string `json:"accountId"`
+	StripeAccountID string `json:"stripeAccountId"`
+}
+
+// ========================================
 // Item snapshot
 // ========================================
 
@@ -41,6 +64,7 @@ const (
 //   - resaleId, productId
 //   - productBlueprintId, tokenBlueprintId, brandId
 //   - sellerSnapshot
+//   - brandRevenueSnapshot
 //   - productBlueprintCategoryPath, consumptionTaxRate
 //   - qty=1, price
 //
@@ -63,7 +87,14 @@ type OrderItemSnapshot struct {
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 	BrandID            string `json:"brandId,omitempty"`
 
+	// SellerSnapshot represents the actual seller of this Order item.
+	// For List items this is the primary-sale Brand/Account seller.
+	// For Resale items this is the Avatar/User/PayoutAccount resale seller.
 	SellerSnapshot SellerSnapshot `json:"sellerSnapshot"`
+
+	// BrandRevenueSnapshot is populated only for Resale items and identifies
+	// the productBlueprint Brand Account entitled to the Brand share of resale proceeds.
+	BrandRevenueSnapshot BrandRevenueSnapshot `json:"brandRevenueSnapshot,omitempty"`
 
 	ProductBlueprintCategoryPath []string `json:"productBlueprintCategoryPath"`
 

@@ -61,19 +61,16 @@ func (r *SalesReceivableRepositoryFS) GetByID(
 	receivableID string,
 ) (salesreceivabledom.SalesReceivable, error) {
 	if r == nil || r.Client == nil {
-		return salesreceivabledom.SalesReceivable{},
-			errors.New("salesReceivable: firestore client is nil")
+		return salesreceivabledom.SalesReceivable{}, errors.New("salesReceivable: firestore client is nil")
 	}
 	if receivableID == "" || strings.Contains(receivableID, "/") {
-		return salesreceivabledom.SalesReceivable{},
-			salesreceivabledom.ErrInvalidID
+		return salesreceivabledom.SalesReceivable{}, salesreceivabledom.ErrInvalidID
 	}
 
 	snapshot, err := r.doc(receivableID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return salesreceivabledom.SalesReceivable{},
-				salesreceivabledom.ErrNotFound
+			return salesreceivabledom.SalesReceivable{}, salesreceivabledom.ErrNotFound
 		}
 		return salesreceivabledom.SalesReceivable{}, err
 	}
@@ -292,8 +289,7 @@ func (r *SalesReceivableRepositoryFS) Create(
 	receivable salesreceivabledom.SalesReceivable,
 ) (salesreceivabledom.SalesReceivable, error) {
 	if r == nil || r.Client == nil {
-		return salesreceivabledom.SalesReceivable{},
-			errors.New("salesReceivable: firestore client is nil")
+		return salesreceivabledom.SalesReceivable{}, errors.New("salesReceivable: firestore client is nil")
 	}
 
 	normalizeSalesReceivableTimestamps(&receivable)
@@ -302,16 +298,14 @@ func (r *SalesReceivableRepositoryFS) Create(
 		return salesreceivabledom.SalesReceivable{}, err
 	}
 	if receivable.Status != salesreceivabledom.StatusPending {
-		return salesreceivabledom.SalesReceivable{},
-			salesreceivabledom.ErrInvalidStatus
+		return salesreceivabledom.SalesReceivable{}, salesreceivabledom.ErrInvalidStatus
 	}
 	if receivable.BankPayoutID != "" ||
 		receivable.AvailableAt != nil ||
 		receivable.ReservedAt != nil ||
 		receivable.PaidAt != nil ||
 		receivable.CanceledAt != nil {
-		return salesreceivabledom.SalesReceivable{},
-			salesreceivabledom.ErrInvalidStatus
+		return salesreceivabledom.SalesReceivable{}, salesreceivabledom.ErrInvalidStatus
 	}
 
 	expectedID, err := salesreceivabledom.NewID(
@@ -322,15 +316,13 @@ func (r *SalesReceivableRepositoryFS) Create(
 		return salesreceivabledom.SalesReceivable{}, err
 	}
 	if receivable.ID != expectedID {
-		return salesreceivabledom.SalesReceivable{},
-			salesreceivabledom.ErrInvalidID
+		return salesreceivabledom.SalesReceivable{}, salesreceivabledom.ErrInvalidID
 	}
 
 	_, err = r.doc(receivable.ID).Create(ctx, receivable)
 	if err != nil {
 		if status.Code(err) == codes.AlreadyExists {
-			return salesreceivabledom.SalesReceivable{},
-				salesreceivabledom.ErrConflict
+			return salesreceivabledom.SalesReceivable{}, salesreceivabledom.ErrConflict
 		}
 		return salesreceivabledom.SalesReceivable{}, err
 	}
@@ -352,8 +344,7 @@ func (r *SalesReceivableRepositoryFS) Update(
 	receivable salesreceivabledom.SalesReceivable,
 ) (salesreceivabledom.SalesReceivable, error) {
 	if r == nil || r.Client == nil {
-		return salesreceivabledom.SalesReceivable{},
-			errors.New("salesReceivable: firestore client is nil")
+		return salesreceivabledom.SalesReceivable{}, errors.New("salesReceivable: firestore client is nil")
 	}
 
 	normalizeSalesReceivableTimestamps(&receivable)
@@ -362,8 +353,7 @@ func (r *SalesReceivableRepositoryFS) Update(
 		return salesreceivabledom.SalesReceivable{}, err
 	}
 	if receivable.ID == "" || strings.Contains(receivable.ID, "/") {
-		return salesreceivabledom.SalesReceivable{},
-			salesreceivabledom.ErrInvalidID
+		return salesreceivabledom.SalesReceivable{}, salesreceivabledom.ErrInvalidID
 	}
 
 	expectedID, err := salesreceivabledom.NewID(
@@ -374,8 +364,7 @@ func (r *SalesReceivableRepositoryFS) Update(
 		return salesreceivabledom.SalesReceivable{}, err
 	}
 	if receivable.ID != expectedID {
-		return salesreceivabledom.SalesReceivable{},
-			salesreceivabledom.ErrInvalidID
+		return salesreceivabledom.SalesReceivable{}, salesreceivabledom.ErrInvalidID
 	}
 
 	ref := r.doc(receivable.ID)
@@ -454,8 +443,11 @@ func validateSalesReceivableImmutableFields(
 		current.AvatarID != next.AvatarID ||
 		current.UserID != next.UserID ||
 		current.PayoutAccountID != next.PayoutAccountID ||
+		current.MerchandiseAmount != next.MerchandiseAmount ||
+		current.ShippingAmount != next.ShippingAmount ||
 		current.GrossAmount != next.GrossAmount ||
 		current.PlatformFeeAmount != next.PlatformFeeAmount ||
+		current.BrandFeeAmount != next.BrandFeeAmount ||
 		current.ReceivableAmount != next.ReceivableAmount ||
 		current.Currency != next.Currency ||
 		!current.CreatedAt.Equal(next.CreatedAt) {
@@ -507,8 +499,7 @@ func docToSalesReceivable(
 	snapshot *firestore.DocumentSnapshot,
 ) (salesreceivabledom.SalesReceivable, error) {
 	if snapshot == nil || snapshot.Ref == nil {
-		return salesreceivabledom.SalesReceivable{},
-			salesreceivabledom.ErrInvalidID
+		return salesreceivabledom.SalesReceivable{}, salesreceivabledom.ErrInvalidID
 	}
 
 	var receivable salesreceivabledom.SalesReceivable
@@ -520,8 +511,7 @@ func docToSalesReceivable(
 
 	if receivable.ID == "" ||
 		receivable.ID != snapshot.Ref.ID {
-		return salesreceivabledom.SalesReceivable{},
-			salesreceivabledom.ErrInvalidID
+		return salesreceivabledom.SalesReceivable{}, salesreceivabledom.ErrInvalidID
 	}
 
 	expectedID, err := salesreceivabledom.NewID(
@@ -532,8 +522,7 @@ func docToSalesReceivable(
 		return salesreceivabledom.SalesReceivable{}, err
 	}
 	if receivable.ID != expectedID {
-		return salesreceivabledom.SalesReceivable{},
-			salesreceivabledom.ErrInvalidID
+		return salesreceivabledom.SalesReceivable{}, salesreceivabledom.ErrInvalidID
 	}
 
 	if err := receivable.Validate(); err != nil {
@@ -603,8 +592,11 @@ func salesReceivableStateEqual(
 		left.AvatarID == right.AvatarID &&
 		left.UserID == right.UserID &&
 		left.PayoutAccountID == right.PayoutAccountID &&
+		left.MerchandiseAmount == right.MerchandiseAmount &&
+		left.ShippingAmount == right.ShippingAmount &&
 		left.GrossAmount == right.GrossAmount &&
 		left.PlatformFeeAmount == right.PlatformFeeAmount &&
+		left.BrandFeeAmount == right.BrandFeeAmount &&
 		left.ReceivableAmount == right.ReceivableAmount &&
 		left.Currency == right.Currency &&
 		left.Status == right.Status &&

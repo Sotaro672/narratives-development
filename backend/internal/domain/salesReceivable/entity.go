@@ -62,10 +62,13 @@ var (
 	ErrInvalidUserID              = errors.New("salesReceivable: invalid userId")
 	ErrInvalidPayoutAccountID     = errors.New("salesReceivable: invalid payoutAccountId")
 	ErrPayoutAccountOwnerMismatch = errors.New("salesReceivable: payoutAccountId does not match userId")
+	ErrInvalidMerchandiseAmount   = errors.New("salesReceivable: invalid merchandiseAmount")
+	ErrInvalidShippingAmount      = errors.New("salesReceivable: invalid shippingAmount")
 	ErrInvalidGrossAmount         = errors.New("salesReceivable: invalid grossAmount")
 	ErrInvalidPlatformFeeAmount   = errors.New("salesReceivable: invalid platformFeeAmount")
 	ErrInvalidBrandFeeAmount      = errors.New("salesReceivable: invalid brandFeeAmount")
 	ErrInvalidReceivableAmount    = errors.New("salesReceivable: invalid receivableAmount")
+	ErrGrossAmountMismatch        = errors.New("salesReceivable: grossAmount does not equal merchandiseAmount - shippingAmount")
 	ErrAmountMismatch             = errors.New("salesReceivable: grossAmount does not equal platformFeeAmount + brandFeeAmount + receivableAmount")
 	ErrInvalidCurrency            = errors.New("salesReceivable: invalid currency")
 	ErrInvalidStatus              = errors.New("salesReceivable: invalid status")
@@ -87,16 +90,29 @@ var (
 //   - document ID is deterministic by PaymentID and OrderItemIndex
 //   - SalesReceivables are never aggregated across multiple Order items
 //
-// GrossAmount represents the resale distribution base after shipping cost has
-// been deducted from the merchandise amount.
+// MerchandiseAmount is the resale merchandise price paid by the buyer.
+// ShippingAmount is the outbound resale shipping cost deducted from the merchandise proceeds.
 //
-// Amount invariant:
+// Distribution base invariant:
+//
+//	GrossAmount = MerchandiseAmount - ShippingAmount
+//
+// Distribution invariant:
 //
 //	GrossAmount = PlatformFeeAmount + BrandFeeAmount + ReceivableAmount
 //
 // PlatformFeeAmount is AMOL's share of the resale distribution base.
 // BrandFeeAmount is the productBlueprint Brand's share.
 // ReceivableAmount is the amount owed to the resale seller.
+//
+// Example:
+//
+//	MerchandiseAmount = 10000
+//	ShippingAmount = 750
+//	GrossAmount = 9250
+//	PlatformFeeAmount = 462
+//	BrandFeeAmount = 462
+//	ReceivableAmount = 8326
 //
 // OrderItemIndex and ResaleID identify the immutable resale item represented by this receivable.
 //
@@ -114,6 +130,9 @@ type SalesReceivable struct {
 	AvatarID        string `json:"avatarId" firestore:"avatarId"`
 	UserID          string `json:"userId" firestore:"userId"`
 	PayoutAccountID string `json:"payoutAccountId" firestore:"payoutAccountId"`
+
+	MerchandiseAmount int `json:"merchandiseAmount" firestore:"merchandiseAmount"`
+	ShippingAmount    int `json:"shippingAmount" firestore:"shippingAmount"`
 
 	GrossAmount       int `json:"grossAmount" firestore:"grossAmount"`
 	PlatformFeeAmount int `json:"platformFeeAmount" firestore:"platformFeeAmount"`
@@ -155,7 +174,10 @@ func NewID(paymentID string, orderItemIndex int) (string, error) {
 
 // New creates a pending SalesReceivable after a successful resale payment.
 //
-// GrossAmount is the resale distribution base after shipping cost has been deducted.
+// MerchandiseAmount is the resale merchandise price paid by the buyer.
+// ShippingAmount is deducted from MerchandiseAmount before the AMOL, Brand,
+// and resale seller allocation is calculated.
+//
 // No bank payout is assigned at creation. The receivable becomes available only after this exact resale Order item has crossed the fulfillment boundary.
 func New(
 	id string,
@@ -166,6 +188,8 @@ func New(
 	avatarID string,
 	userID string,
 	payoutAccountID string,
+	merchandiseAmount int,
+	shippingAmount int,
 	grossAmount int,
 	platformFeeAmount int,
 	brandFeeAmount int,
@@ -186,6 +210,9 @@ func New(
 		AvatarID:        avatarID,
 		UserID:          userID,
 		PayoutAccountID: payoutAccountID,
+
+		MerchandiseAmount: merchandiseAmount,
+		ShippingAmount:    shippingAmount,
 
 		GrossAmount:       grossAmount,
 		PlatformFeeAmount: platformFeeAmount,
@@ -400,8 +427,17 @@ func (r SalesReceivable) Validate() error {
 		return ErrPayoutAccountOwnerMismatch
 	}
 
+	if r.MerchandiseAmount <= 0 {
+		return ErrInvalidMerchandiseAmount
+	}
+	if r.ShippingAmount <= 0 || r.ShippingAmount >= r.MerchandiseAmount {
+		return ErrInvalidShippingAmount
+	}
 	if r.GrossAmount <= 0 {
 		return ErrInvalidGrossAmount
+	}
+	if r.MerchandiseAmount-r.ShippingAmount != r.GrossAmount {
+		return ErrGrossAmountMismatch
 	}
 	if r.PlatformFeeAmount < 0 || r.PlatformFeeAmount > r.GrossAmount {
 		return ErrInvalidPlatformFeeAmount

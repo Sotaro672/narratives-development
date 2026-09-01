@@ -40,6 +40,7 @@ func (o Order) Validate() error {
 	if o.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
+
 	return nil
 }
 
@@ -60,6 +61,7 @@ func validateShippingSnapshot(s ShippingSnapshot) error {
 	if s.Country == "" {
 		return ErrInvalidShippingSnapshot
 	}
+
 	return nil
 }
 
@@ -84,12 +86,14 @@ func validateShippingQuoteSnapshot(s ShippingQuoteSnapshot) error {
 		if total > maxInt-item.Amount {
 			return ErrInvalidShippingQuote
 		}
+
 		total += item.Amount
 	}
 
 	if total != s.Amount {
 		return ErrInvalidShippingQuote
 	}
+
 	return nil
 }
 
@@ -223,6 +227,7 @@ func validateShippingQuoteAmountSnapshot(item ShippingQuoteItemSnapshot) error {
 	if item.UnitAmount*item.Qty != item.Amount {
 		return ErrInvalidShippingQuoteItem
 	}
+
 	return nil
 }
 
@@ -264,6 +269,7 @@ func validatePaymentMethodSnapshot(p PaymentMethodSnapshot) error {
 	if p.CardholderName == "" {
 		return ErrInvalidPaymentMethod
 	}
+
 	return nil
 }
 
@@ -275,11 +281,13 @@ func validateItems(items []OrderItemSnapshot) error {
 	if len(items) < MinItemsRequired {
 		return ErrInvalidItems
 	}
+
 	for _, item := range items {
 		if err := validateItemSnapshot(item); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -293,12 +301,20 @@ func validateItemSnapshot(item OrderItemSnapshot) error {
 		if err := validateListSellerSnapshot(item.SellerSnapshot); err != nil {
 			return err
 		}
+		if err := validateEmptyBrandRevenueSnapshot(item.BrandRevenueSnapshot); err != nil {
+			return err
+		}
+
 		return validateListItemSnapshot(item)
 
 	case OrderItemTypeResale:
 		if err := validateResaleSellerSnapshot(item.SellerSnapshot); err != nil {
 			return err
 		}
+		if err := validateResaleBrandRevenueSnapshot(item.BrandRevenueSnapshot, item.BrandID); err != nil {
+			return err
+		}
+
 		return validateResaleItemSnapshot(item)
 
 	default:
@@ -317,6 +333,7 @@ func validateListSellerSnapshot(seller SellerSnapshot) error {
 	if seller.AvatarID != "" || seller.UserID != "" || seller.PayoutAccountID != "" {
 		return ErrInvalidSellerSnapshot
 	}
+
 	return validateListSellerStripeAccountID(seller.StripeAccountID)
 }
 
@@ -333,6 +350,7 @@ func validateResaleSellerSnapshot(seller SellerSnapshot) error {
 	if seller.StripeAccountID != "" {
 		return ErrInvalidSellerSnapshot
 	}
+
 	return nil
 }
 
@@ -340,6 +358,44 @@ func validateListSellerStripeAccountID(stripeAccountID string) error {
 	if len(stripeAccountID) < len("acct_") || stripeAccountID[:len("acct_")] != "acct_" {
 		return ErrInvalidSellerSnapshot
 	}
+
+	return nil
+}
+
+// ========================================
+// Brand revenue snapshot validation
+// ========================================
+
+func validateEmptyBrandRevenueSnapshot(snapshot BrandRevenueSnapshot) error {
+	if snapshot.BrandID != "" ||
+		snapshot.CompanyID != "" ||
+		snapshot.AccountID != "" ||
+		snapshot.StripeAccountID != "" {
+		return ErrInvalidItemSnapshot
+	}
+
+	return nil
+}
+
+func validateResaleBrandRevenueSnapshot(
+	snapshot BrandRevenueSnapshot,
+	itemBrandID string,
+) error {
+	if itemBrandID == "" ||
+		snapshot.BrandID == "" ||
+		snapshot.CompanyID == "" ||
+		snapshot.AccountID == "" ||
+		snapshot.StripeAccountID == "" {
+		return ErrInvalidItemSnapshot
+	}
+	if snapshot.BrandID != itemBrandID {
+		return ErrInvalidItemSnapshot
+	}
+	if len(snapshot.StripeAccountID) < len("acct_") ||
+		snapshot.StripeAccountID[:len("acct_")] != "acct_" {
+		return ErrInvalidItemSnapshot
+	}
+
 	return nil
 }
 
@@ -351,6 +407,7 @@ func validateProductBlueprintCategorySnapshot(item OrderItemSnapshot) error {
 	if len(item.ProductBlueprintCategoryPath) == 0 {
 		return ErrInvalidItemSnapshot
 	}
+
 	for _, segment := range item.ProductBlueprintCategoryPath {
 		if segment == "" {
 			return ErrInvalidItemSnapshot
@@ -392,6 +449,7 @@ func validateListItemSnapshot(item OrderItemSnapshot) error {
 	if item.Price < 0 {
 		return ErrInvalidItemSnapshot
 	}
+
 	return validateItemTransferState(item)
 }
 
@@ -414,6 +472,9 @@ func validateResaleItemSnapshot(item OrderItemSnapshot) error {
 
 	// BrandID identifies the product brand. It must not be treated as the
 	// consumer resale seller or compared with SellerSnapshot.BrandID.
+	// BrandRevenueSnapshot separately identifies that Brand's immutable
+	// Account and Stripe payout destination captured at Order creation.
+	//
 	// List-only identifiers must not be mixed into a resale item.
 	if item.ModelID != "" || item.InventoryID != "" || item.ListID != "" {
 		return ErrInvalidItemSnapshot
@@ -421,9 +482,10 @@ func validateResaleItemSnapshot(item OrderItemSnapshot) error {
 	if item.Qty != 1 {
 		return ErrInvalidItemSnapshot
 	}
-	if item.Price < 0 {
+	if item.Price <= 0 {
 		return ErrInvalidItemSnapshot
 	}
+
 	return validateItemTransferState(item)
 }
 
@@ -491,12 +553,14 @@ func validateItemTransferState(item OrderItemSnapshot) error {
 		if item.TokenTransferVerifiedAt.After(*item.TransferredAt) {
 			return ErrInvalidItemSnapshot
 		}
+
 		return nil
 	}
 
 	if item.TransferredAt != nil {
 		return ErrInvalidItemSnapshot
 	}
+
 	return nil
 }
 

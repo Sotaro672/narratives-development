@@ -28,7 +28,6 @@ func (u *OrderUsecase) resolveOrderItems(
 			if err != nil {
 				return nil, err
 			}
-
 			items = append(items, resolved)
 
 		case orderdom.OrderItemTypeResale:
@@ -36,7 +35,6 @@ func (u *OrderUsecase) resolveOrderItems(
 			if err != nil {
 				return nil, err
 			}
-
 			items = append(items, resolved)
 
 		default:
@@ -54,7 +52,6 @@ func (u *OrderUsecase) resolveProductBlueprintTaxSnapshot(
 	if u == nil || u.productBlueprintRepo == nil {
 		return nil, 0, orderdom.ErrInvalidItemSnapshot
 	}
-
 	if productBlueprintID == "" {
 		return nil, 0, orderdom.ErrInvalidItemSnapshot
 	}
@@ -63,16 +60,11 @@ func (u *OrderUsecase) resolveProductBlueprintTaxSnapshot(
 	if err != nil {
 		return nil, 0, err
 	}
-
 	if productBlueprint.ID != productBlueprintID {
 		return nil, 0, orderdom.ErrInvalidItemSnapshot
 	}
 
-	categoryPath := append(
-		[]string(nil),
-		productBlueprint.ProductBlueprintCategoryPath...,
-	)
-
+	categoryPath := append([]string(nil), productBlueprint.ProductBlueprintCategoryPath...)
 	taxRate, err := productblueprintcategorydom.GetConsumptionTaxRate(categoryPath)
 	if err != nil {
 		return nil, 0, err
@@ -93,7 +85,6 @@ func (u *OrderUsecase) resolveSellerSnapshotByProductBlueprintID(
 	if err != nil {
 		return orderdom.SellerSnapshot{}, err
 	}
-
 	if productBlueprint.ID != productBlueprintID ||
 		productBlueprint.BrandID == "" ||
 		productBlueprint.CompanyID == "" {
@@ -104,7 +95,6 @@ func (u *OrderUsecase) resolveSellerSnapshotByProductBlueprintID(
 	if err != nil {
 		return orderdom.SellerSnapshot{}, err
 	}
-
 	if brand.ID != productBlueprint.BrandID ||
 		brand.CompanyID != productBlueprint.CompanyID ||
 		brand.AccountID == "" ||
@@ -116,7 +106,6 @@ func (u *OrderUsecase) resolveSellerSnapshotByProductBlueprintID(
 	if err != nil {
 		return orderdom.SellerSnapshot{}, err
 	}
-
 	if account.ID != brand.AccountID ||
 		account.CompanyID != brand.CompanyID ||
 		account.Status != accountdom.StatusActive ||
@@ -132,6 +121,32 @@ func (u *OrderUsecase) resolveSellerSnapshotByProductBlueprintID(
 	}, nil
 }
 
+func (u *OrderUsecase) resolveBrandRevenueSnapshotByProductBlueprintID(
+	ctx context.Context,
+	productBlueprintID string,
+) (orderdom.BrandRevenueSnapshot, error) {
+	sellerSnapshot, err := u.resolveSellerSnapshotByProductBlueprintID(ctx, productBlueprintID)
+	if err != nil {
+		return orderdom.BrandRevenueSnapshot{}, err
+	}
+	if sellerSnapshot.BrandID == "" ||
+		sellerSnapshot.CompanyID == "" ||
+		sellerSnapshot.AccountID == "" ||
+		sellerSnapshot.StripeAccountID == "" ||
+		sellerSnapshot.AvatarID != "" ||
+		sellerSnapshot.UserID != "" ||
+		sellerSnapshot.PayoutAccountID != "" {
+		return orderdom.BrandRevenueSnapshot{}, orderdom.ErrInvalidSellerSnapshot
+	}
+
+	return orderdom.BrandRevenueSnapshot{
+		BrandID:         sellerSnapshot.BrandID,
+		CompanyID:       sellerSnapshot.CompanyID,
+		AccountID:       sellerSnapshot.AccountID,
+		StripeAccountID: sellerSnapshot.StripeAccountID,
+	}, nil
+}
+
 func (u *OrderUsecase) resolveResaleSellerSnapshot(
 	ctx context.Context,
 	avatarID string,
@@ -139,7 +154,6 @@ func (u *OrderUsecase) resolveResaleSellerSnapshot(
 	if u == nil || u.avatarRepo == nil || u.payoutAccountUC == nil {
 		return orderdom.SellerSnapshot{}, orderdom.ErrInvalidSellerSnapshot
 	}
-
 	if avatarID == "" {
 		return orderdom.SellerSnapshot{}, orderdom.ErrInvalidSellerSnapshot
 	}
@@ -187,7 +201,6 @@ func (u *OrderUsecase) resolveListOrderItem(
 	if err != nil {
 		return orderdom.OrderItemSnapshot{}, err
 	}
-
 	if list.Status != listdom.StatusListing {
 		return orderdom.OrderItemSnapshot{}, orderdom.ErrInvalidItemSnapshot
 	}
@@ -196,19 +209,16 @@ func (u *OrderUsecase) resolveListOrderItem(
 	if err != nil {
 		return orderdom.OrderItemSnapshot{}, err
 	}
-
 	if inventory.ProductBlueprintID == "" || inventory.TokenBlueprintID == "" {
 		return orderdom.OrderItemSnapshot{}, orderdom.ErrInvalidItemSnapshot
 	}
 
-	productBlueprintCategoryPath, consumptionTaxRate, err :=
-		u.resolveProductBlueprintTaxSnapshot(ctx, inventory.ProductBlueprintID)
+	productBlueprintCategoryPath, consumptionTaxRate, err := u.resolveProductBlueprintTaxSnapshot(ctx, inventory.ProductBlueprintID)
 	if err != nil {
 		return orderdom.OrderItemSnapshot{}, err
 	}
 
-	sellerSnapshot, err :=
-		u.resolveSellerSnapshotByProductBlueprintID(ctx, inventory.ProductBlueprintID)
+	sellerSnapshot, err := u.resolveSellerSnapshotByProductBlueprintID(ctx, inventory.ProductBlueprintID)
 	if err != nil {
 		return orderdom.OrderItemSnapshot{}, err
 	}
@@ -286,7 +296,6 @@ func (u *OrderUsecase) resolveResaleOrderItem(
 	if err != nil {
 		return orderdom.OrderItemSnapshot{}, err
 	}
-
 	if resale.ID != resaleID ||
 		resale.Status != resaledom.StatusListing ||
 		resale.AvatarID == "" ||
@@ -294,12 +303,11 @@ func (u *OrderUsecase) resolveResaleOrderItem(
 		resale.ProductBlueprintID == "" ||
 		resale.TokenBlueprintID == "" ||
 		resale.BrandID == "" ||
-		resale.Price < 0 {
+		resale.Price <= 0 {
 		return orderdom.OrderItemSnapshot{}, orderdom.ErrInvalidItemSnapshot
 	}
 
-	productBlueprintCategoryPath, consumptionTaxRate, err :=
-		u.resolveProductBlueprintTaxSnapshot(ctx, resale.ProductBlueprintID)
+	productBlueprintCategoryPath, consumptionTaxRate, err := u.resolveProductBlueprintTaxSnapshot(ctx, resale.ProductBlueprintID)
 	if err != nil {
 		return orderdom.OrderItemSnapshot{}, err
 	}
@@ -307,6 +315,14 @@ func (u *OrderUsecase) resolveResaleOrderItem(
 	sellerSnapshot, err := u.resolveResaleSellerSnapshot(ctx, resale.AvatarID)
 	if err != nil {
 		return orderdom.OrderItemSnapshot{}, err
+	}
+
+	brandRevenueSnapshot, err := u.resolveBrandRevenueSnapshotByProductBlueprintID(ctx, resale.ProductBlueprintID)
+	if err != nil {
+		return orderdom.OrderItemSnapshot{}, err
+	}
+	if brandRevenueSnapshot.BrandID != resale.BrandID {
+		return orderdom.OrderItemSnapshot{}, orderdom.ErrInvalidItemSnapshot
 	}
 
 	return orderdom.OrderItemSnapshot{
@@ -317,7 +333,8 @@ func (u *OrderUsecase) resolveResaleOrderItem(
 		TokenBlueprintID:   resale.TokenBlueprintID,
 		BrandID:            resale.BrandID,
 
-		SellerSnapshot: sellerSnapshot,
+		SellerSnapshot:       sellerSnapshot,
+		BrandRevenueSnapshot: brandRevenueSnapshot,
 
 		ProductBlueprintCategoryPath: productBlueprintCategoryPath,
 		ConsumptionTaxRate:           consumptionTaxRate,

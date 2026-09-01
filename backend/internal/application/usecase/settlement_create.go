@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	brandfeesettlementdom "narratives/internal/domain/brandFeeSettlement"
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
 	salesreceivabledom "narratives/internal/domain/salesReceivable"
@@ -13,9 +14,10 @@ import (
 )
 
 var (
-	ErrSettlementCombinedCalculatorMissing     = errors.New("settlement: combined settlement and receivable calculator is not configured")
-	ErrSettlementSalesReceivableUsecaseMissing = errors.New("settlement: sales receivable usecase is not configured")
-	ErrSettlementClockMissing                  = errors.New("settlement: clock is not configured")
+	ErrSettlementCombinedCalculatorMissing        = errors.New("settlement: combined settlement and receivable calculator is not configured")
+	ErrSettlementSalesReceivableUsecaseMissing    = errors.New("settlement: sales receivable usecase is not configured")
+	ErrSettlementBrandFeeSettlementUsecaseMissing = errors.New("settlement: brand fee settlement usecase is not configured")
+	ErrSettlementClockMissing                     = errors.New("settlement: clock is not configured")
 )
 
 type sellerFinancialAllocationCalculator interface {
@@ -30,13 +32,29 @@ type sellerFinancialAllocationCalculator interface {
 // one successfully completed Payment.
 //
 // Primary List sales create Stripe Settlements.
-// Consumer resale transactions create one SalesReceivable per resale Order item.
 //
-// Both persistence paths use deterministic IDs and are safe to retry after a
+// Each consumer resale Order item creates:
+//   - one SalesReceivable for the resale seller
+//   - one BrandFeeSettlement for the productBlueprint Brand
+//
+// Resale allocation:
+//
+//	MerchandiseAmount - ShippingAmount = GrossAmount
+//	GrossAmount = PlatformFeeAmount + BrandFeeAmount + ReceivableAmount
+//
+// PlatformFeeAmount is AMOL's share.
+// BrandFeeAmount is the productBlueprint Brand's share.
+// ReceivableAmount is the amount owed to the resale seller.
+//
+// BrandRevenue identifies the immutable productBlueprint Brand Account and
+// Stripe destination captured when the resale Order item was created.
+//
+// All persistence paths use deterministic IDs and are safe to retry after a
 // partial failure or duplicate Stripe webhook.
 //
-// Only primary-sale Settlement records are returned. Resale financial state is
-// persisted through SalesReceivableUsecase.
+// Only primary-sale Settlement records are returned. Resale seller and Brand
+// financial state is persisted through SalesReceivableUsecase and
+// BrandFeeSettlementUsecase.
 func (u *SettlementUsecase) EnsureForSucceededPayment(
 	ctx context.Context,
 	order orderdom.Order,
@@ -70,8 +88,13 @@ func (u *SettlementUsecase) EnsureForSucceededPayment(
 	if err := validateSellerFinancialCalculation(order, payment, calculation); err != nil {
 		return nil, err
 	}
-	if len(calculation.Receivables) > 0 && u.salesReceivableUC == nil {
-		return nil, ErrSettlementSalesReceivableUsecaseMissing
+	if len(calculation.Receivables) > 0 {
+		if u.salesReceivableUC == nil {
+			return nil, ErrSettlementSalesReceivableUsecaseMissing
+		}
+		if u.brandFeeSettlementUC == nil {
+			return nil, ErrSettlementBrandFeeSettlementUsecaseMissing
+		}
 	}
 
 	now := u.now().UTC()
@@ -96,10 +119,37 @@ func (u *SettlementUsecase) EnsureForSucceededPayment(
 				AvatarID:          allocation.Seller.AvatarID,
 				UserID:            allocation.Seller.UserID,
 				PayoutAccountID:   allocation.Seller.PayoutAccountID,
+				MerchandiseAmount: allocation.MerchandiseAmount,
+				ShippingAmount:    allocation.ShippingAmount,
 				GrossAmount:       allocation.GrossAmount,
 				PlatformFeeAmount: allocation.PlatformFeeAmount,
+				BrandFeeAmount:    allocation.BrandFeeAmount,
 				ReceivableAmount:  allocation.ReceivableAmount,
 				Currency:          salesreceivabledom.CurrencyJPY,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = u.brandFeeSettlementUC.EnsurePending(
+			ctx,
+			EnsureBrandFeeSettlementInput{
+				OrderID:        order.ID,
+				PaymentID:      payment.PaymentID,
+				OrderItemIndex: allocation.OrderItemIndex,
+				ResaleID:       allocation.ResaleID,
+				Brand: brandfeesettlementdom.BrandIdentity{
+					BrandID:         allocation.BrandRevenue.BrandID,
+					CompanyID:       allocation.BrandRevenue.CompanyID,
+					AccountID:       allocation.BrandRevenue.AccountID,
+					StripeAccountID: allocation.BrandRevenue.StripeAccountID,
+				},
+				StripePaymentIntentID: payment.StripePaymentIntentID,
+				StripeChargeID:        payment.StripeChargeID,
+				TransferGroup:         payment.TransferGroup,
+				BrandFeeAmount:        allocation.BrandFeeAmount,
+				Currency:              brandfeesettlementdom.CurrencyJPY,
 			},
 		)
 		if err != nil {
@@ -192,7 +242,6 @@ func validateSucceededPaymentSellerSnapshots(order orderdom.Order) error {
 	}
 
 	activeItemCount := 0
-
 	for _, item := range order.Items {
 		if item.IsCancelled {
 			continue
@@ -205,10 +254,15 @@ func validateSucceededPaymentSellerSnapshots(order orderdom.Order) error {
 			if err := validateListSettlementSeller(item.SellerSnapshot); err != nil {
 				return err
 			}
+
 		case orderdom.OrderItemTypeResale:
 			if err := validateResaleReceivableSeller(item.SellerSnapshot); err != nil {
 				return err
 			}
+			if err := validateResaleBrandRevenueSnapshot(item.BrandRevenueSnapshot, item.BrandID); err != nil {
+				return err
+			}
+
 		default:
 			return ErrSettlementUnsupportedOrderItem
 		}
@@ -244,6 +298,32 @@ func validateResaleReceivableSeller(
 	}
 	if err := resolved.Validate(); err != nil {
 		return orderdom.ErrInvalidSellerSnapshot
+	}
+
+	return nil
+}
+
+func validateResaleBrandRevenueSnapshot(
+	snapshot orderdom.BrandRevenueSnapshot,
+	expectedBrandID string,
+) error {
+	if expectedBrandID == "" ||
+		snapshot.BrandID == "" ||
+		snapshot.BrandID != expectedBrandID ||
+		snapshot.CompanyID == "" ||
+		snapshot.AccountID == "" ||
+		snapshot.StripeAccountID == "" {
+		return orderdom.ErrInvalidItemSnapshot
+	}
+
+	resolved := settlementdom.BrandRevenueIdentity{
+		BrandID:         snapshot.BrandID,
+		CompanyID:       snapshot.CompanyID,
+		AccountID:       snapshot.AccountID,
+		StripeAccountID: snapshot.StripeAccountID,
+	}
+	if err := resolved.Validate(); err != nil {
+		return orderdom.ErrInvalidItemSnapshot
 	}
 
 	return nil
@@ -323,10 +403,17 @@ func validateSellerFinancialCalculation(
 	for _, allocation := range calculation.Receivables {
 		if allocation.OrderItemIndex < 0 ||
 			allocation.OrderItemIndex >= len(order.Items) ||
-			allocation.ResaleID == "" {
+			allocation.ResaleID == "" ||
+			allocation.BrandID == "" {
 			return ErrSettlementAllocationInvalid
 		}
 		if err := allocation.Seller.Validate(); err != nil {
+			return ErrSettlementAllocationInvalid
+		}
+		if err := allocation.BrandRevenue.Validate(); err != nil {
+			return ErrSettlementAllocationInvalid
+		}
+		if allocation.BrandRevenue.BrandID != allocation.BrandID {
 			return ErrSettlementAllocationInvalid
 		}
 
@@ -334,8 +421,10 @@ func validateSellerFinancialCalculation(
 		if item.IsCancelled ||
 			item.Type != orderdom.OrderItemTypeResale ||
 			item.ResaleID != allocation.ResaleID ||
+			item.BrandID == "" ||
+			item.BrandID != allocation.BrandID ||
 			item.Qty != 1 ||
-			item.Price < 0 {
+			item.Price <= 0 {
 			return ErrSettlementAllocationInvalid
 		}
 
@@ -350,15 +439,37 @@ func validateSellerFinancialCalculation(
 			return ErrSettlementAllocationInvalid
 		}
 
-		if allocation.MerchandiseAmount < 0 ||
+		if item.BrandRevenueSnapshot.BrandID != allocation.BrandRevenue.BrandID ||
+			item.BrandRevenueSnapshot.CompanyID != allocation.BrandRevenue.CompanyID ||
+			item.BrandRevenueSnapshot.AccountID != allocation.BrandRevenue.AccountID ||
+			item.BrandRevenueSnapshot.StripeAccountID != allocation.BrandRevenue.StripeAccountID ||
+			item.BrandRevenueSnapshot.BrandID != item.BrandID {
+			return ErrSettlementAllocationInvalid
+		}
+
+		if allocation.MerchandiseAmount <= 0 ||
+			allocation.ShippingAmount <= 0 ||
+			allocation.ShippingAmount >= allocation.MerchandiseAmount ||
 			allocation.GrossAmount <= 0 ||
 			allocation.PlatformFeeAmount < 0 ||
+			allocation.BrandFeeAmount <= 0 ||
 			allocation.ReceivableAmount <= 0 ||
-			allocation.PlatformFeeAmount >= allocation.GrossAmount ||
-			allocation.ReceivableAmount > allocation.GrossAmount ||
-			allocation.GrossAmount-allocation.PlatformFeeAmount != allocation.ReceivableAmount ||
-			allocation.MerchandiseAmount != allocation.GrossAmount ||
-			allocation.GrossAmount != item.Price {
+			allocation.PlatformFeeAmount > allocation.GrossAmount ||
+			allocation.BrandFeeAmount > allocation.GrossAmount ||
+			allocation.ReceivableAmount > allocation.GrossAmount {
+			return ErrSettlementAllocationInvalid
+		}
+
+		if allocation.MerchandiseAmount != item.Price {
+			return ErrSettlementAllocationInvalid
+		}
+		if allocation.MerchandiseAmount-allocation.ShippingAmount != allocation.GrossAmount {
+			return ErrSettlementAllocationInvalid
+		}
+		if allocation.PlatformFeeAmount > allocation.GrossAmount-allocation.BrandFeeAmount {
+			return ErrSettlementAllocationInvalid
+		}
+		if allocation.GrossAmount-allocation.PlatformFeeAmount-allocation.BrandFeeAmount != allocation.ReceivableAmount {
 			return ErrSettlementAllocationInvalid
 		}
 
@@ -380,10 +491,31 @@ func validateSellerFinancialCalculation(
 			return ErrSettlementAllocationInvalid
 		}
 
-		if total > maxInt-allocation.GrossAmount {
+		expectedBrandFeeSettlementID, err := brandfeesettlementdom.NewID(
+			payment.PaymentID,
+			allocation.OrderItemIndex,
+		)
+		if err != nil || expectedBrandFeeSettlementID == "" {
+			return ErrSettlementAllocationInvalid
+		}
+
+		brandIdentity := brandfeesettlementdom.BrandIdentity{
+			BrandID:         allocation.BrandRevenue.BrandID,
+			CompanyID:       allocation.BrandRevenue.CompanyID,
+			AccountID:       allocation.BrandRevenue.AccountID,
+			StripeAccountID: allocation.BrandRevenue.StripeAccountID,
+		}
+		if err := brandIdentity.Validate(); err != nil {
+			return ErrSettlementAllocationInvalid
+		}
+
+		// Resale shipping is not charged to the buyer.
+		// Payment.Amount therefore contains the original resale merchandise
+		// amount rather than GrossAmount after shipping deduction.
+		if total > maxInt-allocation.MerchandiseAmount {
 			return ErrSettlementAllocationAmountMismatch
 		}
-		total += allocation.GrossAmount
+		total += allocation.MerchandiseAmount
 	}
 
 	if total != payment.Amount {
