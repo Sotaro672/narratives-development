@@ -17,13 +17,17 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 28px;
+  min-width: 28px;
   height: 28px;
-  padding: 0;
+  padding: 0 8px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: rgba(15, 23, 42, 0.56);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
 }
 
