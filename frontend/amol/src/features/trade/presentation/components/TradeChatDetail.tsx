@@ -848,19 +848,19 @@ function TradeThreadHeader({
         title="商品情報"
         items={productMetaItems}
       />
+        {trade.resale.description ? (
+          <details className="chat-detail-page__description-accordion">
+            <summary className="chat-detail-page__description-summary">
+              商品説明
+            </summary>
 
-      {trade.resale.description ? (
-        <section className="chat-detail-page__product-meta">
-          <h3 className="chat-detail-page__product-meta-title">
-            商品説明
-          </h3>
-
-          <p className="chat-detail-page__content">
-            {trade.resale.description}
-          </p>
-        </section>
-      ) : null}
-
+            <div className="chat-detail-page__description-body">
+              <p className="chat-detail-page__content">
+                {trade.resale.description}
+              </p>
+            </div>
+          </details>
+        ) : null}
       <ChatImageGrid
         images={trade.resale.images.map((image) => ({
           key: image.id,
