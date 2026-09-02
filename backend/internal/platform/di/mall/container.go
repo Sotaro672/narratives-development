@@ -42,6 +42,7 @@ type Container struct {
 	ItemRefundUC                   *usecase.ItemRefundUsecase
 	RefundRepo                     refunddom.RepositoryPort
 	RefundCompletionNotificationUC usecase.RefundCompletionNotificationUsecasePort
+	ResalePayoutNotificationUC     usecase.ResalePayoutNotificationUsecasePort
 	OrderUC                        *usecase.OrderUsecase
 	TradeUC                        *usecase.TradeUsecase
 	TradeMessageUC                 *usecase.TradeMessageUsecase

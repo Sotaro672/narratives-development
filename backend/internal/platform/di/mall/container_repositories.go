@@ -35,6 +35,7 @@ type mallRepositories struct {
 	productBlueprintReviewRepo       *fs.ProductBlueprintReviewRepositoryFS
 	refundRepo                       *fs.RefundRepositoryFS
 	refundCompletionNotificationRepo *fs.RefundCompletionNotificationRepositoryFS
+	resalePayoutNotificationRepo     *fs.ResalePayoutNotificationRepositoryFS
 	resaleRepo                       *fs.ResaleRepositoryFS
 	resaleImageRepo                  *fs.ResaleImageRepositoryFS
 	resaleReviewRepo                 *fs.ResaleReviewRepositoryFS
@@ -98,6 +99,7 @@ func buildMallRepositories(fsClient *firestore.Client) *mallRepositories {
 	tradeMessageRepo := fs.NewTradeMessageRepositoryFS(fsClient)
 	transferRepo := fs.NewTransferRepositoryFS(fsClient)
 	refundCompletionNotificationRepo := fs.NewRefundCompletionNotificationRepositoryFS(fsClient)
+	resalePayoutNotificationRepo := fs.NewResalePayoutNotificationRepositoryFS(fsClient)
 
 	walletResolverRepo := fs.NewWalletResolverRepoFS(
 		brandRepo,
@@ -132,6 +134,7 @@ func buildMallRepositories(fsClient *firestore.Client) *mallRepositories {
 		productBlueprintReviewRepo:       productBlueprintReviewRepo,
 		refundRepo:                       refundRepo,
 		refundCompletionNotificationRepo: refundCompletionNotificationRepo,
+		resalePayoutNotificationRepo:     resalePayoutNotificationRepo,
 		resaleRepo:                       resaleRepo,
 		resaleImageRepo:                  resaleImageRepo,
 		resaleReviewRepo:                 resaleReviewRepo,

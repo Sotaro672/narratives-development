@@ -38,6 +38,7 @@ type mallUsecases struct {
 	paymentUC                      *usecase.PaymentUsecase
 	salesReceivableUC              *usecase.SalesReceivableUsecase
 	bankPayoutUC                   *usecase.BankPayoutUsecase
+	resalePayoutNotificationUC     usecase.ResalePayoutNotificationUsecasePort
 	brandFeeSettlementUC           *usecase.BrandFeeSettlementUsecase
 	brandFeeSettlementTransferUC   *usecase.BrandFeeSettlementTransferUsecase
 	brandFeeSettlementQueue        usecase.BrandFeeSettlementTransferQueue
@@ -310,6 +311,52 @@ func buildMallUsecases(
 		)
 	}
 
+	if r.resalePayoutNotificationRepo == nil {
+		return nil, errors.New(
+			"di.mall: resale payout notification repository is nil",
+		)
+	}
+
+	resalePayoutNotificationQueue, err :=
+		cloudtasksadp.NewResalePayoutNotificationQueueFromEnv(
+			ctx,
+		)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"di.mall: build resale payout notification queue: %w",
+			err,
+		)
+	}
+	if resalePayoutNotificationQueue == nil {
+		return nil, errors.New(
+			"di.mall: resale payout notification queue is nil",
+		)
+	}
+
+	resalePayoutNotificationMailer :=
+		mailadp.NewResalePayoutNotificationMailer(
+			resendClient,
+			cfg.ResendFrom,
+		)
+	if resalePayoutNotificationMailer == nil {
+		return nil, errors.New(
+			"di.mall: resale payout notification mailer is nil",
+		)
+	}
+
+	resalePayoutNotificationUC :=
+		usecase.NewResalePayoutNotificationUsecase(
+			r.resalePayoutNotificationRepo,
+			authUserReader,
+			resalePayoutNotificationMailer,
+			resalePayoutNotificationQueue,
+		)
+	if resalePayoutNotificationUC == nil {
+		return nil, errors.New(
+			"di.mall: resale payout notification usecase is nil",
+		)
+	}
+
 	if r.bankPayoutRepo == nil {
 		return nil, errors.New(
 			"di.mall: bank payout repository is nil",
@@ -328,6 +375,8 @@ func buildMallUsecases(
 		r.salesReceivableRepo,
 		payoutAccountUC,
 		bankPayoutGateway,
+	).WithResalePayoutNotificationDependencies(
+		resalePayoutNotificationUC,
 	)
 	if bankPayoutUC == nil {
 		return nil, errors.New(
@@ -599,6 +648,7 @@ func buildMallUsecases(
 		paymentUC:                      paymentUC,
 		salesReceivableUC:              salesReceivableUC,
 		bankPayoutUC:                   bankPayoutUC,
+		resalePayoutNotificationUC:     resalePayoutNotificationUC,
 		brandFeeSettlementUC:           brandFeeSettlementUC,
 		brandFeeSettlementTransferUC:   brandFeeSettlementTransferUC,
 		brandFeeSettlementQueue:        brandFeeSettlementQueue,
@@ -648,6 +698,7 @@ func (u *mallUsecases) applyToContainer(c *Container) {
 	c.RefundUC = u.refundUC
 	c.ItemRefundUC = u.itemRefundUC
 	c.RefundCompletionNotificationUC = u.refundCompletionNotificationUC
+	c.ResalePayoutNotificationUC = u.resalePayoutNotificationUC
 	c.OrderUC = u.orderUC
 	c.TradeUC = u.tradeUC
 	c.TradeMessageUC = u.tradeMessageUC
