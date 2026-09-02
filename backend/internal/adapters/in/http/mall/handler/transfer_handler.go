@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/mall/handler/transfer_handler.go
+// backend/// backend/internal/adapters/in/http/mall/handler/transfer_handler.go
 package mallHandler
 
 import (
@@ -28,6 +28,7 @@ type ScanTransferResult struct {
 
 	MatchedOrderID   string `json:"matchedOrderId,omitempty"`
 	MatchedItemIndex *int   `json:"matchedItemIndex,omitempty"`
+	MatchedItemType  string `json:"matchedItemType,omitempty"`
 
 	// Transfer result
 	TxSignature string `json:"txSignature,omitempty"`
@@ -216,12 +217,13 @@ func (h *TransferHandler) ServeHTTP(
 				w,
 				http.StatusConflict,
 				map[string]any{
-					"error":     "return_in_progress_opened",
-					"message":   "返品申請中の商品で開封が確認されました。返品区分を「開封後の返品」に変更しました。Token Transfer は実行していません。",
-					"avatarId":  avatarID,
-					"productId": productID,
-					"orderId":   ucOut.MatchedOrderID,
-					"itemIndex": ucOut.MatchedItemIndex,
+					"error":           "return_in_progress_opened",
+					"message":         "返品申請中の商品で開封が確認されました。返品区分を「開封後の返品」に変更しました。Token Transfer は実行していません。",
+					"avatarId":        avatarID,
+					"productId":       productID,
+					"orderId":         ucOut.MatchedOrderID,
+					"itemIndex":       ucOut.MatchedItemIndex,
+					"matchedItemType": string(ucOut.MatchedItemType),
 				},
 			)
 			return
@@ -268,6 +270,7 @@ func (h *TransferHandler) ServeHTTP(
 		Matched:          true,
 		MatchedOrderID:   ucOut.MatchedOrderID,
 		MatchedItemIndex: &matchedItemIndex,
+		MatchedItemType:  string(ucOut.MatchedItemType),
 		TxSignature:      ucOut.TxSignature,
 		FromDisplayName:  ucOut.FromDisplayName,
 		ToDisplayName:    ucOut.ToDisplayName,

@@ -1,6 +1,9 @@
 // frontend/amol/src/features/shared/types/scanResult.ts
 
-import type { ProductBlueprintCategoryFields, ProductCategoryKind } from "./category";
+import type {
+  ProductBlueprintCategoryFields,
+  ProductCategoryKind,
+} from "./category";
 import type { ProductBlueprintReviewPage } from "./review";
 
 export type MallOwnerInfo = {
@@ -61,7 +64,10 @@ export type ProductBlueprintPatch = {
   }>;
 };
 
-export type CategoryInputFieldScope = "productBlueprint" | "model" | string;
+export type CategoryInputFieldScope =
+  | "productBlueprint"
+  | "model"
+  | string;
 
 export type CategoryInputFieldType =
   | "text"
@@ -135,6 +141,7 @@ export type MallScanTransferResponse = {
   matched: boolean;
   matchedOrderId?: string;
   matchedItemIndex?: number;
+  matchedItemType?: "list" | "resale";
   txSignature: string;
   fromDisplayName: string;
   toDisplayName: string;

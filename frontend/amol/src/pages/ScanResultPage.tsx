@@ -60,6 +60,10 @@ export default function ScanResultPage() {
 
   const isLoggedIn = state.authAvailable === true;
 
+  const isResalePurchase =
+    state.transferResult?.matchedItemType === "resale" ||
+    hasMultipleTransfers;
+
   const canPostReview =
     state.ownedByWallet === true &&
     !state.loading &&
@@ -68,8 +72,10 @@ export default function ScanResultPage() {
 
   const canOpenInquiryPage =
     isLoggedIn &&
+    !state.loading &&
+    !state.busyTransfer &&
     Boolean(state.productId.trim()) &&
-    !hasMultipleTransfers;
+    !isResalePurchase;
 
   return (
     <Layout
@@ -82,8 +88,14 @@ export default function ScanResultPage() {
       hideHamburgerMenu={false}
       hideSettingsButton={!isLoggedIn}
       mainClassName="scan-result-page"
-      secondaryActionButtonLabel={canOpenInquiryPage ? "問い合わせ" : undefined}
-      onSecondaryActionButtonClick={canOpenInquiryPage ? handleOpenInquiryPage : undefined}
+      secondaryActionButtonLabel={
+        canOpenInquiryPage ? "問い合わせ" : undefined
+      }
+      onSecondaryActionButtonClick={
+        canOpenInquiryPage
+          ? handleOpenInquiryPage
+          : undefined
+      }
       secondaryActionButtonDisabled={!canOpenInquiryPage}
       footerProps={
         isLoggedIn &&
@@ -94,7 +106,9 @@ export default function ScanResultPage() {
               value: reviewBody,
               rating: reviewRating,
               placeholder: "口コミを入力",
-              buttonLabel: state.postingReview ? "投稿中" : "投稿",
+              buttonLabel: state.postingReview
+                ? "投稿中"
+                : "投稿",
               disabled: !canPostReview,
               posting: state.postingReview,
               onChange: setReviewBody,
