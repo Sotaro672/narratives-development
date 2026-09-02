@@ -14,6 +14,7 @@ import ReturnRequestModal, { type ReturnPackageState } from "../../../order/comp
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
 import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
 import ChatMessageHeader from "../../../shared/presentation/components/ChatMessageHeader";
+import ChatMetaSection, { type ChatMetaItem } from "../../../shared/presentation/components/ChatMetaSection";
 import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
 import { createProductModelDisplay } from "../../../shared/presentation/utils/productModelDisplay";
 import "../../../shared/styles/trade-chat-detail.css";
@@ -719,6 +720,107 @@ function TradeThreadHeader({
     }
   };
 
+  const transactionMetaItems: ChatMetaItem[] = [
+    {
+      label: "注文ID",
+      value: (
+        <span className="trade-chat-detail__order-id">
+          <span>{trade.orderId}</span>
+
+          <button
+            type="button"
+            className="trade-chat-detail__copy-button"
+            onClick={() => {
+              void handleCopyOrderId();
+            }}
+            aria-label={orderIdCopied ? "コピーしました" : "注文IDをコピー"}
+            title={orderIdCopied ? "コピーしました" : "注文IDをコピー"}
+          >
+            {orderIdCopied ? (
+              <span>コピーしました</span>
+            ) : (
+              <Copy
+                size={15}
+                strokeWidth={2}
+                aria-hidden="true"
+              />
+            )}
+          </button>
+        </span>
+      ),
+    },
+  ];
+
+  if (trade.returnRequestedAt) {
+    transactionMetaItems.push({
+      label: "返品申請日時",
+      value: formatDateTime(trade.returnRequestedAt),
+    });
+  }
+
+  if (trade.returnCompletedAt) {
+    transactionMetaItems.push({
+      label: "返品完了日時",
+      value: formatDateTime(trade.returnCompletedAt),
+    });
+  }
+
+  if (trade.transferredAt) {
+    transactionMetaItems.push({
+      label: "受取日時",
+      value: formatDateTime(trade.transferredAt),
+    });
+  }
+
+  const productMetaItems: ChatMetaItem[] = [
+    {
+      label: "商品の状態",
+      value: trade.resale.condition,
+    },
+  ];
+
+  if (model.modelNumber) {
+    productMetaItems.push({
+      label: "モデル番号",
+      value: model.modelNumber,
+    });
+  }
+
+  if (model.kindLabel && model.kindLabel !== "アパレル") {
+    productMetaItems.push({
+      label: "種別",
+      value: model.kindLabel,
+    });
+  }
+
+  if (model.size) {
+    productMetaItems.push({
+      label: "サイズ",
+      value: model.size,
+    });
+  }
+
+  if (model.colorLabel || model.colorCssValue) {
+    productMetaItems.push({
+      label: "カラー",
+      value: model.colorLabel || model.colorCssValue,
+    });
+  }
+
+  if (model.measurementsLabel !== "-") {
+    productMetaItems.push({
+      label: "採寸",
+      value: model.measurementsLabel,
+    });
+  }
+
+  if (model.volumeLabel !== "-") {
+    productMetaItems.push({
+      label: "容量",
+      value: model.volumeLabel,
+    });
+  }
+
   return (
     <ChatThreadCard variant="trade">
       <ChatMessageHeader
@@ -736,116 +838,15 @@ function TradeThreadHeader({
         {title}
       </h2>
 
-      <section className="chat-detail-page__product-meta">
-        <h3 className="chat-detail-page__product-meta-title">
-          取引情報
-        </h3>
+      <ChatMetaSection
+        title="取引情報"
+        items={transactionMetaItems}
+      />
 
-        <dl className="chat-detail-page__product-meta-list">
-          <div className="chat-detail-page__product-meta-row">
-            <dt>注文ID</dt>
-            <dd className="trade-chat-detail__order-id">
-              <span>{trade.orderId}</span>
-
-              <button
-                type="button"
-                className="trade-chat-detail__copy-button"
-                onClick={() => {
-                  void handleCopyOrderId();
-                }}
-                aria-label={orderIdCopied ? "コピーしました" : "注文IDをコピー"}
-                title={orderIdCopied ? "コピーしました" : "注文IDをコピー"}
-              >
-                {orderIdCopied ? (
-                  <span>コピーしました</span>
-                ) : (
-                  <Copy
-                    size={15}
-                    strokeWidth={2}
-                    aria-hidden="true"
-                  />
-                )}
-              </button>
-            </dd>
-          </div>
-
-          {trade.returnRequestedAt ? (
-            <div className="chat-detail-page__product-meta-row">
-              <dt>返品申請日時</dt>
-              <dd>{formatDateTime(trade.returnRequestedAt)}</dd>
-            </div>
-          ) : null}
-
-          {trade.returnCompletedAt ? (
-            <div className="chat-detail-page__product-meta-row">
-              <dt>返品完了日時</dt>
-              <dd>{formatDateTime(trade.returnCompletedAt)}</dd>
-            </div>
-          ) : null}
-
-          {trade.transferredAt ? (
-            <div className="chat-detail-page__product-meta-row">
-              <dt>受取日時</dt>
-              <dd>{formatDateTime(trade.transferredAt)}</dd>
-            </div>
-          ) : null}
-        </dl>
-      </section>
-
-      <section className="chat-detail-page__product-meta">
-        <h3 className="chat-detail-page__product-meta-title">
-          商品情報
-        </h3>
-
-        <dl className="chat-detail-page__product-meta-list">
-          <div className="chat-detail-page__product-meta-row">
-            <dt>商品の状態</dt>
-            <dd>{trade.resale.condition}</dd>
-          </div>
-
-          {model.modelNumber ? (
-            <div className="chat-detail-page__product-meta-row">
-              <dt>モデル番号</dt>
-              <dd>{model.modelNumber}</dd>
-            </div>
-          ) : null}
-
-          {model.kindLabel && model.kindLabel !== "アパレル" ? (
-            <div className="chat-detail-page__product-meta-row">
-              <dt>種別</dt>
-              <dd>{model.kindLabel}</dd>
-            </div>
-          ) : null}
-
-          {model.size ? (
-            <div className="chat-detail-page__product-meta-row">
-              <dt>サイズ</dt>
-              <dd>{model.size}</dd>
-            </div>
-          ) : null}
-
-          {model.colorLabel || model.colorCssValue ? (
-            <div className="chat-detail-page__product-meta-row">
-              <dt>カラー</dt>
-              <dd>{model.colorLabel || model.colorCssValue}</dd>
-            </div>
-          ) : null}
-
-          {model.measurementsLabel !== "-" ? (
-            <div className="chat-detail-page__product-meta-row">
-              <dt>採寸</dt>
-              <dd>{model.measurementsLabel}</dd>
-            </div>
-          ) : null}
-
-          {model.volumeLabel !== "-" ? (
-            <div className="chat-detail-page__product-meta-row">
-              <dt>容量</dt>
-              <dd>{model.volumeLabel}</dd>
-            </div>
-          ) : null}
-        </dl>
-      </section>
+      <ChatMetaSection
+        title="商品情報"
+        items={productMetaItems}
+      />
 
       {trade.resale.description ? (
         <section className="chat-detail-page__product-meta">

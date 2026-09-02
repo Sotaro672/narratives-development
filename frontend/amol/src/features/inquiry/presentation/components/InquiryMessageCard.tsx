@@ -1,11 +1,11 @@
 // frontend/amol/src/features/inquiry/presentation/components/InquiryMessageCard.tsx
 
+import ChatImageGrid from "../../../shared/presentation/components/ChatImageGrid";
 import ChatMessageHeader from "../../../shared/presentation/components/ChatMessageHeader";
 import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
 import type { InquiryDetail } from "../../../shared/types/inquiryTypes";
 import { getInquiryTypeLabel } from "../../../shared/types/inquiryTypes";
 
-import InquiryImageGrid from "./InquiryImageGrid";
 import InquiryModelMeta from "./InquiryModelMeta";
 
 type InquiryMessageCardProps = {
@@ -17,6 +17,12 @@ export default function InquiryMessageCard({
 }: InquiryMessageCardProps) {
   const statusLabel = getInquiryStatusLabel(inquiry.status);
   const title = getInquiryTitle(inquiry);
+
+  const images = inquiry.images?.map((image) => ({
+    key: image.fileUrl,
+    url: image.fileUrl,
+    alt: image.fileName,
+  }));
 
   return (
     <ChatThreadCard variant="inquiry">
@@ -43,7 +49,7 @@ export default function InquiryMessageCard({
         {inquiry.content}
       </p>
 
-      <InquiryImageGrid images={inquiry.images} />
+      <ChatImageGrid images={images} />
     </ChatThreadCard>
   );
 }

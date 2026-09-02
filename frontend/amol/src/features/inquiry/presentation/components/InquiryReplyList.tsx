@@ -1,9 +1,8 @@
 // frontend/amol/src/features/inquiry/presentation/components/InquiryReplyList.tsx
 
+import ChatImageGrid from "../../../shared/presentation/components/ChatImageGrid";
 import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
 import type { InquiryReply } from "../../../shared/types/inquiryTypes";
-
-import InquiryImageGrid from "./InquiryImageGrid";
 
 type InquiryReplyListProps = {
   replies: InquiryReply[];
@@ -39,6 +38,12 @@ export default function InquiryReplyList({
           avatarIcon,
         );
 
+        const images = reply.images?.map((image) => ({
+          key: image.fileUrl,
+          url: image.fileUrl,
+          alt: image.fileName,
+        }));
+
         return (
           <ChatMessageBubble
             key={reply.id}
@@ -48,7 +53,7 @@ export default function InquiryReplyList({
             content={reply.content}
             isMine={isAvatarReply}
             isSystem={isSystemReply}
-            afterContent={<InquiryImageGrid images={reply.images} />}
+            afterContent={<ChatImageGrid images={images} />}
           />
         );
       })}

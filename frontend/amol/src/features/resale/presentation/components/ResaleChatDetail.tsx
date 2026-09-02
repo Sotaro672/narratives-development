@@ -16,9 +16,12 @@ import {
 } from "../../../market/infrastructure/marketResaleReviewApi";
 
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
+import ChatImageGrid from "../../../shared/presentation/components/ChatImageGrid";
 import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
 import ChatMessageHeader from "../../../shared/presentation/components/ChatMessageHeader";
+import ChatMetaSection, { type ChatMetaItem } from "../../../shared/presentation/components/ChatMetaSection";
 import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
+import { createProductModelDisplay } from "../../../shared/presentation/utils/productModelDisplay";
 import type { MarketResaleListing } from "../../../shared/types/marketResale";
 import type {
   ResaleConditionImage,
@@ -62,11 +65,6 @@ type ResaleChatDetailProps = {
   onBack: () => void;
 };
 
-type ProductMetaItem = {
-  label: string;
-  value: string;
-};
-
 function getErrorMessage(
   error: unknown,
   fallbackMessage: string,
@@ -91,8 +89,9 @@ function getResaleStatusLabel(status: ResaleStatus): string {
   }
 }
 
-function getProductMetaItems(item: ResaleChatItem): ProductMetaItem[] {
-  const items: ProductMetaItem[] = [
+function getProductMetaItems(item: ResaleChatItem): ChatMetaItem[] {
+  const model = createProductModelDisplay(item);
+  const items: ChatMetaItem[] = [
     {
       label: "販売価格",
       value: `${item.price.toLocaleString("ja-JP")}円`,
@@ -103,34 +102,45 @@ function getProductMetaItems(item: ResaleChatItem): ProductMetaItem[] {
     },
   ];
 
-  if (item.modelNumber) {
+  if (model.modelNumber) {
     items.push({
       label: "モデル番号",
-      value: item.modelNumber,
+      value: model.modelNumber,
     });
   }
 
-  if (item.size) {
+  if (model.kindLabel && model.kindLabel !== "アパレル") {
+    items.push({
+      label: "種別",
+      value: model.kindLabel,
+    });
+  }
+
+  if (model.size) {
     items.push({
       label: "サイズ",
-      value: item.size,
+      value: model.size,
     });
   }
 
-  if (item.color?.name) {
+  if (model.colorLabel || model.colorCssValue) {
     items.push({
       label: "カラー",
-      value: item.color.name,
+      value: model.colorLabel || model.colorCssValue,
     });
   }
 
-  if (
-    item.volume?.amount !== undefined &&
-    item.volume?.amount !== null
-  ) {
+  if (model.measurementsLabel !== "-") {
+    items.push({
+      label: "採寸",
+      value: model.measurementsLabel,
+    });
+  }
+
+  if (model.volumeLabel !== "-") {
     items.push({
       label: "容量",
-      value: `${item.volume.amount}${item.volume.unit ?? ""}`,
+      value: model.volumeLabel,
     });
   }
 
@@ -665,7 +675,7 @@ function ResaleThreadHeader({
 }: {
   item: ResaleChatItem;
   images: ResaleConditionImage[];
-  productMetaItems: ProductMetaItem[];
+  productMetaItems: ChatMetaItem[];
   onOpenMarketDetail?: () => void;
 }) {
   const sellerName =
@@ -694,25 +704,10 @@ function ResaleThreadHeader({
         {productTitle}/出品
       </h2>
 
-      {productMetaItems.length > 0 ? (
-        <section className="chat-detail-page__product-meta">
-          <h3 className="chat-detail-page__product-meta-title">
-            対象商品
-          </h3>
-
-          <dl className="chat-detail-page__product-meta-list">
-            {productMetaItems.map((meta) => (
-              <div
-                key={meta.label}
-                className="chat-detail-page__product-meta-row"
-              >
-                <dt>{meta.label}</dt>
-                <dd>{meta.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      ) : null}
+      <ChatMetaSection
+        title="対象商品"
+        items={productMetaItems}
+      />
 
       {item.description ? (
         <details className="chat-detail-page__description-accordion">
@@ -728,26 +723,13 @@ function ResaleThreadHeader({
         </details>
       ) : null}
 
-      {images.length > 0 ? (
-        <div className="chat-detail-page__images">
-          {images.map((image) => (
-            <a
-              key={image.id}
-              href={image.url}
-              target="_blank"
-              rel="noreferrer"
-              className="chat-detail-page__image-link"
-            >
-              <img
-                src={image.url}
-                alt="商品状態"
-                className="chat-detail-page__image"
-                loading="lazy"
-              />
-            </a>
-          ))}
-        </div>
-      ) : null}
+      <ChatImageGrid
+        images={images.map((image) => ({
+          key: image.id,
+          url: image.url,
+          alt: "商品状態",
+        }))}
+      />
 
       {onOpenMarketDetail ? (
         <div className="chat-detail-page__close-prompt-actions">
