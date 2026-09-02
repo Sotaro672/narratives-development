@@ -38,6 +38,10 @@ export type TradeChatListItem = {
   counterpartAvatarName?: string;
   counterpartAvatarIcon?: string;
   status: TradeStatus;
+  isCancelled: boolean;
+  isDispatched: boolean;
+  isReturnRequested: boolean;
+  isReturnCompleted: boolean;
   latestMessage?: TradeMessage;
   unreadMessageCount: number;
   latestActivityAt: string;

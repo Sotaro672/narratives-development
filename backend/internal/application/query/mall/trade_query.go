@@ -61,6 +61,7 @@ func NewTradeQuery(
 //
 // ViewerSide and CounterpartAvatarID are derived from the authenticated Avatar.
 // LatestMessage and UnreadMessageCount are aggregated from Trade messages.
+// Dispatch state is read from the authoritative Order item.
 type TradeListItem struct {
 	ID             string `json:"id"`
 	OrderID        string `json:"orderId"`
@@ -74,7 +75,8 @@ type TradeListItem struct {
 	CounterpartAvatarName string `json:"counterpartAvatarName,omitempty"`
 	CounterpartAvatarIcon string `json:"counterpartAvatarIcon,omitempty"`
 
-	Status tradedom.Status `json:"status"`
+	Status       tradedom.Status `json:"status"`
+	IsDispatched bool            `json:"isDispatched"`
 
 	LatestMessage      *tradedto.TradeMessage `json:"latestMessage,omitempty"`
 	UnreadMessageCount int                    `json:"unreadMessageCount"`
@@ -96,8 +98,9 @@ type TradeListResult struct {
 // read from the authoritative Order item rather than duplicated on Trade.
 //
 // The repository resolves both participant roles. This query enriches each
-// Trade with viewer-side information, latest message, unread count and latest
-// activity time, then orders the result newest-first for ChatListPage.
+// Trade with viewer-side information, authoritative dispatch state, latest
+// message, unread count and latest activity time, then orders the result
+// newest-first for ChatListPage.
 func (q *TradeQuery) ListForAvatar(
 	ctx context.Context,
 	avatarID string,
@@ -157,6 +160,7 @@ func (q *TradeQuery) ListForAvatar(
 			trade,
 			viewerSide,
 			display,
+			orderItemState.IsDispatched,
 			latestMessage,
 			unreadMessageCount,
 		))
@@ -549,6 +553,7 @@ func buildTradeListItem(
 	trade tradedom.Trade,
 	viewerSide tradedom.MessageSenderSide,
 	display tradeDisplay,
+	isDispatched bool,
 	latestMessage *tradedto.TradeMessage,
 	unreadMessageCount int,
 ) TradeListItem {
@@ -574,6 +579,7 @@ func buildTradeListItem(
 		CounterpartAvatarName: counterpartAvatarName,
 		CounterpartAvatarIcon: counterpartAvatarIcon,
 		Status:                trade.Status,
+		IsDispatched:          isDispatched,
 		LatestMessage:         latestMessage,
 		UnreadMessageCount:    unreadMessageCount,
 	}

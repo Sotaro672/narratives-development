@@ -8,6 +8,7 @@ import {
   type ResaleChatListItem,
   type TradeChatListItem,
 } from "../features/inquiry/presentation/hooks/useInquiryListPage";
+import { getTradeStatusLabel } from "../features/trade/presentation/util/tradeStatus";
 
 import "../styles/page-layout.css";
 import "../features/inquiry/presentation/styles/inquiry-list-page.css";
@@ -241,7 +242,7 @@ function TradeListItem({
   const title = getTradeTitle(item);
   const preview = getTradePreview(item);
   const dateLabel = formatChatDate(item.latestActivityAt);
-  const statusLabel = getTradeStatusLabel(item.status);
+  const statusLabel = getTradeStatusLabel(item);
   const initial = getInitial(
     item.counterpartAvatarName || item.productName || "取引",
   );
@@ -404,21 +405,6 @@ function getTradePreview(item: TradeChatListItem): string {
   }
 
   return "メッセージはありません";
-}
-
-function getTradeStatusLabel(
-  status: TradeChatListItem["status"],
-): string {
-  switch (status) {
-    case "active":
-      return "取引中";
-
-    case "closed":
-      return "取引終了";
-
-    default:
-      return "";
-  }
 }
 
 function getInitial(value: string): string {
