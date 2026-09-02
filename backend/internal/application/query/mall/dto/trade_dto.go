@@ -3,8 +3,38 @@ package dto
 
 import (
 	orderdom "narratives/internal/domain/order"
+	resaledom "narratives/internal/domain/resale"
 	tradedom "narratives/internal/domain/trade"
 )
+
+// TradeResaleImage represents one resale condition image displayed in Trade detail.
+type TradeResaleImage struct {
+	ID           string `json:"id"`
+	URL          string `json:"url"`
+	DisplayOrder int    `json:"displayOrder"`
+}
+
+// TradeResaleDetail represents the resale listing information required by
+// TradeDetailPage.
+//
+// This read model intentionally contains only display information required by
+// the Trade UI. The authoritative resale aggregate remains owned by the resale
+// domain.
+type TradeResaleDetail struct {
+	ID          string                    `json:"id"`
+	Condition   resaledom.ResaleCondition `json:"condition"`
+	Description string                    `json:"description,omitempty"`
+
+	ModelID      string                  `json:"modelId,omitempty"`
+	Kind         string                  `json:"kind,omitempty"`
+	ModelNumber  string                  `json:"modelNumber,omitempty"`
+	Size         string                  `json:"size,omitempty"`
+	Color        *resaledom.ResaleColor  `json:"color,omitempty"`
+	Measurements map[string]int          `json:"measurements,omitempty"`
+	Volume       *resaledom.ResaleVolume `json:"volume,omitempty"`
+
+	Images []TradeResaleImage `json:"images"`
+}
 
 // TradeDetail is the buyer/seller private Trade view returned to Mall clients.
 //
@@ -25,7 +55,8 @@ type TradeDetail struct {
 
 	ViewerSide tradedom.MessageSenderSide `json:"viewerSide"`
 
-	ProductName string `json:"productName,omitempty"`
+	ProductName string            `json:"productName,omitempty"`
+	Resale      TradeResaleDetail `json:"resale"`
 
 	BuyerAvatarID   string `json:"buyerAvatarId"`
 	BuyerAvatarName string `json:"buyerAvatarName,omitempty"`

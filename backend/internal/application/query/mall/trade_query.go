@@ -7,10 +7,12 @@ import (
 	"sort"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	tradedto "narratives/internal/application/query/mall/dto"
 	mallshared "narratives/internal/application/query/mall/shared"
 	avatardom "narratives/internal/domain/avatar"
 	orderdom "narratives/internal/domain/order"
+	resaledom "narratives/internal/domain/resale"
 	tradedom "narratives/internal/domain/trade"
 )
 
@@ -37,6 +39,8 @@ type TradeQuery struct {
 	tradeRepo       tradedom.Repository
 	messageRepo     tradedom.MessageRepository
 	orderRepo       orderdom.Repository
+	resaleRepo      resaledom.Repository
+	resaleImageRepo applicationport.ResaleImageLister
 	displayResolver mallshared.MallDisplayResolver
 	avatarRepo      avatardom.Repository
 }
@@ -45,6 +49,8 @@ func NewTradeQuery(
 	tradeRepo tradedom.Repository,
 	messageRepo tradedom.MessageRepository,
 	orderRepo orderdom.Repository,
+	resaleRepo resaledom.Repository,
+	resaleImageRepo applicationport.ResaleImageLister,
 	displayResolver mallshared.MallDisplayResolver,
 	avatarRepo avatardom.Repository,
 ) *TradeQuery {
@@ -52,6 +58,8 @@ func NewTradeQuery(
 		tradeRepo:       tradeRepo,
 		messageRepo:     messageRepo,
 		orderRepo:       orderRepo,
+		resaleRepo:      resaleRepo,
+		resaleImageRepo: resaleImageRepo,
 		displayResolver: displayResolver,
 		avatarRepo:      avatarRepo,
 	}
@@ -203,6 +211,8 @@ func (q *TradeQuery) GetByOrderItem(
 		q.tradeRepo == nil ||
 		q.messageRepo == nil ||
 		q.orderRepo == nil ||
+		q.resaleRepo == nil ||
+		q.resaleImageRepo == nil ||
 		q.displayResolver == nil ||
 		q.avatarRepo == nil {
 		return tradedto.TradeDetail{}, ErrTradeQueryNotConfigured
@@ -247,6 +257,14 @@ func (q *TradeQuery) GetByOrderItem(
 		return tradedto.TradeDetail{}, err
 	}
 
+	resaleDetail, err := q.getTradeResaleDetail(
+		ctx,
+		orderItemState.ResaleID,
+	)
+	if err != nil {
+		return tradedto.TradeDetail{}, err
+	}
+
 	messages, err := q.messageRepo.ListByTradeID(
 		ctx,
 		trade.ID,
@@ -271,6 +289,7 @@ func (q *TradeQuery) GetByOrderItem(
 		viewerSide,
 		orderItemState,
 		display,
+		resaleDetail,
 		messages,
 	), nil
 }
@@ -294,6 +313,8 @@ func (q *TradeQuery) GetByID(
 		q.tradeRepo == nil ||
 		q.messageRepo == nil ||
 		q.orderRepo == nil ||
+		q.resaleRepo == nil ||
+		q.resaleImageRepo == nil ||
 		q.displayResolver == nil ||
 		q.avatarRepo == nil {
 		return tradedto.TradeDetail{}, ErrTradeQueryNotConfigured
@@ -332,6 +353,14 @@ func (q *TradeQuery) GetByID(
 		return tradedto.TradeDetail{}, err
 	}
 
+	resaleDetail, err := q.getTradeResaleDetail(
+		ctx,
+		orderItemState.ResaleID,
+	)
+	if err != nil {
+		return tradedto.TradeDetail{}, err
+	}
+
 	messages, err := q.messageRepo.ListByTradeID(
 		ctx,
 		trade.ID,
@@ -356,6 +385,7 @@ func (q *TradeQuery) GetByID(
 		viewerSide,
 		orderItemState,
 		display,
+		resaleDetail,
 		messages,
 	), nil
 }
@@ -374,6 +404,7 @@ type tradeOrderItemState struct {
 	Transferred   bool
 	TransferredAt *time.Time
 
+	ResaleID           string
 	ProductBlueprintID string
 }
 
@@ -407,6 +438,7 @@ func (q *TradeQuery) getTradeOrderItemState(
 
 	item := order.Items[trade.OrderItemIndex]
 	if item.Type != orderdom.OrderItemTypeResale ||
+		item.ResaleID == "" ||
 		item.SellerSnapshot.AvatarID == "" ||
 		item.SellerSnapshot.AvatarID != trade.SellerAvatarID {
 		return tradeOrderItemState{}, ErrTradeQueryUnsupportedTrade
@@ -422,7 +454,83 @@ func (q *TradeQuery) getTradeOrderItemState(
 		ReturnCompletedAt:  item.ReturnCompletedAt,
 		Transferred:        item.Transferred,
 		TransferredAt:      item.TransferredAt,
+		ResaleID:           item.ResaleID,
 		ProductBlueprintID: item.ProductBlueprintID,
+	}, nil
+}
+
+func (q *TradeQuery) getTradeResaleDetail(
+	ctx context.Context,
+	resaleID string,
+) (tradedto.TradeResaleDetail, error) {
+	if q == nil ||
+		q.resaleRepo == nil ||
+		q.resaleImageRepo == nil ||
+		q.displayResolver == nil {
+		return tradedto.TradeResaleDetail{}, ErrTradeQueryNotConfigured
+	}
+	if resaleID == "" {
+		return tradedto.TradeResaleDetail{}, ErrTradeQueryUnsupportedTrade
+	}
+
+	resale, err := q.resaleRepo.GetByID(ctx, resaleID)
+	if err != nil {
+		return tradedto.TradeResaleDetail{}, err
+	}
+	if resale.ID != resaleID {
+		return tradedto.TradeResaleDetail{}, ErrTradeQueryUnsupportedTrade
+	}
+
+	resale = newResaleDisplayEnricher(
+		resaleDisplayEnricherConfig{
+			displayResolver: q.displayResolver,
+		},
+	).enrichResaleForDisplay(ctx, resale)
+
+	images, err := q.resaleImageRepo.ListByResaleID(ctx, resaleID)
+	if err != nil {
+		return tradedto.TradeResaleDetail{}, err
+	}
+
+	imageDTOs := make(
+		[]tradedto.TradeResaleImage,
+		0,
+		len(images),
+	)
+	for _, image := range images {
+		if image.ID == "" || image.URL == "" {
+			continue
+		}
+
+		imageDTOs = append(
+			imageDTOs,
+			tradedto.TradeResaleImage{
+				ID:           image.ID,
+				URL:          image.URL,
+				DisplayOrder: image.DisplayOrder,
+			},
+		)
+	}
+
+	sort.SliceStable(imageDTOs, func(i, j int) bool {
+		if imageDTOs[i].DisplayOrder == imageDTOs[j].DisplayOrder {
+			return imageDTOs[i].ID < imageDTOs[j].ID
+		}
+		return imageDTOs[i].DisplayOrder < imageDTOs[j].DisplayOrder
+	})
+
+	return tradedto.TradeResaleDetail{
+		ID:           resale.ID,
+		Condition:    resale.Condition,
+		Description:  resale.Description,
+		ModelID:      resale.ModelID,
+		Kind:         resale.Kind,
+		ModelNumber:  resale.ModelNumber,
+		Size:         resale.Size,
+		Color:        resale.Color,
+		Measurements: resale.Measurements,
+		Volume:       resale.Volume,
+		Images:       imageDTOs,
 	}, nil
 }
 
@@ -642,6 +750,7 @@ func buildTradeDetailDTO(
 	viewerSide tradedom.MessageSenderSide,
 	orderItemState tradeOrderItemState,
 	display tradeDisplay,
+	resale tradedto.TradeResaleDetail,
 	messages []tradedom.Message,
 ) tradedto.TradeDetail {
 	messageDTOs := make(
@@ -663,6 +772,7 @@ func buildTradeDetailDTO(
 		OrderItemIndex:    trade.OrderItemIndex,
 		ViewerSide:        viewerSide,
 		ProductName:       display.ProductName,
+		Resale:            resale,
 		BuyerAvatarID:     trade.BuyerAvatarID,
 		BuyerAvatarName:   display.BuyerAvatarName,
 		BuyerAvatarIcon:   display.BuyerAvatarIcon,
