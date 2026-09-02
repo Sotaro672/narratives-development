@@ -68,8 +68,9 @@ type EnsureSalesReceivableInput struct {
 //   - cancel an unpaid pending/available receivable
 //
 // Bank payout reservation and completion intentionally do not belong here.
-// Those operations must later be coordinated with BankPayout creation and
-// completion through a shared transactional boundary.
+// BankPayoutUsecase coordinates those operations with BankPayout creation and
+// completion while this usecase keeps the receivable-facing responsibilities
+// narrow.
 type SalesReceivableUsecase struct {
 	repo salesreceivabledom.Repository
 	now  func() time.Time
@@ -203,7 +204,7 @@ func (u *SalesReceivableUsecase) ListByBankPayoutID(
 }
 
 // ListAvailableByUserID returns item-level receivables eligible for inclusion in
-// a future BankPayout.
+// a BankPayout.
 //
 // This only reads candidates. It must not reserve them.
 func (u *SalesReceivableUsecase) ListAvailableByUserID(

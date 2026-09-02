@@ -71,6 +71,7 @@ type TransferUsecase struct {
 	resaleRepo applicationport.ResaleGetter
 
 	salesReceivableUC *SalesReceivableUsecase
+	bankPayoutUC      *BankPayoutUsecase
 
 	returnOpening ReturnOpeningHandler
 
@@ -129,6 +130,16 @@ func (u *TransferUsecase) WithResaleReceivableDependencies(
 	return u
 }
 
+func (u *TransferUsecase) WithBankPayoutDependencies(
+	bankPayoutUC *BankPayoutUsecase,
+) *TransferUsecase {
+	if u != nil {
+		u.bankPayoutUC = bankPayoutUC
+	}
+
+	return u
+}
+
 func (u *TransferUsecase) WithReturnOpeningHandler(
 	returnOpening ReturnOpeningHandler,
 ) *TransferUsecase {
@@ -162,6 +173,8 @@ var (
 	ErrTransferResaleReceivableNotConfigured = errors.New("transfer_uc: resale receivable dependencies are not configured")
 	ErrTransferResaleReceivableMismatch      = errors.New("transfer_uc: resale receivable identity mismatch")
 	ErrTransferResaleReceivableUnavailable   = errors.New("transfer_uc: resale receivable is unavailable")
+	ErrTransferBankPayoutNotConfigured       = errors.New("transfer_uc: bank payout dependencies are not configured")
+	ErrTransferBankPayoutFailed              = errors.New("transfer_uc: bank payout failed after token transfer")
 	ErrTransferSameAvatar                    = errors.New("transfer_uc: seller avatarId and buyer avatarId must be different")
 	ErrTransferWalletSyncFailed              = errors.New("transfer_uc: wallet sync failed")
 )
@@ -500,6 +513,11 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 
 	var resaleReceivable salesreceivabledom.SalesReceivable
 	if target.ItemType == orderdom.OrderItemTypeResale {
+		if u.bankPayoutUC == nil {
+			return matchedResult,
+				ErrTransferBankPayoutNotConfigured
+		}
+
 		resaleReceivable, err = u.requirePendingResaleReceivable(
 			ctx,
 			target.OrderID,
@@ -628,6 +646,28 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 	if err != nil {
 		return matchedResult,
 			mapTransferExecutionError(err)
+	}
+
+	matchedResult.FromWallet = source.FromWallet
+	matchedResult.ToWallet = toWallet
+	matchedResult.TxSignature = executionResult.TxSignature
+
+	if target.ItemType == orderdom.OrderItemTypeResale {
+		if _, err := u.bankPayoutUC.ExecuteForSalesReceivable(
+			ctx,
+			resaleReceivable.ID,
+		); err != nil {
+			return matchedResult,
+				fmt.Errorf(
+					"%w orderId=%s itemIndex=%d receivableId=%s tx=%s: %v",
+					ErrTransferBankPayoutFailed,
+					target.OrderID,
+					target.ItemIndex,
+					resaleReceivable.ID,
+					executionResult.TxSignature,
+					err,
+				)
+		}
 	}
 
 	fromDisplayName := ""

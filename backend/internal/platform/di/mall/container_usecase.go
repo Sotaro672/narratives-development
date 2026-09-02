@@ -12,6 +12,7 @@ import (
 	mallfs "narratives/internal/adapters/out/firestore/mall"
 	payoutkms "narratives/internal/adapters/out/kms"
 	mailadp "narratives/internal/adapters/out/mail"
+	payoutadp "narratives/internal/adapters/out/payout"
 	stripeadapter "narratives/internal/adapters/out/stripe"
 	applicationport "narratives/internal/application/port"
 	mallquery "narratives/internal/application/query/mall"
@@ -36,6 +37,7 @@ type mallUsecases struct {
 	cartUC                         *usecase.CartUsecase
 	paymentUC                      *usecase.PaymentUsecase
 	salesReceivableUC              *usecase.SalesReceivableUsecase
+	bankPayoutUC                   *usecase.BankPayoutUsecase
 	brandFeeSettlementUC           *usecase.BrandFeeSettlementUsecase
 	brandFeeSettlementTransferUC   *usecase.BrandFeeSettlementTransferUsecase
 	brandFeeSettlementQueue        usecase.BrandFeeSettlementTransferQueue
@@ -119,7 +121,10 @@ func buildMallUsecases(
 		r.companyRepo,
 	)
 
-	orderCancellationMailer := mailadp.NewOrderCancellationMailer(resendClient, cfg.ResendFrom)
+	orderCancellationMailer := mailadp.NewOrderCancellationMailer(
+		resendClient,
+		cfg.ResendFrom,
+	)
 
 	resaleOrderNotificationMailer := mailadp.NewResaleOrderNotificationMailer(
 		resendClient,
@@ -175,7 +180,9 @@ func buildMallUsecases(
 		transportationSvc,
 	)
 
-	shippingAddressUC := usecase.NewShippingAddressUsecase(r.shippingAddressRepo)
+	shippingAddressUC := usecase.NewShippingAddressUsecase(
+		r.shippingAddressRepo,
+	)
 
 	paymentMethodUC := usecase.NewPaymentMethodUsecase(
 		r.paymentMethodRepo,
@@ -226,57 +233,121 @@ func buildMallUsecases(
 		return nil, errors.New("di.mall: trade usecase is nil")
 	}
 
-	tradeMessageUC := usecase.NewTradeMessageUsecase(r.tradeRepo, r.tradeMessageRepo)
+	tradeMessageUC := usecase.NewTradeMessageUsecase(
+		r.tradeRepo,
+		r.tradeMessageRepo,
+	)
 	if tradeMessageUC == nil {
 		return nil, errors.New("di.mall: trade message usecase is nil")
 	}
 
-	paymentUC := usecase.NewPaymentUsecase(usecase.NewPaymentUsecaseInput{
-		PaymentRepo:     r.paymentRepo,
-		StripeEventRepo: r.paymentRepo,
-		OrderRepo:       r.orderRepo,
-		ResaleRepo:      r.resaleRepo,
-	})
+	paymentUC := usecase.NewPaymentUsecase(
+		usecase.NewPaymentUsecaseInput{
+			PaymentRepo:     r.paymentRepo,
+			StripeEventRepo: r.paymentRepo,
+			OrderRepo:       r.orderRepo,
+			ResaleRepo:      r.resaleRepo,
+		},
+	)
 	if paymentUC == nil {
 		return nil, errors.New("di.mall: payment usecase is nil")
 	}
 
-	settlementDependencies, err := shared.BuildSettlementDependencies(ctx, infra)
+	settlementDependencies, err := shared.BuildSettlementDependencies(
+		ctx,
+		infra,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("di.mall: build settlement dependencies: %w", err)
+		return nil, fmt.Errorf(
+			"di.mall: build settlement dependencies: %w",
+			err,
+		)
 	}
 
-	payoutAccountKMSKeyName := os.Getenv(payoutAccountKMSKeyNameEnv)
+	payoutAccountKMSKeyName := os.Getenv(
+		payoutAccountKMSKeyNameEnv,
+	)
 	if payoutAccountKMSKeyName == "" {
-		return nil, fmt.Errorf("di.mall: %s is empty", payoutAccountKMSKeyNameEnv)
+		return nil, fmt.Errorf(
+			"di.mall: %s is empty",
+			payoutAccountKMSKeyNameEnv,
+		)
 	}
 
-	payoutAccountCipher, err := payoutkms.NewPayoutAccountCipher(infra.KMS, payoutAccountKMSKeyName)
+	payoutAccountCipher, err := payoutkms.NewPayoutAccountCipher(
+		infra.KMS,
+		payoutAccountKMSKeyName,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("di.mall: build payout account cipher: %w", err)
+		return nil, fmt.Errorf(
+			"di.mall: build payout account cipher: %w",
+			err,
+		)
 	}
 
-	payoutAccountUC := usecase.NewPayoutAccountUsecase(r.payoutAccountRepo, payoutAccountCipher)
+	payoutAccountUC := usecase.NewPayoutAccountUsecase(
+		r.payoutAccountRepo,
+		payoutAccountCipher,
+	)
 	if payoutAccountUC == nil {
-		return nil, errors.New("di.mall: payout account usecase is nil")
+		return nil, errors.New(
+			"di.mall: payout account usecase is nil",
+		)
 	}
 
 	if r.salesReceivableRepo == nil {
-		return nil, errors.New("di.mall: sales receivable repository is nil")
+		return nil, errors.New(
+			"di.mall: sales receivable repository is nil",
+		)
 	}
 
-	salesReceivableUC := usecase.NewSalesReceivableUsecase(r.salesReceivableRepo)
+	salesReceivableUC := usecase.NewSalesReceivableUsecase(
+		r.salesReceivableRepo,
+	)
 	if salesReceivableUC == nil {
-		return nil, errors.New("di.mall: sales receivable usecase is nil")
+		return nil, errors.New(
+			"di.mall: sales receivable usecase is nil",
+		)
+	}
+
+	if r.bankPayoutRepo == nil {
+		return nil, errors.New(
+			"di.mall: bank payout repository is nil",
+		)
+	}
+
+	bankPayoutGateway := payoutadp.NewFakeBankPayoutGateway()
+	if bankPayoutGateway == nil {
+		return nil, errors.New(
+			"di.mall: fake bank payout gateway is nil",
+		)
+	}
+
+	bankPayoutUC := usecase.NewBankPayoutUsecase(
+		r.bankPayoutRepo,
+		r.salesReceivableRepo,
+		payoutAccountUC,
+		bankPayoutGateway,
+	)
+	if bankPayoutUC == nil {
+		return nil, errors.New(
+			"di.mall: bank payout usecase is nil",
+		)
 	}
 
 	if r.brandFeeSettlementRepo == nil {
-		return nil, errors.New("di.mall: brand fee settlement repository is nil")
+		return nil, errors.New(
+			"di.mall: brand fee settlement repository is nil",
+		)
 	}
 
-	brandFeeSettlementUC := usecase.NewBrandFeeSettlementUsecase(r.brandFeeSettlementRepo)
+	brandFeeSettlementUC := usecase.NewBrandFeeSettlementUsecase(
+		r.brandFeeSettlementRepo,
+	)
 	if brandFeeSettlementUC == nil {
-		return nil, errors.New("di.mall: brand fee settlement usecase is nil")
+		return nil, errors.New(
+			"di.mall: brand fee settlement usecase is nil",
+		)
 	}
 
 	brandFeeSettlementTransferUC := usecase.NewBrandFeeSettlementTransferUsecase(
@@ -286,7 +357,9 @@ func buildMallUsecases(
 		},
 	)
 	if brandFeeSettlementTransferUC == nil {
-		return nil, errors.New("di.mall: brand fee settlement transfer usecase is nil")
+		return nil, errors.New(
+			"di.mall: brand fee settlement transfer usecase is nil",
+		)
 	}
 
 	brandFeeSettlementRefundUC := usecase.NewBrandFeeSettlementRefundUsecase(
@@ -296,15 +369,23 @@ func buildMallUsecases(
 		},
 	)
 	if brandFeeSettlementRefundUC == nil {
-		return nil, errors.New("di.mall: brand fee settlement refund usecase is nil")
+		return nil, errors.New(
+			"di.mall: brand fee settlement refund usecase is nil",
+		)
 	}
 
-	brandFeeSettlementQueue, err := cloudtasksadp.NewBrandFeeSettlementQueueFromEnv(ctx)
+	brandFeeSettlementQueue, err :=
+		cloudtasksadp.NewBrandFeeSettlementQueueFromEnv(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("di.mall: build brand fee settlement queue: %w", err)
+		return nil, fmt.Errorf(
+			"di.mall: build brand fee settlement queue: %w",
+			err,
+		)
 	}
 	if brandFeeSettlementQueue == nil {
-		return nil, errors.New("di.mall: brand fee settlement queue is nil")
+		return nil, errors.New(
+			"di.mall: brand fee settlement queue is nil",
+		)
 	}
 
 	settlementUC := usecase.NewSettlementUsecase(
@@ -317,15 +398,23 @@ func buildMallUsecases(
 		},
 	)
 	if settlementUC == nil {
-		return nil, errors.New("di.mall: settlement usecase is nil")
+		return nil, errors.New(
+			"di.mall: settlement usecase is nil",
+		)
 	}
 
-	settlementQueue, err := cloudtasksadp.NewSettlementQueueFromEnv(ctx)
+	settlementQueue, err :=
+		cloudtasksadp.NewSettlementQueueFromEnv(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("di.mall: build settlement queue: %w", err)
+		return nil, fmt.Errorf(
+			"di.mall: build settlement queue: %w",
+			err,
+		)
 	}
 	if settlementQueue == nil {
-		return nil, errors.New("di.mall: settlement queue is nil")
+		return nil, errors.New(
+			"di.mall: settlement queue is nil",
+		)
 	}
 
 	refundUC := usecase.NewRefundUsecase(
@@ -339,7 +428,9 @@ func buildMallUsecases(
 		},
 	)
 	if refundUC == nil {
-		return nil, errors.New("di.mall: refund usecase is nil")
+		return nil, errors.New(
+			"di.mall: refund usecase is nil",
+		)
 	}
 
 	orderUC := usecase.NewOrderUsecase(
@@ -392,7 +483,9 @@ func buildMallUsecases(
 		},
 	)
 	if itemRefundUC == nil {
-		return nil, errors.New("di.mall: item refund usecase is nil")
+		return nil, errors.New(
+			"di.mall: item refund usecase is nil",
+		)
 	}
 
 	inquiryUC := usecase.NewInquiryUsecase(
@@ -413,7 +506,9 @@ func buildMallUsecases(
 	)
 
 	if infra.PaymentMethodGateway == nil {
-		return nil, errors.New("di.mall: stripe payment intent gateway is nil")
+		return nil, errors.New(
+			"di.mall: stripe payment intent gateway is nil",
+		)
 	}
 
 	paymentFlowUC := usecase.NewPaymentFlowUsecase(
@@ -437,15 +532,22 @@ func buildMallUsecases(
 		},
 	)
 	if resaleTradeDispatchUC == nil {
-		return nil, errors.New("di.mall: resale trade dispatch usecase is nil")
+		return nil, errors.New(
+			"di.mall: resale trade dispatch usecase is nil",
+		)
 	}
 
 	inventoryUC := usecase.NewInventoryUsecase(r.inventoryRepo)
 
 	refundCompletionNotificationQueue, err :=
-		cloudtasksadp.NewRefundCompletionNotificationQueueFromEnv(ctx)
+		cloudtasksadp.NewRefundCompletionNotificationQueueFromEnv(
+			ctx,
+		)
 	if err != nil {
-		return nil, fmt.Errorf("di.mall: build refund completion notification queue: %w", err)
+		return nil, fmt.Errorf(
+			"di.mall: build refund completion notification queue: %w",
+			err,
+		)
 	}
 
 	refundCompletionNotificationMailer :=
@@ -462,7 +564,9 @@ func buildMallUsecases(
 			refundCompletionNotificationQueue,
 		)
 	if refundCompletionNotificationUC == nil {
-		return nil, errors.New("di.mall: refund completion notification usecase is nil")
+		return nil, errors.New(
+			"di.mall: refund completion notification usecase is nil",
+		)
 	}
 
 	resaleTradeReturnReceiptUC :=
@@ -476,7 +580,9 @@ func buildMallUsecases(
 			},
 		)
 	if resaleTradeReturnReceiptUC == nil {
-		return nil, errors.New("di.mall: resale trade return receipt usecase is nil")
+		return nil, errors.New(
+			"di.mall: resale trade return receipt usecase is nil",
+		)
 	}
 
 	return &mallUsecases{
@@ -492,6 +598,7 @@ func buildMallUsecases(
 		cartUC:                         cartUC,
 		paymentUC:                      paymentUC,
 		salesReceivableUC:              salesReceivableUC,
+		bankPayoutUC:                   bankPayoutUC,
 		brandFeeSettlementUC:           brandFeeSettlementUC,
 		brandFeeSettlementTransferUC:   brandFeeSettlementTransferUC,
 		brandFeeSettlementQueue:        brandFeeSettlementQueue,
@@ -566,28 +673,49 @@ func buildMallTransferUsecase(
 	previewQ *mallquery.PreviewQuery,
 ) (*usecase.TransferUsecase, error) {
 	if infra == nil || infra.Firestore == nil {
-		return nil, errors.New("di.mall: firestore client is nil")
+		return nil, errors.New(
+			"di.mall: firestore client is nil",
+		)
 	}
 	if r == nil {
-		return nil, errors.New("di.mall: repositories are nil")
+		return nil, errors.New(
+			"di.mall: repositories are nil",
+		)
 	}
 	if u == nil {
-		return nil, errors.New("di.mall: usecases are nil")
+		return nil, errors.New(
+			"di.mall: usecases are nil",
+		)
 	}
 	if previewQ == nil {
-		return nil, errors.New("di.mall: preview query is nil")
+		return nil, errors.New(
+			"di.mall: preview query is nil",
+		)
 	}
 	if u.walletUC == nil {
-		return nil, errors.New("di.mall: wallet usecase is nil")
+		return nil, errors.New(
+			"di.mall: wallet usecase is nil",
+		)
 	}
 	if u.returnRequestUC == nil {
-		return nil, errors.New("di.mall: return request usecase is nil")
+		return nil, errors.New(
+			"di.mall: return request usecase is nil",
+		)
 	}
 	if u.inventoryUC == nil {
-		return nil, errors.New("di.mall: inventory usecase is nil")
+		return nil, errors.New(
+			"di.mall: inventory usecase is nil",
+		)
 	}
 	if u.salesReceivableUC == nil {
-		return nil, errors.New("di.mall: sales receivable usecase is nil")
+		return nil, errors.New(
+			"di.mall: sales receivable usecase is nil",
+		)
+	}
+	if u.bankPayoutUC == nil {
+		return nil, errors.New(
+			"di.mall: bank payout usecase is nil",
+		)
 	}
 
 	var orderRepoForTransfer applicationport.OrderRepoForTransfer = r.orderTransferItemRepo
@@ -629,6 +757,9 @@ func buildMallTransferUsecase(
 		).
 		WithResaleReceivableDependencies(
 			u.salesReceivableUC,
+		).
+		WithBankPayoutDependencies(
+			u.bankPayoutUC,
 		).
 		WithReturnOpeningHandler(
 			u.returnRequestUC,

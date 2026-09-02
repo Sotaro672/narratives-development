@@ -26,6 +26,9 @@ var (
 	ErrPayoutAccountEncryptionFailed = errors.New(
 		"payoutAccount: account number encryption failed",
 	)
+	ErrPayoutAccountDecryptionFailed = errors.New(
+		"payoutAccount: account number decryption failed",
+	)
 	ErrPayoutAccountOwnershipMismatch = errors.New(
 		"payoutAccount: user ownership mismatch",
 	)
@@ -63,6 +66,9 @@ type RegisterPayoutAccountInput struct {
 //   - BankLast4 is persisted separately for display.
 //   - registering again replaces the user's payout destination while preserving
 //     CreatedAt.
+//   - decryption is allowed only for transient payout execution.
+//   - decrypted account numbers must never be persisted, logged, or returned
+//     to the browser.
 type PayoutAccountUsecase struct {
 	repo   payoutdom.Repository
 	cipher applicationport.PayoutAccountCipher
@@ -107,6 +113,50 @@ func (u *PayoutAccountUsecase) GetByUserID(
 	}
 
 	return &account, nil
+}
+
+// DecryptAccountNumber decrypts a snapshotted payout account number for
+// transient payout execution.
+//
+// The ciphertext may come from a BankPayout destination snapshot rather than
+// the user's current PayoutAccount. This is intentional: changing the
+// registered payout account after BankPayout creation must not alter the
+// destination of that already-created payout.
+//
+// The returned plaintext account number must:
+//   - be used only for the immediate gateway request
+//   - never be persisted
+//   - never be logged
+//   - never be included in errors
+//   - never be returned to the browser
+func (u *PayoutAccountUsecase) DecryptAccountNumber(
+	ctx context.Context,
+	userID string,
+	accountNumberCiphertext string,
+) (string, error) {
+	if u == nil || u.cipher == nil {
+		return "", ErrPayoutAccountCipherMissing
+	}
+	if !isValidPayoutUserID(userID) {
+		return "", payoutdom.ErrInvalidUserID
+	}
+	if accountNumberCiphertext == "" {
+		return "", payoutdom.ErrInvalidAccountNumberCiphertext
+	}
+
+	accountNumber, err := u.cipher.Decrypt(
+		ctx,
+		userID,
+		accountNumberCiphertext,
+	)
+	if err != nil {
+		return "", ErrPayoutAccountDecryptionFailed
+	}
+	if !isValidPayoutAccountNumber(accountNumber) {
+		return "", ErrPayoutAccountDecryptionFailed
+	}
+
+	return accountNumber, nil
 }
 
 // Register creates or replaces the authenticated user's payout bank account.

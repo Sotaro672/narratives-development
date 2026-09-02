@@ -13,6 +13,7 @@ type mallRepositories struct {
 	announcementAvatarRepo           *fs.AnnouncementAvatarRepositoryFS
 	announcementAttachmentRepo       *fs.AnnouncementAttachmentRepositoryFS
 	avatarRepo                       *fs.AvatarRepositoryFS
+	bankPayoutRepo                   *fs.BankPayoutRepositoryFS
 	brandRepo                        *fs.BrandRepositoryFS
 	brandFeeSettlementRepo           *fs.BrandFeeSettlementRepositoryFS
 	cartRepo                         *fs.CartRepositoryFS
@@ -58,6 +59,7 @@ func buildMallRepositories(fsClient *firestore.Client) *mallRepositories {
 	shippingAddressRepo := fs.NewShippingAddressRepositoryFS(fsClient)
 	paymentMethodRepo := fs.NewPaymentMethodRepositoryFS(fsClient)
 	payoutAccountRepo := fs.NewPayoutAccountRepositoryFS(fsClient)
+	bankPayoutRepo := fs.NewBankPayoutRepositoryFS(fsClient)
 	userRepo := fs.NewUserRepositoryFS(fsClient)
 	memberRepo := fs.NewMemberRepositoryFS(fsClient)
 	walletRepo := fs.NewWalletRepositoryFS(fsClient)
@@ -108,6 +110,7 @@ func buildMallRepositories(fsClient *firestore.Client) *mallRepositories {
 		announcementAvatarRepo:           announcementAvatarRepo,
 		announcementAttachmentRepo:       announcementAttachmentRepo,
 		avatarRepo:                       avatarRepo,
+		bankPayoutRepo:                   bankPayoutRepo,
 		brandRepo:                        brandRepo,
 		brandFeeSettlementRepo:           brandFeeSettlementRepo,
 		cartRepo:                         cartRepo,
