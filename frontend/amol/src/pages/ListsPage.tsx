@@ -37,6 +37,8 @@ export default function ListsPage() {
       title: item.productName?.trim() || item.title.trim() || "商品名未設定",
       imageUrl: item.image,
       brandName: item.brandName,
+      reviewAverage: item.reviewAverage,
+      reviewCount: item.reviewCount,
       priceLabel: formatPrice(priceAmount, {
         currency: firstPrice?.currency,
       }),

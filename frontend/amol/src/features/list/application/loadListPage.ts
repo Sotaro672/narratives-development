@@ -17,37 +17,36 @@ type LoadListPageArgs = {
   perPage: number;
 };
 
-function asOptionalString(
-  value: unknown,
-): string | undefined {
+function asOptionalString(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
 
-  const normalizedValue =
-    value.trim();
+  const normalizedValue = value.trim();
+  return normalizedValue || undefined;
+}
 
-  return normalizedValue ||
-    undefined;
+function asOptionalNumber(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+
+  return value;
 }
 
 function mapListItemToCardItem(
   item: MallListItem,
   catalog: MallCatalogResponse | null,
 ): MallListCardItem {
-  const productBlueprint =
-    catalog?.productBlueprint;
+  const productBlueprint = catalog?.productBlueprint;
+  const productReviewSummary = catalog?.productReviewSummary;
 
   return {
     ...item,
-    productName:
-      asOptionalString(
-        productBlueprint?.productName,
-      ),
-    brandName:
-      asOptionalString(
-        productBlueprint?.brandName,
-      ),
+    productName: asOptionalString(productBlueprint?.productName),
+    brandName: asOptionalString(productBlueprint?.brandName),
+    reviewAverage: asOptionalNumber(productReviewSummary?.averageRating),
+    reviewCount: asOptionalNumber(productReviewSummary?.totalCount),
   };
 }
 
@@ -55,10 +54,7 @@ async function attachCatalogToListItem(
   item: MallListItem,
 ): Promise<MallListCardItem> {
   try {
-    const catalog =
-      await fetchListCatalog(
-        item.id,
-      );
+    const catalog = await fetchListCatalog(item.id);
 
     return mapListItemToCardItem(
       item,
@@ -76,28 +72,18 @@ export async function loadListPage({
   page,
   perPage,
 }: LoadListPageArgs): Promise<LoadListPageResult> {
-  const response =
-    await fetchMallLists({
-      page,
-      perPage,
-    });
+  const response = await fetchMallLists({
+    page,
+    perPage,
+  });
 
-  const items =
-    await Promise.all(
-      response.items.map(
-        attachCatalogToListItem,
-      ),
-    );
+  const items = await Promise.all(
+    response.items.map(attachCatalogToListItem),
+  );
 
   return {
     items,
-    page:
-      response.page > 0
-        ? response.page
-        : page,
-    totalPages:
-      response.totalPages > 0
-        ? response.totalPages
-        : 1,
+    page: response.page > 0 ? response.page : page,
+    totalPages: response.totalPages > 0 ? response.totalPages : 1,
   };
 }

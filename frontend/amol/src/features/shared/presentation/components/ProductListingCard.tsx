@@ -10,6 +10,8 @@ export type ProductListingCardViewModel = {
   brandName?: string | null;
   metaLines?: Array<string | null | undefined>;
   priceLabel?: string | null;
+  reviewAverage?: number | null;
+  reviewCount?: number | null;
 };
 
 export type ProductListingCardProps = {
@@ -36,6 +38,23 @@ export default function ProductListingCard({
     .map((line) => line?.trim() || "")
     .filter(Boolean);
   const safePriceLabel = item.priceLabel?.trim() || "";
+
+  const safeReviewAverage =
+    typeof item.reviewAverage === "number" && Number.isFinite(item.reviewAverage)
+      ? Math.max(0, Math.min(5, item.reviewAverage))
+      : null;
+
+  const safeReviewCount =
+    typeof item.reviewCount === "number" && Number.isFinite(item.reviewCount)
+      ? Math.max(0, Math.floor(item.reviewCount))
+      : null;
+
+  const reviewLabel =
+    safeReviewCount === 0
+      ? "レビューなし"
+      : safeReviewCount !== null && safeReviewAverage !== null
+        ? `★ ${safeReviewAverage.toFixed(1)} (${safeReviewCount})`
+        : null;
 
   function handleClick() {
     if (!safeId) return;
@@ -67,6 +86,10 @@ export default function ProductListingCard({
 
         {safeBrandName ? (
           <p className="product-listing-card__brand">{safeBrandName}</p>
+        ) : null}
+
+        {reviewLabel ? (
+          <p className="product-listing-card__review">{reviewLabel}</p>
         ) : null}
 
         {safeMetaLines.length > 0 ? (

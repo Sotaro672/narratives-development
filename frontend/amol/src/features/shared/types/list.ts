@@ -1,6 +1,7 @@
 // frontend/amol/src/features/shared/types/list.ts
 
 import type { PageResult } from "../pageResult";
+import type { CatalogProductReviewSummary } from "./catalog";
 
 export type ListPriceRow = {
   currency?: string;
@@ -30,11 +31,14 @@ export type CatalogProductBlueprint = {
 
 export type MallCatalogResponse = {
   productBlueprint?: CatalogProductBlueprint;
+  productReviewSummary?: CatalogProductReviewSummary;
 };
 
 export type MallListCardItem = MallListItem & {
   productName?: string;
   brandName?: string;
+  reviewAverage?: number;
+  reviewCount?: number;
 };
 
 export type LoadListPageResult = {

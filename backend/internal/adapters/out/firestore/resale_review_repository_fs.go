@@ -156,7 +156,7 @@ func aggregateFromSnapshot(snapshot *gfs.DocumentSnapshot) (resalereview.ResaleR
 	return entity, nil
 }
 
-func likeToDocument(entity resalereview.Like) resaleReviewLikeDocument {
+func resaleReviewLikeToDocument(entity resalereview.Like) resaleReviewLikeDocument {
 	return resaleReviewLikeDocument{
 		ResaleID:  entity.ResaleID,
 		AvatarID:  entity.AvatarID,
@@ -164,7 +164,7 @@ func likeToDocument(entity resalereview.Like) resaleReviewLikeDocument {
 	}
 }
 
-func likeFromSnapshot(snapshot *gfs.DocumentSnapshot) (resalereview.Like, error) {
+func resaleReviewLikeFromSnapshot(snapshot *gfs.DocumentSnapshot) (resalereview.Like, error) {
 	if snapshot == nil || snapshot.Ref == nil || !snapshot.Exists() {
 		return resalereview.Like{}, resalereview.ErrNotFound
 	}
@@ -386,7 +386,7 @@ func (r *resaleReviewLikeRepositoryFS) List(ctx context.Context, filter resalere
 				return common.PageResult[resalereview.Like]{}, err
 			}
 
-			item, err := likeFromSnapshot(snapshot)
+			item, err := resaleReviewLikeFromSnapshot(snapshot)
 			if err != nil {
 				return common.PageResult[resalereview.Like]{}, err
 			}
@@ -417,7 +417,7 @@ func (r *resaleReviewLikeRepositoryFS) List(ctx context.Context, filter resalere
 				return common.PageResult[resalereview.Like]{}, err
 			}
 
-			item, err := likeFromSnapshot(snapshot)
+			item, err := resaleReviewLikeFromSnapshot(snapshot)
 			if err != nil {
 				return common.PageResult[resalereview.Like]{}, err
 			}
@@ -429,8 +429,8 @@ func (r *resaleReviewLikeRepositoryFS) List(ctx context.Context, filter resalere
 		}
 	}
 
-	sortLikes(items, sortSpec)
-	return paginateLikes(items, page), nil
+	sortResaleReviewLikes(items, sortSpec)
+	return paginateResaleReviewLikes(items, page), nil
 }
 
 func (r *resaleReviewLikeRepositoryFS) FindByAvatar(ctx context.Context, resaleID string, avatarID string) (resalereview.Like, error) {
@@ -452,7 +452,7 @@ func (r *resaleReviewLikeRepositoryFS) FindByAvatar(ctx context.Context, resaleI
 		return resalereview.Like{}, err
 	}
 
-	return likeFromSnapshot(snapshot)
+	return resaleReviewLikeFromSnapshot(snapshot)
 }
 
 func (r *resaleReviewLikeRepositoryFS) ExistsByAvatar(ctx context.Context, resaleID string, avatarID string) (bool, error) {
@@ -481,7 +481,7 @@ func (r *resaleReviewLikeRepositoryFS) CreateUnderParent(ctx context.Context, re
 		return resalereview.Like{}, resalereview.ErrInvalidResaleID
 	}
 
-	_, err := r.root.likeDoc(resaleID, like.AvatarID).Create(ctx, likeToDocument(like))
+	_, err := r.root.likeDoc(resaleID, like.AvatarID).Create(ctx, resaleReviewLikeToDocument(like))
 	if err != nil {
 		if status.Code(err) == codes.AlreadyExists {
 			return resalereview.Like{}, resalereview.ErrConflict
@@ -743,7 +743,7 @@ func (r *resaleReviewMutationRepositoryFS) AddLike(ctx context.Context, like res
 			}
 		}
 
-		if err := tx.Create(likeRef, likeToDocument(like)); err != nil {
+		if err := tx.Create(likeRef, resaleReviewLikeToDocument(like)); err != nil {
 			return err
 		}
 
@@ -1178,7 +1178,7 @@ func matchesCommentFilter(item resalereview.Comment, filter resalereview.FilterC
 	return true
 }
 
-func sortLikes(items []resalereview.Like, sortSpec common.Sort) {
+func sortResaleReviewLikes(items []resalereview.Like, sortSpec common.Sort) {
 	descending := sortSpec.Order != common.SortAsc
 
 	sort.SliceStable(items, func(i, j int) bool {
@@ -1255,7 +1255,7 @@ func compareCommentID(left resalereview.CommentID, right resalereview.CommentID,
 	return string(left) < string(right)
 }
 
-func paginateLikes(items []resalereview.Like, page common.Page) common.PageResult[resalereview.Like] {
+func paginateResaleReviewLikes(items []resalereview.Like, page common.Page) common.PageResult[resalereview.Like] {
 	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 20, 200)
 	totalCount := len(items)
 	totalPages := fscommon.ComputeTotalPages(totalCount, perPage)

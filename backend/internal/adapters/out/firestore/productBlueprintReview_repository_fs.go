@@ -43,7 +43,7 @@ type ProductBlueprintReviewRepositoryFS struct {
 func NewProductBlueprintReviewRepositoryFS(client *firestore.Client) *ProductBlueprintReviewRepositoryFS {
 	return &ProductBlueprintReviewRepositoryFS{
 		client:     client,
-		collection: defaultProductBlueprintReviewSubCollection, // サブコレクション名（WithCollectionで変更可）
+		collection: defaultProductBlueprintReviewSubCollection,
 		now:        time.Now,
 	}
 }
@@ -91,6 +91,7 @@ func (r *ProductBlueprintReviewRepositoryFS) InitForProductBlueprint(
 	if r == nil || r.client == nil {
 		return pbr.ErrInternal
 	}
+
 	pbID := strings.TrimSpace(productBlueprintID)
 	if pbID == "" {
 		return pbr.ErrInvalid
@@ -131,10 +132,11 @@ func (r *ProductBlueprintReviewRepositoryFS) InitForProductBlueprint(
 	if err == nil {
 		return nil
 	}
+
 	if status.Code(err) == codes.AlreadyExists {
-		// idempotent
 		return nil
 	}
+
 	return err
 }
 
@@ -146,6 +148,7 @@ func (r *ProductBlueprintReviewRepositoryFS) GetByID(ctx context.Context, id str
 	if r == nil || r.client == nil {
 		return pbr.Review{}, pbr.ErrInternal
 	}
+
 	reviewID := strings.TrimSpace(id)
 	if reviewID == "" {
 		return pbr.Review{}, pbr.ErrInvalid
@@ -171,7 +174,6 @@ func (r *ProductBlueprintReviewRepositoryFS) Create(ctx context.Context, entity 
 	aggDoc := r.aggregateDoc(pbID)
 
 	err := r.client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		// review: Create (fail if exists)
 		if err := tx.Create(reviewDoc, encodeReviewDoc(entity)); err != nil {
 			if isAlreadyExists(err) {
 				return pbr.ErrConflict
@@ -179,12 +181,12 @@ func (r *ProductBlueprintReviewRepositoryFS) Create(ctx context.Context, entity 
 			return err
 		}
 
-		// aggregate: reflect (only when published)
 		if entity.Status == pbr.ReviewStatusPublished {
 			now := r.now().UTC()
 			updates := buildAggregateDeltaOnCreatePublished(entity.Rating, now)
 			return tx.Set(aggDoc, updates, firestore.MergeAll)
 		}
+
 		return nil
 	})
 	if err != nil {
@@ -198,6 +200,7 @@ func (r *ProductBlueprintReviewRepositoryFS) Update(ctx context.Context, id stri
 	if r == nil || r.client == nil {
 		return pbr.Review{}, pbr.ErrInternal
 	}
+
 	reviewID := strings.TrimSpace(id)
 	if reviewID == "" {
 		return pbr.Review{}, pbr.ErrInvalid
@@ -213,6 +216,7 @@ func (r *ProductBlueprintReviewRepositoryFS) Delete(ctx context.Context, id stri
 	if r == nil || r.client == nil {
 		return pbr.ErrInternal
 	}
+
 	reviewID := strings.TrimSpace(id)
 	if reviewID == "" {
 		return pbr.ErrInvalid
@@ -232,68 +236,70 @@ func (r *ProductBlueprintReviewRepositoryFS) List(
 	sort domcommon.Sort,
 	page domcommon.Page,
 ) (domcommon.PageResult[pbr.Review], error) {
-
 	if r == nil || r.client == nil {
 		return domcommon.PageResult[pbr.Review]{}, pbr.ErrInternal
 	}
 
-	// Firestoreで部分一致検索は基本不可
 	if strings.TrimSpace(filter.SearchQuery) != "" {
 		return domcommon.PageResult[pbr.Review]{}, pbr.ErrInvalid
 	}
 
-	// ✅ subcollection 前提のため ProductBlueprintID 必須
 	if filter.ProductBlueprintID == nil || strings.TrimSpace(*filter.ProductBlueprintID) == "" {
 		return domcommon.PageResult[pbr.Review]{}, pbr.ErrInvalid
 	}
-	pbID := strings.TrimSpace(*filter.ProductBlueprintID)
 
+	pbID := strings.TrimSpace(*filter.ProductBlueprintID)
 	q := r.reviewsCol(pbID).Query
 
-	// equality filters
 	if filter.AvatarID != nil && strings.TrimSpace(*filter.AvatarID) != "" {
 		q = q.Where("avatarId", "==", strings.TrimSpace(*filter.AvatarID))
 	}
+
 	if filter.Status != nil {
 		q = q.Where("status", "==", string(*filter.Status))
 	}
+
 	if filter.Rating != nil {
 		q = q.Where("rating", "==", int(*filter.Rating))
 	}
+
 	if filter.RatingMin != nil {
 		q = q.Where("rating", ">=", int(*filter.RatingMin))
 	}
+
 	if filter.RatingMax != nil {
 		q = q.Where("rating", "<=", int(*filter.RatingMax))
 	}
 
-	// reviewedAt range
 	if filter.Reviewed.From != nil {
 		q = q.Where("reviewedAt", ">=", filter.Reviewed.From.UTC())
 	}
+
 	if filter.Reviewed.To != nil {
 		q = q.Where("reviewedAt", "<=", filter.Reviewed.To.UTC())
 	}
 
-	// created/updated range（共通）
 	if filter.Created.From != nil {
 		q = q.Where("createdAt", ">=", filter.Created.From.UTC())
 	}
+
 	if filter.Created.To != nil {
 		q = q.Where("createdAt", "<=", filter.Created.To.UTC())
 	}
+
 	if filter.Updated.From != nil {
 		q = q.Where("updatedAt", ">=", filter.Updated.From.UTC())
 	}
+
 	if filter.Updated.To != nil {
 		q = q.Where("updatedAt", "<=", filter.Updated.To.UTC())
 	}
 
-	// sort
 	sortCol := strings.TrimSpace(sort.Column)
 	if sortCol == "" {
 		sortCol = "reviewedAt"
 	}
+
 	if _, ok := pbr.AllowedSortColumns[sortCol]; !ok {
 		return domcommon.PageResult[pbr.Review]{}, pbr.ErrInvalid
 	}
@@ -305,21 +311,24 @@ func (r *ProductBlueprintReviewRepositoryFS) List(
 
 	q = q.OrderBy(mapSortField(sortCol), orderDir)
 
-	// paging（Offsetページング）
 	pn := page.Number
 	pp := page.PerPage
+
 	if pn <= 0 {
 		pn = 1
 	}
+
 	if pp <= 0 {
 		pp = 20
 	}
+
 	offset := (pn - 1) * pp
 
 	totalCount, err := countQuery(ctx, q)
 	if err != nil {
 		return domcommon.PageResult[pbr.Review]{}, err
 	}
+
 	totalPages := int(math.Ceil(float64(totalCount) / float64(pp)))
 	if totalPages == 0 {
 		totalPages = 1
@@ -334,13 +343,16 @@ func (r *ProductBlueprintReviewRepositoryFS) List(
 		if err == iterator.Done {
 			break
 		}
+
 		if err != nil {
 			return domcommon.PageResult[pbr.Review]{}, err
 		}
-		review, derr := decodeReviewDoc(snap.Ref.ID, snap.Data())
-		if derr != nil {
-			return domcommon.PageResult[pbr.Review]{}, derr
+
+		review, decodeErr := decodeReviewDoc(snap.Ref.ID, snap.Data())
+		if decodeErr != nil {
+			return domcommon.PageResult[pbr.Review]{}, decodeErr
 		}
+
 		items = append(items, review)
 	}
 
@@ -367,11 +379,21 @@ func (r *ProductBlueprintReviewRepositoryFS) ListByProductBlueprintID(
 	if pbID == "" {
 		return domcommon.PageResult[pbr.Review]{}, pbr.ErrInvalid
 	}
+
 	f := pbr.Filter{
 		ProductBlueprintID: &pbID,
 		Status:             &status,
 	}
-	return r.List(ctx, f, domcommon.Sort{Column: "reviewedAt", Order: domcommon.SortDesc}, page)
+
+	return r.List(
+		ctx,
+		f,
+		domcommon.Sort{
+			Column: "reviewedAt",
+			Order:  domcommon.SortDesc,
+		},
+		page,
+	)
 }
 
 func (r *ProductBlueprintReviewRepositoryFS) GetProductSummary(
@@ -379,7 +401,6 @@ func (r *ProductBlueprintReviewRepositoryFS) GetProductSummary(
 	productBlueprintID string,
 	status pbr.ReviewStatus,
 ) (pbr.ProductReviewSummary, error) {
-
 	if r == nil || r.client == nil {
 		return pbr.ProductReviewSummary{}, pbr.ErrInternal
 	}
@@ -389,15 +410,65 @@ func (r *ProductBlueprintReviewRepositoryFS) GetProductSummary(
 		return pbr.ProductReviewSummary{}, pbr.ErrInvalid
 	}
 
-	q := r.reviewsCol(pbID).
-		Where("status", "==", string(status))
+	// published は集計ドキュメントから取得する。
+	// rating1Count..rating5Count は review 作成時に transaction で更新されるため、
+	// review 本体を全件走査せずに件数と平均評価を算出できる。
+	if status == pbr.ReviewStatusPublished {
+		snap, err := r.aggregateDoc(pbID).Get(ctx)
+		if err != nil {
+			if isNotFound(err) {
+				return emptyProductReviewSummary(pbID, status), nil
+			}
+			return pbr.ProductReviewSummary{}, err
+		}
+
+		data := snap.Data()
+
+		c1 := getIntFromAny(data["rating1Count"])
+		c2 := getIntFromAny(data["rating2Count"])
+		c3 := getIntFromAny(data["rating3Count"])
+		c4 := getIntFromAny(data["rating4Count"])
+		c5 := getIntFromAny(data["rating5Count"])
+
+		ratingCount := c1 + c2 + c3 + c4 + c5
+
+		total := getIntFromAny(data["totalCount"])
+		if total < ratingCount {
+			total = ratingCount
+		}
+
+		avg := 0.0
+		if ratingCount > 0 {
+			weightedSum := c1 + c2*2 + c3*3 + c4*4 + c5*5
+			avg = float64(weightedSum) / float64(ratingCount)
+		}
+
+		return pbr.ProductReviewSummary{
+			ProductBlueprintID: pbID,
+			Status:             string(status),
+			TotalCount:         total,
+			AverageRating:      avg,
+			Rating5Count:       c5,
+			Rating4Count:       c4,
+			Rating3Count:       c3,
+			Rating2Count:       c2,
+			Rating1Count:       c1,
+		}, nil
+	}
+
+	// published 以外の status は aggregate に保持していないため、
+	// 従来どおり対象 status の review 本体を走査する。
+	q := r.reviewsCol(pbID).Where(
+		"status",
+		"==",
+		string(status),
+	)
 
 	iter := q.Documents(ctx)
 	defer iter.Stop()
 
 	total := 0
 	sum := 0
-
 	var c1, c2, c3, c4, c5 int
 
 	for {
@@ -405,12 +476,12 @@ func (r *ProductBlueprintReviewRepositoryFS) GetProductSummary(
 		if err == iterator.Done {
 			break
 		}
+
 		if err != nil {
 			return pbr.ProductReviewSummary{}, err
 		}
 
-		data := snap.Data()
-		rv := getIntFromAny(data["rating"])
+		rv := getIntFromAny(snap.Data()["rating"])
 		if rv < int(pbr.RatingMin) || rv > int(pbr.RatingMax) {
 			continue
 		}
@@ -450,12 +521,28 @@ func (r *ProductBlueprintReviewRepositoryFS) GetProductSummary(
 	}, nil
 }
 
-func (r *ProductBlueprintReviewRepositoryFS) IncrementHelpful(ctx context.Context, reviewID string) (pbr.Review, error) {
+func emptyProductReviewSummary(
+	productBlueprintID string,
+	status pbr.ReviewStatus,
+) pbr.ProductReviewSummary {
+	return pbr.ProductReviewSummary{
+		ProductBlueprintID: productBlueprintID,
+		Status:             string(status),
+	}
+}
+
+func (r *ProductBlueprintReviewRepositoryFS) IncrementHelpful(
+	ctx context.Context,
+	reviewID string,
+) (pbr.Review, error) {
 	// subcollection 構造のため reviewID単体では特定できない
 	return pbr.Review{}, pbr.ErrInvalid
 }
 
-func (r *ProductBlueprintReviewRepositoryFS) IncrementNotHelpful(ctx context.Context, reviewID string) (pbr.Review, error) {
+func (r *ProductBlueprintReviewRepositoryFS) IncrementNotHelpful(
+	ctx context.Context,
+	reviewID string,
+) (pbr.Review, error) {
 	// subcollection 構造のため reviewID単体では特定できない
 	return pbr.Review{}, pbr.ErrInvalid
 }
@@ -484,32 +571,37 @@ func encodeReviewDoc(v pbr.Review) map[string]any {
 	if v.ModerationReason != nil {
 		out["moderationReason"] = *v.ModerationReason
 	}
+
 	return out
 }
 
-func decodeReviewDoc(id string, data map[string]any) (pbr.Review, error) {
-	getString := func(k string) string {
-		if v, ok := data[k]; ok {
-			if s, ok := v.(string); ok {
-				return s
+func decodeReviewDoc(
+	id string,
+	data map[string]any,
+) (pbr.Review, error) {
+	getString := func(key string) string {
+		if value, ok := data[key]; ok {
+			if stringValue, ok := value.(string); ok {
+				return stringValue
 			}
 		}
 		return ""
 	}
-	getTime := func(k string) time.Time {
-		if v, ok := data[k]; ok {
-			switch vv := v.(type) {
+
+	getTime := func(key string) time.Time {
+		if value, ok := data[key]; ok {
+			switch typedValue := value.(type) {
 			case time.Time:
-				return vv.UTC()
+				return typedValue.UTC()
 			}
 		}
 		return time.Time{}
 	}
 
-	var modReason *string
-	if v, ok := data["moderationReason"]; ok {
-		if s, ok := v.(string); ok {
-			modReason = &s
+	var moderationReason *string
+	if value, ok := data["moderationReason"]; ok {
+		if stringValue, ok := value.(string); ok {
+			moderationReason = &stringValue
 		}
 	}
 
@@ -528,12 +620,13 @@ func decodeReviewDoc(id string, data map[string]any) (pbr.Review, error) {
 		CreatedBy:          getString("createdBy"),
 		UpdatedAt:          getTime("updatedAt"),
 		UpdatedBy:          getString("updatedBy"),
-		ModerationReason:   modReason,
+		ModerationReason:   moderationReason,
 	}
 
 	if out.ProductBlueprintID == "" {
 		return pbr.Review{}, pbr.ErrInvalid
 	}
+
 	return out, nil
 }
 
@@ -541,11 +634,15 @@ func decodeReviewDoc(id string, data map[string]any) (pbr.Review, error) {
 // Aggregate helpers (transactional reflect)
 // ============================================================
 
-func buildAggregateDeltaOnCreatePublished(rating pbr.Rating, now time.Time) map[string]any {
+func buildAggregateDeltaOnCreatePublished(
+	rating pbr.Rating,
+	now time.Time,
+) map[string]any {
 	out := map[string]any{
 		"totalCount": firestore.Increment(1),
 		"updatedAt":  now,
 	}
+
 	switch int(rating) {
 	case 5:
 		out["rating5Count"] = firestore.Increment(1)
@@ -558,9 +655,9 @@ func buildAggregateDeltaOnCreatePublished(rating pbr.Rating, now time.Time) map[
 	case 1:
 		out["rating1Count"] = firestore.Increment(1)
 	}
-	// averageRating はインクリメントだけでは正確に出せないため、別途再計算が必要。
-	// ここでは「後段で再計算される」前提で updatedAt のみ確実に更新する。
-	// （正確な平均を常に保つなら、sumRating を aggregate に持つ設計にしてください）
+
+	// averageRating 自体はここでは更新しない。
+	// GetProductSummary は rating1Count..rating5Count から平均値を算出する。
 	return out
 }
 
@@ -587,31 +684,37 @@ func mapSortField(col string) string {
 	}
 }
 
-func countQuery(ctx context.Context, q firestore.Query) (int, error) {
+func countQuery(
+	ctx context.Context,
+	q firestore.Query,
+) (int, error) {
 	iter := q.Documents(ctx)
 	defer iter.Stop()
 
 	n := 0
+
 	for {
 		_, err := iter.Next()
 		if err == iterator.Done {
 			return n, nil
 		}
+
 		if err != nil {
 			return 0, err
 		}
+
 		n++
 	}
 }
 
 func getIntFromAny(v any) int {
-	switch vv := v.(type) {
+	switch value := v.(type) {
 	case int:
-		return vv
+		return value
 	case int64:
-		return int(vv)
+		return int(value)
 	case float64:
-		return int(vv)
+		return int(value)
 	default:
 		return 0
 	}
@@ -621,23 +724,26 @@ func isNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Firestore not found is gRPC codes.NotFound
+
 	if status.Code(err) == codes.NotFound {
 		return true
 	}
-	// Some wrappers may embed NotFound text
-	msg := err.Error()
-	return strings.Contains(msg, "NotFound") || strings.Contains(msg, "not found")
+
+	message := err.Error()
+	return strings.Contains(message, "NotFound") ||
+		strings.Contains(message, "not found")
 }
 
 func isAlreadyExists(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Firestore create conflict is gRPC codes.AlreadyExists
+
 	if status.Code(err) == codes.AlreadyExists {
 		return true
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "AlreadyExists") || strings.Contains(msg, "already exists")
+
+	message := err.Error()
+	return strings.Contains(message, "AlreadyExists") ||
+		strings.Contains(message, "already exists")
 }
