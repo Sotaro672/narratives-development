@@ -12,6 +12,7 @@ import { getFirebaseIdToken } from "../../../../lib/authToken";
 import { returnOrderItem } from "../../../order/api/orderDetailApi";
 import ReturnRequestModal, { type ReturnPackageState } from "../../../order/components/ReturnRequestModal";
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
+import ChatImageGrid from "../../../shared/presentation/components/ChatImageGrid";
 import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
 import ChatMessageHeader from "../../../shared/presentation/components/ChatMessageHeader";
 import ChatMetaSection, { type ChatMetaItem } from "../../../shared/presentation/components/ChatMetaSection";
@@ -860,26 +861,13 @@ function TradeThreadHeader({
         </section>
       ) : null}
 
-      {trade.resale.images.length > 0 ? (
-        <div className="chat-detail-page__images">
-          {trade.resale.images.map((image) => (
-            <a
-              key={image.id}
-              href={image.url}
-              target="_blank"
-              rel="noreferrer"
-              className="chat-detail-page__image-link"
-            >
-              <img
-                src={image.url}
-                alt="商品状態"
-                className="chat-detail-page__image"
-                loading="lazy"
-              />
-            </a>
-          ))}
-        </div>
-      ) : null}
+      <ChatImageGrid
+        images={trade.resale.images.map((image) => ({
+          key: image.id,
+          url: image.url,
+          alt: "商品状態",
+        }))}
+      />
     </ChatThreadCard>
   );
 }

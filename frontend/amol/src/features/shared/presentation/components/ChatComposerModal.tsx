@@ -21,10 +21,11 @@ export type ChatComposerModalProps = {
   onCancel: () => void;
   onSubmit: () => void;
   description?: ReactNode;
+  afterInput?: ReactNode;
   cancelLabel?: string;
   inputAriaLabel?: string;
   rows?: number;
-  maxLength?: number;
+  maxLength?: number | null;
 };
 
 export default function ChatComposerModal({
@@ -41,6 +42,7 @@ export default function ChatComposerModal({
   onCancel,
   onSubmit,
   description,
+  afterInput,
   cancelLabel = "キャンセル",
   inputAriaLabel,
   rows = 6,
@@ -132,9 +134,11 @@ export default function ChatComposerModal({
             placeholder
           }
           rows={rows}
-          maxLength={maxLength}
+          maxLength={maxLength ?? undefined}
           disabled={submitting}
         />
+
+        {afterInput}
 
         {error ? (
           <div
