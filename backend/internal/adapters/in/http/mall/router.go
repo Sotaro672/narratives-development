@@ -39,6 +39,13 @@ type Deps struct {
 	// me: /mall/me/wallets
 	MeWallet http.Handler
 
+	// me: /mall/me/likes
+	// - GET    /mall/me/likes
+	// - GET    /mall/me/likes/{list|resale}/{id}
+	// - PUT    /mall/me/likes/{list|resale}/{id}
+	// - DELETE /mall/me/likes/{list|resale}/{id}
+	Like http.Handler
+
 	Cart    http.Handler
 	Payment http.Handler
 
@@ -649,6 +656,24 @@ func Register(
 		"/mall/me/wallets/",
 		deps.MeWallet,
 		"MeWallet",
+		auth,
+		avatar,
+	)
+
+	// likes (me)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/likes",
+		deps.Like,
+		"Like(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/likes/",
+		deps.Like,
+		"Like(me)",
 		auth,
 		avatar,
 	)

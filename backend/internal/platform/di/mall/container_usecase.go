@@ -57,6 +57,7 @@ type mallUsecases struct {
 	announcementUC                 *usecase.AnnouncementUsecase
 	resaleUC                       *usecase.ResaleUsecase
 	resaleReviewUC                 *usecase.ResaleReviewUsecase
+	likeUC                         *usecase.LikeUsecase
 	productBlueprintReviewUC       *usecase.ProductBlueprintReviewUsecase
 	tokenBlueprintReviewUC         *usecase.TokenBlueprintReviewUsecase
 	paymentFlowUC                  *usecase.PaymentFlowUsecase
@@ -164,6 +165,8 @@ func buildMallUsecases(
 		r.avatarRepo,
 		nil,
 	)
+
+	likeUC := usecase.NewLikeUsecase(r.likeRepo, r.listRepoFS, r.resaleRepo, nil)
 
 	avatarUC := usecase.NewAvatarUsecase(
 		r.avatarRepo,
@@ -667,6 +670,7 @@ func buildMallUsecases(
 		announcementUC:                 announcementUC,
 		resaleUC:                       resaleUC,
 		resaleReviewUC:                 resaleReviewUC,
+		likeUC:                         likeUC,
 		productBlueprintReviewUC:       productBlueprintReviewUC,
 		tokenBlueprintReviewUC:         tokenBlueprintReviewUC,
 		paymentFlowUC:                  paymentFlowUC,
@@ -709,6 +713,7 @@ func (u *mallUsecases) applyToContainer(c *Container) {
 	c.AnnouncementUC = u.announcementUC
 	c.ResaleUC = u.resaleUC
 	c.ResaleReviewUC = u.resaleReviewUC
+	c.LikeUC = u.likeUC
 	c.ProductBlueprintReviewUC = u.productBlueprintReviewUC
 	c.TokenBlueprintReviewUC = u.tokenBlueprintReviewUC
 	c.PaymentFlowUC = u.paymentFlowUC

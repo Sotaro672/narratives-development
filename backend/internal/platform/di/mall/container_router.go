@@ -50,6 +50,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	var payoutAccountH http.Handler
 	var avatarH http.Handler
 	var meWalletH http.Handler
+	var likeH http.Handler
 	var cartH http.Handler
 	var payH http.Handler
 	var orderH http.Handler
@@ -167,6 +168,13 @@ func Register(mux *http.ServeMux, cont *Container) {
 	if cont.WalletUC != nil {
 		meWalletH = mallhandler.NewMallMeWalletHandler(
 			cont.WalletUC,
+		)
+	}
+
+	// Likes (me)
+	if cont.LikeUC != nil {
+		likeH = mallhandler.NewLikeHandler(
+			cont.LikeUC,
 		)
 	}
 
@@ -344,6 +352,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 		MeAvatar: meAvatarsH,
 		MeWallet: meWalletH,
+		Like:     likeH,
 		Cart:     cartH,
 
 		Market: marketH,

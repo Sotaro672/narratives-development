@@ -53,6 +53,7 @@ type Container struct {
 	AnnouncementUC                 *usecase.AnnouncementUsecase
 	ResaleUC                       *usecase.ResaleUsecase
 	ResaleReviewUC                 *usecase.ResaleReviewUsecase
+	LikeUC                         *usecase.LikeUsecase
 
 	MeAvatarResolver mallhandler.MeAvatarResolver
 
