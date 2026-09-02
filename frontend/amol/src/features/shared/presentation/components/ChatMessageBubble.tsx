@@ -12,6 +12,7 @@ export type ChatMessageBubbleProps = {
   isMine?: boolean;
   isSystem?: boolean;
   action?: ReactNode;
+  afterContent?: ReactNode;
   className?: string;
 };
 
@@ -29,6 +30,7 @@ export default function ChatMessageBubble({
   isMine = false,
   isSystem = false,
   action,
+  afterContent,
   className,
 }: ChatMessageBubbleProps) {
   const bubbleClassName = joinClassNames(
@@ -53,6 +55,8 @@ export default function ChatMessageBubble({
           {content}
         </p>
       ) : null}
+
+      {afterContent}
     </article>
   );
 }

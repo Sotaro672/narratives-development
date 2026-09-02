@@ -1,7 +1,6 @@
 // frontend/amol/src/features/inquiry/presentation/components/InquiryMessageCard.tsx
 
-import { formatDateTime } from "../../../../components/utils/date";
-
+import ChatMessageHeader from "../../../shared/presentation/components/ChatMessageHeader";
 import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
 import type { InquiryDetail } from "../../../shared/types/inquiryTypes";
 import { getInquiryTypeLabel } from "../../../shared/types/inquiryTypes";
@@ -18,45 +17,19 @@ export default function InquiryMessageCard({
 }: InquiryMessageCardProps) {
   const statusLabel = getInquiryStatusLabel(inquiry.status);
   const title = getInquiryTitle(inquiry);
-  const avatarInitial = getInitial(inquiry.avatarName);
 
   return (
     <ChatThreadCard variant="inquiry">
-      <div className="chat-detail-page__message-head">
-        <div className="chat-detail-page__sender-profile">
-          <div
-            className="chat-detail-page__sender-icon"
-            aria-hidden="true"
-          >
-            {inquiry.avatarIcon ? (
-              <img
-                src={inquiry.avatarIcon}
-                alt=""
-                className="chat-detail-page__sender-icon-image"
-              />
-            ) : (
-              <span>{avatarInitial}</span>
-            )}
-          </div>
-
-          <div>
-            <span className="chat-detail-page__sender">
-              {inquiry.avatarName}
-            </span>
-
-            <time
-              className="chat-detail-page__date"
-              dateTime={inquiry.createdAt}
-            >
-              {formatDateTime(inquiry.createdAt)}
-            </time>
-          </div>
-        </div>
-
-        <span className="chat-detail-page__status">
-          {statusLabel}
-        </span>
-      </div>
+      <ChatMessageHeader
+        name={inquiry.avatarName}
+        icon={inquiry.avatarIcon}
+        createdAt={inquiry.createdAt}
+        action={
+          <span className="chat-detail-page__status">
+            {statusLabel}
+          </span>
+        }
+      />
 
       <h2 className="chat-detail-page__subject">
         {title}
@@ -102,8 +75,4 @@ function getInquiryStatusLabel(
     case "closed":
       return "クローズ";
   }
-}
-
-function getInitial(value: string): string {
-  return Array.from(value)[0] ?? "？";
 }

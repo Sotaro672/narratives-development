@@ -1,7 +1,6 @@
 // frontend/amol/src/features/inquiry/presentation/components/InquiryReplyList.tsx
 
-import { formatDateTime } from "../../../../components/utils/date";
-
+import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
 import type { InquiryReply } from "../../../shared/types/inquiryTypes";
 
 import InquiryImageGrid from "./InquiryImageGrid";
@@ -31,6 +30,7 @@ export default function InquiryReplyList({
       {replies.map((reply) => {
         const isAvatarReply = reply.senderType === "avatar";
         const isSystemReply = reply.senderType === "system";
+
         const sender = getReplySenderDisplay(
           reply.senderType,
           brandName,
@@ -38,61 +38,18 @@ export default function InquiryReplyList({
           avatarName,
           avatarIcon,
         );
-        const senderInitial = getInitial(sender.name);
-
-        const className = isAvatarReply
-          ? "chat-detail-page__reply chat-detail-page__reply--avatar"
-          : isSystemReply
-            ? "chat-detail-page__reply chat-detail-page__reply--system"
-            : "chat-detail-page__reply";
 
         return (
-          <article
+          <ChatMessageBubble
             key={reply.id}
-            className={className}
-          >
-            <div className="chat-detail-page__message-head">
-              <div className="chat-detail-page__sender-profile">
-                {!isSystemReply ? (
-                  <div
-                    className="chat-detail-page__sender-icon"
-                    aria-hidden="true"
-                  >
-                    {sender.icon ? (
-                      <img
-                        src={sender.icon}
-                        alt=""
-                        className="chat-detail-page__sender-icon-image"
-                      />
-                    ) : (
-                      <span>{senderInitial}</span>
-                    )}
-                  </div>
-                ) : null}
-
-                <div>
-                  <span className="chat-detail-page__sender">
-                    {sender.name}
-                  </span>
-
-                  <time
-                    className="chat-detail-page__date"
-                    dateTime={reply.createdAt}
-                  >
-                    {formatDateTime(reply.createdAt)}
-                  </time>
-                </div>
-              </div>
-            </div>
-
-            {reply.content ? (
-              <p className="chat-detail-page__content">
-                {reply.content}
-              </p>
-            ) : null}
-
-            <InquiryImageGrid images={reply.images} />
-          </article>
+            senderName={sender.name}
+            senderIcon={sender.icon}
+            createdAt={reply.createdAt}
+            content={reply.content}
+            isMine={isAvatarReply}
+            isSystem={isSystemReply}
+            afterContent={<InquiryImageGrid images={reply.images} />}
+          />
         );
       })}
     </>
@@ -125,8 +82,4 @@ function getReplySenderDisplay(
         icon: "",
       };
   }
-}
-
-function getInitial(value: string): string {
-  return Array.from(value)[0] ?? "？";
 }
