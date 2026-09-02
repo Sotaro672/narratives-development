@@ -397,6 +397,27 @@ func Register(mux *http.ServeMux, cont *Container) {
 		)
 	}
 
+	if cont.ResalePayoutNotificationUC != nil {
+		resalePayoutNotificationHandler :=
+			internalHandler.NewResalePayoutNotificationHandler(
+				cont.ResalePayoutNotificationUC,
+			)
+
+		mux.Handle(
+			"/internal/resale-payout-notifications/process",
+			http.HandlerFunc(
+				resalePayoutNotificationHandler.Process,
+			),
+		)
+
+		mux.Handle(
+			"/internal/resale-payout-notifications/dispatch-due",
+			http.HandlerFunc(
+				resalePayoutNotificationHandler.DispatchDue,
+			),
+		)
+	}
+
 	// ----------------------------
 	// Webhooks (no auth)
 	// ----------------------------
