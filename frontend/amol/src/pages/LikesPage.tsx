@@ -6,200 +6,240 @@ import { useNavigate } from "react-router-dom";
 import Layout from "../components/layout/Layout";
 import ListPagination from "../components/ui/Pagination";
 import { formatPrice } from "../components/utils/price";
+
+import { fetchCatalogDetail } from "../features/catalog/infrastructure/catalogRepository";
 import {
   DEFAULT_PAGE,
   DEFAULT_PER_PAGE,
 } from "../features/like/constants";
-import type {
-  LikeCardItem,
-  LikeCatalogResponse,
-  LikeIndexResponse,
-  LikeListItem,
-} from "../features/like/types";
+import { fetchLikes } from "../features/like/infrastructure/likeApi";
+import { fetchMarketResaleById } from "../features/market/infrastructure/marketResaleApi";
 import ProductListingGrid, {
   type ProductListingCardViewModel,
 } from "../features/shared/presentation/components/ProductListingGrid";
+import type {
+  LikeEntity,
+  LikeTargetType,
+} from "../features/shared/types/like";
+
 import { getApiBaseUrl } from "../lib/apiBaseUrl";
 
 import "../styles/lists-page.css";
 
-function formatItemPrice(item: LikeListItem): string {
-  const prices = Array.isArray(item.prices) ? item.prices : [];
-  const first = prices[0];
-  const amount = first?.amount ?? first?.price ?? item.price;
-  const currency =
-    typeof first?.currency === "string" && first.currency.trim() !== ""
-      ? first.currency
-      : "JPY";
+type LikeDisplayItem = {
+  key: string;
+  targetType: LikeTargetType;
+  targetId: string;
+  card: ProductListingCardViewModel;
+};
 
-  return formatPrice(amount, { currency });
+function buildLikeCardKey(
+  targetType: LikeTargetType,
+  targetId: string,
+): string {
+  return `${targetType}:${targetId}`;
 }
 
-function getItemImage(item: LikeListItem): string {
-  if (typeof item.image === "string" && item.image.trim() !== "") {
-    return item.image;
-  }
+function buildFallbackLikeDisplayItem(
+  like: LikeEntity,
+): LikeDisplayItem {
+  const key = buildLikeCardKey(
+    like.targetType,
+    like.targetId,
+  );
 
-  if (typeof item.imageUrl === "string" && item.imageUrl.trim() !== "") {
-    return item.imageUrl;
-  }
-
-  return "";
+  return {
+    key,
+    targetType: like.targetType,
+    targetId: like.targetId,
+    card: {
+      id: key,
+      title:
+        like.targetType === "list"
+          ? "商品情報を取得できませんでした。"
+          : "出品情報を取得できませんでした。",
+      metaLines: [
+        like.targetType === "list"
+          ? "通常販売"
+          : "二次流通",
+      ],
+    },
+  };
 }
 
-function getItemTitle(item: LikeCardItem): string {
-  if (typeof item.productName === "string" && item.productName.trim() !== "") {
-    return item.productName;
-  }
-
-  if (typeof item.title === "string" && item.title.trim() !== "") {
-    return item.title;
-  }
-
-  return "商品名未設定";
-}
-
-function getCatalogId(item: LikeListItem): string {
-  if (typeof item.listId === "string" && item.listId.trim() !== "") {
-    return item.listId;
-  }
-
-  if (typeof item.productId === "string" && item.productId.trim() !== "") {
-    return item.productId;
-  }
-
-  return item.id;
-}
-
-function getNavigateId(item: LikeListItem): string {
-  if (typeof item.listId === "string" && item.listId.trim() !== "") {
-    return item.listId;
-  }
-
-  return item.id;
-}
-
-async function fetchCatalogCardItem(
+async function fetchListLikeDisplayItem(
   apiBaseUrl: string,
-  item: LikeListItem,
-): Promise<LikeCardItem> {
-  const catalogId = getCatalogId(item);
+  like: LikeEntity,
+): Promise<LikeDisplayItem> {
+  const catalog = await fetchCatalogDetail({
+    apiBaseUrl,
+    listId: like.targetId,
+  });
 
-  if (!catalogId) {
-    return item;
-  }
+  const key = buildLikeCardKey(
+    like.targetType,
+    like.targetId,
+  );
 
+  const sortedImages = [...catalog.listImages].sort(
+    (a, b) => a.displayOrder - b.displayOrder,
+  );
+
+  const imageUrl =
+    sortedImages[0]?.url?.trim() ||
+    catalog.list.image?.trim() ||
+    "";
+
+  const title =
+    catalog.productBlueprint.productName?.trim() ||
+    catalog.list.title?.trim() ||
+    "商品名未設定";
+
+  const firstPrice = catalog.list.prices[0]?.price;
+
+  return {
+    key,
+    targetType: like.targetType,
+    targetId: like.targetId,
+    card: {
+      id: key,
+      title,
+      imageUrl,
+      imageAlt: title,
+      brandName: catalog.productBlueprint.brandName,
+      metaLines: ["通常販売"],
+      priceLabel: formatPrice(firstPrice),
+      reviewAverage:
+        catalog.productReviewSummary?.averageRating,
+      reviewCount:
+        catalog.productReviewSummary?.totalCount,
+    },
+  };
+}
+
+async function fetchResaleLikeDisplayItem(
+  like: LikeEntity,
+): Promise<LikeDisplayItem> {
+  const resale = await fetchMarketResaleById(
+    like.targetId,
+  );
+
+  const key = buildLikeCardKey(
+    like.targetType,
+    like.targetId,
+  );
+
+  const title =
+    resale.productName?.trim() ||
+    resale.tokenName?.trim() ||
+    "商品名未設定";
+
+  return {
+    key,
+    targetType: like.targetType,
+    targetId: like.targetId,
+    card: {
+      id: key,
+      title,
+      imageUrl: resale.imageUrl,
+      imageAlt: title,
+      brandName: resale.brandName,
+      metaLines: [
+        "二次流通",
+        resale.condition,
+      ],
+      priceLabel: formatPrice(resale.price),
+    },
+  };
+}
+
+async function fetchLikeDisplayItem(
+  apiBaseUrl: string,
+  like: LikeEntity,
+): Promise<LikeDisplayItem> {
   try {
-    const response = await fetch(
-      `${apiBaseUrl}/mall/catalog/${encodeURIComponent(catalogId)}`,
-      {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
-        credentials: "include",
-      },
-    );
-
-    const contentType = response.headers.get("content-type") ?? "";
-
-    if (!response.ok || !contentType.includes("application/json")) {
-      return item;
+    if (like.targetType === "list") {
+      return await fetchListLikeDisplayItem(
+        apiBaseUrl,
+        like,
+      );
     }
 
-    const data = (await response.json()) as LikeCatalogResponse;
-    const productBlueprint = data.productBlueprint;
-
-    return {
-      ...item,
-      productName:
-        typeof productBlueprint?.productName === "string"
-          ? productBlueprint.productName
-          : item.productName,
-      brandName:
-        typeof productBlueprint?.brandName === "string"
-          ? productBlueprint.brandName
-          : item.brandName,
-    };
+    return await fetchResaleLikeDisplayItem(
+      like,
+    );
   } catch {
-    return item;
+    return buildFallbackLikeDisplayItem(like);
   }
 }
 
 export default function LikesPage() {
   const navigate = useNavigate();
 
-  const [items, setItems] = useState<LikeCardItem[]>([]);
-  const [page, setPage] = useState(DEFAULT_PAGE);
-  const [perPage] = useState(DEFAULT_PER_PAGE);
-  const [totalPages, setTotalPages] = useState(1);
-  const [isLoading, setIsLoading] = useState(true);
+  const [items, setItems] =
+    useState<LikeDisplayItem[]>([]);
+  const [page, setPage] =
+    useState(DEFAULT_PAGE);
+  const [perPage] =
+    useState(DEFAULT_PER_PAGE);
+  const [totalPages, setTotalPages] =
+    useState(1);
+  const [isLoading, setIsLoading] =
+    useState(true);
 
-  const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
+  const apiBaseUrl = useMemo(
+    () => getApiBaseUrl(),
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchLikes() {
+    async function loadLikes() {
       setIsLoading(true);
 
       try {
         if (!apiBaseUrl) {
-          throw new Error("API Base URLが未設定です。");
+          throw new Error(
+            "API Base URLが未設定です。",
+          );
         }
 
-        const searchParams = new URLSearchParams({
-          page: String(page),
-          perPage: String(perPage),
+        const result = await fetchLikes({
+          page,
+          perPage,
         });
 
-        const response = await fetch(
-          `${apiBaseUrl}/mall/likes?${searchParams.toString()}`,
-          {
-            method: "GET",
-            headers: {
-              Accept: "application/json",
-            },
-            credentials: "include",
-          },
-        );
-
-        const contentType = response.headers.get("content-type") ?? "";
-
-        if (!contentType.includes("application/json")) {
-          throw new Error("お気に入り一覧APIがJSON以外を返しました。");
-        }
-
-        const data = (await response.json()) as Partial<LikeIndexResponse>;
-
-        if (!response.ok) {
-          throw new Error("お気に入り一覧の取得に失敗しました。");
-        }
-
-        if (!Array.isArray(data.items)) {
-          throw new Error("お気に入り一覧APIのitemsが配列ではありません。");
-        }
-
-        const catalogItems = await Promise.all(
-          data.items.map((item) => fetchCatalogCardItem(apiBaseUrl, item)),
-        );
+        const displayItems =
+          await Promise.all(
+            result.items.map(
+              (like) =>
+                fetchLikeDisplayItem(
+                  apiBaseUrl,
+                  like,
+                ),
+            ),
+          );
 
         if (cancelled) {
           return;
         }
 
-        setItems(catalogItems);
+        setItems(displayItems);
+
         setTotalPages(
-          typeof data.totalPages === "number" && data.totalPages > 0
-            ? data.totalPages
+          Number.isFinite(result.totalPages) &&
+            result.totalPages > 0
+            ? result.totalPages
             : 1,
         );
 
-        setPage(
-          typeof data.page === "number" && data.page > 0
-            ? data.page
-            : page,
-        );
+        if (
+          Number.isFinite(result.page) &&
+          result.page > 0
+        ) {
+          setPage(result.page);
+        }
       } catch {
         if (cancelled) {
           return;
@@ -214,44 +254,82 @@ export default function LikesPage() {
       }
     }
 
-    void fetchLikes();
+    void loadLikes();
 
     return () => {
       cancelled = true;
     };
-  }, [apiBaseUrl, page, perPage]);
+  }, [
+    apiBaseUrl,
+    page,
+    perPage,
+  ]);
 
-  const listingItems: ProductListingCardViewModel[] = items.map((item) => ({
-    id: getNavigateId(item),
-    title: getItemTitle(item),
-    imageUrl: getItemImage(item),
-    brandName: item.brandName,
-    priceLabel: formatItemPrice(item),
-  }));
+  const listingItems:
+    ProductListingCardViewModel[] =
+      items.map((item) => item.card);
 
-  const canGoPrev = page > 1 && !isLoading;
-  const canGoNext = page < totalPages && !isLoading;
+  const canGoPrev =
+    page > DEFAULT_PAGE &&
+    !isLoading;
+
+  const canGoNext =
+    page < totalPages &&
+    !isLoading;
 
   function handleCartButtonClick() {
     navigate("/cart");
   }
 
-  function handleOpenItem(listId: string) {
-    const normalizedListId = listId.trim();
+  function handleOpenItem(
+    cardId: string,
+  ) {
+    const item = items.find(
+      (candidate) =>
+        candidate.key === cardId,
+    );
 
-    if (!normalizedListId) {
+    if (!item) {
       return;
     }
 
-    navigate(`/favorites/${encodeURIComponent(normalizedListId)}`);
+    const targetId =
+      item.targetId.trim();
+
+    if (!targetId) {
+      return;
+    }
+
+    if (item.targetType === "list") {
+      navigate(
+        `/lists/${encodeURIComponent(targetId)}`,
+      );
+      return;
+    }
+
+    navigate(
+      `/market/${encodeURIComponent(targetId)}`,
+    );
   }
 
   function handlePrevPage() {
-    setPage((current) => Math.max(DEFAULT_PAGE, current - 1));
+    setPage(
+      (current) =>
+        Math.max(
+          DEFAULT_PAGE,
+          current - 1,
+        ),
+    );
   }
 
   function handleNextPage() {
-    setPage((current) => Math.min(totalPages, current + 1));
+    setPage(
+      (current) =>
+        Math.min(
+          totalPages,
+          current + 1,
+        ),
+    );
   }
 
   return (
@@ -267,11 +345,12 @@ export default function LikesPage() {
           <ProductListingGrid
             items={listingItems}
             onOpen={handleOpenItem}
-            emptyText="お気に入りの商品はありません。"
+            emptyText="お気に入りはありません。"
           />
         ) : null}
 
-        {!isLoading && totalPages > 1 ? (
+        {!isLoading &&
+        totalPages > 1 ? (
           <ListPagination
             page={page}
             totalPages={totalPages}
