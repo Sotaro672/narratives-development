@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	applicationport "narratives/internal/application/port"
@@ -653,20 +654,31 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 	matchedResult.TxSignature = executionResult.TxSignature
 
 	if target.ItemType == orderdom.OrderItemTypeResale {
-		if _, err := u.bankPayoutUC.ExecuteForSalesReceivable(
-			ctx,
+		payoutCtx, cancelPayout := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			30*time.Second,
+		)
+		_, payoutErr := u.bankPayoutUC.ExecuteForSalesReceivable(
+			payoutCtx,
 			resaleReceivable.ID,
-		); err != nil {
-			return matchedResult,
-				fmt.Errorf(
-					"%w orderId=%s itemIndex=%d receivableId=%s tx=%s: %v",
-					ErrTransferBankPayoutFailed,
-					target.OrderID,
-					target.ItemIndex,
-					resaleReceivable.ID,
-					executionResult.TxSignature,
-					err,
-				)
+		)
+		cancelPayout()
+
+		if payoutErr != nil {
+			// Token Transfer and resale fulfillment have already completed at this
+			// point. A payout failure must not turn the completed transfer into an
+			// HTTP-level transfer failure or cause the transfer item to be unlocked.
+			//
+			// BankPayout is idempotent by SalesReceivableID and can be resumed by a
+			// later payout-recovery path.
+			log.Printf(
+				"[transfer] bank payout failed after token transfer orderId=%s itemIndex=%d receivableId=%s tx=%s err=%v",
+				target.OrderID,
+				target.ItemIndex,
+				resaleReceivable.ID,
+				executionResult.TxSignature,
+				payoutErr,
+			)
 		}
 	}
 

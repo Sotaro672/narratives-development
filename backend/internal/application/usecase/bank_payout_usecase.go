@@ -47,6 +47,12 @@ var (
 	ErrBankPayoutTerminalFailed = errors.New(
 		"bankPayout: payout has failed permanently",
 	)
+	ErrBankPayoutNotificationUsecaseMissing = errors.New(
+		"bankPayout: resale payout notification usecase is not configured",
+	)
+	ErrBankPayoutNotificationFailed = errors.New(
+		"bankPayout: resale payout notification delivery failed",
+	)
 )
 
 // BankPayoutAccountService contains only the payout-account operations required
@@ -98,6 +104,7 @@ type BankPayoutUsecase struct {
 	receivableRepo salesreceivabledom.Repository
 	accountService BankPayoutAccountService
 	gateway        applicationport.BankPayoutGateway
+	notificationUC ResalePayoutNotificationUsecasePort
 	now            func() time.Time
 }
 
@@ -114,6 +121,16 @@ func NewBankPayoutUsecase(
 		gateway:        gateway,
 		now:            time.Now,
 	}
+}
+
+func (u *BankPayoutUsecase) WithResalePayoutNotificationDependencies(
+	notificationUC ResalePayoutNotificationUsecasePort,
+) *BankPayoutUsecase {
+	if u != nil {
+		u.notificationUC = notificationUC
+	}
+
+	return u
 }
 
 // GetByID returns one persisted BankPayout.
@@ -241,6 +258,13 @@ func (u *BankPayoutUsecase) ExecuteForSalesReceivable(
 		}
 		if payout.Status != bankpayoutdom.StatusPaid {
 			return nil, ErrBankPayoutReceivableMismatch
+		}
+
+		if err := u.ensurePayoutNotification(
+			ctx,
+			payout,
+		); err != nil {
+			return &payout, err
 		}
 
 		return &payout, nil
@@ -467,6 +491,13 @@ func (u *BankPayoutUsecase) executeOrResume(
 			return &payout, err
 		}
 
+		if err := u.ensurePayoutNotification(
+			ctx,
+			payout,
+		); err != nil {
+			return &payout, err
+		}
+
 		return &payout, nil
 
 	case bankpayoutdom.StatusFailed:
@@ -607,7 +638,46 @@ func (u *BankPayoutUsecase) executeOrResume(
 		return &persisted, err
 	}
 
+	if err := u.ensurePayoutNotification(
+		ctx,
+		persisted,
+	); err != nil {
+		// Financial state is already complete. Returning the paid payout with the
+		// notification error allows a later retry to recreate or re-enqueue only
+		// the durable notification delivery without executing the gateway again.
+		return &persisted, err
+	}
+
 	return &persisted, nil
+}
+
+func (u *BankPayoutUsecase) ensurePayoutNotification(
+	ctx context.Context,
+	payout bankpayoutdom.BankPayout,
+) error {
+	if u == nil || u.notificationUC == nil {
+		return ErrBankPayoutNotificationUsecaseMissing
+	}
+	if payout.Status != bankpayoutdom.StatusPaid ||
+		payout.PaidAt == nil ||
+		payout.PaidAt.IsZero() {
+		return bankpayoutdom.ErrInvalidStatus
+	}
+
+	_, err := u.notificationUC.EnsureDelivery(
+		ctx,
+		EnsureResalePayoutNotificationInput{
+			Payout: payout,
+		},
+	)
+	if err != nil {
+		return errors.Join(
+			ErrBankPayoutNotificationFailed,
+			err,
+		)
+	}
+
+	return nil
 }
 
 // ensureReceivablePaid reconciles the SalesReceivable after successful payout.
@@ -918,6 +988,9 @@ func (u *BankPayoutUsecase) validateReady() error {
 	}
 	if u.gateway == nil {
 		return ErrBankPayoutGatewayMissing
+	}
+	if u.notificationUC == nil {
+		return ErrBankPayoutNotificationUsecaseMissing
 	}
 	if u.now == nil {
 		return ErrBankPayoutClockMissing
