@@ -42,6 +42,7 @@ export type TradeChatListItem = {
   isDispatched: boolean;
   isReturnRequested: boolean;
   isReturnCompleted: boolean;
+  transferred: boolean;
   latestMessage?: TradeMessage;
   unreadMessageCount: number;
   latestActivityAt: string;

@@ -69,7 +69,7 @@ func NewTradeQuery(
 //
 // ViewerSide and CounterpartAvatarID are derived from the authenticated Avatar.
 // LatestMessage and UnreadMessageCount are aggregated from Trade messages.
-// Dispatch state is read from the authoritative Order item.
+// Dispatch, return, and transfer state are read from the authoritative Order item.
 type TradeListItem struct {
 	ID             string `json:"id"`
 	OrderID        string `json:"orderId"`
@@ -83,8 +83,12 @@ type TradeListItem struct {
 	CounterpartAvatarName string `json:"counterpartAvatarName,omitempty"`
 	CounterpartAvatarIcon string `json:"counterpartAvatarIcon,omitempty"`
 
-	Status       tradedom.Status `json:"status"`
-	IsDispatched bool            `json:"isDispatched"`
+	Status tradedom.Status `json:"status"`
+
+	IsDispatched      bool `json:"isDispatched"`
+	IsReturnRequested bool `json:"isReturnRequested"`
+	IsReturnCompleted bool `json:"isReturnCompleted"`
+	Transferred       bool `json:"transferred"`
 
 	LatestMessage      *tradedto.TradeMessage `json:"latestMessage,omitempty"`
 	UnreadMessageCount int                    `json:"unreadMessageCount"`
@@ -106,7 +110,7 @@ type TradeListResult struct {
 // read from the authoritative Order item rather than duplicated on Trade.
 //
 // The repository resolves both participant roles. This query enriches each
-// Trade with viewer-side information, authoritative dispatch state, latest
+// Trade with viewer-side information, authoritative order-item state, latest
 // message, unread count and latest activity time, then orders the result
 // newest-first for ChatListPage.
 func (q *TradeQuery) ListForAvatar(
@@ -168,7 +172,7 @@ func (q *TradeQuery) ListForAvatar(
 			trade,
 			viewerSide,
 			display,
-			orderItemState.IsDispatched,
+			orderItemState,
 			latestMessage,
 			unreadMessageCount,
 		))
@@ -497,6 +501,7 @@ func (q *TradeQuery) getTradeResaleDetail(
 		0,
 		len(images),
 	)
+
 	for _, image := range images {
 		if image.ID == "" || image.URL == "" {
 			continue
@@ -516,6 +521,7 @@ func (q *TradeQuery) getTradeResaleDetail(
 		if imageDTOs[i].DisplayOrder == imageDTOs[j].DisplayOrder {
 			return imageDTOs[i].ID < imageDTOs[j].ID
 		}
+
 		return imageDTOs[i].DisplayOrder < imageDTOs[j].DisplayOrder
 	})
 
@@ -661,7 +667,7 @@ func buildTradeListItem(
 	trade tradedom.Trade,
 	viewerSide tradedom.MessageSenderSide,
 	display tradeDisplay,
-	isDispatched bool,
+	orderItemState tradeOrderItemState,
 	latestMessage *tradedto.TradeMessage,
 	unreadMessageCount int,
 ) TradeListItem {
@@ -687,7 +693,10 @@ func buildTradeListItem(
 		CounterpartAvatarName: counterpartAvatarName,
 		CounterpartAvatarIcon: counterpartAvatarIcon,
 		Status:                trade.Status,
-		IsDispatched:          isDispatched,
+		IsDispatched:          orderItemState.IsDispatched,
+		IsReturnRequested:     orderItemState.IsReturnRequested,
+		IsReturnCompleted:     orderItemState.IsReturnCompleted,
+		Transferred:           orderItemState.Transferred,
 		LatestMessage:         latestMessage,
 		UnreadMessageCount:    unreadMessageCount,
 	}

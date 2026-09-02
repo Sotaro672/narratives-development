@@ -1,5 +1,11 @@
 // frontend/amol/src/features/shared/types/trade.ts
 
+import type {
+  ResaleColor,
+  ResaleCondition,
+  ResaleVolume,
+} from "./resale";
+
 export const TRADE_STATUSES = ["active", "closed"] as const;
 
 export type TradeStatus = (typeof TRADE_STATUSES)[number];
@@ -34,6 +40,26 @@ export const TRADE_RETURN_REQUEST_KINDS = [
 export type TradeReturnRequestKind =
   (typeof TRADE_RETURN_REQUEST_KINDS)[number];
 
+export type TradeResaleImage = {
+  id: string;
+  url: string;
+  displayOrder: number;
+};
+
+export type TradeResaleDetail = {
+  id: string;
+  condition: ResaleCondition;
+  description?: string;
+  modelId?: string;
+  kind?: string;
+  modelNumber?: string;
+  size?: string;
+  color?: ResaleColor;
+  measurements?: Record<string, number>;
+  volume?: ResaleVolume;
+  images: TradeResaleImage[];
+};
+
 export type TradeMessageImage = {
   fileName: string;
   fileUrl: string;
@@ -61,6 +87,7 @@ export type TradeDetail = {
   orderItemIndex: number;
   viewerSide: TradeViewerSide;
   productName?: string;
+  resale: TradeResaleDetail;
   buyerAvatarId: string;
   buyerAvatarName?: string;
   buyerAvatarIcon?: string;

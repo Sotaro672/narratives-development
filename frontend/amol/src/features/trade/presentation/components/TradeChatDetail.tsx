@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { Copy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../../../../components/layout/Layout";
@@ -12,6 +13,8 @@ import { getFirebaseIdToken } from "../../../../lib/authToken";
 import { returnOrderItem } from "../../../order/api/orderDetailApi";
 import ReturnRequestModal, { type ReturnPackageState } from "../../../order/components/ReturnRequestModal";
 import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
+import { createProductModelDisplay } from "../../../shared/presentation/utils/productModelDisplay";
+import "../../../shared/styles/trade-chat-detail.css";
 import type { TradeDetail, TradeMessage } from "../../../shared/types/trade";
 
 import {
@@ -611,6 +614,29 @@ function TradeThreadHeader({
 
   const title = getTradeTitle(trade.productName);
   const initial = getInitial(displayName);
+  const model = createProductModelDisplay(trade.resale);
+  const [orderIdCopied, setOrderIdCopied] = useState(false);
+
+  useEffect(() => {
+    if (!orderIdCopied) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setOrderIdCopied(false);
+    }, 2000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [orderIdCopied]);
+
+  const handleCopyOrderId = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(trade.orderId);
+      setOrderIdCopied(true);
+    } catch {
+      // Clipboard API が利用できない環境では何もしない。
+    }
+  };
 
   return (
     <ChatThreadCard variant="trade">
@@ -664,17 +690,29 @@ function TradeThreadHeader({
         <dl className="chat-detail-page__product-meta-list">
           <div className="chat-detail-page__product-meta-row">
             <dt>注文ID</dt>
-            <dd>{trade.orderId}</dd>
-          </div>
+            <dd className="trade-chat-detail__order-id">
+              <span>{trade.orderId}</span>
 
-          <div className="chat-detail-page__product-meta-row">
-            <dt>商品番号</dt>
-            <dd>{trade.orderItemIndex + 1}</dd>
-          </div>
-
-          <div className="chat-detail-page__product-meta-row">
-            <dt>{counterpartLabel}</dt>
-            <dd>{displayName}</dd>
+              <button
+                type="button"
+                className="trade-chat-detail__copy-button"
+                onClick={() => {
+                  void handleCopyOrderId();
+                }}
+                aria-label={orderIdCopied ? "コピーしました" : "注文IDをコピー"}
+                title={orderIdCopied ? "コピーしました" : "注文IDをコピー"}
+              >
+                {orderIdCopied ? (
+                  <span>コピーしました</span>
+                ) : (
+                  <Copy
+                    size={15}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+            </dd>
           </div>
 
           {trade.returnRequestedAt ? (
@@ -699,6 +737,94 @@ function TradeThreadHeader({
           ) : null}
         </dl>
       </section>
+
+      <section className="chat-detail-page__product-meta">
+        <h3 className="chat-detail-page__product-meta-title">
+          商品情報
+        </h3>
+
+        <dl className="chat-detail-page__product-meta-list">
+          <div className="chat-detail-page__product-meta-row">
+            <dt>商品の状態</dt>
+            <dd>{trade.resale.condition}</dd>
+          </div>
+
+          {model.modelNumber ? (
+            <div className="chat-detail-page__product-meta-row">
+              <dt>モデル番号</dt>
+              <dd>{model.modelNumber}</dd>
+            </div>
+          ) : null}
+
+          {model.kindLabel && model.kindLabel !== "アパレル" ? (
+            <div className="chat-detail-page__product-meta-row">
+              <dt>種別</dt>
+              <dd>{model.kindLabel}</dd>
+            </div>
+          ) : null}
+
+          {model.size ? (
+            <div className="chat-detail-page__product-meta-row">
+              <dt>サイズ</dt>
+              <dd>{model.size}</dd>
+            </div>
+          ) : null}
+
+          {model.colorLabel || model.colorCssValue ? (
+            <div className="chat-detail-page__product-meta-row">
+              <dt>カラー</dt>
+              <dd>{model.colorLabel || model.colorCssValue}</dd>
+            </div>
+          ) : null}
+
+          {model.measurementsLabel !== "-" ? (
+            <div className="chat-detail-page__product-meta-row">
+              <dt>採寸</dt>
+              <dd>{model.measurementsLabel}</dd>
+            </div>
+          ) : null}
+
+          {model.volumeLabel !== "-" ? (
+            <div className="chat-detail-page__product-meta-row">
+              <dt>容量</dt>
+              <dd>{model.volumeLabel}</dd>
+            </div>
+          ) : null}
+        </dl>
+      </section>
+
+      {trade.resale.description ? (
+        <section className="chat-detail-page__product-meta">
+          <h3 className="chat-detail-page__product-meta-title">
+            商品説明
+          </h3>
+
+          <p className="chat-detail-page__content">
+            {trade.resale.description}
+          </p>
+        </section>
+      ) : null}
+
+      {trade.resale.images.length > 0 ? (
+        <div className="chat-detail-page__images">
+          {trade.resale.images.map((image) => (
+            <a
+              key={image.id}
+              href={image.url}
+              target="_blank"
+              rel="noreferrer"
+              className="chat-detail-page__image-link"
+            >
+              <img
+                src={image.url}
+                alt="商品状態"
+                className="chat-detail-page__image"
+                loading="lazy"
+              />
+            </a>
+          ))}
+        </div>
+      ) : null}
     </ChatThreadCard>
   );
 }

@@ -1,0 +1,38 @@
+/* frontend/amol/src/features/shared/styles/trade-chat-detail.css */
+
+.trade-chat-detail__order-id {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.trade-chat-detail__order-id > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.trade-chat-detail__copy-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(15, 23, 42, 0.56);
+  cursor: pointer;
+}
+
+.trade-chat-detail__copy-button:hover {
+  background: rgba(15, 23, 42, 0.06);
+  color: #0f172a;
+}
+
+.trade-chat-detail__copy-button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
