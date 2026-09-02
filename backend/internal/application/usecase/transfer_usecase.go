@@ -411,12 +411,6 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 			err,
 			orderdom.ErrConflict,
 		) {
-			// A return request may have started after the first verified-scan
-			// transaction but before the transfer lock.
-			//
-			// Record the verified scan again against the latest Order state so
-			// tokenTransferVerifiedAt cannot be lost by that competing return
-			// update.
 			latestItem, verifiedErr :=
 				u.orderRepo.MarkTokenTransferVerified(
 					ctx,
@@ -665,12 +659,6 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 		cancelPayout()
 
 		if payoutErr != nil {
-			// Token Transfer and resale fulfillment have already completed at this
-			// point. A payout failure must not turn the completed transfer into an
-			// HTTP-level transfer failure or cause the transfer item to be unlocked.
-			//
-			// BankPayout is idempotent by SalesReceivableID and can be resumed by a
-			// later payout-recovery path.
 			log.Printf(
 				"[transfer] bank payout failed after token transfer orderId=%s itemIndex=%d receivableId=%s tx=%s err=%v",
 				target.OrderID,
@@ -1027,6 +1015,7 @@ func (u *TransferUsecase) requirePendingResaleReceivable(
 		return salesreceivabledom.SalesReceivable{},
 			ErrTransferResaleReceivableUnavailable
 	}
+
 	if receivable.ID != receivableID ||
 		receivable.PaymentID != paymentID ||
 		receivable.OrderID != paymentID ||
@@ -1035,10 +1024,11 @@ func (u *TransferUsecase) requirePendingResaleReceivable(
 		receivable.AvatarID != snapshot.AvatarID ||
 		receivable.UserID != snapshot.UserID ||
 		receivable.PayoutAccountID != snapshot.PayoutAccountID ||
-		receivable.GrossAmount != item.Price {
+		receivable.MerchandiseAmount != item.Price {
 		return salesreceivabledom.SalesReceivable{},
 			ErrTransferResaleReceivableMismatch
 	}
+
 	if err := receivable.Validate(); err != nil {
 		return salesreceivabledom.SalesReceivable{},
 			ErrTransferResaleReceivableMismatch

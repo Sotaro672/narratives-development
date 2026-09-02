@@ -688,7 +688,7 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 			item.ResaleID != expected.ResaleID ||
 			item.Qty != 1 ||
 			item.Price <= 0 ||
-			item.Price != expected.GrossAmount {
+			item.Price != expected.MerchandiseAmount {
 			return ErrTransferItemProjectionMismatch
 		}
 		if item.IsCancelled {
@@ -718,7 +718,7 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 		}
 		if receivable.OrderItemIndex != itemIndex ||
 			receivable.ResaleID != item.ResaleID ||
-			receivable.GrossAmount != item.Price {
+			receivable.MerchandiseAmount != item.Price {
 			return salesreceivabledom.ErrConflict
 		}
 		if receivable.Status != salesreceivabledom.StatusPending {
@@ -784,8 +784,11 @@ func salesReceivableImmutableFieldsEqual(left, right salesreceivabledom.SalesRec
 		left.AvatarID == right.AvatarID &&
 		left.UserID == right.UserID &&
 		left.PayoutAccountID == right.PayoutAccountID &&
+		left.MerchandiseAmount == right.MerchandiseAmount &&
+		left.ShippingAmount == right.ShippingAmount &&
 		left.GrossAmount == right.GrossAmount &&
 		left.PlatformFeeAmount == right.PlatformFeeAmount &&
+		left.BrandFeeAmount == right.BrandFeeAmount &&
 		left.ReceivableAmount == right.ReceivableAmount &&
 		left.Currency == right.Currency &&
 		left.CreatedAt.Equal(right.CreatedAt)
