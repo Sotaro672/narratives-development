@@ -233,7 +233,7 @@ export default function OrderDetail() {
       });
 
       if (!trade.id) {
-        throw new Error("取引チャットが見つかりません。");
+        throw new Error("取引が見つかりません。");
       }
 
       navigate(`/chats/trades/${encodeURIComponent(trade.id)}`, {
@@ -245,7 +245,7 @@ export default function OrderDetail() {
       setTradeNavigationError(
         caught instanceof Error
           ? caught.message
-          : "取引チャットを開けませんでした。",
+          : "取引を開けませんでした。",
       );
     } finally {
       setTradeNavigatingIndex(null);

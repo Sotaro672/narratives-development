@@ -69,7 +69,7 @@ export default function TradeChatRedirectPage() {
         }
 
         if (!trade.id) {
-          setError("取引チャットが見つかりません。");
+          setError("取引が見つかりません。");
           return;
         }
 
@@ -90,7 +90,7 @@ export default function TradeChatRedirectPage() {
         setError(
           getErrorMessage(
             caught,
-            "取引チャットを開けませんでした。",
+            "取引を開けませんでした。",
           ),
         );
       }
@@ -109,7 +109,7 @@ export default function TradeChatRedirectPage() {
 
   return (
     <Layout
-      title="取引チャット"
+      title="取引"
       mode="mypage"
       showFooter={false}
     >
@@ -120,7 +120,7 @@ export default function TradeChatRedirectPage() {
           </div>
         ) : (
           <div>
-            取引チャットを読み込み中...
+            取引を読み込み中...
           </div>
         )}
       </section>
