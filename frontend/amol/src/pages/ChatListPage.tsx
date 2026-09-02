@@ -238,10 +238,13 @@ function TradeListItem({
   onOpen,
 }: TradeListItemProps) {
   const hasAttention = item.unreadMessageCount > 0;
-  const title = "取引チャット";
+  const title = getTradeTitle(item);
   const preview = getTradePreview(item);
   const dateLabel = formatChatDate(item.latestActivityAt);
   const statusLabel = getTradeStatusLabel(item.status);
+  const initial = getInitial(
+    item.counterpartAvatarName || item.productName || "取引",
+  );
 
   const handleOpen = () => {
     if (navigating) {
@@ -279,7 +282,15 @@ function TradeListItem({
         className="chat-list-page__avatar"
         aria-hidden="true"
       >
-        <span>取</span>
+        {item.counterpartAvatarIcon ? (
+          <img
+            src={item.counterpartAvatarIcon}
+            alt=""
+            className="chat-list-page__avatar-image"
+          />
+        ) : (
+          <span>{initial}</span>
+        )}
       </div>
 
       <div className="chat-list-page__body">
@@ -288,6 +299,12 @@ function TradeListItem({
             <h2 className="chat-list-page__title">
               {title}
             </h2>
+
+            {item.counterpartAvatarName ? (
+              <span className="chat-list-page__sub-label">
+                {item.counterpartAvatarName}
+              </span>
+            ) : null}
           </div>
 
           {dateLabel ? (
@@ -337,6 +354,14 @@ function getResaleTitle(item: ResaleChatListItem): string {
   }
 
   return "再出品";
+}
+
+function getTradeTitle(item: TradeChatListItem): string {
+  if (item.productName) {
+    return `${item.productName}/取引`;
+  }
+
+  return "取引";
 }
 
 function getResalePreview(item: ResaleChatListItem): string {

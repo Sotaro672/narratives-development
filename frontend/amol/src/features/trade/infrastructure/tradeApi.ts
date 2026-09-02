@@ -33,7 +33,10 @@ export type TradeChatListItem = {
   orderId: string;
   orderItemIndex: number;
   viewerSide: TradeViewerSide;
+  productName?: string;
   counterpartAvatarId: string;
+  counterpartAvatarName?: string;
+  counterpartAvatarIcon?: string;
   status: TradeStatus;
   latestMessage?: TradeMessage;
   unreadMessageCount: number;

@@ -210,6 +210,8 @@ func buildMallQueries(
 		r.tradeRepo,
 		r.tradeMessageRepo,
 		r.orderRepo,
+		mallDisplayResolver,
+		r.avatarRepo,
 	)
 
 	return &mallQueries{

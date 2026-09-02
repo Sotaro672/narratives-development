@@ -8,6 +8,8 @@ import (
 	"time"
 
 	tradedto "narratives/internal/application/query/mall/dto"
+	mallshared "narratives/internal/application/query/mall/shared"
+	avatardom "narratives/internal/domain/avatar"
 	orderdom "narratives/internal/domain/order"
 	tradedom "narratives/internal/domain/trade"
 )
@@ -32,20 +34,26 @@ var (
 // Cancellation and dispatch state are read from the authoritative Order item.
 // Trade does not own or duplicate those states.
 type TradeQuery struct {
-	tradeRepo   tradedom.Repository
-	messageRepo tradedom.MessageRepository
-	orderRepo   orderdom.Repository
+	tradeRepo       tradedom.Repository
+	messageRepo     tradedom.MessageRepository
+	orderRepo       orderdom.Repository
+	displayResolver mallshared.MallDisplayResolver
+	avatarRepo      avatardom.Repository
 }
 
 func NewTradeQuery(
 	tradeRepo tradedom.Repository,
 	messageRepo tradedom.MessageRepository,
 	orderRepo orderdom.Repository,
+	displayResolver mallshared.MallDisplayResolver,
+	avatarRepo avatardom.Repository,
 ) *TradeQuery {
 	return &TradeQuery{
-		tradeRepo:   tradeRepo,
-		messageRepo: messageRepo,
-		orderRepo:   orderRepo,
+		tradeRepo:       tradeRepo,
+		messageRepo:     messageRepo,
+		orderRepo:       orderRepo,
+		displayResolver: displayResolver,
+		avatarRepo:      avatarRepo,
 	}
 }
 
@@ -58,8 +66,13 @@ type TradeListItem struct {
 	OrderID        string `json:"orderId"`
 	OrderItemIndex int    `json:"orderItemIndex"`
 
-	ViewerSide          tradedom.MessageSenderSide `json:"viewerSide"`
-	CounterpartAvatarID string                     `json:"counterpartAvatarId"`
+	ViewerSide tradedom.MessageSenderSide `json:"viewerSide"`
+
+	ProductName string `json:"productName,omitempty"`
+
+	CounterpartAvatarID   string `json:"counterpartAvatarId"`
+	CounterpartAvatarName string `json:"counterpartAvatarName,omitempty"`
+	CounterpartAvatarIcon string `json:"counterpartAvatarIcon,omitempty"`
 
 	Status tradedom.Status `json:"status"`
 
@@ -92,7 +105,9 @@ func (q *TradeQuery) ListForAvatar(
 	if q == nil ||
 		q.tradeRepo == nil ||
 		q.messageRepo == nil ||
-		q.orderRepo == nil {
+		q.orderRepo == nil ||
+		q.displayResolver == nil ||
+		q.avatarRepo == nil {
 		return TradeListResult{}, ErrTradeQueryNotConfigured
 	}
 	if avatarID == "" {
@@ -132,9 +147,16 @@ func (q *TradeQuery) ListForAvatar(
 			return TradeListResult{}, err
 		}
 
+		display := q.resolveTradeDisplay(
+			ctx,
+			trade,
+			orderItemState.ProductBlueprintID,
+		)
+
 		items = append(items, buildTradeListItem(
 			trade,
 			viewerSide,
+			display,
 			latestMessage,
 			unreadMessageCount,
 		))
@@ -173,7 +195,12 @@ func (q *TradeQuery) GetByOrderItem(
 	ctx context.Context,
 	in GetTradeByOrderItemInput,
 ) (tradedto.TradeDetail, error) {
-	if q == nil || q.tradeRepo == nil || q.messageRepo == nil || q.orderRepo == nil {
+	if q == nil ||
+		q.tradeRepo == nil ||
+		q.messageRepo == nil ||
+		q.orderRepo == nil ||
+		q.displayResolver == nil ||
+		q.avatarRepo == nil {
 		return tradedto.TradeDetail{}, ErrTradeQueryNotConfigured
 	}
 	if in.AvatarID == "" {
@@ -229,10 +256,17 @@ func (q *TradeQuery) GetByOrderItem(
 		return tradedto.TradeDetail{}, err
 	}
 
+	display := q.resolveTradeDisplay(
+		ctx,
+		trade,
+		orderItemState.ProductBlueprintID,
+	)
+
 	return buildTradeDetailDTO(
 		trade,
 		viewerSide,
 		orderItemState,
+		display,
 		messages,
 	), nil
 }
@@ -252,7 +286,12 @@ func (q *TradeQuery) GetByID(
 	ctx context.Context,
 	in GetTradeByIDInput,
 ) (tradedto.TradeDetail, error) {
-	if q == nil || q.tradeRepo == nil || q.messageRepo == nil || q.orderRepo == nil {
+	if q == nil ||
+		q.tradeRepo == nil ||
+		q.messageRepo == nil ||
+		q.orderRepo == nil ||
+		q.displayResolver == nil ||
+		q.avatarRepo == nil {
 		return tradedto.TradeDetail{}, ErrTradeQueryNotConfigured
 	}
 	if in.AvatarID == "" {
@@ -302,17 +341,25 @@ func (q *TradeQuery) GetByID(
 		return tradedto.TradeDetail{}, err
 	}
 
+	display := q.resolveTradeDisplay(
+		ctx,
+		trade,
+		orderItemState.ProductBlueprintID,
+	)
+
 	return buildTradeDetailDTO(
 		trade,
 		viewerSide,
 		orderItemState,
+		display,
 		messages,
 	), nil
 }
 
 type tradeOrderItemState struct {
-	IsCancelled  bool
-	IsDispatched bool
+	IsCancelled        bool
+	IsDispatched       bool
+	ProductBlueprintID string
 }
 
 func (q *TradeQuery) getTradeOrderItemState(
@@ -351,8 +398,9 @@ func (q *TradeQuery) getTradeOrderItemState(
 	}
 
 	return tradeOrderItemState{
-		IsCancelled:  item.IsCancelled,
-		IsDispatched: item.IsDispatched,
+		IsCancelled:        item.IsCancelled,
+		IsDispatched:       item.IsDispatched,
+		ProductBlueprintID: item.ProductBlueprintID,
 	}, nil
 }
 
@@ -425,28 +473,91 @@ func resolveTradeViewerSide(
 	return "", tradedom.ErrNotFound
 }
 
+type tradeDisplay struct {
+	ProductName string
+
+	BuyerAvatarName string
+	BuyerAvatarIcon string
+
+	SellerAvatarName string
+	SellerAvatarIcon string
+}
+
+func (q *TradeQuery) resolveTradeDisplay(
+	ctx context.Context,
+	trade tradedom.Trade,
+	productBlueprintID string,
+) tradeDisplay {
+	out := tradeDisplay{}
+
+	if q != nil && q.displayResolver != nil && productBlueprintID != "" {
+		productBlueprint, err := q.displayResolver.ResolveProductBlueprintInfo(
+			ctx,
+			productBlueprintID,
+		)
+		if err == nil {
+			out.ProductName = productBlueprint.ProductName
+		}
+	}
+
+	if q == nil || q.avatarRepo == nil {
+		return out
+	}
+
+	if trade.BuyerAvatarID != "" {
+		buyerAvatar, err := q.avatarRepo.GetByID(ctx, trade.BuyerAvatarID)
+		if err == nil {
+			out.BuyerAvatarName = buyerAvatar.AvatarName
+			if buyerAvatar.AvatarIcon != nil {
+				out.BuyerAvatarIcon = *buyerAvatar.AvatarIcon
+			}
+		}
+	}
+
+	if trade.SellerAvatarID != "" {
+		sellerAvatar, err := q.avatarRepo.GetByID(ctx, trade.SellerAvatarID)
+		if err == nil {
+			out.SellerAvatarName = sellerAvatar.AvatarName
+			if sellerAvatar.AvatarIcon != nil {
+				out.SellerAvatarIcon = *sellerAvatar.AvatarIcon
+			}
+		}
+	}
+
+	return out
+}
+
 func buildTradeListItem(
 	trade tradedom.Trade,
 	viewerSide tradedom.MessageSenderSide,
+	display tradeDisplay,
 	latestMessage *tradedto.TradeMessage,
 	unreadMessageCount int,
 ) TradeListItem {
 	counterpartAvatarID := trade.SellerAvatarID
+	counterpartAvatarName := display.SellerAvatarName
+	counterpartAvatarIcon := display.SellerAvatarIcon
+
 	if viewerSide == tradedom.MessageSenderSideSeller {
 		counterpartAvatarID = trade.BuyerAvatarID
+		counterpartAvatarName = display.BuyerAvatarName
+		counterpartAvatarIcon = display.BuyerAvatarIcon
 	}
 
 	latestActivityAt := tradeLatestActivityAt(trade)
 
 	out := TradeListItem{
-		ID:                  trade.ID,
-		OrderID:             trade.OrderID,
-		OrderItemIndex:      trade.OrderItemIndex,
-		ViewerSide:          viewerSide,
-		CounterpartAvatarID: counterpartAvatarID,
-		Status:              trade.Status,
-		LatestMessage:       latestMessage,
-		UnreadMessageCount:  unreadMessageCount,
+		ID:                    trade.ID,
+		OrderID:               trade.OrderID,
+		OrderItemIndex:        trade.OrderItemIndex,
+		ViewerSide:            viewerSide,
+		ProductName:           display.ProductName,
+		CounterpartAvatarID:   counterpartAvatarID,
+		CounterpartAvatarName: counterpartAvatarName,
+		CounterpartAvatarIcon: counterpartAvatarIcon,
+		Status:                trade.Status,
+		LatestMessage:         latestMessage,
+		UnreadMessageCount:    unreadMessageCount,
 	}
 
 	if !latestActivityAt.IsZero() {
@@ -506,6 +617,7 @@ func buildTradeDetailDTO(
 	trade tradedom.Trade,
 	viewerSide tradedom.MessageSenderSide,
 	orderItemState tradeOrderItemState,
+	display tradeDisplay,
 	messages []tradedom.Message,
 ) tradedto.TradeDetail {
 	messageDTOs := make(
@@ -522,16 +634,21 @@ func buildTradeDetailDTO(
 	}
 
 	out := tradedto.TradeDetail{
-		ID:             trade.ID,
-		OrderID:        trade.OrderID,
-		OrderItemIndex: trade.OrderItemIndex,
-		ViewerSide:     viewerSide,
-		BuyerAvatarID:  trade.BuyerAvatarID,
-		SellerAvatarID: trade.SellerAvatarID,
-		Status:         trade.Status,
-		IsCancelled:    orderItemState.IsCancelled,
-		IsDispatched:   orderItemState.IsDispatched,
-		Messages:       messageDTOs,
+		ID:               trade.ID,
+		OrderID:          trade.OrderID,
+		OrderItemIndex:   trade.OrderItemIndex,
+		ViewerSide:       viewerSide,
+		ProductName:      display.ProductName,
+		BuyerAvatarID:    trade.BuyerAvatarID,
+		BuyerAvatarName:  display.BuyerAvatarName,
+		BuyerAvatarIcon:  display.BuyerAvatarIcon,
+		SellerAvatarID:   trade.SellerAvatarID,
+		SellerAvatarName: display.SellerAvatarName,
+		SellerAvatarIcon: display.SellerAvatarIcon,
+		Status:           trade.Status,
+		IsCancelled:      orderItemState.IsCancelled,
+		IsDispatched:     orderItemState.IsDispatched,
+		Messages:         messageDTOs,
 	}
 
 	if !trade.CreatedAt.IsZero() {

@@ -21,8 +21,15 @@ type TradeDetail struct {
 
 	ViewerSide tradedom.MessageSenderSide `json:"viewerSide"`
 
-	BuyerAvatarID  string `json:"buyerAvatarId"`
-	SellerAvatarID string `json:"sellerAvatarId"`
+	ProductName string `json:"productName,omitempty"`
+
+	BuyerAvatarID   string `json:"buyerAvatarId"`
+	BuyerAvatarName string `json:"buyerAvatarName,omitempty"`
+	BuyerAvatarIcon string `json:"buyerAvatarIcon,omitempty"`
+
+	SellerAvatarID   string `json:"sellerAvatarId"`
+	SellerAvatarName string `json:"sellerAvatarName,omitempty"`
+	SellerAvatarIcon string `json:"sellerAvatarIcon,omitempty"`
 
 	Status tradedom.Status `json:"status"`
 

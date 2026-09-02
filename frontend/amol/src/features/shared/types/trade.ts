@@ -52,8 +52,13 @@ export type TradeDetail = {
   orderId: string;
   orderItemIndex: number;
   viewerSide: TradeViewerSide;
+  productName?: string;
   buyerAvatarId: string;
+  buyerAvatarName?: string;
+  buyerAvatarIcon?: string;
   sellerAvatarId: string;
+  sellerAvatarName?: string;
+  sellerAvatarIcon?: string;
   status: TradeStatus;
   isCancelled: boolean;
   isDispatched: boolean;

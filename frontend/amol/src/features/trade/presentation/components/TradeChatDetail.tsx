@@ -28,6 +28,11 @@ type TradeChatDetailProps = {
   onBack: () => void;
 };
 
+type TradeSenderDisplay = {
+  name: string;
+  icon: string;
+};
+
 function getErrorMessage(
   caught: unknown,
   fallbackMessage: string,
@@ -37,6 +42,16 @@ function getErrorMessage(
   }
 
   return fallbackMessage;
+}
+
+function getInitial(value: string): string {
+  return Array.from(value)[0] ?? "？";
+}
+
+function getTradeTitle(productName?: string): string {
+  return productName
+    ? `${productName}/取引`
+    : "取引";
 }
 
 function sortMessages(
@@ -55,10 +70,37 @@ function getTradeStatusLabel(
   switch (status) {
     case "active":
       return "取引中";
+
     case "closed":
       return "取引終了";
+
     default:
       return "";
+  }
+}
+
+function getTradeMessageSenderDisplay(
+  message: TradeMessage,
+  trade: TradeDetail,
+): TradeSenderDisplay {
+  switch (message.senderSide) {
+    case "buyer":
+      return {
+        name: trade.buyerAvatarName || "購入者",
+        icon: trade.buyerAvatarIcon || "",
+      };
+
+    case "seller":
+      return {
+        name: trade.sellerAvatarName || "出品者",
+        icon: trade.sellerAvatarIcon || "",
+      };
+
+    case "system":
+      return {
+        name: "AMOL",
+        icon: "",
+      };
   }
 }
 
@@ -155,6 +197,7 @@ export default function TradeChatDetail({
     [trade?.messages],
   );
 
+  const title = getTradeTitle(trade?.productName);
   const canSubmitReply = /\S/u.test(replyContent);
 
   const shouldShowOrderAction =
@@ -304,7 +347,7 @@ export default function TradeChatDetail({
   return (
     <>
       <Layout
-        title="取引チャット"
+        title={title}
         showBackButton
         onBackButtonClick={onBack}
         showFooter={!isReplyModalOpen}
@@ -335,7 +378,7 @@ export default function TradeChatDetail({
 
           {!loading && !trade ? (
             <div className="chat-detail-page__empty">
-              取引チャットが見つかりません。
+              取引が見つかりません。
             </div>
           ) : null}
 
@@ -358,7 +401,7 @@ export default function TradeChatDetail({
                       <TradeMessageCard
                         key={message.id}
                         message={message}
-                        viewerSide={trade.viewerSide}
+                        trade={trade}
                       />
                     ))}
 
@@ -406,10 +449,21 @@ function TradeThreadHeader({
       ? "出品者"
       : "購入者";
 
-  const counterpartAvatarId =
+  const counterpartAvatarName =
     trade.viewerSide === "buyer"
-      ? trade.sellerAvatarId
-      : trade.buyerAvatarId;
+      ? trade.sellerAvatarName
+      : trade.buyerAvatarName;
+
+  const counterpartAvatarIcon =
+    trade.viewerSide === "buyer"
+      ? trade.sellerAvatarIcon
+      : trade.buyerAvatarIcon;
+
+  const displayName =
+    counterpartAvatarName || counterpartLabel;
+
+  const title = getTradeTitle(trade.productName);
+  const initial = getInitial(displayName);
 
   return (
     <article className="chat-detail-page__inquiry">
@@ -419,12 +473,20 @@ function TradeThreadHeader({
             className="chat-detail-page__sender-icon"
             aria-hidden="true"
           >
-            <span>{counterpartLabel.slice(0, 1)}</span>
+            {counterpartAvatarIcon ? (
+              <img
+                src={counterpartAvatarIcon}
+                alt=""
+                className="chat-detail-page__sender-icon-image"
+              />
+            ) : (
+              <span>{initial}</span>
+            )}
           </div>
 
           <div>
             <span className="chat-detail-page__sender">
-              {counterpartLabel}
+              {displayName}
             </span>
 
             {trade.createdAt ? (
@@ -444,7 +506,7 @@ function TradeThreadHeader({
       </div>
 
       <h2 className="chat-detail-page__subject">
-        取引チャット
+        {title}
       </h2>
 
       <section className="chat-detail-page__product-meta">
@@ -465,7 +527,7 @@ function TradeThreadHeader({
 
           <div className="chat-detail-page__product-meta-row">
             <dt>{counterpartLabel}</dt>
-            <dd>{counterpartAvatarId}</dd>
+            <dd>{displayName}</dd>
           </div>
         </dl>
       </section>
@@ -475,40 +537,53 @@ function TradeThreadHeader({
 
 function TradeMessageCard({
   message,
-  viewerSide,
+  trade,
 }: {
   message: TradeMessage;
-  viewerSide: TradeDetail["viewerSide"];
+  trade: TradeDetail;
 }) {
   const isSystem = message.senderSide === "system";
   const isMine =
     !isSystem &&
-    message.senderSide === viewerSide;
+    message.senderSide === trade.viewerSide;
 
-  const senderLabel = isSystem
-    ? "システム"
-    : isMine
-      ? "あなた"
-      : "相手";
+  const sender = getTradeMessageSenderDisplay(
+    message,
+    trade,
+  );
+
+  const senderInitial = getInitial(sender.name);
 
   const className = isMine
     ? "chat-detail-page__reply chat-detail-page__reply--avatar"
-    : "chat-detail-page__reply";
+    : isSystem
+      ? "chat-detail-page__reply chat-detail-page__reply--system"
+      : "chat-detail-page__reply";
 
   return (
     <article className={className}>
       <div className="chat-detail-page__message-head">
         <div className="chat-detail-page__sender-profile">
-          <div
-            className="chat-detail-page__sender-icon"
-            aria-hidden="true"
-          >
-            <span>{senderLabel.slice(0, 1)}</span>
-          </div>
+          {!isSystem ? (
+            <div
+              className="chat-detail-page__sender-icon"
+              aria-hidden="true"
+            >
+              {sender.icon ? (
+                <img
+                  src={sender.icon}
+                  alt=""
+                  className="chat-detail-page__sender-icon-image"
+                />
+              ) : (
+                <span>{senderInitial}</span>
+              )}
+            </div>
+          ) : null}
 
           <div>
             <span className="chat-detail-page__sender">
-              {senderLabel}
+              {sender.name}
             </span>
 
             {message.createdAt ? (
