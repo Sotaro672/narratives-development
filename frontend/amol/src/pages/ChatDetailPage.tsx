@@ -14,7 +14,7 @@ import ResaleChatDetail from "../features/resale/presentation/components/ResaleC
 import TradeChatDetail from "../features/trade/presentation/components/TradeChatDetail";
 
 import "../styles/page-layout.css";
-import "../features/inquiry/presentation/styles/inquiry-detail-page.css";
+import "../features/shared/styles/chat-detail-page.css";
 
 type ChatDetailRouteParams = {
   inquiryId?: string;

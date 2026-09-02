@@ -123,8 +123,10 @@ export default function TradeChatDetail({
   const [replyError, setReplyError] = useState("");
   const [postingReply, setPostingReply] = useState(false);
 
-  const [orderActionProcessing, setOrderActionProcessing] = useState(false);
-  const [orderActionError, setOrderActionError] = useState("");
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [cancelMessage, setCancelMessage] = useState("");
+  const [cancelError, setCancelError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
 
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [returnPackageState, setReturnPackageState] = useState<ReturnPackageState | null>(null);
@@ -185,7 +187,7 @@ export default function TradeChatDetail({
   }, [loadThread]);
 
   useEffect(() => {
-    if (!isReplyModalOpen) return;
+    if (!isReplyModalOpen && !isCancelModalOpen) return;
 
     const previousOverflow = document.body.style.overflow;
     const previousTouchAction = document.body.style.touchAction;
@@ -197,7 +199,7 @@ export default function TradeChatDetail({
       document.body.style.overflow = previousOverflow;
       document.body.style.touchAction = previousTouchAction;
     };
-  }, [isReplyModalOpen]);
+  }, [isCancelModalOpen, isReplyModalOpen]);
 
   const sortedMessages = useMemo(
     () => sortMessages(trade?.messages ?? []),
@@ -215,7 +217,7 @@ export default function TradeChatDetail({
     trade.status !== "active" ||
     trade.isCancelled ||
     postingReply ||
-    orderActionProcessing ||
+    cancelling ||
     returning;
 
   const openReplyModal = useCallback(() => {
@@ -236,7 +238,7 @@ export default function TradeChatDetail({
   const submitReply = useCallback(async (): Promise<void> => {
     if (
       postingReply ||
-      orderActionProcessing ||
+      cancelling ||
       returning ||
       !trade ||
       trade.status !== "active" ||
@@ -290,11 +292,93 @@ export default function TradeChatDetail({
       setPostingReply(false);
     }
   }, [
+    cancelling,
     normalizedTradeId,
-    orderActionProcessing,
     postingReply,
     replyContent,
     returning,
+    trade,
+  ]);
+
+  const openCancelModal = useCallback(() => {
+    if (
+      !trade ||
+      trade.viewerSide !== "buyer" ||
+      trade.status !== "active" ||
+      trade.isCancelled ||
+      trade.isDispatched ||
+      trade.transferred
+    ) {
+      return;
+    }
+
+    setCancelMessage("");
+    setCancelError("");
+    setIsCancelModalOpen(true);
+  }, [trade]);
+
+  const closeCancelModal = useCallback(() => {
+    if (cancelling) return;
+
+    setIsCancelModalOpen(false);
+    setCancelMessage("");
+    setCancelError("");
+  }, [cancelling]);
+
+  const submitCancel = useCallback(async (): Promise<void> => {
+    if (
+      cancelling ||
+      !trade ||
+      trade.viewerSide !== "buyer" ||
+      trade.status !== "active" ||
+      trade.isCancelled ||
+      trade.isDispatched ||
+      trade.transferred ||
+      !normalizedTradeId
+    ) {
+      return;
+    }
+
+    const normalizedMessage = cancelMessage.trim();
+    if (!normalizedMessage) {
+      setCancelError("キャンセル理由のメッセージを入力してください。");
+      return;
+    }
+
+    setCancelling(true);
+    setCancelError("");
+
+    try {
+      await createTradeMessage({
+        tradeId: normalizedTradeId,
+        content: normalizedMessage,
+      });
+
+      await cancelTradeOrderItem({
+        orderId: trade.orderId,
+        orderItemIndex: trade.orderItemIndex,
+      });
+
+      setIsCancelModalOpen(false);
+      setCancelMessage("");
+      setCancelError("");
+
+      await loadThread();
+    } catch (caught) {
+      setCancelError(
+        getErrorMessage(
+          caught,
+          "注文のキャンセルに失敗しました。",
+        ),
+      );
+    } finally {
+      setCancelling(false);
+    }
+  }, [
+    cancelMessage,
+    cancelling,
+    loadThread,
+    normalizedTradeId,
     trade,
   ]);
 
@@ -307,7 +391,8 @@ export default function TradeChatDetail({
       !trade.isDispatched ||
       trade.transferred ||
       trade.isReturnRequested ||
-      trade.isReturnCompleted
+      trade.isReturnCompleted ||
+      !normalizedTradeId
     ) {
       return;
     }
@@ -316,7 +401,7 @@ export default function TradeChatDetail({
     setReturnReason("");
     setReturnError("");
     setIsReturnModalOpen(true);
-  }, [trade]);
+  }, [normalizedTradeId, trade]);
 
   const closeReturnModal = useCallback(() => {
     if (returning) return;
@@ -330,6 +415,7 @@ export default function TradeChatDetail({
   const submitReturn = useCallback(async (): Promise<void> => {
     if (
       returning ||
+      cancelling ||
       !trade ||
       trade.viewerSide !== "buyer" ||
       trade.status !== "active" ||
@@ -337,7 +423,8 @@ export default function TradeChatDetail({
       !trade.isDispatched ||
       trade.transferred ||
       trade.isReturnRequested ||
-      trade.isReturnCompleted
+      trade.isReturnCompleted ||
+      !normalizedTradeId
     ) {
       return;
     }
@@ -367,6 +454,11 @@ export default function TradeChatDetail({
 
       const idToken = await getFirebaseIdToken();
 
+      await createTradeMessage({
+        tradeId: normalizedTradeId,
+        content: normalizedReason,
+      });
+
       await returnOrderItem({
         backendUrl,
         idToken,
@@ -393,16 +485,18 @@ export default function TradeChatDetail({
       setReturning(false);
     }
   }, [
+    cancelling,
     loadThread,
+    normalizedTradeId,
     returnPackageState,
     returnReason,
     returning,
     trade,
   ]);
 
-  const handleOrderAction = useCallback(async (): Promise<void> => {
+  const handleOrderAction = useCallback((): void => {
     if (
-      orderActionProcessing ||
+      cancelling ||
       returning ||
       !trade ||
       !orderAction ||
@@ -412,8 +506,6 @@ export default function TradeChatDetail({
     ) {
       return;
     }
-
-    setOrderActionError("");
 
     switch (orderAction) {
       case "dispatch":
@@ -434,42 +526,16 @@ export default function TradeChatDetail({
         return;
 
       case "cancel":
-        if (
-          trade.viewerSide !== "buyer" ||
-          trade.isDispatched
-        ) {
-          return;
-        }
-
-        setOrderActionProcessing(true);
-
-        try {
-          await cancelTradeOrderItem({
-            orderId: trade.orderId,
-            orderItemIndex: trade.orderItemIndex,
-          });
-
-          await loadThread();
-        } catch (caught) {
-          setOrderActionError(
-            getErrorMessage(
-              caught,
-              "注文のキャンセルに失敗しました。",
-            ),
-          );
-        } finally {
-          setOrderActionProcessing(false);
-        }
-
+        openCancelModal();
         return;
     }
   }, [
-    loadThread,
+    cancelling,
     navigate,
     normalizedTradeId,
+    openCancelModal,
     openReturnModal,
     orderAction,
-    orderActionProcessing,
     returning,
     trade,
   ]);
@@ -480,7 +546,11 @@ export default function TradeChatDetail({
         title={title}
         showBackButton
         onBackButtonClick={onBack}
-        showFooter={!isReplyModalOpen && !isReturnModalOpen}
+        showFooter={
+          !isReplyModalOpen &&
+          !isCancelModalOpen &&
+          !isReturnModalOpen
+        }
         mode="mypage"
         mainClassName="chat-detail-page-layout"
         actionButtonLabel="返信"
@@ -538,10 +608,12 @@ export default function TradeChatDetail({
                     {orderAction ? (
                       <TradeOrderActionPrompt
                         action={orderAction}
-                        processing={orderActionProcessing || returning}
-                        error={orderActionError}
+                        processing={
+                          cancelling ||
+                          returning
+                        }
                         onAction={() => {
-                          void handleOrderAction();
+                          handleOrderAction();
                         }}
                       />
                     ) : null}
@@ -563,6 +635,21 @@ export default function TradeChatDetail({
         onCancel={closeReplyModal}
         onSubmit={() => {
           void submitReply();
+        }}
+      />
+
+      <TradeCancelModal
+        open={isCancelModalOpen}
+        content={cancelMessage}
+        error={cancelError}
+        submitting={cancelling}
+        onContentChange={(value) => {
+          setCancelMessage(value);
+          setCancelError("");
+        }}
+        onCancel={closeCancelModal}
+        onSubmit={() => {
+          void submitCancel();
         }}
       />
 
@@ -898,6 +985,104 @@ function TradeMessageCard({
         </p>
       ) : null}
     </article>
+  );
+}
+
+function TradeCancelModal({
+  open,
+  content,
+  error,
+  submitting,
+  onContentChange,
+  onCancel,
+  onSubmit,
+}: {
+  open: boolean;
+  content: string;
+  error: string;
+  submitting: boolean;
+  onContentChange: (value: string) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  if (!open || typeof document === "undefined") {
+    return null;
+  }
+
+  const canSubmit = /\S/u.test(content) && !submitting;
+
+  return createPortal(
+    <div className="chat-detail-page__modal-backdrop">
+      <div
+        className="chat-detail-page__modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="trade-cancel-modal-title"
+      >
+        <div className="chat-detail-page__modal-header">
+          <h2 id="trade-cancel-modal-title">
+            注文をキャンセルする
+          </h2>
+
+          <button
+            type="button"
+            className="chat-detail-page__modal-close"
+            onClick={onCancel}
+            disabled={submitting}
+            aria-label="閉じる"
+          >
+            ×
+          </button>
+        </div>
+
+        <p className="chat-detail-page__content">
+          出品者へ送るキャンセル理由のメッセージを入力してください。
+        </p>
+
+        <textarea
+          className="chat-detail-page__reply-input"
+          value={content}
+          onChange={(event) => {
+            onContentChange(event.target.value);
+          }}
+          placeholder="キャンセル理由を入力してください"
+          rows={6}
+          maxLength={500}
+          required
+          disabled={submitting}
+        />
+
+        {error ? (
+          <div
+            className="chat-detail-page__modal-error"
+            role="alert"
+          >
+            {error}
+          </div>
+        ) : null}
+
+        <div className="chat-detail-page__modal-actions">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={submitting}
+          >
+            戻る
+          </button>
+
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={!canSubmit}
+          >
+            {submitting
+              ? "キャンセル中..."
+              : "メッセージを送信してキャンセル"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
