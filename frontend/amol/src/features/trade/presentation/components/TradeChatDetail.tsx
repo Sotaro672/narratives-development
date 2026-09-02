@@ -6,6 +6,12 @@ import { useNavigate } from "react-router-dom";
 
 import Layout from "../../../../components/layout/Layout";
 import { formatDateTime } from "../../../../components/utils/date";
+import { getApiBaseUrl } from "../../../../lib/apiBaseUrl";
+import { getFirebaseIdToken } from "../../../../lib/authToken";
+
+import { returnOrderItem } from "../../../order/api/orderDetailApi";
+import ReturnRequestModal, { type ReturnPackageState } from "../../../order/components/ReturnRequestModal";
+import type { TradeDetail, TradeMessage } from "../../../shared/types/trade";
 
 import {
   cancelTradeOrderItem,
@@ -14,12 +20,9 @@ import {
   markTradeMessagesAsRead,
 } from "../../infrastructure/tradeApi";
 
-import type {
-  TradeDetail,
-  TradeMessage,
-} from "../../../shared/types/trade";
+import TradeOrderActionPrompt, { type TradeOrderAction } from "./TradeOrderActionPrompt";
 
-import TradeOrderActionPrompt from "./TradeOrderActionPrompt";
+import "../../../../styles/order-detail-page.css";
 
 const MESSAGE_LIMIT = 100;
 
@@ -33,14 +36,8 @@ type TradeSenderDisplay = {
   icon: string;
 };
 
-function getErrorMessage(
-  caught: unknown,
-  fallbackMessage: string,
-): string {
-  if (caught instanceof Error && caught.message) {
-    return caught.message;
-  }
-
+function getErrorMessage(caught: unknown, fallbackMessage: string): string {
+  if (caught instanceof Error && caught.message) return caught.message;
   return fallbackMessage;
 }
 
@@ -49,14 +46,10 @@ function getInitial(value: string): string {
 }
 
 function getTradeTitle(productName?: string): string {
-  return productName
-    ? `${productName}/取引`
-    : "取引";
+  return productName ? `${productName}/取引` : "取引";
 }
 
-function sortMessages(
-  messages: TradeMessage[],
-): TradeMessage[] {
+function sortMessages(messages: TradeMessage[]): TradeMessage[] {
   return [...messages].sort(
     (firstMessage, secondMessage) =>
       new Date(firstMessage.createdAt).getTime() -
@@ -64,19 +57,40 @@ function sortMessages(
   );
 }
 
-function getTradeStatusLabel(
-  status: TradeDetail["status"],
-): string {
-  switch (status) {
+function getTradeStatusLabel(trade: TradeDetail): string {
+  if (trade.isCancelled) return "キャンセル";
+  if (trade.isReturnCompleted) return "返品済み";
+  if (trade.isReturnRequested) return "返品申請済み";
+  if (trade.isDispatched) return "発送済み";
+
+  switch (trade.status) {
     case "active":
       return "取引中";
-
     case "closed":
       return "取引終了";
-
     default:
       return "";
   }
+}
+
+function getTradeOrderAction(trade: TradeDetail | null): TradeOrderAction | null {
+  if (!trade || trade.status !== "active" || trade.isCancelled) return null;
+
+  if (trade.viewerSide === "seller") {
+    return trade.isDispatched ? null : "dispatch";
+  }
+
+  if (!trade.isDispatched) return "cancel";
+
+  if (
+    !trade.transferred &&
+    !trade.isReturnRequested &&
+    !trade.isReturnCompleted
+  ) {
+    return "return";
+  }
+
+  return null;
 }
 
 function getTradeMessageSenderDisplay(
@@ -89,13 +103,11 @@ function getTradeMessageSenderDisplay(
         name: trade.buyerAvatarName || "購入者",
         icon: trade.buyerAvatarIcon || "",
       };
-
     case "seller":
       return {
         name: trade.sellerAvatarName || "出品者",
         icon: trade.sellerAvatarIcon || "",
       };
-
     case "system":
       return {
         name: "AMOL",
@@ -122,6 +134,12 @@ export default function TradeChatDetail({
 
   const [orderActionProcessing, setOrderActionProcessing] = useState(false);
   const [orderActionError, setOrderActionError] = useState("");
+
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [returnPackageState, setReturnPackageState] = useState<ReturnPackageState | null>(null);
+  const [returnReason, setReturnReason] = useState("");
+  const [returnError, setReturnError] = useState("");
+  const [returning, setReturning] = useState(false);
 
   const loadThread = useCallback(async (): Promise<void> => {
     if (!normalizedTradeId) {
@@ -163,7 +181,7 @@ export default function TradeChatDetail({
       setError(
         getErrorMessage(
           caught,
-          "取引チャットの取得に失敗しました。",
+          "取引の取得に失敗しました。",
         ),
       );
     } finally {
@@ -176,9 +194,7 @@ export default function TradeChatDetail({
   }, [loadThread]);
 
   useEffect(() => {
-    if (!isReplyModalOpen) {
-      return;
-    }
+    if (!isReplyModalOpen) return;
 
     const previousOverflow = document.body.style.overflow;
     const previousTouchAction = document.body.style.touchAction;
@@ -199,33 +215,27 @@ export default function TradeChatDetail({
 
   const title = getTradeTitle(trade?.productName);
   const canSubmitReply = /\S/u.test(replyContent);
-
-  const shouldShowOrderAction =
-    !!trade &&
-    trade.status === "active" &&
-    !trade.isCancelled &&
-    !trade.isDispatched;
+  const orderAction = getTradeOrderAction(trade);
+  const shouldShowOrderAction = orderAction !== null;
 
   const replyActionDisabled =
     loading ||
     !trade ||
     trade.status !== "active" ||
+    trade.isCancelled ||
     postingReply ||
-    orderActionProcessing;
+    orderActionProcessing ||
+    returning;
 
   const openReplyModal = useCallback(() => {
-    if (replyActionDisabled) {
-      return;
-    }
+    if (replyActionDisabled) return;
 
     setReplyError("");
     setIsReplyModalOpen(true);
   }, [replyActionDisabled]);
 
   const closeReplyModal = useCallback(() => {
-    if (postingReply) {
-      return;
-    }
+    if (postingReply) return;
 
     setIsReplyModalOpen(false);
     setReplyContent("");
@@ -236,8 +246,10 @@ export default function TradeChatDetail({
     if (
       postingReply ||
       orderActionProcessing ||
+      returning ||
       !trade ||
       trade.status !== "active" ||
+      trade.isCancelled ||
       !normalizedTradeId
     ) {
       return;
@@ -258,9 +270,7 @@ export default function TradeChatDetail({
       });
 
       setTrade((currentTrade) => {
-        if (!currentTrade) {
-          return currentTrade;
-        }
+        if (!currentTrade) return currentTrade;
 
         return {
           ...currentTrade,
@@ -293,16 +303,120 @@ export default function TradeChatDetail({
     orderActionProcessing,
     postingReply,
     replyContent,
+    returning,
+    trade,
+  ]);
+
+  const openReturnModal = useCallback(() => {
+    if (
+      !trade ||
+      trade.viewerSide !== "buyer" ||
+      trade.status !== "active" ||
+      trade.isCancelled ||
+      !trade.isDispatched ||
+      trade.transferred ||
+      trade.isReturnRequested ||
+      trade.isReturnCompleted
+    ) {
+      return;
+    }
+
+    setReturnPackageState(null);
+    setReturnReason("");
+    setReturnError("");
+    setIsReturnModalOpen(true);
+  }, [trade]);
+
+  const closeReturnModal = useCallback(() => {
+    if (returning) return;
+
+    setIsReturnModalOpen(false);
+    setReturnPackageState(null);
+    setReturnReason("");
+    setReturnError("");
+  }, [returning]);
+
+  const submitReturn = useCallback(async (): Promise<void> => {
+    if (
+      returning ||
+      !trade ||
+      trade.viewerSide !== "buyer" ||
+      trade.status !== "active" ||
+      trade.isCancelled ||
+      !trade.isDispatched ||
+      trade.transferred ||
+      trade.isReturnRequested ||
+      trade.isReturnCompleted
+    ) {
+      return;
+    }
+
+    if (
+      returnPackageState !== "unopened" &&
+      returnPackageState !== "opened"
+    ) {
+      setReturnError("商品の開封状態を選択してください。");
+      return;
+    }
+
+    const normalizedReason = returnReason.trim();
+    if (!normalizedReason) {
+      setReturnError("返品理由を入力してください。");
+      return;
+    }
+
+    setReturning(true);
+    setReturnError("");
+
+    try {
+      const backendUrl = getApiBaseUrl();
+      if (!backendUrl) {
+        throw new Error("VITE_API_BASE_URLが設定されていません。");
+      }
+
+      const idToken = await getFirebaseIdToken();
+
+      await returnOrderItem({
+        backendUrl,
+        idToken,
+        orderId: trade.orderId,
+        itemIndex: trade.orderItemIndex,
+        packageState: returnPackageState,
+        reason: normalizedReason,
+      });
+
+      setIsReturnModalOpen(false);
+      setReturnPackageState(null);
+      setReturnReason("");
+      setReturnError("");
+
+      await loadThread();
+    } catch (caught) {
+      setReturnError(
+        getErrorMessage(
+          caught,
+          "商品の返品受付に失敗しました。",
+        ),
+      );
+    } finally {
+      setReturning(false);
+    }
+  }, [
+    loadThread,
+    returnPackageState,
+    returnReason,
+    returning,
     trade,
   ]);
 
   const handleOrderAction = useCallback(async (): Promise<void> => {
     if (
       orderActionProcessing ||
+      returning ||
       !trade ||
+      !orderAction ||
       trade.status !== "active" ||
       trade.isCancelled ||
-      trade.isDispatched ||
       !normalizedTradeId
     ) {
       return;
@@ -310,37 +424,62 @@ export default function TradeChatDetail({
 
     setOrderActionError("");
 
-    if (trade.viewerSide === "seller") {
-      navigate(
-        `/dispatch/trades/${encodeURIComponent(normalizedTradeId)}`,
-      );
-      return;
-    }
+    switch (orderAction) {
+      case "dispatch":
+        if (
+          trade.viewerSide !== "seller" ||
+          trade.isDispatched
+        ) {
+          return;
+        }
 
-    setOrderActionProcessing(true);
+        navigate(
+          `/dispatch/trades/${encodeURIComponent(normalizedTradeId)}`,
+        );
+        return;
 
-    try {
-      await cancelTradeOrderItem({
-        orderId: trade.orderId,
-        orderItemIndex: trade.orderItemIndex,
-      });
+      case "return":
+        openReturnModal();
+        return;
 
-      await loadThread();
-    } catch (caught) {
-      setOrderActionError(
-        getErrorMessage(
-          caught,
-          "注文のキャンセルに失敗しました。",
-        ),
-      );
-    } finally {
-      setOrderActionProcessing(false);
+      case "cancel":
+        if (
+          trade.viewerSide !== "buyer" ||
+          trade.isDispatched
+        ) {
+          return;
+        }
+
+        setOrderActionProcessing(true);
+
+        try {
+          await cancelTradeOrderItem({
+            orderId: trade.orderId,
+            orderItemIndex: trade.orderItemIndex,
+          });
+
+          await loadThread();
+        } catch (caught) {
+          setOrderActionError(
+            getErrorMessage(
+              caught,
+              "注文のキャンセルに失敗しました。",
+            ),
+          );
+        } finally {
+          setOrderActionProcessing(false);
+        }
+
+        return;
     }
   }, [
     loadThread,
     navigate,
     normalizedTradeId,
+    openReturnModal,
+    orderAction,
     orderActionProcessing,
+    returning,
     trade,
   ]);
 
@@ -350,7 +489,7 @@ export default function TradeChatDetail({
         title={title}
         showBackButton
         onBackButtonClick={onBack}
-        showFooter={!isReplyModalOpen}
+        showFooter={!isReplyModalOpen && !isReturnModalOpen}
         mode="mypage"
         mainClassName="chat-detail-page-layout"
         actionButtonLabel="返信"
@@ -405,10 +544,10 @@ export default function TradeChatDetail({
                       />
                     ))}
 
-                    {shouldShowOrderAction ? (
+                    {orderAction ? (
                       <TradeOrderActionPrompt
-                        viewerSide={trade.viewerSide}
-                        processing={orderActionProcessing}
+                        action={orderAction}
+                        processing={orderActionProcessing || returning}
                         error={orderActionError}
                         onAction={() => {
                           void handleOrderAction();
@@ -433,6 +572,26 @@ export default function TradeChatDetail({
         onCancel={closeReplyModal}
         onSubmit={() => {
           void submitReply();
+        }}
+      />
+
+      <ReturnRequestModal
+        open={isReturnModalOpen}
+        packageState={returnPackageState}
+        reason={returnReason}
+        error={returnError}
+        submitting={returning}
+        onPackageStateChange={(value) => {
+          setReturnPackageState(value);
+          setReturnError("");
+        }}
+        onReasonChange={(value) => {
+          setReturnReason(value);
+          setReturnError("");
+        }}
+        onCancel={closeReturnModal}
+        onSubmit={() => {
+          void submitReturn();
         }}
       />
     </>
@@ -501,7 +660,7 @@ function TradeThreadHeader({
         </div>
 
         <span className="chat-detail-page__status">
-          {getTradeStatusLabel(trade.status)}
+          {getTradeStatusLabel(trade)}
         </span>
       </div>
 
@@ -529,6 +688,27 @@ function TradeThreadHeader({
             <dt>{counterpartLabel}</dt>
             <dd>{displayName}</dd>
           </div>
+
+          {trade.returnRequestedAt ? (
+            <div className="chat-detail-page__product-meta-row">
+              <dt>返品申請日時</dt>
+              <dd>{formatDateTime(trade.returnRequestedAt)}</dd>
+            </div>
+          ) : null}
+
+          {trade.returnCompletedAt ? (
+            <div className="chat-detail-page__product-meta-row">
+              <dt>返品完了日時</dt>
+              <dd>{formatDateTime(trade.returnCompletedAt)}</dd>
+            </div>
+          ) : null}
+
+          {trade.transferredAt ? (
+            <div className="chat-detail-page__product-meta-row">
+              <dt>受取日時</dt>
+              <dd>{formatDateTime(trade.transferredAt)}</dd>
+            </div>
+          ) : null}
         </dl>
       </section>
     </article>
@@ -626,10 +806,7 @@ function TradeMessageModal({
   onCancel: () => void;
   onSubmit: () => void;
 }) {
-  if (
-    !open ||
-    typeof document === "undefined"
-  ) {
+  if (!open || typeof document === "undefined") {
     return null;
   }
 
@@ -690,14 +867,9 @@ function TradeMessageModal({
           <button
             type="button"
             onClick={onSubmit}
-            disabled={
-              !canSubmit ||
-              submitting
-            }
+            disabled={!canSubmit || submitting}
           >
-            {submitting
-              ? "送信中..."
-              : "送信"}
+            {submitting ? "送信中..." : "送信"}
           </button>
         </div>
       </div>

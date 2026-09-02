@@ -4,7 +4,9 @@ package usecase
 import (
 	"context"
 	"errors"
+	"strings"
 
+	applicationport "narratives/internal/application/port"
 	brandfeesettlementdom "narratives/internal/domain/brandFeeSettlement"
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
@@ -34,6 +36,15 @@ var (
 	ErrResaleTradeDispatchBrandFeeSettlementQueueMissing = errors.New(
 		"resale trade dispatch: brand fee settlement queue is not configured",
 	)
+	ErrResaleTradeDispatchAuthUserReaderMissing = errors.New(
+		"resale trade dispatch: auth user reader is not configured",
+	)
+	ErrResaleTradeDispatchProductBlueprintReaderMissing = errors.New(
+		"resale trade dispatch: product blueprint reader is not configured",
+	)
+	ErrResaleTradeDispatchNotificationMailerMissing = errors.New(
+		"resale trade dispatch: dispatch notification mailer is not configured",
+	)
 )
 
 type ResaleTradeDispatchUsecase struct {
@@ -45,6 +56,10 @@ type ResaleTradeDispatchUsecase struct {
 
 	brandFeeSettlementUC    *BrandFeeSettlementUsecase
 	brandFeeSettlementQueue BrandFeeSettlementTransferQueue
+
+	authUserReader             applicationport.AuthUserReader
+	productBlueprintReader     applicationport.ProductBlueprintGetter
+	dispatchNotificationMailer applicationport.OrderDispatchNotificationMailerPort
 }
 
 type NewResaleTradeDispatchUsecaseInput struct {
@@ -57,6 +72,10 @@ type NewResaleTradeDispatchUsecaseInput struct {
 
 	BrandFeeSettlementUsecase *BrandFeeSettlementUsecase
 	BrandFeeSettlementQueue   BrandFeeSettlementTransferQueue
+
+	AuthUserReader             applicationport.AuthUserReader
+	ProductBlueprintReader     applicationport.ProductBlueprintGetter
+	DispatchNotificationMailer applicationport.OrderDispatchNotificationMailerPort
 }
 
 type DispatchResaleTradeInput struct {
@@ -78,13 +97,16 @@ func NewResaleTradeDispatchUsecase(
 	in NewResaleTradeDispatchUsecaseInput,
 ) *ResaleTradeDispatchUsecase {
 	return &ResaleTradeDispatchUsecase{
-		tradeRepo:               in.TradeRepository,
-		orderRepo:               in.OrderRepository,
-		paymentFlowUC:           in.PaymentFlowUsecase,
-		paymentUC:               in.PaymentUsecase,
-		settlementUC:            in.SettlementUsecase,
-		brandFeeSettlementUC:    in.BrandFeeSettlementUsecase,
-		brandFeeSettlementQueue: in.BrandFeeSettlementQueue,
+		tradeRepo:                  in.TradeRepository,
+		orderRepo:                  in.OrderRepository,
+		paymentFlowUC:              in.PaymentFlowUsecase,
+		paymentUC:                  in.PaymentUsecase,
+		settlementUC:               in.SettlementUsecase,
+		brandFeeSettlementUC:       in.BrandFeeSettlementUsecase,
+		brandFeeSettlementQueue:    in.BrandFeeSettlementQueue,
+		authUserReader:             in.AuthUserReader,
+		productBlueprintReader:     in.ProductBlueprintReader,
+		dispatchNotificationMailer: in.DispatchNotificationMailer,
 	}
 }
 
@@ -119,6 +141,18 @@ func (u *ResaleTradeDispatchUsecase) Dispatch(
 	if u.brandFeeSettlementQueue == nil {
 		return DispatchResaleTradeResult{},
 			ErrResaleTradeDispatchBrandFeeSettlementQueueMissing
+	}
+	if u.authUserReader == nil {
+		return DispatchResaleTradeResult{},
+			ErrResaleTradeDispatchAuthUserReaderMissing
+	}
+	if u.productBlueprintReader == nil {
+		return DispatchResaleTradeResult{},
+			ErrResaleTradeDispatchProductBlueprintReaderMissing
+	}
+	if u.dispatchNotificationMailer == nil {
+		return DispatchResaleTradeResult{},
+			ErrResaleTradeDispatchNotificationMailerMissing
 	}
 
 	if in.TradeID == "" {
@@ -182,6 +216,15 @@ func (u *ResaleTradeDispatchUsecase) Dispatch(
 			ctx,
 			order,
 			trade.OrderItemIndex,
+		); err != nil {
+			return DispatchResaleTradeResult{}, err
+		}
+
+		if err := u.notifyBuyerDispatched(
+			ctx,
+			trade,
+			order,
+			item,
 		); err != nil {
 			return DispatchResaleTradeResult{}, err
 		}
@@ -318,6 +361,15 @@ func (u *ResaleTradeDispatchUsecase) Dispatch(
 			return DispatchResaleTradeResult{}, err
 		}
 
+		if err := u.notifyBuyerDispatched(
+			ctx,
+			trade,
+			paidOrder,
+			paidItem,
+		); err != nil {
+			return DispatchResaleTradeResult{}, err
+		}
+
 		return DispatchResaleTradeResult{
 			Trade:   trade,
 			Order:   paidOrder,
@@ -366,12 +418,100 @@ func (u *ResaleTradeDispatchUsecase) Dispatch(
 		return DispatchResaleTradeResult{}, err
 	}
 
+	if err := u.notifyBuyerDispatched(
+		ctx,
+		trade,
+		updatedOrder,
+		updatedItem,
+	); err != nil {
+		return DispatchResaleTradeResult{}, err
+	}
+
 	return DispatchResaleTradeResult{
 		Trade:   trade,
 		Order:   updatedOrder,
 		Item:    updatedItem,
 		Changed: true,
 	}, nil
+}
+
+// notifyBuyerDispatched sends the buyer a dispatch notification after the
+// authoritative Order item has been persisted as dispatched.
+//
+// The Trade ID is used as the mail provider idempotency key so retries of the
+// same Trade dispatch do not produce duplicate notification emails.
+func (u *ResaleTradeDispatchUsecase) notifyBuyerDispatched(
+	ctx context.Context,
+	trade tradedom.Trade,
+	order orderdom.Order,
+	item orderdom.OrderItemSnapshot,
+) error {
+	if !item.IsDispatched {
+		return orderdom.ErrConflict
+	}
+	if strings.TrimSpace(order.UserID) == "" {
+		return orderdom.ErrInvalidUserID
+	}
+	if strings.TrimSpace(item.ProductBlueprintID) == "" {
+		return orderdom.ErrConflict
+	}
+
+	toEmail, err := u.authUserReader.GetEmailByUID(
+		ctx,
+		order.UserID,
+	)
+	if err != nil {
+		return err
+	}
+
+	toEmail = strings.TrimSpace(toEmail)
+	if toEmail == "" {
+		return errors.New(
+			"resale trade dispatch: buyer email is empty",
+		)
+	}
+
+	productBlueprint, err := u.productBlueprintReader.GetByID(
+		ctx,
+		item.ProductBlueprintID,
+	)
+	if err != nil {
+		return err
+	}
+	if productBlueprint.ID != item.ProductBlueprintID {
+		return orderdom.ErrConflict
+	}
+
+	productName := strings.TrimSpace(
+		productBlueprint.ProductName,
+	)
+	if productName == "" {
+		return errors.New(
+			"resale trade dispatch: product name is empty",
+		)
+	}
+
+	qty := item.Qty
+	if qty <= 0 {
+		return orderdom.ErrConflict
+	}
+
+	_, err = u.dispatchNotificationMailer.SendOrderDispatchNotification(
+		ctx,
+		applicationport.OrderDispatchNotificationMailMessage{
+			IdempotencyKey: "resale-trade-dispatch:" + trade.ID,
+			ToEmail:        toEmail,
+			OrderID:        order.ID,
+			Items: []applicationport.OrderDispatchNotificationMailItem{
+				{
+					ProductName: productName,
+					Qty:         qty,
+				},
+			},
+		},
+	)
+
+	return err
 }
 
 // reconcileDispatchedBrandFee repairs the financial side of an Order item whose
@@ -472,14 +612,20 @@ func (u *ResaleTradeDispatchUsecase) ensureResaleShippingQuote(
 	quote transportationdom.Quote,
 ) (orderdom.Order, error) {
 	if quote.Carrier == "" ||
-		!transportationdom.IsValidResaleShippingCarrier(quote.Carrier) {
+		!transportationdom.IsValidResaleShippingCarrier(
+			quote.Carrier,
+		) {
 		return orderdom.Order{},
 			transportationdom.ErrInvalidCarrier
 	}
-	if !transportationdom.IsValidResaleBoxSize(quote.Size) {
+
+	if !transportationdom.IsValidResaleBoxSize(
+		quote.Size,
+	) {
 		return orderdom.Order{},
 			transportationdom.ErrInvalidResaleBoxSize
 	}
+
 	if quote.Amount <= 0 {
 		return orderdom.Order{},
 			transportationdom.ErrInvalidRateAmount
@@ -492,6 +638,7 @@ func (u *ResaleTradeDispatchUsecase) ensureResaleShippingQuote(
 	}
 
 	amount := int(quote.Amount)
+
 	quoteItems := append(
 		[]orderdom.ShippingQuoteItemSnapshot(nil),
 		order.ShippingQuoteSnapshot.Items...,
@@ -527,7 +674,8 @@ func (u *ResaleTradeDispatchUsecase) ensureResaleShippingQuote(
 			current.Size == quote.Size &&
 			current.UnitAmount == amount &&
 			current.Amount == amount &&
-			current.Currency == orderdom.ShippingQuoteCurrencyJPY
+			current.Currency ==
+				orderdom.ShippingQuoteCurrencyJPY
 
 	if alreadyConfigured {
 		return order, nil
@@ -545,7 +693,8 @@ func (u *ResaleTradeDispatchUsecase) ensureResaleShippingQuote(
 	current.Qty = 1
 	current.UnitAmount = amount
 	current.Amount = amount
-	current.Currency = orderdom.ShippingQuoteCurrencyJPY
+	current.Currency =
+		orderdom.ShippingQuoteCurrencyJPY
 
 	quoteItems[targetIndex] = current
 
@@ -557,7 +706,9 @@ func (u *ResaleTradeDispatchUsecase) ensureResaleShippingQuote(
 			return orderdom.Order{},
 				orderdom.ErrInvalidShippingQuote
 		}
-		if totalAmount > maxOrderAmount-quoteItem.Amount {
+
+		if totalAmount >
+			maxOrderAmount-quoteItem.Amount {
 			return orderdom.Order{},
 				orderdom.ErrInvalidShippingQuote
 		}
@@ -565,11 +716,12 @@ func (u *ResaleTradeDispatchUsecase) ensureResaleShippingQuote(
 		totalAmount += quoteItem.Amount
 	}
 
-	nextShippingQuote := orderdom.ShippingQuoteSnapshot{
-		Items:    quoteItems,
-		Amount:   totalAmount,
-		Currency: orderdom.ShippingQuoteCurrencyJPY,
-	}
+	nextShippingQuote :=
+		orderdom.ShippingQuoteSnapshot{
+			Items:    quoteItems,
+			Amount:   totalAmount,
+			Currency: orderdom.ShippingQuoteCurrencyJPY,
+		}
 
 	if err := order.UpdateShippingQuoteSnapshot(
 		nextShippingQuote,
@@ -618,8 +770,10 @@ func validateResaleTradeDispatchTarget(
 			tradedom.ErrNotFound
 	}
 	if item.SellerSnapshot.AvatarID == "" ||
-		item.SellerSnapshot.AvatarID != trade.SellerAvatarID ||
-		item.SellerSnapshot.AvatarID != sellerAvatarID {
+		item.SellerSnapshot.AvatarID !=
+			trade.SellerAvatarID ||
+		item.SellerSnapshot.AvatarID !=
+			sellerAvatarID {
 		return orderdom.OrderItemSnapshot{},
 			tradedom.ErrNotFound
 	}

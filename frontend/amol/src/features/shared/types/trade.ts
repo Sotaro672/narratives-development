@@ -26,6 +26,14 @@ export const TRADE_MESSAGE_SENDER_TYPES = [
 export type TradeMessageSenderType =
   (typeof TRADE_MESSAGE_SENDER_TYPES)[number];
 
+export const TRADE_RETURN_REQUEST_KINDS = [
+  "unopened",
+  "opened",
+] as const;
+
+export type TradeReturnRequestKind =
+  (typeof TRADE_RETURN_REQUEST_KINDS)[number];
+
 export type TradeMessageImage = {
   fileName: string;
   fileUrl: string;
@@ -62,6 +70,13 @@ export type TradeDetail = {
   status: TradeStatus;
   isCancelled: boolean;
   isDispatched: boolean;
+  isReturnRequested: boolean;
+  returnRequestKind?: TradeReturnRequestKind;
+  returnRequestedAt?: string;
+  isReturnCompleted: boolean;
+  returnCompletedAt?: string;
+  transferred: boolean;
+  transferredAt?: string;
   messages: TradeMessage[];
   createdAt?: string;
   updatedAt?: string;

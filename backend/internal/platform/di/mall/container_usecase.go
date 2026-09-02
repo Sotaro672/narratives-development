@@ -48,6 +48,7 @@ type mallUsecases struct {
 	tradeUC                        *usecase.TradeUsecase
 	tradeMessageUC                 *usecase.TradeMessageUsecase
 	resaleTradeDispatchUC          *usecase.ResaleTradeDispatchUsecase
+	resaleTradeReturnReceiptUC     *usecase.ResaleTradeReturnReceiptUsecase
 	inquiryUC                      *usecase.InquiryUsecase
 	returnRequestUC                *usecase.ReturnRequestUsecase
 	announcementUC                 *usecase.AnnouncementUsecase
@@ -103,6 +104,11 @@ func buildMallUsecases(
 
 	resendClient := mailadp.NewResendClient(cfg.ResendAPIKey)
 
+	orderDispatchNotificationMailer := mailadp.NewOrderDispatchNotificationMailer(
+		resendClient,
+		cfg.ResendFrom,
+	)
+
 	orderMailer := mailadp.NewOrderMailer(
 		resendClient,
 		r.modelRepoFS,
@@ -124,9 +130,7 @@ func buildMallUsecases(
 	inquiryMailer := mailadp.NewInquiryMailer(resendClient)
 
 	avatarWalletSvc := solana.NewAvatarWalletService(infra.ProjectID)
-
 	transportationSvc := transportationdom.NewService(r.transportationRepo)
-
 	setupUC := usecase.NewSetupUsecase(r.avatarRepo)
 
 	announcementUC := usecase.NewAnnouncementUsecase(
@@ -420,13 +424,16 @@ func buildMallUsecases(
 
 	resaleTradeDispatchUC := usecase.NewResaleTradeDispatchUsecase(
 		usecase.NewResaleTradeDispatchUsecaseInput{
-			TradeRepository:           r.tradeRepo,
-			OrderRepository:           r.orderRepo,
-			PaymentFlowUsecase:        paymentFlowUC,
-			PaymentUsecase:            paymentUC,
-			SettlementUsecase:         settlementUC,
-			BrandFeeSettlementUsecase: brandFeeSettlementUC,
-			BrandFeeSettlementQueue:   brandFeeSettlementQueue,
+			TradeRepository:            r.tradeRepo,
+			OrderRepository:            r.orderRepo,
+			PaymentFlowUsecase:         paymentFlowUC,
+			PaymentUsecase:             paymentUC,
+			SettlementUsecase:          settlementUC,
+			BrandFeeSettlementUsecase:  brandFeeSettlementUC,
+			BrandFeeSettlementQueue:    brandFeeSettlementQueue,
+			AuthUserReader:             authUserReader,
+			ProductBlueprintReader:     r.productBlueprintRepoFS,
+			DispatchNotificationMailer: orderDispatchNotificationMailer,
 		},
 	)
 	if resaleTradeDispatchUC == nil {
@@ -454,6 +461,23 @@ func buildMallUsecases(
 			refundCompletionNotificationMailer,
 			refundCompletionNotificationQueue,
 		)
+	if refundCompletionNotificationUC == nil {
+		return nil, errors.New("di.mall: refund completion notification usecase is nil")
+	}
+
+	resaleTradeReturnReceiptUC :=
+		usecase.NewResaleTradeReturnReceiptUsecase(
+			usecase.NewResaleTradeReturnReceiptUsecaseInput{
+				TradeRepository:          r.tradeRepo,
+				OrderService:             orderUC,
+				InquiryRepository:        r.inquiryRepo,
+				ItemRefundService:        itemRefundUC,
+				RefundCompletionNotifier: refundCompletionNotificationUC,
+			},
+		)
+	if resaleTradeReturnReceiptUC == nil {
+		return nil, errors.New("di.mall: resale trade return receipt usecase is nil")
+	}
 
 	return &mallUsecases{
 		avatarUC:                       avatarUC,
@@ -480,6 +504,7 @@ func buildMallUsecases(
 		tradeUC:                        tradeUC,
 		tradeMessageUC:                 tradeMessageUC,
 		resaleTradeDispatchUC:          resaleTradeDispatchUC,
+		resaleTradeReturnReceiptUC:     resaleTradeReturnReceiptUC,
 		inquiryUC:                      inquiryUC,
 		returnRequestUC:                returnRequestUC,
 		announcementUC:                 announcementUC,
@@ -520,6 +545,7 @@ func (u *mallUsecases) applyToContainer(c *Container) {
 	c.TradeUC = u.tradeUC
 	c.TradeMessageUC = u.tradeMessageUC
 	c.ResaleTradeDispatchUC = u.resaleTradeDispatchUC
+	c.ResaleTradeReturnReceiptUC = u.resaleTradeReturnReceiptUC
 	c.InquiryUC = u.inquiryUC
 	c.ReturnRequestUC = u.returnRequestUC
 	c.AnnouncementUC = u.announcementUC

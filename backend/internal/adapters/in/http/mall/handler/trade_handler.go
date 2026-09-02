@@ -4,6 +4,7 @@ package mallHandler
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +12,8 @@ import (
 
 	mallquery "narratives/internal/application/query/mall"
 	usecase "narratives/internal/application/usecase"
+	inquirydom "narratives/internal/domain/inquiry"
+	refunddom "narratives/internal/domain/refund"
 	tradedom "narratives/internal/domain/trade"
 	transportationdom "narratives/internal/domain/transportation"
 )
@@ -24,20 +27,23 @@ import (
 // Avatar identity is always resolved from AvatarContextMiddleware and is never
 // accepted from request body or query parameters.
 type TradeHandler struct {
-	query      *mallquery.TradeQuery
-	messageUC  *usecase.TradeMessageUsecase
-	dispatchUC *usecase.ResaleTradeDispatchUsecase
+	query           *mallquery.TradeQuery
+	messageUC       *usecase.TradeMessageUsecase
+	dispatchUC      *usecase.ResaleTradeDispatchUsecase
+	returnReceiptUC *usecase.ResaleTradeReturnReceiptUsecase
 }
 
 func NewTradeHandler(
 	query *mallquery.TradeQuery,
 	messageUC *usecase.TradeMessageUsecase,
 	dispatchUC *usecase.ResaleTradeDispatchUsecase,
+	returnReceiptUC *usecase.ResaleTradeReturnReceiptUsecase,
 ) http.Handler {
 	return &TradeHandler{
-		query:      query,
-		messageUC:  messageUC,
-		dispatchUC: dispatchUC,
+		query:           query,
+		messageUC:       messageUC,
+		dispatchUC:      dispatchUC,
+		returnReceiptUC: returnReceiptUC,
 	}
 }
 
@@ -52,6 +58,7 @@ func NewTradeHandler(
 //	POST /mall/me/trades/{tradeId}/read
 //	GET  /mall/me/trades/{tradeId}/unread-count
 //	POST /mall/me/trades/{tradeId}/dispatch
+//	POST /mall/me/trades/{tradeId}/receive-return
 func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -123,6 +130,7 @@ func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
+
 		h.createMessage(w, r, tradeID)
 
 	case "read":
@@ -130,6 +138,7 @@ func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
+
 		h.markRead(w, r, tradeID)
 
 	case "unread-count":
@@ -137,6 +146,7 @@ func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
+
 		h.countUnread(w, r, tradeID)
 
 	case "dispatch":
@@ -144,7 +154,16 @@ func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
+
 		h.dispatch(w, r, tradeID)
+
+	case "receive-return":
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.receiveReturn(w, r, tradeID)
 
 	default:
 		notFound(w)
@@ -158,6 +177,10 @@ type createTradeMessageRequest struct {
 type dispatchTradeRequest struct {
 	Carrier transportationdom.Carrier `json:"carrier"`
 	BoxSize int                       `json:"boxSize"`
+}
+
+type receiveTradeReturnRequest struct {
+	Policy refunddom.OpenedReturnRefundPolicy `json:"policy,omitempty"`
 }
 
 // GET /mall/me/trades
@@ -479,6 +502,80 @@ func (h *TradeHandler) dispatch(
 	})
 }
 
+// POST /mall/me/trades/{tradeId}/receive-return
+//
+// SellerAvatarID is never accepted from the client. The authenticated Avatar
+// from AvatarContextMiddleware is authoritative.
+//
+// Unopened return:
+//
+//	Request body may be omitted or sent as {}.
+//
+// Opened return:
+//
+//	{
+//	  "policy": "half_merchandise"
+//	}
+//
+// The usecase resolves Trade, Order, Order item and return Inquiry from
+// authoritative persisted state. Order ID, item index, Inquiry ID, refund amount
+// and seller identity are never accepted from the client.
+func (h *TradeHandler) receiveReturn(
+	w http.ResponseWriter,
+	r *http.Request,
+	tradeID string,
+) {
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	if tradeID == "" {
+		badRequest(w, "invalid trade id")
+		return
+	}
+
+	if h == nil || h.returnReceiptUC == nil {
+		internalError(
+			w,
+			"resale trade return receipt usecase is nil",
+		)
+		return
+	}
+
+	var req receiveTradeReturnRequest
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		badRequest(w, "invalid json")
+		return
+	}
+
+	result, err := h.returnReceiptUC.ReceiveReturn(
+		r.Context(),
+		usecase.ReceiveResaleTradeReturnInput{
+			TradeID:        tradeID,
+			SellerAvatarID: avatarID,
+			Policy:         req.Policy,
+		},
+	)
+	if err != nil {
+		writeTradeReturnReceiptErr(w, err)
+		return
+	}
+
+	status := http.StatusOK
+	if !result.FinanciallyCompleted {
+		status = http.StatusAccepted
+	}
+
+	writeJSON(w, status, map[string]any{
+		"data": result,
+	})
+}
+
 func parseTradeMessageListQuery(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -552,6 +649,48 @@ func parseTradeMessageTimeQuery(
 
 	value = value.UTC()
 	return &value, true
+}
+
+func writeTradeReturnReceiptErr(
+	w http.ResponseWriter,
+	err error,
+) {
+	switch {
+	case err == nil:
+		return
+
+	case errors.Is(err, tradedom.ErrNotFound),
+		errors.Is(err, inquirydom.ErrNotFound),
+		errors.Is(err, usecase.ErrResaleTradeReturnReceiptTradeMismatch),
+		errors.Is(err, usecase.ErrResaleTradeReturnReceiptInquiryMismatch):
+		notFound(w)
+
+	case errors.Is(err, usecase.ErrResaleTradeReturnReceiptInvalidSeller):
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "avatar context is required",
+		})
+
+	case errors.Is(err, refunddom.ErrInvalidOpenedReturnRefundPolicy),
+		errors.Is(err, usecase.ErrResaleTradeReturnReceiptUnexpectedPolicy):
+		badRequest(w, err.Error())
+
+	case errors.Is(err, usecase.ErrResaleTradeReturnReceiptOrderNotPaid),
+		errors.Is(err, usecase.ErrResaleTradeReturnReceiptReturnNotRequested),
+		errors.Is(err, usecase.ErrResaleTradeReturnReceiptInquiryClosed),
+		errors.Is(err, usecase.ErrResaleTradeReturnReceiptInquiryResolved),
+		errors.Is(err, usecase.ErrResaleTradeReturnReceiptReturnKindMismatch),
+		errors.Is(err, usecase.ErrResaleTradeReturnReceiptUnopenedStateInvalid),
+		errors.Is(err, usecase.ErrResaleTradeReturnReceiptOrderCompletionMismatch):
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": err.Error(),
+		})
+
+	case errors.Is(err, usecase.ErrResaleTradeReturnReceiptNotConfigured):
+		internalError(w, err.Error())
+
+	default:
+		writeOrderErr(w, err)
+	}
 }
 
 func writeTradeDispatchErr(

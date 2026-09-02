@@ -1,7 +1,10 @@
 // backend/internal/application/query/mall/dto/trade_dto.go
 package dto
 
-import tradedom "narratives/internal/domain/trade"
+import (
+	orderdom "narratives/internal/domain/order"
+	tradedom "narratives/internal/domain/trade"
+)
 
 // TradeDetail is the buyer/seller private Trade view returned to Mall clients.
 //
@@ -12,8 +15,9 @@ import tradedom "narratives/internal/domain/trade"
 // ViewerSide is resolved by the backend from the authenticated Avatar and must
 // not be supplied by the client.
 //
-// Cancellation and dispatch state are read from the authoritative Order item
-// associated with this Trade and are not owned by the Trade aggregate.
+// Cancellation, dispatch, return, and transfer state are read from the
+// authoritative Order item associated with this Trade and are not owned by
+// the Trade aggregate.
 type TradeDetail struct {
 	ID             string `json:"id"`
 	OrderID        string `json:"orderId"`
@@ -35,6 +39,15 @@ type TradeDetail struct {
 
 	IsCancelled  bool `json:"isCancelled"`
 	IsDispatched bool `json:"isDispatched"`
+
+	IsReturnRequested bool                       `json:"isReturnRequested"`
+	ReturnRequestKind orderdom.ReturnRequestKind `json:"returnRequestKind,omitempty"`
+	IsReturnCompleted bool                       `json:"isReturnCompleted"`
+	Transferred       bool                       `json:"transferred"`
+
+	ReturnRequestedAt string `json:"returnRequestedAt,omitempty"`
+	ReturnCompletedAt string `json:"returnCompletedAt,omitempty"`
+	TransferredAt     string `json:"transferredAt,omitempty"`
 
 	Messages []TradeMessage `json:"messages"`
 

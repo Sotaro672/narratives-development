@@ -46,6 +46,7 @@ type Container struct {
 	TradeUC                        *usecase.TradeUsecase
 	TradeMessageUC                 *usecase.TradeMessageUsecase
 	ResaleTradeDispatchUC          *usecase.ResaleTradeDispatchUsecase
+	ResaleTradeReturnReceiptUC     *usecase.ResaleTradeReturnReceiptUsecase
 	InquiryUC                      *usecase.InquiryUsecase
 	ReturnRequestUC                *usecase.ReturnRequestUsecase
 	AnnouncementUC                 *usecase.AnnouncementUsecase

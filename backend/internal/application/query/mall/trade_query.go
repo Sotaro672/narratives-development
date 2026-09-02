@@ -31,8 +31,8 @@ var (
 // AvatarContext. A caller that is not a participant receives ErrNotFound so the
 // existence of another user's private Trade is not exposed.
 //
-// Cancellation and dispatch state are read from the authoritative Order item.
-// Trade does not own or duplicate those states.
+// Cancellation, dispatch, return, and transfer state are read from the authoritative
+// Order item. Trade does not own or duplicate those states.
 type TradeQuery struct {
 	tradeRepo       tradedom.Repository
 	messageRepo     tradedom.MessageRepository
@@ -357,8 +357,19 @@ func (q *TradeQuery) GetByID(
 }
 
 type tradeOrderItemState struct {
-	IsCancelled        bool
-	IsDispatched       bool
+	IsCancelled  bool
+	IsDispatched bool
+
+	IsReturnRequested bool
+	ReturnRequestKind orderdom.ReturnRequestKind
+	ReturnRequestedAt *time.Time
+
+	IsReturnCompleted bool
+	ReturnCompletedAt *time.Time
+
+	Transferred   bool
+	TransferredAt *time.Time
+
 	ProductBlueprintID string
 }
 
@@ -400,6 +411,13 @@ func (q *TradeQuery) getTradeOrderItemState(
 	return tradeOrderItemState{
 		IsCancelled:        item.IsCancelled,
 		IsDispatched:       item.IsDispatched,
+		IsReturnRequested:  item.IsReturnRequested,
+		ReturnRequestKind:  item.ReturnRequestKind,
+		ReturnRequestedAt:  item.ReturnRequestedAt,
+		IsReturnCompleted:  item.IsReturnCompleted,
+		ReturnCompletedAt:  item.ReturnCompletedAt,
+		Transferred:        item.Transferred,
+		TransferredAt:      item.TransferredAt,
 		ProductBlueprintID: item.ProductBlueprintID,
 	}, nil
 }
@@ -634,21 +652,44 @@ func buildTradeDetailDTO(
 	}
 
 	out := tradedto.TradeDetail{
-		ID:               trade.ID,
-		OrderID:          trade.OrderID,
-		OrderItemIndex:   trade.OrderItemIndex,
-		ViewerSide:       viewerSide,
-		ProductName:      display.ProductName,
-		BuyerAvatarID:    trade.BuyerAvatarID,
-		BuyerAvatarName:  display.BuyerAvatarName,
-		BuyerAvatarIcon:  display.BuyerAvatarIcon,
-		SellerAvatarID:   trade.SellerAvatarID,
-		SellerAvatarName: display.SellerAvatarName,
-		SellerAvatarIcon: display.SellerAvatarIcon,
-		Status:           trade.Status,
-		IsCancelled:      orderItemState.IsCancelled,
-		IsDispatched:     orderItemState.IsDispatched,
-		Messages:         messageDTOs,
+		ID:                trade.ID,
+		OrderID:           trade.OrderID,
+		OrderItemIndex:    trade.OrderItemIndex,
+		ViewerSide:        viewerSide,
+		ProductName:       display.ProductName,
+		BuyerAvatarID:     trade.BuyerAvatarID,
+		BuyerAvatarName:   display.BuyerAvatarName,
+		BuyerAvatarIcon:   display.BuyerAvatarIcon,
+		SellerAvatarID:    trade.SellerAvatarID,
+		SellerAvatarName:  display.SellerAvatarName,
+		SellerAvatarIcon:  display.SellerAvatarIcon,
+		Status:            trade.Status,
+		IsCancelled:       orderItemState.IsCancelled,
+		IsDispatched:      orderItemState.IsDispatched,
+		IsReturnRequested: orderItemState.IsReturnRequested,
+		ReturnRequestKind: orderItemState.ReturnRequestKind,
+		IsReturnCompleted: orderItemState.IsReturnCompleted,
+		Transferred:       orderItemState.Transferred,
+		Messages:          messageDTOs,
+	}
+
+	if orderItemState.ReturnRequestedAt != nil &&
+		!orderItemState.ReturnRequestedAt.IsZero() {
+		out.ReturnRequestedAt = orderItemState.ReturnRequestedAt.
+			UTC().
+			Format(time.RFC3339Nano)
+	}
+	if orderItemState.ReturnCompletedAt != nil &&
+		!orderItemState.ReturnCompletedAt.IsZero() {
+		out.ReturnCompletedAt = orderItemState.ReturnCompletedAt.
+			UTC().
+			Format(time.RFC3339Nano)
+	}
+	if orderItemState.TransferredAt != nil &&
+		!orderItemState.TransferredAt.IsZero() {
+		out.TransferredAt = orderItemState.TransferredAt.
+			UTC().
+			Format(time.RFC3339Nano)
 	}
 
 	if !trade.CreatedAt.IsZero() {

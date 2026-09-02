@@ -247,12 +247,14 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// Trade
 	if cont.TradeQ != nil &&
 		cont.TradeMessageUC != nil &&
-		cont.ResaleTradeDispatchUC != nil {
+		cont.ResaleTradeDispatchUC != nil &&
+		cont.ResaleTradeReturnReceiptUC != nil {
 
 		tradeH = mallhandler.NewTradeHandler(
 			cont.TradeQ,
 			cont.TradeMessageUC,
 			cont.ResaleTradeDispatchUC,
+			cont.ResaleTradeReturnReceiptUC,
 		)
 	}
 
