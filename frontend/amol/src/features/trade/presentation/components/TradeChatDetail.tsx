@@ -1,7 +1,6 @@
 // frontend/amol/src/features/trade/presentation/components/TradeChatDetail.tsx
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { Copy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -12,6 +11,7 @@ import { getFirebaseIdToken } from "../../../../lib/authToken";
 
 import { returnOrderItem } from "../../../order/api/orderDetailApi";
 import ReturnRequestModal, { type ReturnPackageState } from "../../../order/components/ReturnRequestModal";
+import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
 import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
 import { createProductModelDisplay } from "../../../shared/presentation/utils/productModelDisplay";
 import "../../../shared/styles/trade-chat-detail.css";
@@ -208,6 +208,7 @@ export default function TradeChatDetail({
 
   const title = getTradeTitle(trade?.productName);
   const canSubmitReply = /\S/u.test(replyContent);
+  const canSubmitCancel = /\S/u.test(cancelMessage);
   const orderAction = getTradeOrderAction(trade);
   const shouldShowOrderAction = orderAction !== null;
 
@@ -625,12 +626,16 @@ export default function TradeChatDetail({
         </section>
       </Layout>
 
-      <TradeMessageModal
+      <ChatComposerModal
         open={isReplyModalOpen}
+        title="返信する"
         content={replyContent}
+        placeholder="メッセージを入力"
         error={replyError}
         submitting={postingReply}
         canSubmit={canSubmitReply}
+        submitLabel="送信"
+        submittingLabel="送信中..."
         onContentChange={setReplyContent}
         onCancel={closeReplyModal}
         onSubmit={() => {
@@ -638,11 +643,18 @@ export default function TradeChatDetail({
         }}
       />
 
-      <TradeCancelModal
+      <ChatComposerModal
         open={isCancelModalOpen}
+        title="注文をキャンセルする"
         content={cancelMessage}
+        placeholder="キャンセル理由を入力してください"
         error={cancelError}
         submitting={cancelling}
+        canSubmit={canSubmitCancel}
+        submitLabel="メッセージを送信してキャンセル"
+        submittingLabel="キャンセル中..."
+        cancelLabel="戻る"
+        description="出品者へ送るキャンセル理由のメッセージを入力してください。"
         onContentChange={(value) => {
           setCancelMessage(value);
           setCancelError("");
@@ -985,194 +997,5 @@ function TradeMessageCard({
         </p>
       ) : null}
     </article>
-  );
-}
-
-function TradeCancelModal({
-  open,
-  content,
-  error,
-  submitting,
-  onContentChange,
-  onCancel,
-  onSubmit,
-}: {
-  open: boolean;
-  content: string;
-  error: string;
-  submitting: boolean;
-  onContentChange: (value: string) => void;
-  onCancel: () => void;
-  onSubmit: () => void;
-}) {
-  if (!open || typeof document === "undefined") {
-    return null;
-  }
-
-  const canSubmit = /\S/u.test(content) && !submitting;
-
-  return createPortal(
-    <div className="chat-detail-page__modal-backdrop">
-      <div
-        className="chat-detail-page__modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="trade-cancel-modal-title"
-      >
-        <div className="chat-detail-page__modal-header">
-          <h2 id="trade-cancel-modal-title">
-            注文をキャンセルする
-          </h2>
-
-          <button
-            type="button"
-            className="chat-detail-page__modal-close"
-            onClick={onCancel}
-            disabled={submitting}
-            aria-label="閉じる"
-          >
-            ×
-          </button>
-        </div>
-
-        <p className="chat-detail-page__content">
-          出品者へ送るキャンセル理由のメッセージを入力してください。
-        </p>
-
-        <textarea
-          className="chat-detail-page__reply-input"
-          value={content}
-          onChange={(event) => {
-            onContentChange(event.target.value);
-          }}
-          placeholder="キャンセル理由を入力してください"
-          rows={6}
-          maxLength={500}
-          required
-          disabled={submitting}
-        />
-
-        {error ? (
-          <div
-            className="chat-detail-page__modal-error"
-            role="alert"
-          >
-            {error}
-          </div>
-        ) : null}
-
-        <div className="chat-detail-page__modal-actions">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={submitting}
-          >
-            戻る
-          </button>
-
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={!canSubmit}
-          >
-            {submitting
-              ? "キャンセル中..."
-              : "メッセージを送信してキャンセル"}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
-function TradeMessageModal({
-  open,
-  content,
-  error,
-  submitting,
-  canSubmit,
-  onContentChange,
-  onCancel,
-  onSubmit,
-}: {
-  open: boolean;
-  content: string;
-  error: string;
-  submitting: boolean;
-  canSubmit: boolean;
-  onContentChange: (value: string) => void;
-  onCancel: () => void;
-  onSubmit: () => void;
-}) {
-  if (!open || typeof document === "undefined") {
-    return null;
-  }
-
-  return createPortal(
-    <div className="chat-detail-page__modal-backdrop">
-      <div
-        className="chat-detail-page__modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="trade-chat-message-modal-title"
-      >
-        <div className="chat-detail-page__modal-header">
-          <h2 id="trade-chat-message-modal-title">
-            返信する
-          </h2>
-
-          <button
-            type="button"
-            className="chat-detail-page__modal-close"
-            onClick={onCancel}
-            disabled={submitting}
-            aria-label="閉じる"
-          >
-            ×
-          </button>
-        </div>
-
-        <textarea
-          className="chat-detail-page__reply-input"
-          value={content}
-          onChange={(event) => {
-            onContentChange(event.target.value);
-          }}
-          placeholder="メッセージを入力"
-          rows={6}
-          maxLength={500}
-          disabled={submitting}
-        />
-
-        {error ? (
-          <div
-            className="chat-detail-page__modal-error"
-            role="alert"
-          >
-            {error}
-          </div>
-        ) : null}
-
-        <div className="chat-detail-page__modal-actions">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={submitting}
-          >
-            キャンセル
-          </button>
-
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={!canSubmit || submitting}
-          >
-            {submitting ? "送信中..." : "送信"}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
   );
 }

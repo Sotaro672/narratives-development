@@ -1,7 +1,6 @@
 // frontend/amol/src/features/resale/presentation/components/ResaleChatDetail.tsx
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import Layout from "../../../../components/layout/Layout";
@@ -17,6 +16,7 @@ import {
   fetchMarketResaleComments,
 } from "../../../market/infrastructure/marketResaleReviewApi";
 
+import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
 import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
 import type { MarketResaleListing } from "../../../shared/types/marketResale";
 import type {
@@ -247,7 +247,6 @@ export default function ResaleChatDetail({
     location.state as ResaleChatRouteState | null;
 
   const preferredSource = routeState?.source;
-
   const normalizedResaleId = resaleId.trim();
 
   const [source, setSource] = useState<ResaleChatSource | null>(null);
@@ -387,7 +386,10 @@ export default function ResaleChatDetail({
 
   const handleOpenMarketDetail = useCallback(() => {
     if (!normalizedResaleId) return;
-    navigate(`/market/${encodeURIComponent(normalizedResaleId)}`);
+
+    navigate(
+      `/market/${encodeURIComponent(normalizedResaleId)}`,
+    );
   }, [navigate, normalizedResaleId]);
 
   const title =
@@ -606,7 +608,8 @@ export default function ResaleChatDetail({
                 images={images}
                 productMetaItems={productMetaItems}
                 onOpenMarketDetail={
-                  source === "market" && item.status === "listing"
+                  source === "market" &&
+                  item.status === "listing"
                     ? handleOpenMarketDetail
                     : undefined
                 }
@@ -660,12 +663,16 @@ export default function ResaleChatDetail({
         </section>
       </Layout>
 
-      <ResaleCommentModal
+      <ChatComposerModal
         open={isReplyModalOpen}
+        title="コメントする"
         content={replyContent}
+        placeholder="コメントを入力"
         error={replyError}
         submitting={postingReply}
         canSubmit={canSubmitReply}
+        submitLabel="送信"
+        submittingLabel="送信中..."
         onContentChange={setReplyContent}
         onCancel={closeReplyModal}
         onSubmit={() => {
@@ -896,106 +903,5 @@ function ResaleCommentMessage({
         {comment.body}
       </p>
     </article>
-  );
-}
-
-function ResaleCommentModal({
-  open,
-  content,
-  error,
-  submitting,
-  canSubmit,
-  onContentChange,
-  onCancel,
-  onSubmit,
-}: {
-  open: boolean;
-  content: string;
-  error: string;
-  submitting: boolean;
-  canSubmit: boolean;
-  onContentChange: (value: string) => void;
-  onCancel: () => void;
-  onSubmit: () => void;
-}) {
-  if (
-    !open ||
-    typeof document === "undefined"
-  ) {
-    return null;
-  }
-
-  return createPortal(
-    <div className="chat-detail-page__modal-backdrop">
-      <div
-        className="chat-detail-page__modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="resale-chat-comment-modal-title"
-      >
-        <div className="chat-detail-page__modal-header">
-          <h2 id="resale-chat-comment-modal-title">
-            コメントする
-          </h2>
-
-          <button
-            type="button"
-            className="chat-detail-page__modal-close"
-            onClick={onCancel}
-            disabled={submitting}
-            aria-label="閉じる"
-          >
-            ×
-          </button>
-        </div>
-
-        <textarea
-          className="chat-detail-page__reply-input"
-          value={content}
-          onChange={(event) => {
-            onContentChange(
-              event.target.value,
-            );
-          }}
-          placeholder="コメントを入力"
-          rows={6}
-          maxLength={500}
-          disabled={submitting}
-        />
-
-        {error ? (
-          <div
-            className="chat-detail-page__modal-error"
-            role="alert"
-          >
-            {error}
-          </div>
-        ) : null}
-
-        <div className="chat-detail-page__modal-actions">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={submitting}
-          >
-            キャンセル
-          </button>
-
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={
-              !canSubmit ||
-              submitting
-            }
-          >
-            {submitting
-              ? "送信中..."
-              : "送信"}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
   );
 }
