@@ -2,6 +2,7 @@
 
 import { formatDateTime } from "../../../../components/utils/date";
 
+import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
 import type { InquiryDetail } from "../../../shared/types/inquiryTypes";
 import { getInquiryTypeLabel } from "../../../shared/types/inquiryTypes";
 
@@ -20,7 +21,7 @@ export default function InquiryMessageCard({
   const avatarInitial = getInitial(inquiry.avatarName);
 
   return (
-    <article className="chat-detail-page__inquiry">
+    <ChatThreadCard variant="inquiry">
       <div className="chat-detail-page__message-head">
         <div className="chat-detail-page__sender-profile">
           <div
@@ -70,7 +71,7 @@ export default function InquiryMessageCard({
       </p>
 
       <InquiryImageGrid images={inquiry.images} />
-    </article>
+    </ChatThreadCard>
   );
 }
 

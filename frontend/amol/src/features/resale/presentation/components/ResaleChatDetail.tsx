@@ -17,16 +17,7 @@ import {
   fetchMarketResaleComments,
 } from "../../../market/infrastructure/marketResaleReviewApi";
 
-import {
-  createMyResaleComment,
-  deleteMyResaleComment,
-  fetchMyResaleComments,
-  getMyResaleListing,
-  listMyResaleConditionImages,
-} from "../../api/resaleApi";
-import { markMyResaleCommentsAsRead } from "../../api/resaleReviewApi";
-import { updateResaleChatBadgeCount } from "../resaleChatBadgeEvents";
-
+import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
 import type { MarketResaleListing } from "../../../shared/types/marketResale";
 import type {
   ResaleConditionImage,
@@ -37,6 +28,16 @@ import type {
   ResaleReviewComment,
   ResaleReviewCommentPage,
 } from "../../../shared/types/resaleReview";
+
+import {
+  createMyResaleComment,
+  deleteMyResaleComment,
+  fetchMyResaleComments,
+  getMyResaleListing,
+  listMyResaleConditionImages,
+} from "../../api/resaleApi";
+import { markMyResaleCommentsAsRead } from "../../api/resaleReviewApi";
+import { updateResaleChatBadgeCount } from "../resaleChatBadgeEvents";
 
 const COMMENT_PER_PAGE = 100;
 
@@ -84,8 +85,10 @@ function getResaleStatusLabel(status: ResaleStatus): string {
   switch (status) {
     case "listing":
       return "出品中";
+
     case "suspended":
       return "公開停止";
+
     case "sold":
       return "売却済み";
   }
@@ -700,7 +703,7 @@ function ResaleThreadHeader({
     item.createdAt || "";
 
   return (
-    <article className="chat-detail-page__inquiry">
+    <ChatThreadCard variant="resale">
       <div className="chat-detail-page__message-head">
         <div className="chat-detail-page__sender-profile">
           <div
@@ -800,10 +803,15 @@ function ResaleThreadHeader({
 
       {onOpenMarketDetail ? (
         <div className="chat-detail-page__close-prompt-actions">
-          <button type="button" onClick={onOpenMarketDetail}>商品ページを見る</button>
+          <button
+            type="button"
+            onClick={onOpenMarketDetail}
+          >
+            商品ページを見る
+          </button>
         </div>
       ) : null}
-    </article>
+    </ChatThreadCard>
   );
 }
 

@@ -11,6 +11,7 @@ import { getFirebaseIdToken } from "../../../../lib/authToken";
 
 import { returnOrderItem } from "../../../order/api/orderDetailApi";
 import ReturnRequestModal, { type ReturnPackageState } from "../../../order/components/ReturnRequestModal";
+import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
 import type { TradeDetail, TradeMessage } from "../../../shared/types/trade";
 
 import {
@@ -88,11 +89,13 @@ function getTradeMessageSenderDisplay(
         name: trade.buyerAvatarName || "購入者",
         icon: trade.buyerAvatarIcon || "",
       };
+
     case "seller":
       return {
         name: trade.sellerAvatarName || "出品者",
         icon: trade.sellerAvatarIcon || "",
       };
+
     case "system":
       return {
         name: "AMOL",
@@ -610,7 +613,7 @@ function TradeThreadHeader({
   const initial = getInitial(displayName);
 
   return (
-    <article className="chat-detail-page__inquiry">
+    <ChatThreadCard variant="trade">
       <div className="chat-detail-page__message-head">
         <div className="chat-detail-page__sender-profile">
           <div
@@ -696,7 +699,7 @@ function TradeThreadHeader({
           ) : null}
         </dl>
       </section>
-    </article>
+    </ChatThreadCard>
   );
 }
 
