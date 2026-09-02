@@ -9,11 +9,16 @@ export type TradeStatusSource = Pick<
   | "isDispatched"
   | "isReturnRequested"
   | "isReturnCompleted"
+  | "transferred"
 >;
 
 export function getTradeStatusLabel(
   trade: TradeStatusSource,
 ): string {
+  if (trade.transferred) {
+    return "移譲済";
+  }
+
   if (trade.isCancelled) {
     return "キャンセル";
   }

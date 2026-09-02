@@ -15,6 +15,7 @@ import {
 
 import "../styles/page-layout.css";
 import "../styles/settings-page.css";
+import "../styles/dispatch-page.css";
 
 type DispatchRouteParams = {
   tradeId: string;
@@ -183,7 +184,7 @@ export default function DispatchPage() {
       }
       actionButtonDisabled={actionButtonDisabled}
     >
-      <section className="page-section content-page-section settings-page">
+      <section className="page-section content-page-section settings-page dispatch-page">
         {!normalizedTradeId ? (
           <div role="alert">
             取引IDが見つかりません。
