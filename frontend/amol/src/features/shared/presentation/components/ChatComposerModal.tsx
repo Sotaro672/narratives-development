@@ -1,6 +1,10 @@
 // frontend/amol/src/features/shared/presentation/components/ChatComposerModal.tsx
 
-import { useId, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 
 export type ChatComposerModalProps = {
@@ -45,7 +49,34 @@ export default function ChatComposerModal({
   const titleId = useId();
   const descriptionId = useId();
 
-  if (!open || typeof document === "undefined") {
+  useEffect(() => {
+    if (
+      !open ||
+      typeof document === "undefined"
+    ) {
+      return;
+    }
+
+    const previousOverflow =
+      document.body.style.overflow;
+    const previousTouchAction =
+      document.body.style.touchAction;
+
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+
+    return () => {
+      document.body.style.overflow =
+        previousOverflow;
+      document.body.style.touchAction =
+        previousTouchAction;
+    };
+  }, [open]);
+
+  if (
+    !open ||
+    typeof document === "undefined"
+  ) {
     return null;
   }
 
@@ -56,10 +87,16 @@ export default function ChatComposerModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        aria-describedby={description ? descriptionId : undefined}
+        aria-describedby={
+          description
+            ? descriptionId
+            : undefined
+        }
       >
         <div className="chat-detail-page__modal-header">
-          <h2 id={titleId}>{title}</h2>
+          <h2 id={titleId}>
+            {title}
+          </h2>
 
           <button
             type="button"
@@ -73,7 +110,10 @@ export default function ChatComposerModal({
         </div>
 
         {description ? (
-          <div id={descriptionId} className="chat-detail-page__content">
+          <div
+            id={descriptionId}
+            className="chat-detail-page__content"
+          >
             {description}
           </div>
         ) : null}
@@ -82,10 +122,15 @@ export default function ChatComposerModal({
           className="chat-detail-page__reply-input"
           value={content}
           onChange={(event) => {
-            onContentChange(event.target.value);
+            onContentChange(
+              event.target.value,
+            );
           }}
           placeholder={placeholder}
-          aria-label={inputAriaLabel ?? placeholder}
+          aria-label={
+            inputAriaLabel ??
+            placeholder
+          }
           rows={rows}
           maxLength={maxLength}
           disabled={submitting}
@@ -112,9 +157,14 @@ export default function ChatComposerModal({
           <button
             type="button"
             onClick={onSubmit}
-            disabled={!canSubmit || submitting}
+            disabled={
+              !canSubmit ||
+              submitting
+            }
           >
-            {submitting ? submittingLabel : submitLabel}
+            {submitting
+              ? submittingLabel
+              : submitLabel}
           </button>
         </div>
       </div>

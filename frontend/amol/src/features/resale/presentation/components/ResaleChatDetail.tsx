@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import Layout from "../../../../components/layout/Layout";
-import { formatDateTime } from "../../../../components/utils/date";
 
 import { getMyAvatar } from "../../../avatar/api/avatarApi";
 
@@ -17,6 +16,8 @@ import {
 } from "../../../market/infrastructure/marketResaleReviewApi";
 
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
+import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
+import ChatMessageHeader from "../../../shared/presentation/components/ChatMessageHeader";
 import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
 import type { MarketResaleListing } from "../../../shared/types/marketResale";
 import type {
@@ -75,10 +76,6 @@ function getErrorMessage(
   }
 
   return fallbackMessage;
-}
-
-function getInitial(value: string): string {
-  return Array.from(value)[0] ?? "？";
 }
 
 function getResaleStatusLabel(status: ResaleStatus): string {
@@ -347,29 +344,6 @@ export default function ResaleChatDetail({
   useEffect(() => {
     void loadThread();
   }, [loadThread]);
-
-  useEffect(() => {
-    if (!isReplyModalOpen) {
-      return;
-    }
-
-    const previousOverflow =
-      document.body.style.overflow;
-
-    const previousTouchAction =
-      document.body.style.touchAction;
-
-    document.body.style.overflow = "hidden";
-    document.body.style.touchAction = "none";
-
-    return () => {
-      document.body.style.overflow =
-        previousOverflow;
-
-      document.body.style.touchAction =
-        previousTouchAction;
-    };
-  }, [isReplyModalOpen]);
 
   const sortedComments = useMemo(
     () => sortComments(comments),
@@ -698,56 +672,23 @@ function ResaleThreadHeader({
     item.avatarName ||
     "出品者";
 
-  const sellerInitial =
-    getInitial(sellerName);
-
   const productTitle =
     item.productName ||
     item.tokenName ||
     "出品商品";
 
-  const createdAt =
-    item.createdAt || "";
-
   return (
     <ChatThreadCard variant="resale">
-      <div className="chat-detail-page__message-head">
-        <div className="chat-detail-page__sender-profile">
-          <div
-            className="chat-detail-page__sender-icon"
-            aria-hidden="true"
-          >
-            {item.avatarIcon ? (
-              <img
-                src={item.avatarIcon}
-                alt=""
-                className="chat-detail-page__sender-icon-image"
-              />
-            ) : (
-              <span>{sellerInitial}</span>
-            )}
-          </div>
-
-          <div>
-            <span className="chat-detail-page__sender">
-              {sellerName}
-            </span>
-
-            {createdAt ? (
-              <time
-                className="chat-detail-page__date"
-                dateTime={createdAt}
-              >
-                {formatDateTime(createdAt)}
-              </time>
-            ) : null}
-          </div>
-        </div>
-
-        <span className="chat-detail-page__status">
-          {getResaleStatusLabel(item.status)}
-        </span>
-      </div>
+      <ChatMessageHeader
+        name={sellerName}
+        icon={item.avatarIcon}
+        createdAt={item.createdAt}
+        action={
+          <span className="chat-detail-page__status">
+            {getResaleStatusLabel(item.status)}
+          </span>
+        }
+      />
 
       <h2 className="chat-detail-page__subject">
         {productTitle}/出品
@@ -839,47 +780,15 @@ function ResaleCommentMessage({
     comment.avatarName ||
     "ユーザー";
 
-  const avatarInitial =
-    getInitial(avatarName);
-
-  const className = isMine
-    ? "chat-detail-page__reply chat-detail-page__reply--avatar"
-    : "chat-detail-page__reply";
-
   return (
-    <article className={className}>
-      <div className="chat-detail-page__message-head">
-        <div className="chat-detail-page__sender-profile">
-          <div
-            className="chat-detail-page__sender-icon"
-            aria-hidden="true"
-          >
-            {comment.avatarIcon ? (
-              <img
-                src={comment.avatarIcon}
-                alt=""
-                className="chat-detail-page__sender-icon-image"
-              />
-            ) : (
-              <span>{avatarInitial}</span>
-            )}
-          </div>
-
-          <div>
-            <span className="chat-detail-page__sender">
-              {avatarName}
-            </span>
-
-            <time
-              className="chat-detail-page__date"
-              dateTime={comment.createdAt}
-            >
-              {formatDateTime(comment.createdAt)}
-            </time>
-          </div>
-        </div>
-
-        {canDelete ? (
+    <ChatMessageBubble
+      senderName={avatarName}
+      senderIcon={comment.avatarIcon}
+      createdAt={comment.createdAt}
+      content={comment.body}
+      isMine={isMine}
+      action={
+        canDelete ? (
           <button
             type="button"
             className="chat-detail-page__status"
@@ -896,12 +805,8 @@ function ResaleCommentMessage({
               ? "削除中"
               : "削除"}
           </button>
-        ) : null}
-      </div>
-
-      <p className="chat-detail-page__content">
-        {comment.body}
-      </p>
-    </article>
+        ) : undefined
+      }
+    />
   );
 }

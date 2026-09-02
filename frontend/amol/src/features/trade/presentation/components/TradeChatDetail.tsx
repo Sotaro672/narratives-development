@@ -12,6 +12,8 @@ import { getFirebaseIdToken } from "../../../../lib/authToken";
 import { returnOrderItem } from "../../../order/api/orderDetailApi";
 import ReturnRequestModal, { type ReturnPackageState } from "../../../order/components/ReturnRequestModal";
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
+import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
+import ChatMessageHeader from "../../../shared/presentation/components/ChatMessageHeader";
 import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
 import { createProductModelDisplay } from "../../../shared/presentation/utils/productModelDisplay";
 import "../../../shared/styles/trade-chat-detail.css";
@@ -44,10 +46,6 @@ type TradeSenderDisplay = {
 function getErrorMessage(caught: unknown, fallbackMessage: string): string {
   if (caught instanceof Error && caught.message) return caught.message;
   return fallbackMessage;
-}
-
-function getInitial(value: string): string {
-  return Array.from(value)[0] ?? "？";
 }
 
 function getTradeTitle(productName?: string): string {
@@ -185,21 +183,6 @@ export default function TradeChatDetail({
   useEffect(() => {
     void loadThread();
   }, [loadThread]);
-
-  useEffect(() => {
-    if (!isReplyModalOpen && !isCancelModalOpen) return;
-
-    const previousOverflow = document.body.style.overflow;
-    const previousTouchAction = document.body.style.touchAction;
-
-    document.body.style.overflow = "hidden";
-    document.body.style.touchAction = "none";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.body.style.touchAction = previousTouchAction;
-    };
-  }, [isCancelModalOpen, isReplyModalOpen]);
 
   const sortedMessages = useMemo(
     () => sortMessages(trade?.messages ?? []),
@@ -712,7 +695,6 @@ function TradeThreadHeader({
     counterpartAvatarName || counterpartLabel;
 
   const title = getTradeTitle(trade.productName);
-  const initial = getInitial(displayName);
   const model = createProductModelDisplay(trade.resale);
   const [orderIdCopied, setOrderIdCopied] = useState(false);
 
@@ -739,43 +721,16 @@ function TradeThreadHeader({
 
   return (
     <ChatThreadCard variant="trade">
-      <div className="chat-detail-page__message-head">
-        <div className="chat-detail-page__sender-profile">
-          <div
-            className="chat-detail-page__sender-icon"
-            aria-hidden="true"
-          >
-            {counterpartAvatarIcon ? (
-              <img
-                src={counterpartAvatarIcon}
-                alt=""
-                className="chat-detail-page__sender-icon-image"
-              />
-            ) : (
-              <span>{initial}</span>
-            )}
-          </div>
-
-          <div>
-            <span className="chat-detail-page__sender">
-              {displayName}
-            </span>
-
-            {trade.createdAt ? (
-              <time
-                className="chat-detail-page__date"
-                dateTime={trade.createdAt}
-              >
-                {formatDateTime(trade.createdAt)}
-              </time>
-            ) : null}
-          </div>
-        </div>
-
-        <span className="chat-detail-page__status">
-          {getTradeStatusLabel(trade)}
-        </span>
-      </div>
+      <ChatMessageHeader
+        name={displayName}
+        icon={counterpartAvatarIcon}
+        createdAt={trade.createdAt}
+        action={
+          <span className="chat-detail-page__status">
+            {getTradeStatusLabel(trade)}
+          </span>
+        }
+      />
 
       <h2 className="chat-detail-page__subject">
         {title}
@@ -945,57 +900,14 @@ function TradeMessageCard({
     trade,
   );
 
-  const senderInitial = getInitial(sender.name);
-
-  const className = isMine
-    ? "chat-detail-page__reply chat-detail-page__reply--avatar"
-    : isSystem
-      ? "chat-detail-page__reply chat-detail-page__reply--system"
-      : "chat-detail-page__reply";
-
   return (
-    <article className={className}>
-      <div className="chat-detail-page__message-head">
-        <div className="chat-detail-page__sender-profile">
-          {!isSystem ? (
-            <div
-              className="chat-detail-page__sender-icon"
-              aria-hidden="true"
-            >
-              {sender.icon ? (
-                <img
-                  src={sender.icon}
-                  alt=""
-                  className="chat-detail-page__sender-icon-image"
-                />
-              ) : (
-                <span>{senderInitial}</span>
-              )}
-            </div>
-          ) : null}
-
-          <div>
-            <span className="chat-detail-page__sender">
-              {sender.name}
-            </span>
-
-            {message.createdAt ? (
-              <time
-                className="chat-detail-page__date"
-                dateTime={message.createdAt}
-              >
-                {formatDateTime(message.createdAt)}
-              </time>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {message.content ? (
-        <p className="chat-detail-page__content">
-          {message.content}
-        </p>
-      ) : null}
-    </article>
+    <ChatMessageBubble
+      senderName={sender.name}
+      senderIcon={sender.icon}
+      createdAt={message.createdAt}
+      content={message.content}
+      isMine={isMine}
+      isSystem={isSystem}
+    />
   );
 }
