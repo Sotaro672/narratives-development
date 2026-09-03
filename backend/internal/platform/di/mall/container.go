@@ -45,6 +45,7 @@ type Container struct {
 	ResalePayoutNotificationUC     usecase.ResalePayoutNotificationUsecasePort
 	OrderUC                        *usecase.OrderUsecase
 	TradeUC                        *usecase.TradeUsecase
+	AvatarReviewUC                 *usecase.AvatarReviewUsecase
 	TradeMessageUC                 *usecase.TradeMessageUsecase
 	ResaleTradeDispatchUC          *usecase.ResaleTradeDispatchUsecase
 	ResaleTradeReturnReceiptUC     *usecase.ResaleTradeReturnReceiptUsecase

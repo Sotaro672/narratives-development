@@ -143,8 +143,6 @@ export type MallScanTransferResponse = {
   matchedItemIndex?: number;
   matchedItemType?: "list" | "resale";
   txSignature: string;
-  fromDisplayName: string;
-  toDisplayName: string;
   updatedToAddress: boolean;
   assetId: string;
 };

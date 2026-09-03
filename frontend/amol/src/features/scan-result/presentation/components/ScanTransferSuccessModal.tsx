@@ -1,39 +1,79 @@
 // frontend/amol/src/features/scan-result/presentation/components/ScanTransferSuccessModal.tsx
 
-import type {
-  ScanTransferSuccessModalViewModel,
-} from "../../application";
+import { useEffect, useState } from "react";
+
+type ReviewEvaluation = "good" | "disappointed";
 
 type Props = {
   open: boolean;
   loading: boolean;
   error: string | null;
-  viewModel:
-    ScanTransferSuccessModalViewModel | null;
+  canOpenContents: boolean;
   onClose: () => void;
   onOpenContents: () => void;
+  reviewEnabled?: boolean;
+  reviewSubmitting?: boolean;
+  reviewSubmitted?: boolean;
+  reviewError?: string | null;
+  onSubmitReview?: (
+    evaluation: ReviewEvaluation,
+    comment: string,
+  ) => void | Promise<void>;
 };
 
-function displayText(
-  value: string,
-): string {
-  return value.trim() || "-";
-}
+const MAX_REVIEW_COMMENT_LENGTH = 500;
 
 export default function ScanTransferSuccessModal({
   open,
   loading,
   error,
-  viewModel,
+  canOpenContents,
   onClose,
   onOpenContents,
+  reviewEnabled = false,
+  reviewSubmitting = false,
+  reviewSubmitted = false,
+  reviewError = null,
+  onSubmitReview,
 }: Props) {
+  const [reviewEvaluation, setReviewEvaluation] =
+    useState<ReviewEvaluation | null>(null);
+  const [reviewComment, setReviewComment] = useState("");
+
+  useEffect(() => {
+    if (!open) {
+      setReviewEvaluation(null);
+      setReviewComment("");
+    }
+  }, [open]);
+
   if (!open) {
     return null;
   }
 
-  const canOpenContents =
-    viewModel?.canOpenContents === true;
+  const normalizedComment = reviewComment.trim();
+  const canSubmitReview =
+    reviewEnabled &&
+    !reviewSubmitting &&
+    !reviewSubmitted &&
+    reviewEvaluation !== null &&
+    normalizedComment.length > 0 &&
+    onSubmitReview != null;
+
+  const handleSubmitReview = async () => {
+    if (
+      !canSubmitReview ||
+      reviewEvaluation === null ||
+      onSubmitReview == null
+    ) {
+      return;
+    }
+
+    await onSubmitReview(
+      reviewEvaluation,
+      normalizedComment,
+    );
+  };
 
   return (
     <div
@@ -50,7 +90,7 @@ export default function ScanTransferSuccessModal({
       >
         <div className="scan-transfer-modal__header">
           <h2 className="scan-transfer-modal__title">
-            トークン移譲結果
+            トークン移譲完了
           </h2>
 
           <button
@@ -71,60 +111,136 @@ export default function ScanTransferSuccessModal({
           <p className="scan-transfer-modal__error">
             {error}
           </p>
-        ) : viewModel ? (
+        ) : (
           <div className="scan-transfer-modal__body">
-            <dl className="scan-transfer-modal__list">
-              <div>
-                <dt>商品名</dt>
-                <dd>
-                  {displayText(
-                    viewModel.productName,
-                  )}
-                </dd>
-              </div>
+            <p className="scan-transfer-modal__message">
+              トークンの移譲が完了しました。
+            </p>
 
-              <div>
-                <dt>トークン名</dt>
-                <dd>
-                  {displayText(
-                    viewModel.tokenName,
-                  )}
-                </dd>
-              </div>
+            {reviewEnabled ? (
+              <section
+                className="scan-transfer-modal__review"
+                aria-label="取引相手への評価"
+              >
+                <h3 className="scan-transfer-modal__review-title">
+                  取引相手への評価
+                </h3>
 
-              <div>
-                <dt>移譲元</dt>
-                <dd>
-                  {displayText(
-                    viewModel.fromName,
-                  )}
-                </dd>
-              </div>
+                {reviewSubmitted ? (
+                  <p className="scan-transfer-modal__review-success">
+                    評価を投稿しました。ありがとうございます。
+                  </p>
+                ) : (
+                  <>
+                    <p className="scan-transfer-modal__review-description">
+                      商品を受け取るまでの対応はいかがでしたか？
+                    </p>
 
-              <div>
-                <dt>移譲先</dt>
-                <dd>
-                  {displayText(
-                    viewModel.toName,
-                  )}
-                </dd>
-              </div>
-            </dl>
+                    <div
+                      className="scan-transfer-modal__review-options"
+                      role="group"
+                      aria-label="評価"
+                    >
+                      <button
+                        type="button"
+                        className={[
+                          "scan-transfer-modal__review-option",
+                          reviewEvaluation === "good"
+                            ? "scan-transfer-modal__review-option--selected"
+                            : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        aria-pressed={
+                          reviewEvaluation === "good"
+                        }
+                        disabled={reviewSubmitting}
+                        onClick={() => {
+                          setReviewEvaluation("good");
+                        }}
+                      >
+                        良かった
+                      </button>
 
-            {canOpenContents ? (
-              <p className="scan-transfer-modal__message">
-                トークンコンテンツを表示できる状態になりました。
-              </p>
+                      <button
+                        type="button"
+                        className={[
+                          "scan-transfer-modal__review-option",
+                          reviewEvaluation === "disappointed"
+                            ? "scan-transfer-modal__review-option--selected"
+                            : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        aria-pressed={
+                          reviewEvaluation === "disappointed"
+                        }
+                        disabled={reviewSubmitting}
+                        onClick={() => {
+                          setReviewEvaluation(
+                            "disappointed",
+                          );
+                        }}
+                      >
+                        残念だった
+                      </button>
+                    </div>
+
+                    <label className="scan-transfer-modal__review-comment">
+                      <span className="scan-transfer-modal__review-comment-label">
+                        コメント
+                      </span>
+
+                      <textarea
+                        className="scan-transfer-modal__review-textarea"
+                        value={reviewComment}
+                        maxLength={
+                          MAX_REVIEW_COMMENT_LENGTH
+                        }
+                        disabled={reviewSubmitting}
+                        placeholder="取引相手の対応についてコメントしてください"
+                        onChange={(event) => {
+                          setReviewComment(
+                            event.target.value,
+                          );
+                        }}
+                      />
+                    </label>
+
+                    <div className="scan-transfer-modal__review-meta">
+                      <span>
+                        {reviewComment.length}/
+                        {MAX_REVIEW_COMMENT_LENGTH}
+                      </span>
+                    </div>
+
+                    {reviewError ? (
+                      <p className="scan-transfer-modal__error">
+                        {reviewError}
+                      </p>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      className="scan-transfer-modal__button scan-transfer-modal__review-submit"
+                      disabled={!canSubmitReview}
+                      onClick={() => {
+                        void handleSubmitReview();
+                      }}
+                    >
+                      {reviewSubmitting
+                        ? "投稿中..."
+                        : "評価を投稿"}
+                    </button>
+                  </>
+                )}
+              </section>
             ) : null}
           </div>
-        ) : (
-          <p className="scan-transfer-modal__message">
-            移譲結果を取得できませんでした。
-          </p>
         )}
 
         <div className="scan-transfer-modal__footer">
-          {canOpenContents ? (
+          {canOpenContents && !loading && !error ? (
             <button
               type="button"
               className="scan-transfer-modal__button"

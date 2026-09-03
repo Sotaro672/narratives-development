@@ -49,6 +49,7 @@ type mallUsecases struct {
 	refundCompletionNotificationUC usecase.RefundCompletionNotificationUsecasePort
 	orderUC                        *usecase.OrderUsecase
 	tradeUC                        *usecase.TradeUsecase
+	avatarReviewUC                 *usecase.AvatarReviewUsecase
 	tradeMessageUC                 *usecase.TradeMessageUsecase
 	resaleTradeDispatchUC          *usecase.ResaleTradeDispatchUsecase
 	resaleTradeReturnReceiptUC     *usecase.ResaleTradeReturnReceiptUsecase
@@ -86,6 +87,12 @@ func buildMallUsecases(
 	}
 	if r.tradeRepo == nil {
 		return nil, errors.New("di.mall: trade repository is nil")
+	}
+	if r.avatarReviewRepo == nil {
+		return nil, errors.New("di.mall: avatar review repository is nil")
+	}
+	if r.orderRepo == nil {
+		return nil, errors.New("di.mall: order repository is nil")
 	}
 	if r.tradeMessageRepo == nil {
 		return nil, errors.New("di.mall: trade message repository is nil")
@@ -237,6 +244,15 @@ func buildMallUsecases(
 		return nil, errors.New("di.mall: trade usecase is nil")
 	}
 
+	avatarReviewUC := usecase.NewAvatarReviewUsecase(
+		r.avatarReviewRepo,
+		r.tradeRepo,
+		r.orderRepo,
+	)
+	if avatarReviewUC == nil {
+		return nil, errors.New("di.mall: avatar review usecase is nil")
+	}
+
 	tradeMessageUC := usecase.NewTradeMessageUsecase(
 		r.tradeRepo,
 		r.tradeMessageRepo,
@@ -321,9 +337,7 @@ func buildMallUsecases(
 	}
 
 	resalePayoutNotificationQueue, err :=
-		cloudtasksadp.NewResalePayoutNotificationQueueFromEnv(
-			ctx,
-		)
+		cloudtasksadp.NewResalePayoutNotificationQueueFromEnv(ctx)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"di.mall: build resale payout notification queue: %w",
@@ -336,24 +350,22 @@ func buildMallUsecases(
 		)
 	}
 
-	resalePayoutNotificationMailer :=
-		mailadp.NewResalePayoutNotificationMailer(
-			resendClient,
-			cfg.ResendFrom,
-		)
+	resalePayoutNotificationMailer := mailadp.NewResalePayoutNotificationMailer(
+		resendClient,
+		cfg.ResendFrom,
+	)
 	if resalePayoutNotificationMailer == nil {
 		return nil, errors.New(
 			"di.mall: resale payout notification mailer is nil",
 		)
 	}
 
-	resalePayoutNotificationUC :=
-		usecase.NewResalePayoutNotificationUsecase(
-			r.resalePayoutNotificationRepo,
-			authUserReader,
-			resalePayoutNotificationMailer,
-			resalePayoutNotificationQueue,
-		)
+	resalePayoutNotificationUC := usecase.NewResalePayoutNotificationUsecase(
+		r.resalePayoutNotificationRepo,
+		authUserReader,
+		resalePayoutNotificationMailer,
+		resalePayoutNotificationQueue,
+	)
 	if resalePayoutNotificationUC == nil {
 		return nil, errors.New(
 			"di.mall: resale payout notification usecase is nil",
@@ -592,9 +604,7 @@ func buildMallUsecases(
 	inventoryUC := usecase.NewInventoryUsecase(r.inventoryRepo)
 
 	refundCompletionNotificationQueue, err :=
-		cloudtasksadp.NewRefundCompletionNotificationQueueFromEnv(
-			ctx,
-		)
+		cloudtasksadp.NewRefundCompletionNotificationQueueFromEnv(ctx)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"di.mall: build refund completion notification queue: %w",
@@ -602,35 +612,32 @@ func buildMallUsecases(
 		)
 	}
 
-	refundCompletionNotificationMailer :=
-		mailadp.NewRefundCompletionNotificationMailer(
-			resendClient,
-			cfg.ResendFrom,
-		)
+	refundCompletionNotificationMailer := mailadp.NewRefundCompletionNotificationMailer(
+		resendClient,
+		cfg.ResendFrom,
+	)
 
-	refundCompletionNotificationUC :=
-		usecase.NewRefundCompletionNotificationUsecase(
-			r.refundCompletionNotificationRepo,
-			authUserReader,
-			refundCompletionNotificationMailer,
-			refundCompletionNotificationQueue,
-		)
+	refundCompletionNotificationUC := usecase.NewRefundCompletionNotificationUsecase(
+		r.refundCompletionNotificationRepo,
+		authUserReader,
+		refundCompletionNotificationMailer,
+		refundCompletionNotificationQueue,
+	)
 	if refundCompletionNotificationUC == nil {
 		return nil, errors.New(
 			"di.mall: refund completion notification usecase is nil",
 		)
 	}
 
-	resaleTradeReturnReceiptUC :=
-		usecase.NewResaleTradeReturnReceiptUsecase(
-			usecase.NewResaleTradeReturnReceiptUsecaseInput{
-				TradeRepository:          r.tradeRepo,
-				OrderService:             orderUC,
-				InquiryRepository:        r.inquiryRepo,
-				ItemRefundService:        itemRefundUC,
-				RefundCompletionNotifier: refundCompletionNotificationUC,
-			},
-		)
+	resaleTradeReturnReceiptUC := usecase.NewResaleTradeReturnReceiptUsecase(
+		usecase.NewResaleTradeReturnReceiptUsecaseInput{
+			TradeRepository:          r.tradeRepo,
+			OrderService:             orderUC,
+			InquiryRepository:        r.inquiryRepo,
+			ItemRefundService:        itemRefundUC,
+			RefundCompletionNotifier: refundCompletionNotificationUC,
+		},
+	)
 	if resaleTradeReturnReceiptUC == nil {
 		return nil, errors.New(
 			"di.mall: resale trade return receipt usecase is nil",
@@ -662,6 +669,7 @@ func buildMallUsecases(
 		refundCompletionNotificationUC: refundCompletionNotificationUC,
 		orderUC:                        orderUC,
 		tradeUC:                        tradeUC,
+		avatarReviewUC:                 avatarReviewUC,
 		tradeMessageUC:                 tradeMessageUC,
 		resaleTradeDispatchUC:          resaleTradeDispatchUC,
 		resaleTradeReturnReceiptUC:     resaleTradeReturnReceiptUC,
@@ -705,6 +713,7 @@ func (u *mallUsecases) applyToContainer(c *Container) {
 	c.ResalePayoutNotificationUC = u.resalePayoutNotificationUC
 	c.OrderUC = u.orderUC
 	c.TradeUC = u.tradeUC
+	c.AvatarReviewUC = u.avatarReviewUC
 	c.TradeMessageUC = u.tradeMessageUC
 	c.ResaleTradeDispatchUC = u.resaleTradeDispatchUC
 	c.ResaleTradeReturnReceiptUC = u.resaleTradeReturnReceiptUC

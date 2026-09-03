@@ -1,0 +1,133 @@
+/* frontend/amol/src/styles/avatar-review-page.css */
+
+.avatar-review-summary {
+  width: 100%;
+  margin-top: 12px;
+  padding: 14px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  background: transparent;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.avatar-review-summary:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.avatar-review-summary__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.avatar-review-summary__label {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.avatar-review-summary__count {
+  font-size: 20px;
+}
+
+.avatar-review-summary__divider {
+  width: 1px;
+  height: 32px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.avatar-review-summary__arrow {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.avatar-review-page {
+  width: min(720px, 100%);
+  margin: 0 auto;
+}
+
+.avatar-review-page__header {
+  margin-bottom: 24px;
+}
+
+.avatar-review-page__title {
+  margin: 0 0 16px;
+  font-size: 22px;
+}
+
+.avatar-review-page__summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.avatar-review-page__summary-item {
+  padding: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.avatar-review-page__summary-item strong {
+  font-size: 24px;
+}
+
+.avatar-review-page__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.avatar-review-card {
+  padding: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+}
+
+.avatar-review-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar-review-card__evaluation {
+  font-size: 14px;
+}
+
+.avatar-review-card__date {
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+.avatar-review-card__comment {
+  margin: 12px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
+.avatar-review-page__empty,
+.avatar-review-page__message {
+  margin: 24px 0;
+}
+
+.avatar-review-page__pagination {
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+}
+
+.avatar-review-page__pagination button {
+  min-width: 72px;
+  min-height: 40px;
+}
