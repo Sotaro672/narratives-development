@@ -1,0 +1,44 @@
+.favorite-heart-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #777;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.favorite-heart-button:hover:not(:disabled) {
+  background: #f7f7f7;
+  color: #444;
+}
+
+.favorite-heart-button:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+.favorite-heart-button--liked {
+  color: #e53935;
+}
+
+.favorite-heart-button--liked:hover:not(:disabled) {
+  color: #d32f2f;
+}
+
+.favorite-heart-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.favorite-heart-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

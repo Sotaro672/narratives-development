@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 
 import FooterNav from "../components/layout/FooterNav";
 import Layout from "../components/layout/Layout";
-import Button from "../components/ui/Button";
 import { formatPrice } from "../components/utils/price";
 
 import MeasurementTable from "../features/catalog/presentation/components/MeasurementTable";
@@ -13,6 +12,7 @@ import ProductInfoCard from "../features/catalog/presentation/components/Product
 import { useCatalogPage } from "../features/catalog/presentation/hooks/useCatalogPage";
 
 import { useAuthState } from "../features/shared/hooks/useAuthState";
+import FavoriteHeartButton from "../features/shared/presentation/components/FavoriteHeartButton";
 import ProductDescription from "../features/shared/presentation/components/ProductDescription";
 import ProductDetailLayout from "../features/shared/presentation/components/ProductDetailLayout";
 import ProductIdentity from "../features/shared/presentation/components/ProductIdentity";
@@ -80,16 +80,6 @@ export default function CatalogPage() {
 
     navigate(-1);
   };
-
-  const likeButtonLabel = isLoadingLike
-    ? "お気に入り確認中"
-    : isUpdatingLike
-      ? isLiked
-        ? "お気に入り解除中"
-        : "お気に入り追加中"
-      : isLiked
-        ? "お気に入りから解除"
-        : "お気に入りに追加";
 
   return (
     <Layout
@@ -174,15 +164,11 @@ export default function CatalogPage() {
 
             {isLoggedIn ? (
               <>
-                <Button
-                  variant="secondary"
-                  fullWidth
+                <FavoriteHeartButton
+                  isLiked={isLiked}
                   disabled={isLoadingLike || isUpdatingLike}
-                  aria-pressed={isLiked}
                   onClick={handleToggleLike}
-                >
-                  {likeButtonLabel}
-                </Button>
+                />
 
                 {likeErrorMessage ? (
                   <p className="catalog-page-error" role="alert">
