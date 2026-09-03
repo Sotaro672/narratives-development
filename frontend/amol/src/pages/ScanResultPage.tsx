@@ -23,6 +23,7 @@ export default function ScanResultPage() {
     state,
     viewModel,
     hasMultipleTransfers,
+    canOpenTransferContents,
     load,
     submitReview,
     nextReviewsPage,
@@ -32,7 +33,6 @@ export default function ScanResultPage() {
     transferModalOpen,
     transferModalError,
     closeTransferModal,
-    transferSuccessModalViewModel,
   } = useScanResultPage();
 
   const handleSubmitReview = useCallback(async () => {
@@ -51,10 +51,7 @@ export default function ScanResultPage() {
       return;
     }
 
-    const searchParams = new URLSearchParams({
-      productId,
-    });
-
+    const searchParams = new URLSearchParams({ productId });
     navigate(`/inquiries/new?${searchParams.toString()}`);
   }, [navigate, state.productId]);
 
@@ -92,9 +89,7 @@ export default function ScanResultPage() {
         canOpenInquiryPage ? "問い合わせ" : undefined
       }
       onSecondaryActionButtonClick={
-        canOpenInquiryPage
-          ? handleOpenInquiryPage
-          : undefined
+        canOpenInquiryPage ? handleOpenInquiryPage : undefined
       }
       secondaryActionButtonDisabled={!canOpenInquiryPage}
       footerProps={
@@ -106,9 +101,7 @@ export default function ScanResultPage() {
               value: reviewBody,
               rating: reviewRating,
               placeholder: "口コミを入力",
-              buttonLabel: state.postingReview
-                ? "投稿中"
-                : "投稿",
+              buttonLabel: state.postingReview ? "投稿中" : "投稿",
               disabled: !canPostReview,
               posting: state.postingReview,
               onChange: setReviewBody,
@@ -139,7 +132,7 @@ export default function ScanResultPage() {
         open={transferModalOpen}
         loading={state.busyTransfer}
         error={transferModalError}
-        viewModel={transferSuccessModalViewModel}
+        canOpenContents={canOpenTransferContents}
         onClose={closeTransferModal}
         onOpenContents={openContentsAfterResolve}
       />
