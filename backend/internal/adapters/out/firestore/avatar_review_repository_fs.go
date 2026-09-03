@@ -20,26 +20,25 @@ var (
 	ErrAvatarReviewRepositoryNotConfigured = errors.New(
 		"avatar_review_repository_fs: not configured",
 	)
-
 	ErrInvalidAvatarReviewDocumentData = errors.New(
 		"avatar_review_repository_fs: invalid avatar review document data",
+	)
+	ErrInvalidAvatarReviewSummaryDocumentData = errors.New(
+		"avatar_review_repository_fs: invalid avatar review summary document data",
 	)
 )
 
 // AvatarReviewRepositoryFS implements avatarreviewdom.Repository using Firestore.
 //
-// Collection:
+// Collections:
 //
 //	avatarReviews/{tradeId}
+//	avatarReviewSummaries/{avatarId}
 //
-// Review.ID and Review.TradeID are both equal to the Firestore document ID.
+// avatarReviews stores immutable individual reviews. Review.ID and
+// Review.TradeID are both equal to the Firestore document ID.
 //
-// Because one Trade can have at most one Avatar Review, using tradeId directly
-// as the document ID allows Firestore DocumentRef.Create to enforce uniqueness
-// atomically.
-//
-// Avatar Reviews are immutable after creation, therefore this repository does
-// not expose Update or Delete operations.
+// avatarReviewSummaries stores mutable public evaluation totals for each Avatar.
 type AvatarReviewRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -52,6 +51,10 @@ func NewAvatarReviewRepositoryFS(client *firestore.Client) *AvatarReviewReposito
 
 func (r *AvatarReviewRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("avatarReviews")
+}
+
+func (r *AvatarReviewRepositoryFS) summaryCol() *firestore.CollectionRef {
+	return r.Client.Collection("avatarReviewSummaries")
 }
 
 // ============================================================
@@ -81,7 +84,6 @@ func (r *AvatarReviewRepositoryFS) GetByTradeID(
 		if status.Code(err) == codes.NotFound {
 			return avatarreviewdom.Review{}, avatarreviewdom.ErrNotFound
 		}
-
 		return avatarreviewdom.Review{}, err
 	}
 
@@ -121,7 +123,7 @@ func (r *AvatarReviewRepositoryFS) ListByRevieweeAvatarID(
 		return nil, avatarreviewdom.ErrInvalidRevieweeAvatarID
 	}
 	if params.Limit <= 0 || params.Offset < 0 {
-		return nil, avatarreviewdom.ErrInvalidRevieweeAvatarID
+		return nil, avatarreviewdom.ErrInvalidPagination
 	}
 
 	query := r.col().
@@ -165,11 +167,12 @@ func (r *AvatarReviewRepositoryFS) ListByRevieweeAvatarID(
 
 // GetSummaryByRevieweeAvatarID returns public evaluation totals for one Avatar.
 //
-// No matching Review is a normal result and returns:
+// Primary source:
 //
-//	GoodCount:         0
-//	DisappointedCount: 0
-//	Total:             0
+//	avatarReviewSummaries/{avatarId}
+//
+// For backward compatibility, when the summary document does not yet exist,
+// totals are calculated from existing avatarReviews documents.
 func (r *AvatarReviewRepositoryFS) GetSummaryByRevieweeAvatarID(
 	ctx context.Context,
 	revieweeAvatarID string,
@@ -183,6 +186,31 @@ func (r *AvatarReviewRepositoryFS) GetSummaryByRevieweeAvatarID(
 		return avatarreviewdom.ReviewSummary{}, avatarreviewdom.ErrInvalidRevieweeAvatarID
 	}
 
+	snap, err := r.summaryCol().Doc(revieweeAvatarID).Get(ctx)
+	if err == nil {
+		doc, err := docToAvatarReviewSummary(snap, revieweeAvatarID)
+		if err != nil {
+			return avatarreviewdom.ReviewSummary{}, err
+		}
+
+		return avatarreviewdom.ReviewSummary{
+			GoodCount:         doc.GoodCount,
+			DisappointedCount: doc.DisappointedCount,
+			Total:             doc.Total,
+		}, nil
+	}
+
+	if status.Code(err) != codes.NotFound {
+		return avatarreviewdom.ReviewSummary{}, err
+	}
+
+	return r.calculateSummaryFromReviews(ctx, revieweeAvatarID)
+}
+
+func (r *AvatarReviewRepositoryFS) calculateSummaryFromReviews(
+	ctx context.Context,
+	revieweeAvatarID string,
+) (avatarreviewdom.ReviewSummary, error) {
 	it := r.col().
 		Where("revieweeAvatarId", "==", revieweeAvatarID).
 		Documents(ctx)
@@ -232,22 +260,91 @@ func (r *AvatarReviewRepositoryFS) GetSummaryByRevieweeAvatarID(
 }
 
 // ============================================================
+// Summary
+// ============================================================
+
+// EnsureSummaryByRevieweeAvatarID ensures that a zero-valued summary document
+// exists for one Avatar. Existing totals are never overwritten.
+//
+// Firestore:
+//
+//	avatarReviewSummaries/{avatarId}
+func (r *AvatarReviewRepositoryFS) EnsureSummaryByRevieweeAvatarID(
+	ctx context.Context,
+	revieweeAvatarID string,
+	now time.Time,
+) error {
+	if r == nil || r.Client == nil {
+		return ErrAvatarReviewRepositoryNotConfigured
+	}
+
+	revieweeAvatarID = strings.TrimSpace(revieweeAvatarID)
+	if revieweeAvatarID == "" {
+		return avatarreviewdom.ErrInvalidRevieweeAvatarID
+	}
+	if now.IsZero() {
+		return avatarreviewdom.ErrInvalidCreatedAt
+	}
+
+	now = now.UTC()
+
+	doc := avatarReviewSummaryDoc{
+		AvatarID:          revieweeAvatarID,
+		GoodCount:         0,
+		DisappointedCount: 0,
+		Total:             0,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}
+
+	_, err := r.summaryCol().Doc(revieweeAvatarID).Create(ctx, doc)
+	if err != nil {
+		if status.Code(err) == codes.AlreadyExists {
+			return nil
+		}
+		return err
+	}
+
+	return nil
+}
+
+// DeleteSummaryByRevieweeAvatarID deletes one Avatar Review summary.
+// A missing summary is treated as success.
+func (r *AvatarReviewRepositoryFS) DeleteSummaryByRevieweeAvatarID(
+	ctx context.Context,
+	revieweeAvatarID string,
+) error {
+	if r == nil || r.Client == nil {
+		return ErrAvatarReviewRepositoryNotConfigured
+	}
+
+	revieweeAvatarID = strings.TrimSpace(revieweeAvatarID)
+	if revieweeAvatarID == "" {
+		return avatarreviewdom.ErrInvalidRevieweeAvatarID
+	}
+
+	_, err := r.summaryCol().Doc(revieweeAvatarID).Delete(ctx)
+	if err != nil && status.Code(err) != codes.NotFound {
+		return err
+	}
+
+	return nil
+}
+
+// ============================================================
 // Create
 // ============================================================
 
-// Create persists one immutable Avatar Review.
-//
-// Review.ID must equal Review.TradeID.
+// Create persists one immutable Avatar Review and updates the corresponding
+// Avatar Review summary in one Firestore transaction.
 //
 // Firestore:
 //
 //	avatarReviews/{tradeId}
+//	avatarReviewSummaries/{revieweeAvatarId}
 //
-// DocumentRef.Create is intentionally used instead of Set.
-//
-// This guarantees that an existing Avatar Review cannot be overwritten and
-// that concurrent attempts to review the same Trade result in
-// avatarreviewdom.ErrAlreadyExists.
+// This guarantees that an Avatar Review cannot be created without the public
+// summary being updated and prevents duplicate reviews for the same Trade.
 func (r *AvatarReviewRepositoryFS) Create(
 	ctx context.Context,
 	review avatarreviewdom.Review,
@@ -266,14 +363,70 @@ func (r *AvatarReviewRepositoryFS) Create(
 
 	review.CreatedAt = review.CreatedAt.UTC()
 
-	ref := r.col().Doc(review.TradeID)
+	reviewRef := r.col().Doc(review.TradeID)
+	summaryRef := r.summaryCol().Doc(review.RevieweeAvatarID)
 
-	_, err := ref.Create(ctx, avatarReviewToDoc(review))
-	if err != nil {
-		if status.Code(err) == codes.AlreadyExists {
-			return avatarreviewdom.Review{}, avatarreviewdom.ErrAlreadyExists
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		reviewSnap, err := tx.Get(reviewRef)
+		if err == nil && reviewSnap.Exists() {
+			return avatarreviewdom.ErrAlreadyExists
+		}
+		if err != nil && status.Code(err) != codes.NotFound {
+			return err
 		}
 
+		now := review.CreatedAt
+		summaryDoc := avatarReviewSummaryDoc{
+			AvatarID:          review.RevieweeAvatarID,
+			GoodCount:         0,
+			DisappointedCount: 0,
+			Total:             0,
+			CreatedAt:         now,
+			UpdatedAt:         now,
+		}
+
+		summarySnap, err := tx.Get(summaryRef)
+		if err == nil {
+			existing, err := docToAvatarReviewSummary(summarySnap, review.RevieweeAvatarID)
+			if err != nil {
+				return err
+			}
+			summaryDoc = existing
+		} else if status.Code(err) != codes.NotFound {
+			return err
+		}
+
+		switch review.Evaluation {
+		case avatarreviewdom.EvaluationGood:
+			summaryDoc.GoodCount++
+		case avatarreviewdom.EvaluationDisappointed:
+			summaryDoc.DisappointedCount++
+		default:
+			return avatarreviewdom.ErrInvalidEvaluation
+		}
+
+		summaryDoc.Total++
+		summaryDoc.UpdatedAt = now
+
+		if err := tx.Create(reviewRef, avatarReviewToDoc(review)); err != nil {
+			if status.Code(err) == codes.AlreadyExists {
+				return avatarreviewdom.ErrAlreadyExists
+			}
+			return err
+		}
+
+		if err := tx.Set(summaryRef, summaryDoc); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		if errors.Is(err, avatarreviewdom.ErrAlreadyExists) ||
+			status.Code(err) == codes.AlreadyExists {
+			return avatarreviewdom.Review{}, avatarreviewdom.ErrAlreadyExists
+		}
 		return avatarreviewdom.Review{}, err
 	}
 
@@ -281,7 +434,7 @@ func (r *AvatarReviewRepositoryFS) Create(
 }
 
 // ============================================================
-// Firestore document
+// Firestore documents
 // ============================================================
 
 type avatarReviewDoc struct {
@@ -298,6 +451,15 @@ type avatarReviewDoc struct {
 	Comment    string `firestore:"comment"`
 
 	CreatedAt time.Time `firestore:"createdAt"`
+}
+
+type avatarReviewSummaryDoc struct {
+	AvatarID          string    `firestore:"avatarId"`
+	GoodCount         int64     `firestore:"goodCount"`
+	DisappointedCount int64     `firestore:"disappointedCount"`
+	Total             int64     `firestore:"total"`
+	CreatedAt         time.Time `firestore:"createdAt"`
+	UpdatedAt         time.Time `firestore:"updatedAt"`
 }
 
 // ============================================================
@@ -342,8 +504,6 @@ func docToAvatarReview(
 		CreatedAt:        doc.CreatedAt.UTC(),
 	}
 
-	// avatarReviews/{tradeId} must contain an entity whose ID and TradeID
-	// both match the actual Firestore document ID.
 	if review.ID != snap.Ref.ID || review.TradeID != snap.Ref.ID {
 		return avatarreviewdom.Review{}, fmt.Errorf(
 			"avatar review %s: %w: document id mismatch",
@@ -362,4 +522,42 @@ func docToAvatarReview(
 	}
 
 	return review, nil
+}
+
+func docToAvatarReviewSummary(
+	snap *firestore.DocumentSnapshot,
+	expectedAvatarID string,
+) (avatarReviewSummaryDoc, error) {
+	if snap == nil || snap.Ref == nil || !snap.Exists() {
+		return avatarReviewSummaryDoc{}, avatarreviewdom.ErrNotFound
+	}
+
+	var doc avatarReviewSummaryDoc
+	if err := snap.DataTo(&doc); err != nil {
+		return avatarReviewSummaryDoc{}, err
+	}
+
+	expectedAvatarID = strings.TrimSpace(expectedAvatarID)
+	doc.AvatarID = strings.TrimSpace(doc.AvatarID)
+
+	if doc.AvatarID == "" ||
+		doc.AvatarID != expectedAvatarID ||
+		snap.Ref.ID != expectedAvatarID ||
+		doc.GoodCount < 0 ||
+		doc.DisappointedCount < 0 ||
+		doc.Total < 0 ||
+		doc.Total != doc.GoodCount+doc.DisappointedCount ||
+		doc.CreatedAt.IsZero() ||
+		doc.UpdatedAt.IsZero() {
+		return avatarReviewSummaryDoc{}, fmt.Errorf(
+			"avatar review summary %s: %w",
+			snap.Ref.ID,
+			ErrInvalidAvatarReviewSummaryDocumentData,
+		)
+	}
+
+	doc.CreatedAt = doc.CreatedAt.UTC()
+	doc.UpdatedAt = doc.UpdatedAt.UTC()
+
+	return doc, nil
 }

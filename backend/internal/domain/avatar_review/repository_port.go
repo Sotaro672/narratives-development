@@ -4,6 +4,7 @@ package avatar_review
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // ============================================================
@@ -51,15 +52,16 @@ type ListByRevieweeAvatarIDParams struct {
 // Firestore:
 //
 //	avatarReviews/{tradeId}
+//	avatarReviewSummaries/{avatarId}
 //
-// One Trade can have at most one Avatar Review.
+// avatarReviews stores immutable individual reviews. One Trade can have at most
+// one Avatar Review. Review.ID is intentionally equal to Review.TradeID so the
+// persistence layer can enforce the one-review-per-trade constraint by using
+// tradeId as the document ID.
 //
-// Review.ID is intentionally equal to Review.TradeID so that the persistence
-// layer can enforce the one-review-per-trade constraint by using tradeId as
-// the document ID.
-//
-// Avatar Review is immutable after creation. Editing and deletion are
-// intentionally not part of this repository contract.
+// avatarReviewSummaries is a mutable read model keyed by reviewee Avatar ID.
+// It is initialized when an Avatar is created and maintains public evaluation
+// totals independently from immutable Review documents.
 type Repository interface {
 	// GetByTradeID retrieves the Avatar Review associated with one Trade.
 	// Implementations should return ErrNotFound when no Review exists.
@@ -81,7 +83,23 @@ type Repository interface {
 		revieweeAvatarID string,
 	) (ReviewSummary, error)
 
-	// Create persists one Avatar Review.
+	// EnsureSummaryByRevieweeAvatarID ensures that the summary document for one
+	// Avatar exists. When the document does not exist, implementations should
+	// initialize all counts to zero. Existing summary values must not be reset.
+	EnsureSummaryByRevieweeAvatarID(
+		ctx context.Context,
+		revieweeAvatarID string,
+		now time.Time,
+	) error
+
+	// DeleteSummaryByRevieweeAvatarID deletes the summary document for one
+	// Avatar. Implementations should treat a missing document as success.
+	DeleteSummaryByRevieweeAvatarID(
+		ctx context.Context,
+		revieweeAvatarID string,
+	) error
+
+	// Create persists one immutable Avatar Review.
 	//
 	// Implementations must enforce:
 	//

@@ -271,9 +271,11 @@ func buildUsecases(
 
 	brandWalletSvc := solanainfra.NewBrandWalletService(c.firestoreProjectID)
 	avatarWalletSvc := solanainfra.NewAvatarWalletService(c.firestoreProjectID)
+	avatarReviewRepo := fsrepo.NewAvatarReviewRepositoryFS(c.fsClient)
 
 	avatarUC := uc.NewAvatarUsecase(
 		r.avatarRepo,
+		avatarReviewRepo,
 		avatarWalletSvc,
 		r.walletRepo,
 		r.cartRepo,
@@ -485,9 +487,11 @@ func buildUsecases(
 	if err != nil {
 		return nil, resources.CloseWithError(err)
 	}
+
 	if mintTaskQueue == nil {
 		return nil, resources.CloseWithError(errors.New("di.console: mint task queue is nil"))
 	}
+
 	resources.Add("mint task queue", mintTaskQueue)
 	mintUC.SetMintTaskEnqueuer(mintTaskQueue)
 

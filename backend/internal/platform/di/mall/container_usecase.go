@@ -177,6 +177,7 @@ func buildMallUsecases(
 
 	avatarUC := usecase.NewAvatarUsecase(
 		r.avatarRepo,
+		r.avatarReviewRepo,
 		avatarWalletSvc,
 		r.walletRepo,
 		r.cartRepo,

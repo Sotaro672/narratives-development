@@ -56,7 +56,7 @@ export function useWalletPage() {
       setAuthResolved(true);
     });
 
-    return () => unsubscribe();
+    return unsubscribe;
   }, [navigate]);
 
   useEffect(() => {
@@ -79,12 +79,17 @@ export function useWalletPage() {
           throw new Error("ログイン中のアバター情報が見つかりません。");
         }
 
-        const nextViewedAvatarId = routeAvatarId || meAvatar.avatarId;
-        const nextIsOwnAvatar = !routeAvatarId || routeAvatarId === meAvatar.avatarId;
+        const normalizedRouteAvatarId = routeAvatarId?.trim() ?? "";
+        const nextViewedAvatarId = normalizedRouteAvatarId || meAvatar.avatarId;
+        const nextIsOwnAvatar =
+          !normalizedRouteAvatarId ||
+          normalizedRouteAvatarId === meAvatar.avatarId;
 
         const viewedAvatar = nextIsOwnAvatar
           ? meAvatar
-          : await getPublicAvatar({ avatarId: nextViewedAvatarId });
+          : await getPublicAvatar({
+              avatarId: nextViewedAvatarId,
+            });
 
         if (!viewedAvatar) {
           throw new Error("公開アバター情報が見つかりません。");
@@ -92,7 +97,7 @@ export function useWalletPage() {
 
         if (!isMounted) return;
 
-        setAvatarId(viewedAvatar.avatarId);
+        setAvatarId(meAvatar.avatarId);
         setViewedAvatarId(viewedAvatar.avatarId);
         setIsOwnAvatar(nextIsOwnAvatar);
         setAvatarName(viewedAvatar.avatarName);

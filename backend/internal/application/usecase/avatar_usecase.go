@@ -13,18 +13,17 @@ import (
 )
 
 type AvatarUsecase struct {
-	avRepo avatardom.Repository
-
-	walletSvc  AvatarWalletService
-	walletRepo WalletRepo
-
-	cartRepo AvatarCartRepo
-
-	now func() time.Time
+	avRepo           avatardom.Repository
+	avatarReviewRepo AvatarReviewSummaryRepo
+	walletSvc        AvatarWalletService
+	walletRepo       WalletRepo
+	cartRepo         AvatarCartRepo
+	now              func() time.Time
 }
 
 func NewAvatarUsecase(
 	avRepo avatardom.Repository,
+	avatarReviewRepo AvatarReviewSummaryRepo,
 	walletSvc AvatarWalletService,
 	walletRepo WalletRepo,
 	cartRepo AvatarCartRepo,
@@ -35,25 +34,35 @@ func NewAvatarUsecase(
 	}
 
 	return &AvatarUsecase{
-		avRepo:     avRepo,
-		walletSvc:  walletSvc,
-		walletRepo: walletRepo,
-		cartRepo:   cartRepo,
-		now:        now,
+		avRepo:           avRepo,
+		avatarReviewRepo: avatarReviewRepo,
+		walletSvc:        walletSvc,
+		walletRepo:       walletRepo,
+		cartRepo:         cartRepo,
+		now:              now,
 	}
 }
 
 type WalletRepo interface {
-	Save(
-		ctx context.Context,
-		avatarID string,
-		w walletdom.Wallet,
-	) error
+	Save(ctx context.Context, avatarID string, w walletdom.Wallet) error
 }
 
 type AvatarCartRepo interface {
 	Upsert(ctx context.Context, c *cartdom.Cart) error
 	DeleteByAvatarID(ctx context.Context, avatarID string) error
+}
+
+type AvatarReviewSummaryRepo interface {
+	EnsureSummaryByRevieweeAvatarID(
+		ctx context.Context,
+		avatarID string,
+		now time.Time,
+	) error
+
+	DeleteSummaryByRevieweeAvatarID(
+		ctx context.Context,
+		avatarID string,
+	) error
 }
 
 type AvatarWalletService interface {
@@ -66,6 +75,9 @@ type AvatarWalletService interface {
 var (
 	ErrAvatarRepoNotConfigured = errors.New(
 		"avatar: repository not configured",
+	)
+	ErrAvatarReviewRepoNotConfigured = errors.New(
+		"avatar: avatar review repository not configured",
 	)
 	ErrWalletRepoNotConfigured = errors.New(
 		"avatar: wallet repository not configured",
@@ -111,6 +123,10 @@ func (u *AvatarUsecase) DeleteAvatarCascade(
 		return ErrAvatarRepoNotConfigured
 	}
 
+	if u.avatarReviewRepo != nil {
+		_ = u.avatarReviewRepo.DeleteSummaryByRevieweeAvatarID(ctx, avatarID)
+	}
+
 	if u.cartRepo != nil {
 		_ = u.cartRepo.DeleteByAvatarID(ctx, avatarID)
 	}
@@ -134,6 +150,10 @@ func (u *AvatarUsecase) Create(
 ) (avatardom.Avatar, error) {
 	if u == nil || u.avRepo == nil {
 		return avatardom.Avatar{}, ErrAvatarRepoNotConfigured
+	}
+
+	if u.avatarReviewRepo == nil {
+		return avatardom.Avatar{}, ErrAvatarReviewRepoNotConfigured
 	}
 
 	if u.walletSvc == nil {
@@ -168,8 +188,7 @@ func (u *AvatarUsecase) Create(
 		if s != "" {
 			if !strings.HasPrefix(s, "http://") &&
 				!strings.HasPrefix(s, "https://") {
-				return avatardom.Avatar{},
-					avatardom.ErrInvalidAvatarIcon
+				return avatardom.Avatar{}, avatardom.ErrInvalidAvatarIcon
 			}
 
 			avatarIcon = &s
@@ -204,6 +223,10 @@ func (u *AvatarUsecase) Create(
 	}
 
 	rollback := func() {
+		if u.avatarReviewRepo != nil {
+			_ = u.avatarReviewRepo.DeleteSummaryByRevieweeAvatarID(ctx, avatarID)
+		}
+
 		if u.cartRepo != nil {
 			_ = u.cartRepo.DeleteByAvatarID(ctx, avatarID)
 		}
@@ -211,6 +234,15 @@ func (u *AvatarUsecase) Create(
 		if u.avRepo != nil {
 			_ = u.avRepo.Delete(ctx, avatarID)
 		}
+	}
+
+	if err := u.avatarReviewRepo.EnsureSummaryByRevieweeAvatarID(
+		ctx,
+		avatarID,
+		now,
+	); err != nil {
+		rollback()
+		return avatardom.Avatar{}, err
 	}
 
 	cart, err := cartdom.NewCart(avatarID, nil, now)
@@ -224,10 +256,7 @@ func (u *AvatarUsecase) Create(
 		return avatardom.Avatar{}, err
 	}
 
-	walletResult, err := u.walletSvc.OpenAvatarWallet(
-		ctx,
-		avatarID,
-	)
+	walletResult, err := u.walletSvc.OpenAvatarWallet(ctx, avatarID)
 	if err != nil {
 		rollback()
 		return avatardom.Avatar{}, err
@@ -284,10 +313,8 @@ func (u *AvatarUsecase) Update(
 		return avatardom.Avatar{}, avatardom.ErrInvalidID
 	}
 
-	if patch.AvatarName != nil &&
-		*patch.AvatarName == "" {
-		return avatardom.Avatar{},
-			avatardom.ErrInvalidAvatarName
+	if patch.AvatarName != nil && *patch.AvatarName == "" {
+		return avatardom.Avatar{}, avatardom.ErrInvalidAvatarName
 	}
 
 	if patch.AvatarIcon != nil {
@@ -296,8 +323,7 @@ func (u *AvatarUsecase) Update(
 		if s != "" &&
 			!strings.HasPrefix(s, "http://") &&
 			!strings.HasPrefix(s, "https://") {
-			return avatardom.Avatar{},
-				avatardom.ErrInvalidAvatarIcon
+			return avatardom.Avatar{}, avatardom.ErrInvalidAvatarIcon
 		}
 	}
 
