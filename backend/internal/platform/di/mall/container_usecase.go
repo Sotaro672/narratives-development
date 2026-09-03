@@ -164,6 +164,9 @@ func buildMallUsecases(
 		).
 		WithReviewCleanup(
 			r.resaleReviewRepo.Cleanup(),
+		).
+		WithCartItemCleanup(
+			r.cartRepo,
 		)
 
 	resaleReviewUC := usecase.NewResaleReviewUsecase(

@@ -19,6 +19,7 @@ type ResaleUsecase struct {
 	imageRepo            resaledom.ImageRepository
 	imageStorage         applicationport.ResaleImageStorage
 	reviewCleanup        resalereview.CleanupRepository
+	cartItemCleanup      CartItemCleanup
 	productRepo          productdom.Repository
 	productBlueprintRepo productblueprintdom.Repository
 }
@@ -44,6 +45,15 @@ func (uc *ResaleUsecase) WithReviewCleanup(reviewCleanup resalereview.CleanupRep
 	return uc
 }
 
+func (uc *ResaleUsecase) WithCartItemCleanup(cartItemCleanup CartItemCleanup) *ResaleUsecase {
+	if uc == nil {
+		return nil
+	}
+
+	uc.cartItemCleanup = cartItemCleanup
+	return uc
+}
+
 func (uc *ResaleUsecase) WithProductIdentityRepositories(
 	productRepo productdom.Repository,
 	productBlueprintRepo productblueprintdom.Repository,
@@ -61,11 +71,9 @@ func (uc *ResaleUsecase) Create(ctx context.Context, item resaledom.Resale) (res
 	if uc == nil || uc.resaleRepo == nil {
 		return resaledom.Resale{}, ErrNotSupported("Resale.Create")
 	}
-
 	if uc.productRepo == nil || uc.productBlueprintRepo == nil {
 		return resaledom.Resale{}, ErrNotSupported("Resale.Create.ProductIdentity")
 	}
-
 	if item.ProductID == "" {
 		return resaledom.Resale{}, resaledom.ErrInvalidProductID
 	}
@@ -74,7 +82,6 @@ func (uc *ResaleUsecase) Create(ctx context.Context, item resaledom.Resale) (res
 	if err != nil {
 		return resaledom.Resale{}, err
 	}
-
 	if product.ID != item.ProductID || product.ModelID == "" {
 		return resaledom.Resale{}, resaledom.ErrInvalidProductID
 	}
@@ -83,7 +90,6 @@ func (uc *ResaleUsecase) Create(ctx context.Context, item resaledom.Resale) (res
 	if err != nil {
 		return resaledom.Resale{}, err
 	}
-
 	if productBlueprintID == "" {
 		return resaledom.Resale{}, resaledom.ErrInvalidProductBlueprintID
 	}
@@ -92,11 +98,9 @@ func (uc *ResaleUsecase) Create(ctx context.Context, item resaledom.Resale) (res
 	if err != nil {
 		return resaledom.Resale{}, err
 	}
-
 	if productBlueprint.ID != productBlueprintID {
 		return resaledom.Resale{}, resaledom.ErrInvalidProductBlueprintID
 	}
-
 	if productBlueprint.BrandID == "" {
 		return resaledom.Resale{}, resaledom.ErrInvalidBrandID
 	}
@@ -123,15 +127,34 @@ func (uc *ResaleUsecase) Update(ctx context.Context, item resaledom.Resale) (res
 		return resaledom.Resale{}, resaledom.ErrInvalidID
 	}
 
+	if item.Status == resaledom.StatusSuspended && uc.cartItemCleanup == nil {
+		return resaledom.Resale{}, ErrNotSupported("Resale.Update.CartItemCleanup")
+	}
+
 	item.ID = id
-	return uc.resaleRepo.Update(ctx, id, item)
+
+	updated, err := uc.resaleRepo.Update(ctx, id, item)
+	if err != nil {
+		return resaledom.Resale{}, err
+	}
+
+	// RemoveItemsByResaleID is idempotent.
+	// Always execute it while the resulting resale is suspended so a retry
+	// can complete cleanup even when the previous update already persisted
+	// status=suspended.
+	if updated.Status == resaledom.StatusSuspended {
+		if err := uc.cartItemCleanup.RemoveItemsByResaleID(ctx, id); err != nil {
+			return resaledom.Resale{}, err
+		}
+	}
+
+	return updated, nil
 }
 
 func (uc *ResaleUsecase) Delete(ctx context.Context, id string) error {
 	if uc == nil || uc.resaleRepo == nil {
 		return ErrNotSupported("Resale.Delete")
 	}
-
 	if id == "" {
 		return resaledom.ErrInvalidID
 	}
@@ -140,13 +163,14 @@ func (uc *ResaleUsecase) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-
 	if err := item.ValidateDelete(); err != nil {
 		return err
 	}
-
 	if uc.imageStorage == nil {
 		return ErrNotSupported("Resale.Delete.ImageStorage")
+	}
+	if uc.cartItemCleanup == nil {
+		return ErrNotSupported("Resale.Delete.CartItemCleanup")
 	}
 
 	if err := uc.imageStorage.DeleteAll(ctx, id); err != nil {
@@ -159,26 +183,26 @@ func (uc *ResaleUsecase) Delete(ctx context.Context, id string) error {
 		}
 	}
 
-	return uc.resaleRepo.Delete(ctx, id)
+	if err := uc.resaleRepo.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	return uc.cartItemCleanup.RemoveItemsByResaleID(ctx, id)
 }
 
 func (uc *ResaleUsecase) CreateImage(ctx context.Context, img resaledom.ResaleImage) (resaledom.ResaleImage, error) {
 	if uc == nil {
 		return resaledom.ResaleImage{}, ErrNotSupported("Resale.CreateImage")
 	}
-
 	if uc.imageRepo == nil {
 		return resaledom.ResaleImage{}, ErrNotSupported("Resale.CreateImage.ImageRepo")
 	}
-
 	if img.ResaleID == "" {
 		return resaledom.ResaleImage{}, resaledom.ErrInvalidConditionImageResaleID
 	}
-
 	if img.ID == "" {
 		return resaledom.ResaleImage{}, resaledom.ErrInvalidConditionImageID
 	}
-
 	if strings.Contains(img.ID, "/") || strings.Contains(img.ID, "://") {
 		return resaledom.ResaleImage{}, ErrInvalidArgument("invalid_image_id")
 	}
@@ -186,7 +210,6 @@ func (uc *ResaleUsecase) CreateImage(ctx context.Context, img resaledom.ResaleIm
 	if img.DisplayOrder < 0 {
 		img.DisplayOrder = 0
 	}
-
 	if img.CreatedAt.IsZero() {
 		img.CreatedAt = time.Now().UTC()
 	} else {
@@ -209,26 +232,21 @@ func (uc *ResaleUsecase) DeleteImage(ctx context.Context, resaleID string, image
 	if uc == nil {
 		return ErrNotSupported("Resale.DeleteImage")
 	}
-
 	if uc.imageRepo == nil {
 		return ErrNotSupported("Resale.DeleteImage.ImageRepo")
 	}
-
 	if resaleID == "" {
 		return resaledom.ErrInvalidConditionImageResaleID
 	}
-
 	if imageID == "" {
 		return resaledom.ErrInvalidConditionImageID
 	}
-
 	if strings.Contains(imageID, "/") || strings.Contains(imageID, "://") {
 		return ErrInvalidArgument("invalid_image_id")
 	}
 
 	if err := uc.imageRepo.Delete(ctx, resaleID, imageID); err != nil {
-		if !errors.Is(err, resaledom.ErrNotFound) &&
-			!errors.Is(err, resaledom.ErrConditionImageNotFound) {
+		if !errors.Is(err, resaledom.ErrNotFound) && !errors.Is(err, resaledom.ErrConditionImageNotFound) {
 			return err
 		}
 	}
@@ -256,23 +274,18 @@ func (uc *ResaleUsecase) SetPrimaryImage(
 	if uc == nil {
 		return resaledom.Resale{}, ErrNotSupported("Resale.SetPrimaryImage")
 	}
-
 	if uc.resaleRepo == nil {
 		return resaledom.Resale{}, ErrNotSupported("Resale.SetPrimaryImage.ResaleRepo")
 	}
-
 	if uc.imageRepo == nil {
 		return resaledom.Resale{}, ErrNotSupported("Resale.SetPrimaryImage.ImageRepo")
 	}
-
 	if resaleID == "" {
 		return resaledom.Resale{}, resaledom.ErrInvalidID
 	}
-
 	if imageID == "" {
 		return resaledom.Resale{}, resaledom.ErrEmptyImageID
 	}
-
 	if strings.Contains(imageID, "/") || strings.Contains(imageID, "://") {
 		return resaledom.Resale{}, resaledom.ErrInvalidImageID
 	}
@@ -298,15 +311,12 @@ func (uc *ResaleUsecase) SetPrimaryImage(
 	if !found {
 		return resaledom.Resale{}, resaledom.ErrNotFound
 	}
-
 	if selected.ID == "" {
 		return resaledom.Resale{}, resaledom.ErrInvalidImageID
 	}
-
 	if selected.ResaleID != "" && selected.ResaleID != resaleID {
 		return resaledom.Resale{}, errors.New("resale: image belongs to other resale")
 	}
-
 	if selected.URL == "" {
 		return resaledom.Resale{}, resaledom.ErrInvalidConditionImageURL
 	}

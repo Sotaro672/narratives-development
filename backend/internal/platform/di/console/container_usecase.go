@@ -379,6 +379,7 @@ func buildUsecases(
 			OperationRepository: r.listSaveOperationRepo,
 			Storage:             listSaveOperationStorage,
 			RetryQueue:          listSaveOperationRetryQueue,
+			CartItemCleanup:     r.cartRepo,
 		},
 	)
 
