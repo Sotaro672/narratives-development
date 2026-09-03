@@ -23,6 +23,7 @@ const (
 	invitationDeliverySupersededError       = "superseded by another active invitation delivery"
 	invitationDeliveryAttemptError          = "maximum invitation delivery attempts reached"
 	invitationDeliveryTokenError            = "invitation delivery token is not available"
+	invitationDeliveryRevokedError          = "invitation revoked by administrator"
 )
 
 type invitationDeliveryDocument struct {
@@ -980,6 +981,140 @@ func (r *InvitationTokenRepositoryFS) MarkInvitationDeliveryFailed(
 	}
 	return nil
 }
+
+// RevokeMemberInvitationsは、指定Memberに紐づく未使用・未失効の招待tokenを
+// すべて失効させ、未完了のdeliveryをfailedへ変更します。
+// delivered済みdeliveryは履歴として維持し、tokenだけを失効させます。
+func (r *InvitationTokenRepositoryFS) RevokeMemberInvitations(
+	ctx context.Context,
+	memberID string,
+	companyID string,
+	revokedAt time.Time,
+) error {
+	if r == nil || r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	memberID = strings.TrimSpace(memberID)
+	if memberID == "" {
+		return invdom.ErrInvitationMemberIDRequired
+	}
+
+	companyID = strings.TrimSpace(companyID)
+	if companyID == "" {
+		return invdom.ErrInvitationCompanyIDRequired
+	}
+
+	if revokedAt.IsZero() {
+		revokedAt = time.Now().UTC()
+	} else {
+		revokedAt = revokedAt.UTC()
+	}
+
+	activeRef := r.deliveryActivesCol().Doc(memberID)
+
+	err := r.Client.RunTransaction(
+		ctx,
+		func(
+			ctx context.Context,
+			tx *firestore.Transaction,
+		) error {
+			records, err := r.listMemberInvitationDeliveriesInTransaction(
+				tx,
+				memberID,
+			)
+			if err != nil {
+				return err
+			}
+
+			_, activeExists, err := getInvitationDeliveryActiveInTransaction(
+				tx,
+				activeRef,
+			)
+			if err != nil {
+				return err
+			}
+
+			for _, record := range records {
+				if strings.TrimSpace(record.Delivery.CompanyID) != companyID {
+					return invdom.ErrInvitationCompanyMismatch
+				}
+				if record.TokenExists &&
+					strings.TrimSpace(record.Token.CompanyID) != companyID {
+					return invdom.ErrInvitationCompanyMismatch
+				}
+
+				if record.TokenExists &&
+					!record.Token.IsUsed() &&
+					!record.Token.IsRevoked() {
+					token := record.Token
+					token.RevokedAt = copyInvitationTimePointer(&revokedAt)
+					token.UpdatedAt = copyInvitationTimePointer(&revokedAt)
+
+					if err := tx.Set(
+						record.TokenRef,
+						invitationTokenToDocument(token, revokedAt),
+					); err != nil {
+						return fmt.Errorf(
+							"revoke invitation token %q for member %q: %w",
+							token.Token,
+							memberID,
+							err,
+						)
+					}
+				}
+
+				if record.Delivery.Status ==
+					invdom.InvitationDeliveryStatusDelivered ||
+					record.Delivery.Status ==
+						invdom.InvitationDeliveryStatusFailed {
+					continue
+				}
+
+				failed, err := record.Delivery.MarkFailed(
+					invitationDeliveryRevokedError,
+					revokedAt,
+				)
+				if err != nil {
+					return err
+				}
+
+				if err := tx.Set(
+					record.Ref,
+					invitationDeliveryToDocument(failed),
+				); err != nil {
+					return fmt.Errorf(
+						"fail invitation delivery %q for member %q: %w",
+						record.Delivery.ID,
+						memberID,
+						err,
+					)
+				}
+			}
+
+			if activeExists {
+				if err := tx.Delete(activeRef); err != nil {
+					return fmt.Errorf(
+						"delete active invitation delivery for member %q: %w",
+						memberID,
+						err,
+					)
+				}
+			}
+
+			return nil
+		},
+	)
+	if err != nil {
+		return mapInvitationDeliveryRepositoryError(
+			"revoke member invitations",
+			err,
+		)
+	}
+
+	return nil
+}
+
 func (r *InvitationTokenRepositoryFS) listMemberInvitationDeliveriesInTransaction(
 	tx *firestore.Transaction,
 	memberID string,

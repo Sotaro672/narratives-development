@@ -2,7 +2,6 @@
 package invitation
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"time"
@@ -104,13 +103,7 @@ type InvitationDelivery struct {
 	FailedAt            *time.Time
 }
 
-func NewInvitationInfo(
-	memberID string,
-	companyID string,
-	assignedBrandIDs []string,
-	permissions []string,
-	email string,
-) (InvitationInfo, error) {
+func NewInvitationInfo(memberID string, companyID string, assignedBrandIDs []string, permissions []string, email string) (InvitationInfo, error) {
 	info := InvitationInfo{
 		MemberID:         strings.TrimSpace(memberID),
 		CompanyID:        strings.TrimSpace(companyID),
@@ -122,11 +115,9 @@ func NewInvitationInfo(
 	if info.MemberID == "" {
 		return InvitationInfo{}, ErrInvitationMemberIDRequired
 	}
-
 	if info.CompanyID == "" {
 		return InvitationInfo{}, ErrInvitationCompanyIDRequired
 	}
-
 	if info.Email == "" {
 		return InvitationInfo{}, ErrInvitationEmailRequired
 	}
@@ -135,22 +126,10 @@ func NewInvitationInfo(
 }
 
 func (i InvitationInfo) Normalize() (InvitationInfo, error) {
-	return NewInvitationInfo(
-		i.MemberID,
-		i.CompanyID,
-		i.AssignedBrandIDs,
-		i.Permissions,
-		i.Email,
-	)
+	return NewInvitationInfo(i.MemberID, i.CompanyID, i.AssignedBrandIDs, i.Permissions, i.Email)
 }
 
-func NewInvitationToken(
-	token string,
-	deliveryID string,
-	info InvitationInfo,
-	createdAt time.Time,
-	expiresAt *time.Time,
-) (InvitationToken, error) {
+func NewInvitationToken(token string, deliveryID string, info InvitationInfo, createdAt time.Time, expiresAt *time.Time) (InvitationToken, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return InvitationToken{}, ErrInvitationTokenRequired
@@ -184,20 +163,13 @@ func NewInvitationToken(
 }
 
 func (t InvitationToken) InvitationInfo() (InvitationInfo, error) {
-	return NewInvitationInfo(
-		t.MemberID,
-		t.CompanyID,
-		t.AssignedBrandIDs,
-		t.Permissions,
-		t.Email,
-	)
+	return NewInvitationInfo(t.MemberID, t.CompanyID, t.AssignedBrandIDs, t.Permissions, t.Email)
 }
 
 func (t InvitationToken) IsExpired(now time.Time) bool {
 	if t.ExpiresAt == nil || t.ExpiresAt.IsZero() {
 		return false
 	}
-
 	return !normalizeTime(now).Before(t.ExpiresAt.UTC())
 }
 
@@ -217,35 +189,22 @@ func (t InvitationToken) ValidateUsable(now time.Time) error {
 	if strings.TrimSpace(t.Token) == "" {
 		return ErrInvitationTokenNotFound
 	}
-
 	if t.IsRevoked() {
 		return ErrInvitationTokenRevoked
 	}
-
 	if t.IsUsed() {
 		return ErrInvitationTokenUsed
 	}
-
 	if t.IsExpired(now) {
 		return ErrInvitationTokenExpired
 	}
-
 	if !t.IsDelivered() {
 		return ErrInvitationTokenNotDelivered
 	}
-
 	return nil
 }
 
-func NewInvitationCompletion(
-	token string,
-	uid string,
-	lastName string,
-	lastNameKana string,
-	firstName string,
-	firstNameKana string,
-	email string,
-) (InvitationCompletion, error) {
+func NewInvitationCompletion(token string, uid string, lastName string, lastNameKana string, firstName string, firstNameKana string, email string) (InvitationCompletion, error) {
 	completion := InvitationCompletion{
 		Token:         strings.TrimSpace(token),
 		UID:           strings.TrimSpace(uid),
@@ -259,18 +218,12 @@ func NewInvitationCompletion(
 	if completion.Token == "" {
 		return InvitationCompletion{}, ErrInvitationTokenRequired
 	}
-
 	if completion.UID == "" {
 		return InvitationCompletion{}, ErrInvitationUIDRequired
 	}
-
-	if completion.LastName == "" ||
-		completion.LastNameKana == "" ||
-		completion.FirstName == "" ||
-		completion.FirstNameKana == "" {
+	if completion.LastName == "" || completion.LastNameKana == "" || completion.FirstName == "" || completion.FirstNameKana == "" {
 		return InvitationCompletion{}, ErrInvitationNameFieldsRequired
 	}
-
 	if completion.Email == "" {
 		return InvitationCompletion{}, ErrInvitationEmailRequired
 	}
@@ -279,24 +232,10 @@ func NewInvitationCompletion(
 }
 
 func (c InvitationCompletion) Normalize() (InvitationCompletion, error) {
-	return NewInvitationCompletion(
-		c.Token,
-		c.UID,
-		c.LastName,
-		c.LastNameKana,
-		c.FirstName,
-		c.FirstNameKana,
-		c.Email,
-	)
+	return NewInvitationCompletion(c.Token, c.UID, c.LastName, c.LastNameKana, c.FirstName, c.FirstNameKana, c.Email)
 }
 
-func NewInvitationDelivery(
-	deliveryID string,
-	token string,
-	info InvitationInfo,
-	createdAt time.Time,
-	maxAttempts int,
-) (InvitationDelivery, error) {
+func NewInvitationDelivery(deliveryID string, token string, info InvitationInfo, createdAt time.Time, maxAttempts int) (InvitationDelivery, error) {
 	deliveryID = strings.TrimSpace(deliveryID)
 	if deliveryID == "" {
 		return InvitationDelivery{}, ErrInvitationDeliveryIDRequired
@@ -315,7 +254,6 @@ func NewInvitationDelivery(
 	if maxAttempts == 0 {
 		maxAttempts = DefaultInvitationDeliveryMaxAttempts
 	}
-
 	if maxAttempts < 1 {
 		return InvitationDelivery{}, ErrInvitationDeliveryMaxAttemptsInvalid
 	}
@@ -349,13 +287,7 @@ func (d InvitationDelivery) Normalize() (InvitationDelivery, error) {
 		return InvitationDelivery{}, ErrInvitationTokenRequired
 	}
 
-	info, err := NewInvitationInfo(
-		d.MemberID,
-		d.CompanyID,
-		d.AssignedBrandIDs,
-		d.Permissions,
-		d.Email,
-	)
+	info, err := NewInvitationInfo(d.MemberID, d.CompanyID, d.AssignedBrandIDs, d.Permissions, d.Email)
 	if err != nil {
 		return InvitationDelivery{}, err
 	}
@@ -365,24 +297,20 @@ func (d InvitationDelivery) Normalize() (InvitationDelivery, error) {
 	d.AssignedBrandIDs = append([]string(nil), info.AssignedBrandIDs...)
 	d.Permissions = append([]string(nil), info.Permissions...)
 	d.Email = info.Email
-
 	d.Status = DeliveryStatus(strings.TrimSpace(string(d.Status)))
+
 	if d.Status == "" {
 		d.Status = InvitationDeliveryStatusPending
 	}
-
 	if !d.Status.IsValid() {
 		return InvitationDelivery{}, ErrInvitationDeliveryStatusInvalid
 	}
-
 	if d.AttemptCount < 0 {
 		return InvitationDelivery{}, ErrInvitationDeliveryAttemptCountInvalid
 	}
-
 	if d.MaxAttempts == 0 {
 		d.MaxAttempts = DefaultInvitationDeliveryMaxAttempts
 	}
-
 	if d.MaxAttempts < 1 || d.AttemptCount > d.MaxAttempts {
 		return InvitationDelivery{}, ErrInvitationDeliveryMaxAttemptsInvalid
 	}
@@ -408,26 +336,21 @@ func (d InvitationDelivery) Normalize() (InvitationDelivery, error) {
 		if d.ProcessingUntil == nil {
 			return InvitationDelivery{}, ErrInvitationDeliveryLeaseInvalid
 		}
-
 	case InvitationDeliveryStatusDelivered:
 		if d.DeliveredAt == nil {
 			return InvitationDelivery{}, ErrInvitationDeliveryStatusInvalid
 		}
-
 	case InvitationDeliveryStatusRetryableFailed:
 		if d.LastError == "" {
 			return InvitationDelivery{}, ErrInvitationDeliveryErrorRequired
 		}
-
 		if d.NextAttemptAt == nil {
 			return InvitationDelivery{}, ErrInvitationDeliveryNextAttemptInvalid
 		}
-
 	case InvitationDeliveryStatusFailed:
 		if d.LastError == "" {
 			return InvitationDelivery{}, ErrInvitationDeliveryErrorRequired
 		}
-
 		if d.FailedAt == nil {
 			return InvitationDelivery{}, ErrInvitationDeliveryStatusInvalid
 		}
@@ -437,13 +360,7 @@ func (d InvitationDelivery) Normalize() (InvitationDelivery, error) {
 }
 
 func (d InvitationDelivery) InvitationInfo() (InvitationInfo, error) {
-	return NewInvitationInfo(
-		d.MemberID,
-		d.CompanyID,
-		d.AssignedBrandIDs,
-		d.Permissions,
-		d.Email,
-	)
+	return NewInvitationInfo(d.MemberID, d.CompanyID, d.AssignedBrandIDs, d.Permissions, d.Email)
 }
 
 func (s DeliveryStatus) IsValid() bool {
@@ -454,45 +371,33 @@ func (s DeliveryStatus) IsValid() bool {
 		InvitationDeliveryStatusRetryableFailed,
 		InvitationDeliveryStatusFailed:
 		return true
-
 	default:
 		return false
 	}
 }
 
 func (d InvitationDelivery) IsTerminal() bool {
-	return d.Status == InvitationDeliveryStatusDelivered ||
-		d.Status == InvitationDeliveryStatusFailed
+	return d.Status == InvitationDeliveryStatusDelivered || d.Status == InvitationDeliveryStatusFailed
 }
 
 func (d InvitationDelivery) IsDue(now time.Time) bool {
 	now = normalizeTime(now)
 
 	switch d.Status {
-	case InvitationDeliveryStatusPending,
-		InvitationDeliveryStatusRetryableFailed:
-		return d.NextAttemptAt == nil ||
-			!now.Before(d.NextAttemptAt.UTC())
-
+	case InvitationDeliveryStatusPending, InvitationDeliveryStatusRetryableFailed:
+		return d.NextAttemptAt == nil || !now.Before(d.NextAttemptAt.UTC())
 	case InvitationDeliveryStatusProcessing:
-		return d.ProcessingUntil != nil &&
-			!now.Before(d.ProcessingUntil.UTC())
-
+		return d.ProcessingUntil != nil && !now.Before(d.ProcessingUntil.UTC())
 	default:
 		return false
 	}
 }
 
 func (d InvitationDelivery) CanClaim(now time.Time) bool {
-	return !d.IsTerminal() &&
-		d.AttemptCount < d.MaxAttempts &&
-		d.IsDue(now)
+	return !d.IsTerminal() && d.AttemptCount < d.MaxAttempts && d.IsDue(now)
 }
 
-func (d InvitationDelivery) Claim(
-	now time.Time,
-	processingUntil time.Time,
-) (InvitationDelivery, error) {
+func (d InvitationDelivery) Claim(now time.Time, processingUntil time.Time) (InvitationDelivery, error) {
 	normalized, err := d.Normalize()
 	if err != nil {
 		return InvitationDelivery{}, err
@@ -504,11 +409,9 @@ func (d InvitationDelivery) Claim(
 	if !processingUntil.After(now) {
 		return InvitationDelivery{}, ErrInvitationDeliveryLeaseInvalid
 	}
-
 	if normalized.AttemptCount >= normalized.MaxAttempts {
 		return InvitationDelivery{}, ErrInvitationDeliveryAttemptLimit
 	}
-
 	if !normalized.CanClaim(now) {
 		return InvitationDelivery{}, ErrInvitationDeliveryNotClaimable
 	}
@@ -524,10 +427,7 @@ func (d InvitationDelivery) Claim(
 	return normalized, nil
 }
 
-func (d InvitationDelivery) MarkDelivered(
-	providerMessageID string,
-	deliveredAt time.Time,
-) (InvitationDelivery, error) {
+func (d InvitationDelivery) MarkDelivered(providerMessageID string, deliveredAt time.Time) (InvitationDelivery, error) {
 	normalized, err := d.Normalize()
 	if err != nil {
 		return InvitationDelivery{}, err
@@ -536,13 +436,11 @@ func (d InvitationDelivery) MarkDelivered(
 	if normalized.Status == InvitationDeliveryStatusDelivered {
 		return normalized, nil
 	}
-
 	if normalized.Status != InvitationDeliveryStatusProcessing {
 		return InvitationDelivery{}, ErrInvitationDeliveryNotClaimable
 	}
 
 	deliveredAt = normalizeTime(deliveredAt)
-
 	normalized.Status = InvitationDeliveryStatusDelivered
 	normalized.ProviderMessageID = strings.TrimSpace(providerMessageID)
 	normalized.LastError = ""
@@ -556,11 +454,7 @@ func (d InvitationDelivery) MarkDelivered(
 	return normalized, nil
 }
 
-func (d InvitationDelivery) MarkRetryableFailed(
-	lastError string,
-	nextAttemptAt time.Time,
-	failedAt time.Time,
-) (InvitationDelivery, error) {
+func (d InvitationDelivery) MarkRetryableFailed(lastError string, nextAttemptAt time.Time, failedAt time.Time) (InvitationDelivery, error) {
 	normalized, err := d.Normalize()
 	if err != nil {
 		return InvitationDelivery{}, err
@@ -569,7 +463,6 @@ func (d InvitationDelivery) MarkRetryableFailed(
 	if normalized.Status != InvitationDeliveryStatusProcessing {
 		return InvitationDelivery{}, ErrInvitationDeliveryNotClaimable
 	}
-
 	if normalized.AttemptCount >= normalized.MaxAttempts {
 		return InvitationDelivery{}, ErrInvitationDeliveryAttemptLimit
 	}
@@ -596,10 +489,7 @@ func (d InvitationDelivery) MarkRetryableFailed(
 	return normalized, nil
 }
 
-func (d InvitationDelivery) MarkFailed(
-	lastError string,
-	failedAt time.Time,
-) (InvitationDelivery, error) {
+func (d InvitationDelivery) MarkFailed(lastError string, failedAt time.Time) (InvitationDelivery, error) {
 	normalized, err := d.Normalize()
 	if err != nil {
 		return InvitationDelivery{}, err
@@ -608,7 +498,6 @@ func (d InvitationDelivery) MarkFailed(
 	if normalized.Status == InvitationDeliveryStatusDelivered {
 		return InvitationDelivery{}, ErrInvitationDeliveryStatusInvalid
 	}
-
 	if normalized.Status == InvitationDeliveryStatusFailed {
 		return normalized, nil
 	}
@@ -619,7 +508,6 @@ func (d InvitationDelivery) MarkFailed(
 	}
 
 	failedAt = normalizeTime(failedAt)
-
 	normalized.Status = InvitationDeliveryStatusFailed
 	normalized.LastError = lastError
 	normalized.NextAttemptAt = nil
@@ -629,77 +517,6 @@ func (d InvitationDelivery) MarkFailed(
 	normalized.UpdatedAt = failedAt
 
 	return normalized, nil
-}
-
-// Repositoryは、利用者によるtoken検証と招待完了処理を提供します。
-type Repository interface {
-	ResolveInvitationInfoByToken(
-		ctx context.Context,
-		token string,
-	) (InvitationInfo, error)
-
-	CompleteInvitation(
-		ctx context.Context,
-		completion InvitationCompletion,
-	) error
-}
-
-// DeliveryRepositoryは、招待tokenとdelivery outboxを管理します。
-//
-// CreateOrReuseInvitationDeliveryは、同一Memberに対する未使用かつ
-// 未失効のtokenを複数作成してはいけません。
-//
-// 同一Memberにpending、processing、retryable_failedのdeliveryが
-// 存在する場合は、同じdeliveryとtokenを再利用します。
-//
-// MarkInvitationDeliveryDeliveredは、deliveryのdelivered化と
-// invitationToken.deliveredAt更新を同一transactionで実行します。
-//
-// MarkInvitationDeliveryFailedは、deliveryのfailed化と
-// invitationToken.revokedAt更新を同一transactionで実行します。
-type DeliveryRepository interface {
-	CreateOrReuseInvitationDelivery(
-		ctx context.Context,
-		info InvitationInfo,
-	) (InvitationDelivery, error)
-
-	ListDueInvitationDeliveries(
-		ctx context.Context,
-		now time.Time,
-		limit int,
-	) ([]InvitationDelivery, error)
-
-	ClaimInvitationDelivery(
-		ctx context.Context,
-		deliveryID string,
-		now time.Time,
-		processingUntil time.Time,
-	) (InvitationDelivery, error)
-
-	MarkInvitationDeliveryDelivered(
-		ctx context.Context,
-		deliveryID string,
-		expectedAttemptCount int,
-		providerMessageID string,
-		deliveredAt time.Time,
-	) error
-
-	MarkInvitationDeliveryRetryableFailed(
-		ctx context.Context,
-		deliveryID string,
-		expectedAttemptCount int,
-		lastError string,
-		nextAttemptAt time.Time,
-		failedAt time.Time,
-	) error
-
-	MarkInvitationDeliveryFailed(
-		ctx context.Context,
-		deliveryID string,
-		expectedAttemptCount int,
-		lastError string,
-		failedAt time.Time,
-	) error
 }
 
 func normalizeEmail(email string) string {
@@ -719,7 +536,6 @@ func normalizeStringValues(values []string) []string {
 		if value == "" {
 			continue
 		}
-
 		if _, exists := seen[value]; exists {
 			continue
 		}
@@ -739,7 +555,6 @@ func normalizeTime(value time.Time) time.Time {
 	if value.IsZero() {
 		return time.Now().UTC()
 	}
-
 	return value.UTC()
 }
 
