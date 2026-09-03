@@ -23,23 +23,12 @@ type MemberDetailQuery struct {
 }
 
 func NewMemberDetailQuery(repo memdom.Repository) *MemberDetailQuery {
-	return &MemberDetailQuery{
-		repo: repo,
-	}
+	return &MemberDetailQuery{repo: repo}
 }
 
 // GetByUID は Firebase Auth UID から MemberRecord を取得します。
-//
-// companyID を渡した場合は company scope まで確認します。
-// companyID を渡さない場合は UID のみで取得します。
-//
-// GET /members/{uid} は Firebase UID 専用 endpoint であり、
-// path parameter を member docId として扱いません。
-func (q *MemberDetailQuery) GetByUID(
-	ctx context.Context,
-	uid string,
-	companyID ...string,
-) (MemberRecord, error) {
+// GET /members/{uid} は Firebase UID 専用 endpoint として維持します。
+func (q *MemberDetailQuery) GetByUID(ctx context.Context, uid string, companyID ...string) (MemberRecord, error) {
 	if uid == "" {
 		return MemberRecord{}, memdom.ErrNotFound
 	}
@@ -53,8 +42,28 @@ func (q *MemberDetailQuery) GetByUID(
 		return MemberRecord{}, ErrMemberForbidden
 	}
 
-	return MemberRecord{
-		DocID:  rec.DocID,
-		Member: rec.Member,
-	}, nil
+	return MemberRecord{DocID: rec.DocID, Member: rec.Member}, nil
+}
+
+// GetByID は Firestore Member document ID から MemberRecord を取得します。
+// GET /members/by-id/{memberId} から利用し、Firebase UIDとして解釈しません。
+func (q *MemberDetailQuery) GetByID(ctx context.Context, memberID string, companyID ...string) (MemberRecord, error) {
+	if memberID == "" {
+		return MemberRecord{}, memdom.ErrNotFound
+	}
+
+	rec, err := q.repo.GetByID(ctx, memberID)
+	if err != nil {
+		return MemberRecord{}, err
+	}
+
+	if rec.DocID == "" {
+		return MemberRecord{}, memdom.ErrNotFound
+	}
+
+	if len(companyID) > 0 && companyID[0] != "" && rec.Member.CompanyID != companyID[0] {
+		return MemberRecord{}, ErrMemberForbidden
+	}
+
+	return MemberRecord{DocID: rec.DocID, Member: rec.Member}, nil
 }

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	invdom "narratives/internal/domain/invitation"
 	"sort"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -46,12 +45,14 @@ type invitationDeliveryDocument struct {
 	DeliveredAt         *time.Time            `firestore:"deliveredAt,omitempty"`
 	FailedAt            *time.Time            `firestore:"failedAt,omitempty"`
 }
+
 type invitationDeliveryActiveDocument struct {
 	DeliveryID string    `firestore:"deliveryId"`
 	Token      string    `firestore:"token"`
 	CreatedAt  time.Time `firestore:"createdAt"`
 	UpdatedAt  time.Time `firestore:"updatedAt"`
 }
+
 type invitationDeliveryRecord struct {
 	Ref         *firestore.DocumentRef
 	Delivery    invdom.InvitationDelivery
@@ -63,276 +64,178 @@ type invitationDeliveryRecord struct {
 func (r *InvitationTokenRepositoryFS) deliveriesCol() *firestore.CollectionRef {
 	return r.Client.Collection(invitationDeliveriesCollectionName)
 }
+
 func (r *InvitationTokenRepositoryFS) deliveryActivesCol() *firestore.CollectionRef {
 	return r.Client.Collection(invitationDeliveryActivesCollectionName)
 }
 
 var _ invdom.DeliveryRepository = (*InvitationTokenRepositoryFS)(nil)
 
-// CreateOrReuseInvitationDeliveryは、Memberごとの有効なdeliveryとtokenを
-// 1件に集約します。
-//
-// pending、processing、retryable_failed、または未使用のdeliveredが
-// 既に存在する場合は、そのdeliveryとtokenを再利用します。
-//
-// 有効なdeliveryが存在しない場合は、tokenとdeliveryを同一transactionで
-// 新規作成します。
+// CreateOrReuseInvitationDeliveryは、Memberごとの有効なdeliveryとtokenを1件に集約します。
+// pending、processing、retryable_failed、または未使用のdeliveredが既に存在する場合は、そのdeliveryとtokenを再利用します。
+// 有効なdeliveryが存在しない場合は、tokenとdeliveryを同一transactionで新規作成します。
 func (r *InvitationTokenRepositoryFS) CreateOrReuseInvitationDelivery(
 	ctx context.Context,
 	info invdom.InvitationInfo,
 ) (invdom.InvitationDelivery, error) {
 	if r == nil || r.Client == nil {
-		return invdom.InvitationDelivery{},
-			errors.New("firestore client is nil")
+		return invdom.InvitationDelivery{}, errors.New("firestore client is nil")
 	}
+
 	normalizedInfo, err := info.Normalize()
 	if err != nil {
 		return invdom.InvitationDelivery{}, err
 	}
+
 	newDeliveryRef := r.deliveriesCol().NewDoc()
 	newRawToken := r.col().NewDoc().ID
-	newTokenRef := r.col().Doc(
-		invitationTokenDocumentID(newRawToken),
-	)
-	activeRef := r.deliveryActivesCol().Doc(
-		normalizedInfo.MemberID,
-	)
+	newTokenRef := r.col().Doc(invitationTokenDocumentID(newRawToken))
+	activeRef := r.deliveryActivesCol().Doc(normalizedInfo.MemberID)
+
 	var result invdom.InvitationDelivery
-	err = r.Client.RunTransaction(
-		ctx,
-		func(
-			ctx context.Context,
-			tx *firestore.Transaction,
-		) error {
-			now := time.Now().UTC()
-			activeDocument, activeExists, err :=
-				getInvitationDeliveryActiveInTransaction(
-					tx,
-					activeRef,
-				)
-			if err != nil {
-				return err
+
+	err = r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		now := time.Now().UTC()
+
+		activeDocument, activeExists, err := getInvitationDeliveryActiveInTransaction(tx, activeRef)
+		if err != nil {
+			return err
+		}
+
+		records, err := r.listMemberInvitationDeliveriesInTransaction(tx, normalizedInfo.MemberID)
+		if err != nil {
+			return err
+		}
+
+		sort.SliceStable(records, func(i int, j int) bool {
+			left := records[i].Delivery.UpdatedAt
+			right := records[j].Delivery.UpdatedAt
+			if left.Equal(right) {
+				return records[i].Delivery.CreatedAt.After(records[j].Delivery.CreatedAt)
 			}
-			records, err :=
-				r.listMemberInvitationDeliveriesInTransaction(
-					tx,
-					normalizedInfo.MemberID,
-				)
-			if err != nil {
-				return err
+			return left.After(right)
+		})
+
+		selectedIndex := -1
+
+		if activeExists {
+			for index := range records {
+				if records[index].Delivery.ID != activeDocument.DeliveryID {
+					continue
+				}
+				if records[index].Delivery.Token != activeDocument.Token {
+					continue
+				}
+				if reusableInvitationDeliveryRecord(records[index], normalizedInfo, now) {
+					selectedIndex = index
+				}
+				break
 			}
-			sort.SliceStable(
-				records,
-				func(i int, j int) bool {
-					left := records[i].Delivery.UpdatedAt
-					right := records[j].Delivery.UpdatedAt
-					if left.Equal(right) {
-						return records[i].Delivery.CreatedAt.After(
-							records[j].Delivery.CreatedAt,
-						)
-					}
-					return left.After(right)
-				},
-			)
-			selectedIndex := -1
-			if activeExists {
-				for index := range records {
-					if records[index].Delivery.ID !=
-						activeDocument.DeliveryID {
-						continue
-					}
-					if records[index].Delivery.Token !=
-						activeDocument.Token {
-						continue
-					}
-					if reusableInvitationDeliveryRecord(
-						records[index],
-						normalizedInfo,
-						now,
-					) {
-						selectedIndex = index
-					}
+		}
+
+		if selectedIndex < 0 {
+			for index := range records {
+				if reusableInvitationDeliveryRecord(records[index], normalizedInfo, now) {
+					selectedIndex = index
 					break
 				}
 			}
-			if selectedIndex < 0 {
-				for index := range records {
-					if reusableInvitationDeliveryRecord(
-						records[index],
-						normalizedInfo,
-						now,
-					) {
-						selectedIndex = index
-						break
-					}
-				}
+		}
+
+		for index := range records {
+			if index == selectedIndex {
+				continue
 			}
-			for index := range records {
-				if index == selectedIndex {
-					continue
-				}
-				if !revocableInvitationDeliveryRecord(
-					records[index],
-					now,
-				) {
-					continue
-				}
-				if err := revokeInvitationDeliveryRecord(
-					tx,
-					records[index],
-					invitationDeliverySupersededError,
-					now,
-				); err != nil {
-					return err
-				}
+			if !revocableInvitationDeliveryRecord(records[index], now) {
+				continue
 			}
-			if selectedIndex >= 0 {
-				selected := records[selectedIndex]
-				updatedDelivery, err :=
-					updateInvitationDeliverySnapshot(
-						selected.Delivery,
-						normalizedInfo,
-						now,
-					)
-				if err != nil {
-					return err
-				}
-				updatedToken, err :=
-					updateInvitationTokenSnapshot(
-						selected.Token,
-						updatedDelivery.ID,
-						normalizedInfo,
-						now,
-					)
-				if err != nil {
-					return err
-				}
-				if err := tx.Set(
-					selected.Ref,
-					invitationDeliveryToDocument(
-						updatedDelivery,
-					),
-				); err != nil {
-					return fmt.Errorf(
-						"update invitation delivery %q: %w",
-						updatedDelivery.ID,
-						err,
-					)
-				}
-				if err := tx.Set(
-					selected.TokenRef,
-					invitationTokenToDocument(
-						updatedToken,
-						now,
-					),
-				); err != nil {
-					return fmt.Errorf(
-						"update invitation token %q: %w",
-						updatedToken.Token,
-						err,
-					)
-				}
-				activeCreatedAt :=
-					invitationDeliveryActiveCreatedAt(
-						activeDocument,
-						activeExists &&
-							activeDocument.DeliveryID ==
-								updatedDelivery.ID,
-						now,
-					)
-				if err := tx.Set(
-					activeRef,
-					invitationDeliveryActiveDocument{
-						DeliveryID: updatedDelivery.ID,
-						Token:      updatedDelivery.Token,
-						CreatedAt:  activeCreatedAt,
-						UpdatedAt:  now,
-					},
-				); err != nil {
-					return fmt.Errorf(
-						"save active invitation delivery for member %q: %w",
-						normalizedInfo.MemberID,
-						err,
-					)
-				}
-				result = updatedDelivery
-				return nil
+			if err := revokeInvitationDeliveryRecord(tx, records[index], invitationDeliverySupersededError, now); err != nil {
+				return err
 			}
-			newDelivery, err := invdom.NewInvitationDelivery(
-				newDeliveryRef.ID,
-				newRawToken,
-				normalizedInfo,
-				now,
-				invdom.DefaultInvitationDeliveryMaxAttempts,
-			)
+		}
+
+		if selectedIndex >= 0 {
+			selected := records[selectedIndex]
+
+			updatedDelivery, err := updateInvitationDeliverySnapshot(selected.Delivery, normalizedInfo, now)
 			if err != nil {
-				return fmt.Errorf(
-					"create invitation delivery entity: %w",
-					err,
-				)
+				return err
 			}
-			expiresAt := now.Add(invitationTokenTTL)
-			newToken, err := invdom.NewInvitationToken(
-				newRawToken,
-				newDeliveryRef.ID,
-				normalizedInfo,
-				now,
-				&expiresAt,
-			)
+
+			updatedToken, err := updateInvitationTokenSnapshot(selected.Token, updatedDelivery.ID, normalizedInfo, now)
 			if err != nil {
-				return fmt.Errorf(
-					"create invitation token entity: %w",
-					err,
-				)
+				return err
 			}
-			if err := tx.Create(
-				newDeliveryRef,
-				invitationDeliveryToDocument(newDelivery),
-			); err != nil {
-				return fmt.Errorf(
-					"create invitation delivery %q: %w",
-					newDeliveryRef.ID,
-					err,
-				)
+
+			if err := tx.Set(selected.Ref, invitationDeliveryToDocument(updatedDelivery)); err != nil {
+				return fmt.Errorf("update invitation delivery %q: %w", updatedDelivery.ID, err)
 			}
-			if err := tx.Create(
-				newTokenRef,
-				invitationTokenToDocument(
-					newToken,
-					now,
-				),
-			); err != nil {
-				return fmt.Errorf(
-					"create invitation token %q: %w",
-					newTokenRef.ID,
-					err,
-				)
+
+			if err := tx.Set(selected.TokenRef, invitationTokenToDocument(updatedToken, now)); err != nil {
+				return fmt.Errorf("update invitation token %q: %w", updatedToken.Token, err)
 			}
-			if err := tx.Set(
-				activeRef,
-				invitationDeliveryActiveDocument{
-					DeliveryID: newDeliveryRef.ID,
-					Token:      newRawToken,
-					CreatedAt:  now,
-					UpdatedAt:  now,
-				},
-			); err != nil {
-				return fmt.Errorf(
-					"save active invitation delivery for member %q: %w",
-					normalizedInfo.MemberID,
-					err,
-				)
+
+			activeCreatedAt := invitationDeliveryActiveCreatedAt(
+				activeDocument,
+				activeExists && activeDocument.DeliveryID == updatedDelivery.ID,
+				now,
+			)
+
+			if err := tx.Set(activeRef, invitationDeliveryActiveDocument{
+				DeliveryID: updatedDelivery.ID,
+				Token:      updatedDelivery.Token,
+				CreatedAt:  activeCreatedAt,
+				UpdatedAt:  now,
+			}); err != nil {
+				return fmt.Errorf("save active invitation delivery for member %q: %w", normalizedInfo.MemberID, err)
 			}
-			result = newDelivery
+
+			result = updatedDelivery
 			return nil
-		},
-	)
-	if err != nil {
-		return invdom.InvitationDelivery{}, fmt.Errorf(
-			"create or reuse invitation delivery transaction: %w",
-			err,
+		}
+
+		newDelivery, err := invdom.NewInvitationDelivery(
+			newDeliveryRef.ID,
+			newRawToken,
+			normalizedInfo,
+			now,
+			invdom.DefaultInvitationDeliveryMaxAttempts,
 		)
+		if err != nil {
+			return fmt.Errorf("create invitation delivery entity: %w", err)
+		}
+
+		expiresAt := now.Add(invitationTokenTTL)
+
+		newToken, err := invdom.NewInvitationToken(newRawToken, newDeliveryRef.ID, normalizedInfo, now, &expiresAt)
+		if err != nil {
+			return fmt.Errorf("create invitation token entity: %w", err)
+		}
+
+		if err := tx.Create(newDeliveryRef, invitationDeliveryToDocument(newDelivery)); err != nil {
+			return fmt.Errorf("create invitation delivery %q: %w", newDeliveryRef.ID, err)
+		}
+
+		if err := tx.Create(newTokenRef, invitationTokenToDocument(newToken, now)); err != nil {
+			return fmt.Errorf("create invitation token %q: %w", newTokenRef.ID, err)
+		}
+
+		if err := tx.Set(activeRef, invitationDeliveryActiveDocument{
+			DeliveryID: newDeliveryRef.ID,
+			Token:      newRawToken,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}); err != nil {
+			return fmt.Errorf("save active invitation delivery for member %q: %w", normalizedInfo.MemberID, err)
+		}
+
+		result = newDelivery
+		return nil
+	})
+	if err != nil {
+		return invdom.InvitationDelivery{}, fmt.Errorf("create or reuse invitation delivery transaction: %w", err)
 	}
+
 	return result, nil
 }
 
@@ -345,34 +248,36 @@ func (r *InvitationTokenRepositoryFS) ListDueInvitationDeliveries(
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
+
 	now = now.UTC()
 	if limit <= 0 {
 		limit = 50
 	}
-	query := r.deliveriesCol().
-		Where(
-			"status",
-			"in",
-			[]string{
-				string(invdom.InvitationDeliveryStatusPending),
-				string(invdom.InvitationDeliveryStatusProcessing),
-				string(invdom.InvitationDeliveryStatusRetryableFailed),
-			},
-		)
+
+	query := r.deliveriesCol().Where(
+		"status",
+		"in",
+		[]string{
+			string(invdom.InvitationDeliveryStatusPending),
+			string(invdom.InvitationDeliveryStatusProcessing),
+			string(invdom.InvitationDeliveryStatusRetryableFailed),
+		},
+	)
+
 	iter := query.Documents(ctx)
 	defer iter.Stop()
+
 	deliveries := make([]invdom.InvitationDelivery, 0)
+
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf(
-				"list invitation deliveries: %w",
-				err,
-			)
+			return nil, fmt.Errorf("list invitation deliveries: %w", err)
 		}
+
 		delivery, err := readInvitationDeliverySnapshot(doc)
 		if err != nil {
 			return nil, err
@@ -383,28 +288,24 @@ func (r *InvitationTokenRepositoryFS) ListDueInvitationDeliveries(
 		if !delivery.IsDue(now) {
 			continue
 		}
+
 		deliveries = append(deliveries, delivery)
 	}
-	sort.SliceStable(
-		deliveries,
-		func(i int, j int) bool {
-			left := invitationDeliveryDueTime(
-				deliveries[i],
-			)
-			right := invitationDeliveryDueTime(
-				deliveries[j],
-			)
-			if left.Equal(right) {
-				return deliveries[i].CreatedAt.Before(
-					deliveries[j].CreatedAt,
-				)
-			}
-			return left.Before(right)
-		},
-	)
+
+	sort.SliceStable(deliveries, func(i int, j int) bool {
+		left := invitationDeliveryDueTime(deliveries[i])
+		right := invitationDeliveryDueTime(deliveries[j])
+
+		if left.Equal(right) {
+			return deliveries[i].CreatedAt.Before(deliveries[j].CreatedAt)
+		}
+		return left.Before(right)
+	})
+
 	if len(deliveries) > limit {
 		deliveries = deliveries[:limit]
 	}
+
 	return deliveries, nil
 }
 
@@ -416,170 +317,127 @@ func (r *InvitationTokenRepositoryFS) ClaimInvitationDelivery(
 	processingUntil time.Time,
 ) (invdom.InvitationDelivery, error) {
 	if r == nil || r.Client == nil {
-		return invdom.InvitationDelivery{},
-			errors.New("firestore client is nil")
+		return invdom.InvitationDelivery{}, errors.New("firestore client is nil")
 	}
-	deliveryID = strings.TrimSpace(deliveryID)
 	if deliveryID == "" {
-		return invdom.InvitationDelivery{},
-			invdom.ErrInvitationDeliveryIDRequired
+		return invdom.InvitationDelivery{}, invdom.ErrInvitationDeliveryIDRequired
 	}
+
 	now = now.UTC()
 	processingUntil = processingUntil.UTC()
 	deliveryRef := r.deliveriesCol().Doc(deliveryID)
+
 	var (
 		result       invdom.InvitationDelivery
 		committedErr error
 	)
-	err := r.Client.RunTransaction(
-		ctx,
-		func(
-			ctx context.Context,
-			tx *firestore.Transaction,
-		) error {
-			deliveryDoc, err := tx.Get(deliveryRef)
-			if err != nil {
-				if status.Code(err) == codes.NotFound {
-					return invdom.ErrInvitationDeliveryNotFound
-				}
-				return fmt.Errorf(
-					"get invitation delivery %q: %w",
-					deliveryID,
-					err,
-				)
+
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		deliveryDoc, err := tx.Get(deliveryRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return invdom.ErrInvitationDeliveryNotFound
 			}
-			delivery, err :=
-				readInvitationDeliverySnapshot(deliveryDoc)
-			if err != nil {
-				return err
-			}
-			tokenRef := r.col().Doc(
-				invitationTokenDocumentID(delivery.Token),
-			)
-			token, tokenExists, err :=
-				getInvitationTokenInTransaction(
-					tx,
-					tokenRef,
-					delivery.Token,
-				)
-			if err != nil {
-				return err
-			}
-			activeRef := r.deliveryActivesCol().Doc(
-				delivery.MemberID,
-			)
-			activeDocument, activeExists, err :=
-				getInvitationDeliveryActiveInTransaction(
-					tx,
-					activeRef,
-				)
-			if err != nil {
-				return err
-			}
-			if delivery.IsTerminal() {
-				return invdom.ErrInvitationDeliveryNotClaimable
-			}
-			if !tokenExists ||
-				!availableInvitationDeliveryToken(
-					token,
-					delivery,
-					now,
-				) {
-				if err := failInvitationDeliveryInTransaction(
-					tx,
-					deliveryRef,
-					delivery,
-					tokenRef,
-					token,
-					tokenExists,
-					activeRef,
-					activeDocument,
-					activeExists,
-					invitationDeliveryTokenError,
-					now,
-				); err != nil {
-					return err
-				}
-				committedErr =
-					invdom.ErrInvitationDeliveryNotClaimable
-				return nil
-			}
-			if delivery.AttemptCount >= delivery.MaxAttempts {
-				if err := failInvitationDeliveryInTransaction(
-					tx,
-					deliveryRef,
-					delivery,
-					tokenRef,
-					token,
-					true,
-					activeRef,
-					activeDocument,
-					activeExists,
-					invitationDeliveryAttemptError,
-					now,
-				); err != nil {
-					return err
-				}
-				committedErr =
-					invdom.ErrInvitationDeliveryAttemptLimit
-				return nil
-			}
-			claimed, err := delivery.Claim(
-				now,
-				processingUntil,
-			)
-			if err != nil {
-				return err
-			}
-			if err := tx.Set(
+			return fmt.Errorf("get invitation delivery %q: %w", deliveryID, err)
+		}
+
+		delivery, err := readInvitationDeliverySnapshot(deliveryDoc)
+		if err != nil {
+			return err
+		}
+
+		tokenRef := r.col().Doc(invitationTokenDocumentID(delivery.Token))
+		token, tokenExists, err := getInvitationTokenInTransaction(tx, tokenRef, delivery.Token)
+		if err != nil {
+			return err
+		}
+
+		activeRef := r.deliveryActivesCol().Doc(delivery.MemberID)
+		activeDocument, activeExists, err := getInvitationDeliveryActiveInTransaction(tx, activeRef)
+		if err != nil {
+			return err
+		}
+
+		if delivery.IsTerminal() {
+			return invdom.ErrInvitationDeliveryNotClaimable
+		}
+
+		if !tokenExists || !availableInvitationDeliveryToken(token, delivery, now) {
+			if err := failInvitationDeliveryInTransaction(
+				tx,
 				deliveryRef,
-				invitationDeliveryToDocument(claimed),
+				delivery,
+				tokenRef,
+				token,
+				tokenExists,
+				activeRef,
+				activeDocument,
+				activeExists,
+				invitationDeliveryTokenError,
+				now,
 			); err != nil {
-				return fmt.Errorf(
-					"claim invitation delivery %q: %w",
-					deliveryID,
-					err,
-				)
+				return err
 			}
-			result = claimed
+
+			committedErr = invdom.ErrInvitationDeliveryNotClaimable
 			return nil
-		},
-	)
+		}
+
+		if delivery.AttemptCount >= delivery.MaxAttempts {
+			if err := failInvitationDeliveryInTransaction(
+				tx,
+				deliveryRef,
+				delivery,
+				tokenRef,
+				token,
+				true,
+				activeRef,
+				activeDocument,
+				activeExists,
+				invitationDeliveryAttemptError,
+				now,
+			); err != nil {
+				return err
+			}
+
+			committedErr = invdom.ErrInvitationDeliveryAttemptLimit
+			return nil
+		}
+
+		claimed, err := delivery.Claim(now, processingUntil)
+		if err != nil {
+			return err
+		}
+
+		if err := tx.Set(deliveryRef, invitationDeliveryToDocument(claimed)); err != nil {
+			return fmt.Errorf("claim invitation delivery %q: %w", deliveryID, err)
+		}
+
+		result = claimed
+		return nil
+	})
+
 	if err != nil {
 		switch {
-		case errors.Is(
-			err,
-			invdom.ErrInvitationDeliveryNotFound,
-		):
-			return invdom.InvitationDelivery{},
-				invdom.ErrInvitationDeliveryNotFound
-		case errors.Is(
-			err,
-			invdom.ErrInvitationDeliveryNotClaimable,
-		):
-			return invdom.InvitationDelivery{},
-				invdom.ErrInvitationDeliveryNotClaimable
-		case errors.Is(
-			err,
-			invdom.ErrInvitationDeliveryAttemptLimit,
-		):
-			return invdom.InvitationDelivery{},
-				invdom.ErrInvitationDeliveryAttemptLimit
+		case errors.Is(err, invdom.ErrInvitationDeliveryNotFound):
+			return invdom.InvitationDelivery{}, invdom.ErrInvitationDeliveryNotFound
+		case errors.Is(err, invdom.ErrInvitationDeliveryNotClaimable):
+			return invdom.InvitationDelivery{}, invdom.ErrInvitationDeliveryNotClaimable
+		case errors.Is(err, invdom.ErrInvitationDeliveryAttemptLimit):
+			return invdom.InvitationDelivery{}, invdom.ErrInvitationDeliveryAttemptLimit
 		default:
-			return invdom.InvitationDelivery{}, fmt.Errorf(
-				"claim invitation delivery transaction: %w",
-				err,
-			)
+			return invdom.InvitationDelivery{}, fmt.Errorf("claim invitation delivery transaction: %w", err)
 		}
 	}
+
 	if committedErr != nil {
 		return invdom.InvitationDelivery{}, committedErr
 	}
+
 	return result, nil
 }
 
-// MarkInvitationDeliveryDeliveredは、deliveryをdeliveredへ変更し、
-// token.deliveredAtを同一transactionで更新します。
+// MarkInvitationDeliveryDeliveredは、deliveryをdeliveredへ変更し、token.deliveredAtを同一transactionで更新します。
 func (r *InvitationTokenRepositoryFS) MarkInvitationDeliveryDelivered(
 	ctx context.Context,
 	deliveryID string,
@@ -590,155 +448,102 @@ func (r *InvitationTokenRepositoryFS) MarkInvitationDeliveryDelivered(
 	if r == nil || r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-	deliveryID = strings.TrimSpace(deliveryID)
 	if deliveryID == "" {
 		return invdom.ErrInvitationDeliveryIDRequired
 	}
+
 	deliveredAt = deliveredAt.UTC()
 	deliveryRef := r.deliveriesCol().Doc(deliveryID)
-	err := r.Client.RunTransaction(
-		ctx,
-		func(
-			ctx context.Context,
-			tx *firestore.Transaction,
-		) error {
-			deliveryDoc, err := tx.Get(deliveryRef)
-			if err != nil {
-				if status.Code(err) == codes.NotFound {
-					return invdom.ErrInvitationDeliveryNotFound
+
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		deliveryDoc, err := tx.Get(deliveryRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return invdom.ErrInvitationDeliveryNotFound
+			}
+			return fmt.Errorf("get invitation delivery %q: %w", deliveryID, err)
+		}
+
+		delivery, err := readInvitationDeliverySnapshot(deliveryDoc)
+		if err != nil {
+			return err
+		}
+
+		tokenRef := r.col().Doc(invitationTokenDocumentID(delivery.Token))
+		token, tokenExists, err := getInvitationTokenInTransaction(tx, tokenRef, delivery.Token)
+		if err != nil {
+			return err
+		}
+		if !tokenExists {
+			return invdom.ErrInvitationTokenNotFound
+		}
+
+		activeRef := r.deliveryActivesCol().Doc(delivery.MemberID)
+		activeDocument, activeExists, err := getInvitationDeliveryActiveInTransaction(tx, activeRef)
+		if err != nil {
+			return err
+		}
+
+		if delivery.Status == invdom.InvitationDeliveryStatusDelivered {
+			if token.DeliveredAt == nil {
+				token.DeliveredAt = copyInvitationTimePointer(&deliveredAt)
+				token.UpdatedAt = copyInvitationTimePointer(&deliveredAt)
+
+				if err := tx.Set(tokenRef, invitationTokenToDocument(token, deliveredAt)); err != nil {
+					return err
 				}
-				return fmt.Errorf(
-					"get invitation delivery %q: %w",
-					deliveryID,
-					err,
-				)
 			}
-			delivery, err :=
-				readInvitationDeliverySnapshot(deliveryDoc)
-			if err != nil {
-				return err
-			}
-			tokenRef := r.col().Doc(
-				invitationTokenDocumentID(delivery.Token),
-			)
-			token, tokenExists, err :=
-				getInvitationTokenInTransaction(
-					tx,
-					tokenRef,
-					delivery.Token,
-				)
-			if err != nil {
-				return err
-			}
-			if !tokenExists {
-				return invdom.ErrInvitationTokenNotFound
-			}
-			activeRef := r.deliveryActivesCol().Doc(
-				delivery.MemberID,
-			)
-			activeDocument, activeExists, err :=
-				getInvitationDeliveryActiveInTransaction(
-					tx,
-					activeRef,
-				)
-			if err != nil {
-				return err
-			}
-			if delivery.Status ==
-				invdom.InvitationDeliveryStatusDelivered {
-				if token.DeliveredAt == nil {
-					token.DeliveredAt =
-						copyInvitationTimePointer(
-							&deliveredAt,
-						)
-					token.UpdatedAt =
-						copyInvitationTimePointer(
-							&deliveredAt,
-						)
-					if err := tx.Set(
-						tokenRef,
-						invitationTokenToDocument(
-							token,
-							deliveredAt,
-						),
-					); err != nil {
-						return err
-					}
-				}
-				return saveInvitationDeliveryActiveInTransaction(
-					tx,
-					activeRef,
-					activeDocument,
-					activeExists,
-					delivery,
-					deliveredAt,
-				)
-			}
-			if delivery.AttemptCount != expectedAttemptCount ||
-				delivery.Status !=
-					invdom.InvitationDeliveryStatusProcessing {
-				return invdom.ErrInvitationDeliveryNotClaimable
-			}
-			if token.IsUsed() ||
-				token.IsRevoked() ||
-				token.IsExpired(deliveredAt) {
-				return invdom.ErrInvitationDeliveryNotClaimable
-			}
-			delivered, err := delivery.MarkDelivered(
-				providerMessageID,
-				deliveredAt,
-			)
-			if err != nil {
-				return err
-			}
-			token.DeliveredAt =
-				copyInvitationTimePointer(&deliveredAt)
-			token.UpdatedAt =
-				copyInvitationTimePointer(&deliveredAt)
-			if err := tx.Set(
-				deliveryRef,
-				invitationDeliveryToDocument(delivered),
-			); err != nil {
-				return fmt.Errorf(
-					"mark invitation delivery %q delivered: %w",
-					deliveryID,
-					err,
-				)
-			}
-			if err := tx.Set(
-				tokenRef,
-				invitationTokenToDocument(
-					token,
-					deliveredAt,
-				),
-			); err != nil {
-				return fmt.Errorf(
-					"activate invitation token %q: %w",
-					token.Token,
-					err,
-				)
-			}
+
 			return saveInvitationDeliveryActiveInTransaction(
 				tx,
 				activeRef,
 				activeDocument,
 				activeExists,
-				delivered,
+				delivery,
 				deliveredAt,
 			)
-		},
-	)
-	if err != nil {
-		return mapInvitationDeliveryRepositoryError(
-			"mark invitation delivery delivered",
-			err,
+		}
+
+		if delivery.AttemptCount != expectedAttemptCount || delivery.Status != invdom.InvitationDeliveryStatusProcessing {
+			return invdom.ErrInvitationDeliveryNotClaimable
+		}
+		if token.IsUsed() || token.IsRevoked() || token.IsExpired(deliveredAt) {
+			return invdom.ErrInvitationDeliveryNotClaimable
+		}
+
+		delivered, err := delivery.MarkDelivered(providerMessageID, deliveredAt)
+		if err != nil {
+			return err
+		}
+
+		token.DeliveredAt = copyInvitationTimePointer(&deliveredAt)
+		token.UpdatedAt = copyInvitationTimePointer(&deliveredAt)
+
+		if err := tx.Set(deliveryRef, invitationDeliveryToDocument(delivered)); err != nil {
+			return fmt.Errorf("mark invitation delivery %q delivered: %w", deliveryID, err)
+		}
+		if err := tx.Set(tokenRef, invitationTokenToDocument(token, deliveredAt)); err != nil {
+			return fmt.Errorf("activate invitation token %q: %w", token.Token, err)
+		}
+
+		return saveInvitationDeliveryActiveInTransaction(
+			tx,
+			activeRef,
+			activeDocument,
+			activeExists,
+			delivered,
+			deliveredAt,
 		)
+	})
+
+	if err != nil {
+		return mapInvitationDeliveryRepositoryError("mark invitation delivery delivered", err)
 	}
+
 	return nil
 }
 
-// MarkInvitationDeliveryRetryableFailedは、deliveryを再試行可能な失敗へ
-// 変更します。tokenは失効させません。
+// MarkInvitationDeliveryRetryableFailedは、deliveryを再試行可能な失敗へ変更します。tokenは失効させません。
 func (r *InvitationTokenRepositoryFS) MarkInvitationDeliveryRetryableFailed(
 	ctx context.Context,
 	deliveryID string,
@@ -750,110 +555,78 @@ func (r *InvitationTokenRepositoryFS) MarkInvitationDeliveryRetryableFailed(
 	if r == nil || r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-	deliveryID = strings.TrimSpace(deliveryID)
 	if deliveryID == "" {
 		return invdom.ErrInvitationDeliveryIDRequired
 	}
+
 	deliveryRef := r.deliveriesCol().Doc(deliveryID)
 	nextAttemptAt = nextAttemptAt.UTC()
 	failedAt = failedAt.UTC()
-	err := r.Client.RunTransaction(
-		ctx,
-		func(
-			ctx context.Context,
-			tx *firestore.Transaction,
-		) error {
-			deliveryDoc, err := tx.Get(deliveryRef)
-			if err != nil {
-				if status.Code(err) == codes.NotFound {
-					return invdom.ErrInvitationDeliveryNotFound
-				}
-				return err
+
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		deliveryDoc, err := tx.Get(deliveryRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return invdom.ErrInvitationDeliveryNotFound
 			}
-			delivery, err :=
-				readInvitationDeliverySnapshot(deliveryDoc)
-			if err != nil {
-				return err
-			}
-			tokenRef := r.col().Doc(
-				invitationTokenDocumentID(delivery.Token),
-			)
-			token, tokenExists, err :=
-				getInvitationTokenInTransaction(
-					tx,
-					tokenRef,
-					delivery.Token,
-				)
-			if err != nil {
-				return err
-			}
-			if !tokenExists ||
-				token.IsUsed() ||
-				token.IsRevoked() ||
-				token.IsExpired(failedAt) {
-				return invdom.ErrInvitationDeliveryNotClaimable
-			}
-			activeRef := r.deliveryActivesCol().Doc(
-				delivery.MemberID,
-			)
-			activeDocument, activeExists, err :=
-				getInvitationDeliveryActiveInTransaction(
-					tx,
-					activeRef,
-				)
-			if err != nil {
-				return err
-			}
-			if delivery.Status ==
-				invdom.InvitationDeliveryStatusRetryableFailed &&
-				delivery.AttemptCount == expectedAttemptCount {
-				return nil
-			}
-			if delivery.AttemptCount != expectedAttemptCount ||
-				delivery.Status !=
-					invdom.InvitationDeliveryStatusProcessing {
-				return invdom.ErrInvitationDeliveryNotClaimable
-			}
-			retryable, err :=
-				delivery.MarkRetryableFailed(
-					lastError,
-					nextAttemptAt,
-					failedAt,
-				)
-			if err != nil {
-				return err
-			}
-			if err := tx.Set(
-				deliveryRef,
-				invitationDeliveryToDocument(retryable),
-			); err != nil {
-				return fmt.Errorf(
-					"mark invitation delivery %q retryable failed: %w",
-					deliveryID,
-					err,
-				)
-			}
-			return saveInvitationDeliveryActiveInTransaction(
-				tx,
-				activeRef,
-				activeDocument,
-				activeExists,
-				retryable,
-				failedAt,
-			)
-		},
-	)
-	if err != nil {
-		return mapInvitationDeliveryRepositoryError(
-			"mark invitation delivery retryable failed",
-			err,
+			return err
+		}
+
+		delivery, err := readInvitationDeliverySnapshot(deliveryDoc)
+		if err != nil {
+			return err
+		}
+
+		tokenRef := r.col().Doc(invitationTokenDocumentID(delivery.Token))
+		token, tokenExists, err := getInvitationTokenInTransaction(tx, tokenRef, delivery.Token)
+		if err != nil {
+			return err
+		}
+
+		if !tokenExists || token.IsUsed() || token.IsRevoked() || token.IsExpired(failedAt) {
+			return invdom.ErrInvitationDeliveryNotClaimable
+		}
+
+		activeRef := r.deliveryActivesCol().Doc(delivery.MemberID)
+		activeDocument, activeExists, err := getInvitationDeliveryActiveInTransaction(tx, activeRef)
+		if err != nil {
+			return err
+		}
+
+		if delivery.Status == invdom.InvitationDeliveryStatusRetryableFailed && delivery.AttemptCount == expectedAttemptCount {
+			return nil
+		}
+		if delivery.AttemptCount != expectedAttemptCount || delivery.Status != invdom.InvitationDeliveryStatusProcessing {
+			return invdom.ErrInvitationDeliveryNotClaimable
+		}
+
+		retryable, err := delivery.MarkRetryableFailed(lastError, nextAttemptAt, failedAt)
+		if err != nil {
+			return err
+		}
+
+		if err := tx.Set(deliveryRef, invitationDeliveryToDocument(retryable)); err != nil {
+			return fmt.Errorf("mark invitation delivery %q retryable failed: %w", deliveryID, err)
+		}
+
+		return saveInvitationDeliveryActiveInTransaction(
+			tx,
+			activeRef,
+			activeDocument,
+			activeExists,
+			retryable,
+			failedAt,
 		)
+	})
+
+	if err != nil {
+		return mapInvitationDeliveryRepositoryError("mark invitation delivery retryable failed", err)
 	}
+
 	return nil
 }
 
-// MarkInvitationDeliveryFailedは、deliveryを最終失敗へ変更し、
-// tokenを同一transactionで失効させます。
+// MarkInvitationDeliveryFailedは、deliveryを最終失敗へ変更し、tokenを同一transactionで失効させます。
 func (r *InvitationTokenRepositoryFS) MarkInvitationDeliveryFailed(
 	ctx context.Context,
 	deliveryID string,
@@ -864,126 +637,86 @@ func (r *InvitationTokenRepositoryFS) MarkInvitationDeliveryFailed(
 	if r == nil || r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-	deliveryID = strings.TrimSpace(deliveryID)
 	if deliveryID == "" {
 		return invdom.ErrInvitationDeliveryIDRequired
 	}
+
 	deliveryRef := r.deliveriesCol().Doc(deliveryID)
 	failedAt = failedAt.UTC()
-	err := r.Client.RunTransaction(
-		ctx,
-		func(
-			ctx context.Context,
-			tx *firestore.Transaction,
-		) error {
-			deliveryDoc, err := tx.Get(deliveryRef)
+
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		deliveryDoc, err := tx.Get(deliveryRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return invdom.ErrInvitationDeliveryNotFound
+			}
+			return err
+		}
+
+		delivery, err := readInvitationDeliverySnapshot(deliveryDoc)
+		if err != nil {
+			return err
+		}
+
+		tokenRef := r.col().Doc(invitationTokenDocumentID(delivery.Token))
+		token, tokenExists, err := getInvitationTokenInTransaction(tx, tokenRef, delivery.Token)
+		if err != nil {
+			return err
+		}
+
+		activeRef := r.deliveryActivesCol().Doc(delivery.MemberID)
+		activeDocument, activeExists, err := getInvitationDeliveryActiveInTransaction(tx, activeRef)
+		if err != nil {
+			return err
+		}
+
+		if delivery.Status == invdom.InvitationDeliveryStatusDelivered {
+			return invdom.ErrInvitationDeliveryStatusInvalid
+		}
+
+		if delivery.Status != invdom.InvitationDeliveryStatusFailed && delivery.AttemptCount != expectedAttemptCount {
+			return invdom.ErrInvitationDeliveryNotClaimable
+		}
+
+		failed := delivery
+
+		if delivery.Status != invdom.InvitationDeliveryStatusFailed {
+			failed, err = delivery.MarkFailed(lastError, failedAt)
 			if err != nil {
-				if status.Code(err) == codes.NotFound {
-					return invdom.ErrInvitationDeliveryNotFound
-				}
 				return err
 			}
-			delivery, err :=
-				readInvitationDeliverySnapshot(deliveryDoc)
-			if err != nil {
-				return err
+
+			if err := tx.Set(deliveryRef, invitationDeliveryToDocument(failed)); err != nil {
+				return fmt.Errorf("mark invitation delivery %q failed: %w", deliveryID, err)
 			}
-			tokenRef := r.col().Doc(
-				invitationTokenDocumentID(delivery.Token),
-			)
-			token, tokenExists, err :=
-				getInvitationTokenInTransaction(
-					tx,
-					tokenRef,
-					delivery.Token,
-				)
-			if err != nil {
-				return err
+		}
+
+		if tokenExists && !token.IsUsed() {
+			token.RevokedAt = copyInvitationTimePointer(&failedAt)
+			token.UpdatedAt = copyInvitationTimePointer(&failedAt)
+
+			if err := tx.Set(tokenRef, invitationTokenToDocument(token, failedAt)); err != nil {
+				return fmt.Errorf("revoke invitation token %q: %w", token.Token, err)
 			}
-			activeRef := r.deliveryActivesCol().Doc(
-				delivery.MemberID,
-			)
-			activeDocument, activeExists, err :=
-				getInvitationDeliveryActiveInTransaction(
-					tx,
-					activeRef,
-				)
-			if err != nil {
-				return err
+		}
+
+		if activeExists && activeDocument.DeliveryID == deliveryID {
+			if err := tx.Delete(activeRef); err != nil {
+				return fmt.Errorf("delete active invitation delivery for member %q: %w", delivery.MemberID, err)
 			}
-			if delivery.Status ==
-				invdom.InvitationDeliveryStatusDelivered {
-				return invdom.ErrInvitationDeliveryStatusInvalid
-			}
-			if delivery.Status !=
-				invdom.InvitationDeliveryStatusFailed &&
-				delivery.AttemptCount != expectedAttemptCount {
-				return invdom.ErrInvitationDeliveryNotClaimable
-			}
-			failed := delivery
-			if delivery.Status !=
-				invdom.InvitationDeliveryStatusFailed {
-				failed, err = delivery.MarkFailed(
-					lastError,
-					failedAt,
-				)
-				if err != nil {
-					return err
-				}
-				if err := tx.Set(
-					deliveryRef,
-					invitationDeliveryToDocument(failed),
-				); err != nil {
-					return fmt.Errorf(
-						"mark invitation delivery %q failed: %w",
-						deliveryID,
-						err,
-					)
-				}
-			}
-			if tokenExists && !token.IsUsed() {
-				token.RevokedAt =
-					copyInvitationTimePointer(&failedAt)
-				token.UpdatedAt =
-					copyInvitationTimePointer(&failedAt)
-				if err := tx.Set(
-					tokenRef,
-					invitationTokenToDocument(
-						token,
-						failedAt,
-					),
-				); err != nil {
-					return fmt.Errorf(
-						"revoke invitation token %q: %w",
-						token.Token,
-						err,
-					)
-				}
-			}
-			if activeExists &&
-				activeDocument.DeliveryID == deliveryID {
-				if err := tx.Delete(activeRef); err != nil {
-					return fmt.Errorf(
-						"delete active invitation delivery for member %q: %w",
-						delivery.MemberID,
-						err,
-					)
-				}
-			}
-			return nil
-		},
-	)
+		}
+
+		return nil
+	})
+
 	if err != nil {
-		return mapInvitationDeliveryRepositoryError(
-			"mark invitation delivery failed",
-			err,
-		)
+		return mapInvitationDeliveryRepositoryError("mark invitation delivery failed", err)
 	}
+
 	return nil
 }
 
-// RevokeMemberInvitationsは、指定Memberに紐づく未使用・未失効の招待tokenを
-// すべて失効させ、未完了のdeliveryをfailedへ変更します。
+// RevokeMemberInvitationsは、指定Memberに紐づく未使用・未失効の招待tokenをすべて失効させ、未完了のdeliveryをfailedへ変更します。
 // delivered済みdeliveryは履歴として維持し、tokenだけを失効させます。
 func (r *InvitationTokenRepositoryFS) RevokeMemberInvitations(
 	ctx context.Context,
@@ -994,122 +727,74 @@ func (r *InvitationTokenRepositoryFS) RevokeMemberInvitations(
 	if r == nil || r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-
-	memberID = strings.TrimSpace(memberID)
 	if memberID == "" {
 		return invdom.ErrInvitationMemberIDRequired
 	}
-
-	companyID = strings.TrimSpace(companyID)
 	if companyID == "" {
 		return invdom.ErrInvitationCompanyIDRequired
 	}
-
 	if revokedAt.IsZero() {
-		revokedAt = time.Now().UTC()
-	} else {
-		revokedAt = revokedAt.UTC()
+		return errors.New("invitation revokedAt is required")
 	}
 
+	revokedAt = revokedAt.UTC()
 	activeRef := r.deliveryActivesCol().Doc(memberID)
 
-	err := r.Client.RunTransaction(
-		ctx,
-		func(
-			ctx context.Context,
-			tx *firestore.Transaction,
-		) error {
-			records, err := r.listMemberInvitationDeliveriesInTransaction(
-				tx,
-				memberID,
-			)
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		records, err := r.listMemberInvitationDeliveriesInTransaction(tx, memberID)
+		if err != nil {
+			return err
+		}
+
+		_, activeExists, err := getInvitationDeliveryActiveInTransaction(tx, activeRef)
+		if err != nil {
+			return err
+		}
+
+		for _, record := range records {
+			if record.Delivery.CompanyID != companyID {
+				return invdom.ErrInvitationCompanyMismatch
+			}
+			if record.TokenExists && record.Token.CompanyID != companyID {
+				return invdom.ErrInvitationCompanyMismatch
+			}
+
+			if record.TokenExists && !record.Token.IsUsed() && !record.Token.IsRevoked() {
+				token := record.Token
+				token.RevokedAt = copyInvitationTimePointer(&revokedAt)
+				token.UpdatedAt = copyInvitationTimePointer(&revokedAt)
+
+				if err := tx.Set(record.TokenRef, invitationTokenToDocument(token, revokedAt)); err != nil {
+					return fmt.Errorf("revoke invitation token %q for member %q: %w", token.Token, memberID, err)
+				}
+			}
+
+			if record.Delivery.Status == invdom.InvitationDeliveryStatusDelivered ||
+				record.Delivery.Status == invdom.InvitationDeliveryStatusFailed {
+				continue
+			}
+
+			failed, err := record.Delivery.MarkFailed(invitationDeliveryRevokedError, revokedAt)
 			if err != nil {
 				return err
 			}
 
-			_, activeExists, err := getInvitationDeliveryActiveInTransaction(
-				tx,
-				activeRef,
-			)
-			if err != nil {
-				return err
+			if err := tx.Set(record.Ref, invitationDeliveryToDocument(failed)); err != nil {
+				return fmt.Errorf("fail invitation delivery %q for member %q: %w", record.Delivery.ID, memberID, err)
 			}
+		}
 
-			for _, record := range records {
-				if strings.TrimSpace(record.Delivery.CompanyID) != companyID {
-					return invdom.ErrInvitationCompanyMismatch
-				}
-				if record.TokenExists &&
-					strings.TrimSpace(record.Token.CompanyID) != companyID {
-					return invdom.ErrInvitationCompanyMismatch
-				}
-
-				if record.TokenExists &&
-					!record.Token.IsUsed() &&
-					!record.Token.IsRevoked() {
-					token := record.Token
-					token.RevokedAt = copyInvitationTimePointer(&revokedAt)
-					token.UpdatedAt = copyInvitationTimePointer(&revokedAt)
-
-					if err := tx.Set(
-						record.TokenRef,
-						invitationTokenToDocument(token, revokedAt),
-					); err != nil {
-						return fmt.Errorf(
-							"revoke invitation token %q for member %q: %w",
-							token.Token,
-							memberID,
-							err,
-						)
-					}
-				}
-
-				if record.Delivery.Status ==
-					invdom.InvitationDeliveryStatusDelivered ||
-					record.Delivery.Status ==
-						invdom.InvitationDeliveryStatusFailed {
-					continue
-				}
-
-				failed, err := record.Delivery.MarkFailed(
-					invitationDeliveryRevokedError,
-					revokedAt,
-				)
-				if err != nil {
-					return err
-				}
-
-				if err := tx.Set(
-					record.Ref,
-					invitationDeliveryToDocument(failed),
-				); err != nil {
-					return fmt.Errorf(
-						"fail invitation delivery %q for member %q: %w",
-						record.Delivery.ID,
-						memberID,
-						err,
-					)
-				}
+		if activeExists {
+			if err := tx.Delete(activeRef); err != nil {
+				return fmt.Errorf("delete active invitation delivery for member %q: %w", memberID, err)
 			}
+		}
 
-			if activeExists {
-				if err := tx.Delete(activeRef); err != nil {
-					return fmt.Errorf(
-						"delete active invitation delivery for member %q: %w",
-						memberID,
-						err,
-					)
-				}
-			}
+		return nil
+	})
 
-			return nil
-		},
-	)
 	if err != nil {
-		return mapInvitationDeliveryRepositoryError(
-			"revoke member invitations",
-			err,
-		)
+		return mapInvitationDeliveryRepositoryError("revoke member invitations", err)
 	}
 
 	return nil
@@ -1119,53 +804,44 @@ func (r *InvitationTokenRepositoryFS) listMemberInvitationDeliveriesInTransactio
 	tx *firestore.Transaction,
 	memberID string,
 ) ([]invitationDeliveryRecord, error) {
-	query := r.deliveriesCol().
-		Where("memberId", "==", memberID)
+	query := r.deliveriesCol().Where("memberId", "==", memberID)
 	iter := tx.Documents(query)
 	defer iter.Stop()
+
 	records := make([]invitationDeliveryRecord, 0)
+
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf(
-				"list invitation deliveries for member %q: %w",
-				memberID,
-				err,
-			)
+			return nil, fmt.Errorf("list invitation deliveries for member %q: %w", memberID, err)
 		}
-		delivery, err :=
-			readInvitationDeliverySnapshot(doc)
+
+		delivery, err := readInvitationDeliverySnapshot(doc)
 		if err != nil {
 			return nil, err
 		}
-		tokenRef := r.col().Doc(
-			invitationTokenDocumentID(delivery.Token),
-		)
-		token, tokenExists, err :=
-			getInvitationTokenInTransaction(
-				tx,
-				tokenRef,
-				delivery.Token,
-			)
+
+		tokenRef := r.col().Doc(invitationTokenDocumentID(delivery.Token))
+		token, tokenExists, err := getInvitationTokenInTransaction(tx, tokenRef, delivery.Token)
 		if err != nil {
 			return nil, err
 		}
-		records = append(
-			records,
-			invitationDeliveryRecord{
-				Ref:         doc.Ref,
-				Delivery:    delivery,
-				TokenRef:    tokenRef,
-				Token:       token,
-				TokenExists: tokenExists,
-			},
-		)
+
+		records = append(records, invitationDeliveryRecord{
+			Ref:         doc.Ref,
+			Delivery:    delivery,
+			TokenRef:    tokenRef,
+			Token:       token,
+			TokenExists: tokenExists,
+		})
 	}
+
 	return records, nil
 }
+
 func reusableInvitationDeliveryRecord(
 	record invitationDeliveryRecord,
 	info invdom.InvitationInfo,
@@ -1174,8 +850,10 @@ func reusableInvitationDeliveryRecord(
 	if !record.TokenExists {
 		return false
 	}
+
 	delivery := record.Delivery
 	token := record.Token
+
 	if token.DeliveryID != delivery.ID ||
 		token.Token != delivery.Token ||
 		token.MemberID != info.MemberID ||
@@ -1183,34 +861,34 @@ func reusableInvitationDeliveryRecord(
 		token.Email != info.Email {
 		return false
 	}
-	if token.IsUsed() ||
-		token.IsRevoked() ||
-		token.IsExpired(now) {
+
+	if token.IsUsed() || token.IsRevoked() || token.IsExpired(now) {
 		return false
 	}
+
 	switch delivery.Status {
 	case invdom.InvitationDeliveryStatusPending,
 		invdom.InvitationDeliveryStatusProcessing,
 		invdom.InvitationDeliveryStatusRetryableFailed:
 		return !token.IsDelivered()
+
 	case invdom.InvitationDeliveryStatusDelivered:
 		return token.IsDelivered()
+
 	default:
 		return false
 	}
 }
-func revocableInvitationDeliveryRecord(
-	record invitationDeliveryRecord,
-	now time.Time,
-) bool {
+
+func revocableInvitationDeliveryRecord(record invitationDeliveryRecord, now time.Time) bool {
 	if !record.TokenExists {
 		return false
 	}
+
 	token := record.Token
-	return !token.IsUsed() &&
-		!token.IsRevoked() &&
-		!token.IsExpired(now)
+	return !token.IsUsed() && !token.IsRevoked() && !token.IsExpired(now)
 }
+
 func revokeInvitationDeliveryRecord(
 	tx *firestore.Transaction,
 	record invitationDeliveryRecord,
@@ -1220,41 +898,28 @@ func revokeInvitationDeliveryRecord(
 	token := record.Token
 	token.RevokedAt = copyInvitationTimePointer(&now)
 	token.UpdatedAt = copyInvitationTimePointer(&now)
-	if err := tx.Set(
-		record.TokenRef,
-		invitationTokenToDocument(token, now),
-	); err != nil {
-		return fmt.Errorf(
-			"revoke invitation token %q: %w",
-			token.Token,
-			err,
-		)
+
+	if err := tx.Set(record.TokenRef, invitationTokenToDocument(token, now)); err != nil {
+		return fmt.Errorf("revoke invitation token %q: %w", token.Token, err)
 	}
-	if record.Delivery.Status ==
-		invdom.InvitationDeliveryStatusDelivered ||
-		record.Delivery.Status ==
-			invdom.InvitationDeliveryStatusFailed {
+
+	if record.Delivery.Status == invdom.InvitationDeliveryStatusDelivered ||
+		record.Delivery.Status == invdom.InvitationDeliveryStatusFailed {
 		return nil
 	}
-	failed, err := record.Delivery.MarkFailed(
-		reason,
-		now,
-	)
+
+	failed, err := record.Delivery.MarkFailed(reason, now)
 	if err != nil {
 		return err
 	}
-	if err := tx.Set(
-		record.Ref,
-		invitationDeliveryToDocument(failed),
-	); err != nil {
-		return fmt.Errorf(
-			"fail invitation delivery %q: %w",
-			record.Delivery.ID,
-			err,
-		)
+
+	if err := tx.Set(record.Ref, invitationDeliveryToDocument(failed)); err != nil {
+		return fmt.Errorf("fail invitation delivery %q: %w", record.Delivery.ID, err)
 	}
+
 	return nil
 }
+
 func updateInvitationDeliverySnapshot(
 	delivery invdom.InvitationDelivery,
 	info invdom.InvitationInfo,
@@ -1263,43 +928,32 @@ func updateInvitationDeliverySnapshot(
 	delivery.MemberID = info.MemberID
 	delivery.CompanyID = info.CompanyID
 	delivery.Email = info.Email
-	delivery.AssignedBrandIDs = append(
-		[]string(nil),
-		info.AssignedBrandIDs...,
-	)
-	delivery.Permissions = append(
-		[]string(nil),
-		info.Permissions...,
-	)
+	delivery.AssignedBrandIDs = append([]string(nil), info.AssignedBrandIDs...)
+	delivery.Permissions = append([]string(nil), info.Permissions...)
 	delivery.UpdatedAt = now.UTC()
+
 	return delivery.Normalize()
 }
+
 func updateInvitationTokenSnapshot(
 	token invdom.InvitationToken,
 	deliveryID string,
 	info invdom.InvitationInfo,
 	now time.Time,
 ) (invdom.InvitationToken, error) {
-	updated, err := invdom.NewInvitationToken(
-		token.Token,
-		deliveryID,
-		info,
-		token.CreatedAt,
-		token.ExpiresAt,
-	)
+	updated, err := invdom.NewInvitationToken(token.Token, deliveryID, info, token.CreatedAt, token.ExpiresAt)
 	if err != nil {
 		return invdom.InvitationToken{}, err
 	}
-	updated.DeliveredAt =
-		copyInvitationTimePointer(token.DeliveredAt)
-	updated.UsedAt =
-		copyInvitationTimePointer(token.UsedAt)
-	updated.RevokedAt =
-		copyInvitationTimePointer(token.RevokedAt)
-	updated.UpdatedAt =
-		copyInvitationTimePointer(&now)
+
+	updated.DeliveredAt = copyInvitationTimePointer(token.DeliveredAt)
+	updated.UsedAt = copyInvitationTimePointer(token.UsedAt)
+	updated.RevokedAt = copyInvitationTimePointer(token.RevokedAt)
+	updated.UpdatedAt = copyInvitationTimePointer(&now)
+
 	return updated, nil
 }
+
 func availableInvitationDeliveryToken(
 	token invdom.InvitationToken,
 	delivery invdom.InvitationDelivery,
@@ -1310,10 +964,10 @@ func availableInvitationDeliveryToken(
 		token.MemberID != delivery.MemberID {
 		return false
 	}
-	return !token.IsUsed() &&
-		!token.IsRevoked() &&
-		!token.IsExpired(now)
+
+	return !token.IsUsed() && !token.IsRevoked() && !token.IsExpired(now)
 }
+
 func failInvitationDeliveryInTransaction(
 	tx *firestore.Transaction,
 	deliveryRef *firestore.DocumentRef,
@@ -1327,47 +981,36 @@ func failInvitationDeliveryInTransaction(
 	lastError string,
 	failedAt time.Time,
 ) error {
-	if delivery.Status !=
-		invdom.InvitationDeliveryStatusFailed &&
-		delivery.Status !=
-			invdom.InvitationDeliveryStatusDelivered {
-		failed, err := delivery.MarkFailed(
-			lastError,
-			failedAt,
-		)
+	if delivery.Status != invdom.InvitationDeliveryStatusFailed &&
+		delivery.Status != invdom.InvitationDeliveryStatusDelivered {
+		failed, err := delivery.MarkFailed(lastError, failedAt)
 		if err != nil {
 			return err
 		}
-		if err := tx.Set(
-			deliveryRef,
-			invitationDeliveryToDocument(failed),
-		); err != nil {
+
+		if err := tx.Set(deliveryRef, invitationDeliveryToDocument(failed)); err != nil {
 			return err
 		}
 	}
+
 	if tokenExists && !token.IsUsed() {
-		token.RevokedAt =
-			copyInvitationTimePointer(&failedAt)
-		token.UpdatedAt =
-			copyInvitationTimePointer(&failedAt)
-		if err := tx.Set(
-			tokenRef,
-			invitationTokenToDocument(
-				token,
-				failedAt,
-			),
-		); err != nil {
+		token.RevokedAt = copyInvitationTimePointer(&failedAt)
+		token.UpdatedAt = copyInvitationTimePointer(&failedAt)
+
+		if err := tx.Set(tokenRef, invitationTokenToDocument(token, failedAt)); err != nil {
 			return err
 		}
 	}
-	if activeExists &&
-		activeDocument.DeliveryID == delivery.ID {
+
+	if activeExists && activeDocument.DeliveryID == delivery.ID {
 		if err := tx.Delete(activeRef); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
+
 func saveInvitationDeliveryActiveInTransaction(
 	tx *firestore.Transaction,
 	activeRef *firestore.DocumentRef,
@@ -1378,27 +1021,22 @@ func saveInvitationDeliveryActiveInTransaction(
 ) error {
 	createdAt := invitationDeliveryActiveCreatedAt(
 		current,
-		exists &&
-			current.DeliveryID == delivery.ID,
+		exists && current.DeliveryID == delivery.ID,
 		updatedAt,
 	)
-	if err := tx.Set(
-		activeRef,
-		invitationDeliveryActiveDocument{
-			DeliveryID: delivery.ID,
-			Token:      delivery.Token,
-			CreatedAt:  createdAt,
-			UpdatedAt:  updatedAt.UTC(),
-		},
-	); err != nil {
-		return fmt.Errorf(
-			"save active invitation delivery %q: %w",
-			delivery.ID,
-			err,
-		)
+
+	if err := tx.Set(activeRef, invitationDeliveryActiveDocument{
+		DeliveryID: delivery.ID,
+		Token:      delivery.Token,
+		CreatedAt:  createdAt,
+		UpdatedAt:  updatedAt.UTC(),
+	}); err != nil {
+		return fmt.Errorf("save active invitation delivery %q: %w", delivery.ID, err)
 	}
+
 	return nil
 }
+
 func invitationDeliveryActiveCreatedAt(
 	current invitationDeliveryActiveDocument,
 	preserve bool,
@@ -1407,61 +1045,46 @@ func invitationDeliveryActiveCreatedAt(
 	if preserve && !current.CreatedAt.IsZero() {
 		return current.CreatedAt.UTC()
 	}
+
 	return fallback.UTC()
 }
+
 func getInvitationDeliveryActiveInTransaction(
 	tx *firestore.Transaction,
 	ref *firestore.DocumentRef,
-) (
-	invitationDeliveryActiveDocument,
-	bool,
-	error,
-) {
+) (invitationDeliveryActiveDocument, bool, error) {
 	doc, err := tx.Get(ref)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return invitationDeliveryActiveDocument{},
-				false,
-				nil
+			return invitationDeliveryActiveDocument{}, false, nil
 		}
-		return invitationDeliveryActiveDocument{},
-			false,
-			fmt.Errorf(
-				"get active invitation delivery %q: %w",
-				ref.ID,
-				err,
-			)
+
+		return invitationDeliveryActiveDocument{}, false,
+			fmt.Errorf("get active invitation delivery %q: %w", ref.ID, err)
 	}
+
 	var stored invitationDeliveryActiveDocument
+
 	if err := doc.DataTo(&stored); err != nil {
-		return invitationDeliveryActiveDocument{},
-			false,
-			fmt.Errorf(
-				"decode active invitation delivery %q: %w",
-				ref.ID,
-				err,
-			)
+		return invitationDeliveryActiveDocument{}, false,
+			fmt.Errorf("decode active invitation delivery %q: %w", ref.ID, err)
 	}
-	stored.DeliveryID =
-		strings.TrimSpace(stored.DeliveryID)
-	stored.Token =
-		strings.TrimSpace(stored.Token)
+
 	if stored.DeliveryID == "" || stored.Token == "" {
-		return invitationDeliveryActiveDocument{},
-			false,
-			fmt.Errorf(
-				"active invitation delivery %q is invalid",
-				ref.ID,
-			)
+		return invitationDeliveryActiveDocument{}, false,
+			fmt.Errorf("active invitation delivery %q is invalid", ref.ID)
 	}
+
 	if !stored.CreatedAt.IsZero() {
 		stored.CreatedAt = stored.CreatedAt.UTC()
 	}
 	if !stored.UpdatedAt.IsZero() {
 		stored.UpdatedAt = stored.UpdatedAt.UTC()
 	}
+
 	return stored, true, nil
 }
+
 func getInvitationTokenInTransaction(
 	tx *firestore.Transaction,
 	ref *firestore.DocumentRef,
@@ -1470,84 +1093,56 @@ func getInvitationTokenInTransaction(
 	doc, err := tx.Get(ref)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return invdom.InvitationToken{},
-				false,
-				nil
+			return invdom.InvitationToken{}, false, nil
 		}
-		return invdom.InvitationToken{},
-			false,
-			fmt.Errorf(
-				"get invitation token %q: %w",
-				ref.ID,
-				err,
-			)
+
+		return invdom.InvitationToken{}, false,
+			fmt.Errorf("get invitation token %q: %w", ref.ID, err)
 	}
-	token, err := readInvitationTokenSnapshot(
-		doc,
-		rawToken,
-	)
+
+	token, err := readInvitationTokenSnapshot(doc, rawToken)
 	if err != nil {
 		return invdom.InvitationToken{}, false, err
 	}
+
 	return token, true, nil
 }
-func invitationDeliveryToDocument(
-	delivery invdom.InvitationDelivery,
-) invitationDeliveryDocument {
+
+func invitationDeliveryToDocument(delivery invdom.InvitationDelivery) invitationDeliveryDocument {
 	return invitationDeliveryDocument{
-		Token:     delivery.Token,
-		MemberID:  delivery.MemberID,
-		CompanyID: delivery.CompanyID,
-		AssignedBrandIDs: append(
-			[]string(nil),
-			delivery.AssignedBrandIDs...,
-		),
-		Permissions: append(
-			[]string(nil),
-			delivery.Permissions...,
-		),
-		Email:             delivery.Email,
-		Status:            delivery.Status,
-		AttemptCount:      delivery.AttemptCount,
-		MaxAttempts:       delivery.MaxAttempts,
-		LastError:         delivery.LastError,
-		ProviderMessageID: delivery.ProviderMessageID,
-		CreatedAt:         delivery.CreatedAt.UTC(),
-		UpdatedAt:         delivery.UpdatedAt.UTC(),
-		NextAttemptAt: copyInvitationTimePointer(
-			delivery.NextAttemptAt,
-		),
-		ProcessingStartedAt: copyInvitationTimePointer(
-			delivery.ProcessingStartedAt,
-		),
-		ProcessingUntil: copyInvitationTimePointer(
-			delivery.ProcessingUntil,
-		),
-		DeliveredAt: copyInvitationTimePointer(
-			delivery.DeliveredAt,
-		),
-		FailedAt: copyInvitationTimePointer(
-			delivery.FailedAt,
-		),
+		Token:               delivery.Token,
+		MemberID:            delivery.MemberID,
+		CompanyID:           delivery.CompanyID,
+		AssignedBrandIDs:    append([]string(nil), delivery.AssignedBrandIDs...),
+		Permissions:         append([]string(nil), delivery.Permissions...),
+		Email:               delivery.Email,
+		Status:              delivery.Status,
+		AttemptCount:        delivery.AttemptCount,
+		MaxAttempts:         delivery.MaxAttempts,
+		LastError:           delivery.LastError,
+		ProviderMessageID:   delivery.ProviderMessageID,
+		CreatedAt:           delivery.CreatedAt.UTC(),
+		UpdatedAt:           delivery.UpdatedAt.UTC(),
+		NextAttemptAt:       copyInvitationTimePointer(delivery.NextAttemptAt),
+		ProcessingStartedAt: copyInvitationTimePointer(delivery.ProcessingStartedAt),
+		ProcessingUntil:     copyInvitationTimePointer(delivery.ProcessingUntil),
+		DeliveredAt:         copyInvitationTimePointer(delivery.DeliveredAt),
+		FailedAt:            copyInvitationTimePointer(delivery.FailedAt),
 	}
 }
-func readInvitationDeliverySnapshot(
-	doc *firestore.DocumentSnapshot,
-) (invdom.InvitationDelivery, error) {
+
+func readInvitationDeliverySnapshot(doc *firestore.DocumentSnapshot) (invdom.InvitationDelivery, error) {
 	if doc == nil {
-		return invdom.InvitationDelivery{},
-			errors.New(
-				"invitation delivery document snapshot is nil",
-			)
+		return invdom.InvitationDelivery{}, errors.New("invitation delivery document snapshot is nil")
 	}
+
 	var stored invitationDeliveryDocument
+
 	if err := doc.DataTo(&stored); err != nil {
-		return invdom.InvitationDelivery{}, fmt.Errorf(
-			"decode invitation delivery %q: %w",
-			doc.Ref.ID,
-			err,
-		)
+		return invdom.InvitationDelivery{},
+			fmt.Errorf("decode invitation delivery %q: %w", doc.Ref.ID, err)
 	}
+
 	delivery := invdom.InvitationDelivery{
 		ID:                  doc.Ref.ID,
 		Token:               stored.Token,
@@ -1569,60 +1164,43 @@ func readInvitationDeliverySnapshot(
 		DeliveredAt:         stored.DeliveredAt,
 		FailedAt:            stored.FailedAt,
 	}
+
 	normalized, err := delivery.Normalize()
 	if err != nil {
-		return invdom.InvitationDelivery{}, fmt.Errorf(
-			"normalize invitation delivery %q: %w",
-			doc.Ref.ID,
-			err,
-		)
+		return invdom.InvitationDelivery{},
+			fmt.Errorf("normalize invitation delivery %q: %w", doc.Ref.ID, err)
 	}
+
 	return normalized, nil
 }
-func invitationDeliveryDueTime(
-	delivery invdom.InvitationDelivery,
-) time.Time {
+
+func invitationDeliveryDueTime(delivery invdom.InvitationDelivery) time.Time {
 	switch delivery.Status {
 	case invdom.InvitationDeliveryStatusProcessing:
 		if delivery.ProcessingUntil != nil {
 			return delivery.ProcessingUntil.UTC()
 		}
+
 	default:
 		if delivery.NextAttemptAt != nil {
 			return delivery.NextAttemptAt.UTC()
 		}
 	}
+
 	return delivery.CreatedAt.UTC()
 }
-func mapInvitationDeliveryRepositoryError(
-	operation string,
-	err error,
-) error {
+
+func mapInvitationDeliveryRepositoryError(operation string, err error) error {
 	switch {
-	case errors.Is(
-		err,
-		invdom.ErrInvitationDeliveryNotFound,
-	):
+	case errors.Is(err, invdom.ErrInvitationDeliveryNotFound):
 		return invdom.ErrInvitationDeliveryNotFound
-	case errors.Is(
-		err,
-		invdom.ErrInvitationDeliveryNotClaimable,
-	):
+	case errors.Is(err, invdom.ErrInvitationDeliveryNotClaimable):
 		return invdom.ErrInvitationDeliveryNotClaimable
-	case errors.Is(
-		err,
-		invdom.ErrInvitationDeliveryAttemptLimit,
-	):
+	case errors.Is(err, invdom.ErrInvitationDeliveryAttemptLimit):
 		return invdom.ErrInvitationDeliveryAttemptLimit
-	case errors.Is(
-		err,
-		invdom.ErrInvitationDeliveryStatusInvalid,
-	):
+	case errors.Is(err, invdom.ErrInvitationDeliveryStatusInvalid):
 		return invdom.ErrInvitationDeliveryStatusInvalid
-	case errors.Is(
-		err,
-		invdom.ErrInvitationTokenNotFound,
-	):
+	case errors.Is(err, invdom.ErrInvitationTokenNotFound):
 		return invdom.ErrInvitationTokenNotFound
 	default:
 		return fmt.Errorf("%s: %w", operation, err)

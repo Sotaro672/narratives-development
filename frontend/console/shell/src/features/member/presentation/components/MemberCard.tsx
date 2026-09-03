@@ -1,35 +1,20 @@
-// frontend/member/src/presentation/components/MemberDetailCard.tsx
+// frontend/console/shell/src/features/member/presentation/components/MemberCard.tsx
 
 import * as React from "react";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "../../../../shared/ui/card";
-import { User, Mail, Calendar } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
+import { Calendar, Mail, User } from "lucide-react";
 import { useMemberDetail } from "../hooks/useMemberDetail";
 
-const IconUser = User as unknown as React.ComponentType<
-  React.SVGProps<SVGSVGElement>
->;
-const IconMail = Mail as unknown as React.ComponentType<
-  React.SVGProps<SVGSVGElement>
->;
-const IconCalendar = Calendar as unknown as React.ComponentType<
-  React.SVGProps<SVGSVGElement>
->;
+const IconUser = User as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const IconMail = Mail as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const IconCalendar = Calendar as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
 
 type MemberDetailCardProps = {
   /**
-   * 互換のため prop 名は memberId のままにする。
+   * Firestore Member document ID。
    *
-   * IMPORTANT:
-   * この値には Firestore member docId ではなく Firebase Auth UID を渡す。
-   *
-   * backend:
-   * - GET /members/{uid} は Firebase UID 専用
-   * - PATCH /members/{docId} は Firestore member docId 専用
+   * Backend:
+   * GET /members/by-id/{memberId}
    */
   memberId: string;
 };
@@ -37,10 +22,10 @@ type MemberDetailCardProps = {
 function formatDate(iso?: string | null): string {
   if (!iso) return "-";
 
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "-";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "-";
 
-  return d.toLocaleDateString("ja-JP", {
+  return date.toLocaleDateString("ja-JP", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -48,9 +33,7 @@ function formatDate(iso?: string | null): string {
 }
 
 export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
-  const memberUid = String(memberId ?? "").trim();
-
-  const { member, loading, error } = useMemberDetail(memberUid);
+  const { member, loading, error } = useMemberDetail(memberId);
 
   if (loading) {
     return (
@@ -100,12 +83,10 @@ export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
     );
   }
 
-  const fullName = `${member.lastName ?? ""} ${member.firstName ?? ""}`.trim();
-  const fullKana = `${member.lastNameKana ?? ""} ${member.firstNameKana ?? ""}`.trim();
-
-  const email = member.email || "-";
+  const fullName = [member.lastName, member.firstName].filter((value) => value.length > 0).join(" ");
+  const fullKana = [member.lastNameKana, member.firstNameKana].filter((value) => value.length > 0).join(" ");
   const joinedAt = formatDate(member.createdAt);
-  const updatedAt = formatDate(member.updatedAt || member.createdAt);
+  const updatedAt = formatDate(member.updatedAt);
 
   return (
     <Card className="member-card w-full">
@@ -117,7 +98,6 @@ export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
       </CardHeader>
 
       <CardContent className="member-card__body space-y-6 text-sm">
-        {/* 氏名・読み仮名 */}
         <div className="member-card__grid">
           <div className="member-card__section">
             <div className="member-card__label">氏名</div>
@@ -136,18 +116,16 @@ export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
           </div>
         </div>
 
-        {/* メールアドレス */}
         <div className="member-card__grid">
           <div className="member-card__section">
             <div className="member-card__label">メールアドレス</div>
             <div className="member-card__value">
               <IconMail className="icon-inline w-4 h-4" />
-              <span className="break-all">{email}</span>
+              <span className="break-all">{member.email}</span>
             </div>
           </div>
         </div>
 
-        {/* 更新日・参加日 */}
         <div className="member-card__grid">
           <div className="member-card__section">
             <div className="member-card__label">更新日</div>

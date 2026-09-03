@@ -104,6 +104,7 @@ func toMemberResponse(docID string, m memberdom.Member) memberResponse {
 // - /members の POST は招待前 member 作成として扱う。
 // - 通常の console member 作成では request body の uid を信用しない。
 // - GET /members/me は Authorization token の Firebase UID から現在ログイン中 member を返す。
+// - GET /members/by-id/{memberId} は Firestore member docId 専用として扱う。
 // - GET /members/{uid} は Firebase UID 専用として扱う。
 // - PATCH /members/{id} は member docId 専用として扱う。
 // - DELETE /members/{id} は member docId 専用として扱う。
@@ -135,7 +136,35 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
+
 		h.me(w, r)
+		return
+	}
+
+	// /members/{uid} より先に判定し、by-id を uid として扱わない。
+	if path == "/members/by-id" {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid member id"})
+		return
+	}
+
+	if strings.HasPrefix(path, "/members/by-id/") {
+		memberID := strings.TrimPrefix(path, "/members/by-id/")
+		if memberID == "" || strings.Contains(memberID, "/") {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid member id"})
+			return
+		}
+
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.getByID(w, r, memberID)
 		return
 	}
 
@@ -145,7 +174,7 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		// GET は Firebase UID、PATCH / DELETE は member docId。
 		if len(parts) == 1 {
-			idOrUID := strings.TrimSpace(parts[0])
+			idOrUID := parts[0]
 			if idOrUID == "" {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 				return
@@ -199,7 +228,7 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	me, ok := httpmw.CurrentMember(r)
-	if !ok || strings.TrimSpace(me.CompanyID) == "" {
+	if !ok || me.CompanyID == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
@@ -245,14 +274,13 @@ type memberUpdateRequest struct {
 }
 
 func (h *MemberHandler) update(w http.ResponseWriter, r *http.Request, id string) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 		return
 	}
 
 	me, ok := httpmw.CurrentMember(r)
-	if !ok || strings.TrimSpace(me.CompanyID) == "" {
+	if !ok || me.CompanyID == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
@@ -291,14 +319,13 @@ func (h *MemberHandler) update(w http.ResponseWriter, r *http.Request, id string
 // -----------------------------------------------------------------------------
 
 func (h *MemberHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 		return
 	}
 
 	me, ok := httpmw.CurrentMember(r)
-	if !ok || strings.TrimSpace(me.CompanyID) == "" {
+	if !ok || me.CompanyID == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
@@ -325,7 +352,7 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	qv := r.URL.Query()
 
 	me, ok := httpmw.CurrentMember(r)
-	if !ok || strings.TrimSpace(me.CompanyID) == "" {
+	if !ok || me.CompanyID == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
@@ -376,7 +403,7 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *MemberHandler) me(w http.ResponseWriter, r *http.Request) {
 	uid, _, ok := httpmw.CurrentUIDAndEmail(r)
-	if !ok || strings.TrimSpace(uid) == "" {
+	if !ok || uid == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
@@ -388,6 +415,41 @@ func (h *MemberHandler) me(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, memberdom.ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "member not found"})
+			return
+		}
+
+		writeMemberErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toMemberResponse(rec.DocID, rec.Member))
+}
+
+// -----------------------------------------------------------------------------
+// GET /members/by-id/{memberId}
+// -----------------------------------------------------------------------------
+//
+// NOTE:
+// GET /members/by-id/{memberId} は Firestore member docId 専用。
+// Firebase UID として解釈しない。
+// 取得処理と company scope 判定は MemberDetailQuery に移譲する。
+
+func (h *MemberHandler) getByID(w http.ResponseWriter, r *http.Request, memberID string) {
+	if memberID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid member id"})
+		return
+	}
+
+	me, ok := httpmw.CurrentMember(r)
+	if !ok || me.CompanyID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	rec, err := h.detailQuery.GetByID(r.Context(), memberID, me.CompanyID)
+	if err != nil {
+		if errors.Is(err, consolequery.ErrMemberForbidden) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 			return
 		}
 
@@ -412,14 +474,13 @@ func (h *MemberHandler) me(w http.ResponseWriter, r *http.Request) {
 // response DTO への変換だけを担当する。
 
 func (h *MemberHandler) getByUID(w http.ResponseWriter, r *http.Request, uid string) {
-	uid = strings.TrimSpace(uid)
 	if uid == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid uid"})
 		return
 	}
 
 	me, ok := httpmw.CurrentMember(r)
-	if !ok || strings.TrimSpace(me.CompanyID) == "" {
+	if !ok || me.CompanyID == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}

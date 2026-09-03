@@ -20,14 +20,12 @@ export class MemberRepositoryHTTP {
    * GET /members/{uid}
    */
   async getByUid(uid: string): Promise<Member | null> {
-    const uidValue = uid.trim();
-
-    if (!uidValue) {
+    if (!uid) {
       return null;
     }
 
     const headers = await getAuthHeaders();
-    const url = buildConsoleUrl(`/members/${encodeURIComponent(uidValue)}`);
+    const url = buildConsoleUrl(`/members/${encodeURIComponent(uid)}`);
     const response = await fetch(url, { headers });
 
     if (response.status === 404) {
@@ -35,12 +33,42 @@ export class MemberRepositoryHTTP {
     }
 
     const contentType = response.headers.get("content-type") ?? "";
-
     if (!contentType.includes("application/json")) {
       const text = await response.text().catch(() => "");
-      throw new Error(
-        `Unexpected content-type: ${contentType}\n${text.slice(0, 200)}`,
-      );
+      throw new Error(`Unexpected content-type: ${contentType}\n${text.slice(0, 200)}`);
+    }
+
+    if (!response.ok) {
+      const message = await response.text().catch(() => `HTTP ${response.status}`);
+      throw new Error(message);
+    }
+
+    return (await response.json()) as Member;
+  }
+
+  /**
+   * Firestore Member document IDでMemberを取得する。
+   *
+   * Backend:
+   * GET /members/by-id/{memberId}
+   */
+  async getById(memberId: string): Promise<Member | null> {
+    if (!memberId) {
+      return null;
+    }
+
+    const headers = await getAuthHeaders();
+    const url = buildConsoleUrl(`/members/by-id/${encodeURIComponent(memberId)}`);
+    const response = await fetch(url, { headers });
+
+    if (response.status === 404) {
+      return null;
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Unexpected content-type: ${contentType}\n${text.slice(0, 200)}`);
     }
 
     if (!response.ok) {
