@@ -80,16 +80,19 @@ export default function ScanResultPage() {
       mode={isLoggedIn ? "mypage" : "landing"}
       showHeader
       showBackButton={isLoggedIn && isMobilePortrait}
-      showFooter={isLoggedIn}
+      showFooter={isLoggedIn && isMobilePortrait}
       backTo="/wallet"
       hideHamburgerMenu={false}
       hideSettingsButton={!isLoggedIn}
+      hideAnnouncementButton={!isLoggedIn}
       mainClassName="scan-result-page"
       secondaryActionButtonLabel={
         canOpenInquiryPage ? "問い合わせ" : undefined
       }
       onSecondaryActionButtonClick={
-        canOpenInquiryPage ? handleOpenInquiryPage : undefined
+        canOpenInquiryPage
+          ? handleOpenInquiryPage
+          : undefined
       }
       secondaryActionButtonDisabled={!canOpenInquiryPage}
       footerProps={
@@ -101,7 +104,9 @@ export default function ScanResultPage() {
               value: reviewBody,
               rating: reviewRating,
               placeholder: "口コミを入力",
-              buttonLabel: state.postingReview ? "投稿中" : "投稿",
+              buttonLabel: state.postingReview
+                ? "投稿中"
+                : "投稿",
               disabled: !canPostReview,
               posting: state.postingReview,
               onChange: setReviewBody,
