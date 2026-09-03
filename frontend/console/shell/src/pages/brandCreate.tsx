@@ -15,6 +15,7 @@ import {
 
 import { AdminCard } from "../features/admin/presentation/components/AdminCard";
 import { AccountSelectCard } from "../features/brand/presentation/components/accountSelectCard";
+import BrandCreateProgressModal from "../features/brand/presentation/components/brandCreateProgressModal";
 import { useBrandCreate } from "../features/brand/presentation/hook/useBrandCreate";
 
 export default function BrandCreate() {
@@ -70,14 +71,17 @@ export default function BrandCreate() {
 
     saving,
 
+    progress,
+    progressOpen,
+    onCloseProgress,
+
     handleBack,
     handleSave,
   } = useBrandCreate();
 
   const accountLabel =
     accountCandidates.find(
-      (candidate) =>
-        candidate.id === accountId,
+      (candidate) => candidate.id === accountId,
     )?.label ?? null;
 
   const left = (
@@ -118,9 +122,7 @@ export default function BrandCreate() {
                 type="file"
                 accept={brandImageAccept}
                 style={{ display: "none" }}
-                onChange={
-                  handleBrandBackgroundChange
-                }
+                onChange={handleBrandBackgroundChange}
                 disabled={saving}
               />
             </div>
@@ -129,9 +131,7 @@ export default function BrandCreate() {
               <button
                 type="button"
                 className="brand-hero__action-btn"
-                onClick={
-                  handlePickBrandBackground
-                }
+                onClick={handlePickBrandBackground}
                 disabled={saving}
               >
                 <Upload size={16} />
@@ -142,9 +142,7 @@ export default function BrandCreate() {
                 <button
                   type="button"
                   className="brand-hero__action-btn"
-                  onClick={
-                    handleClearBrandBackground
-                  }
+                  onClick={handleClearBrandBackground}
                   disabled={saving}
                 >
                   <X size={16} />
@@ -182,9 +180,7 @@ export default function BrandCreate() {
                     <button
                       type="button"
                       className="brand-hero__avatar-empty is-clickable"
-                      onClick={
-                        handlePickBrandIcon
-                      }
+                      onClick={handlePickBrandIcon}
                       disabled={saving}
                     >
                       アイコンを選択
@@ -195,12 +191,8 @@ export default function BrandCreate() {
                     ref={brandIconInputRef}
                     type="file"
                     accept={brandImageAccept}
-                    style={{
-                      display: "none",
-                    }}
-                    onChange={
-                      handleBrandIconChange
-                    }
+                    style={{ display: "none" }}
+                    onChange={handleBrandIconChange}
                     disabled={saving}
                   />
                 </div>
@@ -209,9 +201,7 @@ export default function BrandCreate() {
                   <button
                     type="button"
                     className="brand-hero__action-btn brand-hero__action-btn--plain"
-                    onClick={
-                      handlePickBrandIcon
-                    }
+                    onClick={handlePickBrandIcon}
                     disabled={saving}
                   >
                     <Upload size={16} />
@@ -222,9 +212,7 @@ export default function BrandCreate() {
                     <button
                       type="button"
                       className="brand-hero__action-btn brand-hero__action-btn--plain"
-                      onClick={
-                        handleClearBrandIcon
-                      }
+                      onClick={handleClearBrandIcon}
                       disabled={saving}
                     >
                       <X size={16} />
@@ -246,8 +234,7 @@ export default function BrandCreate() {
                 </div>
 
                 <div className="brand-hero__sub">
-                  {managerDisplayName ||
-                    "責任者未設定"}
+                  {managerDisplayName || "責任者未設定"}
                 </div>
 
                 <div className="brand-hero__sub">
@@ -261,9 +248,7 @@ export default function BrandCreate() {
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            ブランド情報
-          </CardTitle>
+          <CardTitle>ブランド情報</CardTitle>
         </CardHeader>
 
         <CardContent>
@@ -275,11 +260,7 @@ export default function BrandCreate() {
             id="name"
             placeholder="ブランド名"
             value={name}
-            onChange={(event) =>
-              setName(
-                event.target.value,
-              )
-            }
+            onChange={(event) => setName(event.target.value)}
             disabled={saving}
           />
 
@@ -299,9 +280,7 @@ export default function BrandCreate() {
             placeholder="ブランドの説明を入力してください"
             value={description}
             onChange={(event) =>
-              setDescription(
-                event.target.value,
-              )
+              setDescription(event.target.value)
             }
             disabled={saving}
           />
@@ -315,18 +294,10 @@ export default function BrandCreate() {
             placeholder="https://example.com"
             value={websiteUrl}
             onChange={(event) =>
-              setWebsiteUrl(
-                event.target.value,
-              )
+              setWebsiteUrl(event.target.value)
             }
             disabled={saving}
           />
-
-          {saving && (
-            <p className="mt-4 text-sm text-slate-500">
-              ブランドを登録しています...
-            </p>
-          )}
         </CardContent>
       </Card>
     </div>
@@ -337,19 +308,10 @@ export default function BrandCreate() {
       <AdminCard
         mode="edit"
         assigneeId={managerId}
-        assigneeName={
-          managerDisplayName ||
-          "未設定"
-        }
-        assigneeCandidates={
-          managerCandidates
-        }
-        loadingMembers={
-          loadingManagers
-        }
-        onSelectAssignee={
-          handleSelectManager
-        }
+        assigneeName={managerDisplayName || "未設定"}
+        assigneeCandidates={managerCandidates}
+        loadingMembers={loadingManagers}
+        onSelectAssignee={handleSelectManager}
       />
 
       {managerIdError && (
@@ -360,12 +322,8 @@ export default function BrandCreate() {
 
       <AccountSelectCard
         accountLabel={accountLabel}
-        accountCandidates={
-          accountCandidates
-        }
-        loadingAccounts={
-          loadingAccounts
-        }
+        accountCandidates={accountCandidates}
+        loadingAccounts={loadingAccounts}
         accountError={
           accountLoadError ||
           accountIdError
@@ -375,14 +333,26 @@ export default function BrandCreate() {
   );
 
   return (
-    <PageStyle
-      layout="grid-2"
-      title="ブランド登録"
-      onBack={handleBack}
-      onSave={handleSave}
-      isSaving={saving}
-    >
-      {[left, right]}
-    </PageStyle>
+    <>
+      <PageStyle
+        layout="grid-2"
+        title="ブランド登録"
+        onBack={handleBack}
+        onSave={handleSave}
+        isSaving={saving}
+      >
+        {[left, right]}
+      </PageStyle>
+
+      <BrandCreateProgressModal
+        open={progressOpen}
+        progress={progress}
+        onClose={
+          progress.isBlockingNavigation
+            ? undefined
+            : onCloseProgress
+        }
+      />
+    </>
   );
 }

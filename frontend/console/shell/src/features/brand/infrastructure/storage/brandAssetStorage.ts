@@ -3,13 +3,36 @@
 import {
   getDownloadURL,
   ref,
-  uploadBytes,
+  uploadBytesResumable,
 } from "firebase/storage";
 
 import { storage } from "../../../../auth/infrastructure/config/firebaseClient";
 
 import type { BrandImageTarget } from "../../config/brandImagePolicy.generated";
 import { validateBrandImage } from "../../application/brandImageValidation";
+
+export type BrandAssetUploadProgress = {
+  transferredBytes: number;
+  totalBytes: number;
+  percentage: number;
+};
+
+export type BrandAssetUploadProgressHandler = (
+  progress: BrandAssetUploadProgress,
+) => void;
+
+export type UploadBrandAssetToFirebaseStorageParams = {
+  companyId: string;
+  brandId: string;
+  target: BrandImageTarget;
+  file: File;
+  onProgress?: BrandAssetUploadProgressHandler;
+};
+
+export type UploadedBrandAsset = {
+  downloadUrl: string;
+  objectPath: string;
+};
 
 function buildBrandAssetPath(params: {
   companyId: string;
@@ -24,17 +47,41 @@ function buildBrandAssetPath(params: {
   ].join("/");
 }
 
+function calculateUploadPercentage(
+  transferredBytes: number,
+  totalBytes: number,
+): number {
+  if (totalBytes <= 0) {
+    return 0;
+  }
+
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round((transferredBytes / totalBytes) * 100),
+    ),
+  );
+}
+
+function emitUploadProgress(
+  handler: BrandAssetUploadProgressHandler | undefined,
+  transferredBytes: number,
+  totalBytes: number,
+): void {
+  handler?.({
+    transferredBytes,
+    totalBytes,
+    percentage: calculateUploadPercentage(
+      transferredBytes,
+      totalBytes,
+    ),
+  });
+}
+
 export async function uploadBrandAssetToFirebaseStorage(
-  params: {
-    companyId: string;
-    brandId: string;
-    target: BrandImageTarget;
-    file: File;
-  },
-): Promise<{
-  downloadUrl: string;
-  objectPath: string;
-}> {
+  params: UploadBrandAssetToFirebaseStorageParams,
+): Promise<UploadedBrandAsset> {
   if (!params.companyId) {
     throw new Error(
       "companyId is required before uploading brand asset.",
@@ -70,7 +117,13 @@ export async function uploadBrandAssetToFirebaseStorage(
 
   const storageRef = ref(storage, objectPath);
 
-  await uploadBytes(
+  emitUploadProgress(
+    params.onProgress,
+    0,
+    params.file.size,
+  );
+
+  const uploadTask = uploadBytesResumable(
     storageRef,
     params.file,
     {
@@ -79,7 +132,36 @@ export async function uploadBrandAssetToFirebaseStorage(
     },
   );
 
-  const downloadUrl = await getDownloadURL(storageRef);
+  await new Promise<void>((resolve, reject) => {
+    uploadTask.on(
+      "state_changed",
+      (snapshot) => {
+        emitUploadProgress(
+          params.onProgress,
+          snapshot.bytesTransferred,
+          snapshot.totalBytes,
+        );
+      },
+      (error) => {
+        reject(error);
+      },
+      () => {
+        const snapshot = uploadTask.snapshot;
+
+        emitUploadProgress(
+          params.onProgress,
+          snapshot.totalBytes,
+          snapshot.totalBytes,
+        );
+
+        resolve();
+      },
+    );
+  });
+
+  const downloadUrl = await getDownloadURL(
+    uploadTask.snapshot.ref,
+  );
 
   return {
     downloadUrl,

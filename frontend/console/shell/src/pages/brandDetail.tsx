@@ -1,7 +1,9 @@
 // frontend/console/shell/src/pages/brandDetail.tsx
 
 import { Upload, X } from "lucide-react";
+
 import "../styles/brand.css";
+
 import PageStyle from "../layout/PageStyle/PageStyle";
 
 import {
@@ -16,6 +18,7 @@ import { Input } from "../shared/ui/input";
 import { useBrandDetail } from "../features/brand/presentation/hook/useBrandDetail";
 import { ManagerCard } from "../features/brand/presentation/components/ManagerCard";
 import { AccountSelectCard } from "../features/brand/presentation/components/accountSelectCard";
+import BrandCreateProgressModal from "../features/brand/presentation/components/brandCreateProgressModal";
 
 export default function BrandDetail() {
   const {
@@ -35,6 +38,10 @@ export default function BrandDetail() {
     loading,
     saving,
     error,
+
+    progress,
+    progressOpen,
+    onCloseProgress,
 
     managerId,
     managerCandidates,
@@ -390,12 +397,6 @@ export default function BrandDetail() {
                   disabled={saving}
                 />
               )}
-
-              {saving && (
-                <p className="mt-4 text-sm text-slate-500">
-                  ブランド情報と画像を保存しています...
-                </p>
-              )}
             </>
           )}
         </CardContent>
@@ -434,32 +435,44 @@ export default function BrandDetail() {
   );
 
   return (
-    <PageStyle
-      layout="grid-2"
-      title={brand.name || "ブランド詳細"}
-      onBack={handleBack}
-      onEdit={
-        !isEditing && !loading
-          ? handleEdit
-          : undefined
-      }
-      onSave={
-        isEditing && !saving
-          ? handleSave
-          : undefined
-      }
-      onCancel={
-        isEditing && !saving
-          ? handleCancelEdit
-          : undefined
-      }
-      className={
-        isEditing
-          ? "brand-detail is-edit"
-          : "brand-detail is-view"
-      }
-    >
-      {[left, right]}
-    </PageStyle>
+    <>
+      <PageStyle
+        layout="grid-2"
+        title={brand.name || "ブランド詳細"}
+        onBack={handleBack}
+        onEdit={
+          !isEditing && !loading
+            ? handleEdit
+            : undefined
+        }
+        onSave={
+          isEditing && !saving
+            ? handleSave
+            : undefined
+        }
+        onCancel={
+          isEditing && !saving
+            ? handleCancelEdit
+            : undefined
+        }
+        className={
+          isEditing
+            ? "brand-detail is-edit"
+            : "brand-detail is-view"
+        }
+      >
+        {[left, right]}
+      </PageStyle>
+
+      <BrandCreateProgressModal
+        open={progressOpen}
+        progress={progress}
+        onClose={
+          progress.isBlockingNavigation
+            ? undefined
+            : onCloseProgress
+        }
+      />
+    </>
   );
 }
