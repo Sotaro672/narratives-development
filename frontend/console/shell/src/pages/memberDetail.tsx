@@ -1,61 +1,88 @@
-// frontend\console\shell\src\pages\memberDetail.tsx
+// frontend/console/shell/src/pages/memberDetail.tsx
 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import MemberDetailCard from "../features/member/presentation/components/MemberCard";
 import { useMemberDetail } from "../features/member/presentation/hooks/useMemberDetail";
+import { cancelMemberInvitation } from "../features/member/application/invitationService";
 import {
   Card,
+  CardContent,
   CardHeader,
   CardTitle,
-  CardContent,
 } from "../shared/ui/card";
 import { BrandCard } from "../features/member/presentation/components/BrandCard";
 
 export default function MemberDetail() {
   const navigate = useNavigate();
-
-  /**
-   * IMPORTANT:
-   * この route param は Firestore member docId ではなく Firebase Auth UID。
-   *
-   * backend:
-   * - GET /members/{uid} は Firebase UID 専用
-   * - PATCH /members/{docId} は Firestore member docId 専用
-   */
-  const { memberUid } = useParams<{ memberUid: string }>();
+  const { memberId } = useParams<{ memberId: string }>();
 
   const {
+    member,
     memberName,
     assignedBrands,
     brandRows,
     permissions,
     groupedPermissionsByCategory,
     hasGroupedPermissions,
-  } = useMemberDetail(memberUid);
+    loading,
+    isInvitationPending,
+  } = useMemberDetail(memberId);
 
   const handleBack = React.useCallback(() => {
     navigate(-1);
   }, [navigate]);
 
+  const handleDelete = React.useCallback(async () => {
+    if (!member || !isInvitationPending) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "このメンバーの招待を取り消して削除しますか？送信済みの招待URLも無効になります。",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await cancelMemberInvitation(member.id);
+      navigate("/member");
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "招待の取消に失敗しました。";
+
+      window.alert(message);
+    }
+  }, [member, isInvitationPending, navigate]);
+
+  if (!memberId) {
+    return (
+      <PageStyle layout="single" title="メンバー詳細" onBack={handleBack}>
+        <div className="p-4 text-red-500">
+          メンバーIDが指定されていません。
+        </div>
+      </PageStyle>
+    );
+  }
+
   return (
-    <PageStyle layout="grid-2" title={`${memberName}`} onBack={handleBack}>
-      {/* 左カラム：基本情報カード */}
+    <PageStyle
+      layout="grid-2"
+      title={memberName}
+      onBack={handleBack}
+      onDelete={!loading && isInvitationPending ? handleDelete : undefined}
+    >
       <div>
-        {/*
-          MemberDetailCard は memberId prop だけを受け取る。
-          ただし現状方針では、この memberId には Firebase Auth UID を渡す。
-        */}
-        <MemberDetailCard memberId={memberUid ?? ""} />
+        <MemberDetailCard memberId={memberId} />
       </div>
 
-      {/* 右カラム：所属ブランドカード + 権限カード */}
       <div className="space-y-4">
-        {/* 所属ブランド */}
         <BrandCard assignedBrands={assignedBrands} brandRows={brandRows} />
 
-        {/* 権限カード */}
         <Card>
           <CardHeader>
             <CardTitle>権限</CardTitle>

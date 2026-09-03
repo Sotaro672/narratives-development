@@ -152,7 +152,7 @@ export const routes: RouteObject[] = [
     path: "/member",
     children: [
       { path: "", element: <MemberManagement /> },
-      { path: ":memberUid", element: <MemberDetail /> },
+      { path: ":memberId", element: <MemberDetail /> },
       { path: "create", element: <MemberCreate /> },
     ],
   },

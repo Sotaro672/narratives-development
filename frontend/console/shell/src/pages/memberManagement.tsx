@@ -1,4 +1,5 @@
-// frontend\console\shell\src\pages\memberManagement.tsx
+// frontend/console/shell/src/pages/memberManagement.tsx
+
 import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
@@ -6,7 +7,6 @@ import List, {
 } from "../layout/List/List";
 import "../styles/member.css";
 import { useMemberList } from "../features/member/presentation/hooks/useMemberList";
-
 import Pagination from "../shared/ui/pagination";
 
 export default function MemberManagementPage() {
@@ -38,18 +38,19 @@ export default function MemberManagementPage() {
 
   if (error) {
     return (
-      <div className="p-4 text-red-500">データ取得エラー: {error.message}</div>
+      <div className="p-4 text-red-500">
+        データ取得エラー: {error.message}
+      </div>
     );
   }
 
-  const goDetail = (uid?: string | null) => {
-    const trimmedUid = String(uid ?? "").trim();
-    if (!trimmedUid) {
-      console.warn("[MemberManagementPage] member uid is empty");
+  const goDetail = (memberId: string) => {
+    if (!memberId) {
+      console.warn("[MemberManagementPage] member id is empty");
       return;
     }
 
-    navigate(`/member/${encodeURIComponent(trimmedUid)}`);
+    navigate(`/member/${encodeURIComponent(memberId)}`);
   };
 
   return (
@@ -100,48 +101,38 @@ export default function MemberManagementPage() {
         onReset={handleReset}
       >
         {members.map((m) => {
-          const fallbackInline = `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim();
-
-          const name =
-            String(m.displayName ?? "").trim() ||
-            fallbackInline ||
-            m.email ||
-            "招待中";
-
+          const name = m.displayName || m.email;
           const assigned = m.assignedBrands ?? [];
           const categories = extractPermissionCategories(
             (m.permissions ?? []) as string[],
           );
-
-          const memberUid = String(m.uid ?? "").trim();
-          const canOpenDetail = memberUid.length > 0;
 
           return (
             <tr
               key={m.id}
               role="button"
               tabIndex={0}
-              className={
-                canOpenDetail
-                  ? "cursor-pointer"
-                  : "cursor-not-allowed opacity-60"
-              }
-              onClick={() => goDetail(memberUid)}
+              className="cursor-pointer"
+              onClick={() => goDetail(m.id)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  goDetail(memberUid);
+                  goDetail(m.id);
                 }
               }}
             >
               <td>{name}</td>
-              <td>{m.email ?? ""}</td>
+              <td>{m.email}</td>
 
               <td>
                 {assigned.map((brandId) => {
                   const label = brandMap[brandId] ?? brandId;
+
                   return (
-                    <span key={brandId} className="lp-brand-pill mm-brand-tag">
+                    <span
+                      key={brandId}
+                      className="lp-brand-pill mm-brand-tag"
+                    >
                       {label}
                     </span>
                   );
@@ -155,7 +146,10 @@ export default function MemberManagementPage() {
                   </span>
                 ) : (
                   categories.map((cat) => (
-                    <span key={cat} className="lp-brand-pill mm-brand-tag">
+                    <span
+                      key={cat}
+                      className="lp-brand-pill mm-brand-tag"
+                    >
                       {cat}
                     </span>
                   ))
