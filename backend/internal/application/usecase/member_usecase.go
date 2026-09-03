@@ -26,9 +26,7 @@ type MemberUsecase struct {
 	now  func() time.Time
 }
 
-func NewMemberUsecase(
-	repo memdom.Repository,
-) *MemberUsecase {
+func NewMemberUsecase(repo memdom.Repository) *MemberUsecase {
 	return &MemberUsecase{
 		repo: repo,
 		now:  time.Now,
@@ -59,10 +57,7 @@ type CreateMemberInput struct {
 	CreatedAt *time.Time
 }
 
-func (u *MemberUsecase) Create(
-	ctx context.Context,
-	in CreateMemberInput,
-) (MemberRecord, error) {
+func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (MemberRecord, error) {
 	createdAt := in.CreatedAt
 	if createdAt == nil || createdAt.IsZero() {
 		t := u.now().UTC()
@@ -118,10 +113,7 @@ type UpdateMemberInput struct {
 	Status    *string
 }
 
-func (u *MemberUsecase) Update(
-	ctx context.Context,
-	in UpdateMemberInput,
-) (MemberRecord, error) {
+func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (MemberRecord, error) {
 	memberID := in.MemberID
 	if memberID == "" {
 		return MemberRecord{}, memdom.ErrNotFound
@@ -169,14 +161,44 @@ func (u *MemberUsecase) Update(
 	}, nil
 }
 
+type DeleteMemberInput struct {
+	// MemberID is Firestore member document ID.
+	MemberID string
+
+	// CompanyID は削除を実行する認証中Memberの所属会社ID。
+	CompanyID string
+}
+
+func (u *MemberUsecase) Delete(ctx context.Context, in DeleteMemberInput) error {
+	if in.MemberID == "" {
+		return memdom.ErrNotFound
+	}
+
+	companyID := in.CompanyID
+	if cid := CompanyIDFromContext(ctx); cid != "" {
+		companyID = cid
+	}
+	if companyID == "" {
+		return memdom.ErrNotFound
+	}
+
+	current, err := u.repo.GetByID(ctx, in.MemberID)
+	if err != nil {
+		return err
+	}
+
+	if current.DocID == "" || current.Member.CompanyID != companyID {
+		return memdom.ErrNotFound
+	}
+
+	return u.repo.Delete(ctx, current.DocID)
+}
+
 type GetCurrentMemberInput struct {
 	FirebaseUID string
 }
 
-func (u *MemberUsecase) GetCurrentMember(
-	ctx context.Context,
-	in GetCurrentMemberInput,
-) (MemberRecord, error) {
+func (u *MemberUsecase) GetCurrentMember(ctx context.Context, in GetCurrentMemberInput) (MemberRecord, error) {
 	firebaseUID := in.FirebaseUID
 	if firebaseUID == "" {
 		return MemberRecord{}, memdom.ErrInvalidUID
@@ -191,15 +213,4 @@ func (u *MemberUsecase) GetCurrentMember(
 		DocID:  rec.DocID,
 		Member: rec.Member,
 	}, nil
-}
-
-func (u *MemberUsecase) Delete(
-	ctx context.Context,
-	memberID string,
-) error {
-	if memberID == "" {
-		return memdom.ErrNotFound
-	}
-
-	return u.repo.Delete(ctx, memberID)
 }

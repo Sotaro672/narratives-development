@@ -27,6 +27,7 @@ export default function MemberDetail() {
     groupedPermissionsByCategory,
     hasGroupedPermissions,
     loading,
+    error,
     isInvitationPending,
   } = useMemberDetail(memberId);
 
@@ -49,10 +50,10 @@ export default function MemberDetail() {
     try {
       await cancelMemberInvitation(member.id);
       navigate("/member");
-    } catch (error: unknown) {
+    } catch (deleteError: unknown) {
       const message =
-        error instanceof Error
-          ? error.message
+        deleteError instanceof Error
+          ? deleteError.message
           : "招待の取消に失敗しました。";
 
       window.alert(message);
@@ -77,7 +78,11 @@ export default function MemberDetail() {
       onDelete={!loading && isInvitationPending ? handleDelete : undefined}
     >
       <div>
-        <MemberDetailCard memberId={memberId} />
+        <MemberDetailCard
+          member={member}
+          loading={loading}
+          error={error}
+        />
       </div>
 
       <div className="space-y-4">
@@ -88,13 +93,17 @@ export default function MemberDetail() {
             <CardTitle>権限</CardTitle>
           </CardHeader>
           <CardContent>
-            {permissions.length === 0 ? (
+            {loading ? (
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">
+                権限情報を読み込み中です…
+              </p>
+            ) : permissions.length === 0 ? (
               <p className="text-sm text-[hsl(var(--muted-foreground))]">
                 権限は未設定です。
               </p>
             ) : !hasGroupedPermissions ? (
               <p className="text-sm text-[hsl(var(--muted-foreground))]">
-                権限情報を読み込み中です…
+                権限情報を表示できません。
               </p>
             ) : (
               <div className="space-y-3">

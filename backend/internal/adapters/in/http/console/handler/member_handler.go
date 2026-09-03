@@ -330,7 +330,13 @@ func (h *MemberHandler) delete(w http.ResponseWriter, r *http.Request, id string
 		return
 	}
 
-	if err := h.memberUC.Delete(r.Context(), id); err != nil {
+	if err := h.memberUC.Delete(
+		r.Context(),
+		memberusecase.DeleteMemberInput{
+			MemberID:  id,
+			CompanyID: me.CompanyID,
+		},
+	); err != nil {
 		writeMemberErr(w, err)
 		return
 	}

@@ -3,20 +3,16 @@
 import * as React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
 import { Calendar, Mail, User } from "lucide-react";
-import { useMemberDetail } from "../hooks/useMemberDetail";
+import type { MemberDetail } from "../../application/memberDetailService";
 
 const IconUser = User as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
 const IconMail = Mail as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
 const IconCalendar = Calendar as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
 
 type MemberDetailCardProps = {
-  /**
-   * Firestore Member document ID。
-   *
-   * Backend:
-   * GET /members/by-id/{memberId}
-   */
-  memberId: string;
+  member: MemberDetail | null;
+  loading: boolean;
+  error: Error | null;
 };
 
 function formatDate(iso?: string | null): string {
@@ -32,9 +28,11 @@ function formatDate(iso?: string | null): string {
   });
 }
 
-export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
-  const { member, loading, error } = useMemberDetail(memberId);
-
+export default function MemberDetailCard({
+  member,
+  loading,
+  error,
+}: MemberDetailCardProps) {
   if (loading) {
     return (
       <Card className="member-card w-full">
@@ -83,8 +81,14 @@ export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
     );
   }
 
-  const fullName = [member.lastName, member.firstName].filter((value) => value.length > 0).join(" ");
-  const fullKana = [member.lastNameKana, member.firstNameKana].filter((value) => value.length > 0).join(" ");
+  const fullName = [member.lastName, member.firstName]
+    .filter((value) => value.length > 0)
+    .join(" ");
+
+  const fullKana = [member.lastNameKana, member.firstNameKana]
+    .filter((value) => value.length > 0)
+    .join(" ");
+
   const joinedAt = formatDate(member.createdAt);
   const updatedAt = formatDate(member.updatedAt);
 
